@@ -1,5 +1,5 @@
 import { Controller, Get, HttpStatus, ParseIntPipe, Query, Res } from '@nestjs/common';
-import { ToolsService } from 'src/utils/tool.service';
+import { ToolsService } from '@/utils/tool.service';
 import { DictService } from './dict.service';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ComponentTypeEnum, DictKeyEnum, DictKeyType } from '@/utils/constant';

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DictController } from './dict.controller';
 import { DictService } from './dict.service';
-import { ToolsService } from 'src/utils/tool.service';
+import { ToolsService } from '@/utils/tool.service';
 
 @Module({
   controllers: [DictController],

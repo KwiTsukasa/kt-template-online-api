@@ -17,7 +17,7 @@ import {
   ApiTags,
   PartialType,
 } from '@nestjs/swagger';
-import { ToolsService } from 'src/utils/tool.service';
+import { ToolsService } from '@/utils/tool.service';
 import { ComponentService } from './component.service';
 import { Component } from './component.entity';
 import { PaginatedDto } from '@/utils/constant';

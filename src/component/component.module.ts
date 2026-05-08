@@ -3,7 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ComponentController } from './component.controller';
 import { ComponentService } from './component.service';
 import { Component } from './component.entity';
-import { ToolsService } from 'src/utils/tool.service';
+import { ToolsService } from '@/utils/tool.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Component])],

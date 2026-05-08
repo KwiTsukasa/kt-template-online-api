@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Component } from './component.entity';
-import { ToolsService } from 'src/utils/tool.service';
+import { ToolsService } from '@/utils/tool.service';
 import { isNumber, omit, pick } from 'lodash';
 import { ComponentDto } from './component.dto';
 

@@ -6,11 +6,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { MinioModule } from 'nestjs-minio-client';
 import { ComponentModule } from './component/component.module';
 import { DictModule } from './dict/dict.module';
+import { MinioClientModule } from './minio/minio.module';
 import { SaveMiddleware } from './middleware/save.middleware';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
+      isGlobal: true,
       envFilePath: `.env${
         process.env.NODE_ENV ? `.${process.env.NODE_ENV}` : ''
       }`,
@@ -47,6 +49,7 @@ import { SaveMiddleware } from './middleware/save.middleware';
     }),
     ComponentModule,
     DictModule,
+    MinioClientModule,
   ],
   providers: [AppService, ConfigService],
 })

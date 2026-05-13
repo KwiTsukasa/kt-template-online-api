@@ -10,7 +10,6 @@ import {
 } from '@nestjs/common';
 import {
   ApiExtraModels,
-  ApiOkResponse,
   ApiOperation,
   ApiProperty,
   ApiQuery,
@@ -20,8 +19,28 @@ import {
 import { ToolsService } from '@/utils/tool.service';
 import { ComponentService } from './component.service';
 import { Component } from './component.entity';
-import { PaginatedDto } from '@/utils/constant';
 import { ComponentDto } from './component.dto';
+import {
+  PaginatedDto,
+  ApiArrayResponse,
+  ApiModelResponse,
+  ApiPageResponse,
+  ApiSuccessResponse,
+} from '@/common/swagger-response';
+
+const componentExample = {
+  id: '1d8d3dd2-99f0-4d10-9a44-0cf9566b37c9',
+  name: '基础折线图',
+  type: 1,
+  componentType: 1,
+  typeMsg: '图表',
+  componentTypeMsg: '折线图',
+  image: '',
+  template: '%7B%22version%22%3A%221.0%22%7D',
+  createTime: '2026-05-13T02:30:00.000Z',
+  updateTime: '2026-05-13T02:30:00.000Z',
+  is_deleted: false,
+};
 
 class CompPageDto
   extends PartialType(Component)
@@ -39,16 +58,9 @@ class CompPageDto
   pageSize: number;
 }
 
-class CompPageResDto extends PaginatedDto {
-  @ApiProperty({
-    type: [ComponentDto],
-  })
-  list: ComponentDto[];
-}
-
 @Controller('component')
 @ApiTags('component')
-@ApiExtraModels(PaginatedDto, ComponentDto)
+@ApiExtraModels(PaginatedDto)
 export class ComponentController {
   constructor(
     private readonly toolsService: ToolsService,
@@ -57,7 +69,7 @@ export class ComponentController {
 
   @Get('allList')
   @ApiOperation({ summary: '获取组件列表' })
-  @ApiOkResponse({ type: [ComponentDto] })
+  @ApiArrayResponse(ComponentDto, [componentExample])
   async getAllList(@Res() res) {
     const list = await this.componentService.all();
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', list));
@@ -66,13 +78,11 @@ export class ComponentController {
   @Get('list')
   @ApiOperation({ summary: '获取组件列表分页' })
   @ApiQuery({ type: [CompPageDto] })
-  @ApiOkResponse({
-    type: CompPageResDto,
-  })
+  @ApiPageResponse(ComponentDto, [componentExample], 1)
   async getList(
     @Res() res,
     @Query() { pageNo, pageSize, ...args }: PageParams<ComponentDto>,
-  ): Promise<CompPageResDto> {
+  ): Promise<PaginatedDto<ComponentDto>> {
     const list = await this.componentService.page({
       pageNo,
       pageSize,
@@ -85,6 +95,13 @@ export class ComponentController {
   @Post('save')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '保存组件' })
+  @ApiSuccessResponse({
+    schema: {
+      type: 'string',
+      description: '新增组件ID',
+    },
+    example: '1d8d3dd2-99f0-4d10-9a44-0cf9566b37c9',
+  })
   async save(@Res() res, @Body() component: Component) {
     const save = await this.componentService.save(component);
 
@@ -101,6 +118,12 @@ export class ComponentController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '删除组件' })
   @ApiQuery({ name: 'id', type: String })
+  @ApiSuccessResponse({
+    schema: {
+      type: 'boolean',
+    },
+    example: true,
+  })
   async remove(@Res() res, @Query('id') id) {
     const remove = await this.componentService.remove(id);
 
@@ -118,6 +141,12 @@ export class ComponentController {
   @Post('update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '编辑组件' })
+  @ApiSuccessResponse({
+    schema: {
+      type: 'boolean',
+    },
+    example: true,
+  })
   async update(@Res() res, @Body() component: Component) {
     const update = await this.componentService.update(component);
 
@@ -135,7 +164,7 @@ export class ComponentController {
   @Get('detail')
   @ApiOperation({ summary: '组件详情' })
   @ApiQuery({ name: 'id', type: String })
-  @ApiOkResponse({ type: ComponentDto })
+  @ApiModelResponse(ComponentDto, componentExample)
   async detail(@Res() res, @Query('id') id) {
     const detail = await this.componentService.find(id);
 

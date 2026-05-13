@@ -1,10 +1,3 @@
-import { ApiProperty } from '@nestjs/swagger';
-
-export class PaginatedDto {
-  @ApiProperty()
-  total: number;
-}
-
 export enum ComponentTypeEnum {
   CHART = 1,
   COMPONENT = 2,

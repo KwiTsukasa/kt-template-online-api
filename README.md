@@ -1,79 +1,47 @@
 # KT Template Online API
 
-`kt-template-online-api` 是 KT Template Online 的 Nest.js 后端服务，负责组件模板管理、数据库字典映射和 MinIO 文件能力。
+`kt-template-online-api` 是 KT Template Online 的后端服务，负责组件模板、数据库字典和 MinIO 文件能力。前台列表和 Playground 保存都通过本服务完成数据读写。
 
 ## 技术栈
 
 - Node.js + TypeScript
-- Nest.js
+- NestJS 9
 - TypeORM + MySQL
 - MinIO
 - Swagger / Knife4j
+- pnpm
 
-## 功能概览
+## 功能模块
 
-### Component
-
-管理图表/组件模板：
-
-- 组件列表、分页列表、详情
-- 新增、编辑、逻辑删除
-- 查询阶段自动补充 `typeMsg`、`componentTypeMsg`
-
-### Dict
-
-维护数据库字典：
-
-- 字典项存储在 `dict` 表
-- `COMPONENT_TYPE.children_key` 关联二级字典，例如 `CHART`、`COMPONENT`
-- 服务会将数据库字典刷新到进程缓存，供实体 `AfterLoad` 阶段同步翻译字段
-
-### MinIO
-
-提供文件服务：
-
-- 检查/创建 bucket
-- 上传文件
-- 查询对象列表
-- 获取临时访问地址
-- 下载和删除对象
-
-### Common
-
-项目通用能力：
-
-- 统一响应 Swagger 注解
-- 字典翻译注解
-- `POST */save` 请求体规范化拦截器
-- 通用响应、分页和查询条件工具
+| 模块 | 说明 |
+| --- | --- |
+| `component` | 组件/图表模板的列表、详情、新增、编辑、逻辑删除 |
+| `dict` | 数据库字典查询，维护组件一级类型和二级类型关系 |
+| `minio` | Bucket 检查/创建、文件上传、列表、临时访问地址、下载和删除 |
+| `common` | 响应注解、字典翻译、`POST */save` 请求体规范化等通用能力 |
 
 ## 目录结构
 
 ```text
 src
-  common
-    decorators/     # 通用装饰器
-    interceptors/   # 全局/通用拦截器
-    services/       # 通用服务
-    swagger/        # Swagger 响应注解封装
-    index.ts        # common 统一出口
-  component/        # 组件模板模块
-  dict/             # 数据库字典模块
-  minio/            # MinIO 文件模块
-  types/            # 全局类型声明
-  app.module.ts
-  main.ts
+  common/       # 通用装饰器、拦截器、服务、Swagger 封装
+  component/    # 组件模板模块
+  dict/         # 字典模块
+  minio/        # MinIO 文件模块
+  types/        # 全局类型声明
+  app.module.ts # 全局模块、数据库、MinIO、拦截器注册
+  main.ts       # Swagger、Knife4j、端口启动入口
 ```
 
 ## 环境变量
 
-项目默认读取 `.env.development`，生产环境读取 `.env.production`。仓库只提交 `.env.example`，真实环境配置保留在本地。
+项目按 `NODE_ENV` 读取 `.env.${NODE_ENV}`，未指定时默认读取 `.env.development`。仓库只提交 `.env.example`，真实 `.env.development` 和 `.env.production` 保留在本地。
 
 ```env
 DB_HOST=localhost
 DB_PORT=3306
 DB_USERNAME=root
-DB_PASSWORD=your_password
+DB_PASSWORD=
 DB_DATABASE=shy_template
 DB_SYNC=true
 
@@ -84,93 +52,70 @@ MINIO_SECRET_KEY=minioadmin
 MINIO_BUCKET=kt-template-online
 ```
 
-`DB_SYNC=true` 时 TypeORM 会按实体同步表结构。生产环境建议关闭同步，改用迁移脚本维护表结构。
+`DB_SYNC=true` 会让 TypeORM 根据实体同步表结构。生产环境建议关闭同步，改用迁移脚本维护表结构。
 
-## 数据库字典
-
-`dict` 表是字典翻译的唯一数据源，代码中不再维护本地字典列表。
-
-核心字段：
-
-| 字段           | 说明                                                  |
-| -------------- | ----------------------------------------------------- |
-| `dict_key`     | 字典分组，例如 `COMPONENT_TYPE`、`CHART`、`COMPONENT` |
-| `label`        | 展示文本                                              |
-| `value`        | 字典值                                                |
-| `children_key` | 子字典分组，例如一级类型 `1` 指向 `CHART`             |
-| `sort`         | 排序                                                  |
-| `is_deleted`   | 逻辑删除标记                                          |
-
-组件类型示例：
-
-| dict_key       | value | label | children_key |
-| -------------- | ----- | ----- | ------------ |
-| COMPONENT_TYPE | 1     | 图表  | CHART        |
-| COMPONENT_TYPE | 2     | 组件  | COMPONENT    |
-
-## 全局 Save 规则
-
-项目注册了 `SaveBodyInterceptor`，会对 `POST */save` 请求统一删除 `body.id`，避免新增接口误用前端传入的主键。
-
-如果某个接口需要保留 `id`，可以使用：
-
-```ts
-@SkipSaveBodyNormalize()
-```
-
-## 启动项目
-
-安装依赖：
+## 启动
 
 ```bash
 pnpm install
-```
-
-开发环境：
-
-```bash
 pnpm start:dev
 ```
 
-普通启动：
+服务默认监听 `48085`。
+
+常用命令：
 
 ```bash
-pnpm start
+pnpm start          # 普通启动
+pnpm start:prod     # 构建后按 production 环境启动
+pnpm run build      # Nest 构建
+pnpm run lint       # ESLint 检查
+pnpm test           # 单元测试
+pnpm test:e2e       # e2e 测试
 ```
 
-生产启动：
-
-```bash
-pnpm start:prod
-```
-
-## 文档地址
-
-服务默认监听 `48085`：
+## 接口文档
 
 - Swagger UI：`http://localhost:48085/api`
 - OpenAPI JSON：`http://localhost:48085/api-json`
-- Knife4j：由 `nestjs-knife4j-plus` 根据 `/api-json` 提供增强文档
+- 根路径 `/` 会重定向到 Swagger 文档
+- 接口细节见 [API.md](./API.md)
 
-接口细节见 [API.md](./API.md)。
+除文件下载接口外，业务接口统一返回：
 
-## 常用校验
-
-类型检查：
-
-```bash
-pnpm exec tsc --noEmit
+```json
+{
+  "code": 200,
+  "msg": "操作成功",
+  "data": {}
+}
 ```
 
-格式化：
+## 核心规则
+
+- `dict` 表是字典翻译数据源，`Component.typeMsg` 和 `Component.componentTypeMsg` 查询后自动映射。
+- `POST /component/save` 新增组件，`POST /component/update` 编辑组件。
+- 全局 `SaveBodyInterceptor` 会删除 `POST */save` 请求体里的 `id`，避免新增接口误用前端主键。
+- 如个别 `save` 接口必须保留 `id`，在 Controller 方法上使用 `@SkipSaveBodyNormalize()`。
+- MinIO 上传接口返回的 `url` 会被 Playground 写入组件 `image` 字段。
+
+## 联调关系
+
+- `kt-template-online-web` 读取 `/component/list`、`/component/detail`、`/dict/*` 展示组件列表，并生成 Playground 跳转链接。
+- `kt-template-online-playground` 读取 `/dict/*` 初始化分类，保存时上传截图到 `/minio/upload`，再调用 `/component/save` 或 `/component/update`。
+- 前端项目通过 Vite 代理把 `/api` 转发到 `http://localhost:48085/`。
+
+## 轻量验证
+
+文档或小范围后端改动优先跑轻量命令：
 
 ```bash
-pnpm exec prettier --write "src/**/*.ts" "test/**/*.ts"
-```
-
-测试：
-
-```bash
+pnpm run lint
 pnpm test
-pnpm test:e2e
+```
+
+完整构建只在发布前或改动影响构建链路时执行：
+
+```bash
+pnpm run build
 ```

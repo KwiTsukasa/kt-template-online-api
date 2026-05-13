@@ -14,9 +14,7 @@ import { SaveBodyInterceptor } from './common';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: `.env${
-        process.env.NODE_ENV ? `.${process.env.NODE_ENV}` : ''
-      }`,
+      envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],

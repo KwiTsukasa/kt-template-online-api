@@ -67,7 +67,7 @@ src
 
 ## 环境变量
 
-项目默认读取 `.env`，生产环境会读取 `.env.prod`。
+项目默认读取 `.env.development`，生产环境读取 `.env.production`。仓库只提交 `.env.example`，真实环境配置保留在本地。
 
 ```env
 DB_HOST=localhost

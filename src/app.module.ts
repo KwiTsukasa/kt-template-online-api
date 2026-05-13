@@ -1,13 +1,14 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ConfigService } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MinioModule } from 'nestjs-minio-client';
 import { ComponentModule } from './component/component.module';
 import { DictModule } from './dict/dict.module';
 import { MinioClientModule } from './minio/minio.module';
-import { SaveMiddleware } from './middleware/save.middleware';
+import { SaveBodyInterceptor } from './common';
 
 @Module({
   imports: [
@@ -51,10 +52,13 @@ import { SaveMiddleware } from './middleware/save.middleware';
     DictModule,
     MinioClientModule,
   ],
-  providers: [AppService, ConfigService],
+  providers: [
+    AppService,
+    ConfigService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: SaveBodyInterceptor,
+    },
+  ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(SaveMiddleware).forRoutes('*/save');
-  }
-}
+export class AppModule {}

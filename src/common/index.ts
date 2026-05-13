@@ -1,9 +1,4 @@
-export function DecodeDictKey(dict: Dict[]): PropertyDecorator {
-  return (target, key: string | symbol) => {
-    Reflect.defineProperty(target, `_${key.toString()}`, {
-      set(newVal) {
-        this[key] = dict.find((i) => i.value == newVal).label;
-      },
-    });
-  };
-}
+export * from './decorators/decode-dict.decorator';
+export * from './interceptors/save-body.interceptor';
+export * from './services/tool.service';
+export * from './swagger/swagger-response';

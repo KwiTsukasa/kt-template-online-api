@@ -1,4 +1,5 @@
 import {
+  AfterLoad,
   Entity,
   PrimaryGeneratedColumn,
   Column,
@@ -6,15 +7,10 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ComponentTypeEnum, ComponentEnum } from '@/utils/constant';
-
+import { DecodeDictKey, decodeDictKeys } from '@/common';
 
 @Entity()
 export class Component {
-  constructor(component?: Component) {
-    Object.assign(this, component);
-  }
-
   @ApiPropertyOptional()
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -25,26 +21,31 @@ export class Component {
   })
   name: string;
 
-  @ApiProperty({
-    type: 'enum',
-    enum: ComponentTypeEnum,
-  })
+  @ApiProperty()
   @Column({
-    type: 'enum',
-    enum: ComponentTypeEnum,
+    type: 'int',
+  })
+  @DecodeDictKey('COMPONENT_TYPE', {
+    targetKey: 'typeMsg',
   })
   type: number;
 
-  @ApiProperty({
-    type: 'enum',
-    enum: ComponentEnum,
-  })
+  @ApiProperty()
   @Column({
     name: 'component_type',
-    type: 'enum',
-    enum: ComponentEnum,
+    type: 'int',
+  })
+  // 二级类型值由数据库字典维护；未指定 dictKey 时会在全部字典缓存中匹配。
+  @DecodeDictKey(undefined, {
+    targetKey: 'componentTypeMsg',
   })
   componentType: number;
+
+  @ApiPropertyOptional()
+  typeMsg: string;
+
+  @ApiPropertyOptional()
+  componentTypeMsg: string;
 
   @ApiProperty()
   @Column({
@@ -74,4 +75,10 @@ export class Component {
     default: 0,
   })
   is_deleted: boolean;
+
+  @AfterLoad()
+  decodeDictKeys() {
+    // 查询结果初始化完成后再翻译，避免构造/赋值阶段覆盖派生字段。
+    decodeDictKeys(this);
+  }
 }

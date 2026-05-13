@@ -81,7 +81,8 @@ export class MinioClientService {
     }
 
     const targetBucket = await this.ensureBucket(bucketName);
-    const targetObjectName = objectName || this.createObjectName(file.originalname);
+    const targetObjectName =
+      objectName || this.createObjectName(file.originalname);
 
     const result = await this.client.putObject(
       targetBucket,
@@ -161,7 +162,10 @@ export class MinioClientService {
     );
   }
 
-  async removeObject(objectName: string, bucketName?: string): Promise<boolean> {
+  async removeObject(
+    objectName: string,
+    bucketName?: string,
+  ): Promise<boolean> {
     if (!objectName) {
       throw new BadRequestException('objectName不能为空');
     }
@@ -171,6 +175,7 @@ export class MinioClientService {
   }
 
   private createObjectName(originalName: string): string {
+    // 前端未指定对象名时，生成带时间和随机段的路径，降低同名文件覆盖概率。
     const safeName = originalName.replace(/[\\/]/g, '_');
     const random = Math.random().toString(36).slice(2, 8);
 

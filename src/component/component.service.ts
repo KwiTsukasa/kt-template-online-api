@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Component } from './component.entity';
-import { ToolsService } from '@/utils/tool.service';
+import { ToolsService } from '@/common';
 import { isNumber, omit, pick } from 'lodash';
-import { ComponentDto } from './component.dto';
+import { DictService } from '@/dict/dict.service';
 
 @Injectable()
 export class ComponentService {
@@ -12,9 +12,12 @@ export class ComponentService {
     @InjectRepository(Component)
     private readonly userRepository: Repository<Component>,
     private readonly toolsService: ToolsService,
+    private readonly dictService: DictService,
   ) {}
 
   async all(): Promise<Component[]> {
+    await this.dictService.refreshDecodeCache();
+
     const components = await this.userRepository
       .createQueryBuilder('component')
       .getMany();
@@ -26,6 +29,8 @@ export class ComponentService {
     pageSize,
     ...args
   }: PageParams<Component>): Promise<Page<Component>> {
+    await this.dictService.refreshDecodeCache();
+
     const hasOwnEntity = new Component();
 
     const [wheres, likes] = [['is_deleted'], ['name']] as Array<
@@ -69,10 +74,7 @@ export class ComponentService {
       .take(pageSize)
       .getManyAndCount();
 
-    return this.toolsService.page<Component>(
-      list.map((component) => new ComponentDto(component)),
-      total,
-    );
+    return this.toolsService.page<Component>(list, total);
   }
 
   async save(component: Component): Promise<Component> {
@@ -104,6 +106,8 @@ export class ComponentService {
   }
 
   async find(id: number): Promise<Component> {
+    await this.dictService.refreshDecodeCache();
+
     const component = await this.userRepository
       .createQueryBuilder('component')
       .select([

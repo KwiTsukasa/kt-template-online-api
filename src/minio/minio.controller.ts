@@ -19,7 +19,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Response } from 'express';
-import { ToolsService } from '@/utils/tool.service';
 import { MinioClientService } from './minio.service';
 import type { MinioUploadFile } from './minio.service';
 import {
@@ -27,7 +26,8 @@ import {
   ApiArrayResponse,
   ApiModelResponse,
   ApiSuccessResponse,
-} from '@/common/swagger-response';
+  ToolsService,
+} from '@/common';
 import {
   MinioBucketStatusDto,
   MinioObjectDto,
@@ -40,7 +40,7 @@ export class MinioClientController {
   constructor(
     private readonly toolsService: ToolsService,
     private readonly minioClientService: MinioClientService,
-  ) {} //注入服务
+  ) {}
 
   @Get('check')
   @ApiOperation({ summary: '检查MinIO连接和Bucket状态' })

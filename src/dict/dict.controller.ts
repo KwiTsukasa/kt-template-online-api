@@ -6,11 +6,9 @@ import {
   Query,
   Res,
 } from '@nestjs/common';
-import { ToolsService } from '@/utils/tool.service';
 import { DictService } from './dict.service';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { ComponentTypeEnum, DictKeyEnum, DictKeyType } from '@/utils/constant';
-import { ApiArrayResponse } from '@/common/swagger-response';
+import { ApiArrayResponse, ToolsService } from '@/common';
 import { DictDto } from './dict.dto';
 
 const componentTypeDictExample = [
@@ -41,20 +39,20 @@ export class DictController {
   constructor(
     private readonly toolsService: ToolsService,
     private readonly dictService: DictService,
-  ) {} //注入服务
+  ) {}
 
   @ApiOperation({ summary: '根据key获取字典' })
-  @ApiQuery({ name: 'dictKey', enum: DictKeyEnum })
+  @ApiQuery({ name: 'dictKey', type: String })
   @ApiArrayResponse(DictDto, componentTypeDictExample)
   @Get('getDictByKey')
-  async getDictByKey(@Res() res, @Query('dictKey') dictKey: DictKeyType) {
-    const dict = this.toolsService.getDictByKey(dictKey);
+  async getDictByKey(@Res() res, @Query('dictKey') dictKey: string) {
+    const dict = await this.dictService.getDictByKey(dictKey);
 
     return res.send(this.toolsService.res(HttpStatus.OK, '操作成功', dict));
   }
 
   @ApiOperation({ summary: '根据组件类型获取组件字典' })
-  @ApiQuery({ name: 'type', enum: ComponentTypeEnum })
+  @ApiQuery({ name: 'type', type: Number })
   @ApiArrayResponse(DictDto, chartDictExample)
   @Get('getComponentDictByType')
   async getComponentDictByType(@Res() res, @Query('type', ParseIntPipe) type) {

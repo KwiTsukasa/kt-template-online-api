@@ -16,17 +16,16 @@ import {
   ApiTags,
   PartialType,
 } from '@nestjs/swagger';
-import { ToolsService } from '@/utils/tool.service';
-import { ComponentService } from './component.service';
-import { Component } from './component.entity';
-import { ComponentDto } from './component.dto';
 import {
   PaginatedDto,
   ApiArrayResponse,
   ApiModelResponse,
   ApiPageResponse,
   ApiSuccessResponse,
-} from '@/common/swagger-response';
+  ToolsService,
+} from '@/common';
+import { ComponentService } from './component.service';
+import { Component } from './component.entity';
 
 const componentExample = {
   id: '1d8d3dd2-99f0-4d10-9a44-0cf9566b37c9',
@@ -65,11 +64,11 @@ export class ComponentController {
   constructor(
     private readonly toolsService: ToolsService,
     private readonly componentService: ComponentService,
-  ) {} //注入服务
+  ) {}
 
   @Get('allList')
   @ApiOperation({ summary: '获取组件列表' })
-  @ApiArrayResponse(ComponentDto, [componentExample])
+  @ApiArrayResponse(Component, [componentExample])
   async getAllList(@Res() res) {
     const list = await this.componentService.all();
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', list));
@@ -78,11 +77,11 @@ export class ComponentController {
   @Get('list')
   @ApiOperation({ summary: '获取组件列表分页' })
   @ApiQuery({ type: [CompPageDto] })
-  @ApiPageResponse(ComponentDto, [componentExample], 1)
+  @ApiPageResponse(Component, [componentExample], 1)
   async getList(
     @Res() res,
-    @Query() { pageNo, pageSize, ...args }: PageParams<ComponentDto>,
-  ): Promise<PaginatedDto<ComponentDto>> {
+    @Query() { pageNo, pageSize, ...args }: PageParams<Component>,
+  ): Promise<PaginatedDto<Component>> {
     const list = await this.componentService.page({
       pageNo,
       pageSize,
@@ -164,7 +163,7 @@ export class ComponentController {
   @Get('detail')
   @ApiOperation({ summary: '组件详情' })
   @ApiQuery({ name: 'id', type: String })
-  @ApiModelResponse(ComponentDto, componentExample)
+  @ApiModelResponse(Component, componentExample)
   async detail(@Res() res, @Query('id') id) {
     const detail = await this.componentService.find(id);
 

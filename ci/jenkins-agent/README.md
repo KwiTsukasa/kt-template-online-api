@@ -72,7 +72,6 @@ docker run -d \
   -e JENKINS_SECRET=替换成节点页面里的secret \
   -e JENKINS_AGENT_WORKDIR=/home/jenkins/agent \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v /vol1/docker/kt-template-online-api:/nas-env/kt-template-online-api:ro \
   -v kt-node-agent-workdir:/home/jenkins/agent \
   kt-jenkins-agent:node22
 ```
@@ -90,21 +89,26 @@ docker run -d \
 Jenkinsfile 的 `Docker Run` 阶段默认会读取 Agent 容器内的：
 
 ```text
-/nas-env/kt-template-online-api/.env.production
+/home/jenkins/agent/env/kt-template-online-api/.env.production
 ```
 
-这个路径来自上面启动 Agent 时的只读挂载：
+这个路径在已有的 `kt-node-agent-workdir` volume 里，不需要为了 env 文件重新创建 Agent 容器。先在 Agent 容器内创建目录：
 
 ```bash
--v /vol1/docker/kt-template-online-api:/nas-env/kt-template-online-api:ro
+docker exec kt-node-agent sh -lc 'mkdir -p /home/jenkins/agent/env/kt-template-online-api'
 ```
 
-所以真实生产环境变量文件放在 NAS 本地即可，不需要上传 Git：
+如果 NAS 上已有 env 文件，可以复制进 Agent workdir：
 
 ```bash
-mkdir -p /vol1/docker/kt-template-online-api
-vi /vol1/docker/kt-template-online-api/.env.production
-chmod 600 /vol1/docker/kt-template-online-api/.env.production
+docker cp /你的NAS路径/.env.production kt-node-agent:/home/jenkins/agent/env/kt-template-online-api/.env.production
+docker exec kt-node-agent sh -lc 'chmod 600 /home/jenkins/agent/env/kt-template-online-api/.env.production'
+```
+
+复制后确认 Jenkinsfile 能读取到：
+
+```bash
+docker exec kt-node-agent sh -lc 'ls -l /home/jenkins/agent/env/kt-template-online-api/.env.production'
 ```
 
 多分支流水线构建时保持默认参数即可：
@@ -113,7 +117,7 @@ chmod 600 /vol1/docker/kt-template-online-api/.env.production
 RUN_DOCKER_CONTAINER=true
 CONTAINER_NAME=kt-template-online-api
 CONTAINER_PORT=48085
-CONTAINER_ENV_FILE=/nas-env/kt-template-online-api/.env.production
+CONTAINER_ENV_FILE=/home/jenkins/agent/env/kt-template-online-api/.env.production
 ```
 
 如果业务容器需要加入某个 Docker 网络，在 Jenkins 参数 `CONTAINER_NETWORK` 填网络名；如果需要挂载上传目录、日志目录等，在 `CONTAINER_EXTRA_ARGS` 填额外的 `docker run` 参数。

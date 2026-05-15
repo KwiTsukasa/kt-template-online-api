@@ -41,7 +41,7 @@ pipeline {
     string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签，为空时使用 分支名-BUILD_NUMBER；PR 使用源分支名')
     string(name: 'CONTAINER_NAME', defaultValue: 'kt-template-online-api', description: '业务容器名称')
     string(name: 'CONTAINER_PORT', defaultValue: '48085', description: '宿主机映射端口，容器内固定使用 48085')
-    string(name: 'CONTAINER_ENV_FILE', defaultValue: '/nas-env/kt-template-online-api/.env.production', description: 'Agent 容器内可读取的业务 env 文件路径')
+    string(name: 'CONTAINER_ENV_FILE', defaultValue: '/home/jenkins/agent/env/kt-template-online-api/.env.production', description: 'Agent workdir 内可读取的业务 env 文件路径')
     string(name: 'CONTAINER_NETWORK', defaultValue: '', description: '业务容器加入的 Docker 网络，为空则使用 Docker 默认网络')
     string(name: 'CONTAINER_EXTRA_ARGS', defaultValue: '', description: 'docker run 额外参数，例如 -v /host/data:/app/data')
   }
@@ -204,8 +204,8 @@ pipeline {
             set -e
             if [ ! -f '${containerEnvFile}' ]; then
               echo "Container env file not found: ${containerEnvFile}"
-              echo "Mount the NAS env directory into the Agent, for example:"
-              echo "/vol1/docker/kt-template-online-api:/nas-env/kt-template-online-api:ro"
+              echo "Put .env.production under the existing Agent workdir volume, for example:"
+              echo "/home/jenkins/agent/env/kt-template-online-api/.env.production"
               exit 1
             fi
 

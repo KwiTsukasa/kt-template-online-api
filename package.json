@@ -30,6 +30,7 @@
     "@nestjs/swagger": "^7.4.2",
     "@nestjs/typeorm": "^9.0.1",
     "cross-env": "^7.0.3",
+    "express": "4.18.2",
     "lodash": "^4.17.21",
     "mysql2": "^3.22.3",
     "nestjs-knife4j-plus": "^1.0.8",

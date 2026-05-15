@@ -34,10 +34,16 @@ pipeline {
   parameters {
     booleanParam(name: 'BUILD_DOCKER_IMAGE', defaultValue: true, description: '是否在非 PR 分支使用项目现有 dockerfile 构建镜像')
     booleanParam(name: 'PUSH_DOCKER_IMAGE', defaultValue: false, description: '是否执行 docker push；仅发布分支生效，需要 Agent 已提前完成 docker login')
+    booleanParam(name: 'RUN_DOCKER_CONTAINER', defaultValue: true, description: 'Docker 镜像构建成功后是否重启业务容器；仅发布分支生效')
     string(name: 'PUBLISH_BRANCH_PATTERN', defaultValue: '^(main|master|release/.+)$', description: '允许推送镜像的分支正则')
     string(name: 'DOCKER_REGISTRY', defaultValue: '', description: '镜像仓库地址，为空时只生成本地镜像')
     string(name: 'IMAGE_NAME', defaultValue: 'kt-template-online-api', description: 'Docker 镜像名称')
     string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签，为空时使用 分支名-BUILD_NUMBER；PR 使用源分支名')
+    string(name: 'CONTAINER_NAME', defaultValue: 'kt-template-online-api', description: '业务容器名称')
+    string(name: 'CONTAINER_PORT', defaultValue: '48085', description: '宿主机映射端口，容器内固定使用 48085')
+    string(name: 'CONTAINER_ENV_FILE', defaultValue: '/nas-env/kt-template-online-api/.env.production', description: 'Agent 容器内可读取的业务 env 文件路径')
+    string(name: 'CONTAINER_NETWORK', defaultValue: '', description: '业务容器加入的 Docker 网络，为空则使用 Docker 默认网络')
+    string(name: 'CONTAINER_EXTRA_ARGS', defaultValue: '', description: 'docker run 额外参数，例如 -v /host/data:/app/data')
   }
 
   environment {
@@ -102,6 +108,7 @@ pipeline {
             Tag: ${env.TAG_NAME ?: '-'}
             Docker image: ${env.DOCKER_IMAGE}
             Publish branch: ${env.IS_PUBLISH_BRANCH}
+            Run container: ${params.RUN_DOCKER_CONTAINER}
           """.stripIndent()
         }
       }
@@ -164,6 +171,57 @@ pipeline {
       steps {
         script {
           runCmd("docker push ${env.DOCKER_IMAGE}")
+        }
+      }
+    }
+
+    stage('Docker Run') {
+      when {
+        allOf {
+          expression { return params.BUILD_DOCKER_IMAGE && params.RUN_DOCKER_CONTAINER }
+          expression { return env.IS_CHANGE_REQUEST != 'true' }
+          expression { return env.IS_PUBLISH_BRANCH == 'true' }
+        }
+      }
+      steps {
+        script {
+          if (!isUnix()) {
+            error('Docker Run stage requires a Linux/NAS Jenkins Agent.')
+          }
+
+          def containerName = params.CONTAINER_NAME?.trim() ?: 'kt-template-online-api'
+          def containerPort = params.CONTAINER_PORT?.trim() ?: env.APP_PORT
+          def containerEnvFile = params.CONTAINER_ENV_FILE?.trim()
+          if (!containerEnvFile) {
+            error('CONTAINER_ENV_FILE is required when RUN_DOCKER_CONTAINER is enabled.')
+          }
+
+          def networkArg = params.CONTAINER_NETWORK?.trim() ? "--network ${params.CONTAINER_NETWORK.trim()}" : ''
+          def extraArgs = params.CONTAINER_EXTRA_ARGS?.trim() ?: ''
+
+          // 部署阶段会替换同名容器；真实 env 文件只从 NAS 挂载进 Agent，不进入 Git。
+          runCmd("""
+            set -e
+            if [ ! -f '${containerEnvFile}' ]; then
+              echo "Container env file not found: ${containerEnvFile}"
+              echo "Mount the NAS env directory into the Agent, for example:"
+              echo "/vol1/docker/kt-template-online-api:/nas-env/kt-template-online-api:ro"
+              exit 1
+            fi
+
+            docker rm -f '${containerName}' >/dev/null 2>&1 || true
+            docker run -d \\
+              --name '${containerName}' \\
+              --restart=always \\
+              ${networkArg} \\
+              --env-file '${containerEnvFile}' \\
+              -e NODE_ENV=production \\
+              -p '${containerPort}':${env.APP_PORT} \\
+              ${extraArgs} \\
+              '${env.DOCKER_IMAGE}'
+
+            docker ps --filter "name=^/${containerName}\$"
+          """.stripIndent())
         }
       }
     }

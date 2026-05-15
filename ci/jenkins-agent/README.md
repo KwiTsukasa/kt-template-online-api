@@ -9,6 +9,7 @@ Agent 镜像内置：
 - Node.js 22
 - pnpm 9
 - Docker CLI / Buildx / Compose plugin
+- `github.com` SSH known_hosts
 
 项目业务镜像仍然使用仓库根目录的 `dockerfile`。本目录的 Dockerfile 是给 Jenkins Agent 用的，不是后端服务运行镜像。
 
@@ -40,13 +41,22 @@ agent { label 'kt-node-agent' }
 docker build -t kt-jenkins-agent:node22 -f ci/jenkins-agent/Dockerfile ci/jenkins-agent
 ```
 
-## NAS 侧启动 Agent
-
-如果 Jenkins Controller 容器名是 `jenkins`，并且你希望 Agent 通过 Docker 网络访问 Jenkins，可以先准备网络：
+如果 Git 仓库不是 GitHub，可以在构建时覆盖 SSH host：
 
 ```bash
-docker network create jenkins
-docker network connect jenkins jenkins
+docker build \
+  --build-arg GIT_SSH_HOST=你的Git服务器域名 \
+  -t kt-jenkins-agent:node22 \
+  -f ci/jenkins-agent/Dockerfile \
+  ci/jenkins-agent
+```
+
+## NAS 侧启动 Agent
+
+如果 Jenkins Controller 使用你当前的 compose 启动，默认网络是 `jenkins_default`。先确认网络存在：
+
+```bash
+docker network ls | grep jenkins_default
 ```
 
 启动 Agent 容器。你的 Jenkins Controller compose 暴露的是 `18080:8080`，如果 Agent 和 Jenkins 在同一个 Docker 网络，容器内仍然使用 `http://jenkins:8080/`；如果 Agent 不在同一个网络，使用 NAS/服务器可访问地址，例如 `http://Jenkins服务器IP:18080/`。
@@ -55,7 +65,7 @@ docker network connect jenkins jenkins
 docker run -d \
   --name kt-node-agent \
   --restart=always \
-  --network jenkins \
+  --network jenkins_default \
   -u root \
   -e JENKINS_URL=http://jenkins:8080/ \
   -e JENKINS_AGENT_NAME=kt-node-agent \
@@ -89,3 +99,35 @@ Manage Jenkins -> Nodes -> kt-node-agent
 ```
 
 节点在线后，多分支流水线点击构建即可进入 CI 阶段。
+
+## 常见问题
+
+如果 Jenkins checkout 时报错：
+
+```text
+No ED25519 host key is known for github.com
+Host key verification failed.
+```
+
+说明 Agent 容器缺少 Git 服务器的 SSH host key。当前 Dockerfile 已在镜像构建时写入 `github.com` 的用户级 `known_hosts` 和系统级 `/etc/ssh/ssh_known_hosts`。重新构建镜像并重启 Agent：
+
+```bash
+docker build --no-cache -t kt-jenkins-agent:node22 -f ci/jenkins-agent/Dockerfile ci/jenkins-agent
+docker rm -f kt-node-agent
+```
+
+然后按上面的 `docker run` 命令重新启动 Agent。
+
+重启后可以先检查容器里是否已经写入 GitHub host key：
+
+```bash
+docker exec kt-node-agent sh -lc 'ssh-keygen -F github.com -f /etc/ssh/ssh_known_hosts && ssh-keygen -F github.com -f /root/.ssh/known_hosts'
+```
+
+如果仍然报同样错误，去 Jenkins 页面把 Git Host Key Verification 改成手动提供或首次接受：
+
+```text
+Manage Jenkins -> Security -> Git Host Key Verification Configuration
+```
+
+推荐先选 `Accept first connection strategy` 验证链路；更严格的做法是选手动提供 GitHub host keys。

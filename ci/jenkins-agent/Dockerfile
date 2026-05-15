@@ -4,6 +4,7 @@ USER root
 
 ARG NODE_MAJOR=22
 ARG PNPM_VERSION=9
+ARG GIT_SSH_HOST=github.com
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl git gnupg openssh-client \
@@ -22,6 +23,12 @@ RUN apt-get update \
   && pnpm --version \
   && docker --version \
   && docker compose version \
+  && mkdir -p /root/.ssh /home/jenkins/.ssh /etc/ssh \
+  && ssh-keyscan -t rsa,ecdsa,ed25519 ${GIT_SSH_HOST} | tee /etc/ssh/ssh_known_hosts /root/.ssh/known_hosts /home/jenkins/.ssh/known_hosts >/dev/null \
+  && chmod 700 /root/.ssh /home/jenkins/.ssh \
+  && chmod 644 /root/.ssh/known_hosts /home/jenkins/.ssh/known_hosts \
+  && chmod 644 /etc/ssh/ssh_known_hosts \
+  && chown -R jenkins:jenkins /home/jenkins/.ssh \
   && rm -rf /var/lib/apt/lists/*
 
 USER jenkins

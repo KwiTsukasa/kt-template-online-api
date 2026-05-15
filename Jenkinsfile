@@ -156,7 +156,17 @@ pipeline {
       }
       steps {
         script {
-          runCmd("docker build -f dockerfile -t ${env.DOCKER_IMAGE} .")
+          if (isUnix()) {
+            runCmd("""
+              test -f dist/main.js
+              docker build -f dockerfile -t ${env.DOCKER_IMAGE} .
+            """.stripIndent())
+          } else {
+            runCmd('', """
+              if not exist dist\\main.js exit /b 1
+              docker build -f dockerfile -t ${env.DOCKER_IMAGE} .
+            """.stripIndent())
+          }
         }
       }
     }

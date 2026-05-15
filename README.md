@@ -67,7 +67,7 @@ pnpm start:dev
 
 ```bash
 pnpm start          # 普通启动
-pnpm start:prod     # 构建后按 production 环境启动
+pnpm start:prod     # 按 production 环境运行已构建的 dist/main
 pnpm run build      # Nest 构建
 pnpm run lint       # ESLint 检查
 pnpm test           # 单元测试

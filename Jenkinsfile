@@ -10,6 +10,17 @@ def normalizeDockerTag(String value) {
   return value.replaceAll(/[^A-Za-z0-9_.-]/, '-')
 }
 
+def resolveSourceName(String branchName, String changeBranch, String changeId, String tagName) {
+  if (changeId) {
+    return changeBranch ?: "PR-${changeId}"
+  }
+  return tagName ?: branchName ?: 'local'
+}
+
+def isPublishBranch(String branchName, String pattern) {
+  return branchName ==~ pattern
+}
+
 pipeline {
   agent any
 
@@ -21,11 +32,12 @@ pipeline {
   }
 
   parameters {
-    booleanParam(name: 'BUILD_DOCKER_IMAGE', defaultValue: true, description: '是否使用项目现有 dockerfile 构建镜像')
-    booleanParam(name: 'PUSH_DOCKER_IMAGE', defaultValue: false, description: '是否执行 docker push；需要 Jenkins Agent 已提前完成 docker login')
+    booleanParam(name: 'BUILD_DOCKER_IMAGE', defaultValue: true, description: '是否在非 PR 分支使用项目现有 dockerfile 构建镜像')
+    booleanParam(name: 'PUSH_DOCKER_IMAGE', defaultValue: false, description: '是否执行 docker push；仅发布分支生效，需要 Jenkins Agent 已提前完成 docker login')
+    string(name: 'PUBLISH_BRANCH_PATTERN', defaultValue: '^(main|master|release/.+)$', description: '允许推送镜像的分支正则')
     string(name: 'DOCKER_REGISTRY', defaultValue: '', description: '镜像仓库地址，为空时只生成本地镜像')
     string(name: 'IMAGE_NAME', defaultValue: 'kt-template-online-api', description: 'Docker 镜像名称')
-    string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签，为空时使用 分支名-BUILD_NUMBER')
+    string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签，为空时使用 分支名-BUILD_NUMBER；PR 使用源分支名')
   }
 
   environment {
@@ -45,9 +57,13 @@ pipeline {
     stage('Prepare') {
       steps {
         script {
-          def branchTag = normalizeDockerTag(env.BRANCH_NAME ?: 'local')
+          def sourceName = resolveSourceName(env.BRANCH_NAME, env.CHANGE_BRANCH, env.CHANGE_ID, env.TAG_NAME)
+          def branchTag = normalizeDockerTag(sourceName)
           def imageTagParam = params.IMAGE_TAG?.trim()
           env.IMAGE_TAG_FINAL = imageTagParam ? normalizeDockerTag(imageTagParam) : "${branchTag}-${env.BUILD_NUMBER}"
+          env.IS_CHANGE_REQUEST = env.CHANGE_ID ? 'true' : 'false'
+          def publishPattern = params.PUBLISH_BRANCH_PATTERN?.trim() ?: '^(main|master|release/.+)$'
+          env.IS_PUBLISH_BRANCH = (!env.CHANGE_ID && isPublishBranch(env.BRANCH_NAME ?: '', publishPattern)) ? 'true' : 'false'
           def registry = params.DOCKER_REGISTRY?.trim()
           env.DOCKER_IMAGE = registry ? "${registry}/${params.IMAGE_NAME}:${env.IMAGE_TAG_FINAL}" : "${params.IMAGE_NAME}:${env.IMAGE_TAG_FINAL}"
 
@@ -80,7 +96,13 @@ pipeline {
             """.stripIndent())
           }
 
-          echo "Docker image: ${env.DOCKER_IMAGE}"
+          echo """
+            Branch: ${env.BRANCH_NAME ?: '-'}
+            Change request: ${env.CHANGE_ID ?: '-'}
+            Tag: ${env.TAG_NAME ?: '-'}
+            Docker image: ${env.DOCKER_IMAGE}
+            Publish branch: ${env.IS_PUBLISH_BRANCH}
+          """.stripIndent()
         }
       }
     }
@@ -120,7 +142,10 @@ pipeline {
 
     stage('Docker Build') {
       when {
-        expression { return params.BUILD_DOCKER_IMAGE }
+        allOf {
+          expression { return params.BUILD_DOCKER_IMAGE }
+          expression { return env.IS_CHANGE_REQUEST != 'true' }
+        }
       }
       steps {
         script {
@@ -131,7 +156,10 @@ pipeline {
 
     stage('Docker Push') {
       when {
-        expression { return params.BUILD_DOCKER_IMAGE && params.PUSH_DOCKER_IMAGE }
+        allOf {
+          expression { return params.BUILD_DOCKER_IMAGE && params.PUSH_DOCKER_IMAGE }
+          expression { return env.IS_PUBLISH_BRANCH == 'true' }
+        }
       }
       steps {
         script {

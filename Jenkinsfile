@@ -22,7 +22,7 @@ def isPublishBranch(String branchName, String pattern) {
 }
 
 pipeline {
-  agent any
+  agent { label 'kt-node-agent' }
 
   options {
     skipDefaultCheckout(true)
@@ -33,7 +33,7 @@ pipeline {
 
   parameters {
     booleanParam(name: 'BUILD_DOCKER_IMAGE', defaultValue: true, description: '是否在非 PR 分支使用项目现有 dockerfile 构建镜像')
-    booleanParam(name: 'PUSH_DOCKER_IMAGE', defaultValue: false, description: '是否执行 docker push；仅发布分支生效，需要 Jenkins Agent 已提前完成 docker login')
+    booleanParam(name: 'PUSH_DOCKER_IMAGE', defaultValue: false, description: '是否执行 docker push；仅发布分支生效，需要 Agent 已提前完成 docker login')
     string(name: 'PUBLISH_BRANCH_PATTERN', defaultValue: '^(main|master|release/.+)$', description: '允许推送镜像的分支正则')
     string(name: 'DOCKER_REGISTRY', defaultValue: '', description: '镜像仓库地址，为空时只生成本地镜像')
     string(name: 'IMAGE_NAME', defaultValue: 'kt-template-online-api', description: 'Docker 镜像名称')
@@ -67,7 +67,7 @@ pipeline {
           def registry = params.DOCKER_REGISTRY?.trim()
           env.DOCKER_IMAGE = registry ? "${registry}/${params.IMAGE_NAME}:${env.IMAGE_TAG_FINAL}" : "${params.IMAGE_NAME}:${env.IMAGE_TAG_FINAL}"
 
-          // 项目以 pnpm-lock.yaml 为准；Agent 未安装 pnpm 时再通过 Corepack 启用 pnpm 9。
+          // Agent 由 NAS 侧预先创建；这里仅确认 CI 所需的 Node/pnpm 环境可用。
           if (isUnix()) {
             runCmd("""
               node --version

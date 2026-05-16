@@ -42,7 +42,7 @@ pipeline {
     string(name: 'CONTAINER_NAME', defaultValue: 'kt-template-online-api', description: '业务容器名称')
     string(name: 'CONTAINER_PORT', defaultValue: '48085', description: '宿主机映射端口，容器内固定使用 48085')
     string(name: 'CONTAINER_ENV_FILE', defaultValue: '/home/jenkins/agent/env/kt-template-online-api/.env.production', description: 'Agent workdir 内可读取的业务 env 文件路径')
-    string(name: 'CONTAINER_NETWORK', defaultValue: '', description: '业务容器加入的 Docker 网络，为空则使用 Docker 默认网络')
+    string(name: 'CONTAINER_NETWORK', defaultValue: 'bridge', description: '业务容器加入的 Docker 网络，默认使用 Docker bridge')
     string(name: 'CONTAINER_EXTRA_ARGS', defaultValue: '', description: 'docker run 额外参数，例如 -v /host/data:/app/data')
   }
 

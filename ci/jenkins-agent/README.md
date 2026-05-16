@@ -9,6 +9,7 @@ Agent 镜像内置：
 - Node.js 22
 - pnpm 9
 - Docker CLI / Buildx / Compose plugin
+- kubectl
 - `github.com` SSH known_hosts
 
 项目业务镜像仍然使用仓库根目录的 `dockerfile`。本目录的 Dockerfile 是给 Jenkins Agent 用的，不是后端服务运行镜像。
@@ -121,6 +122,32 @@ CONTAINER_ENV_FILE=/home/jenkins/agent/env/kt-template-online-api/.env.productio
 ```
 
 如果业务容器需要加入某个 Docker 网络，在 Jenkins 参数 `CONTAINER_NETWORK` 填网络名；如果需要挂载上传目录、日志目录等，在 `CONTAINER_EXTRA_ARGS` 填额外的 `docker run` 参数。
+
+## K8s 发布 kubeconfig
+
+标准 K8s 发布链路使用 `ci/fnos-k8s/bootstrap.sh` 在 NAS 上创建 k3d 集群，并把 Jenkins Agent 专用 kubeconfig 放入：
+
+```text
+/home/jenkins/agent/kubeconfig/kt-nas.jenkins.yaml
+```
+
+这个 kubeconfig 的 API Server 地址是 k3d Docker 网络内的：
+
+```text
+https://k3d-kt-nas-serverlb:6443
+```
+
+因此 Agent 容器需要同时加入 Jenkins 网络和 k3d 网络。初始化脚本会自动执行：
+
+```bash
+docker network connect k3d-kt-nas kt-node-agent
+```
+
+如果重建了 Agent 容器，重新执行一次下面命令即可恢复 kubeconfig 和网络连接：
+
+```powershell
+.\ci\fnos-k8s\run-remote-bootstrap.ps1
+```
 
 ## 验证
 

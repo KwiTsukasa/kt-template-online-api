@@ -83,9 +83,12 @@ pipeline {
           def publishPattern = params.PUBLISH_BRANCH_PATTERN?.trim() ?: '^(main|master|release/.+)$'
           env.IS_PUBLISH_BRANCH = (!env.CHANGE_ID && isPublishBranch(env.BRANCH_NAME ?: '', publishPattern)) ? 'true' : 'false'
           def registry = params.DOCKER_REGISTRY?.trim()
+          // Jenkins 已创建任务会缓存旧参数值；K8s 模式下空 registry 自动回退到 NAS 本地 registry。
           if (params.DEPLOY_TARGET == 'k8s' && !registry) {
-            error('DOCKER_REGISTRY is required when DEPLOY_TARGET=k8s.')
+            registry = 'k3d-kt-registry.localhost:5000'
+            echo "DOCKER_REGISTRY is empty, fallback to ${registry} for K8s deploy."
           }
+          env.DOCKER_REGISTRY_EFFECTIVE = registry ?: ''
           env.DOCKER_IMAGE = registry ? "${registry}/${params.IMAGE_NAME}:${env.IMAGE_TAG_FINAL}" : "${params.IMAGE_NAME}:${env.IMAGE_TAG_FINAL}"
           env.DOCKER_IMAGE_LATEST = registry ? "${registry}/${params.IMAGE_NAME}:latest" : "${params.IMAGE_NAME}:latest"
 
@@ -135,6 +138,7 @@ pipeline {
             Branch: ${env.BRANCH_NAME ?: '-'}
             Change request: ${env.CHANGE_ID ?: '-'}
             Tag: ${env.TAG_NAME ?: '-'}
+            Docker registry: ${env.DOCKER_REGISTRY_EFFECTIVE ?: '-'}
             Docker image: ${env.DOCKER_IMAGE}
             Docker latest: ${env.DOCKER_IMAGE_LATEST}
             Deploy target: ${params.DEPLOY_TARGET}
@@ -217,7 +221,7 @@ pipeline {
       }
       steps {
         script {
-          if (params.DOCKER_REGISTRY?.trim()) {
+          if (env.DOCKER_REGISTRY_EFFECTIVE?.trim()) {
             runCmd("""
               docker push ${env.DOCKER_IMAGE}
               docker push ${env.DOCKER_IMAGE_LATEST}

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Body,
   Delete,
@@ -33,6 +34,18 @@ import {
   MinioObjectDto,
   MinioUploadResultDto,
 } from './minio.dto';
+
+const PROXY_RESOURCE_TIMEOUT = 1000 * 15;
+const PROXY_RESOURCE_CONTENT_TYPES = [
+  'image/',
+  'font/',
+  'text/css',
+  'application/font',
+  'application/x-font',
+  'application/vnd.ms-fontobject',
+];
+const PROXY_RESOURCE_EXTENSION_RE =
+  /\.(avif|bmp|css|eot|gif|ico|jpe?g|otf|png|svg|ttf|webp|woff2?)(?:[?#].*)?$/i;
 
 @Controller('minio')
 @ApiTags('minio')
@@ -172,6 +185,47 @@ export class MinioClientController {
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
   }
 
+  @Get('resource-proxy')
+  @ApiOperation({ summary: '代理截图所需的图片/CSS/字体资源' })
+  @ApiQuery({ name: 'url' })
+  async proxyResource(@Res() res: Response, @Query('url') url: string) {
+    const target = this.getProxyResourceUrl(url);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), PROXY_RESOURCE_TIMEOUT);
+
+    try {
+      const response = await fetch(target, {
+        redirect: 'follow',
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new BadRequestException(`资源代理失败：${response.status}`);
+      }
+
+      const contentType =
+        response.headers.get('content-type') || 'application/octet-stream';
+
+      if (!this.isAllowedProxyResource(contentType, target)) {
+        throw new BadRequestException('仅支持代理图片、CSS 和字体资源');
+      }
+
+      const data = Buffer.from(await response.arrayBuffer());
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.send(data);
+    } catch (err) {
+      if (err instanceof BadRequestException) {
+        throw err;
+      }
+
+      throw new BadRequestException('资源代理失败');
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   @Get('download')
   @ApiOperation({ summary: '下载MinIO文件' })
   @ApiQuery({ name: 'objectName' })
@@ -222,5 +276,37 @@ export class MinioClientController {
     );
 
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
+  }
+
+  private getProxyResourceUrl(url: string) {
+    if (!url) {
+      throw new BadRequestException('资源地址不能为空');
+    }
+
+    try {
+      const target = new URL(url);
+
+      if (!['http:', 'https:'].includes(target.protocol)) {
+        throw new BadRequestException('仅支持 http/https 资源');
+      }
+
+      return target.toString();
+    } catch (err) {
+      if (err instanceof BadRequestException) {
+        throw err;
+      }
+
+      throw new BadRequestException('资源地址不合法');
+    }
+  }
+
+  private isAllowedProxyResource(contentType: string, target: string) {
+    const normalizedType = contentType.split(';')[0].trim().toLowerCase();
+
+    return (
+      PROXY_RESOURCE_CONTENT_TYPES.some((type) =>
+        normalizedType.startsWith(type),
+      ) || PROXY_RESOURCE_EXTENSION_RE.test(target)
+    );
   }
 }

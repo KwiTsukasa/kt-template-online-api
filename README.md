@@ -15,8 +15,9 @@
 
 | 模块 | 说明 |
 | --- | --- |
-| `component` | 组件/图表模板的列表、详情、新增、编辑、逻辑删除 |
-| `dict` | 数据库字典查询，维护组件一级类型和二级类型关系 |
+| `component` | Admin 下受保护的组件/图表模板列表、详情、新增、编辑、逻辑删除，数据表为 `admin_component` |
+| `dict` | 基于新 `admin_dict` 表的字典查询，维护组件一级类型和二级类型关系 |
+| `admin` | Vben Admin 真实接口，包含登录、用户、菜单、角色、部门、时区、上传和示例表格 |
 | `minio` | Bucket 检查/创建、文件上传、列表、临时访问地址、下载和删除 |
 | `common` | 响应注解、字典翻译、`POST */save` 请求体规范化等通用能力 |
 
@@ -25,8 +26,7 @@
 ```text
 src
   common/       # 通用装饰器、拦截器、服务、Swagger 封装
-  component/    # 组件模板模块
-  dict/         # 字典模块
+  admin/        # Vben Admin 后台认证、组件、字典、菜单、角色、部门等接口
   minio/        # MinIO 文件模块
   types/        # 全局类型声明
   app.module.ts # 全局模块、数据库、MinIO、拦截器注册
@@ -50,9 +50,15 @@ MINIO_PORT=9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 MINIO_BUCKET=kt-template-online
+
+ADMIN_TOKEN_SECRET=change-me
+ADMIN_COOKIE_SECURE=false
+SNOWFLAKE_WORKER_ID=1
+SNOWFLAKE_DATACENTER_ID=1
 ```
 
 `DB_SYNC=true` 会让 TypeORM 根据实体同步表结构。生产环境建议关闭同步，改用迁移脚本维护表结构。
+内网 HTTP 访问时保持 `ADMIN_COOKIE_SECURE=false`；如果未来切到 HTTPS 域名，再改为 `true`。
 
 ## 启动
 
@@ -93,7 +99,14 @@ pnpm test:e2e       # e2e 测试
 
 ## 核心规则
 
-- `dict` 表是字典翻译数据源，`Component.typeMsg` 和 `Component.componentTypeMsg` 查询后自动映射。
+- `admin_component` 表保存组件/图表模板，`admin_dict` 表是统一字典翻译数据源，`Component.typeMsg` 和 `Component.componentTypeMsg` 查询后自动映射；旧 `/dict/*` 接口路径保持兼容。
+- 业务主键统一由 Snowflake 生成数字 ID，数据库使用 `BIGINT`，接口按字符串返回以避免前端长整型精度问题。
+- 如果基础后台菜单的 `meta` 被旧数据覆盖为空，执行 `sql/fix-admin-menu-meta.sql` 可以恢复初始化菜单的 `title/icon/order` 等元数据。
+- 旧 `component` 表迁移到 `admin_component` 时，执行 `sql/migrate-component-to-admin-component.sql`，脚本会把旧表重命名为备份表。
+- 如果旧版本曾写入 `admin_user.id=0`，先执行 `sql/fix-admin-user-zero-id.sql` 修复脏数据，再重启服务。
+- Admin 与 Component 业务接口统一走 `JwtAuthGuard`；登录、刷新 token、退出登录和部分示例状态测试接口通过 `@Public()` 放行。
+- `kt-template-admin` 登录会写入 access token 与刷新 token cookie，`kt-template-online-web` 和 `kt-template-online-playground` 可在回跳后通过刷新 token 重新持久化登录态。
+- `kt-template-admin` 开发环境通过 `/api` 代理到本服务 `48085`，已关闭 Vben Nitro Mock。
 - `POST /component/save` 新增组件，`POST /component/update` 编辑组件。
 - 全局 `SaveBodyInterceptor` 会删除 `POST */save` 请求体里的 `id`，避免新增接口误用前端主键。
 - 如个别 `save` 接口必须保留 `id`，在 Controller 方法上使用 `@SkipSaveBodyNormalize()`。
@@ -101,8 +114,8 @@ pnpm test:e2e       # e2e 测试
 
 ## 联调关系
 
-- `kt-template-online-web` 读取 `/component/list`、`/component/detail`、`/dict/*` 展示组件列表，并生成 Playground 跳转链接。
-- `kt-template-online-playground` 读取 `/dict/*` 初始化分类，保存时上传截图到 `/minio/upload`，再调用 `/component/save` 或 `/component/update`。
+- `kt-template-online-web` 读取 `/component/list`、`/component/detail`、`/dict/*` 展示组件列表，并生成 Playground 跳转链接；组件接口返回 `401` 时跳转到 `kt-template-admin` 登录。
+- `kt-template-online-playground` 读取 `/dict/*` 初始化分类，保存时上传截图到 `/minio/upload`，再调用 `/component/save` 或 `/component/update`；组件接口返回 `401` 时跳转到 `kt-template-admin` 登录并在回跳后刷新 token。
 - 前端项目通过 Vite 代理把 `/api` 转发到 `http://localhost:48085/`。
 
 ## 轻量验证

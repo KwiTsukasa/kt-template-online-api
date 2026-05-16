@@ -1,28 +1,32 @@
 import {
+  BeforeInsert,
   Column,
   CreateDateColumn,
   Entity,
-  PrimaryGeneratedColumn,
+  PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ensureSnowflakeId } from '@/common';
 
-@Entity('dict')
-export class DictEntity {
+@Entity('admin_dict')
+export class AdminDict {
   @ApiPropertyOptional()
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn({
+    type: 'bigint',
+  })
   id: string;
 
   @ApiProperty({
-    example: 'CHART',
+    example: 'COMPONENT_TYPE',
   })
   @Column({
-    name: 'dict_key',
+    name: 'dict_code',
   })
-  dictKey: string;
+  dictCode: string;
 
   @ApiProperty({
-    example: '折线图',
+    example: '图表',
   })
   @Column()
   label: string;
@@ -37,10 +41,10 @@ export class DictEntity {
     example: 'CHART',
   })
   @Column({
-    name: 'children_key',
+    name: 'children_code',
     nullable: true,
   })
-  childrenKey: string;
+  childrenCode: string;
 
   @ApiPropertyOptional({
     example: 1,
@@ -51,9 +55,15 @@ export class DictEntity {
   sort: number;
 
   @Column({
-    default: 0,
+    default: 1,
   })
-  is_deleted: boolean;
+  status: number;
+
+  @Column({
+    default: false,
+    name: 'is_deleted',
+  })
+  isDeleted: boolean;
 
   @CreateDateColumn({
     name: 'create_time',
@@ -64,4 +74,9 @@ export class DictEntity {
     name: 'update_time',
   })
   updateTime: Date;
+
+  @BeforeInsert()
+  createId() {
+    ensureSnowflakeId(this);
+  }
 }

@@ -2,15 +2,15 @@ import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { setDictDecodeCache } from '@/common';
-import { DictEntity } from './dict.entity';
+import { AdminDict } from './admin-dict.entity';
 
 const COMPONENT_TYPE_DICT_KEY = 'COMPONENT_TYPE';
 
 @Injectable()
 export class DictService implements OnApplicationBootstrap {
   constructor(
-    @InjectRepository(DictEntity)
-    private readonly dictRepository: Repository<DictEntity>,
+    @InjectRepository(AdminDict)
+    private readonly dictRepository: Repository<AdminDict>,
   ) {}
 
   async onApplicationBootstrap() {
@@ -20,8 +20,9 @@ export class DictService implements OnApplicationBootstrap {
   async getDictByKey(dictKey: string): Promise<Dict[]> {
     const list = await this.dictRepository.find({
       where: {
-        dictKey,
-        is_deleted: false,
+        dictCode: dictKey,
+        isDeleted: false,
+        status: 1,
       },
       order: {
         sort: 'ASC',
@@ -36,25 +37,27 @@ export class DictService implements OnApplicationBootstrap {
   }
 
   async getComponentDictByType(type: number): Promise<Dict[]> {
-    // 一级类型的 childrenKey 决定二级字典来源，避免在代码里维护 1 -> CHART 这类关系。
+    // 一级类型的 childrenCode 决定二级字典来源，避免在代码里维护 1 -> CHART 这类关系。
     const componentType = await this.dictRepository.findOne({
       where: {
-        dictKey: COMPONENT_TYPE_DICT_KEY,
+        dictCode: COMPONENT_TYPE_DICT_KEY,
+        isDeleted: false,
+        status: 1,
         value: String(type),
-        is_deleted: false,
       },
     });
 
-    if (!componentType?.childrenKey) return [];
+    if (!componentType?.childrenCode) return [];
 
-    return this.getDictByKey(componentType.childrenKey);
+    return this.getDictByKey(componentType.childrenCode);
   }
 
   async refreshDecodeCache() {
     // AfterLoad 字典翻译必须同步完成，所以这里先把数据库字典刷新到进程缓存。
     const list = await this.dictRepository.find({
       where: {
-        is_deleted: false,
+        isDeleted: false,
+        status: 1,
       },
       order: {
         sort: 'ASC',
@@ -62,6 +65,12 @@ export class DictService implements OnApplicationBootstrap {
       },
     });
 
-    setDictDecodeCache(list);
+    setDictDecodeCache(
+      list.map(({ dictCode, label, value }) => ({
+        dictKey: dictCode,
+        label,
+        value,
+      })),
+    );
   }
 }

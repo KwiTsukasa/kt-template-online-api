@@ -1,18 +1,21 @@
 import {
   AfterLoad,
+  BeforeInsert,
   Entity,
-  PrimaryGeneratedColumn,
+  PrimaryColumn,
   Column,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { DecodeDictKey, decodeDictKeys } from '@/common';
+import { DecodeDictKey, decodeDictKeys, ensureSnowflakeId } from '@/common';
 
-@Entity()
+@Entity('admin_component')
 export class Component {
   @ApiPropertyOptional()
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn({
+    type: 'bigint',
+  })
   id: string;
 
   @ApiProperty()
@@ -80,5 +83,10 @@ export class Component {
   decodeDictKeys() {
     // 查询结果初始化完成后再翻译，避免构造/赋值阶段覆盖派生字段。
     decodeDictKeys(this);
+  }
+
+  @BeforeInsert()
+  createId() {
+    ensureSnowflakeId(this);
   }
 }

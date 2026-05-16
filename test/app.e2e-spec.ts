@@ -5,11 +5,13 @@ import request = require('supertest');
 import { Readable } from 'stream';
 import { AppController } from '../src/app.controller';
 import { AppService } from '../src/app.service';
+import { AdminAuthService } from '../src/admin/auth/admin-auth.service';
+import { JwtAuthGuard } from '../src/admin/auth/jwt-auth.guard';
+import { ComponentController } from '../src/admin/component/component.controller';
+import { ComponentService } from '../src/admin/component/component.service';
+import { DictController } from '../src/admin/dict/dict.controller';
+import { DictService } from '../src/admin/dict/dict.service';
 import { SaveBodyInterceptor, ToolsService } from '../src/common';
-import { ComponentController } from '../src/component/component.controller';
-import { ComponentService } from '../src/component/component.service';
-import { DictController } from '../src/dict/dict.controller';
-import { DictService } from '../src/dict/dict.service';
 import { MinioClientController } from '../src/minio/minio.controller';
 import { MinioClientService } from '../src/minio/minio.service';
 import {
@@ -18,7 +20,7 @@ import {
 } from './helpers/controller-route.helper';
 
 const component = {
-  id: 'component-id',
+  id: '2041739550026043392',
   name: '基础折线图',
   type: 1,
   componentType: 1,
@@ -68,6 +70,10 @@ const componentServiceMock = {
   remove: jest.fn(),
   update: jest.fn(),
   find: jest.fn(),
+};
+
+const authServiceMock = {
+  currentUser: jest.fn(),
 };
 
 const dictServiceMock = {
@@ -154,7 +160,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
     const response = await request(server)
       .post('/component/save')
       .send({
-        id: 'frontend-id',
+        id: '2041739550026043999',
         name: component.name,
         type: component.type,
         componentType: component.componentType,
@@ -382,6 +388,42 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  'GET /minio/resource-proxy': async (server) => {
+    const body = Buffer.from('proxy-content');
+    const originalFetch = global.fetch;
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      headers: {
+        get: jest.fn().mockReturnValue('text/css; charset=utf-8'),
+      },
+      arrayBuffer: jest
+        .fn()
+        .mockResolvedValue(
+          body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength),
+        ),
+    } as any);
+
+    try {
+      const response = await request(server)
+        .get('/minio/resource-proxy')
+        .query({ url: 'https://example.com/assets/style.css' })
+        .expect(200);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://example.com/assets/style.css',
+        expect.objectContaining({
+          redirect: 'follow',
+          signal: expect.any(AbortSignal),
+        }),
+      );
+      expect(response.headers['content-type']).toContain('text/css');
+      expect(response.text).toBe('proxy-content');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  },
+
   'GET /minio/download': async (server) => {
     minioServiceMock.getObject.mockResolvedValue({
       stream: Readable.from(['file-content']),
@@ -450,6 +492,11 @@ describe('KT Template Online API (e2e)', () => {
           provide: ComponentService,
           useValue: componentServiceMock,
         },
+        {
+          provide: AdminAuthService,
+          useValue: authServiceMock,
+        },
+        JwtAuthGuard,
         {
           provide: DictService,
           useValue: dictServiceMock,

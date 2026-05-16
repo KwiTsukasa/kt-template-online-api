@@ -3,10 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { DictController } from './dict.controller';
 import { DictService } from './dict.service';
 import { ToolsService } from '@/common';
-import { DictEntity } from './dict.entity';
+import { AdminDict } from './admin-dict.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([DictEntity])],
+  imports: [TypeOrmModule.forFeature([AdminDict])],
   controllers: [DictController],
   providers: [DictService, ToolsService],
   exports: [DictService],

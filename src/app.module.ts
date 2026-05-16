@@ -5,10 +5,9 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MinioModule } from 'nestjs-minio-client';
-import { ComponentModule } from './component/component.module';
-import { DictModule } from './dict/dict.module';
 import { MinioClientModule } from './minio/minio.module';
 import { SaveBodyInterceptor } from './common';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -26,8 +25,9 @@ import { SaveBodyInterceptor } from './common';
           username: configService.get('DB_USERNAME'),
           password: configService.get('DB_PASSWORD'),
           database: configService.get('DB_DATABASE'),
-          synchronize: configService.get('DB_SYNC'),
-          entities: [__dirname + '/**/*.entity.js'],
+          synchronize: configService.get<string>('DB_SYNC') === 'true',
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          subscribers: [__dirname + '/**/*.subscriber{.ts,.js}'],
         };
       },
       inject: [ConfigService],
@@ -46,9 +46,8 @@ import { SaveBodyInterceptor } from './common';
       },
       inject: [ConfigService],
     }),
-    ComponentModule,
-    DictModule,
     MinioClientModule,
+    AdminModule,
   ],
   providers: [
     AppService,

@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Component } from './component.entity';
 import { ToolsService } from '@/common';
 import { isNumber, omit, pick } from 'lodash';
-import { DictService } from '@/dict/dict.service';
+import { DictService } from '@/admin/dict/dict.service';
 
 @Injectable()
 export class ComponentService {
@@ -105,7 +105,7 @@ export class ComponentService {
     return link.affected > 0;
   }
 
-  async find(id: number): Promise<Component> {
+  async find(id: string): Promise<Component> {
     await this.dictService.refreshDecodeCache();
 
     const component = await this.userRepository

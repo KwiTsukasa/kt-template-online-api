@@ -1,12 +1,13 @@
 import {
+  Body,
   Controller,
   Get,
-  Post,
-  Res,
-  Query,
-  Body,
-  HttpStatus,
   HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+  Res,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiExtraModels,
@@ -24,11 +25,12 @@ import {
   ApiSuccessResponse,
   ToolsService,
 } from '@/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ComponentService } from './component.service';
 import { Component } from './component.entity';
 
 const componentExample = {
-  id: '1d8d3dd2-99f0-4d10-9a44-0cf9566b37c9',
+  id: '2041739550026043392',
   name: '基础折线图',
   type: 1,
   componentType: 1,
@@ -60,6 +62,7 @@ class CompPageDto
 @Controller('component')
 @ApiTags('component')
 @ApiExtraModels(PaginatedDto)
+@UseGuards(JwtAuthGuard)
 export class ComponentController {
   constructor(
     private readonly toolsService: ToolsService,
@@ -99,7 +102,7 @@ export class ComponentController {
       type: 'string',
       description: '新增组件ID',
     },
-    example: '1d8d3dd2-99f0-4d10-9a44-0cf9566b37c9',
+    example: '2041739550026043392',
   })
   async save(@Res() res, @Body() component: Component) {
     const save = await this.componentService.save(component);

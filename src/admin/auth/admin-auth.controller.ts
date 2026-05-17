@@ -15,6 +15,7 @@ import { AdminUser } from '../user/admin-user.entity';
 import { AdminUserService } from '../user/admin-user.service';
 import { AdminAuthService } from './admin-auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { WordpressService } from '@/wordpress/wordpress.service';
 
 @ApiTags('admin-auth')
 @Controller()
@@ -24,6 +25,7 @@ export class AdminAuthController {
     private readonly authService: AdminAuthService,
     private readonly menuService: AdminMenuService,
     private readonly userService: AdminUserService,
+    private readonly wordpressService: WordpressService,
   ) {}
 
   @Post('auth/login')
@@ -36,11 +38,19 @@ export class AdminAuthController {
       body.username,
       body.password,
     );
+    const wordpressLogin =
+      await this.wordpressService.loginWithConfiguredAdmin();
     this.authService.setAccessTokenCookie(res, accessToken);
     this.authService.setRefreshTokenCookie(res, refreshToken);
+    this.wordpressService.setAuthCookie(res, wordpressLogin.cookie);
+
     return vbenSuccess({
       ...this.userService.serializeUser(user),
       accessToken,
+      wordpressAuth: {
+        ...wordpressLogin.auth,
+        user: wordpressLogin.user,
+      },
     });
   }
 
@@ -62,6 +72,7 @@ export class AdminAuthController {
   logout(@Res({ passthrough: true }) res: Response) {
     this.authService.clearAccessTokenCookie(res);
     this.authService.clearRefreshTokenCookie(res);
+    this.wordpressService.clearAuthCookie(res);
     return vbenSuccess('');
   }
 

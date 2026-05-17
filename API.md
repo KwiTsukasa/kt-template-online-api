@@ -57,7 +57,7 @@ Admin、Component、Dict 与 MinIO 业务接口统一走 `JwtAuthGuard`。请求
 
 ### WordPress 认证透传
 
-WordPress 侧只使用客户端登录态，后端不走 BasicAuth。当前 WordPress 只有单管理员账号且不开放注册，管理员账号配置放在 env 中，`/wordpress/auth/login` 会在 Admin 登录成功后使用该账号自动登录 WordPress，把 WordPress cookie 保存到本系统 httpOnly cookie，再把 REST nonce 和用户信息返回给前端持久化。
+WordPress 侧只使用客户端登录态，后端不走 BasicAuth。当前 WordPress 只有单管理员账号且不开放注册，管理员账号配置放在 env 中，Admin 调用 `/auth/login` 通过后，后端会在同一个登录流程里自动登录 WordPress，把 WordPress cookie 保存到本系统 httpOnly cookie，再把 REST nonce 和用户信息随 Admin 登录结果返回给前端持久化。
 
 环境变量：
 
@@ -325,9 +325,9 @@ Query：
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/auth/login` | 登录，返回 `accessToken`，并写入 access token 与刷新 token cookie |
+| POST | `/auth/login` | 登录，返回 `accessToken` 与 `wordpressAuth`，并写入 access token、刷新 token 和 WordPress 授权 cookie |
 | POST | `/auth/refresh` | 通过刷新 token cookie 刷新 accessToken，并更新 token cookie |
-| POST | `/auth/logout` | 退出登录并清理 access token 与刷新 token cookie |
+| POST | `/auth/logout` | 退出登录并清理 access token、刷新 token 与 WordPress 授权 cookie |
 | GET | `/auth/codes` | 获取当前用户权限码 |
 | GET | `/user/info` | 获取当前用户信息 |
 | GET | `/menu/all` | 获取当前用户可访问菜单 |
@@ -362,11 +362,11 @@ Query：
 
 ## WordPress 接口
 
-所有 `/wordpress/*` 管理接口都需要本系统后台登录态和 WordPress 客户端登录态。Admin 登录通过后会自动调用 `/wordpress/auth/login` 建立 WordPress 授权态；后端只把 WordPress cookie 保存到本系统 httpOnly cookie，不把 cookie 明文放入前端持久化。
+所有 `/wordpress/*` 管理接口都需要本系统后台登录态和 WordPress 客户端登录态。Admin 前端只调用现有 `/auth/login`，后端在该登录接口内部自动建立 WordPress 授权态；后端只把 WordPress cookie 保存到本系统 httpOnly cookie，不把 cookie 明文放入前端持久化。
 
 ### POST `/wordpress/auth/login`
 
-使用 env 中的 `WORDPRESS_ADMIN_USERNAME` 和 `WORDPRESS_ADMIN_PASSWORD` 登录 WordPress，写入 `kt_wordpress_auth` httpOnly cookie，并返回前端需要持久化的 REST nonce 和 WordPress 当前用户信息。
+使用 env 中的 `WORDPRESS_ADMIN_USERNAME` 和 `WORDPRESS_ADMIN_PASSWORD` 登录 WordPress，写入 `kt_wordpress_auth` httpOnly cookie，并返回前端需要持久化的 REST nonce 和 WordPress 当前用户信息。该接口主要保留为后端内部能力和调试口子，正常 Admin 登录链路不由前端主动调用它，而是通过 `/auth/login` 自动触发。
 
 响应 `data`：
 

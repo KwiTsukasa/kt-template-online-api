@@ -16,5 +16,6 @@ import { WordpressTagController } from './wordpress-tag.controller';
     WordpressCategoryController,
   ],
   providers: [ToolsService, WordpressService],
+  exports: [WordpressService],
 })
 export class WordpressModule {}

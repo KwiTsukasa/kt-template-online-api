@@ -23,6 +23,7 @@ import { AdminUser } from './user/admin-user.entity';
 import { AdminUserService } from './user/admin-user.service';
 import { ToolsService } from '@/common';
 import { MinioClientModule } from '@/minio/minio.module';
+import { WordpressModule } from '@/wordpress/wordpress.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { MinioClientModule } from '@/minio/minio.module';
     AdminAuthGuardModule,
     DictModule,
     MinioClientModule,
+    WordpressModule,
   ],
   controllers: [
     AdminAuthController,

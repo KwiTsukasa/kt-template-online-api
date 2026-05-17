@@ -48,7 +48,7 @@
 
 ### 后台认证
 
-Admin 与 Component 业务接口统一走 `JwtAuthGuard`。请求可以通过 `Authorization: Bearer <accessToken>` 传递 accessToken，也可以携带登录接口写入的 httpOnly `admin_access_token` cookie。未认证时接口返回 HTTP `401`。
+Admin、Component、Dict 与 MinIO 业务接口统一走 `JwtAuthGuard`。请求可以通过 `Authorization: Bearer <accessToken>` 传递 accessToken，也可以携带登录接口写入的 httpOnly `admin_access_token` cookie。未认证时接口返回 HTTP `401`。
 
 `ADMIN_COOKIE_SECURE=false` 适用于当前内网 HTTP 访问；如果后续切到 HTTPS 域名，可以改为 `true`，cookie 会使用 `Secure + SameSite=None`。
 
@@ -56,7 +56,7 @@ Admin 与 Component 业务接口统一走 `JwtAuthGuard`。请求可以通过 `A
 
 ### 数据库字典翻译
 
-组件数据维护在 `admin_component` 表中，字典数据维护在新的 `admin_dict` 表中。`Component.typeMsg`、`Component.componentTypeMsg` 会在 TypeORM `AfterLoad` 阶段根据字典缓存自动映射；旧 `/dict/*` 接口路径保持兼容。
+组件数据维护在 `admin_component` 表中，字典数据维护在新的 `admin_dict` 表中。`Component.typeMsg`、`Component.componentTypeMsg` 会在 TypeORM `AfterLoad` 阶段根据字典缓存自动映射；旧 `/dict/*` 接口路径保持兼容，但仍需要登录态。
 
 `admin_dict` 表核心字段：
 

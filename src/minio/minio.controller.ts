@@ -9,6 +9,7 @@ import {
   Query,
   Res,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -34,6 +35,7 @@ import {
   MinioObjectDto,
   MinioUploadResultDto,
 } from './minio.dto';
+import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
 
 const PROXY_RESOURCE_TIMEOUT = 1000 * 15;
 const PROXY_RESOURCE_CONTENT_TYPES = [
@@ -49,6 +51,7 @@ const PROXY_RESOURCE_EXTENSION_RE =
 
 @Controller('minio')
 @ApiTags('minio')
+@UseGuards(JwtAuthGuard)
 export class MinioClientController {
   constructor(
     private readonly toolsService: ToolsService,

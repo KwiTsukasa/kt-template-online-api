@@ -5,11 +5,13 @@ import {
   ParseIntPipe,
   Query,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import { DictService } from './dict.service';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { ApiArrayResponse, ToolsService } from '@/common';
 import { DictDto } from './dict.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 const componentTypeDictExample = [
   {
@@ -35,6 +37,7 @@ const chartDictExample = [
 
 @ApiTags('dict')
 @Controller('dict')
+@UseGuards(JwtAuthGuard)
 export class DictController {
   constructor(
     private readonly toolsService: ToolsService,

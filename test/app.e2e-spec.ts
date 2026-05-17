@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { HttpException, HttpStatus, INestApplication } from '@nestjs/common';
 import { APP_INTERCEPTOR, Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import request = require('supertest');
@@ -75,6 +75,17 @@ const componentServiceMock = {
 const authServiceMock = {
   currentUser: jest.fn(),
 };
+
+const unauthorizedException = () =>
+  new HttpException(
+    {
+      code: -1,
+      data: null,
+      error: 'Unauthorized Exception',
+      message: 'Unauthorized Exception',
+    },
+    HttpStatus.UNAUTHORIZED,
+  );
 
 const dictServiceMock = {
   getDictByKey: jest.fn(),
@@ -518,6 +529,10 @@ describe('KT Template Online API (e2e)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    authServiceMock.currentUser.mockResolvedValue({
+      id: '2041739550026043001',
+      username: 'admin',
+    });
   });
 
   afterAll(async () => {
@@ -559,5 +574,23 @@ describe('KT Template Online API (e2e)', () => {
       msg: '操作失败',
       data: false,
     });
+  });
+
+  it('protects dict and minio endpoints with jwt auth', async () => {
+    authServiceMock.currentUser.mockRejectedValue(unauthorizedException());
+
+    await request(app.getHttpServer())
+      .get('/dict/getDictByKey')
+      .query({ dictKey: 'COMPONENT_TYPE' })
+      .expect(401);
+
+    expect(dictServiceMock.getDictByKey).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    authServiceMock.currentUser.mockRejectedValue(unauthorizedException());
+
+    await request(app.getHttpServer()).get('/minio/check').expect(401);
+
+    expect(minioServiceMock.checkConnection).not.toHaveBeenCalled();
   });
 });

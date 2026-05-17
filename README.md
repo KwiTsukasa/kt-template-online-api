@@ -104,7 +104,7 @@ pnpm test:e2e       # e2e 测试
 - 如果基础后台菜单的 `meta` 被旧数据覆盖为空，执行 `sql/fix-admin-menu-meta.sql` 可以恢复初始化菜单的 `title/icon/order` 等元数据。
 - 旧 `component` 表迁移到 `admin_component` 时，执行 `sql/migrate-component-to-admin-component.sql`，脚本会把旧表重命名为备份表。
 - 如果旧版本曾写入 `admin_user.id=0`，先执行 `sql/fix-admin-user-zero-id.sql` 修复脏数据，再重启服务。
-- Admin 与 Component 业务接口统一走 `JwtAuthGuard`；登录、刷新 token、退出登录和部分示例状态测试接口通过 `@Public()` 放行。
+- Admin、Component、Dict 与 MinIO 业务接口统一走 `JwtAuthGuard`；登录、刷新 token、退出登录和部分示例状态测试接口通过 `@Public()` 放行。
 - `kt-template-admin` 登录会写入 access token 与刷新 token cookie，`kt-template-online-web` 和 `kt-template-online-playground` 可在回跳后通过刷新 token 重新持久化登录态。
 - `kt-template-admin` 开发环境通过 `/api` 代理到本服务 `48085`，已关闭 Vben Nitro Mock。
 - `POST /component/save` 新增组件，`POST /component/update` 编辑组件。
@@ -114,8 +114,8 @@ pnpm test:e2e       # e2e 测试
 
 ## 联调关系
 
-- `kt-template-online-web` 读取 `/component/list`、`/component/detail`、`/dict/*` 展示组件列表，并生成 Playground 跳转链接；组件接口返回 `401` 时跳转到 `kt-template-admin` 登录。
-- `kt-template-online-playground` 读取 `/dict/*` 初始化分类，保存时上传截图到 `/minio/upload`，再调用 `/component/save` 或 `/component/update`；组件接口返回 `401` 时跳转到 `kt-template-admin` 登录并在回跳后刷新 token。
+- `kt-template-online-web` 读取 `/component/list`、`/component/detail`、`/dict/*` 展示组件列表，并生成 Playground 跳转链接；业务接口返回 `401` 时跳转到 `kt-template-admin` 登录。
+- `kt-template-online-playground` 读取 `/dict/*` 初始化分类，保存时上传截图到 `/minio/upload`，再调用 `/component/save` 或 `/component/update`；业务接口返回 `401` 时跳转到 `kt-template-admin` 登录并在回跳后刷新 token。
 - 前端项目通过 Vite 代理把 `/api` 转发到 `http://localhost:48085/`。
 
 ## 轻量验证

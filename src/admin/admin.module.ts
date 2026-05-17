@@ -1,9 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AdminAuthGuardModule } from './auth/admin-auth-guard.module';
 import { AdminAuthController } from './auth/admin-auth.controller';
-import { AdminAuthService } from './auth/admin-auth.service';
-import { JwtAuthGuard } from './auth/jwt-auth.guard';
-import { AdminTokenService } from './auth/admin-token.service';
 import { ComponentController } from './component/component.controller';
 import { Component } from './component/component.entity';
 import { ComponentService } from './component/component.service';
@@ -35,6 +33,7 @@ import { MinioClientModule } from '@/minio/minio.module';
       AdminDept,
       Component,
     ]),
+    AdminAuthGuardModule,
     DictModule,
     MinioClientModule,
   ],
@@ -49,15 +48,12 @@ import { MinioClientModule } from '@/minio/minio.module';
     AdminExampleController,
   ],
   providers: [
-    AdminAuthService,
     ComponentService,
     AdminDeptService,
     AdminMenuService,
     AdminRoleService,
     AdminTimezoneService,
-    AdminTokenService,
     AdminUserService,
-    JwtAuthGuard,
     ToolsService,
   ],
 })

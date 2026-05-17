@@ -8,6 +8,7 @@ import { MinioModule } from 'nestjs-minio-client';
 import { MinioClientModule } from './minio/minio.module';
 import { SaveBodyInterceptor } from './common';
 import { AdminModule } from './admin/admin.module';
+import { WordpressModule } from './wordpress/wordpress.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { AdminModule } from './admin/admin.module';
     }),
     MinioClientModule,
     AdminModule,
+    WordpressModule,
   ],
   providers: [
     AppService,

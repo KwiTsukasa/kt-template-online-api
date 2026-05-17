@@ -1,6 +1,6 @@
 # KT Template Online API
 
-`kt-template-online-api` 是 KT Template Online 的后端服务，负责组件模板、数据库字典和 MinIO 文件能力。前台列表和 Playground 保存都通过本服务完成数据读写。
+`kt-template-online-api` 是 KT Template Online 的后端服务，负责组件模板、数据库字典、MinIO 文件和 WordPress 内容管理能力。前台列表和 Playground 保存都通过本服务完成数据读写。
 
 ## 技术栈
 
@@ -19,6 +19,7 @@
 | `dict` | 基于新 `admin_dict` 表的字典查询，维护组件一级类型和二级类型关系 |
 | `admin` | Vben Admin 真实接口，包含登录、用户、菜单、角色、部门、时区、上传和示例表格 |
 | `minio` | Bucket 检查/创建、文件上传、列表、临时访问地址、下载和删除 |
+| `wordpress` | WordPress 文章、标签、分类管理接口，复用客户端 WordPress 登录态访问 REST API |
 | `common` | 响应注解、字典翻译、`POST */save` 请求体规范化等通用能力 |
 
 ## 目录结构
@@ -28,6 +29,7 @@ src
   common/       # 通用装饰器、拦截器、服务、Swagger 封装
   admin/        # Vben Admin 后台认证、组件、字典、菜单、角色、部门等接口
   minio/        # MinIO 文件模块
+  wordpress/    # WordPress REST API 文章、标签、分类代理模块
   types/        # 全局类型声明
   app.module.ts # 全局模块、数据库、MinIO、拦截器注册
   main.ts       # Swagger、Knife4j、端口启动入口
@@ -50,6 +52,11 @@ MINIO_PORT=9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 MINIO_BUCKET=kt-template-online
+
+WORDPRESS_BASE_URL=http://localhost
+WORDPRESS_ADMIN_USERNAME=admin
+WORDPRESS_ADMIN_PASSWORD=
+WORDPRESS_TIMEOUT_MS=15000
 
 ADMIN_TOKEN_SECRET=change-me
 ADMIN_COOKIE_SECURE=false
@@ -105,6 +112,10 @@ pnpm test:e2e       # e2e 测试
 - 旧 `component` 表迁移到 `admin_component` 时，执行 `sql/migrate-component-to-admin-component.sql`，脚本会把旧表重命名为备份表。
 - 如果旧版本曾写入 `admin_user.id=0`，先执行 `sql/fix-admin-user-zero-id.sql` 修复脏数据，再重启服务。
 - Admin、Component、Dict 与 MinIO 业务接口统一走 `JwtAuthGuard`；登录、刷新 token、退出登录和部分示例状态测试接口通过 `@Public()` 放行。
+- WordPress 管理接口同样先走本系统 `JwtAuthGuard`，再透传客户端 WordPress 登录态访问 WordPress REST API；当前 WordPress 只有单管理员账号且不开放注册，账号配置放在 env 中，但不作为 BasicAuth 发送。
+- Admin 登录成功后会调用 `/wordpress/auth/login` 自动登录 WordPress，后端把 WordPress cookie 写入本系统 httpOnly cookie，前端只持久化 REST nonce 和用户信息。
+- WordPress 客户端登录态优先通过 `X-WordPress-Authorization` 透传，也支持 `X-WP-Nonce` 加 WordPress 登录 cookie 的 REST cookie 认证。
+- 如果 WordPress 服务器未开启 rewrite 导致 `/wp-json/*` 返回 404，后端会自动回退到 `?rest_route=/...` 形式继续访问 REST API。
 - `kt-template-admin` 登录会写入 access token 与刷新 token cookie，`kt-template-online-web` 和 `kt-template-online-playground` 可在回跳后通过刷新 token 重新持久化登录态。
 - `kt-template-admin` 开发环境通过 `/api` 代理到本服务 `48085`，已关闭 Vben Nitro Mock。
 - `POST /component/save` 新增组件，`POST /component/update` 编辑组件。

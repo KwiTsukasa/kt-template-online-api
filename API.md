@@ -30,6 +30,7 @@
 | Dict      | 基于新 `admin_dict` 表的数据库字典查询，以及组件一级类型到二级类型的数据库关系映射 |
 | Admin     | Vben Admin 真实接口，包含认证、用户、菜单、角色、部门、时区和上传适配 |
 | MinIO     | Bucket 检查/创建、文件上传、列表、临时访问地址、下载和删除            |
+| WordPress | WordPress 文章、标签、分类管理，复用客户端 WordPress 登录态访问 REST API |
 | Common    | 统一响应 Swagger 注解、字典翻译注解、`POST */save` 请求体规范化拦截器 |
 
 ## 通用规则
@@ -53,6 +54,32 @@ Admin、Component、Dict 与 MinIO 业务接口统一走 `JwtAuthGuard`。请求
 `ADMIN_COOKIE_SECURE=false` 适用于当前内网 HTTP 访问；如果后续切到 HTTPS 域名，可以改为 `true`，cookie 会使用 `Secure + SameSite=None`。
 
 `@Public()` 可用于保留不需要认证的接口口子，目前登录、刷新 token、退出登录和部分示例状态测试接口放行。
+
+### WordPress 认证透传
+
+WordPress 侧只使用客户端登录态，后端不走 BasicAuth。当前 WordPress 只有单管理员账号且不开放注册，管理员账号配置放在 env 中，`/wordpress/auth/login` 会在 Admin 登录成功后使用该账号自动登录 WordPress，把 WordPress cookie 保存到本系统 httpOnly cookie，再把 REST nonce 和用户信息返回给前端持久化。
+
+环境变量：
+
+| 变量 | 说明 |
+| --- | --- |
+| `WORDPRESS_BASE_URL` | WordPress 站点根地址，例如 `http://192.168.31.224:8080` |
+| `WORDPRESS_ADMIN_USERNAME` | WordPress 单管理员账号用户名 |
+| `WORDPRESS_ADMIN_PASSWORD` | WordPress 单管理员账号密码，仅放真实 env，不提交到仓库 |
+| `WORDPRESS_TIMEOUT_MS` | WordPress REST API 请求超时时间，默认 `15000` |
+
+支持的 WordPress 登录态来源：
+
+| Header/Cookie | 说明 |
+| --- | --- |
+| `X-WordPress-Authorization` | 优先透传的 WordPress 授权头，例如客户端登录拿到的 `Bearer <token>` |
+| `Authorization` | 仅当它不是本系统 Admin access token 时才会透传，避免和后台认证冲突 |
+| `X-WP-Nonce` | WordPress REST cookie 认证 nonce |
+| `Cookie` | 只会过滤并透传 `wordpress_*`、`wordpress_logged_in_*`、`wp-settings-*` 等 WordPress 登录相关 cookie |
+| `X-WordPress-Cookie` | 显式传入 WordPress cookie，适合非浏览器客户端联调 |
+| `kt_wordpress_auth` | 后端自动认证后写入的 httpOnly cookie，前端不可读取，后端会自动转成 WordPress cookie 透传 |
+
+如果 WordPress 所在 Apache/Nginx 未开启 rewrite，`/wp-json/*` 可能返回 404。后端会自动回退到 WordPress 原生 `?rest_route=/...` 形式，避免因为固定链接配置阻断文章、标签和分类管理接口。
 
 ### 数据库字典翻译
 
@@ -332,6 +359,120 @@ Query：
 - `sql/migrate-dict-to-admin-dict.sql`：将旧 `dict` 表数据迁移到 `admin_dict`。
 - `sql/migrate-component-to-admin-component.sql`：将旧 `component` 表数据迁移到 `admin_component`，并把旧表改名为备份表。
 - `sql/fix-admin-menu-meta.sql`：修复基础后台菜单 `meta` 被旧数据或错误保存覆盖为空的问题。
+
+## WordPress 接口
+
+所有 `/wordpress/*` 管理接口都需要本系统后台登录态和 WordPress 客户端登录态。Admin 登录通过后会自动调用 `/wordpress/auth/login` 建立 WordPress 授权态；后端只把 WordPress cookie 保存到本系统 httpOnly cookie，不把 cookie 明文放入前端持久化。
+
+### POST `/wordpress/auth/login`
+
+使用 env 中的 `WORDPRESS_ADMIN_USERNAME` 和 `WORDPRESS_ADMIN_PASSWORD` 登录 WordPress，写入 `kt_wordpress_auth` httpOnly cookie，并返回前端需要持久化的 REST nonce 和 WordPress 当前用户信息。
+
+响应 `data`：
+
+```json
+{
+  "auth": {
+    "nonce": "wordpress-rest-nonce",
+    "type": "cookie"
+  },
+  "user": {
+    "id": 1,
+    "name": "admin"
+  }
+}
+```
+
+### POST `/wordpress/auth/logout`
+
+清理本系统保存的 WordPress 授权 cookie。该接口用于 Admin 退出登录时同步清理 WordPress 授权态。
+
+### GET `/wordpress/auth/check`
+
+调用 WordPress `/wp-json/wp/v2/users/me?context=edit` 校验当前客户端 WordPress 登录态。
+
+响应 `data`：WordPress 当前用户信息。
+
+### WordPress Article
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/wordpress/article/list` | 获取文章分页列表 |
+| GET | `/wordpress/article/detail?id=1` | 获取文章详情 |
+| POST | `/wordpress/article/save` | 新增文章 |
+| POST | `/wordpress/article/update` | 编辑文章 |
+| POST | `/wordpress/article/remove?id=1&force=true` | 删除文章 |
+
+列表 Query：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| pageNo | number | 否 | 页码，默认 `1` |
+| pageSize | number | 否 | 每页条数，默认 `10` |
+| search | string | 否 | 关键词搜索 |
+| status | string | 否 | 文章状态，默认 `any` |
+| categories | string | 否 | 分类 ID，多个用逗号分隔 |
+| tags | string | 否 | 标签 ID，多个用逗号分隔 |
+
+新增/编辑 Body 常用字段：
+
+```json
+{
+  "id": 1,
+  "title": "文章标题",
+  "content": "文章内容",
+  "excerpt": "文章摘要",
+  "status": "draft",
+  "slug": "post-slug",
+  "categories": [1],
+  "tags": [2],
+  "featured_media": 10,
+  "sticky": false
+}
+```
+
+### WordPress Tag
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/wordpress/tag/list` | 获取标签分页列表 |
+| GET | `/wordpress/tag/detail?id=1` | 获取标签详情 |
+| POST | `/wordpress/tag/save` | 新增标签 |
+| POST | `/wordpress/tag/update` | 编辑标签 |
+| POST | `/wordpress/tag/remove?id=1&force=true` | 删除标签 |
+
+新增/编辑 Body：
+
+```json
+{
+  "id": 1,
+  "name": "标签名称",
+  "slug": "tag-slug",
+  "description": "标签描述"
+}
+```
+
+### WordPress Category
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/wordpress/category/list` | 获取分类分页列表 |
+| GET | `/wordpress/category/detail?id=1` | 获取分类详情 |
+| POST | `/wordpress/category/save` | 新增分类 |
+| POST | `/wordpress/category/update` | 编辑分类 |
+| POST | `/wordpress/category/remove?id=1&force=true` | 删除分类 |
+
+新增/编辑 Body：
+
+```json
+{
+  "id": 1,
+  "name": "分类名称",
+  "slug": "category-slug",
+  "description": "分类描述",
+  "parent": 0
+}
+```
 
 ## MinIO 接口
 

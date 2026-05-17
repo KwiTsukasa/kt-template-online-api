@@ -14,6 +14,11 @@ import { DictService } from '../src/admin/dict/dict.service';
 import { SaveBodyInterceptor, ToolsService } from '../src/common';
 import { MinioClientController } from '../src/minio/minio.controller';
 import { MinioClientService } from '../src/minio/minio.service';
+import { WordpressArticleController } from '../src/wordpress/wordpress-article.controller';
+import { WordpressAuthController } from '../src/wordpress/wordpress-auth.controller';
+import { WordpressCategoryController } from '../src/wordpress/wordpress-category.controller';
+import { WordpressService } from '../src/wordpress/wordpress.service';
+import { WordpressTagController } from '../src/wordpress/wordpress-tag.controller';
 import {
   collectControllerRoutes,
   routeKey,
@@ -63,6 +68,39 @@ const objectStat = {
   lastModified: '2026-05-13T02:30:00.000Z',
 };
 
+const wordpressAuthContext = {
+  authorization: 'Bearer wordpress-client-token',
+};
+
+const wordpressUser = {
+  id: 1,
+  name: 'WordPress Admin',
+  slug: 'wordpress-admin',
+};
+
+const wordpressLoginResult = {
+  auth: {
+    nonce: 'wordpress-rest-nonce',
+    type: 'cookie',
+  },
+  cookie: 'wordpress_logged_in_demo=1',
+  user: wordpressUser,
+};
+
+const wordpressArticle = {
+  id: 1,
+  title: {
+    rendered: 'WordPress 文章',
+  },
+  status: 'draft',
+};
+
+const wordpressTerm = {
+  id: 1,
+  name: 'WordPress 分类',
+  slug: 'wordpress-category',
+};
+
 const componentServiceMock = {
   all: jest.fn(),
   page: jest.fn(),
@@ -102,11 +140,38 @@ const minioServiceMock = {
   removeObject: jest.fn(),
 };
 
+const wordpressServiceMock = {
+  getAuthContext: jest.fn(),
+  loginWithConfiguredAdmin: jest.fn(),
+  setAuthCookie: jest.fn(),
+  clearAuthCookie: jest.fn(),
+  checkAuth: jest.fn(),
+  articleList: jest.fn(),
+  articleDetail: jest.fn(),
+  articleSave: jest.fn(),
+  articleUpdate: jest.fn(),
+  articleRemove: jest.fn(),
+  tagList: jest.fn(),
+  tagDetail: jest.fn(),
+  tagSave: jest.fn(),
+  tagUpdate: jest.fn(),
+  tagRemove: jest.fn(),
+  categoryList: jest.fn(),
+  categoryDetail: jest.fn(),
+  categorySave: jest.fn(),
+  categoryUpdate: jest.fn(),
+  categoryRemove: jest.fn(),
+};
+
 const controllerClasses = [
   AppController,
   ComponentController,
   DictController,
   MinioClientController,
+  WordpressAuthController,
+  WordpressArticleController,
+  WordpressTagController,
+  WordpressCategoryController,
 ];
 const controllerRoutes = collectControllerRoutes(controllerClasses);
 
@@ -487,6 +552,434 @@ const routeTestCases: Record<string, RouteTestCase> = {
       data: true,
     });
   },
+
+  'GET /wordpress/auth/check': async (server) => {
+    wordpressServiceMock.checkAuth.mockResolvedValue(wordpressUser);
+
+    const response = await request(server)
+      .get('/wordpress/auth/check')
+      .expect(200);
+
+    expect(wordpressServiceMock.checkAuth).toHaveBeenCalledWith(
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: wordpressUser,
+    });
+  },
+
+  'POST /wordpress/auth/login': async (server) => {
+    wordpressServiceMock.loginWithConfiguredAdmin.mockResolvedValue(
+      wordpressLoginResult,
+    );
+
+    const response = await request(server)
+      .post('/wordpress/auth/login')
+      .expect(201);
+
+    expect(wordpressServiceMock.loginWithConfiguredAdmin).toHaveBeenCalledWith();
+    expect(wordpressServiceMock.setAuthCookie).toHaveBeenCalledWith(
+      expect.anything(),
+      wordpressLoginResult.cookie,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: {
+        auth: wordpressLoginResult.auth,
+        user: wordpressUser,
+      },
+    });
+  },
+
+  'POST /wordpress/auth/logout': async (server) => {
+    const response = await request(server)
+      .post('/wordpress/auth/logout')
+      .expect(201);
+
+    expect(wordpressServiceMock.clearAuthCookie).toHaveBeenCalledWith(
+      expect.anything(),
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: true,
+    });
+  },
+
+  'GET /wordpress/article/list': async (server) => {
+    wordpressServiceMock.articleList.mockResolvedValue({
+      list: [wordpressArticle],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/wordpress/article/list')
+      .query({
+        pageNo: 1,
+        pageSize: 10,
+        search: '文章',
+      })
+      .expect(200);
+
+    expect(wordpressServiceMock.articleList).toHaveBeenCalledWith(
+      {
+        pageNo: '1',
+        pageSize: '10',
+        search: '文章',
+      },
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: {
+        list: [wordpressArticle],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /wordpress/article/detail': async (server) => {
+    wordpressServiceMock.articleDetail.mockResolvedValue(wordpressArticle);
+
+    const response = await request(server)
+      .get('/wordpress/article/detail')
+      .query({ id: 1 })
+      .expect(200);
+
+    expect(wordpressServiceMock.articleDetail).toHaveBeenCalledWith(
+      '1',
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: wordpressArticle,
+    });
+  },
+
+  'POST /wordpress/article/save': async (server) => {
+    wordpressServiceMock.articleSave.mockResolvedValue(wordpressArticle);
+
+    const response = await request(server)
+      .post('/wordpress/article/save')
+      .send({
+        id: 999,
+        title: 'WordPress 文章',
+        content: '文章内容',
+      })
+      .expect(200);
+
+    expect(wordpressServiceMock.articleSave).toHaveBeenCalledWith(
+      {
+        title: 'WordPress 文章',
+        content: '文章内容',
+      },
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: wordpressArticle,
+    });
+  },
+
+  'POST /wordpress/article/update': async (server) => {
+    wordpressServiceMock.articleUpdate.mockResolvedValue(wordpressArticle);
+
+    const response = await request(server)
+      .post('/wordpress/article/update')
+      .send({
+        id: 1,
+        title: 'WordPress 文章',
+      })
+      .expect(200);
+
+    expect(wordpressServiceMock.articleUpdate).toHaveBeenCalledWith(
+      {
+        id: 1,
+        title: 'WordPress 文章',
+      },
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: wordpressArticle,
+    });
+  },
+
+  'POST /wordpress/article/remove': async (server) => {
+    wordpressServiceMock.articleRemove.mockResolvedValue(true);
+
+    const response = await request(server)
+      .post('/wordpress/article/remove')
+      .query({
+        id: 1,
+        force: 'false',
+      })
+      .expect(200);
+
+    expect(wordpressServiceMock.articleRemove).toHaveBeenCalledWith(
+      '1',
+      false,
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: true,
+    });
+  },
+
+  'GET /wordpress/tag/list': async (server) => {
+    wordpressServiceMock.tagList.mockResolvedValue({
+      list: [wordpressTerm],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/wordpress/tag/list')
+      .query({
+        pageNo: 1,
+        pageSize: 10,
+        search: '分类',
+      })
+      .expect(200);
+
+    expect(wordpressServiceMock.tagList).toHaveBeenCalledWith(
+      {
+        pageNo: '1',
+        pageSize: '10',
+        search: '分类',
+      },
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: {
+        list: [wordpressTerm],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /wordpress/tag/detail': async (server) => {
+    wordpressServiceMock.tagDetail.mockResolvedValue(wordpressTerm);
+
+    const response = await request(server)
+      .get('/wordpress/tag/detail')
+      .query({ id: 1 })
+      .expect(200);
+
+    expect(wordpressServiceMock.tagDetail).toHaveBeenCalledWith(
+      '1',
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: wordpressTerm,
+    });
+  },
+
+  'POST /wordpress/tag/save': async (server) => {
+    wordpressServiceMock.tagSave.mockResolvedValue(wordpressTerm);
+
+    const response = await request(server)
+      .post('/wordpress/tag/save')
+      .send({
+        id: 999,
+        name: 'WordPress 标签',
+      })
+      .expect(200);
+
+    expect(wordpressServiceMock.tagSave).toHaveBeenCalledWith(
+      {
+        name: 'WordPress 标签',
+      },
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: wordpressTerm,
+    });
+  },
+
+  'POST /wordpress/tag/update': async (server) => {
+    wordpressServiceMock.tagUpdate.mockResolvedValue(wordpressTerm);
+
+    const response = await request(server)
+      .post('/wordpress/tag/update')
+      .send({
+        id: 1,
+        name: 'WordPress 标签',
+      })
+      .expect(200);
+
+    expect(wordpressServiceMock.tagUpdate).toHaveBeenCalledWith(
+      {
+        id: 1,
+        name: 'WordPress 标签',
+      },
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: wordpressTerm,
+    });
+  },
+
+  'POST /wordpress/tag/remove': async (server) => {
+    wordpressServiceMock.tagRemove.mockResolvedValue(true);
+
+    const response = await request(server)
+      .post('/wordpress/tag/remove')
+      .query({ id: 1 })
+      .expect(200);
+
+    expect(wordpressServiceMock.tagRemove).toHaveBeenCalledWith(
+      '1',
+      true,
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: true,
+    });
+  },
+
+  'GET /wordpress/category/list': async (server) => {
+    wordpressServiceMock.categoryList.mockResolvedValue({
+      list: [wordpressTerm],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/wordpress/category/list')
+      .query({
+        pageNo: 1,
+        pageSize: 10,
+        search: '分类',
+      })
+      .expect(200);
+
+    expect(wordpressServiceMock.categoryList).toHaveBeenCalledWith(
+      {
+        pageNo: '1',
+        pageSize: '10',
+        search: '分类',
+      },
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: {
+        list: [wordpressTerm],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /wordpress/category/detail': async (server) => {
+    wordpressServiceMock.categoryDetail.mockResolvedValue(wordpressTerm);
+
+    const response = await request(server)
+      .get('/wordpress/category/detail')
+      .query({ id: 1 })
+      .expect(200);
+
+    expect(wordpressServiceMock.categoryDetail).toHaveBeenCalledWith(
+      '1',
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: wordpressTerm,
+    });
+  },
+
+  'POST /wordpress/category/save': async (server) => {
+    wordpressServiceMock.categorySave.mockResolvedValue(wordpressTerm);
+
+    const response = await request(server)
+      .post('/wordpress/category/save')
+      .send({
+        id: 999,
+        name: 'WordPress 分类',
+        parent: 0,
+      })
+      .expect(200);
+
+    expect(wordpressServiceMock.categorySave).toHaveBeenCalledWith(
+      {
+        name: 'WordPress 分类',
+        parent: 0,
+      },
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: wordpressTerm,
+    });
+  },
+
+  'POST /wordpress/category/update': async (server) => {
+    wordpressServiceMock.categoryUpdate.mockResolvedValue(wordpressTerm);
+
+    const response = await request(server)
+      .post('/wordpress/category/update')
+      .send({
+        id: 1,
+        name: 'WordPress 分类',
+        parent: 0,
+      })
+      .expect(200);
+
+    expect(wordpressServiceMock.categoryUpdate).toHaveBeenCalledWith(
+      {
+        id: 1,
+        name: 'WordPress 分类',
+        parent: 0,
+      },
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: wordpressTerm,
+    });
+  },
+
+  'POST /wordpress/category/remove': async (server) => {
+    wordpressServiceMock.categoryRemove.mockResolvedValue(true);
+
+    const response = await request(server)
+      .post('/wordpress/category/remove')
+      .query({ id: 1 })
+      .expect(200);
+
+    expect(wordpressServiceMock.categoryRemove).toHaveBeenCalledWith(
+      '1',
+      true,
+      wordpressAuthContext,
+    );
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: true,
+    });
+  },
 };
 
 describe('KT Template Online API (e2e)', () => {
@@ -517,6 +1010,10 @@ describe('KT Template Online API (e2e)', () => {
           useValue: minioServiceMock,
         },
         {
+          provide: WordpressService,
+          useValue: wordpressServiceMock,
+        },
+        {
           provide: APP_INTERCEPTOR,
           useClass: SaveBodyInterceptor,
         },
@@ -533,6 +1030,7 @@ describe('KT Template Online API (e2e)', () => {
       id: '2041739550026043001',
       username: 'admin',
     });
+    wordpressServiceMock.getAuthContext.mockReturnValue(wordpressAuthContext);
   });
 
   afterAll(async () => {
@@ -576,7 +1074,7 @@ describe('KT Template Online API (e2e)', () => {
     });
   });
 
-  it('protects dict and minio endpoints with jwt auth', async () => {
+  it('protects dict, minio and wordpress endpoints with jwt auth', async () => {
     authServiceMock.currentUser.mockRejectedValue(unauthorizedException());
 
     await request(app.getHttpServer())
@@ -592,5 +1090,14 @@ describe('KT Template Online API (e2e)', () => {
     await request(app.getHttpServer()).get('/minio/check').expect(401);
 
     expect(minioServiceMock.checkConnection).not.toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    authServiceMock.currentUser.mockRejectedValue(unauthorizedException());
+
+    await request(app.getHttpServer())
+      .get('/wordpress/auth/check')
+      .expect(401);
+
+    expect(wordpressServiceMock.checkAuth).not.toHaveBeenCalled();
   });
 });

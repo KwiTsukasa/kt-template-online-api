@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response as ExpressResponse } from 'express';
 import { throwVbenError } from '@/common';
@@ -366,11 +366,15 @@ export class WordpressService {
 
       throwVbenError('WordPress 请求失败', HttpStatus.BAD_GATEWAY);
     } catch (err) {
+      if (err instanceof HttpException) {
+        throw err;
+      }
+
       if (err instanceof Error && err.name === 'AbortError') {
         throwVbenError('WordPress 请求超时', HttpStatus.GATEWAY_TIMEOUT);
       }
 
-      throw err;
+      this.throwWordpressNetworkError(err);
     } finally {
       clearTimeout(timer);
     }
@@ -441,11 +445,15 @@ export class WordpressService {
         signal: controller.signal,
       });
     } catch (err) {
+      if (err instanceof HttpException) {
+        throw err;
+      }
+
       if (err instanceof Error && err.name === 'AbortError') {
         throwVbenError('WordPress 请求超时', HttpStatus.GATEWAY_TIMEOUT);
       }
 
-      throw err;
+      this.throwWordpressNetworkError(err);
     } finally {
       clearTimeout(timer);
     }
@@ -614,6 +622,31 @@ export class WordpressService {
     if (data?.message) return data.message;
     if (typeof data === 'string' && data) return data;
     return `WordPress 请求失败：${status}`;
+  }
+
+  private throwWordpressNetworkError(err: unknown): never {
+    const message = err instanceof Error ? err.message : '未知错误';
+    const cause = this.getErrorCause(err);
+
+    // fetch 的 DNS、连接拒绝等底层异常不是 HttpException，需要统一转成业务响应。
+    return throwVbenError(
+      cause
+        ? `WordPress 网络请求失败：${message}（${cause}）`
+        : `WordPress 网络请求失败：${message}`,
+      HttpStatus.BAD_GATEWAY,
+      {
+        code: cause || 'WORDPRESS_NETWORK_ERROR',
+        message,
+        name: err instanceof Error ? err.name : 'Error',
+      },
+    );
+  }
+
+  private getErrorCause(err: unknown) {
+    const cause = (err as { cause?: { code?: string; message?: string } })
+      ?.cause;
+
+    return cause?.code || cause?.message || '';
   }
 
   private getLoginErrorMessage(html: string) {

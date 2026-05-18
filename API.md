@@ -24,14 +24,14 @@
 
 ## 功能模块
 
-| 模块      | 说明                                                                  |
-| --------- | --------------------------------------------------------------------- |
+| 模块      | 说明                                                                                      |
+| --------- | ----------------------------------------------------------------------------------------- |
 | Component | Admin 下受保护的组件/图表模板列表、详情、新增、编辑、逻辑删除，数据表为 `admin_component` |
-| Dict      | 基于新 `admin_dict` 表的数据库字典查询，以及组件一级类型到二级类型的数据库关系映射 |
-| Admin     | Vben Admin 真实接口，包含认证、用户、菜单、角色、部门、时区和上传适配 |
-| MinIO     | Bucket 检查/创建、文件上传、列表、临时访问地址、下载和删除            |
-| WordPress | WordPress 文章、标签、分类管理，复用客户端 WordPress 登录态访问 REST API |
-| Common    | 统一响应 Swagger 注解、字典翻译注解、`POST */save` 请求体规范化拦截器 |
+| Dict      | 基于新 `admin_dict` 表的数据库字典查询，以及组件一级类型到二级类型的数据库关系映射        |
+| Admin     | Vben Admin 真实接口，包含认证、用户、菜单、角色、部门、时区和上传适配                     |
+| MinIO     | Bucket 检查/创建、文件上传、列表、临时访问地址、下载和删除                                |
+| WordPress | WordPress 文章、标签、分类管理，复用客户端 WordPress 登录态访问 REST API                  |
+| Common    | 统一响应 Swagger 注解、字典翻译注解、`POST */save` 请求体规范化拦截器                     |
 
 ## 通用规则
 
@@ -61,25 +61,29 @@ WordPress 侧只使用客户端登录态，后端不走 BasicAuth。当前 WordP
 
 环境变量：
 
-| 变量 | 说明 |
-| --- | --- |
-| `WORDPRESS_BASE_URL` | WordPress 站点根地址，例如 `http://192.168.31.224:8080` |
-| `WORDPRESS_ADMIN_USERNAME` | WordPress 单管理员账号用户名 |
-| `WORDPRESS_ADMIN_PASSWORD` | WordPress 单管理员账号密码，仅放真实 env，不提交到仓库 |
-| `WORDPRESS_TIMEOUT_MS` | WordPress REST API 请求超时时间，默认 `15000` |
+| 变量                            | 说明                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `WORDPRESS_BASE_URL`            | WordPress 站点根地址，例如 `http://192.168.31.224:8080`                                    |
+| `WORDPRESS_ADMIN_USERNAME`      | WordPress 单管理员账号用户名                                                               |
+| `WORDPRESS_ADMIN_PASSWORD`      | WordPress 单管理员账号密码，仅放真实 env，不提交到仓库                                     |
+| `WORDPRESS_TIMEOUT_MS`          | WordPress REST API 请求超时时间，默认 `15000`                                              |
+| `WORDPRESS_LOGIN_TIMEOUT_MS`    | Admin 登录链路里 WordPress 自动认证的短超时时间，默认 `3000`，避免远程不可用阻塞主系统登录 |
+| `WORDPRESS_AVAILABILITY_TTL_MS` | WordPress 可用性缓存时间，默认 `60000`；远程不可用时用于过滤博客菜单和按钮权限             |
 
 支持的 WordPress 登录态来源：
 
-| Header/Cookie | 说明 |
-| --- | --- |
-| `X-WordPress-Authorization` | 优先透传的 WordPress 授权头，例如客户端登录拿到的 `Bearer <token>` |
-| `Authorization` | 仅当它不是本系统 Admin access token 时才会透传，避免和后台认证冲突 |
-| `X-WP-Nonce` | WordPress REST cookie 认证 nonce |
-| `Cookie` | 只会过滤并透传 `wordpress_*`、`wordpress_logged_in_*`、`wp-settings-*` 等 WordPress 登录相关 cookie |
-| `X-WordPress-Cookie` | 显式传入 WordPress cookie，适合非浏览器客户端联调 |
-| `kt_wordpress_auth` | 后端自动认证后写入的 httpOnly cookie，前端不可读取，后端会自动转成 WordPress cookie 透传 |
+| Header/Cookie               | 说明                                                                                                |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `X-WordPress-Authorization` | 优先透传的 WordPress 授权头，例如客户端登录拿到的 `Bearer <token>`                                  |
+| `Authorization`             | 仅当它不是本系统 Admin access token 时才会透传，避免和后台认证冲突                                  |
+| `X-WP-Nonce`                | WordPress REST cookie 认证 nonce                                                                    |
+| `Cookie`                    | 只会过滤并透传 `wordpress_*`、`wordpress_logged_in_*`、`wp-settings-*` 等 WordPress 登录相关 cookie |
+| `X-WordPress-Cookie`        | 显式传入 WordPress cookie，适合非浏览器客户端联调                                                   |
+| `kt_wordpress_auth`         | 后端自动认证后写入的 httpOnly cookie，前端不可读取，后端会自动转成 WordPress cookie 透传            |
 
 如果 WordPress 所在 Apache/Nginx 未开启 rewrite，`/wp-json/*` 可能返回 404。后端会自动回退到 WordPress 原生 `?rest_route=/...` 形式，避免因为固定链接配置阻断文章、标签和分类管理接口。
+
+Admin 主登录不依赖 WordPress 可用性：本系统账号验证通过后会先写入 Admin token；WordPress 自动认证失败时登录仍返回成功，`wordpressAuth` 为 `null`、`wordpressAvailable=false`，并清理旧 WordPress cookie。随后 `/menu/all` 与 `/auth/codes` 会基于最近一次 WordPress 可用性状态过滤 `Blog*` 菜单和 `Blog:*` 按钮权限码，避免前端展示不可用的文章、分类、标签管理入口。
 
 ### 数据库字典翻译
 
@@ -87,23 +91,23 @@ WordPress 侧只使用客户端登录态，后端不走 BasicAuth。当前 WordP
 
 `admin_dict` 表核心字段：
 
-| 字段        | 类型    | 说明                                                   |
-| ----------- | ------- | ------------------------------------------------------ |
-| id          | string  | 字典数字 ID                                            |
-| dictCode    | string  | 字典分组，例如 `COMPONENT_TYPE`、`CHART`、`COMPONENT`  |
-| label       | string  | 展示文本                                               |
-| value       | string  | 字典值                                                 |
-| childrenCode | string | 子字典分组，例如 `COMPONENT_TYPE.value=1` 指向 `CHART` |
-| sort        | number  | 排序                                                   |
-| status      | number  | 启停状态，`1` 启用                                     |
-| isDeleted   | boolean | 逻辑删除标记                                           |
+| 字段         | 类型    | 说明                                                   |
+| ------------ | ------- | ------------------------------------------------------ |
+| id           | string  | 字典数字 ID                                            |
+| dictCode     | string  | 字典分组，例如 `COMPONENT_TYPE`、`CHART`、`COMPONENT`  |
+| label        | string  | 展示文本                                               |
+| value        | string  | 字典值                                                 |
+| childrenCode | string  | 子字典分组，例如 `COMPONENT_TYPE.value=1` 指向 `CHART` |
+| sort         | number  | 排序                                                   |
+| status       | number  | 启停状态，`1` 启用                                     |
+| isDeleted    | boolean | 逻辑删除标记                                           |
 
 当前数据库示例关系：
 
 | dictCode       | value | label | childrenCode |
-| -------------- | ----- | ----- | ----------- |
-| COMPONENT_TYPE | 1     | 图表  | CHART       |
-| COMPONENT_TYPE | 2     | 组件  | COMPONENT   |
+| -------------- | ----- | ----- | ------------ |
+| COMPONENT_TYPE | 1     | 图表  | CHART        |
+| COMPONENT_TYPE | 2     | 组件  | COMPONENT    |
 
 ## 数据结构
 
@@ -323,35 +327,35 @@ Query：
 
 核心接口：
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| POST | `/auth/login` | 登录，返回 `accessToken` 与 `wordpressAuth`，并写入 access token、刷新 token 和 WordPress 授权 cookie |
-| POST | `/auth/refresh` | 通过刷新 token cookie 刷新 accessToken，并更新 token cookie |
-| POST | `/auth/logout` | 退出登录并清理 access token、刷新 token 与 WordPress 授权 cookie |
-| GET | `/auth/codes` | 获取当前用户权限码 |
-| GET | `/user/info` | 获取当前用户信息 |
-| GET | `/menu/all` | 获取当前用户可访问菜单 |
-| GET | `/system/menu/list` | 获取系统菜单树 |
-| GET | `/system/menu/name-exists` | 校验菜单 name 是否重复 |
-| GET | `/system/menu/path-exists` | 校验菜单 path 是否重复 |
-| POST | `/system/menu` | 新增菜单 |
-| PUT | `/system/menu/:id` | 更新菜单 |
-| DELETE | `/system/menu/:id` | 删除菜单及子菜单 |
-| GET | `/system/role/list` | 分页查询角色 |
-| POST | `/system/role` | 新增角色 |
-| PUT | `/system/role/:id` | 更新角色 |
-| DELETE | `/system/role/:id` | 删除角色 |
-| GET | `/system/dept/list` | 获取部门树 |
-| POST | `/system/dept` | 新增部门 |
-| PUT | `/system/dept/:id` | 更新部门 |
-| DELETE | `/system/dept/:id` | 删除部门 |
-| GET | `/timezone/getTimezoneOptions` | 获取时区选项 |
-| GET | `/timezone/getTimezone` | 获取当前用户时区 |
-| POST | `/timezone/setTimezone` | 设置当前用户时区 |
-| POST | `/upload` | Vben Upload 适配接口，真实上传到 MinIO 并返回 `{ url }` |
-| GET | `/table/list` | Vben 示例远程表格数据 |
-| GET | `/status` | Vben 状态码测试接口 |
-| GET | `/demo/bigint` | Vben BigInt JSON 测试接口 |
+| 方法   | 路径                           | 说明                                                                                                  |
+| ------ | ------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| POST   | `/auth/login`                  | 登录，返回 `accessToken` 与 `wordpressAuth`，并写入 access token、刷新 token 和 WordPress 授权 cookie |
+| POST   | `/auth/refresh`                | 通过刷新 token cookie 刷新 accessToken，并更新 token cookie                                           |
+| POST   | `/auth/logout`                 | 退出登录并清理 access token、刷新 token 与 WordPress 授权 cookie                                      |
+| GET    | `/auth/codes`                  | 获取当前用户权限码                                                                                    |
+| GET    | `/user/info`                   | 获取当前用户信息                                                                                      |
+| GET    | `/menu/all`                    | 获取当前用户可访问菜单                                                                                |
+| GET    | `/system/menu/list`            | 获取系统菜单树                                                                                        |
+| GET    | `/system/menu/name-exists`     | 校验菜单 name 是否重复                                                                                |
+| GET    | `/system/menu/path-exists`     | 校验菜单 path 是否重复                                                                                |
+| POST   | `/system/menu`                 | 新增菜单                                                                                              |
+| PUT    | `/system/menu/:id`             | 更新菜单                                                                                              |
+| DELETE | `/system/menu/:id`             | 删除菜单及子菜单                                                                                      |
+| GET    | `/system/role/list`            | 分页查询角色                                                                                          |
+| POST   | `/system/role`                 | 新增角色                                                                                              |
+| PUT    | `/system/role/:id`             | 更新角色                                                                                              |
+| DELETE | `/system/role/:id`             | 删除角色                                                                                              |
+| GET    | `/system/dept/list`            | 获取部门树                                                                                            |
+| POST   | `/system/dept`                 | 新增部门                                                                                              |
+| PUT    | `/system/dept/:id`             | 更新部门                                                                                              |
+| DELETE | `/system/dept/:id`             | 删除部门                                                                                              |
+| GET    | `/timezone/getTimezoneOptions` | 获取时区选项                                                                                          |
+| GET    | `/timezone/getTimezone`        | 获取当前用户时区                                                                                      |
+| POST   | `/timezone/setTimezone`        | 设置当前用户时区                                                                                      |
+| POST   | `/upload`                      | Vben Upload 适配接口，真实上传到 MinIO 并返回 `{ url }`                                               |
+| GET    | `/table/list`                  | Vben 示例远程表格数据                                                                                 |
+| GET    | `/status`                      | Vben 状态码测试接口                                                                                   |
+| GET    | `/demo/bigint`                 | Vben BigInt JSON 测试接口                                                                             |
 
 初始化 SQL：
 
@@ -395,24 +399,24 @@ Query：
 
 ### WordPress Article
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/wordpress/article/list` | 获取文章分页列表 |
-| GET | `/wordpress/article/detail?id=1` | 获取文章详情 |
-| POST | `/wordpress/article/save` | 新增文章 |
-| POST | `/wordpress/article/update` | 编辑文章 |
-| POST | `/wordpress/article/remove?id=1&force=true` | 删除文章 |
+| 方法 | 路径                                        | 说明             |
+| ---- | ------------------------------------------- | ---------------- |
+| GET  | `/wordpress/article/list`                   | 获取文章分页列表 |
+| GET  | `/wordpress/article/detail?id=1`            | 获取文章详情     |
+| POST | `/wordpress/article/save`                   | 新增文章         |
+| POST | `/wordpress/article/update`                 | 编辑文章         |
+| POST | `/wordpress/article/remove?id=1&force=true` | 删除文章         |
 
 列表 Query：
 
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| pageNo | number | 否 | 页码，默认 `1` |
-| pageSize | number | 否 | 每页条数，默认 `10` |
-| search | string | 否 | 关键词搜索 |
-| status | string | 否 | 文章状态，默认 `any` |
-| categories | string | 否 | 分类 ID，多个用逗号分隔 |
-| tags | string | 否 | 标签 ID，多个用逗号分隔 |
+| 参数       | 类型   | 必填 | 说明                    |
+| ---------- | ------ | ---- | ----------------------- |
+| pageNo     | number | 否   | 页码，默认 `1`          |
+| pageSize   | number | 否   | 每页条数，默认 `10`     |
+| search     | string | 否   | 关键词搜索              |
+| status     | string | 否   | 文章状态，默认 `any`    |
+| categories | string | 否   | 分类 ID，多个用逗号分隔 |
+| tags       | string | 否   | 标签 ID，多个用逗号分隔 |
 
 新增/编辑 Body 常用字段：
 
@@ -433,13 +437,13 @@ Query：
 
 ### WordPress Tag
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/wordpress/tag/list` | 获取标签分页列表 |
-| GET | `/wordpress/tag/detail?id=1` | 获取标签详情 |
-| POST | `/wordpress/tag/save` | 新增标签 |
-| POST | `/wordpress/tag/update` | 编辑标签 |
-| POST | `/wordpress/tag/remove?id=1&force=true` | 删除标签 |
+| 方法 | 路径                                    | 说明             |
+| ---- | --------------------------------------- | ---------------- |
+| GET  | `/wordpress/tag/list`                   | 获取标签分页列表 |
+| GET  | `/wordpress/tag/detail?id=1`            | 获取标签详情     |
+| POST | `/wordpress/tag/save`                   | 新增标签         |
+| POST | `/wordpress/tag/update`                 | 编辑标签         |
+| POST | `/wordpress/tag/remove?id=1&force=true` | 删除标签         |
 
 新增/编辑 Body：
 
@@ -454,13 +458,13 @@ Query：
 
 ### WordPress Category
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/wordpress/category/list` | 获取分类分页列表 |
-| GET | `/wordpress/category/detail?id=1` | 获取分类详情 |
-| POST | `/wordpress/category/save` | 新增分类 |
-| POST | `/wordpress/category/update` | 编辑分类 |
-| POST | `/wordpress/category/remove?id=1&force=true` | 删除分类 |
+| 方法 | 路径                                         | 说明             |
+| ---- | -------------------------------------------- | ---------------- |
+| GET  | `/wordpress/category/list`                   | 获取分类分页列表 |
+| GET  | `/wordpress/category/detail?id=1`            | 获取分类详情     |
+| POST | `/wordpress/category/save`                   | 新增分类         |
+| POST | `/wordpress/category/update`                 | 编辑分类         |
+| POST | `/wordpress/category/remove?id=1&force=true` | 删除分类         |
 
 新增/编辑 Body：
 

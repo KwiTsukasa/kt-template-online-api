@@ -13,14 +13,14 @@
 
 ## 功能模块
 
-| 模块 | 说明 |
-| --- | --- |
+| 模块        | 说明                                                                                      |
+| ----------- | ----------------------------------------------------------------------------------------- |
 | `component` | Admin 下受保护的组件/图表模板列表、详情、新增、编辑、逻辑删除，数据表为 `admin_component` |
-| `dict` | 基于新 `admin_dict` 表的字典查询，维护组件一级类型和二级类型关系 |
-| `admin` | Vben Admin 真实接口，包含登录、用户、菜单、角色、部门、时区、上传和示例表格 |
-| `minio` | Bucket 检查/创建、文件上传、列表、临时访问地址、下载和删除 |
-| `wordpress` | WordPress 文章、标签、分类管理接口，复用客户端 WordPress 登录态访问 REST API |
-| `common` | 响应注解、字典翻译、`POST */save` 请求体规范化等通用能力 |
+| `dict`      | 基于新 `admin_dict` 表的字典查询，维护组件一级类型和二级类型关系                          |
+| `admin`     | Vben Admin 真实接口，包含登录、用户、菜单、角色、部门、时区、上传和示例表格               |
+| `minio`     | Bucket 检查/创建、文件上传、列表、临时访问地址、下载和删除                                |
+| `wordpress` | WordPress 文章、标签、分类管理接口，复用客户端 WordPress 登录态访问 REST API              |
+| `common`    | 响应注解、字典翻译、`POST */save` 请求体规范化等通用能力                                  |
 
 ## 目录结构
 
@@ -57,6 +57,8 @@ WORDPRESS_BASE_URL=http://localhost
 WORDPRESS_ADMIN_USERNAME=admin
 WORDPRESS_ADMIN_PASSWORD=
 WORDPRESS_TIMEOUT_MS=15000
+WORDPRESS_LOGIN_TIMEOUT_MS=3000
+WORDPRESS_AVAILABILITY_TTL_MS=60000
 
 ADMIN_TOKEN_SECRET=change-me
 ADMIN_COOKIE_SECURE=false
@@ -113,7 +115,7 @@ pnpm test:e2e       # e2e 测试
 - 如果旧版本曾写入 `admin_user.id=0`，先执行 `sql/fix-admin-user-zero-id.sql` 修复脏数据，再重启服务。
 - Admin、Component、Dict 与 MinIO 业务接口统一走 `JwtAuthGuard`；登录、刷新 token、退出登录和部分示例状态测试接口通过 `@Public()` 放行。
 - WordPress 管理接口同样先走本系统 `JwtAuthGuard`，再透传客户端 WordPress 登录态访问 WordPress REST API；当前 WordPress 只有单管理员账号且不开放注册，账号配置放在 env 中，但不作为 BasicAuth 发送。
-- Admin 前端只调用现有 `/auth/login`；后端会在登录流程里自动登录 WordPress，把 WordPress cookie 写入本系统 httpOnly cookie，前端只持久化 REST nonce 和用户信息。
+- Admin 前端只调用现有 `/auth/login`；后端会在登录流程里自动尝试登录 WordPress，把 WordPress cookie 写入本系统 httpOnly cookie，前端只持久化 REST nonce 和用户信息。WordPress 远程不可用时不会阻塞 Admin 主登录，后端会返回 `wordpressAuth=null` 并在菜单和按钮权限接口中过滤博客管理相关入口。
 - WordPress 客户端登录态优先通过 `X-WordPress-Authorization` 透传，也支持 `X-WP-Nonce` 加 WordPress 登录 cookie 的 REST cookie 认证。
 - 如果 WordPress 服务器未开启 rewrite 导致 `/wp-json/*` 返回 404，后端会自动回退到 `?rest_route=/...` 形式继续访问 REST API。
 - `kt-template-admin` 登录会写入 access token 与刷新 token cookie，`kt-template-online-web` 和 `kt-template-online-playground` 可在回跳后通过刷新 token 重新持久化登录态。

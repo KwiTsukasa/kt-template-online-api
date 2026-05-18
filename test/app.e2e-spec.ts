@@ -563,9 +563,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
     expect(wordpressServiceMock.checkAuth).toHaveBeenCalledWith(
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: wordpressUser,
     });
   },
@@ -584,9 +583,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       expect.anything(),
       wordpressLoginResult.cookie,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: {
         auth: wordpressLoginResult.auth,
         user: wordpressUser,
@@ -602,9 +600,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
     expect(wordpressServiceMock.clearAuthCookie).toHaveBeenCalledWith(
       expect.anything(),
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: true,
     });
   },
@@ -632,9 +629,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       },
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: {
         list: [wordpressArticle],
         total: 1,
@@ -654,9 +650,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       '1',
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: wordpressArticle,
     });
   },
@@ -680,9 +675,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       },
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: wordpressArticle,
     });
   },
@@ -705,9 +699,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       },
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: wordpressArticle,
     });
   },
@@ -728,9 +721,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       false,
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: true,
     });
   },
@@ -758,9 +750,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       },
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: {
         list: [wordpressTerm],
         total: 1,
@@ -780,9 +771,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       '1',
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: wordpressTerm,
     });
   },
@@ -804,9 +794,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       },
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: wordpressTerm,
     });
   },
@@ -829,9 +818,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       },
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: wordpressTerm,
     });
   },
@@ -849,9 +837,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       true,
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: true,
     });
   },
@@ -879,9 +866,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       },
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: {
         list: [wordpressTerm],
         total: 1,
@@ -901,9 +887,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       '1',
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: wordpressTerm,
     });
   },
@@ -927,9 +912,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       },
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: wordpressTerm,
     });
   },
@@ -954,9 +938,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       },
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: wordpressTerm,
     });
   },
@@ -974,9 +957,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
       true,
       wordpressAuthContext,
     );
-    expect(response.body).toEqual({
-      code: 200,
-      msg: '操作成功',
+    expect(response.body).toMatchObject({
+      code: 0,
       data: true,
     });
   },

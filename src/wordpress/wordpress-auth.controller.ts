@@ -1,7 +1,6 @@
 import {
   Controller,
   Get,
-  HttpStatus,
   Post,
   Req,
   Res,
@@ -10,7 +9,7 @@ import {
 import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
-import { Public, ToolsService } from '@/common';
+import { Public, vbenSuccess } from '@/common';
 import { WordpressService } from './wordpress.service';
 
 @ApiTags('wordpress-auth')
@@ -27,10 +26,7 @@ import { WordpressService } from './wordpress.service';
 @Controller('wordpress/auth')
 @UseGuards(JwtAuthGuard)
 export class WordpressAuthController {
-  constructor(
-    private readonly toolsService: ToolsService,
-    private readonly wordpressService: WordpressService,
-  ) {}
+  constructor(private readonly wordpressService: WordpressService) {}
 
   @Post('login')
   @ApiOperation({ summary: '使用环境变量中的 WordPress 管理员账号自动认证' })
@@ -39,7 +35,7 @@ export class WordpressAuthController {
       await this.wordpressService.loginWithConfiguredAdmin();
     this.wordpressService.setAuthCookie(res, cookie);
 
-    return this.toolsService.res(HttpStatus.OK, '操作成功', {
+    return vbenSuccess({
       auth,
       user,
     });
@@ -51,7 +47,7 @@ export class WordpressAuthController {
   logout(@Res({ passthrough: true }) res: Response) {
     this.wordpressService.clearAuthCookie(res);
 
-    return this.toolsService.res(HttpStatus.OK, '操作成功', true);
+    return vbenSuccess(true);
   }
 
   @Get('check')
@@ -60,6 +56,6 @@ export class WordpressAuthController {
     const auth = this.wordpressService.getAuthContext(req);
     const user = await this.wordpressService.checkAuth(auth);
 
-    return res.send(this.toolsService.res(HttpStatus.OK, '操作成功', user));
+    return res.send(vbenSuccess(user));
   }
 }

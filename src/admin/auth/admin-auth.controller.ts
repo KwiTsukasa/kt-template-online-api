@@ -39,18 +39,26 @@ export class AdminAuthController {
       body.password,
     );
     const wordpressLogin =
-      await this.wordpressService.loginWithConfiguredAdmin();
+      await this.wordpressService.tryLoginWithConfiguredAdmin();
     this.authService.setAccessTokenCookie(res, accessToken);
     this.authService.setRefreshTokenCookie(res, refreshToken);
-    this.wordpressService.setAuthCookie(res, wordpressLogin.cookie);
+    if (wordpressLogin.available) {
+      this.wordpressService.setAuthCookie(res, wordpressLogin.result.cookie);
+    } else {
+      this.wordpressService.clearAuthCookie(res);
+    }
 
     return vbenSuccess({
       ...this.userService.serializeUser(user),
       accessToken,
-      wordpressAuth: {
-        ...wordpressLogin.auth,
-        user: wordpressLogin.user,
-      },
+      wordpressAuth: wordpressLogin.available
+        ? {
+            ...wordpressLogin.result.auth,
+            user: wordpressLogin.result.user,
+          }
+        : null,
+      wordpressAvailable: wordpressLogin.available,
+      wordpressError: wordpressLogin.error,
     });
   }
 

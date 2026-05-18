@@ -23,6 +23,30 @@ export type WordpressLoginResult = {
   user: any;
 };
 
+export type WordpressOptionalLoginResult =
+  | {
+      available: false;
+      error: WordpressAvailabilityError;
+      result: null;
+    }
+  | {
+      available: true;
+      error: null;
+      result: WordpressLoginResult & { cookie: string };
+    };
+
+export type WordpressAvailabilityError = {
+  error: any;
+  message: string;
+  status: number;
+};
+
+type WordpressAvailabilityCache = {
+  available: boolean;
+  checkedAt: number;
+  error?: WordpressAvailabilityError;
+};
+
 type WordpressRequestOptions = {
   auth: WordpressAuthContext;
   body?: Record<string, unknown>;
@@ -46,6 +70,8 @@ const WORDPRESS_AUTH_COOKIE = 'kt_wordpress_auth';
 
 @Injectable()
 export class WordpressService {
+  private availabilityCache: null | WordpressAvailabilityCache = null;
+
   constructor(private readonly configService: ConfigService) {}
 
   getAuthContext(request: Request): WordpressAuthContext {
@@ -79,9 +105,45 @@ export class WordpressService {
     return response.data;
   }
 
-  async loginWithConfiguredAdmin(): Promise<
-    WordpressLoginResult & { cookie: string }
-  > {
+  async tryLoginWithConfiguredAdmin(): Promise<WordpressOptionalLoginResult> {
+    try {
+      const result = await this.loginWithConfiguredAdmin({
+        timeoutMs: this.getLoginTimeout(),
+      });
+      this.rememberAvailability(true);
+
+      return {
+        available: true,
+        error: null,
+        result,
+      };
+    } catch (err) {
+      const error = this.normalizeAvailabilityError(err);
+      this.rememberAvailability(false, error);
+
+      return {
+        available: false,
+        error,
+        result: null,
+      };
+    }
+  }
+
+  isAdminIntegrationAvailable() {
+    if (!this.availabilityCache) return true;
+    if (
+      Date.now() - this.availabilityCache.checkedAt >
+      this.getAvailabilityTtl()
+    ) {
+      return true;
+    }
+
+    return this.availabilityCache.available;
+  }
+
+  async loginWithConfiguredAdmin(
+    options: { timeoutMs?: number } = {},
+  ): Promise<WordpressLoginResult & { cookie: string }> {
     const username = this.configService.get<string>('WORDPRESS_ADMIN_USERNAME');
     const password = this.configService.get<string>('WORDPRESS_ADMIN_PASSWORD');
 
@@ -93,8 +155,12 @@ export class WordpressService {
       );
     }
 
-    const cookie = await this.loginByPassword(username, password);
-    const nonce = await this.fetchRestNonce(cookie);
+    const cookie = await this.loginByPassword(
+      username,
+      password,
+      options.timeoutMs,
+    );
+    const nonce = await this.fetchRestNonce(cookie, options.timeoutMs);
 
     if (!nonce) {
       throwVbenError(
@@ -138,7 +204,10 @@ export class WordpressService {
     });
   }
 
-  async articleList(query: WordpressArticleListQueryDto, auth: WordpressAuthContext) {
+  async articleList(
+    query: WordpressArticleListQueryDto,
+    auth: WordpressAuthContext,
+  ) {
     const response = await this.request<any[]>('/wp-json/wp/v2/posts', {
       auth,
       query: {
@@ -179,7 +248,10 @@ export class WordpressService {
     return response.data;
   }
 
-  async articleUpdate(body: WordpressArticleBodyDto & { id: number }, auth: WordpressAuthContext) {
+  async articleUpdate(
+    body: WordpressArticleBodyDto & { id: number },
+    auth: WordpressAuthContext,
+  ) {
     const response = await this.request(`/wp-json/wp/v2/posts/${body.id}`, {
       auth,
       body: this.getArticleBody(body),
@@ -189,7 +261,11 @@ export class WordpressService {
     return response.data;
   }
 
-  async articleRemove(id: string | number, force: boolean, auth: WordpressAuthContext) {
+  async articleRemove(
+    id: string | number,
+    force: boolean,
+    auth: WordpressAuthContext,
+  ) {
     const response = await this.request(`/wp-json/wp/v2/posts/${id}`, {
       auth,
       method: 'DELETE',
@@ -213,15 +289,25 @@ export class WordpressService {
     return this.termSave('/wp-json/wp/v2/tags', body, auth);
   }
 
-  async tagUpdate(body: WordpressTermBodyDto & { id: number }, auth: WordpressAuthContext) {
+  async tagUpdate(
+    body: WordpressTermBodyDto & { id: number },
+    auth: WordpressAuthContext,
+  ) {
     return this.termUpdate('/wp-json/wp/v2/tags', body, auth);
   }
 
-  async tagRemove(id: string | number, force: boolean, auth: WordpressAuthContext) {
+  async tagRemove(
+    id: string | number,
+    force: boolean,
+    auth: WordpressAuthContext,
+  ) {
     return this.termRemove('/wp-json/wp/v2/tags', id, force, auth);
   }
 
-  async categoryList(query: WordpressTermListQueryDto, auth: WordpressAuthContext) {
+  async categoryList(
+    query: WordpressTermListQueryDto,
+    auth: WordpressAuthContext,
+  ) {
     return this.termList('/wp-json/wp/v2/categories', query, auth);
   }
 
@@ -233,11 +319,18 @@ export class WordpressService {
     return this.termSave('/wp-json/wp/v2/categories', body, auth);
   }
 
-  async categoryUpdate(body: WordpressTermBodyDto & { id: number }, auth: WordpressAuthContext) {
+  async categoryUpdate(
+    body: WordpressTermBodyDto & { id: number },
+    auth: WordpressAuthContext,
+  ) {
     return this.termUpdate('/wp-json/wp/v2/categories', body, auth);
   }
 
-  async categoryRemove(id: string | number, force: boolean, auth: WordpressAuthContext) {
+  async categoryRemove(
+    id: string | number,
+    force: boolean,
+    auth: WordpressAuthContext,
+  ) {
     return this.termRemove('/wp-json/wp/v2/categories', id, force, auth);
   }
 
@@ -346,7 +439,11 @@ export class WordpressService {
         const data = await this.parseResponse(response);
 
         // 兼容未开启 Apache rewrite 的 WordPress：/wp-json 404 时自动回退到 ?rest_route=。
-        if (!response.ok && response.status === 404 && index < urls.length - 1) {
+        if (
+          !response.ok &&
+          response.status === 404 &&
+          index < urls.length - 1
+        ) {
           continue;
         }
 
@@ -380,14 +477,22 @@ export class WordpressService {
     }
   }
 
-  private async loginByPassword(username: string, password: string) {
-    const response = await this.formRequest('/wp-login.php', {
-      log: username,
-      pwd: password,
-      redirect_to: this.getUrl('/wp-admin/'),
-      testcookie: '1',
-      'wp-submit': 'Log In',
-    });
+  private async loginByPassword(
+    username: string,
+    password: string,
+    timeoutMs?: number,
+  ) {
+    const response = await this.formRequest(
+      '/wp-login.php',
+      {
+        log: username,
+        pwd: password,
+        redirect_to: this.getUrl('/wp-admin/'),
+        testcookie: '1',
+        'wp-submit': 'Log In',
+      },
+      timeoutMs,
+    );
     const setCookies = this.getSetCookieHeaders(response.headers);
     const cookie = this.toCookieHeader(setCookies);
 
@@ -403,15 +508,23 @@ export class WordpressService {
     return cookie;
   }
 
-  private async fetchRestNonce(cookie: string) {
-    const adminPaths = ['/wp-admin/', '/wp-admin/post-new.php', '/wp-admin/edit.php'];
+  private async fetchRestNonce(cookie: string, timeoutMs?: number) {
+    const adminPaths = [
+      '/wp-admin/',
+      '/wp-admin/post-new.php',
+      '/wp-admin/edit.php',
+    ];
 
     for (const path of adminPaths) {
-      const response = await this.rawRequest(path, {
-        headers: {
-          Cookie: cookie,
+      const response = await this.rawRequest(
+        path,
+        {
+          headers: {
+            Cookie: cookie,
+          },
         },
-      });
+        timeoutMs,
+      );
       const html = await response.text().catch(() => '');
       const nonce = this.extractRestNonce(html);
 
@@ -421,23 +534,38 @@ export class WordpressService {
     return '';
   }
 
-  private async formRequest(path: string, body: Record<string, string>) {
+  private async formRequest(
+    path: string,
+    body: Record<string, string>,
+    timeoutMs?: number,
+  ) {
     const form = new URLSearchParams(body);
 
-    return this.rawRequest(path, {
-      body: form,
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Cookie: 'wordpress_test_cookie=WP Cookie check',
+    return this.rawRequest(
+      path,
+      {
+        body: form,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Cookie: 'wordpress_test_cookie=WP Cookie check',
+        },
+        method: 'POST',
+        redirect: 'manual',
       },
-      method: 'POST',
-      redirect: 'manual',
-    });
+      timeoutMs,
+    );
   }
 
-  private async rawRequest(path: string, init: RequestInit = {}) {
+  private async rawRequest(
+    path: string,
+    init: RequestInit = {},
+    timeoutMs?: number,
+  ) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.getTimeout());
+    const timer = setTimeout(
+      () => controller.abort(),
+      timeoutMs || this.getTimeout(),
+    );
 
     try {
       return await fetch(this.getUrl(path), {
@@ -497,7 +625,8 @@ export class WordpressService {
   }
 
   private getCookieOptions() {
-    const secure = this.configService.get<string>('ADMIN_COOKIE_SECURE') === 'true';
+    const secure =
+      this.configService.get<string>('ADMIN_COOKIE_SECURE') === 'true';
 
     return {
       httpOnly: true,
@@ -549,6 +678,31 @@ export class WordpressService {
 
   private getTimeout() {
     return Number(this.configService.get('WORDPRESS_TIMEOUT_MS') || 15000);
+  }
+
+  private getLoginTimeout() {
+    return Number(
+      this.configService.get('WORDPRESS_LOGIN_TIMEOUT_MS') ||
+        this.configService.get('WORDPRESS_TIMEOUT_MS') ||
+        3000,
+    );
+  }
+
+  private getAvailabilityTtl() {
+    return Number(
+      this.configService.get('WORDPRESS_AVAILABILITY_TTL_MS') || 60_000,
+    );
+  }
+
+  private rememberAvailability(
+    available: boolean,
+    error?: WordpressAvailabilityError,
+  ) {
+    this.availabilityCache = {
+      available,
+      checkedAt: Date.now(),
+      error,
+    };
   }
 
   private getPageQuery(query: WordpressPagedQueryDto) {
@@ -642,6 +796,30 @@ export class WordpressService {
     );
   }
 
+  private normalizeAvailabilityError(err: unknown): WordpressAvailabilityError {
+    if (err instanceof HttpException) {
+      const response = err.getResponse();
+      const responseBody =
+        response && typeof response === 'object'
+          ? (response as Record<string, any>)
+          : {};
+
+      return {
+        error: responseBody.error || response,
+        message:
+          responseBody.message ||
+          (typeof response === 'string' ? response : err.message),
+        status: err.getStatus(),
+      };
+    }
+
+    return {
+      error: err instanceof Error ? err.name : 'WordPressUnavailable',
+      message: err instanceof Error ? err.message : 'WordPress 暂不可用',
+      status: HttpStatus.BAD_GATEWAY,
+    };
+  }
+
   private getErrorCause(err: unknown) {
     const cause = (err as { cause?: { code?: string; message?: string } })
       ?.cause;
@@ -650,11 +828,16 @@ export class WordpressService {
   }
 
   private getLoginErrorMessage(html: string) {
-    const match = html.match(/<div[^>]*id=["']login_error["'][^>]*>([\s\S]*?)<\/div>/i);
+    const match = html.match(
+      /<div[^>]*id=["']login_error["'][^>]*>([\s\S]*?)<\/div>/i,
+    );
 
     if (!match?.[1]) return 'WordPress 管理员登录失败';
 
-    return match[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    return match[1]
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   private getSetCookieHeaders(headers: Headers) {
@@ -778,4 +961,6 @@ export class WordpressService {
   }
 }
 
-type WordpressPagedQueryDto = WordpressArticleListQueryDto | WordpressTermListQueryDto;
+type WordpressPagedQueryDto =
+  | WordpressArticleListQueryDto
+  | WordpressTermListQueryDto;

@@ -13,7 +13,7 @@ import {
 import { ApiHeader, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
-import { ToolsService } from '@/common';
+import { vbenSuccess } from '@/common';
 import {
   WordpressTermBodyDto,
   WordpressTermListQueryDto,
@@ -35,10 +35,7 @@ import { WordpressService } from './wordpress.service';
 @Controller('wordpress/category')
 @UseGuards(JwtAuthGuard)
 export class WordpressCategoryController {
-  constructor(
-    private readonly toolsService: ToolsService,
-    private readonly wordpressService: WordpressService,
-  ) {}
+  constructor(private readonly wordpressService: WordpressService) {}
 
   @Get('list')
   @ApiOperation({ summary: '获取 WordPress 分类分页列表' })
@@ -50,7 +47,7 @@ export class WordpressCategoryController {
     const auth = this.wordpressService.getAuthContext(req);
     const list = await this.wordpressService.categoryList(query, auth);
 
-    return res.send(this.toolsService.res(HttpStatus.OK, '操作成功', list));
+    return res.send(vbenSuccess(list));
   }
 
   @Get('detail')
@@ -60,7 +57,7 @@ export class WordpressCategoryController {
     const auth = this.wordpressService.getAuthContext(req);
     const detail = await this.wordpressService.categoryDetail(id, auth);
 
-    return res.send(this.toolsService.res(HttpStatus.OK, '操作成功', detail));
+    return res.send(vbenSuccess(detail));
   }
 
   @Post('save')
@@ -74,7 +71,7 @@ export class WordpressCategoryController {
     const auth = this.wordpressService.getAuthContext(req);
     const result = await this.wordpressService.categorySave(body, auth);
 
-    return res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
+    return res.send(vbenSuccess(result));
   }
 
   @Post('update')
@@ -88,7 +85,7 @@ export class WordpressCategoryController {
     const auth = this.wordpressService.getAuthContext(req);
     const result = await this.wordpressService.categoryUpdate(body, auth);
 
-    return res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
+    return res.send(vbenSuccess(result));
   }
 
   @Post('remove')
@@ -109,6 +106,6 @@ export class WordpressCategoryController {
       auth,
     );
 
-    return res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
+    return res.send(vbenSuccess(result));
   }
 }

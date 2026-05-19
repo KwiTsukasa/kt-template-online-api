@@ -126,6 +126,7 @@ pnpm test:e2e       # e2e 测试
 - Admin、Component、Dict 与 MinIO 业务接口统一走 `JwtAuthGuard`；登录、刷新 token、退出登录和部分示例状态测试接口通过 `@Public()` 放行。
 - WordPress 管理接口同样先走本系统 `JwtAuthGuard`，再透传客户端 WordPress 登录态访问 WordPress REST API；当前 WordPress 只有单管理员账号且不开放注册，账号配置放在 env 中，但不作为 BasicAuth 发送。
 - Admin 前端只调用现有 `/auth/login`；后端会在登录流程里自动尝试登录 WordPress，把 WordPress cookie 写入本系统 httpOnly cookie，前端只持久化 REST nonce 和用户信息。WordPress 远程不可用时不会阻塞 Admin 主登录，后端会返回 `wordpressAuth=null` 并在菜单和按钮权限接口中过滤博客管理相关入口。
+- WordPress 文章的 `categories` 和 `tags` 按原生 REST API 语义透传 ID 数组；分类和标签 term 支持新增、编辑、强制删除，删除 term 不会删除文章。
 - WordPress 客户端登录态优先通过 `X-WordPress-Authorization` 透传，也支持 `X-WP-Nonce` 加 WordPress 登录 cookie 的 REST cookie 认证。
 - 如果 WordPress 服务器未开启 rewrite 导致 `/wp-json/*` 返回 404，后端会自动回退到 `?rest_route=/...` 形式继续访问 REST API。
 - `kt-template-admin` 登录会写入 access token 与刷新 token cookie，`kt-template-online-web` 和 `kt-template-online-playground` 可在回跳后通过刷新 token 重新持久化登录态。

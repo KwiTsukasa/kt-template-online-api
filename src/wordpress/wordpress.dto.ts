@@ -39,14 +39,14 @@ export class WordpressArticleListQueryDto extends WordpressPagedQueryDto {
   status?: string;
 
   @ApiPropertyOptional({
-    description: '分类 ID，多个使用逗号分隔',
+    description: '分类 ID，多个使用逗号分隔或重复传参',
   })
-  categories?: string;
+  categories?: string | string[];
 
   @ApiPropertyOptional({
-    description: '标签 ID，多个使用逗号分隔',
+    description: '标签 ID，多个使用逗号分隔或重复传参',
   })
-  tags?: string;
+  tags?: string | string[];
 
   @ApiPropertyOptional({
     description: '作者 ID',

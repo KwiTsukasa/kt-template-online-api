@@ -415,8 +415,8 @@ Query：
 | pageSize   | number | 否   | 每页条数，默认 `10`     |
 | search     | string | 否   | 关键词搜索              |
 | status     | string | 否   | 文章状态，默认 `any`    |
-| categories | string | 否   | 分类 ID，多个用逗号分隔 |
-| tags       | string | 否   | 标签 ID，多个用逗号分隔 |
+| categories | string | 否   | 分类 ID，多个用逗号分隔，也兼容重复传参 |
+| tags       | string | 否   | 标签 ID，多个用逗号分隔，也兼容重复传参 |
 
 新增/编辑 Body 常用字段：
 
@@ -435,6 +435,8 @@ Query：
 }
 ```
 
+`categories` 与 `tags` 直接对应 WordPress 文章 REST 字段，传入 ID 数组即可把文章绑定到对应分类和标签；传空数组表示清空当前文章的对应绑定。
+
 ### WordPress Tag
 
 | 方法 | 路径                                    | 说明             |
@@ -444,6 +446,8 @@ Query：
 | POST | `/wordpress/tag/save`                   | 新增标签         |
 | POST | `/wordpress/tag/update`                 | 编辑标签         |
 | POST | `/wordpress/tag/remove?id=1&force=true` | 删除标签         |
+
+WordPress 标签 term 不支持回收站，删除时必须使用 `force=true`。
 
 新增/编辑 Body：
 
@@ -465,6 +469,8 @@ Query：
 | POST | `/wordpress/category/save`                   | 新增分类         |
 | POST | `/wordpress/category/update`                 | 编辑分类         |
 | POST | `/wordpress/category/remove?id=1&force=true` | 删除分类         |
+
+WordPress 分类 term 不支持回收站，删除时必须使用 `force=true`；删除分类不会删除文章，文章会按 WordPress 自身规则解除或迁移分类关系。
 
 新增/编辑 Body：
 

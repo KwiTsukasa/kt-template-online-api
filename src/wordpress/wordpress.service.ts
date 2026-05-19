@@ -213,11 +213,11 @@ export class WordpressService {
       query: {
         ...this.getPageQuery(query),
         author: query.author,
-        categories: query.categories,
+        categories: this.normalizeIdQuery(query.categories),
         context: 'edit',
         search: query.search,
         status: query.status || 'any',
-        tags: query.tags,
+        tags: this.normalizeIdQuery(query.tags),
       },
     });
 
@@ -429,14 +429,25 @@ export class WordpressService {
       const urls = this.getRequestUrls(path, options.query);
 
       for (let index = 0; index < urls.length; index += 1) {
-        const response = await fetch(urls[index], {
+        let response = await fetch(urls[index], {
           body: options.body ? JSON.stringify(options.body) : undefined,
           headers: this.getHeaders(options.auth, !!options.body),
           method: options.method || 'GET',
           redirect: 'follow',
           signal: controller.signal,
         });
-        const data = await this.parseResponse(response);
+        let data = await this.parseResponse(response);
+
+        // 部分 WordPress 网关会拦截 DELETE；REST API 官方支持用 _method=DELETE 通过 POST 兜底。
+        if (!response.ok && response.status === 405 && options.method === 'DELETE') {
+          response = await fetch(this.getMethodOverrideUrl(urls[index], 'DELETE'), {
+            headers: this.getHeaders(options.auth, false),
+            method: 'POST',
+            redirect: 'follow',
+            signal: controller.signal,
+          });
+          data = await this.parseResponse(response);
+        }
 
         // 兼容未开启 Apache rewrite 的 WordPress：/wp-json 404 时自动回退到 ?rest_route=。
         if (
@@ -676,6 +687,14 @@ export class WordpressService {
     return url.toString();
   }
 
+  private getMethodOverrideUrl(url: string, method: 'DELETE') {
+    const overrideUrl = new URL(url);
+
+    overrideUrl.searchParams.set('_method', method);
+
+    return overrideUrl.toString();
+  }
+
   private getTimeout() {
     return Number(this.configService.get('WORDPRESS_TIMEOUT_MS') || 15000);
   }
@@ -745,6 +764,24 @@ export class WordpressService {
       .split(',')
       .map((item) => Number(item.trim()))
       .filter((item) => !Number.isNaN(item));
+  }
+
+  private normalizeIdQuery(value?: string | string[]) {
+    if (Array.isArray(value)) {
+      return value
+        .flatMap((item) => item.split(','))
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .join(',');
+    }
+
+    if (typeof value !== 'string') return value;
+
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .join(',');
   }
 
   private pickDefined(payload: Record<string, unknown>) {

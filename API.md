@@ -12,13 +12,13 @@
 }
 ```
 
-失败时仍使用相同结构，常见为：
+失败时使用 `err` 承载错误信息，不返回成功结构里的 `data`：
 
 ```json
 {
   "code": 400,
   "msg": "操作失败",
-  "data": null
+  "err": "错误原因"
 }
 ```
 
@@ -315,12 +315,12 @@ Query：
 
 ## Vben Admin 真实接口
 
-这些接口用于 `Vue/kt-template-admin`，响应格式与 Vben 请求拦截器对齐：
+这些接口用于 `Vue/kt-template-admin`，响应格式与项目统一响应结构对齐：
 
 ```json
 {
-  "code": 0,
-  "message": "ok",
+  "code": 200,
+  "msg": "操作成功",
   "data": {}
 }
 ```

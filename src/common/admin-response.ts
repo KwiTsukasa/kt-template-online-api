@@ -1,17 +1,24 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
 
 export type VbenResponse<T = any> = {
-  code: number;
+  code: 200;
   data: T;
-  error: any;
-  message: string;
+  msg: string;
 };
 
-export const vbenSuccess = <T = any>(data: T): VbenResponse<T> => ({
-  code: 0,
+export type ApiErrorResponse = {
+  code: number;
+  msg: string;
+  err: any;
+};
+
+export const vbenSuccess = <T = any>(
+  data: T,
+  msg = '操作成功',
+): VbenResponse<T> => ({
+  code: 200,
   data,
-  error: null,
-  message: 'ok',
+  msg,
 });
 
 export const vbenPage = <T = any>(items: T[], total: number) =>
@@ -23,14 +30,12 @@ export const vbenPage = <T = any>(items: T[], total: number) =>
 export const throwVbenError = (
   message: string,
   status = HttpStatus.BAD_REQUEST,
-  error: any = message,
+  err: any = message,
 ): never => {
   throw new HttpException(
     {
-      code: -1,
-      data: null,
-      error,
-      message,
+      msg: message,
+      err,
     },
     status,
   );

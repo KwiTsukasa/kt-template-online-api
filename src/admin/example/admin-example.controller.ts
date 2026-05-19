@@ -98,11 +98,16 @@ export class AdminExampleController {
   @Public()
   status(@Query('status') status: string, @Res() res: Response) {
     const code = Number(status) || 200;
+
+    if (code === 200) {
+      res.status(code).send(vbenSuccess(`${code}`));
+      return;
+    }
+
     res.status(code).send({
-      code: -1,
-      data: null,
-      error: `${code}`,
-      message: `${code}`,
+      code,
+      msg: `${code}`,
+      err: `${code}`,
     });
   }
 
@@ -110,8 +115,8 @@ export class AdminExampleController {
   async bigint(@Res() res: Response) {
     res.setHeader('Content-Type', 'application/json');
     res.send(`{
-  "code": 0,
-  "message": "success",
+  "code": 200,
+  "msg": "操作成功",
   "data": [
     {
       "id": 123456789012345678901234567890123456789012345678901234567890,
@@ -132,13 +137,13 @@ export class AdminExampleController {
   @Get('test')
   @Public()
   testGet() {
-    return 'Test get handler';
+    return vbenSuccess('Test get handler');
   }
 
   @Post('test')
   @Public()
   testPost() {
-    return 'Test post handler';
+    return vbenSuccess('Test post handler');
   }
 
   private sortRows(rows: DemoTableRow[], sortBy?: string, sortOrder?: string) {

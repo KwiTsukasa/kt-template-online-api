@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ConfigService } from '@nestjs/config';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MinioModule } from 'nestjs-minio-client';
 import { MinioClientModule } from './minio/minio.module';
-import { SaveBodyInterceptor } from './common';
+import { ApiExceptionFilter, SaveBodyInterceptor } from './common';
 import { AdminModule } from './admin/admin.module';
 import { WordpressModule } from './wordpress/wordpress.module';
 
@@ -57,6 +57,10 @@ import { WordpressModule } from './wordpress/wordpress.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: SaveBodyInterceptor,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: ApiExceptionFilter,
     },
   ],
 })

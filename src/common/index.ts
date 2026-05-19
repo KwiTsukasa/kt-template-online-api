@@ -3,6 +3,7 @@ export * from './admin-tree';
 export * from './decorators/current-admin-user.decorator';
 export * from './decorators/decode-dict.decorator';
 export * from './decorators/public.decorator';
+export * from './filters/api-exception.filter';
 export * from './interceptors/save-body.interceptor';
 export * from './snowflake-id';
 export * from './services/tool.service';

@@ -15,12 +15,19 @@ export class ToolsService {
   }
 
   res(code: number, msg: string, data: any): Res {
-    const retn: Res = {
+    if (code === 200) {
+      return {
+        code,
+        msg,
+        data,
+      };
+    }
+
+    return {
       code,
       msg,
-      data,
+      err: data,
     };
-    return retn;
   }
 
   page<T = any>(list: T[], total: number): Page<T> {

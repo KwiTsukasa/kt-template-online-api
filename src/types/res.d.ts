@@ -1,8 +1,14 @@
-type Res = {
-  code: number;
-  msg: string;
-  data: any;
-};
+type Res =
+  | {
+      code: 200;
+      msg: string;
+      data: any;
+    }
+  | {
+      code: number;
+      msg: string;
+      err: any;
+    };
 
 type Page<T = any> = {
   list: T[];

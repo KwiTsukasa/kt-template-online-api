@@ -106,6 +106,16 @@ pnpm test:e2e       # e2e 测试
 }
 ```
 
+失败时统一返回 `err` 字段，成功响应不包含 `err`：
+
+```json
+{
+  "code": 400,
+  "msg": "操作失败",
+  "err": "错误原因"
+}
+```
+
 ## 核心规则
 
 - `admin_component` 表保存组件/图表模板，`admin_dict` 表是统一字典翻译数据源，`Component.typeMsg` 和 `Component.componentTypeMsg` 查询后自动映射；旧 `/dict/*` 接口路径保持兼容。

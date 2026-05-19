@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, INestApplication } from '@nestjs/common';
-import { APP_INTERCEPTOR, Reflector } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR, Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import request = require('supertest');
 import { Readable } from 'stream';
@@ -11,7 +11,11 @@ import { ComponentController } from '../src/admin/component/component.controller
 import { ComponentService } from '../src/admin/component/component.service';
 import { DictController } from '../src/admin/dict/dict.controller';
 import { DictService } from '../src/admin/dict/dict.service';
-import { SaveBodyInterceptor, ToolsService } from '../src/common';
+import {
+  ApiExceptionFilter,
+  SaveBodyInterceptor,
+  ToolsService,
+} from '../src/common';
 import { MinioClientController } from '../src/minio/minio.controller';
 import { MinioClientService } from '../src/minio/minio.service';
 import { WordpressArticleController } from '../src/wordpress/wordpress-article.controller';
@@ -117,10 +121,8 @@ const authServiceMock = {
 const unauthorizedException = () =>
   new HttpException(
     {
-      code: -1,
-      data: null,
-      error: 'Unauthorized Exception',
-      message: 'Unauthorized Exception',
+      msg: 'Unauthorized Exception',
+      err: 'Unauthorized Exception',
     },
     HttpStatus.UNAUTHORIZED,
   );
@@ -564,7 +566,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: wordpressUser,
     });
   },
@@ -584,7 +586,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressLoginResult.cookie,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: {
         auth: wordpressLoginResult.auth,
         user: wordpressUser,
@@ -601,7 +603,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       expect.anything(),
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: true,
     });
   },
@@ -630,7 +632,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: {
         list: [wordpressArticle],
         total: 1,
@@ -651,7 +653,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: wordpressArticle,
     });
   },
@@ -676,7 +678,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: wordpressArticle,
     });
   },
@@ -700,7 +702,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: wordpressArticle,
     });
   },
@@ -722,7 +724,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: true,
     });
   },
@@ -751,7 +753,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: {
         list: [wordpressTerm],
         total: 1,
@@ -772,7 +774,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: wordpressTerm,
     });
   },
@@ -795,7 +797,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: wordpressTerm,
     });
   },
@@ -819,7 +821,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: wordpressTerm,
     });
   },
@@ -838,7 +840,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: true,
     });
   },
@@ -867,7 +869,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: {
         list: [wordpressTerm],
         total: 1,
@@ -888,7 +890,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: wordpressTerm,
     });
   },
@@ -913,7 +915,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: wordpressTerm,
     });
   },
@@ -939,7 +941,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: wordpressTerm,
     });
   },
@@ -958,7 +960,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
       wordpressAuthContext,
     );
     expect(response.body).toMatchObject({
-      code: 0,
+      code: 200,
       data: true,
     });
   },
@@ -998,6 +1000,10 @@ describe('KT Template Online API (e2e)', () => {
         {
           provide: APP_INTERCEPTOR,
           useClass: SaveBodyInterceptor,
+        },
+        {
+          provide: APP_FILTER,
+          useClass: ApiExceptionFilter,
         },
       ],
     }).compile();
@@ -1052,7 +1058,7 @@ describe('KT Template Online API (e2e)', () => {
     expect(response.body).toEqual({
       code: 400,
       msg: '操作失败',
-      data: false,
+      err: false,
     });
   });
 
@@ -1062,7 +1068,14 @@ describe('KT Template Online API (e2e)', () => {
     await request(app.getHttpServer())
       .get('/dict/getDictByKey')
       .query({ dictKey: 'COMPONENT_TYPE' })
-      .expect(401);
+      .expect(401)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          code: 401,
+          msg: 'Unauthorized Exception',
+          err: 'Unauthorized Exception',
+        });
+      });
 
     expect(dictServiceMock.getDictByKey).not.toHaveBeenCalled();
 

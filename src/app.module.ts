@@ -9,6 +9,7 @@ import { MinioClientModule } from './minio/minio.module';
 import { ApiExceptionFilter, SaveBodyInterceptor } from './common';
 import { AdminModule } from './admin/admin.module';
 import { WordpressModule } from './wordpress/wordpress.module';
+import { QqbotModule } from './qqbot/qqbot.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { WordpressModule } from './wordpress/wordpress.module';
     MinioClientModule,
     AdminModule,
     WordpressModule,
+    QqbotModule,
   ],
   providers: [
     AppService,

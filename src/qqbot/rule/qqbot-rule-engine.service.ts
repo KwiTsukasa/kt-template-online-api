@@ -1,0 +1,41 @@
+import { Injectable, Logger } from '@nestjs/common';
+import type { QqbotNormalizedMessage } from '../qqbot.types';
+import { QqbotPermissionService } from '../permission/qqbot-permission.service';
+import { QqbotSendService } from '../send/qqbot-send.service';
+import { QqbotRuleService } from './qqbot-rule.service';
+
+@Injectable()
+export class QqbotRuleEngineService {
+  private readonly logger = new Logger(QqbotRuleEngineService.name);
+
+  constructor(
+    private readonly permissionService: QqbotPermissionService,
+    private readonly ruleService: QqbotRuleService,
+    private readonly sendService: QqbotSendService,
+  ) {}
+
+  async handleMessage(message: QqbotNormalizedMessage) {
+    if (await this.permissionService.isBlocked(message)) return;
+    if (!(await this.permissionService.isAllowed(message))) return;
+
+    const rules = await this.ruleService.listEnabledForMessage(message);
+    for (const rule of rules) {
+      if (this.ruleService.isInCooldown(rule)) continue;
+      if (!this.ruleService.isMatched(rule, message)) continue;
+
+      await this.ruleService.markHit(rule);
+      try {
+        await this.sendService.sendText({
+          message: rule.replyContent,
+          selfId: message.selfId,
+          targetId: message.targetId,
+          targetType: message.messageType,
+        });
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : '自动回复失败';
+        this.logger.warn(`QQBot 自动回复失败: ${errMsg}`);
+      }
+      return;
+    }
+  }
+}

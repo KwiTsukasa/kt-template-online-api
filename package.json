@@ -35,13 +35,15 @@
     "cross-env": "^7.0.3",
     "express": "4.18.2",
     "lodash": "^4.17.21",
+    "mqtt": "^5.15.1",
     "mysql2": "^3.22.3",
     "nestjs-knife4j-plus": "^1.0.8",
     "nestjs-minio-client": "^2.2.0",
     "reflect-metadata": "^0.1.14",
     "rxjs": "^7.8.2",
     "svg-captcha": "^1.4.0",
-    "typeorm": "^0.3.28"
+    "typeorm": "^0.3.28",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^9.5.0",
@@ -52,6 +54,7 @@
     "@types/lodash": "^4.17.24",
     "@types/node": "18.11.18",
     "@types/supertest": "^2.0.16",
+    "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "eslint": "^8.57.1",

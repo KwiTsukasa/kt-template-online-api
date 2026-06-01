@@ -137,6 +137,20 @@ export class QqbotNapcatContainerService {
     return { deletedContainers };
   }
 
+  async removeUnboundContainer(containerId?: string) {
+    if (!containerId) return false;
+
+    const bindingCount = await this.bindingRepository.count({
+      where: {
+        containerId,
+        isDeleted: false,
+      },
+    });
+    if (bindingCount > 0) return false;
+
+    return this.removeContainer(containerId);
+  }
+
   private async removeContainer(containerId: string) {
     const container = await this.containerRepository.findOne({
       where: {
@@ -507,6 +521,13 @@ docker run -d \\
     return `${this.configService.get<string>(key) || defaultValue}`.trim();
   }
 
+  private getProcessTimeoutMs() {
+    const timeoutMs = Number(
+      this.getConfig('QQBOT_NAPCAT_SSH_TIMEOUT_MS', '120000'),
+    );
+    return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 120000;
+  }
+
   private sh(value: string) {
     return `'${`${value}`.replace(/'/g, `'\\''`)}'`;
   }
@@ -516,21 +537,39 @@ docker run -d \\
       const child = spawn(command, args, {
         windowsHide: true,
       });
+      let settled = false;
       let stdout = '';
       let stderr = '';
+      const timeoutMs = this.getProcessTimeoutMs();
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        child.kill('SIGTERM');
+        reject(new Error(`${command} timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        callback();
+      };
       child.stdout.on('data', (chunk) => {
         stdout += Buffer.from(chunk).toString('utf8');
       });
       child.stderr.on('data', (chunk) => {
         stderr += Buffer.from(chunk).toString('utf8');
       });
-      child.on('error', reject);
+      child.on('error', (err) => {
+        finish(() => reject(err));
+      });
       child.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-          return;
-        }
-        reject(new Error((stderr || stdout || `${command} failed`).trim()));
+        finish(() => {
+          if (code === 0) {
+            resolve();
+            return;
+          }
+          reject(new Error((stderr || stdout || `${command} failed`).trim()));
+        });
       });
       child.stdin.write(input);
       child.stdin.end();

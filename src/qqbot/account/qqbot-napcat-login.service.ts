@@ -124,9 +124,7 @@ export class QqbotNapcatLoginService {
   async status(sessionId: string) {
     const session = this.getSession(sessionId);
     if (Date.now() > session.expiresAt) {
-      session.status = 'expired';
-      this.sessions.set(session.id, session);
-      return this.toResult(session);
+      return this.expireSession(session);
     }
 
     const container = await this.getSessionContainer(session);
@@ -141,8 +139,12 @@ export class QqbotNapcatLoginService {
     return this.completeLogin(session, container);
   }
 
-  cancel(sessionId: string) {
-    this.sessions.delete(sessionId);
+  async cancel(sessionId: string) {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      this.sessions.delete(sessionId);
+      await this.cleanupSessionContainer(session);
+    }
     return true;
   }
 
@@ -154,34 +156,44 @@ export class QqbotNapcatLoginService {
     },
     container: QqbotNapcatRuntime,
   ): Promise<QqbotLoginScanResult> {
-    this.cleanupSessions();
+    await this.cleanupSessions();
 
-    const loginStatus = await this.getLoginStatus(container, true);
-    if (loginStatus.isLogin) {
+    try {
+      const loginStatus = await this.getLoginStatus(container, true);
+      if (loginStatus.isLogin) {
+        const session = this.createSession({
+          ...options,
+          container,
+          qrcode: loginStatus.qrcodeurl,
+          status: 'success',
+        });
+        return this.completeLogin(session, container);
+      }
+
+      let qrcode = this.isExpiredQrcodeStatus(loginStatus)
+        ? ''
+        : loginStatus.qrcodeurl || '';
+      if (!qrcode) {
+        await this.callRefreshQrcode(container, true);
+        qrcode = await this.getQrcode(container, true);
+      }
       const session = this.createSession({
         ...options,
         container,
-        qrcode: loginStatus.qrcodeurl,
-        status: 'success',
+        qrcode,
+        status: 'pending',
       });
-      return this.completeLogin(session, container);
+      this.sessions.set(session.id, session);
+      return this.toResult(session);
+    } catch (err) {
+      const cleanupError = await this.cleanupRuntimeContainer(container);
+      if (cleanupError) {
+        throwVbenError(
+          `${this.getErrorMessage(err)}；清理未绑定容器失败：${cleanupError}`,
+        );
+      }
+      throw err;
     }
-
-    let qrcode = this.isExpiredQrcodeStatus(loginStatus)
-      ? ''
-      : loginStatus.qrcodeurl || '';
-    if (!qrcode) {
-      await this.callRefreshQrcode(container, true);
-      qrcode = await this.getQrcode(container, true);
-    }
-    const session = this.createSession({
-      ...options,
-      container,
-      qrcode,
-      status: 'pending',
-    });
-    this.sessions.set(session.id, session);
-    return this.toResult(session);
   }
 
   private async completeLogin(
@@ -191,16 +203,13 @@ export class QqbotNapcatLoginService {
     const loginInfo = await this.getLoginInfo(container);
     const selfId = this.getSelfId(loginInfo);
     if (!selfId) {
-      session.status = 'error';
-      session.errorMessage = 'NapCat 已登录但未返回 QQ 号';
-      this.sessions.set(session.id, session);
-      return this.toResult(session);
+      return this.failSession(session, 'NapCat 已登录但未返回 QQ 号');
     }
     if (session.expectedSelfId && session.expectedSelfId !== selfId) {
-      session.status = 'error';
-      session.errorMessage = `当前扫码账号 ${selfId} 与目标账号 ${session.expectedSelfId} 不一致`;
-      this.sessions.set(session.id, session);
-      return this.toResult(session);
+      return this.failSession(
+        session,
+        `当前扫码账号 ${selfId} 与目标账号 ${session.expectedSelfId} 不一致`,
+      );
     }
 
     const accountId = await this.accountService.ensureScannedAccount({
@@ -271,13 +280,60 @@ export class QqbotNapcatLoginService {
     return this.containerService.findRuntimeById(session.containerId);
   }
 
-  private cleanupSessions() {
+  private async cleanupSessions() {
     const now = Date.now();
+    const expiredSessions: QqbotLoginScanSession[] = [];
     this.sessions.forEach((session, sessionId) => {
       if (session.status !== 'pending' || now > session.expiresAt) {
         this.sessions.delete(sessionId);
+        expiredSessions.push(session);
       }
     });
+    await Promise.all(
+      expiredSessions.map((session) => this.cleanupSessionContainer(session)),
+    );
+  }
+
+  private async expireSession(session: QqbotLoginScanSession) {
+    session.status = 'expired';
+    session.errorMessage = session.errorMessage || '扫码会话已过期';
+    this.sessions.delete(session.id);
+    await this.cleanupSessionContainer(session);
+    return this.toResult(session);
+  }
+
+  private async failSession(
+    session: QqbotLoginScanSession,
+    errorMessage: string,
+  ) {
+    session.status = 'error';
+    session.errorMessage = errorMessage;
+    this.sessions.delete(session.id);
+    await this.cleanupSessionContainer(session);
+    return this.toResult(session);
+  }
+
+  private async cleanupSessionContainer(session: QqbotLoginScanSession) {
+    const cleanupError = await this.cleanupRuntimeContainer({
+      baseUrl: '',
+      id: session.containerId,
+      name: session.containerName || '',
+      webuiPort: session.webuiPort,
+    });
+    if (cleanupError) {
+      session.errorMessage = session.errorMessage
+        ? `${session.errorMessage}；清理未绑定容器失败：${cleanupError}`
+        : `清理未绑定容器失败：${cleanupError}`;
+    }
+  }
+
+  private async cleanupRuntimeContainer(container: QqbotNapcatRuntime) {
+    try {
+      await this.containerService.removeUnboundContainer(container.id);
+      return null;
+    } catch (err) {
+      return this.getErrorMessage(err);
+    }
   }
 
   private async getLoginStatus(container: QqbotNapcatRuntime, retry = false) {

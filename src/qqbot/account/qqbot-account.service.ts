@@ -184,8 +184,12 @@ export class QqbotAccountService {
   }
 
   async save(body: QqbotAccountBodyDto) {
-    await this.assertSelfIdAvailable(body.selfId);
-    const account = this.accountRepository.create(this.normalizeBody(body));
+    const payload = this.normalizeBody(body);
+    const restored = await this.restoreDeletedAccount(payload);
+    if (restored) return restored.id;
+
+    await this.assertSelfIdAvailable(payload.selfId || '');
+    const account = this.accountRepository.create(payload);
     const saved = await this.accountRepository.save(account);
     return saved.id;
   }
@@ -268,13 +272,40 @@ export class QqbotAccountService {
   private async assertSelfIdAvailable(selfId: string, id?: string) {
     const exists = await this.accountRepository.findOne({
       where: {
-        isDeleted: false,
         selfId,
       },
     });
     if (exists && exists.id !== id) {
-      throwVbenError('QQBot 账号 selfId 已存在');
+      throwVbenError(
+        exists.isDeleted
+          ? 'QQBot 账号 selfId 已存在于已删除账号，请通过新增恢复该账号'
+          : 'QQBot 账号 selfId 已存在',
+      );
     }
+  }
+
+  private async restoreDeletedAccount(payload: Partial<QqbotAccount>) {
+    if (!payload.selfId) return null;
+
+    const existing = await this.accountRepository.findOne({
+      where: {
+        selfId: payload.selfId,
+      },
+    });
+    if (!existing || !existing.isDeleted) return null;
+
+    await this.accountRepository.update(
+      { id: existing.id },
+      {
+        ...payload,
+        clientRole: null,
+        connectStatus: 'offline',
+        isDeleted: false,
+        lastError: null,
+        lastHeartbeatAt: null,
+      },
+    );
+    return existing;
   }
 
   private normalizeBody(body: Partial<QqbotAccountBodyDto>) {
@@ -284,7 +315,8 @@ export class QqbotAccountService {
       enabled: body.enabled ?? true,
       name: body.name || '',
       remark: body.remark || '',
-      selfId: body.selfId,
+      selfId:
+        typeof body.selfId === 'string' ? body.selfId.trim() : body.selfId,
     } as Partial<QqbotAccount>;
   }
 }

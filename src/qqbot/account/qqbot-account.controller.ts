@@ -91,7 +91,7 @@ export class QqbotAccountController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '取消 QQBot 扫码登录会话' })
   async cancelScan(@Query() query: QqbotAccountScanStatusDto) {
-    return vbenSuccess(this.napcatLoginService.cancel(query.sessionId));
+    return vbenSuccess(await this.napcatLoginService.cancel(query.sessionId));
   }
 
   @Post('delete')

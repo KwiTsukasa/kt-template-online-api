@@ -167,7 +167,9 @@ export class QqbotNapcatLoginService {
       return this.completeLogin(session, container);
     }
 
-    let qrcode = loginStatus.qrcodeurl || '';
+    let qrcode = this.isExpiredQrcodeStatus(loginStatus)
+      ? ''
+      : loginStatus.qrcodeurl || '';
     if (!qrcode) {
       await this.callRefreshQrcode(container, true);
       qrcode = await this.getQrcode(container, true);
@@ -334,7 +336,7 @@ export class QqbotNapcatLoginService {
           '/api/QQLogin/GetQQLoginQrcode',
         );
         if (!data.qrcode) {
-          throwVbenError('NapCat 未返回登录二维码');
+          return this.getQrcodeFromStatus(container);
         }
         return data.qrcode;
       } catch (err) {
@@ -342,9 +344,20 @@ export class QqbotNapcatLoginService {
           const status = await this.getLoginStatus(container);
           return status.qrcodeurl || '';
         }
+        if (this.isQrcodePending(err)) {
+          return this.getQrcodeFromStatus(container);
+        }
         throw err;
       }
     });
+  }
+
+  private async getQrcodeFromStatus(container: QqbotNapcatRuntime) {
+    const status = await this.getLoginStatus(container);
+    if (status.qrcodeurl && !this.isExpiredQrcodeStatus(status)) {
+      return status.qrcodeurl;
+    }
+    throwVbenError('NapCat 未返回登录二维码');
   }
 
   private async postNapcat<T>(
@@ -480,8 +493,23 @@ export class QqbotNapcatLoginService {
       'ECONNRESET',
       'ETIMEDOUT',
       'NapCat 请求超时',
+      'NapCat 未返回登录二维码',
+      'QRCode Get Error',
       'socket hang up',
     ].some((keyword) => message.includes(keyword));
+  }
+
+  private isQrcodePending(err: unknown) {
+    const message = this.getErrorMessage(err);
+    return message.includes('QRCode Get Error');
+  }
+
+  private isExpiredQrcodeStatus(status: NapcatLoginStatus) {
+    const message = status.loginError || '';
+    return (
+      message.includes('二维码') &&
+      (message.includes('过期') || message.includes('失效'))
+    );
   }
 
   private async executeNapcatRequest<T>(

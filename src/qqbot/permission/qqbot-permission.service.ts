@@ -1,13 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
+import { throwVbenError } from '@/common';
 import { QqbotAllowlist } from './qqbot-allowlist.entity';
 import { QqbotBlocklist } from './qqbot-blocklist.entity';
 import type {
   QqbotPermissionBodyDto,
+  QqbotPermissionConfigDto,
   QqbotPermissionQueryDto,
   QqbotPermissionUpdateDto,
 } from './qqbot-permission.dto';
+import { QqbotConfigService } from '../config/qqbot-config.service';
 import type { QqbotNormalizedMessage } from '../qqbot.types';
 import { getPageParams } from '../qqbot.utils';
 
@@ -17,11 +20,20 @@ type PermissionEntity = QqbotAllowlist | QqbotBlocklist;
 @Injectable()
 export class QqbotPermissionService {
   constructor(
+    private readonly configService: QqbotConfigService,
     @InjectRepository(QqbotAllowlist)
     private readonly allowlistRepository: Repository<QqbotAllowlist>,
     @InjectRepository(QqbotBlocklist)
     private readonly blocklistRepository: Repository<QqbotBlocklist>,
   ) {}
+
+  async getConfig() {
+    return this.configService.getPermissionConfig();
+  }
+
+  async updateConfig(body: QqbotPermissionConfigDto) {
+    return this.configService.updatePermissionConfig(body);
+  }
 
   async page(kind: PermissionKind, query: QqbotPermissionQueryDto) {
     const { pageNo, pageSize, skip } = getPageParams(query);
@@ -45,6 +57,16 @@ export class QqbotPermissionService {
         targetId: `%${query.targetId}%`,
       });
     }
+    if (query.userId) {
+      builder.andWhere('permission.userId LIKE :userId', {
+        userId: `%${query.userId}%`,
+      });
+    }
+    if (query.preciseUser !== undefined && `${query.preciseUser}` !== '') {
+      builder.andWhere('permission.preciseUser = :preciseUser', {
+        preciseUser: this.normalizeBoolean(query.preciseUser),
+      });
+    }
 
     const [list, total] = await builder
       .orderBy('permission.createTime', 'DESC')
@@ -56,13 +78,10 @@ export class QqbotPermissionService {
 
   async save(kind: PermissionKind, body: QqbotPermissionBodyDto) {
     const repository = this.getRepository(kind);
+    const payload = this.normalizeBody(body);
     const saved = await repository.save(
       repository.create({
-        enabled: body.enabled ?? true,
-        remark: body.remark || '',
-        selfId: body.selfId || '',
-        targetId: body.targetId || '',
-        targetType: body.targetType || 'all',
+        ...payload,
       } as PermissionEntity),
     );
     return saved.id;
@@ -70,14 +89,11 @@ export class QqbotPermissionService {
 
   async update(kind: PermissionKind, body: QqbotPermissionUpdateDto) {
     const repository = this.getRepository(kind);
+    const payload = this.normalizeBody(body);
     await repository.update(
       { id: body.id } as any,
       {
-        enabled: body.enabled ?? true,
-        remark: body.remark || '',
-        selfId: body.selfId || '',
-        targetId: body.targetId || '',
-        targetType: body.targetType || 'all',
+        ...payload,
       } as any,
     );
     return true;
@@ -90,21 +106,14 @@ export class QqbotPermissionService {
   }
 
   async isBlocked(message: QqbotNormalizedMessage) {
+    const config = await this.configService.getPermissionConfig();
+    if (!config.blocklistEnabled) return false;
     return this.existsMatched(this.blocklistRepository, message);
   }
 
   async isAllowed(message: QqbotNormalizedMessage) {
-    const requireAllowlist =
-      `${process.env.QQBOT_REQUIRE_ALLOWLIST ?? 'true'}` !== 'false';
-    if (!requireAllowlist) return true;
-
-    const hasRule = await this.allowlistRepository.count({
-      where: {
-        enabled: true,
-        isDeleted: false,
-      },
-    });
-    if (hasRule <= 0) return false;
+    const config = await this.configService.getPermissionConfig();
+    if (!config.allowlistEnabled) return true;
     return this.existsMatched(this.allowlistRepository, message);
   }
 
@@ -121,15 +130,94 @@ export class QqbotPermissionService {
         selfId: message.selfId,
       })
       .andWhere(
-        '(permission.targetType = :all OR (permission.targetType = :targetType AND permission.targetId = :targetId))',
-        {
-          all: 'all',
-          targetId: message.targetId,
-          targetType: message.messageType,
-        },
+        new Brackets((qb) => {
+          qb.where('permission.targetType = :all', { all: 'all' }).orWhere(
+            '(permission.targetType IN (:...qqTargetTypes) AND permission.targetId = :userId)',
+            {
+              qqTargetTypes: ['qq', 'private'],
+              userId: message.userId,
+            },
+          );
+
+          if (message.messageType === 'group') {
+            qb.orWhere(
+              `(permission.targetType = :groupType
+                AND permission.targetId = :targetId
+                AND (
+                  permission.preciseUser = :notPrecise
+                  OR (permission.preciseUser = :precise AND permission.userId = :userId)
+                ))`,
+              {
+                groupType: 'group',
+                notPrecise: false,
+                precise: true,
+                targetId: message.targetId,
+                userId: message.userId,
+              },
+            );
+          }
+
+          if (message.messageType === 'channel') {
+            qb.orWhere(
+              `(permission.targetType = :channelType
+                AND permission.targetId = :targetId
+                AND (
+                  permission.preciseUser = :notPrecise
+                  OR (permission.preciseUser = :precise AND permission.userId = :userId)
+                ))`,
+              {
+                channelType: 'channel',
+                notPrecise: false,
+                precise: true,
+                targetId: message.targetId,
+                userId: message.userId,
+              },
+            );
+          }
+        }),
       )
       .getCount();
     return count > 0;
+  }
+
+  private normalizeBody(
+    body: Partial<QqbotPermissionBodyDto>,
+  ): Partial<PermissionEntity> {
+    const targetType = body.targetType === 'private' ? 'qq' : body.targetType;
+    const normalizedTargetType = targetType || 'qq';
+    const targetId = `${body.targetId || ''}`.trim();
+    const userId = `${body.userId || ''}`.trim();
+    const preciseUser =
+      normalizedTargetType === 'group' || normalizedTargetType === 'channel'
+        ? !!body.preciseUser
+        : false;
+
+    if (!targetId) {
+      throwVbenError(
+        normalizedTargetType === 'qq'
+          ? '请填写 QQ 号'
+          : normalizedTargetType === 'group'
+          ? '请填写群号'
+          : '请填写频道 ID',
+      );
+    }
+    if (preciseUser && !userId) {
+      throwVbenError('开启精确到 QQ 号后必须填写 QQ 号');
+    }
+
+    return {
+      enabled: body.enabled ?? true,
+      preciseUser,
+      remark: body.remark || '',
+      selfId: body.selfId || '',
+      targetId,
+      targetType: normalizedTargetType,
+      userId: preciseUser ? userId : '',
+    } as Partial<PermissionEntity>;
+  }
+
+  private normalizeBoolean(value: unknown) {
+    return value === true || value === 'true' || value === 1 || value === '1';
   }
 
   private getRepository(kind: PermissionKind) {

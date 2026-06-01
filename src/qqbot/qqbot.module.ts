@@ -7,6 +7,8 @@ import { QqbotAccount } from './account/qqbot-account.entity';
 import { QqbotAccountService } from './account/qqbot-account.service';
 import { QqbotNapcatLoginService } from './account/qqbot-napcat-login.service';
 import { QqbotReverseWsService } from './connection/qqbot-reverse-ws.service';
+import { QqbotConfig } from './config/qqbot-config.entity';
+import { QqbotConfigService } from './config/qqbot-config.service';
 import { QqbotDashboardController } from './dashboard/qqbot-dashboard.controller';
 import { QqbotDashboardService } from './dashboard/qqbot-dashboard.service';
 import { QqbotDedupe } from './dedupe/qqbot-dedupe.entity';
@@ -41,6 +43,7 @@ import { QqbotSendService } from './send/qqbot-send.service';
       QqbotAccount,
       QqbotAllowlist,
       QqbotBlocklist,
+      QqbotConfig,
       QqbotConversation,
       QqbotDedupe,
       QqbotMessage,
@@ -61,6 +64,7 @@ import { QqbotSendService } from './send/qqbot-send.service';
   providers: [
     QqbotAccountService,
     QqbotBusService,
+    QqbotConfigService,
     QqbotDashboardService,
     QqbotDedupeService,
     QqbotEventService,

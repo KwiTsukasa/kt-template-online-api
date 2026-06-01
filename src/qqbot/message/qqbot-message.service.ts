@@ -7,7 +7,7 @@ import type {
   QqbotConversationQueryDto,
   QqbotMessageQueryDto,
 } from './qqbot-message.dto';
-import type { QqbotNormalizedMessage } from '../qqbot.types';
+import type { QqbotMessageType, QqbotNormalizedMessage } from '../qqbot.types';
 import { getPageParams } from '../qqbot.utils';
 
 @Injectable()
@@ -110,7 +110,7 @@ export class QqbotMessageService {
   async saveOutgoing(params: {
     messageId?: string;
     messageText: string;
-    messageType: 'group' | 'private';
+    messageType: QqbotMessageType;
     selfId: string;
     targetId: string;
     userId: string;

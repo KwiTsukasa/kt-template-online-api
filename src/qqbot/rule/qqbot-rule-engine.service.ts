@@ -26,6 +26,10 @@ export class QqbotRuleEngineService {
       await this.ruleService.markHit(rule);
       try {
         await this.sendService.sendText({
+          channelId: message.channelId,
+          guildId: message.rawEvent.guild_id
+            ? `${message.rawEvent.guild_id}`
+            : undefined,
           message: rule.replyContent,
           selfId: message.selfId,
           targetId: message.targetId,

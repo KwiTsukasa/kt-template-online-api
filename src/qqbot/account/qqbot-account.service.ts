@@ -8,6 +8,7 @@ import type {
   QqbotAccountQueryDto,
   QqbotAccountUpdateDto,
 } from './qqbot-account.dto';
+import { QqbotNapcatContainerService } from '../napcat/qqbot-napcat-container.service';
 import type { QqbotConnectionRole } from '../qqbot.types';
 import { getPageParams, normalizeNullableString } from '../qqbot.utils';
 
@@ -16,6 +17,7 @@ export class QqbotAccountService {
   constructor(
     @InjectRepository(QqbotAccount)
     private readonly accountRepository: Repository<QqbotAccount>,
+    private readonly napcatContainerService: QqbotNapcatContainerService,
   ) {}
 
   async page(query: QqbotAccountQueryDto) {
@@ -202,14 +204,29 @@ export class QqbotAccountService {
   }
 
   async remove(id: string) {
+    const account = await this.accountRepository.findOne({
+      where: {
+        id,
+        isDeleted: false,
+      },
+    });
+    if (!account) {
+      throwVbenError('QQBot 账号不存在或已删除');
+    }
+
+    const containerResult =
+      await this.napcatContainerService.removeAccountContainers(id);
     await this.accountRepository.update(
       { id },
       {
         connectStatus: 'offline',
+        enabled: false,
         isDeleted: true,
       },
     );
-    return true;
+    return {
+      deletedContainers: containerResult.deletedContainers,
+    };
   }
 
   async markOnline(

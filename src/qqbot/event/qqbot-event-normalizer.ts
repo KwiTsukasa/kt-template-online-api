@@ -7,20 +7,31 @@ import { toStringId } from '../qqbot.utils';
 
 export function isOneBotMessageEvent(
   payload: QqbotOneBotEvent,
-): payload is QqbotOneBotEvent & { message_type: QqbotMessageType } {
-  return payload?.post_type === 'message' && !!payload.message_type;
+): payload is QqbotOneBotEvent & { message_type: string } {
+  return (
+    payload?.post_type === 'message' &&
+    !!normalizeMessageType(payload.message_type)
+  );
 }
 
 export function normalizeOneBotMessage(
   payload: QqbotOneBotEvent,
 ): QqbotNormalizedMessage {
-  const messageType = payload.message_type as QqbotMessageType;
+  const messageType = normalizeMessageType(payload.message_type) || 'private';
+  const channelId =
+    toStringId(payload.channel_id) || toStringId(payload.guild_id) || undefined;
   const groupId = toStringId(payload.group_id) || undefined;
   const userId = toStringId(payload.user_id);
-  const targetId = messageType === 'group' ? groupId || '' : userId;
+  const targetId =
+    messageType === 'group'
+      ? groupId || ''
+      : messageType === 'channel'
+      ? channelId || ''
+      : userId;
   const messageText = extractMessageText(payload);
 
   return {
+    channelId,
     eventTime: payload.time
       ? new Date(Number(payload.time) * 1000)
       : new Date(),
@@ -63,4 +74,14 @@ function extractMessageText(payload: QqbotOneBotEvent) {
     .map((segment) => segment?.data?.text || '')
     .join('')
     .trim();
+}
+
+function normalizeMessageType(messageType?: string): QqbotMessageType | null {
+  if (messageType === 'private' || messageType === 'group') {
+    return messageType;
+  }
+  if (messageType === 'channel' || messageType === 'guild') {
+    return 'channel';
+  }
+  return null;
 }

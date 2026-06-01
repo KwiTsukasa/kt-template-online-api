@@ -78,6 +78,8 @@ export class QqbotSendService {
   }
 
   async sendText(params: {
+    channelId?: string;
+    guildId?: string;
     message: string;
     selfId?: string;
     targetId: string;
@@ -90,12 +92,7 @@ export class QqbotSendService {
 
     this.rateLimitService.assertCanSend(account.selfId, params.targetId);
 
-    const action =
-      params.targetType === 'group' ? 'send_group_msg' : 'send_private_msg';
-    const actionParams =
-      params.targetType === 'group'
-        ? { group_id: params.targetId, message: params.message }
-        : { message: params.message, user_id: params.targetId };
+    const { action, actionParams } = this.buildAction(params);
 
     const log = await this.sendLogRepository.save(
       this.sendLogRepository.create({
@@ -174,5 +171,35 @@ export class QqbotSendService {
     return this.moduleRef.get<QqbotReverseWsService>(QqbotReverseWsService, {
       strict: false,
     });
+  }
+
+  private buildAction(params: {
+    channelId?: string;
+    guildId?: string;
+    message: string;
+    targetId: string;
+    targetType: QqbotMessageType;
+  }) {
+    if (params.targetType === 'group') {
+      return {
+        action: 'send_group_msg',
+        actionParams: { group_id: params.targetId, message: params.message },
+      };
+    }
+    if (params.targetType === 'channel') {
+      const actionParams: Record<string, any> = {
+        channel_id: params.channelId || params.targetId,
+        message: params.message,
+      };
+      if (params.guildId) actionParams.guild_id = params.guildId;
+      return {
+        action: 'send_guild_channel_msg',
+        actionParams,
+      };
+    }
+    return {
+      action: 'send_private_msg',
+      actionParams: { message: params.message, user_id: params.targetId },
+    };
   }
 }

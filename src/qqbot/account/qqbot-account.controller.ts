@@ -99,6 +99,8 @@ export class QqbotAccountController {
   @ApiOperation({ summary: '删除 QQBot 账号' })
   @ApiQuery({ name: 'id', type: String })
   async delete(@Query('id') id: string) {
+    const account = await this.accountService.findById(id);
+    if (account) await this.reverseWsService.kick(account.selfId);
     return vbenSuccess(await this.accountService.remove(id));
   }
 

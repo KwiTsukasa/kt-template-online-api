@@ -100,6 +100,98 @@ export class QqbotNapcatContainerService {
     );
   }
 
+  async removeAccountContainers(accountId: string) {
+    const bindings = await this.bindingRepository.find({
+      where: {
+        accountId,
+        isDeleted: false,
+      },
+    });
+    if (bindings.length <= 0) return { deletedContainers: 0 };
+
+    let deletedContainers = 0;
+    for (const binding of bindings) {
+      const sharedCount = await this.bindingRepository
+        .createQueryBuilder('binding')
+        .where('binding.containerId = :containerId', {
+          containerId: binding.containerId,
+        })
+        .andWhere('binding.accountId != :accountId', { accountId })
+        .andWhere('binding.isDeleted = :isDeleted', { isDeleted: false })
+        .getCount();
+      if (sharedCount > 0) continue;
+
+      const deleted = await this.removeContainer(binding.containerId);
+      if (deleted) deletedContainers += 1;
+    }
+
+    await this.bindingRepository.update(
+      { accountId, isDeleted: false },
+      {
+        bindStatus: 'disabled',
+        isDeleted: true,
+        isPrimary: false,
+      },
+    );
+
+    return { deletedContainers };
+  }
+
+  private async removeContainer(containerId: string) {
+    const container = await this.containerRepository.findOne({
+      where: {
+        id: containerId,
+        isDeleted: false,
+      },
+    });
+    if (!container) return false;
+
+    if (this.getManagedMode() === 'ssh') {
+      await this.removeRemoteDockerContainer(container);
+    }
+
+    await this.containerRepository.update(
+      { id: container.id },
+      {
+        isDeleted: true,
+        lastError: null,
+        status: 'stopped',
+      },
+    );
+    return true;
+  }
+
+  private async removeRemoteDockerContainer(container: QqbotNapcatContainer) {
+    const script = this.buildRemoteRemoveScript(container);
+    await this.runProcess('ssh', [...this.getSshArgs(), 'sh -s'], script);
+  }
+
+  private buildRemoteRemoveScript(container: QqbotNapcatContainer) {
+    const dataDir = this.sh(container.dataDir || '');
+    const name = this.sh(container.name);
+    const rootDir = this.sh(this.getRootDir());
+
+    return `
+set -eu
+NAME=${name}
+DATA_DIR=${dataDir}
+ROOT_DIR=${rootDir}
+
+docker rm -f "$NAME" >/dev/null 2>&1 || true
+
+if [ -n "$DATA_DIR" ] && [ "$DATA_DIR" != "/" ]; then
+  case "$DATA_DIR" in
+    "$ROOT_DIR"/*)
+      rm -rf "$DATA_DIR"
+      ;;
+    *)
+      echo "skip unsafe data dir: $DATA_DIR" >&2
+      ;;
+  esac
+fi
+`;
+  }
+
   private async getPrimaryRuntime(accountId: string) {
     const binding = await this.bindingRepository.findOne({
       order: {

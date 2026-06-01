@@ -63,6 +63,17 @@ CREATE TABLE IF NOT EXISTS `qqbot_account_napcat` (
   KEY `idx_qqbot_account_napcat_container` (`container_id`, `is_deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `qqbot_config` (
+  `id` bigint NOT NULL,
+  `config_key` varchar(120) NOT NULL,
+  `config_value` text NOT NULL,
+  `remark` varchar(255) NOT NULL DEFAULT '',
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_qqbot_config_key` (`config_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `qqbot_rule` (
   `id` bigint NOT NULL,
   `name` varchar(120) NOT NULL DEFAULT '',
@@ -146,8 +157,10 @@ CREATE TABLE IF NOT EXISTS `qqbot_send_log` (
 CREATE TABLE IF NOT EXISTS `qqbot_allowlist` (
   `id` bigint NOT NULL,
   `self_id` varchar(64) NOT NULL DEFAULT '',
-  `target_type` varchar(32) NOT NULL DEFAULT 'all',
+  `target_type` varchar(32) NOT NULL DEFAULT 'qq',
   `target_id` varchar(64) NOT NULL DEFAULT '',
+  `user_id` varchar(64) NOT NULL DEFAULT '',
+  `precise_user` tinyint(1) NOT NULL DEFAULT 0,
   `enabled` tinyint(1) NOT NULL DEFAULT 1,
   `remark` varchar(255) NOT NULL DEFAULT '',
   `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
@@ -160,8 +173,10 @@ CREATE TABLE IF NOT EXISTS `qqbot_allowlist` (
 CREATE TABLE IF NOT EXISTS `qqbot_blocklist` (
   `id` bigint NOT NULL,
   `self_id` varchar(64) NOT NULL DEFAULT '',
-  `target_type` varchar(32) NOT NULL DEFAULT 'all',
+  `target_type` varchar(32) NOT NULL DEFAULT 'qq',
   `target_id` varchar(64) NOT NULL DEFAULT '',
+  `user_id` varchar(64) NOT NULL DEFAULT '',
+  `precise_user` tinyint(1) NOT NULL DEFAULT 0,
   `enabled` tinyint(1) NOT NULL DEFAULT 1,
   `remark` varchar(255) NOT NULL DEFAULT '',
   `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
@@ -180,6 +195,73 @@ CREATE TABLE IF NOT EXISTS `qqbot_dedupe` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_qqbot_dedupe_event_key` (`event_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_allowlist` ADD COLUMN `user_id` varchar(64) NOT NULL DEFAULT '''' AFTER `target_id`',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_allowlist'
+    AND column_name = 'user_id'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_allowlist` ADD COLUMN `precise_user` tinyint(1) NOT NULL DEFAULT 0 AFTER `user_id`',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_allowlist'
+    AND column_name = 'precise_user'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_blocklist` ADD COLUMN `user_id` varchar(64) NOT NULL DEFAULT '''' AFTER `target_id`',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_blocklist'
+    AND column_name = 'user_id'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_blocklist` ADD COLUMN `precise_user` tinyint(1) NOT NULL DEFAULT 0 AFTER `user_id`',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_blocklist'
+    AND column_name = 'precise_user'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+INSERT INTO `qqbot_config` (`id`, `config_key`, `config_value`, `remark`)
+VALUES
+  (2041700000000200501, 'permission.allowlistEnabled', 'false', 'QQBot 白名单总开关'),
+  (2041700000000200502, 'permission.blocklistEnabled', 'true', 'QQBot 黑名单总开关')
+ON DUPLICATE KEY UPDATE
+  `config_key` = VALUES(`config_key`);
 
 INSERT INTO `admin_menu` (`id`, `pid`, `name`, `path`, `component`, `redirect`, `auth_code`, `type`, `meta`, `status`, `sort`)
 VALUES

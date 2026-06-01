@@ -17,11 +17,17 @@ export class QqbotBlocklist {
   @Column({ default: '', length: 64, name: 'self_id' })
   selfId: string;
 
-  @Column({ default: 'all', length: 32, name: 'target_type' })
+  @Column({ default: 'qq', length: 32, name: 'target_type' })
   targetType: QqbotPermissionTargetType;
 
   @Column({ default: '', length: 64, name: 'target_id' })
   targetId: string;
+
+  @Column({ default: '', length: 64, name: 'user_id' })
+  userId: string;
+
+  @Column({ default: false, name: 'precise_user' })
+  preciseUser: boolean;
 
   @Column({ default: true })
   enabled: boolean;

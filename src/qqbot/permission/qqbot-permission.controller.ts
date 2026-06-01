@@ -13,6 +13,7 @@ import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
 import { vbenSuccess } from '@/common';
 import {
   QqbotPermissionBodyDto,
+  QqbotPermissionConfigDto,
   QqbotPermissionQueryDto,
   QqbotPermissionUpdateDto,
 } from './qqbot-permission.dto';
@@ -23,6 +24,19 @@ import { QqbotPermissionService } from './qqbot-permission.service';
 @UseGuards(JwtAuthGuard)
 export class QqbotPermissionController {
   constructor(private readonly permissionService: QqbotPermissionService) {}
+
+  @Get('config')
+  @ApiOperation({ summary: 'QQBot 权限名单配置' })
+  async config() {
+    return vbenSuccess(await this.permissionService.getConfig());
+  }
+
+  @Post('config')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '保存 QQBot 权限名单配置' })
+  async updateConfig(@Body() body: QqbotPermissionConfigDto) {
+    return vbenSuccess(await this.permissionService.updateConfig(body));
+  }
 
   @Get('allowlist')
   @ApiOperation({ summary: 'QQBot 白名单分页' })

@@ -25,6 +25,44 @@ CREATE TABLE IF NOT EXISTS `qqbot_account` (
   UNIQUE KEY `uk_qqbot_account_self_id` (`self_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `qqbot_napcat_container` (
+  `id` bigint NOT NULL,
+  `name` varchar(120) NOT NULL,
+  `base_url` varchar(255) NOT NULL,
+  `webui_port` int DEFAULT NULL,
+  `webui_token` varchar(255) DEFAULT NULL,
+  `image` varchar(255) NOT NULL DEFAULT '',
+  `data_dir` varchar(500) NOT NULL DEFAULT '',
+  `reverse_ws_url` varchar(500) NOT NULL DEFAULT '',
+  `status` varchar(32) NOT NULL DEFAULT 'creating',
+  `last_started_at` datetime DEFAULT NULL,
+  `last_checked_at` datetime DEFAULT NULL,
+  `last_error` varchar(500) DEFAULT NULL,
+  `remark` varchar(255) NOT NULL DEFAULT '',
+  `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_qqbot_napcat_container_name` (`name`),
+  KEY `idx_qqbot_napcat_container_status` (`status`, `is_deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `qqbot_account_napcat` (
+  `id` bigint NOT NULL,
+  `account_id` bigint NOT NULL,
+  `container_id` bigint NOT NULL,
+  `bind_status` varchar(32) NOT NULL DEFAULT 'pending',
+  `is_primary` tinyint(1) NOT NULL DEFAULT 1,
+  `last_login_at` datetime DEFAULT NULL,
+  `remark` varchar(255) NOT NULL DEFAULT '',
+  `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  KEY `idx_qqbot_account_napcat_account` (`account_id`, `is_deleted`),
+  KEY `idx_qqbot_account_napcat_container` (`container_id`, `is_deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `qqbot_rule` (
   `id` bigint NOT NULL,
   `name` varchar(120) NOT NULL DEFAULT '',
@@ -152,6 +190,7 @@ VALUES
   (2041700000000120402, 2041700000000100402, 'QqBotAccountEdit', NULL, NULL, NULL, 'QqBot:Account:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120403, 2041700000000100402, 'QqBotAccountDelete', NULL, NULL, NULL, 'QqBot:Account:Delete', 'button', '{"title":"common.delete"}', 1, 0),
   (2041700000000120404, 2041700000000100402, 'QqBotAccountKick', NULL, NULL, NULL, 'QqBot:Account:Kick', 'button', '{"title":"断开连接"}', 1, 0),
+  (2041700000000120405, 2041700000000100402, 'QqBotAccountRefreshLogin', NULL, NULL, NULL, 'QqBot:Account:RefreshLogin', 'button', '{"title":"更新登录"}', 1, 0),
   (2041700000000100403, 2041700000000100400, 'QqBotRule', '/qqbot/rule', '/qqbot/rule/list', NULL, 'QqBot:Rule:List', 'menu', '{"icon":"lucide:workflow","title":"自动回复规则"}', 1, 2),
   (2041700000000120411, 2041700000000100403, 'QqBotRuleCreate', NULL, NULL, NULL, 'QqBot:Rule:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120412, 2041700000000100403, 'QqBotRuleEdit', NULL, NULL, NULL, 'QqBot:Rule:Edit', 'button', '{"title":"common.edit"}', 1, 0),

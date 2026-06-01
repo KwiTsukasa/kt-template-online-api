@@ -253,16 +253,22 @@ export class QqbotReverseWsService
     const account = await this.accountService.findEnabledBySelfIdWithToken(
       selfId,
     );
-    if (!account) {
-      return { ok: false as const, message: 'unknown account' };
-    }
-
     const expectedToken =
-      account.accessToken ||
+      account?.accessToken ||
       this.configService.get<string>('QQBOT_REVERSE_WS_TOKEN') ||
       '';
     if (expectedToken && token !== expectedToken) {
       return { ok: false as const, message: 'invalid token' };
+    }
+    if (!account) {
+      const disabledAccount = await this.accountService.findBySelfId(selfId);
+      if (disabledAccount) {
+        return { ok: false as const, message: 'account disabled' };
+      }
+      if (!this.isAutoRegisterEnabled()) {
+        return { ok: false as const, message: 'unknown account' };
+      }
+      await this.accountService.ensureRuntimeAccount(selfId);
     }
 
     return { ok: true as const, role, selfId };
@@ -297,6 +303,13 @@ export class QqbotReverseWsService
 
   private isEnabled() {
     return `${this.configService.get('QQBOT_ENABLED') || 'false'}` === 'true';
+  }
+
+  private isAutoRegisterEnabled() {
+    return (
+      `${this.configService.get('QQBOT_AUTO_REGISTER_ACCOUNT') || 'true'}` ===
+      'true'
+    );
   }
 
   private isReversePath(request: IncomingMessage) {

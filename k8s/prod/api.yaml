@@ -31,10 +31,16 @@ spec:
           env:
             - name: NODE_ENV
               value: production
+            - name: QQBOT_NAPCAT_SSH_KEY_PATH
+              value: /app/secrets/napcat-ssh/id_rsa
           # Jenkins 每次发布会从 Agent 私有 .env.production 重建这个 Secret。
           envFrom:
             - secretRef:
                 name: kt-template-online-api-env
+          volumeMounts:
+            - name: napcat-ssh-key
+              mountPath: /app/secrets/napcat-ssh
+              readOnly: true
           readinessProbe:
             tcpSocket:
               port: 48085
@@ -56,6 +62,12 @@ spec:
             limits:
               cpu: 1000m
               memory: 768Mi
+      volumes:
+        - name: napcat-ssh-key
+          secret:
+            secretName: kt-qqbot-napcat-ssh-key
+            optional: true
+            defaultMode: 0400
 ---
 apiVersion: v1
 kind: Service

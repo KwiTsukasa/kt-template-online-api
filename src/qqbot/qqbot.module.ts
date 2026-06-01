@@ -5,6 +5,7 @@ import { AdminAuthGuardModule } from '@/admin/auth/admin-auth-guard.module';
 import { QqbotAccountController } from './account/qqbot-account.controller';
 import { QqbotAccount } from './account/qqbot-account.entity';
 import { QqbotAccountService } from './account/qqbot-account.service';
+import { QqbotNapcatLoginService } from './account/qqbot-napcat-login.service';
 import { QqbotReverseWsService } from './connection/qqbot-reverse-ws.service';
 import { QqbotDashboardController } from './dashboard/qqbot-dashboard.controller';
 import { QqbotDashboardService } from './dashboard/qqbot-dashboard.service';
@@ -16,6 +17,9 @@ import { QqbotMessageController } from './message/qqbot-message.controller';
 import { QqbotMessage } from './message/qqbot-message.entity';
 import { QqbotMessageService } from './message/qqbot-message.service';
 import { QqbotBusService } from './mqtt/qqbot-bus.service';
+import { QqbotAccountNapcat } from './napcat/qqbot-account-napcat.entity';
+import { QqbotNapcatContainer } from './napcat/qqbot-napcat-container.entity';
+import { QqbotNapcatContainerService } from './napcat/qqbot-napcat-container.service';
 import { QqbotAllowlist } from './permission/qqbot-allowlist.entity';
 import { QqbotBlocklist } from './permission/qqbot-blocklist.entity';
 import { QqbotPermissionController } from './permission/qqbot-permission.controller';
@@ -40,6 +44,8 @@ import { QqbotSendService } from './send/qqbot-send.service';
       QqbotConversation,
       QqbotDedupe,
       QqbotMessage,
+      QqbotAccountNapcat,
+      QqbotNapcatContainer,
       QqbotRule,
       QqbotSendLog,
     ]),
@@ -59,6 +65,8 @@ import { QqbotSendService } from './send/qqbot-send.service';
     QqbotDedupeService,
     QqbotEventService,
     QqbotMessageService,
+    QqbotNapcatLoginService,
+    QqbotNapcatContainerService,
     QqbotPermissionService,
     QqbotRateLimitService,
     QqbotReverseWsService,
@@ -66,6 +74,11 @@ import { QqbotSendService } from './send/qqbot-send.service';
     QqbotRuleService,
     QqbotSendService,
   ],
-  exports: [QqbotAccountService, QqbotReverseWsService],
+  exports: [
+    QqbotAccountService,
+    QqbotNapcatLoginService,
+    QqbotNapcatContainerService,
+    QqbotReverseWsService,
+  ],
 })
 export class QqbotModule {}

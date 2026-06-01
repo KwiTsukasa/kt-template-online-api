@@ -14,9 +14,11 @@ import { vbenSuccess } from '@/common';
 import {
   QqbotAccountBodyDto,
   QqbotAccountQueryDto,
+  QqbotAccountScanStatusDto,
   QqbotAccountUpdateDto,
 } from './qqbot-account.dto';
 import { QqbotAccountService } from './qqbot-account.service';
+import { QqbotNapcatLoginService } from './qqbot-napcat-login.service';
 import { QqbotReverseWsService } from '../connection/qqbot-reverse-ws.service';
 
 @ApiTags('qqbot-account')
@@ -25,6 +27,7 @@ import { QqbotReverseWsService } from '../connection/qqbot-reverse-ws.service';
 export class QqbotAccountController {
   constructor(
     private readonly accountService: QqbotAccountService,
+    private readonly napcatLoginService: QqbotNapcatLoginService,
     private readonly reverseWsService: QqbotReverseWsService,
   ) {}
 
@@ -52,6 +55,43 @@ export class QqbotAccountController {
   @ApiOperation({ summary: '编辑 QQBot 账号' })
   async update(@Body() body: QqbotAccountUpdateDto) {
     return vbenSuccess(await this.accountService.update(body));
+  }
+
+  @Post('scan/create')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '扫码新增 QQBot 账号' })
+  async scanCreate() {
+    return vbenSuccess(await this.napcatLoginService.startCreate());
+  }
+
+  @Post('scan/refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '扫码刷新 QQBot 账号登录态' })
+  @ApiQuery({ name: 'id', type: String })
+  async scanRefresh(@Query('id') id: string) {
+    return vbenSuccess(await this.napcatLoginService.startRefresh(id));
+  }
+
+  @Get('scan/status')
+  @ApiOperation({ summary: '查询 QQBot 扫码登录状态' })
+  async scanStatus(@Query() query: QqbotAccountScanStatusDto) {
+    return vbenSuccess(await this.napcatLoginService.status(query.sessionId));
+  }
+
+  @Post('scan/qrcode/refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '刷新 QQBot 扫码二维码' })
+  async refreshScanQrcode(@Query() query: QqbotAccountScanStatusDto) {
+    return vbenSuccess(
+      await this.napcatLoginService.refreshQrcode(query.sessionId),
+    );
+  }
+
+  @Post('scan/cancel')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '取消 QQBot 扫码登录会话' })
+  async cancelScan(@Query() query: QqbotAccountScanStatusDto) {
+    return vbenSuccess(this.napcatLoginService.cancel(query.sessionId));
   }
 
   @Post('delete')

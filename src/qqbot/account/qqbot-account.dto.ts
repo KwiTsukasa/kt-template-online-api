@@ -42,3 +42,8 @@ export class QqbotAccountQueryDto {
   @ApiPropertyOptional()
   connectStatus?: string;
 }
+
+export class QqbotAccountScanStatusDto {
+  @ApiProperty()
+  sessionId: string;
+}

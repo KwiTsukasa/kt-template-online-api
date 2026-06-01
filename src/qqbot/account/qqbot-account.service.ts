@@ -87,6 +87,100 @@ export class QqbotAccountService {
       .getOne();
   }
 
+  async findById(id: string) {
+    return this.accountRepository.findOne({
+      where: {
+        id,
+        isDeleted: false,
+      },
+    });
+  }
+
+  async findBySelfId(selfId: string) {
+    return this.accountRepository.findOne({
+      where: {
+        isDeleted: false,
+        selfId,
+      },
+    });
+  }
+
+  async ensureScannedAccount(input: {
+    accountId?: string;
+    name?: string;
+    selfId: string;
+  }) {
+    const selfId = `${input.selfId || ''}`.trim();
+    if (!selfId) {
+      throwVbenError('NapCat 未返回 QQ 账号');
+    }
+
+    const existing = input.accountId
+      ? await this.accountRepository.findOne({ where: { id: input.accountId } })
+      : await this.accountRepository.findOne({ where: { selfId } });
+    const payload: Partial<QqbotAccount> = {
+      accessToken: null,
+      clientRole: null,
+      connectStatus: 'offline',
+      connectionMode: 'reverse-ws',
+      enabled: true,
+      isDeleted: false,
+      lastError: null,
+      name: input.name || existing?.name || `QQ ${selfId}`,
+      selfId,
+    };
+
+    if (existing) {
+      await this.accountRepository.update({ id: existing.id }, payload);
+      return existing.id;
+    }
+
+    const saved = await this.accountRepository.save(
+      this.accountRepository.create({
+        ...payload,
+        remark: '',
+      }),
+    );
+    return saved.id;
+  }
+
+  async ensureRuntimeAccount(selfId: string) {
+    const normalizedSelfId = `${selfId || ''}`.trim();
+    if (!normalizedSelfId) return;
+
+    const existing = await this.accountRepository.findOne({
+      where: {
+        selfId: normalizedSelfId,
+      },
+    });
+    if (existing && !existing.isDeleted) return;
+
+    if (existing) {
+      await this.accountRepository.update(
+        { id: existing.id },
+        {
+          connectStatus: 'offline',
+          enabled: true,
+          isDeleted: false,
+          lastError: null,
+          name: existing.name || `QQ ${normalizedSelfId}`,
+        },
+      );
+      return;
+    }
+
+    await this.accountRepository.save(
+      this.accountRepository.create({
+        connectionMode: 'reverse-ws',
+        connectStatus: 'offline',
+        enabled: true,
+        name: `QQ ${normalizedSelfId}`,
+        remark: '',
+        selfId: normalizedSelfId,
+      }),
+    );
+  }
+
   async save(body: QqbotAccountBodyDto) {
     await this.assertSelfIdAvailable(body.selfId);
     const account = this.accountRepository.create(this.normalizeBody(body));

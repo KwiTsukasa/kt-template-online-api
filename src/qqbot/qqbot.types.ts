@@ -24,6 +24,10 @@ export type QqbotRuleMatchType = 'equals' | 'keyword' | 'regex';
 
 export type QqbotRuleTargetType = 'all' | 'channel' | 'group' | 'private';
 
+export type QqbotCommandParserType = 'ff14Price' | 'plain';
+
+export type QqbotPluginHealthStatus = 'degraded' | 'healthy' | 'offline';
+
 export type QqbotSendStatus = 'failed' | 'pending' | 'success';
 
 export type QqbotPermissionTargetType = 'channel' | 'group' | 'private' | 'qq';

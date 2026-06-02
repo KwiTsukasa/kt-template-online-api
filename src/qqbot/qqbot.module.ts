@@ -6,6 +6,13 @@ import { QqbotAccountController } from './account/qqbot-account.controller';
 import { QqbotAccount } from './account/qqbot-account.entity';
 import { QqbotAccountService } from './account/qqbot-account.service';
 import { QqbotNapcatLoginService } from './account/qqbot-napcat-login.service';
+import { QqbotCommandController } from './command/qqbot-command.controller';
+import { QqbotCommand } from './command/qqbot-command.entity';
+import { QqbotCommandEngineService } from './command/qqbot-command-engine.service';
+import { QqbotCommandLog } from './command/qqbot-command-log.entity';
+import { QqbotCommandParserService } from './command/qqbot-command-parser.service';
+import { QqbotCommandService } from './command/qqbot-command.service';
+import { QqbotReplyTemplateService } from './command/qqbot-reply-template.service';
 import { QqbotReverseWsService } from './connection/qqbot-reverse-ws.service';
 import { QqbotConfig } from './config/qqbot-config.entity';
 import { QqbotConfigService } from './config/qqbot-config.service';
@@ -26,6 +33,10 @@ import { QqbotAllowlist } from './permission/qqbot-allowlist.entity';
 import { QqbotBlocklist } from './permission/qqbot-blocklist.entity';
 import { QqbotPermissionController } from './permission/qqbot-permission.controller';
 import { QqbotPermissionService } from './permission/qqbot-permission.service';
+import { QqbotPluginController } from './plugin/qqbot-plugin.controller';
+import { QqbotPluginRegistryService } from './plugin/qqbot-plugin-registry.service';
+import { QqbotFf14ClientService } from './plugins/ff14Market/qqbot-ff14-client.service';
+import { QqbotFf14MarketPluginService } from './plugins/ff14Market/qqbot-ff14-market.plugin';
 import { QqbotRuleController } from './rule/qqbot-rule.controller';
 import { QqbotRule } from './rule/qqbot-rule.entity';
 import { QqbotRuleEngineService } from './rule/qqbot-rule-engine.service';
@@ -43,6 +54,8 @@ import { QqbotSendService } from './send/qqbot-send.service';
       QqbotAccount,
       QqbotAllowlist,
       QqbotBlocklist,
+      QqbotCommand,
+      QqbotCommandLog,
       QqbotConfig,
       QqbotConversation,
       QqbotDedupe,
@@ -55,24 +68,33 @@ import { QqbotSendService } from './send/qqbot-send.service';
   ],
   controllers: [
     QqbotAccountController,
+    QqbotCommandController,
     QqbotDashboardController,
     QqbotMessageController,
     QqbotPermissionController,
+    QqbotPluginController,
     QqbotRuleController,
     QqbotSendController,
   ],
   providers: [
     QqbotAccountService,
     QqbotBusService,
+    QqbotCommandEngineService,
+    QqbotCommandParserService,
+    QqbotCommandService,
     QqbotConfigService,
     QqbotDashboardService,
     QqbotDedupeService,
     QqbotEventService,
+    QqbotFf14ClientService,
+    QqbotFf14MarketPluginService,
     QqbotMessageService,
     QqbotNapcatLoginService,
     QqbotNapcatContainerService,
     QqbotPermissionService,
+    QqbotPluginRegistryService,
     QqbotRateLimitService,
+    QqbotReplyTemplateService,
     QqbotReverseWsService,
     QqbotRuleEngineService,
     QqbotRuleService,

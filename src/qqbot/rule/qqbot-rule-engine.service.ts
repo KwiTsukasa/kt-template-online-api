@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { QqbotNormalizedMessage } from '../qqbot.types';
+import { QqbotCommandEngineService } from '../command/qqbot-command-engine.service';
 import { QqbotPermissionService } from '../permission/qqbot-permission.service';
 import { QqbotSendService } from '../send/qqbot-send.service';
 import { QqbotRuleService } from './qqbot-rule.service';
@@ -9,6 +10,7 @@ export class QqbotRuleEngineService {
   private readonly logger = new Logger(QqbotRuleEngineService.name);
 
   constructor(
+    private readonly commandEngineService: QqbotCommandEngineService,
     private readonly permissionService: QqbotPermissionService,
     private readonly ruleService: QqbotRuleService,
     private readonly sendService: QqbotSendService,
@@ -17,6 +19,7 @@ export class QqbotRuleEngineService {
   async handleMessage(message: QqbotNormalizedMessage) {
     if (await this.permissionService.isBlocked(message)) return;
     if (!(await this.permissionService.isAllowed(message))) return;
+    if (await this.commandEngineService.handleMessage(message)) return;
 
     const rules = await this.ruleService.listEnabledForMessage(message);
     for (const rule of rules) {

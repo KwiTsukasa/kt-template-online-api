@@ -5,6 +5,7 @@ import type { OpenAPIObject } from '@nestjs/swagger';
 import { urlencoded, json } from 'express';
 import { knife4jSetup } from 'nestjs-knife4j-plus';
 import type { Service } from 'nestjs-knife4j-plus';
+import { applySwaggerResponseExamples } from './common';
 
 type SwaggerPathMatcher = (path: string) => boolean;
 
@@ -61,7 +62,9 @@ async function bootstrap() {
     .setTitle('KT-Template API')
     .setVersion('1.0')
     .build();
-  const document = SwaggerModule.createDocument(app, options);
+  const document = applySwaggerResponseExamples(
+    SwaggerModule.createDocument(app, options),
+  );
   SwaggerModule.setup('api', app, document);
   const services: Service[] = [
     {

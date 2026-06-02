@@ -37,7 +37,7 @@
     "lodash": "^4.17.21",
     "mqtt": "^5.15.1",
     "mysql2": "^3.22.3",
-    "nestjs-knife4j-plus": "^1.0.8",
+    "nestjs-knife4j-plus": "^1.0.9",
     "nestjs-minio-client": "^2.2.0",
     "reflect-metadata": "^0.1.14",
     "rxjs": "^7.8.2",

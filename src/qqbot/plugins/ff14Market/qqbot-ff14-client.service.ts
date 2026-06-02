@@ -24,6 +24,8 @@ type UniversalisListing = {
   lastReviewTime?: number;
   pricePerUnit?: number;
   quantity?: number;
+  retainerName?: string;
+  total?: number;
   worldName?: string;
 };
 
@@ -152,8 +154,8 @@ export class QqbotFf14ClientService {
         marketTarget.target,
       )}/${item.itemId}`,
     );
-    url.searchParams.set('entries', '5');
-    url.searchParams.set('listings', '5');
+    url.searchParams.set('entries', '10');
+    url.searchParams.set('listings', '10');
     if (params.hq !== undefined) url.searchParams.set('hq', `${params.hq}`);
 
     const data = await this.requestJson<UniversalisMarketResponse>(
@@ -161,7 +163,7 @@ export class QqbotFf14ClientService {
       'GET',
       'Universalis 市场查询',
     );
-    const listings = (data.listings || []).slice(0, 5);
+    const listings = (data.listings || []).slice(0, 10);
     const minPrice = this.normalizeMarketPrice(
       this.pickPrice(data, params.hq, 'min'),
       listings,
@@ -218,27 +220,25 @@ export class QqbotFf14ClientService {
   }
 
   private buildReplyText(result: Omit<QqbotFf14PriceResult, 'replyText'>) {
-    const quality = result.hq === undefined ? '' : result.hq ? ' HQ' : ' NQ';
-    const minPrice =
-      result.minPrice === undefined ? '暂无' : `${result.minPrice}`;
-    const averagePrice =
-      result.averagePrice === undefined ? '暂无' : `${result.averagePrice}`;
     const listingText = result.listings.length
       ? result.listings
-          .slice(0, 3)
-          .map((item, index) => {
+          .slice(0, 10)
+          .map((item) => {
             const hq = item.hq ? 'HQ' : 'NQ';
-            return `${index + 1}. ${item.pricePerUnit} x${item.quantity || 1} ${hq}`;
+            const price = item.pricePerUnit || 0;
+            const quantity = item.quantity || 1;
+            const total = item.total || price * quantity;
+            const retainerName = item.retainerName || '未知雇员';
+            const worldName = item.worldName || result.world;
+            return `[${hq}]${this.formatPrice(price)} x ${quantity} = ${this.formatPrice(
+              total,
+            )} ${retainerName} (${worldName})`;
           })
           .join('\n')
       : '暂无在售记录';
 
     return [
-      `FF14 查价：${result.item.name}${quality}`,
-      `查询范围：${result.world}`,
-      `最低价：${minPrice}`,
-      `均价：${averagePrice}`,
-      `近期挂单：`,
+      `服务器 ${result.world} 上的物品 ${result.item.name} (ID: ${result.item.itemId}) 市场价格如下:`,
       listingText,
     ].join('\n');
   }
@@ -268,6 +268,10 @@ export class QqbotFf14ClientService {
   ) {
     if (!listings.length && (!price || price <= 0)) return undefined;
     return price;
+  }
+
+  private formatPrice(value: number) {
+    return Math.round(value).toLocaleString('en-US');
   }
 
   private normalizeWorld(world?: string) {

@@ -21,7 +21,7 @@ import {
 } from './wordpress.dto';
 import { WordpressService } from './wordpress.service';
 
-@ApiTags('wordpress-article')
+@ApiTags('WordPress - 文章')
 @ApiHeader({
   name: 'X-WordPress-Authorization',
   required: false,

@@ -14,7 +14,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminDept } from './admin-dept.entity';
 import { AdminDeptService } from './admin-dept.service';
 
-@ApiTags('admin-dept')
+@ApiTags('Admin - 部门管理')
 @Controller('system/dept')
 @UseGuards(JwtAuthGuard)
 export class AdminDeptController {

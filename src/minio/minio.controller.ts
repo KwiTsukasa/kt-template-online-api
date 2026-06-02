@@ -50,7 +50,7 @@ const PROXY_RESOURCE_EXTENSION_RE =
   /\.(avif|bmp|css|eot|gif|ico|jpe?g|otf|png|svg|ttf|webp|woff2?)(?:[?#].*)?$/i;
 
 @Controller('minio')
-@ApiTags('minio')
+@ApiTags('基础能力 - MinIO')
 @UseGuards(JwtAuthGuard)
 export class MinioClientController {
   constructor(

@@ -1,7 +1,12 @@
 import { Controller, Get, Redirect } from '@nestjs/common';
-import { ApiMovedPermanentlyResponse, ApiOperation } from '@nestjs/swagger';
+import {
+  ApiMovedPermanentlyResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AppService } from './app.service';
 
+@ApiTags('基础能力 - 根入口')
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}

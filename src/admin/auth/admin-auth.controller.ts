@@ -17,7 +17,7 @@ import { AdminAuthService } from './admin-auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { WordpressService } from '@/wordpress/wordpress.service';
 
-@ApiTags('admin-auth')
+@ApiTags('Admin - 认证')
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class AdminAuthController {

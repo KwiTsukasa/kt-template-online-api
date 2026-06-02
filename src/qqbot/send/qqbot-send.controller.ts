@@ -18,7 +18,7 @@ import {
 } from './qqbot-send.dto';
 import { QqbotSendService } from './qqbot-send.service';
 
-@ApiTags('qqbot-send')
+@ApiTags('QQBot - 发送日志')
 @Controller('qqbot/send')
 @UseGuards(JwtAuthGuard)
 export class QqbotSendController {

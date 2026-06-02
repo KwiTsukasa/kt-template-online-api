@@ -21,7 +21,7 @@ import {
 } from './wordpress.dto';
 import { WordpressService } from './wordpress.service';
 
-@ApiTags('wordpress-category')
+@ApiTags('WordPress - 分类')
 @ApiHeader({
   name: 'X-WordPress-Authorization',
   required: false,

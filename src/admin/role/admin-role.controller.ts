@@ -14,7 +14,7 @@ import { vbenPage, vbenSuccess } from '@/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminRoleService } from './admin-role.service';
 
-@ApiTags('admin-role')
+@ApiTags('Admin - 角色管理')
 @Controller('system/role')
 @UseGuards(JwtAuthGuard)
 export class AdminRoleController {

@@ -66,7 +66,7 @@ const DEMO_ROWS: DemoTableRow[] = Array.from({ length: 100 }, (_, index) => {
   };
 });
 
-@ApiTags('admin-example')
+@ApiTags('Admin - 示例')
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class AdminExampleController {

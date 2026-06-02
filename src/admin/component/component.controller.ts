@@ -60,7 +60,7 @@ class CompPageDto
 }
 
 @Controller('component')
-@ApiTags('component')
+@ApiTags('Admin - 组件管理')
 @ApiExtraModels(PaginatedDto)
 @UseGuards(JwtAuthGuard)
 export class ComponentController {

@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminUser } from './admin-user.entity';
 import { AdminUserService } from './admin-user.service';
 
-@ApiTags('admin-user')
+@ApiTags('Admin - 用户管理')
 @Controller('user')
 @UseGuards(JwtAuthGuard)
 export class AdminUserController {

@@ -21,7 +21,7 @@ import { QqbotAccountService } from './qqbot-account.service';
 import { QqbotNapcatLoginService } from './qqbot-napcat-login.service';
 import { QqbotReverseWsService } from '../connection/qqbot-reverse-ws.service';
 
-@ApiTags('qqbot-account')
+@ApiTags('QQBot - 账号连接')
 @Controller('qqbot/account')
 @UseGuards(JwtAuthGuard)
 export class QqbotAccountController {

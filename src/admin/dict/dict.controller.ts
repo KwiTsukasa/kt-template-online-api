@@ -35,7 +35,7 @@ const chartDictExample = [
   },
 ];
 
-@ApiTags('dict')
+@ApiTags('Admin - 字典管理')
 @Controller('dict')
 @UseGuards(JwtAuthGuard)
 export class DictController {

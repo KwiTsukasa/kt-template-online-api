@@ -12,7 +12,7 @@ import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
 import { Public, vbenSuccess } from '@/common';
 import { WordpressService } from './wordpress.service';
 
-@ApiTags('wordpress-auth')
+@ApiTags('WordPress - 认证')
 @ApiHeader({
   name: 'X-WordPress-Authorization',
   required: false,

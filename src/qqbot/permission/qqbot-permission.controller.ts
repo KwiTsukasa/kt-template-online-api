@@ -19,7 +19,7 @@ import {
 } from './qqbot-permission.dto';
 import { QqbotPermissionService } from './qqbot-permission.service';
 
-@ApiTags('qqbot-permission')
+@ApiTags('QQBot - 权限名单')
 @Controller('qqbot/permission')
 @UseGuards(JwtAuthGuard)
 export class QqbotPermissionController {

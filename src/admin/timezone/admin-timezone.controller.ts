@@ -13,7 +13,7 @@ const TIMEZONE_OPTIONS = [
   { label: 'Asia/Seoul (GMT+9)', value: 'Asia/Seoul' },
 ];
 
-@ApiTags('admin-timezone')
+@ApiTags('Admin - 时区')
 @Controller('timezone')
 @UseGuards(JwtAuthGuard)
 export class AdminTimezoneController {

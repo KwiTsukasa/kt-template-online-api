@@ -16,7 +16,7 @@ import { AdminUser } from '../user/admin-user.entity';
 import { AdminMenu } from './admin-menu.entity';
 import { AdminMenuService } from './admin-menu.service';
 
-@ApiTags('admin-menu')
+@ApiTags('Admin - 菜单管理')
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class AdminMenuController {

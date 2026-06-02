@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
 import { vbenSuccess } from '@/common';
 import { QqbotDashboardService } from './qqbot-dashboard.service';
 
-@ApiTags('qqbot-dashboard')
+@ApiTags('QQBot - 工作台')
 @Controller('qqbot/dashboard')
 @UseGuards(JwtAuthGuard)
 export class QqbotDashboardController {

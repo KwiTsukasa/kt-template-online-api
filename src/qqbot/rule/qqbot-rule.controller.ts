@@ -19,7 +19,7 @@ import {
 import { QqbotRuleService } from './qqbot-rule.service';
 import { normalizeBoolean } from '../qqbot.utils';
 
-@ApiTags('qqbot-rule')
+@ApiTags('QQBot - 自动回复规则')
 @Controller('qqbot/rule')
 @UseGuards(JwtAuthGuard)
 export class QqbotRuleController {

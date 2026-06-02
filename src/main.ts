@@ -1,8 +1,56 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import type { OpenAPIObject } from '@nestjs/swagger';
 import { urlencoded, json } from 'express';
 import { knife4jSetup } from 'nestjs-knife4j-plus';
+import type { Service } from 'nestjs-knife4j-plus';
+
+type SwaggerPathMatcher = (path: string) => boolean;
+
+interface SwaggerDocumentGroup {
+  matcher: SwaggerPathMatcher;
+  name: string;
+  path: string;
+}
+
+const adminSwaggerPathPrefixes = [
+  '/auth',
+  '/component',
+  '/dict',
+  '/menu',
+  '/system',
+  '/timezone',
+  '/user',
+  '/demo',
+  '/status',
+  '/table',
+  '/test',
+  '/upload',
+];
+
+const swaggerGroups: SwaggerDocumentGroup[] = [
+  {
+    matcher: (path) => matchPathPrefixes(path, adminSwaggerPathPrefixes),
+    name: 'Admin 后台管理',
+    path: 'api/admin',
+  },
+  {
+    matcher: (path) => path.startsWith('/qqbot'),
+    name: 'QQBot 机器人',
+    path: 'api/qqbot',
+  },
+  {
+    matcher: (path) => path.startsWith('/wordpress'),
+    name: 'WordPress 博客',
+    path: 'api/wordpress',
+  },
+  {
+    matcher: (path) => path === '/' || path.startsWith('/minio'),
+    name: '基础能力',
+    path: 'api/basic',
+  },
+];
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -15,15 +63,57 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('api', app, document);
+  const services: Service[] = [
+    {
+      name: '全量接口',
+      url: '/api-json',
+    },
+  ];
+
+  swaggerGroups.forEach((group) => {
+    const groupDocument = filterSwaggerDocument(document, group.matcher);
+    SwaggerModule.setup(group.path, app, groupDocument);
+    services.push({
+      name: group.name,
+      url: `/${group.path}-json`,
+    });
+  });
 
   // 启用knife4j增强（关键代码）
-  knife4jSetup(app, [
-    {
-      name: '1.0', // 文档版本名称
-      url: `/api-json`, // Swagger openapi JSON地址
-    },
-  ]);
+  knife4jSetup(app, services);
 
   await app.listen(48085);
 }
+
+function filterSwaggerDocument(
+  document: OpenAPIObject,
+  matcher: SwaggerPathMatcher,
+): OpenAPIObject {
+  const paths = Object.fromEntries(
+    Object.entries(document.paths).filter(([path]) => matcher(path)),
+  ) as OpenAPIObject['paths'];
+  const usedTags = new Set<string>();
+
+  Object.values(paths).forEach((pathItem) => {
+    Object.values(pathItem || {}).forEach((operation) => {
+      const tags = (operation as any)?.tags;
+      if (Array.isArray(tags)) {
+        tags.forEach((tag) => usedTags.add(tag));
+      }
+    });
+  });
+
+  return {
+    ...document,
+    paths,
+    tags: document.tags?.filter((tag) => usedTags.has(tag.name)),
+  };
+}
+
+function matchPathPrefixes(path: string, prefixes: string[]) {
+  return prefixes.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+  );
+}
+
 bootstrap();

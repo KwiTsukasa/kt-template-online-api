@@ -21,7 +21,7 @@ import { QqbotCommandEngineService } from './qqbot-command-engine.service';
 import { QqbotCommandService } from './qqbot-command.service';
 import { normalizeBoolean } from '../qqbot.utils';
 
-@ApiTags('qqbot-command')
+@ApiTags('QQBot - 在线命令')
 @Controller('qqbot/command')
 @UseGuards(JwtAuthGuard)
 export class QqbotCommandController {

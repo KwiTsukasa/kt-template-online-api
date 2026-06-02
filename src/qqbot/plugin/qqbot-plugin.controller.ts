@@ -14,7 +14,7 @@ import { QqbotEventPluginRegistryService } from './qqbot-event-plugin-registry.s
 import { QqbotPluginRegistryService } from './qqbot-plugin-registry.service';
 import type { QqbotPluginTriggerMode } from './qqbot-plugin.types';
 
-@ApiTags('qqbot-plugin')
+@ApiTags('QQBot - 插件能力')
 @Controller('qqbot/plugin')
 @UseGuards(JwtAuthGuard)
 export class QqbotPluginController {

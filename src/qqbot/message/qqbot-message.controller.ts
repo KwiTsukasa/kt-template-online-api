@@ -8,7 +8,7 @@ import {
 } from './qqbot-message.dto';
 import { QqbotMessageService } from './qqbot-message.service';
 
-@ApiTags('qqbot-message')
+@ApiTags('QQBot - 会话与消息')
 @Controller('qqbot')
 @UseGuards(JwtAuthGuard)
 export class QqbotMessageController {

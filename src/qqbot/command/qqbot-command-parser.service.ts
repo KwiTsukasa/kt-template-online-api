@@ -131,7 +131,7 @@ export class QqbotCommandParserService {
       dataCenter,
       hq: this.normalizeHq(flags.get('hq')),
       item,
-      language: this.normalizeString(flags.get('lang')) || 'zh',
+      language: this.normalizeString(flags.get('lang')) || 'chs',
       raw: rawArgs,
       region,
       world,

@@ -315,7 +315,7 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO `qqbot_command` (`id`, `code`, `name`, `aliases`, `prefixes`, `plugin_key`, `operation_key`, `parser_key`, `target_type`, `default_params`, `reply_template`, `error_template`, `enabled`, `priority`, `cooldown_ms`, `remark`)
 VALUES
-  (2041700000000300501, 'ff14_price', 'FF14 查价', '["查价","price","ff14price"]', '["/","!","！"]', 'ff14Market', 'ff14.market.price', 'ff14Price', 'all', '{"language":"zh","world":"中国"}', '', 'FF14 查价失败：{{error}}', 0, 0, 1500, '默认示例命令；默认查询范围为中国，可按需改为具体服务器')
+  (2041700000000300501, 'ff14_price', 'FF14 查价', '["查价","price","ff14price"]', '["/","!","！"]', 'ff14Market', 'ff14.market.price', 'ff14Price', 'all', '{"language":"chs","world":"中国"}', '', 'FF14 查价失败：{{error}}', 0, 0, 1500, '默认示例命令；默认查询范围为中国，可按需改为具体服务器')
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `plugin_key` = VALUES(`plugin_key`),

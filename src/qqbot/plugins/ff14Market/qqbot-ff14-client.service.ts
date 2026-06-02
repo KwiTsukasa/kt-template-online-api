@@ -8,9 +8,9 @@ type HttpMethod = 'GET';
 
 type XivapiSearchItem = {
   fields?: {
-    Icon?: string;
+    Icon?: string | { path?: string; path_hr1?: string };
     IsUntradable?: boolean;
-    LevelItem?: number;
+    LevelItem?: number | { row_id?: number; value?: number };
     Name?: string;
   };
   id?: number;
@@ -64,19 +64,16 @@ export type QqbotFf14PriceResult = {
 @Injectable()
 export class QqbotFf14ClientService {
   private readonly xivapiBaseUrl: string;
+  private readonly xivapiChsBaseUrl: string;
   private readonly universalisBaseUrl: string;
-  private readonly cnItemAliases = new Map<
-    string,
-    { itemId: number; name: string }
-  >([
-    ['小鸣鼠', { itemId: 43590, name: '小鸣鼠角笛' }],
-    ['小鸣鼠角笛', { itemId: 43590, name: '小鸣鼠角笛' }],
-  ]);
 
   constructor(private readonly configService: ConfigService) {
     this.xivapiBaseUrl =
       this.configService.get<string>('FF14_XIVAPI_BASE_URL') ||
       'https://v2.xivapi.com/api';
+    this.xivapiChsBaseUrl =
+      this.configService.get<string>('FF14_XIVAPI_CHS_BASE_URL') ||
+      'https://xivapi-v2.xivcdn.com/api';
     this.universalisBaseUrl =
       this.configService.get<string>('FF14_UNIVERSALIS_BASE_URL') ||
       'https://universalis.app/api/v2';
@@ -96,34 +93,14 @@ export class QqbotFf14ClientService {
     const keyword = `${params.item || ''}`.trim();
     if (!keyword) throw new Error('请提供 FF14 物品名称或物品 ID');
 
-    const alias = this.resolveCnItemAlias(keyword);
-    if (alias) {
-      return this.getItemById(alias.itemId, language, alias.name);
-    }
-
-    const url = new URL(`${this.xivapiBaseUrl}/search`);
-    url.searchParams.set('sheets', 'Item');
-    url.searchParams.set('fields', 'Name,Icon,LevelItem,IsUntradable');
-    url.searchParams.set('query', `Name~"${this.escapeXivapiValue(keyword)}"`);
-    url.searchParams.set('language', language);
-    url.searchParams.set('limit', '10');
-
-    const data = await this.requestJson<{ results?: XivapiSearchItem[] }>(
-      url,
-      'GET',
-      'XIVAPI 物品解析',
-    );
-    const item = (data.results || []).find(
-      (result) =>
-        result.sheet === 'Item' || result.fields?.Name || result.name,
-    );
+    const item = await this.searchItem(keyword, language);
     if (!item) throw new Error(`未找到 FF14 物品：${keyword}`);
 
     return {
-      icon: item.fields?.Icon,
+      icon: this.normalizeItemIcon(item.fields?.Icon),
       isUntradable: item.fields?.IsUntradable,
       itemId: Number(item.row_id || item.id),
-      itemLevel: item.fields?.LevelItem,
+      itemLevel: this.normalizeItemLevel(item.fields?.LevelItem),
       name: item.fields?.Name || item.name || keyword,
     };
   }
@@ -198,12 +175,16 @@ export class QqbotFf14ClientService {
 
   private async getItemById(
     itemId: number,
-    language = 'zh',
+    language = 'chs',
     displayName?: string,
   ): Promise<QqbotFf14ResolvedItem> {
-    const url = new URL(`${this.xivapiBaseUrl}/sheet/Item/${itemId}`);
+    const normalizedLanguage = this.normalizeXivapiLanguage(language);
+    const url = this.buildXivapiUrl(
+      `/sheet/Item/${itemId}`,
+      normalizedLanguage,
+    );
     url.searchParams.set('fields', 'Name,Icon,LevelItem,IsUntradable');
-    url.searchParams.set('language', this.normalizeXivapiLanguage(language));
+    url.searchParams.set('language', normalizedLanguage);
     const data = await this.requestJson<Record<string, any>>(
       url,
       'GET',
@@ -211,10 +192,10 @@ export class QqbotFf14ClientService {
     );
     const fields = data.fields || data;
     return {
-      icon: fields.Icon,
+      icon: this.normalizeItemIcon(fields.Icon),
       isUntradable: fields.IsUntradable,
       itemId,
-      itemLevel: fields.LevelItem,
+      itemLevel: this.normalizeItemLevel(fields.LevelItem),
       name: displayName || fields.Name || `${itemId}`,
     };
   }
@@ -294,12 +275,107 @@ export class QqbotFf14ClientService {
   }
 
   private normalizeXivapiLanguage(language?: string) {
-    const value = `${language || 'en'}`.trim().toLowerCase();
+    const value = `${language || 'chs'}`.trim().toLowerCase();
+    if (['zh', 'zh-cn', 'zh_hans', 'cn', 'chs'].includes(value)) return 'chs';
     return ['en', 'ja', 'de', 'fr'].includes(value) ? value : 'en';
   }
 
-  private resolveCnItemAlias(keyword: string) {
-    return this.cnItemAliases.get(keyword.trim());
+  private buildXivapiUrl(path: string, language: string) {
+    const baseUrl =
+      language === 'chs' ? this.xivapiChsBaseUrl : this.xivapiBaseUrl;
+    return new URL(`${baseUrl.replace(/\/+$/, '')}${path}`);
+  }
+
+  private async searchItem(keyword: string, language: string) {
+    const item = this.pickFirstSearchItem(
+      await this.searchItemsByLanguage(keyword, language, '='),
+    );
+    if (item) return item;
+
+    if (language !== 'en') {
+      const enItem = this.pickFirstSearchItem(
+        await this.searchItemsByLanguage(keyword, 'en', '='),
+      );
+      if (enItem) return enItem;
+    }
+
+    const fuzzyItems = await this.searchItemsByLanguage(keyword, language, '~');
+    const fuzzyItem = this.pickSingleFuzzySearchItem(keyword, fuzzyItems);
+    if (fuzzyItem || language === 'en') return fuzzyItem;
+
+    const enFuzzyItems = await this.searchItemsByLanguage(keyword, 'en', '~');
+    return this.pickSingleFuzzySearchItem(keyword, enFuzzyItems);
+  }
+
+  private async searchItemsByLanguage(
+    keyword: string,
+    language: string,
+    operator: '=' | '~',
+  ) {
+    const url = this.buildXivapiUrl('/search', language);
+    url.searchParams.set('sheets', 'Item');
+    url.searchParams.set('fields', 'Name,Icon,LevelItem,IsUntradable');
+    url.searchParams.set(
+      'query',
+      `Name${operator}"${this.escapeXivapiValue(keyword)}"`,
+    );
+    url.searchParams.set('language', language);
+    url.searchParams.set('limit', '10');
+
+    const data = await this.requestJson<{ results?: XivapiSearchItem[] }>(
+      url,
+      'GET',
+      'XIVAPI 物品解析',
+    );
+    return (data.results || []).filter(
+      (result) =>
+        result.sheet === 'Item' || result.fields?.Name || result.name,
+    );
+  }
+
+  private pickFirstSearchItem(items: XivapiSearchItem[]) {
+    return items[0];
+  }
+
+  private pickSingleFuzzySearchItem(
+    keyword: string,
+    items: XivapiSearchItem[],
+  ) {
+    if (items.length <= 1) return items[0];
+    throw new Error(
+      `找到多个相似物品，请输入更完整名称或物品 ID：${this.formatSearchCandidates(
+        items,
+      )}`,
+    );
+  }
+
+  private formatSearchCandidates(items: XivapiSearchItem[]) {
+    return items
+      .slice(0, 5)
+      .map((item) => {
+        const name = item.fields?.Name || item.name || '未知物品';
+        const id = item.row_id || item.id;
+        return id ? `${name}(ID:${id})` : name;
+      })
+      .join('、');
+  }
+
+  private normalizeItemIcon(icon: unknown) {
+    if (typeof icon === 'string') return icon;
+    if (icon && typeof icon === 'object') {
+      const item = icon as { path?: string; path_hr1?: string };
+      return item.path_hr1 || item.path;
+    }
+    return undefined;
+  }
+
+  private normalizeItemLevel(level: unknown) {
+    if (typeof level === 'number') return level;
+    if (level && typeof level === 'object') {
+      const item = level as { row_id?: number; value?: number };
+      return item.row_id ?? item.value;
+    }
+    return undefined;
   }
 
   private escapeXivapiValue(value: string) {

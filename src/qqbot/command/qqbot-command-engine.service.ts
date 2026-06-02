@@ -91,24 +91,38 @@ export class QqbotCommandEngineService {
     }
 
     const input = this.mergeInput(command, matched.input);
-    const output = await this.pluginRegistry.execute(
-      command.pluginKey,
-      command.operationKey,
-      input,
-      {
-        args: matched.input,
-        command,
-        message,
-      },
-    );
-    const replyText = this.buildReplyText(command, input, output);
-    return {
-      command: this.commandService.toResponse(command),
-      input,
-      matched: true,
-      output,
-      replyText,
-    };
+    try {
+      const output = await this.pluginRegistry.execute(
+        command.pluginKey,
+        command.operationKey,
+        input,
+        {
+          args: matched.input,
+          command,
+          message,
+        },
+      );
+      const replyText = this.buildReplyText(command, input, output);
+      return {
+        command: this.commandService.toResponse(command),
+        input,
+        matched: true,
+        output,
+        replyText,
+        status: 'success',
+      };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '命令执行失败';
+      return {
+        command: this.commandService.toResponse(command),
+        errorMessage,
+        input,
+        matched: true,
+        output: null,
+        replyText: this.buildErrorReplyText(command, input, errorMessage),
+        status: 'failed',
+      };
+    }
   }
 
   private async findMatchedCommand(message: QqbotNormalizedMessage) {
@@ -140,11 +154,7 @@ export class QqbotCommandEngineService {
     message: QqbotNormalizedMessage,
     errorMessage: string,
   ) {
-    const reply =
-      this.replyTemplate.render(command.errorTemplate, {
-        error: errorMessage,
-        input,
-      }) || `命令执行失败：${errorMessage}`;
+    const reply = this.buildErrorReplyText(command, input, errorMessage);
     try {
       await this.sendService.sendText({
         channelId: message.channelId,
@@ -160,6 +170,19 @@ export class QqbotCommandEngineService {
       const sendErr = err instanceof Error ? err.message : '错误回复发送失败';
       this.logger.warn(`QQBot 命令错误回复发送失败: ${sendErr}`);
     }
+  }
+
+  private buildErrorReplyText(
+    command: QqbotCommand,
+    input: Record<string, any>,
+    errorMessage: string,
+  ) {
+    return (
+      this.replyTemplate.render(command.errorTemplate, {
+        error: errorMessage,
+        input,
+      }) || `命令执行失败：${errorMessage}`
+    );
   }
 
   private mergeInput(command: QqbotCommand, input: Record<string, any>) {

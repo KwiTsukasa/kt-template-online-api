@@ -60,13 +60,15 @@ export class QqbotFf14MarketPluginService {
           description: '查询指定服务器的 FF14 市场最低价、均价与近期挂单。',
           inputSchema: {
             properties: {
+              dataCenter: { description: '大区名，如陆行鸟', type: 'string' },
               hq: { description: '是否只查 HQ', type: 'boolean' },
               item: { description: '物品名称或 ID', type: 'string' },
               itemId: { description: '物品 ID', type: 'number' },
               language: { default: 'zh', type: 'string' },
-              world: { description: '服务器名或大区名', type: 'string' },
+              region: { description: '地区名，如中国', type: 'string' },
+              world: { description: '小区/服务器名，如红玉海', type: 'string' },
             },
-            required: ['item', 'world'],
+            required: ['item'],
             type: 'object',
           },
           key: 'ff14.market.price',

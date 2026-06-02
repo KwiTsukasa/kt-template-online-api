@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
+import { QqbotAccountService } from '../account/qqbot-account.service';
 import { QqbotRule } from './qqbot-rule.entity';
 import type {
   QqbotRuleBodyDto,
@@ -20,6 +21,7 @@ export class QqbotRuleService {
   constructor(
     @InjectRepository(QqbotRule)
     private readonly ruleRepository: Repository<QqbotRule>,
+    private readonly accountService: QqbotAccountService,
   ) {}
 
   async page(query: QqbotRuleQueryDto) {
@@ -35,6 +37,13 @@ export class QqbotRuleService {
           keyword: `%${query.keyword}%`,
         },
       );
+    }
+    if (query.selfId) {
+      const boundIds = await this.accountService.getBoundRuleIds(query.selfId);
+      if (boundIds.length === 0) {
+        return { list: [], pageNo, pageSize, total: 0 };
+      }
+      builder.andWhere('rule.id IN (:...boundIds)', { boundIds });
     }
     if (query.targetType) {
       builder.andWhere('rule.targetType = :targetType', {
@@ -53,14 +62,22 @@ export class QqbotRuleService {
       .skip(skip)
       .take(pageSize)
       .getManyAndCount();
-    return { list, pageNo, pageSize, total };
+    return {
+      list,
+      pageNo,
+      pageSize,
+      total,
+    };
   }
 
   async listEnabledForMessage(message: QqbotNormalizedMessage) {
+    const boundIds = await this.accountService.getBoundRuleIds(message.selfId);
+    if (boundIds.length === 0) return [];
     return this.ruleRepository
       .createQueryBuilder('rule')
       .where('rule.isDeleted = :isDeleted', { isDeleted: false })
       .andWhere('rule.enabled = :enabled', { enabled: true })
+      .andWhere('rule.id IN (:...boundIds)', { boundIds })
       .andWhere('rule.targetType IN (:...targetTypes)', {
         targetTypes: ['all', message.messageType],
       })

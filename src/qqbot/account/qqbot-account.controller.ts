@@ -104,6 +104,58 @@ export class QqbotAccountController {
     return vbenSuccess(await this.accountService.remove(id));
   }
 
+  @Post('bind/command')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '绑定账号在线命令' })
+  @ApiQuery({ name: 'selfId', type: String })
+  @ApiQuery({ name: 'commandId', type: String })
+  async bindCommand(
+    @Query('selfId') selfId: string,
+    @Query('commandId') commandId: string,
+  ) {
+    return vbenSuccess(
+      await this.accountService.bindCommand(selfId, commandId),
+    );
+  }
+
+  @Post('unbind/command')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '解绑账号在线命令' })
+  @ApiQuery({ name: 'selfId', type: String })
+  @ApiQuery({ name: 'commandId', type: String })
+  async unbindCommand(
+    @Query('selfId') selfId: string,
+    @Query('commandId') commandId: string,
+  ) {
+    return vbenSuccess(
+      await this.accountService.unbindCommand(selfId, commandId),
+    );
+  }
+
+  @Post('bind/rule')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '绑定账号自动回复规则' })
+  @ApiQuery({ name: 'selfId', type: String })
+  @ApiQuery({ name: 'ruleId', type: String })
+  async bindRule(
+    @Query('selfId') selfId: string,
+    @Query('ruleId') ruleId: string,
+  ) {
+    return vbenSuccess(await this.accountService.bindRule(selfId, ruleId));
+  }
+
+  @Post('unbind/rule')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '解绑账号自动回复规则' })
+  @ApiQuery({ name: 'selfId', type: String })
+  @ApiQuery({ name: 'ruleId', type: String })
+  async unbindRule(
+    @Query('selfId') selfId: string,
+    @Query('ruleId') ruleId: string,
+  ) {
+    return vbenSuccess(await this.accountService.unbindRule(selfId, ruleId));
+  }
+
   @Post('kick')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '断开 QQBot 反向 WS 会话' })

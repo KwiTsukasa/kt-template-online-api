@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
+import {
+  QqbotAccountAbility,
+  type QqbotAccountAbilityType,
+} from './qqbot-account-ability.entity';
 import { QqbotAccount } from './qqbot-account.entity';
 import type {
   QqbotAccountBodyDto,
@@ -17,6 +21,8 @@ export class QqbotAccountService {
   constructor(
     @InjectRepository(QqbotAccount)
     private readonly accountRepository: Repository<QqbotAccount>,
+    @InjectRepository(QqbotAccountAbility)
+    private readonly accountAbilityRepository: Repository<QqbotAccountAbility>,
     private readonly napcatContainerService: QqbotNapcatContainerService,
   ) {}
 
@@ -58,6 +64,42 @@ export class QqbotAccountService {
         isDeleted: false,
       },
     });
+  }
+
+  async getBoundCommandIds(selfId: string) {
+    return this.getBoundAbilityKeys(selfId, 'command');
+  }
+
+  async getBoundRuleIds(selfId: string) {
+    return this.getBoundAbilityKeys(selfId, 'rule');
+  }
+
+  async getBoundEventPluginKeys(selfId: string) {
+    return this.getBoundAbilityKeys(selfId, 'event_plugin');
+  }
+
+  async bindCommand(selfId: string, commandId: string) {
+    return this.bindAbility(selfId, commandId, 'command');
+  }
+
+  async bindRule(selfId: string, ruleId: string) {
+    return this.bindAbility(selfId, ruleId, 'rule');
+  }
+
+  async bindEventPlugin(selfId: string, pluginKey: string) {
+    return this.bindAbility(selfId, pluginKey, 'event_plugin');
+  }
+
+  async unbindCommand(selfId: string, commandId: string) {
+    return this.unbindAbility(selfId, commandId, 'command');
+  }
+
+  async unbindRule(selfId: string, ruleId: string) {
+    return this.unbindAbility(selfId, ruleId, 'rule');
+  }
+
+  async unbindEventPlugin(selfId: string, pluginKey: string) {
+    return this.unbindAbility(selfId, pluginKey, 'event_plugin');
   }
 
   async getDefaultAccount(selfId?: string) {
@@ -134,6 +176,10 @@ export class QqbotAccountService {
 
     if (existing) {
       await this.accountRepository.update({ id: existing.id }, payload);
+      await this.accountAbilityRepository.update(
+        { accountId: existing.id },
+        { selfId },
+      );
       return existing.id;
     }
 
@@ -204,6 +250,12 @@ export class QqbotAccountService {
       delete payload.accessToken;
     }
     await this.accountRepository.update({ id: body.id }, payload);
+    if (payload.selfId) {
+      await this.accountAbilityRepository.update(
+        { accountId: body.id },
+        { selfId: payload.selfId },
+      );
+    }
     return true;
   }
 
@@ -227,6 +279,10 @@ export class QqbotAccountService {
         enabled: false,
         isDeleted: true,
       },
+    );
+    await this.accountAbilityRepository.update(
+      { accountId: id },
+      { isDeleted: true },
     );
     return {
       deletedContainers: containerResult.deletedContainers,
@@ -318,5 +374,93 @@ export class QqbotAccountService {
       selfId:
         typeof body.selfId === 'string' ? body.selfId.trim() : body.selfId,
     } as Partial<QqbotAccount>;
+  }
+
+  private async bindAbility(
+    selfId: string,
+    abilityKey: string,
+    type: QqbotAccountAbilityType,
+  ) {
+    const account = await this.assertConfigurableAccount(selfId);
+    const normalizedKey = this.normalizeAbilityId(abilityKey);
+    const existing = await this.accountAbilityRepository.findOne({
+      where: {
+        abilityKey: normalizedKey,
+        abilityType: type,
+        accountId: account.id,
+      },
+    });
+
+    if (existing) {
+      await this.accountAbilityRepository.update(
+        { id: existing.id },
+        { isDeleted: false, selfId: account.selfId },
+      );
+      return true;
+    }
+
+    await this.accountAbilityRepository.save(
+      this.accountAbilityRepository.create({
+        abilityKey: normalizedKey,
+        abilityType: type,
+        accountId: account.id,
+        isDeleted: false,
+        selfId: account.selfId,
+      }),
+    );
+    return true;
+  }
+
+  private async unbindAbility(
+    selfId: string,
+    abilityKey: string,
+    type: QqbotAccountAbilityType,
+  ) {
+    const account = await this.assertConfigurableAccount(selfId);
+    const normalizedKey = this.normalizeAbilityId(abilityKey);
+    await this.accountAbilityRepository.update(
+      {
+        abilityKey: normalizedKey,
+        abilityType: type,
+        accountId: account.id,
+      },
+      { isDeleted: true, selfId: account.selfId },
+    );
+    return true;
+  }
+
+  private async assertConfigurableAccount(selfId: string) {
+    const normalizedSelfId = `${selfId || ''}`.trim();
+    if (!normalizedSelfId) throwVbenError('请选择所属 QQBot 账号');
+    const account = await this.findBySelfId(normalizedSelfId);
+    if (!account || !account.enabled) {
+      throwVbenError(`QQBot 账号不存在或已停用：${normalizedSelfId}`);
+    }
+    return account;
+  }
+
+  private normalizeAbilityId(abilityId: string) {
+    const normalizedId = `${abilityId || ''}`.trim();
+    if (!normalizedId) throwVbenError('绑定能力 ID 不能为空');
+    return normalizedId;
+  }
+
+  private async getBoundAbilityKeys(
+    selfId: string,
+    abilityType: QqbotAccountAbilityType,
+  ) {
+    const account = await this.findBySelfId(`${selfId || ''}`.trim());
+    if (!account || !account.enabled || account.isDeleted) return [];
+    const bindings = await this.accountAbilityRepository.find({
+      order: {
+        createTime: 'ASC',
+      },
+      where: {
+        abilityType,
+        accountId: account.id,
+        isDeleted: false,
+      },
+    });
+    return bindings.map((item) => item.abilityKey);
   }
 }

@@ -18,6 +18,9 @@ export class QqbotCommandQueryDto implements QqbotPageQuery {
   keyword?: string;
 
   @ApiPropertyOptional()
+  selfId?: string;
+
+  @ApiPropertyOptional()
   pluginKey?: string;
 
   @ApiPropertyOptional()

@@ -22,8 +22,8 @@ export class QqbotConfigService {
 
   async getPermissionConfig(): Promise<QqbotPermissionConfig> {
     const [allowlistEnabled, blocklistEnabled] = await Promise.all([
-      this.getBoolean(QQBOT_PERMISSION_CONFIG_KEYS.allowlistEnabled, false),
-      this.getBoolean(QQBOT_PERMISSION_CONFIG_KEYS.blocklistEnabled, true),
+      this.getBooleanConfig(QQBOT_PERMISSION_CONFIG_KEYS.allowlistEnabled, false),
+      this.getBooleanConfig(QQBOT_PERMISSION_CONFIG_KEYS.blocklistEnabled, true),
     ]);
 
     return { allowlistEnabled, blocklistEnabled };
@@ -36,7 +36,7 @@ export class QqbotConfigService {
 
     if (typeof config.allowlistEnabled === 'boolean') {
       tasks.push(
-        this.setBoolean(
+        this.setBooleanConfig(
           QQBOT_PERMISSION_CONFIG_KEYS.allowlistEnabled,
           config.allowlistEnabled,
           'QQBot 白名单总开关',
@@ -45,7 +45,7 @@ export class QqbotConfigService {
     }
     if (typeof config.blocklistEnabled === 'boolean') {
       tasks.push(
-        this.setBoolean(
+        this.setBooleanConfig(
           QQBOT_PERMISSION_CONFIG_KEYS.blocklistEnabled,
           config.blocklistEnabled,
           'QQBot 黑名单总开关',
@@ -57,7 +57,7 @@ export class QqbotConfigService {
     return this.getPermissionConfig();
   }
 
-  private async getBoolean(configKey: string, defaultValue: boolean) {
+  async getBooleanConfig(configKey: string, defaultValue: boolean) {
     const record = await this.configRepository.findOne({
       where: { configKey },
     });
@@ -65,7 +65,11 @@ export class QqbotConfigService {
     return record.configValue === 'true';
   }
 
-  private async setBoolean(configKey: string, value: boolean, remark: string) {
+  async setBooleanConfig(
+    configKey: string,
+    value: boolean,
+    remark: string,
+  ) {
     const exists = await this.configRepository.findOne({
       where: { configKey },
     });

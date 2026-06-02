@@ -32,6 +32,7 @@ export class QqbotPluginRegistryService implements OnModuleInit {
       key: plugin.key,
       name: plugin.name,
       operationCount: plugin.operations.length,
+      triggerMode: 'command',
       version: plugin.version,
     }));
   }
@@ -46,6 +47,7 @@ export class QqbotPluginRegistryService implements OnModuleInit {
         name: operation.name,
         outputSchema: operation.outputSchema,
         pluginKey: plugin.key,
+        triggerMode: 'command',
       })),
     );
   }
@@ -58,10 +60,18 @@ export class QqbotPluginRegistryService implements OnModuleInit {
           return {
             checkedAt: new Date().toISOString(),
             message: '插件未提供健康检查',
+            name: plugin.name,
+            pluginKey: plugin.key,
             status: 'healthy',
+            triggerMode: 'command' as const,
           };
         }
-        return plugin.healthCheck();
+        return {
+          ...(await plugin.healthCheck()),
+          name: plugin.name,
+          pluginKey: plugin.key,
+          triggerMode: 'command' as const,
+        };
       }),
     );
   }

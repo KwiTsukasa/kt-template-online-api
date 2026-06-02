@@ -115,6 +115,39 @@ export class AdminMenuService {
         .filter((menu) => !menu.isDeleted && menu.status === 1)
         .forEach((menu) => menuMap.set(menu.id, menu));
     });
+    return this.includeAncestorMenus([...menuMap.values()]);
+  }
+
+  private async includeAncestorMenus(menus: AdminMenu[]) {
+    const menuMap = new Map<string, AdminMenu>();
+    menus.forEach((menu) => menuMap.set(menu.id, menu));
+
+    const pendingParentIds = new Set<string>();
+    const collectMissingParent = (pid?: null | string) => {
+      if (!pid || pid === '0' || menuMap.has(pid)) return;
+      pendingParentIds.add(pid);
+    };
+
+    menus.forEach((menu) => collectMissingParent(menu.pid));
+
+    while (pendingParentIds.size > 0) {
+      const ids = [...pendingParentIds];
+      pendingParentIds.clear();
+      const parents = await this.menuRepository.find({
+        where: {
+          id: In(ids),
+          isDeleted: false,
+          status: 1,
+        },
+      });
+
+      parents.forEach((parent) => {
+        if (menuMap.has(parent.id)) return;
+        menuMap.set(parent.id, parent);
+        collectMissingParent(parent.pid);
+      });
+    }
+
     return [...menuMap.values()];
   }
 

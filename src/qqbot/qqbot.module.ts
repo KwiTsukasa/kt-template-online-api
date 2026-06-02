@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/admin/auth/admin-auth-guard.module';
 import { QqbotAccountController } from './account/qqbot-account.controller';
+import { QqbotAccountAbility } from './account/qqbot-account-ability.entity';
 import { QqbotAccount } from './account/qqbot-account.entity';
 import { QqbotAccountService } from './account/qqbot-account.service';
 import { QqbotNapcatLoginService } from './account/qqbot-napcat-login.service';
@@ -33,10 +34,12 @@ import { QqbotAllowlist } from './permission/qqbot-allowlist.entity';
 import { QqbotBlocklist } from './permission/qqbot-blocklist.entity';
 import { QqbotPermissionController } from './permission/qqbot-permission.controller';
 import { QqbotPermissionService } from './permission/qqbot-permission.service';
+import { QqbotEventPluginRegistryService } from './plugin/qqbot-event-plugin-registry.service';
 import { QqbotPluginController } from './plugin/qqbot-plugin.controller';
 import { QqbotPluginRegistryService } from './plugin/qqbot-plugin-registry.service';
 import { QqbotFf14ClientService } from './plugins/ff14Market/qqbot-ff14-client.service';
 import { QqbotFf14MarketPluginService } from './plugins/ff14Market/qqbot-ff14-market.plugin';
+import { QqbotRepeaterPluginService } from './plugins/repeater/qqbot-repeater.plugin';
 import { QqbotRuleController } from './rule/qqbot-rule.controller';
 import { QqbotRule } from './rule/qqbot-rule.entity';
 import { QqbotRuleEngineService } from './rule/qqbot-rule-engine.service';
@@ -52,6 +55,7 @@ import { QqbotSendService } from './send/qqbot-send.service';
     AdminAuthGuardModule,
     TypeOrmModule.forFeature([
       QqbotAccount,
+      QqbotAccountAbility,
       QqbotAllowlist,
       QqbotBlocklist,
       QqbotCommand,
@@ -92,7 +96,9 @@ import { QqbotSendService } from './send/qqbot-send.service';
     QqbotNapcatLoginService,
     QqbotNapcatContainerService,
     QqbotPermissionService,
+    QqbotEventPluginRegistryService,
     QqbotPluginRegistryService,
+    QqbotRepeaterPluginService,
     QqbotRateLimitService,
     QqbotReplyTemplateService,
     QqbotReverseWsService,

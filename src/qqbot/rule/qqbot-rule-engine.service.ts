@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { QqbotNormalizedMessage } from '../qqbot.types';
 import { QqbotCommandEngineService } from '../command/qqbot-command-engine.service';
 import { QqbotPermissionService } from '../permission/qqbot-permission.service';
+import { QqbotRepeaterPluginService } from '../plugins/repeater/qqbot-repeater.plugin';
 import { QqbotSendService } from '../send/qqbot-send.service';
 import { QqbotRuleService } from './qqbot-rule.service';
 
@@ -12,6 +13,7 @@ export class QqbotRuleEngineService {
   constructor(
     private readonly commandEngineService: QqbotCommandEngineService,
     private readonly permissionService: QqbotPermissionService,
+    private readonly repeaterPluginService: QqbotRepeaterPluginService,
     private readonly ruleService: QqbotRuleService,
     private readonly sendService: QqbotSendService,
   ) {}
@@ -44,5 +46,7 @@ export class QqbotRuleEngineService {
       }
       return;
     }
+
+    await this.repeaterPluginService.handleMessage(message);
   }
 }

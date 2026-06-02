@@ -46,6 +46,9 @@ export class QqbotRuleQueryDto {
   keyword?: string;
 
   @ApiPropertyOptional()
+  selfId?: string;
+
+  @ApiPropertyOptional()
   targetType?: QqbotRuleTargetType;
 
   @ApiPropertyOptional()

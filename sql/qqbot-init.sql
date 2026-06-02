@@ -25,6 +25,20 @@ CREATE TABLE IF NOT EXISTS `qqbot_account` (
   UNIQUE KEY `uk_qqbot_account_self_id` (`self_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `qqbot_account_ability` (
+  `id` bigint NOT NULL,
+  `account_id` bigint NOT NULL,
+  `self_id` varchar(64) NOT NULL,
+  `ability_type` varchar(32) NOT NULL,
+  `ability_key` varchar(128) NOT NULL,
+  `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_qqbot_account_ability` (`account_id`, `ability_type`, `ability_key`),
+  KEY `idx_qqbot_account_ability_self` (`self_id`, `ability_type`, `is_deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `qqbot_napcat_container` (
   `id` bigint NOT NULL,
   `name` varchar(120) NOT NULL,
@@ -248,6 +262,192 @@ CREATE TABLE IF NOT EXISTS `qqbot_dedupe` (
 
 SET @qqbot_sql = (
   SELECT IF(
+    COUNT(*) > 0,
+    'INSERT INTO `qqbot_account_ability` (`id`, `account_id`, `self_id`, `ability_type`, `ability_key`, `is_deleted`)
+     SELECT CAST((UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000 - 1288834974657) * 4194304 + 100000 + ROW_NUMBER() OVER (ORDER BY `legacy`.`account_id`, `legacy`.`ability_key`) AS UNSIGNED) AS `id`,
+            `legacy`.`account_id`,
+            `legacy`.`self_id`,
+            ''command'' AS `ability_type`,
+            `legacy`.`ability_key`,
+            0 AS `is_deleted`
+     FROM (
+       SELECT `account`.`id` AS `account_id`,
+              `account`.`self_id`,
+              TRIM(CASE JSON_TYPE(`binding`.`raw_item`)
+                WHEN ''STRING'' THEN JSON_UNQUOTE(`binding`.`raw_item`)
+                WHEN ''OBJECT'' THEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`binding`.`raw_item`, ''$.id'')), JSON_UNQUOTE(JSON_EXTRACT(`binding`.`raw_item`, ''$.key'')), '''')
+                ELSE ''''
+              END) AS `ability_key`,
+              COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`binding`.`raw_item`, ''$.enabled'')), ''true'') AS `binding_enabled`
+       FROM `qqbot_account` `account`
+       JOIN JSON_TABLE(IF(JSON_VALID(`account`.`command_bindings`), `account`.`command_bindings`, ''[]''), ''$[*]'' COLUMNS (`raw_item` json PATH ''$'')) AS `binding`
+       WHERE `account`.`is_deleted` = 0
+     ) `legacy`
+     WHERE `legacy`.`ability_key` <> ''''
+       AND `legacy`.`binding_enabled` <> ''false''
+     ON DUPLICATE KEY UPDATE `self_id` = VALUES(`self_id`), `is_deleted` = 0',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'command_bindings'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) > 0,
+    'INSERT INTO `qqbot_account_ability` (`id`, `account_id`, `self_id`, `ability_type`, `ability_key`, `is_deleted`)
+     SELECT CAST((UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000 - 1288834974657) * 4194304 + 200000 + ROW_NUMBER() OVER (ORDER BY `legacy`.`account_id`, `legacy`.`ability_key`) AS UNSIGNED) AS `id`,
+            `legacy`.`account_id`,
+            `legacy`.`self_id`,
+            ''rule'' AS `ability_type`,
+            `legacy`.`ability_key`,
+            0 AS `is_deleted`
+     FROM (
+       SELECT `account`.`id` AS `account_id`,
+              `account`.`self_id`,
+              TRIM(CASE JSON_TYPE(`binding`.`raw_item`)
+                WHEN ''STRING'' THEN JSON_UNQUOTE(`binding`.`raw_item`)
+                WHEN ''OBJECT'' THEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`binding`.`raw_item`, ''$.id'')), JSON_UNQUOTE(JSON_EXTRACT(`binding`.`raw_item`, ''$.key'')), '''')
+                ELSE ''''
+              END) AS `ability_key`,
+              COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`binding`.`raw_item`, ''$.enabled'')), ''true'') AS `binding_enabled`
+       FROM `qqbot_account` `account`
+       JOIN JSON_TABLE(IF(JSON_VALID(`account`.`rule_bindings`), `account`.`rule_bindings`, ''[]''), ''$[*]'' COLUMNS (`raw_item` json PATH ''$'')) AS `binding`
+       WHERE `account`.`is_deleted` = 0
+     ) `legacy`
+     WHERE `legacy`.`ability_key` <> ''''
+       AND `legacy`.`binding_enabled` <> ''false''
+     ON DUPLICATE KEY UPDATE `self_id` = VALUES(`self_id`), `is_deleted` = 0',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'rule_bindings'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) > 0,
+    'INSERT INTO `qqbot_account_ability` (`id`, `account_id`, `self_id`, `ability_type`, `ability_key`, `is_deleted`)
+     SELECT CAST((UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000 - 1288834974657) * 4194304 + 300000 + ROW_NUMBER() OVER (ORDER BY `legacy`.`account_id`, `legacy`.`ability_key`) AS UNSIGNED) AS `id`,
+            `legacy`.`account_id`,
+            `legacy`.`self_id`,
+            ''event_plugin'' AS `ability_type`,
+            `legacy`.`ability_key`,
+            0 AS `is_deleted`
+     FROM (
+       SELECT `account`.`id` AS `account_id`,
+              `account`.`self_id`,
+              TRIM(CASE JSON_TYPE(`binding`.`raw_item`)
+                WHEN ''STRING'' THEN JSON_UNQUOTE(`binding`.`raw_item`)
+                WHEN ''OBJECT'' THEN COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`binding`.`raw_item`, ''$.id'')), JSON_UNQUOTE(JSON_EXTRACT(`binding`.`raw_item`, ''$.key'')), '''')
+                ELSE ''''
+              END) AS `ability_key`,
+              COALESCE(JSON_UNQUOTE(JSON_EXTRACT(`binding`.`raw_item`, ''$.enabled'')), ''true'') AS `binding_enabled`
+       FROM `qqbot_account` `account`
+       JOIN JSON_TABLE(IF(JSON_VALID(`account`.`event_plugin_bindings`), `account`.`event_plugin_bindings`, ''[]''), ''$[*]'' COLUMNS (`raw_item` json PATH ''$'')) AS `binding`
+       WHERE `account`.`is_deleted` = 0
+     ) `legacy`
+     WHERE `legacy`.`ability_key` <> ''''
+       AND `legacy`.`binding_enabled` <> ''false''
+     ON DUPLICATE KEY UPDATE `self_id` = VALUES(`self_id`), `is_deleted` = 0',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'event_plugin_bindings'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) > 0,
+    'ALTER TABLE `qqbot_rule` DROP COLUMN `self_id`',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_rule'
+    AND column_name = 'self_id'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) > 0,
+    'ALTER TABLE `qqbot_command` DROP COLUMN `self_id`',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_command'
+    AND column_name = 'self_id'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) > 0,
+    'ALTER TABLE `qqbot_account` DROP COLUMN `command_bindings`',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'command_bindings'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) > 0,
+    'ALTER TABLE `qqbot_account` DROP COLUMN `rule_bindings`',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'rule_bindings'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) > 0,
+    'ALTER TABLE `qqbot_account` DROP COLUMN `event_plugin_bindings`',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'event_plugin_bindings'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
     COUNT(*) = 0,
     'ALTER TABLE `qqbot_allowlist` ADD COLUMN `user_id` varchar(64) NOT NULL DEFAULT '''' AFTER `target_id`',
     'SELECT 1'
@@ -315,14 +515,31 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO `qqbot_command` (`id`, `code`, `name`, `aliases`, `prefixes`, `plugin_key`, `operation_key`, `parser_key`, `target_type`, `default_params`, `reply_template`, `error_template`, `enabled`, `priority`, `cooldown_ms`, `remark`)
 VALUES
-  (2041700000000300501, 'ff14_price', 'FF14 查价', '["查价","price","ff14price"]', '["/","!","！"]', 'ff14Market', 'ff14.market.price', 'ff14Price', 'all', '{"language":"chs","world":"中国"}', '', 'FF14 查价失败：{{error}}', 0, 0, 1500, '默认示例命令；默认查询范围为中国，可按需改为具体服务器')
+  (2041700000000300501, 'ff14_price', 'FF14 查价', '["查价","price","ff14price"]', '["/","!","！"]', 'ff14Market', 'ff14.market.price', 'ff14Price', 'all', '{"language":"chs","world":"中国"}', '', 'FF14 查价失败：{{error}}', 1, 0, 1500, '默认示例命令；请在账号配置中绑定后启用')
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `plugin_key` = VALUES(`plugin_key`),
   `operation_key` = VALUES(`operation_key`),
   `parser_key` = VALUES(`parser_key`),
   `target_type` = VALUES(`target_type`),
+  `enabled` = VALUES(`enabled`),
   `remark` = VALUES(`remark`),
+  `is_deleted` = 0;
+
+UPDATE `admin_menu`
+SET `name` = 'QqBotAccountConfigButton'
+WHERE `id` = 2041700000000120406
+  AND `name` = 'QqBotAccountConfig';
+
+INSERT INTO `admin_dict` (`id`, `dict_code`, `label`, `value`, `children_code`, `sort`, `status`)
+VALUES
+  (2041700000000300401, 'QQBOT_PLUGIN_TRIGGER_MODE', '命令', 'command', NULL, 1, 1),
+  (2041700000000300402, 'QQBOT_PLUGIN_TRIGGER_MODE', '事件', 'event', NULL, 2, 1)
+ON DUPLICATE KEY UPDATE
+  `label` = VALUES(`label`),
+  `children_code` = VALUES(`children_code`),
+  `sort` = VALUES(`sort`),
+  `status` = VALUES(`status`),
   `is_deleted` = 0;
 
 INSERT INTO `admin_menu` (`id`, `pid`, `name`, `path`, `component`, `redirect`, `auth_code`, `type`, `meta`, `status`, `sort`)
@@ -330,11 +547,13 @@ VALUES
   (2041700000000100400, 0, 'QqBot', '/qqbot', NULL, '/qqbot/dashboard', NULL, 'catalog', '{"icon":"lucide:bot","order":110,"title":"QQBot 管理"}', 1, 110),
   (2041700000000100401, 2041700000000100400, 'QqBotDashboard', '/qqbot/dashboard', '/qqbot/dashboard/list', NULL, 'QqBot:Dashboard:List', 'menu', '{"icon":"lucide:gauge","title":"工作台"}', 1, 0),
   (2041700000000100402, 2041700000000100400, 'QqBotAccount', '/qqbot/account', '/qqbot/account/list', NULL, 'QqBot:Account:List', 'menu', '{"icon":"lucide:radio-receiver","title":"账号连接"}', 1, 1),
+  (2041700000000100410, 2041700000000100400, 'QqBotAccountConfig', '/qqbot/account/config', '/qqbot/account/config', NULL, 'QqBot:Account:Config', 'menu', '{"activePath":"/qqbot/account","hideInMenu":true,"title":"账号功能配置"}', 1, 0),
   (2041700000000120401, 2041700000000100402, 'QqBotAccountCreate', NULL, NULL, NULL, 'QqBot:Account:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120402, 2041700000000100402, 'QqBotAccountEdit', NULL, NULL, NULL, 'QqBot:Account:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120403, 2041700000000100402, 'QqBotAccountDelete', NULL, NULL, NULL, 'QqBot:Account:Delete', 'button', '{"title":"common.delete"}', 1, 0),
   (2041700000000120404, 2041700000000100402, 'QqBotAccountKick', NULL, NULL, NULL, 'QqBot:Account:Kick', 'button', '{"title":"断开连接"}', 1, 0),
   (2041700000000120405, 2041700000000100402, 'QqBotAccountRefreshLogin', NULL, NULL, NULL, 'QqBot:Account:RefreshLogin', 'button', '{"title":"更新登录"}', 1, 0),
+  (2041700000000120406, 2041700000000100402, 'QqBotAccountConfigButton', NULL, NULL, NULL, 'QqBot:Account:Config', 'button', '{"title":"配置"}', 1, 0),
   (2041700000000100403, 2041700000000100400, 'QqBotRule', '/qqbot/rule', '/qqbot/rule/list', NULL, 'QqBot:Rule:List', 'menu', '{"icon":"lucide:workflow","title":"自动回复规则"}', 1, 2),
   (2041700000000120411, 2041700000000100403, 'QqBotRuleCreate', NULL, NULL, NULL, 'QqBot:Rule:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120412, 2041700000000100403, 'QqBotRuleEdit', NULL, NULL, NULL, 'QqBot:Rule:Edit', 'button', '{"title":"common.edit"}', 1, 0),
@@ -367,6 +586,11 @@ ON DUPLICATE KEY UPDATE
   `status` = VALUES(`status`),
   `sort` = VALUES(`sort`),
   `is_deleted` = 0;
+
+UPDATE `admin_menu`
+SET `status` = 0,
+    `is_deleted` = 1
+WHERE `name` IN ('QqBotEventPlugin', 'QqBotEventPluginToggle');
 
 INSERT IGNORE INTO `admin_role_menu` (`role_id`, `menu_id`)
 SELECT role.`id`, menu.`id`

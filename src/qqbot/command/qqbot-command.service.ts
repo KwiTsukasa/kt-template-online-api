@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
+import { QqbotAccountService } from '../account/qqbot-account.service';
 import { QqbotPluginRegistryService } from '../plugin/qqbot-plugin-registry.service';
 import type {
   QqbotCommandParserType,
@@ -24,6 +25,7 @@ export class QqbotCommandService {
     private readonly commandRepository: Repository<QqbotCommand>,
     @InjectRepository(QqbotCommandLog)
     private readonly commandLogRepository: Repository<QqbotCommandLog>,
+    private readonly accountService: QqbotAccountService,
     private readonly pluginRegistry: QqbotPluginRegistryService,
   ) {}
 
@@ -38,6 +40,15 @@ export class QqbotCommandService {
         '(command.code LIKE :keyword OR command.name LIKE :keyword OR command.aliases LIKE :keyword)',
         { keyword: `%${query.keyword}%` },
       );
+    }
+    if (query.selfId) {
+      const boundIds = await this.accountService.getBoundCommandIds(
+        query.selfId,
+      );
+      if (boundIds.length === 0) {
+        return { list: [], pageNo, pageSize, total: 0 };
+      }
+      builder.andWhere('command.id IN (:...boundIds)', { boundIds });
     }
     if (query.pluginKey) {
       builder.andWhere('command.pluginKey = :pluginKey', {
@@ -75,10 +86,15 @@ export class QqbotCommandService {
   }
 
   async listEnabledForMessage(message: QqbotNormalizedMessage) {
+    const boundIds = await this.accountService.getBoundCommandIds(
+      message.selfId,
+    );
+    if (boundIds.length === 0) return [];
     return this.commandRepository
       .createQueryBuilder('command')
       .where('command.isDeleted = :isDeleted', { isDeleted: false })
       .andWhere('command.enabled = :enabled', { enabled: true })
+      .andWhere('command.id IN (:...boundIds)', { boundIds })
       .andWhere('command.targetType IN (:...targetTypes)', {
         targetTypes: ['all', message.messageType],
       })
@@ -97,7 +113,7 @@ export class QqbotCommandService {
 
   async save(body: QqbotCommandBodyDto) {
     const payload = await this.normalizeBody(body);
-    await this.assertCodeAvailable(payload.code);
+    await this.assertCodeAvailable(payload.code || '');
     const saved = await this.commandRepository.save(
       this.commandRepository.create(payload),
     );
@@ -110,7 +126,7 @@ export class QqbotCommandService {
       ...this.toRawBody(current),
       ...body,
     });
-    await this.assertCodeAvailable(payload.code, body.id);
+    await this.assertCodeAvailable(payload.code || '', body.id);
     await this.commandRepository.update({ id: body.id }, payload);
     return true;
   }
@@ -218,9 +234,7 @@ export class QqbotCommandService {
   private stringifyList(value: string[] | string | undefined, fallback = []) {
     const list = Array.isArray(value)
       ? value
-      : `${value || ''}`
-          .split(',')
-          .map((item) => item.trim());
+      : `${value || ''}`.split(',').map((item) => item.trim());
     const normalized = list
       .map((item) => `${item || ''}`.trim())
       .filter(Boolean);

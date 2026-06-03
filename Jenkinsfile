@@ -25,6 +25,45 @@ def isPublishBranch(String branchName, String pattern) {
   return branchName ==~ pattern
 }
 
+def requiredRuntimeEnvKeys() {
+  return [
+    'DB_HOST',
+    'DB_PORT',
+    'DB_USERNAME',
+    'DB_PASSWORD',
+    'DB_DATABASE',
+    'ADMIN_TOKEN_SECRET',
+    'FFLOGS_CLIENT_ID',
+    'FFLOGS_CLIENT_SECRET',
+  ]
+}
+
+def buildEnvFileValidationScript(String envFile) {
+  def checks = requiredRuntimeEnvKeys().collect { key ->
+    """
+      if ! grep -Eq '^[[:space:]]*${key}[[:space:]]*=[[:space:]]*[^[:space:]]+' "\$ENV_FILE"; then
+        echo "Missing required runtime env key: ${key}"
+        missing=1
+      fi
+    """.stripIndent()
+  }.join('\n')
+
+  return """
+    set -e
+    ENV_FILE=${shellQuote(envFile)}
+    if [ ! -f "\$ENV_FILE" ]; then
+      echo "Container env file not found: ${envFile}"
+      exit 1
+    fi
+    missing=0
+    ${checks}
+    if [ "\$missing" -ne 0 ]; then
+      echo "Update the private .env.production used by Jenkins before deploying."
+      exit 1
+    fi
+  """.stripIndent()
+}
+
 pipeline {
   agent { label 'kt-node-agent' }
 
@@ -283,7 +322,12 @@ pipeline {
               echo "K8s manifest file not found: ${manifestFile}"
               exit 1
             fi
+          """.stripIndent())
 
+          runCmd(buildEnvFileValidationScript(containerEnvFile))
+
+          runCmd("""
+            set -e
             kubectl ${kubeConfigArg} get namespace ${shellQuote(namespace)} >/dev/null
             kubectl ${kubeConfigArg} ${namespaceArg} create secret generic ${shellQuote(envSecret)} \\
               --from-env-file=${shellQuote(containerEnvFile)} \\
@@ -334,7 +378,12 @@ pipeline {
               echo "/home/jenkins/agent/env/kt-template-online-api/.env.production"
               exit 1
             fi
+          """.stripIndent())
 
+          runCmd(buildEnvFileValidationScript(containerEnvFile))
+
+          runCmd("""
+            set -e
             docker rm -f '${containerName}' >/dev/null 2>&1 || true
             docker run -d \\
               --name '${containerName}' \\

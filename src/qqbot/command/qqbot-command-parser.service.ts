@@ -61,6 +61,9 @@ export class QqbotCommandParserService {
     if (command.parserKey === 'ff14Price') {
       return this.parseFf14PriceInput(rawArgs);
     }
+    if (command.parserKey === 'fflogsCharacter') {
+      return this.parseFflogsCharacterInput(rawArgs);
+    }
     const args = rawArgs ? rawArgs.split(/\s+/).filter(Boolean) : [];
     return {
       args,
@@ -135,6 +138,81 @@ export class QqbotCommandParserService {
       raw: rawArgs,
       region,
       world,
+    };
+  }
+
+  private parseFflogsCharacterInput(rawArgs: string) {
+    const tokens = rawArgs.split(/\s+/).filter(Boolean);
+    const flags = new Map<string, string | true>();
+    const positional: string[] = [];
+
+    for (const token of tokens) {
+      if (token.includes('=')) {
+        const [key, ...rest] = token.split('=');
+        flags.set(key, rest.join('='));
+      } else {
+        positional.push(token);
+      }
+    }
+
+    let characterName = this.normalizeString(
+      flags.get('character') ||
+        flags.get('name') ||
+        flags.get('角色') ||
+        flags.get('角色名'),
+    );
+    let serverSlug = this.normalizeString(
+      flags.get('server') ||
+        flags.get('serverSlug') ||
+        flags.get('world') ||
+        flags.get('服务器') ||
+        flags.get('小区'),
+    );
+
+    if (!characterName && positional.length) {
+      const joined = positional.join(' ');
+      if (joined.includes('@')) {
+        const [name, server] = joined.split('@');
+        characterName = name.trim();
+        serverSlug = serverSlug || server?.trim();
+      } else if (serverSlug) {
+        characterName = joined;
+      } else if (positional.length > 1) {
+        serverSlug = positional[positional.length - 1];
+        characterName = positional.slice(0, -1).join(' ');
+      } else {
+        characterName = joined;
+      }
+    }
+
+    return {
+      characterName,
+      className: this.normalizeString(flags.get('class') || flags.get('职业')),
+      difficulty: this.normalizeString(
+        flags.get('difficulty') || flags.get('难度'),
+      ),
+      metric: this.normalizeString(flags.get('metric') || flags.get('指标')),
+      partition: this.normalizeString(
+        flags.get('partition') || flags.get('分区'),
+      ),
+      raw: rawArgs,
+      role: this.normalizeString(flags.get('role') || flags.get('职责')),
+      serverRegion: this.normalizeString(
+        flags.get('region') ||
+          flags.get('serverRegion') ||
+          flags.get('地区') ||
+          flags.get('服务器地区'),
+      ),
+      serverSlug,
+      size: this.normalizeString(flags.get('size') || flags.get('人数')),
+      specName: this.normalizeString(flags.get('spec') || flags.get('专精')),
+      text: rawArgs,
+      timeframe: this.normalizeString(
+        flags.get('timeframe') || flags.get('时间') || flags.get('范围'),
+      ),
+      zoneId: this.normalizeString(
+        flags.get('zone') || flags.get('zoneId') || flags.get('副本'),
+      ),
     };
   }
 

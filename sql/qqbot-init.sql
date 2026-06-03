@@ -515,7 +515,8 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO `qqbot_command` (`id`, `code`, `name`, `aliases`, `prefixes`, `plugin_key`, `operation_key`, `parser_key`, `target_type`, `default_params`, `reply_template`, `error_template`, `enabled`, `priority`, `cooldown_ms`, `remark`)
 VALUES
-  (2041700000000300501, 'ff14_price', 'FF14 查价', '["查价","price","ff14price"]', '["/","!","！"]', 'ff14Market', 'ff14.market.price', 'ff14Price', 'all', '{"language":"chs","world":"中国"}', '', 'FF14 查价失败：{{error}}', 1, 0, 1500, '默认示例命令；请在账号配置中绑定后启用')
+  (2041700000000300501, 'ff14_price', 'FF14 查价', '["查价","price","ff14price"]', '["/","!","！"]', 'ff14Market', 'ff14.market.price', 'ff14Price', 'all', '{"language":"chs","world":"中国"}', '', 'FF14 查价失败：{{error}}', 1, 0, 1500, '默认示例命令；请在账号配置中绑定后启用'),
+  (2041700000000300502, 'fflogs_character', 'FFLogs 查询', '["fflogs","logs","查logs","查log"]', '["/","!","！"]', 'fflogs', 'fflogs.character.summary', 'fflogsCharacter', 'all', '{"serverRegion":"CN"}', '', 'FFLogs 查询失败：{{error}}', 1, 0, 3000, '查询 FFLogs 角色公开排名；格式：/fflogs 角色名 服务器')
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `plugin_key` = VALUES(`plugin_key`),

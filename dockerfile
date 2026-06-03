@@ -3,6 +3,13 @@ FROM node:22-bookworm-slim
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV APP_PORT=48085
+ENV FFLOGS_BASE_URL=https://www.fflogs.com
+ENV FFLOGS_WEB_BASE_URL=https://cn.fflogs.com
+ENV FFLOGS_GRAPHQL_URL=https://www.fflogs.com/api/v2/client
+ENV FFLOGS_TOKEN_URL=https://www.fflogs.com/oauth/token
+ENV FFLOGS_DEFAULT_SERVER_REGION=CN
+ENV FFLOGS_REQUEST_TIMEOUT_MS=10000
 
 COPY package.json pnpm-lock.yaml ./
 

@@ -806,9 +806,9 @@ function qqbotAccountExample() {
 function qqbotCommandExample() {
   return {
     id: '1000000000000000001',
-    name: 'FF14 查价',
-    command: '/price',
-    pluginKey: 'ff14Market',
+    name: 'FFLogs 查询',
+    command: '/fflogs 角色名 服务器',
+    pluginKey: 'fflogs',
     enabled: true,
   };
 }
@@ -859,10 +859,10 @@ function qqbotPermissionExample() {
 
 function qqbotPluginExample() {
   return {
-    key: 'ff14Market',
-    name: 'FF14 查价',
+    key: 'fflogs',
+    name: 'FFLogs 查询',
     triggerMode: 'command',
-    description: '查询 FF14 市场价格',
+    description: '查询 FFLogs 角色公开排名',
   };
 }
 
@@ -904,8 +904,8 @@ function permissionConfigExample() {
 
 function pluginHealthExample() {
   return {
-    key: 'ff14Market',
-    name: 'FF14 查价',
+    key: 'fflogs',
+    name: 'FFLogs 查询',
     available: true,
     message: '插件可用',
   };

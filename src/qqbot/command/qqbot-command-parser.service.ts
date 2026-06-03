@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { DictService } from '../../admin/dict/dict.service';
 import type { QqbotCommand } from './qqbot-command.entity';
 import type { QqbotNormalizedMessage } from '../qqbot.types';
 import {
+  buildQqbotFf14MarketCatalog,
+  QQBOT_FF14_MARKET_DICT_CODES,
+  type QqbotFf14MarketCatalog,
   isQqbotFf14DataCenterName,
   isQqbotFf14LocationName,
   isQqbotFf14RegionName,
@@ -18,7 +22,9 @@ export type QqbotCommandMatchResult = {
 
 @Injectable()
 export class QqbotCommandParserService {
-  match(command: QqbotCommand, message: QqbotNormalizedMessage) {
+  constructor(private readonly dictService: DictService) {}
+
+  async match(command: QqbotCommand, message: QqbotNormalizedMessage) {
     const source = `${message.messageText || ''}`.trim();
     if (!source) return null;
 
@@ -31,7 +37,7 @@ export class QqbotCommandParserService {
         if (rawArgs === null) continue;
         return {
           alias,
-          input: this.parseInput(command, rawArgs),
+          input: await this.parseInput(command, rawArgs),
           matched: true,
           rawArgs,
         } satisfies QqbotCommandMatchResult;
@@ -57,7 +63,7 @@ export class QqbotCommandParserService {
     return null;
   }
 
-  private parseInput(command: QqbotCommand, rawArgs: string) {
+  private async parseInput(command: QqbotCommand, rawArgs: string) {
     if (command.parserKey === 'ff14Price') {
       return this.parseFf14PriceInput(rawArgs);
     }
@@ -72,7 +78,8 @@ export class QqbotCommandParserService {
     };
   }
 
-  private parseFf14PriceInput(rawArgs: string) {
+  private async parseFf14PriceInput(rawArgs: string) {
+    const catalog = await this.getFf14MarketCatalog();
     const tokens = rawArgs.split(/\s+/).filter(Boolean);
     const flags = new Map<string, string | true>();
     const positional: string[] = [];
@@ -113,7 +120,7 @@ export class QqbotCommandParserService {
     }
 
     if (!world && !dataCenter && positional.length > 1) {
-      const picked = this.pickTrailingFf14Location(positional);
+      const picked = this.pickTrailingFf14Location(catalog, positional);
       if (picked) {
         dataCenter = picked.dataCenter || dataCenter;
         item = picked.item;
@@ -216,9 +223,12 @@ export class QqbotCommandParserService {
     };
   }
 
-  private pickTrailingFf14Location(positional: string[]) {
+  private pickTrailingFf14Location(
+    catalog: QqbotFf14MarketCatalog,
+    positional: string[],
+  ) {
     const last = positional[positional.length - 1];
-    if (!isQqbotFf14LocationName(last)) return null;
+    if (!isQqbotFf14LocationName(catalog, last)) return null;
 
     const path = splitQqbotFf14WorldPath(last);
     if (path.dataCenter && path.world) {
@@ -234,10 +244,11 @@ export class QqbotCommandParserService {
     const beforePrevious = positional[positional.length - 3];
     if (
       previous &&
-      isQqbotFf14DataCenterName(previous) &&
-      isQqbotFf14WorldName(last)
+      isQqbotFf14DataCenterName(catalog, previous) &&
+      isQqbotFf14WorldName(catalog, last)
     ) {
-      const hasRegion = beforePrevious && isQqbotFf14RegionName(beforePrevious);
+      const hasRegion =
+        beforePrevious && isQqbotFf14RegionName(catalog, beforePrevious);
       return {
         dataCenter: previous,
         item: positional.slice(0, hasRegion ? -3 : -2).join(' '),
@@ -248,8 +259,8 @@ export class QqbotCommandParserService {
 
     if (
       previous &&
-      isQqbotFf14RegionName(previous) &&
-      isQqbotFf14DataCenterName(last)
+      isQqbotFf14RegionName(catalog, previous) &&
+      isQqbotFf14DataCenterName(catalog, last)
     ) {
       return {
         dataCenter: last,
@@ -262,6 +273,21 @@ export class QqbotCommandParserService {
       item: positional.slice(0, -1).join(' '),
       world: last,
     };
+  }
+
+  private async getFf14MarketCatalog() {
+    const [regions, dataCenters, worlds] = await Promise.all([
+      this.dictService.getDictItemsByKey(QQBOT_FF14_MARKET_DICT_CODES.region),
+      this.dictService.getDictItemsByKey(
+        QQBOT_FF14_MARKET_DICT_CODES.dataCenter,
+      ),
+      this.dictService.getDictItemsByKey(QQBOT_FF14_MARKET_DICT_CODES.world),
+    ]);
+    return buildQqbotFf14MarketCatalog({
+      dataCenters,
+      regions,
+      worlds,
+    });
   }
 
   private normalizeHq(value?: string | true) {

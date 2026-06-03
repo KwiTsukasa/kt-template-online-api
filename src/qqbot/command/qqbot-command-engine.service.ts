@@ -23,7 +23,7 @@ export class QqbotCommandEngineService {
   async handleMessage(message: QqbotNormalizedMessage) {
     const commands = await this.commandService.listEnabledForMessage(message);
     for (const command of commands) {
-      const matched = this.commandParser.match(command, message);
+      const matched = await this.commandParser.match(command, message);
       if (!matched) continue;
       if (this.commandService.isInCooldown(command)) return true;
 
@@ -61,7 +61,8 @@ export class QqbotCommandEngineService {
           status: 'success',
         });
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : '命令执行失败';
+        const errorMessage =
+          err instanceof Error ? err.message : '命令执行失败';
         await this.commandService.logExecution({
           command,
           errorMessage,
@@ -82,7 +83,7 @@ export class QqbotCommandEngineService {
     const command = body.commandId
       ? await this.commandService.findById(body.commandId)
       : await this.findMatchedCommand(message);
-    const matched = this.commandParser.match(command, message);
+    const matched = await this.commandParser.match(command, message);
     if (!matched) {
       return {
         matched: false,
@@ -127,13 +128,12 @@ export class QqbotCommandEngineService {
 
   private async findMatchedCommand(message: QqbotNormalizedMessage) {
     const commands = await this.commandService.listEnabledForMessage(message);
-    const command = commands.find((item) =>
-      this.commandParser.match(item, message),
-    );
-    if (!command) {
-      throw new Error('未匹配到命令');
+    for (const command of commands) {
+      if (await this.commandParser.match(command, message)) {
+        return command;
+      }
     }
-    return command;
+    throw new Error('未匹配到命令');
   }
 
   private buildReplyText(
@@ -202,7 +202,9 @@ export class QqbotCommandEngineService {
     );
   }
 
-  private buildPreviewMessage(body: QqbotCommandTestDto): QqbotNormalizedMessage {
+  private buildPreviewMessage(
+    body: QqbotCommandTestDto,
+  ): QqbotNormalizedMessage {
     const targetType = body.targetType || 'private';
     const targetId = body.targetId || body.userId || '10000';
     const userId = body.userId || targetId;

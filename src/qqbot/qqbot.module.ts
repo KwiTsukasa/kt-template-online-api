@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/admin/auth/admin-auth-guard.module';
+import { DictModule } from '@/admin/dict/dict.module';
 import { QqbotAccountController } from './account/qqbot-account.controller';
 import { QqbotAccountAbility } from './account/qqbot-account-ability.entity';
 import { QqbotAccount } from './account/qqbot-account.entity';
@@ -55,6 +56,7 @@ import { QqbotSendService } from './send/qqbot-send.service';
   imports: [
     ConfigModule,
     AdminAuthGuardModule,
+    DictModule,
     TypeOrmModule.forFeature([
       QqbotAccount,
       QqbotAccountAbility,

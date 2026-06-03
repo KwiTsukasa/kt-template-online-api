@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as http from 'node:http';
 import * as https from 'node:https';
+import { DictService } from '../../../admin/dict/dict.service';
 
 type HttpMethod = 'GET' | 'POST';
 
@@ -34,6 +35,19 @@ type FflogsCharacterSummaryResponse = {
 };
 
 type FflogsRankingItem = Record<string, any>;
+
+const FFLOGS_LOCALIZATION_DICT_CODES = {
+  encounter: 'FFLOGS_ENCOUNTER_LABEL',
+  job: 'FFLOGS_JOB_LABEL',
+  metric: 'FFLOGS_METRIC_LABEL',
+  role: 'FFLOGS_ROLE_LABEL',
+  serverRegion: 'FFLOGS_SERVER_REGION_LABEL',
+};
+
+type FflogsLocalizationMaps = Record<
+  keyof typeof FFLOGS_LOCALIZATION_DICT_CODES,
+  Map<string, string>
+>;
 
 export type QqbotFflogsCharacterSummaryInput = {
   character?: string;
@@ -74,7 +88,10 @@ export class QqbotFflogsClientService {
   private readonly tokenUrl: string;
   private readonly webBaseUrl: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly dictService: DictService,
+  ) {
     this.baseUrl = this.normalizeBaseUrl(
       this.configService.get<string>('FFLOGS_BASE_URL') ||
         'https://www.fflogs.com',
@@ -196,6 +213,7 @@ export class QqbotFflogsClientService {
       character.server?.slug || serverSlug,
       character.name || characterName,
     );
+    const localizationMaps = await this.getLocalizationMaps();
 
     return {
       allStarText,
@@ -206,7 +224,9 @@ export class QqbotFflogsClientService {
         allStarText,
         characterId: character.id,
         characterName: character.name || characterName,
+        metric: variables.metric || 'DPS',
         rankings,
+        localizationMaps,
         serverName,
         serverRegion,
         url,
@@ -327,29 +347,51 @@ export class QqbotFflogsClientService {
     allStarText?: string;
     characterId?: number;
     characterName: string;
+    localizationMaps: FflogsLocalizationMaps;
+    metric: string;
     rankings: FflogsRankingItem[];
     serverName: string;
     serverRegion: string;
     url: string;
   }) {
-    const header = `FFLogs：${params.characterName} - ${params.serverName} (${params.serverRegion})`;
-    const idText = params.characterId ? `角色 ID：${params.characterId}` : '';
+    const region = this.localizeServerRegion(
+      params.serverRegion,
+      params.localizationMaps,
+    );
+    const header = `FFLogs 战绩：${params.characterName} @ ${params.serverName}（${region}）`;
+    const idText = params.characterId ? `角色ID：${params.characterId}` : '';
     const rankingText = params.rankings.length
-      ? params.rankings
-          .map((item, index) => this.formatRanking(item, index))
-          .join('\n')
-      : '暂无公开排名数据';
+      ? [
+          '公开排名：',
+          ...params.rankings.map((item, index) =>
+            this.formatRanking(
+              item,
+              index,
+              params.metric,
+              params.localizationMaps,
+            ),
+          ),
+        ].join('\n')
+      : '公开排名：暂无公开排名数据';
     return [header, idText, params.allStarText, rankingText, params.url]
       .filter(Boolean)
       .join('\n');
   }
 
-  private formatRanking(item: FflogsRankingItem, index: number) {
-    const encounter = this.pickText(
-      item.encounter?.name,
-      item.encounterName,
-      item.name,
-      `记录 ${index + 1}`,
+  private formatRanking(
+    item: FflogsRankingItem,
+    index: number,
+    fallbackMetric: string,
+    localizationMaps: FflogsLocalizationMaps,
+  ) {
+    const encounter = this.localizeEncounter(
+      this.pickText(
+        item.encounter?.name,
+        item.encounterName,
+        item.name,
+        `记录 ${index + 1}`,
+      ),
+      localizationMaps,
     );
     const percent = this.pickNumber(
       item.rankPercent,
@@ -358,16 +400,29 @@ export class QqbotFflogsClientService {
       item.historicalPercent,
     );
     const amount = this.pickNumber(item.bestAmount, item.amount, item.total);
-    const spec = this.pickText(item.spec, item.specName, item.class, item.role);
+    const spec = this.localizeSpec(
+      this.pickText(item.spec, item.specName, item.class, item.role),
+      localizationMaps,
+    );
     const rank = this.pickText(item.rank, item.regionRank, item.serverRank);
+
+    if (!this.hasMeaningfulRanking(percent, amount)) {
+      return `${index + 1}. ${encounter}：暂无有效排名`;
+    }
+
+    const metric = this.localizeMetric(
+      this.pickText(item.metric, item.metricName, fallbackMetric),
+      localizationMaps,
+    );
     const parts = [
-      `${index + 1}. ${encounter}`,
-      percent !== undefined ? `${this.formatNumber(percent)}%` : '',
-      amount !== undefined ? this.formatNumber(amount) : '',
+      `${index + 1}. ${encounter}：${
+        percent !== undefined ? `${this.formatNumber(percent)}%` : '百分位暂无'
+      }`,
+      amount !== undefined ? `${metric} ${this.formatNumber(amount)}` : '',
       spec,
-      rank ? `Rank ${rank}` : '',
+      rank ? this.formatRank(rank) : '',
     ].filter(Boolean);
-    return parts.join(' / ');
+    return parts.join(' ｜ ');
   }
 
   private pickRankings(payload: any): FflogsRankingItem[] {
@@ -399,8 +454,8 @@ export class QqbotFflogsClientService {
       allStars.serverRank,
     );
     const parts = [
-      points !== undefined ? `全明星分：${this.formatNumber(points)}` : '',
-      rank ? `名次：${rank}` : '',
+      points !== undefined ? `全明星：${this.formatNumber(points)}分` : '',
+      rank ? this.formatRank(rank) : '',
     ].filter(Boolean);
     return parts.length ? parts.join(' / ') : undefined;
   }
@@ -495,10 +550,96 @@ export class QqbotFflogsClientService {
 
   private formatNumber(value: number) {
     const digits = Math.abs(value) >= 100 ? 0 : 1;
-    return value.toLocaleString('en-US', {
+    return value.toLocaleString('zh-CN', {
       maximumFractionDigits: digits,
       minimumFractionDigits: 0,
     });
+  }
+
+  private formatRank(value: string) {
+    const rank = value.replace(/^#/, '').trim();
+    if (!rank) return '';
+    if (rank.startsWith('第') || rank.endsWith('名')) return `排名${rank}`;
+    return `排名第${rank}`;
+  }
+
+  private hasMeaningfulRanking(percent?: number, amount?: number) {
+    return (
+      (percent !== undefined && percent > 0) ||
+      (amount !== undefined && amount > 0)
+    );
+  }
+
+  private async getLocalizationMaps(): Promise<FflogsLocalizationMaps> {
+    const [encounter, job, metric, role, serverRegion] = await Promise.all([
+      this.getNormalizedDictMap(FFLOGS_LOCALIZATION_DICT_CODES.encounter),
+      this.getNormalizedDictMap(FFLOGS_LOCALIZATION_DICT_CODES.job),
+      this.getNormalizedDictMap(FFLOGS_LOCALIZATION_DICT_CODES.metric),
+      this.getNormalizedDictMap(FFLOGS_LOCALIZATION_DICT_CODES.role),
+      this.getNormalizedDictMap(FFLOGS_LOCALIZATION_DICT_CODES.serverRegion),
+    ]);
+
+    return {
+      encounter,
+      job,
+      metric,
+      role,
+      serverRegion,
+    };
+  }
+
+  private async getNormalizedDictMap(dictCode: string) {
+    const dicts = await this.dictService.getDictByKey(dictCode);
+    return new Map(
+      dicts.map(({ label, value }) => [
+        this.normalizeLookupKey(`${value}`),
+        `${label}`,
+      ]),
+    );
+  }
+
+  private localizeEncounter(
+    value: string,
+    localizationMaps: FflogsLocalizationMaps,
+  ) {
+    return (
+      localizationMaps.encounter.get(this.normalizeLookupKey(value)) || value
+    );
+  }
+
+  private localizeMetric(
+    value: string,
+    localizationMaps: FflogsLocalizationMaps,
+  ) {
+    return (
+      localizationMaps.metric.get(this.normalizeLookupKey(value)) ||
+      value ||
+      'DPS'
+    );
+  }
+
+  private localizeServerRegion(
+    value: string,
+    localizationMaps: FflogsLocalizationMaps,
+  ) {
+    return (
+      localizationMaps.serverRegion.get(this.normalizeLookupKey(value)) ||
+      value.toUpperCase()
+    );
+  }
+
+  private localizeSpec(
+    value: string,
+    localizationMaps: FflogsLocalizationMaps,
+  ) {
+    const key = this.normalizeLookupKey(value);
+    return (
+      localizationMaps.job.get(key) || localizationMaps.role.get(key) || value
+    );
+  }
+
+  private normalizeLookupKey(value: string) {
+    return `${value || ''}`.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
   private removeUndefined(input: Record<string, any>) {

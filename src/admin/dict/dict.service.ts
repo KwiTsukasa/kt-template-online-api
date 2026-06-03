@@ -6,6 +6,12 @@ import { AdminDict } from './admin-dict.entity';
 
 const COMPONENT_TYPE_DICT_KEY = 'COMPONENT_TYPE';
 
+export type AdminDictItem = {
+  childrenCode?: string | null;
+  label: string;
+  value: string;
+};
+
 @Injectable()
 export class DictService implements OnApplicationBootstrap {
   constructor(
@@ -18,6 +24,15 @@ export class DictService implements OnApplicationBootstrap {
   }
 
   async getDictByKey(dictKey: string): Promise<Dict[]> {
+    const list = await this.getDictItemsByKey(dictKey);
+
+    return list.map(({ label, value }) => ({
+      label,
+      value: Number.isNaN(Number(value)) ? value : Number(value),
+    }));
+  }
+
+  async getDictItemsByKey(dictKey: string): Promise<AdminDictItem[]> {
     const list = await this.dictRepository.find({
       where: {
         dictCode: dictKey,
@@ -30,9 +45,10 @@ export class DictService implements OnApplicationBootstrap {
       },
     });
 
-    return list.map(({ label, value }) => ({
+    return list.map(({ childrenCode, label, value }) => ({
+      childrenCode,
       label,
-      value: Number.isNaN(Number(value)) ? value : Number(value),
+      value,
     }));
   }
 

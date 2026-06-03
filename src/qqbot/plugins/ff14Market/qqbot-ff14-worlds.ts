@@ -1,7 +1,15 @@
+import type { AdminDictItem } from '../../../admin/dict/dict.service';
+
 export type QqbotFf14DataCenter = {
   name: string;
   region: string;
   worlds: string[];
+};
+
+export type QqbotFf14MarketCatalog = {
+  dataCenters: QqbotFf14DataCenter[];
+  defaultRegion?: string;
+  regions: string[];
 };
 
 export type QqbotFf14MarketTarget = {
@@ -12,80 +20,76 @@ export type QqbotFf14MarketTarget = {
   world?: string;
 };
 
-export const QQBOT_FF14_DEFAULT_REGION = '中国';
+export const QQBOT_FF14_MARKET_DICT_CODES = {
+  dataCenter: 'FF14_MARKET_DATA_CENTER',
+  region: 'FF14_MARKET_REGION',
+  world: 'FF14_MARKET_WORLD',
+};
 
-export const QQBOT_FF14_CHINA_DATA_CENTERS: QqbotFf14DataCenter[] = [
-  {
-    name: '陆行鸟',
-    region: QQBOT_FF14_DEFAULT_REGION,
-    worlds: [
-      '红玉海',
-      '神意之地',
-      '拉诺西亚',
-      '幻影群岛',
-      '萌芽池',
-      '宇宙和音',
-      '沃仙曦染',
-      '晨曦王座',
-    ],
-  },
-  {
-    name: '莫古力',
-    region: QQBOT_FF14_DEFAULT_REGION,
-    worlds: [
-      '白银乡',
-      '白金幻象',
-      '神拳痕',
-      '潮风亭',
-      '旅人栈桥',
-      '拂晓之间',
-      '龙巢神殿',
-      '梦羽宝境',
-    ],
-  },
-  {
-    name: '猫小胖',
-    region: QQBOT_FF14_DEFAULT_REGION,
-    worlds: [
-      '紫水栈桥',
-      '延夏',
-      '静语庄园',
-      '摩杜纳',
-      '海猫茶屋',
-      '柔风海湾',
-      '琥珀原',
-    ],
-  },
-  {
-    name: '豆豆柴',
-    region: QQBOT_FF14_DEFAULT_REGION,
-    worlds: ['水晶塔', '银泪湖', '太阳海岸', '伊修加德', '红茶川'],
-  },
-];
+export function buildQqbotFf14MarketCatalog(input: {
+  dataCenters: AdminDictItem[];
+  regions: AdminDictItem[];
+  worlds: AdminDictItem[];
+}): QqbotFf14MarketCatalog {
+  const regions = input.regions.map(getDictDisplayValue).filter(Boolean);
+  const defaultRegion = regions[0];
+  const dataCenters = input.dataCenters
+    .map((item) => {
+      const name = getDictDisplayValue(item);
+      if (!name) return null;
+      return {
+        name,
+        region:
+          normalizeQqbotFf14WorldValue(item.childrenCode) || defaultRegion,
+        worlds: input.worlds
+          .filter(({ childrenCode }) => childrenCode === getDictRawValue(item))
+          .map(getDictDisplayValue)
+          .filter(Boolean),
+      };
+    })
+    .filter((item): item is QqbotFf14DataCenter => !!item);
 
-export function isQqbotFf14DataCenterName(value?: string) {
+  return {
+    dataCenters,
+    defaultRegion,
+    regions,
+  };
+}
+
+export function isQqbotFf14DataCenterName(
+  catalog: QqbotFf14MarketCatalog,
+  value?: string,
+) {
   const name = normalizeQqbotFf14WorldValue(value);
-  return QQBOT_FF14_CHINA_DATA_CENTERS.some((item) => item.name === name);
+  return catalog.dataCenters.some((item) => item.name === name);
 }
 
-export function isQqbotFf14RegionName(value?: string) {
-  return normalizeQqbotFf14WorldValue(value) === QQBOT_FF14_DEFAULT_REGION;
-}
-
-export function isQqbotFf14WorldName(value?: string) {
+export function isQqbotFf14RegionName(
+  catalog: QqbotFf14MarketCatalog,
+  value?: string,
+) {
   const name = normalizeQqbotFf14WorldValue(value);
-  return QQBOT_FF14_CHINA_DATA_CENTERS.some((item) =>
-    item.worlds.includes(name),
-  );
+  return catalog.regions.includes(name);
 }
 
-export function isQqbotFf14LocationName(value?: string) {
+export function isQqbotFf14WorldName(
+  catalog: QqbotFf14MarketCatalog,
+  value?: string,
+) {
+  const name = normalizeQqbotFf14WorldValue(value);
+  return catalog.dataCenters.some((item) => item.worlds.includes(name));
+}
+
+export function isQqbotFf14LocationName(
+  catalog: QqbotFf14MarketCatalog,
+  value?: string,
+) {
   const name = normalizeQqbotFf14WorldValue(value);
   const path = splitQqbotFf14WorldPath(name);
   return (
-    isQqbotFf14RegionName(name) ||
-    isQqbotFf14DataCenterName(name) ||
-    isQqbotFf14WorldName(name) ||
+    isQqbotFf14RegionName(catalog, name) ||
+    isQqbotFf14DataCenterName(catalog, name) ||
+    isQqbotFf14WorldName(catalog, name) ||
     (!!path.dataCenter && !!path.world)
   );
 }
@@ -114,19 +118,24 @@ export function splitQqbotFf14WorldPath(value?: string) {
   };
 }
 
-export function findQqbotFf14DataCenterByWorld(world?: string) {
+export function findQqbotFf14DataCenterByWorld(
+  catalog: QqbotFf14MarketCatalog,
+  world?: string,
+) {
   const worldName = normalizeQqbotFf14WorldValue(world);
-  return QQBOT_FF14_CHINA_DATA_CENTERS.find((item) =>
-    item.worlds.includes(worldName),
-  );
+  return catalog.dataCenters.find((item) => item.worlds.includes(worldName));
 }
 
-export function resolveQqbotFf14MarketTarget(params: {
-  dataCenter?: string;
-  fallback?: string;
-  region?: string;
-  world?: string;
-}): QqbotFf14MarketTarget {
+export function resolveQqbotFf14MarketTarget(
+  catalog: QqbotFf14MarketCatalog,
+  params: {
+    dataCenter?: string;
+    fallback?: string;
+    region?: string;
+    world?: string;
+  },
+): QqbotFf14MarketTarget {
+  const defaultRegion = catalog.defaultRegion || '';
   const fallback = normalizeQqbotFf14WorldValue(params.fallback);
   const path = splitQqbotFf14WorldPath(params.world);
   const region = normalizeQqbotFf14WorldValue(params.region || path.region);
@@ -134,10 +143,8 @@ export function resolveQqbotFf14MarketTarget(params: {
     params.dataCenter || path.dataCenter,
   );
   const rawWorld = normalizeQqbotFf14WorldValue(path.world || params.world);
-  const world =
-    dataCenter && rawWorld === QQBOT_FF14_DEFAULT_REGION ? '' : rawWorld;
-  const raw =
-    world || dataCenter || region || fallback || QQBOT_FF14_DEFAULT_REGION;
+  const world = dataCenter && rawWorld === defaultRegion ? '' : rawWorld;
+  const raw = world || dataCenter || region || fallback || defaultRegion;
 
   if (region && dataCenter && (!world || world === region)) {
     return {
@@ -148,16 +155,16 @@ export function resolveQqbotFf14MarketTarget(params: {
     };
   }
 
-  if (raw === QQBOT_FF14_DEFAULT_REGION) {
+  if (raw && raw === defaultRegion) {
     return {
-      label: QQBOT_FF14_DEFAULT_REGION,
-      region: QQBOT_FF14_DEFAULT_REGION,
-      target: QQBOT_FF14_DEFAULT_REGION,
+      label: defaultRegion,
+      region: defaultRegion,
+      target: defaultRegion,
     };
   }
 
   if (dataCenter && world && world !== dataCenter) {
-    const matchedDataCenter = QQBOT_FF14_CHINA_DATA_CENTERS.find(
+    const matchedDataCenter = catalog.dataCenters.find(
       (item) => item.name === dataCenter,
     );
     if (matchedDataCenter && !matchedDataCenter.worlds.includes(world)) {
@@ -174,7 +181,7 @@ export function resolveQqbotFf14MarketTarget(params: {
     };
   }
 
-  const matchedWorldDataCenter = findQqbotFf14DataCenterByWorld(raw);
+  const matchedWorldDataCenter = findQqbotFf14DataCenterByWorld(catalog, raw);
   if (matchedWorldDataCenter) {
     return {
       dataCenter: matchedWorldDataCenter.name,
@@ -185,11 +192,11 @@ export function resolveQqbotFf14MarketTarget(params: {
     };
   }
 
-  if (isQqbotFf14DataCenterName(raw)) {
+  if (isQqbotFf14DataCenterName(catalog, raw)) {
     return {
       dataCenter: raw,
-      label: `${QQBOT_FF14_DEFAULT_REGION} / ${raw}`,
-      region: QQBOT_FF14_DEFAULT_REGION,
+      label: defaultRegion ? `${defaultRegion} / ${raw}` : raw,
+      region: defaultRegion,
       target: raw,
     };
   }
@@ -200,6 +207,14 @@ export function resolveQqbotFf14MarketTarget(params: {
   };
 }
 
-function normalizeQqbotFf14WorldValue(value?: string) {
+function getDictDisplayValue(item: AdminDictItem) {
+  return normalizeQqbotFf14WorldValue(item.label || item.value);
+}
+
+function getDictRawValue(item: AdminDictItem) {
+  return normalizeQqbotFf14WorldValue(item.value || item.label);
+}
+
+function normalizeQqbotFf14WorldValue(value?: string | null) {
   return `${value || ''}`.trim();
 }

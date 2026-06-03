@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as http from 'node:http';
 import * as https from 'node:https';
-import { resolveQqbotFf14MarketTarget } from './qqbot-ff14-worlds';
+import { DictService } from '../../../admin/dict/dict.service';
+import {
+  buildQqbotFf14MarketCatalog,
+  QQBOT_FF14_MARKET_DICT_CODES,
+  resolveQqbotFf14MarketTarget,
+} from './qqbot-ff14-worlds';
 
 type HttpMethod = 'GET';
 
@@ -67,7 +72,10 @@ export class QqbotFf14ClientService {
   private readonly xivapiChsBaseUrl: string;
   private readonly universalisBaseUrl: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly dictService: DictService,
+  ) {
     this.xivapiBaseUrl =
       this.configService.get<string>('FF14_XIVAPI_BASE_URL') ||
       'https://v2.xivapi.com/api';
@@ -114,7 +122,7 @@ export class QqbotFf14ClientService {
     region?: string;
     world?: string;
   }): Promise<QqbotFf14PriceResult> {
-    const marketTarget = this.resolveMarketTarget(params);
+    const marketTarget = await this.resolveMarketTarget(params);
     const item = await this.resolveItem(params);
     if (item.isUntradable) {
       return {
@@ -127,9 +135,9 @@ export class QqbotFf14ClientService {
     }
 
     const url = new URL(
-      `${this.universalisBaseUrl}/${encodeURIComponent(
-        marketTarget.target,
-      )}/${item.itemId}`,
+      `${this.universalisBaseUrl}/${encodeURIComponent(marketTarget.target)}/${
+        item.itemId
+      }`,
     );
     url.searchParams.set('entries', '10');
     url.searchParams.set('listings', '10');
@@ -211,7 +219,9 @@ export class QqbotFf14ClientService {
             const total = item.total || price * quantity;
             const retainerName = item.retainerName || '未知雇员';
             const worldName = item.worldName || result.world;
-            return `[${hq}]${this.formatPrice(price)} x ${quantity} = ${this.formatPrice(
+            return `[${hq}]${this.formatPrice(
+              price,
+            )} x ${quantity} = ${this.formatPrice(
               total,
             )} ${retainerName} (${worldName})`;
           })
@@ -255,22 +265,42 @@ export class QqbotFf14ClientService {
     return Math.round(value).toLocaleString('en-US');
   }
 
-  private normalizeWorld(world?: string) {
-    const raw =
-      `${world || this.configService.get<string>('FF14_DEFAULT_WORLD') || '中国'}`.trim();
+  private normalizeWorld(world?: string, fallback?: string) {
+    const raw = `${
+      world ||
+      this.configService.get<string>('FF14_DEFAULT_WORLD') ||
+      fallback ||
+      ''
+    }`.trim();
     return raw;
   }
 
-  private resolveMarketTarget(params: {
+  private async resolveMarketTarget(params: {
     dataCenter?: string;
     region?: string;
     world?: string;
   }) {
-    return resolveQqbotFf14MarketTarget({
+    const catalog = await this.getFf14MarketCatalog();
+    return resolveQqbotFf14MarketTarget(catalog, {
       dataCenter: params.dataCenter,
-      fallback: this.normalizeWorld(params.world),
+      fallback: this.normalizeWorld(params.world, catalog.defaultRegion),
       region: params.region,
       world: params.world,
+    });
+  }
+
+  private async getFf14MarketCatalog() {
+    const [regions, dataCenters, worlds] = await Promise.all([
+      this.dictService.getDictItemsByKey(QQBOT_FF14_MARKET_DICT_CODES.region),
+      this.dictService.getDictItemsByKey(
+        QQBOT_FF14_MARKET_DICT_CODES.dataCenter,
+      ),
+      this.dictService.getDictItemsByKey(QQBOT_FF14_MARKET_DICT_CODES.world),
+    ]);
+    return buildQqbotFf14MarketCatalog({
+      dataCenters,
+      regions,
+      worlds,
     });
   }
 
@@ -328,8 +358,7 @@ export class QqbotFf14ClientService {
       'XIVAPI 物品解析',
     );
     return (data.results || []).filter(
-      (result) =>
-        result.sheet === 'Item' || result.fields?.Name || result.name,
+      (result) => result.sheet === 'Item' || result.fields?.Name || result.name,
     );
   }
 
@@ -400,9 +429,7 @@ export class QqbotFf14ClientService {
           });
           response.on('end', () => {
             if ((response.statusCode || 500) >= 400) {
-              reject(
-                new Error(`${context}失败：${response.statusCode}`),
-              );
+              reject(new Error(`${context}失败：${response.statusCode}`));
               return;
             }
             try {

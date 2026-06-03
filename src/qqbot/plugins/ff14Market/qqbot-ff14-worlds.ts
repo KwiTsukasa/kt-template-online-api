@@ -1,4 +1,7 @@
-import type { AdminDictItem } from '../../../admin/dict/dict.service';
+import type {
+  AdminDictItem,
+  AdminDictTreeItem,
+} from '../../../admin/dict/dict.service';
 
 export type QqbotFf14DataCenter = {
   name: string;
@@ -48,6 +51,40 @@ export function buildQqbotFf14MarketCatalog(input: {
       };
     })
     .filter((item): item is QqbotFf14DataCenter => !!item);
+
+  return {
+    dataCenters,
+    defaultRegion,
+    regions,
+  };
+}
+
+export function buildQqbotFf14MarketCatalogFromTree(
+  roots: AdminDictTreeItem[],
+): QqbotFf14MarketCatalog {
+  const regionNodes = roots.filter(
+    (item) => item.dictCode === QQBOT_FF14_MARKET_DICT_CODES.region,
+  );
+  const regions = regionNodes.map(getDictDisplayValue).filter(Boolean);
+  const defaultRegion = regions[0];
+  const dataCenters = regionNodes.flatMap((regionNode) => {
+    const region = getDictDisplayValue(regionNode) || defaultRegion || '';
+
+    return (regionNode.children || [])
+      .map((dataCenterNode) => {
+        const name = getDictDisplayValue(dataCenterNode);
+        if (!name) return null;
+
+        return {
+          name,
+          region,
+          worlds: (dataCenterNode.children || [])
+            .map(getDictDisplayValue)
+            .filter(Boolean),
+        };
+      })
+      .filter((item): item is QqbotFf14DataCenter => !!item);
+  });
 
   return {
     dataCenters,

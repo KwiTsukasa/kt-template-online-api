@@ -29,7 +29,7 @@ type AdminDictSerialized = {
   value: string;
 };
 
-type AdminDictTreeItem = AdminDictSerialized & {
+export type AdminDictTreeItem = AdminDictSerialized & {
   children?: AdminDictTreeItem[];
   treeKey: string;
 };

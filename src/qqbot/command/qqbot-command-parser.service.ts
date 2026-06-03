@@ -4,6 +4,7 @@ import type { QqbotCommand } from './qqbot-command.entity';
 import type { QqbotNormalizedMessage } from '../qqbot.types';
 import {
   buildQqbotFf14MarketCatalog,
+  buildQqbotFf14MarketCatalogFromTree,
   QQBOT_FF14_MARKET_DICT_CODES,
   type QqbotFf14MarketCatalog,
   isQqbotFf14DataCenterName,
@@ -276,6 +277,13 @@ export class QqbotCommandParserService {
   }
 
   private async getFf14MarketCatalog() {
+    const treeCatalog = buildQqbotFf14MarketCatalogFromTree(
+      await this.dictService.tree({
+        dictCode: QQBOT_FF14_MARKET_DICT_CODES.region,
+      }),
+    );
+    if (treeCatalog.dataCenters.length > 0) return treeCatalog;
+
     const [regions, dataCenters, worlds] = await Promise.all([
       this.dictService.getDictItemsByKey(QQBOT_FF14_MARKET_DICT_CODES.region),
       this.dictService.getDictItemsByKey(

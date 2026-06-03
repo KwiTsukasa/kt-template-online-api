@@ -5,6 +5,7 @@ import * as https from 'node:https';
 import { DictService } from '../../../admin/dict/dict.service';
 import {
   buildQqbotFf14MarketCatalog,
+  buildQqbotFf14MarketCatalogFromTree,
   QQBOT_FF14_MARKET_DICT_CODES,
   resolveQqbotFf14MarketTarget,
 } from './qqbot-ff14-worlds';
@@ -290,6 +291,13 @@ export class QqbotFf14ClientService {
   }
 
   private async getFf14MarketCatalog() {
+    const treeCatalog = buildQqbotFf14MarketCatalogFromTree(
+      await this.dictService.tree({
+        dictCode: QQBOT_FF14_MARKET_DICT_CODES.region,
+      }),
+    );
+    if (treeCatalog.dataCenters.length > 0) return treeCatalog;
+
     const [regions, dataCenters, worlds] = await Promise.all([
       this.dictService.getDictItemsByKey(QQBOT_FF14_MARKET_DICT_CODES.region),
       this.dictService.getDictItemsByKey(

@@ -17,6 +17,23 @@ export type AdminDictItem = {
   value: string;
 };
 
+type AdminDictSerialized = {
+  childrenCode?: string | null;
+  createTime?: Date;
+  dictCode: string;
+  id: string;
+  label: string;
+  sort?: number;
+  status?: number;
+  updateTime?: Date;
+  value: string;
+};
+
+type AdminDictTreeItem = AdminDictSerialized & {
+  children?: AdminDictTreeItem[];
+  treeKey: string;
+};
+
 @Injectable()
 export class DictService implements OnApplicationBootstrap {
   constructor(
@@ -104,6 +121,23 @@ export class DictService implements OnApplicationBootstrap {
         label: item.dictCode,
         value: item.dictCode,
       }));
+  }
+
+  async tree(query: AdminDictQueryDto = {}) {
+    const items = await this.dictRepository.find({
+      where: {
+        isDeleted: false,
+      },
+      order: {
+        dictCode: 'ASC',
+        sort: 'ASC',
+        createTime: 'ASC',
+      },
+    });
+    const serializedItems = items.map((item) => this.serializeDict(item));
+    const visibleItems = this.filterTreeItems(serializedItems, query);
+
+    return this.buildDictTree(visibleItems);
   }
 
   async save(body: AdminDictBodyDto) {
@@ -272,6 +306,207 @@ export class DictService implements OnApplicationBootstrap {
         value,
       },
     });
+  }
+
+  private buildDictTree(items: AdminDictSerialized[]): AdminDictTreeItem[] {
+    const byDictCode = this.groupItemsByDictCode(items);
+    const dictCodes = new Set(items.map((item) => item.dictCode));
+    const referencedCodes = new Set(
+      items
+        .map((item) => this.normalizeText(item.childrenCode))
+        .filter((childrenCode) => childrenCode && dictCodes.has(childrenCode)),
+    );
+    const rootCodes = [...dictCodes].filter(
+      (code) => !referencedCodes.has(code),
+    );
+    const targetRootCodes = rootCodes.length > 0 ? rootCodes : [...dictCodes];
+
+    return items
+      .filter((item) => targetRootCodes.includes(item.dictCode))
+      .map((item) =>
+        this.createTreeNode(
+          item,
+          byDictCode,
+          item.id,
+          new Set([item.dictCode]),
+        ),
+      );
+  }
+
+  private createTreeNode(
+    item: AdminDictSerialized,
+    byDictCode: Map<string, AdminDictSerialized[]>,
+    treeKey: string,
+    pathCodes: Set<string>,
+  ): AdminDictTreeItem {
+    const childrenCode = this.normalizeText(item.childrenCode);
+    const children =
+      childrenCode && !pathCodes.has(childrenCode)
+        ? byDictCode.get(childrenCode)
+        : undefined;
+    const nextPathCodes = new Set(pathCodes);
+    if (childrenCode) nextPathCodes.add(childrenCode);
+    const node: AdminDictTreeItem = {
+      ...item,
+      treeKey,
+    };
+
+    if (children?.length) {
+      node.children = children.map((child) =>
+        this.createTreeNode(
+          child,
+          byDictCode,
+          `${treeKey}/${child.id}`,
+          nextPathCodes,
+        ),
+      );
+    }
+
+    return node;
+  }
+
+  private filterTreeItems(
+    items: AdminDictSerialized[],
+    query: AdminDictQueryDto,
+  ) {
+    if (!this.hasTreeFilter(query)) return items;
+
+    const byDictCode = this.groupItemsByDictCode(items);
+    const parentsByChildrenCode = this.groupParentsByChildrenCode(items);
+    const visibleIds = new Set<string>();
+    const matchedItems = items.filter((item) =>
+      this.matchesTreeFilter(item, query),
+    );
+
+    matchedItems.forEach((item) => {
+      this.collectRelatedTreeItems(
+        item,
+        byDictCode,
+        parentsByChildrenCode,
+        visibleIds,
+      );
+    });
+
+    return items.filter((item) => visibleIds.has(item.id));
+  }
+
+  private collectRelatedTreeItems(
+    item: AdminDictSerialized,
+    byDictCode: Map<string, AdminDictSerialized[]>,
+    parentsByChildrenCode: Map<string, AdminDictSerialized[]>,
+    visibleIds: Set<string>,
+  ) {
+    if (visibleIds.has(item.id)) return;
+
+    visibleIds.add(item.id);
+
+    const parents = parentsByChildrenCode.get(item.dictCode) || [];
+    parents.forEach((parent) =>
+      this.collectRelatedTreeItems(
+        parent,
+        byDictCode,
+        parentsByChildrenCode,
+        visibleIds,
+      ),
+    );
+
+    const childrenCode = this.normalizeText(item.childrenCode);
+    if (!childrenCode) return;
+
+    const children = byDictCode.get(childrenCode) || [];
+    children.forEach((child) =>
+      this.collectRelatedTreeItems(
+        child,
+        byDictCode,
+        parentsByChildrenCode,
+        visibleIds,
+      ),
+    );
+  }
+
+  private groupItemsByDictCode(items: AdminDictSerialized[]) {
+    const map = new Map<string, AdminDictSerialized[]>();
+
+    items.forEach((item) => {
+      const list = map.get(item.dictCode) || [];
+      list.push(item);
+      map.set(item.dictCode, list);
+    });
+
+    return map;
+  }
+
+  private groupParentsByChildrenCode(items: AdminDictSerialized[]) {
+    const map = new Map<string, AdminDictSerialized[]>();
+
+    items.forEach((item) => {
+      const childrenCode = this.normalizeText(item.childrenCode);
+      if (!childrenCode) return;
+
+      const list = map.get(childrenCode) || [];
+      list.push(item);
+      map.set(childrenCode, list);
+    });
+
+    return map;
+  }
+
+  private hasTreeFilter(query: AdminDictQueryDto) {
+    return (
+      [
+        query.childrenCode,
+        query.dictCode,
+        query.keyword,
+        query.label,
+        query.value,
+      ].some((value) => !!this.normalizeText(value)) ||
+      ['0', '1'].includes(String(query.status))
+    );
+  }
+
+  private matchesTreeFilter(
+    item: AdminDictSerialized,
+    query: AdminDictQueryDto,
+  ) {
+    const keyword = this.normalizeText(query.keyword);
+    if (
+      keyword &&
+      ![item.childrenCode, item.dictCode, item.label, item.value].some(
+        (value) => this.includesText(value, keyword),
+      )
+    ) {
+      return false;
+    }
+
+    if (!this.matchesLike(item.dictCode, query.dictCode)) return false;
+    if (!this.matchesLike(item.label, query.label)) return false;
+    if (!this.matchesLike(item.value, query.value)) return false;
+    if (!this.matchesLike(item.childrenCode, query.childrenCode)) return false;
+
+    if (['0', '1'].includes(String(query.status))) {
+      return Number(item.status) === Number(query.status);
+    }
+
+    return true;
+  }
+
+  private matchesLike(
+    value: number | string | null | undefined,
+    keyword?: string,
+  ) {
+    const normalizedKeyword = this.normalizeText(keyword);
+    if (!normalizedKeyword) return true;
+
+    return this.includesText(value, normalizedKeyword);
+  }
+
+  private includesText(
+    value: number | string | null | undefined,
+    keyword: string,
+  ) {
+    return this.normalizeText(value)
+      .toLowerCase()
+      .includes(keyword.toLowerCase());
   }
 
   private normalizeInput(body: AdminDictBodyDto): Partial<AdminDict> {

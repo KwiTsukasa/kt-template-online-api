@@ -66,6 +66,18 @@ export class AdminDictDto {
   updateTime?: Date;
 }
 
+export class AdminDictTreeDto extends AdminDictDto {
+  @ApiProperty({
+    example: '2041700000000300001/2041700000000300002',
+  })
+  treeKey: string;
+
+  @ApiPropertyOptional({
+    type: () => [AdminDictTreeDto],
+  })
+  children?: AdminDictTreeDto[];
+}
+
 export class AdminDictQueryDto {
   @ApiPropertyOptional()
   page?: number | string;

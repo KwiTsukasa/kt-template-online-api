@@ -23,6 +23,7 @@ import {
   AdminDictBodyDto,
   AdminDictDto,
   AdminDictQueryDto,
+  AdminDictTreeDto,
   AdminDictUpdateDto,
   DictDto,
 } from './dict.dto';
@@ -72,6 +73,35 @@ export class DictController {
   async list(@Query() query: AdminDictQueryDto) {
     const page = await this.dictService.page(query);
     return vbenPage(page.items, page.total);
+  }
+
+  @ApiOperation({ summary: '获取字典树列表' })
+  @ApiArrayResponse(AdminDictTreeDto, [
+    {
+      id: '2041700000000300001',
+      dictCode: 'COMPONENT_TYPE',
+      label: '图表',
+      value: '1',
+      childrenCode: 'CHART',
+      sort: 1,
+      status: 1,
+      treeKey: '2041700000000300001',
+      children: [
+        {
+          id: '2041700000000300002',
+          dictCode: 'CHART',
+          label: '折线图',
+          value: '1',
+          sort: 1,
+          status: 1,
+          treeKey: '2041700000000300001/2041700000000300002',
+        },
+      ],
+    },
+  ])
+  @Get('tree')
+  async tree(@Query() query: AdminDictQueryDto) {
+    return vbenSuccess(await this.dictService.tree(query));
   }
 
   @ApiOperation({ summary: '获取字典编码选项' })

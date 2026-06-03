@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS `admin_user` (
   `username` varchar(255) NOT NULL,
   `password` varchar(255) NOT NULL,
   `real_name` varchar(255) NOT NULL,
+  `dept_id` bigint DEFAULT NULL,
   `home_path` varchar(255) NOT NULL DEFAULT '',
   `timezone` varchar(255) NOT NULL DEFAULT 'Asia/Shanghai',
   `status` int NOT NULL DEFAULT 1,
@@ -52,7 +53,8 @@ CREATE TABLE IF NOT EXISTS `admin_user` (
   `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_admin_user_username` (`username`)
+  UNIQUE KEY `uk_admin_user_username` (`username`),
+  KEY `idx_admin_user_dept_id` (`dept_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `admin_dept` (
@@ -67,6 +69,38 @@ CREATE TABLE IF NOT EXISTS `admin_dept` (
   PRIMARY KEY (`id`),
   KEY `idx_admin_dept_pid` (`pid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET @admin_user_dept_id_exists := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'admin_user'
+    AND COLUMN_NAME = 'dept_id'
+);
+SET @admin_user_dept_id_sql := IF(
+  @admin_user_dept_id_exists = 0,
+  'ALTER TABLE `admin_user` ADD COLUMN `dept_id` bigint NULL AFTER `real_name`',
+  'SELECT 1'
+);
+PREPARE admin_user_dept_id_stmt FROM @admin_user_dept_id_sql;
+EXECUTE admin_user_dept_id_stmt;
+DEALLOCATE PREPARE admin_user_dept_id_stmt;
+
+SET @admin_user_dept_idx_exists := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'admin_user'
+    AND INDEX_NAME = 'idx_admin_user_dept_id'
+);
+SET @admin_user_dept_idx_sql := IF(
+  @admin_user_dept_idx_exists = 0,
+  'ALTER TABLE `admin_user` ADD INDEX `idx_admin_user_dept_id` (`dept_id`)',
+  'SELECT 1'
+);
+PREPARE admin_user_dept_idx_stmt FROM @admin_user_dept_idx_sql;
+EXECUTE admin_user_dept_idx_stmt;
+DEALLOCATE PREPARE admin_user_dept_idx_stmt;
 
 CREATE TABLE IF NOT EXISTS `admin_dict` (
   `id` bigint NOT NULL,
@@ -125,19 +159,23 @@ VALUES
   (2041700000000100101, 2041700000000100001, 'Analytics', '/analytics', '/dashboard/analytics/index', NULL, NULL, 'menu', '{"affixTab":true,"title":"page.dashboard.analytics"}', 1, 0),
   (2041700000000100102, 2041700000000100001, 'Workspace', '/workspace', '/dashboard/workspace/index', NULL, NULL, 'menu', '{"icon":"carbon:workspace","title":"page.dashboard.workspace"}', 1, 0),
   (2041700000000100002, 0, 'System', '/system', NULL, NULL, NULL, 'catalog', '{"badge":"new","badgeType":"normal","badgeVariants":"primary","icon":"carbon:settings","order":9997,"title":"system.title"}', 1, 9997),
-  (2041700000000100200, 2041700000000100002, 'SystemRole', '/system/role', '/system/role/list', NULL, 'System:Role:List', 'menu', '{"icon":"carbon:user-role","title":"system.role.title"}', 1, 0),
+  (2041700000000100199, 2041700000000100002, 'SystemUser', '/system/user', '/system/user/list', NULL, 'System:User:List', 'menu', '{"icon":"carbon:user-profile","title":"system.user.title"}', 1, 0),
+  (2041700000000120191, 2041700000000100199, 'SystemUserCreate', NULL, NULL, NULL, 'System:User:Create', 'button', '{"title":"common.create"}', 1, 0),
+  (2041700000000120192, 2041700000000100199, 'SystemUserEdit', NULL, NULL, NULL, 'System:User:Edit', 'button', '{"title":"common.edit"}', 1, 0),
+  (2041700000000120193, 2041700000000100199, 'SystemUserDelete', NULL, NULL, NULL, 'System:User:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000100200, 2041700000000100002, 'SystemRole', '/system/role', '/system/role/list', NULL, 'System:Role:List', 'menu', '{"icon":"carbon:user-role","title":"system.role.title"}', 1, 1),
   (2041700000000120001, 2041700000000100200, 'SystemRoleCreate', NULL, NULL, NULL, 'System:Role:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120002, 2041700000000100200, 'SystemRoleEdit', NULL, NULL, NULL, 'System:Role:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120003, 2041700000000100200, 'SystemRoleDelete', NULL, NULL, NULL, 'System:Role:Delete', 'button', '{"title":"common.delete"}', 1, 0),
-  (2041700000000100201, 2041700000000100002, 'SystemMenu', '/system/menu', '/system/menu/list', NULL, 'System:Menu:List', 'menu', '{"icon":"carbon:menu","title":"system.menu.title"}', 1, 0),
+  (2041700000000100201, 2041700000000100002, 'SystemMenu', '/system/menu', '/system/menu/list', NULL, 'System:Menu:List', 'menu', '{"icon":"carbon:menu","title":"system.menu.title"}', 1, 2),
   (2041700000000120101, 2041700000000100201, 'SystemMenuCreate', NULL, NULL, NULL, 'System:Menu:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120102, 2041700000000100201, 'SystemMenuEdit', NULL, NULL, NULL, 'System:Menu:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120103, 2041700000000100201, 'SystemMenuDelete', NULL, NULL, NULL, 'System:Menu:Delete', 'button', '{"title":"common.delete"}', 1, 0),
-  (2041700000000100202, 2041700000000100002, 'SystemDept', '/system/dept', '/system/dept/list', NULL, 'System:Dept:List', 'menu', '{"icon":"carbon:container-services","title":"system.dept.title"}', 1, 0),
+  (2041700000000100202, 2041700000000100002, 'SystemDept', '/system/dept', '/system/dept/list', NULL, 'System:Dept:List', 'menu', '{"icon":"carbon:container-services","title":"system.dept.title"}', 1, 3),
   (2041700000000120201, 2041700000000100202, 'SystemDeptCreate', NULL, NULL, NULL, 'System:Dept:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120202, 2041700000000100202, 'SystemDeptEdit', NULL, NULL, NULL, 'System:Dept:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120203, 2041700000000100202, 'SystemDeptDelete', NULL, NULL, NULL, 'System:Dept:Delete', 'button', '{"title":"common.delete"}', 1, 0),
-  (2041700000000100203, 2041700000000100002, 'SystemKtTableDemo', '/system/ktTableDemo', '/system/ktTableDemo/list', NULL, 'System:KtTableDemo:List', 'menu', '{"icon":"lucide:table-2","title":"system.ktTableDemo.title"}', 1, 3),
+  (2041700000000100203, 2041700000000100002, 'SystemKtTableDemo', '/system/ktTableDemo', '/system/ktTableDemo/list', NULL, 'System:KtTableDemo:List', 'menu', '{"icon":"lucide:table-2","title":"system.ktTableDemo.title"}', 1, 4),
   (2041700000000120204, 2041700000000100203, 'SystemKtTableDemoCreate', NULL, NULL, NULL, 'System:KtTableDemo:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120205, 2041700000000100203, 'SystemKtTableDemoEdit', NULL, NULL, NULL, 'System:KtTableDemo:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120206, 2041700000000100203, 'SystemKtTableDemoDelete', NULL, NULL, NULL, 'System:KtTableDemo:Delete', 'button', '{"title":"common.delete"}', 1, 0),
@@ -181,14 +219,15 @@ ON DUPLICATE KEY UPDATE
   `status` = VALUES(`status`),
   `is_deleted` = 0;
 
-INSERT INTO `admin_user` (`id`, `username`, `password`, `real_name`, `home_path`, `timezone`, `status`)
+INSERT INTO `admin_user` (`id`, `username`, `password`, `real_name`, `dept_id`, `home_path`, `timezone`, `status`)
 VALUES
-  (2041700000000000001, 'vben', '123456', 'Vben', '/workspace', 'Asia/Shanghai', 1),
-  (2041700000000000002, 'admin', '123456', 'Admin', '/workspace', 'Asia/Shanghai', 1),
-  (2041700000000000003, 'jack', '123456', 'Jack', '/analytics', 'Asia/Shanghai', 1)
+  (2041700000000000001, 'vben', '123456', 'Vben', 2041700000000200002, '/workspace', 'Asia/Shanghai', 1),
+  (2041700000000000002, 'admin', '123456', 'Admin', 2041700000000200001, '/workspace', 'Asia/Shanghai', 1),
+  (2041700000000000003, 'jack', '123456', 'Jack', 2041700000000200003, '/analytics', 'Asia/Shanghai', 1)
 ON DUPLICATE KEY UPDATE
   `password` = VALUES(`password`),
   `real_name` = VALUES(`real_name`),
+  `dept_id` = VALUES(`dept_id`),
   `home_path` = VALUES(`home_path`),
   `timezone` = VALUES(`timezone`),
   `status` = VALUES(`status`),

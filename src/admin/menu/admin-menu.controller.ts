@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAdminUser, vbenSuccess } from '@/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminUser } from '../user/admin-user.entity';
@@ -23,16 +23,19 @@ export class AdminMenuController {
   constructor(private readonly menuService: AdminMenuService) {}
 
   @Get('menu/all')
+  @ApiOperation({ summary: '获取当前用户路由菜单' })
   async all(@CurrentAdminUser() user: AdminUser) {
     return vbenSuccess(await this.menuService.getRouteMenus(user));
   }
 
   @Get('system/menu/list')
+  @ApiOperation({ summary: '获取系统菜单列表' })
   async list() {
     return vbenSuccess(await this.menuService.getMenuList());
   }
 
   @Get('system/menu/name-exists')
+  @ApiOperation({ summary: '校验菜单名称是否存在' })
   async nameExists(
     @Query('name') name: string,
     @Query('id') id?: string,
@@ -41,6 +44,7 @@ export class AdminMenuController {
   }
 
   @Get('system/menu/path-exists')
+  @ApiOperation({ summary: '校验菜单路径是否存在' })
   async pathExists(
     @Query('path') path: string,
     @Query('id') id?: string,
@@ -49,11 +53,13 @@ export class AdminMenuController {
   }
 
   @Post('system/menu')
+  @ApiOperation({ summary: '新增系统菜单' })
   async create(@Body() body: Partial<AdminMenu>) {
     return vbenSuccess(await this.menuService.createMenu(body));
   }
 
   @Put('system/menu/:id')
+  @ApiOperation({ summary: '编辑系统菜单' })
   async update(
     @Param('id') id: string,
     @Body() body: Partial<AdminMenu>,
@@ -62,6 +68,7 @@ export class AdminMenuController {
   }
 
   @Delete('system/menu/:id')
+  @ApiOperation({ summary: '删除系统菜单' })
   async remove(@Param('id') id: string) {
     return vbenSuccess(await this.menuService.deleteMenu(id));
   }

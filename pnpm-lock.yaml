@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@kwitsukasa/knife4j-swagger-vue3':
+        specifier: 0.1.2
+        version: 0.1.2(@nestjs/common@9.4.3(reflect-metadata@0.1.14)(rxjs@7.8.2))
       '@nestjs/common':
         specifier: ^9.4.3
         version: 9.4.3(reflect-metadata@0.1.14)(rxjs@7.8.2)
@@ -41,9 +44,6 @@ importers:
       mysql2:
         specifier: ^3.22.3
         version: 3.22.3(@types/node@18.11.18)
-      nestjs-knife4j-plus:
-        specifier: ^1.0.9
-        version: 1.0.9(@nestjs/common@9.4.3(reflect-metadata@0.1.14)(rxjs@7.8.2))(express@4.18.2)
       nestjs-minio-client:
         specifier: ^2.2.0
         version: 2.2.0(@nestjs/common@9.4.3(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@9.4.3)
@@ -553,6 +553,11 @@ packages:
 
   '@js-joda/core@5.7.0':
     resolution: {integrity: sha512-WBu4ULVVxySLLzK1Ppq+OdfP+adRS4ntmDQT915rzDJ++i95gc2jZkM5B6LWEAwN3lGXpfie3yPABozdD3K3Vg==}
+
+  '@kwitsukasa/knife4j-swagger-vue3@0.1.2':
+    resolution: {integrity: sha512-OsVKUo/URe1zONjW4ZmxXIdRiVHLNufkjYYDi1DuZqXm0a743NlezAAb12wwOajwkyyUNCCgs6NP5x6WkK8NEw==}
+    peerDependencies:
+      '@nestjs/common': '*'
 
   '@lukeed/csprng@1.1.0':
     resolution: {integrity: sha512-Z7C/xXCiGWsg0KuKsHTKJxbWhpI3Vs5GwLfOean7MGyVFGqdRgBbAjOCh6u4bbjPc/8MJ2pZmK/0DLdCbivLDA==}
@@ -2664,19 +2669,6 @@ packages:
   neo-async@2.6.2:
     resolution: {integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==}
 
-  nestjs-knife4j-plus@1.0.9:
-    resolution: {integrity: sha512-MgMrfXgJfRgwW43BbMAKvInxluuvdNjSiYmkBvQvUawJMwn6+Op4W8/iYG1Q7u4D7mefWtM4zwVA7gBHErWCzg==}
-    peerDependencies:
-      '@fastify/static': '*'
-      '@nestjs/common': '*'
-      express: '*'
-      fastify: '*'
-    peerDependenciesMeta:
-      '@fastify/static':
-        optional: true
-      fastify:
-        optional: true
-
   nestjs-minio-client@2.2.0:
     resolution: {integrity: sha512-mz1vfJq/7YfSyVCIeZwOCfIfBz+msI9QynHS2QGO9GB+tVNnQOYta8PxFsH9tMxN7gNrjrf5jXsEIpgBB1oTeA==}
     peerDependencies:
@@ -4421,6 +4413,10 @@ snapshots:
 
   '@js-joda/core@5.7.0':
     optional: true
+
+  '@kwitsukasa/knife4j-swagger-vue3@0.1.2(@nestjs/common@9.4.3(reflect-metadata@0.1.14)(rxjs@7.8.2))':
+    dependencies:
+      '@nestjs/common': 9.4.3(reflect-metadata@0.1.14)(rxjs@7.8.2)
 
   '@lukeed/csprng@1.1.0': {}
 
@@ -7073,11 +7069,6 @@ snapshots:
   negotiator@0.6.3: {}
 
   neo-async@2.6.2: {}
-
-  nestjs-knife4j-plus@1.0.9(@nestjs/common@9.4.3(reflect-metadata@0.1.14)(rxjs@7.8.2))(express@4.18.2):
-    dependencies:
-      '@nestjs/common': 9.4.3(reflect-metadata@0.1.14)(rxjs@7.8.2)
-      express: 4.18.2
 
   nestjs-minio-client@2.2.0(@nestjs/common@9.4.3(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@9.4.3):
     dependencies:

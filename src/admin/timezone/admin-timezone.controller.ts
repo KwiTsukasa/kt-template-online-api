@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAdminUser, vbenSuccess } from '@/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminUser } from '../user/admin-user.entity';
@@ -20,16 +20,19 @@ export class AdminTimezoneController {
   constructor(private readonly timezoneService: AdminTimezoneService) {}
 
   @Get('getTimezoneOptions')
+  @ApiOperation({ summary: '获取时区选项' })
   getOptions() {
     return vbenSuccess(TIMEZONE_OPTIONS);
   }
 
   @Get('getTimezone')
+  @ApiOperation({ summary: '获取当前用户时区' })
   async getTimezone(@CurrentAdminUser() user: AdminUser) {
     return vbenSuccess(await this.timezoneService.getTimezone(user));
   }
 
   @Post('setTimezone')
+  @ApiOperation({ summary: '设置当前用户时区' })
   async setTimezone(
     @CurrentAdminUser() user: AdminUser,
     @Body() body: { timezone?: string },

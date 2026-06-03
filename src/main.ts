@@ -3,8 +3,8 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { OpenAPIObject } from '@nestjs/swagger';
 import { urlencoded, json } from 'express';
-import { knife4jSetup } from 'nestjs-knife4j-plus';
-import type { Service } from 'nestjs-knife4j-plus';
+import { knife4jSetup } from '@kwitsukasa/knife4j-swagger-vue3';
+import type { Service } from '@kwitsukasa/knife4j-swagger-vue3';
 import { applySwaggerResponseExamples } from './common';
 
 type SwaggerPathMatcher = (path: string) => boolean;

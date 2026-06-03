@@ -9,7 +9,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Public, vbenPage, vbenSuccess } from '@/common';
@@ -73,6 +73,7 @@ export class AdminExampleController {
   constructor(private readonly minioClientService: MinioClientService) {}
 
   @Post('upload')
+  @ApiOperation({ summary: '上传示例文件' })
   @UseInterceptors(FileInterceptor('file'))
   async upload(@UploadedFile() file: MinioUploadFile) {
     const result = await this.minioClientService.uploadObject({ file });
@@ -83,6 +84,7 @@ export class AdminExampleController {
   }
 
   @Get('table/list')
+  @ApiOperation({ summary: '获取示例表格分页列表' })
   async tableList(
     @Query() query: Record<string, any>,
   ) {
@@ -95,6 +97,7 @@ export class AdminExampleController {
   }
 
   @Get('status')
+  @ApiOperation({ summary: '返回指定状态码示例' })
   @Public()
   status(@Query('status') status: string, @Res() res: Response) {
     const code = Number(status) || 200;
@@ -112,6 +115,7 @@ export class AdminExampleController {
   }
 
   @Get('demo/bigint')
+  @ApiOperation({ summary: '获取 BigInt 序列化示例' })
   async bigint(@Res() res: Response) {
     res.setHeader('Content-Type', 'application/json');
     res.send(`{
@@ -135,12 +139,14 @@ export class AdminExampleController {
   }
 
   @Get('test')
+  @ApiOperation({ summary: 'GET 测试接口' })
   @Public()
   testGet() {
     return vbenSuccess('Test get handler');
   }
 
   @Post('test')
+  @ApiOperation({ summary: 'POST 测试接口' })
   @Public()
   testPost() {
     return vbenSuccess('Test post handler');

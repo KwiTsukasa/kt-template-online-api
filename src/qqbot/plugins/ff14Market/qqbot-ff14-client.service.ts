@@ -300,11 +300,11 @@ export class QqbotFf14ClientService {
     }
 
     const fuzzyItems = await this.searchItemsByLanguage(keyword, language, '~');
-    const fuzzyItem = this.pickSingleFuzzySearchItem(keyword, fuzzyItems);
+    const fuzzyItem = this.pickSingleFuzzySearchItem(fuzzyItems);
     if (fuzzyItem || language === 'en') return fuzzyItem;
 
     const enFuzzyItems = await this.searchItemsByLanguage(keyword, 'en', '~');
-    return this.pickSingleFuzzySearchItem(keyword, enFuzzyItems);
+    return this.pickSingleFuzzySearchItem(enFuzzyItems);
   }
 
   private async searchItemsByLanguage(
@@ -337,10 +337,7 @@ export class QqbotFf14ClientService {
     return items[0];
   }
 
-  private pickSingleFuzzySearchItem(
-    keyword: string,
-    items: XivapiSearchItem[],
-  ) {
+  private pickSingleFuzzySearchItem(items: XivapiSearchItem[]) {
     if (items.length <= 1) return items[0];
     throw new Error(
       `找到多个相似物品，请输入更完整名称或物品 ID：${this.formatSearchCandidates(

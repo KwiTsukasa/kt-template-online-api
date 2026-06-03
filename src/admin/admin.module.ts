@@ -18,6 +18,7 @@ import { AdminRole } from './role/admin-role.entity';
 import { AdminRoleService } from './role/admin-role.service';
 import { AdminTimezoneController } from './timezone/admin-timezone.controller';
 import { AdminTimezoneService } from './timezone/admin-timezone.service';
+import { AdminUserManageController } from './user/admin-user-manage.controller';
 import { AdminUserController } from './user/admin-user.controller';
 import { AdminUser } from './user/admin-user.entity';
 import { AdminUserService } from './user/admin-user.service';
@@ -42,6 +43,7 @@ import { WordpressModule } from '@/wordpress/wordpress.module';
   controllers: [
     AdminAuthController,
     AdminUserController,
+    AdminUserManageController,
     AdminMenuController,
     AdminRoleController,
     AdminDeptController,

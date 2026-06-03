@@ -3,12 +3,15 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
   JoinTable,
   ManyToMany,
+  ManyToOne,
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { ensureSnowflakeId } from '@/common';
+import { AdminDept } from '../dept/admin-dept.entity';
 import { AdminRole } from '../role/admin-role.entity';
 
 @Entity('admin_user')
@@ -30,6 +33,13 @@ export class AdminUser {
     name: 'real_name',
   })
   realName: string;
+
+  @Column({
+    name: 'dept_id',
+    nullable: true,
+    type: 'bigint',
+  })
+  deptId?: string | null;
 
   @Column({
     default: '',
@@ -78,6 +88,15 @@ export class AdminUser {
     name: 'admin_user_role',
   })
   roles: AdminRole[];
+
+  @ManyToOne(() => AdminDept, {
+    eager: true,
+    nullable: true,
+  })
+  @JoinColumn({
+    name: 'dept_id',
+  })
+  dept?: AdminDept | null;
 
   @BeforeInsert()
   createId() {

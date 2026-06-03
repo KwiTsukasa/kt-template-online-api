@@ -7,7 +7,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { CurrentAdminUser, Public, vbenSuccess } from '@/common';
 import { AdminMenuService } from '../menu/admin-menu.service';
@@ -29,6 +29,7 @@ export class AdminAuthController {
   ) {}
 
   @Post('auth/login')
+  @ApiOperation({ summary: 'Admin 用户登录' })
   @Public()
   async login(
     @Body() body: { password?: string; username?: string },
@@ -63,6 +64,7 @@ export class AdminAuthController {
   }
 
   @Post('auth/refresh')
+  @ApiOperation({ summary: '刷新 Admin 访问令牌' })
   @Public()
   async refresh(
     @Req() req: Request,
@@ -76,6 +78,7 @@ export class AdminAuthController {
   }
 
   @Post('auth/logout')
+  @ApiOperation({ summary: 'Admin 用户退出登录' })
   @Public()
   logout(@Res({ passthrough: true }) res: Response) {
     this.authService.clearAccessTokenCookie(res);
@@ -85,6 +88,7 @@ export class AdminAuthController {
   }
 
   @Get('auth/codes')
+  @ApiOperation({ summary: '获取当前用户按钮权限码' })
   async getAccessCodes(@CurrentAdminUser() user: AdminUser) {
     return vbenSuccess(await this.menuService.getAccessCodes(user));
   }

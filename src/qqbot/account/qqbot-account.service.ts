@@ -12,9 +12,31 @@ import type {
   QqbotAccountQueryDto,
   QqbotAccountUpdateDto,
 } from './qqbot-account.dto';
+import { QqbotAccountNapcat } from '../napcat/qqbot-account-napcat.entity';
+import { QqbotNapcatContainer } from '../napcat/qqbot-napcat-container.entity';
 import { QqbotNapcatContainerService } from '../napcat/qqbot-napcat-container.service';
-import type { QqbotConnectionRole } from '../qqbot.types';
+import type {
+  QqbotAccountNapcatBindStatus,
+  QqbotConnectionRole,
+  QqbotNapcatContainerStatus,
+} from '../qqbot.types';
 import { getPageParams, normalizeNullableString } from '../qqbot.utils';
+
+export type QqbotAccountNapcatRuntimeInfo = {
+  bindStatus?: QqbotAccountNapcatBindStatus;
+  containerId?: string;
+  containerName?: string;
+  containerStatus?: QqbotNapcatContainerStatus;
+  lastCheckedAt?: Date | null;
+  lastError?: null | string;
+  lastLoginAt?: Date | null;
+  lastStartedAt?: Date | null;
+  webuiPort?: null | number;
+};
+
+export type QqbotAccountListItem = QqbotAccount & {
+  napcat?: null | QqbotAccountNapcatRuntimeInfo;
+};
 
 @Injectable()
 export class QqbotAccountService {
@@ -23,6 +45,10 @@ export class QqbotAccountService {
     private readonly accountRepository: Repository<QqbotAccount>,
     @InjectRepository(QqbotAccountAbility)
     private readonly accountAbilityRepository: Repository<QqbotAccountAbility>,
+    @InjectRepository(QqbotAccountNapcat)
+    private readonly accountNapcatRepository: Repository<QqbotAccountNapcat>,
+    @InjectRepository(QqbotNapcatContainer)
+    private readonly napcatContainerRepository: Repository<QqbotNapcatContainer>,
     private readonly napcatContainerService: QqbotNapcatContainerService,
   ) {}
 
@@ -46,11 +72,12 @@ export class QqbotAccountService {
       });
     }
 
-    const [list, total] = await builder
+    const [accounts, total] = await builder
       .orderBy('account.createTime', 'DESC')
       .skip(skip)
       .take(pageSize)
       .getManyAndCount();
+    const list = await this.appendNapcatRuntime(accounts);
     return { list, pageNo, pageSize, total };
   }
 
@@ -323,6 +350,64 @@ export class QqbotAccountService {
         lastError: lastError || null,
       },
     );
+  }
+
+  private async appendNapcatRuntime(
+    accounts: QqbotAccount[],
+  ): Promise<QqbotAccountListItem[]> {
+    if (accounts.length <= 0) return [];
+
+    const accountIds = accounts.map((account) => account.id);
+    const bindings = await this.accountNapcatRepository
+      .createQueryBuilder('binding')
+      .where('binding.accountId IN (:...accountIds)', { accountIds })
+      .andWhere('binding.isDeleted = :isDeleted', { isDeleted: false })
+      .orderBy('binding.isPrimary', 'DESC')
+      .addOrderBy('binding.updateTime', 'DESC')
+      .getMany();
+    const bindingMap = new Map<string, QqbotAccountNapcat>();
+    for (const binding of bindings) {
+      if (!bindingMap.has(binding.accountId)) {
+        bindingMap.set(binding.accountId, binding);
+      }
+    }
+
+    const containerIds = Array.from(
+      new Set(bindings.map((binding) => binding.containerId).filter(Boolean)),
+    );
+    const containerMap = new Map<string, QqbotNapcatContainer>();
+    if (containerIds.length > 0) {
+      const containers = await this.napcatContainerRepository
+        .createQueryBuilder('container')
+        .where('container.id IN (:...containerIds)', { containerIds })
+        .andWhere('container.isDeleted = :isDeleted', { isDeleted: false })
+        .getMany();
+      for (const container of containers) {
+        containerMap.set(container.id, container);
+      }
+    }
+
+    return accounts.map((account) => {
+      const binding = bindingMap.get(account.id);
+      if (!binding) {
+        return Object.assign(account, { napcat: null });
+      }
+
+      const container = containerMap.get(binding.containerId);
+      return Object.assign(account, {
+        napcat: {
+          bindStatus: binding.bindStatus,
+          containerId: binding.containerId,
+          containerName: container?.name,
+          containerStatus: container?.status,
+          lastCheckedAt: container?.lastCheckedAt,
+          lastError: container?.lastError,
+          lastLoginAt: binding.lastLoginAt,
+          lastStartedAt: container?.lastStartedAt,
+          webuiPort: container?.webuiPort,
+        },
+      });
+    });
   }
 
   private async assertSelfIdAvailable(selfId: string, id?: string) {

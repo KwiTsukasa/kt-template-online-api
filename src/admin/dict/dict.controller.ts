@@ -22,6 +22,7 @@ import {
 import {
   AdminDictBodyDto,
   AdminDictDto,
+  AdminDictGroupDto,
   AdminDictQueryDto,
   AdminDictTreeDto,
   AdminDictUpdateDto,
@@ -102,6 +103,22 @@ export class DictController {
   @Get('tree')
   async tree(@Query() query: AdminDictQueryDto) {
     return vbenSuccess(await this.dictService.tree(query));
+  }
+
+  @ApiOperation({ summary: '获取字典编码分组列表' })
+  @ApiPageResponse(AdminDictGroupDto, [
+    {
+      dictCode: 'COMPONENT_TYPE',
+      id: 'dict-code:COMPONENT_TYPE',
+      itemCount: 2,
+      label: 'COMPONENT_TYPE',
+      value: 'COMPONENT_TYPE',
+    },
+  ])
+  @Get('groups')
+  async groups(@Query() query: AdminDictQueryDto) {
+    const page = await this.dictService.groups(query);
+    return vbenPage(page.items, page.total);
   }
 
   @ApiOperation({ summary: '获取字典编码选项' })

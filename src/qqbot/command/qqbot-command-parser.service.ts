@@ -14,6 +14,8 @@ import {
   splitQqbotFf14WorldPath,
 } from '../plugins/ff14Market/qqbot-ff14-worlds';
 
+const QQBOT_FFLOGS_ENCOUNTER_DICT_CODE = 'FFLOGS_ENCOUNTER_LABEL';
+
 export type QqbotCommandMatchResult = {
   alias: string;
   input: Record<string, any>;
@@ -149,7 +151,7 @@ export class QqbotCommandParserService {
     };
   }
 
-  private parseFflogsCharacterInput(rawArgs: string) {
+  private async parseFflogsCharacterInput(rawArgs: string) {
     const tokens = rawArgs.split(/\s+/).filter(Boolean);
     const flags = new Map<string, string | true>();
     const positional: string[] = [];
@@ -176,18 +178,74 @@ export class QqbotCommandParserService {
         flags.get('服务器') ||
         flags.get('小区'),
     );
+    let encounterName = this.normalizeString(
+      flags.get('encounter') ||
+        flags.get('encounterName') ||
+        flags.get('boss') ||
+        flags.get('fight') ||
+        flags.get('任务') ||
+        flags.get('高难') ||
+        flags.get('高难任务'),
+    );
+    let zoneId = this.normalizeString(
+      flags.get('zone') ||
+        flags.get('zoneId') ||
+        flags.get('区域') ||
+        flags.get('副本区域'),
+    );
+    const dungeonFlag = this.normalizeString(flags.get('副本'));
+    if (dungeonFlag) {
+      if (/^\d+$/.test(dungeonFlag)) {
+        zoneId = zoneId || dungeonFlag;
+      } else {
+        encounterName = encounterName || dungeonFlag;
+      }
+    }
+    let remainingPositionals = [...positional];
 
-    if (!characterName && positional.length) {
-      const joined = positional.join(' ');
+    if (!characterName && remainingPositionals[0]?.includes('@')) {
+      const [name, server] = remainingPositionals[0].split('@');
+      characterName = name.trim();
+      serverSlug = serverSlug || server?.trim();
+      if (!encounterName && remainingPositionals.length > 1) {
+        encounterName = remainingPositionals.slice(1).join(' ');
+      }
+      remainingPositionals = [];
+    }
+
+    if (!encounterName && remainingPositionals.length > 2) {
+      const picked = await this.pickFflogsPositionalsByKnownWorld(
+        remainingPositionals,
+      );
+      if (picked) {
+        characterName = characterName || picked.characterName;
+        serverSlug = serverSlug || picked.serverSlug;
+        encounterName = picked.encounterName;
+        remainingPositionals = [];
+      }
+    }
+
+    if (!encounterName && remainingPositionals.length > 1) {
+      const picked = await this.pickTrailingFflogsEncounter(
+        remainingPositionals,
+      );
+      if (picked) {
+        encounterName = picked.encounterName;
+        remainingPositionals = picked.positionals;
+      }
+    }
+
+    if (!characterName && remainingPositionals.length) {
+      const joined = remainingPositionals.join(' ');
       if (joined.includes('@')) {
         const [name, server] = joined.split('@');
         characterName = name.trim();
         serverSlug = serverSlug || server?.trim();
       } else if (serverSlug) {
         characterName = joined;
-      } else if (positional.length > 1) {
-        serverSlug = positional[positional.length - 1];
-        characterName = positional.slice(0, -1).join(' ');
+      } else if (remainingPositionals.length > 1) {
+        serverSlug = remainingPositionals[remainingPositionals.length - 1];
+        characterName = remainingPositionals.slice(0, -1).join(' ');
       } else {
         characterName = joined;
       }
@@ -199,10 +257,13 @@ export class QqbotCommandParserService {
       difficulty: this.normalizeString(
         flags.get('difficulty') || flags.get('难度'),
       ),
+      encounter: encounterName,
+      encounterName,
       metric: this.normalizeString(flags.get('metric') || flags.get('指标')),
       partition: this.normalizeString(
         flags.get('partition') || flags.get('分区'),
       ),
+      limit: this.normalizeString(flags.get('limit') || flags.get('数量')),
       raw: rawArgs,
       role: this.normalizeString(flags.get('role') || flags.get('职责')),
       serverRegion: this.normalizeString(
@@ -218,9 +279,7 @@ export class QqbotCommandParserService {
       timeframe: this.normalizeString(
         flags.get('timeframe') || flags.get('时间') || flags.get('范围'),
       ),
-      zoneId: this.normalizeString(
-        flags.get('zone') || flags.get('zoneId') || flags.get('副本'),
-      ),
+      zoneId,
     };
   }
 
@@ -276,9 +335,68 @@ export class QqbotCommandParserService {
     };
   }
 
+  private async pickFflogsPositionalsByKnownWorld(positional: string[]) {
+    const catalog = await this.getFf14MarketCatalog();
+    for (let index = positional.length - 2; index > 0; index--) {
+      const candidate = positional[index];
+      if (!isQqbotFf14LocationName(catalog, candidate)) continue;
+      const characterName = positional.slice(0, index).join(' ').trim();
+      const encounterName = positional
+        .slice(index + 1)
+        .join(' ')
+        .trim();
+      if (!characterName || !encounterName) continue;
+      const worldPath = splitQqbotFf14WorldPath(candidate);
+      return {
+        characterName,
+        encounterName,
+        serverSlug: worldPath.world || candidate,
+      };
+    }
+    return null;
+  }
+
+  private async pickTrailingFflogsEncounter(positional: string[]) {
+    const catalog = await this.getFflogsEncounterCatalog();
+    for (let index = 1; index < positional.length; index++) {
+      const encounterName = positional.slice(index).join(' ').trim();
+      if (!this.isFflogsEncounterName(catalog, encounterName)) continue;
+      return {
+        encounterName,
+        positionals: positional.slice(0, index),
+      };
+    }
+    return null;
+  }
+
+  private async getFflogsEncounterCatalog() {
+    const dicts = await this.dictService.getDictItemsByKey(
+      QQBOT_FFLOGS_ENCOUNTER_DICT_CODE,
+    );
+    const keys = new Set<string>();
+    for (const item of dicts) {
+      for (const key of this.buildFflogsLookupKeys(item.label, item.value)) {
+        keys.add(key);
+      }
+    }
+    return keys;
+  }
+
+  private isFflogsEncounterName(catalog: Set<string>, value: string) {
+    const keys = this.buildFflogsLookupKeys(value);
+    return keys.some(
+      (key) =>
+        catalog.has(key) ||
+        (key.length >= 3 &&
+          [...catalog].some(
+            (candidate) => candidate.startsWith(key) || candidate.includes(key),
+          )),
+    );
+  }
+
   private async getFf14MarketCatalog() {
     const treeCatalog = buildQqbotFf14MarketCatalogFromTree(
-      await this.dictService.tree({
+      await this.dictService.relationTree({
         dictCode: QQBOT_FF14_MARKET_DICT_CODES.region,
       }),
     );
@@ -328,5 +446,23 @@ export class QqbotCommandParserService {
   private normalizeString(value?: string | true) {
     if (value === true) return '';
     return `${value || ''}`.trim();
+  }
+
+  private buildFflogsLookupKeys(...values: string[]) {
+    const keys = values
+      .flatMap((value) => {
+        const normalized = this.normalizeFflogsLookupKey(value);
+        const withoutAnd = normalized.replace(/and/g, '');
+        return [normalized, withoutAnd];
+      })
+      .filter(Boolean);
+    return [...new Set(keys)];
+  }
+
+  private normalizeFflogsLookupKey(value: string) {
+    return `${value || ''}`
+      .normalize('NFKC')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, '');
   }
 }

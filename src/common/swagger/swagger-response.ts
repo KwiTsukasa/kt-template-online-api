@@ -560,7 +560,11 @@ function getPropertyDescription(propertyName: string) {
     code: '响应状态码',
     command: '命令触发词',
     commandId: '在线命令 ID',
+    connectStatus: 'OneBot 账号在线状态',
+    connectionMode: '连接模式',
     connectionRole: 'OneBot 连接角色',
+    containerName: 'NapCat 容器名称',
+    containerStatus: 'NapCat 容器运行状态',
     count: '数量',
     data: '业务数据',
     description: '描述',
@@ -573,7 +577,10 @@ function getPropertyDescription(propertyName: string) {
     items: '列表数据',
     key: '唯一键',
     keyword: '匹配关键词',
+    lastConnectedAt: '最后连接时间',
+    lastError: '最近异常',
     lastHeartbeatAt: '最后心跳时间',
+    lastLoginAt: '最近扫码登录时间',
     lastMessage: '最后一条消息',
     lastModified: '最后修改时间',
     matchType: '匹配方式',
@@ -582,6 +589,7 @@ function getPropertyDescription(propertyName: string) {
     mode: '过滤模式',
     msg: '响应消息',
     name: '名称',
+    napcat: 'NapCat 容器运行信息',
     nickname: '昵称',
     objectName: '对象名称',
     onlineAccountCount: '在线账号数',
@@ -608,6 +616,7 @@ function getPropertyDescription(propertyName: string) {
     todaySendCount: '今日发送数',
     total: '总条数',
     triggerMode: '触发方式',
+    webuiPort: 'NapCat WebUI 端口',
     type: '类型',
     url: '访问地址',
     userId: '用户 QQ 号',
@@ -809,12 +818,20 @@ function componentExample() {
 
 function qqbotAccountExample() {
   return {
+    connectStatus: 'online',
+    connectionMode: 'reverse-ws',
+    enabled: true,
     id: '1000000000000000001',
-    selfId: '1914728559',
-    nickname: 'Mirror',
-    status: 'online',
-    connectionRole: 'universal',
     lastHeartbeatAt: '2026-06-02T12:00:00.000Z',
+    name: '主账号',
+    napcat: {
+      bindStatus: 'bound',
+      containerName: 'kt-qqbot-napcat-1914728559',
+      containerStatus: 'running',
+      lastLoginAt: '2026-06-02T11:55:00.000Z',
+      webuiPort: 6100,
+    },
+    selfId: '1914728559',
   };
 }
 

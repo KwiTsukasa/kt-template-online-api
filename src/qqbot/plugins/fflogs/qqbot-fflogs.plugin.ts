@@ -8,7 +8,8 @@ export class QqbotFflogsPluginService {
 
   getPlugin(): QqbotIntegrationPlugin {
     return {
-      description: '对接 FFLogs v2 GraphQL，提供 FF14 角色公开排名查询能力。',
+      description:
+        '对接 FFLogs v2 GraphQL，提供 FF14 角色公开排名和指定高难最近记录查询能力。',
       healthCheck: async () => {
         const checkedAt = new Date().toISOString();
         try {
@@ -31,10 +32,20 @@ export class QqbotFflogsPluginService {
       operations: [
         {
           cacheTtlMs: 60_000,
-          description: '查询指定角色的 FFLogs 公开排名摘要。',
+          description:
+            '查询指定角色的 FFLogs 公开排名摘要；传入 encounter/任务 后查询指定高难最近10次记录。',
           inputSchema: {
             properties: {
               characterName: { description: '角色名', type: 'string' },
+              encounter: {
+                description: '高难任务名，支持字典维护的中文名/英文名/缩写',
+                type: 'string',
+              },
+              limit: {
+                default: 10,
+                description: '最近记录数量，最多10条',
+                type: 'number',
+              },
               metric: { description: '排名指标，如 dps/hps', type: 'string' },
               serverRegion: {
                 default: 'CN',
@@ -46,7 +57,10 @@ export class QqbotFflogsPluginService {
                 description: 'Today 或 Historical',
                 type: 'string',
               },
-              zoneId: { description: '副本区域 ID', type: 'number' },
+              zoneId: {
+                description: '副本区域 ID，用于排名摘要',
+                type: 'number',
+              },
             },
             required: ['characterName', 'serverSlug'],
             type: 'object',
@@ -56,6 +70,8 @@ export class QqbotFflogsPluginService {
           outputSchema: {
             properties: {
               characterName: { type: 'string' },
+              encounterName: { type: 'string' },
+              logs: { type: 'array' },
               rankings: { type: 'array' },
               replyText: { type: 'string' },
               url: { type: 'string' },

@@ -516,7 +516,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO `qqbot_command` (`id`, `code`, `name`, `aliases`, `prefixes`, `plugin_key`, `operation_key`, `parser_key`, `target_type`, `default_params`, `reply_template`, `error_template`, `enabled`, `priority`, `cooldown_ms`, `remark`)
 VALUES
   (2041700000000300501, 'ff14_price', 'FF14 查价', '["查价","price","ff14price"]', '["/","!","！"]', 'ff14Market', 'ff14.market.price', 'ff14Price', 'all', '{"language":"chs","world":"中国"}', '', 'FF14 查价失败：{{error}}', 1, 0, 1500, '默认示例命令；请在账号配置中绑定后启用'),
-  (2041700000000300502, 'fflogs_character', 'FFLogs 查询', '["fflogs","logs","查logs","查log"]', '["/","!","！"]', 'fflogs', 'fflogs.character.summary', 'fflogsCharacter', 'all', '{"serverRegion":"CN"}', '', 'FFLogs 查询失败：{{error}}', 1, 0, 3000, '查询 FFLogs 角色公开排名；格式：/fflogs 角色名 服务器')
+  (2041700000000300502, 'fflogs_character', 'FFLogs 查询', '["fflogs","logs","查logs","查log"]', '["/","!","！"]', 'fflogs', 'fflogs.character.summary', 'fflogsCharacter', 'all', '{"serverRegion":"CN"}', '', 'FFLogs 查询失败：{{error}}', 1, 0, 3000, '查询 FFLogs 角色公开排名；带高难任务时返回最近10次记录；格式：/fflogs 角色名 服务器 [高难任务]')
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `plugin_key` = VALUES(`plugin_key`),
@@ -579,6 +579,7 @@ VALUES
   (2041700000000300805, 'FFLOGS_METRIC_LABEL', 'nDPS', 'ndps', NULL, 5, 1),
   (2041700000000300806, 'FFLOGS_METRIC_LABEL', 'Boss DPS', 'bossdps', NULL, 6, 1),
   (2041700000000300807, 'FFLOGS_METRIC_LABEL', 'Boss rDPS', 'bossrdps', NULL, 7, 1),
+  (2041700000000300808, 'FFLOGS_METRIC_LABEL', 'aDPS', 'cdps', NULL, 8, 1),
   (2041700000000300901, 'FFLOGS_ROLE_LABEL', '坦克', 'tank', NULL, 1, 1),
   (2041700000000300902, 'FFLOGS_ROLE_LABEL', '治疗', 'healer', NULL, 2, 1),
   (2041700000000300903, 'FFLOGS_ROLE_LABEL', '输出', 'dps', NULL, 3, 1),

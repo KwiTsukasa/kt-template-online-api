@@ -78,6 +78,33 @@ export class AdminDictTreeDto extends AdminDictDto {
   children?: AdminDictTreeDto[];
 }
 
+export class AdminDictGroupDto {
+  @ApiProperty({
+    example: 'COMPONENT_TYPE',
+  })
+  dictCode: string;
+
+  @ApiProperty({
+    example: 'dict-code:COMPONENT_TYPE',
+  })
+  id: string;
+
+  @ApiProperty({
+    example: 2,
+  })
+  itemCount: number;
+
+  @ApiProperty({
+    example: 'COMPONENT_TYPE',
+  })
+  label: string;
+
+  @ApiProperty({
+    example: 'COMPONENT_TYPE',
+  })
+  value: string;
+}
+
 export class AdminDictQueryDto {
   @ApiPropertyOptional()
   page?: number | string;

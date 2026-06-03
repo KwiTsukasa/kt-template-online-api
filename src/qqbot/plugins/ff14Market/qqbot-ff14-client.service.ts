@@ -292,7 +292,7 @@ export class QqbotFf14ClientService {
 
   private async getFf14MarketCatalog() {
     const treeCatalog = buildQqbotFf14MarketCatalogFromTree(
-      await this.dictService.tree({
+      await this.dictService.relationTree({
         dictCode: QQBOT_FF14_MARKET_DICT_CODES.region,
       }),
     );

@@ -38,6 +38,8 @@ type NapcatLoginStatus = {
 
 type NapcatQrcode = {
   qrcode?: string;
+  qrcodeurl?: string;
+  url?: string;
 };
 
 type QqbotLoginScanSession = {
@@ -114,9 +116,9 @@ export class QqbotNapcatLoginService {
     }
 
     const container = await this.getSessionContainer(session);
-    await this.callRefreshQrcode(container);
-    session.qrcode = await this.getQrcode(container);
+    session.qrcode = await this.refreshOrGetQrcode(container, true);
     session.expiresAt = Date.now() + this.getSessionTtlMs();
+    session.errorMessage = undefined;
     this.sessions.set(session.id, session);
     return this.toResult(session);
   }
@@ -131,7 +133,9 @@ export class QqbotNapcatLoginService {
     const status = await this.getLoginStatus(container);
     if (!status.isLogin) {
       session.errorMessage = status.loginError || undefined;
-      session.qrcode = status.qrcodeurl || session.qrcode;
+      if (status.qrcodeurl && !this.isExpiredQrcodeStatus(status)) {
+        session.qrcode = status.qrcodeurl;
+      }
       this.sessions.set(session.id, session);
       return this.toResult(session);
     }
@@ -170,13 +174,11 @@ export class QqbotNapcatLoginService {
         return this.completeLogin(session, container);
       }
 
-      let qrcode = this.isExpiredQrcodeStatus(loginStatus)
-        ? ''
-        : loginStatus.qrcodeurl || '';
-      if (!qrcode) {
-        await this.callRefreshQrcode(container, true);
-        qrcode = await this.getQrcode(container, true);
-      }
+      const qrcode = await this.refreshOrGetQrcode(
+        container,
+        true,
+        loginStatus,
+      );
       const session = this.createSession({
         ...options,
         container,
@@ -374,11 +376,15 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime,
     retry = false,
   ) {
-    await this.executeNapcatRequest(retry, async () => {
+    return this.executeNapcatRequest(retry, async () => {
       try {
-        await this.postNapcat<null>(container, '/api/QQLogin/RefreshQRcode');
+        const data = await this.postNapcat<NapcatQrcode | null>(
+          container,
+          '/api/QQLogin/RefreshQRcode',
+        );
+        return this.pickQrcode(data);
       } catch (err) {
-        if (this.isAlreadyLoggedIn(err)) return;
+        if (this.isAlreadyLoggedIn(err)) return '';
         throw err;
       }
     });
@@ -391,10 +397,11 @@ export class QqbotNapcatLoginService {
           container,
           '/api/QQLogin/GetQQLoginQrcode',
         );
-        if (!data.qrcode) {
+        const qrcode = this.pickQrcode(data);
+        if (!qrcode) {
           return this.getQrcodeFromStatus(container);
         }
-        return data.qrcode;
+        return qrcode;
       } catch (err) {
         if (this.isAlreadyLoggedIn(err)) {
           const status = await this.getLoginStatus(container);
@@ -408,12 +415,37 @@ export class QqbotNapcatLoginService {
     });
   }
 
+  private async refreshOrGetQrcode(
+    container: QqbotNapcatRuntime,
+    retry = false,
+    fallbackStatus?: NapcatLoginStatus,
+  ) {
+    try {
+      const refreshedQrcode = await this.callRefreshQrcode(container, retry);
+      if (refreshedQrcode) return refreshedQrcode;
+      return await this.getQrcode(container, retry);
+    } catch (err) {
+      if (
+        fallbackStatus?.qrcodeurl &&
+        !this.isExpiredQrcodeStatus(fallbackStatus)
+      ) {
+        return fallbackStatus.qrcodeurl;
+      }
+      throw err;
+    }
+  }
+
   private async getQrcodeFromStatus(container: QqbotNapcatRuntime) {
     const status = await this.getLoginStatus(container);
     if (status.qrcodeurl && !this.isExpiredQrcodeStatus(status)) {
       return status.qrcodeurl;
     }
     throwVbenError('NapCat 未返回登录二维码');
+  }
+
+  private pickQrcode(data?: NapcatQrcode | null) {
+    if (!data) return '';
+    return `${data.qrcode || data.qrcodeurl || data.url || ''}`.trim();
   }
 
   private async postNapcat<T>(

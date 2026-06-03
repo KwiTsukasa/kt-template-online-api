@@ -17,6 +17,14 @@ export type AdminDictItem = {
   value: string;
 };
 
+export type AdminDictGroupItem = {
+  dictCode: string;
+  id: string;
+  itemCount: number;
+  label: string;
+  value: string;
+};
+
 type AdminDictSerialized = {
   childrenCode?: string | null;
   createTime?: Date;
@@ -123,7 +131,45 @@ export class DictService implements OnApplicationBootstrap {
       }));
   }
 
+  async groups(query: AdminDictQueryDto = {}) {
+    const pageNo = this.toPositiveNumber(query.pageNo ?? query.page, 1);
+    const pageSize = this.toPositiveNumber(query.pageSize, 20);
+    const builder = this.dictRepository
+      .createQueryBuilder('dict')
+      .where('dict.isDeleted = :isDeleted', { isDeleted: false });
+
+    const keyword = this.normalizeText(query.keyword);
+    if (keyword) {
+      builder.andWhere('dict.dictCode LIKE :keyword', {
+        keyword: `%${keyword}%`,
+      });
+    }
+    this.applyLikeFilter(builder, 'dictCode', query.dictCode);
+
+    const totalRow = await builder
+      .clone()
+      .select('COUNT(DISTINCT dict.dictCode)', 'total')
+      .getRawOne<{ total: string }>();
+    const rows = await builder
+      .select('dict.dictCode', 'dictCode')
+      .addSelect('COUNT(dict.id)', 'itemCount')
+      .groupBy('dict.dictCode')
+      .orderBy('dict.dictCode', 'ASC')
+      .offset((pageNo - 1) * pageSize)
+      .limit(pageSize)
+      .getRawMany<{ dictCode: string; itemCount: string }>();
+
+    return {
+      items: rows.map((item) => this.serializeDictGroup(item)),
+      total: Number(totalRow?.total || 0),
+    };
+  }
+
   async tree(query: AdminDictQueryDto = {}) {
+    return this.relationTree(query);
+  }
+
+  async relationTree(query: AdminDictQueryDto = {}) {
     const items = await this.dictRepository.find({
       where: {
         isDeleted: false,
@@ -135,9 +181,9 @@ export class DictService implements OnApplicationBootstrap {
       },
     });
     const serializedItems = items.map((item) => this.serializeDict(item));
-    const visibleItems = this.filterTreeItems(serializedItems, query);
+    const visibleItems = this.filterRelationTreeItems(serializedItems, query);
 
-    return this.buildDictTree(visibleItems);
+    return this.buildDictRelationTree(visibleItems);
   }
 
   async save(body: AdminDictBodyDto) {
@@ -308,7 +354,9 @@ export class DictService implements OnApplicationBootstrap {
     });
   }
 
-  private buildDictTree(items: AdminDictSerialized[]): AdminDictTreeItem[] {
+  private buildDictRelationTree(
+    items: AdminDictSerialized[],
+  ): AdminDictTreeItem[] {
     const byDictCode = this.groupItemsByDictCode(items);
     const dictCodes = new Set(items.map((item) => item.dictCode));
     const referencedCodes = new Set(
@@ -365,7 +413,7 @@ export class DictService implements OnApplicationBootstrap {
     return node;
   }
 
-  private filterTreeItems(
+  private filterRelationTreeItems(
     items: AdminDictSerialized[],
     query: AdminDictQueryDto,
   ) {
@@ -548,6 +596,19 @@ export class DictService implements OnApplicationBootstrap {
       status: dict.status,
       updateTime: dict.updateTime,
       value: dict.value,
+    };
+  }
+
+  private serializeDictGroup(item: {
+    dictCode: string;
+    itemCount: number | string;
+  }): AdminDictGroupItem {
+    return {
+      dictCode: item.dictCode,
+      id: `dict-code:${item.dictCode}`,
+      itemCount: Number(item.itemCount || 0),
+      label: item.dictCode,
+      value: item.dictCode,
     };
   }
 

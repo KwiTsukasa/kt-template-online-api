@@ -717,6 +717,7 @@ function itemExampleByPath(path: string) {
     return adminMenuExample();
   if (path.includes('/system/dept')) return adminDeptExample();
   if (path.includes('/system/role')) return adminRoleExample();
+  if (path.includes('/dict')) return adminDictExample();
   if (path.includes('/component')) return componentExample();
   if (path.includes('/user')) return adminUserExample();
   if (path.includes('/timezone')) return { timezone: 'Asia/Shanghai' };
@@ -739,6 +740,20 @@ function adminLoginExample() {
     wordpressAuth: null,
     wordpressAvailable: true,
     wordpressError: null,
+  };
+}
+
+function adminDictExample() {
+  return {
+    id: '2041700000000300001',
+    dictCode: 'COMPONENT_TYPE',
+    label: '图表',
+    value: '1',
+    childrenCode: 'CHART',
+    sort: 1,
+    status: 1,
+    createTime: '2026-06-03T12:00:00.000Z',
+    updateTime: '2026-06-03T12:00:00.000Z',
   };
 }
 

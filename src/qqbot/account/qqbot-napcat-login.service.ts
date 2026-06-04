@@ -55,6 +55,7 @@ export class QqbotNapcatLoginService {
       {
         accountId: account.id,
         expectedSelfId: account.selfId,
+        forceRelogin: true,
         mode: 'refresh',
       },
       container,
@@ -83,12 +84,16 @@ export class QqbotNapcatLoginService {
     }
 
     if (loginStatus.isOffline) {
-      await this.restartNapcatForLogin(container, { waitForReady: false });
+      if (session.mode === 'refresh') {
+        await this.resetNapcatForLogin(container, { waitForReady: false });
+      } else {
+        await this.restartNapcatForLogin(container, { waitForReady: false });
+      }
       session.lastRestartedAt = Date.now();
       return this.keepSessionPending(
         session,
         loginStatus.loginError ||
-          'NapCat 账号已离线，已重启容器并重新生成二维码',
+          'NapCat 账号已离线，已重新生成二维码',
         true,
       );
     }
@@ -162,6 +167,7 @@ export class QqbotNapcatLoginService {
     options: {
       accountId?: string;
       expectedSelfId?: string;
+      forceRelogin?: boolean;
       mode: QqbotLoginScanMode;
     },
     container: QqbotNapcatRuntime,
@@ -169,9 +175,17 @@ export class QqbotNapcatLoginService {
     await this.cleanupSessions();
 
     try {
+      if (options.forceRelogin) {
+        await this.resetNapcatForLogin(container);
+      }
+
       const loginStatus = await this.getLoginStatus(container, true);
       if (loginStatus.isOffline) {
-        await this.restartNapcatForLogin(container, { waitForReady: false });
+        if (options.forceRelogin) {
+          await this.resetNapcatForLogin(container, { waitForReady: false });
+        } else {
+          await this.restartNapcatForLogin(container, { waitForReady: false });
+        }
         const session = this.createSession({
           ...options,
           container,
@@ -180,7 +194,18 @@ export class QqbotNapcatLoginService {
         session.lastRestartedAt = Date.now();
         session.errorMessage =
           loginStatus.loginError ||
-          'NapCat 账号已离线，已重启容器并重新生成二维码';
+          'NapCat 账号已离线，已重新生成二维码';
+        this.sessions.set(session.id, session);
+        return this.toResult(session);
+      }
+
+      if (options.forceRelogin && loginStatus.isLogin) {
+        const session = this.createSession({
+          ...options,
+          container,
+          status: 'pending',
+        });
+        session.errorMessage = 'NapCat 正在重新生成二维码，请稍后刷新';
         this.sessions.set(session.id, session);
         return this.toResult(session);
       }
@@ -586,6 +611,24 @@ export class QqbotNapcatLoginService {
   ) {
     const credential = await this.getCredential(container);
     return this.requestNapcat<T>(container, path, body, credential);
+  }
+
+  private async resetNapcatForLogin(
+    container: QqbotNapcatRuntime,
+    options: NapcatRestartOptions = {},
+  ) {
+    const resetByContainer =
+      await this.containerService.resetRuntimeLoginState(container);
+    if (!resetByContainer) {
+      await this.restartNapcatForLogin(container, options);
+      return;
+    }
+
+    this.credentials.delete(this.getCredentialCacheKey(container));
+    if (options.waitForReady === false) return;
+
+    await this.toolsService.sleep(this.getRestartDelayMs());
+    await this.getLoginStatus(container, true);
   }
 
   private async restartNapcatForLogin(

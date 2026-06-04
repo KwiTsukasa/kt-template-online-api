@@ -166,6 +166,34 @@ export class QqbotNapcatContainerService {
     return true;
   }
 
+  async resetRuntimeLoginState(runtime: QqbotNapcatRuntime) {
+    if (this.getManagedMode() !== 'ssh' || !runtime.id || !runtime.name) {
+      return false;
+    }
+
+    const container = await this.containerRepository.findOne({
+      where: {
+        id: runtime.id,
+        isDeleted: false,
+      },
+    });
+    if (!container) {
+      throwVbenError('NapCat 容器不存在或已删除');
+    }
+
+    const script = this.buildRemoteResetLoginStateScript(container);
+    await this.runProcess('ssh', [...this.getSshArgs(), 'sh -s'], script);
+    await this.containerRepository.update(
+      { id: runtime.id },
+      {
+        lastError: null,
+        lastStartedAt: new Date(),
+        status: 'running',
+      },
+    );
+    return true;
+  }
+
   private async removeContainer(containerId: string) {
     const container = await this.containerRepository.findOne({
       where: {
@@ -218,6 +246,39 @@ if [ -n "$DATA_DIR" ] && [ "$DATA_DIR" != "/" ]; then
       ;;
   esac
 fi
+`;
+  }
+
+  private buildRemoteResetLoginStateScript(container: QqbotNapcatContainer) {
+    const dataDir = this.sh(container.dataDir || '');
+    const name = this.sh(container.name);
+    const rootDir = this.sh(this.getRootDir());
+
+    return `
+set -eu
+NAME=${name}
+DATA_DIR=${dataDir}
+ROOT_DIR=${rootDir}
+
+if [ -z "$DATA_DIR" ] || [ "$DATA_DIR" = "/" ]; then
+  echo "unsafe empty data dir" >&2
+  exit 1
+fi
+
+case "$DATA_DIR" in
+  "$ROOT_DIR"/*)
+    ;;
+  *)
+    echo "skip unsafe data dir: $DATA_DIR" >&2
+    exit 1
+    ;;
+esac
+
+docker exec "$NAME" rm -f /app/napcat/cache/qrcode.png >/dev/null 2>&1 || true
+docker stop "$NAME" >/dev/null 2>&1 || true
+mkdir -p "$DATA_DIR/QQ"
+find "$DATA_DIR/QQ" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+docker start "$NAME" >/dev/null
 `;
   }
 

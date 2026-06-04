@@ -90,9 +90,56 @@ describe('QqbotNapcatLoginService', () => {
       {
         accountId: 'account-1',
         expectedSelfId: '10001',
+        forceRelogin: true,
         mode: 'refresh',
       },
       existingContainer,
+    );
+  });
+
+  it('resets the existing container login state before refresh login scan', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-current',
+      name: 'napcat-10001',
+    };
+    const containerService = {
+      resetRuntimeLoginState: jest.fn().mockResolvedValue(true),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    jest
+      .spyOn((refreshService as any).toolsService, 'sleep')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(refreshService as any, 'cleanupSessions')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(refreshService as any, 'getLoginStatus')
+      .mockResolvedValueOnce({ isLogin: false })
+      .mockResolvedValueOnce({ isLogin: false });
+    jest
+      .spyOn(refreshService as any, 'refreshOrGetQrcode')
+      .mockResolvedValue('fresh-qrcode');
+
+    const result = await (refreshService as any).startScan(
+      {
+        accountId: 'account-1',
+        expectedSelfId: '10001',
+        forceRelogin: true,
+        mode: 'refresh',
+      },
+      container,
+    );
+
+    expect(result.status).toBe('pending');
+    expect(result.qrcode).toBe('fresh-qrcode');
+    expect(containerService.resetRuntimeLoginState).toHaveBeenCalledWith(
+      container,
     );
   });
 

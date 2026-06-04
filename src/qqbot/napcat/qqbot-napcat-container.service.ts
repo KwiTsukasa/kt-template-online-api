@@ -166,7 +166,10 @@ export class QqbotNapcatContainerService {
     return true;
   }
 
-  async resetRuntimeLoginState(runtime: QqbotNapcatRuntime) {
+  async resetRuntimeLoginState(
+    runtime: QqbotNapcatRuntime,
+    onProgress?: (step: string, message: string) => void,
+  ) {
     if (this.getManagedMode() !== 'ssh' || !runtime.id || !runtime.name) {
       return false;
     }
@@ -182,7 +185,15 @@ export class QqbotNapcatContainerService {
     }
 
     const script = this.buildRemoteResetLoginStateScript(container);
-    await this.runProcess('ssh', [...this.getSshArgs(), 'sh -s'], script);
+    await this.runProcess(
+      'ssh',
+      [...this.getSshArgs(), 'sh -s'],
+      script,
+      (line) => {
+        const matched = line.match(/^__KT_PROGRESS__:([^:]+):(.+)$/);
+        if (matched) onProgress?.(matched[1], matched[2]);
+      },
+    );
     await this.containerRepository.update(
       { id: runtime.id },
       {
@@ -275,10 +286,14 @@ case "$DATA_DIR" in
 esac
 
 docker exec "$NAME" rm -f /app/napcat/cache/qrcode.png >/dev/null 2>&1 || true
+echo "__KT_PROGRESS__:container-stop:正在停止 NapCat 容器"
 docker stop "$NAME" >/dev/null 2>&1 || true
+echo "__KT_PROGRESS__:login-data-clean:正在清理旧 QQ 登录态"
 mkdir -p "$DATA_DIR/QQ"
 find "$DATA_DIR/QQ" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+echo "__KT_PROGRESS__:container-start:正在启动 NapCat 容器"
 docker start "$NAME" >/dev/null
+echo "__KT_PROGRESS__:container-started:NapCat 容器已启动"
 `;
   }
 
@@ -608,7 +623,12 @@ docker run -d \\
     return `'${`${value}`.replace(/'/g, `'\\''`)}'`;
   }
 
-  private runProcess(command: string, args: string[], input: string) {
+  private runProcess(
+    command: string,
+    args: string[],
+    input: string,
+    onStdoutLine?: (line: string) => void,
+  ) {
     return new Promise<void>((resolve, reject) => {
       const child = spawn(command, args, {
         windowsHide: true,
@@ -616,6 +636,7 @@ docker run -d \\
       let settled = false;
       let stdout = '';
       let stderr = '';
+      let stdoutLineBuffer = '';
       const timeoutMs = this.getProcessTimeoutMs();
       const timer = setTimeout(() => {
         if (settled) return;
@@ -630,7 +651,16 @@ docker run -d \\
         callback();
       };
       child.stdout.on('data', (chunk) => {
-        stdout += Buffer.from(chunk).toString('utf8');
+        const text = Buffer.from(chunk).toString('utf8');
+        stdout += text;
+        if (onStdoutLine) {
+          const lines = `${stdoutLineBuffer}${text}`.split(/\r?\n/);
+          stdoutLineBuffer = lines.pop() || '';
+          lines
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .forEach((line) => onStdoutLine(line));
+        }
       });
       child.stderr.on('data', (chunk) => {
         stderr += Buffer.from(chunk).toString('utf8');
@@ -640,6 +670,9 @@ docker run -d \\
       });
       child.on('close', (code) => {
         finish(() => {
+          if (onStdoutLine && stdoutLineBuffer.trim()) {
+            onStdoutLine(stdoutLineBuffer.trim());
+          }
           if (code === 0) {
             resolve();
             return;

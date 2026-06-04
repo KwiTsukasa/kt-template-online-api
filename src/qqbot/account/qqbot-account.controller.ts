@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Post,
   Query,
+  Sse,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
@@ -76,6 +77,12 @@ export class QqbotAccountController {
   @ApiOperation({ summary: '查询 QQBot 扫码登录状态' })
   async scanStatus(@Query() query: QqbotAccountScanStatusDto) {
     return vbenSuccess(await this.napcatLoginService.status(query.sessionId));
+  }
+
+  @Sse('scan/events')
+  @ApiOperation({ summary: '订阅 QQBot 扫码登录进度' })
+  scanEvents(@Query() query: QqbotAccountScanStatusDto) {
+    return this.napcatLoginService.events(query.sessionId);
   }
 
   @Post('scan/qrcode/refresh')

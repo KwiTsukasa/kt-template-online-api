@@ -246,6 +246,20 @@ export type QqbotLoginScanResult = {
   webuiPort?: null | number;
 };
 
+export type QqbotLoginScanEventStatus =
+  | 'error'
+  | 'info'
+  | 'processing'
+  | 'success';
+
+export type QqbotLoginScanEvent = {
+  createdAt: number;
+  message: string;
+  result?: QqbotLoginScanResult;
+  status: QqbotLoginScanEventStatus;
+  step: string;
+};
+
 export type QqbotLoginScanSession = {
   accountId?: string;
   containerId?: string;
@@ -257,6 +271,7 @@ export type QqbotLoginScanSession = {
   id: string;
   lastRestartedAt?: number;
   mode: QqbotLoginScanMode;
+  preparingRelogin?: boolean;
   qrcode?: string;
   status: QqbotLoginScanStatus;
   webuiPort?: null | number;

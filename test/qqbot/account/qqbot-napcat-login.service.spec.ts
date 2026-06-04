@@ -24,6 +24,8 @@ describe('QqbotNapcatLoginService', () => {
 
   beforeEach(() => {
     (service as any).sessions.clear();
+    (service as any).sessionEventLogs.clear();
+    (service as any).sessionEventListeners.clear();
     jest.restoreAllMocks();
   });
 
@@ -97,14 +99,20 @@ describe('QqbotNapcatLoginService', () => {
     );
   });
 
-  it('resets the existing container login state before refresh login scan', async () => {
+  it('returns refresh login scan immediately while resetting in background', async () => {
     const container = {
       baseUrl: 'http://127.0.0.1:6103/',
       id: 'container-current',
       name: 'napcat-10001',
     };
+    let resolveReset!: () => void;
     const containerService = {
-      resetRuntimeLoginState: jest.fn().mockResolvedValue(true),
+      resetRuntimeLoginState: jest.fn(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolveReset = () => resolve(true);
+          }),
+      ),
     };
     const refreshService = new QqbotNapcatLoginService(
       { get: jest.fn() } as unknown as ConfigService,
@@ -118,10 +126,6 @@ describe('QqbotNapcatLoginService', () => {
     jest
       .spyOn(refreshService as any, 'cleanupSessions')
       .mockResolvedValue(undefined);
-    jest
-      .spyOn(refreshService as any, 'getLoginStatus')
-      .mockResolvedValueOnce({ isLogin: false })
-      .mockResolvedValueOnce({ isLogin: false });
     jest
       .spyOn(refreshService as any, 'refreshOrGetQrcode')
       .mockResolvedValue('fresh-qrcode');
@@ -137,10 +141,71 @@ describe('QqbotNapcatLoginService', () => {
     );
 
     expect(result.status).toBe('pending');
-    expect(result.qrcode).toBe('fresh-qrcode');
+    expect(result.qrcode).toBeUndefined();
+    expect(result.errorMessage).toBe('NapCat 正在重置登录态并生成二维码，请稍后');
     expect(containerService.resetRuntimeLoginState).toHaveBeenCalledWith(
       container,
+      expect.any(Function),
     );
+    resolveReset();
+  });
+
+  it('does not complete refresh login from stale status while relogin is preparing', async () => {
+    (service as any).sessions.set('session-preparing', {
+      containerId: 'container-preparing',
+      containerName: 'napcat-preparing',
+      createdAt: Date.now(),
+      errorMessage: 'NapCat 正在重置登录态并生成二维码，请稍后',
+      expiresAt: Date.now() + 60_000,
+      id: 'session-preparing',
+      mode: 'refresh',
+      preparingRelogin: true,
+      status: 'pending',
+      webuiPort: 6106,
+    });
+    const getLoginStatus = jest.spyOn(service as any, 'getLoginStatus');
+
+    const result = await service.status('session-preparing');
+
+    expect(result.status).toBe('pending');
+    expect(result.errorMessage).toBe(
+      'NapCat 正在重置登录态并生成二维码，请稍后',
+    );
+    expect(getLoginStatus).not.toHaveBeenCalled();
+  });
+
+  it('replays scan progress events to late SSE subscribers', () => {
+    const session = {
+      containerId: 'container-events',
+      containerName: 'napcat-events',
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      id: 'session-events',
+      mode: 'refresh',
+      status: 'pending',
+      webuiPort: 6107,
+    };
+    (service as any).sessions.set('session-events', session);
+    (service as any).publishScanResultEvent(
+      session,
+      'container-stop',
+      'processing',
+      '正在停止 NapCat 容器',
+    );
+    const events: any[] = [];
+
+    const subscription = service
+      .events('session-events')
+      .subscribe((event) => events.push(event.data));
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        message: '正在停止 NapCat 容器',
+        status: 'processing',
+        step: 'container-stop',
+      }),
+    ]);
+    subscription.unsubscribe();
   });
 
   it('requires a qrcode different from the current one when refreshing qrcode', async () => {

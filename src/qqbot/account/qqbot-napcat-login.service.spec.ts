@@ -53,6 +53,93 @@ describe('QqbotNapcatLoginService', () => {
     expect(getQrcode).not.toHaveBeenCalled();
   });
 
+  it('reuses the existing account container when refreshing login', async () => {
+    const account = {
+      id: 'account-1',
+      selfId: '10001',
+    };
+    const existingContainer = {
+      id: 'container-current',
+      name: 'napcat-10001',
+    };
+    const accountService = {
+      findById: jest.fn().mockResolvedValue(account),
+    };
+    const containerService = {
+      prepareAccountContainer: jest.fn().mockResolvedValue(existingContainer),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+    );
+    const startScan = jest
+      .spyOn(refreshService as any, 'startScan')
+      .mockResolvedValue({ sessionId: 'session-refresh' });
+
+    await refreshService.startRefresh('account-1');
+
+    expect(containerService.prepareAccountContainer).toHaveBeenCalledWith(
+      account,
+    );
+    expect(startScan).toHaveBeenCalledWith(
+      {
+        accountId: 'account-1',
+        expectedSelfId: '10001',
+        mode: 'refresh',
+      },
+      existingContainer,
+    );
+  });
+
+  it('requires a qrcode different from the current one when refreshing qrcode', async () => {
+    (service as any).sessions.set('session-refresh-qrcode', {
+      containerId: 'container-3',
+      containerName: 'napcat-3',
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      id: 'session-refresh-qrcode',
+      mode: 'refresh',
+      qrcode: 'old-qrcode',
+      status: 'pending',
+      webuiPort: 6103,
+    });
+    const container = { id: 'container-3' };
+    jest
+      .spyOn(service as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest.spyOn(service as any, 'callRefreshQrcode').mockResolvedValue('');
+    jest.spyOn(service as any, 'getQrcode').mockResolvedValue('new-qrcode');
+
+    const result = await service.refreshQrcode('session-refresh-qrcode');
+
+    expect(result.qrcode).toBe('new-qrcode');
+    expect((service as any).getQrcode).toHaveBeenCalledWith(container, true, {
+      requireFresh: true,
+      staleQrcode: 'old-qrcode',
+    });
+  });
+
+  it('retries while NapCat still exposes the stale qrcode', async () => {
+    jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
+    jest
+      .spyOn(service as any, 'postNapcat')
+      .mockResolvedValueOnce({ qrcode: 'old-qrcode' })
+      .mockResolvedValueOnce({ qrcode: 'new-qrcode' });
+
+    const result = await (service as any).getQrcode(
+      { id: 'container-4' },
+      true,
+      {
+        requireFresh: true,
+        staleQrcode: 'old-qrcode',
+      },
+    );
+
+    expect(result).toBe('new-qrcode');
+    expect((service as any).postNapcat).toHaveBeenCalledTimes(2);
+  });
+
   it('does not replace current qrcode with expired status qrcode', async () => {
     (service as any).sessions.set('session-2', {
       containerId: 'container-2',

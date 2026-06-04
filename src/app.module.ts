@@ -8,6 +8,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { MinioModule } from 'nestjs-minio-client';
 import { MinioClientModule } from './minio/minio.module';
 import {
+  ApiRequestLogInterceptor,
   ApiExceptionFilter,
   CommonModule,
   createPinoLoggerParams,
@@ -69,6 +70,10 @@ import { QqbotModule } from './qqbot/qqbot.module';
   providers: [
     AppService,
     ConfigService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ApiRequestLogInterceptor,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: SaveBodyInterceptor,

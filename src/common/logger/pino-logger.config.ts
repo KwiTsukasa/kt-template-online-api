@@ -39,10 +39,7 @@ export function createPinoLoggerParams(
 
   return {
     pinoHttp: {
-      autoLogging: {
-        ignore: (req: Request) =>
-          ['/favicon.ico'].includes(req.url) || req.url.startsWith('/api-json'),
-      },
+      autoLogging: false,
       base: {
         app: appName,
         env: nodeEnv,

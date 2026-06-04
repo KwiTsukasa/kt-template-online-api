@@ -211,6 +211,39 @@ export class ToolsService {
     return Array.isArray(value) ? value[0] : value;
   }
 
+  getRequestId(request: { headers?: Record<string, any>; id?: unknown }) {
+    return this.pickFirstText(
+      request?.id,
+      this.readHeader(request, 'x-request-id'),
+      this.readHeader(request, 'x-correlation-id'),
+    );
+  }
+
+  getRequestPath(
+    request:
+      | {
+          originalUrl?: unknown;
+          path?: unknown;
+          url?: unknown;
+        }
+      | undefined,
+  ) {
+    return this.normalizeRequestPathValue(
+      this.pickFirstText(request?.path, request?.originalUrl, request?.url),
+    );
+  }
+
+  normalizeRequestPathValue(value: unknown) {
+    const text = this.toTrimmedString(value);
+    if (!text) return '';
+
+    try {
+      return new URL(text, 'http://localhost').pathname;
+    } catch {
+      return text.split('?')[0] || text;
+    }
+  }
+
   readCookie(
     request: { headers?: Record<string, any> } | undefined,
     cookieName: string,

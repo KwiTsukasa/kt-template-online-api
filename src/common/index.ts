@@ -4,6 +4,7 @@ export * from './decorators/decode-dict.decorator';
 export * from './decorators/format-date-time.decorator';
 export * from './decorators/public.decorator';
 export * from './filters/api-exception.filter';
+export * from './interceptors/api-request-log.interceptor';
 export * from './interceptors/save-body.interceptor';
 export * from './logger/pino-logger.config';
 export * from './response/vben-response';

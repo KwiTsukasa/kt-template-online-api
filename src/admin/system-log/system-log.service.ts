@@ -226,9 +226,25 @@ export class SystemLogService {
       this.normalizeLevel(parsed.level) ||
       'info';
     const requestId =
-      this.pickText(params.metadata?.requestId, meta.requestId, req.id) ||
-      undefined;
-    const path = this.pickText(parsed.path, req.url, req.originalUrl) || undefined;
+      this.pickText(
+        params.metadata?.requestId,
+        parsed.requestId,
+        meta.requestId,
+        req.id,
+      ) || undefined;
+    const path =
+      this.toolsService.normalizeRequestPathValue(
+        this.pickText(
+          parsed.path,
+          parsed.url,
+          parsed.originalUrl,
+          req.path,
+          req.url,
+          req.originalUrl,
+        ),
+      ) || undefined;
+    const method =
+      this.pickText(parsed.method, req.method)?.toUpperCase() || undefined;
 
     return formatDateTimeFields(
       Object.assign(new SystemLogDto(), {
@@ -244,7 +260,7 @@ export class SystemLogService {
         message:
           this.pickText(parsed.msg, parsed.message, parsed.err?.message) ||
           params.line,
-        method: this.pickText(parsed.method, req.method) || undefined,
+        method,
         path,
         raw: params.line,
         requestId,

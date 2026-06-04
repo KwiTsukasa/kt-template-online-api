@@ -1,9 +1,9 @@
+import type { ToolsService } from '@/common';
 import type {
   QqbotMessageType,
   QqbotNormalizedMessage,
   QqbotOneBotEvent,
 } from '../qqbot.types';
-import { toStringId } from '../qqbot.utils';
 
 export function isOneBotMessageEvent(
   payload: QqbotOneBotEvent,
@@ -16,12 +16,15 @@ export function isOneBotMessageEvent(
 
 export function normalizeOneBotMessage(
   payload: QqbotOneBotEvent,
+  toolsService: ToolsService,
 ): QqbotNormalizedMessage {
   const messageType = normalizeMessageType(payload.message_type) || 'private';
   const channelId =
-    toStringId(payload.channel_id) || toStringId(payload.guild_id) || undefined;
-  const groupId = toStringId(payload.group_id) || undefined;
-  const userId = toStringId(payload.user_id);
+    toolsService.toStringId(payload.channel_id) ||
+    toolsService.toStringId(payload.guild_id) ||
+    undefined;
+  const groupId = toolsService.toStringId(payload.group_id) || undefined;
+  const userId = toolsService.toStringId(payload.user_id);
   const targetId =
     messageType === 'group'
       ? groupId || ''
@@ -37,13 +40,13 @@ export function normalizeOneBotMessage(
       : new Date(),
     groupId,
     messageId:
-      toStringId(payload.message_id) ||
+      toolsService.toStringId(payload.message_id) ||
       `${payload.time || Date.now()}-${targetId}-${userId}`,
     messageText,
     messageType,
     rawEvent: payload,
     rawMessage: payload.raw_message || messageText,
-    selfId: toStringId(payload.self_id),
+    selfId: toolsService.toStringId(payload.self_id),
     senderNickname:
       payload.sender?.card ||
       payload.sender?.nickname ||

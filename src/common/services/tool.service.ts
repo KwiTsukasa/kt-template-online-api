@@ -1,5 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import * as svgCaptcha from 'svg-captcha';
+import { normalizeVbenErrorText } from '../response/vben-response';
+import type {
+  KtDictOption,
+  KtPage,
+  KtResponse,
+  NapcatLoginStatusLike,
+  QrcodeLookupOptions,
+} from '../types';
 
 @Injectable()
 export class ToolsService {
@@ -14,7 +22,7 @@ export class ToolsService {
     return captcha;
   }
 
-  res(code: number, msg: string, data: any): Res {
+  res(code: number, msg: string, data: any): KtResponse {
     if (code === 200) {
       return {
         code,
@@ -26,11 +34,11 @@ export class ToolsService {
     return {
       code,
       msg,
-      err: data,
+      err: normalizeVbenErrorText(data, msg),
     };
   }
 
-  page<T = any>(list: T[], total: number): Page<T> {
+  page<T = any>(list: T[], total: number): KtPage<T> {
     const retn = {
       list,
       total,
@@ -86,7 +94,7 @@ export class ToolsService {
     label: string,
     value: any,
     other: Partial<T>,
-  ): Dict<T> {
+  ): KtDictOption<T> {
     const options = {
       label,
       value,
@@ -94,5 +102,213 @@ export class ToolsService {
     };
 
     return options;
+  }
+
+  getErrorMessage(err: unknown, fallback = '') {
+    const response = (err as any)?.getResponse?.();
+    if (typeof response?.msg === 'string') return response.msg;
+    if (typeof response?.message === 'string') return response.message;
+    if (err instanceof Error) return err.message;
+    if (typeof err === 'string') return err;
+    if (err === undefined || err === null) return fallback;
+    return `${err}`;
+  }
+
+  sleep(ms: number) {
+    return new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  toTrimmedString(value: unknown) {
+    return `${value ?? ''}`.trim();
+  }
+
+  normalizeWhitespaceText(value: unknown) {
+    return this.toTrimmedString(value).replace(/\s+/g, ' ');
+  }
+
+  toStringId(value: number | string | undefined | null) {
+    return value === undefined || value === null ? '' : `${value}`;
+  }
+
+  toPositiveNumber(
+    value: number | string | undefined | null,
+    fallback: number,
+  ) {
+    const nextValue = Number(value);
+    return Number.isFinite(nextValue) && nextValue > 0 ? nextValue : fallback;
+  }
+
+  getPageParams(
+    query: { pageNo?: number | string; pageSize?: number | string } = {},
+    defaultPageNo = 1,
+    defaultPageSize = 10,
+  ) {
+    const pageNo = this.toPositiveNumber(query.pageNo, defaultPageNo);
+    const pageSize = this.toPositiveNumber(query.pageSize, defaultPageSize);
+    return {
+      pageNo,
+      pageSize,
+      skip: (pageNo - 1) * pageSize,
+    };
+  }
+
+  normalizeBoolean(value: unknown, fallback = false) {
+    if (value === undefined || value === null || value === '') return fallback;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value === 1;
+    return ['1', 'true', 'yes'].includes(`${value}`.toLowerCase());
+  }
+
+  normalizeNullableString(value: unknown) {
+    if (value === undefined || value === null) return null;
+    const nextValue = this.toTrimmedString(value);
+    return nextValue ? nextValue : null;
+  }
+
+  pickFirstText(...values: unknown[]) {
+    for (const value of values) {
+      const text = this.toTrimmedString(value);
+      if (text) return text;
+    }
+    return '';
+  }
+
+  includesAny(value: unknown, keywords: string[]) {
+    const text = `${value ?? ''}`;
+    return keywords.some((keyword) => text.includes(keyword));
+  }
+
+  includesText(value: unknown, keyword: unknown) {
+    const normalizedKeyword = this.toTrimmedString(keyword);
+    if (!normalizedKeyword) return true;
+
+    return this.toTrimmedString(value)
+      .toLowerCase()
+      .includes(normalizedKeyword.toLowerCase());
+  }
+
+  isSameText(left: unknown, right?: unknown) {
+    const rightText = this.toTrimmedString(right);
+    return !!rightText && this.toTrimmedString(left) === rightText;
+  }
+
+  pickDefined<T extends Record<string, unknown>>(payload: T) {
+    return Object.entries(payload).reduce<Partial<T>>((acc, [key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        acc[key as keyof T] = value as T[keyof T];
+      }
+      return acc;
+    }, {});
+  }
+
+  readHeader(
+    request: { headers?: Record<string, any> } | undefined,
+    name: string,
+  ) {
+    const value = request?.headers?.[name.toLowerCase()];
+    return Array.isArray(value) ? value[0] : value;
+  }
+
+  readCookie(
+    request: { headers?: Record<string, any> } | undefined,
+    cookieName: string,
+  ) {
+    const cookieHeader = request?.headers?.cookie || '';
+    const cookie = `${cookieHeader}`.split(';').find((item) => {
+      const [key] = item.trim().split('=');
+      return key === cookieName;
+    });
+    if (!cookie) return undefined;
+
+    const [, ...value] = cookie.trim().split('=');
+    const joined = value.join('=');
+    try {
+      return decodeURIComponent(joined);
+    } catch {
+      return joined;
+    }
+  }
+
+  readBearerToken(authHeader?: string) {
+    if (!authHeader?.startsWith('Bearer ')) return null;
+    return authHeader.split(' ')[1] || null;
+  }
+
+  pickQrcode(data?: Record<string, any> | null) {
+    if (!data) return '';
+    return this.pickFirstText(data.qrcode, data.qrcodeurl, data.url);
+  }
+
+  ensureFreshQrcode(qrcode: unknown, options: QrcodeLookupOptions = {}) {
+    const normalized = this.toTrimmedString(qrcode);
+    if (options.requireFresh && !normalized) {
+      throw new Error('NapCat 二维码仍未刷新');
+    }
+    if (
+      normalized &&
+      options.requireFresh &&
+      this.isSameText(normalized, options.staleQrcode)
+    ) {
+      throw new Error('NapCat 二维码仍未刷新');
+    }
+    return normalized;
+  }
+
+  pickNapcatSelfId(info: Record<string, any>) {
+    return this.pickFirstText(info.uin, info.self_id, info.selfId);
+  }
+
+  pickNapcatNickname(info: Record<string, any>) {
+    return this.pickFirstText(info.nick, info.nickname, info.name);
+  }
+
+  isNapcatAlreadyLoggedInError(err: unknown) {
+    return this.getErrorMessage(err).includes('QQ Is Logined');
+  }
+
+  isNapcatTemporaryError(err: unknown) {
+    return this.includesAny(this.getErrorMessage(err), [
+      'ECONNREFUSED',
+      'ECONNRESET',
+      'ETIMEDOUT',
+      'NapCat 请求超时',
+      'NapCat 未返回登录二维码',
+      'NapCat 二维码仍未刷新',
+      'QRCode Get Error',
+      'socket hang up',
+    ]);
+  }
+
+  isNapcatQrcodePendingError(err: unknown) {
+    return this.getErrorMessage(err).includes('QRCode Get Error');
+  }
+
+  isNapcatOfflineLoginStatus(status: NapcatLoginStatusLike) {
+    return (
+      !!status.isOffline || this.isNapcatOfflineLoginMessage(status.loginError)
+    );
+  }
+
+  isNapcatOfflineLoginMessage(message?: string) {
+    return this.includesAny(message, [
+      'KickedOffLine',
+      'Not Login',
+      'not login',
+      '下线',
+      '离线',
+      '另一台终端',
+      '被踢',
+      '登录态失效',
+    ]);
+  }
+
+  isNapcatExpiredQrcodeStatus(status: NapcatLoginStatusLike) {
+    const message = status.loginError || '';
+    return (
+      message.includes('二维码') &&
+      (message.includes('过期') || message.includes('失效'))
+    );
   }
 }

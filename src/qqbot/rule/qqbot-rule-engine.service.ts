@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ToolsService } from '@/common';
 import type { QqbotNormalizedMessage } from '../qqbot.types';
 import { QqbotCommandEngineService } from '../command/qqbot-command-engine.service';
 import { QqbotPermissionService } from '../permission/qqbot-permission.service';
@@ -16,6 +17,7 @@ export class QqbotRuleEngineService {
     private readonly repeaterPluginService: QqbotRepeaterPluginService,
     private readonly ruleService: QqbotRuleService,
     private readonly sendService: QqbotSendService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async handleMessage(message: QqbotNormalizedMessage) {
@@ -41,7 +43,7 @@ export class QqbotRuleEngineService {
           targetType: message.messageType,
         });
       } catch (err) {
-        const errMsg = err instanceof Error ? err.message : '自动回复失败';
+        const errMsg = this.toolsService.getErrorMessage(err, '自动回复失败');
         this.logger.warn(`QQBot 自动回复失败: ${errMsg}`);
       }
       return;

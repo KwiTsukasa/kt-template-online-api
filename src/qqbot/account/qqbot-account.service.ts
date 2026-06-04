@@ -1,11 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { throwVbenError } from '@/common';
-import {
-  QqbotAccountAbility,
-  type QqbotAccountAbilityType,
-} from './qqbot-account-ability.entity';
+import { throwVbenError, ToolsService } from '@/common';
+import { QqbotAccountAbility } from './qqbot-account-ability.entity';
 import { QqbotAccount } from './qqbot-account.entity';
 import type {
   QqbotAccountBodyDto,
@@ -15,28 +12,15 @@ import type {
 import { QqbotAccountNapcat } from '../napcat/qqbot-account-napcat.entity';
 import { QqbotNapcatContainer } from '../napcat/qqbot-napcat-container.entity';
 import { QqbotNapcatContainerService } from '../napcat/qqbot-napcat-container.service';
+import {
+  QQBOT_DEFAULT_PAGE_NO,
+  QQBOT_DEFAULT_PAGE_SIZE,
+} from '../qqbot.constants';
 import type {
-  QqbotAccountNapcatBindStatus,
+  QqbotAccountAbilityType,
+  QqbotAccountListItem,
   QqbotConnectionRole,
-  QqbotNapcatContainerStatus,
 } from '../qqbot.types';
-import { getPageParams, normalizeNullableString } from '../qqbot.utils';
-
-export type QqbotAccountNapcatRuntimeInfo = {
-  bindStatus?: QqbotAccountNapcatBindStatus;
-  containerId?: string;
-  containerName?: string;
-  containerStatus?: QqbotNapcatContainerStatus;
-  lastCheckedAt?: Date | null;
-  lastError?: null | string;
-  lastLoginAt?: Date | null;
-  lastStartedAt?: Date | null;
-  webuiPort?: null | number;
-};
-
-export type QqbotAccountListItem = QqbotAccount & {
-  napcat?: null | QqbotAccountNapcatRuntimeInfo;
-};
 
 @Injectable()
 export class QqbotAccountService {
@@ -50,10 +34,15 @@ export class QqbotAccountService {
     @InjectRepository(QqbotNapcatContainer)
     private readonly napcatContainerRepository: Repository<QqbotNapcatContainer>,
     private readonly napcatContainerService: QqbotNapcatContainerService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async page(query: QqbotAccountQueryDto) {
-    const { pageNo, pageSize, skip } = getPageParams(query);
+    const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
+      query,
+      QQBOT_DEFAULT_PAGE_NO,
+      QQBOT_DEFAULT_PAGE_SIZE,
+    );
     const builder = this.accountRepository
       .createQueryBuilder('account')
       .where('account.isDeleted = :isDeleted', { isDeleted: false });
@@ -451,7 +440,7 @@ export class QqbotAccountService {
 
   private normalizeBody(body: Partial<QqbotAccountBodyDto>) {
     return {
-      accessToken: normalizeNullableString(body.accessToken),
+      accessToken: this.toolsService.normalizeNullableString(body.accessToken),
       connectionMode: body.connectionMode || 'reverse-ws',
       enabled: body.enabled ?? true,
       name: body.name || '',

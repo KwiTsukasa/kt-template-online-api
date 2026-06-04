@@ -5,15 +5,8 @@ import type { OpenAPIObject } from '@nestjs/swagger';
 import { urlencoded, json } from 'express';
 import { knife4jSetup } from '@kwitsukasa/knife4j-swagger-vue3';
 import type { Service } from '@kwitsukasa/knife4j-swagger-vue3';
+import type { SwaggerDocumentGroup, SwaggerPathMatcher } from './common';
 import { applySwaggerResponseExamples } from './common';
-
-type SwaggerPathMatcher = (path: string) => boolean;
-
-interface SwaggerDocumentGroup {
-  matcher: SwaggerPathMatcher;
-  name: string;
-  path: string;
-}
 
 const adminSwaggerPathPrefixes = [
   '/auth',

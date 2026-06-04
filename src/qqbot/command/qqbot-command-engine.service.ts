@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ToolsService } from '@/common';
 import { QqbotPluginRegistryService } from '../plugin/qqbot-plugin-registry.service';
 import type { QqbotNormalizedMessage } from '../qqbot.types';
 import { QqbotSendService } from '../send/qqbot-send.service';
@@ -18,6 +19,7 @@ export class QqbotCommandEngineService {
     private readonly pluginRegistry: QqbotPluginRegistryService,
     private readonly replyTemplate: QqbotReplyTemplateService,
     private readonly sendService: QqbotSendService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async handleMessage(message: QqbotNormalizedMessage) {
@@ -61,8 +63,10 @@ export class QqbotCommandEngineService {
           status: 'success',
         });
       } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : '命令执行失败';
+        const errorMessage = this.toolsService.getErrorMessage(
+          err,
+          '命令执行失败',
+        );
         await this.commandService.logExecution({
           command,
           errorMessage,
@@ -113,7 +117,10 @@ export class QqbotCommandEngineService {
         status: 'success',
       };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '命令执行失败';
+      const errorMessage = this.toolsService.getErrorMessage(
+        err,
+        '命令执行失败',
+      );
       return {
         command: this.commandService.toResponse(command),
         errorMessage,
@@ -167,7 +174,10 @@ export class QqbotCommandEngineService {
         targetType: message.messageType,
       });
     } catch (err) {
-      const sendErr = err instanceof Error ? err.message : '错误回复发送失败';
+      const sendErr = this.toolsService.getErrorMessage(
+        err,
+        '错误回复发送失败',
+      );
       this.logger.warn(`QQBot 命令错误回复发送失败: ${sendErr}`);
     }
   }

@@ -27,6 +27,7 @@ import {
   collectControllerRoutes,
   routeKey,
 } from './helpers/controller-route.helper';
+import type { RouteTestCase } from './test.types';
 
 const component = {
   id: '2041739550026043392',
@@ -55,6 +56,41 @@ const chartOptions = [
     value: 1,
   },
 ];
+
+const dictItem = {
+  childrenCode: 'CHART',
+  dictCode: 'COMPONENT_TYPE',
+  id: '2041700000000300001',
+  label: '图表',
+  sort: 1,
+  status: 1,
+  value: '1',
+};
+
+const dictTreeItem = {
+  ...dictItem,
+  children: [
+    {
+      childrenCode: null,
+      dictCode: 'CHART',
+      id: '2041700000000300002',
+      label: '折线图',
+      sort: 1,
+      status: 1,
+      treeKey: '2041700000000300001/2041700000000300002',
+      value: '1',
+    },
+  ],
+  treeKey: '2041700000000300001',
+};
+
+const dictGroupItem = {
+  dictCode: 'COMPONENT_TYPE',
+  id: 'dict-code:COMPONENT_TYPE',
+  itemCount: 2,
+  label: 'COMPONENT_TYPE',
+  value: 'COMPONENT_TYPE',
+};
 
 const uploadResult = {
   bucketName: 'kt-template-online',
@@ -128,8 +164,17 @@ const unauthorizedException = () =>
   );
 
 const dictServiceMock = {
+  codes: jest.fn(),
+  getDictCodeOptions: jest.fn(),
   getDictByKey: jest.fn(),
   getComponentDictByType: jest.fn(),
+  groups: jest.fn(),
+  page: jest.fn(),
+  remove: jest.fn(),
+  save: jest.fn(),
+  toggle: jest.fn(),
+  tree: jest.fn(),
+  update: jest.fn(),
 };
 
 const minioServiceMock = {
@@ -176,9 +221,6 @@ const controllerClasses = [
   WordpressCategoryController,
 ];
 const controllerRoutes = collectControllerRoutes(controllerClasses);
-
-type HttpServer = Parameters<typeof request>[0];
-type RouteTestCase = (server: HttpServer) => Promise<void>;
 
 const routeTestCases: Record<string, RouteTestCase> = {
   'GET /': async (server) => {
@@ -344,6 +386,182 @@ const routeTestCases: Record<string, RouteTestCase> = {
       code: 200,
       msg: '操作成功',
       data: chartOptions,
+    });
+  },
+
+  'GET /dict/list': async (server) => {
+    dictServiceMock.page.mockResolvedValue({
+      items: [dictItem],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/dict/list')
+      .query({ dictCode: 'COMPONENT_TYPE', pageNo: 1, pageSize: 10 })
+      .expect(200);
+
+    expect(dictServiceMock.page).toHaveBeenCalledWith({
+      dictCode: 'COMPONENT_TYPE',
+      pageNo: '1',
+      pageSize: '10',
+    });
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: {
+        items: [dictItem],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /dict/tree': async (server) => {
+    dictServiceMock.tree.mockResolvedValue([dictTreeItem]);
+
+    const response = await request(server)
+      .get('/dict/tree')
+      .query({ dictCode: 'COMPONENT_TYPE' })
+      .expect(200);
+
+    expect(dictServiceMock.tree).toHaveBeenCalledWith({
+      dictCode: 'COMPONENT_TYPE',
+    });
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: [dictTreeItem],
+    });
+  },
+
+  'GET /dict/groups': async (server) => {
+    dictServiceMock.groups.mockResolvedValue({
+      items: [dictGroupItem],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/dict/groups')
+      .query({ keyword: 'COMPONENT', pageNo: 1, pageSize: 10 })
+      .expect(200);
+
+    expect(dictServiceMock.groups).toHaveBeenCalledWith({
+      keyword: 'COMPONENT',
+      pageNo: '1',
+      pageSize: '10',
+    });
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: {
+        items: [dictGroupItem],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /dict/codes': async (server) => {
+    dictServiceMock.getDictCodeOptions.mockResolvedValue([
+      {
+        label: 'COMPONENT_TYPE',
+        value: 'COMPONENT_TYPE',
+      },
+    ]);
+
+    const response = await request(server).get('/dict/codes').expect(200);
+
+    expect(dictServiceMock.getDictCodeOptions).toHaveBeenCalledWith();
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: [
+        {
+          label: 'COMPONENT_TYPE',
+          value: 'COMPONENT_TYPE',
+        },
+      ],
+    });
+  },
+
+  'POST /dict/save': async (server) => {
+    dictServiceMock.save.mockResolvedValue(dictItem.id);
+
+    const response = await request(server)
+      .post('/dict/save')
+      .send({
+        childrenCode: 'CHART',
+        dictCode: 'COMPONENT_TYPE',
+        label: '图表',
+        sort: 1,
+        status: 1,
+        value: '1',
+      })
+      .expect(200);
+
+    expect(dictServiceMock.save).toHaveBeenCalledWith({
+      childrenCode: 'CHART',
+      dictCode: 'COMPONENT_TYPE',
+      label: '图表',
+      sort: 1,
+      status: 1,
+      value: '1',
+    });
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: dictItem.id,
+    });
+  },
+
+  'POST /dict/update': async (server) => {
+    dictServiceMock.update.mockResolvedValue(null);
+
+    const response = await request(server)
+      .post('/dict/update')
+      .send({
+        id: dictItem.id,
+        label: '图表',
+      })
+      .expect(200);
+
+    expect(dictServiceMock.update).toHaveBeenCalledWith({
+      id: dictItem.id,
+      label: '图表',
+    });
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: null,
+    });
+  },
+
+  'DELETE /dict/:id': async (server) => {
+    dictServiceMock.remove.mockResolvedValue(null);
+
+    const response = await request(server)
+      .delete(`/dict/${dictItem.id}`)
+      .expect(200);
+
+    expect(dictServiceMock.remove).toHaveBeenCalledWith(dictItem.id);
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: null,
+    });
+  },
+
+  'POST /dict/toggle': async (server) => {
+    dictServiceMock.toggle.mockResolvedValue(null);
+
+    const response = await request(server)
+      .post('/dict/toggle')
+      .query({ id: dictItem.id, status: 0 })
+      .expect(200);
+
+    expect(dictServiceMock.toggle).toHaveBeenCalledWith(dictItem.id, 0);
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: null,
     });
   },
 
@@ -580,7 +798,9 @@ const routeTestCases: Record<string, RouteTestCase> = {
       .post('/wordpress/auth/login')
       .expect(201);
 
-    expect(wordpressServiceMock.loginWithConfiguredAdmin).toHaveBeenCalledWith();
+    expect(
+      wordpressServiceMock.loginWithConfiguredAdmin,
+    ).toHaveBeenCalledWith();
     expect(wordpressServiceMock.setAuthCookie).toHaveBeenCalledWith(
       expect.anything(),
       wordpressLoginResult.cookie,
@@ -1058,7 +1278,32 @@ describe('KT Template Online API (e2e)', () => {
     expect(response.body).toEqual({
       code: 400,
       msg: '操作失败',
-      err: false,
+      err: 'false',
+    });
+  });
+
+  it('serializes object error details as a string for frontend parsing', async () => {
+    wordpressServiceMock.checkAuth.mockRejectedValue(
+      new HttpException(
+        {
+          msg: 'WordPress 请求失败',
+          err: {
+            code: 'WORDPRESS_NETWORK_ERROR',
+            message: 'connect ECONNREFUSED 127.0.0.1:8080',
+          },
+        },
+        HttpStatus.BAD_GATEWAY,
+      ),
+    );
+
+    const response = await request(app.getHttpServer())
+      .get('/wordpress/auth/check')
+      .expect(502);
+
+    expect(response.body).toEqual({
+      code: 502,
+      msg: 'WordPress 请求失败',
+      err: 'connect ECONNREFUSED 127.0.0.1:8080',
     });
   });
 
@@ -1089,9 +1334,7 @@ describe('KT Template Online API (e2e)', () => {
     jest.clearAllMocks();
     authServiceMock.currentUser.mockRejectedValue(unauthorizedException());
 
-    await request(app.getHttpServer())
-      .get('/wordpress/auth/check')
-      .expect(401);
+    await request(app.getHttpServer()).get('/wordpress/auth/check').expect(401);
 
     expect(wordpressServiceMock.checkAuth).not.toHaveBeenCalled();
   });

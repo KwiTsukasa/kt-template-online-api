@@ -8,7 +8,7 @@ import type {
   QqbotPluginOperationContext,
   QqbotPluginOperationSummary,
   QqbotPluginSummary,
-} from './qqbot-plugin.types';
+} from '../qqbot.types';
 
 @Injectable()
 export class QqbotPluginRegistryService implements OnModuleInit {

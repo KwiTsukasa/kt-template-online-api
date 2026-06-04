@@ -1,13 +1,13 @@
 import { PartialType } from '@nestjs/swagger';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import type { KtPageQuery } from '@/common';
 import type {
   QqbotCommandParserType,
   QqbotMessageType,
   QqbotRuleTargetType,
 } from '../qqbot.types';
-import type { QqbotPageQuery } from '../qqbot.utils';
 
-export class QqbotCommandQueryDto implements QqbotPageQuery {
+export class QqbotCommandQueryDto implements KtPageQuery {
   @ApiPropertyOptional()
   pageNo?: number | string;
 

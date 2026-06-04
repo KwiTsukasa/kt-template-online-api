@@ -2,16 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { QqbotConfig } from './qqbot-config.entity';
+import type { QqbotPermissionConfig } from '../qqbot.types';
 
 const QQBOT_PERMISSION_CONFIG_KEYS = {
   allowlistEnabled: 'permission.allowlistEnabled',
   blocklistEnabled: 'permission.blocklistEnabled',
 } as const;
-
-export type QqbotPermissionConfig = {
-  allowlistEnabled: boolean;
-  blocklistEnabled: boolean;
-};
 
 @Injectable()
 export class QqbotConfigService {
@@ -22,8 +18,14 @@ export class QqbotConfigService {
 
   async getPermissionConfig(): Promise<QqbotPermissionConfig> {
     const [allowlistEnabled, blocklistEnabled] = await Promise.all([
-      this.getBooleanConfig(QQBOT_PERMISSION_CONFIG_KEYS.allowlistEnabled, false),
-      this.getBooleanConfig(QQBOT_PERMISSION_CONFIG_KEYS.blocklistEnabled, true),
+      this.getBooleanConfig(
+        QQBOT_PERMISSION_CONFIG_KEYS.allowlistEnabled,
+        false,
+      ),
+      this.getBooleanConfig(
+        QQBOT_PERMISSION_CONFIG_KEYS.blocklistEnabled,
+        true,
+      ),
     ]);
 
     return { allowlistEnabled, blocklistEnabled };
@@ -65,11 +67,7 @@ export class QqbotConfigService {
     return record.configValue === 'true';
   }
 
-  async setBooleanConfig(
-    configKey: string,
-    value: boolean,
-    remark: string,
-  ) {
+  async setBooleanConfig(configKey: string, value: boolean, remark: string) {
     const exists = await this.configRepository.findOne({
       where: { configKey },
     });

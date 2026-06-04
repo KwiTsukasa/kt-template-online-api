@@ -3,114 +3,23 @@ import { ConfigService } from '@nestjs/config';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import { DictService } from '../../../admin/dict/dict.service';
-
-type HttpMethod = 'GET' | 'POST';
-
-type FflogsTokenResponse = {
-  access_token?: string;
-  expires_in?: number;
-  token_type?: string;
-};
-
-type FflogsGraphqlResponse<T> = {
-  data?: T;
-  errors?: Array<{ message?: string }>;
-};
-
-type FflogsCharacter = {
-  id?: number;
-  lodestoneID?: number;
-  name?: string;
-  recentReports?: {
-    data?: FflogsRecentReport[];
-  };
-  server?: {
-    name?: string;
-    slug?: string;
-  };
-  zoneRankings?: unknown;
-};
-
-type FflogsReportFight = {
-  difficulty?: number | null;
-  encounterID?: number;
-  endTime?: number;
-  id?: number;
-  kill?: boolean | null;
-  name?: string;
-  startTime?: number;
-};
-
-type FflogsRecentReport = {
-  code?: string;
-  endTime?: number;
-  fights?: FflogsReportFight[];
-  startTime?: number;
-  title?: string;
-  zone?: {
-    id?: number;
-    name?: string;
-  };
-};
-
-type FflogsCharacterSummaryResponse = {
-  characterData?: {
-    character?: FflogsCharacter | null;
-  };
-};
-
-type FflogsReportFightMetricsResponse = {
-  reportData?: {
-    report?: {
-      damage?: unknown;
-      dpsRankings?: unknown;
-      healing?: unknown;
-      hpsRankings?: unknown;
-    } | null;
-  };
-};
-
-type FflogsRankingItem = Record<string, any>;
-
-type FflogsEncounterLookup = {
-  displayName: string;
-  encounterId?: number;
-  input: string;
-  keys: string[];
-};
-
-type FflogsEncounterFightCandidate = {
-  absoluteStartTime: number;
-  fight: FflogsReportFight;
-  report: FflogsRecentReport;
-};
-
-type FflogsParseMetric = {
-  amount?: number;
-  color: string;
-  percent?: number;
-  rank?: string;
-};
-
-export type QqbotFflogsEncounterLogItem = {
-  adps?: number;
-  color: string;
-  damageScore?: number;
-  dps?: number;
-  durationMs?: number;
-  encounterName: string;
-  fightId?: number;
-  healingColor: string;
-  healingScore?: number;
-  hps?: number;
-  kill?: boolean | null;
-  logCode: string;
-  logUrl: string;
-  ndps?: number;
-  rdps?: number;
-  reportTitle?: string;
-  startTime?: number;
-};
+import type {
+  FflogsCharacterSummaryResponse,
+  FflogsEncounterFightCandidate,
+  FflogsEncounterLookup,
+  FflogsGraphqlResponse,
+  FflogsHttpMethod,
+  FflogsLocalizationMaps,
+  FflogsParseMetric,
+  FflogsRankingItem,
+  FflogsRecentReport,
+  FflogsReportFight,
+  FflogsReportFightMetricsResponse,
+  FflogsTokenResponse,
+  QqbotFflogsCharacterSummaryInput,
+  QqbotFflogsCharacterSummaryResult,
+  QqbotFflogsEncounterLogItem,
+} from './qqbot-fflogs.types';
 
 const FFLOGS_LOCALIZATION_DICT_CODES = {
   encounter: 'FFLOGS_ENCOUNTER_LABEL',
@@ -118,45 +27,6 @@ const FFLOGS_LOCALIZATION_DICT_CODES = {
   metric: 'FFLOGS_METRIC_LABEL',
   role: 'FFLOGS_ROLE_LABEL',
   serverRegion: 'FFLOGS_SERVER_REGION_LABEL',
-};
-
-type FflogsLocalizationMaps = Record<
-  keyof typeof FFLOGS_LOCALIZATION_DICT_CODES,
-  Map<string, string>
->;
-
-export type QqbotFflogsCharacterSummaryInput = {
-  character?: string;
-  characterName?: string;
-  className?: string;
-  difficulty?: number | string;
-  encounter?: string;
-  encounterName?: string;
-  limit?: number | string;
-  metric?: string;
-  partition?: number | string;
-  reportsLimit?: number | string;
-  role?: string;
-  server?: string;
-  serverRegion?: string;
-  serverSlug?: string;
-  size?: number | string;
-  specName?: string;
-  timeframe?: string;
-  zoneId?: number | string;
-};
-
-export type QqbotFflogsCharacterSummaryResult = {
-  allStarText?: string;
-  characterId?: number;
-  characterName: string;
-  encounterName?: string;
-  logs?: QqbotFflogsEncounterLogItem[];
-  rankings: FflogsRankingItem[];
-  replyText: string;
-  serverName: string;
-  serverRegion: string;
-  url: string;
 };
 
 @Injectable()
@@ -655,7 +525,7 @@ export class QqbotFflogsClientService {
 
   private requestJson<T>(
     url: URL,
-    method: HttpMethod,
+    method: FflogsHttpMethod,
     options: { body?: string; headers?: Record<string, string> } = {},
   ) {
     return new Promise<T>((resolve, reject) => {

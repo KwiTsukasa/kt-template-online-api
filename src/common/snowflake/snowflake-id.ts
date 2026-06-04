@@ -1,3 +1,5 @@
+import type { SnowflakeEntity } from '../types';
+
 const TWEPOCH = 1288834974657n;
 const WORKER_ID_BITS = 5n;
 const DATACENTER_ID_BITS = 5n;
@@ -75,10 +77,6 @@ class SnowflakeIdGenerator {
 const snowflakeIdGenerator = new SnowflakeIdGenerator();
 
 export const createSnowflakeId = () => snowflakeIdGenerator.nextId();
-
-export type SnowflakeEntity = {
-  id?: number | string | null;
-};
 
 export const isEmptySnowflakeId = (id: SnowflakeEntity['id']) =>
   id === undefined || id === null || id === '' || id === 0 || id === '0';

@@ -2,14 +2,19 @@ import { Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { throwVbenError } from '@/common';
+import { throwVbenError, ToolsService } from '@/common';
 import { QqbotAccountService } from '../account/qqbot-account.service';
-import type { QqbotReverseWsService } from '../connection/qqbot-reverse-ws.service';
 import { QQBOT_MQTT_TOPICS } from '../qqbot.constants';
 import { QqbotBusService } from '../mqtt/qqbot-bus.service';
 import { QqbotMessageService } from '../message/qqbot-message.service';
-import type { QqbotMessageType } from '../qqbot.types';
-import { getPageParams } from '../qqbot.utils';
+import type {
+  QqbotMessageType,
+  QqbotReverseActionSender,
+} from '../qqbot.types';
+import {
+  QQBOT_DEFAULT_PAGE_NO,
+  QQBOT_DEFAULT_PAGE_SIZE,
+} from '../qqbot.constants';
 import { QqbotRateLimitService } from './qqbot-rate-limit.service';
 import { QqbotSendLog } from './qqbot-send-log.entity';
 import type {
@@ -28,10 +33,15 @@ export class QqbotSendService {
     private readonly messageService: QqbotMessageService,
     private readonly moduleRef: ModuleRef,
     private readonly rateLimitService: QqbotRateLimitService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async logPage(query: QqbotSendLogQueryDto) {
-    const { pageNo, pageSize, skip } = getPageParams(query);
+    const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
+      query,
+      QQBOT_DEFAULT_PAGE_NO,
+      QQBOT_DEFAULT_PAGE_SIZE,
+    );
     const builder = this.sendLogRepository.createQueryBuilder('log');
 
     if (query.selfId) {
@@ -152,7 +162,7 @@ export class QqbotSendService {
       if (!success) throwVbenError(response.message || 'OneBot 发送失败');
       return { ...response, logId: log.id };
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'OneBot 发送失败';
+      const message = this.toolsService.getErrorMessage(err, 'OneBot 发送失败');
       await this.sendLogRepository.update(
         { id: log.id },
         {
@@ -164,11 +174,11 @@ export class QqbotSendService {
     }
   }
 
-  private async getReverseWsService() {
+  private async getReverseWsService(): Promise<QqbotReverseActionSender> {
     const { QqbotReverseWsService } = await import(
       '../connection/qqbot-reverse-ws.service'
     );
-    return this.moduleRef.get<QqbotReverseWsService>(QqbotReverseWsService, {
+    return this.moduleRef.get<QqbotReverseActionSender>(QqbotReverseWsService, {
       strict: false,
     });
   }

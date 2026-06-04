@@ -1,59 +1,40 @@
 import { HttpStatus, Injectable, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { setDictDecodeCache, throwVbenError } from '@/common';
+import {
+  setDictDecodeCache,
+  throwVbenError,
+  ToolsService,
+  type KtDictOption,
+} from '@/common';
 import { AdminDict } from './admin-dict.entity';
 import {
   AdminDictBodyDto,
   AdminDictQueryDto,
   AdminDictUpdateDto,
 } from './dict.dto';
+import type {
+  AdminDictGroupItem,
+  AdminDictItem,
+  AdminDictSerialized,
+  AdminDictTreeItem,
+} from '../admin.types';
 
 const COMPONENT_TYPE_DICT_KEY = 'COMPONENT_TYPE';
-
-export type AdminDictItem = {
-  childrenCode?: string | null;
-  label: string;
-  value: string;
-};
-
-export type AdminDictGroupItem = {
-  dictCode: string;
-  id: string;
-  itemCount: number;
-  label: string;
-  value: string;
-};
-
-type AdminDictSerialized = {
-  childrenCode?: string | null;
-  createTime?: Date;
-  dictCode: string;
-  id: string;
-  label: string;
-  sort?: number;
-  status?: number;
-  updateTime?: Date;
-  value: string;
-};
-
-export type AdminDictTreeItem = AdminDictSerialized & {
-  children?: AdminDictTreeItem[];
-  treeKey: string;
-};
 
 @Injectable()
 export class DictService implements OnApplicationBootstrap {
   constructor(
     @InjectRepository(AdminDict)
     private readonly dictRepository: Repository<AdminDict>,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async onApplicationBootstrap() {
     await this.refreshDecodeCache();
   }
 
-  async getDictByKey(dictKey: string): Promise<Dict[]> {
+  async getDictByKey(dictKey: string): Promise<KtDictOption[]> {
     const list = await this.getDictItemsByKey(dictKey);
 
     return list.map(({ label, value }) => ({
@@ -63,13 +44,16 @@ export class DictService implements OnApplicationBootstrap {
   }
 
   async page(query: AdminDictQueryDto = {}) {
-    const pageNo = this.toPositiveNumber(query.pageNo ?? query.page, 1);
-    const pageSize = this.toPositiveNumber(query.pageSize, 20);
+    const pageNo = this.toolsService.toPositiveNumber(
+      query.pageNo ?? query.page,
+      1,
+    );
+    const pageSize = this.toolsService.toPositiveNumber(query.pageSize, 20);
     const builder = this.dictRepository
       .createQueryBuilder('dict')
       .where('dict.isDeleted = :isDeleted', { isDeleted: false });
 
-    const keyword = this.normalizeText(query.keyword);
+    const keyword = this.toolsService.toTrimmedString(query.keyword);
     if (keyword) {
       builder.andWhere(
         new Brackets((subBuilder) => {
@@ -132,13 +116,16 @@ export class DictService implements OnApplicationBootstrap {
   }
 
   async groups(query: AdminDictQueryDto = {}) {
-    const pageNo = this.toPositiveNumber(query.pageNo ?? query.page, 1);
-    const pageSize = this.toPositiveNumber(query.pageSize, 20);
+    const pageNo = this.toolsService.toPositiveNumber(
+      query.pageNo ?? query.page,
+      1,
+    );
+    const pageSize = this.toolsService.toPositiveNumber(query.pageSize, 20);
     const builder = this.dictRepository
       .createQueryBuilder('dict')
       .where('dict.isDeleted = :isDeleted', { isDeleted: false });
 
-    const keyword = this.normalizeText(query.keyword);
+    const keyword = this.toolsService.toTrimmedString(query.keyword);
     if (keyword) {
       builder.andWhere('dict.dictCode LIKE :keyword', {
         keyword: `%${keyword}%`,
@@ -206,7 +193,7 @@ export class DictService implements OnApplicationBootstrap {
   }
 
   async update(body: AdminDictUpdateDto) {
-    const id = this.normalizeText(body.id);
+    const id = this.toolsService.toTrimmedString(body.id);
     if (!id) throwVbenError('字典项ID不能为空', HttpStatus.BAD_REQUEST);
 
     const dict = await this.dictRepository.findOne({
@@ -240,7 +227,7 @@ export class DictService implements OnApplicationBootstrap {
   }
 
   async remove(id: string) {
-    const normalizedId = this.normalizeText(id);
+    const normalizedId = this.toolsService.toTrimmedString(id);
     if (!normalizedId)
       throwVbenError('字典项ID不能为空', HttpStatus.BAD_REQUEST);
 
@@ -291,7 +278,7 @@ export class DictService implements OnApplicationBootstrap {
     }));
   }
 
-  async getComponentDictByType(type: number): Promise<Dict[]> {
+  async getComponentDictByType(type: number): Promise<KtDictOption[]> {
     // 一级类型的 childrenCode 决定二级字典来源，避免在代码里维护 1 -> CHART 这类关系。
     const componentType = await this.dictRepository.findOne({
       where: {
@@ -337,7 +324,7 @@ export class DictService implements OnApplicationBootstrap {
     >,
     value?: string,
   ) {
-    const normalizedValue = this.normalizeText(value);
+    const normalizedValue = this.toolsService.toTrimmedString(value);
     if (!normalizedValue) return;
 
     builder.andWhere(`dict.${field} LIKE :${field}`, {
@@ -361,7 +348,7 @@ export class DictService implements OnApplicationBootstrap {
     const dictCodes = new Set(items.map((item) => item.dictCode));
     const referencedCodes = new Set(
       items
-        .map((item) => this.normalizeText(item.childrenCode))
+        .map((item) => this.toolsService.toTrimmedString(item.childrenCode))
         .filter((childrenCode) => childrenCode && dictCodes.has(childrenCode)),
     );
     const rootCodes = [...dictCodes].filter(
@@ -387,7 +374,7 @@ export class DictService implements OnApplicationBootstrap {
     treeKey: string,
     pathCodes: Set<string>,
   ): AdminDictTreeItem {
-    const childrenCode = this.normalizeText(item.childrenCode);
+    const childrenCode = this.toolsService.toTrimmedString(item.childrenCode);
     const children =
       childrenCode && !pathCodes.has(childrenCode)
         ? byDictCode.get(childrenCode)
@@ -458,7 +445,7 @@ export class DictService implements OnApplicationBootstrap {
       ),
     );
 
-    const childrenCode = this.normalizeText(item.childrenCode);
+    const childrenCode = this.toolsService.toTrimmedString(item.childrenCode);
     if (!childrenCode) return;
 
     const children = byDictCode.get(childrenCode) || [];
@@ -488,7 +475,7 @@ export class DictService implements OnApplicationBootstrap {
     const map = new Map<string, AdminDictSerialized[]>();
 
     items.forEach((item) => {
-      const childrenCode = this.normalizeText(item.childrenCode);
+      const childrenCode = this.toolsService.toTrimmedString(item.childrenCode);
       if (!childrenCode) return;
 
       const list = map.get(childrenCode) || [];
@@ -507,7 +494,7 @@ export class DictService implements OnApplicationBootstrap {
         query.keyword,
         query.label,
         query.value,
-      ].some((value) => !!this.normalizeText(value)) ||
+      ].some((value) => !!this.toolsService.toTrimmedString(value)) ||
       ['0', '1'].includes(String(query.status))
     );
   }
@@ -516,11 +503,11 @@ export class DictService implements OnApplicationBootstrap {
     item: AdminDictSerialized,
     query: AdminDictQueryDto,
   ) {
-    const keyword = this.normalizeText(query.keyword);
+    const keyword = this.toolsService.toTrimmedString(query.keyword);
     if (
       keyword &&
       ![item.childrenCode, item.dictCode, item.label, item.value].some(
-        (value) => this.includesText(value, keyword),
+        (value) => this.toolsService.includesText(value, keyword),
       )
     ) {
       return false;
@@ -542,47 +529,31 @@ export class DictService implements OnApplicationBootstrap {
     value: number | string | null | undefined,
     keyword?: string,
   ) {
-    const normalizedKeyword = this.normalizeText(keyword);
+    const normalizedKeyword = this.toolsService.toTrimmedString(keyword);
     if (!normalizedKeyword) return true;
 
-    return this.includesText(value, normalizedKeyword);
-  }
-
-  private includesText(
-    value: number | string | null | undefined,
-    keyword: string,
-  ) {
-    return this.normalizeText(value)
-      .toLowerCase()
-      .includes(keyword.toLowerCase());
+    return this.toolsService.includesText(value, normalizedKeyword);
   }
 
   private normalizeInput(body: AdminDictBodyDto): Partial<AdminDict> {
-    const dictCode = this.normalizeText(body.dictCode);
-    const label = this.normalizeText(body.label);
-    const value = this.normalizeText(body.value);
+    const dictCode = this.toolsService.toTrimmedString(body.dictCode);
+    const label = this.toolsService.toTrimmedString(body.label);
+    const value = this.toolsService.toTrimmedString(body.value);
 
     if (!dictCode) throwVbenError('字典编码不能为空', HttpStatus.BAD_REQUEST);
     if (!label) throwVbenError('字典标签不能为空', HttpStatus.BAD_REQUEST);
     if (!value) throwVbenError('字典值不能为空', HttpStatus.BAD_REQUEST);
 
     return {
-      childrenCode: this.normalizeNullableText(body.childrenCode),
+      childrenCode: this.toolsService.normalizeNullableString(
+        body.childrenCode,
+      ),
       dictCode,
       label,
       sort: Number.isFinite(Number(body.sort)) ? Number(body.sort) : 0,
       status: Number(body.status) === 0 ? 0 : 1,
       value,
     };
-  }
-
-  private normalizeNullableText(value?: number | string | null) {
-    const text = this.normalizeText(value);
-    return text || null;
-  }
-
-  private normalizeText(value?: number | string | null) {
-    return value === undefined || value === null ? '' : String(value).trim();
   }
 
   private serializeDict(dict: AdminDict) {
@@ -610,13 +581,5 @@ export class DictService implements OnApplicationBootstrap {
       label: item.dictCode,
       value: item.dictCode,
     };
-  }
-
-  private toPositiveNumber(
-    value: number | string | undefined,
-    fallback: number,
-  ) {
-    const nextValue = Number(value);
-    return Number.isFinite(nextValue) && nextValue > 0 ? nextValue : fallback;
   }
 }

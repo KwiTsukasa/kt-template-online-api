@@ -1,15 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
-import { throwVbenError } from '@/common';
+import { throwVbenError, ToolsService } from '@/common';
 import { QqbotAccountService } from '../account/qqbot-account.service';
 import { QqbotPluginRegistryService } from '../plugin/qqbot-plugin-registry.service';
+import {
+  QQBOT_DEFAULT_PAGE_NO,
+  QQBOT_DEFAULT_PAGE_SIZE,
+} from '../qqbot.constants';
 import type {
   QqbotCommandParserType,
   QqbotNormalizedMessage,
   QqbotRuleTargetType,
 } from '../qqbot.types';
-import { getPageParams, normalizeBoolean } from '../qqbot.utils';
 import type {
   QqbotCommandBodyDto,
   QqbotCommandQueryDto,
@@ -27,10 +30,15 @@ export class QqbotCommandService {
     private readonly commandLogRepository: Repository<QqbotCommandLog>,
     private readonly accountService: QqbotAccountService,
     private readonly pluginRegistry: QqbotPluginRegistryService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async page(query: QqbotCommandQueryDto) {
-    const { pageNo, pageSize, skip } = getPageParams(query);
+    const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
+      query,
+      QQBOT_DEFAULT_PAGE_NO,
+      QQBOT_DEFAULT_PAGE_SIZE,
+    );
     const builder = this.commandRepository
       .createQueryBuilder('command')
       .where('command.isDeleted = :isDeleted', { isDeleted: false });
@@ -67,7 +75,7 @@ export class QqbotCommandService {
     }
     if (query.enabled !== undefined && `${query.enabled}` !== '') {
       builder.andWhere('command.enabled = :enabled', {
-        enabled: normalizeBoolean(query.enabled),
+        enabled: this.toolsService.normalizeBoolean(query.enabled),
       });
     }
 

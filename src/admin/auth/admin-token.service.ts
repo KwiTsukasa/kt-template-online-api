@@ -1,14 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'crypto';
-
-export type AdminTokenPayload = {
-  exp: number;
-  iat: number;
-  sub: string;
-  type: 'access' | 'refresh';
-  username: string;
-};
+import type { AdminTokenPayload } from '../admin.types';
 
 @Injectable()
 export class AdminTokenService {

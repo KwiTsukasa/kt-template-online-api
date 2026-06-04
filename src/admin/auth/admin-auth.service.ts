@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Request, Response } from 'express';
 import { Repository } from 'typeorm';
-import { throwVbenError } from '@/common';
+import { throwVbenError, ToolsService } from '@/common';
 import { AdminUser } from '../user/admin-user.entity';
 import { AdminTokenService } from './admin-token.service';
 
@@ -15,6 +15,7 @@ export class AdminAuthService {
     @InjectRepository(AdminUser)
     private readonly userRepository: Repository<AdminUser>,
     private readonly tokenService: AdminTokenService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async login(username?: string, password?: string) {
@@ -60,8 +61,8 @@ export class AdminAuthService {
 
   async currentUser(authHeader?: string, req?: Request) {
     const tokens = [
-      this.readBearerToken(authHeader),
-      this.readCookie(req, ACCESS_TOKEN_COOKIE),
+      this.toolsService.readBearerToken(authHeader),
+      this.toolsService.readCookie(req, ACCESS_TOKEN_COOKIE),
     ].filter((token): token is string => !!token);
     const payload = tokens
       .map((token) => this.tokenService.verifyAccessToken(token))
@@ -78,12 +79,13 @@ export class AdminAuthService {
         status: 1,
       },
     });
-    if (!user) throwVbenError('Unauthorized Exception', HttpStatus.UNAUTHORIZED);
+    if (!user)
+      throwVbenError('Unauthorized Exception', HttpStatus.UNAUTHORIZED);
     return user;
   }
 
   getRefreshTokenFromRequest(req: Request) {
-    return this.readCookie(req, REFRESH_TOKEN_COOKIE);
+    return this.toolsService.readCookie(req, REFRESH_TOKEN_COOKIE);
   }
 
   setAccessTokenCookie(res: Response, token: string) {
@@ -117,23 +119,6 @@ export class AdminAuthService {
         username,
       },
     });
-  }
-
-  private readBearerToken(authHeader?: string) {
-    if (!authHeader?.startsWith('Bearer ')) return null;
-    return authHeader.split(' ')[1];
-  }
-
-  private readCookie(req: Request | undefined, cookieName: string) {
-    const cookie = req?.headers.cookie || '';
-    const cookies = cookie
-      .split(';')
-      .reduce<Record<string, string>>((acc, item) => {
-        const [key, ...value] = item.trim().split('=');
-        if (key) acc[key] = decodeURIComponent(value.join('='));
-        return acc;
-      }, {});
-    return cookies[cookieName];
   }
 
   private getTokenCookieOptions() {

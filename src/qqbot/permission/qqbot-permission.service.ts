@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
-import { throwVbenError } from '@/common';
+import { throwVbenError, ToolsService } from '@/common';
 import { QqbotAllowlist } from './qqbot-allowlist.entity';
 import { QqbotBlocklist } from './qqbot-blocklist.entity';
 import type {
@@ -11,11 +11,15 @@ import type {
   QqbotPermissionUpdateDto,
 } from './qqbot-permission.dto';
 import { QqbotConfigService } from '../config/qqbot-config.service';
-import type { QqbotNormalizedMessage } from '../qqbot.types';
-import { getPageParams } from '../qqbot.utils';
-
-type PermissionKind = 'allowlist' | 'blocklist';
-type PermissionEntity = QqbotAllowlist | QqbotBlocklist;
+import {
+  QQBOT_DEFAULT_PAGE_NO,
+  QQBOT_DEFAULT_PAGE_SIZE,
+} from '../qqbot.constants';
+import type {
+  QqbotNormalizedMessage,
+  QqbotPermissionEntity,
+  QqbotPermissionKind,
+} from '../qqbot.types';
 
 @Injectable()
 export class QqbotPermissionService {
@@ -25,6 +29,7 @@ export class QqbotPermissionService {
     private readonly allowlistRepository: Repository<QqbotAllowlist>,
     @InjectRepository(QqbotBlocklist)
     private readonly blocklistRepository: Repository<QqbotBlocklist>,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async getConfig() {
@@ -35,8 +40,12 @@ export class QqbotPermissionService {
     return this.configService.updatePermissionConfig(body);
   }
 
-  async page(kind: PermissionKind, query: QqbotPermissionQueryDto) {
-    const { pageNo, pageSize, skip } = getPageParams(query);
+  async page(kind: QqbotPermissionKind, query: QqbotPermissionQueryDto) {
+    const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
+      query,
+      QQBOT_DEFAULT_PAGE_NO,
+      QQBOT_DEFAULT_PAGE_SIZE,
+    );
     const repository = this.getRepository(kind);
     const builder = repository
       .createQueryBuilder('permission')
@@ -64,7 +73,7 @@ export class QqbotPermissionService {
     }
     if (query.preciseUser !== undefined && `${query.preciseUser}` !== '') {
       builder.andWhere('permission.preciseUser = :preciseUser', {
-        preciseUser: this.normalizeBoolean(query.preciseUser),
+        preciseUser: this.toolsService.normalizeBoolean(query.preciseUser),
       });
     }
 
@@ -76,18 +85,18 @@ export class QqbotPermissionService {
     return { list, pageNo, pageSize, total };
   }
 
-  async save(kind: PermissionKind, body: QqbotPermissionBodyDto) {
+  async save(kind: QqbotPermissionKind, body: QqbotPermissionBodyDto) {
     const repository = this.getRepository(kind);
     const payload = this.normalizeBody(body);
     const saved = await repository.save(
       repository.create({
         ...payload,
-      } as PermissionEntity),
+      } as QqbotPermissionEntity),
     );
     return saved.id;
   }
 
-  async update(kind: PermissionKind, body: QqbotPermissionUpdateDto) {
+  async update(kind: QqbotPermissionKind, body: QqbotPermissionUpdateDto) {
     const repository = this.getRepository(kind);
     const payload = this.normalizeBody(body);
     await repository.update(
@@ -99,7 +108,7 @@ export class QqbotPermissionService {
     return true;
   }
 
-  async remove(kind: PermissionKind, id: string) {
+  async remove(kind: QqbotPermissionKind, id: string) {
     const repository = this.getRepository(kind);
     await repository.update({ id } as any, { isDeleted: true } as any);
     return true;
@@ -118,7 +127,7 @@ export class QqbotPermissionService {
   }
 
   private async existsMatched(
-    repository: Repository<PermissionEntity>,
+    repository: Repository<QqbotPermissionEntity>,
     message: QqbotNormalizedMessage,
   ) {
     const count = await repository
@@ -182,7 +191,7 @@ export class QqbotPermissionService {
 
   private normalizeBody(
     body: Partial<QqbotPermissionBodyDto>,
-  ): Partial<PermissionEntity> {
+  ): Partial<QqbotPermissionEntity> {
     const targetType = body.targetType === 'private' ? 'qq' : body.targetType;
     const normalizedTargetType = targetType || 'qq';
     const targetId = `${body.targetId || ''}`.trim();
@@ -213,14 +222,10 @@ export class QqbotPermissionService {
       targetId,
       targetType: normalizedTargetType,
       userId: preciseUser ? userId : '',
-    } as Partial<PermissionEntity>;
+    } as Partial<QqbotPermissionEntity>;
   }
 
-  private normalizeBoolean(value: unknown) {
-    return value === true || value === 'true' || value === 1 || value === '1';
-  }
-
-  private getRepository(kind: PermissionKind) {
+  private getRepository(kind: QqbotPermissionKind) {
     return kind === 'allowlist'
       ? this.allowlistRepository
       : this.blocklistRepository;

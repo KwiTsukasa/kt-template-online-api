@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ToolsService } from '@/common';
 import { QqbotConversation } from './qqbot-conversation.entity';
 import { QqbotMessage } from './qqbot-message.entity';
 import type {
@@ -8,7 +9,10 @@ import type {
   QqbotMessageQueryDto,
 } from './qqbot-message.dto';
 import type { QqbotMessageType, QqbotNormalizedMessage } from '../qqbot.types';
-import { getPageParams } from '../qqbot.utils';
+import {
+  QQBOT_DEFAULT_PAGE_NO,
+  QQBOT_DEFAULT_PAGE_SIZE,
+} from '../qqbot.constants';
 
 @Injectable()
 export class QqbotMessageService {
@@ -17,10 +21,15 @@ export class QqbotMessageService {
     private readonly conversationRepository: Repository<QqbotConversation>,
     @InjectRepository(QqbotMessage)
     private readonly messageRepository: Repository<QqbotMessage>,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async conversationPage(query: QqbotConversationQueryDto) {
-    const { pageNo, pageSize, skip } = getPageParams(query);
+    const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
+      query,
+      QQBOT_DEFAULT_PAGE_NO,
+      QQBOT_DEFAULT_PAGE_SIZE,
+    );
     const builder = this.conversationRepository
       .createQueryBuilder('conversation')
       .where('conversation.isDeleted = :isDeleted', { isDeleted: false });
@@ -50,7 +59,11 @@ export class QqbotMessageService {
   }
 
   async messagePage(query: QqbotMessageQueryDto) {
-    const { pageNo, pageSize, skip } = getPageParams(query);
+    const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
+      query,
+      QQBOT_DEFAULT_PAGE_NO,
+      QQBOT_DEFAULT_PAGE_SIZE,
+    );
     const builder = this.messageRepository.createQueryBuilder('message');
 
     if (query.conversationId) {

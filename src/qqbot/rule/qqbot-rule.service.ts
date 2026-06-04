@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { throwVbenError } from '@/common';
+import { throwVbenError, ToolsService } from '@/common';
 import { QqbotAccountService } from '../account/qqbot-account.service';
 import { QqbotRule } from './qqbot-rule.entity';
 import type {
@@ -14,7 +14,10 @@ import type {
   QqbotRuleMatchType,
   QqbotRuleTargetType,
 } from '../qqbot.types';
-import { getPageParams, normalizeBoolean } from '../qqbot.utils';
+import {
+  QQBOT_DEFAULT_PAGE_NO,
+  QQBOT_DEFAULT_PAGE_SIZE,
+} from '../qqbot.constants';
 
 @Injectable()
 export class QqbotRuleService {
@@ -22,10 +25,15 @@ export class QqbotRuleService {
     @InjectRepository(QqbotRule)
     private readonly ruleRepository: Repository<QqbotRule>,
     private readonly accountService: QqbotAccountService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async page(query: QqbotRuleQueryDto) {
-    const { pageNo, pageSize, skip } = getPageParams(query);
+    const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
+      query,
+      QQBOT_DEFAULT_PAGE_NO,
+      QQBOT_DEFAULT_PAGE_SIZE,
+    );
     const builder = this.ruleRepository
       .createQueryBuilder('rule')
       .where('rule.isDeleted = :isDeleted', { isDeleted: false });
@@ -52,7 +60,7 @@ export class QqbotRuleService {
     }
     if (query.enabled !== undefined && `${query.enabled}` !== '') {
       builder.andWhere('rule.enabled = :enabled', {
-        enabled: normalizeBoolean(query.enabled),
+        enabled: this.toolsService.normalizeBoolean(query.enabled),
       });
     }
 

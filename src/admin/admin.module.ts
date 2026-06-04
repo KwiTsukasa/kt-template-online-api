@@ -22,7 +22,6 @@ import { AdminUserManageController } from './user/admin-user-manage.controller';
 import { AdminUserController } from './user/admin-user.controller';
 import { AdminUser } from './user/admin-user.entity';
 import { AdminUserService } from './user/admin-user.service';
-import { ToolsService } from '@/common';
 import { MinioClientModule } from '@/minio/minio.module';
 import { WordpressModule } from '@/wordpress/wordpress.module';
 
@@ -58,7 +57,6 @@ import { WordpressModule } from '@/wordpress/wordpress.module';
     AdminRoleService,
     AdminTimezoneService,
     AdminUserService,
-    ToolsService,
   ],
 })
 export class AdminModule {}

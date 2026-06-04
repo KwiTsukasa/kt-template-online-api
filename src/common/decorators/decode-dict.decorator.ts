@@ -1,13 +1,8 @@
-type DecodeDictKeyOptions = {
-  fallback?: string;
-  sourceKey?: string;
-  targetKey?: string;
-};
-
-type DictDecodeRule = DecodeDictKeyOptions & {
-  targetKey: string;
-  dictKeys: string[];
-};
+import type {
+  DecodeDictKeyOptions,
+  DictDecodeRule,
+  KtDictOption,
+} from '../types';
 
 const DICT_DECODE_RULES = Symbol('DICT_DECODE_RULES');
 const DICT_DECODE_CACHE = new Map<string, Map<string, string>>();
@@ -78,7 +73,7 @@ export function decodeDictKeys<T extends object>(target: T): T {
 
 // DictService 从数据库刷新缓存后，实体 AfterLoad 可以同步完成字典映射。
 export function setDictDecodeCache(
-  dicts: Array<Dict<{ dictKey: string }>>,
+  dicts: Array<KtDictOption<{ dictKey: string }>>,
 ): void {
   DICT_DECODE_CACHE.clear();
 

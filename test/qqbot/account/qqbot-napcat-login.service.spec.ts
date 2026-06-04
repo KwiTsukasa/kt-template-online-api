@@ -1,25 +1,25 @@
-jest.mock(
-  '@/common',
-  () => ({
-    ensureSnowflakeId: jest.fn(),
-    setDictDecodeCache: jest.fn(),
-    throwVbenError: (message: string) => {
-      throw new Error(message);
-    },
-  }),
-  { virtual: true },
-);
+jest.mock('@/common', () => ({
+  ToolsService: jest.requireActual('@/common').ToolsService,
+  ensureSnowflakeId: jest.fn(),
+  setDictDecodeCache: jest.fn(),
+  throwVbenError: (message: string) => {
+    throw new Error(message);
+  },
+}));
 
 import { ConfigService } from '@nestjs/config';
-import { QqbotNapcatContainerService } from '../napcat/qqbot-napcat-container.service';
-import { QqbotAccountService } from './qqbot-account.service';
-import { QqbotNapcatLoginService } from './qqbot-napcat-login.service';
+import { ToolsService } from '@/common';
+import { QqbotAccountService } from '@/qqbot/account/qqbot-account.service';
+import { QqbotNapcatLoginService } from '@/qqbot/account/qqbot-napcat-login.service';
+import { QqbotNapcatContainerService } from '@/qqbot/napcat/qqbot-napcat-container.service';
 
 describe('QqbotNapcatLoginService', () => {
+  const toolsService = new ToolsService();
   const service = new QqbotNapcatLoginService(
     { get: jest.fn() } as unknown as ConfigService,
     {} as QqbotAccountService,
     {} as QqbotNapcatContainerService,
+    toolsService,
   );
 
   beforeEach(() => {
@@ -75,6 +75,7 @@ describe('QqbotNapcatLoginService', () => {
       { get: jest.fn() } as unknown as ConfigService,
       accountService as unknown as QqbotAccountService,
       containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
     );
     const startScan = jest
       .spyOn(refreshService as any, 'startScan')
@@ -121,10 +122,100 @@ describe('QqbotNapcatLoginService', () => {
     const result = await service.refreshQrcode('session-refresh-qrcode');
 
     expect(result.qrcode).toBe('new-qrcode');
-    expect((service as any).getQrcode).toHaveBeenCalledWith(container, true, {
+    expect((service as any).getQrcode).toHaveBeenCalledWith(container, false, {
       requireFresh: true,
       staleQrcode: 'old-qrcode',
     });
+  });
+
+  it('keeps the refresh session pending when NapCat is still regenerating qrcode', async () => {
+    (service as any).sessions.set('session-pending-qrcode', {
+      containerId: 'container-pending',
+      containerName: 'napcat-pending',
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      id: 'session-pending-qrcode',
+      mode: 'refresh',
+      qrcode: 'old-qrcode',
+      status: 'pending',
+      webuiPort: 6105,
+    });
+    jest
+      .spyOn(service as any, 'getSessionContainer')
+      .mockResolvedValue({ id: 'container-pending' });
+    jest.spyOn(service as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      qrcodeurl: 'old-qrcode',
+    });
+    jest
+      .spyOn(service as any, 'callRefreshQrcode')
+      .mockRejectedValue(new Error('NapCat 二维码仍未刷新'));
+
+    const result = await service.refreshQrcode('session-pending-qrcode');
+
+    expect(result.status).toBe('pending');
+    expect(result.qrcode).toBeUndefined();
+    expect(result.errorMessage).toContain('正在重新生成二维码');
+  });
+
+  it('normalizes login status to offline when login info reports offline', async () => {
+    jest
+      .spyOn(service as any, 'postNapcat')
+      .mockResolvedValueOnce({ isLogin: true, qrcodeurl: 'old-qrcode' })
+      .mockResolvedValueOnce({ online: false, uin: '10001' });
+
+    const result = await (service as any).getLoginStatus({
+      id: 'container-offline',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        isLogin: false,
+        isOffline: true,
+      }),
+    );
+  });
+
+  it('restarts container and returns pending when refresh login status is effectively offline', async () => {
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      {} as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    jest
+      .spyOn(refreshService as any, 'cleanupSessions')
+      .mockResolvedValue(null);
+    jest.spyOn(refreshService as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      isOffline: true,
+      loginError: 'NapCat 账号已离线',
+      qrcodeurl: 'old-qrcode',
+    });
+    const restartNapcatForLogin = jest
+      .spyOn(refreshService as any, 'restartNapcatForLogin')
+      .mockResolvedValue(undefined);
+
+    const result = await (refreshService as any).startScan(
+      {
+        accountId: 'account-1',
+        expectedSelfId: '10001',
+        mode: 'refresh',
+      },
+      {
+        baseUrl: 'http://127.0.0.1:6105/',
+        id: 'container-offline',
+        name: 'napcat-10001',
+      },
+    );
+
+    expect(result.status).toBe('pending');
+    expect(result.qrcode).toBeUndefined();
+    expect(result.errorMessage).toBe('NapCat 账号已离线');
+    expect(restartNapcatForLogin).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-offline' }),
+      { waitForReady: false },
+    );
   });
 
   it('restarts the existing NapCat container before qrcode refresh when account is kicked offline', async () => {
@@ -140,8 +231,11 @@ describe('QqbotNapcatLoginService', () => {
       { get: jest.fn() } as unknown as ConfigService,
       {} as QqbotAccountService,
       containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
     );
-    jest.spyOn(refreshService as any, 'sleep').mockResolvedValue(undefined);
+    jest
+      .spyOn((refreshService as any).toolsService, 'sleep')
+      .mockResolvedValue(undefined);
     jest.spyOn(refreshService as any, 'getLoginStatus').mockResolvedValue({
       isLogin: false,
       qrcodeurl: 'new-status-qrcode',
@@ -181,7 +275,9 @@ describe('QqbotNapcatLoginService', () => {
   });
 
   it('retries while NapCat still exposes the stale qrcode', async () => {
-    jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
+    jest
+      .spyOn((service as any).toolsService, 'sleep')
+      .mockResolvedValue(undefined);
     jest
       .spyOn(service as any, 'postNapcat')
       .mockResolvedValueOnce({ qrcode: 'old-qrcode' })

@@ -23,6 +23,7 @@ import {
   ApiModelResponse,
   ApiPageResponse,
   ApiSuccessResponse,
+  type KtPageParams,
   ToolsService,
 } from '@/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -45,7 +46,7 @@ const componentExample = {
 
 class CompPageDto
   extends PartialType(Component)
-  implements PageParams<Component>
+  implements KtPageParams<Component>
 {
   @ApiProperty({
     type: Number,
@@ -83,7 +84,7 @@ export class ComponentController {
   @ApiPageResponse(Component, [componentExample], 1)
   async getList(
     @Res() res,
-    @Query() { pageNo, pageSize, ...args }: PageParams<Component>,
+    @Query() { pageNo, pageSize, ...args }: KtPageParams<Component>,
   ): Promise<PaginatedDto<Component>> {
     const list = await this.componentService.page({
       pageNo,

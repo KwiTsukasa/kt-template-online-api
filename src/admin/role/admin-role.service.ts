@@ -4,12 +4,7 @@ import { Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
 import { AdminMenu } from '../menu/admin-menu.entity';
 import { AdminRole } from './admin-role.entity';
-
-type RoleInput = Partial<AdminRole> & {
-  permissions?: string[];
-};
-
-type ListQuery = Record<string, any>;
+import type { AdminRoleInput, AdminRoleListQuery } from '../admin.types';
 
 @Injectable()
 export class AdminRoleService {
@@ -20,7 +15,7 @@ export class AdminRoleService {
     private readonly menuRepository: Repository<AdminMenu>,
   ) {}
 
-  async getRoleList(query: ListQuery) {
+  async getRoleList(query: AdminRoleListQuery) {
     const page = Number(query.page || 1);
     const pageSize = Number(query.pageSize || 20);
     const builder = this.roleRepository
@@ -65,7 +60,7 @@ export class AdminRoleService {
     };
   }
 
-  async createRole(data: RoleInput) {
+  async createRole(data: AdminRoleInput) {
     const role = this.roleRepository.create({
       name: data.name,
       remark: data.remark || '',
@@ -77,7 +72,7 @@ export class AdminRoleService {
     return null;
   }
 
-  async updateRole(id: string, data: RoleInput) {
+  async updateRole(id: string, data: AdminRoleInput) {
     const role = await this.roleRepository.findOne({
       relations: ['menus'],
       where: {
@@ -90,7 +85,8 @@ export class AdminRoleService {
     if (data.name !== undefined) role.name = data.name;
     if (data.remark !== undefined) role.remark = data.remark;
     if (data.status !== undefined) role.status = data.status;
-    if (data.permissions) role.menus = await this.findMenusByIds(data.permissions);
+    if (data.permissions)
+      role.menus = await this.findMenusByIds(data.permissions);
 
     await this.roleRepository.save(role);
     return null;

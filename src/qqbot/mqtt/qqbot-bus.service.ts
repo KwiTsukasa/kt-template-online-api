@@ -8,8 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as mqtt from 'mqtt';
 import type { MqttClient } from 'mqtt';
-
-type Handler = (payload: any) => Promise<void> | void;
+import type { QqbotBusHandler } from '../qqbot.types';
 
 @Injectable()
 export class QqbotBusService implements OnModuleInit, OnModuleDestroy {
@@ -58,7 +57,7 @@ export class QqbotBusService implements OnModuleInit, OnModuleDestroy {
     this.client.publish(topic, JSON.stringify(payload));
   }
 
-  subscribe(topic: string, handler: Handler) {
+  subscribe(topic: string, handler: QqbotBusHandler) {
     this.emitter.on(topic, handler);
     return () => this.emitter.off(topic, handler);
   }

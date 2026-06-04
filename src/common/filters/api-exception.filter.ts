@@ -6,14 +6,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { ApiErrorResponse } from '../admin-response';
-
-type ExceptionBody = {
-  err?: unknown;
-  error?: unknown;
-  message?: unknown;
-  msg?: unknown;
-};
+import { normalizeVbenErrorText } from '../response/vben-response';
+import type { ExceptionBody, KtErrorResponse } from '../types';
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
@@ -22,12 +16,13 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const status = this.getStatus(exception);
     const body = this.getBody(exception);
+    const msg = this.getMessage(status, body, exception);
 
     response.status(status).json({
       code: status,
-      msg: this.getMessage(status, body, exception),
-      err: this.getErr(status, body, exception),
-    } satisfies ApiErrorResponse);
+      msg,
+      err: this.getErr(status, body, exception, msg),
+    } satisfies KtErrorResponse);
   }
 
   private getStatus(exception: unknown) {
@@ -65,17 +60,22 @@ export class ApiExceptionFilter implements ExceptionFilter {
     status: number,
     body: ExceptionBody | string | null,
     exception: unknown,
+    fallback: string,
   ) {
-    if (typeof body === 'string') return body;
-    if (body?.err !== undefined) return body.err;
-    if (body?.error !== undefined) return body.error;
-    if (body?.message !== undefined) return body.message;
-    if (exception instanceof Error) return exception.message;
+    if (typeof body === 'string') return normalizeVbenErrorText(body, fallback);
+    if (body?.err !== undefined)
+      return normalizeVbenErrorText(body.err, fallback);
+    if (body?.error !== undefined)
+      return normalizeVbenErrorText(body.error, fallback);
+    if (body?.message !== undefined)
+      return normalizeVbenErrorText(body.message, fallback);
+    if (exception instanceof Error)
+      return normalizeVbenErrorText(exception.message, fallback);
 
     return status >= 500 ? 'Internal server error' : '操作失败';
   }
 
   private stringifyMessage(message: unknown) {
-    return Array.isArray(message) ? message.join('; ') : String(message);
+    return normalizeVbenErrorText(message);
   }
 }

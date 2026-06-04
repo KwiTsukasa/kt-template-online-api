@@ -6,7 +6,11 @@ import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MinioModule } from 'nestjs-minio-client';
 import { MinioClientModule } from './minio/minio.module';
-import { ApiExceptionFilter, SaveBodyInterceptor } from './common';
+import {
+  ApiExceptionFilter,
+  CommonModule,
+  SaveBodyInterceptor,
+} from './common';
 import { AdminModule } from './admin/admin.module';
 import { WordpressModule } from './wordpress/wordpress.module';
 import { QqbotModule } from './qqbot/qqbot.module';
@@ -49,6 +53,7 @@ import { QqbotModule } from './qqbot/qqbot.module';
       inject: [ConfigService],
     }),
     MinioClientModule,
+    CommonModule,
     AdminModule,
     WordpressModule,
     QqbotModule,

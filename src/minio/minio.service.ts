@@ -1,39 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MinioService } from 'nestjs-minio-client';
-import type { Readable } from 'stream';
-
-export type MinioUploadFile = {
-  originalname: string;
-  mimetype: string;
-  size: number;
-  buffer: Buffer;
-};
-
-type UploadObjectOptions = {
-  bucketName?: string;
-  objectName?: string;
-  file: MinioUploadFile;
-};
-
-type ListObjectOptions = {
-  bucketName?: string;
-  prefix?: string;
-  recursive?: boolean;
-};
-
-type MinioObjectResult = {
-  stream: Readable;
-  stat: {
-    size: number;
-    etag: string;
-    lastModified: Date;
-    metaData: Record<string, any>;
-    versionId?: string | null;
-  };
-  bucketName: string;
-  objectName: string;
-};
+import type {
+  MinioListObjectOptions,
+  MinioObjectResult,
+  MinioUploadObjectOptions,
+} from './minio.types';
 
 @Injectable()
 export class MinioClientService {
@@ -75,7 +47,11 @@ export class MinioClientService {
     return targetBucket;
   }
 
-  async uploadObject({ bucketName, objectName, file }: UploadObjectOptions) {
+  async uploadObject({
+    bucketName,
+    objectName,
+    file,
+  }: MinioUploadObjectOptions) {
     if (!file) {
       throw new BadRequestException('请选择要上传的文件');
     }
@@ -108,7 +84,7 @@ export class MinioClientService {
     bucketName,
     prefix = '',
     recursive = true,
-  }: ListObjectOptions) {
+  }: MinioListObjectOptions) {
     const targetBucket = this.getBucketName(bucketName);
     const exists = await this.client.bucketExists(targetBucket);
 

@@ -5,12 +5,7 @@ import { throwVbenError } from '@/common';
 import { AdminDept } from '../dept/admin-dept.entity';
 import { AdminRole } from '../role/admin-role.entity';
 import { AdminUser } from './admin-user.entity';
-
-type UserInput = Partial<AdminUser> & {
-  roleIds?: string[];
-};
-
-type ListQuery = Record<string, any>;
+import type { AdminUserInput, AdminUserListQuery } from '../admin.types';
 
 @Injectable()
 export class AdminUserService {
@@ -23,7 +18,7 @@ export class AdminUserService {
     private readonly deptRepository: Repository<AdminDept>,
   ) {}
 
-  async getUserList(query: ListQuery) {
+  async getUserList(query: AdminUserListQuery) {
     const page = Number(query.page || 1);
     const pageSize = Number(query.pageSize || 20);
     const builder = this.userRepository
@@ -80,7 +75,7 @@ export class AdminUserService {
     };
   }
 
-  async createUser(data: UserInput) {
+  async createUser(data: AdminUserInput) {
     await this.ensureUsernameAvailable(String(data.username || ''));
 
     const user = this.userRepository.create({
@@ -97,7 +92,7 @@ export class AdminUserService {
     return null;
   }
 
-  async updateUser(id: string, data: UserInput) {
+  async updateUser(id: string, data: AdminUserInput) {
     const user = await this.userRepository.findOne({
       relations: ['roles'],
       where: {

@@ -9,63 +9,14 @@ import {
   QQBOT_FF14_MARKET_DICT_CODES,
   resolveQqbotFf14MarketTarget,
 } from './qqbot-ff14-worlds';
-
-type HttpMethod = 'GET';
-
-type XivapiSearchItem = {
-  fields?: {
-    Icon?: string | { path?: string; path_hr1?: string };
-    IsUntradable?: boolean;
-    LevelItem?: number | { row_id?: number; value?: number };
-    Name?: string;
-  };
-  id?: number;
-  name?: string;
-  row_id?: number;
-  sheet?: string;
-};
-
-type UniversalisListing = {
-  hq?: boolean;
-  lastReviewTime?: number;
-  pricePerUnit?: number;
-  quantity?: number;
-  retainerName?: string;
-  total?: number;
-  worldName?: string;
-};
-
-type UniversalisMarketResponse = {
-  currentAveragePrice?: number;
-  currentAveragePriceHQ?: number;
-  currentAveragePriceNQ?: number;
-  itemID?: number;
-  lastUploadTime?: number;
-  listings?: UniversalisListing[];
-  minPrice?: number;
-  minPriceHQ?: number;
-  minPriceNQ?: number;
-  worldName?: string;
-};
-
-export type QqbotFf14ResolvedItem = {
-  icon?: string;
-  isUntradable?: boolean;
-  itemId: number;
-  itemLevel?: number;
-  name: string;
-};
-
-export type QqbotFf14PriceResult = {
-  averagePrice?: number;
-  hq?: boolean;
-  item: QqbotFf14ResolvedItem;
-  listings: UniversalisListing[];
-  minPrice?: number;
-  replyText: string;
-  updatedAt?: string;
-  world: string;
-};
+import type {
+  Ff14HttpMethod,
+  QqbotFf14PriceResult,
+  QqbotFf14ResolvedItem,
+  UniversalisListing,
+  UniversalisMarketResponse,
+  XivapiSearchItem,
+} from './qqbot-ff14-market.types';
 
 @Injectable()
 export class QqbotFf14ClientService {
@@ -416,7 +367,7 @@ export class QqbotFf14ClientService {
     return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   }
 
-  private requestJson<T>(url: URL, method: HttpMethod, context: string) {
+  private requestJson<T>(url: URL, method: Ff14HttpMethod, context: string) {
     return new Promise<T>((resolve, reject) => {
       const client = url.protocol === 'http:' ? http : https;
       const request = client.request(

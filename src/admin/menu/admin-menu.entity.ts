@@ -9,10 +9,7 @@ import {
 } from 'typeorm';
 import { ensureSnowflakeId } from '@/common';
 import { AdminRole } from '../role/admin-role.entity';
-
-export type AdminMenuType = 'button' | 'catalog' | 'embedded' | 'link' | 'menu';
-
-export type AdminMenuMeta = Record<string, any>;
+import type { AdminMenuMeta, AdminMenuType } from '../admin.types';
 
 @Entity('admin_menu')
 export class AdminMenu {

@@ -10,20 +10,22 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
-import { vbenSuccess } from '@/common';
+import { ToolsService, vbenSuccess } from '@/common';
 import {
   QqbotRuleBodyDto,
   QqbotRuleQueryDto,
   QqbotRuleUpdateDto,
 } from './qqbot-rule.dto';
 import { QqbotRuleService } from './qqbot-rule.service';
-import { normalizeBoolean } from '../qqbot.utils';
 
 @ApiTags('QQBot - 自动回复规则')
 @Controller('qqbot/rule')
 @UseGuards(JwtAuthGuard)
 export class QqbotRuleController {
-  constructor(private readonly ruleService: QqbotRuleService) {}
+  constructor(
+    private readonly ruleService: QqbotRuleService,
+    private readonly toolsService: ToolsService,
+  ) {}
 
   @Get('list')
   @ApiOperation({ summary: 'QQBot 自动回复规则分页' })
@@ -60,7 +62,10 @@ export class QqbotRuleController {
   @ApiQuery({ name: 'enabled', type: Boolean })
   async toggle(@Query('id') id: string, @Query('enabled') enabled: string) {
     return vbenSuccess(
-      await this.ruleService.toggle(id, normalizeBoolean(enabled)),
+      await this.ruleService.toggle(
+        id,
+        this.toolsService.normalizeBoolean(enabled),
+      ),
     );
   }
 }

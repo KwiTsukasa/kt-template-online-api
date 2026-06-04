@@ -14,57 +14,45 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Public, vbenPage, vbenSuccess } from '@/common';
 import { MinioClientService } from '@/minio/minio.service';
-import type { MinioUploadFile } from '@/minio/minio.service';
+import type { MinioUploadFile } from '@/minio/minio.types';
+import type { AdminDemoTableRow } from '../admin.types';
 
-type DemoTableRow = {
-  available: boolean;
-  category: string;
-  color: string;
-  currency: string;
-  description: string;
-  id: string;
-  imageUrl: string;
-  imageUrl2: string;
-  inProduction: boolean;
-  open: boolean;
-  price: string;
-  productName: string;
-  quantity: number;
-  rating: number;
-  releaseDate: string;
-  status: string;
-  tags: string[];
-  weight: number;
-};
+const DEMO_ROWS: AdminDemoTableRow[] = Array.from(
+  { length: 100 },
+  (_, index) => {
+    const sequence = index + 1;
+    const categories = ['Dashboard', 'Form', 'Table', 'Chart', 'Workflow'];
+    const colors = ['Blue', 'Green', 'Purple', 'Orange', 'Slate'];
+    const statuses = ['success', 'warning', 'error'];
 
-const DEMO_ROWS: DemoTableRow[] = Array.from({ length: 100 }, (_, index) => {
-  const sequence = index + 1;
-  const categories = ['Dashboard', 'Form', 'Table', 'Chart', 'Workflow'];
-  const colors = ['Blue', 'Green', 'Purple', 'Orange', 'Slate'];
-  const statuses = ['success', 'warning', 'error'];
-
-  return {
-    available: sequence % 3 !== 0,
-    category: categories[index % categories.length],
-    color: colors[index % colors.length],
-    currency: 'CNY',
-    description: `真实 API 示例数据 ${sequence}`,
-    id: `demo-${String(sequence).padStart(3, '0')}`,
-    imageUrl: 'https://unpkg.com/@vbenjs/static-source@0.1.7/source/logo-v1.webp',
-    imageUrl2:
-      'https://unpkg.com/@vbenjs/static-source@0.1.7/source/avatar-v1.webp',
-    inProduction: sequence % 2 === 0,
-    open: sequence % 4 === 0,
-    price: `${(sequence * 3.6 + 19).toFixed(2)}`,
-    productName: `KT Admin 模板能力 ${sequence}`,
-    quantity: 10 + sequence,
-    rating: Number((3 + (sequence % 20) / 10).toFixed(1)),
-    releaseDate: new Date(2026, index % 12, (index % 28) + 1).toISOString(),
-    status: statuses[index % statuses.length],
-    tags: ['kt', 'admin', categories[index % categories.length].toLowerCase()],
-    weight: Number((1 + sequence / 10).toFixed(2)),
-  };
-});
+    return {
+      available: sequence % 3 !== 0,
+      category: categories[index % categories.length],
+      color: colors[index % colors.length],
+      currency: 'CNY',
+      description: `真实 API 示例数据 ${sequence}`,
+      id: `demo-${String(sequence).padStart(3, '0')}`,
+      imageUrl:
+        'https://unpkg.com/@vbenjs/static-source@0.1.7/source/logo-v1.webp',
+      imageUrl2:
+        'https://unpkg.com/@vbenjs/static-source@0.1.7/source/avatar-v1.webp',
+      inProduction: sequence % 2 === 0,
+      open: sequence % 4 === 0,
+      price: `${(sequence * 3.6 + 19).toFixed(2)}`,
+      productName: `KT Admin 模板能力 ${sequence}`,
+      quantity: 10 + sequence,
+      rating: Number((3 + (sequence % 20) / 10).toFixed(1)),
+      releaseDate: new Date(2026, index % 12, (index % 28) + 1).toISOString(),
+      status: statuses[index % statuses.length],
+      tags: [
+        'kt',
+        'admin',
+        categories[index % categories.length].toLowerCase(),
+      ],
+      weight: Number((1 + sequence / 10).toFixed(2)),
+    };
+  },
+);
 
 @ApiTags('Admin - 示例')
 @Controller()
@@ -85,9 +73,7 @@ export class AdminExampleController {
 
   @Get('table/list')
   @ApiOperation({ summary: '获取示例表格分页列表' })
-  async tableList(
-    @Query() query: Record<string, any>,
-  ) {
+  async tableList(@Query() query: Record<string, any>) {
     const page = Math.max(Number(query.page || 1), 1);
     const pageSize = Math.max(Number(query.pageSize || 10), 1);
     const sorted = this.sortRows([...DEMO_ROWS], query.sortBy, query.sortOrder);
@@ -152,16 +138,24 @@ export class AdminExampleController {
     return vbenSuccess('Test post handler');
   }
 
-  private sortRows(rows: DemoTableRow[], sortBy?: string, sortOrder?: string) {
+  private sortRows(
+    rows: AdminDemoTableRow[],
+    sortBy?: string,
+    sortOrder?: string,
+  ) {
     if (!sortBy || !Object.hasOwn(rows[0], sortBy)) return rows;
 
     return rows.sort((prev, next) => {
       const prevValue = prev[sortBy];
       const nextValue = next[sortBy];
-      const result = String(prevValue).localeCompare(String(nextValue), 'zh-CN', {
-        numeric: true,
-        sensitivity: 'base',
-      });
+      const result = String(prevValue).localeCompare(
+        String(nextValue),
+        'zh-CN',
+        {
+          numeric: true,
+          sensitivity: 'base',
+        },
+      );
 
       return sortOrder === 'desc' ? -result : result;
     });

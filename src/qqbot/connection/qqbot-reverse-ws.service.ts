@@ -9,21 +9,17 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, ModuleRef } from '@nestjs/core';
 import WebSocket = require('ws');
+import { ToolsService } from '@/common';
 import { QQBOT_MQTT_TOPICS, QQBOT_REVERSE_WS_PATH } from '../qqbot.constants';
 import type {
   QqbotConnectionRole,
   QqbotOneBotActionResponse,
   QqbotOneBotEvent,
+  QqbotPendingAction,
 } from '../qqbot.types';
 import { QqbotAccountService } from '../account/qqbot-account.service';
 import { QqbotEventService } from '../event/qqbot-event.service';
 import { QqbotBusService } from '../mqtt/qqbot-bus.service';
-
-type PendingAction = {
-  reject: (reason: Error) => void;
-  resolve: (value: QqbotOneBotActionResponse) => void;
-  timer: NodeJS.Timeout;
-};
 
 @Injectable()
 export class QqbotReverseWsService
@@ -31,7 +27,7 @@ export class QqbotReverseWsService
 {
   private readonly logger = new Logger(QqbotReverseWsService.name);
   private readonly connections = new Map<string, WebSocket>();
-  private readonly pendingActions = new Map<string, PendingAction>();
+  private readonly pendingActions = new Map<string, QqbotPendingAction>();
   private server: WebSocket.Server | null = null;
 
   constructor(
@@ -40,6 +36,7 @@ export class QqbotReverseWsService
     private readonly moduleRef: ModuleRef,
     private readonly accountService: QqbotAccountService,
     private readonly busService: QqbotBusService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   onApplicationBootstrap() {
@@ -178,7 +175,7 @@ export class QqbotReverseWsService
     try {
       await this.handleMessage(selfId, raw);
     } catch (err) {
-      const message = err instanceof Error ? err.message : `${err}`;
+      const message = this.toolsService.getErrorMessage(err);
       this.logger.warn(`QQBot 处理 WS 消息失败 ${selfId}: ${message}`);
     }
   }

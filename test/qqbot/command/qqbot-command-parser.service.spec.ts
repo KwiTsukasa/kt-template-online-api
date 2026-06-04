@@ -7,9 +7,9 @@ jest.mock(
   { virtual: true },
 );
 
-import { DictService } from '../../admin/dict/dict.service';
-import { QqbotCommandParserService } from './qqbot-command-parser.service';
-import type { QqbotCommand } from './qqbot-command.entity';
+import { DictService } from '@/admin/dict/dict.service';
+import type { QqbotCommand } from '@/qqbot/command/qqbot-command.entity';
+import { QqbotCommandParserService } from '@/qqbot/command/qqbot-command-parser.service';
 
 describe('QqbotCommandParserService FFLogs parser', () => {
   const command = {

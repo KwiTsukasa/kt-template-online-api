@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
-import { vbenSuccess } from '@/common';
+import { ToolsService, vbenSuccess } from '@/common';
 import {
   QqbotCommandBodyDto,
   QqbotCommandQueryDto,
@@ -19,7 +19,6 @@ import {
 } from './qqbot-command.dto';
 import { QqbotCommandEngineService } from './qqbot-command-engine.service';
 import { QqbotCommandService } from './qqbot-command.service';
-import { normalizeBoolean } from '../qqbot.utils';
 
 @ApiTags('QQBot - 在线命令')
 @Controller('qqbot/command')
@@ -28,6 +27,7 @@ export class QqbotCommandController {
   constructor(
     private readonly commandEngine: QqbotCommandEngineService,
     private readonly commandService: QqbotCommandService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   @Get('list')
@@ -65,7 +65,10 @@ export class QqbotCommandController {
   @ApiQuery({ name: 'enabled', type: Boolean })
   async toggle(@Query('id') id: string, @Query('enabled') enabled: string) {
     return vbenSuccess(
-      await this.commandService.toggle(id, normalizeBoolean(enabled)),
+      await this.commandService.toggle(
+        id,
+        this.toolsService.normalizeBoolean(enabled),
+      ),
     );
   }
 

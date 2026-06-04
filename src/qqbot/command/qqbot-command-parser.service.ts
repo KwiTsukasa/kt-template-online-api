@@ -6,22 +6,16 @@ import {
   buildQqbotFf14MarketCatalog,
   buildQqbotFf14MarketCatalogFromTree,
   QQBOT_FF14_MARKET_DICT_CODES,
-  type QqbotFf14MarketCatalog,
   isQqbotFf14DataCenterName,
   isQqbotFf14LocationName,
   isQqbotFf14RegionName,
   isQqbotFf14WorldName,
   splitQqbotFf14WorldPath,
 } from '../plugins/ff14Market/qqbot-ff14-worlds';
+import type { QqbotFf14MarketCatalog } from '../plugins/ff14Market/qqbot-ff14-market.types';
+import type { QqbotCommandMatchResult } from '../qqbot.types';
 
 const QQBOT_FFLOGS_ENCOUNTER_DICT_CODE = 'FFLOGS_ENCOUNTER_LABEL';
-
-export type QqbotCommandMatchResult = {
-  alias: string;
-  input: Record<string, any>;
-  matched: true;
-  rawArgs: string;
-};
 
 @Injectable()
 export class QqbotCommandParserService {

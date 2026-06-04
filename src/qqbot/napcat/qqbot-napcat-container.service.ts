@@ -4,18 +4,11 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { throwVbenError } from '@/common';
+import { throwVbenError, ToolsService } from '@/common';
 import { QqbotAccount } from '../account/qqbot-account.entity';
 import { QqbotAccountNapcat } from './qqbot-account-napcat.entity';
 import { QqbotNapcatContainer } from './qqbot-napcat-container.entity';
-
-export type QqbotNapcatRuntime = {
-  baseUrl: string;
-  id?: string;
-  name: string;
-  webuiPort?: null | number;
-  webuiToken?: null | string;
-};
+import type { QqbotNapcatRuntime } from '../qqbot.types';
 
 @Injectable()
 export class QqbotNapcatContainerService {
@@ -25,6 +18,7 @@ export class QqbotNapcatContainerService {
     private readonly containerRepository: Repository<QqbotNapcatContainer>,
     @InjectRepository(QqbotAccountNapcat)
     private readonly bindingRepository: Repository<QqbotAccountNapcat>,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async prepareCreateContainer() {
@@ -311,7 +305,7 @@ fi
         webuiToken: token,
       };
     } catch (err) {
-      const message = this.getErrorMessage(err);
+      const message = this.toolsService.getErrorMessage(err);
       await this.containerRepository.update(
         { id: container.id },
         {
@@ -595,9 +589,5 @@ docker run -d \\
       child.stdin.write(input);
       child.stdin.end();
     });
-  }
-
-  private getErrorMessage(err: unknown) {
-    return err instanceof Error ? err.message : `${err}`;
   }
 }

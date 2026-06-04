@@ -8,8 +8,7 @@ import {
 } from 'typeorm';
 import { ensureSnowflakeId } from '@/common';
 import type { QqbotMessageType } from '../qqbot.types';
-
-export type QqbotCommandLogStatus = 'failed' | 'success';
+import type { QqbotCommandLogStatus } from '../qqbot.types';
 
 @Entity('qqbot_command_log')
 export class QqbotCommandLog {
@@ -52,7 +51,12 @@ export class QqbotCommandLog {
   @Column({ default: 'success', length: 32 })
   status: QqbotCommandLogStatus;
 
-  @Column({ default: null, name: 'error_message', nullable: true, type: 'text' })
+  @Column({
+    default: null,
+    name: 'error_message',
+    nullable: true,
+    type: 'text',
+  })
   errorMessage: string | null;
 
   @CreateDateColumn({ name: 'create_time' })

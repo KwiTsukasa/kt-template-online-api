@@ -1,12 +1,6 @@
 import { RequestMethod, Type } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-
-export interface ControllerRoute {
-  controllerName: string;
-  handlerName: string;
-  method: string;
-  path: string;
-}
+import type { ControllerRoute } from '../test.types';
 
 const requestMethodMap: Partial<Record<RequestMethod, string>> = {
   [RequestMethod.GET]: 'GET',

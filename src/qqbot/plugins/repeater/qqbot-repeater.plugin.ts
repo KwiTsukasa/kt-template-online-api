@@ -1,22 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ToolsService } from '@/common';
 import { QqbotAccountService } from '../../account/qqbot-account.service';
 import type {
   QqbotEventPluginDefinition,
   QqbotEventPluginSummary,
-} from '../../plugin/qqbot-plugin.types';
-import type { QqbotNormalizedMessage } from '../../qqbot.types';
+  QqbotNormalizedMessage,
+  QqbotRepeaterConversationState,
+} from '../../qqbot.types';
 import { QqbotSendService } from '../../send/qqbot-send.service';
 
 const QQBOT_REPEATER_VERSION = '1.0.0';
 const QQBOT_REPEATER_PLUGIN_KEY = 'repeater';
-
-type QqbotRepeaterConversationState = {
-  count: number;
-  lastText: string;
-  repeatedText: string;
-  updatedAt: number;
-};
 
 @Injectable()
 export class QqbotRepeaterPluginService {
@@ -39,6 +34,7 @@ export class QqbotRepeaterPluginService {
     private readonly configService: ConfigService,
     private readonly accountService: QqbotAccountService,
     private readonly sendService: QqbotSendService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async getSummary(params: {
@@ -96,7 +92,7 @@ export class QqbotRepeaterPluginService {
 
   async handleMessage(message: QqbotNormalizedMessage) {
     if (!(await this.isBound(message.selfId))) return false;
-    const text = this.normalizeText(message.messageText);
+    const text = this.toolsService.normalizeWhitespaceText(message.messageText);
     if (!this.canRepeat(message, text)) {
       this.resetState(message);
       return false;
@@ -120,7 +116,7 @@ export class QqbotRepeaterPluginService {
       });
       return true;
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : '复读失败';
+      const errMsg = this.toolsService.getErrorMessage(err, '复读失败');
       this.logger.warn(`QQBot 复读机发送失败: ${errMsg}`);
       return false;
     }
@@ -171,10 +167,6 @@ export class QqbotRepeaterPluginService {
 
   private shouldRepeat(state: QqbotRepeaterConversationState, text: string) {
     return state.count >= this.getThreshold() && state.repeatedText !== text;
-  }
-
-  private normalizeText(value: string) {
-    return `${value || ''}`.trim().replace(/\s+/g, ' ');
   }
 
   private resetState(message: QqbotNormalizedMessage) {

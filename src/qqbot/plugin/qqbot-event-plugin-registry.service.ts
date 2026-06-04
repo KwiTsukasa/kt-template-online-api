@@ -6,7 +6,7 @@ import type {
   QqbotEventPluginDefinition,
   QqbotPluginHealth,
   QqbotPluginOperationSummary,
-} from './qqbot-plugin.types';
+} from '../qqbot.types';
 
 @Injectable()
 export class QqbotEventPluginRegistryService {

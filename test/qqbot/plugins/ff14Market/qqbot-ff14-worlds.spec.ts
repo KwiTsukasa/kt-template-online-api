@@ -2,7 +2,7 @@ import {
   buildQqbotFf14MarketCatalog,
   buildQqbotFf14MarketCatalogFromTree,
   resolveQqbotFf14MarketTarget,
-} from './qqbot-ff14-worlds';
+} from '@/qqbot/plugins/ff14Market/qqbot-ff14-worlds';
 
 describe('qqbot ff14 market worlds', () => {
   const catalog = buildQqbotFf14MarketCatalog({

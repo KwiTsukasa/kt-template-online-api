@@ -4,12 +4,8 @@ import { In, Repository } from 'typeorm';
 import { toTree } from '@/common';
 import { WordpressService } from '@/wordpress/wordpress.service';
 import { AdminUser } from '../user/admin-user.entity';
-import { AdminMenu, AdminMenuMeta } from './admin-menu.entity';
-
-type MenuInput = Partial<AdminMenu> & {
-  activePath?: string;
-  linkSrc?: string;
-};
+import { AdminMenu } from './admin-menu.entity';
+import type { AdminMenuInput, AdminMenuMeta } from '../admin.types';
 
 @Injectable()
 export class AdminMenuService {
@@ -64,7 +60,7 @@ export class AdminMenuService {
     return !!menu && (!id || menu.id !== id);
   }
 
-  async createMenu(data: MenuInput) {
+  async createMenu(data: AdminMenuInput) {
     const entity = this.menuRepository.create({
       ...this.normalizeMenuInput(data, true),
     });
@@ -72,7 +68,7 @@ export class AdminMenuService {
     return null;
   }
 
-  async updateMenu(id: string, data: MenuInput) {
+  async updateMenu(id: string, data: AdminMenuInput) {
     await this.menuRepository.update(
       { id },
       {
@@ -168,7 +164,7 @@ export class AdminMenuService {
   }
 
   private normalizeMenuInput(
-    data: MenuInput,
+    data: AdminMenuInput,
     includeEmptyMeta: boolean,
   ): Partial<AdminMenu> {
     const meta = this.normalizeMetaInput(data);
@@ -188,7 +184,7 @@ export class AdminMenuService {
     return menu;
   }
 
-  private normalizeMetaInput(data: MenuInput): AdminMenuMeta {
+  private normalizeMetaInput(data: AdminMenuInput): AdminMenuMeta {
     const meta = this.normalizeMetaValue(data.meta);
 
     // 兼容表单库返回字面量 `meta.title` 的场景，避免更新菜单时把 meta 覆盖为空对象。

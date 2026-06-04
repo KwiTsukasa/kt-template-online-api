@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ToolsService } from '@/common';
 import { QQBOT_MQTT_TOPICS } from '../qqbot.constants';
 import { QqbotDedupeService } from '../dedupe/qqbot-dedupe.service';
 import { QqbotMessageService } from '../message/qqbot-message.service';
@@ -20,6 +21,7 @@ export class QqbotEventService {
     private readonly dedupeService: QqbotDedupeService,
     private readonly messageService: QqbotMessageService,
     private readonly ruleEngineService: QqbotRuleEngineService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   async handleIncoming(payload: QqbotOneBotEvent) {
@@ -32,7 +34,7 @@ export class QqbotEventService {
     }
 
     if (!isOneBotMessageEvent(payload)) return;
-    const message = normalizeOneBotMessage(payload);
+    const message = normalizeOneBotMessage(payload, this.toolsService);
     if (!message.selfId || !message.targetId || !message.userId) {
       this.logger.warn('QQBot 收到缺少关键字段的消息事件，已忽略');
       return;

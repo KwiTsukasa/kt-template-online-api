@@ -22,7 +22,7 @@ import {
 } from '@nestjs/swagger';
 import { Response } from 'express';
 import { MinioClientService } from './minio.service';
-import type { MinioUploadFile } from './minio.service';
+import type { MinioUploadFile } from './minio.types';
 import {
   ApiFileDownloadResponse,
   ApiArrayResponse,

@@ -1,16 +1,12 @@
 import { applyDecorators, Type } from '@nestjs/common';
 import { ApiExtraModels, ApiOkResponse, ApiProperty } from '@nestjs/swagger';
 import type { OpenAPIObject } from '@nestjs/swagger';
-
-type SwaggerSchema = Record<string, any>;
-type SwaggerOperation = Record<string, any>;
-type SwaggerComponents = NonNullable<OpenAPIObject['components']>;
-
-type ApiResponseOptions = {
-  description?: string;
-  schema?: SwaggerSchema;
-  example: any;
-};
+import type {
+  ApiResponseOptions,
+  SwaggerComponents,
+  SwaggerOperation,
+  SwaggerSchema,
+} from '../types';
 
 const primitiveTypeMap = {
   string: String,
@@ -208,6 +204,7 @@ const standardErrorSchema = {
       example: '操作失败',
     },
     err: {
+      type: 'string',
       description: '错误详情',
       example: 'Bad Request',
     },

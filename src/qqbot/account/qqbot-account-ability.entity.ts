@@ -8,8 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ensureSnowflakeId } from '@/common';
-
-export type QqbotAccountAbilityType = 'command' | 'event_plugin' | 'rule';
+import type { QqbotAccountAbilityType } from '../qqbot.types';
 
 @Entity('qqbot_account_ability')
 @Index('uk_qqbot_account_ability', ['accountId', 'abilityType', 'abilityKey'], {

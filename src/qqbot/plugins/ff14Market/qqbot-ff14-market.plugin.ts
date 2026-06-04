@@ -1,14 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import type { QqbotIntegrationPlugin } from '../../plugin/qqbot-plugin.types';
+import { ToolsService } from '@/common';
+import type { QqbotIntegrationPlugin } from '../../qqbot.types';
 import { QqbotFf14ClientService } from './qqbot-ff14-client.service';
 
 @Injectable()
 export class QqbotFf14MarketPluginService {
-  constructor(private readonly ff14ClientService: QqbotFf14ClientService) {}
+  constructor(
+    private readonly ff14ClientService: QqbotFf14ClientService,
+    private readonly toolsService: ToolsService,
+  ) {}
 
   getPlugin(): QqbotIntegrationPlugin {
     return {
-      description: '对接 XIVAPI v2 与 Universalis，提供 FF14 物品解析和市场价格查询能力。',
+      description:
+        '对接 XIVAPI v2 与 Universalis，提供 FF14 物品解析和市场价格查询能力。',
       healthCheck: async () => {
         const checkedAt = new Date().toISOString();
         try {
@@ -24,7 +29,7 @@ export class QqbotFf14MarketPluginService {
         } catch (err) {
           return {
             checkedAt,
-            message: err instanceof Error ? err.message : 'FF14 插件不可用',
+            message: this.toolsService.getErrorMessage(err, 'FF14 插件不可用'),
             status: 'degraded',
           };
         }
@@ -82,7 +87,8 @@ export class QqbotFf14MarketPluginService {
             },
             type: 'object',
           },
-          execute: async (input) => await this.ff14ClientService.getPrice(input),
+          execute: async (input) =>
+            await this.ff14ClientService.getPrice(input),
         },
       ],
       version: '1.0.0',

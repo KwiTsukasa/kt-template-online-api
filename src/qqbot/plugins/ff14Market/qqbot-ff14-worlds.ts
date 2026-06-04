@@ -1,27 +1,12 @@
 import type {
   AdminDictItem,
   AdminDictTreeItem,
-} from '../../../admin/dict/dict.service';
-
-export type QqbotFf14DataCenter = {
-  name: string;
-  region: string;
-  worlds: string[];
-};
-
-export type QqbotFf14MarketCatalog = {
-  dataCenters: QqbotFf14DataCenter[];
-  defaultRegion?: string;
-  regions: string[];
-};
-
-export type QqbotFf14MarketTarget = {
-  dataCenter?: string;
-  label: string;
-  region?: string;
-  target: string;
-  world?: string;
-};
+} from '../../../admin/admin.types';
+import type {
+  QqbotFf14DataCenter,
+  QqbotFf14MarketCatalog,
+  QqbotFf14MarketTarget,
+} from './qqbot-ff14-market.types';
 
 export const QQBOT_FF14_MARKET_DICT_CODES = {
   dataCenter: 'FF14_MARKET_DATA_CENTER',

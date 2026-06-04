@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import type { QqbotIntegrationPlugin } from '../../plugin/qqbot-plugin.types';
+import { ToolsService } from '@/common';
+import type { QqbotIntegrationPlugin } from '../../qqbot.types';
 import { QqbotFflogsClientService } from './qqbot-fflogs-client.service';
 
 @Injectable()
 export class QqbotFflogsPluginService {
-  constructor(private readonly fflogsClientService: QqbotFflogsClientService) {}
+  constructor(
+    private readonly fflogsClientService: QqbotFflogsClientService,
+    private readonly toolsService: ToolsService,
+  ) {}
 
   getPlugin(): QqbotIntegrationPlugin {
     return {
@@ -22,7 +26,10 @@ export class QqbotFflogsPluginService {
         } catch (err) {
           return {
             checkedAt,
-            message: err instanceof Error ? err.message : 'FFLogs 插件不可用',
+            message: this.toolsService.getErrorMessage(
+              err,
+              'FFLogs 插件不可用',
+            ),
             status: 'degraded',
           };
         }

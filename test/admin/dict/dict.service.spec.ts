@@ -1,15 +1,16 @@
-jest.mock(
-  '@/common',
-  () => ({
+jest.mock('@/common', () => {
+  const actual = jest.requireActual('@/common');
+  return {
+    ...actual,
     setDictDecodeCache: jest.fn(),
     throwVbenError: (message: string) => {
       throw new Error(message);
     },
-  }),
-  { virtual: true },
-);
+  };
+});
 
-import { DictService } from './dict.service';
+import { ToolsService } from '@/common';
+import { DictService } from '@/admin/dict/dict.service';
 
 describe('DictService', () => {
   const dictRows = [
@@ -49,9 +50,12 @@ describe('DictService', () => {
   ];
 
   function createService() {
-    return new DictService({
-      find: jest.fn().mockResolvedValue(dictRows),
-    } as any);
+    return new DictService(
+      {
+        find: jest.fn().mockResolvedValue(dictRows),
+      } as any,
+      new ToolsService(),
+    );
   }
 
   function createGroupService() {
@@ -77,9 +81,12 @@ describe('DictService', () => {
 
     return {
       builder,
-      service: new DictService({
-        createQueryBuilder: jest.fn().mockReturnValue(builder),
-      } as any),
+      service: new DictService(
+        {
+          createQueryBuilder: jest.fn().mockReturnValue(builder),
+        } as any,
+        new ToolsService(),
+      ),
     };
   }
 

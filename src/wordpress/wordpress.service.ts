@@ -1,63 +1,23 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response as ExpressResponse } from 'express';
-import { throwVbenError } from '@/common';
+import { throwVbenError, ToolsService } from '@/common';
 import type {
   WordpressArticleBodyDto,
   WordpressArticleListQueryDto,
   WordpressTermBodyDto,
   WordpressTermListQueryDto,
 } from './wordpress.dto';
-
-export type WordpressAuthContext = {
-  authorization?: string;
-  cookie?: string;
-  nonce?: string;
-};
-
-export type WordpressLoginResult = {
-  auth: {
-    nonce: string;
-    type: 'cookie';
-  };
-  user: any;
-};
-
-export type WordpressOptionalLoginResult =
-  | {
-      available: false;
-      error: WordpressAvailabilityError;
-      result: null;
-    }
-  | {
-      available: true;
-      error: null;
-      result: WordpressLoginResult & { cookie: string };
-    };
-
-export type WordpressAvailabilityError = {
-  error: any;
-  message: string;
-  status: number;
-};
-
-type WordpressAvailabilityCache = {
-  available: boolean;
-  checkedAt: number;
-  error?: WordpressAvailabilityError;
-};
-
-type WordpressRequestOptions = {
-  auth: WordpressAuthContext;
-  body?: Record<string, unknown>;
-  method?: 'GET' | 'POST' | 'DELETE';
-  query?: Record<string, unknown>;
-};
-
-type WordpressResponse<T> = {
-  data: T;
-  total?: number;
-};
+import type {
+  WordpressAuthContext,
+  WordpressAvailabilityCache,
+  WordpressAvailabilityError,
+  WordpressLoginResult,
+  WordpressOptionalLoginResult,
+  WordpressPagedQueryDto,
+  WordpressRequestOptions,
+  WordpressResponse,
+} from './wordpress.types';
 
 const WORDPRESS_COOKIE_PREFIXES = [
   'wordpress_',
@@ -72,19 +32,22 @@ const WORDPRESS_AUTH_COOKIE = 'kt_wordpress_auth';
 export class WordpressService {
   private availabilityCache: null | WordpressAvailabilityCache = null;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly toolsService: ToolsService,
+  ) {}
 
   getAuthContext(request: Request): WordpressAuthContext {
     const authorization =
-      this.readHeader(request, 'x-wordpress-authorization') ||
-      this.readHeader(request, 'x-wp-authorization') ||
+      this.toolsService.readHeader(request, 'x-wordpress-authorization') ||
+      this.toolsService.readHeader(request, 'x-wp-authorization') ||
       this.getForwardableAuthorization(request);
     const nonce =
-      this.readHeader(request, 'x-wp-nonce') ||
-      this.readHeader(request, 'x-wordpress-nonce');
+      this.toolsService.readHeader(request, 'x-wp-nonce') ||
+      this.toolsService.readHeader(request, 'x-wordpress-nonce');
     const cookie =
-      this.readHeader(request, 'x-wordpress-cookie') ||
-      this.readCookie(request, WORDPRESS_AUTH_COOKIE) ||
+      this.toolsService.readHeader(request, 'x-wordpress-cookie') ||
+      this.toolsService.readCookie(request, WORDPRESS_AUTH_COOKIE) ||
       this.getWordpressCookie(request.headers.cookie);
 
     return {
@@ -439,13 +402,20 @@ export class WordpressService {
         let data = await this.parseResponse(response);
 
         // 部分 WordPress 网关会拦截 DELETE；REST API 官方支持用 _method=DELETE 通过 POST 兜底。
-        if (!response.ok && response.status === 405 && options.method === 'DELETE') {
-          response = await fetch(this.getMethodOverrideUrl(urls[index], 'DELETE'), {
-            headers: this.getHeaders(options.auth, false),
-            method: 'POST',
-            redirect: 'follow',
-            signal: controller.signal,
-          });
+        if (
+          !response.ok &&
+          response.status === 405 &&
+          options.method === 'DELETE'
+        ) {
+          response = await fetch(
+            this.getMethodOverrideUrl(urls[index], 'DELETE'),
+            {
+              headers: this.getHeaders(options.auth, false),
+              method: 'POST',
+              redirect: 'follow',
+              signal: controller.signal,
+            },
+          );
           data = await this.parseResponse(response);
         }
 
@@ -460,7 +430,7 @@ export class WordpressService {
 
         if (!response.ok) {
           throwVbenError(
-            this.getErrorMessage(data, response.status),
+            this.getWordpressResponseErrorMessage(data, response.status),
             response.status,
             data,
           );
@@ -734,7 +704,7 @@ export class WordpressService {
   }
 
   private getArticleBody(body: WordpressArticleBodyDto) {
-    return this.pickDefined({
+    return this.toolsService.pickDefined({
       categories: this.normalizeIdList(body.categories),
       content: body.content,
       excerpt: body.excerpt,
@@ -748,7 +718,7 @@ export class WordpressService {
   }
 
   private getTermBody(body: WordpressTermBodyDto) {
-    return this.pickDefined({
+    return this.toolsService.pickDefined({
       description: body.description,
       name: body.name,
       parent: body.parent,
@@ -784,19 +754,6 @@ export class WordpressService {
       .join(',');
   }
 
-  private pickDefined(payload: Record<string, unknown>) {
-    return Object.entries(payload).reduce<Record<string, unknown>>(
-      (acc, [key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-          acc[key] = value;
-        }
-
-        return acc;
-      },
-      {},
-    );
-  }
-
   private async parseResponse(response: globalThis.Response) {
     const text = await response.text();
 
@@ -809,14 +766,14 @@ export class WordpressService {
     }
   }
 
-  private getErrorMessage(data: any, status: number) {
+  private getWordpressResponseErrorMessage(data: any, status: number) {
     if (data?.message) return data.message;
     if (typeof data === 'string' && data) return data;
     return `WordPress 请求失败：${status}`;
   }
 
   private throwWordpressNetworkError(err: unknown): never {
-    const message = err instanceof Error ? err.message : '未知错误';
+    const message = this.toolsService.getErrorMessage(err, '未知错误');
     const cause = this.getErrorCause(err);
 
     // fetch 的 DNS、连接拒绝等底层异常不是 HttpException，需要统一转成业务响应。
@@ -852,7 +809,7 @@ export class WordpressService {
 
     return {
       error: err instanceof Error ? err.name : 'WordPressUnavailable',
-      message: err instanceof Error ? err.message : 'WordPress 暂不可用',
+      message: this.toolsService.getErrorMessage(err, 'WordPress 暂不可用'),
       status: HttpStatus.BAD_GATEWAY,
     };
   }
@@ -928,31 +885,11 @@ export class WordpressService {
     return '';
   }
 
-  private readHeader(request: Request, name: string) {
-    const value = request.headers[name.toLowerCase()];
-    return Array.isArray(value) ? value[0] : value;
-  }
-
-  private readCookie(request: Request, cookieName: string) {
-    const cookieHeader = request.headers.cookie || '';
-    const cookie = cookieHeader.split(';').find((item) => {
-      const [key] = item.trim().split('=');
-      return key === cookieName;
-    });
-
-    if (!cookie) return undefined;
-
-    const [, ...value] = cookie.trim().split('=');
-
-    try {
-      return decodeURIComponent(value.join('='));
-    } catch {
-      return value.join('=');
-    }
-  }
-
   private getForwardableAuthorization(request: Request) {
-    const authorization = this.readHeader(request, 'authorization');
+    const authorization = this.toolsService.readHeader(
+      request,
+      'authorization',
+    );
 
     if (!authorization || this.isLikelyAdminAuthorization(authorization)) {
       return undefined;
@@ -997,7 +934,3 @@ export class WordpressService {
     return cookies.length ? cookies.join('; ') : undefined;
   }
 }
-
-type WordpressPagedQueryDto =
-  | WordpressArticleListQueryDto
-  | WordpressTermListQueryDto;

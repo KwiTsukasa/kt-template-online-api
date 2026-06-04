@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Component } from './component.entity';
-import { ToolsService } from '@/common';
+import { ToolsService, type KtPage, type KtPageParams } from '@/common';
 import { isNumber, omit, pick } from 'lodash';
 import { DictService } from '@/admin/dict/dict.service';
 
@@ -28,7 +28,7 @@ export class ComponentService {
     pageNo,
     pageSize,
     ...args
-  }: PageParams<Component>): Promise<Page<Component>> {
+  }: KtPageParams<Component>): Promise<KtPage<Component>> {
     await this.dictService.refreshDecodeCache();
 
     const hasOwnEntity = new Component();

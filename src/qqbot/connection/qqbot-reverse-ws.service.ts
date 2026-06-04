@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, ModuleRef } from '@nestjs/core';
-import WebSocket from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import { ToolsService } from '@/common';
 import { QQBOT_MQTT_TOPICS, QQBOT_REVERSE_WS_PATH } from '../qqbot.constants';
 import type {
@@ -28,7 +28,7 @@ export class QqbotReverseWsService
   private readonly logger = new Logger(QqbotReverseWsService.name);
   private readonly connections = new Map<string, WebSocket>();
   private readonly pendingActions = new Map<string, QqbotPendingAction>();
-  private server: WebSocket.Server | null = null;
+  private server: WebSocketServer | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -46,7 +46,7 @@ export class QqbotReverseWsService
     }
 
     const httpServer = this.httpAdapterHost.httpAdapter.getHttpServer();
-    this.server = new WebSocket.Server({ noServer: true });
+    this.server = new WebSocketServer({ noServer: true });
     httpServer.on(
       'upgrade',
       (request: IncomingMessage, socket: Socket, head) => {

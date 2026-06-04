@@ -3,6 +3,7 @@ FROM node:22-bookworm-slim
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV TZ=Asia/Shanghai
 ENV APP_PORT=48085
 ENV LOG_LEVEL=info
 ENV LOG_APP_NAME=kt-template-online-api

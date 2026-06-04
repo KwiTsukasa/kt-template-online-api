@@ -1,9 +1,10 @@
 import { Global, Module } from '@nestjs/common';
+import { LokiLogPublisherService } from './logger/loki-log-publisher.service';
 import { ToolsService } from './services/tool.service';
 
 @Global()
 @Module({
-  exports: [ToolsService],
-  providers: [ToolsService],
+  exports: [LokiLogPublisherService, ToolsService],
+  providers: [LokiLogPublisherService, ToolsService],
 })
 export class CommonModule {}

@@ -10,7 +10,11 @@ import { Test } from '@nestjs/testing';
 import { PinoLogger } from 'nestjs-pino';
 import * as request from 'supertest';
 import { lastValueFrom, of, throwError } from 'rxjs';
-import { ApiRequestLogInterceptor, ToolsService } from '../../src/common';
+import {
+  ApiRequestLogInterceptor,
+  LokiLogPublisherService,
+  ToolsService,
+} from '../../src/common';
 
 @Controller('probe')
 class ProbeController {
@@ -38,6 +42,12 @@ function createResponse(statusCode = 200) {
   };
 }
 
+function createLokiLogPublisherMock() {
+  return {
+    pushHttpRequestLog: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe('ApiRequestLogInterceptor', () => {
   it('writes structured HTTP request fields for successful controller calls', async () => {
     const logger = {
@@ -46,8 +56,10 @@ describe('ApiRequestLogInterceptor', () => {
       setContext: jest.fn(),
       warn: jest.fn(),
     };
+    const lokiLogPublisher = createLokiLogPublisherMock();
     const interceptor = new ApiRequestLogInterceptor(
       logger as any,
+      lokiLogPublisher as any,
       new ToolsService(),
     );
     const request: Record<string, any> = {
@@ -55,7 +67,7 @@ describe('ApiRequestLogInterceptor', () => {
         'x-request-id': 'req-1',
       },
       method: 'GET',
-      originalUrl: '/system/logs?pageNo=1',
+      originalUrl: '/status?source=test',
     };
     const response = createResponse(200);
 
@@ -70,12 +82,65 @@ describe('ApiRequestLogInterceptor', () => {
     expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'GET',
-        path: '/system/logs',
+        path: '/status',
         requestId: 'req-1',
         statusCode: 200,
       }),
       'HTTP request completed',
     );
+    expect(lokiLogPublisher.pushHttpRequestLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: ApiRequestLogInterceptor.name,
+        level: 'info',
+        message: 'HTTP request completed',
+        payload: expect.objectContaining({
+          method: 'GET',
+          path: '/status',
+          requestId: 'req-1',
+          statusCode: 200,
+        }),
+      }),
+    );
+  });
+
+  it('does not publish system log query requests back to Loki', async () => {
+    const logger = {
+      error: jest.fn(),
+      info: jest.fn(),
+      setContext: jest.fn(),
+      warn: jest.fn(),
+    };
+    const lokiLogPublisher = createLokiLogPublisherMock();
+    const interceptor = new ApiRequestLogInterceptor(
+      logger as any,
+      lokiLogPublisher as any,
+      new ToolsService(),
+    );
+    const request: Record<string, any> = {
+      headers: {
+        'x-request-id': 'req-system-log',
+      },
+      method: 'GET',
+      originalUrl: '/system/logs?pageNo=1',
+    };
+    const response = createResponse(200);
+
+    await lastValueFrom(
+      interceptor.intercept(createHttpContext(request, response), {
+        handle: () => of({ ok: true }),
+      }),
+    );
+
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        path: '/system/logs',
+        requestId: 'req-system-log',
+        statusCode: 200,
+      }),
+      'HTTP request completed',
+    );
+    expect(lokiLogPublisher.pushHttpRequestLog).not.toHaveBeenCalled();
   });
 
   it('writes warning logs with HTTP status for controller errors', async () => {
@@ -85,8 +150,10 @@ describe('ApiRequestLogInterceptor', () => {
       setContext: jest.fn(),
       warn: jest.fn(),
     };
+    const lokiLogPublisher = createLokiLogPublisherMock();
     const interceptor = new ApiRequestLogInterceptor(
       logger as any,
+      lokiLogPublisher as any,
       new ToolsService(),
     );
     const request: Record<string, any> = {
@@ -115,6 +182,17 @@ describe('ApiRequestLogInterceptor', () => {
       }),
       'HTTP request completed',
     );
+    expect(lokiLogPublisher.pushHttpRequestLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'warning',
+        payload: expect.objectContaining({
+          method: 'POST',
+          path: '/dict/save',
+          requestId: request.id,
+          statusCode: 404,
+        }),
+      }),
+    );
   });
 
   it('captures a real local HTTP request in a Nest application', async () => {
@@ -134,6 +212,10 @@ describe('ApiRequestLogInterceptor', () => {
           {
             provide: PinoLogger,
             useValue: logger,
+          },
+          {
+            provide: LokiLogPublisherService,
+            useValue: createLokiLogPublisherMock(),
           },
           {
             provide: APP_INTERCEPTOR,

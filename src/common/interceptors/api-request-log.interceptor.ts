@@ -9,6 +9,7 @@ import {
 import type { Request, Response } from 'express';
 import { PinoLogger } from 'nestjs-pino';
 import { catchError, Observable, tap, throwError } from 'rxjs';
+import { LokiLogPublisherService } from '../logger/loki-log-publisher.service';
 import { ToolsService } from '../services/tool.service';
 
 type RequestWithId = Request & {
@@ -19,6 +20,7 @@ type RequestWithId = Request & {
 export class ApiRequestLogInterceptor implements NestInterceptor {
   constructor(
     private readonly logger: PinoLogger,
+    private readonly lokiLogPublisherService: LokiLogPublisherService,
     private readonly toolsService: ToolsService,
   ) {
     this.logger.setContext(ApiRequestLogInterceptor.name);
@@ -85,6 +87,12 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
     };
 
     if (statusCode >= 500) {
+      this.publishRequestLog({
+        error: params.error,
+        level: 'error',
+        message: 'HTTP request failed',
+        payload,
+      });
       this.logger.error(
         {
           ...payload,
@@ -96,11 +104,48 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
     }
 
     if (statusCode >= 400) {
+      this.publishRequestLog({
+        level: 'warning',
+        message: 'HTTP request completed',
+        payload,
+      });
       this.logger.warn(payload, 'HTTP request completed');
       return;
     }
 
+    this.publishRequestLog({
+      level: 'info',
+      message: 'HTTP request completed',
+      payload,
+    });
     this.logger.info(payload, 'HTTP request completed');
+  }
+
+  private publishRequestLog(params: {
+    error?: unknown;
+    level: 'error' | 'info' | 'warning';
+    message: string;
+    payload: Record<string, unknown>;
+  }) {
+    if (this.shouldSkipLokiPublish(params.payload.path)) return;
+
+    void this.lokiLogPublisherService
+      .pushHttpRequestLog({
+        context: ApiRequestLogInterceptor.name,
+        error: params.error,
+        level: params.level,
+        message: params.message,
+        payload: params.payload,
+      })
+      .catch(() => undefined);
+  }
+
+  private shouldSkipLokiPublish(path: unknown) {
+    const normalizedPath = this.toolsService.normalizeRequestPathValue(path);
+    return (
+      normalizedPath === '/system/logs' ||
+      normalizedPath.startsWith('/system/logs/')
+    );
   }
 
   private getStatusCode(error: unknown, response: Response) {

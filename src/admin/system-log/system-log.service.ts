@@ -30,6 +30,19 @@ type LokiQueryRangeResponse = {
   status?: string;
 };
 
+type LokiMetricResult = {
+  metric?: Record<string, string>;
+  value?: [number | string, string];
+};
+
+type LokiQueryResponse = {
+  data?: {
+    result?: LokiMetricResult[];
+    resultType?: string;
+  };
+  status?: string;
+};
+
 const DEFAULT_LEVELS = ['debug', 'info', 'warning', 'error', 'critical'];
 const PINO_LEVEL_MAP: Record<string, string> = {
   '10': 'debug',
@@ -89,17 +102,20 @@ export class SystemLogService {
       1,
       20,
     );
+    const skip = (pageNo - 1) * pageSize;
     const requestLimit = Math.min(
-      this.toolsService.toPositiveNumber(query.limit, pageNo * pageSize),
+      this.toolsService.toPositiveNumber(query.limit, skip + pageSize),
       this.getNumberConfig('LOKI_QUERY_MAX_LIMIT', 1000),
     );
-    const logs = await this.queryLogs(query, Math.max(requestLimit, pageSize));
+    const [logs, total] = await Promise.all([
+      this.queryLogs(query, Math.max(requestLimit, pageSize)),
+      this.queryLogCount(query),
+    ]);
     const filteredLogs = logs.filter((item) => this.matchesQuery(item, query));
-    const startIndex = (pageNo - 1) * pageSize;
 
     return {
-      items: filteredLogs.slice(startIndex, startIndex + pageSize),
-      total: filteredLogs.length,
+      items: filteredLogs.slice(skip, skip + pageSize),
+      total,
     };
   }
 
@@ -110,18 +126,10 @@ export class SystemLogService {
       return DEFAULT_LEVELS.map((level) => ({ count: 0, level }));
     }
 
-    const logs = await this.queryLogs(
-      {
-        ...query,
-        level: undefined,
-      },
-      this.toolsService.toPositiveNumber(query.limit, 1000),
-    );
-    const filteredLogs = logs.filter((item) => this.matchesQuery(item, query));
     const countMap = new Map(DEFAULT_LEVELS.map((level) => [level, 0]));
-    filteredLogs.forEach((item) => {
-      const level = this.normalizeLevel(item.level) || 'info';
-      countMap.set(level, (countMap.get(level) || 0) + 1);
+    const counts = await this.queryLogSummary(query);
+    counts.forEach(({ count, level }) => {
+      countMap.set(level, count);
     });
 
     return DEFAULT_LEVELS.map((level) => ({
@@ -158,6 +166,51 @@ export class SystemLogService {
     return this.flattenLogs(response.data?.result || []);
   }
 
+  private async queryLogCount(query: SystemLogQueryDto) {
+    const response = await this.queryInstant(
+      this.buildCountLogQL(query),
+      query,
+    );
+    const value = response.data?.result?.[0]?.value?.[1];
+    return this.toOptionalNumber(value) || 0;
+  }
+
+  private async queryLogSummary(query: SystemLogQueryDto) {
+    const response = await this.queryInstant(
+      this.buildSummaryLogQL(query),
+      query,
+    );
+
+    return (response.data?.result || [])
+      .map((item) => ({
+        count: this.toOptionalNumber(item.value?.[1]) || 0,
+        level: this.normalizeLevel(item.metric?.level) || 'info',
+      }))
+      .filter((item) => DEFAULT_LEVELS.includes(item.level));
+  }
+
+  private async queryInstant(logql: string, query: SystemLogQueryDto) {
+    const url = new URL(this.getInstantQueryEndpoint(), this.host);
+    const { end } = this.getTimeRange(query);
+    url.searchParams.set('query', logql);
+    url.searchParams.set('time', `${Math.floor(end.getTime() / 1000)}`);
+
+    let response: LokiQueryResponse;
+    try {
+      response = await this.requestJson<LokiQueryResponse>(url);
+    } catch (error) {
+      throwVbenError(
+        this.toolsService.getErrorMessage(error, 'Loki 查询失败'),
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+    if (response.status && response.status !== 'success') {
+      throwVbenError('Loki 查询失败', HttpStatus.BAD_GATEWAY, response.status);
+    }
+
+    return response;
+  }
+
   private buildLogQL(query: SystemLogQueryDto) {
     const selector = this.withLevelSelector(
       this.getBaseSelector(),
@@ -174,6 +227,14 @@ export class SystemLogService {
       .map((value) => `|= "${this.escapeLogqlString(value)}"`);
 
     return [selector, ...lineFilters].join(' ');
+  }
+
+  private buildCountLogQL(query: SystemLogQueryDto) {
+    return `sum(count_over_time(${this.buildLogQL(query)}[${this.getLogqlRange(query)}]))`;
+  }
+
+  private buildSummaryLogQL(query: SystemLogQueryDto) {
+    return `sum by (level)(count_over_time(${this.buildLogQL(query)}[${this.getLogqlRange(query)}]))`;
   }
 
   private withLevelSelector(selector: string, level?: string) {
@@ -303,6 +364,26 @@ export class SystemLogService {
             1000,
       );
     return { end, start };
+  }
+
+  private getLogqlRange(query: SystemLogQueryDto) {
+    const { end, start } = this.getTimeRange(query);
+    const seconds = Math.max(
+      1,
+      Math.ceil((end.getTime() - start.getTime()) / 1000),
+    );
+
+    return `${seconds}s`;
+  }
+
+  private getInstantQueryEndpoint() {
+    const endpoint = this.getConfig('LOKI_QUERY_INSTANT_ENDPOINT');
+    if (endpoint) return endpoint;
+
+    return this.getConfig(
+      'LOKI_QUERY_ENDPOINT',
+      '/loki/api/v1/query_range',
+    ).replace(/query_range$/, 'query');
   }
 
   private requestJson<T>(url: URL) {

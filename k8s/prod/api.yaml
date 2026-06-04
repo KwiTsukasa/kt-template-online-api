@@ -31,6 +31,8 @@ spec:
           env:
             - name: NODE_ENV
               value: production
+            - name: TZ
+              value: Asia/Shanghai
             - name: QQBOT_NAPCAT_SSH_KEY_PATH
               value: /app/secrets/napcat-ssh/id_rsa
           # Jenkins 每次发布会从 Agent 私有 .env.production 重建这个 Secret。

@@ -17,6 +17,94 @@ function createService() {
 }
 
 describe('SystemLogService', () => {
+  it('uses Loki aggregate count as page total', async () => {
+    const service = createService();
+    const requestJson = jest
+      .spyOn(service as any, 'requestJson')
+      .mockImplementation(async (url: URL) => {
+        if (url.pathname.endsWith('/query')) {
+          expect(url.searchParams.get('query')).toContain(
+            'sum(count_over_time(',
+          );
+          return {
+            data: {
+              result: [
+                {
+                  value: [1780576200, '12'],
+                },
+              ],
+            },
+            status: 'success',
+          };
+        }
+
+        return {
+          data: {
+            result: [
+              {
+                stream: {
+                  context: 'ApiRequestLogInterceptor',
+                  hostname: 'api-pod',
+                },
+                values: [
+                  [
+                    '1780576200000000000',
+                    JSON.stringify({
+                      durationMs: 18,
+                      level: 30,
+                      method: 'GET',
+                      msg: 'HTTP request completed',
+                      path: '/system/logs',
+                      requestId: 'req-1',
+                      statusCode: 200,
+                    }),
+                  ],
+                ],
+              },
+            ],
+          },
+          status: 'success',
+        };
+      });
+
+    const result = await service.page({
+      pageNo: 1,
+      pageSize: 10,
+      requestId: 'req-1',
+    });
+
+    expect(result.total).toBe(12);
+    expect(result.items).toHaveLength(1);
+    expect(requestJson).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses Loki aggregate counts for summary cards', async () => {
+    const service = createService();
+    jest.spyOn(service as any, 'requestJson').mockResolvedValue({
+      data: {
+        result: [
+          {
+            metric: { level: 'info' },
+            value: [1780576200, '8'],
+          },
+          {
+            metric: { level: 'error' },
+            value: [1780576200, '2'],
+          },
+        ],
+      },
+      status: 'success',
+    });
+
+    await expect(service.summary({ rangeMinutes: 10 })).resolves.toEqual([
+      { count: 0, level: 'debug' },
+      { count: 8, level: 'info' },
+      { count: 0, level: 'warning' },
+      { count: 2, level: 'error' },
+      { count: 0, level: 'critical' },
+    ]);
+  });
+
   it('parses structured HTTP request fields from top-level Loki log lines', () => {
     const service = createService();
     const result = (service as any).serializeLog({

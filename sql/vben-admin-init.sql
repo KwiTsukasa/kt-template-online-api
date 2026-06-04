@@ -183,6 +183,7 @@ VALUES
   (2041700000000120204, 2041700000000100203, 'SystemKtTableDemoCreate', NULL, NULL, NULL, 'System:KtTableDemo:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120205, 2041700000000100203, 'SystemKtTableDemoEdit', NULL, NULL, NULL, 'System:KtTableDemo:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120206, 2041700000000100203, 'SystemKtTableDemoDelete', NULL, NULL, NULL, 'System:KtTableDemo:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000100205, 2041700000000100002, 'SystemLog', '/system/logs', '/system/log/list', NULL, 'System:Log:List', 'menu', '{"icon":"lucide:scroll-text","title":"system.log.title"}', 1, 6),
   (2041700000000100300, 0, 'Blog', '/blog', NULL, '/blog/article', NULL, 'catalog', '{"icon":"lucide:newspaper","order":100,"title":"博客管理"}', 1, 100),
   (2041700000000100301, 2041700000000100300, 'BlogArticle', '/blog/article', '/blog/article/list', NULL, 'Blog:Article:List', 'menu', '{"icon":"lucide:file-text","title":"文章管理"}', 1, 0),
   (2041700000000120301, 2041700000000100301, 'BlogArticleCreate', NULL, NULL, NULL, 'Blog:Article:Create', 'button', '{"title":"common.create"}', 1, 0),

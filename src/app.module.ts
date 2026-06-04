@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { LoggerModule } from 'nestjs-pino';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MinioModule } from 'nestjs-minio-client';
@@ -9,6 +10,7 @@ import { MinioClientModule } from './minio/minio.module';
 import {
   ApiExceptionFilter,
   CommonModule,
+  createPinoLoggerParams,
   SaveBodyInterceptor,
 } from './common';
 import { AdminModule } from './admin/admin.module';
@@ -20,6 +22,12 @@ import { QqbotModule } from './qqbot/qqbot.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
+    }),
+    LoggerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) =>
+        createPinoLoggerParams(configService),
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],

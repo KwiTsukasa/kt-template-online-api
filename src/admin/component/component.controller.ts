@@ -39,8 +39,8 @@ const componentExample = {
   componentTypeMsg: '折线图',
   image: '',
   template: '%7B%22version%22%3A%221.0%22%7D',
-  createTime: '2026-05-13T02:30:00.000Z',
-  updateTime: '2026-05-13T02:30:00.000Z',
+  createTime: '2026-05-13 10:30:00',
+  updateTime: '2026-05-13 10:30:00',
   is_deleted: false,
 };
 

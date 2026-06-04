@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ToolsService } from '@/common';
+import { formatKtDateTime, ToolsService } from '@/common';
 import type { QqbotIntegrationPlugin } from '../../qqbot.types';
 import { QqbotFflogsClientService } from './qqbot-fflogs-client.service';
 
@@ -15,7 +15,7 @@ export class QqbotFflogsPluginService {
       description:
         '对接 FFLogs v2 GraphQL，提供 FF14 角色公开排名和指定高难最近记录查询能力。',
       healthCheck: async () => {
-        const checkedAt = new Date().toISOString();
+        const checkedAt = formatKtDateTime(new Date());
         try {
           await this.fflogsClientService.checkHealth();
           return {

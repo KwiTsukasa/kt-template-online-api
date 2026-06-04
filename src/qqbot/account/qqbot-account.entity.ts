@@ -6,7 +6,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ensureSnowflakeId } from '@/common';
+import { ensureSnowflakeId, FormatDateTime } from '@/common';
 import type {
   QqbotConnectionMode,
   QqbotConnectionRole,
@@ -51,6 +51,7 @@ export class QqbotAccount {
     nullable: true,
     type: 'datetime',
   })
+  @FormatDateTime()
   lastConnectedAt: Date | null;
 
   @Column({
@@ -59,6 +60,7 @@ export class QqbotAccount {
     nullable: true,
     type: 'datetime',
   })
+  @FormatDateTime()
   lastHeartbeatAt: Date | null;
 
   @Column({ default: null, length: 500, name: 'last_error', nullable: true })
@@ -71,9 +73,11 @@ export class QqbotAccount {
   isDeleted: boolean;
 
   @CreateDateColumn({ name: 'create_time' })
+  @FormatDateTime()
   createTime: Date;
 
   @UpdateDateColumn({ name: 'update_time' })
+  @FormatDateTime()
   updateTime: Date;
 
   @BeforeInsert()

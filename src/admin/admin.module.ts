@@ -16,6 +16,8 @@ import { AdminMenuService } from './menu/admin-menu.service';
 import { AdminRoleController } from './role/admin-role.controller';
 import { AdminRole } from './role/admin-role.entity';
 import { AdminRoleService } from './role/admin-role.service';
+import { SystemLogController } from './system-log/system-log.controller';
+import { SystemLogService } from './system-log/system-log.service';
 import { AdminTimezoneController } from './timezone/admin-timezone.controller';
 import { AdminTimezoneService } from './timezone/admin-timezone.service';
 import { AdminUserManageController } from './user/admin-user-manage.controller';
@@ -47,6 +49,7 @@ import { WordpressModule } from '@/wordpress/wordpress.module';
     AdminRoleController,
     AdminDeptController,
     ComponentController,
+    SystemLogController,
     AdminTimezoneController,
     AdminExampleController,
   ],
@@ -55,6 +58,7 @@ import { WordpressModule } from '@/wordpress/wordpress.module';
     AdminDeptService,
     AdminMenuService,
     AdminRoleService,
+    SystemLogService,
     AdminTimezoneService,
     AdminUserService,
   ],

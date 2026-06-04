@@ -6,7 +6,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ensureSnowflakeId } from '@/common';
+import { ensureSnowflakeId, FormatDateTime } from '@/common';
 import type { QqbotRuleMatchType, QqbotRuleTargetType } from '../qqbot.types';
 
 @Entity('qqbot_rule')
@@ -44,6 +44,7 @@ export class QqbotRule {
     nullable: true,
     type: 'datetime',
   })
+  @FormatDateTime()
   lastHitAt: Date | null;
 
   @Column({ default: '', length: 255 })
@@ -53,9 +54,11 @@ export class QqbotRule {
   isDeleted: boolean;
 
   @CreateDateColumn({ name: 'create_time' })
+  @FormatDateTime()
   createTime: Date;
 
   @UpdateDateColumn({ name: 'update_time' })
+  @FormatDateTime()
   updateTime: Date;
 
   @BeforeInsert()

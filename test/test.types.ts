@@ -1,4 +1,4 @@
-import request = require('supertest');
+import type request from 'supertest';
 
 export type ControllerRoute = {
   controllerName: string;

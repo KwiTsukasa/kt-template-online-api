@@ -8,7 +8,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ensureSnowflakeId } from '@/common';
+import { ensureSnowflakeId, FormatDateTime } from '@/common';
 import { AdminMenu } from '../menu/admin-menu.entity';
 import { AdminUser } from '../user/admin-user.entity';
 
@@ -47,11 +47,13 @@ export class AdminRole {
   @CreateDateColumn({
     name: 'create_time',
   })
+  @FormatDateTime()
   createTime: Date;
 
   @UpdateDateColumn({
     name: 'update_time',
   })
+  @FormatDateTime()
   updateTime: Date;
 
   @ManyToMany(() => AdminMenu, (menu) => menu.roles)

@@ -7,7 +7,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ensureSnowflakeId } from '@/common';
+import { ensureSnowflakeId, FormatDateTime } from '@/common';
 import type { QqbotMessageDirection, QqbotMessageType } from '../qqbot.types';
 
 @Entity('qqbot_message')
@@ -58,12 +58,15 @@ export class QqbotMessage {
   rawEvent: Record<string, any>;
 
   @Column({ name: 'event_time', type: 'datetime' })
+  @FormatDateTime()
   eventTime: Date;
 
   @CreateDateColumn({ name: 'create_time' })
+  @FormatDateTime()
   createTime: Date;
 
   @UpdateDateColumn({ name: 'update_time' })
+  @FormatDateTime()
   updateTime: Date;
 
   @BeforeInsert()

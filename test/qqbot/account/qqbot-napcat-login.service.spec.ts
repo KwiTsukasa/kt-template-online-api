@@ -1,11 +1,16 @@
-jest.mock('@/common', () => ({
-  ToolsService: jest.requireActual('@/common').ToolsService,
-  ensureSnowflakeId: jest.fn(),
-  setDictDecodeCache: jest.fn(),
-  throwVbenError: (message: string) => {
-    throw new Error(message);
-  },
-}));
+jest.mock('@/common', () => {
+  const actualCommon = jest.requireActual('@/common');
+  return {
+    FormatDateTime: actualCommon.FormatDateTime,
+    ToolsService: actualCommon.ToolsService,
+    ensureSnowflakeId: jest.fn(),
+    formatKtDateTime: actualCommon.formatKtDateTime,
+    setDictDecodeCache: jest.fn(),
+    throwVbenError: (message: string) => {
+      throw new Error(message);
+    },
+  };
+});
 
 import { ConfigService } from '@nestjs/config';
 import { ToolsService } from '@/common';

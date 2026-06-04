@@ -6,7 +6,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ensureSnowflakeId } from '@/common';
+import { ensureSnowflakeId, FormatDateTime } from '@/common';
 
 @Entity('qqbot_dedupe')
 export class QqbotDedupe {
@@ -22,12 +22,15 @@ export class QqbotDedupe {
     nullable: true,
     type: 'datetime',
   })
+  @FormatDateTime()
   expireAt: Date | null;
 
   @CreateDateColumn({ name: 'create_time' })
+  @FormatDateTime()
   createTime: Date;
 
   @UpdateDateColumn({ name: 'update_time' })
+  @FormatDateTime()
   updateTime: Date;
 
   @BeforeInsert()

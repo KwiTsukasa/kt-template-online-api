@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { throwVbenError } from '@/common';
+import { formatKtDateTime, throwVbenError } from '@/common';
 import { QqbotFf14MarketPluginService } from '../plugins/ff14Market/qqbot-ff14-market.plugin';
 import { QqbotFflogsPluginService } from '../plugins/fflogs/qqbot-fflogs.plugin';
 import type {
@@ -63,7 +63,7 @@ export class QqbotPluginRegistryService implements OnModuleInit {
       plugins.map(async (plugin) => {
         if (!plugin.healthCheck) {
           return {
-            checkedAt: new Date().toISOString(),
+            checkedAt: formatKtDateTime(new Date()),
             message: '插件未提供健康检查',
             name: plugin.name,
             pluginKey: plugin.key,

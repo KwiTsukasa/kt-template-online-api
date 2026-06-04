@@ -21,6 +21,7 @@ SET `meta` = CASE `name`
   WHEN 'SystemDeptCreate' THEN '{"title":"common.create"}'
   WHEN 'SystemDeptEdit' THEN '{"title":"common.edit"}'
   WHEN 'SystemDeptDelete' THEN '{"title":"common.delete"}'
+  WHEN 'SystemLog' THEN '{"icon":"lucide:scroll-text","title":"system.log.title"}'
   WHEN 'Project' THEN '{"badgeType":"dot","icon":"carbon:data-center","order":9998,"title":"demos.vben.title"}'
   WHEN 'VbenDocument' THEN '{"icon":"carbon:book","iframeSrc":"https://doc.vben.pro","title":"demos.vben.document"}'
   WHEN 'VbenGithub' THEN '{"icon":"carbon:logo-github","link":"https://github.com/vbenjs/vue-vben-admin","title":"Github"}'
@@ -44,6 +45,7 @@ WHERE `name` IN (
   'SystemDeptCreate',
   'SystemDeptEdit',
   'SystemDeptDelete',
+  'SystemLog',
   'Project',
   'VbenDocument',
   'VbenGithub',

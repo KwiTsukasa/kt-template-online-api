@@ -32,6 +32,7 @@
 | MinIO     | Bucket 检查/创建、文件上传、列表、临时访问地址、下载和删除                                |
 | WordPress | WordPress 文章、标签、分类管理，复用客户端 WordPress 登录态访问 REST API                  |
 | Common    | 统一响应 Swagger 注解、字典翻译注解、`POST */save` 请求体规范化拦截器                     |
+| Logging   | 基于 Pino 的结构化日志、可选 Loki 直推，以及 Admin 系统日志查询代理                      |
 
 ## 通用规则
 
@@ -84,6 +85,29 @@ WordPress 侧只使用客户端登录态，后端不走 BasicAuth。当前 WordP
 如果 WordPress 所在 Apache/Nginx 未开启 rewrite，`/wp-json/*` 可能返回 404。后端会自动回退到 WordPress 原生 `?rest_route=/...` 形式，避免因为固定链接配置阻断文章、标签和分类管理接口。
 
 Admin 主登录不依赖 WordPress 可用性：本系统账号验证通过后会先写入 Admin token；WordPress 自动认证失败时登录仍返回成功，`wordpressAuth` 为 `null`、`wordpressAvailable=false`，并清理旧 WordPress cookie。随后 `/menu/all` 与 `/auth/codes` 会基于最近一次 WordPress 可用性状态过滤 `Blog*` 菜单和 `Blog:*` 按钮权限码，避免前端展示不可用的文章、分类、标签管理入口。
+
+### 系统日志
+
+后端使用 `nestjs-pino` 输出结构化 JSON 日志。生产环境默认写 stdout；配置 `LOKI_URL` 或 `LOKI_HOST` 后，会同时通过 `pino-loki` 批量推送到 Loki。Admin 不直接连接 Loki，统一通过后端 `/system/logs/*` 查询代理访问，避免 Loki 地址和凭据暴露到浏览器。
+
+环境变量：
+
+| 变量                         | 说明                                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------------------- |
+| `LOG_LEVEL`                  | 日志级别，默认生产 `info`、开发 `debug`                                                  |
+| `LOG_APP_NAME`               | Loki `app` 标签，默认 `kt-template-online-api`                                           |
+| `LOG_PRETTY`                 | 开发环境是否使用 `pino-pretty`，默认 `true`                                              |
+| `LOKI_URL` / `LOKI_HOST`     | Loki HTTP 地址，例如 `http://loki:3100`；为空时仅输出 stdout                             |
+| `LOKI_QUERY_HOST`            | 查询专用 Loki 地址；为空时复用 `LOKI_HOST/LOKI_URL`                                      |
+| `LOKI_ENV`                   | Loki `env` 标签，默认跟随 `NODE_ENV`                                                     |
+| `LOKI_TENANT_ID`             | Loki 多租户 `X-Scope-OrgID`，没有多租户时留空                                            |
+| `LOKI_USERNAME` / `LOKI_PASSWORD` | Loki Basic Auth，仅放真实 env，不提交到仓库                                         |
+| `LOKI_PUSH_ENDPOINT`         | Loki push 路径，默认 `/loki/api/v1/push`                                                 |
+| `LOKI_QUERY_ENDPOINT`        | Loki query_range 路径，默认 `/loki/api/v1/query_range`                                   |
+| `LOKI_QUERY_SELECTOR`        | 查询默认 selector；为空时使用 `{app="<LOG_APP_NAME>",env="<LOKI_ENV>"}`                  |
+| `LOKI_BATCH_INTERVAL_SECONDS` | pino-loki 批量发送间隔，默认 `5`                                                        |
+| `LOKI_BATCH_MAX_BUFFER_SIZE` | Loki 不可用时最大内存缓冲条数，默认 `10000`，超过会丢弃旧日志避免 OOM                   |
+| `LOKI_QUERY_MAX_LIMIT`       | Admin 单次查询最大拉取条数，默认 `1000`                                                  |
 
 ### 数据库字典翻译
 
@@ -349,6 +373,10 @@ Query：
 | POST   | `/system/dept`                 | 新增部门                                                                                              |
 | PUT    | `/system/dept/:id`             | 更新部门                                                                                              |
 | DELETE | `/system/dept/:id`             | 删除部门                                                                                              |
+| GET    | `/system/logs`                 | 查询 Loki 系统日志                                                                                    |
+| GET    | `/system/logs/summary`         | 查询日志级别统计                                                                                      |
+| GET    | `/system/logs/levels`          | 查询日志级别选项                                                                                      |
+| GET    | `/system/logs/status`          | 查询 Loki 配置状态                                                                                    |
 | GET    | `/timezone/getTimezoneOptions` | 获取时区选项                                                                                          |
 | GET    | `/timezone/getTimezone`        | 获取当前用户时区                                                                                      |
 | POST   | `/timezone/setTimezone`        | 设置当前用户时区                                                                                      |
@@ -360,6 +388,7 @@ Query：
 初始化 SQL：
 
 - `sql/vben-admin-init.sql`：创建 `admin_*` 表并导入基础用户、角色、菜单、部门、字典数据，同时创建空的 `admin_component` 表。
+- `sql/system-log-menu.sql`：为已有库增量补齐系统日志菜单及管理员角色授权。
 - `sql/migrate-dict-to-admin-dict.sql`：将旧 `dict` 表数据迁移到 `admin_dict`。
 - `sql/migrate-component-to-admin-component.sql`：将旧 `component` 表数据迁移到 `admin_component`，并把旧表改名为备份表。
 - `sql/fix-admin-menu-meta.sql`：修复基础后台菜单 `meta` 被旧数据或错误保存覆盖为空的问题。

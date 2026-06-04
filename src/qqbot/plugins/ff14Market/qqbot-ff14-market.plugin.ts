@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ToolsService } from '@/common';
+import { formatKtDateTime, ToolsService } from '@/common';
 import type { QqbotIntegrationPlugin } from '../../qqbot.types';
 import { QqbotFf14ClientService } from './qqbot-ff14-client.service';
 
@@ -15,7 +15,7 @@ export class QqbotFf14MarketPluginService {
       description:
         '对接 XIVAPI v2 与 Universalis，提供 FF14 物品解析和市场价格查询能力。',
       healthCheck: async () => {
-        const checkedAt = new Date().toISOString();
+        const checkedAt = formatKtDateTime(new Date());
         try {
           await this.ff14ClientService.resolveItem({
             itemId: 2,

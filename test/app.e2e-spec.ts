@@ -1,7 +1,7 @@
 import { HttpException, HttpStatus, INestApplication } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR, Reflector } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
-import request = require('supertest');
+import * as request from 'supertest';
 import { Readable } from 'stream';
 import { AppController } from '../src/app.controller';
 import { AppService } from '../src/app.service';
@@ -11,6 +11,8 @@ import { ComponentController } from '../src/admin/component/component.controller
 import { ComponentService } from '../src/admin/component/component.service';
 import { DictController } from '../src/admin/dict/dict.controller';
 import { DictService } from '../src/admin/dict/dict.service';
+import { SystemLogController } from '../src/admin/system-log/system-log.controller';
+import { SystemLogService } from '../src/admin/system-log/system-log.service';
 import {
   ApiExceptionFilter,
   SaveBodyInterceptor,
@@ -23,6 +25,7 @@ import { WordpressAuthController } from '../src/wordpress/wordpress-auth.control
 import { WordpressCategoryController } from '../src/wordpress/wordpress-category.controller';
 import { WordpressService } from '../src/wordpress/wordpress.service';
 import { WordpressTagController } from '../src/wordpress/wordpress-tag.controller';
+import { PinoLogger } from 'nestjs-pino';
 import {
   collectControllerRoutes,
   routeKey,
@@ -38,8 +41,8 @@ const component = {
   componentTypeMsg: '折线图',
   image: '',
   template: '{}',
-  createTime: '2026-05-13T02:30:00.000Z',
-  updateTime: '2026-05-13T02:30:00.000Z',
+  createTime: '2026-05-13 10:30:00',
+  updateTime: '2026-05-13 10:30:00',
   is_deleted: false,
 };
 
@@ -92,6 +95,22 @@ const dictGroupItem = {
   value: 'COMPONENT_TYPE',
 };
 
+const systemLogItem = {
+  context: 'ApiExceptionFilter',
+  durationMs: 12,
+  hostname: 'kt-template-online-api',
+  id: '1760000000000000000-0-0',
+  level: 'error',
+  message: 'Loki smoke log',
+  method: 'GET',
+  path: '/system/logs',
+  raw: '{"level":50,"msg":"Loki smoke log"}',
+  requestId: 'request-id',
+  statusCode: 500,
+  timestamp: '2026-06-04 08:00:00',
+  timestampNs: '1760000000000000000',
+};
+
 const uploadResult = {
   bucketName: 'kt-template-online',
   objectName: 'uploads/demo.txt',
@@ -105,7 +124,7 @@ const objectStat = {
   name: 'uploads/demo.txt',
   size: 4,
   etag: 'etag',
-  lastModified: '2026-05-13T02:30:00.000Z',
+  lastModified: '2026-05-13 10:30:00',
 };
 
 const wordpressAuthContext = {
@@ -177,6 +196,19 @@ const dictServiceMock = {
   update: jest.fn(),
 };
 
+const systemLogServiceMock = {
+  levels: jest.fn(),
+  page: jest.fn(),
+  status: jest.fn(),
+  summary: jest.fn(),
+};
+
+const pinoLoggerMock = {
+  error: jest.fn(),
+  setContext: jest.fn(),
+  warn: jest.fn(),
+};
+
 const minioServiceMock = {
   checkConnection: jest.fn(),
   ensureBucket: jest.fn(),
@@ -214,6 +246,7 @@ const controllerClasses = [
   AppController,
   ComponentController,
   DictController,
+  SystemLogController,
   MinioClientController,
   WordpressAuthController,
   WordpressArticleController,
@@ -562,6 +595,92 @@ const routeTestCases: Record<string, RouteTestCase> = {
       code: 200,
       msg: '操作成功',
       data: null,
+    });
+  },
+
+  'GET /system/logs': async (server) => {
+    systemLogServiceMock.page.mockResolvedValue({
+      items: [systemLogItem],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/system/logs')
+      .query({ level: 'error', pageNo: 1, pageSize: 20 })
+      .expect(200);
+
+    expect(systemLogServiceMock.page).toHaveBeenCalledWith({
+      level: 'error',
+      pageNo: '1',
+      pageSize: '20',
+    });
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: {
+        items: [systemLogItem],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /system/logs/levels': async (server) => {
+    systemLogServiceMock.levels.mockReturnValue([
+      { label: 'error', value: 'error' },
+    ]);
+
+    const response = await request(server).get('/system/logs/levels').expect(200);
+
+    expect(systemLogServiceMock.levels).toHaveBeenCalledWith();
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: [{ label: 'error', value: 'error' }],
+    });
+  },
+
+  'GET /system/logs/status': async (server) => {
+    systemLogServiceMock.status.mockReturnValue({
+      app: 'kt-template-online-api',
+      configured: true,
+      env: 'test',
+      host: 'http://loki:3100',
+      selector: '{app="kt-template-online-api",env="test"}',
+    });
+
+    const response = await request(server).get('/system/logs/status').expect(200);
+
+    expect(systemLogServiceMock.status).toHaveBeenCalledWith();
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: {
+        app: 'kt-template-online-api',
+        configured: true,
+        env: 'test',
+        host: 'http://loki:3100',
+        selector: '{app="kt-template-online-api",env="test"}',
+      },
+    });
+  },
+
+  'GET /system/logs/summary': async (server) => {
+    systemLogServiceMock.summary.mockResolvedValue([
+      { count: 1, level: 'error' },
+    ]);
+
+    const response = await request(server)
+      .get('/system/logs/summary')
+      .query({ rangeMinutes: 30 })
+      .expect(200);
+
+    expect(systemLogServiceMock.summary).toHaveBeenCalledWith({
+      rangeMinutes: '30',
+    });
+    expect(response.body).toEqual({
+      code: 200,
+      msg: '操作成功',
+      data: [{ count: 1, level: 'error' }],
     });
   },
 
@@ -1210,12 +1329,20 @@ describe('KT Template Online API (e2e)', () => {
           useValue: dictServiceMock,
         },
         {
+          provide: SystemLogService,
+          useValue: systemLogServiceMock,
+        },
+        {
           provide: MinioClientService,
           useValue: minioServiceMock,
         },
         {
           provide: WordpressService,
           useValue: wordpressServiceMock,
+        },
+        {
+          provide: PinoLogger,
+          useValue: pinoLoggerMock,
         },
         {
           provide: APP_INTERCEPTOR,

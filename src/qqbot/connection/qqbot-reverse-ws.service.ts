@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, ModuleRef } from '@nestjs/core';
-import WebSocket = require('ws');
+import WebSocket from 'ws';
 import { ToolsService } from '@/common';
 import { QQBOT_MQTT_TOPICS, QQBOT_REVERSE_WS_PATH } from '../qqbot.constants';
 import type {

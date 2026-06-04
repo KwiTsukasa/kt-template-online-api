@@ -7,7 +7,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ensureSnowflakeId } from '@/common';
+import { ensureSnowflakeId, FormatDateTime } from '@/common';
 import type { QqbotMessageType } from '../qqbot.types';
 
 @Entity('qqbot_conversation')
@@ -45,6 +45,7 @@ export class QqbotConversation {
     nullable: true,
     type: 'datetime',
   })
+  @FormatDateTime()
   lastMessageTime: Date | null;
 
   @Column({ default: 0, name: 'message_count' })
@@ -54,9 +55,11 @@ export class QqbotConversation {
   isDeleted: boolean;
 
   @CreateDateColumn({ name: 'create_time' })
+  @FormatDateTime()
   createTime: Date;
 
   @UpdateDateColumn({ name: 'update_time' })
+  @FormatDateTime()
   updateTime: Date;
 
   @BeforeInsert()

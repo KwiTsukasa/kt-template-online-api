@@ -7,7 +7,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { ensureSnowflakeId } from '@/common';
+import { ensureSnowflakeId, FormatDateTime } from '@/common';
 import type { QqbotAccountNapcatBindStatus } from '../qqbot.types';
 
 @Entity('qqbot_account_napcat')
@@ -35,6 +35,7 @@ export class QqbotAccountNapcat {
     nullable: true,
     type: 'datetime',
   })
+  @FormatDateTime()
   lastLoginAt: Date | null;
 
   @Column({ default: '', length: 255 })
@@ -44,9 +45,11 @@ export class QqbotAccountNapcat {
   isDeleted: boolean;
 
   @CreateDateColumn({ name: 'create_time' })
+  @FormatDateTime()
   createTime: Date;
 
   @UpdateDateColumn({ name: 'update_time' })
+  @FormatDateTime()
   updateTime: Date;
 
   @BeforeInsert()

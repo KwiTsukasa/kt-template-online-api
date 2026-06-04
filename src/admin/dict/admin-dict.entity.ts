@@ -7,7 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ensureSnowflakeId } from '@/common';
+import { ensureSnowflakeId, FormatDateTime } from '@/common';
 
 @Entity('admin_dict')
 export class AdminDict {
@@ -68,11 +68,13 @@ export class AdminDict {
   @CreateDateColumn({
     name: 'create_time',
   })
+  @FormatDateTime()
   createTime: Date;
 
   @UpdateDateColumn({
     name: 'update_time',
   })
+  @FormatDateTime()
   updateTime: Date;
 
   @BeforeInsert()

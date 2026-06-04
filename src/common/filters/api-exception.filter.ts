@@ -5,24 +5,62 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { PinoLogger } from 'nestjs-pino';
 import { normalizeVbenErrorText } from '../response/vben-response';
 import type { ExceptionBody, KtErrorResponse } from '../types';
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
+  constructor(private readonly logger: PinoLogger) {
+    this.logger.setContext(ApiExceptionFilter.name);
+  }
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
+    const request = ctx.getRequest<Request>();
     const response = ctx.getResponse<Response>();
     const status = this.getStatus(exception);
     const body = this.getBody(exception);
     const msg = this.getMessage(status, body, exception);
+    const err = this.getErr(status, body, exception, msg);
+
+    this.logException({
+      err,
+      exception,
+      msg,
+      request,
+      status,
+    });
 
     response.status(status).json({
       code: status,
       msg,
-      err: this.getErr(status, body, exception, msg),
+      err,
     } satisfies KtErrorResponse);
+  }
+
+  private logException(params: {
+    err: string;
+    exception: unknown;
+    msg: string;
+    request: Request;
+    status: number;
+  }) {
+    const payload = {
+      err: this.getLogError(params.exception, params.err),
+      method: params.request.method,
+      path: params.request.originalUrl || params.request.url,
+      requestId: `${(params.request as any).id || ''}`,
+      statusCode: params.status,
+    };
+
+    if (params.status >= 500) {
+      this.logger.error(payload, params.msg);
+      return;
+    }
+
+    this.logger.warn(payload, params.msg);
   }
 
   private getStatus(exception: unknown) {
@@ -77,5 +115,13 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
   private stringifyMessage(message: unknown) {
     return normalizeVbenErrorText(message);
+  }
+
+  private getLogError(exception: unknown, fallback: string) {
+    if (exception instanceof Error) return exception;
+    return {
+      message: fallback,
+      raw: normalizeVbenErrorText(exception, fallback),
+    };
   }
 }

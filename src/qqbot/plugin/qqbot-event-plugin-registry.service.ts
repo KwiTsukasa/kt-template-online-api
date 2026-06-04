@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { throwVbenError } from '@/common';
+import { formatKtDateTime, throwVbenError } from '@/common';
 import { QqbotAccountService } from '../account/qqbot-account.service';
 import { QqbotRepeaterPluginService } from '../plugins/repeater/qqbot-repeater.plugin';
 import type {
@@ -52,7 +52,7 @@ export class QqbotEventPluginRegistryService {
 
   async health(pluginKey?: string): Promise<QqbotPluginHealth[]> {
     return this.getDefinitions(pluginKey).map((definition) => ({
-      checkedAt: new Date().toISOString(),
+      checkedAt: formatKtDateTime(new Date()),
       message: definition.remark || '事件插件由账号配置绑定后触发',
       name: definition.name,
       pluginKey: definition.key,

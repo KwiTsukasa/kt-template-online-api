@@ -2,6 +2,20 @@ jest.mock(
   '@/common',
   () => ({
     ensureSnowflakeId: jest.fn(),
+    FormatDateTime: () => () => undefined,
+    formatKtDateTime: (value: Date | number | string) => {
+      const date = value instanceof Date ? value : new Date(value);
+      return [
+        `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(
+          2,
+          '0',
+        )}-${`${date.getDate()}`.padStart(2, '0')}`,
+        `${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(
+          2,
+          '0',
+        )}:${`${date.getSeconds()}`.padStart(2, '0')}`,
+      ].join(' ');
+    },
     setDictDecodeCache: jest.fn(),
   }),
   { virtual: true },

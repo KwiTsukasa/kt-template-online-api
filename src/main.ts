@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Logger } from 'nestjs-pino';
 import type { OpenAPIObject } from '@nestjs/swagger';
 import { urlencoded, json } from 'express';
 import { knife4jSetup } from '@kwitsukasa/knife4j-swagger-vue3';
@@ -47,7 +48,8 @@ const swaggerGroups: SwaggerDocumentGroup[] = [
 ];
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.useLogger(app.get(Logger));
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 

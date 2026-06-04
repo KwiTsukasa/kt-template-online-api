@@ -12,7 +12,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Public, vbenPage, vbenSuccess } from '@/common';
+import { formatKtDateTime, Public, vbenPage, vbenSuccess } from '@/common';
 import { MinioClientService } from '@/minio/minio.service';
 import type { MinioUploadFile } from '@/minio/minio.types';
 import type { AdminDemoTableRow } from '../admin.types';
@@ -42,7 +42,9 @@ const DEMO_ROWS: AdminDemoTableRow[] = Array.from(
       productName: `KT Admin 模板能力 ${sequence}`,
       quantity: 10 + sequence,
       rating: Number((3 + (sequence % 20) / 10).toFixed(1)),
-      releaseDate: new Date(2026, index % 12, (index % 28) + 1).toISOString(),
+      releaseDate: formatKtDateTime(
+        new Date(2026, index % 12, (index % 28) + 1),
+      ),
       status: statuses[index % statuses.length],
       tags: [
         'kt',

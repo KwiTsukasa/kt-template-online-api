@@ -1,5 +1,6 @@
 import { PartialType } from '@nestjs/swagger';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { FormatDateTime } from '@/common';
 
 export class DictDto {
   @ApiProperty({
@@ -56,13 +57,15 @@ export class AdminDictDto {
   status?: number;
 
   @ApiPropertyOptional({
-    example: '2026-06-03T12:00:00.000Z',
+    example: '2026-06-03 20:00:00',
   })
+  @FormatDateTime()
   createTime?: Date;
 
   @ApiPropertyOptional({
-    example: '2026-06-03T12:00:00.000Z',
+    example: '2026-06-03 20:00:00',
   })
+  @FormatDateTime()
   updateTime?: Date;
 }
 

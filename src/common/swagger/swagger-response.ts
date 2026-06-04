@@ -758,8 +758,8 @@ function adminDictExample() {
     childrenCode: 'CHART',
     sort: 1,
     status: 1,
-    createTime: '2026-06-03T12:00:00.000Z',
-    updateTime: '2026-06-03T12:00:00.000Z',
+    createTime: '2026-06-03 20:00:00',
+    updateTime: '2026-06-03 20:00:00',
   };
 }
 
@@ -819,13 +819,13 @@ function qqbotAccountExample() {
     connectionMode: 'reverse-ws',
     enabled: true,
     id: '1000000000000000001',
-    lastHeartbeatAt: '2026-06-02T12:00:00.000Z',
+    lastHeartbeatAt: '2026-06-02 20:00:00',
     name: '主账号',
     napcat: {
       bindStatus: 'bound',
       containerName: 'kt-qqbot-napcat-1914728559',
       containerStatus: 'running',
-      lastLoginAt: '2026-06-02T11:55:00.000Z',
+      lastLoginAt: '2026-06-02 19:55:00',
       webuiPort: 6100,
     },
     selfId: '1914728559',
@@ -911,7 +911,7 @@ function qqbotScanExample() {
     sessionId: 'KT_SCAN_20260602120000',
     qrcode: 'data:image/png;base64,MOCK_QRCODE',
     status: 'waiting',
-    expireAt: '2026-06-02T12:05:00.000Z',
+    expireAt: '2026-06-02 20:05:00',
   };
 }
 
@@ -964,7 +964,7 @@ function minioObjectExample() {
     name: 'uploads/demo.png',
     size: 2048,
     etag: '9b2cf535f27731c974343645a3985328',
-    lastModified: '2026-06-02T12:00:00.000Z',
+    lastModified: '2026-06-02 20:00:00',
   };
 }
 

@@ -28,6 +28,7 @@ import {
   ApiArrayResponse,
   ApiModelResponse,
   ApiSuccessResponse,
+  formatDateTimeFields,
   ToolsService,
 } from '@/common';
 import {
@@ -142,7 +143,7 @@ export class MinioClientController {
       name: 'uploads/demo.png',
       size: 2048,
       etag: '9b2cf535f27731c974343645a3985328',
-      lastModified: '2026-05-13T02:30:00.000Z',
+      lastModified: '2026-05-13 10:30:00',
     },
   ])
   async list(
@@ -151,11 +152,15 @@ export class MinioClientController {
     @Query('prefix') prefix?: string,
     @Query('recursive') recursive?: string,
   ) {
-    const result = await this.minioClientService.listObjects({
-      bucketName,
-      prefix,
-      recursive: recursive !== 'false',
-    });
+    const result = (
+      (await this.minioClientService.listObjects({
+        bucketName,
+        prefix,
+        recursive: recursive !== 'false',
+      })) as Record<string, unknown>[]
+    ).map((item) =>
+      formatDateTimeFields(Object.assign(new MinioObjectDto(), item)),
+    );
 
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
   }

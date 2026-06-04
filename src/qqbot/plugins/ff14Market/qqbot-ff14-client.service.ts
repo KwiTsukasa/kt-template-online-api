@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as http from 'node:http';
 import * as https from 'node:https';
+import { formatKtDateTime } from '@/common';
 import { DictService } from '../../../admin/dict/dict.service';
 import {
   buildQqbotFf14MarketCatalog,
@@ -110,7 +111,7 @@ export class QqbotFf14ClientService {
       listings,
     );
     const updatedAt = data.lastUploadTime
-      ? new Date(data.lastUploadTime).toISOString()
+      ? formatKtDateTime(data.lastUploadTime)
       : undefined;
 
     return {

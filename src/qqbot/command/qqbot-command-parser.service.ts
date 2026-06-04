@@ -15,8 +15,6 @@ import {
 import type { QqbotFf14MarketCatalog } from '../plugins/ff14Market/qqbot-ff14-market.types';
 import type { QqbotCommandMatchResult } from '../qqbot.types';
 
-const QQBOT_FFLOGS_ENCOUNTER_DICT_CODE = 'FFLOGS_ENCOUNTER_LABEL';
-
 @Injectable()
 export class QqbotCommandParserService {
   constructor(private readonly dictService: DictService) {}
@@ -208,24 +206,13 @@ export class QqbotCommandParserService {
     }
 
     if (!encounterName && remainingPositionals.length > 2) {
-      const picked = await this.pickFflogsPositionalsByKnownWorld(
-        remainingPositionals,
-      );
+      const picked =
+        await this.pickFflogsPositionalsByKnownWorld(remainingPositionals);
       if (picked) {
         characterName = characterName || picked.characterName;
         serverSlug = serverSlug || picked.serverSlug;
         encounterName = picked.encounterName;
         remainingPositionals = [];
-      }
-    }
-
-    if (!encounterName && remainingPositionals.length > 1) {
-      const picked = await this.pickTrailingFflogsEncounter(
-        remainingPositionals,
-      );
-      if (picked) {
-        encounterName = picked.encounterName;
-        remainingPositionals = picked.positionals;
       }
     }
 
@@ -350,44 +337,6 @@ export class QqbotCommandParserService {
     return null;
   }
 
-  private async pickTrailingFflogsEncounter(positional: string[]) {
-    const catalog = await this.getFflogsEncounterCatalog();
-    for (let index = 1; index < positional.length; index++) {
-      const encounterName = positional.slice(index).join(' ').trim();
-      if (!this.isFflogsEncounterName(catalog, encounterName)) continue;
-      return {
-        encounterName,
-        positionals: positional.slice(0, index),
-      };
-    }
-    return null;
-  }
-
-  private async getFflogsEncounterCatalog() {
-    const dicts = await this.dictService.getDictItemsByKey(
-      QQBOT_FFLOGS_ENCOUNTER_DICT_CODE,
-    );
-    const keys = new Set<string>();
-    for (const item of dicts) {
-      for (const key of this.buildFflogsLookupKeys(item.label, item.value)) {
-        keys.add(key);
-      }
-    }
-    return keys;
-  }
-
-  private isFflogsEncounterName(catalog: Set<string>, value: string) {
-    const keys = this.buildFflogsLookupKeys(value);
-    return keys.some(
-      (key) =>
-        catalog.has(key) ||
-        (key.length >= 3 &&
-          [...catalog].some(
-            (candidate) => candidate.startsWith(key) || candidate.includes(key),
-          )),
-    );
-  }
-
   private async getFf14MarketCatalog() {
     const treeCatalog = buildQqbotFf14MarketCatalogFromTree(
       await this.dictService.relationTree({
@@ -440,23 +389,5 @@ export class QqbotCommandParserService {
   private normalizeString(value?: string | true) {
     if (value === true) return '';
     return `${value || ''}`.trim();
-  }
-
-  private buildFflogsLookupKeys(...values: string[]) {
-    const keys = values
-      .flatMap((value) => {
-        const normalized = this.normalizeFflogsLookupKey(value);
-        const withoutAnd = normalized.replace(/and/g, '');
-        return [normalized, withoutAnd];
-      })
-      .filter(Boolean);
-    return [...new Set(keys)];
-  }
-
-  private normalizeFflogsLookupKey(value: string) {
-    return `${value || ''}`
-      .normalize('NFKC')
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}]+/gu, '');
   }
 }

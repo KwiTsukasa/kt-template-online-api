@@ -4,6 +4,7 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import { DictService } from '../../../admin/dict/dict.service';
 import type {
+  FflogsCharacterEncounterRankingsResponse,
   FflogsCharacterSummaryResponse,
   FflogsEncounterFightCandidate,
   FflogsEncounterLookup,
@@ -22,11 +23,18 @@ import type {
 } from './qqbot-fflogs.types';
 
 const FFLOGS_LOCALIZATION_DICT_CODES = {
-  encounter: 'FFLOGS_ENCOUNTER_LABEL',
   job: 'FFLOGS_JOB_LABEL',
   metric: 'FFLOGS_METRIC_LABEL',
   role: 'FFLOGS_ROLE_LABEL',
   serverRegion: 'FFLOGS_SERVER_REGION_LABEL',
+};
+
+type FflogsEncounterCatalogItem = {
+  displayName: string;
+  encounterId: number;
+  keys: string[];
+  zoneId?: number;
+  zoneName?: string;
 };
 
 @Injectable()
@@ -36,6 +44,10 @@ export class QqbotFflogsClientService {
   private readonly baseUrl: string;
   private readonly clientId: string;
   private readonly clientSecret: string;
+  private encounterCatalogCache?: {
+    entries: FflogsEncounterCatalogItem[];
+    expiresAt: number;
+  };
   private readonly graphqlUrl: string;
   private readonly tokenUrl: string;
   private readonly webBaseUrl: string;
@@ -44,12 +56,14 @@ export class QqbotFflogsClientService {
     private readonly configService: ConfigService,
     private readonly dictService: DictService,
   ) {
-    this.baseUrl = this.normalizeBaseUrl(
-      this.configService.get<string>('FFLOGS_BASE_URL') ||
-        'https://www.fflogs.com',
-    );
     this.webBaseUrl = this.normalizeBaseUrl(
       this.configService.get<string>('FFLOGS_WEB_BASE_URL') ||
+        this.configService.get<string>('FFLOGS_BASE_URL') ||
+        'https://cn.fflogs.com',
+    );
+    this.baseUrl = this.normalizeBaseUrl(
+      this.configService.get<string>('FFLOGS_BASE_URL') ||
+        this.webBaseUrl ||
         'https://cn.fflogs.com',
     );
     this.graphqlUrl =
@@ -250,6 +264,7 @@ export class QqbotFflogsClientService {
               name
               slug
             }
+            zoneRankings(metric: dps)
             recentReports(limit: $reportsLimit) {
               data {
                 code
@@ -291,59 +306,223 @@ export class QqbotFflogsClientService {
       character.server?.slug || serverSlug,
       character.name || characterName,
     );
+    const replyUrl = this.buildCharacterEncounterUrl(
+      url,
+      encounterLookup,
+      params.partition,
+    );
     const difficulty = this.toOptionalNumber(params.difficulty);
+    const encounterNameById = this.buildRankingEncounterNameById(
+      character.zoneRankings,
+    );
     const candidates = this.pickEncounterFightCandidates(
       character.recentReports?.data || [],
       encounterLookup,
       difficulty,
+      encounterNameById,
     );
     const metricCandidates = candidates.slice(0, Math.min(limit * 3, 30));
+    const encounterName = this.pickText(
+      encounterLookup.displayName,
+      candidates[0]?.fight?.name,
+    );
+    const encounterSuggestions = candidates.length
+      ? []
+      : this.pickRecentEncounterSuggestions(
+          character.recentReports?.data || [],
+          encounterNameById,
+        );
+    const rankingSuggestions = candidates.length
+      ? []
+      : this.pickRankingEncounterSuggestions(character.zoneRankings);
 
-    const logs = (
-      await Promise.all(
-        metricCandidates.map((candidate) =>
-          this.getEncounterFightLog({
-            candidate,
-            characterId: character.id,
+    const rankingLogs =
+      encounterLookup.encounterId !== undefined
+        ? await this.getEncounterRankingLogs({
             characterName: character.name || characterName,
             encounterLookup,
-            localizationMaps,
-            serverName,
+            limit,
+            partition: params.partition,
             serverRegion,
             serverSlug: character.server?.slug || serverSlug,
-          }),
-        ),
-      )
-    )
-      .filter(Boolean)
-      .slice(0, limit);
+            timeframe: params.timeframe,
+          })
+        : [];
+    const fallbackLogs = rankingLogs.length
+      ? []
+      : (
+          await Promise.all(
+            metricCandidates.map((candidate) =>
+              this.getEncounterFightLog({
+                candidate,
+                characterId: character.id,
+                characterName: character.name || characterName,
+                encounterNameById,
+                encounterLookup,
+                localizationMaps,
+                serverName,
+                serverRegion,
+                serverSlug: character.server?.slug || serverSlug,
+              }),
+            ),
+          )
+        )
+          .filter(Boolean)
+          .slice(0, limit);
+    const logs = rankingLogs.length ? rankingLogs : fallbackLogs;
 
     return {
       characterId: character.id,
       characterName: character.name || characterName,
-      encounterName: encounterLookup.displayName,
+      encounterName,
+      encounterSuggestions,
       logs,
+      rankingSuggestions,
       rankings: [],
       replyText: this.buildEncounterLogsReplyText({
         characterId: character.id,
         characterName: character.name || characterName,
-        encounterName: encounterLookup.displayName,
+        encounterName,
+        encounterSuggestions,
         logs,
         localizationMaps,
+        rankingSuggestions,
         serverName,
         serverRegion,
-        url,
+        url: replyUrl,
       }),
       serverName,
       serverRegion,
-      url,
+      url: replyUrl,
     };
+  }
+
+  private async getEncounterRankingLogs(params: {
+    characterName: string;
+    encounterLookup: FflogsEncounterLookup;
+    limit: number;
+    partition?: number | string;
+    serverRegion: string;
+    serverSlug: string;
+    timeframe?: string;
+  }) {
+    if (params.encounterLookup.encounterId === undefined) return [];
+    const data =
+      await this.requestGraphql<FflogsCharacterEncounterRankingsResponse>(
+        `query QqbotFflogsCharacterEncounterRankings(
+          $characterName: String!
+          $serverSlug: String!
+          $serverRegion: String!
+          $encounterID: Int!
+          $partition: Int
+          $timeframe: RankingTimeframeType
+        ) {
+          characterData {
+            character(
+              name: $characterName
+              serverSlug: $serverSlug
+              serverRegion: $serverRegion
+            ) {
+              dpsRankings: encounterRankings(
+                encounterID: $encounterID
+                metric: dps
+                partition: $partition
+                timeframe: $timeframe
+              )
+              hpsRankings: encounterRankings(
+                encounterID: $encounterID
+                metric: hps
+                partition: $partition
+                timeframe: $timeframe
+              )
+            }
+          }
+        }`,
+        {
+          characterName: params.characterName,
+          encounterID: params.encounterLookup.encounterId,
+          partition: this.toOptionalNumber(params.partition),
+          serverRegion: params.serverRegion.toUpperCase(),
+          serverSlug: params.serverSlug,
+          timeframe: this.normalizeTimeframe(params.timeframe) || 'Historical',
+        },
+      );
+    const character = data.characterData?.character;
+    if (!character) return [];
+    const dpsPayload = this.normalizeJsonPayload(character.dpsRankings) as any;
+    const hpsPayload = this.normalizeJsonPayload(character.hpsRankings) as any;
+    const dpsRanks = Array.isArray(dpsPayload?.ranks) ? dpsPayload.ranks : [];
+    const hpsRanks = Array.isArray(hpsPayload?.ranks) ? hpsPayload.ranks : [];
+    const hpsByFight = new Map<string, any>();
+    for (const rank of hpsRanks) {
+      const key = this.buildRankingFightKey(rank);
+      if (key) hpsByFight.set(key, rank);
+    }
+    return dpsRanks
+      .map((rank) =>
+        this.buildEncounterRankingLogItem(
+          rank,
+          hpsByFight.get(this.buildRankingFightKey(rank)),
+          params.encounterLookup,
+        ),
+      )
+      .filter(Boolean)
+      .sort((a, b) => Number(b.startTime || 0) - Number(a.startTime || 0))
+      .slice(0, params.limit);
+  }
+
+  private buildEncounterRankingLogItem(
+    damageRank: any,
+    healingRank: any,
+    encounterLookup: FflogsEncounterLookup,
+  ): QqbotFflogsEncounterLogItem | null {
+    const code = `${damageRank?.report?.code || ''}`.trim();
+    const fightId = this.toOptionalNumber(damageRank?.report?.fightID);
+    if (!code || fightId === undefined) return null;
+    const damageScore = this.pickNumber(
+      damageRank?.rankPercent,
+      damageRank?.historicalPercent,
+      damageRank?.todayPercent,
+    );
+    const healingScore = this.pickNumber(
+      healingRank?.rankPercent,
+      healingRank?.historicalPercent,
+      healingRank?.todayPercent,
+    );
+    return {
+      adps: this.pickNumber(damageRank?.aDPS, damageRank?.cDPS),
+      color: this.getParseColor(damageScore),
+      damageScore,
+      dps: this.pickNumber(damageRank?.amount, damageRank?.pDPS),
+      durationMs: this.pickNumber(damageRank?.duration),
+      encounterName: encounterLookup.displayName,
+      fightId,
+      healingColor: this.getParseColor(healingScore),
+      healingScore,
+      hps: this.pickNumber(healingRank?.amount),
+      kill: true,
+      logCode: code,
+      logUrl: this.buildReportFightUrl(code, fightId),
+      ndps: this.pickNumber(damageRank?.nDPS),
+      rdps: this.pickNumber(damageRank?.rDPS),
+      startTime: this.pickNumber(
+        damageRank?.startTime,
+        damageRank?.report?.startTime,
+      ),
+    };
+  }
+
+  private buildRankingFightKey(rank: any) {
+    const code = `${rank?.report?.code || ''}`.trim();
+    const fightId = this.toOptionalNumber(rank?.report?.fightID);
+    return code && fightId !== undefined ? `${code}#${fightId}` : '';
   }
 
   private async getEncounterFightLog(params: {
     candidate: FflogsEncounterFightCandidate;
     characterId?: number;
     characterName: string;
+    encounterNameById: Map<number, string>;
     encounterLookup: FflogsEncounterLookup;
     localizationMaps: FflogsLocalizationMaps;
     serverName: string;
@@ -380,11 +559,13 @@ export class QqbotFflogsClientService {
               dataType: DamageDone
               encounterID: $encounterID
               fightIDs: $fightIDs
+              translate: true
             )
             healing: table(
               dataType: Healing
               encounterID: $encounterID
               fightIDs: $fightIDs
+              translate: true
             )
           }
         }
@@ -431,11 +612,11 @@ export class QqbotFflogsClientService {
     );
     const encounterName = this.localizeEncounter(
       this.pickText(
+        params.encounterNameById.get(encounterId),
         candidate.fight.name,
         params.encounterLookup.displayName,
         `任务 ${candidate.fight.encounterID || ''}`,
       ),
-      params.localizationMaps,
     );
 
     return {
@@ -599,7 +780,13 @@ export class QqbotFflogsClientService {
           ),
         ].join('\n')
       : '公开排名：暂无公开排名数据';
-    return [header, idText, params.allStarText, rankingText, params.url]
+    return [
+      header,
+      idText,
+      params.allStarText,
+      rankingText,
+      this.formatDisplayUrl(params.url),
+    ]
       .filter(Boolean)
       .join('\n');
   }
@@ -608,8 +795,10 @@ export class QqbotFflogsClientService {
     characterId?: number;
     characterName: string;
     encounterName: string;
+    encounterSuggestions?: string[];
     localizationMaps: FflogsLocalizationMaps;
     logs: QqbotFflogsEncounterLogItem[];
+    rankingSuggestions?: string[];
     serverName: string;
     serverRegion: string;
     url: string;
@@ -618,19 +807,40 @@ export class QqbotFflogsClientService {
       params.serverRegion,
       params.localizationMaps,
     );
-    const header = `FFLogs 最近记录：${params.characterName} @ ${params.serverName}（${region}）`;
-    const encounterText = `高难任务：${params.encounterName}`;
+    const header = `FFLogs 最近10次记录`;
+    const characterText = `角色：${params.characterName} @ ${params.serverName}（${region}）`;
+    const encounterText = `任务：${params.encounterName}`;
     const idText = params.characterId ? `角色ID：${params.characterId}` : '';
     const logText = params.logs.length
       ? [
-          '最近10次：',
           ...params.logs.map((item, index) =>
             this.formatEncounterLogLine(item, index),
           ),
         ].join('\n')
-      : '最近10次：暂无匹配的公开记录';
+      : [
+          '暂无匹配的公开记录',
+          this.formatSuggestionLine(
+            '最近报告中可查',
+            params.encounterSuggestions,
+          ),
+          this.formatSuggestionLine(
+            '公开排名中可查',
+            params.rankingSuggestions,
+          ),
+        ]
+          .filter(Boolean)
+          .join('\n');
 
-    return [header, encounterText, idText, logText, params.url]
+    return [
+      header,
+      characterText,
+      encounterText,
+      idText,
+      '',
+      logText,
+      '',
+      this.formatDisplayUrl(params.url),
+    ]
       .filter(Boolean)
       .join('\n');
   }
@@ -650,23 +860,25 @@ export class QqbotFflogsClientService {
         ? `${this.formatNumber(item.healingScore)}`
         : '-';
     const metrics = [
-      `DPS ${this.formatMetricNumber(item.dps)}`,
-      `aDPS ${this.formatMetricNumber(item.adps)}`,
-      `rDPS ${this.formatMetricNumber(item.rdps)}`,
-      `nDPS ${this.formatMetricNumber(item.ndps)}`,
-      `HPS ${this.formatMetricNumber(item.hps)}`,
-    ].join(' / ');
-    return `${index + 1}. ${this.formatLogTime(
-      item.startTime,
-    )}｜${status}｜颜色 ${item.color}｜输出 ${damageScore}｜治疗 ${
-      item.healingColor
-    } ${healingScore}｜${metrics}｜log ${item.logCode}#${item.fightId}`;
+      `D${this.formatMetricNumber(item.dps)}`,
+      `aD${this.formatMetricNumber(item.adps)}`,
+      `rD${this.formatMetricNumber(item.rdps)}`,
+      `nD${this.formatMetricNumber(item.ndps)}`,
+      `H${this.formatMetricNumber(item.hps)}`,
+    ].join('/');
+    return [
+      `${index + 1}. ${this.formatLogTime(item.startTime)}｜${status}｜${item.encounterName}`,
+      `   颜色:D${item.color}/H${item.healingColor}｜评分:D${damageScore}/H${healingScore}`,
+      `   ${metrics}`,
+      `   ${this.formatDisplayUrl(item.logUrl)}`,
+    ].join('\n');
   }
 
   private pickEncounterFightCandidates(
     reports: FflogsRecentReport[],
     encounterLookup: FflogsEncounterLookup,
     difficulty?: number,
+    encounterNameById = new Map<number, string>(),
   ) {
     return reports
       .flatMap((report) =>
@@ -677,7 +889,9 @@ export class QqbotFflogsClientService {
           report,
         })),
       )
-      .filter(({ fight }) => this.matchEncounterFight(fight, encounterLookup))
+      .filter(({ fight }) =>
+        this.matchEncounterFight(fight, encounterLookup, encounterNameById),
+      )
       .filter(
         ({ fight }) =>
           difficulty === undefined || Number(fight.difficulty) === difficulty,
@@ -685,18 +899,81 @@ export class QqbotFflogsClientService {
       .sort((a, b) => b.absoluteStartTime - a.absoluteStartTime);
   }
 
+  private pickRecentEncounterSuggestions(
+    reports: FflogsRecentReport[],
+    encounterNameById = new Map<number, string>(),
+  ) {
+    const names = reports.flatMap((report) =>
+      (report.fights || []).map((fight) =>
+        this.pickText(
+          encounterNameById.get(this.toOptionalNumber(fight.encounterID) || 0),
+          fight.name,
+        ),
+      ),
+    );
+    return this.pickDistinctSuggestions(names, 8);
+  }
+
+  private pickRankingEncounterSuggestions(payload: unknown) {
+    const rankingsPayload = this.normalizeJsonPayload(payload) as any;
+    const rankings = this.pickRankings(rankingsPayload);
+    const names = rankings.map((item) =>
+      this.pickText(item.encounter?.name, item.encounterName, item.name),
+    );
+    return this.pickDistinctSuggestions(names, 8);
+  }
+
+  private buildRankingEncounterNameById(payload: unknown) {
+    const rankingsPayload = this.normalizeJsonPayload(payload) as any;
+    const rankings = this.pickRankings(rankingsPayload);
+    const map = new Map<number, string>();
+    for (const item of rankings) {
+      const id = this.pickNumber(item.encounter?.id, item.encounterID, item.id);
+      const name = this.pickText(
+        item.encounter?.name,
+        item.encounterName,
+        item.name,
+      );
+      if (id !== undefined && name) map.set(id, name);
+    }
+    return map;
+  }
+
+  private pickDistinctSuggestions(values: any[], limit: number) {
+    const suggestions: string[] = [];
+    const keys = new Set<string>();
+    for (const value of values) {
+      const text = `${value || ''}`.trim();
+      if (!text || text.toLowerCase() === 'unknown') continue;
+      const key = this.normalizeLookupKey(text);
+      if (!key || keys.has(key)) continue;
+      keys.add(key);
+      suggestions.push(text);
+      if (suggestions.length >= limit) break;
+    }
+    return suggestions;
+  }
+
+  private formatSuggestionLine(label: string, values?: string[]) {
+    const list = (values || []).filter(Boolean);
+    return list.length ? `${label}：${list.join('、')}` : '';
+  }
+
   private matchEncounterFight(
     fight: FflogsReportFight,
     encounterLookup: FflogsEncounterLookup,
+    encounterNameById = new Map<number, string>(),
   ) {
+    const encounterId = this.toOptionalNumber(fight.encounterID);
     if (
       encounterLookup.encounterId !== undefined &&
-      Number(fight.encounterID) === encounterLookup.encounterId
+      encounterId === encounterLookup.encounterId
     ) {
       return true;
     }
     const fightKeys = this.buildLookupKeys(
       `${fight.name || ''}`,
+      encounterId !== undefined ? encounterNameById.get(encounterId) || '' : '',
       `${fight.encounterID || ''}`,
     );
     return encounterLookup.keys.some((key) => fightKeys.includes(key));
@@ -707,45 +984,100 @@ export class QqbotFflogsClientService {
   ): Promise<FflogsEncounterLookup> {
     const raw = `${input || ''}`.trim();
     const inputKeys = this.buildLookupKeys(raw);
-    const dicts = await this.dictService.getDictItemsByKey(
-      FFLOGS_LOCALIZATION_DICT_CODES.encounter,
-    );
-    const entries = dicts.map((item) => ({
-      displayName: `${item.label || item.value}`.trim(),
-      encounterId: this.toOptionalNumber(item.value),
-      keys: this.buildLookupKeys(`${item.label}`, `${item.value}`),
-    }));
-    const exact = entries.find((entry) =>
-      inputKeys.some((inputKey) => entry.keys.includes(inputKey)),
-    );
-    const prefix = exact
-      ? undefined
-      : entries.find((entry) =>
-          inputKeys.some(
-            (inputKey) =>
-              inputKey.length >= 3 &&
-              entry.keys.some(
-                (key) => key.startsWith(inputKey) || key.includes(inputKey),
-              ),
-          ),
-        );
-    const matched = exact || prefix;
-
-    if (!matched) {
+    const catalog = await this.getFflogsEncounterCatalog();
+    const matched = this.findEncounterCatalogMatch(inputKeys, catalog);
+    if (matched) {
       return {
-        displayName: raw,
-        encounterId: this.toOptionalNumber(raw),
+        displayName: matched.displayName,
+        encounterId: matched.encounterId,
         input: raw,
-        keys: inputKeys,
+        keys: [...new Set([...inputKeys, ...matched.keys])],
+        zoneId: matched.zoneId,
       };
     }
-
     return {
-      displayName: matched.displayName,
-      encounterId: matched.encounterId,
+      displayName: raw,
+      encounterId: this.toOptionalNumber(raw),
       input: raw,
-      keys: [...new Set([...matched.keys, ...inputKeys])],
+      keys: inputKeys,
     };
+  }
+
+  private async getFflogsEncounterCatalog() {
+    if (
+      this.encounterCatalogCache &&
+      Date.now() < this.encounterCatalogCache.expiresAt
+    ) {
+      return this.encounterCatalogCache.entries;
+    }
+    const data = await this.requestGraphql<{
+      worldData?: {
+        zones?: Array<{
+          encounters?: Array<{ id?: number; name?: string }>;
+          id?: number;
+          name?: string;
+        }>;
+      };
+    }>(
+      `query QqbotFflogsEncounterCatalog {
+        worldData {
+          zones {
+            id
+            name
+            encounters {
+              id
+              name
+            }
+          }
+        }
+      }`,
+      {},
+    );
+    const entries = (data.worldData?.zones || []).flatMap((zone) =>
+      (zone.encounters || [])
+        .map((encounter) => {
+          const encounterId = this.toOptionalNumber(encounter.id);
+          const displayName = `${encounter.name || ''}`.trim();
+          if (encounterId === undefined || !displayName) return undefined;
+          return {
+            displayName,
+            encounterId,
+            keys: this.buildLookupKeys(
+              displayName,
+              `${encounterId}`,
+              `${zone.name || ''}`,
+            ),
+            zoneId: this.toOptionalNumber(zone.id),
+            zoneName: zone.name,
+          } satisfies FflogsEncounterCatalogItem;
+        })
+        .filter(Boolean),
+    ) as FflogsEncounterCatalogItem[];
+    this.encounterCatalogCache = {
+      entries,
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+    };
+    return entries;
+  }
+
+  private findEncounterCatalogMatch(
+    inputKeys: string[],
+    catalog: FflogsEncounterCatalogItem[],
+  ) {
+    const exact = catalog.find((entry) =>
+      inputKeys.some((inputKey) => entry.keys.includes(inputKey)),
+    );
+    if (exact) return exact;
+    return catalog.find((entry) =>
+      inputKeys.some((inputKey) =>
+        entry.keys.some(
+          (key) =>
+            inputKey.length >= 2 &&
+            key.length >= 2 &&
+            (key.includes(inputKey) || inputKey.includes(key)),
+        ),
+      ),
+    );
   }
 
   private findRankingCharacter(
@@ -845,7 +1177,6 @@ export class QqbotFflogsClientService {
         item.name,
         `记录 ${index + 1}`,
       ),
-      localizationMaps,
     );
     const percent = this.pickNumber(
       item.rankPercent,
@@ -883,10 +1214,10 @@ export class QqbotFflogsClientService {
     const raw = Array.isArray(payload)
       ? payload
       : Array.isArray(payload?.rankings)
-      ? payload.rankings
-      : Array.isArray(payload?.encounters)
-      ? payload.encounters
-      : [];
+        ? payload.rankings
+        : Array.isArray(payload?.encounters)
+          ? payload.encounters
+          : [];
     return raw
       .filter((item) => item && typeof item === 'object')
       .sort((a, b) => {
@@ -925,6 +1256,14 @@ export class QqbotFflogsClientService {
     return value;
   }
 
+  private formatDisplayUrl(value: string) {
+    try {
+      return decodeURI(value);
+    } catch {
+      return value;
+    }
+  }
+
   private buildCharacterUrl(
     serverRegion: string,
     serverSlug: string,
@@ -933,6 +1272,22 @@ export class QqbotFflogsClientService {
     return `${this.webBaseUrl}/character/${encodeURIComponent(
       serverRegion.toLowerCase(),
     )}/${encodeURIComponent(serverSlug)}/${encodeURIComponent(characterName)}`;
+  }
+
+  private buildCharacterEncounterUrl(
+    url: string,
+    encounterLookup: FflogsEncounterLookup,
+    partition?: number | string,
+  ) {
+    if (encounterLookup.encounterId === undefined) return url;
+    const searchParams = new URLSearchParams();
+    if (encounterLookup.zoneId !== undefined) {
+      searchParams.set('zone', `${encounterLookup.zoneId}`);
+    }
+    searchParams.set('boss', `${encounterLookup.encounterId}`);
+    const partitionValue = this.toOptionalNumber(partition);
+    searchParams.set('partition', `${partitionValue ?? 0}`);
+    return `${url}?${searchParams.toString()}`;
   }
 
   private buildReportFightUrl(code: string, fightId: number) {
@@ -1083,8 +1438,7 @@ export class QqbotFflogsClientService {
   }
 
   private async getLocalizationMaps(): Promise<FflogsLocalizationMaps> {
-    const [encounter, job, metric, role, serverRegion] = await Promise.all([
-      this.getNormalizedDictMap(FFLOGS_LOCALIZATION_DICT_CODES.encounter),
+    const [job, metric, role, serverRegion] = await Promise.all([
       this.getNormalizedDictMap(FFLOGS_LOCALIZATION_DICT_CODES.job),
       this.getNormalizedDictMap(FFLOGS_LOCALIZATION_DICT_CODES.metric),
       this.getNormalizedDictMap(FFLOGS_LOCALIZATION_DICT_CODES.role),
@@ -1092,7 +1446,6 @@ export class QqbotFflogsClientService {
     ]);
 
     return {
-      encounter,
       job,
       metric,
       role,
@@ -1111,13 +1464,8 @@ export class QqbotFflogsClientService {
     return map;
   }
 
-  private localizeEncounter(
-    value: string,
-    localizationMaps: FflogsLocalizationMaps,
-  ) {
-    return (
-      localizationMaps.encounter.get(this.normalizeLookupKey(value)) || value
-    );
+  private localizeEncounter(value: string) {
+    return value;
   }
 
   private localizeMetric(

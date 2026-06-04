@@ -45,7 +45,8 @@ export class QqbotFflogsPluginService {
             properties: {
               characterName: { description: '角色名', type: 'string' },
               encounter: {
-                description: '高难任务名，支持字典维护的中文名/英文名/缩写',
+                description:
+                  '高难任务名，按 FFLogs 公开报告中的任务名或 encounterID 匹配',
                 type: 'string',
               },
               limit: {

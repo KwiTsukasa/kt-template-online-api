@@ -545,11 +545,6 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO `admin_dict` (`id`, `dict_code`, `label`, `value`, `children_code`, `sort`, `status`)
 VALUES
-  (2041700000000300601, 'FFLOGS_ENCOUNTER_LABEL', 'M9S Vamp Fatale', 'vampfatale', NULL, 1, 1),
-  (2041700000000300602, 'FFLOGS_ENCOUNTER_LABEL', 'M10S Red Hot and Deep Blue', 'redhotanddeepblue', NULL, 2, 1),
-  (2041700000000300603, 'FFLOGS_ENCOUNTER_LABEL', 'M11S The Tyrant', 'thetyrant', NULL, 3, 1),
-  (2041700000000300604, 'FFLOGS_ENCOUNTER_LABEL', 'M12S P1 Lindwurm', 'lindwurm', NULL, 4, 1),
-  (2041700000000300605, 'FFLOGS_ENCOUNTER_LABEL', 'M12S P2 Lindwurm II', 'lindwurmii', NULL, 5, 1),
   (2041700000000300701, 'FFLOGS_JOB_LABEL', '骑士', 'paladin', NULL, 1, 1),
   (2041700000000300702, 'FFLOGS_JOB_LABEL', '战士', 'warrior', NULL, 2, 1),
   (2041700000000300703, 'FFLOGS_JOB_LABEL', '暗黑骑士', 'darkknight', NULL, 3, 1),

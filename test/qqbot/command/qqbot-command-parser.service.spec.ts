@@ -35,15 +35,7 @@ describe('QqbotCommandParserService FFLogs parser', () => {
   } as QqbotCommand;
 
   const dictService = {
-    getDictItemsByKey: jest.fn(async (dictKey: string) => {
-      if (dictKey === 'FFLOGS_ENCOUNTER_LABEL') {
-        return [
-          { label: 'M9S 吸血鬼偶像', value: 'vampfatale' },
-          { label: 'M10S Red Hot and Deep Blue', value: 'redhotanddeepblue' },
-        ];
-      }
-      return [];
-    }),
+    getDictItemsByKey: jest.fn(async () => []),
     relationTree: jest.fn(async () => [
       {
         children: [
@@ -72,27 +64,34 @@ describe('QqbotCommandParserService FFLogs parser', () => {
 
   const service = new QqbotCommandParserService(dictService);
 
-  it('parses Chinese encounter name after character and server', async () => {
-    const matched = await service.match(command, {
-      messageText: '/logs Anbbo 琥珀原 吸血鬼偶像',
-    } as any);
-
-    expect(matched?.input).toMatchObject({
-      characterName: 'Anbbo',
-      encounterName: '吸血鬼偶像',
-      serverSlug: '琥珀原',
-    });
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('parses space separated encounter name when server is explicit', async () => {
+  it('parses Chinese encounter name after character and server without encounter dict', async () => {
     const matched = await service.match(command, {
-      messageText: '/logs Kwi 柊司 M10S Red Hot and Deep Blue server=琥珀原',
+      messageText: '/logs Kwi柊司 琥珀原 上位护锁刃龙',
     } as any);
 
     expect(matched?.input).toMatchObject({
-      characterName: 'Kwi 柊司',
-      encounterName: 'M10S Red Hot and Deep Blue',
+      characterName: 'Kwi柊司',
+      encounterName: '上位护锁刃龙',
       serverSlug: '琥珀原',
     });
+    expect(dictService.getDictItemsByKey).not.toHaveBeenCalledWith(
+      'FFLOGS_ENCOUNTER_LABEL',
+    );
+  });
+
+  it('keeps character summary parsing when no encounter is provided', async () => {
+    const matched = await service.match(command, {
+      messageText: '/logs Kwi柊司 琥珀原',
+    } as any);
+
+    expect(matched?.input).toMatchObject({
+      characterName: 'Kwi柊司',
+      serverSlug: '琥珀原',
+    });
+    expect((matched?.input as any).encounterName).toBe('');
   });
 });

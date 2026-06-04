@@ -18,6 +18,17 @@ export type FflogsCharacterSummaryResponse = {
   };
 };
 
+export type FflogsCharacterEncounterRankingsResponse = {
+  characterData?: {
+    character?:
+      | (FflogsCharacter & {
+          dpsRankings?: unknown;
+          hpsRankings?: unknown;
+        })
+      | null;
+  };
+};
+
 export type FflogsEncounterFightCandidate = {
   absoluteStartTime: number;
   fight: FflogsReportFight;
@@ -29,6 +40,7 @@ export type FflogsEncounterLookup = {
   encounterId?: number;
   input: string;
   keys: string[];
+  zoneId?: number;
 };
 
 export type FflogsGraphqlResponse<T> = {
@@ -38,12 +50,7 @@ export type FflogsGraphqlResponse<T> = {
 
 export type FflogsHttpMethod = 'GET' | 'POST';
 
-export type FflogsLocalizationKey =
-  | 'encounter'
-  | 'job'
-  | 'metric'
-  | 'role'
-  | 'serverRegion';
+export type FflogsLocalizationKey = 'job' | 'metric' | 'role' | 'serverRegion';
 
 export type FflogsLocalizationMaps = Record<
   FflogsLocalizationKey,
@@ -124,7 +131,9 @@ export type QqbotFflogsCharacterSummaryResult = {
   characterId?: number;
   characterName: string;
   encounterName?: string;
+  encounterSuggestions?: string[];
   logs?: QqbotFflogsEncounterLogItem[];
+  rankingSuggestions?: string[];
   rankings: FflogsRankingItem[];
   replyText: string;
   serverName: string;

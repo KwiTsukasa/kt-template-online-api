@@ -16,10 +16,10 @@ ENV LOKI_BATCH_INTERVAL_SECONDS=5
 ENV LOKI_BATCH_MAX_BUFFER_SIZE=10000
 ENV LOKI_QUERY_MAX_LIMIT=1000
 ENV LOKI_SILENCE_ERRORS=true
-ENV FFLOGS_BASE_URL=https://www.fflogs.com
+ENV FFLOGS_BASE_URL=https://cn.fflogs.com
 ENV FFLOGS_WEB_BASE_URL=https://cn.fflogs.com
-ENV FFLOGS_GRAPHQL_URL=https://www.fflogs.com/api/v2/client
-ENV FFLOGS_TOKEN_URL=https://www.fflogs.com/oauth/token
+ENV FFLOGS_GRAPHQL_URL=https://cn.fflogs.com/api/v2/client
+ENV FFLOGS_TOKEN_URL=https://cn.fflogs.com/oauth/token
 ENV FFLOGS_DEFAULT_SERVER_REGION=CN
 ENV FFLOGS_REQUEST_TIMEOUT_MS=10000
 

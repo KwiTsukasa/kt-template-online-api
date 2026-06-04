@@ -125,9 +125,11 @@ export class QqbotNapcatLoginService {
     }
 
     const container = await this.getSessionContainer(session);
+    const loginStatus = await this.getLoginStatus(container);
     session.qrcode = await this.refreshOrGetQrcode(container, true, {
+      fallbackStatus: loginStatus,
       requireFresh: true,
-      staleQrcode: session.qrcode,
+      staleQrcode: session.qrcode || loginStatus.qrcodeurl,
     });
     session.expiresAt = Date.now() + this.getSessionTtlMs();
     session.errorMessage = undefined;
@@ -436,10 +438,15 @@ export class QqbotNapcatLoginService {
     retry = false,
     options: QrcodeRefreshOptions = {},
   ) {
+    let fallbackStatus = options.fallbackStatus;
     const lookupOptions: QrcodeLookupOptions = {
-      requireFresh: options.requireFresh,
-      staleQrcode: options.staleQrcode,
+      requireFresh: options.requireFresh || fallbackStatus?.isOffline,
+      staleQrcode: options.staleQrcode || fallbackStatus?.qrcodeurl,
     };
+    if (fallbackStatus?.isOffline) {
+      await this.restartNapcatForLogin(container);
+      fallbackStatus = undefined;
+    }
     try {
       const refreshedQrcode = await this.callRefreshQrcode(container, retry);
       if (refreshedQrcode) {
@@ -449,10 +456,10 @@ export class QqbotNapcatLoginService {
     } catch (err) {
       if (
         !lookupOptions.requireFresh &&
-        options.fallbackStatus?.qrcodeurl &&
-        !this.isExpiredQrcodeStatus(options.fallbackStatus)
+        fallbackStatus?.qrcodeurl &&
+        !this.isExpiredQrcodeStatus(fallbackStatus)
       ) {
-        return options.fallbackStatus.qrcodeurl;
+        return fallbackStatus.qrcodeurl;
       }
       throw err;
     }
@@ -505,8 +512,31 @@ export class QqbotNapcatLoginService {
     return this.requestNapcat<T>(container, path, body, credential);
   }
 
+  private async restartNapcatForLogin(container: QqbotNapcatRuntime) {
+    const restartedByContainer =
+      await this.containerService.restartRuntimeContainer(container);
+    if (!restartedByContainer) {
+      try {
+        await this.postNapcat<Record<string, any> | null>(
+          container,
+          '/api/QQLogin/RestartNapCat',
+        );
+      } catch (err) {
+        if (!this.isTemporaryNapcatError(err)) throw err;
+      }
+    }
+
+    this.credentials.delete(this.getCredentialCacheKey(container));
+    await this.sleep(this.getRestartDelayMs());
+    await this.getLoginStatus(container, true);
+  }
+
+  private getCredentialCacheKey(container: QqbotNapcatRuntime) {
+    return container.id || container.baseUrl;
+  }
+
   private async getCredential(container: QqbotNapcatRuntime) {
-    const cacheKey = container.id || container.baseUrl;
+    const cacheKey = this.getCredentialCacheKey(container);
     const cached = this.credentials.get(cacheKey);
     if (cached && Date.now() < cached.expiresAt) {
       return cached.credential;
@@ -608,6 +638,12 @@ export class QqbotNapcatLoginService {
 
   private getTimeout() {
     return Number(this.configService.get('NAPCAT_WEBUI_TIMEOUT_MS') || 8000);
+  }
+
+  private getRestartDelayMs() {
+    return Number(
+      this.configService.get('NAPCAT_WEBUI_RESTART_DELAY_MS') || 3000,
+    );
   }
 
   private getSelfId(info: NapcatLoginInfo) {

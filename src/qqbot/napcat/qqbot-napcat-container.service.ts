@@ -151,6 +151,27 @@ export class QqbotNapcatContainerService {
     return this.removeContainer(containerId);
   }
 
+  async restartRuntimeContainer(runtime: QqbotNapcatRuntime) {
+    if (this.getManagedMode() !== 'ssh' || !runtime.id || !runtime.name) {
+      return false;
+    }
+
+    await this.runProcess(
+      'ssh',
+      [...this.getSshArgs(), 'docker', 'restart', runtime.name],
+      '',
+    );
+    await this.containerRepository.update(
+      { id: runtime.id },
+      {
+        lastError: null,
+        lastStartedAt: new Date(),
+        status: 'running',
+      },
+    );
+    return true;
+  }
+
   private async removeContainer(containerId: string) {
     const container = await this.containerRepository.findOne({
       where: {

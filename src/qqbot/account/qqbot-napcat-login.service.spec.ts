@@ -42,6 +42,9 @@ describe('QqbotNapcatLoginService', () => {
     jest
       .spyOn(service as any, 'getSessionContainer')
       .mockResolvedValue({ id: 'container-1' });
+    jest.spyOn(service as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+    });
     jest
       .spyOn(service as any, 'callRefreshQrcode')
       .mockResolvedValue('new-qrcode-image');
@@ -108,6 +111,10 @@ describe('QqbotNapcatLoginService', () => {
     jest
       .spyOn(service as any, 'getSessionContainer')
       .mockResolvedValue(container);
+    jest.spyOn(service as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      qrcodeurl: 'old-qrcode',
+    });
     jest.spyOn(service as any, 'callRefreshQrcode').mockResolvedValue('');
     jest.spyOn(service as any, 'getQrcode').mockResolvedValue('new-qrcode');
 
@@ -118,6 +125,59 @@ describe('QqbotNapcatLoginService', () => {
       requireFresh: true,
       staleQrcode: 'old-qrcode',
     });
+  });
+
+  it('restarts the existing NapCat container before qrcode refresh when account is kicked offline', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-3',
+      name: 'napcat-10001',
+    };
+    const containerService = {
+      restartRuntimeContainer: jest.fn().mockResolvedValue(true),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+    );
+    jest.spyOn(refreshService as any, 'sleep').mockResolvedValue(undefined);
+    jest.spyOn(refreshService as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      qrcodeurl: 'new-status-qrcode',
+    });
+    jest
+      .spyOn(refreshService as any, 'callRefreshQrcode')
+      .mockResolvedValue('');
+    jest
+      .spyOn(refreshService as any, 'getQrcode')
+      .mockResolvedValue('new-qrcode');
+
+    const result = await (refreshService as any).refreshOrGetQrcode(
+      container,
+      true,
+      {
+        fallbackStatus: {
+          isLogin: false,
+          isOffline: true,
+          loginError: '您的账号已在另一台终端登录',
+          qrcodeurl: 'old-qrcode',
+        },
+      },
+    );
+
+    expect(result).toBe('new-qrcode');
+    expect(containerService.restartRuntimeContainer).toHaveBeenCalledWith(
+      container,
+    );
+    expect((refreshService as any).getQrcode).toHaveBeenCalledWith(
+      container,
+      true,
+      {
+        requireFresh: true,
+        staleQrcode: 'old-qrcode',
+      },
+    );
   });
 
   it('retries while NapCat still exposes the stale qrcode', async () => {

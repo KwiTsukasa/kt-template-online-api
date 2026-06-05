@@ -1,1 +1,1 @@
-pnpm run verify:commit
+node scripts/husky-fast-check.mjs

@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "verify:staged": "node scripts/husky-fast-check.mjs",
     "verify:commit": "pnpm run lint && pnpm run typecheck",
     "test": "jest",
     "test:watch": "jest --watch",

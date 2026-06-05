@@ -1,6 +1,6 @@
 import { Band } from '@/qqbot/plugins/bangDream/tsugu/domain/band';
 import { getServerByPriority } from '@/qqbot/plugins/bangDream/tsugu/domain/server';
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 import { Canvas, Image } from 'skia-canvas';
 
 interface BandInListOptions {

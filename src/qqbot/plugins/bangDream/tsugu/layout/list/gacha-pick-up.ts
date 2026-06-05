@@ -1,7 +1,7 @@
 import { Gacha } from '@/qqbot/plugins/bangDream/tsugu/domain/gacha';
 import { Server } from '@/qqbot/plugins/bangDream/tsugu/domain/server';
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
-import { drawCardListInList } from '@/qqbot/plugins/bangDream/tsugu/layout/list/card-icon-list';
+import { drawList } from '../list';
+import { drawCardListInList } from './card-icon-list';
 import { Card } from '@/qqbot/plugins/bangDream/tsugu/domain/card';
 import { stackImage } from '@/qqbot/plugins/bangDream/tsugu/layout/utils';
 import { Canvas } from 'skia-canvas';

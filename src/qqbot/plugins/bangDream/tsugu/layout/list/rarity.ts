@@ -1,5 +1,5 @@
 import { Canvas, Image } from 'skia-canvas';
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/tsugu-config';
 import * as path from 'path';
 import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/graphics/utils';

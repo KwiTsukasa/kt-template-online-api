@@ -3,10 +3,7 @@ import {
   Server,
   getServerByPriority,
 } from '@/qqbot/plugins/bangDream/tsugu/domain/server';
-import {
-  drawTipsInList,
-  drawListByServerList,
-} from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawTipsInList, drawListByServerList } from '../list';
 import { stackImage } from '@/qqbot/plugins/bangDream/tsugu/layout/utils';
 import { Canvas } from 'skia-canvas';
 import { Card } from '@/qqbot/plugins/bangDream/tsugu/domain/card';

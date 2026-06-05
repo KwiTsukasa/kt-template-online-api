@@ -1,4 +1,4 @@
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 import { Canvas } from 'skia-canvas';
 import { drawDegree } from '@/qqbot/plugins/bangDream/tsugu/layout/degree';
 import { Degree } from '@/qqbot/plugins/bangDream/tsugu/domain/degree';

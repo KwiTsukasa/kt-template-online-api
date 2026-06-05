@@ -1,6 +1,6 @@
 import { Player } from '@/qqbot/plugins/bangDream/tsugu/domain/player';
 import { Canvas, Image } from 'skia-canvas';
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 import { resizeImage } from '@/qqbot/plugins/bangDream/tsugu/layout/utils';
 import { drawTextWithImages } from '@/qqbot/plugins/bangDream/tsugu/graphics/text';
 import { Character } from '@/qqbot/plugins/bangDream/tsugu/domain/character';

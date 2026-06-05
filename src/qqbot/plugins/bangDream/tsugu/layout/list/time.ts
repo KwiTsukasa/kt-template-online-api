@@ -4,7 +4,7 @@ import {
   Server,
   getServerByName,
 } from '@/qqbot/plugins/bangDream/tsugu/domain/server';
-import { drawListByServerList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawListByServerList } from '../list';
 import { Canvas } from 'skia-canvas';
 import { Event } from '@/qqbot/plugins/bangDream/tsugu/domain/event';
 import mainAPI from '@/qqbot/plugins/bangDream/tsugu/domain/main-api';

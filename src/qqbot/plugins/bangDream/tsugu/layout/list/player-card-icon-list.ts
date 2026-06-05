@@ -2,7 +2,7 @@ import { Card } from '@/qqbot/plugins/bangDream/tsugu/domain/card';
 import { Player } from '@/qqbot/plugins/bangDream/tsugu/domain/player';
 import { Canvas } from 'skia-canvas';
 import { drawCardIcon } from '@/qqbot/plugins/bangDream/tsugu/layout/card';
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 
 export async function drawPlayerCardInList(
   player: Player,

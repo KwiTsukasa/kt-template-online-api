@@ -1,4 +1,4 @@
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 import { Canvas } from 'skia-canvas';
 import { drawCardIcon } from '@/qqbot/plugins/bangDream/tsugu/layout/card';
 import { Card } from '@/qqbot/plugins/bangDream/tsugu/domain/card';

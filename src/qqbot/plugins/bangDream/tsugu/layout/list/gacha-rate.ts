@@ -1,9 +1,9 @@
-import { drawRarityInList } from '@/qqbot/plugins/bangDream/tsugu/layout/list/rarity';
+import { drawRarityInList } from './rarity';
 import { Gacha } from '@/qqbot/plugins/bangDream/tsugu/domain/gacha';
 import { Server } from '@/qqbot/plugins/bangDream/tsugu/domain/server';
 import { stackImage } from '@/qqbot/plugins/bangDream/tsugu/layout/utils';
 import { Canvas } from 'skia-canvas';
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 
 export async function drawGachaRateInList(
   gacha: Gacha,

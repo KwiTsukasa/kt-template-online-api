@@ -7,10 +7,7 @@ import {
 import { Song } from '@/qqbot/plugins/bangDream/tsugu/domain/song';
 import { drawText } from '@/qqbot/plugins/bangDream/tsugu/graphics/text';
 import { resizeImage } from '@/qqbot/plugins/bangDream/tsugu/layout/utils';
-import {
-  drawDifficultyList,
-  drawDifficulty,
-} from '@/qqbot/plugins/bangDream/tsugu/layout/list/difficulty';
+import { drawDifficultyList, drawDifficulty } from './difficulty';
 import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/tsugu-config';
 import { drawList } from '../list';
 import { drawDottedLine } from '@/qqbot/plugins/bangDream/tsugu/graphics/dotted-line';

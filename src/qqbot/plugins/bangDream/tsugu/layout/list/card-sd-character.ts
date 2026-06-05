@@ -1,7 +1,7 @@
 import { Costume } from '@/qqbot/plugins/bangDream/tsugu/domain/costume';
 import { Card } from '@/qqbot/plugins/bangDream/tsugu/domain/card';
 import { Canvas } from 'skia-canvas';
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 
 export async function drawSdCharacterInList(card: Card): Promise<Canvas> {
   const costumeId = card.costumeId;

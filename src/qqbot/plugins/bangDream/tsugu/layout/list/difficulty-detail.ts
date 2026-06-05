@@ -5,7 +5,7 @@ import {
 import { drawRoundedRectWithText } from '@/qqbot/plugins/bangDream/tsugu/graphics/draw-rect';
 import { Canvas, Image } from 'skia-canvas';
 import { drawTextWithImages } from '@/qqbot/plugins/bangDream/tsugu/graphics/text';
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 import { Player } from '@/qqbot/plugins/bangDream/tsugu/domain/player';
 
 interface drawDifficultyDetailInListOptions {

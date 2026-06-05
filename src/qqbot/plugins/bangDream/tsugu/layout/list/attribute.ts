@@ -1,5 +1,5 @@
 import { Attribute } from '@/qqbot/plugins/bangDream/tsugu/domain/attribute';
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 import { Canvas, Image } from 'skia-canvas';
 
 interface AttributeInListOptions {

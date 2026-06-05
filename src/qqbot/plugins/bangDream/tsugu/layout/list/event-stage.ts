@@ -11,7 +11,7 @@ import {
 } from '@/qqbot/plugins/bangDream/tsugu/domain/song';
 import { Canvas, Image, FontLibrary } from 'skia-canvas';
 import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/tsugu-config';
-import { formatTime } from '@/qqbot/plugins/bangDream/tsugu/layout/list/time';
+import { formatTime } from './time';
 import { setFontStyle } from '@/qqbot/plugins/bangDream/tsugu/graphics/text';
 import { stackImageHorizontal } from '../utils';
 import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/graphics/utils';

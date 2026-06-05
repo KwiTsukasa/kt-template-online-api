@@ -1,4 +1,4 @@
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 import { Gacha } from '@/qqbot/plugins/bangDream/tsugu/domain/gacha';
 import { Server } from '@/qqbot/plugins/bangDream/tsugu/domain/server';
 import { Item } from '@/qqbot/plugins/bangDream/tsugu/domain/item';

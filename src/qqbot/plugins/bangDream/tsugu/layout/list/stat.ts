@@ -1,6 +1,6 @@
 import { Canvas } from 'skia-canvas';
 import { drawText } from '@/qqbot/plugins/bangDream/tsugu/graphics/text';
-import { drawList } from '@/qqbot/plugins/bangDream/tsugu/layout/list';
+import { drawList } from '../list';
 import { stackImage } from '@/qqbot/plugins/bangDream/tsugu/layout/utils';
 import { drawRoundedRect } from '@/qqbot/plugins/bangDream/tsugu/graphics/draw-rect';
 import {

@@ -128,6 +128,16 @@ export class ToolsService {
     return this.toTrimmedString(value).replace(/\s+/g, ' ');
   }
 
+  toStoredMessageText(value: unknown, maxLength = 4000) {
+    const text = this.toTrimmedString(value).replace(
+      /\[CQ:image,file=base64:\/\/([A-Za-z0-9+/=]+)\]/g,
+      (_match, payload: string) =>
+        `[CQ:image,file=base64://<${payload.length} chars>]`,
+    );
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, maxLength)}...<truncated ${text.length - maxLength} chars>`;
+  }
+
   toStringId(value: number | string | undefined | null) {
     return value === undefined || value === null ? '' : `${value}`;
   }

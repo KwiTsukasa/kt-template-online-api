@@ -103,12 +103,19 @@ export class QqbotSendService {
     this.rateLimitService.assertCanSend(account.selfId, params.targetId);
 
     const { action, actionParams } = this.buildAction(params);
+    const storedMessageText = this.toolsService.toStoredMessageText(
+      params.message,
+    );
+    const storedActionParams = this.toStoredActionParams(
+      actionParams,
+      storedMessageText,
+    );
 
     const log = await this.sendLogRepository.save(
       this.sendLogRepository.create({
         action,
-        messageText: params.message,
-        params: actionParams,
+        messageText: storedMessageText,
+        params: storedActionParams,
         selfId: account.selfId,
         status: 'pending',
         targetId: params.targetId,
@@ -151,7 +158,7 @@ export class QqbotSendService {
       if (success) {
         await this.messageService.saveOutgoing({
           messageId,
-          messageText: params.message,
+          messageText: storedMessageText,
           messageType: params.targetType,
           selfId: account.selfId,
           targetId: params.targetId,
@@ -175,9 +182,8 @@ export class QqbotSendService {
   }
 
   private async getReverseWsService(): Promise<QqbotReverseActionSender> {
-    const { QqbotReverseWsService } = await import(
-      '../connection/qqbot-reverse-ws.service'
-    );
+    const { QqbotReverseWsService } =
+      await import('../connection/qqbot-reverse-ws.service');
     return this.moduleRef.get<QqbotReverseActionSender>(QqbotReverseWsService, {
       strict: false,
     });
@@ -210,6 +216,18 @@ export class QqbotSendService {
     return {
       action: 'send_private_msg',
       actionParams: { message: params.message, user_id: params.targetId },
+    };
+  }
+
+  private toStoredActionParams(
+    actionParams: Record<string, any>,
+    storedMessageText: string,
+  ) {
+    return {
+      ...actionParams,
+      ...(actionParams.message === undefined
+        ? {}
+        : { message: storedMessageText }),
     };
   }
 }

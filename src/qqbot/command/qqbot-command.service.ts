@@ -179,7 +179,9 @@ export class QqbotCommandService {
         input: JSON.stringify(params.input || {}),
         operationKey: params.command.operationKey,
         output:
-          params.output === undefined ? null : JSON.stringify(params.output),
+          params.output === undefined
+            ? null
+            : this.stringifyStoredOutput(params.output),
         pluginKey: params.command.pluginKey,
         rawMessage: params.message.messageText,
         selfId: params.message.selfId,
@@ -286,6 +288,21 @@ export class QqbotCommandService {
     } catch {
       throwVbenError('默认参数必须是合法 JSON');
     }
+  }
+
+  private stringifyStoredOutput(output: any) {
+    if (
+      output &&
+      typeof output === 'object' &&
+      !Array.isArray(output) &&
+      typeof output.replyText === 'string'
+    ) {
+      return JSON.stringify({
+        ...output,
+        replyText: this.toolsService.toStoredMessageText(output.replyText),
+      });
+    }
+    return JSON.stringify(output);
   }
 
   private toRawBody(command: QqbotCommand): QqbotCommandBodyDto {

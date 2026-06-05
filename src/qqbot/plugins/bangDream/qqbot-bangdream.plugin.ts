@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { formatKtDateTime, ToolsService } from '@/common';
 import type { QqbotIntegrationPlugin } from '../../qqbot.types';
+import {
+  BANGDREAM_INPUT_SCHEMA,
+  BANGDREAM_OPERATION_DEFS,
+  BANGDREAM_OUTPUT_SCHEMA,
+} from './commands/qqbot-bangdream-command.definitions';
 import { QqbotBangDreamClientService } from './qqbot-bangdream-client.service';
 
 @Injectable()
@@ -13,7 +18,7 @@ export class QqbotBangDreamPluginService {
   getPlugin(): QqbotIntegrationPlugin {
     return {
       description:
-        '对接 Bestdori 公开数据，提供 BanG Dream! Girls Band Party 歌曲查询能力。',
+        '合入 Tsugu BangDream Bot 后端开源源码，提供 BanG Dream! Girls Band Party 公开查询出图能力。',
       healthCheck: async () => {
         const checkedAt = formatKtDateTime(new Date());
         try {
@@ -36,39 +41,17 @@ export class QqbotBangDreamPluginService {
       },
       key: 'bangDream',
       name: 'BangDream 查询',
-      operations: [
-        {
-          cacheTtlMs: 60_000,
-          description: '按歌曲名或 Bestdori 歌曲 ID 查询 BanG Dream 歌曲信息。',
-          inputSchema: {
-            properties: {
-              query: { description: '歌曲名或歌曲 ID', type: 'string' },
-              text: { description: '命令原始文本', type: 'string' },
-            },
-            required: ['query'],
-            type: 'object',
-          },
-          key: 'bangdream.song.search',
-          name: '歌曲查询',
-          outputSchema: {
-            properties: {
-              bandName: { type: 'string' },
-              bpmText: { type: 'string' },
-              difficultyText: { type: 'string' },
-              id: { type: 'number' },
-              lengthText: { type: 'string' },
-              notesText: { type: 'string' },
-              replyText: { type: 'string' },
-              title: { type: 'string' },
-              url: { type: 'string' },
-            },
-            type: 'object',
-          },
-          execute: async (input) =>
-            await this.bangDreamClientService.searchSong(input),
-        },
-      ],
-      version: '1.0.0',
+      operations: BANGDREAM_OPERATION_DEFS.map((operation) => ({
+        cacheTtlMs: 60_000,
+        description: operation.description,
+        inputSchema: BANGDREAM_INPUT_SCHEMA,
+        key: operation.key,
+        name: operation.name,
+        outputSchema: BANGDREAM_OUTPUT_SCHEMA,
+        execute: async (input) =>
+          await this.bangDreamClientService.execute(operation.key, input),
+      })),
+      version: '2.0.0',
     };
   }
 }

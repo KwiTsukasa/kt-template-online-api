@@ -1,106 +1,72 @@
+jest.mock(
+  '@/qqbot/plugins/bangDream/renderer/qqbot-bangdream-renderer.service',
+  () => ({
+    QqbotBangDreamRendererService: class QqbotBangDreamRendererService {},
+  }),
+);
+
 import { QqbotBangDreamClientService } from '@/qqbot/plugins/bangDream/qqbot-bangdream-client.service';
+import type { QqbotBangDreamRendererService } from '@/qqbot/plugins/bangDream/renderer/qqbot-bangdream-renderer.service';
 
 describe('QqbotBangDreamClientService', () => {
-  let fetchSpy: jest.SpyInstance;
   let service: QqbotBangDreamClientService;
+  let rendererService: jest.Mocked<QqbotBangDreamRendererService>;
 
   beforeEach(() => {
-    service = new QqbotBangDreamClientService();
-    fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
-      const target = `${url}`;
-      if (target.endsWith('/songs/all.1.json')) {
-        return jsonResponse({
-          '180': {
-            musicTitle: ['Returns', 'Returns', 'Returns', 'Returns', 'Returns'],
-          },
-        });
-      }
-      if (target.endsWith('/songs/180.json')) {
-        return jsonResponse({
-          bandId: 1,
-          bpm: {
-            '3': [{ bpm: 185 }],
-          },
-          difficulty: {
-            '0': { playLevel: 7 },
-            '1': { playLevel: 14 },
-            '2': { playLevel: 19 },
-            '3': { playLevel: 25 },
-          },
-          length: 132.36,
-          musicTitle: ['Returns', 'Returns', 'Returns', 'Returns', 'Returns'],
-          notes: {
-            '0': 140,
-            '1': 269,
-            '2': 473,
-            '3': 698,
-          },
-          publishedAt: [
-            '1553234400000',
-            '1584864000000',
-            '1563519600000',
-            '1577854800000',
-            '1553234400000',
-          ],
-          tag: 'normal',
-        });
-      }
-      if (target.endsWith('/bands/all.1.json')) {
-        return jsonResponse({
-          '1': {
-            bandName: [
-              "Poppin'Party",
-              "Poppin'Party",
-              "Poppin'Party",
-              "Poppin'Party",
-              "Poppin'Party",
-            ],
-          },
-        });
-      }
-      return jsonResponse({}, 404);
-    });
+    rendererService = {
+      checkHealth: jest.fn().mockReturnValue(true),
+      execute: jest.fn().mockResolvedValue({
+        imageCount: 1,
+        operationKey: 'bangdream.song.search',
+        query: '夏祭り',
+        replyText: '[CQ:image,file=base64://base64-song-card]',
+        source: 'Tsugu BangDream Bot 内置源码',
+      }),
+    } as any;
+    service = new QqbotBangDreamClientService(rendererService);
   });
 
-  afterEach(() => {
-    fetchSpy.mockRestore();
+  it('checks embedded Tsugu renderer health', async () => {
+    await expect(service.checkHealth()).resolves.toBe(true);
+
+    expect(rendererService.checkHealth).toHaveBeenCalledTimes(1);
   });
 
-  it('searches Bestdori song by title and builds localized QQ reply text', async () => {
-    const result = await service.searchSong({ text: 'Returns' });
+  it('searches song through embedded Tsugu renderer', async () => {
+    const result = await service.searchSong({ text: '夏祭り' });
 
+    expect(rendererService.execute).toHaveBeenCalledWith(
+      'bangdream.song.search',
+      {
+        text: '夏祭り',
+      },
+    );
     expect(result).toMatchObject({
-      bandName: "Poppin'Party",
-      bpmText: '185',
-      difficultyText: 'EASY7 / NORMAL14 / HARD19 / EXPERT25',
-      id: 180,
-      lengthText: '2:12',
-      notesText: 'EASY140 / NORMAL269 / HARD473 / EXPERT698',
-      tagText: '原创',
-      title: 'Returns',
-      url: 'https://bestdori.com/info/songs/180',
+      imageCount: 1,
+      query: '夏祭り',
+      source: 'Tsugu BangDream Bot 内置源码',
     });
-    expect(result.replyText).toContain('BangDream 歌曲：Returns');
-    expect(result.replyText).toContain('乐队：Poppin');
-    expect(result.replyText).toContain('难度：EASY7 / NORMAL14');
+    expect(result.replyText).toBe('[CQ:image,file=base64://base64-song-card]');
   });
 
-  it('searches Bestdori song by numeric id', async () => {
-    const result = await service.searchSong({ text: '180' });
+  it('executes other Tsugu open commands through the same plugin facade', async () => {
+    await service.execute('bangdream.card.search', { text: '1399' });
 
-    expect(result.id).toBe(180);
-    expect(fetchSpy).toHaveBeenCalledWith(
-      'https://bestdori.com/api/songs/180.json',
-      expect.any(Object),
+    expect(rendererService.execute).toHaveBeenCalledWith(
+      'bangdream.card.search',
+      {
+        text: '1399',
+      },
+    );
+  });
+
+  it('bubbles embedded Tsugu renderer errors as command errors', async () => {
+    rendererService.execute.mockRejectedValueOnce(
+      new Error('错误: 没有有效的关键词'),
+    );
+
+    await expect(service.searchSong({ text: '???' })).rejects.toThrow(
+      '错误: 没有有效的关键词',
     );
   });
 });
-
-function jsonResponse(body: unknown, status = 200) {
-  return Promise.resolve(
-    new Response(JSON.stringify(body), {
-      headers: { 'Content-Type': 'application/json' },
-      status,
-    }),
-  );
-}

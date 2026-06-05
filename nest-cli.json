@@ -3,6 +3,16 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
+    "assets": [
+      {
+        "include": "qqbot/plugins/bangDream/tsugu/assets/**/*",
+        "outDir": "dist"
+      },
+      {
+        "include": "qqbot/plugins/bangDream/tsugu/static-config/**/*",
+        "outDir": "dist"
+      }
+    ],
     "deleteOutDir": true
   }
 }

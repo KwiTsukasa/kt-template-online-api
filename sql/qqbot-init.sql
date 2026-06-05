@@ -517,14 +517,35 @@ INSERT INTO `qqbot_command` (`id`, `code`, `name`, `aliases`, `prefixes`, `plugi
 VALUES
   (2041700000000300501, 'ff14_price', 'FF14 查价', '["查价","price","ff14price"]', '["/","!","！"]', 'ff14Market', 'ff14.market.price', 'ff14Price', 'all', '{"language":"chs","world":"中国"}', '', 'FF14 查价失败：{{error}}', 1, 0, 1500, '默认示例命令；请在账号配置中绑定后启用'),
   (2041700000000300502, 'fflogs_character', 'FFLogs 查询', '["fflogs","logs","查logs","查log"]', '["/","!","！"]', 'fflogs', 'fflogs.character.summary', 'fflogsCharacter', 'all', '{"serverRegion":"CN"}', '', 'FFLogs 查询失败：{{error}}', 1, 0, 3000, '查询 FFLogs 角色公开排名；带高难任务时返回最近10次记录；格式：/fflogs 角色名 服务器 [高难任务]'),
-  (2041700000000300503, 'bangdream_song', 'BangDream 查歌', '["bd","bangdream","bandori","邦邦","邦邦查歌"]', '["/","!","！"]', 'bangDream', 'bangdream.song.search', 'plain', 'all', '{}', '', 'BangDream 查询失败：{{error}}', 1, 0, 1500, '查询 BanG Dream 歌曲信息；格式：/bd 歌曲名 或 /bd 歌曲ID')
+  (2041700000000300503, 'bangdream_song', 'BangDream 查曲', '["查曲","bd","bangdream","bandori","邦邦","邦邦查歌"]', '["/","!","！"]', 'bangDream', 'bangdream.song.search', 'plain', 'all', '{}', '', 'BangDream 查曲失败：{{error}}', 1, 0, 1500, '查询 BanG Dream 歌曲信息；格式：/查曲 歌曲名 或 /查曲 歌曲ID'),
+  (2041700000000300504, 'bangdream_song_chart', 'BangDream 查谱面', '["查谱面","谱面","bd谱面"]', '["/","!","！"]', 'bangDream', 'bangdream.song.chart', 'plain', 'all', '{}', '', 'BangDream 查谱面失败：{{error}}', 1, 0, 1500, '查询歌曲谱面；格式：/查谱面 歌曲ID [难度]'),
+  (2041700000000300505, 'bangdream_song_random', 'BangDream 随机曲', '["随机曲","随机","bd随机"]', '["/","!","！"]', 'bangDream', 'bangdream.song.random', 'plain', 'all', '{}', '', 'BangDream 随机曲失败：{{error}}', 1, 0, 1500, '按关键词随机歌曲；格式：/随机曲 [关键词]'),
+  (2041700000000300506, 'bangdream_song_meta', 'BangDream 分数表', '["查询分数表","查分数表","查询分数榜","查分数榜","bd分数表"]', '["/","!","！"]', 'bangDream', 'bangdream.song.meta', 'plain', 'all', '{}', '', 'BangDream 分数表失败：{{error}}', 1, 0, 1500, '查询歌曲分数榜；格式：/查询分数表 [服务器]'),
+  (2041700000000300507, 'bangdream_card', 'BangDream 查卡', '["查卡","查卡牌","bd查卡"]', '["/","!","！"]', 'bangDream', 'bangdream.card.search', 'plain', 'all', '{}', '', 'BangDream 查卡失败：{{error}}', 1, 0, 1500, '查询卡牌信息；格式：/查卡 卡牌关键词 或 /查卡 卡牌ID'),
+  (2041700000000300508, 'bangdream_card_illustration', 'BangDream 查卡面', '["查卡面","查卡插画","查插画","bd卡面"]', '["/","!","！"]', 'bangDream', 'bangdream.card.illustration', 'plain', 'all', '{}', '', 'BangDream 查卡面失败：{{error}}', 1, 0, 1500, '查询卡牌插画；格式：/查卡面 卡牌ID'),
+  (2041700000000300509, 'bangdream_character', 'BangDream 查角色', '["查角色","bd角色"]', '["/","!","！"]', 'bangDream', 'bangdream.character.search', 'plain', 'all', '{}', '', 'BangDream 查角色失败：{{error}}', 1, 0, 1500, '查询角色信息；格式：/查角色 角色关键词 或 /查角色 角色ID'),
+  (2041700000000300510, 'bangdream_event', 'BangDream 查活动', '["查活动","bd活动"]', '["/","!","！"]', 'bangDream', 'bangdream.event.search', 'plain', 'all', '{}', '', 'BangDream 查活动失败：{{error}}', 1, 0, 1500, '查询活动信息；格式：/查活动 活动关键词 或 /查活动 活动ID'),
+  (2041700000000300511, 'bangdream_event_stage', 'BangDream 查试炼', '["查试炼","查stage","查舞台","查festival","查5v5"]', '["/","!","！"]', 'bangDream', 'bangdream.event.stage', 'plain', 'all', '{}', '', 'BangDream 查试炼失败：{{error}}', 1, 0, 1500, '查询活动试炼；格式：/查试炼 [活动ID] [-m]'),
+  (2041700000000300512, 'bangdream_player', 'BangDream 查玩家', '["查玩家","查询玩家","bd玩家"]', '["/","!","！"]', 'bangDream', 'bangdream.player.search', 'plain', 'all', '{}', '', 'BangDream 查玩家失败：{{error}}', 1, 0, 1500, '查询玩家信息；格式：/查玩家 玩家ID [服务器]'),
+  (2041700000000300513, 'bangdream_gacha', 'BangDream 查卡池', '["查卡池","bd卡池"]', '["/","!","！"]', 'bangDream', 'bangdream.gacha.search', 'plain', 'all', '{}', '', 'BangDream 查卡池失败：{{error}}', 1, 0, 1500, '查询卡池信息；格式：/查卡池 卡池ID'),
+  (2041700000000300514, 'bangdream_gacha_simulate', 'BangDream 抽卡模拟', '["抽卡模拟","bd抽卡"]', '["/","!","！"]', 'bangDream', 'bangdream.gacha.simulate', 'plain', 'all', '{}', '', 'BangDream 抽卡模拟失败：{{error}}', 1, 0, 3000, '模拟抽卡；格式：/抽卡模拟 [次数] [卡池ID]'),
+  (2041700000000300515, 'bangdream_cutoff_detail', 'BangDream ycx', '["ycx","预测线","查档线","bd档线"]', '["/","!","！"]', 'bangDream', 'bangdream.cutoff.detail', 'plain', 'all', '{}', '', 'BangDream ycx 失败：{{error}}', 1, 0, 3000, '查询指定档位预测线；格式：/ycx 档位 [活动ID] [服务器]'),
+  (2041700000000300516, 'bangdream_cutoff_all', 'BangDream ycxall', '["ycxall","myycx","全部档线"]', '["/","!","！"]', 'bangDream', 'bangdream.cutoff.all', 'plain', 'all', '{}', '', 'BangDream ycxall 失败：{{error}}', 1, 0, 3000, '查询所有档位预测线；格式：/ycxall [活动ID] [服务器]'),
+  (2041700000000300517, 'bangdream_cutoff_recent', 'BangDream lsycx', '["lsycx","历史档线","近期档线"]', '["/","!","！"]', 'bangDream', 'bangdream.cutoff.recent', 'plain', 'all', '{}', '', 'BangDream lsycx 失败：{{error}}', 1, 0, 3000, '查询同类型活动档线；格式：/lsycx 档位 [活动ID] [服务器]')
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
+  `aliases` = VALUES(`aliases`),
+  `prefixes` = VALUES(`prefixes`),
   `plugin_key` = VALUES(`plugin_key`),
   `operation_key` = VALUES(`operation_key`),
   `parser_key` = VALUES(`parser_key`),
   `target_type` = VALUES(`target_type`),
+  `default_params` = VALUES(`default_params`),
+  `reply_template` = VALUES(`reply_template`),
+  `error_template` = VALUES(`error_template`),
   `enabled` = VALUES(`enabled`),
+  `priority` = VALUES(`priority`),
+  `cooldown_ms` = VALUES(`cooldown_ms`),
   `remark` = VALUES(`remark`),
   `is_deleted` = 0;
 

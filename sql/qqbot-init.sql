@@ -533,6 +533,7 @@ VALUES
   (2041700000000300516, 'bangdream_cutoff_all', 'BangDream ycxall', '["ycxall","myycx","全部档线"]', '["/","!","！"]', 'bangDream', 'bangdream.cutoff.all', 'plain', 'all', '{}', '', 'BangDream ycxall 失败：{{error}}', 1, 0, 3000, '查询所有档位预测线；格式：/ycxall [活动ID] [服务器]'),
   (2041700000000300517, 'bangdream_cutoff_recent', 'BangDream lsycx', '["lsycx","历史档线","近期档线"]', '["/","!","！"]', 'bangDream', 'bangdream.cutoff.recent', 'plain', 'all', '{}', '', 'BangDream lsycx 失败：{{error}}', 1, 0, 3000, '查询同类型活动档线；格式：/lsycx 档位 [活动ID] [服务器]')
 ON DUPLICATE KEY UPDATE
+  `code` = VALUES(`code`),
   `name` = VALUES(`name`),
   `aliases` = VALUES(`aliases`),
   `prefixes` = VALUES(`prefixes`),

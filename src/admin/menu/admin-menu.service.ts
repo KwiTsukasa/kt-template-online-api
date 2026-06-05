@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { toTree } from '@/common';
-import { WordpressService } from '@/wordpress/wordpress.service';
 import { AdminUser } from '../user/admin-user.entity';
 import { AdminMenu } from './admin-menu.entity';
 import type { AdminMenuInput, AdminMenuMeta } from '../admin.types';
@@ -12,20 +11,15 @@ export class AdminMenuService {
   constructor(
     @InjectRepository(AdminMenu)
     private readonly menuRepository: Repository<AdminMenu>,
-    private readonly wordpressService: WordpressService,
   ) {}
 
   async getAccessCodes(user: AdminUser) {
-    const menus = this.filterUnavailableFeatureMenus(
-      await this.getAllowedMenus(user),
-    );
+    const menus = await this.getAllowedMenus(user);
     return menus.map((menu) => menu.authCode).filter((authCode) => !!authCode);
   }
 
   async getRouteMenus(user: AdminUser) {
-    const menus = this.filterUnavailableFeatureMenus(
-      await this.getAllowedMenus(user),
-    );
+    const menus = await this.getAllowedMenus(user);
     return this.buildMenuTree(menus.filter((menu) => menu.type !== 'button'));
   }
 
@@ -145,22 +139,6 @@ export class AdminMenuService {
     }
 
     return [...menuMap.values()];
-  }
-
-  private filterUnavailableFeatureMenus(menus: AdminMenu[]) {
-    if (!menus.some((menu) => this.isWordpressMenu(menu))) return menus;
-    if (this.wordpressService.isAdminIntegrationAvailable()) return menus;
-
-    // WordPress 是外部增强能力，远程不可用时不影响 Admin 主系统登录和系统管理菜单。
-    return menus.filter((menu) => !this.isWordpressMenu(menu));
-  }
-
-  private isWordpressMenu(menu: AdminMenu) {
-    return (
-      menu.name?.startsWith('Blog') ||
-      menu.path?.startsWith('/blog') ||
-      menu.authCode?.startsWith('Blog:')
-    );
   }
 
   private normalizeMenuInput(

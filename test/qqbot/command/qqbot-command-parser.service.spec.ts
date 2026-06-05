@@ -78,9 +78,7 @@ describe('QqbotCommandParserService FFLogs parser', () => {
       encounterName: '上位护锁刃龙',
       serverSlug: '琥珀原',
     });
-    expect(dictService.getDictItemsByKey).not.toHaveBeenCalledWith(
-      'FFLOGS_ENCOUNTER_LABEL',
-    );
+    expect(dictService.getDictItemsByKey).not.toHaveBeenCalled();
   });
 
   it('keeps character summary parsing when no encounter is provided', async () => {

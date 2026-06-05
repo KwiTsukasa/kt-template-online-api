@@ -1,7 +1,7 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response as ExpressResponse } from 'express';
-import { throwVbenError, ToolsService } from '@/common';
+import { MarkdownService, throwVbenError, ToolsService } from '@/common';
 import type {
   WordpressArticleBodyDto,
   WordpressArticleListQueryDto,
@@ -17,6 +17,8 @@ import type {
   WordpressPagedQueryDto,
   WordpressRequestOptions,
   WordpressResponse,
+  WordpressArgonThemeConfig,
+  WordpressArgonMenuItem,
 } from './wordpress.types';
 
 const WORDPRESS_COOKIE_PREFIXES = [
@@ -34,6 +36,7 @@ export class WordpressService {
 
   constructor(
     private readonly configService: ConfigService,
+    private readonly markdownService: MarkdownService,
     private readonly toolsService: ToolsService,
   ) {}
 
@@ -185,7 +188,7 @@ export class WordpressService {
     });
 
     return {
-      list: response.data,
+      list: response.data.map((item) => this.normalizeArticleResponse(item)),
       total: response.total || 0,
     };
   }
@@ -198,17 +201,17 @@ export class WordpressService {
       },
     });
 
-    return response.data;
+    return this.normalizeArticleResponse(response.data);
   }
 
   async articleSave(body: WordpressArticleBodyDto, auth: WordpressAuthContext) {
     const response = await this.request('/wp-json/wp/v2/posts', {
       auth,
-      body: this.getArticleBody(body),
+      body: await this.getArticleBody(body),
       method: 'POST',
     });
 
-    return response.data;
+    return this.normalizeArticleResponse(response.data);
   }
 
   async articleUpdate(
@@ -217,11 +220,11 @@ export class WordpressService {
   ) {
     const response = await this.request(`/wp-json/wp/v2/posts/${body.id}`, {
       auth,
-      body: this.getArticleBody(body),
+      body: await this.getArticleBody(body),
       method: 'POST',
     });
 
-    return response.data;
+    return this.normalizeArticleResponse(response.data);
   }
 
   async articleRemove(
@@ -238,6 +241,64 @@ export class WordpressService {
     });
 
     return response.data;
+  }
+
+  async publicArticleList(query: WordpressArticleListQueryDto) {
+    const response = await this.publicRequest<any[]>('/wp-json/wp/v2/posts', {
+      query: {
+        ...this.getPageQuery(query),
+        _embed: 'author,wp:featuredmedia,wp:term',
+        author: query.author,
+        categories: this.normalizeIdQuery(query.categories),
+        context: 'view',
+        search: query.search,
+        status: 'publish',
+        tags: this.normalizeIdQuery(query.tags),
+      },
+    });
+
+    return {
+      list: response.data.map((item) => this.normalizeArticleResponse(item)),
+      total: response.total || 0,
+    };
+  }
+
+  async publicArticleDetail(query: { id?: string; slug?: string }) {
+    if (query.id) {
+      const response = await this.publicRequest(
+        `/wp-json/wp/v2/posts/${query.id}`,
+        {
+          query: {
+            _embed: 'author,wp:featuredmedia,wp:term',
+            context: 'view',
+          },
+        },
+      );
+
+      return this.normalizeArticleResponse(response.data);
+    }
+
+    const slug = `${query.slug || ''}`.trim();
+    if (!slug) {
+      throwVbenError('文章别名不能为空', HttpStatus.BAD_REQUEST);
+    }
+
+    const response = await this.publicRequest<any[]>('/wp-json/wp/v2/posts', {
+      query: {
+        _embed: 'author,wp:featuredmedia,wp:term',
+        context: 'view',
+        per_page: 1,
+        slug,
+        status: 'publish',
+      },
+    });
+    const [article] = response.data;
+
+    if (!article) {
+      throwVbenError('文章不存在或未发布', HttpStatus.NOT_FOUND);
+    }
+
+    return this.normalizeArticleResponse(article);
   }
 
   async tagList(query: WordpressTermListQueryDto, auth: WordpressAuthContext) {
@@ -295,6 +356,17 @@ export class WordpressService {
     auth: WordpressAuthContext,
   ) {
     return this.termRemove('/wp-json/wp/v2/categories', id, force, auth);
+  }
+
+  async themeConfig(): Promise<WordpressArgonThemeConfig> {
+    const [rootResponse, homeResponse] = await Promise.all([
+      this.rawRequest('/?rest_route=/'),
+      this.rawRequest('/'),
+    ]);
+    const root = await this.parseResponse(rootResponse);
+    const html = await homeResponse.text();
+
+    return this.parseArgonThemeConfig(html, root);
   }
 
   private async termList(
@@ -385,6 +457,20 @@ export class WordpressService {
   ): Promise<WordpressResponse<T>> {
     this.assertAuthContext(options.auth);
 
+    return this.executeJsonRequest(path, options);
+  }
+
+  private async publicRequest<T>(
+    path: string,
+    options: Omit<WordpressRequestOptions, 'auth'> = {},
+  ): Promise<WordpressResponse<T>> {
+    return this.executeJsonRequest(path, options);
+  }
+
+  private async executeJsonRequest<T>(
+    path: string,
+    options: WordpressRequestOptions,
+  ): Promise<WordpressResponse<T>> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.getTimeout());
 
@@ -568,9 +654,9 @@ export class WordpressService {
     }
   }
 
-  private assertAuthContext(auth: WordpressAuthContext) {
-    const hasToken = !!auth.authorization;
-    const hasCookieLogin = !!auth.cookie && !!auth.nonce;
+  private assertAuthContext(auth?: WordpressAuthContext) {
+    const hasToken = !!auth?.authorization;
+    const hasCookieLogin = !!auth?.cookie && !!auth?.nonce;
 
     if (hasToken || hasCookieLogin) return;
 
@@ -581,7 +667,7 @@ export class WordpressService {
     );
   }
 
-  private getHeaders(auth: WordpressAuthContext, hasBody: boolean) {
+  private getHeaders(auth: WordpressAuthContext | undefined, hasBody: boolean) {
     const headers: Record<string, string> = {
       Accept: 'application/json',
     };
@@ -590,15 +676,15 @@ export class WordpressService {
       headers['Content-Type'] = 'application/json';
     }
 
-    if (auth.authorization) {
+    if (auth?.authorization) {
       headers.Authorization = auth.authorization;
     }
 
-    if (auth.cookie) {
+    if (auth?.cookie) {
       headers.Cookie = auth.cookie;
     }
 
-    if (auth.nonce) {
+    if (auth?.nonce) {
       headers['X-WP-Nonce'] = auth.nonce;
     }
 
@@ -703,10 +789,10 @@ export class WordpressService {
     };
   }
 
-  private getArticleBody(body: WordpressArticleBodyDto) {
+  private async getArticleBody(body: WordpressArticleBodyDto) {
     return this.toolsService.pickDefined({
       categories: this.normalizeIdList(body.categories),
-      content: body.content,
+      content: await this.getArticleContent(body),
       excerpt: body.excerpt,
       featured_media: body.featured_media,
       slug: body.slug,
@@ -715,6 +801,96 @@ export class WordpressService {
       tags: this.normalizeIdList(body.tags),
       title: body.title,
     });
+  }
+
+  private async getArticleContent(body: WordpressArticleBodyDto) {
+    if (body.content === undefined) return undefined;
+    if (body.contentFormat !== 'markdown') return body.content;
+
+    const html = await this.markdownService.renderToHtml(body.content);
+    return this.markdownService.embedSourceHtml(html, body.content);
+  }
+
+  private normalizeArticleResponse(article: Record<string, any>) {
+    const content = article?.content;
+    const contentValue =
+      typeof content === 'string'
+        ? content
+        : content?.raw || content?.rendered || '';
+    const contentMarkdown = this.markdownService.extractSource(contentValue);
+    const contentHtml = this.markdownService.stripSourceMarker(contentValue);
+
+    const nextArticle: Record<string, any> = {
+      ...article,
+      authorName: this.getEmbeddedAuthorName(article),
+      categoriesResolved: this.getEmbeddedTerms(article, 'category'),
+      contentHtml,
+      cover: this.getEmbeddedFeaturedMediaUrl(article),
+      excerptText: this.stripHtml(article?.excerpt?.rendered || article?.excerpt),
+      tagsResolved: this.getEmbeddedTerms(article, 'post_tag'),
+    };
+
+    if (contentMarkdown) {
+      nextArticle.contentMarkdown = contentMarkdown;
+    }
+
+    if (typeof content === 'string') {
+      nextArticle.content = this.markdownService.stripSourceMarker(content);
+      return nextArticle;
+    }
+
+    nextArticle.content = {
+      ...content,
+      raw: content.raw
+        ? this.markdownService.stripSourceMarker(content.raw)
+        : content.raw,
+      rendered: content.rendered
+        ? this.markdownService.stripSourceMarker(content.rendered)
+        : content.rendered,
+    };
+
+    return nextArticle;
+  }
+
+  private getEmbeddedTerms(article: Record<string, any>, taxonomy: string) {
+    const terms = article?._embedded?.['wp:term'];
+    if (!Array.isArray(terms)) return [];
+
+    return terms
+      .flat()
+      .filter((item) => item?.taxonomy === taxonomy)
+      .map((item) =>
+        this.toolsService.pickDefined({
+          count: item.count,
+          id: item.id,
+          name: this.decodeHtmlEntities(item.name || ''),
+          slug: item.slug,
+        }),
+      );
+  }
+
+  private getEmbeddedAuthorName(article: Record<string, any>) {
+    const [author] = article?._embedded?.author || [];
+
+    return this.decodeHtmlEntities(author?.name || '');
+  }
+
+  private getEmbeddedFeaturedMediaUrl(article: Record<string, any>) {
+    const [media] = article?._embedded?.['wp:featuredmedia'] || [];
+
+    return (
+      media?.media_details?.sizes?.large?.source_url ||
+      media?.media_details?.sizes?.full?.source_url ||
+      media?.source_url ||
+      ''
+    );
+  }
+
+  private stripHtml(value: unknown) {
+    return this.decodeHtmlEntities(`${value ?? ''}`)
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   private getTermBody(body: WordpressTermBodyDto) {
@@ -764,6 +940,395 @@ export class WordpressService {
     } catch {
       return text;
     }
+  }
+
+  private parseArgonThemeConfig(
+    html: string,
+    root: any,
+  ): WordpressArgonThemeConfig {
+    const argonConfigBlock = this.getScriptObjectBlock(html, 'argonConfig');
+
+    return {
+      argonConfig: {
+        codeHighlight: {
+          breakLine: this.getJsObjectBoolean(
+            this.getJsObjectBlock(argonConfigBlock, 'code_highlight'),
+            'break_line',
+            false,
+          ),
+          enable: this.getJsObjectBoolean(
+            this.getJsObjectBlock(argonConfigBlock, 'code_highlight'),
+            'enable',
+            false,
+          ),
+          hideLinenumber: this.getJsObjectBoolean(
+            this.getJsObjectBlock(argonConfigBlock, 'code_highlight'),
+            'hide_linenumber',
+            false,
+          ),
+          transparentLinenumber: this.getJsObjectBoolean(
+            this.getJsObjectBlock(argonConfigBlock, 'code_highlight'),
+            'transparent_linenumber',
+            false,
+          ),
+        },
+        dateFormat: this.getJsObjectString(
+          argonConfigBlock,
+          'dateFormat',
+          'YMD',
+        ),
+        disablePjax: this.getJsObjectBoolean(
+          argonConfigBlock,
+          'disable_pjax',
+          false,
+        ),
+        foldLongComments: this.getJsObjectBoolean(
+          argonConfigBlock,
+          'fold_long_comments',
+          false,
+        ),
+        foldLongShuoshuo: this.getJsObjectBoolean(
+          argonConfigBlock,
+          'fold_long_shuoshuo',
+          false,
+        ),
+        headroom: this.getJsObjectRawValue(argonConfigBlock, 'headroom') || '',
+        language: this.getJsObjectString(argonConfigBlock, 'language', ''),
+        lazyload: {
+          effect: this.getJsObjectString(
+            this.getJsObjectBlock(argonConfigBlock, 'lazyload'),
+            'effect',
+            '',
+          ),
+          threshold: this.getJsObjectNumber(
+            this.getJsObjectBlock(argonConfigBlock, 'lazyload'),
+            'threshold',
+            0,
+          ),
+        },
+        pangu: this.getJsObjectString(argonConfigBlock, 'pangu', ''),
+        pjaxAnimationDuration: this.getJsObjectNumber(
+          argonConfigBlock,
+          'pjax_animation_durtion',
+          0,
+        ),
+        waterflowColumns:
+          this.getJsObjectRawValue(argonConfigBlock, 'waterflow_columns') || '',
+        wpPath: this.getJsObjectString(argonConfigBlock, 'wp_path', ''),
+        zoomify: this.getJsObjectBoolean(argonConfigBlock, 'zoomify', false),
+      },
+      backgroundDarkBrightness: this.getArgonBackgroundDarkBrightness(html),
+      backgroundDarkImage: this.getArgonBackgroundImage(html, '#content:after'),
+      backgroundDarkOpacity: this.getArgonBackgroundDarkOpacity(html),
+      backgroundImage: this.getArgonBackgroundImage(html),
+      backgroundOpacity: this.getArgonBackgroundOpacity(html),
+      bodyClass: this.getTagClassList(html, 'body'),
+      darkmodeAutoSwitch: this.getInlineJsString(
+        html,
+        'darkmodeAutoSwitch',
+      ),
+      enableCustomThemeColor:
+        this.getMetaContent(html, 'argon-enable-custom-theme-color') === 'true',
+      headerMenu: this.getArgonMenuItems(html, 'navbar_global'),
+      htmlClass: this.getTagClassList(html, 'html').filter(
+        (item) => item !== 'no-js',
+      ),
+      site: {
+        authorAvatar: this.getArgonAuthorAvatar(html),
+        authorName: this.getArgonAuthorName(html),
+        description: root?.description || '',
+        home: root?.home || '',
+        title: root?.name || this.getMetaContent(html, 'og:title') || '',
+        url: root?.url || '',
+      },
+      sidebarMenu: this.getArgonMenuItems(html, 'leftbar_part1_menu'),
+      themeCardRadius: this.toNonNegativeNumber(
+        this.getMetaContent(html, 'theme-card-radius'),
+        4,
+      ),
+      themeColor: this.getMetaContent(html, 'theme-color'),
+      themeColorRgb: this.getMetaContent(html, 'theme-color-rgb'),
+      themeVersion: this.getMetaContent(html, 'theme-version'),
+    };
+  }
+
+  private getArgonBackgroundImage(html: string, selector = '#content:before') {
+    const block = this.getCssBlock(html, selector);
+    const rawValue =
+      /background(?:-image)?\s*:\s*url\(([^)]+)\)/i.exec(block)?.[1] || '';
+    const value = rawValue.trim().replace(/^['"]|['"]$/g, '');
+
+    return this.decodeUriText(this.decodeHtmlEntities(value));
+  }
+
+  private getArgonBackgroundOpacity(html: string) {
+    const value = this.getCssDeclaration(
+      this.getCssBlock(html, '#content:before'),
+      'opacity',
+    );
+
+    return this.toNonNegativeNumber(value, 1);
+  }
+
+  private getArgonBackgroundDarkOpacity(html: string) {
+    const darkValue = this.getCssDeclaration(
+      this.getCssBlock(html, 'html.darkmode #content:after'),
+      'opacity',
+    );
+    const baseValue = this.getCssDeclaration(
+      this.getCssBlock(html, '#content:after'),
+      'opacity',
+    );
+
+    return this.toNonNegativeNumber(darkValue || baseValue, 1);
+  }
+
+  private getArgonBackgroundDarkBrightness(html: string) {
+    const filter = this.getCssDeclaration(
+      this.getCssBlock(html, 'html.darkmode #content:before'),
+      'filter',
+    );
+    const value = /brightness\(([^)]+)\)/i.exec(filter)?.[1] || '';
+
+    return this.toNonNegativeNumber(value, 1);
+  }
+
+  private getArgonAuthorAvatar(html: string) {
+    const style = this.getTagAttributeById(
+      html,
+      'leftbar_overview_author_image',
+      'style',
+    );
+    const value =
+      /background(?:-image)?\s*:\s*url\(([^)]+)\)/i.exec(style)?.[1] || '';
+
+    return this.decodeUriText(
+      this.decodeHtmlEntities(value.trim().replace(/^['"]|['"]$/g, '')),
+    );
+  }
+
+  private getArgonAuthorName(html: string) {
+    const pattern =
+      /<[^>]*id=["']leftbar_overview_author_name["'][^>]*>([\s\S]*?)<\/[^>]+>/i;
+
+    return this.stripHtml(pattern.exec(html)?.[1] || '');
+  }
+
+  private getArgonMenuItems(
+    html: string,
+    elementId: string,
+  ): WordpressArgonMenuItem[] {
+    const menuHtml = this.getElementHtmlById(html, elementId);
+
+    return Array.from(menuHtml.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi))
+      .map((match) => {
+        const attrText = match[1] || '';
+        const href = this.getHtmlAttribute(attrText, 'href');
+        const label = this.stripHtml(match[2] || '');
+        const icon = /<i\b[^>]*class=["']([^"']*)["']/i.exec(match[2] || '')?.[1] || '';
+
+        if (!href || !label) return null;
+
+        const menuItem: WordpressArgonMenuItem = {
+          href: this.decodeHtmlEntities(href),
+          label,
+        };
+        const iconName = icon
+          .split(/\s+/)
+          .find((item) => item.startsWith('fa-'));
+
+        if (/^https?:\/\//i.test(href)) {
+          menuItem.external = true;
+        }
+        if (iconName) {
+          menuItem.icon = iconName;
+        }
+
+        return menuItem;
+      })
+      .filter((item): item is WordpressArgonMenuItem => !!item);
+  }
+
+  private getCssBlock(html: string, selector: string) {
+    const pattern = new RegExp(
+      `${this.escapeRegex(selector)}\\s*\\{(?<body>[^}]*)\\}`,
+      'i',
+    );
+
+    return pattern.exec(html)?.groups?.body || '';
+  }
+
+  private getCssDeclaration(block: string, property: string) {
+    const pattern = new RegExp(
+      `${this.escapeRegex(property)}\\s*:\\s*([^;]+)`,
+      'i',
+    );
+
+    return pattern.exec(block)?.[1]?.trim() || '';
+  }
+
+  private getTagAttributeById(html: string, id: string, attribute: string) {
+    const tagPattern = new RegExp(
+      `<[^>]*id=["']${this.escapeRegex(id)}["'][^>]*>`,
+      'i',
+    );
+    const tag = tagPattern.exec(html)?.[0] || '';
+    const attrPattern = new RegExp(
+      `${this.escapeRegex(attribute)}=["']([^"']*)["']`,
+      'i',
+    );
+
+    return attrPattern.exec(tag)?.[1] || '';
+  }
+
+  private getElementHtmlById(html: string, id: string) {
+    const startPattern = new RegExp(
+      `<(?<tag>[a-z0-9-]+)[^>]*id=["']${this.escapeRegex(id)}["'][^>]*>`,
+      'i',
+    );
+    const startMatch = startPattern.exec(html);
+    if (!startMatch?.groups?.tag) return '';
+
+    const tag = startMatch.groups.tag;
+    const startIndex = startMatch.index + startMatch[0].length;
+    const endPattern = new RegExp(`</${this.escapeRegex(tag)}>`, 'i');
+    const endMatch = endPattern.exec(html.slice(startIndex));
+
+    return endMatch
+      ? html.slice(startIndex, startIndex + endMatch.index)
+      : html.slice(startIndex);
+  }
+
+  private getHtmlAttribute(attrText: string, attribute: string) {
+    const pattern = new RegExp(
+      `${this.escapeRegex(attribute)}=["']([^"']*)["']`,
+      'i',
+    );
+
+    return pattern.exec(attrText)?.[1] || '';
+  }
+
+  private getMetaContent(html: string, name: string) {
+    const escapedName = this.escapeRegex(name);
+    const pattern = new RegExp(
+      `<meta[^>]+(?:name|property)=["']${escapedName}["'][^>]+content=["']([^"']*)["']`,
+      'i',
+    );
+
+    return this.decodeHtmlEntities(pattern.exec(html)?.[1] || '');
+  }
+
+  private getTagClassList(html: string, tagName: 'body' | 'html') {
+    const pattern = new RegExp(`<${tagName}[^>]*class=["']([^"']*)["']`, 'i');
+    const classValue = pattern.exec(html)?.[1] || '';
+
+    return classValue
+      .split(/\s+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  private getScriptObjectBlock(html: string, name: string) {
+    const pattern = new RegExp(`${this.escapeRegex(name)}\\s*=\\s*\\{`, 'i');
+    const match = pattern.exec(html);
+    if (!match) return '';
+
+    return this.readBraceBlock(html, match.index + match[0].lastIndexOf('{'));
+  }
+
+  private getJsObjectBlock(block: string, key: string) {
+    const pattern = new RegExp(`${this.escapeRegex(key)}\\s*:\\s*\\{`, 'i');
+    const match = pattern.exec(block);
+    if (!match) return '';
+
+    return this.readBraceBlock(block, match.index + match[0].lastIndexOf('{'));
+  }
+
+  private readBraceBlock(value: string, startIndex: number) {
+    let depth = 0;
+    for (let index = startIndex; index < value.length; index += 1) {
+      const char = value[index];
+      if (char === '{') depth += 1;
+      if (char === '}') depth -= 1;
+      if (depth === 0) {
+        return value.slice(startIndex + 1, index);
+      }
+    }
+
+    return '';
+  }
+
+  private getInlineJsString(html: string, key: string) {
+    const pattern = new RegExp(
+      `${this.escapeRegex(key)}\\s*=\\s*["']([^"']*)["']`,
+      'i',
+    );
+
+    return pattern.exec(html)?.[1] || '';
+  }
+
+  private getJsObjectString(block: string, key: string, fallback: string) {
+    const pattern = new RegExp(
+      `${this.escapeRegex(key)}\\s*:\\s*["']([^"']*)["']`,
+      'i',
+    );
+
+    return pattern.exec(block)?.[1] || fallback;
+  }
+
+  private getJsObjectNumber(block: string, key: string, fallback: number) {
+    const pattern = new RegExp(
+      `${this.escapeRegex(key)}\\s*:\\s*([0-9]+)`,
+      'i',
+    );
+    const value = Number(pattern.exec(block)?.[1]);
+
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  private getJsObjectBoolean(block: string, key: string, fallback: boolean) {
+    const rawValue = this.getJsObjectRawValue(block, key);
+    if (rawValue === 'true') return true;
+    if (rawValue === 'false') return false;
+
+    return fallback;
+  }
+
+  private toNonNegativeNumber(value: unknown, fallback: number) {
+    const nextValue = Number(value);
+
+    return Number.isFinite(nextValue) && nextValue >= 0 ? nextValue : fallback;
+  }
+
+  private getJsObjectRawValue(block: string, key: string) {
+    const pattern = new RegExp(
+      `${this.escapeRegex(key)}\\s*:\\s*(["'][^"']*["']|true|false|[0-9]+)`,
+      'i',
+    );
+    const value = pattern.exec(block)?.[1] || '';
+
+    return value.replace(/^["']|["']$/g, '');
+  }
+
+  private decodeHtmlEntities(value: string) {
+    return value
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;/g, "'")
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>');
+  }
+
+  private decodeUriText(value: string) {
+    try {
+      return decodeURI(value);
+    } catch {
+      return value;
+    }
+  }
+
+  private escapeRegex(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   private getWordpressResponseErrorMessage(data: any, status: number) {

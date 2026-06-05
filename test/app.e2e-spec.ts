@@ -15,9 +15,16 @@ import { SystemLogController } from '../src/admin/system-log/system-log.controll
 import { SystemLogService } from '../src/admin/system-log/system-log.service';
 import {
   ApiExceptionFilter,
+  IS_PUBLIC_KEY,
   SaveBodyInterceptor,
   ToolsService,
 } from '../src/common';
+import { BlogArticleController } from '../src/blog/blog-article.controller';
+import { BlogArticleService } from '../src/blog/blog-article.service';
+import { BlogThemeConfigController } from '../src/blog/blog-theme-config.controller';
+import { BlogThemeConfigService } from '../src/blog/blog-theme-config.service';
+import { BlogTermController } from '../src/blog/blog-term.controller';
+import { BlogTermService } from '../src/blog/blog-term.service';
 import { MinioClientController } from '../src/minio/minio.controller';
 import { MinioClientService } from '../src/minio/minio.service';
 import { WordpressArticleController } from '../src/wordpress/wordpress-article.controller';
@@ -25,6 +32,7 @@ import { WordpressAuthController } from '../src/wordpress/wordpress-auth.control
 import { WordpressCategoryController } from '../src/wordpress/wordpress-category.controller';
 import { WordpressService } from '../src/wordpress/wordpress.service';
 import { WordpressTagController } from '../src/wordpress/wordpress-tag.controller';
+import { WordpressThemeController } from '../src/wordpress/wordpress-theme.controller';
 import { PinoLogger } from 'nestjs-pino';
 import {
   collectControllerRoutes,
@@ -154,10 +162,54 @@ const wordpressArticle = {
   status: 'draft',
 };
 
+const blogArticle = {
+  authorName: 'KwiTsukasa',
+  categories: ['技术'],
+  categoriesResolved: [{ name: '技术', slug: 'tech' }],
+  contentHtml: '<h1>本地文章</h1>',
+  contentMarkdown: '# 本地文章',
+  id: '2041800000000000001',
+  slug: 'local-article',
+  status: 'draft',
+  tags: ['Milkdown'],
+  tagsResolved: [{ name: 'Milkdown', slug: 'milkdown' }],
+  title: '本地文章',
+};
+
 const wordpressTerm = {
   id: 1,
   name: 'WordPress 分类',
   slug: 'wordpress-category',
+};
+
+const blogTerm = {
+  count: 1,
+  description: '本地分类描述',
+  id: '2041800000000000100',
+  name: '技术',
+  slug: 'tech',
+};
+
+const wordpressThemeConfig = {
+  bodyClass: ['home', 'blog', 'wp-theme-argon'],
+  darkmodeAutoSwitch: 'alwayson',
+  enableCustomThemeColor: true,
+  htmlClass: [
+    'triple-column',
+    'immersion-color',
+    'toolbar-blur',
+    'article-header-style-default',
+  ],
+  site: {
+    description: '',
+    home: 'https://blog.kwitsukasa.top',
+    title: 'KwiTsukasa的小站',
+    url: 'https://blog.kwitsukasa.top',
+  },
+  themeCardRadius: 4,
+  themeColor: '#c3a1ed',
+  themeColorRgb: '195,161,237',
+  themeVersion: '1.3.5',
 };
 
 const componentServiceMock = {
@@ -219,6 +271,34 @@ const minioServiceMock = {
   removeObject: jest.fn(),
 };
 
+const blogArticleServiceMock = {
+  page: jest.fn(),
+  detail: jest.fn(),
+  save: jest.fn(),
+  update: jest.fn(),
+  remove: jest.fn(),
+  categoryOptions: jest.fn(),
+  tagOptions: jest.fn(),
+  publicList: jest.fn(),
+  publicDetail: jest.fn(),
+  importFromWordpress: jest.fn(),
+};
+
+const blogTermServiceMock = {
+  detail: jest.fn(),
+  options: jest.fn(),
+  page: jest.fn(),
+  remove: jest.fn(),
+  save: jest.fn(),
+  update: jest.fn(),
+};
+
+const blogThemeConfigServiceMock = {
+  importFromWordpress: jest.fn(),
+  publicConfig: jest.fn(),
+  save: jest.fn(),
+};
+
 const wordpressServiceMock = {
   getAuthContext: jest.fn(),
   loginWithConfiguredAdmin: jest.fn(),
@@ -230,6 +310,8 @@ const wordpressServiceMock = {
   articleSave: jest.fn(),
   articleUpdate: jest.fn(),
   articleRemove: jest.fn(),
+  publicArticleList: jest.fn(),
+  publicArticleDetail: jest.fn(),
   tagList: jest.fn(),
   tagDetail: jest.fn(),
   tagSave: jest.fn(),
@@ -240,6 +322,7 @@ const wordpressServiceMock = {
   categorySave: jest.fn(),
   categoryUpdate: jest.fn(),
   categoryRemove: jest.fn(),
+  themeConfig: jest.fn(),
 };
 
 const controllerClasses = [
@@ -247,11 +330,15 @@ const controllerClasses = [
   ComponentController,
   DictController,
   SystemLogController,
+  BlogArticleController,
+  BlogTermController,
+  BlogThemeConfigController,
   MinioClientController,
   WordpressAuthController,
   WordpressArticleController,
   WordpressTagController,
   WordpressCategoryController,
+  WordpressThemeController,
 ];
 const controllerRoutes = collectControllerRoutes(controllerClasses);
 
@@ -387,6 +474,522 @@ const routeTestCases: Record<string, RouteTestCase> = {
       code: 200,
       msg: '操作成功',
       data: component,
+    });
+  },
+
+  'GET /blog/article/list': async (server) => {
+    blogArticleServiceMock.page.mockResolvedValue({
+      list: [blogArticle],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/blog/article/list')
+      .query({ pageNo: 1, pageSize: 10, search: '本地' })
+      .expect(200);
+
+    expect(blogArticleServiceMock.page).toHaveBeenCalledWith({
+      pageNo: '1',
+      pageSize: '10',
+      search: '本地',
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: {
+        list: [blogArticle],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /blog/article/detail': async (server) => {
+    blogArticleServiceMock.detail.mockResolvedValue(blogArticle);
+
+    const response = await request(server)
+      .get('/blog/article/detail')
+      .query({ id: blogArticle.id })
+      .expect(200);
+
+    expect(blogArticleServiceMock.detail).toHaveBeenCalledWith(blogArticle.id);
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: blogArticle,
+    });
+  },
+
+  'GET /blog/article/public/list': async (server) => {
+    blogArticleServiceMock.publicList.mockResolvedValue({
+      list: [blogArticle],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/blog/article/public/list')
+      .query({ pageNo: 1, pageSize: 10 })
+      .expect(200);
+
+    expect(blogArticleServiceMock.publicList).toHaveBeenCalledWith({
+      pageNo: '1',
+      pageSize: '10',
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: {
+        list: [blogArticle],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /blog/article/public/detail': async (server) => {
+    blogArticleServiceMock.publicDetail.mockResolvedValue(blogArticle);
+
+    const response = await request(server)
+      .get('/blog/article/public/detail')
+      .query({ slug: blogArticle.slug })
+      .expect(200);
+
+    expect(blogArticleServiceMock.publicDetail).toHaveBeenCalledWith({
+      id: undefined,
+      slug: blogArticle.slug,
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: blogArticle,
+    });
+  },
+
+  'POST /blog/article/save': async (server) => {
+    blogArticleServiceMock.save.mockResolvedValue(blogArticle);
+
+    const response = await request(server)
+      .post('/blog/article/save')
+      .send({
+        content: '# 本地文章',
+        contentFormat: 'markdown',
+        title: '本地文章',
+      })
+      .expect(200);
+
+    expect(blogArticleServiceMock.save).toHaveBeenCalledWith({
+      content: '# 本地文章',
+      contentFormat: 'markdown',
+      title: '本地文章',
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: blogArticle,
+    });
+  },
+
+  'POST /blog/article/update': async (server) => {
+    blogArticleServiceMock.update.mockResolvedValue(blogArticle);
+
+    const response = await request(server)
+      .post('/blog/article/update')
+      .send({
+        id: blogArticle.id,
+        title: '本地文章',
+      })
+      .expect(200);
+
+    expect(blogArticleServiceMock.update).toHaveBeenCalledWith({
+      id: blogArticle.id,
+      title: '本地文章',
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: blogArticle,
+    });
+  },
+
+  'POST /blog/article/remove': async (server) => {
+    blogArticleServiceMock.remove.mockResolvedValue(true);
+
+    const response = await request(server)
+      .post('/blog/article/remove')
+      .query({ id: blogArticle.id })
+      .expect(200);
+
+    expect(blogArticleServiceMock.remove).toHaveBeenCalledWith(blogArticle.id);
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: true,
+    });
+  },
+
+  'GET /blog/article/category-options': async (server) => {
+    blogArticleServiceMock.categoryOptions.mockResolvedValue({
+      list: [{ count: 1, id: 'tech', name: '技术', slug: 'tech' }],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/blog/article/category-options')
+      .query({ pageNo: 1, pageSize: 20, search: '技' })
+      .expect(200);
+
+    expect(blogArticleServiceMock.categoryOptions).toHaveBeenCalledWith({
+      pageNo: '1',
+      pageSize: '20',
+      search: '技',
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: {
+        list: [{ count: 1, id: 'tech', name: '技术', slug: 'tech' }],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /blog/article/tag-options': async (server) => {
+    blogArticleServiceMock.tagOptions.mockResolvedValue({
+      list: [{ count: 1, id: 'milkdown', name: 'Milkdown', slug: 'milkdown' }],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/blog/article/tag-options')
+      .query({ pageNo: 1, pageSize: 20, search: 'milk' })
+      .expect(200);
+
+    expect(blogArticleServiceMock.tagOptions).toHaveBeenCalledWith({
+      pageNo: '1',
+      pageSize: '20',
+      search: 'milk',
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: {
+        list: [
+          { count: 1, id: 'milkdown', name: 'Milkdown', slug: 'milkdown' },
+        ],
+        total: 1,
+      },
+    });
+  },
+
+  'POST /blog/article/import-wordpress': async (server) => {
+    blogArticleServiceMock.importFromWordpress.mockResolvedValue({
+      created: 1,
+      items: [
+        {
+          action: 'created',
+          id: blogArticle.id,
+          slug: blogArticle.slug,
+          title: blogArticle.title,
+        },
+      ],
+      skipped: 0,
+      total: 1,
+      updated: 0,
+    });
+
+    const response = await request(server)
+      .post('/blog/article/import-wordpress')
+      .send({
+        overwrite: false,
+        pageNo: 1,
+        pageSize: 10,
+      })
+      .expect(200);
+
+    expect(blogArticleServiceMock.importFromWordpress).toHaveBeenCalledWith({
+      overwrite: false,
+      pageNo: 1,
+      pageSize: 10,
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: {
+        created: 1,
+        skipped: 0,
+        total: 1,
+        updated: 0,
+      },
+    });
+  },
+
+  'GET /blog/category/list': async (server) => {
+    blogTermServiceMock.page.mockResolvedValue({
+      list: [blogTerm],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/blog/category/list')
+      .query({ pageNo: 1, pageSize: 10, search: '技' })
+      .expect(200);
+
+    expect(blogTermServiceMock.page).toHaveBeenCalledWith('category', {
+      pageNo: '1',
+      pageSize: '10',
+      search: '技',
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: {
+        list: [blogTerm],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /blog/category/detail': async (server) => {
+    blogTermServiceMock.detail.mockResolvedValue(blogTerm);
+
+    const response = await request(server)
+      .get('/blog/category/detail')
+      .query({ id: blogTerm.id })
+      .expect(200);
+
+    expect(blogTermServiceMock.detail).toHaveBeenCalledWith(
+      'category',
+      blogTerm.id,
+    );
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: blogTerm,
+    });
+  },
+
+  'POST /blog/category/save': async (server) => {
+    blogTermServiceMock.save.mockResolvedValue(blogTerm);
+
+    const response = await request(server)
+      .post('/blog/category/save')
+      .send({
+        description: blogTerm.description,
+        name: blogTerm.name,
+        slug: blogTerm.slug,
+      })
+      .expect(200);
+
+    expect(blogTermServiceMock.save).toHaveBeenCalledWith('category', {
+      description: blogTerm.description,
+      name: blogTerm.name,
+      slug: blogTerm.slug,
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: blogTerm,
+    });
+  },
+
+  'POST /blog/category/update': async (server) => {
+    blogTermServiceMock.update.mockResolvedValue(blogTerm);
+
+    const response = await request(server)
+      .post('/blog/category/update')
+      .send({
+        id: blogTerm.id,
+        name: blogTerm.name,
+      })
+      .expect(200);
+
+    expect(blogTermServiceMock.update).toHaveBeenCalledWith('category', {
+      id: blogTerm.id,
+      name: blogTerm.name,
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: blogTerm,
+    });
+  },
+
+  'POST /blog/category/remove': async (server) => {
+    blogTermServiceMock.remove.mockResolvedValue(true);
+
+    const response = await request(server)
+      .post('/blog/category/remove')
+      .query({ id: blogTerm.id })
+      .expect(200);
+
+    expect(blogTermServiceMock.remove).toHaveBeenCalledWith(
+      'category',
+      blogTerm.id,
+    );
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: true,
+    });
+  },
+
+  'GET /blog/tag/list': async (server) => {
+    blogTermServiceMock.page.mockResolvedValue({
+      list: [blogTerm],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/blog/tag/list')
+      .query({ pageNo: 1, pageSize: 10, search: '技' })
+      .expect(200);
+
+    expect(blogTermServiceMock.page).toHaveBeenCalledWith('tag', {
+      pageNo: '1',
+      pageSize: '10',
+      search: '技',
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: {
+        list: [blogTerm],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /blog/tag/detail': async (server) => {
+    blogTermServiceMock.detail.mockResolvedValue(blogTerm);
+
+    const response = await request(server)
+      .get('/blog/tag/detail')
+      .query({ id: blogTerm.id })
+      .expect(200);
+
+    expect(blogTermServiceMock.detail).toHaveBeenCalledWith('tag', blogTerm.id);
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: blogTerm,
+    });
+  },
+
+  'POST /blog/tag/save': async (server) => {
+    blogTermServiceMock.save.mockResolvedValue(blogTerm);
+
+    const response = await request(server)
+      .post('/blog/tag/save')
+      .send({
+        name: blogTerm.name,
+        slug: blogTerm.slug,
+      })
+      .expect(200);
+
+    expect(blogTermServiceMock.save).toHaveBeenCalledWith('tag', {
+      name: blogTerm.name,
+      slug: blogTerm.slug,
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: blogTerm,
+    });
+  },
+
+  'POST /blog/tag/update': async (server) => {
+    blogTermServiceMock.update.mockResolvedValue(blogTerm);
+
+    const response = await request(server)
+      .post('/blog/tag/update')
+      .send({
+        id: blogTerm.id,
+        name: blogTerm.name,
+      })
+      .expect(200);
+
+    expect(blogTermServiceMock.update).toHaveBeenCalledWith('tag', {
+      id: blogTerm.id,
+      name: blogTerm.name,
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: blogTerm,
+    });
+  },
+
+  'POST /blog/tag/remove': async (server) => {
+    blogTermServiceMock.remove.mockResolvedValue(true);
+
+    const response = await request(server)
+      .post('/blog/tag/remove')
+      .query({ id: blogTerm.id })
+      .expect(200);
+
+    expect(blogTermServiceMock.remove).toHaveBeenCalledWith('tag', blogTerm.id);
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: true,
+    });
+  },
+
+  'GET /blog/term/options': async (server) => {
+    blogTermServiceMock.options.mockResolvedValue({
+      list: [blogTerm],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/blog/term/options')
+      .query({ kind: 'category', pageNo: 1, pageSize: 10 })
+      .expect(200);
+
+    expect(blogTermServiceMock.options).toHaveBeenCalledWith('category', {
+      kind: 'category',
+      pageNo: '1',
+      pageSize: '10',
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: {
+        list: [blogTerm],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /blog/theme/config': async (server) => {
+    blogThemeConfigServiceMock.publicConfig.mockResolvedValue(
+      wordpressThemeConfig,
+    );
+
+    const response = await request(server)
+      .get('/blog/theme/config')
+      .expect(200);
+
+    expect(blogThemeConfigServiceMock.publicConfig).toHaveBeenCalledWith();
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: wordpressThemeConfig,
+    });
+  },
+
+  'POST /blog/theme/save': async (server) => {
+    blogThemeConfigServiceMock.save.mockResolvedValue(wordpressThemeConfig);
+
+    const response = await request(server)
+      .post('/blog/theme/save')
+      .send({
+        config: wordpressThemeConfig,
+        source: 'local-admin',
+      })
+      .expect(200);
+
+    expect(blogThemeConfigServiceMock.save).toHaveBeenCalledWith({
+      config: wordpressThemeConfig,
+      source: 'local-admin',
+    });
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: wordpressThemeConfig,
+    });
+  },
+
+  'POST /blog/theme/import-wordpress': async (server) => {
+    blogThemeConfigServiceMock.importFromWordpress.mockResolvedValue(
+      wordpressThemeConfig,
+    );
+
+    const response = await request(server)
+      .post('/blog/theme/import-wordpress')
+      .expect(200);
+
+    expect(
+      blogThemeConfigServiceMock.importFromWordpress,
+    ).toHaveBeenCalledWith();
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: wordpressThemeConfig,
     });
   },
 
@@ -997,6 +1600,55 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  'GET /wordpress/article/public/list': async (server) => {
+    wordpressServiceMock.publicArticleList.mockResolvedValue({
+      list: [wordpressArticle],
+      total: 1,
+    });
+
+    const response = await request(server)
+      .get('/wordpress/article/public/list')
+      .query({
+        pageNo: 1,
+        pageSize: 10,
+        search: '文章',
+      })
+      .expect(200);
+
+    expect(wordpressServiceMock.publicArticleList).toHaveBeenCalledWith({
+      pageNo: '1',
+      pageSize: '10',
+      search: '文章',
+    });
+    expect(wordpressServiceMock.getAuthContext).not.toHaveBeenCalled();
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: {
+        list: [wordpressArticle],
+        total: 1,
+      },
+    });
+  },
+
+  'GET /wordpress/article/public/detail': async (server) => {
+    wordpressServiceMock.publicArticleDetail.mockResolvedValue(wordpressArticle);
+
+    const response = await request(server)
+      .get('/wordpress/article/public/detail')
+      .query({ slug: 'wordpress-article' })
+      .expect(200);
+
+    expect(wordpressServiceMock.publicArticleDetail).toHaveBeenCalledWith({
+      id: undefined,
+      slug: 'wordpress-article',
+    });
+    expect(wordpressServiceMock.getAuthContext).not.toHaveBeenCalled();
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: wordpressArticle,
+    });
+  },
+
   'POST /wordpress/article/save': async (server) => {
     wordpressServiceMock.articleSave.mockResolvedValue(wordpressArticle);
 
@@ -1303,6 +1955,21 @@ const routeTestCases: Record<string, RouteTestCase> = {
       data: true,
     });
   },
+
+  'GET /wordpress/theme/config': async (server) => {
+    wordpressServiceMock.themeConfig.mockResolvedValue(wordpressThemeConfig);
+
+    const response = await request(server)
+      .get('/wordpress/theme/config')
+      .expect(200);
+
+    expect(wordpressServiceMock.themeConfig).toHaveBeenCalledWith();
+    expect(wordpressServiceMock.getAuthContext).not.toHaveBeenCalled();
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: wordpressThemeConfig,
+    });
+  },
 };
 
 describe('KT Template Online API (e2e)', () => {
@@ -1331,6 +1998,18 @@ describe('KT Template Online API (e2e)', () => {
         {
           provide: SystemLogService,
           useValue: systemLogServiceMock,
+        },
+        {
+          provide: BlogArticleService,
+          useValue: blogArticleServiceMock,
+        },
+        {
+          provide: BlogTermService,
+          useValue: blogTermServiceMock,
+        },
+        {
+          provide: BlogThemeConfigService,
+          useValue: blogThemeConfigServiceMock,
         },
         {
           provide: MinioClientService,
@@ -1376,6 +2055,27 @@ describe('KT Template Online API (e2e)', () => {
     expect(Object.keys(routeTestCases).sort()).toEqual(
       controllerRoutes.map(routeKey).sort(),
     );
+  });
+
+  it('keeps Blog Web runtime endpoints public for WordPress replacement', () => {
+    expect(
+      Reflect.getMetadata(
+        IS_PUBLIC_KEY,
+        BlogArticleController.prototype.publicList,
+      ),
+    ).toBe(true);
+    expect(
+      Reflect.getMetadata(
+        IS_PUBLIC_KEY,
+        BlogArticleController.prototype.publicDetail,
+      ),
+    ).toBe(true);
+    expect(
+      Reflect.getMetadata(
+        IS_PUBLIC_KEY,
+        BlogThemeConfigController.prototype.config,
+      ),
+    ).toBe(true);
   });
 
   describe('generated route smoke tests', () => {

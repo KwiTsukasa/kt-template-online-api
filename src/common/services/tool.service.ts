@@ -132,6 +132,17 @@ export class ToolsService {
     return value === undefined || value === null ? '' : `${value}`;
   }
 
+  normalizeSlugText(value: unknown) {
+    const text = this.toTrimmedString(value);
+    if (!text) return '';
+
+    try {
+      return decodeURIComponent(text).toLowerCase().replace(/\s+/g, '-');
+    } catch {
+      return text.toLowerCase().replace(/\s+/g, '-');
+    }
+  }
+
   toPositiveNumber(
     value: number | string | undefined | null,
     fallback: number,

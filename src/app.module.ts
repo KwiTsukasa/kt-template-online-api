@@ -15,6 +15,7 @@ import {
   SaveBodyInterceptor,
 } from './common';
 import { AdminModule } from './admin/admin.module';
+import { BlogModule } from './blog/blog.module';
 import { WordpressModule } from './wordpress/wordpress.module';
 import { QqbotModule } from './qqbot/qqbot.module';
 
@@ -64,6 +65,7 @@ import { QqbotModule } from './qqbot/qqbot.module';
     MinioClientModule,
     CommonModule,
     AdminModule,
+    BlogModule,
     WordpressModule,
     QqbotModule,
   ],

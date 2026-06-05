@@ -33,6 +33,7 @@ def requiredRuntimeEnvKeys() {
     'DB_PASSWORD',
     'DB_DATABASE',
     'ADMIN_TOKEN_SECRET',
+    'WORDPRESS_BASE_URL',
     'FFLOGS_CLIENT_ID',
     'FFLOGS_CLIENT_SECRET',
   ]

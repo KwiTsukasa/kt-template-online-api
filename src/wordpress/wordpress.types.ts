@@ -46,7 +46,7 @@ export type WordpressPagedQueryDto =
   | WordpressTermListQueryDto;
 
 export type WordpressRequestOptions = {
-  auth: WordpressAuthContext;
+  auth?: WordpressAuthContext;
   body?: Record<string, unknown>;
   method?: 'GET' | 'POST' | 'DELETE';
   query?: Record<string, unknown>;
@@ -55,4 +55,60 @@ export type WordpressRequestOptions = {
 export type WordpressResponse<T> = {
   data: T;
   total?: number;
+};
+
+export type WordpressArgonMenuItem = {
+  external?: boolean;
+  href: string;
+  icon?: string;
+  label: string;
+};
+
+export type WordpressArgonThemeConfig = {
+  argonConfig: {
+    codeHighlight: {
+      breakLine: boolean;
+      enable: boolean;
+      hideLinenumber: boolean;
+      transparentLinenumber: boolean;
+    };
+    dateFormat: string;
+    disablePjax: boolean;
+    foldLongComments: boolean;
+    foldLongShuoshuo: boolean;
+    headroom: boolean | string;
+    language: string;
+    lazyload: {
+      effect: string;
+      threshold: number;
+    };
+    pangu: string;
+    pjaxAnimationDuration: number;
+    waterflowColumns: number | string;
+    wpPath: string;
+    zoomify: boolean;
+  };
+  backgroundDarkBrightness?: number;
+  backgroundDarkImage?: string;
+  backgroundDarkOpacity?: number;
+  backgroundImage?: string;
+  backgroundOpacity?: number;
+  bodyClass: string[];
+  darkmodeAutoSwitch: string;
+  enableCustomThemeColor: boolean;
+  headerMenu?: WordpressArgonMenuItem[];
+  htmlClass: string[];
+  site: {
+    authorAvatar?: string;
+    authorName?: string;
+    description: string;
+    home: string;
+    title: string;
+    url: string;
+  };
+  sidebarMenu?: WordpressArgonMenuItem[];
+  themeCardRadius: number;
+  themeColor: string;
+  themeColorRgb: string;
+  themeVersion: string;
 };

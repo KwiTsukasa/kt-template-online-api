@@ -5,6 +5,7 @@ import { WordpressAuthController } from './wordpress-auth.controller';
 import { WordpressCategoryController } from './wordpress-category.controller';
 import { WordpressService } from './wordpress.service';
 import { WordpressTagController } from './wordpress-tag.controller';
+import { WordpressThemeController } from './wordpress-theme.controller';
 
 @Module({
   imports: [AdminAuthGuardModule],
@@ -13,6 +14,7 @@ import { WordpressTagController } from './wordpress-tag.controller';
     WordpressArticleController,
     WordpressTagController,
     WordpressCategoryController,
+    WordpressThemeController,
   ],
   providers: [WordpressService],
   exports: [WordpressService],

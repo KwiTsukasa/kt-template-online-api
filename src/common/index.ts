@@ -9,6 +9,7 @@ export * from './interceptors/save-body.interceptor';
 export * from './logger/loki-log-publisher.service';
 export * from './logger/pino-logger.config';
 export * from './response/vben-response';
+export * from './services/markdown.service';
 export * from './services/tool.service';
 export * from './snowflake/snowflake-id';
 export * from './snowflake/snowflake-id.subscriber';

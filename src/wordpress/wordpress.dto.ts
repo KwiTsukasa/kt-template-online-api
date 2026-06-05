@@ -78,6 +78,12 @@ export class WordpressArticleBodyDto {
   content?: string;
 
   @ApiPropertyOptional({
+    enum: ['html', 'markdown'],
+    description: '文章内容格式，markdown 会在后端转换为安全 HTML',
+  })
+  contentFormat?: 'html' | 'markdown';
+
+  @ApiPropertyOptional({
     description: '文章摘要',
   })
   excerpt?: string;

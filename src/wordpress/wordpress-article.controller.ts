@@ -13,7 +13,7 @@ import {
 import { ApiHeader, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
-import { vbenSuccess } from '@/common';
+import { Public, vbenSuccess } from '@/common';
 import {
   WordpressArticleBodyDto,
   WordpressArticleListQueryDto,
@@ -36,6 +36,33 @@ import { WordpressService } from './wordpress.service';
 @UseGuards(JwtAuthGuard)
 export class WordpressArticleController {
   constructor(private readonly wordpressService: WordpressService) {}
+
+  @Get('public/list')
+  @Public()
+  @ApiOperation({ summary: '获取公开 WordPress 文章分页列表' })
+  async publicList(@Res() res, @Query() query: WordpressArticleListQueryDto) {
+    const list = await this.wordpressService.publicArticleList(query);
+
+    return res.send(vbenSuccess(list));
+  }
+
+  @Get('public/detail')
+  @Public()
+  @ApiOperation({ summary: '获取公开 WordPress 文章详情' })
+  @ApiQuery({ name: 'slug', required: false, type: String })
+  @ApiQuery({ name: 'id', required: false, type: Number })
+  async publicDetail(
+    @Res() res,
+    @Query('slug') slug?: string,
+    @Query('id') id?: string,
+  ) {
+    const detail = await this.wordpressService.publicArticleDetail({
+      id,
+      slug,
+    });
+
+    return res.send(vbenSuccess(detail));
+  }
 
   @Get('list')
   @ApiOperation({ summary: '获取 WordPress 文章分页列表' })

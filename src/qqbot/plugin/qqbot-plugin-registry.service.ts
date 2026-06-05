@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { formatKtDateTime, throwVbenError } from '@/common';
+import { QqbotBangDreamPluginService } from '../plugins/bangDream/qqbot-bangdream.plugin';
 import { QqbotFf14MarketPluginService } from '../plugins/ff14Market/qqbot-ff14-market.plugin';
 import { QqbotFflogsPluginService } from '../plugins/fflogs/qqbot-fflogs.plugin';
 import type {
@@ -15,11 +16,13 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   private readonly plugins = new Map<string, QqbotIntegrationPlugin>();
 
   constructor(
+    private readonly bangDreamPlugin: QqbotBangDreamPluginService,
     private readonly ff14MarketPlugin: QqbotFf14MarketPluginService,
     private readonly fflogsPlugin: QqbotFflogsPluginService,
   ) {}
 
   onModuleInit() {
+    this.register(this.bangDreamPlugin.getPlugin());
     this.register(this.ff14MarketPlugin.getPlugin());
     this.register(this.fflogsPlugin.getPlugin());
   }

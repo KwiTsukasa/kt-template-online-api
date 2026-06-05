@@ -38,6 +38,8 @@ import { QqbotPermissionService } from './permission/qqbot-permission.service';
 import { QqbotEventPluginRegistryService } from './plugin/qqbot-event-plugin-registry.service';
 import { QqbotPluginController } from './plugin/qqbot-plugin.controller';
 import { QqbotPluginRegistryService } from './plugin/qqbot-plugin-registry.service';
+import { QqbotBangDreamClientService } from './plugins/bangDream/qqbot-bangdream-client.service';
+import { QqbotBangDreamPluginService } from './plugins/bangDream/qqbot-bangdream.plugin';
 import { QqbotFf14ClientService } from './plugins/ff14Market/qqbot-ff14-client.service';
 import { QqbotFf14MarketPluginService } from './plugins/ff14Market/qqbot-ff14-market.plugin';
 import { QqbotFflogsClientService } from './plugins/fflogs/qqbot-fflogs-client.service';
@@ -94,6 +96,8 @@ import { QqbotSendService } from './send/qqbot-send.service';
     QqbotDashboardService,
     QqbotDedupeService,
     QqbotEventService,
+    QqbotBangDreamClientService,
+    QqbotBangDreamPluginService,
     QqbotFf14ClientService,
     QqbotFf14MarketPluginService,
     QqbotFflogsClientService,

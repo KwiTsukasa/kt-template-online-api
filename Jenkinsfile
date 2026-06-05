@@ -208,8 +208,8 @@ pipeline {
     stage('Test') {
       steps {
         script {
-          // 当前单测配置查找 src/**/*.spec.ts，允许空测试集，后续补齐 spec 后仍会正常执行。
-          runCmd('pnpm test --passWithNoTests')
+          // 当前单测配置查找 test/**/*.spec.ts，Jest 参数需要通过 pnpm run 的 -- 透传。
+          runCmd('pnpm run test -- --passWithNoTests')
         }
       }
     }

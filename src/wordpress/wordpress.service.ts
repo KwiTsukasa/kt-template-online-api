@@ -1,3 +1,6 @@
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
+import type { IncomingHttpHeaders } from 'node:http';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response as ExpressResponse } from 'express';
@@ -628,6 +631,13 @@ export class WordpressService {
     init: RequestInit = {},
     timeoutMs?: number,
   ) {
+    const url = this.getUrl(path);
+    const hostHeader = this.getWordpressHostHeader();
+
+    if (hostHeader) {
+      return this.rawNodeRequest(url, init, timeoutMs, hostHeader);
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(
       () => controller.abort(),
@@ -635,7 +645,7 @@ export class WordpressService {
     );
 
     try {
-      return await fetch(this.getUrl(path), {
+      return await fetch(url, {
         ...init,
         signal: controller.signal,
       });
@@ -652,6 +662,140 @@ export class WordpressService {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private async rawNodeRequest(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number | undefined,
+    hostHeader: string,
+    redirectCount = 0,
+  ): Promise<globalThis.Response> {
+    const response = await this.executeRawNodeRequest(
+      url,
+      init,
+      timeoutMs,
+      hostHeader,
+    );
+    const shouldFollowRedirect =
+      (init.redirect || 'follow') !== 'manual' &&
+      response.status >= 300 &&
+      response.status < 400 &&
+      !!response.headers.get('location');
+
+    if (!shouldFollowRedirect) {
+      return response;
+    }
+
+    if (redirectCount >= 5) {
+      return response;
+    }
+
+    const nextUrl = new URL(response.headers.get('location') || '', url);
+
+    return this.rawNodeRequest(
+      nextUrl.toString(),
+      init,
+      timeoutMs,
+      hostHeader,
+      redirectCount + 1,
+    );
+  }
+
+  private async executeRawNodeRequest(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number | undefined,
+    hostHeader: string,
+  ): Promise<globalThis.Response> {
+    const target = new URL(url);
+    const request = target.protocol === 'https:' ? httpsRequest : httpRequest;
+    const headers = this.getRawNodeRequestHeaders(init.headers, hostHeader);
+    const body = this.getRawNodeRequestBody(init.body);
+
+    if (body && !headers['content-length']) {
+      headers['content-length'] = `${Buffer.byteLength(body)}`;
+    }
+
+    return new Promise((resolve, reject) => {
+      const req = request(
+        target,
+        {
+          headers,
+          method: init.method || 'GET',
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+
+          res.on('data', (chunk) => {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          });
+          res.on('error', reject);
+          res.on('end', () => {
+            resolve(
+              new Response(Buffer.concat(chunks), {
+                headers: this.toResponseHeaders(res.headers),
+                status: res.statusCode || HttpStatus.BAD_GATEWAY,
+                statusText: res.statusMessage,
+              }),
+            );
+          });
+        },
+      );
+      const timer = setTimeout(() => {
+        const error = new Error('WordPress 请求超时');
+        error.name = 'AbortError';
+        req.destroy(error);
+      }, timeoutMs || this.getTimeout());
+
+      req.on('error', reject);
+      req.on('close', () => clearTimeout(timer));
+      req.end(body);
+    });
+  }
+
+  private getRawNodeRequestHeaders(
+    headersInit: HeadersInit | undefined,
+    hostHeader: string,
+  ) {
+    const headers = new Headers(headersInit);
+    const result: Record<string, string> = {};
+
+    headers.set('Host', hostHeader);
+    headers.forEach((value, key) => {
+      result[key] = value;
+    });
+
+    return result;
+  }
+
+  private getRawNodeRequestBody(body: RequestInit['body']) {
+    if (!body) return undefined;
+    if (typeof body === 'string') return body;
+    if (body instanceof URLSearchParams) return body.toString();
+    if (body instanceof ArrayBuffer) return Buffer.from(body);
+    if (ArrayBuffer.isView(body)) {
+      return Buffer.from(body.buffer, body.byteOffset, body.byteLength);
+    }
+
+    return body as any;
+  }
+
+  private toResponseHeaders(headers: IncomingHttpHeaders) {
+    const responseHeaders = new Headers();
+
+    Object.entries(headers).forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((item) => responseHeaders.append(key, item));
+        return;
+      }
+
+      if (value !== undefined) {
+        responseHeaders.set(key, value);
+      }
+    });
+
+    return responseHeaders;
   }
 
   private assertAuthContext(auth?: WordpressAuthContext) {
@@ -701,6 +845,19 @@ export class WordpressService {
       sameSite: secure ? ('none' as const) : ('lax' as const),
       secure,
     };
+  }
+
+  private getWordpressHostHeader() {
+    const host = this.toolsService.toTrimmedString(
+      this.configService.get<string>('WORDPRESS_HOST_HEADER'),
+    );
+
+    if (!host) return '';
+
+    return host
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/.*$/g, '')
+      .trim();
   }
 
   private getUrl(path: string, query?: Record<string, unknown>) {

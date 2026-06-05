@@ -1,3 +1,4 @@
+import { createServer, type Server } from 'node:http';
 import { ConfigService } from '@nestjs/config';
 import { MarkdownService, ToolsService } from '../../src/common';
 import { WordpressService } from '../../src/wordpress/wordpress.service';
@@ -177,6 +178,65 @@ describe('WordpressService theme config', () => {
       wpPath: '/',
       zoomify: false,
     });
+  });
+
+  it('uses configured WordPress host header for raw theme html requests', async () => {
+    const hosts: string[] = [];
+    const server = await new Promise<Server>((resolve) => {
+      const nextServer = createServer((request, response) => {
+        hosts.push(request.headers.host || '');
+
+        if (request.headers.host !== 'blog.kwitsukasa.top') {
+          response.writeHead(301, {
+            Location: 'http://127.0.0.1/',
+          });
+          response.end();
+          return;
+        }
+
+        if (request.url?.includes('rest_route=')) {
+          response.writeHead(200, {
+            'Content-Type': 'application/json',
+          });
+          response.end(JSON.stringify(rootPayload));
+          return;
+        }
+
+        response.writeHead(200, {
+          'Content-Type': 'text/html',
+        });
+        response.end(html);
+      });
+
+      nextServer.listen(0, '127.0.0.1', () => resolve(nextServer));
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('测试服务启动失败');
+      }
+      service = new WordpressService(
+        new ConfigService({
+          WORDPRESS_BASE_URL: `http://127.0.0.1:${address.port}`,
+          WORDPRESS_HOST_HEADER: 'blog.kwitsukasa.top',
+        }),
+        markdownService,
+        new ToolsService(),
+      );
+
+      const config = await service.themeConfig();
+
+      expect(config.themeColor).toBe('#c3a1ed');
+      expect(config.site.title).toBe('KwiTsukasa的小站');
+      expect(hosts).toEqual([
+        'blog.kwitsukasa.top',
+        'blog.kwitsukasa.top',
+      ]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   it('renders markdown article content before saving to WordPress', async () => {

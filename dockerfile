@@ -27,7 +27,8 @@ ENV FFLOGS_REQUEST_TIMEOUT_MS=10000
 COPY package.json pnpm-lock.yaml ./
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends fonts-noto-cjk openssh-client \
+  && apt-get install -y --no-install-recommends fontconfig fonts-noto-cjk openssh-client \
+  && fc-cache -f \
   && rm -rf /var/lib/apt/lists/*
 
 # 生产镜像只安装运行依赖，dist 由 Jenkins Build stage 提前产出。

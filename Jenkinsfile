@@ -208,8 +208,8 @@ pipeline {
     stage('Test') {
       steps {
         script {
-          // 当前单测配置查找 test/**/*.spec.ts，Jest 参数需要通过 pnpm run 的 -- 透传。
-          runCmd('pnpm run test -- --passWithNoTests')
+          // 直接执行 Jest，避免不同 pnpm 版本把 --passWithNoTests 当成测试匹配模式。
+          runCmd('pnpm exec jest --passWithNoTests')
         }
       }
     }

@@ -35,4 +35,30 @@ describe('MarkdownService', () => {
     expect(html).not.toContain('onclick');
     expect(html).not.toContain('<script>');
   });
+
+  it('builds sanitizer schema for content classes and image loading', () => {
+    const schema = (service as any).createSanitizeSchema({
+      attributes: {
+        a: ['href'],
+        img: ['src'],
+      },
+      tagNames: ['p'],
+    });
+
+    expect(schema.tagNames).toEqual(['p', 'figcaption', 'figure']);
+    expect(schema.attributes.a).toEqual([
+      'href',
+      'target',
+      'rel',
+      ['className', /^(kt-md-|wp-|align|size-|is-|has-|language-|attachment-)/],
+    ]);
+    expect(schema.attributes.figure).toEqual([
+      ['className', /^(kt-md-|wp-|align|size-|is-|has-|language-|attachment-)/],
+    ]);
+    expect(schema.attributes.img).toEqual([
+      'src',
+      'loading',
+      ['className', /^(kt-md-|wp-|align|size-|is-|has-|language-|attachment-)/],
+    ]);
+  });
 });

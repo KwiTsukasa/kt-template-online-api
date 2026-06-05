@@ -24,6 +24,34 @@ const MARKDOWN_SOURCE_PATTERN =
   /<!--\s*kt-markdown-source:([A-Za-z0-9+/=]+)\s*-->/;
 const CONTENT_CLASS_PATTERN =
   /^(kt-md-|wp-|align|size-|is-|has-|language-|attachment-)/;
+const CONTENT_CLASS_ATTRIBUTE = ['className', CONTENT_CLASS_PATTERN];
+const EXTRA_TAG_NAMES = ['figcaption', 'figure'];
+const CONTENT_CLASS_TAG_NAMES = [
+  'a',
+  'blockquote',
+  'code',
+  'div',
+  'figcaption',
+  'figure',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'li',
+  'ol',
+  'p',
+  'pre',
+  'span',
+  'table',
+  'tbody',
+  'td',
+  'th',
+  'thead',
+  'tr',
+  'ul',
+];
 
 @Injectable()
 export class MarkdownService {
@@ -185,49 +213,27 @@ export class MarkdownService {
 
   private createSanitizeSchema(defaultSchema: unknown) {
     const schema = defaultSchema as Record<string, any>;
-    const attributes = schema.attributes || {};
-    const classNameAttribute = ['className', CONTENT_CLASS_PATTERN];
+    const attributes = (schema.attributes || {}) as Record<string, any[]>;
+    const classAttributes = Object.fromEntries(
+      CONTENT_CLASS_TAG_NAMES.map((tagName) => [
+        tagName,
+        [...(attributes[tagName] || []), CONTENT_CLASS_ATTRIBUTE],
+      ]),
+    );
 
     return {
       ...schema,
       tagNames: [
         ...new Set([
           ...(schema.tagNames || []),
-          'figcaption',
-          'figure',
+          ...EXTRA_TAG_NAMES,
         ]),
       ],
       attributes: {
         ...attributes,
-        a: [...(attributes.a || []), 'target', 'rel', classNameAttribute],
-        blockquote: [...(attributes.blockquote || []), classNameAttribute],
-        code: [...(attributes.code || []), classNameAttribute],
-        div: [...(attributes.div || []), classNameAttribute],
-        figcaption: [...(attributes.figcaption || []), classNameAttribute],
-        figure: [...(attributes.figure || []), classNameAttribute],
-        h1: [...(attributes.h1 || []), classNameAttribute],
-        h2: [...(attributes.h2 || []), classNameAttribute],
-        h3: [...(attributes.h3 || []), classNameAttribute],
-        h4: [...(attributes.h4 || []), classNameAttribute],
-        h5: [...(attributes.h5 || []), classNameAttribute],
-        h6: [...(attributes.h6 || []), classNameAttribute],
-        img: [
-          ...(attributes.img || []),
-          'loading',
-          classNameAttribute,
-        ],
-        li: [...(attributes.li || []), classNameAttribute],
-        ol: [...(attributes.ol || []), classNameAttribute],
-        p: [...(attributes.p || []), classNameAttribute],
-        pre: [...(attributes.pre || []), classNameAttribute],
-        span: [...(attributes.span || []), classNameAttribute],
-        table: [...(attributes.table || []), classNameAttribute],
-        tbody: [...(attributes.tbody || []), classNameAttribute],
-        td: [...(attributes.td || []), classNameAttribute],
-        th: [...(attributes.th || []), classNameAttribute],
-        thead: [...(attributes.thead || []), classNameAttribute],
-        tr: [...(attributes.tr || []), classNameAttribute],
-        ul: [...(attributes.ul || []), classNameAttribute],
+        ...classAttributes,
+        a: [...(attributes.a || []), 'target', 'rel', CONTENT_CLASS_ATTRIBUTE],
+        img: [...(attributes.img || []), 'loading', CONTENT_CLASS_ATTRIBUTE],
       },
     };
   }

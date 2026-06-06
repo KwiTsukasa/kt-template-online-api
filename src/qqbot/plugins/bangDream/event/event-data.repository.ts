@@ -268,7 +268,7 @@ export class EventDataRepository {
     if (rewardId === undefined) return undefined;
 
     const { bangDreamMainDataRepository } = await import(
-      '@/qqbot/plugins/bangDream/shared/main-data.repository'
+      '../shared/main-data.repository'
     );
     const allDeco = bangDreamMainDataRepository.getCollection<
       Record<string, any>

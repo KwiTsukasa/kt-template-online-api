@@ -34,7 +34,7 @@ async function defaultAssetClient(
   options: BangDreamAssetRequestOptions = {},
 ): Promise<Buffer> {
   const { downloadFile, downloadFileCache } = await import(
-    '@/qqbot/plugins/bangDream/provider/asset-cache.client'
+    './asset-cache.client'
   );
   const ignoreError = options.ignoreError ?? true;
   if (options.memoryCache === false || options.overwrite) {

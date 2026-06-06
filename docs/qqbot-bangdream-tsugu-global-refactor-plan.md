@@ -307,6 +307,7 @@ export interface TsuguHook {
 - 已新增 `models/attribute-resource-repository.ts`，把 `Attribute` 的属性图标 SVG 资源路径从 `bestdoriUrl + downloadFileCache` 收口到 provider-backed repository；`attribute-resource-repository.spec.ts` 覆盖属性图标路径和下载调用，本地 `/查卡 472` 图片 smoke 保持非空输出。
 - 已新增 `models/server-resource-repository.ts`，把 `Server` 的服务器图标 SVG 资源路径从 `bestdoriUrl + downloadFileCache` 收口到 provider-backed repository，并把台服本地图标路径改走 asset manifest；`server-resource-repository.spec.ts` 覆盖服务器图标路径、台服本地图标路径和下载调用，本地 `/查卡 472` 图片 smoke 保持非空输出。
 - 已新增 `render-blocks/card-art-resource-repository.ts`，把 `card-art.ts` 的卡牌小图/插画边框资源下载从 `bestdoriUrl + downloadFileCache` 收口到 provider-backed repository，`card-art-spec.ts` 改为只生成 `/res/image/...` 相对资源路径；`card-art-resource-repository.spec.ts` 覆盖边框下载调用，本地 `/查卡 472` 图片 smoke 保持非空输出。
+- 已新增 `models/costume-resource-repository.ts`，把 `Costume` 的服装详情请求和 Live2D 缩略图素材路径从 `bestdoriUrl + callAPIAndCacheResponse/downloadFile` 收口到 provider-backed repository；`costume-resource-repository.spec.ts` 覆盖详情路径、`sdchara.png` 路径和非内存缓存下载调用，本地 `/查卡 472` 图片 smoke 保持演出缩略图正常输出。
 - 固化：Windows 下不要用反斜杠测试路径直接调用 Jest pattern，容易出现 `Pattern ... - 0 matches`；指定文件测试统一使用 `pnpm exec jest --runInBand --runTestsByPath test/qqbot/plugins/bangDream/tsugu/<file>.spec.ts ...`，路径用正斜杠。
 
 ### Phase 4：搜索 specification 和 matcher

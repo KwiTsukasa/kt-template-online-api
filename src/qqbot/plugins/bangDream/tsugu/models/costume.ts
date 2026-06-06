@@ -1,16 +1,9 @@
-import { callAPIAndCacheResponse } from '@/qqbot/plugins/bangDream/tsugu/data-clients/api-cache-client';
-import { downloadFile } from '@/qqbot/plugins/bangDream/tsugu/data-clients/asset-cache-client';
-import {
-  bestdoriUrl,
-  globalDefaultServer,
-} from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
+import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import mainAPI from '@/qqbot/plugins/bangDream/tsugu/models/main-data-store';
-import {
-  Server,
-  getServerByPriority,
-} from '@/qqbot/plugins/bangDream/tsugu/models/server';
+import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { Image, loadImage } from 'skia-canvas';
 import { stringToNumberArray } from '@/qqbot/plugins/bangDream/tsugu/models/model-utils';
+import { costumeResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/models/costume-resource-repository';
 
 export class Costume {
   costumeId: number;
@@ -48,8 +41,8 @@ export class Costume {
     if (this.isInitfull) {
       return;
     }
-    const costumeData = await callAPIAndCacheResponse(
-      `${bestdoriUrl}/api/costumes/${this.costumeId}.json`,
+    const costumeData = await costumeResourceRepository.getDetail(
+      this.costumeId,
     );
     this.data = costumeData;
     this.isExist = true;
@@ -71,10 +64,11 @@ export class Costume {
     displayedServerList: Server[] = globalDefaultServer,
   ): Promise<Image> {
     if (!displayedServerList) displayedServerList = globalDefaultServer;
-    const server = getServerByPriority(this.publishedAt, displayedServerList);
-    const sdCharacterBuffer = await downloadFile(
-      `${bestdoriUrl}/assets/${Server[server]}/characters/livesd/${this.sdResourceName}_rip/sdchara.png`,
-    );
+    const sdCharacterBuffer =
+      await costumeResourceRepository.getSdCharacterBuffer(
+        this,
+        displayedServerList,
+      );
     return await loadImage(sdCharacterBuffer);
   }
 }

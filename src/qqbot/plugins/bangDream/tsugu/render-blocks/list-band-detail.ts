@@ -11,6 +11,16 @@ import {
   BANGDREAM_STAGE_CHALLENGE_BAND_ID,
 } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
 import { deckRankResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/deck-rank-resource-repository';
+import {
+  createBandDetailItemLayout,
+  createBandDetailListFrameSpec,
+  createBandDetailLogoSpec,
+  createBandDetailTextSpec,
+  createDeckRankCanvasSpec,
+  createDeckRankImageLayout,
+  createDeckRankLevelImageSpec,
+  normalizeDeckRankLevelSpriteRankId,
+} from './list-band-detail-spec';
 
 interface drawBandDetailsInListOptions {
   [bandId: number]: Array<Canvas | Image | string>;
@@ -30,33 +40,30 @@ async function drawBandDetailsInList(
   for (const i in BandDetailsInListOptions) {
     const tempBand = new Band(parseInt(i));
     const content = BandDetailsInListOptions[i];
-    const maxWidth = 152;
-    const logoWidth = 110;
     const tempBandIcon = resizeImage({
       image: await tempBand.getLogo(),
-      widthMax: logoWidth,
+      ...createBandDetailLogoSpec(),
     });
-    const canvas = new Canvas(maxWidth, 100);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(tempBandIcon, (maxWidth - logoWidth) / 2, 0);
+    const textSpec = createBandDetailTextSpec();
     const tempBandRankText = drawTextWithImages({
       content,
-      maxWidth: maxWidth,
-      lineHeight: 40,
+      maxWidth: textSpec.maxWidth,
+      lineHeight: textSpec.lineHeight,
     });
-    ctx.drawImage(
-      tempBandRankText,
-      maxWidth / 2 - tempBandRankText.width / 2,
-      50,
-    );
+    const layout = createBandDetailItemLayout(tempBandRankText);
+    const canvas = new Canvas(layout.canvasWidth, layout.canvasHeight);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(tempBandIcon, layout.logoX, layout.logoY);
+    ctx.drawImage(tempBandRankText, layout.textX, layout.textY);
     bandAndContentList.push(canvas);
   }
+  const frameSpec = createBandDetailListFrameSpec(bandAndContentList?.[0]);
   const bandAndContentListImage = drawList({
     key,
     content: bandAndContentList,
-    spacing: 0,
-    lineHeight: bandAndContentList?.[0].height,
-    textSize: bandAndContentList?.[0].height,
+    spacing: frameSpec.spacing,
+    lineHeight: frameSpec.lineHeight,
+    textSize: frameSpec.textSize,
   });
   return bandAndContentListImage;
 }
@@ -145,27 +152,24 @@ export async function drawPlayerDeckTotalRatingInList(
       const rankName = userDeckTotalRatingMap[i].rank;
       let rankId = BANGDREAM_DECK_TOTAL_RATING_ID[rankName];
       const rankImage = await loadRankImage(`rank_${rankId}`);
-      const widthMax = 150,
-        heightMax = 100;
-      const canvas = new Canvas(widthMax, heightMax);
+      const canvasSpec = createDeckRankCanvasSpec();
+      const canvas = new Canvas(canvasSpec.width, canvasSpec.height);
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(rankImage, (widthMax - rankImage.width) / 2, 0);
+      const rankLayout = createDeckRankImageLayout(rankImage);
+      ctx.drawImage(rankImage, rankLayout.rankX, rankLayout.rankY);
       if (userDeckTotalRatingMap[i].level != 0) {
-        //ss与s字体相同
-        if (rankId > 4) {
-          rankId = 4;
-        }
+        rankId = normalizeDeckRankLevelSpriteRankId(rankId);
         const rankLevelImage = resizeImage({
           image: await loadRankImage(
             `rank_${rankId}_${userDeckTotalRatingMap[i].level}`,
           ),
-          heightMax: 50,
+          ...createDeckRankLevelImageSpec(),
         });
-        ctx.drawImage(
+        const levelLayout = createDeckRankImageLayout(
+          rankImage,
           rankLevelImage,
-          (widthMax + rankImage.width) / 2 + 2 - rankLevelImage.width,
-          45,
         );
+        ctx.drawImage(rankLevelImage, levelLayout.levelX, levelLayout.levelY);
       }
       BandDetails[i] = [canvas];
     } else {

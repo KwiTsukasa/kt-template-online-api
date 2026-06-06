@@ -1,6 +1,5 @@
 import { Canvas, Image, loadImage } from 'skia-canvas';
 import { bangDreamBestdoriProvider } from '@/qqbot/plugins/bangDream/tsugu/data-clients/bestdori-provider';
-import { bangDreamMainDataRepository } from '@/qqbot/plugins/bangDream/tsugu/models/main-data-repository';
 import {
   getServerByPriority,
   Server,
@@ -35,7 +34,11 @@ type RewardWithId = {
   rewardType: string;
 };
 
-class EventDataRepository {
+export class EventDataRepository {
+  constructor(
+    private readonly provider = bangDreamBestdoriProvider,
+  ) {}
+
   /**
    * 获取活动远端详情数据。
    *
@@ -44,10 +47,38 @@ class EventDataRepository {
    */
   async getDetail(eventId: number, update = true): Promise<Record<string, any>> {
     const cacheTime = update ? 0 : 1 / 0;
-    return await bangDreamBestdoriProvider.getJson<Record<string, any>>(
+    return await this.provider.getJson<Record<string, any>>(
       `/api/events/${eventId}.json`,
       { cacheTime },
     );
+  }
+
+  /**
+   * 获取活动背景资源路径。
+   *
+   * @param event - 活动资源上下文。
+   * @param displayedServerList - 展示服务器优先级。
+   */
+  getBackgroundImagePath(
+    event: EventAssetContext,
+    displayedServerList: Server[] = globalDefaultServer,
+  ): string {
+    const server = getServerByPriority(event.startAt, displayedServerList);
+    return `/assets/${Server[server]}/event/${event.assetBundleName}/topscreen_rip/bg_eventtop.png`;
+  }
+
+  /**
+   * 获取活动主界面裁切图资源路径。
+   *
+   * @param event - 活动资源上下文。
+   * @param displayedServerList - 展示服务器优先级。
+   */
+  getTopscreenTrimImagePath(
+    event: EventAssetContext,
+    displayedServerList: Server[] = globalDefaultServer,
+  ): string {
+    const server = getServerByPriority(event.startAt, displayedServerList);
+    return `/assets/${Server[server]}/event/${event.assetBundleName}/topscreen_rip/trim_eventtop.png`;
   }
 
   /**
@@ -62,13 +93,13 @@ class EventDataRepository {
   ): Promise<Image> {
     const server = getServerByPriority(event.startAt, displayedServerList);
     try {
-      const bannerImageBuffer = await bangDreamBestdoriProvider.getAsset(
+      const bannerImageBuffer = await this.provider.getAsset(
         `/assets/${Server[server]}/event/${event.assetBundleName}/images_rip/banner.png`,
         { ignoreError: false },
       );
       return await loadImage(bannerImageBuffer);
     } catch {
-      const bannerImageBuffer = await bangDreamBestdoriProvider.getAsset(
+      const bannerImageBuffer = await this.provider.getAsset(
         `/assets/jp/homebanner_rip/${event.bannerAssetBundleName}.png`,
       );
       return await loadImage(bannerImageBuffer);
@@ -79,15 +110,21 @@ class EventDataRepository {
    * 获取活动背景图。
    *
    * @param event - 活动资源上下文。
+   * @param displayedServerList - 展示服务器优先级。
    */
-  async getBackgroundImage(event: EventAssetContext): Promise<Image | Canvas> {
-    const server = getServerByPriority(event.startAt);
-    const bgImageBuffer = await bangDreamBestdoriProvider.getAsset(
-      `/assets/${Server[server]}/event/${event.assetBundleName}/topscreen_rip/bg_eventtop.png`,
+  async getBackgroundImage(
+    event: EventAssetContext,
+    displayedServerList: Server[] = globalDefaultServer,
+  ): Promise<Image | Canvas> {
+    const bgImageBuffer = await this.provider.getAsset(
+      this.getBackgroundImagePath(event, displayedServerList),
     );
     const backgroundImage = await loadImage(bgImageBuffer);
     try {
-      const trimImage = await this.getTopscreenTrimImage(event);
+      const trimImage = await this.getTopscreenTrimImage(
+        event,
+        displayedServerList,
+      );
       return this.mergeTopscreenImages(backgroundImage, trimImage);
     } catch {
       return backgroundImage;
@@ -110,7 +147,7 @@ class EventDataRepository {
     let ruleNumber = 1;
     while (true) {
       try {
-        const slideImageBuffer = await bangDreamBestdoriProvider.getAsset(
+        const slideImageBuffer = await this.provider.getAsset(
           `${basePath}rule${ruleNumber}.png`,
           { ignoreError: false },
         );
@@ -127,11 +164,14 @@ class EventDataRepository {
    * 获取活动主界面裁切图。
    *
    * @param event - 活动资源上下文。
+   * @param displayedServerList - 展示服务器优先级。
    */
-  async getTopscreenTrimImage(event: EventAssetContext): Promise<Image> {
-    const server = getServerByPriority(event.startAt);
-    const topscreenTrimImageBuffer = await bangDreamBestdoriProvider.getAsset(
-      `/assets/${Server[server]}/event/${event.assetBundleName}/topscreen_rip/trim_eventtop.png`,
+  async getTopscreenTrimImage(
+    event: EventAssetContext,
+    displayedServerList: Server[] = globalDefaultServer,
+  ): Promise<Image> {
+    const topscreenTrimImageBuffer = await this.provider.getAsset(
+      this.getTopscreenTrimImagePath(event, displayedServerList),
     );
     return await loadImage(topscreenTrimImageBuffer);
   }
@@ -172,7 +212,7 @@ class EventDataRepository {
     tempServer: Server,
   ): Promise<Image> {
     const server = getServerByPriority(event.startAt, [tempServer]);
-    const logoImageBuffer = await bangDreamBestdoriProvider.getAsset(
+    const logoImageBuffer = await this.provider.getAsset(
       `/assets/${Server[server]}/event/${event.assetBundleName}/images_rip/logo.png`,
     );
     return await loadImage(logoImageBuffer);
@@ -188,7 +228,7 @@ class EventDataRepository {
     event: EventRewardContext,
     server: Server,
   ): Promise<Image | undefined> {
-    const allStamps = await bangDreamBestdoriProvider.getJson<
+    const allStamps = await this.provider.getJson<
       Record<string, any>
     >('/api/stamps/all.2.json');
     const rewardId = this.pickRewardId(event.pointRewards, 'stamp');
@@ -202,7 +242,7 @@ class EventDataRepository {
 
     const serverName = this.pickReleasedServerName(event.startAt, server, 'jp');
     try {
-      const stampBuffer = await bangDreamBestdoriProvider.getAsset(
+      const stampBuffer = await this.provider.getAsset(
         `/assets/${serverName}/stamp/01_rip/${stampAssetName}.png`,
         { ignoreError: false },
       );
@@ -227,6 +267,9 @@ class EventDataRepository {
     const rewardId = this.pickRewardId(event.rankingRewards, 'deco_pins');
     if (rewardId === undefined) return undefined;
 
+    const { bangDreamMainDataRepository } = await import(
+      '@/qqbot/plugins/bangDream/tsugu/models/main-data-repository'
+    );
     const allDeco = bangDreamMainDataRepository.getCollection<
       Record<string, any>
     >('deco');
@@ -235,7 +278,7 @@ class EventDataRepository {
 
     const serverName = this.pickReleasedServerName(event.startAt, server, 'cn');
     try {
-      const decoBuffer = await bangDreamBestdoriProvider.getAsset(
+      const decoBuffer = await this.provider.getAsset(
         `/assets/${serverName}/deco/pins_rip/${decoAssetName}.png`,
         { ignoreError: false },
       );

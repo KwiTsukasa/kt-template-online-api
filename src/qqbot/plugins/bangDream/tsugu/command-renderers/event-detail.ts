@@ -459,7 +459,9 @@ export async function drawEventDetail(
     all.push(gachaImageList[i]);
   }
 
-  const BGimage = useEasyBG ? undefined : await event.getEventBGImage();
+  const BGimage = useEasyBG
+    ? undefined
+    : await event.getEventBGImage(displayedServerList);
 
   return await createOutputFinalImages({
     useEasyBG,

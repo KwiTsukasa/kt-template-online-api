@@ -312,6 +312,7 @@ export interface TsuguHook {
 - 已新增 `models/cutoff-event-top-repository.ts` 和 `render-blocks/player-ranking-resource-repository.ts`，把前十榜 eventtop 数据请求与排名徽章素材路径从 `bestdoriUrl + callAPIAndCacheResponse/downloadFileCache` 收口到 provider-backed repository；相关 spec 覆盖 eventtop query path、排名徽章路径和 provider 调用，本地 `/ycx 10 100 cn` 图片 smoke 输出非空。
 - 已新增 `models/degree-resource-repository.ts`，把 `Degree` 的称号缩略图、称号框、称号图标、动态称号脚本和纹理素材路径从 `bestdoriUrl + downloadFile/downloadFileCache` 收口到 provider-backed repository；`degree-resource-repository.spec.ts` 覆盖旧/新缩略图 fallback、动态称号旧纹理白名单和 provider 调用，本地 `/ycx 10 100 cn` 图片 smoke 输出非空。
 - 已新增 `render-blocks/deck-rank-resource-repository.ts`，把玩家详情“乐队编成等级”Rank 图片从 `list-band-detail.ts` 的本地路径和 Bestdori URL 直拼收口到 repository，渲染层只负责 `Buffer -> Image`；`deck-rank-resource-repository.spec.ts` 覆盖本地素材优先、远端 `/res/icon/*.png` 兜底和 provider 调用，本地 `/查玩家 26591455 jp` 图片 smoke 输出非空。
+- `models/event-data-repository.ts` 已改为 provider-injected repository，并为活动背景和 topscreen trim 增加路径工厂；活动详情背景现在跟随 `displayedServerList` 选服，不再无条件按全局默认服取底图，避免 `/查活动 ... jp` 这类指定服务器查询出现横幅和背景不一致。
 - 固化：Windows 下不要用反斜杠测试路径直接调用 Jest pattern，容易出现 `Pattern ... - 0 matches`；指定文件测试统一使用 `pnpm exec jest --runInBand --runTestsByPath test/qqbot/plugins/bangDream/tsugu/<file>.spec.ts ...`，路径用正斜杠。
 
 ### Phase 4：搜索 specification 和 matcher

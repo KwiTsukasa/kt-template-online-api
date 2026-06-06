@@ -214,8 +214,13 @@ export class Event {
    *
    * @returns 异步处理结果。
    */
-  async getEventBGImage(): Promise<Image | Canvas> {
-    return await eventDataRepository.getBackgroundImage(this);
+  async getEventBGImage(
+    displayedServerList: Server[] = globalDefaultServer,
+  ): Promise<Image | Canvas> {
+    return await eventDataRepository.getBackgroundImage(
+      this,
+      displayedServerList,
+    );
   }
   //活动规则轮播图
   /**
@@ -233,8 +238,13 @@ export class Event {
    *
    * @returns 异步处理结果。
    */
-  async getEventTopscreenTrimImage(): Promise<Image> {
-    return await eventDataRepository.getTopscreenTrimImage(this);
+  async getEventTopscreenTrimImage(
+    displayedServerList: Server[] = globalDefaultServer,
+  ): Promise<Image> {
+    return await eventDataRepository.getTopscreenTrimImage(
+      this,
+      displayedServerList,
+    );
   }
   /**
    * 在 Event 模型中获取活动Logo图片。

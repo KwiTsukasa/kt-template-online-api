@@ -41,6 +41,7 @@ import { QqbotPluginRegistryService } from './plugin/qqbot-plugin-registry.servi
 import { QqbotBangDreamClientService } from './plugins/bangDream/qqbot-bangdream-client.service';
 import { QqbotBangDreamPluginService } from './plugins/bangDream/qqbot-bangdream.plugin';
 import { QqbotBangDreamRendererService } from './plugins/bangDream/renderer/qqbot-bangdream-renderer.service';
+import { TsuguApplicationService } from './plugins/bangDream/renderer/tsugu-application.service';
 import { QqbotFf14ClientService } from './plugins/ff14Market/qqbot-ff14-client.service';
 import { QqbotFf14MarketPluginService } from './plugins/ff14Market/qqbot-ff14-market.plugin';
 import { QqbotFflogsClientService } from './plugins/fflogs/qqbot-fflogs-client.service';
@@ -100,6 +101,7 @@ import { QqbotSendService } from './send/qqbot-send.service';
     QqbotBangDreamClientService,
     QqbotBangDreamPluginService,
     QqbotBangDreamRendererService,
+    TsuguApplicationService,
     QqbotFf14ClientService,
     QqbotFf14MarketPluginService,
     QqbotFflogsClientService,

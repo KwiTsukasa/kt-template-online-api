@@ -5,28 +5,31 @@ import type {
   QqbotBangDreamSongSearchInput,
   QqbotBangDreamSongSummary,
 } from './qqbot-bangdream.types';
-import { QqbotBangDreamRendererService } from './renderer/qqbot-bangdream-renderer.service';
+import { TsuguApplicationService } from './renderer/tsugu-application.service';
 
 @Injectable()
 export class QqbotBangDreamClientService {
   constructor(
-    private readonly rendererService: QqbotBangDreamRendererService,
+    private readonly tsuguApplicationService: TsuguApplicationService,
   ) {}
 
   async checkHealth() {
-    return this.rendererService.checkHealth();
+    return this.tsuguApplicationService.checkHealth();
   }
 
   async execute(
     operationKey: QqbotBangDreamOperationKey,
     input: QqbotBangDreamCommandInput,
   ) {
-    return await this.rendererService.execute(operationKey, input);
+    return await this.tsuguApplicationService.execute(operationKey, input);
   }
 
   async searchSong(
     params: QqbotBangDreamSongSearchInput,
   ): Promise<QqbotBangDreamSongSummary> {
-    return await this.rendererService.execute('bangdream.song.search', params);
+    return await this.tsuguApplicationService.execute(
+      'bangdream.song.search',
+      params,
+    );
   }
 }

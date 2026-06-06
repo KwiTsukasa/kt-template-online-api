@@ -1,4 +1,4 @@
-import { Injectable, OnApplicationBootstrap, Optional } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DictService } from '@/admin/dict/dict.service';
 import { Card } from '../tsugu/models/card';
@@ -8,7 +8,10 @@ import { Gacha, getPresentGachaList } from '../tsugu/models/gacha';
 import { Server } from '../tsugu/models/server';
 import { Song } from '../tsugu/models/song';
 import mainAPI, { waitForMainDataReady } from '../tsugu/models/main-data-store';
-import { fuzzySearch, type FuzzySearchResult } from '../tsugu/search/fuzzy-search';
+import {
+  fuzzySearch,
+  type FuzzySearchResult,
+} from '../tsugu/search/fuzzy-search';
 import { drawCardDetail } from '../tsugu/command-renderers/card-detail';
 import { drawCardList } from '../tsugu/command-renderers/card-list';
 import { drawCharacterDetail } from '../tsugu/command-renderers/character-detail';
@@ -32,7 +35,7 @@ import {
   BangDreamDictionaryLoader,
   type BangDreamDictionaryItem,
 } from '../tsugu/runtime/dictionary-loader';
-import { getBangDreamOperationDefinition } from '../tsugu/runtime/operation-registry';
+import type { QqbotBangDreamOperationHandlerName } from '../tsugu/runtime/operation-registry';
 import {
   BANGDREAM_TSUGU_ENV_KEYS,
   normalizeBangDreamBoolean,
@@ -47,7 +50,7 @@ import type {
 const SOURCE_NAME = 'Tsugu BangDream Bot 内置源码';
 
 @Injectable()
-export class QqbotBangDreamRendererService implements OnApplicationBootstrap {
+export class QqbotBangDreamRendererService {
   private readonly dictionaryLoader = new BangDreamDictionaryLoader();
 
   constructor(
@@ -55,10 +58,6 @@ export class QqbotBangDreamRendererService implements OnApplicationBootstrap {
     @Optional()
     private readonly dictService?: DictService,
   ) {}
-
-  async onApplicationBootstrap() {
-    await this.refreshDictionaryCache();
-  }
 
   async refreshDictionaryCache() {
     await this.dictionaryLoader.refresh((dictCode) =>
@@ -76,18 +75,13 @@ export class QqbotBangDreamRendererService implements OnApplicationBootstrap {
     return true;
   }
 
-  async execute(
-    operationKey: QqbotBangDreamOperationKey,
+  async executeOperationHandler(
+    handlerName: QqbotBangDreamOperationHandlerName,
     input: QqbotBangDreamCommandInput,
   ) {
-    await waitForMainDataReady();
-    const operation = getBangDreamOperationDefinition(operationKey);
-    if (!operation) {
-      throw new Error(`BangDream 插件能力不存在：${operationKey}`);
-    }
-    const handler = this[operation.handlerName];
+    const handler = this[handlerName];
     if (typeof handler !== 'function') {
-      throw new Error(`BangDream 插件能力未绑定执行器：${operationKey}`);
+      throw new Error(`BangDream 插件能力未绑定执行器：${handlerName}`);
     }
     return await (
       handler as (
@@ -434,9 +428,7 @@ export class QqbotBangDreamRendererService implements OnApplicationBootstrap {
   private pickDisplayedServerList(input: QqbotBangDreamCommandInput) {
     const source =
       input.displayedServerList ||
-      this.configService.get<string>(
-        BANGDREAM_TSUGU_ENV_KEYS.displayedServers,
-      );
+      this.configService.get<string>(BANGDREAM_TSUGU_ENV_KEYS.displayedServers);
     const defaultServers = this.dictionaryLoader.getDefaultDisplayedServers();
     if (!source) return defaultServers;
     const values = splitBangDreamOptionList(source);

@@ -43,10 +43,13 @@ const fs = require("fs");
 const path = require("path");
 const { ConfigService } = require("@nestjs/config");
 const payload = JSON.parse(Buffer.from("$PayloadBase64", "base64").toString("utf8"));
+const { ToolsService } = require("./src/common/services/tool.service");
 const { QqbotBangDreamRendererService } = require("./src/qqbot/plugins/bangDream/renderer/qqbot-bangdream-renderer.service");
+const { TsuguApplicationService } = require("./src/qqbot/plugins/bangDream/renderer/tsugu-application.service");
 
 (async () => {
-  const service = new QqbotBangDreamRendererService(new ConfigService({}), undefined);
+  const renderer = new QqbotBangDreamRendererService(new ConfigService({}), undefined);
+  const service = new TsuguApplicationService(renderer, new ToolsService());
   await service.onApplicationBootstrap();
   const result = await service.execute(payload.operationKey, payload.input);
   const match = result.replyText.match(/base64:\/\/([A-Za-z0-9+/=]+)/);

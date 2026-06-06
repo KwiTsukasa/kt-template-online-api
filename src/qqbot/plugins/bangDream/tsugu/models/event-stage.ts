@@ -1,12 +1,14 @@
 import { Event } from '@/qqbot/plugins/bangDream/tsugu/models/event';
-import { bestdoriUrl } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
-import { callAPIAndCacheResponse } from '@/qqbot/plugins/bangDream/tsugu/data-clients/api-cache-client';
 import {
   BANGDREAM_EVENT_STAGE_NAME,
   BANGDREAM_EVENT_STAGE_STROKE_COLOR,
   BANGDREAM_EVENT_STAGE_TYPES,
   BangDreamEventStageType,
 } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import {
+  eventStageDataRepository,
+  type EventStageDataType,
+} from '@/qqbot/plugins/bangDream/tsugu/models/event-stage-data-repository';
 
 export interface Stage {
   type: string;
@@ -72,13 +74,12 @@ export class EventStage {
    * @param update - update参数，未传入时使用默认值。
    * @param type - 数据类型或匹配类型。
    */
-  async getData(update: boolean = true, type: 'stages' | 'rotationMusics') {
-    const time = update ? 0 : 1 / 0;
-    const eventData = await callAPIAndCacheResponse(
-      `${bestdoriUrl}/api/festival/${type}/${this.eventId}.json`,
-      time,
+  async getData(update: boolean = true, type: EventStageDataType) {
+    return await eventStageDataRepository.getFestivalData(
+      this.eventId,
+      type,
+      update,
     );
-    return eventData;
   }
 
   /**

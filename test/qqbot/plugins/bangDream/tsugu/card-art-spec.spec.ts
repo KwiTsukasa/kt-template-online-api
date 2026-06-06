@@ -1,29 +1,23 @@
 import {
   BANGDREAM_CARD_ART_SPEC,
-  createCardIconFrameUrl,
-  createCardIllustrationFrameUrl,
+  createCardIconFramePath,
+  createCardIllustrationFramePath,
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/card-art-spec';
 
 describe('BangDream card art spec', () => {
-  it('creates icon frame urls with Bestdori rarity rules', () => {
-    const baseUrl = 'https://bestdori.com';
-
-    expect(createCardIconFrameUrl(baseUrl, 1, 'cool')).toBe(
-      'https://bestdori.com/res/image/card-1-cool.png',
+  it('creates icon frame paths with Bestdori rarity rules', () => {
+    expect(createCardIconFramePath(1, 'cool')).toBe(
+      '/res/image/card-1-cool.png',
     );
-    expect(createCardIconFrameUrl(baseUrl, 5, 'happy')).toBe(
-      'https://bestdori.com/res/image/card-5.png',
-    );
+    expect(createCardIconFramePath(5, 'happy')).toBe('/res/image/card-5.png');
   });
 
-  it('creates illustration frame urls with Bestdori rarity rules', () => {
-    const baseUrl = 'https://bestdori.com';
-
-    expect(createCardIllustrationFrameUrl(baseUrl, 1, 'pure')).toBe(
-      'https://bestdori.com/res/image/frame-1-pure.png',
+  it('creates illustration frame paths with Bestdori rarity rules', () => {
+    expect(createCardIllustrationFramePath(1, 'pure')).toBe(
+      '/res/image/frame-1-pure.png',
     );
-    expect(createCardIllustrationFrameUrl(baseUrl, 4, 'powerful')).toBe(
-      'https://bestdori.com/res/image/frame-4.png',
+    expect(createCardIllustrationFramePath(4, 'powerful')).toBe(
+      '/res/image/frame-4.png',
     );
   });
 

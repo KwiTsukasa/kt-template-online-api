@@ -45,49 +45,43 @@ export const BANGDREAM_CARD_ART_SPEC = {
 } as const;
 
 /**
- * 创建卡牌小图边框资源 URL。
+ * 创建卡牌小图边框资源路径。
  *
- * @param baseUrl - Bestdori 基础地址。
  * @param rarity - 卡牌稀有度。
  * @param attribute - 卡牌属性。
  */
-export function createCardIconFrameUrl(
-  baseUrl: string,
+export function createCardIconFramePath(
   rarity: number,
   attribute: BangDreamCardArtAttribute,
 ): string {
-  return createCardFrameUrl(baseUrl, 'card', rarity, attribute);
+  return createCardFramePath('card', rarity, attribute);
 }
 
 /**
- * 创建卡牌插画边框资源 URL。
+ * 创建卡牌插画边框资源路径。
  *
- * @param baseUrl - Bestdori 基础地址。
  * @param rarity - 卡牌稀有度。
  * @param attribute - 卡牌属性。
  */
-export function createCardIllustrationFrameUrl(
-  baseUrl: string,
+export function createCardIllustrationFramePath(
   rarity: number,
   attribute: BangDreamCardArtAttribute,
 ): string {
-  return createCardFrameUrl(baseUrl, 'frame', rarity, attribute);
+  return createCardFramePath('frame', rarity, attribute);
 }
 
 /**
- * 根据 Bestdori 边框命名规则创建远程资源 URL。
+ * 根据 Bestdori 边框命名规则创建远程资源路径。
  *
- * @param baseUrl - Bestdori 基础地址。
  * @param prefix - 边框资源前缀。
  * @param rarity - 卡牌稀有度。
  * @param attribute - 卡牌属性。
  */
-function createCardFrameUrl(
-  baseUrl: string,
+function createCardFramePath(
   prefix: 'card' | 'frame',
   rarity: number,
   attribute: BangDreamCardArtAttribute,
 ): string {
   const frameName = rarity === 1 ? `${rarity}-${attribute}` : `${rarity}`;
-  return `${baseUrl}/res/image/${prefix}-${frameName}.png`;
+  return `/res/image/${prefix}-${frameName}.png`;
 }

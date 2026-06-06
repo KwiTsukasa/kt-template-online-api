@@ -3,19 +3,16 @@ import { Band } from '@/qqbot/plugins/bangDream/tsugu/models/band';
 import { Attribute } from '@/qqbot/plugins/bangDream/tsugu/models/attribute';
 import { Card } from '@/qqbot/plugins/bangDream/tsugu/models/card';
 import { Image, Canvas, loadImage } from 'skia-canvas';
-import { downloadFileCache } from '@/qqbot/plugins/bangDream/tsugu/data-clients/asset-cache-client';
 import { drawCardIconSkill } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/skill-text';
 import { Skill } from '@/qqbot/plugins/bangDream/tsugu/models/skill';
-import { bestdoriUrl } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
 import { getBangDreamAssetPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/asset-manifest';
 import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
 import {
   BANGDREAM_CARD_ART_SPEC,
   BangDreamCardArtAttribute,
-  createCardIconFrameUrl,
-  createCardIllustrationFrameUrl,
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/card-art-spec';
+import { cardArtResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/card-art-resource-repository';
 
 const cardTypeIconList: { [type: string]: Image } = {};
 const starList: { [type: string]: Image } = {};
@@ -60,8 +57,10 @@ async function getCardIconFrame(
   rarity: number,
   attribute: BangDreamCardArtAttribute,
 ): Promise<Image> {
-  const imageUrl = createCardIconFrameUrl(bestdoriUrl, rarity, attribute);
-  const imageBuffer = await downloadFileCache(imageUrl);
+  const imageBuffer = await cardArtResourceRepository.getIconFrameBuffer(
+    rarity,
+    attribute,
+  );
   return await loadImage(imageBuffer);
 }
 
@@ -77,12 +76,11 @@ async function getCardIllustrationFrame(
   rarity: number,
   attribute: BangDreamCardArtAttribute,
 ): Promise<Image> {
-  const imageUrl = createCardIllustrationFrameUrl(
-    bestdoriUrl,
-    rarity,
-    attribute,
-  );
-  const imageBuffer = await downloadFileCache(imageUrl);
+  const imageBuffer =
+    await cardArtResourceRepository.getIllustrationFrameBuffer(
+      rarity,
+      attribute,
+    );
   return await loadImage(imageBuffer);
 }
 

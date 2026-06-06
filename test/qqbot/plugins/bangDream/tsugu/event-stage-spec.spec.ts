@@ -4,6 +4,7 @@ import {
   getEventStageSongCellWidth,
   getEventStageSongJacketHeight,
   getEventStageSongRowSize,
+  getEventStageStageBatchSize,
   shouldStartNewEventStageColumn,
   splitEventStageImagesByColumnHeight,
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/event-stage-spec';
@@ -23,6 +24,7 @@ describe('BangDream event stage spec', () => {
     expect(BANGDREAM_EVENT_STAGE_SPEC.typeTop.fontSize).toBe(25);
     expect(BANGDREAM_EVENT_STAGE_SPEC.typeTop.strokeWidth).toBe(4.5);
     expect(BANGDREAM_EVENT_STAGE_SPEC.list.maxColumnHeight).toBe(6000);
+    expect(getEventStageStageBatchSize()).toBe(8);
   });
 
   it('splits stage images by max column height', () => {

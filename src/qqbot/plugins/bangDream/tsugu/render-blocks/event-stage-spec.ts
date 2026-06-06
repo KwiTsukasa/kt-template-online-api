@@ -5,6 +5,7 @@ export interface EventStageCanvasLike {
 export const BANGDREAM_EVENT_STAGE_SPEC = {
   list: {
     maxColumnHeight: 6000,
+    stageBatchSize: 8,
   },
   songRow: {
     difficultyHeightScale: 10,
@@ -64,6 +65,13 @@ export function getEventStageSongRowSize(): { height: number; width: number } {
       BANGDREAM_EVENT_STAGE_SPEC.songRow.verticalPadding,
     width: BANGDREAM_EVENT_STAGE_SPEC.songRow.width,
   };
+}
+
+/**
+ * 获取试炼 stage 绘制批大小。
+ */
+export function getEventStageStageBatchSize(): number {
+  return BANGDREAM_EVENT_STAGE_SPEC.list.stageBatchSize;
 }
 
 /**

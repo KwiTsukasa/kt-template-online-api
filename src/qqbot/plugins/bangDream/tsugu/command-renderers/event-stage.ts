@@ -13,7 +13,10 @@ import {
 import { outputEasyImages } from '@/qqbot/plugins/bangDream/tsugu/canvas/output';
 import { drawDataBlock } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/data-block';
 import { stackImage } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
-import { shouldStartNewEventStageColumn } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/event-stage-spec';
+import {
+  getEventStageStageBatchSize,
+  shouldStartNewEventStageColumn,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/event-stage-spec';
 import { Canvas } from 'skia-canvas';
 
 /**
@@ -58,6 +61,7 @@ export async function drawEventStage(
   let currentColumn: Canvas[] = [];
   let currentHeight = 0;
   let pageIndex = 0;
+  const stageBatchSize = getEventStageStageBatchSize();
 
   //绘制活动stage，每个stage一个图片
   /**
@@ -83,19 +87,23 @@ export async function drawEventStage(
     pageIndex += 1;
   }
 
-  for (const stage of stageList) {
-    const stageImage = await drawStageSong(stage);
-    if (
-      shouldStartNewEventStageColumn(
-        currentHeight,
-        stageImage.height,
-        currentColumn.length,
-      )
-    ) {
-      await flushColumn();
+  for (let start = 0; start < stageList.length; start += stageBatchSize) {
+    const stageImages = await Promise.all(
+      stageList.slice(start, start + stageBatchSize).map(drawStageSong),
+    );
+    for (const stageImage of stageImages) {
+      if (
+        shouldStartNewEventStageColumn(
+          currentHeight,
+          stageImage.height,
+          currentColumn.length,
+        )
+      ) {
+        await flushColumn();
+      }
+      currentColumn.push(stageImage);
+      currentHeight += stageImage.height;
     }
-    currentColumn.push(stageImage);
-    currentHeight += stageImage.height;
   }
 
   await flushColumn();

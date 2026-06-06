@@ -1,4 +1,4 @@
-import { Image } from 'skia-canvas';
+import { Canvas, Image } from 'skia-canvas';
 import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { bangDreamMainDataRepository } from '@/qqbot/plugins/bangDream/tsugu/models/main-data-repository';
 import { Attribute } from '@/qqbot/plugins/bangDream/tsugu/models/attribute';
@@ -213,7 +213,7 @@ export class Event {
    *
    * @returns 异步处理结果。
    */
-  async getEventBGImage(): Promise<Image> {
+  async getEventBGImage(): Promise<Image | Canvas> {
     return await eventDataRepository.getBackgroundImage(this);
   }
   //活动规则轮播图

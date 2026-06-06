@@ -144,7 +144,7 @@ export async function drawEventList(
 }
 
 const matchEventList = createTsuguEntityMatcher<Event>({
-  source: eventRepository.getSource(),
+  source: () => eventRepository.getSource(),
   /**
    * 在QQBot 图片视图层中创建Entity。
    *

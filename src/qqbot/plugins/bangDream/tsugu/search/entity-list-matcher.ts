@@ -1,11 +1,9 @@
 import type { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
-import {
-  checkRelationList,
-  FuzzySearchResult,
-} from '@/qqbot/plugins/bangDream/tsugu/search/fuzzy-search';
+import { checkRelationList } from '@/qqbot/plugins/bangDream/tsugu/search/relation-matcher';
+import type { FuzzySearchResult } from '@/qqbot/plugins/bangDream/tsugu/search/fuzzy-search-types';
 
 interface TsuguEntityMatcherOptions<T> {
-  source: Record<string, unknown>;
+  source: Record<string, unknown> | (() => Record<string, unknown>);
   createEntity: (id: number) => T;
   isCandidate?: (entity: T) => boolean;
   isReleased: (entity: T, displayedServerList: Server[]) => boolean;
@@ -50,6 +48,15 @@ const getRelationList = (matches: FuzzySearchResult): string[] | undefined =>
     : undefined;
 
 /**
+ * 在QQBot 图片视图层中获取当前实体源。
+ *
+ * @param source - 静态实体源或延迟读取函数。
+ */
+const getCurrentSource = (
+  source: TsuguEntityMatcherOptions<unknown>['source'],
+) => (typeof source === 'function' ? source() : source);
+
+/**
  * 在QQBot 图片视图层中判断是否需要Check关系表达式。
  *
  * @param relationList - 关系表达式列表参数。
@@ -76,13 +83,14 @@ export const createTsuguEntityMatcher =
   }: TsuguEntityMatcherOptions<T>) =>
   (matches: FuzzySearchResult, displayedServerList: Server[]): T[] => {
     const result: T[] = [];
+    const currentSource = getCurrentSource(source);
     const relationList = getRelationList(matches);
     const relationOnly =
       relationList !== undefined && getMatchKeyCount(matches) === 1;
     const useRelation = shouldCheckRelation(relationList, relationOnly);
 
-    for (const id in source) {
-      if (!hasOwn(source, id)) {
+    for (const id in currentSource) {
+      if (!hasOwn(currentSource, id)) {
         continue;
       }
 

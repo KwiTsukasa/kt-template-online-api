@@ -1,8 +1,20 @@
 import axios from 'axios';
 import * as path from 'path';
 import * as fs from 'fs';
+import {
+  BANGDREAM_TSUGU_ENV_KEYS,
+  normalizeBangDreamPositiveInteger,
+} from '@/qqbot/plugins/bangDream/tsugu/runtime/runtime-options';
 
 const errUrl: string[] = [];
+const DEFAULT_REQUEST_TIMEOUT_MS = 8000;
+
+function getRequestTimeoutMs(): number {
+  return normalizeBangDreamPositiveInteger(
+    process.env[BANGDREAM_TSUGU_ENV_KEYS.requestTimeoutMs],
+    DEFAULT_REQUEST_TIMEOUT_MS,
+  );
+}
 
 /**
  * 在数据下载与缓存层中下载当前数据。
@@ -45,7 +57,11 @@ export async function download(
     const headers = eTag ? { 'If-None-Match': eTag } : {};
     let response;
     try {
-      response = await axios.get(url, { headers, responseType: 'arraybuffer' });
+      response = await axios.get(url, {
+        headers,
+        responseType: 'arraybuffer',
+        timeout: getRequestTimeoutMs(),
+      });
     } catch (error) {
       if (error.response && error.response.status === 304) {
         const cachedData = fs.readFileSync(cacheFilePath);
@@ -130,7 +146,11 @@ export async function getJsonAndSave(
     const headers = eTag ? { 'If-None-Match': eTag } : {};
     let response;
     try {
-      response = await axios.get(url, { headers, responseType: 'arraybuffer' });
+      response = await axios.get(url, {
+        headers,
+        responseType: 'arraybuffer',
+        timeout: getRequestTimeoutMs(),
+      });
     } catch (error) {
       if (error.response && error.response.status === 304) {
         const cachedData = fs.readFileSync(cacheFilePath, 'utf-8');

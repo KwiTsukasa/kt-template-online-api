@@ -63,7 +63,7 @@ export async function drawCardList(
 
 //计算模糊搜索结果
 export const matchCardList = createTsuguEntityMatcher<Card>({
-  source: cardRepository.getSource(),
+  source: () => cardRepository.getSource(),
   /**
    * 在QQBot 图片视图层中创建Entity。
    *

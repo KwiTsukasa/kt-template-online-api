@@ -1,0 +1,90 @@
+param(
+  [string]$OperationKey = "bangdream.event.search",
+  [string]$Text = "50",
+  [string]$DisplayedServerList = "cn jp",
+  [string]$OutFile = ".kt-workspace/bangdream-smoke/bangdream-smoke.jpg",
+  [int]$TimeoutSeconds = 45,
+  [switch]$UseEasyBg
+)
+
+$ErrorActionPreference = "Stop"
+
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+$ResolvedOutFile = if ([System.IO.Path]::IsPathRooted($OutFile)) {
+  $OutFile
+} else {
+  Join-Path $ProjectRoot $OutFile
+}
+$OutDir = Split-Path -Parent $ResolvedOutFile
+New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+
+$LogDir = Join-Path $ProjectRoot ".kt-workspace/bangdream-smoke"
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$LogName = [System.IO.Path]::GetFileNameWithoutExtension($ResolvedOutFile)
+$StdoutLog = Join-Path $LogDir "$LogName.out.log"
+$StderrLog = Join-Path $LogDir "$LogName.err.log"
+Remove-Item -LiteralPath $StdoutLog,$StderrLog -Force -ErrorAction SilentlyContinue
+
+$Payload = @{
+  input = @{
+    compress = $true
+    displayedServerList = $DisplayedServerList
+    text = $Text
+    useEasyBG = [bool]$UseEasyBg
+  }
+  operationKey = $OperationKey
+  outFile = $ResolvedOutFile
+}
+$PayloadJson = $Payload | ConvertTo-Json -Compress -Depth 5
+$PayloadBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($PayloadJson))
+
+$NodeCode = @"
+const fs = require("fs");
+const path = require("path");
+const { ConfigService } = require("@nestjs/config");
+const payload = JSON.parse(Buffer.from("$PayloadBase64", "base64").toString("utf8"));
+const { QqbotBangDreamRendererService } = require("./src/qqbot/plugins/bangDream/renderer/qqbot-bangdream-renderer.service");
+
+(async () => {
+  const service = new QqbotBangDreamRendererService(new ConfigService({}), undefined);
+  await service.onApplicationBootstrap();
+  const result = await service.execute(payload.operationKey, payload.input);
+  const match = result.replyText.match(/base64:\/\/([A-Za-z0-9+/=]+)/);
+  if (!match) throw new Error("No image CQ payload");
+  fs.mkdirSync(path.dirname(payload.outFile), { recursive: true });
+  fs.writeFileSync(payload.outFile, Buffer.from(match[1], "base64"));
+  process.stdout.write(JSON.stringify({
+    bytes: fs.statSync(payload.outFile).size,
+    imageCount: result.imageCount,
+    out: payload.outFile,
+  }, null, 2) + "\n");
+  process.exit(0);
+})().catch((error) => {
+  process.stderr.write(String(error?.stack || error) + "\n");
+  process.exit(1);
+});
+"@
+$NodeCodeBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($NodeCode))
+$EvalCode = "eval(Buffer.from('$NodeCodeBase64','base64').toString('utf8'))"
+
+$env:TS_NODE_TRANSPILE_ONLY = "true"
+$Process = Start-Process `
+  -FilePath "node" `
+  -ArgumentList @("-r", "ts-node/register", "-r", "tsconfig-paths/register", "-e", $EvalCode) `
+  -WorkingDirectory $ProjectRoot `
+  -RedirectStandardOutput $StdoutLog `
+  -RedirectStandardError $StderrLog `
+  -PassThru `
+  -WindowStyle Hidden
+
+if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+  Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+  Write-Output "BangDream smoke timed out and process $($Process.Id) was killed."
+  if (Test-Path $StdoutLog) { Get-Content $StdoutLog }
+  if (Test-Path $StderrLog) { Get-Content $StderrLog }
+  exit 124
+}
+
+if (Test-Path $StdoutLog) { Get-Content $StdoutLog }
+if (Test-Path $StderrLog) { Get-Content $StderrLog }
+exit $Process.ExitCode

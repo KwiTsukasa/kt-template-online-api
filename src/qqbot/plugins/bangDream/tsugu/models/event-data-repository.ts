@@ -1,4 +1,4 @@
-import { Image, loadImage } from 'skia-canvas';
+import { Canvas, Image, loadImage } from 'skia-canvas';
 import { bangDreamBestdoriProvider } from '@/qqbot/plugins/bangDream/tsugu/data-clients/bestdori-provider';
 import { bangDreamMainDataRepository } from '@/qqbot/plugins/bangDream/tsugu/models/main-data-repository';
 import {
@@ -80,12 +80,18 @@ class EventDataRepository {
    *
    * @param event - 活动资源上下文。
    */
-  async getBackgroundImage(event: EventAssetContext): Promise<Image> {
+  async getBackgroundImage(event: EventAssetContext): Promise<Image | Canvas> {
     const server = getServerByPriority(event.startAt);
     const bgImageBuffer = await bangDreamBestdoriProvider.getAsset(
       `/assets/${Server[server]}/event/${event.assetBundleName}/topscreen_rip/bg_eventtop.png`,
     );
-    return await loadImage(bgImageBuffer);
+    const backgroundImage = await loadImage(bgImageBuffer);
+    try {
+      const trimImage = await this.getTopscreenTrimImage(event);
+      return this.mergeTopscreenImages(backgroundImage, trimImage);
+    } catch {
+      return backgroundImage;
+    }
   }
 
   /**
@@ -128,6 +134,31 @@ class EventDataRepository {
       `/assets/${Server[server]}/event/${event.assetBundleName}/topscreen_rip/trim_eventtop.png`,
     );
     return await loadImage(topscreenTrimImageBuffer);
+  }
+
+  private mergeTopscreenImages(
+    backgroundImage: Image,
+    trimImage: Image,
+  ): Canvas {
+    const canvas = new Canvas(backgroundImage.width, backgroundImage.height);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(backgroundImage, 0, 0);
+
+    const scale = Math.min(
+      backgroundImage.width / trimImage.width,
+      backgroundImage.height / trimImage.height,
+      1,
+    );
+    const width = trimImage.width * scale;
+    const height = trimImage.height * scale;
+    ctx.drawImage(
+      trimImage,
+      (backgroundImage.width - width) / 2,
+      backgroundImage.height - height,
+      width,
+      height,
+    );
+    return canvas;
   }
 
   /**

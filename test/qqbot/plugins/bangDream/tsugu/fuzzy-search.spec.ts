@@ -3,6 +3,11 @@ import {
   fuzzySearch,
   match,
 } from '@/qqbot/plugins/bangDream/tsugu/search/fuzzy-search';
+import {
+  createDefaultFuzzySearchRuleRegistry,
+  createFuzzySearchKeyword,
+} from '@/qqbot/plugins/bangDream/tsugu/search/fuzzy-search-rule-registry';
+import type { FuzzySearchResult } from '@/qqbot/plugins/bangDream/tsugu/search/fuzzy-search-types';
 import { createTsuguEntityMatcher } from '@/qqbot/plugins/bangDream/tsugu/search/entity-list-matcher';
 
 describe('Tsugu fuzzy search helpers', () => {
@@ -35,6 +40,23 @@ describe('Tsugu fuzzy search helpers', () => {
   it('checks numeric relation expressions', () => {
     expect(checkRelationList(136, ['<100', '130-140'])).toBe(true);
     expect(checkRelationList(136, ['<100', '>200'])).toBe(false);
+  });
+
+  it('routes configured aliases through the rule registry', () => {
+    const registry = createDefaultFuzzySearchRuleRegistry({
+      songs: {
+        '136': ['夏祭り'],
+      },
+    });
+    const result: FuzzySearchResult = {};
+    const push = (key: string) => (value: string | number) => {
+      (result[key] ??= []).push(value);
+    };
+
+    expect(registry.match(createFuzzySearchKeyword('夏祭り'), push)).toBe(
+      true,
+    );
+    expect(result).toEqual({ songs: [136] });
   });
 });
 
@@ -78,5 +100,34 @@ describe('Tsugu entity list matcher', () => {
     const result = matchEntity({ name: ['entity-3'] }, [CN_SERVER]);
 
     expect(result.map((entity) => entity.id)).toEqual([3]);
+  });
+
+  it('reads entity source lazily when matching', () => {
+    let dynamicSource: Record<string, unknown> = {
+      '1': {},
+    };
+    const matchDynamicEntity = createTsuguEntityMatcher<TestEntity>({
+      source: () => dynamicSource,
+      createEntity,
+      isReleased: (entity, displayedServerList) =>
+        displayedServerList.some((server) => entity.releasedAt[server] != null),
+      isMatched: (matches, entity) => match(matches, entity, []),
+      relationValue: (entity) => entity.id,
+    });
+
+    expect(matchDynamicEntity({ _relationStr: ['1-3'] }, [CN_SERVER])).toHaveLength(
+      1,
+    );
+
+    dynamicSource = {
+      '1': {},
+      '3': {},
+    };
+
+    expect(
+      matchDynamicEntity({ _relationStr: ['1-3'] }, [CN_SERVER]).map(
+        (entity) => entity.id,
+      ),
+    ).toEqual([1, 3]);
   });
 });

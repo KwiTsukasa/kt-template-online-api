@@ -7,7 +7,7 @@ import { getPresentEvent } from '../tsugu/models/event';
 import { Gacha, getPresentGachaList } from '../tsugu/models/gacha';
 import { Server } from '../tsugu/models/server';
 import { Song } from '../tsugu/models/song';
-import mainAPI from '../tsugu/models/main-data-store';
+import mainAPI, { waitForMainDataReady } from '../tsugu/models/main-data-store';
 import { fuzzySearch, type FuzzySearchResult } from '../tsugu/search/fuzzy-search';
 import { drawCardDetail } from '../tsugu/command-renderers/card-detail';
 import { drawCardList } from '../tsugu/command-renderers/card-list';
@@ -66,7 +66,8 @@ export class QqbotBangDreamRendererService implements OnApplicationBootstrap {
     );
   }
 
-  checkHealth() {
+  async checkHealth() {
+    await waitForMainDataReady();
     const data = mainAPI as { cards?: unknown; songs?: unknown };
     if (!data.songs || !data.cards) {
       throw new Error('Tsugu 数据配置未加载');
@@ -79,6 +80,7 @@ export class QqbotBangDreamRendererService implements OnApplicationBootstrap {
     operationKey: QqbotBangDreamOperationKey,
     input: QqbotBangDreamCommandInput,
   ) {
+    await waitForMainDataReady();
     const operation = getBangDreamOperationDefinition(operationKey);
     if (!operation) {
       throw new Error(`BangDream 插件能力不存在：${operationKey}`);

@@ -118,7 +118,7 @@ export async function drawSongList(
 
 // 计算歌曲模糊搜索结果
 export const matchSongList = createTsuguEntityMatcher<Song>({
-  source: songRepository.getSource(),
+  source: () => songRepository.getSource(),
   /**
    * 在QQBot 图片视图层中创建Entity。
    *

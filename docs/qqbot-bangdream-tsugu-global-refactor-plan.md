@@ -291,7 +291,9 @@ export interface TsuguHook {
 - `command-renderers/song-list.ts`、`event-list.ts`、`card-list.ts`、`gacha-detail.ts`、`player-detail.ts`、`cutoff-detail.ts` 已开始改走 repository 创建模型或读取主数据。
 - `models/song.ts`、`card.ts`、`event.ts`、`gacha.ts`、`player.ts` 的 Bestdori API/素材请求已开始改走 Bestdori provider；`models/cutoff.ts` 的 Bestdori/HHWX Tracker fallback 已改走 provider，并在 fallback 时输出数据源切换日志。
 - 已新增 `models/event-data-repository.ts` 收口活动详情、横幅、背景、轮播、Logo、奖励表情和装饰素材请求；`models/event.ts` 不再直接依赖 Bestdori provider 或 `loadImage`。
-- `drawEventDetail` 的活动真实底图改为轻量图片背景，避免长图走模糊三角纹理导致超时；活动搜索默认遵循 `BANGDREAM_TSUGU_USE_EASY_BG=false`，不再强制简易背景。
+- `drawEventDetail` 的活动真实底图改为轻量图片背景，避免长图走模糊三角纹理导致超时；活动底图由 `bg_eventtop.png` 和 `trim_eventtop.png` 合成，避免只渲染模糊背景底图；活动搜索默认遵循 `BANGDREAM_TSUGU_USE_EASY_BG=false`，不再强制简易背景。
+- 已接入 `BANGDREAM_TSUGU_REQUEST_TIMEOUT_MS` 和 `BANGDREAM_TSUGU_MAIN_DATA_READY_TIMEOUT_MS`，HTTP 请求和主数据首次 ready 等待都有硬超时，BangDream 命令执行前会等待关键主数据集合可用。
+- 已新增 `scripts/bangdream-render-smoke.ps1`，BangDream 图片 smoke 通过父进程限时、子进程 PID 清理、生成后显式退出，避免本地调试命令卡住进程。
 - 已新增 `test/qqbot/plugins/bangDream/tsugu/data-provider.spec.ts`，覆盖 provider URL 解析、Bestdori/HHWX mock 数据源、retry/cache wrapper。
 - 本地图片烟测已生成查歌 `136`、查活动 `50` 简易背景和真实活动背景图片，证明 provider/repository 第一段迁移后仍能输出非空图片。
 
@@ -311,6 +313,13 @@ export interface TsuguHook {
 - `search/fuzzy-search.ts` 文件长度和分支继续下降。
 - 新增昵称或难度别名无需改 matcher 代码。
 - 旧 search/fuzzy-search 测试全部通过。
+
+当前进度：
+
+- 已新增 `search/fuzzy-search-types.ts`、`search/search-dictionary-repository.ts`、`search/relation-matcher.ts`、`search/fuzzy-search-rule-registry.ts`，把搜索类型、搜索字典读取、关系表达式和规则注册表从 `fuzzy-search.ts` 中拆出。
+- `fuzzy-search.ts` 保留关键词拆分、结果校验和目标匹配的兼容入口，关键词解析改由 `FuzzySearchRuleRegistry` 按 number、level、relation、config、fallback 顺序处理，文件长度从 516 行降到 281 行。
+- `entity-list-matcher.ts` 改为只依赖搜索结果类型和关系匹配器，并支持延迟读取 `source`，修复 mainAPI 异步加载前捕获空数据源导致查歌/查卡/查活动搜索不到的问题。
+- `song-list.ts`、`card-list.ts`、`event-list.ts` 的实体列表匹配器已改为运行时读取 repository source，查歌 `夏祭り` 和查活动 `summer` 本地图片 smoke 均生成非空图片。
 
 ### Phase 5：渲染 theme、layout spec 和 section builder
 

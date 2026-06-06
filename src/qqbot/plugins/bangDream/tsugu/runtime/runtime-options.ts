@@ -11,6 +11,7 @@ export const BANGDREAM_TSUGU_ENV_KEYS = {
   compress: 'BANGDREAM_TSUGU_COMPRESS',
   displayedServers: 'BANGDREAM_TSUGU_DISPLAYED_SERVERS',
   hhwxBaseUrl: 'BANGDREAM_TSUGU_HHWX_BASE_URL',
+  mainDataReadyTimeoutMs: 'BANGDREAM_TSUGU_MAIN_DATA_READY_TIMEOUT_MS',
   mainServer: 'BANGDREAM_TSUGU_MAIN_SERVER',
   requestTimeoutMs: 'BANGDREAM_TSUGU_REQUEST_TIMEOUT_MS',
   retryCount: 'BANGDREAM_TSUGU_RETRY_COUNT',
@@ -96,6 +97,14 @@ export const BANGDREAM_STAT_CONFIG = {
 export const BANGDREAM_CN_ESTIMATE_START_EVENT_ID = 298;
 export const BANGDREAM_CN_BLOCKED_EVENT_IDS: readonly number[] = [];
 export const BANGDREAM_DEFAULT_NO_BANG_DAYS = 1;
+
+export function normalizeBangDreamPositiveInteger(
+  value: unknown,
+  fallback: number,
+) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
 
 export function normalizeBangDreamBoolean(
   value: unknown,

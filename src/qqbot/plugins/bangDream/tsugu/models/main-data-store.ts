@@ -2,8 +2,33 @@ import { bestdoriApiPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config'
 import { bangDreamBestdoriProvider } from '@/qqbot/plugins/bangDream/tsugu/data-clients/bestdori-provider';
 import { bangDreamStaticPatchProvider } from '@/qqbot/plugins/bangDream/tsugu/data-clients/static-patch-provider';
 import { logger } from '@/qqbot/plugins/bangDream/tsugu/runtime/logger';
+import {
+  BANGDREAM_TSUGU_ENV_KEYS,
+  normalizeBangDreamPositiveInteger,
+} from '@/qqbot/plugins/bangDream/tsugu/runtime/runtime-options';
 
 const mainAPI: Record<string, any> = {}; //main对象,用于存放所有api数据,数据来源于Bestdori网站
+const REQUIRED_MAIN_DATA_KEYS = ['cards', 'characters', 'events', 'gacha', 'songs'];
+const DEFAULT_MAIN_DATA_READY_TIMEOUT_MS = 15000;
+
+function getMainDataReadyTimeoutMs(): number {
+  return normalizeBangDreamPositiveInteger(
+    process.env[BANGDREAM_TSUGU_ENV_KEYS.mainDataReadyTimeoutMs],
+    DEFAULT_MAIN_DATA_READY_TIMEOUT_MS,
+  );
+}
+
+function isMainDataReady(): boolean {
+  return REQUIRED_MAIN_DATA_KEYS.every((key) => {
+    const collection = mainAPI[key];
+    return collection && Object.keys(collection).length > 0;
+  });
+}
+
+async function rejectAfter(ms: number): Promise<never> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  throw new Error(`BangDream 主数据首次加载超时：${ms}ms`);
+}
 
 //加载mainAPI
 /**
@@ -71,11 +96,24 @@ async function loadMainAPI(useCache: boolean = false) {
 }
 
 logger('mainAPI', 'initializing...');
-loadMainAPI(true).then(() => {
+const initialLoadPromise = loadMainAPI(true).then(() => {
   logger('mainAPI', 'initializing done');
   loadMainAPI();
 });
 
 setInterval(loadMainAPI, 1000 * 60 * 5); //5分钟更新一次
+
+/**
+ * 等待 BangDream 主数据完成首次加载。
+ */
+export async function waitForMainDataReady(): Promise<void> {
+  if (isMainDataReady()) {
+    return;
+  }
+  await Promise.race([initialLoadPromise, rejectAfter(getMainDataReadyTimeoutMs())]);
+  if (!isMainDataReady()) {
+    throw new Error('BangDream 主数据未完成关键集合加载');
+  }
+}
 
 export default mainAPI;

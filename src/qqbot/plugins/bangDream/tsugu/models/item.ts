@@ -1,15 +1,11 @@
 import { Image, loadImage } from 'skia-canvas';
-import { downloadFileCache } from '@/qqbot/plugins/bangDream/tsugu/data-clients/asset-cache-client';
 import {
   Server,
   getServerByPriority,
 } from '@/qqbot/plugins/bangDream/tsugu/models/server';
-import { formatNumber } from '@/qqbot/plugins/bangDream/tsugu/models/model-utils';
 import mainAPI from '@/qqbot/plugins/bangDream/tsugu/models/main-data-store';
-import {
-  globalDefaultServer,
-  bestdoriUrl,
-} from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
+import { itemResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/models/item-resource-repository';
+import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { BANGDREAM_ITEM_TYPE_PREFIXES } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
 
 export class Item {
@@ -82,20 +78,10 @@ export class Item {
       server = getServerByPriority(this.name, displayedServerList);
     }
     server = getServerByPriority(this.name, displayedServerList);
-    let itemImageBuffer: Buffer;
-    if (this.typeName == 'material') {
-      itemImageBuffer = await downloadFileCache(
-        `${bestdoriUrl}/assets/${Server[server]}/thumb/material_rip/${this.typeName}${formatNumber(this.resourceId, 3)}.png`,
-      );
-    } else if (this.typeName == 'star') {
-      itemImageBuffer = await downloadFileCache(
-        `${bestdoriUrl}/assets/${Server[server]}/thumb/common_rip/star.png`,
-      );
-    } else {
-      itemImageBuffer = await downloadFileCache(
-        `${bestdoriUrl}/assets/${Server[server]}/thumb/common_rip/${this.typeName}${this.resourceId}.png`,
-      );
-    }
+    const itemImageBuffer = await itemResourceRepository.getImageBuffer(
+      this,
+      server,
+    );
     return await loadImage(itemImageBuffer);
   }
 }

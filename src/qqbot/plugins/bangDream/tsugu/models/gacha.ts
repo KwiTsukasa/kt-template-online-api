@@ -1,4 +1,3 @@
-import { bangDreamBestdoriProvider } from '@/qqbot/plugins/bangDream/tsugu/data-clients/bestdori-provider';
 import { bangDreamMainDataRepository } from '@/qqbot/plugins/bangDream/tsugu/models/main-data-repository';
 import { Image, loadImage } from 'skia-canvas';
 import {
@@ -7,14 +6,13 @@ import {
   serverList,
 } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { getPresentEvent } from '@/qqbot/plugins/bangDream/tsugu/models/event';
-import {
-  globalDefaultServer,
-} from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
+import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { BANGDREAM_GACHA_TYPE_NAME } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
 import {
   isFreeGachaType,
   isPermanentJapaneseGachaPeriod,
 } from '@/qqbot/plugins/bangDream/tsugu/models/gacha-policy';
+import { gachaResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/models/gacha-resource-repository';
 
 const gachaDataCache = {};
 
@@ -81,10 +79,9 @@ export class Gacha {
    */
   constructor(gachaId: number) {
     this.gachaId = gachaId;
-    const gachaData = bangDreamMainDataRepository.getEntity<Record<string, any>>(
-      'gacha',
-      gachaId,
-    );
+    const gachaData = bangDreamMainDataRepository.getEntity<
+      Record<string, any>
+    >('gacha', gachaId);
     if (gachaData == undefined) {
       this.isExist = false;
       return;
@@ -147,14 +144,7 @@ export class Gacha {
    * @param update - update参数，未传入时使用默认值。
    */
   async getData(update: boolean = true) {
-    const time = update ? 0 : 1 / 0;
-    const gachaData = await bangDreamBestdoriProvider.getJson<
-      Record<string, any>
-    >(
-      `/api/gacha/${this.gachaId}.json`,
-      { cacheTime: time },
-    );
-    return gachaData;
+    return await gachaResourceRepository.getDetail(this.gachaId, update);
   }
   /**
    * 在 Gacha 模型中获取横幅图片。
@@ -162,16 +152,9 @@ export class Gacha {
    * @returns 异步处理结果。
    */
   async getBannerImage(): Promise<Image> {
-    try {
-      if (this.bannerAssetBundleName == undefined) return this.getGachaLogo();
-      const BannerImageBuffer = await bangDreamBestdoriProvider.getAsset(
-        `/assets/jp/homebanner_rip/${this.bannerAssetBundleName}.png`,
-        { ignoreError: false },
-      );
-      return await loadImage(BannerImageBuffer);
-    } catch {
-      return this.getGachaLogo();
-    }
+    const bannerImageBuffer =
+      await gachaResourceRepository.getBannerImageBuffer(this);
+    return await loadImage(bannerImageBuffer);
   }
   /**
    * 在 Gacha 模型中获取卡池背景图片。
@@ -183,19 +166,12 @@ export class Gacha {
     displayedServerList: Server[] = globalDefaultServer,
   ): Promise<Image> {
     if (!displayedServerList) displayedServerList = globalDefaultServer;
-    const server = getServerByPriority(this.publishedAt);
-    let BGImageBuffer: Buffer;
-    try {
-      BGImageBuffer = await bangDreamBestdoriProvider.getAsset(
-        `/assets/${Server[server]}/gacha/screen/${this.resourceName}_rip/bg.png`,
-        { ignoreError: false },
+    const backgroundImageBuffer =
+      await gachaResourceRepository.getBackgroundImageBuffer(
+        this,
+        displayedServerList,
       );
-    } catch {
-      BGImageBuffer = await bangDreamBestdoriProvider.getAsset(
-        `/assets/${Server[server]}/gacha/screen/${this.resourceName}_rip/bg1.png`,
-      );
-    }
-    return await loadImage(BGImageBuffer);
+    return await loadImage(backgroundImageBuffer);
   }
   /**
    * 在 Gacha 模型中获取卡池Logo。
@@ -207,11 +183,11 @@ export class Gacha {
     displayedServerList: Server[] = globalDefaultServer,
   ): Promise<Image> {
     if (!displayedServerList) displayedServerList = globalDefaultServer;
-    const server = getServerByPriority(this.publishedAt);
-    const LogoImageBuffer = await bangDreamBestdoriProvider.getAsset(
-      `/assets/${Server[server]}/gacha/screen/${this.resourceName}_rip/logo.png`,
+    const logoImageBuffer = await gachaResourceRepository.getLogoImageBuffer(
+      this,
+      displayedServerList,
     );
-    return await loadImage(LogoImageBuffer);
+    return await loadImage(logoImageBuffer);
   }
   /**
    * 在 Gacha 模型中获取活动ID。

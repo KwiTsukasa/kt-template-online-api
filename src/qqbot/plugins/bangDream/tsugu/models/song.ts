@@ -1,19 +1,14 @@
 import { Image, loadImage } from 'skia-canvas';
-import { bangDreamBestdoriProvider } from '@/qqbot/plugins/bangDream/tsugu/data-clients/bestdori-provider';
-import {
-  getServerByPriority,
-  Server,
-} from '@/qqbot/plugins/bangDream/tsugu/models/server';
+import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { bangDreamMainDataRepository } from '@/qqbot/plugins/bangDream/tsugu/models/main-data-repository';
 import { stringToNumberArray } from '@/qqbot/plugins/bangDream/tsugu/models/model-utils';
-import { assetErrorImageBuffer } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
 import {
   BANGDREAM_DIFFICULTY_COLORS,
   BANGDREAM_DIFFICULTY_NAME_BY_ID,
   BANGDREAM_DIFFICULTY_NAMES,
-  BANGDREAM_SERVER_CODES,
   BANGDREAM_SONG_TAG_NAME,
 } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import { songResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/models/song-resource-repository';
 
 export const difficultyName: Record<number, string> =
   BANGDREAM_DIFFICULTY_NAME_BY_ID;
@@ -190,12 +185,7 @@ export class Song {
    * 在 Song 模型中请求当前模型的远端详情数据。
    */
   async getData() {
-    const songData = await bangDreamBestdoriProvider.getJson<
-      Record<string, any>
-    >(
-      `/api/songs/${this.songId}.json`,
-    );
-    return songData;
+    return await songResourceRepository.getDetail(this.songId);
   }
   /**
    * 在 Song 模型中获取歌曲资源批次。
@@ -203,7 +193,7 @@ export class Song {
    * @returns 计算后的数值。
    */
   getSongRip(): number {
-    return Math.ceil(this.songId / 10) * 10;
+    return songResourceRepository.getSongRip(this.songId);
   }
   /**
    * 在 Song 模型中获取歌曲封面图片。
@@ -214,22 +204,10 @@ export class Song {
   async getSongJacketImage(
     displayedServerList: Server[] = [Server.jp, Server.cn],
   ): Promise<Image> {
-    let jacketImageBuffer = await bangDreamBestdoriProvider.getAsset(
-      this.getSongJacketImagePath(displayedServerList),
-      { memoryCache: false },
+    const jacketImageBuffer = await songResourceRepository.getJacketImageBuffer(
+      this,
+      displayedServerList,
     );
-    //下载失败自动尝试切换服务器下载
-    if (jacketImageBuffer.equals(assetErrorImageBuffer)) {
-      const jacketImageName = this.jacketImage[this.jacketImage.length - 1];
-      for (const server of BANGDREAM_SERVER_CODES) {
-        const retryPath = `/assets/${server}/musicjacket/musicjacket${this.getSongRip()}_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket${this.getSongRip()}-${jacketImageName}-jacket.png`;
-        jacketImageBuffer = await bangDreamBestdoriProvider.getAsset(
-          retryPath,
-          { ignoreError: true, memoryCache: false, retryCount: 1 },
-        );
-        if (!jacketImageBuffer.equals(assetErrorImageBuffer)) break;
-      }
-    }
     return await loadImage(jacketImageBuffer);
   }
   /**
@@ -239,8 +217,9 @@ export class Song {
    * @returns 格式化后的文本。
    */
   getSongJacketImageURL(displayedServerList?: Server[]): string {
-    return bangDreamBestdoriProvider.resolveUrl(
-      this.getSongJacketImagePath(displayedServerList),
+    return songResourceRepository.resolveJacketImageUrl(
+      this,
+      displayedServerList,
     );
   }
   /**
@@ -250,16 +229,7 @@ export class Song {
    * @returns 格式化后的资源路径。
    */
   getSongJacketImagePath(displayedServerList?: Server[]): string {
-    let server = getServerByPriority(this.publishedAt, displayedServerList);
-    const jacketImageName = this.jacketImage[this.jacketImage.length - 1];
-    let songRip = this.getSongRip();
-    if (this.songId == 13 || this.songId == 40) {
-      songRip = 30;
-    } else if (this.songId == 273) {
-      //针对273的修复
-      server = Server.cn;
-    }
-    return `/assets/${Server[server]}/musicjacket/musicjacket${songRip}_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket${songRip}-${jacketImageName.toLowerCase()}-jacket.png`;
+    return songResourceRepository.getJacketImagePath(this, displayedServerList);
   }
   /**
    * 在 Song 模型中获取Tag名称。
@@ -279,10 +249,7 @@ export class Song {
    * @returns 异步处理结果。
    */
   async getSongChart(difficultyId: number): Promise<object> {
-    const songChart = await bangDreamBestdoriProvider.getJson<object>(
-      `/api/charts/${this.songId}/${difficultyName[difficultyId]}.json`,
-    );
-    return songChart;
+    return await songResourceRepository.getChart(this.songId, difficultyId);
   }
 
   /*

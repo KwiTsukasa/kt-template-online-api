@@ -381,6 +381,7 @@ export class Event {
     try {
       const stampBuffer = await bangDreamBestdoriProvider.getAsset(
         `/assets/${serverName}/stamp/01_rip/${stampAssetName}.png`,
+        { ignoreError: false },
       );
       return await loadImage(stampBuffer);
     } catch {
@@ -426,6 +427,7 @@ export class Event {
     try {
       const decoBuffer = await bangDreamBestdoriProvider.getAsset(
         `/assets/${serverName}/deco/pins_rip/${decoAssetName}.png`,
+        { ignoreError: false },
       );
       return await loadImage(decoBuffer);
     } catch {

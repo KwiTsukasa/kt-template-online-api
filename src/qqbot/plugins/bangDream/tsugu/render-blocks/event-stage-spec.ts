@@ -67,6 +67,23 @@ export function getEventStageSongRowSize(): { height: number; width: number } {
 }
 
 /**
+ * 判断下一张试炼 stage 图是否应该换到新列。
+ *
+ * @param currentHeight - 当前列高度。
+ * @param nextImageHeight - 下一张 stage 图高度。
+ * @param currentColumnLength - 当前列已有图片数量。
+ * @param maxHeight - 单列最大高度，未传入时使用默认值。
+ */
+export function shouldStartNewEventStageColumn(
+  currentHeight: number,
+  nextImageHeight: number,
+  currentColumnLength: number,
+  maxHeight = BANGDREAM_EVENT_STAGE_SPEC.list.maxColumnHeight,
+): boolean {
+  return currentColumnLength > 0 && currentHeight + nextImageHeight > maxHeight;
+}
+
+/**
  * 将试炼 stage 图片按最大列高拆成多列。
  *
  * @param images - 试炼 stage 图片列表。
@@ -83,13 +100,20 @@ export function splitEventStageImagesByColumnHeight<
   let currentHeight = 0;
 
   for (const image of images) {
-    currentHeight += image.height;
-    if (currentHeight > maxHeight && currentColumn.length > 0) {
+    if (
+      shouldStartNewEventStageColumn(
+        currentHeight,
+        image.height,
+        currentColumn.length,
+        maxHeight,
+      )
+    ) {
       columns.push(currentColumn);
       currentColumn = [];
-      currentHeight = image.height;
+      currentHeight = 0;
     }
     currentColumn.push(image);
+    currentHeight += image.height;
   }
 
   if (currentColumn.length > 0) {

@@ -4,6 +4,7 @@ import {
   getEventStageSongCellWidth,
   getEventStageSongJacketHeight,
   getEventStageSongRowSize,
+  shouldStartNewEventStageColumn,
   splitEventStageImagesByColumnHeight,
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/event-stage-spec';
 
@@ -36,6 +37,12 @@ describe('BangDream event stage spec', () => {
       [1, 2],
       [3, 4],
     ]);
+  });
+
+  it('detects whether the next stage image should start a new column', () => {
+    expect(shouldStartNewEventStageColumn(5000, 1000, 2)).toBe(false);
+    expect(shouldStartNewEventStageColumn(5000, 1001, 2)).toBe(true);
+    expect(shouldStartNewEventStageColumn(0, 7000, 0)).toBe(false);
   });
 
   it('keeps oversized first image in its own column', () => {

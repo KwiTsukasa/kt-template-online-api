@@ -25,6 +25,9 @@ $StdoutLog = Join-Path $LogDir "$LogName.out.log"
 $StderrLog = Join-Path $LogDir "$LogName.err.log"
 Remove-Item -LiteralPath $StdoutLog,$StderrLog -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $ResolvedOutFile -Force -ErrorAction SilentlyContinue
+$OutExtension = [System.IO.Path]::GetExtension($ResolvedOutFile)
+Get-ChildItem -LiteralPath $OutDir -Filter "$LogName-*${OutExtension}" -ErrorAction SilentlyContinue |
+  Remove-Item -Force -ErrorAction SilentlyContinue
 
 $Payload = @{
   input = @{
@@ -53,12 +56,27 @@ const { TsuguApplicationService } = require("./src/qqbot/plugins/bangDream/rende
   const service = new TsuguApplicationService(renderer, new ToolsService());
   await service.onApplicationBootstrap();
   const result = await service.execute(payload.operationKey, payload.input);
-  const match = result.replyText.match(/base64:\/\/([A-Za-z0-9+/=]+)/);
-  if (!match) throw new Error("No image CQ payload");
+  const matches = [...result.replyText.matchAll(/base64:\/\/([A-Za-z0-9+/=]+)/g)];
+  if (matches.length === 0) throw new Error("No image CQ payload");
   fs.mkdirSync(path.dirname(payload.outFile), { recursive: true });
-  fs.writeFileSync(payload.outFile, Buffer.from(match[1], "base64"));
+  const parsed = path.parse(payload.outFile);
+  const files = matches.map((match, index) => {
+    const outFile =
+      index === 0
+        ? payload.outFile
+        : path.join(
+            parsed.dir,
+            parsed.name + "-" + (index + 1) + (parsed.ext || ".jpg"),
+          );
+    fs.writeFileSync(outFile, Buffer.from(match[1], "base64"));
+    return {
+      bytes: fs.statSync(outFile).size,
+      out: outFile,
+    };
+  });
   process.stdout.write(JSON.stringify({
-    bytes: fs.statSync(payload.outFile).size,
+    bytes: files[0].bytes,
+    files,
     imageCount: result.imageCount,
     out: payload.outFile,
   }, null, 2) + "\n");
@@ -117,5 +135,9 @@ if (Test-Path $StderrLog) { Get-Content $StderrLog }
 if ($CompletedByOutput) {
   Write-Output "BangDream smoke output completed; lingering process $($Process.Id) was cleaned up."
   exit 0
+}
+if (-not (Test-SmokeCompleted)) {
+  Write-Output "BangDream smoke did not produce an image file."
+  exit 1
 }
 exit $Process.ExitCode

@@ -363,9 +363,10 @@ export interface TsuguHook {
 - 已新增 `render-blocks/gacha-simulate-spec.ts`，收口抽卡模拟网格宽度、单抽/汇总混排尺寸、重复卡叠层、数量右对齐和卡池横幅布局；`gacha-simulate.ts` 改为消费 spec，抽卡概率和卡池选择逻辑保持不变。
 - 已新增 `gacha-simulate-spec.spec.ts`，覆盖 10 抽网格、汇总模式、重复卡叠层、计数字样和横幅尺寸；本地生成 `gacha-simulate-spec-10-259.jpg` 和 `gacha-simulate-spec-50-259-after-cache-fix.jpg`，验证抽卡模拟两种布局模式图片输出正常。
 - 抽卡模拟 50 抽 smoke 暴露资源下载短时失败会把 URL 写入无过期错误缓存，导致后续重试直接输出 `asset error`；已改为只有 HTTP 404 进入错误缓存，超时/网络抖动不污染 URL，并新增 `file-cache-client.spec.ts` 覆盖瞬时失败后可再次下载、404 缓存缺失资源两种路径。
-- 已新增 `render-blocks/event-stage-spec.ts`，收口试炼列表最大列高、歌曲单元格/封面/ID/难度条尺寸和试炼类型顶部文字规格；`event-stage.ts` 与 `list-event-stage.ts` 改为消费 spec，活动/歌曲选择和输出结构保持不变。
-- 已新增 `event-stage-spec.spec.ts`，覆盖试炼歌曲行尺寸、类型顶部文字规格和按列高拆分算法；本地生成 `event-stage-spec-310.jpg`、`event-stage-spec-310-meta.jpg`，验证 `/查试炼 310` 与 `/查试炼 310 -m` 图片输出正常。
-- smoke/Jenkins/远程调试卡点继续按已固化规则处理：同一卡点第二次尝试前必须改变可验证变量；Jenkins 查询 URL 含方括号时用 `curl -g` 或改查 Jenkins home；线上图片 smoke 必须查询 `commandId`、拉回图片、展示图片、查日志并清理本轮临时目录。
+- 已新增 `render-blocks/event-stage-spec.ts`，收口试炼列表最大列高、歌曲单元格/封面/ID/难度条尺寸、试炼类型顶部文字规格和换列判断；`event-stage.ts` 与 `list-event-stage.ts` 改为消费 spec，活动/歌曲选择和输出结构保持不变。
+- 线上 smoke 暴露 `/查试炼 310 -m` 将所有列横向拼成一张巨大 canvas 会触发 Pod `OOMKilled exit=137`；已改为边绘制边按列输出多张 CQ 图片，不再创建最终横向巨图，普通版和 meta 版均拆成 5 张输出。
+- 已新增 `event-stage-spec.spec.ts`，覆盖试炼歌曲行尺寸、类型顶部文字规格、换列判断和按列高拆分算法；本地生成 `event-stage-split-310*.jpg`、`event-stage-split-310-meta*.jpg`，验证 `/查试炼 310` 与 `/查试炼 310 -m` 图片输出正常。
+- smoke/Jenkins/远程调试卡点继续按已固化规则处理：同一卡点第二次尝试前必须改变可验证变量；Jenkins 查询 URL 含方括号时用 `curl -g` 或改查 Jenkins home；线上图片 smoke 必须查询 `commandId`、拉回图片、展示图片、查日志并清理本轮临时目录；PowerShell 双引号 here-string 中不要写 JS `${...}` 模板字面量，避免被 PowerShell 提前插值；smoke 没有真实图片落盘时必须失败。
 
 ### Phase 6：策略 policy 和时间/档线规则
 

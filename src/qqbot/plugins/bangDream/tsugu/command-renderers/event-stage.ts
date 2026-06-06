@@ -12,11 +12,9 @@ import {
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-event-stage';
 import { outputEasyImages } from '@/qqbot/plugins/bangDream/tsugu/canvas/output';
 import { drawDataBlock } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/data-block';
-import {
-  stackImage,
-  stackImageHorizontal,
-} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
-import { splitEventStageImagesByColumnHeight } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/event-stage-spec';
+import { stackImage } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
+import { shouldStartNewEventStageColumn } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/event-stage-spec';
+import { Canvas } from 'skia-canvas';
 
 /**
  * 在QQBot 图片视图层中绘制活动试炼。
@@ -52,13 +50,14 @@ export async function drawEventStage(
     return [`错误: 活动stage数据不足`];
   }
 
-  const all = [];
-  all.push(drawTitle('查试炼', `国服 ID:${eventId} 活动试炼`));
+  const titleImage = drawTitle('查试炼', `国服 ID:${eventId} 活动试炼`);
 
   //获得活动stage列表
   const stageList = eventStage.getStageList();
-
-  const eventStagePromises = [];
+  const outputImages: Array<Buffer | string> = [];
+  let currentColumn: Canvas[] = [];
+  let currentHeight = 0;
+  let pageIndex = 0;
 
   //绘制活动stage，每个stage一个图片
   /**
@@ -73,22 +72,32 @@ export async function drawEventStage(
     ]);
   }
 
-  for (let i = 0; i < stageList.length; i++) {
-    const stage = stageList[i];
-    eventStagePromises.push(drawStageSong(stage));
+  async function flushColumn() {
+    if (currentColumn.length === 0) return;
+    const columnBlock = drawDataBlock({ list: currentColumn });
+    const pageImages =
+      pageIndex === 0 ? [titleImage, columnBlock] : [columnBlock];
+    outputImages.push(...(await outputEasyImages(pageImages, { compress })));
+    currentColumn = [];
+    currentHeight = 0;
+    pageIndex += 1;
   }
 
-  const eventStageResults = await Promise.all(eventStagePromises);
+  for (const stage of stageList) {
+    const stageImage = await drawStageSong(stage);
+    if (
+      shouldStartNewEventStageColumn(
+        currentHeight,
+        stageImage.height,
+        currentColumn.length,
+      )
+    ) {
+      await flushColumn();
+    }
+    currentColumn.push(stageImage);
+    currentHeight += stageImage.height;
+  }
 
-  //将活动stage图片纵向并横向合并
-  const eventStageImageListHorizontal = splitEventStageImagesByColumnHeight(
-    eventStageResults,
-  ).map((list) => drawDataBlock({ list }));
-  const eventStageListImage = stackImageHorizontal(
-    eventStageImageListHorizontal,
-  );
-
-  all.push(eventStageListImage);
-
-  return await outputEasyImages(all, { compress });
+  await flushColumn();
+  return outputImages;
 }

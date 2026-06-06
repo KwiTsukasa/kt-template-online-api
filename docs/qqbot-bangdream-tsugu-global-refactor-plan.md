@@ -302,6 +302,7 @@ export interface TsuguHook {
 - 已新增 `models/card-resource-repository.ts`，把 `Card` 的详情请求、资源批次目录、图标/插画/trim 图片路径和重图缓存策略收口到 provider-backed repository；`card-resource-repository.spec.ts` 覆盖 `/api/cards` 缓存参数、`9999` 后资源批次、CN 优先资源路径和非 icon 图片 `memoryCache=false`，本地 `/查卡 472` 图片 smoke 输出非空。
 - 已新增 `models/gacha-resource-repository.ts`，把 `Gacha` 的详情请求、首页横幅、screen 背景、`bg1` fallback 和 Logo 资源路径收口到 provider-backed repository；`gacha-resource-repository.spec.ts` 覆盖 `/api/gacha` 缓存参数、CN 优先 screen 路径、横幅缺失回退 Logo 和背景 fallback，本地 `/查卡池 259`、`/抽卡模拟 10 259` 图片 smoke 输出非空。
 - 已新增 `models/event-stage-data-repository.ts`，把 `EventStage` 的 festival stages/rotationMusics 数据请求从 `bestdoriUrl + callAPIAndCacheResponse` 收口到 provider-backed repository；`event-stage-data-repository.spec.ts` 覆盖两个 festival API 路径和缓存参数，本地 `/查试炼 310` 保持拆成 5 张图片输出。
+- 已新增 `models/character-resource-repository.ts`，把 `Character` 的详情请求、角色图标、KV 立绘和名称横幅资源路径从 `bestdoriUrl + callAPIAndCacheResponse/downloadFileCache` 收口到 provider-backed repository；`character-resource-repository.spec.ts` 覆盖详情缓存策略和三类资源路径，本地 `/查角色 1` 图片 smoke 输出非空。
 - 固化：Windows 下不要用反斜杠测试路径直接调用 Jest pattern，容易出现 `Pattern ... - 0 matches`；指定文件测试统一使用 `pnpm exec jest --runInBand --runTestsByPath test/qqbot/plugins/bangDream/tsugu/<file>.spec.ts ...`，路径用正斜杠。
 
 ### Phase 4：搜索 specification 和 matcher

@@ -1,9 +1,6 @@
 import mainAPI from '@/qqbot/plugins/bangDream/tsugu/models/main-data-store';
-import { callAPIAndCacheResponse } from '@/qqbot/plugins/bangDream/tsugu/data-clients/api-cache-client';
 import { Image, loadImage } from 'skia-canvas';
-import { downloadFileCache } from '@/qqbot/plugins/bangDream/tsugu/data-clients/asset-cache-client';
-import { formatNumber } from '@/qqbot/plugins/bangDream/tsugu/models/model-utils';
-import { bestdoriUrl } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
+import { characterResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/models/character-resource-repository';
 
 export class Character {
   characterId: number;
@@ -98,12 +95,10 @@ export class Character {
    * @param update - update参数，未传入时使用默认值。
    */
   async getData(update: boolean = true) {
-    const time = update ? 0 : 1 / 0;
-    const cardData = await callAPIAndCacheResponse(
-      `${bestdoriUrl}/api/characters/${this.characterId}.json`,
-      time,
+    return await characterResourceRepository.getDetail(
+      this.characterId,
+      update,
     );
-    return cardData;
   }
   /**
    * 在 Character 模型中获取图标。
@@ -111,8 +106,8 @@ export class Character {
    * @returns 异步处理结果。
    */
   async getIcon(): Promise<Image> {
-    const iconBuffer = await downloadFileCache(
-      `${bestdoriUrl}/res/icon/chara_icon_${this.characterId}.png`,
+    const iconBuffer = await characterResourceRepository.getIconBuffer(
+      this.characterId,
     );
     return await loadImage(iconBuffer);
   }
@@ -122,9 +117,8 @@ export class Character {
    * @returns 异步处理结果。
    */
   async getIllustration(): Promise<Image> {
-    const illustrationBuffer = await downloadFileCache(
-      `${bestdoriUrl}/assets/jp/ui/character_kv_image/${formatNumber(this.characterId, 3)}_rip/image.png`,
-    );
+    const illustrationBuffer =
+      await characterResourceRepository.getIllustrationBuffer(this.characterId);
     return await loadImage(illustrationBuffer);
   }
   /**
@@ -133,9 +127,8 @@ export class Character {
    * @returns 异步处理结果。
    */
   async getNameBanner(): Promise<Image> {
-    const nameBannerBuffer = await downloadFileCache(
-      `${bestdoriUrl}/assets/jp/character_name_rip/name_top_chr${formatNumber(this.characterId, 2)}.png`,
-    );
+    const nameBannerBuffer =
+      await characterResourceRepository.getNameBannerBuffer(this.characterId);
     return await loadImage(nameBannerBuffer);
   }
   /**

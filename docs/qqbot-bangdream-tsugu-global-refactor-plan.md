@@ -14,7 +14,7 @@
 ## 当前事实
 
 - Tsugu 源码目录：`src/qqbot/plugins/bangDream/tsugu`
-- TS 文件：初始基线 92；当前 `tsugu` 源码 124
+- TS 文件：初始基线 92；当前 `tsugu` 源码 125
 - 函数节点：481，其中稳定函数 410，匿名/内联回调 71
 - 源码 JSDoc：稳定函数 410/410 已覆盖
 - 变量声明：1896
@@ -352,6 +352,8 @@ export interface TsuguHook {
 - 线上 `/qqbot/command/test` smoke 已固化为先按 `operationKey` 查询启用命令、传 `commandId`，并保留完整命令文本；避免默认 `preview` selfId 未绑定命令时误报“未匹配到命令”。
 - 已新增 `render-blocks/song-chart-preview-spec.ts`，把谱面 BPM 时间计算、双押识别、滑条拆分、音符排序、展示/计数音符分类、难度颜色和布局规格从 `song-chart-preview.ts` 拆成可测纯策略；绘制文件改为消费 `createSongChartPreviewModel`，只保留资源加载和 canvas 绘制。
 - 已新增 `song-chart-preview-spec.spec.ts`，覆盖 BPM 变速时间、十六分单点、双押、滑条 bar/tick/end、布局列数和音符分类；本地生成 `song-chart-preview-spec-136-expert.jpg`，验证谱面预览重构后图片输出非空且视觉结构正常。
+- 已新增 `render-blocks/card-art-spec.ts`，收口卡牌图标/插画边框 URL 生成、icon/illustration 画布尺寸、属性/乐队/星级/突破/技能等级坐标；`card-art.ts` 改为消费 spec 和 URL factory，下载与绘制顺序保持不变。
+- 已新增 `card-art-spec.spec.ts`，覆盖 rarity=1 属性边框、其他稀有度边框和关键尺寸；本地生成 `card-art-spec-card-472.jpg`，验证卡牌详情图在规格收口后仍能正常输出。
 
 ### Phase 6：策略 policy 和时间/档线规则
 

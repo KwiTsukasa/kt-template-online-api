@@ -2,7 +2,6 @@ import { Event } from '@/qqbot/plugins/bangDream/tsugu/models/event';
 import { Card } from '@/qqbot/plugins/bangDream/tsugu/models/card';
 import {
   drawList,
-  line,
   drawListByServerList,
   drawListMerge,
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-frame';
@@ -37,7 +36,7 @@ import {
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-song';
 import { drawDottedLine } from '@/qqbot/plugins/bangDream/tsugu/canvas/dotted-line';
 import { createHorizontalSeparatorSpec } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/layout-spec';
-import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
+import { DetailBlockBuilder } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/detail-block-builder';
 
 const songSeparatorLine = drawDottedLine(
   createHorizontalSeparatorSpec({ height: 10 }),
@@ -60,17 +59,6 @@ async function drawSongListDataBlock(songList: Song[], topLeftText?: string) {
 }
 
 /**
- * 在QQBot 图片视图层中推入区块。
- *
- * @param list - 待处理列表。
- * @param section - 区块参数。
- */
-function pushSection(list: Array<Image | Canvas>, section: Image | Canvas) {
-  list.push(section);
-  list.push(line);
-}
-
-/**
  * 在QQBot 图片视图层中判断对象是否包含指定自有属性。
  *
  * @param source - 输入来源对象或数据集合。
@@ -84,21 +72,20 @@ function hasOwn(source: object, key: string): boolean {
 /**
  * 在QQBot 图片视图层中追加活动加成区块列表。
  *
- * @param list - 待处理列表。
+ * @param builder - 详情区块构建器。
  * @param event - 活动参数。
  */
 async function appendEventBonusSections(
-  list: Array<Image | Canvas>,
+  builder: DetailBlockBuilder,
   event: Event,
 ): Promise<void> {
-  pushSection(list, drawList({ key: '活动加成' }));
+  builder.addSection(drawList({ key: '活动加成' }));
   const attributeList = event.getAttributeList();
   for (const percent in attributeList) {
     if (!hasOwn(attributeList, percent)) {
       continue;
     }
-    pushSection(
-      list,
+    builder.addSection(
       await drawAttributeInList({
         content: attributeList[percent],
         text: ` +${percent}%`,
@@ -106,14 +93,13 @@ async function appendEventBonusSections(
     );
   }
 
-  pushSection(list, drawList({ key: '活动角色加成' }));
+  builder.addSection(drawList({ key: '活动角色加成' }));
   const characterList = event.getCharacterList();
   for (const percent in characterList) {
     if (!hasOwn(characterList, percent)) {
       continue;
     }
-    pushSection(
-      list,
+    builder.addSection(
       await drawCharacterInList({
         content: characterList[percent],
         text: ` +${percent}%`,
@@ -146,16 +132,18 @@ function getEventStatBonusText(event: Event): string {
 /**
  * 在QQBot 图片视图层中追加活动数值加成。
  *
- * @param list - 待处理列表。
+ * @param builder - 详情区块构建器。
  * @param event - 活动参数。
  */
-function appendEventStatBonus(list: Array<Image | Canvas>, event: Event): void {
+function appendEventStatBonus(
+  builder: DetailBlockBuilder,
+  event: Event,
+): void {
   const statText = getEventStatBonusText(event);
   if (!statText) {
     return;
   }
-  pushSection(
-    list,
+  builder.addSection(
     drawList({
       key: '活动偏科加成',
       text: statText,
@@ -166,19 +154,18 @@ function appendEventStatBonus(list: Array<Image | Canvas>, event: Event): void {
 /**
  * 在QQBot 图片视图层中追加活动奖励区块列表。
  *
- * @param list - 待处理列表。
+ * @param builder - 详情区块构建器。
  * @param event - 活动参数。
  * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
  */
 async function appendEventRewardSections(
-  list: Array<Image | Canvas>,
+  builder: DetailBlockBuilder,
   event: Event,
   displayedServerList: Server[],
 ): Promise<void> {
   const decoImage = await event.getRewardDeco(displayedServerList[0]);
   if (decoImage) {
-    pushSection(
-      list,
+    builder.addSection(
       await drawList({
         key: '活动装饰',
         content: [decoImage],
@@ -188,12 +175,11 @@ async function appendEventRewardSections(
     );
   }
 
-  pushSection(list, await drawDegreeListOfEvent(event, displayedServerList));
+  builder.addSection(await drawDegreeListOfEvent(event, displayedServerList));
 
   const stampImage = await event.getRewardStamp(displayedServerList[0]);
   if (stampImage) {
-    pushSection(
-      list,
+    builder.addSection(
       await drawList({
         key: '活动表情',
         content: [stampImage],
@@ -204,8 +190,7 @@ async function appendEventRewardSections(
   }
 
   const rewardCardList = event.rewardCards.map((cardId) => new Card(cardId));
-  pushSection(
-    list,
+  builder.addSection(
     await drawCardListInList({
       key: '奖励卡牌',
       cardList: rewardCardList,
@@ -231,12 +216,12 @@ function getEventMusicServer(event: Event, displayedServerList: Server[]) {
 /**
  * 在QQBot 图片视图层中追加活动音乐区块。
  *
- * @param list - 待处理列表。
+ * @param builder - 详情区块构建器。
  * @param event - 活动参数。
  * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
  */
 async function appendEventMusicSection(
-  list: Array<Image | Canvas>,
+  builder: DetailBlockBuilder,
   event: Event,
   displayedServerList: Server[],
 ): Promise<void> {
@@ -253,7 +238,7 @@ async function appendEventMusicSection(
   const songs = event.musics[musicServer].map(
     (music) => new Song(music.musicId),
   );
-  pushSection(list, await drawSongListInList(songs));
+  builder.addSection(await drawSongListInList(songs));
 }
 
 interface EventGachaSections {
@@ -381,23 +366,21 @@ export async function drawEventDetail(
     return ['错误: 活动不存在'];
   }
   await event.initFull();
-  const list: Array<Image | Canvas> = [];
+  const builder = new DetailBlockBuilder();
 
   //bannner
   const eventBannerImage = await event.getBannerImage();
   const eventBannerImageCanvas = drawBannerImageCanvas(eventBannerImage);
-  list.push(eventBannerImageCanvas);
-  list.push(new Canvas(BANGDREAM_RENDER_THEME.layout.contentWidth, 30));
+  builder.add(eventBannerImageCanvas).addSpacer(30);
 
   //标题
-  list.push(
+  builder.addSection(
     await drawListByServerList(
       event.eventName,
       '活动名称',
       displayedServerList,
     ),
   );
-  list.push(line);
 
   //类型
   const typeImage = drawList({
@@ -411,11 +394,10 @@ export async function drawEventDetail(
     text: event.eventId.toString(),
   });
 
-  list.push(drawListMerge([typeImage, idImage]));
-  list.push(line);
+  builder.addSection(drawListMerge([typeImage, idImage]));
 
   //开始时间
-  list.push(
+  builder.addSection(
     await drawTimeInList({
       key: '开始时间',
       content: event.startAt,
@@ -423,35 +405,33 @@ export async function drawEventDetail(
       estimateCNTime: true,
     }),
   );
-  list.push(line);
 
   //结束时间
-  list.push(
+  builder.addSection(
     await drawTimeInList({
       key: '结束时间',
       content: event.endAt,
     }),
   );
-  list.push(line);
 
   //活动属性加成
-  await appendEventBonusSections(list, event);
+  await appendEventBonusSections(builder, event);
 
   //活动偏科加成(stat)
-  appendEventStatBonus(list, event);
+  appendEventStatBonus(builder, event);
 
   //有歌榜活动的歌榜歌曲
-  await appendEventMusicSection(list, event, displayedServerList);
+  await appendEventMusicSection(builder, event, displayedServerList);
 
   // 活动装饰、牌子、表情和奖励卡牌
-  await appendEventRewardSections(list, event, displayedServerList);
+  await appendEventRewardSections(builder, event, displayedServerList);
 
   const { gachaCardList, gachaImageList } = await collectEventGachaSections(
     event,
     displayedServerList,
   );
 
-  list.push(
+  builder.add(
     await drawCardListInList({
       key: '活动期间卡池卡牌',
       cardList: gachaCardList,
@@ -462,7 +442,7 @@ export async function drawEventDetail(
     }),
   );
 
-  const listImage = drawDataBlock({ list });
+  const listImage = builder.toDataBlock();
   //创建最终输出数组
 
   const all = [];

@@ -6,7 +6,8 @@ import {
   normalizeBangDreamPositiveInteger,
 } from '@/qqbot/plugins/bangDream/tsugu/runtime/runtime-options';
 
-const errUrl: string[] = [];
+const errorUrlCache: { [url: string]: number } = {};
+const ERROR_URL_CACHE_EXPIRY_MS = 12 * 60 * 60 * 1000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 8000;
 
 function getRequestTimeoutMs(): number {
@@ -35,8 +36,8 @@ export async function download(
     ensureDirectoryExists(directory);
   }
   try {
-    if (errUrl.includes(url)) {
-      throw new Error('downloadFile: errUrl.includes(url)');
+    if (isErrorUrlCacheActive(url)) {
+      throw new Error('downloadFile: errorUrlCache includes url');
     }
     let eTag: string | undefined;
     const cacheFilePath = path.join(directory || '', `${fileName || ''}`);
@@ -83,7 +84,9 @@ export async function download(
     }
     return fileBuffer;
   } catch (e) {
-    errUrl.push(url);
+    if (getErrorResponseStatus(e) === 404) {
+      errorUrlCache[url] = Date.now();
+    }
     if (url.includes('.png')) {
       throw e;
     } else {
@@ -92,6 +95,26 @@ export async function download(
       );
     }
   }
+}
+
+function isErrorUrlCacheActive(url: string): boolean {
+  const cachedAt = errorUrlCache[url];
+  if (cachedAt == null) {
+    return false;
+  }
+  if (Date.now() - cachedAt >= ERROR_URL_CACHE_EXPIRY_MS) {
+    delete errorUrlCache[url];
+    return false;
+  }
+  return true;
+}
+
+function getErrorResponseStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error == null || !('response' in error)) {
+    return undefined;
+  }
+  const response = (error as { response?: { status?: number } }).response;
+  return response?.status;
 }
 
 /**

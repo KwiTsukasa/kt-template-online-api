@@ -360,6 +360,9 @@ export interface TsuguHook {
 - 已新增 `list-frame-spec.spec.ts`，覆盖列表正文宽度、标签/tips 偏移、合并列宽、居中图片换行和左侧竖线尺寸；本地生成 `list-frame-spec-song-136.jpg`、`list-frame-spec-event-50.jpg`、`list-frame-spec-character-1.jpg`，验证列表框架规格收口后查曲/查活动/查角色图片输出正常。
 - 已新增 `canvas/text-spec.ts`，收口文本默认字号、行高比例、baseline、空画布尺寸、混排间距和内联图片缩放计算；`canvas/text.ts` 改为消费 spec，原有文本换行和混排拆分逻辑保持不变。
 - 已新增 `text-spec.spec.ts`，覆盖行高/间距比例、baseline、内联图片缩放和空/单行/多行画布尺寸；本地生成 `text-spec-song-136.jpg`、`text-spec-event-50.jpg`、`text-spec-character-1.jpg`，验证文本规格收口后查曲/查活动/查角色图片输出正常。
+- 已新增 `render-blocks/gacha-simulate-spec.ts`，收口抽卡模拟网格宽度、单抽/汇总混排尺寸、重复卡叠层、数量右对齐和卡池横幅布局；`gacha-simulate.ts` 改为消费 spec，抽卡概率和卡池选择逻辑保持不变。
+- 已新增 `gacha-simulate-spec.spec.ts`，覆盖 10 抽网格、汇总模式、重复卡叠层、计数字样和横幅尺寸；本地生成 `gacha-simulate-spec-10-259.jpg` 和 `gacha-simulate-spec-50-259-after-cache-fix.jpg`，验证抽卡模拟两种布局模式图片输出正常。
+- 抽卡模拟 50 抽 smoke 暴露资源下载短时失败会把 URL 写入无过期错误缓存，导致后续重试直接输出 `asset error`；已改为只有 HTTP 404 进入错误缓存，超时/网络抖动不污染 URL，并新增 `file-cache-client.spec.ts` 覆盖瞬时失败后可再次下载、404 缓存缺失资源两种路径。
 
 ### Phase 6：策略 policy 和时间/档线规则
 

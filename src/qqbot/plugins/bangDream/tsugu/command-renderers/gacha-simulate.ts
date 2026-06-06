@@ -20,8 +20,16 @@ import {
   pickGachaCardIdByWeight,
   pickGachaRarityByRate,
 } from '@/qqbot/plugins/bangDream/tsugu/models/gacha-policy';
+import {
+  BANGDREAM_GACHA_SIMULATE_SPEC,
+  createGachaBannerCanvasSize,
+  createGachaSimulateWrapOptions,
+  getGachaBannerImageMaxWidth,
+  getGachaCountTextPosition,
+  getGachaDuplicateIconRect,
+  getGachaDuplicateLayerCount,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/gacha-simulate-spec';
 
-const maxWidth = 230 * 5;
 /**
  * 在QQBot 图片视图层中绘制Random卡池。
  *
@@ -36,7 +44,9 @@ export async function drawRandomGacha(
   compress: boolean,
 ): Promise<Array<Buffer | string>> {
   if (isGachaSpinCountTooLarge(times)) {
-    return [`错误: 抽卡次数过多, 请不要超过${BANGDREAM_GACHA_MAX_SPIN_COUNT}次`];
+    return [
+      `错误: 抽卡次数过多, 请不要超过${BANGDREAM_GACHA_MAX_SPIN_COUNT}次`,
+    ];
   }
   if (!gacha.isExist) {
     return ['错误: 该卡池不存在'];
@@ -52,11 +62,8 @@ export async function drawRandomGacha(
       cardImageList.push(await drawGachaCard(getGachaRandomCard(gacha, i)));
     }
     gachaImage = drawTextWithImages({
-      textSize: 230,
-      lineHeight: 230,
       content: cardImageList,
-      maxWidth: maxWidth,
-      spacing: 0,
+      ...createGachaSimulateWrapOptions('single'),
     });
   } else {
     const gachaList: { [cardId: number]: number } = {};
@@ -98,11 +105,8 @@ export async function drawRandomGacha(
     cardImageList.push(...cardImageResults);
 
     gachaImage = drawTextWithImages({
-      textSize: 115,
-      lineHeight: 115,
       content: cardImageList,
-      maxWidth: maxWidth,
-      spacing: 0,
+      ...createGachaSimulateWrapOptions('summary'),
     });
   }
 
@@ -134,37 +138,54 @@ async function drawGachaCard(card: Card, numberOfCard: number = 1) {
     cardIdVisible: true,
   });
   if (numberOfCard > 1) {
-    const canvas = new Canvas(230, 230);
+    const canvas = new Canvas(
+      BANGDREAM_GACHA_SIMULATE_SPEC.card.canvas.width,
+      BANGDREAM_GACHA_SIMULATE_SPEC.card.canvas.height,
+    );
     const ctx = canvas.getContext('2d');
-    const maxTimes = Math.min(6, numberOfCard - 1);
+    const layerCount = getGachaDuplicateLayerCount(numberOfCard);
     const cardIconWithoutId = await drawCardIcon({
       card: card,
       trainingStatus: false,
       cardTypeVisible: false,
       cardIdVisible: false,
     });
-    for (let i = 1; i <= maxTimes; i++) {
-      ctx.drawImage(
-        cardIconWithoutId,
-        35 - (maxTimes - i + 1) * 4,
-        20 - (maxTimes - i + 1) * 4,
-        180,
-        180,
-      );
+    for (let i = 0; i < layerCount; i++) {
+      const rect = getGachaDuplicateIconRect(i, layerCount);
+      ctx.drawImage(cardIconWithoutId, rect.x, rect.y, rect.width, rect.height);
     }
-    ctx.drawImage(cardIconWithId, 35, 20, 180, 210);
+    const iconWithCount = BANGDREAM_GACHA_SIMULATE_SPEC.card.iconWithCount;
+    ctx.drawImage(
+      cardIconWithId,
+      iconWithCount.x,
+      iconWithCount.y,
+      iconWithCount.width,
+      iconWithCount.height,
+    );
+    const countTextSpec = BANGDREAM_GACHA_SIMULATE_SPEC.card.countText;
     const numberText = drawText({
       text: `x${numberOfCard}`,
-      textSize: 30,
-      maxWidth: 80,
-      color: '#A7A7A7',
+      textSize: countTextSpec.textSize,
+      maxWidth: countTextSpec.maxWidth,
+      color: countTextSpec.color,
     });
-    ctx.drawImage(numberText, 215 - numberText.width, 195);
+    const countPosition = getGachaCountTextPosition(numberText.width);
+    ctx.drawImage(numberText, countPosition.x, countPosition.y);
     return canvas;
   } else {
-    const canvas = new Canvas(230, 230);
+    const canvas = new Canvas(
+      BANGDREAM_GACHA_SIMULATE_SPEC.card.canvas.width,
+      BANGDREAM_GACHA_SIMULATE_SPEC.card.canvas.height,
+    );
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(cardIconWithId, 35, 20, 180, 200);
+    const iconSingle = BANGDREAM_GACHA_SIMULATE_SPEC.card.iconSingle;
+    ctx.drawImage(
+      cardIconWithId,
+      iconSingle.x,
+      iconSingle.y,
+      iconSingle.width,
+      iconSingle.height,
+    );
     return canvas;
   }
 }
@@ -195,21 +216,6 @@ function getGachaRandomCard(gacha: Gacha, times: number) {
   return card;
 }
 
-/*
-const okButton = drawRoundedRectWithText({
-    text: 'ok',
-    textColor: '#FFFFFF',
-    textSize: 60,
-    color: '#FE3B73',
-    textAlign: 'center',
-    width: 280,
-    height: 80,
-    radius: 20,
-    strokeColor: '#FFFFFF',
-    strokeWidth: 5,
-})
-*/
-
 //画下方的卡池Banner与抽卡按钮
 /**
  * 在QQBot 图片视图层中绘制卡池横幅。
@@ -219,11 +225,15 @@ const okButton = drawRoundedRectWithText({
 async function drawGachaBanner(gacha: Gacha) {
   const gachaBannerImage = resizeImage({
     image: await drawGachaDataBlock(gacha),
-    widthMax: maxWidth / 2,
+    widthMax: getGachaBannerImageMaxWidth(),
   });
-  const canvas = new Canvas(maxWidth + 200, gachaBannerImage.height);
+  const canvasSize = createGachaBannerCanvasSize(gachaBannerImage.height);
+  const canvas = new Canvas(canvasSize.width, canvasSize.height);
   const ctx = canvas.getContext('2d');
-  //ctx.drawImage(okButton, 1010, 0)
-  ctx.drawImage(gachaBannerImage, 50, 0);
+  ctx.drawImage(
+    gachaBannerImage,
+    BANGDREAM_GACHA_SIMULATE_SPEC.banner.imageX,
+    BANGDREAM_GACHA_SIMULATE_SPEC.banner.imageY,
+  );
   return canvas;
 }

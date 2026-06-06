@@ -394,8 +394,9 @@ export interface TsuguHook {
 - 已新增 `tsugu/runtime/hook-registry.ts`，定义 `TsuguHookContext`、`TsuguHook`、`TsuguHookRegistry` 和默认 `TsuguLogHook`，命令执行日志包含 `operation`、`stage`、`handler`、`query`、`imageCount`、`durationMs` 和错误字符串。
 - 已新增 `renderer/tsugu-application.service.ts` 作为 BangDream Tsugu 应用入口，统一执行主数据 ready 等待、operation registry 查找、handler 调度、hook 触发和错误字符串化。
 - `QqbotBangDreamClientService` 已改为注入 `TsuguApplicationService`，不再直接调用 renderer；`QqbotBangDreamRendererService` 移除 operation key 调度，只保留字典刷新、健康检查、渲染选项解析和 15 个具体 handler。
+- 已新增 `tsugu/runtime/operation-pipeline.ts`，把主数据 ready、operation resolve、handler render、output hook 和 error hook 固定为 `TsuguOperationPipeline.run`，`TsuguApplicationService.execute` 只负责调用 pipeline。
 - `scripts/bangdream-render-smoke.ps1` 已切到 `TsuguApplicationService`，本地 smoke 继续走真实应用入口，避免 facade 改造后验证脚本回退到旧链路。
-- 已新增 `hook-registry.spec.ts` 和 `tsugu-application.service.spec.ts`，覆盖 hook 顺序、错误 hook、应用入口执行、字典刷新和错误字符串化；本地 Phase 7 smoke 已生成 `phase7-hook-event-50.jpg`、`phase7-hook-cutoff-detail-100-50-cn.jpg`、`phase7-hook-cutoff-recent-100-50-cn.jpg`。
+- 已新增 `hook-registry.spec.ts`、`operation-pipeline.spec.ts` 和 `tsugu-application.service.spec.ts`，覆盖 hook 顺序、错误 hook、pipeline 成功/未知 operation/handler 错误、应用入口执行、字典刷新和错误字符串化；本地 Phase 7 smoke 已生成 `phase7-hook-event-50.jpg`、`phase7-hook-cutoff-detail-100-50-cn.jpg`、`phase7-hook-cutoff-recent-100-50-cn.jpg`、`phase7-pipeline-event-50.jpg`、`phase7-pipeline-cutoff-detail-100-50-cn.jpg`、`phase7-pipeline-cutoff-recent-100-50-cn.jpg`。
 
 ## 文件迁移优先级
 

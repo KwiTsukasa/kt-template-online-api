@@ -9,6 +9,10 @@ import {
 } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { setFontStyle } from '@/qqbot/plugins/bangDream/tsugu/canvas/text';
 import { drawRoundedRect } from '@/qqbot/plugins/bangDream/tsugu/canvas/rect';
+import {
+  BANGDREAM_CARD_PREFIX_SPEC,
+  getCardPrefixBandLogoLayout,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-card-prefix-spec';
 
 let prefixBG: Canvas;
 /**
@@ -16,10 +20,10 @@ let prefixBG: Canvas;
  */
 async function loadImageOnce() {
   prefixBG = drawRoundedRect({
-    width: 800,
-    height: 155,
-    color: '#f1f1ef',
-    radius: [15, 15, 0, 0],
+    width: BANGDREAM_CARD_PREFIX_SPEC.canvas.width,
+    height: BANGDREAM_CARD_PREFIX_SPEC.canvas.height,
+    color: BANGDREAM_CARD_PREFIX_SPEC.background.color,
+    radius: [...BANGDREAM_CARD_PREFIX_SPEC.background.radius],
   });
 }
 loadImageOnce();
@@ -34,38 +38,57 @@ export async function drawCardPrefixInList(
   card: Card,
   displayedServerList: Server[] = globalDefaultServer,
 ) {
-  const canvas = new Canvas(800, 155);
+  const canvas = new Canvas(
+    BANGDREAM_CARD_PREFIX_SPEC.canvas.width,
+    BANGDREAM_CARD_PREFIX_SPEC.canvas.height,
+  );
   const ctx = canvas.getContext('2d');
   ctx.drawImage(prefixBG, 0, 0);
 
-  //bandLogo
   const band = new Band(card.bandId);
   const bandLogo = await band.getLogo();
+  const bandLogoLayout = getCardPrefixBandLogoLayout(bandLogo);
   ctx.drawImage(
     bandLogo,
-    30,
-    25,
-    240,
-    (bandLogo.height * 240) / bandLogo.width,
+    bandLogoLayout.x,
+    bandLogoLayout.y,
+    bandLogoLayout.width,
+    bandLogoLayout.height,
   );
 
-  //prefix
   const server = getServerByPriority(card.releasedAt, displayedServerList);
-  ctx.fillStyle = '#5b5b5b';
-  ctx.textBaseline = 'hanging';
-  ctx.textAlign = 'left';
-  setFontStyle(ctx, 30, 'old');
-  ctx.fillText(card.prefix[server], 300, 35, 470);
+  ctx.fillStyle = BANGDREAM_CARD_PREFIX_SPEC.text.color;
+  ctx.textBaseline = BANGDREAM_CARD_PREFIX_SPEC.text.baseline;
+  ctx.textAlign = BANGDREAM_CARD_PREFIX_SPEC.text.align;
+  setFontStyle(
+    ctx,
+    BANGDREAM_CARD_PREFIX_SPEC.text.prefix.fontSize,
+    BANGDREAM_CARD_PREFIX_SPEC.text.font,
+  );
+  ctx.fillText(
+    card.prefix[server],
+    BANGDREAM_CARD_PREFIX_SPEC.text.prefix.x,
+    BANGDREAM_CARD_PREFIX_SPEC.text.prefix.y,
+    BANGDREAM_CARD_PREFIX_SPEC.text.prefix.maxWidth,
+  );
 
-  //characterName
   const character = new Character(card.characterId);
   const tempserver = getServerByPriority(
     character.characterName,
     displayedServerList,
   );
   const characterName = character.characterName[tempserver];
-  setFontStyle(ctx, 40, 'old');
-  ctx.fillText(characterName, 300, 75, 470);
+  setFontStyle(
+    ctx,
+    BANGDREAM_CARD_PREFIX_SPEC.text.characterName.fontSize,
+    BANGDREAM_CARD_PREFIX_SPEC.text.font,
+  );
+  ctx.fillText(
+    characterName,
+    BANGDREAM_CARD_PREFIX_SPEC.text.characterName.x,
+    BANGDREAM_CARD_PREFIX_SPEC.text.characterName.y,
+    BANGDREAM_CARD_PREFIX_SPEC.text.characterName.maxWidth,
+  );
 
   return canvas;
 }

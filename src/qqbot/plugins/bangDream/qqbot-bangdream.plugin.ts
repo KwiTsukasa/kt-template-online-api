@@ -3,10 +3,10 @@ import { formatKtDateTime, ToolsService } from '@/common';
 import type { QqbotIntegrationPlugin } from '../../qqbot.types';
 import {
   BANGDREAM_INPUT_SCHEMA,
-  BANGDREAM_OPERATION_DEFS,
   BANGDREAM_OUTPUT_SCHEMA,
 } from './commands/qqbot-bangdream-command.definitions';
 import { QqbotBangDreamClientService } from './qqbot-bangdream-client.service';
+import { BANGDREAM_OPERATION_REGISTRY } from './tsugu/runtime/operation-registry';
 
 @Injectable()
 export class QqbotBangDreamPluginService {
@@ -41,7 +41,7 @@ export class QqbotBangDreamPluginService {
       },
       key: 'bangDream',
       name: 'BangDream 查询',
-      operations: BANGDREAM_OPERATION_DEFS.map((operation) => ({
+      operations: BANGDREAM_OPERATION_REGISTRY.map((operation) => ({
         cacheTtlMs: 60_000,
         description: operation.description,
         inputSchema: BANGDREAM_INPUT_SCHEMA,

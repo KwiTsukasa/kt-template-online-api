@@ -4,6 +4,7 @@ import { extname } from 'node:path';
 
 const CHECK_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 const CHECK_ROOTS = ['src/', 'test/', 'apps/', 'libs/'];
+const MAX_COMMAND_LENGTH = process.platform === 'win32' ? 4000 : 120000;
 
 function run(command, args) {
   const result = spawnSync(command, args, {
@@ -43,6 +44,32 @@ function getPnpmCommand() {
   return 'pnpm';
 }
 
+function chunkArgs(baseArgs, values) {
+  const chunks = [];
+  let currentChunk = [];
+  let currentLength = baseArgs.join(' ').length;
+
+  for (const value of values) {
+    const valueLength = value.length + 3;
+    if (
+      currentChunk.length > 0 &&
+      currentLength + valueLength > MAX_COMMAND_LENGTH
+    ) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentLength = baseArgs.join(' ').length;
+    }
+    currentChunk.push(value);
+    currentLength += valueLength;
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
+
 function getStagedFiles() {
   return output('git', [
     'diff',
@@ -68,11 +95,14 @@ if (files.length === 0) {
   process.exit(0);
 }
 
-run(getPnpmCommand(), [
+const eslintBaseArgs = [
   'exec',
   'eslint',
   '--cache',
   '--cache-location',
   'node_modules/.cache/husky-eslint/',
-  ...files,
-]);
+];
+
+for (const chunk of chunkArgs(eslintBaseArgs, files)) {
+  run(getPnpmCommand(), [...eslintBaseArgs, ...chunk]);
+}

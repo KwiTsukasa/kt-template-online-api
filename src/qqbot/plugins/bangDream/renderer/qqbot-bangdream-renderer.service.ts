@@ -1,51 +1,70 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Card } from '../tsugu/domain/card';
+import { DictService } from '@/admin/dict/dict.service';
+import { Card } from '../tsugu/models/card';
+import { BangDreamGachaType } from '../tsugu/models/bangdream-protocol';
+import { getPresentEvent } from '../tsugu/models/event';
+import { Gacha, getPresentGachaList } from '../tsugu/models/gacha';
+import { Server } from '../tsugu/models/server';
+import { Song } from '../tsugu/models/song';
+import mainAPI from '../tsugu/models/main-data-store';
+import { fuzzySearch, type FuzzySearchResult } from '../tsugu/search/fuzzy-search';
+import { drawCardDetail } from '../tsugu/command-renderers/card-detail';
+import { drawCardList } from '../tsugu/command-renderers/card-list';
+import { drawCharacterDetail } from '../tsugu/command-renderers/character-detail';
+import { drawCharacterList } from '../tsugu/command-renderers/character-list';
+import { drawCutoffAll } from '../tsugu/command-renderers/cutoff-all';
+import { drawCutoffDetail } from '../tsugu/command-renderers/cutoff-detail';
+import { drawCutoffEventTop } from '../tsugu/command-renderers/cutoff-event-top';
+import { drawCutoffListOfRecentEvent } from '../tsugu/command-renderers/cutoff-list-of-recent-event';
+import { drawEventDetail } from '../tsugu/command-renderers/event-detail';
+import { drawEventList } from '../tsugu/command-renderers/event-list';
+import { drawEventStage } from '../tsugu/command-renderers/event-stage';
+import { drawGachaDetail } from '../tsugu/command-renderers/gacha-detail';
+import { drawRandomGacha } from '../tsugu/command-renderers/gacha-simulate';
+import { drawPlayerDetail } from '../tsugu/command-renderers/player-detail';
+import { drawSongChart } from '../tsugu/command-renderers/song-chart';
+import { drawSongDetail } from '../tsugu/command-renderers/song-detail';
+import { drawSongList } from '../tsugu/command-renderers/song-list';
+import { drawSongMetaList } from '../tsugu/command-renderers/song-meta-list';
+import { drawSongRandom } from '../tsugu/command-renderers/song-random';
 import {
-  BANGDREAM_DEFAULT_SERVER_CODES,
-  BANGDREAM_DIFFICULTY_ALIASES,
-  BANGDREAM_SERVER_ALIASES,
-  BangDreamGachaType,
-} from '../tsugu/domain/bangdream.enum';
-import { getPresentEvent } from '../tsugu/domain/event';
-import { Gacha, getPresentGachaList } from '../tsugu/domain/gacha';
-import { Server } from '../tsugu/domain/server';
-import { Song } from '../tsugu/domain/song';
-import mainAPI from '../tsugu/domain/main-api';
-import { fuzzySearch, type FuzzySearchResult } from '../tsugu/fuzzy-search';
-import { drawCardDetail } from '../tsugu/views/card-detail';
-import { drawCardList } from '../tsugu/views/card-list';
-import { drawCharacterDetail } from '../tsugu/views/character-detail';
-import { drawCharacterList } from '../tsugu/views/character-list';
-import { drawCutoffAll } from '../tsugu/views/cutoff-all';
-import { drawCutoffDetail } from '../tsugu/views/cutoff-detail';
-import { drawCutoffEventTop } from '../tsugu/views/cutoff-event-top';
-import { drawCutoffListOfRecentEvent } from '../tsugu/views/cutoff-list-of-recent-event';
-import { drawEventDetail } from '../tsugu/views/event-detail';
-import { drawEventList } from '../tsugu/views/event-list';
-import { drawEventStage } from '../tsugu/views/event-stage';
-import { drawGachaDetail } from '../tsugu/views/gacha-detail';
-import { drawRandomGacha } from '../tsugu/views/gacha-simulate';
-import { drawPlayerDetail } from '../tsugu/views/player-detail';
-import { drawSongChart } from '../tsugu/views/song-chart';
-import { drawSongDetail } from '../tsugu/views/song-detail';
-import { drawSongList } from '../tsugu/views/song-list';
-import { drawSongMetaList } from '../tsugu/views/song-meta-list';
-import { drawSongRandom } from '../tsugu/views/song-random';
+  BangDreamDictionaryLoader,
+  type BangDreamDictionaryItem,
+} from '../tsugu/runtime/dictionary-loader';
+import { getBangDreamOperationDefinition } from '../tsugu/runtime/operation-registry';
+import {
+  BANGDREAM_TSUGU_ENV_KEYS,
+  normalizeBangDreamBoolean,
+  splitBangDreamOptionList,
+} from '../tsugu/runtime/runtime-options';
 import type {
   QqbotBangDreamCommandInput,
   QqbotBangDreamCommandOutput,
   QqbotBangDreamOperationKey,
 } from '../qqbot-bangdream.types';
 
-const DEFAULT_DISPLAYED_SERVERS = BANGDREAM_DEFAULT_SERVER_CODES.map(
-  (serverCode) => Server[serverCode],
-);
 const SOURCE_NAME = 'Tsugu BangDream Bot 内置源码';
 
 @Injectable()
-export class QqbotBangDreamRendererService {
-  constructor(private readonly configService: ConfigService) {}
+export class QqbotBangDreamRendererService implements OnApplicationBootstrap {
+  private readonly dictionaryLoader = new BangDreamDictionaryLoader();
+
+  constructor(
+    private readonly configService: ConfigService,
+    @Optional()
+    private readonly dictService?: DictService,
+  ) {}
+
+  async onApplicationBootstrap() {
+    await this.refreshDictionaryCache();
+  }
+
+  async refreshDictionaryCache() {
+    await this.dictionaryLoader.refresh((dictCode) =>
+      this.fetchDictionaryItems(dictCode),
+    );
+  }
 
   checkHealth() {
     const data = mainAPI as { cards?: unknown; songs?: unknown };
@@ -60,40 +79,19 @@ export class QqbotBangDreamRendererService {
     operationKey: QqbotBangDreamOperationKey,
     input: QqbotBangDreamCommandInput,
   ) {
-    switch (operationKey) {
-      case 'bangdream.card.illustration':
-        return await this.getCardIllustration(input);
-      case 'bangdream.card.search':
-        return await this.searchCard(input);
-      case 'bangdream.character.search':
-        return await this.searchCharacter(input);
-      case 'bangdream.cutoff.all':
-        return await this.getCutoffAll(input);
-      case 'bangdream.cutoff.detail':
-        return await this.getCutoffDetail(input);
-      case 'bangdream.cutoff.recent':
-        return await this.getCutoffRecent(input);
-      case 'bangdream.event.search':
-        return await this.searchEvent(input);
-      case 'bangdream.event.stage':
-        return await this.getEventStage(input);
-      case 'bangdream.gacha.search':
-        return await this.searchGacha(input);
-      case 'bangdream.gacha.simulate':
-        return await this.simulateGacha(input);
-      case 'bangdream.player.search':
-        return await this.searchPlayer(input);
-      case 'bangdream.song.chart':
-        return await this.getSongChart(input);
-      case 'bangdream.song.meta':
-        return await this.getSongMeta(input);
-      case 'bangdream.song.random':
-        return await this.randomSong(input);
-      case 'bangdream.song.search':
-        return await this.searchSong(input);
-      default:
-        throw new Error(`BangDream 插件能力不存在：${operationKey}`);
+    const operation = getBangDreamOperationDefinition(operationKey);
+    if (!operation) {
+      throw new Error(`BangDream 插件能力不存在：${operationKey}`);
     }
+    const handler = this[operation.handlerName];
+    if (typeof handler !== 'function') {
+      throw new Error(`BangDream 插件能力未绑定执行器：${operationKey}`);
+    }
+    return await (
+      handler as (
+        input: QqbotBangDreamCommandInput,
+      ) => Promise<QqbotBangDreamCommandOutput>
+    ).call(this, input);
   }
 
   async searchSong(input: QqbotBangDreamCommandInput) {
@@ -172,7 +170,7 @@ export class QqbotBangDreamRendererService {
 
   async searchEvent(input: QqbotBangDreamCommandInput) {
     const query = this.requireText(input, '请提供活动关键词或活动 ID');
-    const options = this.getRenderOptions(input);
+    const options = this.getRenderOptions(input, { useEasyBG: true });
     const images = this.isInteger(query)
       ? await drawEventDetail(
           Number(query),
@@ -407,22 +405,25 @@ export class QqbotBangDreamRendererService {
     };
   }
 
-  private getRenderOptions(input: QqbotBangDreamCommandInput) {
+  private getRenderOptions(
+    input: QqbotBangDreamCommandInput,
+    defaults: { useEasyBG?: boolean } = {},
+  ) {
     return {
-      compress: this.normalizeBoolean(
+      compress: normalizeBangDreamBoolean(
         input.compress,
-        this.normalizeBoolean(
-          this.configService.get<string>('BANGDREAM_TSUGU_COMPRESS'),
+        normalizeBangDreamBoolean(
+          this.configService.get<string>(BANGDREAM_TSUGU_ENV_KEYS.compress),
           true,
         ),
       ),
       displayedServerList: this.pickDisplayedServerList(input),
       mainServer: this.pickMainServer(input, []),
-      useEasyBG: this.normalizeBoolean(
+      useEasyBG: normalizeBangDreamBoolean(
         input.useEasyBG,
-        this.normalizeBoolean(
-          this.configService.get<string>('BANGDREAM_TSUGU_USE_EASY_BG'),
-          false,
+        normalizeBangDreamBoolean(
+          this.configService.get<string>(BANGDREAM_TSUGU_ENV_KEYS.useEasyBg),
+          defaults.useEasyBG ?? false,
         ),
       ),
     };
@@ -431,17 +432,16 @@ export class QqbotBangDreamRendererService {
   private pickDisplayedServerList(input: QqbotBangDreamCommandInput) {
     const source =
       input.displayedServerList ||
-      this.configService.get<string>('BANGDREAM_TSUGU_DISPLAYED_SERVERS');
-    if (!source) return [...DEFAULT_DISPLAYED_SERVERS];
-    const values = Array.isArray(source)
-      ? source
-      : `${source}`.split(/[\s,，]+/).filter(Boolean);
+      this.configService.get<string>(
+        BANGDREAM_TSUGU_ENV_KEYS.displayedServers,
+      );
+    const defaultServers = this.dictionaryLoader.getDefaultDisplayedServers();
+    if (!source) return defaultServers;
+    const values = splitBangDreamOptionList(source);
     const servers = values
       .map((item) => this.normalizeServer(item))
       .filter((item) => item !== undefined) as Server[];
-    return servers.length > 0
-      ? [...new Set(servers)]
-      : [...DEFAULT_DISPLAYED_SERVERS];
+    return servers.length > 0 ? [...new Set(servers)] : defaultServers;
   }
 
   private pickMainServer(
@@ -453,7 +453,7 @@ export class QqbotBangDreamRendererService {
       input.serverName,
       input.server,
       tokens.find((item) => this.normalizeServer(item) !== undefined) ||
-        this.configService.get<string>('BANGDREAM_TSUGU_MAIN_SERVER'),
+        this.configService.get<string>(BANGDREAM_TSUGU_ENV_KEYS.mainServer),
     );
     return this.normalizeServer(explicit) ?? Server.cn;
   }
@@ -463,11 +463,7 @@ export class QqbotBangDreamRendererService {
     if (!source) return undefined;
     const numeric = this.optionalNumber(source);
     if (numeric !== undefined) return numeric;
-    const normalized = source.toLowerCase();
-    const alias =
-      BANGDREAM_DIFFICULTY_ALIASES[
-        normalized as keyof typeof BANGDREAM_DIFFICULTY_ALIASES
-      ];
+    const alias = this.dictionaryLoader.resolveDifficulty(source);
     if (alias !== undefined) return alias;
     const matched = fuzzySearch(source)?.difficulty?.[0];
     return typeof matched === 'number' ? matched : undefined;
@@ -480,12 +476,8 @@ export class QqbotBangDreamRendererService {
     if (Number.isInteger(numeric) && numeric >= 0 && numeric <= 4) {
       return numeric as Server;
     }
-    const normalized = raw.toLowerCase();
-    const serverCode =
-      BANGDREAM_SERVER_ALIASES[
-        normalized as keyof typeof BANGDREAM_SERVER_ALIASES
-      ];
-    return serverCode === undefined ? undefined : Server[serverCode];
+    const server = this.dictionaryLoader.resolveServer(raw);
+    return server === undefined ? undefined : (server as Server);
   }
 
   private requireText(input: QqbotBangDreamCommandInput, message: string) {
@@ -535,11 +527,7 @@ export class QqbotBangDreamRendererService {
   }
 
   private normalizeBoolean(value: unknown, fallback: boolean) {
-    if (value === undefined || value === null || value === '') return fallback;
-    if (typeof value === 'boolean') return value;
-    return ['1', 'true', 'yes', 'on', '是', '开启'].includes(
-      `${value}`.trim().toLowerCase(),
-    );
+    return normalizeBangDreamBoolean(value, fallback);
   }
 
   private isInteger(value: string) {
@@ -550,5 +538,16 @@ export class QqbotBangDreamRendererService {
     return values.find(
       (value) => value !== undefined && value !== null && value !== '',
     );
+  }
+
+  private async fetchDictionaryItems(
+    dictCode: string,
+  ): Promise<BangDreamDictionaryItem[]> {
+    if (!this.dictService) return [];
+    const items = await this.dictService.getDictItemsByKey(dictCode);
+    return items.map(({ label, value }) => ({
+      label,
+      value,
+    }));
   }
 }

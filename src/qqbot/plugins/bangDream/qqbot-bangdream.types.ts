@@ -1,3 +1,7 @@
+import type { QqbotBangDreamOperationKey } from './tsugu/runtime/operation-registry';
+
+export type { QqbotBangDreamOperationKey } from './tsugu/runtime/operation-registry';
+
 export type QqbotBangDreamCommandInput = {
   args?: string[];
   cardId?: number | string;
@@ -20,23 +24,6 @@ export type QqbotBangDreamCommandInput = {
   times?: number | string;
   useEasyBG?: boolean | string;
 };
-
-export type QqbotBangDreamOperationKey =
-  | 'bangdream.card.illustration'
-  | 'bangdream.card.search'
-  | 'bangdream.character.search'
-  | 'bangdream.cutoff.all'
-  | 'bangdream.cutoff.detail'
-  | 'bangdream.cutoff.recent'
-  | 'bangdream.event.search'
-  | 'bangdream.event.stage'
-  | 'bangdream.gacha.search'
-  | 'bangdream.gacha.simulate'
-  | 'bangdream.player.search'
-  | 'bangdream.song.chart'
-  | 'bangdream.song.meta'
-  | 'bangdream.song.random'
-  | 'bangdream.song.search';
 
 export type QqbotBangDreamCommandOutput = {
   imageCount: number;

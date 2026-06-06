@@ -1,7 +1,7 @@
 import {
   BANGDREAM_OPERATION_REGISTRY,
   type QqbotBangDreamOperationKey,
-} from '../tsugu/runtime/operation-registry';
+} from '@/qqbot/plugins/bangDream/registry/operation-registry';
 
 export const BANGDREAM_INPUT_SCHEMA = {
   properties: {

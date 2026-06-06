@@ -48,8 +48,8 @@ const path = require("path");
 const { ConfigService } = require("@nestjs/config");
 const payload = JSON.parse(Buffer.from("$PayloadBase64", "base64").toString("utf8"));
 const { ToolsService } = require("./src/common/services/tool.service");
-const { QqbotBangDreamRendererService } = require("./src/qqbot/plugins/bangDream/renderer/qqbot-bangdream-renderer.service");
-const { TsuguApplicationService } = require("./src/qqbot/plugins/bangDream/renderer/tsugu-application.service");
+const { QqbotBangDreamRendererService } = require("./src/qqbot/plugins/bangDream/application/bangdream-renderer.facade");
+const { TsuguApplicationService } = require("./src/qqbot/plugins/bangDream/application/bangdream-application.service");
 
 (async () => {
   const renderer = new QqbotBangDreamRendererService(new ConfigService({}), undefined);

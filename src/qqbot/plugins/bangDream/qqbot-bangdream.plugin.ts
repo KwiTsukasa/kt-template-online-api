@@ -4,9 +4,9 @@ import type { QqbotIntegrationPlugin } from '../../qqbot.types';
 import {
   BANGDREAM_INPUT_SCHEMA,
   BANGDREAM_OUTPUT_SCHEMA,
-} from './commands/qqbot-bangdream-command.definitions';
-import { QqbotBangDreamClientService } from './qqbot-bangdream-client.service';
-import { BANGDREAM_OPERATION_REGISTRY } from './tsugu/runtime/operation-registry';
+} from '@/qqbot/plugins/bangDream/commands/qqbot-bangdream-command.definitions';
+import { QqbotBangDreamClientService } from '@/qqbot/plugins/bangDream/application/bangdream-client.service';
+import { BANGDREAM_OPERATION_REGISTRY } from '@/qqbot/plugins/bangDream/registry/operation-registry';
 
 @Injectable()
 export class QqbotBangDreamPluginService {

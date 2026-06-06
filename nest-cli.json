@@ -5,11 +5,11 @@
   "compilerOptions": {
     "assets": [
       {
-        "include": "qqbot/plugins/bangDream/tsugu/assets/**/*",
+        "include": "qqbot/plugins/bangDream/assets/**/*",
         "outDir": "dist"
       },
       {
-        "include": "qqbot/plugins/bangDream/tsugu/static-config/**/*",
+        "include": "qqbot/plugins/bangDream/static-config/**/*",
         "outDir": "dist"
       }
     ],

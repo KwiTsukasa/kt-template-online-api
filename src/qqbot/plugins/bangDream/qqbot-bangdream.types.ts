@@ -1,6 +1,6 @@
-import type { QqbotBangDreamOperationKey } from './tsugu/runtime/operation-registry';
+import type { QqbotBangDreamOperationKey } from '@/qqbot/plugins/bangDream/registry/operation-registry';
 
-export type { QqbotBangDreamOperationKey } from './tsugu/runtime/operation-registry';
+export type { QqbotBangDreamOperationKey } from '@/qqbot/plugins/bangDream/registry/operation-registry';
 
 export type QqbotBangDreamCommandInput = {
   args?: string[];

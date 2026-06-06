@@ -6,6 +6,17 @@ import {
 } from 'skia-canvas';
 import { getBangDreamAssetPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/asset-manifest';
 import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
+import {
+  BANGDREAM_TEXT_SPEC,
+  BangDreamTextFont,
+  BangDreamTextWithImageFont,
+  createTextCanvasSize,
+  getInlineImageWidth,
+  getInlineImageY,
+  getTextBaselineY,
+  getTextInlineSpacing,
+  getTextLineHeight,
+} from '@/qqbot/plugins/bangDream/tsugu/canvas/text-spec';
 
 FontLibrary.use('old', [getBangDreamAssetPath('fontOld')]);
 FontLibrary.use('FangZhengHeiTi', [
@@ -18,7 +29,7 @@ interface WrapTextOptions {
   maxWidth: number;
   lineHeight?: number;
   color?: string;
-  font?: 'FangZhengHeiTi' | 'old' | 'default';
+  font?: BangDreamTextFont;
 }
 
 //画文字,自动换行
@@ -30,30 +41,29 @@ interface WrapTextOptions {
  */
 export function drawText({
   text,
-  textSize = 40,
+  textSize = BANGDREAM_TEXT_SPEC.font.defaultSize,
   maxWidth,
-  lineHeight = (textSize * 4) / 3,
+  lineHeight = getTextLineHeight(textSize),
   color = BANGDREAM_RENDER_THEME.color.primaryText,
   font = BANGDREAM_RENDER_THEME.font.body,
 }: WrapTextOptions): Canvas {
   const wrappedTextData = wrapText({ text, maxWidth, lineHeight, textSize });
-  let canvas: Canvas;
-  if (wrappedTextData.numberOfLines == 0) {
-    canvas = new Canvas(1, lineHeight);
-  } else if (wrappedTextData.numberOfLines == 1) {
-    canvas = new Canvas(1, 1);
-    const ctx = canvas.getContext('2d');
+  let singleLineWidth: number | undefined;
+  if (wrappedTextData.numberOfLines == 1) {
+    const ctx = createMeasureContext();
     setFontStyle(ctx, textSize, font);
-    const width = (maxWidth = ctx.measureText(
-      wrappedTextData.wrappedText[0],
-    ).width);
-    canvas = new Canvas(width, lineHeight);
-  } else {
-    canvas = new Canvas(maxWidth, lineHeight * wrappedTextData.numberOfLines);
+    singleLineWidth = ctx.measureText(wrappedTextData.wrappedText[0]).width;
   }
+  const canvasSize = createTextCanvasSize({
+    lineHeight,
+    maxWidth,
+    numberOfLines: wrappedTextData.numberOfLines,
+    singleLineWidth,
+  });
+  const canvas = new Canvas(canvasSize.width, canvasSize.height);
   const ctx = canvas.getContext('2d');
-  let y = lineHeight / 2 + textSize / 3;
-  ctx.textBaseline = 'alphabetic';
+  let y = getTextBaselineY(lineHeight, textSize);
+  ctx.textBaseline = BANGDREAM_TEXT_SPEC.font.baseline;
   setFontStyle(ctx, textSize, font);
   ctx.fillStyle = color;
   const wrappedText = wrappedTextData.wrappedText;
@@ -71,14 +81,13 @@ export function drawText({
  */
 export function wrapText({
   text,
-  textSize,
+  textSize = BANGDREAM_TEXT_SPEC.font.defaultSize,
   maxWidth,
   font = 'old',
 }: WrapTextOptions) {
-  const canvas = new Canvas(1, 1);
-  const ctx = canvas.getContext('2d');
+  const ctx = createMeasureContext();
   const temp = text.split('\n');
-  ctx.textBaseline = 'alphabetic';
+  ctx.textBaseline = BANGDREAM_TEXT_SPEC.font.baseline;
   setFontStyle(ctx, textSize, font);
 
   for (let i = 0; i < temp.length; i++) {
@@ -118,7 +127,7 @@ interface TextWithImagesOptions {
   content: (string | Canvas | Image)[];
   spacing?: number;
   color?: string;
-  font?: 'default' | 'old';
+  font?: BangDreamTextWithImageFont;
 }
 
 // 画文字包含图片
@@ -128,11 +137,11 @@ interface TextWithImagesOptions {
  * @param options1 - options1参数。
  */
 export function drawTextWithImages({
-  textSize = 40,
+  textSize = BANGDREAM_TEXT_SPEC.font.defaultSize,
   maxWidth,
-  lineHeight = (textSize * 4) / 3,
+  lineHeight = getTextLineHeight(textSize),
   content,
-  spacing = textSize / 3,
+  spacing = getTextInlineSpacing(textSize),
   color = BANGDREAM_RENDER_THEME.color.primaryText,
   font = BANGDREAM_RENDER_THEME.font.body,
 }: TextWithImagesOptions) {
@@ -144,36 +153,33 @@ export function drawTextWithImages({
     spacing,
   });
   const wrappedText = wrappedTextData.wrappedText;
-  let canvas: Canvas;
-  if (wrappedTextData.numberOfLines == 0) {
-    canvas = new Canvas(1, lineHeight);
-  }
-  //单行文字，宽度为第一行的宽度
-  else if (wrappedTextData.numberOfLines == 1) {
-    canvas = new Canvas(1, 1);
-    const ctx = canvas.getContext('2d');
+  let singleLineWidth: number | undefined;
+  if (wrappedTextData.numberOfLines == 1) {
+    const ctx = createMeasureContext();
     setFontStyle(ctx, textSize, font);
-    let Width = 0;
+    let width = 0;
     for (let n = 0; n < wrappedText[0].length; n++) {
       if (typeof wrappedText[0][n] === 'string') {
-        Width += ctx.measureText(wrappedText[0][n] as string).width;
+        width += ctx.measureText(wrappedText[0][n] as string).width;
       } else {
         //等比例缩放图片，至高度与textSize相同
         const tempImage = wrappedText[0][n] as Canvas | Image;
-        const tempWidth = (textSize * tempImage.width) / tempImage.height; //等比例缩放到高度与字体大小相同后，图片宽度
-        Width += tempWidth;
+        width += getInlineImageWidth(tempImage, textSize);
       }
-      Width += spacing;
+      width += spacing;
     }
-    canvas = new Canvas(Width - spacing, lineHeight);
+    singleLineWidth = width - spacing;
   }
-  //多行文字
-  else {
-    canvas = new Canvas(maxWidth, lineHeight * wrappedTextData.numberOfLines);
-  }
+  const canvasSize = createTextCanvasSize({
+    lineHeight,
+    maxWidth,
+    numberOfLines: wrappedTextData.numberOfLines,
+    singleLineWidth,
+  });
+  const canvas = new Canvas(canvasSize.width, canvasSize.height);
   const ctx = canvas.getContext('2d');
-  let y = lineHeight / 2 + textSize / 3;
-  ctx.textBaseline = 'alphabetic';
+  let y = getTextBaselineY(lineHeight, textSize);
+  ctx.textBaseline = BANGDREAM_TEXT_SPEC.font.baseline;
   setFontStyle(ctx, textSize, font);
   ctx.fillStyle = color;
   for (let i = 0; i < wrappedText.length; i++) {
@@ -185,11 +191,11 @@ export function drawTextWithImages({
       } else {
         //等比例缩放图片，至高度与textSize相同
         const tempImage = wrappedText[i][n] as Canvas | Image;
-        const tempWidth = (textSize * tempImage.width) / tempImage.height; //等比例缩放到高度与字体大小相同后，图片宽度
+        const tempWidth = getInlineImageWidth(tempImage, textSize);
         ctx.drawImage(
           tempImage,
           tempX,
-          y - textSize / 3 - textSize / 2,
+          getInlineImageY(y, textSize),
           tempWidth,
           textSize,
         );
@@ -211,15 +217,14 @@ export function drawTextWithImages({
  * @param options1 - options1参数。
  */
 function wrapTextWithImages({
-  textSize = 40,
+  textSize = BANGDREAM_TEXT_SPEC.font.defaultSize,
   maxWidth,
   content,
-  spacing = textSize / 3,
+  spacing = getTextInlineSpacing(textSize),
   font = 'old',
 }: TextWithImagesOptions) {
-  const canvas = new Canvas(1, 1);
-  const ctx = canvas.getContext('2d');
-  ctx.textBaseline = 'alphabetic';
+  const ctx = createMeasureContext();
+  ctx.textBaseline = BANGDREAM_TEXT_SPEC.font.baseline;
   setFontStyle(ctx, textSize, font);
   const temp: Array<Array<string | Image | Canvas>> = [[]];
   let lineNumber = 0;
@@ -274,7 +279,7 @@ function wrapTextWithImages({
       }
     } else if (content[i] instanceof Canvas || content[i] instanceof Image) {
       const tempImage = content[i] as Image;
-      const tempWidth = tempImage.width * (textSize / tempImage.height);
+      const tempWidth = getInlineImageWidth(tempImage, textSize);
       if (tempX + tempWidth > maxWidth) {
         newLine();
       }
@@ -309,3 +314,14 @@ export const setFontStyle = function (
   //设置字体大小
   ctx.font = `${textSize}px ${font},${BANGDREAM_RENDER_THEME.font.fallback}`;
 };
+
+/**
+ * 创建文本测量上下文。
+ */
+function createMeasureContext() {
+  const canvas = new Canvas(
+    BANGDREAM_TEXT_SPEC.canvas.measureWidth,
+    BANGDREAM_TEXT_SPEC.canvas.measureHeight,
+  );
+  return canvas.getContext('2d');
+}

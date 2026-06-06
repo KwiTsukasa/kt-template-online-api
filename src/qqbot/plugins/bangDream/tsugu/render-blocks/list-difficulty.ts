@@ -2,6 +2,15 @@ import { Canvas } from 'skia-canvas';
 import { Song } from '@/qqbot/plugins/bangDream/tsugu/models/song';
 import { drawText } from '@/qqbot/plugins/bangDream/tsugu/canvas/text';
 import { difficultyColorList } from '@/qqbot/plugins/bangDream/tsugu/models/song';
+import {
+  BANGDREAM_DIFFICULTY_LIST_SPEC,
+  createDifficultyBadgeLayout,
+  createDifficultyLevelTextSpec,
+  getDifficultyBadgeColor,
+  getDifficultyLevelTextPosition,
+  getDifficultyListCanvasWidth,
+  getDifficultyListItemX,
+} from './list-difficulty-spec';
 
 /**
  * 在图片布局层中绘制难度列表。
@@ -13,12 +22,13 @@ import { difficultyColorList } from '@/qqbot/plugins/bangDream/tsugu/models/song
  */
 export function drawDifficultyList(
   song: Song,
-  imageHeight: number = 60,
-  spacing: number = 10,
+  imageHeight: number = BANGDREAM_DIFFICULTY_LIST_SPEC.list
+    .defaultImageHeight,
+  spacing: number = BANGDREAM_DIFFICULTY_LIST_SPEC.list.defaultSpacing,
 ): Canvas {
   const difficultyCount = Object.keys(song.difficulty).length;
   const canvas = new Canvas(
-    imageHeight * difficultyCount + (difficultyCount - 1) * spacing,
+    getDifficultyListCanvasWidth(difficultyCount, imageHeight, spacing),
     imageHeight,
   );
   const ctx = canvas.getContext('2d');
@@ -26,7 +36,7 @@ export function drawDifficultyList(
     const i = parseInt(d);
     ctx.drawImage(
       drawDifficulty(i, song.difficulty[i].playLevel, imageHeight),
-      i * (imageHeight + spacing),
+      getDifficultyListItemX(i, imageHeight, spacing),
       0,
     );
   }
@@ -47,22 +57,20 @@ export function drawDifficulty(
 ) {
   const tempCanvas = new Canvas(imageHeight, imageHeight);
   const ctx = tempCanvas.getContext('2d');
-  if (difficultyColorList[difficultyType] != undefined) {
-    ctx.fillStyle = difficultyColorList[difficultyType];
-  } else {
-    ctx.fillStyle = '#f1f1f1';
-  }
-  ctx.arc(imageHeight / 2, imageHeight / 2, imageHeight / 2, 0, 2 * Math.PI);
-  ctx.fill();
-  const levelText = drawText({
-    textSize: (imageHeight / 3) * 2,
-    text: playLevel.toString(),
-    maxWidth: imageHeight * 3,
-  });
-  ctx.drawImage(
-    levelText,
-    imageHeight / 2 - levelText.width / 2,
-    imageHeight / 2 - levelText.height / 2,
+  const badgeLayout = createDifficultyBadgeLayout(imageHeight);
+  ctx.fillStyle = getDifficultyBadgeColor(difficultyType, difficultyColorList);
+  ctx.arc(
+    badgeLayout.arcX,
+    badgeLayout.arcY,
+    badgeLayout.arcRadius,
+    badgeLayout.arcStart,
+    badgeLayout.arcEnd,
   );
+  ctx.fill();
+  const levelText = drawText(
+    createDifficultyLevelTextSpec(imageHeight, playLevel),
+  );
+  const position = getDifficultyLevelTextPosition(imageHeight, levelText);
+  ctx.drawImage(levelText, position.x, position.y);
   return tempCanvas;
 }

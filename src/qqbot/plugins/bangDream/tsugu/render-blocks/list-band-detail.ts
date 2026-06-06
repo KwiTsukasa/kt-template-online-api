@@ -1,19 +1,16 @@
 import { Player } from '@/qqbot/plugins/bangDream/tsugu/models/player';
-import { Canvas, Image } from 'skia-canvas';
+import { Canvas, Image, loadImage } from 'skia-canvas';
 import { drawList } from './list-frame';
 import { resizeImage } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
 import { Band } from '@/qqbot/plugins/bangDream/tsugu/models/band';
 import { drawTextWithImages } from '@/qqbot/plugins/bangDream/tsugu/canvas/text';
 import { starList } from './list-rarity';
 import mainAPI from '@/qqbot/plugins/bangDream/tsugu/models/main-data-store';
-import { bestdoriUrl } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
-import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
-import * as path from 'path';
-import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
 import {
   BANGDREAM_DECK_TOTAL_RATING_ID,
   BANGDREAM_STAGE_CHALLENGE_BAND_ID,
 } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import { deckRankResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/deck-rank-resource-repository';
 
 interface drawBandDetailsInListOptions {
   [bandId: number]: Array<Canvas | Image | string>;
@@ -114,7 +111,7 @@ export async function drawPlayerStageChallengeRankInList(
 }
 
 //画玩家信息内乐队卡组最高等级
-const rankImage: { [rankImageName: string]: Image } = {};
+const rankImageCache: { [rankImageName: string]: Image } = {};
 /**
  * 在图片布局层中加载Rank图片。
  *
@@ -122,18 +119,12 @@ const rankImage: { [rankImageName: string]: Image } = {};
  * @returns 异步处理结果。
  */
 async function loadRankImage(rankImageName: string): Promise<Image> {
-  if (rankImage[rankImageName] == undefined) {
-    try {
-      rankImage[rankImageName] = await loadImageFromPath(
-        path.join(assetsRootPath, `/Rank/${rankImageName}.png`),
-      );
-    } catch {
-      rankImage[rankImageName] = await loadImageFromPath(
-        `${bestdoriUrl}/res/icon/${rankImageName}.png`,
-      );
-    }
+  if (rankImageCache[rankImageName] == undefined) {
+    const rankImageBuffer =
+      await deckRankResourceRepository.getRankImageBuffer(rankImageName);
+    rankImageCache[rankImageName] = await loadImage(rankImageBuffer);
   }
-  return rankImage[rankImageName];
+  return rankImageCache[rankImageName];
 }
 
 /**

@@ -30,6 +30,7 @@ import {
   globalDefaultServer,
   serverNameFullList,
 } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
+import { isBirthdayGachaType } from '@/qqbot/plugins/bangDream/tsugu/models/gacha-policy';
 import {
   drawSongInList,
   drawSongListInList,
@@ -500,7 +501,7 @@ export async function getEventGachaAndCardList(
   const gachaCardIdList: number[] = [];
   for (let i = 0; i < gachaList.length; i++) {
     const tempGacha = gachaList[i];
-    if (tempGacha.type == 'birthday') {
+    if (isBirthdayGachaType(tempGacha.type)) {
       continue;
     }
     await tempGacha.initFull(!useCache);

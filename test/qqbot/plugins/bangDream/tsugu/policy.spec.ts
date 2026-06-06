@@ -23,7 +23,18 @@ import {
   normalizeBangDreamTimestamp,
 } from '@/qqbot/plugins/bangDream/tsugu/models/server-policy';
 import {
+  applyGachaGuaranteedRarity,
+  BANGDREAM_GACHA_MAX_SPIN_COUNT,
+  isBirthdayGachaType,
+  isFreeGachaType,
+  isGachaSpinCountTooLarge,
+  isPermanentJapaneseGachaPeriod,
+  pickGachaCardIdByWeight,
+  pickGachaRarityByRate,
+} from '@/qqbot/plugins/bangDream/tsugu/models/gacha-policy';
+import {
   BangDreamEventStatus,
+  BangDreamGachaType,
   BangDreamServerId as Server,
 } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-protocol';
 
@@ -138,6 +149,52 @@ describe('BangDream cutoff policy', () => {
         server: Server.jp,
       }),
     ).toEqual([3, 4]);
+  });
+});
+
+describe('BangDream gacha policy', () => {
+  it('classifies gacha types and spin count limits', () => {
+    expect(isBirthdayGachaType(BangDreamGachaType.birthday)).toBe(true);
+    expect(isBirthdayGachaType(BangDreamGachaType.limited)).toBe(false);
+    expect(isFreeGachaType(BangDreamGachaType.free)).toBe(true);
+    expect(isPermanentJapaneseGachaPeriod('期限なし')).toBe(true);
+    expect(isGachaSpinCountTooLarge(BANGDREAM_GACHA_MAX_SPIN_COUNT)).toBe(
+      false,
+    );
+    expect(isGachaSpinCountTooLarge(BANGDREAM_GACHA_MAX_SPIN_COUNT + 1)).toBe(
+      true,
+    );
+  });
+
+  it('applies ten-pull guaranteed rarity without changing other pulls', () => {
+    expect(applyGachaGuaranteedRarity(8, 2)).toBe(2);
+    expect(applyGachaGuaranteedRarity(9, 2)).toBe(3);
+    expect(applyGachaGuaranteedRarity(9, 4)).toBe(4);
+  });
+
+  it('picks rarity by rate and cards by rarity weight', () => {
+    expect(
+      pickGachaRarityByRate(
+        {
+          2: { rate: 97, weightTotal: 100 },
+          3: { rate: 3, weightTotal: 50 },
+        },
+        () => 0.98,
+      ),
+    ).toBe('3');
+
+    expect(
+      pickGachaCardIdByWeight(
+        3,
+        50,
+        {
+          100: { rarityIndex: 2, weight: 100 },
+          200: { rarityIndex: 3, weight: 10 },
+          201: { rarityIndex: 3, weight: 40 },
+        },
+        () => 0.5,
+      ),
+    ).toBe('201');
   });
 });
 

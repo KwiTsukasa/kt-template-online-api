@@ -11,6 +11,10 @@ import {
   globalDefaultServer,
 } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { BANGDREAM_GACHA_TYPE_NAME } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import {
+  isFreeGachaType,
+  isPermanentJapaneseGachaPeriod,
+} from '@/qqbot/plugins/bangDream/tsugu/models/gacha-policy';
 
 const gachaDataCache = {};
 
@@ -278,12 +282,12 @@ export async function getPresentGachaList(
         continue;
       }
       if (gacha.publishedAt[server] <= end && gacha.closedAt[server] >= start) {
-        if (gacha.type == 'free') {
+        if (isFreeGachaType(gacha.type)) {
           continue;
         }
         if (gacha.gachaName[Server.jp] != null) {
           await gacha.initFull(false);
-          if (gacha.gachaPeriod[Server.jp] == '期限なし') {
+          if (isPermanentJapaneseGachaPeriod(gacha.gachaPeriod[Server.jp])) {
             continue;
           }
         }

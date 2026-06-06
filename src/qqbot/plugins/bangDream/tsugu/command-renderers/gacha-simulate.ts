@@ -12,6 +12,14 @@ import { getServerByPriority } from '@/qqbot/plugins/bangDream/tsugu/models/serv
 import { drawDataBlock } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/data-block';
 import { resizeImage } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
 import { drawGachaDataBlock } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/detail-blocks';
+import {
+  applyGachaGuaranteedRarity,
+  BANGDREAM_GACHA_DEFAULT_SPIN_COUNT,
+  BANGDREAM_GACHA_MAX_SPIN_COUNT,
+  isGachaSpinCountTooLarge,
+  pickGachaCardIdByWeight,
+  pickGachaRarityByRate,
+} from '@/qqbot/plugins/bangDream/tsugu/models/gacha-policy';
 
 const maxWidth = 230 * 5;
 /**
@@ -24,11 +32,11 @@ const maxWidth = 230 * 5;
  */
 export async function drawRandomGacha(
   gacha: Gacha,
-  times: number = 10,
+  times: number = BANGDREAM_GACHA_DEFAULT_SPIN_COUNT,
   compress: boolean,
 ): Promise<Array<Buffer | string>> {
-  if (times > 10000) {
-    return ['错误: 抽卡次数过多, 请不要超过10000次'];
+  if (isGachaSpinCountTooLarge(times)) {
+    return [`错误: 抽卡次数过多, 请不要超过${BANGDREAM_GACHA_MAX_SPIN_COUNT}次`];
   }
   if (!gacha.isExist) {
     return ['错误: 该卡池不存在'];
@@ -173,85 +181,18 @@ function getGachaRandomCard(gacha: Gacha, times: number) {
   const gachaDetails = gacha.details[server];
   const gachaRates = gacha.rates[server];
   //计算稀有度
-  let cardRarity = parseInt(getRandomRarity(gachaRates));
-  if (times % 10 == 9 && cardRarity < 3) {
-    //第十发保底
-    cardRarity = 3;
-  }
+  const cardRarity = applyGachaGuaranteedRarity(
+    times,
+    parseInt(`${pickGachaRarityByRate(gachaRates)}`),
+  );
   const rarityTotalWeight = gachaRates[cardRarity].weightTotal;
-  const cardId = getCardByWeight(cardRarity, rarityTotalWeight, gachaDetails);
-  const card = new Card(parseInt(cardId));
+  const cardId = pickGachaCardIdByWeight(
+    cardRarity,
+    rarityTotalWeight,
+    gachaDetails,
+  );
+  const card = new Card(parseInt(`${cardId}`));
   return card;
-}
-/**
- * 在QQBot 图片视图层中处理random数字。
- *
- * @param max - max参数。
- */
-function randomNumber(max: number) {
-  return Math.random() * max;
-}
-//根据权重随机抽取一张卡牌
-/**
- * 在QQBot 图片视图层中获取卡牌ByWeight。
- *
- * @param Rarity - Rarity参数。
- * @param totalWeight - totalWeight参数。
- * @param cardWeightList - 卡牌Weight列表参数。
- */
-function getCardByWeight(
-  Rarity: number,
-  totalWeight: number,
-  cardWeightList: { [cardId: string]: { rarityIndex: number; weight: number } },
-) {
-  const randomNum = randomNumber(totalWeight);
-  let currentWeight = 0;
-  for (const key in cardWeightList) {
-    if (cardWeightList.hasOwnProperty(key)) {
-      if (cardWeightList[key].rarityIndex !== Rarity) {
-        continue;
-      }
-      const card = cardWeightList[key];
-      currentWeight += card.weight;
-      if (randomNum < currentWeight) {
-        return key;
-      }
-    }
-  }
-}
-
-//根据权重随机抽取稀有度
-/**
- * 在QQBot 图片视图层中获取RandomRarity。
- *
- * @param rarities - rarities参数。
- * @returns 格式化后的文本。
- */
-function getRandomRarity(rarities: {
-  [rarity: string]: { rate: number; weightTotal: number };
-}): string | null {
-  let totalRate = 0;
-  // 计算所有几率的总和
-  for (const key in rarities) {
-    if (rarities.hasOwnProperty(key)) {
-      totalRate += rarities[key].rate;
-    }
-  }
-
-  // 生成一个 0 到总几率的随机数
-  const randomNum = randomNumber(totalRate);
-
-  let currentRate = 0;
-  // 根据随机数落在的几率范围，返回对应的 rarity
-  for (const key in rarities) {
-    if (rarities.hasOwnProperty(key)) {
-      const rarity = rarities[key];
-      currentRate += rarity.rate;
-      if (randomNum < currentRate) {
-        return key;
-      }
-    }
-  }
 }
 
 /*

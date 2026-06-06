@@ -2,9 +2,12 @@ import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DictService } from '@/admin/dict/dict.service';
 import { Card } from '../tsugu/models/card';
-import { BangDreamGachaType } from '../tsugu/models/bangdream-protocol';
 import { getPresentEvent } from '../tsugu/models/event';
 import { Gacha, getPresentGachaList } from '../tsugu/models/gacha';
+import {
+  BANGDREAM_GACHA_DEFAULT_SPIN_COUNT,
+  isBirthdayGachaType,
+} from '../tsugu/models/gacha-policy';
 import { Server } from '../tsugu/models/server';
 import { Song } from '../tsugu/models/song';
 import mainAPI, { waitForMainDataReady } from '../tsugu/models/main-data-store';
@@ -344,7 +347,9 @@ export class QqbotBangDreamRendererService {
     const tokens = this.getTokens(input);
     const mainServer = this.pickMainServer(input, tokens);
     const times =
-      this.optionalNumber(input.times) ?? this.firstNumber(tokens) ?? 10;
+      this.optionalNumber(input.times) ??
+      this.firstNumber(tokens) ??
+      BANGDREAM_GACHA_DEFAULT_SPIN_COUNT;
     const gachaId =
       this.optionalNumber(input.gachaId) ?? this.secondNumber(tokens);
     const options = this.getRenderOptions({ ...input, mainServer });
@@ -360,9 +365,7 @@ export class QqbotBangDreamRendererService {
 
   private async pickPresentGacha(mainServer: Server) {
     const gachaList = await getPresentGachaList(mainServer);
-    const gacha = gachaList.find(
-      (item) => item.type !== BangDreamGachaType.birthday,
-    );
+    const gacha = gachaList.find((item) => !isBirthdayGachaType(item.type));
     if (!gacha) throw new Error('错误: 该服务器没有正在进行的卡池');
     return gacha;
   }

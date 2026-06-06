@@ -375,6 +375,9 @@ export interface TsuguHook {
 - 已新增 `models/cutoff-policy.ts`，收口档位列表、档位支持判断、国服缺失活动时间预估、档线活动状态、预测窗口、日增天数和最近同类型活动选择规则；`models/cutoff.ts` 和 `cutoff-all.ts` 已接入。
 - 已新增 `test/qqbot/plugins/bangDream/tsugu/policy.spec.ts`，覆盖服务器时区、国服预估纯计算、档位判断、状态/预测窗口、日增 checkpoint、活动天数和最近活动选择；policy 单测 mock `main-data-store`，避免纯测试启动主数据定时器。
 - 已生成 `phase6-policy-event-50.jpg`、`phase6-policy-cutoff-detail-100-50-cn.jpg`、`phase6-policy-cutoff-recent-100-50-cn.jpg`，验证查活动、单档线和历史档线图片输出非空。
+- 已新增 `models/gacha-policy.ts`，收口抽卡默认次数、上限、十连保底、稀有度概率、卡牌权重、生日/免费/日服常驻卡池过滤规则；`gacha-simulate.ts`、`gacha.ts`、`event-detail.ts` 和 renderer 当前卡池选择已接入。
+- `policy.spec.ts` 已补抽卡策略纯函数测试，覆盖卡池类型分类、抽卡次数上限、十连保底和权重抽取；本地生成 `gacha-policy-simulate-10-259.jpg` 和 `gacha-policy-event-50.jpg`，验证抽卡模拟与活动详情图片输出非空。
+- smoke 脚本和远程调试流程继续按已固化规则执行：图片落盘后清理本次 Node 进程并返回成功；远程命令测试必须按 `operationKey` 查询 `commandId`、传完整命令文本、外层设置 timeout，并在成功/失败分支显式退出。
 
 ### Phase 7：Facade 和 hook 接入
 

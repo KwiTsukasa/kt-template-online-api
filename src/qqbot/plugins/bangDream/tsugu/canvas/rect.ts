@@ -1,7 +1,9 @@
 import { Canvas, FontLibrary } from 'skia-canvas';
-import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { getTextWidth } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
-FontLibrary.use('old', [`${assetsRootPath}/Fonts/old.ttf`]);
+import { getBangDreamAssetPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/asset-manifest';
+import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
+
+FontLibrary.use('old', [getBangDreamAssetPath('fontOld')]);
 
 interface RoundedRect {
   width: number;
@@ -24,7 +26,7 @@ export function drawRoundedRect({
   width,
   height,
   radius = 25,
-  color = '#ffffff',
+  color = BANGDREAM_RENDER_THEME.color.surface,
   opacity = 0.9,
   strokeColor = '#bbbbbb',
   strokeWidth = 0,
@@ -119,14 +121,14 @@ interface RoundedRectWithText {
  */
 export function drawRoundedRectWithText({
   text,
-  font = 'old',
-  textColor = '#ffffff',
+  font = BANGDREAM_RENDER_THEME.font.body,
+  textColor = BANGDREAM_RENDER_THEME.color.surface,
   textSize,
   textAlign = 'center',
   height = (textSize * 4) / 3,
   width = getTextWidth(text, textSize, font) + height,
   radius = height / 2,
-  color = '#5b5b5b',
+  color = BANGDREAM_RENDER_THEME.color.labelBackground,
   opacity = 1,
   strokeColor = color,
   strokeWidth = 0,
@@ -144,7 +146,7 @@ export function drawRoundedRectWithText({
 
   ctx.fillStyle = textColor;
   ctx.textBaseline = 'alphabetic';
-  ctx.font = `${textSize}px old,Microsoft Yahei`;
+  ctx.font = `${textSize}px ${font},${BANGDREAM_RENDER_THEME.font.fallback}`;
 
   let x = 0,
     y = 0;

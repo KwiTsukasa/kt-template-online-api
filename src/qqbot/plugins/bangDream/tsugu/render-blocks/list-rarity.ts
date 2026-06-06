@@ -1,8 +1,7 @@
 import { Canvas, Image } from 'skia-canvas';
 import { drawList } from './list-frame';
-import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
-import * as path from 'path';
 import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
+import { getBangDreamAssetPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/asset-manifest';
 
 interface RarityInListOptions {
   key?: string;
@@ -16,11 +15,9 @@ export const starList: { [type: string]: Image } = {};
  * 在图片布局层中加载图片Once。
  */
 async function loadImageOnce() {
-  starList.normal = await loadImageFromPath(
-    path.join(assetsRootPath, '/Card/star.png'),
-  );
+  starList.normal = await loadImageFromPath(getBangDreamAssetPath('cardStar'));
   starList.trained = await loadImageFromPath(
-    path.join(assetsRootPath, '/Card/star_trained.png'),
+    getBangDreamAssetPath('cardStarTrained'),
   );
 }
 loadImageOnce();

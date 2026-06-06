@@ -4,9 +4,8 @@ import {
   createEasyBackground,
   createImageBackground,
 } from '@/qqbot/plugins/bangDream/tsugu/canvas/background';
-import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
-import * as path from 'path';
 import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
+import { getBangDreamAssetPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/asset-manifest';
 
 let BGDefaultImage: Image;
 /**
@@ -14,7 +13,7 @@ let BGDefaultImage: Image;
  */
 async function loadImageOnce() {
   BGDefaultImage = await loadImageFromPath(
-    path.join(assetsRootPath, '/BG/live.png'),
+    getBangDreamAssetPath('backgroundLive'),
   );
 }
 loadImageOnce();

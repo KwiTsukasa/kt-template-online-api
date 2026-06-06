@@ -2,9 +2,9 @@ import { createBlurredTrianglePattern } from '@/qqbot/plugins/bangDream/tsugu/ca
 import { scatterImages } from '@/qqbot/plugins/bangDream/tsugu/canvas/background-star-scatter';
 import { drawTextOnCanvas } from '@/qqbot/plugins/bangDream/tsugu/canvas/background-text';
 import { loadImage, Image, Canvas } from 'skia-canvas';
-import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
-import * as path from 'path';
 import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
+import { getBangDreamAssetPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/asset-manifest';
+import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
 
 interface BackgroundOptions {
   image?: Image | Canvas | any;
@@ -118,14 +118,10 @@ let defaultBGTexture: Image;
  * 在底层绘图工具层中加载图片Once。
  */
 async function loadImageOnce() {
-  star.push(
-    await loadImageFromPath(path.join(assetsRootPath, '/BG/star1.png')),
-  );
-  star.push(
-    await loadImageFromPath(path.join(assetsRootPath, '/BG/star2.png')),
-  );
+  star.push(await loadImageFromPath(getBangDreamAssetPath('backgroundStar1')));
+  star.push(await loadImageFromPath(getBangDreamAssetPath('backgroundStar2')));
   defaultBGTexture = await loadImageFromPath(
-    path.join(assetsRootPath, '/BG/bg_object_big.png'),
+    getBangDreamAssetPath('backgroundObjectBig'),
   );
 }
 loadImageOnce();
@@ -136,7 +132,7 @@ loadImageOnce();
  * @param options1 - options1参数。
  */
 export async function createEasyBackground({ width, height }) {
-  const bgColor = '#fef3ef';
+  const bgColor = BANGDREAM_RENDER_THEME.color.backgroundEasy;
   const canvas: Canvas = new Canvas(width, height);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = bgColor;

@@ -36,18 +36,12 @@ import {
   drawSongListInList,
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-song';
 import { drawDottedLine } from '@/qqbot/plugins/bangDream/tsugu/canvas/dotted-line';
+import { createHorizontalSeparatorSpec } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/layout-spec';
+import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
 
-const songSeparatorLine = drawDottedLine({
-  width: 800,
-  height: 10,
-  startX: 5,
-  startY: 5,
-  endX: 795,
-  endY: 5,
-  radius: 2,
-  gap: 10,
-  color: '#a8a8a8',
-});
+const songSeparatorLine = drawDottedLine(
+  createHorizontalSeparatorSpec({ height: 10 }),
+);
 
 /**
  * 在QQBot 图片视图层中绘制歌曲列表数据块。
@@ -393,7 +387,7 @@ export async function drawEventDetail(
   const eventBannerImage = await event.getBannerImage();
   const eventBannerImageCanvas = drawBannerImageCanvas(eventBannerImage);
   list.push(eventBannerImageCanvas);
-  list.push(new Canvas(800, 30));
+  list.push(new Canvas(BANGDREAM_RENDER_THEME.layout.contentWidth, 30));
 
   //标题
   list.push(

@@ -15,32 +15,16 @@ import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/con
 import { drawSongDetail } from './song-detail';
 import { createTsuguEntityMatcher } from '@/qqbot/plugins/bangDream/tsugu/search/entity-list-matcher';
 import { songRepository } from '@/qqbot/plugins/bangDream/tsugu/models/song-repository';
+import {
+  createHorizontalSeparatorSpec,
+  createVerticalSeparatorSpec,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/layout-spec';
 
 // 紧凑化虚线分割
-const line = drawDottedLine({
-  width: 800,
-  height: 10,
-  startX: 5,
-  startY: 5,
-  endX: 795,
-  endY: 5,
-  radius: 2,
-  gap: 10,
-  color: '#a8a8a8',
-});
+const line = drawDottedLine(createHorizontalSeparatorSpec({ height: 10 }));
 
 //表格用默认竖向虚线
-const line2: Canvas = drawDottedLine({
-  width: 30,
-  height: 6000,
-  startX: 10,
-  startY: 0,
-  endX: 15,
-  endY: 5990,
-  radius: 2,
-  gap: 10,
-  color: '#a8a8a8',
-});
+const line2: Canvas = drawDottedLine(createVerticalSeparatorSpec(6000));
 
 /**
  * 在QQBot 图片视图层中绘制歌曲列表。

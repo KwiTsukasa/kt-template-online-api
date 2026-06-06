@@ -1,6 +1,10 @@
 import { Canvas, Image, loadImage } from 'skia-canvas';
-import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
+import {
+  BangDreamLocalAssetKey,
+  getBangDreamAssetPath,
+} from '@/qqbot/plugins/bangDream/tsugu/runtime/asset-manifest';
+import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
 
 interface BestdoriPreviewPayload {
   id: number;
@@ -70,6 +74,23 @@ const NOTE_IMAGE_KEYS = [
   'RightArrow',
   'RightArrowEnd',
 ] as const;
+const NOTE_IMAGE_ASSET_KEYS: Record<
+  (typeof NOTE_IMAGE_KEYS)[number],
+  BangDreamLocalAssetKey
+> = {
+  Flick: 'songChartNoteFlick',
+  FlickTop: 'songChartNoteFlickTop',
+  LeftArrow: 'songChartNoteLeftArrow',
+  LeftArrowEnd: 'songChartNoteLeftArrowEnd',
+  Long: 'songChartNoteLong',
+  RightArrow: 'songChartNoteRightArrow',
+  RightArrowEnd: 'songChartNoteRightArrowEnd',
+  Sim: 'songChartNoteSim',
+  Single: 'songChartNoteSingle',
+  SingleOff: 'songChartNoteSingleOff',
+  Skill: 'songChartNoteSkill',
+  Tick: 'songChartNoteTick',
+};
 const DISPLAY_NOTE_TYPES = [
   'Single',
   'SingleOff',
@@ -451,7 +472,9 @@ async function loadNoteImages(): Promise<Record<string, Image>> {
   const entries = await Promise.all(
     NOTE_IMAGE_KEYS.map(async (key) => [
       key,
-      await loadImageFromPath(`${assetsRootPath}/SongChart/note/${key}.png`),
+      await loadImageFromPath(
+        getBangDreamAssetPath(NOTE_IMAGE_ASSET_KEYS[key]),
+      ),
     ]),
   );
   return Object.fromEntries(entries);
@@ -467,7 +490,7 @@ async function loadCoverImage(cover: string | Buffer): Promise<Image> {
   try {
     return await loadImage(cover);
   } catch {
-    return await loadImageFromPath(`${assetsRootPath}/SongChart/jacket.png`);
+    return await loadImageFromPath(getBangDreamAssetPath('songChartJacket'));
   }
 }
 
@@ -526,7 +549,7 @@ function drawBaseInfo(
 ): void {
   const { id, diff, level } = payload;
   ctx.save();
-  ctx.fillStyle = '#000';
+  ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartBackground;
   ctx.fillRect(0, 0, layout.width, layout.height);
   ctx.restore();
 
@@ -539,10 +562,10 @@ function drawBaseInfo(
   );
 
   ctx.save();
-  ctx.fillStyle = '#1f1e33';
+  ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartPanel;
   ctx.fillRect(OFFSET - 8, OFFSET - 8, 128, 24);
-  ctx.fillStyle = '#FFF';
-  ctx.font = '16px "Arial"';
+  ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartText;
+  ctx.font = `16px "${BANGDREAM_RENDER_THEME.font.chart}"`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(`${id}`, OFFSET + 56, OFFSET + 4, 128);
@@ -550,10 +573,12 @@ function drawBaseInfo(
 
   const coverWidth = layout.infoAreaWidth - 16;
   ctx.save();
-  ctx.fillStyle = DIFFICULTY_COLOR_LIST[diff] ?? '#777';
+  ctx.fillStyle =
+    DIFFICULTY_COLOR_LIST[diff] ??
+    BANGDREAM_RENDER_THEME.color.chartDifficultyFallback;
   ctx.fillRect(8 + coverWidth - 116, 8 + coverWidth - 12, 128, 24);
-  ctx.fillStyle = '#FFF';
-  ctx.font = '16px "Arial"';
+  ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartText;
+  ctx.font = `16px "${BANGDREAM_RENDER_THEME.font.chart}"`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(`${diff} ${level}`, 8 + coverWidth - 52, 8 + coverWidth, 128);
@@ -657,8 +682,8 @@ function drawBeatLines(
  */
 function drawTimeline(ctx: any, layout: PreviewLayout): void {
   ctx.save();
-  ctx.font = '18px "Arial"';
-  ctx.fillStyle = '#FFF';
+  ctx.font = `18px "${BANGDREAM_RENDER_THEME.font.chart}"`;
+  ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartText;
   ctx.textAlign = 'right';
   for (let i = 0; i <= layout.chartLength; i += 5) {
     const { x, y } = getTimePosition(layout, i);
@@ -692,20 +717,20 @@ function drawCountAndBpmLines(
       if (count % 50 !== 0) {
         continue;
       }
-      ctx.font = '18px "Arial"';
+      ctx.font = `18px "${BANGDREAM_RENDER_THEME.font.chart}"`;
       ctx.fillStyle = 'rgba(128, 128, 128, 0.5)';
       ctx.textAlign = 'left';
       ctx.fillRect(x, y - 1, w, 2);
-      ctx.fillStyle = '#FFF';
+      ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartText;
       setAdaptiveTextBaseline(ctx, layout, 18, y);
       ctx.fillText(`${count}`, x + w + 8, y);
       continue;
     }
 
     if (note.type === 'BPM') {
-      ctx.fillStyle = '#C34FBB';
+      ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartBpm;
       ctx.fillRect(x, y - 1, w, 2);
-      ctx.font = '18px "Arial"';
+      ctx.font = `18px "${BANGDREAM_RENDER_THEME.font.chart}"`;
       ctx.textAlign = 'left';
       setAdaptiveTextBaseline(ctx, layout, 18, y);
       ctx.fillText(`${note.bpm}`, x + w + 8, y);

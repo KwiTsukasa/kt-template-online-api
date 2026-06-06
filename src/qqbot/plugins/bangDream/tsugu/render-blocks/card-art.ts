@@ -1,4 +1,3 @@
-import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { setFontStyle } from '@/qqbot/plugins/bangDream/tsugu/canvas/text';
 import { Band } from '@/qqbot/plugins/bangDream/tsugu/models/band';
 import { Attribute } from '@/qqbot/plugins/bangDream/tsugu/models/attribute';
@@ -6,10 +5,11 @@ import { Card } from '@/qqbot/plugins/bangDream/tsugu/models/card';
 import { Image, Canvas, loadImage } from 'skia-canvas';
 import { downloadFileCache } from '@/qqbot/plugins/bangDream/tsugu/data-clients/asset-cache-client';
 import { drawCardIconSkill } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/skill-text';
-import * as path from 'path';
 import { Skill } from '@/qqbot/plugins/bangDream/tsugu/models/skill';
 import { bestdoriUrl } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
+import { getBangDreamAssetPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/asset-manifest';
+import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
 
 const cardTypeIconList: { [type: string]: Image } = {};
 const starList: { [type: string]: Image } = {};
@@ -20,25 +20,23 @@ let limitBreakIcon: Image;
  */
 async function loadImageOnce() {
   cardTypeIconList.limited = await loadImageFromPath(
-    path.join(assetsRootPath, '/Card/L.png'),
+    getBangDreamAssetPath('cardLimited'),
   );
   cardTypeIconList.dreamfes = await loadImageFromPath(
-    path.join(assetsRootPath, '/Card/D.png'),
+    getBangDreamAssetPath('cardDreamfes'),
   );
   cardTypeIconList.kirafes = await loadImageFromPath(
-    path.join(assetsRootPath, '/Card/K.png'),
+    getBangDreamAssetPath('cardKirafes'),
   );
   cardTypeIconList.birthday = await loadImageFromPath(
-    path.join(assetsRootPath, '/Card/B.png'),
+    getBangDreamAssetPath('cardBirthday'),
   );
-  starList.normal = await loadImageFromPath(
-    path.join(assetsRootPath, '/Card/star.png'),
-  );
+  starList.normal = await loadImageFromPath(getBangDreamAssetPath('cardStar'));
   starList.trained = await loadImageFromPath(
-    path.join(assetsRootPath, '/Card/star_trained.png'),
+    getBangDreamAssetPath('cardStarTrained'),
   );
   limitBreakIcon = await loadImageFromPath(
-    path.join(assetsRootPath, '/Card/limitBreakRank.png'),
+    getBangDreamAssetPath('cardLimitBreakRank'),
   );
 }
 
@@ -136,17 +134,17 @@ export async function drawCardIcon({
   if (cardIdVisible) {
     ctx.textAlign = 'start';
     ctx.textBaseline = 'middle';
-    setFontStyle(ctx, 30, 'old');
-    ctx.fillStyle = '#a7a7a7';
+    setFontStyle(ctx, 30, BANGDREAM_RENDER_THEME.font.body);
+    ctx.fillStyle = BANGDREAM_RENDER_THEME.color.mutedText;
     ctx.fillText(`ID:${card.cardId}`, 4, 195);
   }
   //如果显示技能类型，在右上显示
   if (skillLevel != undefined) {
-    ctx.fillStyle = '#ff0000';
+    ctx.fillStyle = BANGDREAM_RENDER_THEME.color.skillLevelBackground;
     ctx.fillRect(138, 91, 35, 39);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = BANGDREAM_RENDER_THEME.color.surface;
     ctx.textAlign = 'center';
-    setFontStyle(ctx, 35, 'old');
+    setFontStyle(ctx, 35, BANGDREAM_RENDER_THEME.font.body);
     ctx.fillText(skillLevel.toString(), 155.5, 107.5);
   }
   //如果显示技能类型，在右上显示
@@ -169,8 +167,8 @@ export async function drawCardIcon({
   ctx.drawImage(bandIcon, 0, 0, 45, 45);
   if (limitBreakRank != 0) {
     ctx.drawImage(limitBreakIcon, 137, 51, 39, 39);
-    setFontStyle(ctx, 25, 'old');
-    ctx.fillStyle = '#ffffff';
+    setFontStyle(ctx, 25, BANGDREAM_RENDER_THEME.font.body);
+    ctx.fillStyle = BANGDREAM_RENDER_THEME.color.surface;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(limitBreakRank.toString(), 155, 70);

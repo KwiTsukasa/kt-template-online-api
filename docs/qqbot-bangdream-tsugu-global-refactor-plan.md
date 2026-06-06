@@ -339,6 +339,13 @@ export interface TsuguHook {
 - 关键图片命令输出非空，尺寸在既有范围。
 - 视觉 token 修改只改 theme/spec 文件。
 
+当前进度：
+
+- 已新增 `render-blocks/theme.ts`，先收口公共文字颜色、分割线颜色、简易背景色、图表背景/文字色和默认字体名。
+- 已新增 `render-blocks/layout-spec.ts`，统一横向/纵向虚线分割规格，歌曲列表、活动列表、活动详情和通用列表框架不再重复维护分割线宽高/颜色。
+- 已新增 `runtime/asset-manifest.ts`，收口本地 `BG`、`Card`、`Skill`、`SongChart`、字体和标题资源路径；`canvas/text.ts`、`canvas/rect.ts`、`canvas/output.ts`、`canvas/background.ts`、`card-art.ts`、`list-rarity.ts`、`skill-text.ts`、`title.ts`、`song-chart-preview.ts` 已改走 manifest。
+- 已生成查曲、查活动和查谱面 smoke 图片，验证 theme/spec/manifest 第一段迁移后本地图片输出非空，谱面预览资源路径未断。
+
 ### Phase 6：策略 policy 和时间/档线规则
 
 目标：服务器优先级、国服预估、档位、时区和活动状态从工具函数变成可测试规则。

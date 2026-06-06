@@ -38,22 +38,15 @@ import { statConfig } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-s
 import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { createTsuguEntityMatcher } from '@/qqbot/plugins/bangDream/tsugu/search/entity-list-matcher';
 import { eventRepository } from '@/qqbot/plugins/bangDream/tsugu/models/event-repository';
+import { createVerticalSeparatorSpec } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/layout-spec';
 
 const maxHeight = 7000;
 const maxColumns = 7;
 
 //表格用默认虚线
-export const line2: Canvas = drawDottedLine({
-  width: 30,
-  height: 7000,
-  startX: 5,
-  startY: 0,
-  endX: 15,
-  endY: 6995,
-  radius: 2,
-  gap: 10,
-  color: '#a8a8a8',
-});
+export const line2: Canvas = drawDottedLine(
+  createVerticalSeparatorSpec(7000, { startX: 5 }),
+);
 
 /**
  * 在QQBot 图片视图层中绘制活动列表。

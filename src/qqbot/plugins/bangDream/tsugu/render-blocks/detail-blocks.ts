@@ -47,30 +47,22 @@ import {
 } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { Canvas, Image } from 'skia-canvas';
 import { Band } from '@/qqbot/plugins/bangDream/tsugu/models/band';
+import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
+import { createHorizontalSeparatorSpec } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/layout-spec';
 
-const songDetailSeparator = drawDottedLine({
-  width: 365,
-  height: 20,
-  startX: 5,
-  startY: 10,
-  endX: 360,
-  endY: 10,
-  radius: 2,
-  gap: 10,
-  color: '#a8a8a8',
-});
+const songDetailSeparator = drawDottedLine(
+  createHorizontalSeparatorSpec({
+    width: 365,
+    height: 20,
+    endX: 360,
+  }),
+);
 
-const songMetaSeparator = drawDottedLine({
-  width: 800,
-  height: 10,
-  startX: 5,
-  startY: 5,
-  endX: 795,
-  endY: 5,
-  radius: 2,
-  gap: 10,
-  color: '#a8a8a8',
-});
+const songMetaSeparator = drawDottedLine(
+  createHorizontalSeparatorSpec({
+    height: 10,
+  }),
+);
 
 /**
  * 在图片布局层中绘制横幅Info块。
@@ -327,7 +319,7 @@ export async function drawCharacterHalfBlock(
   await character.initFull(false);
   const color = character.colorCode
     ? character.colorCode.toLowerCase()
-    : '#ffffff';
+    : BANGDREAM_RENDER_THEME.color.surface;
   ctx.drawImage(
     drawRoundedRect({
       width,
@@ -382,14 +374,14 @@ export async function drawCharacterHalfBlock(
   const nameTextImage = drawText({
     text: character.characterName[server],
     textSize: 40,
-    color: '#ffffff',
+    color: BANGDREAM_RENDER_THEME.color.surface,
     maxWidth: width,
   });
   list.push(drawImageListCenter([nameTextImage], width));
   const idTextImage = drawText({
     text: `ID: ${character.characterId}`,
     textSize: 30,
-    color: '#ffffff',
+    color: BANGDREAM_RENDER_THEME.color.surface,
     maxWidth: width,
   });
   list.push(drawImageListCenter([idTextImage], width));
@@ -409,13 +401,13 @@ export async function drawPlayerDetailBlockWithIllustration(
   const list: Array<Canvas | Image> = [];
   const playerText = drawText({
     text: player.profile.userName,
-    maxWidth: 800,
+    maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
     textSize: 75,
   });
   list.push(drawImageListCenter([playerText]));
   const levelText = drawText({
     text: `等级 ${player.profile.rank}`,
-    maxWidth: 800,
+    maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
     textSize: 35,
   });
   list.push(drawImageListCenter([levelText]));
@@ -436,7 +428,7 @@ export async function drawPlayerDetailBlockWithIllustration(
 
   const introductionText = drawText({
     text: player.profile.introduction,
-    maxWidth: 800,
+    maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
     textSize: 35,
   });
   list.push(drawImageListCenter([introductionText]));
@@ -447,7 +439,7 @@ export async function drawPlayerDetailBlockWithIllustration(
     : 'ID未公开';
   const idText = drawTextWithImages({
     content: [await getIcon(player.server), userId],
-    maxWidth: 800,
+    maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
     textSize: 35,
   });
   list.push(drawImageListCenter([idText]));

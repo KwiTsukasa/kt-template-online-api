@@ -11,6 +11,8 @@ import { drawDifficultyList, drawDifficulty } from './list-difficulty';
 import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { drawList } from './list-frame';
 import { drawDottedLine } from '@/qqbot/plugins/bangDream/tsugu/canvas/dotted-line';
+import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
+import { createHorizontalSeparatorSpec } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/layout-spec';
 
 /**
  * 在图片布局层中绘制歌曲In列表。
@@ -34,7 +36,7 @@ export async function drawSongInList(
     heightMax: 80,
   });
 
-  const canvas = new Canvas(800, 75);
+  const canvas = new Canvas(BANGDREAM_RENDER_THEME.layout.contentWidth, 75);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(songImage, 50, 5, 65, 65);
   //id
@@ -42,7 +44,7 @@ export async function drawSongInList(
     text: song.songId.toString(),
     textSize: 23,
     lineHeight: 37.5,
-    maxWidth: 800,
+    maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
   });
   ctx.drawImage(idImage, 0, 0);
   //曲名与乐队名
@@ -58,7 +60,7 @@ export async function drawSongInList(
     text: fullText,
     textSize: 23,
     lineHeight: 37.5,
-    maxWidth: 800,
+    maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
   });
   ctx.drawImage(textImage, 120, 0);
 
@@ -69,7 +71,7 @@ export async function drawSongInList(
       : drawDifficulty(difficulty, song.difficulty[difficulty].playLevel, 45);
   ctx.drawImage(
     difficultyImage,
-    800 - difficultyImage.width,
+    BANGDREAM_RENDER_THEME.layout.contentWidth - difficultyImage.width,
     75 / 2 - difficultyImage.height / 2,
   );
   return canvas;
@@ -96,17 +98,7 @@ export async function drawSongListInList(
   const x = 0;
   let y = 0;
   const views: Canvas[] = [];
-  const line = drawDottedLine({
-    width: 800,
-    height: 10,
-    startX: 5,
-    startY: 5,
-    endX: 795,
-    endY: 5,
-    radius: 2,
-    gap: 10,
-    color: '#a8a8a8',
-  });
+  const line = drawDottedLine(createHorizontalSeparatorSpec({ height: 10 }));
   for (let i = 0; i < songs.length; i++) {
     views.push(
       resizeImage({

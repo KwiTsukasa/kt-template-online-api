@@ -4,10 +4,12 @@ import {
   Canvas,
   CanvasRenderingContext2D,
 } from 'skia-canvas';
-import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
-FontLibrary.use('old', [`${assetsRootPath}/Fonts/old.ttf`]);
+import { getBangDreamAssetPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/asset-manifest';
+import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
+
+FontLibrary.use('old', [getBangDreamAssetPath('fontOld')]);
 FontLibrary.use('FangZhengHeiTi', [
-  `${assetsRootPath}/Fonts/FangZhengHeiTi_GBK.ttf`,
+  getBangDreamAssetPath('fontFangZhengHeiTi'),
 ]);
 
 interface WrapTextOptions {
@@ -31,8 +33,8 @@ export function drawText({
   textSize = 40,
   maxWidth,
   lineHeight = (textSize * 4) / 3,
-  color = '#505050',
-  font = 'old',
+  color = BANGDREAM_RENDER_THEME.color.primaryText,
+  font = BANGDREAM_RENDER_THEME.font.body,
 }: WrapTextOptions): Canvas {
   const wrappedTextData = wrapText({ text, maxWidth, lineHeight, textSize });
   let canvas: Canvas;
@@ -131,8 +133,8 @@ export function drawTextWithImages({
   lineHeight = (textSize * 4) / 3,
   content,
   spacing = textSize / 3,
-  color = '#505050',
-  font = 'old',
+  color = BANGDREAM_RENDER_THEME.color.primaryText,
+  font = BANGDREAM_RENDER_THEME.font.body,
 }: TextWithImagesOptions) {
   const wrappedTextData = wrapTextWithImages({
     textSize,
@@ -305,5 +307,5 @@ export const setFontStyle = function (
   font: string,
 ) {
   //设置字体大小
-  ctx.font = textSize + 'px ' + font + ',Microsoft Yahei';
+  ctx.font = `${textSize}px ${font},${BANGDREAM_RENDER_THEME.font.fallback}`;
 };

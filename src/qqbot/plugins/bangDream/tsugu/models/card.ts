@@ -8,14 +8,11 @@ import {
 import { Gacha } from '@/qqbot/plugins/bangDream/tsugu/models/gacha';
 import { Event } from '@/qqbot/plugins/bangDream/tsugu/models/event';
 import { Image, loadImage } from 'skia-canvas';
-import { bangDreamBestdoriProvider } from '@/qqbot/plugins/bangDream/tsugu/data-clients/bestdori-provider';
 import { bangDreamMainDataRepository } from '@/qqbot/plugins/bangDream/tsugu/models/main-data-repository';
 import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
-import {
-  stringToNumberArray,
-  formatNumber,
-} from '@/qqbot/plugins/bangDream/tsugu/models/model-utils';
+import { stringToNumberArray } from '@/qqbot/plugins/bangDream/tsugu/models/model-utils';
 import { BANGDREAM_CARD_TYPE_NAME } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import { cardResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/models/card-resource-repository';
 
 export interface Stat {
   //综合力
@@ -177,14 +174,7 @@ export class Card {
    * @param update - update参数，未传入时使用默认值。
    */
   async getData(update: boolean = true) {
-    const time = update ? 0 : 1 / 0;
-    const cardData = await bangDreamBestdoriProvider.getJson<
-      Record<string, any>
-    >(
-      `/api/cards/${this.cardId}.json`,
-      { cacheTime: time },
-    );
-    return cardData;
+    return await cardResourceRepository.getDetail(this.cardId, update);
   }
 
   /**
@@ -366,15 +356,7 @@ export class Card {
    * @returns 格式化后的文本。
    */
   getRip(): string {
-    let cardResourceSetId: string;
-    if (this.cardId < 9999) {
-      //确定目录位置，50为一组
-      const cardResourceSetIdNumber: number = Math.floor(this.cardId / 50);
-      cardResourceSetId = formatNumber(cardResourceSetIdNumber, 3);
-    } else {
-      cardResourceSetId = '200';
-    }
-    return cardResourceSetId + '_rip';
+    return cardResourceRepository.getRip(this.cardId);
   }
   /**
    * 在 Card 模型中获取卡牌图标图片。
@@ -384,10 +366,10 @@ export class Card {
    */
   async getCardIconImage(trainingStatus: boolean): Promise<Image> {
     trainingStatus = this.ableToTraining(trainingStatus);
-    const trainingString = trainingStatus ? '_after_training' : '_normal';
-    const tempServer = this.getFirstReleasedServer();
-    const cardIconImageBuffer = await bangDreamBestdoriProvider.getAsset(
-      `/assets/${Server[tempServer]}/thumb/chara/card00${this.getRip()}/${this.resourceSetName}${trainingString}.png`,
+    const cardIconImageBuffer = await cardResourceRepository.getImageBuffer(
+      this,
+      'icon',
+      trainingStatus,
     );
     return await loadImage(cardIconImageBuffer);
   }
@@ -399,12 +381,12 @@ export class Card {
    */
   async getCardIllustrationImage(trainingStatus: boolean): Promise<Image> {
     trainingStatus = this.ableToTraining(trainingStatus);
-    const trainingString = trainingStatus ? '_after_training' : '_normal';
-    const tempServer = this.getFirstReleasedServer();
-    const cardIllustrationImageBuffer = await bangDreamBestdoriProvider.getAsset(
-      `/assets/${Server[tempServer]}/characters/resourceset/${this.resourceSetName}_rip/card${trainingString}.png`,
-      { memoryCache: false },
-    );
+    const cardIllustrationImageBuffer =
+      await cardResourceRepository.getImageBuffer(
+        this,
+        'illustration',
+        trainingStatus,
+      );
     return await loadImage(cardIllustrationImageBuffer);
   }
   /**
@@ -417,13 +399,11 @@ export class Card {
     trainingStatus: boolean,
   ): Promise<Buffer> {
     trainingStatus = this.ableToTraining(trainingStatus);
-    const trainingString = trainingStatus ? '_after_training' : '_normal';
-    const tempServer = this.getFirstReleasedServer();
-    const cardIllustration = await bangDreamBestdoriProvider.getAsset(
-      `/assets/${Server[tempServer]}/characters/resourceset/${this.resourceSetName}_rip/card${trainingString}.png`,
-      { memoryCache: false },
+    return await cardResourceRepository.getImageBuffer(
+      this,
+      'illustration',
+      trainingStatus,
     );
-    return cardIllustration;
   }
   /**
    * 在 Card 模型中获取卡牌Trim图片。
@@ -433,12 +413,8 @@ export class Card {
    */
   async getCardTrimImage(trainingStatus: boolean): Promise<Image> {
     trainingStatus = this.ableToTraining(trainingStatus);
-    const trainingString = trainingStatus ? '_after_training' : '_normal';
-    const tempServer = this.getFirstReleasedServer();
-    const cardIllustrationImageBuffer = await bangDreamBestdoriProvider.getAsset(
-      `/assets/${Server[tempServer]}/characters/resourceset/${this.resourceSetName}_rip/trim${trainingString}.png`,
-      { memoryCache: false },
-    );
+    const cardIllustrationImageBuffer =
+      await cardResourceRepository.getImageBuffer(this, 'trim', trainingStatus);
     return await loadImage(cardIllustrationImageBuffer);
   }
   /**

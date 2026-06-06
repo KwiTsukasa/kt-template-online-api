@@ -14,7 +14,7 @@
 ## 当前事实
 
 - Tsugu 源码目录：`src/qqbot/plugins/bangDream/tsugu`
-- TS 文件：初始基线 92；当前 `tsugu` 源码 132
+- TS 文件：初始基线 92；当前 `tsugu` 源码 133
 - 函数节点：481，其中稳定函数 410，匿名/内联回调 71
 - 源码 JSDoc：稳定函数 410/410 已覆盖
 - 变量声明：1896
@@ -299,6 +299,8 @@ export interface TsuguHook {
 - 已新增 `cache-client-policy.spec.ts`，覆盖缓存客户端 retry/status/not-found 策略；`file-cache-client.spec.ts` 补 SVG 缺失资源 404 缓存，避免 SVG 素材缺失仍反复请求。
 - 本地图片烟测已生成查歌 `136`、查活动 `50` 简易背景和真实活动背景图片，证明 provider/repository 第一段迁移后仍能输出非空图片。
 - 已新增 `models/song-resource-repository.ts`，把 `Song` 的歌曲详情、谱面、封面路径、封面完整 URL 和封面缺失时服务器回退下载收口到不依赖 `Song` 类的资源 repository，避免 `song.ts` 继续直接拼 Bestdori API/asset 路径；`song-resource-repository.spec.ts` 覆盖 detail/chart provider 调用、13/40 旧封面批次、273 强制 CN 和封面 fallback 行为，本地 `/查曲 136`、`/查谱面 136 expert` 图片 smoke 输出非空。
+- 已新增 `models/card-resource-repository.ts`，把 `Card` 的详情请求、资源批次目录、图标/插画/trim 图片路径和重图缓存策略收口到 provider-backed repository；`card-resource-repository.spec.ts` 覆盖 `/api/cards` 缓存参数、`9999` 后资源批次、CN 优先资源路径和非 icon 图片 `memoryCache=false`，本地 `/查卡 472` 图片 smoke 输出非空。
+- 固化：Windows 下不要用反斜杠测试路径直接调用 Jest pattern，容易出现 `Pattern ... - 0 matches`；指定文件测试统一使用 `pnpm exec jest --runInBand --runTestsByPath test/qqbot/plugins/bangDream/tsugu/<file>.spec.ts ...`，路径用正斜杠。
 
 ### Phase 4：搜索 specification 和 matcher
 

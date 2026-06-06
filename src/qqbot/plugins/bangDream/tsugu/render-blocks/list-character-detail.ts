@@ -5,6 +5,12 @@ import { resizeImage } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image
 import { drawTextWithImages } from '@/qqbot/plugins/bangDream/tsugu/canvas/text';
 import { Character } from '@/qqbot/plugins/bangDream/tsugu/models/character';
 import mainAPI from '@/qqbot/plugins/bangDream/tsugu/models/main-data-store';
+import {
+  createCharacterDetailIconSpec,
+  createCharacterDetailItemLayout,
+  createCharacterDetailListFrameSpec,
+  createCharacterDetailTextSpec,
+} from './list-character-detail-spec';
 
 interface drawBandDetailsInListOptions {
   [characterId: number]: Array<Canvas | Image | string>;
@@ -24,33 +30,32 @@ async function drawCharacterInList(
   for (const i in CharacterDetailsInListOptions) {
     const tempCharacter = new Character(parseInt(i));
     const content = CharacterDetailsInListOptions[i];
-    const maxWidth = 76;
-    const logoWidth = 50;
     const tempCharacterIcon = resizeImage({
       image: await tempCharacter.getIcon(),
-      widthMax: logoWidth,
+      ...createCharacterDetailIconSpec(),
     });
-    const canvas = new Canvas(maxWidth, 100);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(tempCharacterIcon, (maxWidth - logoWidth) / 2, 0);
+    const textSpec = createCharacterDetailTextSpec();
     const tempCharacterRankText = drawTextWithImages({
       content,
-      maxWidth: maxWidth,
-      lineHeight: 40,
+      maxWidth: textSpec.maxWidth,
+      lineHeight: textSpec.lineHeight,
     });
-    ctx.drawImage(
-      tempCharacterRankText,
-      maxWidth / 2 - tempCharacterRankText.width / 2,
-      50,
-    );
+    const layout = createCharacterDetailItemLayout(tempCharacterRankText);
+    const canvas = new Canvas(layout.canvasWidth, layout.canvasHeight);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(tempCharacterIcon, layout.iconX, layout.iconY);
+    ctx.drawImage(tempCharacterRankText, layout.textX, layout.textY);
     characterAndContentList.push(canvas);
   }
+  const frameSpec = createCharacterDetailListFrameSpec(
+    characterAndContentList?.[0],
+  );
   const characterAndContentListImage = drawList({
     key,
     content: characterAndContentList,
-    spacing: 0,
-    lineHeight: characterAndContentList?.[0].height,
-    textSize: characterAndContentList?.[0].height,
+    spacing: frameSpec.spacing,
+    lineHeight: frameSpec.lineHeight,
+    textSize: frameSpec.textSize,
   });
   return characterAndContentListImage;
 }

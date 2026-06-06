@@ -6,7 +6,6 @@ import {
   preferHhwxSource,
   reportDataSourceProblem,
   clearDataSourceProblem,
-  tierListOfServer,
 } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import {
@@ -16,11 +15,14 @@ import {
 import { predict } from '@/qqbot/plugins/bangDream/tsugu/calculations/cutoff-predictor';
 import { logger } from '@/qqbot/plugins/bangDream/tsugu/runtime/logger';
 import {
-  normalizeTimestamp,
-  getDateByServerTimezone,
-  getServerUtcOffset,
-  getProbableTimeDifference,
-} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-time';
+  getCutoffDateByServerTimezone,
+  getCutoffDayIndex,
+  getCutoffEventStatus,
+  getCutoffPredictionWindow,
+  isCutoffDailyCheckpoint,
+  isCutoffTierSupported,
+  resolveCutoffEventSchedule,
+} from '@/qqbot/plugins/bangDream/tsugu/models/cutoff-policy';
 import { BangDreamEventStatus } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
 
 export class Cutoff {
@@ -58,7 +60,7 @@ export class Cutoff {
     this.eventId = eventId;
     this.server = server;
     //如果该档线不在该服的档线列表中，直接返回
-    if (!tierListOfServer[Server[server]].includes(tier)) {
+    if (!isCutoffTierSupported(server, tier)) {
       this.isExist = false;
       return;
     }
@@ -67,29 +69,17 @@ export class Cutoff {
     // this.startAt = event.startAt[server]
     // this.endAt = event.endAt[server]
     // 当该活动在服务器上尚未存在时，使用预测的时间去推断startAt以及endAt，以解决部分情况下卡死及档线状态不对的问题
-    this.startAt =
-      event.startAt[server] || server != Server.cn
-        ? event.startAt[server]
-        : getProbableTimeDifference(this.eventId, getPresentEvent(this.server));
-    this.endAt =
-      event.endAt[server] || server != Server.cn
-        ? event.endAt[server]
-        : getProbableTimeDifference(
-            this.eventId,
-            getPresentEvent(this.server),
-          ) +
-          (event.endAt[Server.jp] - event.startAt[Server.jp]);
-    const tempEvent = new Event(this.eventId);
+    const schedule = resolveCutoffEventSchedule({
+      currentEvent: getPresentEvent(this.server),
+      endAt: event.endAt,
+      eventId: this.eventId,
+      server,
+      startAt: event.startAt,
+    });
+    this.startAt = schedule.startAt;
+    this.endAt = schedule.endAt;
     this.currentGetDataTime = new Date().getTime();
-    //状态
-    const time = new Date().getTime();
-    if (time < tempEvent.startAt[this.server]) {
-      this.status = BangDreamEventStatus.notStart;
-    } else if (time > tempEvent.endAt[this.server]) {
-      this.status = BangDreamEventStatus.ended;
-    } else {
-      this.status = BangDreamEventStatus.inProgress;
-    }
+    this.status = getCutoffEventStatus(this.startAt, this.endAt);
   }
   /**
    * 在 Cutoff 模型中获取最终 Tracker 数据源。
@@ -245,9 +235,10 @@ export class Cutoff {
       this.latestCutoff = this.cutoffs[this.cutoffs.length - 1];
     }
     //rate
-    const rateDataList = bangDreamMainDataRepository.getValue<
-      Array<{ server: number; type: string; tier: number; rate: number }>
-    >('rates');
+    const rateDataList =
+      bangDreamMainDataRepository.getValue<
+        Array<{ server: number; type: string; tier: number; rate: number }>
+      >('rates');
     const rateData = rateDataList.find((element) => {
       return (
         element.server == this.server &&
@@ -294,11 +285,7 @@ export class Cutoff {
    * @returns 计算后的数值。
    */
   getPredictionWindow(): { startTs: number; endTs: number } {
-    const event = new Event(this.eventId);
-    return {
-      startTs: Math.floor(event.startAt[this.server] / 1000),
-      endTs: Math.floor(event.endAt[this.server] / 1000),
-    };
+    return getCutoffPredictionWindow(this.startAt, this.endAt);
   }
   /**
    * 在 Cutoff 模型中获取档线列表InSeconds。
@@ -342,36 +329,7 @@ export class Cutoff {
    * @param ts - ts参数。
    */
   getDaysOfEvent(ts: number) {
-    if (!this.startAt) return 0;
-    const offsetMs = getServerUtcOffset(this.server) * 60 * 60 * 1000;
-    const eventStartAtTime = normalizeTimestamp(this.startAt);
-    const timestamp = normalizeTimestamp(ts);
-
-    const serverStartTime = eventStartAtTime + offsetMs;
-
-    const startDate = new Date(serverStartTime);
-
-    const hour = startDate.getUTCHours();
-    const minute = startDate.getUTCMinutes();
-    const second = startDate.getUTCSeconds();
-    const millisecond = startDate.getUTCMilliseconds();
-
-    const firstDayEndServerTime =
-      serverStartTime +
-      (86400000 +
-        4 * 60 * 60 * 1000 -
-        hour * 60 * 60 * 1000 -
-        minute * 60 * 1000 -
-        second * 1000 -
-        millisecond);
-
-    const firstDayEndTime = firstDayEndServerTime - offsetMs;
-
-    if (timestamp < firstDayEndTime) {
-      return 0;
-    } else {
-      return Math.ceil((timestamp - firstDayEndTime) / 86400000);
-    }
+    return getCutoffDayIndex(this.server, this.startAt, ts);
   }
   /**
    * 在 Cutoff 模型中判断日增Checkpoint。
@@ -380,13 +338,7 @@ export class Cutoff {
    * @returns 判断结果。
    */
   isDailyCheckpoint(date: Date): boolean {
-    return (
-      (this.server == Server.cn ||
-        this.server == Server.tw ||
-        this.server == Server.jp) &&
-      date.getUTCHours() === 3 &&
-      date.getUTCMinutes() === 45
-    );
+    return isCutoffDailyCheckpoint(this.server, date);
   }
   /**
    * 在 Cutoff 模型中获取日增CheckpointSeries。
@@ -397,8 +349,8 @@ export class Cutoff {
     const score: number[] = [];
     const time: number[] = [];
     for (const c of this.cutoffs) {
-      const timestamp = normalizeTimestamp(c.time);
-      const date = getDateByServerTimezone(timestamp, this.server);
+      const timestamp = c.time;
+      const date = getCutoffDateByServerTimezone(timestamp, this.server);
       if (this.isDailyCheckpoint(date)) {
         score.push(c.ep);
         time.push(timestamp);
@@ -609,11 +561,11 @@ export class Cutoff {
     let lastCutoffTime = this.cutoffs[this.cutoffs.length - 1].time;
     // HHWX数据源会在快要结活的时候改为每15分钟抓取一次，因此需要主动规避
     let usePrevPoint = false;
-    const UTCMin = getDateByServerTimezone(
+    const UTCMin = getCutoffDateByServerTimezone(
       lastCutoffTime,
       this.server,
     ).getUTCMinutes();
-    const UTCHour = getDateByServerTimezone(
+    const UTCHour = getCutoffDateByServerTimezone(
       lastCutoffTime,
       this.server,
     ).getUTCHours();
@@ -630,13 +582,13 @@ export class Cutoff {
     const time: number[] = [];
     const scoreCur: number[] = [];
     const timeCur: number[] = [];
-    const dateNow = getDateByServerTimezone(lastCutoffTime, this.server);
+    const dateNow = getCutoffDateByServerTimezone(lastCutoffTime, this.server);
     const lastestUtcHour = dateNow.getUTCHours();
     const lastestUtcMinutes = dateNow.getUTCMinutes();
 
     for (const c of this.cutoffs) {
       let allowPushFlag = false;
-      const timestamp = normalizeTimestamp(c.time);
+      const timestamp = c.time;
       const d = this.getDaysOfEvent(timestamp);
       if (d < curEventDays - 2) {
         continue;
@@ -644,7 +596,7 @@ export class Cutoff {
       if (d > curEventDays - 2) {
         allowPushFlag = true;
       }
-      const date = getDateByServerTimezone(timestamp, this.server);
+      const date = getCutoffDateByServerTimezone(timestamp, this.server);
       if (
         (this.server == Server.cn ||
           this.server == Server.tw ||

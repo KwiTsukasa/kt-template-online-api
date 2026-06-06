@@ -3,13 +3,15 @@ import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { bangDreamMainDataRepository } from '@/qqbot/plugins/bangDream/tsugu/models/main-data-repository';
 import { Attribute } from '@/qqbot/plugins/bangDream/tsugu/models/attribute';
 import { Character } from '@/qqbot/plugins/bangDream/tsugu/models/character';
-import {
-  globalDefaultServer,
-} from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
+import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { stringToNumberArray } from '@/qqbot/plugins/bangDream/tsugu/models/model-utils';
-import { getProbableTimeDifference } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-time';
 import { BANGDREAM_EVENT_TYPE_NAME } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
 import { eventDataRepository } from '@/qqbot/plugins/bangDream/tsugu/models/event-data-repository';
+import { estimateCnEventStartAt } from '@/qqbot/plugins/bangDream/tsugu/models/cn-event-estimate-policy';
+import {
+  selectRecentCutoffEventIds,
+  type CutoffRecentEventCandidate,
+} from '@/qqbot/plugins/bangDream/tsugu/models/cutoff-policy';
 
 const typeName: Record<string, string> = BANGDREAM_EVENT_TYPE_NAME;
 
@@ -93,10 +95,9 @@ export class Event {
    */
   constructor(eventId: number) {
     this.eventId = eventId;
-    const eventData = bangDreamMainDataRepository.getEntity<Record<string, any>>(
-      'events',
-      eventId,
-    );
+    const eventData = bangDreamMainDataRepository.getEntity<
+      Record<string, any>
+    >('events', eventId);
     if (eventData == undefined) {
       this.isExist = false;
       return;
@@ -387,17 +388,17 @@ export function sortEventList(
           let prvEvent = null;
           let nxtEvent = null;
           if (a.startAt[server] == null) {
-            prvEvent = getProbableTimeDifference(a.eventId, presentEventCN);
+            prvEvent = estimateCnEventStartAt(a.eventId, presentEventCN);
           } else {
             prvEvent = a.startAt[server];
           }
           if (b.startAt[server] == null) {
-            nxtEvent = getProbableTimeDifference(b.eventId, presentEventCN);
+            nxtEvent = estimateCnEventStartAt(b.eventId, presentEventCN);
           } else {
             nxtEvent = b.startAt[server];
           }
           if (prvEvent != null || nxtEvent != null) {
-            return prvEvent - nxtEvent;
+            return (prvEvent ?? 0) - (nxtEvent ?? 0);
           }
         }
         continue;
@@ -425,31 +426,18 @@ export function getRecentEventListByEventAndServer(
   sameType: boolean = false,
 ) {
   const eventIdList = bangDreamMainDataRepository.getNumericIds('events');
-  //对活动列表进行排序,从新到旧
-  eventIdList.sort((a, b) => {
-    const eventA = new Event(a);
-    const eventB = new Event(b);
-    if (eventA.startAt[server] == null || eventB.startAt[server] == null) {
-      return 0;
-    }
-    return eventB.startAt[server] - eventA.startAt[server];
-  });
-  const tempEventList: Array<Event> = [];
-  for (let i = 0; i < eventIdList.length; i++) {
-    const tempEvent = new Event(eventIdList[i]);
-    if (tempEvent.startAt[server] != null) {
-      if (sameType && tempEvent.eventType != event.eventType) {
-        continue;
-      }
-      if (tempEvent.startAt[server] > event.startAt[server]) {
-        continue;
-      }
-      tempEventList.push(tempEvent);
-    }
-  }
-  sortEventList(tempEventList, [server]);
-  return tempEventList.slice(
-    tempEventList.length - count,
-    tempEventList.length,
-  );
+  const candidates: CutoffRecentEventCandidate[] = eventIdList
+    .map((eventId) => new Event(eventId))
+    .map((candidate) => ({
+      eventId: candidate.eventId,
+      eventType: candidate.eventType,
+      startAt: candidate.startAt,
+    }));
+  return selectRecentCutoffEventIds({
+    candidates,
+    count,
+    event,
+    sameType,
+    server,
+  }).map((eventId) => new Event(eventId));
 }

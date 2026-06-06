@@ -6,13 +6,15 @@ import {
 } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { drawListByServerList } from './list-frame';
 import { Canvas } from 'skia-canvas';
-import { Event } from '@/qqbot/plugins/bangDream/tsugu/models/event';
-import mainAPI from '@/qqbot/plugins/bangDream/tsugu/models/main-data-store';
 import {
-  BANGDREAM_CN_BLOCKED_EVENT_IDS,
-  BANGDREAM_CN_ESTIMATE_START_EVENT_ID,
-  BANGDREAM_DEFAULT_NO_BANG_DAYS,
-} from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+  estimateCnEventStartAt,
+  type BangDreamEventTimeLike,
+} from '@/qqbot/plugins/bangDream/tsugu/models/cn-event-estimate-policy';
+import {
+  getBangDreamDateByServerTimezone,
+  getBangDreamServerUtcOffset,
+  normalizeBangDreamTimestamp,
+} from '@/qqbot/plugins/bangDream/tsugu/models/server-policy';
 
 interface TimeInListOptions {
   key?: string;
@@ -35,13 +37,16 @@ export async function drawTimeInList(
   for (let i = 0; i < content.length; i++) {
     const element = content[i];
     if (element == null) {
-      if (i == 3 && estimateCNTime) {
+      if (i == 3 && estimateCNTime && eventId != null) {
         const currentEvent = getPresentEvent(getServerByName('cn'));
-        const currentEventId = currentEvent.eventId;
-        if (eventId > currentEventId) {
+        const currentEventId = currentEvent?.eventId;
+        const estimatedStartAt = getProbableTimeDifference(
+          eventId,
+          currentEvent,
+        );
+        if (currentEventId != null && eventId > currentEventId) {
           formattedTimeList.push(
-            formatTime(getProbableTimeDifference(eventId, currentEvent)) +
-              ' (预计开放时间)',
+            formatTime(estimatedStartAt) + ' (预计开放时间)',
           );
         }
       }
@@ -68,91 +73,9 @@ export async function drawTimeInList(
  */
 export function getProbableTimeDifference(
   eventId: number,
-  currentEvent: Event,
-): number {
-  const eventsData = mainAPI['events'];
-  const presentEventJP = getPresentEvent(Server.jp).eventId; // 取得日服最新一期的活动
-  let currentEventWithNoBanGDaysTotalOffset = 0;
-  const currentEventId = currentEvent.eventId;
-  // 计算当前活动日服与国服的实际持续天数偏移
-  const eventLenOffset =
-    occupiedDays(
-      new Event(currentEventId).startAt[Server.cn],
-      new Event(currentEventId).endAt[Server.cn],
-    ) -
-    occupiedDays(
-      new Event(currentEventId).startAt[Server.jp],
-      new Event(currentEventId).endAt[Server.jp],
-    );
-  // 计算当前正在进行的活动含无邦日当天一共有多少天
-  if (currentEventId < presentEventJP) {
-    currentEventWithNoBanGDaysTotalOffset =
-      (occupiedDays(
-        new Event(currentEventId).startAt[Server.jp],
-        new Event(currentEventId + 1).startAt[Server.jp],
-      ) -
-        1 +
-        eventLenOffset) *
-      24 *
-      3600 *
-      1000;
-  } else if (currentEventId == presentEventJP) {
-    // 如果当前活动与日服并行，则计算无邦日就从上一个endAt到这一个endAt
-    currentEventWithNoBanGDaysTotalOffset =
-      (occupiedDays(
-        new Event(currentEventId - 1).endAt[Server.jp],
-        new Event(currentEventId).endAt[Server.jp],
-      ) -
-        1 +
-        eventLenOffset) *
-      24 *
-      3600 *
-      1000;
-  } else {
-    // 预防国服可能出现与台服一样存在自有活动的情形，如台服5001。
-    currentEventWithNoBanGDaysTotalOffset =
-      (occupiedDays(
-        new Event(currentEventId).startAt[Server.cn],
-        new Event(currentEventId).endAt[Server.cn],
-      ) +
-        BANGDREAM_DEFAULT_NO_BANG_DAYS) *
-      24 *
-      3600 *
-      1000;
-  }
-  let probableTimeOffset = currentEvent.startAt[Server.cn]; // 等于正在举办活动的StartAt
-  for (let i = BANGDREAM_CN_ESTIMATE_START_EVENT_ID; i < presentEventJP; i++) {
-    if (!eventsData[i.toString()]['startAt'][Server.cn]) {
-      // 对于国服来说当前活动未举办
-      // 计算活动相对于日服（含无邦日）的时长。
-      probableTimeOffset +=
-        (occupiedDays(
-          new Event(i).startAt[Server.jp],
-          new Event(i + 1).startAt[Server.jp],
-        ) -
-          1) *
-        24 *
-        3600 *
-        1000;
-    }
-    if (i + 1 == eventId)
-      return probableTimeOffset + currentEventWithNoBanGDaysTotalOffset; //如果下一个循环是要获取的时间
-    if (BANGDREAM_CN_BLOCKED_EVENT_IDS.includes(i + 1)) continue; // 对于国服而言不会举办的活动，跳过
-  }
-  const presentEventJPLen =
-    (occupiedDays(
-      new Event(presentEventJP).startAt[Server.jp],
-      new Event(presentEventJP).endAt[Server.jp],
-    ) +
-      BANGDREAM_DEFAULT_NO_BANG_DAYS) *
-    24 *
-    3600 *
-    1000;
-  return (
-    probableTimeOffset +
-    currentEventWithNoBanGDaysTotalOffset +
-    presentEventJPLen
-  ); // 日服321，预测322+
+  currentEvent: BangDreamEventTimeLike | null,
+): number | null {
+  return estimateCnEventStartAt(eventId, currentEvent);
 }
 
 /**
@@ -311,24 +234,6 @@ export function formatSeconds(value: number) {
  * @param endTs - endTs参数。
  * @returns 计算后的数值。
  */
-function occupiedDays(startTs: number, endTs: number): number {
-  const start = new Date(startTs);
-  const end = new Date(endTs);
-
-  // 取年月日，忽略时分秒
-  const startDay = new Date(
-    start.getFullYear(),
-    start.getMonth(),
-    start.getDate(),
-  );
-  const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-
-  const msPerDay = 1000 * 60 * 60 * 24;
-
-  // 计算跨越的天数，再加1包含第一天
-  return Math.floor((endDay.getTime() - startDay.getTime()) / msPerDay) + 1;
-}
-
 /**
  * 在图片布局层中规范化Timestamp。
  *
@@ -336,8 +241,7 @@ function occupiedDays(startTs: number, endTs: number): number {
  * @returns 计算后的数值。
  */
 export function normalizeTimestamp(time: number | string): number {
-  const t = Number(time);
-  return t < 1e12 ? t * 1000 : t;
+  return normalizeBangDreamTimestamp(time);
 }
 
 /**
@@ -347,19 +251,7 @@ export function normalizeTimestamp(time: number | string): number {
  * @returns 计算后的数值。
  */
 export function getServerUtcOffset(server: Server): number {
-  switch (server) {
-    case Server.cn:
-    case Server.tw:
-      return 8;
-
-    case Server.jp:
-    case Server.kr:
-      return 9;
-
-    case Server.en:
-    default:
-      return 0;
-  }
+  return getBangDreamServerUtcOffset(server);
 }
 
 /**
@@ -373,7 +265,5 @@ export function getDateByServerTimezone(
   time: number | string,
   server: Server,
 ): Date {
-  const timestamp = normalizeTimestamp(time);
-  const offset = getServerUtcOffset(server);
-  return new Date(timestamp + offset * 60 * 60 * 1000);
+  return getBangDreamDateByServerTimezone(time, server);
 }

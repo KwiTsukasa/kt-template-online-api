@@ -1,5 +1,8 @@
 import { Event } from '@/qqbot/plugins/bangDream/tsugu/models/event';
-import { drawList, line } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-frame';
+import {
+  drawList,
+  line,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-frame';
 import { drawDataBlock } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/data-block';
 import { Image, Canvas } from 'skia-canvas';
 import { formatTime } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-time';
@@ -8,13 +11,11 @@ import { drawTitle } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/title';
 import { outputEasyImages } from '@/qqbot/plugins/bangDream/tsugu/canvas/output';
 import { Cutoff } from '@/qqbot/plugins/bangDream/tsugu/models/cutoff';
 import { drawCutoffChart } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/cutoff-chart';
-import {
-  serverNameFullList,
-  tierListOfServer,
-} from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
+import { serverNameFullList } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { drawEventDataBlock } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/detail-blocks';
 import { statusName } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { BangDreamEventStatus } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import { getCutoffTierList } from '@/qqbot/plugins/bangDream/tsugu/models/cutoff-policy';
 
 /**
  * 在QQBot 图片视图层中绘制档线全部。
@@ -43,7 +44,7 @@ export async function drawCutoffAll(
   const list: Array<Image | Canvas> = [];
 
   //初始化档线列表
-  const tierList = tierListOfServer[Server[mainServer]];
+  const tierList = getCutoffTierList(mainServer);
   const cutoffList: Array<Cutoff> = [];
   for (const i in tierList) {
     const tempCutoff = new Cutoff(eventId, mainServer, tierList[i]);

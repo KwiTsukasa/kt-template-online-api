@@ -364,6 +364,14 @@ export interface TsuguHook {
 - `models/cutoff.ts` 的请求、预测、展示规则分层。
 - policy 均有纯函数测试。
 
+当前进度：
+
+- 已新增 `models/server-policy.ts`，收口服务器 UTC 偏移、服务器时区 Date 转换、时间戳规范化和档线日增 checkpoint 服务器规则；`render-blocks/list-time.ts` 保留兼容入口但不再维护时区 switch。
+- 已新增 `models/cn-event-estimate-policy.ts`，把国服预估起始活动、跳过活动和无邦日规则从 `list-time.ts` 移出，提供 `calculateCnEventEstimateStartAt` 纯函数测试入口；`list-time.ts` 和 `event.ts` 改走 policy，不再让 Event 排序依赖渲染层预估实现。
+- 已新增 `models/cutoff-policy.ts`，收口档位列表、档位支持判断、国服缺失活动时间预估、档线活动状态、预测窗口、日增天数和最近同类型活动选择规则；`models/cutoff.ts` 和 `cutoff-all.ts` 已接入。
+- 已新增 `test/qqbot/plugins/bangDream/tsugu/policy.spec.ts`，覆盖服务器时区、国服预估纯计算、档位判断、状态/预测窗口、日增 checkpoint、活动天数和最近活动选择；policy 单测 mock `main-data-store`，避免纯测试启动主数据定时器。
+- 已生成 `phase6-policy-event-50.jpg`、`phase6-policy-cutoff-detail-100-50-cn.jpg`、`phase6-policy-cutoff-recent-100-50-cn.jpg`，验证查活动、单档线和历史档线图片输出非空。
+
 ### Phase 7：Facade 和 hook 接入
 
 目标：Nest 边界稳定，Tsugu 内部可观测。

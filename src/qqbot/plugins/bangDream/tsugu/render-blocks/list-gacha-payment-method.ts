@@ -3,15 +3,10 @@ import { Gacha } from '@/qqbot/plugins/bangDream/tsugu/models/gacha';
 import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { Item } from '@/qqbot/plugins/bangDream/tsugu/models/item';
 import { stackImage } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
-
-const behaviorName = {
-  normal: '',
-  over_the_3_star_once: '必中★3+',
-  over_the_4_star_once: '必中★4+',
-  once_a_day: '每日一次',
-  fixed_4_star_once: '必中★4',
-  fixed_5_star_once: '必中★5',
-};
+import {
+  BANGDREAM_GACHA_LIST_SPEC,
+  getGachaPaymentBehaviorLabel,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/gacha-list-spec';
 
 /**
  * 在图片布局层中绘制Gasha支付方式MethodIn列表。
@@ -45,29 +40,34 @@ export async function drawGashaPaymentMethodInList(gacha: Gacha) {
       }
       methodDescription.push(`x${costItemQuantity}`);
     } else {
-      methodDescription.push(` ? x${costItemQuantity}`);
+      methodDescription.push(
+        `${BANGDREAM_GACHA_LIST_SPEC.paymentText.unknownItemPrefix}${costItemQuantity}`,
+      );
     }
 
     //抽卡次数
     if (patmentMethod.count != undefined) {
-      methodDescription.push(patmentMethod.count + '次抽卡');
+      methodDescription.push(
+        `${patmentMethod.count}${BANGDREAM_GACHA_LIST_SPEC.paymentText.drawCountSuffix}`,
+      );
     }
 
     //更多情况描述
-    if (behaviorName[patmentMethod.behavior] != undefined) {
-      if (behaviorName[patmentMethod.behavior] != '') {
-        methodDescription.push(' ' + behaviorName[patmentMethod.behavior]);
-      }
-    } else {
-      methodDescription.push(patmentMethod.behavior);
+    const behaviorLabel = getGachaPaymentBehaviorLabel(patmentMethod.behavior);
+    if (behaviorLabel !== '') {
+      methodDescription.push(' ' + behaviorLabel);
     }
     if (patmentMethod['maxSpinLimit'] != undefined) {
-      methodDescription.push(' 仅限' + patmentMethod['maxSpinLimit'] + '次');
+      methodDescription.push(
+        `${BANGDREAM_GACHA_LIST_SPEC.paymentText.limitPrefix}${patmentMethod['maxSpinLimit']}${BANGDREAM_GACHA_LIST_SPEC.paymentText.limitSuffix}`,
+      );
     }
     const isFirst = i == 0;
     list.push(
       drawList({
-        key: isFirst ? '付费方式' : undefined,
+        key: isFirst
+          ? BANGDREAM_GACHA_LIST_SPEC.label.paymentMethod
+          : undefined,
         content: methodDescription,
       }),
     );

@@ -1,6 +1,10 @@
 import { Attribute } from '@/qqbot/plugins/bangDream/tsugu/models/attribute';
 import { drawList } from './list-frame';
 import { Canvas, Image } from 'skia-canvas';
+import {
+  BANGDREAM_ENTITY_LIST_SPEC,
+  shouldUseSingleEntityLabel,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-entity-spec';
 
 interface AttributeInListOptions {
   key?: string;
@@ -19,7 +23,7 @@ export async function drawAttributeInList({
   text,
 }: AttributeInListOptions): Promise<Canvas> {
   const list: Array<string | Image | Canvas> = [];
-  if (content.length == 1 && text == undefined) {
+  if (shouldUseSingleEntityLabel(content.length, text)) {
     list.push(await content[0].getIcon());
     list.push(content[0].name.toUpperCase());
     const canvas = drawList({
@@ -33,7 +37,7 @@ export async function drawAttributeInList({
     const canvas = drawList({
       key: key,
       content: list,
-      spacing: 0,
+      spacing: BANGDREAM_ENTITY_LIST_SPEC.multiValueSpacing,
     });
     return canvas;
   }

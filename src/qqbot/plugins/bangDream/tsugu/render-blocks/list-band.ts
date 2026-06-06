@@ -2,6 +2,10 @@ import { Band } from '@/qqbot/plugins/bangDream/tsugu/models/band';
 import { getServerByPriority } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { drawList } from './list-frame';
 import { Canvas, Image } from 'skia-canvas';
+import {
+  BANGDREAM_ENTITY_LIST_SPEC,
+  shouldUseSingleEntityLabel,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-entity-spec';
 
 interface BandInListOptions {
   key?: string;
@@ -21,7 +25,7 @@ export async function drawBandInList({
 }: BandInListOptions): Promise<Canvas> {
   const server = getServerByPriority(content[0].bandName);
   const list: Array<string | Image | Canvas> = [];
-  if (content.length == 1 && text == undefined) {
+  if (shouldUseSingleEntityLabel(content.length, text)) {
     if (content[0].hasIcon) {
       list.push(await content[0].getIcon());
     }
@@ -34,7 +38,7 @@ export async function drawBandInList({
   } else {
     for (let i = 0; i < content.length; i++) {
       const band = content[i];
-      if (this.hasIcon) {
+      if (band.hasIcon) {
         list.push(await band.getIcon());
       } else {
         list.push(band.bandName[server]);
@@ -46,7 +50,7 @@ export async function drawBandInList({
     const canvas = drawList({
       key: key,
       content: list,
-      spacing: 0,
+      spacing: BANGDREAM_ENTITY_LIST_SPEC.multiValueSpacing,
     });
     return canvas;
   }

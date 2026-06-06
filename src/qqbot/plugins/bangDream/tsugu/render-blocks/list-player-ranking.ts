@@ -7,6 +7,12 @@ import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { Degree } from '@/qqbot/plugins/bangDream/tsugu/models/degree';
 import { drawText } from '@/qqbot/plugins/bangDream/tsugu/canvas/text';
 import { playerRankingResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/player-ranking-resource-repository';
+import {
+  BANGDREAM_PLAYER_RANKING_SPEC,
+  createRankingDegreeLayout,
+  isMedalRanking,
+  stripPlayerRankingTextTags,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-player-ranking-spec';
 
 interface User {
   uid: number;
@@ -30,44 +36,51 @@ interface User {
  */
 export async function drawPlayerRankingInList(
   user: User,
-  backgroudColor: string = 'white',
+  backgroudColor: string = BANGDREAM_PLAYER_RANKING_SPEC.backgroundColor,
   server: Server,
 ): Promise<Canvas> {
-  const canvas = new Canvas(800, 110);
+  const canvas = new Canvas(
+    BANGDREAM_PLAYER_RANKING_SPEC.canvas.width,
+    BANGDREAM_PLAYER_RANKING_SPEC.canvas.height,
+  );
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = backgroudColor;
-  ctx.fillRect(0, 0, 800, 110);
-
-  /**
-   * 在图片布局层中移除Braces。
-   *
-   * @param text - 待绘制文本。
-   * @returns 格式化后的文本。
-   */
-  function removeBraces(text: string): string {
-    const newText = text.replace(/\[[^\]]*\]/g, '');
-    return newText;
-  }
+  ctx.fillRect(
+    0,
+    0,
+    BANGDREAM_PLAYER_RANKING_SPEC.canvas.width,
+    BANGDREAM_PLAYER_RANKING_SPEC.canvas.height,
+  );
 
   //排名
   let rankingImage;
   if (user.ranking == undefined) {
     return;
-  } else if (user.ranking > 0 && user.ranking <= 3) {
+  } else if (isMedalRanking(user.ranking)) {
     const rankIamgeBuffer =
       await playerRankingResourceRepository.getRankImageBuffer(
         server,
         user.ranking,
       );
     rankingImage = await loadImage(rankIamgeBuffer);
-    ctx.drawImage(rankingImage, 12, 45, 45, 21);
+    ctx.drawImage(
+      rankingImage,
+      BANGDREAM_PLAYER_RANKING_SPEC.ranking.x,
+      BANGDREAM_PLAYER_RANKING_SPEC.ranking.y,
+      BANGDREAM_PLAYER_RANKING_SPEC.ranking.imageWidth,
+      BANGDREAM_PLAYER_RANKING_SPEC.ranking.imageHeight,
+    );
   } else {
     rankingImage = drawText({
       text: '#' + user.ranking.toString(),
-      textSize: 21,
-      maxWidth: 100,
+      textSize: BANGDREAM_PLAYER_RANKING_SPEC.ranking.textSize,
+      maxWidth: BANGDREAM_PLAYER_RANKING_SPEC.ranking.fallbackMaxWidth,
     });
-    ctx.drawImage(rankingImage, 12, 45);
+    ctx.drawImage(
+      rankingImage,
+      BANGDREAM_PLAYER_RANKING_SPEC.ranking.x,
+      BANGDREAM_PLAYER_RANKING_SPEC.ranking.y,
+    );
   }
 
   //头像
@@ -78,59 +91,90 @@ export async function drawPlayerRankingInList(
     skillTypeVisible: false,
     cardTypeVisible: false,
   });
-  ctx.drawImage(headShotImage, 85, 10, 90, 90);
+  ctx.drawImage(
+    headShotImage,
+    BANGDREAM_PLAYER_RANKING_SPEC.headShot.x,
+    BANGDREAM_PLAYER_RANKING_SPEC.headShot.y,
+    BANGDREAM_PLAYER_RANKING_SPEC.headShot.width,
+    BANGDREAM_PLAYER_RANKING_SPEC.headShot.height,
+  );
 
   //玩家昵称
   const playerNameImage = drawText({
-    text: removeBraces(user.name),
-    textSize: 23,
-    maxWidth: 450,
+    text: stripPlayerRankingTextTags(user.name),
+    textSize: BANGDREAM_PLAYER_RANKING_SPEC.text.nameSize,
+    maxWidth: BANGDREAM_PLAYER_RANKING_SPEC.text.nameMaxWidth,
   });
-  ctx.drawImage(playerNameImage, 210, 10);
+  ctx.drawImage(
+    playerNameImage,
+    BANGDREAM_PLAYER_RANKING_SPEC.text.nameX,
+    BANGDREAM_PLAYER_RANKING_SPEC.text.nameY,
+  );
 
   //牌子
   for (let i = 0; i < user.degrees.length; i++) {
     const degreeImage = await drawDegree(new Degree(user.degrees[i]), server);
+    const degreeLayout = createRankingDegreeLayout({
+      height: degreeImage.height,
+      index: i,
+      width: degreeImage.width,
+    });
     ctx.drawImage(
       degreeImage,
-      210 + (degreeImage.width / 2 + 10) * i,
-      46,
-      degreeImage.width / 2,
-      degreeImage.height / 2,
+      degreeLayout.x,
+      degreeLayout.y,
+      degreeLayout.width,
+      degreeLayout.height,
     );
   }
 
   //简介
   const playerIntroductionImage = drawText({
-    text: removeBraces(user.introduction),
-    textSize: 20,
-    maxWidth: 450,
+    text: stripPlayerRankingTextTags(user.introduction),
+    textSize: BANGDREAM_PLAYER_RANKING_SPEC.text.introductionSize,
+    maxWidth: BANGDREAM_PLAYER_RANKING_SPEC.text.introductionMaxWidth,
   });
-  ctx.drawImage(playerIntroductionImage, 210, 75);
+  ctx.drawImage(
+    playerIntroductionImage,
+    BANGDREAM_PLAYER_RANKING_SPEC.text.introductionX,
+    BANGDREAM_PLAYER_RANKING_SPEC.text.introductionY,
+  );
 
   //等级
   const playerRankImage = drawText({
     text: '等级 ' + user.rank.toString(),
-    textSize: 23,
-    maxWidth: 150,
+    textSize: BANGDREAM_PLAYER_RANKING_SPEC.text.rankSize,
+    maxWidth: BANGDREAM_PLAYER_RANKING_SPEC.rightColumn.maxWidth,
   });
-  ctx.drawImage(playerRankImage, 790 - playerRankImage.width, 10);
+  ctx.drawImage(
+    playerRankImage,
+    BANGDREAM_PLAYER_RANKING_SPEC.rightColumn.edgeX - playerRankImage.width,
+    BANGDREAM_PLAYER_RANKING_SPEC.rightColumn.rankY,
+  );
 
   //id
   const idImage = drawText({
     text: '#' + user.uid,
-    textSize: 20,
-    maxWidth: 150,
+    textSize: BANGDREAM_PLAYER_RANKING_SPEC.text.idSize,
+    maxWidth: BANGDREAM_PLAYER_RANKING_SPEC.rightColumn.maxWidth,
   });
-  ctx.drawImage(idImage, 790 - idImage.width, 45);
+  ctx.drawImage(
+    idImage,
+    BANGDREAM_PLAYER_RANKING_SPEC.rightColumn.edgeX - idImage.width,
+    BANGDREAM_PLAYER_RANKING_SPEC.rightColumn.idY,
+  );
 
   //pt
   const ptImage = drawText({
     text: user.currentPt.toString() + '分',
-    textSize: 23,
-    maxWidth: 150,
+    textSize: BANGDREAM_PLAYER_RANKING_SPEC.text.pointSize,
+    maxWidth: BANGDREAM_PLAYER_RANKING_SPEC.rightColumn.maxWidth,
   });
-  ctx.drawImage(ptImage, 790 - ptImage.width, 70);
+  ctx.drawImage(
+    ptImage,
+    BANGDREAM_PLAYER_RANKING_SPEC.rightColumn.edgeX - ptImage.width,
+    BANGDREAM_PLAYER_RANKING_SPEC.rightColumn.pointY,
+  );
 
   return canvas;
 }

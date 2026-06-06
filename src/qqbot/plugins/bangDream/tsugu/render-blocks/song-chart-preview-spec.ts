@@ -44,13 +44,39 @@ export interface PreviewLayout {
 export const BANGDREAM_SONG_CHART_PREVIEW_SPEC = {
   aspectRatioLimit: 16 / 9,
   blockDistance: 72,
+  coverInset: 16,
   heightPerSecond: 216,
   infoAreaWidth: 240,
+  infoOffset: 8,
   laneCount: 7,
   laneWidth: 32,
   minHeight: 500,
   noteEndPaddingSeconds: 0.25,
+  panel: {
+    fontSize: 16,
+    height: 24,
+    maxWidth: 128,
+    width: 128,
+  },
+  difficultyPanel: {
+    textXFromCoverRight: -52,
+    textYOffsetFromCoverBottom: 0,
+    xFromCoverRight: -116,
+    yFromCoverBottom: -12,
+  },
+  idPanel: {
+    textXOffset: 56,
+    textYOffset: 4,
+    xOffset: -8,
+    yOffset: -8,
+  },
+  simLineHeight: 2,
   splitLineWidth: 2,
+  trackGradientStops: [
+    { color: '#2F4E6F', offset: 0 },
+    { color: '#3E6F8A', offset: 0.5 },
+    { color: '#4D80A4', offset: 1 },
+  ],
 } as const;
 
 export const BANGDREAM_SONG_CHART_DISPLAY_NOTE_TYPES = [

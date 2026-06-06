@@ -9,6 +9,12 @@ import {
 import { Event } from '@/qqbot/plugins/bangDream/tsugu/models/event';
 import { stackImage } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
 import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
+import {
+  BANGDREAM_DEGREE_LIST_SPEC,
+  isDegreeRewardType,
+  shouldCollectMusicRankingDegreeRewards,
+  shouldStopAfterFirstMusicRewardGroup,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/degree-list-spec';
 
 interface DegreeListInListOptions {
   key?: string;
@@ -37,7 +43,7 @@ export async function drawDegreeListInList({
   return drawList({
     key: key,
     content: list,
-    textSize: 50,
+    textSize: BANGDREAM_DEGREE_LIST_SPEC.list.textSize,
   });
 }
 
@@ -58,9 +64,13 @@ export async function drawDegreeListOfEvent(
   const server = getServerByPriority(event.rankingRewards, displayedServerList);
   const rankingRewards = event.rankingRewards[server];
   for (let i = 0; i < rankingRewards.length; i++) {
-    if (rankingRewards[i].rewardType == 'degree') {
+    if (isDegreeRewardType(rankingRewards[i].rewardType)) {
       tempDegreeList.push(new Degree(rankingRewards[i].rewardId));
-      if (tempDegreeList.length >= 6) break;
+      if (
+        tempDegreeList.length >=
+        BANGDREAM_DEGREE_LIST_SPEC.eventRewards.maxDegreeCount
+      )
+        break;
     }
   }
   list.push(
@@ -71,20 +81,22 @@ export async function drawDegreeListOfEvent(
       displayedServerList: displayedServerList,
     }),
   );
-  if (
-    event.eventType == 'versus' ||
-    event.eventType == 'challenge' ||
-    event.eventType == 'medley'
-  ) {
+  if (shouldCollectMusicRankingDegreeRewards(event.eventType)) {
     const rewards = event.musics[server];
     for (let i = 0; i < rewards.length; i++) {
       const tempDegreeList = [];
       for (let n = 0; n < rewards[i].musicRankingRewards.length; n++) {
-        if (rewards[i].musicRankingRewards[n].resourceType == 'degree') {
+        if (
+          isDegreeRewardType(rewards[i].musicRankingRewards[n].resourceType)
+        ) {
           tempDegreeList.push(
             new Degree(rewards[i].musicRankingRewards[n].resourceId),
           );
-          if (tempDegreeList.length >= 6) break;
+          if (
+            tempDegreeList.length >=
+            BANGDREAM_DEGREE_LIST_SPEC.eventRewards.maxDegreeCount
+          )
+            break;
         }
       }
       list.push(
@@ -94,7 +106,7 @@ export async function drawDegreeListOfEvent(
           displayedServerList: displayedServerList,
         }),
       );
-      if (event.eventType == 'medley') {
+      if (shouldStopAfterFirstMusicRewardGroup(event.eventType)) {
         break;
       }
     }
@@ -106,9 +118,13 @@ export async function drawDegreeListOfEvent(
       if (Object.prototype.hasOwnProperty.call(rewards, i)) {
         const rewardsList = rewards[i]['entries'];
         for (const j in rewardsList) {
-          if (rewardsList[j]['resourceType'] == 'degree') {
+          if (isDegreeRewardType(rewardsList[j]['resourceType'])) {
             tempDegreeList.push(new Degree(rewardsList[j]['resourceId']));
-            if (tempDegreeList.length >= 6) break;
+            if (
+              tempDegreeList.length >=
+              BANGDREAM_DEGREE_LIST_SPEC.eventRewards.maxDegreeCount
+            )
+              break;
           }
         }
       }

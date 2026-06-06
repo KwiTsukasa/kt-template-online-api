@@ -5,6 +5,7 @@ import { drawCardListInList } from './list-card-icon-list';
 import { Card } from '@/qqbot/plugins/bangDream/tsugu/models/card';
 import { stackImage } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
 import { Canvas } from 'skia-canvas';
+import { BANGDREAM_GACHA_LIST_SPEC } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/gacha-list-spec';
 
 /**
  * 在图片布局层中绘制卡池PickUpIn列表。
@@ -22,7 +23,7 @@ export async function drawGachaPickupInList(
   const list = [];
   list.push(
     drawList({
-      key: key ?? '卡池PickUp',
+      key: key ?? BANGDREAM_GACHA_LIST_SPEC.label.pickup,
     }),
   );
   let pickUpCardIdList = [];
@@ -72,8 +73,8 @@ export async function drawGachaPickupInList(
     return stackImage(list);
   } else {
     const result = drawList({
-      key: key ?? '卡池PickUp',
-      text: '无',
+      key: key ?? BANGDREAM_GACHA_LIST_SPEC.label.pickup,
+      text: BANGDREAM_GACHA_LIST_SPEC.label.empty,
     });
     return result;
   }

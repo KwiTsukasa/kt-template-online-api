@@ -4,6 +4,7 @@ import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { stackImage } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
 import { Canvas } from 'skia-canvas';
 import { drawList } from './list-frame';
+import { BANGDREAM_GACHA_LIST_SPEC } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/gacha-list-spec';
 
 /**
  * 在图片布局层中绘制卡池概率In列表。
@@ -22,11 +23,11 @@ export async function drawGachaRateInList(
   let key = undefined;
   // 如果卡池数据没有提供概率数据，则不返回概率相关数据
   if (rates == null) {
-    key = '概率分布';
+    key = BANGDREAM_GACHA_LIST_SPEC.label.rateDistribution;
     list.push(
       drawList({
         key,
-        text: `未提供概率分布数据`,
+        text: BANGDREAM_GACHA_LIST_SPEC.label.rateMissing,
       }),
     );
   } else {
@@ -35,7 +36,7 @@ export async function drawGachaRateInList(
         continue;
       }
       if (times == 0) {
-        key = '概率分布';
+        key = BANGDREAM_GACHA_LIST_SPEC.label.rateDistribution;
       }
       list.push(
         await drawRarityInList({

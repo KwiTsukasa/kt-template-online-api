@@ -3,6 +3,11 @@ import { Canvas, FontLibrary, loadImage } from 'skia-canvas';
 import 'chartjs-adapter-moment';
 import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { assetErrorImageBuffer } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
+import {
+  BANGDREAM_TIMELINE_CHART_SPEC,
+  getTimelineDisplayYMax,
+  getTimelineRawYMax,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/timeline-chart-spec';
 
 // 2. 注册 Chart.js 所有组件
 Chart.register(...registerables);
@@ -34,19 +39,15 @@ export async function drawTimeLineChart(
   { start, end, setStartToZero = false, data }: drawTimeLineChartOptions,
   displayLabel = false,
 ) {
-  const width = 800;
-  const height = 900;
+  const width = BANGDREAM_TIMELINE_CHART_SPEC.canvas.width;
+  const height = BANGDREAM_TIMELINE_CHART_SPEC.canvas.height;
 
   // 7. 创建 skia-canvas 实例
   const canvas = new Canvas(width, height);
   const ctx = canvas.getContext('2d');
 
   // 8. 计算 y 轴最大值
-  const yMax = Math.max(
-    ...data.datasets.map((dataset: any) =>
-      Math.max(...dataset.data.map((pt: any) => pt.y)),
-    ),
-  );
+  const yMax = getTimelineRawYMax(data.datasets);
 
   // 9. 配置 Chart.js 选项
   const options = {
@@ -54,7 +55,7 @@ export async function drawTimeLineChart(
       legend: {
         labels: {
           font: {
-            size: 20,
+            size: BANGDREAM_TIMELINE_CHART_SPEC.legend.fontSize,
           },
         },
         display: displayLabel,
@@ -64,15 +65,15 @@ export async function drawTimeLineChart(
       x: {
         type: 'time',
         time: {
-          unit: 'day',
+          unit: BANGDREAM_TIMELINE_CHART_SPEC.xAxis.unit,
         },
         min: start,
         max: end,
         display: !setStartToZero,
       },
       y: {
-        min: 0,
-        max: (yMax + 1000) * 1.1,
+        min: BANGDREAM_TIMELINE_CHART_SPEC.yAxis.min,
+        max: getTimelineDisplayYMax(yMax),
       },
     },
   };
@@ -83,8 +84,8 @@ export async function drawTimeLineChart(
     data,
     options: {
       ...options,
-      responsive: false, // 重要：关闭 Chart.js 自适应模式
-      animation: false,
+      responsive: BANGDREAM_TIMELINE_CHART_SPEC.responsive, // 重要：关闭 Chart.js 自适应模式
+      animation: BANGDREAM_TIMELINE_CHART_SPEC.animation,
     },
   };
 

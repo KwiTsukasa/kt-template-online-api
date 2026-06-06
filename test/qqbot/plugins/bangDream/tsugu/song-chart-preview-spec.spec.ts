@@ -1,6 +1,7 @@
 import {
   assignSongChartTimes,
   BestdoriNote,
+  BANGDREAM_SONG_CHART_PREVIEW_SPEC,
   createSongChartPreviewLayout,
   createSongChartPreviewModel,
   createSongChartPreviewNotes,
@@ -101,5 +102,22 @@ describe('BangDream song chart preview spec', () => {
 
     expect(model.notes.some((note) => note.type === 'Single')).toBe(true);
     expect(model.layout.width).toBeGreaterThan(0);
+  });
+
+  it('keeps the drawing-only panel and gradient specs stable', () => {
+    expect(BANGDREAM_SONG_CHART_PREVIEW_SPEC.infoOffset).toBe(8);
+    expect(BANGDREAM_SONG_CHART_PREVIEW_SPEC.coverInset).toBe(16);
+    expect(BANGDREAM_SONG_CHART_PREVIEW_SPEC.panel).toEqual({
+      fontSize: 16,
+      height: 24,
+      maxWidth: 128,
+      width: 128,
+    });
+    expect(BANGDREAM_SONG_CHART_PREVIEW_SPEC.simLineHeight).toBe(2);
+    expect(BANGDREAM_SONG_CHART_PREVIEW_SPEC.trackGradientStops).toEqual([
+      { color: '#2F4E6F', offset: 0 },
+      { color: '#3E6F8A', offset: 0.5 },
+      { color: '#4D80A4', offset: 1 },
+    ]);
   });
 });

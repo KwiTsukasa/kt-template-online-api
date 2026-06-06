@@ -5,6 +5,11 @@ import {
   getServerByPriority,
 } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { Canvas } from 'skia-canvas';
+import {
+  BANGDREAM_DEGREE_LIST_SPEC,
+  shouldDrawDegreeDecorations,
+  shouldDrawDegreeIcon,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/degree-list-spec';
 
 /**
  * 在图片布局层中绘制称号。
@@ -23,17 +28,22 @@ export async function drawDegree(
   if (degree.degreeName[server] == null) {
     server = getServerByPriority(degree.degreeName, displayedServerList);
   }
-  const canvas = new Canvas(230, 50);
+  const canvas = new Canvas(
+    BANGDREAM_DEGREE_LIST_SPEC.badge.width,
+    BANGDREAM_DEGREE_LIST_SPEC.badge.height,
+  );
   const ctx = canvas.getContext('2d');
 
   const degreeImage = await degree.getDegreeImage(server); //底图
   ctx.drawImage(degreeImage, 0, 0);
 
   // 画其他部分,normal类型不需要画
+  const degreeType = degree.degreeType[server];
   if (
-    degree.degreeType[server] != 'normal' &&
-    degree.degreeType[server] != null &&
-    degree.degreeId > 12
+    shouldDrawDegreeDecorations({
+      degreeId: degree.degreeId,
+      degreeType,
+    })
   ) {
     //画框
     if (degree.rank[server] && degree.rank[server] != 'none') {
@@ -41,7 +51,7 @@ export async function drawDegree(
       ctx.drawImage(frame, 0, 0);
     }
     //画icon
-    if (degree.degreeType[server] != 'try_clear') {
+    if (shouldDrawDegreeIcon(degreeType)) {
       // 如果不是EX牌活动 EX牌活动没有icon在左边
       const icon = await degree.getDegreeIcon(server);
       ctx.drawImage(icon, 0, 0);

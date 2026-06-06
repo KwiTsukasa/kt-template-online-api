@@ -25,7 +25,6 @@ interface BestdoriPreviewPayload {
   cover: string | Buffer;
 }
 
-const OFFSET = 8;
 const NOTE_IMAGE_KEYS = [
   'Single',
   'SingleOff',
@@ -149,33 +148,67 @@ function drawBaseInfo(
 
   ctx.drawImage(
     coverImg,
-    OFFSET,
-    OFFSET,
-    layout.infoAreaWidth - 16,
-    layout.infoAreaWidth - 16,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.infoOffset,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.infoOffset,
+    layout.infoAreaWidth - BANGDREAM_SONG_CHART_PREVIEW_SPEC.coverInset,
+    layout.infoAreaWidth - BANGDREAM_SONG_CHART_PREVIEW_SPEC.coverInset,
   );
 
   ctx.save();
   ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartPanel;
-  ctx.fillRect(OFFSET - 8, OFFSET - 8, 128, 24);
+  ctx.fillRect(
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.infoOffset +
+      BANGDREAM_SONG_CHART_PREVIEW_SPEC.idPanel.xOffset,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.infoOffset +
+      BANGDREAM_SONG_CHART_PREVIEW_SPEC.idPanel.yOffset,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.panel.width,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.panel.height,
+  );
   ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartText;
-  ctx.font = `16px "${BANGDREAM_RENDER_THEME.font.chart}"`;
+  ctx.font = `${BANGDREAM_SONG_CHART_PREVIEW_SPEC.panel.fontSize}px "${BANGDREAM_RENDER_THEME.font.chart}"`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`${id}`, OFFSET + 56, OFFSET + 4, 128);
+  ctx.fillText(
+    `${id}`,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.infoOffset +
+      BANGDREAM_SONG_CHART_PREVIEW_SPEC.idPanel.textXOffset,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.infoOffset +
+      BANGDREAM_SONG_CHART_PREVIEW_SPEC.idPanel.textYOffset,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.panel.maxWidth,
+  );
   ctx.restore();
 
-  const coverWidth = layout.infoAreaWidth - 16;
+  const coverWidth =
+    layout.infoAreaWidth - BANGDREAM_SONG_CHART_PREVIEW_SPEC.coverInset;
   ctx.save();
   ctx.fillStyle =
     BANGDREAM_SONG_CHART_DIFFICULTY_COLORS[diff] ??
     BANGDREAM_RENDER_THEME.color.chartDifficultyFallback;
-  ctx.fillRect(8 + coverWidth - 116, 8 + coverWidth - 12, 128, 24);
+  ctx.fillRect(
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.infoOffset +
+      coverWidth +
+      BANGDREAM_SONG_CHART_PREVIEW_SPEC.difficultyPanel.xFromCoverRight,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.infoOffset +
+      coverWidth +
+      BANGDREAM_SONG_CHART_PREVIEW_SPEC.difficultyPanel.yFromCoverBottom,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.panel.width,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.panel.height,
+  );
   ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartText;
-  ctx.font = `16px "${BANGDREAM_RENDER_THEME.font.chart}"`;
+  ctx.font = `${BANGDREAM_SONG_CHART_PREVIEW_SPEC.panel.fontSize}px "${BANGDREAM_RENDER_THEME.font.chart}"`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`${diff} ${level}`, 8 + coverWidth - 52, 8 + coverWidth, 128);
+  ctx.fillText(
+    `${diff} ${level}`,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.infoOffset +
+      coverWidth +
+      BANGDREAM_SONG_CHART_PREVIEW_SPEC.difficultyPanel.textXFromCoverRight,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.infoOffset +
+      coverWidth +
+      BANGDREAM_SONG_CHART_PREVIEW_SPEC.difficultyPanel
+        .textYOffsetFromCoverBottom,
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.panel.maxWidth,
+  );
   ctx.restore();
 }
 
@@ -190,17 +223,18 @@ function drawTracks(ctx: any, layout: PreviewLayout): void {
     ctx.save();
     const x =
       layout.infoAreaWidth + i * layout.originalWidth + layout.blockDistance;
-    const w =
-      layout.laneWidth * BANGDREAM_SONG_CHART_PREVIEW_SPEC.laneCount;
+    const w = layout.laneWidth * BANGDREAM_SONG_CHART_PREVIEW_SPEC.laneCount;
     const grd = ctx.createLinearGradient(
       x,
       0,
       x + layout.splitLineWidth * 2,
       0,
     );
-    grd.addColorStop(0, '#2F4E6F');
-    grd.addColorStop(0.5, '#3E6F8A');
-    grd.addColorStop(1, '#4D80A4');
+    BANGDREAM_SONG_CHART_PREVIEW_SPEC.trackGradientStops.forEach(
+      ({ color, offset }) => {
+        grd.addColorStop(offset, color);
+      },
+    );
     ctx.fillStyle = grd;
     ctx.fillRect(
       x - layout.splitLineWidth * 2,
@@ -253,8 +287,7 @@ function drawBeatLines(
       }
       const currentTime = (bpmNote.time as number) + beat * (60 / bpmNote.bpm);
       const { x, y } = getTimePosition(layout, currentTime);
-      const w =
-        BANGDREAM_SONG_CHART_PREVIEW_SPEC.laneCount * layout.laneWidth;
+      const w = BANGDREAM_SONG_CHART_PREVIEW_SPEC.laneCount * layout.laneWidth;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -445,7 +478,7 @@ function drawSimNote(
   const lane = note.lane as number[];
   lane.sort((a, b) => a - b);
   const simW = layout.laneWidth * (lane[1] - lane[0] - 1);
-  const simH = 2;
+  const simH = BANGDREAM_SONG_CHART_PREVIEW_SPEC.simLineHeight;
   const simStartX =
     layout.infoAreaWidth +
     drawCol * layout.originalWidth +

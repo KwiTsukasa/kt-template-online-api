@@ -2,6 +2,12 @@ import { Canvas, Image } from 'skia-canvas';
 import { drawRoundedRect } from '@/qqbot/plugins/bangDream/tsugu/canvas/rect';
 import { drawText } from '@/qqbot/plugins/bangDream/tsugu/canvas/text';
 import { resizeImage } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
+import {
+  BANGDREAM_DATA_BLOCK_SPEC,
+  calculateHorizontalDataBlockSize,
+  calculateVerticalDataBlockSize,
+  getDataBlockTitleLineHeight,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/data-block-spec';
 
 interface DataBlockOptions {
   list: Array<Canvas | Image>;
@@ -20,27 +26,29 @@ export function drawDataBlock({
   list,
   BG = true,
   topLeftText,
-  opacity = 0.9,
+  opacity = BANGDREAM_DATA_BLOCK_SPEC.background.defaultOpacity,
 }: DataBlockOptions): Canvas {
-  const topLeftTextHeight = 70;
   //计算高度
-  let allH = 0;
+  let contentHeight = 0;
   let maxW = 0;
-  if (BG) {
-    allH += 100;
-  }
   for (let i = 0; i < list.length; i++) {
-    allH = allH + list[i].height;
+    contentHeight += list[i].height;
     if (list[i].width > maxW) {
       maxW = list[i].width;
     }
   }
+  const allH =
+    contentHeight +
+    (BG ? BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraHeight : 0);
+  const canvasSize = calculateVerticalDataBlockSize({
+    contentHeight,
+    maxContentWidth: maxW,
+    withBackground: BG,
+    withTitle: topLeftText != undefined,
+  });
 
   //创建Canvas
-  const tempCanvas =
-    topLeftText != undefined && BG
-      ? new Canvas(maxW + 200, allH + topLeftTextHeight)
-      : new Canvas(maxW + 200, allH);
+  const tempCanvas = new Canvas(canvasSize.width, canvasSize.height);
   const ctx = tempCanvas.getContext('2d');
 
   //画背景
@@ -51,58 +59,76 @@ export function drawDataBlock({
         drawRoundedRect({
           //画字底，左下角右下角没有圆角
           opacity: 1,
-          color: '#ea4e73',
-          width: 380,
-          height: topLeftTextHeight + 5,
-          radius: [25, 25, 0, 0],
-          strokeColor: '#ffffff',
-          strokeWidth: 5,
+          color: BANGDREAM_DATA_BLOCK_SPEC.title.backgroundColor,
+          width: BANGDREAM_DATA_BLOCK_SPEC.title.blockSize,
+          height:
+            BANGDREAM_DATA_BLOCK_SPEC.title.height +
+            BANGDREAM_DATA_BLOCK_SPEC.title.rectExtraSize,
+          radius: [
+            BANGDREAM_DATA_BLOCK_SPEC.background.radius,
+            BANGDREAM_DATA_BLOCK_SPEC.background.radius,
+            0,
+            0,
+          ],
+          strokeColor: BANGDREAM_DATA_BLOCK_SPEC.title.strokeColor,
+          strokeWidth: BANGDREAM_DATA_BLOCK_SPEC.title.strokeWidth,
         }),
-        50,
-        0,
+        BANGDREAM_DATA_BLOCK_SPEC.vertical.titleRectX,
+        BANGDREAM_DATA_BLOCK_SPEC.vertical.titleRectY,
       );
 
       const textImage = drawText({
         //画字
-        color: '#ffffff',
+        color: BANGDREAM_DATA_BLOCK_SPEC.title.textColor,
         text: topLeftText,
-        maxWidth: 370,
-        lineHeight: topLeftTextHeight - 5,
+        maxWidth:
+          BANGDREAM_DATA_BLOCK_SPEC.title.blockSize -
+          BANGDREAM_DATA_BLOCK_SPEC.title.textInset * 2,
+        lineHeight: getDataBlockTitleLineHeight(),
       });
-      ctx.drawImage(textImage, 240 - textImage.width / 2, 5);
+      ctx.drawImage(
+        textImage,
+        BANGDREAM_DATA_BLOCK_SPEC.vertical.titleCenterX - textImage.width / 2,
+        BANGDREAM_DATA_BLOCK_SPEC.vertical.titleTextY,
+      );
       ctx.drawImage(
         drawRoundedRect({
           //画总底，左上角没有圆角
           opacity,
-          width: maxW + 100,
+          width: maxW + BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraWidth,
           height: allH,
-          radius: [0, 25, 25, 25],
+          radius: [
+            0,
+            BANGDREAM_DATA_BLOCK_SPEC.background.radius,
+            BANGDREAM_DATA_BLOCK_SPEC.background.radius,
+            BANGDREAM_DATA_BLOCK_SPEC.background.radius,
+          ],
         }),
-        50,
-        topLeftTextHeight,
+        BANGDREAM_DATA_BLOCK_SPEC.vertical.backgroundOffsetX,
+        BANGDREAM_DATA_BLOCK_SPEC.title.height,
       );
     } else {
       ctx.drawImage(
         drawRoundedRect({
           //画总底
           opacity,
-          width: maxW + 100,
+          width: maxW + BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraWidth,
           height: allH,
         }),
-        50,
-        0,
+        BANGDREAM_DATA_BLOCK_SPEC.vertical.backgroundOffsetX,
+        BANGDREAM_DATA_BLOCK_SPEC.vertical.backgroundOffsetY,
       );
     }
   }
   let allH2 = 0;
   if (BG) {
-    allH2 += 50;
+    allH2 += BANGDREAM_DATA_BLOCK_SPEC.vertical.contentOffsetY;
     if (topLeftText != undefined) {
-      allH2 += topLeftTextHeight;
+      allH2 += BANGDREAM_DATA_BLOCK_SPEC.title.height;
     }
   }
 
-  const xStart = BG ? 100 : 0;
+  const xStart = BG ? BANGDREAM_DATA_BLOCK_SPEC.vertical.contentOffsetX : 0;
 
   for (let i = 0; i < list.length; i++) {
     ctx.drawImage(list[i], xStart, allH2);
@@ -123,26 +149,27 @@ export function drawDataBlockHorizontal({
   BG = true,
   topLeftText,
 }: DataBlockOptions): Canvas {
-  const topLeftTextHeight = 70;
-
   // 计算宽度和高度
-  let allW = 0;
+  let contentWidth = 0;
   let maxH = 0;
-  if (BG) {
-    allW += 200;
-  }
   for (let i = 0; i < list.length; i++) {
-    allW += list[i].width;
+    contentWidth += list[i].width;
     if (list[i].height > maxH) {
       maxH = list[i].height;
     }
   }
+  const allW =
+    contentWidth +
+    (BG ? BANGDREAM_DATA_BLOCK_SPEC.background.outerExtraWidth : 0);
+  const canvasSize = calculateHorizontalDataBlockSize({
+    contentWidth,
+    maxContentHeight: maxH,
+    withBackground: BG,
+    withTitle: topLeftText !== undefined,
+  });
 
   // 创建 Canvas
-  const tempCanvas =
-    topLeftText !== undefined && BG
-      ? new Canvas(allW + topLeftTextHeight, maxH + 100)
-      : new Canvas(allW, maxH + 100);
+  const tempCanvas = new Canvas(canvasSize.width, canvasSize.height);
   const ctx = tempCanvas.getContext('2d');
 
   // 绘制背景
@@ -152,59 +179,80 @@ export function drawDataBlockHorizontal({
       ctx.drawImage(
         drawRoundedRect({
           opacity: 1,
-          color: '#ea4e73',
-          width: topLeftTextHeight + 5,
-          height: 380,
-          radius: [25, 25, 0, 0],
-          strokeColor: '#ffffff',
-          strokeWidth: 5,
+          color: BANGDREAM_DATA_BLOCK_SPEC.title.backgroundColor,
+          width:
+            BANGDREAM_DATA_BLOCK_SPEC.title.height +
+            BANGDREAM_DATA_BLOCK_SPEC.title.rectExtraSize,
+          height: BANGDREAM_DATA_BLOCK_SPEC.title.blockSize,
+          radius: [
+            BANGDREAM_DATA_BLOCK_SPEC.background.radius,
+            BANGDREAM_DATA_BLOCK_SPEC.background.radius,
+            0,
+            0,
+          ],
+          strokeColor: BANGDREAM_DATA_BLOCK_SPEC.title.strokeColor,
+          strokeWidth: BANGDREAM_DATA_BLOCK_SPEC.title.strokeWidth,
         }),
-        0,
-        50,
+        BANGDREAM_DATA_BLOCK_SPEC.horizontal.titleRectX,
+        BANGDREAM_DATA_BLOCK_SPEC.horizontal.titleRectY,
       );
 
       const textImage = drawText({
-        color: '#ffffff',
+        color: BANGDREAM_DATA_BLOCK_SPEC.title.textColor,
         text: topLeftText,
-        maxWidth: topLeftTextHeight - 5,
-        lineHeight: 370,
+        maxWidth: getDataBlockTitleLineHeight(),
+        lineHeight:
+          BANGDREAM_DATA_BLOCK_SPEC.title.blockSize -
+          BANGDREAM_DATA_BLOCK_SPEC.title.textInset * 2,
       });
       ctx.save();
-      ctx.translate(topLeftTextHeight - 5, 240);
+      ctx.translate(
+        getDataBlockTitleLineHeight(),
+        BANGDREAM_DATA_BLOCK_SPEC.horizontal.titleCenterY,
+      );
       ctx.rotate(-Math.PI / 2);
       ctx.drawImage(textImage, 0, 0);
       ctx.restore();
 
       ctx.drawImage(
         drawRoundedRect({
-          width: allW - 100,
-          height: maxH + 100,
-          radius: [25, 0, 25, 25],
+          width: allW - BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraWidth,
+          height: maxH + BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraHeight,
+          radius: [
+            BANGDREAM_DATA_BLOCK_SPEC.background.radius,
+            0,
+            BANGDREAM_DATA_BLOCK_SPEC.background.radius,
+            BANGDREAM_DATA_BLOCK_SPEC.background.radius,
+          ],
         }),
-        topLeftTextHeight,
-        50,
+        BANGDREAM_DATA_BLOCK_SPEC.title.height,
+        BANGDREAM_DATA_BLOCK_SPEC.horizontal.contentOffsetY,
       );
     } else {
       ctx.drawImage(
         drawRoundedRect({
-          width: allW - 100,
-          height: maxH + 100,
+          width: allW - BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraWidth,
+          height: maxH + BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraHeight,
         }),
-        50,
-        0,
+        BANGDREAM_DATA_BLOCK_SPEC.horizontal.backgroundOffsetX,
+        BANGDREAM_DATA_BLOCK_SPEC.horizontal.backgroundOffsetY,
       );
     }
   }
 
   let allW2 = 0;
   if (BG) {
-    allW2 += 100;
+    allW2 += BANGDREAM_DATA_BLOCK_SPEC.horizontal.contentOffsetX;
     if (topLeftText !== undefined) {
-      allW2 += topLeftTextHeight;
+      allW2 += BANGDREAM_DATA_BLOCK_SPEC.title.height;
     }
   }
   for (let i = 0; i < list.length; i++) {
-    ctx.drawImage(list[i], allW2, 50);
+    ctx.drawImage(
+      list[i],
+      allW2,
+      BANGDREAM_DATA_BLOCK_SPEC.horizontal.contentOffsetY,
+    );
     allW2 += list[i].width;
   }
 
@@ -220,6 +268,6 @@ export function drawDataBlockHorizontal({
 export function drawBannerImageCanvas(eventBannerImage: Image): Canvas {
   return resizeImage({
     image: eventBannerImage,
-    widthMax: 800,
+    widthMax: BANGDREAM_DATA_BLOCK_SPEC.banner.widthMax,
   });
 }

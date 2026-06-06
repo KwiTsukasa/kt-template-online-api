@@ -8,6 +8,10 @@ import { getPresetColor } from '@/qqbot/plugins/bangDream/tsugu/models/color';
 import { drawList } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-frame';
 import { stackImage } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
 import { BangDreamEventStatus } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import {
+  BANGDREAM_CUTOFF_CHART_SPEC,
+  stripCutoffChartLabelTags,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/cutoff-chart-spec';
 
 /**
  * 在图片布局层中绘制档线谱面。
@@ -25,7 +29,10 @@ export async function drawCutoffChart(
   const datasets = [];
   const time = new Date().getTime();
   if (cutoffList.length == 0) {
-    return new Canvas(1, 1);
+    return new Canvas(
+      BANGDREAM_CUTOFF_CHART_SPEC.emptyCanvas.width,
+      BANGDREAM_CUTOFF_CHART_SPEC.emptyCanvas.height,
+    );
   }
 
   const list = [];
@@ -43,27 +50,38 @@ export async function drawCutoffChart(
       list.push(
         drawList({
           content: [
-            tempColor.generateColorBlock(0.8),
+            tempColor.generateColorBlock(
+              BANGDREAM_CUTOFF_CHART_SPEC.legend.colorBlockOpacity,
+            ),
             `[${tempEvent.eventId}] ${tempEvent.eventName[server]} T${cutoff.tier}`,
           ],
-          textSize: 20,
+          textSize: BANGDREAM_CUTOFF_CHART_SPEC.legend.textSize,
         }),
       );
     } else {
       lableName = `T${cutoff.tier}`;
       list.push(
         drawList({
-          content: [tempColor.generateColorBlock(0.8), `T${cutoff.tier}`],
-          textSize: 20,
+          content: [
+            tempColor.generateColorBlock(
+              BANGDREAM_CUTOFF_CHART_SPEC.legend.colorBlockOpacity,
+            ),
+            `T${cutoff.tier}`,
+          ],
+          textSize: BANGDREAM_CUTOFF_CHART_SPEC.legend.textSize,
         }),
       );
     }
     datasets.push({
       label: lableName,
       data: cutoff.getChartData(setStartToZero),
-      borderWidth: 5,
+      borderWidth: BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.borderWidth,
       borderColor: [tempColor.getRGBA(1)],
-      backgroundColor: [tempColor.getRGBA(0.2)],
+      backgroundColor: [
+        tempColor.getRGBA(
+          BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.singleLineFillBackgroundAlpha,
+        ),
+      ],
       pointBackgroundColor: tempColor.getRGBA(1),
       pointBorderColor: tempColor.getRGBA(1),
       fill: onlyOne,
@@ -109,15 +127,25 @@ export async function drawCutoffChart(
         }
         const tempColor = getPresetColor(i);
         datasets.push({
-          label: `T${cutoff.tier} 预测线`,
-          borderColor: [tempColor.getRGBA(1)],
-          backgroundColor: [tempColor.getRGBA(1)],
+          label: `T${cutoff.tier} ${BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.predictionSuffix}`,
+          borderColor: [
+            tempColor.getRGBA(
+              BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.predictionBorderAlpha,
+            ),
+          ],
+          backgroundColor: [
+            tempColor.getRGBA(
+              BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.predictionBackgroundAlpha,
+            ),
+          ],
           data: data,
-          borderWidth: 5,
-          borderDash: [20, 10],
+          borderWidth: BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.borderWidth,
+          borderDash: BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.predictionDash,
           fill: false,
-          pointRadius: 0,
-          pointHoverRadius: 0,
+          pointRadius:
+            BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.predictionPointRadius,
+          pointHoverRadius:
+            BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.predictionPointHoverRadius,
         });
       }
     }
@@ -126,13 +154,14 @@ export async function drawCutoffChart(
     if (time < cutoffList[0].endAt) {
       const tempColor = getPresetColor(0);
       datasets.push({
-        label: '当前时间',
+        label: BANGDREAM_CUTOFF_CHART_SPEC.currentTimeDataset.label,
         borderColor: [tempColor.getRGBA(1)],
         backgroundColor: [tempColor.getRGBA(1)],
         data: [{ x: new Date(time), y: 0 }],
         fill: false,
-        pointRadius: 10,
-        pointHoverRadius: 15,
+        pointRadius: BANGDREAM_CUTOFF_CHART_SPEC.currentTimeDataset.pointRadius,
+        pointHoverRadius:
+          BANGDREAM_CUTOFF_CHART_SPEC.currentTimeDataset.pointHoverRadius,
         showLine: false,
       });
     }
@@ -184,30 +213,33 @@ export async function drawCutoffEventTopChart(
 ) {
   const datasets = [];
   if (CutoffEventTop == undefined) {
-    return new Canvas(1, 1);
+    return new Canvas(
+      BANGDREAM_CUTOFF_CHART_SPEC.emptyCanvas.width,
+      BANGDREAM_CUTOFF_CHART_SPEC.emptyCanvas.height,
+    );
   }
   const allData = CutoffEventTop.getChartData();
-  /**
-   * 在图片布局层中移除Braces。
-   *
-   * @param text - 待绘制文本。
-   * @returns 格式化后的文本。
-   */
-  function removeBraces(text: string): string {
-    const newText = text.replace(/\[[^\]]*\]/g, '');
-    return newText;
-  }
   let colorNumber = 0;
   for (const key in allData) {
     const tempColor = getPresetColor(colorNumber);
     datasets.push({
-      label: removeBraces(CutoffEventTop.getUserNameById(Number(key))),
+      label: stripCutoffChartLabelTags(
+        CutoffEventTop.getUserNameById(Number(key)),
+      ),
       data: allData[key],
-      borderWidth: 4,
+      borderWidth: BANGDREAM_CUTOFF_CHART_SPEC.eventTopDataset.borderWidth,
       borderColor: [tempColor.getRGBA(1)],
-      backgroundColor: [tempColor.getRGBA(0.2)],
-      pointBackgroundColor: tempColor.getRGBA(0),
-      pointBorderColor: tempColor.getRGBA(0),
+      backgroundColor: [
+        tempColor.getRGBA(
+          BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.singleLineFillBackgroundAlpha,
+        ),
+      ],
+      pointBackgroundColor: tempColor.getRGBA(
+        BANGDREAM_CUTOFF_CHART_SPEC.eventTopDataset.pointAlpha,
+      ),
+      pointBorderColor: tempColor.getRGBA(
+        BANGDREAM_CUTOFF_CHART_SPEC.eventTopDataset.pointAlpha,
+      ),
       pointStyle: false,
       fill: false,
     });

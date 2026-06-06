@@ -15,6 +15,13 @@ import {
   getBangDreamServerUtcOffset,
   normalizeBangDreamTimestamp,
 } from '@/qqbot/plugins/bangDream/tsugu/models/server-policy';
+import {
+  BANGDREAM_TIME_FORMAT_SPEC,
+  formatBangDreamMonthDay,
+  formatBangDreamPeriod,
+  formatBangDreamSeconds,
+  formatBangDreamTime,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-time-spec';
 
 interface TimeInListOptions {
   key?: string;
@@ -46,7 +53,8 @@ export async function drawTimeInList(
         );
         if (currentEventId != null && eventId > currentEventId) {
           formattedTimeList.push(
-            formatTime(estimatedStartAt) + ' (预计开放时间)',
+            formatTime(estimatedStartAt) +
+              BANGDREAM_TIME_FORMAT_SPEC.estimatedOpenSuffix,
           );
         }
       }
@@ -84,31 +92,7 @@ export function getProbableTimeDifference(
  * @param timeStamp - 时间Stamp参数。
  */
 export function formatTime(timeStamp: number | null) {
-  //时间戳到年月日 精确到分钟
-  if (timeStamp == null) {
-    return '?';
-  }
-  const date = new Date(Math.floor(timeStamp / 1000) * 1000);
-  let nMinutes: string;
-  if (date.getMinutes() < 10) {
-    nMinutes = '0' + date.getMinutes().toString();
-    if (date.getMinutes() == 0) {
-      nMinutes = '00';
-    }
-  } else {
-    nMinutes = date.getMinutes().toString();
-  }
-  const temp =
-    date.getFullYear().toString() +
-    '年' +
-    (date.getMonth() + 1).toString() +
-    '月' +
-    date.getDate().toString() +
-    '日 ' +
-    date.getHours().toString() +
-    ':' +
-    nMinutes;
-  return temp;
+  return formatBangDreamTime(timeStamp);
 }
 
 /**
@@ -117,39 +101,7 @@ export function formatTime(timeStamp: number | null) {
  * @param timeStamp - 时间Stamp参数。
  */
 export function formatMonthDay(timeStamp: number | null) {
-  //获取生日的月与日
-  /**
-   * 在图片布局层中转换为Japan时间。
-   *
-   * @param dateString - dateString参数。
-   */
-  function toJapanTime(dateString) {
-    // 创建一个新的Date实例，表示当前时间。
-    const date = new Date(dateString);
-
-    // 获取本地时间与UTC的时间差（分钟）。
-    const offset = date.getTimezoneOffset() * 60000;
-
-    // 将本地时间转换为UTC时间。
-    const utcTime = date.getTime() + offset;
-
-    // 日本时区的偏移量是UTC+9。
-    const japanTimeOffset = 9 * 60 * 60 * 1000;
-
-    // 将UTC时间转换为日本时间。
-    const japanTime = new Date(utcTime + japanTimeOffset);
-
-    // 返回日本时间的字符串表示。
-    return japanTime;
-  }
-
-  if (timeStamp == null) {
-    return '?';
-  }
-  const date = toJapanTime(timeStamp);
-  const temp =
-    (date.getMonth() + 1).toString() + '月' + date.getDate().toString() + '日 ';
-  return temp;
+  return formatBangDreamMonthDay(timeStamp);
 }
 
 /**
@@ -159,44 +111,7 @@ export function formatMonthDay(timeStamp: number | null) {
  * @returns 格式化后的文本。
  */
 export function formatTimePeriod(period: number): string {
-  //时间戳的差值到年月日时分秒
-  if (period == null) {
-    return '?';
-  }
-
-  const century = Math.floor(period / (1000 * 60 * 60 * 24 * 30 * 12 * 100));
-  const years = Math.floor(period / (1000 * 60 * 60 * 24 * 30 * 12));
-  const months = Math.floor(period / (1000 * 60 * 60 * 24 * 30));
-  const days = Math.floor(
-    (period % (1000 * 60 * 60 * 24 * 30)) / (1000 * 60 * 60 * 24),
-  );
-  const hours = Math.floor((period % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((period % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((period % (1000 * 60)) / 1000);
-
-  let temp = '';
-
-  if (century != 0) {
-    temp += century.toString() + '世纪';
-  }
-  if (years != 0) {
-    temp += years.toString() + '年';
-  }
-  if (months != 0) {
-    temp += months.toString() + '月';
-  }
-  if (days != 0) {
-    temp += days.toString() + '日';
-  }
-  if (hours != 0) {
-    temp += hours.toString() + '小时';
-  }
-  if (minutes != 0) {
-    temp += minutes.toString() + '分钟';
-  }
-  temp += seconds.toString() + '秒';
-
-  return temp;
+  return formatBangDreamPeriod(period);
 }
 
 //时间长度转时分秒函数
@@ -206,25 +121,7 @@ export function formatTimePeriod(period: number): string {
  * @param value - 当前处理的值。
  */
 export function formatSeconds(value: number) {
-  let theTime = value; // 秒
-  let theTime1 = 0; // 分
-  let theTime2 = 0; // 小时
-  if (theTime > 60) {
-    theTime1 = parseInt((theTime / 60).toString());
-    theTime = parseInt((theTime % 60).toString());
-    if (theTime1 > 60) {
-      theTime2 = parseInt((theTime1 / 60).toString());
-      theTime1 = parseInt((theTime1 % 60).toString());
-    }
-  }
-  let result = '' + parseInt(theTime.toString()) + '秒';
-  if (theTime1 > 0) {
-    result = '' + parseInt(theTime1.toString()) + '分' + result;
-  }
-  if (theTime2 > 0) {
-    result = '' + parseInt(theTime2.toString()) + '小时' + result;
-  }
-  return result;
+  return formatBangDreamSeconds(value);
 }
 
 /**

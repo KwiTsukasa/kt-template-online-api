@@ -6,6 +6,10 @@ import {
 } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { drawList } from './list-frame';
 import { Canvas, Image } from 'skia-canvas';
+import {
+  BANGDREAM_ENTITY_LIST_SPEC,
+  shouldUseSingleEntityLabel,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-entity-spec';
 
 interface CharacterInListOptions {
   key?: string;
@@ -28,7 +32,7 @@ export async function drawCharacterInList(
     displayedServerList,
   );
   const list: Array<string | Image | Canvas> = [];
-  if (content.length == 1 && text == undefined) {
+  if (shouldUseSingleEntityLabel(content.length, text)) {
     list.push(await content[0].getIcon());
     list.push(content[0].getCharacterName()[server]);
     const canvas = drawList({
@@ -47,7 +51,7 @@ export async function drawCharacterInList(
     const canvas = drawList({
       key: key,
       content: list,
-      spacing: 0,
+      spacing: BANGDREAM_ENTITY_LIST_SPEC.multiValueSpacing,
     });
     return canvas;
   }

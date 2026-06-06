@@ -6,8 +6,7 @@ import { drawDegree } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/degree
 import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { Degree } from '@/qqbot/plugins/bangDream/tsugu/models/degree';
 import { drawText } from '@/qqbot/plugins/bangDream/tsugu/canvas/text';
-import { downloadFileCache } from '@/qqbot/plugins/bangDream/tsugu/data-clients/asset-cache-client';
-import { bestdoriUrl } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
+import { playerRankingResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/player-ranking-resource-repository';
 
 interface User {
   uid: number;
@@ -55,9 +54,11 @@ export async function drawPlayerRankingInList(
   if (user.ranking == undefined) {
     return;
   } else if (user.ranking > 0 && user.ranking <= 3) {
-    const rankIamgeBuffer = await downloadFileCache(
-      `${bestdoriUrl}/res/image/${Server[server]}_${user.ranking}.png`,
-    );
+    const rankIamgeBuffer =
+      await playerRankingResourceRepository.getRankImageBuffer(
+        server,
+        user.ranking,
+      );
     rankingImage = await loadImage(rankIamgeBuffer);
     ctx.drawImage(rankingImage, 12, 45, 45, 21);
   } else {

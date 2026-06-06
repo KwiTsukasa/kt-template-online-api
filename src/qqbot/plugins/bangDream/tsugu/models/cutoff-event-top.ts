@@ -1,8 +1,11 @@
 import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { Event } from '@/qqbot/plugins/bangDream/tsugu/models/event';
-import { callAPIAndCacheResponse } from '@/qqbot/plugins/bangDream/tsugu/data-clients/api-cache-client';
-import { bestdoriUrl } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { BangDreamEventStatus } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import {
+  cutoffEventTopRepository,
+  type CutoffEventTopPoint,
+  type CutoffEventTopUser,
+} from '@/qqbot/plugins/bangDream/tsugu/models/cutoff-event-top-repository';
 
 export class CutoffEventTop {
   eventId: number;
@@ -12,22 +15,8 @@ export class CutoffEventTop {
   status: BangDreamEventStatus;
   isInitfull: boolean = false;
   isExist = false;
-  points: {
-    time: number;
-    uid: number;
-    value: number;
-  }[];
-  users: {
-    uid: number;
-    name: string;
-    introduction: string;
-    rank: number;
-    sid: number;
-    strained: number;
-    degrees: number[];
-    ranking: number;
-    currentPt: number;
-  }[];
+  points: CutoffEventTopPoint[];
+  users: CutoffEventTopUser[];
   /**
    * 构造 CutoffEventTop 实例，并初始化该模型的本地基础字段。
    *
@@ -64,30 +53,17 @@ export class CutoffEventTop {
     if (this.isInitfull) {
       return;
     }
-    const topData = await callAPIAndCacheResponse(
-      `${bestdoriUrl}/api/eventtop/data?server=${<number>this.server}&event=${this.eventId}&mid=0&interval=3600000`,
+    const topData = await cutoffEventTopRepository.getTopData(
+      this.eventId,
+      this.server,
     );
     if (topData == undefined) {
       this.isExist = false;
       return;
     }
     this.isExist = true;
-    this.points = topData['points'] as {
-      time: number;
-      uid: number;
-      value: number;
-    }[];
-    this.users = topData['users'] as {
-      uid: number;
-      name: string;
-      introduction: string;
-      rank: number;
-      sid: number;
-      strained: number;
-      degrees: number[];
-      ranking: number;
-      currentPt: number;
-    }[];
+    this.points = topData.points;
+    this.users = topData.users;
     if (this.points.length == 0 || this.users.length == 0) {
       //如果没有数据，返回不存在
       this.isExist = false;

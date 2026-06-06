@@ -1,4 +1,3 @@
-import { bangDreamBestdoriProvider } from '@/qqbot/plugins/bangDream/tsugu/data-clients/bestdori-provider';
 import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import {
   Card,
@@ -8,7 +7,11 @@ import {
 import { AreaItem } from '@/qqbot/plugins/bangDream/tsugu/models/area-item';
 import { Event } from '@/qqbot/plugins/bangDream/tsugu/models/event';
 import { difficultyNameList } from '@/qqbot/plugins/bangDream/tsugu/models/song';
-import { logger } from '@/qqbot/plugins/bangDream/tsugu/runtime/logger';
+import {
+  playerDataRepository,
+  type PlayerDataRepository,
+  type PlayerDetailMode,
+} from './player-data-repository';
 
 /*
 - mode=0 只从缓存取，无需等待队列立即返回缓存数据
@@ -185,7 +188,11 @@ export class Player {
    * @param playerId - 玩家ID参数。
    * @param server - 目标服务器。
    */
-  constructor(playerId: number, server: Server) {
+  constructor(
+    playerId: number,
+    server: Server,
+    private readonly dataRepository: PlayerDataRepository = playerDataRepository,
+  ) {
     this.playerId = playerId;
     this.server = server;
   }
@@ -195,43 +202,34 @@ export class Player {
    * @param useCache - use缓存参数，未传入时使用默认值。
    * @param mode - mode参数，未传入时使用默认值。
    */
-  async initFull(useCache: boolean = false, mode: 0 | 1 | 2 | 3 = 2) {
+  async initFull(useCache: boolean = false, mode: PlayerDetailMode = 2) {
     if (this.isInitfull) {
       return;
     }
-    const cacheTime = useCache ? 1 / 0 : 0;
 
     let playerData;
     try {
-      playerData = await bangDreamBestdoriProvider.getJson(
-        `/api/player/${Server[this.server]}/${this.playerId}?mode=${mode}`,
-        { cacheTime, retryCount: 1 },
+      playerData = await this.dataRepository.getDetail(
+        this.playerId,
+        this.server,
+        useCache,
+        mode,
       );
-      if (mode == 1 && !isFinite(cacheTime)) {
-        // 后台更新玩家信息，确保下一次用最新的缓存去显示
-        bangDreamBestdoriProvider
-          .getJson(
-            `/api/player/${Server[this.server]}/${this.playerId}?mode=${mode}`,
-            { cacheTime: 300, retryCount: 1 },
-          )
-          .catch((err) => {
-            logger('InitPlayer', err);
-          });
-      }
     } catch {
       this.isExist = false;
       this.initError = true;
       return;
     }
-    if (!playerData['result'] || playerData['data']['profile'] == null) {
+    const responseData = playerData.data;
+    if (!playerData.result || responseData?.profile == null) {
       this.isExist = false;
       this.initError = true;
       return;
     }
     this.isExist = true;
-    this.cache = playerData['data']['cache'];
-    this.time = playerData['data']['time'];
-    this.profile = playerData['data']['profile'];
+    this.cache = responseData.cache as boolean;
+    this.time = responseData.time as number;
+    this.profile = responseData.profile as typeof this.profile;
     //卡牌列表
     this.profile.cardList = [];
     for (

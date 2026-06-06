@@ -397,6 +397,7 @@ export interface TsuguHook {
 - 已新增 `tsugu/runtime/operation-pipeline.ts`，把主数据 ready、operation resolve、handler render、output hook 和 error hook 固定为 `TsuguOperationPipeline.run`，`TsuguApplicationService.execute` 只负责调用 pipeline。
 - `scripts/bangdream-render-smoke.ps1` 已切到 `TsuguApplicationService`，本地 smoke 继续走真实应用入口，避免 facade 改造后验证脚本回退到旧链路。
 - 已新增 `hook-registry.spec.ts`、`operation-pipeline.spec.ts` 和 `tsugu-application.service.spec.ts`，覆盖 hook 顺序、错误 hook、pipeline 成功/未知 operation/handler 错误、应用入口执行、字典刷新和错误字符串化；本地 Phase 7 smoke 已生成 `phase7-hook-event-50.jpg`、`phase7-hook-cutoff-detail-100-50-cn.jpg`、`phase7-hook-cutoff-recent-100-50-cn.jpg`、`phase7-pipeline-event-50.jpg`、`phase7-pipeline-cutoff-detail-100-50-cn.jpg`、`phase7-pipeline-cutoff-recent-100-50-cn.jpg`。
+- 线上 `qqbot/command/test` 复测时曾出现 `bangdream.event.search` 的 `Invalid URL`，根因按风险点固化为：缓存层不能假设所有调用方都已把 `/api`、`/assets` 相对路径解析成完整 Bestdori URL；已在 `data-clients/cache-path.ts` 增加 `resolveCacheUrl` 兜底，并新增 `cache-path.spec.ts` 覆盖相对资产路径、相对 API 路径和完整 URL。线上/远程临时 Node 调试脚本必须同时设置外层 `timeout`，并在成功和失败分支显式 `process.exit(...)`，避免 SSH 会话被后台 timer 卡住。
 
 ## 文件迁移优先级
 

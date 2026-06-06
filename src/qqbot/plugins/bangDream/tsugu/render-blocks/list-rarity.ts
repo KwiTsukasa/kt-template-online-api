@@ -2,6 +2,10 @@ import { Canvas, Image } from 'skia-canvas';
 import { drawList } from './list-frame';
 import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
 import { getBangDreamAssetPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/asset-manifest';
+import {
+  BANGDREAM_RARITY_LIST_SPEC,
+  shouldUseTrainedRarityStar,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-rarity-spec';
 
 interface RarityInListOptions {
   key?: string;
@@ -36,7 +40,7 @@ export async function drawRarityInList({
 }: RarityInListOptions): Promise<Canvas> {
   const content: Array<string | Image | Canvas> = [];
   let star: Image;
-  if (rarity > 3 && trainingStatus) {
+  if (shouldUseTrainedRarityStar(rarity, trainingStatus)) {
     star = starList.trained;
   } else {
     star = starList.normal;
@@ -50,8 +54,8 @@ export async function drawRarityInList({
   const canvas = drawList({
     key,
     content: content,
-    textSize: 50,
-    spacing: 0,
+    textSize: BANGDREAM_RARITY_LIST_SPEC.list.textSize,
+    spacing: BANGDREAM_RARITY_LIST_SPEC.list.spacing,
   });
   return canvas;
 }

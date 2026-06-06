@@ -290,8 +290,10 @@ export interface TsuguHook {
 - 已新增 `models/main-data-repository.ts`、`song-repository.ts`、`card-repository.ts`、`event-repository.ts`、`gacha-repository.ts`、`player-repository.ts`。
 - `command-renderers/song-list.ts`、`event-list.ts`、`card-list.ts`、`gacha-detail.ts`、`player-detail.ts`、`cutoff-detail.ts` 已开始改走 repository 创建模型或读取主数据。
 - `models/song.ts`、`card.ts`、`event.ts`、`gacha.ts`、`player.ts` 的 Bestdori API/素材请求已开始改走 Bestdori provider；`models/cutoff.ts` 的 Bestdori/HHWX Tracker fallback 已改走 provider，并在 fallback 时输出数据源切换日志。
+- 已新增 `models/event-data-repository.ts` 收口活动详情、横幅、背景、轮播、Logo、奖励表情和装饰素材请求；`models/event.ts` 不再直接依赖 Bestdori provider 或 `loadImage`。
+- `drawEventDetail` 的活动真实底图改为轻量图片背景，避免长图走模糊三角纹理导致超时；活动搜索默认遵循 `BANGDREAM_TSUGU_USE_EASY_BG=false`，不再强制简易背景。
 - 已新增 `test/qqbot/plugins/bangDream/tsugu/data-provider.spec.ts`，覆盖 provider URL 解析、Bestdori/HHWX mock 数据源、retry/cache wrapper。
-- 本地图片烟测已生成查歌 `136` 和查活动 `50` 图片，证明 provider/repository 第一段迁移后仍能输出非空图片。
+- 本地图片烟测已生成查歌 `136`、查活动 `50` 简易背景和真实活动背景图片，证明 provider/repository 第一段迁移后仍能输出非空图片。
 
 ### Phase 4：搜索 specification 和 matcher
 

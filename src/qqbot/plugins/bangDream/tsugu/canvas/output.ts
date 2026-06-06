@@ -2,6 +2,7 @@ import { Canvas, Image } from 'skia-canvas';
 import {
   createBackground,
   createEasyBackground,
+  createImageBackground,
 } from '@/qqbot/plugins/bangDream/tsugu/canvas/background';
 import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import * as path from 'path';
@@ -22,6 +23,7 @@ export interface OutputFinalOptions {
   startWithSpace?: boolean;
   imageList: Array<Image | Canvas>;
   useEasyBG?: boolean;
+  useImageBG?: boolean;
   text?: string;
   BGimage?: Image | Canvas;
   compress?: boolean;
@@ -40,6 +42,7 @@ export const outputFinalCanv = async function ({
   imageList,
   startWithSpace = true,
   useEasyBG = true,
+  useImageBG = false,
   text = 'BanG Dream!',
   BGimage = BGDefaultImage,
 }: OutputFinalOptions): Promise<Canvas> {
@@ -61,6 +64,16 @@ export const outputFinalCanv = async function ({
   if (useEasyBG) {
     ctx.drawImage(
       await createEasyBackground({
+        width: maxW,
+        height: allH,
+      }),
+      0,
+      0,
+    );
+  } else if (useImageBG) {
+    ctx.drawImage(
+      await createImageBackground({
+        image: BGimage,
         width: maxW,
         height: allH,
       }),
@@ -104,6 +117,7 @@ export const outputFinalBuffer = async function ({
   startWithSpace = true,
   imageList,
   useEasyBG = true,
+  useImageBG,
   text,
   BGimage,
   compress,
@@ -112,6 +126,7 @@ export const outputFinalBuffer = async function ({
     startWithSpace,
     imageList,
     useEasyBG,
+    useImageBG,
     text,
     BGimage,
   });

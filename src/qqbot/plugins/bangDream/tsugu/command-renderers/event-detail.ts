@@ -488,6 +488,7 @@ export async function drawEventDetail(
 
   return await createOutputFinalImages({
     useEasyBG,
+    useImageBG: true,
     BGimage,
     text: 'Event',
     compress,

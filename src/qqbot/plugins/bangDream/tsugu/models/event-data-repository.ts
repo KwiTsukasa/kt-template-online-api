@@ -1,0 +1,247 @@
+import { Image, loadImage } from 'skia-canvas';
+import { bangDreamBestdoriProvider } from '@/qqbot/plugins/bangDream/tsugu/data-clients/bestdori-provider';
+import { bangDreamMainDataRepository } from '@/qqbot/plugins/bangDream/tsugu/models/main-data-repository';
+import {
+  getServerByPriority,
+  Server,
+} from '@/qqbot/plugins/bangDream/tsugu/models/server';
+import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
+
+export interface EventAssetContext {
+  assetBundleName: string;
+  bannerAssetBundleName?: string;
+  startAt: Array<number | null>;
+}
+
+export interface EventRewardContext {
+  pointRewards?: Array<Array<{
+    point: string;
+    rewardType: string;
+    rewardId?: number;
+    rewardQuantity: number;
+  }> | null>;
+  rankingRewards?: Array<Array<{
+    fromRank: number;
+    toRank: number;
+    rewardType: string;
+    rewardId: number;
+    rewardQuantity: number;
+  }> | null>;
+  startAt: Array<number | null>;
+}
+
+type RewardWithId = {
+  rewardId?: number;
+  rewardType: string;
+};
+
+class EventDataRepository {
+  /**
+   * 获取活动远端详情数据。
+   *
+   * @param eventId - 活动 ID。
+   * @param update - 是否强制更新缓存。
+   */
+  async getDetail(eventId: number, update = true): Promise<Record<string, any>> {
+    const cacheTime = update ? 0 : 1 / 0;
+    return await bangDreamBestdoriProvider.getJson<Record<string, any>>(
+      `/api/events/${eventId}.json`,
+      { cacheTime },
+    );
+  }
+
+  /**
+   * 获取活动横幅图，优先活动资源，失败时回退 homebanner。
+   *
+   * @param event - 活动资源上下文。
+   * @param displayedServerList - 展示服务器优先级。
+   */
+  async getBannerImage(
+    event: EventAssetContext,
+    displayedServerList: Server[] = globalDefaultServer,
+  ): Promise<Image> {
+    const server = getServerByPriority(event.startAt, displayedServerList);
+    try {
+      const bannerImageBuffer = await bangDreamBestdoriProvider.getAsset(
+        `/assets/${Server[server]}/event/${event.assetBundleName}/images_rip/banner.png`,
+        { ignoreError: false },
+      );
+      return await loadImage(bannerImageBuffer);
+    } catch {
+      const bannerImageBuffer = await bangDreamBestdoriProvider.getAsset(
+        `/assets/jp/homebanner_rip/${event.bannerAssetBundleName}.png`,
+      );
+      return await loadImage(bannerImageBuffer);
+    }
+  }
+
+  /**
+   * 获取活动背景图。
+   *
+   * @param event - 活动资源上下文。
+   */
+  async getBackgroundImage(event: EventAssetContext): Promise<Image> {
+    const server = getServerByPriority(event.startAt);
+    const bgImageBuffer = await bangDreamBestdoriProvider.getAsset(
+      `/assets/${Server[server]}/event/${event.assetBundleName}/topscreen_rip/bg_eventtop.png`,
+    );
+    return await loadImage(bgImageBuffer);
+  }
+
+  /**
+   * 获取活动规则轮播图列表。
+   *
+   * @param event - 活动资源上下文。
+   * @param tempServer - 目标服务器。
+   */
+  async getSlideImages(
+    event: EventAssetContext,
+    tempServer: Server,
+  ): Promise<Image[]> {
+    const server = getServerByPriority(event.startAt, [tempServer]);
+    const result: Image[] = [];
+    const basePath = `/assets/${Server[server]}/event/${event.assetBundleName}/slide_rip/`;
+    let ruleNumber = 1;
+    while (true) {
+      try {
+        const slideImageBuffer = await bangDreamBestdoriProvider.getAsset(
+          `${basePath}rule${ruleNumber}.png`,
+          { ignoreError: false },
+        );
+        result.push(await loadImage(slideImageBuffer));
+      } catch {
+        break;
+      }
+      ruleNumber++;
+    }
+    return result;
+  }
+
+  /**
+   * 获取活动主界面裁切图。
+   *
+   * @param event - 活动资源上下文。
+   */
+  async getTopscreenTrimImage(event: EventAssetContext): Promise<Image> {
+    const server = getServerByPriority(event.startAt);
+    const topscreenTrimImageBuffer = await bangDreamBestdoriProvider.getAsset(
+      `/assets/${Server[server]}/event/${event.assetBundleName}/topscreen_rip/trim_eventtop.png`,
+    );
+    return await loadImage(topscreenTrimImageBuffer);
+  }
+
+  /**
+   * 获取活动 Logo 图。
+   *
+   * @param event - 活动资源上下文。
+   * @param tempServer - 目标服务器。
+   */
+  async getLogoImage(
+    event: EventAssetContext,
+    tempServer: Server,
+  ): Promise<Image> {
+    const server = getServerByPriority(event.startAt, [tempServer]);
+    const logoImageBuffer = await bangDreamBestdoriProvider.getAsset(
+      `/assets/${Server[server]}/event/${event.assetBundleName}/images_rip/logo.png`,
+    );
+    return await loadImage(logoImageBuffer);
+  }
+
+  /**
+   * 获取活动奖励表情图；缺失或上游资源不可用时返回 undefined。
+   *
+   * @param event - 活动奖励上下文。
+   * @param server - 目标服务器。
+   */
+  async getRewardStampImage(
+    event: EventRewardContext,
+    server: Server,
+  ): Promise<Image | undefined> {
+    const allStamps = await bangDreamBestdoriProvider.getJson<
+      Record<string, any>
+    >('/api/stamps/all.2.json');
+    const rewardId = this.pickRewardId(event.pointRewards, 'stamp');
+    if (rewardId === undefined) return undefined;
+
+    const stampAssetName = this.pickServerValue<string>(
+      allStamps[rewardId]?.imageName,
+      server,
+    );
+    if (!stampAssetName) return undefined;
+
+    const serverName = this.pickReleasedServerName(event.startAt, server, 'jp');
+    try {
+      const stampBuffer = await bangDreamBestdoriProvider.getAsset(
+        `/assets/${serverName}/stamp/01_rip/${stampAssetName}.png`,
+        { ignoreError: false },
+      );
+      return await loadImage(stampBuffer);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * 获取活动奖励装饰图；缺失或上游资源不可用时返回 undefined。
+   *
+   * @param event - 活动奖励上下文。
+   * @param server - 目标服务器。
+   */
+  async getRewardDecoImage(
+    event: EventRewardContext,
+    server: Server,
+  ): Promise<Image | undefined> {
+    if (!event.rankingRewards?.[server]) return undefined;
+
+    const rewardId = this.pickRewardId(event.rankingRewards, 'deco_pins');
+    if (rewardId === undefined) return undefined;
+
+    const allDeco = bangDreamMainDataRepository.getCollection<
+      Record<string, any>
+    >('deco');
+    const decoAssetName = allDeco[rewardId]?.assetBundleName;
+    if (!decoAssetName) return undefined;
+
+    const serverName = this.pickReleasedServerName(event.startAt, server, 'cn');
+    try {
+      const decoBuffer = await bangDreamBestdoriProvider.getAsset(
+        `/assets/${serverName}/deco/pins_rip/${decoAssetName}.png`,
+        { ignoreError: false },
+      );
+      return await loadImage(decoBuffer);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private pickRewardId(
+    rewardsByServer: Array<Array<RewardWithId> | null> | undefined,
+    rewardType: string,
+  ): number | undefined {
+    const rewards = rewardsByServer?.filter(Boolean)[0];
+    return rewards?.find((reward) => reward.rewardType === rewardType)
+      ?.rewardId;
+  }
+
+  private pickReleasedServerName(
+    startAt: Array<number | null>,
+    server: Server,
+    fallback: string,
+  ) {
+    return startAt[server] && startAt[server] < Date.now()
+      ? Server[server]
+      : fallback;
+  }
+
+  private pickServerValue<T>(
+    value: T | T[] | undefined | null,
+    server: Server,
+  ): T | undefined {
+    if (Array.isArray(value)) {
+      return value[server] ?? value[Server.jp] ?? value.find(Boolean);
+    }
+    return value ?? undefined;
+  }
+}
+
+export const eventDataRepository = new EventDataRepository();

@@ -163,6 +163,33 @@ export async function createEasyBackground({ width, height }) {
 }
 
 /**
+ * 使用业务图片生成轻量背景。
+ *
+ * @param options1 - 背景参数。
+ */
+export async function createImageBackground({
+  image,
+  width,
+  height,
+}: BackgroundOptions): Promise<Canvas> {
+  const backgroundBuffer = await spreadBackgroundImage(
+    image,
+    width,
+    height,
+    40,
+  );
+  const backgroundImage = await loadImage(backgroundBuffer);
+  const canvas = new Canvas(width, height);
+  const ctx = canvas.getContext('2d');
+
+  ctx.drawImage(backgroundImage, 0, 0);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+  ctx.fillRect(0, 0, width, height);
+
+  return canvas;
+}
+
+/**
  * 在底层绘图工具层中创建Background。
  *
  * @param options1 - options1参数。

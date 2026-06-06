@@ -1,9 +1,5 @@
-import { Image, loadImage } from 'skia-canvas';
-import { bangDreamBestdoriProvider } from '@/qqbot/plugins/bangDream/tsugu/data-clients/bestdori-provider';
-import {
-  Server,
-  getServerByPriority,
-} from '@/qqbot/plugins/bangDream/tsugu/models/server';
+import { Image } from 'skia-canvas';
+import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
 import { bangDreamMainDataRepository } from '@/qqbot/plugins/bangDream/tsugu/models/main-data-repository';
 import { Attribute } from '@/qqbot/plugins/bangDream/tsugu/models/attribute';
 import { Character } from '@/qqbot/plugins/bangDream/tsugu/models/character';
@@ -13,6 +9,7 @@ import {
 import { stringToNumberArray } from '@/qqbot/plugins/bangDream/tsugu/models/model-utils';
 import { getProbableTimeDifference } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-time';
 import { BANGDREAM_EVENT_TYPE_NAME } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import { eventDataRepository } from '@/qqbot/plugins/bangDream/tsugu/models/event-data-repository';
 
 const typeName: Record<string, string> = BANGDREAM_EVENT_TYPE_NAME;
 
@@ -197,14 +194,7 @@ export class Event {
    * @param update - update参数，未传入时使用默认值。
    */
   async getData(update: boolean = true) {
-    const time = update ? 0 : 1 / 0;
-    const eventData = await bangDreamBestdoriProvider.getJson<
-      Record<string, any>
-    >(
-      `/api/events/${this.eventId}.json`,
-      { cacheTime: time },
-    );
-    return eventData;
+    return await eventDataRepository.getDetail(this.eventId, update);
   }
   /**
    * 在 Event 模型中获取横幅图片。
@@ -216,20 +206,7 @@ export class Event {
     displayedServerList: Server[] = globalDefaultServer,
   ): Promise<Image> {
     if (!displayedServerList) displayedServerList = globalDefaultServer;
-    const server = getServerByPriority(this.startAt, displayedServerList);
-    try {
-      const BannerImageBuffer = await bangDreamBestdoriProvider.getAsset(
-        `/assets/${Server[server]}/event/${this.assetBundleName}/images_rip/banner.png`,
-        { ignoreError: false },
-      );
-      return await loadImage(BannerImageBuffer);
-    } catch {
-      const server = Server.jp;
-      const BannerImageBuffer = await bangDreamBestdoriProvider.getAsset(
-        `/assets/${Server[server]}/homebanner_rip/${this.bannerAssetBundleName}.png`,
-      );
-      return await loadImage(BannerImageBuffer);
-    }
+    return await eventDataRepository.getBannerImage(this, displayedServerList);
   }
   /**
    * 在 Event 模型中获取活动背景图片。
@@ -237,11 +214,7 @@ export class Event {
    * @returns 异步处理结果。
    */
   async getEventBGImage(): Promise<Image> {
-    const server = getServerByPriority(this.startAt);
-    const BGImageBuffer = await bangDreamBestdoriProvider.getAsset(
-      `/assets/${Server[server]}/event/${this.assetBundleName}/topscreen_rip/bg_eventtop.png`,
-    );
-    return await loadImage(BGImageBuffer);
+    return await eventDataRepository.getBackgroundImage(this);
   }
   //活动规则轮播图
   /**
@@ -251,23 +224,7 @@ export class Event {
    * @returns 异步处理结果。
    */
   async getEventSlideImage(tempServer: Server): Promise<Image[]> {
-    const server = getServerByPriority(this.startAt, [tempServer]);
-    const result: Image[] = [];
-    const basePath = `/assets/${Server[server]}/event/${this.assetBundleName}/slide_rip/`;
-    let ruleNumber = 1;
-    while (true) {
-      try {
-        const SlideImageBuffer = await bangDreamBestdoriProvider.getAsset(
-          `${basePath}rule${ruleNumber}.png`,
-          { ignoreError: false },
-        );
-        result.push(await loadImage(SlideImageBuffer));
-      } catch {
-        break;
-      }
-      ruleNumber++;
-    }
-    return result;
+    return await eventDataRepository.getSlideImages(this, tempServer);
   }
   //活动主界面trim
   /**
@@ -276,11 +233,7 @@ export class Event {
    * @returns 异步处理结果。
    */
   async getEventTopscreenTrimImage(): Promise<Image> {
-    const server = getServerByPriority(this.startAt);
-    const TopscreenTrimImageBuffer = await bangDreamBestdoriProvider.getAsset(
-      `/assets/${Server[server]}/event/${this.assetBundleName}/topscreen_rip/trim_eventtop.png`,
-    );
-    return await loadImage(TopscreenTrimImageBuffer);
+    return await eventDataRepository.getTopscreenTrimImage(this);
   }
   /**
    * 在 Event 模型中获取活动Logo图片。
@@ -289,11 +242,7 @@ export class Event {
    * @returns 异步处理结果。
    */
   async getEventLogoImage(tempServer: Server): Promise<Image> {
-    const server = getServerByPriority(this.startAt, [tempServer]);
-    const LogoImageBuffer = await bangDreamBestdoriProvider.getAsset(
-      `/assets/${Server[server]}/event/${this.assetBundleName}/images_rip/logo.png`,
-    );
-    return await loadImage(LogoImageBuffer);
+    return await eventDataRepository.getLogoImage(this, tempServer);
   }
   /**
    * 在 Event 模型中获取类型名称。
@@ -352,41 +301,7 @@ export class Event {
    * @returns 异步处理结果。
    */
   async getRewardStamp(server: Server): Promise<Image> {
-    const allStamps = await bangDreamBestdoriProvider.getJson<
-      Record<string, any>
-    >(
-      `/api/stamps/all.2.json`,
-    );
-    const rewards = this.pointRewards.filter(Boolean)[0];
-    let rewardId = -1;
-    for (let i = 0; i < rewards?.length; i++) {
-      if (rewards[i].rewardType == 'stamp') {
-        rewardId = rewards[i].rewardId;
-        break;
-      }
-    }
-    let stampAssetName = '';
-    for (const i in allStamps) {
-      if (i == rewardId.toString()) {
-        stampAssetName = allStamps[i]['imageName'];
-      }
-    }
-    if (stampAssetName == '') {
-      return undefined;
-    }
-    let serverName = 'jp';
-    if (this.startAt[server] && this.startAt[server] < Date.now()) {
-      serverName = Server[server];
-    }
-    try {
-      const stampBuffer = await bangDreamBestdoriProvider.getAsset(
-        `/assets/${serverName}/stamp/01_rip/${stampAssetName}.png`,
-        { ignoreError: false },
-      );
-      return await loadImage(stampBuffer);
-    } catch {
-      return undefined;
-    }
+    return await eventDataRepository.getRewardStampImage(this, server);
   }
   /**
    * 在 Event 模型中获取奖励Deco。
@@ -395,44 +310,7 @@ export class Event {
    * @returns 异步处理结果。
    */
   async getRewardDeco(server: Server): Promise<Image> {
-    const allDeco = bangDreamMainDataRepository.getCollection<
-      Record<string, any>
-    >('deco');
-    if (!this.rankingRewards[server]) {
-      // Undefined处理
-      return undefined;
-    }
-    const rewards = this.rankingRewards[server].filter(Boolean);
-    let rewardId = -1;
-    for (let i = 0; i < rewards?.length; i++) {
-      if (rewards[i].rewardType == 'deco_pins') {
-        rewardId = rewards[i].rewardId;
-        break;
-      }
-    }
-    if (rewardId == -1) return undefined;
-    let decoAssetName = '';
-    for (const i in allDeco) {
-      if (i == rewardId.toString()) {
-        decoAssetName = allDeco[i]['assetBundleName'];
-      }
-    }
-    if (decoAssetName == '') {
-      return undefined;
-    }
-    let serverName = 'cn';
-    if (this.startAt[server] && this.startAt[server] < Date.now()) {
-      serverName = Server[server];
-    }
-    try {
-      const decoBuffer = await bangDreamBestdoriProvider.getAsset(
-        `/assets/${serverName}/deco/pins_rip/${decoAssetName}.png`,
-        { ignoreError: false },
-      );
-      return await loadImage(decoBuffer);
-    } catch {
-      return undefined;
-    }
+    return await eventDataRepository.getRewardDecoImage(this, server);
   }
 }
 

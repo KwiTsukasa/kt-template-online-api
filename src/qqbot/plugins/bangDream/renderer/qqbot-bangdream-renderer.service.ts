@@ -170,7 +170,7 @@ export class QqbotBangDreamRendererService implements OnApplicationBootstrap {
 
   async searchEvent(input: QqbotBangDreamCommandInput) {
     const query = this.requireText(input, '请提供活动关键词或活动 ID');
-    const options = this.getRenderOptions(input, { useEasyBG: true });
+    const options = this.getRenderOptions(input);
     const images = this.isInteger(query)
       ? await drawEventDetail(
           Number(query),

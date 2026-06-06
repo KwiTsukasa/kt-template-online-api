@@ -1,10 +1,8 @@
 import mainAPI from '@/qqbot/plugins/bangDream/tsugu/models/main-data-store';
 import { Character } from '@/qqbot/plugins/bangDream/tsugu/models/character';
 import { Image, loadImage } from 'skia-canvas';
-import { downloadFileCache } from '@/qqbot/plugins/bangDream/tsugu/data-clients/asset-cache-client';
-import { formatNumber } from '@/qqbot/plugins/bangDream/tsugu/models/model-utils';
-import { bestdoriUrl } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { convertSvgToPngBuffer } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
+import { bandResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/models/band-resource-repository';
 
 export class Band {
   bandId: number;
@@ -61,9 +59,7 @@ export class Band {
    * @returns 异步处理结果。
    */
   async getLogo(): Promise<Image> {
-    const logoBuffer = await downloadFileCache(
-      `${bestdoriUrl}/assets/jp/band/logo/${formatNumber(this.bandId, 3)}_rip/logoL.png`,
-    );
+    const logoBuffer = await bandResourceRepository.getLogoBuffer(this.bandId);
     return await loadImage(logoBuffer);
   }
 }
@@ -80,9 +76,7 @@ export async function getBandIcon(bandId: number): Promise<Image> {
   if (bandIconCache[bandId]) {
     return bandIconCache[bandId];
   }
-  const iconSvgBuffer = await downloadFileCache(
-    `${bestdoriUrl}/res/icon/band_${bandId}.svg`,
-  );
+  const iconSvgBuffer = await bandResourceRepository.getIconSvgBuffer(bandId);
   const iconPngBuffer = await convertSvgToPngBuffer(iconSvgBuffer);
   const image = await loadImage(iconPngBuffer);
   bandIconCache[bandId] = image;

@@ -24,6 +24,7 @@ $LogName = [System.IO.Path]::GetFileNameWithoutExtension($ResolvedOutFile)
 $StdoutLog = Join-Path $LogDir "$LogName.out.log"
 $StderrLog = Join-Path $LogDir "$LogName.err.log"
 Remove-Item -LiteralPath $StdoutLog,$StderrLog -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $ResolvedOutFile -Force -ErrorAction SilentlyContinue
 
 $Payload = @{
   input = @{
@@ -80,7 +81,30 @@ $Process = Start-Process `
   -PassThru `
   -WindowStyle Hidden
 
-if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+function Test-SmokeCompleted {
+  if (-not (Test-Path -LiteralPath $ResolvedOutFile)) { return $false }
+  if ((Get-Item -LiteralPath $ResolvedOutFile).Length -le 0) { return $false }
+  if (-not (Test-Path -LiteralPath $StdoutLog)) { return $false }
+  return [bool](Select-String -Path $StdoutLog -Pattern '"bytes"' -Quiet)
+}
+
+$Deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+$CompletedByOutput = $false
+while (-not $Process.HasExited) {
+  if (Test-SmokeCompleted) {
+    $CompletedByOutput = $true
+    Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    $Process.WaitForExit(5000) | Out-Null
+    break
+  }
+  if ((Get-Date) -ge $Deadline) {
+    break
+  }
+  Start-Sleep -Milliseconds 500
+  $Process.Refresh()
+}
+
+if ((-not $Process.HasExited) -and (-not $CompletedByOutput)) {
   Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
   Write-Output "BangDream smoke timed out and process $($Process.Id) was killed."
   if (Test-Path $StdoutLog) { Get-Content $StdoutLog }
@@ -90,4 +114,8 @@ if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
 
 if (Test-Path $StdoutLog) { Get-Content $StdoutLog }
 if (Test-Path $StderrLog) { Get-Content $StderrLog }
+if ($CompletedByOutput) {
+  Write-Output "BangDream smoke output completed; lingering process $($Process.Id) was cleaned up."
+  exit 0
+}
 exit $Process.ExitCode

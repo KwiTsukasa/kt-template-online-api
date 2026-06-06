@@ -2,11 +2,9 @@ import { Card } from '@/qqbot/plugins/bangDream/tsugu/models/card';
 import { Skill } from '@/qqbot/plugins/bangDream/tsugu/models/skill';
 import {
   drawList,
-  line,
   drawListByServerList,
   drawListMerge,
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-frame';
-import { drawDataBlock } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/data-block';
 import { drawCardIllustration } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/card-art';
 import { drawSkillInList } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-skill';
 import { drawTimeInList } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-time';
@@ -26,17 +24,7 @@ import {
   globalDefaultServer,
   serverNameFullList,
 } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
-
-/**
- * 在QQBot 图片视图层中推入区块。
- *
- * @param list - 待处理列表。
- * @param section - 区块参数。
- */
-function pushSection(list: Array<Image | Canvas>, section: Image | Canvas) {
-  list.push(section);
-  list.push(line);
-}
+import { DetailBlockBuilder } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/detail-block-builder';
 
 /**
  * 在QQBot 图片视图层中判断对象是否包含指定自有属性。
@@ -52,22 +40,22 @@ function hasOwn(source: object, key: string): boolean {
 /**
  * 在QQBot 图片视图层中追加卡牌Illustrations。
  *
- * @param list - 待处理列表。
+ * @param builder - 详情区块构建器。
  * @param card - 卡牌参数。
  */
 async function appendCardIllustrations(
-  list: Array<Image | Canvas>,
+  builder: DetailBlockBuilder,
   card: Card,
 ): Promise<void> {
   for (const trainingStatus of card.getTrainingStatusList()) {
-    list.push(
+    builder.add(
       await drawCardIllustration({
         card,
         trainingStatus,
         isList: true,
       }),
     );
-    list.push(new Canvas(800, 30));
+    builder.addSpacer(30);
   }
 }
 
@@ -101,20 +89,19 @@ function shouldShowGachaText(
 /**
  * 在QQBot 图片视图层中追加卡牌基础区块列表。
  *
- * @param list - 待处理列表。
+ * @param builder - 详情区块构建器。
  * @param card - 卡牌参数。
  * @param source - 输入来源对象或数据集合。
  * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
  */
 async function appendCardBaseSections(
-  list: Array<Image | Canvas>,
+  builder: DetailBlockBuilder,
   card: Card,
   source,
   displayedServerList: Server[],
 ): Promise<void> {
   //类型 / 卡牌ID
-  pushSection(
-    list,
+  builder.addSection(
     drawListMerge([
       drawList({ key: '类型', text: card.getTypeName() }),
       drawList({ key: 'ID', text: card.cardId.toString() }),
@@ -122,12 +109,11 @@ async function appendCardBaseSections(
   );
 
   //综合力
-  pushSection(list, await drawCardStatInList(card));
+  builder.addSection(await drawCardStatInList(card));
 
   //技能
   const skill = new Skill(card.skillId);
-  pushSection(
-    list,
+  builder.addSection(
     await drawSkillInList(
       { key: '技能', card: card, content: skill },
       displayedServerList,
@@ -135,22 +121,19 @@ async function appendCardBaseSections(
   );
 
   //标题
-  pushSection(
-    list,
+  builder.addSection(
     await drawListByServerList(card.prefix, '标题', displayedServerList),
   );
 
   //招募语
   if (shouldShowGachaText(card, source, displayedServerList)) {
-    pushSection(
-      list,
+    builder.addSection(
       await drawListByServerList(card.gachaText, '招募语', displayedServerList),
     );
   }
 
   //发售日期
-  pushSection(
-    list,
+  builder.addSection(
     await drawTimeInList(
       {
         key: '发布日期',
@@ -161,8 +144,7 @@ async function appendCardBaseSections(
   );
 
   //缩略图
-  pushSection(
-    list,
+  builder.addSection(
     await drawCardListInList({
       key: '缩略图',
       cardList: [card],
@@ -307,14 +289,15 @@ async function drawCardDetail(
   await card.initFull();
   const source = card.source;
 
-  const list: Array<Image | Canvas> = [];
+  const builder = new DetailBlockBuilder();
 
   //标题
-  list.push(await drawCardPrefixInList(card, displayedServerList));
-  list.push(new Canvas(800, 30));
+  builder
+    .add(await drawCardPrefixInList(card, displayedServerList))
+    .addSpacer(30);
 
   //插画
-  await appendCardIllustrations(list, card);
+  await appendCardIllustrations(builder, card);
 
   /*
     //乐队
@@ -335,13 +318,13 @@ async function drawCardDetail(
     list.push(await drawRarityInList({ rarity: card.rarity }))
     list.push(line)
     */
-  await appendCardBaseSections(list, card, source, displayedServerList);
+  await appendCardBaseSections(builder, card, source, displayedServerList);
 
   //演出缩略图
-  list.push(await drawSdCharacterInList(card));
+  builder.add(await drawSdCharacterInList(card));
 
   //创建最终输出数组
-  const listImage = drawDataBlock({ list });
+  const listImage = builder.toDataBlock();
   const all = [];
   all.push(drawTitle('查询', '卡牌'));
   all.push(listImage);

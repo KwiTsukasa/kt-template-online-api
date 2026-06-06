@@ -347,6 +347,8 @@ export interface TsuguHook {
 - 已生成查曲、查活动和查谱面 smoke 图片，验证 theme/spec/manifest 第一段迁移后本地图片输出非空，谱面预览资源路径未断。
 - 已新增 `render-blocks/detail-block-builder.ts`，活动详情页先接入 `DetailBlockBuilder` 统一 section、spacer 和 data block 拼装，去掉局部 `pushSection` 和手动分割线维护；`detail-block-builder.spec.ts` 覆盖 section 分割线与 spacer/data block 输出。
 - 本地验证时发现 Jest 无法解析 `skia-canvas/lib/v6/index.node`，根因是 `moduleFileExtensions` 未包含 `node`；已把 `.node` 原生扩展解析固化进 Jest 配置，避免后续渲染单测重复卡在同类问题。
+- 卡牌详情页已接入 `DetailBlockBuilder`，卡牌标题、插画、基础字段、缩略图和演出缩略图不再手写数组与分割线；`/查卡 472` 本地 smoke 输出非空长图。
+- `scripts/bangdream-render-smoke.ps1` 已固化图片 smoke 完成判定：先删除旧目标图，轮询 stdout 成功 JSON 和新图片文件；如果 Tsugu 后台 handle 导致 Node 未自然退出，则在图片落盘后清理本次进程并返回成功，避免已成功出图仍卡到超时。
 - 线上 `/qqbot/command/test` smoke 已固化为先按 `operationKey` 查询启用命令、传 `commandId`，并保留完整命令文本；避免默认 `preview` selfId 未绑定命令时误报“未匹配到命令”。
 
 ### Phase 6：策略 policy 和时间/档线规则

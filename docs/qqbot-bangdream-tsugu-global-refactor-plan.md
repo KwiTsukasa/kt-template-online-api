@@ -395,6 +395,7 @@ export interface TsuguHook {
 - 已新增 `render-blocks/list-card-sd-character-spec.ts`，收口卡牌详情演出缩略图的 SD 角色 sprite 裁切网格、列表缩放行高、字号和间距；`list-card-sd-character.ts` 改为消费 spec，素材加载、四帧裁切和列表绘制顺序保持不变；`list-card-sd-character-spec.spec.ts` 覆盖四帧裁切坐标、单帧裁切计算和列表规格，本地 `/查卡 472` 图片 smoke 输出非空。
 - 已新增 `render-blocks/list-card-prefix-spec.ts`，收口卡牌详情顶部标题块的画布、背景、乐队 Logo 等比缩放、卡牌标题和角色名文字布局；`list-card-prefix.ts` 改为消费 spec，乐队/角色/服务器优先级读取和绘制顺序保持不变；`list-card-prefix-spec.spec.ts` 覆盖标题块尺寸、背景、文字坐标和 Logo 缩放，本地 `/查卡 472` 图片 smoke 输出非空。
 - 已新增 `render-blocks/list-stat-spec.ts`，收口卡牌/玩家综合力列表的间隔、数值行画布、文字规格、进度条布局和条宽算法；`list-stat.ts` 改为消费 spec，综合力计算、突破加成和绘制顺序保持不变；`list-stat-spec.spec.ts` 覆盖间隔/画布/文字/进度条规格、文本生成和条宽布局，本地 `/查卡 472` 图片 smoke 输出非空。
+- 已新增 `render-blocks/title-spec.ts`，收口通用标题条的背景偏移、两行文字字号/行高/颜色/字体/坐标；`title.ts` 改为消费 spec，标题底图加载、标题文案和绘制顺序保持不变；`title-spec.spec.ts` 覆盖背景偏移、两行文字布局、绘制参数和坐标，本地 `/查卡 472` 图片 smoke 输出非空。
 - smoke/Jenkins/远程调试卡点继续按已固化规则处理：同一卡点第二次尝试前必须改变可验证变量；Jenkins 查询 URL 含方括号时用 `curl -g` 或改查 Jenkins home；线上图片 smoke 必须查询 `commandId`、拉回图片、展示图片、查日志并清理本轮临时目录；PowerShell 双引号 here-string 中不要写 JS `${...}` 模板字面量，避免被 PowerShell 提前插值；smoke 没有真实图片落盘时必须失败。
 
 ### Phase 6：策略 policy 和时间/档线规则

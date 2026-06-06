@@ -93,7 +93,7 @@ export async function getIcon(server: Server): Promise<Image> {
  * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
  */
 export function getServerByPriority(
-  content: Array<any>,
+  content: Array<unknown>,
   displayedServerList: Server[] = globalDefaultServer,
 ) {
   const serverPriority: Server[] = [
@@ -114,13 +114,8 @@ export function getServerByPriority(
  * @param server - 目标服务器。
  * @returns 判断结果。
  */
-export function isServer(server: any): boolean {
-  if (typeof server == 'number') {
-    server = Server[server];
-  } else {
-    return false;
-  }
-  return Object.keys(Server).includes(server);
+export function isServer(server: unknown): boolean {
+  return typeof server === 'number' && serverList.includes(server);
 }
 
 /**
@@ -129,7 +124,7 @@ export function isServer(server: any): boolean {
  * @param serverList - 服务器列表参数。
  * @returns 判断结果。
  */
-export function isServerList(serverList: Array<any>): boolean {
+export function isServerList(serverList: Array<unknown>): boolean {
   let result = true;
   for (let i = 0; i < serverList.length; i++) {
     const element = serverList[i];

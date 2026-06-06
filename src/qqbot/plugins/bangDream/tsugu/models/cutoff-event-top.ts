@@ -87,38 +87,38 @@ export class CutoffEventTop {
    * @returns 计算后的数值。
    */
   getChartData(setStartToZero = false): {
-    [key: number]: { x: Date; y: number }[];
+    [key: number]: { x: number; y: number }[];
   } {
     if (this.isExist == false) {
       return;
     }
-    const chartDate: { [key: number]: { x: Date; y: number }[] } = {};
+    const chartDate: { [key: number]: { x: number; y: number }[] } = {};
     for (let i = 0; i < this.points.length; i++) {
       const element = this.points[i];
       if (!(element.uid in chartDate)) {
         chartDate[element.uid] = [];
         if (setStartToZero) {
-          chartDate[element.uid].push({ x: new Date(0), y: 0 });
+          chartDate[element.uid].push({ x: 0, y: 0 });
           chartDate[element.uid].push({
-            x: new Date(element.time - this.startAt),
+            x: element.time - this.startAt,
             y: element.value,
           });
         } else {
-          chartDate[element.uid].push({ x: new Date(this.startAt), y: 0 });
+          chartDate[element.uid].push({ x: this.startAt, y: 0 });
           chartDate[element.uid].push({
-            x: new Date(element.time),
+            x: element.time,
             y: element.value,
           });
         }
       } else {
         if (setStartToZero) {
           chartDate[element.uid].push({
-            x: new Date(element.time - this.startAt),
+            x: element.time - this.startAt,
             y: element.value,
           });
         } else {
           chartDate[element.uid].push({
-            x: new Date(element.time),
+            x: element.time,
             y: element.value,
           });
         }

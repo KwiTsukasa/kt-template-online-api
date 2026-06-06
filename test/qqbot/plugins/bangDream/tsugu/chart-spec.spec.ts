@@ -16,8 +16,8 @@ describe('BangDream chart specs', () => {
     });
     expect(
       getTimelineRawYMax([
-        { data: [{ y: 100 }, { y: 300 }] },
-        { data: [{ y: 200 }] },
+        { data: [{ x: 0, y: 100 }, { x: 1, y: 300 }] },
+        { data: [{ x: 0, y: 200 }] },
       ]),
     ).toBe(300);
     expect(getTimelineDisplayYMax(300)).toBeCloseTo(1430);

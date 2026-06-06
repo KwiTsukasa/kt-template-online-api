@@ -1,3 +1,5 @@
+import type { ChartDataset } from 'chart.js';
+
 export const BANGDREAM_TIMELINE_CHART_SPEC = {
   animation: false,
   canvas: {
@@ -18,14 +20,19 @@ export const BANGDREAM_TIMELINE_CHART_SPEC = {
   },
 } as const;
 
+export interface TimelineChartPoint {
+  x: number;
+  y: number;
+}
+
+export type TimelineChartDataset = ChartDataset<'line', TimelineChartPoint[]>;
+
 /**
  * 计算时间线图表的原始 Y 轴最大值。
  *
  * @param datasets - Chart.js 数据集。
  */
-export function getTimelineRawYMax(
-  datasets: Array<{ data: Array<{ y: number }> }>,
-) {
+export function getTimelineRawYMax(datasets: TimelineChartDataset[]) {
   return Math.max(
     ...datasets.map((dataset) => Math.max(...dataset.data.map((pt) => pt.y))),
   );

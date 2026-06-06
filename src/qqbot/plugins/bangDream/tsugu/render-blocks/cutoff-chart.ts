@@ -12,6 +12,10 @@ import {
   BANGDREAM_CUTOFF_CHART_SPEC,
   stripCutoffChartLabelTags,
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/cutoff-chart-spec';
+import type {
+  TimelineChartDataset,
+  TimelineChartPoint,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/timeline-chart-spec';
 
 /**
  * 在图片布局层中绘制档线谱面。
@@ -26,7 +30,7 @@ export async function drawCutoffChart(
   server: Server = Server['jp'],
 ) {
   //setStartToZero:是否将开始时间设置为0
-  const datasets = [];
+  const datasets: TimelineChartDataset[] = [];
   const time = new Date().getTime();
   if (cutoffList.length == 0) {
     return new Canvas(
@@ -44,9 +48,9 @@ export async function drawCutoffChart(
     const cutoff = cutoffList[i];
     const tempEvent = new Event(cutoff.eventId);
 
-    let lableName: string;
+    let labelName: string;
     if (setStartToZero) {
-      lableName = `[${tempEvent.eventId}] ${tempEvent.eventName[server]} T${cutoff.tier}`;
+      labelName = `[${tempEvent.eventId}] ${tempEvent.eventName[server]} T${cutoff.tier}`;
       list.push(
         drawList({
           content: [
@@ -59,7 +63,7 @@ export async function drawCutoffChart(
         }),
       );
     } else {
-      lableName = `T${cutoff.tier}`;
+      labelName = `T${cutoff.tier}`;
       list.push(
         drawList({
           content: [
@@ -73,7 +77,7 @@ export async function drawCutoffChart(
       );
     }
     datasets.push({
-      label: lableName,
+      label: labelName,
       data: cutoff.getChartData(setStartToZero),
       borderWidth: BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.borderWidth,
       borderColor: [tempColor.getRGBA(1)],
@@ -89,39 +93,39 @@ export async function drawCutoffChart(
 
     if (cutoff.status == BangDreamEventStatus.inProgress) {
       if (cutoff.predictEP != null && cutoff.predictEP != 0) {
-        let data = [];
+        let data: TimelineChartPoint[] = [];
         const history = cutoff.getPredictionHistory();
         if (history.length > 0) {
           if (setStartToZero) {
             for (const p of history) {
-              data.push({ x: new Date(p.time - cutoff.startAt), y: p.ep });
+              data.push({ x: p.time - cutoff.startAt, y: p.ep });
             }
             data.push({
-              x: new Date(cutoff.endAt - cutoff.startAt),
+              x: cutoff.endAt - cutoff.startAt,
               y: history[history.length - 1].ep,
             });
           } else {
             for (const p of history) {
-              data.push({ x: new Date(p.time), y: p.ep });
+              data.push({ x: p.time, y: p.ep });
             }
             data.push({
-              x: new Date(cutoff.endAt),
+              x: cutoff.endAt,
               y: history[history.length - 1].ep,
             });
           }
         } else {
           if (setStartToZero) {
             data = [
-              { x: new Date(0), y: cutoff.predictEP },
+              { x: 0, y: cutoff.predictEP },
               {
-                x: new Date(cutoff.endAt - cutoff.startAt),
+                x: cutoff.endAt - cutoff.startAt,
                 y: cutoff.predictEP,
               },
             ];
           } else {
             data = [
-              { x: new Date(cutoff.startAt), y: cutoff.predictEP },
-              { x: new Date(cutoff.endAt), y: cutoff.predictEP },
+              { x: cutoff.startAt, y: cutoff.predictEP },
+              { x: cutoff.endAt, y: cutoff.predictEP },
             ];
           }
         }
@@ -140,7 +144,9 @@ export async function drawCutoffChart(
           ],
           data: data,
           borderWidth: BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.borderWidth,
-          borderDash: BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.predictionDash,
+          borderDash: [
+            ...BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.predictionDash,
+          ],
           fill: false,
           pointRadius:
             BANGDREAM_CUTOFF_CHART_SPEC.lineDataset.predictionPointRadius,
@@ -157,7 +163,7 @@ export async function drawCutoffChart(
         label: BANGDREAM_CUTOFF_CHART_SPEC.currentTimeDataset.label,
         borderColor: [tempColor.getRGBA(1)],
         backgroundColor: [tempColor.getRGBA(1)],
-        data: [{ x: new Date(time), y: 0 }],
+        data: [{ x: time, y: 0 }],
         fill: false,
         pointRadius: BANGDREAM_CUTOFF_CHART_SPEC.currentTimeDataset.pointRadius,
         pointHoverRadius:
@@ -204,27 +210,27 @@ export async function drawCutoffChart(
 /**
  * 在图片布局层中绘制档线活动排名谱面。
  *
- * @param CutoffEventTop - 档线活动排名参数。
+ * @param cutoffEventTop - 档线活动排名参数。
  * @param setStartToZero - setStartToZero参数，未传入时使用默认值。
  */
 export async function drawCutoffEventTopChart(
-  CutoffEventTop: CutoffEventTop,
+  cutoffEventTop: CutoffEventTop,
   setStartToZero = false,
 ) {
-  const datasets = [];
-  if (CutoffEventTop == undefined) {
+  const datasets: TimelineChartDataset[] = [];
+  if (cutoffEventTop == undefined) {
     return new Canvas(
       BANGDREAM_CUTOFF_CHART_SPEC.emptyCanvas.width,
       BANGDREAM_CUTOFF_CHART_SPEC.emptyCanvas.height,
     );
   }
-  const allData = CutoffEventTop.getChartData();
+  const allData = cutoffEventTop.getChartData();
   let colorNumber = 0;
   for (const key in allData) {
     const tempColor = getPresetColor(colorNumber);
     datasets.push({
       label: stripCutoffChartLabelTags(
-        CutoffEventTop.getUserNameById(Number(key)),
+        cutoffEventTop.getUserNameById(Number(key)),
       ),
       data: allData[key],
       borderWidth: BANGDREAM_CUTOFF_CHART_SPEC.eventTopDataset.borderWidth,
@@ -249,8 +255,8 @@ export async function drawCutoffEventTopChart(
   return await drawTimeLineChart(
     {
       data,
-      start: new Date(CutoffEventTop.startAt),
-      end: new Date(CutoffEventTop.endAt),
+      start: new Date(cutoffEventTop.startAt),
+      end: new Date(cutoffEventTop.endAt),
       setStartToZero,
     },
     true,

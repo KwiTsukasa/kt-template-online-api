@@ -1,4 +1,5 @@
 import { Canvas, Image, loadImage } from 'skia-canvas';
+import type { CanvasRenderingContext2D } from 'skia-canvas';
 import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
 import {
   BangDreamLocalAssetKey,
@@ -96,7 +97,7 @@ async function loadCoverImage(cover: string | Buffer): Promise<Image> {
  * @param y - 纵向绘制坐标。
  */
 function setAdaptiveTextBaseline(
-  ctx: any,
+  ctx: CanvasRenderingContext2D,
   layout: PreviewLayout,
   fontSize: number,
   y: number,
@@ -135,7 +136,7 @@ function getTimePosition(layout: PreviewLayout, time: number) {
  * @param coverImg - coverImg参数。
  */
 function drawBaseInfo(
-  ctx: any,
+  ctx: CanvasRenderingContext2D,
   layout: PreviewLayout,
   payload: BestdoriPreviewPayload,
   coverImg: Image,
@@ -218,7 +219,7 @@ function drawBaseInfo(
  * @param ctx - 画布绘图上下文。
  * @param layout - 布局参数。
  */
-function drawTracks(ctx: any, layout: PreviewLayout): void {
+function drawTracks(ctx: CanvasRenderingContext2D, layout: PreviewLayout): void {
   for (let i = 0; i < layout.colCount; i++) {
     ctx.save();
     const x =
@@ -259,7 +260,7 @@ function drawTracks(ctx: any, layout: PreviewLayout): void {
  * @param notes - 谱面音符列表。
  */
 function drawBeatLines(
-  ctx: any,
+  ctx: CanvasRenderingContext2D,
   layout: PreviewLayout,
   notes: PreviewNote[],
 ): void {
@@ -309,7 +310,10 @@ function drawBeatLines(
  * @param ctx - 画布绘图上下文。
  * @param layout - 布局参数。
  */
-function drawTimeline(ctx: any, layout: PreviewLayout): void {
+function drawTimeline(
+  ctx: CanvasRenderingContext2D,
+  layout: PreviewLayout,
+): void {
   ctx.save();
   ctx.font = `18px "${BANGDREAM_RENDER_THEME.font.chart}"`;
   ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartText;
@@ -330,7 +334,7 @@ function drawTimeline(ctx: any, layout: PreviewLayout): void {
  * @param notes - 谱面音符列表。
  */
 function drawCountAndBpmLines(
-  ctx: any,
+  ctx: CanvasRenderingContext2D,
   layout: PreviewLayout,
   notes: PreviewNote[],
 ): void {
@@ -376,7 +380,7 @@ function drawCountAndBpmLines(
  * @param note - 谱面音符。
  */
 function drawTapNote(
-  ctx: any,
+  ctx: CanvasRenderingContext2D,
   layout: PreviewLayout,
   noteImages: Record<string, Image>,
   note: PreviewNote,
@@ -417,7 +421,7 @@ function drawTapNote(
  * @param note - 谱面音符。
  */
 function drawDirectionalNote(
-  ctx: any,
+  ctx: CanvasRenderingContext2D,
   layout: PreviewLayout,
   noteImages: Record<string, Image>,
   note: PreviewNote,
@@ -469,7 +473,7 @@ function drawDirectionalNote(
  * @param note - 谱面音符。
  */
 function drawSimNote(
-  ctx: any,
+  ctx: CanvasRenderingContext2D,
   layout: PreviewLayout,
   noteImages: Record<string, Image>,
   note: PreviewNote,
@@ -498,7 +502,11 @@ function drawSimNote(
  * @param layout - 布局参数。
  * @param note - 谱面音符。
  */
-function drawBarNote(ctx: any, layout: PreviewLayout, note: PreviewNote): void {
+function drawBarNote(
+  ctx: CanvasRenderingContext2D,
+  layout: PreviewLayout,
+  note: PreviewNote,
+): void {
   const time = note.time as number[];
   const lane = note.lane as number[];
   const startCol = Math.floor(time[0] / layout.secondsPerCol);
@@ -543,7 +551,7 @@ function drawBarNote(ctx: any, layout: PreviewLayout, note: PreviewNote): void {
  * @param notes - 谱面音符列表。
  */
 function drawNotes(
-  ctx: any,
+  ctx: CanvasRenderingContext2D,
   layout: PreviewLayout,
   noteImages: Record<string, Image>,
   notes: PreviewNote[],

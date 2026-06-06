@@ -1,4 +1,5 @@
 import { Chart, registerables } from 'chart.js';
+import type { ChartConfiguration, ChartItem } from 'chart.js';
 import { Canvas, FontLibrary, loadImage } from 'skia-canvas';
 import 'chartjs-adapter-moment';
 import { assetsRootPath } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
@@ -7,6 +8,8 @@ import {
   BANGDREAM_TIMELINE_CHART_SPEC,
   getTimelineDisplayYMax,
   getTimelineRawYMax,
+  type TimelineChartDataset,
+  type TimelineChartPoint,
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/timeline-chart-spec';
 
 // 2. 注册 Chart.js 所有组件
@@ -19,12 +22,12 @@ Chart.register(...registerables);
 FontLibrary.use('old', [`${assetsRootPath}/Fonts/old.ttf`]);
 
 // 5. 定义参数接口
-interface drawTimeLineChartOptions {
+interface DrawTimeLineChartOptions {
   start: Date;
   end: Date;
   setStartToZero?: boolean;
   data: {
-    datasets: any[];
+    datasets: TimelineChartDataset[];
   };
 }
 
@@ -36,7 +39,7 @@ interface drawTimeLineChartOptions {
  * @param displayLabel - 展示Label参数，未传入时使用默认值。
  */
 export async function drawTimeLineChart(
-  { start, end, setStartToZero = false, data }: drawTimeLineChartOptions,
+  { start, end, setStartToZero = false, data }: DrawTimeLineChartOptions,
   displayLabel = false,
 ) {
   const width = BANGDREAM_TIMELINE_CHART_SPEC.canvas.width;
@@ -63,12 +66,12 @@ export async function drawTimeLineChart(
     },
     scales: {
       x: {
-        type: 'time',
+        type: 'time' as const,
         time: {
           unit: BANGDREAM_TIMELINE_CHART_SPEC.xAxis.unit,
         },
-        min: start,
-        max: end,
+        min: start.getTime(),
+        max: end.getTime(),
         display: !setStartToZero,
       },
       y: {
@@ -79,7 +82,7 @@ export async function drawTimeLineChart(
   };
 
   // 10. Chart.js 配置
-  const config = {
+  const config: ChartConfiguration<'line', TimelineChartPoint[]> = {
     type: 'line' as const,
     data,
     options: {
@@ -91,7 +94,7 @@ export async function drawTimeLineChart(
 
   try {
     // 11. 生成 Chart.js 图表
-    new Chart(ctx as any, config as any);
+    new Chart(ctx as unknown as ChartItem, config);
 
     // 12. 返回 skia-canvas 的 Image 对象
     return canvas;

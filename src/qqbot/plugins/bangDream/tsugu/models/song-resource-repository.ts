@@ -9,6 +9,7 @@ import {
   getServerByPriority,
   Server,
 } from '@/qqbot/plugins/bangDream/tsugu/models/server';
+import type { BestdoriNote } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/song-chart-preview-spec';
 
 export interface SongJacketSource {
   jacketImage: Array<string>;
@@ -50,8 +51,8 @@ export class SongResourceRepository {
    * @param songId - 歌曲 ID。
    * @param difficultyId - 难度 ID。
    */
-  async getChart(songId: number, difficultyId: number): Promise<object> {
-    return await this.provider.getJson<object>(
+  async getChart(songId: number, difficultyId: number): Promise<BestdoriNote[]> {
+    return await this.provider.getJson<BestdoriNote[]>(
       `/api/charts/${songId}/${difficultyNameById[difficultyId]}.json`,
     );
   }

@@ -634,15 +634,15 @@ export class Cutoff {
    * @param setStartToZero - setStartToZero参数，未传入时使用默认值。
    * @returns 计算后的数值。
    */
-  getChartData(setStartToZero = false): { x: Date; y: number }[] {
+  getChartData(setStartToZero = false): { x: number; y: number }[] {
     if (this.isExist == false) {
       return [];
     }
-    const chartData: { x: Date; y: number }[] = [];
+    const chartData: { x: number; y: number }[] = [];
     if (setStartToZero) {
-      chartData.push({ x: new Date(0), y: 0 });
+      chartData.push({ x: 0, y: 0 });
     } else {
-      chartData.push({ x: new Date(this.startAt), y: 0 });
+      chartData.push({ x: this.startAt, y: 0 });
     }
 
     // 在访问 this.cutoffs[0].time 之前检查 this.cutoffs 是否存在且长度大于0
@@ -655,11 +655,11 @@ export class Cutoff {
       if (setStartToZero) {
         // 确保 tempTime 不为 null 才执行减法操作
         chartData.push({
-          x: tempTime ? new Date(element.time - this.startAt) : new Date(0),
+          x: tempTime ? element.time - this.startAt : 0,
           y: element.ep,
         });
       } else {
-        chartData.push({ x: new Date(element.time), y: element.ep });
+        chartData.push({ x: element.time, y: element.ep });
       }
       tempTime = element.time;
     }

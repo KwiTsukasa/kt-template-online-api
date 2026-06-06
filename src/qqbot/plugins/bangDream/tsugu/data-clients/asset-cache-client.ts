@@ -22,14 +22,14 @@ const memoryCache: { [url: string]: Buffer } = {};
  * 在数据下载与缓存层中下载File。
  *
  * @param url - 远端资源地址。
- * @param IgnoreErr - IgnoreErr参数，未传入时使用默认值。
+ * @param ignoreError - ignoreError参数，未传入时使用默认值。
  * @param overwrite - overwrite参数，未传入时使用默认值。
  * @param retryCount - retryCount参数，未传入时使用默认值。
  * @returns 异步处理结果。
  */
 async function downloadFile(
   url: string,
-  IgnoreErr: boolean = true,
+  ignoreError: boolean = true,
   overwrite = false,
   retryCount = 3,
 ): Promise<Buffer> {
@@ -84,7 +84,7 @@ async function downloadFile(
       errUrl[url] = Date.now();
     }
 
-    if ((url.includes('.png') || url.includes('.svg')) && IgnoreErr) {
+    if ((url.includes('.png') || url.includes('.svg')) && ignoreError) {
       return assetErrorImageBuffer;
     }
 
@@ -96,17 +96,17 @@ async function downloadFile(
  * 在数据下载与缓存层中下载File缓存。
  *
  * @param url - 远端资源地址。
- * @param IgnoreErr - IgnoreErr参数，未传入时使用默认值。
+ * @param ignoreError - ignoreError参数，未传入时使用默认值。
  * @returns 异步处理结果。
  */
 async function downloadFileCache(
   url: string,
-  IgnoreErr = true,
+  ignoreError = true,
 ): Promise<Buffer> {
   if (memoryCache[url]) {
     return memoryCache[url];
   }
-  const data = await downloadFile(url, IgnoreErr);
+  const data = await downloadFile(url, ignoreError);
   if (process.env.MEMORY_CACHE == 'true') {
     memoryCache[url] = data;
   }

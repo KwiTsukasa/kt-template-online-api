@@ -48,20 +48,14 @@ export async function writeJSON(filepath: string, data: object) {
  * @param filePath - 本地文件路径。
  * @returns 异步处理结果。
  */
-export async function readExcelFile(filePath: string): Promise<any[]> {
-  // 读取Excel文件
+export async function readExcelFile<
+  T extends Record<string, unknown> = Record<string, unknown>,
+>(filePath: string): Promise<T[]> {
   const workbook = XLSX.readFile(filePath);
 
-  // 获取工作表的名字
   const sheetName = workbook.SheetNames[0];
-
-  // 获取工作表
   const worksheet = workbook.Sheets[sheetName];
-
-  // 将工作表转换为JSON
-  const json = XLSX.utils.sheet_to_json(worksheet);
-
-  return json;
+  return XLSX.utils.sheet_to_json<T>(worksheet);
 }
 
 //将string[]转变为number[]

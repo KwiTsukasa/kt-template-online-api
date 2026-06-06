@@ -46,7 +46,7 @@ export async function drawSongChart(
       diff: difficultyName[difficultyId],
       cover: song.getSongJacketImageURL(displayedServerList),
     },
-    songChart as any,
+    songChart,
   );
 
   let buffer: Buffer;

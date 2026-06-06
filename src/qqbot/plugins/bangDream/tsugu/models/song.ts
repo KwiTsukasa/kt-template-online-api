@@ -9,6 +9,7 @@ import {
   BANGDREAM_SONG_TAG_NAME,
 } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
 import { songResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/models/song-resource-repository';
+import type { BestdoriNote } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/song-chart-preview-spec';
 
 export const difficultyName: Record<number, string> =
   BANGDREAM_DIFFICULTY_NAME_BY_ID;
@@ -248,7 +249,7 @@ export class Song {
    * @param difficultyId - 难度ID参数。
    * @returns 异步处理结果。
    */
-  async getSongChart(difficultyId: number): Promise<object> {
+  async getSongChart(difficultyId: number): Promise<BestdoriNote[]> {
     return await songResourceRepository.getChart(this.songId, difficultyId);
   }
 
@@ -272,7 +273,7 @@ export class Song {
    * @param difficultyId - 难度ID参数。
    * @param scoreUpMaxValue - 分数UpMax值参数，未传入时使用默认值。
    * @param skillDuration - 技能Duration参数，未传入时使用默认值。
-   * @param accruacy - accruacy参数，未传入时使用默认值。
+   * @param accuracy - accuracy参数，未传入时使用默认值。
    * @returns 计算后的数值。
    */
   calcMeta(
@@ -280,7 +281,7 @@ export class Song {
     difficultyId: number,
     scoreUpMaxValue: number = 100,
     skillDuration: number = 7,
-    accruacy: number = 100,
+    accuracy: number = 100,
   ): number {
     if (this.hasMeta == false) {
       return 0;
@@ -298,7 +299,7 @@ export class Song {
           this.meta[difficultyId][skillDuration][1];
     }
     const scoreParameter =
-      skillParameter * ((1.1 * accruacy) / 100 + 0.8 * (1 - accruacy / 100));
+      skillParameter * ((1.1 * accuracy) / 100 + 0.8 * (1 - accuracy / 100));
     return scoreParameter;
   }
 }

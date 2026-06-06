@@ -168,11 +168,11 @@ export async function drawCharacterDetail(
     key: '生日',
   });
   //星座
-  const constellationTextImafe = drawList({
+  const constellationTextImage = drawList({
     text: constellationList[character.profile.constellation],
     key: '星座',
   });
-  list.push(drawListMerge([birthdayTextImage, constellationTextImafe]));
+  list.push(drawListMerge([birthdayTextImage, constellationTextImage]));
   list.push(line);
   //身高
   const heightTextImage = drawList({

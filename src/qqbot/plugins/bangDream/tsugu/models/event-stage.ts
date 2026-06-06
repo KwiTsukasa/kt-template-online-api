@@ -7,6 +7,9 @@ import {
 } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
 import {
   eventStageDataRepository,
+  type EventStageDataRows,
+  type EventStageRotationMusicRow,
+  type EventStageTypeRow,
   type EventStageDataType,
 } from '@/qqbot/plugins/bangDream/tsugu/models/event-stage-data-repository';
 
@@ -28,8 +31,8 @@ export class EventStage {
   eventId: number;
   isExist: boolean = false;
   isInitFull = false;
-  stageType: Array<{ type: string; startAt: string; endAt: string }>;
-  rotationMusics: Array<{ musicId: string; startAt: string; endAt: string }>;
+  stageType: EventStageTypeRow[] = [];
+  rotationMusics: EventStageRotationMusicRow[] = [];
   /**
    * 构造 EventStage 实例，并初始化该模型的本地基础字段。
    *
@@ -59,10 +62,12 @@ export class EventStage {
       return;
     }
     try {
-      const stageData = await this.getData(true, 'stages');
-      const rotationMusicsData = await this.getData(true, 'rotationMusics');
-      this.stageType = stageData as any;
-      this.rotationMusics = rotationMusicsData as any;
+      const [stageData, rotationMusicsData] = await Promise.all([
+        this.getData(true, 'stages'),
+        this.getData(true, 'rotationMusics'),
+      ]);
+      this.stageType = stageData;
+      this.rotationMusics = rotationMusicsData;
       this.isInitFull = true;
     } catch {
       this.isExist = false;
@@ -74,7 +79,10 @@ export class EventStage {
    * @param update - update参数，未传入时使用默认值。
    * @param type - 数据类型或匹配类型。
    */
-  async getData(update: boolean = true, type: EventStageDataType) {
+  async getData<T extends EventStageDataType>(
+    update: boolean = true,
+    type: T,
+  ): Promise<EventStageDataRows<T>> {
     return await eventStageDataRepository.getFestivalData(
       this.eventId,
       type,
@@ -88,25 +96,26 @@ export class EventStage {
    * @returns 处理后的列表。
    */
   getStageList(): Stage[] {
-    //获取所有的stage,并且按照时间排序 [{type,startAt,endAt,songIdList}]
     if (!this.isInitFull) {
-      return;
+      return [];
     }
-    const temp = {};
-    for (const i in this.rotationMusics) {
-      const tempStartAt = this.rotationMusics[i].startAt;
-      if (temp[tempStartAt] == undefined) {
-        temp[tempStartAt] = {
-          startAt: this.rotationMusics[i].startAt,
-          endAt: this.rotationMusics[i].endAt,
+    const groupedByStartAt: Record<
+      string,
+      { startAt: string; endAt: string; music: number[] }
+    > = {};
+    for (const rotationMusic of this.rotationMusics) {
+      const tempStartAt = rotationMusic.startAt;
+      if (groupedByStartAt[tempStartAt] == undefined) {
+        groupedByStartAt[tempStartAt] = {
+          startAt: rotationMusic.startAt,
+          endAt: rotationMusic.endAt,
           music: [],
         };
       }
-      temp[tempStartAt].music.push(this.rotationMusics[i].musicId);
+      groupedByStartAt[tempStartAt].music.push(Number(rotationMusic.musicId));
     }
     const tempStageList: Stage[] = [];
-    for (const i in temp) {
-      const element = temp[i];
+    for (const element of Object.values(groupedByStartAt)) {
       const tempStartAt = parseInt(element.startAt);
       const tempEndAt = parseInt(element.endAt);
       const tempStageType = this.getStageTypeByTime(tempStartAt, tempEndAt);
@@ -114,10 +123,9 @@ export class EventStage {
         type: tempStageType,
         startAt: tempStartAt,
         endAt: tempEndAt,
-        songIdList: temp[i].music,
+        songIdList: element.music,
       });
     }
-    //排序
     tempStageList.sort((a, b) => {
       return a.startAt - b.startAt;
     });
@@ -133,9 +141,8 @@ export class EventStage {
    * @returns 格式化后的文本。
    */
   getStageTypeByTime(startAt: number, endAt: number): string {
-    //根据时间获取当前stage类型
     if (!this.isInitFull) {
-      return;
+      return BangDreamEventStageType.unknown;
     }
     const stage = this.stageType.find((x) => {
       const startTime = parseInt(x.startAt);

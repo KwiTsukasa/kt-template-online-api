@@ -310,6 +310,7 @@ export interface TsuguHook {
 - 已新增 `models/costume-resource-repository.ts`，把 `Costume` 的服装详情请求和 Live2D 缩略图素材路径从 `bestdoriUrl + callAPIAndCacheResponse/downloadFile` 收口到 provider-backed repository；`costume-resource-repository.spec.ts` 覆盖详情路径、`sdchara.png` 路径和非内存缓存下载调用，本地 `/查卡 472` 图片 smoke 保持演出缩略图正常输出。
 - 已新增 `models/item-resource-repository.ts`，把 `Item` 的道具缩略图路径从 `bestdoriUrl + downloadFileCache` 收口到 provider-backed repository；`item-resource-repository.spec.ts` 覆盖 material、star 和 common item 三类路径，本地 `/查卡池 259` 图片 smoke 输出非空。
 - 已新增 `models/cutoff-event-top-repository.ts` 和 `render-blocks/player-ranking-resource-repository.ts`，把前十榜 eventtop 数据请求与排名徽章素材路径从 `bestdoriUrl + callAPIAndCacheResponse/downloadFileCache` 收口到 provider-backed repository；相关 spec 覆盖 eventtop query path、排名徽章路径和 provider 调用，本地 `/ycx 10 100 cn` 图片 smoke 输出非空。
+- 已新增 `models/degree-resource-repository.ts`，把 `Degree` 的称号缩略图、称号框、称号图标、动态称号脚本和纹理素材路径从 `bestdoriUrl + downloadFile/downloadFileCache` 收口到 provider-backed repository；`degree-resource-repository.spec.ts` 覆盖旧/新缩略图 fallback、动态称号旧纹理白名单和 provider 调用，本地 `/ycx 10 100 cn` 图片 smoke 输出非空。
 - 固化：Windows 下不要用反斜杠测试路径直接调用 Jest pattern，容易出现 `Pattern ... - 0 matches`；指定文件测试统一使用 `pnpm exec jest --runInBand --runTestsByPath test/qqbot/plugins/bangDream/tsugu/<file>.spec.ts ...`，路径用正斜杠。
 
 ### Phase 4：搜索 specification 和 matcher

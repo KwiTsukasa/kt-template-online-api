@@ -1,10 +1,8 @@
 import { Server } from '@/qqbot/plugins/bangDream/tsugu/models/server';
-import { downloadFileCache } from '@/qqbot/plugins/bangDream/tsugu/data-clients/asset-cache-client';
-import { downloadFile } from '@/qqbot/plugins/bangDream/tsugu/data-clients/asset-cache-client';
 import { Canvas, Image, loadImage } from 'skia-canvas';
 import mainAPI from '@/qqbot/plugins/bangDream/tsugu/models/main-data-store';
-import { bestdoriUrl } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { readJSONFromBuffer } from './model-utils';
+import { degreeResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/models/degree-resource-repository';
 
 export class Degree {
   degreeId: number;
@@ -52,20 +50,11 @@ export class Degree {
         return degreeImageBuffer;
       } catch {}
     }
-    // 资源路径修复
-    try {
-      const degreeImageBuffer = await downloadFile(
-        `${bestdoriUrl}/assets/${Server[server]}/thumb/degree_rip/${this.baseImageName[server]}.png`,
-        false,
-      );
-      return loadImage(degreeImageBuffer);
-    } catch {
-      const degreeImageBuffer = await downloadFile(
-        `${bestdoriUrl}/assets/${Server[server]}/thumb/degree_rip/assets-star-forassetbundle-startapp-thumbnail-degree-${this.baseImageName[server]}.png`,
-        true,
-      );
-      return loadImage(degreeImageBuffer);
-    }
+    const degreeImageBuffer = await degreeResourceRepository.getThumbnailBuffer(
+      this.baseImageName[server],
+      server,
+    );
+    return loadImage(degreeImageBuffer);
   }
   /**
    * 在 Degree 模型中获取称号Frame。
@@ -80,8 +69,9 @@ export class Degree {
       return new Canvas(1, 1);
     }
 
-    const degreeFrameBuffer = await downloadFileCache(
-      `${bestdoriUrl}/assets/${Server[server]}/thumb/degree_rip/${frameName}.png`,
+    const degreeFrameBuffer = await degreeResourceRepository.getFrameBuffer(
+      frameName,
+      server,
     );
     return loadImage(degreeFrameBuffer);
   }
@@ -97,8 +87,9 @@ export class Degree {
       //这个为空底图
       return new Canvas(1, 1);
     }
-    const degreeIconBuffer = await downloadFileCache(
-      `${bestdoriUrl}/assets/${Server[server]}/thumb/degree_rip/${iconName}.png`,
+    const degreeIconBuffer = await degreeResourceRepository.getIconBuffer(
+      iconName,
+      server,
     );
     return loadImage(degreeIconBuffer);
   }
@@ -132,11 +123,12 @@ export async function getFrameFromAnimatedDegreeAsset(
   server: Server,
   frame?: number,
 ): Promise<Canvas> {
-  // script
-  // example https://bestdori.com/assets/cn/ani_degree_bilibili_day1_rip/assets-star-forassetbundle-startapp-thumbnail-animedegree-ani_degree_bilibili_day1-ani_degree_bilibili_day1.asset
-  const scriptUrl = `${bestdoriUrl}/assets/${Server[server]}/${baseImageName}_rip/assets-star-forassetbundle-startapp-thumbnail-animedegree-${baseImageName}-${baseImageName}.asset`;
-  const srciptBuffer = await downloadFileCache(scriptUrl);
-  const script = await readJSONFromBuffer(srciptBuffer);
+  const scriptBuffer =
+    await degreeResourceRepository.getAnimatedScriptBuffer(
+      baseImageName,
+      server,
+    );
+  const script = await readJSONFromBuffer(scriptBuffer);
   const frames: Array<Frame> = script['Base']['mSprites'] as Array<Frame>;
   const framecount = frames.length;
   if (!frame) {
@@ -144,27 +136,9 @@ export async function getFrameFromAnimatedDegreeAsset(
     frame = Math.floor(Math.random() * framecount);
   }
 
-  // texture
-  // example https://bestdori.com/assets/cn/ani_degree_bilibili_day1_rip/ani_degree_bilibili_day1.png
-  // example https://bestdori.com/assets/cn/ani_degree_election_5th_rip/assets-star-forassetbundle-startapp-thumbnail-animedegree-ani_degree_election_5th-ani_degree_election_5th.png
-  const textureUrlOld = `${bestdoriUrl}/assets/${Server[server]}/${baseImageName}_rip/${baseImageName}.png`;
-  const textureUrlNew = `${bestdoriUrl}/assets/${Server[server]}/${baseImageName}_rip/assets-star-forassetbundle-startapp-thumbnail-animedegree-${baseImageName}-${baseImageName}.png`;
-  // 后期使用了统一的资源路径
-  const useTextureUrlOldAssetWhitelist = [
-    'ani_degree_bilibili_day1',
-    'ani_degree_bilibili_092701',
-    'ani_degree_bilibili_collabo',
-    'ani_degree_bilibili_6years',
-  ];
-  let useTextureUrlOld = false;
-  for (const l of useTextureUrlOldAssetWhitelist) {
-    if (baseImageName == l) {
-      useTextureUrlOld = true;
-      break;
-    }
-  }
-  const textureBuffer = await downloadFileCache(
-    useTextureUrlOld ? textureUrlOld : textureUrlNew,
+  const textureBuffer = await degreeResourceRepository.getAnimatedTextureBuffer(
+    baseImageName,
+    server,
   );
   const texture = await loadImage(textureBuffer);
 

@@ -14,7 +14,7 @@
 ## 当前事实
 
 - Tsugu 源码目录：`src/qqbot/plugins/bangDream/tsugu`
-- TS 文件：初始基线 92；当前 `tsugu` 源码 126
+- TS 文件：初始基线 92；当前 `tsugu` 源码 127
 - 函数节点：481，其中稳定函数 410，匿名/内联回调 71
 - 源码 JSDoc：稳定函数 410/410 已覆盖
 - 变量声明：1896
@@ -356,6 +356,8 @@ export interface TsuguHook {
 - 已新增 `card-art-spec.spec.ts`，覆盖 rarity=1 属性边框、其他稀有度边框和关键尺寸；本地生成 `card-art-spec-card-472.jpg`，验证卡牌详情图在规格收口后仍能正常输出。
 - 已新增 `render-blocks/detail-block-spec.ts`，收口歌曲详情、歌曲 meta、角色半身块和玩家详情头图的尺寸、间距、字号与相对分数舍入规则；`detail-blocks.ts` 改为消费 spec，数据查询和绘制顺序保持不变。
 - 已新增 `detail-block-spec.spec.ts`，覆盖歌曲详情尺寸、角色/玩家详情尺寸和 meta 相对百分比舍入；本地生成 `detail-spec-song-136.jpg`、`detail-spec-event-50.jpg`、`detail-spec-character-1.jpg`，验证详情区块规格收口后查曲/查活动/查角色图片输出正常。
+- 已新增 `render-blocks/list-frame-spec.ts`，收口通用列表行、tips、横向合并列、居中图片列表和左侧竖线的字号、间距、兜底尺寸与布局计算；`list-frame.ts` 改为消费 spec，服务器分组、换行和绘制顺序保持不变。
+- 已新增 `list-frame-spec.spec.ts`，覆盖列表正文宽度、标签/tips 偏移、合并列宽、居中图片换行和左侧竖线尺寸；本地生成 `list-frame-spec-song-136.jpg`、`list-frame-spec-event-50.jpg`、`list-frame-spec-character-1.jpg`，验证列表框架规格收口后查曲/查活动/查角色图片输出正常。
 
 ### Phase 6：策略 policy 和时间/档线规则
 

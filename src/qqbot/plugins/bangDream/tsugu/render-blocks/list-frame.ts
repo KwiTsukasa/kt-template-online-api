@@ -17,6 +17,18 @@ import {
   createHorizontalSeparatorSpec,
   createVerticalSeparatorSpec,
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/layout-spec';
+import {
+  BANGDREAM_LIST_FRAME_SPEC,
+  createCenteredImageRows,
+  createKeyedListFrameLayout,
+  createListWithLineLayout,
+  createTipsInListLayout,
+  getCenteredImageRowsHeight,
+  getListFrameLineHeight,
+  getListFrameSpacing,
+  getListFrameTextMaxWidth,
+  getMergedListColumnWidth,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-frame-spec';
 
 //表格用默认虚线
 export const line: Canvas = drawDottedLine(createHorizontalSeparatorSpec());
@@ -43,16 +55,16 @@ export function drawList({
   key,
   text,
   content,
-  textSize = 40,
-  lineHeight = textSize * 1.5,
-  spacing = textSize / 3,
+  textSize = BANGDREAM_LIST_FRAME_SPEC.text.defaultSize,
+  lineHeight = getListFrameLineHeight(textSize),
+  spacing = getListFrameSpacing(textSize),
   color = BANGDREAM_RENDER_THEME.color.primaryText,
   maxWidth = BANGDREAM_RENDER_THEME.layout.contentWidth,
 }: ListOptions): Canvas {
-  const xmax = maxWidth - 40;
+  const xmax = getListFrameTextMaxWidth(maxWidth);
   const keyImage = drawRoundedRectWithText({
     text: key,
-    textSize: 30,
+    textSize: BANGDREAM_LIST_FRAME_SPEC.text.labelSize,
   });
 
   let textImage: Canvas;
@@ -68,24 +80,30 @@ export function drawList({
       color,
     });
   } else {
-    textImage = new Canvas(0, 0);
+    textImage = new Canvas(
+      BANGDREAM_LIST_FRAME_SPEC.list.emptyTextWidth,
+      BANGDREAM_LIST_FRAME_SPEC.list.emptyTextHeight,
+    );
   }
   if (key == undefined) {
     return stackImageHorizontal([
-      new Canvas(BANGDREAM_RENDER_THEME.layout.listIndent, 1),
+      new Canvas(
+        BANGDREAM_RENDER_THEME.layout.listIndent,
+        BANGDREAM_LIST_FRAME_SPEC.list.noKeySpacerHeight,
+      ),
       textImage,
     ]);
   }
-  const ymax = textImage.height + keyImage.height + 10;
-  const canvas = new Canvas(maxWidth, ymax);
+  const layout = createKeyedListFrameLayout({
+    keyHeight: keyImage.height,
+    maxWidth,
+    textHeight: textImage.height,
+  });
+  const canvas = new Canvas(layout.width, layout.height);
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(keyImage, 0, 0);
+  ctx.drawImage(keyImage, layout.keyX, layout.keyY);
   if (textImage.height != 0) {
-    ctx.drawImage(
-      textImage,
-      BANGDREAM_RENDER_THEME.layout.listIndent,
-      keyImage.height + 10,
-    );
+    ctx.drawImage(textImage, layout.textX, layout.textY);
   }
   return canvas;
 }
@@ -105,13 +123,12 @@ interface tipsOptions {
 export function drawTipsInList({
   text,
   content,
-  textSize = 30,
-  lineHeight = textSize * 1.5,
-  spacing = textSize / 3,
+  textSize = BANGDREAM_LIST_FRAME_SPEC.tips.defaultTextSize,
+  lineHeight = getListFrameLineHeight(textSize),
+  spacing = getListFrameSpacing(textSize),
 }: tipsOptions) {
-  const xmax =
-    BANGDREAM_RENDER_THEME.layout.contentWidth -
-    BANGDREAM_RENDER_THEME.layout.listIndent * 2;
+  const layout = createTipsInListLayout(0);
+  const xmax = layout.textMaxWidth;
   let textImage: Canvas;
   if (typeof text == 'string') {
     textImage = drawText({ text, textSize, maxWidth: xmax, lineHeight });
@@ -124,21 +141,22 @@ export function drawTipsInList({
       spacing,
     });
   } else {
-    textImage = new Canvas(1, 1);
+    textImage = new Canvas(
+      BANGDREAM_LIST_FRAME_SPEC.tips.emptyTextWidth,
+      BANGDREAM_LIST_FRAME_SPEC.tips.emptyTextHeight,
+    );
   }
-  const canvas = new Canvas(
-    BANGDREAM_RENDER_THEME.layout.contentWidth,
-    textImage.height + 10,
-  );
+  const textLayout = createTipsInListLayout(textImage.height);
+  const canvas = new Canvas(textLayout.width, textLayout.height);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = BANGDREAM_RENDER_THEME.color.subtlePanel;
   ctx.fillRect(
-    0,
-    10,
-    BANGDREAM_RENDER_THEME.layout.contentWidth,
-    textImage.height,
+    textLayout.backgroundX,
+    textLayout.backgroundY,
+    textLayout.backgroundWidth,
+    textLayout.backgroundHeight,
   );
-  ctx.drawImage(textImage, BANGDREAM_RENDER_THEME.layout.listIndent, 10);
+  ctx.drawImage(textImage, textLayout.textX, textLayout.textY);
   return canvas;
 }
 
@@ -224,15 +242,16 @@ export function drawListMerge(imageList: Array<Canvas | Image>): Canvas {
     }
   }
   const canvas = new Canvas(
-    BANGDREAM_RENDER_THEME.layout.contentWidth,
+    BANGDREAM_LIST_FRAME_SPEC.merge.defaultWidth,
     maxHeight,
   );
   const ctx = canvas.getContext('2d');
   let x = 0;
+  const columnWidth = getMergedListColumnWidth(imageList.length);
   for (let i = 0; i < imageList.length; i++) {
     const element = imageList[i];
     ctx.drawImage(element, x, 0);
-    x += BANGDREAM_RENDER_THEME.layout.contentWidth / imageList.length;
+    x += columnWidth;
   }
   return canvas;
 }
@@ -249,60 +268,15 @@ export function drawImageListCenter(
   imageList: Array<Canvas | Image>,
   maxWidth: number = BANGDREAM_RENDER_THEME.layout.contentWidth,
 ): Canvas {
-  interface imageLine {
-    imageList: Array<Canvas | Image>;
-    width: number;
-    height: number;
-  }
-  const lineList: Array<imageLine> = [];
-  let tempWidth = 0;
-  let tempHeight = 0;
-  let tempImageList: Array<Canvas | Image> = [];
-  //换行函数
-  /**
-   * 在图片布局层中处理new线条。
-   */
-  function newLine() {
-    lineList.push({
-      imageList: tempImageList,
-      width: tempWidth,
-      height: tempHeight,
-    });
-    tempWidth = 0;
-    tempHeight = 0;
-    tempImageList = [];
-  }
   if (imageList.length == 0) {
-    return new Canvas(1, 10);
+    return new Canvas(
+      BANGDREAM_LIST_FRAME_SPEC.imageList.emptyWidth,
+      BANGDREAM_LIST_FRAME_SPEC.imageList.emptyHeight,
+    );
   }
-  //遍历imageList，计算每一行的宽度，高度，imageList
-  for (let i = 0; i < imageList.length; i++) {
-    const element = imageList[i];
-    if (element.width > maxWidth) {
-      newLine();
-      tempImageList.push(element);
-      continue;
-    }
-    if (tempWidth + element.width > maxWidth) {
-      newLine();
-    }
-    tempWidth += element.width;
-    if (element.height > tempHeight) {
-      tempHeight = element.height;
-    }
-    tempImageList.push(element);
-  }
-  if (tempImageList.length > 0) {
-    //最后一行
-    newLine();
-  }
-  //计算总高度，生成canvas
-  let Height = 0;
-  for (let i = 0; i < lineList.length; i++) {
-    const element = lineList[i];
-    Height += element.height;
-  }
-  const canvas = new Canvas(maxWidth, Height);
+  const lineList = createCenteredImageRows(imageList, maxWidth);
+  const height = getCenteredImageRowsHeight(lineList);
+  const canvas = new Canvas(maxWidth, height);
   const ctx = canvas.getContext('2d');
   //画每一行
   const middleWidth = maxWidth / 2;
@@ -328,24 +302,26 @@ export function drawImageListCenter(
  * @returns 渲染或资源结果。
  */
 export function drawListWithLine(textImageList: Array<Canvas | Image>): Canvas {
-  const x = 10;
-  let y = 10;
   let height = 0;
   for (let i = 0; i < textImageList.length; i++) {
     const element = textImageList[i];
     height += element.height;
   }
-  const canvas = new Canvas(
-    BANGDREAM_RENDER_THEME.layout.contentWidth,
-    height + 10,
-  );
+  const layout = createListWithLineLayout(height);
+  const canvas = new Canvas(layout.canvasWidth, layout.canvasHeight);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = BANGDREAM_RENDER_THEME.color.separator;
-  const lineSpec = createVerticalSeparatorSpec(height + 20);
-  ctx.fillRect(lineSpec.startX, 10, 5, height + 20);
+  const lineSpec = createVerticalSeparatorSpec(layout.lineHeight);
+  ctx.fillRect(
+    lineSpec.startX,
+    layout.lineY,
+    layout.lineWidth,
+    layout.lineHeight,
+  );
+  let y = layout.contentY;
   for (let i = 0; i < textImageList.length; i++) {
     const element = textImageList[i];
-    ctx.drawImage(element, x, y);
+    ctx.drawImage(element, layout.contentX, y);
     y += element.height;
   }
   return canvas;

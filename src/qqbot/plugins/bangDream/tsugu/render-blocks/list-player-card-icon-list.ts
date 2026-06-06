@@ -3,6 +3,12 @@ import { Player } from '@/qqbot/plugins/bangDream/tsugu/models/player';
 import { Canvas } from 'skia-canvas';
 import { drawCardIcon } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/card-art';
 import { drawList } from './list-frame';
+import {
+  BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC,
+  getPlayerCardIconListSpacing,
+  getPlayerCardIconListTextSize,
+  sortPlayerMainDeckEntries,
+} from './list-player-card-icon-spec';
 
 /**
  * 在图片布局层中绘制玩家卡牌In列表。
@@ -17,19 +23,14 @@ export async function drawPlayerCardInList(
   player: Player,
   key?: string,
   cardIdVisible = false,
-  lineHeight = 184,
+  lineHeight = BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC.list.defaultLineHeight,
 ): Promise<Canvas> {
-  const textSize = (lineHeight / 200) * 180;
-  const spacing = (lineHeight / 200) * 13;
+  const textSize = getPlayerCardIconListTextSize(lineHeight);
+  const spacing = getPlayerCardIconListSpacing(lineHeight);
   const promiseList: Promise<Canvas>[] = [];
-  const tempCardDataList = player.profile.mainDeckUserSituations.entries;
-  //将tempCardDataList调整顺序，为3,1,0,2,4
-  const defaultCardSort = [3, 1, 0, 2, 4];
-  const cardDataList = [];
-  for (let i = 0; i < defaultCardSort.length; i++) {
-    const tempCardData = tempCardDataList[defaultCardSort[i]];
-    cardDataList.push(tempCardData);
-  }
+  const cardDataList = sortPlayerMainDeckEntries(
+    player.profile.mainDeckUserSituations.entries,
+  );
   const cardIconList: Array<Canvas> = [];
   for (const i in cardDataList) {
     const tempCardData = cardDataList[i];
@@ -40,8 +41,9 @@ export async function drawPlayerCardInList(
         illustrationTrainingStatus: tempCardData.illust == 'after_training',
         limitBreakRank: tempCardData.limitBreakRank,
         cardIdVisible: cardIdVisible,
-        skillTypeVisible: true,
-        cardTypeVisible: false,
+        skillTypeVisible:
+          BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC.card.showSkillType,
+        cardTypeVisible: BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC.card.showCardType,
         skillLevel: tempCardData.skillLevel,
       }),
     );

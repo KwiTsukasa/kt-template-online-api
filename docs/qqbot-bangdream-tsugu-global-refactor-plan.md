@@ -305,6 +305,7 @@ export interface TsuguHook {
 - 已新增 `models/character-resource-repository.ts`，把 `Character` 的详情请求、角色图标、KV 立绘和名称横幅资源路径从 `bestdoriUrl + callAPIAndCacheResponse/downloadFileCache` 收口到 provider-backed repository；`character-resource-repository.spec.ts` 覆盖详情缓存策略和三类资源路径，本地 `/查角色 1` 图片 smoke 输出非空。
 - 已新增 `models/band-resource-repository.ts`，把 `Band` 的乐队 Logo 和乐队图标 SVG 资源路径从 `bestdoriUrl + downloadFileCache` 收口到 provider-backed repository；`band-resource-repository.spec.ts` 覆盖两类资源路径和下载调用，本地 `/查角色 1` 图片 smoke 保持非空输出。
 - 已新增 `models/attribute-resource-repository.ts`，把 `Attribute` 的属性图标 SVG 资源路径从 `bestdoriUrl + downloadFileCache` 收口到 provider-backed repository；`attribute-resource-repository.spec.ts` 覆盖属性图标路径和下载调用，本地 `/查卡 472` 图片 smoke 保持非空输出。
+- 已新增 `models/server-resource-repository.ts`，把 `Server` 的服务器图标 SVG 资源路径从 `bestdoriUrl + downloadFileCache` 收口到 provider-backed repository，并把台服本地图标路径改走 asset manifest；`server-resource-repository.spec.ts` 覆盖服务器图标路径、台服本地图标路径和下载调用，本地 `/查卡 472` 图片 smoke 保持非空输出。
 - 固化：Windows 下不要用反斜杠测试路径直接调用 Jest pattern，容易出现 `Pattern ... - 0 matches`；指定文件测试统一使用 `pnpm exec jest --runInBand --runTestsByPath test/qqbot/plugins/bangDream/tsugu/<file>.spec.ts ...`，路径用正斜杠。
 
 ### Phase 4：搜索 specification 和 matcher

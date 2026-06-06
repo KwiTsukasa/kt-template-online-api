@@ -1,20 +1,15 @@
-import { downloadFileCache } from '@/qqbot/plugins/bangDream/tsugu/data-clients/asset-cache-client';
-import * as path from 'path';
 import { loadImage, Image } from 'skia-canvas';
 import {
-  assetsRootPath,
   globalDefaultServer,
   serverNameFullList,
 } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
-import {
-  globalServerPriority,
-  bestdoriUrl,
-} from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
+import { globalServerPriority } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import {
   loadImageFromPath,
   convertSvgToPngBuffer,
 } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
 import { BANGDREAM_SERVER_CODES } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import { serverResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/models/server-resource-repository';
 
 export enum Server {
   jp,
@@ -79,10 +74,10 @@ export async function getIcon(server: Server): Promise<Image> {
   }
   let image: Image;
   if (server == Server.tw) {
-    image = await loadImageFromPath(path.join(assetsRootPath, 'tw.png'));
+    image = await loadImageFromPath(serverResourceRepository.getTwIconPath());
   } else {
-    const iconSvgBuffer = await downloadFileCache(
-      `${bestdoriUrl}/res/icon/${Server[server]}.svg`,
+    const iconSvgBuffer = await serverResourceRepository.getIconSvgBuffer(
+      Server[server],
     );
     const iconPngBuffer = await convertSvgToPngBuffer(iconSvgBuffer);
     image = await loadImage(iconPngBuffer);

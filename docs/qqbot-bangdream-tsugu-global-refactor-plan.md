@@ -14,7 +14,7 @@
 ## 当前事实
 
 - Tsugu 源码目录：`src/qqbot/plugins/bangDream/tsugu`
-- TS 文件：92
+- TS 文件：初始基线 92；当前 `tsugu` 源码 124
 - 函数节点：481，其中稳定函数 410，匿名/内联回调 71
 - 源码 JSDoc：稳定函数 410/410 已覆盖
 - 变量声明：1896
@@ -350,6 +350,8 @@ export interface TsuguHook {
 - 卡牌详情页已接入 `DetailBlockBuilder`，卡牌标题、插画、基础字段、缩略图和演出缩略图不再手写数组与分割线；`/查卡 472` 本地 smoke 输出非空长图。
 - `scripts/bangdream-render-smoke.ps1` 已固化图片 smoke 完成判定：先删除旧目标图，轮询 stdout 成功 JSON 和新图片文件；如果 Tsugu 后台 handle 导致 Node 未自然退出，则在图片落盘后清理本次进程并返回成功，避免已成功出图仍卡到超时。
 - 线上 `/qqbot/command/test` smoke 已固化为先按 `operationKey` 查询启用命令、传 `commandId`，并保留完整命令文本；避免默认 `preview` selfId 未绑定命令时误报“未匹配到命令”。
+- 已新增 `render-blocks/song-chart-preview-spec.ts`，把谱面 BPM 时间计算、双押识别、滑条拆分、音符排序、展示/计数音符分类、难度颜色和布局规格从 `song-chart-preview.ts` 拆成可测纯策略；绘制文件改为消费 `createSongChartPreviewModel`，只保留资源加载和 canvas 绘制。
+- 已新增 `song-chart-preview-spec.spec.ts`，覆盖 BPM 变速时间、十六分单点、双押、滑条 bar/tick/end、布局列数和音符分类；本地生成 `song-chart-preview-spec-136-expert.jpg`，验证谱面预览重构后图片输出非空且视觉结构正常。
 
 ### Phase 6：策略 policy 和时间/档线规则
 

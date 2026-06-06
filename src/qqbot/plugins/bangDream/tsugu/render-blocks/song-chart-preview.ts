@@ -5,6 +5,15 @@ import {
   getBangDreamAssetPath,
 } from '@/qqbot/plugins/bangDream/tsugu/runtime/asset-manifest';
 import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
+import {
+  BANGDREAM_SONG_CHART_DIFFICULTY_COLORS,
+  BANGDREAM_SONG_CHART_PREVIEW_SPEC,
+  BestdoriNote,
+  createSongChartPreviewModel,
+  isSongChartCountLineNoteType,
+  PreviewLayout,
+  PreviewNote,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/song-chart-preview-spec';
 
 interface BestdoriPreviewPayload {
   id: number;
@@ -14,49 +23,6 @@ interface BestdoriPreviewPayload {
   diff: string;
   level: number;
   cover: string | Buffer;
-}
-
-interface BestdoriConnection {
-  beat: number;
-  lane: number;
-  time?: number;
-  skill?: boolean;
-  flick?: boolean;
-  hidden?: boolean;
-}
-
-interface BestdoriNote {
-  type: string;
-  beat: number;
-  lane?: number;
-  time?: number | number[];
-  bpm?: number;
-  connections?: BestdoriConnection[];
-  skill?: boolean;
-  flick?: boolean;
-  direction?: 'Left' | 'Right';
-  width?: number;
-  hidden?: boolean;
-}
-
-type PreviewNote = Omit<BestdoriNote, 'time' | 'lane'> & {
-  type: string;
-  time: number | number[];
-  lane: number | number[];
-};
-
-interface PreviewLayout {
-  infoAreaWidth: number;
-  laneWidth: number;
-  splitLineWidth: number;
-  blockDistance: number;
-  heightPerSecond: number;
-  originalWidth: number;
-  chartLength: number;
-  secondsPerCol: number;
-  width: number;
-  height: number;
-  colCount: number;
 }
 
 const OFFSET = 8;
@@ -91,378 +57,6 @@ const NOTE_IMAGE_ASSET_KEYS: Record<
   Skill: 'songChartNoteSkill',
   Tick: 'songChartNoteTick',
 };
-const DISPLAY_NOTE_TYPES = [
-  'Single',
-  'SingleOff',
-  'Skill',
-  'Flick',
-  'Directional',
-  'Long',
-];
-const COUNT_LINE_NOTE_TYPES = [
-  'Single',
-  'SingleOff',
-  'Flick',
-  'Long',
-  'Skill',
-  'Tick',
-  'Directional',
-];
-const DIFFICULTY_COLOR_LIST: Record<string, string> = {
-  easy: 'rgb(87, 192, 201)',
-  normal: 'rgb(138, 201, 87)',
-  hard: 'rgb(239, 161, 25)',
-  expert: 'rgb(199, 96, 96)',
-  special: 'rgb(195, 96, 199)',
-};
-
-/**
- * 在图片布局层中按节拍排序 BPM 时间点并写入累计时间。
- *
- * @param timepoints - BPM 时间点列表。
- * @returns 处理后的列表。
- */
-function sortTimepoints(timepoints: BestdoriNote[]): BestdoriNote[] {
-  timepoints.sort((a, b) => a.beat - b.beat);
-  for (let i = 0; i < timepoints.length; i++) {
-    const current = timepoints[i];
-    if (i === 0) {
-      current.time = 0;
-      continue;
-    }
-
-    const previous = timepoints[i - 1];
-    current.time =
-      (previous.time as number) +
-      (current.beat - previous.beat) * (60 / previous.bpm);
-  }
-  return timepoints;
-}
-
-/**
- * 在图片布局层中用二分查找定位节拍所在的 BPM 时间点。
- *
- * @param timepoints - BPM 时间点列表。
- * @param beat - 谱面节拍位置。
- * @returns 处理结果。
- */
-function findTimepointAtBeat(
-  timepoints: BestdoriNote[],
-  beat: number,
-): BestdoriNote {
-  let left = 0;
-  let right = timepoints.length - 1;
-  let result = timepoints[0];
-
-  while (left <= right) {
-    const mid = Math.floor((left + right) / 2);
-    if (timepoints[mid].beat > beat) {
-      right = mid - 1;
-      continue;
-    }
-    result = timepoints[mid];
-    left = mid + 1;
-  }
-
-  return result;
-}
-
-/**
- * 在图片布局层中根据 BPM 时间点计算谱面音符时间。
- *
- * @param timepoints - BPM 时间点列表。
- * @param beat - 谱面节拍位置。
- * @returns 计算后的数值。
- */
-function getNoteTime(timepoints: BestdoriNote[], beat: number): number {
-  const timepoint = findTimepointAtBeat(timepoints, beat);
-  return (
-    (timepoint.time as number) + (60 / timepoint.bpm) * (beat - timepoint.beat)
-  );
-}
-
-/**
- * 在图片布局层中为谱面音符写入实际时间。
- *
- * @param chart - 谱面音符数据。
- * @returns 处理后的列表。
- */
-function assignChartTimes(chart: BestdoriNote[]): BestdoriNote[] {
-  const timepoints = sortTimepoints(
-    chart.filter((note) => note.type === 'BPM'),
-  );
-
-  for (const note of chart) {
-    if (note.type === 'Long' || note.type === 'Slide') {
-      for (const connection of note.connections ?? []) {
-        connection.time = getNoteTime(timepoints, connection.beat);
-      }
-      continue;
-    }
-    if (note.type !== 'BPM') {
-      note.time = getNoteTime(timepoints, note.beat);
-    }
-  }
-
-  return timepoints;
-}
-
-/**
- * 在图片布局层中为同拍音符补充双押标记。
- *
- * @param notes - 谱面音符列表。
- * @param beat - 谱面节拍位置。
- * @param time - 谱面时间点。
- * @param lane - 轨道位置。
- */
-function addSimNote(
-  notes: PreviewNote[],
-  beat: number,
-  time: number,
-  lane: number,
-): void {
-  for (const note of notes) {
-    if (note.beat === beat && note.lane === lane) {
-      continue;
-    }
-    if (
-      ['Single', 'Flick', 'Skill', 'Long', 'Directional'].includes(note.type) &&
-      note.beat === beat
-    ) {
-      notes.push({
-        type: 'Sim',
-        beat,
-        time,
-        lane: [note.lane as number, lane].sort((a, b) => a - b),
-      });
-    }
-  }
-}
-
-/**
- * 在图片布局层中识别单点音符的展示类型。
- *
- * @param note - 谱面音符。
- * @returns 格式化后的文本。
- */
-function getSingleNoteType(note: BestdoriNote): string {
-  if (note.flick) {
-    return 'Flick';
-  }
-  if (note.skill) {
-    return 'Skill';
-  }
-  if (note.beat % 0.5 !== 0) {
-    return 'SingleOff';
-  }
-  return 'Single';
-}
-
-/**
- * 在图片布局层中把滑条连接点拆成可绘制音符。
- *
- * @param notes - 谱面音符列表。
- * @param note - 谱面音符。
- */
-function pushSlideNotes(notes: PreviewNote[], note: BestdoriNote): void {
-  const barTime: number[] = [];
-  const lane: number[] = [];
-  const connections = note.connections ?? [];
-
-  for (let i = 0; i < connections.length; i++) {
-    const tick = connections[i];
-    const time = tick.time;
-    const firstTick = i === 0;
-    const lastTick = i === connections.length - 1;
-
-    barTime.push(time);
-    lane.push(tick.lane);
-
-    if (!firstTick) {
-      notes.push({
-        type: 'Bar',
-        beat: tick.beat,
-        time: [barTime[0], barTime[1]],
-        lane: [lane[0], lane[1]],
-      });
-    }
-
-    if (firstTick || lastTick) {
-      notes.push({
-        ...tick,
-        type: firstTick
-          ? tick.skill
-            ? 'Skill'
-            : 'Long'
-          : tick.flick
-            ? 'Flick'
-            : tick.skill
-              ? 'Skill'
-              : 'Long',
-        time,
-        lane: tick.lane,
-      });
-      addSimNote(notes, tick.beat, time, tick.lane);
-      continue;
-    }
-
-    lane.shift();
-    barTime.shift();
-    if (!tick.hidden) {
-      notes.push({ ...tick, type: 'Tick', time, lane: tick.lane });
-    }
-  }
-}
-
-/**
- * 在图片布局层中把可游玩音符转换为预览音符。
- *
- * @param notes - 谱面音符列表。
- * @param note - 谱面音符。
- */
-function pushPlayableNote(notes: PreviewNote[], note: BestdoriNote): void {
-  if (note.type === 'Single') {
-    const typedNote = {
-      ...note,
-      type: getSingleNoteType(note),
-      time: note.time as number,
-      lane: note.lane,
-    } as PreviewNote;
-    notes.push(typedNote);
-    addSimNote(notes, note.beat, typedNote.time as number, note.lane);
-    return;
-  }
-
-  if (note.type === 'Directional') {
-    notes.push({
-      ...note,
-      time: note.time as number,
-      lane: note.lane,
-    } as PreviewNote);
-    addSimNote(notes, note.beat, note.time as number, note.lane);
-  }
-}
-
-/**
- * 在图片布局层中获取Sort轨道。
- *
- * @param note - 谱面音符。
- * @returns 计算后的数值。
- */
-function getSortLane(note: PreviewNote): number {
-  return Array.isArray(note.lane) ? note.lane[0] : note.lane;
-}
-
-/**
- * 在图片布局层中按时间和轨道排序预览音符。
- *
- * @param notes - 谱面音符列表。
- * @returns 处理后的列表。
- */
-function sortPreviewNotes(notes: PreviewNote[]): PreviewNote[] {
-  /**
-   * 在图片布局层中处理类型Sort。
-   *
-   * @param type - 数据类型或匹配类型。
-   * @returns 计算后的数值。
-   */
-  const typeSort = (type: string): number => ({ Bar: -2, Sim: -1 })[type] || 0;
-  notes.sort((a, b) => {
-    const typeSortResult = typeSort(a.type) - typeSort(b.type);
-    if (typeSortResult !== 0) {
-      return typeSortResult;
-    }
-    if (a.time !== b.time) {
-      return (a.time as number) - (b.time as number);
-    }
-    return getSortLane(a) - getSortLane(b);
-  });
-  return notes;
-}
-
-/**
- * 在图片布局层中把 Bestdori 谱面转换为预览音符列表。
- *
- * @param chart - 谱面音符数据。
- * @returns 处理后的列表。
- */
-function createPreviewNotes(chart: BestdoriNote[]): PreviewNote[] {
-  const notes: PreviewNote[] = [];
-
-  for (const note of chart) {
-    if (note.type === 'Slide' || note.type === 'Long') {
-      pushSlideNotes(notes, note);
-      continue;
-    }
-    if (note.type === 'BPM') {
-      notes.push(note as PreviewNote);
-      continue;
-    }
-    pushPlayableNote(notes, note);
-  }
-
-  return sortPreviewNotes(notes);
-}
-
-/**
- * 在图片布局层中根据谱面长度创建预览布局参数。
- *
- * @param notes - 谱面音符列表。
- * @returns 处理结果。
- */
-function createPreviewLayout(notes: PreviewNote[]): PreviewLayout {
-  const infoAreaWidth = 240;
-  const laneWidth = 32;
-  const splitLineWidth = 2;
-  const blockDistance = 72;
-  const heightPerSecond = 216;
-  const displayNotes = notes.filter((note) =>
-    DISPLAY_NOTE_TYPES.includes(note.type),
-  );
-  const chartLength = Math.ceil(
-    (displayNotes[displayNotes.length - 1].time as number) + 0.25,
-  );
-  const minHeight = 500;
-  const originalWidth = blockDistance * 2 + laneWidth * 7;
-  const originalHeight = heightPerSecond * chartLength;
-  let width = infoAreaWidth + originalWidth;
-  let height = originalHeight;
-  let colCount = 1;
-
-  while (width / height < 16 / 9) {
-    if (width / height > 4 / 3) {
-      break;
-    }
-    if (Math.ceil(originalHeight / (colCount + 1)) < minHeight) {
-      break;
-    }
-    colCount++;
-
-    const newWidth = infoAreaWidth + originalWidth * colCount;
-    const newHeight = originalHeight / colCount;
-    if (newHeight < minHeight) {
-      break;
-    }
-
-    width = newWidth;
-    height = newHeight;
-  }
-
-  return {
-    infoAreaWidth,
-    laneWidth,
-    splitLineWidth,
-    blockDistance,
-    heightPerSecond,
-    originalWidth,
-    chartLength,
-    secondsPerCol: chartLength / colCount,
-    width,
-    height,
-    colCount,
-  };
-}
-
 /**
  * 在图片布局层中加载谱面预览所需音符贴图。
  *
@@ -574,7 +168,7 @@ function drawBaseInfo(
   const coverWidth = layout.infoAreaWidth - 16;
   ctx.save();
   ctx.fillStyle =
-    DIFFICULTY_COLOR_LIST[diff] ??
+    BANGDREAM_SONG_CHART_DIFFICULTY_COLORS[diff] ??
     BANGDREAM_RENDER_THEME.color.chartDifficultyFallback;
   ctx.fillRect(8 + coverWidth - 116, 8 + coverWidth - 12, 128, 24);
   ctx.fillStyle = BANGDREAM_RENDER_THEME.color.chartText;
@@ -596,7 +190,8 @@ function drawTracks(ctx: any, layout: PreviewLayout): void {
     ctx.save();
     const x =
       layout.infoAreaWidth + i * layout.originalWidth + layout.blockDistance;
-    const w = layout.laneWidth * 7;
+    const w =
+      layout.laneWidth * BANGDREAM_SONG_CHART_PREVIEW_SPEC.laneCount;
     const grd = ctx.createLinearGradient(
       x,
       0,
@@ -658,7 +253,8 @@ function drawBeatLines(
       }
       const currentTime = (bpmNote.time as number) + beat * (60 / bpmNote.bpm);
       const { x, y } = getTimePosition(layout, currentTime);
-      const w = 7 * layout.laneWidth;
+      const w =
+        BANGDREAM_SONG_CHART_PREVIEW_SPEC.laneCount * layout.laneWidth;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(x, y);
@@ -706,13 +302,13 @@ function drawCountAndBpmLines(
   notes: PreviewNote[],
 ): void {
   let count = 0;
-  const w = 7 * layout.laneWidth;
+  const w = BANGDREAM_SONG_CHART_PREVIEW_SPEC.laneCount * layout.laneWidth;
 
   for (const note of notes) {
     const time = note.time as number;
     const { x, y } = getTimePosition(layout, time);
 
-    if (COUNT_LINE_NOTE_TYPES.includes(note.type)) {
+    if (isSongChartCountLineNoteType(note.type)) {
       count++;
       if (count % 50 !== 0) {
         continue;
@@ -955,9 +551,7 @@ export async function drawBestdoriPreview(
   payload: BestdoriPreviewPayload,
   chart: BestdoriNote[],
 ): Promise<Canvas> {
-  assignChartTimes(chart);
-  const notes = createPreviewNotes(chart);
-  const layout = createPreviewLayout(notes);
+  const { layout, notes } = createSongChartPreviewModel(chart);
   const canvas = new Canvas(layout.width, layout.height);
   const ctx = canvas.getContext('2d');
   const [noteImages, coverImg] = await Promise.all([

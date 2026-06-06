@@ -386,6 +386,7 @@ export interface TsuguHook {
 - 线上 smoke 暴露 `/查试炼 310 -m` 将所有列横向拼成一张巨大 canvas 会触发 Pod `OOMKilled exit=137`；已改为按小批次绘制 stage、边分列边输出多张 CQ 图片，不再创建最终横向巨图，普通版和 meta 版均拆成 5 张输出，同时避免完全串行导致冷缓存首条命令耗时过长。
 - 已新增 `event-stage-spec.spec.ts`，覆盖试炼歌曲行尺寸、类型顶部文字规格、换列判断和按列高拆分算法；本地生成 `event-stage-split-310*.jpg`、`event-stage-split-310-meta*.jpg`，验证 `/查试炼 310` 与 `/查试炼 310 -m` 图片输出正常。
 - 已新增 `render-blocks/list-player-card-icon-spec.ts`，收口玩家详情主卡组展示顺序、默认行高、文本字号比例、卡牌间距比例和卡牌图标可见性标记；`list-player-card-icon-list.ts` 改为消费 spec，主卡组渲染顺序和输出结构保持不变；`list-player-card-icon-spec.spec.ts` 覆盖历史卡牌顺序、缺失条目跳过和字号/间距计算，本地 `/查玩家 26591455 jp` 图片 smoke 输出非空。
+- 已新增 `render-blocks/list-card-icon-spec.ts`，收口通用卡牌图标列表默认行高、文本字号比例、卡牌间距比例、默认可见性标记和历史排序比较器；`list-card-icon-list.ts` 改为消费 spec，卡牌图标列表排序和输出结构保持不变；`list-card-icon-spec.spec.ts` 覆盖稀有度排序、优先卡牌类型排序、普通卡按 ID 排序和字号/间距计算，本地 `/查卡 472` 图片 smoke 输出非空。
 - smoke/Jenkins/远程调试卡点继续按已固化规则处理：同一卡点第二次尝试前必须改变可验证变量；Jenkins 查询 URL 含方括号时用 `curl -g` 或改查 Jenkins home；线上图片 smoke 必须查询 `commandId`、拉回图片、展示图片、查日志并清理本轮临时目录；PowerShell 双引号 here-string 中不要写 JS `${...}` 模板字面量，避免被 PowerShell 提前插值；smoke 没有真实图片落盘时必须失败。
 
 ### Phase 6：策略 policy 和时间/档线规则

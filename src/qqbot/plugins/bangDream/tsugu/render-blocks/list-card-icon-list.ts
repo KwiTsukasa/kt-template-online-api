@@ -2,7 +2,12 @@ import { drawList } from './list-frame';
 import { Canvas } from 'skia-canvas';
 import { drawCardIcon } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/card-art';
 import { Card } from '@/qqbot/plugins/bangDream/tsugu/models/card';
-import { BANGDREAM_CARD_PRIORITY_TYPES } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import {
+  BANGDREAM_CARD_ICON_LIST_SPEC,
+  getCardIconListSpacing,
+  getCardIconListTextSize,
+  sortCardIconListCards,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-card-icon-spec';
 
 interface CardIconInListOptions {
   key?: string;
@@ -22,33 +27,15 @@ interface CardIconInListOptions {
 export async function drawCardListInList({
   key,
   cardList,
-  cardIdVisible = false,
-  skillTypeVisible = true,
-  cardTypeVisible = true,
+  cardIdVisible = BANGDREAM_CARD_ICON_LIST_SPEC.card.showCardId,
+  skillTypeVisible = BANGDREAM_CARD_ICON_LIST_SPEC.card.showSkillType,
+  cardTypeVisible = BANGDREAM_CARD_ICON_LIST_SPEC.card.showCardType,
   trainingStatus,
-  lineHeight = 200,
+  lineHeight = BANGDREAM_CARD_ICON_LIST_SPEC.list.defaultLineHeight,
 }: CardIconInListOptions) {
-  //cardList排序，稀有度高的在前面，其中cardId低的在前面
-  const typeList: readonly string[] = BANGDREAM_CARD_PRIORITY_TYPES;
-  cardList.sort((a, b) => {
-    if (a.rarity == b.rarity) {
-      if (typeList.includes(a.type) && !typeList.includes(b.type)) {
-        return -1;
-      } else if (!typeList.includes(a.type) && typeList.includes(b.type)) {
-        return 1;
-      } else if (
-        typeList.indexOf(a.type) != -1 &&
-        typeList.indexOf(b.type) != -1
-      ) {
-        return typeList.indexOf(a.type) - typeList.indexOf(b.type);
-      }
-
-      return a.cardId - b.cardId;
-    }
-    return b.rarity - a.rarity;
-  });
-  const textSize = (lineHeight / 200) * 180;
-  const spacing = (lineHeight / 200) * 13;
+  sortCardIconListCards(cardList);
+  const textSize = getCardIconListTextSize(lineHeight);
+  const spacing = getCardIconListSpacing(lineHeight);
   const list: Array<Canvas> = [];
   for (let i = 0; i < cardList.length; i++) {
     const element: Card = cardList[i];

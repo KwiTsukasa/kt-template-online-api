@@ -49,18 +49,22 @@ import { Canvas, Image } from 'skia-canvas';
 import { Band } from '@/qqbot/plugins/bangDream/tsugu/models/band';
 import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
 import { createHorizontalSeparatorSpec } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/layout-spec';
+import {
+  BANGDREAM_DETAIL_BLOCK_SPEC,
+  getRelativeMetaPercent,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/detail-block-spec';
 
 const songDetailSeparator = drawDottedLine(
   createHorizontalSeparatorSpec({
-    width: 365,
-    height: 20,
-    endX: 360,
+    width: BANGDREAM_DETAIL_BLOCK_SPEC.songDetail.detailSeparator.width,
+    height: BANGDREAM_DETAIL_BLOCK_SPEC.songDetail.detailSeparator.height,
+    endX: BANGDREAM_DETAIL_BLOCK_SPEC.songDetail.detailSeparator.endX,
   }),
 );
 
 const songMetaSeparator = drawDottedLine(
   createHorizontalSeparatorSpec({
-    height: 10,
+    height: BANGDREAM_DETAIL_BLOCK_SPEC.songDetail.metaSeparatorHeight,
   }),
 );
 
@@ -174,18 +178,19 @@ export async function drawSongDataBlock(
   text?: string,
   displayedServerList: Server[] = globalDefaultServer,
 ) {
+  const spec = BANGDREAM_DETAIL_BLOCK_SPEC.songDetail;
   const server = getServerByPriority(song.publishedAt, displayedServerList);
   const songJacketCanvas = resizeImage({
     image: await song.getSongJacketImage(),
-    widthMax: 400,
+    widthMax: spec.jacketMaxWidth,
   });
   const songName = song.musicTitle[server];
   const bandName = new Band(song.bandId).bandName[server];
   const songTipsName = song.getTagName();
   const songNameImage = drawText({
     text: songName,
-    textSize: 40,
-    maxWidth: 365,
+    textSize: spec.titleTextSize,
+    maxWidth: spec.textMaxWidth,
   });
   let songDetail = `${bandName}\n${songTipsName}\nID:${song.songId}`;
   if (text != undefined) {
@@ -193,23 +198,31 @@ export async function drawSongDataBlock(
   }
   const songDetailImage = drawText({
     text: songDetail,
-    textSize: 30,
-    maxWidth: 365,
+    textSize: spec.detailTextSize,
+    maxWidth: spec.textMaxWidth,
   });
-  const difficultyImage = drawDifficultyList(song, 60, 10);
+  const difficultyImage = drawDifficultyList(
+    song,
+    spec.difficultyHeight,
+    spec.difficultyGap,
+  );
   const rightCanvas = stackImage([
     songNameImage,
     songDetailSeparator,
     songDetailImage,
-    new Canvas(1, 60),
+    new Canvas(1, spec.rightBottomGapHeight),
   ]);
   const canvas = stackImageHorizontal([
     songJacketCanvas,
-    new Canvas(35, 1),
+    new Canvas(spec.horizontalGapWidth, 1),
     rightCanvas,
   ]);
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(difficultyImage, 435, canvas.height - difficultyImage.height);
+  ctx.drawImage(
+    difficultyImage,
+    spec.difficultyX,
+    canvas.height - difficultyImage.height,
+  );
   return drawDataBlock({ list: [canvas] });
 }
 
@@ -250,9 +263,10 @@ export async function drawSongMetaListDataBlock(
       const tempSongMetaRanking = songMetaRanking[server].data;
       for (let j = 0; j < tempSongMetaRanking.length; j++) {
         if (tempSongMetaRanking[j].difficulty == difficultyId) {
-          let percent =
-            (tempSongMetaRanking[j].meta / metaRanking[server].maxMeta) * 100;
-          percent = Math.round(percent * 100) / 100;
+          const percent = getRelativeMetaPercent(
+            tempSongMetaRanking[j].meta,
+            metaRanking[server].maxMeta,
+          );
           text += `${serverNameFullList[server]}: ${percent}% #${tempSongMetaRanking[j].rank + 1} `;
         }
       }
@@ -280,14 +294,14 @@ export async function drawMetaListDataBlock(
   const metaRanking = getMetaRanking(withFever, server);
   const maxMeta = metaRanking[0].meta;
   const list: Array<Image | Canvas> = [];
-  const max = 50;
-  for (let i = 0; i < max; i++) {
+  const maxRows = BANGDREAM_DETAIL_BLOCK_SPEC.metaList.maxRows;
+  for (let i = 0; i < maxRows; i++) {
     if (i >= metaRanking.length) {
       break;
     }
     const song = new Song(metaRanking[i].songId);
     const difficultyId = metaRanking[i].difficulty;
-    const percent = (metaRanking[i].meta / maxMeta) * 100;
+    const percent = getRelativeMetaPercent(metaRanking[i].meta, maxMeta);
     list.push(
       await drawSongInList(
         song,
@@ -312,8 +326,9 @@ export async function drawCharacterHalfBlock(
   character: Character,
   displayedServerList: Server[] = globalDefaultServer,
 ): Promise<Canvas> {
-  const width = 250;
-  const height = 800;
+  const spec = BANGDREAM_DETAIL_BLOCK_SPEC.characterHalf;
+  const width = spec.width;
+  const height = spec.height;
   const canvas = new Canvas(width, height);
   const ctx = canvas.getContext('2d');
   await character.initFull(false);
@@ -324,32 +339,32 @@ export async function drawCharacterHalfBlock(
     drawRoundedRect({
       width,
       height,
-      radius: 20,
+      radius: spec.radius,
       color,
-      opacity: 0.25,
+      opacity: spec.overlayOpacity,
     }),
     0,
     0,
   );
   const characterIllustration = resizeImage({
     image: await character.getIllustration(),
-    heightMax: height - 20,
+    heightMax: height - spec.illustrationPaddingHeight,
   });
 
   ctx.drawImage(
     characterIllustration,
     width / 2 - characterIllustration.width / 2,
-    2,
+    spec.illustrationInsetY,
   );
   ctx.drawImage(
     drawRoundedRect({
       width,
       height,
-      radius: 20,
-      opacity: 1,
+      radius: spec.radius,
+      opacity: spec.opaqueOpacity,
       color: color + '00',
       strokeColor: color,
-      strokeWidth: 4,
+      strokeWidth: spec.strokeWidth,
     }),
     0,
     0,
@@ -357,13 +372,13 @@ export async function drawCharacterHalfBlock(
   ctx.drawImage(
     drawRoundedRect({
       width,
-      height: 100,
-      radius: 20,
-      opacity: 1,
+      height: spec.footerHeight,
+      radius: spec.radius,
+      opacity: spec.opaqueOpacity,
       color,
     }),
     0,
-    height - 100,
+    height - spec.footerHeight,
   );
 
   const list: Canvas[] = [];
@@ -373,19 +388,19 @@ export async function drawCharacterHalfBlock(
   );
   const nameTextImage = drawText({
     text: character.characterName[server],
-    textSize: 40,
+    textSize: spec.nameTextSize,
     color: BANGDREAM_RENDER_THEME.color.surface,
     maxWidth: width,
   });
   list.push(drawImageListCenter([nameTextImage], width));
   const idTextImage = drawText({
     text: `ID: ${character.characterId}`,
-    textSize: 30,
+    textSize: spec.idTextSize,
     color: BANGDREAM_RENDER_THEME.color.surface,
     maxWidth: width,
   });
   list.push(drawImageListCenter([idTextImage], width));
-  ctx.drawImage(stackImage(list), 0, height - 100);
+  ctx.drawImage(stackImage(list), 0, height - spec.footerHeight);
   return canvas;
 }
 
@@ -398,20 +413,21 @@ export async function drawCharacterHalfBlock(
 export async function drawPlayerDetailBlockWithIllustration(
   player: Player,
 ): Promise<Canvas> {
+  const spec = BANGDREAM_DETAIL_BLOCK_SPEC.playerDetail;
   const list: Array<Canvas | Image> = [];
   const playerText = drawText({
     text: player.profile.userName,
     maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
-    textSize: 75,
+    textSize: spec.nameTextSize,
   });
   list.push(drawImageListCenter([playerText]));
   const levelText = drawText({
     text: `等级 ${player.profile.rank}`,
     maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
-    textSize: 35,
+    textSize: spec.infoTextSize,
   });
   list.push(drawImageListCenter([levelText]));
-  list.push(new Canvas(1, 25));
+  list.push(new Canvas(1, spec.spacerHeight));
 
   const degreeImageList: Array<Canvas | Image> = [];
   const userProfileDegreeMap = player.profile.userProfileDegreeMap.entries;
@@ -420,19 +436,19 @@ export async function drawPlayerDetailBlockWithIllustration(
     degreeImageList.push(
       await drawDegree(new Degree(tempDegree.degreeId), player.server),
     );
-    degreeImageList.push(new Canvas(20, 1));
+    degreeImageList.push(new Canvas(spec.degreeGapWidth, 1));
   }
   degreeImageList.pop();
   list.push(drawImageListCenter(degreeImageList));
-  list.push(new Canvas(1, 25));
+  list.push(new Canvas(1, spec.spacerHeight));
 
   const introductionText = drawText({
     text: player.profile.introduction,
     maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
-    textSize: 35,
+    textSize: spec.infoTextSize,
   });
   list.push(drawImageListCenter([introductionText]));
-  list.push(new Canvas(1, 25));
+  list.push(new Canvas(1, spec.spacerHeight));
 
   const userId = player.profile.publishUserIdFlg
     ? player.profile.userId.toString()
@@ -440,10 +456,10 @@ export async function drawPlayerDetailBlockWithIllustration(
   const idText = drawTextWithImages({
     content: [await getIcon(player.server), userId],
     maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
-    textSize: 35,
+    textSize: spec.infoTextSize,
   });
   list.push(drawImageListCenter([idText]));
-  const dataBlock = drawDataBlock({ list, opacity: 1 });
+  const dataBlock = drawDataBlock({ list, opacity: spec.dataBlockOpacity });
 
   const userIllustrationData = player.profile.userIllustration;
   const illustrationCard = new Card(userIllustrationData.cardId);
@@ -451,10 +467,19 @@ export async function drawPlayerDetailBlockWithIllustration(
     userIllustrationData.trainingStatus,
   );
   const titleImage = drawTitle('查询', '玩家信息');
-  const canvas = new Canvas(1000, 900 + dataBlock.height);
+  const canvas = new Canvas(
+    spec.illustrationWidth,
+    spec.dataBlockY + dataBlock.height,
+  );
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(illustrationImage, 0, 0, 1000, 1000);
+  ctx.drawImage(
+    illustrationImage,
+    0,
+    0,
+    spec.illustrationWidth,
+    spec.illustrationHeight,
+  );
   ctx.drawImage(titleImage, 0, 0);
-  ctx.drawImage(dataBlock, 0, 900);
+  ctx.drawImage(dataBlock, 0, spec.dataBlockY);
   return canvas;
 }

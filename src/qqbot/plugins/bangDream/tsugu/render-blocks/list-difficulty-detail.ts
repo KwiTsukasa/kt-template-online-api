@@ -7,6 +7,12 @@ import { Canvas, Image } from 'skia-canvas';
 import { drawTextWithImages } from '@/qqbot/plugins/bangDream/tsugu/canvas/text';
 import { drawList } from './list-frame';
 import { Player } from '@/qqbot/plugins/bangDream/tsugu/models/player';
+import {
+  createDifficultyDetailBadgeSpec,
+  createDifficultyDetailItemLayout,
+  createDifficultyDetailListFrameSpec,
+  createDifficultyDetailTextSpec,
+} from './list-difficulty-detail-spec';
 
 interface drawDifficultyDetailInListOptions {
   [difficultyId: number]: Array<Canvas | Image | string>;
@@ -25,37 +31,35 @@ function DifficultyDetailInList(
   const difficultyAndContentList: Array<Canvas> = [];
   for (const i in DifficultyDetailInListOptions) {
     const content = DifficultyDetailInListOptions[i];
-    const maxWidth = 152;
-    const logoWidth = 140;
-    const tempBandIcon = drawRoundedRectWithText({
-      text: difficultyNameList[i].toUpperCase(),
-      width: logoWidth,
-      textSize: 30,
-      radius: 5,
-      color: difficultyColorList[i],
-    });
+    const tempBandIcon = drawRoundedRectWithText(
+      createDifficultyDetailBadgeSpec(
+        difficultyNameList[i],
+        difficultyColorList[i],
+      ),
+    );
 
+    const textSpec = createDifficultyDetailTextSpec();
     const tempBandRankText = drawTextWithImages({
       content,
-      maxWidth: maxWidth,
-      lineHeight: 40,
+      maxWidth: textSpec.maxWidth,
+      lineHeight: textSpec.lineHeight,
     });
-    const canvas = new Canvas(maxWidth, tempBandRankText.height + 50);
+    const layout = createDifficultyDetailItemLayout(tempBandRankText);
+    const canvas = new Canvas(layout.canvasWidth, layout.canvasHeight);
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(tempBandIcon, (maxWidth - logoWidth) / 2, 0);
-    ctx.drawImage(
-      tempBandRankText,
-      maxWidth / 2 - tempBandRankText.width / 2,
-      50,
-    );
+    ctx.drawImage(tempBandIcon, layout.badgeX, layout.badgeY);
+    ctx.drawImage(tempBandRankText, layout.textX, layout.textY);
     difficultyAndContentList.push(canvas);
   }
+  const frameSpec = createDifficultyDetailListFrameSpec(
+    difficultyAndContentList?.[0],
+  );
   const difficultyAndContentListImage = drawList({
     key,
     content: difficultyAndContentList,
-    spacing: 0,
-    lineHeight: difficultyAndContentList?.[0].height,
-    textSize: difficultyAndContentList?.[0].height,
+    spacing: frameSpec.spacing,
+    lineHeight: frameSpec.lineHeight,
+    textSize: frameSpec.textSize,
   });
   return difficultyAndContentListImage;
 }

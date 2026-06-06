@@ -389,6 +389,7 @@ export interface TsuguHook {
 - 已新增 `render-blocks/list-card-icon-spec.ts`，收口通用卡牌图标列表默认行高、文本字号比例、卡牌间距比例、默认可见性标记和历史排序比较器；`list-card-icon-list.ts` 改为消费 spec，卡牌图标列表排序和输出结构保持不变；`list-card-icon-spec.spec.ts` 覆盖稀有度排序、优先卡牌类型排序、普通卡按 ID 排序和字号/间距计算，本地 `/查卡 472` 图片 smoke 输出非空。
 - 已新增 `render-blocks/list-song-spec.ts`，收口歌曲列表单行封面、文本、难度块位置、列表内容宽度、分割线高度和外层行高计算；`list-song.ts` 改为消费 spec，歌曲列表绘制顺序和输出结构保持不变；`list-song-spec.spec.ts` 覆盖单行尺寸、难度块垂直居中和歌曲组列表尺寸，本地 `/查曲 136` 图片 smoke 输出非空。
 - 已新增 `render-blocks/list-difficulty-spec.ts`，收口难度列表默认高度/间距、徽章兜底色、圆形布局和等级文字比例/居中计算；`list-difficulty.ts` 改为消费 spec，难度列表绘制顺序和输出结构保持不变；`list-difficulty-spec.spec.ts` 覆盖列表宽度、条目偏移、徽章颜色、圆形布局和文字居中，本地 `/查曲 136` 图片 smoke 输出非空。
+- 已新增 `render-blocks/list-difficulty-detail-spec.ts`，收口玩家难度详情列表的徽章宽度/字号/圆角、正文宽度/行高、项画布高度和通用列表行高/间距；`list-difficulty-detail.ts` 改为消费 spec，玩家详情里的已通关/Full Combo/All Perfect 难度详情绘制顺序和输出结构保持不变；`list-difficulty-detail-spec.spec.ts` 覆盖徽章参数、正文绘制参数、项布局和列表框架参数，本地 `/查玩家 26591455 jp` 图片 smoke 输出非空。
 - smoke/Jenkins/远程调试卡点继续按已固化规则处理：同一卡点第二次尝试前必须改变可验证变量；Jenkins 查询 URL 含方括号时用 `curl -g` 或改查 Jenkins home；线上图片 smoke 必须查询 `commandId`、拉回图片、展示图片、查日志并清理本轮临时目录；PowerShell 双引号 here-string 中不要写 JS `${...}` 模板字面量，避免被 PowerShell 提前插值；smoke 没有真实图片落盘时必须失败。
 
 ### Phase 6：策略 policy 和时间/档线规则

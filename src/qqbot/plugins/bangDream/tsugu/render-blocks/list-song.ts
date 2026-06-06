@@ -11,8 +11,14 @@ import { drawDifficultyList, drawDifficulty } from './list-difficulty';
 import { globalDefaultServer } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { drawList } from './list-frame';
 import { drawDottedLine } from '@/qqbot/plugins/bangDream/tsugu/canvas/dotted-line';
-import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/theme';
 import { createHorizontalSeparatorSpec } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/layout-spec';
+import {
+  BANGDREAM_SONG_LIST_SPEC,
+  createSongInListLayout,
+  getSongListCanvasHeight,
+  getSongListContentWidth,
+  getSongListFrameLineHeight,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-song-spec';
 
 /**
  * 在图片布局层中绘制歌曲In列表。
@@ -32,21 +38,40 @@ export async function drawSongInList(
   const server = getServerByPriority(song.publishedAt, displayedServerList);
   const songImage = resizeImage({
     image: await song.getSongJacketImage(),
-    widthMax: 80,
-    heightMax: 80,
+    widthMax: BANGDREAM_SONG_LIST_SPEC.item.jacketSourceWidthMax,
+    heightMax: BANGDREAM_SONG_LIST_SPEC.item.jacketSourceHeightMax,
   });
 
-  const canvas = new Canvas(BANGDREAM_RENDER_THEME.layout.contentWidth, 75);
+  const difficultyImage =
+    difficulty == undefined
+      ? drawDifficultyList(
+          song,
+          BANGDREAM_SONG_LIST_SPEC.item.difficultyHeight,
+          BANGDREAM_SONG_LIST_SPEC.item.difficultySpacing,
+        )
+      : drawDifficulty(
+          difficulty,
+          song.difficulty[difficulty].playLevel,
+          BANGDREAM_SONG_LIST_SPEC.item.difficultyHeight,
+        );
+  const layout = createSongInListLayout(difficultyImage);
+  const canvas = new Canvas(layout.canvasWidth, layout.canvasHeight);
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(songImage, 50, 5, 65, 65);
+  ctx.drawImage(
+    songImage,
+    layout.jacketX,
+    layout.jacketY,
+    layout.jacketWidth,
+    layout.jacketHeight,
+  );
   //id
   const idImage = drawText({
     text: song.songId.toString(),
-    textSize: 23,
-    lineHeight: 37.5,
-    maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
+    textSize: layout.textSize,
+    lineHeight: layout.textLineHeight,
+    maxWidth: layout.textMaxWidth,
   });
-  ctx.drawImage(idImage, 0, 0);
+  ctx.drawImage(idImage, layout.idTextX, layout.idTextY);
   //曲名与乐队名
   let fullText = `${song.musicTitle[server]}`;
   if (!text) {
@@ -58,22 +83,13 @@ export async function drawSongInList(
   }
   const textImage = drawText({
     text: fullText,
-    textSize: 23,
-    lineHeight: 37.5,
-    maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,
+    textSize: layout.textSize,
+    lineHeight: layout.textLineHeight,
+    maxWidth: layout.textMaxWidth,
   });
-  ctx.drawImage(textImage, 120, 0);
+  ctx.drawImage(textImage, layout.titleTextX, layout.titleTextY);
 
-  //难度
-  const difficultyImage =
-    difficulty == undefined
-      ? drawDifficultyList(song, 45, 10)
-      : drawDifficulty(difficulty, song.difficulty[difficulty].playLevel, 45);
-  ctx.drawImage(
-    difficultyImage,
-    BANGDREAM_RENDER_THEME.layout.contentWidth - difficultyImage.width,
-    75 / 2 - difficultyImage.height / 2,
-  );
+  ctx.drawImage(difficultyImage, layout.difficultyX, layout.difficultyY);
   return canvas;
 }
 
@@ -92,13 +108,18 @@ export async function drawSongListInList(
   text?: string,
   displayedServerList: Server[] = globalDefaultServer,
 ): Promise<Canvas> {
-  const height: number = 75 * songs.length + 10 * (songs.length - 1);
-  const canvas = new Canvas(760, height);
+  const contentWidth = getSongListContentWidth();
+  const height = getSongListCanvasHeight(songs.length);
+  const canvas = new Canvas(contentWidth, height);
   const ctx = canvas.getContext('2d');
   const x = 0;
   let y = 0;
   const views: Canvas[] = [];
-  const line = drawDottedLine(createHorizontalSeparatorSpec({ height: 10 }));
+  const line = drawDottedLine(
+    createHorizontalSeparatorSpec({
+      height: BANGDREAM_SONG_LIST_SPEC.list.separatorHeight,
+    }),
+  );
   for (let i = 0; i < songs.length; i++) {
     views.push(
       resizeImage({
@@ -108,7 +129,7 @@ export async function drawSongListInList(
           text,
           displayedServerList,
         ),
-        widthMax: 760,
+        widthMax: contentWidth,
       }),
     );
     views.push(line);
@@ -119,10 +140,10 @@ export async function drawSongListInList(
     y += views[i].height;
   }
   return await drawList({
-    key: '歌榜歌曲',
+    key: BANGDREAM_SONG_LIST_SPEC.list.key,
     content: [canvas],
     textSize: canvas.height,
-    lineHeight: canvas.height + 20,
-    spacing: 0,
+    lineHeight: getSongListFrameLineHeight(canvas.height),
+    spacing: BANGDREAM_SONG_LIST_SPEC.list.spacing,
   });
 }

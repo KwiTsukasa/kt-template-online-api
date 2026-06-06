@@ -1,7 +1,6 @@
 import { loadImage, Image } from 'skia-canvas';
-import { downloadFileCache } from '@/qqbot/plugins/bangDream/tsugu/data-clients/asset-cache-client';
-import { bestdoriUrl } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { convertSvgToPngBuffer } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
+import { attributeResourceRepository } from '@/qqbot/plugins/bangDream/tsugu/models/attribute-resource-repository';
 
 const attributeColor = {
   happy: '#ff6600',
@@ -49,9 +48,8 @@ async function getAttributeIcon(attributeName: string): Promise<Image> {
   if (attributeIconCache[attributeName]) {
     return attributeIconCache[attributeName];
   }
-  const iconSvgBuffer = await downloadFileCache(
-    `${bestdoriUrl}/res/icon/${attributeName}.svg`,
-  );
+  const iconSvgBuffer =
+    await attributeResourceRepository.getIconSvgBuffer(attributeName);
   const iconPngBuffer = await convertSvgToPngBuffer(iconSvgBuffer);
   const image = await loadImage(iconPngBuffer);
   attributeIconCache[attributeName] = image;

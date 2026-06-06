@@ -345,6 +345,7 @@ export interface TsuguHook {
 - 已新增 `render-blocks/layout-spec.ts`，统一横向/纵向虚线分割规格，歌曲列表、活动列表、活动详情和通用列表框架不再重复维护分割线宽高/颜色。
 - 已新增 `runtime/asset-manifest.ts`，收口本地 `BG`、`Card`、`Skill`、`SongChart`、字体和标题资源路径；`canvas/text.ts`、`canvas/rect.ts`、`canvas/output.ts`、`canvas/background.ts`、`card-art.ts`、`list-rarity.ts`、`skill-text.ts`、`title.ts`、`song-chart-preview.ts` 已改走 manifest。
 - 已生成查曲、查活动和查谱面 smoke 图片，验证 theme/spec/manifest 第一段迁移后本地图片输出非空，谱面预览资源路径未断。
+- 线上 `/qqbot/command/test` smoke 已固化为先按 `operationKey` 查询启用命令、传 `commandId`，并保留完整命令文本；避免默认 `preview` selfId 未绑定命令时误报“未匹配到命令”。
 
 ### Phase 6：策略 policy 和时间/档线规则
 

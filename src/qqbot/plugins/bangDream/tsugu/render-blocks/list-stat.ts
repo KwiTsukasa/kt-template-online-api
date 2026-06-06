@@ -9,6 +9,11 @@ import {
   limitBreakRankStat,
 } from '@/qqbot/plugins/bangDream/tsugu/models/card';
 import { BANGDREAM_STAT_CONFIG } from '@/qqbot/plugins/bangDream/tsugu/models/bangdream-constants';
+import {
+  BANGDREAM_STAT_LIST_SPEC,
+  createStatLineText,
+  getStatLineBarLayout,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/list-stat-spec';
 
 export const statConfig: Record<string, { color: string; name: string }> =
   BANGDREAM_STAT_CONFIG;
@@ -34,7 +39,12 @@ export async function drawCardStatInList(card: Card) {
       content: [`综合力: ${statTotal} + (${limitBreakstatTotal * 4})`],
     }),
   );
-  list.push(new Canvas(1, 5));
+  list.push(
+    new Canvas(
+      BANGDREAM_STAT_LIST_SPEC.spacer.width,
+      BANGDREAM_STAT_LIST_SPEC.spacer.height,
+    ),
+  );
   list.push(statImage);
   return stackImage(list);
 }
@@ -54,7 +64,12 @@ export async function drawStatInList(stat: Stat) {
       content: [`综合力: ${statTotal}`],
     }),
   );
-  list.push(new Canvas(1, 5));
+  list.push(
+    new Canvas(
+      BANGDREAM_STAT_LIST_SPEC.spacer.width,
+      BANGDREAM_STAT_LIST_SPEC.spacer.height,
+    ),
+  );
   list.push(statImage);
   return stackImage(list);
 }
@@ -72,8 +87,6 @@ async function drawCardStatDivided(
   statTotal: number,
   limitBreakstat?: Stat,
 ): Promise<Canvas> {
-  const widthMax = 800;
-
   /**
    * 在图片布局层中绘制数值线条。
    *
@@ -83,27 +96,33 @@ async function drawCardStatDivided(
    * @returns 渲染或资源结果。
    */
   function drawStatLine(key: string, value: number, total: number): Canvas {
-    const canvas = new Canvas(800, 70);
+    const canvas = new Canvas(
+      BANGDREAM_STAT_LIST_SPEC.line.canvas.width,
+      BANGDREAM_STAT_LIST_SPEC.line.canvas.height,
+    );
     const ctx = canvas.getContext('2d');
-    let text = `${statConfig[key].name}: ${Math.floor(value)}`;
-    if (limitBreakstat) {
-      text += ` + (${limitBreakstat[key] * 4})`;
-    }
+    const text = createStatLineText({
+      label: statConfig[key].name,
+      limitBreakValue: limitBreakstat?.[key],
+      value,
+    });
+    const textSpec = BANGDREAM_STAT_LIST_SPEC.line.text;
     const textImage = drawText({
       text,
-      maxWidth: widthMax,
-      textSize: 30,
-      lineHeight: 30,
+      maxWidth: textSpec.maxWidth,
+      textSize: textSpec.textSize,
+      lineHeight: textSpec.lineHeight,
     });
+    const barLayout = getStatLineBarLayout(value, total);
     const roundedRect = drawRoundedRect({
-      width: ((widthMax * value) / total) * 2,
-      height: 30,
-      radius: 15,
+      width: barLayout.width,
+      height: barLayout.height,
+      radius: barLayout.radius,
       color: statConfig[key].color,
-      strokeWidth: 0,
+      strokeWidth: barLayout.strokeWidth,
     });
-    ctx.drawImage(textImage, 20, 0);
-    ctx.drawImage(roundedRect, 20, 35);
+    ctx.drawImage(textImage, textSpec.x, textSpec.y);
+    ctx.drawImage(roundedRect, barLayout.x, barLayout.y);
     return canvas;
   }
   const list = [];

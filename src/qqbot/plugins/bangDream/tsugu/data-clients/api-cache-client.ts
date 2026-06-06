@@ -4,6 +4,11 @@ import {
   getFileNameFromUrl,
 } from '@/qqbot/plugins/bangDream/tsugu/data-clients/cache-path';
 import { logger } from '@/qqbot/plugins/bangDream/tsugu/runtime/logger';
+import {
+  getCacheClientErrorMessage,
+  isCacheClientNotFound,
+  runWithCacheClientRetry,
+} from '@/qqbot/plugins/bangDream/tsugu/data-clients/cache-client-policy';
 
 /**
  * 在数据下载与缓存层中调用APIAnd缓存Response。
@@ -26,33 +31,24 @@ async function callAPIAndCacheResponse(
   }
   const cacheDir = getCacheDirectory(url);
   const fileName = getFileNameFromUrl(url);
-  for (let attempt = 0; attempt < retryCount; attempt++) {
-    try {
-      const data = await getJsonAndSave(url, cacheDir, fileName, cacheTime);
-      return data;
-    } catch (e) {
-      if (e && e.response && e.response.status === 404) {
-        // 当URL返回404错误后，不再重试，直接抛出错误。
+  return await runWithCacheClientRetry({
+    action: () => getJsonAndSave(url, cacheDir, fileName, cacheTime),
+    onFailure: (attempt, _retryCount, error) => {
+      if (isCacheClientNotFound(error)) {
         logger(
           `API`,
           `URL "${url}" returned 404 Not Found. No more retries will be made.`,
         );
-        throw e;
+        return;
       }
       logger(
         `API`,
-        `Failed to get JSON from "${url}" on attempt ${attempt + 1}. Error: ${e.message}`,
+        `Failed to get JSON from "${url}" on attempt ${attempt}. Error: ${getCacheClientErrorMessage(error)}`,
       );
-      if (attempt === retryCount - 1) {
-        throw e; // Rethrow the error if all retries fail
-      }
-      //等待3秒后重试
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-    }
-  }
-  throw new Error(
-    `Failed to get JSON from "${url}" after ${retryCount} attempts`,
-  );
+    },
+    retryCount,
+    shouldRetry: (error) => !isCacheClientNotFound(error),
+  });
 }
 
 export { callAPIAndCacheResponse };

@@ -5,9 +5,13 @@ import {
   BANGDREAM_TSUGU_ENV_KEYS,
   normalizeBangDreamPositiveInteger,
 } from '@/qqbot/plugins/bangDream/tsugu/runtime/runtime-options';
+import {
+  BANGDREAM_MISSING_URL_CACHE_EXPIRY_MS,
+  getCacheClientErrorMessage,
+  getCacheClientResponseStatus,
+} from '@/qqbot/plugins/bangDream/tsugu/data-clients/cache-client-policy';
 
 const errorUrlCache: { [url: string]: number } = {};
-const ERROR_URL_CACHE_EXPIRY_MS = 12 * 60 * 60 * 1000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 8000;
 
 function getRequestTimeoutMs(): number {
@@ -84,14 +88,14 @@ export async function download(
     }
     return fileBuffer;
   } catch (e) {
-    if (getErrorResponseStatus(e) === 404) {
+    if (getCacheClientResponseStatus(e) === 404) {
       errorUrlCache[url] = Date.now();
     }
-    if (url.includes('.png')) {
+    if (url.includes('.png') || url.includes('.svg')) {
       throw e;
     } else {
       throw new Error(
-        `Failed to download file from "${url}". Error: ${e.message}`,
+        `Failed to download file from "${url}". Error: ${getCacheClientErrorMessage(e)}`,
       );
     }
   }
@@ -102,19 +106,11 @@ function isErrorUrlCacheActive(url: string): boolean {
   if (cachedAt == null) {
     return false;
   }
-  if (Date.now() - cachedAt >= ERROR_URL_CACHE_EXPIRY_MS) {
+  if (Date.now() - cachedAt >= BANGDREAM_MISSING_URL_CACHE_EXPIRY_MS) {
     delete errorUrlCache[url];
     return false;
   }
   return true;
-}
-
-function getErrorResponseStatus(error: unknown): number | undefined {
-  if (typeof error !== 'object' || error == null || !('response' in error)) {
-    return undefined;
-  }
-  const response = (error as { response?: { status?: number } }).response;
-  return response?.status;
 }
 
 /**

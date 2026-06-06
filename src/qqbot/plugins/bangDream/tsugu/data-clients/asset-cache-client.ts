@@ -8,10 +8,14 @@ import { Buffer } from 'buffer';
 import { assetErrorImageBuffer } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
 import { logger } from '@/qqbot/plugins/bangDream/tsugu/runtime/logger';
 import * as fs from 'fs';
+import {
+  BANGDREAM_MISSING_URL_CACHE_EXPIRY_MS,
+  getCacheClientErrorMessage,
+  getCacheClientResponseStatus,
+  runWithCacheClientRetry,
+} from '@/qqbot/plugins/bangDream/tsugu/data-clients/cache-client-policy';
 
-// 错误 URL 列表和错误缓存过期时间
 const errUrl: { [key: string]: number } = {};
-const ERROR_CACHE_EXPIRY = 12 * 60 * 60 * 1000; // 1 天
 const memoryCache: { [url: string]: Buffer } = {};
 
 /**
@@ -35,7 +39,10 @@ async function downloadFile(
       throw new Error("downloadFile: url.includes('undefined')");
     }
 
-    if (errUrl[url] && currentTime - errUrl[url] < ERROR_CACHE_EXPIRY) {
+    if (
+      errUrl[url] &&
+      currentTime - errUrl[url] < BANGDREAM_MISSING_URL_CACHE_EXPIRY_MS
+    ) {
       throw new Error('downloadFile: errUrl includes url and not expired');
     }
 
@@ -43,15 +50,10 @@ async function downloadFile(
     const cacheDir = getCacheDirectory(url);
     const fileName = getFileNameFromUrl(url);
 
-    for (let attempt = 0; attempt < retryCount; attempt++) {
-      let assetNotExists = false;
-      if (attempt > 0) {
-        logger(
-          `downloader`,
-          `Retrying download for "${url}" (attempt ${attempt + 1}/${retryCount})`,
-        );
-      }
-      try {
+    let assetNotExists = false;
+    return await runWithCacheClientRetry({
+      action: async () => {
+        assetNotExists = false;
         const data = await download(url, cacheDir, fileName, cacheTime);
         const htmlSig = Buffer.from('<!DOCTYPE html>');
         const slice = Buffer.from(data.subarray(0, htmlSig.length));
@@ -63,24 +65,22 @@ async function downloadFile(
           );
         }
         return data;
-      } catch (e) {
-        if (attempt === retryCount - 1) {
-          throw e;
-        }
-        if (assetNotExists) {
-          throw e;
-        }
-        //等待3秒后重试
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-      }
-    }
+      },
+      onRetry: (nextAttempt, normalizedRetryCount) =>
+        logger(
+          `downloader`,
+          `Retrying download for "${url}" (attempt ${nextAttempt}/${normalizedRetryCount})`,
+        ),
+      retryCount,
+      shouldRetry: () => !assetNotExists,
+    });
   } catch (e) {
     logger(
       `downloader`,
-      `Failed to download file from "${url}". Error: ${e.message}`,
+      `Failed to download file from "${url}". Error: ${getCacheClientErrorMessage(e)}`,
     );
 
-    if (e.message.includes('404')) {
+    if (getCacheClientResponseStatus(e) === 404) {
       errUrl[url] = Date.now();
     }
 

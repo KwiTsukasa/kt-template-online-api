@@ -50,4 +50,27 @@ describe('BangDream file cache client', () => {
     );
     expect(get).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps missing svg urls in the error cache', async () => {
+    const notFoundError = Object.assign(new Error('not found'), {
+      response: { status: 404 },
+    });
+    const get = jest.fn().mockRejectedValueOnce(notFoundError);
+
+    jest.doMock('axios', () => ({
+      __esModule: true,
+      default: { get },
+    }));
+
+    const { download } =
+      await import('@/qqbot/plugins/bangDream/tsugu/data-clients/file-cache-client');
+
+    await expect(download('https://example.com/missing.svg')).rejects.toThrow(
+      'not found',
+    );
+    await expect(download('https://example.com/missing.svg')).rejects.toThrow(
+      'errorUrlCache includes url',
+    );
+    expect(get).toHaveBeenCalledTimes(1);
+  });
 });

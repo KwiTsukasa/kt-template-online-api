@@ -285,6 +285,7 @@ export interface TsuguHook {
 
 - 已新增 `data-clients/data-provider.ts`，定义 `BangDreamDataProvider`、JSON/Asset/Tracker 请求参数和 provider URL 解析。
 - 已新增 `data-clients/provider-decorators.ts`，提供 `withCache`、`withRetry`、`withTiming`，缓存默认值、重试和耗时日志不再要求业务函数内手写循环。
+- 已新增 `data-clients/cache-client-policy.ts`，收口旧 cache client 的重试次数规范化、3 秒等待、HTTP 状态读取、404 不重试和缺失 URL 缓存过期时间；`api-cache-client.ts`、`asset-cache-client.ts`、`file-cache-client.ts` 开始消费统一策略，避免 JSON/API 与素材下载继续各自手写 retry/fallback。
 - 已新增 `data-clients/bestdori-provider.ts`、`data-clients/hhwx-tracker-provider.ts`、`data-clients/static-patch-provider.ts`，主数据、素材、Tracker 和本地静态修正分别走 provider。
 - `models/main-data-store.ts` 已改为通过 Bestdori provider 加载主数据，通过 static patch provider 读取 `cards-cn-fix.json`、`skills-cn-fix.json`、`area-item-fix.json` 和 `nickname-song.xlsx`。
 - 已新增 `models/main-data-repository.ts`、`song-repository.ts`、`card-repository.ts`、`event-repository.ts`、`gacha-repository.ts`、`player-repository.ts`。
@@ -295,6 +296,7 @@ export interface TsuguHook {
 - 已接入 `BANGDREAM_TSUGU_REQUEST_TIMEOUT_MS` 和 `BANGDREAM_TSUGU_MAIN_DATA_READY_TIMEOUT_MS`，HTTP 请求和主数据首次 ready 等待都有硬超时，BangDream 命令执行前会等待关键主数据集合可用。
 - 已新增 `scripts/bangdream-render-smoke.ps1`，BangDream 图片 smoke 通过父进程限时、子进程 PID 清理、生成后显式退出，避免本地调试命令卡住进程。
 - 已新增 `test/qqbot/plugins/bangDream/tsugu/data-provider.spec.ts`，覆盖 provider URL 解析、Bestdori/HHWX mock 数据源、retry/cache wrapper。
+- 已新增 `cache-client-policy.spec.ts`，覆盖缓存客户端 retry/status/not-found 策略；`file-cache-client.spec.ts` 补 SVG 缺失资源 404 缓存，避免 SVG 素材缺失仍反复请求。
 - 本地图片烟测已生成查歌 `136`、查活动 `50` 简易背景和真实活动背景图片，证明 provider/repository 第一段迁移后仍能输出非空图片。
 
 ### Phase 4：搜索 specification 和 matcher

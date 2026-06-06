@@ -6,7 +6,6 @@ import {
 } from '@/qqbot/plugins/bangDream/tsugu/models/event-stage';
 import { serverNameFullList } from '@/qqbot/plugins/bangDream/tsugu/runtime/config';
 import { drawTitle } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/title';
-import { Canvas } from 'skia-canvas';
 import {
   drawEventStageTypeTop,
   drawEventStageSongHorizontal,
@@ -17,6 +16,7 @@ import {
   stackImage,
   stackImageHorizontal,
 } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/image-stack';
+import { splitEventStageImagesByColumnHeight } from '@/qqbot/plugins/bangDream/tsugu/render-blocks/event-stage-spec';
 
 /**
  * 在QQBot 图片视图层中绘制活动试炼。
@@ -81,33 +81,9 @@ export async function drawEventStage(
   const eventStageResults = await Promise.all(eventStagePromises);
 
   //将活动stage图片纵向并横向合并
-  let tempH = 0;
-  const maxHeight = 6000;
-
-  let tempEventStageImageList: Canvas[] = [];
-  const eventStageImageListHorizontal: Canvas[] = [];
-
-  for (let i = 0; i < eventStageResults.length; i++) {
-    const tempImage = eventStageResults[i];
-    tempH += tempImage.height;
-    if (tempH > maxHeight) {
-      if (tempEventStageImageList.length > 0) {
-        eventStageImageListHorizontal.push(
-          drawDataBlock({ list: tempEventStageImageList }),
-        );
-      }
-      tempEventStageImageList = [];
-      tempH = tempImage.height;
-    }
-    tempEventStageImageList.push(tempImage);
-
-    if (i == eventStageResults.length - 1) {
-      eventStageImageListHorizontal.push(
-        drawDataBlock({ list: tempEventStageImageList }),
-      );
-    }
-  }
-
+  const eventStageImageListHorizontal = splitEventStageImagesByColumnHeight(
+    eventStageResults,
+  ).map((list) => drawDataBlock({ list }));
   const eventStageListImage = stackImageHorizontal(
     eventStageImageListHorizontal,
   );

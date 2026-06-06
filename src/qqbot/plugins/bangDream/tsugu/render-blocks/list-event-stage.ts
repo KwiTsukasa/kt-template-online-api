@@ -15,6 +15,13 @@ import { formatTime } from './list-time';
 import { setFontStyle } from '@/qqbot/plugins/bangDream/tsugu/canvas/text';
 import { stackImageHorizontal } from './image-stack';
 import { loadImageFromPath } from '@/qqbot/plugins/bangDream/tsugu/canvas/image-utils';
+import {
+  BANGDREAM_EVENT_STAGE_SPEC,
+  getEventStageSongCellHeight,
+  getEventStageSongCellWidth,
+  getEventStageSongJacketHeight,
+  getEventStageSongRowSize,
+} from '@/qqbot/plugins/bangDream/tsugu/render-blocks/event-stage-spec';
 
 FontLibrary.use('old', [`${assetsRootPath}/Fonts/old.ttf`]);
 
@@ -63,19 +70,22 @@ export async function drawEventStageTypeTop(stage: Stage): Promise<Canvas> {
     eventStageTypeTopImage.height,
   );
   const ctx = canvas.getContext('2d');
+  const typeTopSpec = BANGDREAM_EVENT_STAGE_SPEC.typeTop;
   ctx.drawImage(eventStageTypeTopImage, 0, 0);
   ctx.textBaseline = 'middle';
-  setFontStyle(ctx, 25, 'old');
+  setFontStyle(ctx, typeTopSpec.fontSize, 'old');
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#ffffff';
-  ctx.lineWidth = 4.5;
+  ctx.fillStyle = typeTopSpec.textColor;
+  ctx.lineWidth = typeTopSpec.strokeWidth;
   ctx.strokeStyle = stageTypeTextStrokeColor[type];
-  ctx.strokeText(timeText, 20, canvas.height / 2 - 2);
-  ctx.fillText(timeText, 20, canvas.height / 2 - 2);
+  const textY = canvas.height / 2 + typeTopSpec.yOffset;
+  ctx.strokeText(timeText, typeTopSpec.textX, textY);
+  ctx.fillText(timeText, typeTopSpec.textX, textY);
 
   ctx.textAlign = 'right';
-  ctx.strokeText(typeName, canvas.width - 50, canvas.height / 2 - 2);
-  ctx.fillText(typeName, canvas.width - 50, canvas.height / 2 - 2);
+  const typeNameX = canvas.width - typeTopSpec.rightPadding;
+  ctx.strokeText(typeName, typeNameX, textY);
+  ctx.fillText(typeName, typeNameX, textY);
 
   //如果是当前进行中活动，额外画标志
   if (new Date() >= new Date(startAt) && new Date() <= new Date(endAt)) {
@@ -98,23 +108,26 @@ async function drawSongInEventStageSongHorizontal(
   meta: boolean,
 ): Promise<Canvas> {
   //绘制活动中的每个歌曲(包括难度)
-  const canvas = new Canvas(800 / 8, (800 / 8 / 180) * 210);
+  const cellWidth = getEventStageSongCellWidth();
+  const cellHeight = getEventStageSongCellHeight();
+  const jacketImageHeight = getEventStageSongJacketHeight();
+  const songRowSpec = BANGDREAM_EVENT_STAGE_SPEC.songRow;
+  const canvas = new Canvas(cellWidth, cellHeight);
   const ctx = canvas.getContext('2d');
 
-  const jacketImageHeight = 800 / 8 - 6;
   ctx.drawImage(
     await song.getSongJacketImage(),
-    3,
-    0,
+    songRowSpec.jacketInsetX,
+    songRowSpec.jacketY,
     jacketImageHeight,
     jacketImageHeight,
   );
 
   ctx.textAlign = 'start';
   ctx.textBaseline = 'middle';
-  setFontStyle(ctx, 16, 'old');
-  ctx.fillStyle = '#a7a7a7';
-  ctx.fillText(`ID:${song.songId}`, 4, 108);
+  setFontStyle(ctx, songRowSpec.songId.fontSize, 'old');
+  ctx.fillStyle = songRowSpec.songId.color;
+  ctx.fillText(`ID:${song.songId}`, songRowSpec.songId.x, songRowSpec.songId.y);
 
   //难度，高度为meta*10像素
   /**
@@ -130,9 +143,10 @@ async function drawSongInEventStageSongHorizontal(
     ctx.fillStyle = difficultyColorList[difficultyId];
     ctx.fillRect(
       0,
-      jacketImageHeight - meta * 10,
+      jacketImageHeight -
+        meta * BANGDREAM_EVENT_STAGE_SPEC.songRow.difficultyHeightScale,
       jacketImageHeight,
-      meta * 10,
+      meta * BANGDREAM_EVENT_STAGE_SPEC.songRow.difficultyHeightScale,
     );
     return canvas;
   }
@@ -145,7 +159,11 @@ async function drawSongInEventStageSongHorizontal(
     }
 
     const difficultyLineGraph = stackImageHorizontal(difficultyLineGraphList);
-    ctx.drawImage(difficultyLineGraph, 3, 0);
+    ctx.drawImage(
+      difficultyLineGraph,
+      songRowSpec.jacketInsetX,
+      songRowSpec.jacketY,
+    );
   }
 
   return canvas;
@@ -165,13 +183,14 @@ export async function drawEventStageSongHorizontal(
   //绘制活动中的歌曲列表(横向)
   const songIdList = stage.songIdList;
 
-  const canvas = new Canvas(800, (800 / 8 / 180) * 210 + 10);
+  const songRowSize = getEventStageSongRowSize();
+  const canvas = new Canvas(songRowSize.width, songRowSize.height);
   const ctx = canvas.getContext('2d');
   for (let i = 0; i < songIdList.length; i++) {
     const song = new Song(songIdList[i]);
     ctx.drawImage(
       await drawSongInEventStageSongHorizontal(song, meta),
-      (800 / 8) * i,
+      getEventStageSongCellWidth() * i,
       0,
     );
   }

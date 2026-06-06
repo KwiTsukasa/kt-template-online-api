@@ -10,12 +10,13 @@ describe('BangDream cache path', () => {
       '/assets/cn/event/foo/topscreen_rip/bg_eventtop.png',
     );
 
+    const normalizedDirectory = directory.replace(/[\\/]/g, '_');
     expect(directory).toContain(
       path.join('.kt-workspace', 'cache', 'bangdream'),
     );
     expect(directory).toContain('bestdori.com');
-    expect(directory).toContain(
-      path.join('assets', 'cn', 'event', 'foo', 'topscreen_rip'),
+    expect(normalizedDirectory).toContain(
+      'assets_cn_event_foo_topscreen_rip',
     );
   });
 

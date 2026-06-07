@@ -204,7 +204,8 @@ VALUES
   (2041700000000100009, 0, 'Project', '/vben-admin', NULL, NULL, NULL, 'catalog', '{"badgeType":"dot","icon":"carbon:data-center","order":9998,"title":"demos.vben.title"}', 1, 9998),
   (2041700000000100901, 2041700000000100009, 'VbenDocument', '/vben-admin/document', 'IFrameView', NULL, NULL, 'embedded', '{"icon":"carbon:book","iframeSrc":"https://doc.vben.pro","title":"demos.vben.document"}', 1, 0),
   (2041700000000100902, 2041700000000100009, 'VbenGithub', '/vben-admin/github', 'IFrameView', NULL, NULL, 'link', '{"icon":"carbon:logo-github","link":"https://github.com/vbenjs/vue-vben-admin","title":"Github"}', 1, 0),
-  (2041700000000100010, 0, 'About', '/about', '_core/about/index', NULL, NULL, 'menu', '{"icon":"lucide:copyright","order":9999,"title":"demos.vben.about"}', 1, 9999)
+  (2041700000000100010, 0, 'About', '/about', '_core/about/index', NULL, NULL, 'menu', '{"icon":"lucide:copyright","order":9999,"title":"demos.vben.about"}', 1, 9999),
+  (2041700000000100011, 0, 'Profile', '/profile', '_core/profile/index', NULL, NULL, 'menu', '{"hideInMenu":true,"icon":"lucide:user","title":"page.auth.profile"}', 1, 10000)
 ON DUPLICATE KEY UPDATE
   `pid` = VALUES(`pid`),
   `path` = VALUES(`path`),
@@ -310,6 +311,7 @@ VALUES
   (2041700000000010003, 2041700000000100009),
   (2041700000000010003, 2041700000000100901),
   (2041700000000010003, 2041700000000100902),
-  (2041700000000010003, 2041700000000100010);
+  (2041700000000010003, 2041700000000100010),
+  (2041700000000010003, 2041700000000100011);
 
 SET FOREIGN_KEY_CHECKS = 1;

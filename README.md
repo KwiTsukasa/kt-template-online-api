@@ -1,73 +1,71 @@
 # KT Template Online API
 
-`kt-template-online-api` 是 KT Template Online 的后端服务，负责组件模板、数据库字典、MinIO 文件和 WordPress 内容管理能力。前台列表和 Playground 保存都通过本服务完成数据读写。
+`kt-template-online-api` 是 KT 工作区的 NestJS 后端服务，承接 Admin 后台、博客内容、组件模板、MinIO 文件、系统日志、QQBot/NapCat 和游戏查询插件能力。
 
 ## 技术栈
 
-- Node.js + TypeScript
-- NestJS 9
-- TypeORM + MySQL
-- MinIO
+- Node.js 22 / TypeScript 5.9
+- NestJS 11 / Express 5
+- TypeORM 0.3 / MySQL
 - Swagger / Knife4j
-- pnpm
+- nestjs-pino / pino-loki / Loki
+- MinIO
+- MQTT / OneBot v11 reverse WebSocket / NapCat
+- skia-canvas / Chart.js
+- pnpm 9
 
 ## 功能模块
 
-| 模块        | 说明                                                                                      |
-| ----------- | ----------------------------------------------------------------------------------------- |
-| `component` | Admin 下受保护的组件/图表模板列表、详情、新增、编辑、逻辑删除，数据表为 `admin_component` |
-| `dict`      | 基于新 `admin_dict` 表的字典查询，维护组件一级类型和二级类型关系                          |
-| `admin`     | Vben Admin 真实接口，包含登录、用户、菜单、角色、部门、时区、上传和示例表格               |
-| `minio`     | Bucket 检查/创建、文件上传、列表、临时访问地址、下载和删除                                |
-| `wordpress` | WordPress 文章、标签、分类管理接口，复用客户端 WordPress 登录态访问 REST API              |
-| `common`    | 响应注解、字典翻译、`POST */save` 请求体规范化等通用能力                                  |
+| 模块 | 说明 |
+| --- | --- |
+| `admin` | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志 |
+| `blog` | 本地博客文章、分类、标签、Argon 主题配置和 WordPress 导入 |
+| `wordpress` | WordPress REST 代理、登录态透传、文章/分类/标签/主题配置 |
+| `qqbot` | QQBot 账号、NapCat 扫码登录、OneBot 反向 WS、在线命令、规则、权限、发送/接收日志 |
+| `qqbot/plugins/bangDream` | BanG Dream 查曲、查卡、查活动、试炼、玩家、卡池、抽卡模拟、档线、谱面出图 |
+| `qqbot/plugins/ff14Market` | XIVAPI + Universalis 物品解析和 FF14 市场查价 |
+| `qqbot/plugins/fflogs` | FFLogs v2 GraphQL 角色排名和指定高难最近记录查询 |
+| `minio` | Bucket 检查、上传、列表、临时 URL、代理下载、删除 |
+| `common` | 响应封装、异常过滤、请求日志、日期格式化、字典解码、Snowflake、工具服务 |
 
 ## 目录结构
 
 ```text
-src
-  common/       # 通用装饰器、拦截器、服务、Swagger 封装
-  admin/        # Vben Admin 后台认证、组件、字典、菜单、角色、部门等接口
-  minio/        # MinIO 文件模块
-  wordpress/    # WordPress REST API 文章、标签、分类代理模块
-  types/        # 全局类型声明
-  app.module.ts # 全局模块、数据库、MinIO、拦截器注册
-  main.ts       # Swagger、Knife4j、端口启动入口
+src/
+  admin/       Admin 后台接口和实体
+  blog/        本地博客内容与主题配置
+  common/      全局装饰器、过滤器、拦截器、logger、工具和类型
+  minio/       MinIO 文件服务
+  qqbot/       QQBot 运行态、管理接口和插件生态
+  wordpress/   WordPress REST 代理
+  app.module.ts
+  main.ts
+test/          Jest 单元测试，统一放在 test 下
+sql/           初始化、菜单、迁移和修复 SQL
+scripts/       smoke、husky 快速检查等脚本
+k8s/           K8s 生产部署清单
+ci/            Jenkins Agent/Docker 辅助文件
 ```
 
 ## 环境变量
 
-项目按 `NODE_ENV` 读取 `.env.${NODE_ENV}`，未指定时默认读取 `.env.development`。仓库只提交 `.env.example`，真实 `.env.development` 和 `.env.production` 保留在本地。
+项目按 `NODE_ENV` 读取 `.env.${NODE_ENV}`，未指定时默认 `.env.development`。仓库只跟踪 `.env.example`；真实 `.env.development`、`.env.production`、数据库密码、Token、OAuth secret 和 SSH key 不提交。
 
-```env
-DB_HOST=localhost
-DB_PORT=3306
-DB_USERNAME=root
-DB_PASSWORD=
-DB_DATABASE=shy_template
-DB_SYNC=true
+主要配置分组：
 
-MINIO_ENDPOINT=localhost
-MINIO_PORT=9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_BUCKET=kt-template-online
+| 分组 | 变量 |
+| --- | --- |
+| MySQL | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC` |
+| MinIO | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET` |
+| Admin | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID` |
+| WordPress | `WORDPRESS_BASE_URL`、`WORDPRESS_HOST_HEADER`、`WORDPRESS_ADMIN_USERNAME`、`WORDPRESS_ADMIN_PASSWORD`、`WORDPRESS_*_TIMEOUT_MS` |
+| Logging/Loki | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*` |
+| QQBot/NapCat | `QQBOT_ENABLED`、`QQBOT_REVERSE_WS_*`、`NAPCAT_*`、`QQBOT_NAPCAT_*`、`MQTT_*` |
+| BangDream | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT` |
+| FF14 Market | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_MARKET_CACHE_TTL_MS` |
+| FFLogs | `FFLOGS_BASE_URL`、`FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET` |
 
-WORDPRESS_BASE_URL=http://localhost
-WORDPRESS_ADMIN_USERNAME=admin
-WORDPRESS_ADMIN_PASSWORD=
-WORDPRESS_TIMEOUT_MS=15000
-WORDPRESS_LOGIN_TIMEOUT_MS=3000
-WORDPRESS_AVAILABILITY_TTL_MS=60000
-
-ADMIN_TOKEN_SECRET=change-me
-ADMIN_COOKIE_SECURE=false
-SNOWFLAKE_WORKER_ID=1
-SNOWFLAKE_DATACENTER_ID=1
-```
-
-`DB_SYNC=true` 会让 TypeORM 根据实体同步表结构。生产环境建议关闭同步，改用迁移脚本维护表结构。
-内网 HTTP 访问时保持 `ADMIN_COOKIE_SECURE=false`；如果未来切到 HTTPS 域名，再改为 `true`。
+`DB_SYNC=true` 只适合本地开发或明确允许自动同步表结构的环境；生产应关闭并使用 SQL/迁移脚本。
 
 ## 启动
 
@@ -76,27 +74,34 @@ pnpm install
 pnpm start:dev
 ```
 
-服务默认监听 `48085`。
+服务固定监听 `48085`。
 
 常用命令：
 
 ```bash
-pnpm start          # 普通启动
-pnpm start:prod     # 按 production 环境运行已构建的 dist/main
-pnpm run build      # Nest 构建
-pnpm run lint       # ESLint 检查
-pnpm test           # 单元测试
-pnpm test:e2e       # e2e 测试
+pnpm start
+pnpm start:prod
+pnpm run typecheck
+pnpm run lint
+pnpm test
+pnpm run build
+```
+
+Jest 只扫描 `test/**/*.spec.ts`。如果在 Windows 下指定测试文件，使用：
+
+```bash
+pnpm exec jest --runInBand --runTestsByPath test/path/to/file.spec.ts
 ```
 
 ## 接口文档
 
-- Swagger UI：`http://localhost:48085/api`
+- Swagger 全量：`http://localhost:48085/api`
 - OpenAPI JSON：`http://localhost:48085/api-json`
-- 根路径 `/` 会重定向到 Swagger 文档
-- 接口细节见 [API.md](./API.md)
+- 分组文档：`/api/admin`、`/api/qqbot`、`/api/wordpress`、`/api/basic`
+- Knife4j：服务启动后同样使用上述 OpenAPI 服务列表
+- 手工接口索引：[API.md](./API.md)
 
-除文件下载接口外，业务接口统一返回：
+业务接口统一返回 Vben 结构，文件下载/流式接口除外：
 
 ```json
 {
@@ -106,7 +111,7 @@ pnpm test:e2e       # e2e 测试
 }
 ```
 
-失败时统一返回 `err` 字段，成功响应不包含 `err`：
+错误响应里的 `err` 必须是字符串，避免前端解析 JSON 对象时报错：
 
 ```json
 {
@@ -118,41 +123,42 @@ pnpm test:e2e       # e2e 测试
 
 ## 核心规则
 
-- `admin_component` 表保存组件/图表模板，`admin_dict` 表是统一字典翻译数据源，`Component.typeMsg` 和 `Component.componentTypeMsg` 查询后自动映射；旧 `/dict/*` 接口路径保持兼容。
-- 业务主键统一由 Snowflake 生成数字 ID，数据库使用 `BIGINT`，接口按字符串返回以避免前端长整型精度问题。
-- 如果基础后台菜单的 `meta` 被旧数据覆盖为空，执行 `sql/fix-admin-menu-meta.sql` 可以恢复初始化菜单的 `title/icon/order` 等元数据。
-- 旧 `component` 表迁移到 `admin_component` 时，执行 `sql/migrate-component-to-admin-component.sql`，脚本会把旧表重命名为备份表。
-- 如果旧版本曾写入 `admin_user.id=0`，先执行 `sql/fix-admin-user-zero-id.sql` 修复脏数据，再重启服务。
-- Admin、Component、Dict 与 MinIO 业务接口统一走 `JwtAuthGuard`；登录、刷新 token、退出登录和部分示例状态测试接口通过 `@Public()` 放行。
-- WordPress 管理接口同样先走本系统 `JwtAuthGuard`，再透传客户端 WordPress 登录态访问 WordPress REST API；当前 WordPress 只有单管理员账号且不开放注册，账号配置放在 env 中，但不作为 BasicAuth 发送。
-- Admin 前端只调用现有 `/auth/login`；后端会在登录流程里自动尝试登录 WordPress，把 WordPress cookie 写入本系统 httpOnly cookie，前端只持久化 REST nonce 和用户信息。WordPress 远程不可用时不会阻塞 Admin 主登录，后端会返回 `wordpressAuth=null` 并在菜单和按钮权限接口中过滤博客管理相关入口。
-- WordPress 文章的 `categories` 和 `tags` 按原生 REST API 语义透传 ID 数组；分类和标签 term 支持新增、编辑、强制删除，删除 term 不会删除文章。
-- WordPress 客户端登录态优先通过 `X-WordPress-Authorization` 透传，也支持 `X-WP-Nonce` 加 WordPress 登录 cookie 的 REST cookie 认证。
-- 如果 WordPress 服务器未开启 rewrite 导致 `/wp-json/*` 返回 404，后端会自动回退到 `?rest_route=/...` 形式继续访问 REST API。
-- `kt-template-admin` 登录会写入 access token 与刷新 token cookie，`kt-template-online-web` 和 `kt-template-online-playground` 可在回跳后通过刷新 token 重新持久化登录态。
-- `kt-template-admin` 开发环境通过 `/api` 代理到本服务 `48085`，已关闭 Vben Nitro Mock。
-- `POST /component/save` 新增组件，`POST /component/update` 编辑组件。
-- 全局 `SaveBodyInterceptor` 会删除 `POST */save` 请求体里的 `id`，避免新增接口误用前端主键。
-- 如个别 `save` 接口必须保留 `id`，在 Controller 方法上使用 `@SkipSaveBodyNormalize()`。
-- MinIO 上传接口返回的 `url` 会被 Playground 写入组件 `image` 字段。
-
-## 联调关系
-
-- `kt-template-online-web` 读取 `/component/list`、`/component/detail`、`/dict/*` 展示组件列表，并生成 Playground 跳转链接；业务接口返回 `401` 时跳转到 `kt-template-admin` 登录。
-- `kt-template-online-playground` 读取 `/dict/*` 初始化分类，保存时上传截图到 `/minio/upload`，再调用 `/component/save` 或 `/component/update`；业务接口返回 `401` 时跳转到 `kt-template-admin` 登录并在回跳后刷新 token。
-- 前端项目通过 Vite 代理把 `/api` 转发到 `http://localhost:48085/`。
+- 后台主键使用 Snowflake 数字 ID，数据库字段为 `BIGINT`，接口按字符串返回。
+- 后端响应时间统一用 `YYYY-MM-DD HH:mm:ss`，需要格式化的 DTO/Entity 字段使用 `@FormatDateTime()`。
+- 字典维护在 `admin_dict`，Admin 字典管理按 `dictCode` 分组展示；可运营映射优先走字典或静态配置，不硬编码到业务函数。
+- 全局 `SaveBodyInterceptor` 会删除 `POST */save` 请求体里的 `id`；需要保留时使用 `@SkipSaveBodyNormalize()`。
+- Admin、Component、Dict、MinIO、Blog 管理、WordPress 管理和 QQBot 管理接口默认走 `JwtAuthGuard`；公开接口用 `@Public()`。
+- WordPress 自动登录失败不会阻断 Admin 主登录，会通过菜单和权限码过滤不可用的 Blog 管理入口。
+- 系统日志由 pino 输出，Loki 查询统一通过后端 `/system/logs/*` 代理，前端不直连 Loki。
+- QQBot 扫码登录通过 SSE `/qqbot/account/scan/events` 暴露进度，耗时链路不应阻塞普通 HTTP 响应。
+- BangDream 当前源码根目录是 `src/qqbot/plugins/bangDream`；不要恢复旧 `tsugu` 层级或旧大桶目录。
+- BangDream 在线命令以 `registry/operation-registry.ts` 为单一来源，新增命令必须同步 SQL/在线命令表并跑 registry/command-SQL 测试。
+- BangDream event stage 大图必须保持分页拆图行为，线上 smoke 关注 `imageCount=5`，避免大 canvas OOM 回归。
 
 ## 轻量验证
 
-文档或小范围后端改动优先跑轻量命令：
+文档、小范围配置或低风险改动：
 
 ```bash
+git diff --check
+```
+
+后端代码改动：
+
+```bash
+pnpm run typecheck
 pnpm run lint
 pnpm test
 ```
 
-完整构建只在发布前或改动影响构建链路时执行：
+BangDream 图片能力改动：
 
-```bash
-pnpm run build
+```powershell
+.\scripts\bangdream-render-smoke.ps1 -OperationKey bangdream.song.search -Text "夏祭り" -OutFile ".kt-workspace/bangdream-smoke/song.jpg"
 ```
+
+接口改动必须启动或复用本地服务，并真实调用一次对应接口。
+
+## 发布
+
+主线发布由 Jenkins 构建镜像、推送 NAS 本地 Registry，并滚动更新 K8s `kt-prod/kt-template-online-api`。推送后不能只看 Git push 成功，需要继续观察 Jenkins、K8s rollout、新 Pod 状态和至少一条真实运行态 smoke。

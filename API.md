@@ -1,8 +1,19 @@
 # KT Template Online API
 
-后端服务默认监听 `48085`，Swagger 地址为 `/api`，OpenAPI JSON 地址为 `/api-json`。
+本文是当前 API 的人工索引。字段细节、Swagger 示例和 DTO 以运行态 Swagger/Knife4j 为准：
 
-除文件下载接口外，接口统一返回：
+- 全量 Swagger：`/api`
+- OpenAPI JSON：`/api-json`
+- Admin 分组：`/api/admin`
+- QQBot 分组：`/api/qqbot`
+- WordPress 分组：`/api/wordpress`
+- 基础能力分组：`/api/basic`
+
+## 通用约定
+
+后端固定监听 `48085`。根路径 `GET /` 重定向到 `/api#/`。
+
+除文件下载、SSE、反向 WebSocket 等特殊接口外，业务接口统一返回：
 
 ```json
 {
@@ -12,7 +23,7 @@
 }
 ```
 
-失败时使用 `err` 承载错误信息，不返回成功结构里的 `data`：
+错误响应统一把 `err` 输出为字符串：
 
 ```json
 {
@@ -22,600 +33,419 @@
 }
 ```
 
-## 功能模块
+### 认证
 
-| 模块      | 说明                                                                                      |
-| --------- | ----------------------------------------------------------------------------------------- |
-| Component | Admin 下受保护的组件/图表模板列表、详情、新增、编辑、逻辑删除，数据表为 `admin_component` |
-| Dict      | 基于新 `admin_dict` 表的数据库字典查询，以及组件一级类型到二级类型的数据库关系映射        |
-| Admin     | Vben Admin 真实接口，包含认证、用户、菜单、角色、部门、时区和上传适配                     |
-| MinIO     | Bucket 检查/创建、文件上传、列表、临时访问地址、下载和删除                                |
-| WordPress | WordPress 文章、标签、分类管理，复用客户端 WordPress 登录态访问 REST API                  |
-| Common    | 统一响应 Swagger 注解、字典翻译注解、`POST */save` 请求体规范化拦截器                     |
-| Logging   | 基于 Pino 的结构化日志、可选 Loki 直推，以及 Admin 系统日志查询代理                      |
+Admin、Component、Dict、MinIO、Blog 管理、WordPress 管理和 QQBot 管理接口默认需要后台登录态。
 
-## 通用规则
+支持两种 access token 传递方式：
 
-### 数字 ID
+- `Authorization: Bearer <accessToken>`
+- 登录接口写入的 httpOnly `admin_access_token` cookie
 
-后台主键统一使用 Snowflake 数字 ID。数据库字段使用 `BIGINT`；接口 JSON 中按字符串返回，例如 `"2041739550026043392"`，避免 JavaScript 直接用 `number` 承载 64 位长整型导致精度丢失。
+公开接口包括 `/auth/login`、`/auth/refresh`、`/auth/logout`、部分 Blog public 接口和根路径。具体以 Controller 上的 `@Public()` 为准。
 
-如果旧版本曾经写入 `admin_user.id=0`，请先执行 `sql/fix-admin-user-zero-id.sql` 修复已有脏数据，再重启后端服务。
+### ID 与时间
 
-### Save 请求体规范化
+- 后台主键使用 Snowflake 数字 ID，接口按字符串返回，避免 JavaScript 长整型精度丢失。
+- DTO/Entity 需要后端格式化的时间字段使用 `@FormatDateTime()`，输出格式为 `YYYY-MM-DD HH:mm:ss`。
+- `POST */save` 默认会删除请求体里的 `id`，防止新增接口误用前端主键。
 
-系统全局注册 `SaveBodyInterceptor`，默认会对 `POST */save` 请求删除 `body.id`，避免新增接口因为前端误传 `id` 而走指定主键保存。
+## 环境变量分组
 
-如果个别接口需要保留 `id`，可在对应 Controller 方法上使用 `@SkipSaveBodyNormalize()`。
+| 分组 | 关键变量 |
+| --- | --- |
+| MySQL | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC` |
+| MinIO | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET` |
+| Admin | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID` |
+| WordPress | `WORDPRESS_BASE_URL`、`WORDPRESS_HOST_HEADER`、`WORDPRESS_ADMIN_USERNAME`、`WORDPRESS_ADMIN_PASSWORD` |
+| Loki | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_QUERY_SELECTOR` |
+| QQBot | `QQBOT_ENABLED`、`QQBOT_REVERSE_WS_PATH`、`QQBOT_REVERSE_WS_TOKEN`、`QQBOT_EVENT_BUS` |
+| NapCat | `NAPCAT_WEBUI_BASE_URL`、`NAPCAT_WEBUI_TOKEN`、`QQBOT_NAPCAT_*` |
+| MQTT | `MQTT_URL`、`MQTT_USERNAME`、`MQTT_PASSWORD`、`MQTT_CLIENT_ID` |
+| BangDream | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT` |
+| FF14 Market | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_DEFAULT_WORLD` |
+| FFLogs | `FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET` |
 
-### 后台认证
+真实密码、Token、OAuth secret 和生产 env 不提交到 Git。
 
-Admin、Component、Dict 与 MinIO 业务接口统一走 `JwtAuthGuard`。请求可以通过 `Authorization: Bearer <accessToken>` 传递 accessToken，也可以携带登录接口写入的 httpOnly `admin_access_token` cookie。未认证时接口返回 HTTP `401`。
+## Admin 与基础后台
 
-`ADMIN_COOKIE_SECURE=false` 适用于当前内网 HTTP 访问；如果后续切到 HTTPS 域名，可以改为 `true`，cookie 会使用 `Secure + SameSite=None`。
+### Auth / User
 
-`@Public()` 可用于保留不需要认证的接口口子，目前登录、刷新 token、退出登录和部分示例状态测试接口放行。
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/auth/login` | 后台登录，返回 accessToken、用户信息和 WordPress 自动登录状态，并写入 httpOnly cookie |
+| `POST` | `/auth/refresh` | 通过 refresh token cookie 刷新 accessToken |
+| `POST` | `/auth/logout` | 清理 Admin 与 WordPress 登录 cookie |
+| `GET` | `/auth/codes` | 获取当前用户按钮权限码 |
+| `GET` | `/user/info` | 获取当前用户信息 |
 
-### WordPress 认证透传
+`/auth/login` 会尝试用 env 中的 WordPress 管理员账号建立 WordPress 登录态。WordPress 不可用时，Admin 主登录仍成功，返回 `wordpressAuth=null`、`wordpressAvailable=false`，菜单和权限码会过滤 Blog 管理入口。
 
-WordPress 侧只使用客户端登录态，后端不走 BasicAuth。当前 WordPress 只有单管理员账号且不开放注册，管理员账号配置放在 env 中，Admin 调用 `/auth/login` 通过后，后端会在同一个登录流程里自动登录 WordPress，把 WordPress cookie 保存到本系统 httpOnly cookie，再把 REST nonce 和用户信息随 Admin 登录结果返回给前端持久化。
+### Menu / Role / Dept / User Manage
 
-环境变量：
-
-| 变量                            | 说明                                                                                       |
-| ------------------------------- | ------------------------------------------------------------------------------------------ |
-| `WORDPRESS_BASE_URL`            | WordPress 站点根地址，例如 `http://192.168.31.224:8080`                                    |
-| `WORDPRESS_ADMIN_USERNAME`      | WordPress 单管理员账号用户名                                                               |
-| `WORDPRESS_ADMIN_PASSWORD`      | WordPress 单管理员账号密码，仅放真实 env，不提交到仓库                                     |
-| `WORDPRESS_TIMEOUT_MS`          | WordPress REST API 请求超时时间，默认 `15000`                                              |
-| `WORDPRESS_LOGIN_TIMEOUT_MS`    | Admin 登录链路里 WordPress 自动认证的短超时时间，默认 `3000`，避免远程不可用阻塞主系统登录 |
-| `WORDPRESS_AVAILABILITY_TTL_MS` | WordPress 可用性缓存时间，默认 `60000`；远程不可用时用于过滤博客菜单和按钮权限             |
-
-支持的 WordPress 登录态来源：
-
-| Header/Cookie               | 说明                                                                                                |
-| --------------------------- | --------------------------------------------------------------------------------------------------- |
-| `X-WordPress-Authorization` | 优先透传的 WordPress 授权头，例如客户端登录拿到的 `Bearer <token>`                                  |
-| `Authorization`             | 仅当它不是本系统 Admin access token 时才会透传，避免和后台认证冲突                                  |
-| `X-WP-Nonce`                | WordPress REST cookie 认证 nonce                                                                    |
-| `Cookie`                    | 只会过滤并透传 `wordpress_*`、`wordpress_logged_in_*`、`wp-settings-*` 等 WordPress 登录相关 cookie |
-| `X-WordPress-Cookie`        | 显式传入 WordPress cookie，适合非浏览器客户端联调                                                   |
-| `kt_wordpress_auth`         | 后端自动认证后写入的 httpOnly cookie，前端不可读取，后端会自动转成 WordPress cookie 透传            |
-
-如果 WordPress 所在 Apache/Nginx 未开启 rewrite，`/wp-json/*` 可能返回 404。后端会自动回退到 WordPress 原生 `?rest_route=/...` 形式，避免因为固定链接配置阻断文章、标签和分类管理接口。
-
-Admin 主登录不依赖 WordPress 可用性：本系统账号验证通过后会先写入 Admin token；WordPress 自动认证失败时登录仍返回成功，`wordpressAuth` 为 `null`、`wordpressAvailable=false`，并清理旧 WordPress cookie。随后 `/menu/all` 与 `/auth/codes` 会基于最近一次 WordPress 可用性状态过滤 `Blog*` 菜单和 `Blog:*` 按钮权限码，避免前端展示不可用的文章、分类、标签管理入口。
-
-### 系统日志
-
-后端使用 `nestjs-pino` 输出结构化 JSON 日志。生产环境默认写 stdout；配置 `LOKI_URL` 或 `LOKI_HOST` 后，会同时通过 `pino-loki` 批量推送到 Loki。Admin 不直接连接 Loki，统一通过后端 `/system/logs/*` 查询代理访问，避免 Loki 地址和凭据暴露到浏览器。
-
-环境变量：
-
-| 变量                         | 说明                                                                                     |
-| ---------------------------- | ---------------------------------------------------------------------------------------- |
-| `LOG_LEVEL`                  | 日志级别，默认生产 `info`、开发 `debug`                                                  |
-| `LOG_APP_NAME`               | Loki `app` 标签，默认 `kt-template-online-api`                                           |
-| `LOG_PRETTY`                 | 开发环境是否使用 `pino-pretty`，默认 `true`                                              |
-| `LOKI_URL` / `LOKI_HOST`     | Loki HTTP 地址，例如 `http://loki:3100`；为空时仅输出 stdout                             |
-| `LOKI_QUERY_HOST`            | 查询专用 Loki 地址；为空时复用 `LOKI_HOST/LOKI_URL`                                      |
-| `LOKI_ENV`                   | Loki `env` 标签，默认跟随 `NODE_ENV`                                                     |
-| `LOKI_TENANT_ID`             | Loki 多租户 `X-Scope-OrgID`，没有多租户时留空                                            |
-| `LOKI_USERNAME` / `LOKI_PASSWORD` | Loki Basic Auth，仅放真实 env，不提交到仓库                                         |
-| `LOKI_PUSH_ENDPOINT`         | Loki push 路径，默认 `/loki/api/v1/push`                                                 |
-| `LOKI_QUERY_ENDPOINT`        | Loki query_range 路径，默认 `/loki/api/v1/query_range`                                   |
-| `LOKI_QUERY_SELECTOR`        | 查询默认 selector；为空时使用 `{app="<LOG_APP_NAME>",env="<LOKI_ENV>"}`                  |
-| `LOKI_BATCH_INTERVAL_SECONDS` | pino-loki 批量发送间隔，默认 `5`                                                        |
-| `LOKI_BATCH_MAX_BUFFER_SIZE` | Loki 不可用时最大内存缓冲条数，默认 `10000`，超过会丢弃旧日志避免 OOM                   |
-| `LOKI_QUERY_MAX_LIMIT`       | Admin 单次查询最大拉取条数，默认 `1000`                                                  |
-
-### 数据库字典翻译
-
-组件数据维护在 `admin_component` 表中，字典数据维护在新的 `admin_dict` 表中。`Component.typeMsg`、`Component.componentTypeMsg` 会在 TypeORM `AfterLoad` 阶段根据字典缓存自动映射；旧 `/dict/*` 接口路径保持兼容，但仍需要登录态。
-
-`admin_dict` 表核心字段：
-
-| 字段         | 类型    | 说明                                                   |
-| ------------ | ------- | ------------------------------------------------------ |
-| id           | string  | 字典数字 ID                                            |
-| dictCode     | string  | 字典分组，例如 `COMPONENT_TYPE`、`CHART`、`COMPONENT`  |
-| label        | string  | 展示文本                                               |
-| value        | string  | 字典值                                                 |
-| childrenCode | string  | 子字典分组，例如 `COMPONENT_TYPE.value=1` 指向 `CHART` |
-| sort         | number  | 排序                                                   |
-| status       | number  | 启停状态，`1` 启用                                     |
-| isDeleted    | boolean | 逻辑删除标记                                           |
-
-当前数据库示例关系：
-
-| dictCode       | value | label | childrenCode |
-| -------------- | ----- | ----- | ------------ |
-| COMPONENT_TYPE | 1     | 图表  | CHART        |
-| COMPONENT_TYPE | 2     | 组件  | COMPONENT    |
-
-## 数据结构
-
-### Component
-
-| 字段             | 类型    | 说明                               |
-| ---------------- | ------- | ---------------------------------- |
-| id               | string  | 组件数字 ID，新增时由后端生成      |
-| name             | string  | 组件名称                           |
-| type             | number  | 一级类型，实际含义由 `dict` 表维护 |
-| componentType    | number  | 二级类型，实际含义由 `dict` 表维护 |
-| typeMsg          | string  | 一级类型文本，查询后自动映射       |
-| componentTypeMsg | string  | 二级类型文本，查询后自动映射       |
-| image            | string  | 封面图或封面图地址                 |
-| template         | string  | Playground 序列化模板内容          |
-| createTime       | string  | 创建时间                           |
-| updateTime       | string  | 更新时间                           |
-| is_deleted       | boolean | 逻辑删除标记                       |
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/menu/all` | 当前用户菜单 |
+| `GET` | `/system/menu/list` | 系统菜单树 |
+| `GET` | `/system/menu/name-exists` | 菜单 name 重名校验 |
+| `GET` | `/system/menu/path-exists` | 菜单 path 重名校验 |
+| `POST` | `/system/menu` | 新增菜单 |
+| `PUT` | `/system/menu/:id` | 更新菜单 |
+| `DELETE` | `/system/menu/:id` | 删除菜单及子菜单 |
+| `GET` | `/system/role/list` | 角色分页 |
+| `POST` | `/system/role` | 新增角色 |
+| `PUT` | `/system/role/:id` | 更新角色 |
+| `DELETE` | `/system/role/:id` | 删除角色 |
+| `GET` | `/system/dept/list` | 部门树 |
+| `POST` | `/system/dept` | 新增部门 |
+| `PUT` | `/system/dept/:id` | 更新部门 |
+| `DELETE` | `/system/dept/:id` | 删除部门 |
+| `GET` | `/system/user/list` | 用户分页 |
+| `POST` | `/system/user` | 新增用户 |
+| `PUT` | `/system/user/:id` | 更新用户 |
+| `DELETE` | `/system/user/:id` | 删除用户 |
 
 ### Dict
 
-接口返回的字典项结构：
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/dict/list` | 字典项分页，支持 `dictCode`、`keyword`、`label`、`value`、`childrenCode`、`status` |
+| `GET` | `/dict/tree` | 兼容树形字典视图 |
+| `GET` | `/dict/groups` | 字典编码分组列表，适合左右表左侧分组 |
+| `GET` | `/dict/codes` | 字典编码选项 |
+| `GET` | `/dict/getDictByKey` | 按 `dictKey` 获取启用字典项 |
+| `GET` | `/dict/getComponentDictByType` | 按组件一级类型查二级类型 |
+| `POST` | `/dict/save` | 新增字典项 |
+| `POST` | `/dict/update` | 更新字典项 |
+| `DELETE` | `/dict/:id` | 物理删除字典项 |
+| `POST` | `/dict/toggle` | 启停字典项 |
 
-| 字段  | 类型          | 说明     |
-| ----- | ------------- | -------- |
-| label | string        | 展示文本 |
-| value | number/string | 字典值   |
+字典核心字段：
 
-### MinIO
+| 字段 | 说明 |
+| --- | --- |
+| `dictCode` | 字典分组，例如 `COMPONENT_TYPE`、`BANGDREAM_SERVER_ALIAS` |
+| `label` | 展示文本 |
+| `value` | 字典值 |
+| `childrenCode` | 关联子分组编码 |
+| `sort` | 排序 |
+| `status` | `1` 启用 |
 
-`bucketName` 未传时默认读取环境变量 `MINIO_BUCKET`，缺省值为 `kt-template-online`。
+### Component
 
-## Root
+组件接口保持 `/component/*` 路径兼容，但数据表为 `admin_component`。
 
-### GET `/`
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/component/allList` | 全量组件 |
+| `GET` | `/component/list` | 组件分页，支持 `pageNo`、`pageSize`、`name`、`type`、`componentType` |
+| `GET` | `/component/detail?id=` | 组件详情 |
+| `POST` | `/component/save` | 新增组件 |
+| `POST` | `/component/update` | 更新组件 |
+| `POST` | `/component/remove?id=` | 逻辑删除组件 |
 
-重定向到 Swagger 文档页 `/api#/`，HTTP 状态码为 `301`。
+### Timezone / Upload / Demo
 
-## Component 接口
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/timezone/getTimezoneOptions` | 时区选项 |
+| `GET` | `/timezone/getTimezone` | 当前用户时区 |
+| `POST` | `/timezone/setTimezone` | 设置当前用户时区 |
+| `POST` | `/upload` | Vben 上传适配，实际写入 MinIO |
+| `GET` | `/table/list` | Vben 示例表格 |
+| `GET` | `/status` | 状态码测试 |
+| `GET` | `/demo/bigint` | BigInt JSON 测试 |
+| `GET` | `/test` | GET 测试 |
+| `POST` | `/test` | POST 测试 |
 
-组件接口仍保持 `/component/*` 路径兼容，但模块已迁入 Admin 目录并要求后台登录态。`kt-template-online-web` 和 `kt-template-online-playground` 收到 `401` 后会跳转到 `kt-template-admin` 登录页，登录完成再回到原页面。
+## 系统日志
 
-### GET `/component/allList`
+后端通过 `nestjs-pino` 输出结构化日志。配置 Loki 后，Admin 日志页面通过后端代理查询，不直连 Loki。
 
-获取全部组件。
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/system/logs` | 日志分页，支持 `level`、`keyword`、`context`、`path`、`requestId`、`startTime`、`endTime`、`rangeMinutes` |
+| `GET` | `/system/logs/summary` | 按级别统计 |
+| `GET` | `/system/logs/levels` | 日志级别选项 |
+| `GET` | `/system/logs/status` | Loki 查询配置状态 |
 
-响应 `data`：`Component[]`。
+日志行包含 `timestamp`、`level`、`message`、`method`、`path`、`statusCode`、`durationMs`、`requestId`、`raw` 等字段。
 
-示例：
+## Blog 本地内容
 
-```json
-{
-  "code": 200,
-  "msg": "操作成功",
-  "data": [
-    {
-      "id": "2041739550026043392",
-      "name": "基础折线图",
-      "type": 1,
-      "componentType": 1,
-      "typeMsg": "图表",
-      "componentTypeMsg": "折线图",
-      "image": "",
-      "template": "%7B%22version%22%3A%221.0%22%7D",
-      "createTime": "2026-05-13T02:30:00.000Z",
-      "updateTime": "2026-05-13T02:30:00.000Z",
-      "is_deleted": false
-    }
-  ]
-}
-```
+`/blog/*` 是本地博客内容能力，供 `Vue/kt-blog-web` 和 Admin 博客管理使用。
 
-### GET `/component/list`
+### Blog Article
 
-分页获取组件列表。列表默认过滤 `is_deleted=false`，并支持按名称模糊搜索。
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/blog/article/public/list` | 公开文章分页 |
+| `GET` | `/blog/article/public/detail` | 公开文章详情，支持 id/slug |
+| `GET` | `/blog/article/list` | 后台文章分页 |
+| `GET` | `/blog/article/detail` | 后台文章详情 |
+| `POST` | `/blog/article/save` | 新增文章 |
+| `POST` | `/blog/article/update` | 更新文章 |
+| `POST` | `/blog/article/remove` | 删除文章 |
+| `GET` | `/blog/article/category-options` | 文章分类选项 |
+| `GET` | `/blog/article/tag-options` | 文章标签选项 |
+| `POST` | `/blog/article/import-wordpress` | 从 WordPress 导入文章 |
 
-Query：
-
-| 参数          | 类型   | 必填 | 说明             |
-| ------------- | ------ | ---- | ---------------- |
-| pageNo        | number | 是   | 页码             |
-| pageSize      | number | 是   | 每页条数         |
-| name          | string | 否   | 组件名称模糊搜索 |
-| type          | number | 否   | 一级类型         |
-| componentType | number | 否   | 二级类型         |
-
-响应 `data`：
-
-```ts
-{
-  list: Component[]
-  total: number
-}
-```
-
-### GET `/component/detail`
-
-获取组件详情。
-
-Query：
-
-| 参数 | 类型   | 必填 | 说明    |
-| ---- | ------ | ---- | ------- |
-| id   | string | 是   | 组件 ID |
-
-响应 `data`：`Component`。
-
-### POST `/component/save`
-
-新增组件。全局 `SaveBodyInterceptor` 会删除 `body.id`，新增时不需要传 `id`。
-
-Body：
+文章 body 常用字段：
 
 ```json
 {
-  "name": "基础折线图",
-  "type": 1,
-  "componentType": 1,
-  "image": "",
-  "template": "%7B%22version%22%3A%221.0%22%7D"
-}
-```
-
-响应 `data`：新增组件 ID。
-
-```json
-{
-  "code": 200,
-  "msg": "操作成功",
-  "data": "2041739550026043392"
-}
-```
-
-### POST `/component/update`
-
-编辑组件。
-
-Body：
-
-```json
-{
-  "id": "2041739550026043392",
-  "name": "基础折线图",
-  "type": 1,
-  "componentType": 1,
-  "image": "",
-  "template": "%7B%22version%22%3A%221.0%22%7D"
-}
-```
-
-响应 `data`：`true` 表示更新成功。
-
-### POST `/component/remove`
-
-逻辑删除组件。
-
-Query：
-
-| 参数 | 类型   | 必填 | 说明    |
-| ---- | ------ | ---- | ------- |
-| id   | string | 是   | 组件 ID |
-
-响应 `data`：`true` 表示删除成功。
-
-## Dict 接口
-
-### GET `/dict/getDictByKey`
-
-根据字典分组获取字典项。
-
-Query：
-
-| 参数    | 类型   | 必填 | 说明                   |
-| ------- | ------ | ---- | ---------------------- |
-| dictKey | string | 是   | 字典分组，例如 `CHART` |
-
-响应示例：
-
-```json
-{
-  "code": 200,
-  "msg": "操作成功",
-  "data": [
-    {
-      "label": "折线图",
-      "value": 1
-    }
-  ]
-}
-```
-
-### GET `/dict/getComponentDictByType`
-
-根据组件一级类型获取对应的二级类型字典。
-
-查询逻辑：先查 `dictCode=COMPONENT_TYPE` 且 `value=type` 的字典项，再使用该项的 `childrenCode` 查询子字典。
-
-Query：
-
-| 参数 | 类型   | 必填 | 说明     |
-| ---- | ------ | ---- | -------- |
-| type | number | 是   | 一级类型 |
-
-响应 `data`：`Array<{ label: string; value: number | string }>`。
-
-## Vben Admin 真实接口
-
-这些接口用于 `Vue/kt-template-admin`，响应格式与项目统一响应结构对齐：
-
-```json
-{
-  "code": 200,
-  "msg": "操作成功",
-  "data": {}
-}
-```
-
-核心接口：
-
-| 方法   | 路径                           | 说明                                                                                                  |
-| ------ | ------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| POST   | `/auth/login`                  | 登录，返回 `accessToken` 与 `wordpressAuth`，并写入 access token、刷新 token 和 WordPress 授权 cookie |
-| POST   | `/auth/refresh`                | 通过刷新 token cookie 刷新 accessToken，并更新 token cookie                                           |
-| POST   | `/auth/logout`                 | 退出登录并清理 access token、刷新 token 与 WordPress 授权 cookie                                      |
-| GET    | `/auth/codes`                  | 获取当前用户权限码                                                                                    |
-| GET    | `/user/info`                   | 获取当前用户信息                                                                                      |
-| GET    | `/menu/all`                    | 获取当前用户可访问菜单                                                                                |
-| GET    | `/system/menu/list`            | 获取系统菜单树                                                                                        |
-| GET    | `/system/menu/name-exists`     | 校验菜单 name 是否重复                                                                                |
-| GET    | `/system/menu/path-exists`     | 校验菜单 path 是否重复                                                                                |
-| POST   | `/system/menu`                 | 新增菜单                                                                                              |
-| PUT    | `/system/menu/:id`             | 更新菜单                                                                                              |
-| DELETE | `/system/menu/:id`             | 删除菜单及子菜单                                                                                      |
-| GET    | `/system/role/list`            | 分页查询角色                                                                                          |
-| POST   | `/system/role`                 | 新增角色                                                                                              |
-| PUT    | `/system/role/:id`             | 更新角色                                                                                              |
-| DELETE | `/system/role/:id`             | 删除角色                                                                                              |
-| GET    | `/system/dept/list`            | 获取部门树                                                                                            |
-| POST   | `/system/dept`                 | 新增部门                                                                                              |
-| PUT    | `/system/dept/:id`             | 更新部门                                                                                              |
-| DELETE | `/system/dept/:id`             | 删除部门                                                                                              |
-| GET    | `/system/logs`                 | 查询 Loki 系统日志                                                                                    |
-| GET    | `/system/logs/summary`         | 查询日志级别统计                                                                                      |
-| GET    | `/system/logs/levels`          | 查询日志级别选项                                                                                      |
-| GET    | `/system/logs/status`          | 查询 Loki 配置状态                                                                                    |
-| GET    | `/timezone/getTimezoneOptions` | 获取时区选项                                                                                          |
-| GET    | `/timezone/getTimezone`        | 获取当前用户时区                                                                                      |
-| POST   | `/timezone/setTimezone`        | 设置当前用户时区                                                                                      |
-| POST   | `/upload`                      | Vben Upload 适配接口，真实上传到 MinIO 并返回 `{ url }`                                               |
-| GET    | `/table/list`                  | Vben 示例远程表格数据                                                                                 |
-| GET    | `/status`                      | Vben 状态码测试接口                                                                                   |
-| GET    | `/demo/bigint`                 | Vben BigInt JSON 测试接口                                                                             |
-
-初始化 SQL：
-
-- `sql/vben-admin-init.sql`：创建 `admin_*` 表并导入基础用户、角色、菜单、部门、字典数据，同时创建空的 `admin_component` 表。
-- `sql/system-log-menu.sql`：为已有库增量补齐系统日志菜单及管理员角色授权。
-- `sql/migrate-dict-to-admin-dict.sql`：将旧 `dict` 表数据迁移到 `admin_dict`。
-- `sql/migrate-component-to-admin-component.sql`：将旧 `component` 表数据迁移到 `admin_component`，并把旧表改名为备份表。
-- `sql/fix-admin-menu-meta.sql`：修复基础后台菜单 `meta` 被旧数据或错误保存覆盖为空的问题。
-
-## WordPress 接口
-
-所有 `/wordpress/*` 管理接口都需要本系统后台登录态和 WordPress 客户端登录态。Admin 前端只调用现有 `/auth/login`，后端在该登录接口内部自动建立 WordPress 授权态；后端只把 WordPress cookie 保存到本系统 httpOnly cookie，不把 cookie 明文放入前端持久化。
-
-### POST `/wordpress/auth/login`
-
-使用 env 中的 `WORDPRESS_ADMIN_USERNAME` 和 `WORDPRESS_ADMIN_PASSWORD` 登录 WordPress，写入 `kt_wordpress_auth` httpOnly cookie，并返回前端需要持久化的 REST nonce 和 WordPress 当前用户信息。该接口主要保留为后端内部能力和调试口子，正常 Admin 登录链路不由前端主动调用它，而是通过 `/auth/login` 自动触发。
-
-响应 `data`：
-
-```json
-{
-  "auth": {
-    "nonce": "wordpress-rest-nonce",
-    "type": "cookie"
-  },
-  "user": {
-    "id": 1,
-    "name": "admin"
-  }
-}
-```
-
-### POST `/wordpress/auth/logout`
-
-清理本系统保存的 WordPress 授权 cookie。该接口用于 Admin 退出登录时同步清理 WordPress 授权态。
-
-### GET `/wordpress/auth/check`
-
-调用 WordPress `/wp-json/wp/v2/users/me?context=edit` 校验当前客户端 WordPress 登录态。
-
-响应 `data`：WordPress 当前用户信息。
-
-### WordPress Article
-
-| 方法 | 路径                                        | 说明             |
-| ---- | ------------------------------------------- | ---------------- |
-| GET  | `/wordpress/article/list`                   | 获取文章分页列表 |
-| GET  | `/wordpress/article/detail?id=1`            | 获取文章详情     |
-| POST | `/wordpress/article/save`                   | 新增文章         |
-| POST | `/wordpress/article/update`                 | 编辑文章         |
-| POST | `/wordpress/article/remove?id=1&force=true` | 删除文章         |
-
-列表 Query：
-
-| 参数       | 类型   | 必填 | 说明                    |
-| ---------- | ------ | ---- | ----------------------- |
-| pageNo     | number | 否   | 页码，默认 `1`          |
-| pageSize   | number | 否   | 每页条数，默认 `10`     |
-| search     | string | 否   | 关键词搜索              |
-| status     | string | 否   | 文章状态，默认 `any`    |
-| categories | string | 否   | 分类 ID，多个用逗号分隔，也兼容重复传参 |
-| tags       | string | 否   | 标签 ID，多个用逗号分隔，也兼容重复传参 |
-
-新增/编辑 Body 常用字段：
-
-```json
-{
-  "id": 1,
   "title": "文章标题",
-  "content": "文章内容",
-  "excerpt": "文章摘要",
-  "status": "draft",
   "slug": "post-slug",
-  "categories": [1],
-  "tags": [2],
-  "featured_media": 10,
-  "sticky": false
+  "status": "publish",
+  "content": "Markdown 或 HTML",
+  "contentFormat": "markdown",
+  "cover": "",
+  "categories": ["tech"],
+  "tags": ["kt"]
 }
 ```
 
-`categories` 与 `tags` 直接对应 WordPress 文章 REST 字段，传入 ID 数组即可把文章绑定到对应分类和标签；传空数组表示清空当前文章的对应绑定。
+### Blog Category / Tag / Theme
 
-### WordPress Tag
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/blog/category/list` | 本地分类分页 |
+| `GET` | `/blog/category/detail` | 本地分类详情 |
+| `POST` | `/blog/category/save` | 新增分类 |
+| `POST` | `/blog/category/update` | 更新分类 |
+| `POST` | `/blog/category/remove` | 删除分类 |
+| `GET` | `/blog/tag/list` | 本地标签分页 |
+| `GET` | `/blog/tag/detail` | 本地标签详情 |
+| `POST` | `/blog/tag/save` | 新增标签 |
+| `POST` | `/blog/tag/update` | 更新标签 |
+| `POST` | `/blog/tag/remove` | 删除标签 |
+| `GET` | `/blog/term/options` | 分类/标签选项 |
+| `GET` | `/blog/theme/config` | 获取 Argon 主题配置 |
+| `POST` | `/blog/theme/save` | 保存本地主题配置 |
+| `POST` | `/blog/theme/import-wordpress` | 从 WordPress 导入主题配置 |
 
-| 方法 | 路径                                    | 说明             |
-| ---- | --------------------------------------- | ---------------- |
-| GET  | `/wordpress/tag/list`                   | 获取标签分页列表 |
-| GET  | `/wordpress/tag/detail?id=1`            | 获取标签详情     |
-| POST | `/wordpress/tag/save`                   | 新增标签         |
-| POST | `/wordpress/tag/update`                 | 编辑标签         |
-| POST | `/wordpress/tag/remove?id=1&force=true` | 删除标签         |
+## WordPress 代理
 
-WordPress 标签 term 不支持回收站，删除时必须使用 `force=true`。
+`/wordpress/*` 需要 Admin 登录态和 WordPress 登录态。后端优先使用 `kt_wordpress_auth` httpOnly cookie，也支持显式透传 WordPress 认证 header。
 
-新增/编辑 Body：
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/wordpress/auth/login` | 使用 env 管理员账号登录 WordPress 并写入 cookie |
+| `POST` | `/wordpress/auth/logout` | 清理 WordPress cookie |
+| `GET` | `/wordpress/auth/check` | 校验 WordPress 登录态 |
+| `GET` | `/wordpress/theme/config` | 读取 WordPress Argon 主题配置 |
+
+### WordPress Article / Tag / Category
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/wordpress/article/public/list` | 公开文章列表代理 |
+| `GET` | `/wordpress/article/public/detail` | 公开文章详情代理 |
+| `GET` | `/wordpress/article/list` | WordPress 文章分页 |
+| `GET` | `/wordpress/article/detail` | WordPress 文章详情 |
+| `POST` | `/wordpress/article/save` | 新增 WordPress 文章 |
+| `POST` | `/wordpress/article/update` | 更新 WordPress 文章 |
+| `POST` | `/wordpress/article/remove` | 删除 WordPress 文章 |
+| `GET` | `/wordpress/tag/list` | 标签分页 |
+| `GET` | `/wordpress/tag/detail` | 标签详情 |
+| `POST` | `/wordpress/tag/save` | 新增标签 |
+| `POST` | `/wordpress/tag/update` | 更新标签 |
+| `POST` | `/wordpress/tag/remove` | 删除标签 |
+| `GET` | `/wordpress/category/list` | 分类分页 |
+| `GET` | `/wordpress/category/detail` | 分类详情 |
+| `POST` | `/wordpress/category/save` | 新增分类 |
+| `POST` | `/wordpress/category/update` | 更新分类 |
+| `POST` | `/wordpress/category/remove` | 删除分类 |
+
+WordPress rewrite 未开启导致 `/wp-json/*` 返回 404 时，后端会回退到 `?rest_route=/...`。
+
+## MinIO
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/minio/check` | 检查连接和 bucket |
+| `POST` | `/minio/bucket` | 创建 bucket |
+| `POST` | `/minio/upload` | 上传文件，`multipart/form-data` |
+| `GET` | `/minio/list` | 文件列表 |
+| `GET` | `/minio/url` | 临时访问 URL |
+| `GET` | `/minio/resource-proxy` | 代理读取资源 |
+| `GET` | `/minio/download` | 下载文件流 |
+| `DELETE` | `/minio/remove` | 删除文件 |
+
+`bucketName` 不传时使用 `MINIO_BUCKET`。
+
+## QQBot 管理
+
+QQBot 运行态包括 NapCat 容器登录、OneBot v11 反向 WebSocket、MQTT 事件总线、账号能力绑定、在线命令、自动回复规则、权限名单、发送/接收日志和插件生态。
+
+### Account / Scan Login
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/qqbot/account/list` | QQBot 账号分页 |
+| `GET` | `/qqbot/account/enabled` | 启用账号列表 |
+| `POST` | `/qqbot/account/save` | 手动新增账号 |
+| `POST` | `/qqbot/account/update` | 更新账号 |
+| `POST` | `/qqbot/account/scan/create` | 扫码新增账号，创建登录会话 |
+| `POST` | `/qqbot/account/scan/refresh?id=` | 对已有账号刷新登录态 |
+| `GET` | `/qqbot/account/scan/status?sessionId=` | 查询扫码会话状态 |
+| `GET` | `/qqbot/account/scan/events?sessionId=` | SSE 订阅扫码进度 |
+| `POST` | `/qqbot/account/scan/qrcode/refresh?sessionId=` | 刷新当前会话二维码 |
+| `POST` | `/qqbot/account/scan/cancel?sessionId=` | 取消扫码会话 |
+| `POST` | `/qqbot/account/delete?id=` | 删除账号并断开 WS |
+| `POST` | `/qqbot/account/kick?selfId=` | 断开反向 WS 会话 |
+| `POST` | `/qqbot/account/bind/command` | 绑定账号和在线命令 |
+| `POST` | `/qqbot/account/unbind/command` | 解绑账号和在线命令 |
+| `POST` | `/qqbot/account/bind/rule` | 绑定账号和自动回复规则 |
+| `POST` | `/qqbot/account/unbind/rule` | 解绑账号和自动回复规则 |
+
+扫码链路返回 `sessionId`，前端应使用 SSE 查看步骤进度，而不是等待长 HTTP 请求完成。
+
+### Command / Rule / Permission
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/qqbot/command/list` | 在线命令分页，支持 `pluginKey`、`operationKey`、`selfId`、`enabled` |
+| `POST` | `/qqbot/command/save` | 新增在线命令 |
+| `POST` | `/qqbot/command/update` | 更新在线命令 |
+| `POST` | `/qqbot/command/delete?id=` | 删除在线命令 |
+| `POST` | `/qqbot/command/toggle?id=&enabled=` | 启停在线命令 |
+| `POST` | `/qqbot/command/test` | 预览测试在线命令 |
+| `GET` | `/qqbot/rule/list` | 自动回复规则分页 |
+| `POST` | `/qqbot/rule/save` | 新增自动回复规则 |
+| `POST` | `/qqbot/rule/update` | 更新自动回复规则 |
+| `POST` | `/qqbot/rule/delete?id=` | 删除自动回复规则 |
+| `POST` | `/qqbot/rule/toggle?id=&enabled=` | 启停自动回复规则 |
+| `GET` | `/qqbot/permission/config` | 权限名单配置 |
+| `POST` | `/qqbot/permission/config` | 保存权限名单配置 |
+| `GET` | `/qqbot/permission/allowlist` | 白名单分页 |
+| `POST` | `/qqbot/permission/allowlist/save` | 新增白名单 |
+| `POST` | `/qqbot/permission/allowlist/update` | 更新白名单 |
+| `POST` | `/qqbot/permission/allowlist/delete?id=` | 删除白名单 |
+| `GET` | `/qqbot/permission/blocklist` | 黑名单分页 |
+| `POST` | `/qqbot/permission/blocklist/save` | 新增黑名单 |
+| `POST` | `/qqbot/permission/blocklist/update` | 更新黑名单 |
+| `POST` | `/qqbot/permission/blocklist/delete?id=` | 删除黑名单 |
+
+`/qqbot/command/test` 示例：
 
 ```json
 {
-  "id": 1,
-  "name": "标签名称",
-  "slug": "tag-slug",
-  "description": "标签描述"
+  "commandId": "2041700000000000001",
+  "text": "/查曲 夏祭り",
+  "selfId": "10000",
+  "targetType": "group",
+  "targetId": "123456",
+  "userId": "2354598417"
 }
 ```
 
-### WordPress Category
+线上 smoke 必须按 `operationKey` 查询启用命令 ID 后传入 `commandId`，避免默认 `preview` selfId 误报未匹配命令。
 
-| 方法 | 路径                                         | 说明             |
-| ---- | -------------------------------------------- | ---------------- |
-| GET  | `/wordpress/category/list`                   | 获取分类分页列表 |
-| GET  | `/wordpress/category/detail?id=1`            | 获取分类详情     |
-| POST | `/wordpress/category/save`                   | 新增分类         |
-| POST | `/wordpress/category/update`                 | 编辑分类         |
-| POST | `/wordpress/category/remove?id=1&force=true` | 删除分类         |
+### Plugin / Dashboard / Send / Message
 
-WordPress 分类 term 不支持回收站，删除时必须使用 `force=true`；删除分类不会删除文章，文章会按 WordPress 自身规则解除或迁移分类关系。
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/qqbot/plugin/list` | 插件列表，支持 `triggerMode=command/event` |
+| `GET` | `/qqbot/plugin/operation/list` | 插件能力列表 |
+| `GET` | `/qqbot/plugin/health` | 插件健康检查 |
+| `GET` | `/qqbot/plugin/event/list` | 事件触发插件绑定状态 |
+| `POST` | `/qqbot/plugin/event/bind` | 绑定事件触发插件 |
+| `POST` | `/qqbot/plugin/event/unbind` | 解绑事件触发插件 |
+| `GET` | `/qqbot/dashboard/summary` | QQBot 工作台汇总 |
+| `GET` | `/qqbot/send/log/list` | 发送日志分页 |
+| `POST` | `/qqbot/send/private` | 发送私聊消息 |
+| `POST` | `/qqbot/send/group` | 发送群聊消息 |
+| `GET` | `/qqbot/conversation/list` | 会话列表 |
+| `GET` | `/qqbot/message/list` | 消息列表 |
 
-新增/编辑 Body：
+### OneBot Reverse WebSocket
 
-```json
-{
-  "id": 1,
-  "name": "分类名称",
-  "slug": "category-slug",
-  "description": "分类描述",
-  "parent": 0
-}
+`QQBOT_REVERSE_WS_PATH` 默认是 `/qqbot/onebot/reverse`。NapCat 通过反向 WS 连接 API，token 使用 `QQBOT_REVERSE_WS_TOKEN`。
+
+## QQBot 插件能力
+
+### BangDream
+
+插件 key：`bangDream`。当前源码根目录为 `src/qqbot/plugins/bangDream`，不再使用旧 `tsugu` 子目录。
+
+| operation key | 命令 | 说明 |
+| --- | --- | --- |
+| `bangdream.song.search` | `/查曲` | 查歌曲信息图片 |
+| `bangdream.song.chart` | `/查谱面` | 查谱面图片 |
+| `bangdream.song.random` | `/随机曲` | 随机歌曲 |
+| `bangdream.song.meta` | `/查询分数表` | 查歌曲分数榜 |
+| `bangdream.card.search` | `/查卡` | 查卡牌信息图片 |
+| `bangdream.card.illustration` | `/查卡面` | 查卡面插画 |
+| `bangdream.character.search` | `/查角色` | 查角色信息 |
+| `bangdream.event.search` | `/查活动` | 查活动信息 |
+| `bangdream.event.stage` | `/查试炼` | 查活动试炼，保持拆图输出 |
+| `bangdream.player.search` | `/查玩家` | 查玩家信息 |
+| `bangdream.gacha.search` | `/查卡池` | 查卡池 |
+| `bangdream.gacha.simulate` | `/抽卡模拟` | 模拟抽卡 |
+| `bangdream.cutoff.detail` | `/ycx` | 单档位预测线 |
+| `bangdream.cutoff.all` | `/ycxall` | 全档位预测线 |
+| `bangdream.cutoff.recent` | `/lsycx` | 历史/近期档线 |
+
+`registry/operation-registry.ts` 是 BangDream operation、handlerName、别名、冷却和说明的单一来源。新增或调整命令必须同步在线命令 SQL，并跑 registry/command-SQL 测试。
+
+### FF14 Market
+
+插件 key：`ff14Market`。
+
+| operation key | 说明 |
+| --- | --- |
+| `ff14.item.resolve` | 按物品名称或 ID 解析 XIVAPI 物品 |
+| `ff14.market.price` | 查询指定服务器/大区的 Universalis 市场价格 |
+
+市场查价支持 `item`、`itemId`、`world`、`dataCenter`、`region`、`hq`、`language`。
+
+### FFLogs
+
+插件 key：`fflogs`。
+
+| operation key | 说明 |
+| --- | --- |
+| `fflogs.character.summary` | 查询 FFLogs 角色公开排名；传 `encounter` 时查询指定高难最近记录 |
+
+常用输入：`characterName`、`serverSlug`、`serverRegion`、`encounter`、`limit`、`metric`、`timeframe`、`zoneId`。
+
+## 初始化 SQL
+
+| 文件 | 用途 |
+| --- | --- |
+| `sql/vben-admin-init.sql` | 创建 Admin 基础表、用户、角色、菜单、部门、字典和空组件表 |
+| `sql/blog-init.sql` | 初始化本地 Blog 表 |
+| `sql/blog-menu.sql` | 初始化 Blog 管理菜单 |
+| `sql/qqbot-init.sql` | 初始化 QQBot 表、插件命令和字典 |
+| `sql/system-log-menu.sql` | 初始化系统日志菜单和权限 |
+| `sql/migrate-dict-to-admin-dict.sql` | 旧 `dict` 迁移到 `admin_dict` |
+| `sql/migrate-component-to-admin-component.sql` | 旧 `component` 迁移到 `admin_component` |
+| `sql/fix-admin-menu-meta.sql` | 修复菜单 meta 被覆盖为空 |
+| `sql/fix-admin-user-zero-id.sql` | 修复旧版本 `admin_user.id=0` 脏数据 |
+
+## 验证入口
+
+常规文档/配置检查：
+
+```bash
+git diff --check
 ```
 
-## MinIO 接口
+后端代码检查：
 
-### GET `/minio/check`
-
-检查 MinIO 连接和 bucket 状态。
-
-Query：
-
-| 参数       | 类型   | 必填 | 说明        |
-| ---------- | ------ | ---- | ----------- |
-| bucketName | string | 否   | bucket 名称 |
-
-响应 `data`：`{ bucketName: string; exists: boolean }`。
-
-### POST `/minio/bucket`
-
-创建 bucket，已存在时跳过。
-
-Query：
-
-| 参数       | 类型   | 必填 | 说明        |
-| ---------- | ------ | ---- | ----------- |
-| bucketName | string | 否   | bucket 名称 |
-
-响应 `data`：bucket 名称。
-
-### POST `/minio/upload`
-
-上传文件，请求类型为 `multipart/form-data`。
-
-Body：
-
-| 参数       | 类型   | 必填 | 说明                   |
-| ---------- | ------ | ---- | ---------------------- |
-| file       | File   | 是   | 文件                   |
-| bucketName | string | 否   | bucket 名称            |
-| objectName | string | 否   | 对象名，不传时自动生成 |
-
-响应示例：
-
-```json
-{
-  "code": 200,
-  "msg": "操作成功",
-  "data": {
-    "bucketName": "kt-template-online",
-    "objectName": "uploads/1715580000000-a1b2c3-demo.png",
-    "etag": "9b2cf535f27731c974343645a3985328",
-    "size": 2048,
-    "mimeType": "image/png",
-    "url": "http://127.0.0.1:9000/kt-template-online/uploads/demo.png"
-  }
-}
+```bash
+pnpm run typecheck
+pnpm run lint
+pnpm test
 ```
 
-### GET `/minio/list`
+BangDream 图片 smoke：
 
-获取文件列表。
+```powershell
+.\scripts\bangdream-render-smoke.ps1 -OperationKey bangdream.song.search -Text "夏祭り" -OutFile ".kt-workspace/bangdream-smoke/song.jpg"
+.\scripts\bangdream-render-smoke.ps1 -OperationKey bangdream.event.stage -Text "310" -OutFile ".kt-workspace/bangdream-smoke/stage.jpg"
+```
 
-Query：
-
-| 参数       | 类型   | 必填 | 说明                          |
-| ---------- | ------ | ---- | ----------------------------- |
-| bucketName | string | 否   | bucket 名称                   |
-| prefix     | string | 否   | 对象名前缀                    |
-| recursive  | string | 否   | 是否递归，传 `false` 时不递归 |
-
-响应 `data`：MinIO 对象数组，常见字段为 `name`、`size`、`etag`、`lastModified`。
-
-### GET `/minio/url`
-
-获取文件临时访问地址。
-
-Query：
-
-| 参数       | 类型   | 必填 | 说明                        |
-| ---------- | ------ | ---- | --------------------------- |
-| objectName | string | 是   | 对象名                      |
-| bucketName | string | 否   | bucket 名称                 |
-| expiry     | string | 否   | 有效期秒数，默认 `86400` 秒 |
-
-响应 `data`：临时访问 URL。
-
-### GET `/minio/download`
-
-下载文件，直接返回文件流。
-
-Query：
-
-| 参数       | 类型   | 必填 | 说明        |
-| ---------- | ------ | ---- | ----------- |
-| objectName | string | 是   | 对象名      |
-| bucketName | string | 否   | bucket 名称 |
-
-### DELETE `/minio/remove`
-
-删除文件。
-
-Query：
-
-| 参数       | 类型   | 必填 | 说明        |
-| ---------- | ------ | ---- | ----------- |
-| objectName | string | 是   | 对象名      |
-| bucketName | string | 否   | bucket 名称 |
-
-响应 `data`：`true` 表示删除成功。
+Jenkins/K8s 发布后还需要观察 rollout、新 Pod 日志，并跑真实运行态 smoke；推送成功不等于发布完成。

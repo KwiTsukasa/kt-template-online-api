@@ -14,6 +14,8 @@ import { AdminMenuService } from '../menu/admin-menu.service';
 import { AdminUser } from '../user/admin-user.entity';
 import { AdminUserService } from '../user/admin-user.service';
 import { AdminAuthService } from './admin-auth.service';
+import { AdminLoginDto } from './admin-auth.dto';
+import { AdminPasswordCryptoService } from './admin-password-crypto.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { WordpressService } from '@/wordpress/wordpress.service';
 
@@ -23,21 +25,32 @@ import { WordpressService } from '@/wordpress/wordpress.service';
 export class AdminAuthController {
   constructor(
     private readonly authService: AdminAuthService,
+    private readonly passwordCryptoService: AdminPasswordCryptoService,
     private readonly menuService: AdminMenuService,
     private readonly userService: AdminUserService,
     private readonly wordpressService: WordpressService,
   ) {}
 
+  @Get('auth/password-public-key')
+  @ApiOperation({ summary: '获取 Admin 登录密码加密公钥' })
+  @Public()
+  getPasswordPublicKey() {
+    return vbenSuccess(this.passwordCryptoService.getPublicKey());
+  }
+
   @Post('auth/login')
   @ApiOperation({ summary: 'Admin 用户登录' })
   @Public()
   async login(
-    @Body() body: { password?: string; username?: string },
+    @Body() body: AdminLoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const password = this.passwordCryptoService.decryptPassword(
+      body.encryptedPassword,
+    );
     const { accessToken, refreshToken, user } = await this.authService.login(
       body.username,
-      body.password,
+      password,
     );
     const wordpressLogin =
       await this.wordpressService.tryLoginWithConfiguredAdmin();

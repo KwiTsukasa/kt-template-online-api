@@ -142,14 +142,36 @@ export class AdminUserService {
     return null;
   }
 
+  async updateCurrentProfile(userId: string, data: AdminUserInput) {
+    const user = await this.findActiveUser(userId);
+
+    if (data.realName !== undefined) {
+      const realName = String(data.realName || '').trim();
+      if (!realName) throwVbenError('姓名不能为空', HttpStatus.BAD_REQUEST);
+      user.realName = realName;
+    }
+    if (data.homePath !== undefined) {
+      user.homePath = String(data.homePath || '').trim() || '/workspace';
+    }
+    if (data.avatar !== undefined) {
+      user.avatar = String(data.avatar || '').trim();
+    }
+
+    await this.userRepository.save(user);
+    return this.findActiveUser(userId);
+  }
+
   serializeUser(user: AdminUser) {
     return {
+      avatar: user.avatar || '',
       homePath: user.homePath,
       id: user.id,
       realName: user.realName,
       roles: (user.roles || [])
         .filter((role) => !role.isDeleted && role.status === 1)
         .map((role) => role.roleCode),
+      timezone: user.timezone,
+      userId: user.id,
       username: user.username,
     };
   }
@@ -168,6 +190,7 @@ export class AdminUserService {
       deptName: user.dept?.name || '',
       homePath: user.homePath,
       id: user.id,
+      avatar: user.avatar,
       realName: user.realName,
       roleIds: activeRoles.map((role) => role.id),
       roleNames: activeRoles.map((role) => role.name),
@@ -217,6 +240,19 @@ export class AdminUserService {
     }
 
     return Array.from(result);
+  }
+
+  private async findActiveUser(id: string) {
+    const user = await this.userRepository.findOne({
+      relations: ['roles', 'dept'],
+      where: {
+        id,
+        isDeleted: false,
+      },
+    });
+
+    if (!user) throwVbenError('用户不存在', HttpStatus.BAD_REQUEST);
+    return user;
   }
 
   private async ensureUsernameAvailable(username: string, ignoreId?: string) {

@@ -768,6 +768,7 @@ function adminUserExample() {
     id: '1000000000000000001',
     username: 'admin',
     realName: '管理员',
+    avatar: '/api/minio/download?objectName=avatars/admin/avatar.jpg',
     status: 1,
   };
 }

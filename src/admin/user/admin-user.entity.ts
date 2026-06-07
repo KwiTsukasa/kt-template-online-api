@@ -35,6 +35,12 @@ export class AdminUser {
   realName: string;
 
   @Column({
+    default: '',
+    length: 1024,
+  })
+  avatar: string;
+
+  @Column({
     name: 'dept_id',
     nullable: true,
     type: 'bigint',

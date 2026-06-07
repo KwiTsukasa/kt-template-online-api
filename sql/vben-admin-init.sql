@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS `admin_user` (
   `username` varchar(255) NOT NULL,
   `password` varchar(255) NOT NULL,
   `real_name` varchar(255) NOT NULL,
+  `avatar` varchar(1024) NOT NULL DEFAULT '',
   `dept_id` bigint DEFAULT NULL,
   `home_path` varchar(255) NOT NULL DEFAULT '',
   `timezone` varchar(255) NOT NULL DEFAULT 'Asia/Shanghai',
@@ -85,6 +86,22 @@ SET @admin_user_dept_id_sql := IF(
 PREPARE admin_user_dept_id_stmt FROM @admin_user_dept_id_sql;
 EXECUTE admin_user_dept_id_stmt;
 DEALLOCATE PREPARE admin_user_dept_id_stmt;
+
+SET @admin_user_avatar_exists := (
+  SELECT COUNT(*)
+  FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'admin_user'
+    AND COLUMN_NAME = 'avatar'
+);
+SET @admin_user_avatar_sql := IF(
+  @admin_user_avatar_exists = 0,
+  'ALTER TABLE `admin_user` ADD COLUMN `avatar` varchar(1024) NOT NULL DEFAULT '''' AFTER `real_name`',
+  'SELECT 1'
+);
+PREPARE admin_user_avatar_stmt FROM @admin_user_avatar_sql;
+EXECUTE admin_user_avatar_stmt;
+DEALLOCATE PREPARE admin_user_avatar_stmt;
 
 SET @admin_user_dept_idx_exists := (
   SELECT COUNT(*)
@@ -229,11 +246,11 @@ ON DUPLICATE KEY UPDATE
   `status` = VALUES(`status`),
   `is_deleted` = 0;
 
-INSERT INTO `admin_user` (`id`, `username`, `password`, `real_name`, `dept_id`, `home_path`, `timezone`, `status`)
+INSERT INTO `admin_user` (`id`, `username`, `password`, `real_name`, `avatar`, `dept_id`, `home_path`, `timezone`, `status`)
 VALUES
-  (2041700000000000001, 'vben', '123456', 'Vben', 2041700000000200002, '/workspace', 'Asia/Shanghai', 1),
-  (2041700000000000002, 'admin', '123456', 'Admin', 2041700000000200001, '/workspace', 'Asia/Shanghai', 1),
-  (2041700000000000003, 'jack', '123456', 'Jack', 2041700000000200003, '/analytics', 'Asia/Shanghai', 1)
+  (2041700000000000001, 'vben', '123456', 'Vben', '', 2041700000000200002, '/workspace', 'Asia/Shanghai', 1),
+  (2041700000000000002, 'admin', '123456', 'Admin', '', 2041700000000200001, '/workspace', 'Asia/Shanghai', 1),
+  (2041700000000000003, 'jack', '123456', 'Jack', '', 2041700000000200003, '/analytics', 'Asia/Shanghai', 1)
 ON DUPLICATE KEY UPDATE
   `password` = VALUES(`password`),
   `real_name` = VALUES(`real_name`),

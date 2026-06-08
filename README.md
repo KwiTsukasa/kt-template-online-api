@@ -162,3 +162,9 @@ BangDream 图片能力改动：
 ## 发布
 
 主线发布由 Jenkins 构建镜像、推送 NAS 本地 Registry，并滚动更新 K8s `kt-prod/kt-template-online-api`。推送后不能只看 Git push 成功，需要继续观察 Jenkins、K8s rollout、新 Pod 状态和至少一条真实运行态 smoke。
+
+## 来源与许可证
+
+| 一级来源 | 使用方式 | License |
+| --- | --- | --- |
+| [Tsugu BangDream Bot](https://github.com/Yamamoto-2/tsugu-bangdream-bot) | BangDream QQBot 后端能力已重构合入 `src/qqbot/plugins/bangDream`，保留本地 `TSUGU-LICENSE` | MIT |

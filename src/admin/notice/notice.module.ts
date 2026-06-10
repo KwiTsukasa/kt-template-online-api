@@ -3,11 +3,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminNoticeController } from './admin-notice.controller';
 import { AdminNotice } from './admin-notice.entity';
 import { AdminNoticeService } from './admin-notice.service';
+import { AdminAuthGuardModule } from '../auth/admin-auth-guard.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([AdminNotice])],
+  imports: [AdminAuthGuardModule, TypeOrmModule.forFeature([AdminNotice])],
   controllers: [AdminNoticeController],
   providers: [AdminNoticeService],
 })
 export class NoticeModule {}
-

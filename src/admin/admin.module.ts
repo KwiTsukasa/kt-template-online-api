@@ -16,6 +16,7 @@ import { AdminMenuService } from './menu/admin-menu.service';
 import { AdminRoleController } from './role/admin-role.controller';
 import { AdminRole } from './role/admin-role.entity';
 import { AdminRoleService } from './role/admin-role.service';
+import { NoticeModule } from './notice/notice.module';
 import { SystemLogController } from './system-log/system-log.controller';
 import { SystemLogService } from './system-log/system-log.service';
 import { AdminTimezoneController } from './timezone/admin-timezone.controller';
@@ -38,6 +39,7 @@ import { WordpressModule } from '@/wordpress/wordpress.module';
     ]),
     AdminAuthGuardModule,
     DictModule,
+    NoticeModule,
     MinioClientModule,
     WordpressModule,
   ],

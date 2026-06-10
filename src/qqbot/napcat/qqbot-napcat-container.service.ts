@@ -79,6 +79,7 @@ export class QqbotNapcatContainerService {
           lastLoginAt: new Date(),
         },
       );
+      await this.removeOtherAccountContainers(accountId, containerId);
       return;
     }
 
@@ -92,6 +93,7 @@ export class QqbotNapcatContainerService {
         remark: '',
       }),
     );
+    await this.removeOtherAccountContainers(accountId, containerId);
   }
 
   async removeAccountContainers(accountId: string) {
@@ -227,6 +229,42 @@ export class QqbotNapcatContainerService {
       },
     );
     return true;
+  }
+
+  private async removeOtherAccountContainers(
+    accountId: string,
+    keepContainerId: string,
+  ) {
+    const bindings = await this.bindingRepository.find({
+      where: {
+        accountId,
+        isDeleted: false,
+      },
+    });
+    for (const binding of bindings) {
+      if (binding.containerId === keepContainerId) continue;
+
+      const sharedCount = await this.bindingRepository
+        .createQueryBuilder('binding')
+        .where('binding.containerId = :containerId', {
+          containerId: binding.containerId,
+        })
+        .andWhere('binding.accountId != :accountId', { accountId })
+        .andWhere('binding.isDeleted = :isDeleted', { isDeleted: false })
+        .getCount();
+      if (sharedCount <= 0) {
+        await this.removeContainer(binding.containerId);
+      }
+
+      await this.bindingRepository.update(
+        { id: binding.id },
+        {
+          bindStatus: 'disabled',
+          isDeleted: true,
+          isPrimary: false,
+        },
+      );
+    }
   }
 
   private async removeRemoteDockerContainer(container: QqbotNapcatContainer) {

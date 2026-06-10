@@ -332,13 +332,13 @@ export class QqbotAccountService {
   }
 
   async markOffline(selfId: string, lastError?: string) {
-    await this.accountRepository.update(
-      { selfId },
-      {
-        connectStatus: 'offline',
-        lastError: lastError || null,
-      },
-    );
+    const payload: Partial<QqbotAccount> = {
+      connectStatus: 'offline',
+    };
+    if (lastError !== undefined) {
+      payload.lastError = lastError || null;
+    }
+    await this.accountRepository.update({ selfId }, payload);
   }
 
   private async appendNapcatRuntime(

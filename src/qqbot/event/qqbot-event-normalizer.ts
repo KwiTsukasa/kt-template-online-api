@@ -67,6 +67,36 @@ export function buildDedupeKey(message: QqbotNormalizedMessage) {
   ].join(':');
 }
 
+export function getOneBotOfflineReason(payload: QqbotOneBotEvent) {
+  if (payload?.post_type !== 'notice') return null;
+
+  const noticeType = `${payload.notice_type || ''}`.trim();
+  const subType = `${payload.sub_type || ''}`.trim();
+  const content = [
+    payload.message,
+    payload.reason,
+    payload.raw_message,
+    payload.title,
+    payload.tips,
+    payload.loginError,
+  ]
+    .filter((item) => typeof item === 'string' && item.trim())
+    .join(' ')
+    .trim();
+  const probe = `${noticeType} ${subType} ${content}`;
+  if (!/offline|kick|KickedOffLine|下线|离线|登录已失效/i.test(probe)) {
+    return null;
+  }
+
+  const source = [noticeType, subType].filter(Boolean).join('/') || 'offline';
+  const message = content
+    .replace(/\[KickedOffLine\]/gi, '')
+    .replace(/\[下线通知\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return `${source}：${message || '账号已离线，请重新登录'}`;
+}
+
 function extractMessageText(payload: QqbotOneBotEvent) {
   if (payload.raw_message) return payload.raw_message;
   if (typeof payload.message === 'string') return payload.message;

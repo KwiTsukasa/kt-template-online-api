@@ -7,10 +7,12 @@ import { QqbotBusService } from '../mqtt/qqbot-bus.service';
 import type { QqbotOneBotEvent } from '../qqbot.types';
 import {
   buildDedupeKey,
+  getOneBotOfflineReason,
   isOneBotMessageEvent,
   normalizeOneBotMessage,
 } from './qqbot-event-normalizer';
 import { QqbotRuleEngineService } from '../rule/qqbot-rule-engine.service';
+import { QqbotAccountService } from '../account/qqbot-account.service';
 
 @Injectable()
 export class QqbotEventService {
@@ -22,6 +24,7 @@ export class QqbotEventService {
     private readonly messageService: QqbotMessageService,
     private readonly ruleEngineService: QqbotRuleEngineService,
     private readonly toolsService: ToolsService,
+    private readonly accountService: QqbotAccountService,
   ) {}
 
   async handleIncoming(payload: QqbotOneBotEvent) {
@@ -33,7 +36,10 @@ export class QqbotEventService {
       );
     }
 
-    if (!isOneBotMessageEvent(payload)) return;
+    if (!isOneBotMessageEvent(payload)) {
+      await this.handleRuntimeNotice(selfId, payload);
+      return;
+    }
     const message = normalizeOneBotMessage(payload, this.toolsService);
     if (!message.selfId || !message.targetId || !message.userId) {
       this.logger.warn('QQBot 收到缺少关键字段的消息事件，已忽略');
@@ -49,5 +55,15 @@ export class QqbotEventService {
       message,
     );
     await this.ruleEngineService.handleMessage(message);
+  }
+
+  private async handleRuntimeNotice(
+    selfId: string,
+    payload: QqbotOneBotEvent,
+  ) {
+    if (!selfId) return;
+    const offlineReason = getOneBotOfflineReason(payload);
+    if (!offlineReason) return;
+    await this.accountService.markOffline(selfId, offlineReason);
   }
 }

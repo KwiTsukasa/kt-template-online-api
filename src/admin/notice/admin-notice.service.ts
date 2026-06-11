@@ -2,18 +2,36 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import {
+  SystemNoticePublishInput,
+  SystemNoticePublisher,
   throwVbenError,
   ToolsService,
 } from '@/common';
 import { AdminNotice } from './admin-notice.entity';
-import type {
-  AdminNoticeBodyDto,
-  AdminNoticeQueryDto,
-  AdminNoticeUpdateDto,
-} from './admin-notice.dto';
+import type { AdminNoticeQueryDto } from './admin-notice.dto';
+
+const SYSTEM_NOTICE_DEFAULT_ROLE_CODE = 'super';
+const NOTICE_SEVERITY_LEVEL_MAP: Record<string, number> = {
+  fatal: 4,
+  error: 3,
+  warn: 2,
+  info: 1,
+};
+type NormalizedSystemNoticeInput = {
+  content: string;
+  dedupeKey?: string;
+  eventType: string;
+  level: number;
+  metadata?: Record<string, unknown>;
+  notifyRoleCode: string;
+  severity: string;
+  source: string;
+  summary: string;
+  title: string;
+};
 
 @Injectable()
-export class AdminNoticeService {
+export class AdminNoticeService implements SystemNoticePublisher {
   constructor(
     @InjectRepository(AdminNotice)
     private readonly noticeRepository: Repository<AdminNotice>,
@@ -47,6 +65,10 @@ export class AdminNoticeService {
     }
 
     this.applyLikeFilter(builder, 'notifyUsers', query.notifyUsers);
+    this.applyExactTextFilter(builder, 'severity', query.severity);
+    this.applyExactTextFilter(builder, 'source', query.source);
+    this.applyExactTextFilter(builder, 'eventType', query.eventType);
+    this.applyExactTextFilter(builder, 'notifyRoleCode', query.notifyRoleCode);
 
     const level = this.normalizeLevel(query.level);
     if (Number.isFinite(level)) {
@@ -65,6 +87,7 @@ export class AdminNoticeService {
 
     const [items, total] = await builder
       .orderBy('notice.isTop', 'DESC')
+      .addOrderBy('notice.lastSeenAt', 'DESC')
       .addOrderBy('notice.createTime', 'DESC')
       .skip((pageNo - 1) * pageSize)
       .take(pageSize)
@@ -74,6 +97,52 @@ export class AdminNoticeService {
       items: items.map((item) => this.serialize(item)),
       total,
     };
+  }
+
+  async publishSystemNotice(input: SystemNoticePublishInput) {
+    const normalizedInput = this.normalizeSystemNoticeInput(input);
+    const now = new Date();
+
+    if (normalizedInput.dedupeKey) {
+      const existingNotice = await this.findActiveNoticeByDedupeKey(
+        normalizedInput.dedupeKey,
+      );
+
+      if (existingNotice) {
+        return this.aggregateSystemNotice(
+          existingNotice.id,
+          normalizedInput,
+          now,
+        );
+      }
+    }
+
+    const notice = this.noticeRepository.create({
+      ...normalizedInput,
+      firstSeenAt: now,
+      isTop: false,
+      lastSeenAt: now,
+      occurrenceCount: 1,
+      status: 1,
+    });
+    try {
+      const saved = await this.noticeRepository.save(notice);
+      return saved.id;
+    } catch (err) {
+      if (!normalizedInput.dedupeKey || !this.isDuplicateKeyError(err)) {
+        throw err;
+      }
+
+      const existingNotice = await this.findActiveNoticeByDedupeKey(
+        normalizedInput.dedupeKey,
+      );
+      if (!existingNotice) throw err;
+      return this.aggregateSystemNotice(
+        existingNotice.id,
+        normalizedInput,
+        now,
+      );
+    }
   }
 
   async get(id: string) {
@@ -89,40 +158,6 @@ export class AdminNoticeService {
     if (!notice) throwVbenError('站内信不存在', HttpStatus.BAD_REQUEST);
 
     return this.serialize(notice);
-  }
-
-  async create(body: AdminNoticeBodyDto, createdBy?: string) {
-    const input = this.normalizeInput(body);
-    const notice = this.noticeRepository.create({
-      ...input,
-      createdBy,
-    });
-
-    const saved = await this.noticeRepository.save(notice);
-    return saved.id;
-  }
-
-  async update(body: AdminNoticeUpdateDto) {
-    const id = this.toolsService.toTrimmedString(body.id);
-    if (!id) throwVbenError('站内信ID不能为空', HttpStatus.BAD_REQUEST);
-
-    const notice = await this.noticeRepository.findOne({
-      where: {
-        id,
-        isDeleted: false,
-      },
-    });
-    if (!notice) throwVbenError('站内信不存在', HttpStatus.BAD_REQUEST);
-
-    const input = this.normalizeInput({
-      ...body,
-      content: body.content || notice.content,
-      title: body.title || notice.title,
-    });
-    await this.noticeRepository.save(
-      this.noticeRepository.merge(notice, input),
-    );
-    return null;
   }
 
   async remove(id: string) {
@@ -212,6 +247,22 @@ export class AdminNoticeService {
     });
   }
 
+  private applyExactTextFilter(
+    builder: ReturnType<Repository<AdminNotice>['createQueryBuilder']>,
+    field: keyof Pick<
+      AdminNotice,
+      'eventType' | 'notifyRoleCode' | 'severity' | 'source'
+    >,
+    value?: string,
+  ) {
+    const normalizedValue = this.toolsService.toTrimmedString(value);
+    if (!normalizedValue) return;
+
+    builder.andWhere(`notice.${field} = :${field}`, {
+      [field]: normalizedValue,
+    });
+  }
+
   private normalizeBoolean(value: boolean | number | string | undefined) {
     if (value === undefined || value === null) return undefined;
     if (value === true || value === 1 || `${value}` === '1') return true;
@@ -231,39 +282,89 @@ export class AdminNoticeService {
       : NaN;
   }
 
-  private normalizeNotifyUsers(notifyUsers?: string) {
-    const normalized = this.toolsService.toTrimmedString(notifyUsers);
-    if (!normalized) return undefined;
-
-    const userIds = normalized
-      .split(',')
-      .map((item) => this.toolsService.toTrimmedString(item))
-      .filter((item) => !!item)
-      .filter((item, index, array) => array.indexOf(item) === index);
-
-    return userIds.length ? userIds.join(',') : undefined;
+  private normalizeSeverity(severity?: string) {
+    const normalized = this.toolsService
+      .toTrimmedString(severity)
+      .toLowerCase();
+    return NOTICE_SEVERITY_LEVEL_MAP[normalized] ? normalized : 'info';
   }
 
-  private normalizeInput(body: AdminNoticeBodyDto) {
-    const title = this.toolsService.toTrimmedString(body.title);
-    const content = this.toolsService.toTrimmedString(body.content);
-    const summary = this.toolsService.toTrimmedString(body.summary) || undefined;
-    const level = this.normalizeLevel(body.level);
-    const status = this.normalizeStatus(body.status);
-    const isTop = this.normalizeBoolean(body.isTop);
+  private normalizeSystemNoticeInput(input: SystemNoticePublishInput) {
+    const title = this.toolsService.toColumnText(input.title, 255);
+    const content = this.toolsService.toStoredMessageText(input.content, 4000);
+    const source = this.toolsService.toColumnText(
+      this.toolsService.toTrimmedString(input.source) || 'system',
+      64,
+    );
+    const eventType = this.toolsService.toColumnText(
+      this.toolsService.toTrimmedString(input.eventType) || 'system.event',
+      120,
+    );
+    const severity = this.normalizeSeverity(input.severity);
+    const dedupeKey = this.toolsService.toStableColumnText(
+      input.dedupeKey,
+      255,
+    );
 
-    if (!title) throwVbenError('标题不能为空', HttpStatus.BAD_REQUEST);
-    if (!content) throwVbenError('内容不能为空', HttpStatus.BAD_REQUEST);
+    if (!title) throwVbenError('站内信标题不能为空', HttpStatus.BAD_REQUEST);
+    if (!content) throwVbenError('站内信内容不能为空', HttpStatus.BAD_REQUEST);
 
     return {
       content,
-      level: Number.isFinite(level) ? level : 1,
-      notifyUsers: this.normalizeNotifyUsers(body.notifyUsers),
-      isTop: isTop ?? false,
-      status: status === 0 || status === 1 ? status : 1,
-      summary,
+      dedupeKey: dedupeKey || undefined,
+      eventType,
+      level: NOTICE_SEVERITY_LEVEL_MAP[severity],
+      metadata: input.metadata,
+      notifyRoleCode: this.toolsService.toColumnText(
+        this.toolsService.toTrimmedString(input.notifyRoleCode) ||
+          SYSTEM_NOTICE_DEFAULT_ROLE_CODE,
+        64,
+      ),
+      severity,
+      source,
+      summary: this.toolsService.toStoredMessageText(
+        input.summary || content,
+        200,
+      ),
       title,
-    };
+    } satisfies NormalizedSystemNoticeInput;
+  }
+
+  private async findActiveNoticeByDedupeKey(dedupeKey: string) {
+    return this.noticeRepository.findOne({
+      where: {
+        dedupeKey,
+        isDeleted: false,
+      },
+    });
+  }
+
+  private async aggregateSystemNotice(
+    id: string,
+    normalizedInput: NormalizedSystemNoticeInput,
+    lastSeenAt: Date,
+  ) {
+    await this.noticeRepository
+      .createQueryBuilder()
+      .update(AdminNotice)
+      .set({
+        ...normalizedInput,
+        lastSeenAt,
+        occurrenceCount: () => 'occurrence_count + 1',
+        status: 1,
+      } as any)
+      .where('id = :id', { id })
+      .execute();
+    return id;
+  }
+
+  private isDuplicateKeyError(err: unknown) {
+    const error = err as { code?: string; errno?: number; message?: string };
+    return (
+      error?.code === 'ER_DUP_ENTRY' ||
+      error?.errno === 1062 ||
+      `${error?.message || ''}`.includes('Duplicate entry')
+    );
   }
 
   private serialize(notice: AdminNotice) {
@@ -274,8 +375,17 @@ export class AdminNoticeService {
       id: notice.id,
       isDeleted: notice.isDeleted,
       isTop: notice.isTop,
+      dedupeKey: notice.dedupeKey,
+      eventType: notice.eventType,
+      firstSeenAt: notice.firstSeenAt,
+      lastSeenAt: notice.lastSeenAt,
       level: notice.level,
+      metadata: notice.metadata,
       notifyUsers: notice.notifyUsers,
+      notifyRoleCode: notice.notifyRoleCode,
+      occurrenceCount: notice.occurrenceCount,
+      severity: notice.severity,
+      source: notice.source,
       status: notice.status,
       summary: notice.summary,
       title: notice.title,

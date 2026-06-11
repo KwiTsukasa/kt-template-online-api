@@ -152,6 +152,42 @@ CREATE TABLE IF NOT EXISTS `admin_component` (
   KEY `idx_admin_component_deleted` (`is_deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `admin_notice` (
+  `id` bigint NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `content` longtext NOT NULL,
+  `summary` text DEFAULT NULL,
+  `level` int NOT NULL DEFAULT 1,
+  `status` int NOT NULL DEFAULT 1,
+  `severity` varchar(16) NOT NULL DEFAULT 'info',
+  `source` varchar(64) NOT NULL DEFAULT 'system',
+  `event_type` varchar(120) NOT NULL DEFAULT 'system.event',
+  `dedupe_key` varchar(255) DEFAULT NULL,
+  `occurrence_count` int NOT NULL DEFAULT 1,
+  `notify_role_code` varchar(64) NOT NULL DEFAULT 'super',
+  `metadata` json DEFAULT NULL,
+  `is_top` tinyint(1) NOT NULL DEFAULT 0,
+  `notify_users` text DEFAULT NULL,
+  `created_by` bigint DEFAULT NULL,
+  `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
+  `active_dedupe_key` varchar(255) GENERATED ALWAYS AS (CASE WHEN `is_deleted` = 0 AND `dedupe_key` IS NOT NULL THEN `dedupe_key` ELSE NULL END) VIRTUAL,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  `first_seen_at` datetime DEFAULT NULL,
+  `last_seen_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_admin_notice_active_dedupe_key` (`active_dedupe_key`),
+  KEY `idx_admin_notice_status` (`status`),
+  KEY `idx_admin_notice_severity` (`severity`),
+  KEY `idx_admin_notice_source_event` (`source`, `event_type`),
+  KEY `idx_admin_notice_dedupe_key` (`dedupe_key`),
+  KEY `idx_admin_notice_notify_role` (`notify_role_code`),
+  KEY `idx_admin_notice_is_top` (`is_top`),
+  KEY `idx_admin_notice_is_deleted` (`is_deleted`),
+  KEY `idx_admin_notice_create_time` (`create_time`),
+  KEY `idx_admin_notice_last_seen` (`last_seen_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `admin_user_role` (
   `user_id` bigint NOT NULL,
   `role_id` bigint NOT NULL,
@@ -201,6 +237,9 @@ VALUES
   (2041700000000120205, 2041700000000100203, 'SystemKtTableDemoEdit', NULL, NULL, NULL, 'System:KtTableDemo:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120206, 2041700000000100203, 'SystemKtTableDemoDelete', NULL, NULL, NULL, 'System:KtTableDemo:Delete', 'button', '{"title":"common.delete"}', 1, 0),
   (2041700000000100205, 2041700000000100002, 'SystemLog', '/system/logs', '/system/log/list', NULL, 'System:Log:List', 'menu', '{"icon":"lucide:scroll-text","title":"system.log.title"}', 1, 6),
+  (2041700000000100206, 2041700000000100002, 'SystemNotice', '/system/notice', '/system/notice/list', NULL, 'System:Notice:List', 'menu', '{"icon":"mdi:bell-outline","title":"system.notice.title"}', 1, 7),
+  (2041700000000120212, 2041700000000100206, 'SystemNoticeEdit', NULL, NULL, NULL, 'System:Notice:Edit', 'button', '{"title":"system.notice.markHandled"}', 1, 1),
+  (2041700000000120213, 2041700000000100206, 'SystemNoticeDelete', NULL, NULL, NULL, 'System:Notice:Delete', 'button', '{"title":"common.delete"}', 1, 2),
   (2041700000000100300, 0, 'Blog', '/blog', NULL, '/blog/article', NULL, 'catalog', '{"icon":"lucide:newspaper","order":100,"title":"博客管理"}', 1, 100),
   (2041700000000100301, 2041700000000100300, 'BlogArticle', '/blog/article', '/blog/article/list', NULL, 'Blog:Article:List', 'menu', '{"icon":"lucide:file-text","title":"文章管理"}', 1, 0),
   (2041700000000120301, 2041700000000100301, 'BlogArticleCreate', NULL, NULL, NULL, 'Blog:Article:Create', 'button', '{"title":"common.create"}', 1, 0),
@@ -318,7 +357,8 @@ WHERE `is_deleted` = 0;
 INSERT INTO `admin_role_menu` (`role_id`, `menu_id`)
 SELECT 2041700000000010002, `id`
 FROM `admin_menu`
-WHERE `is_deleted` = 0;
+WHERE `is_deleted` = 0
+  AND `name` NOT IN ('SystemNotice', 'SystemNoticeEdit', 'SystemNoticeDelete');
 
 INSERT INTO `admin_role_menu` (`role_id`, `menu_id`)
 VALUES

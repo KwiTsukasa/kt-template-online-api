@@ -22,8 +22,7 @@ SET `meta` = CASE `name`
   WHEN 'SystemDeptEdit' THEN '{"title":"common.edit"}'
   WHEN 'SystemDeptDelete' THEN '{"title":"common.delete"}'
   WHEN 'SystemNotice' THEN '{"icon":"mdi:bell-outline","title":"system.notice.title"}'
-  WHEN 'SystemNoticeCreate' THEN '{"title":"common.create"}'
-  WHEN 'SystemNoticeEdit' THEN '{"title":"common.edit"}'
+  WHEN 'SystemNoticeEdit' THEN '{"title":"system.notice.markHandled"}'
   WHEN 'SystemNoticeDelete' THEN '{"title":"common.delete"}'
   WHEN 'SystemLog' THEN '{"icon":"lucide:scroll-text","title":"system.log.title"}'
   WHEN 'Project' THEN '{"badgeType":"dot","icon":"carbon:data-center","order":9998,"title":"demos.vben.title"}'
@@ -50,7 +49,6 @@ WHERE `name` IN (
   'SystemDeptEdit',
   'SystemDeptDelete',
   'SystemNotice',
-  'SystemNoticeCreate',
   'SystemNoticeEdit',
   'SystemNoticeDelete',
   'SystemLog',

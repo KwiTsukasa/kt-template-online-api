@@ -1,5 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ToolsService } from '@/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import {
+  SYSTEM_NOTICE_PUBLISHER,
+  SystemNoticePublisher,
+  ToolsService,
+} from '@/common';
 import { QQBOT_MQTT_TOPICS } from '../qqbot.constants';
 import { QqbotDedupeService } from '../dedupe/qqbot-dedupe.service';
 import { QqbotMessageService } from '../message/qqbot-message.service';
@@ -25,6 +29,9 @@ export class QqbotEventService {
     private readonly ruleEngineService: QqbotRuleEngineService,
     private readonly toolsService: ToolsService,
     private readonly accountService: QqbotAccountService,
+    @Optional()
+    @Inject(SYSTEM_NOTICE_PUBLISHER)
+    private readonly systemNoticePublisher?: SystemNoticePublisher,
   ) {}
 
   async handleIncoming(payload: QqbotOneBotEvent) {
@@ -65,5 +72,31 @@ export class QqbotEventService {
     const offlineReason = getOneBotOfflineReason(payload);
     if (!offlineReason) return;
     await this.accountService.markOffline(selfId, offlineReason);
+    this.publishOfflineNotice(selfId, offlineReason, payload);
+  }
+
+  private publishOfflineNotice(
+    selfId: string,
+    offlineReason: string,
+    payload: QqbotOneBotEvent,
+  ) {
+    if (!this.systemNoticePublisher) return;
+
+    void this.systemNoticePublisher
+      .publishSystemNotice({
+        content: offlineReason,
+        dedupeKey: `qqbot:offline:${selfId}`,
+        eventType: 'qqbot.account.offline',
+        metadata: {
+          payload,
+          selfId,
+        },
+        notifyRoleCode: 'super',
+        severity: 'error',
+        source: 'qqbot',
+        summary: offlineReason,
+        title: `QQBot 账号已下线：${selfId}`,
+      })
+      .catch(() => undefined);
   }
 }

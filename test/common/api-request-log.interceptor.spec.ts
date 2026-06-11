@@ -48,6 +48,12 @@ function createLokiLogPublisherMock() {
   };
 }
 
+function createSystemNoticePublisherMock() {
+  return {
+    publishSystemNotice: jest.fn().mockResolvedValue('notice-1'),
+  };
+}
+
 describe('ApiRequestLogInterceptor', () => {
   it('writes structured HTTP request fields for successful controller calls', async () => {
     const logger = {
@@ -191,6 +197,59 @@ describe('ApiRequestLogInterceptor', () => {
           requestId: request.id,
           statusCode: 404,
         }),
+      }),
+    );
+  });
+
+  it('publishes a super notice when a controller call fails with 5xx', async () => {
+    const logger = {
+      error: jest.fn(),
+      info: jest.fn(),
+      setContext: jest.fn(),
+      warn: jest.fn(),
+    };
+    const lokiLogPublisher = createLokiLogPublisherMock();
+    const systemNoticePublisher = createSystemNoticePublisherMock();
+    const interceptor = new (ApiRequestLogInterceptor as any)(
+      logger,
+      lokiLogPublisher,
+      new ToolsService(),
+      systemNoticePublisher,
+    );
+    const request: Record<string, any> = {
+      headers: {
+        'x-request-id': 'req-error',
+      },
+      method: 'POST',
+      originalUrl: '/system/user/save?trace=1',
+    };
+    const response = createResponse(200);
+    const error = new Error('database unavailable');
+
+    await expect(
+      lastValueFrom(
+        interceptor.intercept(createHttpContext(request, response), {
+          handle: () => throwError(() => error),
+        }),
+      ),
+    ).rejects.toBe(error);
+
+    expect(systemNoticePublisher.publishSystemNotice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'database unavailable',
+        dedupeKey: 'api:error:POST:/system/user/save:500',
+        eventType: 'api.error',
+        metadata: expect.objectContaining({
+          method: 'POST',
+          path: '/system/user/save',
+          requestId: 'req-error',
+          statusCode: 500,
+        }),
+        notifyRoleCode: 'super',
+        severity: 'error',
+        source: 'api',
+        summary: '500 POST /system/user/save',
+        title: '接口错误：POST /system/user/save',
       }),
     );
   });

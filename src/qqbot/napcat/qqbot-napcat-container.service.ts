@@ -10,6 +10,13 @@ import { QqbotAccountNapcat } from './qqbot-account-napcat.entity';
 import { QqbotNapcatContainer } from './qqbot-napcat-container.entity';
 import type { QqbotNapcatRuntime } from '../qqbot.types';
 
+type NapcatLoginLogState = 'offline' | 'online' | 'unknown';
+
+type NapcatLoginLogResult = {
+  offlineReason: string | null;
+  state: NapcatLoginLogState;
+};
+
 @Injectable()
 export class QqbotNapcatContainerService {
   constructor(
@@ -207,6 +214,41 @@ export class QqbotNapcatContainerService {
     return true;
   }
 
+  async detectRuntimeOffline(container: QqbotNapcatContainer) {
+    if (this.getManagedMode() !== 'ssh' || !container.name) return null;
+
+    try {
+      const result = await this.runProcess(
+        'ssh',
+        [...this.getSshArgs(), 'sh -s'],
+        this.buildRemoteRecentLogsScript(container),
+        undefined,
+        this.getRuntimeCheckTimeoutMs(),
+      );
+      const loginState = this.extractLoginState(result.stdout);
+      await this.containerRepository.update(
+        { id: container.id },
+        {
+          lastCheckedAt: new Date(),
+          ...(loginState.state === 'offline'
+            ? { lastError: loginState.offlineReason }
+            : {}),
+          ...(loginState.state === 'online' ? { lastError: null } : {}),
+        },
+      );
+      return loginState.offlineReason;
+    } catch (err) {
+      await this.containerRepository.update(
+        { id: container.id },
+        {
+          lastCheckedAt: new Date(),
+          lastError: this.toolsService.getErrorMessage(err),
+        },
+      );
+      return null;
+    }
+  }
+
   private async removeContainer(containerId: string) {
     const container = await this.containerRepository.findOne({
       where: {
@@ -333,6 +375,60 @@ echo "__KT_PROGRESS__:container-start:正在启动 NapCat 容器"
 docker start "$NAME" >/dev/null
 echo "__KT_PROGRESS__:container-started:NapCat 容器已启动"
 `;
+  }
+
+  private buildRemoteRecentLogsScript(container: QqbotNapcatContainer) {
+    const name = this.sh(container.name);
+
+    return `
+set -eu
+NAME=${name}
+docker logs --tail 300 "$NAME" 2>&1 || true
+`;
+  }
+
+  private extractLoginState(logs: string): NapcatLoginLogResult {
+    const lines = logs
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .reverse();
+
+    const matchedLine = lines.find(
+      (line) =>
+        this.toolsService.isNapcatOfflineLoginMessage(line) ||
+        this.toolsService.isNapcatOnlineLoginMessage(line),
+    );
+    if (!matchedLine) {
+      return {
+        offlineReason: null,
+        state: 'unknown',
+      };
+    }
+
+    if (this.toolsService.isNapcatOnlineLoginMessage(matchedLine)) {
+      return {
+        offlineReason: null,
+        state: 'online',
+      };
+    }
+
+    const message = matchedLine
+      .replace(/^\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+\[[^\]]+\]\s+/, '')
+      .replace(/^Mirror\s*\|\s*/, '')
+      .replace(/\[KickedOffLine]/gi, '')
+      .replace(/\[下线通知]/g, '')
+      .trim();
+    const offlineReason = this.toolsService.isNapcatOfflineFlagMessage(
+      matchedLine,
+    )
+      ? 'NapCat 账号状态变更为离线'
+      : message || 'NapCat 账号状态变更为离线';
+
+    return {
+      offlineReason,
+      state: 'offline',
+    };
   }
 
   private async getPrimaryRuntime(accountId: string) {
@@ -657,6 +753,13 @@ docker run -d \\
     return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 120000;
   }
 
+  private getRuntimeCheckTimeoutMs() {
+    const timeoutMs = Number(
+      this.getConfig('QQBOT_NAPCAT_RUNTIME_CHECK_TIMEOUT_MS', '5000'),
+    );
+    return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5000;
+  }
+
   private sh(value: string) {
     return `'${`${value}`.replace(/'/g, `'\\''`)}'`;
   }
@@ -666,60 +769,62 @@ docker run -d \\
     args: string[],
     input: string,
     onStdoutLine?: (line: string) => void,
+    timeoutMs = this.getProcessTimeoutMs(),
   ) {
-    return new Promise<void>((resolve, reject) => {
-      const child = spawn(command, args, {
-        windowsHide: true,
-      });
-      let settled = false;
-      let stdout = '';
-      let stderr = '';
-      let stdoutLineBuffer = '';
-      const timeoutMs = this.getProcessTimeoutMs();
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        child.kill('SIGTERM');
-        reject(new Error(`${command} timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
-      const finish = (callback: () => void) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        callback();
-      };
-      child.stdout.on('data', (chunk) => {
-        const text = Buffer.from(chunk).toString('utf8');
-        stdout += text;
-        if (onStdoutLine) {
-          const lines = `${stdoutLineBuffer}${text}`.split(/\r?\n/);
-          stdoutLineBuffer = lines.pop() || '';
-          lines
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .forEach((line) => onStdoutLine(line));
-        }
-      });
-      child.stderr.on('data', (chunk) => {
-        stderr += Buffer.from(chunk).toString('utf8');
-      });
-      child.on('error', (err) => {
-        finish(() => reject(err));
-      });
-      child.on('close', (code) => {
-        finish(() => {
-          if (onStdoutLine && stdoutLineBuffer.trim()) {
-            onStdoutLine(stdoutLineBuffer.trim());
-          }
-          if (code === 0) {
-            resolve();
-            return;
-          }
-          reject(new Error((stderr || stdout || `${command} failed`).trim()));
+    return new Promise<{ stderr: string; stdout: string }>(
+      (resolve, reject) => {
+        const child = spawn(command, args, {
+          windowsHide: true,
         });
-      });
-      child.stdin.write(input);
-      child.stdin.end();
-    });
+        let settled = false;
+        let stdout = '';
+        let stderr = '';
+        let stdoutLineBuffer = '';
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          child.kill('SIGTERM');
+          reject(new Error(`${command} timeout after ${timeoutMs}ms`));
+        }, timeoutMs);
+        const finish = (callback: () => void) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          callback();
+        };
+        child.stdout.on('data', (chunk) => {
+          const text = Buffer.from(chunk).toString('utf8');
+          stdout += text;
+          if (onStdoutLine) {
+            const lines = `${stdoutLineBuffer}${text}`.split(/\r?\n/);
+            stdoutLineBuffer = lines.pop() || '';
+            lines
+              .map((line) => line.trim())
+              .filter(Boolean)
+              .forEach((line) => onStdoutLine(line));
+          }
+        });
+        child.stderr.on('data', (chunk) => {
+          stderr += Buffer.from(chunk).toString('utf8');
+        });
+        child.on('error', (err) => {
+          finish(() => reject(err));
+        });
+        child.on('close', (code) => {
+          finish(() => {
+            if (onStdoutLine && stdoutLineBuffer.trim()) {
+              onStdoutLine(stdoutLineBuffer.trim());
+            }
+            if (code === 0) {
+              resolve({ stderr, stdout });
+              return;
+            }
+            reject(new Error((stderr || stdout || `${command} failed`).trim()));
+          });
+        });
+        child.stdin.write(input);
+        child.stdin.end();
+      },
+    );
   }
 }

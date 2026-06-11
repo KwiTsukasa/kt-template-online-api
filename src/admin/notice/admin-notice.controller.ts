@@ -1,31 +1,14 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import {
-  CurrentAdminUser,
-  vbenPage,
-  vbenSuccess,
-} from '@/common';
+import { vbenPage, vbenSuccess } from '@/common';
+import { AdminSuperGuard } from '../auth/admin-super.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AdminUser } from '../user/admin-user.entity';
-import {
-  AdminNoticeBodyDto,
-  AdminNoticeQueryDto,
-  AdminNoticeUpdateDto,
-} from './admin-notice.dto';
+import { AdminNoticeQueryDto } from './admin-notice.dto';
 import { AdminNoticeService } from './admin-notice.service';
 
 @ApiTags('Admin - 站内信管理')
 @Controller('system/notice')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, AdminSuperGuard)
 export class AdminNoticeController {
   constructor(private readonly noticeService: AdminNoticeService) {}
 
@@ -46,23 +29,6 @@ export class AdminNoticeController {
   @ApiOperation({ summary: '查询站内信详情' })
   async detail(@Param('id') id: string) {
     return vbenSuccess(await this.noticeService.get(id));
-  }
-
-  @Post('save')
-  @ApiOperation({ summary: '新增站内信' })
-  async save(
-    @Body() body: AdminNoticeBodyDto,
-    @CurrentAdminUser() currentUser: AdminUser,
-  ) {
-    return vbenSuccess(
-      await this.noticeService.create(body, currentUser?.id),
-    );
-  }
-
-  @Post('update')
-  @ApiOperation({ summary: '编辑站内信' })
-  async update(@Body() body: AdminNoticeUpdateDto) {
-    return vbenSuccess(await this.noticeService.update(body));
   }
 
   @Delete(':id')

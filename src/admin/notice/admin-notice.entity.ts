@@ -57,6 +57,70 @@ export class AdminNotice {
   status: number;
 
   @ApiProperty({
+    example: 'error',
+  })
+  @Column({
+    default: 'info',
+    length: 16,
+  })
+  severity: string;
+
+  @ApiProperty({
+    example: 'api',
+  })
+  @Column({
+    default: 'system',
+    length: 64,
+  })
+  source: string;
+
+  @ApiProperty({
+    example: 'api.error',
+  })
+  @Column({
+    default: 'system.event',
+    length: 120,
+    name: 'event_type',
+  })
+  eventType: string;
+
+  @ApiPropertyOptional({
+    example: 'api:error:GET:/boom:500',
+  })
+  @Column({
+    length: 255,
+    name: 'dedupe_key',
+    nullable: true,
+  })
+  dedupeKey?: string;
+
+  @ApiProperty({
+    example: 1,
+  })
+  @Column({
+    default: 1,
+    name: 'occurrence_count',
+  })
+  occurrenceCount: number;
+
+  @ApiProperty({
+    example: 'super',
+  })
+  @Column({
+    default: 'super',
+    length: 64,
+    name: 'notify_role_code',
+  })
+  notifyRoleCode: string;
+
+  @ApiPropertyOptional()
+  @Column({
+    nullable: true,
+    type: 'json',
+  })
+  metadata?: Record<string, unknown>;
+
+  @ApiProperty({
     example: false,
   })
   @Column({
@@ -82,6 +146,7 @@ export class AdminNotice {
   @Column({
     name: 'created_by',
     nullable: true,
+    type: 'bigint',
   })
   createdBy?: string;
 
@@ -106,9 +171,24 @@ export class AdminNotice {
   @FormatDateTime()
   updateTime: Date;
 
+  @Column({
+    name: 'first_seen_at',
+    nullable: true,
+    type: 'datetime',
+  })
+  @FormatDateTime()
+  firstSeenAt?: Date;
+
+  @Column({
+    name: 'last_seen_at',
+    nullable: true,
+    type: 'datetime',
+  })
+  @FormatDateTime()
+  lastSeenAt?: Date;
+
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);
   }
 }
-

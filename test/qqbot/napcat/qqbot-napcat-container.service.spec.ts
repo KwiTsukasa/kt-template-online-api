@@ -79,4 +79,134 @@ describe('QqbotNapcatContainerService', () => {
       }),
     );
   });
+
+  it('uses the latest NapCat account status line as runtime offline truth', () => {
+    const service = new QqbotNapcatContainerService(
+      { get: jest.fn() } as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+
+    expect(
+      service.extractLoginState(`
+06-11 08:39:19 [info] Mirror | 账号状态变更为离线
+06-11 08:41:19 [info] Mirror | 账号状态变更为在线
+`).offlineReason,
+    ).toBeNull();
+  });
+
+  it('treats isOnline false as an offline runtime state', () => {
+    const service = new QqbotNapcatContainerService(
+      { get: jest.fn() } as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+
+    const result = service.extractLoginState(`
+06-11 08:39:19 [info] Mirror | {"isOnline": false}
+`);
+
+    expect(result).toEqual({
+      offlineReason: 'NapCat 账号状态变更为离线',
+      state: 'offline',
+    });
+  });
+
+  it('clears stale offline error when the latest NapCat account status is online', async () => {
+    const containerRepository = {
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
+            QQBOT_NAPCAT_SSH_TARGET: 'nas',
+          };
+          return values[key] || '';
+        }),
+      } as any,
+      containerRepository as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+    service.runProcess = jest.fn().mockResolvedValue({
+      stderr: '',
+      stdout: `
+06-11 08:39:19 [info] Mirror | 账号状态变更为离线
+06-11 08:41:19 [info] Mirror | 账号状态变更为在线
+`,
+    });
+
+    const reason = await service.detectRuntimeOffline({
+      id: 'container-1',
+      name: 'kt-qqbot-napcat-1914728559',
+    });
+
+    expect(reason).toBeNull();
+    expect(containerRepository.update).toHaveBeenCalledWith(
+      { id: 'container-1' },
+      expect.objectContaining({
+        lastCheckedAt: expect.any(Date),
+        lastError: null,
+      }),
+    );
+  });
+
+  it('extracts the latest NapCat offline reason from container logs', () => {
+    const service = new QqbotNapcatContainerService(
+      { get: jest.fn() } as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+
+    expect(
+      service.extractLoginState(`
+06-11 08:39:19 [info] Mirror | [KickedOffLine] [下线通知] 您的账号已在另一台终端登录
+06-11 08:40:49 [info] Mirror | 账号状态变更为离线
+`).offlineReason,
+    ).toBe('账号状态变更为离线');
+  });
+
+  it('uses a short timeout for runtime offline log detection', async () => {
+    const containerRepository = {
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
+            QQBOT_NAPCAT_RUNTIME_CHECK_TIMEOUT_MS: '5000',
+            QQBOT_NAPCAT_SSH_TARGET: 'nas',
+          };
+          return values[key] || '';
+        }),
+      } as any,
+      containerRepository as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+    service.runProcess = jest.fn().mockResolvedValue({
+      stderr: '',
+      stdout: '06-11 08:39:19 [info] Mirror | 账号状态变更为离线',
+    });
+
+    const reason = await service.detectRuntimeOffline({
+      id: 'container-1',
+      name: 'kt-qqbot-napcat-1914728559',
+    });
+
+    expect(reason).toBe('账号状态变更为离线');
+    expect(service.runProcess).toHaveBeenCalledWith(
+      'ssh',
+      expect.any(Array),
+      expect.any(String),
+      undefined,
+      5000,
+    );
+  });
 });

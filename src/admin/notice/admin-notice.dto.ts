@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FormatDateTime } from '@/common';
 
 export class AdminNoticeDto {
@@ -33,6 +33,39 @@ export class AdminNoticeDto {
   status: number;
 
   @ApiProperty({
+    example: 'error',
+  })
+  severity: string;
+
+  @ApiProperty({
+    example: 'api',
+  })
+  source: string;
+
+  @ApiProperty({
+    example: 'api.error',
+  })
+  eventType: string;
+
+  @ApiPropertyOptional({
+    example: 'api:error:GET:/boom:500',
+  })
+  dedupeKey?: string;
+
+  @ApiProperty({
+    example: 1,
+  })
+  occurrenceCount: number;
+
+  @ApiProperty({
+    example: 'super',
+  })
+  notifyRoleCode: string;
+
+  @ApiPropertyOptional()
+  metadata?: Record<string, unknown>;
+
+  @ApiProperty({
     example: false,
   })
   isTop: boolean;
@@ -63,6 +96,18 @@ export class AdminNoticeDto {
   })
   @FormatDateTime()
   updateTime?: Date;
+
+  @ApiPropertyOptional({
+    example: '2026-06-03 20:00:00',
+  })
+  @FormatDateTime()
+  firstSeenAt?: Date;
+
+  @ApiPropertyOptional({
+    example: '2026-06-03 20:00:00',
+  })
+  @FormatDateTime()
+  lastSeenAt?: Date;
 }
 
 export class AdminNoticeQueryDto {
@@ -85,38 +130,20 @@ export class AdminNoticeQueryDto {
   status?: number | string;
 
   @ApiPropertyOptional()
+  severity?: string;
+
+  @ApiPropertyOptional()
+  source?: string;
+
+  @ApiPropertyOptional()
+  eventType?: string;
+
+  @ApiPropertyOptional()
+  notifyRoleCode?: string;
+
+  @ApiPropertyOptional()
   isTop?: boolean | number | string;
 
   @ApiPropertyOptional()
   notifyUsers?: string;
-}
-
-export class AdminNoticeBodyDto {
-  @ApiProperty({ example: '系统公告' })
-  title: string;
-
-  @ApiProperty({ example: '站内公告正文内容' })
-  content: string;
-
-  @ApiPropertyOptional({ example: '站内公告摘要' })
-  summary?: string;
-
-  @ApiPropertyOptional({ example: 1 })
-  level?: number | string;
-
-  @ApiPropertyOptional({ example: 1 })
-  status?: number | string;
-
-  @ApiPropertyOptional({ example: false })
-  isTop?: boolean | number | string;
-
-  @ApiPropertyOptional({ example: '100001,100002' })
-  notifyUsers?: string;
-}
-
-export class AdminNoticeUpdateDto extends PartialType(AdminNoticeBodyDto) {
-  @ApiProperty({
-    example: '2041700000000300001',
-  })
-  id: string;
 }

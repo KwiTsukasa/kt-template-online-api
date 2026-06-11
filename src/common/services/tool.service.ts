@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import * as svgCaptcha from 'svg-captcha';
 import { normalizeVbenErrorText } from '../response/vben-response';
@@ -136,6 +137,24 @@ export class ToolsService {
     );
     if (text.length <= maxLength) return text;
     return `${text.slice(0, maxLength)}...<truncated ${text.length - maxLength} chars>`;
+  }
+
+  toColumnText(value: unknown, maxLength: number) {
+    const text = this.toTrimmedString(value);
+    if (maxLength <= 0) return '';
+    if (text.length <= maxLength) return text;
+    if (maxLength <= 3) return text.slice(0, maxLength);
+    return `${text.slice(0, maxLength - 3)}...`;
+  }
+
+  toStableColumnText(value: unknown, maxLength: number) {
+    const text = this.toTrimmedString(value);
+    if (maxLength <= 0) return '';
+    if (text.length <= maxLength) return text;
+
+    const suffix = `...#${createHash('sha1').update(text).digest('hex').slice(0, 12)}`;
+    if (maxLength <= suffix.length) return text.slice(0, maxLength);
+    return `${text.slice(0, maxLength - suffix.length)}${suffix}`;
   }
 
   toStringId(value: number | string | undefined | null) {
@@ -346,6 +365,8 @@ export class ToolsService {
   }
 
   isNapcatOfflineLoginMessage(message?: string) {
+    if (this.isNapcatOfflineFlagMessage(message)) return true;
+
     return this.includesAny(message, [
       'KickedOffLine',
       'Not Login',
@@ -356,6 +377,35 @@ export class ToolsService {
       '被踢',
       '登录态失效',
     ]);
+  }
+
+  isNapcatOnlineLoginMessage(message?: string) {
+    if (this.isNapcatOfflineFlagMessage(message)) return false;
+    if (this.isNapcatOnlineFlagMessage(message)) return true;
+
+    return this.includesAny(message, [
+      '账号状态变更为在线',
+      '扫码登录成功',
+      '登录成功',
+      'Login Success',
+    ]);
+  }
+
+  isNapcatOfflineFlagMessage(message?: string) {
+    return this.matchesNapcatOnlineFlag(message, false);
+  }
+
+  isNapcatOnlineFlagMessage(message?: string) {
+    return this.matchesNapcatOnlineFlag(message, true);
+  }
+
+  private matchesNapcatOnlineFlag(message: unknown, expected: boolean) {
+    const text = this.toTrimmedString(message);
+    if (!text) return false;
+    return new RegExp(
+      `["']?isOnline["']?\\s*[:=]\\s*${expected ? 'true' : 'false'}\\b`,
+      'i',
+    ).test(text);
   }
 
   isNapcatExpiredQrcodeStatus(status: NapcatLoginStatusLike) {

@@ -3,13 +3,19 @@ import {
   CallHandler,
   ExecutionContext,
   HttpException,
+  Inject,
   Injectable,
   NestInterceptor,
+  Optional,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { PinoLogger } from 'nestjs-pino';
 import { catchError, Observable, tap, throwError } from 'rxjs';
 import { LokiLogPublisherService } from '../logger/loki-log-publisher.service';
+import {
+  SYSTEM_NOTICE_PUBLISHER,
+  SystemNoticePublisher,
+} from '../notice/system-notice-publisher';
 import { ToolsService } from '../services/tool.service';
 
 type RequestWithId = Request & {
@@ -22,6 +28,9 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
     private readonly logger: PinoLogger,
     private readonly lokiLogPublisherService: LokiLogPublisherService,
     private readonly toolsService: ToolsService,
+    @Optional()
+    @Inject(SYSTEM_NOTICE_PUBLISHER)
+    private readonly systemNoticePublisher?: SystemNoticePublisher,
   ) {
     this.logger.setContext(ApiRequestLogInterceptor.name);
   }
@@ -93,6 +102,10 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
         message: 'HTTP request failed',
         payload,
       });
+      this.publishSystemNotice({
+        error: params.error,
+        payload,
+      });
       this.logger.error(
         {
           ...payload,
@@ -140,11 +153,58 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
       .catch(() => undefined);
   }
 
+  private publishSystemNotice(params: {
+    error?: unknown;
+    payload: Record<string, unknown>;
+  }) {
+    const method = this.toolsService.toTrimmedString(params.payload.method);
+    const path = this.toolsService.normalizeRequestPathValue(
+      params.payload.path,
+    );
+    const statusCode = Number(params.payload.statusCode) || 500;
+
+    if (!this.systemNoticePublisher || this.shouldSkipSystemNotice(path)) {
+      return;
+    }
+
+    const errorMessage = this.toolsService.getErrorMessage(
+      params.error,
+      'HTTP request failed',
+    );
+
+    void this.systemNoticePublisher
+      .publishSystemNotice({
+        content: errorMessage,
+        dedupeKey: `api:error:${method}:${path}:${statusCode}`,
+        eventType: 'api.error',
+        metadata: {
+          ...params.payload,
+          errorMessage,
+        },
+        notifyRoleCode: 'super',
+        severity: 'error',
+        source: 'api',
+        summary: `${statusCode} ${method} ${path}`,
+        title: `接口错误：${method} ${path}`,
+      })
+      .catch(() => undefined);
+  }
+
   private shouldSkipLokiPublish(path: unknown) {
     const normalizedPath = this.toolsService.normalizeRequestPathValue(path);
     return (
       normalizedPath === '/system/logs' ||
       normalizedPath.startsWith('/system/logs/')
+    );
+  }
+
+  private shouldSkipSystemNotice(path: unknown) {
+    const normalizedPath = this.toolsService.normalizeRequestPathValue(path);
+    return (
+      normalizedPath === '/system/logs' ||
+      normalizedPath.startsWith('/system/logs/') ||
+      normalizedPath === '/system/notice' ||
+      normalizedPath.startsWith('/system/notice/')
     );
   }
 

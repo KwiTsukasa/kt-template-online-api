@@ -130,8 +130,9 @@ pnpm exec jest --runInBand --runTestsByPath test/path/to/file.spec.ts
 - Admin、Component、Dict、MinIO、Blog 管理、WordPress 管理和 QQBot 管理接口默认走 `JwtAuthGuard`；公开接口用 `@Public()`。
 - WordPress 自动登录失败不会阻断 Admin 主登录，会通过菜单和权限码过滤不可用的 Blog 管理入口。
 - 系统日志由 pino 输出，Loki 查询统一通过后端 `/system/logs/*` 代理，前端不直连 Loki。
+- 日志级站内信只承接运行期事件：接口 5xx、QQBot 下线 notice、NapCat 容器最新离线日志会自动聚合通知 `super` 角色；服务端强制 `super` 访问，Admin 不再暴露人工新增/编辑入口；长路径接口错误会压缩 `dedupeKey/title` 到表字段长度内，避免通知入库失败。
 - QQBot 扫码登录通过 SSE `/qqbot/account/scan/events` 暴露进度，耗时链路不应阻塞普通 HTTP 响应。
-- QQBot 同一账号只允许一个有效 NapCat 主容器；绑定新容器时会释放旧绑定和不再共享的旧容器，下线 notice 会写入账号 `lastError`，后续无错误的普通断连不能清空该原因。
+- QQBot 同一账号只允许一个有效 NapCat 主容器；绑定新容器时会释放旧绑定和不再共享的旧容器，下线 notice、`isOnline:false` 和 NapCat 容器最新离线日志都会写入账号 `lastError`，后续无错误的普通断连不能清空该原因；账号列表日志检测带近期缓存和短超时，账号连接时间或心跳晚于容器检测时间时以账号在线态为准，最新日志为在线时清空容器旧离线错误。
 - BangDream 当前源码根目录是 `src/qqbot/plugins/bangDream`；不要恢复旧 `tsugu` 层级或旧大桶目录。
 - BangDream 在线命令以 `registry/operation-registry.ts` 为单一来源，新增命令必须同步 SQL/在线命令表并跑 registry/command-SQL 测试。
 - BangDream event stage 大图必须保持分页拆图行为，线上 smoke 关注 `imageCount=5`，避免大 canvas OOM 回归。

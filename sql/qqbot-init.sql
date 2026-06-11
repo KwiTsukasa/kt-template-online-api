@@ -262,6 +262,231 @@ CREATE TABLE IF NOT EXISTS `qqbot_dedupe` (
 
 SET @qqbot_sql = (
   SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_account` ADD COLUMN `connection_mode` varchar(32) NOT NULL DEFAULT ''reverse-ws''',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'connection_mode'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_account` ADD COLUMN `access_token` varchar(255) DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'access_token'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_account` ADD COLUMN `client_role` varchar(32) DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'client_role'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_account` ADD COLUMN `last_connected_at` datetime DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'last_connected_at'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_account` ADD COLUMN `last_heartbeat_at` datetime DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'last_heartbeat_at'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_account` ADD COLUMN `last_error` varchar(500) DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'last_error'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `webui_port` int DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_napcat_container'
+    AND column_name = 'webui_port'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `webui_token` varchar(255) DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_napcat_container'
+    AND column_name = 'webui_token'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `image` varchar(255) NOT NULL DEFAULT ''''',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_napcat_container'
+    AND column_name = 'image'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `data_dir` varchar(500) NOT NULL DEFAULT ''''',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_napcat_container'
+    AND column_name = 'data_dir'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `reverse_ws_url` varchar(500) NOT NULL DEFAULT ''''',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_napcat_container'
+    AND column_name = 'reverse_ws_url'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `status` varchar(32) NOT NULL DEFAULT ''creating''',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_napcat_container'
+    AND column_name = 'status'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `last_started_at` datetime DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_napcat_container'
+    AND column_name = 'last_started_at'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `last_checked_at` datetime DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_napcat_container'
+    AND column_name = 'last_checked_at'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `last_error` varchar(500) DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_napcat_container'
+    AND column_name = 'last_error'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
     COUNT(*) > 0,
     'INSERT INTO `qqbot_account_ability` (`id`, `account_id`, `self_id`, `ability_type`, `ability_key`, `is_deleted`)
      SELECT CAST((UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000 - 1288834974657) * 4194304 + 100000 + ROW_NUMBER() OVER (ORDER BY `legacy`.`account_id`, `legacy`.`ability_key`) AS UNSIGNED) AS `id`,

@@ -231,7 +231,14 @@ export class QqbotNapcatContainerService {
         {
           lastCheckedAt: new Date(),
           ...(loginState.state === 'offline'
-            ? { lastError: loginState.offlineReason }
+            ? {
+                lastError: loginState.offlineReason
+                  ? this.toolsService.toColumnText(
+                      loginState.offlineReason,
+                      500,
+                    )
+                  : null,
+              }
             : {}),
           ...(loginState.state === 'online' ? { lastError: null } : {}),
         },
@@ -242,7 +249,10 @@ export class QqbotNapcatContainerService {
         { id: container.id },
         {
           lastCheckedAt: new Date(),
-          lastError: this.toolsService.getErrorMessage(err),
+          lastError: this.toolsService.toColumnText(
+            this.toolsService.getErrorMessage(err),
+            500,
+          ),
         },
       );
       return null;
@@ -463,13 +473,13 @@ docker logs --tail 300 "$NAME" 2>&1 || true
       throwVbenError('当前仅支持通过 SSH 创建 NapCat 容器');
     }
 
+    const image = this.getConfig('QQBOT_NAPCAT_IMAGE');
+    if (!image) {
+      throwVbenError('NapCat 镜像未配置，请先设置 QQBOT_NAPCAT_IMAGE');
+    }
     const port = await this.allocatePort();
     const name = this.buildContainerName(selfId);
     const token = randomBytes(24).toString('hex');
-    const image = this.getConfig(
-      'QQBOT_NAPCAT_IMAGE',
-      'mlikiowa/napcat-docker:latest',
-    );
     const dataDir = `${this.getRootDir()}/${name}`;
     const baseUrl = this.buildBaseUrl(port);
     const reverseWsUrl = this.buildReverseWsUrl();
@@ -519,7 +529,7 @@ docker logs --tail 300 "$NAME" 2>&1 || true
       await this.containerRepository.update(
         { id: container.id },
         {
-          lastError: message,
+          lastError: this.toolsService.toColumnText(message, 500),
           status: 'error',
         },
       );

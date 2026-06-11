@@ -346,7 +346,9 @@ export class QqbotAccountService {
       connectStatus: 'offline',
     };
     if (lastError !== undefined) {
-      payload.lastError = lastError || null;
+      payload.lastError = lastError
+        ? this.toolsService.toColumnText(lastError, 500)
+        : null;
     }
     await this.accountRepository.update({ selfId }, payload);
   }
@@ -428,7 +430,11 @@ export class QqbotAccountService {
 
     const cachedOfflineReason = this.getFreshCachedOfflineReason(container);
     if (cachedOfflineReason) {
-      await this.applyNapcatOfflineState(account, container, cachedOfflineReason);
+      await this.applyNapcatOfflineState(
+        account,
+        container,
+        cachedOfflineReason,
+      );
       return;
     }
     if (this.isFreshRuntimeCheck(container.lastCheckedAt)) return;
@@ -457,7 +463,9 @@ export class QqbotAccountService {
   private getFreshCachedOfflineReason(container: QqbotNapcatContainer) {
     if (!this.isFreshRuntimeCheck(container.lastCheckedAt)) return null;
     const reason = this.toolsService.toTrimmedString(container.lastError);
-    return this.toolsService.isNapcatOfflineLoginMessage(reason) ? reason : null;
+    return this.toolsService.isNapcatOfflineLoginMessage(reason)
+      ? reason
+      : null;
   }
 
   private isAccountStateNewerThanRuntimeCheck(

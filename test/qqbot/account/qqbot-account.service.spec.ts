@@ -12,7 +12,7 @@ describe('QqbotAccountService', () => {
       {} as any,
       {} as any,
       {} as any,
-      {} as any,
+      new ToolsService(),
     );
 
     await service.markOffline('1914728559');
@@ -21,6 +21,30 @@ describe('QqbotAccountService', () => {
       { selfId: '1914728559' },
       {
         connectStatus: 'offline',
+      },
+    );
+  });
+
+  it('truncates offline reason before writing lastError column', async () => {
+    const accountRepository = {
+      update: jest.fn(),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    );
+
+    await service.markOffline('1914728559', '错误'.repeat(300));
+
+    expect(accountRepository.update).toHaveBeenCalledWith(
+      { selfId: '1914728559' },
+      {
+        connectStatus: 'offline',
+        lastError: `${'错误'.repeat(248)}错...`,
       },
     );
   });

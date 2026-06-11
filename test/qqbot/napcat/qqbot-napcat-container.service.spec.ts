@@ -209,4 +209,101 @@ describe('QqbotNapcatContainerService', () => {
       5000,
     );
   });
+
+  it('truncates runtime offline reason before writing container lastError', async () => {
+    const containerRepository = {
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
+            QQBOT_NAPCAT_SSH_TARGET: 'nas',
+          };
+          return values[key] || '';
+        }),
+      } as any,
+      containerRepository as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+    service.runProcess = jest.fn().mockResolvedValue({
+      stderr: '',
+      stdout: `06-11 08:39:19 [info] Mirror | [KickedOffLine] [下线通知] ${'错误'.repeat(300)}`,
+    });
+
+    await service.detectRuntimeOffline({
+      id: 'container-1',
+      name: 'kt-qqbot-napcat-1914728559',
+    });
+
+    expect(containerRepository.update).toHaveBeenCalledWith(
+      { id: 'container-1' },
+      expect.objectContaining({
+        lastError: `${'错误'.repeat(248)}错...`,
+      }),
+    );
+  });
+
+  it('truncates runtime check errors before writing container lastError', async () => {
+    const containerRepository = {
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
+            QQBOT_NAPCAT_SSH_TARGET: 'nas',
+          };
+          return values[key] || '';
+        }),
+      } as any,
+      containerRepository as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+    service.runProcess = jest
+      .fn()
+      .mockRejectedValue(new Error('错误'.repeat(300)));
+
+    await service.detectRuntimeOffline({
+      id: 'container-1',
+      name: 'kt-qqbot-napcat-1914728559',
+    });
+
+    expect(containerRepository.update).toHaveBeenCalledWith(
+      { id: 'container-1' },
+      expect.objectContaining({
+        lastError: `${'错误'.repeat(248)}错...`,
+      }),
+    );
+  });
+
+  it('requires an explicit NapCat image when creating a managed container', async () => {
+    const containerRepository = {
+      find: jest.fn().mockResolvedValue([]),
+      save: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
+            QQBOT_NAPCAT_SSH_TARGET: 'nas',
+          };
+          return values[key] || '';
+        }),
+      } as any,
+      containerRepository as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+
+    await expect(service.createManagedContainer('1914728559')).rejects.toThrow(
+      'NapCat 镜像未配置，请先设置 QQBOT_NAPCAT_IMAGE',
+    );
+    expect(containerRepository.save).not.toHaveBeenCalled();
+  });
 });

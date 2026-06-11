@@ -29,8 +29,8 @@ export function normalizeOneBotMessage(
     messageType === 'group'
       ? groupId || ''
       : messageType === 'channel'
-      ? channelId || ''
-      : userId;
+        ? channelId || ''
+        : userId;
   const messageText = extractMessageText(payload);
 
   return {
@@ -84,7 +84,15 @@ export function getOneBotOfflineReason(payload: QqbotOneBotEvent) {
     .join(' ')
     .trim();
   const probe = `${noticeType} ${subType} ${content}`;
-  if (!/offline|kick|KickedOffLine|下线|离线|登录已失效/i.test(probe)) {
+  const isBotOfflineNotice =
+    ['bot_offline', 'bot_self_offline', 'bot_login_expired'].includes(
+      noticeType,
+    ) ||
+    ['kick_offline', 'kicked_offline', 'login_expired'].includes(subType) ||
+    /KickedOffLine|下线通知|账号状态变更为离线|登录已失效|登录态失效|另一台终端/i.test(
+      probe,
+    );
+  if (!isBotOfflineNotice) {
     return null;
   }
 

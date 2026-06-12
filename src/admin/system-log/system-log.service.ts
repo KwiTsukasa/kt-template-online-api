@@ -6,7 +6,7 @@ import { URL } from 'node:url';
 import {
   getAppName,
   getLokiEnvironment,
-  formatDateTimeFields,
+  transformKtDateTimeFields,
   throwVbenError,
   ToolsService,
 } from '@/common';
@@ -97,11 +97,7 @@ export class SystemLogService {
       };
     }
 
-    const { pageNo, pageSize } = this.toolsService.getPageParams(
-      query,
-      1,
-      20,
-    );
+    const { pageNo, pageSize } = this.toolsService.getPageParams(query, 1, 20);
     const skip = (pageNo - 1) * pageSize;
     const requestLimit = Math.min(
       this.toolsService.toPositiveNumber(query.limit, skip + pageSize),
@@ -119,9 +115,7 @@ export class SystemLogService {
     };
   }
 
-  async summary(
-    query: SystemLogQueryDto = {},
-  ): Promise<SystemLogSummaryDto[]> {
+  async summary(query: SystemLogQueryDto = {}): Promise<SystemLogSummaryDto[]> {
     if (!this.host) {
       return DEFAULT_LEVELS.map((level) => ({ count: 0, level }));
     }
@@ -239,7 +233,10 @@ export class SystemLogService {
 
   private withLevelSelector(selector: string, level?: string) {
     if (!level || selector.includes('level=')) return selector;
-    return selector.replace(/}\s*$/, `,level="${this.escapeLabelValue(level)}"}`);
+    return selector.replace(
+      /}\s*$/,
+      `,level="${this.escapeLabelValue(level)}"}`,
+    );
   }
 
   private getBaseSelector() {
@@ -307,7 +304,7 @@ export class SystemLogService {
     const method =
       this.pickText(parsed.method, req.method)?.toUpperCase() || undefined;
 
-    return formatDateTimeFields(
+    return transformKtDateTimeFields(
       Object.assign(new SystemLogDto(), {
         context:
           this.pickText(parsed.context, params.stream.context) || undefined,
@@ -454,7 +451,9 @@ export class SystemLogService {
   }
 
   private asRecord(value: unknown): Record<string, any> {
-    return value && typeof value === 'object' ? (value as Record<string, any>) : {};
+    return value && typeof value === 'object'
+      ? (value as Record<string, any>)
+      : {};
   }
 
   private pickText(...values: unknown[]) {
@@ -472,7 +471,9 @@ export class SystemLogService {
   private toDate(value: unknown) {
     const text = this.toolsService.toTrimmedString(value);
     if (!text) return null;
-    const timestamp = /^\d+$/.test(text) ? this.normalizeTimestamp(text) : Date.parse(text);
+    const timestamp = /^\d+$/.test(text)
+      ? this.normalizeTimestamp(text)
+      : Date.parse(text);
     const date = new Date(timestamp);
     return Number.isNaN(date.getTime()) ? null : date;
   }

@@ -1,13 +1,10 @@
+import { BeforeInsert, Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtUpdateDateColumn,
+} from '@/common';
 import type { QqbotAccountAbilityType } from '../qqbot.types';
 
 @Entity('qqbot_account_ability')
@@ -34,13 +31,11 @@ export class QqbotAccountAbility {
   @Column({ default: false, name: 'is_deleted' })
   isDeleted: boolean;
 
-  @CreateDateColumn({ name: 'create_time' })
-  @FormatDateTime()
-  createTime: Date;
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({ name: 'update_time' })
-  @FormatDateTime()
-  updateTime: Date;
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
 
   @BeforeInsert()
   createId() {

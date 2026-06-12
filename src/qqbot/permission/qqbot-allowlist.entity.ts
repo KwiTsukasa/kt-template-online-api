@@ -1,12 +1,10 @@
+import { BeforeInsert, Column, Entity, PrimaryColumn } from 'typeorm';
 import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtUpdateDateColumn,
+} from '@/common';
 import type { QqbotPermissionTargetType } from '../qqbot.types';
 
 @Entity('qqbot_allowlist')
@@ -38,13 +36,11 @@ export class QqbotAllowlist {
   @Column({ default: false, name: 'is_deleted' })
   isDeleted: boolean;
 
-  @CreateDateColumn({ name: 'create_time' })
-  @FormatDateTime()
-  createTime: Date;
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({ name: 'update_time' })
-  @FormatDateTime()
-  updateTime: Date;
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
 
   @BeforeInsert()
   createId() {

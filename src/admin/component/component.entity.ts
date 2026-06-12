@@ -1,20 +1,19 @@
 import {
   AfterLoad,
   BeforeInsert,
+  Column,
   Entity,
   PrimaryColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
 } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   DecodeDictKey,
   decodeDictKeys,
   ensureSnowflakeId,
-  FormatDateTime,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtUpdateDateColumn,
 } from '@/common';
-
 @Entity('admin_component')
 export class Component {
   @ApiPropertyOptional()
@@ -69,17 +68,15 @@ export class Component {
   })
   template: string;
 
-  @CreateDateColumn({
+  @KtCreateDateColumn({
     name: 'create_time',
   })
-  @FormatDateTime()
-  createTime: Date;
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({
+  @KtUpdateDateColumn({
     name: 'update_time',
   })
-  @FormatDateTime()
-  updateTime: Date;
+  updateTime: KtDateTime;
 
   @Column({
     default: 0,

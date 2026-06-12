@@ -1,13 +1,11 @@
+import { BeforeInsert, Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtDateTimeColumn,
+  KtUpdateDateColumn,
+} from '@/common';
 import type { QqbotMessageType } from '../qqbot.types';
 
 @Entity('qqbot_conversation')
@@ -39,14 +37,13 @@ export class QqbotConversation {
   @Column({ name: 'last_message_text', type: 'text' })
   lastMessageText: string;
 
-  @Column({
+  @KtDateTimeColumn({
     default: null,
     name: 'last_message_time',
     nullable: true,
     type: 'datetime',
   })
-  @FormatDateTime()
-  lastMessageTime: Date | null;
+  lastMessageTime: KtDateTime | null;
 
   @Column({ default: 0, name: 'message_count' })
   messageCount: number;
@@ -54,13 +51,11 @@ export class QqbotConversation {
   @Column({ default: false, name: 'is_deleted' })
   isDeleted: boolean;
 
-  @CreateDateColumn({ name: 'create_time' })
-  @FormatDateTime()
-  createTime: Date;
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({ name: 'update_time' })
-  @FormatDateTime()
-  updateTime: Date;
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
 
   @BeforeInsert()
   createId() {

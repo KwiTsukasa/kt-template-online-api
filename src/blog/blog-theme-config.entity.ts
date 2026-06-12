@@ -1,12 +1,6 @@
-import {
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { Column, Entity, PrimaryColumn } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { FormatDateTime } from '@/common';
+import { KtCreateDateColumn, KtDateTime, KtUpdateDateColumn } from '@/common';
 import type { WordpressArgonThemeConfig } from '@/wordpress/wordpress.types';
 
 @Entity('blog_theme_config')
@@ -30,15 +24,13 @@ export class BlogThemeConfig {
   })
   source: string;
 
-  @CreateDateColumn({
+  @KtCreateDateColumn({
     name: 'create_time',
   })
-  @FormatDateTime()
-  createTime: Date;
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({
+  @KtUpdateDateColumn({
     name: 'update_time',
   })
-  @FormatDateTime()
-  updateTime: Date;
+  updateTime: KtDateTime;
 }

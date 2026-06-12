@@ -1,13 +1,10 @@
+import { BeforeInsert, Column, Entity, PrimaryColumn } from 'typeorm';
 import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
-
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtUpdateDateColumn,
+} from '@/common';
 @Entity('admin_dept')
 export class AdminDept {
   @PrimaryColumn({
@@ -40,17 +37,15 @@ export class AdminDept {
   })
   isDeleted: boolean;
 
-  @CreateDateColumn({
+  @KtCreateDateColumn({
     name: 'create_time',
   })
-  @FormatDateTime()
-  createTime: Date;
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({
+  @KtUpdateDateColumn({
     name: 'update_time',
   })
-  @FormatDateTime()
-  updateTime: Date;
+  updateTime: KtDateTime;
 
   @BeforeInsert()
   createId() {

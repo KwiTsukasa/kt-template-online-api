@@ -1,13 +1,10 @@
+import { BeforeInsert, Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtUpdateDateColumn,
+} from '@/common';
 import type { QqbotMessageType, QqbotSendStatus } from '../qqbot.types';
 
 @Entity('qqbot_send_log')
@@ -49,13 +46,11 @@ export class QqbotSendLog {
   @Column({ nullable: true, type: 'simple-json' })
   response: Record<string, any>;
 
-  @CreateDateColumn({ name: 'create_time' })
-  @FormatDateTime()
-  createTime: Date;
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({ name: 'update_time' })
-  @FormatDateTime()
-  updateTime: Date;
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
 
   @BeforeInsert()
   createId() {

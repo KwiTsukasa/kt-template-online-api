@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { FormatDateTime } from '@/common';
+import { KtDateTime, KtDateTimeField } from '@/common';
 
 export class AdminNoticeDto {
   @ApiProperty({
@@ -88,26 +88,26 @@ export class AdminNoticeDto {
   @ApiPropertyOptional({
     example: '2026-06-03 20:00:00',
   })
-  @FormatDateTime()
-  createTime?: Date;
+  @KtDateTimeField()
+  createTime?: KtDateTime;
 
   @ApiPropertyOptional({
     example: '2026-06-03 20:00:00',
   })
-  @FormatDateTime()
-  updateTime?: Date;
+  @KtDateTimeField()
+  updateTime?: KtDateTime;
 
   @ApiPropertyOptional({
     example: '2026-06-03 20:00:00',
   })
-  @FormatDateTime()
-  firstSeenAt?: Date;
+  @KtDateTimeField()
+  firstSeenAt?: KtDateTime;
 
   @ApiPropertyOptional({
     example: '2026-06-03 20:00:00',
   })
-  @FormatDateTime()
-  lastSeenAt?: Date;
+  @KtDateTimeField()
+  lastSeenAt?: KtDateTime;
 }
 
 export class AdminNoticeQueryDto {

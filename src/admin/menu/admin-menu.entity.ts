@@ -1,13 +1,16 @@
 import {
   BeforeInsert,
   Column,
-  CreateDateColumn,
   Entity,
   ManyToMany,
   PrimaryColumn,
-  UpdateDateColumn,
 } from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
+import {
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtUpdateDateColumn,
+} from '@/common';
 import { AdminRole } from '../role/admin-role.entity';
 import type { AdminMenuMeta, AdminMenuType } from '../admin.types';
 
@@ -83,17 +86,15 @@ export class AdminMenu {
   })
   isDeleted: boolean;
 
-  @CreateDateColumn({
+  @KtCreateDateColumn({
     name: 'create_time',
   })
-  @FormatDateTime()
-  createTime: Date;
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({
+  @KtUpdateDateColumn({
     name: 'update_time',
   })
-  @FormatDateTime()
-  updateTime: Date;
+  updateTime: KtDateTime;
 
   @ManyToMany(() => AdminRole, (role) => role.menus)
   roles: AdminRole[];

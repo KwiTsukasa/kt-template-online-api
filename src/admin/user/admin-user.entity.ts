@@ -1,16 +1,19 @@
 import {
   BeforeInsert,
   Column,
-  CreateDateColumn,
   Entity,
   JoinColumn,
   JoinTable,
   ManyToMany,
   ManyToOne,
   PrimaryColumn,
-  UpdateDateColumn,
 } from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
+import {
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtUpdateDateColumn,
+} from '@/common';
 import { AdminDept } from '../dept/admin-dept.entity';
 import { AdminRole } from '../role/admin-role.entity';
 
@@ -69,17 +72,15 @@ export class AdminUser {
   })
   isDeleted: boolean;
 
-  @CreateDateColumn({
+  @KtCreateDateColumn({
     name: 'create_time',
   })
-  @FormatDateTime()
-  createTime: Date;
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({
+  @KtUpdateDateColumn({
     name: 'update_time',
   })
-  @FormatDateTime()
-  updateTime: Date;
+  updateTime: KtDateTime;
 
   @ManyToMany(() => AdminRole, (role) => role.users, {
     eager: true,

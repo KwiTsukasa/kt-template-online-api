@@ -16,17 +16,17 @@
 
 ## 功能模块
 
-| 模块 | 说明 |
-| --- | --- |
-| `admin` | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志 |
-| `blog` | 本地博客文章、分类、标签、Argon 主题配置和 WordPress 导入 |
-| `wordpress` | WordPress REST 代理、登录态透传、文章/分类/标签/主题配置 |
-| `qqbot` | QQBot 账号、NapCat 扫码登录、OneBot 反向 WS、在线命令、规则、权限、发送/接收日志 |
-| `qqbot/plugins/bangDream` | BanG Dream 查曲、查卡、查活动、试炼、玩家、卡池、抽卡模拟、档线、谱面出图 |
-| `qqbot/plugins/ff14Market` | XIVAPI + Universalis 物品解析和 FF14 市场查价 |
-| `qqbot/plugins/fflogs` | FFLogs v2 GraphQL 角色排名和指定高难最近记录查询 |
-| `minio` | Bucket 检查、上传、列表、临时 URL、代理下载、删除 |
-| `common` | 响应封装、异常过滤、请求日志、日期格式化、字典解码、Snowflake、工具服务 |
+| 模块                       | 说明                                                                             |
+| -------------------------- | -------------------------------------------------------------------------------- |
+| `admin`                    | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志          |
+| `blog`                     | 本地博客文章、分类、标签、Argon 主题配置和 WordPress 导入                        |
+| `wordpress`                | WordPress REST 代理、登录态透传、文章/分类/标签/主题配置                         |
+| `qqbot`                    | QQBot 账号、NapCat 扫码登录、OneBot 反向 WS、在线命令、规则、权限、发送/接收日志 |
+| `qqbot/plugins/bangDream`  | BanG Dream 查曲、查卡、查活动、试炼、玩家、卡池、抽卡模拟、档线、谱面出图        |
+| `qqbot/plugins/ff14Market` | XIVAPI + Universalis 物品解析和 FF14 市场查价                                    |
+| `qqbot/plugins/fflogs`     | FFLogs v2 GraphQL 角色排名和指定高难最近记录查询                                 |
+| `minio`                    | Bucket 检查、上传、列表、临时 URL、代理下载、删除                                |
+| `common`                   | 响应封装、异常过滤、请求日志、日期格式化、字典解码、Snowflake、工具服务          |
 
 ## 目录结构
 
@@ -53,17 +53,17 @@ ci/            Jenkins Agent/Docker 辅助文件
 
 主要配置分组：
 
-| 分组 | 变量 |
-| --- | --- |
-| MySQL | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC` |
-| MinIO | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET` |
-| Admin | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID` |
-| WordPress | `WORDPRESS_BASE_URL`、`WORDPRESS_HOST_HEADER`、`WORDPRESS_ADMIN_USERNAME`、`WORDPRESS_ADMIN_PASSWORD`、`WORDPRESS_*_TIMEOUT_MS` |
-| Logging/Loki | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*` |
+| 分组         | 变量                                                                                                                                                                             |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MySQL        | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC`                                                                                                     |
+| MinIO        | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`                                                                                           |
+| Admin        | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                    |
+| WordPress    | `WORDPRESS_BASE_URL`、`WORDPRESS_HOST_HEADER`、`WORDPRESS_ADMIN_USERNAME`、`WORDPRESS_ADMIN_PASSWORD`、`WORDPRESS_*_TIMEOUT_MS`                                                  |
+| Logging/Loki | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*`                                                                                                             |
 | QQBot/NapCat | `QQBOT_ENABLED`、`QQBOT_REVERSE_WS_*`、`QQBOT_SEND_*`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`、`NAPCAT_*`、`QQBOT_NAPCAT_*`、`MQTT_*` |
-| BangDream | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT` |
-| FF14 Market | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_MARKET_CACHE_TTL_MS` |
-| FFLogs | `FFLOGS_BASE_URL`、`FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET` |
+| BangDream    | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT`                                                                                 |
+| FF14 Market  | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_MARKET_CACHE_TTL_MS`                                                                                                  |
+| FFLogs       | `FFLOGS_BASE_URL`、`FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET`                                                                          |
 
 `DB_SYNC=true` 只适合本地开发或明确允许自动同步表结构的环境；生产应关闭并使用 SQL/迁移脚本。
 
@@ -124,7 +124,7 @@ pnpm exec jest --runInBand --runTestsByPath test/path/to/file.spec.ts
 ## 核心规则
 
 - 后台主键使用 Snowflake 数字 ID，数据库字段为 `BIGINT`，接口按字符串返回。
-- 后端响应时间统一用 `YYYY-MM-DD HH:mm:ss`，需要格式化的 DTO/Entity 字段使用 `@FormatDateTime()`。
+- 后端响应时间统一用 `KtDateTime extends Date` 承接序列化语义；Entity 使用 `@KtDateTimeColumn(format)`、`@KtCreateDateColumn(format)`、`@KtUpdateDateColumn(format)` 在 TypeORM hydrate 边界转换，DTO/外部数据源使用 `@KtDateTimeField(format)` + `transformKtDateTimeFields()` 转换，默认格式为 `YYYY-MM-DD HH:mm:ss`。`vbenSuccess` / `ToolsService.res` 不做全量递归格式化。
 - 字典维护在 `admin_dict`，Admin 字典管理按 `dictCode` 分组展示；可运营映射优先走字典或静态配置，不硬编码到业务函数。
 - 全局 `SaveBodyInterceptor` 会删除 `POST */save` 请求体里的 `id`；需要保留时使用 `@SkipSaveBodyNormalize()`。
 - Admin、Component、Dict、MinIO、Blog 管理、WordPress 管理和 QQBot 管理接口默认走 `JwtAuthGuard`；公开接口用 `@Public()`。
@@ -173,6 +173,6 @@ BangDream 图片能力改动：
 
 ## 来源与许可证
 
-| 一级来源 | 使用方式 | License |
-| --- | --- | --- |
-| [Tsugu BangDream Bot](https://github.com/Yamamoto-2/tsugu-bangdream-bot) | BangDream QQBot 后端能力已重构合入 `src/qqbot/plugins/bangDream`，保留本地 `TSUGU-LICENSE` | MIT |
+| 一级来源                                                                 | 使用方式                                                                                   | License |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------- |
+| [Tsugu BangDream Bot](https://github.com/Yamamoto-2/tsugu-bangdream-bot) | BangDream QQBot 后端能力已重构合入 `src/qqbot/plugins/bangDream`，保留本地 `TSUGU-LICENSE` | MIT     |

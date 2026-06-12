@@ -1,13 +1,11 @@
+import { BeforeInsert, Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtDateTimeColumn,
+  KtUpdateDateColumn,
+} from '@/common';
 import type { QqbotMessageDirection, QqbotMessageType } from '../qqbot.types';
 
 @Entity('qqbot_message')
@@ -57,17 +55,14 @@ export class QqbotMessage {
   @Column({ name: 'raw_event', nullable: true, type: 'simple-json' })
   rawEvent: Record<string, any>;
 
-  @Column({ name: 'event_time', type: 'datetime' })
-  @FormatDateTime()
-  eventTime: Date;
+  @KtDateTimeColumn({ name: 'event_time', type: 'datetime' })
+  eventTime: KtDateTime;
 
-  @CreateDateColumn({ name: 'create_time' })
-  @FormatDateTime()
-  createTime: Date;
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({ name: 'update_time' })
-  @FormatDateTime()
-  updateTime: Date;
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
 
   @BeforeInsert()
   createId() {

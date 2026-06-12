@@ -1,7 +1,13 @@
+import { formatKtDateTime, KtDateTime, KtDateTimeColumn } from '@/common';
 import {
   getEffectiveCooldownMs,
   isWithinCooldown,
 } from '@/qqbot/qqbot-cooldown.policy';
+
+class CooldownEntityFixture {
+  @KtDateTimeColumn()
+  lastHitAt!: KtDateTime;
+}
 
 describe('QQBot cooldown policy', () => {
   beforeEach(() => {
@@ -22,6 +28,22 @@ describe('QQBot cooldown policy', () => {
       isWithinCooldown({
         cooldownMs: 500,
         lastHitAt: new Date(Date.now() - 10000),
+        minCooldownMs: 30000,
+      }),
+    ).toBe(true);
+  });
+
+  it('keeps decorated entity datetime usable for cooldown checks', () => {
+    const entity = new CooldownEntityFixture();
+    entity.lastHitAt = new KtDateTime(new Date(Date.now() - 10000));
+
+    expect(entity.lastHitAt).toBeInstanceOf(KtDateTime);
+    expect(`${entity.lastHitAt}`).toBe(formatKtDateTime(entity.lastHitAt));
+    expect(entity.lastHitAt).toBeInstanceOf(Date);
+    expect(
+      isWithinCooldown({
+        cooldownMs: 500,
+        lastHitAt: entity.lastHitAt,
         minCooldownMs: 30000,
       }),
     ).toBe(true);

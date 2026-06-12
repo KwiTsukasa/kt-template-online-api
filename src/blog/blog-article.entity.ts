@@ -1,14 +1,12 @@
-import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { BeforeInsert, Column, Entity, PrimaryColumn } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
-
+import {
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtDateTimeColumn,
+  KtUpdateDateColumn,
+} from '@/common';
 export type BlogArticleStatus = 'draft' | 'pending' | 'private' | 'publish';
 
 export type BlogArticleTerm = {
@@ -117,25 +115,22 @@ export class BlogArticle {
   isDeleted: boolean;
 
   @ApiPropertyOptional()
-  @Column({
+  @KtDateTimeColumn({
     name: 'publish_time',
     nullable: true,
     type: 'datetime',
   })
-  @FormatDateTime()
-  publishTime: Date;
+  publishTime: KtDateTime;
 
-  @CreateDateColumn({
+  @KtCreateDateColumn({
     name: 'create_time',
   })
-  @FormatDateTime()
-  createTime: Date;
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({
+  @KtUpdateDateColumn({
     name: 'update_time',
   })
-  @FormatDateTime()
-  updateTime: Date;
+  updateTime: KtDateTime;
 
   @ApiPropertyOptional()
   categories?: string[];

@@ -1,6 +1,6 @@
 import { PartialType } from '@nestjs/swagger';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { FormatDateTime } from '@/common';
+import { KtDateTime, KtDateTimeField } from '@/common';
 
 export class DictDto {
   @ApiProperty({
@@ -59,14 +59,14 @@ export class AdminDictDto {
   @ApiPropertyOptional({
     example: '2026-06-03 20:00:00',
   })
-  @FormatDateTime()
-  createTime?: Date;
+  @KtDateTimeField()
+  createTime?: KtDateTime;
 
   @ApiPropertyOptional({
     example: '2026-06-03 20:00:00',
   })
-  @FormatDateTime()
-  updateTime?: Date;
+  @KtDateTimeField()
+  updateTime?: KtDateTime;
 }
 
 export class AdminDictTreeDto extends AdminDictDto {

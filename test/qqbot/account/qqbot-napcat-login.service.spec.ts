@@ -1,10 +1,9 @@
 jest.mock('@/common', () => {
   const actualCommon = jest.requireActual('@/common');
   return {
-    FormatDateTime: actualCommon.FormatDateTime,
+    ...actualCommon,
     ToolsService: actualCommon.ToolsService,
     ensureSnowflakeId: jest.fn(),
-    formatKtDateTime: actualCommon.formatKtDateTime,
     setDictDecodeCache: jest.fn(),
     throwVbenError: (message: string) => {
       throw new Error(message);
@@ -147,7 +146,9 @@ describe('QqbotNapcatLoginService', () => {
 
     expect(result.status).toBe('pending');
     expect(result.qrcode).toBeUndefined();
-    expect(result.errorMessage).toBe('NapCat 正在重置登录态并生成二维码，请稍后');
+    expect(result.errorMessage).toBe(
+      'NapCat 正在重置登录态并生成二维码，请稍后',
+    );
     expect(containerService.resetRuntimeLoginState).toHaveBeenCalledWith(
       container,
       expect.any(Function),

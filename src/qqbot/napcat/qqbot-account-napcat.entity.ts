@@ -1,13 +1,11 @@
+import { BeforeInsert, Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtDateTimeColumn,
+  KtUpdateDateColumn,
+} from '@/common';
 import type { QqbotAccountNapcatBindStatus } from '../qqbot.types';
 
 @Entity('qqbot_account_napcat')
@@ -29,14 +27,13 @@ export class QqbotAccountNapcat {
   @Column({ default: true, name: 'is_primary' })
   isPrimary: boolean;
 
-  @Column({
+  @KtDateTimeColumn({
     default: null,
     name: 'last_login_at',
     nullable: true,
     type: 'datetime',
   })
-  @FormatDateTime()
-  lastLoginAt: Date | null;
+  lastLoginAt: KtDateTime | null;
 
   @Column({ default: '', length: 255 })
   remark: string;
@@ -44,13 +41,11 @@ export class QqbotAccountNapcat {
   @Column({ default: false, name: 'is_deleted' })
   isDeleted: boolean;
 
-  @CreateDateColumn({ name: 'create_time' })
-  @FormatDateTime()
-  createTime: Date;
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({ name: 'update_time' })
-  @FormatDateTime()
-  updateTime: Date;
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
 
   @BeforeInsert()
   createId() {

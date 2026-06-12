@@ -1,12 +1,11 @@
+import { BeforeInsert, Column, Entity, PrimaryColumn } from 'typeorm';
 import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtDateTimeColumn,
+  KtUpdateDateColumn,
+} from '@/common';
 import type {
   QqbotConnectionMode,
   QqbotConnectionRole,
@@ -45,23 +44,21 @@ export class QqbotAccount {
   @Column({ default: null, length: 32, name: 'client_role', nullable: true })
   clientRole: null | QqbotConnectionRole;
 
-  @Column({
+  @KtDateTimeColumn({
     default: null,
     name: 'last_connected_at',
     nullable: true,
     type: 'datetime',
   })
-  @FormatDateTime()
-  lastConnectedAt: Date | null;
+  lastConnectedAt: KtDateTime | null;
 
-  @Column({
+  @KtDateTimeColumn({
     default: null,
     name: 'last_heartbeat_at',
     nullable: true,
     type: 'datetime',
   })
-  @FormatDateTime()
-  lastHeartbeatAt: Date | null;
+  lastHeartbeatAt: KtDateTime | null;
 
   @Column({ default: null, length: 500, name: 'last_error', nullable: true })
   lastError: null | string;
@@ -72,13 +69,11 @@ export class QqbotAccount {
   @Column({ default: false, name: 'is_deleted' })
   isDeleted: boolean;
 
-  @CreateDateColumn({ name: 'create_time' })
-  @FormatDateTime()
-  createTime: Date;
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({ name: 'update_time' })
-  @FormatDateTime()
-  updateTime: Date;
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
 
   @BeforeInsert()
   createId() {

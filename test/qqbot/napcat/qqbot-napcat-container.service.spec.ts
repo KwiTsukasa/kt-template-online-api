@@ -1,10 +1,9 @@
 jest.mock('@/common', () => {
   const actualCommon = jest.requireActual('@/common');
   return {
-    FormatDateTime: actualCommon.FormatDateTime,
+    ...actualCommon,
     ToolsService: actualCommon.ToolsService,
     ensureSnowflakeId: jest.fn(),
-    formatKtDateTime: actualCommon.formatKtDateTime,
     setDictDecodeCache: jest.fn(),
     throwVbenError: (message: string) => {
       throw new Error(message);

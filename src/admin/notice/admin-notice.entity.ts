@@ -1,14 +1,12 @@
-import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { BeforeInsert, Column, Entity, PrimaryColumn } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
-
+import {
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtDateTimeColumn,
+  KtUpdateDateColumn,
+} from '@/common';
 @Entity('admin_notice')
 export class AdminNotice {
   @ApiPropertyOptional()
@@ -159,33 +157,29 @@ export class AdminNotice {
   })
   isDeleted: boolean;
 
-  @CreateDateColumn({
+  @KtCreateDateColumn({
     name: 'create_time',
   })
-  @FormatDateTime()
-  createTime: Date;
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({
+  @KtUpdateDateColumn({
     name: 'update_time',
   })
-  @FormatDateTime()
-  updateTime: Date;
+  updateTime: KtDateTime;
 
-  @Column({
+  @KtDateTimeColumn({
     name: 'first_seen_at',
     nullable: true,
     type: 'datetime',
   })
-  @FormatDateTime()
-  firstSeenAt?: Date;
+  firstSeenAt?: KtDateTime;
 
-  @Column({
+  @KtDateTimeColumn({
     name: 'last_seen_at',
     nullable: true,
     type: 'datetime',
   })
-  @FormatDateTime()
-  lastSeenAt?: Date;
+  lastSeenAt?: KtDateTime;
 
   @BeforeInsert()
   createId() {

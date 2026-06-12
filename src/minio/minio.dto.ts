@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { FormatDateTime } from '@/common';
+import { KtDateTime, KtDateTimeField } from '@/common';
 
 export class MinioBucketStatusDto {
   @ApiProperty({
@@ -64,6 +64,6 @@ export class MinioObjectDto {
   @ApiProperty({
     example: '2026-05-13 10:30:00',
   })
-  @FormatDateTime()
-  lastModified: string;
+  @KtDateTimeField()
+  lastModified: KtDateTime;
 }

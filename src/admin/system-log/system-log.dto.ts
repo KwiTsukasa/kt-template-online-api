@@ -1,8 +1,10 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { FormatDateTime } from '@/common';
+import { KtDateTime, KtDateTimeField } from '@/common';
 
 export class SystemLogQueryDto {
-  @ApiPropertyOptional({ description: '日志级别：debug/info/warning/error/critical' })
+  @ApiPropertyOptional({
+    description: '日志级别：debug/info/warning/error/critical',
+  })
   level?: string;
 
   @ApiPropertyOptional({ description: '全文关键字' })
@@ -44,8 +46,8 @@ export class SystemLogDto {
   id: string;
 
   @ApiPropertyOptional({ description: '日志时间' })
-  @FormatDateTime()
-  timestamp: string;
+  @KtDateTimeField()
+  timestamp: KtDateTime;
 
   @ApiPropertyOptional({ description: 'Loki 纳秒时间戳' })
   timestampNs: string;

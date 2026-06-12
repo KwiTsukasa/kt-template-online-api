@@ -28,7 +28,7 @@ import {
   ApiArrayResponse,
   ApiModelResponse,
   ApiSuccessResponse,
-  formatDateTimeFields,
+  transformKtDateTimeFields,
   ToolsService,
 } from '@/common';
 import {
@@ -159,7 +159,7 @@ export class MinioClientController {
         recursive: recursive !== 'false',
       })) as Record<string, unknown>[]
     ).map((item) =>
-      formatDateTimeFields(Object.assign(new MinioObjectDto(), item)),
+      transformKtDateTimeFields(Object.assign(new MinioObjectDto(), item)),
     );
 
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));

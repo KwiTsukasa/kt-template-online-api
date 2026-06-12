@@ -1,13 +1,11 @@
+import { BeforeInsert, Column, Entity, PrimaryColumn } from 'typeorm';
 import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
-
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtDateTimeColumn,
+  KtUpdateDateColumn,
+} from '@/common';
 @Entity('qqbot_dedupe')
 export class QqbotDedupe {
   @PrimaryColumn({ type: 'bigint' })
@@ -16,22 +14,19 @@ export class QqbotDedupe {
   @Column({ length: 255, name: 'event_key', unique: true })
   eventKey: string;
 
-  @Column({
+  @KtDateTimeColumn({
     default: null,
     name: 'expire_at',
     nullable: true,
     type: 'datetime',
   })
-  @FormatDateTime()
-  expireAt: Date | null;
+  expireAt: KtDateTime | null;
 
-  @CreateDateColumn({ name: 'create_time' })
-  @FormatDateTime()
-  createTime: Date;
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({ name: 'update_time' })
-  @FormatDateTime()
-  updateTime: Date;
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
 
   @BeforeInsert()
   createId() {

@@ -2,7 +2,11 @@ jest.mock(
   '@/common',
   () => ({
     ensureSnowflakeId: jest.fn(),
-    FormatDateTime: () => () => undefined,
+    KtCreateDateColumn: () => () => undefined,
+    KtDateTime: Date,
+    KtDateTimeColumn: () => () => undefined,
+    KtDateTimeField: () => () => undefined,
+    KtUpdateDateColumn: () => () => undefined,
     formatKtDateTime: (value: Date | number | string) => {
       const date = value instanceof Date ? value : new Date(value);
       return [
@@ -17,6 +21,7 @@ jest.mock(
       ].join(' ');
     },
     setDictDecodeCache: jest.fn(),
+    transformKtDateTimeFields: (value: unknown) => value,
   }),
   { virtual: true },
 );

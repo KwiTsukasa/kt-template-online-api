@@ -1,13 +1,11 @@
+import { BeforeInsert, Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  Index,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtDateTimeColumn,
+  KtUpdateDateColumn,
+} from '@/common';
 import type { QqbotNapcatContainerStatus } from '../qqbot.types';
 
 @Entity('qqbot_napcat_container')
@@ -47,23 +45,21 @@ export class QqbotNapcatContainer {
   @Column({ default: 'creating', length: 32 })
   status: QqbotNapcatContainerStatus;
 
-  @Column({
+  @KtDateTimeColumn({
     default: null,
     name: 'last_started_at',
     nullable: true,
     type: 'datetime',
   })
-  @FormatDateTime()
-  lastStartedAt: Date | null;
+  lastStartedAt: KtDateTime | null;
 
-  @Column({
+  @KtDateTimeColumn({
     default: null,
     name: 'last_checked_at',
     nullable: true,
     type: 'datetime',
   })
-  @FormatDateTime()
-  lastCheckedAt: Date | null;
+  lastCheckedAt: KtDateTime | null;
 
   @Column({ default: null, length: 500, name: 'last_error', nullable: true })
   lastError: null | string;
@@ -74,13 +70,11 @@ export class QqbotNapcatContainer {
   @Column({ default: false, name: 'is_deleted' })
   isDeleted: boolean;
 
-  @CreateDateColumn({ name: 'create_time' })
-  @FormatDateTime()
-  createTime: Date;
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({ name: 'update_time' })
-  @FormatDateTime()
-  updateTime: Date;
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
 
   @BeforeInsert()
   createId() {

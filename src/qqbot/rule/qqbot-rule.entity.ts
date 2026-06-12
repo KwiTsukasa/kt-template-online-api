@@ -1,12 +1,11 @@
+import { BeforeInsert, Column, Entity, PrimaryColumn } from 'typeorm';
 import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
-import { ensureSnowflakeId, FormatDateTime } from '@/common';
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtDateTimeColumn,
+  KtUpdateDateColumn,
+} from '@/common';
 import type { QqbotRuleMatchType, QqbotRuleTargetType } from '../qqbot.types';
 
 @Entity('qqbot_rule')
@@ -38,14 +37,13 @@ export class QqbotRule {
   @Column({ default: 1500, name: 'cooldown_ms' })
   cooldownMs: number;
 
-  @Column({
+  @KtDateTimeColumn({
     default: null,
     name: 'last_hit_at',
     nullable: true,
     type: 'datetime',
   })
-  @FormatDateTime()
-  lastHitAt: Date | null;
+  lastHitAt: KtDateTime | null;
 
   @Column({ default: '', length: 255 })
   remark: string;
@@ -53,13 +51,11 @@ export class QqbotRule {
   @Column({ default: false, name: 'is_deleted' })
   isDeleted: boolean;
 
-  @CreateDateColumn({ name: 'create_time' })
-  @FormatDateTime()
-  createTime: Date;
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
 
-  @UpdateDateColumn({ name: 'update_time' })
-  @FormatDateTime()
-  updateTime: Date;
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
 
   @BeforeInsert()
   createId() {

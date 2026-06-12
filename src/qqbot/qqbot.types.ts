@@ -279,6 +279,8 @@ export type QqbotLoginScanSession = {
 
 export type QqbotNapcatRuntime = {
   baseUrl: string;
+  /** Heuristic for quick login: existing primary binding implies a reusable data volume may exist. */
+  hasExistingPrimaryBinding?: boolean;
   id?: string;
   name: string;
   webuiPort?: null | number;

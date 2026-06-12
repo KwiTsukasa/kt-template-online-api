@@ -50,19 +50,22 @@ export class QqbotNapcatLoginService {
   }
 
   async startRefresh(accountId: string) {
-    const account = await this.accountService.findById(accountId);
+    const account =
+      await this.accountService.findByIdWithNapcatLoginSecret(accountId);
     if (!account) {
       throwVbenError('QQBot 账号不存在');
     }
-    const container = await this.containerService.prepareAccountContainer(
-      account,
-    );
+    const loginPassword = this.accountService.getNapcatLoginPassword(account);
+    const container =
+      await this.containerService.prepareAccountContainer(account);
 
     return this.startScan(
       {
         accountId: account.id,
         expectedSelfId: account.selfId,
         forceRelogin: true,
+        hasExistingPrimaryBinding: container.hasExistingPrimaryBinding,
+        loginPassword,
         mode: 'refresh',
       },
       container,
@@ -77,7 +80,7 @@ export class QqbotNapcatLoginService {
     if (session.preparingRelogin) {
       return this.keepSessionPending(
         session,
-        session.errorMessage || 'NapCat 正在重置登录态并生成二维码，请稍后',
+        session.errorMessage || 'NapCat 正在尝试快速登录，请稍后',
       );
     }
 
@@ -117,8 +120,7 @@ export class QqbotNapcatLoginService {
       session.lastRestartedAt = Date.now();
       return this.keepSessionPending(
         session,
-        loginStatus.loginError ||
-          'NapCat 账号已离线，已重新生成二维码',
+        loginStatus.loginError || 'NapCat 账号已离线，已重新生成二维码',
         true,
       );
     }
@@ -240,6 +242,8 @@ export class QqbotNapcatLoginService {
       accountId?: string;
       expectedSelfId?: string;
       forceRelogin?: boolean;
+      hasExistingPrimaryBinding?: boolean;
+      loginPassword?: string;
       mode: QqbotLoginScanMode;
     },
     container: QqbotNapcatRuntime,
@@ -254,7 +258,7 @@ export class QqbotNapcatLoginService {
         status: 'pending',
       });
       session.lastRestartedAt = Date.now();
-      session.errorMessage = 'NapCat 正在重置登录态并生成二维码，请稍后';
+      session.errorMessage = this.getReloginPreparingMessage(options);
       this.sessions.set(session.id, session);
       this.publishScanResultEvent(
         session,
@@ -262,7 +266,13 @@ export class QqbotNapcatLoginService {
         'processing',
         '已创建更新登录会话',
       );
-      void this.prepareReloginQrcode(session, container);
+      const reloginTask = this.prepareReloginQrcode(
+        session,
+        container,
+        options.loginPassword,
+        options.hasExistingPrimaryBinding,
+      );
+      void reloginTask;
       return this.toResult(session);
     }
 
@@ -277,8 +287,7 @@ export class QqbotNapcatLoginService {
         });
         session.lastRestartedAt = Date.now();
         session.errorMessage =
-          loginStatus.loginError ||
-          'NapCat 账号已离线，已重新生成二维码';
+          loginStatus.loginError || 'NapCat 账号已离线，已重新生成二维码';
         this.sessions.set(session.id, session);
         this.publishScanResultEvent(
           session,
@@ -341,8 +350,9 @@ export class QqbotNapcatLoginService {
   private async completeLogin(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
+    options: { loginInfo?: NapcatLoginInfo; successMessage?: string } = {},
   ): Promise<QqbotLoginScanResult> {
-    const loginInfo = await this.getLoginInfo(container);
+    const loginInfo = options.loginInfo ?? (await this.getLoginInfo(container));
     if (loginInfo.online === false) {
       return this.failSession(session, 'NapCat 当前账号已离线，请重新更新登录');
     }
@@ -374,7 +384,7 @@ export class QqbotNapcatLoginService {
       selfId,
     };
     this.publishScanEvent(session, {
-      message: '扫码登录成功',
+      message: options.successMessage || '扫码登录成功',
       result,
       status: 'success',
       step: 'login-success',
@@ -770,8 +780,27 @@ export class QqbotNapcatLoginService {
   private async prepareReloginQrcode(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
+    loginPassword?: string,
+    hasExistingPrimaryBinding = true,
   ) {
     try {
+      const password = this.toolsService.toSecretText(loginPassword);
+      if (hasExistingPrimaryBinding) {
+        const quickLoginCompleted = await this.tryQuickRelogin(
+          session,
+          container,
+          !!password,
+        );
+        if (quickLoginCompleted) return;
+      }
+
+      const passwordLoginCompleted = await this.tryPasswordRelogin(
+        session,
+        container,
+        password,
+      );
+      if (passwordLoginCompleted) return;
+
       this.publishScanResultEvent(
         session,
         'relogin-reset-start',
@@ -846,13 +875,333 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  private async tryQuickRelogin(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    hasPasswordFallback = false,
+  ) {
+    let loginInfo: NapcatLoginInfo;
+    session.errorMessage = 'NapCat 正在尝试快速登录，请稍后';
+    this.sessions.set(session.id, session);
+    this.publishScanResultEvent(
+      session,
+      'quick-login-start',
+      'processing',
+      '正在尝试 NapCat -q 快速登录',
+    );
+    await this.clearRuntimeLoginPasswordBeforeQuick(session, container);
+
+    try {
+      await this.restartNapcatForLogin(container, { waitForReady: false });
+      session.lastRestartedAt = Date.now();
+      this.publishScanResultEvent(
+        session,
+        'quick-login-wait',
+        'processing',
+        '等待 NapCat 快速登录结果',
+      );
+      await this.toolsService.sleep(this.getRestartDelayMs());
+      const loginStatus = await this.getLoginStatus(container, true);
+      if (!loginStatus.isLogin) {
+        this.publishQuickLoginFallback(
+          session,
+          loginStatus.loginError,
+          hasPasswordFallback,
+        );
+        return false;
+      }
+
+      loginInfo = await this.getLoginInfo(container);
+      if (loginInfo.online === false) {
+        this.publishQuickLoginFallback(
+          session,
+          'NapCat 当前账号已离线',
+          hasPasswordFallback,
+        );
+        return false;
+      }
+
+      const selfId = this.toolsService.pickNapcatSelfId(loginInfo);
+      if (!selfId) {
+        this.publishQuickLoginFallback(
+          session,
+          'NapCat 未返回 QQ 号',
+          hasPasswordFallback,
+        );
+        return false;
+      }
+      if (session.expectedSelfId && session.expectedSelfId !== selfId) {
+        this.publishQuickLoginFallback(
+          session,
+          `当前快速登录账号 ${selfId} 与目标账号 ${session.expectedSelfId} 不一致`,
+          hasPasswordFallback,
+        );
+        return false;
+      }
+    } catch (err) {
+      this.publishQuickLoginFallback(
+        session,
+        this.toolsService.getErrorMessage(err),
+        hasPasswordFallback,
+      );
+      return false;
+    }
+
+    await this.completeLogin(session, container, {
+      loginInfo,
+      successMessage: '快速登录成功',
+    });
+    return true;
+  }
+
+  private async tryPasswordRelogin(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    loginPassword?: string,
+  ) {
+    const password = this.toolsService.toSecretText(loginPassword);
+    if (!password) {
+      this.publishPasswordLoginFallback(session, '未配置 QQ 登录密码');
+      return false;
+    }
+
+    let loginInfo: NapcatLoginInfo | undefined;
+    let loggedInSelfId = '';
+    session.errorMessage = 'NapCat 正在尝试密码登录，请稍后';
+    this.sessions.set(session.id, session);
+    this.publishScanResultEvent(
+      session,
+      'password-login-start',
+      'processing',
+      '正在尝试 NapCat 密码登录',
+    );
+
+    const passwordEnv = await this.containerService.ensureRuntimeLoginEnv(
+      container,
+      {
+        loginPassword: password,
+        selfId: session.expectedSelfId,
+      },
+    );
+    if (!passwordEnv.ok) {
+      this.publishPasswordLoginFallback(session, '运行态密码环境准备失败');
+      return false;
+    }
+
+    let loginStatus: NapcatLoginStatus;
+    try {
+      await this.restartNapcatForLogin(container, { waitForReady: false });
+      session.lastRestartedAt = Date.now();
+      this.publishScanResultEvent(
+        session,
+        'password-login-wait',
+        'processing',
+        '等待 NapCat 密码登录结果',
+      );
+      await this.toolsService.sleep(this.getRestartDelayMs());
+      loginStatus = await this.getLoginStatus(container, true);
+
+      if (loginStatus.isLogin) {
+        loginInfo = await this.getLoginInfo(container);
+      }
+    } catch (err) {
+      await this.clearRuntimeLoginPasswordAfterFailedPassword(
+        session,
+        container,
+        session.expectedSelfId || loggedInSelfId,
+      );
+      this.publishPasswordLoginFallback(
+        session,
+        this.toolsService.getErrorMessage(err),
+      );
+      return false;
+    }
+
+    if (!loginStatus.isLogin) {
+      await this.clearRuntimeLoginPasswordAfterFailedPassword(
+        session,
+        container,
+        session.expectedSelfId,
+      );
+      this.publishPasswordLoginFallback(session, loginStatus.loginError);
+      return false;
+    }
+
+    if (loginInfo?.online === false) {
+      await this.clearRuntimeLoginPasswordAfterFailedPassword(
+        session,
+        container,
+        session.expectedSelfId,
+      );
+      this.publishPasswordLoginFallback(session, 'NapCat 当前账号已离线');
+      return false;
+    }
+    if (!loginInfo) {
+      await this.clearRuntimeLoginPasswordAfterFailedPassword(
+        session,
+        container,
+        session.expectedSelfId,
+      );
+      this.publishPasswordLoginFallback(session, 'NapCat 未返回登录信息');
+      return false;
+    }
+
+    const selfId = this.toolsService.pickNapcatSelfId(loginInfo);
+    if (!selfId) {
+      await this.clearRuntimeLoginPasswordAfterFailedPassword(
+        session,
+        container,
+        session.expectedSelfId,
+      );
+      this.publishPasswordLoginFallback(session, 'NapCat 未返回 QQ 号');
+      return false;
+    }
+    loggedInSelfId = selfId;
+    if (session.expectedSelfId && session.expectedSelfId !== selfId) {
+      await this.clearRuntimeLoginPasswordAfterFailedPassword(
+        session,
+        container,
+        selfId,
+      );
+      this.publishPasswordLoginFallback(
+        session,
+        `当前密码登录账号 ${selfId} 与目标账号 ${session.expectedSelfId} 不一致`,
+      );
+      return false;
+    }
+
+    await this.clearRuntimeLoginPasswordAfterSuccess(
+      session,
+      container,
+      loggedInSelfId,
+    );
+    await this.completeLogin(session, container, {
+      loginInfo,
+      successMessage: '密码登录成功',
+    });
+    return true;
+  }
+
+  private async clearRuntimeLoginPasswordBeforeQuick(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+  ) {
+    this.publishScanResultEvent(
+      session,
+      'quick-login-cleanup',
+      'processing',
+      '正在清理运行态登录密码',
+    );
+    const cleaned = await this.containerService.ensureRuntimeLoginEnv(container, {
+      clearLoginPassword: true,
+      selfId: session.expectedSelfId,
+    });
+    if (!cleaned.ok) {
+      throw new Error('NapCat 快速登录前运行态密码清理失败，请重试更新登录');
+    }
+  }
+
+  private async clearRuntimeLoginPasswordAfterFailedPassword(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    selfId?: string,
+  ) {
+    this.publishScanResultEvent(
+      session,
+      'password-env-cleanup',
+      'processing',
+      '正在移除运行态登录密码',
+    );
+    const cleaned = await this.containerService.ensureRuntimeLoginEnv(container, {
+      clearLoginPassword: true,
+      selfId,
+    });
+    if (!cleaned.ok) {
+      throw new Error(
+        'NapCat 密码登录未完成，且运行态密码清理失败，请重试更新登录',
+      );
+    }
+  }
+
+  private async clearRuntimeLoginPasswordAfterSuccess(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    selfId: string,
+  ) {
+    this.publishScanResultEvent(
+      session,
+      'password-env-cleanup',
+      'processing',
+      '正在移除运行态登录密码',
+    );
+    const cleaned = await this.containerService.ensureRuntimeLoginEnv(container, {
+      clearLoginPassword: true,
+      selfId,
+    });
+    if (!cleaned.ok) {
+      throw new Error(
+        'NapCat 密码登录已完成，但运行态密码清理失败，请重试更新登录',
+      );
+    }
+  }
+
+  private getReloginPreparingMessage(options: {
+    hasExistingPrimaryBinding?: boolean;
+    loginPassword?: string;
+  }) {
+    if (options.hasExistingPrimaryBinding !== false) {
+      return 'NapCat 正在尝试快速登录，请稍后';
+    }
+    return this.toolsService.toSecretText(options.loginPassword)
+      ? 'NapCat 正在尝试密码登录，请稍后'
+      : 'NapCat 正在准备登录二维码，请稍后';
+  }
+
+  private publishQuickLoginFallback(
+    session: QqbotLoginScanSession,
+    reason?: string,
+    hasPasswordFallback = false,
+  ) {
+    const nextStepMessage = hasPasswordFallback
+      ? '开始尝试密码登录'
+      : '开始生成二维码';
+    session.errorMessage = reason
+      ? `快速登录未完成：${reason}，${nextStepMessage}`
+      : `快速登录未完成，${nextStepMessage}`;
+    this.sessions.set(session.id, session);
+    this.publishScanResultEvent(
+      session,
+      'quick-login-fallback',
+      'processing',
+      session.errorMessage,
+    );
+  }
+
+  private publishPasswordLoginFallback(
+    session: QqbotLoginScanSession,
+    reason?: string,
+  ) {
+    session.errorMessage = reason
+      ? `密码登录未完成：${reason}，开始生成二维码`
+      : '密码登录未完成，开始生成二维码';
+    this.sessions.set(session.id, session);
+    this.publishScanResultEvent(
+      session,
+      'password-login-fallback',
+      'processing',
+      session.errorMessage,
+    );
+  }
+
   private async resetNapcatForLogin(
     container: QqbotNapcatRuntime,
     options: NapcatRestartOptions = {},
     onProgress?: (step: string, message: string) => void,
   ) {
-    const resetByContainer =
-      await this.containerService.resetRuntimeLoginState(container, onProgress);
+    const resetByContainer = await this.containerService.resetRuntimeLoginState(
+      container,
+      onProgress,
+    );
     if (!resetByContainer) {
       onProgress?.('napcat-restart-webui', '正在调用 NapCat 重启接口');
       await this.restartNapcatForLogin(container, options);

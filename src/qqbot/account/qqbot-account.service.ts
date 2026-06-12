@@ -1,4 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -7,6 +8,7 @@ import {
   throwVbenError,
   ToolsService,
 } from '@/common';
+import { AdminPasswordCryptoService } from '@/admin/auth/admin-password-crypto.service';
 import { QqbotAccountAbility } from './qqbot-account-ability.entity';
 import { QqbotAccount } from './qqbot-account.entity';
 import type {
@@ -28,6 +30,12 @@ import type {
 } from '../qqbot.types';
 
 const NAPCAT_RUNTIME_CHECK_TTL_MS = 30_000;
+const NAPCAT_AUTO_LOGIN_CLEANUP_FAILED_MESSAGE =
+  'NapCat 自动登录后运行态密码清理失败，请手动更新登录';
+const INSECURE_ACCOUNT_SECRET_VALUES = new Set([
+  'change-me',
+  'kt-template-online-admin-token-secret',
+]);
 
 @Injectable()
 export class QqbotAccountService {
@@ -45,6 +53,10 @@ export class QqbotAccountService {
     @Optional()
     @Inject(SYSTEM_NOTICE_PUBLISHER)
     private readonly systemNoticePublisher?: SystemNoticePublisher,
+    @Optional()
+    private readonly configService?: ConfigService,
+    @Optional()
+    private readonly passwordCryptoService?: AdminPasswordCryptoService,
   ) {}
 
   async page(query: QqbotAccountQueryDto) {
@@ -164,6 +176,15 @@ export class QqbotAccountService {
         isDeleted: false,
       },
     });
+  }
+
+  async findByIdWithNapcatLoginSecret(id: string) {
+    return this.accountRepository
+      .createQueryBuilder('account')
+      .addSelect('account.napcatLoginPasswordSecret')
+      .where('account.id = :id', { id })
+      .andWhere('account.isDeleted = :isDeleted', { isDeleted: false })
+      .getOne();
   }
 
   async findBySelfId(selfId: string) {
@@ -344,19 +365,21 @@ export class QqbotAccountService {
   /**
    * 看门狗：主动巡检在线的已绑定账号，复用既有离线检测 + 站内信告警逻辑，
    * 让掉线/被踢能被及时发现并通知超管，而不必等管理员打开账号列表页。
-   * 仅做检测与告警，不做容器重建（避免与 NapCat 自身重连竞争、产生设备登录抖动）。
+   * 检测到离线后先尝试快速登录，再尝试密码登录；扫码登录仍只由管理员手动触发。
    */
   async runOfflineWatchdog(): Promise<{ checked: number }> {
-    const accounts = await this.accountRepository.find({
-      where: {
+    const accounts = await this.accountRepository
+      .createQueryBuilder('account')
+      .addSelect('account.napcatLoginPasswordSecret')
+      .where('account.connectStatus = :connectStatus', {
         connectStatus: 'online',
-        enabled: true,
-        isDeleted: false,
-      },
-    });
+      })
+      .andWhere('account.enabled = :enabled', { enabled: true })
+      .andWhere('account.isDeleted = :isDeleted', { isDeleted: false })
+      .getMany();
     if (accounts.length <= 0) return { checked: 0 };
 
-    await this.appendNapcatRuntime(accounts);
+    await this.appendNapcatRuntime(accounts, { autoLogin: true });
     return { checked: accounts.length };
   }
 
@@ -372,8 +395,22 @@ export class QqbotAccountService {
     await this.accountRepository.update({ selfId }, payload);
   }
 
+  getNapcatLoginPassword(
+    account?: Pick<QqbotAccount, 'napcatLoginPasswordSecret'> | null,
+  ) {
+    const secret = this.toolsService.toTrimmedString(
+      account?.napcatLoginPasswordSecret,
+    );
+    if (!secret) return '';
+    return this.toolsService.decryptSecretText(
+      secret,
+      this.getAccountSecretKey(),
+    );
+  }
+
   private async appendNapcatRuntime(
     accounts: QqbotAccount[],
+    options: { autoLogin?: boolean } = {},
   ): Promise<QqbotAccountListItem[]> {
     if (accounts.length <= 0) return [];
 
@@ -415,7 +452,7 @@ export class QqbotAccountService {
         }
 
         const container = containerMap.get(binding.containerId);
-        await this.syncNapcatOfflineState(account, container);
+        await this.syncNapcatOfflineState(account, container, options);
         return Object.assign(account, {
           napcat: {
             bindStatus: binding.bindStatus,
@@ -436,6 +473,7 @@ export class QqbotAccountService {
   private async syncNapcatOfflineState(
     account: QqbotAccount,
     container?: QqbotNapcatContainer,
+    options: { autoLogin?: boolean } = {},
   ) {
     if (
       account.connectStatus !== 'online' ||
@@ -449,6 +487,9 @@ export class QqbotAccountService {
 
     const cachedOfflineReason = this.getFreshCachedOfflineReason(container);
     if (cachedOfflineReason) {
+      if (options.autoLogin && (await this.tryAutoLogin(account, container))) {
+        return;
+      }
       await this.applyNapcatOfflineState(
         account,
         container,
@@ -462,7 +503,41 @@ export class QqbotAccountService {
       await this.napcatContainerService.detectRuntimeOffline(container);
     if (!offlineReason) return;
 
+    if (options.autoLogin && (await this.tryAutoLogin(account, container))) {
+      return;
+    }
+
     await this.applyNapcatOfflineState(account, container, offlineReason);
+  }
+
+  private async tryAutoLogin(
+    account: QqbotAccount,
+    container: QqbotNapcatContainer,
+  ) {
+    try {
+      const result = await this.napcatContainerService.tryAutoLogin(container, {
+        loginPassword: this.getNapcatLoginPassword(account),
+        selfId: account.selfId,
+      });
+      if (result.cleanupFailed) {
+        await this.applyNapcatOfflineState(
+          account,
+          container,
+          NAPCAT_AUTO_LOGIN_CLEANUP_FAILED_MESSAGE,
+        );
+        return true;
+      }
+      if (!result.success) return false;
+
+      await this.markOnline(account.selfId, 'Universal');
+      account.clientRole = 'Universal';
+      account.connectStatus = 'online';
+      account.lastConnectedAt = new Date() as any;
+      account.lastError = null;
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async applyNapcatOfflineState(
@@ -578,7 +653,7 @@ export class QqbotAccountService {
   }
 
   private normalizeBody(body: Partial<QqbotAccountBodyDto>) {
-    return {
+    const payload: Partial<QqbotAccount> = {
       accessToken: this.toolsService.normalizeNullableString(body.accessToken),
       connectionMode: body.connectionMode || 'reverse-ws',
       enabled: body.enabled ?? true,
@@ -586,7 +661,44 @@ export class QqbotAccountService {
       remark: body.remark || '',
       selfId:
         typeof body.selfId === 'string' ? body.selfId.trim() : body.selfId,
-    } as Partial<QqbotAccount>;
+    };
+    const napcatLoginPasswordSecret = this.toNapcatLoginPasswordSecret(
+      body.encryptedLoginPassword,
+    );
+    if (napcatLoginPasswordSecret !== undefined) {
+      payload.napcatLoginPasswordSecret = napcatLoginPasswordSecret;
+    }
+    return payload;
+  }
+
+  private toNapcatLoginPasswordSecret(encryptedLoginPassword?: string) {
+    if (!encryptedLoginPassword) return undefined;
+    if (!this.passwordCryptoService) {
+      throwVbenError('登录密码解密服务未配置');
+    }
+
+    const password = this.toolsService.toSecretText(
+      this.passwordCryptoService.decryptPassword(encryptedLoginPassword),
+    );
+    return password
+      ? this.toolsService.encryptSecretText(
+          password,
+          this.getAccountSecretKey(),
+        )
+      : null;
+  }
+
+  private getAccountSecretKey() {
+    const secret = this.toolsService.pickFirstText(
+      this.configService?.get<string>('QQBOT_ACCOUNT_SECRET_KEY'),
+      this.configService?.get<string>('ADMIN_TOKEN_SECRET'),
+    );
+    if (!secret || INSECURE_ACCOUNT_SECRET_VALUES.has(secret)) {
+      throwVbenError(
+        'QQBot 账号登录密码密钥未配置，请设置 QQBOT_ACCOUNT_SECRET_KEY 或 ADMIN_TOKEN_SECRET',
+      );
+    }
+    return secret;
   }
 
   private async bindAbility(

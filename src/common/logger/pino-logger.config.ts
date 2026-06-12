@@ -13,23 +13,26 @@ const REDACT_PATHS = [
   'body.adminToken',
   'body.authorization',
   'body.cookie',
+  'body.encryptedLoginPassword',
+  'body.loginPassword',
   'body.password',
   'body.refreshToken',
   'body.secret',
   'body.token',
   '*.clientSecret',
+  '*.encryptedLoginPassword',
+  '*.loginPassword',
   '*.password',
   '*.secret',
   '*.token',
 ];
 
-export function createPinoLoggerParams(
-  configService: ConfigService,
-): Params {
+export function createPinoLoggerParams(configService: ConfigService): Params {
   const nodeEnv = getString(configService, 'NODE_ENV', 'development');
   const appName = getAppName(configService);
   const lokiHost = normalizeUrl(
-    getString(configService, 'LOKI_HOST') || getString(configService, 'LOKI_URL'),
+    getString(configService, 'LOKI_HOST') ||
+      getString(configService, 'LOKI_URL'),
   );
   const logLevel = getString(
     configService,
@@ -80,7 +83,11 @@ export function getAppName(configService: ConfigService) {
 }
 
 export function getLokiEnvironment(configService: ConfigService) {
-  return getString(configService, 'LOKI_ENV', getString(configService, 'NODE_ENV', 'development'));
+  return getString(
+    configService,
+    'LOKI_ENV',
+    getString(configService, 'NODE_ENV', 'development'),
+  );
 }
 
 function createTransport(
@@ -131,7 +138,11 @@ function createTransport(
               service: 'api',
             },
             propsToLabels: ['context'],
-            silenceErrors: getBoolean(configService, 'LOKI_SILENCE_ERRORS', true),
+            silenceErrors: getBoolean(
+              configService,
+              'LOKI_SILENCE_ERRORS',
+              true,
+            ),
             timeout: getNumber(configService, 'LOKI_PUSH_TIMEOUT_MS', 30000),
           },
           target: 'pino-loki',
@@ -182,11 +193,7 @@ function getRequestId(req: Request) {
   return `${(req as any).id || getHeader(req, 'x-request-id') || ''}`.trim();
 }
 
-function getString(
-  configService: ConfigService,
-  key: string,
-  fallback = '',
-) {
+function getString(configService: ConfigService, key: string, fallback = '') {
   const value = configService.get<string>(key);
   const normalized = `${value ?? ''}`.trim();
   return normalized || fallback;

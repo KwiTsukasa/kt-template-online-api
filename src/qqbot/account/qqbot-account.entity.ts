@@ -63,6 +63,15 @@ export class QqbotAccount {
   @Column({ default: null, length: 500, name: 'last_error', nullable: true })
   lastError: null | string;
 
+  @Column({
+    default: null,
+    length: 1024,
+    name: 'napcat_login_password_secret',
+    nullable: true,
+    select: false,
+  })
+  napcatLoginPasswordSecret: null | string;
+
   @Column({ default: '', length: 255 })
   remark: string;
 

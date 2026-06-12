@@ -2,6 +2,190 @@ import { ToolsService } from '@/common';
 import { QqbotAccountService } from '@/qqbot/account/qqbot-account.service';
 
 describe('QqbotAccountService', () => {
+  it('stores NapCat login password as encrypted secret and never persists the transport field', async () => {
+    const toolsService = new ToolsService();
+    const accountRepository = {
+      create: jest.fn((input) => input),
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn(async (input) => ({ ...input, id: 'account-1' })),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      toolsService,
+      undefined,
+      {
+        get: jest.fn((key: string) =>
+          key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
+        ),
+      } as any,
+      {
+        decryptPassword: jest.fn().mockReturnValue('qq-login-password'),
+      } as any,
+    );
+
+    await service.save({
+      encryptedLoginPassword: 'encrypted-payload',
+      selfId: '1914728559',
+    });
+
+    const payload = accountRepository.create.mock.calls[0][0];
+    expect(payload.encryptedLoginPassword).toBeUndefined();
+    expect(payload.napcatLoginPasswordSecret).toBeTruthy();
+    expect(payload.napcatLoginPasswordSecret).not.toContain(
+      'qq-login-password',
+    );
+    expect(
+      toolsService.decryptSecretText(
+        payload.napcatLoginPasswordSecret,
+        'unit-secret',
+      ),
+    ).toBe('qq-login-password');
+  });
+
+  it('requires an explicit secret key before storing NapCat login password', async () => {
+    const accountRepository = {
+      create: jest.fn((input) => input),
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn(async (input) => ({ ...input, id: 'account-1' })),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+      undefined,
+      {
+        get: jest.fn().mockReturnValue(''),
+      } as any,
+      {
+        decryptPassword: jest.fn().mockReturnValue('qq-login-password'),
+      } as any,
+    );
+
+    await expect(
+      service.save({
+        encryptedLoginPassword: 'encrypted-payload',
+        selfId: '1914728559',
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        msg: 'QQBot 账号登录密码密钥未配置，请设置 QQBOT_ACCOUNT_SECRET_KEY 或 ADMIN_TOKEN_SECRET',
+      }),
+    });
+    expect(accountRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('rejects public placeholder secret before storing NapCat login password', async () => {
+    const accountRepository = {
+      create: jest.fn((input) => input),
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn(async (input) => ({ ...input, id: 'account-1' })),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+      undefined,
+      {
+        get: jest.fn((key: string) =>
+          key === 'ADMIN_TOKEN_SECRET' ? 'change-me' : '',
+        ),
+      } as any,
+      {
+        decryptPassword: jest.fn().mockReturnValue('qq-login-password'),
+      } as any,
+    );
+
+    await expect(
+      service.save({
+        encryptedLoginPassword: 'encrypted-payload',
+        selfId: '1914728559',
+      }),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        msg: 'QQBot 账号登录密码密钥未配置，请设置 QQBOT_ACCOUNT_SECRET_KEY 或 ADMIN_TOKEN_SECRET',
+      }),
+    });
+    expect(accountRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('preserves NapCat login password whitespace after decryption', async () => {
+    const toolsService = new ToolsService();
+    const accountRepository = {
+      create: jest.fn((input) => input),
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn(async (input) => ({ ...input, id: 'account-1' })),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      toolsService,
+      undefined,
+      {
+        get: jest.fn((key: string) =>
+          key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
+        ),
+      } as any,
+      {
+        decryptPassword: jest.fn().mockReturnValue(' qq-login-password '),
+      } as any,
+    );
+
+    await service.save({
+      encryptedLoginPassword: 'encrypted-payload',
+      selfId: '1914728559',
+    });
+
+    const payload = accountRepository.create.mock.calls[0][0];
+    expect(
+      toolsService.decryptSecretText(
+        payload.napcatLoginPasswordSecret,
+        'unit-secret',
+      ),
+    ).toBe(' qq-login-password ');
+  });
+
+  it('does not update NapCat login password when edit leaves the password blank', async () => {
+    const accountRepository = {
+      findOne: jest.fn().mockResolvedValue({ id: 'account-1' }),
+      update: jest.fn(),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      { update: jest.fn() } as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    );
+
+    await service.update({
+      id: 'account-1',
+      name: 'Mirror',
+      selfId: '1914728559',
+    });
+
+    expect(accountRepository.update).toHaveBeenCalledWith(
+      { id: 'account-1' },
+      expect.not.objectContaining({
+        encryptedLoginPassword: expect.anything(),
+        napcatLoginPasswordSecret: expect.anything(),
+      }),
+    );
+  });
+
   it('preserves previous offline reason when later disconnect has no explicit error', async () => {
     const accountRepository = {
       update: jest.fn(),
@@ -267,7 +451,7 @@ describe('QqbotAccountService', () => {
       detectRuntimeOffline: jest.fn(),
     };
     const systemNoticePublisher = {
-      publishSystemNotice: jest.fn(),
+      publishSystemNotice: jest.fn().mockResolvedValue(undefined),
     };
     const service = new QqbotAccountService(
       accountRepository as any,
@@ -304,5 +488,212 @@ describe('QqbotAccountService', () => {
         lastError: null,
       }),
     );
+  });
+
+  it('lets watchdog auto-login before marking an account offline', async () => {
+    const toolsService = new ToolsService();
+    const account = {
+      connectStatus: 'online',
+      enabled: true,
+      id: 'account-1',
+      isDeleted: false,
+      lastError: null,
+      name: '主账号',
+      napcatLoginPasswordSecret: toolsService.encryptSecretText(
+        'qq-login-password',
+        'unit-secret',
+      ),
+      selfId: '1914728559',
+    };
+    const binding = {
+      accountId: 'account-1',
+      bindStatus: 'bound',
+      containerId: 'container-1',
+      isDeleted: false,
+      isPrimary: true,
+      lastLoginAt: new Date('2026-06-10T12:00:00.000Z'),
+    };
+    const container = {
+      id: 'container-1',
+      isDeleted: false,
+      lastError: null,
+      name: 'kt-qqbot-napcat-1914728559',
+      status: 'running',
+      webuiPort: 6101,
+    };
+    const accountRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        addSelect: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([account]),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const napcatContainerService = {
+      detectRuntimeOffline: jest
+        .fn()
+        .mockResolvedValue('NapCat 账号状态变更为离线'),
+      tryAutoLogin: jest.fn().mockResolvedValue({
+        method: 'password',
+        success: true,
+      }),
+    };
+    const systemNoticePublisher = {
+      publishSystemNotice: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addOrderBy: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([binding]),
+          orderBy: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([container]),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      napcatContainerService as any,
+      toolsService,
+      systemNoticePublisher as any,
+      {
+        get: jest.fn((key: string) =>
+          key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
+        ),
+      } as any,
+    );
+
+    const result = await service.runOfflineWatchdog();
+
+    expect(result).toEqual({ checked: 1 });
+    expect(napcatContainerService.tryAutoLogin).toHaveBeenCalledWith(
+      container,
+      {
+        loginPassword: 'qq-login-password',
+        selfId: '1914728559',
+      },
+    );
+    expect(accountRepository.update).toHaveBeenCalledWith(
+      { selfId: '1914728559' },
+      expect.objectContaining({
+        clientRole: 'Universal',
+        connectStatus: 'online',
+        lastConnectedAt: expect.any(Date),
+        lastError: null,
+      }),
+    );
+    expect(systemNoticePublisher.publishSystemNotice).not.toHaveBeenCalled();
+  });
+
+  it('records a cleanup failure when watchdog auto-login leaves runtime password env uncertain', async () => {
+    const toolsService = new ToolsService();
+    const account = {
+      connectStatus: 'online',
+      enabled: true,
+      id: 'account-1',
+      isDeleted: false,
+      lastError: null,
+      name: '主账号',
+      napcatLoginPasswordSecret: toolsService.encryptSecretText(
+        'qq-login-password',
+        'unit-secret',
+      ),
+      selfId: '1914728559',
+    };
+    const binding = {
+      accountId: 'account-1',
+      bindStatus: 'bound',
+      containerId: 'container-1',
+      isDeleted: false,
+      isPrimary: true,
+      lastLoginAt: new Date('2026-06-10T12:00:00.000Z'),
+    };
+    const container = {
+      id: 'container-1',
+      isDeleted: false,
+      lastError: null,
+      name: 'kt-qqbot-napcat-1914728559',
+      status: 'running',
+      webuiPort: 6101,
+    };
+    const accountRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        addSelect: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([account]),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const napcatContainerService = {
+      detectRuntimeOffline: jest
+        .fn()
+        .mockResolvedValue('NapCat 账号状态变更为离线'),
+      tryAutoLogin: jest.fn().mockResolvedValue({
+        cleanupFailed: true,
+        success: false,
+      }),
+    };
+    const systemNoticePublisher = {
+      publishSystemNotice: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addOrderBy: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([binding]),
+          orderBy: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([container]),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      napcatContainerService as any,
+      toolsService,
+      systemNoticePublisher as any,
+      {
+        get: jest.fn((key: string) =>
+          key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
+        ),
+      } as any,
+    );
+
+    await service.runOfflineWatchdog();
+
+    expect(accountRepository.update).toHaveBeenCalledTimes(1);
+    expect(accountRepository.update).toHaveBeenCalledWith(
+      { selfId: '1914728559' },
+      {
+        connectStatus: 'offline',
+        lastError: 'NapCat 自动登录后运行态密码清理失败，请手动更新登录',
+      },
+    );
+    expect(systemNoticePublisher.publishSystemNotice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'NapCat 自动登录后运行态密码清理失败，请手动更新登录',
+        eventType: 'qqbot.account.offline',
+        severity: 'error',
+        title: 'QQBot 账号已下线：1914728559',
+      }),
+    );
+    expect(
+      JSON.stringify(accountRepository.update.mock.calls),
+    ).not.toContain('NapCat 账号状态变更为离线');
   });
 });

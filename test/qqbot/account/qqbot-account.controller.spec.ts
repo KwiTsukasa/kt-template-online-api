@@ -1,0 +1,79 @@
+jest.mock('@/admin/auth/jwt-auth.guard', () => ({
+  JwtAuthGuard: class {
+    canActivate() {
+      return true;
+    }
+  },
+}));
+jest.mock('@/qqbot/account/qqbot-account.service', () => ({
+  QqbotAccountService: class {},
+}));
+jest.mock('@/qqbot/account/qqbot-napcat-login.service', () => ({
+  QqbotNapcatLoginService: class {},
+}));
+jest.mock('@/qqbot/connection/qqbot-reverse-ws.service', () => ({
+  QqbotReverseWsService: class {},
+}));
+
+import * as request from 'supertest';
+import { Test } from '@nestjs/testing';
+import type { INestApplication } from '@nestjs/common';
+import { QqbotAccountController } from '@/qqbot/account/qqbot-account.controller';
+import { QqbotAccountService } from '@/qqbot/account/qqbot-account.service';
+import { QqbotNapcatLoginService } from '@/qqbot/account/qqbot-napcat-login.service';
+import { QqbotReverseWsService } from '@/qqbot/connection/qqbot-reverse-ws.service';
+
+describe('QqbotAccountController', () => {
+  let app: INestApplication;
+  const accountService = {
+    save: jest.fn().mockResolvedValue('account-1'),
+  };
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [QqbotAccountController],
+      providers: [
+        { provide: QqbotAccountService, useValue: accountService },
+        { provide: QqbotNapcatLoginService, useValue: {} },
+        { provide: QqbotReverseWsService, useValue: {} },
+      ],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(() => {
+    accountService.save.mockClear();
+  });
+
+  it('accepts encrypted NapCat login password through account save API', async () => {
+    await request(app.getHttpServer())
+      .post('/qqbot/account/save')
+      .send({
+        encryptedLoginPassword: 'encrypted-login-password',
+        name: 'Mirror',
+        selfId: '1914728559',
+      })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body).toEqual(
+          expect.objectContaining({
+            code: 200,
+            data: 'account-1',
+          }),
+        );
+      });
+
+    expect(accountService.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        encryptedLoginPassword: 'encrypted-login-password',
+        selfId: '1914728559',
+      }),
+    );
+  });
+});

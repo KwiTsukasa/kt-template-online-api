@@ -1,4 +1,9 @@
-import { createHash } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import * as svgCaptcha from 'svg-captcha';
 import { normalizeVbenErrorText } from '../response/vben-response';
@@ -125,6 +130,12 @@ export class ToolsService {
     return `${value ?? ''}`.trim();
   }
 
+  toSecretText(value: unknown) {
+    if (value === undefined || value === null) return '';
+    const text = `${value}`;
+    return text.trim() ? text : '';
+  }
+
   normalizeWhitespaceText(value: unknown) {
     return this.toTrimmedString(value).replace(/\s+/g, ' ');
   }
@@ -205,6 +216,47 @@ export class ToolsService {
     if (value === undefined || value === null) return null;
     const nextValue = this.toTrimmedString(value);
     return nextValue ? nextValue : null;
+  }
+
+  encryptSecretText(value: unknown, secret: unknown) {
+    const text = this.toSecretText(value);
+    if (!text) return null;
+
+    const key = this.deriveSecretKey(secret);
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([
+      cipher.update(text, 'utf8'),
+      cipher.final(),
+    ]);
+    const tag = cipher.getAuthTag();
+    return [
+      'ktv1',
+      iv.toString('base64url'),
+      tag.toString('base64url'),
+      encrypted.toString('base64url'),
+    ].join(':');
+  }
+
+  decryptSecretText(value: unknown, secret: unknown) {
+    const text = this.toTrimmedString(value);
+    if (!text) return '';
+
+    const [version, ivText, tagText, encryptedText] = text.split(':');
+    if (version !== 'ktv1' || !ivText || !tagText || !encryptedText) {
+      throw new Error('密文格式不正确');
+    }
+
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      this.deriveSecretKey(secret),
+      Buffer.from(ivText, 'base64url'),
+    );
+    decipher.setAuthTag(Buffer.from(tagText, 'base64url'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(encryptedText, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8');
   }
 
   pickFirstText(...values: unknown[]) {
@@ -406,6 +458,14 @@ export class ToolsService {
       `["']?isOnline["']?\\s*[:=]\\s*${expected ? 'true' : 'false'}\\b`,
       'i',
     ).test(text);
+  }
+
+  private deriveSecretKey(secret: unknown) {
+    const normalizedSecret = this.toTrimmedString(secret);
+    if (!normalizedSecret) {
+      throw new Error('密钥不能为空');
+    }
+    return createHash('sha256').update(normalizedSecret).digest();
   }
 
   isNapcatExpiredQrcodeStatus(status: NapcatLoginStatusLike) {

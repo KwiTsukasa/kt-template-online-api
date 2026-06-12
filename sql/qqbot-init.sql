@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS `qqbot_account` (
   `self_id` varchar(64) NOT NULL,
   `name` varchar(120) NOT NULL DEFAULT '',
   `access_token` varchar(255) DEFAULT NULL,
+  `napcat_login_password_secret` varchar(1024) DEFAULT NULL,
   `enabled` tinyint(1) NOT NULL DEFAULT 1,
   `connect_status` varchar(32) NOT NULL DEFAULT 'offline',
   `client_role` varchar(32) DEFAULT NULL,
@@ -285,6 +286,21 @@ SET @qqbot_sql = (
   WHERE table_schema = DATABASE()
     AND table_name = 'qqbot_account'
     AND column_name = 'access_token'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_account` ADD COLUMN `napcat_login_password_secret` varchar(1024) DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'napcat_login_password_secret'
 );
 PREPARE qqbot_stmt FROM @qqbot_sql;
 EXECUTE qqbot_stmt;

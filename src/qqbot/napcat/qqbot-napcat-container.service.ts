@@ -17,6 +17,23 @@ type NapcatLoginLogResult = {
   state: NapcatLoginLogState;
 };
 
+type NapcatLoginEnvOptions = {
+  clearLoginPassword?: boolean;
+  loginPassword?: string;
+  selfId?: string;
+};
+
+type NapcatLoginEnvUpdateResult = {
+  changed: boolean;
+  ok: boolean;
+};
+
+type NapcatAutoLoginResult = {
+  cleanupFailed?: boolean;
+  method?: 'password' | 'quick';
+  success: boolean;
+};
+
 @Injectable()
 export class QqbotNapcatContainerService {
   constructor(
@@ -44,10 +61,11 @@ export class QqbotNapcatContainerService {
     const existing = await this.getPrimaryRuntime(account.id);
     if (existing) {
       await this.ensureRuntimeQuickLogin(existing, account.selfId);
-      return existing;
+      return { ...existing, hasExistingPrimaryBinding: true };
     }
 
-    return this.createManagedContainer(account.selfId);
+    const created = await this.createManagedContainer(account.selfId);
+    return { ...created, hasExistingPrimaryBinding: false };
   }
 
   /**
@@ -56,34 +74,49 @@ export class QqbotNapcatContainerService {
    * 能从持久化会话免扫码自动重登。硬踢（登录已失效）时会话作废，仍需扫码。
    */
   async ensureRuntimeQuickLogin(runtime: QqbotNapcatRuntime, selfId?: string) {
-    const account = `${selfId || ''}`.trim();
-    if (!account || this.getManagedMode() !== 'ssh' || !runtime.id) {
-      return false;
+    return this.ensureRuntimeLoginEnv(runtime, { selfId });
+  }
+
+  async ensureRuntimeLoginEnv(
+    runtime: QqbotNapcatRuntime,
+    options: NapcatLoginEnvOptions,
+  ): Promise<NapcatLoginEnvUpdateResult> {
+    if (this.getManagedMode() !== 'ssh' || !runtime.id) {
+      return { changed: false, ok: true };
     }
 
-    const container = await this.containerRepository
-      .createQueryBuilder('container')
-      .addSelect('container.webuiToken')
-      .where('container.id = :containerId', { containerId: runtime.id })
-      .andWhere('container.isDeleted = :isDeleted', { isDeleted: false })
-      .getOne();
+    const account = this.toolsService.toTrimmedString(options.selfId);
+    if (!account) {
+      return { changed: false, ok: false };
+    }
+
+    const container = await this.findContainerWithToken(runtime.id);
     if (
       !container ||
       !container.name ||
       !container.webuiPort ||
       !container.webuiToken
     ) {
-      return false;
+      return { changed: false, ok: false };
     }
 
-    // 已带 ACCOUNT（或无法确认）则跳过，避免重复重建：只在首次缺失时原地重建一次。
-    if (await this.runtimeHasAccountEnv(container.name)) return false;
+    if (
+      await this.runtimeMatchesLoginEnv(container.name, {
+        ...options,
+        selfId: account,
+      })
+    ) {
+      return { changed: false, ok: true };
+    }
 
     try {
       await this.createRemoteDockerContainer({
         account,
         dataDir: container.dataDir || `${this.getRootDir()}/${container.name}`,
         image: container.image,
+        loginPassword: options.clearLoginPassword
+          ? undefined
+          : this.toolsService.toSecretText(options.loginPassword),
         name: container.name,
         port: container.webuiPort,
         reverseWsUrl: container.reverseWsUrl || this.buildReverseWsUrl(),
@@ -98,34 +131,118 @@ export class QqbotNapcatContainerService {
           status: 'running',
         },
       );
+      return { changed: true, ok: true };
+    } catch {
+      return { changed: false, ok: false };
+    }
+  }
+
+  async tryAutoLogin(
+    container: QqbotNapcatContainer,
+    options: NapcatLoginEnvOptions,
+  ): Promise<NapcatAutoLoginResult> {
+    const selfId = this.toolsService.toTrimmedString(options.selfId);
+    if (!selfId || this.getManagedMode() !== 'ssh' || !container.id) {
+      return { success: false };
+    }
+
+    const runtimeContainer = await this.findContainerWithToken(container.id);
+    if (!runtimeContainer?.name) return { success: false };
+    const runtime = this.toRuntime(runtimeContainer);
+
+    const quickCleanup = await this.ensureRuntimeLoginEnv(runtime, {
+      clearLoginPassword: true,
+      selfId,
+    });
+    if (!quickCleanup.ok) return { cleanupFailed: true, success: false };
+
+    const quickState = await this.restartAndDetectLoginState(runtime);
+    if (quickState.state === 'online') {
+      return { method: 'quick', success: true };
+    }
+
+    const loginPassword = this.toolsService.toSecretText(options.loginPassword);
+    if (!loginPassword) return { success: false };
+
+    const passwordEnv = await this.ensureRuntimeLoginEnv(runtime, {
+      loginPassword,
+      selfId,
+    });
+    if (!passwordEnv.ok) return { success: false };
+
+    const passwordState = await this.restartAndDetectLoginState(runtime);
+    if (passwordState.state !== 'online') {
+      const cleaned = await this.ensureRuntimeLoginEnv(runtime, {
+        clearLoginPassword: true,
+        selfId,
+      });
+      return cleaned.ok
+        ? { success: false }
+        : { cleanupFailed: true, success: false };
+    }
+
+    const cleaned = await this.ensureRuntimeLoginEnv(runtime, {
+      clearLoginPassword: true,
+      selfId,
+    });
+    if (!cleaned.ok) return { cleanupFailed: true, success: false };
+
+    return { method: 'password', success: true };
+  }
+
+  private async runtimeMatchesLoginEnv(
+    name: string,
+    options: NapcatLoginEnvOptions,
+  ) {
+    try {
+      const result = await this.runProcess(
+        'ssh',
+        [...this.getSshArgs(), 'sh -s'],
+        this.buildRemoteInspectEnvScript(name),
+        undefined,
+        this.getRuntimeCheckTimeoutMs(),
+      );
+      const env = this.parseDockerEnv(result.stdout);
+      if (
+        env.get('ACCOUNT') !== this.toolsService.toTrimmedString(options.selfId)
+      ) {
+        return false;
+      }
+      const hasPassword =
+        env.has('NAPCAT_QUICK_PASSWORD') ||
+        env.has('NAPCAT_QUICK_PASSWORD_MD5');
+      if (options.clearLoginPassword) return !hasPassword;
+
+      const loginPassword = this.toolsService.toSecretText(options.loginPassword);
+      if (loginPassword) {
+        return env.get('NAPCAT_QUICK_PASSWORD') === loginPassword;
+      }
       return true;
     } catch {
-      // 重建失败不阻断登录流程：保持原容器继续走扫码登录。
       return false;
     }
   }
 
-  private async runtimeHasAccountEnv(name: string) {
-    try {
-      const result = await this.runProcess(
-        'ssh',
-        [
-          ...this.getSshArgs(),
-          'docker',
-          'inspect',
-          '--format',
-          '{{range .Config.Env}}{{println .}}{{end}}',
-          name,
-        ],
-        '',
-        undefined,
-        this.getRuntimeCheckTimeoutMs(),
-      );
-      return /^ACCOUNT=\S/m.test(result.stdout);
-    } catch {
-      // 无法确认时按“已存在”处理，宁可不重建也不误删运行中的容器。
-      return true;
-    }
+  private buildRemoteInspectEnvScript(name: string) {
+    return `
+set -eu
+NAME=${this.sh(name)}
+docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
+`;
+  }
+
+  private parseDockerEnv(stdout: string) {
+    const env = new Map<string, string>();
+    stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((line) => {
+        const index = line.indexOf('=');
+        if (index <= 0) return;
+        env.set(line.slice(0, index), line.slice(index + 1));
+      });
+    return env;
   }
 
   async findRuntimeById(containerId?: string) {
@@ -478,6 +595,47 @@ docker logs --tail 300 "$NAME" 2>&1 || true
 `;
   }
 
+  private buildRemoteRecentLogsSinceScript(name: string, since: string) {
+    return `
+set -eu
+NAME=${this.sh(name)}
+SINCE=${this.sh(since)}
+docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
+`;
+  }
+
+  private async restartAndDetectLoginState(runtime: QqbotNapcatRuntime) {
+    const since = new Date(Date.now() - 1000).toISOString();
+    await this.restartRuntimeContainer(runtime);
+    const attempts = Number(
+      this.getConfig('QQBOT_NAPCAT_AUTO_LOGIN_RETRIES', '10'),
+    );
+    const delayMs = Number(
+      this.getConfig('QQBOT_NAPCAT_AUTO_LOGIN_INTERVAL_MS', '2000'),
+    );
+    let latest: NapcatLoginLogResult = {
+      offlineReason: null,
+      state: 'unknown',
+    };
+    for (let index = 0; index < attempts; index += 1) {
+      await this.toolsService.sleep(Number.isFinite(delayMs) ? delayMs : 2000);
+      latest = await this.detectRuntimeLoginStateSince(runtime.name, since);
+      if (latest.state !== 'unknown') return latest;
+    }
+    return latest;
+  }
+
+  private async detectRuntimeLoginStateSince(name: string, since: string) {
+    const result = await this.runProcess(
+      'ssh',
+      [...this.getSshArgs(), 'sh -s'],
+      this.buildRemoteRecentLogsSinceScript(name, since),
+      undefined,
+      this.getRuntimeCheckTimeoutMs(),
+    );
+    return this.extractLoginState(result.stdout);
+  }
+
   private extractLoginState(logs: string): NapcatLoginLogResult {
     const lines = logs
       .split(/\r?\n/)
@@ -548,7 +706,19 @@ docker logs --tail 300 "$NAME" 2>&1 || true
     return container ? this.toRuntime(container) : null;
   }
 
-  private async createManagedContainer(selfId?: string) {
+  private async findContainerWithToken(containerId: string) {
+    return this.containerRepository
+      .createQueryBuilder('container')
+      .addSelect('container.webuiToken')
+      .where('container.id = :containerId', { containerId })
+      .andWhere('container.isDeleted = :isDeleted', { isDeleted: false })
+      .getOne();
+  }
+
+  private async createManagedContainer(
+    selfId?: string,
+    loginPassword?: string,
+  ) {
     const mode = this.getManagedMode();
     if (mode !== 'ssh') {
       throwVbenError('当前仅支持通过 SSH 创建 NapCat 容器');
@@ -586,6 +756,7 @@ docker logs --tail 300 "$NAME" 2>&1 || true
         account: selfId,
         dataDir,
         image,
+        loginPassword,
         name,
         port,
         reverseWsUrl,
@@ -623,6 +794,7 @@ docker logs --tail 300 "$NAME" 2>&1 || true
     account?: string;
     dataDir: string;
     image: string;
+    loginPassword?: string;
     name: string;
     port: number;
     reverseWsUrl: string;
@@ -637,6 +809,7 @@ docker logs --tail 300 "$NAME" 2>&1 || true
     account?: string;
     dataDir: string;
     image: string;
+    loginPassword?: string;
     name: string;
     port: number;
     reverseWsUrl: string;
@@ -649,8 +822,15 @@ docker logs --tail 300 "$NAME" 2>&1 || true
     const reverseWsUrl = this.sh(input.reverseWsUrl);
     const token = this.sh(input.token);
     const account = `${input.account || ''}`.trim();
+    const loginPassword = this.toolsService.toSecretText(input.loginPassword);
     const accountHeader = account ? `ACCOUNT=${this.sh(account)}\n` : '';
     const accountRunFlag = account ? '  -e ACCOUNT="$ACCOUNT" \\\n' : '';
+    const passwordHeader = loginPassword
+      ? `NAPCAT_QUICK_PASSWORD=${this.sh(loginPassword)}\n`
+      : '';
+    const passwordRunFlag = loginPassword
+      ? '  -e NAPCAT_QUICK_PASSWORD="$NAPCAT_QUICK_PASSWORD" \\\n'
+      : '';
     const pullCmd = input.skipPull ? '' : 'docker pull "$IMAGE" >/dev/null\n';
 
     return `
@@ -662,6 +842,7 @@ PORT=${input.port}
 REVERSE_WS_URL=${reverseWsUrl}
 WEBUI_TOKEN=${token}
 ${accountHeader}
+${passwordHeader}
 mkdir -p "$DATA_DIR/QQ" "$DATA_DIR/config" "$DATA_DIR/plugins" "$DATA_DIR/logs"
 chmod 700 "$DATA_DIR"
 
@@ -707,7 +888,7 @@ docker run -d \\
   -e NAPCAT_UID=0 \\
   -e NAPCAT_GID=0 \\
   -e WEBUI_TOKEN="$WEBUI_TOKEN" \\
-${accountRunFlag}  -p "$PORT:6099" \\
+${accountRunFlag}${passwordRunFlag}  -p "$PORT:6099" \\
   -v "$DATA_DIR/QQ:/app/.config/QQ" \\
   -v "$DATA_DIR/config:/app/napcat/config" \\
   -v "$DATA_DIR/plugins:/app/napcat/plugins" \\

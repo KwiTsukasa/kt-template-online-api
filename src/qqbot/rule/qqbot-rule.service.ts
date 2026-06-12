@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { throwVbenError, ToolsService } from '@/common';
@@ -18,6 +19,7 @@ import {
   QQBOT_DEFAULT_PAGE_NO,
   QQBOT_DEFAULT_PAGE_SIZE,
 } from '../qqbot.constants';
+import { isWithinCooldown } from '../qqbot-cooldown.policy';
 
 @Injectable()
 export class QqbotRuleService {
@@ -26,6 +28,7 @@ export class QqbotRuleService {
     private readonly ruleRepository: Repository<QqbotRule>,
     private readonly accountService: QqbotAccountService,
     private readonly toolsService: ToolsService,
+    private readonly configService: ConfigService,
   ) {}
 
   async page(query: QqbotRuleQueryDto) {
@@ -145,8 +148,11 @@ export class QqbotRuleService {
   }
 
   isInCooldown(rule: QqbotRule) {
-    if (!rule.lastHitAt || !rule.cooldownMs) return false;
-    return Date.now() - new Date(rule.lastHitAt).getTime() < rule.cooldownMs;
+    return isWithinCooldown({
+      cooldownMs: rule.cooldownMs,
+      lastHitAt: rule.lastHitAt,
+      minCooldownMs: this.getMinCooldownMs(),
+    });
   }
 
   private assertRuleValid(matchType: QqbotRuleMatchType, keyword: string) {
@@ -164,7 +170,10 @@ export class QqbotRuleService {
 
   private normalizeBody(body: Partial<QqbotRuleBodyDto>) {
     return {
-      cooldownMs: Number(body.cooldownMs ?? 1500),
+      cooldownMs: Math.max(
+        Number(body.cooldownMs ?? this.getMinCooldownMs()),
+        this.getMinCooldownMs(),
+      ),
       enabled: body.enabled ?? true,
       keyword: body.keyword || '',
       matchType: (body.matchType || 'keyword') as QqbotRuleMatchType,
@@ -174,5 +183,10 @@ export class QqbotRuleService {
       replyContent: body.replyContent || '',
       targetType: (body.targetType || 'all') as QqbotRuleTargetType,
     } as Partial<QqbotRule>;
+  }
+
+  private getMinCooldownMs() {
+    const value = Number(this.configService.get('QQBOT_RULE_MIN_COOLDOWN_MS'));
+    return Number.isInteger(value) && value > 0 ? value : 30000;
   }
 }

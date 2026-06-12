@@ -301,6 +301,7 @@ export type QqbotReverseActionSender = {
 
 export type QqbotRepeaterConversationState = {
   count: number;
+  lastRepeatedAt?: number;
   lastText: string;
   repeatedText: string;
   updatedAt: number;

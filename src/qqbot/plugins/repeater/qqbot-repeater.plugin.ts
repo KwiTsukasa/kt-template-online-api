@@ -102,7 +102,10 @@ export class QqbotRepeaterPluginService {
     const state = this.getNextState(key, text);
     if (!this.shouldRepeat(state, text)) return false;
 
+    const repeatedAt = Date.now();
     state.repeatedText = text;
+    state.lastRepeatedAt = repeatedAt;
+    state.updatedAt = repeatedAt;
     try {
       await this.sendService.sendText({
         channelId: message.channelId,
@@ -157,6 +160,7 @@ export class QqbotRepeaterPluginService {
         : {
             count: 1,
             lastText: text,
+            lastRepeatedAt: current?.lastRepeatedAt || 0,
             repeatedText: '',
             updatedAt: now,
           };
@@ -166,11 +170,28 @@ export class QqbotRepeaterPluginService {
   }
 
   private shouldRepeat(state: QqbotRepeaterConversationState, text: string) {
-    return state.count >= this.getThreshold() && state.repeatedText !== text;
+    return (
+      state.count >= this.getThreshold() &&
+      state.repeatedText !== text &&
+      Date.now() - (state.lastRepeatedAt || 0) >= this.getMinIntervalMs()
+    );
   }
 
   private resetState(message: QqbotNormalizedMessage) {
-    this.states.delete(this.buildStateKey(message));
+    const key = this.buildStateKey(message);
+    const current = this.states.get(key);
+    if (!current?.lastRepeatedAt) {
+      this.states.delete(key);
+      return;
+    }
+
+    this.states.set(key, {
+      count: 0,
+      lastRepeatedAt: current.lastRepeatedAt,
+      lastText: '',
+      repeatedText: '',
+      updatedAt: Date.now(),
+    });
   }
 
   private buildStateKey(message: QqbotNormalizedMessage) {
@@ -179,14 +200,21 @@ export class QqbotRepeaterPluginService {
 
   private getThreshold() {
     const value = Number(this.configService.get('QQBOT_REPEATER_THRESHOLD'));
-    return Number.isInteger(value) && value > 1 ? value : 2;
+    return Number.isInteger(value) && value > 1 ? value : 4;
   }
 
   private getMaxTextLength() {
     const value = Number(
       this.configService.get('QQBOT_REPEATER_MAX_TEXT_LENGTH'),
     );
-    return Number.isInteger(value) && value > 0 ? value : 300;
+    return Number.isInteger(value) && value > 0 ? value : 120;
+  }
+
+  private getMinIntervalMs() {
+    const value = Number(
+      this.configService.get('QQBOT_REPEATER_MIN_INTERVAL_MS'),
+    );
+    return Number.isInteger(value) && value > 0 ? value : 10 * 60 * 1000;
   }
 
   private getStateTtlMs() {

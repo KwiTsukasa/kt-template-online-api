@@ -31,7 +31,7 @@ describe('QqbotSendService', () => {
       busService as any,
       messageService as any,
       { get: jest.fn(() => reverseWsService) } as any,
-      { assertCanSend: jest.fn() } as any,
+      { waitForSendSlot: jest.fn().mockResolvedValue({ waitMs: 0 }) } as any,
       new ToolsService(),
     );
     (service as any).getReverseWsService = jest

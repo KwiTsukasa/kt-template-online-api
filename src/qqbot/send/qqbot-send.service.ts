@@ -100,7 +100,10 @@ export class QqbotSendService {
       throwVbenError('没有可用 QQBot 账号');
     }
 
-    this.rateLimitService.assertCanSend(account.selfId, params.targetId);
+    await this.rateLimitService.waitForSendSlot(
+      account.selfId,
+      params.targetId,
+    );
 
     const { action, actionParams } = this.buildAction(params);
     const storedMessageText = this.toolsService.toStoredMessageText(

@@ -60,7 +60,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 | Admin | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID` |
 | WordPress | `WORDPRESS_BASE_URL`、`WORDPRESS_HOST_HEADER`、`WORDPRESS_ADMIN_USERNAME`、`WORDPRESS_ADMIN_PASSWORD`、`WORDPRESS_*_TIMEOUT_MS` |
 | Logging/Loki | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*` |
-| QQBot/NapCat | `QQBOT_ENABLED`、`QQBOT_REVERSE_WS_*`、`NAPCAT_*`、`QQBOT_NAPCAT_*`、`MQTT_*` |
+| QQBot/NapCat | `QQBOT_ENABLED`、`QQBOT_REVERSE_WS_*`、`QQBOT_SEND_*`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`、`NAPCAT_*`、`QQBOT_NAPCAT_*`、`MQTT_*` |
 | BangDream | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT` |
 | FF14 Market | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_MARKET_CACHE_TTL_MS` |
 | FFLogs | `FFLOGS_BASE_URL`、`FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET` |
@@ -132,6 +132,9 @@ pnpm exec jest --runInBand --runTestsByPath test/path/to/file.spec.ts
 - 系统日志由 pino 输出，Loki 查询统一通过后端 `/system/logs/*` 代理，前端不直连 Loki。
 - 日志级站内信只承接运行期事件：接口 5xx、QQBot 下线 notice、NapCat 容器最新离线日志会自动聚合通知 `super` 角色；服务端强制 `super` 访问，Admin 不再暴露人工新增/编辑入口；长路径接口错误会压缩 `dedupeKey/title` 到表字段长度内，避免通知入库失败。
 - QQBot 扫码登录通过 SSE `/qqbot/account/scan/events` 暴露进度，耗时链路不应阻塞普通 HTTP 响应。
+- QQBot 外发统一走发送排队：默认全局间隔 `2500ms`、同会话间隔 `8000ms`、排队抖动 `0-800ms`，超过 `QQBOT_SEND_MAX_QUEUE_WAIT_MS` 时拒绝本次发送，避免高频自动回复形成突发流量。
+- QQBot 在线命令和自动回复规则都有运行时保底冷却：默认命令 `5000ms`、规则 `30000ms`；即使数据库里旧数据冷却值更低，也按保底值判定，降低频繁触发风控的概率。
+- QQBot 复读机默认阈值为 4，同一会话默认 10 分钟只复读一次，默认只复读 120 字以内普通文本，避免群聊重复内容导致机器人过于频繁地模拟真人发言。
 - QQBot 同一账号只允许一个有效 NapCat 主容器；绑定新容器时会释放旧绑定和不再共享的旧容器，机器人下线 notice、`isOnline:false` 和 NapCat 容器最新离线日志都会写入账号 `lastError`，普通群成员 kick 不属于账号离线信号；写入 `last_error` 前按 500 字符截断，后续无错误的普通断连不能清空该原因；账号列表日志检测带近期缓存和短超时，账号连接时间或心跳晚于容器检测时间时以账号在线态为准，最新日志为在线时清空容器旧离线错误。
 - NapCat 托管容器必须显式配置 `QQBOT_NAPCAT_IMAGE`，不要依赖 `latest` 默认镜像；生产切换镜像前先 pin 明确版本或 digest 并单账号观察。
 - BangDream 当前源码根目录是 `src/qqbot/plugins/bangDream`；不要恢复旧 `tsugu` 层级或旧大桶目录。

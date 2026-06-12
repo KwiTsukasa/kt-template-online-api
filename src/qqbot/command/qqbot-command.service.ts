@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { throwVbenError, ToolsService } from '@/common';
@@ -18,6 +19,7 @@ import type {
   QqbotCommandQueryDto,
   QqbotCommandUpdateDto,
 } from './qqbot-command.dto';
+import { isWithinCooldown } from '../qqbot-cooldown.policy';
 import { QqbotCommandLog } from './qqbot-command-log.entity';
 import { QqbotCommand } from './qqbot-command.entity';
 
@@ -31,6 +33,7 @@ export class QqbotCommandService {
     private readonly accountService: QqbotAccountService,
     private readonly pluginRegistry: QqbotPluginRegistryService,
     private readonly toolsService: ToolsService,
+    private readonly configService: ConfigService,
   ) {}
 
   async page(query: QqbotCommandQueryDto) {
@@ -157,10 +160,11 @@ export class QqbotCommandService {
   }
 
   isInCooldown(command: QqbotCommand) {
-    if (!command.lastHitAt || !command.cooldownMs) return false;
-    return (
-      Date.now() - new Date(command.lastHitAt).getTime() < command.cooldownMs
-    );
+    return isWithinCooldown({
+      cooldownMs: command.cooldownMs,
+      lastHitAt: command.lastHitAt,
+      minCooldownMs: this.getMinCooldownMs(),
+    });
   }
 
   async logExecution(params: {
@@ -217,7 +221,10 @@ export class QqbotCommandService {
     return {
       aliases: this.stringifyList(body.aliases),
       code,
-      cooldownMs: Number(body.cooldownMs ?? 1500),
+      cooldownMs: Math.max(
+        Number(body.cooldownMs ?? this.getMinCooldownMs()),
+        this.getMinCooldownMs(),
+      ),
       defaultParams: this.stringifyParams(body.defaultParams),
       enabled: body.enabled ?? true,
       errorTemplate: body.errorTemplate || null,
@@ -323,5 +330,10 @@ export class QqbotCommandService {
       replyTemplate: command.replyTemplate || '',
       targetType: command.targetType,
     };
+  }
+
+  private getMinCooldownMs() {
+    const value = Number(this.configService.get('QQBOT_COMMAND_MIN_COOLDOWN_MS'));
+    return Number.isInteger(value) && value > 0 ? value : 5000;
   }
 }

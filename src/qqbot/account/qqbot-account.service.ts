@@ -27,6 +27,7 @@ import type {
   QqbotAccountAbilityType,
   QqbotAccountListItem,
   QqbotConnectionRole,
+  QqbotNapcatRuntimeStatusSnapshot,
 } from '../qqbot.types';
 
 const NAPCAT_RUNTIME_CHECK_TTL_MS = 30_000;
@@ -434,8 +435,10 @@ export class QqbotAccountService {
     );
     const containerMap = new Map<string, QqbotNapcatContainer>();
     if (containerIds.length > 0) {
-      const containers = await this.napcatContainerRepository
-        .createQueryBuilder('container')
+      const containerBuilder = this.napcatContainerRepository
+        .createQueryBuilder('container');
+      containerBuilder.addSelect?.('container.webuiToken');
+      const containers = await containerBuilder
         .where('container.id IN (:...containerIds)', { containerIds })
         .andWhere('container.isDeleted = :isDeleted', { isDeleted: false })
         .getMany();
@@ -452,17 +455,28 @@ export class QqbotAccountService {
         }
 
         const container = containerMap.get(binding.containerId);
-        await this.syncNapcatOfflineState(account, container, options);
+        const runtimeStatus = await this.syncNapcatRuntimeState(
+          account,
+          container,
+          options,
+        );
         return Object.assign(account, {
           napcat: {
             bindStatus: binding.bindStatus,
             containerId: binding.containerId,
             containerName: container?.name,
+            containerOnline:
+              runtimeStatus?.containerOnline ??
+              (container?.status === 'running' || false),
             containerStatus: container?.status,
-            lastCheckedAt: container?.lastCheckedAt,
-            lastError: container?.lastError,
+            lastCheckedAt: runtimeStatus?.checkedAt || container?.lastCheckedAt,
+            lastError: runtimeStatus?.lastError ?? container?.lastError,
             lastLoginAt: binding.lastLoginAt,
             lastStartedAt: container?.lastStartedAt,
+            oneBotOnline: account.connectStatus === 'online',
+            qqLoginMessage: runtimeStatus?.qqLoginMessage,
+            qqLoginStatus: runtimeStatus?.qqLoginStatus,
+            webuiOnline: runtimeStatus?.webuiOnline,
             webuiPort: container?.webuiPort,
           },
         });
@@ -470,44 +484,150 @@ export class QqbotAccountService {
     );
   }
 
-  private async syncNapcatOfflineState(
+  private async syncNapcatRuntimeState(
     account: QqbotAccount,
     container?: QqbotNapcatContainer,
     options: { autoLogin?: boolean } = {},
   ) {
-    if (
-      account.connectStatus !== 'online' ||
-      !container ||
-      container.status !== 'running'
-    ) {
-      return;
+    const runtimeStatus = await this.getNapcatRuntimeStatus(account, container);
+    if (!container || container.status !== 'running') return runtimeStatus;
+    if (account.connectStatus !== 'online') return runtimeStatus;
+
+    if (this.isAccountStateNewerThanRuntimeCheck(account, container)) {
+      return runtimeStatus;
     }
 
-    if (this.isAccountStateNewerThanRuntimeCheck(account, container)) return;
+    const runtimeOfflineReason =
+      this.getRuntimeStatusOfflineReason(runtimeStatus);
+    if (runtimeOfflineReason) {
+      if (options.autoLogin && (await this.tryAutoLogin(account, container))) {
+        return this.toCachedNapcatRuntimeStatus(account, container);
+      }
+      await this.applyNapcatOfflineState(
+        account,
+        container,
+        runtimeOfflineReason,
+      );
+      return runtimeStatus;
+    }
 
     const cachedOfflineReason = this.getFreshCachedOfflineReason(container);
     if (cachedOfflineReason) {
       if (options.autoLogin && (await this.tryAutoLogin(account, container))) {
-        return;
+        return this.toCachedNapcatRuntimeStatus(account, container);
       }
       await this.applyNapcatOfflineState(
         account,
         container,
         cachedOfflineReason,
       );
-      return;
+      return runtimeStatus;
     }
-    if (this.isFreshRuntimeCheck(container.lastCheckedAt)) return;
+    if (this.isFreshRuntimeCheck(container.lastCheckedAt)) {
+      return runtimeStatus;
+    }
 
     const offlineReason =
       await this.napcatContainerService.detectRuntimeOffline(container);
-    if (!offlineReason) return;
+    if (!offlineReason) return runtimeStatus;
 
     if (options.autoLogin && (await this.tryAutoLogin(account, container))) {
-      return;
+      return this.toCachedNapcatRuntimeStatus(account, container);
     }
 
     await this.applyNapcatOfflineState(account, container, offlineReason);
+    return {
+      ...runtimeStatus,
+      checkedAt: new Date(),
+      lastError: offlineReason,
+      qqLoginMessage: offlineReason,
+      qqLoginStatus: 'offline',
+    } as QqbotNapcatRuntimeStatusSnapshot;
+  }
+
+  private async getNapcatRuntimeStatus(
+    account: QqbotAccount,
+    container?: QqbotNapcatContainer,
+  ): Promise<QqbotNapcatRuntimeStatusSnapshot | undefined> {
+    if (!container) return undefined;
+    const cached = this.toCachedNapcatRuntimeStatus(account, container);
+    if (container.status !== 'running') return cached;
+    if (this.isAccountStateNewerThanRuntimeCheck(account, container)) {
+      return cached;
+    }
+    if (this.isFreshRuntimeCheck(container.lastCheckedAt)) return cached;
+    if (
+      typeof this.napcatContainerService.inspectRuntimeStatus !== 'function'
+    ) {
+      return cached;
+    }
+
+    const inspected =
+      await this.napcatContainerService.inspectRuntimeStatus(container);
+    container.lastCheckedAt = inspected.checkedAt as any;
+    container.lastError = inspected.lastError || null;
+    return inspected;
+  }
+
+  private toCachedNapcatRuntimeStatus(
+    account: QqbotAccount,
+    container: QqbotNapcatContainer,
+  ): QqbotNapcatRuntimeStatusSnapshot {
+    const containerOnline = container.status === 'running';
+    const lastError = this.toolsService.toTrimmedString(container.lastError);
+    const offlineReason = this.toolsService.isNapcatOfflineLoginMessage(
+      lastError,
+    )
+      ? lastError
+      : null;
+    return {
+      checkedAt: container.lastCheckedAt || undefined,
+      containerOnline,
+      lastError: lastError || null,
+      qqLoginMessage: offlineReason,
+      qqLoginStatus: this.toCachedQqLoginStatus(
+        account,
+        containerOnline,
+        lastError,
+      ),
+      webuiOnline: containerOnline ? null : false,
+    };
+  }
+
+  private toCachedQqLoginStatus(
+    account: QqbotAccount,
+    containerOnline: boolean,
+    lastError: string,
+  ): QqbotNapcatRuntimeStatusSnapshot['qqLoginStatus'] {
+    if (!containerOnline) return 'offline';
+    if (
+      lastError.includes('二维码已过期') ||
+      lastError.includes('二维码过期')
+    ) {
+      return 'qrcode_expired';
+    }
+    if (this.toolsService.isNapcatOfflineLoginMessage(lastError)) {
+      return 'offline';
+    }
+    if (account.connectStatus === 'online') return 'online';
+    return 'unknown';
+  }
+
+  private getRuntimeStatusOfflineReason(
+    runtimeStatus?: QqbotNapcatRuntimeStatusSnapshot,
+  ) {
+    if (!runtimeStatus) return null;
+    if (
+      runtimeStatus.qqLoginStatus !== 'offline' &&
+      runtimeStatus.qqLoginStatus !== 'qrcode_expired'
+    ) {
+      return null;
+    }
+    return (
+      this.toolsService.toTrimmedString(runtimeStatus.qqLoginMessage) ||
+      this.toolsService.toTrimmedString(runtimeStatus.lastError) ||
+      'NapCat QQ 登录态不可用'
+    );
   }
 
   private async tryAutoLogin(

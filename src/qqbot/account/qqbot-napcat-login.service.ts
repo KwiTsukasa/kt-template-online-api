@@ -153,11 +153,17 @@ export class QqbotNapcatLoginService {
 
   async status(sessionId: string) {
     const session = this.getSession(sessionId);
-    if (Date.now() > session.expiresAt) {
-      return this.expireSession(session);
+    if (session.status !== 'pending') {
+      return this.toResult(session);
     }
     if (session.preparingRelogin) {
-      return this.toResult(session);
+      return this.keepSessionPending(
+        session,
+        session.errorMessage || 'NapCat 正在准备登录，请稍后',
+      );
+    }
+    if (Date.now() > session.expiresAt) {
+      return this.expireSession(session);
     }
 
     const container = await this.getSessionContainer(session);
@@ -377,6 +383,7 @@ export class QqbotNapcatLoginService {
     session.accountId = accountId;
     session.status = 'success';
     session.errorMessage = undefined;
+    session.preparingRelogin = false;
     this.sessions.set(session.id, session);
     const result = {
       ...this.toResult(session),
@@ -455,6 +462,10 @@ export class QqbotNapcatLoginService {
     status: QqbotLoginScanEvent['status'],
     message: string,
   ) {
+    if (session.status === 'pending') {
+      session.expiresAt = Date.now() + this.getSessionTtlMs();
+      this.sessions.set(session.id, session);
+    }
     this.publishScanEvent(session, {
       message,
       result: this.toResult(session),
@@ -529,6 +540,7 @@ export class QqbotNapcatLoginService {
   ) {
     session.status = 'error';
     session.errorMessage = errorMessage;
+    session.preparingRelogin = false;
     this.publishScanResultEvent(session, 'login-error', 'error', errorMessage);
     this.sessions.delete(session.id);
     await this.cleanupSessionContainer(session);
@@ -859,6 +871,7 @@ export class QqbotNapcatLoginService {
       } else {
         session.status = 'error';
         session.errorMessage = message || 'NapCat 重置登录态失败';
+        session.preparingRelogin = false;
         this.publishScanResultEvent(
           session,
           'relogin-error',
@@ -998,8 +1011,7 @@ export class QqbotNapcatLoginService {
         'processing',
         '等待 NapCat 密码登录结果',
       );
-      await this.toolsService.sleep(this.getRestartDelayMs());
-      loginStatus = await this.getLoginStatus(container, true);
+      loginStatus = await this.waitForPasswordLoginStatus(container);
 
       if (loginStatus.isLogin) {
         loginInfo = await this.getLoginInfo(container);
@@ -1353,6 +1365,48 @@ export class QqbotNapcatLoginService {
     return Number(
       this.configService.get('NAPCAT_WEBUI_RESTART_DELAY_MS') || 3000,
     );
+  }
+
+  private async waitForPasswordLoginStatus(container: QqbotNapcatRuntime) {
+    let latestStatus: NapcatLoginStatus = { isLogin: false };
+    const attempts = this.getLoginPollAttempts(
+      this.getPasswordLoginWaitMs(),
+      this.getLoginPollIntervalMs(),
+    );
+    for (let index = 0; index < attempts; index += 1) {
+      if (index > 0) {
+        await this.toolsService.sleep(this.getLoginPollIntervalMs());
+      }
+      latestStatus = await this.getLoginStatus(container, true);
+      if (latestStatus.isLogin) return latestStatus;
+    }
+    return latestStatus;
+  }
+
+  private getLoginPollAttempts(waitMs: number, intervalMs: number) {
+    const normalizedWaitMs = Number.isFinite(waitMs) && waitMs > 0 ? waitMs : 1;
+    const normalizedIntervalMs =
+      Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 1;
+    return Math.max(1, Math.ceil(normalizedWaitMs / normalizedIntervalMs));
+  }
+
+  private getPasswordLoginWaitMs() {
+    return this.getPositiveConfigNumber(
+      'QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS',
+      120_000,
+    );
+  }
+
+  private getLoginPollIntervalMs() {
+    return this.getPositiveConfigNumber(
+      'QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS',
+      3000,
+    );
+  }
+
+  private getPositiveConfigNumber(key: string, fallback: number) {
+    const value = Number(this.configService.get(key) || fallback);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
   }
 
   private async executeNapcatRequest<T>(

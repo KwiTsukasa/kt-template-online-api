@@ -1,5 +1,7 @@
+import * as http from 'http';
+import * as https from 'https';
 import { spawn } from 'child_process';
-import { randomBytes, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -8,7 +10,14 @@ import { throwVbenError, ToolsService } from '@/common';
 import { QqbotAccount } from '../account/qqbot-account.entity';
 import { QqbotAccountNapcat } from './qqbot-account-napcat.entity';
 import { QqbotNapcatContainer } from './qqbot-napcat-container.entity';
-import type { QqbotNapcatRuntime } from '../qqbot.types';
+import type {
+  NapcatApiResponse,
+  NapcatCredential,
+  NapcatLoginStatus,
+  QqbotNapcatRuntime,
+  QqbotNapcatRuntimeLoginStatus,
+  QqbotNapcatRuntimeStatusSnapshot,
+} from '../qqbot.types';
 
 type NapcatLoginLogState = 'offline' | 'online' | 'unknown';
 
@@ -454,6 +463,92 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
         },
       );
       return null;
+    }
+  }
+
+  async inspectRuntimeStatus(
+    container: QqbotNapcatContainer,
+  ): Promise<QqbotNapcatRuntimeStatusSnapshot> {
+    const checkedAt = new Date();
+    const containerOnline = container.status === 'running';
+    if (!containerOnline) {
+      return {
+        checkedAt,
+        containerOnline,
+        lastError: container.lastError,
+        qqLoginMessage: null,
+        qqLoginStatus: 'offline',
+        webuiOnline: false,
+      };
+    }
+
+    if (!container.baseUrl || !container.webuiToken) {
+      const message = 'NapCat WebUI 配置缺失';
+      await this.containerRepository.update(
+        { id: container.id },
+        {
+          lastCheckedAt: checkedAt,
+          lastError: message,
+        },
+      );
+      return {
+        checkedAt,
+        containerOnline,
+        lastError: message,
+        qqLoginMessage: null,
+        qqLoginStatus: 'unknown',
+        webuiOnline: false,
+      };
+    }
+
+    try {
+      const runtime = this.toRuntime(container);
+      const credential = await this.getNapcatCredential(runtime);
+      const status = await this.requestNapcat<NapcatLoginStatus>(
+        runtime,
+        '/api/QQLogin/CheckLoginStatus',
+        {},
+        credential,
+      );
+      const snapshot = this.toRuntimeStatusSnapshot(
+        status,
+        containerOnline,
+        checkedAt,
+      );
+      await this.containerRepository.update(
+        { id: container.id },
+        {
+          lastCheckedAt: checkedAt,
+          lastError:
+            snapshot.qqLoginStatus === 'online'
+              ? null
+              : this.toolsService.toColumnText(
+                  snapshot.qqLoginMessage || snapshot.lastError || '',
+                  500,
+                ) || null,
+        },
+      );
+      return snapshot;
+    } catch (err) {
+      const message = this.toolsService.toColumnText(
+        this.toolsService.getErrorMessage(err),
+        500,
+      );
+      await this.containerRepository.update(
+        { id: container.id },
+        {
+          lastCheckedAt: checkedAt,
+          lastError: message,
+        },
+      );
+      return {
+        checkedAt,
+        containerOnline,
+        lastError: message,
+        qqLoginMessage: null,
+        qqLoginStatus: 'unknown',
+        webuiOnline: false,
+      };
     }
   }
 
@@ -977,6 +1072,116 @@ ${accountRunFlag}${passwordRunFlag}  -p "$PORT:6099" \\
       webuiPort: container.webuiPort,
       webuiToken: container.webuiToken,
     };
+  }
+
+  private async getNapcatCredential(runtime: QqbotNapcatRuntime) {
+    const token = runtime.webuiToken || '';
+    const hash = createHash('sha256').update(`${token}.napcat`).digest('hex');
+    const data = await this.requestNapcat<NapcatCredential>(
+      runtime,
+      '/api/auth/login',
+      { hash },
+    );
+    if (!data.Credential) {
+      throwVbenError('NapCat WebUI 登录失败');
+    }
+    return data.Credential;
+  }
+
+  private toRuntimeStatusSnapshot(
+    status: NapcatLoginStatus,
+    containerOnline: boolean,
+    checkedAt: Date,
+  ): QqbotNapcatRuntimeStatusSnapshot {
+    const message = this.toolsService.toTrimmedString(status.loginError);
+    const qqLoginStatus = this.toQqLoginStatus(status, message);
+    return {
+      checkedAt,
+      containerOnline,
+      lastError: qqLoginStatus === 'online' ? null : message || null,
+      qqLoginMessage: qqLoginStatus === 'online' ? null : message || null,
+      qqLoginStatus,
+      webuiOnline: true,
+    };
+  }
+
+  private toQqLoginStatus(
+    status: NapcatLoginStatus,
+    message: string,
+  ): QqbotNapcatRuntimeLoginStatus {
+    if (status.isLogin) return 'online';
+    if (
+      this.toolsService.isNapcatExpiredQrcodeStatus(status) ||
+      message.includes('二维码已过期')
+    ) {
+      return 'qrcode_expired';
+    }
+    if (status.qrcodeurl) return 'qrcode_pending';
+    if (
+      status.isOffline ||
+      this.toolsService.isNapcatOfflineLoginMessage(message)
+    ) {
+      return 'offline';
+    }
+    return 'unknown';
+  }
+
+  private requestNapcat<T>(
+    runtime: QqbotNapcatRuntime,
+    path: string,
+    body: Record<string, any> = {},
+    credential?: string,
+  ): Promise<T> {
+    const target = new URL(path, runtime.baseUrl);
+    const payload = JSON.stringify(body);
+    const client = target.protocol === 'https:' ? https : http;
+
+    return new Promise<T>((resolve, reject) => {
+      const req = client.request(
+        {
+          headers: {
+            ...(credential
+              ? {
+                  Authorization: `Bearer ${credential}`,
+                }
+              : {}),
+            'Content-Length': Buffer.byteLength(payload),
+            'Content-Type': 'application/json',
+          },
+          hostname: target.hostname,
+          method: 'POST',
+          path: `${target.pathname}${target.search}`,
+          port: target.port,
+          protocol: target.protocol,
+          timeout: this.getRuntimeCheckTimeoutMs(),
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+          res.on('end', () => {
+            const raw = Buffer.concat(chunks).toString('utf8');
+            let result: NapcatApiResponse<T>;
+            try {
+              result = raw ? JSON.parse(raw) : ({ code: -1 } as any);
+            } catch {
+              reject(new Error('NapCat 返回非 JSON 响应'));
+              return;
+            }
+            if (result.code !== 0) {
+              reject(new Error(result.message || 'NapCat 请求失败'));
+              return;
+            }
+            resolve(result.data as T);
+          });
+        },
+      );
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy(new Error('NapCat 请求超时'));
+      });
+      req.write(payload);
+      req.end();
+    });
   }
 
   private normalizeBaseUrl(value: string) {

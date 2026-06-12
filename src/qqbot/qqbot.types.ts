@@ -63,17 +63,38 @@ export type QqbotNapcatContainerStatus =
 
 export type QqbotAccountNapcatBindStatus = 'bound' | 'disabled' | 'pending';
 
+export type QqbotNapcatRuntimeLoginStatus =
+  | 'offline'
+  | 'online'
+  | 'qrcode_expired'
+  | 'qrcode_pending'
+  | 'unknown';
+
+export type QqbotNapcatRuntimeStatusSnapshot = {
+  checkedAt?: Date;
+  containerOnline: boolean;
+  lastError?: null | string;
+  qqLoginMessage?: null | string;
+  qqLoginStatus: QqbotNapcatRuntimeLoginStatus;
+  webuiOnline?: boolean | null;
+};
+
 export type QqbotAccountAbilityType = 'command' | 'event_plugin' | 'rule';
 
 export type QqbotAccountNapcatRuntimeInfo = {
   bindStatus?: QqbotAccountNapcatBindStatus;
   containerId?: string;
   containerName?: string;
+  containerOnline?: boolean;
   containerStatus?: QqbotNapcatContainerStatus;
   lastCheckedAt?: Date | null;
   lastError?: null | string;
   lastLoginAt?: Date | null;
   lastStartedAt?: Date | null;
+  oneBotOnline?: boolean;
+  qqLoginMessage?: null | string;
+  qqLoginStatus?: QqbotNapcatRuntimeLoginStatus;
+  webuiOnline?: boolean | null;
   webuiPort?: null | number;
 };
 

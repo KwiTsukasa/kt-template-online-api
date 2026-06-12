@@ -407,6 +407,174 @@ describe('QqbotAccountService', () => {
     );
   });
 
+  it('separates OneBot, container, WebUI and QQ login status for offline accounts', async () => {
+    const account = {
+      connectStatus: 'offline',
+      enabled: true,
+      id: 'account-1',
+      isDeleted: false,
+      lastError: null,
+      name: '主账号',
+      selfId: '1914728559',
+    };
+    const binding = {
+      accountId: 'account-1',
+      bindStatus: 'bound',
+      containerId: 'container-1',
+      isDeleted: false,
+      isPrimary: true,
+      lastLoginAt: new Date('2026-06-10T12:00:00.000Z'),
+    };
+    const container = {
+      id: 'container-1',
+      isDeleted: false,
+      lastCheckedAt: new Date('2026-06-11T02:00:00.000Z'),
+      lastError: null,
+      name: 'kt-qqbot-napcat-1914728559',
+      status: 'running',
+      webuiPort: 6101,
+    };
+    const accountRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[account], 1]),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const napcatContainerService = {
+      inspectRuntimeStatus: jest.fn().mockResolvedValue({
+        checkedAt: new Date('2026-06-12T12:00:00.000Z'),
+        containerOnline: true,
+        lastError: '二维码已过期，请刷新',
+        qqLoginMessage: '二维码已过期，请刷新',
+        qqLoginStatus: 'qrcode_expired',
+        webuiOnline: true,
+      }),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addOrderBy: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([binding]),
+          orderBy: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addSelect: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([container]),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      napcatContainerService as any,
+      new ToolsService(),
+    );
+
+    const page = await service.page({});
+
+    expect(napcatContainerService.inspectRuntimeStatus).toHaveBeenCalledWith(
+      container,
+    );
+    expect(accountRepository.update).not.toHaveBeenCalled();
+    expect(page.list[0]).toEqual(
+      expect.objectContaining({
+        connectStatus: 'offline',
+        napcat: expect.objectContaining({
+          containerOnline: true,
+          oneBotOnline: false,
+          qqLoginMessage: '二维码已过期，请刷新',
+          qqLoginStatus: 'qrcode_expired',
+          webuiOnline: true,
+        }),
+      }),
+    );
+  });
+
+  it('does not expose WebUI errors as QQ login messages in cached runtime status', async () => {
+    const checkedAt = new Date();
+    const account = {
+      connectStatus: 'offline',
+      enabled: true,
+      id: 'account-1',
+      isDeleted: false,
+      lastError: null,
+      name: '主账号',
+      selfId: '1914728559',
+    };
+    const binding = {
+      accountId: 'account-1',
+      bindStatus: 'bound',
+      containerId: 'container-1',
+      isDeleted: false,
+      isPrimary: true,
+      lastLoginAt: checkedAt,
+    };
+    const container = {
+      id: 'container-1',
+      isDeleted: false,
+      lastCheckedAt: checkedAt,
+      lastError: 'NapCat WebUI 配置缺失',
+      name: 'kt-qqbot-napcat-1914728559',
+      status: 'running',
+      webuiPort: 6101,
+    };
+    const accountRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[account], 1]),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addOrderBy: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([binding]),
+          orderBy: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addSelect: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([container]),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      {} as any,
+      new ToolsService(),
+    );
+
+    const page = await service.page({});
+
+    expect(page.list[0].napcat).toEqual(
+      expect.objectContaining({
+        containerOnline: true,
+        lastError: 'NapCat WebUI 配置缺失',
+        qqLoginMessage: null,
+        qqLoginStatus: 'unknown',
+        webuiOnline: null,
+      }),
+    );
+  });
+
   it('ignores cached NapCat offline reason after the account reconnects', async () => {
     const checkedAt = new Date('2026-06-11T02:00:00.000Z');
     const account = {

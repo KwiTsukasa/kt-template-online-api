@@ -137,6 +137,8 @@ pnpm exec jest --runInBand --runTestsByPath test/path/to/file.spec.ts
 - QQBot 复读机默认阈值为 4，同一会话默认 10 分钟只复读一次，默认只复读 120 字以内普通文本，避免群聊重复内容导致机器人过于频繁地模拟真人发言。
 - QQBot 同一账号只允许一个有效 NapCat 主容器；绑定新容器时会释放旧绑定和不再共享的旧容器，机器人下线 notice、`isOnline:false` 和 NapCat 容器最新离线日志都会写入账号 `lastError`，普通群成员 kick 不属于账号离线信号；写入 `last_error` 前按 500 字符截断，后续无错误的普通断连不能清空该原因；账号列表日志检测带近期缓存和短超时，账号连接时间或心跳晚于容器检测时间时以账号在线态为准，最新日志为在线时清空容器旧离线错误。
 - NapCat 托管容器必须显式配置 `QQBOT_NAPCAT_IMAGE`，不要依赖 `latest` 默认镜像；生产切换镜像前先 pin 明确版本或 digest 并单账号观察。
+- NapCat 容器为已知 `selfId` 创建/重建时会注入 `ACCOUNT` 环境变量启用 `-q` 快速登录：容器重启（崩溃/重启策略/宿主重启）能从持久化会话免扫码自动重登；硬踢 `登录已失效` 会话作废仍需扫码。已绑定但缺少 `ACCOUNT` 的旧容器在下一次「更新登录」时原地重建一次补齐（保留 QQ 数据卷），`docker inspect` 已带 `ACCOUNT` 则跳过，重建失败不阻断登录。
+- NapCat 离线看门狗按 `QQBOT_NAPCAT_WATCHDOG_INTERVAL_MS`（默认 `120000`，最小 `30000`，`QQBOT_NAPCAT_WATCHDOG_ENABLED=false` 关闭）定时巡检在线账号，复用既有离线检测与 `super` 站内信告警，使掉线/被踢无需管理员打开列表页即可及时发现；看门狗只做检测告警、不重建容器，避免与 NapCat 自身重连竞争产生设备登录抖动。
 - BangDream 当前源码根目录是 `src/qqbot/plugins/bangDream`；不要恢复旧 `tsugu` 层级或旧大桶目录。
 - BangDream 在线命令以 `registry/operation-registry.ts` 为单一来源，新增命令必须同步 SQL/在线命令表并跑 registry/command-SQL 测试。
 - BangDream event stage 大图必须保持分页拆图行为，线上 smoke 关注 `imageCount=5`，避免大 canvas OOM 回归。

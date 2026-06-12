@@ -341,6 +341,25 @@ export class QqbotAccountService {
     );
   }
 
+  /**
+   * 看门狗：主动巡检在线的已绑定账号，复用既有离线检测 + 站内信告警逻辑，
+   * 让掉线/被踢能被及时发现并通知超管，而不必等管理员打开账号列表页。
+   * 仅做检测与告警，不做容器重建（避免与 NapCat 自身重连竞争、产生设备登录抖动）。
+   */
+  async runOfflineWatchdog(): Promise<{ checked: number }> {
+    const accounts = await this.accountRepository.find({
+      where: {
+        connectStatus: 'online',
+        enabled: true,
+        isDeleted: false,
+      },
+    });
+    if (accounts.length <= 0) return { checked: 0 };
+
+    await this.appendNapcatRuntime(accounts);
+    return { checked: accounts.length };
+  }
+
   async markOffline(selfId: string, lastError?: string) {
     const payload: Partial<QqbotAccount> = {
       connectStatus: 'offline',

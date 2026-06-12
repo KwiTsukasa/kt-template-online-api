@@ -8,6 +8,7 @@ import { QqbotAccountAbility } from './account/qqbot-account-ability.entity';
 import { QqbotAccount } from './account/qqbot-account.entity';
 import { QqbotAccountService } from './account/qqbot-account.service';
 import { QqbotNapcatLoginService } from './account/qqbot-napcat-login.service';
+import { QqbotNapcatWatchdogService } from './account/qqbot-napcat-watchdog.service';
 import { QqbotCommandController } from './command/qqbot-command.controller';
 import { QqbotCommand } from './command/qqbot-command.entity';
 import { QqbotCommandEngineService } from './command/qqbot-command-engine.service';
@@ -108,6 +109,7 @@ import { QqbotSendService } from './send/qqbot-send.service';
     QqbotFflogsPluginService,
     QqbotMessageService,
     QqbotNapcatLoginService,
+    QqbotNapcatWatchdogService,
     QqbotNapcatContainerService,
     QqbotPermissionService,
     QqbotEventPluginRegistryService,

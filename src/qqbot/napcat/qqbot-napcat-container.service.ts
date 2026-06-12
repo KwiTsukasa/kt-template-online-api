@@ -42,9 +42,90 @@ export class QqbotNapcatContainerService {
     }
 
     const existing = await this.getPrimaryRuntime(account.id);
-    if (existing) return existing;
+    if (existing) {
+      await this.ensureRuntimeQuickLogin(existing, account.selfId);
+      return existing;
+    }
 
     return this.createManagedContainer(account.selfId);
+  }
+
+  /**
+   * 让已绑定账号的容器带上 ACCOUNT 环境变量（NapCat 的 -q 快速登录）。
+   * 仅在 ssh 托管模式下原地重建容器：保留 QQ 数据卷，因此随后的容器重启
+   * 能从持久化会话免扫码自动重登。硬踢（登录已失效）时会话作废，仍需扫码。
+   */
+  async ensureRuntimeQuickLogin(runtime: QqbotNapcatRuntime, selfId?: string) {
+    const account = `${selfId || ''}`.trim();
+    if (!account || this.getManagedMode() !== 'ssh' || !runtime.id) {
+      return false;
+    }
+
+    const container = await this.containerRepository
+      .createQueryBuilder('container')
+      .addSelect('container.webuiToken')
+      .where('container.id = :containerId', { containerId: runtime.id })
+      .andWhere('container.isDeleted = :isDeleted', { isDeleted: false })
+      .getOne();
+    if (
+      !container ||
+      !container.name ||
+      !container.webuiPort ||
+      !container.webuiToken
+    ) {
+      return false;
+    }
+
+    // 已带 ACCOUNT（或无法确认）则跳过，避免重复重建：只在首次缺失时原地重建一次。
+    if (await this.runtimeHasAccountEnv(container.name)) return false;
+
+    try {
+      await this.createRemoteDockerContainer({
+        account,
+        dataDir: container.dataDir || `${this.getRootDir()}/${container.name}`,
+        image: container.image,
+        name: container.name,
+        port: container.webuiPort,
+        reverseWsUrl: container.reverseWsUrl || this.buildReverseWsUrl(),
+        skipPull: true,
+        token: container.webuiToken,
+      });
+      await this.containerRepository.update(
+        { id: container.id },
+        {
+          lastError: null,
+          lastStartedAt: new Date(),
+          status: 'running',
+        },
+      );
+      return true;
+    } catch {
+      // 重建失败不阻断登录流程：保持原容器继续走扫码登录。
+      return false;
+    }
+  }
+
+  private async runtimeHasAccountEnv(name: string) {
+    try {
+      const result = await this.runProcess(
+        'ssh',
+        [
+          ...this.getSshArgs(),
+          'docker',
+          'inspect',
+          '--format',
+          '{{range .Config.Env}}{{println .}}{{end}}',
+          name,
+        ],
+        '',
+        undefined,
+        this.getRuntimeCheckTimeoutMs(),
+      );
+      return /^ACCOUNT=\S/m.test(result.stdout);
+    } catch {
+      // 无法确认时按“已存在”处理，宁可不重建也不误删运行中的容器。
+      return true;
+    }
   }
 
   async findRuntimeById(containerId?: string) {
@@ -502,6 +583,7 @@ docker logs --tail 300 "$NAME" 2>&1 || true
 
     try {
       await this.createRemoteDockerContainer({
+        account: selfId,
         dataDir,
         image,
         name,
@@ -538,11 +620,13 @@ docker logs --tail 300 "$NAME" 2>&1 || true
   }
 
   private async createRemoteDockerContainer(input: {
+    account?: string;
     dataDir: string;
     image: string;
     name: string;
     port: number;
     reverseWsUrl: string;
+    skipPull?: boolean;
     token: string;
   }) {
     const script = this.buildRemoteCreateScript(input);
@@ -550,11 +634,13 @@ docker logs --tail 300 "$NAME" 2>&1 || true
   }
 
   private buildRemoteCreateScript(input: {
+    account?: string;
     dataDir: string;
     image: string;
     name: string;
     port: number;
     reverseWsUrl: string;
+    skipPull?: boolean;
     token: string;
   }) {
     const dataDir = this.sh(input.dataDir);
@@ -562,6 +648,10 @@ docker logs --tail 300 "$NAME" 2>&1 || true
     const name = this.sh(input.name);
     const reverseWsUrl = this.sh(input.reverseWsUrl);
     const token = this.sh(input.token);
+    const account = `${input.account || ''}`.trim();
+    const accountHeader = account ? `ACCOUNT=${this.sh(account)}\n` : '';
+    const accountRunFlag = account ? '  -e ACCOUNT="$ACCOUNT" \\\n' : '';
+    const pullCmd = input.skipPull ? '' : 'docker pull "$IMAGE" >/dev/null\n';
 
     return `
 set -eu
@@ -571,7 +661,7 @@ NAME=${name}
 PORT=${input.port}
 REVERSE_WS_URL=${reverseWsUrl}
 WEBUI_TOKEN=${token}
-
+${accountHeader}
 mkdir -p "$DATA_DIR/QQ" "$DATA_DIR/config" "$DATA_DIR/plugins" "$DATA_DIR/logs"
 chmod 700 "$DATA_DIR"
 
@@ -610,15 +700,14 @@ cat > "$DATA_DIR/config/onebot11.json" <<EOF
 }
 EOF
 
-docker pull "$IMAGE" >/dev/null
-docker rm -f "$NAME" >/dev/null 2>&1 || true
+${pullCmd}docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d \\
   --name "$NAME" \\
   --restart unless-stopped \\
   -e NAPCAT_UID=0 \\
   -e NAPCAT_GID=0 \\
   -e WEBUI_TOKEN="$WEBUI_TOKEN" \\
-  -p "$PORT:6099" \\
+${accountRunFlag}  -p "$PORT:6099" \\
   -v "$DATA_DIR/QQ:/app/.config/QQ" \\
   -v "$DATA_DIR/config:/app/napcat/config" \\
   -v "$DATA_DIR/plugins:/app/napcat/plugins" \\

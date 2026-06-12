@@ -281,6 +281,101 @@ describe('QqbotNapcatContainerService', () => {
     );
   });
 
+  it('injects ACCOUNT env (NapCat -q quick login) only when a selfId is provided', () => {
+    const service = new QqbotNapcatContainerService(
+      { get: jest.fn().mockReturnValue('') } as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+
+    const baseInput = {
+      dataDir: '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-test',
+      image: 'mlikiowa/napcat-docker:latest',
+      name: 'kt-qqbot-napcat-test',
+      port: 6100,
+      reverseWsUrl: 'ws://127.0.0.1:48085/qqbot/onebot/reverse',
+      token: 'token-test',
+    };
+
+    const withAccount = service.buildRemoteCreateScript({
+      ...baseInput,
+      account: '2354598417',
+    });
+    expect(withAccount).toContain("ACCOUNT='2354598417'");
+    expect(withAccount).toContain('-e ACCOUNT="$ACCOUNT"');
+
+    const withoutAccount = service.buildRemoteCreateScript(baseInput);
+    expect(withoutAccount).not.toContain('-e ACCOUNT="$ACCOUNT"');
+    expect(withoutAccount).not.toMatch(/^ACCOUNT=/m);
+  });
+
+  it('skips docker pull when recreating in place for quick login', () => {
+    const service = new QqbotNapcatContainerService(
+      { get: jest.fn().mockReturnValue('') } as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+
+    const baseInput = {
+      dataDir: '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-test',
+      image: 'mlikiowa/napcat-docker:latest',
+      name: 'kt-qqbot-napcat-test',
+      port: 6100,
+      reverseWsUrl: 'ws://127.0.0.1:48085/qqbot/onebot/reverse',
+      token: 'token-test',
+    };
+
+    expect(service.buildRemoteCreateScript(baseInput)).toContain('docker pull');
+    expect(
+      service.buildRemoteCreateScript({ ...baseInput, skipPull: true }),
+    ).not.toContain('docker pull');
+  });
+
+  it('skips quick-login recreate when the container already carries ACCOUNT', async () => {
+    const containerRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        addSelect: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          dataDir: '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-x',
+          id: 'container-1',
+          image: 'mlikiowa/napcat-docker:latest',
+          name: 'kt-qqbot-napcat-x',
+          reverseWsUrl: 'ws://127.0.0.1:48085/qqbot/onebot/reverse',
+          webuiPort: 6100,
+          webuiToken: 'token-x',
+        }),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string) =>
+          key === 'QQBOT_NAPCAT_CONTAINER_MODE' ? 'ssh' : '',
+        ),
+      } as any,
+      containerRepository as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+    service.runProcess = jest
+      .fn()
+      .mockResolvedValue({ stderr: '', stdout: 'ACCOUNT=2354598417\nPATH=/x' });
+
+    const recreated = await service.ensureRuntimeQuickLogin(
+      { id: 'container-1', name: 'kt-qqbot-napcat-x' },
+      '2354598417',
+    );
+
+    expect(recreated).toBe(false);
+    // 仅做了 inspect 检查，没有触发任何重建（rm/run）。
+    expect(service.runProcess).toHaveBeenCalledTimes(1);
+    expect(containerRepository.update).not.toHaveBeenCalled();
+  });
+
   it('requires an explicit NapCat image when creating a managed container', async () => {
     const containerRepository = {
       find: jest.fn().mockResolvedValue([]),

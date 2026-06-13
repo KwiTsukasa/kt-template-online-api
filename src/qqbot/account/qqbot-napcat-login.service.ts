@@ -1266,7 +1266,10 @@ export class QqbotNapcatLoginService {
         'processing',
         '等待 NapCat 密码登录结果',
       );
-      loginStatus = await this.waitForPasswordLoginStatus(container);
+      loginStatus = await this.waitForPasswordLoginStatus(
+        container,
+        session.lastRestartedAt,
+      );
 
       if (loginStatus.isLogin) {
         loginInfo = await this.getLoginInfo(container);
@@ -1413,6 +1416,32 @@ export class QqbotNapcatLoginService {
   ) {
     const statusCaptchaUrl = this.getCaptchaUrlFromStatus(loginStatus);
     if (statusCaptchaUrl) return statusCaptchaUrl;
+    const runtimeCaptchaUrl = await this.detectPasswordCaptchaUrl(
+      container,
+      sinceMs,
+      false,
+    );
+    if (runtimeCaptchaUrl) return runtimeCaptchaUrl;
+    if (
+      !this.toolsService.isNapcatCaptchaRequiredMessage(loginStatus.loginError)
+    ) {
+      return '';
+    }
+    return this.detectPasswordCaptchaUrl(container, sinceMs, true);
+  }
+
+  private getCaptchaUrlFromStatus(status: NapcatLoginStatus) {
+    return (
+      this.toolsService.toTrimmedString(status.captchaUrl) ||
+      this.toolsService.extractNapcatCaptchaUrl(status.loginError)
+    );
+  }
+
+  private async detectPasswordCaptchaUrl(
+    container: QqbotNapcatRuntime,
+    sinceMs?: number,
+    allowTailFallback = true,
+  ) {
     if (typeof this.containerService.detectRuntimeCaptchaUrl !== 'function') {
       return '';
     }
@@ -1421,18 +1450,10 @@ export class QqbotNapcatLoginService {
       sinceMs,
     );
     if (recentCaptchaUrl) return recentCaptchaUrl;
-    if (
-      !this.toolsService.isNapcatCaptchaRequiredMessage(loginStatus.loginError)
-    ) {
-      return '';
-    }
+    if (!allowTailFallback) return '';
     return (
       (await this.containerService.detectRuntimeCaptchaUrl(container)) || ''
     );
-  }
-
-  private getCaptchaUrlFromStatus(status: NapcatLoginStatus) {
-    return this.toolsService.extractNapcatCaptchaUrl(status.loginError);
   }
 
   private isPasswordQrcodeChallenge(status: NapcatLoginStatus) {
@@ -1710,7 +1731,10 @@ export class QqbotNapcatLoginService {
     );
   }
 
-  private async waitForPasswordLoginStatus(container: QqbotNapcatRuntime) {
+  private async waitForPasswordLoginStatus(
+    container: QqbotNapcatRuntime,
+    sinceMs?: number,
+  ) {
     let latestStatus: NapcatLoginStatus = { isLogin: false };
     const attempts = this.getLoginPollAttempts(
       this.getPasswordLoginWaitMs(),
@@ -1726,6 +1750,10 @@ export class QqbotNapcatLoginService {
         const errorMessage = this.toolsService.getErrorMessage(err);
         if (this.toolsService.isNapcatCaptchaRequiredMessage(errorMessage)) {
           return {
+            captchaUrl: await this.detectPasswordCaptchaUrl(
+              container,
+              sinceMs,
+            ),
             isLogin: false,
             loginError: errorMessage,
           };
@@ -1739,6 +1767,17 @@ export class QqbotNapcatLoginService {
           latestStatus.loginError,
         )
       ) {
+        if (
+          !this.getCaptchaUrlFromStatus(latestStatus) &&
+          this.toolsService.isNapcatCaptchaRequiredMessage(
+            latestStatus.loginError,
+          )
+        ) {
+          latestStatus.captchaUrl = await this.detectPasswordCaptchaUrl(
+            container,
+            sinceMs,
+          );
+        }
         return latestStatus;
       }
     }

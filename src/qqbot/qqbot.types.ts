@@ -25,6 +25,7 @@ export type NapcatLoginInfo = Record<string, any> & {
 };
 
 export type NapcatLoginStatus = {
+  captchaUrl?: string;
   isLogin?: boolean;
   isOffline?: boolean;
   loginError?: string;

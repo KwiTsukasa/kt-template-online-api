@@ -121,6 +121,18 @@ pnpm exec jest --runInBand --runTestsByPath test/path/to/file.spec.ts
 }
 ```
 
+## 运行时健康检查
+
+API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow 观测入口。该接口返回 plain JSON，不使用 Vben 响应包装，便于脚本直接读取。
+
+返回内容包括：
+
+- `status`：`live`、`ready`、`degraded` 或 `blocked`。
+- `checks`：进程存活和运行时配置检查。
+- `config`：已脱敏的运行时配置快照，不包含原始密码、Token、Cookie、SSH key 或验证码票据。
+
+`blocked` 表示关键配置缺失；`degraded` 表示可选运行时配置缺失，核心 API 仍可继续工作。本地未配置 Loki、WordPress、NapCat 等可选依赖时，健康状态可能保持 `degraded`。
+
 ## 核心规则
 
 - 后台主键使用 Snowflake 数字 ID，数据库字段为 `BIGINT`，接口按字符串返回。

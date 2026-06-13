@@ -99,6 +99,7 @@ describe('RuntimeConfigService', () => {
       LOKI_USERNAME: 'loki-user',
       LOKI_PASSWORD: 'loki-password',
       QQBOT_NAPCAT_ROOT: '/vol1/docker/napcat',
+      QQBOT_NAPCAT_IMAGE: 'mlikiowa/napcat-docker:latest',
       QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
       QQBOT_NAPCAT_SSH_TARGET: 'nas',
       QQBOT_NAPCAT_SSH_PORT: '2202',
@@ -134,6 +135,7 @@ describe('RuntimeConfigService', () => {
       reverseWsPath: '/qqbot/reverse',
       reverseWsToken: 'qq***en',
       napcatRoot: '/vol1/docker/napcat',
+      napcatImage: 'mlikiowa/napcat-docker:latest',
       napcatContainerMode: 'ssh',
       napcatSshTarget: 'nas',
       napcatSshPort: 2202,
@@ -147,6 +149,13 @@ describe('RuntimeConfigService', () => {
     expect(checks).toContainEqual(
       expect.objectContaining({
         key: 'LOKI_HOST|LOKI_URL',
+        level: 'optional',
+        present: true,
+      }),
+    );
+    expect(checks).toContainEqual(
+      expect.objectContaining({
+        key: 'QQBOT_NAPCAT_IMAGE',
         level: 'optional',
         present: true,
       }),

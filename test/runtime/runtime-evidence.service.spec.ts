@@ -179,4 +179,41 @@ describe('RuntimeEvidenceService', () => {
     expect(input.assertions[0].message).toContain('raw-reply-text');
     expect(input.cleanup.message).toContain('raw-cookie');
   });
+
+  it('redacts captcha sid, snake_case secret keys, JSON secret text, and base64 payloads', () => {
+    const service = new RuntimeEvidenceService();
+    const rawBase64Payload = `data:image/png;base64,${'A'.repeat(160)}`;
+
+    const record = service.createRecord({
+      title: 'captcha evidence',
+      taskType: 'api',
+      project: 'kt-template-online-api',
+      environment: 'local',
+      operation: 'qqbot-login',
+      status: 'blocked',
+      details: {
+        sid: 'raw-captcha-sid',
+        private_key: 'raw-private-key',
+        ssh_key: 'raw-ssh-key',
+        imageBase64: rawBase64Payload,
+        text: 'sid=raw-text-sid private_key=raw-text-private-key ssh_key=raw-text-ssh-key',
+        jsonText:
+          '{"sid":"raw-json-sid","token":"raw-json-token","safe":"kept"}',
+      },
+    });
+
+    const serialized = JSON.stringify(record);
+
+    expect(serialized).not.toContain('raw-captcha-sid');
+    expect(serialized).not.toContain('raw-private-key');
+    expect(serialized).not.toContain('raw-ssh-key');
+    expect(serialized).not.toContain('raw-text-sid');
+    expect(serialized).not.toContain('raw-text-private-key');
+    expect(serialized).not.toContain('raw-text-ssh-key');
+    expect(serialized).not.toContain('raw-json-sid');
+    expect(serialized).not.toContain('raw-json-token');
+    expect(serialized).not.toContain(rawBase64Payload);
+    expect(serialized).toContain('captcha evidence');
+    expect(serialized).toContain('kept');
+  });
 });

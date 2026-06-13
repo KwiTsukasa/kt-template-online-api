@@ -44,6 +44,7 @@ function createSnapshot(
       reverseWsPath: '/qqbot/onebot/reverse',
       reverseWsToken: 'qq***en',
       napcatRoot: '/vol1/docker/napcat',
+      napcatImage: 'mlikiowa/napcat-docker:latest',
       napcatContainerMode: 'ssh',
       napcatSshTarget: 'nas',
       napcatSshPort: 2202,

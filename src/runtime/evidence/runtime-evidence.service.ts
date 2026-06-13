@@ -5,12 +5,30 @@ import {
 } from './runtime-evidence.types';
 
 const REDACTED_VALUE = '<redacted>';
+const REDACTED_BASE64_VALUE = '<redacted-base64>';
 const SENSITIVE_KEY_PATTERN =
-  /password|secret|token|authorization|cookie|privateKey|sshKey|ticket|randstr|replyText/i;
+  /password|secret|token|authorization|cookie|privatekey|sshkey|ticket|randstr|replytext|base64/i;
+const SENSITIVE_TEXT_KEY_PATTERN =
+  'password|secret|token|authorization|cookie|private[_-]?key|ssh[_-]?key|ticket|randstr|replyText|sid';
 const SENSITIVE_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
+  [
+    /data:[a-z0-9.+-]+\/[a-z0-9.+-]+;base64,[a-z0-9+/=\r\n]+/gi,
+    REDACTED_BASE64_VALUE,
+  ],
+  [/\b[A-Za-z0-9+/]{120,}={0,2}\b/g, REDACTED_BASE64_VALUE],
   [/\b(Authorization)\s*[:=]\s*Bearer\s+[^\s,;]+/gi, '$1=<redacted>'],
   [/\b(Cookie)\s*[:=]\s*[^\s,;]+/gi, '$1=<redacted>'],
-  [/\b(ticket|randstr|token|replyText)\s*=\s*[^\s,;&]+/gi, '$1=<redacted>'],
+  [
+    new RegExp(
+      `(["'])(${SENSITIVE_TEXT_KEY_PATTERN})\\1\\s*:\\s*(["'])[^"']*\\3`,
+      'gi',
+    ),
+    '$1$2$1:$3<redacted>$3',
+  ],
+  [
+    new RegExp(`\\b(${SENSITIVE_TEXT_KEY_PATTERN})\\s*=\\s*[^\\s,;&]+`, 'gi'),
+    '$1=<redacted>',
+  ],
 ];
 
 @Injectable()
@@ -63,6 +81,7 @@ export class RuntimeEvidenceService {
   }
 
   private isSensitiveKey(key: string) {
-    return SENSITIVE_KEY_PATTERN.test(key);
+    const normalizedKey = key.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    return normalizedKey === 'sid' || SENSITIVE_KEY_PATTERN.test(normalizedKey);
   }
 }

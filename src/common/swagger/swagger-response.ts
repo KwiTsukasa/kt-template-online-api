@@ -258,6 +258,19 @@ function applyOperationResponseExamples(
     return;
   }
 
+  if (isRuntimeHealthPath(path)) {
+    const plainResponse = buildPlainJsonResponse(
+      runtimeHealthExample(),
+      'API 运行时健康检查',
+    );
+    operation.responses['200'] = mergeJsonResponse(
+      operation.responses['200'],
+      plainResponse,
+    );
+    applyErrorResponses(operation);
+    return;
+  }
+
   const dataExample = getOperationDataExample(path, method, operation);
   const successSchema = createOperationSuccessSchema(
     document,
@@ -301,6 +314,24 @@ function buildSuccessResponse(dataExample: any, schema: SwaggerSchema) {
     content: {
       'application/json': {
         schema,
+        example,
+        examples: {
+          success: {
+            summary: '成功响应',
+            value: example,
+          },
+        },
+      },
+    },
+  };
+}
+
+function buildPlainJsonResponse(example: any, description: string) {
+  return {
+    description,
+    content: {
+      'application/json': {
+        schema: schemaFromExample(example),
         example,
         examples: {
           success: {
@@ -705,6 +736,10 @@ function isBinaryResponsePath(path: string) {
   return path.includes('/download') || path.includes('/resource-proxy');
 }
 
+function isRuntimeHealthPath(path: string) {
+  return path.toLowerCase() === '/health/runtime';
+}
+
 function itemExampleByPath(path: string) {
   if (path.includes('/qqbot/account')) return qqbotAccountExample();
   if (path.includes('/qqbot/command')) return qqbotCommandExample();
@@ -943,6 +978,95 @@ function pluginHealthExample() {
     name: 'FFLogs 查询',
     available: true,
     message: '插件可用',
+  };
+}
+
+function runtimeHealthExample() {
+  return {
+    service: 'kt-template-online-api',
+    checkedAt: '2026-06-13T00:00:00.000Z',
+    status: 'degraded',
+    checks: [
+      {
+        name: 'process',
+        status: 'live',
+        critical: true,
+        message: 'NestJS process is responding',
+      },
+      {
+        name: 'config:QQBOT_NAPCAT_IMAGE',
+        status: 'degraded',
+        critical: false,
+        message: 'QQBOT_NAPCAT_IMAGE is not configured',
+      },
+    ],
+    config: {
+      app: {
+        nodeEnv: 'production',
+        port: 48085,
+      },
+      database: {
+        host: 'mysql',
+        port: 3306,
+        database: 'kt_template',
+        username: 'kt',
+        synchronize: false,
+      },
+      loki: {
+        transportEnabled: false,
+        httpRequestPushEnabled: false,
+        queryConfigured: false,
+        host: '',
+        queryHost: '',
+        environment: 'production',
+        tenantId: '',
+        username: '',
+        passwordConfigured: false,
+      },
+      minio: {
+        endpoint: 'minio',
+        port: 9000,
+        useSSL: false,
+        accessKey: 'mi***ey',
+        bucket: 'kt-template-online',
+      },
+      wordpress: {
+        baseUrl: 'https://blog.example.test',
+        hostHeader: 'blog.example.test',
+        adminUsername: 'wordpress-admin',
+        passwordConfigured: true,
+        timeoutMs: 15000,
+        loginTimeoutMs: 3000,
+        availabilityTtlMs: 60000,
+      },
+      qqbot: {
+        reverseWsPath: '/qqbot/onebot/reverse',
+        reverseWsToken: 'qq***en',
+        napcatRoot: '/vol1/docker/kt-qqbot/napcat-instances',
+        napcatImage: '',
+        napcatContainerMode: 'ssh',
+        napcatSshTarget: 'nas',
+        napcatSshPort: 2202,
+        napcatSshKeyPath: '/home/kt/.ssh/napcat',
+        napcatReverseWsBase: 'ws://api.example.test/qqbot/onebot/reverse',
+        napcatWebuiBaseUrl: 'http://127.0.0.1:6099',
+        napcatWebuiToken: 'na***en',
+      },
+      checks: [
+        {
+          key: 'DB_HOST',
+          level: 'required',
+          present: true,
+          maskedValue: 'my***ql',
+        },
+        {
+          key: 'QQBOT_NAPCAT_IMAGE',
+          level: 'optional',
+          present: false,
+          message: 'QQBOT_NAPCAT_IMAGE is not configured',
+        },
+      ],
+    },
   };
 }
 

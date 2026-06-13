@@ -55,6 +55,7 @@ export interface RuntimeQqbotConfig {
   reverseWsPath: string;
   reverseWsToken: string;
   napcatRoot: string;
+  napcatImage: string;
   napcatContainerMode: string;
   napcatSshTarget: string;
   napcatSshPort: number;

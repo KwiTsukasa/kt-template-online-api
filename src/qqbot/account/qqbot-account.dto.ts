@@ -50,3 +50,14 @@ export class QqbotAccountScanStatusDto {
   @ApiProperty()
   sessionId: string;
 }
+
+export class QqbotAccountScanCaptchaDto extends QqbotAccountScanStatusDto {
+  @ApiProperty()
+  randstr: string;
+
+  @ApiPropertyOptional()
+  sid?: string;
+
+  @ApiProperty()
+  ticket: string;
+}

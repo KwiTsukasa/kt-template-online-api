@@ -15,6 +15,7 @@ import { vbenSuccess } from '@/common';
 import {
   QqbotAccountBodyDto,
   QqbotAccountQueryDto,
+  QqbotAccountScanCaptchaDto,
   QqbotAccountScanStatusDto,
   QqbotAccountUpdateDto,
 } from './qqbot-account.dto';
@@ -91,6 +92,15 @@ export class QqbotAccountController {
   async refreshScanQrcode(@Query() query: QqbotAccountScanStatusDto) {
     return vbenSuccess(
       await this.napcatLoginService.refreshQrcode(query.sessionId),
+    );
+  }
+
+  @Post('scan/captcha/submit')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '提交 QQBot 登录安全验证码' })
+  async submitScanCaptcha(@Body() body: QqbotAccountScanCaptchaDto) {
+    return vbenSuccess(
+      await this.napcatLoginService.submitCaptcha(body.sessionId, body),
     );
   }
 

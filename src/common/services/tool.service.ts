@@ -451,6 +451,28 @@ export class ToolsService {
     return this.matchesNapcatOnlineFlag(message, true);
   }
 
+  extractNapcatCaptchaUrl(message?: string) {
+    const text = this.toTrimmedString(message);
+    if (!text) return '';
+
+    const proofWaterUrl = text.match(
+      /["']?proofWaterUrl["']?\s*[:：]\s*["']?(https?:\/\/[^"'\s,，}]+)/i,
+    )?.[1];
+    const fallbackUrl = text.includes('验证码')
+      ? text.match(/https?:\/\/[^"'\s,，)\]}>。；;、]+/i)?.[0]
+      : '';
+
+    return this.normalizeExtractedUrl(proofWaterUrl || fallbackUrl || '');
+  }
+
+  isNapcatCaptchaRequiredMessage(message?: string) {
+    const text = this.toTrimmedString(message);
+    return (
+      !!this.extractNapcatCaptchaUrl(text) ||
+      this.includesAny(text, ['proofWaterUrl', '需要验证码', '验证码'])
+    );
+  }
+
   private matchesNapcatOnlineFlag(message: unknown, expected: boolean) {
     const text = this.toTrimmedString(message);
     if (!text) return false;
@@ -458,6 +480,10 @@ export class ToolsService {
       `["']?isOnline["']?\\s*[:=]\\s*${expected ? 'true' : 'false'}\\b`,
       'i',
     ).test(text);
+  }
+
+  private normalizeExtractedUrl(value: string) {
+    return this.toTrimmedString(value).replace(/[)"'\]}>，。；;、,]+$/g, '');
   }
 
   private deriveSecretKey(secret: unknown) {

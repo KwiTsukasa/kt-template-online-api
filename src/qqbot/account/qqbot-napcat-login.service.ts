@@ -7,11 +7,13 @@ import { Observable } from 'rxjs';
 import { throwVbenError, ToolsService } from '@/common';
 import type {
   NapcatApiResponse,
+  NapcatCaptchaLoginResult,
   NapcatCredential,
   NapcatLoginInfo,
   NapcatLoginStatus,
   NapcatQrcode,
   NapcatRestartOptions,
+  QqbotLoginCaptchaSubmitInput,
   QqbotLoginScanMode,
   QqbotLoginScanEvent,
   QqbotLoginScanResult,
@@ -178,6 +180,29 @@ export class QqbotNapcatLoginService {
       );
     }
     if (!status.isLogin) {
+      const captchaUrl = this.getCaptchaUrlFromStatus(status);
+      if (captchaUrl) {
+        return this.keepPasswordCaptchaPending(
+          session,
+          captchaUrl,
+          status.loginError,
+        );
+      }
+      if (session.captchaUrl) {
+        if (!status.isOffline && !status.loginError) {
+          return this.keepPasswordCaptchaPending(
+            session,
+            session.captchaUrl,
+            '等待 QQ 安全验证结果',
+          );
+        }
+        return this.failCaptchaLogin(
+          session,
+          container,
+          status.loginError || '验证码登录未完成',
+        );
+      }
+
       session.errorMessage = status.loginError || undefined;
       if (
         status.qrcodeurl &&
@@ -205,6 +230,117 @@ export class QqbotNapcatLoginService {
     return this.completeLogin(session, container);
   }
 
+  async submitCaptcha(sessionId: string, input: QqbotLoginCaptchaSubmitInput) {
+    const session = this.getSession(sessionId);
+    if (session.status !== 'pending') {
+      return this.toResult(session);
+    }
+
+    const ticket = this.toolsService.toTrimmedString(input.ticket);
+    const randstr = this.toolsService.toTrimmedString(input.randstr);
+    const sid = this.toolsService.toTrimmedString(input.sid);
+    if (!ticket || !randstr) {
+      throwVbenError('验证码结果缺失，请重新验证');
+    }
+    if (!session.captchaUrl) {
+      throwVbenError('当前登录会话不需要验证码');
+    }
+    if (!session.expectedSelfId || !session.passwordMd5) {
+      throwVbenError('验证码登录上下文已失效，请重新更新登录');
+    }
+
+    const container = await this.getSessionContainer(session);
+    this.publishScanResultEvent(
+      session,
+      'password-login-captcha-submit',
+      'processing',
+      '正在提交 QQ 安全验证结果',
+    );
+
+    let captchaResult: NapcatCaptchaLoginResult | null;
+    try {
+      captchaResult = await this.postNapcat<NapcatCaptchaLoginResult | null>(
+        container,
+        '/api/QQLogin/CaptchaLogin',
+        {
+          passwordMd5: session.passwordMd5,
+          randstr,
+          sid,
+          ticket,
+          uin: session.expectedSelfId,
+        },
+      );
+    } catch (err) {
+      return this.keepPasswordCaptchaPending(
+        session,
+        session.captchaUrl,
+        this.toolsService.getErrorMessage(err) || '验证码登录失败',
+      );
+    }
+
+    if (captchaResult?.needNewDevice && captchaResult.jumpUrl) {
+      return this.keepSessionPending(
+        session,
+        '验证码已通过，但 QQ 仍要求新设备验证，请在 NapCat WebUI 继续完成',
+        true,
+      );
+    }
+
+    const loginStatus = await this.waitForPasswordLoginStatus(container);
+    if (!loginStatus.isLogin) {
+      const captchaUrl = this.getCaptchaUrlFromStatus(loginStatus);
+      if (captchaUrl) {
+        return this.keepPasswordCaptchaPending(
+          session,
+          captchaUrl,
+          loginStatus.loginError,
+        );
+      }
+      return this.failCaptchaLogin(
+        session,
+        container,
+        `验证码登录未完成：${loginStatus.loginError || 'NapCat 未返回登录成功'}`,
+      );
+    }
+
+    const loginInfo = await this.getLoginInfo(container);
+    const selfId = this.toolsService.pickNapcatSelfId(loginInfo);
+    if (loginInfo.online === false || !selfId) {
+      return this.failCaptchaLogin(
+        session,
+        container,
+        loginInfo.online === false
+          ? 'NapCat 当前账号已离线'
+          : 'NapCat 未返回 QQ 号',
+      );
+    }
+    if (session.expectedSelfId && session.expectedSelfId !== selfId) {
+      await this.clearRuntimeLoginPasswordAfterFailedPassword(
+        session,
+        container,
+        selfId,
+      );
+      return this.failSession(
+        session,
+        `当前密码登录账号 ${selfId} 与目标账号 ${session.expectedSelfId} 不一致`,
+      );
+    }
+
+    try {
+      await this.clearRuntimeLoginPasswordAfterSuccess(
+        session,
+        container,
+        selfId,
+      );
+    } catch {
+      return this.toResult(session);
+    }
+    return this.completeLogin(session, container, {
+      loginInfo,
+      successMessage: '验证码登录成功',
+    });
+  }
+
   events(sessionId: string) {
     this.getSession(sessionId);
     return new Observable<{ data: QqbotLoginScanEvent }>((subscriber) => {
@@ -230,6 +366,7 @@ export class QqbotNapcatLoginService {
   async cancel(sessionId: string) {
     const session = this.sessions.get(sessionId);
     if (session) {
+      await this.cleanupPasswordLoginContext(session);
       this.publishScanEvent(session, {
         message: '扫码会话已取消',
         result: this.toResult(session),
@@ -381,8 +518,10 @@ export class QqbotNapcatLoginService {
     });
     await this.containerService.bindAccount(accountId, session.containerId);
     session.accountId = accountId;
+    session.captchaUrl = undefined;
     session.status = 'success';
     session.errorMessage = undefined;
+    session.passwordMd5 = undefined;
     session.preparingRelogin = false;
     this.sessions.set(session.id, session);
     const result = {
@@ -428,6 +567,7 @@ export class QqbotNapcatLoginService {
   private toResult(session: QqbotLoginScanSession): QqbotLoginScanResult {
     return {
       accountId: session.accountId,
+      captchaUrl: session.captchaUrl,
       containerId: session.containerId,
       containerName: session.containerName,
       errorMessage: session.errorMessage,
@@ -492,6 +632,110 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
+  private keepPasswordCaptchaPending(
+    session: QqbotLoginScanSession,
+    captchaUrl: string,
+    reason?: string,
+  ) {
+    const captchaMessage = '密码登录需要完成 QQ 安全验证';
+    const detail = this.toolsService.isNapcatCaptchaRequiredMessage(reason)
+      ? ''
+      : this.toolsService.toTrimmedString(reason);
+    const message = detail ? `${captchaMessage}：${detail}` : captchaMessage;
+    const shouldPublish =
+      session.captchaUrl !== captchaUrl ||
+      !session.errorMessage?.includes(captchaMessage);
+
+    session.status = 'pending';
+    session.captchaUrl = captchaUrl;
+    session.qrcode = undefined;
+    session.errorMessage = message;
+    session.expiresAt = Date.now() + this.getSessionTtlMs();
+    this.sessions.set(session.id, session);
+    if (shouldPublish) {
+      this.publishScanResultEvent(
+        session,
+        'password-login-captcha',
+        'processing',
+        `${message}，请完成验证码验证`,
+      );
+    }
+    return this.toResult(session);
+  }
+
+  private async failCaptchaLogin(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    errorMessage: string,
+  ) {
+    const cleaned = await this.cleanupPasswordLoginContext(
+      session,
+      container,
+      session.expectedSelfId,
+    );
+    if (!cleaned) return this.toResult(session);
+
+    session.status = 'error';
+    session.captchaUrl = undefined;
+    session.errorMessage = errorMessage;
+    session.passwordMd5 = undefined;
+    session.preparingRelogin = false;
+    this.sessions.set(session.id, session);
+    this.publishScanEvent(session, {
+      message: errorMessage,
+      result: this.toResult(session),
+      status: 'error',
+      step: 'password-login-captcha-failed',
+    });
+    return this.toResult(session);
+  }
+
+  private async cleanupPasswordLoginContext(
+    session: QqbotLoginScanSession,
+    container?: QqbotNapcatRuntime,
+    selfId?: string,
+    cleanupFailureMessage?: string,
+  ) {
+    if (!session.passwordMd5 && !session.captchaUrl) return true;
+    const runtime = container || (await this.getSessionContainer(session));
+    const failureMessage =
+      cleanupFailureMessage ||
+      (session.status === 'success'
+        ? 'NapCat 密码登录已完成，但运行态密码清理失败，请重试更新登录'
+        : 'NapCat 密码登录未完成，且运行态密码清理失败，请重试更新登录');
+
+    this.publishScanResultEvent(
+      session,
+      'password-env-cleanup',
+      'processing',
+      '正在移除运行态登录密码',
+    );
+    const cleaned = await this.containerService.ensureRuntimeLoginEnv(runtime, {
+      clearLoginPassword: true,
+      selfId: selfId || session.expectedSelfId,
+    });
+    if (!cleaned.ok) {
+      session.status = 'error';
+      session.captchaUrl = undefined;
+      session.errorMessage = failureMessage;
+      session.passwordMd5 = undefined;
+      session.preparingRelogin = false;
+      this.sessions.set(session.id, session);
+      this.publishScanEvent(session, {
+        message: failureMessage,
+        result: this.toResult(session),
+        status: 'error',
+        step: 'password-env-cleanup-failed',
+      });
+      return false;
+    }
+
+    session.captchaUrl = undefined;
+    session.passwordMd5 = undefined;
+    this.sessions.set(session.id, session);
+    return true;
+  }
+
   private getSession(sessionId: string) {
     const session = this.sessions.get(sessionId);
     if (!session) {
@@ -510,16 +754,17 @@ export class QqbotNapcatLoginService {
     this.sessions.forEach((session, sessionId) => {
       if (session.status !== 'pending' || now > session.expiresAt) {
         this.sessions.delete(sessionId);
-        this.cleanupSessionEvents(sessionId);
         expiredSessions.push(session);
       }
     });
     await Promise.all(
-      expiredSessions.map((session) => this.cleanupSessionContainer(session)),
+      expiredSessions.map((session) => this.closeSession(session)),
     );
   }
 
   private async expireSession(session: QqbotLoginScanSession) {
+    const cleaned = await this.cleanupPasswordLoginContext(session);
+    if (!cleaned) return this.toResult(session);
     session.status = 'expired';
     session.errorMessage = session.errorMessage || '扫码会话已过期';
     this.publishScanResultEvent(
@@ -529,8 +774,7 @@ export class QqbotNapcatLoginService {
       session.errorMessage,
     );
     this.sessions.delete(session.id);
-    await this.cleanupSessionContainer(session);
-    this.cleanupSessionEvents(session.id);
+    await this.closeSession(session);
     return this.toResult(session);
   }
 
@@ -539,13 +783,21 @@ export class QqbotNapcatLoginService {
     errorMessage: string,
   ) {
     session.status = 'error';
+    session.captchaUrl = undefined;
     session.errorMessage = errorMessage;
+    session.passwordMd5 = undefined;
     session.preparingRelogin = false;
     this.publishScanResultEvent(session, 'login-error', 'error', errorMessage);
     this.sessions.delete(session.id);
-    await this.cleanupSessionContainer(session);
-    this.cleanupSessionEvents(session.id);
+    await this.closeSession(session);
     return this.toResult(session);
+  }
+
+  private async closeSession(session: QqbotLoginScanSession) {
+    await this.cleanupPasswordLoginContext(session);
+    await this.cleanupSessionContainer(session);
+    this.sessions.delete(session.id);
+    this.cleanupSessionEvents(session.id);
   }
 
   private async cleanupSessionContainer(session: QqbotLoginScanSession) {
@@ -980,6 +1232,9 @@ export class QqbotNapcatLoginService {
 
     let loginInfo: NapcatLoginInfo | undefined;
     let loggedInSelfId = '';
+    session.passwordMd5 = createHash('md5')
+      .update(password, 'utf8')
+      .digest('hex');
     session.errorMessage = 'NapCat 正在尝试密码登录，请稍后';
     this.sessions.set(session.id, session);
     this.publishScanResultEvent(
@@ -1030,6 +1285,20 @@ export class QqbotNapcatLoginService {
     }
 
     if (!loginStatus.isLogin) {
+      const captchaUrl = await this.resolvePasswordCaptchaUrl(
+        container,
+        loginStatus,
+        session.lastRestartedAt,
+      );
+      if (captchaUrl) {
+        this.keepPasswordCaptchaPending(
+          session,
+          captchaUrl,
+          loginStatus.loginError,
+        );
+        return true;
+      }
+
       await this.clearRuntimeLoginPasswordAfterFailedPassword(
         session,
         container,
@@ -1094,6 +1363,28 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
+  private async resolvePasswordCaptchaUrl(
+    container: QqbotNapcatRuntime,
+    loginStatus: NapcatLoginStatus,
+    sinceMs?: number,
+  ) {
+    const statusCaptchaUrl = this.getCaptchaUrlFromStatus(loginStatus);
+    if (statusCaptchaUrl) return statusCaptchaUrl;
+    if (typeof this.containerService.detectRuntimeCaptchaUrl !== 'function') {
+      return '';
+    }
+    return (
+      (await this.containerService.detectRuntimeCaptchaUrl(
+        container,
+        sinceMs,
+      )) || ''
+    );
+  }
+
+  private getCaptchaUrlFromStatus(status: NapcatLoginStatus) {
+    return this.toolsService.extractNapcatCaptchaUrl(status.loginError);
+  }
+
   private async clearRuntimeLoginPasswordBeforeQuick(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -1104,10 +1395,13 @@ export class QqbotNapcatLoginService {
       'processing',
       '正在清理运行态登录密码',
     );
-    const cleaned = await this.containerService.ensureRuntimeLoginEnv(container, {
-      clearLoginPassword: true,
-      selfId: session.expectedSelfId,
-    });
+    const cleaned = await this.containerService.ensureRuntimeLoginEnv(
+      container,
+      {
+        clearLoginPassword: true,
+        selfId: session.expectedSelfId,
+      },
+    );
     if (!cleaned.ok) {
       throw new Error('NapCat 快速登录前运行态密码清理失败，请重试更新登录');
     }
@@ -1118,20 +1412,16 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime,
     selfId?: string,
   ) {
-    this.publishScanResultEvent(
+    const failureMessage =
+      'NapCat 密码登录未完成，且运行态密码清理失败，请重试更新登录';
+    const cleaned = await this.cleanupPasswordLoginContext(
       session,
-      'password-env-cleanup',
-      'processing',
-      '正在移除运行态登录密码',
-    );
-    const cleaned = await this.containerService.ensureRuntimeLoginEnv(container, {
-      clearLoginPassword: true,
+      container,
       selfId,
-    });
-    if (!cleaned.ok) {
-      throw new Error(
-        'NapCat 密码登录未完成，且运行态密码清理失败，请重试更新登录',
-      );
+      failureMessage,
+    );
+    if (!cleaned) {
+      throw new Error(failureMessage);
     }
   }
 
@@ -1140,20 +1430,16 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime,
     selfId: string,
   ) {
-    this.publishScanResultEvent(
+    const failureMessage =
+      'NapCat 密码登录已完成，但运行态密码清理失败，请重试更新登录';
+    const cleaned = await this.cleanupPasswordLoginContext(
       session,
-      'password-env-cleanup',
-      'processing',
-      '正在移除运行态登录密码',
-    );
-    const cleaned = await this.containerService.ensureRuntimeLoginEnv(container, {
-      clearLoginPassword: true,
+      container,
       selfId,
-    });
-    if (!cleaned.ok) {
-      throw new Error(
-        'NapCat 密码登录已完成，但运行态密码清理失败，请重试更新登录',
-      );
+      failureMessage,
+    );
+    if (!cleaned) {
+      throw new Error(failureMessage);
     }
   }
 
@@ -1378,7 +1664,14 @@ export class QqbotNapcatLoginService {
         await this.toolsService.sleep(this.getLoginPollIntervalMs());
       }
       latestStatus = await this.getLoginStatus(container, true);
-      if (latestStatus.isLogin) return latestStatus;
+      if (
+        latestStatus.isLogin ||
+        this.toolsService.isNapcatCaptchaRequiredMessage(
+          latestStatus.loginError,
+        )
+      ) {
+        return latestStatus;
+      }
     }
     return latestStatus;
   }

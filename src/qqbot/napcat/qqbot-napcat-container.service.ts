@@ -222,7 +222,9 @@ export class QqbotNapcatContainerService {
         env.has('NAPCAT_QUICK_PASSWORD_MD5');
       if (options.clearLoginPassword) return !hasPassword;
 
-      const loginPassword = this.toolsService.toSecretText(options.loginPassword);
+      const loginPassword = this.toolsService.toSecretText(
+        options.loginPassword,
+      );
       if (loginPassword) {
         return env.get('NAPCAT_QUICK_PASSWORD') === loginPassword;
       }
@@ -466,6 +468,34 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     }
   }
 
+  async detectRuntimeCaptchaUrl(
+    runtime: Pick<QqbotNapcatRuntime, 'name'>,
+    sinceMs?: number,
+  ) {
+    if (this.getManagedMode() !== 'ssh' || !runtime.name) return null;
+
+    const since =
+      typeof sinceMs === 'number' && Number.isFinite(sinceMs)
+        ? new Date(Math.max(0, sinceMs - 1000)).toISOString()
+        : '';
+    const script = since
+      ? this.buildRemoteRecentLogsSinceScript(runtime.name, since)
+      : this.buildRemoteRecentLogsByNameScript(runtime.name);
+
+    try {
+      const result = await this.runProcess(
+        'ssh',
+        [...this.getSshArgs(), 'sh -s'],
+        script,
+        undefined,
+        this.getRuntimeCheckTimeoutMs(),
+      );
+      return this.toolsService.extractNapcatCaptchaUrl(result.stdout) || null;
+    } catch {
+      return null;
+    }
+  }
+
   async inspectRuntimeStatus(
     container: QqbotNapcatContainer,
   ): Promise<QqbotNapcatRuntimeStatusSnapshot> {
@@ -681,11 +711,13 @@ echo "__KT_PROGRESS__:container-started:NapCat 容器已启动"
   }
 
   private buildRemoteRecentLogsScript(container: QqbotNapcatContainer) {
-    const name = this.sh(container.name);
+    return this.buildRemoteRecentLogsByNameScript(container.name);
+  }
 
+  private buildRemoteRecentLogsByNameScript(name: string) {
     return `
 set -eu
-NAME=${name}
+NAME=${this.sh(name)}
 docker logs --tail 300 "$NAME" 2>&1 || true
 `;
   }

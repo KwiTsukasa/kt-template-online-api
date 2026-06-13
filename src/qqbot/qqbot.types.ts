@@ -31,6 +31,12 @@ export type NapcatLoginStatus = {
   qrcodeurl?: string;
 };
 
+export type NapcatCaptchaLoginResult = {
+  jumpUrl?: string;
+  needNewDevice?: boolean;
+  newDevicePullQrCodeSig?: string;
+};
+
 export type NapcatQrcode = {
   qrcode?: string;
   qrcodeurl?: string;
@@ -255,6 +261,7 @@ export type QqbotBusHandler = (payload: any) => Promise<void> | void;
 
 export type QqbotLoginScanResult = {
   accountId?: string;
+  captchaUrl?: string;
   containerId?: string;
   containerName?: string;
   errorMessage?: string;
@@ -283,6 +290,7 @@ export type QqbotLoginScanEvent = {
 
 export type QqbotLoginScanSession = {
   accountId?: string;
+  captchaUrl?: string;
   containerId?: string;
   containerName?: string;
   createdAt: number;
@@ -292,10 +300,17 @@ export type QqbotLoginScanSession = {
   id: string;
   lastRestartedAt?: number;
   mode: QqbotLoginScanMode;
+  passwordMd5?: string;
   preparingRelogin?: boolean;
   qrcode?: string;
   status: QqbotLoginScanStatus;
   webuiPort?: null | number;
+};
+
+export type QqbotLoginCaptchaSubmitInput = {
+  randstr: string;
+  sid?: string;
+  ticket: string;
 };
 
 export type QqbotNapcatRuntime = {

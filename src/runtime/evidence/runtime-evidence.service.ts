@@ -9,7 +9,7 @@ const REDACTED_BASE64_VALUE = '<redacted-base64>';
 const SENSITIVE_KEY_PATTERN =
   /password|secret|token|authorization|cookie|privatekey|sshkey|ticket|randstr|replytext|base64/i;
 const SENSITIVE_TEXT_KEY_PATTERN =
-  'password|secret|token|authorization|cookie|private[_-]?key|ssh[_-]?key|ticket|randstr|replyText|sid';
+  '(?:[A-Za-z0-9_-]*(?:password|secret|token|authorization|cookie|private[_-]?key|ssh[_-]?key|ticket|randstr|replyText|base64)[A-Za-z0-9_-]*|sid)';
 const SENSITIVE_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
   [
     /data:[a-z0-9.+-]+\/[a-z0-9.+-]+;base64,[a-z0-9+/=\r\n]+/gi,
@@ -26,8 +26,11 @@ const SENSITIVE_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
     '$1$2$1:$3<redacted>$3',
   ],
   [
-    new RegExp(`\\b(${SENSITIVE_TEXT_KEY_PATTERN})\\s*=\\s*[^\\s,;&]+`, 'gi'),
-    '$1=<redacted>',
+    new RegExp(
+      `\\b(${SENSITIVE_TEXT_KEY_PATTERN})(\\s*[:=]\\s*)[^\\s,;&]+`,
+      'gi',
+    ),
+    '$1$2<redacted>',
   ],
 ];
 

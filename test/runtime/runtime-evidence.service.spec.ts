@@ -216,4 +216,37 @@ describe('RuntimeEvidenceService', () => {
     expect(serialized).toContain('captcha evidence');
     expect(serialized).toContain('kept');
   });
+
+  it('redacts compound token and secret text keys while preserving session identifiers', () => {
+    const service = new RuntimeEvidenceService();
+
+    const record = service.createRecord({
+      title: 'compound token evidence',
+      taskType: 'api',
+      project: 'kt-template-online-api',
+      environment: 'local',
+      operation: 'admin-login',
+      target: 'sessionId=KT_SCAN_SAFE',
+      status: 'failed',
+      details: {
+        sessionId: 'KT_SCAN_SAFE',
+        text:
+          'accessToken=raw-access-token refreshToken=raw-refresh-token access_token=raw-snake-token client_secret=raw-client-secret sessionId=KT_SCAN_SAFE',
+        jsonText:
+          '{"accessToken":"raw-json-access","refreshToken":"raw-json-refresh","access_token":"raw-json-snake","client_secret":"raw-json-client-secret","sessionId":"KT_SCAN_SAFE"}',
+      },
+    });
+
+    const serialized = JSON.stringify(record);
+
+    expect(serialized).not.toContain('raw-access-token');
+    expect(serialized).not.toContain('raw-refresh-token');
+    expect(serialized).not.toContain('raw-snake-token');
+    expect(serialized).not.toContain('raw-client-secret');
+    expect(serialized).not.toContain('raw-json-access');
+    expect(serialized).not.toContain('raw-json-refresh');
+    expect(serialized).not.toContain('raw-json-snake');
+    expect(serialized).not.toContain('raw-json-client-secret');
+    expect(serialized).toContain('KT_SCAN_SAFE');
+  });
 });

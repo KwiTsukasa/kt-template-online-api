@@ -1760,26 +1760,39 @@ export class QqbotNapcatLoginService {
         }
         throw err;
       }
+      const qrcodeChallenge = this.isPasswordQrcodeChallenge(latestStatus);
+      const captchaRequired = this.toolsService.isNapcatCaptchaRequiredMessage(
+        latestStatus.loginError,
+      );
+      const hasRestartTimestamp =
+        typeof sinceMs === 'number' && Number.isFinite(sinceMs);
       if (
-        latestStatus.isLogin ||
-        this.isPasswordQrcodeChallenge(latestStatus) ||
-        this.toolsService.isNapcatCaptchaRequiredMessage(
-          latestStatus.loginError,
-        )
+        !latestStatus.isLogin &&
+        !qrcodeChallenge &&
+        (hasRestartTimestamp || captchaRequired)
       ) {
+        latestStatus.captchaUrl =
+          this.getCaptchaUrlFromStatus(latestStatus) ||
+          (await this.detectPasswordCaptchaUrl(
+            container,
+            sinceMs,
+            captchaRequired,
+          ));
+      }
+      if (latestStatus.isLogin || qrcodeChallenge || captchaRequired) {
         if (
           !this.getCaptchaUrlFromStatus(latestStatus) &&
-          this.toolsService.isNapcatCaptchaRequiredMessage(
-            latestStatus.loginError,
-          )
+          captchaRequired
         ) {
           latestStatus.captchaUrl = await this.detectPasswordCaptchaUrl(
             container,
             sinceMs,
+            true,
           );
         }
         return latestStatus;
       }
+      if (latestStatus.captchaUrl) return latestStatus;
     }
     return latestStatus;
   }

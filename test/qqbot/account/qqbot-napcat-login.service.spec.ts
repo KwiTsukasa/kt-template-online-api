@@ -759,8 +759,9 @@ describe('QqbotNapcatLoginService', () => {
     const containerService = {
       detectRuntimeCaptchaUrl: jest
         .fn()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(staleCaptchaUrl),
+        .mockImplementation(async (_runtime: unknown, sinceMs?: number) =>
+          typeof sinceMs === 'number' ? null : staleCaptchaUrl,
+        ),
       ensureRuntimeLoginEnv: jest
         .fn()
         .mockResolvedValue({ changed: true, ok: true }),
@@ -815,8 +816,50 @@ describe('QqbotNapcatLoginService', () => {
     );
 
     expect(session.captchaUrl).toBeUndefined();
-    expect(containerService.detectRuntimeCaptchaUrl).toHaveBeenCalledTimes(1);
+    expect(containerService.detectRuntimeCaptchaUrl).toHaveBeenCalledTimes(2);
+    expect(containerService.detectRuntimeCaptchaUrl).not.toHaveBeenCalledWith(
+      container,
+    );
     expect(session.qrcode).toBe('fallback-qrcode');
+  });
+
+  it('does not read tail captcha logs for processing status without restart timestamp', async () => {
+    const staleCaptchaUrl =
+      'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001';
+    const containerService = {
+      detectRuntimeCaptchaUrl: jest.fn().mockResolvedValue(staleCaptchaUrl),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS: '1',
+            QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS: '1',
+          };
+          return values[key] || '';
+        }),
+      } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    jest
+      .spyOn((refreshService as any).toolsService, 'sleep')
+      .mockResolvedValue(undefined);
+    jest.spyOn(refreshService as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      loginError: '密码登录处理中',
+    });
+
+    const status = await (refreshService as any).waitForPasswordLoginStatus({
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-stale-tail-no-since',
+      name: 'napcat-10001',
+      webuiToken: 'token',
+    });
+
+    expect(status.captchaUrl).toBeUndefined();
+    expect(containerService.detectRuntimeCaptchaUrl).not.toHaveBeenCalled();
   });
 
   it('keeps password captcha pending before cleanup when status check throws captcha error', async () => {
@@ -1326,6 +1369,60 @@ describe('QqbotNapcatLoginService', () => {
       expect.objectContaining({ name: 'napcat-10001' }),
       restartedAt,
     );
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('returns captcha status during password wait when processing logs already contain captcha url', async () => {
+    const restartedAt = Date.now() - 1500;
+    const captchaUrl =
+      'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001';
+    const containerService = {
+      detectRuntimeCaptchaUrl: jest.fn().mockResolvedValue(captchaUrl),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS: '1000',
+            QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS: '3000',
+          };
+          return values[key] || '';
+        }),
+      } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const getLoginStatus = jest
+      .spyOn(refreshService as any, 'getLoginStatus')
+      .mockResolvedValue({
+        isLogin: false,
+        loginError: '密码登录处理中',
+      });
+    const sleep = jest
+      .spyOn((refreshService as any).toolsService, 'sleep')
+      .mockResolvedValue(undefined);
+
+    const status = await (refreshService as any).waitForPasswordLoginStatus(
+      {
+        baseUrl: 'http://127.0.0.1:6103/',
+        id: 'container-captcha-log-processing',
+        name: 'napcat-10001',
+        webuiToken: 'token',
+      },
+      restartedAt,
+    );
+
+    expect(status).toMatchObject({
+      captchaUrl,
+      isLogin: false,
+      loginError: '密码登录处理中',
+    });
+    expect(containerService.detectRuntimeCaptchaUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'napcat-10001' }),
+      restartedAt,
+    );
+    expect(getLoginStatus).toHaveBeenCalledTimes(1);
     expect(sleep).not.toHaveBeenCalled();
   });
 

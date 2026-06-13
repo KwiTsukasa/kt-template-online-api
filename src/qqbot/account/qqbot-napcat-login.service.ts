@@ -1428,7 +1428,7 @@ export class QqbotNapcatLoginService {
     ) {
       return '';
     }
-    return this.detectPasswordCaptchaUrl(container, sinceMs, true);
+    return this.waitForPasswordCaptchaUrl(container, sinceMs);
   }
 
   private getCaptchaUrlFromStatus(status: NapcatLoginStatus) {
@@ -1455,6 +1455,25 @@ export class QqbotNapcatLoginService {
     return (
       (await this.containerService.detectRuntimeCaptchaUrl(container)) || ''
     );
+  }
+
+  private async waitForPasswordCaptchaUrl(
+    container: QqbotNapcatRuntime,
+    sinceMs?: number,
+  ) {
+    const attempts = 5;
+    for (let index = 0; index < attempts; index += 1) {
+      if (index > 0) {
+        await this.toolsService.sleep(this.getLoginPollIntervalMs());
+      }
+      const captchaUrl = await this.detectPasswordCaptchaUrl(
+        container,
+        sinceMs,
+        true,
+      );
+      if (captchaUrl) return captchaUrl;
+    }
+    return '';
   }
 
   private isPasswordQrcodeChallenge(status: NapcatLoginStatus) {

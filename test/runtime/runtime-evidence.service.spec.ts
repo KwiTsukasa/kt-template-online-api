@@ -279,4 +279,36 @@ describe('RuntimeEvidenceService', () => {
     expect(serialized).not.toContain('67890');
     expect(serialized).toContain('KT_SCAN_SAFE');
   });
+
+  it('redacts access key and api key text plus unquoted multi-word secret values', () => {
+    const service = new RuntimeEvidenceService();
+
+    const record = service.createRecord({
+      title: 'access key evidence',
+      taskType: 'backend',
+      project: 'kt-template-online-api',
+      environment: 'local',
+      operation: 'runtime-evidence',
+      status: 'failed',
+      details: {
+        text:
+          'accessKey=raw-access-key access_key=raw-snake-access-key apiKey=raw-api-key api_key=raw-snake-api-key private_key=-----BEGIN PRIVATE KEY----- raw unquoted pem token=Bearer raw-bearer-token safe=value',
+        jsonText:
+          '{"accessKey":"raw-json-access-key","api_key":"raw-json-api-key","safe":"kept"}',
+      },
+    });
+
+    const serialized = JSON.stringify(record);
+
+    expect(serialized).not.toContain('raw-access-key');
+    expect(serialized).not.toContain('raw-snake-access-key');
+    expect(serialized).not.toContain('raw-api-key');
+    expect(serialized).not.toContain('raw-snake-api-key');
+    expect(serialized).not.toContain('raw unquoted pem');
+    expect(serialized).not.toContain('raw-bearer-token');
+    expect(serialized).not.toContain('raw-json-access-key');
+    expect(serialized).not.toContain('raw-json-api-key');
+    expect(serialized).toContain('safe=value');
+    expect(serialized).toContain('kept');
+  });
 });

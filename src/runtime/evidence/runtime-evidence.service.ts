@@ -7,9 +7,9 @@ import {
 const REDACTED_VALUE = '<redacted>';
 const REDACTED_BASE64_VALUE = '<redacted-base64>';
 const SENSITIVE_KEY_PATTERN =
-  /password|secret|token|authorization|cookie|privatekey|sshkey|ticket|randstr|replytext|base64/i;
+  /password|secret|token|authorization|cookie|privatekey|sshkey|accesskey|apikey|ticket|randstr|replytext|base64/i;
 const SENSITIVE_TEXT_KEY_PATTERN =
-  '(?:[A-Za-z0-9_-]*(?:password|secret|token|authorization|cookie|private[_-]?key|ssh[_-]?key|ticket|randstr|replyText|base64)[A-Za-z0-9_-]*|sid)';
+  '(?:[A-Za-z0-9_-]*(?:password|secret|token|authorization|cookie|private[_-]?key|ssh[_-]?key|access[_-]?key|api[_-]?key|ticket|randstr|replyText|base64)[A-Za-z0-9_-]*|sid)';
 const SENSITIVE_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
   [
     /data:[a-z0-9.+-]+\/[a-z0-9.+-]+;base64,[a-z0-9+/=\r\n]+/gi,
@@ -18,6 +18,21 @@ const SENSITIVE_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\b[A-Za-z0-9+/]{120,}={0,2}\b/g, REDACTED_BASE64_VALUE],
   [/\b(Authorization)\s*[:=]\s*[^\r\n]+/gi, '$1=<redacted>'],
   [/\b(Cookie)\s*[:=]\s*[^\r\n]+/gi, '$1=<redacted>'],
+  [
+    /\b((?:private|ssh)[_-]?key)(\s*[:=]\s*)-----BEGIN[\s\S]*?-----END [^-]+-----/gi,
+    '$1$2<redacted>',
+  ],
+  [
+    /\b((?:private|ssh)[_-]?key)(\s*[:=]\s*)-----BEGIN[\s\S]*?(?=\s+[A-Za-z0-9_-]+\s*[:=]|\s*$)/gi,
+    '$1$2<redacted>',
+  ],
+  [
+    new RegExp(
+      `\\b(${SENSITIVE_TEXT_KEY_PATTERN})(\\s*[:=]\\s*)Bearer\\s+[^\\s,;&]+`,
+      'gi',
+    ),
+    '$1$2<redacted>',
+  ],
   [
     new RegExp(
       `(["'])(${SENSITIVE_TEXT_KEY_PATTERN})\\1\\s*:\\s*(?:(["'])[^"']*\\3|[-+]?\\d+(?:\\.\\d+)?|true|false|null)`,

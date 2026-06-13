@@ -4,6 +4,8 @@
 
 **Goal:** Implement Phase 1 of the approved API runtime foundation: typed runtime config, classified runtime errors, structured runtime evidence, and a lightweight `GET /health/runtime` endpoint that can be used by Jenkins/K8s/ktWorkflow in the next plan.
 
+**Post-review amendment:** The final public `GET /health/runtime` contract intentionally returns only `service`, `checkedAt`, `status`, and `checks`. Earlier code snippets in this plan that included `config` or described the endpoint as a safe config view were superseded during code review to avoid exposing runtime topology on an unauthenticated health endpoint. The internal `RuntimeConfigService` still owns the safe snapshot used to derive checks.
+
 **Architecture:** Add a focused `src/runtime` Nest module. It depends on `ConfigModule` and `CommonModule`, exports typed runtime primitives, and keeps business modules unchanged during this phase. The endpoint returns plain machine-readable JSON, not a Vben response wrapper, so deployment tooling can consume it directly.
 
 **Tech Stack:** NestJS 11, TypeScript 5.9, Jest 29 with `ts-jest`, existing `@nestjs/config`, existing `ToolsService`, existing Swagger/Knife4j setup.
@@ -1245,11 +1247,12 @@ git commit -m "feat: 添加API运行时健康检查"
 ### Runtime health
 
 The API exposes `GET /health/runtime` for deployment and local smoke checks.
+
+Post-review note: the public response no longer returns `config`; it exposes status and config check results only.
 It returns plain JSON with:
 
 - `status`: `live`, `ready`, `degraded`, or `blocked`.
 - `checks`: process and runtime config checks.
-- `config`: a safe runtime config snapshot with secrets masked.
 
 The endpoint is machine-readable and intentionally does not use the Vben
 response wrapper.

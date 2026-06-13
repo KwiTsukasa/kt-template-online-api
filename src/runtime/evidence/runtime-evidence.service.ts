@@ -16,14 +16,21 @@ const SENSITIVE_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
     REDACTED_BASE64_VALUE,
   ],
   [/\b[A-Za-z0-9+/]{120,}={0,2}\b/g, REDACTED_BASE64_VALUE],
-  [/\b(Authorization)\s*[:=]\s*Bearer\s+[^\s,;]+/gi, '$1=<redacted>'],
-  [/\b(Cookie)\s*[:=]\s*[^\s,;]+/gi, '$1=<redacted>'],
+  [/\b(Authorization)\s*[:=]\s*[^\r\n]+/gi, '$1=<redacted>'],
+  [/\b(Cookie)\s*[:=]\s*[^\r\n]+/gi, '$1=<redacted>'],
   [
     new RegExp(
-      `(["'])(${SENSITIVE_TEXT_KEY_PATTERN})\\1\\s*:\\s*(["'])[^"']*\\3`,
+      `(["'])(${SENSITIVE_TEXT_KEY_PATTERN})\\1\\s*:\\s*(?:(["'])[^"']*\\3|[-+]?\\d+(?:\\.\\d+)?|true|false|null)`,
       'gi',
     ),
-    '$1$2$1:$3<redacted>$3',
+    '$1$2$1:"<redacted>"',
+  ],
+  [
+    new RegExp(
+      `\\b(${SENSITIVE_TEXT_KEY_PATTERN})(\\s*[:=]\\s*)(["'])[^"']*\\3`,
+      'gi',
+    ),
+    '$1$2$3<redacted>$3',
   ],
   [
     new RegExp(

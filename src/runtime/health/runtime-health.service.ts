@@ -34,7 +34,6 @@ export class RuntimeHealthService {
       checkedAt: new Date().toISOString(),
       status: this.aggregateStatus(checks),
       checks,
-      config,
     };
   }
 

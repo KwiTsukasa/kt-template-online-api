@@ -29,19 +29,18 @@ describe('applySwaggerResponseExamples', () => {
         service: 'kt-template-online-api',
         status: 'degraded',
         checks: expect.any(Array),
-        config: expect.any(Object),
       }),
     );
     expect(jsonContent.example).not.toHaveProperty('code');
     expect(jsonContent.example).not.toHaveProperty('msg');
     expect(jsonContent.example).not.toHaveProperty('data');
+    expect(jsonContent.example).not.toHaveProperty('config');
     expect(jsonContent.schema).toEqual(
       expect.objectContaining({
         type: 'object',
         properties: expect.objectContaining({
           service: expect.any(Object),
           checks: expect.any(Object),
-          config: expect.any(Object),
         }),
       }),
     );

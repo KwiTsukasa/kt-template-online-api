@@ -128,10 +128,9 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 返回内容包括：
 
 - `status`：`live`、`ready`、`degraded` 或 `blocked`。
-- `checks`：进程存活和运行时配置检查。
-- `config`：已脱敏的运行时配置快照，不包含原始密码、Token、Cookie、SSH key 或验证码票据。
+- `checks`：进程存活和运行时配置检查状态。
 
-`blocked` 表示关键配置缺失；`degraded` 表示可选运行时配置缺失，核心 API 仍可继续工作。本地未配置 Loki、WordPress、NapCat 等可选依赖时，健康状态可能保持 `degraded`。
+该公开入口不返回数据库、WordPress、Loki、NapCat SSH 等运行拓扑配置快照；配置检查只暴露 key 级别、是否存在和缺失说明。`blocked` 表示关键配置缺失；`degraded` 表示可选运行时配置缺失，核心 API 仍可继续工作。本地未配置 Loki、WordPress、NapCat 等可选依赖时，健康状态可能保持 `degraded`。
 
 ## 核心规则
 

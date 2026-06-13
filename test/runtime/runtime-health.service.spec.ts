@@ -78,11 +78,11 @@ describe('RuntimeHealthService', () => {
       expect.objectContaining({
         service: 'kt-template-online-api',
         status: 'ready',
-        config: expect.objectContaining({
-          minio: expect.objectContaining({ bucket: 'kt-template-online' }),
-        }),
       }),
     );
+    expect(report).not.toHaveProperty('config');
+    expect(JSON.stringify(report)).not.toContain('mysql');
+    expect(JSON.stringify(report)).not.toContain('/vol1/docker/napcat');
     expect(new Date(report.checkedAt).toISOString()).toBe(report.checkedAt);
     expect(report.checks).toContainEqual({
       name: 'process',

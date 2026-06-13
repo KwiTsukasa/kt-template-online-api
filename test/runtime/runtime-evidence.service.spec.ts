@@ -249,4 +249,34 @@ describe('RuntimeEvidenceService', () => {
     expect(serialized).not.toContain('raw-json-client-secret');
     expect(serialized).toContain('KT_SCAN_SAFE');
   });
+
+  it('redacts cookie headers, quoted private key values, and non-string JSON secrets', () => {
+    const service = new RuntimeEvidenceService();
+
+    const record = service.createRecord({
+      title: 'realistic secret text evidence',
+      taskType: 'api',
+      project: 'kt-template-online-api',
+      environment: 'local',
+      operation: 'runtime-evidence',
+      status: 'failed',
+      details: {
+        cookieHeader:
+          'Cookie: admin_access_token=raw-cookie-token; wordpress_logged_in=raw-wordpress-cookie; theme=light',
+        quotedPrivateKey:
+          'private_key="-----BEGIN PRIVATE KEY----- raw pem body -----END PRIVATE KEY-----"',
+        jsonText:
+          '{"accessToken":12345,"sid":67890,"client_secret":true,"sessionId":"KT_SCAN_SAFE"}',
+      },
+    });
+
+    const serialized = JSON.stringify(record);
+
+    expect(serialized).not.toContain('raw-cookie-token');
+    expect(serialized).not.toContain('raw-wordpress-cookie');
+    expect(serialized).not.toContain('raw pem body');
+    expect(serialized).not.toContain('12345');
+    expect(serialized).not.toContain('67890');
+    expect(serialized).toContain('KT_SCAN_SAFE');
+  });
 });

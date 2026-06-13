@@ -1,5 +1,3 @@
-import type { RuntimeSafeConfigSnapshot } from '../config/runtime-config.types';
-
 export type RuntimeHealthStatus = 'live' | 'ready' | 'degraded' | 'blocked';
 
 export interface RuntimeHealthCheck {
@@ -15,5 +13,4 @@ export interface RuntimeHealthReport {
   checkedAt: string;
   status: RuntimeHealthStatus;
   checks: RuntimeHealthCheck[];
-  config: RuntimeSafeConfigSnapshot;
 }

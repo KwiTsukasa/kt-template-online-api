@@ -70,7 +70,7 @@ export class RuntimeConfigService {
   readAppProfile(): RuntimeAppConfig {
     return {
       nodeEnv: this.getString('NODE_ENV', 'development'),
-      port: this.getPositiveNumber('PORT', 48085),
+      port: 48085,
     };
   }
 
@@ -86,15 +86,19 @@ export class RuntimeConfigService {
 
   readLokiProfile(): RuntimeLokiConfig {
     const host = this.getFirstString(['LOKI_HOST', 'LOKI_URL']);
+    const queryHost = this.getFirstString([
+      'LOKI_QUERY_HOST',
+      'LOKI_HOST',
+      'LOKI_URL',
+    ]);
 
     return {
-      enabled: !!host && this.getBoolean('LOKI_HTTP_REQUEST_PUSH_ENABLED', true),
+      transportEnabled: !!host,
+      httpRequestPushEnabled:
+        !!host && this.getBoolean('LOKI_HTTP_REQUEST_PUSH_ENABLED', true),
+      queryConfigured: !!queryHost,
       host,
-      queryHost: this.getFirstString([
-        'LOKI_QUERY_HOST',
-        'LOKI_HOST',
-        'LOKI_URL',
-      ]),
+      queryHost,
       environment: this.getString(
         'LOKI_ENV',
         this.getString('NODE_ENV', 'development'),
@@ -109,7 +113,7 @@ export class RuntimeConfigService {
     return {
       endpoint: this.getString('MINIO_ENDPOINT'),
       port: this.getPositiveNumber('MINIO_PORT', 9000),
-      useSSL: this.getBoolean('MINIO_USE_SSL', false),
+      useSSL: false,
       accessKey: this.maskSecret(this.configService.get('MINIO_ACCESS_KEY')),
       bucket: this.getString('MINIO_BUCKET', 'kt-template-online'),
     };

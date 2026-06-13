@@ -19,6 +19,7 @@ describe('RuntimeConfigService', () => {
       DB_USERNAME: 'admin',
       DB_SYNC: 'true',
       NODE_ENV: 'test',
+      PORT: '12345',
     });
 
     expect(service.readAppProfile()).toEqual({
@@ -43,6 +44,7 @@ describe('RuntimeConfigService', () => {
       DB_PASSWORD: 'password-value',
       DB_DATABASE: 'kt',
       MINIO_ACCESS_KEY: 'minio-access-key',
+      MINIO_USE_SSL: 'true',
       WORDPRESS_ADMIN_USERNAME: 'wordpress-user',
       WORDPRESS_ADMIN_PASSWORD: 'wordpress-password',
       LOKI_PASSWORD: 'loki-password',
@@ -73,6 +75,7 @@ describe('RuntimeConfigService', () => {
     expect(snapshotJson).not.toContain('qq-reverse-token');
     expect(snapshotJson).not.toContain('napcat-webui-token');
     expect(snapshot.minio.accessKey).toBe('mi***ey');
+    expect(snapshot.minio.useSSL).toBe(false);
     expect(snapshot.wordpress.adminUsername).toBe('wordpress-user');
     expect(snapshot.wordpress.passwordConfigured).toBe(true);
     expect(snapshot.loki.passwordConfigured).toBe(true);
@@ -92,7 +95,7 @@ describe('RuntimeConfigService', () => {
       LOKI_URL: 'https://loki-push.example.test',
       LOKI_QUERY_HOST: 'https://loki-query.example.test',
       LOKI_ENV: 'production',
-      LOKI_HTTP_REQUEST_PUSH_ENABLED: 'true',
+      LOKI_HTTP_REQUEST_PUSH_ENABLED: 'false',
       LOKI_USERNAME: 'loki-user',
       LOKI_PASSWORD: 'loki-password',
       QQBOT_NAPCAT_ROOT: '/vol1/docker/napcat',
@@ -117,7 +120,9 @@ describe('RuntimeConfigService', () => {
       availabilityTtlMs: 70000,
     });
     expect(service.readLokiProfile()).toEqual({
-      enabled: true,
+      transportEnabled: true,
+      httpRequestPushEnabled: false,
+      queryConfigured: true,
       host: 'https://loki-push.example.test',
       queryHost: 'https://loki-query.example.test',
       environment: 'production',

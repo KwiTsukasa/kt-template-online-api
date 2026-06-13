@@ -111,7 +111,9 @@ export interface RuntimeDatabaseConfig {
 }
 
 export interface RuntimeLokiConfig {
-  enabled: boolean;
+  transportEnabled: boolean;
+  httpRequestPushEnabled: boolean;
+  queryConfigured: boolean;
   host: string;
   queryHost: string;
   environment: string;
@@ -237,7 +239,7 @@ export class RuntimeConfigService {
   readAppProfile(): RuntimeAppConfig {
     return {
       nodeEnv: this.getString('NODE_ENV', 'development'),
-      port: this.getPositiveNumber('PORT', 48085),
+      port: 48085,
     };
   }
 
@@ -253,15 +255,19 @@ export class RuntimeConfigService {
 
   readLokiProfile(): RuntimeLokiConfig {
     const host = this.getFirstString(['LOKI_HOST', 'LOKI_URL']);
+    const queryHost = this.getFirstString([
+      'LOKI_QUERY_HOST',
+      'LOKI_HOST',
+      'LOKI_URL',
+    ]);
 
     return {
-      enabled: !!host && this.getBoolean('LOKI_HTTP_REQUEST_PUSH_ENABLED', true),
+      transportEnabled: !!host,
+      httpRequestPushEnabled:
+        !!host && this.getBoolean('LOKI_HTTP_REQUEST_PUSH_ENABLED', true),
+      queryConfigured: !!queryHost,
       host,
-      queryHost: this.getFirstString([
-        'LOKI_QUERY_HOST',
-        'LOKI_HOST',
-        'LOKI_URL',
-      ]),
+      queryHost,
       environment: this.getString(
         'LOKI_ENV',
         this.getString('NODE_ENV', 'development'),
@@ -276,7 +282,7 @@ export class RuntimeConfigService {
     return {
       endpoint: this.getString('MINIO_ENDPOINT'),
       port: this.getPositiveNumber('MINIO_PORT', 9000),
-      useSSL: this.getBoolean('MINIO_USE_SSL', false),
+      useSSL: false,
       accessKey: this.maskSecret(this.configService.get('MINIO_ACCESS_KEY')),
       bucket: this.getString('MINIO_BUCKET', 'kt-template-online'),
     };
@@ -450,6 +456,7 @@ describe('RuntimeConfigService', () => {
       DB_USERNAME: 'admin',
       DB_SYNC: 'true',
       NODE_ENV: 'test',
+      PORT: '12345',
     });
 
     expect(service.readAppProfile()).toEqual({
@@ -474,6 +481,7 @@ describe('RuntimeConfigService', () => {
       DB_PASSWORD: 'password-value',
       DB_DATABASE: 'kt',
       MINIO_ACCESS_KEY: 'minio-access-key',
+      MINIO_USE_SSL: 'true',
       WORDPRESS_ADMIN_USERNAME: 'wordpress-user',
       WORDPRESS_ADMIN_PASSWORD: 'wordpress-password',
       LOKI_PASSWORD: 'loki-password',
@@ -499,11 +507,73 @@ describe('RuntimeConfigService', () => {
     expect(JSON.stringify(snapshot)).not.toContain('qq-reverse-token');
     expect(JSON.stringify(snapshot)).not.toContain('napcat-webui-token');
     expect(snapshot.minio.accessKey).toBe('mi***ey');
+    expect(snapshot.minio.useSSL).toBe(false);
     expect(snapshot.wordpress.adminUsername).toBe('wordpress-user');
     expect(snapshot.wordpress.passwordConfigured).toBe(true);
     expect(snapshot.loki.passwordConfigured).toBe(true);
     expect(snapshot.qqbot.reverseWsToken).toBe('qq***en');
     expect(snapshot.qqbot.napcatWebuiToken).toBe('na***en');
+  });
+
+  it('reads current WordPress, Loki, and NapCat runtime keys without leaking secrets', () => {
+    const service = createService({
+      WORDPRESS_BASE_URL: 'https://blog.example.test',
+      WORDPRESS_HOST_HEADER: 'blog.example.test',
+      WORDPRESS_ADMIN_USERNAME: 'wordpress-admin',
+      WORDPRESS_ADMIN_PASSWORD: 'wordpress-password',
+      WORDPRESS_TIMEOUT_MS: '16000',
+      WORDPRESS_LOGIN_TIMEOUT_MS: '4000',
+      WORDPRESS_AVAILABILITY_TTL_MS: '70000',
+      LOKI_URL: 'https://loki-push.example.test',
+      LOKI_QUERY_HOST: 'https://loki-query.example.test',
+      LOKI_ENV: 'production',
+      LOKI_HTTP_REQUEST_PUSH_ENABLED: 'false',
+      LOKI_USERNAME: 'loki-user',
+      LOKI_PASSWORD: 'loki-password',
+      QQBOT_NAPCAT_ROOT: '/vol1/docker/napcat',
+      QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
+      QQBOT_NAPCAT_SSH_TARGET: 'nas',
+      QQBOT_NAPCAT_SSH_PORT: '2202',
+      QQBOT_NAPCAT_SSH_KEY_PATH: '/home/kt/.ssh/napcat',
+      QQBOT_NAPCAT_REVERSE_WS_BASE: 'ws://api.example.test/onebot',
+      QQBOT_REVERSE_WS_PATH: '/qqbot/reverse',
+      QQBOT_REVERSE_WS_TOKEN: 'qq-reverse-token',
+      NAPCAT_WEBUI_BASE_URL: 'http://127.0.0.1:6099',
+      NAPCAT_WEBUI_TOKEN: 'napcat-webui-token',
+    });
+
+    expect(service.readWordpressProfile()).toEqual({
+      baseUrl: 'https://blog.example.test',
+      hostHeader: 'blog.example.test',
+      adminUsername: 'wordpress-admin',
+      passwordConfigured: true,
+      timeoutMs: 16000,
+      loginTimeoutMs: 4000,
+      availabilityTtlMs: 70000,
+    });
+    expect(service.readLokiProfile()).toEqual({
+      transportEnabled: true,
+      httpRequestPushEnabled: false,
+      queryConfigured: true,
+      host: 'https://loki-push.example.test',
+      queryHost: 'https://loki-query.example.test',
+      environment: 'production',
+      tenantId: '',
+      username: 'loki-user',
+      passwordConfigured: true,
+    });
+    expect(service.readQqbotProfile()).toEqual({
+      reverseWsPath: '/qqbot/reverse',
+      reverseWsToken: 'qq***en',
+      napcatRoot: '/vol1/docker/napcat',
+      napcatContainerMode: 'ssh',
+      napcatSshTarget: 'nas',
+      napcatSshPort: 2202,
+      napcatSshKeyPath: '/home/kt/.ssh/napcat',
+      napcatReverseWsBase: 'ws://api.example.test/onebot',
+      napcatWebuiBaseUrl: 'http://127.0.0.1:6099',
+      napcatWebuiToken: 'na***en',
+    });
   });
 
   it('marks missing required config as absent', () => {
@@ -949,7 +1019,17 @@ describe('RuntimeHealthService', () => {
           username: 'root',
           synchronize: false,
         },
-        loki: { enabled: false, host: '', basicAuth: '' },
+        loki: {
+          transportEnabled: false,
+          httpRequestPushEnabled: false,
+          queryConfigured: false,
+          host: '',
+          queryHost: '',
+          environment: 'test',
+          tenantId: '',
+          username: '',
+          passwordConfigured: false,
+        },
         minio: {
           endpoint: 'minio',
           port: 9000,
@@ -990,7 +1070,17 @@ describe('RuntimeHealthService', () => {
           username: '',
           synchronize: false,
         },
-        loki: { enabled: false, host: '', basicAuth: '' },
+        loki: {
+          transportEnabled: false,
+          httpRequestPushEnabled: false,
+          queryConfigured: false,
+          host: '',
+          queryHost: '',
+          environment: 'test',
+          tenantId: '',
+          username: '',
+          passwordConfigured: false,
+        },
         minio: { endpoint: '', port: 9000, useSSL: false, accessKey: '' },
         wordpress: { endpoint: '', username: '' },
         qqbot: {
@@ -1052,7 +1142,17 @@ describe('RuntimeHealthController', () => {
           username: 'root',
           synchronize: false,
         },
-        loki: { enabled: false, host: '', basicAuth: '' },
+        loki: {
+          transportEnabled: false,
+          httpRequestPushEnabled: false,
+          queryConfigured: false,
+          host: '',
+          queryHost: '',
+          environment: 'test',
+          tenantId: '',
+          username: '',
+          passwordConfigured: false,
+        },
         minio: { endpoint: '', port: 9000, useSSL: false, accessKey: '' },
         wordpress: { endpoint: '', username: '' },
         qqbot: {

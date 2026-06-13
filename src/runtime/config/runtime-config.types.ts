@@ -22,7 +22,9 @@ export interface RuntimeDatabaseConfig {
 }
 
 export interface RuntimeLokiConfig {
-  enabled: boolean;
+  transportEnabled: boolean;
+  httpRequestPushEnabled: boolean;
+  queryConfigured: boolean;
   host: string;
   queryHost: string;
   environment: string;

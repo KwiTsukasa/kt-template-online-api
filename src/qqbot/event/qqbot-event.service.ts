@@ -71,7 +71,7 @@ export class QqbotEventService {
     if (!selfId) return;
     const offlineReason = getOneBotOfflineReason(payload);
     if (!offlineReason) return;
-    await this.accountService.markOffline(selfId, offlineReason);
+    await this.accountService.markQqLoginOffline(selfId, offlineReason);
     this.publishOfflineNotice(selfId, offlineReason, payload);
   }
 

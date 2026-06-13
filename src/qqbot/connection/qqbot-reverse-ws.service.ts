@@ -91,6 +91,7 @@ export class QqbotReverseWsService
       (resolve, reject) => {
         const timer = setTimeout(() => {
           this.pendingActions.delete(echo);
+          this.closeTimedOutConnection(selfId, ws);
           reject(new Error('OneBot action timeout'));
         }, this.getActionTimeout());
         this.pendingActions.set(echo, { reject, resolve, timer });
@@ -153,6 +154,7 @@ export class QqbotReverseWsService
     });
 
     ws.on('close', async () => {
+      if (!this.isCurrentConnection(key, ws)) return;
       this.connections.delete(key);
       await this.accountService.markOffline(context.selfId);
       await this.busService.publish(QQBOT_MQTT_TOPICS.status(context.selfId), {
@@ -163,6 +165,7 @@ export class QqbotReverseWsService
     });
     ws.on('error', async (err) => {
       this.logger.warn(`QQBot WS 错误 ${context.selfId}: ${err.message}`);
+      if (!this.isCurrentConnection(key, ws)) return;
       await this.accountService.markOffline(context.selfId, err.message);
     });
 
@@ -227,6 +230,33 @@ export class QqbotReverseWsService
       payload,
     );
     pending.resolve(payload);
+  }
+
+  private closeTimedOutConnection(selfId: string, ws: WebSocket) {
+    const reason = 'OneBot action timeout';
+    let closedCurrentConnection = false;
+    [...this.connections.entries()].forEach(([key, connection]) => {
+      if (!key.startsWith(`${selfId}:`) || connection !== ws) return;
+      this.connections.delete(key);
+      closedCurrentConnection = true;
+      try {
+        connection.close(1011, reason);
+      } catch {
+        // The connection is already unusable; state cleanup is the important part.
+      }
+    });
+    if (!closedCurrentConnection) return;
+    void this.accountService.markOffline(selfId, reason).catch(() => undefined);
+    void this.busService
+      .publish(QQBOT_MQTT_TOPICS.status(selfId), {
+        selfId,
+        status: 'offline',
+      })
+      .catch(() => undefined);
+  }
+
+  private isCurrentConnection(key: string, ws: WebSocket) {
+    return this.connections.get(key) === ws;
   }
 
   private async authorize(request: IncomingMessage) {

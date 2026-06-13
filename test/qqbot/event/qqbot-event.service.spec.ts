@@ -7,7 +7,7 @@ import { QqbotEventService } from '@/qqbot/event/qqbot-event.service';
 describe('QqbotEventService', () => {
   it('marks account offline with reason when NapCat reports kicked offline notice', async () => {
     const accountService = {
-      markOffline: jest.fn(),
+      markQqLoginOffline: jest.fn(),
     };
     const systemNoticePublisher = {
       publishSystemNotice: jest.fn().mockResolvedValue('notice-1'),
@@ -37,7 +37,7 @@ describe('QqbotEventService', () => {
 
     await service.handleIncoming(payload);
 
-    expect(accountService.markOffline).toHaveBeenCalledWith(
+    expect(accountService.markQqLoginOffline).toHaveBeenCalledWith(
       '1914728559',
       'bot_offline/kick_offline：你的帐号当前登录已失效，请重新登录。',
     );
@@ -63,7 +63,7 @@ describe('QqbotEventService', () => {
 
   it('ignores normal group kick notices because they are not bot offline signals', async () => {
     const accountService = {
-      markOffline: jest.fn(),
+      markQqLoginOffline: jest.fn(),
     };
     const systemNoticePublisher = {
       publishSystemNotice: jest.fn(),
@@ -91,7 +91,7 @@ describe('QqbotEventService', () => {
       user_id: 67890,
     });
 
-    expect(accountService.markOffline).not.toHaveBeenCalled();
+    expect(accountService.markQqLoginOffline).not.toHaveBeenCalled();
     expect(systemNoticePublisher.publishSystemNotice).not.toHaveBeenCalled();
   });
 });

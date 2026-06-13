@@ -209,6 +209,58 @@ describe('QqbotAccountService', () => {
     );
   });
 
+  it('preserves QQ login error when OneBot connection comes online', async () => {
+    const accountRepository = {
+      update: jest.fn(),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    );
+
+    await service.markOnline('1914728559', 'Universal');
+
+    const updatePayload = accountRepository.update.mock.calls[0][1];
+    expect(updatePayload).toEqual(
+      expect.objectContaining({
+        clientRole: 'Universal',
+        connectStatus: 'online',
+        lastConnectedAt: expect.any(Date),
+      }),
+    );
+    expect(updatePayload).not.toHaveProperty('lastError');
+  });
+
+  it('clears QQ login error only when online state is explicitly confirmed', async () => {
+    const accountRepository = {
+      update: jest.fn(),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    );
+
+    await service.markOnline('1914728559', 'Universal', null);
+
+    expect(accountRepository.update).toHaveBeenCalledWith(
+      { selfId: '1914728559' },
+      expect.objectContaining({
+        clientRole: 'Universal',
+        connectStatus: 'online',
+        lastConnectedAt: expect.any(Date),
+        lastError: null,
+      }),
+    );
+  });
+
   it('truncates offline reason before writing lastError column', async () => {
     const accountRepository = {
       update: jest.fn(),
@@ -306,14 +358,17 @@ describe('QqbotAccountService', () => {
     expect(accountRepository.update).toHaveBeenCalledWith(
       { selfId: '1914728559' },
       {
-        connectStatus: 'offline',
         lastError: 'NapCat 账号状态变更为离线',
       },
     );
     expect(page.list[0]).toEqual(
       expect.objectContaining({
-        connectStatus: 'offline',
+        connectStatus: 'online',
         lastError: 'NapCat 账号状态变更为离线',
+        napcat: expect.objectContaining({
+          oneBotOnline: true,
+          qqLoginStatus: 'offline',
+        }),
       }),
     );
     expect(systemNoticePublisher.publishSystemNotice).toHaveBeenCalledWith(
@@ -575,14 +630,90 @@ describe('QqbotAccountService', () => {
     );
   });
 
-  it('ignores cached NapCat offline reason after the account reconnects', async () => {
-    const checkedAt = new Date('2026-06-11T02:00:00.000Z');
+  it('does not derive QQ login online status from OneBot heartbeat cache', async () => {
+    const checkedAt = new Date();
     const account = {
       connectStatus: 'online',
       enabled: true,
       id: 'account-1',
       isDeleted: false,
-      lastConnectedAt: new Date('2026-06-11T02:00:10.000Z'),
+      lastError: null,
+      lastHeartbeatAt: new Date(),
+      name: '主账号',
+      selfId: '1914728559',
+    };
+    const binding = {
+      accountId: 'account-1',
+      bindStatus: 'bound',
+      containerId: 'container-1',
+      isDeleted: false,
+      isPrimary: true,
+      lastLoginAt: checkedAt,
+    };
+    const container = {
+      id: 'container-1',
+      isDeleted: false,
+      lastCheckedAt: checkedAt,
+      lastError: null,
+      name: 'kt-qqbot-napcat-1914728559',
+      status: 'running',
+      webuiPort: 6101,
+    };
+    const accountRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[account], 1]),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addOrderBy: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([binding]),
+          orderBy: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addSelect: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([container]),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      {} as any,
+      new ToolsService(),
+    );
+
+    const page = await service.page({});
+
+    expect(page.list[0].napcat).toEqual(
+      expect.objectContaining({
+        oneBotOnline: true,
+        qqLoginStatus: 'unknown',
+        webuiOnline: null,
+      }),
+    );
+  });
+
+  it('ignores cached NapCat offline reason after the account reconnects', async () => {
+    const now = Date.now();
+    const checkedAt = new Date(now - 10_000);
+    const account = {
+      connectStatus: 'online',
+      enabled: true,
+      id: 'account-1',
+      isDeleted: false,
+      lastConnectedAt: new Date(now - 5_000),
       lastError: null,
       name: '主账号',
       selfId: '1914728559',
@@ -654,6 +785,194 @@ describe('QqbotAccountService', () => {
       expect.objectContaining({
         connectStatus: 'online',
         lastError: null,
+      }),
+    );
+  });
+
+  it('does not let heartbeat bypass stale NapCat offline inspection', async () => {
+    const checkedAt = new Date(Date.now() - 60_000);
+    const account = {
+      connectStatus: 'online',
+      enabled: true,
+      id: 'account-1',
+      isDeleted: false,
+      lastConnectedAt: new Date(Date.now() - 120_000),
+      lastError: null,
+      lastHeartbeatAt: new Date(),
+      name: '主账号',
+      selfId: '1914728559',
+    };
+    const binding = {
+      accountId: 'account-1',
+      bindStatus: 'bound',
+      containerId: 'container-1',
+      isDeleted: false,
+      isPrimary: true,
+      lastLoginAt: checkedAt,
+    };
+    const container = {
+      id: 'container-1',
+      isDeleted: false,
+      lastCheckedAt: checkedAt,
+      lastError: null,
+      name: 'kt-qqbot-napcat-1914728559',
+      status: 'running',
+      webuiPort: 6101,
+    };
+    const accountRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[account], 1]),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const napcatContainerService = {
+      inspectRuntimeStatus: jest.fn().mockResolvedValue({
+        checkedAt: new Date(),
+        containerOnline: true,
+        lastError: '账号状态变更为离线',
+        qqLoginMessage: '账号状态变更为离线',
+        qqLoginStatus: 'offline',
+        webuiOnline: true,
+      }),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addOrderBy: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([binding]),
+          orderBy: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addSelect: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([container]),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      napcatContainerService as any,
+      new ToolsService(),
+    );
+
+    const page = await service.page({});
+
+    expect(napcatContainerService.inspectRuntimeStatus).toHaveBeenCalledWith(
+      container,
+    );
+    expect(accountRepository.update).toHaveBeenCalledWith(
+      { selfId: '1914728559' },
+      {
+        lastError: '账号状态变更为离线',
+      },
+    );
+    expect(page.list[0]).toEqual(
+      expect.objectContaining({
+        connectStatus: 'online',
+        lastError: '账号状态变更为离线',
+        napcat: expect.objectContaining({
+          oneBotOnline: true,
+          qqLoginStatus: 'offline',
+        }),
+      }),
+    );
+  });
+
+  it('clears previous QQ login error when NapCat WebUI confirms QQ is online', async () => {
+    const checkedAt = new Date(Date.now() - 60_000);
+    const account = {
+      connectStatus: 'online',
+      enabled: true,
+      id: 'account-1',
+      isDeleted: false,
+      lastConnectedAt: new Date(Date.now() - 120_000),
+      lastError: '账号状态变更为离线',
+      name: '主账号',
+      selfId: '1914728559',
+    };
+    const binding = {
+      accountId: 'account-1',
+      bindStatus: 'bound',
+      containerId: 'container-1',
+      isDeleted: false,
+      isPrimary: true,
+      lastLoginAt: checkedAt,
+    };
+    const container = {
+      id: 'container-1',
+      isDeleted: false,
+      lastCheckedAt: checkedAt,
+      lastError: '账号状态变更为离线',
+      name: 'kt-qqbot-napcat-1914728559',
+      status: 'running',
+      webuiPort: 6101,
+    };
+    const accountRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        andWhere: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[account], 1]),
+        orderBy: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const napcatContainerService = {
+      inspectRuntimeStatus: jest.fn().mockResolvedValue({
+        checkedAt: new Date(),
+        containerOnline: true,
+        lastError: null,
+        qqLoginMessage: null,
+        qqLoginStatus: 'online',
+        webuiOnline: true,
+      }),
+    };
+    const service = new QqbotAccountService(
+      accountRepository as any,
+      {} as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addOrderBy: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([binding]),
+          orderBy: jest.fn().mockReturnThis(),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      {
+        createQueryBuilder: jest.fn(() => ({
+          addSelect: jest.fn().mockReturnThis(),
+          andWhere: jest.fn().mockReturnThis(),
+          getMany: jest.fn().mockResolvedValue([container]),
+          where: jest.fn().mockReturnThis(),
+        })),
+      } as any,
+      napcatContainerService as any,
+      new ToolsService(),
+    );
+
+    const page = await service.page({});
+
+    expect(accountRepository.update).toHaveBeenCalledWith(
+      { selfId: '1914728559' },
+      { lastError: null },
+    );
+    expect(page.list[0]).toEqual(
+      expect.objectContaining({
+        lastError: null,
+        napcat: expect.objectContaining({
+          qqLoginStatus: 'online',
+        }),
       }),
     );
   });
@@ -848,7 +1167,6 @@ describe('QqbotAccountService', () => {
     expect(accountRepository.update).toHaveBeenCalledWith(
       { selfId: '1914728559' },
       {
-        connectStatus: 'offline',
         lastError: 'NapCat 自动登录后运行态密码清理失败，请手动更新登录',
       },
     );

@@ -189,6 +189,13 @@ export class QqbotNapcatLoginService {
         );
       }
       if (session.captchaUrl) {
+        if (this.isPasswordCaptchaStillRequired(status)) {
+          return this.keepPasswordCaptchaPending(
+            session,
+            session.captchaUrl,
+            status.loginError || '等待 QQ 安全验证结果',
+          );
+        }
         if (!status.isOffline && !status.loginError) {
           return this.keepPasswordCaptchaPending(
             session,
@@ -1435,6 +1442,31 @@ export class QqbotNapcatLoginService {
     return (
       this.toolsService.toTrimmedString(status.captchaUrl) ||
       this.toolsService.extractNapcatCaptchaUrl(status.loginError)
+    );
+  }
+
+  private isPasswordCaptchaStillRequired(status: NapcatLoginStatus) {
+    if (this.getCaptchaUrlFromStatus(status)) return true;
+    const message = this.toolsService.toTrimmedString(status.loginError);
+    if (
+      this.toolsService.includesAny(message, [
+        '失败',
+        '错误',
+        '过期',
+        '失效',
+        '拒绝',
+        '取消',
+      ])
+    ) {
+      return false;
+    }
+    return (
+      message.includes('proofWaterUrl') ||
+      message.includes('需要验证码') ||
+      message.includes('继续完成验证') ||
+      message.includes('需要安全验证') ||
+      message.includes('继续安全验证') ||
+      message.includes('完成安全验证')
     );
   }
 

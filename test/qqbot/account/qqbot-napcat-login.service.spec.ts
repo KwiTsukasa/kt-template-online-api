@@ -748,6 +748,96 @@ describe('QqbotNapcatLoginService', () => {
     expect(session.captchaUrl).toBe(captchaUrl);
   });
 
+  it('keeps password captcha pending before cleanup when status check throws captcha error', async () => {
+    const captchaUrl =
+      'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001';
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-password-captcha-error',
+      name: 'napcat-10001',
+    };
+    const ensureRuntimeLoginEnv = jest.fn().mockResolvedValue({
+      changed: true,
+      ok: true,
+    });
+    const containerService = {
+      detectRuntimeCaptchaUrl: jest.fn().mockImplementation(async () => {
+        const cleanedPasswordBeforeLogRead = ensureRuntimeLoginEnv.mock.calls
+          .slice(1)
+          .some(([, options]) => options?.clearLoginPassword === true);
+        return cleanedPasswordBeforeLogRead ? '' : captchaUrl;
+      }),
+      ensureRuntimeLoginEnv,
+      resetRuntimeLoginState: jest.fn().mockResolvedValue(true),
+      restartRuntimeContainer: jest.fn().mockResolvedValue(true),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS: '1',
+            QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS: '1',
+            QQBOT_NAPCAT_QUICK_LOGIN_WAIT_MS: '1',
+          };
+          return values[key] || '';
+        }),
+      } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '10001',
+      mode: 'refresh',
+      preparingRelogin: true,
+      status: 'pending',
+    });
+    (refreshService as any).sessions.set(session.id, session);
+    jest
+      .spyOn((refreshService as any).toolsService, 'sleep')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(refreshService as any, 'getLoginStatus')
+      .mockResolvedValueOnce({
+        isLogin: false,
+        loginError: '快速登录未找到历史会话',
+      })
+      .mockRejectedValueOnce(
+        new Error('密码回退需要验证码，请在 WebUi 中继续完成验证'),
+      );
+    const refreshQrcode = jest
+      .spyOn(refreshService as any, 'refreshOrGetQrcode')
+      .mockResolvedValue('fallback-qrcode');
+
+    await (refreshService as any).prepareReloginQrcode(
+      session,
+      container,
+      'qq-password',
+    );
+
+    expect(containerService.detectRuntimeCaptchaUrl).toHaveBeenCalledWith(
+      container,
+      expect.any(Number),
+    );
+    expect(refreshQrcode).not.toHaveBeenCalled();
+    expect(containerService.resetRuntimeLoginState).not.toHaveBeenCalled();
+    expect(ensureRuntimeLoginEnv).toHaveBeenCalledTimes(2);
+    expect(ensureRuntimeLoginEnv).toHaveBeenNthCalledWith(1, container, {
+      clearLoginPassword: true,
+      selfId: '10001',
+    });
+    expect(ensureRuntimeLoginEnv).toHaveBeenNthCalledWith(2, container, {
+      loginPassword: 'qq-password',
+      selfId: '10001',
+    });
+    expect(session.status).toBe('pending');
+    expect(session.captchaUrl).toBe(captchaUrl);
+    expect(session.passwordMd5).toBeTruthy();
+    expect(session.errorMessage).toContain('需要完成 QQ 安全验证');
+  });
+
   it('keeps qrcode pending when password login falls into NapCat qrcode status', async () => {
     const container = {
       baseUrl: 'http://127.0.0.1:6103/',

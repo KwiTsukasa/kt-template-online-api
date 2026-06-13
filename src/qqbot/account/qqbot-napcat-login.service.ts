@@ -1416,11 +1416,18 @@ export class QqbotNapcatLoginService {
     if (typeof this.containerService.detectRuntimeCaptchaUrl !== 'function') {
       return '';
     }
+    const recentCaptchaUrl = await this.containerService.detectRuntimeCaptchaUrl(
+      container,
+      sinceMs,
+    );
+    if (recentCaptchaUrl) return recentCaptchaUrl;
+    if (
+      !this.toolsService.isNapcatCaptchaRequiredMessage(loginStatus.loginError)
+    ) {
+      return '';
+    }
     return (
-      (await this.containerService.detectRuntimeCaptchaUrl(
-        container,
-        sinceMs,
-      )) || ''
+      (await this.containerService.detectRuntimeCaptchaUrl(container)) || ''
     );
   }
 
@@ -1713,7 +1720,18 @@ export class QqbotNapcatLoginService {
       if (index > 0) {
         await this.toolsService.sleep(this.getLoginPollIntervalMs());
       }
-      latestStatus = await this.getLoginStatus(container, true);
+      try {
+        latestStatus = await this.getLoginStatus(container, true);
+      } catch (err) {
+        const errorMessage = this.toolsService.getErrorMessage(err);
+        if (this.toolsService.isNapcatCaptchaRequiredMessage(errorMessage)) {
+          return {
+            isLogin: false,
+            loginError: errorMessage,
+          };
+        }
+        throw err;
+      }
       if (
         latestStatus.isLogin ||
         this.isPasswordQrcodeChallenge(latestStatus) ||

@@ -1232,6 +1232,7 @@ export class QqbotNapcatLoginService {
 
     let loginInfo: NapcatLoginInfo | undefined;
     let loggedInSelfId = '';
+    const passwordLogSinceMs = Date.now();
     session.passwordMd5 = createHash('md5')
       .update(password, 'utf8')
       .digest('hex');
@@ -1268,7 +1269,7 @@ export class QqbotNapcatLoginService {
       );
       loginStatus = await this.waitForPasswordLoginStatus(
         container,
-        session.lastRestartedAt,
+        passwordLogSinceMs,
       );
 
       if (loginStatus.isLogin) {
@@ -1295,7 +1296,7 @@ export class QqbotNapcatLoginService {
       const captchaUrl = await this.resolvePasswordCaptchaUrl(
         container,
         loginStatus,
-        session.lastRestartedAt,
+        passwordLogSinceMs,
       );
       if (captchaUrl) {
         this.keepPasswordCaptchaPending(

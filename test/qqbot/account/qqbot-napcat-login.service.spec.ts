@@ -748,6 +748,81 @@ describe('QqbotNapcatLoginService', () => {
     expect(session.captchaUrl).toBe(captchaUrl);
   });
 
+  it('anchors password captcha log lookup before runtime env rebuild', async () => {
+    const captchaUrl =
+      'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001';
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-password-log-window',
+      name: 'napcat-10001',
+    };
+    const passwordLogSinceMs = 1000;
+    const envRebuildStartedAt = 5000;
+    let envRebuildStarted = false;
+    const containerService = {
+      ensureRuntimeLoginEnv: jest.fn().mockImplementation(async () => {
+        envRebuildStarted = true;
+        return { changed: true, ok: true };
+      }),
+      restartRuntimeContainer: jest.fn().mockResolvedValue(true),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS: '1',
+            QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS: '1',
+          };
+          return values[key] || '';
+        }),
+      } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '10001',
+      mode: 'refresh',
+      preparingRelogin: true,
+      status: 'pending',
+    });
+    jest.spyOn(Date, 'now').mockImplementation(() =>
+      envRebuildStarted ? envRebuildStartedAt : passwordLogSinceMs,
+    );
+    jest.spyOn(refreshService as any, 'waitForPasswordLoginStatus')
+      .mockResolvedValue({
+        isLogin: false,
+        loginError: '密码回退需要验证码，请在 WebUi 中继续完成验证',
+      });
+    jest
+      .spyOn(refreshService as any, 'resolvePasswordCaptchaUrl')
+      .mockResolvedValue(captchaUrl);
+
+    const result = await (refreshService as any).tryPasswordRelogin(
+      session,
+      container,
+      'qq-password',
+    );
+
+    expect(result).toBe(true);
+    expect(
+      (refreshService as any).waitForPasswordLoginStatus,
+    ).toHaveBeenCalledWith(container, passwordLogSinceMs);
+    expect(
+      (refreshService as any).resolvePasswordCaptchaUrl,
+    ).toHaveBeenCalledWith(
+      container,
+      expect.objectContaining({ isLogin: false }),
+      passwordLogSinceMs,
+    );
+    expect(session.lastRestartedAt).toBeGreaterThanOrEqual(
+      envRebuildStartedAt,
+    );
+    expect(session.captchaUrl).toBe(captchaUrl);
+  });
+
   it('does not keep stale captcha from tail logs when current password status is processing', async () => {
     const staleCaptchaUrl =
       'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001';

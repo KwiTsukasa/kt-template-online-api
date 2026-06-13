@@ -1265,7 +1265,7 @@ response wrapper.
 
 | Method | Path              | Auth | Description                         |
 | ------ | ----------------- | ---- | ----------------------------------- |
-| GET    | `/health/runtime` | No   | Runtime health and safe config view |
+| GET    | `/health/runtime` | No   | Runtime health and config check status |
 
 Status meanings:
 

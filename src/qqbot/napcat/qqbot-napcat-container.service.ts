@@ -492,7 +492,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
         [...this.getSshArgs(), 'sh -s'],
         script,
         undefined,
-        this.getRuntimeCheckTimeoutMs(),
+        this.getCaptchaLogReadTimeoutMs(),
       );
       return this.toolsService.extractNapcatCaptchaUrl(result.stdout) || null;
     } catch {
@@ -1279,6 +1279,10 @@ ${accountRunFlag}${passwordRunFlag}  -p "$PORT:6099" \\
       this.getConfig('QQBOT_NAPCAT_RUNTIME_CHECK_TIMEOUT_MS', '5000'),
     );
     return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5000;
+  }
+
+  private getCaptchaLogReadTimeoutMs() {
+    return Math.max(this.getRuntimeCheckTimeoutMs(), 15000);
   }
 
   private sh(value: string) {

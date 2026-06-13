@@ -43,7 +43,11 @@ describe('RuntimeConfigService', () => {
       DB_PASSWORD: 'password-value',
       DB_DATABASE: 'kt',
       MINIO_ACCESS_KEY: 'minio-access-key',
-      WORDPRESS_USERNAME: 'wordpress-user',
+      WORDPRESS_ADMIN_USERNAME: 'wordpress-user',
+      WORDPRESS_ADMIN_PASSWORD: 'wordpress-password',
+      LOKI_PASSWORD: 'loki-password',
+      QQBOT_REVERSE_WS_TOKEN: 'qq-reverse-token',
+      NAPCAT_WEBUI_TOKEN: 'napcat-webui-token',
     });
 
     const snapshot = service.getSafeSnapshot();
@@ -64,9 +68,104 @@ describe('RuntimeConfigService', () => {
     expect(snapshotJson).not.toContain('abcdef123456');
     expect(snapshotJson).not.toContain('password-value');
     expect(snapshotJson).not.toContain('minio-access-key');
-    expect(snapshotJson).not.toContain('wordpress-user');
+    expect(snapshotJson).not.toContain('wordpress-password');
+    expect(snapshotJson).not.toContain('loki-password');
+    expect(snapshotJson).not.toContain('qq-reverse-token');
+    expect(snapshotJson).not.toContain('napcat-webui-token');
     expect(snapshot.minio.accessKey).toBe('mi***ey');
-    expect(snapshot.wordpress.username).toBe('wo***er');
+    expect(snapshot.wordpress.adminUsername).toBe('wordpress-user');
+    expect(snapshot.wordpress.passwordConfigured).toBe(true);
+    expect(snapshot.loki.passwordConfigured).toBe(true);
+    expect(snapshot.qqbot.reverseWsToken).toBe('qq***en');
+    expect(snapshot.qqbot.napcatWebuiToken).toBe('na***en');
+  });
+
+  it('reads current WordPress, Loki, and NapCat runtime keys without leaking secrets', () => {
+    const service = createService({
+      WORDPRESS_BASE_URL: 'https://blog.example.test',
+      WORDPRESS_HOST_HEADER: 'blog.example.test',
+      WORDPRESS_ADMIN_USERNAME: 'wordpress-admin',
+      WORDPRESS_ADMIN_PASSWORD: 'wordpress-password',
+      WORDPRESS_TIMEOUT_MS: '16000',
+      WORDPRESS_LOGIN_TIMEOUT_MS: '4000',
+      WORDPRESS_AVAILABILITY_TTL_MS: '70000',
+      LOKI_URL: 'https://loki-push.example.test',
+      LOKI_QUERY_HOST: 'https://loki-query.example.test',
+      LOKI_ENV: 'production',
+      LOKI_HTTP_REQUEST_PUSH_ENABLED: 'true',
+      LOKI_USERNAME: 'loki-user',
+      LOKI_PASSWORD: 'loki-password',
+      QQBOT_NAPCAT_ROOT: '/vol1/docker/napcat',
+      QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
+      QQBOT_NAPCAT_SSH_TARGET: 'nas',
+      QQBOT_NAPCAT_SSH_PORT: '2202',
+      QQBOT_NAPCAT_SSH_KEY_PATH: '/home/kt/.ssh/napcat',
+      QQBOT_NAPCAT_REVERSE_WS_BASE: 'ws://api.example.test/onebot',
+      QQBOT_REVERSE_WS_PATH: '/qqbot/reverse',
+      QQBOT_REVERSE_WS_TOKEN: 'qq-reverse-token',
+      NAPCAT_WEBUI_BASE_URL: 'http://127.0.0.1:6099',
+      NAPCAT_WEBUI_TOKEN: 'napcat-webui-token',
+    });
+
+    expect(service.readWordpressProfile()).toEqual({
+      baseUrl: 'https://blog.example.test',
+      hostHeader: 'blog.example.test',
+      adminUsername: 'wordpress-admin',
+      passwordConfigured: true,
+      timeoutMs: 16000,
+      loginTimeoutMs: 4000,
+      availabilityTtlMs: 70000,
+    });
+    expect(service.readLokiProfile()).toEqual({
+      enabled: true,
+      host: 'https://loki-push.example.test',
+      queryHost: 'https://loki-query.example.test',
+      environment: 'production',
+      tenantId: '',
+      username: 'loki-user',
+      passwordConfigured: true,
+    });
+    expect(service.readQqbotProfile()).toEqual({
+      reverseWsPath: '/qqbot/reverse',
+      reverseWsToken: 'qq***en',
+      napcatRoot: '/vol1/docker/napcat',
+      napcatContainerMode: 'ssh',
+      napcatSshTarget: 'nas',
+      napcatSshPort: 2202,
+      napcatSshKeyPath: '/home/kt/.ssh/napcat',
+      napcatReverseWsBase: 'ws://api.example.test/onebot',
+      napcatWebuiBaseUrl: 'http://127.0.0.1:6099',
+      napcatWebuiToken: 'na***en',
+    });
+
+    const checks = service.getConfigChecks();
+    expect(checks).toContainEqual(
+      expect.objectContaining({
+        key: 'LOKI_HOST|LOKI_URL',
+        level: 'optional',
+        present: true,
+      }),
+    );
+    expect(checks).toContainEqual(
+      expect.objectContaining({
+        key: 'QQBOT_NAPCAT_REVERSE_WS_URL|QQBOT_NAPCAT_REVERSE_WS_BASE',
+        level: 'optional',
+        present: true,
+      }),
+    );
+    expect(checks).toContainEqual(
+      expect.objectContaining({
+        key: 'NAPCAT_WEBUI_BASE_URL|QQBOT_NAPCAT_WEBUI_URL',
+        level: 'optional',
+        present: true,
+      }),
+    );
+
+    const snapshotJson = JSON.stringify(service.getSafeSnapshot());
+    expect(snapshotJson).not.toContain('wordpress-password');
+    expect(snapshotJson).not.toContain('loki-password');
+    expect(snapshotJson).not.toContain('qq-reverse-token');
+    expect(snapshotJson).not.toContain('napcat-webui-token');
   });
 
   it('marks missing required config as absent', () => {

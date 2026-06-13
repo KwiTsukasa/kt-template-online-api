@@ -24,7 +24,11 @@ export interface RuntimeDatabaseConfig {
 export interface RuntimeLokiConfig {
   enabled: boolean;
   host: string;
-  basicAuth: string;
+  queryHost: string;
+  environment: string;
+  tenantId: string;
+  username: string;
+  passwordConfigured: boolean;
 }
 
 export interface RuntimeMinioConfig {
@@ -32,19 +36,30 @@ export interface RuntimeMinioConfig {
   port: number;
   useSSL: boolean;
   accessKey: string;
+  bucket: string;
 }
 
 export interface RuntimeWordpressConfig {
-  endpoint: string;
-  username: string;
+  baseUrl: string;
+  hostHeader: string;
+  adminUsername: string;
+  passwordConfigured: boolean;
+  timeoutMs: number;
+  loginTimeoutMs: number;
+  availabilityTtlMs: number;
 }
 
 export interface RuntimeQqbotConfig {
-  reverseWsUrl: string;
-  napcatDataRoot: string;
-  napcatSshHost: string;
+  reverseWsPath: string;
+  reverseWsToken: string;
+  napcatRoot: string;
+  napcatContainerMode: string;
+  napcatSshTarget: string;
   napcatSshPort: number;
-  napcatSshUser: string;
+  napcatSshKeyPath: string;
+  napcatReverseWsBase: string;
+  napcatWebuiBaseUrl: string;
+  napcatWebuiToken: string;
 }
 
 export interface RuntimeSafeConfigSnapshot {

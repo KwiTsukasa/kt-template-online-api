@@ -22,19 +22,43 @@ const REQUIRED_CONFIG_KEYS = [
   'ADMIN_TOKEN_SECRET',
 ] as const;
 
-const OPTIONAL_CONFIG_KEYS = [
+const OPTIONAL_CONFIG_CHECKS: ReadonlyArray<string | readonly string[]> = [
   'MINIO_ENDPOINT',
   'MINIO_PORT',
   'MINIO_ACCESS_KEY',
   'MINIO_SECRET_KEY',
-  'LOKI_HOST',
-  'WORDPRESS_API_URL',
-  'QQBOT_REVERSE_WS_URL',
-  'NAPCAT_DATA_ROOT',
-  'NAPCAT_SSH_HOST',
-  'NAPCAT_SSH_PORT',
-  'NAPCAT_SSH_USER',
-] as const;
+  'MINIO_BUCKET',
+  ['LOKI_HOST', 'LOKI_URL'],
+  ['LOKI_QUERY_HOST', 'LOKI_HOST', 'LOKI_URL'],
+  'LOKI_ENV',
+  'LOKI_HTTP_REQUEST_PUSH_ENABLED',
+  'LOKI_TENANT_ID',
+  'LOKI_USERNAME',
+  'LOKI_PASSWORD',
+  'LOKI_PUSH_ENDPOINT',
+  'LOKI_QUERY_ENDPOINT',
+  'LOKI_PUSH_TIMEOUT_MS',
+  'LOKI_QUERY_TIMEOUT_MS',
+  'LOKI_BATCH_INTERVAL_SECONDS',
+  'LOKI_BATCH_MAX_BUFFER_SIZE',
+  'WORDPRESS_BASE_URL',
+  'WORDPRESS_HOST_HEADER',
+  'WORDPRESS_ADMIN_USERNAME',
+  'WORDPRESS_ADMIN_PASSWORD',
+  'WORDPRESS_TIMEOUT_MS',
+  'WORDPRESS_LOGIN_TIMEOUT_MS',
+  'WORDPRESS_AVAILABILITY_TTL_MS',
+  'QQBOT_REVERSE_WS_PATH',
+  'QQBOT_REVERSE_WS_TOKEN',
+  'QQBOT_NAPCAT_ROOT',
+  'QQBOT_NAPCAT_CONTAINER_MODE',
+  'QQBOT_NAPCAT_SSH_TARGET',
+  'QQBOT_NAPCAT_SSH_PORT',
+  'QQBOT_NAPCAT_SSH_KEY_PATH',
+  ['QQBOT_NAPCAT_REVERSE_WS_URL', 'QQBOT_NAPCAT_REVERSE_WS_BASE'],
+  ['NAPCAT_WEBUI_BASE_URL', 'QQBOT_NAPCAT_WEBUI_URL'],
+  ['NAPCAT_WEBUI_TOKEN', 'QQBOT_NAPCAT_WEBUI_TOKEN'],
+];
 
 @Injectable()
 export class RuntimeConfigService {
@@ -61,10 +85,23 @@ export class RuntimeConfigService {
   }
 
   readLokiProfile(): RuntimeLokiConfig {
+    const host = this.getFirstString(['LOKI_HOST', 'LOKI_URL']);
+
     return {
-      enabled: this.getBoolean('LOKI_ENABLED', false),
-      host: this.getString('LOKI_HOST'),
-      basicAuth: this.maskSecret(this.configService.get('LOKI_BASIC_AUTH')),
+      enabled: !!host && this.getBoolean('LOKI_HTTP_REQUEST_PUSH_ENABLED', true),
+      host,
+      queryHost: this.getFirstString([
+        'LOKI_QUERY_HOST',
+        'LOKI_HOST',
+        'LOKI_URL',
+      ]),
+      environment: this.getString(
+        'LOKI_ENV',
+        this.getString('NODE_ENV', 'development'),
+      ),
+      tenantId: this.getString('LOKI_TENANT_ID'),
+      username: this.getString('LOKI_USERNAME'),
+      passwordConfigured: !!this.getString('LOKI_PASSWORD'),
     };
   }
 
@@ -74,23 +111,58 @@ export class RuntimeConfigService {
       port: this.getPositiveNumber('MINIO_PORT', 9000),
       useSSL: this.getBoolean('MINIO_USE_SSL', false),
       accessKey: this.maskSecret(this.configService.get('MINIO_ACCESS_KEY')),
+      bucket: this.getString('MINIO_BUCKET', 'kt-template-online'),
     };
   }
 
   readWordpressProfile(): RuntimeWordpressConfig {
+    const timeoutMs = this.getPositiveNumber('WORDPRESS_TIMEOUT_MS', 15000);
+
     return {
-      endpoint: this.getString('WORDPRESS_API_URL'),
-      username: this.maskSecret(this.configService.get('WORDPRESS_USERNAME')),
+      baseUrl: this.getString('WORDPRESS_BASE_URL'),
+      hostHeader: this.getString('WORDPRESS_HOST_HEADER'),
+      adminUsername: this.getString('WORDPRESS_ADMIN_USERNAME'),
+      passwordConfigured: !!this.getString('WORDPRESS_ADMIN_PASSWORD'),
+      timeoutMs,
+      loginTimeoutMs: this.getPositiveNumber(
+        'WORDPRESS_LOGIN_TIMEOUT_MS',
+        this.getPositiveNumber('WORDPRESS_TIMEOUT_MS', 3000),
+      ),
+      availabilityTtlMs: this.getPositiveNumber(
+        'WORDPRESS_AVAILABILITY_TTL_MS',
+        60_000,
+      ),
     };
   }
 
   readQqbotProfile(): RuntimeQqbotConfig {
     return {
-      reverseWsUrl: this.getString('QQBOT_REVERSE_WS_URL'),
-      napcatDataRoot: this.getString('NAPCAT_DATA_ROOT'),
-      napcatSshHost: this.getString('NAPCAT_SSH_HOST'),
-      napcatSshPort: this.getPositiveNumber('NAPCAT_SSH_PORT', 22),
-      napcatSshUser: this.getString('NAPCAT_SSH_USER'),
+      reverseWsPath: this.getString(
+        'QQBOT_REVERSE_WS_PATH',
+        '/qqbot/onebot/reverse',
+      ),
+      reverseWsToken: this.maskSecret(
+        this.configService.get('QQBOT_REVERSE_WS_TOKEN'),
+      ),
+      napcatRoot: this.getString(
+        'QQBOT_NAPCAT_ROOT',
+        '/vol1/docker/kt-qqbot/napcat-instances',
+      ),
+      napcatContainerMode: this.getString('QQBOT_NAPCAT_CONTAINER_MODE'),
+      napcatSshTarget: this.getString('QQBOT_NAPCAT_SSH_TARGET', 'nas'),
+      napcatSshPort: this.getPositiveNumber('QQBOT_NAPCAT_SSH_PORT', 22),
+      napcatSshKeyPath: this.getString('QQBOT_NAPCAT_SSH_KEY_PATH'),
+      napcatReverseWsBase: this.getFirstString([
+        'QQBOT_NAPCAT_REVERSE_WS_URL',
+        'QQBOT_NAPCAT_REVERSE_WS_BASE',
+      ]),
+      napcatWebuiBaseUrl: this.getFirstString([
+        'NAPCAT_WEBUI_BASE_URL',
+        'QQBOT_NAPCAT_WEBUI_URL',
+      ]),
+      napcatWebuiToken: this.maskSecret(
+        this.getFirstString(['NAPCAT_WEBUI_TOKEN', 'QQBOT_NAPCAT_WEBUI_TOKEN']),
+      ),
     };
   }
 
@@ -109,7 +181,11 @@ export class RuntimeConfigService {
   getConfigChecks(): RuntimeConfigCheck[] {
     return [
       ...REQUIRED_CONFIG_KEYS.map((key) => this.createCheck(key, 'required')),
-      ...OPTIONAL_CONFIG_KEYS.map((key) => this.createCheck(key, 'optional')),
+      ...OPTIONAL_CONFIG_CHECKS.map((check) =>
+        typeof check === 'string'
+          ? this.createCheck(check, 'optional')
+          : this.createAnyCheck([...check], 'optional'),
+      ),
     ];
   }
 
@@ -137,9 +213,34 @@ export class RuntimeConfigService {
     };
   }
 
+  private createAnyCheck(
+    keys: string[],
+    level: RuntimeConfigCheckLevel,
+  ): RuntimeConfigCheck {
+    const key = keys.join('|');
+    const value = this.getFirstString(keys);
+    const present = !!value;
+
+    return {
+      key,
+      level,
+      present,
+      maskedValue: present ? this.maskSecret(value) : undefined,
+      message: present ? undefined : `${key} is not configured`,
+    };
+  }
+
   private getString(key: string, fallback = '') {
     const value = this.toolsService.toTrimmedString(this.configService.get(key));
     return value || fallback;
+  }
+
+  private getFirstString(keys: string[], fallback = '') {
+    for (const key of keys) {
+      const value = this.getString(key);
+      if (value) return value;
+    }
+    return fallback;
   }
 
   private getPositiveNumber(key: string, fallback: number) {

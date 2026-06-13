@@ -41,7 +41,8 @@ const swaggerGroups: SwaggerDocumentGroup[] = [
     path: 'api/wordpress',
   },
   {
-    matcher: (path) => path === '/' || path.startsWith('/minio'),
+    matcher: (path) =>
+      path === '/' || path.startsWith('/minio') || path.startsWith('/health'),
     name: '基础能力',
     path: 'api/basic',
   },

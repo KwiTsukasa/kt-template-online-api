@@ -1009,50 +1009,77 @@ Add `RuntimeModule` to `imports` after `CommonModule`:
 
 ```ts
 import { RuntimeHealthService } from '../../src/runtime/health/runtime-health.service';
+import type { RuntimeSafeConfigSnapshot } from '../../src/runtime/config/runtime-config.types';
+
+function createSnapshot(
+  checks: RuntimeSafeConfigSnapshot['checks'],
+): RuntimeSafeConfigSnapshot {
+  return {
+    app: { nodeEnv: 'test', port: 48085 },
+    database: {
+      host: 'mysql',
+      port: 3306,
+      database: 'kt',
+      username: 'root',
+      synchronize: false,
+    },
+    loki: {
+      transportEnabled: true,
+      httpRequestPushEnabled: true,
+      queryConfigured: true,
+      host: 'https://loki-push.example.test',
+      queryHost: 'https://loki-query.example.test',
+      environment: 'test',
+      tenantId: 'kt',
+      username: 'loki-user',
+      passwordConfigured: true,
+    },
+    minio: {
+      endpoint: 'minio',
+      port: 9000,
+      useSSL: false,
+      accessKey: 'mi***ey',
+      bucket: 'kt-template-online',
+    },
+    wordpress: {
+      baseUrl: 'https://blog.example.test',
+      hostHeader: 'blog.example.test',
+      adminUsername: 'wordpress-admin',
+      passwordConfigured: true,
+      timeoutMs: 15000,
+      loginTimeoutMs: 3000,
+      availabilityTtlMs: 60000,
+    },
+    qqbot: {
+      reverseWsPath: '/qqbot/onebot/reverse',
+      reverseWsToken: 'qq***en',
+      napcatRoot: '/vol1/docker/napcat',
+      napcatContainerMode: 'ssh',
+      napcatSshTarget: 'nas',
+      napcatSshPort: 2202,
+      napcatSshKeyPath: '/home/kt/.ssh/napcat',
+      napcatReverseWsBase: 'ws://api.example.test/onebot',
+      napcatWebuiBaseUrl: 'http://127.0.0.1:6099',
+      napcatWebuiToken: 'na***en',
+    },
+    checks,
+  };
+}
+
+function createService(snapshot: RuntimeSafeConfigSnapshot) {
+  return new RuntimeHealthService({
+    getSafeSnapshot: jest.fn(() => snapshot),
+  } as any);
+}
 
 describe('RuntimeHealthService', () => {
-  it('returns ready when required config is present and optional config is present', () => {
-    const service = new RuntimeHealthService({
-      getSafeSnapshot: () => ({
-        app: { nodeEnv: 'test', port: 48085 },
-        database: {
-          host: 'mysql',
-          port: 3306,
-          database: 'kt',
-          username: 'root',
-          synchronize: false,
-        },
-        loki: {
-          transportEnabled: false,
-          httpRequestPushEnabled: false,
-          queryConfigured: false,
-          host: '',
-          queryHost: '',
-          environment: 'test',
-          tenantId: '',
-          username: '',
-          passwordConfigured: false,
-        },
-        minio: {
-          endpoint: 'minio',
-          port: 9000,
-          useSSL: false,
-          accessKey: 'mi***ey',
-        },
-        wordpress: { endpoint: 'https://example.test', username: 'wo***er' },
-        qqbot: {
-          reverseWsUrl: 'ws://127.0.0.1:3001',
-          napcatDataRoot: '/data/napcat',
-          napcatSshHost: 'nas',
-          napcatSshPort: 22,
-          napcatSshUser: 'root',
-        },
-        checks: [
-          { key: 'DB_HOST', level: 'required', present: true },
-          { key: 'MINIO_ENDPOINT', level: 'optional', present: true },
-        ],
-      }),
-    } as any);
+  it('returns ready when required and optional checks are present', () => {
+    const service = createService(
+      createSnapshot([
+        { key: 'DB_HOST', level: 'required', present: true },
+        { key: 'MINIO_ENDPOINT', level: 'optional', present: true },
+      ]),
+    );
 
     expect(service.getRuntimeHealth()).toEqual(
       expect.objectContaining({
@@ -1063,52 +1090,17 @@ describe('RuntimeHealthService', () => {
   });
 
   it('returns blocked when required config is missing', () => {
-    const service = new RuntimeHealthService({
-      getSafeSnapshot: () => ({
-        app: { nodeEnv: 'test', port: 48085 },
-        database: {
-          host: '',
-          port: 3306,
-          database: '',
-          username: '',
-          synchronize: false,
+    const service = createService(
+      createSnapshot([
+        {
+          key: 'DB_PASSWORD',
+          level: 'required',
+          present: false,
+          message: 'DB_PASSWORD is not configured',
         },
-        loki: {
-          transportEnabled: false,
-          httpRequestPushEnabled: false,
-          queryConfigured: false,
-          host: '',
-          queryHost: '',
-          environment: 'test',
-          tenantId: '',
-          username: '',
-          passwordConfigured: false,
-        },
-        minio: { endpoint: '', port: 9000, useSSL: false, accessKey: '' },
-        wordpress: { endpoint: '', username: '' },
-        qqbot: {
-          reverseWsUrl: '',
-          napcatDataRoot: '',
-          napcatSshHost: '',
-          napcatSshPort: 22,
-          napcatSshUser: '',
-        },
-        checks: [
-          {
-            key: 'DB_PASSWORD',
-            level: 'required',
-            present: false,
-            message: 'DB_PASSWORD is not configured',
-          },
-          {
-            key: 'MINIO_ENDPOINT',
-            level: 'optional',
-            present: false,
-            message: 'MINIO_ENDPOINT is not configured',
-          },
-        ],
-      }),
-    } as any);
+        { key: 'MINIO_ENDPOINT', level: 'optional', present: true },
+      ]),
+    );
 
     const report = service.getRuntimeHealth();
 
@@ -1121,6 +1113,31 @@ describe('RuntimeHealthService', () => {
       }),
     );
   });
+
+  it('returns degraded when only optional config is missing', () => {
+    const service = createService(
+      createSnapshot([
+        { key: 'DB_HOST', level: 'required', present: true },
+        {
+          key: 'LOKI_PASSWORD',
+          level: 'optional',
+          present: false,
+          message: 'LOKI_PASSWORD is not configured',
+        },
+      ]),
+    );
+
+    const report = service.getRuntimeHealth();
+
+    expect(report.status).toBe('degraded');
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        name: 'config:LOKI_PASSWORD',
+        status: 'degraded',
+        critical: false,
+      }),
+    );
+  });
 });
 ```
 
@@ -1128,10 +1145,11 @@ describe('RuntimeHealthService', () => {
 
 ```ts
 import { RuntimeHealthController } from '../../src/runtime/health/runtime-health.controller';
+import type { RuntimeHealthReport } from '../../src/runtime/health/runtime-health.types';
 
 describe('RuntimeHealthController', () => {
   it('returns the runtime health report from the service', () => {
-    const report = {
+    const report: RuntimeHealthReport = {
       service: 'kt-template-online-api',
       checkedAt: '2026-06-13T00:00:00.000Z',
       status: 'ready',
@@ -1156,18 +1174,37 @@ describe('RuntimeHealthController', () => {
           username: '',
           passwordConfigured: false,
         },
-        minio: { endpoint: '', port: 9000, useSSL: false, accessKey: '' },
-        wordpress: { endpoint: '', username: '' },
+        minio: {
+          endpoint: 'minio',
+          port: 9000,
+          useSSL: false,
+          accessKey: 'mi***ey',
+          bucket: 'kt-template-online',
+        },
+        wordpress: {
+          baseUrl: 'https://blog.example.test',
+          hostHeader: 'blog.example.test',
+          adminUsername: 'wordpress-admin',
+          passwordConfigured: true,
+          timeoutMs: 15000,
+          loginTimeoutMs: 3000,
+          availabilityTtlMs: 60000,
+        },
         qqbot: {
-          reverseWsUrl: '',
-          napcatDataRoot: '',
-          napcatSshHost: '',
-          napcatSshPort: 22,
-          napcatSshUser: '',
+          reverseWsPath: '/qqbot/onebot/reverse',
+          reverseWsToken: 'qq***en',
+          napcatRoot: '/vol1/docker/napcat',
+          napcatContainerMode: 'ssh',
+          napcatSshTarget: 'nas',
+          napcatSshPort: 2202,
+          napcatSshKeyPath: '/home/kt/.ssh/napcat',
+          napcatReverseWsBase: 'ws://api.example.test/onebot',
+          napcatWebuiBaseUrl: 'http://127.0.0.1:6099',
+          napcatWebuiToken: 'na***en',
         },
         checks: [],
       },
-    } as const;
+    };
     const service = { getRuntimeHealth: jest.fn(() => report) };
     const controller = new RuntimeHealthController(service as any);
 
@@ -1193,7 +1230,7 @@ pnpm run typecheck
 
 ```powershell
 git status --short
-git add src/runtime src/app.module.ts src/main.ts test/runtime
+git add src/runtime src/app.module.ts src/main.ts test/runtime docs/superpowers/plans/2026-06-13-api-runtime-foundation.md
 git diff --cached --check
 git commit -m "feat: 添加API运行时健康检查"
 ```

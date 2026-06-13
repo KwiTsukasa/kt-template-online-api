@@ -18,6 +18,7 @@ import { AdminModule } from './admin/admin.module';
 import { BlogModule } from './blog/blog.module';
 import { WordpressModule } from './wordpress/wordpress.module';
 import { QqbotModule } from './qqbot/qqbot.module';
+import { RuntimeModule } from './runtime';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { QqbotModule } from './qqbot/qqbot.module';
     }),
     MinioClientModule,
     CommonModule,
+    RuntimeModule,
     AdminModule,
     BlogModule,
     WordpressModule,

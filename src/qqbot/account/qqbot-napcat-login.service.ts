@@ -1285,6 +1285,10 @@ export class QqbotNapcatLoginService {
     }
 
     if (!loginStatus.isLogin) {
+      if (this.isPasswordQrcodeChallenge(loginStatus)) {
+        await this.keepPasswordQrcodePending(session, container, loginStatus);
+        return true;
+      }
       const captchaUrl = await this.resolvePasswordCaptchaUrl(
         container,
         loginStatus,
@@ -1363,6 +1367,45 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
+  private async keepPasswordQrcodePending(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    loginStatus: NapcatLoginStatus,
+  ) {
+    await this.clearRuntimeLoginPasswordAfterFailedPassword(
+      session,
+      container,
+      session.expectedSelfId,
+    );
+    this.publishScanResultEvent(
+      session,
+      'password-login-qrcode',
+      'processing',
+      '密码登录未完成，已切换到扫码确认',
+    );
+    session.qrcode = await this.refreshOrGetQrcode(container, true, {
+      fallbackStatus: loginStatus,
+      requireFresh: this.toolsService.isNapcatExpiredQrcodeStatus(loginStatus),
+      staleQrcode: loginStatus.qrcodeurl,
+    });
+    session.captchaUrl = undefined;
+    session.errorMessage = undefined;
+    session.expiresAt = Date.now() + this.getSessionTtlMs();
+    this.sessions.set(session.id, session);
+    this.publishScanResultEvent(
+      session,
+      'qrcode-ready',
+      'success',
+      '登录二维码已生成',
+    );
+    this.publishScanResultEvent(
+      session,
+      'waiting-scan',
+      'processing',
+      '等待扫码确认',
+    );
+  }
+
   private async resolvePasswordCaptchaUrl(
     container: QqbotNapcatRuntime,
     loginStatus: NapcatLoginStatus,
@@ -1383,6 +1426,13 @@ export class QqbotNapcatLoginService {
 
   private getCaptchaUrlFromStatus(status: NapcatLoginStatus) {
     return this.toolsService.extractNapcatCaptchaUrl(status.loginError);
+  }
+
+  private isPasswordQrcodeChallenge(status: NapcatLoginStatus) {
+    return (
+      !!this.toolsService.toTrimmedString(status.qrcodeurl) ||
+      this.toolsService.isNapcatExpiredQrcodeStatus(status)
+    );
   }
 
   private async clearRuntimeLoginPasswordBeforeQuick(
@@ -1666,6 +1716,7 @@ export class QqbotNapcatLoginService {
       latestStatus = await this.getLoginStatus(container, true);
       if (
         latestStatus.isLogin ||
+        this.isPasswordQrcodeChallenge(latestStatus) ||
         this.toolsService.isNapcatCaptchaRequiredMessage(
           latestStatus.loginError,
         )

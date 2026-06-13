@@ -418,7 +418,11 @@ describe('QqbotNapcatContainerService', () => {
     service.runProcess = jest
       .fn()
       .mockRejectedValueOnce(new Error('inspect failed'))
-      .mockResolvedValueOnce({ stderr: '', stdout: '' });
+      .mockResolvedValueOnce({ stderr: '', stdout: '' })
+      .mockResolvedValueOnce({
+        stderr: '',
+        stdout: 'ACCOUNT=2354598417\nNAPCAT_QUICK_PASSWORD=qq-password\n',
+      });
 
     const recreated = await service.ensureRuntimeLoginEnv(
       { id: 'container-1', name: 'kt-qqbot-napcat-x' },
@@ -429,7 +433,7 @@ describe('QqbotNapcatContainerService', () => {
     );
 
     expect(recreated).toEqual({ changed: true, ok: true });
-    expect(service.runProcess).toHaveBeenCalledTimes(2);
+    expect(service.runProcess).toHaveBeenCalledTimes(3);
     expect(service.runProcess.mock.calls[1][2]).toContain(
       "NAPCAT_QUICK_PASSWORD='qq-password'",
     );
@@ -466,7 +470,11 @@ describe('QqbotNapcatContainerService', () => {
     service.runProcess = jest
       .fn()
       .mockResolvedValueOnce({ stderr: '', stdout: 'ACCOUNT=2354598417\n' })
-      .mockResolvedValueOnce({ stderr: '', stdout: '' });
+      .mockResolvedValueOnce({ stderr: '', stdout: '' })
+      .mockResolvedValueOnce({
+        stderr: '',
+        stdout: 'ACCOUNT=2354598417\nNAPCAT_QUICK_PASSWORD=qq-password\n',
+      });
 
     const recreated = await service.ensureRuntimeLoginEnv(
       { id: 'container-1', name: 'kt-qqbot-napcat-x' },
@@ -477,7 +485,7 @@ describe('QqbotNapcatContainerService', () => {
     );
 
     expect(recreated).toEqual({ changed: true, ok: true });
-    expect(service.runProcess).toHaveBeenCalledTimes(2);
+    expect(service.runProcess).toHaveBeenCalledTimes(3);
     expect(service.runProcess.mock.calls[1][2]).toContain(
       "NAPCAT_QUICK_PASSWORD='qq-password'",
     );
@@ -485,6 +493,59 @@ describe('QqbotNapcatContainerService', () => {
       { id: 'container-1' },
       expect.objectContaining({
         lastError: null,
+        status: 'running',
+      }),
+    );
+  });
+
+  it('fails login env preparation when recreated container still misses password env', async () => {
+    const containerRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        addSelect: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          dataDir: '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-x',
+          id: 'container-1',
+          image: 'mlikiowa/napcat-docker:latest',
+          name: 'kt-qqbot-napcat-x',
+          reverseWsUrl: 'ws://127.0.0.1:48085/qqbot/onebot/reverse',
+          webuiPort: 6100,
+          webuiToken: 'token-x',
+        }),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string) =>
+          key === 'QQBOT_NAPCAT_CONTAINER_MODE' ? 'ssh' : '',
+        ),
+      } as any,
+      containerRepository as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+    service.runProcess = jest
+      .fn()
+      .mockResolvedValueOnce({ stderr: '', stdout: 'ACCOUNT=2354598417\n' })
+      .mockResolvedValueOnce({ stderr: '', stdout: '' })
+      .mockResolvedValueOnce({ stderr: '', stdout: 'ACCOUNT=2354598417\n' });
+
+    const recreated = await service.ensureRuntimeLoginEnv(
+      { id: 'container-1', name: 'kt-qqbot-napcat-x' },
+      {
+        loginPassword: 'qq-password',
+        selfId: '2354598417',
+      },
+    );
+
+    expect(recreated).toEqual({ changed: true, ok: false });
+    expect(service.runProcess).toHaveBeenCalledTimes(3);
+    expect(containerRepository.update).toHaveBeenCalledWith(
+      { id: 'container-1' },
+      expect.objectContaining({
+        lastError: 'NapCat 运行态登录环境校验失败',
         status: 'running',
       }),
     );
@@ -524,7 +585,8 @@ describe('QqbotNapcatContainerService', () => {
         stderr: '',
         stdout: 'ACCOUNT=2354598417\nNAPCAT_QUICK_PASSWORD=old-password\n',
       })
-      .mockResolvedValueOnce({ stderr: '', stdout: '' });
+      .mockResolvedValueOnce({ stderr: '', stdout: '' })
+      .mockResolvedValueOnce({ stderr: '', stdout: 'ACCOUNT=2354598417\n' });
 
     const recreated = await service.ensureRuntimeLoginEnv(
       { id: 'container-1', name: 'kt-qqbot-napcat-x' },

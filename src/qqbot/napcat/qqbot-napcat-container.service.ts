@@ -132,15 +132,19 @@ export class QqbotNapcatContainerService {
         skipPull: true,
         token: container.webuiToken,
       });
+      const verified = await this.runtimeMatchesLoginEnv(container.name, {
+        ...options,
+        selfId: account,
+      });
       await this.containerRepository.update(
         { id: container.id },
         {
-          lastError: null,
+          lastError: verified ? null : 'NapCat 运行态登录环境校验失败',
           lastStartedAt: new Date(),
           status: 'running',
         },
       );
-      return { changed: true, ok: true };
+      return { changed: true, ok: verified };
     } catch {
       return { changed: false, ok: false };
     }

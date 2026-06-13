@@ -748,6 +748,162 @@ describe('QqbotNapcatLoginService', () => {
     expect(session.captchaUrl).toBe(captchaUrl);
   });
 
+  it('keeps qrcode pending when password login falls into NapCat qrcode status', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-password-qrcode',
+      name: 'napcat-10001',
+    };
+    const containerService = {
+      ensureRuntimeLoginEnv: jest
+        .fn()
+        .mockResolvedValueOnce({ changed: false, ok: true })
+        .mockResolvedValueOnce({ changed: true, ok: true })
+        .mockResolvedValueOnce({ changed: true, ok: true }),
+      resetRuntimeLoginState: jest.fn().mockResolvedValue(true),
+      restartRuntimeContainer: jest.fn().mockResolvedValue(true),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS: '1',
+            QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS: '10',
+            QQBOT_NAPCAT_QUICK_LOGIN_WAIT_MS: '1',
+          };
+          return values[key] || '';
+        }),
+      } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '10001',
+      mode: 'refresh',
+      preparingRelogin: true,
+      status: 'pending',
+    });
+    (refreshService as any).sessions.set(session.id, session);
+    jest
+      .spyOn((refreshService as any).toolsService, 'sleep')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(refreshService as any, 'getLoginStatus')
+      .mockResolvedValueOnce({
+        isLogin: false,
+        loginError: '快速登录未找到历史会话',
+      })
+      .mockResolvedValueOnce({
+        isLogin: false,
+        loginError: '二维码已过期，请刷新',
+        qrcodeurl: 'expired-qrcode',
+      });
+    const refreshQrcode = jest
+      .spyOn(refreshService as any, 'refreshOrGetQrcode')
+      .mockResolvedValue('fresh-qrcode');
+
+    await (refreshService as any).prepareReloginQrcode(
+      session,
+      container,
+      'qq-password',
+    );
+
+    expect(containerService.resetRuntimeLoginState).not.toHaveBeenCalled();
+    expect(refreshQrcode).toHaveBeenCalledWith(
+      container,
+      true,
+      expect.objectContaining({
+        requireFresh: true,
+        staleQrcode: 'expired-qrcode',
+      }),
+    );
+    expect(session.status).toBe('pending');
+    expect(session.captchaUrl).toBeUndefined();
+    expect(session.passwordMd5).toBeUndefined();
+    expect(session.qrcode).toBe('fresh-qrcode');
+    const steps = (
+      (refreshService as any).sessionEventLogs.get(session.id) ?? []
+    ).map((event: { step: string }) => event.step);
+    expect(steps).toContain('password-login-qrcode');
+    expect(steps).not.toContain('relogin-reset-start');
+  });
+
+  it('prioritizes current qrcode status over stale captcha URL in runtime logs', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-password-qrcode-over-captcha-log',
+      name: 'napcat-10001',
+    };
+    const containerService = {
+      detectRuntimeCaptchaUrl: jest
+        .fn()
+        .mockResolvedValue(
+          'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001',
+        ),
+      ensureRuntimeLoginEnv: jest
+        .fn()
+        .mockResolvedValueOnce({ changed: false, ok: true })
+        .mockResolvedValueOnce({ changed: true, ok: true })
+        .mockResolvedValueOnce({ changed: true, ok: true }),
+      resetRuntimeLoginState: jest.fn().mockResolvedValue(true),
+      restartRuntimeContainer: jest.fn().mockResolvedValue(true),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS: '1',
+            QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS: '10',
+          };
+          return values[key] || '';
+        }),
+      } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '10001',
+      mode: 'refresh',
+      preparingRelogin: true,
+      status: 'pending',
+    });
+    (refreshService as any).sessions.set(session.id, session);
+    jest
+      .spyOn((refreshService as any).toolsService, 'sleep')
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(refreshService as any, 'getLoginStatus')
+      .mockResolvedValueOnce({
+        isLogin: false,
+        loginError: '快速登录未找到历史会话',
+      })
+      .mockResolvedValueOnce({
+        isLogin: false,
+        loginError: '二维码已过期，请刷新',
+        qrcodeurl: 'expired-qrcode',
+      });
+    jest
+      .spyOn(refreshService as any, 'refreshOrGetQrcode')
+      .mockResolvedValue('fresh-qrcode');
+
+    await (refreshService as any).prepareReloginQrcode(
+      session,
+      container,
+      'qq-password',
+    );
+
+    expect(containerService.detectRuntimeCaptchaUrl).not.toHaveBeenCalled();
+    expect(session.status).toBe('pending');
+    expect(session.captchaUrl).toBeUndefined();
+    expect(session.qrcode).toBe('fresh-qrcode');
+  });
+
   it('submits captcha result back to NapCat and completes password login', async () => {
     const accountService = {
       ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
@@ -961,6 +1117,42 @@ describe('QqbotNapcatLoginService', () => {
     });
 
     expect(status.loginError).toContain(captchaUrl);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('returns qrcode status immediately without waiting full password window', async () => {
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS: '1000',
+            QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS: '3000',
+          };
+          return values[key] || '';
+        }),
+      } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      {} as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const getLoginStatus = jest
+      .spyOn(refreshService as any, 'getLoginStatus')
+      .mockResolvedValue({
+        isLogin: false,
+        loginError: '二维码已过期，请刷新',
+        qrcodeurl: 'expired-qrcode',
+      });
+    const sleep = jest.spyOn((refreshService as any).toolsService, 'sleep');
+
+    const status = await (refreshService as any).waitForPasswordLoginStatus({
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-qrcode-early',
+      name: 'napcat-10001',
+      webuiToken: 'token',
+    });
+
+    expect(status.qrcodeurl).toBe('expired-qrcode');
+    expect(getLoginStatus).toHaveBeenCalledTimes(1);
     expect(sleep).not.toHaveBeenCalled();
   });
 

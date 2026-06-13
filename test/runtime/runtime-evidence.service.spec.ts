@@ -23,6 +23,25 @@ describe('RuntimeEvidenceService', () => {
     expect(record.schemaVersion).toBe(1);
   });
 
+  it('keeps duration non-negative when evidence ends before it starts', () => {
+    const service = new RuntimeEvidenceService();
+    const startedAt = new Date('2026-06-13T00:00:01.250Z');
+    const endedAt = new Date('2026-06-13T00:00:00.000Z');
+
+    const record = service.createRecord({
+      title: 'runtime config smoke',
+      taskType: 'backend',
+      project: 'kt-template-online-api',
+      environment: 'local',
+      operation: 'runtime-config',
+      status: 'failed',
+      startedAt,
+      endedAt,
+    });
+
+    expect(record.durationMs).toBe(0);
+  });
+
   it('redacts nested sensitive fields in details and cleanup details', () => {
     const service = new RuntimeEvidenceService();
 
@@ -108,5 +127,56 @@ describe('RuntimeEvidenceService', () => {
         count: 2,
       },
     });
+  });
+
+  it('sanitizes sensitive key-value text across the whole evidence record without mutating input', () => {
+    const service = new RuntimeEvidenceService();
+    const input = {
+      title: 'safe title token=raw-token',
+      taskType: 'api',
+      project: 'kt-template-online-api',
+      environment: 'local',
+      operation: 'qqbot-login',
+      target: 'account safe text Authorization=Bearer raw-token',
+      status: 'failed' as const,
+      error: {
+        category: 'operation_failed' as const,
+        operation: 'captcha',
+        message: 'safe error message ticket=raw-ticket',
+        cause:
+          'safe cause randstr=raw-randstr Authorization: Bearer raw-token Cookie=session=raw-cookie',
+        retryable: false,
+      },
+      assertions: [
+        {
+          name: 'reply text check',
+          passed: false,
+          message: 'safe assertion replyText=raw-reply-text',
+        },
+      ],
+      cleanup: {
+        status: 'failed' as const,
+        message: 'safe cleanup Cookie=session=raw-cookie',
+      },
+    };
+
+    const record = service.createRecord(input);
+    const serialized = JSON.stringify(record);
+
+    expect(serialized).not.toContain('raw-ticket');
+    expect(serialized).not.toContain('raw-randstr');
+    expect(serialized).not.toContain('raw-token');
+    expect(serialized).not.toContain('raw-cookie');
+    expect(serialized).not.toContain('raw-reply-text');
+    expect(serialized).toContain('safe title');
+    expect(serialized).toContain('safe error message');
+    expect(serialized).toContain('safe cause');
+    expect(serialized).toContain('safe assertion');
+    expect(serialized).toContain('safe cleanup');
+    expect(input.title).toContain('raw-token');
+    expect(input.error.message).toContain('raw-ticket');
+    expect(input.error.cause).toContain('raw-randstr');
+    expect(input.assertions[0].message).toContain('raw-reply-text');
+    expect(input.cleanup.message).toContain('raw-cookie');
   });
 });

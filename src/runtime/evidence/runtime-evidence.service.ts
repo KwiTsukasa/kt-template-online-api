@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import {
-  RuntimeEvidenceCleanupResult,
   RuntimeEvidenceInput,
   RuntimeEvidenceRecord,
 } from './runtime-evidence.types';
@@ -8,44 +7,31 @@ import {
 const REDACTED_VALUE = '<redacted>';
 const SENSITIVE_KEY_PATTERN =
   /password|secret|token|authorization|cookie|privateKey|sshKey|ticket|randstr|replyText/i;
+const SENSITIVE_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/\b(Authorization)\s*[:=]\s*Bearer\s+[^\s,;]+/gi, '$1=<redacted>'],
+  [/\b(Cookie)\s*[:=]\s*[^\s,;]+/gi, '$1=<redacted>'],
+  [/\b(ticket|randstr|token|replyText)\s*=\s*[^\s,;&]+/gi, '$1=<redacted>'],
+];
 
 @Injectable()
 export class RuntimeEvidenceService {
   createRecord(input: RuntimeEvidenceInput): RuntimeEvidenceRecord {
     const startedAt = input.startedAt ?? new Date();
     const endedAt = input.endedAt ?? new Date();
-
-    return {
+    const record: RuntimeEvidenceRecord = {
       ...input,
       startedAt,
       endedAt,
       durationMs: Math.max(0, endedAt.getTime() - startedAt.getTime()),
       schemaVersion: 1,
-      details: this.sanitizeRecord(input.details),
-      cleanup: this.sanitizeCleanup(input.cleanup),
     };
-  }
 
-  private sanitizeCleanup(
-    cleanup?: RuntimeEvidenceCleanupResult,
-  ): RuntimeEvidenceCleanupResult | undefined {
-    if (!cleanup) return undefined;
-
-    return {
-      ...cleanup,
-      details: this.sanitizeRecord(cleanup.details),
-    };
-  }
-
-  private sanitizeRecord(
-    value?: Record<string, unknown>,
-  ): Record<string, unknown> | undefined {
-    if (!value) return undefined;
-    return this.sanitizeValue(value) as Record<string, unknown>;
+    return this.sanitizeValue(record) as RuntimeEvidenceRecord;
   }
 
   private sanitizeValue(value: unknown): unknown {
     if (value instanceof Date) return value;
+    if (typeof value === 'string') return this.sanitizeText(value);
     if (Array.isArray(value)) {
       return value.map((item) => this.sanitizeValue(item));
     }
@@ -58,6 +44,13 @@ export class RuntimeEvidenceService {
       );
     }
     return value;
+  }
+
+  private sanitizeText(value: string) {
+    return SENSITIVE_TEXT_REPLACEMENTS.reduce(
+      (text, [pattern, replacement]) => text.replace(pattern, replacement),
+      value,
+    );
   }
 
   private isPlainRecord(value: unknown): value is Record<string, unknown> {

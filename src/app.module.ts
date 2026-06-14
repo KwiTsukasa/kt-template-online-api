@@ -14,7 +14,7 @@ import {
   createPinoLoggerParams,
   SaveBodyInterceptor,
 } from './common';
-import { AdminModule } from './admin/admin.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { BlogModule } from './blog/blog.module';
 import { WordpressModule } from './wordpress/wordpress.module';
 import { QqbotModule } from './qqbot/qqbot.module';

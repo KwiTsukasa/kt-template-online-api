@@ -270,4 +270,95 @@ describe('NapCat device identity persistence', () => {
     expect(createScript).toContain('--mac-address "$NAPCAT_MAC_ADDRESS"');
     expect(createScript).toContain('-v "$MACHINE_ID_PATH:/etc/machine-id:ro"');
   });
+
+  it('reuses persisted device identity when rebuilding an existing account container login env', async () => {
+    const identityRepository = createIdentityRepository();
+    const identityService = new NapcatDeviceIdentityService(
+      identityRepository as any,
+      createIdentityConfig(),
+    );
+    const identity = await identityService.resolveForAccount({
+      accountId: 'account-10001',
+      containerId: 'container-1',
+      selfId: '10001',
+    });
+    const bindingRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        accountId: 'account-10001',
+        containerId: 'container-1',
+        isDeleted: false,
+        isPrimary: true,
+      }),
+    };
+    const containerRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        addSelect: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          dataDir: identity.dataDir,
+          id: 'container-1',
+          image: 'mlikiowa/napcat-docker:latest',
+          name: 'kt-qqbot-napcat-10001',
+          reverseWsUrl: 'ws://127.0.0.1:48085/qqbot/onebot/reverse',
+          webuiPort: 6100,
+          webuiToken: 'token-x',
+        }),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const containerService = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string, defaultValue?: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
+            QQBOT_NAPCAT_CONTAINER_PREFIX: 'kt-qqbot-napcat',
+            QQBOT_NAPCAT_IMAGE: 'mlikiowa/napcat-docker:latest',
+            QQBOT_NAPCAT_ROOT: '/vol1/docker/kt-qqbot/napcat-instances',
+            QQBOT_NAPCAT_SSH_TARGET: 'nas',
+          };
+          return values[key] || defaultValue || '';
+        }),
+      } as any,
+      containerRepository as any,
+      bindingRepository as any,
+      new ToolsService(),
+      identityService,
+    ) as any;
+    containerService.runProcess = jest
+      .fn()
+      .mockResolvedValueOnce({
+        stderr: '',
+        stdout: 'ACCOUNT=10001\nNAPCAT_QUICK_PASSWORD=old-password\n',
+      })
+      .mockResolvedValueOnce({ stderr: '', stdout: '' })
+      .mockResolvedValueOnce({ stderr: '', stdout: 'ACCOUNT=10001\n' });
+
+    const recreated = await containerService.ensureRuntimeLoginEnv(
+      { id: 'container-1', name: 'kt-qqbot-napcat-10001' },
+      {
+        clearLoginPassword: true,
+        selfId: '10001',
+      },
+    );
+
+    expect(recreated).toEqual({ changed: true, ok: true });
+    expect(bindingRepository.findOne).toHaveBeenCalledWith({
+      where: {
+        bindStatus: 'bound',
+        containerId: 'container-1',
+        isDeleted: false,
+        isPrimary: true,
+      },
+    });
+    const createScript = containerService.runProcess.mock.calls[1][2];
+    expect(createScript).toContain(`NAPCAT_HOSTNAME='${identity.hostname}'`);
+    expect(createScript).toContain(
+      `NAPCAT_MAC_ADDRESS='${identity.macAddress}'`,
+    );
+    expect(createScript).toContain(`MACHINE_ID_PATH='${identity.machineIdPath}'`);
+    expect(createScript).toContain('--hostname "$NAPCAT_HOSTNAME"');
+    expect(createScript).toContain('--mac-address "$NAPCAT_MAC_ADDRESS"');
+    expect(createScript).toContain('-v "$MACHINE_ID_PATH:/etc/machine-id:ro"');
+  });
 });

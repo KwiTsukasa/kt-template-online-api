@@ -129,9 +129,17 @@ export class QqbotNapcatContainerService {
     }
 
     try {
+      const deviceIdentity = await this.resolveRuntimeDeviceIdentity(
+        container,
+        account,
+      );
       await this.createRemoteDockerContainer({
         account,
-        dataDir: container.dataDir || `${this.getRootDir()}/${container.name}`,
+        dataDir:
+          deviceIdentity?.dataDir ||
+          container.dataDir ||
+          `${this.getRootDir()}/${container.name}`,
+        deviceIdentity,
         image: container.image,
         loginPassword: options.clearLoginPassword
           ? undefined
@@ -158,6 +166,36 @@ export class QqbotNapcatContainerService {
     } catch {
       return { changed: false, ok: false };
     }
+  }
+
+  private async resolveRuntimeDeviceIdentity(
+    container: QqbotNapcatContainer,
+    selfId: string,
+  ): Promise<NapcatDockerDeviceOptions | undefined> {
+    if (
+      !this.deviceIdentityService ||
+      !container.id ||
+      typeof this.bindingRepository.findOne !== 'function'
+    ) {
+      return undefined;
+    }
+
+    const binding = await this.bindingRepository.findOne({
+      where: {
+        bindStatus: 'bound',
+        containerId: container.id,
+        isDeleted: false,
+        isPrimary: true,
+      },
+    });
+    if (!binding?.accountId) return undefined;
+
+    const identity = await this.deviceIdentityService.resolveForAccount({
+      accountId: binding.accountId,
+      containerId: container.id,
+      selfId,
+    });
+    return toNapcatDockerDeviceOptions(identity);
   }
 
   async tryAutoLogin(

@@ -1,10 +1,10 @@
-import { assetErrorImageBuffer } from '@/qqbot/plugins/bangDream/theme/canvas-image';
-import type { BangDreamDataProvider } from '@/qqbot/plugins/bangDream/provider/bangdream-data-provider';
-import { Server } from '@/qqbot/plugins/bangDream/catalog/server.model';
+import { assetErrorImageBuffer } from '@/modules/qqbot/plugins/bangDream/theme/canvas-image';
+import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangDream/provider/bangdream-data-provider';
+import { Server } from '@/modules/qqbot/plugins/bangDream/catalog/server.model';
 import {
   SongResourceRepository,
   type SongJacketSource,
-} from '@/qqbot/plugins/bangDream/song/song-resource.repository';
+} from '@/modules/qqbot/plugins/bangDream/song/song-resource.repository';
 
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {

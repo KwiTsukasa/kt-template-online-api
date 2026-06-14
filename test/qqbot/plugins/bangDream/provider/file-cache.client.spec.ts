@@ -17,7 +17,7 @@ describe('BangDream file cache client', () => {
     }));
 
     const { download } =
-      await import('@/qqbot/plugins/bangDream/provider/file-cache.client');
+      await import('@/modules/qqbot/plugins/bangDream/provider/file-cache.client');
 
     await expect(download('https://example.com/card.png')).rejects.toThrow(
       'timeout of 8000ms exceeded',
@@ -40,7 +40,7 @@ describe('BangDream file cache client', () => {
     }));
 
     const { download } =
-      await import('@/qqbot/plugins/bangDream/provider/file-cache.client');
+      await import('@/modules/qqbot/plugins/bangDream/provider/file-cache.client');
 
     await expect(download('https://example.com/missing.png')).rejects.toThrow(
       'not found',
@@ -63,7 +63,7 @@ describe('BangDream file cache client', () => {
     }));
 
     const { download } =
-      await import('@/qqbot/plugins/bangDream/provider/file-cache.client');
+      await import('@/modules/qqbot/plugins/bangDream/provider/file-cache.client');
 
     await expect(download('https://example.com/missing.svg')).rejects.toThrow(
       'not found',

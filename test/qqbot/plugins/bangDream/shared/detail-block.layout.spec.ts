@@ -1,7 +1,7 @@
 import {
   BANGDREAM_DETAIL_BLOCK_SPEC,
   getRelativeMetaPercent,
-} from '@/qqbot/plugins/bangDream/shared/detail-block.layout';
+} from '@/modules/qqbot/plugins/bangDream/shared/detail-block.layout';
 
 describe('BangDream detail block spec', () => {
   it('keeps song detail dimensions stable', () => {

@@ -8,7 +8,7 @@ import {
   createDeckRankImageLayout,
   createDeckRankLevelImageSpec,
   normalizeDeckRankLevelSpriteRankId,
-} from '@/qqbot/plugins/bangDream/player/player-band-detail.layout';
+} from '@/modules/qqbot/plugins/bangDream/player/player-band-detail.layout';
 
 describe('BangDream band detail list spec', () => {
   it('keeps band detail item constants stable', () => {

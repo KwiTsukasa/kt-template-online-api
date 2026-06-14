@@ -3,7 +3,7 @@ import {
   createStatLineText,
   getStatLineBarLayout,
   getStatLineBarWidth,
-} from '@/qqbot/plugins/bangDream/card/card-stat.layout';
+} from '@/modules/qqbot/plugins/bangDream/card/card-stat.layout';
 
 describe('BangDream stat list spec', () => {
   it('keeps the historical stat list spacer stable', () => {

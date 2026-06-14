@@ -28,7 +28,8 @@ jest.mock(
 
 import { ConfigService } from '@nestjs/config';
 import { DictService } from '@/admin/dict/dict.service';
-import { QqbotFflogsClientService } from '@/qqbot/plugins/fflogs/qqbot-fflogs-client.service';
+import { QqbotPluginHttpClientService } from '@/modules/qqbot/plugin-platform/sdk';
+import { QqbotFflogsClientService } from '@/modules/qqbot/plugins/fflogs/qqbot-fflogs-client.service';
 
 describe('QqbotFflogsClientService', () => {
   const dicts = {
@@ -53,6 +54,9 @@ describe('QqbotFflogsClientService', () => {
         async (dictKey: keyof typeof dicts) => dicts[dictKey] || [],
       ),
     } as unknown as DictService,
+    {
+      requestJson: jest.fn(),
+    } as unknown as QqbotPluginHttpClientService,
   );
 
   it('uses cn FFLogs API endpoints by default', () => {

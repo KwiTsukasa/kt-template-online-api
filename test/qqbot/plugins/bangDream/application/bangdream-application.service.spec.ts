@@ -1,20 +1,20 @@
 jest.mock(
-  '@/qqbot/plugins/bangDream/application/bangdream-renderer.facade',
+  '@/modules/qqbot/plugins/bangDream/application/bangdream-renderer.facade',
   () => ({
     QqbotBangDreamRendererService: class QqbotBangDreamRendererService {},
   }),
 );
 
-jest.mock('@/qqbot/plugins/bangDream/shared/main-data-store', () => ({
+jest.mock('@/modules/qqbot/plugins/bangDream/shared/main-data-store', () => ({
   __esModule: true,
   default: {},
   waitForMainDataReady: jest.fn().mockResolvedValue(undefined),
 }));
 
 import { ToolsService } from '@/common';
-import { TsuguApplicationService } from '@/qqbot/plugins/bangDream/application/bangdream-application.service';
-import { waitForMainDataReady } from '@/qqbot/plugins/bangDream/shared/main-data-store';
-import type { QqbotBangDreamRendererService } from '@/qqbot/plugins/bangDream/application/bangdream-renderer.facade';
+import { TsuguApplicationService } from '@/modules/qqbot/plugins/bangDream/application/bangdream-application.service';
+import { waitForMainDataReady } from '@/modules/qqbot/plugins/bangDream/shared/main-data-store';
+import type { QqbotBangDreamRendererService } from '@/modules/qqbot/plugins/bangDream/application/bangdream-renderer.facade';
 
 describe('TsuguApplicationService', () => {
   let rendererService: jest.Mocked<QqbotBangDreamRendererService>;

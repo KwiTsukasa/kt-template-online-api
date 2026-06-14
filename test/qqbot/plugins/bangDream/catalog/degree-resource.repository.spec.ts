@@ -1,6 +1,6 @@
-import type { BangDreamDataProvider } from '@/qqbot/plugins/bangDream/provider/bangdream-data-provider';
-import { DegreeResourceRepository } from '@/qqbot/plugins/bangDream/catalog/degree-resource.repository';
-import { Server } from '@/qqbot/plugins/bangDream/catalog/server.model';
+import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangDream/provider/bangdream-data-provider';
+import { DegreeResourceRepository } from '@/modules/qqbot/plugins/bangDream/catalog/degree-resource.repository';
+import { Server } from '@/modules/qqbot/plugins/bangDream/catalog/server.model';
 
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {
@@ -40,7 +40,9 @@ describe('BangDream degree resource repository', () => {
 
     expect(
       repository.getAnimatedTexturePath('ani_degree_bilibili_day1', Server.cn),
-    ).toBe('/assets/cn/ani_degree_bilibili_day1_rip/ani_degree_bilibili_day1.png');
+    ).toBe(
+      '/assets/cn/ani_degree_bilibili_day1_rip/ani_degree_bilibili_day1.png',
+    );
     expect(
       repository.getAnimatedTexturePath('ani_degree_election_5th', Server.cn),
     ).toBe(
@@ -85,9 +87,9 @@ describe('BangDream degree resource repository', () => {
       .mockResolvedValueOnce(textureBuffer);
     const repository = new DegreeResourceRepository(provider);
 
-    await expect(repository.getFrameBuffer('normal_1', Server.cn)).resolves.toBe(
-      frameBuffer,
-    );
+    await expect(
+      repository.getFrameBuffer('normal_1', Server.cn),
+    ).resolves.toBe(frameBuffer);
     await expect(repository.getIconBuffer('event_1', Server.cn)).resolves.toBe(
       iconBuffer,
     );

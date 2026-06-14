@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
-import type { BangDreamDataProvider } from '@/qqbot/plugins/bangDream/provider/bangdream-data-provider';
-import { DeckRankResourceRepository } from '@/qqbot/plugins/bangDream/player/deck-rank.repository';
+import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangDream/provider/bangdream-data-provider';
+import { DeckRankResourceRepository } from '@/modules/qqbot/plugins/bangDream/player/deck-rank.repository';
 
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {
@@ -36,10 +36,7 @@ describe('BangDream deck rank resource repository', () => {
     const localImagePath = path.join(localRootPath, 'rank_1.png');
     const localBuffer = Buffer.from('local-rank');
     writeFileSync(localImagePath, localBuffer);
-    const repository = new DeckRankResourceRepository(
-      provider,
-      localRootPath,
-    );
+    const repository = new DeckRankResourceRepository(provider, localRootPath);
 
     try {
       await expect(repository.getRankImageBuffer('rank_1')).resolves.toEqual(

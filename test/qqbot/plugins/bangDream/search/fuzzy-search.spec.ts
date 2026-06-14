@@ -2,13 +2,13 @@ import {
   checkRelationList,
   fuzzySearch,
   match,
-} from '@/qqbot/plugins/bangDream/search/fuzzy-search';
+} from '@/modules/qqbot/plugins/bangDream/search/fuzzy-search';
 import {
   createDefaultFuzzySearchRuleRegistry,
   createFuzzySearchKeyword,
-} from '@/qqbot/plugins/bangDream/search/fuzzy-search-rule.registry';
-import type { FuzzySearchResult } from '@/qqbot/plugins/bangDream/search/fuzzy-search.types';
-import { createTsuguEntityMatcher } from '@/qqbot/plugins/bangDream/search/entity-list-matcher';
+} from '@/modules/qqbot/plugins/bangDream/search/fuzzy-search-rule.registry';
+import type { FuzzySearchResult } from '@/modules/qqbot/plugins/bangDream/search/fuzzy-search.types';
+import { createTsuguEntityMatcher } from '@/modules/qqbot/plugins/bangDream/search/entity-list-matcher';
 
 describe('Tsugu fuzzy search helpers', () => {
   it('parses number, level, relation and quoted fallback keywords', () => {
@@ -53,9 +53,7 @@ describe('Tsugu fuzzy search helpers', () => {
       (result[key] ??= []).push(value);
     };
 
-    expect(registry.match(createFuzzySearchKeyword('夏祭り'), push)).toBe(
-      true,
-    );
+    expect(registry.match(createFuzzySearchKeyword('夏祭り'), push)).toBe(true);
     expect(result).toEqual({ songs: [136] });
   });
 });
@@ -115,9 +113,9 @@ describe('Tsugu entity list matcher', () => {
       relationValue: (entity) => entity.id,
     });
 
-    expect(matchDynamicEntity({ _relationStr: ['1-3'] }, [CN_SERVER])).toHaveLength(
-      1,
-    );
+    expect(
+      matchDynamicEntity({ _relationStr: ['1-3'] }, [CN_SERVER]),
+    ).toHaveLength(1);
 
     dynamicSource = {
       '1': {},

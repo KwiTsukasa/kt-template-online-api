@@ -6,7 +6,7 @@ import {
   getTextBaselineY,
   getTextInlineSpacing,
   getTextLineHeight,
-} from '@/qqbot/plugins/bangDream/theme/canvas-text.layout';
+} from '@/modules/qqbot/plugins/bangDream/theme/canvas-text.layout';
 
 describe('BangDream text spec', () => {
   it('keeps text line and spacing ratios stable', () => {

@@ -1195,15 +1195,15 @@ git -C D:\MyFiles\KT\Vue\kt-template-admin commit -m "feat: 增加QQBot插件管
 - Create/modify: `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\qqbot\plugins\bangDream\**`
 - Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugins\bangDream\**`
 
-- [ ] **Step 1: Preserve business directories**
+- [x] **Step 1: Preserve business directories**
 
 Keep business capabilities in `song`, `card`, `character`, `event`, `gacha`, `player`, `cutoff`, `catalog`, with cross-cutting code only in `application`, `registry`, `hook`, `provider`, `policy`, `theme`, `config`, `dictionary`, `search`, `shared`.
 
-- [ ] **Step 2: Convert operation registry to manifest metadata**
+- [x] **Step 2: Convert operation registry to manifest metadata**
 
 Keep operation keys and aliases stable. `handlerName` becomes worker-internal.
 
-- [ ] **Step 3: Verify BangDream**
+- [x] **Step 3: Verify BangDream**
 
 Run:
 
@@ -1213,6 +1213,8 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api run typecheck
 ```
 
 Expected: PASS. Event stage smoke keeps `imageCount=5`.
+
+Actual note: BangDream moved to `src/modules/qqbot/plugins/bangDream` with the approved business and cross-cutting directory layout preserved. Added `plugin.json` with platform key `bangdream`; manifest operations are asserted against `BANGDREAM_OPERATION_REGISTRY` for stable operation keys, aliases, names, and worker-internal `handlerName`. Runtime registry now uses platform key `bangdream` as primary while resolving legacy `bangDream`; `/qqbot/plugin/*` local HTTP smoke now proves the controller returns platform keys and resolves legacy `bangDream` to `bangdream`. Verification passed via focused registry/command SQL Jest, plugin migration contract, QQBot core module contract path guard, plugin controller HTTP smoke, `pnpm run typecheck`, and `scripts/bangdream-render-smoke.ps1 -OperationKey bangdream.event.stage -Text 310`, which produced `imageCount=5`.
 
 ### Task 6.2: Rewrite FF14 Market, FFLogs, and Repeater
 
@@ -1225,19 +1227,19 @@ Expected: PASS. Event stage smoke keeps `imageCount=5`.
 - Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugins\fflogs\**`
 - Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugins\repeater\**`
 
-- [ ] **Step 1: FF14 Market**
+- [x] **Step 1: FF14 Market**
 
 Use host runtime HTTP SDK for external requests. No direct axios client in plugin code.
 
-- [ ] **Step 2: FFLogs**
+- [x] **Step 2: FFLogs**
 
 Use plugin config for credential references. No real secret in manifest, tests, docs, or commits.
 
-- [ ] **Step 3: Repeater**
+- [x] **Step 3: Repeater**
 
 Use host send queue and account binding. Do not bypass rate limit.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
 
@@ -1247,6 +1249,8 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api run typecheck
 ```
 
 Expected: PASS.
+
+Actual note: FF14 Market, FFLogs, and Repeater moved to `src/modules/qqbot/plugins/*` and each now has a platform `plugin.json`. FF14 Market uses platform key `ff14-market` with legacy `ff14Market` compatibility and delegates outbound requests through `QqbotPluginHttpClientService`; FFLogs delegates outbound requests through the same host SDK and keeps credential references in manifest config schema without real secrets; Repeater remains event-plugin driven through host account binding and send queue services. Verification passed via focused plugin Jest, migration direct-HTTP scan for FF14/FFLogs, `/qqbot/plugin/list` and `/qqbot/plugin/operation/list` local HTTP smoke, and `pnpm run typecheck`; final focused Jest covered 9 suites / 27 tests.
 
 ### Task 6.3: Commit Batch 6
 

@@ -24,6 +24,7 @@ import { QqbotDashboardService } from '@/qqbot/dashboard/qqbot-dashboard.service
 import { QqbotDedupe } from '@/qqbot/dedupe/qqbot-dedupe.entity';
 import { QqbotDedupeService } from '@/qqbot/dedupe/qqbot-dedupe.service';
 import { QqbotEventService } from '@/qqbot/event/qqbot-event.service';
+import { QqbotPluginHttpClientService } from '@/modules/qqbot/plugin-platform/sdk';
 import { QqbotConversation } from '@/qqbot/message/qqbot-conversation.entity';
 import { QqbotMessageController } from '@/qqbot/message/qqbot-message.controller';
 import { QqbotMessage } from '@/qqbot/message/qqbot-message.entity';
@@ -39,15 +40,15 @@ import { QqbotPermissionService } from '@/qqbot/permission/qqbot-permission.serv
 import { QqbotEventPluginRegistryService } from '@/qqbot/plugin/qqbot-event-plugin-registry.service';
 import { QqbotPluginController } from '@/qqbot/plugin/qqbot-plugin.controller';
 import { QqbotPluginRegistryService } from '@/qqbot/plugin/qqbot-plugin-registry.service';
-import { QqbotBangDreamClientService } from '@/qqbot/plugins/bangDream/application/bangdream-client.service';
-import { TsuguApplicationService } from '@/qqbot/plugins/bangDream/application/bangdream-application.service';
-import { QqbotBangDreamRendererService } from '@/qqbot/plugins/bangDream/application/bangdream-renderer.facade';
-import { QqbotBangDreamPluginService } from '@/qqbot/plugins/bangDream/qqbot-bangdream.plugin';
-import { QqbotFf14ClientService } from '@/qqbot/plugins/ff14Market/qqbot-ff14-client.service';
-import { QqbotFf14MarketPluginService } from '@/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin';
-import { QqbotFflogsClientService } from '@/qqbot/plugins/fflogs/qqbot-fflogs-client.service';
-import { QqbotFflogsPluginService } from '@/qqbot/plugins/fflogs/qqbot-fflogs.plugin';
-import { QqbotRepeaterPluginService } from '@/qqbot/plugins/repeater/qqbot-repeater.plugin';
+import { QqbotBangDreamClientService } from '@/modules/qqbot/plugins/bangDream/application/bangdream-client.service';
+import { TsuguApplicationService } from '@/modules/qqbot/plugins/bangDream/application/bangdream-application.service';
+import { QqbotBangDreamRendererService } from '@/modules/qqbot/plugins/bangDream/application/bangdream-renderer.facade';
+import { QqbotBangDreamPluginService } from '@/modules/qqbot/plugins/bangDream/qqbot-bangdream.plugin';
+import { QqbotFf14ClientService } from '@/modules/qqbot/plugins/ff14Market/qqbot-ff14-client.service';
+import { QqbotFf14MarketPluginService } from '@/modules/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin';
+import { QqbotFflogsClientService } from '@/modules/qqbot/plugins/fflogs/qqbot-fflogs-client.service';
+import { QqbotFflogsPluginService } from '@/modules/qqbot/plugins/fflogs/qqbot-fflogs.plugin';
+import { QqbotRepeaterPluginService } from '@/modules/qqbot/plugins/repeater/qqbot-repeater.plugin';
 import { QqbotRuleController } from '@/qqbot/rule/qqbot-rule.controller';
 import { QqbotRule } from '@/qqbot/rule/qqbot-rule.entity';
 import { QqbotRuleEngineService } from '@/qqbot/rule/qqbot-rule-engine.service';
@@ -97,6 +98,7 @@ export const QQBOT_CORE_PROVIDERS = [
   QqbotDashboardService,
   QqbotDedupeService,
   QqbotEventService,
+  QqbotPluginHttpClientService,
   QqbotBangDreamClientService,
   QqbotBangDreamPluginService,
   QqbotBangDreamRendererService,

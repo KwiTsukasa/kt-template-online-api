@@ -6,7 +6,7 @@ import {
   getDifficultyLevelTextPosition,
   getDifficultyListCanvasWidth,
   getDifficultyListItemX,
-} from '@/qqbot/plugins/bangDream/song/song-difficulty.layout';
+} from '@/modules/qqbot/plugins/bangDream/song/song-difficulty.layout';
 
 describe('BangDream difficulty list spec', () => {
   it('keeps default difficulty list dimensions stable', () => {
@@ -18,9 +18,7 @@ describe('BangDream difficulty list spec', () => {
 
   it('keeps difficulty badge color fallback stable', () => {
     expect(getDifficultyBadgeColor(1, ['#111111', '#222222'])).toBe('#222222');
-    expect(getDifficultyBadgeColor(6, ['#111111', '#222222'])).toBe(
-      '#f1f1f1',
-    );
+    expect(getDifficultyBadgeColor(6, ['#111111', '#222222'])).toBe('#f1f1f1');
   });
 
   it('keeps difficulty badge circle layout stable', () => {
@@ -41,11 +39,11 @@ describe('BangDream difficulty list spec', () => {
       text: '26',
       textSize: 30,
     });
-    expect(getDifficultyLevelTextPosition(45, { height: 12, width: 20 })).toEqual(
-      {
-        x: 12.5,
-        y: 16.5,
-      },
-    );
+    expect(
+      getDifficultyLevelTextPosition(45, { height: 12, width: 20 }),
+    ).toEqual({
+      x: 12.5,
+      y: 16.5,
+    });
   });
 });

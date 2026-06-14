@@ -1,0 +1,40 @@
+{
+  "pluginKey": "fflogs",
+  "name": "FFLogs 查询",
+  "version": "1.0.0",
+  "minApiSdkVersion": "1.0.0",
+  "description": "对接 FFLogs v2 GraphQL，提供 FF14 角色公开排名和指定高难最近记录查询能力。",
+  "author": "KT",
+  "entry": "qqbot-fflogs.plugin.ts",
+  "permissions": ["runtime.http", "plugin.config.read"],
+  "runtime": {
+    "workerType": "node-worker",
+    "timeoutMs": 20000,
+    "memoryMb": 256,
+    "maxConcurrency": 2
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "baseUrl": { "type": "string" },
+      "graphqlUrl": { "type": "string" },
+      "tokenUrl": { "type": "string" },
+      "clientIdRef": { "type": "string" },
+      "clientSecretRef": { "type": "string" }
+    }
+  },
+  "operations": [
+    {
+      "key": "fflogs.character.summary",
+      "name": "角色排名摘要",
+      "handlerName": "getCharacterSummary",
+      "description": "查询指定角色的 FFLogs 公开排名摘要；传入 encounter/任务 后查询指定高难最近10次记录。",
+      "aliases": ["fflogs", "logs", "查logs", "查log"],
+      "permissions": ["runtime.http", "plugin.config.read"],
+      "timeoutMs": 20000
+    }
+  ],
+  "events": [],
+  "assets": [],
+  "migrations": []
+}

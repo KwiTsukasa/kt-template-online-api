@@ -3,7 +3,7 @@ import {
   createRankingDegreeLayout,
   isMedalRanking,
   stripPlayerRankingTextTags,
-} from '@/qqbot/plugins/bangDream/player/player-ranking.layout';
+} from '@/modules/qqbot/plugins/bangDream/player/player-ranking.layout';
 
 describe('BangDream player ranking spec', () => {
   it('keeps the historical ranking row dimensions stable', () => {

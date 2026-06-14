@@ -1,16 +1,16 @@
 import {
   createBestdoriProvider,
   type BangDreamBestdoriProviderOptions,
-} from '@/qqbot/plugins/bangDream/provider/bestdori.provider';
-import { createHhwxTrackerProvider } from '@/qqbot/plugins/bangDream/provider/hhwx-tracker.provider';
+} from '@/modules/qqbot/plugins/bangDream/provider/bestdori.provider';
+import { createHhwxTrackerProvider } from '@/modules/qqbot/plugins/bangDream/provider/hhwx-tracker.provider';
 import {
   resolveBangDreamProviderUrl,
   type BangDreamDataProvider,
-} from '@/qqbot/plugins/bangDream/provider/bangdream-data-provider';
+} from '@/modules/qqbot/plugins/bangDream/provider/bangdream-data-provider';
 import {
   withCache,
   withRetry,
-} from '@/qqbot/plugins/bangDream/provider/provider-decorators';
+} from '@/modules/qqbot/plugins/bangDream/provider/provider-decorators';
 
 describe('BangDream data provider', () => {
   it('resolves relative paths against provider base url', () => {

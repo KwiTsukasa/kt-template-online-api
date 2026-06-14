@@ -4,7 +4,7 @@ import {
   getCardSdCharacterCropRects,
   getCardSdCharacterListLineHeight,
   getCardSdCharacterListTextSize,
-} from '@/qqbot/plugins/bangDream/card/card-sd-character.layout';
+} from '@/modules/qqbot/plugins/bangDream/card/card-sd-character.layout';
 
 describe('BangDream card SD character list spec', () => {
   it('keeps the historical four-frame SD character crop grid', () => {

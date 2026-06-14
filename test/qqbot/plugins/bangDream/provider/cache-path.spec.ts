@@ -2,7 +2,7 @@ import * as path from 'path';
 import {
   getCacheDirectory,
   getFileNameFromUrl,
-} from '@/qqbot/plugins/bangDream/provider/cache-path';
+} from '@/modules/qqbot/plugins/bangDream/provider/cache-path';
 
 describe('BangDream cache path', () => {
   it('resolves relative asset paths before creating cache directories', () => {
@@ -15,9 +15,7 @@ describe('BangDream cache path', () => {
       path.join('.kt-workspace', 'cache', 'bangdream'),
     );
     expect(directory).toContain('bestdori.com');
-    expect(normalizedDirectory).toContain(
-      'assets_cn_event_foo_topscreen_rip',
-    );
+    expect(normalizedDirectory).toContain('assets_cn_event_foo_topscreen_rip');
   });
 
   it('resolves relative api paths before creating cache file names', () => {

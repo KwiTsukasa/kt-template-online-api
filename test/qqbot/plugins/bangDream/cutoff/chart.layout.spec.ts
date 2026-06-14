@@ -1,12 +1,12 @@
 import {
   BANGDREAM_CUTOFF_CHART_SPEC,
   stripCutoffChartLabelTags,
-} from '@/qqbot/plugins/bangDream/cutoff/cutoff-chart.layout';
+} from '@/modules/qqbot/plugins/bangDream/cutoff/cutoff-chart.layout';
 import {
   BANGDREAM_TIMELINE_CHART_SPEC,
   getTimelineDisplayYMax,
   getTimelineRawYMax,
-} from '@/qqbot/plugins/bangDream/cutoff/timeline-chart.layout';
+} from '@/modules/qqbot/plugins/bangDream/cutoff/timeline-chart.layout';
 
 describe('BangDream chart specs', () => {
   it('keeps timeline chart dimensions and y-axis padding stable', () => {
@@ -16,7 +16,12 @@ describe('BangDream chart specs', () => {
     });
     expect(
       getTimelineRawYMax([
-        { data: [{ x: 0, y: 100 }, { x: 1, y: 300 }] },
+        {
+          data: [
+            { x: 0, y: 100 },
+            { x: 1, y: 300 },
+          ],
+        },
         { data: [{ x: 0, y: 200 }] },
       ]),
     ).toBe(300);

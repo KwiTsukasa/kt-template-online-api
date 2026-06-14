@@ -1,8 +1,8 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { formatKtDateTime, throwVbenError } from '@/common';
-import { QqbotBangDreamPluginService } from '../plugins/bangDream/qqbot-bangdream.plugin';
-import { QqbotFf14MarketPluginService } from '../plugins/ff14Market/qqbot-ff14-market.plugin';
-import { QqbotFflogsPluginService } from '../plugins/fflogs/qqbot-fflogs.plugin';
+import { QqbotBangDreamPluginService } from '@/modules/qqbot/plugins/bangDream/qqbot-bangdream.plugin';
+import { QqbotFf14MarketPluginService } from '@/modules/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin';
+import { QqbotFflogsPluginService } from '@/modules/qqbot/plugins/fflogs/qqbot-fflogs.plugin';
 import type {
   QqbotIntegrationPlugin,
   QqbotPluginHealth,
@@ -13,6 +13,7 @@ import type {
 
 @Injectable()
 export class QqbotPluginRegistryService implements OnModuleInit {
+  private readonly pluginAliases = new Map<string, string>();
   private readonly plugins = new Map<string, QqbotIntegrationPlugin>();
 
   constructor(
@@ -32,6 +33,13 @@ export class QqbotPluginRegistryService implements OnModuleInit {
       throwVbenError('QQBot 插件必须包含 key 和 operation');
     }
     this.plugins.set(plugin.key, plugin);
+    for (const legacyKey of plugin.legacyKeys || []) {
+      if (!legacyKey || legacyKey === plugin.key) continue;
+      if (this.plugins.has(legacyKey) || this.pluginAliases.has(legacyKey)) {
+        throwVbenError(`QQBot 插件别名重复：${legacyKey}`);
+      }
+      this.pluginAliases.set(legacyKey, plugin.key);
+    }
   }
 
   listPlugins(): QqbotPluginSummary[] {
@@ -102,7 +110,7 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   private getOperation(pluginKey: string, operationKey: string) {
-    const plugin = this.plugins.get(pluginKey);
+    const plugin = this.getPluginByKey(pluginKey);
     if (!plugin) throwVbenError(`QQBot 插件不存在：${pluginKey}`);
 
     const operation = plugin.operations.find(
@@ -116,7 +124,14 @@ export class QqbotPluginRegistryService implements OnModuleInit {
 
   private getPlugins(pluginKey?: string) {
     if (!pluginKey) return [...this.plugins.values()];
-    const plugin = this.plugins.get(pluginKey);
+    const plugin = this.getPluginByKey(pluginKey);
     return plugin ? [plugin] : [];
+  }
+
+  private getPluginByKey(pluginKey: string) {
+    return (
+      this.plugins.get(pluginKey) ||
+      this.plugins.get(this.pluginAliases.get(pluginKey) || '')
+    );
   }
 }

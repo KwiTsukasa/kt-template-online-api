@@ -1,0 +1,42 @@
+{
+  "pluginKey": "repeater",
+  "name": "复读机",
+  "version": "1.0.0",
+  "minApiSdkVersion": "1.0.0",
+  "description": "监听同一会话内连续重复的普通文本消息，达到阈值后通过宿主发送队列复读一次。",
+  "author": "KT",
+  "entry": "qqbot-repeater.plugin.ts",
+  "permissions": [
+    "qqbot.event.receive",
+    "qqbot.send",
+    "plugin.config.read",
+    "plugin.storage.read",
+    "plugin.storage.write"
+  ],
+  "runtime": {
+    "workerType": "node-worker",
+    "timeoutMs": 5000,
+    "memoryMb": 128,
+    "maxConcurrency": 1
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "threshold": { "type": "number" },
+      "maxTextLength": { "type": "number" },
+      "minIntervalMs": { "type": "number" }
+    }
+  },
+  "operations": [],
+  "events": [
+    {
+      "key": "repeater.message",
+      "name": "消息事件",
+      "eventName": "message",
+      "handlerName": "handleMessage",
+      "description": "同一会话连续重复普通文本达到阈值后复读。"
+    }
+  ],
+  "assets": [],
+  "migrations": []
+}

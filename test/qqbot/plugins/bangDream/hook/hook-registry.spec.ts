@@ -1,7 +1,7 @@
 import {
   createTsuguHookContext,
   TsuguHookRegistry,
-} from '@/qqbot/plugins/bangDream/hook/hook-registry';
+} from '@/modules/qqbot/plugins/bangDream/hook/hook-registry';
 
 describe('BangDream Tsugu hook registry', () => {
   it('emits simple lifecycle hooks by configured order', async () => {

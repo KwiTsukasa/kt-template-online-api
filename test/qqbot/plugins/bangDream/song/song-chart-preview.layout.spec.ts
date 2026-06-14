@@ -7,7 +7,7 @@ import {
   createSongChartPreviewNotes,
   isSongChartCountLineNoteType,
   isSongChartDisplayNoteType,
-} from '@/qqbot/plugins/bangDream/song/song-chart-preview.layout';
+} from '@/modules/qqbot/plugins/bangDream/song/song-chart-preview.layout';
 
 describe('BangDream song chart preview spec', () => {
   it('assigns note times from BPM changes', () => {

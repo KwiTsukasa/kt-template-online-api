@@ -1,8 +1,8 @@
 import {
   BANGDREAM_CARD_PREFIX_SPEC,
   getCardPrefixBandLogoLayout,
-} from '@/qqbot/plugins/bangDream/card/card-prefix.layout';
-import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/theme/render-theme';
+} from '@/modules/qqbot/plugins/bangDream/card/card-prefix.layout';
+import { BANGDREAM_RENDER_THEME } from '@/modules/qqbot/plugins/bangDream/theme/render-theme';
 
 describe('BangDream card prefix spec', () => {
   it('keeps the card prefix canvas and background stable', () => {

@@ -4,7 +4,7 @@ import {
   createCharacterDetailItemLayout,
   createCharacterDetailListFrameSpec,
   createCharacterDetailTextSpec,
-} from '@/qqbot/plugins/bangDream/player/player-character-detail.layout';
+} from '@/modules/qqbot/plugins/bangDream/player/player-character-detail.layout';
 
 describe('BangDream character detail list spec', () => {
   it('keeps character detail item constants stable', () => {

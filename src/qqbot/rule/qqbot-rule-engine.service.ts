@@ -3,7 +3,7 @@ import { ToolsService } from '@/common';
 import type { QqbotNormalizedMessage } from '../qqbot.types';
 import { QqbotCommandEngineService } from '../command/qqbot-command-engine.service';
 import { QqbotPermissionService } from '../permission/qqbot-permission.service';
-import { QqbotRepeaterPluginService } from '../plugins/repeater/qqbot-repeater.plugin';
+import { QqbotRepeaterPluginService } from '@/modules/qqbot/plugins/repeater/qqbot-repeater.plugin';
 import { QqbotSendService } from '../send/qqbot-send.service';
 import { QqbotRuleService } from './qqbot-rule.service';
 

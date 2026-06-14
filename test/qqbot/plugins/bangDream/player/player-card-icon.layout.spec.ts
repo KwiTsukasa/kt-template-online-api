@@ -3,7 +3,7 @@ import {
   getPlayerCardIconListSpacing,
   getPlayerCardIconListTextSize,
   sortPlayerMainDeckEntries,
-} from '@/qqbot/plugins/bangDream/player/player-card-icon.layout';
+} from '@/modules/qqbot/plugins/bangDream/player/player-card-icon.layout';
 
 describe('BangDream player card icon list spec', () => {
   it('keeps player card list text and spacing ratios stable', () => {
@@ -26,10 +26,6 @@ describe('BangDream player card icon list spec', () => {
   });
 
   it('skips missing deck entries without changing the remaining order', () => {
-    expect(sortPlayerMainDeckEntries(['0', '1', '2'])).toEqual([
-      '1',
-      '0',
-      '2',
-    ]);
+    expect(sortPlayerMainDeckEntries(['0', '1', '2'])).toEqual(['1', '0', '2']);
   });
 });

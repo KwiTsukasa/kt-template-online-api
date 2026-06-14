@@ -160,6 +160,7 @@ export type QqbotIntegrationPlugin = {
   description?: string;
   healthCheck?: () => Promise<QqbotPluginHealth>;
   key: string;
+  legacyKeys?: string[];
   name: string;
   operations: QqbotPluginOperation[];
   version: string;

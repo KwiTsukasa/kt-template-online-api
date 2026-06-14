@@ -2,8 +2,8 @@ import {
   BANGDREAM_TITLE_SPEC,
   createTitleTextDrawOptions,
   getTitleTextPosition,
-} from '@/qqbot/plugins/bangDream/shared/title.layout';
-import { BANGDREAM_RENDER_THEME } from '@/qqbot/plugins/bangDream/theme/render-theme';
+} from '@/modules/qqbot/plugins/bangDream/shared/title.layout';
+import { BANGDREAM_RENDER_THEME } from '@/modules/qqbot/plugins/bangDream/theme/render-theme';
 
 describe('BangDream title spec', () => {
   it('keeps the historical title background offset stable', () => {

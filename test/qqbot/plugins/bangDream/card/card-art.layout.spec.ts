@@ -2,7 +2,7 @@ import {
   BANGDREAM_CARD_ART_SPEC,
   createCardIconFramePath,
   createCardIllustrationFramePath,
-} from '@/qqbot/plugins/bangDream/card/card-art.layout';
+} from '@/modules/qqbot/plugins/bangDream/card/card-art.layout';
 
 describe('BangDream card art spec', () => {
   it('creates icon frame paths with Bestdori rarity rules', () => {

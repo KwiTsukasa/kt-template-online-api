@@ -445,7 +445,7 @@ pnpm qqbot-plugin install-local <packageFile>
 
 ### BangDream
 
-插件 key：`bangDream`。当前源码根目录为 `src/qqbot/plugins/bangDream`，不再使用旧 `tsugu` 子目录。
+插件 key：`bangdream`。旧 `bangDream` 作为兼容别名仍可解析；当前源码根目录为 `src/modules/qqbot/plugins/bangDream`，不再使用旧 `tsugu` 子目录。
 
 | operation key                 | 命令          | 说明                     |
 | ----------------------------- | ------------- | ------------------------ |
@@ -469,7 +469,7 @@ pnpm qqbot-plugin install-local <packageFile>
 
 ### FF14 Market
 
-插件 key：`ff14Market`。
+插件 key：`ff14-market`。旧 `ff14Market` 作为兼容别名仍可解析。
 
 | operation key       | 说明                                       |
 | ------------------- | ------------------------------------------ |

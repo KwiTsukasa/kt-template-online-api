@@ -1,7 +1,7 @@
 import {
   BANGDREAM_RARITY_LIST_SPEC,
   shouldUseTrainedRarityStar,
-} from '@/qqbot/plugins/bangDream/card/card-rarity.layout';
+} from '@/modules/qqbot/plugins/bangDream/card/card-rarity.layout';
 
 describe('BangDream rarity list spec', () => {
   it('keeps the historical rarity list text size and spacing stable', () => {

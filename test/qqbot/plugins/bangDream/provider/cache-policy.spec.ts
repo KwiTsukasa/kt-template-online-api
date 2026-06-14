@@ -4,7 +4,7 @@ import {
   isCacheClientNotFound,
   normalizeCacheClientRetryCount,
   runWithCacheClientRetry,
-} from '@/qqbot/plugins/bangDream/provider/cache-policy';
+} from '@/modules/qqbot/plugins/bangDream/provider/cache-policy';
 
 describe('BangDream cache client policy', () => {
   it('normalizes retry count and reads http status safely', () => {

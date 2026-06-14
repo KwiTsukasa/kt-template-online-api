@@ -7,7 +7,7 @@ import {
   getGachaDuplicateIconRect,
   getGachaDuplicateLayerCount,
   getGachaSimulateGridMaxWidth,
-} from '@/qqbot/plugins/bangDream/gacha/gacha-simulate.layout';
+} from '@/modules/qqbot/plugins/bangDream/gacha/gacha-simulate.layout';
 
 describe('BangDream gacha simulate spec', () => {
   it('keeps grid widths and wrap modes stable', () => {

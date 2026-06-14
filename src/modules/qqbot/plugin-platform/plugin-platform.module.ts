@@ -4,14 +4,15 @@ import { AdminAuthGuardModule } from '@/admin/auth/admin-auth-guard.module';
 import { QqbotPluginPlatformController } from './plugin-platform.controller';
 import { QqbotPluginPlatformService } from './plugin-platform.service';
 import { QQBOT_PLUGIN_PLATFORM_ENTITIES } from './persistence';
+import { QqbotPluginHttpClientService } from './sdk';
 
 @Module({
   controllers: [QqbotPluginPlatformController],
-  exports: [QqbotPluginPlatformService],
+  exports: [QqbotPluginHttpClientService, QqbotPluginPlatformService],
   imports: [
     AdminAuthGuardModule,
     TypeOrmModule.forFeature([...QQBOT_PLUGIN_PLATFORM_ENTITIES]),
   ],
-  providers: [QqbotPluginPlatformService],
+  providers: [QqbotPluginHttpClientService, QqbotPluginPlatformService],
 })
 export class QqbotPluginPlatformModule {}

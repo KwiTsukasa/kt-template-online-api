@@ -1,13 +1,13 @@
 import {
   BangDreamDictionaryLoader,
   normalizeDictionaryLookupKey,
-} from '@/qqbot/plugins/bangDream/dictionary/dictionary-loader';
-import { BANGDREAM_DICTIONARY_CODES } from '@/qqbot/plugins/bangDream/dictionary/default-dictionary';
+} from '@/modules/qqbot/plugins/bangDream/dictionary/dictionary-loader';
+import { BANGDREAM_DICTIONARY_CODES } from '@/modules/qqbot/plugins/bangDream/dictionary/default-dictionary';
 import {
   normalizeBangDreamBoolean,
   splitBangDreamOptionList,
-} from '@/qqbot/plugins/bangDream/config/runtime-options';
-import { BangDreamDifficultyId } from '@/qqbot/plugins/bangDream/shared/bangdream-protocol';
+} from '@/modules/qqbot/plugins/bangDream/config/runtime-options';
+import { BangDreamDifficultyId } from '@/modules/qqbot/plugins/bangDream/shared/bangdream-protocol';
 
 describe('BangDreamDictionaryLoader', () => {
   it('resolves server and difficulty from default dictionary without DB', () => {
@@ -58,9 +58,7 @@ describe('BangDreamDictionaryLoader', () => {
     });
 
     expect(loader.resolveServer('台服')).toBe(2);
-    expect(loader.resolveDifficulty('普通')).toBe(
-      BangDreamDifficultyId.normal,
-    );
+    expect(loader.resolveDifficulty('普通')).toBe(BangDreamDifficultyId.normal);
   });
 });
 

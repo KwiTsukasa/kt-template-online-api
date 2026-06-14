@@ -3,7 +3,7 @@ import {
   calculateHorizontalDataBlockSize,
   calculateVerticalDataBlockSize,
   getDataBlockTitleLineHeight,
-} from '@/qqbot/plugins/bangDream/shared/data-block.layout';
+} from '@/modules/qqbot/plugins/bangDream/shared/data-block.layout';
 
 describe('BangDream data block spec', () => {
   it('keeps the historical title and banner specs stable', () => {

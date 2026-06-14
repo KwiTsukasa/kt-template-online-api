@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BANGDREAM_OPERATION_REGISTRY } from '@/qqbot/plugins/bangDream/registry/operation-registry';
+import { BANGDREAM_OPERATION_REGISTRY } from '@/modules/qqbot/plugins/bangDream/registry/operation-registry';
 
 type BangDreamSqlCommandRow = {
   aliases: string[];

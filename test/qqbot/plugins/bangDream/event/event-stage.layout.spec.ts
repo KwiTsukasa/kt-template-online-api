@@ -7,7 +7,7 @@ import {
   getEventStageStageBatchSize,
   shouldStartNewEventStageColumn,
   splitEventStageImagesByColumnHeight,
-} from '@/qqbot/plugins/bangDream/event/event-stage.layout';
+} from '@/modules/qqbot/plugins/bangDream/event/event-stage.layout';
 
 describe('BangDream event stage spec', () => {
   it('keeps song row dimensions compatible with existing layout', () => {

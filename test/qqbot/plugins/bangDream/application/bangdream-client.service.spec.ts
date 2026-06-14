@@ -1,12 +1,12 @@
 jest.mock(
-  '@/qqbot/plugins/bangDream/application/bangdream-application.service',
+  '@/modules/qqbot/plugins/bangDream/application/bangdream-application.service',
   () => ({
     TsuguApplicationService: class TsuguApplicationService {},
   }),
 );
 
-import { QqbotBangDreamClientService } from '@/qqbot/plugins/bangDream/application/bangdream-client.service';
-import type { TsuguApplicationService } from '@/qqbot/plugins/bangDream/application/bangdream-application.service';
+import { QqbotBangDreamClientService } from '@/modules/qqbot/plugins/bangDream/application/bangdream-client.service';
+import type { TsuguApplicationService } from '@/modules/qqbot/plugins/bangDream/application/bangdream-application.service';
 
 describe('QqbotBangDreamClientService', () => {
   let service: QqbotBangDreamClientService;

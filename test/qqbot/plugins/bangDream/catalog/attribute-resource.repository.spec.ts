@@ -1,5 +1,5 @@
-import type { BangDreamDataProvider } from '@/qqbot/plugins/bangDream/provider/bangdream-data-provider';
-import { AttributeResourceRepository } from '@/qqbot/plugins/bangDream/catalog/attribute-resource.repository';
+import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangDream/provider/bangdream-data-provider';
+import { AttributeResourceRepository } from '@/modules/qqbot/plugins/bangDream/catalog/attribute-resource.repository';
 
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {

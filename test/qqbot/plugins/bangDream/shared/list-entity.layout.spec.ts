@@ -1,7 +1,7 @@
 import {
   BANGDREAM_ENTITY_LIST_SPEC,
   shouldUseSingleEntityLabel,
-} from '@/qqbot/plugins/bangDream/shared/list-entity.layout';
+} from '@/modules/qqbot/plugins/bangDream/shared/list-entity.layout';
 
 describe('BangDream entity list spec', () => {
   it('keeps the historical multi-value spacing stable', () => {

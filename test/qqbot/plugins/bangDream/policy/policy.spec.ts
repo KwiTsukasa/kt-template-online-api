@@ -1,4 +1,4 @@
-jest.mock('@/qqbot/plugins/bangDream/shared/main-data-store', () => ({
+jest.mock('@/modules/qqbot/plugins/bangDream/shared/main-data-store', () => ({
   __esModule: true,
   default: {},
 }));
@@ -7,7 +7,7 @@ import {
   calculateCnEventEstimateStartAt,
   getBangDreamOccupiedDays,
   type BangDreamEventSchedule,
-} from '@/qqbot/plugins/bangDream/policy/cn-event-estimate.policy';
+} from '@/modules/qqbot/plugins/bangDream/policy/cn-event-estimate.policy';
 import {
   getCutoffDateByServerTimezone,
   getCutoffDayIndex,
@@ -17,11 +17,11 @@ import {
   isCutoffDailyCheckpoint,
   isCutoffTierSupported,
   selectRecentCutoffEventIds,
-} from '@/qqbot/plugins/bangDream/policy/cutoff.policy';
+} from '@/modules/qqbot/plugins/bangDream/policy/cutoff.policy';
 import {
   getBangDreamServerUtcOffset,
   normalizeBangDreamTimestamp,
-} from '@/qqbot/plugins/bangDream/policy/server.policy';
+} from '@/modules/qqbot/plugins/bangDream/policy/server.policy';
 import {
   applyGachaGuaranteedRarity,
   BANGDREAM_GACHA_MAX_SPIN_COUNT,
@@ -31,12 +31,12 @@ import {
   isPermanentJapaneseGachaPeriod,
   pickGachaCardIdByWeight,
   pickGachaRarityByRate,
-} from '@/qqbot/plugins/bangDream/policy/gacha.policy';
+} from '@/modules/qqbot/plugins/bangDream/policy/gacha.policy';
 import {
   BangDreamEventStatus,
   BangDreamGachaType,
   BangDreamServerId as Server,
-} from '@/qqbot/plugins/bangDream/shared/bangdream-protocol';
+} from '@/modules/qqbot/plugins/bangDream/shared/bangdream-protocol';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

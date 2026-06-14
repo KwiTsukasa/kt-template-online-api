@@ -1,7 +1,7 @@
 import {
   BANGDREAM_GACHA_LIST_SPEC,
   getGachaPaymentBehaviorLabel,
-} from '@/qqbot/plugins/bangDream/gacha/gacha-list.layout';
+} from '@/modules/qqbot/plugins/bangDream/gacha/gacha-list.layout';
 
 describe('BangDream gacha list spec', () => {
   it('keeps gacha list labels stable', () => {

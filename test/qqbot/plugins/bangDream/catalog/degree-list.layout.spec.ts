@@ -5,7 +5,7 @@ import {
   shouldDrawDegreeDecorations,
   shouldDrawDegreeIcon,
   shouldStopAfterFirstMusicRewardGroup,
-} from '@/qqbot/plugins/bangDream/catalog/degree-list.layout';
+} from '@/modules/qqbot/plugins/bangDream/catalog/degree-list.layout';
 
 describe('BangDream degree list spec', () => {
   it('keeps badge and list sizes stable', () => {

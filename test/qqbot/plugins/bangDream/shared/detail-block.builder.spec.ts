@@ -1,6 +1,6 @@
 import { Canvas } from 'skia-canvas';
-import { DetailBlockBuilder } from '@/qqbot/plugins/bangDream/shared/detail-block.builder';
-import { line } from '@/qqbot/plugins/bangDream/shared/list-frame.renderer';
+import { DetailBlockBuilder } from '@/modules/qqbot/plugins/bangDream/shared/detail-block.builder';
+import { line } from '@/modules/qqbot/plugins/bangDream/shared/list-frame.renderer';
 
 describe('DetailBlockBuilder', () => {
   it('keeps section separators centralized', () => {

@@ -1,11 +1,11 @@
-import { BangDreamCardType } from '@/qqbot/plugins/bangDream/shared/bangdream-protocol';
+import { BangDreamCardType } from '@/modules/qqbot/plugins/bangDream/shared/bangdream-protocol';
 import {
   BANGDREAM_CARD_ICON_LIST_SPEC,
   compareCardIconListCards,
   getCardIconListSpacing,
   getCardIconListTextSize,
   sortCardIconListCards,
-} from '@/qqbot/plugins/bangDream/card/card-icon.layout';
+} from '@/modules/qqbot/plugins/bangDream/card/card-icon.layout';
 
 describe('BangDream card icon list spec', () => {
   it('keeps card icon list text and spacing ratios stable', () => {

@@ -1,6 +1,6 @@
-import type { BangDreamDataProvider } from '@/qqbot/plugins/bangDream/provider/bangdream-data-provider';
-import { Server } from '@/qqbot/plugins/bangDream/catalog/server.model';
-import { PlayerRankingResourceRepository } from '@/qqbot/plugins/bangDream/player/player-ranking.repository';
+import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangDream/provider/bangdream-data-provider';
+import { Server } from '@/modules/qqbot/plugins/bangDream/catalog/server.model';
+import { PlayerRankingResourceRepository } from '@/modules/qqbot/plugins/bangDream/player/player-ranking.repository';
 
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {
@@ -14,7 +14,9 @@ function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
 
 describe('BangDream player ranking resource repository', () => {
   it('builds player ranking image paths', () => {
-    const repository = new PlayerRankingResourceRepository(createProviderMock());
+    const repository = new PlayerRankingResourceRepository(
+      createProviderMock(),
+    );
 
     expect(repository.getRankImagePath(Server.cn, 1)).toBe(
       '/res/image/cn_1.png',

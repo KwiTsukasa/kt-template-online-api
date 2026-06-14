@@ -1,6 +1,6 @@
-import { TsuguHookRegistry } from '@/qqbot/plugins/bangDream/hook/hook-registry';
-import { TsuguOperationPipeline } from '@/qqbot/plugins/bangDream/application/operation-pipeline';
-import type { TsuguOperationDefinition } from '@/qqbot/plugins/bangDream/registry/operation-registry';
+import { TsuguHookRegistry } from '@/modules/qqbot/plugins/bangDream/hook/hook-registry';
+import { TsuguOperationPipeline } from '@/modules/qqbot/plugins/bangDream/application/operation-pipeline';
+import type { TsuguOperationDefinition } from '@/modules/qqbot/plugins/bangDream/registry/operation-registry';
 
 const songSearchOperation: TsuguOperationDefinition = {
   description: '查询歌曲',

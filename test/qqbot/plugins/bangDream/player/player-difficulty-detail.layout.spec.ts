@@ -4,7 +4,7 @@ import {
   createDifficultyDetailItemLayout,
   createDifficultyDetailListFrameSpec,
   createDifficultyDetailTextSpec,
-} from '@/qqbot/plugins/bangDream/player/player-difficulty-detail.layout';
+} from '@/modules/qqbot/plugins/bangDream/player/player-difficulty-detail.layout';
 
 describe('BangDream difficulty detail list spec', () => {
   it('keeps difficulty detail item constants stable', () => {
@@ -37,23 +37,25 @@ describe('BangDream difficulty detail list spec', () => {
   });
 
   it('keeps item layout offsets stable', () => {
-    expect(createDifficultyDetailItemLayout({ height: 72, width: 88 })).toEqual({
-      badgeX: 6,
-      badgeY: 0,
-      canvasHeight: 122,
-      canvasWidth: 152,
-      textX: 32,
-      textY: 50,
-    });
+    expect(createDifficultyDetailItemLayout({ height: 72, width: 88 })).toEqual(
+      {
+        badgeX: 6,
+        badgeY: 0,
+        canvasHeight: 122,
+        canvasWidth: 152,
+        textX: 32,
+        textY: 50,
+      },
+    );
   });
 
   it('keeps list frame values derived from the first item', () => {
-    expect(createDifficultyDetailListFrameSpec({ height: 122, width: 152 })).toEqual(
-      {
-        lineHeight: 122,
-        spacing: 0,
-        textSize: 122,
-      },
-    );
+    expect(
+      createDifficultyDetailListFrameSpec({ height: 122, width: 152 }),
+    ).toEqual({
+      lineHeight: 122,
+      spacing: 0,
+      textSize: 122,
+    });
   });
 });

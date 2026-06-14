@@ -11,8 +11,8 @@ import {
   isQqbotFf14RegionName,
   isQqbotFf14WorldName,
   splitQqbotFf14WorldPath,
-} from '../plugins/ff14Market/qqbot-ff14-worlds';
-import type { QqbotFf14MarketCatalog } from '../plugins/ff14Market/qqbot-ff14-market.types';
+} from '@/modules/qqbot/plugins/ff14Market/qqbot-ff14-worlds';
+import type { QqbotFf14MarketCatalog } from '@/modules/qqbot/plugins/ff14Market/qqbot-ff14-market.types';
 import type { QqbotCommandMatchResult } from '../qqbot.types';
 
 @Injectable()

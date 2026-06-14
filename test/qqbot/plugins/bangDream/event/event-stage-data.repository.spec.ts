@@ -1,5 +1,5 @@
-import type { BangDreamDataProvider } from '@/qqbot/plugins/bangDream/provider/bangdream-data-provider';
-import { EventStageDataRepository } from '@/qqbot/plugins/bangDream/event/event-stage-data.repository';
+import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangDream/provider/bangdream-data-provider';
+import { EventStageDataRepository } from '@/modules/qqbot/plugins/bangDream/event/event-stage-data.repository';
 
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {

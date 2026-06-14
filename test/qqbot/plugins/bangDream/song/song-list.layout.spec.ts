@@ -4,7 +4,7 @@ import {
   getSongListCanvasHeight,
   getSongListContentWidth,
   getSongListFrameLineHeight,
-} from '@/qqbot/plugins/bangDream/song/song-list.layout';
+} from '@/modules/qqbot/plugins/bangDream/song/song-list.layout';
 
 describe('BangDream song list spec', () => {
   it('keeps song list item dimensions stable', () => {

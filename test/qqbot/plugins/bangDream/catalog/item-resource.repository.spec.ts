@@ -1,9 +1,9 @@
-import type { BangDreamDataProvider } from '@/qqbot/plugins/bangDream/provider/bangdream-data-provider';
+import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangDream/provider/bangdream-data-provider';
 import {
   ItemResourceRepository,
   type ItemResourceSource,
-} from '@/qqbot/plugins/bangDream/catalog/item-resource.repository';
-import { Server } from '@/qqbot/plugins/bangDream/catalog/server.model';
+} from '@/modules/qqbot/plugins/bangDream/catalog/item-resource.repository';
+import { Server } from '@/modules/qqbot/plugins/bangDream/catalog/server.model';
 
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {
@@ -36,7 +36,10 @@ describe('BangDream item resource repository', () => {
       ),
     ).toBe('/assets/cn/thumb/material_rip/material003.png');
     expect(
-      repository.getImagePath(createItemSource({ typeName: 'star' }), Server.jp),
+      repository.getImagePath(
+        createItemSource({ typeName: 'star' }),
+        Server.jp,
+      ),
     ).toBe('/assets/jp/thumb/common_rip/star.png');
     expect(repository.getImagePath(createItemSource(), Server.cn)).toBe(
       '/assets/cn/thumb/common_rip/gacha_ticket_7.png',

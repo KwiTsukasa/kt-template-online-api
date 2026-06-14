@@ -1,7 +1,7 @@
 import {
   BANGDREAM_OPERATION_REGISTRY,
   getBangDreamOperationDefinition,
-} from '@/qqbot/plugins/bangDream/registry/operation-registry';
+} from '@/modules/qqbot/plugins/bangDream/registry/operation-registry';
 
 describe('BangDream Tsugu operation registry', () => {
   it('keeps operation keys unique and complete', () => {
@@ -31,6 +31,8 @@ describe('BangDream Tsugu operation registry', () => {
       handlerName: 'searchSong',
       name: '查曲',
     });
-    expect(getBangDreamOperationDefinition('bangdream.unknown')).toBeUndefined();
+    expect(
+      getBangDreamOperationDefinition('bangdream.unknown'),
+    ).toBeUndefined();
   });
 });

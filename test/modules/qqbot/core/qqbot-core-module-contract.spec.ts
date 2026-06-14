@@ -17,39 +17,45 @@ jest.mock('../../../../src/qqbot/plugin/qqbot-plugin-registry.service', () => ({
   QqbotPluginRegistryService: mockQqbotPluginRegistryService,
 }));
 jest.mock(
-  '@/qqbot/plugins/bangDream/application/bangdream-client.service',
+  '@/modules/qqbot/plugins/bangDream/application/bangdream-client.service',
   () => ({
     QqbotBangDreamClientService: class QqbotBangDreamClientService {},
   }),
 );
 jest.mock(
-  '@/qqbot/plugins/bangDream/application/bangdream-renderer.facade',
+  '@/modules/qqbot/plugins/bangDream/application/bangdream-renderer.facade',
   () => ({
     QqbotBangDreamRendererService: class QqbotBangDreamRendererService {},
   }),
 );
 jest.mock(
-  '@/qqbot/plugins/bangDream/application/bangdream-application.service',
+  '@/modules/qqbot/plugins/bangDream/application/bangdream-application.service',
   () => ({
     TsuguApplicationService: class TsuguApplicationService {},
   }),
 );
-jest.mock('@/qqbot/plugins/bangDream/qqbot-bangdream.plugin', () => ({
+jest.mock('@/modules/qqbot/plugins/bangDream/qqbot-bangdream.plugin', () => ({
   QqbotBangDreamPluginService: class QqbotBangDreamPluginService {},
 }));
-jest.mock('@/qqbot/plugins/ff14Market/qqbot-ff14-client.service', () => ({
-  QqbotFf14ClientService: class QqbotFf14ClientService {},
-}));
-jest.mock('@/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin', () => ({
-  QqbotFf14MarketPluginService: class QqbotFf14MarketPluginService {},
-}));
-jest.mock('@/qqbot/plugins/fflogs/qqbot-fflogs-client.service', () => ({
+jest.mock(
+  '@/modules/qqbot/plugins/ff14Market/qqbot-ff14-client.service',
+  () => ({
+    QqbotFf14ClientService: class QqbotFf14ClientService {},
+  }),
+);
+jest.mock(
+  '@/modules/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin',
+  () => ({
+    QqbotFf14MarketPluginService: class QqbotFf14MarketPluginService {},
+  }),
+);
+jest.mock('@/modules/qqbot/plugins/fflogs/qqbot-fflogs-client.service', () => ({
   QqbotFflogsClientService: class QqbotFflogsClientService {},
 }));
-jest.mock('@/qqbot/plugins/fflogs/qqbot-fflogs.plugin', () => ({
+jest.mock('@/modules/qqbot/plugins/fflogs/qqbot-fflogs.plugin', () => ({
   QqbotFflogsPluginService: class QqbotFflogsPluginService {},
 }));
-jest.mock('@/qqbot/plugins/repeater/qqbot-repeater.plugin', () => ({
+jest.mock('@/modules/qqbot/plugins/repeater/qqbot-repeater.plugin', () => ({
   QqbotRepeaterPluginService: class QqbotRepeaterPluginService {},
 }));
 
@@ -219,6 +225,7 @@ describe('QQBot core module contract', () => {
         'QqbotNapcatLoginService',
         'QqbotNapcatWatchdogService',
         'QqbotPermissionService',
+        'QqbotPluginHttpClientService',
         'QqbotPluginRegistryService',
         'QqbotRateLimitService',
         'QqbotReplyTemplateService',

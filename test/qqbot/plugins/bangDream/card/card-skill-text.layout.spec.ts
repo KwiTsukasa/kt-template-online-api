@@ -2,7 +2,7 @@ import {
   BANGDREAM_SKILL_TEXT_SPEC,
   createSkillTextFragments,
   getSkillScoreSuffix,
-} from '@/qqbot/plugins/bangDream/card/card-skill-text.layout';
+} from '@/modules/qqbot/plugins/bangDream/card/card-skill-text.layout';
 
 describe('BangDream skill text spec', () => {
   it('keeps the historical card skill text layout stable', () => {

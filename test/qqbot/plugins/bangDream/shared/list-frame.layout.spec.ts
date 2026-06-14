@@ -9,7 +9,7 @@ import {
   getListFrameSpacing,
   getListFrameTextMaxWidth,
   getMergedListColumnWidth,
-} from '@/qqbot/plugins/bangDream/shared/list-frame.layout';
+} from '@/modules/qqbot/plugins/bangDream/shared/list-frame.layout';
 
 describe('BangDream list frame spec', () => {
   it('keeps text sizing and content width stable', () => {

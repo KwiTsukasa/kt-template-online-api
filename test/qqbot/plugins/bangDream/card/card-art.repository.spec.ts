@@ -1,5 +1,5 @@
-import type { BangDreamDataProvider } from '@/qqbot/plugins/bangDream/provider/bangdream-data-provider';
-import { CardArtResourceRepository } from '@/qqbot/plugins/bangDream/card/card-art.repository';
+import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangDream/provider/bangdream-data-provider';
+import { CardArtResourceRepository } from '@/modules/qqbot/plugins/bangDream/card/card-art.repository';
 
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {

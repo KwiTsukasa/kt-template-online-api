@@ -5,7 +5,7 @@ import {
   formatBangDreamPeriod,
   formatBangDreamSeconds,
   formatBangDreamTime,
-} from '@/qqbot/plugins/bangDream/event/event-time.layout';
+} from '@/modules/qqbot/plugins/bangDream/event/event-time.layout';
 
 describe('BangDream time format spec', () => {
   it('keeps common labels and offsets stable', () => {

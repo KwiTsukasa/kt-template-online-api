@@ -1,0 +1,54 @@
+{
+  "pluginKey": "__PLUGIN_KEY__",
+  "name": "__PLUGIN_NAME__",
+  "description": "Generated QQBot plugin",
+  "version": "0.1.0",
+  "author": "KT",
+  "license": "UNLICENSED",
+  "homepage": "",
+  "minApiSdkVersion": "1.0.0",
+  "entry": "src/index.ts",
+  "permissions": ["qqbot.send", "plugin.config.read", "plugin.storage.write"],
+  "operations": [
+    {
+      "key": "__PLUGIN_KEY__.echo",
+      "name": "Echo",
+      "description": "Echo input text",
+      "handlerName": "echo",
+      "aliases": ["/__PLUGIN_KEY__"],
+      "permissions": ["qqbot.send"],
+      "timeoutMs": 3000,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object"
+      }
+    }
+  ],
+  "events": [
+    {
+      "key": "__PLUGIN_KEY__.message",
+      "name": "Message Event",
+      "eventName": "message.created",
+      "handlerName": "onMessage"
+    }
+  ],
+  "configSchema": {
+    "type": "object",
+    "properties": {}
+  },
+  "assets": [],
+  "migrations": [],
+  "runtime": {
+    "workerType": "node-worker",
+    "timeoutMs": 5000,
+    "memoryMb": 128,
+    "maxConcurrency": 1
+  }
+}

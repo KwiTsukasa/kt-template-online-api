@@ -1044,15 +1044,15 @@ git -C D:\MyFiles\KT\Vue\kt-template-admin commit -m "refactor: 同步QQBot核�
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\qqbot\plugin-platform\persistence\**`
 - Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugin-platform\manifest.spec.ts`
 
-- [ ] **Step 1: Write RED manifest validation tests**
+- [x] **Step 1: Write RED manifest validation tests**
 
 Cover plugin key, semantic version, SDK version, operations, events, config schema, assets, migrations, permissions, and runtime limits.
 
-- [ ] **Step 2: Implement manifest parser**
+- [x] **Step 2: Implement manifest parser**
 
 Reject unknown permissions, duplicate operation keys, duplicate event keys, missing runtime budgets, and package paths outside plugin root.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
@@ -1061,6 +1061,8 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --run
 ```
 
 Expected: PASS.
+
+Actual note: Manifest RED first failed with missing `src/modules/qqbot/plugin-platform/manifest`. The parser now normalizes complete manifests and rejects unknown permissions, duplicate operation/event keys, missing runtime budgets, missing operation timeout, and paths outside the plugin root. Batch 5 persistence RED first failed with missing `persistence`; TypeORM entities now map all 9 plugin-platform v3 tables and are checked against real `sql/refactor-v3/00-full-schema.sql`.
 
 ### Task 5.2: Build plugin CLI
 
@@ -1072,7 +1074,7 @@ Expected: PASS.
 - Modify: `D:\MyFiles\KT\Node\kt-template-online-api\package.json`
 - Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugin-platform\cli.spec.ts`
 
-- [ ] **Step 1: Add package script**
+- [x] **Step 1: Add package script**
 
 Add:
 
@@ -1086,7 +1088,7 @@ Add:
 
 Keep existing scripts.
 
-- [ ] **Step 2: Implement commands**
+- [x] **Step 2: Implement commands**
 
 Commands:
 
@@ -1097,7 +1099,7 @@ pack <path>
 install-local <package>
 ```
 
-- [ ] **Step 3: Verify CLI**
+- [x] **Step 3: Verify CLI**
 
 Run:
 
@@ -1109,6 +1111,8 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api qqbot-plugin pack .\plugins
 
 Expected: commands exit `0`, package includes content hash.
 
+Actual note: Added `pnpm qqbot-plugin` backed by `scripts/qqbot-plugin/cli.ts`, with `create`, `validate`, `pack`, and `install-local`. CLI tests caught a package hash mismatch caused by `undefined` fields in stable serialization; stable stringify now skips `undefined` so `pack` and `install-local` verify the same content hash. Real CLI smoke created `plugins/demo-plugin`, validated it, packed `demo-plugin-0.1.0-acc880b89e70.qqbot-plugin.json`, installed it locally, and then removed the temporary directory.
+
 ### Task 5.3: Build worker runtime and lifecycle
 
 **Files:**
@@ -1117,19 +1121,19 @@ Expected: commands exit `0`, package includes content hash.
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\qqbot\plugin-platform\sdk\**`
 - Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugin-platform\worker-runtime.spec.ts`
 
-- [ ] **Step 1: Write RED RPC tests**
+- [x] **Step 1: Write RED RPC tests**
 
 Cover `load`, `activate`, `executeOperation`, `handleEvent`, `health`, `deactivate`, `dispose`, timeout, and crash isolation.
 
-- [ ] **Step 2: Implement host-side runtime**
+- [x] **Step 2: Implement host-side runtime**
 
 Worker messages include correlation ID, timeout budget, operation ID, safe input summary, and structured output.
 
-- [ ] **Step 3: Implement SDK**
+- [x] **Step 3: Implement SDK**
 
 Expose only send queue, plugin config, plugin storage, runtime HTTP client, plugin asset loader, operation context, and event context.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
 
@@ -1140,6 +1144,8 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api run typecheck
 
 Expected: PASS.
 
+Actual note: Worker runtime RED first failed on missing `runtime` and `sdk`. `QqbotPluginWorkerRuntime` now sends lifecycle/execution RPC messages with correlation ID, timeout budget, operation ID/event key, and safe input summary without raw secret values. Worker crash and timeout become plugin-scoped runtime events and set the installation runtime status boundary to failed. `createQqbotPluginSdk` exposes only host-controlled send queue, config, storage, runtime HTTP, asset, operation context, event context, and runtime-event capabilities.
+
 ### Task 5.4: Sync Admin plugin platform page
 
 **Files:**
@@ -1148,15 +1154,15 @@ Expected: PASS.
 - Modify: `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\views\qqbot\plugin\list.tsx`
 - Modify: `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\router\routes\modules\qqbot.ts`
 
-- [ ] **Step 1: Add plugin caller**
+- [x] **Step 1: Add plugin caller**
 
 Caller methods: upload, validate, install, enable, disable, upgrade, uninstall, update config, list runtime events, list account bindings.
 
-- [ ] **Step 2: Build management page**
+- [x] **Step 2: Build management page**
 
 Use tables, status tags, drawers/modals for upload/config/events, and Chinese operation labels.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
@@ -1165,6 +1171,8 @@ pnpm --dir D:\MyFiles\KT\Vue\kt-template-admin -F @vben/web-antdv-next run typec
 ```
 
 Expected: PASS.
+
+Actual note: Added `/qqbot/plugin-platform/*` API controller/service/module before wiring Admin so the caller methods target real routes. Admin now has `src/api/qqbot/plugin.ts` with upload, validate, install, install-local, enable, disable, upgrade, uninstall, config update, runtime events, and account bindings. The existing plugin page remains a single `Page` root, keeps the operation table, and adds Chinese platform actions plus modal/drawer flows for Manifest JSON, installation records, runtime events, and account bindings. Admin route title changed from "插件能力" to "插件平台".
 
 ### Task 5.5: Commit Batch 5
 

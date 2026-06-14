@@ -653,7 +653,7 @@ git -C D:\MyFiles\KT commit -m "docs: 记录第三期迁移准备"
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\src\runtime\client\runtime-docker-client.types.ts`
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\test\runtime\runtime-client-contract.spec.ts`
 
-- [ ] **Step 1: Write RED contract test**
+- [x] **Step 1: Write RED contract test**
 
 Test expectations:
 
@@ -673,15 +673,15 @@ describe('runtime client contracts', () => {
 });
 ```
 
-- [ ] **Step 2: Create type files**
+- [x] **Step 2: Create type files**
 
 Define request/response types for HTTP, process, and Docker calls. Each request type includes `timeoutMs`, `correlationId`, and `safeSummary`.
 
-- [ ] **Step 3: Export contracts**
+- [x] **Step 3: Export contracts**
 
 Modify `src/runtime/index.ts` to export the new client contract types.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run:
 
@@ -699,7 +699,7 @@ Expected: PASS.
 - Modify: `D:\MyFiles\KT\Node\kt-template-online-api\src\common\common.module.ts`
 - Test: existing `test/common/*.spec.ts`
 
-- [ ] **Step 1: List exported common symbols**
+- [x] **Step 1: List exported common symbols**
 
 Run:
 
@@ -707,11 +707,13 @@ Run:
 Get-Content D:\MyFiles\KT\Node\kt-template-online-api\src\common\index.ts
 ```
 
-- [ ] **Step 2: Remove only exports made obsolete by new runtime contracts**
+- [x] **Step 2: Remove only exports made obsolete by new runtime contracts**
 
 Keep response wrappers, filters, interceptors, time decorators, Snowflake, logger config, and generic tools.
 
-- [ ] **Step 3: Verify common tests**
+Actual note: no runtime client or now-obsolete export was present in `src/common/index.ts` or `src/common/common.module.ts`, so Common stayed unchanged to avoid artificial churn.
+
+- [x] **Step 3: Verify common tests**
 
 Run:
 
@@ -728,7 +730,7 @@ Expected: PASS.
 - Modify: `D:\MyFiles\KT\TASKS.md`
 - API and root commits.
 
-- [ ] **Step 1: Run Batch 1 review gates**
+- [x] **Step 1: Run Batch 1 review gates**
 
 Run MCP tools:
 
@@ -739,7 +741,7 @@ kt_global_code_review(projects=["api","root"], contentScanMode="changed", includ
 
 Expected: required docs resolved and `findings=[]`.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 Run:
 

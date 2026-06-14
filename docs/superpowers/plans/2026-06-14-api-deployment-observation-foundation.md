@@ -191,9 +191,9 @@ Add this block after the existing workstream closeout self-tests and before the 
     "--container",
     "api",
     "--health-url",
-    "http://127.0.0.1:30085/health/runtime",
+    "http://127.0.0.1:48085/health/runtime",
     "--smoke",
-    "curl -fsS --max-time 8 http://127.0.0.1:30085/health/runtime",
+    "curl -fsS --max-time 8 http://127.0.0.1:48085/health/runtime",
   ]);
   if (
     deployObservationInput.project !== "api" ||
@@ -205,9 +205,9 @@ Add this block after the existing workstream closeout self-tests and before the 
     deployObservationInput.deployment !== "kt-template-online-api" ||
     deployObservationInput.container !== "api" ||
     deployObservationInput.healthUrl !==
-      "http://127.0.0.1:30085/health/runtime" ||
+      "http://127.0.0.1:48085/health/runtime" ||
     deployObservationInput.smoke !==
-      "curl -fsS --max-time 8 http://127.0.0.1:30085/health/runtime" ||
+      "curl -fsS --max-time 8 http://127.0.0.1:48085/health/runtime" ||
     deployObservationInput.execute !== false
   ) {
     throw new Error("deploy observation CLI parser self-check failed");
@@ -315,12 +315,12 @@ Add this block after the existing workstream closeout self-tests and before the 
   const deployObservationDryRun = await buildDeployObservation({
     deployment: "kt-template-online-api",
     execute: false,
-    healthUrl: "http://127.0.0.1:30085/health/runtime",
+    healthUrl: "http://127.0.0.1:48085/health/runtime",
     imageTag: "abc1234",
     jobName: "kt-template-online-api",
     namespace: "kt-prod",
     project: "api",
-    smoke: "curl -fsS --max-time 8 http://127.0.0.1:30085/health/runtime",
+    smoke: "curl -fsS --max-time 8 http://127.0.0.1:48085/health/runtime",
   });
   const deployObservationCommandText = JSON.stringify(
     deployObservationDryRun.commands,
@@ -429,6 +429,8 @@ export interface DeployObservationJenkinsEvidence {
 
 export interface DeployObservationDeploymentEvidence {
   container: string;
+  containerFound: boolean;
+  desiredReplicas: number | null;
   generation: number | null;
   image: string | null;
   namespace: string;
@@ -438,6 +440,7 @@ export interface DeployObservationDeploymentEvidence {
 }
 
 export interface DeployObservationPodEvidence {
+  containerFound: boolean;
   image: string | null;
   name: string | null;
   phase: string | null;
@@ -574,10 +577,10 @@ function normalizeInput(input: DeployObservationInput = {}): NormalizedInput {
     expectedCommit: input.expectedCommit?.trim() || undefined,
     healthUrl:
       input.healthUrl?.trim() ||
-      'http://127.0.0.1:30085/health/runtime',
+      'http://127.0.0.1:48085/health/runtime',
     imageTag: input.imageTag?.trim() || undefined,
-    jenkinsHome: input.jenkinsHome?.trim() || '/vol1/docker/jenkins_home',
-    jobName: input.jobName?.trim() || 'kt-template-online-api',
+    jenkinsHome: input.jenkinsHome?.trim() || '/vol1/docker/jenkins/jenkins_home',
+    jobName: input.jobName?.trim() || 'KT-Template/KT-Template-API/main',
     kubeconfigPath:
       input.kubeconfigPath?.trim() ||
       '/vol1/docker/kt-k8s/kubeconfig/kt-nas.jenkins.yaml',
@@ -885,9 +888,10 @@ export function normalizeDeployObservationEvidence({
       'deployment-ready-replicas',
       deployment.updatedReplicas !== null &&
         deployment.readyReplicas !== null &&
-        deployment.updatedReplicas > 0 &&
-        deployment.readyReplicas >= deployment.updatedReplicas,
-      `Deployment updated=${deployment.updatedReplicas} ready=${deployment.readyReplicas}`,
+        deployment.desiredReplicas !== null &&
+        deployment.updatedReplicas >= deployment.desiredReplicas &&
+        deployment.readyReplicas >= deployment.desiredReplicas,
+      `Deployment desired=${deployment.desiredReplicas} updated=${deployment.updatedReplicas} ready=${deployment.readyReplicas}`,
     ),
     buildAssertion(
       'pod-running-for-image',
@@ -1099,10 +1103,10 @@ Add this registration after `kt_remote_health_check`:
         deployment: z.string().default('kt-template-online-api'),
         execute: z.boolean().default(false),
         expectedCommit: z.string().optional(),
-        healthUrl: z.string().default('http://127.0.0.1:30085/health/runtime'),
+        healthUrl: z.string().default('http://127.0.0.1:48085/health/runtime'),
         imageTag: z.string().optional(),
-        jenkinsHome: z.string().default('/vol1/docker/jenkins_home'),
-        jobName: z.string().default('kt-template-online-api'),
+        jenkinsHome: z.string().default('/vol1/docker/jenkins/jenkins_home'),
+        jobName: z.string().default('KT-Template/KT-Template-API/main'),
         kubeconfigPath: z
           .string()
           .default('/vol1/docker/kt-k8s/kubeconfig/kt-nas.jenkins.yaml'),
@@ -1242,7 +1246,7 @@ Add this row in the script table:
 Add this guidance near the remote health check note:
 
 ```markdown
-- API 推送触发 Jenkins/K8s 后先运行 `pnpm run deploy-observation -- --project api --job kt-template-online-api --namespace kt-prod --deployment kt-template-online-api --container api --health-url http://127.0.0.1:30085/health/runtime --smoke "curl -fsS --max-time 8 http://127.0.0.1:30085/health/runtime"` 查看 dry-run 命令；确认需要线上只读观测时再加 `--execute`。Deployment/Pod 成功只算发布证据，功能完成还必须看 smoke 输出。
+- API 推送触发 Jenkins/K8s 后先运行 `pnpm run deploy-observation -- --project api --job KT-Template/KT-Template-API/main --namespace kt-prod --deployment kt-template-online-api --container api --health-url http://127.0.0.1:48085/health/runtime --smoke "curl -fsS --max-time 8 http://127.0.0.1:48085/health/runtime"` 查看 dry-run 命令；确认需要线上只读观测时再加 `--execute`。Deployment/Pod 成功只算发布证据，功能完成还必须看 smoke 输出。
 ```
 
 - [ ] **Step 6: Run self-test**
@@ -1322,7 +1326,7 @@ Both commands pass.
 Run:
 
 ```powershell
-pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run deploy-observation -- --project api --job kt-template-online-api --namespace kt-prod --deployment kt-template-online-api --container api --health-url http://127.0.0.1:30085/health/runtime --smoke "curl -fsS --max-time 8 http://127.0.0.1:30085/health/runtime"
+pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run deploy-observation -- --project api --job KT-Template/KT-Template-API/main --namespace kt-prod --deployment kt-template-online-api --container api --health-url http://127.0.0.1:48085/health/runtime --smoke "curl -fsS --max-time 8 http://127.0.0.1:48085/health/runtime"
 ```
 
 Expected:
@@ -1338,7 +1342,7 @@ No artifact is written.
 Run only after confirming NAS SSH is expected to be reachable:
 
 ```powershell
-pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run deploy-observation -- --execute --project api --job kt-template-online-api --namespace kt-prod --deployment kt-template-online-api --container api --health-url http://127.0.0.1:30085/health/runtime --smoke "curl -fsS --max-time 8 http://127.0.0.1:30085/health/runtime"
+pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run deploy-observation -- --execute --project api --job KT-Template/KT-Template-API/main --namespace kt-prod --deployment kt-template-online-api --container api --health-url http://127.0.0.1:48085/health/runtime --smoke "curl -fsS --max-time 8 http://127.0.0.1:48085/health/runtime"
 ```
 
 Expected:

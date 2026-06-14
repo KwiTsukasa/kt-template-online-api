@@ -1,0 +1,677 @@
+CREATE TABLE IF NOT EXISTS admin_user (
+  id BIGINT NOT NULL PRIMARY KEY,
+  username VARCHAR(64) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  nickname VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_admin_user_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_role (
+  id BIGINT NOT NULL PRIMARY KEY,
+  role_key VARCHAR(64) NOT NULL,
+  role_name VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_admin_role_key (role_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_permission (
+  id BIGINT NOT NULL PRIMARY KEY,
+  permission_key VARCHAR(128) NOT NULL,
+  permission_name VARCHAR(128) NOT NULL,
+  module_key VARCHAR(64) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_admin_permission_key (permission_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_menu (
+  id BIGINT NOT NULL PRIMARY KEY,
+  parent_id BIGINT NULL,
+  menu_key VARCHAR(128) NOT NULL,
+  title VARCHAR(128) NOT NULL,
+  path VARCHAR(255) NOT NULL,
+  component VARCHAR(255) NULL,
+  sort_no INT NOT NULL DEFAULT 0,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_admin_menu_key (menu_key),
+  KEY idx_admin_menu_parent (parent_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_department (
+  id BIGINT NOT NULL PRIMARY KEY,
+  parent_id BIGINT NULL,
+  dept_name VARCHAR(128) NOT NULL,
+  sort_no INT NOT NULL DEFAULT 0,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_admin_department_parent (parent_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_user_role (
+  id BIGINT NOT NULL PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  role_id BIGINT NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_admin_user_role (user_id, role_id),
+  KEY idx_admin_user_role_role (role_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_role_permission (
+  id BIGINT NOT NULL PRIMARY KEY,
+  role_id BIGINT NOT NULL,
+  permission_id BIGINT NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_admin_role_permission (role_id, permission_id),
+  KEY idx_admin_role_permission_permission (permission_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_role_menu (
+  id BIGINT NOT NULL PRIMARY KEY,
+  role_id BIGINT NOT NULL,
+  menu_id BIGINT NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_admin_role_menu (role_id, menu_id),
+  KEY idx_admin_role_menu_menu (menu_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS platform_dict_group (
+  id BIGINT NOT NULL PRIMARY KEY,
+  group_key VARCHAR(128) NOT NULL,
+  group_name VARCHAR(128) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_platform_dict_group_key (group_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS platform_dict_item (
+  id BIGINT NOT NULL PRIMARY KEY,
+  group_id BIGINT NOT NULL,
+  item_key VARCHAR(128) NOT NULL,
+  item_label VARCHAR(128) NOT NULL,
+  item_value VARCHAR(255) NOT NULL,
+  sort_no INT NOT NULL DEFAULT 0,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_platform_dict_item (group_id, item_key),
+  KEY idx_platform_dict_item_group (group_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS platform_component_template (
+  id BIGINT NOT NULL PRIMARY KEY,
+  template_key VARCHAR(128) NOT NULL,
+  template_name VARCHAR(128) NOT NULL,
+  schema_json JSON NULL,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_platform_component_template_key (template_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS platform_setting (
+  id BIGINT NOT NULL PRIMARY KEY,
+  setting_key VARCHAR(128) NOT NULL,
+  setting_value TEXT NULL,
+  value_type VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_platform_setting_key (setting_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS blog_post (
+  id BIGINT NOT NULL PRIMARY KEY,
+  slug VARCHAR(255) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  summary TEXT NULL,
+  content_markdown LONGTEXT NULL,
+  content_html LONGTEXT NULL,
+  status VARCHAR(32) NOT NULL,
+  publish_time DATETIME NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_blog_post_slug (slug),
+  KEY idx_blog_post_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS blog_taxonomy (
+  id BIGINT NOT NULL PRIMARY KEY,
+  taxonomy_key VARCHAR(64) NOT NULL,
+  taxonomy_name VARCHAR(128) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_blog_taxonomy_key (taxonomy_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS blog_term (
+  id BIGINT NOT NULL PRIMARY KEY,
+  taxonomy_id BIGINT NOT NULL,
+  slug VARCHAR(255) NOT NULL,
+  term_name VARCHAR(128) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_blog_term_slug (taxonomy_id, slug),
+  KEY idx_blog_term_taxonomy (taxonomy_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS blog_post_term (
+  id BIGINT NOT NULL PRIMARY KEY,
+  post_id BIGINT NOT NULL,
+  term_id BIGINT NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_blog_post_term (post_id, term_id),
+  KEY idx_blog_post_term_term (term_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS blog_theme_profile (
+  id BIGINT NOT NULL PRIMARY KEY,
+  profile_key VARCHAR(128) NOT NULL,
+  profile_name VARCHAR(128) NOT NULL,
+  config_json JSON NOT NULL,
+  enabled TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_blog_theme_profile_key (profile_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS blog_import_job (
+  id BIGINT NOT NULL PRIMARY KEY,
+  source_key VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  started_at DATETIME NULL,
+  finished_at DATETIME NULL,
+  summary_json JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_blog_import_job_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS wordpress_site (
+  id BIGINT NOT NULL PRIMARY KEY,
+  site_key VARCHAR(128) NOT NULL,
+  base_url VARCHAR(512) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_wordpress_site_key (site_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS wordpress_auth_session (
+  id BIGINT NOT NULL PRIMARY KEY,
+  site_id BIGINT NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  expires_at DATETIME NULL,
+  safe_summary JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_wordpress_auth_session_site (site_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS wordpress_remote_post (
+  id BIGINT NOT NULL PRIMARY KEY,
+  site_id BIGINT NOT NULL,
+  remote_id VARCHAR(64) NOT NULL,
+  slug VARCHAR(255) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  raw_payload JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_wordpress_remote_post (site_id, remote_id),
+  KEY idx_wordpress_remote_post_slug (slug)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS wordpress_remote_term (
+  id BIGINT NOT NULL PRIMARY KEY,
+  site_id BIGINT NOT NULL,
+  remote_id VARCHAR(64) NOT NULL,
+  taxonomy_key VARCHAR(64) NOT NULL,
+  slug VARCHAR(255) NOT NULL,
+  raw_payload JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_wordpress_remote_term (site_id, taxonomy_key, remote_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS wordpress_sync_job (
+  id BIGINT NOT NULL PRIMARY KEY,
+  site_id BIGINT NOT NULL,
+  job_type VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  started_at DATETIME NULL,
+  finished_at DATETIME NULL,
+  summary_json JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_wordpress_sync_job_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS wordpress_sync_mapping (
+  id BIGINT NOT NULL PRIMARY KEY,
+  site_id BIGINT NOT NULL,
+  remote_type VARCHAR(64) NOT NULL,
+  remote_id VARCHAR(64) NOT NULL,
+  local_type VARCHAR(64) NOT NULL,
+  local_id BIGINT NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_wordpress_sync_mapping (site_id, remote_type, remote_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS asset_bucket (
+  id BIGINT NOT NULL PRIMARY KEY,
+  bucket_key VARCHAR(128) NOT NULL,
+  bucket_name VARCHAR(128) NOT NULL,
+  provider VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_asset_bucket_key (bucket_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS asset_object (
+  id BIGINT NOT NULL PRIMARY KEY,
+  bucket_id BIGINT NOT NULL,
+  object_key VARCHAR(512) NOT NULL,
+  source_module VARCHAR(64) NOT NULL,
+  mime_type VARCHAR(128) NULL,
+  size_bytes BIGINT NULL,
+  status VARCHAR(32) NOT NULL,
+  metadata_json JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_asset_object_key (bucket_id, object_key),
+  KEY idx_asset_object_source (source_module)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS asset_reference (
+  id BIGINT NOT NULL PRIMARY KEY,
+  object_id BIGINT NOT NULL,
+  owner_module VARCHAR(64) NOT NULL,
+  owner_type VARCHAR(64) NOT NULL,
+  owner_id BIGINT NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_asset_reference (object_id, owner_module, owner_type, owner_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS asset_access_grant (
+  id BIGINT NOT NULL PRIMARY KEY,
+  object_id BIGINT NOT NULL,
+  grant_token VARCHAR(128) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_asset_access_grant_token (grant_token),
+  KEY idx_asset_access_grant_object (object_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS system_notice (
+  id BIGINT NOT NULL PRIMARY KEY,
+  notice_key VARCHAR(128) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  content TEXT NOT NULL,
+  level VARCHAR(32) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_system_notice_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS system_event (
+  id BIGINT NOT NULL PRIMARY KEY,
+  event_key VARCHAR(128) NOT NULL,
+  source_module VARCHAR(64) NOT NULL,
+  event_type VARCHAR(64) NOT NULL,
+  payload_json JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_system_event_key (event_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS system_event_dedupe (
+  id BIGINT NOT NULL PRIMARY KEY,
+  dedupe_key VARCHAR(255) NOT NULL,
+  first_seen_at DATETIME NOT NULL,
+  last_seen_at DATETIME NOT NULL,
+  hit_count INT NOT NULL DEFAULT 1,
+  UNIQUE KEY uk_system_event_dedupe_key (dedupe_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS system_event_delivery (
+  id BIGINT NOT NULL PRIMARY KEY,
+  event_id BIGINT NOT NULL,
+  delivery_target VARCHAR(128) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  attempt_count INT NOT NULL DEFAULT 0,
+  last_error TEXT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_system_event_delivery_event (event_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS runtime_evidence_index (
+  id BIGINT NOT NULL PRIMARY KEY,
+  evidence_key VARCHAR(128) NOT NULL,
+  evidence_type VARCHAR(64) NOT NULL,
+  artifact_path VARCHAR(512) NOT NULL,
+  safe_summary JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_runtime_evidence_key (evidence_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_account (
+  id BIGINT NOT NULL PRIMARY KEY,
+  self_id VARCHAR(64) NOT NULL,
+  display_name VARCHAR(128) NULL,
+  onebot_status VARCHAR(32) NOT NULL,
+  container_status VARCHAR(32) NOT NULL,
+  webui_status VARCHAR(32) NOT NULL,
+  qq_login_status VARCHAR(32) NOT NULL,
+  last_error TEXT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_account_self_id (self_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_connection_session (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  session_key VARCHAR(128) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  connected_at DATETIME NULL,
+  disconnected_at DATETIME NULL,
+  close_reason TEXT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_connection_session_key (session_key),
+  KEY idx_qqbot_connection_session_account (account_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_capability_binding (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  capability_key VARCHAR(128) NOT NULL,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_capability_binding (account_id, capability_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_permission_policy (
+  id BIGINT NOT NULL PRIMARY KEY,
+  policy_key VARCHAR(128) NOT NULL,
+  scope_type VARCHAR(64) NOT NULL,
+  scope_value VARCHAR(128) NOT NULL,
+  effect VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_permission_policy (policy_key, scope_type, scope_value)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_command (
+  id BIGINT NOT NULL PRIMARY KEY,
+  operation_key VARCHAR(128) NOT NULL,
+  command_key VARCHAR(128) NOT NULL,
+  plugin_key VARCHAR(128) NULL,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  cooldown_seconds INT NOT NULL DEFAULT 0,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_command_key (command_key),
+  KEY idx_qqbot_command_operation (operation_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_command_alias (
+  id BIGINT NOT NULL PRIMARY KEY,
+  command_id BIGINT NOT NULL,
+  alias_text VARCHAR(128) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_command_alias (command_id, alias_text)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_rule (
+  id BIGINT NOT NULL PRIMARY KEY,
+  rule_key VARCHAR(128) NOT NULL,
+  account_id BIGINT NULL,
+  command_id BIGINT NULL,
+  matcher_json JSON NOT NULL,
+  action_json JSON NOT NULL,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_rule_key (rule_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_conversation (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  conversation_type VARCHAR(64) NOT NULL,
+  conversation_key VARCHAR(128) NOT NULL,
+  display_name VARCHAR(255) NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_conversation (account_id, conversation_type, conversation_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_message (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  conversation_id BIGINT NULL,
+  message_id VARCHAR(128) NOT NULL,
+  direction VARCHAR(32) NOT NULL,
+  message_type VARCHAR(64) NOT NULL,
+  summary TEXT NULL,
+  raw_payload JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_message (account_id, message_id),
+  KEY idx_qqbot_message_conversation (conversation_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_send_task (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  conversation_id BIGINT NULL,
+  task_key VARCHAR(128) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  payload_json JSON NOT NULL,
+  reserved_at DATETIME NULL,
+  sent_at DATETIME NULL,
+  last_error TEXT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_send_task_key (task_key),
+  KEY idx_qqbot_send_task_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_send_log (
+  id BIGINT NOT NULL PRIMARY KEY,
+  task_id BIGINT NULL,
+  account_id BIGINT NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  safe_summary JSON NULL,
+  error_message TEXT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_qqbot_send_log_task (task_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_dedupe_event (
+  id BIGINT NOT NULL PRIMARY KEY,
+  dedupe_key VARCHAR(255) NOT NULL,
+  account_id BIGINT NULL,
+  expires_at DATETIME NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_dedupe_event_key (dedupe_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_plugin (
+  id BIGINT NOT NULL PRIMARY KEY,
+  plugin_key VARCHAR(128) NOT NULL,
+  plugin_name VARCHAR(128) NOT NULL,
+  description TEXT NULL,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_plugin_key (plugin_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_plugin_version (
+  id BIGINT NOT NULL PRIMARY KEY,
+  plugin_id BIGINT NOT NULL,
+  version VARCHAR(64) NOT NULL,
+  package_hash VARCHAR(128) NOT NULL,
+  manifest_json JSON NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_plugin_version (plugin_id, version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_plugin_installation (
+  id BIGINT NOT NULL PRIMARY KEY,
+  plugin_id BIGINT NOT NULL,
+  version_id BIGINT NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  runtime_status VARCHAR(32) NOT NULL,
+  installed_path VARCHAR(512) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_qqbot_plugin_installation_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_plugin_operation (
+  id BIGINT NOT NULL PRIMARY KEY,
+  plugin_id BIGINT NOT NULL,
+  operation_key VARCHAR(128) NOT NULL,
+  operation_name VARCHAR(128) NOT NULL,
+  handler_name VARCHAR(128) NOT NULL,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_plugin_operation (plugin_id, operation_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_plugin_event_handler (
+  id BIGINT NOT NULL PRIMARY KEY,
+  plugin_id BIGINT NOT NULL,
+  event_key VARCHAR(128) NOT NULL,
+  handler_name VARCHAR(128) NOT NULL,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_plugin_event_handler (plugin_id, event_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_plugin_account_binding (
+  id BIGINT NOT NULL PRIMARY KEY,
+  plugin_id BIGINT NOT NULL,
+  account_id BIGINT NOT NULL,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_plugin_account_binding (plugin_id, account_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_plugin_config (
+  id BIGINT NOT NULL PRIMARY KEY,
+  plugin_id BIGINT NOT NULL,
+  config_key VARCHAR(128) NOT NULL,
+  config_value JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_plugin_config (plugin_id, config_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_plugin_asset (
+  id BIGINT NOT NULL PRIMARY KEY,
+  plugin_id BIGINT NOT NULL,
+  asset_key VARCHAR(255) NOT NULL,
+  asset_path VARCHAR(512) NOT NULL,
+  content_hash VARCHAR(128) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_plugin_asset (plugin_id, asset_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_plugin_runtime_event (
+  id BIGINT NOT NULL PRIMARY KEY,
+  plugin_id BIGINT NOT NULL,
+  installation_id BIGINT NULL,
+  event_type VARCHAR(64) NOT NULL,
+  level VARCHAR(32) NOT NULL,
+  safe_summary JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_qqbot_plugin_runtime_event_plugin (plugin_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS napcat_container (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  container_name VARCHAR(128) NOT NULL,
+  image_name VARCHAR(255) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_napcat_container_name (container_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS napcat_device_identity (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  container_id BIGINT NULL,
+  data_dir VARCHAR(512) NOT NULL,
+  hostname VARCHAR(128) NOT NULL,
+  machine_id_path VARCHAR(512) NOT NULL,
+  mac_address VARCHAR(64) NOT NULL,
+  verification_status VARCHAR(32) NOT NULL,
+  last_login_evidence JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_napcat_device_identity_account (account_id),
+  KEY idx_napcat_device_identity_container (container_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS napcat_account_binding (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  container_id BIGINT NOT NULL,
+  device_identity_id BIGINT NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_napcat_account_binding_account (account_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS napcat_login_session (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  session_key VARCHAR(128) NOT NULL,
+  login_stage VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  progress_message VARCHAR(255) NOT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_napcat_login_session_key (session_key),
+  KEY idx_napcat_login_session_account (account_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS napcat_login_challenge (
+  id BIGINT NOT NULL PRIMARY KEY,
+  session_id BIGINT NOT NULL,
+  challenge_type VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  challenge_url TEXT NULL,
+  challenge_payload JSON NULL,
+  resolved_at DATETIME NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_napcat_login_challenge_session (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS napcat_runtime_cleanup (
+  id BIGINT NOT NULL PRIMARY KEY,
+  session_id BIGINT NOT NULL,
+  cleanup_type VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  error_message TEXT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_napcat_runtime_cleanup_session (session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

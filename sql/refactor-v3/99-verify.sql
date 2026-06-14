@@ -1,0 +1,53 @@
+SELECT 'admin_user' AS table_name, COUNT(*) AS row_count FROM admin_user;
+SELECT 'admin_role' AS table_name, COUNT(*) AS row_count FROM admin_role;
+SELECT 'admin_menu' AS table_name, COUNT(*) AS row_count FROM admin_menu;
+SELECT 'platform_setting' AS table_name, COUNT(*) AS row_count FROM platform_setting;
+SELECT 'qqbot_command' AS table_name, COUNT(*) AS row_count FROM qqbot_command;
+SELECT 'qqbot_plugin' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin;
+SELECT 'napcat_device_identity' AS table_name, COUNT(*) AS row_count FROM napcat_device_identity;
+
+SELECT 'seed_admin_user' AS check_name, COUNT(*) AS matched_rows
+FROM admin_user
+WHERE username = 'admin'
+  AND status = 'password_unset';
+
+SELECT 'seed_platform_schema_version' AS check_name, COUNT(*) AS matched_rows
+FROM platform_setting
+WHERE setting_key = 'schema.version'
+  AND setting_value = 'refactor-v3';
+
+SELECT 'seed_qqbot_plugin_bangdream' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_plugin
+WHERE plugin_key = 'bangdream'
+  AND status = 'installed';
+
+SELECT 'seed_qqbot_command_bangdream_song' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_command
+WHERE command_key = 'bangdream_song'
+  AND operation_key = 'bangdream.song.search'
+  AND plugin_key = 'bangdream'
+  AND enabled = 1;
+
+SELECT 'index_admin_user_username' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'admin_user'
+  AND index_name = 'uk_admin_user_username';
+
+SELECT 'index_platform_setting_key' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'platform_setting'
+  AND index_name = 'uk_platform_setting_key';
+
+SELECT 'index_qqbot_command_key' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'qqbot_command'
+  AND index_name = 'uk_qqbot_command_key';
+
+SELECT 'index_napcat_device_identity_account' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_device_identity'
+  AND index_name = 'uk_napcat_device_identity_account';

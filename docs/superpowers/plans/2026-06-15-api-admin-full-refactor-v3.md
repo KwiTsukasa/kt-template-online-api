@@ -18,8 +18,8 @@ Every batch must leave the product in a locally verifiable state. Batch 8 is the
 
 ## Current State Evidence
 
-- API repo: `D:\MyFiles\KT\Node\kt-template-online-api`, branch `main`, clean at plan start, package manager `pnpm@9.15.9`, no `.node-version`, no `engines`.
-- Admin repo: `D:\MyFiles\KT\Vue\kt-template-admin`, branch `main`, package manager `pnpm@10.28.2`, `.node-version=22.22.0`, `engines.node >=20.19.0`, `engines.pnpm >=10.0.0`.
+- API repo: `D:\MyFiles\KT\Node\kt-template-online-api`, implementation branch `dev-api-full-refactor-v3`, package manager `pnpm@9.15.9`, no `.node-version`, no `engines`.
+- Admin repo: `D:\MyFiles\KT\Vue\kt-template-admin`, implementation branch `dev-admin-full-refactor-v3`, package manager `pnpm@10.28.2`, `.node-version=22.22.0`, `engines.node >=20.19.0`, `engines.pnpm >=10.0.0`.
 - Admin repo has three old dirty files authorized by the user to discard during implementation preparation:
   - `README.md`
   - `apps/web-antdv-next/src/api/qqbot/index.ts`
@@ -106,7 +106,7 @@ Every batch must leave the product in a locally verifiable state. Batch 8 is the
 **Files:**
 - No file edits in this task.
 
-- [ ] **Step 1: Verify API worktree is clean**
+- [x] **Step 1: Verify API worktree is clean**
 
 Run:
 
@@ -120,21 +120,21 @@ Expected:
 ## main...origin/main [ahead 3]
 ```
 
-- [ ] **Step 2: Create API implementation branch**
+- [x] **Step 2: Create API implementation branch**
 
 Run:
 
 ```powershell
-git -C D:\MyFiles\KT\Node\kt-template-online-api switch -c dev/api-full-refactor-v3
+git -C D:\MyFiles\KT\Node\kt-template-online-api switch -c dev-api-full-refactor-v3
 ```
 
 Expected:
 
 ```text
-Switched to a new branch 'dev/api-full-refactor-v3'
+Switched to a new branch 'dev-api-full-refactor-v3'
 ```
 
-- [ ] **Step 3: Confirm branch**
+- [x] **Step 3: Confirm branch**
 
 Run:
 
@@ -145,8 +145,10 @@ git -C D:\MyFiles\KT\Node\kt-template-online-api branch --show-current
 Expected:
 
 ```text
-dev/api-full-refactor-v3
+dev-api-full-refactor-v3
 ```
+
+Actual note: `dev/api-full-refactor-v3` could not be created because the API repository already has a local `dev` branch, so Git cannot create a nested ref under `refs/heads/dev`. The implementation branch is `dev-api-full-refactor-v3` to preserve the existing `dev` branch.
 
 ### Task 0.2: Clean authorized Admin old artifacts and prepare branch
 
@@ -156,7 +158,7 @@ dev/api-full-refactor-v3
   - `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\api\qqbot\index.ts`
   - `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\views\qqbot\account\list.tsx`
 
-- [ ] **Step 1: Verify Admin dirty set is exactly authorized**
+- [x] **Step 1: Verify Admin dirty set is exactly authorized**
 
 Run:
 
@@ -172,11 +174,11 @@ Expected:
  M apps/web-antdv-next/src/views/qqbot/account/list.tsx
 ```
 
-- [ ] **Step 2: Stop if any extra path appears**
+- [x] **Step 2: Stop if any extra path appears**
 
 If the output contains another path, stop and ask the user before cleanup.
 
-- [ ] **Step 3: Restore authorized old files**
+- [x] **Step 3: Restore authorized old files**
 
 Run:
 
@@ -186,7 +188,7 @@ git -C D:\MyFiles\KT\Vue\kt-template-admin restore -- README.md apps/web-antdv-n
 
 Expected: command exits `0`.
 
-- [ ] **Step 4: Confirm Admin worktree is clean**
+- [x] **Step 4: Confirm Admin worktree is clean**
 
 Run:
 
@@ -200,18 +202,18 @@ Expected:
 ## main...origin/main
 ```
 
-- [ ] **Step 5: Create Admin implementation branch**
+- [x] **Step 5: Create Admin implementation branch**
 
 Run:
 
 ```powershell
-git -C D:\MyFiles\KT\Vue\kt-template-admin switch -c dev/admin-full-refactor-v3
+git -C D:\MyFiles\KT\Vue\kt-template-admin switch -c dev-admin-full-refactor-v3
 ```
 
 Expected:
 
 ```text
-Switched to a new branch 'dev/admin-full-refactor-v3'
+Switched to a new branch 'dev-admin-full-refactor-v3'
 ```
 
 ### Task 0.3: Create migration control documents
@@ -222,7 +224,7 @@ Switched to a new branch 'dev/admin-full-refactor-v3'
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\docs\refactor-v3\breaking-changes.md`
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\docs\refactor-v3\rebuild-runbook.md`
 
-- [ ] **Step 1: Add `schema-map.md`**
+- [x] **Step 1: Add `schema-map.md`**
 
 Use this content:
 
@@ -254,7 +256,7 @@ Use this content:
 | Plugin-Owned Data | plugin namespace tables | Batch 6 | Table names start with registered plugin namespace. |
 ```
 
-- [ ] **Step 2: Add `api-admin-contract-matrix.md`**
+- [x] **Step 2: Add `api-admin-contract-matrix.md`**
 
 Use this content:
 
@@ -273,7 +275,7 @@ Use this content:
 | 8 | public deployed URLs | deployed Admin | online smoke bundle |
 ```
 
-- [ ] **Step 3: Add `breaking-changes.md`**
+- [x] **Step 3: Add `breaking-changes.md`**
 
 Use this content:
 
@@ -300,7 +302,7 @@ Use this content:
 - NapCat cleanup failure blocks success.
 ```
 
-- [ ] **Step 4: Add `rebuild-runbook.md`**
+- [x] **Step 4: Add `rebuild-runbook.md`**
 
 Use this content:
 
@@ -338,7 +340,7 @@ Use this content:
 4. Re-run smoke for the restored version.
 ```
 
-- [ ] **Step 5: Verify docs exist**
+- [x] **Step 5: Verify docs exist**
 
 Run:
 
@@ -366,7 +368,7 @@ True
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\sql\refactor-v3\99-verify.sql`
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\test\refactor-v3\schema-map.spec.ts`
 
-- [ ] **Step 1: Write failing schema test**
+- [x] **Step 1: Write failing schema test**
 
 Create `test/refactor-v3/schema-map.spec.ts`:
 
@@ -425,15 +427,17 @@ describe('refactor v3 schema skeleton', () => {
     );
 
     expect(seed).toContain('INSERT INTO admin_user');
+    expect(seed).toContain('INSERT INTO qqbot_command');
     expect(seed).toContain('INSERT INTO qqbot_plugin');
     expect(verify).toContain('admin_user');
+    expect(verify).toContain('qqbot_command');
     expect(verify).toContain('qqbot_plugin');
     expect(verify).toContain('napcat_device_identity');
   });
 });
 ```
 
-- [ ] **Step 2: Run RED check**
+- [x] **Step 2: Run RED check**
 
 Run:
 
@@ -443,11 +447,11 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --run
 
 Expected: FAIL because `sql/refactor-v3/00-full-schema.sql` does not exist.
 
-- [ ] **Step 3: Add minimal SQL skeleton**
+- [x] **Step 3: Add minimal SQL skeleton**
 
 Create the three SQL files with table declarations, seed markers, and verify markers. Use full table definitions before ending Batch 0; the initial minimal version only makes the RED check meaningful.
 
-- [ ] **Step 4: Run GREEN check**
+- [x] **Step 4: Run GREEN check**
 
 Run:
 
@@ -465,7 +469,7 @@ Expected: PASS.
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\scripts\refactor-v3\db-restore-online.ps1`
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\scripts\refactor-v3\local-smoke.ps1`
 
-- [ ] **Step 1: Add dry-run script**
+- [x] **Step 1: Add dry-run script**
 
 Create `db-dry-run.ps1`:
 
@@ -478,18 +482,31 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($Database -notmatch '^[A-Za-z0-9_]+$') {
+  throw "Database must match ^[A-Za-z0-9_]+$"
+}
+
 $root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $schema = Join-Path $root "sql\refactor-v3\00-full-schema.sql"
 $seed = Join-Path $root "sql\refactor-v3\01-seed-core.sql"
 $verify = Join-Path $root "sql\refactor-v3\99-verify.sql"
 
+function Invoke-MysqlSource {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path
+  )
+
+  $sourcePath = (Resolve-Path -LiteralPath $Path).Path.Replace("\", "/")
+  mysql -h $HostName -P $Port -u $User $Database --execute="source $sourcePath"
+}
+
 mysql -h $HostName -P $Port -u $User -e "DROP DATABASE IF EXISTS ``$Database``; CREATE DATABASE ``$Database`` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql -h $HostName -P $Port -u $User $Database < $schema
-mysql -h $HostName -P $Port -u $User $Database < $seed
-mysql -h $HostName -P $Port -u $User $Database < $verify
+Invoke-MysqlSource -Path $schema
+Invoke-MysqlSource -Path $seed
+Invoke-MysqlSource -Path $verify
 ```
 
-- [ ] **Step 2: Add online backup script**
+- [x] **Step 2: Add online backup script**
 
 Create `db-backup-online.ps1`:
 
@@ -500,13 +517,17 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($Database -notmatch '^[A-Za-z0-9_]+$') {
+  throw "Database must match ^[A-Za-z0-9_]+$"
+}
+
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $target = Join-Path $OutputDirectory "$Database-refactor-v3-$stamp.sql"
-mysqldump --set-gtid-purged=OFF --single-transaction --routines --triggers $Database | Out-File -Encoding utf8 $target
+mysqldump --set-gtid-purged=OFF --single-transaction --routines --triggers --default-character-set=utf8mb4 "--result-file=$target" $Database
 Write-Output $target
 ```
 
-- [ ] **Step 3: Add restore script**
+- [x] **Step 3: Add restore script**
 
 Create `db-restore-online.ps1`:
 
@@ -517,11 +538,19 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($Database -notmatch '^[A-Za-z0-9_]+$') {
+  throw "Database must match ^[A-Za-z0-9_]+$"
+}
+if (-not (Test-Path -LiteralPath $BackupFile -PathType Leaf)) {
+  throw "BackupFile does not exist"
+}
+
+$sourcePath = (Resolve-Path -LiteralPath $BackupFile).Path.Replace("\", "/")
 mysql -e "DROP DATABASE IF EXISTS ``$Database``; CREATE DATABASE ``$Database`` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-mysql $Database < $BackupFile
+mysql --default-character-set=utf8mb4 $Database --execute="source $sourcePath"
 ```
 
-- [ ] **Step 4: Add local smoke script**
+- [x] **Step 4: Add local smoke script**
 
 Create `local-smoke.ps1`:
 
@@ -538,18 +567,22 @@ if (-not $runtime.service) {
 Write-Output "runtime.service=$($runtime.service)"
 ```
 
-- [ ] **Step 5: Validate scripts parse**
+- [x] **Step 5: Validate scripts parse**
 
 Run:
 
 ```powershell
-powershell -NoProfile -Command "$null = [scriptblock]::Create((Get-Content -Raw D:\MyFiles\KT\Node\kt-template-online-api\scripts\refactor-v3\db-dry-run.ps1)); 'ok'"
-powershell -NoProfile -Command "$null = [scriptblock]::Create((Get-Content -Raw D:\MyFiles\KT\Node\kt-template-online-api\scripts\refactor-v3\local-smoke.ps1)); 'ok'"
+powershell -NoProfile -Command '$null = [scriptblock]::Create((Get-Content -Raw -LiteralPath "D:\MyFiles\KT\Node\kt-template-online-api\scripts\refactor-v3\db-dry-run.ps1")); "ok"'
+powershell -NoProfile -Command '$null = [scriptblock]::Create((Get-Content -Raw -LiteralPath "D:\MyFiles\KT\Node\kt-template-online-api\scripts\refactor-v3\local-smoke.ps1")); "ok"'
+powershell -NoProfile -Command '$null = [scriptblock]::Create((Get-Content -Raw -LiteralPath "D:\MyFiles\KT\Node\kt-template-online-api\scripts\refactor-v3\db-backup-online.ps1")); "ok"'
+powershell -NoProfile -Command '$null = [scriptblock]::Create((Get-Content -Raw -LiteralPath "D:\MyFiles\KT\Node\kt-template-online-api\scripts\refactor-v3\db-restore-online.ps1")); "ok"'
 ```
 
 Expected:
 
 ```text
+ok
+ok
 ok
 ok
 ```
@@ -1373,8 +1406,8 @@ After confirmation, push both repos.
 Run:
 
 ```powershell
-git -C D:\MyFiles\KT\Node\kt-template-online-api push -u origin dev/api-full-refactor-v3
-git -C D:\MyFiles\KT\Vue\kt-template-admin push -u origin dev/admin-full-refactor-v3
+git -C D:\MyFiles\KT\Node\kt-template-online-api push -u origin dev-api-full-refactor-v3
+git -C D:\MyFiles\KT\Vue\kt-template-admin push -u origin dev-admin-full-refactor-v3
 ```
 
 Then collect Jenkins/K8s evidence:

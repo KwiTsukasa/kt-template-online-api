@@ -368,15 +368,39 @@ CREATE TABLE IF NOT EXISTS runtime_evidence_index (
 CREATE TABLE IF NOT EXISTS qqbot_account (
   id BIGINT NOT NULL PRIMARY KEY,
   self_id VARCHAR(64) NOT NULL,
+  connection_mode VARCHAR(32) NOT NULL DEFAULT 'reverse-ws',
+  name VARCHAR(120) NOT NULL DEFAULT '',
   display_name VARCHAR(128) NULL,
-  onebot_status VARCHAR(32) NOT NULL,
-  container_status VARCHAR(32) NOT NULL,
-  webui_status VARCHAR(32) NOT NULL,
-  qq_login_status VARCHAR(32) NOT NULL,
+  access_token VARCHAR(255) NULL,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  connect_status VARCHAR(32) NOT NULL DEFAULT 'offline',
+  onebot_status VARCHAR(32) NOT NULL DEFAULT 'offline',
+  container_status VARCHAR(32) NOT NULL DEFAULT 'unknown',
+  webui_status VARCHAR(32) NOT NULL DEFAULT 'unknown',
+  qq_login_status VARCHAR(32) NOT NULL DEFAULT 'unknown',
+  client_role VARCHAR(32) NULL,
+  last_connected_at DATETIME NULL,
+  last_heartbeat_at DATETIME NULL,
   last_error TEXT NULL,
+  napcat_login_password_secret VARCHAR(1024) NULL,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  is_deleted TINYINT NOT NULL DEFAULT 0,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_qqbot_account_self_id (self_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_account_ability (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  self_id VARCHAR(64) NOT NULL,
+  ability_type VARCHAR(32) NOT NULL,
+  ability_key VARCHAR(128) NOT NULL,
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_account_ability (account_id, ability_type, ability_key),
+  KEY idx_qqbot_account_ability_self (self_id, ability_type, is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS qqbot_connection_session (
@@ -412,13 +436,55 @@ CREATE TABLE IF NOT EXISTS qqbot_permission_policy (
   UNIQUE KEY uk_qqbot_permission_policy (policy_key, scope_type, scope_value)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS qqbot_allowlist (
+  id BIGINT NOT NULL PRIMARY KEY,
+  self_id VARCHAR(64) NOT NULL DEFAULT '',
+  target_type VARCHAR(32) NOT NULL DEFAULT 'qq',
+  target_id VARCHAR(64) NOT NULL DEFAULT '',
+  user_id VARCHAR(64) NOT NULL DEFAULT '',
+  precise_user TINYINT NOT NULL DEFAULT 0,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_blocklist (
+  id BIGINT NOT NULL PRIMARY KEY,
+  self_id VARCHAR(64) NOT NULL DEFAULT '',
+  target_type VARCHAR(32) NOT NULL DEFAULT 'qq',
+  target_id VARCHAR(64) NOT NULL DEFAULT '',
+  user_id VARCHAR(64) NOT NULL DEFAULT '',
+  precise_user TINYINT NOT NULL DEFAULT 0,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS qqbot_command (
   id BIGINT NOT NULL PRIMARY KEY,
   operation_key VARCHAR(128) NOT NULL,
-  command_key VARCHAR(128) NOT NULL,
+  command_key VARCHAR(128) NULL,
+  code VARCHAR(80) NOT NULL,
+  name VARCHAR(120) NOT NULL DEFAULT '',
+  aliases TEXT NOT NULL,
+  prefixes VARCHAR(120) NOT NULL DEFAULT '/,!,！',
   plugin_key VARCHAR(128) NULL,
+  parser_key VARCHAR(40) NOT NULL DEFAULT 'plain',
+  target_type VARCHAR(32) NOT NULL DEFAULT 'all',
+  default_params TEXT NULL,
+  reply_template TEXT NULL,
+  error_template TEXT NULL,
   enabled TINYINT NOT NULL DEFAULT 1,
+  priority INT NOT NULL DEFAULT 0,
+  cooldown_ms INT NOT NULL DEFAULT 1500,
   cooldown_seconds INT NOT NULL DEFAULT 0,
+  last_hit_at DATETIME NULL,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  is_deleted TINYINT NOT NULL DEFAULT 0,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_qqbot_command_key (command_key),
@@ -433,14 +499,53 @@ CREATE TABLE IF NOT EXISTS qqbot_command_alias (
   UNIQUE KEY uk_qqbot_command_alias (command_id, alias_text)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS qqbot_command_log (
+  id BIGINT NOT NULL PRIMARY KEY,
+  command_id VARCHAR(64) NOT NULL,
+  command_code VARCHAR(80) NOT NULL DEFAULT '',
+  plugin_key VARCHAR(80) NOT NULL,
+  operation_key VARCHAR(120) NOT NULL,
+  self_id VARCHAR(64) NOT NULL DEFAULT '',
+  target_type VARCHAR(32) NOT NULL DEFAULT 'private',
+  target_id VARCHAR(64) NOT NULL DEFAULT '',
+  user_id VARCHAR(64) NOT NULL DEFAULT '',
+  raw_message TEXT NOT NULL,
+  input TEXT NULL,
+  output TEXT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'success',
+  error_message TEXT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_config (
+  id BIGINT NOT NULL PRIMARY KEY,
+  config_key VARCHAR(120) NOT NULL,
+  config_value TEXT NOT NULL,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_config_key (config_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS qqbot_rule (
   id BIGINT NOT NULL PRIMARY KEY,
-  rule_key VARCHAR(128) NOT NULL,
+  rule_key VARCHAR(128) NULL,
+  name VARCHAR(120) NOT NULL DEFAULT '',
+  match_type VARCHAR(32) NOT NULL DEFAULT 'keyword',
+  keyword VARCHAR(500) NOT NULL,
+  target_type VARCHAR(32) NOT NULL DEFAULT 'all',
+  reply_content TEXT NOT NULL,
   account_id BIGINT NULL,
   command_id BIGINT NULL,
-  matcher_json JSON NOT NULL,
-  action_json JSON NOT NULL,
+  matcher_json JSON NULL,
+  action_json JSON NULL,
   enabled TINYINT NOT NULL DEFAULT 1,
+  priority INT NOT NULL DEFAULT 0,
+  cooldown_ms INT NOT NULL DEFAULT 1500,
+  last_hit_at DATETIME NULL,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  is_deleted TINYINT NOT NULL DEFAULT 0,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_qqbot_rule_key (rule_key)
@@ -448,10 +553,19 @@ CREATE TABLE IF NOT EXISTS qqbot_rule (
 
 CREATE TABLE IF NOT EXISTS qqbot_conversation (
   id BIGINT NOT NULL PRIMARY KEY,
-  account_id BIGINT NOT NULL,
-  conversation_type VARCHAR(64) NOT NULL,
-  conversation_key VARCHAR(128) NOT NULL,
+  account_id BIGINT NULL,
+  self_id VARCHAR(64) NOT NULL,
+  conversation_type VARCHAR(64) NULL,
+  conversation_key VARCHAR(128) NULL,
+  target_type VARCHAR(32) NOT NULL,
+  target_id VARCHAR(64) NOT NULL,
   display_name VARCHAR(255) NULL,
+  target_name VARCHAR(120) NOT NULL DEFAULT '',
+  last_message_id VARCHAR(64) NULL,
+  last_message_text TEXT NOT NULL,
+  last_message_time DATETIME NULL,
+  message_count INT NOT NULL DEFAULT 0,
+  is_deleted TINYINT NOT NULL DEFAULT 0,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_qqbot_conversation (account_id, conversation_type, conversation_key)
@@ -459,21 +573,31 @@ CREATE TABLE IF NOT EXISTS qqbot_conversation (
 
 CREATE TABLE IF NOT EXISTS qqbot_message (
   id BIGINT NOT NULL PRIMARY KEY,
-  account_id BIGINT NOT NULL,
+  account_id BIGINT NULL,
+  self_id VARCHAR(64) NOT NULL,
   conversation_id BIGINT NULL,
-  message_id VARCHAR(128) NOT NULL,
+  message_id VARCHAR(128) NULL,
   direction VARCHAR(32) NOT NULL,
   message_type VARCHAR(64) NOT NULL,
+  target_id VARCHAR(64) NOT NULL,
+  group_id VARCHAR(64) NULL,
+  user_id VARCHAR(64) NOT NULL,
+  sender_nickname VARCHAR(120) NOT NULL DEFAULT '',
+  raw_message TEXT NOT NULL,
+  message_text TEXT NOT NULL,
   summary TEXT NULL,
   raw_payload JSON NULL,
+  raw_event JSON NULL,
+  event_time DATETIME NOT NULL,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_qqbot_message (account_id, message_id),
   KEY idx_qqbot_message_conversation (conversation_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS qqbot_send_task (
   id BIGINT NOT NULL PRIMARY KEY,
-  account_id BIGINT NOT NULL,
+  account_id BIGINT NULL,
   conversation_id BIGINT NULL,
   task_key VARCHAR(128) NOT NULL,
   status VARCHAR(32) NOT NULL,
@@ -490,11 +614,21 @@ CREATE TABLE IF NOT EXISTS qqbot_send_task (
 CREATE TABLE IF NOT EXISTS qqbot_send_log (
   id BIGINT NOT NULL PRIMARY KEY,
   task_id BIGINT NULL,
-  account_id BIGINT NOT NULL,
+  account_id BIGINT NULL,
+  self_id VARCHAR(64) NOT NULL,
+  target_type VARCHAR(32) NOT NULL,
+  target_id VARCHAR(64) NOT NULL,
+  action VARCHAR(64) NOT NULL,
+  message_text TEXT NOT NULL,
+  params JSON NULL,
   status VARCHAR(32) NOT NULL,
+  echo VARCHAR(80) NULL,
+  message_id VARCHAR(64) NULL,
   safe_summary JSON NULL,
   error_message TEXT NULL,
+  response JSON NULL,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_qqbot_send_log_task (task_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -505,6 +639,15 @@ CREATE TABLE IF NOT EXISTS qqbot_dedupe_event (
   expires_at DATETIME NOT NULL,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_qqbot_dedupe_event_key (dedupe_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_dedupe (
+  id BIGINT NOT NULL PRIMARY KEY,
+  event_key VARCHAR(255) NOT NULL,
+  expire_at DATETIME NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_dedupe_event_key (event_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS qqbot_plugin (
@@ -610,6 +753,42 @@ CREATE TABLE IF NOT EXISTS napcat_container (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_napcat_container_name (container_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_account_napcat (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  container_id BIGINT NOT NULL,
+  bind_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+  is_primary TINYINT NOT NULL DEFAULT 1,
+  last_login_at DATETIME NULL,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_qqbot_account_napcat_account (account_id, is_deleted),
+  KEY idx_qqbot_account_napcat_container (container_id, is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_napcat_container (
+  id BIGINT NOT NULL PRIMARY KEY,
+  name VARCHAR(120) NOT NULL,
+  base_url VARCHAR(255) NOT NULL,
+  webui_port INT NULL,
+  webui_token VARCHAR(255) NULL,
+  image VARCHAR(255) NOT NULL DEFAULT '',
+  data_dir VARCHAR(500) NOT NULL DEFAULT '',
+  reverse_ws_url VARCHAR(500) NOT NULL DEFAULT '',
+  status VARCHAR(32) NOT NULL DEFAULT 'creating',
+  last_started_at DATETIME NULL,
+  last_checked_at DATETIME NULL,
+  last_error VARCHAR(500) NULL,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_napcat_container_name (name),
+  KEY idx_qqbot_napcat_container_status (status, is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS napcat_device_identity (

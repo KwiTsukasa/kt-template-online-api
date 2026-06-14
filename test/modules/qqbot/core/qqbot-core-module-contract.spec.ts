@@ -1,0 +1,280 @@
+const mockQqbotEventPluginRegistryService = class QqbotEventPluginRegistryService {};
+const mockQqbotPluginRegistryService = class QqbotPluginRegistryService {};
+
+jest.mock('@/qqbot/plugin/qqbot-event-plugin-registry.service', () => ({
+  QqbotEventPluginRegistryService: mockQqbotEventPluginRegistryService,
+}));
+jest.mock(
+  '../../../../src/qqbot/plugin/qqbot-event-plugin-registry.service',
+  () => ({
+    QqbotEventPluginRegistryService: mockQqbotEventPluginRegistryService,
+  }),
+);
+jest.mock('@/qqbot/plugin/qqbot-plugin-registry.service', () => ({
+  QqbotPluginRegistryService: mockQqbotPluginRegistryService,
+}));
+jest.mock('../../../../src/qqbot/plugin/qqbot-plugin-registry.service', () => ({
+  QqbotPluginRegistryService: mockQqbotPluginRegistryService,
+}));
+jest.mock(
+  '@/qqbot/plugins/bangDream/application/bangdream-client.service',
+  () => ({
+    QqbotBangDreamClientService: class QqbotBangDreamClientService {},
+  }),
+);
+jest.mock(
+  '@/qqbot/plugins/bangDream/application/bangdream-renderer.facade',
+  () => ({
+    QqbotBangDreamRendererService: class QqbotBangDreamRendererService {},
+  }),
+);
+jest.mock(
+  '@/qqbot/plugins/bangDream/application/bangdream-application.service',
+  () => ({
+    TsuguApplicationService: class TsuguApplicationService {},
+  }),
+);
+jest.mock('@/qqbot/plugins/bangDream/qqbot-bangdream.plugin', () => ({
+  QqbotBangDreamPluginService: class QqbotBangDreamPluginService {},
+}));
+jest.mock('@/qqbot/plugins/ff14Market/qqbot-ff14-client.service', () => ({
+  QqbotFf14ClientService: class QqbotFf14ClientService {},
+}));
+jest.mock('@/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin', () => ({
+  QqbotFf14MarketPluginService: class QqbotFf14MarketPluginService {},
+}));
+jest.mock('@/qqbot/plugins/fflogs/qqbot-fflogs-client.service', () => ({
+  QqbotFflogsClientService: class QqbotFflogsClientService {},
+}));
+jest.mock('@/qqbot/plugins/fflogs/qqbot-fflogs.plugin', () => ({
+  QqbotFflogsPluginService: class QqbotFflogsPluginService {},
+}));
+jest.mock('@/qqbot/plugins/repeater/qqbot-repeater.plugin', () => ({
+  QqbotRepeaterPluginService: class QqbotRepeaterPluginService {},
+}));
+
+import { MODULE_METADATA } from '@nestjs/common/constants';
+import { ConfigModule } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { getMetadataArgsStorage } from 'typeorm';
+import { AdminAuthGuardModule } from '../../../../src/admin/auth/admin-auth-guard.module';
+import { DictModule } from '../../../../src/admin/dict/dict.module';
+import { AppModule } from '../../../../src/app.module';
+import { QqbotAccountController } from '../../../../src/qqbot/account/qqbot-account.controller';
+import { QqbotCommandController } from '../../../../src/qqbot/command/qqbot-command.controller';
+import { QqbotDashboardController } from '../../../../src/qqbot/dashboard/qqbot-dashboard.controller';
+import { QqbotMessageController } from '../../../../src/qqbot/message/qqbot-message.controller';
+import { QqbotPermissionController } from '../../../../src/qqbot/permission/qqbot-permission.controller';
+import { QqbotPluginController } from '../../../../src/qqbot/plugin/qqbot-plugin.controller';
+import { QqbotModule } from '../../../../src/qqbot/qqbot.module';
+import { QqbotRuleController } from '../../../../src/qqbot/rule/qqbot-rule.controller';
+import { QqbotSendController } from '../../../../src/qqbot/send/qqbot-send.controller';
+import {
+  QQBOT_CORE_CONTROLLERS,
+  QQBOT_CORE_ENTITIES,
+  QQBOT_CORE_EXPORTS,
+  QQBOT_CORE_PROVIDERS,
+  QqbotCoreModule,
+} from '../../../../src/modules/qqbot/core/qqbot-core.module';
+import {
+  collectControllerRoutes,
+  routeKey,
+} from '../../../helpers/controller-route.helper';
+import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
+
+const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] => {
+  return Reflect.getMetadata(key, moduleClass) || [];
+};
+
+const getNames = (items: unknown[]) =>
+  items.map((item) => (item as { name?: string }).name || `${item}`);
+
+type EntityClass = new (...args: never[]) => unknown;
+
+const getEntityTableName = (entity: EntityClass) => {
+  return getMetadataArgsStorage().tables.find(
+    (table) => table.target === entity,
+  )?.name;
+};
+
+const getEntityColumnNames = (entity: EntityClass) => {
+  return getMetadataArgsStorage()
+    .columns.filter((column) => column.target === entity)
+    .map((column) => `${column.options.name || column.propertyName}`);
+};
+
+const getEntityNullableColumnNames = (entity: EntityClass) => {
+  return getMetadataArgsStorage()
+    .columns.filter((column) => column.target === entity)
+    .filter((column) => column.options.nullable === true)
+    .map((column) => `${column.options.name || column.propertyName}`);
+};
+
+const isOptionalSqlColumnForEntityInsert = (definition: string) => {
+  return (
+    !/\bNOT\s+NULL\b/i.test(definition) ||
+    /\bDEFAULT\b/i.test(definition) ||
+    /\bAUTO_INCREMENT\b/i.test(definition)
+  );
+};
+
+describe('QQBot core module contract', () => {
+  const schema = readRefactorV3SqlSchema();
+
+  it('keeps QQBot Admin and runtime routes compatible through the core boundary', () => {
+    const routes = collectControllerRoutes(QQBOT_CORE_CONTROLLERS);
+
+    expect(routes.map(routeKey)).toEqual(
+      expect.arrayContaining([
+        'GET /qqbot/account/list',
+        'GET /qqbot/account/enabled',
+        'POST /qqbot/account/scan/create',
+        'GET /qqbot/account/scan/status',
+        'POST /qqbot/account/bind/command',
+        'POST /qqbot/account/unbind/command',
+        'POST /qqbot/account/kick',
+        'GET /qqbot/command/list',
+        'POST /qqbot/command/test',
+        'GET /qqbot/conversation/list',
+        'GET /qqbot/message/list',
+        'GET /qqbot/permission/config',
+        'GET /qqbot/permission/allowlist',
+        'GET /qqbot/permission/blocklist',
+        'GET /qqbot/plugin/list',
+        'GET /qqbot/rule/list',
+        'GET /qqbot/send/log/list',
+        'POST /qqbot/send/private',
+        'POST /qqbot/send/group',
+        'GET /qqbot/dashboard/summary',
+      ]),
+    );
+  });
+
+  it('routes QQBot through the core module as the owning Nest boundary', () => {
+    expect(getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS)).toEqual(
+      expect.arrayContaining([QqbotCoreModule]),
+    );
+    expect(getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS)).not.toEqual(
+      expect.arrayContaining([QqbotModule]),
+    );
+
+    const coreImports = getModuleMetadata(
+      QqbotCoreModule,
+      MODULE_METADATA.IMPORTS,
+    );
+    expect(coreImports).toEqual(
+      expect.arrayContaining([ConfigModule, AdminAuthGuardModule, DictModule]),
+    );
+    expect(
+      coreImports.some(
+        (item) => (item as { module?: unknown }).module === TypeOrmModule,
+      ),
+    ).toBe(true);
+    expect(coreImports).not.toEqual(expect.arrayContaining([QqbotModule]));
+
+    expect(
+      getModuleMetadata(QqbotCoreModule, MODULE_METADATA.CONTROLLERS),
+    ).toEqual(expect.arrayContaining(QQBOT_CORE_CONTROLLERS));
+    expect(
+      getModuleMetadata(QqbotCoreModule, MODULE_METADATA.PROVIDERS),
+    ).toEqual(expect.arrayContaining(QQBOT_CORE_PROVIDERS));
+    expect(getModuleMetadata(QqbotCoreModule, MODULE_METADATA.EXPORTS)).toEqual(
+      expect.arrayContaining(QQBOT_CORE_EXPORTS),
+    );
+    expect(getModuleMetadata(QqbotModule, MODULE_METADATA.IMPORTS)).toEqual(
+      expect.arrayContaining([QqbotCoreModule]),
+    );
+    expect(getModuleMetadata(QqbotModule, MODULE_METADATA.EXPORTS)).toEqual(
+      expect.arrayContaining([QqbotCoreModule]),
+    );
+  });
+
+  it('makes the legacy QQBot controllers, providers and entities explicit', () => {
+    expect(QQBOT_CORE_CONTROLLERS).toEqual(
+      expect.arrayContaining([
+        QqbotAccountController,
+        QqbotCommandController,
+        QqbotDashboardController,
+        QqbotMessageController,
+        QqbotPermissionController,
+        QqbotPluginController,
+        QqbotRuleController,
+        QqbotSendController,
+      ]),
+    );
+    expect(getNames(QQBOT_CORE_PROVIDERS)).toEqual(
+      expect.arrayContaining([
+        'QqbotAccountService',
+        'QqbotBusService',
+        'QqbotCommandEngineService',
+        'QqbotCommandParserService',
+        'QqbotCommandService',
+        'QqbotConfigService',
+        'QqbotDashboardService',
+        'QqbotDedupeService',
+        'QqbotEventPluginRegistryService',
+        'QqbotEventService',
+        'QqbotMessageService',
+        'QqbotNapcatContainerService',
+        'QqbotNapcatLoginService',
+        'QqbotNapcatWatchdogService',
+        'QqbotPermissionService',
+        'QqbotPluginRegistryService',
+        'QqbotRateLimitService',
+        'QqbotReplyTemplateService',
+        'QqbotReverseWsService',
+        'QqbotRuleEngineService',
+        'QqbotRuleService',
+        'QqbotSendService',
+      ]),
+    );
+    expect(getNames(QQBOT_CORE_ENTITIES)).toEqual(
+      expect.arrayContaining([
+        'QqbotAccount',
+        'QqbotAccountAbility',
+        'QqbotAccountNapcat',
+        'QqbotAllowlist',
+        'QqbotBlocklist',
+        'QqbotCommand',
+        'QqbotCommandLog',
+        'QqbotConfig',
+        'QqbotConversation',
+        'QqbotDedupe',
+        'QqbotMessage',
+        'QqbotNapcatContainer',
+        'QqbotRule',
+        'QqbotSendLog',
+      ]),
+    );
+  });
+
+  it('keeps every registered QQBot core entity mapped to the refactor-v3 schema', () => {
+    for (const entity of QQBOT_CORE_ENTITIES) {
+      const tableName = getEntityTableName(entity);
+      const columns = getEntityColumnNames(entity);
+      const nullableColumns = getEntityNullableColumnNames(entity);
+
+      expect(tableName).toBeTruthy();
+      expect(schema.hasTable(tableName || '')).toBe(true);
+      schema.expectTableColumns(tableName || '', columns);
+
+      const sqlColumns = schema.getTableColumns(tableName || '');
+      const entityColumnNames = new Set(columns);
+      const requiredSqlOnlyColumns = sqlColumns
+        .filter((column) => !entityColumnNames.has(column.name))
+        .filter(
+          (column) => !isOptionalSqlColumnForEntityInsert(column.definition),
+        )
+        .map((column) => `${tableName}.${column.name}`);
+
+      expect(requiredSqlOnlyColumns).toEqual([]);
+
+      for (const nullableColumn of nullableColumns) {
+        const sqlColumn = sqlColumns.find(
+          (column) => column.name === nullableColumn,
+        );
+        expect(sqlColumn?.definition).not.toMatch(/\bNOT\s+NULL\b/i);
+      }
+    }
+  });
+});

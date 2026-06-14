@@ -14,10 +14,16 @@ const nonColumnTokens = new Set([
 
 export type SqlSchemaContract = {
   hasTable(tableName: string): boolean;
+  getTableColumns(tableName: string): SqlSchemaColumn[];
   expectTableColumns(tableName: string, columns: readonly string[]): void;
 };
 
-const parseColumnNames = (tableBlock: string) => {
+export type SqlSchemaColumn = {
+  definition: string;
+  name: string;
+};
+
+const parseColumns = (tableBlock: string): SqlSchemaColumn[] => {
   return tableBlock
     .split(/\r?\n/)
     .map((line) => line.trim().replace(/,$/, ''))
@@ -28,16 +34,21 @@ const parseColumnNames = (tableBlock: string) => {
         return [];
       }
 
-      return [match[1]];
+      return [
+        {
+          definition: line,
+          name: match[1],
+        },
+      ];
     });
 };
 
 const parseSchema = (sql: string) => {
-  const tables = new Map<string, Set<string>>();
+  const tables = new Map<string, SqlSchemaColumn[]>();
 
   for (const match of sql.matchAll(createTableRegex)) {
     const [, tableName, tableBlock] = match;
-    tables.set(tableName, new Set(parseColumnNames(tableBlock)));
+    tables.set(tableName, parseColumns(tableBlock));
   }
 
   return tables;
@@ -55,12 +66,13 @@ export const readRefactorV3SqlSchema = (): SqlSchemaContract => {
   const tables = parseSchema(fs.readFileSync(schemaPath, 'utf8'));
 
   return {
+    getTableColumns: (tableName) => tables.get(tableName) || [],
     hasTable: (tableName) => tables.has(tableName),
     expectTableColumns: (tableName, columns) => {
       const tableColumns = tables.get(tableName);
 
       expect(tableColumns).toBeDefined();
-      expect(Array.from(tableColumns || [])).toEqual(
+      expect((tableColumns || []).map((column) => column.name)).toEqual(
         expect.arrayContaining([...columns]),
       );
     },

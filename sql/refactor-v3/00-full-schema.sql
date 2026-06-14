@@ -1,22 +1,147 @@
-CREATE TABLE IF NOT EXISTS admin_user (
+CREATE TABLE IF NOT EXISTS admin_menu (
   id BIGINT NOT NULL PRIMARY KEY,
-  username VARCHAR(64) NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  nickname VARCHAR(64) NOT NULL,
-  status VARCHAR(32) NOT NULL,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_admin_user_username (username)
+  pid BIGINT NOT NULL DEFAULT 0,
+  name VARCHAR(120) NOT NULL,
+  path VARCHAR(255) NULL,
+  component VARCHAR(255) NULL,
+  redirect VARCHAR(255) NULL,
+  auth_code VARCHAR(120) NULL,
+  type VARCHAR(32) NOT NULL DEFAULT 'menu',
+  meta LONGTEXT NULL,
+  status INT NOT NULL DEFAULT 1,
+  sort INT NOT NULL DEFAULT 0,
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_admin_menu_name (name),
+  KEY idx_admin_menu_pid (pid),
+  KEY idx_admin_menu_path (path),
+  KEY idx_admin_menu_auth_code (auth_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS admin_role (
   id BIGINT NOT NULL PRIMARY KEY,
-  role_key VARCHAR(64) NOT NULL,
-  role_name VARCHAR(64) NOT NULL,
-  status VARCHAR(32) NOT NULL,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_admin_role_key (role_key)
+  role_code VARCHAR(255) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  status INT NOT NULL DEFAULT 1,
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_admin_role_code (role_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_user (
+  id BIGINT NOT NULL PRIMARY KEY,
+  username VARCHAR(255) NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  real_name VARCHAR(255) NOT NULL,
+  avatar VARCHAR(1024) NOT NULL DEFAULT '',
+  dept_id BIGINT NULL,
+  home_path VARCHAR(255) NOT NULL DEFAULT '',
+  timezone VARCHAR(255) NOT NULL DEFAULT 'Asia/Shanghai',
+  status INT NOT NULL DEFAULT 1,
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_admin_user_username (username),
+  KEY idx_admin_user_dept_id (dept_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_dept (
+  id BIGINT NOT NULL PRIMARY KEY,
+  pid BIGINT NOT NULL DEFAULT 0,
+  name VARCHAR(255) NOT NULL,
+  status INT NOT NULL DEFAULT 1,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  KEY idx_admin_dept_pid (pid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_dict (
+  id BIGINT NOT NULL PRIMARY KEY,
+  dict_code VARCHAR(255) NOT NULL,
+  label VARCHAR(255) NOT NULL,
+  value VARCHAR(255) NOT NULL,
+  children_code VARCHAR(255) NULL,
+  sort INT NOT NULL DEFAULT 0,
+  status INT NOT NULL DEFAULT 1,
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_admin_dict_code_value (dict_code, value),
+  KEY idx_admin_dict_code (dict_code),
+  KEY idx_admin_dict_children_code (children_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_component (
+  id BIGINT NOT NULL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL DEFAULT '',
+  type INT NOT NULL,
+  component_type INT NOT NULL,
+  image MEDIUMTEXT NOT NULL,
+  template MEDIUMTEXT NOT NULL,
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  KEY idx_admin_component_type (type),
+  KEY idx_admin_component_component_type (component_type),
+  KEY idx_admin_component_deleted (is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_notice (
+  id BIGINT NOT NULL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  content LONGTEXT NOT NULL,
+  summary TEXT NULL,
+  level INT NOT NULL DEFAULT 1,
+  status INT NOT NULL DEFAULT 1,
+  severity VARCHAR(16) NOT NULL DEFAULT 'info',
+  source VARCHAR(64) NOT NULL DEFAULT 'system',
+  event_type VARCHAR(120) NOT NULL DEFAULT 'system.event',
+  dedupe_key VARCHAR(255) NULL,
+  occurrence_count INT NOT NULL DEFAULT 1,
+  notify_role_code VARCHAR(64) NOT NULL DEFAULT 'super',
+  metadata JSON NULL,
+  is_top TINYINT NOT NULL DEFAULT 0,
+  notify_users TEXT NULL,
+  created_by BIGINT NULL,
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  active_dedupe_key VARCHAR(255) GENERATED ALWAYS AS (CASE WHEN is_deleted = 0 AND dedupe_key IS NOT NULL THEN dedupe_key ELSE NULL END) VIRTUAL,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  first_seen_at DATETIME NULL,
+  last_seen_at DATETIME NULL,
+  UNIQUE KEY uk_admin_notice_active_dedupe_key (active_dedupe_key),
+  KEY idx_admin_notice_status (status),
+  KEY idx_admin_notice_severity (severity),
+  KEY idx_admin_notice_source_event (source, event_type),
+  KEY idx_admin_notice_dedupe_key (dedupe_key),
+  KEY idx_admin_notice_notify_role (notify_role_code),
+  KEY idx_admin_notice_is_top (is_top),
+  KEY idx_admin_notice_is_deleted (is_deleted),
+  KEY idx_admin_notice_create_time (create_time),
+  KEY idx_admin_notice_last_seen (last_seen_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_user_role (
+  user_id BIGINT NOT NULL,
+  role_id BIGINT NOT NULL,
+  PRIMARY KEY (user_id, role_id),
+  KEY idx_admin_user_role_role_id (role_id),
+  CONSTRAINT fk_admin_user_role_user FOREIGN KEY (user_id) REFERENCES admin_user (id) ON DELETE CASCADE,
+  CONSTRAINT fk_admin_user_role_role FOREIGN KEY (role_id) REFERENCES admin_role (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_role_menu (
+  role_id BIGINT NOT NULL,
+  menu_id BIGINT NOT NULL,
+  PRIMARY KEY (role_id, menu_id),
+  KEY idx_admin_role_menu_menu_id (menu_id),
+  CONSTRAINT fk_admin_role_menu_role FOREIGN KEY (role_id) REFERENCES admin_role (id) ON DELETE CASCADE,
+  CONSTRAINT fk_admin_role_menu_menu FOREIGN KEY (menu_id) REFERENCES admin_menu (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS admin_permission (
@@ -27,21 +152,6 @@ CREATE TABLE IF NOT EXISTS admin_permission (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_admin_permission_key (permission_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS admin_menu (
-  id BIGINT NOT NULL PRIMARY KEY,
-  parent_id BIGINT NULL,
-  menu_key VARCHAR(128) NOT NULL,
-  title VARCHAR(128) NOT NULL,
-  path VARCHAR(255) NOT NULL,
-  component VARCHAR(255) NULL,
-  sort_no INT NOT NULL DEFAULT 0,
-  status VARCHAR(32) NOT NULL,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_admin_menu_key (menu_key),
-  KEY idx_admin_menu_parent (parent_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS admin_department (
@@ -55,15 +165,6 @@ CREATE TABLE IF NOT EXISTS admin_department (
   KEY idx_admin_department_parent (parent_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS admin_user_role (
-  id BIGINT NOT NULL PRIMARY KEY,
-  user_id BIGINT NOT NULL,
-  role_id BIGINT NOT NULL,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_admin_user_role (user_id, role_id),
-  KEY idx_admin_user_role_role (role_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE IF NOT EXISTS admin_role_permission (
   id BIGINT NOT NULL PRIMARY KEY,
   role_id BIGINT NOT NULL,
@@ -71,15 +172,6 @@ CREATE TABLE IF NOT EXISTS admin_role_permission (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_admin_role_permission (role_id, permission_id),
   KEY idx_admin_role_permission_permission (permission_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS admin_role_menu (
-  id BIGINT NOT NULL PRIMARY KEY,
-  role_id BIGINT NOT NULL,
-  menu_id BIGINT NOT NULL,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_admin_role_menu (role_id, menu_id),
-  KEY idx_admin_role_menu_menu (menu_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS platform_dict_group (
@@ -142,6 +234,30 @@ CREATE TABLE IF NOT EXISTS blog_post (
   KEY idx_blog_post_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS blog_article (
+  id BIGINT NOT NULL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  slug VARCHAR(255) NOT NULL DEFAULT '',
+  status VARCHAR(32) NOT NULL DEFAULT 'draft',
+  excerpt TEXT NULL,
+  content_markdown MEDIUMTEXT NULL,
+  content_html MEDIUMTEXT NULL,
+  cover TEXT NULL,
+  author_name VARCHAR(255) NOT NULL DEFAULT 'KwiTsukasa',
+  category_items TEXT NULL,
+  tag_items TEXT NULL,
+  views INT NOT NULL DEFAULT 0,
+  comments INT NOT NULL DEFAULT 0,
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  publish_time DATETIME NULL,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  KEY idx_blog_article_slug (slug),
+  KEY idx_blog_article_status (status),
+  KEY idx_blog_article_publish_time (publish_time),
+  KEY idx_blog_article_is_deleted (is_deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS blog_taxonomy (
   id BIGINT NOT NULL PRIMARY KEY,
   taxonomy_key VARCHAR(64) NOT NULL,
@@ -153,13 +269,20 @@ CREATE TABLE IF NOT EXISTS blog_taxonomy (
 
 CREATE TABLE IF NOT EXISTS blog_term (
   id BIGINT NOT NULL PRIMARY KEY,
-  taxonomy_id BIGINT NOT NULL,
+  taxonomy_id BIGINT NULL,
+  kind VARCHAR(32) NOT NULL,
+  name VARCHAR(255) NOT NULL,
   slug VARCHAR(255) NOT NULL,
-  term_name VARCHAR(128) NOT NULL,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_blog_term_slug (taxonomy_id, slug),
-  KEY idx_blog_term_taxonomy (taxonomy_id)
+  term_name VARCHAR(128) NULL,
+  description TEXT NULL,
+  parent_id VARCHAR(64) NULL,
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  KEY idx_blog_term_taxonomy (taxonomy_id),
+  KEY idx_blog_term_kind_slug (kind, slug),
+  KEY idx_blog_term_parent_id (parent_id),
+  KEY idx_blog_term_is_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS blog_post_term (
@@ -180,6 +303,14 @@ CREATE TABLE IF NOT EXISTS blog_theme_profile (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_blog_theme_profile_key (profile_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS blog_theme_config (
+  id VARCHAR(64) NOT NULL PRIMARY KEY,
+  config LONGTEXT NOT NULL,
+  source VARCHAR(255) NOT NULL DEFAULT 'local',
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS blog_import_job (

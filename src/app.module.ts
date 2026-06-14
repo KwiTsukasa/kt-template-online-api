@@ -44,7 +44,10 @@ import { RuntimeModule } from './runtime';
           password: configService.get('DB_PASSWORD'),
           database: configService.get('DB_DATABASE'),
           synchronize: configService.get<string>('DB_SYNC') === 'true',
-          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          entities: [
+            __dirname + '/**/*.entity{.ts,.js}',
+            __dirname + '/**/*.entities{.ts,.js}',
+          ],
           subscribers: [__dirname + '/**/*.subscriber{.ts,.js}'],
         };
       },

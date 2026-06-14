@@ -105,6 +105,15 @@ describe('QQBot plugin platform API contract', () => {
     expect(source).toContain('QqbotPluginPlatformModule');
   });
 
+  it('loads plural entity files into the TypeORM datasource', () => {
+    const source = readFileSync(
+      join(__dirname, '../../../../src/app.module.ts'),
+      'utf8',
+    );
+
+    expect(source).toContain('*.entities{.ts,.js}');
+  });
+
   it('exposes plugin-platform management routes', () => {
     expect(routeKey).toBeDefined();
     expect(

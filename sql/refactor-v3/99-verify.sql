@@ -2,6 +2,7 @@ SELECT 'admin_user' AS table_name, COUNT(*) AS row_count FROM admin_user;
 SELECT 'admin_role' AS table_name, COUNT(*) AS row_count FROM admin_role;
 SELECT 'admin_menu' AS table_name, COUNT(*) AS row_count FROM admin_menu;
 SELECT 'platform_setting' AS table_name, COUNT(*) AS row_count FROM platform_setting;
+SELECT 'admin_dict' AS table_name, COUNT(*) AS row_count FROM admin_dict;
 SELECT 'qqbot_command' AS table_name, COUNT(*) AS row_count FROM qqbot_command;
 SELECT 'qqbot_plugin' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin;
 SELECT 'napcat_device_identity' AS table_name, COUNT(*) AS row_count FROM napcat_device_identity;
@@ -9,7 +10,9 @@ SELECT 'napcat_device_identity' AS table_name, COUNT(*) AS row_count FROM napcat
 SELECT 'seed_admin_user' AS check_name, COUNT(*) AS matched_rows
 FROM admin_user
 WHERE username = 'admin'
-  AND status = 'password_unset';
+  AND password <> ''
+  AND status = 1
+  AND is_deleted = 0;
 
 SELECT 'seed_platform_schema_version' AS check_name, COUNT(*) AS matched_rows
 FROM platform_setting
@@ -39,6 +42,12 @@ FROM information_schema.statistics
 WHERE table_schema = DATABASE()
   AND table_name = 'platform_setting'
   AND index_name = 'uk_platform_setting_key';
+
+SELECT 'index_admin_dict_code_value' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'admin_dict'
+  AND index_name = 'uk_admin_dict_code_value';
 
 SELECT 'index_qqbot_command_key' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics

@@ -15,16 +15,27 @@ $schema = Join-Path $root "sql\refactor-v3\00-full-schema.sql"
 $seed = Join-Path $root "sql\refactor-v3\01-seed-core.sql"
 $verify = Join-Path $root "sql\refactor-v3\99-verify.sql"
 
+function Invoke-Mysql {
+  param(
+    [Parameter(Mandatory = $true)][string[]]$Arguments
+  )
+
+  mysql --default-character-set=utf8mb4 @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "mysql failed with exit code $LASTEXITCODE"
+  }
+}
+
 function Invoke-MysqlSource {
   param(
     [Parameter(Mandatory = $true)][string]$Path
   )
 
   $sourcePath = (Resolve-Path -LiteralPath $Path).Path.Replace("\", "/")
-  mysql -h $HostName -P $Port -u $User $Database --execute="source $sourcePath"
+  Invoke-Mysql -Arguments @("-h", $HostName, "-P", "$Port", "-u", $User, $Database, "--execute=source $sourcePath")
 }
 
-mysql -h $HostName -P $Port -u $User -e "DROP DATABASE IF EXISTS ``$Database``; CREATE DATABASE ``$Database`` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+Invoke-Mysql -Arguments @("-h", $HostName, "-P", "$Port", "-u", $User, "-e", "DROP DATABASE IF EXISTS ``$Database``; CREATE DATABASE ``$Database`` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
 Invoke-MysqlSource -Path $schema
 Invoke-MysqlSource -Path $seed
 Invoke-MysqlSource -Path $verify

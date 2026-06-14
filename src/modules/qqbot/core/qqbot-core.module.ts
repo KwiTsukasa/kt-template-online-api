@@ -25,6 +25,10 @@ import { QqbotDedupe } from '@/qqbot/dedupe/qqbot-dedupe.entity';
 import { QqbotDedupeService } from '@/qqbot/dedupe/qqbot-dedupe.service';
 import { QqbotEventService } from '@/qqbot/event/qqbot-event.service';
 import { QqbotPluginHttpClientService } from '@/modules/qqbot/plugin-platform/sdk';
+import {
+  NapcatDeviceIdentity,
+  NapcatDeviceIdentityService,
+} from '@/modules/qqbot/napcat';
 import { QqbotConversation } from '@/qqbot/message/qqbot-conversation.entity';
 import { QqbotMessageController } from '@/qqbot/message/qqbot-message.controller';
 import { QqbotMessage } from '@/qqbot/message/qqbot-message.entity';
@@ -71,6 +75,7 @@ export const QQBOT_CORE_ENTITIES = [
   QqbotConversation,
   QqbotDedupe,
   QqbotMessage,
+  NapcatDeviceIdentity,
   QqbotAccountNapcat,
   QqbotNapcatContainer,
   QqbotRule,
@@ -108,6 +113,7 @@ export const QQBOT_CORE_PROVIDERS = [
   QqbotFflogsClientService,
   QqbotFflogsPluginService,
   QqbotMessageService,
+  NapcatDeviceIdentityService,
   QqbotNapcatLoginService,
   QqbotNapcatWatchdogService,
   QqbotNapcatContainerService,
@@ -125,6 +131,7 @@ export const QQBOT_CORE_PROVIDERS = [
 
 export const QQBOT_CORE_EXPORTS = [
   QqbotAccountService,
+  NapcatDeviceIdentityService,
   QqbotNapcatLoginService,
   QqbotNapcatContainerService,
   QqbotReverseWsService,

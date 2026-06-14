@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs';
 import type { Server } from '@/modules/qqbot/plugins/bangDream/catalog/server.model';
 import { BANGDREAM_BESTDORI_API_PATHS } from '@/modules/qqbot/plugins/bangDream/shared/bangdream-protocol';
 import {
@@ -13,7 +14,24 @@ import {
 } from '@/modules/qqbot/plugins/bangDream/config/runtime-options';
 import { logger } from '@/modules/qqbot/plugins/bangDream/shared/bangdream-logger';
 
-export const projectRoot: string = path.resolve(__dirname, '..');
+export function resolveBangDreamProjectRoot(moduleDir = __dirname): string {
+  const directRoot = path.resolve(moduleDir, '..');
+  if (fs.existsSync(path.join(directRoot, 'assets', 'err.png'))) {
+    return directRoot;
+  }
+
+  const sourceRoot = path.resolve(
+    process.cwd(),
+    'src/modules/qqbot/plugins/bangDream',
+  );
+  if (fs.existsSync(path.join(sourceRoot, 'assets', 'err.png'))) {
+    return sourceRoot;
+  }
+
+  return directRoot;
+}
+
+export const projectRoot: string = resolveBangDreamProjectRoot();
 export const assetsRootPath: string = path.join(projectRoot, 'assets');
 export const configPath: string = path.join(projectRoot, 'static-config');
 export const fuzzySearchPath = path.join(

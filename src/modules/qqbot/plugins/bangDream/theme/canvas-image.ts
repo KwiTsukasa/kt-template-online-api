@@ -1,9 +1,8 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import { Canvas, loadImage, Image } from 'skia-canvas';
 import * as svg2img from 'svg2img';
+import { assetsRootPath } from '@/modules/qqbot/plugins/bangDream/config/runtime-config';
 
-const assetsRootPath = path.resolve(__dirname, '..', 'assets');
 const convertSvg = svg2img as unknown as (
   svg: string,
   callback: (error: Error | null, buffer: Buffer) => void,

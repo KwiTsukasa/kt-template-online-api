@@ -5,6 +5,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Observable } from 'rxjs';
 import { throwVbenError, ToolsService } from '@/common';
+import { NapcatLoginApiClient } from '@/modules/qqbot/napcat';
 import type {
   NapcatApiResponse,
   NapcatCaptchaLoginResult,
@@ -169,6 +170,9 @@ export class QqbotNapcatLoginService {
     }
 
     const container = await this.getSessionContainer(session);
+    if (session.newDeviceStatus && session.newDeviceStatus !== 'verified') {
+      return this.pollNewDeviceVerification(session, container);
+    }
     let status: NapcatLoginStatus;
     try {
       status = await this.getLoginStatus(container);
@@ -285,67 +289,19 @@ export class QqbotNapcatLoginService {
       );
     }
 
-    if (captchaResult?.needNewDevice && captchaResult.jumpUrl) {
-      return this.keepSessionPending(
+    if (captchaResult?.needNewDevice) {
+      return this.startNewDeviceVerification(
         session,
-        '验证码已通过，但 QQ 仍要求新设备验证，请在 NapCat WebUI 继续完成',
-        true,
+        container,
+        captchaResult,
       );
     }
 
-    const loginStatus = await this.waitForPasswordLoginStatus(container);
-    if (!loginStatus.isLogin) {
-      const captchaUrl = this.getCaptchaUrlFromStatus(loginStatus);
-      if (captchaUrl) {
-        return this.keepPasswordCaptchaPending(
-          session,
-          captchaUrl,
-          loginStatus.loginError,
-        );
-      }
-      return this.failCaptchaLogin(
-        session,
-        container,
-        `验证码登录未完成：${loginStatus.loginError || 'NapCat 未返回登录成功'}`,
-      );
-    }
-
-    const loginInfo = await this.getLoginInfo(container);
-    const selfId = this.toolsService.pickNapcatSelfId(loginInfo);
-    if (loginInfo.online === false || !selfId) {
-      return this.failCaptchaLogin(
-        session,
-        container,
-        loginInfo.online === false
-          ? 'NapCat 当前账号已离线'
-          : 'NapCat 未返回 QQ 号',
-      );
-    }
-    if (session.expectedSelfId && session.expectedSelfId !== selfId) {
-      await this.clearRuntimeLoginPasswordAfterFailedPassword(
-        session,
-        container,
-        selfId,
-      );
-      return this.failSession(
-        session,
-        `当前密码登录账号 ${selfId} 与目标账号 ${session.expectedSelfId} 不一致`,
-      );
-    }
-
-    try {
-      await this.clearRuntimeLoginPasswordAfterSuccess(
-        session,
-        container,
-        selfId,
-      );
-    } catch {
-      return this.toResult(session);
-    }
-    return this.completeLogin(session, container, {
-      loginInfo,
-      successMessage: '验证码登录成功',
-    });
+    return this.completePasswordLoginAfterChallenge(
+      session,
+      container,
+      '验证码登录成功',
+    );
   }
 
   events(sessionId: string) {
@@ -577,14 +533,230 @@ export class QqbotNapcatLoginService {
       captchaUrl: session.captchaUrl,
       containerId: session.containerId,
       containerName: session.containerName,
+      deviceVerifyUrl: session.deviceVerifyUrl,
       errorMessage: session.errorMessage,
       expiresAt: session.expiresAt,
       mode: session.mode,
+      newDeviceQrcode: session.newDeviceQrcode,
+      newDeviceStatus: session.newDeviceStatus,
       qrcode: session.qrcode,
       sessionId: session.id,
       status: session.status,
       webuiPort: session.webuiPort,
     };
+  }
+
+  private async startNewDeviceVerification(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    captchaResult: NapcatCaptchaLoginResult,
+  ) {
+    session.status = 'pending';
+    session.captchaUrl = undefined;
+    session.qrcode = undefined;
+    session.deviceVerifyUrl = this.toolsService.toTrimmedString(
+      captchaResult.jumpUrl,
+    );
+    session.newDevicePullQrCodeSig = this.toolsService.toTrimmedString(
+      captchaResult.newDevicePullQrCodeSig,
+    );
+    session.newDeviceStatus = 'qr-pending';
+    session.errorMessage = '需要新设备验证二维码';
+    this.sessions.set(session.id, session);
+    this.publishScanResultEvent(
+      session,
+      'new-device-required',
+      'processing',
+      '需要新设备验证二维码',
+    );
+
+    try {
+      const client = new NapcatLoginApiClient({
+        post: (path, body) => this.postNapcat(container, path, body),
+      });
+      const qrcode = await client.getNewDeviceQRCode(session.id);
+      session.newDeviceQrcode = qrcode.qrcodeUrl;
+      session.newDevicePullQrCodeSig =
+        qrcode.pullQrCodeSig || session.newDevicePullQrCodeSig;
+      session.newDeviceStatus = qrcode.status;
+      session.errorMessage = '新设备二维码待扫码';
+      this.sessions.set(session.id, session);
+      this.publishScanResultEvent(
+        session,
+        'new-device-qrcode-ready',
+        'processing',
+        '新设备二维码待扫码',
+      );
+      return this.toResult(session);
+    } catch (err) {
+      return this.keepSessionPending(
+        session,
+        this.toolsService.getErrorMessage(err) || '新设备二维码生成失败',
+        true,
+      );
+    }
+  }
+
+  private async pollNewDeviceVerification(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+  ) {
+    const client = new NapcatLoginApiClient({
+      post: (path, body) => this.postNapcat(container, path, body),
+    });
+    const poll = await client.pollNewDeviceQR(session.id);
+    if (poll.status === 'scanned') {
+      return this.keepNewDevicePending(
+        session,
+        'scanned',
+        poll.message || '新设备二维码已扫码',
+        'new-device-scanned',
+      );
+    }
+    if (poll.status === 'confirming') {
+      this.keepNewDevicePending(
+        session,
+        'confirming',
+        poll.message || '新设备确认中',
+        'new-device-confirming',
+      );
+      const loginResult = await client.newDeviceLogin(session.id);
+      if (!loginResult.success) {
+        return this.failNewDeviceVerification(
+          session,
+          container,
+          loginResult.message || '新设备验证失败',
+        );
+      }
+      session.newDeviceQrcode = undefined;
+      session.newDeviceStatus = 'verified';
+      session.errorMessage = '新设备验证成功，继续登录';
+      this.sessions.set(session.id, session);
+      this.publishScanResultEvent(
+        session,
+        'new-device-verified',
+        'success',
+        '新设备验证成功，继续登录',
+      );
+      return this.completePasswordLoginAfterChallenge(
+        session,
+        container,
+        '新设备验证登录成功',
+      );
+    }
+    if (poll.status === 'expired') {
+      return this.failNewDeviceVerification(
+        session,
+        container,
+        poll.message || '新设备二维码已过期',
+      );
+    }
+    if (poll.status === 'failed') {
+      return this.failNewDeviceVerification(
+        session,
+        container,
+        poll.message || '新设备验证失败',
+      );
+    }
+    return this.keepNewDevicePending(
+      session,
+      'qr-pending',
+      poll.message || '新设备二维码待扫码',
+      'new-device-qrcode-ready',
+    );
+  }
+
+  private keepNewDevicePending(
+    session: QqbotLoginScanSession,
+    status: NonNullable<QqbotLoginScanSession['newDeviceStatus']>,
+    message: string,
+    step: string,
+  ) {
+    const shouldPublish =
+      session.newDeviceStatus !== status || session.errorMessage !== message;
+    session.status = 'pending';
+    session.captchaUrl = undefined;
+    session.qrcode = undefined;
+    session.newDeviceStatus = status;
+    session.errorMessage = message;
+    session.expiresAt = Date.now() + this.getSessionTtlMs();
+    this.sessions.set(session.id, session);
+    if (shouldPublish) {
+      this.publishScanResultEvent(session, step, 'processing', message);
+    }
+    return this.toResult(session);
+  }
+
+  private async failNewDeviceVerification(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    message: string,
+  ) {
+    session.newDeviceQrcode = undefined;
+    session.newDeviceStatus = 'failed';
+    session.errorMessage = message;
+    this.sessions.set(session.id, session);
+    return this.failCaptchaLogin(session, container, message);
+  }
+
+  private async completePasswordLoginAfterChallenge(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    successMessage: string,
+  ) {
+    const loginStatus = await this.waitForPasswordLoginStatus(container);
+    if (!loginStatus.isLogin) {
+      const captchaUrl = this.getCaptchaUrlFromStatus(loginStatus);
+      if (captchaUrl) {
+        return this.keepPasswordCaptchaPending(
+          session,
+          captchaUrl,
+          loginStatus.loginError,
+        );
+      }
+      return this.failCaptchaLogin(
+        session,
+        container,
+        `验证码登录未完成：${loginStatus.loginError || 'NapCat 未返回登录成功'}`,
+      );
+    }
+
+    const loginInfo = await this.getLoginInfo(container);
+    const selfId = this.toolsService.pickNapcatSelfId(loginInfo);
+    if (loginInfo.online === false || !selfId) {
+      return this.failCaptchaLogin(
+        session,
+        container,
+        loginInfo.online === false
+          ? 'NapCat 当前账号已离线'
+          : 'NapCat 未返回 QQ 号',
+      );
+    }
+    if (session.expectedSelfId && session.expectedSelfId !== selfId) {
+      await this.clearRuntimeLoginPasswordAfterFailedPassword(
+        session,
+        container,
+        selfId,
+      );
+      return this.failSession(
+        session,
+        `当前密码登录账号 ${selfId} 与目标账号 ${session.expectedSelfId} 不一致`,
+      );
+    }
+
+    try {
+      await this.clearRuntimeLoginPasswordAfterSuccess(
+        session,
+        container,
+        selfId,
+      );
+    } catch {
+      return this.toResult(session);
+    }
+    return this.completeLogin(session, container, {
+      loginInfo,
+      successMessage,
+    });
   }
 
   private publishScanEvent(

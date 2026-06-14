@@ -1431,6 +1431,197 @@ describe('QqbotNapcatLoginService', () => {
     expect(session.passwordMd5).toBeUndefined();
   });
 
+  it('generates new-device verification QR through NapCat after captcha requires new device', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-new-device',
+      name: 'napcat-10001',
+    };
+    const containerService = {
+      findRuntimeById: jest.fn().mockResolvedValue(container),
+      removeUnboundContainer: jest.fn().mockResolvedValue(false),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '10001',
+      mode: 'refresh',
+      status: 'pending',
+    });
+    session.captchaUrl =
+      'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001&sid=sid-from-url';
+    session.passwordMd5 = '0123456789abcdef0123456789abcdef';
+    (refreshService as any).sessions.set(session.id, session);
+    const postNapcat = jest
+      .spyOn(refreshService as any, 'postNapcat')
+      .mockImplementation(async (_runtime, path: string) => {
+        if (path === '/api/QQLogin/CaptchaLogin') {
+          return {
+            jumpUrl: 'https://ti.qq.com/new-device/verify',
+            needNewDevice: true,
+            newDevicePullQrCodeSig: 'sig-new-device',
+          };
+        }
+        if (path === '/api/QQLogin/GetNewDeviceQRCode') {
+          return {
+            newDevicePullQrCodeSig: 'sig-new-device',
+            qrcodeUrl: 'data:image/png;base64,new-device-qrcode',
+          };
+        }
+        throw new Error(`unexpected NapCat path ${path}`);
+      });
+    const waitForPasswordLoginStatus = jest.spyOn(
+      refreshService as any,
+      'waitForPasswordLoginStatus',
+    );
+
+    const result = await refreshService.submitCaptcha(session.id, {
+      randstr: '@rand',
+      sid: 'sid-from-url',
+      ticket: 'captcha-ticket',
+    });
+
+    expect(postNapcat).toHaveBeenNthCalledWith(
+      2,
+      container,
+      '/api/QQLogin/GetNewDeviceQRCode',
+      {
+        sessionId: session.id,
+      },
+    );
+    expect(waitForPasswordLoginStatus).not.toHaveBeenCalled();
+    expect(result.status).toBe('pending');
+    expect(result.captchaUrl).toBeUndefined();
+    expect(result.qrcode).toBeUndefined();
+    expect(result.newDeviceQrcode).toBe(
+      'data:image/png;base64,new-device-qrcode',
+    );
+    expect(result.newDeviceStatus).toBe('qr-pending');
+    expect(result.errorMessage).toBe('新设备二维码待扫码');
+    expect(session.newDevicePullQrCodeSig).toBe('sig-new-device');
+    expect(session.deviceVerifyUrl).toBe('https://ti.qq.com/new-device/verify');
+    const steps = (
+      (refreshService as any).sessionEventLogs.get(session.id) ?? []
+    ).map((event: { step: string }) => event.step);
+    expect(steps).toEqual(
+      expect.arrayContaining([
+        'password-login-captcha-submit',
+        'new-device-required',
+        'new-device-qrcode-ready',
+      ]),
+    );
+  });
+
+  it('polls new-device QR and completes NewDeviceLogin before password success', async () => {
+    const accountService = {
+      ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
+    };
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-new-device-poll',
+      name: 'napcat-10001',
+    };
+    const containerService = {
+      bindAccount: jest.fn().mockResolvedValue(undefined),
+      findRuntimeById: jest.fn().mockResolvedValue(container),
+      removeUnboundContainer: jest.fn().mockResolvedValue(false),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '10001',
+      mode: 'refresh',
+      status: 'pending',
+    });
+    session.deviceVerifyUrl = 'https://ti.qq.com/new-device/verify';
+    session.newDevicePullQrCodeSig = 'sig-new-device';
+    session.newDeviceQrcode = 'data:image/png;base64,new-device-qrcode';
+    session.newDeviceStatus = 'qr-pending';
+    session.passwordMd5 = '0123456789abcdef0123456789abcdef';
+    (refreshService as any).sessions.set(session.id, session);
+    const postNapcat = jest
+      .spyOn(refreshService as any, 'postNapcat')
+      .mockResolvedValueOnce({
+        status: 'scanned',
+      })
+      .mockResolvedValueOnce({
+        status: 'confirming',
+      })
+      .mockResolvedValueOnce({
+        success: true,
+      });
+    jest
+      .spyOn(refreshService as any, 'waitForPasswordLoginStatus')
+      .mockResolvedValue({
+        isLogin: true,
+      });
+    jest.spyOn(refreshService as any, 'getLoginInfo').mockResolvedValue({
+      nickname: 'Kwi',
+      online: true,
+      uin: '10001',
+    });
+    jest
+      .spyOn(refreshService as any, 'clearRuntimeLoginPasswordAfterSuccess')
+      .mockResolvedValue(undefined);
+
+    const scanned = (await refreshService.status(session.id)) as any;
+    const completed = await refreshService.status(session.id);
+
+    expect(scanned.status).toBe('pending');
+    expect(scanned.newDeviceStatus).toBe('scanned');
+    expect(scanned.errorMessage).toBe('新设备二维码已扫码');
+    expect(completed.status).toBe('success');
+    expect(postNapcat).toHaveBeenNthCalledWith(
+      1,
+      container,
+      '/api/QQLogin/PollNewDeviceQR',
+      {
+        sessionId: session.id,
+      },
+    );
+    expect(postNapcat).toHaveBeenNthCalledWith(
+      2,
+      container,
+      '/api/QQLogin/PollNewDeviceQR',
+      {
+        sessionId: session.id,
+      },
+    );
+    expect(postNapcat).toHaveBeenNthCalledWith(
+      3,
+      container,
+      '/api/QQLogin/NewDeviceLogin',
+      {
+        sessionId: session.id,
+      },
+    );
+    expect(session.newDeviceQrcode).toBeUndefined();
+    expect(session.newDeviceStatus).toBe('verified');
+    const steps = (
+      (refreshService as any).sessionEventLogs.get(session.id) ?? []
+    ).map((event: { step: string }) => event.step);
+    expect(steps).toEqual(
+      expect.arrayContaining([
+        'new-device-scanned',
+        'new-device-confirming',
+        'new-device-verified',
+        'login-success',
+      ]),
+    );
+  });
+
   it('cleans runtime password env when cancelling captcha pending login', async () => {
     const container = {
       baseUrl: 'http://127.0.0.1:6103/',

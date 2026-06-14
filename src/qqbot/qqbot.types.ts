@@ -58,6 +58,14 @@ export type QqbotLoginScanMode = 'create' | 'refresh';
 
 export type QqbotLoginScanStatus = 'error' | 'expired' | 'pending' | 'success';
 
+export type QqbotLoginNewDeviceStatus =
+  | 'confirming'
+  | 'expired'
+  | 'failed'
+  | 'qr-pending'
+  | 'scanned'
+  | 'verified';
+
 export type QqbotMessageDirection = 'inbound' | 'outbound';
 
 export type QqbotMessageType = 'channel' | 'group' | 'private';
@@ -266,9 +274,12 @@ export type QqbotLoginScanResult = {
   captchaUrl?: string;
   containerId?: string;
   containerName?: string;
+  deviceVerifyUrl?: string;
   errorMessage?: string;
   expiresAt?: number;
   mode: QqbotLoginScanMode;
+  newDeviceQrcode?: string;
+  newDeviceStatus?: QqbotLoginNewDeviceStatus;
   qrcode?: string;
   selfId?: string;
   sessionId?: string;
@@ -296,12 +307,16 @@ export type QqbotLoginScanSession = {
   containerId?: string;
   containerName?: string;
   createdAt: number;
+  deviceVerifyUrl?: string;
   errorMessage?: string;
   expiresAt: number;
   expectedSelfId?: string;
   id: string;
   lastRestartedAt?: number;
   mode: QqbotLoginScanMode;
+  newDevicePullQrCodeSig?: string;
+  newDeviceQrcode?: string;
+  newDeviceStatus?: QqbotLoginNewDeviceStatus;
   passwordMd5?: string;
   preparingRelogin?: boolean;
   qrcode?: string;

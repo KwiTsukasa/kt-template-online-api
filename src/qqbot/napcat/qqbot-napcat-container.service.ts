@@ -7,6 +7,11 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { throwVbenError, ToolsService } from '@/common';
+import {
+  NapcatDeviceIdentityService,
+  toNapcatDockerDeviceOptions,
+  type NapcatDockerDeviceOptions,
+} from '@/modules/qqbot/napcat';
 import { QqbotAccount } from '../account/qqbot-account.entity';
 import { QqbotAccountNapcat } from './qqbot-account-napcat.entity';
 import { QqbotNapcatContainer } from './qqbot-napcat-container.entity';
@@ -52,6 +57,7 @@ export class QqbotNapcatContainerService {
     @InjectRepository(QqbotAccountNapcat)
     private readonly bindingRepository: Repository<QqbotAccountNapcat>,
     private readonly toolsService: ToolsService,
+    private readonly deviceIdentityService?: NapcatDeviceIdentityService,
   ) {}
 
   async prepareCreateContainer() {
@@ -73,7 +79,11 @@ export class QqbotNapcatContainerService {
       return { ...existing, hasExistingPrimaryBinding: true };
     }
 
-    const created = await this.createManagedContainer(account.selfId);
+    const created = await this.createManagedContainer(
+      account.selfId,
+      undefined,
+      account.id,
+    );
     return { ...created, hasExistingPrimaryBinding: false };
   }
 
@@ -849,6 +859,7 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
   private async createManagedContainer(
     selfId?: string,
     loginPassword?: string,
+    accountId?: string,
   ) {
     const mode = this.getManagedMode();
     if (mode !== 'ssh') {
@@ -862,7 +873,16 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     const port = await this.allocatePort();
     const name = this.buildContainerName(selfId);
     const token = randomBytes(24).toString('hex');
-    const dataDir = `${this.getRootDir()}/${name}`;
+    let dataDir = `${this.getRootDir()}/${name}`;
+    let deviceIdentity: NapcatDockerDeviceOptions | undefined;
+    if (accountId && this.deviceIdentityService) {
+      const identity = await this.deviceIdentityService.resolveForAccount({
+        accountId,
+        selfId,
+      });
+      dataDir = identity.dataDir || dataDir;
+      deviceIdentity = toNapcatDockerDeviceOptions(identity);
+    }
     const baseUrl = this.buildBaseUrl(port);
     const reverseWsUrl = this.buildReverseWsUrl();
 
@@ -886,6 +906,7 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
       await this.createRemoteDockerContainer({
         account: selfId,
         dataDir,
+        deviceIdentity,
         image,
         loginPassword,
         name,
@@ -901,8 +922,16 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
           status: 'running',
         },
       );
+      if (accountId && this.deviceIdentityService) {
+        await this.deviceIdentityService.resolveForAccount({
+          accountId,
+          containerId: container.id,
+          selfId,
+        });
+      }
       return {
         baseUrl,
+        dataDir,
         id: container.id,
         name,
         webuiPort: port,
@@ -924,6 +953,7 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
   private async createRemoteDockerContainer(input: {
     account?: string;
     dataDir: string;
+    deviceIdentity?: NapcatDockerDeviceOptions;
     image: string;
     loginPassword?: string;
     name: string;
@@ -939,6 +969,7 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
   private buildRemoteCreateScript(input: {
     account?: string;
     dataDir: string;
+    deviceIdentity?: NapcatDockerDeviceOptions;
     image: string;
     loginPassword?: string;
     name: string;
@@ -963,6 +994,29 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
       ? '  -e NAPCAT_QUICK_PASSWORD="$NAPCAT_QUICK_PASSWORD" \\\n'
       : '';
     const pullCmd = input.skipPull ? '' : 'docker pull "$IMAGE" >/dev/null\n';
+    const deviceHeader = input.deviceIdentity
+      ? [
+          `NAPCAT_HOSTNAME=${this.sh(input.deviceIdentity.hostname)}`,
+          `NAPCAT_MAC_ADDRESS=${this.sh(input.deviceIdentity.macAddress)}`,
+          `MACHINE_ID_PATH=${this.sh(input.deviceIdentity.machineIdPath)}`,
+          `DEVICE_ENV_PATH=${this.sh(input.deviceIdentity.deviceEnvPath)}`,
+        ].join('\n') + '\n'
+      : '';
+    const devicePrepareScript = input.deviceIdentity
+      ? `
+cat > "$DEVICE_ENV_PATH" <<EOF
+NAPCAT_HOSTNAME=$NAPCAT_HOSTNAME
+NAPCAT_MAC_ADDRESS=$NAPCAT_MAC_ADDRESS
+MACHINE_ID_PATH=$MACHINE_ID_PATH
+EOF
+if [ ! -s "$MACHINE_ID_PATH" ]; then
+  printf '%s' "$NAME" | sha256sum | cut -c 1-32 > "$MACHINE_ID_PATH"
+fi
+`
+      : '';
+    const deviceRunFlags = input.deviceIdentity
+      ? '  --hostname "$NAPCAT_HOSTNAME" \\\n  --mac-address "$NAPCAT_MAC_ADDRESS" \\\n  -v "$MACHINE_ID_PATH:/etc/machine-id:ro" \\\n'
+      : '';
 
     return `
 set -eu
@@ -974,8 +1028,10 @@ REVERSE_WS_URL=${reverseWsUrl}
 WEBUI_TOKEN=${token}
 ${accountHeader}
 ${passwordHeader}
+${deviceHeader}
 mkdir -p "$DATA_DIR/QQ" "$DATA_DIR/config" "$DATA_DIR/plugins" "$DATA_DIR/logs"
 chmod 700 "$DATA_DIR"
+${devicePrepareScript}
 
 cat > "$DATA_DIR/config/webui.json" <<EOF
 {
@@ -1019,7 +1075,7 @@ docker run -d \\
   -e NAPCAT_UID=0 \\
   -e NAPCAT_GID=0 \\
   -e WEBUI_TOKEN="$WEBUI_TOKEN" \\
-${accountRunFlag}${passwordRunFlag}  -p "$PORT:6099" \\
+${accountRunFlag}${passwordRunFlag}${deviceRunFlags}  -p "$PORT:6099" \\
   -v "$DATA_DIR/QQ:/app/.config/QQ" \\
   -v "$DATA_DIR/config:/app/napcat/config" \\
   -v "$DATA_DIR/plugins:/app/napcat/plugins" \\

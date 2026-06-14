@@ -15,7 +15,7 @@ import { AdminUserManageController } from '@/admin/user/admin-user-manage.contro
 import { AdminUserController } from '@/admin/user/admin-user.controller';
 import { AdminUser } from '@/admin/user/admin-user.entity';
 import { AdminUserService } from '@/admin/user/admin-user.service';
-import { WordpressModule } from '@/wordpress/wordpress.module';
+import { WordpressMirrorModule } from '@/modules/wordpress/wordpress-mirror.module';
 
 export const ADMIN_IDENTITY_CONTROLLERS = [
   AdminAuthController,
@@ -37,7 +37,7 @@ export const ADMIN_IDENTITY_PROVIDERS = [
   imports: [
     TypeOrmModule.forFeature([AdminUser, AdminRole, AdminMenu, AdminDept]),
     AdminAuthGuardModule,
-    WordpressModule,
+    WordpressMirrorModule,
   ],
   controllers: ADMIN_IDENTITY_CONTROLLERS,
   providers: ADMIN_IDENTITY_PROVIDERS,

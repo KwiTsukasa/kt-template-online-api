@@ -6,7 +6,6 @@ import { LoggerModule } from 'nestjs-pino';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MinioModule } from 'nestjs-minio-client';
-import { MinioClientModule } from './minio/minio.module';
 import {
   ApiRequestLogInterceptor,
   ApiExceptionFilter,
@@ -15,8 +14,9 @@ import {
   SaveBodyInterceptor,
 } from './common';
 import { AdminModule } from './modules/admin/admin.module';
-import { BlogModule } from './blog/blog.module';
-import { WordpressModule } from './wordpress/wordpress.module';
+import { AssetModule } from './modules/asset/asset.module';
+import { BlogContentModule } from './modules/blog/blog-content.module';
+import { WordpressMirrorModule } from './modules/wordpress/wordpress-mirror.module';
 import { QqbotModule } from './qqbot/qqbot.module';
 import { RuntimeModule } from './runtime';
 
@@ -63,12 +63,12 @@ import { RuntimeModule } from './runtime';
       },
       inject: [ConfigService],
     }),
-    MinioClientModule,
     CommonModule,
     RuntimeModule,
     AdminModule,
-    BlogModule,
-    WordpressModule,
+    BlogContentModule,
+    WordpressMirrorModule,
+    AssetModule,
     QqbotModule,
   ],
   providers: [

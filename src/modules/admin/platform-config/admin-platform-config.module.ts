@@ -14,7 +14,7 @@ import { AdminTimezoneController } from '@/admin/timezone/admin-timezone.control
 import { AdminTimezoneService } from '@/admin/timezone/admin-timezone.service';
 import { AdminUser } from '@/admin/user/admin-user.entity';
 import { AdminExampleController } from '@/admin/example/admin-example.controller';
-import { MinioClientModule } from '@/minio/minio.module';
+import { AssetModule } from '@/modules/asset/asset.module';
 
 export const ADMIN_PLATFORM_CONFIG_DIRECT_CONTROLLERS = [
   ComponentController,
@@ -45,7 +45,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
     AdminAuthGuardModule,
     DictModule,
     NoticeModule,
-    MinioClientModule,
+    AssetModule,
   ],
   controllers: ADMIN_PLATFORM_CONFIG_DIRECT_CONTROLLERS,
   providers: ADMIN_PLATFORM_CONFIG_PROVIDERS,

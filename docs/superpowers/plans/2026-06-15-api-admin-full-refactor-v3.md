@@ -857,23 +857,23 @@ Actual: Admin repo remained clean after Task 2.2 verification, so Batch 2 create
 - Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\wordpress\**`
 - Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\asset\**`
 
-- [ ] **Step 1: Write RED tests for public Blog behavior**
+- [x] **Step 1: Write RED tests for public Blog behavior**
 
 Cover article list, article detail, term relation, and theme profile.
 
-- [ ] **Step 2: Write RED tests for WordPress mapping**
+- [x] **Step 2: Write RED tests for WordPress mapping**
 
 Cover remote ID to local post/term mapping and sync job state.
 
-- [ ] **Step 3: Write RED tests for Asset ownership**
+- [x] **Step 3: Write RED tests for Asset ownership**
 
 Cover object owner module, MIME metadata, reference, and access grant.
 
-- [ ] **Step 4: Implement modules**
+- [x] **Step 4: Implement modules**
 
 Keep route compatibility for public Blog endpoints and Admin-facing endpoints. Move MinIO ownership out of legacy `src/minio` into `src/modules/asset`.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run:
 
@@ -884,6 +884,8 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api run typecheck
 
 Expected: PASS.
 
+Actual note: Batch 3 moved API ownership to transitional `BlogContentModule`, `WordpressMirrorModule`, and `AssetModule` boundaries while retaining legacy business internals behind imported modules for compatibility. Contract tests now parse `sql/refactor-v3/00-full-schema.sql` through `test/helpers/sql-schema.helper.ts` so domain expectations catch SQL schema drift instead of only repeating local constants. Route compatibility and duplicate-controller safety are covered by module graph tests, with `QqbotModule` mocked in metadata-only specs to avoid unrelated BangDream/NapCat side effects.
+
 ### Task 3.2: Sync Admin Blog/WordPress/Asset pages
 
 **Files:**
@@ -893,15 +895,15 @@ Expected: PASS.
 - Modify: `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\views\blog\**`
 - Modify: `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\router\routes\modules\blog.ts`
 
-- [ ] **Step 1: Update callers**
+- [x] **Step 1: Update callers**
 
 Use string IDs and explicit response types.
 
-- [ ] **Step 2: Keep pages work-focused**
+- [x] **Step 2: Keep pages work-focused**
 
 Use KtTable or existing forms; avoid landing-page or card-heavy redesign.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
@@ -910,6 +912,8 @@ pnpm --dir D:\MyFiles\KT\Vue\kt-template-admin -F @vben/web-antdv-next run typec
 ```
 
 Expected: PASS.
+
+Actual note: Admin Blog/WordPress ID-facing types were aligned to string IDs, `api/blog/asset.ts` was added against the existing `/minio/*` compatibility routes, and the Blog router/page layout was left unchanged because Batch 3 did not introduce a new visible page structure.
 
 ### Task 3.3: Commit Batch 3
 

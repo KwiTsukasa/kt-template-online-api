@@ -5,11 +5,11 @@
   "compilerOptions": {
     "assets": [
       {
-        "include": "qqbot/plugins/bangDream/assets/**/*",
+        "include": "modules/qqbot/plugins/bangDream/assets/**/*",
         "outDir": "dist"
       },
       {
-        "include": "qqbot/plugins/bangDream/static-config/**/*",
+        "include": "modules/qqbot/plugins/bangDream/static-config/**/*",
         "outDir": "dist"
       }
     ],

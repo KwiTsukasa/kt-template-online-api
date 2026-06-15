@@ -13,24 +13,19 @@ import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { DictService } from '../../../../src/modules/admin/platform-config/dict/dict.service';
 import { ToolsService } from '../../../../src/common';
-import { QqbotAccountService } from '../../../../src/modules/qqbot/core/account/qqbot-account.service';
-import { QqbotCommandController } from '../../../../src/modules/qqbot/core/command/qqbot-command.controller';
-import { QqbotCommand } from '../../../../src/modules/qqbot/core/command/qqbot-command.entity';
-import { QqbotCommandEngineService } from '../../../../src/modules/qqbot/core/command/qqbot-command-engine.service';
-import { QqbotCommandLog } from '../../../../src/modules/qqbot/core/command/qqbot-command-log.entity';
-import { QqbotCommandParserService } from '../../../../src/modules/qqbot/core/command/qqbot-command-parser.service';
-import { QqbotCommandService } from '../../../../src/modules/qqbot/core/command/qqbot-command.service';
-import { QqbotReplyTemplateService } from '../../../../src/modules/qqbot/core/command/qqbot-reply-template.service';
-import { QQBOT_CORE_PROVIDERS } from '../../../../src/modules/qqbot/core/qqbot-core.module';
-import { QqbotSendService } from '../../../../src/modules/qqbot/core/send/qqbot-send.service';
+import { QqbotAccountService } from '../../../../src/modules/qqbot/core/application/account/qqbot-account.service';
+import { QqbotCommandController } from '../../../../src/modules/qqbot/core/contract/command/qqbot-command.controller';
+import { QqbotCommand } from '../../../../src/modules/qqbot/core/infrastructure/persistence/command/qqbot-command.entity';
+import { QqbotCommandEngineService } from '../../../../src/modules/qqbot/core/application/command/qqbot-command-engine.service';
+import { QqbotCommandLog } from '../../../../src/modules/qqbot/core/infrastructure/persistence/command/qqbot-command-log.entity';
+import { QqbotCommandParserService } from '../../../../src/modules/qqbot/core/application/command/qqbot-command-parser.service';
+import { QqbotCommandService } from '../../../../src/modules/qqbot/core/application/command/qqbot-command.service';
+import { QqbotReplyTemplateService } from '../../../../src/modules/qqbot/core/application/command/qqbot-reply-template.service';
+import { QQBOT_PLUGIN_EXECUTION_PORT } from '../../../../src/modules/qqbot/core/domain/plugin-execution.port';
+import { QqbotSendService } from '../../../../src/modules/qqbot/core/application/send/qqbot-send.service';
 
 describe('QQBot core command local smoke', () => {
   let app: INestApplication;
-  type ProviderClass = new (...args: never[]) => unknown;
-  const qqbotPluginRegistryProvider = QQBOT_CORE_PROVIDERS.find(
-    (provider) =>
-      (provider as { name?: string }).name === 'QqbotPluginRegistryService',
-  ) as ProviderClass;
 
   const command = {
     aliases: '["查歌"]',
@@ -72,10 +67,14 @@ describe('QQBot core command local smoke', () => {
     save: jest.fn(),
   };
 
-  const pluginRegistry = {
-    execute: jest.fn().mockResolvedValue({
+  const pluginExecution = {
+    executeOperation: jest.fn().mockResolvedValue({
       title: 'FIRE BIRD',
       type: 'text',
+    }),
+    getOperationByCommand: jest.fn().mockResolvedValue({
+      key: command.operationKey,
+      pluginKey: command.pluginKey,
     }),
   };
 
@@ -103,8 +102,8 @@ describe('QQBot core command local smoke', () => {
           },
         },
         {
-          provide: qqbotPluginRegistryProvider,
-          useValue: pluginRegistry,
+          provide: QQBOT_PLUGIN_EXECUTION_PORT,
+          useValue: pluginExecution,
         },
         {
           provide: QqbotSendService,
@@ -190,14 +189,16 @@ describe('QQBot core command local smoke', () => {
     expect(commandRepository.findOne).toHaveBeenCalledWith({
       where: { id: command.id, isDeleted: false },
     });
-    expect(pluginRegistry.execute).toHaveBeenCalledWith(
-      command.pluginKey,
-      command.operationKey,
+    expect(pluginExecution.executeOperation).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: 'FIRE BIRD',
-      }),
-      expect.objectContaining({
-        command,
+        context: expect.objectContaining({
+          command,
+        }),
+        input: expect.objectContaining({
+          text: 'FIRE BIRD',
+        }),
+        operationKey: command.operationKey,
+        pluginKey: command.pluginKey,
       }),
     );
   });

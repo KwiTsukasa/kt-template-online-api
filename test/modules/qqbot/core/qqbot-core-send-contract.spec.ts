@@ -1,4 +1,4 @@
-import { QQBOT_CORE_DOMAIN_CONTRACT } from '../../../../src/modules/qqbot/core/qqbot-core.contract';
+import { QQBOT_CORE_DOMAIN_CONTRACT } from '../../../../src/modules/qqbot/core/contract/qqbot-core.contract';
 import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
 describe('QQBot core send contract', () => {

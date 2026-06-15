@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative } from 'path';
-import { parseQqbotPluginManifest } from '../../../../src/modules/qqbot/plugin-platform/manifest';
+import { parseQqbotPluginManifest } from '../../../../src/modules/qqbot/plugin-platform/domain/manifest';
 
 const repoRoot = join(__dirname, '../../../..');
 const pluginRoot = join(repoRoot, 'src/modules/qqbot/plugins');

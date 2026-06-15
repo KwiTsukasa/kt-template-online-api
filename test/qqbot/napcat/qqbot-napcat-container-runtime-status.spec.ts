@@ -9,7 +9,7 @@ jest.mock('@/common', () => {
 });
 
 import { ToolsService } from '@/common';
-import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/qqbot-napcat-container.service';
+import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
 
 describe('QqbotNapcatContainerService runtime status', () => {
   const createService = (repository: {

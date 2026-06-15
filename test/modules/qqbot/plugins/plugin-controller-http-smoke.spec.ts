@@ -25,9 +25,9 @@ import { ToolsService } from '../../../../src/common';
 import { QqbotBangDreamPluginService } from '../../../../src/modules/qqbot/plugins/bangDream/qqbot-bangdream.plugin';
 import { QqbotFf14MarketPluginService } from '../../../../src/modules/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin';
 import { QqbotFflogsPluginService } from '../../../../src/modules/qqbot/plugins/fflogs/qqbot-fflogs.plugin';
-import { QqbotPluginController } from '../../../../src/modules/qqbot/plugin-platform/qqbot-plugin.controller';
-import { QqbotEventPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/registry/qqbot-event-plugin-registry.service';
-import { QqbotPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/registry/qqbot-plugin-registry.service';
+import { QqbotPluginController } from '../../../../src/modules/qqbot/plugin-platform/contract/qqbot-plugin.controller';
+import { QqbotEventPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-event-plugin-registry.service';
+import { QqbotPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-plugin-registry.service';
 import type { QqbotIntegrationPlugin } from '../../../../src/modules/qqbot/core/contract/qqbot.types';
 
 const createPlugin = (

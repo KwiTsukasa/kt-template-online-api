@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-import { parseQqbotPluginManifest } from '../../../../src/modules/qqbot/plugin-platform/manifest';
+import { parseQqbotPluginManifest } from '../../../../src/modules/qqbot/plugin-platform/domain/manifest';
 import { BANGDREAM_OPERATION_REGISTRY } from '../../../../src/modules/qqbot/plugins/bangDream/registry/operation-registry';
 
 const repoRoot = join(__dirname, '../../../..');

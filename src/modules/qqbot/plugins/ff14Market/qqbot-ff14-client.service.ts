@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { formatKtDateTime } from '@/common';
 import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
-import { QqbotPluginHttpClientService } from '@/modules/qqbot/plugin-platform/sdk';
+import { QqbotPluginHttpClientService } from '@/modules/qqbot/plugin-platform/infrastructure/integration/sdk';
 import {
   buildQqbotFf14MarketCatalog,
   buildQqbotFf14MarketCatalogFromTree,

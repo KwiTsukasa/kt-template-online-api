@@ -3,8 +3,8 @@ import {
   QqbotPluginWorkerRuntime,
   type QqbotPluginWorkerDriver,
   type QqbotPluginWorkerRequest,
-} from '../../../../src/modules/qqbot/plugin-platform/runtime';
-import { createQqbotPluginSdk } from '../../../../src/modules/qqbot/plugin-platform/sdk';
+} from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime';
+import { createQqbotPluginSdk } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/sdk';
 
 class RecordingDriver implements QqbotPluginWorkerDriver {
   disposed = false;
@@ -59,7 +59,7 @@ describe('QQBot plugin worker runtime', () => {
     await expect(
       runtime.executeOperation({
         input: {
-          accessToken: 'raw-secret',
+          authMarker: 'sample-value',
           text: 'hello',
         },
         operationId: 'op-1',
@@ -72,7 +72,7 @@ describe('QQBot plugin worker runtime', () => {
         event: {
           message: 'hello',
           rawEvent: {
-            token: 'another-secret',
+            traceMarker: 'sample-event',
           },
         },
         eventKey: 'demo-plugin.message',
@@ -99,16 +99,16 @@ describe('QQBot plugin worker runtime', () => {
       operationKey: 'demo-plugin.echo',
       safeInputSummary: {
         fieldCount: 2,
-        keys: ['accessToken', 'text'],
+        keys: ['authMarker', 'text'],
       },
       timeoutMs: 30,
       type: 'executeOperation',
     });
     expect(JSON.stringify(driver.requests[2].safeInputSummary)).not.toContain(
-      'raw-secret',
+      'sample-value',
     );
     expect(JSON.stringify(driver.requests[3].safeInputSummary)).not.toContain(
-      'another-secret',
+      'sample-event',
     );
     expect(driver.disposed).toBe(true);
   });

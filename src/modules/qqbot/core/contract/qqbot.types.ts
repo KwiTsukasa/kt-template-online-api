@@ -1,8 +1,8 @@
 import type { QrcodeLookupOptions } from '@/common/types';
-import type { QqbotAccount } from '../account/qqbot-account.entity';
-import type { QqbotCommand } from '../command/qqbot-command.entity';
-import type { QqbotAllowlist } from '../permission/qqbot-allowlist.entity';
-import type { QqbotBlocklist } from '../permission/qqbot-blocklist.entity';
+import type { QqbotAccount } from '../infrastructure/persistence/account/qqbot-account.entity';
+import type { QqbotCommand } from '../infrastructure/persistence/command/qqbot-command.entity';
+import type { QqbotAllowlist } from '../infrastructure/persistence/permission/qqbot-allowlist.entity';
+import type { QqbotBlocklist } from '../infrastructure/persistence/permission/qqbot-blocklist.entity';
 
 export type { QrcodeLookupOptions } from '@/common/types';
 
@@ -352,14 +352,6 @@ export type QqbotReverseActionSender = {
     action: string,
     params: Record<string, any>,
   ) => Promise<QqbotOneBotActionResponse>;
-};
-
-export type QqbotRepeaterConversationState = {
-  count: number;
-  lastRepeatedAt?: number;
-  lastText: string;
-  repeatedText: string;
-  updatedAt: number;
 };
 
 export type QrcodeRefreshOptions = QrcodeLookupOptions & {

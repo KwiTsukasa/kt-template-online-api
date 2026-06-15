@@ -6,7 +6,7 @@ import {
   KtDateTimeColumn,
   KtUpdateDateColumn,
 } from '@/common';
-import type { QqbotAccountNapcatBindStatus } from '../../../core/contract/qqbot.types';
+import type { QqbotAccountNapcatBindStatus } from '@/modules/qqbot/core/contract/qqbot.types';
 
 @Entity('qqbot_account_napcat')
 @Index('idx_qqbot_account_napcat_account', ['accountId', 'isDeleted'])

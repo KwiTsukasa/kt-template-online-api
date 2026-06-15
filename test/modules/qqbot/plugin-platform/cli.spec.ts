@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { runQqbotPluginCli } from '../../../../scripts/qqbot-plugin/cli';
-import { parseQqbotPluginManifest } from '../../../../src/modules/qqbot/plugin-platform/manifest';
+import { parseQqbotPluginManifest } from '../../../../src/modules/qqbot/plugin-platform/domain/manifest';
 
 const projectRoot = path.resolve(__dirname, '..', '..', '..', '..');
 const workspaceTmpRoot = path.resolve(

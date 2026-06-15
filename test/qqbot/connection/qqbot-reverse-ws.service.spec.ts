@@ -1,10 +1,10 @@
-jest.mock('@/modules/qqbot/core/event/qqbot-event.service', () => ({
+jest.mock('@/modules/qqbot/core/application/event/qqbot-event.service', () => ({
   QqbotEventService: class {},
 }));
 
 import { EventEmitter } from 'events';
 import { ToolsService } from '@/common';
-import { QqbotReverseWsService } from '@/modules/qqbot/core/connection/qqbot-reverse-ws.service';
+import { QqbotReverseWsService } from '@/modules/qqbot/core/infrastructure/integration/connection/qqbot-reverse-ws.service';
 
 class FakeWebSocket extends EventEmitter {
   closed: Array<{ code?: number; reason?: string }> = [];

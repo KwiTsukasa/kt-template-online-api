@@ -9,10 +9,10 @@ const readSource = (relativePath: string) =>
 describe('QQBot plugin platform lifecycle runtime contract', () => {
   it('uses dedicated lifecycle use cases instead of direct status flips', () => {
     const controller = readSource(
-      'src/modules/qqbot/plugin-platform/plugin-platform.controller.ts',
+      'src/modules/qqbot/plugin-platform/contract/plugin-platform.controller.ts',
     );
     const service = readSource(
-      'src/modules/qqbot/plugin-platform/plugin-platform.service.ts',
+      'src/modules/qqbot/plugin-platform/application/plugin-platform.service.ts',
     );
 
     const bannedDirectStatusFlips = [
@@ -36,8 +36,8 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
 
   it('activates workers and refreshes active registries during lifecycle transitions', () => {
     const source = [
-      readSource('src/modules/qqbot/plugin-platform/plugin-platform.service.ts'),
-      readSource('src/modules/qqbot/plugin-platform/runtime/worker-runtime.ts'),
+      readSource('src/modules/qqbot/plugin-platform/application/plugin-platform.service.ts'),
+      readSource('src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/worker-runtime.ts'),
     ].join('\n');
 
     const missingRuntimeSignals = [
@@ -55,7 +55,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
 
   it('exposes operation executor and event dispatcher through the platform', () => {
     const source = readSource(
-      'src/modules/qqbot/plugin-platform/plugin-platform.service.ts',
+      'src/modules/qqbot/plugin-platform/application/plugin-platform.service.ts',
     );
 
     const missingExecutorSignals = [

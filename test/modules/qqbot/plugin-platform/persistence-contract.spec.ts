@@ -2,7 +2,7 @@ import { getMetadataArgsStorage } from 'typeorm';
 import {
   QQBOT_PLUGIN_PLATFORM_DOMAIN_CONTRACT,
   QQBOT_PLUGIN_PLATFORM_ENTITIES,
-} from '../../../../src/modules/qqbot/plugin-platform/persistence';
+} from '../../../../src/modules/qqbot/plugin-platform/infrastructure/persistence';
 import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
 type EntityClass = new (...args: never[]) => unknown;

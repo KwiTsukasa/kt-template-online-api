@@ -13,9 +13,9 @@ jest.mock('@/common', () => {
 
 import { ConfigService } from '@nestjs/config';
 import { ToolsService } from '@/common';
-import { QqbotAccountService } from '@/modules/qqbot/core/account/qqbot-account.service';
-import { QqbotNapcatLoginService } from '@/modules/qqbot/napcat/login/qqbot-napcat-login.service';
-import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/qqbot-napcat-container.service';
+import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
+import { QqbotNapcatLoginService } from '@/modules/qqbot/napcat/application/login/qqbot-napcat-login.service';
+import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
 
 describe('QqbotNapcatLoginService', () => {
   const toolsService = new ToolsService();

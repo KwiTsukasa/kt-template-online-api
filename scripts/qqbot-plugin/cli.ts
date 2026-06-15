@@ -4,7 +4,7 @@ import * as path from 'path';
 import {
   parseQqbotPluginManifest,
   type QqbotPluginManifest,
-} from '../../src/modules/qqbot/plugin-platform/manifest';
+} from '../../src/modules/qqbot/plugin-platform/domain/manifest';
 
 export type QqbotPluginCliCommand =
   | 'create'
@@ -284,8 +284,8 @@ export const runQqbotPluginCli = async (
   const command = argv[0] as QqbotPluginCliCommand | undefined;
   const resolvedOptions: Required<QqbotPluginCliOptions> = {
     cwd: options.cwd || process.cwd(),
-    stderr: options.stderr || ((message) => console.error(message)),
-    stdout: options.stdout || ((message) => console.log(message)),
+    stderr: options.stderr || ((message) => process.stderr.write(`${message}\n`)),
+    stdout: options.stdout || ((message) => process.stdout.write(`${message}\n`)),
   };
 
   switch (command) {

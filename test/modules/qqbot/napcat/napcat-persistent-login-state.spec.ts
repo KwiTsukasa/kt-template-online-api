@@ -38,7 +38,7 @@ describe('NapCat persistent login state contract', () => {
 
   it('keeps login truth in persistence rather than in-memory scan sessions', () => {
     const loginSource = readSource(
-      'src/modules/qqbot/napcat/login/qqbot-napcat-login.service.ts',
+      'src/modules/qqbot/napcat/application/login/qqbot-napcat-login.service.ts',
     );
 
     const bannedMemorySignals = ['new Map', 'scanSessions'].filter((signal) =>
@@ -56,7 +56,7 @@ describe('NapCat persistent login state contract', () => {
 
   it('keeps captcha and new-device challenges recoverable and separate', () => {
     const stateMachine = readSource(
-      'src/modules/qqbot/napcat/login/napcat-login-state-machine.ts',
+      'src/modules/qqbot/napcat/domain/login/napcat-login-state-machine.ts',
     );
 
     expect(stateMachine).toEqual(expect.stringContaining("type: 'captcha'"));

@@ -50,13 +50,13 @@ import { getMetadataArgsStorage } from 'typeorm';
 import { AdminAuthGuardModule } from '../../../../src/modules/admin/identity/auth/admin-auth-guard.module';
 import { DictModule } from '../../../../src/modules/admin/platform-config/dict/dict.module';
 import { AppModule } from '../../../../src/app.module';
-import { QqbotAccountController } from '../../../../src/modules/qqbot/core/account/qqbot-account.controller';
-import { QqbotCommandController } from '../../../../src/modules/qqbot/core/command/qqbot-command.controller';
-import { QqbotDashboardController } from '../../../../src/modules/qqbot/core/dashboard/qqbot-dashboard.controller';
-import { QqbotMessageController } from '../../../../src/modules/qqbot/core/message/qqbot-message.controller';
-import { QqbotPermissionController } from '../../../../src/modules/qqbot/core/permission/qqbot-permission.controller';
-import { QqbotRuleController } from '../../../../src/modules/qqbot/core/rule/qqbot-rule.controller';
-import { QqbotSendController } from '../../../../src/modules/qqbot/core/send/qqbot-send.controller';
+import { QqbotAccountController } from '../../../../src/modules/qqbot/core/contract/account/qqbot-account.controller';
+import { QqbotCommandController } from '../../../../src/modules/qqbot/core/contract/command/qqbot-command.controller';
+import { QqbotDashboardController } from '../../../../src/modules/qqbot/core/contract/dashboard/qqbot-dashboard.controller';
+import { QqbotMessageController } from '../../../../src/modules/qqbot/core/contract/message/qqbot-message.controller';
+import { QqbotPermissionController } from '../../../../src/modules/qqbot/core/contract/permission/qqbot-permission.controller';
+import { QqbotRuleController } from '../../../../src/modules/qqbot/core/contract/rule/qqbot-rule.controller';
+import { QqbotSendController } from '../../../../src/modules/qqbot/core/contract/send/qqbot-send.controller';
 import {
   QQBOT_CORE_CONTROLLERS,
   QQBOT_CORE_ENTITIES,
@@ -128,7 +128,6 @@ describe('QQBot core module contract', () => {
         'GET /qqbot/permission/config',
         'GET /qqbot/permission/allowlist',
         'GET /qqbot/permission/blocklist',
-        'GET /qqbot/plugin/list',
         'GET /qqbot/rule/list',
         'GET /qqbot/send/log/list',
         'POST /qqbot/send/private',
@@ -191,9 +190,6 @@ describe('QQBot core module contract', () => {
         QqbotSendController,
       ]),
     );
-    expect(getNames(QQBOT_CORE_CONTROLLERS)).toEqual(
-      expect.arrayContaining(['QqbotPluginController']),
-    );
     expect(getNames(QQBOT_CORE_PROVIDERS)).toEqual(
       expect.arrayContaining([
         'QqbotAccountService',
@@ -204,7 +200,6 @@ describe('QQBot core module contract', () => {
         'QqbotConfigService',
         'QqbotDashboardService',
         'QqbotDedupeService',
-        'QqbotEventPluginRegistryService',
         'QqbotEventService',
         'QqbotMessageService',
         'NapcatDeviceIdentityService',
@@ -212,8 +207,6 @@ describe('QQBot core module contract', () => {
         'QqbotNapcatLoginService',
         'QqbotNapcatWatchdogService',
         'QqbotPermissionService',
-        'QqbotPluginHttpClientService',
-        'QqbotPluginRegistryService',
         'QqbotRateLimitService',
         'QqbotReplyTemplateService',
         'QqbotReverseWsService',

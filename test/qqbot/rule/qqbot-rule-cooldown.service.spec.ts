@@ -1,5 +1,5 @@
 import { ToolsService } from '@/common';
-import { QqbotRuleService } from '@/modules/qqbot/core/rule/qqbot-rule.service';
+import { QqbotRuleService } from '@/modules/qqbot/core/application/rule/qqbot-rule.service';
 
 function createService(config: Record<string, number | string | undefined>) {
   return new (QqbotRuleService as any)(

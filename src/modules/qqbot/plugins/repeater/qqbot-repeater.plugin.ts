@@ -1,17 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ToolsService } from '@/common';
-import { QqbotAccountService } from '@/modules/qqbot/core/account/qqbot-account.service';
+import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
 import type {
   QqbotEventPluginDefinition,
   QqbotEventPluginSummary,
   QqbotNormalizedMessage,
-  QqbotRepeaterConversationState,
 } from '@/modules/qqbot/core/contract/qqbot.types';
-import { QqbotSendService } from '@/modules/qqbot/core/send/qqbot-send.service';
+import { QqbotSendService } from '@/modules/qqbot/core/application/send/qqbot-send.service';
 
 const QQBOT_REPEATER_VERSION = '1.0.0';
 const QQBOT_REPEATER_PLUGIN_KEY = 'repeater';
+
+type QqbotRepeaterConversationState = {
+  count: number;
+  lastRepeatedAt?: number;
+  lastText: string;
+  repeatedText: string;
+  updatedAt: number;
+};
 
 @Injectable()
 export class QqbotRepeaterPluginService {

@@ -6,7 +6,7 @@ import {
   KtDateTimeColumn,
   KtUpdateDateColumn,
 } from '@/common';
-import type { QqbotNapcatContainerStatus } from '../../../core/contract/qqbot.types';
+import type { QqbotNapcatContainerStatus } from '@/modules/qqbot/core/contract/qqbot.types';
 
 @Entity('qqbot_napcat_container')
 @Index('uk_qqbot_napcat_container_name', ['name'], { unique: true })

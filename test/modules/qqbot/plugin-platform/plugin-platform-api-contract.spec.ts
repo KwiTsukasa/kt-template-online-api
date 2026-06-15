@@ -5,9 +5,9 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as request from 'supertest';
 import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-auth.guard';
-import { QqbotPluginPlatformController } from '../../../../src/modules/qqbot/plugin-platform/plugin-platform.controller';
+import { QqbotPluginPlatformController } from '../../../../src/modules/qqbot/plugin-platform/contract/plugin-platform.controller';
 import { QqbotPluginPlatformModule } from '../../../../src/modules/qqbot/plugin-platform/plugin-platform.module';
-import { QqbotPluginPlatformService } from '../../../../src/modules/qqbot/plugin-platform/plugin-platform.service';
+import { QqbotPluginPlatformService } from '../../../../src/modules/qqbot/plugin-platform/application/plugin-platform.service';
 import {
   QQBOT_PLUGIN_PLATFORM_ENTITIES,
   QqbotPlugin,
@@ -19,7 +19,7 @@ import {
   QqbotPluginOperation,
   QqbotPluginRuntimeEvent,
   QqbotPluginVersion,
-} from '../../../../src/modules/qqbot/plugin-platform/persistence';
+} from '../../../../src/modules/qqbot/plugin-platform/infrastructure/persistence';
 import {
   collectControllerRoutes,
   routeKey,

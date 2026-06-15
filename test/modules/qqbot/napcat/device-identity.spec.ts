@@ -5,9 +5,9 @@ import {
   NapcatDeviceIdentityService,
   NAPCAT_RUNTIME_DOMAIN_CONTRACT,
   NAPCAT_RUNTIME_ENTITIES,
-  toNapcatDockerDeviceOptions,
 } from '../../../../src/modules/qqbot/napcat';
-import { QqbotNapcatContainerService } from '../../../../src/modules/qqbot/napcat/qqbot-napcat-container.service';
+import { toNapcatDockerDeviceOptions } from '../../../../src/modules/qqbot/napcat/infrastructure/integration/container/napcat-docker-device-options';
+import { QqbotNapcatContainerService } from '../../../../src/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
 import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
 type EntityClass = new (...args: never[]) => unknown;

@@ -25,7 +25,7 @@ describe('QQBot core plugin execution ports', () => {
 
   it('keeps command parser generic and leaves plugin-specific parsing to plugins', () => {
     const source = readSource(
-      'src/modules/qqbot/core/command/qqbot-command-parser.service.ts',
+      'src/modules/qqbot/core/application/command/qqbot-command-parser.service.ts',
     );
 
     const bannedParserSignals = [
@@ -41,7 +41,7 @@ describe('QQBot core plugin execution ports', () => {
 
   it('dispatches unconsumed events through Plugin Platform instead of directly invoking Repeater', () => {
     const source = readSource(
-      'src/modules/qqbot/core/rule/qqbot-rule-engine.service.ts',
+      'src/modules/qqbot/core/application/rule/qqbot-rule-engine.service.ts',
     );
 
     const bannedRepeaterSignals = [

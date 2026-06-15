@@ -2,7 +2,7 @@ import {
   QQBOT_PLUGIN_ALLOWED_PERMISSIONS,
   parseQqbotPluginManifest,
   QqbotPluginManifestValidationError,
-} from '../../../../src/modules/qqbot/plugin-platform/manifest';
+} from '../../../../src/modules/qqbot/plugin-platform/domain/manifest';
 
 const createValidManifest = () => ({
   assets: [

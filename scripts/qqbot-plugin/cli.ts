@@ -21,11 +21,13 @@ export type QqbotPluginCliOptions = {
 export type QqbotPluginCliResult = {
   command: QqbotPluginCliCommand;
   exitCode: number;
+  installationId?: string;
   packageHash?: string;
   packagePath?: string;
   pluginKey?: string;
   pluginRoot?: string;
   version?: string;
+  versionId?: string;
 };
 
 type PackedPluginFile = {
@@ -41,6 +43,18 @@ type PackedPlugin = {
 
 const templateRoot = path.join(__dirname, 'templates', 'basic');
 const packageExtension = '.qqbot-plugin.json';
+const maxPackageFileBytes = 5 * 1024 * 1024;
+const pluginKeyPattern = /^[a-z][a-z0-9-]{2,63}$/;
+const allowedTopLevelEntries = new Set([
+  'LICENSE',
+  'LICENSE.txt',
+  'README.md',
+  'assets',
+  'migrations',
+  'plugin.json',
+  'src',
+  'tests',
+]);
 
 const sha256 = (content: Buffer | string) =>
   crypto.createHash('sha256').update(content).digest('hex');
@@ -67,6 +81,73 @@ const formatPluginName = (pluginKey: string) => {
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(' ');
 };
+
+const getOptionValue = (argv: string[], optionName: string) => {
+  const optionIndex = argv.indexOf(optionName);
+  if (optionIndex < 0) return undefined;
+
+  const value = argv[optionIndex + 1];
+  if (!value || value.startsWith('--')) {
+    throw new Error(`Usage: ${optionName} <path>`);
+  }
+  return value;
+};
+
+const isInsideDirectory = (parent: string, child: string) => {
+  const relativePath = path.relative(parent, child);
+  return (
+    relativePath === '' ||
+    (!!relativePath &&
+      !relativePath.startsWith('..') &&
+      !path.isAbsolute(relativePath))
+  );
+};
+
+const findWorkspaceRoot = (cwd: string) => {
+  let current = path.resolve(cwd);
+  while (true) {
+    if (fs.existsSync(path.join(current, 'AGENTS.md'))) return current;
+    const parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+};
+
+const getControlledRoots = (options: Required<QqbotPluginCliOptions>) => {
+  const cwd = path.resolve(options.cwd);
+  const roots = [cwd];
+
+  if (fs.existsSync(path.join(cwd, 'package.json'))) {
+    const workspaceRoot = findWorkspaceRoot(cwd);
+    if (workspaceRoot) roots.push(path.join(workspaceRoot, '.kt-workspace'));
+  }
+
+  return roots;
+};
+
+const resolveControlledPath = (
+  pathArg: string,
+  options: Required<QqbotPluginCliOptions>,
+  label: string,
+) => {
+  const resolvedPath = path.resolve(options.cwd, pathArg);
+  const allowed = getControlledRoots(options).some((root) =>
+    isInsideDirectory(root, resolvedPath),
+  );
+  if (!allowed) {
+    throw new Error(`Unsafe ${label} output path: ${resolvedPath}`);
+  }
+  return resolvedPath;
+};
+
+function assertPluginKey(
+  pluginKey: string | undefined,
+): asserts pluginKey is string {
+  if (!pluginKey) throw new Error('Usage: qqbot-plugin create <pluginKey>');
+  if (!pluginKeyPattern.test(pluginKey)) {
+    throw new Error(`Invalid QQBot plugin key: ${pluginKey}`);
+  }
+}
 
 const readManifest = (pluginRoot: string) => {
   const manifestPath = path.join(pluginRoot, 'plugin.json');
@@ -116,16 +197,30 @@ const listPackageFiles = (pluginRoot: string): PackedPluginFile[] => {
   const visit = (current: string) => {
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       if (current === pluginRoot && ignoredRoots.has(entry.name)) continue;
+      if (entry.name.startsWith('.')) {
+        throw new Error(`Hidden files are not allowed in plugin packages: ${entry.name}`);
+      }
+      if (entry.isSymbolicLink()) {
+        throw new Error(`Symbolic links are not allowed in plugin packages: ${entry.name}`);
+      }
 
       const absolutePath = path.join(current, entry.name);
+      const relativePath = path
+        .relative(pluginRoot, absolutePath)
+        .replace(/\\/g, '/');
+      const topLevelEntry = relativePath.split('/')[0];
+      if (!allowedTopLevelEntries.has(topLevelEntry)) {
+        throw new Error(`Plugin package path is not whitelisted: ${relativePath}`);
+      }
       if (entry.isDirectory()) {
         visit(absolutePath);
         continue;
       }
+      const fileSize = fs.statSync(absolutePath).size;
+      if (fileSize > maxPackageFileBytes) {
+        throw new Error(`Plugin package file is too large: ${relativePath}`);
+      }
 
-      const relativePath = path
-        .relative(pluginRoot, absolutePath)
-        .replace(/\\/g, '/');
       files.push({
         path: relativePath,
         sha256: sha256(fs.readFileSync(absolutePath)),
@@ -137,8 +232,32 @@ const listPackageFiles = (pluginRoot: string): PackedPluginFile[] => {
   return files.sort((a, b) => a.path.localeCompare(b.path));
 };
 
+const assertPluginSourceBoundary = (pluginRoot: string) => {
+  const forbiddenPatterns: Array<[RegExp, string]> = [
+    [/\bfrom\s+['"]@nestjs\//, '@nestjs imports'],
+    [/\bfrom\s+['"](?:node:)?fs['"]/, 'fs imports'],
+    [/\brequire\(['"](?:node:)?fs['"]\)/, 'fs require'],
+    [/\bfrom\s+['"]axios['"]/, 'axios imports'],
+    [/\brequire\(['"]axios['"]\)/, 'axios require'],
+    [/\bprocess\.env\b/, 'process.env access'],
+  ];
+
+  for (const file of listPackageFiles(pluginRoot)) {
+    if (!/\.[cm]?[tj]sx?$/.test(file.path)) continue;
+    const filePath = path.join(pluginRoot, file.path);
+    const source = fs.readFileSync(filePath, 'utf8');
+    const violation = forbiddenPatterns.find(([pattern]) => pattern.test(source));
+    if (violation) {
+      throw new Error(
+        `Forbidden plugin source boundary violation in ${file.path}: ${violation[1]}`,
+      );
+    }
+  }
+};
+
 const buildPackedPlugin = (pluginRoot: string): PackedPlugin => {
   const manifest = readManifest(pluginRoot);
+  assertPluginSourceBoundary(pluginRoot);
   const files = listPackageFiles(pluginRoot);
   const contentHash = sha256(
     stableStringify({
@@ -172,10 +291,13 @@ const assertPackageIntegrity = (packedPlugin: PackedPlugin) => {
 const createPlugin = (
   pluginKey: string | undefined,
   options: Required<QqbotPluginCliOptions>,
+  outputPathArg?: string,
 ): QqbotPluginCliResult => {
-  if (!pluginKey) throw new Error('Usage: qqbot-plugin create <pluginKey>');
+  assertPluginKey(pluginKey);
 
-  const pluginRoot = path.join(options.cwd, 'plugins', pluginKey);
+  const pluginRoot = outputPathArg
+    ? resolveControlledPath(outputPathArg, options, 'create')
+    : path.join(options.cwd, 'plugins', pluginKey);
   if (fs.existsSync(pluginRoot)) {
     throw new Error(`Plugin already exists: ${pluginRoot}`);
   }
@@ -186,6 +308,15 @@ const createPlugin = (
   });
   fs.mkdirSync(path.join(pluginRoot, 'assets'), { recursive: true });
   fs.mkdirSync(path.join(pluginRoot, 'migrations'), { recursive: true });
+  fs.mkdirSync(path.join(pluginRoot, 'src', 'application'), {
+    recursive: true,
+  });
+  fs.mkdirSync(path.join(pluginRoot, 'src', 'domain'), { recursive: true });
+  fs.mkdirSync(path.join(pluginRoot, 'src', 'events'), { recursive: true });
+  fs.mkdirSync(path.join(pluginRoot, 'src', 'infrastructure'), {
+    recursive: true,
+  });
+  fs.mkdirSync(path.join(pluginRoot, 'src', 'operations'), { recursive: true });
   fs.mkdirSync(path.join(pluginRoot, 'tests'), { recursive: true });
   readManifest(pluginRoot);
 
@@ -207,6 +338,7 @@ const validatePlugin = (
 
   const pluginRoot = path.resolve(options.cwd, pluginRootArg);
   const manifest = readManifest(pluginRoot);
+  assertPluginSourceBoundary(pluginRoot);
   options.stdout(
     `Validated QQBot plugin: ${manifest.pluginKey}@${manifest.version}`,
   );
@@ -223,15 +355,18 @@ const validatePlugin = (
 const packPlugin = (
   pluginRootArg: string | undefined,
   options: Required<QqbotPluginCliOptions>,
+  outputPathArg?: string,
 ): QqbotPluginCliResult => {
   if (!pluginRootArg) throw new Error('Usage: qqbot-plugin pack <path>');
 
   const pluginRoot = path.resolve(options.cwd, pluginRootArg);
   const packedPlugin = buildPackedPlugin(pluginRoot);
   const shortHash = packedPlugin.contentHash.slice(0, 12);
+  const packageRoot = outputPathArg
+    ? resolveControlledPath(outputPathArg, options, 'pack')
+    : path.join(pluginRoot, 'dist');
   const packagePath = path.join(
-    pluginRoot,
-    'dist',
+    packageRoot,
     `${packedPlugin.manifest.pluginKey}-${packedPlugin.manifest.version}-${shortHash}${packageExtension}`,
   );
 
@@ -263,6 +398,12 @@ const installLocalPlugin = (
     fs.readFileSync(packagePath, 'utf8'),
   ) as PackedPlugin;
   assertPackageIntegrity(packedPlugin);
+  const versionId = sha256(
+    `version:${packedPlugin.manifest.pluginKey}:${packedPlugin.manifest.version}:${packedPlugin.contentHash}`,
+  ).slice(0, 16);
+  const installationId = sha256(
+    `installation:${packagePath}:${packedPlugin.contentHash}`,
+  ).slice(0, 16);
   options.stdout(
     `Installed local QQBot plugin package: ${packedPlugin.manifest.pluginKey}@${packedPlugin.manifest.version}`,
   );
@@ -270,10 +411,12 @@ const installLocalPlugin = (
   return {
     command: 'install-local',
     exitCode: 0,
+    installationId,
     packageHash: packedPlugin.contentHash,
     packagePath,
     pluginKey: packedPlugin.manifest.pluginKey,
     version: packedPlugin.manifest.version,
+    versionId,
   };
 };
 
@@ -290,11 +433,11 @@ export const runQqbotPluginCli = async (
 
   switch (command) {
     case 'create':
-      return createPlugin(argv[1], resolvedOptions);
+      return createPlugin(argv[1], resolvedOptions, getOptionValue(argv, '--out'));
     case 'install-local':
       return installLocalPlugin(argv[1], resolvedOptions);
     case 'pack':
-      return packPlugin(argv[1], resolvedOptions);
+      return packPlugin(argv[1], resolvedOptions, getOptionValue(argv, '--out'));
     case 'validate':
       return validatePlugin(argv[1], resolvedOptions);
     default:

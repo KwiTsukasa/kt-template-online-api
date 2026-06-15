@@ -25,6 +25,43 @@ export class QqbotPluginPlatformController {
     return vbenSuccess(await this.service.listInstallations());
   }
 
+  @Get('capabilities')
+  @ApiOperation({ summary: '插件平台能力汇总' })
+  @ApiQuery({ name: 'pluginId', required: false, type: String })
+  async capabilities(@Query('pluginId') pluginId?: string) {
+    return vbenSuccess(await this.service.listCapabilities(pluginId));
+  }
+
+  @Get('operations/list')
+  @ApiOperation({ summary: '插件平台能力列表' })
+  @ApiQuery({ name: 'pluginId', required: false, type: String })
+  async operationsList(@Query('pluginId') pluginId?: string) {
+    return vbenSuccess(await this.service.listOperations(pluginId));
+  }
+
+  @Get('operations/page')
+  @ApiOperation({ summary: '插件平台能力分页' })
+  @ApiQuery({ name: 'pageNo', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  @ApiQuery({ name: 'pluginId', required: false, type: String })
+  async operationsPage(
+    @Query()
+    query: {
+      pageNo?: number | string;
+      pageSize?: number | string;
+      pluginId?: string;
+    },
+  ) {
+    return vbenSuccess(await this.service.pageOperations(query));
+  }
+
+  @Get('event-handlers')
+  @ApiOperation({ summary: '插件平台事件处理器列表' })
+  @ApiQuery({ name: 'pluginId', required: false, type: String })
+  async eventHandlers(@Query('pluginId') pluginId?: string) {
+    return vbenSuccess(await this.service.listEventHandlers(pluginId));
+  }
+
   @Post('validate')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '校验插件 manifest' })
@@ -78,36 +115,28 @@ export class QqbotPluginPlatformController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '启用插件' })
   async enable(@Body() body: { id?: string }) {
-    return vbenSuccess(
-      await this.service.setInstallationStatus(body, 'enabled'),
-    );
+    return vbenSuccess(await this.service.enableInstallation(body));
   }
 
   @Post('disable')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '禁用插件' })
   async disable(@Body() body: { id?: string }) {
-    return vbenSuccess(
-      await this.service.setInstallationStatus(body, 'disabled'),
-    );
+    return vbenSuccess(await this.service.disableInstallation(body));
   }
 
   @Post('upgrade')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '升级插件' })
   async upgrade(@Body() body: { id?: string }) {
-    return vbenSuccess(
-      await this.service.setInstallationStatus(body, 'installed'),
-    );
+    return vbenSuccess(await this.service.upgradeInstallation(body));
   }
 
   @Post('uninstall')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '卸载插件' })
   async uninstall(@Body() body: { id?: string }) {
-    return vbenSuccess(
-      await this.service.setInstallationStatus(body, 'uninstalled'),
-    );
+    return vbenSuccess(await this.service.uninstallInstallation(body));
   }
 
   @Post('config')
@@ -122,8 +151,23 @@ export class QqbotPluginPlatformController {
   @Get('runtime-events')
   @ApiOperation({ summary: '插件运行事件列表' })
   @ApiQuery({ name: 'pluginId', required: false, type: String })
-  async runtimeEvents(@Query('pluginId') pluginId?: string) {
-    return vbenSuccess(await this.service.listRuntimeEvents(pluginId));
+  @ApiQuery({ name: 'installationId', required: false, type: String })
+  @ApiQuery({ name: 'level', required: false, type: String })
+  @ApiQuery({ name: 'eventType', required: false, type: String })
+  @ApiQuery({ name: 'startTime', required: false, type: String })
+  @ApiQuery({ name: 'endTime', required: false, type: String })
+  async runtimeEvents(
+    @Query()
+    query: {
+      endTime?: string;
+      eventType?: string;
+      installationId?: string;
+      level?: 'error' | 'info' | 'warn';
+      pluginId?: string;
+      startTime?: string;
+    },
+  ) {
+    return vbenSuccess(await this.service.listRuntimeEvents(query));
   }
 
   @Get('account-bindings')

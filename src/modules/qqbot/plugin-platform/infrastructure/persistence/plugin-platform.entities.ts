@@ -12,6 +12,7 @@ export type QqbotPluginInstallStatus =
   | 'failed'
   | 'installed'
   | 'uninstalled'
+  | 'upgrading'
   | 'uploaded'
   | 'validated';
 

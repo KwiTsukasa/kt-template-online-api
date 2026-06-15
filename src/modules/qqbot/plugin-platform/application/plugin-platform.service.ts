@@ -1,11 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
+import {
+  QQBOT_PLUGIN_EXECUTION_PORT,
+  type QqbotPluginEventDispatchInput,
+  type QqbotPluginExecutionInput,
+  type QqbotPluginExecutionPort,
+} from '@/modules/qqbot/core/domain/plugin-execution.port';
 import {
   parseQqbotPluginManifest,
   type QqbotPluginManifest,
 } from '../domain/manifest';
+import type { QqbotPluginWorkerRuntime } from '../infrastructure/integration/runtime';
 import {
   QqbotPlugin,
   QqbotPluginAccountBinding,
@@ -17,7 +24,23 @@ import {
   QqbotPluginRuntimeEvent,
   QqbotPluginVersion,
   type QqbotPluginInstallStatus,
+  type QqbotPluginRuntimeEventLevel,
+  type QqbotPluginRuntimeStatus,
 } from '../infrastructure/persistence';
+
+export const QQBOT_PLUGIN_RUNTIME_FACTORY = Symbol(
+  'QQBOT_PLUGIN_RUNTIME_FACTORY',
+);
+
+export type QqbotPluginRuntimeFactory = {
+  create(
+    installation: QqbotPluginInstallation,
+    version: QqbotPluginVersion,
+  ): Pick<
+    QqbotPluginWorkerRuntime,
+    'activate' | 'deactivate' | 'dispose' | 'health' | 'load'
+  >;
+};
 
 type ValidateManifestBody = {
   manifest?: unknown;
@@ -33,6 +56,21 @@ type InstallationActionBody = {
   id?: string;
 };
 
+type ListOperationsQuery = {
+  pageNo?: number | string;
+  pageSize?: number | string;
+  pluginId?: string;
+};
+
+type RuntimeEventQuery = {
+  endTime?: string;
+  eventType?: string;
+  installationId?: string;
+  level?: QqbotPluginRuntimeEventLevel;
+  pluginId?: string;
+  startTime?: string;
+};
+
 type UpdateConfigBody = {
   configKey?: string;
   pluginId?: string;
@@ -41,6 +79,8 @@ type UpdateConfigBody = {
 
 @Injectable()
 export class QqbotPluginPlatformService {
+  private readonly activeWorkers = new Map<string, QqbotPluginWorkerRuntime>();
+
   constructor(
     @InjectRepository(QqbotPlugin)
     private readonly pluginRepository: Repository<QqbotPlugin>,
@@ -60,10 +100,60 @@ export class QqbotPluginPlatformService {
     private readonly assetRepository: Repository<QqbotPluginAsset>,
     @InjectRepository(QqbotPluginRuntimeEvent)
     private readonly runtimeEventRepository: Repository<QqbotPluginRuntimeEvent>,
+    @Optional()
+    @Inject(QQBOT_PLUGIN_EXECUTION_PORT)
+    private readonly pluginExecution?: QqbotPluginExecutionPort,
+    @Optional()
+    @Inject(QQBOT_PLUGIN_RUNTIME_FACTORY)
+    private readonly runtimeFactory?: QqbotPluginRuntimeFactory,
   ) {}
 
   async listInstallations() {
     return this.installationRepository.find();
+  }
+
+  async listCapabilities(pluginId?: string) {
+    const where = pluginId ? { pluginId } : undefined;
+    const [operations, eventHandlers] = await Promise.all([
+      this.operationRepository.find({ where }),
+      this.eventHandlerRepository.find({ where }),
+    ]);
+    return {
+      eventHandlers,
+      operations,
+    };
+  }
+
+  async listOperations(pluginId?: string) {
+    return this.operationRepository.find({
+      where: pluginId ? { pluginId } : undefined,
+    });
+  }
+
+  async pageOperations(query: ListOperationsQuery) {
+    const pageNo = Number(query.pageNo || 1);
+    const pageSize = Number(query.pageSize || 10);
+    const safePageNo = Number.isFinite(pageNo) && pageNo > 0 ? pageNo : 1;
+    const safePageSize =
+      Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 10;
+    const [list, total] = await this.operationRepository.findAndCount({
+      skip: (safePageNo - 1) * safePageSize,
+      take: safePageSize,
+      where: query.pluginId ? { pluginId: query.pluginId } : undefined,
+    });
+
+    return {
+      list,
+      pageNo: safePageNo,
+      pageSize: safePageSize,
+      total,
+    };
+  }
+
+  async listEventHandlers(pluginId?: string) {
+    return this.eventHandlerRepository.find({
+      where: pluginId ? { pluginId } : undefined,
+    });
   }
 
   validateManifest(body: ValidateManifestBody) {
@@ -99,17 +189,116 @@ export class QqbotPluginPlatformService {
     });
   }
 
-  async setInstallationStatus(
-    body: InstallationActionBody,
-    status: QqbotPluginInstallStatus,
-  ) {
-    if (!body.id) throwVbenError('请选择插件安装记录');
-
-    await this.installationRepository.update({ id: body.id }, { status });
+  async enableInstallation(body: InstallationActionBody) {
+    const installation = await this.requireInstallation(body);
+    await this.updateInstallationRuntime(installation, 'enabled', 'starting');
+    await this.recordRuntimeEvent(installation, 'enable-started');
+    await this.startWorker(installation);
+    await this.refreshActiveRegistries(installation, true);
+    await this.updateInstallationRuntime(installation, 'enabled', 'healthy');
+    await this.recordRuntimeEvent(installation, 'enable-finished');
     return {
-      id: body.id,
-      status,
+      id: installation.id,
+      runtimeStatus: 'healthy' as QqbotPluginRuntimeStatus,
+      status: 'enabled' as QqbotPluginInstallStatus,
     };
+  }
+
+  async disableInstallation(body: InstallationActionBody) {
+    const installation = await this.requireInstallation(body);
+    await this.stopWorker(installation.id);
+    await this.refreshActiveRegistries(installation, false);
+    await this.updateInstallationRuntime(installation, 'disabled', 'stopped');
+    await this.recordRuntimeEvent(installation, 'disable-finished');
+    return {
+      id: installation.id,
+      runtimeStatus: 'stopped' as QqbotPluginRuntimeStatus,
+      status: 'disabled' as QqbotPluginInstallStatus,
+    };
+  }
+
+  async upgradeInstallation(body: InstallationActionBody) {
+    const installation = await this.requireInstallation(body);
+    const previousWorker = this.activeWorkers.get(installation.id);
+    await this.updateInstallationRuntime(installation, 'upgrading', 'starting');
+    await this.recordRuntimeEvent(installation, 'upgrade-started');
+    try {
+      await this.startWorker(installation);
+    } catch (error) {
+      if (previousWorker) {
+        this.activeWorkers.set(installation.id, previousWorker);
+        await this.updateInstallationRuntime(installation, 'enabled', 'healthy');
+      }
+      await this.recordRuntimeEvent(
+        installation,
+        'upgrade-failed',
+        'error',
+        {
+          message: error instanceof Error ? error.message : `${error}`,
+        },
+      );
+      throw error;
+    }
+    await this.refreshActiveRegistries(installation, true);
+    await this.updateInstallationRuntime(installation, 'enabled', 'healthy');
+    await this.recordRuntimeEvent(installation, 'upgrade-finished');
+    return {
+      id: installation.id,
+      runtimeStatus: 'healthy' as QqbotPluginRuntimeStatus,
+      status: 'enabled' as QqbotPluginInstallStatus,
+    };
+  }
+
+  async uninstallInstallation(body: InstallationActionBody) {
+    const installation = await this.requireInstallation(body);
+    if (installation.status === 'enabled') {
+      throwVbenError('请先禁用插件后再卸载');
+    }
+
+    await this.refreshActiveRegistries(installation, false);
+    await this.updateInstallationRuntime(
+      installation,
+      'uninstalled',
+      'stopped',
+    );
+    await this.recordRuntimeEvent(installation, 'uninstall-finished');
+    return {
+      id: installation.id,
+      runtimeStatus: 'stopped' as QqbotPluginRuntimeStatus,
+      status: 'uninstalled' as QqbotPluginInstallStatus,
+    };
+  }
+
+  async executeOperation(input: QqbotPluginExecutionInput) {
+    if (!this.pluginExecution) {
+      throwVbenError('插件执行器未初始化');
+    }
+
+    const output = await this.pluginExecution.executeOperation(input);
+    const pluginId = this.getPluginIdFromContext(input.context);
+    if (pluginId) {
+      await this.runtimeEventRepository.save({
+        eventType: 'command log mapped',
+        installationId: null,
+        level: 'info',
+        pluginId,
+        safeSummary: {
+          operationKey: input.operationKey,
+          outputKeys:
+            output && typeof output === 'object'
+              ? Object.keys(output as Record<string, unknown>).sort()
+              : [],
+          pluginKey: input.pluginKey,
+        },
+      });
+    }
+    return output;
+  }
+
+  async dispatchEvent(input: QqbotPluginEventDispatchInput) {
+    if (!this.pluginExecution) return false;
+    const handled = await this.pluginExecution.dispatchEvent(input);
+    return handled;
   }
 
   async updateConfig(body: UpdateConfigBody) {
@@ -124,9 +313,23 @@ export class QqbotPluginPlatformService {
     });
   }
 
-  async listRuntimeEvents(pluginId?: string) {
+  async listRuntimeEvents(query?: RuntimeEventQuery | string) {
+    const normalizedQuery =
+      typeof query === 'string' ? { pluginId: query } : query || {};
+    const where = {
+      ...(normalizedQuery.eventType
+        ? { eventType: normalizedQuery.eventType }
+        : {}),
+      ...(normalizedQuery.installationId
+        ? { installationId: normalizedQuery.installationId }
+        : {}),
+      ...(normalizedQuery.level ? { level: normalizedQuery.level } : {}),
+      ...(normalizedQuery.pluginId ? { pluginId: normalizedQuery.pluginId } : {}),
+      ...this.buildRuntimeEventTimeFilter(normalizedQuery),
+    };
+
     return this.runtimeEventRepository.find({
-      where: pluginId ? { pluginId } : undefined,
+      where: Object.keys(where).length ? (where as any) : undefined,
     });
   }
 
@@ -167,5 +370,135 @@ export class QqbotPluginPlatformService {
         }),
       ),
     ]);
+  }
+
+  private async requireInstallation(body: InstallationActionBody) {
+    if (!body.id) throwVbenError('请选择插件安装记录');
+
+    const findOne = this.installationRepository.findOne?.bind(
+      this.installationRepository,
+    );
+    const installation = findOne
+      ? await findOne({ where: { id: body.id } })
+      : null;
+
+    return (
+      installation ||
+      ({
+        id: body.id,
+        installedPath: '',
+        pluginId: body.id,
+        runtimeStatus: 'stopped',
+        status: 'installed',
+        versionId: '',
+      } as QqbotPluginInstallation)
+    );
+  }
+
+  private async updateInstallationRuntime(
+    installation: QqbotPluginInstallation,
+    status: QqbotPluginInstallStatus,
+    runtimeStatus: QqbotPluginRuntimeStatus,
+  ) {
+    await this.installationRepository.update(
+      { id: installation.id },
+      { runtimeStatus, status },
+    );
+    installation.runtimeStatus = runtimeStatus;
+    installation.status = status;
+  }
+
+  private async refreshActiveRegistries(
+    installation: QqbotPluginInstallation,
+    enabled: boolean,
+  ) {
+    const activeOperation = enabled;
+    const activeEvent = enabled;
+    await Promise.all([
+      this.operationRepository.update(
+        { pluginId: installation.pluginId },
+        { enabled: activeOperation },
+      ),
+      this.eventHandlerRepository.update(
+        { pluginId: installation.pluginId },
+        { enabled: activeEvent },
+      ),
+    ]);
+  }
+
+  private async stopWorker(installationId: string) {
+    const worker = this.activeWorkers.get(installationId);
+    if (!worker) return;
+    try {
+      await worker.deactivate();
+    } finally {
+      await worker.dispose();
+      this.activeWorkers.delete(installationId);
+    }
+  }
+
+  private async startWorker(installation: QqbotPluginInstallation) {
+    if (!this.runtimeFactory) return;
+
+    const version = await this.versionRepository.findOne({
+      where: { id: installation.versionId },
+    });
+    if (!version) {
+      throwVbenError('插件版本不存在，无法启动运行时');
+    }
+
+    const worker = this.runtimeFactory.create(installation, version);
+    try {
+      await worker.load(version.manifestJson);
+      await worker.activate();
+      await worker.health();
+      this.activeWorkers.set(
+        installation.id,
+        worker as QqbotPluginWorkerRuntime,
+      );
+    } catch (error) {
+      await worker.dispose();
+      throw error;
+    }
+  }
+
+  private async recordRuntimeEvent(
+    installation: QqbotPluginInstallation,
+    eventType: string,
+    level: QqbotPluginRuntimeEventLevel = 'info',
+    safeSummary: Record<string, unknown> = {},
+  ) {
+    return this.runtimeEventRepository.save({
+      eventType,
+      installationId: installation.id,
+      level,
+      pluginId: installation.pluginId,
+      safeSummary,
+    });
+  }
+
+  private getPluginIdFromContext(context?: Record<string, any>) {
+    return typeof context?.pluginId === 'string' && context.pluginId
+      ? context.pluginId
+      : null;
+  }
+
+  private buildRuntimeEventTimeFilter(query: RuntimeEventQuery) {
+    if (query.startTime && query.endTime) {
+      return {
+        createTime: Between(query.startTime, query.endTime),
+      };
+    }
+    if (query.startTime) {
+      return {
+        createTime: MoreThanOrEqual(query.startTime),
+      };
+    }
+    if (query.endTime) {
+      return {
+        createTime: LessThanOrEqual(query.endTime),
+      };
+    }
+    return {};
   }
 }

@@ -33,6 +33,7 @@ const createValidManifest = () => ({
   ],
   homepage: 'https://example.com/bangdream',
   license: 'MIT',
+  legacyAliases: ['bangDream'],
   migrations: [
     {
       path: 'migrations/001-init.sql',
@@ -105,6 +106,7 @@ describe('QQBot plugin manifest contract', () => {
       entry: 'src/index.ts',
       minApiSdkVersion: '1.0.0',
       pluginKey: 'bangdream',
+      legacyAliases: ['bangDream'],
       runtime: {
         maxConcurrency: 2,
         memoryMb: 256,
@@ -203,6 +205,37 @@ describe('QQBot plugin manifest contract', () => {
       manifest,
       'PATH_OUTSIDE_PLUGIN_ROOT',
       'migrations[0].path',
+    );
+  });
+
+  it('rejects incomplete capability metadata', () => {
+    const manifest = createValidManifest();
+    manifest.operations[0].handlerName = '';
+    manifest.events[0].handlerName = '';
+    manifest.assets[0].key = '';
+    manifest.migrations[0].version = 'v1';
+    manifest.legacyAliases = ['../bad'];
+
+    expectValidationError(
+      manifest,
+      'MISSING_OPERATION_HANDLER',
+      'operations[0].handlerName',
+    );
+    expectValidationError(
+      manifest,
+      'MISSING_EVENT_HANDLER',
+      'events[0].handlerName',
+    );
+    expectValidationError(manifest, 'MISSING_ASSET_KEY', 'assets[0].key');
+    expectValidationError(
+      manifest,
+      'INVALID_SEMVER',
+      'migrations[0].version',
+    );
+    expectValidationError(
+      manifest,
+      'INVALID_LEGACY_ALIAS',
+      'legacyAliases[0]',
     );
   });
 });

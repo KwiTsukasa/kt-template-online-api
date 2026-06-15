@@ -27,6 +27,7 @@ import {
 
 const createRepositoryMock = () => ({
   find: jest.fn(async () => []),
+  findAndCount: jest.fn(async () => [[], 0]),
   save: jest.fn(async (value) => value),
   update: jest.fn(async () => ({ affected: 1 })),
 });
@@ -62,8 +63,10 @@ const createManifest = () => ({
 
 describe('QQBot plugin platform API contract', () => {
   let app: INestApplication;
+  let repositoryMocks: Map<unknown, ReturnType<typeof createRepositoryMock>>;
 
   beforeEach(async () => {
+    repositoryMocks = new Map();
     const moduleRef = await Test.createTestingModule({
       controllers: [QqbotPluginPlatformController],
       providers: [
@@ -80,7 +83,11 @@ describe('QQBot plugin platform API contract', () => {
           QqbotPluginRuntimeEvent,
         ].map((entity) => ({
           provide: getRepositoryToken(entity),
-          useFactory: createRepositoryMock,
+          useFactory: () => {
+            const repository = createRepositoryMock();
+            repositoryMocks.set(entity, repository);
+            return repository;
+          },
         })),
       ],
     })
@@ -132,6 +139,10 @@ describe('QQBot plugin platform API contract', () => {
         'POST /qqbot/plugin-platform/config',
         'GET /qqbot/plugin-platform/runtime-events',
         'GET /qqbot/plugin-platform/account-bindings',
+        'GET /qqbot/plugin-platform/capabilities',
+        'GET /qqbot/plugin-platform/operations/list',
+        'GET /qqbot/plugin-platform/operations/page',
+        'GET /qqbot/plugin-platform/event-handlers',
       ]),
     );
   });
@@ -161,5 +172,29 @@ describe('QQBot plugin platform API contract', () => {
   it('keeps TypeORM entity registration aligned with the persistence contract', () => {
     expect(QqbotPluginPlatformModule).toBeDefined();
     expect(QQBOT_PLUGIN_PLATFORM_ENTITIES).toHaveLength(9);
+  });
+
+  it('passes runtime-event filters to persistence', async () => {
+    await request(app.getHttpServer())
+      .get('/qqbot/plugin-platform/runtime-events')
+      .query({
+        eventType: 'worker-crash',
+        installationId: '2002',
+        level: 'error',
+        pluginId: '1001',
+        startTime: '2026-06-15 00:00:00',
+        endTime: '2026-06-15 23:59:59',
+      })
+      .expect(200);
+
+    expect(repositoryMocks.get(QqbotPluginRuntimeEvent)?.find).toHaveBeenCalledWith({
+      where: {
+        eventType: 'worker-crash',
+        installationId: '2002',
+        level: 'error',
+        pluginId: '1001',
+        createTime: expect.any(Object),
+      },
+    });
   });
 });

@@ -66,6 +66,7 @@ export type QqbotPluginManifest = {
   entry: string;
   events: QqbotPluginEventManifest[];
   homepage?: string;
+  legacyAliases: string[];
   license?: string;
   migrations: QqbotPluginMigrationManifest[];
   minApiSdkVersion: string;

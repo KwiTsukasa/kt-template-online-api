@@ -121,4 +121,91 @@ describe('QQBot plugin CLI', () => {
       pluginKey: 'demo-plugin',
     });
   });
+
+  it('honors explicit output paths used by CLI smoke workflows', async () => {
+    const pluginRoot = path.join(sandbox, 'smoke-plugin');
+    const packageRoot = path.join(sandbox, 'packages');
+
+    const created = await runQqbotPluginCli(
+      ['create', 'smoke-plugin', '--out', pluginRoot],
+      silentCliOptions(projectRoot),
+    );
+
+    expect(created).toMatchObject({
+      command: 'create',
+      exitCode: 0,
+      pluginRoot,
+    });
+    expect(fs.existsSync(path.join(pluginRoot, 'plugin.json'))).toBe(true);
+
+    const packed = await runQqbotPluginCli(
+      ['pack', pluginRoot, '--out', packageRoot],
+      silentCliOptions(projectRoot),
+    );
+
+    expect(packed).toMatchObject({
+      command: 'pack',
+      exitCode: 0,
+      pluginKey: 'smoke-plugin',
+    });
+    expect(path.dirname(packed.packagePath || '')).toBe(packageRoot);
+  });
+
+  it('rejects unsafe create output paths before writing files', async () => {
+    const outsideRoot = path.resolve(sandbox, '..', 'outside-plugin');
+
+    await expect(
+      runQqbotPluginCli(
+        ['create', '../bad-plugin', '--out', outsideRoot],
+        silentCliOptions(sandbox),
+      ),
+    ).rejects.toThrow(/plugin key|output path/i);
+    expect(fs.existsSync(outsideRoot)).toBe(false);
+  });
+
+  it('validates plugin source boundaries before packaging', async () => {
+    const pluginRoot = path.join(sandbox, 'plugins', 'unsafe-plugin');
+    await runQqbotPluginCli(
+      ['create', 'unsafe-plugin', '--out', pluginRoot],
+      silentCliOptions(sandbox),
+    );
+    fs.writeFileSync(
+      path.join(pluginRoot, 'src', 'index.ts'),
+      "import { Injectable } from '@nestjs/common';\nconst token = process.env.SECRET;\n",
+    );
+
+    await expect(
+      runQqbotPluginCli(['validate', pluginRoot], silentCliOptions(sandbox)),
+    ).rejects.toThrow(/forbidden plugin source/i);
+  });
+
+  it('refuses hidden files, oversized files, and returns stable install ids', async () => {
+    const pluginRoot = path.join(sandbox, 'plugins', 'safe-plugin');
+    await runQqbotPluginCli(
+      ['create', 'safe-plugin', '--out', pluginRoot],
+      silentCliOptions(sandbox),
+    );
+    expect(fs.existsSync(path.join(pluginRoot, 'src', 'operations'))).toBe(true);
+    expect(fs.existsSync(path.join(pluginRoot, 'src', 'events'))).toBe(true);
+    fs.writeFileSync(path.join(pluginRoot, '.env'), 'SECRET=1\n');
+
+    await expect(
+      runQqbotPluginCli(['pack', pluginRoot], silentCliOptions(sandbox)),
+    ).rejects.toThrow(/hidden/i);
+
+    fs.rmSync(path.join(pluginRoot, '.env'));
+    const packed = await runQqbotPluginCli(
+      ['pack', pluginRoot],
+      silentCliOptions(sandbox),
+    );
+    await expect(
+      runQqbotPluginCli(
+        ['install-local', packed.packagePath || ''],
+        silentCliOptions(sandbox),
+      ),
+    ).resolves.toMatchObject({
+      installationId: expect.stringMatching(/^[a-f0-9]{16}$/),
+      versionId: expect.stringMatching(/^[a-f0-9]{16}$/),
+    });
+  });
 });

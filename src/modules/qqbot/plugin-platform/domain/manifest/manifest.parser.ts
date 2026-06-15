@@ -15,6 +15,7 @@ import {
 } from './manifest.types';
 
 const pluginKeyPattern = /^[a-z][a-z0-9-]{2,63}$/;
+const legacyAliasPattern = /^[A-Za-z][A-Za-z0-9-]{2,63}$/;
 const semanticVersionPattern = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 const capabilityKeyPattern = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/;
 const windowsAbsolutePathPattern = /^[a-zA-Z]:[\\/]/;
@@ -245,6 +246,14 @@ const parseOperations = (
         'Operation timeoutMs is required.',
       );
     }
+    if (!getString(operation, 'handlerName')) {
+      pushIssue(
+        issues,
+        'MISSING_OPERATION_HANDLER',
+        `${pathPrefix}.handlerName`,
+        'Operation handlerName is required.',
+      );
+    }
 
     return {
       aliases: getStringArray(operation, 'aliases'),
@@ -289,6 +298,14 @@ const parseEvents = (
       );
     }
     seenKeys.add(key);
+    if (!getString(event, 'handlerName')) {
+      pushIssue(
+        issues,
+        'MISSING_EVENT_HANDLER',
+        `${pathPrefix}.handlerName`,
+        'Event handlerName is required.',
+      );
+    }
 
     return {
       description: getString(event, 'description'),
@@ -306,11 +323,22 @@ const parseAssets = (
 ): QqbotPluginAssetManifest[] => {
   const assets = Array.isArray(source.assets) ? source.assets : [];
 
-  return assets.filter(isPlainObject).map((asset, index) => ({
-    contentHash: getString(asset, 'contentHash'),
-    key: getString(asset, 'key') || '',
-    path: normalizePackagePath(asset.path, `assets[${index}].path`, issues),
-  }));
+  return assets.filter(isPlainObject).map((asset, index) => {
+    const key = getString(asset, 'key') || '';
+    if (!key) {
+      pushIssue(
+        issues,
+        'MISSING_ASSET_KEY',
+        `assets[${index}].key`,
+        'Asset key is required.',
+      );
+    }
+    return {
+      contentHash: getString(asset, 'contentHash'),
+      key,
+      path: normalizePackagePath(asset.path, `assets[${index}].path`, issues),
+    };
+  });
 };
 
 const parseMigrations = (
@@ -319,14 +347,36 @@ const parseMigrations = (
 ): QqbotPluginMigrationManifest[] => {
   const migrations = Array.isArray(source.migrations) ? source.migrations : [];
 
-  return migrations.filter(isPlainObject).map((migration, index) => ({
-    path: normalizePackagePath(
-      migration.path,
-      `migrations[${index}].path`,
-      issues,
-    ),
-    version: getString(migration, 'version') || '',
-  }));
+  return migrations.filter(isPlainObject).map((migration, index) => {
+    const version = getString(migration, 'version') || '';
+    requireSemver(version, `migrations[${index}].version`, issues);
+    return {
+      path: normalizePackagePath(
+        migration.path,
+        `migrations[${index}].path`,
+        issues,
+      ),
+      version,
+    };
+  });
+};
+
+const parseLegacyAliases = (
+  source: Record<string, unknown>,
+  issues: QqbotPluginManifestValidationIssue[],
+) => {
+  return getStringArray(source, 'legacyAliases').filter((alias, index) => {
+    if (!legacyAliasPattern.test(alias)) {
+      pushIssue(
+        issues,
+        'INVALID_LEGACY_ALIAS',
+        `legacyAliases[${index}]`,
+        'Legacy alias must be a simple historical plugin key.',
+      );
+      return false;
+    }
+    return true;
+  });
 };
 
 export const parseQqbotPluginManifest = (
@@ -372,6 +422,7 @@ export const parseQqbotPluginManifest = (
     entry: normalizePackagePath(manifestLike.entry, 'entry', issues),
     events: parseEvents(manifestLike, issues),
     homepage: getString(manifestLike, 'homepage'),
+    legacyAliases: parseLegacyAliases(manifestLike, issues),
     license: getString(manifestLike, 'license'),
     migrations: parseMigrations(manifestLike, issues),
     minApiSdkVersion,

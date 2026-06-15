@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+
 import {
   checkRelationList,
   fuzzySearch,
@@ -9,6 +11,14 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/search/fuzzy-search-rule.registry';
 import type { FuzzySearchResult } from '@/modules/qqbot/plugins/bangdream/src/domain/search/fuzzy-search.types';
 import { createBangDreamEntityMatcher } from '@/modules/qqbot/plugins/bangdream/src/domain/search/entity-list-matcher';
+import { configureBangDreamRuntimeIo } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
+
+beforeAll(() => {
+  configureBangDreamRuntimeIo({
+    readJsonFileSync: (filePath) =>
+      JSON.parse(fs.readFileSync(filePath, 'utf8')),
+  });
+});
 
 describe('BangDream fuzzy search helpers', () => {
   it('parses number, level, relation and quoted fallback keywords', () => {

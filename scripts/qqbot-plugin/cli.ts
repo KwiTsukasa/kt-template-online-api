@@ -119,7 +119,8 @@ const getControlledRoots = (options: Required<QqbotPluginCliOptions>) => {
 
   if (fs.existsSync(path.join(cwd, 'package.json'))) {
     const workspaceRoot = findWorkspaceRoot(cwd);
-    if (workspaceRoot) roots.push(path.join(workspaceRoot, '.kt-workspace'));
+    const artifactRoot = workspaceRoot || path.resolve(cwd, '..', '..');
+    roots.push(path.join(artifactRoot, '.kt-workspace'));
   }
 
   return roots;

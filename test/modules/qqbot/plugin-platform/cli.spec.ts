@@ -151,6 +151,40 @@ describe('QQBot plugin CLI', () => {
     expect(path.dirname(packed.packagePath || '')).toBe(packageRoot);
   });
 
+  it('allows Jenkins single-repo checkout artifact roots without root AGENTS.md', async () => {
+    const ciProjectRoot = path.join(
+      sandbox,
+      'agent',
+      'workspace',
+      'KT-Template_KT-Template-API_main',
+    );
+    fs.mkdirSync(ciProjectRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(ciProjectRoot, 'package.json'),
+      JSON.stringify({ name: 'kt-template-online-api' }),
+    );
+
+    const pluginRoot = path.resolve(
+      ciProjectRoot,
+      '..',
+      '..',
+      '.kt-workspace',
+      'tmp',
+      'smoke-plugin',
+    );
+    const created = await runQqbotPluginCli(
+      ['create', 'smoke-plugin', '--out', pluginRoot],
+      silentCliOptions(ciProjectRoot),
+    );
+
+    expect(created).toMatchObject({
+      command: 'create',
+      exitCode: 0,
+      pluginRoot,
+    });
+    expect(fs.existsSync(path.join(pluginRoot, 'plugin.json'))).toBe(true);
+  });
+
   it('rejects unsafe create output paths before writing files', async () => {
     const outsideRoot = path.resolve(sandbox, '..', 'outside-plugin');
 

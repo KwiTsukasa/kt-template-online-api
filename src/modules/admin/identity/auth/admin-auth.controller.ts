@@ -17,7 +17,7 @@ import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginDto } from './admin-auth.dto';
 import { AdminPasswordCryptoService } from './admin-password-crypto.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { WordpressService } from '@/wordpress/wordpress.service';
+import { WordpressService } from '@/modules/wordpress/wordpress-mirror.service';
 
 @ApiTags('Admin - 认证')
 @Controller()

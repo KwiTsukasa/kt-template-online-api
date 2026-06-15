@@ -110,7 +110,8 @@ const initialLoadPromise = loadMainAPI(true).then(() => {
   loadMainAPI();
 });
 
-setInterval(loadMainAPI, 1000 * 60 * 5); //5分钟更新一次
+const refreshTimer = setInterval(loadMainAPI, 1000 * 60 * 5); //5分钟更新一次
+refreshTimer.unref?.();
 
 /**
  * 等待 BangDream 主数据完成首次加载。

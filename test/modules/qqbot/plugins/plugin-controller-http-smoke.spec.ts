@@ -21,6 +21,7 @@ jest.mock('@/modules/qqbot/plugins/fflogs/qqbot-fflogs.plugin', () => ({
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
+import { ToolsService } from '../../../../src/common';
 import { QqbotBangDreamPluginService } from '../../../../src/modules/qqbot/plugins/bangDream/qqbot-bangdream.plugin';
 import { QqbotFf14MarketPluginService } from '../../../../src/modules/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin';
 import { QqbotFflogsPluginService } from '../../../../src/modules/qqbot/plugins/fflogs/qqbot-fflogs.plugin';
@@ -53,6 +54,7 @@ describe('QQBot plugin controller local HTTP smoke', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [QqbotPluginController],
       providers: [
+        ToolsService,
         QqbotPluginRegistryService,
         {
           provide: QqbotBangDreamPluginService,
@@ -114,5 +116,25 @@ describe('QQBot plugin controller local HTTP smoke', () => {
       pluginKey: 'bangdream',
       triggerMode: 'command',
     });
+  });
+
+  it('returns paged plugin operations for KtTable pagination', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/qqbot/plugin/operation/page')
+      .query({ pageNo: 2, pageSize: 1, triggerMode: 'command' })
+      .expect(200);
+
+    expect(response.body.data).toMatchObject({
+      pageNo: 2,
+      pageSize: 1,
+      total: 3,
+    });
+    expect(response.body.data.list).toEqual([
+      expect.objectContaining({
+        key: 'ff14-market.operation',
+        pluginKey: 'ff14-market',
+        triggerMode: 'command',
+      }),
+    ]);
   });
 });

@@ -64,7 +64,7 @@ describe('NapCat new-device flow API client', () => {
     ]);
   });
 
-  it('normalizes waiting, expired, and failed poll responses without exposing jumpUrl as the completion mechanism', async () => {
+  it('encodes jumpUrl as a QR image before polling new-device verification', async () => {
     const client = new NapcatLoginApiClient({
       post: jest
         .fn()
@@ -74,9 +74,15 @@ describe('NapCat new-device flow API client', () => {
         .mockResolvedValueOnce({ status: 'failed', message: 'denied' }),
     });
 
-    await expect(client.getNewDeviceQRCode('session-2')).rejects.toThrow(
-      'NapCat 未返回新设备验证二维码',
-    );
+    const qr = await client.getNewDeviceQRCode('session-2');
+
+    expect(qr).toMatchObject({
+      deviceVerifyUrl: 'https://qq.example/new-device',
+      sessionId: 'session-2',
+      status: 'qr-pending',
+    });
+    expect(qr.qrcodeUrl).toMatch(/^data:image\/png;base64,/);
+    expect(qr.qrcodeUrl).not.toBe('https://qq.example/new-device');
     await expect(client.pollNewDeviceQR('session-2')).resolves.toEqual({
       message: undefined,
       sessionId: 'session-2',

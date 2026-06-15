@@ -1,3 +1,5 @@
+import * as QRCode from 'qrcode';
+
 export type NewDeviceQrStatus =
   | 'confirming'
   | 'expired'
@@ -7,6 +9,7 @@ export type NewDeviceQrStatus =
   | 'verified';
 
 export type NewDeviceQrCode = {
+  deviceVerifyUrl?: string;
   pullQrCodeSig?: string;
   qrcodeUrl: string;
   sessionId: string;
@@ -44,13 +47,16 @@ export class NapcatLoginApiClient {
       data.qrcode,
       data.url,
     );
-    if (!qrcodeUrl) {
+    const jumpUrl = this.pickString(data.jumpUrl, data.verifyUrl);
+    const newDeviceQrcodeUrl = qrcodeUrl || (await this.createQrcode(jumpUrl));
+    if (!newDeviceQrcodeUrl) {
       throw new Error('NapCat 未返回新设备验证二维码');
     }
 
     return {
+      deviceVerifyUrl: jumpUrl || undefined,
       pullQrCodeSig: this.pickString(data.newDevicePullQrCodeSig, data.sig),
-      qrcodeUrl,
+      qrcodeUrl: newDeviceQrcodeUrl,
       sessionId,
       status: 'qr-pending',
     };
@@ -105,5 +111,15 @@ export class NapcatLoginApiClient {
       if (trimmed) return trimmed;
     }
     return '';
+  }
+
+  private async createQrcode(text: string) {
+    if (!text) return '';
+    return QRCode.toDataURL(text, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      scale: 6,
+      type: 'image/png',
+    });
   }
 }

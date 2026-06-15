@@ -9,10 +9,20 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
-import { vbenSuccess } from '@/common';
+import { ToolsService, vbenSuccess } from '@/common';
 import { QqbotEventPluginRegistryService } from './registry/qqbot-event-plugin-registry.service';
 import { QqbotPluginRegistryService } from './registry/qqbot-plugin-registry.service';
-import type { QqbotPluginTriggerMode } from '@/modules/qqbot/core/contract/qqbot.types';
+import type {
+  QqbotPluginOperationSummary,
+  QqbotPluginTriggerMode,
+} from '@/modules/qqbot/core/contract/qqbot.types';
+
+type QqbotPluginOperationPageQuery = {
+  pageNo?: number | string;
+  pageSize?: number | string;
+  pluginKey?: string;
+  triggerMode?: QqbotPluginTriggerMode;
+};
 
 @ApiTags('QQBot - 插件能力')
 @Controller('qqbot/plugin')
@@ -21,6 +31,7 @@ export class QqbotPluginController {
   constructor(
     private readonly eventPluginRegistry: QqbotEventPluginRegistryService,
     private readonly pluginRegistry: QqbotPluginRegistryService,
+    private readonly toolsService: ToolsService,
   ) {}
 
   @Get('list')
@@ -60,14 +71,29 @@ export class QqbotPluginController {
     @Query('pluginKey') pluginKey?: string,
     @Query('triggerMode') triggerMode?: QqbotPluginTriggerMode,
   ) {
-    return vbenSuccess([
-      ...(this.includesTriggerMode('command', triggerMode)
-        ? this.pluginRegistry.listOperations(pluginKey)
-        : []),
-      ...(this.includesTriggerMode('event', triggerMode)
-        ? this.eventPluginRegistry.listOperations(pluginKey)
-        : []),
-    ]);
+    return vbenSuccess(this.listOperations(pluginKey, triggerMode));
+  }
+
+  @Get('operation/page')
+  @ApiOperation({ summary: 'QQBot 插件能力分页列表' })
+  @ApiQuery({ name: 'pageNo', required: false, type: Number })
+  @ApiQuery({ name: 'pageSize', required: false, type: Number })
+  @ApiQuery({ name: 'pluginKey', required: false, type: String })
+  @ApiQuery({
+    enum: ['command', 'event'],
+    name: 'triggerMode',
+    required: false,
+  })
+  async operationPage(@Query() query: QqbotPluginOperationPageQuery) {
+    const { pageNo, pageSize, skip } = this.toolsService.getPageParams(query);
+    const operations = this.listOperations(query.pluginKey, query.triggerMode);
+
+    return vbenSuccess({
+      list: operations.slice(skip, skip + pageSize),
+      pageNo,
+      pageSize,
+      total: operations.length,
+    });
   }
 
   @Get('health')
@@ -131,5 +157,19 @@ export class QqbotPluginController {
     triggerMode?: QqbotPluginTriggerMode,
   ) {
     return !triggerMode || triggerMode === target;
+  }
+
+  private listOperations(
+    pluginKey?: string,
+    triggerMode?: QqbotPluginTriggerMode,
+  ): QqbotPluginOperationSummary[] {
+    return [
+      ...(this.includesTriggerMode('command', triggerMode)
+        ? this.pluginRegistry.listOperations(pluginKey)
+        : []),
+      ...(this.includesTriggerMode('event', triggerMode)
+        ? this.eventPluginRegistry.listOperations(pluginKey)
+        : []),
+    ];
   }
 }

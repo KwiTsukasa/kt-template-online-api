@@ -5,7 +5,12 @@ SELECT 'platform_setting' AS table_name, COUNT(*) AS row_count FROM platform_set
 SELECT 'admin_dict' AS table_name, COUNT(*) AS row_count FROM admin_dict;
 SELECT 'qqbot_command' AS table_name, COUNT(*) AS row_count FROM qqbot_command;
 SELECT 'qqbot_plugin' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin;
+SELECT 'napcat_container' AS table_name, COUNT(*) AS row_count FROM napcat_container;
 SELECT 'napcat_device_identity' AS table_name, COUNT(*) AS row_count FROM napcat_device_identity;
+SELECT 'napcat_account_binding' AS table_name, COUNT(*) AS row_count FROM napcat_account_binding;
+SELECT 'napcat_login_session' AS table_name, COUNT(*) AS row_count FROM napcat_login_session;
+SELECT 'napcat_login_challenge' AS table_name, COUNT(*) AS row_count FROM napcat_login_challenge;
+SELECT 'napcat_runtime_cleanup' AS table_name, COUNT(*) AS row_count FROM napcat_runtime_cleanup;
 
 SELECT 'seed_admin_user' AS check_name, COUNT(*) AS matched_rows
 FROM admin_user
@@ -67,3 +72,27 @@ FROM information_schema.statistics
 WHERE table_schema = DATABASE()
   AND table_name = 'napcat_device_identity'
   AND index_name = 'uk_napcat_device_identity_account';
+
+SELECT 'index_napcat_account_binding_account' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_account_binding'
+  AND index_name = 'uk_napcat_account_binding_account';
+
+SELECT 'index_napcat_login_session_key' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_login_session'
+  AND index_name = 'uk_napcat_login_session_key';
+
+SELECT 'index_napcat_login_challenge_session' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_login_challenge'
+  AND index_name = 'idx_napcat_login_challenge_session';
+
+SELECT 'index_napcat_runtime_cleanup_session' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_runtime_cleanup'
+  AND index_name = 'idx_napcat_runtime_cleanup_session';

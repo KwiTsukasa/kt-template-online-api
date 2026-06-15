@@ -1,4 +1,9 @@
+import { NapcatAccountBinding } from './napcat-account-binding.entity';
+import { NapcatContainer } from './napcat-container.entity';
 import { NapcatDeviceIdentity } from './napcat-device-identity.entity';
+import { NapcatLoginChallengeEntity } from './napcat-login-challenge.entity';
+import { NapcatLoginSession } from './napcat-login-session.entity';
+import { NapcatRuntimeCleanup } from './napcat-runtime-cleanup.entity';
 import { QqbotAccountNapcat } from './qqbot-account-napcat.entity';
 import { QqbotNapcatContainer } from './qqbot-napcat-container.entity';
 
@@ -14,7 +19,12 @@ export const NAPCAT_RUNTIME_DOMAIN_CONTRACT = {
 } as const;
 
 export const NAPCAT_RUNTIME_ENTITIES = [
+  NapcatAccountBinding,
+  NapcatContainer,
   NapcatDeviceIdentity,
+  NapcatLoginChallengeEntity,
+  NapcatLoginSession,
+  NapcatRuntimeCleanup,
   QqbotAccountNapcat,
   QqbotNapcatContainer,
 ];

@@ -1,6 +1,8 @@
 import { getMetadataArgsStorage } from 'typeorm';
 import { ToolsService } from '@/common';
 import {
+  NapcatAccountBinding,
+  NapcatContainer,
   NapcatDeviceIdentity,
   NapcatDeviceIdentityService,
   NAPCAT_RUNTIME_DOMAIN_CONTRACT,
@@ -95,6 +97,18 @@ describe('NapCat device identity persistence', () => {
         'last_login_evidence',
       ]),
     );
+  });
+
+  it('maps target container and account binding entities to the v3 SQL schema', () => {
+    for (const entity of [NapcatContainer, NapcatAccountBinding]) {
+      expect(NAPCAT_RUNTIME_ENTITIES).toContain(entity);
+
+      const tableName = getEntityTableName(entity);
+      const columns = getEntityColumnNames(entity);
+
+      expect(tableName).toBeTruthy();
+      schema.expectTableColumns(tableName || '', columns);
+    }
   });
 
   it('reuses data dir, hostname, machine-id path, and MAC when rebuilding the same account container', async () => {

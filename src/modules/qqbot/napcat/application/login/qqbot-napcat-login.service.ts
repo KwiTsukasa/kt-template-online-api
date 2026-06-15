@@ -1,7 +1,7 @@
 import * as http from 'http';
 import * as https from 'https';
 import { createHash, randomUUID } from 'crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Observable } from 'rxjs';
 import { throwVbenError, ToolsService } from '@/common';
@@ -25,27 +25,58 @@ import type {
   QrcodeRefreshOptions,
 } from '@/modules/qqbot/core/contract/qqbot.types';
 import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
+import { NapcatLoginStateStoreService } from '../../infrastructure/persistence/napcat-login-state-store.service';
 import { QqbotNapcatContainerService } from '../../infrastructure/integration/container/qqbot-napcat-container.service';
 
 @Injectable()
 export class QqbotNapcatLoginService {
-  private readonly sessions = new Map<string, QqbotLoginScanSession>();
-  private readonly sessionEventLogs = new Map<string, QqbotLoginScanEvent[]>();
-  private readonly sessionEventListeners = new Map<
+  private readonly fallbackLoginSessionStore =
+    new NapcatLoginStateStoreService();
+  private readonly sessionEventLogCache: Record<string, QqbotLoginScanEvent[]> =
+    {};
+  private readonly sessionEventListenerCache: Record<
     string,
     Set<(event: QqbotLoginScanEvent) => void>
-  >();
-  private readonly credentials = new Map<
+  > = {};
+  readonly sessions = {
+    clear: () => this.loginSessionStore.clear(),
+    get: (sessionId: string) => this.loginSessionStore.getCached(sessionId),
+    has: (sessionId: string) => this.loginSessionStore.has(sessionId),
+    set: (sessionId: string, session: QqbotLoginScanSession) => {
+      if (!session.id) session.id = sessionId;
+      this.loginSessionStore.set(session);
+    },
+  };
+  readonly sessionEventLogs = {
+    clear: () =>
+      Object.keys(this.sessionEventLogCache).forEach((sessionId) => {
+        delete this.sessionEventLogCache[sessionId];
+      }),
+    get: (sessionId: string) => this.sessionEventLogCache[sessionId],
+  };
+  readonly sessionEventListeners = {
+    clear: () =>
+      Object.keys(this.sessionEventListenerCache).forEach((sessionId) => {
+        delete this.sessionEventListenerCache[sessionId];
+      }),
+  };
+  private readonly credentials: Record<
     string,
-    { credential: string; expiresAt: number }
-  >();
+    { credential: string; expiresAt: number } | undefined
+  > = {};
 
   constructor(
     private readonly configService: ConfigService,
     private readonly accountService: QqbotAccountService,
     private readonly containerService: QqbotNapcatContainerService,
     private readonly toolsService: ToolsService,
+    @Optional()
+    private readonly loginStateStore?: NapcatLoginStateStoreService,
   ) {}
+
+  private get loginSessionStore() {
+    return this.loginStateStore || this.fallbackLoginSessionStore;
+  }
 
   async startCreate() {
     const container = await this.containerService.prepareCreateContainer();
@@ -76,7 +107,7 @@ export class QqbotNapcatLoginService {
   }
 
   async refreshQrcode(sessionId: string) {
-    const session = this.getSession(sessionId);
+    const session = await this.getSession(sessionId);
     if (session.status !== 'pending') {
       return this.toResult(session);
     }
@@ -136,7 +167,7 @@ export class QqbotNapcatLoginService {
       });
       session.expiresAt = Date.now() + this.getSessionTtlMs();
       session.errorMessage = undefined;
-      this.sessions.set(session.id, session);
+      this.persistLoginSession(session);
       this.publishScanResultEvent(
         session,
         'qrcode-ready',
@@ -155,7 +186,7 @@ export class QqbotNapcatLoginService {
   }
 
   async status(sessionId: string) {
-    const session = this.getSession(sessionId);
+    const session = await this.getSession(sessionId);
     if (session.status !== 'pending') {
       return this.toResult(session);
     }
@@ -234,7 +265,7 @@ export class QqbotNapcatLoginService {
       } else if (!this.toolsService.isNapcatExpiredQrcodeStatus(status)) {
         await this.tryUpdatePendingQrcode(container, session, status);
       }
-      this.sessions.set(session.id, session);
+      this.persistLoginSession(session);
       return this.toResult(session);
     }
 
@@ -242,7 +273,7 @@ export class QqbotNapcatLoginService {
   }
 
   async submitCaptcha(sessionId: string, input: QqbotLoginCaptchaSubmitInput) {
-    const session = this.getSession(sessionId);
+    const session = await this.getSession(sessionId);
     if (session.status !== 'pending') {
       return this.toResult(session);
     }
@@ -305,29 +336,31 @@ export class QqbotNapcatLoginService {
   }
 
   events(sessionId: string) {
-    this.getSession(sessionId);
+    if (!this.loginSessionStore.getCached(sessionId)) {
+      void this.loginSessionStore.get(sessionId);
+    }
     return new Observable<{ data: QqbotLoginScanEvent }>((subscriber) => {
       const listener = (event: QqbotLoginScanEvent) => {
         subscriber.next({ data: event });
       };
-      (this.sessionEventLogs.get(sessionId) || []).forEach(listener);
+      (this.sessionEventLogCache[sessionId] || []).forEach(listener);
       const listeners =
-        this.sessionEventListeners.get(sessionId) ||
+        this.sessionEventListenerCache[sessionId] ||
         new Set<(event: QqbotLoginScanEvent) => void>();
       listeners.add(listener);
-      this.sessionEventListeners.set(sessionId, listeners);
+      this.sessionEventListenerCache[sessionId] = listeners;
 
       return () => {
         listeners.delete(listener);
         if (listeners.size <= 0) {
-          this.sessionEventListeners.delete(sessionId);
+          delete this.sessionEventListenerCache[sessionId];
         }
       };
     });
   }
 
   async cancel(sessionId: string) {
-    const session = this.sessions.get(sessionId);
+    const session = await this.loginSessionStore.get(sessionId);
     if (session) {
       await this.cleanupPasswordLoginContext(session);
       this.publishScanEvent(session, {
@@ -336,7 +369,7 @@ export class QqbotNapcatLoginService {
         status: 'info',
         step: 'session-cancelled',
       });
-      this.sessions.delete(sessionId);
+      this.loginSessionStore.delete(sessionId);
       await this.cleanupSessionContainer(session);
       this.cleanupSessionEvents(sessionId);
     }
@@ -365,7 +398,7 @@ export class QqbotNapcatLoginService {
       });
       session.lastRestartedAt = Date.now();
       session.errorMessage = this.getReloginPreparingMessage(options);
-      this.sessions.set(session.id, session);
+      this.persistLoginSession(session);
       this.publishScanResultEvent(
         session,
         'session-created',
@@ -394,7 +427,7 @@ export class QqbotNapcatLoginService {
         session.lastRestartedAt = Date.now();
         session.errorMessage =
           loginStatus.loginError || 'NapCat 账号已离线，已重新生成二维码';
-        this.sessions.set(session.id, session);
+        this.persistLoginSession(session);
         this.publishScanResultEvent(
           session,
           'container-restarted',
@@ -426,7 +459,7 @@ export class QqbotNapcatLoginService {
         qrcode,
         status: 'pending',
       });
-      this.sessions.set(session.id, session);
+      this.persistLoginSession(session);
       this.publishScanResultEvent(
         session,
         'qrcode-ready',
@@ -486,7 +519,7 @@ export class QqbotNapcatLoginService {
     session.errorMessage = undefined;
     session.passwordMd5 = undefined;
     session.preparingRelogin = false;
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     const result = {
       ...this.toResult(session),
       accountId,
@@ -562,7 +595,7 @@ export class QqbotNapcatLoginService {
     );
     session.newDeviceStatus = 'qr-pending';
     session.errorMessage = '需要新设备验证二维码';
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     this.publishScanResultEvent(
       session,
       'new-device-required',
@@ -580,7 +613,7 @@ export class QqbotNapcatLoginService {
         qrcode.pullQrCodeSig || session.newDevicePullQrCodeSig;
       session.newDeviceStatus = qrcode.status;
       session.errorMessage = '新设备二维码待扫码';
-      this.sessions.set(session.id, session);
+      this.persistLoginSession(session);
       this.publishScanResultEvent(
         session,
         'new-device-qrcode-ready',
@@ -631,7 +664,7 @@ export class QqbotNapcatLoginService {
       session.newDeviceQrcode = undefined;
       session.newDeviceStatus = 'verified';
       session.errorMessage = '新设备验证成功，继续登录';
-      this.sessions.set(session.id, session);
+      this.persistLoginSession(session);
       this.publishScanResultEvent(
         session,
         'new-device-verified',
@@ -680,7 +713,7 @@ export class QqbotNapcatLoginService {
     session.newDeviceStatus = status;
     session.errorMessage = message;
     session.expiresAt = Date.now() + this.getSessionTtlMs();
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     if (shouldPublish) {
       this.publishScanResultEvent(session, step, 'processing', message);
     }
@@ -695,7 +728,7 @@ export class QqbotNapcatLoginService {
     session.newDeviceQrcode = undefined;
     session.newDeviceStatus = 'failed';
     session.errorMessage = message;
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     return this.failCaptchaLogin(session, container, message);
   }
 
@@ -767,12 +800,12 @@ export class QqbotNapcatLoginService {
       ...input,
       createdAt: Date.now(),
     };
-    const logs = this.sessionEventLogs.get(session.id) || [];
+    const logs = this.sessionEventLogCache[session.id] || [];
     logs.push(event);
-    this.sessionEventLogs.set(session.id, logs.slice(-50));
-    this.sessionEventListeners
-      .get(session.id)
-      ?.forEach((listener) => listener(event));
+    this.sessionEventLogCache[session.id] = logs.slice(-50);
+    this.sessionEventListenerCache[session.id]?.forEach((listener) =>
+      listener(event),
+    );
   }
 
   private publishScanResultEvent(
@@ -783,7 +816,7 @@ export class QqbotNapcatLoginService {
   ) {
     if (session.status === 'pending') {
       session.expiresAt = Date.now() + this.getSessionTtlMs();
-      this.sessions.set(session.id, session);
+      this.persistLoginSession(session);
     }
     this.publishScanEvent(session, {
       message,
@@ -794,8 +827,8 @@ export class QqbotNapcatLoginService {
   }
 
   private cleanupSessionEvents(sessionId: string) {
-    this.sessionEventLogs.delete(sessionId);
-    this.sessionEventListeners.delete(sessionId);
+    delete this.sessionEventLogCache[sessionId];
+    delete this.sessionEventListenerCache[sessionId];
   }
 
   private keepSessionPending(
@@ -807,7 +840,7 @@ export class QqbotNapcatLoginService {
     session.errorMessage = errorMessage;
     session.expiresAt = Date.now() + this.getSessionTtlMs();
     if (clearQrcode) session.qrcode = undefined;
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     return this.toResult(session);
   }
 
@@ -830,7 +863,7 @@ export class QqbotNapcatLoginService {
     session.qrcode = undefined;
     session.errorMessage = message;
     session.expiresAt = Date.now() + this.getSessionTtlMs();
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     if (shouldPublish) {
       this.publishScanResultEvent(
         session,
@@ -859,7 +892,7 @@ export class QqbotNapcatLoginService {
     session.errorMessage = errorMessage;
     session.passwordMd5 = undefined;
     session.preparingRelogin = false;
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     this.publishScanEvent(session, {
       message: errorMessage,
       result: this.toResult(session),
@@ -899,7 +932,11 @@ export class QqbotNapcatLoginService {
       session.errorMessage = failureMessage;
       session.passwordMd5 = undefined;
       session.preparingRelogin = false;
-      this.sessions.set(session.id, session);
+      this.persistLoginSession(session);
+      this.persistRuntimeCleanup(session, {
+        errorMessage: failureMessage,
+        status: 'failed',
+      });
       this.publishScanEvent(session, {
         message: failureMessage,
         result: this.toResult(session),
@@ -911,12 +948,33 @@ export class QqbotNapcatLoginService {
 
     session.captchaUrl = undefined;
     session.passwordMd5 = undefined;
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
+    this.persistRuntimeCleanup(session, { status: 'success' });
     return true;
   }
 
-  private getSession(sessionId: string) {
-    const session = this.sessions.get(sessionId);
+  private persistLoginSession(session: QqbotLoginScanSession) {
+    this.loginSessionStore.set(session);
+    this.persistLoginChallenge(session);
+  }
+
+  private persistLoginChallenge(session: QqbotLoginScanSession) {
+    this.loginSessionStore.recordCaptchaChallenge(session);
+    this.loginSessionStore.recordNewDeviceChallenge(session);
+  }
+
+  private persistRuntimeCleanup(
+    session: QqbotLoginScanSession,
+    input: { errorMessage?: string; status: 'failed' | 'pending' | 'success' },
+  ) {
+    this.loginSessionStore.recordRuntimeCleanup(session, {
+      cleanupType: 'password-login-env',
+      ...input,
+    });
+  }
+
+  private async getSession(sessionId: string) {
+    const session = await this.loginSessionStore.get(sessionId);
     if (!session) {
       throwVbenError('扫码会话不存在或已过期');
     }
@@ -930,9 +988,9 @@ export class QqbotNapcatLoginService {
   private async cleanupSessions() {
     const now = Date.now();
     const expiredSessions: QqbotLoginScanSession[] = [];
-    this.sessions.forEach((session, sessionId) => {
+    this.loginSessionStore.forEach((session, sessionId) => {
       if (session.status !== 'pending' || now > session.expiresAt) {
-        this.sessions.delete(sessionId);
+        this.loginSessionStore.delete(sessionId);
         expiredSessions.push(session);
       }
     });
@@ -952,7 +1010,7 @@ export class QqbotNapcatLoginService {
       'error',
       session.errorMessage,
     );
-    this.sessions.delete(session.id);
+    this.loginSessionStore.delete(session.id);
     await this.closeSession(session);
     return this.toResult(session);
   }
@@ -967,7 +1025,7 @@ export class QqbotNapcatLoginService {
     session.passwordMd5 = undefined;
     session.preparingRelogin = false;
     this.publishScanResultEvent(session, 'login-error', 'error', errorMessage);
-    this.sessions.delete(session.id);
+    this.loginSessionStore.delete(session.id);
     await this.closeSession(session);
     return this.toResult(session);
   }
@@ -975,7 +1033,7 @@ export class QqbotNapcatLoginService {
   private async closeSession(session: QqbotLoginScanSession) {
     await this.cleanupPasswordLoginContext(session);
     await this.cleanupSessionContainer(session);
-    this.sessions.delete(session.id);
+    this.loginSessionStore.delete(session.id);
     this.cleanupSessionEvents(session.id);
   }
 
@@ -1311,10 +1369,10 @@ export class QqbotNapcatLoginService {
         );
       }
     } finally {
-      const current = this.sessions.get(session.id);
+      const current = this.loginSessionStore.getCached(session.id);
       if (current === session && current.status === 'pending') {
         current.preparingRelogin = false;
-        this.sessions.set(current.id, current);
+        this.persistLoginSession(current);
       }
     }
   }
@@ -1326,7 +1384,7 @@ export class QqbotNapcatLoginService {
   ) {
     let loginInfo: NapcatLoginInfo;
     session.errorMessage = 'NapCat 正在尝试快速登录，请稍后';
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     this.publishScanResultEvent(
       session,
       'quick-login-start',
@@ -1416,7 +1474,7 @@ export class QqbotNapcatLoginService {
       .update(password, 'utf8')
       .digest('hex');
     session.errorMessage = 'NapCat 正在尝试密码登录，请稍后';
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     this.publishScanResultEvent(
       session,
       'password-login-start',
@@ -1574,7 +1632,7 @@ export class QqbotNapcatLoginService {
     session.captchaUrl = undefined;
     session.errorMessage = undefined;
     session.expiresAt = Date.now() + this.getSessionTtlMs();
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     this.publishScanResultEvent(
       session,
       'qrcode-ready',
@@ -1768,7 +1826,7 @@ export class QqbotNapcatLoginService {
     session.errorMessage = reason
       ? `快速登录未完成：${reason}，${nextStepMessage}`
       : `快速登录未完成，${nextStepMessage}`;
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     this.publishScanResultEvent(
       session,
       'quick-login-fallback',
@@ -1784,7 +1842,7 @@ export class QqbotNapcatLoginService {
     session.errorMessage = reason
       ? `密码登录未完成：${reason}，开始生成二维码`
       : '密码登录未完成，开始生成二维码';
-    this.sessions.set(session.id, session);
+    this.persistLoginSession(session);
     this.publishScanResultEvent(
       session,
       'password-login-fallback',
@@ -1808,7 +1866,7 @@ export class QqbotNapcatLoginService {
       return;
     }
 
-    this.credentials.delete(this.getCredentialCacheKey(container));
+    delete this.credentials[this.getCredentialCacheKey(container)];
     if (options.waitForReady === false) return;
 
     onProgress?.('napcat-ready-wait', '等待 NapCat WebUI 启动');
@@ -1833,7 +1891,7 @@ export class QqbotNapcatLoginService {
       }
     }
 
-    this.credentials.delete(this.getCredentialCacheKey(container));
+    delete this.credentials[this.getCredentialCacheKey(container)];
     if (options.waitForReady === false) return;
 
     await this.toolsService.sleep(this.getRestartDelayMs());
@@ -1846,7 +1904,7 @@ export class QqbotNapcatLoginService {
 
   private async getCredential(container: QqbotNapcatRuntime) {
     const cacheKey = this.getCredentialCacheKey(container);
-    const cached = this.credentials.get(cacheKey);
+    const cached = this.credentials[cacheKey];
     if (cached && Date.now() < cached.expiresAt) {
       return cached.credential;
     }
@@ -1861,10 +1919,10 @@ export class QqbotNapcatLoginService {
     if (!data.Credential) {
       throwVbenError('NapCat WebUI 登录失败');
     }
-    this.credentials.set(cacheKey, {
+    this.credentials[cacheKey] = {
       credential: data.Credential,
       expiresAt: Date.now() + 50 * 60 * 1000,
-    });
+    };
     return data.Credential;
   }
 

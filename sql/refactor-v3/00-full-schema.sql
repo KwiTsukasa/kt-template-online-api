@@ -951,11 +951,14 @@ CREATE TABLE IF NOT EXISTS napcat_account_binding (
 
 CREATE TABLE IF NOT EXISTS napcat_login_session (
   id BIGINT NOT NULL PRIMARY KEY,
-  account_id BIGINT NOT NULL,
+  account_id BIGINT NULL,
   session_key VARCHAR(128) NOT NULL,
   login_stage VARCHAR(64) NOT NULL,
   status VARCHAR(32) NOT NULL,
   progress_message VARCHAR(255) NOT NULL,
+  session_payload JSON NULL,
+  expires_at DATETIME NULL,
+  completed_at DATETIME NULL,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_napcat_login_session_key (session_key),

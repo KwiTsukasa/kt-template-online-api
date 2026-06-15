@@ -25,8 +25,14 @@ import { QqbotDashboardService } from '@/modules/qqbot/core/application/dashboar
 import { QqbotDedupe } from '@/modules/qqbot/core/infrastructure/persistence/dedupe/qqbot-dedupe.entity';
 import { QqbotDedupeService } from '@/modules/qqbot/core/application/dedupe/qqbot-dedupe.service';
 import { QqbotEventService } from '@/modules/qqbot/core/application/event/qqbot-event.service';
+import { NapcatAccountBinding } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-account-binding.entity';
+import { NapcatContainer } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-container.entity';
 import { NapcatDeviceIdentity } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-device-identity.entity';
 import { NapcatDeviceIdentityService } from '@/modules/qqbot/napcat/infrastructure/integration/device/napcat-device-identity.service';
+import { NapcatLoginChallengeEntity } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-login-challenge.entity';
+import { NapcatLoginSession } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-login-session.entity';
+import { NapcatLoginStateStoreService } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-login-state-store.service';
+import { NapcatRuntimeCleanup } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-runtime-cleanup.entity';
 import { QqbotConversation } from '@/modules/qqbot/core/infrastructure/persistence/message/qqbot-conversation.entity';
 import { QqbotMessageController } from '@/modules/qqbot/core/contract/message/qqbot-message.controller';
 import { QqbotMessage } from '@/modules/qqbot/core/infrastructure/persistence/message/qqbot-message.entity';
@@ -61,7 +67,12 @@ export const QQBOT_CORE_ENTITIES = [
   QqbotConversation,
   QqbotDedupe,
   QqbotMessage,
+  NapcatAccountBinding,
+  NapcatContainer,
   NapcatDeviceIdentity,
+  NapcatLoginChallengeEntity,
+  NapcatLoginSession,
+  NapcatRuntimeCleanup,
   QqbotAccountNapcat,
   QqbotNapcatContainer,
   QqbotRule,
@@ -90,6 +101,7 @@ export const QQBOT_CORE_PROVIDERS = [
   QqbotEventService,
   QqbotMessageService,
   NapcatDeviceIdentityService,
+  NapcatLoginStateStoreService,
   QqbotNapcatLoginService,
   QqbotNapcatWatchdogService,
   QqbotNapcatContainerService,

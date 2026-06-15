@@ -7,7 +7,7 @@ import {
   NAPCAT_RUNTIME_ENTITIES,
   toNapcatDockerDeviceOptions,
 } from '../../../../src/modules/qqbot/napcat';
-import { QqbotNapcatContainerService } from '../../../../src/qqbot/napcat/qqbot-napcat-container.service';
+import { QqbotNapcatContainerService } from '../../../../src/modules/qqbot/napcat/qqbot-napcat-container.service';
 import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
 type EntityClass = new (...args: never[]) => unknown;

@@ -1,5 +1,5 @@
 import { ToolsService } from '@/common';
-import { QqbotAccountService } from '@/qqbot/account/qqbot-account.service';
+import { QqbotAccountService } from '@/modules/qqbot/core/account/qqbot-account.service';
 
 describe('QqbotAccountService', () => {
   it('stores NapCat login password as encrypted secret and never persists the transport field', async () => {

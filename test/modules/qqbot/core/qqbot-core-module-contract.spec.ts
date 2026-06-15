@@ -1,21 +1,3 @@
-const mockQqbotEventPluginRegistryService = class QqbotEventPluginRegistryService {};
-const mockQqbotPluginRegistryService = class QqbotPluginRegistryService {};
-
-jest.mock('@/qqbot/plugin/qqbot-event-plugin-registry.service', () => ({
-  QqbotEventPluginRegistryService: mockQqbotEventPluginRegistryService,
-}));
-jest.mock(
-  '../../../../src/qqbot/plugin/qqbot-event-plugin-registry.service',
-  () => ({
-    QqbotEventPluginRegistryService: mockQqbotEventPluginRegistryService,
-  }),
-);
-jest.mock('@/qqbot/plugin/qqbot-plugin-registry.service', () => ({
-  QqbotPluginRegistryService: mockQqbotPluginRegistryService,
-}));
-jest.mock('../../../../src/qqbot/plugin/qqbot-plugin-registry.service', () => ({
-  QqbotPluginRegistryService: mockQqbotPluginRegistryService,
-}));
 jest.mock(
   '@/modules/qqbot/plugins/bangDream/application/bangdream-client.service',
   () => ({
@@ -59,6 +41,8 @@ jest.mock('@/modules/qqbot/plugins/repeater/qqbot-repeater.plugin', () => ({
   QqbotRepeaterPluginService: class QqbotRepeaterPluginService {},
 }));
 
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -66,15 +50,13 @@ import { getMetadataArgsStorage } from 'typeorm';
 import { AdminAuthGuardModule } from '../../../../src/modules/admin/identity/auth/admin-auth-guard.module';
 import { DictModule } from '../../../../src/modules/admin/platform-config/dict/dict.module';
 import { AppModule } from '../../../../src/app.module';
-import { QqbotAccountController } from '../../../../src/qqbot/account/qqbot-account.controller';
-import { QqbotCommandController } from '../../../../src/qqbot/command/qqbot-command.controller';
-import { QqbotDashboardController } from '../../../../src/qqbot/dashboard/qqbot-dashboard.controller';
-import { QqbotMessageController } from '../../../../src/qqbot/message/qqbot-message.controller';
-import { QqbotPermissionController } from '../../../../src/qqbot/permission/qqbot-permission.controller';
-import { QqbotPluginController } from '../../../../src/qqbot/plugin/qqbot-plugin.controller';
-import { QqbotModule } from '../../../../src/qqbot/qqbot.module';
-import { QqbotRuleController } from '../../../../src/qqbot/rule/qqbot-rule.controller';
-import { QqbotSendController } from '../../../../src/qqbot/send/qqbot-send.controller';
+import { QqbotAccountController } from '../../../../src/modules/qqbot/core/account/qqbot-account.controller';
+import { QqbotCommandController } from '../../../../src/modules/qqbot/core/command/qqbot-command.controller';
+import { QqbotDashboardController } from '../../../../src/modules/qqbot/core/dashboard/qqbot-dashboard.controller';
+import { QqbotMessageController } from '../../../../src/modules/qqbot/core/message/qqbot-message.controller';
+import { QqbotPermissionController } from '../../../../src/modules/qqbot/core/permission/qqbot-permission.controller';
+import { QqbotRuleController } from '../../../../src/modules/qqbot/core/rule/qqbot-rule.controller';
+import { QqbotSendController } from '../../../../src/modules/qqbot/core/send/qqbot-send.controller';
 import {
   QQBOT_CORE_CONTROLLERS,
   QQBOT_CORE_ENTITIES,
@@ -157,12 +139,20 @@ describe('QQBot core module contract', () => {
   });
 
   it('routes QQBot through the core module as the owning Nest boundary', () => {
-    expect(getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS)).toEqual(
+    const legacyWrapperName = ['Qqbot', 'Module'].join('');
+    const legacyWrapperPath = join(
+      process.cwd(),
+      'src',
+      'qqbot',
+      ['qqbot', 'module.ts'].join('.'),
+    );
+    const appImports = getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS);
+
+    expect(appImports).toEqual(
       expect.arrayContaining([QqbotCoreModule]),
     );
-    expect(getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS)).not.toEqual(
-      expect.arrayContaining([QqbotModule]),
-    );
+    expect(getNames(appImports)).not.toContain(legacyWrapperName);
+    expect(existsSync(legacyWrapperPath)).toBe(false);
 
     const coreImports = getModuleMetadata(
       QqbotCoreModule,
@@ -176,7 +166,7 @@ describe('QQBot core module contract', () => {
         (item) => (item as { module?: unknown }).module === TypeOrmModule,
       ),
     ).toBe(true);
-    expect(coreImports).not.toEqual(expect.arrayContaining([QqbotModule]));
+    expect(getNames(coreImports)).not.toContain(legacyWrapperName);
 
     expect(
       getModuleMetadata(QqbotCoreModule, MODULE_METADATA.CONTROLLERS),
@@ -186,12 +176,6 @@ describe('QQBot core module contract', () => {
     ).toEqual(expect.arrayContaining(QQBOT_CORE_PROVIDERS));
     expect(getModuleMetadata(QqbotCoreModule, MODULE_METADATA.EXPORTS)).toEqual(
       expect.arrayContaining(QQBOT_CORE_EXPORTS),
-    );
-    expect(getModuleMetadata(QqbotModule, MODULE_METADATA.IMPORTS)).toEqual(
-      expect.arrayContaining([QqbotCoreModule]),
-    );
-    expect(getModuleMetadata(QqbotModule, MODULE_METADATA.EXPORTS)).toEqual(
-      expect.arrayContaining([QqbotCoreModule]),
     );
   });
 
@@ -203,10 +187,12 @@ describe('QQBot core module contract', () => {
         QqbotDashboardController,
         QqbotMessageController,
         QqbotPermissionController,
-        QqbotPluginController,
         QqbotRuleController,
         QqbotSendController,
       ]),
+    );
+    expect(getNames(QQBOT_CORE_CONTROLLERS)).toEqual(
+      expect.arrayContaining(['QqbotPluginController']),
     );
     expect(getNames(QQBOT_CORE_PROVIDERS)).toEqual(
       expect.arrayContaining([

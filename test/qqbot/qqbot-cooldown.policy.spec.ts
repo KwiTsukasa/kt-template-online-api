@@ -2,7 +2,7 @@ import { formatKtDateTime, KtDateTime, KtDateTimeColumn } from '@/common';
 import {
   getEffectiveCooldownMs,
   isWithinCooldown,
-} from '@/qqbot/qqbot-cooldown.policy';
+} from '@/modules/qqbot/core/domain/qqbot-cooldown.policy';
 
 class CooldownEntityFixture {
   @KtDateTimeColumn()

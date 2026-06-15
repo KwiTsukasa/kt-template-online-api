@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { formatKtDateTime, throwVbenError } from '@/common';
-import { QqbotAccountService } from '../account/qqbot-account.service';
+import { QqbotAccountService } from '@/modules/qqbot/core/account/qqbot-account.service';
 import { QqbotRepeaterPluginService } from '@/modules/qqbot/plugins/repeater/qqbot-repeater.plugin';
 import type {
   QqbotEventPluginDefinition,
   QqbotPluginHealth,
   QqbotPluginOperationSummary,
-} from '../qqbot.types';
+} from '@/modules/qqbot/core/contract/qqbot.types';
 
 @Injectable()
 export class QqbotEventPluginRegistryService {

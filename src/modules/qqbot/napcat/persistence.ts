@@ -1,4 +1,6 @@
 import { NapcatDeviceIdentity } from './device/napcat-device-identity.entity';
+import { QqbotAccountNapcat } from './infrastructure/persistence/qqbot-account-napcat.entity';
+import { QqbotNapcatContainer } from './infrastructure/persistence/qqbot-napcat-container.entity';
 
 export const NAPCAT_RUNTIME_DOMAIN_CONTRACT = {
   tables: [
@@ -11,4 +13,8 @@ export const NAPCAT_RUNTIME_DOMAIN_CONTRACT = {
   ],
 } as const;
 
-export const NAPCAT_RUNTIME_ENTITIES = [NapcatDeviceIdentity];
+export const NAPCAT_RUNTIME_ENTITIES = [
+  NapcatDeviceIdentity,
+  QqbotAccountNapcat,
+  QqbotNapcatContainer,
+];

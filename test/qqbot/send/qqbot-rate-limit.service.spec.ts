@@ -1,4 +1,4 @@
-import { QqbotRateLimitService } from '@/qqbot/send/qqbot-rate-limit.service';
+import { QqbotRateLimitService } from '@/modules/qqbot/core/send/qqbot-rate-limit.service';
 
 function createService(config: Record<string, number | string | undefined>) {
   return new QqbotRateLimitService({

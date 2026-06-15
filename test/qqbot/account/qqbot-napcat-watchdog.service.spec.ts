@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { QqbotNapcatWatchdogService } from '@/qqbot/account/qqbot-napcat-watchdog.service';
+import { QqbotNapcatWatchdogService } from '@/modules/qqbot/napcat/login/qqbot-napcat-watchdog.service';
 
 function buildService(
   configValues: Record<string, string | undefined>,

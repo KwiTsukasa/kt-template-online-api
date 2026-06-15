@@ -13,7 +13,7 @@ jest.mock('@/common', () => {
 
 import { ConfigService } from '@nestjs/config';
 import { ToolsService } from '@/common';
-import { QqbotNapcatContainerService } from '@/qqbot/napcat/qqbot-napcat-container.service';
+import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/qqbot-napcat-container.service';
 
 describe('QqbotNapcatContainerService', () => {
   it('removes previous account containers when binding a new primary container', async () => {

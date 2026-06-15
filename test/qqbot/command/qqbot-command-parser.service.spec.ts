@@ -27,8 +27,8 @@ jest.mock(
 );
 
 import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
-import type { QqbotCommand } from '@/qqbot/command/qqbot-command.entity';
-import { QqbotCommandParserService } from '@/qqbot/command/qqbot-command-parser.service';
+import type { QqbotCommand } from '@/modules/qqbot/core/command/qqbot-command.entity';
+import { QqbotCommandParserService } from '@/modules/qqbot/core/command/qqbot-command-parser.service';
 
 describe('QqbotCommandParserService FFLogs parser', () => {
   const command = {

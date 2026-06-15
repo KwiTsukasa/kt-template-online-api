@@ -12,7 +12,7 @@ import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { vbenSuccess } from '@/common';
 import { QqbotEventPluginRegistryService } from './qqbot-event-plugin-registry.service';
 import { QqbotPluginRegistryService } from './qqbot-plugin-registry.service';
-import type { QqbotPluginTriggerMode } from '../qqbot.types';
+import type { QqbotPluginTriggerMode } from '@/modules/qqbot/core/contract/qqbot.types';
 
 @ApiTags('QQBot - 插件能力')
 @Controller('qqbot/plugin')

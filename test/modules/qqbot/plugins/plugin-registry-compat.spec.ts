@@ -12,7 +12,7 @@ jest.mock('@/modules/qqbot/plugins/fflogs/qqbot-fflogs.plugin', () => ({
 }));
 
 import { QqbotPluginRegistryService } from '../../../../src/qqbot/plugin/qqbot-plugin-registry.service';
-import type { QqbotIntegrationPlugin } from '../../../../src/qqbot/qqbot.types';
+import type { QqbotIntegrationPlugin } from '../../../../src/modules/qqbot/core/contract/qqbot.types';
 
 const asPluginService = (plugin: QqbotIntegrationPlugin) =>
   ({

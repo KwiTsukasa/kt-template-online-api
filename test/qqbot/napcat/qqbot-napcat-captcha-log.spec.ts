@@ -1,5 +1,5 @@
 import { ToolsService } from '@/common';
-import { QqbotNapcatContainerService } from '@/qqbot/napcat/qqbot-napcat-container.service';
+import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/qqbot-napcat-container.service';
 
 describe('QqbotNapcatContainerService captcha logs', () => {
   it('extracts captcha url from recent runtime logs', async () => {

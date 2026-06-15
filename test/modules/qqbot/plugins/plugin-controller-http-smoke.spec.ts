@@ -27,7 +27,7 @@ import { QqbotFflogsPluginService } from '../../../../src/modules/qqbot/plugins/
 import { QqbotEventPluginRegistryService } from '../../../../src/qqbot/plugin/qqbot-event-plugin-registry.service';
 import { QqbotPluginController } from '../../../../src/qqbot/plugin/qqbot-plugin.controller';
 import { QqbotPluginRegistryService } from '../../../../src/qqbot/plugin/qqbot-plugin-registry.service';
-import type { QqbotIntegrationPlugin } from '../../../../src/qqbot/qqbot.types';
+import type { QqbotIntegrationPlugin } from '../../../../src/modules/qqbot/core/contract/qqbot.types';
 
 const createPlugin = (
   key: string,

@@ -5,23 +5,23 @@ jest.mock('@/modules/admin/identity/auth/jwt-auth.guard', () => ({
     }
   },
 }));
-jest.mock('@/qqbot/account/qqbot-account.service', () => ({
+jest.mock('@/modules/qqbot/core/account/qqbot-account.service', () => ({
   QqbotAccountService: class {},
 }));
-jest.mock('@/qqbot/account/qqbot-napcat-login.service', () => ({
+jest.mock('@/modules/qqbot/napcat/login/qqbot-napcat-login.service', () => ({
   QqbotNapcatLoginService: class {},
 }));
-jest.mock('@/qqbot/connection/qqbot-reverse-ws.service', () => ({
+jest.mock('@/modules/qqbot/core/connection/qqbot-reverse-ws.service', () => ({
   QqbotReverseWsService: class {},
 }));
 
 import * as request from 'supertest';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
-import { QqbotAccountController } from '@/qqbot/account/qqbot-account.controller';
-import { QqbotAccountService } from '@/qqbot/account/qqbot-account.service';
-import { QqbotNapcatLoginService } from '@/qqbot/account/qqbot-napcat-login.service';
-import { QqbotReverseWsService } from '@/qqbot/connection/qqbot-reverse-ws.service';
+import { QqbotAccountController } from '@/modules/qqbot/core/account/qqbot-account.controller';
+import { QqbotAccountService } from '@/modules/qqbot/core/account/qqbot-account.service';
+import { QqbotNapcatLoginService } from '@/modules/qqbot/napcat/login/qqbot-napcat-login.service';
+import { QqbotReverseWsService } from '@/modules/qqbot/core/connection/qqbot-reverse-ws.service';
 
 describe('QqbotAccountController', () => {
   let app: INestApplication;

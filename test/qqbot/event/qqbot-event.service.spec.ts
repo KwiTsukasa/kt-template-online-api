@@ -1,8 +1,8 @@
-jest.mock('@/qqbot/rule/qqbot-rule-engine.service', () => ({
+jest.mock('@/modules/qqbot/core/rule/qqbot-rule-engine.service', () => ({
   QqbotRuleEngineService: class QqbotRuleEngineService {},
 }));
 
-import { QqbotEventService } from '@/qqbot/event/qqbot-event.service';
+import { QqbotEventService } from '@/modules/qqbot/core/event/qqbot-event.service';
 
 describe('QqbotEventService', () => {
   it('marks account offline with reason when NapCat reports kicked offline notice', async () => {

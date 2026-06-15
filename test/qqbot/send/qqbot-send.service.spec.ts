@@ -1,5 +1,5 @@
 import { ToolsService } from '@/common';
-import { QqbotSendService } from '@/qqbot/send/qqbot-send.service';
+import { QqbotSendService } from '@/modules/qqbot/core/send/qqbot-send.service';
 
 describe('QqbotSendService', () => {
   it('stores summarized CQ image payloads while sending the original message', async () => {

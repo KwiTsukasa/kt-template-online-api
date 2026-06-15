@@ -1,22 +1,3 @@
-jest.mock('@/qqbot/qqbot.module', () => ({
-  QqbotModule: class QqbotModule {},
-}));
-jest.mock('@/qqbot/plugin/qqbot-event-plugin-registry.service', () => ({
-  QqbotEventPluginRegistryService: class QqbotEventPluginRegistryService {},
-}));
-jest.mock(
-  '../../../../src/qqbot/plugin/qqbot-event-plugin-registry.service',
-  () => ({
-    QqbotEventPluginRegistryService: class QqbotEventPluginRegistryService {},
-  }),
-);
-jest.mock('@/qqbot/plugin/qqbot-plugin-registry.service', () => ({
-  QqbotPluginRegistryService: class QqbotPluginRegistryService {},
-}));
-jest.mock('../../../../src/qqbot/plugin/qqbot-plugin-registry.service', () => ({
-  QqbotPluginRegistryService: class QqbotPluginRegistryService {},
-}));
-
 import { QQBOT_CORE_DOMAIN_CONTRACT } from '../../../../src/modules/qqbot/core/qqbot-core.contract';
 import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 

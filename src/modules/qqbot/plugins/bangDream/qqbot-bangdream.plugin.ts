@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { formatKtDateTime, ToolsService } from '@/common';
-import type { QqbotIntegrationPlugin } from '@/qqbot/qqbot.types';
+import type { QqbotIntegrationPlugin } from '@/modules/qqbot/core/contract/qqbot.types';
 import {
   BANGDREAM_INPUT_SCHEMA,
   BANGDREAM_OUTPUT_SCHEMA,

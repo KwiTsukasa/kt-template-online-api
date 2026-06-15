@@ -9,7 +9,7 @@ import type {
   QqbotPluginOperationContext,
   QqbotPluginOperationSummary,
   QqbotPluginSummary,
-} from '../qqbot.types';
+} from '@/modules/qqbot/core/contract/qqbot.types';
 
 @Injectable()
 export class QqbotPluginRegistryService implements OnModuleInit {

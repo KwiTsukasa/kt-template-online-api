@@ -1,6 +1,6 @@
 import { ToolsService } from '@/common';
 import { QqbotRepeaterPluginService } from '@/modules/qqbot/plugins/repeater/qqbot-repeater.plugin';
-import type { QqbotNormalizedMessage } from '@/qqbot/qqbot.types';
+import type { QqbotNormalizedMessage } from '@/modules/qqbot/core/contract/qqbot.types';
 
 function createMessage(text: string): QqbotNormalizedMessage {
   return {

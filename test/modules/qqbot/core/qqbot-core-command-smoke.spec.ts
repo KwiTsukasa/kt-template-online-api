@@ -5,12 +5,6 @@ jest.mock('@/modules/admin/identity/auth/jwt-auth.guard', () => ({
     }
   },
 }));
-jest.mock('@/qqbot/plugin/qqbot-plugin-registry.service', () => ({
-  QqbotPluginRegistryService: class QqbotPluginRegistryService {},
-}));
-jest.mock('../../../../src/qqbot/plugin/qqbot-plugin-registry.service', () => ({
-  QqbotPluginRegistryService: class QqbotPluginRegistryService {},
-}));
 
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -19,19 +13,24 @@ import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { DictService } from '../../../../src/modules/admin/platform-config/dict/dict.service';
 import { ToolsService } from '../../../../src/common';
-import { QqbotAccountService } from '../../../../src/qqbot/account/qqbot-account.service';
-import { QqbotCommandController } from '../../../../src/qqbot/command/qqbot-command.controller';
-import { QqbotCommand } from '../../../../src/qqbot/command/qqbot-command.entity';
-import { QqbotCommandEngineService } from '../../../../src/qqbot/command/qqbot-command-engine.service';
-import { QqbotCommandLog } from '../../../../src/qqbot/command/qqbot-command-log.entity';
-import { QqbotCommandParserService } from '../../../../src/qqbot/command/qqbot-command-parser.service';
-import { QqbotCommandService } from '../../../../src/qqbot/command/qqbot-command.service';
-import { QqbotReplyTemplateService } from '../../../../src/qqbot/command/qqbot-reply-template.service';
-import { QqbotPluginRegistryService } from '../../../../src/qqbot/plugin/qqbot-plugin-registry.service';
-import { QqbotSendService } from '../../../../src/qqbot/send/qqbot-send.service';
+import { QqbotAccountService } from '../../../../src/modules/qqbot/core/account/qqbot-account.service';
+import { QqbotCommandController } from '../../../../src/modules/qqbot/core/command/qqbot-command.controller';
+import { QqbotCommand } from '../../../../src/modules/qqbot/core/command/qqbot-command.entity';
+import { QqbotCommandEngineService } from '../../../../src/modules/qqbot/core/command/qqbot-command-engine.service';
+import { QqbotCommandLog } from '../../../../src/modules/qqbot/core/command/qqbot-command-log.entity';
+import { QqbotCommandParserService } from '../../../../src/modules/qqbot/core/command/qqbot-command-parser.service';
+import { QqbotCommandService } from '../../../../src/modules/qqbot/core/command/qqbot-command.service';
+import { QqbotReplyTemplateService } from '../../../../src/modules/qqbot/core/command/qqbot-reply-template.service';
+import { QQBOT_CORE_PROVIDERS } from '../../../../src/modules/qqbot/core/qqbot-core.module';
+import { QqbotSendService } from '../../../../src/modules/qqbot/core/send/qqbot-send.service';
 
 describe('QQBot core command local smoke', () => {
   let app: INestApplication;
+  type ProviderClass = new (...args: never[]) => unknown;
+  const qqbotPluginRegistryProvider = QQBOT_CORE_PROVIDERS.find(
+    (provider) =>
+      (provider as { name?: string }).name === 'QqbotPluginRegistryService',
+  ) as ProviderClass;
 
   const command = {
     aliases: '["查歌"]',
@@ -104,7 +103,7 @@ describe('QQBot core command local smoke', () => {
           },
         },
         {
-          provide: QqbotPluginRegistryService,
+          provide: qqbotPluginRegistryProvider,
           useValue: pluginRegistry,
         },
         {

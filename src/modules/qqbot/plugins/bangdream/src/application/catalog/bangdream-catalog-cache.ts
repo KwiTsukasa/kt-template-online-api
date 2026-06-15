@@ -111,9 +111,8 @@ let initialLoadPromise: Promise<void> | undefined;
 function ensureCatalogInitialLoad() {
   if (!initialLoadPromise) {
     logger('catalog', 'initializing...');
-    initialLoadPromise = loadCatalogData(true).then(async () => {
+    initialLoadPromise = loadCatalogData(true).then(() => {
       logger('catalog', 'initializing done');
-      await loadCatalogData();
     });
   }
   return initialLoadPromise;

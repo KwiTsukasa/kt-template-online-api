@@ -54,20 +54,10 @@ export async function drawSongList(
   let tempSongImageList: Canvas[] = [];
   const songImageListHorizontal: Canvas[] = [];
   let tempH = 0;
-  const songPromises: Promise<Canvas>[] = [];
-
-  for (let i = 0; i < tempSongList.length; i++) {
-    songPromises.push(
-      drawSongInList(
-        tempSongList[i],
-        undefined,
-        undefined,
-        displayedServerList,
-      ),
-    );
-  }
-
-  const songImages = await Promise.all(songPromises);
+  const songImages = await renderSongListItemsSequentially(
+    tempSongList,
+    displayedServerList,
+  );
 
   for (let i = 0; i < songImages.length; i++) {
     const tempImage = songImages[i];
@@ -131,3 +121,31 @@ export const matchSongList = createBangDreamEntityMatcher<Song>({
    */
   relationValue: (song) => song.songId,
 });
+
+export type SongListItemRenderer = (
+  song: Song,
+  difficulty: number | undefined,
+  text: string | undefined,
+  displayedServerList: Server[],
+) => Promise<Canvas>;
+
+/**
+ * 在歌曲列表中顺序渲染单项，避免并发 Skia 图片解码导致 native 内存峰值过高。
+ *
+ * @param songs - 待绘制歌曲列表。
+ * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
+ * @param renderItem - 单项渲染函数，未传入时使用默认歌曲列表渲染器。
+ */
+export async function renderSongListItemsSequentially(
+  songs: Song[],
+  displayedServerList: Server[],
+  renderItem: SongListItemRenderer = drawSongInList,
+): Promise<Canvas[]> {
+  const songImages: Canvas[] = [];
+  for (const song of songs) {
+    songImages.push(
+      await renderItem(song, undefined, undefined, displayedServerList),
+    );
+  }
+  return songImages;
+}

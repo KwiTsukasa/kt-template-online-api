@@ -4,7 +4,7 @@
 
 第三期全量重构已经完成了基础能力、schema、插件平台、NapCat 登录链路和线上闭环，但当前源码结构仍没有完全兑现第三期目标架构：API 业务实现仍散落在 `src/admin`、`src/blog`、`src/minio`、`src/wordpress`、`src/qqbot`，`src/modules/**` 仍大量反向导入旧根。用户已确认本批次选择“方案 A：强门禁全收敛”。
 
-本批次目标不是“继续能跑”，而是让第三期目标架构在当前代码里变成事实：旧根删除，业务实现归入 `src/modules/**`，结构测试阻止回退，Admin 同步按功能域整理，并在迁移过程中清理无用代码、废话代码和重复胶水，同时保持现有功能一致。
+本批次目标不是“继续能跑”，而是让第三期目标架构在当前代码里变成事实：旧根删除，业务实现归入 `src/modules/**`，结构测试阻止回退，API/Admin 全模块按功能域整理，并在迁移过程中全面清理无用代码、废话代码和重复胶水，同时保持现有功能一致。瘦身不是 QQBot 专项，而是覆盖 Admin/Auth、Platform Config、Blog、WordPress、Asset、QQBot Core、NapCat、Plugin Platform、现有插件、Admin 所有相关 caller 和页面状态的通用门禁。
 
 ## 已确认原则
 
@@ -13,6 +13,7 @@
 - 不做无意义备份、临时日志提交、根目录临时文件或为了“保险”留下的补丁文件。
 - API 与 Admin 使用开发分支，不使用 `.worktree`。
 - 本批次必须覆盖父级模块、子模块、插件目录和 Admin 页面/caller/state，不只移动父级目录。
+- 全面瘦身是每个模块迁移的完成条件：每个模块都要扫描旧产物、重复类型、重复状态文案、无引用文件、纯转发胶水和可复用边界，不允许只在 QQBot 上做。
 - 功能行为保持一致，内部结构可以破坏式收敛。
 - 完成条件必须由结构测试、typecheck、Jest、真实接口 smoke、Admin typecheck/page smoke 和 review 共同证明。
 
@@ -75,6 +76,7 @@ Admin 当前结构证据：
 - `src/common` 只保留真正跨模块基础能力，例如响应、错误、时间、Snowflake、日志、装饰器、通用工具。
 - `src/runtime` 只保留运行时基础能力，例如 HTTP/process/Docker adapter、runtime evidence、health。
 - 删除或合并迁移后无引用的重复类型、重复常量、临时兼容胶水、空目录和纯转发文件。
+- 对每个 API 模块执行瘦身扫描，输出删除、合并、保留和不确定项的证据；Admin/Auth、Blog、WordPress、Asset、Runtime/Common、QQBot、NapCat、Plugin Platform、插件目录全部适用。
 
 ### Admin
 
@@ -87,6 +89,7 @@ Admin 当前结构证据：
   - QQBot Plugin Platform。
   - NapCat 登录与设备。
 - QQBot 页面按 Core、Plugin Platform、NapCat 三条边界整理状态和组件，避免账号页、插件页、登录页各自复制状态标签、进度文案、错误归一化和请求处理。
+- System、Blog、WordPress、Asset 页面也要做同样瘦身：清理无引用 caller、重复请求包装、重复表格列定义、过时类型、无路由页面、无菜单入口页面和没有复用价值的中间组件。
 - 插件管理、NapCat 登录进度、QQBot 账号/命令/规则/消息/发送队列现有功能保持一致。
 - 清理无引用组件、重复枚举、过时类型、临时兼容 caller 和只包一层的无意义函数。
 
@@ -173,6 +176,48 @@ apps/web-antdv-next/src/
 
 Admin 允许沿用现有 Vben/Antdv/Vue TSX 组织方式，但状态文案、状态 tag、SSE 进度映射、插件操作按钮和 API 错误解析必须抽到可复用边界。
 
+## 全模块瘦身门禁
+
+瘦身门禁和目录收敛同级，不能作为后续优化延期。每个模块迁移任务都必须同时回答三件事：删掉了什么，合并了什么，为什么保留。
+
+### API 瘦身范围
+
+每个 API 域都要执行：
+
+- Admin/Auth/Platform Config：清理旧 guard/module 转发、重复 DTO、无菜单入口 controller、过时 example、重复 dict/component/notice 类型。
+- Blog：清理旧 article/term/theme 类型重复、只为旧路径存在的 service wrapper、无引用 Markdown helper。
+- WordPress：清理重复远端 DTO、旧 REST fallback 胶水中无测试保护的分支、无引用 sync helper。
+- Asset/MinIO：清理旧 `minio` 命名遗留中只表达路径而不表达资产域的 wrapper；保留对外路由兼容，但内部命名收敛到 asset。
+- Runtime/Common：清理模块私有工具误放 common 的代码；common 只保留跨两个以上业务域复用且有当前引用的能力。
+- QQBot Core：清理旧 registry、旧状态别名、重复权限/发送/消息类型和只转发旧服务的 shell。
+- NapCat：清理重复登录状态映射、重复 Docker 环境拼装、过期 QR/captcha/new-device 兼容分支；保留已验证的设备持久化和安全校验语义。
+- Plugin Platform：清理旧 `@/qqbot/plugin` 平台依赖、重复 manifest/operation 类型、绕过 SDK 的直接调用。
+- 现有插件：BangDream、FF14 Market、FFLogs、Repeater 都要扫内部无用 bucket、重复 provider、重复 layout/theme/helper、过期 legacy key 胶水和直接 HTTP 绕过。
+
+API 瘦身完成证据：
+
+- 每个旧根删除前后都有 `rg` 引用扫描。
+- 删除文件必须有无引用证据；反射、Nest DI、SQL seed、manifest 或外部路由入口必须用测试或 smoke 证明。
+- `src/common` 新增或保留的能力必须至少被两个业务域引用，单模块私有能力迁回模块内。
+- 没有仅做旧路径转发的 module/controller/service。
+
+### Admin 瘦身范围
+
+Admin 瘦身覆盖所有相关功能域：
+
+- System：登录、菜单、权限、用户、角色、部门、字典、通知、设置页面清理重复类型、重复表格配置、旧路由残留和无入口页面。
+- Blog/WordPress/Asset：清理重复 caller、重复列表状态、重复上传/下载/导入状态、无引用组件和旧 API 类型。
+- QQBot Core：账号、命令、规则、消息、权限、发送队列共享状态标签、错误解析和表格动作。
+- Plugin Platform：插件安装、启用、禁用、配置、健康、事件、账号绑定共享操作状态和表单模型。
+- NapCat：设备、登录 session、验证码、新设备二维码和 SSE 进度共享中文状态映射。
+
+Admin 瘦身完成证据：
+
+- `rg` 证明删除的 caller、组件、类型没有引用。
+- 菜单、路由和页面文件一致；不存在有路由无页面、有页面无入口且无测试覆盖的旧页面。
+- 重复状态文案和 tag 映射收敛到共享模块，System、Blog/Asset、QQBot/Plugin/NapCat 各自不复制同一套逻辑。
+- Admin typecheck 和关键页面 smoke 证明功能保持一致。
+
 ## 清理分类标准
 
 每个待处理文件必须归类后再改：
@@ -247,15 +292,17 @@ Admin 允许沿用现有 Vben/Antdv/Vue TSX 组织方式，但状态文案、状
 - BangDream、FF14 Market、FFLogs、Repeater 插件内部扫描无用 bucket、重复 provider、旧 key 胶水和直接 HTTP 绕过。
 - `legacyKeys` 只作为外部数据兼容语义保留；不能成为保留旧源码根的理由。
 
-### 6. Admin QQBot 全域瘦身
+### 6. Admin 全域瘦身
 
-整理 Admin QQBot 管理面：
+整理 Admin 管理面，不只整理 QQBot：
 
+- System 管理：登录、菜单、权限、用户、角色、部门、字典、通知、设置。
+- Blog/WordPress/Asset 管理：文章、术语、主题配置、远端同步、上传下载和对象引用。
 - Core 管理：账号、命令、规则、消息、权限、发送队列。
 - Plugin Platform：插件安装、启用、禁用、配置、健康、事件、账号绑定。
 - NapCat：设备身份、登录 session、验证码、新设备二维码、扫码/确认/成功/失败进度。
-- 抽取共享状态映射、tag 渲染、SSE 进度解析、API 错误归一化。
-- 删除无引用页面、组件、重复类型和临时兼容函数。
+- 抽取共享状态映射、tag 渲染、SSE 进度解析、API 错误归一化、表格动作模型和上传/导入状态。
+- 删除全域无引用页面、组件、重复类型和临时兼容函数。
 
 ### 7. 旧根删除与最终验证
 
@@ -279,7 +326,7 @@ Admin 允许沿用现有 Vben/Antdv/Vue TSX 组织方式，但状态文案、状
 3. `refactor: 收敛Blog WordPress Asset模块`。
 4. `refactor: 收敛QQBot核心与NapCat模块`。
 5. `refactor: 收敛QQBot插件平台与现有插件`。
-6. `refactor: 收敛Admin QQBot管理边界`。
+6. `refactor: 收敛Admin全域管理边界`。
 7. `test: 完成架构收敛验证闭环`。
 
 实际执行时可按风险拆得更细，但每个提交都必须满足：
@@ -295,7 +342,8 @@ Admin 允许沿用现有 Vben/Antdv/Vue TSX 组织方式，但状态文案、状
 
 - API 旧根 `src/admin`、`src/blog`、`src/minio`、`src/wordpress`、`src/qqbot` 全部不存在。
 - `src/modules/**` 对旧根导入为 0。
-- Admin QQBot/插件/NapCat 页面和 caller 完成边界瘦身，没有重复进度文案和明显无引用旧代码。
+- API 全模块完成瘦身门禁，Admin/Auth、Blog、WordPress、Asset、Runtime/Common、QQBot、NapCat、Plugin Platform 和现有插件没有只为旧结构存在的无引用旧代码。
+- Admin 全域页面和 caller 完成边界瘦身，System、Blog/WordPress/Asset、QQBot/插件/NapCat 没有重复状态文案、重复请求胶水和明显无引用旧代码。
 - 现有 API 路由和 Admin 功能保持一致。
 - 插件平台和现有插件仍可安装、启用、执行、查看健康和运行事件。
 - NapCat 登录链路仍覆盖设备持久化、验证码、新设备验证、手动 QR fallback 和中文进度。
@@ -310,6 +358,7 @@ Admin 允许沿用现有 Vben/Antdv/Vue TSX 组织方式，但状态文案、状
 - 结构测试的 RED/GREEN 步骤和精确文件路径。
 - 每个旧根迁移到哪个目标模块。
 - 每批删除前的引用扫描命令。
+- 每个 API/Admin 模块的全模块瘦身检查项。
 - 每批需要保留的行为 smoke。
 - Admin 共享状态/进度/错误处理抽取位置。
 - 插件和 NapCat 的功能保持验证。

@@ -23,12 +23,7 @@ describe('QQBot plugin registry platform key compatibility', () => {
     const bangdream = createPlugin('bangdream', ['bangDream']);
     const ff14Market = createPlugin('ff14-market', ['ff14Market']);
     const fflogs = createPlugin('fflogs', []);
-    const registry = new QqbotPluginRegistryService(
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+    const registry = new QqbotPluginRegistryService();
 
     registry.register(bangdream);
     registry.register(ff14Market);

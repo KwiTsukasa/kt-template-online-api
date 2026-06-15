@@ -60,4 +60,9 @@ export type {
   QqbotFflogsCharacterSummaryInput,
   QqbotFflogsCharacterSummaryResult,
 } from './domain/fflogs.types';
+export {
+  parseQqbotFflogsCharacterInput,
+  type QqbotFflogsCharacterInputParseOptions,
+  type QqbotFflogsKnownWorldResolver,
+} from './application/fflogs-input-parser';
 export type { FflogsPluginHost } from './infrastructure/integration/fflogs-client';

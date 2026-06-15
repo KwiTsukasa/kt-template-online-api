@@ -1,10 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { Injectable } from '@nestjs/common';
 import { formatKtDateTime, throwVbenError } from '@/common';
 import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
-import { QqbotSendService } from '@/modules/qqbot/core/application/send/qqbot-send.service';
 import type {
   QqbotEventPluginDefinition,
   QqbotNormalizedMessage,
@@ -12,41 +8,18 @@ import type {
   QqbotPluginOperationSummary,
 } from '@/modules/qqbot/core/contract/qqbot.types';
 import {
-  parseQqbotPluginManifest,
-  type QqbotPluginManifest,
-} from '@/modules/qqbot/plugin-platform/domain/manifest';
-import { createPlugin as createRepeaterPlugin } from '@/modules/qqbot/plugins/repeater/src';
+  QqbotBuiltinPluginPackageLoaderService,
+  type QqbotRepeaterPluginPackage,
+} from '@/modules/qqbot/plugin-platform/infrastructure/integration/package/builtin-plugin-package-loader.service';
 
 @Injectable()
 export class QqbotEventPluginRegistryService {
-  private readonly logger = new Logger(QqbotEventPluginRegistryService.name);
-  private readonly repeaterPlugin: ReturnType<typeof createRepeaterPlugin>;
+  private repeaterPlugin?: QqbotRepeaterPluginPackage;
 
   constructor(
     private readonly accountService: QqbotAccountService,
-    private readonly configService: ConfigService,
-    private readonly sendService: QqbotSendService,
-  ) {
-    const manifest = this.loadManifest('repeater');
-    this.repeaterPlugin = createRepeaterPlugin({
-      host: {
-        bindEventPlugin: (selfId, pluginKey) =>
-          this.accountService
-            .bindEventPlugin(selfId, pluginKey)
-            .then(() => undefined),
-        getBoundEventPluginKeys: (selfId) =>
-          this.accountService.getBoundEventPluginKeys(selfId),
-        getConfig: (key) => this.configService.get(key),
-        sendText: (input) => this.sendService.sendText(input as any),
-        unbindEventPlugin: (selfId, pluginKey) =>
-          this.accountService
-            .unbindEventPlugin(selfId, pluginKey)
-            .then(() => undefined),
-        warn: (message) => this.logger.warn(message),
-      },
-      manifest,
-    });
-  }
+    private readonly builtinPluginLoader: QqbotBuiltinPluginPackageLoaderService,
+  ) {}
 
   listDefinitions(pluginKey?: string): QqbotEventPluginDefinition[] {
     return this.getDefinitions(pluginKey);
@@ -60,7 +33,7 @@ export class QqbotEventPluginRegistryService {
       accounts
         .filter((account): account is NonNullable<typeof account> => !!account)
         .map((account) =>
-          this.repeaterPlugin.getSummary({
+          this.getRepeaterPlugin().getSummary({
             accountName: account.name,
             connectStatus: account.connectStatus,
             selfId: account.selfId,
@@ -95,13 +68,13 @@ export class QqbotEventPluginRegistryService {
   }
 
   async dispatchMessage(message: QqbotNormalizedMessage) {
-    return this.repeaterPlugin.handleMessage(message);
+    return this.getRepeaterPlugin().handleMessage(message);
   }
 
   async bind(pluginKey: string, selfId: string) {
     this.assertPlugin(pluginKey);
     if (pluginKey === 'repeater') {
-      return this.repeaterPlugin.bind(selfId);
+      return this.getRepeaterPlugin().bind(selfId);
     }
     await this.accountService.bindEventPlugin(selfId, pluginKey);
     return true;
@@ -110,7 +83,7 @@ export class QqbotEventPluginRegistryService {
   async unbind(pluginKey: string, selfId: string) {
     this.assertPlugin(pluginKey);
     if (pluginKey === 'repeater') {
-      return this.repeaterPlugin.unbind(selfId);
+      return this.getRepeaterPlugin().unbind(selfId);
     }
     await this.accountService.unbindEventPlugin(selfId, pluginKey);
     return true;
@@ -122,30 +95,14 @@ export class QqbotEventPluginRegistryService {
   }
 
   private getDefinitions(pluginKey?: string): QqbotEventPluginDefinition[] {
-    const definitions = [this.repeaterPlugin.getDefinition()];
+    const definitions = [this.getRepeaterPlugin().getDefinition()];
     return pluginKey
       ? definitions.filter((definition) => definition.key === pluginKey)
       : definitions;
   }
 
-  private loadManifest(pluginKey: string): QqbotPluginManifest {
-    const pluginRoot = this.resolvePluginRoot(pluginKey);
-    return parseQqbotPluginManifest(
-      readJsonFile(join(pluginRoot, 'plugin.json')),
-      { pluginRoot },
-    );
+  private getRepeaterPlugin() {
+    this.repeaterPlugin ||= this.builtinPluginLoader.loadRepeaterPlugin();
+    return this.repeaterPlugin;
   }
-
-  private resolvePluginRoot(pluginKey: string) {
-    const sourceRoot = join(
-      process.cwd(),
-      `src/modules/qqbot/plugins/${pluginKey}`,
-    );
-    if (existsSync(join(sourceRoot, 'plugin.json'))) return sourceRoot;
-    return join(__dirname, `../../../plugins/${pluginKey}`);
-  }
-}
-
-function readJsonFile<T = unknown>(filePath: string) {
-  return JSON.parse(readFileSync(filePath, 'utf8')) as T;
 }

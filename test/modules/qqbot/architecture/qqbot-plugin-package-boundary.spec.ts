@@ -53,6 +53,29 @@ describe('QQBot plugin package boundary', () => {
     ).toBe(false);
   });
 
+  it('does not hard-code built-in plugin packages in platform application services', () => {
+    const applicationFiles = collectTsFiles(
+      join(repoRoot, 'src/modules/qqbot/plugin-platform/application'),
+    );
+
+    const violations = applicationFiles.flatMap((filePath) => {
+      const source = readFileSync(filePath, 'utf8');
+      const file = toRepoPath(filePath);
+      return [
+        source.includes('@/modules/qqbot/plugins/')
+          ? `${file} :: concrete plugin import`
+          : '',
+        /from ['"]node:fs['"]|from ['"]fs['"]|require\(['"](?:node:)?fs['"]\)/.test(
+          source,
+        )
+          ? `${file} :: direct host file IO`
+          : '',
+      ].filter(Boolean);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
   it('uses only approved built-in plugin package keys as directory names', () => {
     const pluginDirs = readdirSync(pluginRoot)
       .filter((name) => statSync(join(pluginRoot, name)).isDirectory())

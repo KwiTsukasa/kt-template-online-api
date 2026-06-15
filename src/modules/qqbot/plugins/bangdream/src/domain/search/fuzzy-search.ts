@@ -22,9 +22,28 @@ const KEYWORD_PATTERN = /["“”『』「」]([^"“”『』「」]+)["“”�
 const QUOTE_EDGE_PATTERN = /^["“”『』「」]|["“”『』「」]$/g;
 const RESERVED_MATCH_KEYS = new Set(['_number', '_relationStr', '_all']);
 
-export const config: FuzzySearchConfig =
-  searchDictionaryRepository.loadConfig();
-const ruleRegistry = createDefaultFuzzySearchRuleRegistry(config);
+let cachedConfig: FuzzySearchConfig | undefined;
+let cachedRuleRegistry:
+  | ReturnType<typeof createDefaultFuzzySearchRuleRegistry>
+  | undefined;
+
+export const config = new Proxy({} as FuzzySearchConfig, {
+  get(_target, key: string) {
+    return getFuzzySearchConfig()[key];
+  },
+}) as FuzzySearchConfig;
+
+function getFuzzySearchConfig() {
+  cachedConfig ??= searchDictionaryRepository.loadConfig();
+  return cachedConfig;
+}
+
+function getRuleRegistry() {
+  cachedRuleRegistry ??= createDefaultFuzzySearchRuleRegistry(
+    getFuzzySearchConfig(),
+  );
+  return cachedRuleRegistry;
+}
 
 /**
  * 判断对象是否包含指定自有属性。
@@ -86,7 +105,7 @@ export function fuzzySearch(keyword: string): FuzzySearchResult {
   const push = appendTo(matches);
 
   for (const rawKeyword of extractKeywords(keyword)) {
-    ruleRegistry.match(createFuzzySearchKeyword(rawKeyword), push);
+    getRuleRegistry().match(createFuzzySearchKeyword(rawKeyword), push);
   }
 
   return matches;

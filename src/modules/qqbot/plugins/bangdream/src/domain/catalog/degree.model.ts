@@ -1,6 +1,6 @@
 import { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model';
 import { Canvas, Image, loadImage } from 'skia-canvas';
-import mainAPI from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import bangdreamCatalogCache from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 import { readJSONFromBuffer } from '@/modules/qqbot/plugins/bangdream/src/domain/common/model-utils';
 import { degreeResourceRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/degree-resource.repository';
 
@@ -20,7 +20,7 @@ export class Degree {
    */
   constructor(degreeId) {
     this.degreeId = degreeId;
-    const degreeData = mainAPI['degrees'][degreeId.toString()];
+    const degreeData = bangdreamCatalogCache['degrees'][degreeId.toString()];
     if (degreeData == undefined) {
       this.isExist = false;
       return;

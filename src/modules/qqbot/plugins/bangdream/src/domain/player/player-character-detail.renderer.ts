@@ -4,7 +4,7 @@ import { drawList } from '@/modules/qqbot/plugins/bangdream/src/theme/list-frame
 import { resizeImage } from '@/modules/qqbot/plugins/bangdream/src/theme/image-stack';
 import { drawTextWithImages } from '@/modules/qqbot/plugins/bangdream/src/theme/canvas-text';
 import { Character } from '@/modules/qqbot/plugins/bangdream/src/domain/character/character.model';
-import mainAPI from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import bangdreamCatalogCache from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 import {
   createCharacterDetailIconSpec,
   createCharacterDetailItemLayout,
@@ -69,7 +69,7 @@ async function drawCharacterInList(
 export async function drawCharacterRankInList(player: Player, key?: string) {
   const characterRankMap = player.profile.userCharacterRankMap?.entries;
   const CharacterDetailsInListOptions = {};
-  for (const i in mainAPI['characters']) {
+  for (const i in bangdreamCatalogCache['characters']) {
     if (characterRankMap[i] != undefined) {
       CharacterDetailsInListOptions[i] = [`${characterRankMap[i].rank}`];
     } else {

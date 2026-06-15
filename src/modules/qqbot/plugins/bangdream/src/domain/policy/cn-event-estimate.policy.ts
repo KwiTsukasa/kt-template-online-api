@@ -1,4 +1,4 @@
-import { bangDreamMainDataRepository } from '@/modules/qqbot/plugins/bangdream/src/application/main-data.repository';
+import { bangdreamCatalogRepository } from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-repository';
 import { stringToNumberArray } from '@/modules/qqbot/plugins/bangdream/src/domain/common/model-utils';
 import { BangDreamServerId as Server } from '@/modules/qqbot/plugins/bangdream/src/domain/common/bangdream-protocol';
 import {
@@ -42,7 +42,7 @@ export interface CnEventEstimateCalculationContext {
 export function getBangDreamEventSchedule(
   eventId: number,
 ): BangDreamEventSchedule | null {
-  const eventData = bangDreamMainDataRepository.getEntity<Record<string, any>>(
+  const eventData = bangdreamCatalogRepository.getEntity<Record<string, any>>(
     'events',
     eventId,
   );
@@ -64,7 +64,7 @@ export function getPresentBangDreamEventId(
   server: number,
   time = Date.now(),
 ): number | null {
-  const eventIds = bangDreamMainDataRepository.getNumericIds('events');
+  const eventIds = bangdreamCatalogRepository.getNumericIds('events');
   const activeEventIds: number[] = [];
   let latestEndedEventId: number | null = null;
   let latestEndedAt = 0;

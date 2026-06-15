@@ -35,7 +35,9 @@ describe('BangDream rewritten plugin parity', () => {
       'plugin.json',
       'src/index.ts',
       'src/application/bangdream-command-context.ts',
-      'src/application/hook/hook-registry.ts',
+      'src/application/catalog/bangdream-catalog-cache.ts',
+      'src/application/catalog/bangdream-catalog-repository.ts',
+      'src/application/execution/operation-lifecycle.ts',
       'src/operations/song-search',
       'src/operations/song-chart',
       'src/operations/song-random',
@@ -59,9 +61,10 @@ describe('BangDream rewritten plugin parity', () => {
       'src/domain/player',
       'src/domain/cutoff',
       'src/domain/catalog',
-      'src/domain/common/qqbot-bangdream.types.ts',
+      'src/domain/common/bangdream.types.ts',
       'src/infrastructure/integration',
       'src/infrastructure/storage',
+      'src/infrastructure/storage/remote-resource.client.ts',
       'src/config',
       'src/config/dictionary',
       'src/assets',
@@ -147,17 +150,48 @@ describe('BangDream rewritten plugin parity', () => {
       ).toBe(false);
     }
 
-    for (const removedPath of [
+    const removedPaths = [
+      'src/application/hook/hook-registry.ts',
+      'src/application/main-data-store.ts',
+      'src/application/main-data.repository.ts',
       'src/application/bangdream-renderer.facade.ts',
       'src/application/bangdream-application.service.ts',
       'src/application/bangdream-context.ts',
       'src/application/bangdream-operation-runtime.ts',
       'src/application/operation-pipeline.ts',
+      'src/infrastructure/storage/file-cache.client.ts',
       'src/operations/operation-executor.ts',
       'src/domain/common/bangdream-constants.ts',
-      'src/qqbot-bangdream.types.ts',
-    ]) {
-      expect(existsSync(join(newBangDreamRoot, removedPath))).toBe(false);
-    }
+      `src/qqbot-${'bangdream'}.types.ts`,
+    ];
+    const existingRemovedPaths = removedPaths.filter((removedPath) =>
+      existsSync(join(newBangDreamRoot, removedPath)),
+    );
+
+    expect(existingRemovedPaths).toEqual([]);
+  });
+
+  it('does not reference forbidden old BangDream bucket names from runtime source', () => {
+    const forbiddenFragments = [
+      'application/hook/hook-registry',
+      'application/main-data-store',
+      'application/main-data.repository',
+      'infrastructure/storage/file-cache.client',
+    ];
+    const runtimeFiles = [
+      'src/index.ts',
+      'src/application/bangdream-command-context.ts',
+      'src/infrastructure/storage/asset-cache.client.ts',
+      'src/infrastructure/integration/api-cache.client.ts',
+    ];
+
+    const violations = runtimeFiles.flatMap((runtimeFile) => {
+      const source = readFileSync(join(newBangDreamRoot, runtimeFile), 'utf8');
+      return forbiddenFragments
+        .filter((fragment) => source.includes(fragment))
+        .map((fragment) => `${runtimeFile} -> ${fragment}`);
+    });
+
+    expect(violations).toEqual([]);
   });
 });

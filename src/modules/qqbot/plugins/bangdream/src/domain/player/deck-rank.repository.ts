@@ -1,13 +1,13 @@
 import * as path from 'node:path';
 
-import { bangDreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
+import { bangdreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
 import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bangdream-data-provider';
 import { assetsRootPath } from '@/modules/qqbot/plugins/bangdream/src/config/runtime-config';
 import { readBangDreamAsset } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
 
 export class DeckRankResourceRepository {
   constructor(
-    private readonly provider: BangDreamDataProvider = bangDreamBestdoriProvider,
+    private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
     private readonly localRankRootPath: string = path.join(
       assetsRootPath,
       'Rank',

@@ -1,15 +1,15 @@
 import { Gacha } from '@/modules/qqbot/plugins/bangdream/src/domain/gacha/gacha.model';
 import {
-  bangDreamMainDataRepository,
-  type BangDreamMainDataCollection,
-} from '@/modules/qqbot/plugins/bangdream/src/application/main-data.repository';
+  bangdreamCatalogRepository,
+  type BangDreamCatalogCollection,
+} from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-repository';
 
 export class GachaRepository {
   /**
    * 获取卡池主数据集合。
    */
-  getSource(): BangDreamMainDataCollection {
-    return bangDreamMainDataRepository.getCollection('gacha');
+  getSource(): BangDreamCatalogCollection {
+    return bangdreamCatalogRepository.getCollection('gacha');
   }
 
   /**

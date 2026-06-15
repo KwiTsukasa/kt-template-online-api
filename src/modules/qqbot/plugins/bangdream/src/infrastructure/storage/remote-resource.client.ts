@@ -36,7 +36,7 @@ function rememberNotFound(url: string, statusCode?: number) {
   if (statusCode === 404) errorUrlCache[url] = Date.now();
 }
 
-export async function download(
+export async function fetchRemoteResourceBuffer(
   url: string,
   _directory?: string,
   _fileName?: string,
@@ -66,7 +66,7 @@ export async function download(
   }
 }
 
-export async function getJsonAndSave<T = object>(
+export async function fetchRemoteResourceJson<T = object>(
   url: string,
   _directory?: string,
   _fileName?: string,

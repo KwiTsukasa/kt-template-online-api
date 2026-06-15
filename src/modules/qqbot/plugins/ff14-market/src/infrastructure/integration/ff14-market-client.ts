@@ -1,14 +1,14 @@
 import {
-  buildQqbotFf14MarketCatalog,
-  buildQqbotFf14MarketCatalogFromTree,
+  buildFf14MarketCatalog,
+  buildFf14MarketCatalogFromTree,
   QQBOT_FF14_MARKET_DICT_CODES,
-  resolveQqbotFf14MarketTarget,
+  resolveFf14MarketTarget,
 } from '../../domain/ff14-worlds';
 import { resolveFf14MarketConfig } from '../../config/ff14-market-config';
 import type {
   Ff14HttpMethod,
-  QqbotFf14PriceResult,
-  QqbotFf14ResolvedItem,
+  Ff14PriceResult,
+  Ff14ResolvedItem,
   UniversalisListing,
   UniversalisMarketResponse,
   XivapiSearchItem,
@@ -54,7 +54,7 @@ export class Ff14MarketClient {
     item?: string;
     itemId?: number | string;
     language?: string;
-  }): Promise<QqbotFf14ResolvedItem> {
+  }): Promise<Ff14ResolvedItem> {
     const language = this.normalizeXivapiLanguage(params.language);
     const itemId = Number(params.itemId || params.item);
     if (Number.isInteger(itemId) && itemId > 0) {
@@ -84,7 +84,7 @@ export class Ff14MarketClient {
     language?: string;
     region?: string;
     world?: string;
-  }): Promise<QqbotFf14PriceResult> {
+  }): Promise<Ff14PriceResult> {
     const marketTarget = await this.resolveMarketTarget(params);
     const item = await this.resolveItem(params);
     if (item.isUntradable) {
@@ -148,7 +148,7 @@ export class Ff14MarketClient {
     itemId: number,
     language = 'chs',
     displayName?: string,
-  ): Promise<QqbotFf14ResolvedItem> {
+  ): Promise<Ff14ResolvedItem> {
     const normalizedLanguage = this.normalizeXivapiLanguage(language);
     const url = this.buildXivapiUrl(
       `/sheet/Item/${itemId}`,
@@ -171,7 +171,7 @@ export class Ff14MarketClient {
     };
   }
 
-  private buildReplyText(result: Omit<QqbotFf14PriceResult, 'replyText'>) {
+  private buildReplyText(result: Omit<Ff14PriceResult, 'replyText'>) {
     const listingText = result.listings.length
       ? result.listings
           .slice(0, 10)
@@ -243,8 +243,8 @@ export class Ff14MarketClient {
     region?: string;
     world?: string;
   }) {
-    const catalog = await this.getFf14MarketCatalog();
-    return resolveQqbotFf14MarketTarget(catalog, {
+    const catalog = await this.getMarketCatalog();
+    return resolveFf14MarketTarget(catalog, {
       dataCenter: params.dataCenter,
       fallback: this.normalizeWorld(params.world, catalog.defaultRegion),
       region: params.region,
@@ -252,8 +252,8 @@ export class Ff14MarketClient {
     });
   }
 
-  private async getFf14MarketCatalog() {
-    const treeCatalog = buildQqbotFf14MarketCatalogFromTree(
+  async getMarketCatalog() {
+    const treeCatalog = buildFf14MarketCatalogFromTree(
       await this.host.relationTree({
         dictCode: QQBOT_FF14_MARKET_DICT_CODES.region,
       }),
@@ -267,7 +267,7 @@ export class Ff14MarketClient {
       ),
       this.host.getDictItemsByKey(QQBOT_FF14_MARKET_DICT_CODES.world),
     ]);
-    return buildQqbotFf14MarketCatalog({
+    return buildFf14MarketCatalog({
       dataCenters,
       regions,
       worlds,

@@ -1,4 +1,4 @@
-describe('BangDream file cache client', () => {
+describe('BangDream remote resource client', () => {
   beforeEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
@@ -15,15 +15,15 @@ describe('BangDream file cache client', () => {
       '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io'
     );
     configureBangDreamRuntimeIo({ requestArrayBuffer });
-    const { download } =
-      await import('@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/file-cache.client');
+    const { fetchRemoteResourceBuffer } =
+      await import('@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/remote-resource.client');
 
-    await expect(download('https://example.com/card.png')).rejects.toThrow(
-      'timeout of 8000ms exceeded',
-    );
-    await expect(download('https://example.com/card.png')).resolves.toEqual(
-      imageBuffer,
-    );
+    await expect(
+      fetchRemoteResourceBuffer('https://example.com/card.png'),
+    ).rejects.toThrow('timeout of 8000ms exceeded');
+    await expect(
+      fetchRemoteResourceBuffer('https://example.com/card.png'),
+    ).resolves.toEqual(imageBuffer);
     expect(requestArrayBuffer).toHaveBeenCalledTimes(2);
   });
 
@@ -37,15 +37,15 @@ describe('BangDream file cache client', () => {
       '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io'
     );
     configureBangDreamRuntimeIo({ requestArrayBuffer });
-    const { download } =
-      await import('@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/file-cache.client');
+    const { fetchRemoteResourceBuffer } =
+      await import('@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/remote-resource.client');
 
-    await expect(download('https://example.com/missing.png')).rejects.toThrow(
-      'not found',
-    );
-    await expect(download('https://example.com/missing.png')).rejects.toThrow(
-      'errorUrlCache includes url',
-    );
+    await expect(
+      fetchRemoteResourceBuffer('https://example.com/missing.png'),
+    ).rejects.toThrow('not found');
+    await expect(
+      fetchRemoteResourceBuffer('https://example.com/missing.png'),
+    ).rejects.toThrow('errorUrlCache includes url');
     expect(requestArrayBuffer).toHaveBeenCalledTimes(1);
   });
 
@@ -59,15 +59,15 @@ describe('BangDream file cache client', () => {
       '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io'
     );
     configureBangDreamRuntimeIo({ requestArrayBuffer });
-    const { download } =
-      await import('@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/file-cache.client');
+    const { fetchRemoteResourceBuffer } =
+      await import('@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/remote-resource.client');
 
-    await expect(download('https://example.com/missing.svg')).rejects.toThrow(
-      'not found',
-    );
-    await expect(download('https://example.com/missing.svg')).rejects.toThrow(
-      'errorUrlCache includes url',
-    );
+    await expect(
+      fetchRemoteResourceBuffer('https://example.com/missing.svg'),
+    ).rejects.toThrow('not found');
+    await expect(
+      fetchRemoteResourceBuffer('https://example.com/missing.svg'),
+    ).rejects.toThrow('errorUrlCache includes url');
     expect(requestArrayBuffer).toHaveBeenCalledTimes(1);
   });
 });

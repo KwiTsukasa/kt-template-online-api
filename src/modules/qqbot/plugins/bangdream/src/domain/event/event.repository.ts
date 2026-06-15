@@ -1,22 +1,22 @@
 import { Event } from '@/modules/qqbot/plugins/bangdream/src/domain/event/event.model';
 import {
-  bangDreamMainDataRepository,
-  type BangDreamMainDataCollection,
-} from '@/modules/qqbot/plugins/bangdream/src/application/main-data.repository';
+  bangdreamCatalogRepository,
+  type BangDreamCatalogCollection,
+} from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-repository';
 
 export class EventRepository {
   /**
    * 获取活动主数据集合。
    */
-  getSource(): BangDreamMainDataCollection {
-    return bangDreamMainDataRepository.getCollection('events');
+  getSource(): BangDreamCatalogCollection {
+    return bangdreamCatalogRepository.getCollection('events');
   }
 
   /**
    * 获取活动 ID 列表。
    */
   getEventIds(): number[] {
-    return bangDreamMainDataRepository.getNumericIds('events');
+    return bangdreamCatalogRepository.getNumericIds('events');
   }
 
   /**

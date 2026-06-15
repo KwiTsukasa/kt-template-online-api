@@ -40,7 +40,7 @@ function createService(config: Record<string, number | string | undefined>) {
   return { sendService, service };
 }
 
-describe('QqbotRepeaterPluginService risk-control defaults', () => {
+describe('RepeaterPluginService risk-control defaults', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-06-12T00:00:00.000Z'));

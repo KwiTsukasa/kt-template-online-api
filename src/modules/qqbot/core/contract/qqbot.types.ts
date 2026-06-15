@@ -152,12 +152,14 @@ export type QqbotPluginOperationContext = {
 };
 
 export type QqbotPluginOperation<Input = any, Output = any> = {
+  aliases?: string[];
   cacheTtlMs?: number;
   description?: string;
   inputSchema?: Record<string, any>;
   key: string;
   name: string;
   outputSchema?: Record<string, any>;
+  timeoutMs?: number;
   execute: (
     input: Input,
     context: QqbotPluginOperationContext,
@@ -206,6 +208,7 @@ export type QqbotPluginSummary = {
 };
 
 export type QqbotPluginOperationSummary = {
+  aliases?: string[];
   cacheTtlMs?: number;
   description?: string;
   inputSchema?: Record<string, any>;
@@ -213,6 +216,7 @@ export type QqbotPluginOperationSummary = {
   name: string;
   outputSchema?: Record<string, any>;
   pluginKey: string;
+  timeoutMs?: number;
   triggerMode: QqbotPluginTriggerMode;
 };
 

@@ -1,4 +1,5 @@
 export type FflogsManifestOperation = {
+  aliases?: string[];
   cacheTtlMs?: number;
   description?: string;
   handlerName: string;
@@ -6,6 +7,7 @@ export type FflogsManifestOperation = {
   key: string;
   name: string;
   outputSchema?: Record<string, unknown>;
+  timeoutMs?: number;
 };
 
 export type FflogsManifest = {

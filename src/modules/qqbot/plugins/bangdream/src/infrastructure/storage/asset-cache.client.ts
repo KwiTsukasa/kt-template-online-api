@@ -2,7 +2,7 @@ import {
   getCacheDirectory,
   getFileNameFromUrl,
 } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/cache-path';
-import { download } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/file-cache.client';
+import { fetchRemoteResourceBuffer } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/remote-resource.client';
 import { Buffer } from 'buffer';
 import { assetErrorImageBuffer } from '@/modules/qqbot/plugins/bangdream/src/theme/canvas-image';
 import { logger } from '@/modules/qqbot/plugins/bangdream/src/application/bangdream-logger';
@@ -53,7 +53,12 @@ async function downloadFile(
     return await runWithCacheClientRetry({
       action: async () => {
         assetNotExists = false;
-        const data = await download(url, cacheDir, fileName, cacheTime);
+        const data = await fetchRemoteResourceBuffer(
+          url,
+          cacheDir,
+          fileName,
+          cacheTime,
+        );
         const htmlSig = Buffer.from('<!DOCTYPE html>');
         const slice = Buffer.from(data.subarray(0, htmlSig.length));
         if (slice.equals(htmlSig)) {

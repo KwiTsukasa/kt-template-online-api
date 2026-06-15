@@ -12,10 +12,13 @@ import type {
   FflogsReportFight,
   FflogsReportFightMetricsResponse,
   FflogsTokenResponse,
-  QqbotFflogsCharacterSummaryInput,
-  QqbotFflogsCharacterSummaryResult,
-  QqbotFflogsEncounterLogItem,
+  FflogsCharacterSummaryInput,
+  FflogsCharacterSummaryResult,
+  FflogsEncounterLogItem,
 } from '../../domain/fflogs.types';
+import type {
+  FflogsKnownWorldResolver,
+} from '../../application/fflogs-input-parser';
 import { resolveFflogsConfig } from '../../config/fflogs-config';
 import { FflogsOAuthTokenCache } from '../storage/oauth-token-cache';
 
@@ -50,6 +53,9 @@ export type FflogsPluginHost = {
     timeoutMs: number;
     url: URL;
   }) => Promise<T>;
+  resolveKnownWorld?: (
+    value: string,
+  ) => Promise<null | { serverSlug?: string }>;
 };
 
 export class FflogsClient {
@@ -79,8 +85,8 @@ export class FflogsClient {
   }
 
   async getCharacterSummary(
-    params: QqbotFflogsCharacterSummaryInput,
-  ): Promise<QqbotFflogsCharacterSummaryResult> {
+    params: FflogsCharacterSummaryInput,
+  ): Promise<FflogsCharacterSummaryResult> {
     const characterName = `${
       params.characterName || params.character || ''
     }`.trim();
@@ -123,7 +129,7 @@ export class FflogsClient {
     };
 
     const data = await this.requestGraphql<FflogsCharacterSummaryResponse>(
-      `query QqbotFflogsCharacterSummary(
+      `query FflogsCharacterSummary(
         $characterName: String!
         $serverSlug: String!
         $serverRegion: String!
@@ -207,9 +213,27 @@ export class FflogsClient {
     };
   }
 
+  async buildKnownWorldResolver(
+    candidates: string[],
+  ): Promise<FflogsKnownWorldResolver> {
+    const resolved = new Map<string, null | { serverSlug?: string }>();
+    await Promise.all(
+      candidates.map(async (candidate) => {
+        const key = `${candidate || ''}`.trim();
+        if (!key || resolved.has(key)) return;
+        resolved.set(key, await this.resolveKnownWorld(key));
+      }),
+    );
+    return (value: string) => resolved.get(value) || null;
+  }
+
+  async resolveKnownWorld(value: string) {
+    return this.host.resolveKnownWorld?.(value) || null;
+  }
+
   private async getCharacterEncounterLogs(
-    params: QqbotFflogsCharacterSummaryInput,
-  ): Promise<QqbotFflogsCharacterSummaryResult> {
+    params: FflogsCharacterSummaryInput,
+  ): Promise<FflogsCharacterSummaryResult> {
     const characterName = `${
       params.characterName || params.character || ''
     }`.trim();
@@ -238,7 +262,7 @@ export class FflogsClient {
     };
 
     const data = await this.requestGraphql<FflogsCharacterSummaryResponse>(
-      `query QqbotFflogsCharacterEncounterReports(
+      `query FflogsCharacterEncounterReports(
         $characterName: String!
         $serverSlug: String!
         $serverRegion: String!
@@ -402,7 +426,7 @@ export class FflogsClient {
     if (params.encounterLookup.encounterId === undefined) return [];
     const data =
       await this.requestGraphql<FflogsCharacterEncounterRankingsResponse>(
-        `query QqbotFflogsCharacterEncounterRankings(
+        `query FflogsCharacterEncounterRankings(
           $characterName: String!
           $serverSlug: String!
           $serverRegion: String!
@@ -468,7 +492,7 @@ export class FflogsClient {
     damageRank: any,
     healingRank: any,
     encounterLookup: FflogsEncounterLookup,
-  ): QqbotFflogsEncounterLogItem | null {
+  ): FflogsEncounterLogItem | null {
     const code = `${damageRank?.report?.code || ''}`.trim();
     const fightId = this.toOptionalNumber(damageRank?.report?.fightID);
     if (!code || fightId === undefined) return null;
@@ -521,7 +545,7 @@ export class FflogsClient {
     serverName: string;
     serverRegion: string;
     serverSlug: string;
-  }): Promise<QqbotFflogsEncounterLogItem | null> {
+  }): Promise<FflogsEncounterLogItem | null> {
     const { candidate } = params;
     const code = `${candidate.report.code || ''}`.trim();
     const fightId = this.toOptionalNumber(candidate.fight.id);
@@ -531,7 +555,7 @@ export class FflogsClient {
     }
 
     const data = await this.requestGraphql<FflogsReportFightMetricsResponse>(
-      `query QqbotFflogsEncounterFightMetrics(
+      `query FflogsEncounterFightMetrics(
         $code: String!
         $encounterID: Int!
         $fightIDs: [Int]
@@ -760,7 +784,7 @@ export class FflogsClient {
     encounterName: string;
     encounterSuggestions?: string[];
     localizationMaps: FflogsLocalizationMaps;
-    logs: QqbotFflogsEncounterLogItem[];
+    logs: FflogsEncounterLogItem[];
     rankingSuggestions?: string[];
     serverName: string;
     serverRegion: string;
@@ -809,7 +833,7 @@ export class FflogsClient {
   }
 
   private formatEncounterLogLine(
-    item: QqbotFflogsEncounterLogItem,
+    item: FflogsEncounterLogItem,
     index: number,
   ) {
     const status =
@@ -982,7 +1006,7 @@ export class FflogsClient {
         }>;
       };
     }>(
-      `query QqbotFflogsEncounterCatalog {
+      `query FflogsEncounterCatalog {
         worldData {
           zones {
             id
@@ -1259,7 +1283,7 @@ export class FflogsClient {
     )}#fight=${encodeURIComponent(`${fightId}`)}`;
   }
 
-  private normalizeEncounterInput(params: QqbotFflogsCharacterSummaryInput) {
+  private normalizeEncounterInput(params: FflogsCharacterSummaryInput) {
     return `${params.encounterName || params.encounter || ''}`.trim();
   }
 

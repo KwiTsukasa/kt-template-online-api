@@ -16,8 +16,8 @@ import type {
   QqbotAccountQueryDto,
   QqbotAccountUpdateDto,
 } from '../../contract/account/qqbot-account.dto';
-import { QqbotAccountNapcat } from '@/modules/qqbot/napcat/infrastructure/persistence/qqbot-account-napcat.entity';
-import { QqbotNapcatContainer } from '@/modules/qqbot/napcat/infrastructure/persistence/qqbot-napcat-container.entity';
+import { NapcatAccountBinding } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-account-binding.entity';
+import { NapcatContainer } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-container.entity';
 import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
 import {
   QQBOT_DEFAULT_PAGE_NO,
@@ -45,10 +45,10 @@ export class QqbotAccountService {
     private readonly accountRepository: Repository<QqbotAccount>,
     @InjectRepository(QqbotAccountAbility)
     private readonly accountAbilityRepository: Repository<QqbotAccountAbility>,
-    @InjectRepository(QqbotAccountNapcat)
-    private readonly accountNapcatRepository: Repository<QqbotAccountNapcat>,
-    @InjectRepository(QqbotNapcatContainer)
-    private readonly napcatContainerRepository: Repository<QqbotNapcatContainer>,
+    @InjectRepository(NapcatAccountBinding)
+    private readonly accountNapcatRepository: Repository<NapcatAccountBinding>,
+    @InjectRepository(NapcatContainer)
+    private readonly napcatContainerRepository: Repository<NapcatContainer>,
     private readonly napcatContainerService: QqbotNapcatContainerService,
     private readonly toolsService: ToolsService,
     @Optional()
@@ -437,7 +437,7 @@ export class QqbotAccountService {
       .orderBy('binding.isPrimary', 'DESC')
       .addOrderBy('binding.updateTime', 'DESC')
       .getMany();
-    const bindingMap = new Map<string, QqbotAccountNapcat>();
+    const bindingMap = new Map<string, NapcatAccountBinding>();
     for (const binding of bindings) {
       if (!bindingMap.has(binding.accountId)) {
         bindingMap.set(binding.accountId, binding);
@@ -447,7 +447,7 @@ export class QqbotAccountService {
     const containerIds = Array.from(
       new Set(bindings.map((binding) => binding.containerId).filter(Boolean)),
     );
-    const containerMap = new Map<string, QqbotNapcatContainer>();
+    const containerMap = new Map<string, NapcatContainer>();
     if (containerIds.length > 0) {
       const containerBuilder = this.napcatContainerRepository
         .createQueryBuilder('container');
@@ -500,7 +500,7 @@ export class QqbotAccountService {
 
   private async syncNapcatRuntimeState(
     account: QqbotAccount,
-    container?: QqbotNapcatContainer,
+    container?: NapcatContainer,
     options: { autoLogin?: boolean } = {},
   ) {
     const runtimeStatus = await this.getNapcatRuntimeStatus(account, container);
@@ -561,7 +561,7 @@ export class QqbotAccountService {
 
   private async getNapcatRuntimeStatus(
     account: QqbotAccount,
-    container?: QqbotNapcatContainer,
+    container?: NapcatContainer,
   ): Promise<QqbotNapcatRuntimeStatusSnapshot | undefined> {
     if (!container) return undefined;
     const cached = this.toCachedNapcatRuntimeStatus(container);
@@ -600,7 +600,7 @@ export class QqbotAccountService {
   }
 
   private toCachedNapcatRuntimeStatus(
-    container: QqbotNapcatContainer,
+    container: NapcatContainer,
   ): QqbotNapcatRuntimeStatusSnapshot {
     const containerOnline = container.status === 'running';
     const lastError = this.toolsService.toTrimmedString(container.lastError);
@@ -663,7 +663,7 @@ export class QqbotAccountService {
 
   private async tryAutoLogin(
     account: QqbotAccount,
-    container: QqbotNapcatContainer,
+    container: NapcatContainer,
   ) {
     try {
       const result = await this.napcatContainerService.tryAutoLogin(container, {
@@ -693,7 +693,7 @@ export class QqbotAccountService {
 
   private async applyNapcatOfflineState(
     account: QqbotAccount,
-    container: QqbotNapcatContainer,
+    container: NapcatContainer,
     offlineReason: string,
   ) {
     await this.markQqLoginOffline(account.selfId, offlineReason);
@@ -704,7 +704,7 @@ export class QqbotAccountService {
     });
   }
 
-  private getFreshCachedOfflineReason(container: QqbotNapcatContainer) {
+  private getFreshCachedOfflineReason(container: NapcatContainer) {
     if (!this.isFreshRuntimeCheck(container.lastCheckedAt)) return null;
     const reason = this.toolsService.toTrimmedString(container.lastError);
     return this.toolsService.isNapcatOfflineLoginMessage(reason)
@@ -714,7 +714,7 @@ export class QqbotAccountService {
 
   private isRecentConnectNewerThanRuntimeCheck(
     account: QqbotAccount,
-    container: QqbotNapcatContainer,
+    container: NapcatContainer,
   ) {
     const checkedAt = this.toTime(container.lastCheckedAt);
     if (!checkedAt) return false;

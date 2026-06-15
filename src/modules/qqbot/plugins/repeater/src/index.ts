@@ -3,7 +3,7 @@ import type { RepeaterManifest } from './domain/repeater.types';
 import { createRepeaterMessageEventHandler } from './events/message';
 import type { RepeaterPluginHost } from './infrastructure/integration/repeater-host';
 
-export type RepeaterPluginOptions = {
+type RepeaterPluginOptions = {
   host: RepeaterPluginHost;
   manifest: RepeaterManifest;
   now?: () => number;
@@ -30,6 +30,3 @@ export function createPlugin(options: RepeaterPluginOptions) {
     unbind: (selfId: string) => application.unbind(selfId),
   };
 }
-
-export type { RepeaterPluginHost } from './infrastructure/integration/repeater-host';
-export type { RepeaterManifest, RepeaterMessage } from './domain/repeater.types';

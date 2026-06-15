@@ -12,14 +12,14 @@ import {
   fuzzySearch,
   type FuzzySearchResult,
 } from '@/modules/qqbot/plugins/bangdream/src/domain/search/fuzzy-search';
-import mainAPI, {
-  waitForMainDataReady,
-} from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import bangdreamCatalogCache, {
+  waitForBangDreamCatalogReady,
+} from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 import type {
-  QqbotBangDreamCommandInput,
-  QqbotBangDreamCommandOutput,
-  QqbotBangDreamOperationKey,
-} from '@/modules/qqbot/plugins/bangdream/src/domain/common/qqbot-bangdream.types';
+  BangDreamCommandInput,
+  BangDreamCommandOutput,
+  BangDreamOperationKey,
+} from '@/modules/qqbot/plugins/bangdream/src/domain/common/bangdream.types';
 
 const SOURCE_NAME = 'BangDream 内置插件';
 
@@ -58,8 +58,8 @@ export class BangDreamCommandContext {
   }
 
   async checkHealth() {
-    await waitForMainDataReady();
-    const data = mainAPI as { cards?: unknown; songs?: unknown };
+    await waitForBangDreamCatalogReady();
+    const data = bangdreamCatalogCache as { cards?: unknown; songs?: unknown };
     if (!data.songs || !data.cards) {
       throw new Error('BangDream 数据配置未加载');
     }
@@ -79,10 +79,10 @@ export class BangDreamCommandContext {
   }
 
   toImageReply(
-    operationKey: QqbotBangDreamOperationKey,
+    operationKey: BangDreamOperationKey,
     query: string,
     list: Array<Buffer | string>,
-  ): QqbotBangDreamCommandOutput {
+  ): BangDreamCommandOutput {
     const images = list.filter((item): item is Buffer => Buffer.isBuffer(item));
     if (images.length === 0) {
       const message =
@@ -102,7 +102,7 @@ export class BangDreamCommandContext {
   }
 
   getRenderOptions(
-    input: QqbotBangDreamCommandInput,
+    input: BangDreamCommandInput,
     defaults: { useEasyBG?: boolean } = {},
   ) {
     return {
@@ -125,7 +125,7 @@ export class BangDreamCommandContext {
     };
   }
 
-  pickDisplayedServerList(input: QqbotBangDreamCommandInput) {
+  pickDisplayedServerList(input: BangDreamCommandInput) {
     const source =
       input.displayedServerList ||
       this.readConfig(BANGDREAM_TSUGU_ENV_KEYS.displayedServers);
@@ -138,7 +138,7 @@ export class BangDreamCommandContext {
     return servers.length > 0 ? [...new Set(servers)] : defaultServers;
   }
 
-  pickMainServer(input: QqbotBangDreamCommandInput, tokens: string[]): Server {
+  pickMainServer(input: BangDreamCommandInput, tokens: string[]): Server {
     const explicit = this.firstDefined(
       input.mainServer,
       input.serverName,
@@ -171,24 +171,24 @@ export class BangDreamCommandContext {
     return server === undefined ? undefined : (server as Server);
   }
 
-  requireText(input: QqbotBangDreamCommandInput, message: string) {
+  requireText(input: BangDreamCommandInput, message: string) {
     const text = this.pickText(input);
     if (!text) throw new Error(message);
     return text;
   }
 
-  pickText(input: QqbotBangDreamCommandInput) {
+  pickText(input: BangDreamCommandInput) {
     return `${input.query || input.text || input.raw || ''}`.trim();
   }
 
-  getTokens(input: QqbotBangDreamCommandInput) {
+  getTokens(input: BangDreamCommandInput) {
     if (Array.isArray(input.args)) {
       return input.args.map((item) => `${item}`.trim()).filter(Boolean);
     }
     return this.pickText(input).split(/\s+/).filter(Boolean);
   }
 
-  firstToken(input: QqbotBangDreamCommandInput) {
+  firstToken(input: BangDreamCommandInput) {
     return this.getTokens(input)[0];
   }
 

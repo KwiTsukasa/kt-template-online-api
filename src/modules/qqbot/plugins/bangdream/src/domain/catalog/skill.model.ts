@@ -1,4 +1,4 @@
-import mainAPI from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import bangdreamCatalogCache from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 
 export class Skill {
   skillId: number;
@@ -18,13 +18,13 @@ export class Skill {
    */
   constructor(skillId: number) {
     this.skillId = skillId;
-    if (mainAPI['skills'][this.skillId.toString()] == undefined) {
+    if (bangdreamCatalogCache['skills'][this.skillId.toString()] == undefined) {
       this.isExist = false;
       return;
     }
     this.isExist = true;
     this.skillId = this.skillId;
-    this.data = mainAPI['skills'][this.skillId.toString()];
+    this.data = bangdreamCatalogCache['skills'][this.skillId.toString()];
     this.simpleDescription = this.data['simpleDescription'];
     this.description = this.data['description'];
     this.duration = this.data['duration'];

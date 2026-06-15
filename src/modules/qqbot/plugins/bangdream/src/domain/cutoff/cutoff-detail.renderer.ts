@@ -15,7 +15,7 @@ import { drawCutoffChart } from '@/modules/qqbot/plugins/bangdream/src/domain/cu
 import { serverNameFullList } from '@/modules/qqbot/plugins/bangdream/src/config/runtime-config';
 import { drawEventDataBlock } from '@/modules/qqbot/plugins/bangdream/src/theme/detail-block.renderer';
 import { statusName } from '@/modules/qqbot/plugins/bangdream/src/config/runtime-config';
-import { bangDreamMainDataRepository } from '@/modules/qqbot/plugins/bangdream/src/application/main-data.repository';
+import { bangdreamCatalogRepository } from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-repository';
 import { BangDreamEventStatus } from '@/modules/qqbot/plugins/bangdream/src/domain/common/bangdream-protocol';
 
 /**
@@ -33,7 +33,7 @@ export async function drawCutoffDetail(
   mainServer: Server,
   compress: boolean,
 ): Promise<Array<Buffer | string>> {
-  const eventData = bangDreamMainDataRepository.getEntity<Record<string, any>>(
+  const eventData = bangdreamCatalogRepository.getEntity<Record<string, any>>(
     'events',
     eventId,
   );

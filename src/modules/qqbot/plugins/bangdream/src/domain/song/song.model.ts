@@ -1,6 +1,6 @@
 import { Image, loadImage } from 'skia-canvas';
 import { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model';
-import { bangDreamMainDataRepository } from '@/modules/qqbot/plugins/bangdream/src/application/main-data.repository';
+import { bangdreamCatalogRepository } from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-repository';
 import { stringToNumberArray } from '@/modules/qqbot/plugins/bangdream/src/domain/common/model-utils';
 import {
   BANGDREAM_DIFFICULTY_COLORS,
@@ -99,7 +99,7 @@ export class Song {
    */
   constructor(songId: number) {
     this.songId = songId;
-    const songData = bangDreamMainDataRepository.getEntity<Record<string, any>>(
+    const songData = bangdreamCatalogRepository.getEntity<Record<string, any>>(
       'songs',
       songId,
     );
@@ -131,7 +131,7 @@ export class Song {
     }
 
     //meta数据
-    const metaData = bangDreamMainDataRepository.getEntity<Record<string, any>>(
+    const metaData = bangdreamCatalogRepository.getEntity<Record<string, any>>(
       'meta',
       songId,
     );
@@ -321,7 +321,7 @@ export function getPresentSongList(
   end: number = Date.now(),
 ): Song[] {
   const songList: Array<Song> = [];
-  const songListMain = bangDreamMainDataRepository.getCollection('songs');
+  const songListMain = bangdreamCatalogRepository.getCollection('songs');
 
   for (const songId in songListMain) {
     if (Object.prototype.hasOwnProperty.call(songListMain, songId)) {
@@ -368,7 +368,7 @@ export function getMetaRanking(
   withFever: boolean,
   mainServer: Server,
 ): SongInRank[] {
-  const songIdList = bangDreamMainDataRepository.getNumericIds('meta');
+  const songIdList = bangdreamCatalogRepository.getNumericIds('meta');
   const songRankList: SongInRank[] = [];
   for (let i = 0; i < songIdList.length; i++) {
     const songId = songIdList[i];

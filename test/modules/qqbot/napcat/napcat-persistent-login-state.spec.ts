@@ -65,11 +65,11 @@ describe('NapCat persistent login state contract', () => {
     const sqlSchema = readSource('sql/refactor-v3/00-full-schema.sql');
     const persistenceFiles = existsSync(persistenceRoot)
       ? readSource(
-          'src/modules/qqbot/napcat/infrastructure/persistence/qqbot-account-napcat.entity.ts',
+          'src/modules/qqbot/napcat/infrastructure/persistence/napcat-account-binding.entity.ts',
         ) +
         '\n' +
         readSource(
-          'src/modules/qqbot/napcat/infrastructure/persistence/qqbot-napcat-container.entity.ts',
+          'src/modules/qqbot/napcat/infrastructure/persistence/napcat-container.entity.ts',
         )
       : '';
     const source = `${sqlSchema}\n${persistenceFiles}`;
@@ -206,6 +206,166 @@ describe('NapCat persistent login state contract', () => {
         status: 'failed',
       }),
     );
+  });
+
+  it('recovers captcha, new-device, and cleanup blockers after cache miss', async () => {
+    const loginSessionRepository = createRepository<NapcatLoginSession>();
+    const loginChallengeRepository =
+      createRepository<NapcatLoginChallengeEntity>();
+    const runtimeCleanupRepository = createRepository<NapcatRuntimeCleanup>();
+    const store = new NapcatLoginStateStoreService(
+      loginSessionRepository as any,
+      loginChallengeRepository as any,
+      runtimeCleanupRepository as any,
+    );
+
+    loginSessionRepository.rows.push({
+      expiresAt: new Date(Date.now() + 60_000),
+      sessionKey: 'captcha-recover',
+      sessionPayload: {
+        containerId: 'container-captcha',
+        containerName: 'kt-qqbot-napcat-captcha',
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 60_000,
+        id: 'captcha-recover',
+        mode: 'refresh',
+        passwordMd5: 'md5',
+        status: 'pending',
+        webuiPort: 6099,
+      },
+      status: 'pending',
+    } as any);
+    loginChallengeRepository.rows.push({
+      challengePayload: { expectedSelfId: '10001' },
+      challengeType: 'captcha',
+      challengeUrl: 'https://captcha.example/proof',
+      sessionId: 'captcha-recover',
+      status: 'pending',
+    } as any);
+
+    loginSessionRepository.rows.push({
+      expiresAt: new Date(Date.now() + 60_000),
+      sessionKey: 'new-device-recover',
+      sessionPayload: {
+        containerId: 'container-device',
+        containerName: 'kt-qqbot-napcat-device',
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 60_000,
+        id: 'new-device-recover',
+        mode: 'refresh',
+        status: 'pending',
+        webuiPort: 6099,
+      },
+      status: 'pending',
+    } as any);
+    loginChallengeRepository.rows.push({
+      challengePayload: {
+        deviceVerifyUrl: 'https://ti.qq.com/new-device/verify',
+        newDevicePullQrCodeSig: 'sig-new-device',
+        newDeviceQrcode: 'data:image/png;base64,new-device-qrcode',
+      },
+      challengeType: 'new-device',
+      challengeUrl: 'data:image/png;base64,new-device-qrcode',
+      sessionId: 'new-device-recover',
+      status: 'qr-pending',
+    } as any);
+
+    loginSessionRepository.rows.push({
+      expiresAt: new Date(Date.now() + 60_000),
+      sessionKey: 'cleanup-recover',
+      sessionPayload: {
+        containerId: 'container-cleanup',
+        containerName: 'kt-qqbot-napcat-cleanup',
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 60_000,
+        id: 'cleanup-recover',
+        mode: 'refresh',
+        passwordMd5: 'md5',
+        status: 'pending',
+        webuiPort: 6099,
+      },
+      status: 'pending',
+    } as any);
+    runtimeCleanupRepository.rows.push({
+      cleanupType: 'password-login-env',
+      errorMessage: '运行态密码清理失败',
+      sessionId: 'cleanup-recover',
+      status: 'failed',
+    } as any);
+
+    await expect(store.get('captcha-recover')).resolves.toEqual(
+      expect.objectContaining({
+        captchaUrl: 'https://captcha.example/proof',
+        expectedSelfId: '10001',
+        id: 'captcha-recover',
+        status: 'pending',
+      }),
+    );
+    await expect(store.get('new-device-recover')).resolves.toEqual(
+      expect.objectContaining({
+        deviceVerifyUrl: 'https://ti.qq.com/new-device/verify',
+        newDevicePullQrCodeSig: 'sig-new-device',
+        newDeviceQrcode: 'data:image/png;base64,new-device-qrcode',
+        newDeviceStatus: 'qr-pending',
+      }),
+    );
+    await expect(store.get('cleanup-recover')).resolves.toEqual(
+      expect.objectContaining({
+        errorMessage: '运行态密码清理失败',
+        passwordMd5: undefined,
+        status: 'error',
+      }),
+    );
+  });
+
+  it('does not recover resolved new-device challenges as actionable QR state', async () => {
+    const loginSessionRepository = createRepository<NapcatLoginSession>();
+    const loginChallengeRepository =
+      createRepository<NapcatLoginChallengeEntity>();
+    const store = new NapcatLoginStateStoreService(
+      loginSessionRepository as any,
+      loginChallengeRepository as any,
+    );
+
+    loginSessionRepository.rows.push({
+      expiresAt: new Date(Date.now() + 60_000),
+      sessionKey: 'new-device-failed',
+      sessionPayload: {
+        containerId: 'container-device',
+        containerName: 'kt-qqbot-napcat-device',
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 60_000,
+        id: 'new-device-failed',
+        mode: 'refresh',
+        status: 'pending',
+        webuiPort: 6099,
+      },
+      status: 'pending',
+    } as any);
+    loginChallengeRepository.rows.push({
+      challengePayload: {
+        deviceVerifyUrl: 'https://ti.qq.com/new-device/verify',
+        newDevicePullQrCodeSig: 'stale-sig',
+        newDeviceQrcode: 'data:image/png;base64,stale-qrcode',
+      },
+      challengeType: 'new-device',
+      challengeUrl: 'data:image/png;base64,stale-qrcode',
+      sessionId: 'new-device-failed',
+      status: 'failed',
+    } as any);
+
+    const recovered = await store.get('new-device-failed');
+
+    expect(recovered).toEqual(
+      expect.objectContaining({
+        id: 'new-device-failed',
+        status: 'pending',
+      }),
+    );
+    expect(recovered?.deviceVerifyUrl).toBeUndefined();
+    expect(recovered?.newDevicePullQrCodeSig).toBeUndefined();
+    expect(recovered?.newDeviceQrcode).toBeUndefined();
+    expect(recovered?.newDeviceStatus).toBeUndefined();
   });
 
   it('keeps captcha and new-device challenges recoverable and separate', () => {

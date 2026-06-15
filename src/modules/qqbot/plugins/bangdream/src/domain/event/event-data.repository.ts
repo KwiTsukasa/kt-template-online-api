@@ -1,5 +1,5 @@
 import { Canvas, Image, loadImage } from 'skia-canvas';
-import { bangDreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
+import { bangdreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
 import {
   getServerByPriority,
   Server,
@@ -35,7 +35,7 @@ type RewardWithId = {
 };
 
 export class EventDataRepository {
-  constructor(private readonly provider = bangDreamBestdoriProvider) {}
+  constructor(private readonly provider = bangdreamBestdoriProvider) {}
 
   /**
    * 获取活动远端详情数据。
@@ -268,10 +268,10 @@ export class EventDataRepository {
     const rewardId = this.pickRewardId(event.rankingRewards, 'deco_pins');
     if (rewardId === undefined) return undefined;
 
-    const { bangDreamMainDataRepository } =
-      await import('../../application/main-data.repository');
+    const { bangdreamCatalogRepository } =
+      await import('../../application/catalog/bangdream-catalog-repository');
     const allDeco =
-      bangDreamMainDataRepository.getCollection<Record<string, any>>('deco');
+      bangdreamCatalogRepository.getCollection<Record<string, any>>('deco');
     const decoAssetName = allDeco[rewardId]?.assetBundleName;
     if (!decoAssetName) return undefined;
 

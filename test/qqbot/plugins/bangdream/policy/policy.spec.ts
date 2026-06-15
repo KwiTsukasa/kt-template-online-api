@@ -1,4 +1,4 @@
-jest.mock('@/modules/qqbot/plugins/bangdream/src/application/main-data-store', () => ({
+jest.mock('@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache', () => ({
   __esModule: true,
   default: {},
 }));

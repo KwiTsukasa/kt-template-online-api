@@ -29,4 +29,4 @@ export class BangDreamStaticPatchProvider {
   }
 }
 
-export const bangDreamStaticPatchProvider = new BangDreamStaticPatchProvider();
+export const bangdreamStaticPatchProvider = new BangDreamStaticPatchProvider();

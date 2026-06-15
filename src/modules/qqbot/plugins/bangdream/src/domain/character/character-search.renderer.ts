@@ -1,5 +1,5 @@
 import { Character } from '@/modules/qqbot/plugins/bangdream/src/domain/character/character.model';
-import mainAPI from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import bangdreamCatalogCache from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 import {
   match,
   FuzzySearchResult,
@@ -31,7 +31,7 @@ export async function drawCharacterList(
 ): Promise<Array<Buffer | string>> {
   //计算模糊搜索结果
   const tempCharacterList: Array<Character> = []; //最终输出的角色列表
-  const characterIdList: Array<number> = Object.keys(mainAPI['characters']).map(
+  const characterIdList: Array<number> = Object.keys(bangdreamCatalogCache['characters']).map(
     Number,
   ); //所有卡牌ID列表
   for (let i = 0; i < characterIdList.length; i++) {

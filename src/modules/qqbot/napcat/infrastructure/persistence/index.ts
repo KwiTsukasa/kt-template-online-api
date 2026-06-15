@@ -4,8 +4,6 @@ import { NapcatDeviceIdentity } from './napcat-device-identity.entity';
 import { NapcatLoginChallengeEntity } from './napcat-login-challenge.entity';
 import { NapcatLoginSession } from './napcat-login-session.entity';
 import { NapcatRuntimeCleanup } from './napcat-runtime-cleanup.entity';
-import { QqbotAccountNapcat } from './qqbot-account-napcat.entity';
-import { QqbotNapcatContainer } from './qqbot-napcat-container.entity';
 
 export const NAPCAT_RUNTIME_DOMAIN_CONTRACT = {
   tables: [
@@ -25,6 +23,4 @@ export const NAPCAT_RUNTIME_ENTITIES = [
   NapcatLoginChallengeEntity,
   NapcatLoginSession,
   NapcatRuntimeCleanup,
-  QqbotAccountNapcat,
-  QqbotNapcatContainer,
 ];

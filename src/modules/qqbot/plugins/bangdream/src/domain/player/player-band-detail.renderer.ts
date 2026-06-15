@@ -5,7 +5,7 @@ import { resizeImage } from '@/modules/qqbot/plugins/bangdream/src/theme/image-s
 import { Band } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/band.model';
 import { drawTextWithImages } from '@/modules/qqbot/plugins/bangdream/src/theme/canvas-text';
 import { starList } from '@/modules/qqbot/plugins/bangdream/src/domain/card/card-rarity.renderer';
-import mainAPI from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import bangdreamCatalogCache from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 import {
   BANGDREAM_DECK_TOTAL_RATING_ID,
   BANGDREAM_STAGE_CHALLENGE_BAND_ID,
@@ -81,7 +81,7 @@ export async function drawPlayerBandRankInList(
 ): Promise<Canvas> {
   const bandRankMap = player.profile.bandRankMap?.entries;
   const BandDetails = {};
-  for (const i in mainAPI['bands']) {
+  for (const i in bangdreamCatalogCache['bands']) {
     if (bandRankMap[i] != undefined) {
       BandDetails[i] = [bandRankMap[i].toString()];
     } else {
@@ -107,7 +107,7 @@ export async function drawPlayerStageChallengeRankInList(
     player.profile.stageChallengeAchievementConditionsMap.entries;
 
   const BandDetails = {};
-  for (const band in mainAPI['bands']) {
+  for (const band in bangdreamCatalogCache['bands']) {
     const level =
       stageChallengeAchievementConditionsMap?.[
         BANGDREAM_STAGE_CHALLENGE_BAND_ID[band]
@@ -147,7 +147,7 @@ export async function drawPlayerDeckTotalRatingInList(
   const userDeckTotalRatingMap = player.profile.userDeckTotalRatingMap.entries;
   const BandDetails = {};
 
-  for (const i in mainAPI['bands']) {
+  for (const i in bangdreamCatalogCache['bands']) {
     if (userDeckTotalRatingMap[i] != undefined) {
       const rankName = userDeckTotalRatingMap[i].rank;
       let rankId = BANGDREAM_DECK_TOTAL_RATING_ID[rankName];

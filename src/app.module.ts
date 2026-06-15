@@ -17,6 +17,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AssetModule } from './modules/asset/asset.module';
 import { BlogContentModule } from './modules/blog/blog-content.module';
 import { QqbotCoreModule } from './modules/qqbot/core/qqbot-core.module';
+import { QqbotNapcatModule } from './modules/qqbot/napcat/qqbot-napcat.module';
 import { QqbotPluginPlatformModule } from './modules/qqbot/plugin-platform/plugin-platform.module';
 import { WordpressMirrorModule } from './modules/wordpress/wordpress-mirror.module';
 import { RuntimeModule } from './runtime';
@@ -74,6 +75,7 @@ import { RuntimeModule } from './runtime';
     WordpressMirrorModule,
     AssetModule,
     QqbotCoreModule,
+    QqbotNapcatModule,
     QqbotPluginPlatformModule,
   ],
   providers: [

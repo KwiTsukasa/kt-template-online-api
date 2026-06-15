@@ -3,10 +3,10 @@ import {
   type BangDreamCommandContextOptions,
 } from './application/bangdream-command-context';
 import {
-  createBangDreamHookContext,
-  createBangDreamLogHook,
-  BangDreamHookRegistry,
-} from './application/hook/hook-registry';
+  createBangDreamOperationLifecycleContext,
+  createBangDreamOperationLogObserver,
+  BangDreamOperationLifecycle,
+} from './application/execution/operation-lifecycle';
 import {
   configureBangDreamRuntimeIo,
   type BangDreamRuntimeIo,
@@ -16,14 +16,14 @@ import {
   type BangDreamOperationModule,
 } from './operations';
 import type {
-  QqbotBangDreamCommandInput,
-  QqbotBangDreamCommandOutput,
-  QqbotBangDreamOperationHandlerName,
-  QqbotBangDreamOperationKey,
-} from './domain/common/qqbot-bangdream.types';
-import { waitForMainDataReady } from './application/main-data-store';
+  BangDreamCommandInput,
+  BangDreamCommandOutput,
+  BangDreamOperationHandlerName,
+  BangDreamOperationKey,
+} from './domain/common/bangdream.types';
+import { waitForBangDreamCatalogReady } from './application/catalog/bangdream-catalog-cache';
 
-export type BangDreamPluginRuntimeOptions = BangDreamCommandContextOptions & {
+type BangDreamPluginRuntimeOptions = BangDreamCommandContextOptions & {
   description?: string;
   io?: BangDreamRuntimeIo;
   legacyAliases?: string[];
@@ -34,13 +34,15 @@ export type BangDreamPluginRuntimeOptions = BangDreamCommandContextOptions & {
   version?: string;
 };
 
-export type BangDreamManifestOperation = {
+type BangDreamManifestOperation = {
+  aliases?: string[];
   description?: string;
-  handlerName: QqbotBangDreamOperationHandlerName;
+  handlerName: BangDreamOperationHandlerName;
   inputSchema?: Record<string, any>;
-  key: QqbotBangDreamOperationKey;
+  key: BangDreamOperationKey;
   name?: string;
   outputSchema?: Record<string, any>;
+  timeoutMs?: number;
 };
 
 type BangDreamResolvedOperation = BangDreamManifestOperation & {
@@ -50,7 +52,9 @@ type BangDreamResolvedOperation = BangDreamManifestOperation & {
 export function createPlugin(options: BangDreamPluginRuntimeOptions) {
   if (options.io) configureBangDreamRuntimeIo(options.io);
   const context = new BangDreamCommandContext(options);
-  const hookRegistry = new BangDreamHookRegistry([createBangDreamLogHook()]);
+  const lifecycle = new BangDreamOperationLifecycle([
+    createBangDreamOperationLogObserver(),
+  ]);
   const operationsByKey = resolveBangDreamOperations(options.operations);
   const normalizeError =
     options.normalizeError ||
@@ -59,12 +63,12 @@ export function createPlugin(options: BangDreamPluginRuntimeOptions) {
       'BangDream 命令执行失败');
 
   const executeOperation = (
-    operationKey: QqbotBangDreamOperationKey,
-    input: QqbotBangDreamCommandInput,
+    operationKey: BangDreamOperationKey,
+    input: BangDreamCommandInput,
   ) =>
     executeBangDreamOperation({
       context,
-      hookRegistry,
+      lifecycle,
       input,
       normalizeError,
       operationKey,
@@ -98,13 +102,15 @@ export function createPlugin(options: BangDreamPluginRuntimeOptions) {
     legacyKeys: options.legacyAliases,
     name: options.name || 'BangDream 查询',
     operations: options.operations.map((operation) => ({
+      aliases: operation.aliases,
       cacheTtlMs: 60_000,
       description: operation.description,
       inputSchema: operation.inputSchema || getBangDreamInputSchema(),
       key: operation.key,
       name: operation.name || operation.key,
       outputSchema: operation.outputSchema || getBangDreamOutputSchema(),
-      execute: async (input: QqbotBangDreamCommandInput) =>
+      timeoutMs: operation.timeoutMs,
+      execute: async (input: BangDreamCommandInput) =>
         await executeOperation(operation.key, input),
     })),
     version: options.version || '2.0.0',
@@ -134,21 +140,21 @@ function resolveBangDreamOperations(operations: BangDreamManifestOperation[]) {
 
 async function executeBangDreamOperation(options: {
   context: BangDreamCommandContext;
-  hookRegistry: BangDreamHookRegistry;
-  input: QqbotBangDreamCommandInput;
+  lifecycle: BangDreamOperationLifecycle;
+  input: BangDreamCommandInput;
   normalizeError: (error: unknown) => string;
-  operationKey: QqbotBangDreamOperationKey;
-  operationsByKey: Map<QqbotBangDreamOperationKey, BangDreamResolvedOperation>;
-}): Promise<QqbotBangDreamCommandOutput> {
-  const operationContext = createBangDreamHookContext(
+  operationKey: BangDreamOperationKey;
+  operationsByKey: Map<BangDreamOperationKey, BangDreamResolvedOperation>;
+}): Promise<BangDreamCommandOutput> {
+  const operationContext = createBangDreamOperationLifecycleContext(
     options.operationKey,
     options.input,
   );
-  await options.hookRegistry.beforeParse(operationContext);
+  await options.lifecycle.beforeParse(operationContext);
 
   try {
-    operationContext.stage = 'mainData';
-    await waitForMainDataReady();
+    operationContext.stage = 'catalog';
+    await waitForBangDreamCatalogReady();
 
     operationContext.stage = 'operation';
     const operation = options.operationsByKey.get(options.operationKey);
@@ -156,30 +162,23 @@ async function executeBangDreamOperation(options: {
       throw new Error(`BangDream 插件能力不存在：${options.operationKey}`);
     }
     operationContext.handlerName = operation.handlerName;
-    await options.hookRegistry.afterResolve(operationContext);
+    await options.lifecycle.afterResolve(operationContext);
 
     operationContext.stage = 'handler';
-    await options.hookRegistry.beforeRender(operationContext);
+    await options.lifecycle.beforeRender(operationContext);
     const output = await operation.execute(options.input, options.context);
 
     operationContext.stage = 'output';
     operationContext.imageCount = output.imageCount;
     operationContext.query = output.query || operationContext.query;
-    await options.hookRegistry.afterOutput(operationContext);
+    await options.lifecycle.afterOutput(operationContext);
     return output;
   } catch (error) {
     const message = options.normalizeError(error);
-    await options.hookRegistry.onError(operationContext, message);
+    await options.lifecycle.onError(operationContext, message);
     throw new Error(message);
   }
 }
-
-export type {
-  QqbotBangDreamCommandInput,
-  QqbotBangDreamCommandOutput,
-  QqbotBangDreamOperationHandlerName,
-  QqbotBangDreamOperationKey,
-} from './domain/common/qqbot-bangdream.types';
 
 function getBangDreamInputSchema() {
   return {

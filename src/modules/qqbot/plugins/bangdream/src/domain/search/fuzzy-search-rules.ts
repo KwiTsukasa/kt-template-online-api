@@ -23,7 +23,7 @@ export interface FuzzySearchRule {
   match: (keyword: FuzzySearchKeyword, push: FuzzySearchResultWriter) => void;
 }
 
-export class FuzzySearchRuleRegistry {
+export class FuzzySearchRules {
   constructor(private readonly rules: readonly FuzzySearchRule[]) {}
 
   /**
@@ -61,10 +61,10 @@ export function createFuzzySearchKeyword(
  *
  * @param config - 搜索别名配置。
  */
-export function createDefaultFuzzySearchRuleRegistry(
+export function createDefaultFuzzySearchRules(
   config: FuzzySearchConfig,
 ) {
-  return new FuzzySearchRuleRegistry([
+  return new FuzzySearchRules([
     createNumberRule(),
     createLevelRule(),
     createRelationRule(),

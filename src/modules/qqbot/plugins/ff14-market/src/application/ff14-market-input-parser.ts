@@ -1,13 +1,13 @@
-import type { QqbotFf14MarketCatalog } from '../domain/ff14-market.types';
+import type { Ff14MarketCatalog } from '../domain/ff14-market.types';
 import {
-  isQqbotFf14DataCenterName,
-  isQqbotFf14LocationName,
-  isQqbotFf14RegionName,
-  isQqbotFf14WorldName,
-  splitQqbotFf14WorldPath,
+  isFf14DataCenterName,
+  isFf14LocationName,
+  isFf14RegionName,
+  isFf14WorldName,
+  splitFf14WorldPath,
 } from '../domain/ff14-worlds';
 
-export type QqbotFf14MarketPriceInput = {
+export type Ff14MarketPriceInput = {
   dataCenter?: string;
   hq?: boolean;
   item?: string;
@@ -17,10 +17,10 @@ export type QqbotFf14MarketPriceInput = {
   world?: string;
 };
 
-export function parseQqbotFf14MarketPriceInput(
+export function parseFf14MarketPriceInput(
   rawArgs: string,
-  catalog: QqbotFf14MarketCatalog,
-): QqbotFf14MarketPriceInput {
+  catalog: Ff14MarketCatalog,
+): Ff14MarketPriceInput {
   const tokens = rawArgs.split(/\s+/).filter(Boolean);
   const flags = new Map<string, string | true>();
   const positional: string[] = [];
@@ -53,7 +53,7 @@ export function parseQqbotFf14MarketPriceInput(
   );
   let item = positional.join(' ');
 
-  const worldPath = splitQqbotFf14WorldPath(world);
+  const worldPath = splitFf14WorldPath(world);
   if (worldPath.dataCenter && worldPath.world) {
     dataCenter = dataCenter || worldPath.dataCenter;
     region = region || worldPath.region || '';
@@ -71,7 +71,7 @@ export function parseQqbotFf14MarketPriceInput(
   }
   if (item.includes('@')) {
     const [itemName, worldName] = item.split('@');
-    const itemWorldPath = splitQqbotFf14WorldPath(worldName);
+    const itemWorldPath = splitFf14WorldPath(worldName);
     item = itemName.trim();
     dataCenter = dataCenter || itemWorldPath.dataCenter || '';
     region = region || itemWorldPath.region || '';
@@ -90,13 +90,13 @@ export function parseQqbotFf14MarketPriceInput(
 }
 
 function pickTrailingFf14Location(
-  catalog: QqbotFf14MarketCatalog,
+  catalog: Ff14MarketCatalog,
   positional: string[],
 ) {
   const last = positional[positional.length - 1];
-  if (!isQqbotFf14LocationName(catalog, last)) return null;
+  if (!isFf14LocationName(catalog, last)) return null;
 
-  const path = splitQqbotFf14WorldPath(last);
+  const path = splitFf14WorldPath(last);
   if (path.dataCenter && path.world) {
     return {
       dataCenter: path.dataCenter,
@@ -110,11 +110,11 @@ function pickTrailingFf14Location(
   const beforePrevious = positional[positional.length - 3];
   if (
     previous &&
-    isQqbotFf14DataCenterName(catalog, previous) &&
-    isQqbotFf14WorldName(catalog, last)
+    isFf14DataCenterName(catalog, previous) &&
+    isFf14WorldName(catalog, last)
   ) {
     const hasRegion =
-      beforePrevious && isQqbotFf14RegionName(catalog, beforePrevious);
+      beforePrevious && isFf14RegionName(catalog, beforePrevious);
     return {
       dataCenter: previous,
       item: positional.slice(0, hasRegion ? -3 : -2).join(' '),
@@ -125,8 +125,8 @@ function pickTrailingFf14Location(
 
   if (
     previous &&
-    isQqbotFf14RegionName(catalog, previous) &&
-    isQqbotFf14DataCenterName(catalog, last)
+    isFf14RegionName(catalog, previous) &&
+    isFf14DataCenterName(catalog, last)
   ) {
     return {
       dataCenter: last,

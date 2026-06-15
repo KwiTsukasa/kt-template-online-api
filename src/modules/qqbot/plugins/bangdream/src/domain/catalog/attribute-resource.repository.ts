@@ -1,9 +1,9 @@
-import { bangDreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
+import { bangdreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
 import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bangdream-data-provider';
 
 export class AttributeResourceRepository {
   constructor(
-    private readonly provider: BangDreamDataProvider = bangDreamBestdoriProvider,
+    private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
 
   /**

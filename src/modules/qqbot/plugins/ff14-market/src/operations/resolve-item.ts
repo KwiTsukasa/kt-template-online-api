@@ -6,7 +6,11 @@ export function createFf14ResolveItemOperation(
   application: Ff14MarketApplication,
 ) {
   return {
-    execute: (input: Record<string, any>) => application.resolveItem(input),
+    execute: (input: Record<string, any>) =>
+      application.resolveItem({
+        ...input,
+        item: input.item || input.raw || input.text,
+      }),
     inputSchema: {
       properties: {
         item: { description: '物品名称或 ID', type: 'string' },

@@ -877,33 +877,8 @@ CREATE TABLE IF NOT EXISTS qqbot_plugin_runtime_event (
 
 CREATE TABLE IF NOT EXISTS napcat_container (
   id BIGINT NOT NULL PRIMARY KEY,
-  account_id BIGINT NOT NULL,
-  container_name VARCHAR(128) NOT NULL,
-  image_name VARCHAR(255) NOT NULL,
-  status VARCHAR(32) NOT NULL,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_napcat_container_name (container_name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS qqbot_account_napcat (
-  id BIGINT NOT NULL PRIMARY KEY,
-  account_id BIGINT NOT NULL,
-  container_id BIGINT NOT NULL,
-  bind_status VARCHAR(32) NOT NULL DEFAULT 'pending',
-  is_primary TINYINT NOT NULL DEFAULT 1,
-  last_login_at DATETIME NULL,
-  remark VARCHAR(255) NOT NULL DEFAULT '',
-  is_deleted TINYINT NOT NULL DEFAULT 0,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY idx_qqbot_account_napcat_account (account_id, is_deleted),
-  KEY idx_qqbot_account_napcat_container (container_id, is_deleted)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS qqbot_napcat_container (
-  id BIGINT NOT NULL PRIMARY KEY,
-  name VARCHAR(120) NOT NULL,
+  account_id BIGINT NULL,
+  container_name VARCHAR(120) NOT NULL,
   base_url VARCHAR(255) NOT NULL,
   webui_port INT NULL,
   webui_token VARCHAR(255) NULL,
@@ -918,8 +893,9 @@ CREATE TABLE IF NOT EXISTS qqbot_napcat_container (
   is_deleted TINYINT NOT NULL DEFAULT 0,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_qqbot_napcat_container_name (name),
-  KEY idx_qqbot_napcat_container_status (status, is_deleted)
+  UNIQUE KEY uk_napcat_container_name (container_name),
+  KEY idx_napcat_container_status (status, is_deleted),
+  KEY idx_napcat_container_account (account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS napcat_device_identity (
@@ -942,11 +918,16 @@ CREATE TABLE IF NOT EXISTS napcat_account_binding (
   id BIGINT NOT NULL PRIMARY KEY,
   account_id BIGINT NOT NULL,
   container_id BIGINT NOT NULL,
-  device_identity_id BIGINT NOT NULL,
-  status VARCHAR(32) NOT NULL,
+  device_identity_id BIGINT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'pending',
+  is_primary TINYINT NOT NULL DEFAULT 1,
+  last_login_at DATETIME NULL,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  is_deleted TINYINT NOT NULL DEFAULT 0,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_napcat_account_binding_account (account_id)
+  UNIQUE KEY uk_napcat_account_binding_account (account_id),
+  KEY idx_napcat_account_binding_container (container_id, is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS napcat_login_session (

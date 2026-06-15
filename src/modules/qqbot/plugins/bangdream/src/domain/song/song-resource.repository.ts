@@ -1,5 +1,5 @@
 import { assetErrorImageBuffer } from '@/modules/qqbot/plugins/bangdream/src/theme/canvas-image';
-import { bangDreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
+import { bangdreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
 import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bangdream-data-provider';
 import {
   BANGDREAM_DIFFICULTY_NAME_BY_ID,
@@ -31,7 +31,7 @@ function getServerCode(server: Server | undefined): string {
 
 export class SongResourceRepository {
   constructor(
-    private readonly provider: BangDreamDataProvider = bangDreamBestdoriProvider,
+    private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
 
   /**

@@ -1,4 +1,4 @@
-import { bangDreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
+import { bangdreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
 import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bangdream-data-provider';
 
 export type EventStageDataType = 'stages' | 'rotationMusics';
@@ -20,7 +20,7 @@ export type EventStageDataRows<T extends EventStageDataType> =
 
 export class EventStageDataRepository {
   constructor(
-    private readonly provider: BangDreamDataProvider = bangDreamBestdoriProvider,
+    private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
 
   /**

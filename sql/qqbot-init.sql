@@ -40,9 +40,10 @@ CREATE TABLE IF NOT EXISTS `qqbot_account_ability` (
   KEY `idx_qqbot_account_ability_self` (`self_id`, `ability_type`, `is_deleted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `qqbot_napcat_container` (
+CREATE TABLE IF NOT EXISTS `napcat_container` (
   `id` bigint NOT NULL,
-  `name` varchar(120) NOT NULL,
+  `account_id` bigint DEFAULT NULL,
+  `container_name` varchar(120) NOT NULL,
   `base_url` varchar(255) NOT NULL,
   `webui_port` int DEFAULT NULL,
   `webui_token` varchar(255) DEFAULT NULL,
@@ -58,15 +59,34 @@ CREATE TABLE IF NOT EXISTS `qqbot_napcat_container` (
   `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_qqbot_napcat_container_name` (`name`),
-  KEY `idx_qqbot_napcat_container_status` (`status`, `is_deleted`)
+  UNIQUE KEY `uk_napcat_container_name` (`container_name`),
+  KEY `idx_napcat_container_status` (`status`, `is_deleted`),
+  KEY `idx_napcat_container_account` (`account_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `qqbot_account_napcat` (
+CREATE TABLE IF NOT EXISTS `napcat_device_identity` (
+  `id` bigint NOT NULL,
+  `account_id` bigint NOT NULL,
+  `container_id` bigint DEFAULT NULL,
+  `data_dir` varchar(512) NOT NULL,
+  `hostname` varchar(128) NOT NULL,
+  `machine_id_path` varchar(512) NOT NULL,
+  `mac_address` varchar(64) NOT NULL,
+  `verification_status` varchar(32) NOT NULL,
+  `last_login_evidence` json DEFAULT NULL,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_napcat_device_identity_account` (`account_id`),
+  KEY `idx_napcat_device_identity_container` (`container_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `napcat_account_binding` (
   `id` bigint NOT NULL,
   `account_id` bigint NOT NULL,
   `container_id` bigint NOT NULL,
-  `bind_status` varchar(32) NOT NULL DEFAULT 'pending',
+  `device_identity_id` bigint DEFAULT NULL,
+  `status` varchar(32) NOT NULL DEFAULT 'pending',
   `is_primary` tinyint(1) NOT NULL DEFAULT 1,
   `last_login_at` datetime DEFAULT NULL,
   `remark` varchar(255) NOT NULL DEFAULT '',
@@ -74,8 +94,51 @@ CREATE TABLE IF NOT EXISTS `qqbot_account_napcat` (
   `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
-  KEY `idx_qqbot_account_napcat_account` (`account_id`, `is_deleted`),
-  KEY `idx_qqbot_account_napcat_container` (`container_id`, `is_deleted`)
+  UNIQUE KEY `uk_napcat_account_binding_account` (`account_id`),
+  KEY `idx_napcat_account_binding_container` (`container_id`, `is_deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `napcat_login_session` (
+  `id` bigint NOT NULL,
+  `account_id` bigint DEFAULT NULL,
+  `session_key` varchar(128) NOT NULL,
+  `login_stage` varchar(64) NOT NULL,
+  `status` varchar(32) NOT NULL,
+  `progress_message` varchar(255) NOT NULL,
+  `session_payload` json DEFAULT NULL,
+  `expires_at` datetime DEFAULT NULL,
+  `completed_at` datetime DEFAULT NULL,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_napcat_login_session_key` (`session_key`),
+  KEY `idx_napcat_login_session_account` (`account_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `napcat_login_challenge` (
+  `id` bigint NOT NULL,
+  `session_id` bigint NOT NULL,
+  `challenge_type` varchar(64) NOT NULL,
+  `status` varchar(32) NOT NULL,
+  `challenge_url` text,
+  `challenge_payload` json DEFAULT NULL,
+  `resolved_at` datetime DEFAULT NULL,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  KEY `idx_napcat_login_challenge_session` (`session_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `napcat_runtime_cleanup` (
+  `id` bigint NOT NULL,
+  `session_id` bigint NOT NULL,
+  `cleanup_type` varchar(64) NOT NULL,
+  `status` varchar(32) NOT NULL,
+  `error_message` text,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  KEY `idx_napcat_runtime_cleanup_session` (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `qqbot_config` (
@@ -360,141 +423,6 @@ SET @qqbot_sql = (
   FROM information_schema.columns
   WHERE table_schema = DATABASE()
     AND table_name = 'qqbot_account'
-    AND column_name = 'last_error'
-);
-PREPARE qqbot_stmt FROM @qqbot_sql;
-EXECUTE qqbot_stmt;
-DEALLOCATE PREPARE qqbot_stmt;
-
-SET @qqbot_sql = (
-  SELECT IF(
-    COUNT(*) = 0,
-    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `webui_port` int DEFAULT NULL',
-    'SELECT 1'
-  )
-  FROM information_schema.columns
-  WHERE table_schema = DATABASE()
-    AND table_name = 'qqbot_napcat_container'
-    AND column_name = 'webui_port'
-);
-PREPARE qqbot_stmt FROM @qqbot_sql;
-EXECUTE qqbot_stmt;
-DEALLOCATE PREPARE qqbot_stmt;
-
-SET @qqbot_sql = (
-  SELECT IF(
-    COUNT(*) = 0,
-    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `webui_token` varchar(255) DEFAULT NULL',
-    'SELECT 1'
-  )
-  FROM information_schema.columns
-  WHERE table_schema = DATABASE()
-    AND table_name = 'qqbot_napcat_container'
-    AND column_name = 'webui_token'
-);
-PREPARE qqbot_stmt FROM @qqbot_sql;
-EXECUTE qqbot_stmt;
-DEALLOCATE PREPARE qqbot_stmt;
-
-SET @qqbot_sql = (
-  SELECT IF(
-    COUNT(*) = 0,
-    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `image` varchar(255) NOT NULL DEFAULT ''''',
-    'SELECT 1'
-  )
-  FROM information_schema.columns
-  WHERE table_schema = DATABASE()
-    AND table_name = 'qqbot_napcat_container'
-    AND column_name = 'image'
-);
-PREPARE qqbot_stmt FROM @qqbot_sql;
-EXECUTE qqbot_stmt;
-DEALLOCATE PREPARE qqbot_stmt;
-
-SET @qqbot_sql = (
-  SELECT IF(
-    COUNT(*) = 0,
-    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `data_dir` varchar(500) NOT NULL DEFAULT ''''',
-    'SELECT 1'
-  )
-  FROM information_schema.columns
-  WHERE table_schema = DATABASE()
-    AND table_name = 'qqbot_napcat_container'
-    AND column_name = 'data_dir'
-);
-PREPARE qqbot_stmt FROM @qqbot_sql;
-EXECUTE qqbot_stmt;
-DEALLOCATE PREPARE qqbot_stmt;
-
-SET @qqbot_sql = (
-  SELECT IF(
-    COUNT(*) = 0,
-    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `reverse_ws_url` varchar(500) NOT NULL DEFAULT ''''',
-    'SELECT 1'
-  )
-  FROM information_schema.columns
-  WHERE table_schema = DATABASE()
-    AND table_name = 'qqbot_napcat_container'
-    AND column_name = 'reverse_ws_url'
-);
-PREPARE qqbot_stmt FROM @qqbot_sql;
-EXECUTE qqbot_stmt;
-DEALLOCATE PREPARE qqbot_stmt;
-
-SET @qqbot_sql = (
-  SELECT IF(
-    COUNT(*) = 0,
-    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `status` varchar(32) NOT NULL DEFAULT ''creating''',
-    'SELECT 1'
-  )
-  FROM information_schema.columns
-  WHERE table_schema = DATABASE()
-    AND table_name = 'qqbot_napcat_container'
-    AND column_name = 'status'
-);
-PREPARE qqbot_stmt FROM @qqbot_sql;
-EXECUTE qqbot_stmt;
-DEALLOCATE PREPARE qqbot_stmt;
-
-SET @qqbot_sql = (
-  SELECT IF(
-    COUNT(*) = 0,
-    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `last_started_at` datetime DEFAULT NULL',
-    'SELECT 1'
-  )
-  FROM information_schema.columns
-  WHERE table_schema = DATABASE()
-    AND table_name = 'qqbot_napcat_container'
-    AND column_name = 'last_started_at'
-);
-PREPARE qqbot_stmt FROM @qqbot_sql;
-EXECUTE qqbot_stmt;
-DEALLOCATE PREPARE qqbot_stmt;
-
-SET @qqbot_sql = (
-  SELECT IF(
-    COUNT(*) = 0,
-    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `last_checked_at` datetime DEFAULT NULL',
-    'SELECT 1'
-  )
-  FROM information_schema.columns
-  WHERE table_schema = DATABASE()
-    AND table_name = 'qqbot_napcat_container'
-    AND column_name = 'last_checked_at'
-);
-PREPARE qqbot_stmt FROM @qqbot_sql;
-EXECUTE qqbot_stmt;
-DEALLOCATE PREPARE qqbot_stmt;
-
-SET @qqbot_sql = (
-  SELECT IF(
-    COUNT(*) = 0,
-    'ALTER TABLE `qqbot_napcat_container` ADD COLUMN `last_error` varchar(500) DEFAULT NULL',
-    'SELECT 1'
-  )
-  FROM information_schema.columns
-  WHERE table_schema = DATABASE()
-    AND table_name = 'qqbot_napcat_container'
     AND column_name = 'last_error'
 );
 PREPARE qqbot_stmt FROM @qqbot_sql;

@@ -1,4 +1,4 @@
-import mainAPI from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import bangdreamCatalogCache from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 import { Image, loadImage } from 'skia-canvas';
 import { characterResourceRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/character/character-resource.repository';
 
@@ -38,7 +38,7 @@ export class Character {
    * @param characterId - 角色 ID。
    */
   constructor(characterId: number) {
-    const characterData = mainAPI['characters'][characterId.toString()];
+    const characterData = bangdreamCatalogCache['characters'][characterId.toString()];
     if (characterData == undefined) {
       this.isExist = false;
       return;

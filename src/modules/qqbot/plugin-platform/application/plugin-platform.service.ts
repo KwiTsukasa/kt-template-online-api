@@ -13,6 +13,9 @@ import {
   type QqbotPluginManifest,
 } from '../domain/manifest';
 import type { QqbotPluginWorkerRuntime } from '../infrastructure/integration/runtime';
+import { QqbotPluginPackageReaderService } from '../infrastructure/integration/package/plugin-package-reader.service';
+import { QqbotEventPluginRegistryService } from './registry/qqbot-event-plugin-registry.service';
+import { QqbotPluginRegistryService } from './registry/qqbot-plugin-registry.service';
 import {
   QqbotPlugin,
   QqbotPluginAccountBinding,
@@ -106,6 +109,12 @@ export class QqbotPluginPlatformService {
     @Optional()
     @Inject(QQBOT_PLUGIN_RUNTIME_FACTORY)
     private readonly runtimeFactory?: QqbotPluginRuntimeFactory,
+    @Optional()
+    private readonly pluginRegistry?: QqbotPluginRegistryService,
+    @Optional()
+    private readonly eventPluginRegistry?: QqbotEventPluginRegistryService,
+    @Optional()
+    private readonly packageReader?: QqbotPluginPackageReaderService,
   ) {}
 
   async listInstallations() {
@@ -163,8 +172,16 @@ export class QqbotPluginPlatformService {
     };
   }
 
+  uploadPackage(body: InstallLocalBody) {
+    return {
+      ...this.requirePackageReader().readPackage(body),
+      valid: true,
+    };
+  }
+
   async installLocal(body: InstallLocalBody) {
-    const manifest = parseQqbotPluginManifest(body.manifest);
+    const pluginPackage = this.requirePackageReader().readPackage(body);
+    const manifest = pluginPackage.manifest;
     const plugin = await this.pluginRepository.save({
       pluginKey: manifest.pluginKey,
       pluginName: manifest.name,
@@ -173,7 +190,7 @@ export class QqbotPluginPlatformService {
     });
     const version = await this.versionRepository.save({
       manifestJson: manifest,
-      packageHash: body.packageHash || 'local-dev-package',
+      packageHash: pluginPackage.packageHash,
       pluginId: plugin.id,
       version: manifest.version,
     });
@@ -181,7 +198,7 @@ export class QqbotPluginPlatformService {
     await this.persistManifestCapabilities(plugin.id, manifest);
 
     return this.installationRepository.save({
-      installedPath: body.packagePath || '',
+      installedPath: pluginPackage.packagePath,
       pluginId: plugin.id,
       runtimeStatus: 'stopped',
       status: 'installed',
@@ -414,6 +431,7 @@ export class QqbotPluginPlatformService {
   ) {
     const activeOperation = enabled;
     const activeEvent = enabled;
+    const pluginKey = await this.getPluginKey(installation.pluginId);
     await Promise.all([
       this.operationRepository.update(
         { pluginId: installation.pluginId },
@@ -424,6 +442,16 @@ export class QqbotPluginPlatformService {
         { enabled: activeEvent },
       ),
     ]);
+    this.pluginRegistry?.setPluginActive(pluginKey, enabled);
+    this.eventPluginRegistry?.setPluginActive(pluginKey, enabled);
+  }
+
+  private async getPluginKey(pluginId: string) {
+    const findOne = this.pluginRepository.findOne?.bind(
+      this.pluginRepository,
+    );
+    const plugin = findOne ? await findOne({ where: { id: pluginId } }) : null;
+    return plugin?.pluginKey || pluginId;
   }
 
   private async stopWorker(installationId: string) {
@@ -500,5 +528,12 @@ export class QqbotPluginPlatformService {
       };
     }
     return {};
+  }
+
+  private requirePackageReader() {
+    if (!this.packageReader) {
+      throwVbenError('插件包读取器未初始化');
+    }
+    return this.packageReader;
   }
 }

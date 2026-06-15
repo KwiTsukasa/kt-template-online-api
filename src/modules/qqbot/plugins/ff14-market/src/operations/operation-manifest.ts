@@ -1,4 +1,5 @@
 export type Ff14MarketManifestOperation = {
+  aliases?: string[];
   cacheTtlMs?: number;
   description?: string;
   handlerName: string;
@@ -6,6 +7,7 @@ export type Ff14MarketManifestOperation = {
   key: string;
   name: string;
   outputSchema?: Record<string, unknown>;
+  timeoutMs?: number;
 };
 
 export type Ff14MarketManifest = {

@@ -28,8 +28,8 @@ describe('QQBot core command local smoke', () => {
   let app: INestApplication;
 
   const command = {
-    aliases: '["查歌"]',
-    code: 'bangdream-song-search',
+    aliases: '[]',
+    code: 'bd',
     cooldownMs: 5000,
     defaultParams: null,
     enabled: true,
@@ -37,7 +37,7 @@ describe('QQBot core command local smoke', () => {
     id: 'cmd-bangdream-song-search',
     isDeleted: false,
     lastHitAt: null,
-    name: 'BangDream 查歌',
+    name: '',
     operationKey: 'bangdream.song.search',
     parserKey: 'plain',
     pluginKey: 'bangdream',
@@ -73,7 +73,9 @@ describe('QQBot core command local smoke', () => {
       type: 'text',
     }),
     getOperationByCommand: jest.fn().mockResolvedValue({
+      aliases: ['查歌', 'bd', 'bangdream', 'bandori', '邦邦', '邦邦查歌'],
       key: command.operationKey,
+      name: '查曲',
       pluginKey: command.pluginKey,
     }),
   };

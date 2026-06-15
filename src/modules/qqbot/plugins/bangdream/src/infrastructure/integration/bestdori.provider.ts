@@ -104,4 +104,4 @@ export function createBestdoriProvider(
   );
 }
 
-export const bangDreamBestdoriProvider = createBestdoriProvider();
+export const bangdreamBestdoriProvider = createBestdoriProvider();

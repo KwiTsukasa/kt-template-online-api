@@ -73,8 +73,6 @@ describe('QQBot core module contract', () => {
       expect.arrayContaining([
         'GET /qqbot/account/list',
         'GET /qqbot/account/enabled',
-        'POST /qqbot/account/scan/create',
-        'GET /qqbot/account/scan/status',
         'POST /qqbot/account/bind/command',
         'POST /qqbot/account/unbind/command',
         'POST /qqbot/account/kick',
@@ -90,6 +88,17 @@ describe('QQBot core module contract', () => {
         'POST /qqbot/send/private',
         'POST /qqbot/send/group',
         'GET /qqbot/dashboard/summary',
+      ]),
+    );
+    expect(routes.map(routeKey)).not.toEqual(
+      expect.arrayContaining([
+        'POST /qqbot/account/scan/create',
+        'POST /qqbot/account/scan/refresh',
+        'GET /qqbot/account/scan/status',
+        'GET /qqbot/account/scan/events',
+        'POST /qqbot/account/scan/qrcode/refresh',
+        'POST /qqbot/account/scan/captcha/submit',
+        'POST /qqbot/account/scan/cancel',
       ]),
     );
   });
@@ -159,10 +168,6 @@ describe('QQBot core module contract', () => {
         'QqbotDedupeService',
         'QqbotEventService',
         'QqbotMessageService',
-        'NapcatDeviceIdentityService',
-        'QqbotNapcatContainerService',
-        'QqbotNapcatLoginService',
-        'QqbotNapcatWatchdogService',
         'QqbotPermissionService',
         'QqbotRateLimitService',
         'QqbotReplyTemplateService',
@@ -172,23 +177,41 @@ describe('QQBot core module contract', () => {
         'QqbotSendService',
       ]),
     );
+    expect(getNames(QQBOT_CORE_PROVIDERS)).not.toEqual(
+      expect.arrayContaining([
+        'NapcatDeviceIdentityService',
+        'NapcatLoginStateStoreService',
+        'QqbotNapcatContainerService',
+        'QqbotNapcatLoginService',
+        'QqbotNapcatWatchdogService',
+      ]),
+    );
     expect(getNames(QQBOT_CORE_ENTITIES)).toEqual(
       expect.arrayContaining([
         'QqbotAccount',
         'QqbotAccountAbility',
-        'QqbotAccountNapcat',
         'QqbotAllowlist',
         'QqbotBlocklist',
-        'NapcatDeviceIdentity',
         'QqbotCommand',
         'QqbotCommandLog',
         'QqbotConfig',
         'QqbotConversation',
         'QqbotDedupe',
         'QqbotMessage',
-        'QqbotNapcatContainer',
         'QqbotRule',
         'QqbotSendLog',
+      ]),
+    );
+    expect(getNames(QQBOT_CORE_ENTITIES)).not.toEqual(
+      expect.arrayContaining([
+        'NapcatAccountBinding',
+        'NapcatContainer',
+        'NapcatDeviceIdentity',
+        'NapcatLoginChallengeEntity',
+        'NapcatLoginSession',
+        'NapcatRuntimeCleanup',
+        'QqbotAccountNapcat',
+        'QqbotNapcatContainer',
       ]),
     );
   });

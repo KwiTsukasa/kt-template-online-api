@@ -105,7 +105,7 @@ export type FflogsTokenResponse = {
   token_type?: string;
 };
 
-export type QqbotFflogsCharacterSummaryInput = {
+export type FflogsCharacterSummaryInput = {
   character?: string;
   characterName?: string;
   className?: string;
@@ -126,13 +126,13 @@ export type QqbotFflogsCharacterSummaryInput = {
   zoneId?: number | string;
 };
 
-export type QqbotFflogsCharacterSummaryResult = {
+export type FflogsCharacterSummaryResult = {
   allStarText?: string;
   characterId?: number;
   characterName: string;
   encounterName?: string;
   encounterSuggestions?: string[];
-  logs?: QqbotFflogsEncounterLogItem[];
+  logs?: FflogsEncounterLogItem[];
   rankingSuggestions?: string[];
   rankings: FflogsRankingItem[];
   replyText: string;
@@ -141,7 +141,7 @@ export type QqbotFflogsCharacterSummaryResult = {
   url: string;
 };
 
-export type QqbotFflogsEncounterLogItem = {
+export type FflogsEncounterLogItem = {
   adps?: number;
   color: string;
   damageScore?: number;

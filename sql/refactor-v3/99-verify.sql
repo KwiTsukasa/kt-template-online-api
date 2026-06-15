@@ -79,6 +79,18 @@ WHERE table_schema = DATABASE()
   AND table_name = 'napcat_account_binding'
   AND index_name = 'uk_napcat_account_binding_account';
 
+SELECT 'index_napcat_account_binding_container' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_account_binding'
+  AND index_name = 'idx_napcat_account_binding_container';
+
+SELECT 'index_napcat_container_name' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_container'
+  AND index_name = 'uk_napcat_container_name';
+
 SELECT 'index_napcat_login_session_key' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics
 WHERE table_schema = DATABASE()

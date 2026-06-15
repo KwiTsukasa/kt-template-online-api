@@ -1,7 +1,7 @@
 import type {
-  QqbotFf14DataCenter,
-  QqbotFf14MarketCatalog,
-  QqbotFf14MarketTarget,
+  Ff14DataCenter,
+  Ff14MarketCatalog,
+  Ff14MarketTarget,
 } from './ff14-market.types';
 
 export type Ff14DictItem = {
@@ -22,11 +22,11 @@ export const QQBOT_FF14_MARKET_DICT_CODES = {
   world: 'FF14_MARKET_WORLD',
 };
 
-export function buildQqbotFf14MarketCatalog(input: {
+export function buildFf14MarketCatalog(input: {
   dataCenters: Ff14DictItem[];
   regions: Ff14DictItem[];
   worlds: Ff14DictItem[];
-}): QqbotFf14MarketCatalog {
+}): Ff14MarketCatalog {
   const regions = input.regions.map(getDictDisplayValue).filter(Boolean);
   const defaultRegion = regions[0];
   const dataCenters = input.dataCenters
@@ -36,14 +36,14 @@ export function buildQqbotFf14MarketCatalog(input: {
       return {
         name,
         region:
-          normalizeQqbotFf14WorldValue(item.childrenCode) || defaultRegion,
+          normalizeFf14WorldValue(item.childrenCode) || defaultRegion,
         worlds: input.worlds
           .filter(({ childrenCode }) => childrenCode === getDictRawValue(item))
           .map(getDictDisplayValue)
           .filter(Boolean),
       };
     })
-    .filter((item): item is QqbotFf14DataCenter => !!item);
+    .filter((item): item is Ff14DataCenter => !!item);
 
   return {
     dataCenters,
@@ -52,9 +52,9 @@ export function buildQqbotFf14MarketCatalog(input: {
   };
 }
 
-export function buildQqbotFf14MarketCatalogFromTree(
+export function buildFf14MarketCatalogFromTree(
   roots: Ff14DictItem[],
-): QqbotFf14MarketCatalog {
+): Ff14MarketCatalog {
   const regionNodes = roots.filter(
     (item) => item.dictCode === QQBOT_FF14_MARKET_DICT_CODES.region,
   );
@@ -76,7 +76,7 @@ export function buildQqbotFf14MarketCatalogFromTree(
             .filter(Boolean),
         };
       })
-      .filter((item): item is QqbotFf14DataCenter => !!item);
+      .filter((item): item is Ff14DataCenter => !!item);
   });
 
   return {
@@ -86,46 +86,46 @@ export function buildQqbotFf14MarketCatalogFromTree(
   };
 }
 
-export function isQqbotFf14DataCenterName(
-  catalog: QqbotFf14MarketCatalog,
+export function isFf14DataCenterName(
+  catalog: Ff14MarketCatalog,
   value?: string,
 ) {
-  const name = normalizeQqbotFf14WorldValue(value);
+  const name = normalizeFf14WorldValue(value);
   return catalog.dataCenters.some((item) => item.name === name);
 }
 
-export function isQqbotFf14RegionName(
-  catalog: QqbotFf14MarketCatalog,
+export function isFf14RegionName(
+  catalog: Ff14MarketCatalog,
   value?: string,
 ) {
-  const name = normalizeQqbotFf14WorldValue(value);
+  const name = normalizeFf14WorldValue(value);
   return catalog.regions.includes(name);
 }
 
-export function isQqbotFf14WorldName(
-  catalog: QqbotFf14MarketCatalog,
+export function isFf14WorldName(
+  catalog: Ff14MarketCatalog,
   value?: string,
 ) {
-  const name = normalizeQqbotFf14WorldValue(value);
+  const name = normalizeFf14WorldValue(value);
   return catalog.dataCenters.some((item) => item.worlds.includes(name));
 }
 
-export function isQqbotFf14LocationName(
-  catalog: QqbotFf14MarketCatalog,
+export function isFf14LocationName(
+  catalog: Ff14MarketCatalog,
   value?: string,
 ) {
-  const name = normalizeQqbotFf14WorldValue(value);
-  const path = splitQqbotFf14WorldPath(name);
+  const name = normalizeFf14WorldValue(value);
+  const path = splitFf14WorldPath(name);
   return (
-    isQqbotFf14RegionName(catalog, name) ||
-    isQqbotFf14DataCenterName(catalog, name) ||
-    isQqbotFf14WorldName(catalog, name) ||
+    isFf14RegionName(catalog, name) ||
+    isFf14DataCenterName(catalog, name) ||
+    isFf14WorldName(catalog, name) ||
     (!!path.dataCenter && !!path.world)
   );
 }
 
-export function splitQqbotFf14WorldPath(value?: string) {
-  const raw = normalizeQqbotFf14WorldValue(value);
+export function splitFf14WorldPath(value?: string) {
+  const raw = normalizeFf14WorldValue(value);
   if (!raw) return {};
 
   const parts = raw
@@ -148,31 +148,31 @@ export function splitQqbotFf14WorldPath(value?: string) {
   };
 }
 
-export function findQqbotFf14DataCenterByWorld(
-  catalog: QqbotFf14MarketCatalog,
+export function findFf14DataCenterByWorld(
+  catalog: Ff14MarketCatalog,
   world?: string,
 ) {
-  const worldName = normalizeQqbotFf14WorldValue(world);
+  const worldName = normalizeFf14WorldValue(world);
   return catalog.dataCenters.find((item) => item.worlds.includes(worldName));
 }
 
-export function resolveQqbotFf14MarketTarget(
-  catalog: QqbotFf14MarketCatalog,
+export function resolveFf14MarketTarget(
+  catalog: Ff14MarketCatalog,
   params: {
     dataCenter?: string;
     fallback?: string;
     region?: string;
     world?: string;
   },
-): QqbotFf14MarketTarget {
+): Ff14MarketTarget {
   const defaultRegion = catalog.defaultRegion || '';
-  const fallback = normalizeQqbotFf14WorldValue(params.fallback);
-  const path = splitQqbotFf14WorldPath(params.world);
-  const region = normalizeQqbotFf14WorldValue(params.region || path.region);
-  const dataCenter = normalizeQqbotFf14WorldValue(
+  const fallback = normalizeFf14WorldValue(params.fallback);
+  const path = splitFf14WorldPath(params.world);
+  const region = normalizeFf14WorldValue(params.region || path.region);
+  const dataCenter = normalizeFf14WorldValue(
     params.dataCenter || path.dataCenter,
   );
-  const rawWorld = normalizeQqbotFf14WorldValue(path.world || params.world);
+  const rawWorld = normalizeFf14WorldValue(path.world || params.world);
   const world = dataCenter && rawWorld === defaultRegion ? '' : rawWorld;
   const raw = world || dataCenter || region || fallback || defaultRegion;
 
@@ -211,7 +211,7 @@ export function resolveQqbotFf14MarketTarget(
     };
   }
 
-  const matchedWorldDataCenter = findQqbotFf14DataCenterByWorld(catalog, raw);
+  const matchedWorldDataCenter = findFf14DataCenterByWorld(catalog, raw);
   if (matchedWorldDataCenter) {
     return {
       dataCenter: matchedWorldDataCenter.name,
@@ -222,7 +222,7 @@ export function resolveQqbotFf14MarketTarget(
     };
   }
 
-  if (isQqbotFf14DataCenterName(catalog, raw)) {
+  if (isFf14DataCenterName(catalog, raw)) {
     return {
       dataCenter: raw,
       label: defaultRegion ? `${defaultRegion} / ${raw}` : raw,
@@ -238,13 +238,13 @@ export function resolveQqbotFf14MarketTarget(
 }
 
 function getDictDisplayValue(item: Ff14DictItem) {
-  return normalizeQqbotFf14WorldValue(item.label || item.value);
+  return normalizeFf14WorldValue(item.label || item.value);
 }
 
 function getDictRawValue(item: Ff14DictItem) {
-  return normalizeQqbotFf14WorldValue(item.value || item.label);
+  return normalizeFf14WorldValue(item.value || item.label);
 }
 
-function normalizeQqbotFf14WorldValue(value?: string | null) {
+function normalizeFf14WorldValue(value?: string | null) {
   return `${value || ''}`.trim();
 }

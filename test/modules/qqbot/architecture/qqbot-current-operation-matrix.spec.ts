@@ -24,7 +24,7 @@ const readManifest = (pluginDir: string) =>
     },
   );
 
-const bangDreamOperations: ExpectedOperation[] = [
+const bangdreamOperations: ExpectedOperation[] = [
   {
     aliases: ['查曲', 'bd', 'bangdream', 'bandori', '邦邦', '邦邦查歌'],
     handlerName: 'searchSong',
@@ -128,13 +128,13 @@ describe('QQBot current operation matrix', () => {
         key: operation.key,
         name: operation.name,
       })),
-    ).toEqual(bangDreamOperations);
+    ).toEqual(bangdreamOperations);
   });
 
   it('freezes built-in plugin manifests and exposed capabilities', () => {
     const manifests = {
       bangdream: readManifest('bangdream'),
-      ff14Market: readManifest('ff14-market'),
+      ff14: readManifest('ff14-market'),
       fflogs: readManifest('fflogs'),
       repeater: readManifest('repeater'),
     };
@@ -147,10 +147,10 @@ describe('QQBot current operation matrix', () => {
         key: operation.key,
         name: operation.name,
       })),
-    ).toEqual(bangDreamOperations);
+    ).toEqual(bangdreamOperations);
 
     expect(
-      manifests.ff14Market.operations.map((operation) => ({
+      manifests.ff14.operations.map((operation) => ({
         aliases: operation.aliases,
         handlerName: operation.handlerName,
         key: operation.key,
@@ -208,7 +208,7 @@ describe('QQBot current operation matrix', () => {
   it('freezes current online command seed linkage for command plugins', () => {
     const seedSql = readFileSync(join(repoRoot, 'sql/qqbot-init.sql'), 'utf8');
 
-    for (const operation of bangDreamOperations) {
+    for (const operation of bangdreamOperations) {
       expect(seedSql).toContain(`'${operation.key}'`);
       expect(seedSql).toContain(JSON.stringify(operation.aliases));
     }

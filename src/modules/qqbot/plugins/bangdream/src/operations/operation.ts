@@ -1,17 +1,17 @@
 import type { BangDreamCommandContext } from '@/modules/qqbot/plugins/bangdream/src/application/bangdream-command-context';
 import type {
-  QqbotBangDreamCommandInput,
-  QqbotBangDreamCommandOutput,
-  QqbotBangDreamOperationHandlerName,
-} from '@/modules/qqbot/plugins/bangdream/src/domain/common/qqbot-bangdream.types';
+  BangDreamCommandInput,
+  BangDreamCommandOutput,
+  BangDreamOperationHandlerName,
+} from '@/modules/qqbot/plugins/bangdream/src/domain/common/bangdream.types';
 
 export type BangDreamOperationExecute = (
-  input: QqbotBangDreamCommandInput,
+  input: BangDreamCommandInput,
   context: BangDreamCommandContext,
-) => Promise<QqbotBangDreamCommandOutput>;
+) => Promise<BangDreamCommandOutput>;
 
 export type BangDreamOperationModule = {
   execute: BangDreamOperationExecute;
   expectedImageCount?: number;
-  handlerName: QqbotBangDreamOperationHandlerName;
+  handlerName: BangDreamOperationHandlerName;
 };

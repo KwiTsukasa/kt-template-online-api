@@ -1,5 +1,5 @@
-import { parseQqbotFf14MarketPriceInput } from '../../../../src/modules/qqbot/plugins/ff14-market/src';
-import { parseQqbotFflogsCharacterInput } from '../../../../src/modules/qqbot/plugins/fflogs/src';
+import { parseFf14MarketPriceInput } from '../../../../src/modules/qqbot/plugins/ff14-market/src/application/ff14-market-input-parser';
+import { parseFflogsCharacterInput } from '../../../../src/modules/qqbot/plugins/fflogs/src/application/fflogs-input-parser';
 
 const ff14Catalog = {
   dataCenters: [
@@ -16,7 +16,7 @@ const ff14Catalog = {
 describe('QQBot built-in plugin input parsers', () => {
   it('keeps FF14 market price parsing inside the FF14 plugin package', () => {
     expect(
-      parseQqbotFf14MarketPriceInput('柔韧鲫鱼 猫小胖 宇宙和音 hq', ff14Catalog),
+      parseFf14MarketPriceInput('柔韧鲫鱼 猫小胖 宇宙和音 hq', ff14Catalog),
     ).toMatchObject({
       dataCenter: '猫小胖',
       hq: true,
@@ -30,7 +30,7 @@ describe('QQBot built-in plugin input parsers', () => {
 
   it('keeps FFLogs character parsing inside the FFLogs plugin package', () => {
     expect(
-      parseQqbotFflogsCharacterInput('Kwi 宇宙和音 阿尔卡迪亚', {
+      parseFflogsCharacterInput('Kwi 宇宙和音 阿尔卡迪亚', {
         resolveKnownWorld: (value) =>
           value === '宇宙和音' ? { serverSlug: value } : null,
       }),

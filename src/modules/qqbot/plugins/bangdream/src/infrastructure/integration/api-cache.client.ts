@@ -1,4 +1,4 @@
-import { getJsonAndSave } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/file-cache.client';
+import { fetchRemoteResourceJson } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/remote-resource.client';
 import {
   getCacheDirectory,
   getFileNameFromUrl,
@@ -32,7 +32,8 @@ async function callAPIAndCacheResponse(
   const cacheDir = getCacheDirectory(url);
   const fileName = getFileNameFromUrl(url);
   return await runWithCacheClientRetry({
-    action: () => getJsonAndSave(url, cacheDir, fileName, cacheTime),
+    action: () =>
+      fetchRemoteResourceJson(url, cacheDir, fileName, cacheTime),
     onFailure: (attempt, _retryCount, error) => {
       if (isCacheClientNotFound(error)) {
         logger(

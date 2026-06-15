@@ -1,6 +1,6 @@
 import { FflogsClient } from '@/modules/qqbot/plugins/fflogs/src/infrastructure/integration/fflogs-client';
 
-describe('QqbotFflogsClientService', () => {
+describe('FflogsClientService', () => {
   const dicts = {
     FFLOGS_JOB_LABEL: [{ label: '机工士', value: 'machinist' }],
     FFLOGS_METRIC_LABEL: [

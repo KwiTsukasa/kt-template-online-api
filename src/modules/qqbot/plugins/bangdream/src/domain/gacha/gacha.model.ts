@@ -1,4 +1,4 @@
-import { bangDreamMainDataRepository } from '@/modules/qqbot/plugins/bangdream/src/application/main-data.repository';
+import { bangdreamCatalogRepository } from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-repository';
 import { Image, loadImage } from 'skia-canvas';
 import {
   Server,
@@ -79,7 +79,7 @@ export class Gacha {
    */
   constructor(gachaId: number) {
     this.gachaId = gachaId;
-    const gachaData = bangDreamMainDataRepository.getEntity<
+    const gachaData = bangdreamCatalogRepository.getEntity<
       Record<string, any>
     >('gacha', gachaId);
     if (gachaData == undefined) {
@@ -247,7 +247,7 @@ export async function getPresentGachaList(
   end: number = Date.now(),
 ): Promise<Array<Gacha>> {
   const gachaList: Array<Gacha> = [];
-  const gachaListMain = bangDreamMainDataRepository.getCollection('gacha');
+  const gachaListMain = bangdreamCatalogRepository.getCollection('gacha');
 
   for (const gachaId in gachaListMain) {
     if (Object.prototype.hasOwnProperty.call(gachaListMain, gachaId)) {

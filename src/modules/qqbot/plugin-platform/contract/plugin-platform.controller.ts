@@ -80,7 +80,7 @@ export class QqbotPluginPlatformController {
       packagePath?: string;
     },
   ) {
-    return vbenSuccess(this.service.validateManifest(body));
+    return vbenSuccess(this.service.uploadPackage(body));
   }
 
   @Post('install')

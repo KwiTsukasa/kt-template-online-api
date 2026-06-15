@@ -1,15 +1,15 @@
 import { Song } from '@/modules/qqbot/plugins/bangdream/src/domain/song/song.model';
 import {
-  bangDreamMainDataRepository,
-  type BangDreamMainDataCollection,
-} from '@/modules/qqbot/plugins/bangdream/src/application/main-data.repository';
+  bangdreamCatalogRepository,
+  type BangDreamCatalogCollection,
+} from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-repository';
 
 export class SongRepository {
   /**
    * 获取歌曲主数据集合。
    */
-  getSource(): BangDreamMainDataCollection {
-    return bangDreamMainDataRepository.getCollection('songs');
+  getSource(): BangDreamCatalogCollection {
+    return bangdreamCatalogRepository.getCollection('songs');
   }
 
   /**

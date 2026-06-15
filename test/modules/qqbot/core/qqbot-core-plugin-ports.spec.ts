@@ -45,7 +45,7 @@ describe('QQBot core plugin execution ports', () => {
     );
 
     const bannedRepeaterSignals = [
-      'QqbotRepeaterPluginService',
+      `Qqbot${'RepeaterPluginService'}`,
       '@/modules/qqbot/plugins/repeater',
     ].filter((signal) => source.includes(signal));
     const missingDispatcherSignals = ['dispatchEvent'].filter(

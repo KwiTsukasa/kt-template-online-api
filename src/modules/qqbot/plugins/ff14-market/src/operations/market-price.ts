@@ -1,12 +1,16 @@
 import type { Ff14MarketApplication } from '../application/ff14-market-application';
 
-export const ff14MarketPriceHandlerName = 'getPrice';
+export const ff14PricePriceHandlerName = 'getPrice';
 
 export function createFf14MarketPriceOperation(
   application: Ff14MarketApplication,
 ) {
   return {
-    execute: (input: Record<string, any>) => application.getPrice(input),
+    execute: async (input: Record<string, any>) => {
+      const raw = `${input.raw ?? input.text ?? ''}`.trim();
+      const parsed = raw ? await application.parsePriceInput(raw) : {};
+      return application.getPrice(removeEmpty({ ...input, ...parsed }));
+    },
     inputSchema: {
       properties: {
         dataCenter: { description: '大区名，如陆行鸟', type: 'string' },
@@ -30,4 +34,14 @@ export function createFf14MarketPriceOperation(
       type: 'object',
     },
   };
+}
+
+function removeEmpty(input: Record<string, any>) {
+  return Object.entries(input).reduce<Record<string, any>>(
+    (result, [key, value]) => {
+      if (value !== undefined && value !== '') result[key] = value;
+      return result;
+    },
+    {},
+  );
 }

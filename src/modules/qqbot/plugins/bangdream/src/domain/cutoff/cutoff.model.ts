@@ -1,7 +1,7 @@
-import { bangDreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
-import { bangDreamHhwxTrackerProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/hhwx-tracker.provider';
+import { bangdreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
+import { bangdreamHhwxTrackerProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/hhwx-tracker.provider';
 import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bangdream-data-provider';
-import { bangDreamMainDataRepository } from '@/modules/qqbot/plugins/bangdream/src/application/main-data.repository';
+import { bangdreamCatalogRepository } from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-repository';
 import {
   preferHhwxSource,
   reportDataSourceProblem,
@@ -91,15 +91,15 @@ export class Cutoff {
     if (this.server != Server.cn) {
       // 非国服不使用HHWX
       this.useHHWX = false;
-      return bangDreamBestdoriProvider;
+      return bangdreamBestdoriProvider;
     }
     const provider = !reverse
       ? this.useHHWX
-        ? bangDreamHhwxTrackerProvider
-        : bangDreamBestdoriProvider
+        ? bangdreamHhwxTrackerProvider
+        : bangdreamBestdoriProvider
       : this.useHHWX
-        ? bangDreamBestdoriProvider
-        : bangDreamHhwxTrackerProvider;
+        ? bangdreamBestdoriProvider
+        : bangdreamHhwxTrackerProvider;
     if (reverse && this.server == Server.cn) this.useHHWX = !this.useHHWX;
     return provider;
   }
@@ -236,7 +236,7 @@ export class Cutoff {
     }
     //rate
     const rateDataList =
-      bangDreamMainDataRepository.getValue<
+      bangdreamCatalogRepository.getValue<
         Array<{ server: number; type: string; tier: number; rate: number }>
       >('rates');
     const rateData = rateDataList.find((element) => {

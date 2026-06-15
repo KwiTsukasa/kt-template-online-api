@@ -1,4 +1,4 @@
-import mainAPI from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import bangdreamCatalogCache from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 import { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model';
 import { Card, Stat } from '@/modules/qqbot/plugins/bangdream/src/domain/card/card.model';
 
@@ -21,7 +21,7 @@ export class AreaItem {
    */
   constructor(areaItemId: number) {
     this.areaItemId = areaItemId;
-    const areaItemData = mainAPI['areaItems'][areaItemId.toString()];
+    const areaItemData = bangdreamCatalogCache['areaItems'][areaItemId.toString()];
     if (areaItemData == undefined) {
       this.isExist = false;
       return;

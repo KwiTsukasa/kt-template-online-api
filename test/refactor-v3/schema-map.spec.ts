@@ -92,7 +92,7 @@ describe('refactor v3 schema skeleton', () => {
     expect(blogTermColumns).toContain('parent_id');
   });
 
-  it('seeds qqbot command rows with required command code and aliases', () => {
+  it('seeds qqbot command rows with required command code and manifest-owned aliases', () => {
     const seed = readFileSync(
       join(root, 'sql/refactor-v3/01-seed-core.sql'),
       'utf8',
@@ -103,7 +103,57 @@ describe('refactor v3 schema skeleton', () => {
 
     expect(commandColumns).toContain('code');
     expect(commandColumns).toContain('aliases');
-    expect(seed).toContain('["查曲","bd","bangdream","bandori","邦邦","邦邦查歌"]');
+    expect(seed).toContain("'bangdream.song.search'");
+    expect(seed).toContain("'bd'");
+    expect(seed).toContain("'[]'");
+    expect(seed).not.toContain('["查曲","bd","bangdream","bandori","邦邦","邦邦查歌"]');
+  });
+
+  it('seeds qqbot admin menus and button permissions required by current pages', () => {
+    const seed = readFileSync(
+      join(root, 'sql/refactor-v3/01-seed-core.sql'),
+      'utf8',
+    );
+    const requiredNames = [
+      'QqBotDashboard',
+      'QqBotAccount',
+      'QqBotAccountConfig',
+      'QqBotAccountConfigButton',
+      'QqBotAccountCreate',
+      'QqBotAccountDelete',
+      'QqBotAccountEdit',
+      'QqBotAccountKick',
+      'QqBotAccountRefreshLogin',
+      'QqBotRule',
+      'QqBotRuleCreate',
+      'QqBotRuleDelete',
+      'QqBotRuleEdit',
+      'QqBotRuleToggle',
+      'QqBotCommand',
+      'QqBotCommandCreate',
+      'QqBotCommandDelete',
+      'QqBotCommandEdit',
+      'QqBotCommandTest',
+      'QqBotCommandToggle',
+      'QqBotPlugin',
+      'QqBotConversation',
+      'QqBotMessage',
+      'QqBotSendLog',
+      'QqBotSendPrivate',
+      'QqBotSendGroup',
+      'QqBotPermission',
+      'QqBotPermissionCreate',
+      'QqBotPermissionDelete',
+      'QqBotPermissionEdit',
+    ];
+
+    for (const name of requiredNames) {
+      expect(seed).toContain(`'${name}'`);
+    }
+
+    expect(seed).toContain("'QqBot:Account:RefreshLogin'");
+    expect(seed).toContain("'QqBot:Command:Test'");
+    expect(seed).toContain('INSERT IGNORE INTO admin_role_menu');
   });
 
   it('runs dry-run SQL sources with utf8mb4 and fails on native mysql errors', () => {

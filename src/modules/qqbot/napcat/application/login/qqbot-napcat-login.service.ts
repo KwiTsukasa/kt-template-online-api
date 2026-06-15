@@ -1,15 +1,14 @@
-import * as http from 'http';
-import * as https from 'https';
 import { createHash, randomUUID } from 'crypto';
 import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Observable } from 'rxjs';
 import { throwVbenError, ToolsService } from '@/common';
-import { NapcatLoginApiClient } from '../../infrastructure/integration/napcat-login-api.client';
+import {
+  NapcatLoginApiClient,
+  NapcatWebuiHttpClient,
+} from '../../infrastructure/integration/napcat-login-api.client';
 import type {
-  NapcatApiResponse,
   NapcatCaptchaLoginResult,
-  NapcatCredential,
   NapcatLoginInfo,
   NapcatLoginStatus,
   NapcatQrcode,
@@ -60,10 +59,9 @@ export class QqbotNapcatLoginService {
         delete this.sessionEventListenerCache[sessionId];
       }),
   };
-  private readonly credentials: Record<
-    string,
-    { credential: string; expiresAt: number } | undefined
-  > = {};
+  private readonly webuiClient = new NapcatWebuiHttpClient({
+    getTimeoutMs: () => this.getTimeout(),
+  });
 
   constructor(
     private readonly configService: ConfigService,
@@ -1274,8 +1272,12 @@ export class QqbotNapcatLoginService {
     path: string,
     body: Record<string, any> = {},
   ) {
-    const credential = await this.getCredential(container);
-    return this.requestNapcat<T>(container, path, body, credential);
+    return this.webuiClient
+      .post<T>(container, path, body)
+      .catch((err): never => {
+        const message = this.toolsService.getErrorMessage(err);
+        return throwVbenError(message || 'NapCat 请求失败');
+      });
   }
 
   private async prepareReloginQrcode(
@@ -1866,7 +1868,7 @@ export class QqbotNapcatLoginService {
       return;
     }
 
-    delete this.credentials[this.getCredentialCacheKey(container)];
+    this.webuiClient.clearCredential(container);
     if (options.waitForReady === false) return;
 
     onProgress?.('napcat-ready-wait', '等待 NapCat WebUI 启动');
@@ -1891,110 +1893,11 @@ export class QqbotNapcatLoginService {
       }
     }
 
-    delete this.credentials[this.getCredentialCacheKey(container)];
+    this.webuiClient.clearCredential(container);
     if (options.waitForReady === false) return;
 
     await this.toolsService.sleep(this.getRestartDelayMs());
     await this.getLoginStatus(container, true);
-  }
-
-  private getCredentialCacheKey(container: QqbotNapcatRuntime) {
-    return container.id || container.baseUrl;
-  }
-
-  private async getCredential(container: QqbotNapcatRuntime) {
-    const cacheKey = this.getCredentialCacheKey(container);
-    const cached = this.credentials[cacheKey];
-    if (cached && Date.now() < cached.expiresAt) {
-      return cached.credential;
-    }
-
-    const token = this.getWebuiToken(container);
-    const hash = createHash('sha256').update(`${token}.napcat`).digest('hex');
-    const data = await this.requestNapcat<NapcatCredential>(
-      container,
-      '/api/auth/login',
-      { hash },
-    );
-    if (!data.Credential) {
-      throwVbenError('NapCat WebUI 登录失败');
-    }
-    this.credentials[cacheKey] = {
-      credential: data.Credential,
-      expiresAt: Date.now() + 50 * 60 * 1000,
-    };
-    return data.Credential;
-  }
-
-  private requestNapcat<T>(
-    container: QqbotNapcatRuntime,
-    path: string,
-    body: Record<string, any> = {},
-    credential?: string,
-  ): Promise<T> {
-    const baseUrl = container.baseUrl;
-    const target = new URL(path, baseUrl);
-    const payload = JSON.stringify(body);
-    const client = target.protocol === 'https:' ? https : http;
-
-    return new Promise<T>((resolve, reject) => {
-      const req = client.request(
-        {
-          headers: {
-            ...(credential
-              ? {
-                  Authorization: `Bearer ${credential}`,
-                }
-              : {}),
-            'Content-Length': Buffer.byteLength(payload),
-            'Content-Type': 'application/json',
-          },
-          hostname: target.hostname,
-          method: 'POST',
-          path: `${target.pathname}${target.search}`,
-          port: target.port,
-          protocol: target.protocol,
-          timeout: this.getTimeout(),
-        },
-        (res) => {
-          const chunks: Buffer[] = [];
-          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-          res.on('end', () => {
-            const raw = Buffer.concat(chunks).toString('utf8');
-            let result: NapcatApiResponse<T>;
-            try {
-              result = raw ? JSON.parse(raw) : ({ code: -1 } as any);
-            } catch {
-              reject(new Error('NapCat 返回非 JSON 响应'));
-              return;
-            }
-            if (result.code !== 0) {
-              reject(new Error(result.message || 'NapCat 请求失败'));
-              return;
-            }
-            resolve(result.data as T);
-          });
-        },
-      );
-      req.on('error', reject);
-      req.on('timeout', () => {
-        req.destroy(new Error('NapCat 请求超时'));
-      });
-      req.write(payload);
-      req.end();
-    }).catch((err): never => {
-      const message = this.toolsService.getErrorMessage(err);
-      return throwVbenError(message || 'NapCat 请求失败');
-    });
-  }
-
-  private getWebuiToken(container: QqbotNapcatRuntime) {
-    const value = container.webuiToken || '';
-    const token = `${value}`.trim();
-    if (!token) {
-      throwVbenError('NapCat WebUI token 未配置');
-    }
-    return token;
   }
 
   private getSessionTtlMs() {

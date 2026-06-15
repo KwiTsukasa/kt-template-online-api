@@ -1,4 +1,4 @@
-import { bangDreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
+import { bangdreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
 import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bangdream-data-provider';
 import { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model';
 
@@ -27,7 +27,7 @@ export interface CutoffEventTopData {
 
 export class CutoffEventTopRepository {
   constructor(
-    private readonly provider: BangDreamDataProvider = bangDreamBestdoriProvider,
+    private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
 
   /**

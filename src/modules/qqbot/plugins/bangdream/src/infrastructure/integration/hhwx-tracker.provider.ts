@@ -75,4 +75,4 @@ export function createHhwxTrackerProvider(
   );
 }
 
-export const bangDreamHhwxTrackerProvider = createHhwxTrackerProvider();
+export const bangdreamHhwxTrackerProvider = createHhwxTrackerProvider();

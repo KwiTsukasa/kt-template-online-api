@@ -55,8 +55,11 @@ export class NapcatLoginStateStoreService {
       where: { sessionKey: sessionId },
     });
     const session = persisted?.sessionPayload;
-    if (session) this.cache[session.id] = session;
-    return session;
+    if (!session) return undefined;
+
+    const hydratedSession = await this.hydratePersistedSession(session);
+    this.cache[hydratedSession.id] = hydratedSession;
+    return hydratedSession;
   }
 
   set(session: QqbotLoginScanSession) {
@@ -178,6 +181,97 @@ export class NapcatLoginStateStoreService {
         completedAt: new Date() as NapcatLoginSession['completedAt'],
       },
     );
+  }
+
+  private async hydratePersistedSession(session: QqbotLoginScanSession) {
+    const hydratedSession = { ...session };
+
+    await this.hydrateCaptchaChallenge(hydratedSession);
+    await this.hydrateNewDeviceChallenge(hydratedSession);
+    await this.hydrateRuntimeCleanup(hydratedSession);
+
+    return hydratedSession;
+  }
+
+  private async hydrateCaptchaChallenge(session: QqbotLoginScanSession) {
+    const challenge = await this.findChallenge(session.id, 'captcha');
+    if (!challenge || challenge.status !== 'pending') return;
+
+    const payload = this.toChallengePayload(challenge.challengePayload);
+    if (!session.captchaUrl && challenge.challengeUrl) {
+      session.captchaUrl = challenge.challengeUrl;
+    }
+    if (!session.expectedSelfId && typeof payload.expectedSelfId === 'string') {
+      session.expectedSelfId = payload.expectedSelfId;
+    }
+    session.errorMessage = session.errorMessage || '需要验证码';
+  }
+
+  private async hydrateNewDeviceChallenge(session: QqbotLoginScanSession) {
+    const challenge = await this.findChallenge(session.id, 'new-device');
+    if (!challenge || this.isResolvedChallenge(challenge.status)) return;
+
+    const payload = this.toChallengePayload(challenge.challengePayload);
+    session.newDeviceStatus = challenge.status as QqbotLoginScanSession['newDeviceStatus'];
+    if (
+      !session.deviceVerifyUrl &&
+      typeof payload.deviceVerifyUrl === 'string'
+    ) {
+      session.deviceVerifyUrl = payload.deviceVerifyUrl;
+    }
+    if (
+      !session.newDevicePullQrCodeSig &&
+      typeof payload.newDevicePullQrCodeSig === 'string'
+    ) {
+      session.newDevicePullQrCodeSig = payload.newDevicePullQrCodeSig;
+    }
+    if (!session.newDeviceQrcode) {
+      session.newDeviceQrcode =
+        typeof payload.newDeviceQrcode === 'string'
+          ? payload.newDeviceQrcode
+          : challenge.challengeUrl || undefined;
+    }
+    session.errorMessage = session.errorMessage || '需要新设备验证二维码';
+  }
+
+  private async hydrateRuntimeCleanup(session: QqbotLoginScanSession) {
+    if (!this.runtimeCleanupRepository) return;
+    const cleanup = await this.runtimeCleanupRepository.findOne({
+      order: { createTime: 'DESC' },
+      where: {
+        cleanupType: 'password-login-env',
+        sessionId: session.id,
+        status: 'failed',
+      },
+    } as any);
+    if (!cleanup) return;
+
+    session.status = 'error';
+    session.captchaUrl = undefined;
+    session.errorMessage =
+      cleanup.errorMessage || session.errorMessage || '运行态密码清理失败';
+    session.passwordMd5 = undefined;
+    session.preparingRelogin = false;
+  }
+
+  private async findChallenge(
+    sessionId: string,
+    challengeType: NapcatLoginChallengeType,
+  ) {
+    if (!this.loginChallengeRepository) return null;
+    return this.loginChallengeRepository.findOne({
+      order: { createTime: 'DESC' },
+      where: {
+        challengeType,
+        sessionId,
+      },
+    } as any);
+  }
+
+  private toChallengePayload(payload: unknown) {
+    return payload && typeof payload === 'object'
+      ? (payload as Record<string, unknown>)
+      : {};
   }
 
   private async saveChallenge(input: {

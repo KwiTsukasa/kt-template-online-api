@@ -21,12 +21,12 @@ const createPlugin = (
 describe('QQBot plugin registry platform key compatibility', () => {
   it('uses platform plugin keys as primary keys while resolving legacy command keys', async () => {
     const bangdream = createPlugin('bangdream', ['bangDream']);
-    const ff14Market = createPlugin('ff14-market', ['ff14Market']);
+    const ff14Plugin = createPlugin('ff14-market', ['ff14Market']);
     const fflogs = createPlugin('fflogs', []);
     const registry = new QqbotPluginRegistryService();
 
     registry.register(bangdream);
-    registry.register(ff14Market);
+    registry.register(ff14Plugin);
     registry.register(fflogs);
 
     expect(registry.listPlugins().map((plugin) => plugin.key)).toEqual([

@@ -29,6 +29,7 @@ export function buildFflogsOperations(
     }
     const implementation = factory();
     return {
+      aliases: operation.aliases,
       cacheTtlMs: operation.cacheTtlMs || implementation.cacheTtlMs,
       description: operation.description,
       execute: implementation.execute,
@@ -36,6 +37,7 @@ export function buildFflogsOperations(
       key: operation.key,
       name: operation.name,
       outputSchema: operation.outputSchema || implementation.outputSchema,
+      timeoutMs: operation.timeoutMs,
     };
   });
 }

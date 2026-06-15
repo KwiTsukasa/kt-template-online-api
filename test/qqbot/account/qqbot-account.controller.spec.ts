@@ -21,6 +21,7 @@ import type { INestApplication } from '@nestjs/common';
 import { QqbotAccountController } from '@/modules/qqbot/core/contract/account/qqbot-account.controller';
 import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
 import { QqbotNapcatLoginService } from '@/modules/qqbot/napcat/application/login/qqbot-napcat-login.service';
+import { QqbotNapcatLoginController } from '@/modules/qqbot/napcat/contract/qqbot-napcat-login.controller';
 import { QqbotReverseWsService } from '@/modules/qqbot/core/infrastructure/integration/connection/qqbot-reverse-ws.service';
 
 describe('QqbotAccountController', () => {
@@ -37,7 +38,7 @@ describe('QqbotAccountController', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      controllers: [QqbotAccountController],
+      controllers: [QqbotAccountController, QqbotNapcatLoginController],
       providers: [
         { provide: QqbotAccountService, useValue: accountService },
         { provide: QqbotNapcatLoginService, useValue: napcatLoginService },

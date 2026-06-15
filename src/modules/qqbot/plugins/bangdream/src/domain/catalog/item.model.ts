@@ -3,7 +3,7 @@ import {
   Server,
   getServerByPriority,
 } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model';
-import mainAPI from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import bangdreamCatalogCache from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 import { itemResourceRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/item-resource.repository';
 import { globalDefaultServer } from '@/modules/qqbot/plugins/bangdream/src/config/runtime-config';
 import { BANGDREAM_ITEM_TYPE_PREFIXES } from '@/modules/qqbot/plugins/bangdream/src/domain/common/bangdream-protocol';
@@ -47,7 +47,7 @@ export class Item {
       return;
     }
     //如果是其他物品
-    const itemData = mainAPI['items'][itemId];
+    const itemData = bangdreamCatalogCache['items'][itemId];
     if (itemData == undefined) {
       return;
     }

@@ -7,8 +7,13 @@ export function createFflogsCharacterSummaryOperation(
 ) {
   return {
     cacheTtlMs: 60_000,
-    execute: (input: Record<string, any>) =>
-      application.getCharacterSummary(input),
+    execute: async (input: Record<string, any>) => {
+      const raw = `${input.raw ?? input.text ?? ''}`.trim();
+      const parsed = raw ? await application.parseCharacterInput(raw) : {};
+      return application.getCharacterSummary(
+        removeEmpty({ ...input, ...parsed }),
+      );
+    },
     inputSchema: {
       properties: {
         characterName: { description: '角色名', type: 'string' },
@@ -52,4 +57,14 @@ export function createFflogsCharacterSummaryOperation(
       type: 'object',
     },
   };
+}
+
+function removeEmpty(input: Record<string, any>) {
+  return Object.entries(input).reduce<Record<string, any>>(
+    (result, [key, value]) => {
+      if (value !== undefined && value !== '') result[key] = value;
+      return result;
+    },
+    {},
+  );
 }

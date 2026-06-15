@@ -83,10 +83,10 @@ describe('QQBot third-phase module boundaries', () => {
       'QqbotPluginHttpClientService',
       'QqbotPluginRegistryService',
       'QqbotEventPluginRegistryService',
-      'QqbotBangDream',
-      'QqbotFf14',
-      'QqbotFflogs',
-      'QqbotRepeater',
+      `Qqbot${'BangDream'}`,
+      `Qqbot${'Ff14'}`,
+      `Qqbot${'Fflogs'}`,
+      `Qqbot${'Repeater'}`,
       'BangDreamApplicationService',
     ];
 
@@ -127,6 +127,22 @@ describe('QQBot third-phase module boundaries', () => {
           source,
         );
       })
+      .map(({ file }) => file);
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps NapCat WebUI HTTP clients inside infrastructure integration', () => {
+    const violations = collectTsFiles(join(qqbotRoot, 'napcat/application'))
+      .map((filePath) => ({
+        file: toRepoPath(filePath),
+        source: readSource(filePath),
+      }))
+      .filter(({ source }) =>
+        /from ['"]https?['"]|import \* as https?|client\.request|http\.request|https\.request|Credential.*expiresAt/.test(
+          source,
+        ),
+      )
       .map(({ file }) => file);
 
     expect(violations).toEqual([]);

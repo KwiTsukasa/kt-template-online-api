@@ -1,4 +1,4 @@
-export type QqbotBangDreamOperationKey =
+export type BangDreamOperationKey =
   | 'bangdream.card.illustration'
   | 'bangdream.card.search'
   | 'bangdream.character.search'
@@ -15,7 +15,7 @@ export type QqbotBangDreamOperationKey =
   | 'bangdream.song.random'
   | 'bangdream.song.search';
 
-export type QqbotBangDreamOperationHandlerName =
+export type BangDreamOperationHandlerName =
   | 'getCardIllustration'
   | 'getCutoffAll'
   | 'getCutoffDetail'
@@ -32,7 +32,7 @@ export type QqbotBangDreamOperationHandlerName =
   | 'searchSong'
   | 'simulateGacha';
 
-export type QqbotBangDreamCommandInput = {
+export type BangDreamCommandInput = {
   args?: string[];
   cardId?: number | string;
   compress?: boolean | string;
@@ -55,9 +55,9 @@ export type QqbotBangDreamCommandInput = {
   useEasyBG?: boolean | string;
 };
 
-export type QqbotBangDreamCommandOutput = {
+export type BangDreamCommandOutput = {
   imageCount: number;
-  operationKey: QqbotBangDreamOperationKey;
+  operationKey: BangDreamOperationKey;
   query: string;
   replyText: string;
   source: string;

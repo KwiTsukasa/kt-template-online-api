@@ -5,6 +5,7 @@ import { parseQqbotPluginManifest } from '@/modules/qqbot/plugin-platform/domain
 type BangDreamSqlCommandRow = {
   aliases: string[];
   cooldownMs: number;
+  name?: string;
   operationKey: string;
   remark?: string;
 };
@@ -13,7 +14,7 @@ const BANGDREAM_FULL_SQL_ROW_PATTERN =
   /\(\d+, '[^']+', '[^']+', '(\[[^']*\])', '\[[^']*\]', 'bangdream', '([^']+)', 'plain', 'all', '\{\}', '', '[^']*', 1, 0, (\d+), '([^']*)'\)/g;
 
 const BANGDREAM_REFACTOR_V3_SQL_ROW_PATTERN =
-  /\(\s*\d+,\s*'([^']+)',\s*'[^']+',\s*'[^']+',\s*'[^']+',\s*'(\[[^']*\])',\s*'bangdream',\s*1,\s*(\d+)\s*\)/g;
+  /\(\s*\d+,\s*'([^']+)',\s*'[^']+',\s*'[^']+',\s*'([^']*)',\s*'(\[[^']*\])',\s*'bangdream',\s*1,\s*(\d+)\s*\)/g;
 
 const pluginRoot = join(
   process.cwd(),
@@ -47,8 +48,9 @@ function getBangDreamFullSqlCommandRows(sql: string) {
 function getBangDreamRefactorV3SqlCommandRows(sql: string) {
   return Array.from(sql.matchAll(BANGDREAM_REFACTOR_V3_SQL_ROW_PATTERN)).map(
     (match): BangDreamSqlCommandRow => ({
-      aliases: JSON.parse(match[2]) as string[],
-      cooldownMs: Number(match[3]) * 1000,
+      aliases: JSON.parse(match[3]) as string[],
+      cooldownMs: Number(match[4]) * 1000,
+      name: match[2],
       operationKey: match[1],
     }),
   );
@@ -57,6 +59,7 @@ function getBangDreamRefactorV3SqlCommandRows(sql: string) {
 function expectSqlRowsMatchManifest(
   sqlRows: BangDreamSqlCommandRow[],
   options: {
+    aliasSource?: 'manifest' | 'plugin-manifest-only';
     requireRemark?: boolean;
   } = {},
 ) {
@@ -77,11 +80,16 @@ function expectSqlRowsMatchManifest(
     for (const operation of manifest.operations) {
       const row = rowsByKey.get(operation.key);
 
-      expect(row).toEqual(
-        expect.objectContaining({
-          aliases: [...operation.aliases],
-        }),
-      );
+      if (options.aliasSource === 'plugin-manifest-only') {
+        expect(row?.aliases).toEqual([]);
+        expect(row?.name).toBe('');
+      } else {
+        expect(row).toEqual(
+          expect.objectContaining({
+            aliases: [...operation.aliases],
+          }),
+        );
+      }
       expect(row?.cooldownMs).toBeGreaterThan(0);
       if (options.requireRemark) {
         expect(row?.remark).not.toHaveLength(0);
@@ -111,7 +119,12 @@ describe('refactor v3 BangDream command seed SQL', () => {
   const sqlRows = getBangDreamRefactorV3SqlCommandRows(sql);
 
   it('keeps fresh-schema BangDream seed aligned with the manifest', () => {
-    expectSqlRowsMatchManifest(sqlRows);
+    expectSqlRowsMatchManifest(sqlRows, {
+      aliasSource: 'plugin-manifest-only',
+    });
+    for (const operation of manifest.operations) {
+      expect(sql).not.toContain(JSON.stringify(operation.aliases));
+    }
   });
 
   it('reactivates dirty command rows on duplicate keys', () => {

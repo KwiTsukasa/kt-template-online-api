@@ -6,9 +6,9 @@ import {
   match,
 } from '@/modules/qqbot/plugins/bangdream/src/domain/search/fuzzy-search';
 import {
-  createDefaultFuzzySearchRuleRegistry,
+  createDefaultFuzzySearchRules,
   createFuzzySearchKeyword,
-} from '@/modules/qqbot/plugins/bangdream/src/domain/search/fuzzy-search-rule.registry';
+} from '@/modules/qqbot/plugins/bangdream/src/domain/search/fuzzy-search-rules';
 import type { FuzzySearchResult } from '@/modules/qqbot/plugins/bangdream/src/domain/search/fuzzy-search.types';
 import { createBangDreamEntityMatcher } from '@/modules/qqbot/plugins/bangdream/src/domain/search/entity-list-matcher';
 import { configureBangDreamRuntimeIo } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
@@ -52,8 +52,8 @@ describe('BangDream fuzzy search helpers', () => {
     expect(checkRelationList(136, ['<100', '>200'])).toBe(false);
   });
 
-  it('routes configured aliases through the rule registry', () => {
-    const registry = createDefaultFuzzySearchRuleRegistry({
+  it('routes configured aliases through the rule set', () => {
+    const rules = createDefaultFuzzySearchRules({
       songs: {
         '136': ['夏祭り'],
       },
@@ -63,7 +63,7 @@ describe('BangDream fuzzy search helpers', () => {
       (result[key] ??= []).push(value);
     };
 
-    expect(registry.match(createFuzzySearchKeyword('夏祭り'), push)).toBe(true);
+    expect(rules.match(createFuzzySearchKeyword('夏祭り'), push)).toBe(true);
     expect(result).toEqual({ songs: [136] });
   });
 });

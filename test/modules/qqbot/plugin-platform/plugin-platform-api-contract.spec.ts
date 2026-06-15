@@ -1,4 +1,5 @@
-import { readFileSync } from 'fs';
+import { createHash } from 'crypto';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
@@ -8,6 +9,7 @@ import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-au
 import { QqbotPluginPlatformController } from '../../../../src/modules/qqbot/plugin-platform/contract/plugin-platform.controller';
 import { QqbotPluginPlatformModule } from '../../../../src/modules/qqbot/plugin-platform/plugin-platform.module';
 import { QqbotPluginPlatformService } from '../../../../src/modules/qqbot/plugin-platform/application/plugin-platform.service';
+import { QqbotPluginPackageReaderService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/package/plugin-package-reader.service';
 import {
   QQBOT_PLUGIN_PLATFORM_ENTITIES,
   QqbotPlugin,
@@ -61,6 +63,55 @@ const createManifest = () => ({
   version: '0.1.0',
 });
 
+const stableStringify = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .filter((key) => record[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const sha256 = (content: Buffer | string) =>
+  createHash('sha256').update(content).digest('hex');
+
+const packageRoot = join(
+  process.cwd(),
+  '.kt-workspace',
+  'qqbot-plugin-packages',
+  'api-contract',
+);
+
+const writePluginPackage = (manifest: ReturnType<typeof createManifest>) => {
+  mkdirSync(packageRoot, { recursive: true });
+  const packageBody = {
+    contentHash: '',
+    files: [],
+    manifest,
+  };
+  packageBody.contentHash = sha256(
+    stableStringify({
+      files: packageBody.files,
+      manifest: packageBody.manifest,
+    }),
+  );
+  const packagePath = join(
+    packageRoot,
+    `${manifest.pluginKey}-${manifest.version}.qqbot-plugin.json`,
+  );
+  writeFileSync(packagePath, `${JSON.stringify(packageBody, null, 2)}\n`);
+  return {
+    packageHash: packageBody.contentHash,
+    packagePath,
+  };
+};
+
 describe('QQBot plugin platform API contract', () => {
   let app: INestApplication;
   let repositoryMocks: Map<unknown, ReturnType<typeof createRepositoryMock>>;
@@ -71,6 +122,7 @@ describe('QQBot plugin platform API contract', () => {
       controllers: [QqbotPluginPlatformController],
       providers: [
         QqbotPluginPlatformService,
+        QqbotPluginPackageReaderService,
         ...[
           QqbotPlugin,
           QqbotPluginVersion,
@@ -101,6 +153,7 @@ describe('QQBot plugin platform API contract', () => {
 
   afterEach(async () => {
     await app.close();
+    rmSync(packageRoot, { force: true, recursive: true });
   });
 
   it('registers plugin-platform as a first-class AppModule import', () => {
@@ -167,6 +220,55 @@ describe('QQBot plugin platform API contract', () => {
         valid: true,
       },
     });
+  });
+
+  it('validates controlled plugin packages during upload and install', async () => {
+    const manifest = createManifest();
+    const { packageHash, packagePath } = writePluginPackage(manifest);
+
+    const uploadResponse = await request(app.getHttpServer())
+      .post('/qqbot/plugin-platform/upload')
+      .send({ packagePath })
+      .expect(200);
+
+    expect(uploadResponse.body).toMatchObject({
+      code: 200,
+      data: {
+        manifest: {
+          pluginKey: manifest.pluginKey,
+        },
+        packageHash,
+        packagePath,
+        valid: true,
+      },
+    });
+
+    await request(app.getHttpServer())
+      .post('/qqbot/plugin-platform/install-local')
+      .send({ packageHash, packagePath })
+      .expect(200);
+
+    expect(repositoryMocks.get(QqbotPluginVersion)?.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        packageHash,
+      }),
+    );
+    expect(
+      repositoryMocks.get(QqbotPluginInstallation)?.save,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        installedPath: packagePath,
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .post('/qqbot/plugin-platform/install-local')
+      .send({ packageHash: 'bad-hash', packagePath })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/qqbot/plugin-platform/install-local')
+      .send({ packagePath: join(process.cwd(), 'package.json') })
+      .expect(400);
   });
 
   it('keeps TypeORM entity registration aligned with the persistence contract', () => {

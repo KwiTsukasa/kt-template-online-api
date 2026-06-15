@@ -3,13 +3,12 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
 import { DictModule } from '@/modules/admin/platform-config/dict/dict.module';
+import { QqbotNapcatModule } from '@/modules/qqbot/napcat/qqbot-napcat.module';
 import { QqbotPluginPlatformModule } from '@/modules/qqbot/plugin-platform/plugin-platform.module';
 import { QqbotAccountAbility } from '@/modules/qqbot/core/infrastructure/persistence/account/qqbot-account-ability.entity';
 import { QqbotAccountController } from '@/modules/qqbot/core/contract/account/qqbot-account.controller';
 import { QqbotAccount } from '@/modules/qqbot/core/infrastructure/persistence/account/qqbot-account.entity';
 import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
-import { QqbotNapcatLoginService } from '@/modules/qqbot/napcat/application/login/qqbot-napcat-login.service';
-import { QqbotNapcatWatchdogService } from '@/modules/qqbot/napcat/application/login/qqbot-napcat-watchdog.service';
 import { QqbotCommandController } from '@/modules/qqbot/core/contract/command/qqbot-command.controller';
 import { QqbotCommand } from '@/modules/qqbot/core/infrastructure/persistence/command/qqbot-command.entity';
 import { QqbotCommandEngineService } from '@/modules/qqbot/core/application/command/qqbot-command-engine.service';
@@ -25,22 +24,11 @@ import { QqbotDashboardService } from '@/modules/qqbot/core/application/dashboar
 import { QqbotDedupe } from '@/modules/qqbot/core/infrastructure/persistence/dedupe/qqbot-dedupe.entity';
 import { QqbotDedupeService } from '@/modules/qqbot/core/application/dedupe/qqbot-dedupe.service';
 import { QqbotEventService } from '@/modules/qqbot/core/application/event/qqbot-event.service';
-import { NapcatAccountBinding } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-account-binding.entity';
-import { NapcatContainer } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-container.entity';
-import { NapcatDeviceIdentity } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-device-identity.entity';
-import { NapcatDeviceIdentityService } from '@/modules/qqbot/napcat/infrastructure/integration/device/napcat-device-identity.service';
-import { NapcatLoginChallengeEntity } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-login-challenge.entity';
-import { NapcatLoginSession } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-login-session.entity';
-import { NapcatLoginStateStoreService } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-login-state-store.service';
-import { NapcatRuntimeCleanup } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-runtime-cleanup.entity';
 import { QqbotConversation } from '@/modules/qqbot/core/infrastructure/persistence/message/qqbot-conversation.entity';
 import { QqbotMessageController } from '@/modules/qqbot/core/contract/message/qqbot-message.controller';
 import { QqbotMessage } from '@/modules/qqbot/core/infrastructure/persistence/message/qqbot-message.entity';
 import { QqbotMessageService } from '@/modules/qqbot/core/application/message/qqbot-message.service';
 import { QqbotBusService } from '@/modules/qqbot/core/infrastructure/integration/bus/qqbot-bus.service';
-import { QqbotAccountNapcat } from '@/modules/qqbot/napcat/infrastructure/persistence/qqbot-account-napcat.entity';
-import { QqbotNapcatContainer } from '@/modules/qqbot/napcat/infrastructure/persistence/qqbot-napcat-container.entity';
-import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
 import { QqbotAllowlist } from '@/modules/qqbot/core/infrastructure/persistence/permission/qqbot-allowlist.entity';
 import { QqbotBlocklist } from '@/modules/qqbot/core/infrastructure/persistence/permission/qqbot-blocklist.entity';
 import { QqbotPermissionController } from '@/modules/qqbot/core/contract/permission/qqbot-permission.controller';
@@ -67,14 +55,6 @@ export const QQBOT_CORE_ENTITIES = [
   QqbotConversation,
   QqbotDedupe,
   QqbotMessage,
-  NapcatAccountBinding,
-  NapcatContainer,
-  NapcatDeviceIdentity,
-  NapcatLoginChallengeEntity,
-  NapcatLoginSession,
-  NapcatRuntimeCleanup,
-  QqbotAccountNapcat,
-  QqbotNapcatContainer,
   QqbotRule,
   QqbotSendLog,
 ];
@@ -100,11 +80,6 @@ export const QQBOT_CORE_PROVIDERS = [
   QqbotDedupeService,
   QqbotEventService,
   QqbotMessageService,
-  NapcatDeviceIdentityService,
-  NapcatLoginStateStoreService,
-  QqbotNapcatLoginService,
-  QqbotNapcatWatchdogService,
-  QqbotNapcatContainerService,
   QqbotPermissionService,
   QqbotRateLimitService,
   QqbotReplyTemplateService,
@@ -117,9 +92,6 @@ export const QQBOT_CORE_PROVIDERS = [
 export const QQBOT_CORE_EXPORTS = [
   QqbotAccountService,
   QqbotSendService,
-  NapcatDeviceIdentityService,
-  QqbotNapcatLoginService,
-  QqbotNapcatContainerService,
   QqbotReverseWsService,
 ];
 
@@ -128,6 +100,7 @@ export const QQBOT_CORE_EXPORTS = [
     ConfigModule,
     AdminAuthGuardModule,
     DictModule,
+    forwardRef(() => QqbotNapcatModule),
     forwardRef(() => QqbotPluginPlatformModule),
     TypeOrmModule.forFeature(QQBOT_CORE_ENTITIES),
   ],

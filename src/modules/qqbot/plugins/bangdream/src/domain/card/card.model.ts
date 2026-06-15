@@ -8,7 +8,7 @@ import {
 import { Gacha } from '@/modules/qqbot/plugins/bangdream/src/domain/gacha/gacha.model';
 import { Event } from '@/modules/qqbot/plugins/bangdream/src/domain/event/event.model';
 import { Image, loadImage } from 'skia-canvas';
-import { bangDreamMainDataRepository } from '@/modules/qqbot/plugins/bangdream/src/application/main-data.repository';
+import { bangdreamCatalogRepository } from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-repository';
 import { globalDefaultServer } from '@/modules/qqbot/plugins/bangdream/src/config/runtime-config';
 import { stringToNumberArray } from '@/modules/qqbot/plugins/bangdream/src/domain/common/model-utils';
 import { BANGDREAM_CARD_TYPE_NAME } from '@/modules/qqbot/plugins/bangdream/src/config/dictionary/default-dictionary';
@@ -94,7 +94,7 @@ export class Card {
    */
   constructor(cardId: number) {
     this.cardId = cardId;
-    const cardData = bangDreamMainDataRepository.getEntity<Record<string, any>>(
+    const cardData = bangdreamCatalogRepository.getEntity<Record<string, any>>(
       'cards',
       cardId,
     );

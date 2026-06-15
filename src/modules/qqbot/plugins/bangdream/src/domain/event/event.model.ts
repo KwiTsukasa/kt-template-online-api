@@ -1,6 +1,6 @@
 import { Canvas, Image } from 'skia-canvas';
 import { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model';
-import { bangDreamMainDataRepository } from '@/modules/qqbot/plugins/bangdream/src/application/main-data.repository';
+import { bangdreamCatalogRepository } from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-repository';
 import { Attribute } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/attribute.model';
 import { Character } from '@/modules/qqbot/plugins/bangdream/src/domain/character/character.model';
 import { globalDefaultServer } from '@/modules/qqbot/plugins/bangdream/src/config/runtime-config';
@@ -95,7 +95,7 @@ export class Event {
    */
   constructor(eventId: number) {
     this.eventId = eventId;
-    const eventData = bangDreamMainDataRepository.getEntity<
+    const eventData = bangdreamCatalogRepository.getEntity<
       Record<string, any>
     >('events', eventId);
     if (eventData == undefined) {
@@ -337,7 +337,7 @@ export function getPresentEvent(server: Server, time?: number) {
     time = Date.now();
   }
   const eventList: Array<number> = [];
-  const eventListMain = bangDreamMainDataRepository.getCollection('events');
+  const eventListMain = bangdreamCatalogRepository.getCollection('events');
   for (const key in eventListMain) {
     const event = new Event(parseInt(key));
     //如果在活动进行时
@@ -435,7 +435,7 @@ export function getRecentEventListByEventAndServer(
   count: number,
   sameType: boolean = false,
 ) {
-  const eventIdList = bangDreamMainDataRepository.getNumericIds('events');
+  const eventIdList = bangdreamCatalogRepository.getNumericIds('events');
   const candidates: CutoffRecentEventCandidate[] = eventIdList
     .map((eventId) => new Event(eventId))
     .map((candidate) => ({

@@ -1,7 +1,7 @@
-jest.mock('@/modules/qqbot/plugins/bangdream/src/application/main-data-store', () => ({
+jest.mock('@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache', () => ({
   __esModule: true,
   default: {},
-  waitForMainDataReady: jest.fn().mockResolvedValue(undefined),
+  waitForBangDreamCatalogReady: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockContext = {
@@ -59,15 +59,14 @@ jest.mock('@/modules/qqbot/plugins/bangdream/src/operations', () => ({
     ),
 }));
 
-import {
-  createPlugin,
-  type BangDreamManifestOperation,
-} from '@/modules/qqbot/plugins/bangdream/src';
+import { createPlugin } from '@/modules/qqbot/plugins/bangdream/src';
 import { BangDreamCommandContext } from '@/modules/qqbot/plugins/bangdream/src/application/bangdream-command-context';
-import { waitForMainDataReady } from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import { waitForBangDreamCatalogReady } from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 
-const manifestOperations: BangDreamManifestOperation[] =
-  mockManifestOperations.map(([key, handlerName]) => ({ handlerName, key }));
+const manifestOperations = mockManifestOperations.map(([key, handlerName]) => ({
+  handlerName,
+  key,
+}));
 
 describe('BangDream package entry', () => {
   beforeEach(() => {
@@ -110,7 +109,7 @@ describe('BangDream package entry', () => {
     });
 
     expect(mockContext.refreshDictionaryCache).toHaveBeenCalledTimes(1);
-    expect(waitForMainDataReady).toHaveBeenCalledTimes(1);
+    expect(waitForBangDreamCatalogReady).toHaveBeenCalledTimes(1);
     expect(songSearch).toHaveBeenCalledWith(
       { text: '夏祭り' },
       mockContext,

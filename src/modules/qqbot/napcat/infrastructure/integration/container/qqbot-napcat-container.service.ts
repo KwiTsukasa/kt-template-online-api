@@ -13,8 +13,8 @@ import {
 } from './napcat-docker-device-options';
 import { NapcatDeviceIdentityService } from '../device/napcat-device-identity.service';
 import { QqbotAccount } from '@/modules/qqbot/core/infrastructure/persistence/account/qqbot-account.entity';
-import { QqbotAccountNapcat } from '../../persistence/qqbot-account-napcat.entity';
-import { QqbotNapcatContainer } from '../../persistence/qqbot-napcat-container.entity';
+import { NapcatAccountBinding } from '../../persistence/napcat-account-binding.entity';
+import { NapcatContainer } from '../../persistence/napcat-container.entity';
 import type {
   NapcatApiResponse,
   NapcatCredential,
@@ -52,10 +52,10 @@ type NapcatAutoLoginResult = {
 export class QqbotNapcatContainerService {
   constructor(
     private readonly configService: ConfigService,
-    @InjectRepository(QqbotNapcatContainer)
-    private readonly containerRepository: Repository<QqbotNapcatContainer>,
-    @InjectRepository(QqbotAccountNapcat)
-    private readonly bindingRepository: Repository<QqbotAccountNapcat>,
+    @InjectRepository(NapcatContainer)
+    private readonly containerRepository: Repository<NapcatContainer>,
+    @InjectRepository(NapcatAccountBinding)
+    private readonly bindingRepository: Repository<NapcatAccountBinding>,
     private readonly toolsService: ToolsService,
     private readonly deviceIdentityService?: NapcatDeviceIdentityService,
   ) {}
@@ -169,7 +169,7 @@ export class QqbotNapcatContainerService {
   }
 
   private async resolveRuntimeDeviceIdentity(
-    container: QqbotNapcatContainer,
+    container: NapcatContainer,
     selfId: string,
   ): Promise<NapcatDockerDeviceOptions | undefined> {
     if (
@@ -199,7 +199,7 @@ export class QqbotNapcatContainerService {
   }
 
   async tryAutoLogin(
-    container: QqbotNapcatContainer,
+    container: NapcatContainer,
     options: NapcatLoginEnvOptions,
   ): Promise<NapcatAutoLoginResult> {
     const selfId = this.toolsService.toTrimmedString(options.selfId);
@@ -334,8 +334,6 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     const existing = await this.bindingRepository.findOne({
       where: {
         accountId,
-        containerId,
-        isDeleted: false,
       },
     });
     if (existing) {
@@ -343,8 +341,11 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
         { id: existing.id },
         {
           bindStatus: 'bound',
+          containerId,
           isPrimary: true,
+          isDeleted: false,
           lastLoginAt: new Date(),
+          remark: '',
         },
       );
       await this.removeOtherAccountContainers(accountId, containerId);
@@ -475,7 +476,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     return true;
   }
 
-  async detectRuntimeOffline(container: QqbotNapcatContainer) {
+  async detectRuntimeOffline(container: NapcatContainer) {
     if (this.getManagedMode() !== 'ssh' || !container.name) return null;
 
     try {
@@ -549,7 +550,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   async inspectRuntimeStatus(
-    container: QqbotNapcatContainer,
+    container: NapcatContainer,
   ): Promise<QqbotNapcatRuntimeStatusSnapshot> {
     const checkedAt = new Date();
     const containerOnline = container.status === 'running';
@@ -694,12 +695,12 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     }
   }
 
-  private async removeRemoteDockerContainer(container: QqbotNapcatContainer) {
+  private async removeRemoteDockerContainer(container: NapcatContainer) {
     const script = this.buildRemoteRemoveScript(container);
     await this.runProcess('ssh', [...this.getSshArgs(), 'sh -s'], script);
   }
 
-  private buildRemoteRemoveScript(container: QqbotNapcatContainer) {
+  private buildRemoteRemoveScript(container: NapcatContainer) {
     const dataDir = this.sh(container.dataDir || '');
     const name = this.sh(container.name);
     const rootDir = this.sh(this.getRootDir());
@@ -725,7 +726,7 @@ fi
 `;
   }
 
-  private buildRemoteResetLoginStateScript(container: QqbotNapcatContainer) {
+  private buildRemoteResetLoginStateScript(container: NapcatContainer) {
     const dataDir = this.sh(container.dataDir || '');
     const name = this.sh(container.name);
     const rootDir = this.sh(this.getRootDir());
@@ -762,7 +763,7 @@ echo "__KT_PROGRESS__:container-started:NapCat 容器已启动"
 `;
   }
 
-  private buildRemoteRecentLogsScript(container: QqbotNapcatContainer) {
+  private buildRemoteRecentLogsScript(container: NapcatContainer) {
     return this.buildRemoteRecentLogsByNameScript(container.name);
   }
 
@@ -927,6 +928,7 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     const container = await this.containerRepository.save(
       this.containerRepository.create({
         baseUrl,
+        accountId: accountId || null,
         dataDir,
         image,
         isDeleted: false,
@@ -1194,7 +1196,7 @@ ${accountRunFlag}${passwordRunFlag}${deviceRunFlags}  -p "$PORT:6099" \\
     };
   }
 
-  private toRuntime(container: QqbotNapcatContainer): QqbotNapcatRuntime {
+  private toRuntime(container: NapcatContainer): QqbotNapcatRuntime {
     return {
       baseUrl: this.normalizeBaseUrl(container.baseUrl),
       id: container.id,

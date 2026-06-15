@@ -1,14 +1,14 @@
-export type QqbotFflogsKnownWorldResolver = (
+export type FflogsKnownWorldResolver = (
   value: string,
 ) => null | { serverSlug?: string };
 
-export type QqbotFflogsCharacterInputParseOptions = {
-  resolveKnownWorld?: QqbotFflogsKnownWorldResolver;
+export type FflogsCharacterInputParseOptions = {
+  resolveKnownWorld?: FflogsKnownWorldResolver;
 };
 
-export function parseQqbotFflogsCharacterInput(
+export function parseFflogsCharacterInput(
   rawArgs: string,
-  options: QqbotFflogsCharacterInputParseOptions = {},
+  options: FflogsCharacterInputParseOptions = {},
 ) {
   const tokens = rawArgs.split(/\s+/).filter(Boolean);
   const flags = new Map<string, string | true>();
@@ -130,7 +130,7 @@ export function parseQqbotFflogsCharacterInput(
 
 function pickPositionalsByKnownWorld(
   positional: string[],
-  resolveKnownWorld?: QqbotFflogsKnownWorldResolver,
+  resolveKnownWorld?: FflogsKnownWorldResolver,
 ) {
   if (!resolveKnownWorld) return null;
 

@@ -1,7 +1,7 @@
 import {
-  createDefaultFuzzySearchRuleRegistry,
+  createDefaultFuzzySearchRules,
   createFuzzySearchKeyword,
-} from '@/modules/qqbot/plugins/bangdream/src/domain/search/fuzzy-search-rule.registry';
+} from '@/modules/qqbot/plugins/bangdream/src/domain/search/fuzzy-search-rules';
 import { searchDictionaryRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/search/search-dictionary.repository';
 import type {
   FuzzySearchConfig,
@@ -23,8 +23,8 @@ const QUOTE_EDGE_PATTERN = /^["“”『』「」]|["“”『』「」]$/g;
 const RESERVED_MATCH_KEYS = new Set(['_number', '_relationStr', '_all']);
 
 let cachedConfig: FuzzySearchConfig | undefined;
-let cachedRuleRegistry:
-  | ReturnType<typeof createDefaultFuzzySearchRuleRegistry>
+let cachedRules:
+  | ReturnType<typeof createDefaultFuzzySearchRules>
   | undefined;
 
 export const config = new Proxy({} as FuzzySearchConfig, {
@@ -38,11 +38,11 @@ function getFuzzySearchConfig() {
   return cachedConfig;
 }
 
-function getRuleRegistry() {
-  cachedRuleRegistry ??= createDefaultFuzzySearchRuleRegistry(
+function getFuzzySearchRules() {
+  cachedRules ??= createDefaultFuzzySearchRules(
     getFuzzySearchConfig(),
   );
-  return cachedRuleRegistry;
+  return cachedRules;
 }
 
 /**
@@ -105,7 +105,7 @@ export function fuzzySearch(keyword: string): FuzzySearchResult {
   const push = appendTo(matches);
 
   for (const rawKeyword of extractKeywords(keyword)) {
-    getRuleRegistry().match(createFuzzySearchKeyword(rawKeyword), push);
+    getFuzzySearchRules().match(createFuzzySearchKeyword(rawKeyword), push);
   }
 
   return matches;

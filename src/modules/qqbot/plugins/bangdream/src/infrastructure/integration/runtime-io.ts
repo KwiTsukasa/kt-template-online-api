@@ -120,4 +120,4 @@ export async function sleepBangDreamRuntime(ms: number) {
   await new Promise((resolve) => globalThis[`set${'Timeout'}`](resolve, ms));
 }
 
-export const bangDreamFallbackImageBuffer = defaultPng;
+export const bangdreamFallbackImageBuffer = defaultPng;

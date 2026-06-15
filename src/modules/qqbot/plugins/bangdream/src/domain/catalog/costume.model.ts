@@ -1,5 +1,5 @@
 import { globalDefaultServer } from '@/modules/qqbot/plugins/bangdream/src/config/runtime-config';
-import mainAPI from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import bangdreamCatalogCache from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 import { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model';
 import { Image, loadImage } from 'skia-canvas';
 import { stringToNumberArray } from '@/modules/qqbot/plugins/bangdream/src/domain/common/model-utils';
@@ -23,7 +23,7 @@ export class Costume {
    */
   constructor(costumeId: number) {
     this.costumeId = costumeId;
-    const costumeData = mainAPI['costumes'][costumeId.toString()];
+    const costumeData = bangdreamCatalogCache['costumes'][costumeId.toString()];
     if (costumeData == undefined) {
       this.isExist = false;
       return;

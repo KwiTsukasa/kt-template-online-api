@@ -1,4 +1,4 @@
-import mainAPI from '@/modules/qqbot/plugins/bangdream/src/application/main-data-store';
+import bangdreamCatalogCache from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 import { Character } from '@/modules/qqbot/plugins/bangdream/src/domain/character/character.model';
 import { Image, loadImage } from 'skia-canvas';
 import { convertSvgToPngBuffer } from '@/modules/qqbot/plugins/bangdream/src/theme/canvas-image';
@@ -18,8 +18,8 @@ export class Band {
    */
   constructor(bandId: number) {
     this.bandId = bandId;
-    const bandData = mainAPI['singer'][bandId.toString()];
-    if (mainAPI['bands'][bandId.toString()] != undefined) {
+    const bandData = bangdreamCatalogCache['singer'][bandId.toString()];
+    if (bangdreamCatalogCache['bands'][bandId.toString()] != undefined) {
       this.hasIcon = true;
     }
     if (bandData == undefined) {
@@ -36,7 +36,7 @@ export class Band {
    */
   getMembers() {
     const members = [];
-    const characterList = mainAPI['characters'];
+    const characterList = bangdreamCatalogCache['characters'];
     for (const characterID in characterList) {
       const character = new Character(parseInt(characterID));
       if (character.bandId == this.bandId) {

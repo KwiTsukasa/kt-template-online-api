@@ -1,15 +1,7 @@
 # QQBot NapCat Schema
 
 NapCat owns container runtime, account binding, device identity, login session,
-challenge, and cleanup persistence.
-
-Current compatibility tables:
-
-- `qqbot_account_napcat`
-- `qqbot_napcat_container`
-- `napcat_device_identity`
-
-Target v3 tables:
+challenge, and cleanup persistence through the v3 `napcat_*` tables.
 
 - `napcat_container`
 - `napcat_device_identity`
@@ -21,7 +13,7 @@ Target v3 tables:
 Verification SQL:
 
 ```sql
+SELECT COUNT(*) FROM napcat_container WHERE is_deleted = 0;
 SELECT COUNT(*) FROM napcat_device_identity;
-SELECT COUNT(*) FROM qqbot_account_napcat WHERE is_deleted = 0;
-SELECT COUNT(*) FROM qqbot_napcat_container WHERE is_deleted = 0;
+SELECT COUNT(*) FROM napcat_account_binding WHERE is_deleted = 0;
 ```

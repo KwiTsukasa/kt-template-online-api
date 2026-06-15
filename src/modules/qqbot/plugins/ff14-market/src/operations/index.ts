@@ -1,7 +1,7 @@
 import type { Ff14MarketApplication } from '../application/ff14-market-application';
 import {
   createFf14MarketPriceOperation,
-  ff14MarketPriceHandlerName,
+  ff14PricePriceHandlerName,
 } from './market-price';
 import type { Ff14MarketManifestOperation } from './operation-manifest';
 import {
@@ -14,7 +14,7 @@ export function buildFf14MarketOperations(
   operations: Ff14MarketManifestOperation[],
 ) {
   const operationFactories = {
-    [ff14MarketPriceHandlerName]: () =>
+    [ff14PricePriceHandlerName]: () =>
       createFf14MarketPriceOperation(application),
     [ff14ResolveItemHandlerName]: () =>
       createFf14ResolveItemOperation(application),
@@ -34,6 +34,7 @@ export function buildFf14MarketOperations(
     }
     const implementation = factory();
     return {
+      aliases: operation.aliases,
       cacheTtlMs: operation.cacheTtlMs,
       description: operation.description,
       execute: implementation.execute,
@@ -41,6 +42,7 @@ export function buildFf14MarketOperations(
       key: operation.key,
       name: operation.name,
       outputSchema: operation.outputSchema || implementation.outputSchema,
+      timeoutMs: operation.timeoutMs,
     };
   });
 }

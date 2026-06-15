@@ -1,18 +1,18 @@
 export type Ff14HttpMethod = 'GET';
 
-export type QqbotFf14DataCenter = {
+export type Ff14DataCenter = {
   name: string;
   region: string;
   worlds: string[];
 };
 
-export type QqbotFf14MarketCatalog = {
-  dataCenters: QqbotFf14DataCenter[];
+export type Ff14MarketCatalog = {
+  dataCenters: Ff14DataCenter[];
   defaultRegion?: string;
   regions: string[];
 };
 
-export type QqbotFf14MarketTarget = {
+export type Ff14MarketTarget = {
   dataCenter?: string;
   label: string;
   region?: string;
@@ -20,7 +20,7 @@ export type QqbotFf14MarketTarget = {
   world?: string;
 };
 
-export type QqbotFf14ResolvedItem = {
+export type Ff14ResolvedItem = {
   icon?: string;
   isUntradable?: boolean;
   itemId: number;
@@ -38,10 +38,10 @@ export type UniversalisListing = {
   worldName?: string;
 };
 
-export type QqbotFf14PriceResult = {
+export type Ff14PriceResult = {
   averagePrice?: number;
   hq?: boolean;
-  item: QqbotFf14ResolvedItem;
+  item: Ff14ResolvedItem;
   listings: UniversalisListing[];
   minPrice?: number;
   replyText: string;

@@ -1,3 +1,6 @@
+import { createHash } from 'crypto';
+import * as http from 'http';
+import * as https from 'https';
 import * as QRCode from 'qrcode';
 
 export type NewDeviceQrStatus =
@@ -32,6 +35,142 @@ export type NewDeviceLoginResult = {
 export type NapcatLoginApiTransport = {
   post(path: string, body: Record<string, unknown>): Promise<unknown>;
 };
+
+export type NapcatWebuiRuntime = {
+  baseUrl: string;
+  id?: string;
+  webuiToken?: null | string;
+};
+
+type NapcatApiResponse<T> = {
+  code: number;
+  data?: T;
+  message?: string;
+};
+
+type NapcatCredential = {
+  Credential?: string;
+};
+
+export class NapcatWebuiHttpClient {
+  private readonly credentials: Record<
+    string,
+    { credential: string; expiresAt: number } | undefined
+  > = {};
+
+  constructor(
+    private readonly options: {
+      getTimeoutMs: () => number;
+    },
+  ) {}
+
+  async post<T>(
+    container: NapcatWebuiRuntime,
+    path: string,
+    body: Record<string, unknown> = {},
+  ) {
+    const credential = await this.getCredential(container);
+    return this.request<T>(container, path, body, credential);
+  }
+
+  clearCredential(container: NapcatWebuiRuntime) {
+    delete this.credentials[this.getCredentialCacheKey(container)];
+  }
+
+  private getCredentialCacheKey(container: NapcatWebuiRuntime) {
+    return container.id || container.baseUrl;
+  }
+
+  private async getCredential(container: NapcatWebuiRuntime) {
+    const cacheKey = this.getCredentialCacheKey(container);
+    const cached = this.credentials[cacheKey];
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.credential;
+    }
+
+    const token = this.getWebuiToken(container);
+    const hash = createHash('sha256').update(`${token}.napcat`).digest('hex');
+    const data = await this.request<NapcatCredential>(
+      container,
+      '/api/auth/login',
+      { hash },
+    );
+    if (!data.Credential) {
+      throw new Error('NapCat WebUI 登录失败');
+    }
+    this.credentials[cacheKey] = {
+      credential: data.Credential,
+      expiresAt: Date.now() + 50 * 60 * 1000,
+    };
+    return data.Credential;
+  }
+
+  private request<T>(
+    container: NapcatWebuiRuntime,
+    path: string,
+    body: Record<string, unknown> = {},
+    credential?: string,
+  ): Promise<T> {
+    const target = new URL(path, container.baseUrl);
+    const payload = JSON.stringify(body);
+    const client = target.protocol === 'https:' ? https : http;
+
+    return new Promise<T>((resolve, reject) => {
+      const req = client.request(
+        {
+          headers: {
+            ...(credential
+              ? {
+                  Authorization: `Bearer ${credential}`,
+                }
+              : {}),
+            'Content-Length': Buffer.byteLength(payload),
+            'Content-Type': 'application/json',
+          },
+          hostname: target.hostname,
+          method: 'POST',
+          path: `${target.pathname}${target.search}`,
+          port: target.port,
+          protocol: target.protocol,
+          timeout: this.options.getTimeoutMs(),
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+          res.on('end', () => {
+            const raw = Buffer.concat(chunks).toString('utf8');
+            let result: NapcatApiResponse<T>;
+            try {
+              result = raw ? JSON.parse(raw) : ({ code: -1 } as any);
+            } catch {
+              reject(new Error('NapCat 返回非 JSON 响应'));
+              return;
+            }
+            if (result.code !== 0) {
+              reject(new Error(result.message || 'NapCat 请求失败'));
+              return;
+            }
+            resolve(result.data as T);
+          });
+        },
+      );
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy(new Error('NapCat 请求超时'));
+      });
+      req.write(payload);
+      req.end();
+    });
+  }
+
+  private getWebuiToken(container: NapcatWebuiRuntime) {
+    const token = `${container.webuiToken || ''}`.trim();
+    if (!token) {
+      throw new Error('NapCat WebUI token 未配置');
+    }
+    return token;
+  }
+}
 
 export class NapcatLoginApiClient {
   constructor(private readonly transport: NapcatLoginApiTransport) {}

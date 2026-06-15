@@ -1,11 +1,11 @@
 import {
-  buildQqbotFf14MarketCatalog,
-  buildQqbotFf14MarketCatalogFromTree,
-  resolveQqbotFf14MarketTarget,
-} from '@/modules/qqbot/plugins/ff14-market/src';
+  buildFf14MarketCatalog,
+  buildFf14MarketCatalogFromTree,
+  resolveFf14MarketTarget,
+} from '@/modules/qqbot/plugins/ff14-market/src/domain/ff14-worlds';
 
 describe('qqbot ff14 market worlds', () => {
-  const catalog = buildQqbotFf14MarketCatalog({
+  const catalog = buildFf14MarketCatalog({
     dataCenters: [
       { childrenCode: '中国', label: '猫小胖', value: '猫小胖' },
       { childrenCode: '中国', label: '陆行鸟', value: '陆行鸟' },
@@ -18,7 +18,7 @@ describe('qqbot ff14 market worlds', () => {
   });
 
   it('resolves world labels from dict catalog', () => {
-    expect(resolveQqbotFf14MarketTarget(catalog, { world: '琥珀原' })).toEqual({
+    expect(resolveFf14MarketTarget(catalog, { world: '琥珀原' })).toEqual({
       dataCenter: '猫小胖',
       label: '中国 / 猫小胖 / 琥珀原',
       region: '中国',
@@ -29,7 +29,7 @@ describe('qqbot ff14 market worlds', () => {
 
   it('rejects world and data center mismatch from dict catalog', () => {
     expect(() =>
-      resolveQqbotFf14MarketTarget(catalog, {
+      resolveFf14MarketTarget(catalog, {
         dataCenter: '陆行鸟',
         world: '琥珀原',
       }),
@@ -37,7 +37,7 @@ describe('qqbot ff14 market worlds', () => {
   });
 
   it('builds catalog from dict tree relations', () => {
-    const treeCatalog = buildQqbotFf14MarketCatalogFromTree([
+    const treeCatalog = buildFf14MarketCatalogFromTree([
       {
         children: [
           {
@@ -74,7 +74,7 @@ describe('qqbot ff14 market worlds', () => {
     ]);
 
     expect(
-      resolveQqbotFf14MarketTarget(treeCatalog, { world: '琥珀原' }),
+      resolveFf14MarketTarget(treeCatalog, { world: '琥珀原' }),
     ).toEqual({
       dataCenter: '猫小胖',
       label: '中国 / 猫小胖 / 琥珀原',

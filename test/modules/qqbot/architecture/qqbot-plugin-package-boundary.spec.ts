@@ -225,6 +225,47 @@ describe('QQBot plugin package boundary', () => {
     expect(duplicateMetadataFiles).toEqual([]);
   });
 
+  it('keeps plugin package entrypoints limited to createPlugin', () => {
+    const extraExports = [
+      'bangdream',
+      'ff14-market',
+      'fflogs',
+      'repeater',
+    ].flatMap((pluginKey) => {
+      const entryPath = join(pluginRoot, pluginKey, 'src/index.ts');
+      const source = readFileSync(entryPath, 'utf8');
+      return source
+        .split(/\r?\n/)
+        .map((line, index) => ({ index: index + 1, line: line.trim() }))
+        .filter(({ line }) => /^export\s+/.test(line))
+        .filter(({ line }) => !/^export\s+function\s+createPlugin\b/.test(line))
+        .map(
+          ({ index, line }) =>
+            `${toRepoPath(entryPath)}:${index} :: ${line}`,
+        );
+    });
+
+    expect(extraExports).toEqual([]);
+  });
+
+  it('does not keep registry-named BangDream runtime files or types', () => {
+    const bangdreamSourceRoot = join(pluginRoot, 'bangdream', 'src');
+    const violations = collectTsFiles(bangdreamSourceRoot).flatMap(
+      (filePath) => {
+        const file = toRepoPath(filePath);
+        const source = readFileSync(filePath, 'utf8');
+        return [
+          file.includes('.registry.ts') ? `${file} :: registry file` : '',
+          /\b[A-Za-z0-9]+Registry\b/.test(source)
+            ? `${file} :: Registry type name`
+            : '',
+        ].filter(Boolean);
+      },
+    );
+
+    expect(violations).toEqual([]);
+  });
+
   it('does not keep pure transfer TypeScript files in plugin packages', () => {
     const transferFiles = collectTsFiles(pluginRoot)
       .filter((filePath) => {

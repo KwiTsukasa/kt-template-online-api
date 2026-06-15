@@ -6,7 +6,6 @@ import {
   HttpStatus,
   Post,
   Query,
-  Sse,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
@@ -15,12 +14,9 @@ import { vbenSuccess } from '@/common';
 import {
   QqbotAccountBodyDto,
   QqbotAccountQueryDto,
-  QqbotAccountScanCaptchaDto,
-  QqbotAccountScanStatusDto,
   QqbotAccountUpdateDto,
 } from './qqbot-account.dto';
 import { QqbotAccountService } from '../../application/account/qqbot-account.service';
-import { QqbotNapcatLoginService } from '@/modules/qqbot/napcat/application/login/qqbot-napcat-login.service';
 import { QqbotReverseWsService } from '../../infrastructure/integration/connection/qqbot-reverse-ws.service';
 
 @ApiTags('QQBot - 账号连接')
@@ -29,7 +25,6 @@ import { QqbotReverseWsService } from '../../infrastructure/integration/connecti
 export class QqbotAccountController {
   constructor(
     private readonly accountService: QqbotAccountService,
-    private readonly napcatLoginService: QqbotNapcatLoginService,
     private readonly reverseWsService: QqbotReverseWsService,
   ) {}
 
@@ -57,58 +52,6 @@ export class QqbotAccountController {
   @ApiOperation({ summary: '编辑 QQBot 账号' })
   async update(@Body() body: QqbotAccountUpdateDto) {
     return vbenSuccess(await this.accountService.update(body));
-  }
-
-  @Post('scan/create')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '扫码新增 QQBot 账号' })
-  async scanCreate() {
-    return vbenSuccess(await this.napcatLoginService.startCreate());
-  }
-
-  @Post('scan/refresh')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '扫码刷新 QQBot 账号登录态' })
-  @ApiQuery({ name: 'id', type: String })
-  async scanRefresh(@Query('id') id: string) {
-    return vbenSuccess(await this.napcatLoginService.startRefresh(id));
-  }
-
-  @Get('scan/status')
-  @ApiOperation({ summary: '查询 QQBot 扫码登录状态' })
-  async scanStatus(@Query() query: QqbotAccountScanStatusDto) {
-    return vbenSuccess(await this.napcatLoginService.status(query.sessionId));
-  }
-
-  @Sse('scan/events')
-  @ApiOperation({ summary: '订阅 QQBot 扫码登录进度' })
-  scanEvents(@Query() query: QqbotAccountScanStatusDto) {
-    return this.napcatLoginService.events(query.sessionId);
-  }
-
-  @Post('scan/qrcode/refresh')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '刷新 QQBot 扫码二维码' })
-  async refreshScanQrcode(@Query() query: QqbotAccountScanStatusDto) {
-    return vbenSuccess(
-      await this.napcatLoginService.refreshQrcode(query.sessionId),
-    );
-  }
-
-  @Post('scan/captcha/submit')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '提交 QQBot 登录安全验证码' })
-  async submitScanCaptcha(@Body() body: QqbotAccountScanCaptchaDto) {
-    return vbenSuccess(
-      await this.napcatLoginService.submitCaptcha(body.sessionId, body),
-    );
-  }
-
-  @Post('scan/cancel')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '取消 QQBot 扫码登录会话' })
-  async cancelScan(@Query() query: QqbotAccountScanStatusDto) {
-    return vbenSuccess(await this.napcatLoginService.cancel(query.sessionId));
   }
 
   @Post('delete')

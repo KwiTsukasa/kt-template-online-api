@@ -1,7 +1,7 @@
 import { Canvas, loadImage, Image } from 'skia-canvas';
 import * as svg2img from 'svg2img';
 import {
-  bangDreamFallbackImageBuffer,
+  bangdreamFallbackImageBuffer,
   readBangDreamAsset,
 } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
 
@@ -10,7 +10,7 @@ const convertSvg = svg2img as unknown as (
   callback: (error: Error | null, buffer: Buffer) => void,
 ) => void;
 
-export const assetErrorImageBuffer = bangDreamFallbackImageBuffer;
+export const assetErrorImageBuffer = bangdreamFallbackImageBuffer;
 
 /**
  * 在底层绘图工具层中加载图片FromPath。

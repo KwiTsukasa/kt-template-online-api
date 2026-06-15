@@ -19,20 +19,20 @@ import {
   SaveBodyInterceptor,
   ToolsService,
 } from '../src/common';
-import { BlogArticleController } from '../src/blog/blog-article.controller';
-import { BlogArticleService } from '../src/blog/blog-article.service';
-import { BlogThemeConfigController } from '../src/blog/blog-theme-config.controller';
-import { BlogThemeConfigService } from '../src/blog/blog-theme-config.service';
-import { BlogTermController } from '../src/blog/blog-term.controller';
-import { BlogTermService } from '../src/blog/blog-term.service';
-import { MinioClientController } from '../src/minio/minio.controller';
-import { MinioClientService } from '../src/minio/minio.service';
-import { WordpressArticleController } from '../src/wordpress/wordpress-article.controller';
-import { WordpressAuthController } from '../src/wordpress/wordpress-auth.controller';
-import { WordpressCategoryController } from '../src/wordpress/wordpress-category.controller';
-import { WordpressService } from '../src/wordpress/wordpress.service';
-import { WordpressTagController } from '../src/wordpress/wordpress-tag.controller';
-import { WordpressThemeController } from '../src/wordpress/wordpress-theme.controller';
+import { BlogArticleService } from '../src/modules/blog/application/blog-article.service';
+import { BlogTermService } from '../src/modules/blog/application/blog-term.service';
+import { BlogThemeConfigService } from '../src/modules/blog/application/blog-theme-config.service';
+import { BlogArticleController } from '../src/modules/blog/contract/blog-article.controller';
+import { BlogTermController } from '../src/modules/blog/contract/blog-term.controller';
+import { BlogThemeConfigController } from '../src/modules/blog/contract/blog-theme-config.controller';
+import { MinioClientService } from '../src/modules/asset/application/asset-minio.service';
+import { MinioClientController } from '../src/modules/asset/contract/asset-minio.controller';
+import { WordpressService } from '../src/modules/wordpress/application/wordpress.service';
+import { WordpressArticleController } from '../src/modules/wordpress/contract/wordpress-article.controller';
+import { WordpressAuthController } from '../src/modules/wordpress/contract/wordpress-auth.controller';
+import { WordpressCategoryController } from '../src/modules/wordpress/contract/wordpress-category.controller';
+import { WordpressTagController } from '../src/modules/wordpress/contract/wordpress-tag.controller';
+import { WordpressThemeController } from '../src/modules/wordpress/contract/wordpress-theme.controller';
 import { PinoLogger } from 'nestjs-pino';
 import {
   collectControllerRoutes,

@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import type { BlogArticleStatus, BlogArticleTerm } from './blog-article.entity';
+import type {
+  BlogArticleStatus,
+  BlogArticleTerm,
+} from '../infrastructure/persistence/blog-article.entity';
 
 export class BlogArticleListQueryDto {
   @ApiPropertyOptional({

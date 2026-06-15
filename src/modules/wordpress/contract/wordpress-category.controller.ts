@@ -19,9 +19,9 @@ import {
   WordpressTermListQueryDto,
   WordpressTermUpdateBodyDto,
 } from './wordpress.dto';
-import { WordpressService } from './wordpress.service';
+import { WordpressService } from '../application/wordpress.service';
 
-@ApiTags('WordPress - 标签')
+@ApiTags('WordPress - 分类')
 @ApiHeader({
   name: 'X-WordPress-Authorization',
   required: false,
@@ -32,65 +32,65 @@ import { WordpressService } from './wordpress.service';
   required: false,
   description: 'WordPress REST cookie 认证 nonce',
 })
-@Controller('wordpress/tag')
+@Controller('wordpress/category')
 @UseGuards(JwtAuthGuard)
-export class WordpressTagController {
+export class WordpressCategoryController {
   constructor(private readonly wordpressService: WordpressService) {}
 
   @Get('list')
-  @ApiOperation({ summary: '获取 WordPress 标签分页列表' })
+  @ApiOperation({ summary: '获取 WordPress 分类分页列表' })
   async list(
     @Req() req: Request,
     @Res() res,
     @Query() query: WordpressTermListQueryDto,
   ) {
     const auth = this.wordpressService.getAuthContext(req);
-    const list = await this.wordpressService.tagList(query, auth);
+    const list = await this.wordpressService.categoryList(query, auth);
 
     return res.send(vbenSuccess(list));
   }
 
   @Get('detail')
-  @ApiOperation({ summary: '获取 WordPress 标签详情' })
+  @ApiOperation({ summary: '获取 WordPress 分类详情' })
   @ApiQuery({ name: 'id', type: Number })
   async detail(@Req() req: Request, @Res() res, @Query('id') id: string) {
     const auth = this.wordpressService.getAuthContext(req);
-    const detail = await this.wordpressService.tagDetail(id, auth);
+    const detail = await this.wordpressService.categoryDetail(id, auth);
 
     return res.send(vbenSuccess(detail));
   }
 
   @Post('save')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '新增 WordPress 标签' })
+  @ApiOperation({ summary: '新增 WordPress 分类' })
   async save(
     @Req() req: Request,
     @Res() res,
     @Body() body: WordpressTermBodyDto,
   ) {
     const auth = this.wordpressService.getAuthContext(req);
-    const result = await this.wordpressService.tagSave(body, auth);
+    const result = await this.wordpressService.categorySave(body, auth);
 
     return res.send(vbenSuccess(result));
   }
 
   @Post('update')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '编辑 WordPress 标签' })
+  @ApiOperation({ summary: '编辑 WordPress 分类' })
   async update(
     @Req() req: Request,
     @Res() res,
     @Body() body: WordpressTermUpdateBodyDto,
   ) {
     const auth = this.wordpressService.getAuthContext(req);
-    const result = await this.wordpressService.tagUpdate(body, auth);
+    const result = await this.wordpressService.categoryUpdate(body, auth);
 
     return res.send(vbenSuccess(result));
   }
 
   @Post('remove')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '删除 WordPress 标签' })
+  @ApiOperation({ summary: '删除 WordPress 分类' })
   @ApiQuery({ name: 'id', type: Number })
   @ApiQuery({ name: 'force', required: false, type: Boolean })
   async remove(
@@ -100,7 +100,7 @@ export class WordpressTagController {
     @Query('force') force?: string,
   ) {
     const auth = this.wordpressService.getAuthContext(req);
-    const result = await this.wordpressService.tagRemove(
+    const result = await this.wordpressService.categoryRemove(
       id,
       force !== 'false',
       auth,

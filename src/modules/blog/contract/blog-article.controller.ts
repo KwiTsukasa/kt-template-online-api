@@ -19,7 +19,7 @@ import {
   BlogArticleTermOptionsQueryDto,
   BlogArticleUpdateBodyDto,
 } from './blog-article.dto';
-import { BlogArticleService } from './blog-article.service';
+import { BlogArticleService } from '../application/blog-article.service';
 
 @ApiTags('Blog - 文章')
 @Controller('blog/article')

@@ -5,7 +5,7 @@ import type {
   MinioListObjectOptions,
   MinioObjectResult,
   MinioUploadObjectOptions,
-} from './minio.types';
+} from '../domain/asset-minio.types';
 
 @Injectable()
 export class MinioClientService {

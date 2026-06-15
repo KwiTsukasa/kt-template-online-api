@@ -4,20 +4,20 @@ jest.mock('../../../src/modules/qqbot/core/qqbot-core.module', () => ({
 
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { AppModule } from '../../../src/app.module';
+import { AdminAuthGuardModule } from '../../../src/modules/admin/identity/auth/admin-auth-guard.module';
 import { AdminIdentityModule } from '../../../src/modules/admin/identity/admin-identity.module';
+import { WordpressService } from '../../../src/modules/wordpress/application/wordpress.service';
+import { WordpressArticleController } from '../../../src/modules/wordpress/contract/wordpress-article.controller';
+import { WordpressAuthController } from '../../../src/modules/wordpress/contract/wordpress-auth.controller';
+import { WordpressCategoryController } from '../../../src/modules/wordpress/contract/wordpress-category.controller';
+import { WordpressTagController } from '../../../src/modules/wordpress/contract/wordpress-tag.controller';
+import { WordpressThemeController } from '../../../src/modules/wordpress/contract/wordpress-theme.controller';
 import {
   WORDPRESS_MIRROR_CONTROLLERS,
   WORDPRESS_MIRROR_DOMAIN_CONTRACT,
   WORDPRESS_MIRROR_PROVIDERS,
   WordpressMirrorModule,
 } from '../../../src/modules/wordpress/wordpress-mirror.module';
-import { WordpressArticleController } from '../../../src/wordpress/wordpress-article.controller';
-import { WordpressAuthController } from '../../../src/wordpress/wordpress-auth.controller';
-import { WordpressCategoryController } from '../../../src/wordpress/wordpress-category.controller';
-import { WordpressModule } from '../../../src/wordpress/wordpress.module';
-import { WordpressService } from '../../../src/wordpress/wordpress.service';
-import { WordpressTagController } from '../../../src/wordpress/wordpress-tag.controller';
-import { WordpressThemeController } from '../../../src/wordpress/wordpress-theme.controller';
 import {
   collectControllerRoutes,
   routeKey,
@@ -28,18 +28,13 @@ const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] => {
   return Reflect.getMetadata(key, moduleClass) || [];
 };
 
-const expectControllersNotRegisteredDirectly = (
-  moduleClass: unknown,
-  controllers: unknown[],
-) => {
-  const directControllers = getModuleMetadata(
-    moduleClass,
-    MODULE_METADATA.CONTROLLERS,
-  );
-
-  for (const controller of controllers) {
-    expect(directControllers).not.toContain(controller);
-  }
+const expectNoModuleNamed = (modules: unknown[], moduleName: string) => {
+  expect(
+    modules.some(
+      (moduleRef) =>
+        typeof moduleRef === 'function' && moduleRef.name === moduleName,
+    ),
+  ).toBe(false);
 };
 
 describe('WordPress mirror module contract', () => {
@@ -79,29 +74,34 @@ describe('WordPress mirror module contract', () => {
     expect(getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS)).toEqual(
       expect.arrayContaining([WordpressMirrorModule]),
     );
-    expect(getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS)).not.toEqual(
-      expect.arrayContaining([WordpressModule]),
-    );
     expect(
       getModuleMetadata(AdminIdentityModule, MODULE_METADATA.IMPORTS),
     ).toEqual(expect.arrayContaining([WordpressMirrorModule]));
-    expect(
-      getModuleMetadata(AdminIdentityModule, MODULE_METADATA.IMPORTS),
-    ).not.toEqual(expect.arrayContaining([WordpressModule]));
 
-    expect(
-      getModuleMetadata(WordpressMirrorModule, MODULE_METADATA.IMPORTS),
-    ).toEqual(expect.arrayContaining([WordpressModule]));
-    expect(
-      getModuleMetadata(WordpressMirrorModule, MODULE_METADATA.EXPORTS),
-    ).toEqual(expect.arrayContaining([WordpressModule]));
-    expectControllersNotRegisteredDirectly(
+    const appImports = getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS);
+    const identityImports = getModuleMetadata(
+      AdminIdentityModule,
+      MODULE_METADATA.IMPORTS,
+    );
+    const wordpressImports = getModuleMetadata(
       WordpressMirrorModule,
-      WORDPRESS_MIRROR_CONTROLLERS,
+      MODULE_METADATA.IMPORTS,
+    );
+    const wordpressExports = getModuleMetadata(
+      WordpressMirrorModule,
+      MODULE_METADATA.EXPORTS,
     );
 
+    expectNoModuleNamed(appImports, 'WordpressModule');
+    expectNoModuleNamed(identityImports, 'WordpressModule');
+    expectNoModuleNamed(wordpressImports, 'WordpressModule');
+    expectNoModuleNamed(wordpressExports, 'WordpressModule');
+
+    expect(wordpressImports).toEqual(
+      expect.arrayContaining([AdminAuthGuardModule]),
+    );
     expect(
-      getModuleMetadata(WordpressModule, MODULE_METADATA.CONTROLLERS),
+      getModuleMetadata(WordpressMirrorModule, MODULE_METADATA.CONTROLLERS),
     ).toEqual(
       expect.arrayContaining([
         WordpressAuthController,
@@ -112,8 +112,9 @@ describe('WordPress mirror module contract', () => {
       ]),
     );
     expect(
-      getModuleMetadata(WordpressModule, MODULE_METADATA.PROVIDERS),
+      getModuleMetadata(WordpressMirrorModule, MODULE_METADATA.PROVIDERS),
     ).toEqual(expect.arrayContaining([WordpressService]));
+    expect(wordpressExports).toEqual(expect.arrayContaining([WordpressService]));
     expect(WORDPRESS_MIRROR_CONTROLLERS).toEqual(
       expect.arrayContaining([
         WordpressAuthController,

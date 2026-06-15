@@ -1,9 +1,9 @@
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 import { ToolsService } from '../../src/common';
-import { BlogArticle } from '../../src/blog/blog-article.entity';
-import { BlogTerm } from '../../src/blog/blog-term.entity';
-import { BlogTermService } from '../../src/blog/blog-term.service';
+import { BlogTermService } from '../../src/modules/blog/application/blog-term.service';
+import { BlogArticle } from '../../src/modules/blog/infrastructure/persistence/blog-article.entity';
+import { BlogTerm } from '../../src/modules/blog/infrastructure/persistence/blog-term.entity';
 
 describe('BlogTermService', () => {
   let service: BlogTermService;

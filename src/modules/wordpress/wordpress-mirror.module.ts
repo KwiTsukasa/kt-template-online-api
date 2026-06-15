@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { WordpressArticleController } from '@/wordpress/wordpress-article.controller';
-import { WordpressAuthController } from '@/wordpress/wordpress-auth.controller';
-import { WordpressCategoryController } from '@/wordpress/wordpress-category.controller';
-import { WordpressModule } from '@/wordpress/wordpress.module';
-import { WordpressService } from '@/wordpress/wordpress.service';
-import { WordpressTagController } from '@/wordpress/wordpress-tag.controller';
-import { WordpressThemeController } from '@/wordpress/wordpress-theme.controller';
+import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
+import { WordpressService } from './application/wordpress.service';
+import { WordpressArticleController } from './contract/wordpress-article.controller';
+import { WordpressAuthController } from './contract/wordpress-auth.controller';
+import { WordpressCategoryController } from './contract/wordpress-category.controller';
+import { WordpressTagController } from './contract/wordpress-tag.controller';
+import { WordpressThemeController } from './contract/wordpress-theme.controller';
 
 export const WORDPRESS_MIRROR_CONTROLLERS = [
   WordpressAuthController,
@@ -53,7 +53,9 @@ export const WORDPRESS_MIRROR_DOMAIN_CONTRACT = {
 } as const;
 
 @Module({
-  imports: [WordpressModule],
-  exports: [WordpressModule],
+  imports: [AdminAuthGuardModule],
+  controllers: WORDPRESS_MIRROR_CONTROLLERS,
+  providers: WORDPRESS_MIRROR_PROVIDERS,
+  exports: WORDPRESS_MIRROR_PROVIDERS,
 })
 export class WordpressMirrorModule {}

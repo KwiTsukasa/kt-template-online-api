@@ -12,13 +12,13 @@ import {
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { vbenSuccess } from '@/common';
-import type { BlogTermKind } from './blog-term.entity';
+import type { BlogTermKind } from '../infrastructure/persistence/blog-term.entity';
 import {
   BlogTermBodyDto,
   BlogTermListQueryDto,
   BlogTermUpdateBodyDto,
 } from './blog-term.dto';
-import { BlogTermService } from './blog-term.service';
+import { BlogTermService } from '../application/blog-term.service';
 
 @ApiTags('Blog - 分类标签')
 @Controller('blog')

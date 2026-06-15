@@ -1,9 +1,9 @@
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 import { ToolsService } from '../../src/common';
-import { BlogThemeConfig } from '../../src/blog/blog-theme-config.entity';
-import { BlogThemeConfigService } from '../../src/blog/blog-theme-config.service';
-import { WordpressService } from '../../src/wordpress/wordpress.service';
+import { BlogThemeConfigService } from '../../src/modules/blog/application/blog-theme-config.service';
+import { BlogThemeConfig } from '../../src/modules/blog/infrastructure/persistence/blog-theme-config.entity';
+import { WordpressService } from '../../src/modules/wordpress/application/wordpress.service';
 
 describe('BlogThemeConfigService', () => {
   let service: BlogThemeConfigService;

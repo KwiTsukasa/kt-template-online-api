@@ -1,11 +1,17 @@
 import { Module } from '@nestjs/common';
-import { BlogArticleController } from '@/blog/blog-article.controller';
-import { BlogArticleService } from '@/blog/blog-article.service';
-import { BlogModule } from '@/blog/blog.module';
-import { BlogTermController } from '@/blog/blog-term.controller';
-import { BlogTermService } from '@/blog/blog-term.service';
-import { BlogThemeConfigController } from '@/blog/blog-theme-config.controller';
-import { BlogThemeConfigService } from '@/blog/blog-theme-config.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { CommonModule } from '@/common';
+import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
+import { WordpressMirrorModule } from '@/modules/wordpress/wordpress-mirror.module';
+import { BlogArticleService } from './application/blog-article.service';
+import { BlogTermService } from './application/blog-term.service';
+import { BlogThemeConfigService } from './application/blog-theme-config.service';
+import { BlogArticleController } from './contract/blog-article.controller';
+import { BlogTermController } from './contract/blog-term.controller';
+import { BlogThemeConfigController } from './contract/blog-theme-config.controller';
+import { BlogArticle } from './infrastructure/persistence/blog-article.entity';
+import { BlogTerm } from './infrastructure/persistence/blog-term.entity';
+import { BlogThemeConfig } from './infrastructure/persistence/blog-theme-config.entity';
 
 export const BLOG_CONTENT_CONTROLLERS = [
   BlogArticleController,
@@ -60,7 +66,14 @@ export const BLOG_CONTENT_DOMAIN_CONTRACT = {
 } as const;
 
 @Module({
-  imports: [BlogModule],
-  exports: [BlogModule],
+  imports: [
+    AdminAuthGuardModule,
+    CommonModule,
+    WordpressMirrorModule,
+    TypeOrmModule.forFeature([BlogArticle, BlogTerm, BlogThemeConfig]),
+  ],
+  controllers: BLOG_CONTENT_CONTROLLERS,
+  providers: BLOG_CONTENT_PROVIDERS,
+  exports: BLOG_CONTENT_PROVIDERS,
 })
 export class BlogContentModule {}

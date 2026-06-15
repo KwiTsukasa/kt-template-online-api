@@ -3,16 +3,17 @@ jest.mock('../../../src/modules/qqbot/core/qqbot-core.module', () => ({
 }));
 
 import { MODULE_METADATA } from '@nestjs/common/constants';
+import { ConfigModule } from '@nestjs/config';
 import { AppModule } from '../../../src/app.module';
-import { MinioClientController } from '../../../src/minio/minio.controller';
-import { MinioClientModule } from '../../../src/minio/minio.module';
-import { MinioClientService } from '../../../src/minio/minio.service';
+import { AdminAuthGuardModule } from '../../../src/modules/admin/identity/auth/admin-auth-guard.module';
 import {
   ASSET_CONTROLLERS,
   ASSET_DOMAIN_CONTRACT,
   ASSET_PROVIDERS,
   AssetModule,
 } from '../../../src/modules/asset/asset.module';
+import { MinioClientService } from '../../../src/modules/asset/application/asset-minio.service';
+import { MinioClientController } from '../../../src/modules/asset/contract/asset-minio.controller';
 import { AdminPlatformConfigModule } from '../../../src/modules/admin/platform-config/admin-platform-config.module';
 import {
   collectControllerRoutes,
@@ -24,18 +25,13 @@ const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] => {
   return Reflect.getMetadata(key, moduleClass) || [];
 };
 
-const expectControllersNotRegisteredDirectly = (
-  moduleClass: unknown,
-  controllers: unknown[],
-) => {
-  const directControllers = getModuleMetadata(
-    moduleClass,
-    MODULE_METADATA.CONTROLLERS,
-  );
-
-  for (const controller of controllers) {
-    expect(directControllers).not.toContain(controller);
-  }
+const expectNoModuleNamed = (modules: unknown[], moduleName: string) => {
+  expect(
+    modules.some(
+      (moduleRef) =>
+        typeof moduleRef === 'function' && moduleRef.name === moduleName,
+    ),
+  ).toBe(false);
 };
 
 describe('Asset module contract', () => {
@@ -62,30 +58,34 @@ describe('Asset module contract', () => {
     expect(getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS)).toEqual(
       expect.arrayContaining([AssetModule]),
     );
-    expect(getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS)).not.toEqual(
-      expect.arrayContaining([MinioClientModule]),
-    );
     expect(
       getModuleMetadata(AdminPlatformConfigModule, MODULE_METADATA.IMPORTS),
     ).toEqual(expect.arrayContaining([AssetModule]));
-    expect(
-      getModuleMetadata(AdminPlatformConfigModule, MODULE_METADATA.IMPORTS),
-    ).not.toEqual(expect.arrayContaining([MinioClientModule]));
 
-    expect(getModuleMetadata(AssetModule, MODULE_METADATA.IMPORTS)).toEqual(
-      expect.arrayContaining([MinioClientModule]),
+    const appImports = getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS);
+    const platformImports = getModuleMetadata(
+      AdminPlatformConfigModule,
+      MODULE_METADATA.IMPORTS,
     );
-    expect(getModuleMetadata(AssetModule, MODULE_METADATA.EXPORTS)).toEqual(
-      expect.arrayContaining([MinioClientModule]),
+    const assetImports = getModuleMetadata(AssetModule, MODULE_METADATA.IMPORTS);
+    const assetExports = getModuleMetadata(AssetModule, MODULE_METADATA.EXPORTS);
+
+    expectNoModuleNamed(appImports, 'MinioClientModule');
+    expectNoModuleNamed(platformImports, 'MinioClientModule');
+    expectNoModuleNamed(assetImports, 'MinioClientModule');
+    expectNoModuleNamed(assetExports, 'MinioClientModule');
+
+    expect(assetImports).toEqual(
+      expect.arrayContaining([AdminAuthGuardModule, ConfigModule]),
     );
-    expectControllersNotRegisteredDirectly(AssetModule, ASSET_CONTROLLERS);
 
     expect(
-      getModuleMetadata(MinioClientModule, MODULE_METADATA.CONTROLLERS),
+      getModuleMetadata(AssetModule, MODULE_METADATA.CONTROLLERS),
     ).toEqual(expect.arrayContaining([MinioClientController]));
     expect(
-      getModuleMetadata(MinioClientModule, MODULE_METADATA.PROVIDERS),
+      getModuleMetadata(AssetModule, MODULE_METADATA.PROVIDERS),
     ).toEqual(expect.arrayContaining([MinioClientService]));
+    expect(assetExports).toEqual(expect.arrayContaining([MinioClientService]));
     expect(ASSET_CONTROLLERS).toEqual(
       expect.arrayContaining([MinioClientController]),
     );

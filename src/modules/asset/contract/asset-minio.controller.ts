@@ -21,8 +21,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Response } from 'express';
-import { MinioClientService } from './minio.service';
-import type { MinioUploadFile } from './minio.types';
+import { MinioClientService } from '../application/asset-minio.service';
+import type { MinioUploadFile } from '../domain/asset-minio.types';
 import {
   ApiFileDownloadResponse,
   ApiArrayResponse,
@@ -35,7 +35,7 @@ import {
   MinioBucketStatusDto,
   MinioObjectDto,
   MinioUploadResultDto,
-} from './minio.dto';
+} from './asset-minio.dto';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 
 const PROXY_RESOURCE_TIMEOUT = 1000 * 15;

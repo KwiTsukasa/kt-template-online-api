@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import type { WordpressArgonThemeConfig } from '@/wordpress/wordpress.types';
+import type { WordpressArgonThemeConfig } from '@/modules/wordpress/domain/wordpress.types';
 
 export class BlogThemeConfigBodyDto {
   @ApiPropertyOptional({

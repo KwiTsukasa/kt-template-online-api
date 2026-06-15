@@ -12,7 +12,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { Public, vbenSuccess } from '@/common';
 import { BlogThemeConfigBodyDto } from './blog-theme-config.dto';
-import { BlogThemeConfigService } from './blog-theme-config.service';
+import { BlogThemeConfigService } from '../application/blog-theme-config.service';
 
 @ApiTags('Blog - 主题')
 @Controller('blog/theme')

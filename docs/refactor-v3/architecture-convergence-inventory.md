@@ -15,7 +15,7 @@
 | Domain | Deleted | Merged | Kept | Evidence |
 | --- | --- | --- | --- | --- |
 | Admin/Auth/Platform Config | `src/admin/example` if no active route evidence; empty old admin subdirectories | auth/user/role/menu/dept/component/dict/notice/system-log/timezone moved into `src/modules/admin/**`; duplicate old imports removed | route paths and public DTO class names kept | `rg '@/admin/' src test` returns no source hits; admin focused Jest passes |
-| Blog/WordPress/Asset | none yet | none yet | current files before migration | baseline only |
+| Blog/WordPress/Asset | old `src/blog`, `src/wordpress`, `src/minio`; legacy module wrappers after local imports replaced | MinIO internal files renamed into Asset module; Blog and WordPress controller/service/entity files moved under target modules | existing route decorators and response DTO behavior | `rg '@/blog/|@/wordpress/|@/minio/' src test` has no hits; Blog/WordPress/Asset focused tests pass |
 | Runtime/Common | none yet | none yet | current files before migration | baseline only |
 | QQBot Core/NapCat | none yet | none yet | current files before migration | baseline only |
 | Plugin Platform/Plugins | none yet | none yet | current files before migration | baseline only |

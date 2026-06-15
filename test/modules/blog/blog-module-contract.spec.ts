@@ -4,19 +4,21 @@ jest.mock('../../../src/modules/qqbot/core/qqbot-core.module', () => ({
 
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { AppModule } from '../../../src/app.module';
-import { BlogArticleController } from '../../../src/blog/blog-article.controller';
-import { BlogArticleService } from '../../../src/blog/blog-article.service';
-import { BlogModule } from '../../../src/blog/blog.module';
-import { BlogTermController } from '../../../src/blog/blog-term.controller';
-import { BlogTermService } from '../../../src/blog/blog-term.service';
-import { BlogThemeConfigController } from '../../../src/blog/blog-theme-config.controller';
-import { BlogThemeConfigService } from '../../../src/blog/blog-theme-config.service';
+import { CommonModule } from '../../../src/common';
+import { AdminAuthGuardModule } from '../../../src/modules/admin/identity/auth/admin-auth-guard.module';
+import { BlogArticleService } from '../../../src/modules/blog/application/blog-article.service';
+import { BlogTermService } from '../../../src/modules/blog/application/blog-term.service';
+import { BlogThemeConfigService } from '../../../src/modules/blog/application/blog-theme-config.service';
+import { BlogArticleController } from '../../../src/modules/blog/contract/blog-article.controller';
+import { BlogTermController } from '../../../src/modules/blog/contract/blog-term.controller';
+import { BlogThemeConfigController } from '../../../src/modules/blog/contract/blog-theme-config.controller';
 import {
   BLOG_CONTENT_CONTROLLERS,
   BLOG_CONTENT_DOMAIN_CONTRACT,
   BLOG_CONTENT_PROVIDERS,
   BlogContentModule,
 } from '../../../src/modules/blog/blog-content.module';
+import { WordpressMirrorModule } from '../../../src/modules/wordpress/wordpress-mirror.module';
 import {
   collectControllerRoutes,
   routeKey,
@@ -27,18 +29,13 @@ const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] => {
   return Reflect.getMetadata(key, moduleClass) || [];
 };
 
-const expectControllersNotRegisteredDirectly = (
-  moduleClass: unknown,
-  controllers: unknown[],
-) => {
-  const directControllers = getModuleMetadata(
-    moduleClass,
-    MODULE_METADATA.CONTROLLERS,
-  );
-
-  for (const controller of controllers) {
-    expect(directControllers).not.toContain(controller);
-  }
+const expectNoModuleNamed = (modules: unknown[], moduleName: string) => {
+  expect(
+    modules.some(
+      (moduleRef) =>
+        typeof moduleRef === 'function' && moduleRef.name === moduleName,
+    ),
+  ).toBe(false);
 };
 
 describe('Blog content module contract', () => {
@@ -81,29 +78,48 @@ describe('Blog content module contract', () => {
     expect(getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS)).toEqual(
       expect.arrayContaining([BlogContentModule]),
     );
-    expect(getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS)).not.toEqual(
-      expect.arrayContaining([BlogModule]),
-    );
 
-    expect(
-      getModuleMetadata(BlogContentModule, MODULE_METADATA.IMPORTS),
-    ).toEqual(expect.arrayContaining([BlogModule]));
-    expect(
-      getModuleMetadata(BlogContentModule, MODULE_METADATA.EXPORTS),
-    ).toEqual(expect.arrayContaining([BlogModule]));
-    expectControllersNotRegisteredDirectly(
+    const appImports = getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS);
+    const blogImports = getModuleMetadata(
       BlogContentModule,
-      BLOG_CONTENT_CONTROLLERS,
+      MODULE_METADATA.IMPORTS,
+    );
+    const blogExports = getModuleMetadata(
+      BlogContentModule,
+      MODULE_METADATA.EXPORTS,
     );
 
-    expect(getModuleMetadata(BlogModule, MODULE_METADATA.CONTROLLERS)).toEqual(
+    expectNoModuleNamed(appImports, 'BlogModule');
+    expectNoModuleNamed(blogImports, 'BlogModule');
+    expectNoModuleNamed(blogExports, 'BlogModule');
+
+    expect(blogImports).toEqual(
+      expect.arrayContaining([
+        AdminAuthGuardModule,
+        CommonModule,
+        WordpressMirrorModule,
+      ]),
+    );
+    expect(
+      blogImports.some(
+        (moduleRef: any) => moduleRef?.module?.name === 'TypeOrmModule',
+      ),
+    ).toBe(true);
+    expect(getModuleMetadata(BlogContentModule, MODULE_METADATA.CONTROLLERS)).toEqual(
       expect.arrayContaining([
         BlogArticleController,
         BlogTermController,
         BlogThemeConfigController,
       ]),
     );
-    expect(getModuleMetadata(BlogModule, MODULE_METADATA.PROVIDERS)).toEqual(
+    expect(getModuleMetadata(BlogContentModule, MODULE_METADATA.PROVIDERS)).toEqual(
+      expect.arrayContaining([
+        BlogArticleService,
+        BlogTermService,
+        BlogThemeConfigService,
+      ]),
+    );
+    expect(blogExports).toEqual(
       expect.arrayContaining([
         BlogArticleService,
         BlogTermService,

@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
-import { MinioClientController } from '@/minio/minio.controller';
-import { MinioClientModule } from '@/minio/minio.module';
-import { MinioClientService } from '@/minio/minio.service';
+import { ConfigModule } from '@nestjs/config';
+import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
+import { MinioClientService } from './application/asset-minio.service';
+import { MinioClientController } from './contract/asset-minio.controller';
 
 export const ASSET_CONTROLLERS = [MinioClientController];
 
@@ -41,7 +42,9 @@ export const ASSET_DOMAIN_CONTRACT = {
 } as const;
 
 @Module({
-  imports: [MinioClientModule],
-  exports: [MinioClientModule],
+  imports: [AdminAuthGuardModule, ConfigModule],
+  controllers: ASSET_CONTROLLERS,
+  providers: ASSET_PROVIDERS,
+  exports: ASSET_PROVIDERS,
 })
 export class AssetModule {}

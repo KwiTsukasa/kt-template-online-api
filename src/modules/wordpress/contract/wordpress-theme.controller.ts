@@ -2,7 +2,7 @@ import { Controller, Get, Res, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { Public, vbenSuccess } from '@/common';
-import { WordpressService } from './wordpress.service';
+import { WordpressService } from '../application/wordpress.service';
 
 @ApiTags('WordPress - 主题')
 @Controller('wordpress/theme')

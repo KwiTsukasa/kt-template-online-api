@@ -1,7 +1,7 @@
 import { Column, Entity, PrimaryColumn } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { KtCreateDateColumn, KtDateTime, KtUpdateDateColumn } from '@/common';
-import type { WordpressArgonThemeConfig } from '@/wordpress/wordpress.types';
+import type { WordpressArgonThemeConfig } from '@/modules/wordpress/domain/wordpress.types';
 
 @Entity('blog_theme_config')
 export class BlogThemeConfig {

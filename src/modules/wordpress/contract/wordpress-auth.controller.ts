@@ -10,7 +10,7 @@ import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { Public, vbenSuccess } from '@/common';
-import { WordpressService } from './wordpress.service';
+import { WordpressService } from '../application/wordpress.service';
 
 @ApiTags('WordPress - 认证')
 @ApiHeader({

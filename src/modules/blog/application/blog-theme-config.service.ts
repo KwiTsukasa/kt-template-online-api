@@ -2,10 +2,10 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { throwVbenError, ToolsService } from '@/common';
-import { WordpressService } from '@/wordpress/wordpress.service';
-import type { WordpressArgonThemeConfig } from '@/wordpress/wordpress.types';
-import { BlogThemeConfigBodyDto } from './blog-theme-config.dto';
-import { BlogThemeConfig } from './blog-theme-config.entity';
+import { WordpressService } from '@/modules/wordpress/application/wordpress.service';
+import type { WordpressArgonThemeConfig } from '@/modules/wordpress/domain/wordpress.types';
+import { BlogThemeConfigBodyDto } from '../contract/blog-theme-config.dto';
+import { BlogThemeConfig } from '../infrastructure/persistence/blog-theme-config.entity';
 
 const DEFAULT_THEME_ID = 'argon';
 

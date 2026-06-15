@@ -10,7 +10,7 @@ import type {
   WordpressArticleListQueryDto,
   WordpressTermBodyDto,
   WordpressTermListQueryDto,
-} from './wordpress.dto';
+} from '../contract/wordpress.dto';
 import type {
   WordpressAuthContext,
   WordpressAvailabilityCache,
@@ -22,7 +22,7 @@ import type {
   WordpressResponse,
   WordpressArgonThemeConfig,
   WordpressArgonMenuItem,
-} from './wordpress.types';
+} from '../domain/wordpress.types';
 
 const WORDPRESS_COOKIE_PREFIXES = [
   'wordpress_',

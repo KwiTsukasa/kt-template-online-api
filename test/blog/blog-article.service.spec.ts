@@ -1,10 +1,10 @@
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 import { MarkdownService, ToolsService } from '../../src/common';
-import { BlogArticle } from '../../src/blog/blog-article.entity';
-import { BlogArticleService } from '../../src/blog/blog-article.service';
-import { BlogTermService } from '../../src/blog/blog-term.service';
-import { WordpressService } from '../../src/wordpress/wordpress.service';
+import { BlogArticleService } from '../../src/modules/blog/application/blog-article.service';
+import { BlogTermService } from '../../src/modules/blog/application/blog-term.service';
+import { BlogArticle } from '../../src/modules/blog/infrastructure/persistence/blog-article.entity';
+import { WordpressService } from '../../src/modules/wordpress/application/wordpress.service';
 
 describe('BlogArticleService', () => {
   let service: BlogArticleService;

@@ -1,7 +1,7 @@
 import type {
   WordpressArticleListQueryDto,
   WordpressTermListQueryDto,
-} from './wordpress.dto';
+} from '../contract/wordpress.dto';
 
 export type WordpressAuthContext = {
   authorization?: string;

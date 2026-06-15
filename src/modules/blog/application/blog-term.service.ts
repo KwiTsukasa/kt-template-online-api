@@ -5,13 +5,16 @@ import { throwVbenError, ToolsService } from '@/common';
 import {
   BlogArticle,
   type BlogArticleTerm,
-} from './blog-article.entity';
-import { BlogTerm, type BlogTermKind } from './blog-term.entity';
+} from '../infrastructure/persistence/blog-article.entity';
+import {
+  BlogTerm,
+  type BlogTermKind,
+} from '../infrastructure/persistence/blog-term.entity';
 import type {
   BlogTermBodyDto,
   BlogTermListQueryDto,
   BlogTermUpdateBodyDto,
-} from './blog-term.dto';
+} from '../contract/blog-term.dto';
 
 type CountedBlogTerm = BlogArticleTerm & {
   count: number;

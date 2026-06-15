@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { ConfigService } from '@nestjs/config';
 import { MarkdownService, ToolsService } from '../../src/common';
-import { WordpressService } from '../../src/wordpress/wordpress.service';
+import { WordpressService } from '../../src/modules/wordpress/application/wordpress.service';
 
 describe('WordpressService theme config', () => {
   const rootPayload = {

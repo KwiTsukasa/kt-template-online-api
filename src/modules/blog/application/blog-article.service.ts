@@ -2,19 +2,19 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { MarkdownService, throwVbenError, ToolsService } from '@/common';
+import { WordpressService } from '@/modules/wordpress/application/wordpress.service';
 import {
   BlogArticle,
   type BlogArticleStatus,
   type BlogArticleTerm,
-} from './blog-article.entity';
+} from '../infrastructure/persistence/blog-article.entity';
 import type {
   BlogArticleBodyDto,
   BlogArticleImportWordpressDto,
   BlogArticleListQueryDto,
   BlogArticleTermOptionsQueryDto,
   BlogArticleUpdateBodyDto,
-} from './blog-article.dto';
-import { WordpressService } from '@/wordpress/wordpress.service';
+} from '../contract/blog-article.dto';
 import { BlogTermService } from './blog-term.service';
 
 @Injectable()

@@ -19,7 +19,7 @@ import {
   WordpressArticleListQueryDto,
   WordpressArticleUpdateBodyDto,
 } from './wordpress.dto';
-import { WordpressService } from './wordpress.service';
+import { WordpressService } from '../application/wordpress.service';
 
 @ApiTags('WordPress - 文章')
 @ApiHeader({

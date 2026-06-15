@@ -18,7 +18,7 @@
   "runtime": {
     "workerType": "node-worker",
     "timeoutMs": 30000,
-    "memoryMb": 512,
+    "memoryMb": 3072,
     "maxConcurrency": 2
   },
   "configSchema": {

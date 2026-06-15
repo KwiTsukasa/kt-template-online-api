@@ -4,7 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { throwVbenError, ToolsService } from '@/common';
 import { QqbotAccountService } from '../account/qqbot-account.service';
-import { QqbotPluginRegistryService } from '../../../../qqbot/plugin/qqbot-plugin-registry.service';
+import { QqbotPluginRegistryService } from '@/modules/qqbot/plugin-platform/registry/qqbot-plugin-registry.service';
 import {
   QQBOT_DEFAULT_PAGE_NO,
   QQBOT_DEFAULT_PAGE_SIZE,

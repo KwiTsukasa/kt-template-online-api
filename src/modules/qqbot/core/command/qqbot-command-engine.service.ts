@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ToolsService } from '@/common';
-import { QqbotPluginRegistryService } from '../../../../qqbot/plugin/qqbot-plugin-registry.service';
+import { QqbotPluginRegistryService } from '@/modules/qqbot/plugin-platform/registry/qqbot-plugin-registry.service';
 import type { QqbotNormalizedMessage } from '../contract/qqbot.types';
 import { QqbotSendService } from '../send/qqbot-send.service';
 import type { QqbotCommandTestDto } from './qqbot-command.dto';

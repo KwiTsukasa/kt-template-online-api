@@ -39,9 +39,9 @@ import { QqbotAllowlist } from '@/modules/qqbot/core/permission/qqbot-allowlist.
 import { QqbotBlocklist } from '@/modules/qqbot/core/permission/qqbot-blocklist.entity';
 import { QqbotPermissionController } from '@/modules/qqbot/core/permission/qqbot-permission.controller';
 import { QqbotPermissionService } from '@/modules/qqbot/core/permission/qqbot-permission.service';
-import { QqbotEventPluginRegistryService } from '../../../qqbot/plugin/qqbot-event-plugin-registry.service';
-import { QqbotPluginController } from '../../../qqbot/plugin/qqbot-plugin.controller';
-import { QqbotPluginRegistryService } from '../../../qqbot/plugin/qqbot-plugin-registry.service';
+import { QqbotPluginController } from '@/modules/qqbot/plugin-platform/qqbot-plugin.controller';
+import { QqbotEventPluginRegistryService } from '@/modules/qqbot/plugin-platform/registry/qqbot-event-plugin-registry.service';
+import { QqbotPluginRegistryService } from '@/modules/qqbot/plugin-platform/registry/qqbot-plugin-registry.service';
 import { QqbotBangDreamClientService } from '@/modules/qqbot/plugins/bangDream/application/bangdream-client.service';
 import { TsuguApplicationService } from '@/modules/qqbot/plugins/bangDream/application/bangdream-application.service';
 import { QqbotBangDreamRendererService } from '@/modules/qqbot/plugins/bangDream/application/bangdream-renderer.facade';

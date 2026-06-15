@@ -51,6 +51,17 @@ jest.mock('@/modules/qqbot/plugins/bangdream/src/operations', () => ({
         return [
           handlerName,
           {
+            catalogKeys:
+              key === 'bangdream.song.search'
+                ? [
+                    'songs',
+                    'meta',
+                    'singer',
+                    'bands',
+                    'characters',
+                    'events',
+                  ]
+                : undefined,
             execute,
             handlerName,
           },
@@ -109,7 +120,14 @@ describe('BangDream package entry', () => {
     });
 
     expect(mockContext.refreshDictionaryCache).toHaveBeenCalledTimes(1);
-    expect(waitForBangDreamCatalogReady).toHaveBeenCalledTimes(1);
+    expect(waitForBangDreamCatalogReady).toHaveBeenCalledWith([
+      'songs',
+      'meta',
+      'singer',
+      'bands',
+      'characters',
+      'events',
+    ]);
     expect(songSearch).toHaveBeenCalledWith(
       { text: '夏祭り' },
       mockContext,

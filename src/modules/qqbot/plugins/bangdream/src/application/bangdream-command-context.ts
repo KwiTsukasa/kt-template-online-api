@@ -58,9 +58,9 @@ export class BangDreamCommandContext {
   }
 
   async checkHealth() {
-    await waitForBangDreamCatalogReady();
-    const data = bangdreamCatalogCache as { cards?: unknown; songs?: unknown };
-    if (!data.songs || !data.cards) {
+    await waitForBangDreamCatalogReady(['songs']);
+    const data = bangdreamCatalogCache as { songs?: unknown };
+    if (!data.songs) {
       throw new Error('BangDream 数据配置未加载');
     }
     fuzzySearch('夏祭り');

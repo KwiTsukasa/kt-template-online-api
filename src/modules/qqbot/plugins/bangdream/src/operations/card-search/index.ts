@@ -1,8 +1,10 @@
 import { drawCardDetail } from '@/modules/qqbot/plugins/bangdream/src/domain/card/card-detail.renderer';
 import { drawCardList } from '@/modules/qqbot/plugins/bangdream/src/domain/card/card-search.renderer';
+import { BANGDREAM_CARD_CATALOG_KEYS } from '@/modules/qqbot/plugins/bangdream/src/operations/catalog-keys';
 import type { BangDreamOperationModule } from '@/modules/qqbot/plugins/bangdream/src/operations/operation';
 
 export const cardSearchOperation: BangDreamOperationModule = {
+  catalogKeys: BANGDREAM_CARD_CATALOG_KEYS,
   handlerName: 'searchCard',
   execute: async (input, context) => {
     const query = context.requireText(input, '请提供卡牌关键词或卡牌 ID');

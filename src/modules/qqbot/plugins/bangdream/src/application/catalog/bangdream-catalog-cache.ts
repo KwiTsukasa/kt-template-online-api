@@ -11,15 +11,16 @@ import {
   sleepBangDreamRuntime,
 } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
 
-const bangdreamCatalogCache: Record<string, any> = {};
+export type BangDreamCatalogKey = keyof typeof bestdoriApiPath;
+
+const bangdreamCatalogCache: Record<string, any> = Object.fromEntries(
+  Object.keys(bestdoriApiPath).map((key) => [key, {}]),
+);
 const REQUIRED_CATALOG_KEYS = [
-  'cards',
-  'characters',
-  'events',
-  'gacha',
   'songs',
-];
+] as const satisfies readonly BangDreamCatalogKey[];
 const DEFAULT_CATALOG_READY_TIMEOUT_MS = 15000;
+const catalogLoadPromises = new Map<BangDreamCatalogKey, Promise<void>>();
 
 function getCatalogReadyTimeoutMs(): number {
   return normalizeBangDreamPositiveInteger(
@@ -28,8 +29,22 @@ function getCatalogReadyTimeoutMs(): number {
   );
 }
 
-function isCatalogReady(): boolean {
-  return REQUIRED_CATALOG_KEYS.every((key) => {
+function normalizeCatalogKeys(
+  keys: readonly BangDreamCatalogKey[] = REQUIRED_CATALOG_KEYS,
+): BangDreamCatalogKey[] {
+  return [...new Set(keys)].filter((key) => key in bestdoriApiPath);
+}
+
+function isCatalogKeyReady(key: BangDreamCatalogKey): boolean {
+  const collection = bangdreamCatalogCache[key];
+  if (!collection) return false;
+  return typeof collection === 'object'
+    ? Object.keys(collection).length > 0
+    : true;
+}
+
+function isCatalogReady(keys?: readonly BangDreamCatalogKey[]): boolean {
+  return normalizeCatalogKeys(keys).every((key) => {
     const collection = bangdreamCatalogCache[key];
     return collection && Object.keys(collection).length > 0;
   });
@@ -45,91 +60,126 @@ async function rejectAfter(ms: number): Promise<never> {
  *
  * @param useCache - use缓存参数，未传入时使用默认值。
  */
-async function loadCatalogData(useCache: boolean = false) {
+async function loadCatalogData(
+  keys?: readonly BangDreamCatalogKey[],
+  useCache: boolean = false,
+) {
+  const catalogKeys = normalizeCatalogKeys(keys);
   logger('catalog', 'loading catalog...');
-  const promiseAll = Object.keys(bestdoriApiPath).map(async (key) => {
-    if (useCache) {
-      return (bangdreamCatalogCache[key] =
-        await bangdreamBestdoriProvider.getJson(bestdoriApiPath[key], {
-          cacheTime: 1 / 0,
-        }));
-    } else {
-      try {
-        return (bangdreamCatalogCache[key] =
-          await bangdreamBestdoriProvider.getJson(bestdoriApiPath[key]));
-      } catch {
-        logger('catalog', `load ${key} failed`);
-      }
-    }
-  });
 
-  await Promise.all(promiseAll);
+  for (const key of catalogKeys) {
+    await loadCatalogKey(key, useCache);
+  }
 
-  const cardsCnFix =
-    await bangdreamStaticPatchProvider.readJson<Record<string, unknown>>(
-      'cards-cn-fix.json',
-    );
-  for (const key in cardsCnFix) {
-    bangdreamCatalogCache['cards'][key] = cardsCnFix[key];
-  }
-  const skillsCnFix =
-    await bangdreamStaticPatchProvider.readJson<Record<string, unknown>>(
-      'skills-cn-fix.json',
-    );
-  for (const key in skillsCnFix) {
-    bangdreamCatalogCache['skills'][key] = skillsCnFix[key];
-  }
-  const areaItemFix =
-    await bangdreamStaticPatchProvider.readJson<Record<string, unknown>>(
-      'area-item-fix.json',
-    );
-  for (const key in areaItemFix) {
-    if (bangdreamCatalogCache['areaItems'][key] == undefined) {
-      bangdreamCatalogCache['areaItems'][key] = areaItemFix[key];
-    }
-  }
-  try {
-    const songNickname = await bangdreamStaticPatchProvider.readExcelRows<{
-      Id: number;
-      Nickname: string;
-    }>('nickname-song.xlsx');
-    for (let i = 0; i < songNickname.length; i++) {
-      const element = songNickname[i];
-      if (bangdreamCatalogCache['songs'][element['Id'].toString()]) {
-        bangdreamCatalogCache['songs'][element['Id'].toString()]['nickname'] =
-          element['Nickname'];
-      }
-    }
-  } catch {
-    logger('catalog', '读取 nickname-song.xlsx 失败');
-  }
+  await applyStaticPatches(catalogKeys);
   logger('catalog', 'catalog loaded');
 }
 
-let initialLoadPromise: Promise<void> | undefined;
+async function loadCatalogKey(key: BangDreamCatalogKey, useCache: boolean) {
+  if (isCatalogKeyReady(key)) return;
+  const pending = catalogLoadPromises.get(key);
+  if (pending) return await pending;
 
-function ensureCatalogInitialLoad() {
-  if (!initialLoadPromise) {
-    logger('catalog', 'initializing...');
-    initialLoadPromise = loadCatalogData(true).then(() => {
-      logger('catalog', 'initializing done');
-    });
+  const promise = (async () => {
+    if (useCache) {
+      bangdreamCatalogCache[key] = await bangdreamBestdoriProvider.getJson(
+        bestdoriApiPath[key],
+        {
+          cacheTime: 1 / 0,
+        },
+      );
+      return;
+    }
+
+    try {
+      bangdreamCatalogCache[key] = await bangdreamBestdoriProvider.getJson(
+        bestdoriApiPath[key],
+      );
+    } catch {
+      logger('catalog', `load ${key} failed`);
+    }
+  })();
+  catalogLoadPromises.set(key, promise);
+  try {
+    await promise;
+  } finally {
+    catalogLoadPromises.delete(key);
   }
-  return initialLoadPromise;
+}
+
+async function applyStaticPatches(keys: readonly BangDreamCatalogKey[]) {
+  const keySet = new Set(keys);
+  if (keySet.has('cards')) {
+    const cardsCnFix =
+      await bangdreamStaticPatchProvider.readJson<Record<string, unknown>>(
+        'cards-cn-fix.json',
+      );
+    for (const key in cardsCnFix) {
+      bangdreamCatalogCache['cards'][key] = cardsCnFix[key];
+    }
+  }
+  if (keySet.has('skills')) {
+    const skillsCnFix =
+      await bangdreamStaticPatchProvider.readJson<Record<string, unknown>>(
+        'skills-cn-fix.json',
+      );
+    for (const key in skillsCnFix) {
+      bangdreamCatalogCache['skills'][key] = skillsCnFix[key];
+    }
+  }
+  if (keySet.has('areaItems')) {
+    const areaItemFix =
+      await bangdreamStaticPatchProvider.readJson<Record<string, unknown>>(
+        'area-item-fix.json',
+      );
+    for (const key in areaItemFix) {
+      if (bangdreamCatalogCache['areaItems'][key] == undefined) {
+        bangdreamCatalogCache['areaItems'][key] = areaItemFix[key];
+      }
+    }
+  }
+  if (keySet.has('songs')) {
+    try {
+      const songNickname = await bangdreamStaticPatchProvider.readExcelRows<{
+        Id: number;
+        Nickname: string;
+      }>('nickname-song.xlsx');
+      for (let i = 0; i < songNickname.length; i++) {
+        const element = songNickname[i];
+        if (bangdreamCatalogCache['songs'][element['Id'].toString()]) {
+          bangdreamCatalogCache['songs'][element['Id'].toString()]['nickname'] =
+            element['Nickname'];
+        }
+      }
+    } catch {
+      logger('catalog', '读取 nickname-song.xlsx 失败');
+    }
+  }
+}
+
+async function ensureCatalogInitialLoad(keys?: readonly BangDreamCatalogKey[]) {
+  const catalogKeys = normalizeCatalogKeys(keys);
+  if (isCatalogReady(catalogKeys)) return;
+  logger('catalog', 'initializing...');
+  await loadCatalogData(catalogKeys, true);
+  logger('catalog', 'initializing done');
 }
 
 /**
  * 等待 BangDream 目录数据完成首次加载。
  */
-export async function waitForBangDreamCatalogReady(): Promise<void> {
-  if (isCatalogReady()) {
+export async function waitForBangDreamCatalogReady(
+  keys?: readonly BangDreamCatalogKey[],
+): Promise<void> {
+  const catalogKeys = normalizeCatalogKeys(keys);
+  if (isCatalogReady(catalogKeys)) {
     return;
   }
   await Promise.race([
-    ensureCatalogInitialLoad(),
+    ensureCatalogInitialLoad(catalogKeys),
     rejectAfter(getCatalogReadyTimeoutMs()),
   ]);
-  if (!isCatalogReady()) {
+  if (!isCatalogReady(catalogKeys)) {
     throw new Error('BangDream 主数据未完成关键集合加载');
   }
 }

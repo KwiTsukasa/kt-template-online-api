@@ -51,9 +51,13 @@ describe('BangDream catalog cache', () => {
   });
 
   it('loads each Bestdori catalog path only once during the initial ready wait', async () => {
-    await waitForBangDreamCatalogReady!();
-
     const catalogPaths = Object.values(BANGDREAM_BESTDORI_API_PATHS);
+    await waitForBangDreamCatalogReady(
+      Object.keys(BANGDREAM_BESTDORI_API_PATHS) as Array<
+        keyof typeof BANGDREAM_BESTDORI_API_PATHS
+      >,
+    );
+
     expect(mockGetJson).toHaveBeenCalledTimes(catalogPaths.length);
     expect(mockGetJson.mock.calls.map(([path]) => path).sort()).toEqual(
       [...catalogPaths].sort(),
@@ -66,4 +70,5 @@ describe('BangDream catalog cache', () => {
     expect(mockReadJson).toHaveBeenCalledTimes(3);
     expect(mockReadExcelRows).toHaveBeenCalledTimes(1);
   });
+
 });

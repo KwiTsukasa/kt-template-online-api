@@ -1,6 +1,7 @@
 import { drawCutoffDetail } from '@/modules/qqbot/plugins/bangdream/src/domain/cutoff/cutoff-detail.renderer';
 import { drawCutoffEventTop } from '@/modules/qqbot/plugins/bangdream/src/domain/cutoff/cutoff-event-top.renderer';
 import { getPresentEvent } from '@/modules/qqbot/plugins/bangdream/src/domain/event/event.model';
+import { BANGDREAM_CUTOFF_DETAIL_CATALOG_KEYS } from '@/modules/qqbot/plugins/bangdream/src/operations/catalog-keys';
 import type { BangDreamOperationModule } from '@/modules/qqbot/plugins/bangdream/src/operations/operation';
 
 const CUTOFF_DETAIL_COMMAND_ALIASES = new Set([
@@ -12,6 +13,7 @@ const CUTOFF_DETAIL_COMMAND_ALIASES = new Set([
 const DEFAULT_CUTOFF_DETAIL_TIER = 1000;
 
 export const cutoffDetailOperation: BangDreamOperationModule = {
+  catalogKeys: BANGDREAM_CUTOFF_DETAIL_CATALOG_KEYS,
   handlerName: 'getCutoffDetail',
   execute: async (input, context) => {
     const tokens = context.getTokens(input);

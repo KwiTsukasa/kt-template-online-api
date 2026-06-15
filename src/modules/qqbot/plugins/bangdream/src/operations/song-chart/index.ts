@@ -1,7 +1,9 @@
 import { drawSongChart } from '@/modules/qqbot/plugins/bangdream/src/domain/song/song-chart.renderer';
+import { BANGDREAM_SONG_CATALOG_KEYS } from '@/modules/qqbot/plugins/bangdream/src/operations/catalog-keys';
 import type { BangDreamOperationModule } from '@/modules/qqbot/plugins/bangdream/src/operations/operation';
 
 export const songChartOperation: BangDreamOperationModule = {
+  catalogKeys: BANGDREAM_SONG_CATALOG_KEYS,
   handlerName: 'getSongChart',
   execute: async (input, context) => {
     const tokens = context.getTokens(input);

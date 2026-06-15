@@ -1,8 +1,10 @@
 import { drawEventDetail } from '@/modules/qqbot/plugins/bangdream/src/domain/event/event-detail.renderer';
 import { drawEventList } from '@/modules/qqbot/plugins/bangdream/src/domain/event/event-search.renderer';
+import { BANGDREAM_EVENT_CATALOG_KEYS } from '@/modules/qqbot/plugins/bangdream/src/operations/catalog-keys';
 import type { BangDreamOperationModule } from '@/modules/qqbot/plugins/bangdream/src/operations/operation';
 
 export const eventSearchOperation: BangDreamOperationModule = {
+  catalogKeys: BANGDREAM_EVENT_CATALOG_KEYS,
   handlerName: 'searchEvent',
   execute: async (input, context) => {
     const query = context.requireText(input, '请提供活动关键词或活动 ID');

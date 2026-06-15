@@ -1,8 +1,10 @@
 import { getPresentEvent } from '@/modules/qqbot/plugins/bangdream/src/domain/event/event.model';
 import { drawEventStage } from '@/modules/qqbot/plugins/bangdream/src/domain/event/event-stage.renderer';
+import { BANGDREAM_EVENT_STAGE_CATALOG_KEYS } from '@/modules/qqbot/plugins/bangdream/src/operations/catalog-keys';
 import type { BangDreamOperationModule } from '@/modules/qqbot/plugins/bangdream/src/operations/operation';
 
 export const eventStageOperation: BangDreamOperationModule = {
+  catalogKeys: BANGDREAM_EVENT_STAGE_CATALOG_KEYS,
   expectedImageCount: 5,
   handlerName: 'getEventStage',
   execute: async (input, context) => {

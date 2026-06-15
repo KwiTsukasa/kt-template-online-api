@@ -4,6 +4,7 @@ import type {
   BangDreamCommandOutput,
   BangDreamOperationHandlerName,
 } from '@/modules/qqbot/plugins/bangdream/src/domain/common/bangdream.types';
+import type { BangDreamCatalogKey } from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 
 export type BangDreamOperationExecute = (
   input: BangDreamCommandInput,
@@ -11,6 +12,7 @@ export type BangDreamOperationExecute = (
 ) => Promise<BangDreamCommandOutput>;
 
 export type BangDreamOperationModule = {
+  catalogKeys?: readonly BangDreamCatalogKey[];
   execute: BangDreamOperationExecute;
   expectedImageCount?: number;
   handlerName: BangDreamOperationHandlerName;

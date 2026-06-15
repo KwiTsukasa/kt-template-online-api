@@ -7,9 +7,11 @@ import {
   BANGDREAM_GACHA_DEFAULT_SPIN_COUNT,
   isBirthdayGachaType,
 } from '@/modules/qqbot/plugins/bangdream/src/domain/policy/gacha.policy';
+import { BANGDREAM_GACHA_SIMULATE_CATALOG_KEYS } from '@/modules/qqbot/plugins/bangdream/src/operations/catalog-keys';
 import type { BangDreamOperationModule } from '@/modules/qqbot/plugins/bangdream/src/operations/operation';
 
 export const gachaSimulateOperation: BangDreamOperationModule = {
+  catalogKeys: BANGDREAM_GACHA_SIMULATE_CATALOG_KEYS,
   handlerName: 'simulateGacha',
   execute: async (input, context) => {
     const tokens = context.getTokens(input);

@@ -46,6 +46,7 @@ type BangDreamManifestOperation = {
 };
 
 type BangDreamResolvedOperation = BangDreamManifestOperation & {
+  catalogKeys?: BangDreamOperationModule['catalogKeys'];
   execute: BangDreamOperationModule['execute'];
 };
 
@@ -131,6 +132,7 @@ function resolveBangDreamOperations(operations: BangDreamManifestOperation[]) {
         operation.key,
         {
           ...operation,
+          catalogKeys: operationModule.catalogKeys,
           execute: operationModule.execute,
         },
       ] as const;
@@ -153,9 +155,6 @@ async function executeBangDreamOperation(options: {
   await options.lifecycle.beforeParse(operationContext);
 
   try {
-    operationContext.stage = 'catalog';
-    await waitForBangDreamCatalogReady();
-
     operationContext.stage = 'operation';
     const operation = options.operationsByKey.get(options.operationKey);
     if (!operation) {
@@ -163,6 +162,9 @@ async function executeBangDreamOperation(options: {
     }
     operationContext.handlerName = operation.handlerName;
     await options.lifecycle.afterResolve(operationContext);
+
+    operationContext.stage = 'catalog';
+    await waitForBangDreamCatalogReady(operation.catalogKeys);
 
     operationContext.stage = 'handler';
     await options.lifecycle.beforeRender(operationContext);

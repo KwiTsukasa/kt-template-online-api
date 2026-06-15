@@ -849,14 +849,14 @@ Run:
 ```powershell
 $api = 'D:\MyFiles\KT\Node\kt-template-online-api'
 $candidateFiles = @(
-  'src/modules/qqbot/plugins/ff14Market/qqbot-ff14-client.service.ts',
-  'src/modules/qqbot/plugins/ff14Market/qqbot-ff14-worlds.ts',
-  'src/modules/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin.ts',
+  'src/modules/qqbot/plugins/ff14-market/qqbot-ff14-client.service.ts',
+  'src/modules/qqbot/plugins/ff14-market/qqbot-ff14-worlds.ts',
+  'src/modules/qqbot/plugins/ff14-market/qqbot-ff14-market.plugin.ts',
   'src/modules/qqbot/plugins/fflogs/qqbot-fflogs-client.service.ts',
   'src/modules/qqbot/plugins/fflogs/qqbot-fflogs.plugin.ts',
   'src/modules/qqbot/plugins/repeater/qqbot-repeater.plugin.ts',
-  'src/modules/qqbot/plugins/bangDream/application/bangdream-renderer.facade.ts',
-  'src/modules/qqbot/plugins/bangDream/qqbot-bangdream.plugin.ts'
+  'src/modules/qqbot/plugins/bangdream/src/application/bangdream-renderer.facade.ts',
+  'src/modules/qqbot/plugins/bangdream/src/qqbot-bangdream.plugin.ts'
 )
 foreach ($file in $candidateFiles) {
   $absolute = Join-Path $api $file
@@ -878,7 +878,7 @@ Record each deletion or keep decision in the inventory table.
 Run:
 
 ```powershell
-pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/modules/qqbot/plugin-platform/manifest.spec.ts test/modules/qqbot/plugin-platform/cli.spec.ts test/modules/qqbot/plugin-platform/persistence-contract.spec.ts test/modules/qqbot/plugin-platform/plugin-platform-api-contract.spec.ts test/modules/qqbot/plugin-platform/worker-runtime.spec.ts test/modules/qqbot/plugins/plugin-registry-compat.spec.ts test/modules/qqbot/plugins/plugin-platform-migration.spec.ts test/modules/qqbot/plugins/plugin-controller-http-smoke.spec.ts test/qqbot/plugins/ff14Market/qqbot-ff14-worlds.spec.ts test/qqbot/plugins/fflogs/qqbot-fflogs-client.service.spec.ts test/qqbot/plugins/repeater/qqbot-repeater.plugin.spec.ts test/qqbot/plugins/bangDream/registry/operation-registry.spec.ts test/qqbot/plugins/bangDream/registry/command-sql.spec.ts
+pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/modules/qqbot/plugin-platform/manifest.spec.ts test/modules/qqbot/plugin-platform/cli.spec.ts test/modules/qqbot/plugin-platform/persistence-contract.spec.ts test/modules/qqbot/plugin-platform/plugin-platform-api-contract.spec.ts test/modules/qqbot/plugin-platform/worker-runtime.spec.ts test/modules/qqbot/plugins/plugin-registry-compat.spec.ts test/modules/qqbot/plugins/plugin-platform-migration.spec.ts test/modules/qqbot/plugins/plugin-controller-http-smoke.spec.ts test/qqbot/plugins/ff14-market/qqbot-ff14-worlds.spec.ts test/qqbot/plugins/fflogs/qqbot-fflogs-client.service.spec.ts test/qqbot/plugins/repeater/qqbot-repeater.plugin.spec.ts test/qqbot/plugins/bangdream/manifest/operation-manifest.spec.ts test/qqbot/plugins/bangdream/manifest/command-sql.spec.ts
 pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api run typecheck
 ```
 

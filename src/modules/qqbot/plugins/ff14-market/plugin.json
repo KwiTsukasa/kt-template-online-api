@@ -1,0 +1,48 @@
+{
+  "pluginKey": "ff14-market",
+  "name": "FF14 市场价格",
+  "version": "1.0.0",
+  "minApiSdkVersion": "1.0.0",
+  "description": "对接 XIVAPI v2 与 Universalis，提供 FF14 物品解析和市场价格查询能力。",
+  "author": "KT",
+  "entry": "src/index.ts",
+  "legacyAliases": ["ff14Market"],
+  "permissions": ["runtime.http", "plugin.config.read"],
+  "runtime": {
+    "workerType": "node-worker",
+    "timeoutMs": 15000,
+    "memoryMb": 256,
+    "maxConcurrency": 4
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "xivapiBaseUrl": { "type": "string" },
+      "universalisBaseUrl": { "type": "string" },
+      "defaultWorld": { "type": "string" }
+    }
+  },
+  "operations": [
+    {
+      "key": "ff14.item.resolve",
+      "name": "解析物品",
+      "handlerName": "resolveItem",
+      "description": "按物品名称或 ID 解析 XIVAPI 物品信息。",
+      "aliases": ["物品", "item", "ff14item"],
+      "permissions": ["runtime.http", "plugin.config.read"],
+      "timeoutMs": 15000
+    },
+    {
+      "key": "ff14.market.price",
+      "name": "市场查价",
+      "handlerName": "getPrice",
+      "description": "查询指定服务器的 FF14 市场最低价、均价与近期挂单。",
+      "aliases": ["查价", "price", "ff14price"],
+      "permissions": ["runtime.http", "plugin.config.read"],
+      "timeoutMs": 15000
+    }
+  ],
+  "events": [],
+  "assets": [],
+  "migrations": []
+}

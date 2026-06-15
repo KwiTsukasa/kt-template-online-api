@@ -1191,13 +1191,13 @@ git -C D:\MyFiles\KT\Vue\kt-template-admin commit -m "feat: 增加QQBot插件管
 
 **Files:**
 
-- Create: `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\qqbot\plugins\bangDream\plugin.json`
-- Create/modify: `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\qqbot\plugins\bangDream\**`
-- Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugins\bangDream\**`
+- Create: `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\qqbot\plugins\bangdream\plugin.json`
+- Create/modify: `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\qqbot\plugins\bangdream\**`
+- Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugins\bangdream\**`
 
 - [x] **Step 1: Preserve business directories**
 
-Keep business capabilities in `song`, `card`, `character`, `event`, `gacha`, `player`, `cutoff`, `catalog`, with cross-cutting code only in `application`, `registry`, `hook`, `provider`, `policy`, `theme`, `config`, `dictionary`, `search`, `shared`.
+Keep business capabilities in `domain/song`, `domain/card`, `domain/character`, `domain/event`, `domain/gacha`, `domain/player`, `domain/cutoff`, and `domain/catalog`; keep orchestration in `application`, operations in `operations`, external APIs in `infrastructure/integration`, cache/static patch adapters in `infrastructure/storage`, dictionary/static config in `config`, and visual helpers in `theme`.
 
 - [x] **Step 2: Convert operation registry to manifest metadata**
 
@@ -1208,22 +1208,22 @@ Keep operation keys and aliases stable. `handlerName` becomes worker-internal.
 Run:
 
 ```powershell
-pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/qqbot/plugins/bangDream/registry/operation-registry.spec.ts test/qqbot/plugins/bangDream/registry/command-sql.spec.ts test/modules/qqbot/plugins/bangDream
+pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/qqbot/plugins/bangdream/manifest/operation-manifest.spec.ts test/qqbot/plugins/bangdream/manifest/command-sql.spec.ts test/modules/qqbot/plugins/bangdream-rewrite/bangdream-operation-parity.spec.ts
 pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api run typecheck
 ```
 
 Expected: PASS. Event stage smoke keeps `imageCount=5`.
 
-Actual note: BangDream moved to `src/modules/qqbot/plugins/bangDream` with the approved business and cross-cutting directory layout preserved. Added `plugin.json` with platform key `bangdream`; manifest operations are asserted against `BANGDREAM_OPERATION_REGISTRY` for stable operation keys, aliases, names, and worker-internal `handlerName`. Runtime registry now uses platform key `bangdream` as primary while resolving legacy `bangDream`; `/qqbot/plugin/*` local HTTP smoke now proves the controller returns platform keys and resolves legacy `bangDream` to `bangdream`. Verification passed via focused registry/command SQL Jest, plugin migration contract, QQBot core module contract path guard, plugin controller HTTP smoke, `pnpm run typecheck`, and `scripts/bangdream-render-smoke.ps1 -OperationKey bangdream.event.stage -Text 310`, which produced `imageCount=5`.
+Actual note: BangDream moved to `src/modules/qqbot/plugins/bangdream/src` with third-phase plugin ownership: business code in `domain/*`, orchestration in `application`, operations in `operations`, external APIs in `infrastructure/integration`, cache/static patch adapters in `infrastructure/storage`, dictionary/static config in `config`, and visual helpers in `theme`. Added `plugin.json` with platform key `bangdream`; manifest operations are the single metadata source for stable operation keys, aliases, names, and worker-internal `handlerName`. Runtime registry now uses platform key `bangdream` as primary while resolving legacy `bangDream`; `/qqbot/plugin/*` local HTTP smoke now proves the controller returns platform keys and resolves legacy `bangDream` to `bangdream`. Verification passed via focused manifest/command SQL Jest, plugin migration contract, QQBot core module contract path guard, plugin controller HTTP smoke, `pnpm run typecheck`, and `scripts/bangdream-render-smoke.ps1 -OperationKey bangdream.event.stage -Text 310`, which produced `imageCount=5`.
 
 ### Task 6.2: Rewrite FF14 Market, FFLogs, and Repeater
 
 **Files:**
 
-- Create: `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\qqbot\plugins\ff14Market\**`
+- Create: `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\qqbot\plugins\ff14-market\**`
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\qqbot\plugins\fflogs\**`
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\qqbot\plugins\repeater\**`
-- Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugins\ff14Market\**`
+- Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugins\ff14-market\**`
 - Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugins\fflogs\**`
 - Test: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugins\repeater\**`
 
@@ -1244,13 +1244,13 @@ Use host send queue and account binding. Do not bypass rate limit.
 Run:
 
 ```powershell
-pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/qqbot/plugins/ff14Market/qqbot-ff14-worlds.spec.ts test/qqbot/plugins/fflogs/qqbot-fflogs-client.service.spec.ts test/qqbot/plugins/repeater/qqbot-repeater.plugin.spec.ts test/modules/qqbot/plugins/ff14Market test/modules/qqbot/plugins/fflogs test/modules/qqbot/plugins/repeater
+pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/qqbot/plugins/ff14-market/qqbot-ff14-worlds.spec.ts test/qqbot/plugins/fflogs/qqbot-fflogs-client.service.spec.ts test/qqbot/plugins/repeater/qqbot-repeater.plugin.spec.ts test/modules/qqbot/plugins/ff14-market test/modules/qqbot/plugins/fflogs test/modules/qqbot/plugins/repeater
 pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api run typecheck
 ```
 
 Expected: PASS.
 
-Actual note: FF14 Market, FFLogs, and Repeater moved to `src/modules/qqbot/plugins/*` and each now has a platform `plugin.json`. FF14 Market uses platform key `ff14-market` with legacy `ff14Market` compatibility and delegates outbound requests through `QqbotPluginHttpClientService`; FFLogs delegates outbound requests through the same host SDK and keeps credential references in manifest config schema without real secrets; Repeater remains event-plugin driven through host account binding and send queue services. Verification passed via focused plugin Jest, migration direct-HTTP scan for FF14/FFLogs, `/qqbot/plugin/list` and `/qqbot/plugin/operation/list` local HTTP smoke, and `pnpm run typecheck`; final focused Jest covered 9 suites / 27 tests.
+Actual note: FF14 Market, FFLogs, and Repeater moved to `src/modules/qqbot/plugins/*` and each now has a platform `plugin.json` plus real third-phase package structure. FF14 Market splits operation binding into `operations`, use cases into `application`, world/market types into `domain`, external clients into `infrastructure/integration`, and config into `config`; FFLogs splits character-summary operation, application use case, GraphQL/OAuth client, config, and token cache; Repeater splits event handler, repeat policy/domain state, runtime config, application state, and host integration. Verification passed via focused plugin Jest, migration direct-HTTP scan for FF14/FFLogs, `/qqbot/plugin/list` and `/qqbot/plugin/operation/list` local HTTP smoke, and `pnpm run typecheck`; final focused Jest covered 9 suites / 27 tests.
 
 ### Task 6.3: Commit Batch 6
 

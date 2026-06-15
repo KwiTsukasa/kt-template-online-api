@@ -31,6 +31,13 @@ WHERE command_key = 'bangdream_song'
   AND plugin_key = 'bangdream'
   AND enabled = 1;
 
+SELECT 'seed_qqbot_command_bangdream_all' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_command
+WHERE plugin_key = 'bangdream'
+  AND operation_key LIKE 'bangdream.%'
+  AND enabled = 1
+  AND is_deleted = 0;
+
 SELECT 'index_admin_user_username' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics
 WHERE table_schema = DATABASE()

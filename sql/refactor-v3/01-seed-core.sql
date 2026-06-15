@@ -274,21 +274,178 @@ INSERT INTO qqbot_command (
   plugin_key,
   enabled,
   cooldown_seconds
-) VALUES (
-  1000000000000000201,
-  'bangdream.song.search',
-  'bangdream_song',
-  'bd',
-  'BangDream 查歌',
-  '["查曲","bd","bangdream","bandori","邦邦","邦邦查歌"]',
-  'bangdream',
-  1,
-  2
-) ON DUPLICATE KEY UPDATE
+) VALUES
+  (
+    1000000000000000201,
+    'bangdream.song.search',
+    'bangdream_song',
+    'bd',
+    'BangDream 查歌',
+    '["查曲","bd","bangdream","bandori","邦邦","邦邦查歌"]',
+    'bangdream',
+    1,
+    2
+  ),
+  (
+    1000000000000000202,
+    'bangdream.song.chart',
+    'bangdream_song_chart',
+    'bangdream_song_chart',
+    'BangDream 查谱面',
+    '["查谱面","谱面","bd谱面"]',
+    'bangdream',
+    1,
+    2
+  ),
+  (
+    1000000000000000203,
+    'bangdream.song.random',
+    'bangdream_song_random',
+    'bangdream_song_random',
+    'BangDream 随机曲',
+    '["随机曲","随机","bd随机"]',
+    'bangdream',
+    1,
+    2
+  ),
+  (
+    1000000000000000204,
+    'bangdream.song.meta',
+    'bangdream_song_meta',
+    'bangdream_song_meta',
+    'BangDream 分数表',
+    '["查询分数表","查分数表","查询分数榜","查分数榜","bd分数表"]',
+    'bangdream',
+    1,
+    2
+  ),
+  (
+    1000000000000000205,
+    'bangdream.card.search',
+    'bangdream_card',
+    'bangdream_card',
+    'BangDream 查卡',
+    '["查卡","查卡牌","bd查卡"]',
+    'bangdream',
+    1,
+    2
+  ),
+  (
+    1000000000000000206,
+    'bangdream.card.illustration',
+    'bangdream_card_illustration',
+    'bangdream_card_illustration',
+    'BangDream 查卡面',
+    '["查卡面","查卡插画","查插画","bd卡面"]',
+    'bangdream',
+    1,
+    2
+  ),
+  (
+    1000000000000000207,
+    'bangdream.character.search',
+    'bangdream_character',
+    'bangdream_character',
+    'BangDream 查角色',
+    '["查角色","bd角色"]',
+    'bangdream',
+    1,
+    2
+  ),
+  (
+    1000000000000000208,
+    'bangdream.event.search',
+    'bangdream_event',
+    'bangdream_event',
+    'BangDream 查活动',
+    '["查活动","bd活动"]',
+    'bangdream',
+    1,
+    2
+  ),
+  (
+    1000000000000000209,
+    'bangdream.event.stage',
+    'bangdream_event_stage',
+    'bangdream_event_stage',
+    'BangDream 查试炼',
+    '["查试炼","查stage","查舞台","查festival","查5v5"]',
+    'bangdream',
+    1,
+    2
+  ),
+  (
+    1000000000000000210,
+    'bangdream.player.search',
+    'bangdream_player',
+    'bangdream_player',
+    'BangDream 查玩家',
+    '["查玩家","查询玩家","bd玩家"]',
+    'bangdream',
+    1,
+    2
+  ),
+  (
+    1000000000000000211,
+    'bangdream.gacha.search',
+    'bangdream_gacha',
+    'bangdream_gacha',
+    'BangDream 查卡池',
+    '["查卡池","bd卡池"]',
+    'bangdream',
+    1,
+    2
+  ),
+  (
+    1000000000000000212,
+    'bangdream.gacha.simulate',
+    'bangdream_gacha_simulate',
+    'bangdream_gacha_simulate',
+    'BangDream 抽卡模拟',
+    '["抽卡模拟","bd抽卡"]',
+    'bangdream',
+    1,
+    3
+  ),
+  (
+    1000000000000000213,
+    'bangdream.cutoff.detail',
+    'bangdream_cutoff_detail',
+    'bangdream_cutoff_detail',
+    'BangDream ycx',
+    '["ycx","预测线","查档线","bd档线"]',
+    'bangdream',
+    1,
+    3
+  ),
+  (
+    1000000000000000214,
+    'bangdream.cutoff.all',
+    'bangdream_cutoff_all',
+    'bangdream_cutoff_all',
+    'BangDream ycxall',
+    '["ycxall","myycx","全部档线"]',
+    'bangdream',
+    1,
+    3
+  ),
+  (
+    1000000000000000215,
+    'bangdream.cutoff.recent',
+    'bangdream_cutoff_recent',
+    'bangdream_cutoff_recent',
+    'BangDream lsycx',
+    '["lsycx","历史档线","近期档线"]',
+    'bangdream',
+    1,
+    3
+  )
+ON DUPLICATE KEY UPDATE
   operation_key = VALUES(operation_key),
   code = VALUES(code),
   name = VALUES(name),
   aliases = VALUES(aliases),
   plugin_key = VALUES(plugin_key),
   enabled = VALUES(enabled),
-  cooldown_seconds = VALUES(cooldown_seconds);
+  cooldown_seconds = VALUES(cooldown_seconds),
+  is_deleted = 0;

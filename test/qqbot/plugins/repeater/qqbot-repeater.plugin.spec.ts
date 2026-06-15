@@ -1,6 +1,5 @@
-import { ToolsService } from '@/common';
-import { QqbotRepeaterPluginService } from '@/modules/qqbot/plugins/repeater/qqbot-repeater.plugin';
 import type { QqbotNormalizedMessage } from '@/modules/qqbot/core/contract/qqbot.types';
+import { createPlugin } from '@/modules/qqbot/plugins/repeater/src';
 
 function createMessage(text: string): QqbotNormalizedMessage {
   return {
@@ -21,16 +20,23 @@ function createService(config: Record<string, number | string | undefined>) {
   const sendService = {
     sendText: jest.fn().mockResolvedValue({ status: 'ok' }),
   };
-  const service = new QqbotRepeaterPluginService(
-    {
-      get: jest.fn((key: string) => config[key]),
-    } as any,
-    {
+  const service = createPlugin({
+    host: {
+      bindEventPlugin: jest.fn(),
       getBoundEventPluginKeys: jest.fn().mockResolvedValue(['repeater']),
-    } as any,
-    sendService as any,
-    new ToolsService(),
-  );
+      getConfig: (<T = string>(key: string) => config[key] as T),
+      sendText: sendService.sendText,
+      unbindEventPlugin: jest.fn(),
+      warn: jest.fn(),
+    },
+    manifest: {
+      events: [],
+      name: '复读机',
+      pluginKey: 'repeater',
+      version: '1.0.0',
+    },
+    now: () => Date.now(),
+  });
   return { sendService, service };
 }
 
@@ -87,7 +93,6 @@ describe('QqbotRepeaterPluginService risk-control defaults', () => {
       QQBOT_REPEATER_THRESHOLD: 4,
     });
     sendService.sendText.mockRejectedValueOnce(new Error('send failed'));
-    jest.spyOn((service as any).logger, 'warn').mockImplementation();
 
     for (let index = 0; index < 4; index += 1) {
       await service.handleMessage(createMessage('哈'));

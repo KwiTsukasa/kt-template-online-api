@@ -5,7 +5,7 @@
   "minApiSdkVersion": "1.0.0",
   "description": "对接 FFLogs v2 GraphQL，提供 FF14 角色公开排名和指定高难最近记录查询能力。",
   "author": "KT",
-  "entry": "qqbot-fflogs.plugin.ts",
+  "entry": "src/index.ts",
   "permissions": ["runtime.http", "plugin.config.read"],
   "runtime": {
     "workerType": "node-worker",

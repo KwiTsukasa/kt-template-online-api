@@ -9,8 +9,8 @@ import {
   isQqbotFf14WorldName,
   QQBOT_FF14_MARKET_DICT_CODES,
   splitQqbotFf14WorldPath,
-} from '@/modules/qqbot/plugins/ff14Market/qqbot-ff14-worlds';
-import type { QqbotFf14MarketCatalog } from '@/modules/qqbot/plugins/ff14Market/qqbot-ff14-market.types';
+} from '@/modules/qqbot/plugins/ff14-market/src';
+import type { QqbotFf14MarketCatalog } from '@/modules/qqbot/plugins/ff14-market/src';
 import type { QqbotPluginExecutionInput } from '@/modules/qqbot/core/domain/plugin-execution.port';
 
 @Injectable()

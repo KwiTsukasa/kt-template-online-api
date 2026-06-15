@@ -5,26 +5,10 @@ jest.mock('@/modules/admin/identity/auth/jwt-auth.guard', () => ({
     }
   },
 }));
-jest.mock('@/modules/qqbot/plugins/bangDream/qqbot-bangdream.plugin', () => ({
-  QqbotBangDreamPluginService: class {},
-}));
-jest.mock(
-  '@/modules/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin',
-  () => ({
-    QqbotFf14MarketPluginService: class {},
-  }),
-);
-jest.mock('@/modules/qqbot/plugins/fflogs/qqbot-fflogs.plugin', () => ({
-  QqbotFflogsPluginService: class {},
-}));
-
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { ToolsService } from '../../../../src/common';
-import { QqbotBangDreamPluginService } from '../../../../src/modules/qqbot/plugins/bangDream/qqbot-bangdream.plugin';
-import { QqbotFf14MarketPluginService } from '../../../../src/modules/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin';
-import { QqbotFflogsPluginService } from '../../../../src/modules/qqbot/plugins/fflogs/qqbot-fflogs.plugin';
 import { QqbotPluginController } from '../../../../src/modules/qqbot/plugin-platform/contract/qqbot-plugin.controller';
 import { QqbotEventPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-event-plugin-registry.service';
 import { QqbotPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-plugin-registry.service';
@@ -55,23 +39,46 @@ describe('QQBot plugin controller local HTTP smoke', () => {
       controllers: [QqbotPluginController],
       providers: [
         ToolsService,
-        QqbotPluginRegistryService,
         {
-          provide: QqbotBangDreamPluginService,
+          provide: QqbotPluginRegistryService,
           useValue: {
-            getPlugin: () => createPlugin('bangdream', ['bangDream']),
-          },
-        },
-        {
-          provide: QqbotFf14MarketPluginService,
-          useValue: {
-            getPlugin: () => createPlugin('ff14-market', ['ff14Market']),
-          },
-        },
-        {
-          provide: QqbotFflogsPluginService,
-          useValue: {
-            getPlugin: () => createPlugin('fflogs'),
+            health: jest.fn(async () => []),
+            listOperations: jest.fn((pluginKey?: string) => {
+              const plugins = [
+                createPlugin('bangdream', ['bangDream']),
+                createPlugin('ff14-market', ['ff14Market']),
+                createPlugin('fflogs'),
+              ];
+              const resolvedPluginKey =
+                pluginKey === 'bangDream'
+                  ? 'bangdream'
+                  : pluginKey === 'ff14Market'
+                    ? 'ff14-market'
+                    : pluginKey;
+              return plugins
+                .filter((plugin) => !resolvedPluginKey || plugin.key === resolvedPluginKey)
+                .flatMap((plugin) =>
+                  plugin.operations.map((operation) => ({
+                    key: operation.key,
+                    name: operation.name,
+                    pluginKey: plugin.key,
+                    triggerMode: 'command',
+                  })),
+                );
+            }),
+            listPlugins: jest.fn(() =>
+              [
+                createPlugin('bangdream', ['bangDream']),
+                createPlugin('ff14-market', ['ff14Market']),
+                createPlugin('fflogs'),
+              ].map((plugin) => ({
+                key: plugin.key,
+                name: plugin.name,
+                operationCount: plugin.operations.length,
+                triggerMode: 'command',
+                version: plugin.version,
+              })),
+            ),
           },
         },
         {

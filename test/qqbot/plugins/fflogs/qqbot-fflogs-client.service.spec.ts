@@ -1,35 +1,4 @@
-jest.mock(
-  '@/common',
-  () => ({
-    ensureSnowflakeId: jest.fn(),
-    KtCreateDateColumn: () => () => undefined,
-    KtDateTime: Date,
-    KtDateTimeColumn: () => () => undefined,
-    KtDateTimeField: () => () => undefined,
-    KtUpdateDateColumn: () => () => undefined,
-    formatKtDateTime: (value: Date | number | string) => {
-      const date = value instanceof Date ? value : new Date(value);
-      return [
-        `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(
-          2,
-          '0',
-        )}-${`${date.getDate()}`.padStart(2, '0')}`,
-        `${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(
-          2,
-          '0',
-        )}:${`${date.getSeconds()}`.padStart(2, '0')}`,
-      ].join(' ');
-    },
-    setDictDecodeCache: jest.fn(),
-    transformKtDateTimeFields: (value: unknown) => value,
-  }),
-  { virtual: true },
-);
-
-import { ConfigService } from '@nestjs/config';
-import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
-import { QqbotPluginHttpClientService } from '@/modules/qqbot/plugin-platform/infrastructure/integration/sdk';
-import { QqbotFflogsClientService } from '@/modules/qqbot/plugins/fflogs/qqbot-fflogs-client.service';
+import { FflogsClient } from '@/modules/qqbot/plugins/fflogs/src/infrastructure/integration/fflogs-client';
 
 describe('QqbotFflogsClientService', () => {
   const dicts = {
@@ -42,22 +11,13 @@ describe('QqbotFflogsClientService', () => {
     FFLOGS_SERVER_REGION_LABEL: [{ label: '国服', value: 'cn' }],
   };
 
-  const service = new QqbotFflogsClientService(
-    {
-      get: jest.fn(),
-    } as unknown as ConfigService,
-    {
-      getDictByKey: jest.fn(
-        async (dictKey: keyof typeof dicts) => dicts[dictKey] || [],
-      ),
-      getDictItemsByKey: jest.fn(
-        async (dictKey: keyof typeof dicts) => dicts[dictKey] || [],
-      ),
-    } as unknown as DictService,
-    {
-      requestJson: jest.fn(),
-    } as unknown as QqbotPluginHttpClientService,
-  );
+  const service = new FflogsClient({
+    getConfig: jest.fn(),
+    getDictByKey: jest.fn(
+      async (dictKey: keyof typeof dicts) => dicts[dictKey] || [],
+    ),
+    requestJson: jest.fn(),
+  });
 
   it('uses cn FFLogs API endpoints by default', () => {
     expect((service as any).graphqlUrl).toBe(

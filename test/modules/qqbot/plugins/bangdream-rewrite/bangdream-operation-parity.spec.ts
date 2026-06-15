@@ -34,6 +34,8 @@ describe('BangDream rewritten plugin parity', () => {
     const requiredPaths = [
       'plugin.json',
       'src/index.ts',
+      'src/application/bangdream-command-context.ts',
+      'src/application/hook/hook-registry.ts',
       'src/operations/song-search',
       'src/operations/song-chart',
       'src/operations/song-random',
@@ -57,13 +59,12 @@ describe('BangDream rewritten plugin parity', () => {
       'src/domain/player',
       'src/domain/cutoff',
       'src/domain/catalog',
-      'src/application',
+      'src/domain/common/qqbot-bangdream.types.ts',
       'src/infrastructure/integration',
       'src/infrastructure/storage',
       'src/config',
+      'src/config/dictionary',
       'src/assets',
-      'src/migrations',
-      'src/tests',
     ];
 
     const missing = requiredPaths.filter(
@@ -104,7 +105,59 @@ describe('BangDream rewritten plugin parity', () => {
       join(operationSourcePath, 'index.ts'),
       'utf8',
     );
-    expect(eventStageSource).toContain('imageCount');
+    expect(eventStageSource).toContain('expectedImageCount');
     expect(eventStageSource).toContain('5');
+  });
+
+  it('makes operation modules executable instead of handler-name placeholders', () => {
+    const operationRoot = join(newBangDreamRoot, 'src/operations');
+    const operationDirs = expectedOperationKeys.map((operationKey) =>
+      operationKey.replace('bangdream.', '').replace(/\./g, '-'),
+    );
+
+    for (const operationDir of operationDirs) {
+      const source = readFileSync(
+        join(operationRoot, operationDir, 'index.ts'),
+        'utf8',
+      );
+      expect(source).toContain('execute: async');
+      expect(source).toContain('context.');
+      expect(source).not.toMatch(/key: 'bangdream\./);
+    }
+  });
+
+  it('uses real business directories and removes old wrapper layers', () => {
+    const domainDirs = [
+      'song',
+      'card',
+      'character',
+      'event',
+      'gacha',
+      'player',
+      'cutoff',
+      'catalog',
+    ];
+
+    for (const domainDir of domainDirs) {
+      expect(existsSync(join(newBangDreamRoot, 'src/domain', domainDir))).toBe(
+        true,
+      );
+      expect(
+        existsSync(join(newBangDreamRoot, 'src/domain', domainDir, 'index.ts')),
+      ).toBe(false);
+    }
+
+    for (const removedPath of [
+      'src/application/bangdream-renderer.facade.ts',
+      'src/application/bangdream-application.service.ts',
+      'src/application/bangdream-context.ts',
+      'src/application/bangdream-operation-runtime.ts',
+      'src/application/operation-pipeline.ts',
+      'src/operations/operation-executor.ts',
+      'src/domain/common/bangdream-constants.ts',
+      'src/qqbot-bangdream.types.ts',
+    ]) {
+      expect(existsSync(join(newBangDreamRoot, removedPath))).toBe(false);
+    }
   });
 });

@@ -449,7 +449,7 @@ pnpm qqbot-plugin install-local <packageFile>
 
 ### BangDream
 
-插件 key：`bangdream`。旧 `bangDream` 作为兼容别名仍可解析；当前源码根目录为 `src/modules/qqbot/plugins/bangDream`，不再使用旧 `tsugu` 子目录。
+插件 key：`bangdream`。旧 `bangDream` 作为兼容别名仍可解析；当前源码根目录为 `src/modules/qqbot/plugins/bangdream/src`，按第三期插件结构拆分为 `operations`、`domain/*`、`application`、`infrastructure/integration`、`infrastructure/storage`、`config`、`assets` 和 `theme`，不再使用旧 `tsugu` 子目录、宿主 builtins 包装层或纯转接目录。
 
 | operation key                 | 命令          | 说明                     |
 | ----------------------------- | ------------- | ------------------------ |
@@ -469,11 +469,11 @@ pnpm qqbot-plugin install-local <packageFile>
 | `bangdream.cutoff.all`        | `/ycxall`     | 全档位预测线             |
 | `bangdream.cutoff.recent`     | `/lsycx`      | 历史/近期档线            |
 
-`registry/operation-registry.ts` 是 BangDream operation、handlerName、别名、冷却和说明的单一来源。新增或调整命令必须同步在线命令 SQL，并跑 registry/command-SQL 测试。
+`plugins/bangdream/plugin.json` 是 BangDream operation、handlerName、别名、权限、超时和说明的单一来源。新增或调整命令必须同步在线命令 SQL，并跑 manifest/command-SQL 测试。
 
 ### FF14 Market
 
-插件 key：`ff14-market`。旧 `ff14Market` 作为兼容别名仍可解析。
+插件 key：`ff14-market`。旧 `ff14Market` 作为兼容别名仍可解析；源码按第三期插件结构拆分为 `operations`、`application`、`domain`、`infrastructure/integration` 和 `config`。
 
 | operation key       | 说明                                       |
 | ------------------- | ------------------------------------------ |
@@ -485,6 +485,8 @@ pnpm qqbot-plugin install-local <packageFile>
 ### FFLogs
 
 插件 key：`fflogs`。
+
+源码按第三期插件结构拆分为 `operations`、`application`、`domain`、`infrastructure/integration`、`infrastructure/storage` 和 `config`。
 
 | operation key              | 说明                                                            |
 | -------------------------- | --------------------------------------------------------------- |
@@ -527,7 +529,7 @@ BangDream 图片 smoke：
 
 ```powershell
 .\scripts\bangdream-render-smoke.ps1 -OperationKey bangdream.song.search -Text "夏祭り" -OutFile ".kt-workspace/bangdream-smoke/song.jpg"
-.\scripts\bangdream-render-smoke.ps1 -OperationKey bangdream.event.stage -Text "310" -OutFile ".kt-workspace/bangdream-smoke/stage.jpg"
+.\scripts\bangdream-render-smoke.ps1 -OperationKey bangdream.event.stage -Text "310" -OutFile ".kt-workspace/bangdream-smoke/stage.jpg" -ExpectedImageCount 5
 ```
 
 Jenkins/K8s 发布后还需要观察 rollout、新 Pod 日志，并跑真实运行态 smoke；推送成功不等于发布完成。

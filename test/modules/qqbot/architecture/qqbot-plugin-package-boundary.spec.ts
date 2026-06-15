@@ -15,25 +15,44 @@ const collectTsFiles = (root: string): string[] => {
   });
 };
 
+const collectFiles = (root: string): string[] => {
+  if (!existsSync(root)) return [];
+
+  return readdirSync(root).flatMap((name) => {
+    const filePath = join(root, name);
+    const stat = statSync(filePath);
+    if (stat.isDirectory()) return collectFiles(filePath);
+    return [filePath];
+  });
+};
+
 const toRepoPath = (filePath: string) =>
   relative(repoRoot, filePath).replace(/\\/g, '/');
 
 const requiredPluginPaths = [
   'plugin.json',
   'src/index.ts',
-  'src/operations',
-  'src/events',
-  'src/domain',
   'src/application',
-  'src/infrastructure/integration',
-  'src/infrastructure/storage',
   'src/config',
-  'src/assets',
-  'src/migrations',
-  'src/tests',
+  'src/domain',
+  'src/infrastructure/integration',
 ];
 
+const requiredCommandPluginPaths = ['src/operations'];
+const requiredEventPluginPaths = ['src/events'];
+
 describe('QQBot plugin package boundary', () => {
+  it('does not keep built-in plugin transfer services under plugin-platform', () => {
+    expect(
+      existsSync(
+        join(
+          repoRoot,
+          'src/modules/qqbot/plugin-platform/infrastructure/integration/builtins',
+        ),
+      ),
+    ).toBe(false);
+  });
+
   it('uses only approved built-in plugin package keys as directory names', () => {
     const pluginDirs = readdirSync(pluginRoot)
       .filter((name) => statSync(join(pluginRoot, name)).isDirectory())
@@ -49,13 +68,64 @@ describe('QQBot plugin package boundary', () => {
 
   it('uses the same package shape for every built-in plugin', () => {
     const missing = ['bangdream', 'ff14-market', 'fflogs', 'repeater'].flatMap(
-      (pluginKey) =>
-        requiredPluginPaths
+      (pluginKey) => {
+        const manifest = JSON.parse(
+          readFileSync(join(pluginRoot, pluginKey, 'plugin.json'), 'utf8'),
+        ) as { events?: unknown[]; operations?: unknown[] };
+        const requiredPaths = [
+          ...requiredPluginPaths,
+          ...((manifest.operations || []).length
+            ? requiredCommandPluginPaths
+            : []),
+          ...((manifest.events || []).length ? requiredEventPluginPaths : []),
+        ];
+        return requiredPaths
           .map((pathName) => `${pluginKey}/${pathName}`)
-          .filter((pathName) => !existsSync(join(pluginRoot, pathName))),
+          .filter((pathName) => !existsSync(join(pluginRoot, pathName)));
+      },
     );
 
     expect(missing).toEqual([]);
+  });
+
+  it('does not keep third-phase package directories as empty shells', () => {
+    const emptyRequiredDirs = [
+      'bangdream',
+      'ff14-market',
+      'fflogs',
+      'repeater',
+    ].flatMap((pluginKey) => {
+      const manifest = JSON.parse(
+        readFileSync(join(pluginRoot, pluginKey, 'plugin.json'), 'utf8'),
+      ) as { events?: unknown[]; operations?: unknown[] };
+      const requiredDirs = [
+        'src/application',
+        'src/config',
+        'src/domain',
+        'src/infrastructure/integration',
+        ...((manifest.operations || []).length ? ['src/operations'] : []),
+        ...((manifest.events || []).length ? ['src/events'] : []),
+      ];
+      return requiredDirs
+        .map((pathName) => join(pluginRoot, pluginKey, pathName))
+        .filter((pathName) => collectTsFiles(pathName).length === 0)
+        .map(toRepoPath);
+    });
+
+    expect(emptyRequiredDirs).toEqual([]);
+  });
+
+  it('does not keep empty .gitkeep placeholder shells in built-in plugin packages', () => {
+    const placeholders = readdirSync(pluginRoot)
+      .filter((name) => statSync(join(pluginRoot, name)).isDirectory())
+      .flatMap((pluginKey) =>
+        collectFiles(join(pluginRoot, pluginKey)).filter((filePath) =>
+          filePath.endsWith('.gitkeep'),
+        ),
+      )
+      .map(toRepoPath);
+
+    expect(placeholders).toEqual([]);
   });
 
   it('keeps plugin runtime source independent from host internals and direct IO', () => {
@@ -130,5 +200,24 @@ describe('QQBot plugin package boundary', () => {
       .map(toRepoPath);
 
     expect(duplicateMetadataFiles).toEqual([]);
+  });
+
+  it('does not keep pure transfer TypeScript files in plugin packages', () => {
+    const transferFiles = collectTsFiles(pluginRoot)
+      .filter((filePath) => {
+        const source = readFileSync(filePath, 'utf8')
+          .replace(/\/\*[\s\S]*?\*\//g, '')
+          .replace(/\/\/.*$/gm, '')
+          .trim();
+        return (
+          source.length > 0 &&
+          source
+            .split(/\r?\n/)
+            .every((line) => /^export\s+(?:type\s+)?\*?\s*/.test(line.trim()))
+        );
+      })
+      .map(toRepoPath);
+
+    expect(transferFiles).toEqual([]);
   });
 });

@@ -4,6 +4,7 @@ param(
   [string]$DisplayedServerList = "cn jp",
   [string]$OutFile = ".kt-workspace/bangdream-smoke/bangdream-smoke.jpg",
   [int]$TimeoutSeconds = 45,
+  [int]$ExpectedImageCount = 0,
   [switch]$UseEasyBg
 )
 
@@ -38,6 +39,7 @@ $Payload = @{
   }
   operationKey = $OperationKey
   outFile = $ResolvedOutFile
+  expectedImageCount = $ExpectedImageCount
 }
 $PayloadJson = $Payload | ConvertTo-Json -Compress -Depth 5
 $PayloadBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($PayloadJson))
@@ -45,17 +47,96 @@ $PayloadBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Paylo
 $NodeCode = @"
 const fs = require("fs");
 const path = require("path");
-const { ConfigService } = require("@nestjs/config");
+const XLSX = require("xlsx");
 const payload = JSON.parse(Buffer.from("$PayloadBase64", "base64").toString("utf8"));
-const { ToolsService } = require("./src/common/services/tool.service");
-const { QqbotBangDreamRendererService } = require("./src/modules/qqbot/plugins/bangDream/application/bangdream-renderer.facade");
-const { TsuguApplicationService } = require("./src/modules/qqbot/plugins/bangDream/application/bangdream-application.service");
+const { createPlugin } = require("./src/modules/qqbot/plugins/bangdream/src");
+
+function createHttpError(message, statusCode) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.response = { status: statusCode };
+  return error;
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeoutMs = options.timeoutMs || 30000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      headers: options.headers,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function readJsonFile(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function readExcelRows(filePath) {
+  const workbook = XLSX.readFile(filePath);
+  const sheetName = workbook.SheetNames[0];
+  return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+}
+
+async function requestBuffer(url, options) {
+  const response = await fetchWithTimeout(url, options);
+  const body = Buffer.from(await response.arrayBuffer());
+  if (!response.ok) {
+    throw createHttpError("BangDream resource request failed: " + response.status, response.status);
+  }
+  return {
+    body,
+    statusCode: response.status,
+  };
+}
+
+async function requestJson(url, options) {
+  const response = await fetchWithTimeout(url, options);
+  const text = await response.text();
+  if (!response.ok) {
+    throw createHttpError("BangDream JSON request failed: " + response.status, response.status);
+  }
+  return {
+    body: JSON.parse(text),
+    statusCode: response.status,
+  };
+}
 
 (async () => {
-  const renderer = new QqbotBangDreamRendererService(new ConfigService({}), undefined);
-  const service = new TsuguApplicationService(renderer, new ToolsService());
-  await service.onApplicationBootstrap();
-  const result = await service.execute(payload.operationKey, payload.input);
+  const manifest = readJsonFile(path.join(process.cwd(), "src/modules/qqbot/plugins/bangdream/plugin.json"));
+  const operations = manifest.operations.map((operation) => ({
+    handlerName: operation.handlerName,
+    key: operation.key,
+  }));
+  const plugin = createPlugin({
+    io: {
+      getConfig: (key) => process.env[key],
+      readAssetFile: async (filePath) => fs.promises.readFile(filePath),
+      readExcelRows: async (filePath) => readExcelRows(filePath),
+      readJsonFile: async (filePath) => readJsonFile(filePath),
+      readJsonFileSync: (filePath) => readJsonFile(filePath),
+      requestArrayBuffer: requestBuffer,
+      requestJson,
+      sleep: async (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      writeJsonFile: async (filePath, data) => {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        fs.writeFileSync(filePath, JSON.stringify(data));
+      },
+    },
+    normalizeError: (error) => String(error?.message || error || "BangDream command failed"),
+    operations,
+  });
+  await plugin.activate();
+  const result = await plugin.executeOperation(payload.operationKey, payload.input);
+  if (payload.expectedImageCount > 0 && result.imageCount !== payload.expectedImageCount) {
+    throw new Error(
+      "Expected imageCount=" + payload.expectedImageCount + ", got " + result.imageCount,
+    );
+  }
   const matches = [...result.replyText.matchAll(/base64:\/\/([A-Za-z0-9+/=]+)/g)];
   if (matches.length === 0) throw new Error("No image CQ payload");
   fs.mkdirSync(path.dirname(payload.outFile), { recursive: true });

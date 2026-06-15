@@ -5,7 +5,7 @@
   "minApiSdkVersion": "1.0.0",
   "description": "监听同一会话内连续重复的普通文本消息，达到阈值后通过宿主发送队列复读一次。",
   "author": "KT",
-  "entry": "qqbot-repeater.plugin.ts",
+  "entry": "src/index.ts",
   "permissions": [
     "qqbot.event.receive",
     "qqbot.send",

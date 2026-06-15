@@ -87,7 +87,7 @@ describe('QQBot third-phase module boundaries', () => {
       'QqbotFf14',
       'QqbotFflogs',
       'QqbotRepeater',
-      'TsuguApplicationService',
+      'BangDreamApplicationService',
     ];
 
     const violations = bannedSymbols.filter((symbol) =>

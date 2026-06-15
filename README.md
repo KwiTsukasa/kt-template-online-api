@@ -23,8 +23,8 @@
 | `wordpress`                     | WordPress REST 代理、登录态透传、文章/分类/标签/主题配置                                   |
 | `qqbot`                         | QQBot 账号、NapCat 扫码登录、OneBot 反向 WS、在线命令、规则、权限、发送/接收日志和插件平台 |
 | `modules/qqbot/plugin-platform` | QQBot 插件 manifest 校验、版本安装、运行事件、受控 SDK 和 CLI 脚手架                       |
-| `qqbot/plugins/bangDream`       | BanG Dream 查曲、查卡、查活动、试炼、玩家、卡池、抽卡模拟、档线、谱面出图                  |
-| `qqbot/plugins/ff14Market`      | XIVAPI + Universalis 物品解析和 FF14 市场查价                                              |
+| `qqbot/plugins/bangdream`       | BanG Dream 查曲、查卡、查活动、试炼、玩家、卡池、抽卡模拟、档线、谱面出图                  |
+| `qqbot/plugins/ff14-market`     | XIVAPI + Universalis 物品解析和 FF14 市场查价                                              |
 | `qqbot/plugins/fflogs`          | FFLogs v2 GraphQL 角色排名和指定高难最近记录查询                                           |
 | `minio`                         | Bucket 检查、上传、列表、临时 URL、代理下载、删除                                          |
 | `common`                        | 响应封装、异常过滤、请求日志、日期格式化、字典解码、Snowflake、工具服务                    |
@@ -160,8 +160,8 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 - NapCat 设备身份按账号持久化到 `napcat_device_identity`：同一账号重建容器会复用数据目录、hostname、machine-id 和 MAC，并在 Docker run 中注入 `--hostname`、`--mac-address`、只读 `/etc/machine-id`，避免频繁重建被 QQ 判定为全新设备。
 - NapCat 新设备验证走同一 scan session：`CaptchaLogin` 返回 `needNewDevice` 后，后端继续调用 `GetNewDeviceQRCode -> PollNewDeviceQR -> NewDeviceLogin`，Admin/SSE 分开展示 `captchaUrl`、`newDeviceQrcode`、已扫码、确认中、验证成功、登录成功/失败等中文进度，不把 `jumpUrl` 当作唯一完成入口。
 - NapCat 离线看门狗按 `QQBOT_NAPCAT_WATCHDOG_INTERVAL_MS`（默认 `120000`，最小 `30000`，`QQBOT_NAPCAT_WATCHDOG_ENABLED=false` 关闭）定时巡检在线账号，使掉线/被踢无需管理员打开列表页即可及时发现；检测到离线后先尝试 `ACCOUNT` 历史会话快速登录，再尝试账号保存的登录密码，仍失败时写入离线原因并复用 `super` 站内信告警；看门狗不自动进入扫码阶段。
-- BangDream 当前源码根目录是 `src/modules/qqbot/plugins/bangDream`；不要恢复旧 `tsugu` 层级或旧大桶目录。
-- BangDream 在线命令以 `registry/operation-registry.ts` 为单一来源，新增命令必须同步 SQL/在线命令表并跑 registry/command-SQL 测试。
+- BangDream 当前源码根目录是 `src/modules/qqbot/plugins/bangdream/src`；按第三期插件结构放置真实职责代码：业务在 `domain/*`，编排在 `application`，操作在 `operations`，外部 API 在 `infrastructure/integration`，缓存/静态修正在 `infrastructure/storage`，字典和静态配置在 `config`，视觉渲染公共件在 `theme`；不要恢复旧 `tsugu` 层级、旧大桶目录、纯 re-export 转接文件或空 `.gitkeep` 目录壳。
+- BangDream 在线命令以 `plugins/bangdream/plugin.json` 为单一来源，新增命令必须同步 SQL/在线命令表并跑 manifest/command-SQL 测试。
 - BangDream event stage 大图必须保持分页拆图行为，线上 smoke 关注 `imageCount=5`，避免大 canvas OOM 回归。
 
 ## 轻量验证
@@ -184,6 +184,7 @@ BangDream 图片能力改动：
 
 ```powershell
 .\scripts\bangdream-render-smoke.ps1 -OperationKey bangdream.song.search -Text "夏祭り" -OutFile ".kt-workspace/bangdream-smoke/song.jpg"
+.\scripts\bangdream-render-smoke.ps1 -OperationKey bangdream.event.stage -Text "310" -OutFile ".kt-workspace/bangdream-smoke/stage.jpg" -ExpectedImageCount 5
 ```
 
 接口改动必须启动或复用本地服务，并真实调用一次对应接口。
@@ -196,4 +197,4 @@ BangDream 图片能力改动：
 
 | 一级来源                                                                 | 使用方式                                                                                   | License |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------- |
-| [Tsugu BangDream Bot](https://github.com/Yamamoto-2/tsugu-bangdream-bot) | BangDream QQBot 后端能力已重构合入 `src/modules/qqbot/plugins/bangDream`，保留本地 `TSUGU-LICENSE` | MIT     |
+| [Tsugu BangDream Bot](https://github.com/Yamamoto-2/tsugu-bangdream-bot) | BangDream QQBot 后端能力已重构合入 `src/modules/qqbot/plugins/bangdream/src`，保留本地 `TSUGU-LICENSE` | MIT     |

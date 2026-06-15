@@ -34,7 +34,7 @@ This plan is complete only when all of these are true:
   - `pnpm-lock.yaml`
   - `src/modules/qqbot/napcat/integration/napcat-login-api.client.ts`
   - `src/modules/qqbot/plugin-platform/qqbot-plugin.controller.ts`
-  - `src/modules/qqbot/plugins/bangDream/shared/main-data-store.ts`
+  - `src/modules/qqbot/plugins/bangdream/src/application/main-data-store.ts`
   - `test/modules/qqbot/napcat/new-device-flow.spec.ts`
   - `test/modules/qqbot/plugins/plugin-controller-http-smoke.spec.ts`
 - Existing Admin dirty work contains the matching plugin pagination wrapper/page change:
@@ -93,7 +93,7 @@ pnpm --dir D:\MyFiles\KT\Vue\kt-template-admin -F @vben/web-antdv-next run typec
 - [ ] Commit the verified baseline in API with:
 
 ```powershell
-git -C D:\MyFiles\KT\Node\kt-template-online-api add package.json pnpm-lock.yaml src/modules/qqbot/napcat/integration/napcat-login-api.client.ts src/modules/qqbot/plugin-platform/qqbot-plugin.controller.ts src/modules/qqbot/plugins/bangDream/shared/main-data-store.ts test/modules/qqbot/napcat/new-device-flow.spec.ts test/modules/qqbot/plugins/plugin-controller-http-smoke.spec.ts
+git -C D:\MyFiles\KT\Node\kt-template-online-api add package.json pnpm-lock.yaml src/modules/qqbot/napcat/integration/napcat-login-api.client.ts src/modules/qqbot/plugin-platform/qqbot-plugin.controller.ts src/modules/qqbot/plugins/bangdream/src/application/main-data-store.ts test/modules/qqbot/napcat/new-device-flow.spec.ts test/modules/qqbot/plugins/plugin-controller-http-smoke.spec.ts
 git -C D:\MyFiles\KT\Node\kt-template-online-api commit -m "fix: 补齐QQBot插件分页与新设备二维码"
 ```
 
@@ -472,7 +472,7 @@ powershell -ExecutionPolicy Bypass -File D:\MyFiles\KT\Node\kt-template-online-a
 
 ```powershell
 git -C D:\MyFiles\KT\Node\kt-template-online-api add src/modules/qqbot/plugins/bangdream test/modules/qqbot/plugins/bangdream-rewrite test/modules/qqbot/architecture sql/refactor-v3 docs/refactor-v3 API.md
-git -C D:\MyFiles\KT\Node\kt-template-online-api add -u src/modules/qqbot/plugins/bangDream
+git -C D:\MyFiles\KT\Node\kt-template-online-api add -u src/modules/qqbot/plugins/bangdream/src
 git -C D:\MyFiles\KT\Node\kt-template-online-api commit -m "refactor: 重写BangDream插件"
 ```
 
@@ -533,7 +533,7 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api run typecheck
 
 ```powershell
 git -C D:\MyFiles\KT\Node\kt-template-online-api add src/modules/qqbot/plugins/ff14-market src/modules/qqbot/plugins/fflogs src/modules/qqbot/plugins/repeater test/modules/qqbot/plugins test/modules/qqbot/architecture sql/refactor-v3 docs/refactor-v3 API.md
-git -C D:\MyFiles\KT\Node\kt-template-online-api add -u src/modules/qqbot/plugins/ff14Market
+git -C D:\MyFiles\KT\Node\kt-template-online-api add -u src/modules/qqbot/plugins/ff14-market
 git -C D:\MyFiles\KT\Node\kt-template-online-api commit -m "refactor: 规范化QQBot内置插件包"
 ```
 

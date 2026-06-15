@@ -28,6 +28,57 @@ export class QqbotPluginHttpClientService {
     }
   }
 
+  requestBuffer(input: QqbotPluginHttpClientRequest): Promise<Buffer> {
+    const url = input.url instanceof URL ? input.url : new URL(input.url);
+    const method = input.method || 'GET';
+    const timeoutMs = input.timeoutMs || 8000;
+    const context = input.context || '插件 HTTP 接口';
+
+    return new Promise<Buffer>((resolve, reject) => {
+      const client = url.protocol === 'http:' ? http : https;
+      const request = client.request(
+        url,
+        {
+          headers: {
+            Accept: '*/*',
+            'User-Agent': 'kt-template-online-api/qqbot-plugin',
+            ...(input.headers || {}),
+          },
+          method,
+          timeout: timeoutMs,
+        },
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on('data', (chunk) => {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          });
+          response.on('end', () => {
+            const statusCode = response.statusCode || 500;
+            if (statusCode >= 400) {
+              reject(
+                createPluginHttpError(
+                  input.failureMessage?.(statusCode) ||
+                    `${context}请求失败：${statusCode}`,
+                  statusCode,
+                ),
+              );
+              return;
+            }
+            resolve(Buffer.concat(chunks));
+          });
+        },
+      );
+      request.on('timeout', () => {
+        request.destroy(
+          new Error(input.timeoutMessage || `${context}请求超时`),
+        );
+      });
+      request.on('error', reject);
+      if (input.body) request.write(input.body);
+      request.end();
+    });
+  }
+
   requestText(input: QqbotPluginHttpClientRequest): Promise<string> {
     const url = input.url instanceof URL ? input.url : new URL(input.url);
     const method = input.method || 'GET';
@@ -57,9 +108,10 @@ export class QqbotPluginHttpClientService {
             const statusCode = response.statusCode || 500;
             if (statusCode >= 400) {
               reject(
-                new Error(
+                createPluginHttpError(
                   input.failureMessage?.(statusCode) ||
                     `${context}请求失败：${statusCode}`,
+                  statusCode,
                 ),
               );
               return;
@@ -78,4 +130,13 @@ export class QqbotPluginHttpClientService {
       request.end();
     });
   }
+}
+
+function createPluginHttpError(message: string, statusCode: number) {
+  return Object.assign(new Error(message), {
+    response: {
+      status: statusCode,
+    },
+    statusCode,
+  });
 }

@@ -2,7 +2,6 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 import { parseQqbotPluginManifest } from '../../../../src/modules/qqbot/plugin-platform/domain/manifest';
-import { BANGDREAM_OPERATION_REGISTRY } from '../../../../src/modules/qqbot/plugins/bangDream/registry/operation-registry';
 
 const repoRoot = join(__dirname, '../../../..');
 const pluginRoot = join(repoRoot, 'src/modules/qqbot/plugins');
@@ -119,10 +118,12 @@ const bangDreamOperations: ExpectedOperation[] = [
 ];
 
 describe('QQBot current operation matrix', () => {
-  it('freezes the current BangDream operation registry before rewrite', () => {
+  it('freezes the current BangDream operation matrix from the manifest', () => {
+    const manifest = readManifest('bangdream');
+
     expect(
-      BANGDREAM_OPERATION_REGISTRY.map((operation) => ({
-        aliases: [...operation.onlineCommand.aliases],
+      manifest.operations.map((operation) => ({
+        aliases: operation.aliases,
         handlerName: operation.handlerName,
         key: operation.key,
         name: operation.name,
@@ -132,15 +133,15 @@ describe('QQBot current operation matrix', () => {
 
   it('freezes built-in plugin manifests and exposed capabilities', () => {
     const manifests = {
-      bangDream: readManifest('bangDream'),
-      ff14Market: readManifest('ff14Market'),
+      bangdream: readManifest('bangdream'),
+      ff14Market: readManifest('ff14-market'),
       fflogs: readManifest('fflogs'),
       repeater: readManifest('repeater'),
     };
 
-    expect(manifests.bangDream.pluginKey).toBe('bangdream');
+    expect(manifests.bangdream.pluginKey).toBe('bangdream');
     expect(
-      manifests.bangDream.operations.map((operation) => ({
+      manifests.bangdream.operations.map((operation) => ({
         aliases: operation.aliases,
         handlerName: operation.handlerName,
         key: operation.key,
@@ -212,10 +213,10 @@ describe('QQBot current operation matrix', () => {
       expect(seedSql).toContain(JSON.stringify(operation.aliases));
     }
 
-    expect(seedSql).toContain(`'ff14Market', 'ff14.market.price'`);
+    expect(seedSql).toContain(`'ff14-market', 'ff14.market.price'`);
     expect(seedSql).toContain(`'fflogs', 'fflogs.character.summary'`);
     expect(seedSql).toContain(
-      `'bangDream', 'bangdream.event.stage', 'plain'`,
+      `'bangdream', 'bangdream.event.stage', 'plain'`,
     );
   });
 });

@@ -1,23 +1,5 @@
-jest.mock('@/modules/qqbot/plugins/bangDream/qqbot-bangdream.plugin', () => ({
-  QqbotBangDreamPluginService: class {},
-}));
-jest.mock(
-  '@/modules/qqbot/plugins/ff14Market/qqbot-ff14-market.plugin',
-  () => ({
-    QqbotFf14MarketPluginService: class {},
-  }),
-);
-jest.mock('@/modules/qqbot/plugins/fflogs/qqbot-fflogs.plugin', () => ({
-  QqbotFflogsPluginService: class {},
-}));
-
 import { QqbotPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-plugin-registry.service';
 import type { QqbotIntegrationPlugin } from '../../../../src/modules/qqbot/core/contract/qqbot.types';
-
-const asPluginService = (plugin: QqbotIntegrationPlugin) =>
-  ({
-    getPlugin: () => plugin,
-  }) as any;
 
 const createPlugin = (
   key: string,
@@ -42,12 +24,15 @@ describe('QQBot plugin registry platform key compatibility', () => {
     const ff14Market = createPlugin('ff14-market', ['ff14Market']);
     const fflogs = createPlugin('fflogs', []);
     const registry = new QqbotPluginRegistryService(
-      asPluginService(bangdream),
-      asPluginService(ff14Market),
-      asPluginService(fflogs),
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
     );
 
-    registry.onModuleInit();
+    registry.register(bangdream);
+    registry.register(ff14Market);
+    registry.register(fflogs);
 
     expect(registry.listPlugins().map((plugin) => plugin.key)).toEqual([
       'bangdream',

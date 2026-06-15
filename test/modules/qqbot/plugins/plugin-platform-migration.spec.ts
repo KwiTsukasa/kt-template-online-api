@@ -28,7 +28,7 @@ describe('QQBot existing plugin platform migration', () => {
       readdirSync(pluginRoot)
         .filter((name) => statSync(join(pluginRoot, name)).isDirectory())
         .sort(),
-    ).toEqual(['bangDream', 'ff14Market', 'fflogs', 'repeater']);
+    ).toEqual(['bangdream', 'ff14-market', 'fflogs', 'repeater']);
 
     const legacySources = collectFiles(legacyPluginRoot).filter((filePath) =>
       filePath.endsWith('.ts'),
@@ -37,7 +37,7 @@ describe('QQBot existing plugin platform migration', () => {
   });
 
   it('declares parseable platform manifests for every existing plugin', () => {
-    const manifests = ['bangDream', 'ff14Market', 'fflogs', 'repeater'].map(
+    const manifests = ['bangdream', 'ff14-market', 'fflogs', 'repeater'].map(
       (pluginName) => {
         const root = join(pluginRoot, pluginName);
         const manifest = parseQqbotPluginManifest(
@@ -66,38 +66,111 @@ describe('QQBot existing plugin platform migration', () => {
     ).toBe(true);
   });
 
-  it('keeps BangDream manifest operations aligned with the registry metadata', async () => {
-    const { BANGDREAM_OPERATION_REGISTRY } =
-      await import('../../../../src/modules/qqbot/plugins/bangDream/registry/operation-registry');
+  it('keeps BangDream manifest operations as the single metadata source', () => {
     const manifest = parseQqbotPluginManifest(
-      readJson(join(pluginRoot, 'bangDream/plugin.json')),
+      readJson(join(pluginRoot, 'bangdream/plugin.json')),
       {
-        pluginRoot: join(pluginRoot, 'bangDream'),
+        pluginRoot: join(pluginRoot, 'bangdream'),
       },
     );
 
-    expect(manifest.operations).toHaveLength(
-      BANGDREAM_OPERATION_REGISTRY.length,
-    );
     expect(
       manifest.operations.map((operation) => ({
-        aliases: operation.aliases,
         handlerName: operation.handlerName,
         key: operation.key,
         name: operation.name,
       })),
-    ).toEqual(
-      BANGDREAM_OPERATION_REGISTRY.map((operation) => ({
-        aliases: [...operation.onlineCommand.aliases],
-        handlerName: operation.handlerName,
-        key: operation.key,
-        name: operation.name,
-      })),
-    );
+    ).toEqual([
+      {
+        handlerName: 'searchSong',
+        key: 'bangdream.song.search',
+        name: '查曲',
+      },
+      {
+        handlerName: 'getSongChart',
+        key: 'bangdream.song.chart',
+        name: '查谱面',
+      },
+      {
+        handlerName: 'randomSong',
+        key: 'bangdream.song.random',
+        name: '随机曲',
+      },
+      {
+        handlerName: 'getSongMeta',
+        key: 'bangdream.song.meta',
+        name: '查询分数表',
+      },
+      {
+        handlerName: 'searchCard',
+        key: 'bangdream.card.search',
+        name: '查卡',
+      },
+      {
+        handlerName: 'getCardIllustration',
+        key: 'bangdream.card.illustration',
+        name: '查卡面',
+      },
+      {
+        handlerName: 'searchCharacter',
+        key: 'bangdream.character.search',
+        name: '查角色',
+      },
+      {
+        handlerName: 'searchEvent',
+        key: 'bangdream.event.search',
+        name: '查活动',
+      },
+      {
+        handlerName: 'getEventStage',
+        key: 'bangdream.event.stage',
+        name: '查试炼',
+      },
+      {
+        handlerName: 'searchPlayer',
+        key: 'bangdream.player.search',
+        name: '查玩家',
+      },
+      {
+        handlerName: 'searchGacha',
+        key: 'bangdream.gacha.search',
+        name: '查卡池',
+      },
+      {
+        handlerName: 'simulateGacha',
+        key: 'bangdream.gacha.simulate',
+        name: '抽卡模拟',
+      },
+      {
+        handlerName: 'getCutoffDetail',
+        key: 'bangdream.cutoff.detail',
+        name: 'ycx',
+      },
+      {
+        handlerName: 'getCutoffAll',
+        key: 'bangdream.cutoff.all',
+        name: 'ycxall',
+      },
+      {
+        handlerName: 'getCutoffRecent',
+        key: 'bangdream.cutoff.recent',
+        name: 'lsycx',
+      },
+    ]);
+    expect(
+      existsSync(
+        join(pluginRoot, 'bangdream/src/registry/operation-registry.ts'),
+      ),
+    ).toBe(false);
+    expect(
+      existsSync(
+        join(pluginRoot, 'bangdream/src/commands/qqbot-bangdream-command.definitions.ts'),
+      ),
+    ).toBe(false);
   });
 
   it('routes FF14 Market and FFLogs HTTP through the plugin platform SDK', () => {
-    const externalHttpSources = ['ff14Market', 'fflogs'].flatMap((pluginName) =>
+    const externalHttpSources = ['ff14-market', 'fflogs'].flatMap((pluginName) =>
       collectFiles(join(pluginRoot, pluginName)).filter((filePath) =>
         filePath.endsWith('.ts'),
       ),

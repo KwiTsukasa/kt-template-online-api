@@ -177,7 +177,7 @@ export class QqbotBuiltinPluginPackageLoaderService {
       `src/modules/qqbot/plugins/${pluginKey}`,
     );
     if (existsSync(join(sourceRoot, 'plugin.json'))) return sourceRoot;
-    return join(__dirname, `../../../plugins/${pluginKey}`);
+    return join(__dirname, `../../../../plugins/${pluginKey}`);
   }
 }
 

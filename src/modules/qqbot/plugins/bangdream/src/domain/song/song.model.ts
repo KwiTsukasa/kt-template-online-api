@@ -78,6 +78,7 @@ export class Song {
 
   //meta数据
   hasMeta = false;
+  private readonly songJacketImageCache = new Map<string, Promise<Image>>();
 
   meta: {
     [difficultyId: number]: {
@@ -206,6 +207,18 @@ export class Song {
    */
   async getSongJacketImage(
     displayedServerList: Server[] = [Server.jp, Server.cn],
+  ): Promise<Image> {
+    const cacheKey = displayedServerList.join(',');
+    let jacketImage = this.songJacketImageCache.get(cacheKey);
+    if (!jacketImage) {
+      jacketImage = this.loadSongJacketImage(displayedServerList);
+      this.songJacketImageCache.set(cacheKey, jacketImage);
+    }
+    return await jacketImage;
+  }
+
+  private async loadSongJacketImage(
+    displayedServerList: Server[],
   ): Promise<Image> {
     const jacketImageBuffer = await songResourceRepository.getJacketImageBuffer(
       this,
@@ -357,6 +370,16 @@ export interface SongInRank {
   meta: number;
   rank: number;
 }
+
+export interface SongMetaRankSummary {
+  entries: Array<{
+    difficulty: number;
+    meta: number;
+    rank: number;
+  }>;
+  maxMeta: number;
+}
+
 /**
  * 在BangDream 领域模型层中获取MetaRanking。
  *
@@ -403,4 +426,88 @@ export function getMetaRanking(
     songRankList[i].rank = i;
   }
   return songRankList;
+}
+
+/**
+ * 在BangDream 领域模型层中获取指定歌曲的Meta排名摘要。
+ *
+ * @param targetSong - 目标歌曲。
+ * @param withFever - withFever参数。
+ * @param mainServer - 主数据服务器参数。
+ * @returns 目标歌曲的排名条目与全局最大Meta。
+ */
+export function getSongMetaRankSummary(
+  targetSong: Song,
+  withFever: boolean,
+  mainServer: Server,
+): SongMetaRankSummary {
+  const songIdList = bangdreamCatalogRepository.getNumericIds('meta');
+  const rowMetas: number[] = [];
+  const targetEntries: Array<{
+    difficulty: number;
+    meta: number;
+    order: number;
+  }> = [];
+  let maxMeta = 0;
+
+  for (let i = 0; i < songIdList.length; i++) {
+    const songId = songIdList[i];
+    const song = songId === targetSong.songId ? targetSong : new Song(songId);
+    if (!isSongMetaRankCandidate(song, mainServer)) {
+      continue;
+    }
+    for (const j in song.difficulty) {
+      const difficulty = parseInt(j);
+      const meta = song.calcMeta(withFever, difficulty);
+      const order = rowMetas.length;
+      rowMetas.push(meta);
+      if (meta > maxMeta) {
+        maxMeta = meta;
+      }
+      if (song.songId === targetSong.songId) {
+        targetEntries.push({
+          difficulty,
+          meta,
+          order,
+        });
+      }
+    }
+  }
+
+  targetEntries.sort((a, b) => {
+    const metaDiff = b.meta - a.meta;
+    return metaDiff === 0 ? a.order - b.order : metaDiff;
+  });
+
+  return {
+    entries: targetEntries.map((entry) => ({
+      difficulty: entry.difficulty,
+      meta: entry.meta,
+      rank: countStableMetaRank(rowMetas, entry.meta, entry.order),
+    })),
+    maxMeta,
+  };
+}
+
+function isSongMetaRankCandidate(song: Song, mainServer: Server): boolean {
+  return (
+    song.publishedAt[mainServer] != null &&
+    Object.keys(song.notes).length > 0 &&
+    song.hasMeta
+  );
+}
+
+function countStableMetaRank(
+  rowMetas: number[],
+  targetMeta: number,
+  targetOrder: number,
+) {
+  let rank = 0;
+  for (let i = 0; i < rowMetas.length; i++) {
+    const meta = rowMetas[i];
+    if (meta > targetMeta || (meta === targetMeta && i < targetOrder)) {
+      rank++;
+    }
+  }
+  return rank;
 }

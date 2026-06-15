@@ -12,7 +12,8 @@ import {
 import {
   Song,
   getMetaRanking,
-  SongInRank,
+  getSongMetaRankSummary,
+  type SongMetaRankSummary,
 } from '@/modules/qqbot/plugins/bangdream/src/domain/song/song.model';
 import { drawDottedLine } from '@/modules/qqbot/plugins/bangdream/src/theme/canvas-dotted-line';
 import {
@@ -240,19 +241,9 @@ export async function drawSongMetaListDataBlock(
   topLeftText?: string,
   displayedServerList: Server[] = globalDefaultServer,
 ) {
-  const metaRanking = {};
+  const metaRanking: Partial<Record<Server, SongMetaRankSummary>> = {};
   for (const server of displayedServerList) {
-    metaRanking[server] = {};
-    metaRanking[server].data = getMetaRanking(withFever, server);
-    metaRanking[server].maxMeta = metaRanking[server].data[0].meta;
-  }
-  const songMetaRanking = {};
-  for (const server of displayedServerList) {
-    songMetaRanking[server] = {};
-    const tempMetaRanking = metaRanking[server].data;
-    songMetaRanking[server].data = tempMetaRanking.filter(
-      (value: SongInRank) => value.songId == song.songId,
-    );
+    metaRanking[server] = getSongMetaRankSummary(song, withFever, server);
   }
 
   const list: Array<Image | Canvas> = [];
@@ -260,14 +251,17 @@ export async function drawSongMetaListDataBlock(
     const difficultyId = parseInt(difficulty);
     let text = '';
     for (const server of displayedServerList) {
-      const tempSongMetaRanking = songMetaRanking[server].data;
-      for (let j = 0; j < tempSongMetaRanking.length; j++) {
-        if (tempSongMetaRanking[j].difficulty == difficultyId) {
+      const summary = metaRanking[server];
+      if (!summary) {
+        continue;
+      }
+      for (let j = 0; j < summary.entries.length; j++) {
+        if (summary.entries[j].difficulty == difficultyId) {
           const percent = getRelativeMetaPercent(
-            tempSongMetaRanking[j].meta,
-            metaRanking[server].maxMeta,
+            summary.entries[j].meta,
+            summary.maxMeta,
           );
-          text += `${serverNameFullList[server]}: ${percent}% #${tempSongMetaRanking[j].rank + 1} `;
+          text += `${serverNameFullList[server]}: ${percent}% #${summary.entries[j].rank + 1} `;
         }
       }
     }

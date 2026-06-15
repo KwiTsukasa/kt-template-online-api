@@ -278,7 +278,7 @@ export function match(
   }
 
   if (matchesOnlyAll(matches, keyCount)) {
-    return matches._all.some((keyword) =>
+    return matches._all.every((keyword) =>
       targetIncludesAllKeyword(target, keyword),
     );
   }

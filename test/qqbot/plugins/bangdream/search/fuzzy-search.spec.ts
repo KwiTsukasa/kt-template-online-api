@@ -39,6 +39,12 @@ describe('BangDream fuzzy search helpers', () => {
       true,
     );
     expect(
+      match({ _all: ['fire', 'bird'] }, { title: ['FIRE BIRD'] }, []),
+    ).toBe(true);
+    expect(
+      match({ _all: ['fire', 'bird'] }, { title: ['Light a fire'] }, []),
+    ).toBe(false);
+    expect(
       match(
         { scoreUpMaxValue: [100], _number: [100] },
         { scoreUpMaxValue: 100 },

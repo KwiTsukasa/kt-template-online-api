@@ -227,7 +227,7 @@ Expected: fails on current `bangDream`, `ff14Market`, Nest services, and old reg
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugin-platform\plugin-lifecycle-runtime.spec.ts`
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\core\qqbot-core-plugin-ports.spec.ts`
 - Create: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\napcat\napcat-persistent-login-state.spec.ts`
-- Create: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugins\bangdream\bangdream-operation-parity.spec.ts`
+- Create: `D:\MyFiles\KT\Node\kt-template-online-api\test\modules\qqbot\plugins\bangdream-rewrite\bangdream-operation-parity.spec.ts`
 
 - [ ] Lifecycle test covers install, enable, active registry refresh, operation execution, event dispatch, disable, uninstall, timeout, crash isolation, and runtime event persistence.
 - [ ] Core ports test covers command prefix and alias matching in core, raw args handed to Plugin Platform, plugin output normalized back to command log/send queue, and plugin event dispatch after core does not consume a message.
@@ -236,7 +236,7 @@ Expected: fails on current `bangDream`, `ff14Market`, Nest services, and old reg
 - [ ] Verify RED:
 
 ```powershell
-pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/modules/qqbot/plugin-platform/plugin-lifecycle-runtime.spec.ts test/modules/qqbot/core/qqbot-core-plugin-ports.spec.ts test/modules/qqbot/napcat/napcat-persistent-login-state.spec.ts test/modules/qqbot/plugins/bangdream/bangdream-operation-parity.spec.ts
+pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/modules/qqbot/plugin-platform/plugin-lifecycle-runtime.spec.ts test/modules/qqbot/core/qqbot-core-plugin-ports.spec.ts test/modules/qqbot/napcat/napcat-persistent-login-state.spec.ts test/modules/qqbot/plugins/bangdream-rewrite/bangdream-operation-parity.spec.ts
 ```
 
 Expected: fails because current runtime and plugin package boundaries are not the approved model.
@@ -448,7 +448,7 @@ git -C D:\MyFiles\KT\Node\kt-template-online-api commit -m "feat: 重建QQBot插
 - [ ] Run:
 
 ```powershell
-pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/modules/qqbot/plugins/bangdream/bangdream-operation-parity.spec.ts test/modules/qqbot/architecture/qqbot-plugin-package-boundary.spec.ts test/modules/qqbot/plugins/plugin-platform-migration.spec.ts test/modules/qqbot/plugins/plugin-registry-compat.spec.ts
+pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/modules/qqbot/plugins/bangdream-rewrite/bangdream-operation-parity.spec.ts test/modules/qqbot/architecture/qqbot-plugin-package-boundary.spec.ts test/modules/qqbot/plugins/plugin-platform-migration.spec.ts test/modules/qqbot/plugins/plugin-registry-compat.spec.ts
 pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api run typecheck
 ```
 
@@ -471,7 +471,7 @@ powershell -ExecutionPolicy Bypass -File D:\MyFiles\KT\Node\kt-template-online-a
 - [ ] Commit:
 
 ```powershell
-git -C D:\MyFiles\KT\Node\kt-template-online-api add src/modules/qqbot/plugins/bangdream test/modules/qqbot/plugins/bangdream test/modules/qqbot/architecture sql/refactor-v3 docs/refactor-v3 API.md
+git -C D:\MyFiles\KT\Node\kt-template-online-api add src/modules/qqbot/plugins/bangdream test/modules/qqbot/plugins/bangdream-rewrite test/modules/qqbot/architecture sql/refactor-v3 docs/refactor-v3 API.md
 git -C D:\MyFiles\KT\Node\kt-template-online-api add -u src/modules/qqbot/plugins/bangDream
 git -C D:\MyFiles\KT\Node\kt-template-online-api commit -m "refactor: 重写BangDream插件"
 ```
@@ -739,7 +739,7 @@ Expected: no old runtime implementation references; only explicit legacy alias f
 - [ ] Run:
 
 ```powershell
-pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/modules/qqbot/architecture/qqbot-module-boundary.spec.ts test/modules/qqbot/architecture/qqbot-plugin-package-boundary.spec.ts test/modules/qqbot/plugin-platform/plugin-lifecycle-runtime.spec.ts test/modules/qqbot/plugins/bangdream/bangdream-operation-parity.spec.ts test/modules/qqbot/napcat/napcat-persistent-login-state.spec.ts
+pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/modules/qqbot/architecture/qqbot-module-boundary.spec.ts test/modules/qqbot/architecture/qqbot-plugin-package-boundary.spec.ts test/modules/qqbot/plugin-platform/plugin-lifecycle-runtime.spec.ts test/modules/qqbot/plugins/bangdream-rewrite/bangdream-operation-parity.spec.ts test/modules/qqbot/napcat/napcat-persistent-login-state.spec.ts
 pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api run typecheck
 pnpm --dir D:\MyFiles\KT\Vue\kt-template-admin -F @vben/web-antdv-next run typecheck
 pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run global-review -- --project api --content-scan-mode changed
@@ -771,7 +771,7 @@ git -C D:\MyFiles\KT commit -m "docs: 更新QQBot插件架构规则"
 ```powershell
 git -C D:\MyFiles\KT\Node\kt-template-online-api status --short --branch
 pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api run typecheck
-pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/modules/qqbot/architecture/qqbot-module-boundary.spec.ts test/modules/qqbot/architecture/qqbot-plugin-package-boundary.spec.ts test/modules/qqbot/core/qqbot-core-plugin-ports.spec.ts test/modules/qqbot/plugin-platform/plugin-lifecycle-runtime.spec.ts test/modules/qqbot/plugins/bangdream/bangdream-operation-parity.spec.ts test/modules/qqbot/napcat/napcat-persistent-login-state.spec.ts
+pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand --runTestsByPath test/modules/qqbot/architecture/qqbot-module-boundary.spec.ts test/modules/qqbot/architecture/qqbot-plugin-package-boundary.spec.ts test/modules/qqbot/core/qqbot-core-plugin-ports.spec.ts test/modules/qqbot/plugin-platform/plugin-lifecycle-runtime.spec.ts test/modules/qqbot/plugins/bangdream-rewrite/bangdream-operation-parity.spec.ts test/modules/qqbot/napcat/napcat-persistent-login-state.spec.ts
 pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api exec jest --runInBand
 git -C D:\MyFiles\KT\Node\kt-template-online-api diff --check
 ```

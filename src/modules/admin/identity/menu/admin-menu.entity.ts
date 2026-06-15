@@ -12,7 +12,7 @@ import {
   KtUpdateDateColumn,
 } from '@/common';
 import { AdminRole } from '../role/admin-role.entity';
-import type { AdminMenuMeta, AdminMenuType } from '../admin.types';
+import type { AdminMenuMeta, AdminMenuType } from '../../contract/admin.types';
 
 @Entity('admin_menu')
 export class AdminMenu {

@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
 import { AdminMenu } from '../menu/admin-menu.entity';
 import { AdminRole } from './admin-role.entity';
-import type { AdminRoleInput, AdminRoleListQuery } from '../admin.types';
+import type { AdminRoleInput, AdminRoleListQuery } from '../../contract/admin.types';
 
 @Injectable()
 export class AdminRoleService {

@@ -1,7 +1,7 @@
 import { constants, publicEncrypt } from 'node:crypto';
 
 import { HttpException } from '@nestjs/common';
-import { AdminPasswordCryptoService } from '../../../src/admin/auth/admin-password-crypto.service';
+import { AdminPasswordCryptoService } from '../../../src/modules/admin/identity/auth/admin-password-crypto.service';
 
 describe('AdminPasswordCryptoService', () => {
   it('decrypts password encrypted by the exported public key', () => {

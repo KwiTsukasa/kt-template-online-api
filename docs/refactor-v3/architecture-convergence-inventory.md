@@ -14,7 +14,7 @@
 
 | Domain | Deleted | Merged | Kept | Evidence |
 | --- | --- | --- | --- | --- |
-| Admin/Auth/Platform Config | none yet | none yet | current files before migration | baseline only |
+| Admin/Auth/Platform Config | `src/admin/example` if no active route evidence; empty old admin subdirectories | auth/user/role/menu/dept/component/dict/notice/system-log/timezone moved into `src/modules/admin/**`; duplicate old imports removed | route paths and public DTO class names kept | `rg '@/admin/' src test` returns no source hits; admin focused Jest passes |
 | Blog/WordPress/Asset | none yet | none yet | current files before migration | baseline only |
 | Runtime/Common | none yet | none yet | current files before migration | baseline only |
 | QQBot Core/NapCat | none yet | none yet | current files before migration | baseline only |

@@ -2,10 +2,10 @@ import type { INestApplication } from '@nestjs/common';
 
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
-import { AdminSuperGuard } from '../../../src/admin/auth/admin-super.guard';
-import { JwtAuthGuard } from '../../../src/admin/auth/jwt-auth.guard';
-import { AdminNoticeController } from '../../../src/admin/notice/admin-notice.controller';
-import { AdminNoticeService } from '../../../src/admin/notice/admin-notice.service';
+import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/admin-super.guard';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { AdminNoticeController } from '../../../src/modules/admin/platform-config/notice/admin-notice.controller';
+import { AdminNoticeService } from '../../../src/modules/admin/platform-config/notice/admin-notice.service';
 
 describe('AdminNoticeController', () => {
   let app: INestApplication;

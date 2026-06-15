@@ -1,8 +1,8 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAdminUser, vbenSuccess } from '@/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AdminUser } from '../user/admin-user.entity';
+import { JwtAuthGuard } from '../../identity/auth/jwt-auth.guard';
+import { AdminUser } from '../../identity/user/admin-user.entity';
 import { AdminTimezoneService } from './admin-timezone.service';
 
 const TIMEZONE_OPTIONS = [

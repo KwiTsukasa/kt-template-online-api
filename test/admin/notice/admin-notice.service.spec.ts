@@ -1,4 +1,4 @@
-import { AdminNoticeService } from '@/admin/notice/admin-notice.service';
+import { AdminNoticeService } from '@/modules/admin/platform-config/notice/admin-notice.service';
 import { ToolsService } from '@/common';
 
 function createRepositoryMock(overrides: Record<string, jest.Mock> = {}) {

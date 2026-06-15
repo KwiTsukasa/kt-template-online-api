@@ -1,4 +1,4 @@
-import type { AdminDictItem, AdminDictTreeItem } from '@/admin/admin.types';
+import type { AdminDictItem, AdminDictTreeItem } from '@/modules/admin/contract/admin.types';
 import type {
   QqbotFf14DataCenter,
   QqbotFf14MarketCatalog,

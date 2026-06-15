@@ -10,7 +10,7 @@ jest.mock('@/common', () => {
 });
 
 import { ToolsService } from '@/common';
-import { DictService } from '@/admin/dict/dict.service';
+import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
 
 describe('DictService', () => {
   const dictRows = [

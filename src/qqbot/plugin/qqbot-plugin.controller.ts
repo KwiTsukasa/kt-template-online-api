@@ -8,7 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { vbenSuccess } from '@/common';
 import { QqbotEventPluginRegistryService } from './qqbot-event-plugin-registry.service';
 import { QqbotPluginRegistryService } from './qqbot-plugin-registry.service';

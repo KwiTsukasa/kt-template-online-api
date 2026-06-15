@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AdminAuthService } from './admin-auth.service';
 import { IS_PUBLIC_KEY } from '@/common';
-import type { AdminRequest } from '../admin.types';
+import type { AdminRequest } from '../../contract/admin.types';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {

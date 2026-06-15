@@ -1,6 +1,6 @@
 import { CanActivate, ExecutionContext, HttpStatus, Injectable } from '@nestjs/common';
 import { throwVbenError } from '@/common';
-import type { AdminRequest } from '../admin.types';
+import type { AdminRequest } from '../../contract/admin.types';
 
 @Injectable()
 export class AdminSuperGuard implements CanActivate {

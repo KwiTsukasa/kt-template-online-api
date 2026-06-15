@@ -18,7 +18,7 @@ import type {
   AdminDictItem,
   AdminDictSerialized,
   AdminDictTreeItem,
-} from '../admin.types';
+} from '../../contract/admin.types';
 
 const COMPONENT_TYPE_DICT_KEY = 'COMPONENT_TYPE';
 

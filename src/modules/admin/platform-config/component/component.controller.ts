@@ -26,7 +26,7 @@ import {
   type KtPageParams,
   ToolsService,
 } from '@/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../identity/auth/jwt-auth.guard';
 import { ComponentService } from './component.service';
 import { Component } from './component.entity';
 

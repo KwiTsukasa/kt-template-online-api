@@ -27,7 +27,7 @@ jest.mock(
 );
 
 import { ConfigService } from '@nestjs/config';
-import { DictService } from '@/admin/dict/dict.service';
+import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
 import { QqbotPluginHttpClientService } from '@/modules/qqbot/plugin-platform/sdk';
 import { QqbotFflogsClientService } from '@/modules/qqbot/plugins/fflogs/qqbot-fflogs-client.service';
 

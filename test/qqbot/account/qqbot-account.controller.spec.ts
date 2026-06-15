@@ -1,4 +1,4 @@
-jest.mock('@/admin/auth/jwt-auth.guard', () => ({
+jest.mock('@/modules/admin/identity/auth/jwt-auth.guard', () => ({
   JwtAuthGuard: class {
     canActivate() {
       return true;

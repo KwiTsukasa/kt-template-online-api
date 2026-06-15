@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { ToolsService, vbenSuccess } from '@/common';
 import {
   QqbotRuleBodyDto,

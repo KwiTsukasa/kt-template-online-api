@@ -2,7 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
-import { AdminUser } from '../user/admin-user.entity';
+import { AdminUser } from '../../identity/user/admin-user.entity';
 
 @Injectable()
 export class AdminTimezoneService {

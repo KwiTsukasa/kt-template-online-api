@@ -1,6 +1,6 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { vbenSuccess } from '@/common';
 import {
   QqbotConversationQueryDto,

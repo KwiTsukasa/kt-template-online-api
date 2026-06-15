@@ -4,7 +4,7 @@ import { In, Repository } from 'typeorm';
 import { toTree } from '@/common';
 import { AdminUser } from '../user/admin-user.entity';
 import { AdminMenu } from './admin-menu.entity';
-import type { AdminMenuInput, AdminMenuMeta } from '../admin.types';
+import type { AdminMenuInput, AdminMenuMeta } from '../../contract/admin.types';
 
 @Injectable()
 export class AdminMenuService {

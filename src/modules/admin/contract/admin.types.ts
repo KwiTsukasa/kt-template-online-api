@@ -1,28 +1,7 @@
 import type { Request } from 'express';
-import type { AdminMenu } from './menu/admin-menu.entity';
-import type { AdminRole } from './role/admin-role.entity';
-import type { AdminUser } from './user/admin-user.entity';
-
-export type AdminDemoTableRow = {
-  available: boolean;
-  category: string;
-  color: string;
-  currency: string;
-  description: string;
-  id: string;
-  imageUrl: string;
-  imageUrl2: string;
-  inProduction: boolean;
-  open: boolean;
-  price: string;
-  productName: string;
-  quantity: number;
-  rating: number;
-  releaseDate: string;
-  status: string;
-  tags: string[];
-  weight: number;
-};
+import type { AdminMenu } from '../identity/menu/admin-menu.entity';
+import type { AdminRole } from '../identity/role/admin-role.entity';
+import type { AdminUser } from '../identity/user/admin-user.entity';
 
 export type AdminDictItem = {
   childrenCode?: string | null;

@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { SystemLogService } from '../../../src/admin/system-log/system-log.service';
+import { SystemLogService } from '../../../src/modules/admin/platform-config/system-log/system-log.service';
 import { ToolsService } from '../../../src/common';
 
 function createService() {

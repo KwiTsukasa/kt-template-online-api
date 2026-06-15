@@ -7,7 +7,7 @@ import {
   vbenPage,
   vbenSuccess,
 } from '@/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../identity/auth/jwt-auth.guard';
 import {
   SystemLogDto,
   SystemLogQueryDto,

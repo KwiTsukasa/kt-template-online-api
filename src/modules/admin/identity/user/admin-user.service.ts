@@ -5,7 +5,7 @@ import { throwVbenError } from '@/common';
 import { AdminDept } from '../dept/admin-dept.entity';
 import { AdminRole } from '../role/admin-role.entity';
 import { AdminUser } from './admin-user.entity';
-import type { AdminUserInput, AdminUserListQuery } from '../admin.types';
+import type { AdminUserInput, AdminUserListQuery } from '../../contract/admin.types';
 
 @Injectable()
 export class AdminUserService {

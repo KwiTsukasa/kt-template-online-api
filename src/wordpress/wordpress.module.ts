@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { AdminAuthGuardModule } from '@/admin/auth/admin-auth-guard.module';
+import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
 import { WordpressArticleController } from './wordpress-article.controller';
 import { WordpressAuthController } from './wordpress-auth.controller';
 import { WordpressCategoryController } from './wordpress-category.controller';

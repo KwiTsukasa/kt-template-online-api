@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AdminAuthGuardModule } from '@/admin/auth/admin-auth-guard.module';
+import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
 import { CommonModule } from '@/common';
 import { WordpressModule } from '@/wordpress/wordpress.module';
 import { BlogArticleController } from './blog-article.controller';

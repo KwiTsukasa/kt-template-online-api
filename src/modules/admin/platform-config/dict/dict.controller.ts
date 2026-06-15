@@ -28,7 +28,7 @@ import {
   AdminDictUpdateDto,
   DictDto,
 } from './dict.dto';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../identity/auth/jwt-auth.guard';
 
 const componentTypeDictExample = [
   {

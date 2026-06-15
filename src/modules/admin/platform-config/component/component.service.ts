@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Component } from './component.entity';
 import { ToolsService, type KtPage, type KtPageParams } from '@/common';
 import { isNumber, omit, pick } from 'lodash';
-import { DictService } from '@/admin/dict/dict.service';
+import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
 
 @Injectable()
 export class ComponentService {

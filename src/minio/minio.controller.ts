@@ -36,7 +36,7 @@ import {
   MinioObjectDto,
   MinioUploadResultDto,
 } from './minio.dto';
-import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 
 const PROXY_RESOURCE_TIMEOUT = 1000 * 15;
 const PROXY_RESOURCE_CONTENT_TYPES = [

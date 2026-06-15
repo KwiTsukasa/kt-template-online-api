@@ -1,6 +1,6 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DictService } from '@/admin/dict/dict.service';
+import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
 import { Card } from '@/modules/qqbot/plugins/bangDream/card/card.model';
 import { getPresentEvent } from '@/modules/qqbot/plugins/bangDream/event/event.model';
 import {

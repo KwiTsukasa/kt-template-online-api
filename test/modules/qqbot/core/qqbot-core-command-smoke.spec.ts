@@ -1,4 +1,4 @@
-jest.mock('@/admin/auth/jwt-auth.guard', () => ({
+jest.mock('@/modules/admin/identity/auth/jwt-auth.guard', () => ({
   JwtAuthGuard: class {
     canActivate() {
       return true;
@@ -17,7 +17,7 @@ import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
-import { DictService } from '../../../../src/admin/dict/dict.service';
+import { DictService } from '../../../../src/modules/admin/platform-config/dict/dict.service';
 import { ToolsService } from '../../../../src/common';
 import { QqbotAccountService } from '../../../../src/qqbot/account/qqbot-account.service';
 import { QqbotCommandController } from '../../../../src/qqbot/command/qqbot-command.controller';

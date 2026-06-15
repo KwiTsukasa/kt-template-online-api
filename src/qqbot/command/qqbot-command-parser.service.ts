@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DictService } from '../../admin/dict/dict.service';
+import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
 import type { QqbotCommand } from './qqbot-command.entity';
 import type { QqbotNormalizedMessage } from '../qqbot.types';
 import {

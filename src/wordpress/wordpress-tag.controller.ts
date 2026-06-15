@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { JwtAuthGuard } from '@/admin/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { vbenSuccess } from '@/common';
 import {
   WordpressTermBodyDto,

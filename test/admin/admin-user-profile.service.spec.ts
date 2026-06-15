@@ -1,4 +1,4 @@
-import { AdminUserService } from '../../src/admin/user/admin-user.service';
+import { AdminUserService } from '../../src/modules/admin/identity/user/admin-user.service';
 
 describe('AdminUserService profile', () => {
   const userRepository = {

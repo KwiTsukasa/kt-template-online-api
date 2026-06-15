@@ -1,8 +1,8 @@
 import { Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { vbenPage, vbenSuccess } from '@/common';
-import { AdminSuperGuard } from '../auth/admin-super.guard';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminSuperGuard } from '../../identity/auth/admin-super.guard';
+import { JwtAuthGuard } from '../../identity/auth/jwt-auth.guard';
 import { AdminNoticeQueryDto } from './admin-notice.dto';
 import { AdminNoticeService } from './admin-notice.service';
 

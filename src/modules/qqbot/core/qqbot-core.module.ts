@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { AdminAuthGuardModule } from '@/admin/auth/admin-auth-guard.module';
-import { DictModule } from '@/admin/dict/dict.module';
+import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
+import { DictModule } from '@/modules/admin/platform-config/dict/dict.module';
 import { QqbotAccountAbility } from '@/qqbot/account/qqbot-account-ability.entity';
 import { QqbotAccountController } from '@/qqbot/account/qqbot-account.controller';
 import { QqbotAccount } from '@/qqbot/account/qqbot-account.entity';

@@ -4,7 +4,7 @@ import { SYSTEM_NOTICE_PUBLISHER } from '@/common';
 import { AdminNoticeController } from './admin-notice.controller';
 import { AdminNotice } from './admin-notice.entity';
 import { AdminNoticeService } from './admin-notice.service';
-import { AdminAuthGuardModule } from '../auth/admin-auth-guard.module';
+import { AdminAuthGuardModule } from '../../identity/auth/admin-auth-guard.module';
 
 @Global()
 @Module({

@@ -1,8 +1,8 @@
 import { MODULE_METADATA } from '@nestjs/common/constants';
-import { DictController } from '../../../src/admin/dict/dict.controller';
-import { DictModule } from '../../../src/admin/dict/dict.module';
-import { AdminNoticeController } from '../../../src/admin/notice/admin-notice.controller';
-import { NoticeModule } from '../../../src/admin/notice/notice.module';
+import { DictController } from '../../../src/modules/admin/platform-config/dict/dict.controller';
+import { DictModule } from '../../../src/modules/admin/platform-config/dict/dict.module';
+import { AdminNoticeController } from '../../../src/modules/admin/platform-config/notice/admin-notice.controller';
+import { NoticeModule } from '../../../src/modules/admin/platform-config/notice/notice.module';
 import { AdminModule } from '../../../src/modules/admin/admin.module';
 import {
   ADMIN_IDENTITY_CONTROLLERS,

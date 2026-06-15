@@ -1,6 +1,6 @@
-import { AdminMenuService } from '../../src/admin/menu/admin-menu.service';
-import type { AdminMenu } from '../../src/admin/menu/admin-menu.entity';
-import type { AdminUser } from '../../src/admin/user/admin-user.entity';
+import { AdminMenuService } from '../../src/modules/admin/identity/menu/admin-menu.service';
+import type { AdminMenu } from '../../src/modules/admin/identity/menu/admin-menu.entity';
+import type { AdminUser } from '../../src/modules/admin/identity/user/admin-user.entity';
 
 describe('AdminMenuService', () => {
   const blogMenus = [

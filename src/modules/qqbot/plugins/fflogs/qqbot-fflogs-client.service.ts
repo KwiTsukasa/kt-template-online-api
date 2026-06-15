@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DictService } from '@/admin/dict/dict.service';
+import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
 import { QqbotPluginHttpClientService } from '@/modules/qqbot/plugin-platform/sdk';
 import type {
   FflogsCharacterEncounterRankingsResponse,

@@ -8,7 +8,7 @@ import {
   throwVbenError,
   ToolsService,
 } from '@/common';
-import { AdminPasswordCryptoService } from '@/admin/auth/admin-password-crypto.service';
+import { AdminPasswordCryptoService } from '@/modules/admin/identity/auth/admin-password-crypto.service';
 import { QqbotAccountAbility } from './qqbot-account-ability.entity';
 import { QqbotAccount } from './qqbot-account.entity';
 import type {

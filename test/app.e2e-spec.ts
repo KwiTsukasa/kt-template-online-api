@@ -5,14 +5,14 @@ import * as request from 'supertest';
 import { Readable } from 'stream';
 import { AppController } from '../src/app.controller';
 import { AppService } from '../src/app.service';
-import { AdminAuthService } from '../src/admin/auth/admin-auth.service';
-import { JwtAuthGuard } from '../src/admin/auth/jwt-auth.guard';
-import { ComponentController } from '../src/admin/component/component.controller';
-import { ComponentService } from '../src/admin/component/component.service';
-import { DictController } from '../src/admin/dict/dict.controller';
-import { DictService } from '../src/admin/dict/dict.service';
-import { SystemLogController } from '../src/admin/system-log/system-log.controller';
-import { SystemLogService } from '../src/admin/system-log/system-log.service';
+import { AdminAuthService } from '../src/modules/admin/identity/auth/admin-auth.service';
+import { JwtAuthGuard } from '../src/modules/admin/identity/auth/jwt-auth.guard';
+import { ComponentController } from '../src/modules/admin/platform-config/component/component.controller';
+import { ComponentService } from '../src/modules/admin/platform-config/component/component.service';
+import { DictController } from '../src/modules/admin/platform-config/dict/dict.controller';
+import { DictService } from '../src/modules/admin/platform-config/dict/dict.service';
+import { SystemLogController } from '../src/modules/admin/platform-config/system-log/system-log.controller';
+import { SystemLogService } from '../src/modules/admin/platform-config/system-log/system-log.service';
 import {
   ApiExceptionFilter,
   IS_PUBLIC_KEY,

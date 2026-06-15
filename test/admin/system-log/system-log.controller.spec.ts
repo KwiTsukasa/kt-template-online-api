@@ -2,9 +2,9 @@ import { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
-import { JwtAuthGuard } from '../../../src/admin/auth/jwt-auth.guard';
-import { SystemLogController } from '../../../src/admin/system-log/system-log.controller';
-import { SystemLogService } from '../../../src/admin/system-log/system-log.service';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { SystemLogController } from '../../../src/modules/admin/platform-config/system-log/system-log.controller';
+import { SystemLogService } from '../../../src/modules/admin/platform-config/system-log/system-log.service';
 import { ToolsService } from '../../../src/common';
 
 describe('SystemLogController', () => {

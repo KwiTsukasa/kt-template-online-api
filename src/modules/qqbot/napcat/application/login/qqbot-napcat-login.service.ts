@@ -189,10 +189,12 @@ export class QqbotNapcatLoginService {
       return this.toResult(session);
     }
     if (session.preparingRelogin) {
-      return this.keepSessionPending(
-        session,
-        session.errorMessage || 'NapCat 正在准备登录，请稍后',
-      );
+      if (!this.recoverStaleReloginPreparation(session)) {
+        return this.keepSessionPending(
+          session,
+          session.errorMessage || 'NapCat 正在准备登录，请稍后',
+        );
+      }
     }
     if (Date.now() > session.expiresAt) {
       return this.expireSession(session);
@@ -341,12 +343,18 @@ export class QqbotNapcatLoginService {
       const listener = (event: QqbotLoginScanEvent) => {
         subscriber.next({ data: event });
       };
-      (this.sessionEventLogCache[sessionId] || []).forEach(listener);
+      const replayEvents = this.sessionEventLogCache[sessionId] || [];
+      replayEvents.forEach(listener);
       const listeners =
         this.sessionEventListenerCache[sessionId] ||
         new Set<(event: QqbotLoginScanEvent) => void>();
       listeners.add(listener);
       this.sessionEventListenerCache[sessionId] = listeners;
+      if (replayEvents.length <= 0) {
+        void this.emitCurrentSessionSnapshot(sessionId, listener).catch(
+          () => undefined,
+        );
+      }
 
       return () => {
         listeners.delete(listener);
@@ -822,6 +830,108 @@ export class QqbotNapcatLoginService {
       status,
       step,
     });
+  }
+
+  private async emitCurrentSessionSnapshot(
+    sessionId: string,
+    listener: (event: QqbotLoginScanEvent) => void,
+  ) {
+    const session = await this.loginSessionStore.get(sessionId);
+    if (!session) return;
+    listener(this.toSessionSnapshotEvent(session));
+  }
+
+  private toSessionSnapshotEvent(
+    session: QqbotLoginScanSession,
+  ): QqbotLoginScanEvent {
+    return {
+      createdAt: Date.now(),
+      message: this.getSessionSnapshotMessage(session),
+      result: this.toResult(session),
+      status: this.getSessionSnapshotStatus(session),
+      step: this.getSessionSnapshotStep(session),
+    };
+  }
+
+  private getSessionSnapshotStatus(
+    session: QqbotLoginScanSession,
+  ): QqbotLoginScanEvent['status'] {
+    if (session.status === 'success') return 'success';
+    if (session.status === 'error' || session.status === 'expired') {
+      return 'error';
+    }
+    return 'processing';
+  }
+
+  private getSessionSnapshotStep(session: QqbotLoginScanSession) {
+    if (session.status === 'success') return 'login-success';
+    if (session.status === 'error') return 'login-failed';
+    if (session.status === 'expired') return 'session-expired';
+    if (session.newDeviceStatus) {
+      if (session.newDeviceStatus === 'scanned') return 'new-device-scanned';
+      if (session.newDeviceStatus === 'confirming') {
+        return 'new-device-confirming';
+      }
+      if (session.newDeviceStatus === 'verified') return 'new-device-verified';
+      if (['expired', 'failed'].includes(session.newDeviceStatus)) {
+        return 'login-failed';
+      }
+      return 'new-device-qrcode-ready';
+    }
+    if (session.captchaUrl) return 'password-login-captcha';
+    if (session.qrcode) return 'qrcode-ready';
+    if (session.preparingRelogin) {
+      const message = this.toolsService.toTrimmedString(session.errorMessage);
+      if (message.includes('密码')) return 'password-login-start';
+      if (message.includes('快速')) return 'quick-login-start';
+      return 'relogin-preparing';
+    }
+    if (session.passwordMd5) return 'password-login';
+    return 'scan-status';
+  }
+
+  private getSessionSnapshotMessage(session: QqbotLoginScanSession) {
+    const message = this.toolsService.toTrimmedString(session.errorMessage);
+    if (message) return message;
+    if (session.status === 'success') return '登录成功';
+    if (session.status === 'error') return '登录失败';
+    if (session.status === 'expired') return '扫码会话已过期';
+    if (session.newDeviceStatus === 'scanned') return '新设备二维码已扫码';
+    if (session.newDeviceStatus === 'confirming') return '新设备确认中';
+    if (session.newDeviceStatus) return '新设备二维码待扫码';
+    if (session.captchaUrl) return '密码登录需要完成 QQ 安全验证';
+    if (session.qrcode) return '登录二维码已生成';
+    return '登录处理中';
+  }
+
+  private recoverStaleReloginPreparation(session: QqbotLoginScanSession) {
+    if (!this.isStaleReloginPreparation(session)) return false;
+    session.preparingRelogin = false;
+    session.errorMessage = '更新登录任务已恢复，继续检测 NapCat 登录状态';
+    this.publishScanResultEvent(
+      session,
+      'relogin-recovered',
+      'processing',
+      session.errorMessage,
+    );
+    return true;
+  }
+
+  private isStaleReloginPreparation(session: QqbotLoginScanSession) {
+    if (!session.preparingRelogin || !session.lastRestartedAt) return false;
+    return (
+      Date.now() - session.lastRestartedAt >
+      this.getReloginPreparationStaleMs()
+    );
+  }
+
+  private getReloginPreparationStaleMs() {
+    return this.getPositiveConfigNumber(
+      'QQBOT_NAPCAT_RELOGIN_PREPARING_STALE_MS',
+      this.getPasswordLoginWaitMs() +
+        Math.max(this.getRestartDelayMs(), this.getTimeout()) +
+        this.getLoginPollIntervalMs() * 2,
+    );
   }
 
   private cleanupSessionEvents(sessionId: string) {

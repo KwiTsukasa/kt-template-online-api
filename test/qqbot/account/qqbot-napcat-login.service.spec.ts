@@ -194,6 +194,59 @@ describe('QqbotNapcatLoginService', () => {
     expect((refreshService as any).sessions.has(session.id)).toBe(true);
   });
 
+  it('recovers stale refresh preparation left by a restarted API pod', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-stale-preparing',
+      name: 'napcat-10001',
+    };
+    const containerService = {
+      findRuntimeById: jest.fn().mockResolvedValue(container),
+      removeUnboundContainer: jest.fn().mockResolvedValue(false),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          if (key === 'NAPCAT_LOGIN_QR_EXPIRE_MS') return '120000';
+          if (key === 'QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS') return '1000';
+          if (key === 'QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS') return '1000';
+          if (key === 'NAPCAT_WEBUI_RESTART_DELAY_MS') return '100';
+          if (key === 'NAPCAT_WEBUI_TIMEOUT_MS') return '100';
+          return '';
+        }),
+      } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '10001',
+      mode: 'refresh',
+      preparingRelogin: true,
+      status: 'pending',
+    });
+    session.errorMessage = 'NapCat 正在尝试密码登录，请稍后';
+    session.expiresAt = Date.now() + 60_000;
+    session.lastRestartedAt = Date.now() - 10_000;
+    (refreshService as any).sessions.set(session.id, session);
+    const getLoginStatus = jest
+      .spyOn(refreshService as any, 'getLoginStatus')
+      .mockResolvedValue({
+        isLogin: false,
+        qrcodeurl: 'fresh-qrcode-after-restart',
+      });
+
+    const result = await refreshService.status(session.id);
+
+    expect(getLoginStatus).toHaveBeenCalledWith(container);
+    expect(result.status).toBe('pending');
+    expect(result.qrcode).toBe('fresh-qrcode-after-restart');
+    expect((refreshService as any).sessions.get(session.id).preparingRelogin)
+      .toBe(false);
+  });
+
   it('keeps existing password captcha pending when NapCat still reports captcha without url', async () => {
     const captchaUrl =
       'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001';
@@ -2409,6 +2462,42 @@ describe('QqbotNapcatLoginService', () => {
         message: '正在停止 NapCat 容器',
         status: 'processing',
         step: 'container-stop',
+      }),
+    ]);
+    subscription.unsubscribe();
+  });
+
+  it('emits a current session snapshot when SSE event cache was lost', async () => {
+    const session = {
+      accountId: 'account-1',
+      containerId: 'container-events-snapshot',
+      containerName: 'napcat-events-snapshot',
+      createdAt: Date.now(),
+      errorMessage: 'NapCat 正在尝试密码登录，请稍后',
+      expiresAt: Date.now() + 60_000,
+      id: 'session-events-snapshot',
+      mode: 'refresh',
+      preparingRelogin: true,
+      status: 'pending',
+      webuiPort: 6107,
+    };
+    (service as any).sessions.set('session-events-snapshot', session);
+    const events: any[] = [];
+
+    const subscription = service
+      .events('session-events-snapshot')
+      .subscribe((event) => events.push(event.data));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        message: 'NapCat 正在尝试密码登录，请稍后',
+        result: expect.objectContaining({
+          sessionId: 'session-events-snapshot',
+          status: 'pending',
+        }),
+        status: 'processing',
+        step: 'password-login-start',
       }),
     ]);
     subscription.unsubscribe();

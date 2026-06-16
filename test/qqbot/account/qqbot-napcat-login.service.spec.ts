@@ -1567,6 +1567,7 @@ describe('QqbotNapcatLoginService', () => {
         }
         if (path === '/api/QQLogin/GetNewDeviceQRCode') {
           return {
+            bytes_token: 'bytes-new-device',
             newDevicePullQrCodeSig: 'sig-new-device',
             qrcodeUrl: 'data:image/png;base64,new-device-qrcode',
           };
@@ -1589,7 +1590,8 @@ describe('QqbotNapcatLoginService', () => {
       container,
       '/api/QQLogin/GetNewDeviceQRCode',
       {
-        sessionId: session.id,
+        jumpUrl: 'https://ti.qq.com/new-device/verify',
+        uin: '10001',
       },
     );
     expect(waitForPasswordLoginStatus).not.toHaveBeenCalled();
@@ -1602,6 +1604,7 @@ describe('QqbotNapcatLoginService', () => {
     expect(result.newDeviceStatus).toBe('qr-pending');
     expect(result.errorMessage).toBe('新设备二维码待扫码');
     expect(session.newDevicePullQrCodeSig).toBe('sig-new-device');
+    expect(session.newDeviceBytesToken).toBe('bytes-new-device');
     expect(session.deviceVerifyUrl).toBe('https://ti.qq.com/new-device/verify');
     const steps = (
       (refreshService as any).sessionEventLogs.get(session.id) ?? []
@@ -1619,6 +1622,7 @@ describe('QqbotNapcatLoginService', () => {
     const accountService = {
       ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
     };
+    const pullQrCodeSig = { key: 'sig-new-device' };
     const container = {
       baseUrl: 'http://127.0.0.1:6103/',
       id: 'container-new-device-poll',
@@ -1643,7 +1647,8 @@ describe('QqbotNapcatLoginService', () => {
       status: 'pending',
     });
     session.deviceVerifyUrl = 'https://ti.qq.com/new-device/verify';
-    session.newDevicePullQrCodeSig = 'sig-new-device';
+    session.newDeviceBytesToken = 'bytes-new-device';
+    session.newDevicePullQrCodeSig = pullQrCodeSig;
     session.newDeviceQrcode = 'data:image/png;base64,new-device-qrcode';
     session.newDeviceStatus = 'qr-pending';
     session.passwordMd5 = '0123456789abcdef0123456789abcdef';
@@ -1685,7 +1690,8 @@ describe('QqbotNapcatLoginService', () => {
       container,
       '/api/QQLogin/PollNewDeviceQR',
       {
-        sessionId: session.id,
+        bytesToken: 'bytes-new-device',
+        uin: '10001',
       },
     );
     expect(postNapcat).toHaveBeenNthCalledWith(
@@ -1693,7 +1699,8 @@ describe('QqbotNapcatLoginService', () => {
       container,
       '/api/QQLogin/PollNewDeviceQR',
       {
-        sessionId: session.id,
+        bytesToken: 'bytes-new-device',
+        uin: '10001',
       },
     );
     expect(postNapcat).toHaveBeenNthCalledWith(
@@ -1701,7 +1708,9 @@ describe('QqbotNapcatLoginService', () => {
       container,
       '/api/QQLogin/NewDeviceLogin',
       {
-        sessionId: session.id,
+        newDevicePullQrCodeSig: pullQrCodeSig,
+        passwordMd5: '0123456789abcdef0123456789abcdef',
+        uin: '10001',
       },
     );
     expect(session.newDeviceQrcode).toBeUndefined();
@@ -1716,6 +1725,60 @@ describe('QqbotNapcatLoginService', () => {
         'new-device-verified',
         'login-success',
       ]),
+    );
+  });
+
+  it('recovers missing new-device bytesToken before polling', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-new-device-recover',
+      name: 'napcat-10001',
+    };
+    const containerService = {
+      findRuntimeById: jest.fn().mockResolvedValue(container),
+      removeUnboundContainer: jest.fn().mockResolvedValue(false),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '10001',
+      mode: 'refresh',
+      status: 'pending',
+    });
+    session.deviceVerifyUrl = 'https://ti.qq.com/new-device/verify';
+    session.newDevicePullQrCodeSig = 'sig-new-device';
+    session.newDeviceStatus = 'qr-pending';
+    session.passwordMd5 = '0123456789abcdef0123456789abcdef';
+    (refreshService as any).sessions.set(session.id, session);
+    const postNapcat = jest
+      .spyOn(refreshService as any, 'postNapcat')
+      .mockResolvedValue({
+        bytes_token: 'bytes-recovered',
+        qrcodeUrl: 'data:image/png;base64,recovered-new-device-qrcode',
+      });
+
+    const result = await refreshService.status(session.id);
+
+    expect(result.status).toBe('pending');
+    expect(result.newDeviceStatus).toBe('qr-pending');
+    expect(result.newDeviceQrcode).toBe(
+      'data:image/png;base64,recovered-new-device-qrcode',
+    );
+    expect(session.newDeviceBytesToken).toBe('bytes-recovered');
+    expect(postNapcat).toHaveBeenCalledTimes(1);
+    expect(postNapcat).toHaveBeenCalledWith(
+      container,
+      '/api/QQLogin/GetNewDeviceQRCode',
+      {
+        jumpUrl: 'https://ti.qq.com/new-device/verify',
+        uin: '10001',
+      },
     );
   });
 

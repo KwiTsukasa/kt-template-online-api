@@ -35,7 +35,7 @@ export type NapcatLoginStatus = {
 export type NapcatCaptchaLoginResult = {
   jumpUrl?: string;
   needNewDevice?: boolean;
-  newDevicePullQrCodeSig?: string;
+  newDevicePullQrCodeSig?: unknown;
 };
 
 export type NapcatQrcode = {
@@ -320,7 +320,8 @@ export type QqbotLoginScanSession = {
   lastCaptchaLookupAt?: number;
   lastRestartedAt?: number;
   mode: QqbotLoginScanMode;
-  newDevicePullQrCodeSig?: string;
+  newDeviceBytesToken?: string;
+  newDevicePullQrCodeSig?: unknown;
   newDeviceQrcode?: string;
   newDeviceStatus?: QqbotLoginNewDeviceStatus;
   passwordMd5?: string;

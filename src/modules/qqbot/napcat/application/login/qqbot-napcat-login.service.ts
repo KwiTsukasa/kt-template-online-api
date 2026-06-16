@@ -6,6 +6,8 @@ import { throwVbenError, ToolsService } from '@/common';
 import {
   NapcatLoginApiClient,
   NapcatWebuiHttpClient,
+  type NewDeviceQrCode,
+  type NewDeviceQrRequest,
 } from '../../infrastructure/integration/napcat-login-api.client';
 import type {
   NapcatCaptchaLoginResult,
@@ -614,7 +616,8 @@ export class QqbotNapcatLoginService {
     session.deviceVerifyUrl = this.toolsService.toTrimmedString(
       captchaResult.jumpUrl,
     );
-    session.newDevicePullQrCodeSig = this.toolsService.toTrimmedString(
+    session.newDeviceBytesToken = undefined;
+    session.newDevicePullQrCodeSig = this.pickNewDevicePullQrCodeSig(
       captchaResult.newDevicePullQrCodeSig,
     );
     session.newDeviceStatus = 'qr-pending';
@@ -631,20 +634,7 @@ export class QqbotNapcatLoginService {
       const client = new NapcatLoginApiClient({
         post: (path, body) => this.postNapcat(container, path, body),
       });
-      const qrcode = await client.getNewDeviceQRCode(session.id);
-      session.newDeviceQrcode = qrcode.qrcodeUrl;
-      session.newDevicePullQrCodeSig =
-        qrcode.pullQrCodeSig || session.newDevicePullQrCodeSig;
-      session.newDeviceStatus = qrcode.status;
-      session.errorMessage = '新设备二维码待扫码';
-      this.persistLoginSession(session);
-      this.publishScanResultEvent(
-        session,
-        'new-device-qrcode-ready',
-        'processing',
-        '新设备二维码待扫码',
-      );
-      return this.toResult(session);
+      return this.refreshNewDeviceQrcode(session, container, client);
     } catch (err) {
       return this.keepSessionPending(
         session,
@@ -661,7 +651,21 @@ export class QqbotNapcatLoginService {
     const client = new NapcatLoginApiClient({
       post: (path, body) => this.postNapcat(container, path, body),
     });
-    const poll = await client.pollNewDeviceQR(session.id);
+    if (!session.newDeviceBytesToken) {
+      return this.refreshNewDeviceQrcode(session, container, client);
+    }
+    const uin = this.toolsService.toTrimmedString(session.expectedSelfId);
+    if (!uin) {
+      return this.failNewDeviceVerification(
+        session,
+        container,
+        '新设备验证账号上下文缺失，请重新更新登录',
+      );
+    }
+    const poll = await client.pollNewDeviceQR({
+      bytesToken: session.newDeviceBytesToken,
+      uin,
+    });
     if (poll.status === 'scanned') {
       return this.keepNewDevicePending(
         session,
@@ -677,7 +681,19 @@ export class QqbotNapcatLoginService {
         poll.message || '新设备确认中',
         'new-device-confirming',
       );
-      const loginResult = await client.newDeviceLogin(session.id);
+      const passwordMd5 = this.toolsService.toTrimmedString(session.passwordMd5);
+      if (!passwordMd5 || !this.hasNewDevicePullQrCodeSig(session)) {
+        return this.failNewDeviceVerification(
+          session,
+          container,
+          '新设备验证登录上下文缺失，请重新更新登录',
+        );
+      }
+      const loginResult = await client.newDeviceLogin({
+        newDevicePullQrCodeSig: session.newDevicePullQrCodeSig,
+        passwordMd5,
+        uin,
+      });
       if (!loginResult.success) {
         return this.failNewDeviceVerification(
           session,
@@ -685,6 +701,7 @@ export class QqbotNapcatLoginService {
           loginResult.message || '新设备验证失败',
         );
       }
+      session.newDeviceBytesToken = undefined;
       session.newDeviceQrcode = undefined;
       session.newDeviceStatus = 'verified';
       session.errorMessage = '新设备验证成功，继续登录';
@@ -723,6 +740,81 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  private async refreshNewDeviceQrcode(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    client: NapcatLoginApiClient,
+  ) {
+    const request = this.getNewDeviceQrRequest(session);
+    if (!request) {
+      return this.failNewDeviceVerification(
+        session,
+        container,
+        '新设备验证上下文缺失，请重新更新登录',
+      );
+    }
+
+    try {
+      const qrcode = await client.getNewDeviceQRCode(request);
+      this.applyNewDeviceQrcode(session, qrcode);
+      this.persistLoginSession(session);
+      this.publishScanResultEvent(
+        session,
+        'new-device-qrcode-ready',
+        'processing',
+        '新设备二维码待扫码',
+      );
+      return this.toResult(session);
+    } catch (err) {
+      return this.keepNewDevicePending(
+        session,
+        'qr-pending',
+        this.toolsService.getErrorMessage(err) || '新设备二维码生成失败',
+        'new-device-required',
+      );
+    }
+  }
+
+  private applyNewDeviceQrcode(
+    session: QqbotLoginScanSession,
+    qrcode: NewDeviceQrCode,
+  ) {
+    session.newDeviceQrcode = qrcode.qrcodeUrl;
+    session.newDeviceBytesToken = qrcode.bytesToken;
+    session.deviceVerifyUrl = qrcode.deviceVerifyUrl || session.deviceVerifyUrl;
+    const pullQrCodeSig = this.pickNewDevicePullQrCodeSig(qrcode.pullQrCodeSig);
+    if (pullQrCodeSig !== undefined) {
+      session.newDevicePullQrCodeSig = pullQrCodeSig;
+    }
+    session.newDeviceStatus = qrcode.status;
+    session.errorMessage = '新设备二维码待扫码';
+  }
+
+  private getNewDeviceQrRequest(
+    session: QqbotLoginScanSession,
+  ): NewDeviceQrRequest | null {
+    const uin = this.toolsService.toTrimmedString(session.expectedSelfId);
+    const jumpUrl = this.toolsService.toTrimmedString(session.deviceVerifyUrl);
+    if (!uin || !jumpUrl) return null;
+    return { jumpUrl, uin };
+  }
+
+  private pickNewDevicePullQrCodeSig(value: unknown) {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'string') {
+      const text = this.toolsService.toTrimmedString(value);
+      return text || undefined;
+    }
+    return value;
+  }
+
+  private hasNewDevicePullQrCodeSig(session: QqbotLoginScanSession) {
+    return (
+      this.pickNewDevicePullQrCodeSig(session.newDevicePullQrCodeSig) !==
+      undefined
+    );
+  }
+
   private keepNewDevicePending(
     session: QqbotLoginScanSession,
     status: NonNullable<QqbotLoginScanSession['newDeviceStatus']>,
@@ -750,6 +842,7 @@ export class QqbotNapcatLoginService {
     message: string,
   ) {
     session.newDeviceQrcode = undefined;
+    session.newDeviceBytesToken = undefined;
     session.newDeviceStatus = 'failed';
     session.errorMessage = message;
     this.persistLoginSession(session);

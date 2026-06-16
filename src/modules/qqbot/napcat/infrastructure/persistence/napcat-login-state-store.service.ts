@@ -102,6 +102,7 @@ export class NapcatLoginStateStoreService {
     void this.saveChallenge({
       challengePayload: {
         deviceVerifyUrl: session.deviceVerifyUrl,
+        newDeviceBytesToken: session.newDeviceBytesToken,
         newDevicePullQrCodeSig: session.newDevicePullQrCodeSig,
         newDeviceQrcode: session.newDeviceQrcode,
       },
@@ -230,9 +231,16 @@ export class NapcatLoginStateStoreService {
     }
     if (
       !session.newDevicePullQrCodeSig &&
-      typeof payload.newDevicePullQrCodeSig === 'string'
+      payload.newDevicePullQrCodeSig !== undefined &&
+      payload.newDevicePullQrCodeSig !== null
     ) {
       session.newDevicePullQrCodeSig = payload.newDevicePullQrCodeSig;
+    }
+    if (
+      !session.newDeviceBytesToken &&
+      typeof payload.newDeviceBytesToken === 'string'
+    ) {
+      session.newDeviceBytesToken = payload.newDeviceBytesToken;
     }
     if (!session.newDeviceQrcode) {
       session.newDeviceQrcode =

@@ -1,15 +1,17 @@
 import { NapcatLoginApiClient } from '../../../../src/modules/qqbot/napcat';
 
 describe('NapCat new-device flow API client', () => {
-  it('runs GetNewDeviceQRCode -> PollNewDeviceQR -> NewDeviceLogin with normalized states', async () => {
+  it('runs GetNewDeviceQRCode -> PollNewDeviceQR -> NewDeviceLogin with NapCat WebUI payloads', async () => {
     const calls: Array<{ body: unknown; path: string }> = [];
+    const pullQrCodeSig = { key: 'sig-1' };
     const client = new NapcatLoginApiClient({
       post: jest.fn(async (path: string, body: unknown) => {
         calls.push({ body, path });
         if (path.endsWith('/GetNewDeviceQRCode')) {
           return {
-            newDevicePullQrCodeSig: 'sig-1',
-            qrcodeUrl: 'data:image/png;base64,new-device',
+            bytes_token: 'bytes-1',
+            newDevicePullQrCodeSig: pullQrCodeSig,
+            str_url: 'https://qq.example/new-device/qr?str_url=https%3A%2F%2Fproof.qq.com%2Ftoken',
           };
         }
         if (path.endsWith('/PollNewDeviceQR') && calls.length === 2) {
@@ -19,84 +21,133 @@ describe('NapCat new-device flow API client', () => {
           return { status: 'confirming' };
         }
         if (path.endsWith('/NewDeviceLogin')) {
-          return { message: 'ok', success: true };
+          return { message: 'ok', status: 'ok' };
         }
         throw new Error(`unexpected path ${path}`);
       }),
     });
 
-    const qr = await client.getNewDeviceQRCode('session-1');
-    const scanned = await client.pollNewDeviceQR('session-1');
-    const confirming = await client.pollNewDeviceQR('session-1');
-    const verified = await client.newDeviceLogin('session-1');
+    const qr = await client.getNewDeviceQRCode({
+      jumpUrl: 'https://accounts.qq.com/safe/verify?sid=sid-1',
+      uin: '10001',
+    });
+    const scanned = await client.pollNewDeviceQR({
+      bytesToken: qr.bytesToken,
+      uin: '10001',
+    });
+    const confirming = await client.pollNewDeviceQR({
+      bytesToken: qr.bytesToken,
+      uin: '10001',
+    });
+    const verified = await client.newDeviceLogin({
+      newDevicePullQrCodeSig: pullQrCodeSig,
+      passwordMd5: '0123456789abcdef0123456789abcdef',
+      uin: '10001',
+    });
 
-    expect(qr).toEqual({
-      pullQrCodeSig: 'sig-1',
-      qrcodeUrl: 'data:image/png;base64,new-device',
-      sessionId: 'session-1',
+    expect(qr).toMatchObject({
+      bytesToken: 'bytes-1',
+      deviceVerifyUrl: 'https://accounts.qq.com/safe/verify?sid=sid-1',
+      pullQrCodeSig,
       status: 'qr-pending',
     });
+    expect(qr.qrcodeUrl).toMatch(/^data:image\/png;base64,/);
     expect(scanned.status).toBe('scanned');
     expect(confirming.status).toBe('confirming');
     expect(verified).toEqual({
       message: 'ok',
-      sessionId: 'session-1',
       status: 'verified',
       success: true,
     });
     expect(calls).toEqual([
       {
-        body: { sessionId: 'session-1' },
+        body: {
+          jumpUrl: 'https://accounts.qq.com/safe/verify?sid=sid-1',
+          uin: '10001',
+        },
         path: '/api/QQLogin/GetNewDeviceQRCode',
       },
       {
-        body: { sessionId: 'session-1' },
+        body: { bytesToken: 'bytes-1', uin: '10001' },
         path: '/api/QQLogin/PollNewDeviceQR',
       },
       {
-        body: { sessionId: 'session-1' },
+        body: { bytesToken: 'bytes-1', uin: '10001' },
         path: '/api/QQLogin/PollNewDeviceQR',
       },
       {
-        body: { sessionId: 'session-1' },
+        body: {
+          newDevicePullQrCodeSig: pullQrCodeSig,
+          passwordMd5: '0123456789abcdef0123456789abcdef',
+          uin: '10001',
+        },
         path: '/api/QQLogin/NewDeviceLogin',
       },
     ]);
   });
 
-  it('encodes jumpUrl as a QR image before polling new-device verification', async () => {
+  it('derives bytesToken from str_url when NapCat omits bytes_token', async () => {
+    const rawProofUrl = 'https://proof.qq.com/token?a=1&b=2';
+    const strUrl = `https://qq.example/new-device/qr?str_url=${encodeURIComponent(rawProofUrl)}`;
     const client = new NapcatLoginApiClient({
       post: jest
         .fn()
-        .mockResolvedValueOnce({ jumpUrl: 'https://qq.example/new-device' })
+        .mockResolvedValueOnce({ str_url: strUrl })
         .mockResolvedValueOnce({ status: 'waiting' })
         .mockResolvedValueOnce({ status: 'expired', message: 'expired' })
         .mockResolvedValueOnce({ status: 'failed', message: 'denied' }),
     });
 
-    const qr = await client.getNewDeviceQRCode('session-2');
+    const qr = await client.getNewDeviceQRCode({
+      jumpUrl: 'https://accounts.qq.com/safe/verify?sid=sid-2',
+      uin: '10002',
+    });
 
     expect(qr).toMatchObject({
-      deviceVerifyUrl: 'https://qq.example/new-device',
-      sessionId: 'session-2',
+      bytesToken: Buffer.from(rawProofUrl, 'utf8').toString('base64'),
+      deviceVerifyUrl: 'https://accounts.qq.com/safe/verify?sid=sid-2',
       status: 'qr-pending',
     });
     expect(qr.qrcodeUrl).toMatch(/^data:image\/png;base64,/);
-    expect(qr.qrcodeUrl).not.toBe('https://qq.example/new-device');
-    await expect(client.pollNewDeviceQR('session-2')).resolves.toEqual({
+    expect(qr.qrcodeUrl).not.toBe(strUrl);
+    await expect(
+      client.pollNewDeviceQR({ bytesToken: qr.bytesToken, uin: '10002' }),
+    ).resolves.toEqual({
       message: undefined,
-      sessionId: 'session-2',
       status: 'qr-pending',
     });
-    await expect(client.pollNewDeviceQR('session-2')).resolves.toEqual({
+    await expect(
+      client.pollNewDeviceQR({ bytesToken: qr.bytesToken, uin: '10002' }),
+    ).resolves.toEqual({
       message: 'expired',
-      sessionId: 'session-2',
       status: 'expired',
     });
-    await expect(client.pollNewDeviceQR('session-2')).resolves.toEqual({
+    await expect(
+      client.pollNewDeviceQR({ bytesToken: qr.bytesToken, uin: '10002' }),
+    ).resolves.toEqual({
       message: 'denied',
-      sessionId: 'session-2',
       status: 'failed',
+    });
+  });
+
+  it('normalizes NewDeviceLogin status-only failures', async () => {
+    const client = new NapcatLoginApiClient({
+      post: jest.fn().mockResolvedValue({
+        message: 'denied',
+        status: 'failed',
+      }),
+    });
+
+    await expect(
+      client.newDeviceLogin({
+        newDevicePullQrCodeSig: 'sig-1',
+        passwordMd5: '0123456789abcdef0123456789abcdef',
+        uin: '10001',
+      }),
+    ).resolves.toEqual({
+      message: 'denied',
+      status: 'failed',
+      success: false,
     });
   });
 });

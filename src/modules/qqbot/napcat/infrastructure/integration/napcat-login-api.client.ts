@@ -12,24 +12,39 @@ export type NewDeviceQrStatus =
   | 'verified';
 
 export type NewDeviceQrCode = {
+  bytesToken: string;
   deviceVerifyUrl?: string;
-  pullQrCodeSig?: string;
+  pullQrCodeSig?: unknown;
   qrcodeUrl: string;
-  sessionId: string;
   status: 'qr-pending';
+  strUrl?: string;
 };
 
 export type NewDeviceQrPollResult = {
   message?: string;
-  sessionId: string;
   status: Exclude<NewDeviceQrStatus, 'verified'>;
 };
 
 export type NewDeviceLoginResult = {
   message?: string;
-  sessionId: string;
   status: 'failed' | 'verified';
   success: boolean;
+};
+
+export type NewDeviceQrRequest = {
+  jumpUrl: string;
+  uin: string;
+};
+
+export type NewDeviceQrPollRequest = {
+  bytesToken: string;
+  uin: string;
+};
+
+export type NewDeviceLoginRequest = {
+  newDevicePullQrCodeSig?: unknown;
+  passwordMd5: string;
+  uin: string;
 };
 
 export type NapcatLoginApiTransport = {
@@ -175,36 +190,62 @@ export class NapcatWebuiHttpClient {
 export class NapcatLoginApiClient {
   constructor(private readonly transport: NapcatLoginApiTransport) {}
 
-  async getNewDeviceQRCode(sessionId: string): Promise<NewDeviceQrCode> {
+  async getNewDeviceQRCode(
+    input: NewDeviceQrRequest,
+  ): Promise<NewDeviceQrCode> {
+    const uin = this.pickString(input.uin);
+    const jumpUrl = this.pickString(input.jumpUrl);
+    if (!uin || !jumpUrl) {
+      throw new Error('uin and jumpUrl are required');
+    }
+
     const data = (await this.transport.post(
       '/api/QQLogin/GetNewDeviceQRCode',
-      { sessionId },
+      { jumpUrl, uin },
     )) as Record<string, unknown>;
-    const qrcodeUrl = this.pickString(
+    const strUrl = this.pickString(data.str_url, data.strUrl);
+    const qrcodeSource = this.pickString(
       data.qrcodeUrl,
       data.qrcodeurl,
       data.qrcode,
       data.url,
     );
-    const jumpUrl = this.pickString(data.jumpUrl, data.verifyUrl);
-    const newDeviceQrcodeUrl = qrcodeUrl || (await this.createQrcode(jumpUrl));
+    const returnedJumpUrl = this.pickString(data.jumpUrl, data.verifyUrl);
+    const bytesToken =
+      this.pickString(data.bytes_token, data.bytesToken) ||
+      this.deriveBytesToken(strUrl);
+    const newDeviceQrcodeUrl = await this.toQrcodeDataUrl(
+      qrcodeSource || strUrl || returnedJumpUrl || jumpUrl,
+    );
     if (!newDeviceQrcodeUrl) {
       throw new Error('NapCat 未返回新设备验证二维码');
     }
+    if (!bytesToken) {
+      throw new Error('NapCat 未返回新设备验证 bytesToken');
+    }
 
     return {
-      deviceVerifyUrl: jumpUrl || undefined,
-      pullQrCodeSig: this.pickString(data.newDevicePullQrCodeSig, data.sig),
+      bytesToken,
+      deviceVerifyUrl: returnedJumpUrl || jumpUrl,
+      pullQrCodeSig: this.pickPayload(data.newDevicePullQrCodeSig, data.sig),
       qrcodeUrl: newDeviceQrcodeUrl,
-      sessionId,
       status: 'qr-pending',
+      strUrl: strUrl || undefined,
     };
   }
 
-  async pollNewDeviceQR(sessionId: string): Promise<NewDeviceQrPollResult> {
+  async pollNewDeviceQR(
+    input: NewDeviceQrPollRequest,
+  ): Promise<NewDeviceQrPollResult> {
+    const uin = this.pickString(input.uin);
+    const bytesToken = this.pickString(input.bytesToken);
+    if (!uin || !bytesToken) {
+      throw new Error('uin and bytesToken are required');
+    }
+
     const data = (await this.transport.post(
       '/api/QQLogin/PollNewDeviceQR',
-      { sessionId },
+      { bytesToken, uin },
     )) as Record<string, unknown>;
     const status = this.normalizePollStatus(
       this.pickString(data.status, data.state, data.result),
@@ -212,21 +253,33 @@ export class NapcatLoginApiClient {
 
     return {
       message: this.pickString(data.message, data.reason) || undefined,
-      sessionId,
       status,
     };
   }
 
-  async newDeviceLogin(sessionId: string): Promise<NewDeviceLoginResult> {
+  async newDeviceLogin(
+    input: NewDeviceLoginRequest,
+  ): Promise<NewDeviceLoginResult> {
+    const uin = this.pickString(input.uin);
+    const passwordMd5 = this.pickString(input.passwordMd5);
+    if (!uin || !passwordMd5 || input.newDevicePullQrCodeSig == null) {
+      throw new Error(
+        'uin, passwordMd5 and newDevicePullQrCodeSig are required',
+      );
+    }
+
     const data = (await this.transport.post(
       '/api/QQLogin/NewDeviceLogin',
-      { sessionId },
+      {
+        newDevicePullQrCodeSig: input.newDevicePullQrCodeSig,
+        passwordMd5,
+        uin,
+      },
     )) as Record<string, unknown>;
-    const success = data.success !== false;
+    const success = this.normalizeLoginSuccess(data);
 
     return {
       message: this.pickString(data.message, data.reason) || undefined,
-      sessionId,
       status: success ? 'verified' : 'failed',
       success,
     };
@@ -243,6 +296,15 @@ export class NapcatLoginApiClient {
     return 'qr-pending';
   }
 
+  private normalizeLoginSuccess(data: Record<string, unknown>) {
+    const status = this.pickString(data.status, data.state, data.result)
+      .toLowerCase()
+      .replace(/[_\s-]+/g, '');
+    if (['fail', 'failed', 'error', 'denied'].includes(status)) return false;
+    if (['ok', 'success', 'verified'].includes(status)) return true;
+    return data.success !== false;
+  }
+
   private pickString(...values: unknown[]) {
     for (const value of values) {
       if (typeof value !== 'string') continue;
@@ -250,6 +312,37 @@ export class NapcatLoginApiClient {
       if (trimmed) return trimmed;
     }
     return '';
+  }
+
+  private pickPayload(...values: unknown[]) {
+    for (const value of values) {
+      if (value === undefined || value === null) continue;
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) return trimmed;
+        continue;
+      }
+      return value;
+    }
+    return undefined;
+  }
+
+  private deriveBytesToken(strUrl: string) {
+    if (!strUrl) return '';
+    try {
+      const proofUrl = new URL(strUrl).searchParams.get('str_url') || '';
+      if (!proofUrl) return '';
+      return Buffer.from(proofUrl, 'utf8').toString('base64');
+    } catch {
+      return '';
+    }
+  }
+
+  private async toQrcodeDataUrl(text: string) {
+    const normalized = this.pickString(text);
+    if (!normalized) return '';
+    if (normalized.startsWith('data:image/')) return normalized;
+    return this.createQrcode(normalized);
   }
 
   private async createQrcode(text: string) {

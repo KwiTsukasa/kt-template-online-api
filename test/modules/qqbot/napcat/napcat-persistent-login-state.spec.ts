@@ -292,7 +292,8 @@ describe('NapCat persistent login state contract', () => {
     loginChallengeRepository.rows.push({
       challengePayload: {
         deviceVerifyUrl: 'https://ti.qq.com/new-device/verify',
-        newDevicePullQrCodeSig: 'sig-new-device',
+        newDeviceBytesToken: 'bytes-new-device',
+        newDevicePullQrCodeSig: { key: 'sig-new-device' },
         newDeviceQrcode: 'data:image/png;base64,new-device-qrcode',
       },
       challengeType: 'new-device',
@@ -335,7 +336,8 @@ describe('NapCat persistent login state contract', () => {
     await expect(store.get('new-device-recover')).resolves.toEqual(
       expect.objectContaining({
         deviceVerifyUrl: 'https://ti.qq.com/new-device/verify',
-        newDevicePullQrCodeSig: 'sig-new-device',
+        newDeviceBytesToken: 'bytes-new-device',
+        newDevicePullQrCodeSig: { key: 'sig-new-device' },
         newDeviceQrcode: 'data:image/png;base64,new-device-qrcode',
         newDeviceStatus: 'qr-pending',
       }),

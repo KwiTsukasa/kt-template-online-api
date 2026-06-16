@@ -223,6 +223,18 @@ export class QqbotNapcatLoginService {
           status.loginError,
         );
       }
+      const recoveredCaptchaUrl = await this.resolveStatusCaptchaUrl(
+        session,
+        container,
+        status,
+      );
+      if (recoveredCaptchaUrl) {
+        return this.keepPasswordCaptchaPending(
+          session,
+          recoveredCaptchaUrl,
+          status.loginError,
+        );
+      }
       if (session.captchaUrl) {
         if (this.isPasswordCaptchaStillRequired(status)) {
           return this.keepPasswordCaptchaPending(
@@ -242,6 +254,12 @@ export class QqbotNapcatLoginService {
           session,
           container,
           status.loginError || '验证码登录未完成',
+        );
+      }
+      if (this.isPasswordCaptchaStillRequired(status)) {
+        return this.keepPasswordCaptchaWaitingForUrl(
+          session,
+          status.loginError,
         );
       }
 
@@ -978,6 +996,31 @@ export class QqbotNapcatLoginService {
         'password-login-captcha',
         'processing',
         `${message}，请完成验证码验证`,
+      );
+    }
+    return this.toResult(session);
+  }
+
+  private keepPasswordCaptchaWaitingForUrl(
+    session: QqbotLoginScanSession,
+    reason?: string,
+  ) {
+    const message =
+      this.toolsService.toTrimmedString(reason) ||
+      '密码登录需要完成 QQ 安全验证';
+    const shouldPublish = session.errorMessage !== message;
+    session.status = 'pending';
+    session.captchaUrl = undefined;
+    session.qrcode = undefined;
+    session.errorMessage = message;
+    session.expiresAt = Date.now() + this.getSessionTtlMs();
+    this.persistLoginSession(session);
+    if (shouldPublish) {
+      this.publishScanResultEvent(
+        session,
+        'password-login-captcha',
+        'processing',
+        message,
       );
     }
     return this.toResult(session);
@@ -1780,11 +1823,30 @@ export class QqbotNapcatLoginService {
     return this.waitForPasswordCaptchaUrl(container, sinceMs);
   }
 
+  private async resolveStatusCaptchaUrl(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    loginStatus: NapcatLoginStatus,
+  ) {
+    if (!this.isPasswordCaptchaStillRequired(loginStatus)) return '';
+    if (!this.shouldLookupStatusCaptchaUrl(session)) return '';
+    session.lastCaptchaLookupAt = Date.now();
+    this.persistLoginSession(session);
+    return this.detectPasswordCaptchaUrl(container, session.lastRestartedAt);
+  }
+
   private getCaptchaUrlFromStatus(status: NapcatLoginStatus) {
     return (
       this.toolsService.toTrimmedString(status.captchaUrl) ||
       this.toolsService.extractNapcatCaptchaUrl(status.loginError)
     );
+  }
+
+  private shouldLookupStatusCaptchaUrl(session: QqbotLoginScanSession) {
+    const lastCheckedAt = Number(session.lastCaptchaLookupAt || 0);
+    if (!Number.isFinite(lastCheckedAt) || lastCheckedAt <= 0) return true;
+    const cooldownMs = Math.max(15_000, this.getLoginPollIntervalMs() * 5);
+    return Date.now() - lastCheckedAt > cooldownMs;
   }
 
   private isPasswordCaptchaStillRequired(status: NapcatLoginStatus) {

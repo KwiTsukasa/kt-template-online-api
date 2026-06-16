@@ -247,6 +247,49 @@ describe('QqbotNapcatLoginService', () => {
       .toBe(false);
   });
 
+  it('uses runtime logs to recover captcha url when status only says captcha required', async () => {
+    const captchaUrl =
+      'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001';
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-status-captcha',
+      name: 'napcat-10001',
+    };
+    const containerService = {
+      detectRuntimeCaptchaUrl: jest.fn().mockResolvedValue(captchaUrl),
+      findRuntimeById: jest.fn().mockResolvedValue(container),
+      removeUnboundContainer: jest.fn().mockResolvedValue(false),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '10001',
+      mode: 'refresh',
+      status: 'pending',
+    });
+    session.lastRestartedAt = Date.now() - 10_000;
+    (refreshService as any).sessions.set(session.id, session);
+    jest.spyOn(refreshService as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      loginError: '密码回退需要验证码，请在 WebUi 中继续完成验证',
+    });
+
+    const result = await refreshService.status(session.id);
+
+    expect(containerService.detectRuntimeCaptchaUrl).toHaveBeenCalledWith(
+      container,
+      session.lastRestartedAt,
+    );
+    expect(result.captchaUrl).toBe(captchaUrl);
+    expect(result.errorMessage).toContain('密码登录需要完成 QQ 安全验证');
+  });
+
   it('keeps existing password captcha pending when NapCat still reports captcha without url', async () => {
     const captchaUrl =
       'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001';

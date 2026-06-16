@@ -317,6 +317,7 @@ export type QqbotLoginScanSession = {
   expiresAt: number;
   expectedSelfId?: string;
   id: string;
+  lastCaptchaLookupAt?: number;
   lastRestartedAt?: number;
   mode: QqbotLoginScanMode;
   newDevicePullQrCodeSig?: string;

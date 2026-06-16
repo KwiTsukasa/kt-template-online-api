@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { QqbotLoginScanSession } from '@/modules/qqbot/core/contract/qqbot.types';
@@ -16,6 +16,7 @@ type NapcatLoginStoreCache = Record<string, QqbotLoginScanSession>;
 
 @Injectable()
 export class NapcatLoginStateStoreService {
+  private readonly logger = new Logger(NapcatLoginStateStoreService.name);
   private readonly cache: NapcatLoginStoreCache = {};
   private readonly pendingSessionWrites: Record<string, Promise<void> | undefined> =
     {};
@@ -91,7 +92,9 @@ export class NapcatLoginStateStoreService {
       challengeUrl: session.captchaUrl,
       session,
       status: 'pending',
-    });
+    }).catch((err) =>
+      this.warnPersistenceError('登录验证码 challenge 持久化失败', err),
+    );
   }
 
   recordNewDeviceChallenge(session: QqbotLoginScanSession) {
@@ -106,7 +109,9 @@ export class NapcatLoginStateStoreService {
       challengeUrl: session.deviceVerifyUrl || session.newDeviceQrcode || null,
       session,
       status: session.newDeviceStatus,
-    });
+    }).catch((err) =>
+      this.warnPersistenceError('新设备 challenge 持久化失败', err),
+    );
   }
 
   recordRuntimeCleanup(
@@ -124,7 +129,11 @@ export class NapcatLoginStateStoreService {
       sessionId: session.id,
       status: input.status,
     });
-    void this.runtimeCleanupRepository.save(cleanup);
+    void this.runtimeCleanupRepository
+      .save(cleanup)
+      .catch((err) =>
+        this.warnPersistenceError('运行态清理记录持久化失败', err),
+      );
   }
 
   async flushSessionWrites(sessionId?: string) {
@@ -293,6 +302,16 @@ export class NapcatLoginStateStoreService {
       status: input.status,
     });
     await this.loginChallengeRepository.save(entity);
+  }
+
+  private warnPersistenceError(message: string, err: unknown) {
+    const detail =
+      err instanceof Error
+        ? err.message
+        : typeof err === 'string'
+          ? err
+          : JSON.stringify(err);
+    this.logger.warn(`${message}: ${detail || 'unknown error'}`);
   }
 
   private isResolvedChallenge(status: string) {

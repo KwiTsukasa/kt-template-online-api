@@ -948,7 +948,7 @@ CREATE TABLE IF NOT EXISTS napcat_login_session (
 
 CREATE TABLE IF NOT EXISTS napcat_login_challenge (
   id BIGINT NOT NULL PRIMARY KEY,
-  session_id BIGINT NOT NULL,
+  session_id VARCHAR(64) NOT NULL,
   challenge_type VARCHAR(64) NOT NULL,
   status VARCHAR(32) NOT NULL,
   challenge_url TEXT NULL,
@@ -961,7 +961,7 @@ CREATE TABLE IF NOT EXISTS napcat_login_challenge (
 
 CREATE TABLE IF NOT EXISTS napcat_runtime_cleanup (
   id BIGINT NOT NULL PRIMARY KEY,
-  session_id BIGINT NOT NULL,
+  session_id VARCHAR(64) NOT NULL,
   cleanup_type VARCHAR(64) NOT NULL,
   status VARCHAR(32) NOT NULL,
   error_message TEXT NULL,

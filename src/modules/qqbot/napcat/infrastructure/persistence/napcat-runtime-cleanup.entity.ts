@@ -14,7 +14,7 @@ export class NapcatRuntimeCleanup {
   @PrimaryColumn({ type: 'bigint' })
   id: string;
 
-  @Column({ name: 'session_id', type: 'bigint' })
+  @Column({ length: 64, name: 'session_id', type: 'varchar' })
   sessionId: string;
 
   @Column({ length: 64, name: 'cleanup_type' })

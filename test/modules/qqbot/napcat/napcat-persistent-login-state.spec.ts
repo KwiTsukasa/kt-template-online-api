@@ -30,6 +30,18 @@ const getEntityColumnNames = (entity: EntityClass) => {
     .map((column) => `${column.options.name || column.propertyName}`);
 };
 
+const getEntityColumnOptions = (entity: EntityClass, propertyName: string) => {
+  return getMetadataArgsStorage().columns.find(
+    (column) => column.target === entity && column.propertyName === propertyName,
+  )?.options;
+};
+
+const getSchemaColumnDefinition = (tableName: string, columnName: string) => {
+  return schema
+    .getTableColumns(tableName)
+    .find((column) => column.name === columnName)?.definition;
+};
+
 const createRepository = <T extends Record<string, any>>() => {
   const rows: T[] = [];
   return {
@@ -124,6 +136,25 @@ describe('NapCat persistent login state contract', () => {
       expect(tableName).toBeTruthy();
       schema.expectTableColumns(tableName || '', columns);
     }
+  });
+
+  it('stores challenge and cleanup session ids as uuid-safe text', () => {
+    expect(
+      getEntityColumnOptions(NapcatLoginChallengeEntity, 'sessionId'),
+    ).toMatchObject({ length: 64, type: 'varchar' });
+    expect(getEntityColumnOptions(NapcatRuntimeCleanup, 'sessionId')).toMatchObject(
+      { length: 64, type: 'varchar' },
+    );
+
+    expect(
+      getSchemaColumnDefinition('napcat_login_challenge', 'session_id'),
+    ).toMatch(/^session_id VARCHAR\(64\) NOT NULL/i);
+    expect(
+      getSchemaColumnDefinition('napcat_runtime_cleanup', 'session_id'),
+    ).toMatch(/^session_id VARCHAR\(64\) NOT NULL/i);
+
+    const qqbotInitSql = readSource('sql/qqbot-init.sql');
+    expect(qqbotInitSql).toContain('`session_id` varchar(64) NOT NULL');
   });
 
   it('keeps NapCat runtime tables covered by the v3 verification SQL', () => {

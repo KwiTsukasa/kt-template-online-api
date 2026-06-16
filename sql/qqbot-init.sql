@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS `napcat_login_session` (
 
 CREATE TABLE IF NOT EXISTS `napcat_login_challenge` (
   `id` bigint NOT NULL,
-  `session_id` bigint NOT NULL,
+  `session_id` varchar(64) NOT NULL,
   `challenge_type` varchar(64) NOT NULL,
   `status` varchar(32) NOT NULL,
   `challenge_url` text,
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS `napcat_login_challenge` (
 
 CREATE TABLE IF NOT EXISTS `napcat_runtime_cleanup` (
   `id` bigint NOT NULL,
-  `session_id` bigint NOT NULL,
+  `session_id` varchar(64) NOT NULL,
   `cleanup_type` varchar(64) NOT NULL,
   `status` varchar(32) NOT NULL,
   `error_message` text,

@@ -108,3 +108,17 @@ FROM information_schema.statistics
 WHERE table_schema = DATABASE()
   AND table_name = 'napcat_runtime_cleanup'
   AND index_name = 'idx_napcat_runtime_cleanup_session';
+
+SELECT 'column_napcat_login_challenge_session_id_varchar' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_login_challenge'
+  AND column_name = 'session_id'
+  AND column_type = 'varchar(64)';
+
+SELECT 'column_napcat_runtime_cleanup_session_id_varchar' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_runtime_cleanup'
+  AND column_name = 'session_id'
+  AND column_type = 'varchar(64)';

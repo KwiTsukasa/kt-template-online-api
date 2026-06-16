@@ -66,9 +66,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
 
   it('uses BullMQ queues to serialize plugin worker requests instead of ad hoc in-memory chaining', () => {
     const source = [
-      readSource(
-        'src/modules/qqbot/plugin-platform/plugin-platform.module.ts',
-      ),
+      readSource('src/modules/qqbot/plugin-platform/plugin-platform.module.ts'),
       readSource(
         'src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/bullmq-plugin-worker-request.queue.ts',
       ),
@@ -77,7 +75,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       ),
     ].join('\n');
 
-    expect(source).toContain("@nestjs/bullmq");
+    expect(source).toContain('@nestjs/bullmq');
     expect(source).toContain("from 'bullmq'");
     expect(source).toContain('new Queue(');
     expect(source).toContain('new Worker(');
@@ -101,6 +99,15 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     expect(source).toContain('type: Recreate');
     expect(source).not.toContain('maxSurge: 1');
     expect(source).not.toContain('maxUnavailable: 0');
+  });
+
+  it('pulls the plugin Redis runtime image from the local registry', () => {
+    const source = readSource('k8s/prod/api.yaml');
+
+    expect(source).toContain(
+      'image: k3d-kt-registry.localhost:5000/redis:7.4-alpine',
+    );
+    expect(source).not.toContain('image: redis:7.4-alpine');
   });
 
   it('uses dedicated lifecycle use cases instead of direct status flips', () => {
@@ -465,12 +472,10 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     });
 
     expect(worker.dispose).toHaveBeenCalled();
-    expect(
-      (service as any).activeWorkers.has(installation.id),
-    ).toBe(false);
-    expect(
-      (service as any).activeWorkerContexts.has(installation.id),
-    ).toBe(false);
+    expect((service as any).activeWorkers.has(installation.id)).toBe(false);
+    expect((service as any).activeWorkerContexts.has(installation.id)).toBe(
+      false,
+    );
   });
 
   it('routes enabled command and message executions through active worker runtimes', async () => {

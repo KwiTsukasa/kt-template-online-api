@@ -47,9 +47,7 @@ type QqbotWorkerQueueResult =
       ok: false;
     };
 
-export class QqbotBullmqPluginWorkerRequestQueue
-  implements QqbotPluginWorkerRequestQueue
-{
+export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerRequestQueue {
   private readonly queue: Queue<
     QqbotWorkerQueueJobData,
     QqbotWorkerQueueResult,
@@ -159,7 +157,9 @@ export class QqbotBullmqPluginWorkerRequestQueue
       message.type,
       {
         expiresAt:
-          Date.now() + message.timeoutMs + this.options.waitUntilFinishedBufferMs,
+          Date.now() +
+          message.timeoutMs +
+          this.options.waitUntilFinishedBufferMs,
         generation: this.generation,
         message,
         workerInstanceId: this.options.workerInstanceId,
@@ -280,7 +280,7 @@ export function resolveQqbotPluginQueueConnection(
 function buildWorkerQueueName(pluginKey: string, installationId: string) {
   const safePluginKey = pluginKey.replace(/[^a-zA-Z0-9_-]/g, '-');
   const safeInstallationId = installationId.replace(/[^a-zA-Z0-9_-]/g, '-');
-  return `qqbot-plugin-worker:${safePluginKey}:${safeInstallationId}`;
+  return `qqbot-plugin-worker-${safePluginKey}-${safeInstallationId}`;
 }
 
 function createWorkerInstanceId() {

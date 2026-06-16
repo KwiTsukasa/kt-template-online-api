@@ -105,7 +105,7 @@ spec:
     spec:
       containers:
         - name: redis
-          image: redis:7.4-alpine
+          image: k3d-kt-registry.localhost:5000/redis:7.4-alpine
           imagePullPolicy: IfNotPresent
           args:
             - redis-server

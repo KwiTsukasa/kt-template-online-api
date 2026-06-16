@@ -9,13 +9,21 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/theme/title.layout';
 
 let titleImage: Image;
-/**
- * 在图片布局层中加载图片Once。
- */
-async function loadImageOnce() {
-  titleImage = await loadImageFromPath(getBangDreamAssetPath('title'));
+let titleImagePreload: Promise<void> | undefined;
+
+export async function preloadBangDreamTitleAssets() {
+  if (!titleImagePreload) {
+    titleImagePreload = loadImageFromPath(getBangDreamAssetPath('title'))
+      .then((image) => {
+        titleImage = image;
+      })
+      .catch((error) => {
+        titleImagePreload = undefined;
+        throw error;
+      });
+  }
+  await titleImagePreload;
 }
-loadImageOnce();
 
 /**
  * 在图片布局层中绘制标题。
@@ -25,6 +33,9 @@ loadImageOnce();
  * @returns 渲染或资源结果。
  */
 export function drawTitle(title1: string, title2: string): Canvas {
+  if (!titleImage) {
+    throw new Error('BangDream 标题资源未初始化');
+  }
   const canvas = new Canvas(titleImage.width, titleImage.height);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(

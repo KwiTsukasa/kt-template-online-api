@@ -14,19 +14,12 @@ import {
   getCardPrefixBandLogoLayout,
 } from '@/modules/qqbot/plugins/bangdream/src/domain/card/card-prefix.layout';
 
-let prefixBG: Canvas;
-/**
- * 在图片布局层中加载图片Once。
- */
-async function loadImageOnce() {
-  prefixBG = drawRoundedRect({
-    width: BANGDREAM_CARD_PREFIX_SPEC.canvas.width,
-    height: BANGDREAM_CARD_PREFIX_SPEC.canvas.height,
-    color: BANGDREAM_CARD_PREFIX_SPEC.background.color,
-    radius: [...BANGDREAM_CARD_PREFIX_SPEC.background.radius],
-  });
-}
-loadImageOnce();
+const prefixBG: Canvas = drawRoundedRect({
+  width: BANGDREAM_CARD_PREFIX_SPEC.canvas.width,
+  height: BANGDREAM_CARD_PREFIX_SPEC.canvas.height,
+  color: BANGDREAM_CARD_PREFIX_SPEC.background.color,
+  radius: [...BANGDREAM_CARD_PREFIX_SPEC.background.radius],
+});
 
 /**
  * 在图片布局层中绘制卡牌PrefixIn列表。

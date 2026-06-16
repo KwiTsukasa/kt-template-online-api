@@ -21,7 +21,7 @@ describe('QQBot plugin registry operation timeout', () => {
         },
       ],
     } as any);
-    commandRegistry.onModuleInit();
+    await commandRegistry.onModuleInit();
 
     await expect(
       Promise.race([

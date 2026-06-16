@@ -280,7 +280,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     const commandRegistry = new QqbotPluginRegistryService({
       loadCommandPlugins: () => [commandPlugin],
     } as any);
-    commandRegistry.onModuleInit();
+    await commandRegistry.onModuleInit();
 
     await expect(
       commandRegistry.execute('demo-plugin', 'demo.echo', {}, {}),

@@ -22,6 +22,7 @@ import type {
   BangDreamOperationKey,
 } from './domain/common/bangdream.types';
 import { waitForBangDreamCatalogReady } from './application/catalog/bangdream-catalog-cache';
+import { preloadBangDreamRenderAssets } from './application/render-assets';
 
 type BangDreamPluginRuntimeOptions = BangDreamCommandContextOptions & {
   description?: string;
@@ -77,7 +78,12 @@ export function createPlugin(options: BangDreamPluginRuntimeOptions) {
     });
 
   return {
-    activate: () => context.refreshDictionaryCache(),
+    activate: async () => {
+      await Promise.all([
+        context.refreshDictionaryCache(),
+        preloadBangDreamRenderAssets(),
+      ]);
+    },
     description: options.description,
     dispose: async () => undefined,
     executeOperation,

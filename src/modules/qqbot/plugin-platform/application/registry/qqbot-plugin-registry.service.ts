@@ -35,6 +35,7 @@ export class QqbotPluginRegistryService implements OnModuleInit {
 
   async onModuleInit() {
     for (const plugin of this.builtinPluginLoader?.loadCommandPlugins() || []) {
+      await plugin.activate?.();
       this.register(plugin);
     }
     await this.hydrateInactivePluginKeys();

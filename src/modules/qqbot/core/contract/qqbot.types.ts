@@ -167,6 +167,7 @@ export type QqbotPluginOperation<Input = any, Output = any> = {
 };
 
 export type QqbotIntegrationPlugin = {
+  activate?: () => Promise<unknown> | unknown;
   description?: string;
   healthCheck?: () => Promise<QqbotPluginHealth>;
   key: string;

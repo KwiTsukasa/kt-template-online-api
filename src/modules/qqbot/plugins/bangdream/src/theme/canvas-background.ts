@@ -1,7 +1,12 @@
 import { createBlurredTrianglePattern } from '@/modules/qqbot/plugins/bangdream/src/theme/canvas-background-triangle';
 import { scatterImages } from '@/modules/qqbot/plugins/bangdream/src/theme/canvas-background-scatter';
 import { drawTextOnCanvas } from '@/modules/qqbot/plugins/bangdream/src/theme/canvas-background-text';
-import { loadImage, Image, Canvas } from 'skia-canvas';
+import {
+  loadImage,
+  Image,
+  Canvas,
+  CanvasRenderingContext2D,
+} from 'skia-canvas';
 import { loadImageFromPath } from '@/modules/qqbot/plugins/bangdream/src/theme/canvas-image';
 import { getBangDreamAssetPath } from '@/modules/qqbot/plugins/bangdream/src/theme/asset-manifest';
 import { BANGDREAM_RENDER_THEME } from '@/modules/qqbot/plugins/bangdream/src/theme/render-theme';
@@ -11,6 +16,17 @@ interface BackgroundOptions {
   text?: string;
   width: number;
   height: number;
+}
+
+interface TextureLike {
+  height: number;
+  width: number;
+}
+
+interface TextureTileOptions {
+  ratio: number;
+  x: number;
+  y: number;
 }
 
 // 将图片等比例缩放并重复铺满整个画布,并且增加亮度
@@ -114,17 +130,27 @@ function getScaledDimensions(
 const star: Image[] = [];
 
 let defaultBGTexture: Image;
-/**
- * 在底层绘图工具层中加载图片Once。
- */
-async function loadImageOnce() {
-  star.push(await loadImageFromPath(getBangDreamAssetPath('backgroundStar1')));
-  star.push(await loadImageFromPath(getBangDreamAssetPath('backgroundStar2')));
-  defaultBGTexture = await loadImageFromPath(
-    getBangDreamAssetPath('backgroundObjectBig'),
-  );
+let backgroundAssetsPreload: Promise<void> | undefined;
+
+export async function preloadBangDreamBackgroundAssets() {
+  if (!backgroundAssetsPreload) {
+    backgroundAssetsPreload = Promise.all([
+      loadImageFromPath(getBangDreamAssetPath('backgroundStar1')),
+      loadImageFromPath(getBangDreamAssetPath('backgroundStar2')),
+      loadImageFromPath(getBangDreamAssetPath('backgroundObjectBig')),
+    ])
+      .then(([star1, star2, texture]) => {
+        star.length = 0;
+        star.push(star1, star2);
+        defaultBGTexture = texture;
+      })
+      .catch((error) => {
+        backgroundAssetsPreload = undefined;
+        throw error;
+      });
+  }
+  await backgroundAssetsPreload;
 }
-loadImageOnce();
 
 /**
  * 在底层绘图工具层中创建简易Background。
@@ -132,6 +158,7 @@ loadImageOnce();
  * @param options1 - options1参数。
  */
 export async function createEasyBackground({ width, height }) {
+  await preloadBangDreamBackgroundAssets();
   const bgColor = BANGDREAM_RENDER_THEME.color.backgroundEasy;
   const canvas: Canvas = new Canvas(width, height);
   const ctx = canvas.getContext('2d');
@@ -144,18 +171,32 @@ export async function createEasyBackground({ width, height }) {
   while (y < height) {
     x = 0 - Math.random() * defaultBGTexture.width * ratio;
     while (x < width) {
-      ctx.drawImage(
-        defaultBGTexture,
+      drawScaledTextureTile(ctx, defaultBGTexture, {
+        ratio,
         x,
         y,
-        defaultBGTexture.width * ratio,
-        defaultBGTexture.height * ratio,
-      );
+      });
       x += defaultBGTexture.width * ratio;
     }
     y += defaultBGTexture.height * ratio;
   }
   return canvas;
+}
+
+/**
+ * 使用坐标变换绘制缩放纹理，保持 Tsugu 的比例与偏移，同时避开 skia-canvas
+ * scaled drawImage 重载在完整 Nest 进程里的 native 内存峰值。
+ */
+export function drawScaledTextureTile(
+  ctx: CanvasRenderingContext2D,
+  texture: TextureLike,
+  { ratio, x, y }: TextureTileOptions,
+) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(ratio, ratio);
+  ctx.drawImage(texture as Image | Canvas, 0, 0);
+  ctx.restore();
 }
 
 /**
@@ -197,6 +238,7 @@ export async function createBackground({
   width,
   height,
 }: BackgroundOptions): Promise<Canvas> {
+  await preloadBangDreamBackgroundAssets();
   //将图片铺满画面，并且增加20亮度
   const backgroundBuffer = await spreadBackgroundImage(
     image,

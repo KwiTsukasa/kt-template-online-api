@@ -40,7 +40,7 @@ export async function drawSongInList(
 ): Promise<Canvas> {
   const server = getServerByPriority(song.publishedAt, displayedServerList);
   const songImage = resizeImage({
-    image: await song.getSongJacketImage(),
+    image: await song.getSongJacketImage(displayedServerList),
     widthMax: BANGDREAM_SONG_LIST_SPEC.item.jacketSourceWidthMax,
     heightMax: BANGDREAM_SONG_LIST_SPEC.item.jacketSourceHeightMax,
   });

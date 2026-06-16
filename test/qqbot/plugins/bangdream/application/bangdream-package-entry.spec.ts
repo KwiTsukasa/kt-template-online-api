@@ -9,6 +9,7 @@ const mockContext = {
   refreshDictionaryCache: jest.fn(),
 };
 const mockConfigureBangDreamRuntimeIo = jest.fn();
+const mockPreloadBangDreamRenderAssets = jest.fn();
 const mockOperationModules = new Map<string, jest.Mock>();
 const mockManifestOperations = [
   ['bangdream.song.search', 'searchSong'],
@@ -39,6 +40,13 @@ jest.mock(
   '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io',
   () => ({
     configureBangDreamRuntimeIo: mockConfigureBangDreamRuntimeIo,
+  }),
+);
+
+jest.mock(
+  '@/modules/qqbot/plugins/bangdream/src/application/render-assets',
+  () => ({
+    preloadBangDreamRenderAssets: mockPreloadBangDreamRenderAssets,
   }),
 );
 
@@ -85,6 +93,7 @@ describe('BangDream package entry', () => {
     mockOperationModules.clear();
     mockContext.refreshDictionaryCache.mockResolvedValue(undefined);
     mockContext.checkHealth.mockResolvedValue(true);
+    mockPreloadBangDreamRenderAssets.mockResolvedValue(undefined);
   });
 
   it('binds every manifest operation directly to the package operation modules', async () => {
@@ -120,6 +129,7 @@ describe('BangDream package entry', () => {
     });
 
     expect(mockContext.refreshDictionaryCache).toHaveBeenCalledTimes(1);
+    expect(mockPreloadBangDreamRenderAssets).toHaveBeenCalledTimes(1);
     expect(waitForBangDreamCatalogReady).toHaveBeenCalledWith([
       'songs',
       'meta',

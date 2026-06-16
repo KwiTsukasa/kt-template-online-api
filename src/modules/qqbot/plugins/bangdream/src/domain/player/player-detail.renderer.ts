@@ -25,15 +25,23 @@ import { loadImageFromPath } from '@/modules/qqbot/plugins/bangdream/src/theme/c
 import { playerRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/player/player.repository';
 
 let BGDefaultImage: Image;
-/**
- * 在QQBot 图片视图层中加载图片Once。
- */
-async function loadImageOnce() {
-  BGDefaultImage = await loadImageFromPath(
-    path.join(assetsRootPath, '/BG/common.png'),
-  );
+let playerAssetsPreload: Promise<void> | undefined;
+
+export async function preloadBangDreamPlayerAssets() {
+  if (!playerAssetsPreload) {
+    playerAssetsPreload = loadImageFromPath(
+      path.join(assetsRootPath, '/BG/common.png'),
+    )
+      .then((image) => {
+        BGDefaultImage = image;
+      })
+      .catch((error) => {
+        playerAssetsPreload = undefined;
+        throw error;
+      });
+  }
+  await playerAssetsPreload;
 }
-loadImageOnce();
 
 /**
  * 在QQBot 图片视图层中绘制玩家详情。
@@ -50,6 +58,7 @@ export async function drawPlayerDetail(
   useEasyBG: boolean,
   compress: boolean,
 ): Promise<Array<Buffer | string>> {
+  await preloadBangDreamPlayerAssets();
   const result = [];
   let player = playerRepository.create(playerId, mainServer);
   //不使用缓存查询

@@ -19,6 +19,24 @@ const createPlugin = (
 });
 
 describe('QQBot plugin registry platform key compatibility', () => {
+  it('activates builtin command plugins before they are registered', async () => {
+    const activate = jest.fn(async () => undefined);
+    const plugin = {
+      ...createPlugin('demo-plugin', []),
+      activate,
+    };
+    const registry = new QqbotPluginRegistryService({
+      loadCommandPlugins: () => [plugin],
+    } as any);
+
+    await registry.onModuleInit();
+
+    expect(activate).toHaveBeenCalledTimes(1);
+    expect(registry.listPlugins().map((item) => item.key)).toEqual([
+      'demo-plugin',
+    ]);
+  });
+
   it('uses platform plugin keys as primary keys while resolving legacy command keys', async () => {
     const bangdream = createPlugin('bangdream', ['bangDream']);
     const ff14Plugin = createPlugin('ff14-market', ['ff14Market']);

@@ -8,15 +8,23 @@ import { loadImageFromPath } from '@/modules/qqbot/plugins/bangdream/src/theme/c
 import { getBangDreamAssetPath } from '@/modules/qqbot/plugins/bangdream/src/theme/asset-manifest';
 
 let BGDefaultImage: Image;
-/**
- * 在底层绘图工具层中加载图片Once。
- */
-async function loadImageOnce() {
-  BGDefaultImage = await loadImageFromPath(
-    getBangDreamAssetPath('backgroundLive'),
-  );
+let outputAssetsPreload: Promise<void> | undefined;
+
+export async function preloadBangDreamOutputAssets() {
+  if (!outputAssetsPreload) {
+    outputAssetsPreload = loadImageFromPath(
+      getBangDreamAssetPath('backgroundLive'),
+    )
+      .then((image) => {
+        BGDefaultImage = image;
+      })
+      .catch((error) => {
+        outputAssetsPreload = undefined;
+        throw error;
+      });
+  }
+  await outputAssetsPreload;
 }
-loadImageOnce();
 
 export interface OutputFinalOptions {
   startWithSpace?: boolean;
@@ -43,8 +51,10 @@ export const outputFinalCanv = async function ({
   useEasyBG = true,
   useImageBG = false,
   text = 'BanG Dream!',
-  BGimage = BGDefaultImage,
+  BGimage,
 }: OutputFinalOptions): Promise<Canvas> {
+  await preloadBangDreamOutputAssets();
+  const backgroundImage = BGimage ?? BGDefaultImage;
   let allH = 30;
   if (startWithSpace) {
     allH += 50;
@@ -72,7 +82,7 @@ export const outputFinalCanv = async function ({
   } else if (useImageBG) {
     ctx.drawImage(
       await createImageBackground({
-        image: BGimage,
+        image: backgroundImage,
         width: maxW,
         height: allH,
       }),
@@ -83,7 +93,7 @@ export const outputFinalCanv = async function ({
     ctx.drawImage(
       await createBackground({
         text,
-        image: BGimage,
+        image: backgroundImage,
         width: maxW,
         height: allH,
       }),

@@ -11,19 +11,27 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/card/card-skill-text.layout';
 
 const skillIcon: Partial<Record<BangDreamSkillIconKey, Image>> = {};
-/**
- * 在图片布局层中加载图片Once。
- */
-async function loadImageOnce() {
-  skillIcon.life = await loadImageFromPath(getBangDreamAssetPath('skillLife'));
-  skillIcon.judge = await loadImageFromPath(
-    getBangDreamAssetPath('skillJudge'),
-  );
-  skillIcon.damage = await loadImageFromPath(
-    getBangDreamAssetPath('skillDamage'),
-  );
+let skillTextAssetsPreload: Promise<void> | undefined;
+
+export async function preloadBangDreamCardSkillTextAssets() {
+  if (!skillTextAssetsPreload) {
+    skillTextAssetsPreload = Promise.all([
+      loadImageFromPath(getBangDreamAssetPath('skillLife')),
+      loadImageFromPath(getBangDreamAssetPath('skillJudge')),
+      loadImageFromPath(getBangDreamAssetPath('skillDamage')),
+    ])
+      .then(([life, judge, damage]) => {
+        skillIcon.life = life;
+        skillIcon.judge = judge;
+        skillIcon.damage = damage;
+      })
+      .catch((error) => {
+        skillTextAssetsPreload = undefined;
+        throw error;
+      });
+  }
+  await skillTextAssetsPreload;
 }
-loadImageOnce();
 
 //卡牌Icon右下角的技能描述图标
 /**
@@ -33,6 +41,7 @@ loadImageOnce();
  * @returns 异步处理结果。
  */
 export async function drawCardIconSkill(skill: Skill): Promise<Canvas> {
+  await preloadBangDreamCardSkillTextAssets();
   const content = createSkillTextFragments({
     effectTypes: skill.getEffectTypes(),
     scoreUpMaxValue: skill.getScoreUpMaxValue(),

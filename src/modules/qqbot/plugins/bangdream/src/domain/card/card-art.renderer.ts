@@ -17,33 +17,45 @@ import { cardArtResourceRepository } from '@/modules/qqbot/plugins/bangdream/src
 const cardTypeIconList: { [type: string]: Image } = {};
 const starList: { [type: string]: Image } = {};
 let limitBreakIcon: Image;
+let cardArtAssetsPreload: Promise<void> | undefined;
 
-/**
- * 在图片布局层中加载图片Once。
- */
-async function loadImageOnce() {
-  cardTypeIconList.limited = await loadImageFromPath(
-    getBangDreamAssetPath('cardLimited'),
-  );
-  cardTypeIconList.dreamfes = await loadImageFromPath(
-    getBangDreamAssetPath('cardDreamfes'),
-  );
-  cardTypeIconList.kirafes = await loadImageFromPath(
-    getBangDreamAssetPath('cardKirafes'),
-  );
-  cardTypeIconList.birthday = await loadImageFromPath(
-    getBangDreamAssetPath('cardBirthday'),
-  );
-  starList.normal = await loadImageFromPath(getBangDreamAssetPath('cardStar'));
-  starList.trained = await loadImageFromPath(
-    getBangDreamAssetPath('cardStarTrained'),
-  );
-  limitBreakIcon = await loadImageFromPath(
-    getBangDreamAssetPath('cardLimitBreakRank'),
-  );
+export async function preloadBangDreamCardArtAssets() {
+  if (!cardArtAssetsPreload) {
+    cardArtAssetsPreload = Promise.all([
+      loadImageFromPath(getBangDreamAssetPath('cardLimited')),
+      loadImageFromPath(getBangDreamAssetPath('cardDreamfes')),
+      loadImageFromPath(getBangDreamAssetPath('cardKirafes')),
+      loadImageFromPath(getBangDreamAssetPath('cardBirthday')),
+      loadImageFromPath(getBangDreamAssetPath('cardStar')),
+      loadImageFromPath(getBangDreamAssetPath('cardStarTrained')),
+      loadImageFromPath(getBangDreamAssetPath('cardLimitBreakRank')),
+    ])
+      .then(
+        ([
+          limited,
+          dreamfes,
+          kirafes,
+          birthday,
+          normalStar,
+          trainedStar,
+          limitBreak,
+        ]) => {
+          cardTypeIconList.limited = limited;
+          cardTypeIconList.dreamfes = dreamfes;
+          cardTypeIconList.kirafes = kirafes;
+          cardTypeIconList.birthday = birthday;
+          starList.normal = normalStar;
+          starList.trained = trainedStar;
+          limitBreakIcon = limitBreak;
+        },
+      )
+      .catch((error) => {
+        cardArtAssetsPreload = undefined;
+        throw error;
+      });
+  }
+  await cardArtAssetsPreload;
 }
-
-loadImageOnce();
 
 //根据稀有度与属性，获得图标框
 /**
@@ -113,6 +125,7 @@ export async function drawCardIcon({
   cardTypeVisible = true,
   skillLevel,
 }: DrawCardIconOptions): Promise<Canvas> {
+  await preloadBangDreamCardArtAssets();
   trainingStatus = card.ableToTraining(trainingStatus);
   illustrationTrainingStatus ??= trainingStatus;
   const spec = BANGDREAM_CARD_ART_SPEC.icon;
@@ -248,6 +261,7 @@ export async function drawCardIllustration({
   trainingStatus,
   isList = false,
 }: DrawCardIllustrationOptions): Promise<Canvas> {
+  await preloadBangDreamCardArtAssets();
   trainingStatus = card.ableToTraining(trainingStatus);
   const spec = BANGDREAM_CARD_ART_SPEC.illustration;
   const cardIllustrationImage =

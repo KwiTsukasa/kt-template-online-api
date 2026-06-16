@@ -15,16 +15,25 @@ interface RarityInListOptions {
 }
 
 export const starList: { [type: string]: Image } = {};
-/**
- * 在图片布局层中加载图片Once。
- */
-async function loadImageOnce() {
-  starList.normal = await loadImageFromPath(getBangDreamAssetPath('cardStar'));
-  starList.trained = await loadImageFromPath(
-    getBangDreamAssetPath('cardStarTrained'),
-  );
+let rarityAssetsPreload: Promise<void> | undefined;
+
+export async function preloadBangDreamCardRarityAssets() {
+  if (!rarityAssetsPreload) {
+    rarityAssetsPreload = Promise.all([
+      loadImageFromPath(getBangDreamAssetPath('cardStar')),
+      loadImageFromPath(getBangDreamAssetPath('cardStarTrained')),
+    ])
+      .then(([normal, trained]) => {
+        starList.normal = normal;
+        starList.trained = trained;
+      })
+      .catch((error) => {
+        rarityAssetsPreload = undefined;
+        throw error;
+      });
+  }
+  await rarityAssetsPreload;
 }
-loadImageOnce();
 
 /**
  * 在图片布局层中绘制RarityIn列表。
@@ -38,6 +47,7 @@ export async function drawRarityInList({
   trainingStatus = true,
   text,
 }: RarityInListOptions): Promise<Canvas> {
+  await preloadBangDreamCardRarityAssets();
   const content: Array<string | Image | Canvas> = [];
   let star: Image;
   if (shouldUseTrainedRarityStar(rarity, trainingStatus)) {

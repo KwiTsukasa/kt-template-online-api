@@ -40,6 +40,8 @@ export type QqbotPluginWorkerDriver = {
 
 export type QqbotPluginWorkerRequestQueue = {
   close(): Promise<void>;
+  handlesRequestTimeout?: boolean;
+  queueWaitTimeoutMs?: number;
   request(message: QqbotPluginWorkerRequest): Promise<unknown>;
   reset(): Promise<void>;
 };

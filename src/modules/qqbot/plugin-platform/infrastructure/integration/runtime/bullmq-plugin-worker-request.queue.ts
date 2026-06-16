@@ -25,6 +25,7 @@ export type QqbotBullmqWorkerRequestQueueOptions = {
   installationId: string;
   pluginKey: string;
   prefix: string;
+  queueWaitTimeoutMs: number;
   removeOnFailCount: number;
   waitUntilFinishedBufferMs: number;
   workerInstanceId: string;
@@ -48,6 +49,8 @@ type QqbotWorkerQueueResult =
     };
 
 export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerRequestQueue {
+  readonly handlesRequestTimeout = true;
+  readonly queueWaitTimeoutMs: number;
   private readonly queue: Queue<
     QqbotWorkerQueueJobData,
     QqbotWorkerQueueResult,
@@ -70,6 +73,7 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
     private readonly driver: QqbotPluginWorkerDriver,
     private readonly options: QqbotBullmqWorkerRequestQueueOptions,
   ) {
+    this.queueWaitTimeoutMs = options.queueWaitTimeoutMs;
     const queueName = buildWorkerQueueName(
       options.pluginKey,
       options.installationId,
@@ -113,12 +117,22 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
         try {
           return {
             ok: true,
-            result: await this.driver.request(job.data.message),
+            result: await this.requestDriverWithTimeout(job.data.message),
           };
         } catch (error) {
           if (error instanceof QqbotPluginWorkerResponseError) {
             return {
               error: error.serializedError,
+              ok: false,
+            };
+          }
+          if (error instanceof QqbotPluginWorkerExpiredRequestError) {
+            await this.reset();
+            return {
+              error: {
+                message: error.message,
+                name: error.name,
+              },
               ok: false,
             };
           }
@@ -159,6 +173,7 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
         expiresAt:
           Date.now() +
           message.timeoutMs +
+          this.options.queueWaitTimeoutMs +
           this.options.waitUntilFinishedBufferMs,
         generation: this.generation,
         message,
@@ -173,7 +188,9 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
     );
     const result = await job.waitUntilFinished(
       this.queueEvents,
-      message.timeoutMs + this.options.waitUntilFinishedBufferMs,
+      message.timeoutMs +
+        this.options.queueWaitTimeoutMs +
+        this.options.waitUntilFinishedBufferMs,
     );
 
     if (result?.ok === false) {
@@ -212,6 +229,31 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
       error.stack,
     );
   }
+
+  private async requestDriverWithTimeout(
+    message: QqbotPluginWorkerRequest,
+  ): Promise<unknown> {
+    let timer: NodeJS.Timeout | undefined;
+    const requestPromise = this.driver.request(message);
+    requestPromise.catch(() => undefined);
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(
+          new QqbotPluginWorkerExpiredRequestError(
+            'worker-request-execution-timeout',
+          ),
+        );
+      }, message.timeoutMs);
+      timer.unref?.();
+    });
+
+    try {
+      return await Promise.race([requestPromise, timeoutPromise]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
 }
 
 export function createQqbotBullmqWorkerQueueOptions(
@@ -224,6 +266,11 @@ export function createQqbotBullmqWorkerQueueOptions(
     installationId,
     pluginKey,
     prefix: resolveQqbotPluginQueuePrefix(configService),
+    queueWaitTimeoutMs: readNumberConfig(
+      configService,
+      ['QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS'],
+      120_000,
+    ),
     removeOnFailCount: readNumberConfig(
       configService,
       ['QQBOT_PLUGIN_QUEUE_REMOVE_ON_FAIL'],

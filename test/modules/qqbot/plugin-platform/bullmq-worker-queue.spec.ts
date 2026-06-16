@@ -74,6 +74,7 @@ describe('QQBot BullMQ plugin worker request queue', () => {
       installationId: 'install:1',
       pluginKey: 'bang:dream',
       prefix: 'kt:qqbot:plugin-worker',
+      queueWaitTimeoutMs: 120_000,
       removeOnFailCount: 100,
       waitUntilFinishedBufferMs: 5_000,
       workerInstanceId: 'worker-1',
@@ -95,5 +96,7 @@ describe('QQBot BullMQ plugin worker request queue', () => {
         (creation) => creation.options.prefix === 'kt:qqbot:plugin-worker',
       ),
     ).toBe(true);
+    expect(queue.handlesRequestTimeout).toBe(true);
+    expect(queue.queueWaitTimeoutMs).toBe(120_000);
   });
 });

@@ -106,6 +106,11 @@ class GenerationAwareRequestQueue implements QqbotPluginWorkerRequestQueue {
   }
 }
 
+class TimeoutAwareRecordingRequestQueue extends RecordingRequestQueue {
+  readonly handlesRequestTimeout = true;
+  readonly queueWaitTimeoutMs = 50;
+}
+
 const createRuntime = (driver = new RecordingDriver()) => {
   const runtime = new QqbotPluginWorkerRuntime(new RecordingRequestQueue(driver), {
     defaultTimeoutMs: 50,
@@ -177,6 +182,49 @@ describe('QQBot plugin worker runtime', () => {
       releaseSecond.resolve();
       await Promise.allSettled([first, second]);
     }
+  });
+
+  it('does not count queue wait time against a queued operation execution timeout', async () => {
+    const requestOrder: string[] = [];
+    const driver: QqbotPluginWorkerDriver = {
+      dispose: jest.fn(async () => undefined),
+      request: jest.fn(async (message) => {
+        requestOrder.push(message.operationId || message.type);
+        await new Promise((resolve) =>
+          setTimeout(resolve, message.operationId === 'op-1' ? 20 : 15),
+        );
+        return {
+          ok: true,
+          operationId: message.operationId,
+        };
+      }),
+    };
+    const runtime = new QqbotPluginWorkerRuntime(
+      new TimeoutAwareRecordingRequestQueue(driver),
+      {
+        defaultTimeoutMs: 30,
+        installationId: 'install-queue-wait',
+        pluginKey: 'demo-plugin',
+      },
+    );
+
+    const first = runtime.executeOperation({
+      input: { text: 'first' },
+      operationId: 'op-1',
+      operationKey: 'demo-plugin.echo',
+    });
+    const second = runtime.executeOperation({
+      input: { text: 'second' },
+      operationId: 'op-2',
+      operationKey: 'demo-plugin.echo',
+    });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { ok: true, operationId: 'op-1' },
+      { ok: true, operationId: 'op-2' },
+    ]);
+    expect(requestOrder).toEqual(['op-1', 'op-2']);
+    expect(driver.dispose).not.toHaveBeenCalled();
   });
 
   it('recovers a failed worker by reloading and activating it before the next request', async () => {
@@ -596,6 +644,7 @@ describe('QQBot plugin worker queue config', () => {
       installationId: 'install-1',
       pluginKey: 'bangdream',
       prefix: 'kt:qqbot:plugin-worker',
+      queueWaitTimeoutMs: 120_000,
       removeOnFailCount: 100,
       waitUntilFinishedBufferMs: 5_000,
       workerInstanceId: expect.any(String),

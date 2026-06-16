@@ -188,7 +188,11 @@ export class QqbotPluginWorkerRuntime {
     );
     requestPromise.catch(() => undefined);
 
-    const timeout = this.createTimeoutPromise(type, message, timeoutMs);
+    const timeout = this.createTimeoutPromise(
+      type,
+      message,
+      this.getRequestTimeoutMs(timeoutMs),
+    );
 
     try {
       return await Promise.race([requestPromise, timeout.promise]);
@@ -285,6 +289,13 @@ export class QqbotPluginWorkerRuntime {
       },
       promise,
     };
+  }
+
+  private getRequestTimeoutMs(timeoutMs: number) {
+    if (!this.requestQueue.handlesRequestTimeout) return timeoutMs;
+
+    const queueWaitTimeoutMs = Number(this.requestQueue.queueWaitTimeoutMs || 0);
+    return timeoutMs + Math.max(0, queueWaitTimeoutMs);
   }
 
   private async recoverIfNeeded(triggerType: QqbotPluginWorkerRequestType) {

@@ -860,6 +860,7 @@ describe('QqbotNapcatLoginService', () => {
     expect(containerService.resetRuntimeLoginState).not.toHaveBeenCalled();
     expect(session.status).toBe('pending');
     expect(session.captchaUrl).toBe(captchaUrl);
+    expect(session.preparingRelogin).toBe(false);
     expect(session.errorMessage).toContain('需要完成 QQ 安全验证');
     const steps = (
       (refreshService as any).sessionEventLogs.get(session.id) ?? []

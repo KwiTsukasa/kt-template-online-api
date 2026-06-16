@@ -986,6 +986,7 @@ export class QqbotNapcatLoginService {
 
     session.status = 'pending';
     session.captchaUrl = captchaUrl;
+    session.preparingRelogin = false;
     session.qrcode = undefined;
     session.errorMessage = message;
     session.expiresAt = Date.now() + this.getSessionTtlMs();
@@ -1011,6 +1012,7 @@ export class QqbotNapcatLoginService {
     const shouldPublish = session.errorMessage !== message;
     session.status = 'pending';
     session.captchaUrl = undefined;
+    session.preparingRelogin = false;
     session.qrcode = undefined;
     session.errorMessage = message;
     session.expiresAt = Date.now() + this.getSessionTtlMs();

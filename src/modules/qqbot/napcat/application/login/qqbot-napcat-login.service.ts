@@ -675,13 +675,17 @@ export class QqbotNapcatLoginService {
       );
     }
     if (poll.status === 'confirming') {
+      const confirmToken = this.pickNewDevicePullQrCodeSig(poll.confirmToken);
+      if (confirmToken !== undefined) {
+        session.newDevicePullQrCodeSig = confirmToken;
+      }
       this.keepNewDevicePending(
         session,
         'confirming',
         poll.message || '新设备确认中',
         'new-device-confirming',
       );
-      const passwordMd5 = this.toolsService.toTrimmedString(session.passwordMd5);
+      const passwordMd5 = await this.resolveNewDevicePasswordMd5(session);
       if (!passwordMd5 || !this.hasNewDevicePullQrCodeSig(session)) {
         return this.failNewDeviceVerification(
           session,
@@ -694,6 +698,13 @@ export class QqbotNapcatLoginService {
         passwordMd5,
         uin,
       });
+      if (loginResult.needNewDevice && loginResult.jumpUrl) {
+        return this.startNewDeviceVerification(session, container, {
+          jumpUrl: loginResult.jumpUrl,
+          needNewDevice: true,
+          newDevicePullQrCodeSig: loginResult.pullQrCodeSig,
+        });
+      }
       if (!loginResult.success) {
         return this.failNewDeviceVerification(
           session,
@@ -738,6 +749,23 @@ export class QqbotNapcatLoginService {
       poll.message || '新设备二维码待扫码',
       'new-device-qrcode-ready',
     );
+  }
+
+  private async resolveNewDevicePasswordMd5(session: QqbotLoginScanSession) {
+    const existing = this.toolsService.toTrimmedString(session.passwordMd5);
+    if (existing) return existing;
+    if (!session.accountId) return '';
+
+    const account =
+      await this.accountService.findByIdWithNapcatLoginSecret(session.accountId);
+    const password = this.accountService.getNapcatLoginPassword(account);
+    if (!password) return '';
+
+    session.passwordMd5 = createHash('md5')
+      .update(password, 'utf8')
+      .digest('hex');
+    this.persistLoginSession(session);
+    return session.passwordMd5;
   }
 
   private async refreshNewDeviceQrcode(

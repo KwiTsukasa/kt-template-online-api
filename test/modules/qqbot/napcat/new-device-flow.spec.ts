@@ -1,4 +1,5 @@
 import { NapcatLoginApiClient } from '../../../../src/modules/qqbot/napcat';
+import * as QRCode from 'qrcode';
 
 describe('NapCat new-device flow API client', () => {
   it('runs GetNewDeviceQRCode -> PollNewDeviceQR -> NewDeviceLogin with NapCat WebUI payloads', async () => {
@@ -55,7 +56,10 @@ describe('NapCat new-device flow API client', () => {
     expect(scanned.status).toBe('scanned');
     expect(confirming.status).toBe('confirming');
     expect(verified).toEqual({
+      jumpUrl: undefined,
       message: 'ok',
+      needNewDevice: false,
+      pullQrCodeSig: undefined,
       status: 'verified',
       success: true,
     });
@@ -130,6 +134,39 @@ describe('NapCat new-device flow API client', () => {
     });
   });
 
+  it('prefers NapCat str_url over generic url as QR payload', async () => {
+    const strUrl = 'https://qq.example/new-device/qr?str_url=https%3A%2F%2Fproof.qq.com%2Ftoken';
+    const toDataUrl = jest.spyOn(
+      QRCode,
+      'toDataURL',
+    ) as unknown as jest.Mock;
+    toDataUrl.mockResolvedValue('data:image/png;base64,encoded-qr');
+    const client = new NapcatLoginApiClient({
+      post: jest.fn().mockResolvedValue({
+        bytes_token: 'bytes-1',
+        str_url: strUrl,
+        url: 'https://accounts.qq.com/safe/verify?missing=location-context',
+      }),
+    });
+
+    try {
+      const qr = await client.getNewDeviceQRCode({
+        jumpUrl: 'https://accounts.qq.com/safe/verify?sig=sig&uin-token=token',
+        uin: '10001',
+      });
+
+      expect(qr.qrcodeUrl).toBe('data:image/png;base64,encoded-qr');
+      expect(toDataUrl).toHaveBeenCalledWith(
+        strUrl,
+        expect.objectContaining({
+          type: 'image/png',
+        }),
+      );
+    } finally {
+      toDataUrl.mockRestore();
+    }
+  });
+
   it('normalizes NewDeviceLogin status-only failures', async () => {
     const client = new NapcatLoginApiClient({
       post: jest.fn().mockResolvedValue({
@@ -145,9 +182,84 @@ describe('NapCat new-device flow API client', () => {
         uin: '10001',
       }),
     ).resolves.toEqual({
+      jumpUrl: undefined,
       message: 'denied',
+      needNewDevice: false,
+      pullQrCodeSig: undefined,
       status: 'failed',
       success: false,
+    });
+  });
+
+  it('normalizes NapCat official numeric QR poll statuses and success token', async () => {
+    const client = new NapcatLoginApiClient({
+      post: jest
+        .fn()
+        .mockResolvedValueOnce({ uint32_guarantee_status: 3 })
+        .mockResolvedValueOnce({
+          str_nt_succ_token: 'nt-success-token',
+          uint32_guarantee_status: 1,
+        }),
+    });
+
+    await expect(
+      client.pollNewDeviceQR({ bytesToken: 'bytes-1', uin: '10001' }),
+    ).resolves.toEqual({
+      message: undefined,
+      status: 'scanned',
+    });
+    await expect(
+      client.pollNewDeviceQR({ bytesToken: 'bytes-1', uin: '10001' }),
+    ).resolves.toEqual({
+      confirmToken: 'nt-success-token',
+      message: undefined,
+      status: 'confirming',
+    });
+  });
+
+  it('does not treat repeated needNewDevice from NewDeviceLogin as success', async () => {
+    const client = new NapcatLoginApiClient({
+      post: jest.fn().mockResolvedValue({
+        jumpUrl: 'https://accounts.qq.com/safe/verify?sig=next&uin-token=next',
+        needNewDevice: true,
+        newDevicePullQrCodeSig: 'next-sig',
+      }),
+    });
+
+    await expect(
+      client.newDeviceLogin({
+        newDevicePullQrCodeSig: 'nt-success-token',
+        passwordMd5: '0123456789abcdef0123456789abcdef',
+        uin: '10001',
+      }),
+    ).resolves.toEqual({
+      jumpUrl: 'https://accounts.qq.com/safe/verify?sig=next&uin-token=next',
+      message: undefined,
+      needNewDevice: true,
+      pullQrCodeSig: 'next-sig',
+      status: 'failed',
+      success: false,
+    });
+  });
+
+  it('treats NapCat NewDeviceLogin null payload as success', async () => {
+    const client = new NapcatLoginApiClient({
+      post: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      client.newDeviceLogin({
+        newDevicePullQrCodeSig: 'nt-success-token',
+        passwordMd5: '0123456789abcdef0123456789abcdef',
+        uin: '10001',
+      }),
+    ).resolves.toEqual({
+      jumpUrl: undefined,
+      message: undefined,
+      needNewDevice: false,
+      pullQrCodeSig: undefined,
+      status: 'verified',
+      success: true,
     });
   });
 });

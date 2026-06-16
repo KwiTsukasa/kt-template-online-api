@@ -21,12 +21,16 @@ export type NewDeviceQrCode = {
 };
 
 export type NewDeviceQrPollResult = {
+  confirmToken?: string;
   message?: string;
   status: Exclude<NewDeviceQrStatus, 'verified'>;
 };
 
 export type NewDeviceLoginResult = {
+  jumpUrl?: string;
   message?: string;
+  needNewDevice?: boolean;
+  pullQrCodeSig?: unknown;
   status: 'failed' | 'verified';
   success: boolean;
 };
@@ -215,7 +219,7 @@ export class NapcatLoginApiClient {
       this.pickString(data.bytes_token, data.bytesToken) ||
       this.deriveBytesToken(strUrl);
     const newDeviceQrcodeUrl = await this.toQrcodeDataUrl(
-      qrcodeSource || strUrl || returnedJumpUrl || jumpUrl,
+      strUrl || qrcodeSource || returnedJumpUrl || jumpUrl,
     );
     if (!newDeviceQrcodeUrl) {
       throw new Error('NapCat 未返回新设备验证二维码');
@@ -248,10 +252,16 @@ export class NapcatLoginApiClient {
       { bytesToken, uin },
     )) as Record<string, unknown>;
     const status = this.normalizePollStatus(
-      this.pickString(data.status, data.state, data.result),
+      this.pickPayload(
+        data.status,
+        data.state,
+        data.result,
+        data.uint32_guarantee_status,
+      ),
     );
 
     return {
+      confirmToken: this.pickString(data.str_nt_succ_token) || undefined,
       message: this.pickString(data.message, data.reason) || undefined,
       status,
     };
@@ -268,24 +278,42 @@ export class NapcatLoginApiClient {
       );
     }
 
-    const data = (await this.transport.post(
+    const payload = await this.transport.post(
       '/api/QQLogin/NewDeviceLogin',
       {
         newDevicePullQrCodeSig: input.newDevicePullQrCodeSig,
         passwordMd5,
         uin,
       },
-    )) as Record<string, unknown>;
-    const success = this.normalizeLoginSuccess(data);
+    );
+    const data =
+      payload && typeof payload === 'object'
+        ? (payload as Record<string, unknown>)
+        : {};
+    const success =
+      payload === null || payload === undefined
+        ? true
+        : this.normalizeLoginSuccess(data);
 
     return {
+      jumpUrl: this.pickString(data.jumpUrl, data.verifyUrl) || undefined,
       message: this.pickString(data.message, data.reason) || undefined,
+      needNewDevice: data.needNewDevice === true,
+      pullQrCodeSig: this.pickPayload(data.newDevicePullQrCodeSig, data.sig),
       status: success ? 'verified' : 'failed',
       success,
     };
   }
 
-  private normalizePollStatus(status: string): NewDeviceQrPollResult['status'] {
+  private normalizePollStatus(status: unknown): NewDeviceQrPollResult['status'] {
+    if (typeof status === 'number') {
+      if (status === 3) return 'scanned';
+      if (status === 1) return 'confirming';
+      if (status < 0) return 'failed';
+      return 'qr-pending';
+    }
+    if (typeof status !== 'string') return 'qr-pending';
+
     const normalized = status.toLowerCase().replace(/[_\s-]+/g, '');
     if (['scan', 'scanned'].includes(normalized)) return 'scanned';
     if (['confirm', 'confirming'].includes(normalized)) return 'confirming';
@@ -297,6 +325,7 @@ export class NapcatLoginApiClient {
   }
 
   private normalizeLoginSuccess(data: Record<string, unknown>) {
+    if (data.needNewDevice === true) return false;
     const status = this.pickString(data.status, data.state, data.result)
       .toLowerCase()
       .replace(/[_\s-]+/g, '');

@@ -1728,6 +1728,89 @@ describe('QqbotNapcatLoginService', () => {
     );
   });
 
+  it('uses NapCat confirmed token and reloads saved password when new-device session lost passwordMd5', async () => {
+    const account = {
+      id: 'account-1',
+      napcatLoginPasswordSecret: 'encrypted-secret',
+      selfId: '10001',
+    };
+    const accountService = {
+      ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
+      findByIdWithNapcatLoginSecret: jest.fn().mockResolvedValue(account),
+      getNapcatLoginPassword: jest.fn().mockReturnValue('qq-password'),
+    };
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-new-device-confirmed',
+      name: 'napcat-10001',
+    };
+    const containerService = {
+      bindAccount: jest.fn().mockResolvedValue(undefined),
+      findRuntimeById: jest.fn().mockResolvedValue(container),
+      removeUnboundContainer: jest.fn().mockResolvedValue(false),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '10001',
+      mode: 'refresh',
+      status: 'pending',
+    });
+    session.deviceVerifyUrl = 'https://accounts.qq.com/safe/verify?sig=sig&uin-token=token';
+    session.newDeviceBytesToken = 'bytes-new-device';
+    session.newDevicePullQrCodeSig = 'initial-sig';
+    session.newDeviceQrcode = 'data:image/png;base64,new-device-qrcode';
+    session.newDeviceStatus = 'qr-pending';
+    (refreshService as any).sessions.set(session.id, session);
+    const postNapcat = jest
+      .spyOn(refreshService as any, 'postNapcat')
+      .mockResolvedValueOnce({
+        str_nt_succ_token: 'nt-success-token',
+        uint32_guarantee_status: 1,
+      })
+      .mockResolvedValueOnce({
+        success: true,
+      });
+    jest
+      .spyOn(refreshService as any, 'waitForPasswordLoginStatus')
+      .mockResolvedValue({
+        isLogin: true,
+      });
+    jest.spyOn(refreshService as any, 'getLoginInfo').mockResolvedValue({
+      nickname: 'Kwi',
+      online: true,
+      uin: '10001',
+    });
+    jest
+      .spyOn(refreshService as any, 'clearRuntimeLoginPasswordAfterSuccess')
+      .mockResolvedValue(undefined);
+
+    const result = await refreshService.status(session.id);
+
+    expect(result.status).toBe('success');
+    expect(accountService.findByIdWithNapcatLoginSecret).toHaveBeenCalledWith(
+      'account-1',
+    );
+    expect(accountService.getNapcatLoginPassword).toHaveBeenCalledWith(account);
+    expect(postNapcat).toHaveBeenNthCalledWith(
+      2,
+      container,
+      '/api/QQLogin/NewDeviceLogin',
+      {
+        newDevicePullQrCodeSig: 'nt-success-token',
+        passwordMd5: '7fe1f9ae1130b64e9ca1441492c382c0',
+        uin: '10001',
+      },
+    );
+    expect(session.newDeviceStatus).toBe('verified');
+  });
+
   it('recovers missing new-device bytesToken before polling', async () => {
     const container = {
       baseUrl: 'http://127.0.0.1:6103/',

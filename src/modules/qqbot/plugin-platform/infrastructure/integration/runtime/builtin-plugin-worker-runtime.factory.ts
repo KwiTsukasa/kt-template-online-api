@@ -1,14 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { Worker } from 'node:worker_threads';
+import { join } from 'node:path';
 import { throwVbenError } from '@/common';
 import {
   QqbotBuiltinPluginPackageLoaderService,
-  type QqbotEventPluginPackage,
 } from '../package/builtin-plugin-package-loader.service';
-import type {
-  QqbotIntegrationPlugin,
-  QqbotPluginOperation,
-  QqbotNormalizedMessage,
-} from '@/modules/qqbot/core/contract/qqbot.types';
 import type {
   QqbotPluginRuntimeFactory,
 } from '@/modules/qqbot/plugin-platform/application/plugin-platform.service';
@@ -24,11 +20,6 @@ import type {
   QqbotPluginWorkerRequest,
 } from './worker-runtime.types';
 
-type RuntimeCommandPlugin = QqbotIntegrationPlugin & {
-  activate?: () => Promise<unknown> | unknown;
-  dispose?: () => Promise<unknown> | unknown;
-};
-
 @Injectable()
 export class QqbotBuiltinPluginWorkerRuntimeFactoryService
   implements QqbotPluginRuntimeFactory
@@ -43,7 +34,7 @@ export class QqbotBuiltinPluginWorkerRuntimeFactoryService
   ) {
     const pluginKey = getManifestPluginKey(version.manifestJson);
     return new QqbotPluginWorkerRuntime(
-      new QqbotBuiltinPluginWorkerDriver(this.pluginLoader, pluginKey),
+      new QqbotBuiltinPluginWorkerThreadDriver(this.pluginLoader, pluginKey),
       {
         defaultTimeoutMs: getDefaultRuntimeTimeout(version.manifestJson),
         installationId: installation.id,
@@ -53,9 +44,31 @@ export class QqbotBuiltinPluginWorkerRuntimeFactoryService
   }
 }
 
-class QqbotBuiltinPluginWorkerDriver implements QqbotPluginWorkerDriver {
-  private commandPlugin?: RuntimeCommandPlugin;
-  private eventPlugin?: QqbotEventPluginPackage;
+type WorkerBridgeMessage =
+  | {
+      ok: boolean;
+      requestId: string;
+      result?: unknown;
+      error?: { message?: string; name?: string; stack?: string };
+      type: 'response';
+    }
+  | {
+      args?: Record<string, unknown>;
+      method: string;
+      requestId: string;
+      type: 'hostCall';
+    };
+
+type PendingRequest = {
+  reject: (reason?: unknown) => void;
+  resolve: (value: unknown) => void;
+};
+
+export class QqbotBuiltinPluginWorkerThreadDriver
+  implements QqbotPluginWorkerDriver
+{
+  private readonly pendingRequests = new Map<string, PendingRequest>();
+  private worker?: Worker;
 
   constructor(
     private readonly pluginLoader: QqbotBuiltinPluginPackageLoaderService,
@@ -63,90 +76,121 @@ class QqbotBuiltinPluginWorkerDriver implements QqbotPluginWorkerDriver {
   ) {}
 
   async request(message: QqbotPluginWorkerRequest): Promise<unknown> {
-    switch (message.type) {
-      case 'load':
-        return this.load();
-      case 'activate':
-        await this.commandPlugin?.activate?.();
-        return { ok: true };
-      case 'health':
-        return this.health();
-      case 'executeOperation':
-        return this.executeOperation(message);
-      case 'handleEvent':
-        return this.handleEvent(message);
-      case 'deactivate':
-        return { ok: true };
-      case 'dispose':
-        await this.commandPlugin?.dispose?.();
-        return { ok: true };
-      default:
-        throwVbenError(`未知插件运行时请求：${message.type}`);
-    }
+    const worker = this.ensureWorker();
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(message.correlationId, { reject, resolve });
+      worker.postMessage({
+        message,
+        requestId: message.correlationId,
+        type: 'request',
+      });
+    });
   }
 
   async dispose(): Promise<void> {
-    await this.commandPlugin?.dispose?.();
+    const worker = this.worker;
+    this.worker = undefined;
+    this.rejectPending(new Error('QQBot 插件 worker 已关闭'));
+    if (worker) {
+      await worker.terminate();
+    }
   }
 
-  private load() {
-    this.commandPlugin = this.pluginLoader
-      .loadCommandPlugins()
-      .find((plugin) => plugin.key === this.pluginKey) as
-      | RuntimeCommandPlugin
-      | undefined;
-    this.eventPlugin = this.pluginLoader
-      .loadEventPlugins()
-      .find((plugin) => plugin.getDefinition().key === this.pluginKey);
+  private ensureWorker() {
+    if (this.worker) return this.worker;
 
-    if (!this.commandPlugin && !this.eventPlugin) {
-      throwVbenError(`QQBot 插件运行时不存在：${this.pluginKey}`);
-    }
-
-    return {
-      ok: true,
-      pluginKey: this.pluginKey,
-      triggerMode: this.commandPlugin ? 'command' : 'event',
-    };
+    const worker = new Worker(resolveWorkerEntrypoint(), {
+      execArgv: resolveWorkerExecArgv(),
+      workerData: {
+        pluginKey: this.pluginKey,
+      },
+    });
+    worker.on('message', (message: WorkerBridgeMessage) => {
+      void this.handleWorkerMessage(message);
+    });
+    worker.on('error', (error) => {
+      this.worker = undefined;
+      this.rejectPending(error);
+    });
+    worker.on('exit', (code) => {
+      this.worker = undefined;
+      if (code !== 0) {
+        this.rejectPending(
+          new Error(`QQBot 插件 worker 异常退出：${code}`),
+        );
+      }
+    });
+    this.worker = worker;
+    return worker;
   }
 
-  private async health() {
-    if (this.commandPlugin?.healthCheck) {
-      return this.commandPlugin.healthCheck();
+  private async handleWorkerMessage(message: WorkerBridgeMessage) {
+    if (message.type === 'response') {
+      const pending = this.pendingRequests.get(message.requestId);
+      if (!pending) return;
+      this.pendingRequests.delete(message.requestId);
+      if (message.ok) {
+        pending.resolve(message.result);
+        return;
+      }
+      pending.reject(deserializeWorkerError(message.error));
+      return;
     }
-    if (this.eventPlugin) {
-      return {
-        message: this.eventPlugin.getDefinition().remark || '事件插件可用',
-        status: 'healthy',
-      };
+
+    try {
+      const result = await this.pluginLoader.handleWorkerHostCall(
+        message.method,
+        message.args,
+      );
+      this.worker?.postMessage({
+        ok: true,
+        requestId: message.requestId,
+        result,
+        type: 'hostResponse',
+      });
+    } catch (error) {
+      this.worker?.postMessage({
+        error: serializeWorkerError(error),
+        ok: false,
+        requestId: message.requestId,
+        type: 'hostResponse',
+      });
     }
-    throwVbenError(`QQBot 插件运行时未加载：${this.pluginKey}`);
   }
 
-  private async executeOperation(message: QqbotPluginWorkerRequest) {
-    const operation = this.commandPlugin?.operations.find(
-      (item: QqbotPluginOperation) => item.key === message.operationKey,
-    );
-    if (!operation) {
-      throwVbenError(`QQBot 插件能力不存在：${message.operationKey}`);
+  private rejectPending(error: Error) {
+    for (const pending of this.pendingRequests.values()) {
+      pending.reject(error);
     }
-    return operation.execute(
-      (message.input || {}) as Record<string, unknown>,
-      {},
-    );
+    this.pendingRequests.clear();
   }
+}
 
-  private async handleEvent(message: QqbotPluginWorkerRequest) {
-    if (!this.eventPlugin) {
-      return false;
-    }
-    const definition = this.eventPlugin.getDefinition();
-    if (message.eventKey && message.eventKey !== definition.key) return false;
-    if (definition.triggerType !== 'message') return false;
-    return this.eventPlugin.handleMessage(
-      (message.event || {}) as QqbotNormalizedMessage,
-    );
-  }
+function resolveWorkerEntrypoint() {
+  const extension = __filename.endsWith('.ts') ? '.ts' : '.js';
+  return join(__dirname, `builtin-plugin-worker.thread${extension}`);
+}
+
+function resolveWorkerExecArgv() {
+  if (!__filename.endsWith('.ts')) return [];
+  return ['-r', 'ts-node/register', '-r', 'tsconfig-paths/register'];
+}
+
+function serializeWorkerError(error: unknown) {
+  return {
+    message: error instanceof Error ? error.message : `${error}`,
+    name: error instanceof Error ? error.name : 'Error',
+    stack: error instanceof Error ? error.stack : undefined,
+  };
+}
+
+function deserializeWorkerError(
+  error?: { message?: string; name?: string; stack?: string },
+) {
+  const output = new Error(error?.message || 'QQBot 插件 worker 请求失败');
+  if (error?.name) output.name = error.name;
+  if (error?.stack) output.stack = error.stack;
+  return output;
 }
 
 function getManifestPluginKey(manifest: unknown) {

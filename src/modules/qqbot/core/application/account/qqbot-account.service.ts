@@ -9,6 +9,10 @@ import {
   ToolsService,
 } from '@/common';
 import { AdminPasswordCryptoService } from '@/modules/admin/identity/auth/admin-password-crypto.service';
+import {
+  QQBOT_ACCOUNT_NAPCAT_RUNTIME_PORT,
+  type QqbotAccountNapcatRuntimePort,
+} from './qqbot-account-napcat-runtime.port';
 import { QqbotAccountAbility } from '../../infrastructure/persistence/account/qqbot-account-ability.entity';
 import { QqbotAccount } from '../../infrastructure/persistence/account/qqbot-account.entity';
 import type {
@@ -16,9 +20,6 @@ import type {
   QqbotAccountQueryDto,
   QqbotAccountUpdateDto,
 } from '../../contract/account/qqbot-account.dto';
-import { NapcatAccountBinding } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-account-binding.entity';
-import { NapcatContainer } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-container.entity';
-import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
 import {
   QQBOT_DEFAULT_PAGE_NO,
   QQBOT_DEFAULT_PAGE_SIZE,
@@ -27,12 +28,8 @@ import type {
   QqbotAccountAbilityType,
   QqbotAccountListItem,
   QqbotConnectionRole,
-  QqbotNapcatRuntimeStatusSnapshot,
 } from '../../contract/qqbot.types';
 
-const NAPCAT_RUNTIME_CHECK_TTL_MS = 30_000;
-const NAPCAT_AUTO_LOGIN_CLEANUP_FAILED_MESSAGE =
-  'NapCat 自动登录后运行态密码清理失败，请手动更新登录';
 const INSECURE_ACCOUNT_SECRET_VALUES = new Set([
   'change-me',
   'kt-template-online-admin-token-secret',
@@ -45,12 +42,10 @@ export class QqbotAccountService {
     private readonly accountRepository: Repository<QqbotAccount>,
     @InjectRepository(QqbotAccountAbility)
     private readonly accountAbilityRepository: Repository<QqbotAccountAbility>,
-    @InjectRepository(NapcatAccountBinding)
-    private readonly accountNapcatRepository: Repository<NapcatAccountBinding>,
-    @InjectRepository(NapcatContainer)
-    private readonly napcatContainerRepository: Repository<NapcatContainer>,
-    private readonly napcatContainerService: QqbotNapcatContainerService,
     private readonly toolsService: ToolsService,
+    @Optional()
+    @Inject(QQBOT_ACCOUNT_NAPCAT_RUNTIME_PORT)
+    private readonly napcatRuntime?: QqbotAccountNapcatRuntimePort,
     @Optional()
     @Inject(SYSTEM_NOTICE_PUBLISHER)
     private readonly systemNoticePublisher?: SystemNoticePublisher,
@@ -319,7 +314,9 @@ export class QqbotAccountService {
     }
 
     const containerResult =
-      await this.napcatContainerService.removeAccountContainers(id);
+      (await this.napcatRuntime?.removeAccountContainers(id)) || {
+        deletedContainers: 0,
+      };
     await this.accountRepository.update(
       { id },
       {
@@ -427,314 +424,22 @@ export class QqbotAccountService {
     accounts: QqbotAccount[],
     options: { autoLogin?: boolean } = {},
   ): Promise<QqbotAccountListItem[]> {
-    if (accounts.length <= 0) return [];
-
-    const accountIds = accounts.map((account) => account.id);
-    const bindings = await this.accountNapcatRepository
-      .createQueryBuilder('binding')
-      .where('binding.accountId IN (:...accountIds)', { accountIds })
-      .andWhere('binding.isDeleted = :isDeleted', { isDeleted: false })
-      .orderBy('binding.isPrimary', 'DESC')
-      .addOrderBy('binding.updateTime', 'DESC')
-      .getMany();
-    const bindingMap = new Map<string, NapcatAccountBinding>();
-    for (const binding of bindings) {
-      if (!bindingMap.has(binding.accountId)) {
-        bindingMap.set(binding.accountId, binding);
-      }
+    if (!this.napcatRuntime) {
+      return accounts.map((account) => Object.assign(account, { napcat: null }));
     }
 
-    const containerIds = Array.from(
-      new Set(bindings.map((binding) => binding.containerId).filter(Boolean)),
-    );
-    const containerMap = new Map<string, NapcatContainer>();
-    if (containerIds.length > 0) {
-      const containerBuilder = this.napcatContainerRepository
-        .createQueryBuilder('container');
-      containerBuilder.addSelect?.('container.webuiToken');
-      const containers = await containerBuilder
-        .where('container.id IN (:...containerIds)', { containerIds })
-        .andWhere('container.isDeleted = :isDeleted', { isDeleted: false })
-        .getMany();
-      for (const container of containers) {
-        containerMap.set(container.id, container);
-      }
-    }
-
-    return Promise.all(
-      accounts.map(async (account) => {
-        const binding = bindingMap.get(account.id);
-        if (!binding) {
-          return Object.assign(account, { napcat: null });
-        }
-
-        const container = containerMap.get(binding.containerId);
-        const runtimeStatus = await this.syncNapcatRuntimeState(
-          account,
-          container,
-          options,
-        );
-        return Object.assign(account, {
-          napcat: {
-            bindStatus: binding.bindStatus,
-            containerId: binding.containerId,
-            containerName: container?.name,
-            containerOnline:
-              runtimeStatus?.containerOnline ??
-              (container?.status === 'running' || false),
-            containerStatus: container?.status,
-            lastCheckedAt: runtimeStatus?.checkedAt || container?.lastCheckedAt,
-            lastError: runtimeStatus?.lastError ?? container?.lastError,
-            lastLoginAt: binding.lastLoginAt,
-            lastStartedAt: container?.lastStartedAt,
-            oneBotOnline: account.connectStatus === 'online',
-            qqLoginMessage: runtimeStatus?.qqLoginMessage,
-            qqLoginStatus: runtimeStatus?.qqLoginStatus,
-            webuiOnline: runtimeStatus?.webuiOnline,
-            webuiPort: container?.webuiPort,
-          },
-        });
-      }),
-    );
-  }
-
-  private async syncNapcatRuntimeState(
-    account: QqbotAccount,
-    container?: NapcatContainer,
-    options: { autoLogin?: boolean } = {},
-  ) {
-    const runtimeStatus = await this.getNapcatRuntimeStatus(account, container);
-    if (!container || container.status !== 'running') return runtimeStatus;
-    if (account.connectStatus !== 'online') return runtimeStatus;
-
-    if (this.isRecentConnectNewerThanRuntimeCheck(account, container)) {
-      return runtimeStatus;
-    }
-
-    const runtimeOfflineReason =
-      this.getRuntimeStatusOfflineReason(runtimeStatus);
-    if (runtimeOfflineReason) {
-      if (options.autoLogin && (await this.tryAutoLogin(account, container))) {
-        return this.toCachedNapcatRuntimeStatus(container);
-      }
-      await this.applyNapcatOfflineState(
-        account,
-        container,
-        runtimeOfflineReason,
-      );
-      return runtimeStatus;
-    }
-
-    const cachedOfflineReason = this.getFreshCachedOfflineReason(container);
-    if (cachedOfflineReason) {
-      if (options.autoLogin && (await this.tryAutoLogin(account, container))) {
-        return this.toCachedNapcatRuntimeStatus(container);
-      }
-      await this.applyNapcatOfflineState(
-        account,
-        container,
-        cachedOfflineReason,
-      );
-      return runtimeStatus;
-    }
-    if (this.isFreshRuntimeCheck(container.lastCheckedAt)) {
-      return runtimeStatus;
-    }
-
-    const offlineReason =
-      await this.napcatContainerService.detectRuntimeOffline(container);
-    if (!offlineReason) return runtimeStatus;
-
-    if (options.autoLogin && (await this.tryAutoLogin(account, container))) {
-      return this.toCachedNapcatRuntimeStatus(container);
-    }
-
-    await this.applyNapcatOfflineState(account, container, offlineReason);
-    return {
-      ...runtimeStatus,
-      checkedAt: new Date(),
-      lastError: offlineReason,
-      qqLoginMessage: offlineReason,
-      qqLoginStatus: 'offline',
-    } as QqbotNapcatRuntimeStatusSnapshot;
-  }
-
-  private async getNapcatRuntimeStatus(
-    account: QqbotAccount,
-    container?: NapcatContainer,
-  ): Promise<QqbotNapcatRuntimeStatusSnapshot | undefined> {
-    if (!container) return undefined;
-    const cached = this.toCachedNapcatRuntimeStatus(container);
-    if (container.status !== 'running') return cached;
-    if (this.isRecentConnectNewerThanRuntimeCheck(account, container)) {
-      return cached;
-    }
-    if (this.isFreshRuntimeCheck(container.lastCheckedAt)) return cached;
-    if (
-      typeof this.napcatContainerService.inspectRuntimeStatus !== 'function'
-    ) {
-      return cached;
-    }
-
-    const inspected =
-      await this.napcatContainerService.inspectRuntimeStatus(container);
-    container.lastCheckedAt = inspected.checkedAt as any;
-    container.lastError = inspected.lastError || null;
-    await this.clearQqLoginErrorIfConfirmedOnline(account, inspected);
-    return inspected;
-  }
-
-  private async clearQqLoginErrorIfConfirmedOnline(
-    account: QqbotAccount,
-    runtimeStatus: QqbotNapcatRuntimeStatusSnapshot,
-  ) {
-    if (runtimeStatus.qqLoginStatus !== 'online') return;
-    const lastError = this.toolsService.toTrimmedString(account.lastError);
-    if (!lastError || !this.isQqLoginStateError(lastError)) return;
-
-    await this.accountRepository.update(
-      { selfId: account.selfId },
-      { lastError: null },
-    );
-    account.lastError = null;
-  }
-
-  private toCachedNapcatRuntimeStatus(
-    container: NapcatContainer,
-  ): QqbotNapcatRuntimeStatusSnapshot {
-    const containerOnline = container.status === 'running';
-    const lastError = this.toolsService.toTrimmedString(container.lastError);
-    const offlineReason = this.toolsService.isNapcatOfflineLoginMessage(
-      lastError,
-    )
-      ? lastError
-      : null;
-    return {
-      checkedAt: container.lastCheckedAt || undefined,
-      containerOnline,
-      lastError: lastError || null,
-      qqLoginMessage: offlineReason,
-      qqLoginStatus: this.toCachedQqLoginStatus(containerOnline, lastError),
-      webuiOnline: containerOnline ? null : false,
-    };
-  }
-
-  private toCachedQqLoginStatus(
-    containerOnline: boolean,
-    lastError: string,
-  ): QqbotNapcatRuntimeStatusSnapshot['qqLoginStatus'] {
-    if (!containerOnline) return 'offline';
-    if (
-      lastError.includes('二维码已过期') ||
-      lastError.includes('二维码过期')
-    ) {
-      return 'qrcode_expired';
-    }
-    if (this.toolsService.isNapcatOfflineLoginMessage(lastError)) {
-      return 'offline';
-    }
-    return 'unknown';
-  }
-
-  private isQqLoginStateError(message: string) {
-    return (
-      this.toolsService.isNapcatOfflineLoginMessage(message) ||
-      message.includes('二维码已过期') ||
-      message.includes('二维码过期')
-    );
-  }
-
-  private getRuntimeStatusOfflineReason(
-    runtimeStatus?: QqbotNapcatRuntimeStatusSnapshot,
-  ) {
-    if (!runtimeStatus) return null;
-    if (
-      runtimeStatus.qqLoginStatus !== 'offline' &&
-      runtimeStatus.qqLoginStatus !== 'qrcode_expired'
-    ) {
-      return null;
-    }
-    return (
-      this.toolsService.toTrimmedString(runtimeStatus.qqLoginMessage) ||
-      this.toolsService.toTrimmedString(runtimeStatus.lastError) ||
-      'NapCat QQ 登录态不可用'
-    );
-  }
-
-  private async tryAutoLogin(
-    account: QqbotAccount,
-    container: NapcatContainer,
-  ) {
-    try {
-      const result = await this.napcatContainerService.tryAutoLogin(container, {
-        loginPassword: this.getNapcatLoginPassword(account),
-        selfId: account.selfId,
-      });
-      if (result.cleanupFailed) {
-        await this.applyNapcatOfflineState(
-          account,
-          container,
-          NAPCAT_AUTO_LOGIN_CLEANUP_FAILED_MESSAGE,
-        );
-        return true;
-      }
-      if (!result.success) return false;
-
-      await this.markOnline(account.selfId, 'Universal', null);
-      account.clientRole = 'Universal';
-      account.connectStatus = 'online';
-      account.lastConnectedAt = new Date() as any;
-      account.lastError = null;
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private async applyNapcatOfflineState(
-    account: QqbotAccount,
-    container: NapcatContainer,
-    offlineReason: string,
-  ) {
-    await this.markQqLoginOffline(account.selfId, offlineReason);
-    account.lastError = offlineReason;
-    this.publishOfflineNotice(account.selfId, offlineReason, {
-      containerId: container.id,
-      containerName: container.name,
+    return this.napcatRuntime.appendRuntime(accounts, options, {
+      clearQqLoginError: async (selfId) => {
+        await this.accountRepository.update({ selfId }, { lastError: null });
+      },
+      getLoginPassword: (account) => this.getNapcatLoginPassword(account),
+      markOnline: (selfId, clientRole, lastError) =>
+        this.markOnline(selfId, clientRole, lastError),
+      markQqLoginOffline: (selfId, lastError) =>
+        this.markQqLoginOffline(selfId, lastError),
+      publishOfflineNotice: (selfId, offlineReason, metadata) =>
+        this.publishOfflineNotice(selfId, offlineReason, metadata),
     });
-  }
-
-  private getFreshCachedOfflineReason(container: NapcatContainer) {
-    if (!this.isFreshRuntimeCheck(container.lastCheckedAt)) return null;
-    const reason = this.toolsService.toTrimmedString(container.lastError);
-    return this.toolsService.isNapcatOfflineLoginMessage(reason)
-      ? reason
-      : null;
-  }
-
-  private isRecentConnectNewerThanRuntimeCheck(
-    account: QqbotAccount,
-    container: NapcatContainer,
-  ) {
-    const checkedAt = this.toTime(container.lastCheckedAt);
-    if (!checkedAt) return false;
-    const connectedAt = this.toTime(account.lastConnectedAt);
-    if (connectedAt <= checkedAt) return false;
-
-    return Date.now() - connectedAt < NAPCAT_RUNTIME_CHECK_TTL_MS;
-  }
-
-  private isFreshRuntimeCheck(lastCheckedAt?: Date | null) {
-    if (!lastCheckedAt) return false;
-    const checkedAt = this.toTime(lastCheckedAt);
-    if (!Number.isFinite(checkedAt)) return false;
-    return Date.now() - checkedAt < NAPCAT_RUNTIME_CHECK_TTL_MS;
-  }
-
-  private toTime(value?: Date | null) {
-    if (!value) return 0;
-    const time = new Date(value).getTime();
-    return Number.isFinite(time) ? time : 0;
   }
 
   private publishOfflineNotice(

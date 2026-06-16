@@ -9,11 +9,11 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
-import { ToolsService, vbenSuccess } from '@/common';
+import { vbenSuccess } from '@/common';
+import { QqbotPluginPlatformService } from '../application/plugin-platform.service';
 import { QqbotEventPluginRegistryService } from '../application/registry/qqbot-event-plugin-registry.service';
 import { QqbotPluginRegistryService } from '../application/registry/qqbot-plugin-registry.service';
 import type {
-  QqbotPluginOperationSummary,
   QqbotPluginTriggerMode,
 } from '@/modules/qqbot/core/contract/qqbot.types';
 
@@ -31,7 +31,7 @@ export class QqbotPluginController {
   constructor(
     private readonly eventPluginRegistry: QqbotEventPluginRegistryService,
     private readonly pluginRegistry: QqbotPluginRegistryService,
-    private readonly toolsService: ToolsService,
+    private readonly service: QqbotPluginPlatformService,
   ) {}
 
   @Get('list')
@@ -71,7 +71,9 @@ export class QqbotPluginController {
     @Query('pluginKey') pluginKey?: string,
     @Query('triggerMode') triggerMode?: QqbotPluginTriggerMode,
   ) {
-    return vbenSuccess(this.listOperations(pluginKey, triggerMode));
+    return vbenSuccess(
+      await this.service.listOperationSummaries({ pluginKey, triggerMode }),
+    );
   }
 
   @Get('operation/page')
@@ -85,15 +87,7 @@ export class QqbotPluginController {
     required: false,
   })
   async operationPage(@Query() query: QqbotPluginOperationPageQuery) {
-    const { pageNo, pageSize, skip } = this.toolsService.getPageParams(query);
-    const operations = this.listOperations(query.pluginKey, query.triggerMode);
-
-    return vbenSuccess({
-      list: operations.slice(skip, skip + pageSize),
-      pageNo,
-      pageSize,
-      total: operations.length,
-    });
+    return vbenSuccess(await this.service.pageOperationSummaries(query));
   }
 
   @Get('health')
@@ -159,17 +153,4 @@ export class QqbotPluginController {
     return !triggerMode || triggerMode === target;
   }
 
-  private listOperations(
-    pluginKey?: string,
-    triggerMode?: QqbotPluginTriggerMode,
-  ): QqbotPluginOperationSummary[] {
-    return [
-      ...(this.includesTriggerMode('command', triggerMode)
-        ? this.pluginRegistry.listOperations(pluginKey)
-        : []),
-      ...(this.includesTriggerMode('event', triggerMode)
-        ? this.eventPluginRegistry.listOperations(pluginKey)
-        : []),
-    ];
-  }
 }

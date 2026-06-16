@@ -34,9 +34,14 @@ import { createPlugin as createFf14MarketPlugin } from '@/modules/qqbot/plugins/
 import { createPlugin as createFflogsPlugin } from '@/modules/qqbot/plugins/fflogs/src';
 import { createPlugin as createRepeaterPlugin } from '@/modules/qqbot/plugins/repeater/src';
 
-export type RepeaterPluginPackage = ReturnType<
-  typeof createRepeaterPlugin
->;
+const BUILTIN_PLUGIN_KEYS = [
+  'bangdream',
+  'ff14-market',
+  'fflogs',
+  'repeater',
+] as const;
+
+export type RepeaterPluginPackage = ReturnType<typeof createRepeaterPlugin>;
 
 export type QqbotEventPluginPackage = {
   bind(selfId: string): Promise<boolean> | boolean;
@@ -75,6 +80,63 @@ export class QqbotBuiltinPluginPackageLoaderService {
 
   loadEventPlugins(): QqbotEventPluginPackage[] {
     return [this.loadRepeaterPlugin()];
+  }
+
+  loadBuiltinManifests(): QqbotPluginManifest[] {
+    return BUILTIN_PLUGIN_KEYS.map((pluginKey) => this.loadManifest(pluginKey));
+  }
+
+  async handleWorkerHostCall(method: string, args: Record<string, any> = {}) {
+    switch (method) {
+      case 'bindEventPlugin':
+        await this.accountService.bindEventPlugin(args.selfId, args.pluginKey);
+        return undefined;
+      case 'getBoundEventPluginKeys':
+        return this.accountService.getBoundEventPluginKeys(args.selfId);
+      case 'getConfig':
+        return this.configService.get(args.key);
+      case 'getDictByKey':
+        return this.dictService.getDictByKey(args.dictCode);
+      case 'getDictItemsByKey':
+        return this.dictService.getDictItemsByKey(args.dictCode);
+      case 'relationTree':
+        return this.dictService.relationTree(args.input);
+      case 'bangdreamRequestBuffer':
+        return this.httpClient.requestBuffer(
+          createWorkerHttpRequest(
+            args.options,
+            (statusCode) => `BangDream 资源下载失败：${statusCode}`,
+          ),
+        );
+      case 'bangdreamRequestJson':
+        return this.httpClient.requestJson(
+          createWorkerHttpRequest(
+            args.options,
+            (statusCode) => `BangDream 数据接口失败：${statusCode}`,
+          ),
+        );
+      case 'requestBuffer':
+        return this.httpClient.requestBuffer(
+          createWorkerHttpRequest(args.options),
+        );
+      case 'requestJson':
+        return this.httpClient.requestJson(
+          createWorkerHttpRequest(args.options),
+        );
+      case 'sendText':
+        return this.sendService.sendText(args.input);
+      case 'unbindEventPlugin':
+        await this.accountService.unbindEventPlugin(
+          args.selfId,
+          args.pluginKey,
+        );
+        return undefined;
+      case 'warn':
+        this.logger.warn(args.message);
+        return undefined;
+      default:
+        throw new Error(`未知插件 Host 调用：${method}`);
+    }
   }
 
   loadRepeaterPlugin(): RepeaterPluginPackage {
@@ -252,4 +314,24 @@ function readExcelRows<T extends Record<string, unknown>>(filePath: string) {
   const sheetName = workbook.SheetNames[0];
   const worksheet = workbook.Sheets[sheetName];
   return XLSX.utils.sheet_to_json<T>(worksheet);
+}
+
+function createWorkerHttpRequest(
+  input: Record<string, any> = {},
+  fallbackFailureMessage?: (statusCode: number) => string,
+) {
+  const failureMessageTemplate =
+    typeof input.failureMessageTemplate === 'string'
+      ? input.failureMessageTemplate
+      : undefined;
+  const { url, ...rest } = input;
+  delete rest.failureMessageTemplate;
+  return {
+    ...rest,
+    failureMessage: failureMessageTemplate
+      ? (statusCode: number) =>
+          failureMessageTemplate.replaceAll('{statusCode}', `${statusCode}`)
+      : fallbackFailureMessage,
+    url,
+  };
 }

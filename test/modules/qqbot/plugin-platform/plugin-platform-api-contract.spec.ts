@@ -289,7 +289,9 @@ describe('QQBot plugin platform API contract', () => {
       })
       .expect(200);
 
-    expect(repositoryMocks.get(QqbotPluginRuntimeEvent)?.find).toHaveBeenCalledWith({
+    expect(
+      repositoryMocks.get(QqbotPluginRuntimeEvent)?.find,
+    ).toHaveBeenCalledWith({
       where: {
         eventType: 'worker-crash',
         installationId: '2002',
@@ -298,5 +300,100 @@ describe('QQBot plugin platform API contract', () => {
         createTime: expect.any(Object),
       },
     });
+  });
+
+  it('serves platform operation pages from active runtime summaries when persistence rows are empty', async () => {
+    const manifest = createManifest();
+    const installation = {
+      id: 'install-demo',
+      installedPath: 'D:/plugins/demo',
+      pluginId: 'plugin-demo',
+      runtimeStatus: 'stopped',
+      status: 'installed',
+      versionId: 'version-demo',
+    };
+    const version = {
+      id: 'version-demo',
+      manifestJson: manifest,
+      packageHash: 'hash',
+      pluginId: installation.pluginId,
+      version: manifest.version,
+    };
+    const createRepository = (findOneValue?: unknown) => ({
+      find: jest.fn(async () => []),
+      findAndCount: jest.fn(async () => [[], 0]),
+      findOne: jest.fn(async () => findOneValue || null),
+      save: jest.fn(async (value) => value),
+      update: jest.fn(async () => ({ affected: 1 })),
+    });
+    const operationRepository = createRepository();
+    const worker = {
+      activate: jest.fn(async () => ({ ok: true })),
+      deactivate: jest.fn(async () => ({ ok: true })),
+      dispose: jest.fn(async () => undefined),
+      executeOperation: jest.fn(),
+      handleEvent: jest.fn(),
+      health: jest.fn(async () => ({ ok: true })),
+      load: jest.fn(async () => ({ ok: true })),
+    };
+    const runtimeFactory = {
+      create: jest.fn(() => worker),
+    };
+    const service = new (QqbotPluginPlatformService as any)(
+      createRepository({
+        id: installation.pluginId,
+        pluginKey: manifest.pluginKey,
+      }),
+      createRepository(version),
+      createRepository(installation),
+      operationRepository,
+      createRepository(),
+      createRepository(),
+      createRepository(),
+      createRepository(),
+      createRepository(),
+      undefined,
+      runtimeFactory,
+    ) as QqbotPluginPlatformService;
+
+    await service.enableInstallation({ id: installation.id });
+    const page = await service.pageOperations({
+      pageNo: 1,
+      pageSize: 10,
+      triggerMode: 'command',
+    } as any);
+
+    expect(operationRepository.findAndCount).not.toHaveBeenCalled();
+    expect(page).toMatchObject({
+      pageNo: 1,
+      pageSize: 10,
+      total: 1,
+    });
+    expect(page.list).toEqual([
+      expect.objectContaining({
+        key: 'demo-plugin.echo',
+        pluginKey: 'demo-plugin',
+        triggerMode: 'command',
+      }),
+    ]);
+  });
+
+  it('keeps compatible plugin operation routes delegated to platform service ownership', () => {
+    const source = readFileSync(
+      join(
+        __dirname,
+        '../../../../src/modules/qqbot/plugin-platform/contract/qqbot-plugin.controller.ts',
+      ),
+      'utf8',
+    );
+    const operationRoutes = source.slice(
+      source.indexOf("@Get('operation/list')"),
+      source.indexOf("@Get('health')"),
+    );
+
+    expect(operationRoutes).toContain('this.service.');
+    expect(operationRoutes).not.toContain('this.pluginRegistry');
+    expect(operationRoutes).not.toContain('this.eventPluginRegistry');
+    expect(source).not.toContain('private listOperations(');
   });
 });

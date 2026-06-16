@@ -2,7 +2,9 @@ import { forwardRef, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
+import { QQBOT_ACCOUNT_NAPCAT_RUNTIME_PORT } from '@/modules/qqbot/core/application/account/qqbot-account-napcat-runtime.port';
 import { QqbotCoreModule } from '@/modules/qqbot/core/qqbot-core.module';
+import { QqbotNapcatAccountRuntimeService } from './application/account-runtime/qqbot-napcat-account-runtime.service';
 import { QqbotNapcatLoginService } from './application/login/qqbot-napcat-login.service';
 import { QqbotNapcatWatchdogService } from './application/login/qqbot-napcat-watchdog.service';
 import { QqbotNapcatLoginController } from './contract/qqbot-napcat-login.controller';
@@ -20,15 +22,20 @@ export const QQBOT_NAPCAT_CONTROLLERS = [QqbotNapcatLoginController];
 export const QQBOT_NAPCAT_PROVIDERS = [
   NapcatDeviceIdentityService,
   NapcatLoginStateStoreService,
+  QqbotNapcatAccountRuntimeService,
   QqbotNapcatContainerService,
   QqbotNapcatLoginService,
   QqbotNapcatWatchdogService,
+  {
+    provide: QQBOT_ACCOUNT_NAPCAT_RUNTIME_PORT,
+    useExisting: QqbotNapcatAccountRuntimeService,
+  },
 ];
 
 export const QQBOT_NAPCAT_EXPORTS = [
   NapcatDeviceIdentityService,
   NapcatLoginStateStoreService,
-  QqbotNapcatContainerService,
+  QQBOT_ACCOUNT_NAPCAT_RUNTIME_PORT,
   QqbotNapcatLoginService,
 ];
 

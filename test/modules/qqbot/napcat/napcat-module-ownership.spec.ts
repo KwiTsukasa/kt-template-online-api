@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { getMetadataArgsStorage } from 'typeorm';
 import { AdminAuthGuardModule } from '../../../../src/modules/admin/identity/auth/admin-auth-guard.module';
 import { AppModule } from '../../../../src/app.module';
+import { QQBOT_ACCOUNT_NAPCAT_RUNTIME_PORT } from '../../../../src/modules/qqbot/core/application/account/qqbot-account-napcat-runtime.port';
 import { QqbotCoreModule } from '../../../../src/modules/qqbot/core/qqbot-core.module';
 import {
   QQBOT_NAPCAT_CONTROLLERS,
@@ -14,7 +15,9 @@ import {
   QQBOT_NAPCAT_PROVIDERS,
   QqbotNapcatModule,
 } from '../../../../src/modules/qqbot/napcat/qqbot-napcat.module';
+import { QqbotNapcatAccountRuntimeService } from '../../../../src/modules/qqbot/napcat/application/account-runtime/qqbot-napcat-account-runtime.service';
 import { QqbotNapcatLoginController } from '../../../../src/modules/qqbot/napcat/contract/qqbot-napcat-login.controller';
+import { QqbotNapcatContainerService } from '../../../../src/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
 import {
   collectControllerRoutes,
   routeKey,
@@ -26,7 +29,10 @@ const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] => {
 };
 
 const getNames = (items: unknown[]) =>
-  items.map((item) => (item as { name?: string }).name || `${item}`);
+  items.map((item) => {
+    if (typeof item === 'symbol') return item.description || item.toString();
+    return (item as { name?: string }).name || `${item}`;
+  });
 
 const unwrapForwardRef = (item: unknown) => {
   const maybeForwardRef = item as { forwardRef?: () => unknown };
@@ -102,6 +108,7 @@ describe('QQBot NapCat module ownership', () => {
       expect.arrayContaining([
         'NapcatDeviceIdentityService',
         'NapcatLoginStateStoreService',
+        'QqbotNapcatAccountRuntimeService',
         'QqbotNapcatContainerService',
         'QqbotNapcatLoginService',
         'QqbotNapcatWatchdogService',
@@ -124,8 +131,17 @@ describe('QQBot NapCat module ownership', () => {
       expect.arrayContaining([
         'NapcatDeviceIdentityService',
         'NapcatLoginStateStoreService',
-        'QqbotNapcatContainerService',
+        'QQBOT_ACCOUNT_NAPCAT_RUNTIME_PORT',
         'QqbotNapcatLoginService',
+      ]),
+    );
+    expect(QQBOT_NAPCAT_EXPORTS).not.toContain(QqbotNapcatContainerService);
+    expect(QQBOT_NAPCAT_PROVIDERS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provide: QQBOT_ACCOUNT_NAPCAT_RUNTIME_PORT,
+          useExisting: QqbotNapcatAccountRuntimeService,
+        }),
       ]),
     );
   });

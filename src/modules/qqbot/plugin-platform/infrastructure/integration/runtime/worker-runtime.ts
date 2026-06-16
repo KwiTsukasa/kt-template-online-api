@@ -127,11 +127,10 @@ export class QqbotPluginWorkerRuntime {
     );
     requestPromise.catch(() => undefined);
 
+    const timeout = this.createTimeoutPromise(type, message, timeoutMs);
+
     try {
-      return await Promise.race([
-        requestPromise,
-        this.createTimeoutPromise(type, message, timeoutMs),
-      ]);
+      return await Promise.race([requestPromise, timeout.promise]);
     } catch (error) {
       if (error instanceof QqbotPluginRuntimeError) {
         throw error;
@@ -151,6 +150,8 @@ export class QqbotPluginWorkerRuntime {
       );
       this.recordRuntimeEvent('worker-crash', runtimeError.safeSummary);
       throw runtimeError;
+    } finally {
+      timeout.clear();
     }
   }
 
@@ -159,8 +160,9 @@ export class QqbotPluginWorkerRuntime {
     message: QqbotPluginWorkerRequest,
     timeoutMs: number,
   ) {
-    return new Promise<never>((_, reject) => {
-      const timer = setTimeout(async () => {
+    let timer: NodeJS.Timeout | undefined;
+    const promise = new Promise<never>((_, reject) => {
+      timer = setTimeout(async () => {
         this.status = 'failed';
         const error = new QqbotPluginRuntimeError(
           'PLUGIN_WORKER_TIMEOUT',
@@ -184,6 +186,12 @@ export class QqbotPluginWorkerRuntime {
       }, timeoutMs);
       timer.unref?.();
     });
+    return {
+      clear: () => {
+        if (timer) clearTimeout(timer);
+      },
+      promise,
+    };
   }
 
   private recordRuntimeEvent(

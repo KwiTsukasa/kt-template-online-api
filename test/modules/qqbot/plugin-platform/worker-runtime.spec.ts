@@ -175,6 +175,30 @@ describe('QQBot plugin worker runtime', () => {
     expect(driver.dispose).toHaveBeenCalled();
     expect(runtime.status).toBe('failed');
   });
+
+  it('keeps successful worker calls alive after the timeout window', async () => {
+    const driver: QqbotPluginWorkerDriver = {
+      dispose: jest.fn(async () => undefined),
+      request: jest.fn(async () => ({ ok: true })),
+    };
+    const runtime = new QqbotPluginWorkerRuntime(driver, {
+      defaultTimeoutMs: 5,
+      installationId: 'install-success',
+      pluginKey: 'demo-plugin',
+    });
+
+    await runtime.load({
+      entry: 'src/index.ts',
+      pluginKey: 'demo-plugin',
+      version: '0.1.0',
+    });
+    await runtime.activate();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(driver.dispose).not.toHaveBeenCalled();
+    expect(runtime.status).toBe('active');
+    expect(runtime.listRuntimeEvents()).toEqual([]);
+  });
 });
 
 describe('QQBot plugin SDK contract', () => {

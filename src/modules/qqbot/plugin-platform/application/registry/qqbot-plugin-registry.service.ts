@@ -34,11 +34,13 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    for (const plugin of this.builtinPluginLoader?.loadCommandPlugins() || []) {
-      await plugin.activate?.();
-      this.register(plugin);
-    }
     await this.hydrateInactivePluginKeys();
+    for (const plugin of this.builtinPluginLoader?.loadCommandPlugins() || []) {
+      this.register(plugin);
+      if (this.isPluginActive(plugin.key)) {
+        await plugin.activate?.();
+      }
+    }
   }
 
   register(plugin: QqbotIntegrationPlugin) {
@@ -199,7 +201,9 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   private isPluginActive(pluginKey: string) {
-    return !this.inactivePluginKeys.has(this.resolveCanonicalPluginKey(pluginKey));
+    return !this.inactivePluginKeys.has(
+      this.resolveCanonicalPluginKey(pluginKey),
+    );
   }
 
   private resolveCanonicalPluginKey(pluginKey: string) {
@@ -213,10 +217,7 @@ export class QqbotPluginRegistryService implements OnModuleInit {
       this.pluginRepository.find(),
       this.installationRepository.find(),
     ]);
-    for (const pluginKey of resolveInactivePluginKeys(
-      plugins,
-      installations,
-    )) {
+    for (const pluginKey of resolveInactivePluginKeys(plugins, installations)) {
       this.setPluginActive(pluginKey, false);
     }
   }

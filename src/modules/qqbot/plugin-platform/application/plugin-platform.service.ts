@@ -1,20 +1,27 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
 import {
-  QQBOT_PLUGIN_EXECUTION_PORT,
   type QqbotPluginEventDispatchInput,
   type QqbotPluginExecutionInput,
   type QqbotPluginExecutionPort,
+  type QqbotPluginOperationLookup,
 } from '@/modules/qqbot/core/domain/plugin-execution.port';
+import type {
+  QqbotPluginOperationSummary,
+  QqbotPluginTriggerMode,
+} from '@/modules/qqbot/core/contract/qqbot.types';
 import {
   parseQqbotPluginManifest,
   type QqbotPluginManifest,
 } from '../domain/manifest';
 import type { QqbotPluginWorkerRuntime } from '../infrastructure/integration/runtime';
+import { QqbotPluginArgumentParserService } from './argument/qqbot-plugin-argument-parser.service';
+import { QqbotBuiltinPluginPackageLoaderService } from '../infrastructure/integration/package/builtin-plugin-package-loader.service';
 import { QqbotPluginPackageReaderService } from '../infrastructure/integration/package/plugin-package-reader.service';
 import { QqbotEventPluginRegistryService } from './registry/qqbot-event-plugin-registry.service';
+import { resolveInactivePluginKeys } from './registry/plugin-installation-state';
 import { QqbotPluginRegistryService } from './registry/qqbot-plugin-registry.service';
 import {
   QqbotPlugin,
@@ -41,7 +48,13 @@ export type QqbotPluginRuntimeFactory = {
     version: QqbotPluginVersion,
   ): Pick<
     QqbotPluginWorkerRuntime,
-    'activate' | 'deactivate' | 'dispose' | 'health' | 'load'
+    | 'activate'
+    | 'deactivate'
+    | 'dispose'
+    | 'executeOperation'
+    | 'handleEvent'
+    | 'health'
+    | 'load'
   >;
 };
 
@@ -63,6 +76,8 @@ type ListOperationsQuery = {
   pageNo?: number | string;
   pageSize?: number | string;
   pluginId?: string;
+  pluginKey?: string;
+  triggerMode?: QqbotPluginTriggerMode;
 };
 
 type RuntimeEventQuery = {
@@ -80,9 +95,33 @@ type UpdateConfigBody = {
   value?: unknown;
 };
 
+type ActiveWorkerContext = {
+  installationId: string;
+  manifest: QqbotPluginManifest;
+  pluginId: string;
+  pluginKey: string;
+  worker: QqbotPluginWorkerRuntime;
+};
+
+type PersistedPluginRuntimeState = {
+  enabledInstallationsByPluginKey: Map<string, QqbotPluginInstallation>;
+  inactivePluginKeys: Set<string>;
+};
+
 @Injectable()
-export class QqbotPluginPlatformService {
+export class QqbotPluginPlatformService
+  implements OnModuleInit, QqbotPluginExecutionPort
+{
   private readonly activeWorkers = new Map<string, QqbotPluginWorkerRuntime>();
+  private readonly activeWorkerContexts = new Map<
+    string,
+    ActiveWorkerContext
+  >();
+  private readonly activeWorkersByPluginKey = new Map<
+    string,
+    ActiveWorkerContext
+  >();
+  private readonly activeWorkerPluginAliases = new Map<string, string>();
 
   constructor(
     @InjectRepository(QqbotPlugin)
@@ -104,8 +143,7 @@ export class QqbotPluginPlatformService {
     @InjectRepository(QqbotPluginRuntimeEvent)
     private readonly runtimeEventRepository: Repository<QqbotPluginRuntimeEvent>,
     @Optional()
-    @Inject(QQBOT_PLUGIN_EXECUTION_PORT)
-    private readonly pluginExecution?: QqbotPluginExecutionPort,
+    private readonly argumentParser?: QqbotPluginArgumentParserService,
     @Optional()
     @Inject(QQBOT_PLUGIN_RUNTIME_FACTORY)
     private readonly runtimeFactory?: QqbotPluginRuntimeFactory,
@@ -115,7 +153,13 @@ export class QqbotPluginPlatformService {
     private readonly eventPluginRegistry?: QqbotEventPluginRegistryService,
     @Optional()
     private readonly packageReader?: QqbotPluginPackageReaderService,
+    @Optional()
+    private readonly builtinPluginLoader?: QqbotBuiltinPluginPackageLoaderService,
   ) {}
+
+  async onModuleInit() {
+    await this.startBuiltinWorkers();
+  }
 
   async listInstallations() {
     return this.installationRepository.find();
@@ -134,28 +178,37 @@ export class QqbotPluginPlatformService {
   }
 
   async listOperations(pluginId?: string) {
-    return this.operationRepository.find({
-      where: pluginId ? { pluginId } : undefined,
-    });
+    return this.listOperationSummaries({ pluginId });
   }
 
   async pageOperations(query: ListOperationsQuery) {
+    return this.pageOperationSummaries(query);
+  }
+
+  async listOperationSummaries(query: ListOperationsQuery = {}) {
+    const pluginKey = await this.resolveOperationPluginKeyFilter(query);
+    const operations = await this.resolveActiveOperationSummaries();
+    return operations.filter(
+      (operation) =>
+        (!pluginKey || operation.pluginKey === pluginKey) &&
+        (!query.triggerMode || operation.triggerMode === query.triggerMode),
+    );
+  }
+
+  async pageOperationSummaries(query: ListOperationsQuery) {
     const pageNo = Number(query.pageNo || 1);
     const pageSize = Number(query.pageSize || 10);
     const safePageNo = Number.isFinite(pageNo) && pageNo > 0 ? pageNo : 1;
     const safePageSize =
       Number.isFinite(pageSize) && pageSize > 0 ? pageSize : 10;
-    const [list, total] = await this.operationRepository.findAndCount({
-      skip: (safePageNo - 1) * safePageSize,
-      take: safePageSize,
-      where: query.pluginId ? { pluginId: query.pluginId } : undefined,
-    });
+    const operations = await this.listOperationSummaries(query);
+    const skip = (safePageNo - 1) * safePageSize;
 
     return {
-      list,
+      list: operations.slice(skip, skip + safePageSize),
       pageNo: safePageNo,
       pageSize: safePageSize,
-      total,
+      total: operations.length,
     };
   }
 
@@ -223,7 +276,7 @@ export class QqbotPluginPlatformService {
 
   async disableInstallation(body: InstallationActionBody) {
     const installation = await this.requireInstallation(body);
-    await this.stopWorker(installation.id);
+    await this.stopWorkersForInstallation(installation);
     await this.refreshActiveRegistries(installation, false);
     await this.updateInstallationRuntime(installation, 'disabled', 'stopped');
     await this.recordRuntimeEvent(installation, 'disable-finished');
@@ -244,16 +297,15 @@ export class QqbotPluginPlatformService {
     } catch (error) {
       if (previousWorker) {
         this.activeWorkers.set(installation.id, previousWorker);
-        await this.updateInstallationRuntime(installation, 'enabled', 'healthy');
+        await this.updateInstallationRuntime(
+          installation,
+          'enabled',
+          'healthy',
+        );
       }
-      await this.recordRuntimeEvent(
-        installation,
-        'upgrade-failed',
-        'error',
-        {
-          message: error instanceof Error ? error.message : `${error}`,
-        },
-      );
+      await this.recordRuntimeEvent(installation, 'upgrade-failed', 'error', {
+        message: error instanceof Error ? error.message : `${error}`,
+      });
       throw error;
     }
     await this.refreshActiveRegistries(installation, true);
@@ -287,11 +339,24 @@ export class QqbotPluginPlatformService {
   }
 
   async executeOperation(input: QqbotPluginExecutionInput) {
-    if (!this.pluginExecution) {
-      throwVbenError('插件执行器未初始化');
+    const normalizedInput =
+      (await this.argumentParser?.normalizeInput(input)) || input.input;
+    const workerContext = this.requireActiveWorker(input.pluginKey);
+    const operation = workerContext.manifest.operations.find(
+      (item) => item.key === input.operationKey,
+    );
+    if (!operation) {
+      throwVbenError(
+        `QQBot 插件能力不存在：${input.pluginKey}.${input.operationKey}`,
+      );
     }
 
-    const output = await this.pluginExecution.executeOperation(input);
+    const output = await workerContext.worker.executeOperation({
+      input: normalizedInput,
+      operationId: operation.key,
+      operationKey: operation.key,
+      timeoutMs: operation.timeoutMs,
+    });
     const pluginId = this.getPluginIdFromContext(input.context);
     if (pluginId) {
       await this.runtimeEventRepository.save({
@@ -313,9 +378,45 @@ export class QqbotPluginPlatformService {
   }
 
   async dispatchEvent(input: QqbotPluginEventDispatchInput) {
-    if (!this.pluginExecution) return false;
-    const handled = await this.pluginExecution.dispatchEvent(input);
+    let handled = false;
+    for (const workerContext of this.activeWorkerContexts.values()) {
+      for (const event of workerContext.manifest.events) {
+        if (
+          event.eventName !== input.eventKey &&
+          event.key !== input.eventKey
+        ) {
+          continue;
+        }
+        const result = await workerContext.worker.handleEvent({
+          event: input.message,
+          eventKey: event.eventName || input.eventKey,
+          timeoutMs: workerContext.manifest.runtime.timeoutMs,
+        });
+        handled = Boolean(result) || handled;
+      }
+    }
     return handled;
+  }
+
+  async listActiveOperations() {
+    const workerOperations = this.listActiveWorkerOperations();
+    if (workerOperations.length > 0) return workerOperations;
+    return [
+      ...(this.pluginRegistry?.listOperations() || []),
+      ...(this.eventPluginRegistry?.listOperations() || []),
+    ];
+  }
+
+  async getOperationByCommand(command: QqbotPluginOperationLookup) {
+    if (!command.pluginKey || !command.operationKey) return null;
+    return (
+      (await this.listActiveOperations()).find(
+        (operation) =>
+          operation.pluginKey ===
+            this.resolveActivePluginKey(command.pluginKey) &&
+          operation.key === command.operationKey,
+      ) || null
+    );
   }
 
   async updateConfig(body: UpdateConfigBody) {
@@ -341,7 +442,9 @@ export class QqbotPluginPlatformService {
         ? { installationId: normalizedQuery.installationId }
         : {}),
       ...(normalizedQuery.level ? { level: normalizedQuery.level } : {}),
-      ...(normalizedQuery.pluginId ? { pluginId: normalizedQuery.pluginId } : {}),
+      ...(normalizedQuery.pluginId
+        ? { pluginId: normalizedQuery.pluginId }
+        : {}),
       ...this.buildRuntimeEventTimeFilter(normalizedQuery),
     };
 
@@ -387,6 +490,34 @@ export class QqbotPluginPlatformService {
         }),
       ),
     ]);
+  }
+
+  private async resolveActiveOperationSummaries() {
+    const operations = await this.listActiveOperations();
+    return operations.map((operation) =>
+      this.toPlatformOperationSummary(operation),
+    );
+  }
+
+  private toPlatformOperationSummary(operation: QqbotPluginOperationSummary) {
+    return {
+      ...operation,
+      enabled: true,
+      operationKey: operation.key,
+      operationName: operation.name,
+      pluginId: operation.pluginKey,
+    };
+  }
+
+  private async resolveOperationPluginKeyFilter(query: ListOperationsQuery) {
+    if (query.pluginKey) return this.resolveActivePluginKey(query.pluginKey);
+    if (!query.pluginId) return undefined;
+
+    const findOne = this.pluginRepository.findOne?.bind(this.pluginRepository);
+    const plugin = findOne
+      ? await findOne({ where: { id: query.pluginId } })
+      : null;
+    return plugin?.pluginKey || query.pluginId;
   }
 
   private async requireInstallation(body: InstallationActionBody) {
@@ -446,10 +577,167 @@ export class QqbotPluginPlatformService {
     this.eventPluginRegistry?.setPluginActive(pluginKey, enabled);
   }
 
-  private async getPluginKey(pluginId: string) {
-    const findOne = this.pluginRepository.findOne?.bind(
-      this.pluginRepository,
+  private async startBuiltinWorkers() {
+    if (!this.runtimeFactory || !this.builtinPluginLoader) return;
+
+    const persistedState = await this.resolvePersistedPluginRuntimeState();
+    for (const manifest of this.builtinPluginLoader.loadBuiltinManifests()) {
+      if (persistedState.inactivePluginKeys.has(manifest.pluginKey)) continue;
+      if (this.activeWorkersByPluginKey.has(manifest.pluginKey)) continue;
+
+      const persistedInstallation =
+        persistedState.enabledInstallationsByPluginKey.get(manifest.pluginKey);
+      const installation =
+        persistedInstallation ||
+        ({
+          id: `builtin-${manifest.pluginKey}`,
+          installedPath: `builtin://${manifest.pluginKey}`,
+          pluginId: manifest.pluginKey,
+          runtimeStatus: 'stopped',
+          status: 'installed',
+          versionId: `builtin-${manifest.pluginKey}-${manifest.version}`,
+        } as QqbotPluginInstallation);
+
+      await this.startWorker(installation, {
+        id: `builtin-${manifest.pluginKey}-${manifest.version}`,
+        manifestJson: manifest as unknown as Record<string, unknown>,
+        packageHash: `builtin-${manifest.pluginKey}`,
+        pluginId: manifest.pluginKey,
+        version: manifest.version,
+      } as QqbotPluginVersion);
+    }
+  }
+
+  private async resolvePersistedPluginRuntimeState(): Promise<PersistedPluginRuntimeState> {
+    const [plugins, installations] = await Promise.all([
+      this.pluginRepository.find(),
+      this.installationRepository.find(),
+    ]);
+    const pluginsById = new Map(
+      plugins.map((plugin) => [plugin.id, plugin] as const),
     );
+    const enabledInstallationsByPluginKey = new Map<
+      string,
+      QqbotPluginInstallation
+    >();
+
+    for (const installation of installations) {
+      if (installation.status !== 'enabled') continue;
+      const plugin = pluginsById.get(installation.pluginId);
+      if (!plugin?.pluginKey) continue;
+      enabledInstallationsByPluginKey.set(plugin.pluginKey, installation);
+    }
+
+    return {
+      enabledInstallationsByPluginKey,
+      inactivePluginKeys: new Set(
+        resolveInactivePluginKeys(plugins, installations),
+      ),
+    };
+  }
+
+  private requireActiveWorker(pluginKey: string) {
+    const resolvedPluginKey = this.resolveActivePluginKey(pluginKey);
+    const workerContext = this.activeWorkersByPluginKey.get(resolvedPluginKey);
+    if (!workerContext) {
+      throwVbenError(`QQBot 插件运行时未启用：${pluginKey}`);
+    }
+    return workerContext;
+  }
+
+  private resolveActivePluginKey(pluginKey: string) {
+    return this.activeWorkerPluginAliases.get(pluginKey) || pluginKey;
+  }
+
+  private listActiveWorkerOperations(): QqbotPluginOperationSummary[] {
+    return [...this.activeWorkerContexts.values()].flatMap((workerContext) => [
+      ...workerContext.manifest.operations.map((operation) => ({
+        aliases: operation.aliases,
+        description: operation.description,
+        inputSchema: operation.inputSchema,
+        key: operation.key,
+        name: operation.name,
+        outputSchema: operation.outputSchema,
+        pluginKey: workerContext.pluginKey,
+        timeoutMs: operation.timeoutMs,
+        triggerMode: 'command' as const,
+      })),
+      ...workerContext.manifest.events.map((event) => ({
+        description: event.description,
+        inputSchema: {
+          triggerType: event.eventName,
+        },
+        key: event.eventName || event.key,
+        name: event.name,
+        pluginKey: workerContext.pluginKey,
+        triggerMode: 'event' as const,
+      })),
+    ]);
+  }
+
+  private async registerActiveWorker(
+    installation: QqbotPluginInstallation,
+    version: QqbotPluginVersion,
+    worker: QqbotPluginWorkerRuntime,
+  ) {
+    const manifest = parseQqbotPluginManifest(version.manifestJson);
+    await this.stopExistingWorkersForManifest(manifest);
+    const workerContext: ActiveWorkerContext = {
+      installationId: installation.id,
+      manifest,
+      pluginId: installation.pluginId,
+      pluginKey: manifest.pluginKey,
+      worker,
+    };
+    this.activeWorkers.set(installation.id, worker);
+    this.activeWorkerContexts.set(installation.id, workerContext);
+    this.activeWorkersByPluginKey.set(manifest.pluginKey, workerContext);
+    for (const alias of manifest.legacyAliases) {
+      this.activeWorkerPluginAliases.set(alias, manifest.pluginKey);
+      this.activeWorkersByPluginKey.set(alias, workerContext);
+    }
+  }
+
+  private async stopExistingWorkersForManifest(manifest: QqbotPluginManifest) {
+    const installationIds = new Set<string>();
+    for (const pluginKey of [manifest.pluginKey, ...manifest.legacyAliases]) {
+      const workerContext = this.activeWorkersByPluginKey.get(pluginKey);
+      if (!workerContext) {
+        continue;
+      }
+      installationIds.add(workerContext.installationId);
+    }
+
+    for (const installationId of installationIds) {
+      await this.stopWorker(installationId);
+    }
+  }
+
+  private unregisterActiveWorker(installationId: string) {
+    const workerContext = this.activeWorkerContexts.get(installationId);
+    this.activeWorkers.delete(installationId);
+    this.activeWorkerContexts.delete(installationId);
+    if (!workerContext) return;
+
+    for (const pluginKey of [
+      workerContext.pluginKey,
+      ...workerContext.manifest.legacyAliases,
+    ]) {
+      if (this.activeWorkersByPluginKey.get(pluginKey) === workerContext) {
+        this.activeWorkersByPluginKey.delete(pluginKey);
+      }
+    }
+    for (const alias of workerContext.manifest.legacyAliases) {
+      if (
+        this.activeWorkerPluginAliases.get(alias) === workerContext.pluginKey
+      ) {
+        this.activeWorkerPluginAliases.delete(alias);
+      }
+    }
+  }
+
+  private async getPluginKey(pluginId: string) {
+    const findOne = this.pluginRepository.findOne?.bind(this.pluginRepository);
     const plugin = findOne ? await findOne({ where: { id: pluginId } }) : null;
     return plugin?.pluginKey || pluginId;
   }
@@ -461,16 +749,36 @@ export class QqbotPluginPlatformService {
       await worker.deactivate();
     } finally {
       await worker.dispose();
-      this.activeWorkers.delete(installationId);
+      this.unregisterActiveWorker(installationId);
     }
   }
 
-  private async startWorker(installation: QqbotPluginInstallation) {
+  private async stopWorkersForInstallation(
+    installation: QqbotPluginInstallation,
+  ) {
+    const pluginKey = await this.getPluginKey(installation.pluginId);
+    const installationIds = new Set([installation.id]);
+    const pluginWorkerContext = this.activeWorkersByPluginKey.get(pluginKey);
+    if (pluginWorkerContext) {
+      installationIds.add(pluginWorkerContext.installationId);
+    }
+
+    for (const installationId of installationIds) {
+      await this.stopWorker(installationId);
+    }
+  }
+
+  private async startWorker(
+    installation: QqbotPluginInstallation,
+    versionOverride?: QqbotPluginVersion,
+  ) {
     if (!this.runtimeFactory) return;
 
-    const version = await this.versionRepository.findOne({
-      where: { id: installation.versionId },
-    });
+    const version =
+      versionOverride ||
+      (await this.versionRepository.findOne({
+        where: { id: installation.versionId },
+      }));
     if (!version) {
       throwVbenError('插件版本不存在，无法启动运行时');
     }
@@ -480,8 +788,9 @@ export class QqbotPluginPlatformService {
       await worker.load(version.manifestJson);
       await worker.activate();
       await worker.health();
-      this.activeWorkers.set(
-        installation.id,
+      await this.registerActiveWorker(
+        installation,
+        version,
         worker as QqbotPluginWorkerRuntime,
       );
     } catch (error) {

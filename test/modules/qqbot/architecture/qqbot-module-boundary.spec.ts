@@ -76,6 +76,28 @@ describe('QQBot third-phase module boundaries', () => {
     expect(violations).toEqual([]);
   });
 
+  it('prevents QQBot core application from importing NapCat infrastructure or persistence directly', () => {
+    const violations = collectTsFiles(join(qqbotRoot, 'core/application'))
+      .map((filePath) => ({
+        file: toRepoPath(filePath),
+        source: readSource(filePath),
+      }))
+      .flatMap(({ file, source }) => {
+        const bannedPatterns = [
+          /@\/modules\/qqbot\/napcat\/infrastructure\//,
+          /NapcatAccountBinding/,
+          /NapcatContainer/,
+          /QqbotNapcatContainerService/,
+          /@InjectRepository\(Napcat/,
+        ];
+        return bannedPatterns
+          .filter((pattern) => pattern.test(source))
+          .map((pattern) => `${file}: ${pattern}`);
+      });
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps QqbotCoreModule free of plugin platform controllers, registries, SDKs, and concrete plugin services', () => {
     const source = readSource(join(qqbotRoot, 'core/qqbot-core.module.ts'));
     const bannedSymbols = [

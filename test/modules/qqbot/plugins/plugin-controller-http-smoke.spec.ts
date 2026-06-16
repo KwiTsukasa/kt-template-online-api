@@ -10,6 +10,7 @@ import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { ToolsService } from '../../../../src/common';
 import { QqbotPluginController } from '../../../../src/modules/qqbot/plugin-platform/contract/qqbot-plugin.controller';
+import { QqbotPluginPlatformService } from '../../../../src/modules/qqbot/plugin-platform/application/plugin-platform.service';
 import { QqbotEventPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-event-plugin-registry.service';
 import { QqbotPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-plugin-registry.service';
 import type { QqbotIntegrationPlugin } from '../../../../src/modules/qqbot/core/contract/qqbot.types';
@@ -31,6 +32,30 @@ const createPlugin = (
   version: '1.0.0',
 });
 
+const listOperationSummaries = (pluginKey?: string) => {
+  const plugins = [
+    createPlugin('bangdream', ['bangDream']),
+    createPlugin('ff14-market', ['ff14Market']),
+    createPlugin('fflogs'),
+  ];
+  const resolvedPluginKey =
+    pluginKey === 'bangDream'
+      ? 'bangdream'
+      : pluginKey === 'ff14Market'
+        ? 'ff14-market'
+        : pluginKey;
+  return plugins
+    .filter((plugin) => !resolvedPluginKey || plugin.key === resolvedPluginKey)
+    .flatMap((plugin) =>
+      plugin.operations.map((operation) => ({
+        key: operation.key,
+        name: operation.name,
+        pluginKey: plugin.key,
+        triggerMode: 'command',
+      })),
+    );
+};
+
 describe('QQBot plugin controller local HTTP smoke', () => {
   let app: INestApplication;
 
@@ -43,29 +68,7 @@ describe('QQBot plugin controller local HTTP smoke', () => {
           provide: QqbotPluginRegistryService,
           useValue: {
             health: jest.fn(async () => []),
-            listOperations: jest.fn((pluginKey?: string) => {
-              const plugins = [
-                createPlugin('bangdream', ['bangDream']),
-                createPlugin('ff14-market', ['ff14Market']),
-                createPlugin('fflogs'),
-              ];
-              const resolvedPluginKey =
-                pluginKey === 'bangDream'
-                  ? 'bangdream'
-                  : pluginKey === 'ff14Market'
-                    ? 'ff14-market'
-                    : pluginKey;
-              return plugins
-                .filter((plugin) => !resolvedPluginKey || plugin.key === resolvedPluginKey)
-                .flatMap((plugin) =>
-                  plugin.operations.map((operation) => ({
-                    key: operation.key,
-                    name: operation.name,
-                    pluginKey: plugin.key,
-                    triggerMode: 'command',
-                  })),
-                );
-            }),
+            listOperations: jest.fn(listOperationSummaries),
             listPlugins: jest.fn(() =>
               [
                 createPlugin('bangdream', ['bangDream']),
@@ -79,6 +82,26 @@ describe('QQBot plugin controller local HTTP smoke', () => {
                 version: plugin.version,
               })),
             ),
+          },
+        },
+        {
+          provide: QqbotPluginPlatformService,
+          useValue: {
+            listOperationSummaries: jest.fn(async (query) =>
+              listOperationSummaries(query?.pluginKey),
+            ),
+            pageOperationSummaries: jest.fn(async (query) => {
+              const pageNo = Number(query?.pageNo || 1);
+              const pageSize = Number(query?.pageSize || 10);
+              const operations = listOperationSummaries(query?.pluginKey);
+              const skip = (pageNo - 1) * pageSize;
+              return {
+                list: operations.slice(skip, skip + pageSize),
+                pageNo,
+                pageSize,
+                total: operations.length,
+              };
+            }),
           },
         },
         {

@@ -5,49 +5,25 @@ import type {
   QqbotPluginExecutionPort,
   QqbotPluginOperationLookup,
 } from '@/modules/qqbot/core/domain/plugin-execution.port';
-import { QqbotEventPluginRegistryService } from './registry/qqbot-event-plugin-registry.service';
-import { QqbotPluginRegistryService } from './registry/qqbot-plugin-registry.service';
-import { QqbotPluginArgumentParserService } from './argument/qqbot-plugin-argument-parser.service';
+import { QqbotPluginPlatformService } from './plugin-platform.service';
 
 @Injectable()
 export class QqbotPluginExecutionAdapter implements QqbotPluginExecutionPort {
-  constructor(
-    private readonly argumentParser: QqbotPluginArgumentParserService,
-    private readonly eventPluginRegistry: QqbotEventPluginRegistryService,
-    private readonly pluginRegistry: QqbotPluginRegistryService,
-  ) {}
+  constructor(private readonly platformService: QqbotPluginPlatformService) {}
 
   async executeOperation(input: QqbotPluginExecutionInput) {
-    const normalizedInput = await this.argumentParser.normalizeInput(input);
-    return this.pluginRegistry.execute(
-      input.pluginKey,
-      input.operationKey,
-      normalizedInput,
-      {
-        ...(input.context || {}),
-        args: normalizedInput,
-      },
-    );
+    return this.platformService.executeOperation(input);
   }
 
   async dispatchEvent(input: QqbotPluginEventDispatchInput) {
-    if (input.eventKey !== 'message') return false;
-    return this.eventPluginRegistry.dispatchMessage(input.message);
+    return this.platformService.dispatchEvent(input);
   }
 
   async listActiveOperations() {
-    return [
-      ...this.pluginRegistry.listOperations(),
-      ...this.eventPluginRegistry.listOperations(),
-    ];
+    return this.platformService.listActiveOperations();
   }
 
   async getOperationByCommand(command: QqbotPluginOperationLookup) {
-    if (!command.pluginKey || !command.operationKey) return null;
-    return (
-      this.pluginRegistry
-        .listOperations(command.pluginKey)
-        .find((operation) => operation.key === command.operationKey) || null
-    );
+    return this.platformService.getOperationByCommand(command);
   }
 }

@@ -1,5 +1,65 @@
 import { ToolsService } from '@/common';
+import type { QqbotAccountNapcatRuntimePort } from '@/modules/qqbot/core/application/account/qqbot-account-napcat-runtime.port';
 import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
+import { QqbotNapcatAccountRuntimeService } from '@/modules/qqbot/napcat/application/account-runtime/qqbot-napcat-account-runtime.service';
+
+const createAccountService = (input: {
+  accountAbilityRepository?: any;
+  accountRepository: any;
+  configService?: any;
+  napcatRuntime?: QqbotAccountNapcatRuntimePort;
+  passwordCryptoService?: any;
+  systemNoticePublisher?: any;
+  toolsService?: ToolsService;
+}) =>
+  new QqbotAccountService(
+    input.accountRepository,
+    input.accountAbilityRepository || {},
+    input.toolsService || new ToolsService(),
+    input.napcatRuntime,
+    input.systemNoticePublisher,
+    input.configService,
+    input.passwordCryptoService,
+  );
+
+const createNapcatRuntime = (input: {
+  bindingRepository: any;
+  containerRepository: any;
+  containerService: any;
+  toolsService?: ToolsService;
+}) =>
+  new QqbotNapcatAccountRuntimeService(
+    input.bindingRepository,
+    input.containerRepository,
+    input.containerService,
+    input.toolsService || new ToolsService(),
+  );
+
+const createAccountServiceWithNapcatRuntime = (input: {
+  accountRepository: any;
+  bindingRepository: any;
+  configService?: any;
+  containerRepository: any;
+  containerService: any;
+  passwordCryptoService?: any;
+  systemNoticePublisher?: any;
+  toolsService?: ToolsService;
+}) => {
+  const toolsService = input.toolsService || new ToolsService();
+  return createAccountService({
+    accountRepository: input.accountRepository,
+    configService: input.configService,
+    napcatRuntime: createNapcatRuntime({
+      bindingRepository: input.bindingRepository,
+      containerRepository: input.containerRepository,
+      containerService: input.containerService,
+      toolsService,
+    }),
+    passwordCryptoService: input.passwordCryptoService,
+    systemNoticePublisher: input.systemNoticePublisher,
+    toolsService,
+  });
+};
 
 describe('QqbotAccountService', () => {
   it('stores NapCat login password as encrypted secret and never persists the transport field', async () => {
@@ -9,23 +69,18 @@ describe('QqbotAccountService', () => {
       findOne: jest.fn().mockResolvedValue(null),
       save: jest.fn(async (input) => ({ ...input, id: 'account-1' })),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      toolsService,
-      undefined,
-      {
+    const service = createAccountService({
+      accountRepository,
+      configService: {
         get: jest.fn((key: string) =>
           key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
         ),
-      } as any,
-      {
+      },
+      passwordCryptoService: {
         decryptPassword: jest.fn().mockReturnValue('qq-login-password'),
-      } as any,
-    );
+      },
+      toolsService,
+    });
 
     await service.save({
       encryptedLoginPassword: 'encrypted-payload',
@@ -52,21 +107,15 @@ describe('QqbotAccountService', () => {
       findOne: jest.fn().mockResolvedValue(null),
       save: jest.fn(async (input) => ({ ...input, id: 'account-1' })),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      new ToolsService(),
-      undefined,
-      {
+    const service = createAccountService({
+      accountRepository,
+      configService: {
         get: jest.fn().mockReturnValue(''),
-      } as any,
-      {
+      },
+      passwordCryptoService: {
         decryptPassword: jest.fn().mockReturnValue('qq-login-password'),
-      } as any,
-    );
+      },
+    });
 
     await expect(
       service.save({
@@ -87,23 +136,17 @@ describe('QqbotAccountService', () => {
       findOne: jest.fn().mockResolvedValue(null),
       save: jest.fn(async (input) => ({ ...input, id: 'account-1' })),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      new ToolsService(),
-      undefined,
-      {
+    const service = createAccountService({
+      accountRepository,
+      configService: {
         get: jest.fn((key: string) =>
           key === 'ADMIN_TOKEN_SECRET' ? 'change-me' : '',
         ),
-      } as any,
-      {
+      },
+      passwordCryptoService: {
         decryptPassword: jest.fn().mockReturnValue('qq-login-password'),
-      } as any,
-    );
+      },
+    });
 
     await expect(
       service.save({
@@ -125,23 +168,18 @@ describe('QqbotAccountService', () => {
       findOne: jest.fn().mockResolvedValue(null),
       save: jest.fn(async (input) => ({ ...input, id: 'account-1' })),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      toolsService,
-      undefined,
-      {
+    const service = createAccountService({
+      accountRepository,
+      configService: {
         get: jest.fn((key: string) =>
           key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
         ),
-      } as any,
-      {
+      },
+      passwordCryptoService: {
         decryptPassword: jest.fn().mockReturnValue(' qq-login-password '),
-      } as any,
-    );
+      },
+      toolsService,
+    });
 
     await service.save({
       encryptedLoginPassword: 'encrypted-payload',
@@ -162,14 +200,10 @@ describe('QqbotAccountService', () => {
       findOne: jest.fn().mockResolvedValue({ id: 'account-1' }),
       update: jest.fn(),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      { update: jest.fn() } as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      new ToolsService(),
-    );
+    const service = createAccountService({
+      accountAbilityRepository: { update: jest.fn() },
+      accountRepository,
+    });
 
     await service.update({
       id: 'account-1',
@@ -190,14 +224,7 @@ describe('QqbotAccountService', () => {
     const accountRepository = {
       update: jest.fn(),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      new ToolsService(),
-    );
+    const service = createAccountService({ accountRepository });
 
     await service.markOffline('1914728559');
 
@@ -213,14 +240,7 @@ describe('QqbotAccountService', () => {
     const accountRepository = {
       update: jest.fn(),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      new ToolsService(),
-    );
+    const service = createAccountService({ accountRepository });
 
     await service.markOnline('1914728559', 'Universal');
 
@@ -239,14 +259,7 @@ describe('QqbotAccountService', () => {
     const accountRepository = {
       update: jest.fn(),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      new ToolsService(),
-    );
+    const service = createAccountService({ accountRepository });
 
     await service.markOnline('1914728559', 'Universal', null);
 
@@ -265,14 +278,7 @@ describe('QqbotAccountService', () => {
     const accountRepository = {
       update: jest.fn(),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      new ToolsService(),
-    );
+    const service = createAccountService({ accountRepository });
 
     await service.markOffline('1914728559', '错误'.repeat(300));
 
@@ -343,15 +349,15 @@ describe('QqbotAccountService', () => {
     const systemNoticePublisher = {
       publishSystemNotice: jest.fn().mockResolvedValue('notice-1'),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      { createQueryBuilder: jest.fn(createBindingBuilder) } as any,
-      { createQueryBuilder: jest.fn(createContainerBuilder) } as any,
-      napcatContainerService as any,
-      new ToolsService(),
-      systemNoticePublisher as any,
-    );
+    const service = createAccountServiceWithNapcatRuntime({
+      accountRepository,
+      bindingRepository: { createQueryBuilder: jest.fn(createBindingBuilder) },
+      containerRepository: {
+        createQueryBuilder: jest.fn(createContainerBuilder),
+      },
+      containerService: napcatContainerService,
+      systemNoticePublisher,
+    });
 
     const page = await service.page({});
 
@@ -425,10 +431,9 @@ describe('QqbotAccountService', () => {
     const napcatContainerService = {
       detectRuntimeOffline: jest.fn(),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {
+    const service = createAccountServiceWithNapcatRuntime({
+      accountRepository,
+      bindingRepository: {
         createQueryBuilder: jest.fn(() => ({
           addOrderBy: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
@@ -436,17 +441,16 @@ describe('QqbotAccountService', () => {
           orderBy: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      {
+      },
+      containerRepository: {
         createQueryBuilder: jest.fn(() => ({
           andWhere: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue([container]),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      napcatContainerService as any,
-      new ToolsService(),
-    );
+      },
+      containerService: napcatContainerService,
+    });
 
     const page = await service.page({});
 
@@ -510,10 +514,9 @@ describe('QqbotAccountService', () => {
         webuiOnline: true,
       }),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {
+    const service = createAccountServiceWithNapcatRuntime({
+      accountRepository,
+      bindingRepository: {
         createQueryBuilder: jest.fn(() => ({
           addOrderBy: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
@@ -521,18 +524,17 @@ describe('QqbotAccountService', () => {
           orderBy: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      {
+      },
+      containerRepository: {
         createQueryBuilder: jest.fn(() => ({
           addSelect: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue([container]),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      napcatContainerService as any,
-      new ToolsService(),
-    );
+      },
+      containerService: napcatContainerService,
+    });
 
     const page = await service.page({});
 
@@ -593,10 +595,9 @@ describe('QqbotAccountService', () => {
       })),
       update: jest.fn(),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {
+    const service = createAccountServiceWithNapcatRuntime({
+      accountRepository,
+      bindingRepository: {
         createQueryBuilder: jest.fn(() => ({
           addOrderBy: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
@@ -604,18 +605,17 @@ describe('QqbotAccountService', () => {
           orderBy: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      {
+      },
+      containerRepository: {
         createQueryBuilder: jest.fn(() => ({
           addSelect: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue([container]),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      {} as any,
-      new ToolsService(),
-    );
+      },
+      containerService: {},
+    });
 
     const page = await service.page({});
 
@@ -670,10 +670,9 @@ describe('QqbotAccountService', () => {
       })),
       update: jest.fn(),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {
+    const service = createAccountServiceWithNapcatRuntime({
+      accountRepository,
+      bindingRepository: {
         createQueryBuilder: jest.fn(() => ({
           addOrderBy: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
@@ -681,18 +680,17 @@ describe('QqbotAccountService', () => {
           orderBy: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      {
+      },
+      containerRepository: {
         createQueryBuilder: jest.fn(() => ({
           addSelect: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue([container]),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      {} as any,
-      new ToolsService(),
-    );
+      },
+      containerService: {},
+    });
 
     const page = await service.page({});
 
@@ -752,10 +750,9 @@ describe('QqbotAccountService', () => {
     const systemNoticePublisher = {
       publishSystemNotice: jest.fn().mockResolvedValue(undefined),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {
+    const service = createAccountServiceWithNapcatRuntime({
+      accountRepository,
+      bindingRepository: {
         createQueryBuilder: jest.fn(() => ({
           addOrderBy: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
@@ -763,18 +760,17 @@ describe('QqbotAccountService', () => {
           orderBy: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      {
+      },
+      containerRepository: {
         createQueryBuilder: jest.fn(() => ({
           andWhere: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue([container]),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      napcatContainerService as any,
-      new ToolsService(),
-      systemNoticePublisher as any,
-    );
+      },
+      containerService: napcatContainerService,
+      systemNoticePublisher,
+    });
 
     const page = await service.page({});
 
@@ -840,10 +836,9 @@ describe('QqbotAccountService', () => {
         webuiOnline: true,
       }),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {
+    const service = createAccountServiceWithNapcatRuntime({
+      accountRepository,
+      bindingRepository: {
         createQueryBuilder: jest.fn(() => ({
           addOrderBy: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
@@ -851,18 +846,17 @@ describe('QqbotAccountService', () => {
           orderBy: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      {
+      },
+      containerRepository: {
         createQueryBuilder: jest.fn(() => ({
           addSelect: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue([container]),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      napcatContainerService as any,
-      new ToolsService(),
-    );
+      },
+      containerService: napcatContainerService,
+    });
 
     const page = await service.page({});
 
@@ -937,10 +931,9 @@ describe('QqbotAccountService', () => {
         webuiOnline: true,
       }),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {
+    const service = createAccountServiceWithNapcatRuntime({
+      accountRepository,
+      bindingRepository: {
         createQueryBuilder: jest.fn(() => ({
           addOrderBy: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
@@ -948,18 +941,17 @@ describe('QqbotAccountService', () => {
           orderBy: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      {
+      },
+      containerRepository: {
         createQueryBuilder: jest.fn(() => ({
           addSelect: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue([container]),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      napcatContainerService as any,
-      new ToolsService(),
-    );
+      },
+      containerService: napcatContainerService,
+    });
 
     const page = await service.page({});
 
@@ -1029,10 +1021,9 @@ describe('QqbotAccountService', () => {
     const systemNoticePublisher = {
       publishSystemNotice: jest.fn().mockResolvedValue(undefined),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {
+    const service = createAccountServiceWithNapcatRuntime({
+      accountRepository,
+      bindingRepository: {
         createQueryBuilder: jest.fn(() => ({
           addOrderBy: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
@@ -1040,23 +1031,23 @@ describe('QqbotAccountService', () => {
           orderBy: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      {
+      },
+      configService: {
+        get: jest.fn((key: string) =>
+          key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
+        ),
+      },
+      containerRepository: {
         createQueryBuilder: jest.fn(() => ({
           andWhere: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue([container]),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      napcatContainerService as any,
+      },
+      containerService: napcatContainerService,
+      systemNoticePublisher,
       toolsService,
-      systemNoticePublisher as any,
-      {
-        get: jest.fn((key: string) =>
-          key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
-        ),
-      } as any,
-    );
+    });
 
     const result = await service.runOfflineWatchdog();
 
@@ -1132,10 +1123,9 @@ describe('QqbotAccountService', () => {
     const systemNoticePublisher = {
       publishSystemNotice: jest.fn().mockResolvedValue(undefined),
     };
-    const service = new QqbotAccountService(
-      accountRepository as any,
-      {} as any,
-      {
+    const service = createAccountServiceWithNapcatRuntime({
+      accountRepository,
+      bindingRepository: {
         createQueryBuilder: jest.fn(() => ({
           addOrderBy: jest.fn().mockReturnThis(),
           andWhere: jest.fn().mockReturnThis(),
@@ -1143,23 +1133,23 @@ describe('QqbotAccountService', () => {
           orderBy: jest.fn().mockReturnThis(),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      {
+      },
+      configService: {
+        get: jest.fn((key: string) =>
+          key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
+        ),
+      },
+      containerRepository: {
         createQueryBuilder: jest.fn(() => ({
           andWhere: jest.fn().mockReturnThis(),
           getMany: jest.fn().mockResolvedValue([container]),
           where: jest.fn().mockReturnThis(),
         })),
-      } as any,
-      napcatContainerService as any,
+      },
+      containerService: napcatContainerService,
+      systemNoticePublisher,
       toolsService,
-      systemNoticePublisher as any,
-      {
-        get: jest.fn((key: string) =>
-          key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
-        ),
-      } as any,
-    );
+    });
 
     await service.runOfflineWatchdog();
 

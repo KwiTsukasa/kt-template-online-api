@@ -16,7 +16,10 @@ import {
   parseQqbotPluginManifest,
   type QqbotPluginManifest,
 } from '../domain/manifest';
-import type { QqbotPluginWorkerRuntime } from '../infrastructure/integration/runtime';
+import type {
+  QqbotPluginRuntimeEvent as QqbotPluginWorkerRuntimeEvent,
+  QqbotPluginWorkerRuntime,
+} from '../infrastructure/integration/runtime';
 import { QqbotPluginArgumentParserService } from './argument/qqbot-plugin-argument-parser.service';
 import { QqbotBuiltinPluginPackageLoaderService } from '../infrastructure/integration/package/builtin-plugin-package-loader.service';
 import { QqbotPluginPackageReaderService } from '../infrastructure/integration/package/plugin-package-reader.service';
@@ -51,6 +54,7 @@ export type QqbotPluginRuntimeFactory = {
     | 'activate'
     | 'deactivate'
     | 'dispose'
+    | 'drainRuntimeEvents'
     | 'executeOperation'
     | 'handleEvent'
     | 'health'
@@ -351,30 +355,34 @@ export class QqbotPluginPlatformService
       );
     }
 
-    const output = await workerContext.worker.executeOperation({
-      input: normalizedInput,
-      operationId: operation.key,
-      operationKey: operation.key,
-      timeoutMs: operation.timeoutMs,
-    });
-    const pluginId = this.getPluginIdFromContext(input.context);
-    if (pluginId) {
-      await this.runtimeEventRepository.save({
-        eventType: 'command log mapped',
-        installationId: null,
-        level: 'info',
-        pluginId,
-        safeSummary: {
-          operationKey: input.operationKey,
-          outputKeys:
-            output && typeof output === 'object'
-              ? Object.keys(output as Record<string, unknown>).sort()
-              : [],
-          pluginKey: input.pluginKey,
-        },
+    try {
+      const output = await workerContext.worker.executeOperation({
+        input: normalizedInput,
+        operationId: operation.key,
+        operationKey: operation.key,
+        timeoutMs: operation.timeoutMs,
       });
+      const pluginId = this.getPluginIdFromContext(input.context);
+      if (pluginId) {
+        await this.runtimeEventRepository.save({
+          eventType: 'command log mapped',
+          installationId: null,
+          level: 'info',
+          pluginId,
+          safeSummary: {
+            operationKey: input.operationKey,
+            outputKeys:
+              output && typeof output === 'object'
+                ? Object.keys(output as Record<string, unknown>).sort()
+                : [],
+            pluginKey: input.pluginKey,
+          },
+        });
+      }
+      return output;
+    } finally {
+      await this.flushWorkerRuntimeEvents(workerContext);
     }
-    return output;
   }
 
   async dispatchEvent(input: QqbotPluginEventDispatchInput) {
@@ -387,12 +395,16 @@ export class QqbotPluginPlatformService
         ) {
           continue;
         }
-        const result = await workerContext.worker.handleEvent({
-          event: input.message,
-          eventKey: event.eventName || input.eventKey,
-          timeoutMs: workerContext.manifest.runtime.timeoutMs,
-        });
-        handled = Boolean(result) || handled;
+        try {
+          const result = await workerContext.worker.handleEvent({
+            event: input.message,
+            eventKey: event.eventName || input.eventKey,
+            timeoutMs: workerContext.manifest.runtime.timeoutMs,
+          });
+          handled = Boolean(result) || handled;
+        } finally {
+          await this.flushWorkerRuntimeEvents(workerContext);
+        }
       }
     }
     return handled;
@@ -745,11 +757,20 @@ export class QqbotPluginPlatformService
   private async stopWorker(installationId: string) {
     const worker = this.activeWorkers.get(installationId);
     if (!worker) return;
+    const workerContext = this.activeWorkerContexts.get(installationId);
     try {
-      await worker.deactivate();
+      try {
+        await worker.deactivate();
+      } finally {
+        await this.flushWorkerRuntimeEventsBestEffort(workerContext);
+      }
     } finally {
-      await worker.dispose();
-      this.unregisterActiveWorker(installationId);
+      try {
+        await worker.dispose();
+      } finally {
+        await this.flushWorkerRuntimeEventsBestEffort(workerContext);
+        this.unregisterActiveWorker(installationId);
+      }
     }
   }
 
@@ -788,15 +809,77 @@ export class QqbotPluginPlatformService
       await worker.load(version.manifestJson);
       await worker.activate();
       await worker.health();
+      await this.flushRuntimeEvents(
+        installation.id,
+        installation.pluginId,
+        worker,
+      );
       await this.registerActiveWorker(
         installation,
         version,
         worker as QqbotPluginWorkerRuntime,
       );
     } catch (error) {
-      await worker.dispose();
+      await this.flushRuntimeEvents(
+        installation.id,
+        installation.pluginId,
+        worker,
+      );
+      try {
+        await worker.dispose();
+      } finally {
+        await this.flushRuntimeEvents(
+          installation.id,
+          installation.pluginId,
+          worker,
+        );
+      }
       throw error;
     }
+  }
+
+  private async flushWorkerRuntimeEvents(workerContext: ActiveWorkerContext) {
+    await this.flushRuntimeEvents(
+      workerContext.installationId,
+      workerContext.pluginId,
+      workerContext.worker,
+    );
+  }
+
+  private async flushWorkerRuntimeEventsBestEffort(
+    workerContext?: ActiveWorkerContext,
+  ) {
+    if (!workerContext) return;
+    try {
+      await this.flushWorkerRuntimeEvents(workerContext);
+    } catch {
+      // Runtime event persistence must not block worker cleanup.
+    }
+  }
+
+  private async flushRuntimeEvents(
+    installationId: string,
+    pluginId: string,
+    worker: Pick<QqbotPluginWorkerRuntime, 'drainRuntimeEvents'>,
+  ) {
+    const events = worker.drainRuntimeEvents?.() || [];
+    if (!events.length || !this.isPersistablePluginId(pluginId)) return;
+
+    await Promise.all(
+      events.map((event: QqbotPluginWorkerRuntimeEvent) =>
+        this.runtimeEventRepository.save({
+          eventType: event.eventType,
+          installationId,
+          level: event.level,
+          pluginId,
+          safeSummary: event.safeSummary,
+        }),
+      ),
+    );
+  }
+
+  private isPersistablePluginId(pluginId: string) {
+    return /^\d+$/.test(pluginId);
   }
 
   private async recordRuntimeEvent(

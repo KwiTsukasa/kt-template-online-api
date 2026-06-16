@@ -1,5 +1,6 @@
 import { forwardRef, Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
 import { DictModule } from '@/modules/admin/platform-config/dict/dict.module';
@@ -16,7 +17,11 @@ import { QQBOT_PLUGIN_PLATFORM_ENTITIES } from './infrastructure/persistence';
 import { QqbotBuiltinPluginPackageLoaderService } from './infrastructure/integration/package/builtin-plugin-package-loader.service';
 import { QqbotPluginPackageReaderService } from './infrastructure/integration/package/plugin-package-reader.service';
 import { QqbotPluginHttpClientService } from './infrastructure/integration/sdk';
-import { QqbotBuiltinPluginWorkerRuntimeFactoryService } from './infrastructure/integration/runtime';
+import {
+  QqbotBuiltinPluginWorkerRuntimeFactoryService,
+  resolveQqbotPluginQueueConnection,
+  resolveQqbotPluginQueuePrefix,
+} from './infrastructure/integration/runtime';
 import { QQBOT_PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.service';
 
 @Module({
@@ -28,6 +33,14 @@ import { QQBOT_PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.serv
   ],
   imports: [
     ConfigModule,
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: resolveQqbotPluginQueueConnection(configService),
+        prefix: resolveQqbotPluginQueuePrefix(configService),
+      }),
+    }),
     AdminAuthGuardModule,
     DictModule,
     forwardRef(() => QqbotCoreModule),

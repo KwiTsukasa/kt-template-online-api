@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Worker } from 'node:worker_threads';
 import { join } from 'node:path';
 import { throwVbenError } from '@/common';
@@ -13,8 +14,14 @@ import type {
   QqbotPluginVersion,
 } from '@/modules/qqbot/plugin-platform/infrastructure/persistence';
 import {
+  QqbotPluginWorkerResponseError,
   QqbotPluginWorkerRuntime,
+  serializePluginWorkerResponseError,
 } from './worker-runtime';
+import {
+  createQqbotBullmqWorkerQueueOptions,
+  QqbotBullmqPluginWorkerRequestQueue,
+} from './bullmq-plugin-worker-request.queue';
 import type {
   QqbotPluginWorkerDriver,
   QqbotPluginWorkerRequest,
@@ -26,6 +33,7 @@ export class QqbotBuiltinPluginWorkerRuntimeFactoryService
 {
   constructor(
     private readonly pluginLoader: QqbotBuiltinPluginPackageLoaderService,
+    private readonly configService: ConfigService,
   ) {}
 
   create(
@@ -33,8 +41,19 @@ export class QqbotBuiltinPluginWorkerRuntimeFactoryService
     version: QqbotPluginVersion,
   ) {
     const pluginKey = getManifestPluginKey(version.manifestJson);
+    const driver = new QqbotBuiltinPluginWorkerThreadDriver(
+      this.pluginLoader,
+      pluginKey,
+    );
     return new QqbotPluginWorkerRuntime(
-      new QqbotBuiltinPluginWorkerThreadDriver(this.pluginLoader, pluginKey),
+      new QqbotBullmqPluginWorkerRequestQueue(
+        driver,
+        createQqbotBullmqWorkerQueueOptions(
+          this.configService,
+          pluginKey,
+          installation.id,
+        ),
+      ),
       {
         defaultTimeoutMs: getDefaultRuntimeTimeout(version.manifestJson),
         installationId: installation.id,
@@ -133,7 +152,7 @@ export class QqbotBuiltinPluginWorkerThreadDriver
         pending.resolve(message.result);
         return;
       }
-      pending.reject(deserializeWorkerError(message.error));
+      pending.reject(new QqbotPluginWorkerResponseError(message.error || {}));
       return;
     }
 
@@ -177,20 +196,7 @@ function resolveWorkerExecArgv() {
 }
 
 function serializeWorkerError(error: unknown) {
-  return {
-    message: error instanceof Error ? error.message : `${error}`,
-    name: error instanceof Error ? error.name : 'Error',
-    stack: error instanceof Error ? error.stack : undefined,
-  };
-}
-
-function deserializeWorkerError(
-  error?: { message?: string; name?: string; stack?: string },
-) {
-  const output = new Error(error?.message || 'QQBot 插件 worker 请求失败');
-  if (error?.name) output.name = error.name;
-  if (error?.stack) output.stack = error.stack;
-  return output;
+  return serializePluginWorkerResponseError(error);
 }
 
 function getManifestPluginKey(manifest: unknown) {

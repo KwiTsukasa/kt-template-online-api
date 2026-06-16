@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { MODULE_METADATA } from '@nestjs/common/constants';
+import { ConfigService } from '@nestjs/config';
 import { QQBOT_PLUGIN_RUNTIME_FACTORY } from '../../../../src/modules/qqbot/plugin-platform/application/plugin-platform.service';
 import { QqbotPluginPlatformService } from '../../../../src/modules/qqbot/plugin-platform/application/plugin-platform.service';
 import { QqbotEventPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-event-plugin-registry.service';
@@ -49,6 +50,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     );
 
     expect(dependencies?.[0]).toBe(QqbotBuiltinPluginPackageLoaderService);
+    expect(dependencies?.[1]).toBe(ConfigService);
   });
 
   it('uses a real worker-thread boundary for built-in plugin runtimes', () => {
@@ -60,6 +62,45 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     expect(source).toContain('QqbotBuiltinPluginWorkerThreadDriver');
     expect(source).not.toContain('class QqbotBuiltinPluginWorkerDriver');
     expect(source).not.toContain('new QqbotBuiltinPluginWorkerDriver');
+  });
+
+  it('uses BullMQ queues to serialize plugin worker requests instead of ad hoc in-memory chaining', () => {
+    const source = [
+      readSource(
+        'src/modules/qqbot/plugin-platform/plugin-platform.module.ts',
+      ),
+      readSource(
+        'src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/bullmq-plugin-worker-request.queue.ts',
+      ),
+      readSource(
+        'src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/builtin-plugin-worker-runtime.factory.ts',
+      ),
+    ].join('\n');
+
+    expect(source).toContain("@nestjs/bullmq");
+    expect(source).toContain("from 'bullmq'");
+    expect(source).toContain('new Queue(');
+    expect(source).toContain('new Worker(');
+    expect(source).toContain('new QueueEvents(');
+    expect(source).toContain('concurrency: 1');
+    expect(source).toContain('installation.id');
+    expect(source).toContain('options.installationId');
+    expect(source).toContain("this.queue.on('error'");
+    expect(source).toContain("this.queueEvents.on('error'");
+    expect(source).toContain("this.worker.on('error'");
+    expect(source).toContain('expiresAt');
+    expect(source).toContain('workerInstanceId');
+    expect(source).toContain('worker-request-expired');
+    expect(source).not.toContain('previous.catch(() => undefined).then');
+  });
+
+  it('keeps API deployment as a single plugin queue consumer during releases', () => {
+    const source = readSource('k8s/prod/api.yaml');
+
+    expect(source).toContain('replicas: 1');
+    expect(source).toContain('type: Recreate');
+    expect(source).not.toContain('maxSurge: 1');
+    expect(source).not.toContain('maxUnavailable: 0');
   });
 
   it('uses dedicated lifecycle use cases instead of direct status flips', () => {
@@ -181,7 +222,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     const installation = {
       id: 'installation-1',
       installedPath: 'D:/plugins/demo-plugin',
-      pluginId: 'plugin-1',
+      pluginId: '2060000000000000002',
       runtimeStatus: 'stopped',
       status: 'installed',
       versionId: 'version-1',
@@ -212,10 +253,24 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     const configRepository = createRepository();
     const assetRepository = createRepository();
     const runtimeEventRepository = createRepository();
+    const runtimeEventBatches = [
+      [],
+      [
+        {
+          eventType: 'worker-dispose-finished',
+          level: 'info',
+          pluginKey: 'demo-plugin',
+          safeSummary: {
+            phase: 'dispose',
+          },
+        },
+      ],
+    ];
     const worker = {
       activate: jest.fn(async () => ({ ok: true })),
       deactivate: jest.fn(async () => ({ ok: true })),
       dispose: jest.fn(async () => undefined),
+      drainRuntimeEvents: jest.fn(() => runtimeEventBatches.shift() || []),
       health: jest.fn(async () => ({ ok: true })),
       load: jest.fn(async () => ({ ok: true })),
     };
@@ -290,6 +345,132 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     );
     expect(worker.deactivate).toHaveBeenCalled();
     expect(worker.dispose).toHaveBeenCalled();
+    expect(runtimeEventRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'worker-dispose-finished',
+        installationId: installation.id,
+        pluginId: installation.pluginId,
+      }),
+    );
+  });
+
+  it('keeps worker cleanup best-effort when stop runtime event persistence fails', async () => {
+    const manifest = {
+      assets: [],
+      configSchema: {},
+      entry: 'src/index.ts',
+      events: [],
+      legacyAliases: [],
+      migrations: [],
+      minApiSdkVersion: '1.0.0',
+      name: 'Demo Plugin',
+      operations: [],
+      permissions: [],
+      pluginKey: 'demo-plugin',
+      runtime: {
+        maxConcurrency: 1,
+        memoryMb: 128,
+        timeoutMs: 5000,
+        workerType: 'node-worker',
+      },
+      version: '0.1.0',
+    };
+    const installation = {
+      id: 'installation-cleanup',
+      installedPath: 'D:/plugins/demo-plugin',
+      pluginId: '2060000000000000003',
+      runtimeStatus: 'stopped',
+      status: 'installed',
+      versionId: 'version-cleanup',
+    };
+    const version = {
+      id: 'version-cleanup',
+      manifestJson: manifest,
+      packageHash: 'hash',
+      pluginId: installation.pluginId,
+      version: '0.1.0',
+    };
+    const createRepository = (findOneValue?: unknown) => ({
+      find: jest.fn(async () => []),
+      findAndCount: jest.fn(async () => [[], 0]),
+      findOne: jest.fn(async () => findOneValue),
+      save: jest.fn(async (value) => value),
+      update: jest.fn(async () => ({ affected: 1 })),
+    });
+    const runtimeEventRepository = createRepository();
+    runtimeEventRepository.save = jest.fn(async (value) => {
+      if (
+        value &&
+        typeof value === 'object' &&
+        (value as { eventType?: string }).eventType ===
+          'worker-dispose-finished'
+      ) {
+        throw new Error('runtime event db unavailable');
+      }
+      return value;
+    });
+    const runtimeEventBatches = [
+      [],
+      [
+        {
+          eventType: 'worker-dispose-finished',
+          level: 'info',
+          pluginKey: 'demo-plugin',
+          safeSummary: {
+            phase: 'dispose',
+          },
+        },
+      ],
+    ];
+    const worker = {
+      activate: jest.fn(async () => ({ ok: true })),
+      deactivate: jest.fn(async () => ({ ok: true })),
+      dispose: jest.fn(async () => undefined),
+      drainRuntimeEvents: jest.fn(() => runtimeEventBatches.shift() || []),
+      health: jest.fn(async () => ({ ok: true })),
+      load: jest.fn(async () => ({ ok: true })),
+    };
+    const service = new (QqbotPluginPlatformService as any)(
+      createRepository({
+        id: installation.pluginId,
+        pluginKey: 'demo-plugin',
+      }),
+      createRepository(version),
+      createRepository(installation),
+      createRepository(),
+      createRepository(),
+      createRepository(),
+      createRepository(),
+      createRepository(),
+      runtimeEventRepository,
+      undefined,
+      {
+        create: jest.fn(() => worker),
+      },
+      {
+        setPluginActive: jest.fn(),
+      },
+      {
+        setPluginActive: jest.fn(),
+      },
+    ) as QqbotPluginPlatformService;
+
+    await service.enableInstallation({ id: installation.id });
+    await expect(
+      service.disableInstallation({ id: installation.id }),
+    ).resolves.toMatchObject({
+      id: installation.id,
+      runtimeStatus: 'stopped',
+      status: 'disabled',
+    });
+
+    expect(worker.dispose).toHaveBeenCalled();
+    expect(
+      (service as any).activeWorkers.has(installation.id),
+    ).toBe(false);
+    expect(
+      (service as any).activeWorkerContexts.has(installation.id),
+    ).toBe(false);
   });
 
   it('routes enabled command and message executions through active worker runtimes', async () => {
@@ -331,7 +512,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     const installation = {
       id: 'installation-execute',
       installedPath: 'D:/plugins/demo-plugin',
-      pluginId: 'plugin-execute',
+      pluginId: '2060000000000000001',
       runtimeStatus: 'stopped',
       status: 'installed',
       versionId: 'version-execute',
@@ -350,10 +531,25 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       save: jest.fn(async (value) => value),
       update: jest.fn(async () => ({ affected: 1 })),
     });
+    const runtimeEventRepository = createRepository();
+    const runtimeEventBatches = [
+      [
+        {
+          eventType: 'worker-recovered',
+          level: 'info',
+          pluginKey: 'demo-plugin',
+          safeSummary: {
+            status: 'active',
+          },
+        },
+      ],
+      [],
+    ];
     const worker = {
       activate: jest.fn(async () => ({ ok: true })),
       deactivate: jest.fn(async () => ({ ok: true })),
       dispose: jest.fn(async () => undefined),
+      drainRuntimeEvents: jest.fn(() => runtimeEventBatches.shift() || []),
       executeOperation: jest.fn(async () => ({ replyText: 'worker-ok' })),
       handleEvent: jest.fn(async () => true),
       health: jest.fn(async () => ({ ok: true })),
@@ -398,7 +594,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       createRepository(),
       createRepository(),
       createRepository(),
-      createRepository(),
+      runtimeEventRepository,
       argumentParser,
       runtimeFactory,
       fallbackCommandRegistry,
@@ -452,6 +648,17 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     );
     expect(fallbackCommandRegistry.execute).not.toHaveBeenCalled();
     expect(fallbackEventRegistry.dispatchMessage).not.toHaveBeenCalled();
+    expect(runtimeEventRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'worker-recovered',
+        installationId: installation.id,
+        level: 'info',
+        pluginId: installation.pluginId,
+        safeSummary: {
+          status: 'active',
+        },
+      }),
+    );
   });
 
   it('does not execute workers for persisted disabled built-in plugins', async () => {

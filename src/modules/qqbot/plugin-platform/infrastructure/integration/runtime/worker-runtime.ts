@@ -5,7 +5,7 @@ import {
   type QqbotPluginRuntimeEvent,
   type QqbotPluginRuntimeStatus,
   type QqbotPluginSafeInputSummary,
-  type QqbotPluginWorkerDriver,
+  type QqbotPluginWorkerRequestQueue,
   type QqbotPluginWorkerRequest,
   type QqbotPluginWorkerRequestType,
   type QqbotPluginWorkerRuntimeOptions,
@@ -23,6 +23,46 @@ export class QqbotPluginRuntimeError extends Error {
   }
 }
 
+export type QqbotPluginWorkerResponseErrorInput = {
+  message?: string;
+  name?: string;
+  stack?: string;
+};
+
+export class QqbotPluginWorkerResponseError extends Error {
+  constructor(readonly serializedError: QqbotPluginWorkerResponseErrorInput) {
+    super(serializedError.message || 'QQBot 插件 worker 请求失败');
+    this.name = serializedError.name || 'QqbotPluginWorkerResponseError';
+    if (serializedError.stack) this.stack = serializedError.stack;
+  }
+}
+
+export const serializePluginWorkerResponseError = (
+  error: unknown,
+): QqbotPluginWorkerResponseErrorInput => ({
+  message: error instanceof Error ? error.message : `${error}`,
+  name: error instanceof Error ? error.name : 'Error',
+  stack: error instanceof Error ? error.stack : undefined,
+});
+
+export class QqbotPluginWorkerStaleRequestError extends Error {
+  constructor(message = 'QQBot 插件 worker 队列请求已过期，需要恢复后重试') {
+    super(message);
+    this.name = 'QqbotPluginWorkerStaleRequestError';
+  }
+}
+
+export class QqbotPluginWorkerExpiredRequestError extends Error {
+  constructor(message = 'QQBot 插件 worker 队列请求已超时') {
+    super(message);
+    this.name = 'QqbotPluginWorkerExpiredRequestError';
+  }
+}
+
+const isNamedError = (error: unknown, name: string) => {
+  return error instanceof Error && error.name === name;
+};
+
 const createCorrelationId = () => {
   return `qqbot-plugin-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
@@ -38,18 +78,27 @@ const summarizeInput = (
 
 export class QqbotPluginWorkerRuntime {
   private readonly runtimeEvents: QqbotPluginRuntimeEvent[] = [];
+  private manifestForRecovery?: unknown;
+  private recoveryPromise?: Promise<void>;
+  private shouldRecoverActive = false;
 
   status: QqbotPluginRuntimeStatus = 'stopped';
 
   constructor(
-    private readonly driver: QqbotPluginWorkerDriver,
+    private readonly requestQueue: QqbotPluginWorkerRequestQueue,
     private readonly options: QqbotPluginWorkerRuntimeOptions,
   ) {}
 
   async load(manifest: unknown) {
-    const result = await this.request('load', {
-      manifest,
-    });
+    this.manifestForRecovery = manifest;
+    const result = await this.request(
+      'load',
+      {
+        manifest,
+      },
+      undefined,
+      { skipRecovery: true },
+    );
     this.status = 'loaded';
     return result;
   }
@@ -57,6 +106,7 @@ export class QqbotPluginWorkerRuntime {
   async activate() {
     const result = await this.request('activate');
     this.status = 'active';
+    this.shouldRecoverActive = true;
     return result;
   }
 
@@ -92,15 +142,17 @@ export class QqbotPluginWorkerRuntime {
   async deactivate() {
     const result = await this.request('deactivate');
     this.status = 'stopped';
+    this.shouldRecoverActive = false;
     return result;
   }
 
   async dispose() {
     try {
-      await this.request('dispose');
+      await this.request('dispose', {}, undefined, { skipRecovery: true });
     } finally {
-      await this.driver.dispose();
+      await this.requestQueue.close();
       this.status = 'stopped';
+      this.shouldRecoverActive = false;
     }
   }
 
@@ -108,11 +160,20 @@ export class QqbotPluginWorkerRuntime {
     return [...this.runtimeEvents];
   }
 
+  drainRuntimeEvents() {
+    return this.runtimeEvents.splice(0);
+  }
+
   private async request(
     type: QqbotPluginWorkerRequestType,
     payload: Partial<QqbotPluginWorkerRequest> = {},
     timeoutMs = this.options.defaultTimeoutMs,
+    control: { retryStale?: boolean; skipRecovery?: boolean } = {},
   ) {
+    if (!control.skipRecovery) {
+      await this.recoverIfNeeded(type);
+    }
+
     const message: QqbotPluginWorkerRequest = {
       correlationId: createCorrelationId(),
       installationId: this.options.installationId,
@@ -123,7 +184,7 @@ export class QqbotPluginWorkerRuntime {
     };
 
     const requestPromise = Promise.resolve().then(() =>
-      this.driver.request(message),
+      this.requestQueue.request(message),
     );
     requestPromise.catch(() => undefined);
 
@@ -135,8 +196,47 @@ export class QqbotPluginWorkerRuntime {
       if (error instanceof QqbotPluginRuntimeError) {
         throw error;
       }
+      if (
+        (error instanceof QqbotPluginWorkerStaleRequestError ||
+          isNamedError(error, 'QqbotPluginWorkerStaleRequestError')) &&
+        control.retryStale !== false
+      ) {
+        await this.markWorkerFailed('worker-stale-request', {
+          correlationId: message.correlationId,
+          operationId: message.operationId,
+          type,
+        });
+        await this.recoverIfNeeded(type);
+        return this.request(type, payload, timeoutMs, {
+          retryStale: false,
+          skipRecovery: true,
+        });
+      }
+      if (
+        error instanceof QqbotPluginWorkerExpiredRequestError ||
+        isNamedError(error, 'QqbotPluginWorkerExpiredRequestError')
+      ) {
+        const runtimeError = new QqbotPluginRuntimeError(
+          'PLUGIN_WORKER_TIMEOUT',
+          this.options.pluginKey,
+          'QQBot plugin worker queue request expired.',
+          {
+            correlationId: message.correlationId,
+            operationId: message.operationId,
+            timeoutMs,
+            type,
+          },
+        );
+        this.recordRuntimeEvent(
+          'worker-request-expired',
+          runtimeError.safeSummary,
+        );
+        throw runtimeError;
+      }
+      if (error instanceof QqbotPluginWorkerResponseError) {
+        throw error;
+      }
 
-      this.status = 'failed';
       const runtimeError = new QqbotPluginRuntimeError(
         'PLUGIN_WORKER_CRASH',
         this.options.pluginKey,
@@ -148,7 +248,7 @@ export class QqbotPluginWorkerRuntime {
           type,
         },
       );
-      this.recordRuntimeEvent('worker-crash', runtimeError.safeSummary);
+      await this.markWorkerFailed('worker-crash', runtimeError.safeSummary);
       throw runtimeError;
     } finally {
       timeout.clear();
@@ -163,7 +263,6 @@ export class QqbotPluginWorkerRuntime {
     let timer: NodeJS.Timeout | undefined;
     const promise = new Promise<never>((_, reject) => {
       timer = setTimeout(async () => {
-        this.status = 'failed';
         const error = new QqbotPluginRuntimeError(
           'PLUGIN_WORKER_TIMEOUT',
           this.options.pluginKey,
@@ -175,13 +274,7 @@ export class QqbotPluginWorkerRuntime {
             type,
           },
         );
-        this.recordRuntimeEvent('worker-timeout', error.safeSummary);
-
-        try {
-          await this.driver.dispose();
-        } catch {
-          // Timeout disposal is best-effort; the timeout error is the primary signal.
-        }
+        await this.markWorkerFailed('worker-timeout', error.safeSummary);
         reject(error);
       }, timeoutMs);
       timer.unref?.();
@@ -194,13 +287,87 @@ export class QqbotPluginWorkerRuntime {
     };
   }
 
-  private recordRuntimeEvent(
+  private async recoverIfNeeded(triggerType: QqbotPluginWorkerRequestType) {
+    if (this.status !== 'failed' || !this.manifestForRecovery) return;
+
+    if (!this.recoveryPromise) {
+      this.recoveryPromise = this.recoverWorker(triggerType).finally(() => {
+        this.recoveryPromise = undefined;
+      });
+    }
+
+    await this.recoveryPromise;
+  }
+
+  private async recoverWorker(triggerType: QqbotPluginWorkerRequestType) {
+    this.recordRuntimeEvent(
+      'worker-recover-started',
+      {
+        triggerType,
+      },
+      'warn',
+    );
+
+    await this.request(
+      'load',
+      {
+        manifest: this.manifestForRecovery,
+      },
+      this.options.defaultTimeoutMs,
+      { skipRecovery: true },
+    );
+    this.status = 'loaded';
+
+    if (this.shouldRecoverActive) {
+      await this.request(
+        'activate',
+        {},
+        this.options.defaultTimeoutMs,
+        { skipRecovery: true },
+      );
+      this.status = 'active';
+    }
+
+    this.recordRuntimeEvent(
+      'worker-recovered',
+      {
+        status: this.status,
+        triggerType,
+      },
+      'info',
+    );
+  }
+
+  private async markWorkerFailed(
     eventType: string,
     safeSummary: Record<string, unknown>,
   ) {
+    if (this.status === 'active') {
+      this.shouldRecoverActive = true;
+    }
+    this.status = 'failed';
+
+    let resetError: string | undefined;
+    try {
+      await this.requestQueue.reset();
+    } catch (error) {
+      resetError = error instanceof Error ? error.message : `${error}`;
+    }
+
+    this.recordRuntimeEvent(eventType, {
+      ...safeSummary,
+      ...(resetError ? { resetError } : {}),
+    });
+  }
+
+  private recordRuntimeEvent(
+    eventType: string,
+    safeSummary: Record<string, unknown>,
+    level: QqbotPluginRuntimeEvent['level'] = 'error',
+  ) {
     this.runtimeEvents.push({
       eventType,
-      level: 'error',
+      level,
       pluginKey: this.options.pluginKey,
       safeSummary,
     });

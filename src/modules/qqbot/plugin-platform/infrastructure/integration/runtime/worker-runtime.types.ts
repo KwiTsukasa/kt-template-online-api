@@ -38,6 +38,12 @@ export type QqbotPluginWorkerDriver = {
   request(message: QqbotPluginWorkerRequest): Promise<unknown>;
 };
 
+export type QqbotPluginWorkerRequestQueue = {
+  close(): Promise<void>;
+  request(message: QqbotPluginWorkerRequest): Promise<unknown>;
+  reset(): Promise<void>;
+};
+
 export type QqbotPluginWorkerRuntimeOptions = {
   defaultTimeoutMs: number;
   installationId: string;

@@ -9,10 +9,7 @@ spec:
   replicas: 1
   revisionHistoryLimit: 3
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   selector:
     matchLabels:
       app: kt-template-online-api
@@ -87,3 +84,78 @@ spec:
       port: 48085
       targetPort: 48085
       nodePort: 30085
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kt-qqbot-plugin-redis
+  namespace: kt-prod
+  labels:
+    app: kt-qqbot-plugin-redis
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: kt-qqbot-plugin-redis
+  template:
+    metadata:
+      labels:
+        app: kt-qqbot-plugin-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.4-alpine
+          imagePullPolicy: IfNotPresent
+          args:
+            - redis-server
+            - --appendonly
+            - "no"
+            - --save
+            - ""
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kt-qqbot-plugin-redis
+  namespace: kt-prod
+  labels:
+    app: kt-qqbot-plugin-redis
+spec:
+  type: ClusterIP
+  selector:
+    app: kt-qqbot-plugin-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379

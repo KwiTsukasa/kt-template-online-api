@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@kwitsukasa/knife4j-swagger-vue3": "0.1.2",
+    "@nestjs/bullmq": "11.0.4",
     "@nestjs/common": "^11.1.24",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.24",
@@ -41,6 +42,7 @@
     "@nestjs/swagger": "^11.4.4",
     "@nestjs/typeorm": "^11.0.1",
     "axios": "^1.17.0",
+    "bullmq": "5.78.1",
     "chart.js": "^4.5.1",
     "chartjs-adapter-moment": "^1.0.1",
     "cross-env": "^7.0.3",

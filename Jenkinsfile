@@ -36,6 +36,8 @@ def requiredRuntimeEnvKeys() {
     'WORDPRESS_BASE_URL',
     'FFLOGS_CLIENT_ID',
     'FFLOGS_CLIENT_SECRET',
+    'QQBOT_PLUGIN_QUEUE_REDIS_HOST',
+    'QQBOT_PLUGIN_QUEUE_REDIS_PORT',
   ]
 }
 

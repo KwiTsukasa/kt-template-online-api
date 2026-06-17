@@ -19,6 +19,14 @@ import type {
 import type { FflogsKnownWorldResolver } from '../../application/fflogs-input-parser';
 import { resolveFflogsConfig } from '../../config/fflogs-config';
 import { FflogsOAuthTokenCache } from '../storage/oauth-token-cache';
+import {
+  buildFf14MarketCatalog,
+  buildFf14MarketCatalogFromTree,
+  isFf14LocationName,
+  QQBOT_FF14_MARKET_DICT_CODES,
+  splitFf14WorldPath,
+  type Ff14DictItem,
+} from '../../../../ff14-market/src/domain/ff14-worlds';
 
 const FFLOGS_LOCALIZATION_DICT_CODES = {
   job: 'FFLOGS_JOB_LABEL',
@@ -37,9 +45,11 @@ type FflogsEncounterCatalogItem = {
 
 export type FflogsPluginHost = {
   getConfig: <T = string>(key: string) => T | undefined;
-  getDictByKey: (
+  getDictByKey?: (
     dictCode: string,
   ) => Promise<Array<{ label?: string; value?: string }>>;
+  getDictItemsByKey?: (dictCode: string) => Promise<Ff14DictItem[]>;
+  relationTree?: (input: { dictCode: string }) => Promise<Ff14DictItem[]>;
   requestJson: <T>(options: {
     body?: string;
     context: string;
@@ -244,10 +254,20 @@ export class FflogsClient {
 
   /**
    * 解析Known World。
-   * @param value - 待转换值；影响 resolveKnownWorld 的返回值。
+   * @param value - FF14 server, region, data-center, or path token parsed from FFLogs command text.
+   * @returns Legacy host resolution when available, otherwise package-owned dictionary fallback for generic workers.
    */
   async resolveKnownWorld(value: string) {
-    return this.host.resolveKnownWorld?.(value) || null;
+    if (this.host.resolveKnownWorld) {
+      return this.host.resolveKnownWorld(value);
+    }
+
+    const catalog = await this.loadFf14MarketCatalog();
+    if (!isFf14LocationName(catalog, value)) return null;
+    const worldPath = splitFf14WorldPath(value);
+    return {
+      serverSlug: worldPath.world || value,
+    };
   }
 
   /**
@@ -1700,7 +1720,7 @@ export class FflogsClient {
    * @param dictCode - dictCode 输入；驱动 `host.getDictByKey()` 的 FFLogs步骤。
    */
   private async getNormalizedDictMap(dictCode: string) {
-    const dicts = await this.host.getDictByKey(dictCode);
+    const dicts = await this.getDictItems(dictCode);
     const map = new Map<string, string>();
     for (const { label, value } of dicts) {
       for (const key of this.buildLookupKeys(`${value}`, `${label}`)) {
@@ -1708,6 +1728,47 @@ export class FflogsClient {
       }
     }
     return map;
+  }
+
+  /**
+   * Loads the FF14 market dictionary catalog inside the FFLogs package for known-world parsing.
+   * @returns FF14 region/data-center/world catalog assembled from generic host dictionary methods.
+   */
+  private async loadFf14MarketCatalog() {
+    if (this.host.relationTree) {
+      const treeCatalog = buildFf14MarketCatalogFromTree(
+        await this.host.relationTree({
+          dictCode: QQBOT_FF14_MARKET_DICT_CODES.region,
+        }),
+      );
+      if (treeCatalog.dataCenters.length > 0) return treeCatalog;
+    }
+
+    const [regions, dataCenters, worlds] = await Promise.all([
+      this.getDictItems(QQBOT_FF14_MARKET_DICT_CODES.region),
+      this.getDictItems(QQBOT_FF14_MARKET_DICT_CODES.dataCenter),
+      this.getDictItems(QQBOT_FF14_MARKET_DICT_CODES.world),
+    ]);
+    return buildFf14MarketCatalog({
+      dataCenters,
+      regions,
+      worlds,
+    });
+  }
+
+  /**
+   * Reads dictionary items through whichever generic or legacy host dictionary method is available.
+   * @param dictCode - Dictionary code used by FFLogs localization or FF14 world catalog lookup.
+   * @returns Dictionary items from `getDictItemsByKey`, legacy `getDictByKey`, or an empty list.
+   */
+  private async getDictItems(dictCode: string): Promise<Ff14DictItem[]> {
+    if (this.host.getDictItemsByKey) {
+      return this.host.getDictItemsByKey(dictCode);
+    }
+    if (this.host.getDictByKey) {
+      return this.host.getDictByKey(dictCode);
+    }
+    return [];
   }
 
   /**

@@ -17,10 +17,22 @@
     "plugin.storage.write"
   ],
   "runtime": {
-    "workerType": "node-worker",
+    "workerType": "thread",
     "timeoutMs": 30000,
-    "memoryMb": 3072,
-    "maxConcurrency": 2
+    "memoryMb": 512,
+    "maxConcurrency": 1,
+    "configKeys": [
+      "BANGDREAM_TSUGU_BESTDORI_BASE_URL",
+      "BANGDREAM_TSUGU_CACHE_ROOT",
+      "BANGDREAM_TSUGU_COMPRESS",
+      "BANGDREAM_TSUGU_DISPLAYED_SERVERS",
+      "BANGDREAM_TSUGU_HHWX_BASE_URL",
+      "BANGDREAM_TSUGU_MAIN_DATA_READY_TIMEOUT_MS",
+      "BANGDREAM_TSUGU_MAIN_SERVER",
+      "BANGDREAM_TSUGU_REQUEST_TIMEOUT_MS",
+      "BANGDREAM_TSUGU_RETRY_COUNT",
+      "BANGDREAM_TSUGU_USE_EASY_BG"
+    ]
   },
   "configSchema": {
     "type": "object"

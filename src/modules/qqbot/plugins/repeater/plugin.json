@@ -14,10 +14,17 @@
     "plugin.storage.write"
   ],
   "runtime": {
-    "workerType": "node-worker",
-    "timeoutMs": 5000,
+    "workerType": "thread",
+    "timeoutMs": 10000,
     "memoryMb": 128,
-    "maxConcurrency": 1
+    "maxConcurrency": 1,
+    "configKeys": [
+      "QQBOT_REPEATER_CONFIG_CACHE_TTL_MS",
+      "QQBOT_REPEATER_MAX_TEXT_LENGTH",
+      "QQBOT_REPEATER_MIN_INTERVAL_MS",
+      "QQBOT_REPEATER_STATE_TTL_MS",
+      "QQBOT_REPEATER_THRESHOLD"
+    ]
   },
   "configSchema": {
     "type": "object",

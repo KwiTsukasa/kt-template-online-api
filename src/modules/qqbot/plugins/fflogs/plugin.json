@@ -8,10 +8,21 @@
   "entry": "src/index.ts",
   "permissions": ["runtime.http", "plugin.config.read"],
   "runtime": {
-    "workerType": "node-worker",
-    "timeoutMs": 20000,
+    "workerType": "thread",
+    "timeoutMs": 30000,
     "memoryMb": 256,
-    "maxConcurrency": 2
+    "maxConcurrency": 1,
+    "configKeys": [
+      "FFLOGS_WEB_BASE_URL",
+      "FFLOGS_BASE_URL",
+      "FFLOGS_CLIENT_ID",
+      "FFLOGS_CLIENT_SECRET",
+      "FFLOGS_GRAPHQL_URL",
+      "FFLOGS_TOKEN_URL",
+      "FFLOGS_DEFAULT_SERVER",
+      "FFLOGS_DEFAULT_SERVER_REGION",
+      "FFLOGS_REQUEST_TIMEOUT_MS"
+    ]
   },
   "configSchema": {
     "type": "object",

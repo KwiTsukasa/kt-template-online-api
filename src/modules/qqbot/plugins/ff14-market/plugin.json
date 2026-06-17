@@ -9,10 +9,16 @@
   "legacyAliases": ["ff14Market"],
   "permissions": ["runtime.http", "plugin.config.read"],
   "runtime": {
-    "workerType": "node-worker",
-    "timeoutMs": 15000,
+    "workerType": "thread",
+    "timeoutMs": 30000,
     "memoryMb": 256,
-    "maxConcurrency": 4
+    "maxConcurrency": 1,
+    "configKeys": [
+      "FF14_DEFAULT_WORLD",
+      "FF14_UNIVERSALIS_BASE_URL",
+      "FF14_XIVAPI_BASE_URL",
+      "FF14_XIVAPI_CHS_BASE_URL"
+    ]
   },
   "configSchema": {
     "type": "object",

@@ -54,14 +54,13 @@ export class QqbotPluginPackageSourceService {
     }
 
     const manifestLike = JSON.parse(readFileSync(manifestFile, 'utf8'));
-    const entry = this.readManifestEntry(manifestLike);
-    const entryFile = this.pathPolicy.resolveEntryFile(
-      controlledPackageRoot,
-      entry,
-    );
     const manifest = parseQqbotPluginManifest(manifestLike, {
       pluginRoot: controlledPackageRoot,
     });
+    const entryFile = this.pathPolicy.resolveEntryFile(
+      controlledPackageRoot,
+      manifest.entry,
+    );
     const pluginKey = manifest.key;
 
     return {
@@ -82,24 +81,5 @@ export class QqbotPluginPackageSourceService {
     return readdirSync(root, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => join(root, entry.name));
-  }
-
-  /**
-   * Reads the raw entry string before parser normalization so path policy errors stay explicit.
-   * @param manifestLike - Parsed `plugin.json` content whose entry path belongs to the package.
-   * @returns Raw entry path or an empty value that the manifest parser will reject.
-   */
-  private readManifestEntry(manifestLike: unknown): string {
-    if (!this.isRecord(manifestLike)) return '';
-    return typeof manifestLike.entry === 'string' ? manifestLike.entry : '';
-  }
-
-  /**
-   * Narrows JSON values to object records before reading manifest fields.
-   * @param value - Parsed JSON value from a QQBot plugin package manifest.
-   * @returns Whether the value is a non-array object record.
-   */
-  private isRecord(value: unknown): value is Record<string, unknown> {
-    return !!value && typeof value === 'object' && !Array.isArray(value);
   }
 }

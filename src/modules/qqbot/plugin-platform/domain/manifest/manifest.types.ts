@@ -21,6 +21,7 @@ export type QqbotPluginPermission =
 export type QqbotPluginWorkerType = (typeof QQBOT_PLUGIN_WORKER_TYPES)[number];
 
 export type QqbotPluginRuntimeManifest = {
+  configKeys: string[];
   maxConcurrency: number;
   memoryMb: number;
   timeoutMs: number;

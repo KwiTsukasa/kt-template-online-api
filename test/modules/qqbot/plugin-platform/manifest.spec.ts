@@ -155,6 +155,27 @@ describe('QQBot plugin manifest contract', () => {
     );
   });
 
+  it('normalizes runtime config keys without platform-owned plugin knowledge', () => {
+    const validManifest = createValidManifest();
+    const manifest = parseQqbotPluginManifest({
+      ...validManifest,
+      runtime: {
+        ...validManifest.runtime,
+        configKeys: [
+          'SAMPLE_TOKEN',
+          ' SAMPLE_TIMEOUT_MS ',
+          '',
+          'SAMPLE_TOKEN',
+        ],
+      },
+    });
+
+    expect(manifest.runtime.configKeys).toEqual([
+      'SAMPLE_TOKEN',
+      'SAMPLE_TIMEOUT_MS',
+    ]);
+  });
+
   it('rejects unknown permissions from both plugin and operation scopes', () => {
     const manifest = createValidManifest();
     manifest.permissions = ['qqbot.send', 'host.env.read'];

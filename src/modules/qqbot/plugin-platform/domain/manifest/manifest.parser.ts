@@ -83,6 +83,28 @@ const getStringArray = (
 };
 
 /**
+ * Normalizes config keys declared by a plugin package manifest.
+ *
+ * @param rawKeys - Manifest-provided values from `runtime.configKeys`; these are package-owned
+ * names used by the generic host to preload configuration without hard-coding plugin keys.
+ * @returns Unique non-empty config keys in declaration order.
+ */
+function parseConfigKeys(rawKeys: unknown): string[] {
+  if (!Array.isArray(rawKeys)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      rawKeys
+        .filter((key): key is string => typeof key === 'string')
+        .map((key) => key.trim())
+        .filter((key) => key.length > 0),
+    ),
+  );
+}
+
+/**
  * 查询 QQBot 插件平台数据。
  * @param source - source 输入；限定 插件平台查询范围。
  * @param key - 键名；限定 插件平台查询范围。
@@ -276,6 +298,7 @@ const parseRuntime = (
   }
 
   return {
+    configKeys: parseConfigKeys(runtime.configKeys),
     maxConcurrency: maxConcurrency || 1,
     memoryMb: memoryMb || 128,
     timeoutMs: timeoutMs || 1000,

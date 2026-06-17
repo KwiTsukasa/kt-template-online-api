@@ -40,6 +40,18 @@ export class QqbotConfigService {
   }
 
   /**
+   * Reads a raw QQBot config value for plugin runtime host calls.
+   * @param configKey - Package-owned config key requested by a plugin manifest or worker host call.
+   * @returns Stored config value, or `undefined` when the key is not configured.
+   */
+  async getConfigValue(configKey: string): Promise<string | undefined> {
+    const record = await this.configRepository.findOne({
+      where: { configKey },
+    });
+    return record?.configValue || undefined;
+  }
+
+  /**
    * 更新Permission Config。
    * @param config - config 输入；使用 `allowlistEnabled`、`blocklistEnabled` 字段生成结果。
    * @returns QQBot 核心更新后的状态。

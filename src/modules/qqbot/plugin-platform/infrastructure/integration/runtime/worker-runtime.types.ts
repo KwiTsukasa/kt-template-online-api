@@ -1,3 +1,8 @@
+import type {
+  QqbotPluginPackageDescriptor,
+  QqbotPluginRuntimeConfigSnapshot,
+} from '@/modules/qqbot/plugin-platform/infrastructure/integration/package/plugin-package.types';
+
 export type QqbotPluginWorkerRequestType =
   | 'activate'
   | 'deactivate'
@@ -20,7 +25,9 @@ export type QqbotPluginSafeInputSummary = {
 };
 
 export type QqbotPluginWorkerRequest = {
+  configSnapshot?: QqbotPluginRuntimeConfigSnapshot;
   correlationId: string;
+  descriptor?: QqbotPluginPackageDescriptor;
   event?: unknown;
   eventKey?: string;
   installationId?: string;
@@ -53,6 +60,7 @@ export type QqbotPluginWorkerRequestQueue = {
 
 export type QqbotPluginWorkerRuntimeOptions = {
   defaultTimeoutMs: number;
+  descriptor?: QqbotPluginPackageDescriptor;
   installationId: string;
   pluginKey: string;
 };

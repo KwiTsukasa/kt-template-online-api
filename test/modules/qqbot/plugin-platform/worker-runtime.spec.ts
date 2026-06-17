@@ -1,15 +1,20 @@
 import type { ConfigService } from '@nestjs/config';
 import {
-  createQqbotBullmqWorkerQueueOptions,
   QqbotPluginRuntimeError,
+  QqbotPluginWorkerRuntime,
   QqbotPluginWorkerExpiredRequestError,
   QqbotPluginWorkerResponseError,
-  QqbotPluginWorkerRuntime,
+} from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/worker-runtime';
+import {
+  createQqbotBullmqWorkerQueueOptions,
   resolveQqbotPluginQueueConnection,
-  type QqbotPluginWorkerDriver,
-  type QqbotPluginWorkerRequest,
-  type QqbotPluginWorkerRequestQueue,
-} from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime';
+} from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/bullmq-plugin-worker-request.queue';
+import type {
+  QqbotPluginWorkerDriver,
+  QqbotPluginWorkerRequest,
+  QqbotPluginWorkerRequestQueue,
+  QqbotPluginWorkerRuntimeOptions,
+} from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/worker-runtime.types';
 import { createQqbotPluginSdk } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/sdk';
 
 class RecordingDriver implements QqbotPluginWorkerDriver {
@@ -209,6 +214,48 @@ const createRuntime = (driver = new RecordingDriver()) => {
 };
 
 describe('QQBot plugin worker runtime', () => {
+  it('accepts a package descriptor in worker runtime options', () => {
+    const options: QqbotPluginWorkerRuntimeOptions = {
+      defaultTimeoutMs: 5000,
+      descriptor: {
+        entry: 'src/index.ts',
+        entryFile: 'D:/repo/src/modules/qqbot/plugins/sample/src/index.ts',
+        manifest: {
+          key: 'sample',
+          pluginKey: 'sample',
+          name: 'Sample',
+          version: '1.0.0',
+          minApiSdkVersion: '1.0.0',
+          entry: 'src/index.ts',
+          runtime: {
+            configKeys: ['SAMPLE_TOKEN'],
+            maxConcurrency: 1,
+            memoryMb: 128,
+            timeoutMs: 5000,
+            workerType: 'thread',
+          },
+          operations: [],
+          events: [],
+          tasks: [],
+          assets: [],
+          configSchema: {},
+          legacyAliases: [],
+          migrations: [],
+          permissions: [],
+        },
+        packageRoot: 'D:/repo/src/modules/qqbot/plugins/sample',
+        pluginKey: 'sample',
+      },
+      installationId: 'install-1',
+      pluginKey: 'sample',
+    };
+
+    expect(options.descriptor.manifest.runtime.configKeys).toEqual([
+      'SAMPLE_TOKEN',
+    ]);
+    expect(options.descriptor.pluginKey).toBe('sample');
+  });
+
   it('serializes concurrent worker execution requests for one plugin runtime', async () => {
     const releaseFirst = createDeferred<void>();
     const releaseSecond = createDeferred<void>();
@@ -669,7 +716,7 @@ describe('QQBot plugin worker runtime', () => {
     const driver: QqbotPluginWorkerDriver = {
       dispose: jest.fn(async () => undefined),
       request: jest.fn(
-        () => new Promise((resolve) => setTimeout(resolve, 1000)),
+        () => new Promise((resolve) => setTimeout(resolve, 100)),
       ),
     };
     const runtime = new QqbotPluginWorkerRuntime(

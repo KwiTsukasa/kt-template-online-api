@@ -27,16 +27,9 @@ describe('QQBot plugin host bridge', () => {
       SAMPLE_TOKEN: 'token-1',
       SAMPLE_EMPTY: undefined,
     };
-    const configService = {
-      /**
-       * Reads the fixture config value requested by a plugin host call.
-       * @param configKey - Package-owned config key from the host call arguments.
-       * @returns Stored fixture value or `undefined` when the key is absent.
-       */
-      getConfigValue: jest.fn(
-        async (configKey: string) => configValues[configKey],
-      ),
-    } as unknown as QqbotConfigService;
+    const configService = new QqbotConfigService(
+      createConfigRepository(configValues),
+    );
     const dictService = {
       getDictByKey: jest.fn(),
       getDictItemsByKey: jest.fn(),
@@ -80,6 +73,23 @@ describe('QQBot plugin host bridge', () => {
         SAMPLE_EMPTY: undefined,
         SAMPLE_MISSING: undefined,
         SAMPLE_TOKEN: 'token-1',
+      },
+    });
+  });
+
+  it('preserves configured empty string values in config snapshots', async () => {
+    configValues.SAMPLE_EMPTY = '';
+
+    await expect(
+      bridge.handleHostCall(createDescriptor(), {
+        args: { keys: ['SAMPLE_EMPTY'] },
+        method: 'getConfigMany',
+        pluginKey: 'sample',
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      value: {
+        SAMPLE_EMPTY: '',
       },
     });
   });
@@ -195,3 +205,32 @@ describe('QQBot plugin host bridge', () => {
     };
   }
 });
+
+/**
+ * Creates a minimal config repository that lets QqbotConfigService read fixture values through its real raw-value method.
+ * @param values - Config key/value fixture; absent keys behave like missing records.
+ * @returns Repository-shaped fixture used by QqbotConfigService in host bridge tests.
+ */
+function createConfigRepository(
+  values: Record<string, string | undefined>,
+): ConstructorParameters<typeof QqbotConfigService>[0] {
+  /**
+   * Finds one QQBot config fixture using the TypeORM `where.configKey` query shape.
+   * @param query - TypeORM-style lookup object produced by QqbotConfigService.
+   * @returns Fixture record with the stored config value, or `null` when the key is not present.
+   */
+  const findOne = async (query: { where?: { configKey?: string } }) => {
+    const configKey = query.where?.configKey;
+    if (
+      !configKey ||
+      !Object.prototype.hasOwnProperty.call(values, configKey)
+    ) {
+      return null;
+    }
+    return { configValue: values[configKey] };
+  };
+
+  return {
+    findOne: jest.fn(findOne),
+  } as unknown as ConstructorParameters<typeof QqbotConfigService>[0];
+}

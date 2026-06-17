@@ -48,7 +48,7 @@ export class QqbotConfigService {
     const record = await this.configRepository.findOne({
       where: { configKey },
     });
-    return record?.configValue || undefined;
+    return record?.configValue ?? undefined;
   }
 
   /**

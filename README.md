@@ -71,7 +71,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 
 QQBot 插件 worker 使用 BullMQ 队列串行执行同一插件安装实例的请求。K8s 生产清单包含内部服务 `kt-qqbot-plugin-redis`，生产 env 可将 `QQBOT_PLUGIN_QUEUE_REDIS_HOST` 配为该服务名。`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS` 控制排队等待窗口，插件 `operation.timeoutMs` 仍表示单次执行预算。
 
-QQBot 插件定时任务由 manifest 的 `tasks` 声明，平台持久化到 `qqbot_plugin_task` / `qqbot_plugin_task_run`，通过 BullMQ Job Scheduler 调度并经插件 worker 的 `executeTask` 边界执行。`sql/qqbot-init.sql` 可为既有环境增量创建任务表和 Admin 菜单。Admin 页面路径为 `/qqbot/plugin-task`。定时任务队列可用 `QQBOT_PLUGIN_TASK_QUEUE_REDIS_*` 单独配置；留空时复用插件 worker 队列的 Redis 连接。BangDream Bestdori 主数据缓存使用 `BANGDREAM_TSUGU_CACHE_ROOT`，生产清单挂载到 `/data/qqbot/plugins/bangdream/cache`。
+QQBot 插件定时任务由 manifest 的 `tasks` 声明，平台持久化到 `qqbot_plugin_task` / `qqbot_plugin_task_run`，通过 BullMQ Job Scheduler 调度并经插件 worker 的 `executeTask` 边界执行。`sql/qqbot-init.sql` 可为既有环境增量创建任务表和 Admin 菜单。Admin 页面路径为 `/qqbot/plugin-task`。定时任务队列可用 `QQBOT_PLUGIN_TASK_QUEUE_REDIS_*` 单独配置；留空时复用插件 worker 队列的 Redis 连接。BangDream Bestdori 主数据缓存使用 `BANGDREAM_TSUGU_CACHE_ROOT`，生产清单挂载到容器内 `/data/qqbot/plugins/bangdream/cache`，对应 k3d 节点可写 hostPath `/var/lib/rancher/k3s/kt-template-online-api/qqbot-plugins`。
 
 ## 启动
 

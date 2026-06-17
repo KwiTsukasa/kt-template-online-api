@@ -468,7 +468,7 @@ pnpm qqbot-plugin install-local <packageFile>
 
 `src/modules/qqbot/plugin-platform/runtime` 当前提供 host-side driver 边界和超时/崩溃事件归档；实际 worker/child-process driver 可以在后续批次接入，但插件侧只能通过受控 SDK 访问发送队列、配置、存储、HTTP、资产和事件上下文。
 
-Admin 入口为 `/qqbot/plugin-task`，用于分页查看任务、启停、修改 cron、手动运行和查看运行记录。BangDream 内置任务 `bangdream.bestdori.sync-main-data` 会定期同步 Bestdori 主数据到 `BANGDREAM_TSUGU_CACHE_ROOT`。
+Admin 入口为 `/qqbot/plugin-task`，用于分页查看任务、启停、修改 cron、手动运行和查看运行记录。BangDream 内置任务 `bangdream.bestdori.sync-main-data` 会定期同步 Bestdori 主数据到 `BANGDREAM_TSUGU_CACHE_ROOT`；生产容器内路径为 `/data/qqbot/plugins/bangdream/cache`，K8s hostPath 使用 k3d 节点可写目录 `/var/lib/rancher/k3s/kt-template-online-api/qqbot-plugins`。
 
 ### OneBot Reverse WebSocket
 

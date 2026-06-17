@@ -75,7 +75,7 @@ spec:
             defaultMode: 0400
         - name: qqbot-plugin-data
           hostPath:
-            path: /vol1/docker/kt-template-online-api/qqbot-plugins
+            path: /var/lib/rancher/k3s/kt-template-online-api/qqbot-plugins
             type: DirectoryOrCreate
 ---
 apiVersion: v1

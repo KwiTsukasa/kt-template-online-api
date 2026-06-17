@@ -76,7 +76,7 @@ export class QqbotPluginHostBridgeService {
       case 'bindEventPlugin':
         return this.accountService.bindEventPlugin(
           getRequiredText(args, 'selfId'),
-          getRequiredText(args, 'pluginKey'),
+          request.pluginKey,
         );
       case 'getBoundEventPluginKeys':
         return this.accountService.getBoundEventPluginKeys(
@@ -117,7 +117,7 @@ export class QqbotPluginHostBridgeService {
       case 'unbindEventPlugin':
         return this.accountService.unbindEventPlugin(
           getRequiredText(args, 'selfId'),
-          getRequiredText(args, 'pluginKey'),
+          request.pluginKey,
         );
       case 'warn':
         this.logger.warn({

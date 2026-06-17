@@ -134,7 +134,7 @@ describe('QQBot plugin host bridge', () => {
 
     await expect(
       bridge.handleHostCall(descriptor, {
-        args: { selfId: '10001', pluginKey: 'sample' },
+        args: { selfId: '10001', pluginKey: 'other-plugin' },
         method: 'bindEventPlugin',
         pluginKey: 'sample',
       }),
@@ -152,6 +152,21 @@ describe('QQBot plugin host bridge', () => {
       'sample',
     );
     expect(sendService.sendText).toHaveBeenCalledWith(sendInput);
+  });
+
+  it('uses the request plugin key when unbinding event plugins', async () => {
+    const descriptor = createDescriptor();
+
+    await bridge.handleHostCall(descriptor, {
+      args: { selfId: '10001', pluginKey: 'other-plugin' },
+      method: 'unbindEventPlugin',
+      pluginKey: 'sample',
+    });
+
+    expect(accountService.unbindEventPlugin).toHaveBeenCalledWith(
+      '10001',
+      'sample',
+    );
   });
 
   it('reads JSON files from descriptor package roots', async () => {

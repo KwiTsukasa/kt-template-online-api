@@ -36,6 +36,11 @@ import type { QqbotPluginWorkerRequest } from './worker-runtime.types';
 type RuntimeCommandPlugin = QqbotIntegrationPlugin & {
   activate?: () => Promise<unknown> | unknown;
   dispose?: () => Promise<unknown> | unknown;
+  tasks?: Array<{
+    execute(input: Record<string, unknown>): Promise<unknown> | unknown;
+    handlerName: string;
+    key: string;
+  }>;
 };
 
 type RuntimeEventPlugin = {
@@ -139,6 +144,8 @@ async function handleWorkerRequest(message: QqbotPluginWorkerRequest) {
       return health();
     case 'executeOperation':
       return executeOperation(message);
+    case 'executeTask':
+      return executeTask(message);
     case 'handleEvent':
       return handleEvent(message);
     case 'deactivate':
@@ -191,6 +198,18 @@ async function executeOperation(message: QqbotPluginWorkerRequest) {
     (message.input || {}) as Record<string, unknown>,
     {},
   );
+}
+
+async function executeTask(message: QqbotPluginWorkerRequest) {
+  const task = commandPlugin?.tasks?.find(
+    (item) =>
+      item.key === message.taskKey ||
+      item.handlerName === message.taskHandlerName,
+  );
+  if (!task) {
+    throw new Error(`QQBot 插件定时任务不存在：${message.taskKey}`);
+  }
+  return task.execute((message.input || {}) as Record<string, unknown>);
 }
 
 async function handleEvent(message: QqbotPluginWorkerRequest) {

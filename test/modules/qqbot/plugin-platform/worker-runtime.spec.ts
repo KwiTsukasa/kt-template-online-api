@@ -417,6 +417,35 @@ describe('QQBot plugin worker runtime', () => {
     expect(driver.disposed).toBe(true);
   });
 
+  it('sends executeTask RPC with safe input summary and timeout', async () => {
+    const { driver, runtime } = createRuntime();
+    driver.responses.set('executeTask', { syncedKeys: ['songs'] });
+
+    await expect(
+      runtime.executeTask({
+        input: { force: true, fullPayload: 'secret' },
+        taskHandlerName: 'syncBestdoriMainData',
+        taskId: 'task-1',
+        taskKey: 'bangdream.bestdori.sync-main-data',
+        timeoutMs: 120000,
+        triggerType: 'manual',
+      }),
+    ).resolves.toEqual({ syncedKeys: ['songs'] });
+
+    expect(driver.requests[0]).toMatchObject({
+      safeInputSummary: { fieldCount: 2, keys: ['force', 'fullPayload'] },
+      taskHandlerName: 'syncBestdoriMainData',
+      taskId: 'task-1',
+      taskKey: 'bangdream.bestdori.sync-main-data',
+      timeoutMs: 120000,
+      triggerType: 'manual',
+      type: 'executeTask',
+    });
+    expect(JSON.stringify(driver.requests[0].safeInputSummary)).not.toContain(
+      'secret',
+    );
+  });
+
   it('isolates worker crashes as plugin runtime events without throwing raw errors', async () => {
     const { runtime } = createRuntime(
       new RecordingDriver(

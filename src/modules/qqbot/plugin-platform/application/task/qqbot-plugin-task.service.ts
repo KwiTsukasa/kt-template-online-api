@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Between,
@@ -18,6 +18,7 @@ import type {
   QqbotPluginTaskPageQuery,
   QqbotPluginTaskRunPageQuery,
 } from './qqbot-plugin-task.types';
+import { QqbotPluginTaskSchedulerService } from './qqbot-plugin-task-scheduler.service';
 
 @Injectable()
 export class QqbotPluginTaskService {
@@ -29,6 +30,8 @@ export class QqbotPluginTaskService {
     @InjectRepository(QqbotPlugin)
     private readonly pluginRepository: Repository<QqbotPlugin>,
     private readonly toolsService: ToolsService,
+    @Optional()
+    private readonly scheduler?: QqbotPluginTaskSchedulerService,
   ) {}
 
   async pageTasks(query: QqbotPluginTaskPageQuery) {
@@ -57,39 +60,38 @@ export class QqbotPluginTaskService {
   }
 
   async enableTask(id: string) {
-    await this.taskRepository.update(
-      { id },
-      { enabled: true, runtimeStatus: 'scheduled' },
-    );
-    return this.getTaskDetail(id);
+    const task = await this.getTaskDetail(id);
+    task.enabled = true;
+    task.runtimeStatus = 'scheduled';
+    const saved = await this.taskRepository.save(task);
+    await this.requireScheduler().syncTaskScheduler(saved);
+    return saved;
   }
 
   async disableTask(id: string) {
-    await this.taskRepository.update(
-      { id },
-      { enabled: false, runtimeStatus: 'disabled' },
-    );
-    return this.getTaskDetail(id);
+    const task = await this.getTaskDetail(id);
+    task.enabled = false;
+    task.runtimeStatus = 'disabled';
+    const saved = await this.taskRepository.save(task);
+    await this.requireScheduler().removeTaskScheduler(id);
+    return saved;
   }
 
   async updateTaskCron(id: string, body: { cronExpression?: string }) {
-    const cronExpression = requireQqbotPluginTaskCron(body.cronExpression);
-    await this.taskRepository.update({ id }, { cronExpression });
-    return this.getTaskDetail(id);
+    const task = await this.getTaskDetail(id);
+    task.cronExpression = requireQqbotPluginTaskCron(body.cronExpression);
+    const saved = await this.taskRepository.save(task);
+    await this.requireScheduler().syncTaskScheduler(saved);
+    return saved;
   }
 
   async runTaskOnce(id: string, body: { input?: Record<string, unknown> }) {
-    void body;
-    const task = await this.getTaskDetail(id);
-    const run = await this.runRepository.save({
-      installationId: task.installationId,
-      pluginId: task.pluginId,
-      status: 'running',
-      taskId: task.id,
-      taskKey: task.taskKey,
-      triggerType: 'manual',
-    });
-    return { jobId: run.jobId || `${run.id || ''}`, taskId: task.id };
+    await this.getTaskDetail(id);
+    const job = await this.requireScheduler().enqueueManualRun(
+      id,
+      body.input || {},
+    );
+    return { jobId: `${job.id || ''}`, taskId: id };
   }
 
   async pageTaskRuns(id: string, query: QqbotPluginTaskRunPageQuery) {
@@ -134,5 +136,12 @@ export class QqbotPluginTaskService {
       };
     }
     return {};
+  }
+
+  private requireScheduler() {
+    if (!this.scheduler) {
+      throwVbenError('插件定时任务调度器未初始化');
+    }
+    return this.scheduler;
   }
 }

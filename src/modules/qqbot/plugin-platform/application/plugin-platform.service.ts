@@ -20,6 +20,9 @@ import type {
   QqbotPluginRuntimeEvent as QqbotPluginWorkerRuntimeEvent,
   QqbotPluginWorkerRuntime,
 } from '../infrastructure/integration/runtime';
+import { QqbotPluginTaskManifestSynchronizer } from './task/qqbot-plugin-task-manifest.synchronizer';
+import { QqbotPluginTaskSchedulerService } from './task/qqbot-plugin-task-scheduler.service';
+import type { QqbotPluginTaskTriggerType } from './task/qqbot-plugin-task.types';
 import { QqbotPluginArgumentParserService } from './argument/qqbot-plugin-argument-parser.service';
 import { QqbotBuiltinPluginPackageLoaderService } from '../infrastructure/integration/package/builtin-plugin-package-loader.service';
 import { QqbotPluginPackageReaderService } from '../infrastructure/integration/package/plugin-package-reader.service';
@@ -56,6 +59,7 @@ export type QqbotPluginRuntimeFactory = {
     | 'dispose'
     | 'drainRuntimeEvents'
     | 'executeOperation'
+    | 'executeTask'
     | 'handleEvent'
     | 'health'
     | 'load'
@@ -159,6 +163,10 @@ export class QqbotPluginPlatformService
     private readonly packageReader?: QqbotPluginPackageReaderService,
     @Optional()
     private readonly builtinPluginLoader?: QqbotBuiltinPluginPackageLoaderService,
+    @Optional()
+    private readonly taskSynchronizer?: QqbotPluginTaskManifestSynchronizer,
+    @Optional()
+    private readonly taskScheduler?: QqbotPluginTaskSchedulerService,
   ) {}
 
   async onModuleInit() {
@@ -254,13 +262,15 @@ export class QqbotPluginPlatformService
 
     await this.persistManifestCapabilities(plugin.id, manifest);
 
-    return this.installationRepository.save({
+    const installation = await this.installationRepository.save({
       installedPath: pluginPackage.packagePath,
       pluginId: plugin.id,
       runtimeStatus: 'stopped',
       status: 'installed',
       versionId: version.id,
     });
+    await this.syncManifestTasksForInstallation(installation, manifest, false);
+    return installation;
   }
 
   async enableInstallation(body: InstallationActionBody) {
@@ -281,6 +291,7 @@ export class QqbotPluginPlatformService
   async disableInstallation(body: InstallationActionBody) {
     const installation = await this.requireInstallation(body);
     await this.stopWorkersForInstallation(installation);
+    await this.taskScheduler?.removeSchedulersForInstallation(installation.id);
     await this.refreshActiveRegistries(installation, false);
     await this.updateInstallationRuntime(installation, 'disabled', 'stopped');
     await this.recordRuntimeEvent(installation, 'disable-finished');
@@ -329,6 +340,7 @@ export class QqbotPluginPlatformService
     }
 
     await this.refreshActiveRegistries(installation, false);
+    await this.taskScheduler?.removeSchedulersForInstallation(installation.id);
     await this.updateInstallationRuntime(
       installation,
       'uninstalled',
@@ -408,6 +420,34 @@ export class QqbotPluginPlatformService
       }
     }
     return handled;
+  }
+
+  async executeTask(input: {
+    input: Record<string, unknown>;
+    installationId: string;
+    pluginId: string;
+    taskHandlerName: string;
+    taskId: string;
+    taskKey: string;
+    timeoutMs: number;
+    triggerType: QqbotPluginTaskTriggerType;
+  }) {
+    const workerContext = this.activeWorkerContexts.get(input.installationId);
+    if (!workerContext) {
+      throwVbenError('插件运行时未启用');
+    }
+    try {
+      return await workerContext.worker.executeTask({
+        input: input.input,
+        taskHandlerName: input.taskHandlerName,
+        taskId: input.taskId,
+        taskKey: input.taskKey,
+        timeoutMs: input.timeoutMs,
+        triggerType: input.triggerType,
+      });
+    } finally {
+      await this.flushWorkerRuntimeEvents(workerContext);
+    }
   }
 
   async listActiveOperations() {
@@ -708,6 +748,27 @@ export class QqbotPluginPlatformService
       this.activeWorkerPluginAliases.set(alias, manifest.pluginKey);
       this.activeWorkersByPluginKey.set(alias, workerContext);
     }
+    await this.syncManifestTasksForInstallation(installation, manifest, true);
+  }
+
+  private async syncManifestTasksForInstallation(
+    installation: QqbotPluginInstallation,
+    manifest: QqbotPluginManifest,
+    scheduleEnabledTasks: boolean,
+  ) {
+    if (!this.taskSynchronizer || !manifest.tasks.length) return [];
+
+    const tasks = await this.taskSynchronizer.syncManifestTasks({
+      installationId: installation.id,
+      manifestTasks: manifest.tasks,
+      pluginId: installation.pluginId,
+    });
+    if (scheduleEnabledTasks && this.taskScheduler) {
+      for (const task of tasks) {
+        await this.taskScheduler.syncTaskScheduler(task);
+      }
+    }
+    return tasks;
   }
 
   private async stopExistingWorkersForManifest(manifest: QqbotPluginManifest) {

@@ -5,6 +5,7 @@ import {
   type QqbotPluginRuntimeEvent,
   type QqbotPluginRuntimeStatus,
   type QqbotPluginSafeInputSummary,
+  type QqbotPluginTaskRequest,
   type QqbotPluginWorkerRequestQueue,
   type QqbotPluginWorkerRequest,
   type QqbotPluginWorkerRequestType,
@@ -130,6 +131,21 @@ export class QqbotPluginWorkerRuntime {
         event: request.event,
         eventKey: request.eventKey,
         safeInputSummary: summarizeInput(request.event),
+      },
+      request.timeoutMs,
+    );
+  }
+
+  async executeTask(request: QqbotPluginTaskRequest) {
+    return this.request(
+      'executeTask',
+      {
+        input: request.input,
+        safeInputSummary: summarizeInput(request.input),
+        taskHandlerName: request.taskHandlerName,
+        taskId: request.taskId,
+        taskKey: request.taskKey,
+        triggerType: request.triggerType,
       },
       request.timeoutMs,
     );

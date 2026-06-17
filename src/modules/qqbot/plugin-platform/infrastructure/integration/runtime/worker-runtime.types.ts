@@ -3,6 +3,7 @@ export type QqbotPluginWorkerRequestType =
   | 'deactivate'
   | 'dispose'
   | 'executeOperation'
+  | 'executeTask'
   | 'handleEvent'
   | 'health'
   | 'load';
@@ -29,7 +30,11 @@ export type QqbotPluginWorkerRequest = {
   input?: unknown;
   pluginKey: string;
   safeInputSummary?: QqbotPluginSafeInputSummary;
+  taskHandlerName?: string;
+  taskId?: string;
+  taskKey?: string;
   timeoutMs: number;
+  triggerType?: 'bootstrap' | 'manual' | 'schedule';
   type: QqbotPluginWorkerRequestType;
 };
 
@@ -74,4 +79,13 @@ export type QqbotPluginEventRequest = {
   event: Record<string, unknown>;
   eventKey: string;
   timeoutMs?: number;
+};
+
+export type QqbotPluginTaskRequest = {
+  input: Record<string, unknown>;
+  taskHandlerName: string;
+  taskId: string;
+  taskKey: string;
+  timeoutMs?: number;
+  triggerType: 'bootstrap' | 'manual' | 'schedule';
 };

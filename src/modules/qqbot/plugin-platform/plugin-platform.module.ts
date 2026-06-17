@@ -13,7 +13,9 @@ import { QqbotPluginExecutionAdapter } from './application/plugin-execution.adap
 import { QqbotPluginPlatformService } from './application/plugin-platform.service';
 import {
   QqbotPluginTaskManifestSynchronizer,
+  QqbotPluginTaskSchedulerService,
   QqbotPluginTaskService,
+  QqbotPluginTaskWorkerProcessor,
 } from './application/task';
 import { QqbotPluginPlatformTaskController } from './contract/plugin-platform-task.controller';
 import { QqbotPluginPlatformController } from './contract/plugin-platform.controller';
@@ -63,7 +65,9 @@ import { QQBOT_PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.serv
     QqbotBuiltinPluginWorkerRuntimeFactoryService,
     QqbotPluginPackageReaderService,
     QqbotPluginTaskManifestSynchronizer,
+    QqbotPluginTaskSchedulerService,
     QqbotPluginTaskService,
+    QqbotPluginTaskWorkerProcessor,
     {
       provide: QQBOT_PLUGIN_EXECUTION_PORT,
       useExisting: QqbotPluginExecutionAdapter,

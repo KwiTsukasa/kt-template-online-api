@@ -1,4 +1,10 @@
-import { Injectable, OnModuleInit, Optional } from '@nestjs/common';
+import {
+  forwardRef,
+  Inject,
+  Injectable,
+  OnModuleInit,
+  Optional,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { formatKtDateTime, throwVbenError } from '@/common';
@@ -26,6 +32,7 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
 
   constructor(
     private readonly accountService: QqbotAccountService,
+    @Inject(forwardRef(() => QqbotBuiltinPluginPackageLoaderService))
     private readonly builtinPluginLoader: QqbotBuiltinPluginPackageLoaderService,
     @Optional()
     @InjectRepository(QqbotPlugin)

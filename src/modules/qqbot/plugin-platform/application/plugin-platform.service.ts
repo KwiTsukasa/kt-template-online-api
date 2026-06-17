@@ -1,4 +1,10 @@
-import { Inject, Injectable, OnModuleInit, Optional } from '@nestjs/common';
+import {
+  forwardRef,
+  Inject,
+  Injectable,
+  OnModuleInit,
+  Optional,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
@@ -162,6 +168,7 @@ export class QqbotPluginPlatformService
     @Optional()
     private readonly packageReader?: QqbotPluginPackageReaderService,
     @Optional()
+    @Inject(forwardRef(() => QqbotBuiltinPluginPackageLoaderService))
     private readonly builtinPluginLoader?: QqbotBuiltinPluginPackageLoaderService,
     @Optional()
     private readonly taskSynchronizer?: QqbotPluginTaskManifestSynchronizer,

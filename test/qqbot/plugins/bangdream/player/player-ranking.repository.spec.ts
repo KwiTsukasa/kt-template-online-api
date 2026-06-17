@@ -2,6 +2,10 @@ import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/sr
 import { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model';
 import { PlayerRankingResourceRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/player/player-ranking.repository';
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @returns 创建后的 BangDream 插件对象或配置。
+ */
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {
     getAsset: jest.fn(),

@@ -22,6 +22,12 @@ type CountedBlogTerm = BlogArticleTerm & {
 
 @Injectable()
 export class BlogTermService {
+  /**
+   * 初始化 BlogTermService 实例。
+   * @param termRepository - 博客仓库依赖；影响 constructor 的返回值。
+   * @param articleRepository - 文章仓库依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(BlogTerm)
     private readonly termRepository: Repository<BlogTerm>,
@@ -30,6 +36,11 @@ export class BlogTermService {
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 获取分页数据。
+   * @param kind - kind 输入；驱动 `this.collectArticleTermMap()`、`this.filterAndSortTerms()` 的 博客步骤。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   async page(kind: BlogTermKind, query: BlogTermListQueryDto = {}) {
     const { pageSize, skip } = this.toolsService.getPageParams(query);
     const countMap = await this.collectArticleTermMap(kind);
@@ -40,9 +51,17 @@ export class BlogTermService {
       query,
     );
 
-    return this.toolsService.page(list.slice(skip, skip + pageSize), list.length);
+    return this.toolsService.page(
+      list.slice(skip, skip + pageSize),
+      list.length,
+    );
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param kind - kind 输入；驱动 `this.collectArticleTermMap()`、`this.getStoredTerms()` 的 博客步骤。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   async options(kind: BlogTermKind, query: BlogTermListQueryDto = {}) {
     const { pageSize, skip } = this.toolsService.getPageParams(query, 1, 200);
     const countMap = await this.collectArticleTermMap(kind);
@@ -66,13 +85,23 @@ export class BlogTermService {
     });
 
     const list = this.filterAndSortTerms(
-      Array.from(termMap.values()).map((term) => this.toResponse(term, countMap)),
+      Array.from(termMap.values()).map((term) =>
+        this.toResponse(term, countMap),
+      ),
       query,
     );
 
-    return this.toolsService.page(list.slice(skip, skip + pageSize), list.length);
+    return this.toolsService.page(
+      list.slice(skip, skip + pageSize),
+      list.length,
+    );
   }
 
+  /**
+   * 获取详情数据。
+   * @param kind - kind 输入；驱动 `this.findExistingTerm()`、`this.collectArticleTermMap()` 的 博客步骤。
+   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   */
   async detail(kind: BlogTermKind, id: string | number) {
     const term = await this.findExistingTerm(kind, id);
     const countMap = await this.collectArticleTermMap(kind);
@@ -80,6 +109,11 @@ export class BlogTermService {
     return this.toResponse(term, countMap);
   }
 
+  /**
+   * 保存数据。
+   * @param kind - kind 输入；驱动 `this.getTermEntity()`、`this.assertSlugAvailable()`、`this.toResponse()` 的 博客步骤。
+   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   */
   async save(kind: BlogTermKind, body: BlogTermBodyDto) {
     const entity = this.getTermEntity(kind, body);
     await this.assertSlugAvailable(kind, entity.slug);
@@ -91,6 +125,11 @@ export class BlogTermService {
     return this.toResponse(saved, await this.collectArticleTermMap(kind));
   }
 
+  /**
+   * 更新数据。
+   * @param kind - kind 输入；驱动 `this.findExistingTerm()`、`this.getTermEntity()`、`this.assertSlugAvailable()`、`this.toResponse()` 的 博客步骤。
+   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   */
   async update(kind: BlogTermKind, body: BlogTermUpdateBodyDto) {
     const term = await this.findExistingTerm(kind, body.id);
     const nextEntity = this.getTermEntity(kind, body);
@@ -103,6 +142,11 @@ export class BlogTermService {
     return this.toResponse(saved, await this.collectArticleTermMap(kind));
   }
 
+  /**
+   * 删除数据。
+   * @param kind - kind 输入；影响 remove 的返回值。
+   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   */
   async remove(kind: BlogTermKind, id: string | number) {
     const result = await this.termRepository.update(
       {
@@ -118,6 +162,11 @@ export class BlogTermService {
     return (result.affected || 0) > 0;
   }
 
+  /**
+   * 更新 博客内容状态。
+   * @param kind - kind 输入；写入 博客状态。
+   * @param terms - 博客列表；驱动 `for()` 的 博客步骤。
+   */
   async syncTerms(kind: BlogTermKind, terms: BlogArticleTerm[] = []) {
     for (const term of this.normalizeTerms(terms)) {
       const slug = term.slug || this.normalizeSlug(term.name);
@@ -141,6 +190,10 @@ export class BlogTermService {
     }
   }
 
+  /**
+   * 查询 博客内容数据。
+   * @param kind - kind 输入；限定 博客查询范围。
+   */
   private async getStoredTerms(kind: BlogTermKind) {
     return this.termRepository.find({
       where: {
@@ -150,6 +203,11 @@ export class BlogTermService {
     });
   }
 
+  /**
+   * 查询 博客内容数据。
+   * @param kind - kind 输入；限定 博客查询范围。
+   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   */
   private async findExistingTerm(kind: BlogTermKind, id: string | number) {
     const term = await this.termRepository.findOne({
       where: {
@@ -166,6 +224,11 @@ export class BlogTermService {
     return term;
   }
 
+  /**
+   * 查询 博客内容数据。
+   * @param kind - kind 输入；限定 博客查询范围。
+   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   */
   private getTermEntity(kind: BlogTermKind, body: BlogTermBodyDto) {
     const name = this.toolsService.toTrimmedString(body.name);
 
@@ -183,6 +246,12 @@ export class BlogTermService {
     } as Partial<BlogTerm>;
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param kind - kind 输入；影响 assertSlugAvailable 的返回值。
+   * @param slug - slug 输入；影响 assertSlugAvailable 的返回值。
+   * @param currentId - 博客 ID；定位本次读取、更新、删除或关联的博客。
+   */
   private async assertSlugAvailable(
     kind: BlogTermKind,
     slug: string,
@@ -201,6 +270,10 @@ export class BlogTermService {
     }
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param kind - kind 输入；影响 collectArticleTermMap 的返回值。
+   */
   private async collectArticleTermMap(kind: BlogTermKind) {
     const articles = await this.articleRepository.find({
       select:
@@ -219,7 +292,9 @@ export class BlogTermService {
 
     articles.forEach((article) => {
       const source =
-        kind === 'category' ? article.categoryItems || [] : article.tagItems || [];
+        kind === 'category'
+          ? article.categoryItems || []
+          : article.tagItems || [];
 
       this.normalizeTerms(source).forEach((term) => {
         const slug = term.slug || this.normalizeSlug(term.name);
@@ -242,6 +317,10 @@ export class BlogTermService {
     return termMap;
   }
 
+  /**
+   * 转换 博客内容输入。
+   * @param values - 配置值字典；影响 normalizeTerms 的返回值。
+   */
   private normalizeTerms(values: BlogArticleTerm[]) {
     const seen = new Set<string>();
 
@@ -263,11 +342,18 @@ export class BlogTermService {
       });
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param terms - 博客列表；影响 filterAndSortTerms 的返回值。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   private filterAndSortTerms(
     terms: BlogTerm[],
     query: BlogTermListQueryDto = {},
   ) {
-    const search = this.toolsService.toTrimmedString(query.search).toLowerCase();
+    const search = this.toolsService
+      .toTrimmedString(query.search)
+      .toLowerCase();
     const parent = this.toolsService.toStringId(query.parent);
     const hideEmpty = this.toolsService.normalizeBoolean(query.hide_empty);
 
@@ -287,6 +373,11 @@ export class BlogTermService {
       });
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param term - term 输入；使用 `slug`、`name`、`id`、`parentId` 字段生成结果。
+   * @param countMap - countMap 输入；执行 `countMap.get()` 对应的 博客步骤。
+   */
   private toResponse(term: BlogTerm, countMap: Map<string, CountedBlogTerm>) {
     const slug = term.slug || this.normalizeSlug(term.name);
     const countedTerm = countMap.get(slug);
@@ -299,6 +390,10 @@ export class BlogTermService {
     });
   }
 
+  /**
+   * 转换 博客内容输入。
+   * @param value - 待转换值；驱动 `toolsService.normalizeSlugText()` 的 博客步骤。
+   */
   private normalizeSlug(value: unknown) {
     return this.toolsService.normalizeSlugText(value);
   }

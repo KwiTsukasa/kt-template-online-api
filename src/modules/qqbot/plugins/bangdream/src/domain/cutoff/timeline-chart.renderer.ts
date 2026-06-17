@@ -35,8 +35,8 @@ interface DrawTimeLineChartOptions {
 /**
  * 在图片布局层中绘制时间线条谱面。
  *
- * @param options1 - options1参数。
- * @param displayLabel - 展示Label参数，未传入时使用默认值。
+ * @param options1 - options1 输入；影响 drawTimeLineChart 的返回值。
+ * @param displayLabel - displayLabel 输入；影响 drawTimeLineChart 的返回值。
  */
 export async function drawTimeLineChart(
   { start, end, setStartToZero = false, data }: DrawTimeLineChartOptions,

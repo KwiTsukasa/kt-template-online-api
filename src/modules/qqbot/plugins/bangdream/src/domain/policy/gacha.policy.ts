@@ -25,7 +25,7 @@ export type GachaCardWeightList = Record<
 /**
  * 判断卡池类型是否为生日卡池。
  *
- * @param type - 卡池类型。
+ * @param type - type 输入；计算 BangDream判断结果。
  * @returns 判断结果。
  */
 export function isBirthdayGachaType(type: string): boolean {
@@ -35,7 +35,7 @@ export function isBirthdayGachaType(type: string): boolean {
 /**
  * 判断卡池类型是否为免费卡池。
  *
- * @param type - 卡池类型。
+ * @param type - type 输入；计算 BangDream判断结果。
  * @returns 判断结果。
  */
 export function isFreeGachaType(type: string): boolean {
@@ -45,7 +45,7 @@ export function isFreeGachaType(type: string): boolean {
 /**
  * 判断日服卡池是否为常驻期。
  *
- * @param gachaPeriod - 卡池期间文案。
+ * @param gachaPeriod - gachaPeriod 输入；计算 BangDream判断结果。
  * @returns 判断结果。
  */
 export function isPermanentJapaneseGachaPeriod(
@@ -57,7 +57,7 @@ export function isPermanentJapaneseGachaPeriod(
 /**
  * 判断抽卡次数是否超过上限。
  *
- * @param times - 抽卡次数。
+ * @param times - BangDream列表；计算 BangDream判断结果。
  * @returns 判断结果。
  */
 export function isGachaSpinCountTooLarge(times: number): boolean {
@@ -67,8 +67,8 @@ export function isGachaSpinCountTooLarge(times: number): boolean {
 /**
  * 应用十连保底稀有度规则。
  *
- * @param drawIndex - 从 0 开始的抽卡序号。
- * @param rarity - 原始稀有度。
+ * @param drawIndex - drawIndex 输入；决定 BangDream条件分支。
+ * @param rarity - rarity 输入；驱动 `Math.max()` 的 BangDream步骤。
  * @returns 应用保底后的稀有度。
  */
 export function applyGachaGuaranteedRarity(
@@ -84,8 +84,8 @@ export function applyGachaGuaranteedRarity(
 /**
  * 按卡池概率抽取稀有度。
  *
- * @param rarities - 稀有度概率表。
- * @param random - 随机源。
+ * @param rarities - BangDream列表；驱动 `Object.values()`、`for()` 的 BangDream步骤。
+ * @param random - random 输入；影响 pickGachaRarityByRate 的返回值。
  * @returns 稀有度 key。
  */
 export function pickGachaRarityByRate(
@@ -113,10 +113,10 @@ export function pickGachaRarityByRate(
 /**
  * 按卡牌权重抽取卡牌 ID。
  *
- * @param rarity - 目标稀有度。
- * @param totalWeight - 目标稀有度总权重。
- * @param cardWeightList - 卡牌权重表。
- * @param random - 随机源。
+ * @param rarity - rarity 输入；决定 BangDream条件分支。
+ * @param totalWeight - totalWeight 输入；驱动 `random()` 的 BangDream步骤。
+ * @param cardWeightList - cardWeightList 输入；驱动 `for()` 的 BangDream步骤。
+ * @param random - random 输入；影响 pickGachaCardIdByWeight 的返回值。
  * @returns 卡牌 ID。
  */
 export function pickGachaCardIdByWeight(

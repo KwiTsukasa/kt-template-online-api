@@ -15,9 +15,9 @@ import {
 /**
  * 在图片布局层中绘制难度列表。
  *
- * @param song - 歌曲参数。
- * @param imageHeight - 图片高度参数，未传入时使用默认值。
- * @param spacing - spacing参数，未传入时使用默认值。
+ * @param song - song 输入；使用 `difficulty` 字段生成结果。
+ * @param imageHeight - imageHeight 输入；驱动 `Canvas()`、`ctx.drawImage()` 的 BangDream步骤。
+ * @param spacing - spacing 输入；驱动 `Canvas()`、`ctx.drawImage()` 的 BangDream步骤。
  * @returns 渲染或资源结果。
  */
 export function drawDifficultyList(
@@ -45,9 +45,9 @@ export function drawDifficultyList(
 /**
  * 在图片布局层中绘制难度。
  *
- * @param difficultyType - 难度类型参数。
- * @param playLevel - play等级参数。
- * @param imageHeight - 图片高度参数。
+ * @param difficultyType - difficultyType 输入；驱动 `getDifficultyBadgeColor()` 的 BangDream步骤。
+ * @param playLevel - playLevel 输入；驱动 `drawText()` 的 BangDream步骤。
+ * @param imageHeight - imageHeight 输入；驱动 `Canvas()`、`createDifficultyBadgeLayout()`、`drawText()`、`getDifficultyLevelTextPosition()` 的 BangDream步骤。
  */
 export function drawDifficulty(
   difficultyType: number,

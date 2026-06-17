@@ -23,10 +23,10 @@ import { BangDreamEventStatus } from '@/modules/qqbot/plugins/bangdream/src/doma
 /**
  * 在QQBot 图片视图层中绘制档线列表Of最近活动。
  *
- * @param eventId - 活动 ID。
- * @param tier - tier参数。
- * @param mainServer - 主数据服务器参数。
- * @param compress - compress参数。
+ * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+ * @param tier - tier 输入；驱动 `Cutoff()` 的 BangDream步骤。
+ * @param mainServer - mainServer 输入；驱动 `Cutoff()`、`all.push()`、`getRecentEventListByEventAndServer()`、`list.push()` 的 BangDream步骤。
+ * @param compress - BangDream列表；影响 drawCutoffListOfRecentEvent 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawCutoffListOfRecentEvent(

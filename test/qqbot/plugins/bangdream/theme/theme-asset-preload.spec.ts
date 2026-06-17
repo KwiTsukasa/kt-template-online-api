@@ -2,6 +2,11 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import * as XLSX from 'xlsx';
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param dir - dir 输入；驱动 `readdir()`、`join()` 的 BangDream步骤。
+ * @returns BangDream 插件渲染后的图片、画布或文本。
+ */
 async function collectTypeScriptFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
   const files = await Promise.all(
@@ -19,21 +24,25 @@ async function collectTypeScriptFiles(dir: string): Promise<string[]> {
 describe('BangDream theme asset preload', () => {
   it('loads title assets after runtime IO is configured during plugin activation', async () => {
     jest.resetModules();
-    const { createPlugin } = await import(
-      '@/modules/qqbot/plugins/bangdream/src'
-    );
+    const { createPlugin } =
+      await import('@/modules/qqbot/plugins/bangdream/src');
     const manifest = JSON.parse(
       await readFile(
-        join(
-          process.cwd(),
-          'src/modules/qqbot/plugins/bangdream/plugin.json',
-        ),
+        join(process.cwd(), 'src/modules/qqbot/plugins/bangdream/plugin.json'),
         'utf8',
       ),
     );
     const plugin = createPlugin({
       io: {
+        /**
+         * 执行 BangDream回调。
+         * @param filePath - BangDream路径；驱动 `readFile()` 的 BangDream步骤。
+         */
         readAssetFile: async (filePath) => readFile(filePath),
+        /**
+         * 执行 BangDream回调。
+         * @param filePath - BangDream路径；驱动 `XLSX.readFile()` 的 BangDream步骤。
+         */
         readExcelRows: async (filePath) => {
           const workbook = XLSX.readFile(filePath);
           return XLSX.utils.sheet_to_json(
@@ -48,9 +57,8 @@ describe('BangDream theme asset preload', () => {
     });
 
     await plugin.activate();
-    const { drawTitle } = await import(
-      '@/modules/qqbot/plugins/bangdream/src/theme/title.renderer'
-    );
+    const { drawTitle } =
+      await import('@/modules/qqbot/plugins/bangdream/src/theme/title.renderer');
     const title = drawTitle('查询', '歌曲列表');
 
     expect(title.width).toBe(587);
@@ -68,7 +76,9 @@ describe('BangDream theme asset preload', () => {
     for (const file of files) {
       const source = await readFile(file, 'utf8');
       if (source.includes('loadImageOnce();')) {
-        eagerLoaders.push(file.replace(process.cwd(), '').replace(/^[\\/]/, ''));
+        eagerLoaders.push(
+          file.replace(process.cwd(), '').replace(/^[\\/]/, ''),
+        );
       }
     }
 

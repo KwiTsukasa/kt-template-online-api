@@ -25,6 +25,9 @@ class SnowflakeIdGenerator {
   private lastTimestamp = -1n;
   private sequence = 0n;
 
+  /**
+   * 执行 当前模块流程。
+   */
   nextId() {
     let timestamp = this.currentTime();
 
@@ -51,10 +54,17 @@ class SnowflakeIdGenerator {
     ).toString();
   }
 
+  /**
+   * 执行 当前模块流程。
+   */
   private currentTime() {
     return BigInt(Date.now());
   }
 
+  /**
+   * 执行 当前模块流程。
+   * @param lastTimestamp - lastTimestamp 输入；影响 waitUntil 的返回值。
+   */
   private waitUntil(lastTimestamp: bigint) {
     // Snowflake requires monotonic timestamps; waiting avoids duplicate IDs
     // when the system clock briefly moves backwards or a millisecond is full.
@@ -65,6 +75,11 @@ class SnowflakeIdGenerator {
     return timestamp;
   }
 
+  /**
+   * 读取 当前模块资源。
+   * @param envName - envName 输入；驱动 `Number()` 的 公共基础设施步骤。
+   * @param max - max 输入；影响 readNodeId 的返回值。
+   */
   private readNodeId(envName: string, max: bigint) {
     const value = Number(process.env[envName] || 1);
     if (!Number.isInteger(value) || value < 0 || value > Number(max)) {
@@ -76,11 +91,22 @@ class SnowflakeIdGenerator {
 
 const snowflakeIdGenerator = new SnowflakeIdGenerator();
 
+/**
+ * 创建 当前模块对象或配置。
+ */
 export const createSnowflakeId = () => snowflakeIdGenerator.nextId();
 
+/**
+ * 判断 当前模块条件。
+ * @param id - 公共基础设施记录 ID；定位本次读取、更新、删除或关联的公共基础设施记录。
+ */
 export const isEmptySnowflakeId = (id: SnowflakeEntity['id']) =>
   id === undefined || id === null || id === '' || id === 0 || id === '0';
 
+/**
+ * 确保Snowflake Id。
+ * @param entity - entity 输入；使用 `id` 字段生成结果。
+ */
 export const ensureSnowflakeId = <T extends SnowflakeEntity>(entity: T) => {
   if (isEmptySnowflakeId(entity.id)) {
     entity.id = createSnowflakeId();

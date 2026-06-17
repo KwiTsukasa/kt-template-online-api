@@ -36,7 +36,7 @@ interface WrapTextOptions {
 /**
  * 在底层绘图工具层中绘制文本。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawText 的返回值。
  * @returns 渲染或资源结果。
  */
 export function drawText({
@@ -77,7 +77,7 @@ export function drawText({
 /**
  * 在底层绘图工具层中包装文本。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 wrapText 的返回值。
  */
 export function wrapText({
   text,
@@ -134,7 +134,7 @@ interface TextWithImagesOptions {
 /**
  * 在底层绘图工具层中绘制文本With图片列表。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawTextWithImages 的返回值。
  */
 export function drawTextWithImages({
   textSize = BANGDREAM_TEXT_SPEC.font.defaultSize,
@@ -214,7 +214,7 @@ export function drawTextWithImages({
 /**
  * 在底层绘图工具层中包装文本With图片列表。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 wrapTextWithImages 的返回值。
  */
 function wrapTextWithImages({
   textSize = BANGDREAM_TEXT_SPEC.font.defaultSize,
@@ -300,11 +300,10 @@ function wrapTextWithImages({
 }
 
 /**
- * 在底层绘图工具层中设置FontStyle。
- *
- * @param ctx - 画布绘图上下文。
- * @param textSize - 文本Size参数。
- * @param font - font参数。
+ * 设置Font Style。
+ * @param ctx - ctx 输入；使用 `font` 字段生成结果。
+ * @param textSize - textSize 输入；写入 BangDream状态。
+ * @param font - font 输入；使用 `fallback` 字段生成结果。
  */
 export const setFontStyle = function (
   ctx: CanvasRenderingContext2D,

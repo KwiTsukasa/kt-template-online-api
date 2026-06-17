@@ -59,6 +59,11 @@ export class SystemLogService {
   private readonly environment: string;
   private readonly host: string;
 
+  /**
+   * 初始化 SystemLogService 实例。
+   * @param configService - Nest ConfigService 依赖；驱动 `getAppName()`、`getLokiEnvironment()` 的 Admin步骤。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly configService: ConfigService,
     private readonly toolsService: ToolsService,
@@ -72,6 +77,10 @@ export class SystemLogService {
     );
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @returns Admin 平台配置产出的 SystemLogStatusDto。
+   */
   status(): SystemLogStatusDto {
     return {
       app: this.appName,
@@ -82,6 +91,9 @@ export class SystemLogService {
     };
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   */
   levels() {
     return DEFAULT_LEVELS.map((level) => ({
       label: level,
@@ -89,6 +101,10 @@ export class SystemLogService {
     }));
   }
 
+  /**
+   * 获取分页数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   async page(query: SystemLogQueryDto = {}) {
     if (!this.host) {
       return {
@@ -115,6 +131,11 @@ export class SystemLogService {
     };
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * @returns 异步完成后的 Admin 平台配置结果。
+   */
   async summary(query: SystemLogQueryDto = {}): Promise<SystemLogSummaryDto[]> {
     if (!this.host) {
       return DEFAULT_LEVELS.map((level) => ({ count: 0, level }));
@@ -132,6 +153,11 @@ export class SystemLogService {
     }));
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * @param limit - limit 输入；驱动 `searchParams.set()` 的 Admin步骤。
+   */
   private async queryLogs(query: SystemLogQueryDto, limit: number) {
     const url = new URL(
       this.getConfig('LOKI_QUERY_ENDPOINT', '/loki/api/v1/query_range'),
@@ -160,6 +186,10 @@ export class SystemLogService {
     return this.flattenLogs(response.data?.result || []);
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private async queryLogCount(query: SystemLogQueryDto) {
     const response = await this.queryInstant(
       this.buildCountLogQL(query),
@@ -169,6 +199,10 @@ export class SystemLogService {
     return this.toOptionalNumber(value) || 0;
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private async queryLogSummary(query: SystemLogQueryDto) {
     const response = await this.queryInstant(
       this.buildSummaryLogQL(query),
@@ -183,6 +217,11 @@ export class SystemLogService {
       .filter((item) => DEFAULT_LEVELS.includes(item.level));
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param logql - logql 输入；驱动 `searchParams.set()` 的 Admin步骤。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private async queryInstant(logql: string, query: SystemLogQueryDto) {
     const url = new URL(this.getInstantQueryEndpoint(), this.host);
     const { end } = this.getTimeRange(query);
@@ -205,6 +244,10 @@ export class SystemLogService {
     return response;
   }
 
+  /**
+   * 创建 Admin 平台配置对象或配置。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private buildLogQL(query: SystemLogQueryDto) {
     const selector = this.withLevelSelector(
       this.getBaseSelector(),
@@ -223,14 +266,27 @@ export class SystemLogService {
     return [selector, ...lineFilters].join(' ');
   }
 
+  /**
+   * 创建 Admin 平台配置对象或配置。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private buildCountLogQL(query: SystemLogQueryDto) {
     return `sum(count_over_time(${this.buildLogQL(query)}[${this.getLogqlRange(query)}]))`;
   }
 
+  /**
+   * 创建 Admin 平台配置对象或配置。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private buildSummaryLogQL(query: SystemLogQueryDto) {
     return `sum by (level)(count_over_time(${this.buildLogQL(query)}[${this.getLogqlRange(query)}]))`;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param selector - selector 输入；计算 Admin布尔判断。
+   * @param level - level 输入；驱动 `this.escapeLabelValue()` 的 Admin步骤。
+   */
   private withLevelSelector(selector: string, level?: string) {
     if (!level || selector.includes('level=')) return selector;
     return selector.replace(
@@ -239,6 +295,9 @@ export class SystemLogService {
     );
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   */
   private getBaseSelector() {
     const selector = this.getConfig('LOKI_QUERY_SELECTOR');
     if (selector) return selector;
@@ -248,6 +307,11 @@ export class SystemLogService {
     )}",env="${this.escapeLabelValue(this.environment)}"}`;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param streams - Admin列表；影响 flattenLogs 的返回值。
+   * @returns Admin 平台配置产出的 SystemLogDto[]。
+   */
   private flattenLogs(streams: LokiStreamResult[]): SystemLogDto[] {
     return streams
       .flatMap((stream, streamIndex) =>
@@ -267,6 +331,11 @@ export class SystemLogService {
       );
   }
 
+  /**
+   * 序列化Log。
+   * @param params - Admin列表；使用 `line`、`stream`、`metadata`、`timestampNs` 字段生成结果。
+   * @returns Admin 平台配置产出的 SystemLogDto。
+   */
   private serializeLog(params: {
     line: string;
     metadata?: Record<string, string>;
@@ -329,6 +398,11 @@ export class SystemLogService {
     );
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param item - item 输入；使用 `level`、`raw`、`message`、`context` 字段生成结果。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private matchesQuery(item: SystemLogDto, query: SystemLogQueryDto) {
     const level = this.normalizeLevel(query.level);
     if (level && item.level !== level) return false;
@@ -344,12 +418,21 @@ export class SystemLogService {
     return true;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param value - 待转换值；驱动 `toolsService.includesText()` 的 Admin步骤。
+   * @param keyword - keyword 输入；驱动 `toolsService.toTrimmedString()` 的 Admin步骤。
+   */
   private includes(value: unknown, keyword: unknown) {
     const normalizedKeyword = this.toolsService.toTrimmedString(keyword);
     if (!normalizedKeyword) return true;
     return this.toolsService.includesText(value, normalizedKeyword);
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private getTimeRange(query: SystemLogQueryDto) {
     const end = this.toDate(query.endTime) || new Date();
     const start =
@@ -363,6 +446,10 @@ export class SystemLogService {
     return { end, start };
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private getLogqlRange(query: SystemLogQueryDto) {
     const { end, start } = this.getTimeRange(query);
     const seconds = Math.max(
@@ -373,6 +460,9 @@ export class SystemLogService {
     return `${seconds}s`;
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   */
   private getInstantQueryEndpoint() {
     const endpoint = this.getConfig('LOKI_QUERY_INSTANT_ENDPOINT');
     if (endpoint) return endpoint;
@@ -383,6 +473,10 @@ export class SystemLogService {
     ).replace(/query_range$/, 'query');
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param url - 访问地址；使用 `protocol` 字段生成结果。
+   */
   private requestJson<T>(url: URL) {
     return new Promise<T>((resolve, reject) => {
       const client = url.protocol === 'http:' ? http : https;
@@ -425,6 +519,9 @@ export class SystemLogService {
     });
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   */
   private getHeaders() {
     const headers: Record<string, string> = {};
     const tenantId = this.getConfig('LOKI_TENANT_ID');
@@ -441,6 +538,11 @@ export class SystemLogService {
     return headers;
   }
 
+  /**
+   * 解析Log Line。
+   * @param line - line 输入；转换 JSON 文本。
+   * @returns Admin 平台配置渲染后的图片、画布或文本。
+   */
   private parseLogLine(line: string): Record<string, any> {
     try {
       const parsed = JSON.parse(line);
@@ -450,16 +552,29 @@ export class SystemLogService {
     }
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param value - 待转换值；影响 asRecord 的返回值。
+   * @returns Admin 平台配置渲染后的图片、画布或文本。
+   */
   private asRecord(value: unknown): Record<string, any> {
     return value && typeof value === 'object'
       ? (value as Record<string, any>)
       : {};
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param values - 配置值字典；驱动 `toolsService.pickFirstText()` 的 Admin步骤。
+   */
   private pickText(...values: unknown[]) {
     return this.toolsService.pickFirstText(...values);
   }
 
+  /**
+   * 转换 Admin 平台配置输入。
+   * @param value - 待转换值；驱动 `toolsService.toTrimmedString()` 的 Admin步骤。
+   */
   private normalizeLevel(value: unknown) {
     const text = this.toolsService.toTrimmedString(value).toLowerCase();
     if (!text) return '';
@@ -468,6 +583,10 @@ export class SystemLogService {
     return DEFAULT_LEVELS.includes(text) ? text : '';
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param value - 待转换时间值；驱动 `toolsService.toTrimmedString()` 的 Admin步骤。
+   */
   private toDate(value: unknown) {
     const text = this.toolsService.toTrimmedString(value);
     if (!text) return null;
@@ -478,10 +597,18 @@ export class SystemLogService {
     return Number.isNaN(date.getTime()) ? null : date;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param date - date 输入；执行 `date.getTime()` 对应的 Admin步骤。
+   */
   private toNanoseconds(date: Date) {
     return `${BigInt(date.getTime()) * 1000000n}`;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param value - 待转换时间值；构造时间对象。
+   */
   private timestampNsToDate(value: string) {
     try {
       return new Date(Number(BigInt(value) / 1000000n));
@@ -490,6 +617,11 @@ export class SystemLogService {
     }
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param left - left 输入；执行 `left.localeCompare()` 对应的 Admin步骤。
+   * @param right - right 输入；驱动 `BigInt()`、`left.localeCompare()` 的 Admin步骤。
+   */
   private compareTimestamp(left: string, right: string) {
     try {
       const diff = BigInt(left) - BigInt(right);
@@ -499,6 +631,10 @@ export class SystemLogService {
     }
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param values - 配置值字典；驱动 `for()` 的 Admin步骤。
+   */
   private toOptionalNumber(...values: unknown[]) {
     for (const value of values) {
       const nextValue = Number(value);
@@ -507,28 +643,54 @@ export class SystemLogService {
     return undefined;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param value - 待转换值；生成规范化文本。
+   */
   private escapeLogqlString(value: string) {
     return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param value - 待转换值；驱动 `this.escapeLogqlString()` 的 Admin步骤。
+   */
   private escapeLabelValue(value: string) {
     return this.escapeLogqlString(value);
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param key - 键名；限定 Admin查询范围。
+   * @param fallback - 兜底值；驱动 `toolsService.toTrimmedString()` 的 Admin步骤。
+   */
   private getConfig(key: string, fallback = '') {
     const value = this.configService.get<string>(key);
     return this.toolsService.toTrimmedString(value || fallback);
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param key - 键名；驱动 `Number()` 的 Admin步骤。
+   * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 Admin步骤。
+   */
   private getNumberConfig(key: string, fallback: number) {
     const value = Number(this.configService.get<string>(key));
     return Number.isFinite(value) && value > 0 ? value : fallback;
   }
 
+  /**
+   * 转换 Admin 平台配置输入。
+   * @param value - 待转换值；生成规范化文本。
+   */
   private normalizeUrl(value: string) {
     return value.replace(/\/+$/g, '');
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param host - host 输入；驱动 `URL()` 的 Admin步骤。
+   */
   private maskHost(host: string) {
     if (!host) return undefined;
     try {
@@ -543,6 +705,10 @@ export class SystemLogService {
     }
   }
 
+  /**
+   * 转换 Admin 平台配置输入。
+   * @param value - 待转换时间值；使用 `length` 字段生成结果。
+   */
   private normalizeTimestamp(value: string) {
     if (value.length === 10) return Number(value) * 1000;
     if (value.length === 16) return Math.floor(Number(value) / 1000);

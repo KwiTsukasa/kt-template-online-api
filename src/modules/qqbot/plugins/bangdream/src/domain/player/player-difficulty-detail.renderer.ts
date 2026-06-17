@@ -21,8 +21,8 @@ interface drawDifficultyDetailInListOptions {
 /**
  * 在图片布局层中处理难度详情In列表。
  *
- * @param DifficultyDetailInListOptions - 难度详情In列表Options参数。
- * @param key - 当前字段键名，未传入时使用默认值。
+ * @param DifficultyDetailInListOptions - BangDream列表；驱动 `for()` 的 BangDream步骤。
+ * @param key - 键名；影响 DifficultyDetailInList 的返回值。
  */
 function DifficultyDetailInList(
   DifficultyDetailInListOptions: drawDifficultyDetailInListOptions,
@@ -67,9 +67,9 @@ function DifficultyDetailInList(
 /**
  * 在图片布局层中绘制玩家难度详情In列表。
  *
- * @param player - 玩家参数。
- * @param type - 数据类型或匹配类型。
- * @param key - 当前字段键名，未传入时使用默认值。
+ * @param player - player 输入；使用 `profile` 字段生成结果。
+ * @param type - type 输入；影响 drawPlayerDifficultyDetailInList 的返回值。
+ * @param key - 键名；驱动 `DifficultyDetailInList()` 的 BangDream步骤。
  */
 export function drawPlayerDifficultyDetailInList(
   player: Player,

@@ -1,6 +1,11 @@
 import { RuntimeHealthService } from '../../src/runtime/health/runtime-health.service';
 import type { RuntimeSafeConfigSnapshot } from '../../src/runtime/config/runtime-config.types';
 
+/**
+ * 创建 运行态健康检查对象或配置。
+ * @param checks - 健康检查项列表；生成 运行态对象。
+ * @returns 创建后的 运行态健康检查对象或配置。
+ */
 function createSnapshot(
   checks: RuntimeSafeConfigSnapshot['checks'],
 ): RuntimeSafeConfigSnapshot {
@@ -57,6 +62,10 @@ function createSnapshot(
   };
 }
 
+/**
+ * 创建 运行态健康检查对象或配置。
+ * @param snapshot - snapshot 输入；构造 Jest mock 返回值。
+ */
 function createService(snapshot: RuntimeSafeConfigSnapshot) {
   return new RuntimeHealthService({
     getSafeSnapshot: jest.fn(() => snapshot),

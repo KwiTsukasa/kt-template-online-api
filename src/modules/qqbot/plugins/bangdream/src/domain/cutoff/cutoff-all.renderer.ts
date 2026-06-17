@@ -20,9 +20,9 @@ import { getCutoffTierList } from '@/modules/qqbot/plugins/bangdream/src/domain/
 /**
  * 在QQBot 图片视图层中绘制档线全部。
  *
- * @param eventId - 活动 ID。
- * @param mainServer - 主数据服务器参数。
- * @param compress - compress参数。
+ * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+ * @param mainServer - mainServer 输入；驱动 `all.push()`、`getCutoffTierList()`、`Cutoff()` 的 BangDream步骤。
+ * @param compress - BangDream列表；影响 drawCutoffAll 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawCutoffAll(

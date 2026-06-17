@@ -12,7 +12,7 @@ import {
 /**
  * 在图片布局层中绘制SD角色In列表。
  *
- * @param card - 卡牌参数。
+ * @param card - card 输入；使用 `costumeId` 字段生成结果。
  * @returns 异步处理结果。
  */
 export async function drawSdCharacterInList(card: Card): Promise<Canvas> {

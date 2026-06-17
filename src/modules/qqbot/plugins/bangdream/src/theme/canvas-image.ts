@@ -15,7 +15,7 @@ export const assetErrorImageBuffer = bangdreamFallbackImageBuffer;
 /**
  * 在底层绘图工具层中加载图片FromPath。
  *
- * @param path - 本地文件路径。
+ * @param path - 路由或文件路径；驱动 `readBangDreamAsset()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function loadImageFromPath(path: string): Promise<Image> {
@@ -27,9 +27,9 @@ export async function loadImageFromPath(path: string): Promise<Image> {
 /**
  * 在底层绘图工具层中获取文本宽度。
  *
- * @param text - 待绘制文本。
- * @param textSize - 文本Size参数。
- * @param font - font参数。
+ * @param text - 待匹配文本；驱动 `context.measureText()` 的 BangDream步骤。
+ * @param textSize - textSize 输入；限定 BangDream查询范围。
+ * @param font - font 输入；限定 BangDream查询范围。
  */
 export function getTextWidth(text: string, textSize: number, font: string) {
   const canvas = new Canvas(1, 1);
@@ -45,9 +45,9 @@ export function getTextWidth(text: string, textSize: number, font: string) {
 }
 
 /**
- * 在底层绘图工具层中转换SvgToPNG缓冲区。
+ * 执行 BangDream 插件流程。
  *
- * @param svgBuffer - svg缓冲区参数。
+ * @param svgBuffer - svgBuffer 输入；生成规范化文本。
  * @returns 异步处理结果。
  */
 export function convertSvgToPngBuffer(svgBuffer: Buffer): Promise<Buffer> {

@@ -17,6 +17,12 @@ export type Ff14MarketPriceInput = {
   world?: string;
 };
 
+/**
+ * 解析Ff14 Market Price Input。
+ * @param rawArgs - FF14 市场列表；生成规范化文本。
+ * @param catalog - catalog 输入；驱动 `pickTrailingFf14Location()` 的 FF14 市场步骤。
+ * @returns FF14 市场插件转换后的值。
+ */
 export function parseFf14MarketPriceInput(
   rawArgs: string,
   catalog: Ff14MarketCatalog,
@@ -89,6 +95,11 @@ export function parseFf14MarketPriceInput(
   };
 }
 
+/**
+ * 执行 FF14 市场插件流程。
+ * @param catalog - catalog 输入；驱动 `isFf14RegionName()` 的 FF14 市场步骤。
+ * @param positional - positional 输入；使用 `length` 字段生成结果。
+ */
 function pickTrailingFf14Location(
   catalog: Ff14MarketCatalog,
   positional: string[],
@@ -141,6 +152,10 @@ function pickTrailingFf14Location(
   };
 }
 
+/**
+ * 转换 FF14 市场插件输入。
+ * @param value - 待转换值；决定 FF14 市场条件分支。
+ */
 function normalizeHq(value?: string | true) {
   if (value === undefined) return undefined;
   if (value === true) return true;
@@ -148,6 +163,10 @@ function normalizeHq(value?: string | true) {
   return ['1', 'true', 'yes', 'hq'].includes(`${value}`.toLowerCase());
 }
 
+/**
+ * 转换 FF14 市场插件输入。
+ * @param value - 待转换值；决定 FF14 市场条件分支。
+ */
 function normalizeString(value?: string | true) {
   if (value === true) return '';
   return `${value || ''}`.trim();

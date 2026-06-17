@@ -4,6 +4,9 @@ import {
 } from '../../../../src/modules/qqbot/plugin-platform/domain/manifest';
 import { normalizeQqbotPluginTaskCron } from '../../../../src/modules/qqbot/plugin-platform/application/task';
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ */
 const createManifestWithTask = () => ({
   assets: [],
   configSchema: { type: 'object' },

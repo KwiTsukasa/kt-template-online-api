@@ -72,7 +72,7 @@ const songMetaSeparator = drawDottedLine(
 /**
  * 在图片布局层中绘制横幅Info块。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawBannerInfoBlock 的返回值。
  */
 async function drawBannerInfoBlock({
   banner,
@@ -92,9 +92,9 @@ async function drawBannerInfoBlock({
 /**
  * 在图片布局层中绘制活动数据块。
  *
- * @param event - 活动参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
- * @param topLeftText - 排名Left文本参数，未传入时使用默认值。
+ * @param event - event 输入；使用 `eventId`、`startAt` 字段生成结果。
+ * @param displayedServerList - displayedServerList 输入；影响 drawEventDataBlock 的返回值。
+ * @param topLeftText - topLeftText 输入；驱动 `event.getBannerImage()` 的 BangDream步骤。
  */
 export async function drawEventDataBlock(
   event: Event,
@@ -152,8 +152,8 @@ export async function drawEventDataBlock(
 /**
  * 在图片布局层中绘制卡池数据块。
  *
- * @param gacha - 卡池参数。
- * @param topLeftText - 排名Left文本参数，未传入时使用默认值。
+ * @param gacha - gacha 输入；使用 `gachaId` 字段生成结果。
+ * @param topLeftText - topLeftText 输入；影响 drawGachaDataBlock 的返回值。
  */
 export async function drawGachaDataBlock(gacha: Gacha, topLeftText?: string) {
   return drawBannerInfoBlock({
@@ -170,9 +170,9 @@ export async function drawGachaDataBlock(gacha: Gacha, topLeftText?: string) {
 /**
  * 在图片布局层中绘制歌曲数据块。
  *
- * @param song - 歌曲参数。
- * @param text - 待绘制文本，未传入时使用默认值。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param song - song 输入；使用 `publishedAt`、`musicTitle`、`bandId`、`songId` 字段生成结果。
+ * @param text - 待匹配文本；决定 BangDream条件分支。
+ * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
  */
 export async function drawSongDataBlock(
   song: Song,
@@ -230,10 +230,10 @@ export async function drawSongDataBlock(
 /**
  * 在图片布局层中绘制歌曲Meta列表数据块。
  *
- * @param withFever - withFever参数。
- * @param song - 歌曲参数。
- * @param topLeftText - 排名Left文本参数，未传入时使用默认值。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param withFever - withFever 输入；驱动 `getSongMetaRankSummary()` 的 BangDream步骤。
+ * @param song - song 输入；使用 `difficulty` 字段生成结果。
+ * @param topLeftText - topLeftText 输入；影响 drawSongMetaListDataBlock 的返回值。
+ * @param displayedServerList - displayedServerList 输入；驱动 `for()` 的 BangDream步骤。
  */
 export async function drawSongMetaListDataBlock(
   withFever: boolean,
@@ -276,9 +276,9 @@ export async function drawSongMetaListDataBlock(
 /**
  * 在图片布局层中绘制Meta列表数据块。
  *
- * @param withFever - withFever参数。
- * @param server - 目标服务器。
- * @param topLeftText - 排名Left文本参数，未传入时使用默认值。
+ * @param withFever - withFever 输入；驱动 `getMetaRanking()` 的 BangDream步骤。
+ * @param server - server 输入；驱动 `getMetaRanking()` 的 BangDream步骤。
+ * @param topLeftText - topLeftText 输入；影响 drawMetaListDataBlock 的返回值。
  */
 export async function drawMetaListDataBlock(
   withFever: boolean,
@@ -312,8 +312,8 @@ export async function drawMetaListDataBlock(
 /**
  * 在图片布局层中绘制角色Half块。
  *
- * @param character - 角色参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param character - character 输入；使用 `colorCode`、`characterName`、`characterId` 字段生成结果。
+ * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawCharacterHalfBlock(
@@ -401,7 +401,7 @@ export async function drawCharacterHalfBlock(
 /**
  * 在图片布局层中绘制玩家详情块WithIllustration。
  *
- * @param player - 玩家参数。
+ * @param player - player 输入；使用 `profile`、`server` 字段生成结果。
  * @returns 异步处理结果。
  */
 export async function drawPlayerDetailBlockWithIllustration(

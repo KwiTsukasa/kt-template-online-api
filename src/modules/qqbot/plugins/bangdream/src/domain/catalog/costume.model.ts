@@ -19,7 +19,7 @@ export class Costume {
   /**
    * 构造 Costume 实例，并初始化该模型的本地基础字段。
    *
-   * @param costumeId - 服装ID参数。
+   * @param costumeId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
    */
   constructor(costumeId: number) {
     this.costumeId = costumeId;
@@ -55,9 +55,9 @@ export class Costume {
     this.isInitfull = true;
   }
   /**
-   * 在 Costume 模型中获取SD角色。
+   * 查询 BangDream 插件数据。
    *
-   * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+   * @param displayedServerList - displayedServerList 输入；驱动 `costumeResourceRepository.getSdCharacterBuffer()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getSdCharacter(

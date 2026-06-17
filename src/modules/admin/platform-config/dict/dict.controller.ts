@@ -56,8 +56,16 @@ const chartDictExample = [
 @Controller('dict')
 @UseGuards(JwtAuthGuard)
 export class DictController {
+  /**
+   * 初始化 DictController 实例。
+   * @param dictService - dictService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(private readonly dictService: DictService) {}
 
+  /**
+   * 获取字典分页列表。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   @ApiOperation({ summary: '获取字典分页列表' })
   @ApiPageResponse(AdminDictDto, [
     {
@@ -76,6 +84,10 @@ export class DictController {
     return vbenPage(page.items, page.total);
   }
 
+  /**
+   * 获取字典树列表。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   @ApiOperation({ summary: '获取字典树列表' })
   @ApiArrayResponse(AdminDictTreeDto, [
     {
@@ -105,6 +117,10 @@ export class DictController {
     return vbenSuccess(await this.dictService.tree(query));
   }
 
+  /**
+   * 获取字典编码分组列表。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   @ApiOperation({ summary: '获取字典编码分组列表' })
   @ApiPageResponse(AdminDictGroupDto, [
     {
@@ -121,12 +137,19 @@ export class DictController {
     return vbenPage(page.items, page.total);
   }
 
+  /**
+   * 获取字典编码选项。
+   */
   @ApiOperation({ summary: '获取字典编码选项' })
   @Get('codes')
   async codes() {
     return vbenSuccess(await this.dictService.getDictCodeOptions());
   }
 
+  /**
+   * 根据key获取字典。
+   * @param dictKey - dictKey 输入；驱动 `dictService.getDictByKey()` 的 Admin步骤。
+   */
   @ApiOperation({ summary: '根据key获取字典' })
   @ApiQuery({ name: 'dictKey', type: String })
   @ApiArrayResponse(DictDto, componentTypeDictExample)
@@ -137,6 +160,10 @@ export class DictController {
     return vbenSuccess(dict);
   }
 
+  /**
+   * 根据组件类型获取组件字典。
+   * @param type - type 输入；驱动 `dictService.getComponentDictByType()` 的 Admin步骤。
+   */
   @ApiOperation({ summary: '根据组件类型获取组件字典' })
   @ApiQuery({ name: 'type', type: Number })
   @ApiArrayResponse(DictDto, chartDictExample)
@@ -147,6 +174,10 @@ export class DictController {
     return vbenSuccess(dict);
   }
 
+  /**
+   * 新增字典项。
+   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   */
   @ApiOperation({ summary: '新增字典项' })
   @Post('save')
   @HttpCode(HttpStatus.OK)
@@ -154,6 +185,10 @@ export class DictController {
     return vbenSuccess(await this.dictService.save(body));
   }
 
+  /**
+   * 编辑字典项。
+   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   */
   @ApiOperation({ summary: '编辑字典项' })
   @Post('update')
   @HttpCode(HttpStatus.OK)
@@ -161,12 +196,21 @@ export class DictController {
     return vbenSuccess(await this.dictService.update(body));
   }
 
+  /**
+   * 删除字典项。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   @ApiOperation({ summary: '删除字典项' })
   @Delete(':id')
   async remove(@Param('id') id: string) {
     return vbenSuccess(await this.dictService.remove(id));
   }
 
+  /**
+   * 启停字典项。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @param status - Admin列表；驱动 `vbenSuccess()` 的 Admin步骤。
+   */
   @ApiOperation({ summary: '启停字典项' })
   @Post('toggle')
   @HttpCode(HttpStatus.OK)

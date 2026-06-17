@@ -37,12 +37,23 @@ const WORDPRESS_AUTH_COOKIE = 'kt_wordpress_auth';
 export class WordpressService {
   private availabilityCache: null | WordpressAvailabilityCache = null;
 
+  /**
+   * 初始化 WordpressService 实例。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   * @param markdownService - markdownService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly configService: ConfigService,
     private readonly markdownService: MarkdownService,
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * @returns WordPress 镜像查询结果。
+   */
   getAuthContext(request: Request): WordpressAuthContext {
     const authorization =
       this.toolsService.readHeader(request, 'x-wordpress-authorization') ||
@@ -63,6 +74,10 @@ export class WordpressService {
     };
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param auth - auth 输入；影响 checkAuth 的返回值。
+   */
   async checkAuth(auth: WordpressAuthContext) {
     const response = await this.request('/wp-json/wp/v2/users/me', {
       auth,
@@ -74,6 +89,10 @@ export class WordpressService {
     return response.data;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @returns 异步完成后的 WordPress 镜像结果。
+   */
   async tryLoginWithConfiguredAdmin(): Promise<WordpressOptionalLoginResult> {
     try {
       const result = await this.loginWithConfiguredAdmin({
@@ -98,6 +117,9 @@ export class WordpressService {
     }
   }
 
+  /**
+   * 判断 WordPress 镜像条件。
+   */
   isAdminIntegrationAvailable() {
     if (!this.availabilityCache) return true;
     if (
@@ -110,6 +132,11 @@ export class WordpressService {
     return this.availabilityCache.available;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param options - WordPress列表；使用 `timeoutMs` 字段生成结果。
+   * @returns WordPress 镜像渲染后的图片、画布或文本。
+   */
   async loginWithConfiguredAdmin(
     options: { timeoutMs?: number } = {},
   ): Promise<WordpressLoginResult & { cookie: string }> {
@@ -154,6 +181,11 @@ export class WordpressService {
     };
   }
 
+  /**
+   * 设置Auth Cookie。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param cookie - cookie 输入；写入 WordPress状态。
+   */
   setAuthCookie(res: ExpressResponse, cookie: string) {
     res.cookie(WORDPRESS_AUTH_COOKIE, cookie, {
       ...this.getCookieOptions(),
@@ -161,6 +193,10 @@ export class WordpressService {
     });
   }
 
+  /**
+   * 清理Auth Cookie。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   */
   clearAuthCookie(res: ExpressResponse) {
     res.clearCookie(WORDPRESS_AUTH_COOKIE, this.getCookieOptions());
     res.clearCookie(WORDPRESS_AUTH_COOKIE, {
@@ -173,6 +209,11 @@ export class WordpressService {
     });
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param query - 查询参数 DTO；限定 WordPress分页、搜索或详情查询条件。
+   * @param auth - auth 输入；影响 articleList 的返回值。
+   */
   async articleList(
     query: WordpressArticleListQueryDto,
     auth: WordpressAuthContext,
@@ -196,6 +237,11 @@ export class WordpressService {
     };
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   * @param auth - auth 输入；影响 articleDetail 的返回值。
+   */
   async articleDetail(id: string | number, auth: WordpressAuthContext) {
     const response = await this.request(`/wp-json/wp/v2/posts/${id}`, {
       auth,
@@ -207,6 +253,11 @@ export class WordpressService {
     return this.normalizeArticleResponse(response.data);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   * @param auth - auth 输入；影响 articleSave 的返回值。
+   */
   async articleSave(body: WordpressArticleBodyDto, auth: WordpressAuthContext) {
     const response = await this.request('/wp-json/wp/v2/posts', {
       auth,
@@ -217,6 +268,11 @@ export class WordpressService {
     return this.normalizeArticleResponse(response.data);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   * @param auth - auth 输入；影响 articleUpdate 的返回值。
+   */
   async articleUpdate(
     body: WordpressArticleBodyDto & { id: number },
     auth: WordpressAuthContext,
@@ -230,6 +286,12 @@ export class WordpressService {
     return this.normalizeArticleResponse(response.data);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   * @param force - force 输入；影响 articleRemove 的返回值。
+   * @param auth - auth 输入；影响 articleRemove 的返回值。
+   */
   async articleRemove(
     id: string | number,
     force: boolean,
@@ -246,6 +308,10 @@ export class WordpressService {
     return response.data;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param query - 查询参数 DTO；限定 WordPress分页、搜索或详情查询条件。
+   */
   async publicArticleList(query: WordpressArticleListQueryDto) {
     const response = await this.publicRequest<any[]>('/wp-json/wp/v2/posts', {
       query: {
@@ -266,6 +332,10 @@ export class WordpressService {
     };
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param query - 查询参数 DTO；限定 WordPress分页、搜索或详情查询条件。
+   */
   async publicArticleDetail(query: { id?: string; slug?: string }) {
     if (query.id) {
       const response = await this.publicRequest(
@@ -304,18 +374,38 @@ export class WordpressService {
     return this.normalizeArticleResponse(article);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param query - 查询参数 DTO；限定 WordPress分页、搜索或详情查询条件。
+   * @param auth - auth 输入；驱动 `this.termList()` 的 WordPress步骤。
+   */
   async tagList(query: WordpressTermListQueryDto, auth: WordpressAuthContext) {
     return this.termList('/wp-json/wp/v2/tags', query, auth);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   * @param auth - auth 输入；驱动 `this.termDetail()` 的 WordPress步骤。
+   */
   async tagDetail(id: string | number, auth: WordpressAuthContext) {
     return this.termDetail('/wp-json/wp/v2/tags', id, auth);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   * @param auth - auth 输入；驱动 `this.termSave()` 的 WordPress步骤。
+   */
   async tagSave(body: WordpressTermBodyDto, auth: WordpressAuthContext) {
     return this.termSave('/wp-json/wp/v2/tags', body, auth);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   * @param auth - auth 输入；驱动 `this.termUpdate()` 的 WordPress步骤。
+   */
   async tagUpdate(
     body: WordpressTermBodyDto & { id: number },
     auth: WordpressAuthContext,
@@ -323,6 +413,12 @@ export class WordpressService {
     return this.termUpdate('/wp-json/wp/v2/tags', body, auth);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   * @param force - force 输入；驱动 `this.termRemove()` 的 WordPress步骤。
+   * @param auth - auth 输入；驱动 `this.termRemove()` 的 WordPress步骤。
+   */
   async tagRemove(
     id: string | number,
     force: boolean,
@@ -331,6 +427,11 @@ export class WordpressService {
     return this.termRemove('/wp-json/wp/v2/tags', id, force, auth);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param query - 查询参数 DTO；限定 WordPress分页、搜索或详情查询条件。
+   * @param auth - auth 输入；驱动 `this.termList()` 的 WordPress步骤。
+   */
   async categoryList(
     query: WordpressTermListQueryDto,
     auth: WordpressAuthContext,
@@ -338,14 +439,29 @@ export class WordpressService {
     return this.termList('/wp-json/wp/v2/categories', query, auth);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   * @param auth - auth 输入；驱动 `this.termDetail()` 的 WordPress步骤。
+   */
   async categoryDetail(id: string | number, auth: WordpressAuthContext) {
     return this.termDetail('/wp-json/wp/v2/categories', id, auth);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   * @param auth - auth 输入；驱动 `this.termSave()` 的 WordPress步骤。
+   */
   async categorySave(body: WordpressTermBodyDto, auth: WordpressAuthContext) {
     return this.termSave('/wp-json/wp/v2/categories', body, auth);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   * @param auth - auth 输入；驱动 `this.termUpdate()` 的 WordPress步骤。
+   */
   async categoryUpdate(
     body: WordpressTermBodyDto & { id: number },
     auth: WordpressAuthContext,
@@ -353,6 +469,12 @@ export class WordpressService {
     return this.termUpdate('/wp-json/wp/v2/categories', body, auth);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   * @param force - force 输入；驱动 `this.termRemove()` 的 WordPress步骤。
+   * @param auth - auth 输入；驱动 `this.termRemove()` 的 WordPress步骤。
+   */
   async categoryRemove(
     id: string | number,
     force: boolean,
@@ -361,6 +483,10 @@ export class WordpressService {
     return this.termRemove('/wp-json/wp/v2/categories', id, force, auth);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @returns 异步完成后的 WordPress 镜像结果。
+   */
   async themeConfig(): Promise<WordpressArgonThemeConfig> {
     const [rootResponse, homeResponse] = await Promise.all([
       this.rawRequest('/?rest_route=/'),
@@ -372,6 +498,12 @@ export class WordpressService {
     return this.parseArgonThemeConfig(html, root);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param path - 路由或文件路径；影响 termList 的返回值。
+   * @param query - 查询参数 DTO；限定 WordPress分页、搜索或详情查询条件。
+   * @param auth - auth 输入；影响 termList 的返回值。
+   */
   private async termList(
     path: string,
     query: WordpressTermListQueryDto,
@@ -394,6 +526,12 @@ export class WordpressService {
     };
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param path - 路由或文件路径；影响 termDetail 的返回值。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   * @param auth - auth 输入；影响 termDetail 的返回值。
+   */
   private async termDetail(
     path: string,
     id: string | number,
@@ -409,6 +547,12 @@ export class WordpressService {
     return response.data;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param path - 路由或文件路径；驱动 `this.request()` 的 WordPress步骤。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   * @param auth - auth 输入；影响 termSave 的返回值。
+   */
   private async termSave(
     path: string,
     body: WordpressTermBodyDto,
@@ -423,6 +567,12 @@ export class WordpressService {
     return response.data;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param path - 路由或文件路径；影响 termUpdate 的返回值。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   * @param auth - auth 输入；影响 termUpdate 的返回值。
+   */
   private async termUpdate(
     path: string,
     body: WordpressTermBodyDto & { id: number },
@@ -437,6 +587,13 @@ export class WordpressService {
     return response.data;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param path - 路由或文件路径；影响 termRemove 的返回值。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   * @param force - force 输入；影响 termRemove 的返回值。
+   * @param auth - auth 输入；影响 termRemove 的返回值。
+   */
   private async termRemove(
     path: string,
     id: string | number,
@@ -454,6 +611,12 @@ export class WordpressService {
     return response.data;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param path - 路由或文件路径；驱动 `this.executeJsonRequest()` 的 WordPress步骤。
+   * @param options - WordPress列表；使用 `auth` 字段生成结果。
+   * @returns 异步完成后的 WordPress 镜像结果。
+   */
   private async request<T>(
     path: string,
     options: WordpressRequestOptions,
@@ -463,6 +626,12 @@ export class WordpressService {
     return this.executeJsonRequest(path, options);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param path - 路由或文件路径；驱动 `this.executeJsonRequest()` 的 WordPress步骤。
+   * @param options - WordPress列表；驱动 `this.executeJsonRequest()` 的 WordPress步骤。
+   * @returns 异步完成后的 WordPress 镜像结果。
+   */
   private async publicRequest<T>(
     path: string,
     options: Omit<WordpressRequestOptions, 'auth'> = {},
@@ -470,6 +639,12 @@ export class WordpressService {
     return this.executeJsonRequest(path, options);
   }
 
+  /**
+   * 执行Json Request。
+   * @param path - 路由或文件路径；驱动 `this.getRequestUrls()` 的 WordPress步骤。
+   * @param options - WordPress列表；使用 `query`、`body`、`auth`、`method` 字段生成结果。
+   * @returns 异步完成后的 WordPress 镜像结果。
+   */
   private async executeJsonRequest<T>(
     path: string,
     options: WordpressRequestOptions,
@@ -547,6 +722,12 @@ export class WordpressService {
     }
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param username - username 输入；影响 loginByPassword 的返回值。
+   * @param password - password 输入；影响 loginByPassword 的返回值。
+   * @param timeoutMs - WordPress列表；影响 loginByPassword 的返回值。
+   */
   private async loginByPassword(
     username: string,
     password: string,
@@ -578,6 +759,11 @@ export class WordpressService {
     return cookie;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param cookie - cookie 输入；影响 fetchRestNonce 的返回值。
+   * @param timeoutMs - WordPress列表；影响 fetchRestNonce 的返回值。
+   */
   private async fetchRestNonce(cookie: string, timeoutMs?: number) {
     const adminPaths = [
       '/wp-admin/',
@@ -604,6 +790,12 @@ export class WordpressService {
     return '';
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param path - 路由或文件路径；驱动 `this.rawRequest()` 的 WordPress步骤。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   * @param timeoutMs - WordPress列表；影响 formRequest 的返回值。
+   */
   private async formRequest(
     path: string,
     body: Record<string, string>,
@@ -626,6 +818,12 @@ export class WordpressService {
     );
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param path - 路由或文件路径；驱动 `this.getUrl()` 的 WordPress步骤。
+   * @param init - init 输入；驱动 `this.rawNodeRequest()` 的 WordPress步骤。
+   * @param timeoutMs - WordPress列表；驱动 `this.rawNodeRequest()`、`setTimeout()` 的 WordPress步骤。
+   */
   private async rawRequest(
     path: string,
     init: RequestInit = {},
@@ -664,6 +862,15 @@ export class WordpressService {
     }
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param url - 访问地址；驱动 `this.executeRawNodeRequest()`、`URL()` 的 WordPress步骤。
+   * @param init - init 输入；使用 `redirect` 字段生成结果。
+   * @param timeoutMs - WordPress列表；驱动 `this.executeRawNodeRequest()`、`this.rawNodeRequest()` 的 WordPress步骤。
+   * @param hostHeader - hostHeader 输入；驱动 `this.executeRawNodeRequest()`、`this.rawNodeRequest()` 的 WordPress步骤。
+   * @param redirectCount - redirectCount 输入；驱动 `this.rawNodeRequest()` 的 WordPress步骤。
+   * @returns 异步完成后的 WordPress 镜像结果。
+   */
   private async rawNodeRequest(
     url: string,
     init: RequestInit,
@@ -702,6 +909,14 @@ export class WordpressService {
     );
   }
 
+  /**
+   * 执行Raw Node Request。
+   * @param url - 访问地址；驱动 `URL()` 的 WordPress步骤。
+   * @param init - init 输入；使用 `headers`、`body`、`method` 字段生成结果。
+   * @param timeoutMs - WordPress列表；影响 executeRawNodeRequest 的返回值。
+   * @param hostHeader - hostHeader 输入；驱动 `this.getRawNodeRequestHeaders()` 的 WordPress步骤。
+   * @returns 异步完成后的 WordPress 镜像结果。
+   */
   private async executeRawNodeRequest(
     url: string,
     init: RequestInit,
@@ -754,6 +969,11 @@ export class WordpressService {
     });
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param headersInit - headersInit 输入；驱动 `Headers()` 的 WordPress步骤。
+   * @param hostHeader - hostHeader 输入；驱动 `headers.set()` 的 WordPress步骤。
+   */
   private getRawNodeRequestHeaders(
     headersInit: HeadersInit | undefined,
     hostHeader: string,
@@ -769,6 +989,10 @@ export class WordpressService {
     return result;
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   */
   private getRawNodeRequestBody(body: RequestInit['body']) {
     if (!body) return undefined;
     if (typeof body === 'string') return body;
@@ -781,6 +1005,10 @@ export class WordpressService {
     return body as any;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param headers - WordPress列表；驱动 `Object.entries()` 的 WordPress步骤。
+   */
   private toResponseHeaders(headers: IncomingHttpHeaders) {
     const responseHeaders = new Headers();
 
@@ -798,6 +1026,10 @@ export class WordpressService {
     return responseHeaders;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param auth - auth 输入；影响 assertAuthContext 的返回值。
+   */
   private assertAuthContext(auth?: WordpressAuthContext) {
     const hasToken = !!auth?.authorization;
     const hasCookieLogin = !!auth?.cookie && !!auth?.nonce;
@@ -811,6 +1043,11 @@ export class WordpressService {
     );
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param auth - auth 输入；使用 `authorization`、`cookie`、`nonce` 字段生成结果。
+   * @param hasBody - hasBody 输入；决定 WordPress条件分支。
+   */
   private getHeaders(auth: WordpressAuthContext | undefined, hasBody: boolean) {
     const headers: Record<string, string> = {
       Accept: 'application/json',
@@ -835,6 +1072,9 @@ export class WordpressService {
     return headers;
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   */
   private getCookieOptions() {
     const secure =
       this.configService.get<string>('ADMIN_COOKIE_SECURE') === 'true';
@@ -847,6 +1087,9 @@ export class WordpressService {
     };
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   */
   private getWordpressHostHeader() {
     const host = this.toolsService.toTrimmedString(
       this.configService.get<string>('WORDPRESS_HOST_HEADER'),
@@ -860,6 +1103,11 @@ export class WordpressService {
       .trim();
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param path - 路由或文件路径；限定 WordPress查询范围。
+   * @param query - 查询参数 DTO；限定 WordPress分页、搜索或详情查询条件。
+   */
   private getUrl(path: string, query?: Record<string, unknown>) {
     const baseUrl = this.configService.get<string>('WORDPRESS_BASE_URL');
 
@@ -881,6 +1129,11 @@ export class WordpressService {
     return url.toString();
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param path - 路由或文件路径；计算 WordPress布尔判断。
+   * @param query - 查询参数 DTO；限定 WordPress分页、搜索或详情查询条件。
+   */
   private getRequestUrls(path: string, query?: Record<string, unknown>) {
     const urls = [this.getUrl(path, query)];
 
@@ -891,6 +1144,11 @@ export class WordpressService {
     return urls;
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param path - 路由或文件路径；生成规范化文本。
+   * @param query - 查询参数 DTO；限定 WordPress分页、搜索或详情查询条件。
+   */
   private getRestRouteUrl(path: string, query?: Record<string, unknown>) {
     const restRoute = path.replace(/^\/wp-json/, '') || '/';
     const url = new URL(this.getUrl('/', query));
@@ -900,6 +1158,11 @@ export class WordpressService {
     return url.toString();
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param url - 访问地址；驱动 `URL()` 的 WordPress步骤。
+   * @param method - HTTP 方法名；驱动 `searchParams.set()` 的 WordPress步骤。
+   */
   private getMethodOverrideUrl(url: string, method: 'DELETE') {
     const overrideUrl = new URL(url);
 
@@ -908,10 +1171,16 @@ export class WordpressService {
     return overrideUrl.toString();
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   */
   private getTimeout() {
     return Number(this.configService.get('WORDPRESS_TIMEOUT_MS') || 15000);
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   */
   private getLoginTimeout() {
     return Number(
       this.configService.get('WORDPRESS_LOGIN_TIMEOUT_MS') ||
@@ -920,12 +1189,20 @@ export class WordpressService {
     );
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   */
   private getAvailabilityTtl() {
     return Number(
       this.configService.get('WORDPRESS_AVAILABILITY_TTL_MS') || 60_000,
     );
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param available - available 输入；影响 rememberAvailability 的返回值。
+   * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   */
   private rememberAvailability(
     available: boolean,
     error?: WordpressAvailabilityError,
@@ -937,6 +1214,10 @@ export class WordpressService {
     };
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param query - 查询参数 DTO；限定 WordPress分页、搜索或详情查询条件。
+   */
   private getPageQuery(query: WordpressPagedQueryDto) {
     return {
       order: query.order,
@@ -946,6 +1227,10 @@ export class WordpressService {
     };
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   */
   private async getArticleBody(body: WordpressArticleBodyDto) {
     return this.toolsService.pickDefined({
       categories: this.normalizeIdList(body.categories),
@@ -960,6 +1245,10 @@ export class WordpressService {
     });
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   */
   private async getArticleContent(body: WordpressArticleBodyDto) {
     if (body.content === undefined) return undefined;
     if (body.contentFormat !== 'markdown') return body.content;
@@ -968,6 +1257,10 @@ export class WordpressService {
     return this.markdownService.embedSourceHtml(html, body.content);
   }
 
+  /**
+   * 转换 WordPress 镜像输入。
+   * @param article - article 输入；驱动 `this.getEmbeddedAuthorName()` 的 WordPress步骤。
+   */
   private normalizeArticleResponse(article: Record<string, any>) {
     const content = article?.content;
     const contentValue =
@@ -983,7 +1276,9 @@ export class WordpressService {
       categoriesResolved: this.getEmbeddedTerms(article, 'category'),
       contentHtml,
       cover: this.getEmbeddedFeaturedMediaUrl(article),
-      excerptText: this.stripHtml(article?.excerpt?.rendered || article?.excerpt),
+      excerptText: this.stripHtml(
+        article?.excerpt?.rendered || article?.excerpt,
+      ),
       tagsResolved: this.getEmbeddedTerms(article, 'post_tag'),
     };
 
@@ -1009,6 +1304,11 @@ export class WordpressService {
     return nextArticle;
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param article - article 输入；限定 WordPress查询范围。
+   * @param taxonomy - taxonomy 输入；驱动 `flat()` 的 WordPress步骤。
+   */
   private getEmbeddedTerms(article: Record<string, any>, taxonomy: string) {
     const terms = article?._embedded?.['wp:term'];
     if (!Array.isArray(terms)) return [];
@@ -1026,12 +1326,20 @@ export class WordpressService {
       );
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param article - article 输入；限定 WordPress查询范围。
+   */
   private getEmbeddedAuthorName(article: Record<string, any>) {
     const [author] = article?._embedded?.author || [];
 
     return this.decodeHtmlEntities(author?.name || '');
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param article - article 输入；限定 WordPress查询范围。
+   */
   private getEmbeddedFeaturedMediaUrl(article: Record<string, any>) {
     const [media] = article?._embedded?.['wp:featuredmedia'] || [];
 
@@ -1043,6 +1351,10 @@ export class WordpressService {
     );
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param value - 待转换值；影响 stripHtml 的返回值。
+   */
   private stripHtml(value: unknown) {
     return this.decodeHtmlEntities(`${value ?? ''}`)
       .replace(/<[^>]*>/g, '')
@@ -1050,6 +1362,10 @@ export class WordpressService {
       .trim();
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   */
   private getTermBody(body: WordpressTermBodyDto) {
     return this.toolsService.pickDefined({
       description: body.description,
@@ -1059,6 +1375,10 @@ export class WordpressService {
     });
   }
 
+  /**
+   * 转换 WordPress 镜像输入。
+   * @param value - 待转换值；决定 WordPress条件分支。
+   */
   private normalizeIdList(value?: number[] | string) {
     if (Array.isArray(value)) return value;
     if (typeof value !== 'string') return value;
@@ -1069,6 +1389,10 @@ export class WordpressService {
       .filter((item) => !Number.isNaN(item));
   }
 
+  /**
+   * 转换 WordPress 镜像输入。
+   * @param value - 待转换值；决定 WordPress条件分支。
+   */
   private normalizeIdQuery(value?: string | string[]) {
     if (Array.isArray(value)) {
       return value
@@ -1087,6 +1411,10 @@ export class WordpressService {
       .join(',');
   }
 
+  /**
+   * 解析Response。
+   * @param response - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   */
   private async parseResponse(response: globalThis.Response) {
     const text = await response.text();
 
@@ -1099,6 +1427,12 @@ export class WordpressService {
     }
   }
 
+  /**
+   * 解析Argon Theme Config。
+   * @param html - html 输入；驱动 `this.getScriptObjectBlock()`、`this.getArgonBackgroundDarkBrightness()`、`this.getArgonAuthorAvatar()`、`this.getArgonMenuItems()` 的 WordPress步骤。
+   * @param root - root 输入；驱动 `this.getArgonAuthorAvatar()` 的 WordPress步骤。
+   * @returns WordPress 镜像转换后的值。
+   */
   private parseArgonThemeConfig(
     html: string,
     root: any,
@@ -1180,10 +1514,7 @@ export class WordpressService {
       backgroundImage: this.getArgonBackgroundImage(html),
       backgroundOpacity: this.getArgonBackgroundOpacity(html),
       bodyClass: this.getTagClassList(html, 'body'),
-      darkmodeAutoSwitch: this.getInlineJsString(
-        html,
-        'darkmodeAutoSwitch',
-      ),
+      darkmodeAutoSwitch: this.getInlineJsString(html, 'darkmodeAutoSwitch'),
       enableCustomThemeColor:
         this.getMetaContent(html, 'argon-enable-custom-theme-color') === 'true',
       headerMenu: this.getArgonMenuItems(html, 'navbar_global'),
@@ -1209,6 +1540,11 @@ export class WordpressService {
     };
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；驱动 `this.getCssBlock()` 的 WordPress步骤。
+   * @param selector - selector 输入；驱动 `this.getCssBlock()` 的 WordPress步骤。
+   */
   private getArgonBackgroundImage(html: string, selector = '#content:before') {
     const block = this.getCssBlock(html, selector);
     const rawValue =
@@ -1218,6 +1554,10 @@ export class WordpressService {
     return this.decodeUriText(this.decodeHtmlEntities(value));
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；驱动 `this.getCssDeclaration()` 的 WordPress步骤。
+   */
   private getArgonBackgroundOpacity(html: string) {
     const value = this.getCssDeclaration(
       this.getCssBlock(html, '#content:before'),
@@ -1227,6 +1567,10 @@ export class WordpressService {
     return this.toNonNegativeNumber(value, 1);
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；使用 `darkmode` 字段生成结果。
+   */
   private getArgonBackgroundDarkOpacity(html: string) {
     const darkValue = this.getCssDeclaration(
       this.getCssBlock(html, 'html.darkmode #content:after'),
@@ -1240,6 +1584,10 @@ export class WordpressService {
     return this.toNonNegativeNumber(darkValue || baseValue, 1);
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；使用 `darkmode` 字段生成结果。
+   */
   private getArgonBackgroundDarkBrightness(html: string) {
     const filter = this.getCssDeclaration(
       this.getCssBlock(html, 'html.darkmode #content:before'),
@@ -1250,6 +1598,10 @@ export class WordpressService {
     return this.toNonNegativeNumber(value, 1);
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；驱动 `this.getTagAttributeById()` 的 WordPress步骤。
+   */
   private getArgonAuthorAvatar(html: string) {
     const style = this.getTagAttributeById(
       html,
@@ -1264,6 +1616,10 @@ export class WordpressService {
     );
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；驱动 `this.stripHtml()` 的 WordPress步骤。
+   */
   private getArgonAuthorName(html: string) {
     const pattern =
       /<[^>]*id=["']leftbar_overview_author_name["'][^>]*>([\s\S]*?)<\/[^>]+>/i;
@@ -1271,6 +1627,12 @@ export class WordpressService {
     return this.stripHtml(pattern.exec(html)?.[1] || '');
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；驱动 `this.getElementHtmlById()` 的 WordPress步骤。
+   * @param elementId - WordPress ID；定位本次读取、更新、删除或关联的WordPress。
+   * @returns WordPress 镜像查询结果。
+   */
   private getArgonMenuItems(
     html: string,
     elementId: string,
@@ -1282,7 +1644,8 @@ export class WordpressService {
         const attrText = match[1] || '';
         const href = this.getHtmlAttribute(attrText, 'href');
         const label = this.stripHtml(match[2] || '');
-        const icon = /<i\b[^>]*class=["']([^"']*)["']/i.exec(match[2] || '')?.[1] || '';
+        const icon =
+          /<i\b[^>]*class=["']([^"']*)["']/i.exec(match[2] || '')?.[1] || '';
 
         if (!href || !label) return null;
 
@@ -1306,6 +1669,11 @@ export class WordpressService {
       .filter((item): item is WordpressArgonMenuItem => !!item);
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；驱动 `pattern.exec()` 的 WordPress步骤。
+   * @param selector - selector 输入；驱动 `this.escapeRegex()` 的 WordPress步骤。
+   */
   private getCssBlock(html: string, selector: string) {
     const pattern = new RegExp(
       `${this.escapeRegex(selector)}\\s*\\{(?<body>[^}]*)\\}`,
@@ -1315,6 +1683,11 @@ export class WordpressService {
     return pattern.exec(html)?.groups?.body || '';
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param block - block 输入；驱动 `pattern.exec()` 的 WordPress步骤。
+   * @param property - property 输入；驱动 `this.escapeRegex()` 的 WordPress步骤。
+   */
   private getCssDeclaration(block: string, property: string) {
     const pattern = new RegExp(
       `${this.escapeRegex(property)}\\s*:\\s*([^;]+)`,
@@ -1324,6 +1697,12 @@ export class WordpressService {
     return pattern.exec(block)?.[1]?.trim() || '';
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；驱动 `tagPattern.exec()` 的 WordPress步骤。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   * @param attribute - attribute 输入；驱动 `this.escapeRegex()` 的 WordPress步骤。
+   */
   private getTagAttributeById(html: string, id: string, attribute: string) {
     const tagPattern = new RegExp(
       `<[^>]*id=["']${this.escapeRegex(id)}["'][^>]*>`,
@@ -1338,6 +1717,11 @@ export class WordpressService {
     return attrPattern.exec(tag)?.[1] || '';
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；生成规范化文本。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   */
   private getElementHtmlById(html: string, id: string) {
     const startPattern = new RegExp(
       `<(?<tag>[a-z0-9-]+)[^>]*id=["']${this.escapeRegex(id)}["'][^>]*>`,
@@ -1356,6 +1740,11 @@ export class WordpressService {
       : html.slice(startIndex);
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param attrText - attrText 输入；驱动 `pattern.exec()` 的 WordPress步骤。
+   * @param attribute - attribute 输入；驱动 `this.escapeRegex()` 的 WordPress步骤。
+   */
   private getHtmlAttribute(attrText: string, attribute: string) {
     const pattern = new RegExp(
       `${this.escapeRegex(attribute)}=["']([^"']*)["']`,
@@ -1365,6 +1754,11 @@ export class WordpressService {
     return pattern.exec(attrText)?.[1] || '';
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；驱动 `this.decodeHtmlEntities()` 的 WordPress步骤。
+   * @param name - 名称文本；驱动 `this.escapeRegex()`、`RegExp()` 的 WordPress步骤。
+   */
   private getMetaContent(html: string, name: string) {
     const escapedName = this.escapeRegex(name);
     const pattern = new RegExp(
@@ -1375,6 +1769,11 @@ export class WordpressService {
     return this.decodeHtmlEntities(pattern.exec(html)?.[1] || '');
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；驱动 `pattern.exec()` 的 WordPress步骤。
+   * @param tagName - tagName 输入；限定 WordPress查询范围。
+   */
   private getTagClassList(html: string, tagName: 'body' | 'html') {
     const pattern = new RegExp(`<${tagName}[^>]*class=["']([^"']*)["']`, 'i');
     const classValue = pattern.exec(html)?.[1] || '';
@@ -1385,6 +1784,11 @@ export class WordpressService {
       .filter(Boolean);
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；驱动 `pattern.exec()`、`this.readBraceBlock()` 的 WordPress步骤。
+   * @param name - 名称文本；驱动 `this.escapeRegex()` 的 WordPress步骤。
+   */
   private getScriptObjectBlock(html: string, name: string) {
     const pattern = new RegExp(`${this.escapeRegex(name)}\\s*=\\s*\\{`, 'i');
     const match = pattern.exec(html);
@@ -1393,6 +1797,11 @@ export class WordpressService {
     return this.readBraceBlock(html, match.index + match[0].lastIndexOf('{'));
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param block - block 输入；驱动 `pattern.exec()`、`this.readBraceBlock()` 的 WordPress步骤。
+   * @param key - 键名；驱动 `this.escapeRegex()` 的 WordPress步骤。
+   */
   private getJsObjectBlock(block: string, key: string) {
     const pattern = new RegExp(`${this.escapeRegex(key)}\\s*:\\s*\\{`, 'i');
     const match = pattern.exec(block);
@@ -1401,6 +1810,11 @@ export class WordpressService {
     return this.readBraceBlock(block, match.index + match[0].lastIndexOf('{'));
   }
 
+  /**
+   * 读取 WordPress 镜像资源。
+   * @param value - 待转换值；使用 `length` 字段生成结果。
+   * @param startIndex - startIndex 输入；驱动 `for()`、`value.slice()` 的 WordPress步骤。
+   */
   private readBraceBlock(value: string, startIndex: number) {
     let depth = 0;
     for (let index = startIndex; index < value.length; index += 1) {
@@ -1415,6 +1829,11 @@ export class WordpressService {
     return '';
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；驱动 `pattern.exec()` 的 WordPress步骤。
+   * @param key - 键名；驱动 `this.escapeRegex()` 的 WordPress步骤。
+   */
   private getInlineJsString(html: string, key: string) {
     const pattern = new RegExp(
       `${this.escapeRegex(key)}\\s*=\\s*["']([^"']*)["']`,
@@ -1424,6 +1843,12 @@ export class WordpressService {
     return pattern.exec(html)?.[1] || '';
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param block - block 输入；驱动 `pattern.exec()` 的 WordPress步骤。
+   * @param key - 键名；驱动 `this.escapeRegex()` 的 WordPress步骤。
+   * @param fallback - 兜底值；驱动 `pattern.exec()` 的 WordPress步骤。
+   */
   private getJsObjectString(block: string, key: string, fallback: string) {
     const pattern = new RegExp(
       `${this.escapeRegex(key)}\\s*:\\s*["']([^"']*)["']`,
@@ -1433,6 +1858,12 @@ export class WordpressService {
     return pattern.exec(block)?.[1] || fallback;
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param block - block 输入；驱动 `Number()` 的 WordPress步骤。
+   * @param key - 键名；驱动 `this.escapeRegex()` 的 WordPress步骤。
+   * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 WordPress步骤。
+   */
   private getJsObjectNumber(block: string, key: string, fallback: number) {
     const pattern = new RegExp(
       `${this.escapeRegex(key)}\\s*:\\s*([0-9]+)`,
@@ -1443,6 +1874,12 @@ export class WordpressService {
     return Number.isFinite(value) ? value : fallback;
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param block - block 输入；驱动 `this.getJsObjectRawValue()` 的 WordPress步骤。
+   * @param key - 键名；驱动 `this.getJsObjectRawValue()` 的 WordPress步骤。
+   * @param fallback - 兜底值；限定 WordPress查询范围。
+   */
   private getJsObjectBoolean(block: string, key: string, fallback: boolean) {
     const rawValue = this.getJsObjectRawValue(block, key);
     if (rawValue === 'true') return true;
@@ -1451,12 +1888,22 @@ export class WordpressService {
     return fallback;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param value - 待转换值；驱动 `Number()` 的 WordPress步骤。
+   * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 WordPress步骤。
+   */
   private toNonNegativeNumber(value: unknown, fallback: number) {
     const nextValue = Number(value);
 
     return Number.isFinite(nextValue) && nextValue >= 0 ? nextValue : fallback;
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param block - block 输入；驱动 `pattern.exec()` 的 WordPress步骤。
+   * @param key - 键名；驱动 `this.escapeRegex()` 的 WordPress步骤。
+   */
   private getJsObjectRawValue(block: string, key: string) {
     const pattern = new RegExp(
       `${this.escapeRegex(key)}\\s*:\\s*(["'][^"']*["']|true|false|[0-9]+)`,
@@ -1467,6 +1914,10 @@ export class WordpressService {
     return value.replace(/^["']|["']$/g, '');
   }
 
+  /**
+   * 转换 WordPress 镜像输入。
+   * @param value - 待转换值；影响 decodeHtmlEntities 的返回值。
+   */
   private decodeHtmlEntities(value: string) {
     return value
       .replace(/&quot;/g, '"')
@@ -1476,6 +1927,10 @@ export class WordpressService {
       .replace(/&gt;/g, '>');
   }
 
+  /**
+   * 转换 WordPress 镜像输入。
+   * @param value - 待转文本值；驱动 `decodeURI()` 的 WordPress步骤。
+   */
   private decodeUriText(value: string) {
     try {
       return decodeURI(value);
@@ -1484,16 +1939,29 @@ export class WordpressService {
     }
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param value - 待转换值；生成规范化文本。
+   */
   private escapeRegex(value: string) {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param data - 响应数据；承载 WordPress新增、更新、导入或执行字段。
+   * @param status - WordPress列表；限定 WordPress查询范围。
+   */
   private getWordpressResponseErrorMessage(data: any, status: number) {
     if (data?.message) return data.message;
     if (typeof data === 'string' && data) return data;
     return `WordPress 请求失败：${status}`;
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param err - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   */
   private throwWordpressNetworkError(err: unknown): never {
     const message = this.toolsService.getErrorMessage(err, '未知错误');
     const cause = this.getErrorCause(err);
@@ -1512,6 +1980,11 @@ export class WordpressService {
     );
   }
 
+  /**
+   * 转换 WordPress 镜像输入。
+   * @param err - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   * @returns WordPress 镜像转换后的值。
+   */
   private normalizeAvailabilityError(err: unknown): WordpressAvailabilityError {
     if (err instanceof HttpException) {
       const response = err.getResponse();
@@ -1536,6 +2009,10 @@ export class WordpressService {
     };
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param err - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   */
   private getErrorCause(err: unknown) {
     const cause = (err as { cause?: { code?: string; message?: string } })
       ?.cause;
@@ -1543,6 +2020,10 @@ export class WordpressService {
     return cause?.code || cause?.message || '';
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param html - html 输入；提取正则匹配结果。
+   */
   private getLoginErrorMessage(html: string) {
     const match = html.match(
       /<div[^>]*id=["']login_error["'][^>]*>([\s\S]*?)<\/div>/i,
@@ -1556,6 +2037,10 @@ export class WordpressService {
       .trim();
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param headers - WordPress列表；执行 `headers.get()` 对应的 WordPress步骤。
+   */
   private getSetCookieHeaders(headers: Headers) {
     const getSetCookie = (headers as any).getSetCookie;
     if (typeof getSetCookie === 'function') {
@@ -1571,10 +2056,18 @@ export class WordpressService {
     return this.splitSetCookieHeader(setCookie);
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param value - 待转换值；生成规范化文本。
+   */
   private splitSetCookieHeader(value: string) {
     return value.split(/,(?=\s*[^;,]+=)/).map((item) => item.trim());
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param setCookies - WordPress列表；影响 toCookieHeader 的返回值。
+   */
   private toCookieHeader(setCookies: string[]) {
     const cookies = setCookies
       .map((item) => item.split(';')[0]?.trim())
@@ -1590,6 +2083,10 @@ export class WordpressService {
     return cookies.join('; ');
   }
 
+  /**
+   * 执行 WordPress 镜像流程。
+   * @param html - html 输入；提取正则匹配结果。
+   */
   private extractRestNonce(html: string) {
     const patterns = [
       /"nonce"\s*:\s*"([^"]+)"/i,
@@ -1607,6 +2104,10 @@ export class WordpressService {
     return '';
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   */
   private getForwardableAuthorization(request: Request) {
     const authorization = this.toolsService.readHeader(
       request,
@@ -1620,6 +2121,10 @@ export class WordpressService {
     return authorization;
   }
 
+  /**
+   * 判断 WordPress 镜像条件。
+   * @param authorization - authorization 输入；计算 WordPress布尔判断。
+   */
   private isLikelyAdminAuthorization(authorization: string) {
     if (!authorization.startsWith('Bearer ')) return false;
 
@@ -1639,6 +2144,10 @@ export class WordpressService {
     }
   }
 
+  /**
+   * 查询 WordPress 镜像数据。
+   * @param cookieHeader - cookieHeader 输入；决定 WordPress条件分支。
+   */
   private getWordpressCookie(cookieHeader?: string) {
     if (!cookieHeader) return undefined;
 

@@ -56,9 +56,18 @@ const allowedTopLevelEntries = new Set([
   'tests',
 ]);
 
+/**
+ * 执行 脚本或 CLI流程。
+ * @param content - 待处理内容；驱动 `crypto.createHash()` 的 CLI步骤。
+ */
 const sha256 = (content: Buffer | string) =>
   crypto.createHash('sha256').update(content).digest('hex');
 
+/**
+ * 执行 脚本或 CLI流程。
+ * @param value - 待稳定序列化的值；转换 CLI列表项。
+ * @returns 脚本或 CLI渲染后的图片、画布或文本。
+ */
 const stableStringify = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map((item) => stableStringify(item)).join(',')}]`;
@@ -75,6 +84,10 @@ const stableStringify = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
+/**
+ * 转换 脚本或 CLI输入。
+ * @param pluginKey - pluginKey 输入；影响 formatPluginName 的返回值。
+ */
 const formatPluginName = (pluginKey: string) => {
   return pluginKey
     .split('-')
@@ -82,6 +95,11 @@ const formatPluginName = (pluginKey: string) => {
     .join(' ');
 };
 
+/**
+ * 查询 脚本或 CLI数据。
+ * @param argv - CLI 参数数组；执行 `argv.indexOf()` 对应的 CLI步骤。
+ * @param optionName - optionName 输入；驱动 `argv.indexOf()` 的 CLI步骤。
+ */
 const getOptionValue = (argv: string[], optionName: string) => {
   const optionIndex = argv.indexOf(optionName);
   if (optionIndex < 0) return undefined;
@@ -93,6 +111,11 @@ const getOptionValue = (argv: string[], optionName: string) => {
   return value;
 };
 
+/**
+ * 判断 脚本或 CLI条件。
+ * @param parent - parent 输入；定位文件系统路径。
+ * @param child - child 输入；定位文件系统路径。
+ */
 const isInsideDirectory = (parent: string, child: string) => {
   const relativePath = path.relative(parent, child);
   return (
@@ -103,6 +126,10 @@ const isInsideDirectory = (parent: string, child: string) => {
   );
 };
 
+/**
+ * 查询 脚本或 CLI数据。
+ * @param cwd - 当前工作目录；定位文件系统路径。
+ */
 const findWorkspaceRoot = (cwd: string) => {
   let current = path.resolve(cwd);
   while (true) {
@@ -113,6 +140,10 @@ const findWorkspaceRoot = (cwd: string) => {
   }
 };
 
+/**
+ * 查询 脚本或 CLI数据。
+ * @param options - CLI列表；使用 `cwd` 字段生成结果。
+ */
 const getControlledRoots = (options: Required<QqbotPluginCliOptions>) => {
   const cwd = path.resolve(options.cwd);
   const roots = [cwd];
@@ -126,6 +157,12 @@ const getControlledRoots = (options: Required<QqbotPluginCliOptions>) => {
   return roots;
 };
 
+/**
+ * 解析Controlled Path。
+ * @param pathArg - CLI路径；定位文件系统路径。
+ * @param options - CLI列表；使用 `cwd` 字段生成结果。
+ * @param label - 字典展示文本；影响 resolveControlledPath 的返回值。
+ */
 const resolveControlledPath = (
   pathArg: string,
   options: Required<QqbotPluginCliOptions>,
@@ -141,6 +178,11 @@ const resolveControlledPath = (
   return resolvedPath;
 };
 
+/**
+ * 执行 脚本或 CLI流程。
+ * @param pluginKey - pluginKey 输入；决定 CLI条件分支。
+ * @returns 脚本或 CLI渲染后的图片、画布或文本。
+ */
 function assertPluginKey(
   pluginKey: string | undefined,
 ): asserts pluginKey is string {
@@ -150,6 +192,10 @@ function assertPluginKey(
   }
 }
 
+/**
+ * 读取 脚本或 CLI资源。
+ * @param pluginRoot - pluginRoot 输入；定位文件系统路径。
+ */
 const readManifest = (pluginRoot: string) => {
   const manifestPath = path.join(pluginRoot, 'plugin.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as unknown;
@@ -157,6 +203,12 @@ const readManifest = (pluginRoot: string) => {
   return parseQqbotPluginManifest(manifest, { pluginRoot });
 };
 
+/**
+ * 执行 脚本或 CLI流程。
+ * @param sourcePath - CLI路径；读取本地文件内容。
+ * @param targetPath - CLI路径；驱动 `fs.mkdirSync()`、`fs.writeFileSync()` 的 CLI步骤。
+ * @param replacements - CLI列表；驱动 `Object.entries()` 的 CLI步骤。
+ */
 const copyTemplateFile = (
   sourcePath: string,
   targetPath: string,
@@ -173,6 +225,12 @@ const copyTemplateFile = (
   fs.writeFileSync(targetPath, rendered);
 };
 
+/**
+ * 执行 脚本或 CLI流程。
+ * @param sourceRoot - sourceRoot 输入；定位文件系统路径。
+ * @param targetRoot - targetRoot 输入；定位文件系统路径。
+ * @param replacements - CLI列表；驱动 `copyTemplateDirectory()`、`copyTemplateFile()` 的 CLI步骤。
+ */
 const copyTemplateDirectory = (
   sourceRoot: string,
   targetRoot: string,
@@ -191,18 +249,31 @@ const copyTemplateDirectory = (
   }
 };
 
+/**
+ * 列出Package Files。
+ * @param pluginRoot - pluginRoot 输入；驱动 `relative()`、`visit()` 的 CLI步骤。
+ * @returns 脚本或 CLI查询结果。
+ */
 const listPackageFiles = (pluginRoot: string): PackedPluginFile[] => {
   const files: PackedPluginFile[] = [];
   const ignoredRoots = new Set(['dist', 'node_modules']);
 
+  /**
+   * 遍历 脚本或 CLI结构。
+   * @param current - current 输入；定位文件系统路径。
+   */
   const visit = (current: string) => {
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       if (current === pluginRoot && ignoredRoots.has(entry.name)) continue;
       if (entry.name.startsWith('.')) {
-        throw new Error(`Hidden files are not allowed in plugin packages: ${entry.name}`);
+        throw new Error(
+          `Hidden files are not allowed in plugin packages: ${entry.name}`,
+        );
       }
       if (entry.isSymbolicLink()) {
-        throw new Error(`Symbolic links are not allowed in plugin packages: ${entry.name}`);
+        throw new Error(
+          `Symbolic links are not allowed in plugin packages: ${entry.name}`,
+        );
       }
 
       const absolutePath = path.join(current, entry.name);
@@ -211,7 +282,9 @@ const listPackageFiles = (pluginRoot: string): PackedPluginFile[] => {
         .replace(/\\/g, '/');
       const topLevelEntry = relativePath.split('/')[0];
       if (!allowedTopLevelEntries.has(topLevelEntry)) {
-        throw new Error(`Plugin package path is not whitelisted: ${relativePath}`);
+        throw new Error(
+          `Plugin package path is not whitelisted: ${relativePath}`,
+        );
       }
       if (entry.isDirectory()) {
         visit(absolutePath);
@@ -233,6 +306,10 @@ const listPackageFiles = (pluginRoot: string): PackedPluginFile[] => {
   return files.sort((a, b) => a.path.localeCompare(b.path));
 };
 
+/**
+ * 执行 脚本或 CLI流程。
+ * @param pluginRoot - pluginRoot 输入；定位文件系统路径。
+ */
 const assertPluginSourceBoundary = (pluginRoot: string) => {
   const forbiddenPatterns: Array<[RegExp, string]> = [
     [/\bfrom\s+['"]@nestjs\//, '@nestjs imports'],
@@ -247,7 +324,9 @@ const assertPluginSourceBoundary = (pluginRoot: string) => {
     if (!/\.[cm]?[tj]sx?$/.test(file.path)) continue;
     const filePath = path.join(pluginRoot, file.path);
     const source = fs.readFileSync(filePath, 'utf8');
-    const violation = forbiddenPatterns.find(([pattern]) => pattern.test(source));
+    const violation = forbiddenPatterns.find(([pattern]) =>
+      pattern.test(source),
+    );
     if (violation) {
       throw new Error(
         `Forbidden plugin source boundary violation in ${file.path}: ${violation[1]}`,
@@ -256,6 +335,11 @@ const assertPluginSourceBoundary = (pluginRoot: string) => {
   }
 };
 
+/**
+ * 创建 脚本或 CLI对象或配置。
+ * @param pluginRoot - pluginRoot 输入；驱动 `readManifest()`、`assertPluginSourceBoundary()`、`listPackageFiles()` 的 CLI步骤。
+ * @returns 创建后的 脚本或 CLI对象或配置。
+ */
 const buildPackedPlugin = (pluginRoot: string): PackedPlugin => {
   const manifest = readManifest(pluginRoot);
   assertPluginSourceBoundary(pluginRoot);
@@ -274,6 +358,10 @@ const buildPackedPlugin = (pluginRoot: string): PackedPlugin => {
   };
 };
 
+/**
+ * 执行 脚本或 CLI流程。
+ * @param packedPlugin - packedPlugin 输入；使用 `files`、`manifest`、`contentHash` 字段生成结果。
+ */
 const assertPackageIntegrity = (packedPlugin: PackedPlugin) => {
   const expectedHash = sha256(
     stableStringify({
@@ -289,6 +377,13 @@ const assertPackageIntegrity = (packedPlugin: PackedPlugin) => {
   parseQqbotPluginManifest(packedPlugin.manifest);
 };
 
+/**
+ * 创建 脚本或 CLI对象或配置。
+ * @param pluginKey - pluginKey 输入；驱动 `assertPluginKey()`、`resolveControlledPath()`、`formatPluginName()` 的 CLI步骤。
+ * @param options - CLI列表；使用 `cwd` 字段生成结果。
+ * @param outputPathArg - CLI路径；驱动 `resolveControlledPath()` 的 CLI步骤。
+ * @returns 创建后的 脚本或 CLI对象或配置。
+ */
 const createPlugin = (
   pluginKey: string | undefined,
   options: Required<QqbotPluginCliOptions>,
@@ -331,6 +426,12 @@ const createPlugin = (
   };
 };
 
+/**
+ * 判断 脚本或 CLI条件。
+ * @param pluginRootArg - pluginRootArg 输入；定位文件系统路径。
+ * @param options - CLI列表；使用 `cwd` 字段生成结果。
+ * @returns 脚本或 CLI产出的 QqbotPluginCliResult。
+ */
 const validatePlugin = (
   pluginRootArg: string | undefined,
   options: Required<QqbotPluginCliOptions>,
@@ -353,6 +454,13 @@ const validatePlugin = (
   };
 };
 
+/**
+ * 执行 脚本或 CLI流程。
+ * @param pluginRootArg - pluginRootArg 输入；定位文件系统路径。
+ * @param options - CLI列表；使用 `cwd` 字段生成结果。
+ * @param outputPathArg - CLI路径；驱动 `resolveControlledPath()` 的 CLI步骤。
+ * @returns 脚本或 CLI产出的 QqbotPluginCliResult。
+ */
 const packPlugin = (
   pluginRootArg: string | undefined,
   options: Required<QqbotPluginCliOptions>,
@@ -386,6 +494,12 @@ const packPlugin = (
   };
 };
 
+/**
+ * 执行 脚本或 CLI流程。
+ * @param packagePathArg - CLI路径；定位文件系统路径。
+ * @param options - CLI列表；使用 `cwd` 字段生成结果。
+ * @returns 脚本或 CLI产出的 QqbotPluginCliResult。
+ */
 const installLocalPlugin = (
   packagePathArg: string | undefined,
   options: Required<QqbotPluginCliOptions>,
@@ -421,6 +535,12 @@ const installLocalPlugin = (
   };
 };
 
+/**
+ * 执行Qqbot Plugin Cli。
+ * @param argv - CLI 参数数组；驱动 `createPlugin()`、`installLocalPlugin()`、`packPlugin()`、`validatePlugin()` 的 CLI步骤。
+ * @param options - CLI列表；使用 `cwd`、`stderr`、`stdout` 字段生成结果。
+ * @returns 异步完成后的 脚本或 CLI结果。
+ */
 export const runQqbotPluginCli = async (
   argv: string[],
   options: QqbotPluginCliOptions = {},
@@ -428,17 +548,27 @@ export const runQqbotPluginCli = async (
   const command = argv[0] as QqbotPluginCliCommand | undefined;
   const resolvedOptions: Required<QqbotPluginCliOptions> = {
     cwd: options.cwd || process.cwd(),
-    stderr: options.stderr || ((message) => process.stderr.write(`${message}\n`)),
-    stdout: options.stdout || ((message) => process.stdout.write(`${message}\n`)),
+    stderr:
+      options.stderr || ((message) => process.stderr.write(`${message}\n`)),
+    stdout:
+      options.stdout || ((message) => process.stdout.write(`${message}\n`)),
   };
 
   switch (command) {
     case 'create':
-      return createPlugin(argv[1], resolvedOptions, getOptionValue(argv, '--out'));
+      return createPlugin(
+        argv[1],
+        resolvedOptions,
+        getOptionValue(argv, '--out'),
+      );
     case 'install-local':
       return installLocalPlugin(argv[1], resolvedOptions);
     case 'pack':
-      return packPlugin(argv[1], resolvedOptions, getOptionValue(argv, '--out'));
+      return packPlugin(
+        argv[1],
+        resolvedOptions,
+        getOptionValue(argv, '--out'),
+      );
     case 'validate':
       return validatePlugin(argv[1], resolvedOptions);
     default:

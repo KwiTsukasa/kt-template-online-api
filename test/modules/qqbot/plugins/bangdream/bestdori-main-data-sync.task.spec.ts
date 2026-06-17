@@ -33,19 +33,44 @@ describe('BangDream Bestdori main-data sync task', () => {
   it('downloads main JSON data, writes cache atomically, and returns safe summary', async () => {
     const requestedUrls: string[] = [];
     configureBangDreamRuntimeIo({
+      /**
+       * 读取 BangDream回调数据。
+       * @param key - 键名；限定 BangDream查询范围。
+       */
       getConfig: (key) =>
         key === BANGDREAM_TSUGU_ENV_KEYS.cacheRoot ? cacheRoot : undefined,
+      /**
+       * 执行 BangDream回调。
+       * @param filePath - BangDream路径；转换 JSON 文本。
+       */
       readJsonFile: async (filePath) =>
         JSON.parse(readFileSync(filePath, 'utf8')),
+      /**
+       * 执行 BangDream回调。
+       */
       readExcelRows: async () => [],
+      /**
+       * 执行 BangDream回调。
+       * @param from - from 输入；驱动 `renameSync()` 的 BangDream步骤。
+       * @param to - to 输入；驱动 `mkdirSync()`、`renameSync()` 的 BangDream步骤。
+       */
       renameFile: async (from, to) => {
         mkdirSync(dirname(to), { recursive: true });
         renameSync(from, to);
       },
+      /**
+       * 执行 BangDream回调。
+       * @param url - 访问地址；影响 requestJson 的返回值。
+       */
       requestJson: async <T = unknown>(url: string) => {
         requestedUrls.push(`${url}`);
         return { body: { ok: true, url } as T };
       },
+      /**
+       * 执行 BangDream回调。
+       * @param filePath - BangDream路径；驱动 `mkdirSync()`、`writeFileSync()` 的 BangDream步骤。
+       * @param data - 业务数据；承载 BangDream新增、更新、导入或执行字段。
+       */
       writeJsonFile: async (filePath, data) => {
         mkdirSync(dirname(filePath), { recursive: true });
         writeFileSync(filePath, `${JSON.stringify(data)}\n`);
@@ -75,21 +100,46 @@ describe('BangDream Bestdori main-data sync task', () => {
     mkdirSync(dirname(metaCachePath), { recursive: true });
     writeFileSync(metaCachePath, '{"previous":true}\n');
     configureBangDreamRuntimeIo({
+      /**
+       * 读取 BangDream回调数据。
+       * @param key - 键名；限定 BangDream查询范围。
+       */
       getConfig: (key) =>
         key === BANGDREAM_TSUGU_ENV_KEYS.cacheRoot ? cacheRoot : undefined,
+      /**
+       * 执行 BangDream回调。
+       * @param filePath - BangDream路径；转换 JSON 文本。
+       */
       readJsonFile: async (filePath) =>
         JSON.parse(readFileSync(filePath, 'utf8')),
+      /**
+       * 执行 BangDream回调。
+       */
       readExcelRows: async () => [],
+      /**
+       * 执行 BangDream回调。
+       * @param from - from 输入；驱动 `renameSync()` 的 BangDream步骤。
+       * @param to - to 输入；驱动 `mkdirSync()`、`renameSync()` 的 BangDream步骤。
+       */
       renameFile: async (from, to) => {
         mkdirSync(dirname(to), { recursive: true });
         renameSync(from, to);
       },
+      /**
+       * 执行 BangDream回调。
+       * @param url - 访问地址；决定 BangDream条件分支。
+       */
       requestJson: async <T = unknown>(url: string) => {
         if (`${url}`.includes('/api/songs/meta/')) {
           throw new Error('network failed');
         }
         return { body: { ok: true } as T };
       },
+      /**
+       * 执行 BangDream回调。
+       * @param filePath - BangDream路径；驱动 `mkdirSync()`、`writeFileSync()` 的 BangDream步骤。
+       * @param data - 业务数据；承载 BangDream新增、更新、导入或执行字段。
+       */
       writeJsonFile: async (filePath, data) => {
         mkdirSync(dirname(filePath), { recursive: true });
         writeFileSync(filePath, `${JSON.stringify(data)}\n`);

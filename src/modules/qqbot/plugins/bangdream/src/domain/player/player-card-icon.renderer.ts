@@ -13,10 +13,10 @@ import {
 /**
  * 在图片布局层中绘制玩家卡牌In列表。
  *
- * @param player - 玩家参数。
- * @param key - 当前字段键名，未传入时使用默认值。
- * @param cardIdVisible - 卡牌IDVisible参数，未传入时使用默认值。
- * @param lineHeight - 线条高度参数，未传入时使用默认值。
+ * @param player - player 输入；使用 `profile` 字段生成结果。
+ * @param key - 键名；影响 drawPlayerCardInList 的返回值。
+ * @param cardIdVisible - cardIdVisible 输入；驱动 `Card()` 的 BangDream步骤。
+ * @param lineHeight - lineHeight 输入；驱动 `getPlayerCardIconListTextSize()`、`getPlayerCardIconListSpacing()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawPlayerCardInList(

@@ -1,6 +1,10 @@
 import { ToolsService } from '@/common';
 import { QqbotRuleService } from '@/modules/qqbot/core/application/rule/qqbot-rule.service';
 
+/**
+ * 创建 测试断言对象或配置。
+ * @param config - config 输入；构造 Jest mock 返回值。
+ */
 function createService(config: Record<string, number | string | undefined>) {
   return new (QqbotRuleService as any)(
     {} as any,

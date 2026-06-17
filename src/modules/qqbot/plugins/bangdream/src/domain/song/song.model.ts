@@ -7,9 +7,7 @@ import {
   BANGDREAM_DIFFICULTY_NAME_BY_ID,
   BANGDREAM_DIFFICULTY_NAMES,
 } from '@/modules/qqbot/plugins/bangdream/src/domain/common/bangdream-protocol';
-import {
-  BANGDREAM_SONG_TAG_NAME,
-} from '@/modules/qqbot/plugins/bangdream/src/config/dictionary/default-dictionary';
+import { BANGDREAM_SONG_TAG_NAME } from '@/modules/qqbot/plugins/bangdream/src/config/dictionary/default-dictionary';
 import { songResourceRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/song/song-resource.repository';
 import type { BestdoriNote } from '@/modules/qqbot/plugins/bangdream/src/domain/song/song-chart-preview.layout';
 
@@ -96,7 +94,7 @@ export class Song {
   /**
    * 构造 Song 实例，并初始化该模型的本地基础字段。
    *
-   * @param songId - 歌曲 ID。
+   * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
    */
   constructor(songId: number) {
     this.songId = songId;
@@ -202,7 +200,7 @@ export class Song {
   /**
    * 在 Song 模型中获取歌曲封面图片。
    *
-   * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+   * @param displayedServerList - displayedServerList 输入；生成规范化文本。
    * @returns 异步处理结果。
    */
   async getSongJacketImage(
@@ -217,6 +215,11 @@ export class Song {
     return await jacketImage;
   }
 
+  /**
+   * 加载Song Jacket Image。
+   * @param displayedServerList - displayedServerList 输入；驱动 `songResourceRepository.getJacketImageBuffer()` 的 BangDream步骤。
+   * @returns 异步完成后的 BangDream 插件结果。
+   */
   private async loadSongJacketImage(
     displayedServerList: Server[],
   ): Promise<Image> {
@@ -229,7 +232,7 @@ export class Song {
   /**
    * 在 Song 模型中获取歌曲封面图片URL。
    *
-   * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+   * @param displayedServerList - displayedServerList 输入；驱动 `songResourceRepository.resolveJacketImageUrl()` 的 BangDream步骤。
    * @returns 格式化后的文本。
    */
   getSongJacketImageURL(displayedServerList?: Server[]): string {
@@ -241,14 +244,14 @@ export class Song {
   /**
    * 在 Song 模型中获取歌曲封面图片资源路径。
    *
-   * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+   * @param displayedServerList - displayedServerList 输入；驱动 `songResourceRepository.getJacketImagePath()` 的 BangDream步骤。
    * @returns 格式化后的资源路径。
    */
   getSongJacketImagePath(displayedServerList?: Server[]): string {
     return songResourceRepository.getJacketImagePath(this, displayedServerList);
   }
   /**
-   * 在 Song 模型中获取Tag名称。
+   * 查询 BangDream 插件数据。
    *
    * @returns 格式化后的文本。
    */
@@ -261,7 +264,7 @@ export class Song {
   /**
    * 在 Song 模型中获取歌曲谱面。
    *
-   * @param difficultyId - 难度ID参数。
+   * @param difficultyId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
    * @returns 异步处理结果。
    */
   async getSongChart(difficultyId: number): Promise<BestdoriNote[]> {
@@ -284,11 +287,11 @@ export class Song {
   /**
    * 在 Song 模型中计算Meta。
    *
-   * @param withFever - withFever参数。
-   * @param difficultyId - 难度ID参数。
-   * @param scoreUpMaxValue - 分数UpMax值参数，未传入时使用默认值。
-   * @param skillDuration - 技能Duration参数，未传入时使用默认值。
-   * @param accuracy - accuracy参数，未传入时使用默认值。
+   * @param withFever - withFever 输入；决定 BangDream条件分支。
+   * @param difficultyId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
+   * @param scoreUpMaxValue - scoreUpMaxValue 输入；影响 calcMeta 的返回值。
+   * @param skillDuration - skillDuration 输入；影响 calcMeta 的返回值。
+   * @param accuracy - accuracy 输入；影响 calcMeta 的返回值。
    * @returns 计算后的数值。
    */
   calcMeta(
@@ -321,11 +324,11 @@ export class Song {
 
 //获取时间范围内指定服务器推出的新歌
 /**
- * 在BangDream 领域模型层中获取Present歌曲列表。
+ * 查询 BangDream 插件数据。
  *
- * @param mainServer - 主数据服务器参数。
- * @param start - start参数，未传入时使用默认值。
- * @param end - end参数，未传入时使用默认值。
+ * @param mainServer - mainServer 输入；决定 BangDream条件分支。
+ * @param start - start 输入；决定 BangDream条件分支。
+ * @param end - end 输入；决定 BangDream条件分支。
  * @returns 处理后的列表。
  */
 export function getPresentSongList(
@@ -381,10 +384,10 @@ export interface SongMetaRankSummary {
 }
 
 /**
- * 在BangDream 领域模型层中获取MetaRanking。
+ * 查询 BangDream 插件数据。
  *
- * @param withFever - withFever参数。
- * @param mainServer - 主数据服务器参数。
+ * @param withFever - withFever 输入；驱动 `song.calcMeta()` 的 BangDream步骤。
+ * @param mainServer - mainServer 输入；决定 BangDream条件分支。
  * @returns 处理后的列表。
  */
 export function getMetaRanking(
@@ -431,9 +434,9 @@ export function getMetaRanking(
 /**
  * 在BangDream 领域模型层中获取指定歌曲的Meta排名摘要。
  *
- * @param targetSong - 目标歌曲。
- * @param withFever - withFever参数。
- * @param mainServer - 主数据服务器参数。
+ * @param targetSong - targetSong 输入；使用 `songId` 字段生成结果。
+ * @param withFever - withFever 输入；驱动 `song.calcMeta()` 的 BangDream步骤。
+ * @param mainServer - mainServer 输入；决定 BangDream条件分支。
  * @returns 目标歌曲的排名条目与全局最大Meta。
  */
 export function getSongMetaRankSummary(
@@ -489,6 +492,12 @@ export function getSongMetaRankSummary(
   };
 }
 
+/**
+ * 判断 BangDream 插件条件。
+ * @param song - song 输入；使用 `publishedAt`、`notes`、`hasMeta` 字段计算判断结果。
+ * @param mainServer - mainServer 输入；计算 BangDream判断结果。
+ * @returns 布尔值，表示 BangDream 插件条件是否满足。
+ */
 function isSongMetaRankCandidate(song: Song, mainServer: Server): boolean {
   return (
     song.publishedAt[mainServer] != null &&
@@ -497,6 +506,12 @@ function isSongMetaRankCandidate(song: Song, mainServer: Server): boolean {
   );
 }
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param rowMetas - BangDream列表；使用 `length` 字段生成结果。
+ * @param targetMeta - targetMeta 输入；决定 BangDream条件分支。
+ * @param targetOrder - targetOrder 输入；决定 BangDream条件分支。
+ */
 function countStableMetaRank(
   rowMetas: number[],
   targetMeta: number,

@@ -26,6 +26,10 @@ export interface CutoffEventTopData {
 }
 
 export class CutoffEventTopRepository {
+  /**
+   * 初始化 CutoffEventTopRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
@@ -33,8 +37,8 @@ export class CutoffEventTopRepository {
   /**
    * 获取活动前十榜数据路径。
    *
-   * @param eventId - 活动 ID。
-   * @param server - 目标服务器。
+   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+   * @param server - server 输入；限定 BangDream查询范围。
    */
   getTopDataPath(eventId: number, server: Server): string {
     return `/api/eventtop/data?server=${server}&event=${eventId}&mid=0&interval=3600000`;
@@ -43,8 +47,8 @@ export class CutoffEventTopRepository {
   /**
    * 获取活动前十榜数据。
    *
-   * @param eventId - 活动 ID。
-   * @param server - 目标服务器。
+   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+   * @param server - server 输入；驱动 `this.getTopDataPath()` 的 BangDream步骤。
    */
   async getTopData(
     eventId: number,

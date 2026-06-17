@@ -17,7 +17,7 @@ const DAILY_CHECKPOINT_SERVERS = new Set<number>([
 /**
  * 规范化上游时间戳为毫秒。
  *
- * @param time - 秒级或毫秒级时间戳。
+ * @param time - time 输入；驱动 `Number()` 的 BangDream步骤。
  * @returns 毫秒级时间戳。
  */
 export function normalizeBangDreamTimestamp(time: number | string): number {
@@ -28,7 +28,7 @@ export function normalizeBangDreamTimestamp(time: number | string): number {
 /**
  * 获取服务器对应的 UTC 偏移小时数。
  *
- * @param server - 目标服务器。
+ * @param server - server 输入；限定 BangDream查询范围。
  * @returns UTC 偏移小时数。
  */
 export function getBangDreamServerUtcOffset(server: number): number {
@@ -38,8 +38,8 @@ export function getBangDreamServerUtcOffset(server: number): number {
 /**
  * 将时间戳转换为目标服务器时区下的 Date。
  *
- * @param time - 秒级或毫秒级时间戳。
- * @param server - 目标服务器。
+ * @param time - time 输入；驱动 `normalizeBangDreamTimestamp()` 的 BangDream步骤。
+ * @param server - server 输入；驱动 `getBangDreamServerUtcOffset()` 的 BangDream步骤。
  * @returns 服务器时区 Date。
  */
 export function getBangDreamDateByServerTimezone(
@@ -54,7 +54,7 @@ export function getBangDreamDateByServerTimezone(
 /**
  * 判断服务器是否存在每日档线 checkpoint。
  *
- * @param server - 目标服务器。
+ * @param server - server 输入；驱动 `DAILY_CHECKPOINT_SERVERS.has()` 的 BangDream步骤。
  * @returns 是否启用每日 checkpoint。
  */
 export function hasBangDreamDailyCheckpoint(server: number): boolean {
@@ -64,8 +64,8 @@ export function hasBangDreamDailyCheckpoint(server: number): boolean {
 /**
  * 判断时间是否命中档线日增 checkpoint。
  *
- * @param server - 目标服务器。
- * @param date - 已按服务器时区转换后的 Date。
+ * @param server - server 输入；计算 BangDream判断结果。
+ * @param date - date 输入；执行 `date.getUTCHours()`、`date.getUTCMinutes()` 对应的 BangDream步骤。
  * @returns 是否命中 checkpoint。
  */
 export function isBangDreamDailyCheckpoint(

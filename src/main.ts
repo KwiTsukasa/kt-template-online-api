@@ -26,21 +26,37 @@ const adminSwaggerPathPrefixes = [
 
 const swaggerGroups: SwaggerDocumentGroup[] = [
   {
+    /**
+     * 执行 模块回调。
+     * @param path - 路由或文件路径；驱动 `matchPathPrefixes()` 的 模块步骤。
+     */
     matcher: (path) => matchPathPrefixes(path, adminSwaggerPathPrefixes),
     name: 'Admin 后台管理',
     path: 'api/admin',
   },
   {
+    /**
+     * 执行 模块回调。
+     * @param path - 路由或文件路径；计算 模块布尔判断。
+     */
     matcher: (path) => path.startsWith('/qqbot'),
     name: 'QQBot 机器人',
     path: 'api/qqbot',
   },
   {
+    /**
+     * 执行 模块回调。
+     * @param path - 路由或文件路径；计算 模块布尔判断。
+     */
     matcher: (path) => path.startsWith('/wordpress'),
     name: 'WordPress 博客',
     path: 'api/wordpress',
   },
   {
+    /**
+     * 执行 模块回调。
+     * @param path - 路由或文件路径；计算 模块布尔判断。
+     */
     matcher: (path) =>
       path === '/' || path.startsWith('/minio') || path.startsWith('/health'),
     name: '基础能力',
@@ -48,6 +64,9 @@ const swaggerGroups: SwaggerDocumentGroup[] = [
   },
 ];
 
+/**
+ * 执行 当前模块流程。
+ */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
@@ -84,6 +103,12 @@ async function bootstrap() {
   await app.listen(48085);
 }
 
+/**
+ * 执行 当前模块流程。
+ * @param document - document 输入；使用 `paths`、`tags` 字段生成结果。
+ * @param matcher - matcher 输入；驱动 `Object.fromEntries()` 的 模块步骤。
+ * @returns 当前模块产出的 OpenAPIObject。
+ */
 function filterSwaggerDocument(
   document: OpenAPIObject,
   matcher: SwaggerPathMatcher,
@@ -109,6 +134,11 @@ function filterSwaggerDocument(
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ * @param path - 路由或文件路径；计算 模块布尔判断。
+ * @param prefixes - 模块列表；计算 模块布尔判断。
+ */
 function matchPathPrefixes(path: string, prefixes: string[]) {
   return prefixes.some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`),

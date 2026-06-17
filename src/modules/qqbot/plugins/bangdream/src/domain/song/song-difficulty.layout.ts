@@ -20,9 +20,9 @@ export const BANGDREAM_DIFFICULTY_LIST_SPEC = {
 /**
  * 计算难度列表画布宽度。
  *
- * @param difficultyCount - 难度数量。
- * @param imageHeight - 单个难度徽章高度。
- * @param spacing - 难度徽章间距。
+ * @param difficultyCount - difficultyCount 输入；限定 BangDream查询范围。
+ * @param imageHeight - imageHeight 输入；限定 BangDream查询范围。
+ * @param spacing - spacing 输入；限定 BangDream查询范围。
  */
 export function getDifficultyListCanvasWidth(
   difficultyCount: number,
@@ -35,9 +35,9 @@ export function getDifficultyListCanvasWidth(
 /**
  * 计算难度徽章在列表中的横向位置。
  *
- * @param index - 难度下标。
- * @param imageHeight - 单个难度徽章高度。
- * @param spacing - 难度徽章间距。
+ * @param index - index 输入；限定 BangDream查询范围。
+ * @param imageHeight - imageHeight 输入；限定 BangDream查询范围。
+ * @param spacing - spacing 输入；限定 BangDream查询范围。
  */
 export function getDifficultyListItemX(
   index: number,
@@ -50,8 +50,8 @@ export function getDifficultyListItemX(
 /**
  * 获取难度徽章颜色。
  *
- * @param difficultyType - 难度类型。
- * @param colors - 难度颜色表。
+ * @param difficultyType - difficultyType 输入；限定 BangDream查询范围。
+ * @param colors - BangDream列表；限定 BangDream查询范围。
  */
 export function getDifficultyBadgeColor(
   difficultyType: number,
@@ -65,7 +65,7 @@ export function getDifficultyBadgeColor(
 /**
  * 计算难度徽章圆形布局。
  *
- * @param imageHeight - 难度徽章高度。
+ * @param imageHeight - imageHeight 输入；生成 BangDream对象。
  */
 export function createDifficultyBadgeLayout(imageHeight: number) {
   return {
@@ -82,8 +82,8 @@ export function createDifficultyBadgeLayout(imageHeight: number) {
 /**
  * 计算难度等级文字绘制参数。
  *
- * @param imageHeight - 难度徽章高度。
- * @param playLevel - 谱面等级。
+ * @param imageHeight - imageHeight 输入；驱动 `playLevel.toString()` 的 BangDream步骤。
+ * @param playLevel - playLevel 输入；生成规范化文本。
  */
 export function createDifficultyLevelTextSpec(
   imageHeight: number,
@@ -100,8 +100,8 @@ export function createDifficultyLevelTextSpec(
 /**
  * 计算难度等级文字居中位置。
  *
- * @param imageHeight - 难度徽章高度。
- * @param levelText - 已渲染的等级文字图片。
+ * @param imageHeight - imageHeight 输入；限定 BangDream查询范围。
+ * @param levelText - levelText 输入；使用 `width`、`height` 字段生成结果。
  */
 export function getDifficultyLevelTextPosition(
   imageHeight: number,

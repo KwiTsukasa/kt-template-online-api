@@ -9,6 +9,11 @@ type InstallationStateRow = Pick<
   'pluginId' | 'status'
 >;
 
+/**
+ * 解析Inactive Plugin Keys。
+ * @param plugins - 插件列表；转换 插件平台列表项。
+ * @param installations - 插件平台列表；驱动 `for()` 的 插件平台步骤。
+ */
 export function resolveInactivePluginKeys(
   plugins: PluginStateRow[],
   installations: InstallationStateRow[],

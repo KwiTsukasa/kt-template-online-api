@@ -54,11 +54,21 @@ const PROXY_RESOURCE_EXTENSION_RE =
 @ApiTags('基础能力 - MinIO')
 @UseGuards(JwtAuthGuard)
 export class MinioClientController {
+  /**
+   * 初始化 MinioClientController 实例。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * @param minioClientService - minioClientService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly toolsService: ToolsService,
     private readonly minioClientService: MinioClientService,
   ) {}
 
+  /**
+   * 检查MinIO连接和Bucket状态。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param bucketName - bucketName 输入；驱动 `minioClientService.checkConnection()` 的 MinIO步骤。
+   */
   @Get('check')
   @ApiOperation({ summary: '检查MinIO连接和Bucket状态' })
   @ApiQuery({ name: 'bucketName', required: false })
@@ -72,6 +82,11 @@ export class MinioClientController {
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
   }
 
+  /**
+   * 创建 MinIO 资源对象或配置。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param bucketName - bucketName 输入；驱动 `minioClientService.ensureBucket()` 的 MinIO步骤。
+   */
   @Post('bucket')
   @ApiOperation({ summary: '创建Bucket（存在则跳过）' })
   @ApiQuery({ name: 'bucketName', required: false })
@@ -88,6 +103,13 @@ export class MinioClientController {
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
   }
 
+  /**
+   * 上传文件到MinIO。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param file - file 输入；影响 upload 的返回值。
+   * @param bucketName - bucketName 输入；影响 upload 的返回值。
+   * @param objectName - objectName 输入；影响 upload 的返回值。
+   */
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   @ApiOperation({ summary: '上传文件到MinIO' })
@@ -133,6 +155,13 @@ export class MinioClientController {
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
   }
 
+  /**
+   * 查询 MinIO 资源数据。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param bucketName - bucketName 输入；限定 MinIO查询范围。
+   * @param prefix - prefix 输入；限定 MinIO查询范围。
+   * @param recursive - recursive 输入；限定 MinIO查询范围。
+   */
   @Get('list')
   @ApiOperation({ summary: '获取MinIO文件列表' })
   @ApiQuery({ name: 'bucketName', required: false })
@@ -165,6 +194,13 @@ export class MinioClientController {
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
   }
 
+  /**
+   * 获取文件临时访问地址。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param objectName - objectName 输入；驱动 `minioClientService.getPresignedUrl()` 的 MinIO步骤。
+   * @param bucketName - bucketName 输入；驱动 `minioClientService.getPresignedUrl()` 的 MinIO步骤。
+   * @param expiry - expiry 输入；驱动 `minioClientService.getPresignedUrl()` 的 MinIO步骤。
+   */
   @Get('url')
   @ApiOperation({ summary: '获取文件临时访问地址' })
   @ApiQuery({ name: 'objectName' })
@@ -193,6 +229,11 @@ export class MinioClientController {
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
   }
 
+  /**
+   * 代理截图所需的图片/CSS/字体资源。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param url - 访问地址；驱动 `this.getProxyResourceUrl()` 的 MinIO步骤。
+   */
   @Get('resource-proxy')
   @ApiOperation({ summary: '代理截图所需的图片/CSS/字体资源' })
   @ApiQuery({ name: 'url' })
@@ -234,6 +275,12 @@ export class MinioClientController {
     }
   }
 
+  /**
+   * 下载MinIO文件。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param objectName - objectName 输入；生成规范化文本。
+   * @param bucketName - bucketName 输入；驱动 `minioClientService.getObject()` 的 MinIO步骤。
+   */
   @Get('download')
   @ApiOperation({ summary: '下载MinIO文件' })
   @ApiQuery({ name: 'objectName' })
@@ -263,6 +310,12 @@ export class MinioClientController {
     stream.pipe(res);
   }
 
+  /**
+   * 删除MinIO文件。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param objectName - objectName 输入；驱动 `minioClientService.removeObject()` 的 MinIO步骤。
+   * @param bucketName - bucketName 输入；驱动 `minioClientService.removeObject()` 的 MinIO步骤。
+   */
   @Delete('remove')
   @ApiOperation({ summary: '删除MinIO文件' })
   @ApiQuery({ name: 'objectName' })
@@ -286,6 +339,10 @@ export class MinioClientController {
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));
   }
 
+  /**
+   * 查询 MinIO 资源数据。
+   * @param url - 访问地址；驱动 `URL()` 的 MinIO步骤。
+   */
   private getProxyResourceUrl(url: string) {
     if (!url) {
       throw new BadRequestException('资源地址不能为空');
@@ -308,6 +365,11 @@ export class MinioClientController {
     }
   }
 
+  /**
+   * 判断 MinIO 资源条件。
+   * @param contentType - contentType 输入；生成规范化文本。
+   * @param target - target 输入；计算 MinIO判断结果。
+   */
   private isAllowedProxyResource(contentType: string, target: string) {
     const normalizedType = contentType.split(';')[0].trim().toLowerCase();
 

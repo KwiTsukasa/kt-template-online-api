@@ -10,9 +10,9 @@ import { BANGDREAM_GACHA_LIST_SPEC } from '@/modules/qqbot/plugins/bangdream/src
 /**
  * 在图片布局层中绘制卡池PickUpIn列表。
  *
- * @param gacha - 卡池参数。
- * @param server - 目标服务器。
- * @param key - 当前字段键名，未传入时使用默认值。
+ * @param gacha - gacha 输入；使用 `details`、`rates` 字段生成结果。
+ * @param server - server 输入；驱动 `parseInt()` 的 BangDream步骤。
+ * @param key - 键名；影响 drawGachaPickupInList 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawGachaPickupInList(

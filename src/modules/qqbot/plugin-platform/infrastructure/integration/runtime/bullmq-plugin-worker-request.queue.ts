@@ -69,6 +69,11 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
   private closed = false;
   private generation = 0;
 
+  /**
+   * 初始化 QqbotBullmqPluginWorkerRequestQueue 实例。
+   * @param driver - driver 输入；影响 constructor 的返回值。
+   * @param options - 插件平台列表；使用 `queueWaitTimeoutMs`、`pluginKey`、`installationId`、`connection` 字段生成结果。
+   */
   constructor(
     private readonly driver: QqbotPluginWorkerDriver,
     private readonly options: QqbotBullmqWorkerRequestQueueOptions,
@@ -161,6 +166,11 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
     ]);
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param message - message 输入；使用 `type`、`timeoutMs`、`correlationId` 字段生成结果。
+   * @returns 异步完成后的 QQBot 插件平台结果。
+   */
   async request(message: QqbotPluginWorkerRequest): Promise<unknown> {
     if (this.closed) {
       throw new Error('QQBot 插件 worker 队列已关闭');
@@ -205,11 +215,17 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
     return result?.result;
   }
 
+  /**
+   * 重置业务数据。
+   */
   async reset(): Promise<void> {
     this.generation += 1;
     await this.driver.dispose();
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   */
   async close(): Promise<void> {
     this.closed = true;
     await Promise.allSettled([
@@ -220,6 +236,11 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
     ]);
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param source - source 输入；影响 logBullmqError 的返回值。
+   * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   */
   private logBullmqError(
     source: 'queue' | 'queueEvents' | 'worker',
     error: Error,
@@ -230,6 +251,11 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
     );
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param message - message 输入；使用 `timeoutMs` 字段生成结果。
+   * @returns 异步完成后的 QQBot 插件平台结果。
+   */
   private async requestDriverWithTimeout(
     message: QqbotPluginWorkerRequest,
   ): Promise<unknown> {
@@ -256,6 +282,13 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
   }
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @param configService - Nest ConfigService 依赖；驱动 `resolveQqbotPluginQueueConnection()` 的 插件平台步骤。
+ * @param pluginKey - pluginKey 输入；驱动 `resolveQqbotPluginQueueConnection()` 的 插件平台步骤。
+ * @param installationId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
+ * @returns 创建后的 QQBot 插件平台对象或配置。
+ */
 export function createQqbotBullmqWorkerQueueOptions(
   configService: ConfigService,
   pluginKey: string,
@@ -285,6 +318,10 @@ export function createQqbotBullmqWorkerQueueOptions(
   };
 }
 
+/**
+ * 解析Qqbot Plugin Queue Prefix。
+ * @param configService - Nest ConfigService 依赖；驱动 `readStringConfig()` 的 插件平台步骤。
+ */
 export function resolveQqbotPluginQueuePrefix(configService: ConfigService) {
   return readStringConfig(
     configService,
@@ -293,6 +330,11 @@ export function resolveQqbotPluginQueuePrefix(configService: ConfigService) {
   );
 }
 
+/**
+ * 解析Qqbot Plugin Queue Connection。
+ * @param configService - Nest ConfigService 依赖；驱动 `readStringConfig()`、`readNumberConfig()` 的 插件平台步骤。
+ * @returns QQBot 插件平台转换后的值。
+ */
 export function resolveQqbotPluginQueueConnection(
   configService: ConfigService,
 ): ConnectionOptions {
@@ -324,12 +366,20 @@ export function resolveQqbotPluginQueueConnection(
   };
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @param pluginKey - pluginKey 输入；生成规范化文本。
+ * @param installationId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
+ */
 function buildWorkerQueueName(pluginKey: string, installationId: string) {
   const safePluginKey = pluginKey.replace(/[^a-zA-Z0-9_-]/g, '-');
   const safeInstallationId = installationId.replace(/[^a-zA-Z0-9_-]/g, '-');
   return `qqbot-plugin-worker-${safePluginKey}-${safeInstallationId}`;
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ */
 function createWorkerInstanceId() {
   return [
     process.env.HOSTNAME || 'local',
@@ -339,6 +389,12 @@ function createWorkerInstanceId() {
   ].join(':');
 }
 
+/**
+ * 读取 QQBot 插件平台资源。
+ * @param configService - Nest ConfigService 依赖；使用 `get` 字段生成结果。
+ * @param keys - 插件平台列表；驱动 `for()` 的 插件平台步骤。
+ * @param fallback - 兜底值；影响 readStringConfig 的返回值。
+ */
 function readStringConfig(
   configService: ConfigService,
   keys: string[],
@@ -353,6 +409,12 @@ function readStringConfig(
   return fallback;
 }
 
+/**
+ * 读取 QQBot 插件平台资源。
+ * @param configService - Nest ConfigService 依赖；驱动 `readStringConfig()` 的 插件平台步骤。
+ * @param keys - 插件平台列表；驱动 `readStringConfig()` 的 插件平台步骤。
+ * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 插件平台步骤。
+ */
 function readNumberConfig(
   configService: ConfigService,
   keys: string[],

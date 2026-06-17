@@ -35,8 +35,18 @@ import { WordpressService } from '../application/wordpress.service';
 @Controller('wordpress/tag')
 @UseGuards(JwtAuthGuard)
 export class WordpressTagController {
+  /**
+   * 初始化 WordpressTagController 实例。
+   * @param wordpressService - wordpressService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(private readonly wordpressService: WordpressService) {}
 
+  /**
+   * 获取 WordPress 标签分页列表。
+   * @param req - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param query - 查询参数 DTO；限定 WordPress分页、搜索或详情查询条件。
+   */
   @Get('list')
   @ApiOperation({ summary: '获取 WordPress 标签分页列表' })
   async list(
@@ -50,6 +60,12 @@ export class WordpressTagController {
     return res.send(vbenSuccess(list));
   }
 
+  /**
+   * 获取 WordPress 标签详情。
+   * @param req - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   */
   @Get('detail')
   @ApiOperation({ summary: '获取 WordPress 标签详情' })
   @ApiQuery({ name: 'id', type: Number })
@@ -60,6 +76,12 @@ export class WordpressTagController {
     return res.send(vbenSuccess(detail));
   }
 
+  /**
+   * 新增 WordPress 标签。
+   * @param req - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   */
   @Post('save')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '新增 WordPress 标签' })
@@ -74,6 +96,12 @@ export class WordpressTagController {
     return res.send(vbenSuccess(result));
   }
 
+  /**
+   * 编辑 WordPress 标签。
+   * @param req - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param body - 请求体 DTO；承载 WordPress新增、更新、导入或执行字段。
+   */
   @Post('update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '编辑 WordPress 标签' })
@@ -88,6 +116,13 @@ export class WordpressTagController {
     return res.send(vbenSuccess(result));
   }
 
+  /**
+   * 删除 WordPress 标签。
+   * @param req - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param id - WordPress记录 ID；定位本次读取、更新、删除或关联的WordPress记录。
+   * @param force - force 输入；驱动 `wordpressService.tagRemove()` 的 WordPress步骤。
+   */
   @Post('remove')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '删除 WordPress 标签' })

@@ -29,9 +29,9 @@ interface User {
 /**
  * 在图片布局层中绘制玩家RankingIn列表。
  *
- * @param user - user参数。
- * @param backgroudColor - backgroud颜色参数，未传入时使用默认值。
- * @param server - 目标服务器。
+ * @param user - user 输入；使用 `ranking`、`sid`、`strained`、`name` 字段生成结果。
+ * @param backgroudColor - backgroudColor 输入；影响 drawPlayerRankingInList 的返回值。
+ * @param server - server 输入；驱动 `playerRankingResourceRepository.getRankImageBuffer()`、`drawDegree()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawPlayerRankingInList(

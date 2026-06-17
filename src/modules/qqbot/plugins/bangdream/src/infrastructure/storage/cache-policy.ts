@@ -13,7 +13,7 @@ export interface CacheClientRetryOptions<T> {
 /**
  * 获取缓存客户端错误文本。
  *
- * @param error - 待解析错误。
+ * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
  */
 export function getCacheClientErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -23,7 +23,7 @@ export function getCacheClientErrorMessage(error: unknown): string {
 /**
  * 获取缓存客户端 HTTP 错误状态码。
  *
- * @param error - 待解析错误。
+ * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
  */
 export function getCacheClientResponseStatus(
   error: unknown,
@@ -38,7 +38,7 @@ export function getCacheClientResponseStatus(
 /**
  * 判断缓存客户端错误是否为 HTTP 404。
  *
- * @param error - 待判断错误。
+ * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
  */
 export function isCacheClientNotFound(error: unknown): boolean {
   return getCacheClientResponseStatus(error) === 404;
@@ -47,7 +47,7 @@ export function isCacheClientNotFound(error: unknown): boolean {
 /**
  * 规范化缓存客户端重试次数。
  *
- * @param retryCount - 原始重试次数。
+ * @param retryCount - retryCount 输入；驱动 `Math.max()` 的 BangDream步骤。
  */
 export function normalizeCacheClientRetryCount(retryCount = 1): number {
   return Math.max(1, retryCount);
@@ -56,7 +56,7 @@ export function normalizeCacheClientRetryCount(retryCount = 1): number {
 /**
  * 等待缓存客户端下一次重试。
  *
- * @param delayMs - 等待毫秒数。
+ * @param delayMs - BangDream列表；驱动 `sleepBangDreamRuntime()` 的 BangDream步骤。
  */
 export async function waitCacheClientRetryDelay(
   delayMs: number,
@@ -68,7 +68,7 @@ export async function waitCacheClientRetryDelay(
 /**
  * 按缓存客户端策略执行可重试任务。
  *
- * @param options - 重试策略。
+ * @param options - BangDream列表；使用 `retryCount`、`delayMs`、`onFailure`、`shouldRetry` 字段生成结果。
  */
 export async function runWithCacheClientRetry<T>(
   options: CacheClientRetryOptions<T>,

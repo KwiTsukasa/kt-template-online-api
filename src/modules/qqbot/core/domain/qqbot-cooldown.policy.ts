@@ -1,3 +1,8 @@
+/**
+ * 查询 QQBot 核心数据。
+ * @param cooldownMs - QQBot列表；驱动 `Number()` 的 QQBot步骤。
+ * @param minCooldownMs - QQBot列表；驱动 `Number()` 的 QQBot步骤。
+ */
 export function getEffectiveCooldownMs(
   cooldownMs: number | null | undefined,
   minCooldownMs: number,
@@ -10,6 +15,10 @@ export function getEffectiveCooldownMs(
   );
 }
 
+/**
+ * 判断 QQBot 核心条件。
+ * @param params - QQBot列表；使用 `lastHitAt`、`cooldownMs`、`minCooldownMs` 字段计算判断结果。
+ */
 export function isWithinCooldown(params: {
   cooldownMs: number | null | undefined;
   lastHitAt: Date | null | undefined;

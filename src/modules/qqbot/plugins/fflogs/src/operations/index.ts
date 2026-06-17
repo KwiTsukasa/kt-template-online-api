@@ -5,11 +5,19 @@ import {
 } from './character-summary';
 import type { FflogsManifestOperation } from './operation-manifest';
 
+/**
+ * 创建 FFLogs 插件对象或配置。
+ * @param application - application 输入；驱动 `createFflogsCharacterSummaryOperation()` 的 FFLogs步骤。
+ * @param operations - FFLogs列表；转换 FFLogs列表项。
+ */
 export function buildFflogsOperations(
   application: FflogsApplication,
   operations: FflogsManifestOperation[],
 ) {
   const operationFactories = {
+    /**
+     * 执行 FFLogs回调。
+     */
     [fflogsCharacterSummaryHandlerName]: () =>
       createFflogsCharacterSummaryOperation(application),
   } satisfies Record<
@@ -42,4 +50,7 @@ export function buildFflogsOperations(
   });
 }
 
-export type { FflogsManifest, FflogsManifestOperation } from './operation-manifest';
+export type {
+  FflogsManifest,
+  FflogsManifestOperation,
+} from './operation-manifest';

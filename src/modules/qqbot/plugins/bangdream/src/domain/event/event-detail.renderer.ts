@@ -46,8 +46,8 @@ const songSeparatorLine = drawDottedLine(
 /**
  * 在QQBot 图片视图层中绘制歌曲列表数据块。
  *
- * @param songList - 歌曲列表参数。
- * @param topLeftText - 排名Left文本参数，未传入时使用默认值。
+ * @param songList - songList 输入；驱动 `for()` 的 BangDream步骤。
+ * @param topLeftText - topLeftText 输入；影响 drawSongListDataBlock 的返回值。
  */
 async function drawSongListDataBlock(songList: Song[], topLeftText?: string) {
   const list: Array<Image | Canvas> = [];
@@ -62,8 +62,8 @@ async function drawSongListDataBlock(songList: Song[], topLeftText?: string) {
 /**
  * 在QQBot 图片视图层中判断对象是否包含指定自有属性。
  *
- * @param source - 输入来源对象或数据集合。
- * @param key - 当前字段键名。
+ * @param source - source 输入；驱动 `hasOwnProperty.call()` 的 BangDream步骤。
+ * @param key - 键名；驱动 `hasOwnProperty.call()` 的 BangDream步骤。
  * @returns 判断结果。
  */
 function hasOwn(source: object, key: string): boolean {
@@ -73,8 +73,8 @@ function hasOwn(source: object, key: string): boolean {
 /**
  * 在QQBot 图片视图层中追加活动加成区块列表。
  *
- * @param builder - 详情区块构建器。
- * @param event - 活动参数。
+ * @param builder - builder 输入；执行 `builder.addSection()` 对应的 BangDream步骤。
+ * @param event - event 输入；执行 `event.getAttributeList()`、`event.getCharacterList()` 对应的 BangDream步骤。
  */
 async function appendEventBonusSections(
   builder: DetailBlockBuilder,
@@ -112,7 +112,7 @@ async function appendEventBonusSections(
 /**
  * 在QQBot 图片视图层中获取活动数值加成文本。
  *
- * @param event - 活动参数。
+ * @param event - event 输入；使用 `eventCharacterParameterBonus` 字段生成结果。
  * @returns 格式化后的文本。
  */
 function getEventStatBonusText(event: Event): string {
@@ -133,8 +133,8 @@ function getEventStatBonusText(event: Event): string {
 /**
  * 在QQBot 图片视图层中追加活动数值加成。
  *
- * @param builder - 详情区块构建器。
- * @param event - 活动参数。
+ * @param builder - builder 输入；执行 `builder.addSection()` 对应的 BangDream步骤。
+ * @param event - event 输入；驱动 `getEventStatBonusText()` 的 BangDream步骤。
  */
 function appendEventStatBonus(builder: DetailBlockBuilder, event: Event): void {
   const statText = getEventStatBonusText(event);
@@ -152,9 +152,9 @@ function appendEventStatBonus(builder: DetailBlockBuilder, event: Event): void {
 /**
  * 在QQBot 图片视图层中追加活动奖励区块列表。
  *
- * @param builder - 详情区块构建器。
- * @param event - 活动参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
+ * @param builder - builder 输入；执行 `builder.addSection()` 对应的 BangDream步骤。
+ * @param event - event 输入；使用 `rewardCards` 字段生成结果。
+ * @param displayedServerList - displayedServerList 输入；驱动 `event.getRewardDeco()`、`builder.addSection()`、`event.getRewardStamp()` 的 BangDream步骤。
  */
 async function appendEventRewardSections(
   builder: DetailBlockBuilder,
@@ -203,8 +203,8 @@ async function appendEventRewardSections(
 /**
  * 在QQBot 图片视图层中获取活动音乐服务器。
  *
- * @param event - 活动参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
+ * @param event - event 输入；使用 `musics` 字段生成结果。
+ * @param displayedServerList - displayedServerList 输入；限定 BangDream查询范围。
  */
 function getEventMusicServer(event: Event, displayedServerList: Server[]) {
   const defaultServer = displayedServerList[0];
@@ -214,9 +214,9 @@ function getEventMusicServer(event: Event, displayedServerList: Server[]) {
 /**
  * 在QQBot 图片视图层中追加活动音乐区块。
  *
- * @param builder - 详情区块构建器。
- * @param event - 活动参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
+ * @param builder - builder 输入；执行 `builder.addSection()` 对应的 BangDream步骤。
+ * @param event - event 输入；使用 `eventType`、`musics` 字段生成结果。
+ * @param displayedServerList - displayedServerList 输入；驱动 `getEventMusicServer()` 的 BangDream步骤。
  */
 async function appendEventMusicSection(
   builder: DetailBlockBuilder,
@@ -247,8 +247,8 @@ interface EventGachaSections {
 /**
  * 在QQBot 图片视图层中收集活动卡池区块列表。
  *
- * @param event - 活动参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
+ * @param event - event 输入；使用 `startAt` 字段生成结果。
+ * @param displayedServerList - displayedServerList 输入；驱动 `for()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function collectEventGachaSections(
@@ -296,7 +296,7 @@ async function collectEventGachaSections(
 /**
  * 在QQBot 图片视图层中获取歌曲列表Signature。
  *
- * @param songList - 歌曲列表参数。
+ * @param songList - songList 输入；转换 BangDream列表项。
  * @returns 格式化后的文本。
  */
 function getSongListSignature(songList: Song[]): string {
@@ -306,9 +306,9 @@ function getSongListSignature(songList: Song[]): string {
 /**
  * 在QQBot 图片视图层中追加Related歌曲区块列表。
  *
- * @param all - 全部参数。
- * @param event - 活动参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
+ * @param all - all 输入；写入 BangDream集合、缓存或持久化状态。
+ * @param event - event 输入；使用 `startAt`、`endAt` 字段生成结果。
+ * @param displayedServerList - displayedServerList 输入；驱动 `for()` 的 BangDream步骤。
  */
 async function appendRelatedSongSections(
   all: Array<Image | Canvas>,
@@ -347,10 +347,10 @@ async function appendRelatedSongSections(
 /**
  * 在QQBot 图片视图层中绘制活动详情。
  *
- * @param eventId - 活动 ID。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
- * @param useEasyBG - use简易背景参数。
- * @param compress - compress参数。
+ * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+ * @param displayedServerList - displayedServerList 输入；驱动 `builder.addSection()`、`appendEventMusicSection()`、`appendEventRewardSections()`、`collectEventGachaSections()` 的 BangDream步骤。
+ * @param useEasyBG - useEasyBG 输入；影响 drawEventDetail 的返回值。
+ * @param compress - BangDream列表；影响 drawEventDetail 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawEventDetail(
@@ -472,9 +472,9 @@ export async function drawEventDetail(
 /**
  * 在QQBot 图片视图层中获取活动卡池And卡牌列表。
  *
- * @param event - 活动参数。
- * @param mainServer - 主数据服务器参数。
- * @param useCache - use缓存参数，未传入时使用默认值。
+ * @param event - event 输入；使用 `startAt`、`endAt` 字段生成结果。
+ * @param mainServer - mainServer 输入；驱动 `getPresentGachaList()` 的 BangDream步骤。
+ * @param useCache - useCache 输入；驱动 `tempGacha.initFull()` 的 BangDream步骤。
  */
 export async function getEventGachaAndCardList(
   event: Event,

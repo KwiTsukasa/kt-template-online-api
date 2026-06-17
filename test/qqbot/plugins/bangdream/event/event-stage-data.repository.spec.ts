@@ -1,6 +1,10 @@
 import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bangdream-data-provider';
 import { EventStageDataRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/event/event-stage-data.repository';
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @returns 创建后的 BangDream 插件对象或配置。
+ */
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {
     getAsset: jest.fn(),

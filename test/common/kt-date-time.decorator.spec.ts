@@ -54,6 +54,10 @@ describe('KtDateTime decorators', () => {
     const metadata = getMetadataArgsStorage().columns.filter(
       (column) => column.target === DateTimeColumnFixture,
     );
+    /**
+     * 收集 时间 transformer数据。
+     * @param propertyName - propertyName 输入；驱动 `metadata.find()` 的 公共基础设施步骤。
+     */
     const getTransformer = (propertyName: string) =>
       metadata.find((column) => column.propertyName === propertyName)?.options
         .transformer as ValueTransformer;

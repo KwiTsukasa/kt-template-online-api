@@ -15,6 +15,10 @@ import { configureBangDreamRuntimeIo } from '@/modules/qqbot/plugins/bangdream/s
 
 beforeAll(() => {
   configureBangDreamRuntimeIo({
+    /**
+     * 执行 BangDream回调。
+     * @param filePath - BangDream路径；转换 JSON 文本。
+     */
     readJsonFileSync: (filePath) =>
       JSON.parse(fs.readFileSync(filePath, 'utf8')),
   });
@@ -65,6 +69,10 @@ describe('BangDream fuzzy search helpers', () => {
       },
     });
     const result: FuzzySearchResult = {};
+    /**
+     * 执行 BangDream 插件局部步骤。
+     * @param key - 键名；影响 push 的返回值。
+     */
     const push = (key: string) => (value: string | number) => {
       (result[key] ??= []).push(value);
     };
@@ -89,6 +97,11 @@ describe('BangDream entity list matcher', () => {
     '3': {},
   };
 
+  /**
+   * 创建 BangDream 插件。
+   * @param id - BangDream记录 ID；定位本次读取、更新、删除或关联的BangDream记录。
+   * @returns BangDream 插件产出的 TestEntity。
+   */
   const createEntity = (id: number): TestEntity => ({
     id,
     name: `entity-${id}`,
@@ -98,9 +111,23 @@ describe('BangDream entity list matcher', () => {
   const matchEntity = createBangDreamEntityMatcher<TestEntity>({
     source,
     createEntity,
+    /**
+     * 判断 BangDream 插件条件。
+     * @param entity - entity 输入；使用 `releasedAt` 字段计算判断结果。
+     * @param displayedServerList - displayedServerList 输入；计算 BangDream布尔判断。
+     */
     isReleased: (entity, displayedServerList) =>
       displayedServerList.some((server) => entity.releasedAt[server] != null),
+    /**
+     * 判断 BangDream 插件条件。
+     * @param matches - BangDream列表；驱动 `match()` 的 BangDream步骤。
+     * @param entity - entity 输入；驱动 `match()` 的 BangDream步骤。
+     */
     isMatched: (matches, entity) => match(matches, entity, []),
+    /**
+     * 执行 BangDream 插件局部步骤。
+     * @param entity - entity 输入；使用 `id` 字段生成结果。
+     */
     relationValue: (entity) => entity.id,
   });
 
@@ -121,11 +148,28 @@ describe('BangDream entity list matcher', () => {
       '1': {},
     };
     const matchDynamicEntity = createBangDreamEntityMatcher<TestEntity>({
+      /**
+       * 执行 BangDream回调。
+       */
       source: () => dynamicSource,
       createEntity,
+      /**
+       * 判断 BangDream 插件条件。
+       * @param entity - entity 输入；使用 `releasedAt` 字段计算判断结果。
+       * @param displayedServerList - displayedServerList 输入；计算 BangDream布尔判断。
+       */
       isReleased: (entity, displayedServerList) =>
         displayedServerList.some((server) => entity.releasedAt[server] != null),
+      /**
+       * 判断 BangDream 插件条件。
+       * @param matches - BangDream列表；驱动 `match()` 的 BangDream步骤。
+       * @param entity - entity 输入；驱动 `match()` 的 BangDream步骤。
+       */
       isMatched: (matches, entity) => match(matches, entity, []),
+      /**
+       * 执行 BangDream 插件局部步骤。
+       * @param entity - entity 输入；使用 `id` 字段生成结果。
+       */
       relationValue: (entity) => entity.id,
     });
 

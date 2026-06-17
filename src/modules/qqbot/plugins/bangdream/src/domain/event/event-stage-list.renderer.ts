@@ -30,7 +30,7 @@ export const stageTypeTopImageList: { [type: string]: Image } = {};
 /**
  * 在图片布局层中加载试炼类型排名图片。
  *
- * @param type - 数据类型或匹配类型。
+ * @param type - type 输入；决定 BangDream条件分支。
  * @returns 异步处理结果。
  */
 async function loadStageTypeTopImage(type: string): Promise<Image> {
@@ -48,7 +48,7 @@ async function loadStageTypeTopImage(type: string): Promise<Image> {
 /**
  * 在图片布局层中绘制活动试炼类型排名。
  *
- * @param stage - 试炼参数。
+ * @param stage - stage 输入；使用 `type`、`startAt`、`endAt` 字段生成结果。
  * @returns 异步处理结果。
  */
 export async function drawEventStageTypeTop(stage: Stage): Promise<Canvas> {
@@ -99,8 +99,8 @@ export async function drawEventStageTypeTop(stage: Stage): Promise<Canvas> {
 /**
  * 在图片布局层中绘制歌曲In活动试炼歌曲Horizontal。
  *
- * @param song - 歌曲参数。
- * @param meta - Meta参数。
+ * @param song - song 输入；使用 `songId`、`difficulty` 字段生成结果。
+ * @param meta - meta 输入；驱动 `ctx.fillRect()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function drawSongInEventStageSongHorizontal(
@@ -133,7 +133,7 @@ async function drawSongInEventStageSongHorizontal(
   /**
    * 在图片布局层中绘制难度线条Graph。
    *
-   * @param difficultyId - 难度ID参数。
+   * @param difficultyId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
    * @returns 渲染或资源结果。
    */
   function drawDifficultyLineGraph(difficultyId: number): Canvas {
@@ -172,8 +172,8 @@ async function drawSongInEventStageSongHorizontal(
 /**
  * 在图片布局层中绘制活动试炼歌曲Horizontal。
  *
- * @param stage - 试炼参数。
- * @param meta - Meta参数，未传入时使用默认值。
+ * @param stage - stage 输入；使用 `songIdList` 字段生成结果。
+ * @param meta - meta 输入；驱动 `ctx.drawImage()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawEventStageSongHorizontal(

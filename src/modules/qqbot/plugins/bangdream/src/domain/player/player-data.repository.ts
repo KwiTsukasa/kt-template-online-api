@@ -15,6 +15,10 @@ export interface PlayerDetailResponse {
 }
 
 export class PlayerDataRepository {
+  /**
+   * 初始化 PlayerDataRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
@@ -22,9 +26,9 @@ export class PlayerDataRepository {
   /**
    * 构建玩家资料 API 路径。
    *
-   * @param playerId - 玩家 ID。
-   * @param server - 目标服务器。
-   * @param mode - Bestdori 玩家查询模式。
+   * @param playerId - 玩家 ID；定位本次读取、更新、删除或关联的玩家。
+   * @param server - server 输入；限定 BangDream查询范围。
+   * @param mode - mode 输入；限定 BangDream查询范围。
    */
   getDetailPath(playerId: number, server: Server, mode: PlayerDetailMode) {
     return `/api/player/${Server[server]}/${playerId}?mode=${mode}`;
@@ -33,10 +37,10 @@ export class PlayerDataRepository {
   /**
    * 读取玩家详情，并在缓存模式 1 下保留后台刷新行为。
    *
-   * @param playerId - 玩家 ID。
-   * @param server - 目标服务器。
-   * @param useCache - 是否只读取缓存。
-   * @param mode - Bestdori 玩家查询模式。
+   * @param playerId - 玩家 ID；定位本次读取、更新、删除或关联的玩家。
+   * @param server - server 输入；驱动 `this.getDetailPath()`、`this.refreshCache()` 的 BangDream步骤。
+   * @param useCache - useCache 输入；限定 BangDream查询范围。
+   * @param mode - mode 输入；驱动 `this.getDetailPath()`、`this.refreshCache()` 的 BangDream步骤。
    */
   async getDetail(
     playerId: number,
@@ -59,9 +63,9 @@ export class PlayerDataRepository {
   /**
    * 后台刷新玩家缓存，失败只记日志，不影响当前查询结果。
    *
-   * @param playerId - 玩家 ID。
-   * @param server - 目标服务器。
-   * @param mode - Bestdori 玩家查询模式。
+   * @param playerId - 玩家 ID；定位本次读取、更新、删除或关联的玩家。
+   * @param server - server 输入；驱动 `getJson()` 的 BangDream步骤。
+   * @param mode - mode 输入；驱动 `getJson()` 的 BangDream步骤。
    */
   refreshCache(playerId: number, server: Server, mode: PlayerDetailMode): void {
     this.provider

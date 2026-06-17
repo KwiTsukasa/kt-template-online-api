@@ -52,6 +52,9 @@ describe('BangDream cache client policy', () => {
         action,
         delayMs: 0,
         retryCount: 3,
+        /**
+         * 执行 BangDream回调。
+         */
         shouldRetry: () => false,
       }),
     ).rejects.toThrow('missing');

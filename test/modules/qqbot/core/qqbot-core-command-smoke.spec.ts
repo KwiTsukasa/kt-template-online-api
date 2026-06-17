@@ -1,5 +1,8 @@
 jest.mock('@/modules/admin/identity/auth/jwt-auth.guard', () => ({
   JwtAuthGuard: class {
+    /**
+     * 判断 QQBot 核心条件。
+     */
     canActivate() {
       return true;
     }

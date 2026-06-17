@@ -31,6 +31,13 @@ export class QqbotPluginTaskWorkerProcessor
   private readonly logger = new Logger(QqbotPluginTaskWorkerProcessor.name);
   private worker?: Worker<QqbotPluginTaskJobData>;
 
+  /**
+   * 初始化 QqbotPluginTaskWorkerProcessor 实例。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   * @param platformService - platformService 服务依赖；影响 constructor 的返回值。
+   * @param taskRepository - 插件任务仓库依赖；影响 constructor 的返回值。
+   * @param runRepository - 插件平台仓库依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly configService: ConfigService,
     private readonly platformService: QqbotPluginPlatformService,
@@ -40,6 +47,9 @@ export class QqbotPluginTaskWorkerProcessor
     private readonly runRepository: Repository<QqbotPluginTaskRun>,
   ) {}
 
+  /**
+   * 处理 QQBot 插件平台事件。
+   */
   async onModuleInit() {
     this.worker = new Worker<QqbotPluginTaskJobData>(
       QQBOT_PLUGIN_TASK_QUEUE_NAME,
@@ -56,10 +66,17 @@ export class QqbotPluginTaskWorkerProcessor
     await this.worker.waitUntilReady();
   }
 
+  /**
+   * 处理 QQBot 插件平台事件。
+   */
   async onModuleDestroy() {
     await this.worker?.close();
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param job - job 输入；使用 `name`、`data`、`id` 字段生成结果。
+   */
   private async processJob(job: Job<QqbotPluginTaskJobData>) {
     if (job.name && job.name !== QQBOT_PLUGIN_TASK_JOB_NAME) {
       return { ok: false, reason: 'unknown-job', skipped: true };
@@ -112,6 +129,13 @@ export class QqbotPluginTaskWorkerProcessor
     );
   }
 
+  /**
+   * 执行Task Run。
+   * @param task - task 输入；使用 `installationId`、`pluginId`、`id`、`taskKey` 字段生成结果。
+   * @param jobId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
+   * @param triggerType - triggerType 输入；影响 executeTaskRun 的返回值。
+   * @param input - input 输入；驱动 `Object.keys()` 的 插件平台步骤。
+   */
   private async executeTaskRun(
     task: QqbotPluginTask,
     jobId: string,
@@ -193,6 +217,13 @@ export class QqbotPluginTaskWorkerProcessor
     }
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param task - task 输入；使用 `installationId`、`pluginId`、`id`、`taskKey` 字段生成结果。
+   * @param jobId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
+   * @param triggerType - triggerType 输入；影响 writeSkippedRun 的返回值。
+   * @param reason - reason 输入；影响 writeSkippedRun 的返回值。
+   */
   private async writeSkippedRun(
     task: QqbotPluginTask,
     jobId: string,
@@ -227,6 +258,11 @@ export class QqbotPluginTaskWorkerProcessor
     };
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param run - run 输入；影响 finishRun 的返回值。
+   * @param patch - patch 输入；影响 finishRun 的返回值。
+   */
   private async finishRun(
     run: QqbotPluginTaskRun,
     patch: Partial<QqbotPluginTaskRun>,
@@ -237,6 +273,12 @@ export class QqbotPluginTaskWorkerProcessor
     });
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param task - task 输入；使用 `id`、`enabled` 字段生成结果。
+   * @param run - run 输入；使用 `id` 字段生成结果。
+   * @param result - result 输入；使用 `durationMs`、`errorMessage`、`finishedAt`、`status` 字段生成结果。
+   */
   private async finishTask(
     task: QqbotPluginTask,
     run: QqbotPluginTaskRun,
@@ -266,11 +308,19 @@ export class QqbotPluginTaskWorkerProcessor
     );
   }
 
+  /**
+   * 解析Next Run At。
+   * @param task - task 输入；使用 `enabled`、`cronExpression` 字段生成结果。
+   */
   private resolveNextRunAt(task: QqbotPluginTask) {
     if (!task.enabled || !task.cronExpression) return null;
     return resolveNextQqbotPluginTaskRunAt(task.cronExpression);
   }
 
+  /**
+   * 判断 QQBot 插件平台条件。
+   * @param taskId - 插件任务 ID；定位本次读取、更新、删除或关联的插件任务。
+   */
   private async isInstallationEnabled(taskId: string) {
     const count = await this.taskRepository
       .createQueryBuilder('task')
@@ -285,6 +335,10 @@ export class QqbotPluginTaskWorkerProcessor
     return count > 0;
   }
 
+  /**
+   * 查询 QQBot 插件平台数据。
+   * @param output - output 输入；驱动 `Object.keys()` 的 插件平台步骤。
+   */
   private getOutputKeys(output: unknown) {
     return output && typeof output === 'object'
       ? Object.keys(output as Record<string, unknown>).sort()

@@ -67,6 +67,11 @@ describe('AdminMenuService', () => {
   });
 });
 
+/**
+ * 创建 测试断言对象或配置。
+ * @param menu - menu 输入；构造时间对象。
+ * @returns 创建后的 测试断言对象或配置。
+ */
 function createMenu(menu: Partial<AdminMenu>): AdminMenu {
   return {
     authCode: null,

@@ -3,6 +3,10 @@ import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/sr
 import { getBangDreamAssetPath } from '@/modules/qqbot/plugins/bangdream/src/theme/asset-manifest';
 
 export class ServerResourceRepository {
+  /**
+   * 初始化 ServerResourceRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
@@ -10,7 +14,7 @@ export class ServerResourceRepository {
   /**
    * 获取服务器图标 SVG 资源路径。
    *
-   * @param serverName - 服务器代码。
+   * @param serverName - serverName 输入；限定 BangDream查询范围。
    */
   getIconSvgPath(serverName: string): string {
     return `/res/icon/${serverName}.svg`;
@@ -26,7 +30,7 @@ export class ServerResourceRepository {
   /**
    * 下载服务器图标 SVG 资源。
    *
-   * @param serverName - 服务器代码。
+   * @param serverName - serverName 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
    */
   async getIconSvgBuffer(serverName: string): Promise<Buffer> {
     return await this.provider.getAsset(this.getIconSvgPath(serverName));

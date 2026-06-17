@@ -77,12 +77,22 @@ export class NapcatWebuiHttpClient {
     { credential: string; expiresAt: number } | undefined
   > = {};
 
+  /**
+   * 初始化 NapcatWebuiHttpClient 实例。
+   * @param options - NapCat列表；影响 constructor 的返回值。
+   */
   constructor(
     private readonly options: {
       getTimeoutMs: () => number;
     },
   ) {}
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param container - container 输入；驱动 `this.getCredential()` 的 NapCat步骤。
+   * @param path - 路由或文件路径；影响 post 的返回值。
+   * @param body - 请求体 DTO；承载 NapCat新增、更新、导入或执行字段。
+   */
   async post<T>(
     container: NapcatWebuiRuntime,
     path: string,
@@ -92,14 +102,26 @@ export class NapcatWebuiHttpClient {
     return this.request<T>(container, path, body, credential);
   }
 
+  /**
+   * 清理Credential。
+   * @param container - container 输入；驱动 `this.getCredentialCacheKey()` 的 NapCat步骤。
+   */
   clearCredential(container: NapcatWebuiRuntime) {
     delete this.credentials[this.getCredentialCacheKey(container)];
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param container - container 输入；使用 `id`、`baseUrl` 字段生成结果。
+   */
   private getCredentialCacheKey(container: NapcatWebuiRuntime) {
     return container.id || container.baseUrl;
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param container - container 输入；驱动 `this.getCredentialCacheKey()`、`this.getWebuiToken()` 的 NapCat步骤。
+   */
   private async getCredential(container: NapcatWebuiRuntime) {
     const cacheKey = this.getCredentialCacheKey(container);
     const cached = this.credentials[cacheKey];
@@ -124,6 +146,14 @@ export class NapcatWebuiHttpClient {
     return data.Credential;
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param container - container 输入；使用 `baseUrl` 字段生成结果。
+   * @param path - 路由或文件路径；驱动 `URL()` 的 NapCat步骤。
+   * @param body - 请求体 DTO；承载 NapCat新增、更新、导入或执行字段。
+   * @param credential - credential 输入；影响 request 的返回值。
+   * @returns 异步完成后的 NapCat 登录运行态结果。
+   */
   private request<T>(
     container: NapcatWebuiRuntime,
     path: string,
@@ -182,6 +212,10 @@ export class NapcatWebuiHttpClient {
     });
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param container - container 输入；使用 `webuiToken` 字段生成结果。
+   */
   private getWebuiToken(container: NapcatWebuiRuntime) {
     const token = `${container.webuiToken || ''}`.trim();
     if (!token) {
@@ -192,8 +226,17 @@ export class NapcatWebuiHttpClient {
 }
 
 export class NapcatLoginApiClient {
+  /**
+   * 初始化 NapcatLoginApiClient 实例。
+   * @param transport - transport 输入；影响 constructor 的返回值。
+   */
   constructor(private readonly transport: NapcatLoginApiTransport) {}
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param input - input 输入；使用 `uin`、`jumpUrl` 字段生成结果。
+   * @returns NapCat 登录运行态查询结果。
+   */
   async getNewDeviceQRCode(
     input: NewDeviceQrRequest,
   ): Promise<NewDeviceQrCode> {
@@ -203,10 +246,10 @@ export class NapcatLoginApiClient {
       throw new Error('uin and jumpUrl are required');
     }
 
-    const data = (await this.transport.post(
-      '/api/QQLogin/GetNewDeviceQRCode',
-      { jumpUrl, uin },
-    )) as Record<string, unknown>;
+    const data = (await this.transport.post('/api/QQLogin/GetNewDeviceQRCode', {
+      jumpUrl,
+      uin,
+    })) as Record<string, unknown>;
     const strUrl = this.pickString(data.str_url, data.strUrl);
     const qrcodeSource = this.pickString(
       data.qrcodeUrl,
@@ -238,6 +281,11 @@ export class NapcatLoginApiClient {
     };
   }
 
+  /**
+   * 轮询New Device QR。
+   * @param input - input 输入；使用 `uin`、`bytesToken` 字段生成结果。
+   * @returns 异步完成后的 NapCat 登录运行态结果。
+   */
   async pollNewDeviceQR(
     input: NewDeviceQrPollRequest,
   ): Promise<NewDeviceQrPollResult> {
@@ -247,10 +295,10 @@ export class NapcatLoginApiClient {
       throw new Error('uin and bytesToken are required');
     }
 
-    const data = (await this.transport.post(
-      '/api/QQLogin/PollNewDeviceQR',
-      { bytesToken, uin },
-    )) as Record<string, unknown>;
+    const data = (await this.transport.post('/api/QQLogin/PollNewDeviceQR', {
+      bytesToken,
+      uin,
+    })) as Record<string, unknown>;
     const status = this.normalizePollStatus(
       this.pickPayload(
         data.status,
@@ -267,6 +315,11 @@ export class NapcatLoginApiClient {
     };
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param input - input 输入；使用 `uin`、`passwordMd5`、`newDevicePullQrCodeSig` 字段生成结果。
+   * @returns 异步完成后的 NapCat 登录运行态结果。
+   */
   async newDeviceLogin(
     input: NewDeviceLoginRequest,
   ): Promise<NewDeviceLoginResult> {
@@ -278,14 +331,11 @@ export class NapcatLoginApiClient {
       );
     }
 
-    const payload = await this.transport.post(
-      '/api/QQLogin/NewDeviceLogin',
-      {
-        newDevicePullQrCodeSig: input.newDevicePullQrCodeSig,
-        passwordMd5,
-        uin,
-      },
-    );
+    const payload = await this.transport.post('/api/QQLogin/NewDeviceLogin', {
+      newDevicePullQrCodeSig: input.newDevicePullQrCodeSig,
+      passwordMd5,
+      uin,
+    });
     const data =
       payload && typeof payload === 'object'
         ? (payload as Record<string, unknown>)
@@ -305,7 +355,14 @@ export class NapcatLoginApiClient {
     };
   }
 
-  private normalizePollStatus(status: unknown): NewDeviceQrPollResult['status'] {
+  /**
+   * 转换 NapCat 登录运行态输入。
+   * @param status - NapCat列表；执行 `status.toLowerCase()` 对应的 NapCat步骤。
+   * @returns NapCat 登录运行态转换后的值。
+   */
+  private normalizePollStatus(
+    status: unknown,
+  ): NewDeviceQrPollResult['status'] {
     if (typeof status === 'number') {
       if (status === 3) return 'scanned';
       if (status === 1) return 'confirming';
@@ -324,6 +381,10 @@ export class NapcatLoginApiClient {
     return 'qr-pending';
   }
 
+  /**
+   * 转换 NapCat 登录运行态输入。
+   * @param data - 响应数据；承载 NapCat新增、更新、导入或执行字段。
+   */
   private normalizeLoginSuccess(data: Record<string, unknown>) {
     if (data.needNewDevice === true) return false;
     const status = this.pickString(data.status, data.state, data.result)
@@ -334,6 +395,10 @@ export class NapcatLoginApiClient {
     return data.success !== false;
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param values - 配置值字典；驱动 `for()` 的 NapCat步骤。
+   */
   private pickString(...values: unknown[]) {
     for (const value of values) {
       if (typeof value !== 'string') continue;
@@ -343,6 +408,10 @@ export class NapcatLoginApiClient {
     return '';
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param values - 配置值字典；驱动 `for()` 的 NapCat步骤。
+   */
   private pickPayload(...values: unknown[]) {
     for (const value of values) {
       if (value === undefined || value === null) continue;
@@ -356,6 +425,10 @@ export class NapcatLoginApiClient {
     return undefined;
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param strUrl - 访问地址；驱动 `URL()` 的 NapCat步骤。
+   */
   private deriveBytesToken(strUrl: string) {
     if (!strUrl) return '';
     try {
@@ -367,6 +440,10 @@ export class NapcatLoginApiClient {
     }
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param text - 待匹配文本；驱动 `this.pickString()` 的 NapCat步骤。
+   */
   private async toQrcodeDataUrl(text: string) {
     const normalized = this.pickString(text);
     if (!normalized) return '';
@@ -374,6 +451,10 @@ export class NapcatLoginApiClient {
     return this.createQrcode(normalized);
   }
 
+  /**
+   * 创建 NapCat 登录运行态对象或配置。
+   * @param text - 待匹配文本；驱动 `QRCode.toDataURL()` 的 NapCat步骤。
+   */
   private async createQrcode(text: string) {
     if (!text) return '';
     return QRCode.toDataURL(text, {

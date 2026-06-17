@@ -33,10 +33,10 @@ interface TextureTileOptions {
 /**
  * 在底层绘图工具层中处理spreadBackground图片。
  *
- * @param image - 待绘制图片。
- * @param width - 绘制宽度。
- * @param height - 绘制高度。
- * @param brightness - brightness参数。
+ * @param image - image 输入；驱动 `adjustBrightness()` 的 BangDream步骤。
+ * @param width - width 输入；驱动 `Canvas()`、`getScaledDimensions()` 的 BangDream步骤。
+ * @param height - height 输入；驱动 `Canvas()`、`getScaledDimensions()` 的 BangDream步骤。
+ * @param brightness - BangDream列表；驱动 `adjustBrightness()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function spreadBackgroundImage(
@@ -71,8 +71,8 @@ async function spreadBackgroundImage(
 /**
  * 在底层绘图工具层中处理adjustBrightness。
  *
- * @param image - 待绘制图片。
- * @param brightness - brightness参数。
+ * @param image - image 输入；使用 `width`、`height` 字段生成结果。
+ * @param brightness - BangDream列表；影响 adjustBrightness 的返回值。
  * @returns 异步处理结果。
  */
 async function adjustBrightness(
@@ -100,11 +100,11 @@ async function adjustBrightness(
 }
 
 /**
- * 在底层绘图工具层中获取ScaledDimensions。
+ * 查询 BangDream 插件数据。
  *
- * @param image - 待绘制图片。
- * @param targetWidth - target宽度参数。
- * @param targetHeight - target高度参数。
+ * @param image - image 输入；使用 `width`、`height` 字段生成结果。
+ * @param targetWidth - targetWidth 输入；限定 BangDream查询范围。
+ * @param targetHeight - targetHeight 输入；限定 BangDream查询范围。
  * @returns 计算后的数值。
  */
 function getScaledDimensions(
@@ -132,6 +132,9 @@ const star: Image[] = [];
 let defaultBGTexture: Image;
 let backgroundAssetsPreload: Promise<void> | undefined;
 
+/**
+ * 执行 BangDream 插件流程。
+ */
 export async function preloadBangDreamBackgroundAssets() {
   if (!backgroundAssetsPreload) {
     backgroundAssetsPreload = Promise.all([
@@ -155,7 +158,7 @@ export async function preloadBangDreamBackgroundAssets() {
 /**
  * 在底层绘图工具层中创建简易Background。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；生成 BangDream对象。
  */
 export async function createEasyBackground({ width, height }) {
   await preloadBangDreamBackgroundAssets();
@@ -202,7 +205,7 @@ export function drawScaledTextureTile(
 /**
  * 使用业务图片生成轻量背景。
  *
- * @param options1 - 背景参数。
+ * @param options1 - options1 输入；生成 BangDream对象。
  */
 export async function createImageBackground({
   image,
@@ -227,9 +230,9 @@ export async function createImageBackground({
 }
 
 /**
- * 在底层绘图工具层中创建Background。
+ * 创建 BangDream 插件对象或配置。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；生成 BangDream对象。
  * @returns 异步处理结果。
  */
 export async function createBackground({

@@ -31,7 +31,7 @@ export const BANGDREAM_CUTOFF_CHART_SPEC = {
 /**
  * 去掉图表标签里的方括号装饰。
  *
- * @param text - 原始标签。
+ * @param text - 待匹配文本；生成规范化文本。
  */
 export function stripCutoffChartLabelTags(text: string) {
   return text.replace(/\[[^\]]*\]/g, '');

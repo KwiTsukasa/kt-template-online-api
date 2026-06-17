@@ -12,26 +12,31 @@ jest.mock(
   }),
 );
 
-jest.mock('@/modules/qqbot/plugins/bangdream/src/domain/event/event.model', () => ({
-  getPresentEvent: jest.fn(() => ({ eventId: 321 })),
-}));
+jest.mock(
+  '@/modules/qqbot/plugins/bangdream/src/domain/event/event.model',
+  () => ({
+    getPresentEvent: jest.fn(() => ({ eventId: 321 })),
+  }),
+);
 
 import { drawCutoffDetail } from '@/modules/qqbot/plugins/bangdream/src/domain/cutoff/cutoff-detail.renderer';
 import { cutoffDetailOperation } from '@/modules/qqbot/plugins/bangdream/src/operations/cutoff-detail';
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ */
 const createContext = () =>
   ({
     firstNumber: jest.fn((tokens: string[]) =>
-      tokens
-        .map((item) => Number(item))
-        .find((item) => Number.isInteger(item)),
+      tokens.map((item) => Number(item)).find((item) => Number.isInteger(item)),
     ),
     getRenderOptions: jest.fn(() => ({ compress: true })),
     getTokens: jest.fn((input: { text?: string }) =>
       `${input.text || ''}`.trim().split(/\s+/).filter(Boolean),
     ),
     optionalNumber: jest.fn((value: unknown) => {
-      if (value === undefined || value === null || value === '') return undefined;
+      if (value === undefined || value === null || value === '')
+        return undefined;
       const parsed = Number(value);
       return Number.isInteger(parsed) ? parsed : undefined;
     }),

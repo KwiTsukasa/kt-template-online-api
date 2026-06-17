@@ -42,7 +42,7 @@ export type BangDreamLocalAssetKey = keyof typeof BANGDREAM_LOCAL_ASSETS;
 /**
  * 解析 BangDream 本地资源路径。
  *
- * @param key - 本地资源 manifest 键名。
+ * @param key - 键名；定位文件系统路径。
  */
 export function getBangDreamAssetPath(key: BangDreamLocalAssetKey): string {
   return path.join(assetsRootPath, BANGDREAM_LOCAL_ASSETS[key]);

@@ -63,11 +63,20 @@ const OPTIONAL_CONFIG_CHECKS: ReadonlyArray<string | readonly string[]> = [
 
 @Injectable()
 export class RuntimeConfigService {
+  /**
+   * 初始化 RuntimeConfigService 实例。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly configService: ConfigService,
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 读取 运行态健康检查资源。
+   * @returns 运行态健康检查产出的 RuntimeAppConfig。
+   */
   readAppProfile(): RuntimeAppConfig {
     return {
       nodeEnv: this.getString('NODE_ENV', 'development'),
@@ -75,6 +84,10 @@ export class RuntimeConfigService {
     };
   }
 
+  /**
+   * 读取 运行态健康检查资源。
+   * @returns 运行态健康检查产出的 RuntimeDatabaseConfig。
+   */
   readDatabaseProfile(): RuntimeDatabaseConfig {
     return {
       host: this.getString('DB_HOST'),
@@ -85,6 +98,10 @@ export class RuntimeConfigService {
     };
   }
 
+  /**
+   * 读取 运行态健康检查资源。
+   * @returns 运行态健康检查产出的 RuntimeLokiConfig。
+   */
   readLokiProfile(): RuntimeLokiConfig {
     const host = this.getFirstString(['LOKI_HOST', 'LOKI_URL']);
     const queryHost = this.getFirstString([
@@ -110,6 +127,10 @@ export class RuntimeConfigService {
     };
   }
 
+  /**
+   * 读取 运行态健康检查资源。
+   * @returns 运行态健康检查产出的 RuntimeMinioConfig。
+   */
   readMinioProfile(): RuntimeMinioConfig {
     return {
       endpoint: this.getString('MINIO_ENDPOINT'),
@@ -120,6 +141,10 @@ export class RuntimeConfigService {
     };
   }
 
+  /**
+   * 读取 运行态健康检查资源。
+   * @returns 运行态健康检查产出的 RuntimeWordpressConfig。
+   */
   readWordpressProfile(): RuntimeWordpressConfig {
     const timeoutMs = this.getPositiveNumber('WORDPRESS_TIMEOUT_MS', 15000);
 
@@ -140,6 +165,10 @@ export class RuntimeConfigService {
     };
   }
 
+  /**
+   * 读取 运行态健康检查资源。
+   * @returns 运行态健康检查产出的 RuntimeQqbotConfig。
+   */
   readQqbotProfile(): RuntimeQqbotConfig {
     return {
       reverseWsPath: this.getString(
@@ -172,6 +201,10 @@ export class RuntimeConfigService {
     };
   }
 
+  /**
+   * 查询 运行态健康检查数据。
+   * @returns 运行态健康检查查询结果。
+   */
   getSafeSnapshot(): RuntimeSafeConfigSnapshot {
     return {
       app: this.readAppProfile(),
@@ -184,6 +217,10 @@ export class RuntimeConfigService {
     };
   }
 
+  /**
+   * 查询 运行态健康检查数据。
+   * @returns 运行态健康检查查询结果。
+   */
   getConfigChecks(): RuntimeConfigCheck[] {
     return [
       ...REQUIRED_CONFIG_KEYS.map((key) => this.createCheck(key, 'required')),
@@ -195,6 +232,11 @@ export class RuntimeConfigService {
     ];
   }
 
+  /**
+   * 执行 运行态健康检查流程。
+   * @param value - 待转换值；驱动 `toolsService.toSecretText()` 的 运行态步骤。
+   * @returns 运行态健康检查渲染后的图片、画布或文本。
+   */
   maskSecret(value: unknown): string {
     const text = this.toolsService.toSecretText(value);
     if (!text) return '';
@@ -202,6 +244,12 @@ export class RuntimeConfigService {
     return `${text.slice(0, 2)}***${text.slice(-2)}`;
   }
 
+  /**
+   * 创建 运行态健康检查对象或配置。
+   * @param key - 键名；驱动 `configService.get()` 的 运行态步骤。
+   * @param level - level 输入；生成 运行态对象。
+   * @returns 创建后的 运行态健康检查对象或配置。
+   */
   private createCheck(
     key: string,
     level: RuntimeConfigCheckLevel,
@@ -219,6 +267,12 @@ export class RuntimeConfigService {
     };
   }
 
+  /**
+   * 创建 运行态健康检查对象或配置。
+   * @param keys - 运行态列表；生成规范化文本。
+   * @param level - level 输入；生成 运行态对象。
+   * @returns 创建后的 运行态健康检查对象或配置。
+   */
   private createAnyCheck(
     keys: string[],
     level: RuntimeConfigCheckLevel,
@@ -236,11 +290,23 @@ export class RuntimeConfigService {
     };
   }
 
+  /**
+   * 查询 运行态健康检查数据。
+   * @param key - 键名；驱动 `toolsService.toTrimmedString()` 的 运行态步骤。
+   * @param fallback - 兜底值；限定 运行态查询范围。
+   */
   private getString(key: string, fallback = '') {
-    const value = this.toolsService.toTrimmedString(this.configService.get(key));
+    const value = this.toolsService.toTrimmedString(
+      this.configService.get(key),
+    );
     return value || fallback;
   }
 
+  /**
+   * 查询 运行态健康检查数据。
+   * @param keys - 运行态列表；驱动 `for()` 的 运行态步骤。
+   * @param fallback - 兜底值；限定 运行态查询范围。
+   */
   private getFirstString(keys: string[], fallback = '') {
     for (const key of keys) {
       const value = this.getString(key);
@@ -249,6 +315,11 @@ export class RuntimeConfigService {
     return fallback;
   }
 
+  /**
+   * 查询 运行态健康检查数据。
+   * @param key - 键名；驱动 `toolsService.toPositiveNumber()` 的 运行态步骤。
+   * @param fallback - 兜底值；驱动 `toolsService.toPositiveNumber()` 的 运行态步骤。
+   */
   private getPositiveNumber(key: string, fallback: number) {
     return this.toolsService.toPositiveNumber(
       this.configService.get<string | number>(key),
@@ -256,6 +327,11 @@ export class RuntimeConfigService {
     );
   }
 
+  /**
+   * 查询 运行态健康检查数据。
+   * @param key - 键名；驱动 `toolsService.normalizeBoolean()` 的 运行态步骤。
+   * @param fallback - 兜底值；驱动 `toolsService.normalizeBoolean()` 的 运行态步骤。
+   */
   private getBoolean(key: string, fallback: boolean) {
     return this.toolsService.normalizeBoolean(
       this.configService.get<string | boolean | number>(key),

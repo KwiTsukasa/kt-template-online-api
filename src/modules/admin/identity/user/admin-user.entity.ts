@@ -107,6 +107,9 @@ export class AdminUser {
   })
   dept?: AdminDept | null;
 
+  /**
+   * 创建 Admin 身份权限对象或配置。
+   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

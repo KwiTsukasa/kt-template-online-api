@@ -23,6 +23,13 @@ import type {
 
 @Injectable()
 export class QqbotPermissionService {
+  /**
+   * 初始化 QqbotPermissionService 实例。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   * @param allowlistRepository - QQBot仓库依赖；影响 constructor 的返回值。
+   * @param blocklistRepository - QQBot仓库依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly configService: QqbotConfigService,
     @InjectRepository(QqbotAllowlist)
@@ -32,14 +39,26 @@ export class QqbotPermissionService {
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 查询 QQBot 核心数据。
+   */
   async getConfig() {
     return this.configService.getPermissionConfig();
   }
 
+  /**
+   * 更新Config。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async updateConfig(body: QqbotPermissionConfigDto) {
     return this.configService.updatePermissionConfig(body);
   }
 
+  /**
+   * 获取分页数据。
+   * @param kind - kind 输入；驱动 `this.getRepository()` 的 QQBot步骤。
+   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   */
   async page(kind: QqbotPermissionKind, query: QqbotPermissionQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
       query,
@@ -85,6 +104,11 @@ export class QqbotPermissionService {
     return { list, pageNo, pageSize, total };
   }
 
+  /**
+   * 保存数据。
+   * @param kind - kind 输入；驱动 `this.getRepository()` 的 QQBot步骤。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async save(kind: QqbotPermissionKind, body: QqbotPermissionBodyDto) {
     const repository = this.getRepository(kind);
     const payload = this.normalizeBody(body);
@@ -96,6 +120,11 @@ export class QqbotPermissionService {
     return saved.id;
   }
 
+  /**
+   * 更新数据。
+   * @param kind - kind 输入；驱动 `this.getRepository()` 的 QQBot步骤。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async update(kind: QqbotPermissionKind, body: QqbotPermissionUpdateDto) {
     const repository = this.getRepository(kind);
     const payload = this.normalizeBody(body);
@@ -108,24 +137,42 @@ export class QqbotPermissionService {
     return true;
   }
 
+  /**
+   * 删除数据。
+   * @param kind - kind 输入；驱动 `this.getRepository()` 的 QQBot步骤。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   */
   async remove(kind: QqbotPermissionKind, id: string) {
     const repository = this.getRepository(kind);
     await repository.update({ id } as any, { isDeleted: true } as any);
     return true;
   }
 
+  /**
+   * 判断 QQBot 核心条件。
+   * @param message - message 输入；驱动 `this.existsMatched()` 的 QQBot步骤。
+   */
   async isBlocked(message: QqbotNormalizedMessage) {
     const config = await this.configService.getPermissionConfig();
     if (!config.blocklistEnabled) return false;
     return this.existsMatched(this.blocklistRepository, message);
   }
 
+  /**
+   * 判断 QQBot 核心条件。
+   * @param message - message 输入；驱动 `this.existsMatched()` 的 QQBot步骤。
+   */
   async isAllowed(message: QqbotNormalizedMessage) {
     const config = await this.configService.getPermissionConfig();
     if (!config.allowlistEnabled) return true;
     return this.existsMatched(this.allowlistRepository, message);
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param repository - repository 输入；影响 existsMatched 的返回值。
+   * @param message - message 输入；使用 `selfId`、`userId`、`messageType`、`targetId` 字段生成结果。
+   */
   private async existsMatched(
     repository: Repository<QqbotPermissionEntity>,
     message: QqbotNormalizedMessage,
@@ -189,6 +236,11 @@ export class QqbotPermissionService {
     return count > 0;
   }
 
+  /**
+   * 转换 QQBot 核心输入。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * @returns QQBot 核心转换后的值。
+   */
   private normalizeBody(
     body: Partial<QqbotPermissionBodyDto>,
   ): Partial<QqbotPermissionEntity> {
@@ -206,8 +258,8 @@ export class QqbotPermissionService {
         normalizedTargetType === 'qq'
           ? '请填写 QQ 号'
           : normalizedTargetType === 'group'
-          ? '请填写群号'
-          : '请填写频道 ID',
+            ? '请填写群号'
+            : '请填写频道 ID',
       );
     }
     if (preciseUser && !userId) {
@@ -225,6 +277,10 @@ export class QqbotPermissionService {
     } as Partial<QqbotPermissionEntity>;
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param kind - kind 输入；限定 QQBot查询范围。
+   */
   private getRepository(kind: QqbotPermissionKind) {
     return kind === 'allowlist'
       ? this.allowlistRepository

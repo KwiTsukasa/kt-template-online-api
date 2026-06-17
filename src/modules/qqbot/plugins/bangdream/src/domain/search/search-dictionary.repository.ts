@@ -4,6 +4,10 @@ import type { FuzzySearchConfig } from '@/modules/qqbot/plugins/bangdream/src/do
 import { readBangDreamJsonFileSync } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
 
 export class SearchDictionaryRepository {
+  /**
+   * 初始化 SearchDictionaryRepository 实例。
+   * @param filePath - BangDream路径；影响 constructor 的返回值。
+   */
   constructor(private readonly filePath = fuzzySearchPath) {}
 
   /**

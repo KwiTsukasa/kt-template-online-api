@@ -31,11 +31,19 @@ import { RuntimeModule } from './runtime';
     LoggerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
+      /**
+       * 创建 模块依赖注入工厂产物。
+       * @param configService - Nest ConfigService 依赖；驱动 `createPinoLoggerParams()` 的 模块步骤。
+       */
       useFactory: (configService: ConfigService) =>
         createPinoLoggerParams(configService),
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
+      /**
+       * 创建 模块依赖注入工厂产物。
+       * @param configService - Nest ConfigService 依赖；使用 `get` 字段生成结果。
+       */
       useFactory: async (configService: ConfigService) => {
         return {
           type: 'mysql',
@@ -57,6 +65,10 @@ import { RuntimeModule } from './runtime';
     MinioModule.registerAsync({
       isGlobal: true,
       imports: [ConfigModule],
+      /**
+       * 创建 模块依赖注入工厂产物。
+       * @param configService - Nest ConfigService 依赖；执行 `configService.get()` 对应的 模块步骤。
+       */
       useFactory: (configService: ConfigService) => {
         return {
           endPoint: configService.get('MINIO_ENDPOINT'),

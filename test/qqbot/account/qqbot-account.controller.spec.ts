@@ -1,19 +1,31 @@
 jest.mock('@/modules/admin/identity/auth/jwt-auth.guard', () => ({
   JwtAuthGuard: class {
+    /**
+     * 判断 测试断言条件。
+     */
     canActivate() {
       return true;
     }
   },
 }));
-jest.mock('@/modules/qqbot/core/application/account/qqbot-account.service', () => ({
-  QqbotAccountService: class {},
-}));
-jest.mock('@/modules/qqbot/napcat/application/login/qqbot-napcat-login.service', () => ({
-  QqbotNapcatLoginService: class {},
-}));
-jest.mock('@/modules/qqbot/core/infrastructure/integration/connection/qqbot-reverse-ws.service', () => ({
-  QqbotReverseWsService: class {},
-}));
+jest.mock(
+  '@/modules/qqbot/core/application/account/qqbot-account.service',
+  () => ({
+    QqbotAccountService: class {},
+  }),
+);
+jest.mock(
+  '@/modules/qqbot/napcat/application/login/qqbot-napcat-login.service',
+  () => ({
+    QqbotNapcatLoginService: class {},
+  }),
+);
+jest.mock(
+  '@/modules/qqbot/core/infrastructure/integration/connection/qqbot-reverse-ws.service',
+  () => ({
+    QqbotReverseWsService: class {},
+  }),
+);
 
 import * as request from 'supertest';
 import { Test } from '@nestjs/testing';

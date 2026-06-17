@@ -137,6 +137,26 @@ export class QqbotPluginPlatformService
   >();
   private readonly activeWorkerPluginAliases = new Map<string, string>();
 
+  /**
+   * 初始化 QqbotPluginPlatformService 实例。
+   * @param pluginRepository - 插件仓库依赖；影响 constructor 的返回值。
+   * @param versionRepository - 插件平台仓库依赖；影响 constructor 的返回值。
+   * @param installationRepository - 插件平台仓库依赖；影响 constructor 的返回值。
+   * @param operationRepository - 插件平台仓库依赖；影响 constructor 的返回值。
+   * @param eventHandlerRepository - 活动仓库依赖；影响 constructor 的返回值。
+   * @param accountBindingRepository - 账号仓库依赖；影响 constructor 的返回值。
+   * @param configRepository - 插件平台仓库依赖；影响 constructor 的返回值。
+   * @param assetRepository - 插件平台仓库依赖；影响 constructor 的返回值。
+   * @param runtimeEventRepository - 活动仓库依赖；影响 constructor 的返回值。
+   * @param argumentParser - argumentParser 输入；影响 constructor 的返回值。
+   * @param runtimeFactory - runtimeFactory 输入；影响 constructor 的返回值。
+   * @param pluginRegistry - pluginRegistry 输入；影响 constructor 的返回值。
+   * @param eventPluginRegistry - eventPluginRegistry 输入；影响 constructor 的返回值。
+   * @param packageReader - packageReader 输入；影响 constructor 的返回值。
+   * @param builtinPluginLoader - builtinPluginLoader 输入；影响 constructor 的返回值。
+   * @param taskSynchronizer - taskSynchronizer 输入；影响 constructor 的返回值。
+   * @param taskScheduler - taskScheduler 输入；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(QqbotPlugin)
     private readonly pluginRepository: Repository<QqbotPlugin>,
@@ -176,14 +196,24 @@ export class QqbotPluginPlatformService
     private readonly taskScheduler?: QqbotPluginTaskSchedulerService,
   ) {}
 
+  /**
+   * 处理 QQBot 插件平台事件。
+   */
   async onModuleInit() {
     await this.startBuiltinWorkers();
   }
 
+  /**
+   * 列出Installations。
+   */
   async listInstallations() {
     return this.installationRepository.find();
   }
 
+  /**
+   * 列出Capabilities。
+   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   */
   async listCapabilities(pluginId?: string) {
     const where = pluginId ? { pluginId } : undefined;
     const [operations, eventHandlers] = await Promise.all([
@@ -196,14 +226,26 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /**
+   * 列出Operations。
+   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   */
   async listOperations(pluginId?: string) {
     return this.listOperationSummaries({ pluginId });
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   */
   async pageOperations(query: ListOperationsQuery) {
     return this.pageOperationSummaries(query);
   }
 
+  /**
+   * 列出Operation Summaries。
+   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   */
   async listOperationSummaries(query: ListOperationsQuery = {}) {
     const pluginKey = await this.resolveOperationPluginKeyFilter(query);
     const operations = await this.resolveActiveOperationSummaries();
@@ -214,6 +256,10 @@ export class QqbotPluginPlatformService
     );
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   */
   async pageOperationSummaries(query: ListOperationsQuery) {
     const pageNo = Number(query.pageNo || 1);
     const pageSize = Number(query.pageSize || 10);
@@ -231,12 +277,20 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /**
+   * 列出Event Handlers。
+   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   */
   async listEventHandlers(pluginId?: string) {
     return this.eventHandlerRepository.find({
       where: pluginId ? { pluginId } : undefined,
     });
   }
 
+  /**
+   * 判断 QQBot 插件平台条件。
+   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   */
   validateManifest(body: ValidateManifestBody) {
     return {
       manifest: parseQqbotPluginManifest(body.manifest),
@@ -244,6 +298,10 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   */
   uploadPackage(body: InstallLocalBody) {
     return {
       ...this.requirePackageReader().readPackage(body),
@@ -251,6 +309,10 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   */
   async installLocal(body: InstallLocalBody) {
     const pluginPackage = this.requirePackageReader().readPackage(body);
     const manifest = pluginPackage.manifest;
@@ -280,6 +342,10 @@ export class QqbotPluginPlatformService
     return installation;
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   */
   async enableInstallation(body: InstallationActionBody) {
     const installation = await this.requireInstallation(body);
     await this.updateInstallationRuntime(installation, 'enabled', 'starting');
@@ -295,6 +361,10 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   */
   async disableInstallation(body: InstallationActionBody) {
     const installation = await this.requireInstallation(body);
     await this.stopWorkersForInstallation(installation);
@@ -309,6 +379,10 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   */
   async upgradeInstallation(body: InstallationActionBody) {
     const installation = await this.requireInstallation(body);
     const previousWorker = this.activeWorkers.get(installation.id);
@@ -340,6 +414,10 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   */
   async uninstallInstallation(body: InstallationActionBody) {
     const installation = await this.requireInstallation(body);
     if (installation.status === 'enabled') {
@@ -361,6 +439,10 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /**
+   * 执行Operation。
+   * @param input - input 输入；使用 `input`、`pluginKey`、`operationKey`、`context` 字段生成结果。
+   */
   async executeOperation(input: QqbotPluginExecutionInput) {
     const normalizedInput =
       (await this.argumentParser?.normalizeInput(input)) || input.input;
@@ -404,6 +486,10 @@ export class QqbotPluginPlatformService
     }
   }
 
+  /**
+   * 投递 QQBot 插件平台消息或任务。
+   * @param input - input 输入；使用 `eventKey`、`message` 字段生成结果。
+   */
   async dispatchEvent(input: QqbotPluginEventDispatchInput) {
     let handled = false;
     for (const workerContext of this.activeWorkerContexts.values()) {
@@ -429,6 +515,10 @@ export class QqbotPluginPlatformService
     return handled;
   }
 
+  /**
+   * 执行Task。
+   * @param input - input 输入；使用 `installationId`、`input`、`taskHandlerName`、`taskId` 字段生成结果。
+   */
   async executeTask(input: {
     input: Record<string, unknown>;
     installationId: string;
@@ -457,6 +547,9 @@ export class QqbotPluginPlatformService
     }
   }
 
+  /**
+   * 列出Active Operations。
+   */
   async listActiveOperations() {
     const workerOperations = this.listActiveWorkerOperations();
     if (workerOperations.length > 0) return workerOperations;
@@ -466,6 +559,10 @@ export class QqbotPluginPlatformService
     ];
   }
 
+  /**
+   * 查询 QQBot 插件平台数据。
+   * @param command - command 输入；使用 `pluginKey`、`operationKey` 字段生成结果。
+   */
   async getOperationByCommand(command: QqbotPluginOperationLookup) {
     if (!command.pluginKey || !command.operationKey) return null;
     return (
@@ -478,6 +575,10 @@ export class QqbotPluginPlatformService
     );
   }
 
+  /**
+   * 更新Config。
+   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   */
   async updateConfig(body: UpdateConfigBody) {
     if (!body.pluginId || !body.configKey) {
       throwVbenError('请选择插件和配置项');
@@ -490,6 +591,10 @@ export class QqbotPluginPlatformService
     });
   }
 
+  /**
+   * 列出Runtime Events。
+   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   */
   async listRuntimeEvents(query?: RuntimeEventQuery | string) {
     const normalizedQuery =
       typeof query === 'string' ? { pluginId: query } : query || {};
@@ -512,12 +617,21 @@ export class QqbotPluginPlatformService
     });
   }
 
+  /**
+   * 列出Account Bindings。
+   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   */
   async listAccountBindings(pluginId?: string) {
     return this.accountBindingRepository.find({
       where: pluginId ? { pluginId } : undefined,
     });
   }
 
+  /**
+   * 保存 QQBot 插件平台数据。
+   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   * @param manifest - manifest 输入；使用 `operations`、`events`、`assets` 字段生成结果。
+   */
   private async persistManifestCapabilities(
     pluginId: string,
     manifest: QqbotPluginManifest,
@@ -551,6 +665,9 @@ export class QqbotPluginPlatformService
     ]);
   }
 
+  /**
+   * 解析Active Operation Summaries。
+   */
   private async resolveActiveOperationSummaries() {
     const operations = await this.listActiveOperations();
     return operations.map((operation) =>
@@ -558,6 +675,10 @@ export class QqbotPluginPlatformService
     );
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param operation - operation 输入；使用 `key`、`name`、`pluginKey` 字段生成结果。
+   */
   private toPlatformOperationSummary(operation: QqbotPluginOperationSummary) {
     return {
       ...operation,
@@ -568,6 +689,10 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /**
+   * 解析Operation Plugin Key Filter。
+   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   */
   private async resolveOperationPluginKeyFilter(query: ListOperationsQuery) {
     if (query.pluginKey) return this.resolveActivePluginKey(query.pluginKey);
     if (!query.pluginId) return undefined;
@@ -579,6 +704,10 @@ export class QqbotPluginPlatformService
     return plugin?.pluginKey || query.pluginId;
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   */
   private async requireInstallation(body: InstallationActionBody) {
     if (!body.id) throwVbenError('请选择插件安装记录');
 
@@ -602,6 +731,12 @@ export class QqbotPluginPlatformService
     );
   }
 
+  /**
+   * 更新Installation Runtime。
+   * @param installation - installation 输入；使用 `id`、`runtimeStatus`、`status` 字段生成结果。
+   * @param status - 插件平台列表；写入 插件平台状态。
+   * @param runtimeStatus - 插件平台列表；写入 插件平台状态。
+   */
   private async updateInstallationRuntime(
     installation: QqbotPluginInstallation,
     status: QqbotPluginInstallStatus,
@@ -615,6 +750,11 @@ export class QqbotPluginPlatformService
     installation.status = status;
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param installation - installation 输入；使用 `pluginId` 字段生成结果。
+   * @param enabled - enabled 输入；驱动 `setPluginActive()` 的 插件平台步骤。
+   */
   private async refreshActiveRegistries(
     installation: QqbotPluginInstallation,
     enabled: boolean,
@@ -636,6 +776,9 @@ export class QqbotPluginPlatformService
     this.eventPluginRegistry?.setPluginActive(pluginKey, enabled);
   }
 
+  /**
+   * 启动Builtin Workers。
+   */
   private async startBuiltinWorkers() {
     if (!this.runtimeFactory || !this.builtinPluginLoader) return;
 
@@ -654,6 +797,11 @@ export class QqbotPluginPlatformService
     }
   }
 
+  /**
+   * 解析Persisted Builtin Runtime。
+   * @param manifest - manifest 输入；使用 `pluginKey`、`version` 字段生成结果。
+   * @param installation - installation 输入；使用 `versionId`、`pluginId` 字段生成结果。
+   */
   private resolvePersistedBuiltinRuntime(
     manifest: QqbotPluginManifest,
     installation: QqbotPluginInstallation,
@@ -670,6 +818,10 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /**
+   * 确保Builtin Runtime Persistence。
+   * @param manifest - manifest 输入；使用 `pluginKey` 字段生成结果。
+   */
   private async ensureBuiltinRuntimePersistence(manifest: QqbotPluginManifest) {
     const plugin = await this.ensureBuiltinPlugin(manifest);
     const version = await this.ensureBuiltinPluginVersion(plugin.id, manifest);
@@ -684,6 +836,10 @@ export class QqbotPluginPlatformService
     return { installation, version };
   }
 
+  /**
+   * 确保Builtin Plugin。
+   * @param manifest - manifest 输入；使用 `pluginKey`、`description`、`name` 字段生成结果。
+   */
   private async ensureBuiltinPlugin(manifest: QqbotPluginManifest) {
     const existing = await this.pluginRepository.findOne({
       where: { pluginKey: manifest.pluginKey },
@@ -698,6 +854,11 @@ export class QqbotPluginPlatformService
     });
   }
 
+  /**
+   * 确保Builtin Plugin Version。
+   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   * @param manifest - manifest 输入；使用 `version`、`pluginKey` 字段生成结果。
+   */
   private async ensureBuiltinPluginVersion(
     pluginId: string,
     manifest: QqbotPluginManifest,
@@ -718,6 +879,10 @@ export class QqbotPluginPlatformService
     });
   }
 
+  /**
+   * 解析Persisted Plugin Runtime State。
+   * @returns QQBot 插件平台转换后的值。
+   */
   private async resolvePersistedPluginRuntimeState(): Promise<PersistedPluginRuntimeState> {
     const [plugins, installations] = await Promise.all([
       this.pluginRepository.find(),
@@ -746,6 +911,10 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param pluginKey - pluginKey 输入；驱动 `this.resolveActivePluginKey()` 的 插件平台步骤。
+   */
   private requireActiveWorker(pluginKey: string) {
     const resolvedPluginKey = this.resolveActivePluginKey(pluginKey);
     const workerContext = this.activeWorkersByPluginKey.get(resolvedPluginKey);
@@ -755,10 +924,18 @@ export class QqbotPluginPlatformService
     return workerContext;
   }
 
+  /**
+   * 解析Active Plugin Key。
+   * @param pluginKey - pluginKey 输入；驱动 `activeWorkerPluginAliases.get()` 的 插件平台步骤。
+   */
   private resolveActivePluginKey(pluginKey: string) {
     return this.activeWorkerPluginAliases.get(pluginKey) || pluginKey;
   }
 
+  /**
+   * 列出Active Worker Operations。
+   * @returns QQBot 插件平台查询结果。
+   */
   private listActiveWorkerOperations(): QqbotPluginOperationSummary[] {
     return [...this.activeWorkerContexts.values()].flatMap((workerContext) => [
       ...workerContext.manifest.operations.map((operation) => ({
@@ -785,6 +962,12 @@ export class QqbotPluginPlatformService
     ]);
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param installation - installation 输入；使用 `id`、`pluginId` 字段生成结果。
+   * @param version - version 输入；使用 `manifestJson` 字段生成结果。
+   * @param worker - worker 输入；驱动 `activeWorkers.set()` 的 插件平台步骤。
+   */
   private async registerActiveWorker(
     installation: QqbotPluginInstallation,
     version: QqbotPluginVersion,
@@ -809,6 +992,12 @@ export class QqbotPluginPlatformService
     await this.syncManifestTasksForInstallation(installation, manifest, true);
   }
 
+  /**
+   * 更新 QQBot 插件平台状态。
+   * @param installation - installation 输入；使用 `pluginId`、`id` 字段生成结果。
+   * @param manifest - manifest 输入；使用 `tasks` 字段生成结果。
+   * @param scheduleEnabledTasks - 插件任务列表；决定 插件平台条件分支。
+   */
   private async syncManifestTasksForInstallation(
     installation: QqbotPluginInstallation,
     manifest: QqbotPluginManifest,
@@ -835,6 +1024,10 @@ export class QqbotPluginPlatformService
     return tasks;
   }
 
+  /**
+   * 停止Existing Workers For Manifest。
+   * @param manifest - manifest 输入；使用 `pluginKey`、`legacyAliases` 字段生成结果。
+   */
   private async stopExistingWorkersForManifest(manifest: QqbotPluginManifest) {
     const installationIds = new Set<string>();
     for (const pluginKey of [manifest.pluginKey, ...manifest.legacyAliases]) {
@@ -850,6 +1043,10 @@ export class QqbotPluginPlatformService
     }
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param installationId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
+   */
   private unregisterActiveWorker(installationId: string) {
     const workerContext = this.activeWorkerContexts.get(installationId);
     this.activeWorkers.delete(installationId);
@@ -873,12 +1070,20 @@ export class QqbotPluginPlatformService
     }
   }
 
+  /**
+   * 查询 QQBot 插件平台数据。
+   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   */
   private async getPluginKey(pluginId: string) {
     const findOne = this.pluginRepository.findOne?.bind(this.pluginRepository);
     const plugin = findOne ? await findOne({ where: { id: pluginId } }) : null;
     return plugin?.pluginKey || pluginId;
   }
 
+  /**
+   * 停止Worker。
+   * @param installationId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
+   */
   private async stopWorker(installationId: string) {
     const worker = this.activeWorkers.get(installationId);
     if (!worker) return;
@@ -899,6 +1104,10 @@ export class QqbotPluginPlatformService
     }
   }
 
+  /**
+   * 停止Workers For Installation。
+   * @param installation - installation 输入；使用 `pluginId`、`id` 字段生成结果。
+   */
   private async stopWorkersForInstallation(
     installation: QqbotPluginInstallation,
   ) {
@@ -914,6 +1123,11 @@ export class QqbotPluginPlatformService
     }
   }
 
+  /**
+   * 启动Worker。
+   * @param installation - installation 输入；使用 `versionId`、`id`、`pluginId` 字段生成结果。
+   * @param versionOverride - versionOverride 输入；影响 startWorker 的返回值。
+   */
   private async startWorker(
     installation: QqbotPluginInstallation,
     versionOverride?: QqbotPluginVersion,
@@ -963,6 +1177,10 @@ export class QqbotPluginPlatformService
     }
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param workerContext - workerContext 输入；使用 `installationId`、`pluginId`、`worker` 字段生成结果。
+   */
   private async flushWorkerRuntimeEvents(workerContext: ActiveWorkerContext) {
     await this.flushRuntimeEvents(
       workerContext.installationId,
@@ -971,6 +1189,10 @@ export class QqbotPluginPlatformService
     );
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param workerContext - workerContext 输入；驱动 `this.flushWorkerRuntimeEvents()` 的 插件平台步骤。
+   */
   private async flushWorkerRuntimeEventsBestEffort(
     workerContext?: ActiveWorkerContext,
   ) {
@@ -982,6 +1204,12 @@ export class QqbotPluginPlatformService
     }
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param installationId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
+   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   * @param worker - worker 输入；使用 `drainRuntimeEvents` 字段生成结果。
+   */
   private async flushRuntimeEvents(
     installationId: string,
     pluginId: string,
@@ -1003,10 +1231,21 @@ export class QqbotPluginPlatformService
     );
   }
 
+  /**
+   * 判断 QQBot 插件平台条件。
+   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   */
   private isPersistablePluginId(pluginId: string) {
     return /^\d+$/.test(pluginId);
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param installation - installation 输入；使用 `id`、`pluginId` 字段生成结果。
+   * @param eventType - eventType 输入；影响 recordRuntimeEvent 的返回值。
+   * @param level - level 输入；影响 recordRuntimeEvent 的返回值。
+   * @param safeSummary - safeSummary 输入；影响 recordRuntimeEvent 的返回值。
+   */
   private async recordRuntimeEvent(
     installation: QqbotPluginInstallation,
     eventType: string,
@@ -1022,12 +1261,20 @@ export class QqbotPluginPlatformService
     });
   }
 
+  /**
+   * 查询 QQBot 插件平台数据。
+   * @param context - context 输入；使用 `pluginId` 字段生成结果。
+   */
   private getPluginIdFromContext(context?: Record<string, any>) {
     return typeof context?.pluginId === 'string' && context.pluginId
       ? context.pluginId
       : null;
   }
 
+  /**
+   * 创建 QQBot 插件平台对象或配置。
+   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   */
   private buildRuntimeEventTimeFilter(query: RuntimeEventQuery) {
     if (query.startTime && query.endTime) {
       return {
@@ -1047,6 +1294,9 @@ export class QqbotPluginPlatformService
     return {};
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   */
   private requirePackageReader() {
     if (!this.packageReader) {
       throwVbenError('插件包读取器未初始化');

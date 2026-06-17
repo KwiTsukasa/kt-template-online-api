@@ -24,8 +24,8 @@ const prefixBG: Canvas = drawRoundedRect({
 /**
  * 在图片布局层中绘制卡牌PrefixIn列表。
  *
- * @param card - 卡牌参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param card - card 输入；使用 `bandId`、`releasedAt`、`prefix`、`characterId` 字段生成结果。
+ * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
  */
 export async function drawCardPrefixInList(
   card: Card,

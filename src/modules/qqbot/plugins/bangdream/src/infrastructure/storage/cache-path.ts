@@ -8,7 +8,7 @@ import * as path from 'path';
 /**
  * 在数据下载与缓存层中获取缓存Directory。
  *
- * @param url - 远端资源地址。
+ * @param url - 访问地址；驱动 `URL()` 的 BangDream步骤。
  * @returns 格式化后的文本。
  */
 export function getCacheDirectory(url: string): string {
@@ -26,9 +26,9 @@ export function getCacheDirectory(url: string): string {
 }
 
 /**
- * 在数据下载与缓存层中获取File名称FromURL。
+ * 查询 BangDream 插件数据。
  *
- * @param url - 远端资源地址。
+ * @param url - 访问地址；驱动 `URL()` 的 BangDream步骤。
  * @returns 格式化后的文本。
  */
 export function getFileNameFromUrl(url: string): string {
@@ -53,7 +53,7 @@ export function getFileNameFromUrl(url: string): string {
 /**
  * 在数据下载与缓存层中处理sanitizeDirectory名称。
  *
- * @param dirName - dir名称参数。
+ * @param dirName - dirName 输入；生成规范化文本。
  * @returns 格式化后的文本。
  */
 function sanitizeDirectoryName(dirName: string): string {
@@ -63,6 +63,11 @@ function sanitizeDirectoryName(dirName: string): string {
   return dirName.replace(illegalChars, replacementChar);
 }
 
+/**
+ * 解析Cache Url。
+ * @param url - 访问地址；驱动 `Error()` 的 BangDream步骤。
+ * @returns BangDream 插件渲染后的图片、画布或文本。
+ */
 function resolveCacheUrl(url: string): string {
   const source = `${url || ''}`.trim();
   if (!source) {

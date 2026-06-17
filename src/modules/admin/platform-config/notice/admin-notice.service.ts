@@ -32,12 +32,21 @@ type NormalizedSystemNoticeInput = {
 
 @Injectable()
 export class AdminNoticeService implements SystemNoticePublisher {
+  /**
+   * 初始化 AdminNoticeService 实例。
+   * @param noticeRepository - Admin仓库依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(AdminNotice)
     private readonly noticeRepository: Repository<AdminNotice>,
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 获取分页数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   async page(query: AdminNoticeQueryDto = {}) {
     const pageNo = this.toolsService.toPositiveNumber(
       query.pageNo ?? query.page,
@@ -99,6 +108,10 @@ export class AdminNoticeService implements SystemNoticePublisher {
     };
   }
 
+  /**
+   * 投递 Admin 平台配置消息或任务。
+   * @param input - input 输入；驱动 `this.normalizeSystemNoticeInput()` 的 Admin步骤。
+   */
   async publishSystemNotice(input: SystemNoticePublishInput) {
     const normalizedInput = this.normalizeSystemNoticeInput(input);
     const now = new Date();
@@ -145,6 +158,10 @@ export class AdminNoticeService implements SystemNoticePublisher {
     }
   }
 
+  /**
+   * 获取业务数据。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   async get(id: string) {
     const noticeId = this.toolsService.toTrimmedString(id);
     if (!noticeId) throwVbenError('站内信ID不能为空', HttpStatus.BAD_REQUEST);
@@ -160,6 +177,10 @@ export class AdminNoticeService implements SystemNoticePublisher {
     return this.serialize(notice);
   }
 
+  /**
+   * 删除数据。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   async remove(id: string) {
     const noticeId = this.toolsService.toTrimmedString(id);
     if (!noticeId) throwVbenError('站内信ID不能为空', HttpStatus.BAD_REQUEST);
@@ -183,6 +204,11 @@ export class AdminNoticeService implements SystemNoticePublisher {
     return null;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @param status - Admin列表；驱动 `this.normalizeStatus()`、`throwVbenError()` 的 Admin步骤。
+   */
   async toggleStatus(id: string, status: number | string) {
     const normalizedStatus = this.normalizeStatus(status);
     if (Number.isNaN(normalizedStatus)) {
@@ -208,6 +234,11 @@ export class AdminNoticeService implements SystemNoticePublisher {
     return null;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @param isTop - isTop 输入；驱动 `this.normalizeBoolean()`、`throwVbenError()` 的 Admin步骤。
+   */
   async toggleTop(id: string, isTop: boolean | number | string) {
     const noticeId = this.toolsService.toTrimmedString(id);
     if (!noticeId) throwVbenError('站内信ID不能为空', HttpStatus.BAD_REQUEST);
@@ -234,6 +265,12 @@ export class AdminNoticeService implements SystemNoticePublisher {
     return null;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param builder - builder 输入；执行 `builder.andWhere()` 对应的 Admin步骤。
+   * @param field - field 输入；影响 applyLikeFilter 的返回值。
+   * @param value - 待转换值；驱动 `toolsService.toTrimmedString()` 的 Admin步骤。
+   */
   private applyLikeFilter(
     builder: ReturnType<Repository<AdminNotice>['createQueryBuilder']>,
     field: keyof Pick<AdminNotice, 'notifyUsers'>,
@@ -247,6 +284,12 @@ export class AdminNoticeService implements SystemNoticePublisher {
     });
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param builder - builder 输入；执行 `builder.andWhere()` 对应的 Admin步骤。
+   * @param field - field 输入；影响 applyExactTextFilter 的返回值。
+   * @param value - 待转文本值；驱动 `toolsService.toTrimmedString()` 的 Admin步骤。
+   */
   private applyExactTextFilter(
     builder: ReturnType<Repository<AdminNotice>['createQueryBuilder']>,
     field: keyof Pick<
@@ -263,6 +306,10 @@ export class AdminNoticeService implements SystemNoticePublisher {
     });
   }
 
+  /**
+   * 转换 Admin 平台配置输入。
+   * @param value - 待转换值；决定 Admin条件分支。
+   */
   private normalizeBoolean(value: boolean | number | string | undefined) {
     if (value === undefined || value === null) return undefined;
     if (value === true || value === 1 || `${value}` === '1') return true;
@@ -270,11 +317,19 @@ export class AdminNoticeService implements SystemNoticePublisher {
     return undefined;
   }
 
+  /**
+   * 转换 Admin 平台配置输入。
+   * @param level - level 输入；驱动 `Number()` 的 Admin步骤。
+   */
   private normalizeLevel(level?: number | string) {
     const normalizedLevel = Number(level);
     return Number.isFinite(normalizedLevel) ? normalizedLevel : Number.NaN;
   }
 
+  /**
+   * 转换 Admin 平台配置输入。
+   * @param status - Admin列表；驱动 `Number()` 的 Admin步骤。
+   */
   private normalizeStatus(status?: number | string) {
     const normalizedStatus = Number(status);
     return normalizedStatus === 0 || normalizedStatus === 1
@@ -282,6 +337,10 @@ export class AdminNoticeService implements SystemNoticePublisher {
       : NaN;
   }
 
+  /**
+   * 转换 Admin 平台配置输入。
+   * @param severity - severity 输入；驱动 `toTrimmedString()` 的 Admin步骤。
+   */
   private normalizeSeverity(severity?: string) {
     const normalized = this.toolsService
       .toTrimmedString(severity)
@@ -289,6 +348,10 @@ export class AdminNoticeService implements SystemNoticePublisher {
     return NOTICE_SEVERITY_LEVEL_MAP[normalized] ? normalized : 'info';
   }
 
+  /**
+   * 转换 Admin 平台配置输入。
+   * @param input - input 输入；使用 `title`、`content`、`source`、`eventType` 字段生成结果。
+   */
   private normalizeSystemNoticeInput(input: SystemNoticePublishInput) {
     const title = this.toolsService.toColumnText(input.title, 255);
     const content = this.toolsService.toStoredMessageText(input.content, 4000);
@@ -330,6 +393,10 @@ export class AdminNoticeService implements SystemNoticePublisher {
     } satisfies NormalizedSystemNoticeInput;
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param dedupeKey - dedupeKey 输入；限定 Admin查询范围。
+   */
   private async findActiveNoticeByDedupeKey(dedupeKey: string) {
     return this.noticeRepository.findOne({
       where: {
@@ -339,6 +406,12 @@ export class AdminNoticeService implements SystemNoticePublisher {
     });
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @param normalizedInput - normalizedInput 输入；影响 aggregateSystemNotice 的返回值。
+   * @param lastSeenAt - lastSeenAt 输入；影响 aggregateSystemNotice 的返回值。
+   */
   private async aggregateSystemNotice(
     id: string,
     normalizedInput: NormalizedSystemNoticeInput,
@@ -350,6 +423,9 @@ export class AdminNoticeService implements SystemNoticePublisher {
       .set({
         ...normalizedInput,
         lastSeenAt,
+        /**
+         * 执行 Admin回调。
+         */
         occurrenceCount: () => 'occurrence_count + 1',
         status: 1,
       } as any)
@@ -358,6 +434,10 @@ export class AdminNoticeService implements SystemNoticePublisher {
     return id;
   }
 
+  /**
+   * 判断 Admin 平台配置条件。
+   * @param err - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   */
   private isDuplicateKeyError(err: unknown) {
     const error = err as { code?: string; errno?: number; message?: string };
     return (
@@ -367,6 +447,10 @@ export class AdminNoticeService implements SystemNoticePublisher {
     );
   }
 
+  /**
+   * 序列化业务数据。
+   * @param notice - notice 输入；使用 `content`、`createTime`、`createdBy`、`id` 字段生成结果。
+   */
   private serialize(notice: AdminNotice) {
     return {
       content: notice.content,

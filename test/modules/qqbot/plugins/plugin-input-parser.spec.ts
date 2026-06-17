@@ -31,6 +31,10 @@ describe('QQBot built-in plugin input parsers', () => {
   it('keeps FFLogs character parsing inside the FFLogs plugin package', () => {
     expect(
       parseFflogsCharacterInput('Kwi 宇宙和音 阿尔卡迪亚', {
+        /**
+         * 执行 测试回调。
+         * @param value - 待转换值；影响 resolveKnownWorld 的返回值。
+         */
         resolveKnownWorld: (value) =>
           value === '宇宙和音' ? { serverSlug: value } : null,
       }),

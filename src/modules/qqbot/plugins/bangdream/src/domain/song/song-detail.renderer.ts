@@ -25,9 +25,9 @@ import { formatSeconds } from '@/modules/qqbot/plugins/bangdream/src/domain/even
 /**
  * 在QQBot 图片视图层中绘制歌曲详情。
  *
- * @param song - 歌曲参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
- * @param compress - compress参数。
+ * @param song - song 输入；使用 `isExist`、`musicTitle`、`songId`、`bandId` 字段生成结果。
+ * @param displayedServerList - displayedServerList 输入；使用 `length` 字段生成结果。
+ * @param compress - BangDream列表；影响 drawSongDetail 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawSongDetail(

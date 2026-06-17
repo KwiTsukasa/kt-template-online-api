@@ -25,10 +25,21 @@ import {
 } from '../../helpers/controller-route.helper';
 import { readRefactorV3SqlSchema } from '../../helpers/sql-schema.helper';
 
+/**
+ * 查询 博客内容数据。
+ * @param moduleClass - Nest 模块类；读取装饰器 metadata。
+ * @param key - 键名；读取装饰器 metadata。
+ * @returns 博客内容查询结果。
+ */
 const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] => {
   return Reflect.getMetadata(key, moduleClass) || [];
 };
 
+/**
+ * 执行 博客内容流程。
+ * @param modules - 模块列表；计算 博客布尔判断。
+ * @param moduleName - 模块名称文本；构造测试断言。
+ */
 const expectNoModuleNamed = (modules: unknown[], moduleName: string) => {
   expect(
     modules.some(
@@ -105,14 +116,18 @@ describe('Blog content module contract', () => {
         (moduleRef: any) => moduleRef?.module?.name === 'TypeOrmModule',
       ),
     ).toBe(true);
-    expect(getModuleMetadata(BlogContentModule, MODULE_METADATA.CONTROLLERS)).toEqual(
+    expect(
+      getModuleMetadata(BlogContentModule, MODULE_METADATA.CONTROLLERS),
+    ).toEqual(
       expect.arrayContaining([
         BlogArticleController,
         BlogTermController,
         BlogThemeConfigController,
       ]),
     );
-    expect(getModuleMetadata(BlogContentModule, MODULE_METADATA.PROVIDERS)).toEqual(
+    expect(
+      getModuleMetadata(BlogContentModule, MODULE_METADATA.PROVIDERS),
+    ).toEqual(
       expect.arrayContaining([
         BlogArticleService,
         BlogTermService,

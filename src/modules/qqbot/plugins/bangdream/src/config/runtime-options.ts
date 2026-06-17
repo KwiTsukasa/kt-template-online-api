@@ -98,6 +98,11 @@ export const BANGDREAM_CN_ESTIMATE_START_EVENT_ID = 298;
 export const BANGDREAM_CN_BLOCKED_EVENT_IDS: readonly number[] = [];
 export const BANGDREAM_DEFAULT_NO_BANG_DAYS = 1;
 
+/**
+ * 转换 BangDream 插件输入。
+ * @param value - 待转换值；驱动 `Number()` 的 BangDream步骤。
+ * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 BangDream步骤。
+ */
 export function normalizeBangDreamPositiveInteger(
   value: unknown,
   fallback: number,
@@ -106,6 +111,11 @@ export function normalizeBangDreamPositiveInteger(
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
+/**
+ * 转换 BangDream 插件输入。
+ * @param value - 待转换值；决定 BangDream条件分支。
+ * @param fallback - 兜底值；影响 normalizeBangDreamBoolean 的返回值。
+ */
 export function normalizeBangDreamBoolean(value: unknown, fallback: boolean) {
   if (value === undefined || value === null || value === '') return fallback;
   if (typeof value === 'boolean') return value;
@@ -114,6 +124,10 @@ export function normalizeBangDreamBoolean(value: unknown, fallback: boolean) {
   );
 }
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param source - source 输入；转换 BangDream列表项。
+ */
 export function splitBangDreamOptionList(source: unknown) {
   if (Array.isArray(source)) {
     return source.map((item) => `${item}`.trim()).filter(Boolean);

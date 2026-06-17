@@ -36,7 +36,7 @@ export class EventStage {
   /**
    * 构造 EventStage 实例，并初始化该模型的本地基础字段。
    *
-   * @param eventId - 活动 ID。
+   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
    */
   constructor(eventId: number) {
     this.eventId = eventId;
@@ -76,8 +76,8 @@ export class EventStage {
   /**
    * 在 EventStage 模型中请求当前模型的远端详情数据。
    *
-   * @param update - update参数，未传入时使用默认值。
-   * @param type - 数据类型或匹配类型。
+   * @param update - update 输入；驱动 `eventStageDataRepository.getFestivalData()` 的 BangDream步骤。
+   * @param type - type 输入；驱动 `eventStageDataRepository.getFestivalData()` 的 BangDream步骤。
    */
   async getData<T extends EventStageDataType>(
     update: boolean = true,
@@ -136,8 +136,8 @@ export class EventStage {
   /**
    * 在 EventStage 模型中获取试炼类型By时间。
    *
-   * @param startAt - startAt参数。
-   * @param endAt - endAt参数。
+   * @param startAt - startAt 输入；驱动 `parseInt()` 的 BangDream步骤。
+   * @param endAt - endAt 输入；驱动 `parseInt()` 的 BangDream步骤。
    * @returns 格式化后的文本。
    */
   getStageTypeByTime(startAt: number, endAt: number): string {

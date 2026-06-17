@@ -21,7 +21,7 @@ export const statConfig: Record<string, { color: string; name: string }> =
 /**
  * 在图片布局层中绘制卡牌数值In列表。
  *
- * @param card - 卡牌参数。
+ * @param card - card 输入；使用 `rarity` 字段生成结果。
  */
 export async function drawCardStatInList(card: Card) {
   const stat = await card.calcStat();
@@ -52,7 +52,7 @@ export async function drawCardStatInList(card: Card) {
 /**
  * 在图片布局层中绘制数值In列表。
  *
- * @param stat - 数值参数。
+ * @param stat - stat 输入；使用 `performance`、`technique`、`visual` 字段生成结果。
  */
 export async function drawStatInList(stat: Stat) {
   const statTotal = Math.floor(stat.performance + stat.technique + stat.visual);
@@ -77,9 +77,9 @@ export async function drawStatInList(stat: Stat) {
 /**
  * 在图片布局层中绘制卡牌数值Divided。
  *
- * @param stat - 数值参数。
- * @param statTotal - 数值Total参数。
- * @param limitBreakstat - limitBreakstat参数，未传入时使用默认值。
+ * @param stat - stat 输入；驱动 `for()` 的 BangDream步骤。
+ * @param statTotal - statTotal 输入；驱动 `list.push()` 的 BangDream步骤。
+ * @param limitBreakstat - limitBreakstat 输入；影响 drawCardStatDivided 的返回值。
  * @returns 异步处理结果。
  */
 async function drawCardStatDivided(
@@ -90,9 +90,9 @@ async function drawCardStatDivided(
   /**
    * 在图片布局层中绘制数值线条。
    *
-   * @param key - 当前字段键名。
-   * @param value - 当前处理的值。
-   * @param total - total参数。
+   * @param key - 键名；影响 drawStatLine 的返回值。
+   * @param value - 待转换值；驱动 `getStatLineBarLayout()` 的 BangDream步骤。
+   * @param total - 总记录数；驱动 `getStatLineBarLayout()` 的 BangDream步骤。
    * @returns 渲染或资源结果。
    */
   function drawStatLine(key: string, value: number, total: number): Canvas {

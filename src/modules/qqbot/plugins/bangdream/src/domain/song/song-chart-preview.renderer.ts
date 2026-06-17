@@ -77,7 +77,7 @@ async function loadNoteImages(): Promise<Record<string, Image>> {
 /**
  * 在图片布局层中加载谱面预览封面图。
  *
- * @param cover - cover参数。
+ * @param cover - cover 输入；驱动 `loadImage()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function loadCoverImage(cover: string | Buffer): Promise<Image> {
@@ -91,10 +91,10 @@ async function loadCoverImage(cover: string | Buffer): Promise<Image> {
 /**
  * 在图片布局层中设置Adaptive文本Baseline。
  *
- * @param ctx - 画布绘图上下文。
- * @param layout - 布局参数。
- * @param fontSize - fontSize参数。
- * @param y - 纵向绘制坐标。
+ * @param ctx - ctx 输入；使用 `textBaseline` 字段生成结果。
+ * @param layout - layout 输入；使用 `height` 字段生成结果。
+ * @param fontSize - fontSize 输入；决定 BangDream条件分支。
+ * @param y - y 输入；决定 BangDream条件分支。
  */
 function setAdaptiveTextBaseline(
   ctx: CanvasRenderingContext2D,
@@ -114,8 +114,8 @@ function setAdaptiveTextBaseline(
 /**
  * 在图片布局层中获取时间Position。
  *
- * @param layout - 布局参数。
- * @param time - 谱面时间点。
+ * @param layout - layout 输入；使用 `secondsPerCol`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
+ * @param time - time 输入；驱动 `Math.floor()` 的 BangDream步骤。
  */
 function getTimePosition(layout: PreviewLayout, time: number) {
   const drawCol = Math.floor(time / layout.secondsPerCol);
@@ -130,10 +130,10 @@ function getTimePosition(layout: PreviewLayout, time: number) {
 /**
  * 在图片布局层中绘制基础Info。
  *
- * @param ctx - 画布绘图上下文。
- * @param layout - 布局参数。
- * @param payload - 渲染或请求负载。
- * @param coverImg - coverImg参数。
+ * @param ctx - ctx 输入；使用 `fillStyle`、`font`、`textAlign`、`textBaseline` 字段生成结果。
+ * @param layout - layout 输入；使用 `width`、`height`、`infoAreaWidth` 字段生成结果。
+ * @param payload - payload 输入；影响 drawBaseInfo 的返回值。
+ * @param coverImg - coverImg 输入；驱动 `ctx.drawImage()` 的 BangDream步骤。
  */
 function drawBaseInfo(
   ctx: CanvasRenderingContext2D,
@@ -216,8 +216,8 @@ function drawBaseInfo(
 /**
  * 在图片布局层中绘制Tracks。
  *
- * @param ctx - 画布绘图上下文。
- * @param layout - 布局参数。
+ * @param ctx - ctx 输入；使用 `fillStyle` 字段生成结果。
+ * @param layout - layout 输入；使用 `colCount`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
  */
 function drawTracks(
   ctx: CanvasRenderingContext2D,
@@ -258,9 +258,9 @@ function drawTracks(
 /**
  * 在图片布局层中绘制Beat线条列表。
  *
- * @param ctx - 画布绘图上下文。
- * @param layout - 布局参数。
- * @param notes - 谱面音符列表。
+ * @param ctx - ctx 输入；使用 `strokeStyle`、`lineWidth` 字段生成结果。
+ * @param layout - layout 输入；使用 `chartLength`、`laneWidth` 字段生成结果。
+ * @param notes - BangDream列表；影响 drawBeatLines 的返回值。
  */
 function drawBeatLines(
   ctx: CanvasRenderingContext2D,
@@ -310,8 +310,8 @@ function drawBeatLines(
 /**
  * 在图片布局层中绘制时间轴。
  *
- * @param ctx - 画布绘图上下文。
- * @param layout - 布局参数。
+ * @param ctx - ctx 输入；使用 `font`、`fillStyle`、`textAlign` 字段生成结果。
+ * @param layout - layout 输入；使用 `chartLength` 字段生成结果。
  */
 function drawTimeline(
   ctx: CanvasRenderingContext2D,
@@ -332,9 +332,9 @@ function drawTimeline(
 /**
  * 在图片布局层中绘制CountAndBPM线条列表。
  *
- * @param ctx - 画布绘图上下文。
- * @param layout - 布局参数。
- * @param notes - 谱面音符列表。
+ * @param ctx - ctx 输入；使用 `font`、`fillStyle`、`textAlign` 字段生成结果。
+ * @param layout - layout 输入；使用 `laneWidth` 字段生成结果。
+ * @param notes - BangDream列表；驱动 `for()` 的 BangDream步骤。
  */
 function drawCountAndBpmLines(
   ctx: CanvasRenderingContext2D,
@@ -377,10 +377,10 @@ function drawCountAndBpmLines(
 /**
  * 在图片布局层中绘制Tap音符。
  *
- * @param ctx - 画布绘图上下文。
- * @param layout - 布局参数。
- * @param noteImages - 音符图片列表参数。
- * @param note - 谱面音符。
+ * @param ctx - ctx 输入；执行 `ctx.drawImage()` 对应的 BangDream步骤。
+ * @param layout - layout 输入；使用 `laneWidth`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
+ * @param noteImages - BangDream列表；使用 `FlickTop` 字段生成结果。
+ * @param note - note 输入；使用 `time`、`type`、`lane` 字段生成结果。
  */
 function drawTapNote(
   ctx: CanvasRenderingContext2D,
@@ -418,10 +418,10 @@ function drawTapNote(
 /**
  * 在图片布局层中绘制Directional音符。
  *
- * @param ctx - 画布绘图上下文。
- * @param layout - 布局参数。
- * @param noteImages - 音符图片列表参数。
- * @param note - 谱面音符。
+ * @param ctx - ctx 输入；执行 `ctx.drawImage()` 对应的 BangDream步骤。
+ * @param layout - layout 输入；使用 `laneWidth`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
+ * @param noteImages - BangDream列表；影响 drawDirectionalNote 的返回值。
+ * @param note - note 输入；使用 `time`、`direction`、`width`、`lane` 字段生成结果。
  */
 function drawDirectionalNote(
   ctx: CanvasRenderingContext2D,
@@ -470,10 +470,10 @@ function drawDirectionalNote(
 /**
  * 在图片布局层中绘制Sim音符。
  *
- * @param ctx - 画布绘图上下文。
- * @param layout - 布局参数。
- * @param noteImages - 音符图片列表参数。
- * @param note - 谱面音符。
+ * @param ctx - ctx 输入；执行 `ctx.drawImage()` 对应的 BangDream步骤。
+ * @param layout - layout 输入；使用 `laneWidth`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
+ * @param noteImages - BangDream列表；使用 `Sim` 字段生成结果。
+ * @param note - note 输入；使用 `time`、`lane` 字段生成结果。
  */
 function drawSimNote(
   ctx: CanvasRenderingContext2D,
@@ -501,9 +501,9 @@ function drawSimNote(
 /**
  * 在图片布局层中绘制Bar音符。
  *
- * @param ctx - 画布绘图上下文。
- * @param layout - 布局参数。
- * @param note - 谱面音符。
+ * @param ctx - ctx 输入；使用 `fillStyle` 字段生成结果。
+ * @param layout - layout 输入；使用 `secondsPerCol`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
+ * @param note - note 输入；使用 `time`、`lane` 字段生成结果。
  */
 function drawBarNote(
   ctx: CanvasRenderingContext2D,
@@ -548,10 +548,10 @@ function drawBarNote(
 /**
  * 在图片布局层中绘制音符列表。
  *
- * @param ctx - 画布绘图上下文。
- * @param layout - 布局参数。
- * @param noteImages - 音符图片列表参数。
- * @param notes - 谱面音符列表。
+ * @param ctx - ctx 输入；驱动 `drawTapNote()`、`drawDirectionalNote()`、`drawSimNote()`、`drawBarNote()` 的 BangDream步骤。
+ * @param layout - layout 输入；驱动 `drawTapNote()`、`drawDirectionalNote()`、`drawSimNote()`、`drawBarNote()` 的 BangDream步骤。
+ * @param noteImages - BangDream列表；驱动 `drawTapNote()`、`drawDirectionalNote()`、`drawSimNote()` 的 BangDream步骤。
+ * @param notes - BangDream列表；驱动 `for()` 的 BangDream步骤。
  */
 function drawNotes(
   ctx: CanvasRenderingContext2D,
@@ -587,8 +587,8 @@ function drawNotes(
 /**
  * 在图片布局层中绘制 Bestdori 谱面预览图。
  *
- * @param payload - 渲染或请求负载。
- * @param chart - 谱面音符数据。
+ * @param payload - payload 输入；使用 `cover` 字段生成结果。
+ * @param chart - chart 输入；驱动 `createSongChartPreviewModel()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawBestdoriPreview(

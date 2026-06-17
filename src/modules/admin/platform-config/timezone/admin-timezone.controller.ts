@@ -17,20 +17,36 @@ const TIMEZONE_OPTIONS = [
 @Controller('timezone')
 @UseGuards(JwtAuthGuard)
 export class AdminTimezoneController {
+  /**
+   * 初始化 AdminTimezoneController 实例。
+   * @param timezoneService - timezoneService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(private readonly timezoneService: AdminTimezoneService) {}
 
+  /**
+   * 获取时区选项。
+   */
   @Get('getTimezoneOptions')
   @ApiOperation({ summary: '获取时区选项' })
   getOptions() {
     return vbenSuccess(TIMEZONE_OPTIONS);
   }
 
+  /**
+   * 获取当前用户时区。
+   * @param user - user 输入；驱动 `vbenSuccess()` 的 Admin步骤。
+   */
   @Get('getTimezone')
   @ApiOperation({ summary: '获取当前用户时区' })
   async getTimezone(@CurrentAdminUser() user: AdminUser) {
     return vbenSuccess(await this.timezoneService.getTimezone(user));
   }
 
+  /**
+   * 设置当前用户时区。
+   * @param user - user 输入；驱动 `vbenSuccess()` 的 Admin步骤。
+   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   */
   @Post('setTimezone')
   @ApiOperation({ summary: '设置当前用户时区' })
   async setTimezone(

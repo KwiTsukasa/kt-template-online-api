@@ -6,7 +6,10 @@ import {
   KtDateTimeColumn,
   KtUpdateDateColumn,
 } from '@/common';
-import type { QqbotMessageDirection, QqbotMessageType } from '../../../contract/qqbot.types';
+import type {
+  QqbotMessageDirection,
+  QqbotMessageType,
+} from '../../../contract/qqbot.types';
 
 @Entity('qqbot_message')
 @Index('idx_qqbot_message_self_message', ['selfId', 'messageId'])
@@ -64,6 +67,9 @@ export class QqbotMessage {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
+  /**
+   * 创建 QQBot 核心对象或配置。
+   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

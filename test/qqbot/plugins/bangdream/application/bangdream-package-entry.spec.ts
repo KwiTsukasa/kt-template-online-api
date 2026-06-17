@@ -1,8 +1,11 @@
-jest.mock('@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache', () => ({
-  __esModule: true,
-  default: {},
-  waitForBangDreamCatalogReady: jest.fn().mockResolvedValue(undefined),
-}));
+jest.mock(
+  '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache',
+  () => ({
+    __esModule: true,
+    default: {},
+    waitForBangDreamCatalogReady: jest.fn().mockResolvedValue(undefined),
+  }),
+);
 
 const mockContext = {
   checkHealth: jest.fn(),
@@ -53,6 +56,9 @@ jest.mock(
 );
 
 jest.mock('@/modules/qqbot/plugins/bangdream/src/operations', () => ({
+  /**
+   * 读取 BangDream回调数据。
+   */
   getBangDreamOperationsByHandlerName: () =>
     new Map(
       mockManifestOperations.map(([key, handlerName]) => {
@@ -63,14 +69,7 @@ jest.mock('@/modules/qqbot/plugins/bangdream/src/operations', () => ({
           {
             catalogKeys:
               key === 'bangdream.song.search'
-                ? [
-                    'songs',
-                    'meta',
-                    'singer',
-                    'bands',
-                    'characters',
-                    'events',
-                  ]
+                ? ['songs', 'meta', 'singer', 'bands', 'characters', 'events']
                 : undefined,
             execute,
             handlerName,
@@ -140,15 +139,16 @@ describe('BangDream package entry', () => {
       'characters',
       'events',
     ]);
-    expect(songSearch).toHaveBeenCalledWith(
-      { text: '夏祭り' },
-      mockContext,
-    );
+    expect(songSearch).toHaveBeenCalledWith({ text: '夏祭り' }, mockContext);
     expect(manifestOperations).toHaveLength(15);
   });
 
   it('normalizes operation errors without an application-service wrapper', async () => {
     const plugin = createPlugin({
+      /**
+       * 执行 BangDream回调。
+       * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+       */
       normalizeError: (error) => `normalized:${error}`,
       operations: manifestOperations,
     });

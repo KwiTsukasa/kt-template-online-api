@@ -20,22 +20,39 @@ export class RepeaterApplication {
   >();
   private readonly states = new Map<string, RepeaterConversationState>();
 
+  /**
+   * 初始化 RepeaterApplication 实例。
+   * @param host - host 输入；影响 constructor 的返回值。
+   * @param manifest - manifest 输入；影响 constructor 的返回值。
+   * @param now - now 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly host: RepeaterPluginHost,
     private readonly manifest: RepeaterManifest,
     private readonly now: () => number = Date.now,
   ) {}
 
+  /**
+   * 执行 复读插件流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async bind(selfId: string) {
     await this.host.bindEventPlugin(selfId, this.manifest.pluginKey);
     this.clearBoundCache(selfId);
     return true;
   }
 
+  /**
+   * 清理Bound Cache。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   clearBoundCache(selfId: string) {
     this.boundCache.delete(`${selfId || ''}`.trim());
   }
 
+  /**
+   * 查询 复读插件数据。
+   */
   getDefinition() {
     return {
       description: this.manifest.description,
@@ -47,6 +64,10 @@ export class RepeaterApplication {
     };
   }
 
+  /**
+   * 查询 复读插件数据。
+   * @param params - 模块列表；使用 `accountName`、`selfId`、`connectStatus` 字段生成结果。
+   */
   async getSummary(params: {
     accountName?: string;
     connectStatus?: string;
@@ -67,6 +88,10 @@ export class RepeaterApplication {
     };
   }
 
+  /**
+   * 处理Message。
+   * @param message - message 输入；使用 `selfId`、`messageText`、`channelId`、`rawEvent` 字段生成结果。
+   */
   async handleMessage(message: RepeaterMessage) {
     if (!(await this.isBound(message.selfId))) return false;
 
@@ -109,12 +134,20 @@ export class RepeaterApplication {
     }
   }
 
+  /**
+   * 执行 复读插件流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async unbind(selfId: string) {
     await this.host.unbindEventPlugin(selfId, this.manifest.pluginKey);
     this.clearBoundCache(selfId);
     return true;
   }
 
+  /**
+   * 判断 复读插件条件。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   private async isBound(selfId: string) {
     const normalizedSelfId = `${selfId || ''}`.trim();
     if (!normalizedSelfId) return false;
@@ -133,12 +166,21 @@ export class RepeaterApplication {
     return value;
   }
 
+  /**
+   * 执行 复读插件流程。
+   * @param current - current 输入；决定 模块条件分支。
+   * @param ttl - ttl 输入；决定 模块条件分支。
+   */
   private pruneStates(current: number, ttl: number) {
     for (const [key, state] of this.states.entries()) {
       if (current - state.updatedAt > ttl) this.states.delete(key);
     }
   }
 
+  /**
+   * 重置State。
+   * @param message - message 输入；驱动 `buildRepeaterStateKey()` 的 模块步骤。
+   */
   private resetState(message: RepeaterMessage) {
     const key = buildRepeaterStateKey(message);
     const currentState = this.states.get(key);

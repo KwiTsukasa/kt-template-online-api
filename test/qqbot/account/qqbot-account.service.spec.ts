@@ -3,6 +3,10 @@ import type { QqbotAccountNapcatRuntimePort } from '@/modules/qqbot/core/applica
 import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
 import { QqbotNapcatAccountRuntimeService } from '@/modules/qqbot/napcat/application/account-runtime/qqbot-napcat-account-runtime.service';
 
+/**
+ * 创建 测试断言对象或配置。
+ * @param input - input 输入；使用 `accountRepository`、`accountAbilityRepository`、`toolsService`、`napcatRuntime` 字段生成结果。
+ */
 const createAccountService = (input: {
   accountAbilityRepository?: any;
   accountRepository: any;
@@ -22,6 +26,10 @@ const createAccountService = (input: {
     input.passwordCryptoService,
   );
 
+/**
+ * 创建 测试断言对象或配置。
+ * @param input - input 输入；使用 `bindingRepository`、`containerRepository`、`containerService`、`toolsService` 字段生成结果。
+ */
 const createNapcatRuntime = (input: {
   bindingRepository: any;
   containerRepository: any;
@@ -35,6 +43,10 @@ const createNapcatRuntime = (input: {
     input.toolsService || new ToolsService(),
   );
 
+/**
+ * 创建 测试断言对象或配置。
+ * @param input - input 输入；使用 `toolsService`、`accountRepository`、`configService`、`bindingRepository` 字段生成结果。
+ */
 const createAccountServiceWithNapcatRuntime = (input: {
   accountRepository: any;
   bindingRepository: any;
@@ -317,6 +329,9 @@ describe('QqbotAccountService', () => {
       status: 'running',
       webuiPort: 6101,
     };
+    /**
+     * 创建 账号。
+     */
     const createAccountBuilder = () => ({
       andWhere: jest.fn().mockReturnThis(),
       getManyAndCount: jest.fn().mockResolvedValue([[account], 1]),
@@ -325,6 +340,9 @@ describe('QqbotAccountService', () => {
       take: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
     });
+    /**
+     * 创建 账号绑定。
+     */
     const createBindingBuilder = () => ({
       addOrderBy: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
@@ -332,6 +350,9 @@ describe('QqbotAccountService', () => {
       orderBy: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
     });
+    /**
+     * 创建 容器。
+     */
     const createContainerBuilder = () => ({
       andWhere: jest.fn().mockReturnThis(),
       getMany: jest.fn().mockResolvedValue([container]),
@@ -1168,8 +1189,8 @@ describe('QqbotAccountService', () => {
         title: 'QQBot 账号已下线：1914728559',
       }),
     );
-    expect(
-      JSON.stringify(accountRepository.update.mock.calls),
-    ).not.toContain('NapCat 账号状态变更为离线');
+    expect(JSON.stringify(accountRepository.update.mock.calls)).not.toContain(
+      'NapCat 账号状态变更为离线',
+    );
   });
 });

@@ -20,8 +20,16 @@ import { SystemLogService } from './system-log.service';
 @Controller('system/logs')
 @UseGuards(JwtAuthGuard)
 export class SystemLogController {
+  /**
+   * 初始化 SystemLogController 实例。
+   * @param systemLogService - systemLogService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(private readonly systemLogService: SystemLogService) {}
 
+  /**
+   * 查询系统日志。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   @Get()
   @ApiOperation({ summary: '查询系统日志' })
   @ApiPageResponse(SystemLogDto, [
@@ -46,6 +54,10 @@ export class SystemLogController {
     return vbenPage(page.items, page.total);
   }
 
+  /**
+   * 查询系统日志级别统计。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   @Get('summary')
   @ApiOperation({ summary: '查询系统日志级别统计' })
   @ApiArrayResponse(SystemLogSummaryDto, [{ level: 'error', count: 2 }])
@@ -53,12 +65,18 @@ export class SystemLogController {
     return vbenSuccess(await this.systemLogService.summary(query));
   }
 
+  /**
+   * 查询系统日志级别选项。
+   */
   @Get('levels')
   @ApiOperation({ summary: '查询系统日志级别选项' })
   async levels() {
     return vbenSuccess(this.systemLogService.levels());
   }
 
+  /**
+   * 查询系统日志配置状态。
+   */
   @Get('status')
   @ApiOperation({ summary: '查询系统日志配置状态' })
   @ApiModelResponse(SystemLogStatusDto, {

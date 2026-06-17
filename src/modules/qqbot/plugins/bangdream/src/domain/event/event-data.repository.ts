@@ -35,13 +35,17 @@ type RewardWithId = {
 };
 
 export class EventDataRepository {
+  /**
+   * 初始化 EventDataRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(private readonly provider = bangdreamBestdoriProvider) {}
 
   /**
    * 获取活动远端详情数据。
    *
-   * @param eventId - 活动 ID。
-   * @param update - 是否强制更新缓存。
+   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+   * @param update - update 输入；限定 BangDream查询范围。
    */
   async getDetail(
     eventId: number,
@@ -57,8 +61,8 @@ export class EventDataRepository {
   /**
    * 获取活动背景资源路径。
    *
-   * @param event - 活动资源上下文。
-   * @param displayedServerList - 展示服务器优先级。
+   * @param event - event 输入；使用 `startAt`、`assetBundleName` 字段生成结果。
+   * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
    */
   getBackgroundImagePath(
     event: EventAssetContext,
@@ -71,8 +75,8 @@ export class EventDataRepository {
   /**
    * 获取活动主界面裁切图资源路径。
    *
-   * @param event - 活动资源上下文。
-   * @param displayedServerList - 展示服务器优先级。
+   * @param event - event 输入；使用 `startAt`、`assetBundleName` 字段生成结果。
+   * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
    */
   getTopscreenTrimImagePath(
     event: EventAssetContext,
@@ -85,8 +89,8 @@ export class EventDataRepository {
   /**
    * 获取活动横幅图，优先活动资源，失败时回退 homebanner。
    *
-   * @param event - 活动资源上下文。
-   * @param displayedServerList - 展示服务器优先级。
+   * @param event - event 输入；使用 `startAt`、`assetBundleName`、`bannerAssetBundleName` 字段生成结果。
+   * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
    */
   async getBannerImage(
     event: EventAssetContext,
@@ -110,8 +114,8 @@ export class EventDataRepository {
   /**
    * 获取活动背景图。
    *
-   * @param event - 活动资源上下文。
-   * @param displayedServerList - 展示服务器优先级。
+   * @param event - event 输入；驱动 `provider.getAsset()`、`this.getTopscreenTrimImage()` 的 BangDream步骤。
+   * @param displayedServerList - displayedServerList 输入；驱动 `provider.getAsset()`、`this.getTopscreenTrimImage()` 的 BangDream步骤。
    */
   async getBackgroundImage(
     event: EventAssetContext,
@@ -135,8 +139,8 @@ export class EventDataRepository {
   /**
    * 获取活动规则轮播图列表。
    *
-   * @param event - 活动资源上下文。
-   * @param tempServer - 目标服务器。
+   * @param event - event 输入；使用 `startAt`、`assetBundleName` 字段生成结果。
+   * @param tempServer - tempServer 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
    */
   async getSlideImages(
     event: EventAssetContext,
@@ -164,8 +168,8 @@ export class EventDataRepository {
   /**
    * 获取活动主界面裁切图。
    *
-   * @param event - 活动资源上下文。
-   * @param displayedServerList - 展示服务器优先级。
+   * @param event - event 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * @param displayedServerList - displayedServerList 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
    */
   async getTopscreenTrimImage(
     event: EventAssetContext,
@@ -177,6 +181,12 @@ export class EventDataRepository {
     return await loadImage(topscreenTrimImageBuffer);
   }
 
+  /**
+   * 合并Topscreen Images。
+   * @param backgroundImage - backgroundImage 输入；使用 `width`、`height` 字段生成结果。
+   * @param trimImage - trimImage 输入；使用 `width`、`height` 字段生成结果。
+   * @returns BangDream 插件渲染后的图片、画布或文本。
+   */
   private mergeTopscreenImages(
     backgroundImage: Image,
     trimImage: Image,
@@ -205,8 +215,8 @@ export class EventDataRepository {
   /**
    * 获取活动 Logo 图。
    *
-   * @param event - 活动资源上下文。
-   * @param tempServer - 目标服务器。
+   * @param event - event 输入；使用 `startAt`、`assetBundleName` 字段生成结果。
+   * @param tempServer - tempServer 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
    */
   async getLogoImage(
     event: EventAssetContext,
@@ -222,8 +232,8 @@ export class EventDataRepository {
   /**
    * 获取活动奖励表情图；缺失或上游资源不可用时返回 undefined。
    *
-   * @param event - 活动奖励上下文。
-   * @param server - 目标服务器。
+   * @param event - event 输入；使用 `pointRewards`、`startAt` 字段生成结果。
+   * @param server - server 输入；驱动 `this.pickReleasedServerName()` 的 BangDream步骤。
    */
   async getRewardStampImage(
     event: EventRewardContext,
@@ -256,8 +266,8 @@ export class EventDataRepository {
   /**
    * 获取活动奖励装饰图；缺失或上游资源不可用时返回 undefined。
    *
-   * @param event - 活动奖励上下文。
-   * @param server - 目标服务器。
+   * @param event - event 输入；使用 `rankingRewards`、`startAt` 字段生成结果。
+   * @param server - server 输入；驱动 `this.pickReleasedServerName()` 的 BangDream步骤。
    */
   async getRewardDecoImage(
     event: EventRewardContext,
@@ -287,6 +297,12 @@ export class EventDataRepository {
     }
   }
 
+  /**
+   * 执行 BangDream 插件流程。
+   * @param rewardsByServer - rewardsByServer 输入；影响 pickRewardId 的返回值。
+   * @param rewardType - rewardType 输入；驱动 `find()` 的 BangDream步骤。
+   * @returns BangDream 插件产出的 number | undefined。
+   */
   private pickRewardId(
     rewardsByServer: Array<Array<RewardWithId> | null> | undefined,
     rewardType: string,
@@ -296,6 +312,12 @@ export class EventDataRepository {
       ?.rewardId;
   }
 
+  /**
+   * 执行 BangDream 插件流程。
+   * @param startAt - startAt 输入；影响 pickReleasedServerName 的返回值。
+   * @param server - server 输入；驱动 `Date.now()` 的 BangDream步骤。
+   * @param fallback - 兜底值；驱动 `Date.now()` 的 BangDream步骤。
+   */
   private pickReleasedServerName(
     startAt: Array<number | null>,
     server: Server,
@@ -306,6 +328,12 @@ export class EventDataRepository {
       : fallback;
   }
 
+  /**
+   * 执行 BangDream 插件流程。
+   * @param value - 待转换值；执行 `value.find()` 对应的 BangDream步骤。
+   * @param server - server 输入；影响 pickServerValue 的返回值。
+   * @returns BangDream 插件产出的 T | undefined。
+   */
   private pickServerValue<T>(
     value: T | T[] | undefined | null,
     server: Server,

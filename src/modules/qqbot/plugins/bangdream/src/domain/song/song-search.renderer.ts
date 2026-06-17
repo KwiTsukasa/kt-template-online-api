@@ -29,9 +29,9 @@ const line2: Canvas = drawDottedLine(createVerticalSeparatorSpec(6000));
 /**
  * 在QQBot 图片视图层中绘制歌曲列表。
  *
- * @param matches - 模糊搜索命中结果。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
- * @param compress - compress参数。
+ * @param matches - BangDream列表；驱动 `matchSongList()` 的 BangDream步骤。
+ * @param displayedServerList - displayedServerList 输入；驱动 `matchSongList()`、`drawSongDetail()`、`renderSongListItemsSequentially()` 的 BangDream步骤。
+ * @param compress - BangDream列表；驱动 `drawSongDetail()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawSongList(
@@ -92,32 +92,35 @@ export async function drawSongList(
 
 // 计算歌曲模糊搜索结果
 export const matchSongList = createBangDreamEntityMatcher<Song>({
+  /**
+   * 执行 BangDream回调。
+   */
   source: () => songRepository.getSource(),
   /**
-   * 在QQBot 图片视图层中创建Entity。
+   * 创建 BangDream 插件对象或配置。
    *
-   * @param songId - 歌曲 ID。
+   * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
    */
   createEntity: (songId) => songRepository.create(songId),
   /**
-   * 在QQBot 图片视图层中判断Released。
+   * 判断 BangDream 插件条件。
    *
-   * @param song - 歌曲参数。
-   * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
+   * @param song - song 输入；使用 `publishedAt` 字段计算判断结果。
+   * @param displayedServerList - displayedServerList 输入；计算 BangDream布尔判断。
    */
   isReleased: (song, displayedServerList) =>
     displayedServerList.some((server) => song.publishedAt[server] != null),
   /**
-   * 在QQBot 图片视图层中判断Matched。
+   * 判断 BangDream 插件条件。
    *
-   * @param matches - 模糊搜索命中结果。
-   * @param song - 歌曲参数。
+   * @param matches - BangDream列表；驱动 `match()` 的 BangDream步骤。
+   * @param song - song 输入；驱动 `match()` 的 BangDream步骤。
    */
   isMatched: (matches, song) => match(matches, song, []),
   /**
    * 在QQBot 图片视图层中处理关系表达式值。
    *
-   * @param song - 歌曲参数。
+   * @param song - song 输入；使用 `songId` 字段生成结果。
    */
   relationValue: (song) => song.songId,
 });
@@ -132,9 +135,9 @@ export type SongListItemRenderer = (
 /**
  * 在歌曲列表中顺序渲染单项，避免并发 Skia 图片解码导致 native 内存峰值过高。
  *
- * @param songs - 待绘制歌曲列表。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
- * @param renderItem - 单项渲染函数，未传入时使用默认歌曲列表渲染器。
+ * @param songs - 歌曲列表；驱动 `for()` 的 BangDream步骤。
+ * @param displayedServerList - displayedServerList 输入；驱动 `songImages.push()` 的 BangDream步骤。
+ * @param renderItem - renderItem 输入；驱动 `songImages.push()` 的 BangDream步骤。
  */
 export async function renderSongListItemsSequentially(
   songs: Song[],

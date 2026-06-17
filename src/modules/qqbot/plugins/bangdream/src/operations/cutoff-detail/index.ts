@@ -15,6 +15,12 @@ const DEFAULT_CUTOFF_DETAIL_TIER = 1000;
 export const cutoffDetailOperation: BangDreamOperationModule = {
   catalogKeys: BANGDREAM_CUTOFF_DETAIL_CATALOG_KEYS,
   handlerName: 'getCutoffDetail',
+  /**
+   * 执行插件操作处理器。
+   * @param input - input 输入；使用 `tier`、`eventId` 字段生成结果。
+   * @param context - context 输入；执行 `context.getTokens()`、`context.optionalNumber()`、`context.pickMainServer()`、`context.firstNumber()` 对应的 BangDream步骤。
+   * @returns 插件处理结果。
+   */
   execute: async (input, context) => {
     const tokens = context.getTokens(input);
     const hasCommandAlias = CUTOFF_DETAIL_COMMAND_ALIASES.has(tokens[0]);

@@ -22,7 +22,7 @@ export class EventRepository {
   /**
    * 创建活动领域模型。
    *
-   * @param eventId - 活动 ID。
+   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
    */
   create(eventId: number): Event {
     return new Event(eventId);

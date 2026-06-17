@@ -47,7 +47,7 @@ export function createBandDetailTextSpec() {
 /**
  * 计算乐队详情项画布和内容位置。
  *
- * @param contentImage - 正文图片尺寸。
+ * @param contentImage - contentImage 输入；使用 `width` 字段生成结果。
  */
 export function createBandDetailItemLayout(contentImage: ImageLike) {
   const item = BANGDREAM_BAND_DETAIL_LIST_SPEC.item;
@@ -64,7 +64,7 @@ export function createBandDetailItemLayout(contentImage: ImageLike) {
 /**
  * 计算乐队详情列表传给通用列表框架的尺寸。
  *
- * @param firstItem - 第一个乐队详情项。
+ * @param firstItem - firstItem 输入；生成 BangDream对象。
  */
 export function createBandDetailListFrameSpec(firstItem?: ImageLike) {
   return {
@@ -88,8 +88,8 @@ export function createDeckRankCanvasSpec() {
 /**
  * 计算乐队编成等级图片位置。
  *
- * @param rankImage - Rank 主图片尺寸。
- * @param levelImage - Rank 等级图片尺寸。
+ * @param rankImage - rankImage 输入；使用 `width` 字段生成结果。
+ * @param levelImage - levelImage 输入；使用 `width` 字段生成结果。
  */
 export function createDeckRankImageLayout(
   rankImage: ImageLike,
@@ -123,7 +123,7 @@ export function createDeckRankLevelImageSpec() {
 /**
  * 计算可用于等级图片文件名的 Rank ID。
  *
- * @param rankId - 原始 Rank ID。
+ * @param rankId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
  */
 export function normalizeDeckRankLevelSpriteRankId(rankId: number) {
   const maxRankId =

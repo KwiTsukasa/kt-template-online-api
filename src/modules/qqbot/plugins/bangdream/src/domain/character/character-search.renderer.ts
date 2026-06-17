@@ -19,9 +19,9 @@ const maxWidth = 1370;
 /**
  * 在QQBot 图片视图层中绘制角色列表。
  *
- * @param matches - 模糊搜索命中结果。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
- * @param compress - compress参数。
+ * @param matches - BangDream列表；驱动 `match()` 的 BangDream步骤。
+ * @param displayedServerList - displayedServerList 输入；使用 `length` 字段生成结果。
+ * @param compress - BangDream列表；驱动 `drawCharacterDetail()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawCharacterList(
@@ -31,9 +31,9 @@ export async function drawCharacterList(
 ): Promise<Array<Buffer | string>> {
   //计算模糊搜索结果
   const tempCharacterList: Array<Character> = []; //最终输出的角色列表
-  const characterIdList: Array<number> = Object.keys(bangdreamCatalogCache['characters']).map(
-    Number,
-  ); //所有卡牌ID列表
+  const characterIdList: Array<number> = Object.keys(
+    bangdreamCatalogCache['characters'],
+  ).map(Number); //所有卡牌ID列表
   for (let i = 0; i < characterIdList.length; i++) {
     const tempCharacter = new Character(characterIdList[i]);
     let isMatch = match(matches, tempCharacter, ['scoreUpMaxValue']);

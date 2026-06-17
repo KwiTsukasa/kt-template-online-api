@@ -20,9 +20,9 @@ import type {
 /**
  * 在图片布局层中绘制档线谱面。
  *
- * @param cutoffList - 档线列表参数。
- * @param setStartToZero - setStartToZero参数，未传入时使用默认值。
- * @param server - 目标服务器，未传入时使用默认值。
+ * @param cutoffList - cutoffList 输入；使用 `length` 字段生成结果。
+ * @param setStartToZero - setStartToZero 输入；构造时间对象。
+ * @param server - server 输入；影响 drawCutoffChart 的返回值。
  */
 export async function drawCutoffChart(
   cutoffList: Cutoff[],
@@ -210,8 +210,8 @@ export async function drawCutoffChart(
 /**
  * 在图片布局层中绘制档线活动排名谱面。
  *
- * @param cutoffEventTop - 档线活动排名参数。
- * @param setStartToZero - setStartToZero参数，未传入时使用默认值。
+ * @param cutoffEventTop - cutoffEventTop 输入；使用 `startAt`、`endAt` 字段生成结果。
+ * @param setStartToZero - setStartToZero 输入；构造时间对象。
  */
 export async function drawCutoffEventTopChart(
   cutoffEventTop: CutoffEventTop,

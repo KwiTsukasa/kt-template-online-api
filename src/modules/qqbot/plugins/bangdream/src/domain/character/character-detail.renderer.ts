@@ -59,9 +59,9 @@ const constellationList = {
 /**
  * 在QQBot 图片视图层中绘制角色详情。
  *
- * @param characterId - 角色 ID。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
- * @param compress - compress参数。
+ * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
+ * @param displayedServerList - displayedServerList 输入；驱动 `listRight.push()`、`list.push()`、`drawListByServerList()` 的 BangDream步骤。
+ * @param compress - BangDream列表；影响 drawCharacterDetail 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawCharacterDetail(

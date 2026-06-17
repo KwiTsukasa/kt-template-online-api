@@ -20,8 +20,8 @@ export class CutoffEventTop {
   /**
    * 构造 CutoffEventTop 实例，并初始化该模型的本地基础字段。
    *
-   * @param eventId - 活动 ID。
-   * @param server - 目标服务器。
+   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+   * @param server - server 输入；决定 BangDream条件分支。
    */
   constructor(eventId: number, server: Server) {
     const event = new Event(eventId);
@@ -83,7 +83,7 @@ export class CutoffEventTop {
   /**
    * 在 CutoffEventTop 模型中获取谱面数据。
    *
-   * @param setStartToZero - setStartToZero参数，未传入时使用默认值。
+   * @param setStartToZero - setStartToZero 输入；决定 BangDream条件分支。
    * @returns 计算后的数值。
    */
   getChartData(setStartToZero = false): {
@@ -127,7 +127,7 @@ export class CutoffEventTop {
     return chartDate;
   }
   /**
-   * 在 CutoffEventTop 模型中获取LatestRanking。
+   * 查询 BangDream 插件数据。
    *
    * @returns 计算后的数值。
    */
@@ -143,9 +143,9 @@ export class CutoffEventTop {
     return result;
   }
   /**
-   * 在 CutoffEventTop 模型中获取UserByUid。
+   * 查询 BangDream 插件数据。
    *
-   * @param id - 业务实体 ID。
+   * @param id - BangDream记录 ID；定位本次读取、更新、删除或关联的BangDream记录。
    * @returns 格式化后的文本。
    */
   getUserByUid(id: number): {
@@ -167,9 +167,9 @@ export class CutoffEventTop {
     return;
   }
   /**
-   * 在 CutoffEventTop 模型中获取User名称ByID。
+   * 查询 BangDream 插件数据。
    *
-   * @param id - 业务实体 ID。
+   * @param id - BangDream记录 ID；定位本次读取、更新、删除或关联的BangDream记录。
    * @returns 格式化后的文本。
    */
   getUserNameById(id: number): string {

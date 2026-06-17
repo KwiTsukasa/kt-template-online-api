@@ -28,10 +28,10 @@ import { gachaRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/ga
 /**
  * 在QQBot 图片视图层中绘制卡池详情。
  *
- * @param gachaId - 卡池 ID。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
- * @param useEasyBG - use简易背景参数。
- * @param compress - compress参数。
+ * @param gachaId - 卡池 ID；定位本次读取、更新、删除或关联的卡池。
+ * @param displayedServerList - displayedServerList 输入；使用 `length` 字段生成结果。
+ * @param useEasyBG - useEasyBG 输入；影响 drawGachaDetail 的返回值。
+ * @param compress - BangDream列表；影响 drawGachaDetail 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawGachaDetail(

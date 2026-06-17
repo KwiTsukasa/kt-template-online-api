@@ -27,8 +27,8 @@ export const serverList: Array<Server> = BANGDREAM_SERVER_CODES.map(
 /**
  * 在BangDream 领域模型层中获取服务器By服务器ID。
  *
- * @param serverId - 目标服务器 ID。
- * @returns 处理结果。
+ * @param serverId - 服务器 ID；定位本次读取、更新、删除或关联的服务器。
+ * @returns BangDream 插件查询结果。
  */
 export function getServerByServerId(serverId: number): Server {
   //如果是string，则按服务器名查服务器
@@ -42,8 +42,8 @@ export function getServerByServerId(serverId: number): Server {
 /**
  * 在BangDream 领域模型层中获取服务器By名称。
  *
- * @param name - 名称参数。
- * @returns 处理结果。
+ * @param name - 名称文本；决定 BangDream条件分支。
+ * @returns BangDream 插件查询结果。
  */
 export function getServerByName(name: string): Server {
   // 根据服务器名获取对应服务器
@@ -65,7 +65,7 @@ const serverIconCache: { [server: number]: Image } = {};
 /**
  * 在BangDream 领域模型层中获取图标。
  *
- * @param server - 目标服务器。
+ * @param server - server 输入；驱动 `serverResourceRepository.getIconSvgBuffer()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function getIcon(server: Server): Promise<Image> {
@@ -89,8 +89,8 @@ export async function getIcon(server: Server): Promise<Image> {
 /**
  * 在BangDream 领域模型层中获取服务器ByPriority。
  *
- * @param content - content参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param content - 待处理内容；决定 BangDream条件分支。
+ * @param displayedServerList - displayedServerList 输入；去重列表值。
  */
 export function getServerByPriority(
   content: Array<unknown>,
@@ -111,7 +111,7 @@ export function getServerByPriority(
 /**
  * 在BangDream 领域模型层中判断服务器。
  *
- * @param server - 目标服务器。
+ * @param server - server 输入；驱动 `serverList.includes()` 的 BangDream步骤。
  * @returns 判断结果。
  */
 export function isServer(server: unknown): boolean {
@@ -121,7 +121,7 @@ export function isServer(server: unknown): boolean {
 /**
  * 在BangDream 领域模型层中判断服务器列表。
  *
- * @param serverList - 服务器列表参数。
+ * @param serverList - serverList 输入；使用 `length` 字段计算判断结果。
  * @returns 判断结果。
  */
 export function isServerList(serverList: Array<unknown>): boolean {

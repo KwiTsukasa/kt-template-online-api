@@ -1,5 +1,8 @@
 jest.mock('@/modules/admin/identity/auth/jwt-auth.guard', () => ({
   JwtAuthGuard: class {
+    /**
+     * 判断 测试断言条件。
+     */
     canActivate() {
       return true;
     }
@@ -15,6 +18,12 @@ import { QqbotEventPluginRegistryService } from '../../../../src/modules/qqbot/p
 import { QqbotPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-plugin-registry.service';
 import type { QqbotIntegrationPlugin } from '../../../../src/modules/qqbot/core/contract/qqbot.types';
 
+/**
+ * 创建 测试断言对象或配置。
+ * @param key - 键名；生成 测试对象。
+ * @param legacyKeys - 测试列表；生成 测试对象。
+ * @returns 创建后的 测试断言对象或配置。
+ */
 const createPlugin = (
   key: string,
   legacyKeys: string[] = [],
@@ -32,6 +41,10 @@ const createPlugin = (
   version: '1.0.0',
 });
 
+/**
+ * 列出Operation Summaries。
+ * @param pluginKey - pluginKey 输入；限定 测试查询范围。
+ */
 const listOperationSummaries = (pluginKey?: string) => {
   const plugins = [
     createPlugin('bangdream', ['bangDream']),

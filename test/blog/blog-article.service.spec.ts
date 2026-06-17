@@ -308,11 +308,17 @@ describe('BlogArticleService', () => {
   });
 });
 
+/**
+ * 创建 博客内容对象或配置。
+ * @param list - 博客列表；使用 `length` 字段生成结果。
+ */
 function createQueryBuilderMock(list: Partial<BlogArticle>[]) {
   const builder = {
     addOrderBy: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
-    getManyAndCount: jest.fn().mockResolvedValue([list as BlogArticle[], list.length]),
+    getManyAndCount: jest
+      .fn()
+      .mockResolvedValue([list as BlogArticle[], list.length]),
     orderBy: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     take: jest.fn().mockReturnThis(),

@@ -2,6 +2,9 @@ import { ConfigService } from '@nestjs/config';
 import { SystemLogService } from '../../../src/modules/admin/platform-config/system-log/system-log.service';
 import { ToolsService } from '../../../src/common';
 
+/**
+ * 创建 测试断言对象或配置。
+ */
 function createService() {
   const configService = {
     get: jest.fn((key: string) => {

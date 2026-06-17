@@ -22,7 +22,12 @@ export class NapcatDeviceIdentity {
   @Column({ name: 'account_id', type: 'bigint' })
   accountId: string;
 
-  @Column({ default: null, name: 'container_id', nullable: true, type: 'bigint' })
+  @Column({
+    default: null,
+    name: 'container_id',
+    nullable: true,
+    type: 'bigint',
+  })
   containerId: null | string;
 
   @Column({ length: 512, name: 'data_dir' })
@@ -40,7 +45,12 @@ export class NapcatDeviceIdentity {
   @Column({ length: 32, name: 'verification_status' })
   verificationStatus: NapcatDeviceVerificationStatus;
 
-  @Column({ default: null, name: 'last_login_evidence', nullable: true, type: 'json' })
+  @Column({
+    default: null,
+    name: 'last_login_evidence',
+    nullable: true,
+    type: 'json',
+  })
   lastLoginEvidence: null | Record<string, unknown>;
 
   @KtCreateDateColumn({ name: 'create_time' })
@@ -49,6 +59,9 @@ export class NapcatDeviceIdentity {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
+  /**
+   * 创建 NapCat 登录运行态对象或配置。
+   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

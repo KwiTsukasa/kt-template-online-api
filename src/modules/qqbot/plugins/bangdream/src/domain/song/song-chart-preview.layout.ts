@@ -114,7 +114,7 @@ const PREVIEW_NOTE_TYPE_SORT: Record<string, number> = {
 /**
  * 判断谱面音符是否参与谱面长度计算。
  *
- * @param type - 预览音符类型。
+ * @param type - type 输入；驱动 `BANGDREAM_SONG_CHART_DISPLAY_NOTE_TYPES.includes()` 的 BangDream步骤。
  */
 export function isSongChartDisplayNoteType(type: string): boolean {
   return BANGDREAM_SONG_CHART_DISPLAY_NOTE_TYPES.includes(type as never);
@@ -123,7 +123,7 @@ export function isSongChartDisplayNoteType(type: string): boolean {
 /**
  * 判断谱面音符是否参与计数线绘制。
  *
- * @param type - 预览音符类型。
+ * @param type - type 输入；驱动 `BANGDREAM_SONG_CHART_COUNT_LINE_NOTE_TYPES.includes()` 的 BangDream步骤。
  */
 export function isSongChartCountLineNoteType(type: string): boolean {
   return BANGDREAM_SONG_CHART_COUNT_LINE_NOTE_TYPES.includes(type as never);
@@ -132,7 +132,7 @@ export function isSongChartCountLineNoteType(type: string): boolean {
 /**
  * 在图片布局层中按节拍排序 BPM 时间点并写入累计时间。
  *
- * @param timepoints - BPM 时间点列表。
+ * @param timepoints - BangDream列表；使用 `length` 字段生成结果。
  * @returns 处理后的列表。
  */
 function sortTimepoints(timepoints: BestdoriNote[]): BestdoriNote[] {
@@ -155,9 +155,9 @@ function sortTimepoints(timepoints: BestdoriNote[]): BestdoriNote[] {
 /**
  * 在图片布局层中用二分查找定位节拍所在的 BPM 时间点。
  *
- * @param timepoints - BPM 时间点列表。
- * @param beat - 谱面节拍位置。
- * @returns 处理结果。
+ * @param timepoints - BangDream列表；使用 `length` 字段生成结果。
+ * @param beat - beat 输入；决定 BangDream条件分支。
+ * @returns BangDream 插件查询结果。
  */
 function findTimepointAtBeat(
   timepoints: BestdoriNote[],
@@ -183,8 +183,8 @@ function findTimepointAtBeat(
 /**
  * 在图片布局层中根据 BPM 时间点计算谱面音符时间。
  *
- * @param timepoints - BPM 时间点列表。
- * @param beat - 谱面节拍位置。
+ * @param timepoints - BangDream列表；驱动 `findTimepointAtBeat()` 的 BangDream步骤。
+ * @param beat - beat 输入；驱动 `findTimepointAtBeat()` 的 BangDream步骤。
  * @returns 计算后的数值。
  */
 function getNoteTime(timepoints: BestdoriNote[], beat: number): number {
@@ -197,7 +197,7 @@ function getNoteTime(timepoints: BestdoriNote[], beat: number): number {
 /**
  * 在图片布局层中为谱面音符写入实际时间。
  *
- * @param chart - 谱面音符数据。
+ * @param chart - chart 输入；筛选 BangDream列表项。
  * @returns 处理后的 BPM 时间点列表。
  */
 export function assignSongChartTimes(chart: BestdoriNote[]): BestdoriNote[] {
@@ -223,10 +223,10 @@ export function assignSongChartTimes(chart: BestdoriNote[]): BestdoriNote[] {
 /**
  * 在图片布局层中为同拍音符补充双押标记。
  *
- * @param notes - 谱面音符列表。
- * @param beat - 谱面节拍位置。
- * @param time - 谱面时间点。
- * @param lane - 轨道位置。
+ * @param notes - BangDream列表；写入 BangDream集合、缓存或持久化状态。
+ * @param beat - beat 输入；决定 BangDream条件分支。
+ * @param time - time 输入；驱动 `sort()` 的 BangDream步骤。
+ * @param lane - lane 输入；决定 BangDream条件分支。
  */
 function addSimNote(
   notes: PreviewNote[],
@@ -255,7 +255,7 @@ function addSimNote(
 /**
  * 在图片布局层中识别单点音符的展示类型。
  *
- * @param note - 谱面音符。
+ * @param note - note 输入；使用 `flick`、`skill`、`beat` 字段生成结果。
  * @returns 预览音符类型。
  */
 function getSingleNoteType(note: BestdoriNote): string {
@@ -274,8 +274,8 @@ function getSingleNoteType(note: BestdoriNote): string {
 /**
  * 在图片布局层中把滑条连接点拆成可绘制音符。
  *
- * @param notes - 谱面音符列表。
- * @param note - 谱面音符。
+ * @param notes - BangDream列表；写入 BangDream集合、缓存或持久化状态。
+ * @param note - note 输入；使用 `connections` 字段生成结果。
  */
 function pushSlideNotes(notes: PreviewNote[], note: BestdoriNote): void {
   const barTime: number[] = [];
@@ -330,8 +330,8 @@ function pushSlideNotes(notes: PreviewNote[], note: BestdoriNote): void {
 /**
  * 在图片布局层中把可游玩音符转换为预览音符。
  *
- * @param notes - 谱面音符列表。
- * @param note - 谱面音符。
+ * @param notes - BangDream列表；写入 BangDream集合、缓存或持久化状态。
+ * @param note - note 输入；使用 `type`、`lane`、`time`、`beat` 字段生成结果。
  */
 function pushPlayableNote(notes: PreviewNote[], note: BestdoriNote): void {
   if (note.type === 'Single') {
@@ -359,7 +359,7 @@ function pushPlayableNote(notes: PreviewNote[], note: BestdoriNote): void {
 /**
  * 在图片布局层中获取排序轨道。
  *
- * @param note - 谱面音符。
+ * @param note - note 输入；使用 `lane` 字段生成结果。
  * @returns 计算后的数值。
  */
 function getSortLane(note: PreviewNote): number {
@@ -369,7 +369,7 @@ function getSortLane(note: PreviewNote): number {
 /**
  * 在图片布局层中按时间和轨道排序预览音符。
  *
- * @param notes - 谱面音符列表。
+ * @param notes - BangDream列表；执行 `notes.sort()` 对应的 BangDream步骤。
  * @returns 处理后的列表。
  */
 function sortPreviewNotes(notes: PreviewNote[]): PreviewNote[] {
@@ -391,7 +391,7 @@ function sortPreviewNotes(notes: PreviewNote[]): PreviewNote[] {
 /**
  * 在图片布局层中把 Bestdori 谱面转换为预览音符列表。
  *
- * @param chart - 谱面音符数据。
+ * @param chart - chart 输入；驱动 `for()` 的 BangDream步骤。
  * @returns 处理后的列表。
  */
 export function createSongChartPreviewNotes(
@@ -417,8 +417,8 @@ export function createSongChartPreviewNotes(
 /**
  * 在图片布局层中根据谱面长度创建预览布局参数。
  *
- * @param notes - 谱面音符列表。
- * @returns 处理结果。
+ * @param notes - BangDream列表；筛选 BangDream列表项。
+ * @returns 创建后的 BangDream 插件对象或配置。
  */
 export function createSongChartPreviewLayout(
   notes: PreviewNote[],
@@ -484,7 +484,7 @@ export function createSongChartPreviewLayout(
 /**
  * 创建谱面预览渲染模型。
  *
- * @param chart - Bestdori 谱面数据。
+ * @param chart - chart 输入；驱动 `assignSongChartTimes()`、`createSongChartPreviewNotes()` 的 BangDream步骤。
  * @returns 预览音符和布局。
  */
 export function createSongChartPreviewModel(chart: BestdoriNote[]) {

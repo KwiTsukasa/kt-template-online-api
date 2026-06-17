@@ -14,6 +14,11 @@ import {
 import { logger } from '@/modules/qqbot/plugins/bangdream/src/application/bangdream-logger';
 import { readBangDreamRuntimeConfig } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
 
+/**
+ * 解析Bang Dream Project Root。
+ * @param moduleDir - moduleDir 输入；定位文件系统路径。
+ * @returns BangDream 插件渲染后的图片、画布或文本。
+ */
 export function resolveBangDreamProjectRoot(moduleDir = __dirname): string {
   const currentDir = path.resolve(moduleDir);
   return path.basename(currentDir) === 'config'

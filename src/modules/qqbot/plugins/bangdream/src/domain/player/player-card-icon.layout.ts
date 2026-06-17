@@ -14,7 +14,7 @@ export const BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC = {
 /**
  * 计算玩家卡牌列表文本字号。
  *
- * @param lineHeight - 列表行高。
+ * @param lineHeight - lineHeight 输入；限定 BangDream查询范围。
  */
 export function getPlayerCardIconListTextSize(lineHeight: number) {
   return lineHeight * BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC.list.textSizeRatio;
@@ -23,7 +23,7 @@ export function getPlayerCardIconListTextSize(lineHeight: number) {
 /**
  * 计算玩家卡牌列表卡牌间距。
  *
- * @param lineHeight - 列表行高。
+ * @param lineHeight - lineHeight 输入；限定 BangDream查询范围。
  */
 export function getPlayerCardIconListSpacing(lineHeight: number) {
   return lineHeight * BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC.list.spacingRatio;
@@ -32,7 +32,7 @@ export function getPlayerCardIconListSpacing(lineHeight: number) {
 /**
  * 按历史展示顺序排列玩家主卡组。
  *
- * @param entries - 玩家主卡组条目。
+ * @param entries - BangDream列表；驱动 `map()` 的 BangDream步骤。
  */
 export function sortPlayerMainDeckEntries<T>(entries: T[]): T[] {
   return BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC.card.defaultOrder

@@ -25,6 +25,16 @@ import type {
 
 @Injectable()
 export class QqbotSendService {
+  /**
+   * 初始化 QqbotSendService 实例。
+   * @param sendLogRepository - QQBot仓库依赖；影响 constructor 的返回值。
+   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
+   * @param busService - busService 服务依赖；影响 constructor 的返回值。
+   * @param messageService - messageService 服务依赖；影响 constructor 的返回值。
+   * @param moduleRef - moduleRef 输入；影响 constructor 的返回值。
+   * @param rateLimitService - rateLimitService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(QqbotSendLog)
     private readonly sendLogRepository: Repository<QqbotSendLog>,
@@ -36,6 +46,10 @@ export class QqbotSendService {
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   */
   async logPage(query: QqbotSendLogQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
       query,
@@ -69,6 +83,10 @@ export class QqbotSendService {
     return { list, pageNo, pageSize, total };
   }
 
+  /**
+   * 投递 QQBot 核心消息或任务。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async sendPrivate(body: QqbotSendPrivateDto) {
     return this.sendText({
       message: body.message,
@@ -78,6 +96,10 @@ export class QqbotSendService {
     });
   }
 
+  /**
+   * 投递 QQBot 核心消息或任务。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async sendGroup(body: QqbotSendGroupDto) {
     return this.sendText({
       message: body.message,
@@ -87,6 +109,10 @@ export class QqbotSendService {
     });
   }
 
+  /**
+   * 投递 QQBot 核心消息或任务。
+   * @param params - QQBot列表；使用 `selfId`、`targetId`、`message`、`targetType` 字段生成结果。
+   */
   async sendText(params: {
     channelId?: string;
     guildId?: string;
@@ -184,6 +210,10 @@ export class QqbotSendService {
     }
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @returns QQBot 核心查询结果。
+   */
   private async getReverseWsService(): Promise<QqbotReverseActionSender> {
     const { QqbotReverseWsService } =
       await import('../../infrastructure/integration/connection/qqbot-reverse-ws.service');
@@ -192,6 +222,10 @@ export class QqbotSendService {
     });
   }
 
+  /**
+   * 创建 QQBot 核心对象或配置。
+   * @param params - QQBot列表；使用 `targetType`、`targetId`、`message`、`channelId` 字段生成结果。
+   */
   private buildAction(params: {
     channelId?: string;
     guildId?: string;
@@ -222,6 +256,11 @@ export class QqbotSendService {
     };
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param actionParams - QQBot列表；使用 `message` 字段生成结果。
+   * @param storedMessageText - storedMessageText 输入；影响 toStoredActionParams 的返回值。
+   */
   private toStoredActionParams(
     actionParams: Record<string, any>,
     storedMessageText: string,

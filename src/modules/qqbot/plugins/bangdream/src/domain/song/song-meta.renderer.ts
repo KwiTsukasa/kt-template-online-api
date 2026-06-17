@@ -28,8 +28,8 @@ const line = drawDottedLine({
 /**
  * 在QQBot 图片视图层中绘制歌曲Meta列表。
  *
- * @param mainServer - 主数据服务器参数。
- * @param compress - compress参数。
+ * @param mainServer - mainServer 输入；驱动 `imageList.push()` 的 BangDream步骤。
+ * @param compress - BangDream列表；影响 drawSongMetaList 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawSongMetaList(
@@ -51,8 +51,8 @@ export async function drawSongMetaList(
 /**
  * 在QQBot 图片视图层中绘制MetaRank列表数据块。
  *
- * @param withFever - withFever参数。
- * @param mainServer - 主数据服务器参数。
+ * @param withFever - withFever 输入；驱动 `getMetaRanking()` 的 BangDream步骤。
+ * @param mainServer - mainServer 输入；驱动 `getMetaRanking()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function drawMetaRankListDataBlock(

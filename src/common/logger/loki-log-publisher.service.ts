@@ -30,6 +30,11 @@ export class LokiLogPublisherService {
   private readonly environment: string;
   private readonly host: string;
 
+  /**
+   * 初始化 LokiLogPublisherService 实例。
+   * @param configService - Nest ConfigService 依赖；驱动 `getAppName()`、`getLokiEnvironment()` 的 公共基础设施步骤。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly configService: ConfigService,
     private readonly toolsService: ToolsService,
@@ -41,6 +46,10 @@ export class LokiLogPublisherService {
     );
   }
 
+  /**
+   * 执行 日志管道流程。
+   * @param params - 公共基础设施列表；使用 `context`、`level`、`payload`、`error` 字段生成结果。
+   */
   async pushHttpRequestLog(params: LokiPushLogParams) {
     if (!this.isEnabled()) return;
 
@@ -74,6 +83,9 @@ export class LokiLogPublisherService {
     await this.requestPush(body);
   }
 
+  /**
+   * 判断 日志管道条件。
+   */
   private isEnabled() {
     return (
       !!this.host &&
@@ -84,6 +96,10 @@ export class LokiLogPublisherService {
     );
   }
 
+  /**
+   * 执行 日志管道流程。
+   * @param body - 请求体 DTO；承载 公共基础设施新增、更新、导入或执行字段。
+   */
   private requestPush(body: string) {
     const url = new URL(
       this.getConfig('LOKI_PUSH_ENDPOINT', '/loki/api/v1/push'),
@@ -124,6 +140,9 @@ export class LokiLogPublisherService {
     });
   }
 
+  /**
+   * 查询 日志管道数据。
+   */
   private getHeaders() {
     const headers: Record<string, string> = {};
     const tenantId = this.getConfig('LOKI_TENANT_ID');
@@ -140,6 +159,10 @@ export class LokiLogPublisherService {
     return headers;
   }
 
+  /**
+   * 序列化Error。
+   * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   */
   private serializeError(error: unknown) {
     if (error instanceof Error) {
       return {
@@ -154,20 +177,38 @@ export class LokiLogPublisherService {
     };
   }
 
+  /**
+   * 执行 日志管道流程。
+   * @param timestampMs - 公共基础设施列表；驱动 `BigInt()` 的 公共基础设施步骤。
+   */
   private toNanoseconds(timestampMs: number) {
     return `${BigInt(timestampMs) * 1000000n}`;
   }
 
+  /**
+   * 查询 日志管道数据。
+   * @param key - 键名；限定 公共基础设施查询范围。
+   * @param fallback - 兜底值；驱动 `toolsService.toTrimmedString()` 的 公共基础设施步骤。
+   */
   private getConfig(key: string, fallback = '') {
     const value = this.configService.get<string>(key);
     return this.toolsService.toTrimmedString(value || fallback);
   }
 
+  /**
+   * 查询 日志管道数据。
+   * @param key - 键名；驱动 `Number()` 的 公共基础设施步骤。
+   * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 公共基础设施步骤。
+   */
   private getNumberConfig(key: string, fallback: number) {
     const value = Number(this.configService.get<string>(key));
     return Number.isFinite(value) && value > 0 ? value : fallback;
   }
 
+  /**
+   * 转换 日志管道输入。
+   * @param value - 待转换值；生成规范化文本。
+   */
   private normalizeUrl(value: string) {
     return value.replace(/\/+$/g, '');
   }

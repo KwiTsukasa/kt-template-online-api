@@ -22,17 +22,30 @@ import { QqbotRuleService } from '../../application/rule/qqbot-rule.service';
 @Controller('qqbot/rule')
 @UseGuards(JwtAuthGuard)
 export class QqbotRuleController {
+  /**
+   * 初始化 QqbotRuleController 实例。
+   * @param ruleService - ruleService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly ruleService: QqbotRuleService,
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * QQBot 自动回复规则分页。
+   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   */
   @Get('list')
   @ApiOperation({ summary: 'QQBot 自动回复规则分页' })
   async list(@Query() query: QqbotRuleQueryDto) {
     return vbenSuccess(await this.ruleService.page(query));
   }
 
+  /**
+   * 新增 QQBot 自动回复规则。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   @Post('save')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '新增 QQBot 自动回复规则' })
@@ -40,6 +53,10 @@ export class QqbotRuleController {
     return vbenSuccess(await this.ruleService.save(body));
   }
 
+  /**
+   * 编辑 QQBot 自动回复规则。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   @Post('update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '编辑 QQBot 自动回复规则' })
@@ -47,6 +64,10 @@ export class QqbotRuleController {
     return vbenSuccess(await this.ruleService.update(body));
   }
 
+  /**
+   * 删除 QQBot 自动回复规则。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   */
   @Post('delete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '删除 QQBot 自动回复规则' })
@@ -55,6 +76,11 @@ export class QqbotRuleController {
     return vbenSuccess(await this.ruleService.remove(id));
   }
 
+  /**
+   * 启停 QQBot 自动回复规则。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   * @param enabled - enabled 输入；驱动 `vbenSuccess()` 的 QQBot步骤。
+   */
   @Post('toggle')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '启停 QQBot 自动回复规则' })

@@ -5,6 +5,11 @@ jest.mock('bullmq', () => ({
   Queue: class MockQueue {
     readonly schedulers = new Map<string, unknown>();
 
+    /**
+     * 初始化 当前类 实例。
+     * @param name - 名称文本；影响 constructor 的返回值。
+     * @param options - 插件平台列表；影响 constructor 的返回值。
+     */
     constructor(
       public name: string,
       public options: unknown,
@@ -12,29 +17,53 @@ jest.mock('bullmq', () => ({
       createdQueues.push(this);
     }
 
+    /**
+     * 执行 QQBot 插件平台流程。
+     * @param name - 名称文本；影响 add 的返回值。
+     * @param data - 业务数据；承载 插件平台新增、更新、导入或执行字段。
+     * @param opts - 插件平台列表；影响 add 的返回值。
+     */
     async add(name: string, data: unknown, opts?: unknown) {
       return { data, id: `${name}-job`, name, opts };
     }
 
+    /**
+     * 执行 QQBot 插件平台流程。
+     */
     async close() {}
 
+    /**
+     * 清理 QQBot 插件平台状态。
+     * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
+     */
     async removeJobScheduler(id: string) {
       this.schedulers.delete(id);
       return 1;
     }
 
-    async upsertJobScheduler(
-      id: string,
-      repeat: unknown,
-      template: unknown,
-    ) {
+    /**
+     * 执行 QQBot 插件平台流程。
+     * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
+     * @param repeat - repeat 输入；影响 upsertJobScheduler 的返回值。
+     * @param template - template 输入；影响 upsertJobScheduler 的返回值。
+     */
+    async upsertJobScheduler(id: string, repeat: unknown, template: unknown) {
       this.schedulers.set(id, { repeat, template });
       return { id };
     }
 
+    /**
+     * 执行 QQBot 插件平台流程。
+     */
     async waitUntilReady() {}
   },
   Worker: class MockWorker {
+    /**
+     * 初始化 当前类 实例。
+     * @param name - 名称文本；影响 constructor 的返回值。
+     * @param processor - processor 输入；影响 constructor 的返回值。
+     * @param options - 插件平台列表；影响 constructor 的返回值。
+     */
     constructor(
       public name: string,
       public processor: (job: unknown) => Promise<unknown> | unknown,
@@ -43,12 +72,21 @@ jest.mock('bullmq', () => ({
       createdWorkers.push(this);
     }
 
+    /**
+     * 处理业务数据。
+     */
     on() {
       return this;
     }
 
+    /**
+     * 执行 QQBot 插件平台流程。
+     */
     async close() {}
 
+    /**
+     * 执行 QQBot 插件平台流程。
+     */
     async waitUntilReady() {}
   },
 }));
@@ -363,8 +401,16 @@ describe('QQBot plugin task scheduler', () => {
   });
 });
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @returns 创建后的 QQBot 插件平台对象或配置。
+ */
 function createConfigService(): any {
   return {
+    /**
+     * 读取 插件平台回调数据。
+     * @param key - 键名；限定 插件平台查询范围。
+     */
     get: (key: string) =>
       ({
         QQBOT_PLUGIN_QUEUE_REDIS_HOST: 'redis.local',
@@ -373,6 +419,10 @@ function createConfigService(): any {
   };
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @param tasks - 插件任务列表；筛选 插件平台列表项。
+ */
 function createTaskRepository(tasks: any[]) {
   let idFilter: string | undefined;
   let queryMode: 'schedulable' | 'stale' = 'schedulable';
@@ -387,25 +437,26 @@ function createTaskRepository(tasks: any[]) {
       }
       return queryBuilder;
     }),
-    getCount: jest.fn(async () => queryBuilder.getMany().then((rows) => rows.length)),
+    getCount: jest.fn(async () =>
+      queryBuilder.getMany().then((rows) => rows.length),
+    ),
     getMany: jest.fn(async () =>
-      tasks.filter(
-        (task) => {
-          const matchesId = !idFilter || task.id === idFilter;
-          const installationEnabled =
-            !task.installationStatus || task.installationStatus === 'enabled';
-          if (queryMode === 'stale') {
-            return matchesId && task.enabled === true && !installationEnabled;
-          }
-          return matchesId && task.enabled === true && installationEnabled;
-        },
-      ),
+      tasks.filter((task) => {
+        const matchesId = !idFilter || task.id === idFilter;
+        const installationEnabled =
+          !task.installationStatus || task.installationStatus === 'enabled';
+        if (queryMode === 'stale') {
+          return matchesId && task.enabled === true && !installationEnabled;
+        }
+        return matchesId && task.enabled === true && installationEnabled;
+      }),
     ),
     innerJoin: jest.fn(() => queryBuilder),
     where: jest.fn((_clause?: string, params?: any) => {
       idFilter = params?.taskId;
       queryMode =
-        typeof _clause === 'string' && _clause.includes('installation.status <>')
+        typeof _clause === 'string' &&
+        _clause.includes('installation.status <>')
           ? 'stale'
           : 'schedulable';
       return queryBuilder;
@@ -414,14 +465,18 @@ function createTaskRepository(tasks: any[]) {
   return {
     createQueryBuilder: jest.fn(() => queryBuilder),
     find: jest.fn(async () => tasks),
-    findOne: jest.fn(async ({ where }: any) =>
-      tasks.find((task) => task.id === where.id) || null,
+    findOne: jest.fn(
+      async ({ where }: any) =>
+        tasks.find((task) => task.id === where.id) || null,
     ),
     save: jest.fn(async (value) => value),
     update: jest.fn(async () => ({ affected: 1 })),
   };
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ */
 function createRunRepository() {
   let runningRun: any;
   return {

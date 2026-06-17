@@ -24,16 +24,29 @@ const COMPONENT_TYPE_DICT_KEY = 'COMPONENT_TYPE';
 
 @Injectable()
 export class DictService implements OnApplicationBootstrap {
+  /**
+   * 初始化 DictService 实例。
+   * @param dictRepository - Admin仓库依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(AdminDict)
     private readonly dictRepository: Repository<AdminDict>,
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 处理Application Bootstrap。
+   */
   async onApplicationBootstrap() {
     await this.refreshDecodeCache();
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param dictKey - dictKey 输入；驱动 `this.getDictItemsByKey()` 的 Admin步骤。
+   * @returns Admin 平台配置查询结果。
+   */
   async getDictByKey(dictKey: string): Promise<KtDictOption[]> {
     const list = await this.getDictItemsByKey(dictKey);
 
@@ -43,6 +56,10 @@ export class DictService implements OnApplicationBootstrap {
     }));
   }
 
+  /**
+   * 获取分页数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   async page(query: AdminDictQueryDto = {}) {
     const pageNo = this.toolsService.toPositiveNumber(
       query.pageNo ?? query.page,
@@ -99,6 +116,9 @@ export class DictService implements OnApplicationBootstrap {
     };
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   */
   async getDictCodeOptions() {
     const rows = await this.dictRepository
       .createQueryBuilder('dict')
@@ -115,6 +135,10 @@ export class DictService implements OnApplicationBootstrap {
       }));
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   async groups(query: AdminDictQueryDto = {}) {
     const pageNo = this.toolsService.toPositiveNumber(
       query.pageNo ?? query.page,
@@ -152,10 +176,18 @@ export class DictService implements OnApplicationBootstrap {
     };
   }
 
+  /**
+   * 获取树形数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   async tree(query: AdminDictQueryDto = {}) {
     return this.relationTree(query);
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   async relationTree(query: AdminDictQueryDto = {}) {
     const items = await this.dictRepository.find({
       where: {
@@ -173,6 +205,10 @@ export class DictService implements OnApplicationBootstrap {
     return this.buildDictRelationTree(visibleItems);
   }
 
+  /**
+   * 保存数据。
+   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   */
   async save(body: AdminDictBodyDto) {
     const input = this.normalizeInput(body);
     const existing = await this.findByCodeValue(input.dictCode, input.value);
@@ -192,6 +228,10 @@ export class DictService implements OnApplicationBootstrap {
     return entity.id;
   }
 
+  /**
+   * 更新数据。
+   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   */
   async update(body: AdminDictUpdateDto) {
     const id = this.toolsService.toTrimmedString(body.id);
     if (!id) throwVbenError('字典项ID不能为空', HttpStatus.BAD_REQUEST);
@@ -226,6 +266,10 @@ export class DictService implements OnApplicationBootstrap {
     return null;
   }
 
+  /**
+   * 删除数据。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   async remove(id: string) {
     const normalizedId = this.toolsService.toTrimmedString(id);
     if (!normalizedId)
@@ -249,6 +293,11 @@ export class DictService implements OnApplicationBootstrap {
     return null;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @param status - Admin列表；影响 toggle 的返回值。
+   */
   async toggle(id: string, status: number) {
     const normalizedStatus = status === 1 ? 1 : 0;
     await this.update({
@@ -258,6 +307,11 @@ export class DictService implements OnApplicationBootstrap {
     return null;
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param dictKey - dictKey 输入；限定 Admin查询范围。
+   * @returns Admin 平台配置查询结果。
+   */
   async getDictItemsByKey(dictKey: string): Promise<AdminDictItem[]> {
     const list = await this.dictRepository.find({
       where: {
@@ -278,6 +332,11 @@ export class DictService implements OnApplicationBootstrap {
     }));
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param type - type 输入；驱动 `String()` 的 Admin步骤。
+   * @returns Admin 平台配置查询结果。
+   */
   async getComponentDictByType(type: number): Promise<KtDictOption[]> {
     // 一级类型的 childrenCode 决定二级字典来源，避免在代码里维护 1 -> CHART 这类关系。
     const componentType = await this.dictRepository.findOne({
@@ -294,6 +353,9 @@ export class DictService implements OnApplicationBootstrap {
     return this.getDictByKey(componentType.childrenCode);
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   */
   async refreshDecodeCache() {
     // AfterLoad 字典翻译必须同步完成，所以这里先把数据库字典刷新到进程缓存。
     const list = await this.dictRepository.find({
@@ -316,6 +378,12 @@ export class DictService implements OnApplicationBootstrap {
     );
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param builder - builder 输入；执行 `builder.andWhere()` 对应的 Admin步骤。
+   * @param field - field 输入；影响 applyLikeFilter 的返回值。
+   * @param value - 待转换值；驱动 `toolsService.toTrimmedString()` 的 Admin步骤。
+   */
   private applyLikeFilter(
     builder: ReturnType<Repository<AdminDict>['createQueryBuilder']>,
     field: keyof Pick<
@@ -332,6 +400,11 @@ export class DictService implements OnApplicationBootstrap {
     });
   }
 
+  /**
+   * 查询 Admin 平台配置数据。
+   * @param dictCode - dictCode 输入；限定 Admin查询范围。
+   * @param value - 待转换值；限定 Admin查询范围。
+   */
   private async findByCodeValue(dictCode: string, value: string) {
     return this.dictRepository.findOne({
       where: {
@@ -341,6 +414,11 @@ export class DictService implements OnApplicationBootstrap {
     });
   }
 
+  /**
+   * 创建 Admin 平台配置对象或配置。
+   * @param items - Admin列表；转换 Admin列表项。
+   * @returns 创建后的 Admin 平台配置对象或配置。
+   */
   private buildDictRelationTree(
     items: AdminDictSerialized[],
   ): AdminDictTreeItem[] {
@@ -368,6 +446,14 @@ export class DictService implements OnApplicationBootstrap {
       );
   }
 
+  /**
+   * 创建 Admin 平台配置对象或配置。
+   * @param item - item 输入；使用 `childrenCode` 字段生成结果。
+   * @param byDictCode - byDictCode 输入；执行 `byDictCode.get()` 对应的 Admin步骤。
+   * @param treeKey - treeKey 输入；生成 Admin对象。
+   * @param pathCodes - Admin路径；执行 `pathCodes.has()` 对应的 Admin步骤。
+   * @returns 创建后的 Admin 平台配置对象或配置。
+   */
   private createTreeNode(
     item: AdminDictSerialized,
     byDictCode: Map<string, AdminDictSerialized[]>,
@@ -400,6 +486,11 @@ export class DictService implements OnApplicationBootstrap {
     return node;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param items - Admin列表；筛选 Admin列表项。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private filterRelationTreeItems(
     items: AdminDictSerialized[],
     query: AdminDictQueryDto,
@@ -425,6 +516,13 @@ export class DictService implements OnApplicationBootstrap {
     return items.filter((item) => visibleIds.has(item.id));
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param item - item 输入；使用 `id`、`dictCode`、`childrenCode` 字段生成结果。
+   * @param byDictCode - byDictCode 输入；执行 `byDictCode.get()` 对应的 Admin步骤。
+   * @param parentsByChildrenCode - parentsByChildrenCode 输入；执行 `parentsByChildrenCode.get()` 对应的 Admin步骤。
+   * @param visibleIds - Admin ID 列表；限定本次批量读取、渲染或关联的Admin范围。
+   */
   private collectRelatedTreeItems(
     item: AdminDictSerialized,
     byDictCode: Map<string, AdminDictSerialized[]>,
@@ -459,6 +557,10 @@ export class DictService implements OnApplicationBootstrap {
     );
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param items - Admin列表；遍历并累积 Admin结果。
+   */
   private groupItemsByDictCode(items: AdminDictSerialized[]) {
     const map = new Map<string, AdminDictSerialized[]>();
 
@@ -471,6 +573,10 @@ export class DictService implements OnApplicationBootstrap {
     return map;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param items - Admin列表；遍历并累积 Admin结果。
+   */
   private groupParentsByChildrenCode(items: AdminDictSerialized[]) {
     const map = new Map<string, AdminDictSerialized[]>();
 
@@ -486,6 +592,10 @@ export class DictService implements OnApplicationBootstrap {
     return map;
   }
 
+  /**
+   * 判断 Admin 平台配置条件。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private hasTreeFilter(query: AdminDictQueryDto) {
     return (
       [
@@ -499,6 +609,11 @@ export class DictService implements OnApplicationBootstrap {
     );
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param item - item 输入；使用 `childrenCode`、`dictCode`、`label`、`value` 字段生成结果。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   private matchesTreeFilter(
     item: AdminDictSerialized,
     query: AdminDictQueryDto,
@@ -525,6 +640,11 @@ export class DictService implements OnApplicationBootstrap {
     return true;
   }
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @param value - 待转换值；驱动 `toolsService.includesText()` 的 Admin步骤。
+   * @param keyword - keyword 输入；驱动 `toolsService.toTrimmedString()` 的 Admin步骤。
+   */
   private matchesLike(
     value: number | string | null | undefined,
     keyword?: string,
@@ -535,6 +655,11 @@ export class DictService implements OnApplicationBootstrap {
     return this.toolsService.includesText(value, normalizedKeyword);
   }
 
+  /**
+   * 转换 Admin 平台配置输入。
+   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   * @returns Admin 平台配置转换后的值。
+   */
   private normalizeInput(body: AdminDictBodyDto): Partial<AdminDict> {
     const dictCode = this.toolsService.toTrimmedString(body.dictCode);
     const label = this.toolsService.toTrimmedString(body.label);
@@ -556,6 +681,10 @@ export class DictService implements OnApplicationBootstrap {
     };
   }
 
+  /**
+   * 序列化Dict。
+   * @param dict - dict 输入；使用 `childrenCode`、`createTime`、`dictCode`、`id` 字段生成结果。
+   */
   private serializeDict(dict: AdminDict) {
     return {
       childrenCode: dict.childrenCode,
@@ -570,6 +699,11 @@ export class DictService implements OnApplicationBootstrap {
     };
   }
 
+  /**
+   * 序列化Dict Group。
+   * @param item - item 输入；使用 `dictCode`、`itemCount` 字段生成结果。
+   * @returns Admin 平台配置产出的 AdminDictGroupItem。
+   */
   private serializeDictGroup(item: {
     dictCode: string;
     itemCount: number | string;

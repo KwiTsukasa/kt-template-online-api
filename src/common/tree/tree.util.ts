@@ -1,3 +1,7 @@
+/**
+ * 执行 当前模块流程。
+ * @param nodes - 公共基础设施列表；遍历并累积 公共基础设施结果。
+ */
 export function toTree<T extends { id: string; pid?: string | null }>(
   nodes: T[],
 ) {

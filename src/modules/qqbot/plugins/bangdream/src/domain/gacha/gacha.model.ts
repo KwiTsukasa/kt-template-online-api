@@ -75,13 +75,14 @@ export class Gacha {
   /**
    * 构造 Gacha 实例，并初始化该模型的本地基础字段。
    *
-   * @param gachaId - 卡池 ID。
+   * @param gachaId - 卡池 ID；定位本次读取、更新、删除或关联的卡池。
    */
   constructor(gachaId: number) {
     this.gachaId = gachaId;
-    const gachaData = bangdreamCatalogRepository.getEntity<
-      Record<string, any>
-    >('gacha', gachaId);
+    const gachaData = bangdreamCatalogRepository.getEntity<Record<string, any>>(
+      'gacha',
+      gachaId,
+    );
     if (gachaData == undefined) {
       this.isExist = false;
       return;
@@ -99,7 +100,7 @@ export class Gacha {
   /**
    * 在 Gacha 模型中加载远端完整详情并标记初始化状态。
    *
-   * @param useCache - use缓存参数，未传入时使用默认值。
+   * @param useCache - useCache 输入；驱动 `this.getData()` 的 BangDream步骤。
    */
   async initFull(useCache: boolean = true) {
     if (this.isInitFull) {
@@ -141,7 +142,7 @@ export class Gacha {
   /**
    * 在 Gacha 模型中请求当前模型的远端详情数据。
    *
-   * @param update - update参数，未传入时使用默认值。
+   * @param update - update 输入；驱动 `gachaResourceRepository.getDetail()` 的 BangDream步骤。
    */
   async getData(update: boolean = true) {
     return await gachaResourceRepository.getDetail(this.gachaId, update);
@@ -159,7 +160,7 @@ export class Gacha {
   /**
    * 在 Gacha 模型中获取卡池背景图片。
    *
-   * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+   * @param displayedServerList - displayedServerList 输入；驱动 `gachaResourceRepository.getBackgroundImageBuffer()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getGachaBGImage(
@@ -176,7 +177,7 @@ export class Gacha {
   /**
    * 在 Gacha 模型中获取卡池Logo。
    *
-   * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+   * @param displayedServerList - displayedServerList 输入；驱动 `gachaResourceRepository.getLogoImageBuffer()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getGachaLogo(
@@ -234,11 +235,11 @@ export class Gacha {
 
 //获取当前进行中的卡池
 /**
- * 在BangDream 领域模型层中获取Present卡池列表。
+ * 查询 BangDream 插件数据。
  *
- * @param server - 目标服务器。
- * @param start - start参数，未传入时使用默认值。
- * @param end - end参数，未传入时使用默认值。
+ * @param server - server 输入；决定 BangDream条件分支。
+ * @param start - start 输入；决定 BangDream条件分支。
+ * @param end - end 输入；决定 BangDream条件分支。
  * @returns 异步处理结果。
  */
 export async function getPresentGachaList(

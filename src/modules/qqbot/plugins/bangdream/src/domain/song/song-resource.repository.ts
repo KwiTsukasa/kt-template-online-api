@@ -23,13 +23,17 @@ const difficultyNameById: Record<number, string> =
 /**
  * 将服务器枚举值转换为 Bestdori 资源路径中的服务器编码。
  *
- * @param server - 服务器枚举值。
+ * @param server - server 输入；限定 BangDream查询范围。
  */
 function getServerCode(server: Server | undefined): string {
   return server == null ? 'undefined' : Server[server];
 }
 
 export class SongResourceRepository {
+  /**
+   * 初始化 SongResourceRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
@@ -37,7 +41,7 @@ export class SongResourceRepository {
   /**
    * 获取歌曲远端详情。
    *
-   * @param songId - 歌曲 ID。
+   * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
    */
   async getDetail(songId: number): Promise<Record<string, any>> {
     return await this.provider.getJson<Record<string, any>>(
@@ -48,8 +52,8 @@ export class SongResourceRepository {
   /**
    * 获取歌曲谱面数据。
    *
-   * @param songId - 歌曲 ID。
-   * @param difficultyId - 难度 ID。
+   * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
+   * @param difficultyId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
    */
   async getChart(
     songId: number,
@@ -63,7 +67,7 @@ export class SongResourceRepository {
   /**
    * 获取歌曲封面资源批次。
    *
-   * @param songId - 歌曲 ID。
+   * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
    */
   getSongRip(songId: number): number {
     return Math.ceil(songId / 10) * 10;
@@ -72,8 +76,8 @@ export class SongResourceRepository {
   /**
    * 获取歌曲封面资源路径。
    *
-   * @param source - 歌曲封面来源字段。
-   * @param displayedServerList - 可展示服务器优先级。
+   * @param source - source 输入；驱动 `this.getJacketServerAndRip()`、`this.getJacketImageName()` 的 BangDream步骤。
+   * @param displayedServerList - displayedServerList 输入；驱动 `this.getJacketServerAndRip()` 的 BangDream步骤。
    */
   getJacketImagePath(
     source: SongJacketSource,
@@ -94,8 +98,8 @@ export class SongResourceRepository {
   /**
    * 获取歌曲封面完整 URL。
    *
-   * @param source - 歌曲封面来源字段。
-   * @param displayedServerList - 可展示服务器优先级。
+   * @param source - source 输入；驱动 `provider.resolveUrl()` 的 BangDream步骤。
+   * @param displayedServerList - displayedServerList 输入；驱动 `provider.resolveUrl()` 的 BangDream步骤。
    */
   resolveJacketImageUrl(
     source: SongJacketSource,
@@ -109,8 +113,8 @@ export class SongResourceRepository {
   /**
    * 下载歌曲封面 Buffer，并在缺失时按服务器顺序回退。
    *
-   * @param source - 歌曲封面来源字段。
-   * @param displayedServerList - 可展示服务器优先级。
+   * @param source - source 输入；驱动 `provider.getAsset()`、`for()` 的 BangDream步骤。
+   * @param displayedServerList - displayedServerList 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
    */
   async getJacketImageBuffer(
     source: SongJacketSource,
@@ -138,8 +142,8 @@ export class SongResourceRepository {
   /**
    * 计算歌曲封面优先服务器和资源批次。
    *
-   * @param source - 歌曲封面来源字段。
-   * @param displayedServerList - 可展示服务器优先级。
+   * @param source - source 输入；使用 `publishedAt`、`songId` 字段生成结果。
+   * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
    */
   private getJacketServerAndRip(
     source: SongJacketSource,
@@ -158,7 +162,7 @@ export class SongResourceRepository {
   /**
    * 获取歌曲封面缺失时的服务器回退路径列表。
    *
-   * @param source - 歌曲封面来源字段。
+   * @param source - source 输入；使用 `songId` 字段生成结果。
    */
   private getFallbackJacketImagePaths(source: SongJacketSource): string[] {
     const jacketImageName = this.getJacketImageName(source);
@@ -171,9 +175,9 @@ export class SongResourceRepository {
   /**
    * 拼接歌曲封面资源路径。
    *
-   * @param serverCode - Bestdori 服务器编码。
-   * @param songRip - 歌曲资源批次。
-   * @param jacketImageName - 封面资源名称。
+   * @param serverCode - serverCode 输入；生成 BangDream对象。
+   * @param songRip - songRip 输入；生成 BangDream对象。
+   * @param jacketImageName - jacketImageName 输入；生成 BangDream对象。
    */
   private buildJacketImagePath(
     serverCode: string,
@@ -186,7 +190,7 @@ export class SongResourceRepository {
   /**
    * 获取歌曲封面资源名称。
    *
-   * @param source - 歌曲封面来源字段。
+   * @param source - source 输入；使用 `jacketImage` 字段生成结果。
    */
   private getJacketImageName(source: SongJacketSource): string {
     return source.jacketImage[source.jacketImage.length - 1];

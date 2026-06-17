@@ -65,11 +65,20 @@ class CompPageDto
 @ApiExtraModels(PaginatedDto)
 @UseGuards(JwtAuthGuard)
 export class ComponentController {
+  /**
+   * 初始化 ComponentController 实例。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * @param componentService - componentService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly toolsService: ToolsService,
     private readonly componentService: ComponentService,
   ) {}
 
+  /**
+   * 获取组件列表。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   */
   @Get('allList')
   @ApiOperation({ summary: '获取组件列表' })
   @ApiArrayResponse(Component, [componentExample])
@@ -78,6 +87,12 @@ export class ComponentController {
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', list));
   }
 
+  /**
+   * 获取组件列表分页。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param { pageNo, pageSize, ...args } - HTTP 查询参数，提供组件配置查询或解析所需字段，读取 `pageNo`、`pageSize`、`args` 字段。
+   * @returns Admin 平台配置查询结果。
+   */
   @Get('list')
   @ApiOperation({ summary: '获取组件列表分页' })
   @ApiQuery({ type: [CompPageDto] })
@@ -95,6 +110,11 @@ export class ComponentController {
     return;
   }
 
+  /**
+   * 保存组件。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param component - component 输入；驱动 `componentService.save()` 的 Admin步骤。
+   */
   @Post('save')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '保存组件' })
@@ -117,6 +137,11 @@ export class ComponentController {
     return;
   }
 
+  /**
+   * 删除组件。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   @Post('remove')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '删除组件' })
@@ -141,6 +166,11 @@ export class ComponentController {
     return;
   }
 
+  /**
+   * 编辑组件。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param component - component 输入；驱动 `componentService.update()` 的 Admin步骤。
+   */
   @Post('update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '编辑组件' })
@@ -164,6 +194,11 @@ export class ComponentController {
     return;
   }
 
+  /**
+   * 组件详情。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   @Get('detail')
   @ApiOperation({ summary: '组件详情' })
   @ApiQuery({ name: 'id', type: String })

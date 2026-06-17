@@ -35,10 +35,11 @@ export class Character {
   /**
    * 构造 Character 实例，并初始化该模型的本地基础字段。
    *
-   * @param characterId - 角色 ID。
+   * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
    */
   constructor(characterId: number) {
-    const characterData = bangdreamCatalogCache['characters'][characterId.toString()];
+    const characterData =
+      bangdreamCatalogCache['characters'][characterId.toString()];
     if (characterData == undefined) {
       this.isExist = false;
       return;
@@ -57,7 +58,7 @@ export class Character {
   /**
    * 在 Character 模型中加载远端完整详情并标记初始化状态。
    *
-   * @param useCache - use缓存参数，未传入时使用默认值。
+   * @param useCache - useCache 输入；驱动 `this.getData()` 的 BangDream步骤。
    */
   async initFull(useCache: boolean = true) {
     if (this.isInitFull) {
@@ -92,7 +93,7 @@ export class Character {
   /**
    * 在 Character 模型中请求当前模型的远端详情数据。
    *
-   * @param update - update参数，未传入时使用默认值。
+   * @param update - update 输入；驱动 `characterResourceRepository.getDetail()` 的 BangDream步骤。
    */
   async getData(update: boolean = true) {
     return await characterResourceRepository.getDetail(
@@ -112,7 +113,7 @@ export class Character {
     return await loadImage(iconBuffer);
   }
   /**
-   * 在 Character 模型中获取Illustration。
+   * 查询 BangDream 插件数据。
    *
    * @returns 异步处理结果。
    */

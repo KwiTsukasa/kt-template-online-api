@@ -61,6 +61,15 @@ export class QqbotBuiltinPluginPackageLoaderService {
     QqbotBuiltinPluginPackageLoaderService.name,
   );
 
+  /**
+   * 初始化 QqbotBuiltinPluginPackageLoaderService 实例。
+   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   * @param dictService - dictService 服务依赖；影响 constructor 的返回值。
+   * @param httpClient - httpClient 客户端依赖；影响 constructor 的返回值。
+   * @param sendService - sendService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly accountService: QqbotAccountService,
     private readonly configService: ConfigService,
@@ -70,6 +79,10 @@ export class QqbotBuiltinPluginPackageLoaderService {
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 加载Command Plugins。
+   * @returns QQBot 插件平台产出的 QqbotIntegrationPlugin[]。
+   */
   loadCommandPlugins(): QqbotIntegrationPlugin[] {
     return [
       this.createBangDreamPlugin(),
@@ -78,14 +91,27 @@ export class QqbotBuiltinPluginPackageLoaderService {
     ];
   }
 
+  /**
+   * 加载Event Plugins。
+   * @returns QQBot 插件平台产出的 QqbotEventPluginPackage[]。
+   */
   loadEventPlugins(): QqbotEventPluginPackage[] {
     return [this.loadRepeaterPlugin()];
   }
 
+  /**
+   * 加载Builtin Manifests。
+   * @returns QQBot 插件平台产出的 QqbotPluginManifest[]。
+   */
   loadBuiltinManifests(): QqbotPluginManifest[] {
     return BUILTIN_PLUGIN_KEYS.map((pluginKey) => this.loadManifest(pluginKey));
   }
 
+  /**
+   * 处理Worker Host Call。
+   * @param method - HTTP 方法名；影响 handleWorkerHostCall 的返回值。
+   * @param args - 插件平台列表；使用 `selfId`、`pluginKey`、`key`、`dictCode` 字段生成结果。
+   */
   async handleWorkerHostCall(method: string, args: Record<string, any> = {}) {
     switch (method) {
       case 'bindEventPlugin':
@@ -139,42 +165,88 @@ export class QqbotBuiltinPluginPackageLoaderService {
     }
   }
 
+  /**
+   * 加载Repeater Plugin。
+   * @returns QQBot 插件平台产出的 RepeaterPluginPackage。
+   */
   loadRepeaterPlugin(): RepeaterPluginPackage {
     const manifest = this.loadManifest('repeater');
     return createRepeaterPlugin({
       host: {
+        /**
+         * 维护 插件平台事件绑定。
+         * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+         * @param pluginKey - pluginKey 输入；驱动 `bindEventPlugin()` 的 插件平台步骤。
+         */
         bindEventPlugin: (selfId, pluginKey) =>
           this.accountService
             .bindEventPlugin(selfId, pluginKey)
             .then(() => undefined),
+        /**
+         * 读取 插件平台回调数据。
+         * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+         */
         getBoundEventPluginKeys: (selfId) =>
           this.accountService.getBoundEventPluginKeys(selfId),
+        /**
+         * 读取 插件平台回调数据。
+         * @param key - 键名；驱动 `configService.get()` 的 插件平台步骤。
+         */
         getConfig: (key) => this.configService.get(key),
+        /**
+         * 发送 插件平台回调消息。
+         * @param input - input 输入；驱动 `sendService.sendText()` 的 插件平台步骤。
+         */
         sendText: (input) => this.sendService.sendText(input as any),
+        /**
+         * 维护 插件平台事件绑定。
+         * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+         * @param pluginKey - pluginKey 输入；驱动 `unbindEventPlugin()` 的 插件平台步骤。
+         */
         unbindEventPlugin: (selfId, pluginKey) =>
           this.accountService
             .unbindEventPlugin(selfId, pluginKey)
             .then(() => undefined),
+        /**
+         * 记录 插件平台回调日志。
+         * @param message - message 输入；驱动 `logger.warn()` 的 插件平台步骤。
+         */
         warn: (message) => this.logger.warn(message),
       },
       manifest,
     });
   }
 
+  /**
+   * 创建 QQBot 插件平台对象或配置。
+   * @returns 创建后的 QQBot 插件平台对象或配置。
+   */
   private createBangDreamPlugin(): QqbotIntegrationPlugin {
     const manifest = this.loadManifest('bangdream');
     return createBangDreamPlugin({
       configReader: {
+        /**
+         * 读取 插件平台回调数据。
+         * @param key - 键名；驱动 `configService.get()` 的 插件平台步骤。
+         */
         get: (key) => this.configService.get(key),
       },
       description: manifest.description,
       dictionaryReader: {
+        /**
+         * 读取 插件平台回调数据。
+         * @param dictCode - dictCode 输入；驱动 `dictService.getDictItemsByKey()` 的 插件平台步骤。
+         */
         getDictItemsByKey: (dictCode) =>
           this.dictService.getDictItemsByKey(dictCode),
       },
       io: this.createBangDreamRuntimeIo(),
       legacyAliases: manifest.legacyAliases,
       name: manifest.name,
+      /**
+       * 执行 插件平台回调。
+       * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+       */
       normalizeError: (error) =>
         this.toolsService.getErrorMessage(error, 'BangDream 命令执行失败'),
       operations: manifest.operations.map((operation) => ({
@@ -192,47 +264,130 @@ export class QqbotBuiltinPluginPackageLoaderService {
     }) as QqbotIntegrationPlugin;
   }
 
+  /**
+   * 创建 QQBot 插件平台对象或配置。
+   * @returns 创建后的 QQBot 插件平台对象或配置。
+   */
   private createFf14MarketPlugin(): QqbotIntegrationPlugin {
     const manifest = this.loadManifest('ff14-market');
     return createFf14MarketPlugin({
       host: {
+        /**
+         * 读取 插件平台回调数据。
+         * @param key - 键名；驱动 `configService.get()` 的 插件平台步骤。
+         */
         getConfig: (key) => this.configService.get(key),
+        /**
+         * 读取 插件平台回调数据。
+         * @param dictCode - dictCode 输入；驱动 `dictService.getDictItemsByKey()` 的 插件平台步骤。
+         */
         getDictItemsByKey: (dictCode) =>
           this.dictService.getDictItemsByKey(dictCode),
+        /**
+         * 执行 插件平台回调。
+         * @param input - input 输入；驱动 `dictService.relationTree()` 的 插件平台步骤。
+         */
         relationTree: (input) => this.dictService.relationTree(input),
+        /**
+         * 执行 插件平台回调。
+         * @param options - 插件平台列表；驱动 `httpClient.requestJson()` 的 插件平台步骤。
+         */
         requestJson: (options) => this.httpClient.requestJson(options),
       },
       manifest,
+      /**
+       * 执行 插件平台回调。
+       * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+       * @param fallback - 兜底值；驱动 `toolsService.getErrorMessage()` 的 插件平台步骤。
+       */
       normalizeError: (error, fallback) =>
         this.toolsService.getErrorMessage(error, fallback),
     }) as QqbotIntegrationPlugin;
   }
 
+  /**
+   * 创建 QQBot 插件平台对象或配置。
+   * @returns 创建后的 QQBot 插件平台对象或配置。
+   */
   private createFflogsPlugin(): QqbotIntegrationPlugin {
     const manifest = this.loadManifest('fflogs');
     return createFflogsPlugin({
       host: {
+        /**
+         * 读取 插件平台回调数据。
+         * @param key - 键名；驱动 `configService.get()` 的 插件平台步骤。
+         */
         getConfig: (key) => this.configService.get(key),
+        /**
+         * 读取 插件平台回调数据。
+         * @param dictCode - dictCode 输入；驱动 `dictService.getDictByKey()` 的 插件平台步骤。
+         */
         getDictByKey: (dictCode) => this.dictService.getDictByKey(dictCode),
+        /**
+         * 执行 插件平台回调。
+         * @param candidate - candidate 输入；驱动 `this.resolveKnownFf14World()` 的 插件平台步骤。
+         */
         resolveKnownWorld: (candidate) => this.resolveKnownFf14World(candidate),
+        /**
+         * 执行 插件平台回调。
+         * @param options - 插件平台列表；驱动 `httpClient.requestJson()` 的 插件平台步骤。
+         */
         requestJson: (options) => this.httpClient.requestJson(options),
       },
       manifest,
+      /**
+       * 执行 插件平台回调。
+       * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+       * @param fallback - 兜底值；驱动 `toolsService.getErrorMessage()` 的 插件平台步骤。
+       */
       normalizeError: (error, fallback) =>
         this.toolsService.getErrorMessage(error, fallback),
     }) as QqbotIntegrationPlugin;
   }
 
+  /**
+   * 创建 QQBot 插件平台对象或配置。
+   * @returns 创建后的 QQBot 插件平台对象或配置。
+   */
   private createBangDreamRuntimeIo(): BangDreamRuntimeIo {
     return {
+      /**
+       * 读取 插件平台回调数据。
+       * @param key - 键名；驱动 `configService.get()` 的 插件平台步骤。
+       */
       getConfig: (key) => this.configService.get(key),
+      /**
+       * 执行 插件平台回调。
+       * @param filePath - 插件平台路径；读取本地文件内容。
+       */
       readAssetFile: async (filePath) => readFileSync(filePath),
+      /**
+       * 执行 插件平台回调。
+       * @param filePath - 插件平台路径；驱动 `readExcelRows()` 的 插件平台步骤。
+       */
       readExcelRows: async (filePath) => readExcelRows(filePath),
+      /**
+       * 执行 插件平台回调。
+       * @param filePath - 插件平台路径；驱动 `readJsonFile()` 的 插件平台步骤。
+       */
       readJsonFile: async (filePath) => readJsonFile(filePath),
+      /**
+       * 执行 插件平台回调。
+       * @param filePath - 插件平台路径；驱动 `readJsonFile()` 的 插件平台步骤。
+       */
       readJsonFileSync: (filePath) => readJsonFile(filePath),
+      /**
+       * 执行 插件平台回调。
+       * @param url - 访问地址；影响 requestArrayBuffer 的返回值。
+       * @param options - 插件平台列表；影响 requestArrayBuffer 的返回值。
+       */
       requestArrayBuffer: async (url, options) => ({
         body: await this.httpClient.requestBuffer({
           context: 'BangDream 资源下载',
+          /**
+           * 执行 插件平台回调。
+           * @param statusCode - statusCode 输入；影响 failureMessage 的返回值。
+           */
           failureMessage: (statusCode) =>
             `BangDream 资源下载失败：${statusCode}`,
           timeoutMessage: 'BangDream 资源下载超时',
@@ -240,9 +395,18 @@ export class QqbotBuiltinPluginPackageLoaderService {
           url,
         }),
       }),
+      /**
+       * 执行 插件平台回调。
+       * @param url - 访问地址；影响 requestJson 的返回值。
+       * @param options - 插件平台列表；影响 requestJson 的返回值。
+       */
       requestJson: async (url, options) => ({
         body: await this.httpClient.requestJson({
           context: 'BangDream 数据接口',
+          /**
+           * 执行 插件平台回调。
+           * @param statusCode - statusCode 输入；影响 failureMessage 的返回值。
+           */
           failureMessage: (statusCode) =>
             `BangDream 数据接口失败：${statusCode}`,
           invalidJsonMessage: 'BangDream 数据接口返回不是合法 JSON',
@@ -251,13 +415,27 @@ export class QqbotBuiltinPluginPackageLoaderService {
           url,
         }),
       }),
+      /**
+       * 执行 插件平台回调。
+       * @param ms - 等待毫秒数；驱动 `Promise()` 的 插件平台步骤。
+       */
       sleep: async (ms) =>
         await new Promise((resolve) => setTimeout(resolve, ms)),
+      /**
+       * 执行 插件平台回调。
+       * @param filePath - 插件平台路径；驱动 `writeFileSync()` 的 插件平台步骤。
+       * @param data - 业务数据；承载 插件平台新增、更新、导入或执行字段。
+       */
       writeJsonFile: async (filePath, data) =>
         writeFileSync(filePath, JSON.stringify(data)),
     };
   }
 
+  /**
+   * 加载Manifest。
+   * @param pluginKey - pluginKey 输入；驱动 `this.resolvePluginRoot()` 的 插件平台步骤。
+   * @returns QQBot 插件平台产出的 QqbotPluginManifest。
+   */
   private loadManifest(pluginKey: string): QqbotPluginManifest {
     const pluginRoot = this.resolvePluginRoot(pluginKey);
     return parseQqbotPluginManifest(
@@ -266,6 +444,10 @@ export class QqbotBuiltinPluginPackageLoaderService {
     );
   }
 
+  /**
+   * 解析Known Ff14 World。
+   * @param candidate - candidate 输入；驱动 `splitFf14WorldPath()` 的 插件平台步骤。
+   */
   private async resolveKnownFf14World(candidate: string) {
     const catalog = await this.loadFf14MarketCatalog();
     if (!isFf14LocationName(catalog, candidate)) return null;
@@ -273,6 +455,9 @@ export class QqbotBuiltinPluginPackageLoaderService {
     return { serverSlug: worldPath.world || candidate };
   }
 
+  /**
+   * 加载Ff14 Market Catalog。
+   */
   private async loadFf14MarketCatalog() {
     const treeCatalog = buildFf14MarketCatalogFromTree(
       await this.dictService.relationTree({
@@ -295,6 +480,10 @@ export class QqbotBuiltinPluginPackageLoaderService {
     });
   }
 
+  /**
+   * 解析Plugin Root。
+   * @param pluginKey - pluginKey 输入；影响 resolvePluginRoot 的返回值。
+   */
   private resolvePluginRoot(pluginKey: string) {
     const sourceRoot = join(
       process.cwd(),
@@ -305,10 +494,18 @@ export class QqbotBuiltinPluginPackageLoaderService {
   }
 }
 
+/**
+ * 读取 QQBot 插件平台资源。
+ * @param filePath - 插件平台路径；转换 JSON 文本。
+ */
 function readJsonFile<T = unknown>(filePath: string) {
   return JSON.parse(readFileSync(filePath, 'utf8')) as T;
 }
 
+/**
+ * 读取 QQBot 插件平台资源。
+ * @param filePath - 插件平台路径；驱动 `XLSX.readFile()` 的 插件平台步骤。
+ */
 function readExcelRows<T extends Record<string, unknown>>(filePath: string) {
   const workbook = XLSX.readFile(filePath);
   const sheetName = workbook.SheetNames[0];
@@ -316,6 +513,11 @@ function readExcelRows<T extends Record<string, unknown>>(filePath: string) {
   return XLSX.utils.sheet_to_json<T>(worksheet);
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @param input - input 输入；使用 `failureMessageTemplate` 字段生成结果。
+ * @param fallbackFailureMessage - fallbackFailureMessage 输入；生成 插件平台对象。
+ */
 function createWorkerHttpRequest(
   input: Record<string, any> = {},
   fallbackFailureMessage?: (statusCode: number) => string,

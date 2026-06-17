@@ -225,6 +225,9 @@ const authServiceMock = {
   currentUser: jest.fn(),
 };
 
+/**
+ * 执行 测试断言流程。
+ */
 const unauthorizedException = () =>
   new HttpException(
     {
@@ -343,10 +346,18 @@ const controllerClasses = [
 const controllerRoutes = collectControllerRoutes(controllerClasses);
 
 const routeTestCases: Record<string, RouteTestCase> = {
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /': async (server) => {
     await request(server).get('/').expect(301).expect('Location', '/api#/');
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /component/allList': async (server) => {
     componentServiceMock.all.mockResolvedValue([component]);
 
@@ -362,6 +373,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /component/list': async (server) => {
     componentServiceMock.page.mockResolvedValue({
       list: [component],
@@ -392,6 +407,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /component/save': async (server) => {
     componentServiceMock.save.mockResolvedValue({
       id: component.id,
@@ -423,6 +442,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /component/remove': async (server) => {
     componentServiceMock.remove.mockResolvedValue(true);
 
@@ -439,6 +462,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /component/update': async (server) => {
     componentServiceMock.update.mockResolvedValue(true);
 
@@ -461,6 +488,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /component/detail': async (server) => {
     componentServiceMock.find.mockResolvedValue(component);
 
@@ -477,6 +508,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/article/list': async (server) => {
     blogArticleServiceMock.page.mockResolvedValue({
       list: [blogArticle],
@@ -502,6 +537,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/article/detail': async (server) => {
     blogArticleServiceMock.detail.mockResolvedValue(blogArticle);
 
@@ -517,6 +556,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/article/public/list': async (server) => {
     blogArticleServiceMock.publicList.mockResolvedValue({
       list: [blogArticle],
@@ -541,6 +584,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/article/public/detail': async (server) => {
     blogArticleServiceMock.publicDetail.mockResolvedValue(blogArticle);
 
@@ -559,6 +606,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/article/save': async (server) => {
     blogArticleServiceMock.save.mockResolvedValue(blogArticle);
 
@@ -582,6 +633,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/article/update': async (server) => {
     blogArticleServiceMock.update.mockResolvedValue(blogArticle);
 
@@ -603,6 +658,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/article/remove': async (server) => {
     blogArticleServiceMock.remove.mockResolvedValue(true);
 
@@ -618,6 +677,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/article/category-options': async (server) => {
     blogArticleServiceMock.categoryOptions.mockResolvedValue({
       list: [{ count: 1, id: 'tech', name: '技术', slug: 'tech' }],
@@ -643,6 +706,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/article/tag-options': async (server) => {
     blogArticleServiceMock.tagOptions.mockResolvedValue({
       list: [{ count: 1, id: 'milkdown', name: 'Milkdown', slug: 'milkdown' }],
@@ -670,6 +737,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/article/import-wordpress': async (server) => {
     blogArticleServiceMock.importFromWordpress.mockResolvedValue({
       created: 1,
@@ -711,6 +782,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/category/list': async (server) => {
     blogTermServiceMock.page.mockResolvedValue({
       list: [blogTerm],
@@ -736,6 +811,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/category/detail': async (server) => {
     blogTermServiceMock.detail.mockResolvedValue(blogTerm);
 
@@ -754,6 +833,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/category/save': async (server) => {
     blogTermServiceMock.save.mockResolvedValue(blogTerm);
 
@@ -777,6 +860,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/category/update': async (server) => {
     blogTermServiceMock.update.mockResolvedValue(blogTerm);
 
@@ -798,6 +885,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/category/remove': async (server) => {
     blogTermServiceMock.remove.mockResolvedValue(true);
 
@@ -816,6 +907,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/tag/list': async (server) => {
     blogTermServiceMock.page.mockResolvedValue({
       list: [blogTerm],
@@ -841,6 +936,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/tag/detail': async (server) => {
     blogTermServiceMock.detail.mockResolvedValue(blogTerm);
 
@@ -856,6 +955,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/tag/save': async (server) => {
     blogTermServiceMock.save.mockResolvedValue(blogTerm);
 
@@ -877,6 +980,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/tag/update': async (server) => {
     blogTermServiceMock.update.mockResolvedValue(blogTerm);
 
@@ -898,6 +1005,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/tag/remove': async (server) => {
     blogTermServiceMock.remove.mockResolvedValue(true);
 
@@ -913,6 +1024,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/term/options': async (server) => {
     blogTermServiceMock.options.mockResolvedValue({
       list: [blogTerm],
@@ -938,6 +1053,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /blog/theme/config': async (server) => {
     blogThemeConfigServiceMock.publicConfig.mockResolvedValue(
       wordpressThemeConfig,
@@ -954,6 +1073,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/theme/save': async (server) => {
     blogThemeConfigServiceMock.save.mockResolvedValue(wordpressThemeConfig);
 
@@ -975,6 +1098,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /blog/theme/import-wordpress': async (server) => {
     blogThemeConfigServiceMock.importFromWordpress.mockResolvedValue(
       wordpressThemeConfig,
@@ -993,6 +1120,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /dict/getDictByKey': async (server) => {
     dictServiceMock.getDictByKey.mockResolvedValue(dictOptions);
 
@@ -1009,6 +1140,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /dict/getComponentDictByType': async (server) => {
     dictServiceMock.getComponentDictByType.mockResolvedValue(chartOptions);
 
@@ -1025,6 +1160,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /dict/list': async (server) => {
     dictServiceMock.page.mockResolvedValue({
       items: [dictItem],
@@ -1051,6 +1190,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /dict/tree': async (server) => {
     dictServiceMock.tree.mockResolvedValue([dictTreeItem]);
 
@@ -1069,6 +1212,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /dict/groups': async (server) => {
     dictServiceMock.groups.mockResolvedValue({
       items: [dictGroupItem],
@@ -1095,6 +1242,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /dict/codes': async (server) => {
     dictServiceMock.getDictCodeOptions.mockResolvedValue([
       {
@@ -1118,6 +1269,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /dict/save': async (server) => {
     dictServiceMock.save.mockResolvedValue(dictItem.id);
 
@@ -1148,6 +1303,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /dict/update': async (server) => {
     dictServiceMock.update.mockResolvedValue(null);
 
@@ -1170,6 +1329,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'DELETE /dict/:id': async (server) => {
     dictServiceMock.remove.mockResolvedValue(null);
 
@@ -1185,6 +1348,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /dict/toggle': async (server) => {
     dictServiceMock.toggle.mockResolvedValue(null);
 
@@ -1201,6 +1368,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /system/logs': async (server) => {
     systemLogServiceMock.page.mockResolvedValue({
       items: [systemLogItem],
@@ -1227,12 +1398,18 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /system/logs/levels': async (server) => {
     systemLogServiceMock.levels.mockReturnValue([
       { label: 'error', value: 'error' },
     ]);
 
-    const response = await request(server).get('/system/logs/levels').expect(200);
+    const response = await request(server)
+      .get('/system/logs/levels')
+      .expect(200);
 
     expect(systemLogServiceMock.levels).toHaveBeenCalledWith();
     expect(response.body).toEqual({
@@ -1242,6 +1419,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /system/logs/status': async (server) => {
     systemLogServiceMock.status.mockReturnValue({
       app: 'kt-template-online-api',
@@ -1251,7 +1432,9 @@ const routeTestCases: Record<string, RouteTestCase> = {
       selector: '{app="kt-template-online-api",env="test"}',
     });
 
-    const response = await request(server).get('/system/logs/status').expect(200);
+    const response = await request(server)
+      .get('/system/logs/status')
+      .expect(200);
 
     expect(systemLogServiceMock.status).toHaveBeenCalledWith();
     expect(response.body).toEqual({
@@ -1267,6 +1450,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /system/logs/summary': async (server) => {
     systemLogServiceMock.summary.mockResolvedValue([
       { count: 1, level: 'error' },
@@ -1287,6 +1474,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /minio/check': async (server) => {
     minioServiceMock.checkConnection.mockResolvedValue({
       bucketName: 'demo-bucket',
@@ -1311,6 +1502,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /minio/bucket': async (server) => {
     minioServiceMock.ensureBucket.mockResolvedValue('demo-bucket');
 
@@ -1327,6 +1522,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /minio/upload': async (server) => {
     minioServiceMock.uploadObject.mockResolvedValue(uploadResult);
 
@@ -1356,6 +1555,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /minio/list': async (server) => {
     minioServiceMock.listObjects.mockResolvedValue([objectStat]);
 
@@ -1380,6 +1583,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /minio/url': async (server) => {
     minioServiceMock.getPresignedUrl.mockResolvedValue(
       'http://127.0.0.1:9000/kt-template-online/uploads/demo.txt',
@@ -1406,6 +1613,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /minio/resource-proxy': async (server) => {
     const body = Buffer.from('proxy-content');
     const originalFetch = global.fetch;
@@ -1442,6 +1653,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     }
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /minio/download': async (server) => {
     minioServiceMock.getObject.mockResolvedValue({
       stream: Readable.from(['file-content']),
@@ -1473,6 +1688,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     expect(response.text).toBe('file-content');
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'DELETE /minio/remove': async (server) => {
     minioServiceMock.removeObject.mockResolvedValue(true);
 
@@ -1495,6 +1714,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /wordpress/auth/check': async (server) => {
     wordpressServiceMock.checkAuth.mockResolvedValue(wordpressUser);
 
@@ -1511,6 +1734,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /wordpress/auth/login': async (server) => {
     wordpressServiceMock.loginWithConfiguredAdmin.mockResolvedValue(
       wordpressLoginResult,
@@ -1536,6 +1763,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /wordpress/auth/logout': async (server) => {
     const response = await request(server)
       .post('/wordpress/auth/logout')
@@ -1550,6 +1781,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /wordpress/article/list': async (server) => {
     wordpressServiceMock.articleList.mockResolvedValue({
       list: [wordpressArticle],
@@ -1582,6 +1817,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /wordpress/article/detail': async (server) => {
     wordpressServiceMock.articleDetail.mockResolvedValue(wordpressArticle);
 
@@ -1600,6 +1839,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /wordpress/article/public/list': async (server) => {
     wordpressServiceMock.publicArticleList.mockResolvedValue({
       list: [wordpressArticle],
@@ -1630,8 +1873,14 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /wordpress/article/public/detail': async (server) => {
-    wordpressServiceMock.publicArticleDetail.mockResolvedValue(wordpressArticle);
+    wordpressServiceMock.publicArticleDetail.mockResolvedValue(
+      wordpressArticle,
+    );
 
     const response = await request(server)
       .get('/wordpress/article/public/detail')
@@ -1649,6 +1898,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /wordpress/article/save': async (server) => {
     wordpressServiceMock.articleSave.mockResolvedValue(wordpressArticle);
 
@@ -1674,6 +1927,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /wordpress/article/update': async (server) => {
     wordpressServiceMock.articleUpdate.mockResolvedValue(wordpressArticle);
 
@@ -1698,6 +1955,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /wordpress/article/remove': async (server) => {
     wordpressServiceMock.articleRemove.mockResolvedValue(true);
 
@@ -1720,6 +1981,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /wordpress/tag/list': async (server) => {
     wordpressServiceMock.tagList.mockResolvedValue({
       list: [wordpressTerm],
@@ -1752,6 +2017,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /wordpress/tag/detail': async (server) => {
     wordpressServiceMock.tagDetail.mockResolvedValue(wordpressTerm);
 
@@ -1770,6 +2039,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /wordpress/tag/save': async (server) => {
     wordpressServiceMock.tagSave.mockResolvedValue(wordpressTerm);
 
@@ -1793,6 +2066,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /wordpress/tag/update': async (server) => {
     wordpressServiceMock.tagUpdate.mockResolvedValue(wordpressTerm);
 
@@ -1817,6 +2094,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /wordpress/tag/remove': async (server) => {
     wordpressServiceMock.tagRemove.mockResolvedValue(true);
 
@@ -1836,6 +2117,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /wordpress/category/list': async (server) => {
     wordpressServiceMock.categoryList.mockResolvedValue({
       list: [wordpressTerm],
@@ -1868,6 +2153,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /wordpress/category/detail': async (server) => {
     wordpressServiceMock.categoryDetail.mockResolvedValue(wordpressTerm);
 
@@ -1886,6 +2175,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /wordpress/category/save': async (server) => {
     wordpressServiceMock.categorySave.mockResolvedValue(wordpressTerm);
 
@@ -1911,6 +2204,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /wordpress/category/update': async (server) => {
     wordpressServiceMock.categoryUpdate.mockResolvedValue(wordpressTerm);
 
@@ -1937,6 +2234,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 执行 测试回调。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'POST /wordpress/category/remove': async (server) => {
     wordpressServiceMock.categoryRemove.mockResolvedValue(true);
 
@@ -1956,6 +2257,10 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
+  /**
+   * 读取 测试回调数据。
+   * @param server - server 输入；驱动 `request()` 的 测试步骤。
+   */
   'GET /wordpress/theme/config': async (server) => {
     wordpressServiceMock.themeConfig.mockResolvedValue(wordpressThemeConfig);
 

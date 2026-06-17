@@ -11,6 +11,16 @@ import { QqbotSendLog } from '../../infrastructure/persistence/send/qqbot-send-l
 
 @Injectable()
 export class QqbotDashboardService {
+  /**
+   * 初始化 QqbotDashboardService 实例。
+   * @param accountRepository - 账号仓库依赖；影响 constructor 的返回值。
+   * @param conversationRepository - QQBot仓库依赖；影响 constructor 的返回值。
+   * @param messageRepository - QQBot仓库依赖；影响 constructor 的返回值。
+   * @param ruleRepository - QQBot仓库依赖；影响 constructor 的返回值。
+   * @param sendLogRepository - QQBot仓库依赖；影响 constructor 的返回值。
+   * @param busService - busService 服务依赖；影响 constructor 的返回值。
+   * @param reverseWsService - reverseWsService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(QqbotAccount)
     private readonly accountRepository: Repository<QqbotAccount>,
@@ -26,6 +36,9 @@ export class QqbotDashboardService {
     private readonly reverseWsService: QqbotReverseWsService,
   ) {}
 
+  /**
+   * 执行 QQBot 核心流程。
+   */
   async summary() {
     const [
       accountTotal,

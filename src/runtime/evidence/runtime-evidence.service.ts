@@ -58,6 +58,11 @@ const SENSITIVE_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
 
 @Injectable()
 export class RuntimeEvidenceService {
+  /**
+   * 创建 运行态健康检查对象或配置。
+   * @param input - input 输入；使用 `startedAt`、`endedAt` 字段生成结果。
+   * @returns 创建后的 运行态健康检查对象或配置。
+   */
   createRecord(input: RuntimeEvidenceInput): RuntimeEvidenceRecord {
     const startedAt = input.startedAt ?? new Date();
     const endedAt = input.endedAt ?? new Date();
@@ -72,6 +77,11 @@ export class RuntimeEvidenceService {
     return this.sanitizeValue(record) as RuntimeEvidenceRecord;
   }
 
+  /**
+   * 执行 运行态健康检查流程。
+   * @param value - 待转换值；转换 运行态列表项。
+   * @returns 运行态健康检查产出的 unknown。
+   */
   private sanitizeValue(value: unknown): unknown {
     if (value instanceof Date) return value;
     if (typeof value === 'string') return this.sanitizeText(value);
@@ -89,6 +99,10 @@ export class RuntimeEvidenceService {
     return value;
   }
 
+  /**
+   * 执行 运行态健康检查流程。
+   * @param value - 待转文本值；驱动 `SENSITIVE_TEXT_REPLACEMENTS.reduce()` 的 运行态步骤。
+   */
   private sanitizeText(value: string) {
     return SENSITIVE_TEXT_REPLACEMENTS.reduce(
       (text, [pattern, replacement]) => text.replace(pattern, replacement),
@@ -96,6 +110,11 @@ export class RuntimeEvidenceService {
     );
   }
 
+  /**
+   * 判断 运行态健康检查条件。
+   * @param value - 待转换值；计算 运行态判断结果。
+   * @returns 布尔值，表示 运行态健康检查条件是否满足。
+   */
   private isPlainRecord(value: unknown): value is Record<string, unknown> {
     return (
       typeof value === 'object' &&
@@ -105,6 +124,10 @@ export class RuntimeEvidenceService {
     );
   }
 
+  /**
+   * 判断 运行态健康检查条件。
+   * @param key - 键名；生成规范化文本。
+   */
   private isSensitiveKey(key: string) {
     const normalizedKey = key.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
     return normalizedKey === 'sid' || SENSITIVE_KEY_PATTERN.test(normalizedKey);

@@ -1,4 +1,12 @@
-import { Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { vbenPage, vbenSuccess } from '@/common';
 import { AdminSuperGuard } from '../../identity/auth/admin-super.guard';
@@ -10,8 +18,16 @@ import { AdminNoticeService } from './admin-notice.service';
 @Controller('system/notice')
 @UseGuards(JwtAuthGuard, AdminSuperGuard)
 export class AdminNoticeController {
+  /**
+   * 初始化 AdminNoticeController 实例。
+   * @param noticeService - noticeService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(private readonly noticeService: AdminNoticeService) {}
 
+  /**
+   * 获取列表数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   @Get('list')
   @ApiOperation({
     description:
@@ -25,18 +41,31 @@ export class AdminNoticeController {
     return vbenPage(page.items, page.total);
   }
 
+  /**
+   * 查询站内信详情。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   @Get('detail/:id')
   @ApiOperation({ summary: '查询站内信详情' })
   async detail(@Param('id') id: string) {
     return vbenSuccess(await this.noticeService.get(id));
   }
 
+  /**
+   * 删除站内信。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   @Delete(':id')
   @ApiOperation({ summary: '删除站内信' })
   async remove(@Param('id') id: string) {
     return vbenSuccess(await this.noticeService.remove(id));
   }
 
+  /**
+   * 启停站内信。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @param status - Admin列表；驱动 `vbenSuccess()` 的 Admin步骤。
+   */
   @Post('toggle')
   @ApiOperation({ summary: '启停站内信' })
   @ApiQuery({ name: 'id', type: String })
@@ -45,6 +74,11 @@ export class AdminNoticeController {
     return vbenSuccess(await this.noticeService.toggleStatus(id, status));
   }
 
+  /**
+   * 置顶/取消站内信。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @param isTop - isTop 输入；驱动 `vbenSuccess()` 的 Admin步骤。
+   */
   @Post('top')
   @ApiOperation({ summary: '置顶/取消站内信' })
   @ApiQuery({ name: 'id', type: String })

@@ -6,6 +6,10 @@ import type {
   BangDreamOperationKey,
 } from '@/modules/qqbot/plugins/bangdream/src/domain/common/bangdream.types';
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param name - 名称文本；影响 mockImageBuffer 的返回值。
+ */
 const mockImageBuffer = (name: string) => Buffer.from(`image:${name}`);
 
 const mockFuzzySearch = jest.fn(() => ({ song: [136] }));
@@ -16,9 +20,7 @@ const mockDrawSongDetail = jest.fn(async () => [
   mockImageBuffer('song-detail'),
 ]);
 const mockDrawSongList = jest.fn(async () => [mockImageBuffer('song-list')]);
-const mockDrawSongChart = jest.fn(async () => [
-  mockImageBuffer('song-chart'),
-]);
+const mockDrawSongChart = jest.fn(async () => [mockImageBuffer('song-chart')]);
 const mockDrawSongRandom = jest.fn(async () => [
   mockImageBuffer('song-random'),
 ]);
@@ -87,9 +89,7 @@ const mockDrawCutoffDetail = jest.fn(async () => [
 const mockDrawCutoffEventTop = jest.fn(async () => [
   mockImageBuffer('cutoff-event-top'),
 ]);
-const mockDrawCutoffAll = jest.fn(async () => [
-  mockImageBuffer('cutoff-all'),
-]);
+const mockDrawCutoffAll = jest.fn(async () => [mockImageBuffer('cutoff-all')]);
 const mockDrawCutoffListOfRecentEvent = jest.fn(async () => [
   mockImageBuffer('cutoff-recent'),
 ]);
@@ -263,6 +263,9 @@ type BranchCase = {
 
 const branchCases: BranchCase[] = [
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawSongDetail).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '136',
@@ -271,6 +274,9 @@ const branchCases: BranchCase[] = [
     name: 'song.search numeric detail',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawSongList).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '夏祭',
@@ -279,6 +285,9 @@ const branchCases: BranchCase[] = [
     name: 'song.search fuzzy list',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawSongChart).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '136 3',
@@ -287,6 +296,9 @@ const branchCases: BranchCase[] = [
     name: 'song.chart explicit difficulty',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawSongRandom).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '随机曲',
@@ -295,6 +307,9 @@ const branchCases: BranchCase[] = [
     name: 'song.random empty query',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawSongMetaList).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: 'cn',
@@ -303,6 +318,9 @@ const branchCases: BranchCase[] = [
     name: 'song.meta server',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawCardDetail).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '1001',
@@ -311,6 +329,9 @@ const branchCases: BranchCase[] = [
     name: 'card.search numeric detail',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawCardList).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '香澄',
@@ -319,6 +340,9 @@ const branchCases: BranchCase[] = [
     name: 'card.search fuzzy list',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => {
       expect(mockCardCtor).toHaveBeenCalledWith(1001);
       expect(mockCardGetCardIllustrationImageBuffer).toHaveBeenCalledTimes(2);
@@ -330,6 +354,9 @@ const branchCases: BranchCase[] = [
     name: 'card.illustration trained variants',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () =>
       expect(mockDrawCharacterDetail).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
@@ -339,6 +366,9 @@ const branchCases: BranchCase[] = [
     name: 'character.search numeric detail',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawCharacterList).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '香澄',
@@ -347,6 +377,9 @@ const branchCases: BranchCase[] = [
     name: 'character.search fuzzy list',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawEventDetail).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '50',
@@ -355,6 +388,9 @@ const branchCases: BranchCase[] = [
     name: 'event.search numeric detail',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawEventList).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: 'summer',
@@ -363,12 +399,11 @@ const branchCases: BranchCase[] = [
     name: 'event.search fuzzy list',
   },
   {
-    assertBranch: () => expect(mockDrawEventStage).toHaveBeenCalledWith(
-      50,
-      3,
-      true,
-      true,
-    ),
+    /**
+     * 执行 BangDream回调。
+     */
+    assertBranch: () =>
+      expect(mockDrawEventStage).toHaveBeenCalledWith(50, 3, true, true),
     expectedImageCount: 5,
     expectedQuery: '50',
     input: { text: '50 -m cn' },
@@ -376,6 +411,9 @@ const branchCases: BranchCase[] = [
     name: 'event.stage meta split output',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawPlayerDetail).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '123456',
@@ -384,6 +422,9 @@ const branchCases: BranchCase[] = [
     name: 'player.search server detail',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawGachaDetail).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '300',
@@ -392,6 +433,9 @@ const branchCases: BranchCase[] = [
     name: 'gacha.search detail',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => {
       expect(mockGachaCtor).toHaveBeenCalledWith(300);
       expect(mockDrawRandomGacha).toHaveBeenCalledTimes(1);
@@ -403,6 +447,9 @@ const branchCases: BranchCase[] = [
     name: 'gacha.simulate explicit gacha',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => {
       expect(mockGetPresentGachaList).toHaveBeenCalledWith(3);
       expect(mockDrawRandomGacha).toHaveBeenCalledTimes(1);
@@ -414,6 +461,9 @@ const branchCases: BranchCase[] = [
     name: 'gacha.simulate present gacha fallback',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawCutoffDetail).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '1000 50',
@@ -422,6 +472,9 @@ const branchCases: BranchCase[] = [
     name: 'cutoff.detail tier detail',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawCutoffEventTop).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '10 50',
@@ -430,6 +483,9 @@ const branchCases: BranchCase[] = [
     name: 'cutoff.detail top10 branch',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () => expect(mockDrawCutoffAll).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
     expectedQuery: '50',
@@ -438,6 +494,9 @@ const branchCases: BranchCase[] = [
     name: 'cutoff.all event',
   },
   {
+    /**
+     * 执行 BangDream回调。
+     */
     assertBranch: () =>
       expect(mockDrawCutoffListOfRecentEvent).toHaveBeenCalledTimes(1),
     expectedImageCount: 1,
@@ -458,9 +517,8 @@ let operationsByKey: Map<BangDreamOperationKey, any>;
 
 describe('BangDream operation branch matrix', () => {
   beforeAll(async () => {
-    const { getBangDreamOperationsByHandlerName } = await import(
-      '@/modules/qqbot/plugins/bangdream/src/operations'
-    );
+    const { getBangDreamOperationsByHandlerName } =
+      await import('@/modules/qqbot/plugins/bangdream/src/operations');
     const operationsByHandlerName = getBangDreamOperationsByHandlerName();
     operationsByKey = new Map(
       manifestOperations.map((operation) => [
@@ -497,28 +555,47 @@ describe('BangDream operation branch matrix', () => {
         query: branchCase.expectedQuery,
         source: 'BangDream 内置插件',
       });
-      expect(output.replyText.match(/\[CQ:image,file=base64:\/\//g)).toHaveLength(
-        branchCase.expectedImageCount,
-      );
+      expect(
+        output.replyText.match(/\[CQ:image,file=base64:\/\//g),
+      ).toHaveLength(branchCase.expectedImageCount);
       branchCase.assertBranch();
     },
   );
 });
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ */
 function createCommandContext() {
+  /**
+   * 执行 BangDream 插件局部步骤。
+   * @param input - input 输入；使用 `query`、`text`、`raw` 字段生成结果。
+   */
   const pickText = (input: BangDreamCommandInput) =>
     `${input.query || input.text || input.raw || ''}`.trim();
+  /**
+   * 执行 BangDream 插件局部步骤。
+   * @param value - 待转换值；驱动 `Number()` 的 BangDream步骤。
+   */
   const optionalNumber = (value: unknown) => {
     if (value === undefined || value === null || value === '') return undefined;
     const parsed = Number(value);
     return Number.isInteger(parsed) ? parsed : undefined;
   };
+  /**
+   * 收集 BangDream 插件数据。
+   * @param input - input 输入；使用 `args` 字段生成结果。
+   */
   const getTokens = (input: BangDreamCommandInput) => {
     if (Array.isArray(input.args)) {
       return input.args.map((item) => `${item}`.trim()).filter(Boolean);
     }
     return pickText(input).split(/\s+/).filter(Boolean);
   };
+  /**
+   * 执行 BangDream 插件局部步骤。
+   * @param value - 待转换值；决定 BangDream条件分支。
+   */
   const normalizeServer = (value: unknown) => {
     if (value === undefined || value === null || value === '') return undefined;
     const raw = `${value}`.trim().toLowerCase();
@@ -537,6 +614,11 @@ function createCommandContext() {
     }
     return mapped[raw];
   };
+  /**
+   * 执行 BangDream 插件局部步骤。
+   * @param input - input 输入；使用 `mainServer`、`serverName`、`server` 字段生成结果。
+   * @param tokens - 协议 token；执行 `tokens.find()` 对应的 BangDream步骤。
+   */
   const pickMainServer = (input: BangDreamCommandInput, tokens: string[]) => {
     const explicit =
       input.mainServer ??
@@ -547,13 +629,33 @@ function createCommandContext() {
   };
 
   return {
+    /**
+     * 执行 BangDream回调。
+     * @param _query - _query 输入；影响 drawFuzzyResult 的返回值。
+     * @param render - render 输入；影响 drawFuzzyResult 的返回值。
+     */
     drawFuzzyResult: async (
       _query: string,
       render: (matches: Record<string, unknown>) => Promise<Array<Buffer>>,
     ) => render({ result: [1] }),
+    /**
+     * 执行 BangDream回调。
+     * @param tokens - 协议 token；影响 firstNumber 的返回值。
+     */
     firstNumber: (tokens: string[]) =>
-      tokens.map((item) => optionalNumber(item)).find((item) => item !== undefined),
+      tokens
+        .map((item) => optionalNumber(item))
+        .find((item) => item !== undefined),
+    /**
+     * 执行 BangDream回调。
+     * @param input - input 输入；驱动 `getTokens()` 的 BangDream步骤。
+     */
     firstToken: (input: BangDreamCommandInput) => getTokens(input)[0],
+    /**
+     * 读取 BangDream回调数据。
+     * @param input - input 输入；使用 `compress`、`useEasyBG` 字段生成结果。
+     * @param defaults - BangDream列表；使用 `useEasyBG` 字段生成结果。
+     */
     getRenderOptions: (
       input: BangDreamCommandInput,
       defaults: { useEasyBG?: boolean } = {},
@@ -563,19 +665,33 @@ function createCommandContext() {
       mainServer: pickMainServer(input, getTokens(input)),
       useEasyBG:
         input.useEasyBG === undefined
-          ? defaults.useEasyBG ?? false
+          ? (defaults.useEasyBG ?? false)
           : input.useEasyBG !== false,
     }),
     getTokens,
+    /**
+     * 判断 BangDream回调条件。
+     * @param value - 待转换值；驱动 `test()` 的 BangDream步骤。
+     */
     isInteger: (value: string) => /^(0|[1-9]\d*)$/.test(value),
+    /**
+     * 执行 BangDream回调。
+     * @param value - 待转换值；决定 BangDream条件分支。
+     * @param fallback - 兜底值；影响 normalizeBoolean 的返回值。
+     */
     normalizeBoolean: (value: unknown, fallback: boolean) => {
-      if (value === undefined || value === null || value === '') return fallback;
+      if (value === undefined || value === null || value === '')
+        return fallback;
       if (typeof value === 'boolean') return value;
       return ['1', 'true', 'yes', 'y', '-m'].includes(
         `${value}`.trim().toLowerCase(),
       );
     },
     optionalNumber,
+    /**
+     * 执行 BangDream回调。
+     * @param value - 待转换值；驱动 `optionalNumber()` 的 BangDream步骤。
+     */
     pickDifficulty: (value: unknown) => {
       const numeric = optionalNumber(value);
       if (numeric !== undefined) return numeric;
@@ -590,26 +706,49 @@ function createCommandContext() {
     },
     pickMainServer,
     pickText,
+    /**
+     * 执行 BangDream回调。
+     * @param explicit - explicit 输入；驱动 `optionalNumber()` 的 BangDream步骤。
+     * @param fallback - 兜底值；驱动 `optionalNumber()` 的 BangDream步骤。
+     * @param message - message 输入；影响 requireNumber 的返回值。
+     */
     requireNumber: (explicit: unknown, fallback: unknown, message: string) => {
       const value = optionalNumber(explicit) ?? optionalNumber(fallback);
       if (value === undefined) throw new Error(message);
       return value;
     },
+    /**
+     * 执行 BangDream回调。
+     * @param input - input 输入；驱动 `pickText()` 的 BangDream步骤。
+     * @param message - message 输入；影响 requireText 的返回值。
+     */
     requireText: (input: BangDreamCommandInput, message: string) => {
       const value = pickText(input);
       if (!value) throw new Error(message);
       return value;
     },
+    /**
+     * 执行 BangDream回调。
+     * @param tokens - 协议 token；影响 secondNumber 的返回值。
+     */
     secondNumber: (tokens: string[]) =>
       tokens
         .map((item) => optionalNumber(item))
         .filter((item) => item !== undefined)[1],
+    /**
+     * 执行 BangDream回调。
+     * @param operationKey - operationKey 输入；影响 toImageReply 的返回值。
+     * @param query - 查询参数 DTO；限定 BangDream分页、搜索或详情查询条件。
+     * @param list - BangDream列表；筛选 BangDream列表项。
+     */
     toImageReply: (
       operationKey: BangDreamOperationKey,
       query: string,
       list: Array<Buffer | string>,
     ) => {
-      const images = list.filter((item): item is Buffer => Buffer.isBuffer(item));
+      const images = list.filter((item): item is Buffer =>
+        Buffer.isBuffer(item),
+      );
       if (images.length === 0) {
         throw new Error(
           list.find((item): item is string => typeof item === 'string') ||

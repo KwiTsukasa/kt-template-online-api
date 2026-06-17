@@ -5,7 +5,7 @@ type RegressionInput = { ep: number; percent: number };
 /**
  * 在数据下载与缓存层中处理regression。
  *
- * @param data - 业务数据对象。
+ * @param data - 响应数据；承载 BangDream新增、更新、导入或执行字段。
  */
 function regression(data: RegressionInput[]) {
   let percentTotal = 0;
@@ -31,10 +31,10 @@ function regression(data: RegressionInput[]) {
 /**
  * 在数据下载与缓存层中处理预测。
  *
- * @param cutoff - 档线参数。
- * @param startTs - startTs参数。
- * @param endTs - endTs参数。
- * @param rate - 概率参数。
+ * @param cutoff - cutoff 输入；使用 `length` 字段生成结果。
+ * @param startTs - BangDream列表；决定 BangDream条件分支。
+ * @param endTs - BangDream列表；决定 BangDream条件分支。
+ * @param rate - rate 输入；影响 predict 的返回值。
  */
 export function predict(
   cutoff: CutoffPoint[],

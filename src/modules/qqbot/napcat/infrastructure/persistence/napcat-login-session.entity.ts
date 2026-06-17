@@ -33,7 +33,12 @@ export class NapcatLoginSession {
   @Column({ length: 255, name: 'progress_message' })
   progressMessage: string;
 
-  @Column({ default: null, name: 'session_payload', nullable: true, type: 'json' })
+  @Column({
+    default: null,
+    name: 'session_payload',
+    nullable: true,
+    type: 'json',
+  })
   sessionPayload: null | QqbotLoginScanSession;
 
   @KtDateTimeColumn({
@@ -58,6 +63,9 @@ export class NapcatLoginSession {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
+  /**
+   * 创建 NapCat 登录运行态对象或配置。
+   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

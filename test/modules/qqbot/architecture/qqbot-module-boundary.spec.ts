@@ -4,6 +4,11 @@ import { basename, join, relative } from 'path';
 const repoRoot = join(__dirname, '../../../..');
 const qqbotRoot = join(repoRoot, 'src/modules/qqbot');
 
+/**
+ * 执行 测试断言流程。
+ * @param root - root 输入；驱动 `readdirSync()`、`join()` 的 测试步骤。
+ * @returns 测试断言渲染后的图片、画布或文本。
+ */
 const collectTsFiles = (root: string): string[] => {
   if (!existsSync(root)) return [];
 
@@ -15,11 +20,23 @@ const collectTsFiles = (root: string): string[] => {
   });
 };
 
+/**
+ * 读取 测试断言资源。
+ * @param filePath - 测试路径；读取本地文件内容。
+ */
 const readSource = (filePath: string) => readFileSync(filePath, 'utf8');
 
+/**
+ * 执行 测试断言流程。
+ * @param filePath - 测试路径；驱动 `relative()` 的 测试步骤。
+ */
 const toRepoPath = (filePath: string) =>
   relative(repoRoot, filePath).replace(/\\/g, '/');
 
+/**
+ * 列出Top Level Entries。
+ * @param moduleName - 模块名称文本；驱动 `join()` 的 测试步骤。
+ */
 const listTopLevelEntries = (moduleName: string) => {
   const root = join(qqbotRoot, moduleName);
   return readdirSync(root)
@@ -174,7 +191,9 @@ describe('QQBot third-phase module boundaries', () => {
     const missing = ['core', 'plugin-platform', 'napcat']
       .map((moduleName) => join(qqbotRoot, moduleName, 'schema/README.md'))
       .filter((filePath) => !existsSync(filePath))
-      .map((filePath) => `${basename(join(filePath, '../..'))}/schema/README.md`);
+      .map(
+        (filePath) => `${basename(join(filePath, '../..'))}/schema/README.md`,
+      );
 
     expect(missing).toEqual([]);
   });

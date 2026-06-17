@@ -33,9 +33,9 @@ import {
 /**
  * 在QQBot 图片视图层中绘制Random卡池。
  *
- * @param gacha - 卡池参数。
- * @param times - 时间列表参数，未传入时使用默认值。
- * @param compress - compress参数。
+ * @param gacha - gacha 输入；使用 `isExist`、`rates`、`publishedAt` 字段生成结果。
+ * @param times - BangDream列表；决定 BangDream条件分支。
+ * @param compress - BangDream列表；影响 drawRandomGacha 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawRandomGacha(
@@ -127,8 +127,8 @@ export async function drawRandomGacha(
 /**
  * 在QQBot 图片视图层中绘制卡池卡牌。
  *
- * @param card - 卡牌参数。
- * @param numberOfCard - 数字Of卡牌参数，未传入时使用默认值。
+ * @param card - card 输入；使用 `canvas`、`iconWithCount`、`countText`、`iconSingle` 字段生成结果。
+ * @param numberOfCard - numberOfCard 输入；驱动 `getGachaDuplicateLayerCount()` 的 BangDream步骤。
  */
 async function drawGachaCard(card: Card, numberOfCard: number = 1) {
   const cardIconWithId = await drawCardIcon({
@@ -194,8 +194,8 @@ async function drawGachaCard(card: Card, numberOfCard: number = 1) {
 /**
  * 在QQBot 图片视图层中获取卡池Random卡牌。
  *
- * @param gacha - 卡池参数。
- * @param times - 时间列表参数。
+ * @param gacha - gacha 输入；使用 `publishedAt`、`details`、`rates` 字段生成结果。
+ * @param times - BangDream列表；驱动 `applyGachaGuaranteedRarity()` 的 BangDream步骤。
  */
 function getGachaRandomCard(gacha: Gacha, times: number) {
   const server = getServerByPriority(gacha.publishedAt);
@@ -220,7 +220,7 @@ function getGachaRandomCard(gacha: Gacha, times: number) {
 /**
  * 在QQBot 图片视图层中绘制卡池横幅。
  *
- * @param gacha - 卡池参数。
+ * @param gacha - gacha 输入；驱动 `drawGachaDataBlock()` 的 BangDream步骤。
  */
 async function drawGachaBanner(gacha: Gacha) {
   const gachaBannerImage = resizeImage({

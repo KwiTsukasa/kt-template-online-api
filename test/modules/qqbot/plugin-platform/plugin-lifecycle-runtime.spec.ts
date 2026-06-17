@@ -12,9 +12,18 @@ import { QqbotBuiltinPluginWorkerRuntimeFactoryService } from '../../../../src/m
 
 const repoRoot = join(__dirname, '../../../..');
 
+/**
+ * 读取 QQBot 插件平台资源。
+ * @param relativePath - 相对文件路径；读取本地文件内容。
+ */
 const readSource = (relativePath: string) =>
   readFileSync(join(repoRoot, relativePath), 'utf8');
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param relativePath - 相对文件路径；驱动 `join()`、`flatMap()` 的 插件平台步骤。
+ * @returns QQBot 插件平台渲染后的图片、画布或文本。
+ */
 const collectSourceFiles = (relativePath: string): string[] => {
   const absolutePath = join(repoRoot, relativePath);
   if (!existsSync(absolutePath)) return [];
@@ -241,6 +250,10 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: 'plugin-1',
       version: '0.1.0',
     };
+    /**
+     * 创建 仓库 mock。
+     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
+     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),
@@ -397,6 +410,10 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: installation.pluginId,
       version: '0.1.0',
     };
+    /**
+     * 创建 仓库 mock。
+     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
+     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),
@@ -529,6 +546,10 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: installation.pluginId,
       version: manifest.version,
     };
+    /**
+     * 创建 仓库 mock。
+     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
+     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),
@@ -707,6 +728,11 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       status: 'disabled',
       versionId: 'version-disabled',
     };
+    /**
+     * 创建 仓库 mock。
+     * @param rows - 插件平台列表；使用 `length` 字段生成结果。
+     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
+     */
     const createRepository = (
       rows: unknown[] = [],
       findOneValue?: unknown,
@@ -799,17 +825,22 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       ],
       version: '0.1.0',
     };
+    /**
+     * 创建 仓库 mock。
+     * @param ids - 插件平台 ID 列表；限定本次批量读取、渲染或关联的插件平台范围。
+     */
     const createRepository = (ids: string[]) => {
       const rows: any[] = [];
       return {
         find: jest.fn(async () => rows),
         findAndCount: jest.fn(async () => [rows, rows.length]),
-        findOne: jest.fn(async ({ where }: any) =>
-          rows.find((row) =>
-            Object.entries(where || {}).every(
-              ([key, value]) => row[key] === value,
-            ),
-          ) || null,
+        findOne: jest.fn(
+          async ({ where }: any) =>
+            rows.find((row) =>
+              Object.entries(where || {}).every(
+                ([key, value]) => row[key] === value,
+              ),
+            ) || null,
         ),
         save: jest.fn(async (value: any) => {
           const saved = { id: value.id || ids.shift(), ...value };
@@ -928,6 +959,11 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       status: 'enabled',
       versionId: 'version-enabled',
     };
+    /**
+     * 创建 仓库 mock。
+     * @param rows - 插件平台列表；使用 `length` 字段生成结果。
+     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
+     */
     const createRepository = (
       rows: unknown[] = [],
       findOneValue?: unknown,
@@ -1052,6 +1088,11 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: plugin.id,
       version: manifest.version,
     };
+    /**
+     * 创建 仓库 mock。
+     * @param rows - 插件平台列表；使用 `length` 字段生成结果。
+     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
+     */
     const createRepository = (
       rows: unknown[] = [],
       findOneValue?: unknown,
@@ -1183,6 +1224,10 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       },
       version: '0.1.0',
     };
+    /**
+     * 创建 仓库 mock。
+     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
+     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),
@@ -1293,6 +1338,10 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: installation.pluginId,
       version: manifest.version,
     };
+    /**
+     * 创建 仓库 mock。
+     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
+     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),
@@ -1376,6 +1425,9 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       version: '0.1.0',
     };
     const commandRegistry = new QqbotPluginRegistryService({
+      /**
+       * 执行 插件平台回调。
+       */
       loadCommandPlugins: () => [commandPlugin],
     } as any);
     await commandRegistry.onModuleInit();
@@ -1398,6 +1450,9 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
 
     const repeaterPlugin = {
       bind: jest.fn(async () => true),
+      /**
+       * 读取 插件平台回调数据。
+       */
       getDefinition: () => ({
         description: 'repeat messages',
         key: 'repeater',
@@ -1415,6 +1470,9 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
         findBySelfId: jest.fn(),
       } as any,
       {
+        /**
+         * 执行 插件平台回调。
+         */
         loadEventPlugins: () => [repeaterPlugin],
       } as any,
     );
@@ -1452,6 +1510,10 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       ],
       version: '0.1.0',
     };
+    /**
+     * 创建 仓库 mock。
+     * @param rows - 插件平台列表；构造 Jest mock 返回值。
+     */
     const createRepository = (rows: unknown[] = []) => ({
       find: jest.fn(async () => rows),
     });
@@ -1465,6 +1527,9 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     ]);
     const commandRegistry = new (QqbotPluginRegistryService as any)(
       {
+        /**
+         * 执行 插件平台回调。
+         */
         loadCommandPlugins: () => [commandPlugin],
       },
       pluginRepository,
@@ -1484,6 +1549,9 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
 
     const repeaterPlugin = {
       bind: jest.fn(async () => true),
+      /**
+       * 读取 插件平台回调数据。
+       */
       getDefinition: () => ({
         description: 'repeat messages',
         key: 'repeater',
@@ -1501,6 +1569,9 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
         findBySelfId: jest.fn(),
       },
       {
+        /**
+         * 执行 插件平台回调。
+         */
         loadEventPlugins: () => [repeaterPlugin],
       },
       pluginRepository,
@@ -1536,11 +1607,18 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       ],
       version: '0.1.0',
     };
+    /**
+     * 创建 仓库 mock。
+     * @param rows - 插件平台列表；构造 Jest mock 返回值。
+     */
     const createRepository = (rows: unknown[] = []) => ({
       find: jest.fn(async () => rows),
     });
     const commandRegistry = new (QqbotPluginRegistryService as any)(
       {
+        /**
+         * 执行 插件平台回调。
+         */
         loadCommandPlugins: () => [commandPlugin],
       },
       createRepository([{ id: 'plugin-command', pluginKey: 'demo-plugin' }]),
@@ -1588,6 +1666,10 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: installation.pluginId,
       version: '0.2.0',
     };
+    /**
+     * 创建 仓库 mock。
+     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
+     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),

@@ -14,6 +14,11 @@ const primitiveTypeMap = {
   boolean: Boolean,
 };
 
+/**
+ * 设置Class Name。
+ * @param target - target 输入；驱动 `Object.defineProperty()` 的 公共基础设施步骤。
+ * @param name - 名称文本；驱动 `Object.defineProperty()` 的 公共基础设施步骤。
+ */
 const setClassName = (target: Type<any>, name: string) => {
   Object.defineProperty(target, 'name', {
     value: name,
@@ -47,12 +52,20 @@ export class ApiResponseDto<TData> {
   data: TData;
 }
 
+/**
+ * 查询 当前模块数据。
+ * @param example - example 输入；限定 公共基础设施查询范围。
+ */
 const getResponseExample = (example: any) => ({
   code: 200,
   msg: '操作成功',
   data: example,
 });
 
+/**
+ * 执行 当前模块流程。
+ * @param { description = '操作成功', schema, example, } - Swagger 响应示例数据，用于生成 OpenAPI 成功或错误响应示例，读取 `description`、`schema`、`example` 字段。
+ */
 export const ApiSuccessResponse = ({
   description = '操作成功',
   schema,
@@ -80,6 +93,12 @@ export const ApiSuccessResponse = ({
   );
 };
 
+/**
+ * 执行 当前模块流程。
+ * @param model - model 输入；使用 `name` 字段生成结果。
+ * @param example - example 输入；驱动 `getResponseExample()` 的 公共基础设施步骤。
+ * @param description - description 输入；影响 ApiModelResponse 的返回值。
+ */
 export const ApiModelResponse = <TModel extends Type<any>>(
   model: TModel,
   example: any,
@@ -104,6 +123,12 @@ export const ApiModelResponse = <TModel extends Type<any>>(
   );
 };
 
+/**
+ * 执行 当前模块流程。
+ * @param model - model 输入；使用 `name` 字段生成结果。
+ * @param example - example 输入；驱动 `getResponseExample()` 的 公共基础设施步骤。
+ * @param description - description 输入；影响 ApiArrayResponse 的返回值。
+ */
 export const ApiArrayResponse = <TModel extends Type<any>>(
   model: TModel,
   example: any[],
@@ -128,6 +153,13 @@ export const ApiArrayResponse = <TModel extends Type<any>>(
   );
 };
 
+/**
+ * 执行 当前模块流程。
+ * @param model - model 输入；使用 `name` 字段生成结果。
+ * @param example - example 输入；影响 ApiPageResponse 的返回值。
+ * @param total - 总记录数；影响 ApiPageResponse 的返回值。
+ * @param description - description 输入；影响 ApiPageResponse 的返回值。
+ */
 export const ApiPageResponse = <TModel extends Type<any>>(
   model: TModel,
   example: any[],
@@ -164,6 +196,10 @@ export const ApiPageResponse = <TModel extends Type<any>>(
   );
 };
 
+/**
+ * 执行 当前模块流程。
+ * @param description - description 输入；影响 ApiFileDownloadResponse 的返回值。
+ */
 export const ApiFileDownloadResponse = (description = '文件下载成功') =>
   applyDecorators(
     ApiOkResponse({
@@ -211,6 +247,10 @@ const standardErrorSchema = {
   },
 };
 
+/**
+ * 执行 当前模块流程。
+ * @param document - document 输入；使用 `paths` 字段生成结果。
+ */
 export const applySwaggerResponseExamples = (document: OpenAPIObject) => {
   const components = ensureDocumentComponents(document);
   components.schemas.KtApiErrorResponse ||= standardErrorSchema;
@@ -225,6 +265,13 @@ export const applySwaggerResponseExamples = (document: OpenAPIObject) => {
   return document;
 };
 
+/**
+ * 执行 当前模块流程。
+ * @param document - document 输入；驱动 `createOperationSuccessSchema()` 的 公共基础设施步骤。
+ * @param path - OpenAPI 路径；驱动 `getOperationDataExample()`、`createOperationSuccessSchema()` 的 公共基础设施步骤。
+ * @param method - HTTP 方法名；驱动 `getOperationDataExample()`、`createOperationSuccessSchema()` 的 公共基础设施步骤。
+ * @param operation - operation 输入；使用 `responses` 字段生成结果。
+ */
 function applyOperationResponseExamples(
   document: OpenAPIObject,
   path: string,
@@ -288,6 +335,10 @@ function applyOperationResponseExamples(
   applyErrorResponses(operation);
 }
 
+/**
+ * 执行 当前模块流程。
+ * @param operation - operation 输入；使用 `responses` 字段生成结果。
+ */
 function applyErrorResponses(operation: SwaggerOperation) {
   operation.responses['400'] ||= buildErrorResponse(
     400,
@@ -306,6 +357,11 @@ function applyErrorResponses(operation: SwaggerOperation) {
   );
 }
 
+/**
+ * 创建 当前模块对象或配置。
+ * @param dataExample - dataExample 输入；驱动 `getResponseExample()` 的 公共基础设施步骤。
+ * @param schema - schema 输入；生成 公共基础设施对象。
+ */
 function buildSuccessResponse(dataExample: any, schema: SwaggerSchema) {
   const example = getResponseExample(dataExample);
 
@@ -326,6 +382,11 @@ function buildSuccessResponse(dataExample: any, schema: SwaggerSchema) {
   };
 }
 
+/**
+ * 创建 当前模块对象或配置。
+ * @param example - example 输入；驱动 `schemaFromExample()` 的 公共基础设施步骤。
+ * @param description - description 输入；生成 公共基础设施对象。
+ */
 function buildPlainJsonResponse(example: any, description: string) {
   return {
     description,
@@ -344,6 +405,12 @@ function buildPlainJsonResponse(example: any, description: string) {
   };
 }
 
+/**
+ * 创建 当前模块对象或配置。
+ * @param status - 公共基础设施列表；生成 公共基础设施对象。
+ * @param summary - summary 输入；生成 公共基础设施对象。
+ * @param message - message 输入；生成 公共基础设施对象。
+ */
 function buildErrorResponse(status: number, summary: string, message: string) {
   return {
     description: message,
@@ -372,6 +439,13 @@ function buildErrorResponse(status: number, summary: string, message: string) {
   };
 }
 
+/**
+ * 创建 当前模块对象或配置。
+ * @param document - document 输入；驱动 `ensureDocumentComponents()` 的 公共基础设施步骤。
+ * @param path - OpenAPI 路径；驱动 `toPascalCase()` 的 公共基础设施步骤。
+ * @param method - HTTP 方法名；驱动 `toPascalCase()` 的 公共基础设施步骤。
+ * @param dataExample - dataExample 输入；驱动 `schemaFromExample()`、`buildSuccessSchema()` 的 公共基础设施步骤。
+ */
 function createOperationSuccessSchema(
   document: OpenAPIObject,
   path: string,
@@ -396,6 +470,12 @@ function createOperationSuccessSchema(
   };
 }
 
+/**
+ * 创建 当前模块对象或配置。
+ * @param dataExample - dataExample 输入；驱动 `getResponseExample()` 的 公共基础设施步骤。
+ * @param dataSchemaName - dataSchemaName 输入；生成 公共基础设施对象。
+ * @returns 创建后的 当前模块对象或配置。
+ */
 function buildSuccessSchema(
   dataExample: any,
   dataSchemaName: string,
@@ -431,6 +511,11 @@ function buildSuccessSchema(
   };
 }
 
+/**
+ * 合并Json Response。
+ * @param currentResponse - currentResponse 输入；使用 `content`、`description` 字段生成结果。
+ * @param standardResponse - standardResponse 输入；使用 `description`、`content` 字段生成结果。
+ */
 function mergeJsonResponse(currentResponse: any, standardResponse: any) {
   if (!currentResponse?.content?.['application/json']) {
     return {
@@ -461,6 +546,14 @@ function mergeJsonResponse(currentResponse: any, standardResponse: any) {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ * @param example - example 输入；使用 `length` 字段生成结果。
+ * @param propertyName - propertyName 输入；驱动 `toPascalCase()`、`schemaFromExample()`、`getPropertyDescription()`、`Number.isInteger()` 的 公共基础设施步骤。
+ * @param components - 公共基础设施列表；使用 `schemas` 字段生成结果。
+ * @param schemaName - schemaName 输入；驱动 `schemaFromExample()` 的 公共基础设施步骤。
+ * @returns 当前模块产出的 SwaggerSchema。
+ */
 function schemaFromExample(
   example: any,
   propertyName = 'data',
@@ -556,6 +649,11 @@ function schemaFromExample(
   };
 }
 
+/**
+ * 确保Document Components。
+ * @param document - document 输入；使用 `components` 字段生成结果。
+ * @returns 当前模块产出的 SwaggerComponents。
+ */
 function ensureDocumentComponents(document: OpenAPIObject): SwaggerComponents {
   document.components ||= {};
   document.components.schemas ||= {};
@@ -563,6 +661,10 @@ function ensureDocumentComponents(document: OpenAPIObject): SwaggerComponents {
   return document.components;
 }
 
+/**
+ * 执行 当前模块流程。
+ * @param value - 待转换值；影响 toPascalCase 的返回值。
+ */
 function toPascalCase(value: string) {
   return value
     .split(/[^a-zA-Z0-9]+/)
@@ -571,6 +673,10 @@ function toPascalCase(value: string) {
     .join('');
 }
 
+/**
+ * 查询 当前模块数据。
+ * @param propertyName - propertyName 输入；计算 公共基础设施布尔判断。
+ */
 function getArrayItemName(propertyName: string) {
   if (propertyName === 'items') return 'item';
   if (propertyName.endsWith('s')) return propertyName.slice(0, -1);
@@ -578,6 +684,10 @@ function getArrayItemName(propertyName: string) {
   return `${propertyName}Item`;
 }
 
+/**
+ * 查询 当前模块数据。
+ * @param propertyName - propertyName 输入；限定 公共基础设施查询范围。
+ */
 function getPropertyDescription(propertyName: string) {
   const descriptionMap: Record<string, string> = {
     ['access' + 'Token']: 'Admin 访问令牌',
@@ -657,6 +767,12 @@ function getPropertyDescription(propertyName: string) {
   return descriptionMap[propertyName] || propertyName;
 }
 
+/**
+ * 查询 当前模块数据。
+ * @param path - OpenAPI 路径；执行 `path.toLowerCase()` 对应的 公共基础设施步骤。
+ * @param method - HTTP 方法名；决定 公共基础设施条件分支。
+ * @param operation - operation 输入；使用 `summary`、`description` 字段生成结果。
+ */
 function getOperationDataExample(
   path: string,
   method: string,
@@ -694,6 +810,10 @@ function getOperationDataExample(
   return itemExampleByPath(normalizedPath);
 }
 
+/**
+ * 判断 当前模块条件。
+ * @param path - OpenAPI 路径；计算 公共基础设施布尔判断。
+ */
 function isPageResponsePath(path: string) {
   if (path.startsWith('/wordpress/')) return false;
   return (
@@ -704,6 +824,10 @@ function isPageResponsePath(path: string) {
   );
 }
 
+/**
+ * 判断 当前模块条件。
+ * @param path - OpenAPI 路径；计算 公共基础设施布尔判断。
+ */
 function isArrayResponsePath(path: string) {
   return (
     (path.startsWith('/wordpress/') && path.endsWith('/list')) ||
@@ -718,6 +842,12 @@ function isArrayResponsePath(path: string) {
   );
 }
 
+/**
+ * 判断 当前模块条件。
+ * @param path - OpenAPI 路径；计算 公共基础设施布尔判断。
+ * @param method - HTTP 方法名；计算 公共基础设施判断结果。
+ * @param summary - summary 输入；计算 公共基础设施布尔判断。
+ */
 function isBooleanResponsePath(path: string, method: string, summary: string) {
   return (
     method === 'delete' ||
@@ -732,14 +862,26 @@ function isBooleanResponsePath(path: string, method: string, summary: string) {
   );
 }
 
+/**
+ * 判断 当前模块条件。
+ * @param path - OpenAPI 路径；计算 公共基础设施布尔判断。
+ */
 function isBinaryResponsePath(path: string) {
   return path.includes('/download') || path.includes('/resource-proxy');
 }
 
+/**
+ * 判断 当前模块条件。
+ * @param path - OpenAPI 路径；执行 `path.toLowerCase()` 对应的 公共基础设施步骤。
+ */
 function isRuntimeHealthPath(path: string) {
   return path.toLowerCase() === '/health/runtime';
 }
 
+/**
+ * 执行 当前模块流程。
+ * @param path - OpenAPI 路径；计算 公共基础设施布尔判断。
+ */
 function itemExampleByPath(path: string) {
   if (path.includes('/qqbot/account')) return qqbotAccountExample();
   if (path.includes('/qqbot/command')) return qqbotCommandExample();
@@ -771,6 +913,9 @@ function itemExampleByPath(path: string) {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function adminLoginExample() {
   return {
     id: '1000000000000000001',
@@ -784,6 +929,9 @@ function adminLoginExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function adminDictExample() {
   return {
     id: '2041700000000300001',
@@ -798,6 +946,9 @@ function adminDictExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function adminUserExample() {
   return {
     id: '1000000000000000001',
@@ -808,6 +959,9 @@ function adminUserExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function adminMenuExample() {
   return {
     id: '1000000000000000001',
@@ -822,6 +976,9 @@ function adminMenuExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function adminDeptExample() {
   return {
     id: '1000000000000000001',
@@ -831,6 +988,9 @@ function adminDeptExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function adminRoleExample() {
   return {
     id: '1000000000000000001',
@@ -840,6 +1000,9 @@ function adminRoleExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function componentExample() {
   return {
     id: '1000000000000000001',
@@ -849,6 +1012,9 @@ function componentExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function qqbotAccountExample() {
   return {
     connectStatus: 'online',
@@ -873,6 +1039,9 @@ function qqbotAccountExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function qqbotCommandExample() {
   return {
     id: '1000000000000000001',
@@ -883,6 +1052,9 @@ function qqbotCommandExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function qqbotRuleExample() {
   return {
     id: '1000000000000000001',
@@ -894,6 +1066,9 @@ function qqbotRuleExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function qqbotConversationExample() {
   return {
     id: '1000000000000000001',
@@ -904,6 +1079,9 @@ function qqbotConversationExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function qqbotMessageExample() {
   return {
     id: '1000000000000000001',
@@ -915,6 +1093,9 @@ function qqbotMessageExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function qqbotPermissionExample() {
   return {
     id: '1000000000000000001',
@@ -927,6 +1108,9 @@ function qqbotPermissionExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function qqbotPluginExample() {
   return {
     key: 'fflogs',
@@ -936,6 +1120,9 @@ function qqbotPluginExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function qqbotSendLogExample() {
   return {
     id: '1000000000000000001',
@@ -947,6 +1134,9 @@ function qqbotSendLogExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function qqbotScanExample() {
   return {
     sessionId: 'KT_SCAN_20260602120000',
@@ -956,6 +1146,9 @@ function qqbotScanExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function dashboardExample() {
   return {
     accountCount: 1,
@@ -965,6 +1158,9 @@ function dashboardExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function permissionConfigExample() {
   return {
     mode: 'blocklist',
@@ -972,6 +1168,9 @@ function permissionConfigExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function pluginHealthExample() {
   return {
     key: 'fflogs',
@@ -981,6 +1180,9 @@ function pluginHealthExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function runtimeHealthExample() {
   return {
     service: 'kt-template-online-api',
@@ -1003,6 +1205,9 @@ function runtimeHealthExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function wordpressArticleExample() {
   return {
     id: 1,
@@ -1013,6 +1218,10 @@ function wordpressArticleExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ * @param name - 名称文本；执行 `name.toLowerCase()` 对应的 公共基础设施步骤。
+ */
 function wordpressTaxonomyExample(name: string) {
   return {
     id: 1,
@@ -1022,6 +1231,9 @@ function wordpressTaxonomyExample(name: string) {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function minioObjectExample() {
   return {
     name: 'uploads/demo.png',
@@ -1031,6 +1243,9 @@ function minioObjectExample() {
   };
 }
 
+/**
+ * 执行 当前模块流程。
+ */
 function minioUploadExample() {
   return {
     bucketName: 'kt-template-online',

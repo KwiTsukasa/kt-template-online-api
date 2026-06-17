@@ -13,8 +13,8 @@ const RELATION_CHECKERS: RelationChecker[] = [
     /**
      * 判断数字是否小于关系表达式右值。
      *
-     * @param num - 待匹配数字。
-     * @param match - 关系表达式捕获结果。
+     * @param num - num 输入；影响 test 的返回值。
+     * @param match - match 输入；驱动 `parseFloat()` 的 BangDream步骤。
      */
     test: (num, match) => num < parseFloat(match[1]),
   },
@@ -23,8 +23,8 @@ const RELATION_CHECKERS: RelationChecker[] = [
     /**
      * 判断数字是否大于关系表达式右值。
      *
-     * @param num - 待匹配数字。
-     * @param match - 关系表达式捕获结果。
+     * @param num - num 输入；影响 test 的返回值。
+     * @param match - match 输入；驱动 `parseFloat()` 的 BangDream步骤。
      */
     test: (num, match) => num > parseFloat(match[1]),
   },
@@ -33,8 +33,8 @@ const RELATION_CHECKERS: RelationChecker[] = [
     /**
      * 判断数字是否落入关系表达式闭区间。
      *
-     * @param num - 待匹配数字。
-     * @param match - 关系表达式捕获结果。
+     * @param num - num 输入；驱动 `parseFloat()` 的 BangDream步骤。
+     * @param match - match 输入；驱动 `parseFloat()` 的 BangDream步骤。
      */
     test: (num, match) =>
       num >= parseFloat(match[1]) && num <= parseFloat(match[2]),
@@ -44,7 +44,7 @@ const RELATION_CHECKERS: RelationChecker[] = [
 /**
  * 统一关系表达式中的符号写法。
  *
- * @param keyword - 用户输入的搜索关键词。
+ * @param keyword - keyword 输入；影响 normalizeRelationKeyword 的返回值。
  */
 export function normalizeRelationKeyword(keyword: string): string {
   return keyword
@@ -57,7 +57,7 @@ export function normalizeRelationKeyword(keyword: string): string {
 /**
  * 判断关系表达式是否可用于范围匹配。
  *
- * @param relationStr - 关系表达式。
+ * @param relationStr - relationStr 输入；驱动 `RELATION_PATTERNS.some()` 的 BangDream步骤。
  */
 export function isValidRelationStr(relationStr: string): boolean {
   return RELATION_PATTERNS.some((pattern) => pattern.test(relationStr));
@@ -66,7 +66,7 @@ export function isValidRelationStr(relationStr: string): boolean {
 /**
  * 创建数值关系表达式匹配器。
  *
- * @param relationStr - 关系表达式。
+ * @param relationStr - relationStr 输入；提取正则匹配结果。
  */
 function createRelationMatcher(relationStr: string): (num: number) => boolean {
   for (const checker of RELATION_CHECKERS) {
@@ -81,8 +81,8 @@ function createRelationMatcher(relationStr: string): (num: number) => boolean {
 /**
  * 检查数值列表是否满足关系表达式。
  *
- * @param num - 待匹配数字。
- * @param relationStrList - 关系表达式列表。
+ * @param num - num 输入；影响 checkRelationList 的返回值。
+ * @param relationStrList - relationStrList 输入；驱动 `for()` 的 BangDream步骤。
  */
 export function checkRelationList(
   num: number,

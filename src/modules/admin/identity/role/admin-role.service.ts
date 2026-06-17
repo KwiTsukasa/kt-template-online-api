@@ -4,10 +4,18 @@ import { Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
 import { AdminMenu } from '../menu/admin-menu.entity';
 import { AdminRole } from './admin-role.entity';
-import type { AdminRoleInput, AdminRoleListQuery } from '../../contract/admin.types';
+import type {
+  AdminRoleInput,
+  AdminRoleListQuery,
+} from '../../contract/admin.types';
 
 @Injectable()
 export class AdminRoleService {
+  /**
+   * 初始化 AdminRoleService 实例。
+   * @param roleRepository - 角色仓库依赖；影响 constructor 的返回值。
+   * @param menuRepository - 菜单仓库依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(AdminRole)
     private readonly roleRepository: Repository<AdminRole>,
@@ -15,6 +23,10 @@ export class AdminRoleService {
     private readonly menuRepository: Repository<AdminMenu>,
   ) {}
 
+  /**
+   * 查询 Admin 身份权限数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   async getRoleList(query: AdminRoleListQuery) {
     const page = Number(query.page || 1);
     const pageSize = Number(query.pageSize || 20);
@@ -60,6 +72,10 @@ export class AdminRoleService {
     };
   }
 
+  /**
+   * 创建 Admin 身份权限对象或配置。
+   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   */
   async createRole(data: AdminRoleInput) {
     const role = this.roleRepository.create({
       name: data.name,
@@ -72,6 +88,11 @@ export class AdminRoleService {
     return null;
   }
 
+  /**
+   * 更新Role。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   */
   async updateRole(id: string, data: AdminRoleInput) {
     const role = await this.roleRepository.findOne({
       relations: ['menus'],
@@ -92,6 +113,10 @@ export class AdminRoleService {
     return null;
   }
 
+  /**
+   * 删除Role。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   async deleteRole(id: string) {
     await this.roleRepository.update(
       { id },
@@ -102,6 +127,10 @@ export class AdminRoleService {
     return null;
   }
 
+  /**
+   * 序列化Role。
+   * @param role - role 输入；使用 `createTime`、`id`、`name`、`menus` 字段生成结果。
+   */
   private serializeRole(role: AdminRole) {
     return {
       createTime: role.createTime,
@@ -113,6 +142,10 @@ export class AdminRoleService {
     };
   }
 
+  /**
+   * 查询 Admin 身份权限数据。
+   * @param ids - Admin ID 列表；限定本次批量读取、渲染或关联的Admin范围。
+   */
   private async findMenusByIds(ids: string[]) {
     const normalizedIds = ids.map((id) => String(id)).filter(Boolean);
     if (!normalizedIds.length) return [];
@@ -124,6 +157,10 @@ export class AdminRoleService {
     });
   }
 
+  /**
+   * 创建 Admin 身份权限对象或配置。
+   * @param name - 名称文本；生成 Admin对象。
+   */
   private createRoleCode(name?: string) {
     const slug = (name || 'role')
       .toLowerCase()

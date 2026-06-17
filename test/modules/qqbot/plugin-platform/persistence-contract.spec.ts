@@ -7,12 +7,20 @@ import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
 type EntityClass = new (...args: never[]) => unknown;
 
+/**
+ * 查询 QQBot 插件平台数据。
+ * @param entity - entity 输入；驱动 `getMetadataArgsStorage()` 的 插件平台步骤。
+ */
 const getEntityTableName = (entity: EntityClass) => {
   return getMetadataArgsStorage().tables.find(
     (table) => table.target === entity,
   )?.name;
 };
 
+/**
+ * 查询 QQBot 插件平台数据。
+ * @param entity - entity 输入；驱动 `getMetadataArgsStorage()` 的 插件平台步骤。
+ */
 const getEntityColumnNames = (entity: EntityClass) => {
   return getMetadataArgsStorage()
     .columns.filter((column) => column.target === entity)

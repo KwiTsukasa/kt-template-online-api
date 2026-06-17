@@ -13,35 +13,61 @@ import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 const repoRoot = join(__dirname, '../../../..');
 const schema = readRefactorV3SqlSchema();
 
+/**
+ * 读取 NapCat 登录运行态资源。
+ * @param relativePath - 相对文件路径；读取本地文件内容。
+ */
 const readSource = (relativePath: string) =>
   readFileSync(join(repoRoot, relativePath), 'utf8');
 
 type EntityClass = new (...args: never[]) => unknown;
 
+/**
+ * 查询 NapCat 登录运行态数据。
+ * @param entity - entity 输入；驱动 `getMetadataArgsStorage()` 的 NapCat步骤。
+ */
 const getEntityTableName = (entity: EntityClass) => {
   return getMetadataArgsStorage().tables.find(
     (table) => table.target === entity,
   )?.name;
 };
 
+/**
+ * 查询 NapCat 登录运行态数据。
+ * @param entity - entity 输入；驱动 `getMetadataArgsStorage()` 的 NapCat步骤。
+ */
 const getEntityColumnNames = (entity: EntityClass) => {
   return getMetadataArgsStorage()
     .columns.filter((column) => column.target === entity)
     .map((column) => `${column.options.name || column.propertyName}`);
 };
 
+/**
+ * 查询 NapCat 登录运行态数据。
+ * @param entity - entity 输入；驱动 `getMetadataArgsStorage()` 的 NapCat步骤。
+ * @param propertyName - propertyName 输入；驱动 `getMetadataArgsStorage()` 的 NapCat步骤。
+ */
 const getEntityColumnOptions = (entity: EntityClass, propertyName: string) => {
   return getMetadataArgsStorage().columns.find(
-    (column) => column.target === entity && column.propertyName === propertyName,
+    (column) =>
+      column.target === entity && column.propertyName === propertyName,
   )?.options;
 };
 
+/**
+ * 查询 NapCat 登录运行态数据。
+ * @param tableName - tableName 输入；驱动 `getTableColumns()` 的 NapCat步骤。
+ * @param columnName - columnName 输入；驱动 `getTableColumns()` 的 NapCat步骤。
+ */
 const getSchemaColumnDefinition = (tableName: string, columnName: string) => {
   return schema
     .getTableColumns(tableName)
     .find((column) => column.name === columnName)?.definition;
 };
 
+/**
+ * 创建 NapCat 登录运行态对象或配置。
+ */
 const createRepository = <T extends Record<string, any>>() => {
   const rows: T[] = [];
   return {
@@ -142,9 +168,9 @@ describe('NapCat persistent login state contract', () => {
     expect(
       getEntityColumnOptions(NapcatLoginChallengeEntity, 'sessionId'),
     ).toMatchObject({ length: 64, type: 'varchar' });
-    expect(getEntityColumnOptions(NapcatRuntimeCleanup, 'sessionId')).toMatchObject(
-      { length: 64, type: 'varchar' },
-    );
+    expect(
+      getEntityColumnOptions(NapcatRuntimeCleanup, 'sessionId'),
+    ).toMatchObject({ length: 64, type: 'varchar' });
 
     expect(
       getSchemaColumnDefinition('napcat_login_challenge', 'session_id'),

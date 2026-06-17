@@ -9,13 +9,24 @@ import {
   ff14ResolveItemHandlerName,
 } from './resolve-item';
 
+/**
+ * 创建 FF14 市场插件对象或配置。
+ * @param application - application 输入；驱动 `createFf14MarketPriceOperation()` 的 FF14 市场步骤。
+ * @param operations - FF14 市场列表；转换 FF14 市场列表项。
+ */
 export function buildFf14MarketOperations(
   application: Ff14MarketApplication,
   operations: Ff14MarketManifestOperation[],
 ) {
   const operationFactories = {
+    /**
+     * 执行 FF14 市场回调。
+     */
     [ff14PricePriceHandlerName]: () =>
       createFf14MarketPriceOperation(application),
+    /**
+     * 执行 FF14 市场回调。
+     */
     [ff14ResolveItemHandlerName]: () =>
       createFf14ResolveItemOperation(application),
   } satisfies Record<

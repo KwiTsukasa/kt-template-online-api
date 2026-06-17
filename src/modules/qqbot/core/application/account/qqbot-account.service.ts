@@ -37,6 +37,16 @@ const INSECURE_ACCOUNT_SECRET_VALUES = new Set([
 
 @Injectable()
 export class QqbotAccountService {
+  /**
+   * 初始化 QqbotAccountService 实例。
+   * @param accountRepository - 账号仓库依赖；影响 constructor 的返回值。
+   * @param accountAbilityRepository - 账号仓库依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * @param napcatRuntime - napcatRuntime 输入；影响 constructor 的返回值。
+   * @param systemNoticePublisher - systemNoticePublisher 输入；影响 constructor 的返回值。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   * @param passwordCryptoService - passwordCryptoService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(QqbotAccount)
     private readonly accountRepository: Repository<QqbotAccount>,
@@ -55,6 +65,10 @@ export class QqbotAccountService {
     private readonly passwordCryptoService?: AdminPasswordCryptoService,
   ) {}
 
+  /**
+   * 获取分页数据。
+   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   */
   async page(query: QqbotAccountQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
       query,
@@ -88,6 +102,9 @@ export class QqbotAccountService {
     return { list, pageNo, pageSize, total };
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   */
   async allEnabled() {
     return this.accountRepository.find({
       order: {
@@ -100,42 +117,88 @@ export class QqbotAccountService {
     });
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async getBoundCommandIds(selfId: string) {
     return this.getBoundAbilityKeys(selfId, 'command');
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async getBoundRuleIds(selfId: string) {
     return this.getBoundAbilityKeys(selfId, 'rule');
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async getBoundEventPluginKeys(selfId: string) {
     return this.getBoundAbilityKeys(selfId, 'event_plugin');
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param commandId - 命令 ID；定位本次读取、更新、删除或关联的命令。
+   */
   async bindCommand(selfId: string, commandId: string) {
     return this.bindAbility(selfId, commandId, 'command');
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param ruleId - QQBot ID；定位本次读取、更新、删除或关联的QQBot。
+   */
   async bindRule(selfId: string, ruleId: string) {
     return this.bindAbility(selfId, ruleId, 'rule');
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param pluginKey - pluginKey 输入；驱动 `this.bindAbility()` 的 QQBot步骤。
+   */
   async bindEventPlugin(selfId: string, pluginKey: string) {
     return this.bindAbility(selfId, pluginKey, 'event_plugin');
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param commandId - 命令 ID；定位本次读取、更新、删除或关联的命令。
+   */
   async unbindCommand(selfId: string, commandId: string) {
     return this.unbindAbility(selfId, commandId, 'command');
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param ruleId - QQBot ID；定位本次读取、更新、删除或关联的QQBot。
+   */
   async unbindRule(selfId: string, ruleId: string) {
     return this.unbindAbility(selfId, ruleId, 'rule');
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param pluginKey - pluginKey 输入；驱动 `this.unbindAbility()` 的 QQBot步骤。
+   */
   async unbindEventPlugin(selfId: string, pluginKey: string) {
     return this.unbindAbility(selfId, pluginKey, 'event_plugin');
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async getDefaultAccount(selfId?: string) {
     if (selfId) {
       const account = await this.accountRepository.findOne({
@@ -155,6 +218,10 @@ export class QqbotAccountService {
     });
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async findEnabledBySelfIdWithToken(selfId: string) {
     return this.accountRepository
       .createQueryBuilder('account')
@@ -165,6 +232,10 @@ export class QqbotAccountService {
       .getOne();
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   */
   async findById(id: string) {
     return this.accountRepository.findOne({
       where: {
@@ -174,6 +245,10 @@ export class QqbotAccountService {
     });
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   */
   async findByIdWithNapcatLoginSecret(id: string) {
     return this.accountRepository
       .createQueryBuilder('account')
@@ -183,6 +258,10 @@ export class QqbotAccountService {
       .getOne();
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async findBySelfId(selfId: string) {
     return this.accountRepository.findOne({
       where: {
@@ -192,6 +271,10 @@ export class QqbotAccountService {
     });
   }
 
+  /**
+   * 确保Scanned Account。
+   * @param input - input 输入；使用 `selfId`、`accountId`、`name` 字段生成结果。
+   */
   async ensureScannedAccount(input: {
     accountId?: string;
     name?: string;
@@ -235,6 +318,10 @@ export class QqbotAccountService {
     return saved.id;
   }
 
+  /**
+   * 确保Runtime Account。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async ensureRuntimeAccount(selfId: string) {
     const normalizedSelfId = `${selfId || ''}`.trim();
     if (!normalizedSelfId) return;
@@ -272,6 +359,10 @@ export class QqbotAccountService {
     );
   }
 
+  /**
+   * 保存数据。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async save(body: QqbotAccountBodyDto) {
     const payload = this.normalizeBody(body);
     const restored = await this.restoreDeletedAccount(payload);
@@ -283,6 +374,10 @@ export class QqbotAccountService {
     return saved.id;
   }
 
+  /**
+   * 更新数据。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async update(body: QqbotAccountUpdateDto) {
     if (body.selfId) {
       await this.assertSelfIdAvailable(body.selfId, body.id);
@@ -302,6 +397,10 @@ export class QqbotAccountService {
     return true;
   }
 
+  /**
+   * 删除数据。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   */
   async remove(id: string) {
     const account = await this.accountRepository.findOne({
       where: {
@@ -313,10 +412,11 @@ export class QqbotAccountService {
       throwVbenError('QQBot 账号不存在或已删除');
     }
 
-    const containerResult =
-      (await this.napcatRuntime?.removeAccountContainers(id)) || {
-        deletedContainers: 0,
-      };
+    const containerResult = (await this.napcatRuntime?.removeAccountContainers(
+      id,
+    )) || {
+      deletedContainers: 0,
+    };
     await this.accountRepository.update(
       { id },
       {
@@ -334,6 +434,12 @@ export class QqbotAccountService {
     };
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param clientRole - clientRole 输入；影响 markOnline 的返回值。
+   * @param lastError - lastError 输入；驱动 `toolsService.toColumnText()` 的 QQBot步骤。
+   */
   async markOnline(
     selfId: string,
     clientRole: QqbotConnectionRole,
@@ -349,12 +455,13 @@ export class QqbotAccountService {
         ? this.toolsService.toColumnText(lastError, 500)
         : null;
     }
-    await this.accountRepository.update(
-      { selfId },
-      payload,
-    );
+    await this.accountRepository.update({ selfId }, payload);
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async markHeartbeat(selfId: string) {
     await this.accountRepository.update(
       { selfId },
@@ -386,6 +493,11 @@ export class QqbotAccountService {
     return { checked: accounts.length };
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param lastError - lastError 输入；驱动 `toolsService.toColumnText()` 的 QQBot步骤。
+   */
   async markOffline(selfId: string, lastError?: string) {
     const payload: Partial<QqbotAccount> = {
       connectStatus: 'offline',
@@ -398,6 +510,11 @@ export class QqbotAccountService {
     await this.accountRepository.update({ selfId }, payload);
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param lastError - lastError 输入；驱动 `toolsService.toColumnText()` 的 QQBot步骤。
+   */
   async markQqLoginOffline(selfId: string, lastError: string) {
     await this.accountRepository.update(
       { selfId },
@@ -407,6 +524,10 @@ export class QqbotAccountService {
     );
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param account - account 输入；驱动 `toolsService.toTrimmedString()` 的 QQBot步骤。
+   */
   getNapcatLoginPassword(
     account?: Pick<QqbotAccount, 'napcatLoginPasswordSecret'> | null,
   ) {
@@ -420,28 +541,67 @@ export class QqbotAccountService {
     );
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param accounts - 账号列表；转换 QQBot列表项。
+   * @param options - QQBot列表；驱动 `napcatRuntime.appendRuntime()` 的 QQBot步骤。
+   * @returns 异步完成后的 QQBot 核心结果。
+   */
   private async appendNapcatRuntime(
     accounts: QqbotAccount[],
     options: { autoLogin?: boolean } = {},
   ): Promise<QqbotAccountListItem[]> {
     if (!this.napcatRuntime) {
-      return accounts.map((account) => Object.assign(account, { napcat: null }));
+      return accounts.map((account) =>
+        Object.assign(account, { napcat: null }),
+      );
     }
 
     return this.napcatRuntime.appendRuntime(accounts, options, {
+      /**
+       * 执行 QQBot回调。
+       * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+       */
       clearQqLoginError: async (selfId) => {
         await this.accountRepository.update({ selfId }, { lastError: null });
       },
+      /**
+       * 读取 QQBot回调数据。
+       * @param account - account 输入；驱动 `this.getNapcatLoginPassword()` 的 QQBot步骤。
+       */
       getLoginPassword: (account) => this.getNapcatLoginPassword(account),
+      /**
+       * 执行 QQBot回调。
+       * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+       * @param clientRole - clientRole 输入；驱动 `this.markOnline()` 的 QQBot步骤。
+       * @param lastError - lastError 输入；驱动 `this.markOnline()` 的 QQBot步骤。
+       */
       markOnline: (selfId, clientRole, lastError) =>
         this.markOnline(selfId, clientRole, lastError),
+      /**
+       * 执行 QQBot回调。
+       * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+       * @param lastError - lastError 输入；驱动 `this.markQqLoginOffline()` 的 QQBot步骤。
+       */
       markQqLoginOffline: (selfId, lastError) =>
         this.markQqLoginOffline(selfId, lastError),
+      /**
+       * 执行 QQBot回调。
+       * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+       * @param offlineReason - offlineReason 输入；驱动 `this.publishOfflineNotice()` 的 QQBot步骤。
+       * @param metadata - metadata 输入；驱动 `this.publishOfflineNotice()` 的 QQBot步骤。
+       */
       publishOfflineNotice: (selfId, offlineReason, metadata) =>
         this.publishOfflineNotice(selfId, offlineReason, metadata),
     });
   }
 
+  /**
+   * 投递 QQBot 核心消息或任务。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param offlineReason - offlineReason 输入；影响 publishOfflineNotice 的返回值。
+   * @param metadata - metadata 输入；影响 publishOfflineNotice 的返回值。
+   */
   private publishOfflineNotice(
     selfId: string,
     offlineReason: string,
@@ -467,6 +627,11 @@ export class QqbotAccountService {
       .catch(() => undefined);
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   */
   private async assertSelfIdAvailable(selfId: string, id?: string) {
     const exists = await this.accountRepository.findOne({
       where: {
@@ -482,6 +647,10 @@ export class QqbotAccountService {
     }
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param payload - payload 输入；使用 `selfId` 字段生成结果。
+   */
   private async restoreDeletedAccount(payload: Partial<QqbotAccount>) {
     if (!payload.selfId) return null;
 
@@ -506,6 +675,10 @@ export class QqbotAccountService {
     return existing;
   }
 
+  /**
+   * 转换 QQBot 核心输入。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   private normalizeBody(body: Partial<QqbotAccountBodyDto>) {
     const payload: Partial<QqbotAccount> = {
       accessToken: this.toolsService.normalizeNullableString(body.accessToken),
@@ -525,6 +698,10 @@ export class QqbotAccountService {
     return payload;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param encryptedLoginPassword - encryptedLoginPassword 输入；驱动 `toolsService.toSecretText()` 的 QQBot步骤。
+   */
   private toNapcatLoginPasswordSecret(encryptedLoginPassword?: string) {
     if (!encryptedLoginPassword) return undefined;
     if (!this.passwordCryptoService) {
@@ -542,6 +719,9 @@ export class QqbotAccountService {
       : null;
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   */
   private getAccountSecretKey() {
     const secret = this.toolsService.pickFirstText(
       this.configService?.get<string>('QQBOT_ACCOUNT_SECRET_KEY'),
@@ -555,6 +735,12 @@ export class QqbotAccountService {
     return secret;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param abilityKey - abilityKey 输入；驱动 `this.normalizeAbilityId()` 的 QQBot步骤。
+   * @param type - type 输入；影响 bindAbility 的返回值。
+   */
   private async bindAbility(
     selfId: string,
     abilityKey: string,
@@ -590,6 +776,12 @@ export class QqbotAccountService {
     return true;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param abilityKey - abilityKey 输入；驱动 `this.normalizeAbilityId()` 的 QQBot步骤。
+   * @param type - type 输入；影响 unbindAbility 的返回值。
+   */
   private async unbindAbility(
     selfId: string,
     abilityKey: string,
@@ -608,6 +800,10 @@ export class QqbotAccountService {
     return true;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   private async assertConfigurableAccount(selfId: string) {
     const normalizedSelfId = `${selfId || ''}`.trim();
     if (!normalizedSelfId) throwVbenError('请选择所属 QQBot 账号');
@@ -618,12 +814,21 @@ export class QqbotAccountService {
     return account;
   }
 
+  /**
+   * 转换 QQBot 核心输入。
+   * @param abilityId - QQBot ID；定位本次读取、更新、删除或关联的QQBot。
+   */
   private normalizeAbilityId(abilityId: string) {
     const normalizedId = `${abilityId || ''}`.trim();
     if (!normalizedId) throwVbenError('绑定能力 ID 不能为空');
     return normalizedId;
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param abilityType - abilityType 输入；限定 QQBot查询范围。
+   */
   private async getBoundAbilityKeys(
     selfId: string,
     abilityType: QqbotAccountAbilityType,

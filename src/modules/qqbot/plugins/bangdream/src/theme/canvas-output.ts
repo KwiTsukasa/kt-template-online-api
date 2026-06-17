@@ -10,6 +10,9 @@ import { getBangDreamAssetPath } from '@/modules/qqbot/plugins/bangdream/src/the
 let BGDefaultImage: Image;
 let outputAssetsPreload: Promise<void> | undefined;
 
+/**
+ * 执行 BangDream 插件流程。
+ */
 export async function preloadBangDreamOutputAssets() {
   if (!outputAssetsPreload) {
     outputAssetsPreload = loadImageFromPath(
@@ -40,12 +43,12 @@ export type FinalImageRenderOptions = Omit<OutputFinalOptions, 'imageList'>;
 
 //将图片列表从上到下叠在一起输出为一张图片
 /**
- * 在底层绘图工具层中输出最终Canv。
+ * 在底层绘图工具层中输出最终画布。
  *
- * @param options1 - options1参数。
+ * @param options - BangDream列表；影响 outputFinalCanv 的返回值。
  * @returns 异步处理结果。
  */
-export const outputFinalCanv = async function ({
+export const outputFinalCanv = async function outputFinalCanv({
   imageList,
   startWithSpace = true,
   useEasyBG = true,
@@ -119,10 +122,10 @@ export const outputFinalCanv = async function ({
 /**
  * 在底层绘图工具层中输出最终缓冲区。
  *
- * @param options1 - options1参数。
+ * @param options - BangDream列表；影响 outputFinalBuffer 的返回值。
  * @returns 异步处理结果。
  */
-export const outputFinalBuffer = async function ({
+export const outputFinalBuffer = async function outputFinalBuffer({
   startWithSpace = true,
   imageList,
   useEasyBG = true,
@@ -149,9 +152,8 @@ export const outputFinalBuffer = async function ({
 };
 
 /**
- * 在底层绘图工具层中创建输出最终图片列表。
- *
- * @param defaultOptions - defaultOptions参数，未传入时使用默认值。
+ * 创建 BangDream 插件对象或配置。
+ * @param defaultOptions - BangDream列表；生成 BangDream对象。
  */
 export const createOutputFinalImages =
   (defaultOptions: FinalImageRenderOptions = {}) =>

@@ -16,6 +16,15 @@ import { QqbotReplyTemplateService } from './qqbot-reply-template.service';
 export class QqbotCommandEngineService {
   private readonly logger = new Logger(QqbotCommandEngineService.name);
 
+  /**
+   * 初始化 QqbotCommandEngineService 实例。
+   * @param commandParser - commandParser 输入；影响 constructor 的返回值。
+   * @param commandService - commandService 服务依赖；影响 constructor 的返回值。
+   * @param pluginExecution - pluginExecution 输入；影响 constructor 的返回值。
+   * @param replyTemplate - replyTemplate 输入；影响 constructor 的返回值。
+   * @param sendService - sendService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly commandParser: QqbotCommandParserService,
     private readonly commandService: QqbotCommandService,
@@ -26,6 +35,10 @@ export class QqbotCommandEngineService {
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 处理Message。
+   * @param message - message 输入；使用 `channelId`、`rawEvent`、`selfId`、`targetId` 字段生成结果。
+   */
   async handleMessage(message: QqbotNormalizedMessage) {
     const commands = await this.commandService.listEnabledForMessage(message);
     for (const command of commands) {
@@ -86,6 +99,10 @@ export class QqbotCommandEngineService {
     return false;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async preview(body: QqbotCommandTestDto) {
     const message = this.buildPreviewMessage(body);
     const command = body.commandId
@@ -137,6 +154,10 @@ export class QqbotCommandEngineService {
     }
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param message - message 输入；驱动 `commandService.listEnabledForMessage()` 的 QQBot步骤。
+   */
   private async findMatchedCommand(message: QqbotNormalizedMessage) {
     const commands = await this.commandService.listEnabledForMessage(message);
     for (const command of commands) {
@@ -147,6 +168,12 @@ export class QqbotCommandEngineService {
     throw new Error('未匹配到命令');
   }
 
+  /**
+   * 创建 QQBot 核心对象或配置。
+   * @param command - command 输入；使用 `replyTemplate` 字段生成结果。
+   * @param input - input 输入；生成 QQBot对象。
+   * @param output - output 输入；生成 QQBot对象。
+   */
   private buildReplyText(
     command: QqbotCommand,
     input: Record<string, any>,
@@ -159,6 +186,13 @@ export class QqbotCommandEngineService {
     );
   }
 
+  /**
+   * 投递 QQBot 核心消息或任务。
+   * @param command - command 输入；驱动 `this.buildErrorReplyText()` 的 QQBot步骤。
+   * @param input - input 输入；驱动 `this.buildErrorReplyText()` 的 QQBot步骤。
+   * @param message - message 输入；使用 `channelId`、`rawEvent`、`selfId`、`targetId` 字段生成结果。
+   * @param errorMessage - errorMessage 输入；驱动 `this.buildErrorReplyText()` 的 QQBot步骤。
+   */
   private async sendErrorReply(
     command: QqbotCommand,
     input: Record<string, any>,
@@ -186,6 +220,12 @@ export class QqbotCommandEngineService {
     }
   }
 
+  /**
+   * 创建 QQBot 核心对象或配置。
+   * @param command - command 输入；使用 `errorTemplate` 字段生成结果。
+   * @param input - input 输入；生成 QQBot对象。
+   * @param errorMessage - errorMessage 输入；生成 QQBot对象。
+   */
   private buildErrorReplyText(
     command: QqbotCommand,
     input: Record<string, any>,
@@ -199,6 +239,11 @@ export class QqbotCommandEngineService {
     );
   }
 
+  /**
+   * 合并Input。
+   * @param command - command 输入；驱动 `commandService.parseDefaultParams()` 的 QQBot步骤。
+   * @param input - input 输入；驱动 `commandService.parseDefaultParams()` 的 QQBot步骤。
+   */
   private mergeInput(command: QqbotCommand, input: Record<string, any>) {
     return {
       ...this.commandService.parseDefaultParams(command),
@@ -206,6 +251,10 @@ export class QqbotCommandEngineService {
     };
   }
 
+  /**
+   * 清理 QQBot 核心状态。
+   * @param input - input 输入；驱动 `Object.entries()` 的 QQBot步骤。
+   */
   private removeUndefined(input: Record<string, any>) {
     return Object.entries(input).reduce<Record<string, any>>(
       (result, [key, value]) => {
@@ -216,6 +265,11 @@ export class QqbotCommandEngineService {
     );
   }
 
+  /**
+   * 创建 QQBot 核心对象或配置。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * @returns 创建后的 QQBot 核心对象或配置。
+   */
   private buildPreviewMessage(
     body: QqbotCommandTestDto,
   ): QqbotNormalizedMessage {

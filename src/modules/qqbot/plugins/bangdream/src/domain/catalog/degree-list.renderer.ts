@@ -26,7 +26,7 @@ interface DegreeListInListOptions {
 /**
  * 在图片布局层中绘制称号列表In列表。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawDegreeListInList 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawDegreeListInList({
@@ -50,8 +50,8 @@ export async function drawDegreeListInList({
 /**
  * 在图片布局层中绘制称号列表Of活动。
  *
- * @param event - 活动参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param event - event 输入；使用 `rankingRewards`、`eventType`、`musics` 字段生成结果。
+ * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawDegreeListOfEvent(

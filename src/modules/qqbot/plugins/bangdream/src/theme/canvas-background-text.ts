@@ -20,8 +20,8 @@ interface DrawTextOptions {
 /**
  * 在底层绘图工具层中绘制文本On画布。
  *
- * @param canvas - Skia 画布实例。
- * @param options2 - options2参数。
+ * @param canvas - BangDream列表；使用 `width`、`height` 字段生成结果。
+ * @param options2 - options2 输入；影响 drawTextOnCanvas 的返回值。
  */
 export function drawTextOnCanvas(
   canvas: Canvas,

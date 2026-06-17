@@ -29,28 +29,48 @@ export type BangDreamSkillTextFragment =
 const BANGDREAM_SKILL_SCORE_SUFFIX_RULES = [
   {
     suffix: 'G',
+    /**
+     * 执行 BangDream回调。
+     * @param effectTypes - BangDream列表；计算 BangDream布尔判断。
+     */
     matches: (effectTypes: readonly string[]) =>
       effectTypes.includes('score_continued_note_judge'),
   },
   {
     suffix: 'L',
+    /**
+     * 执行 BangDream回调。
+     * @param effectTypes - BangDream列表；计算 BangDream布尔判断。
+     */
     matches: (effectTypes: readonly string[]) =>
       effectTypes.includes('score_over_life') &&
       effectTypes.includes('score_under_life'),
   },
   {
     suffix: '/',
+    /**
+     * 执行 BangDream回调。
+     * @param effectTypes - BangDream列表；计算 BangDream布尔判断。
+     */
     matches: (effectTypes: readonly string[]) =>
       effectTypes.includes('score_over_life'),
   },
   {
     suffix: 'P',
+    /**
+     * 执行 BangDream回调。
+     * @param effectTypes - BangDream列表；计算 BangDream布尔判断。
+     */
     matches: (effectTypes: readonly string[]) =>
       effectTypes.includes('score_under_great_half') ||
       effectTypes.includes('score_perfect'),
   },
   {
     suffix: '+0.5*P',
+    /**
+     * 执行 BangDream回调。
+     * @param effectTypes - BangDream列表；计算 BangDream布尔判断。
+     */
     matches: (effectTypes: readonly string[]) =>
       effectTypes.includes('score_rate_up_with_perfect'),
   },
@@ -59,7 +79,7 @@ const BANGDREAM_SKILL_SCORE_SUFFIX_RULES = [
 /**
  * 生成技能角标里分数值后面展示的规则后缀。
  *
- * @param effectTypes - 技能效果类型列表。
+ * @param effectTypes - BangDream列表；驱动 `matches()` 的 BangDream步骤。
  */
 export function getSkillScoreSuffix(effectTypes: readonly string[]) {
   return (
@@ -72,7 +92,7 @@ export function getSkillScoreSuffix(effectTypes: readonly string[]) {
 /**
  * 生成技能角标的文本和图标片段。
  *
- * @param options - 分数加成和技能效果类型。
+ * @param options - BangDream列表；生成 BangDream对象。
  */
 export function createSkillTextFragments({
   effectTypes,

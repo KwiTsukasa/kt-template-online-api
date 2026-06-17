@@ -15,7 +15,7 @@ export class GachaRepository {
   /**
    * 创建卡池领域模型。
    *
-   * @param gachaId - 卡池 ID。
+   * @param gachaId - 卡池 ID；定位本次读取、更新、删除或关联的卡池。
    */
   create(gachaId: number): Gacha {
     return new Gacha(gachaId);

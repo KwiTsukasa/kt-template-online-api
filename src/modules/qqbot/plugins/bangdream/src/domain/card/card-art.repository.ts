@@ -7,6 +7,10 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/card/card-art.layout';
 
 export class CardArtResourceRepository {
+  /**
+   * 初始化 CardArtResourceRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
@@ -14,8 +18,8 @@ export class CardArtResourceRepository {
   /**
    * 下载卡牌小图边框资源。
    *
-   * @param rarity - 卡牌稀有度。
-   * @param attribute - 卡牌属性。
+   * @param rarity - rarity 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * @param attribute - attribute 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
    */
   async getIconFrameBuffer(
     rarity: number,
@@ -29,8 +33,8 @@ export class CardArtResourceRepository {
   /**
    * 下载卡牌插画边框资源。
    *
-   * @param rarity - 卡牌稀有度。
-   * @param attribute - 卡牌属性。
+   * @param rarity - rarity 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * @param attribute - attribute 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
    */
   async getIllustrationFrameBuffer(
     rarity: number,

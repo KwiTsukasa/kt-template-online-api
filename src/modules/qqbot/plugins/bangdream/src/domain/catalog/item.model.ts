@@ -18,7 +18,7 @@ export class Item {
   /**
    * 构造 Item 实例，并初始化该模型的本地基础字段。
    *
-   * @param itemId - 道具 ID。
+   * @param itemId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
    */
   constructor(itemId: string) {
     //如果是星石
@@ -65,8 +65,8 @@ export class Item {
   /**
    * 在 Item 模型中获取道具图片。
    *
-   * @param server - 目标服务器，未传入时使用默认值。
-   * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+   * @param server - server 输入；驱动 `itemResourceRepository.getImageBuffer()` 的 BangDream步骤。
+   * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getItemImage(

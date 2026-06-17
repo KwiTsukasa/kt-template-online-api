@@ -18,22 +18,49 @@ import {
 
 @Controller('probe')
 class ProbeController {
+  /**
+   * 执行 测试断言流程。
+   */
   @Get()
   probe() {
     return { ok: true };
   }
 }
 
-function createHttpContext(request: Record<string, any>, response: Record<string, any>) {
+/**
+ * 创建 测试断言对象或配置。
+ * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+ * @param response - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+ */
+function createHttpContext(
+  request: Record<string, any>,
+  response: Record<string, any>,
+) {
   return {
+    /**
+     * 读取 公共基础设施回调数据。
+     */
     getType: () => 'http',
+    /**
+     * 执行 公共基础设施回调。
+     */
     switchToHttp: () => ({
+      /**
+       * 读取 公共基础设施回调数据。
+       */
       getRequest: () => request,
+      /**
+       * 读取 公共基础设施回调数据。
+       */
       getResponse: () => response,
     }),
   } as any;
 }
 
+/**
+ * 创建 测试断言对象或配置。
+ * @param statusCode - statusCode 输入；构造 Jest mock 返回值。
+ */
 function createResponse(statusCode = 200) {
   return {
     getHeader: jest.fn(),
@@ -42,12 +69,18 @@ function createResponse(statusCode = 200) {
   };
 }
 
+/**
+ * 创建 测试断言对象或配置。
+ */
 function createLokiLogPublisherMock() {
   return {
     pushHttpRequestLog: jest.fn().mockResolvedValue(undefined),
   };
 }
 
+/**
+ * 创建 测试断言对象或配置。
+ */
 function createSystemNoticePublisherMock() {
   return {
     publishSystemNotice: jest.fn().mockResolvedValue('notice-1'),
@@ -79,6 +112,9 @@ describe('ApiRequestLogInterceptor', () => {
 
     await lastValueFrom(
       interceptor.intercept(createHttpContext(request, response), {
+        /**
+         * 执行 公共基础设施回调。
+         */
         handle: () => of({ ok: true }),
       }),
     );
@@ -133,6 +169,9 @@ describe('ApiRequestLogInterceptor', () => {
 
     await lastValueFrom(
       interceptor.intercept(createHttpContext(request, response), {
+        /**
+         * 执行 公共基础设施回调。
+         */
         handle: () => of({ ok: true }),
       }),
     );
@@ -173,6 +212,9 @@ describe('ApiRequestLogInterceptor', () => {
     await expect(
       lastValueFrom(
         interceptor.intercept(createHttpContext(request, response), {
+          /**
+           * 执行 公共基础设施回调。
+           */
           handle: () => throwError(() => error),
         }),
       ),
@@ -229,6 +271,9 @@ describe('ApiRequestLogInterceptor', () => {
     await expect(
       lastValueFrom(
         interceptor.intercept(createHttpContext(request, response), {
+          /**
+           * 执行 公共基础设施回调。
+           */
           handle: () => throwError(() => error),
         }),
       ),

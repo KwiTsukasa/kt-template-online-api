@@ -3,6 +3,10 @@ import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/sr
 import { formatNumber } from '@/modules/qqbot/plugins/bangdream/src/domain/common/model-utils';
 
 export class CharacterResourceRepository {
+  /**
+   * 初始化 CharacterResourceRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
@@ -10,8 +14,8 @@ export class CharacterResourceRepository {
   /**
    * 获取角色远端详情。
    *
-   * @param characterId - 角色 ID。
-   * @param update - 是否绕过缓存。
+   * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
+   * @param update - update 输入；限定 BangDream查询范围。
    */
   async getDetail(
     characterId: number,
@@ -26,7 +30,7 @@ export class CharacterResourceRepository {
   /**
    * 获取角色图标资源路径。
    *
-   * @param characterId - 角色 ID。
+   * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
    */
   getIconPath(characterId: number): string {
     return `/res/icon/chara_icon_${characterId}.png`;
@@ -35,7 +39,7 @@ export class CharacterResourceRepository {
   /**
    * 获取角色 KV 立绘资源路径。
    *
-   * @param characterId - 角色 ID。
+   * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
    */
   getIllustrationPath(characterId: number): string {
     return `/assets/jp/ui/character_kv_image/${formatNumber(characterId, 3)}_rip/image.png`;
@@ -44,7 +48,7 @@ export class CharacterResourceRepository {
   /**
    * 获取角色名称横幅资源路径。
    *
-   * @param characterId - 角色 ID。
+   * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
    */
   getNameBannerPath(characterId: number): string {
     return `/assets/jp/character_name_rip/name_top_chr${formatNumber(
@@ -56,7 +60,7 @@ export class CharacterResourceRepository {
   /**
    * 下载角色图标资源。
    *
-   * @param characterId - 角色 ID。
+   * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
    */
   async getIconBuffer(characterId: number): Promise<Buffer> {
     return await this.provider.getAsset(this.getIconPath(characterId));
@@ -65,7 +69,7 @@ export class CharacterResourceRepository {
   /**
    * 下载角色 KV 立绘资源。
    *
-   * @param characterId - 角色 ID。
+   * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
    */
   async getIllustrationBuffer(characterId: number): Promise<Buffer> {
     return await this.provider.getAsset(this.getIllustrationPath(characterId));
@@ -74,7 +78,7 @@ export class CharacterResourceRepository {
   /**
    * 下载角色名称横幅资源。
    *
-   * @param characterId - 角色 ID。
+   * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
    */
   async getNameBannerBuffer(characterId: number): Promise<Buffer> {
     return await this.provider.getAsset(this.getNameBannerPath(characterId));

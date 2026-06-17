@@ -1,7 +1,10 @@
-jest.mock('@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache', () => ({
-  __esModule: true,
-  default: {},
-}));
+jest.mock(
+  '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache',
+  () => ({
+    __esModule: true,
+    default: {},
+  }),
+);
 
 import {
   calculateCnEventEstimateStartAt,
@@ -77,6 +80,10 @@ describe('BangDream CN event estimate policy', () => {
     const result = calculateCnEventEstimateStartAt({
       currentEvent: { eventId: 100, ...schedules[100] },
       eventId: 101,
+      /**
+       * 读取 BangDream回调数据。
+       * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+       */
       getSchedule: (eventId) => schedules[eventId] || null,
       options: {
         defaultNoBangDays: 1,
@@ -198,6 +205,12 @@ describe('BangDream gacha policy', () => {
   });
 });
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+ * @param eventType - eventType 输入；影响 eventCandidate 的返回值。
+ * @param jpStartAt - jpStartAt 输入；影响 eventCandidate 的返回值。
+ */
 function eventCandidate(
   eventId: number,
   eventType: string,

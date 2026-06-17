@@ -22,7 +22,7 @@ export const BANGDREAM_CARD_SD_CHARACTER_SPEC = {
 /**
  * 计算卡牌 SD 角色 sprite 裁切区域。
  *
- * @param index - 第几个 SD 动作帧。
+ * @param index - index 输入；驱动 `Math.floor()` 的 BangDream步骤。
  */
 export function getCardSdCharacterCropRect(
   index: number,

@@ -5,6 +5,10 @@ jest.mock('@/common', () => {
     ToolsService: actualCommon.ToolsService,
     ensureSnowflakeId: jest.fn(),
     setDictDecodeCache: jest.fn(),
+    /**
+     * 执行 NapCat回调。
+     * @param message - message 输入；驱动 `Error()` 的 NapCat步骤。
+     */
     throwVbenError: (message: string) => {
       throw new Error(message);
     },
@@ -382,7 +386,7 @@ describe('QqbotNapcatContainerService', () => {
       expect.arrayContaining(['sh -s']),
     );
     expect(service.runProcess.mock.calls[0][2]).toContain(
-      "docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' \"$NAME\"",
+      'docker inspect --format \'{{range .Config.Env}}{{println .}}{{end}}\' "$NAME"',
     );
     expect(containerRepository.update).not.toHaveBeenCalled();
   });
@@ -634,7 +638,10 @@ describe('QqbotNapcatContainerService', () => {
       .mockResolvedValueOnce({ changed: false, ok: false });
     jest
       .spyOn(service, 'restartAndDetectLoginState')
-      .mockResolvedValueOnce({ offlineReason: '历史会话失效', state: 'offline' })
+      .mockResolvedValueOnce({
+        offlineReason: '历史会话失效',
+        state: 'offline',
+      })
       .mockResolvedValueOnce({ offlineReason: null, state: 'online' });
 
     const result = await service.tryAutoLogin(
@@ -691,8 +698,14 @@ describe('QqbotNapcatContainerService', () => {
       .mockResolvedValueOnce({ changed: false, ok: false });
     jest
       .spyOn(service, 'restartAndDetectLoginState')
-      .mockResolvedValueOnce({ offlineReason: '历史会话失效', state: 'offline' })
-      .mockResolvedValueOnce({ offlineReason: '密码登录失败', state: 'offline' });
+      .mockResolvedValueOnce({
+        offlineReason: '历史会话失效',
+        state: 'offline',
+      })
+      .mockResolvedValueOnce({
+        offlineReason: '密码登录失败',
+        state: 'offline',
+      });
 
     const result = await service.tryAutoLogin(
       { id: 'container-1' },

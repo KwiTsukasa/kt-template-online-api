@@ -19,6 +19,12 @@ import {
   routeKey,
 } from '../../helpers/controller-route.helper';
 
+/**
+ * 查询 测试断言数据。
+ * @param moduleClass - Nest 模块类；读取装饰器 metadata。
+ * @param key - 键名；读取装饰器 metadata。
+ * @returns 测试断言查询结果。
+ */
 const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] => {
   return Reflect.getMetadata(key, moduleClass) || [];
 };

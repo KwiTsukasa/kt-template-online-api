@@ -19,6 +19,14 @@ import { BlogTermService } from './blog-term.service';
 
 @Injectable()
 export class BlogArticleService {
+  /**
+   * 初始化 BlogArticleService 实例。
+   * @param articleRepository - 文章仓库依赖；影响 constructor 的返回值。
+   * @param markdownService - markdownService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * @param wordpressService - wordpressService 服务依赖；影响 constructor 的返回值。
+   * @param blogTermService - blogTermService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(BlogArticle)
     private readonly articleRepository: Repository<BlogArticle>,
@@ -28,10 +36,18 @@ export class BlogArticleService {
     private readonly blogTermService: BlogTermService,
   ) {}
 
+  /**
+   * 获取分页数据。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   async page(query: BlogArticleListQueryDto) {
     return this.queryPage(query);
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   async publicList(query: BlogArticleListQueryDto) {
     return this.queryPage({
       ...query,
@@ -39,6 +55,10 @@ export class BlogArticleService {
     });
   }
 
+  /**
+   * 获取详情数据。
+   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   */
   async detail(id: string | number) {
     const article = await this.articleRepository.findOne({
       where: {
@@ -54,6 +74,10 @@ export class BlogArticleService {
     return this.toResponse(article);
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   async publicDetail(query: { id?: string; slug?: string }) {
     const article = await this.articleRepository.findOne({
       where: query.id
@@ -76,6 +100,10 @@ export class BlogArticleService {
     return this.toResponse(article);
   }
 
+  /**
+   * 保存数据。
+   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   */
   async save(body: BlogArticleBodyDto) {
     const articleEntity = await this.getArticleEntity(body);
     await this.syncArticleTerms(articleEntity);
@@ -86,6 +114,10 @@ export class BlogArticleService {
     return this.toResponse(saved);
   }
 
+  /**
+   * 更新数据。
+   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   */
   async update(body: BlogArticleUpdateBodyDto) {
     const article = await this.articleRepository.findOne({
       where: {
@@ -107,6 +139,10 @@ export class BlogArticleService {
     return this.toResponse(saved);
   }
 
+  /**
+   * 删除数据。
+   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   */
   async remove(id: string | number) {
     const result = await this.articleRepository.update(
       {
@@ -121,14 +157,26 @@ export class BlogArticleService {
     return (result.affected || 0) > 0;
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   async categoryOptions(query: BlogArticleTermOptionsQueryDto = {}) {
     return this.blogTermService.options('category', query);
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   async tagOptions(query: BlogArticleTermOptionsQueryDto = {}) {
     return this.blogTermService.options('tag', query);
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   async importFromWordpress(query: BlogArticleImportWordpressDto = {}) {
     const pageNo = this.toolsService.toPositiveNumber(query.pageNo, 1);
     const pageSize = Math.min(
@@ -221,6 +269,10 @@ export class BlogArticleService {
     return result;
   }
 
+  /**
+   * 查询 博客内容数据。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   private async queryPage(query: BlogArticleListQueryDto) {
     const { pageSize, skip } = this.toolsService.getPageParams(query);
     const builder = this.articleRepository
@@ -268,9 +320,18 @@ export class BlogArticleService {
       .take(pageSize)
       .getManyAndCount();
 
-    return this.toolsService.page(list.map((item) => this.toResponse(item)), total);
+    return this.toolsService.page(
+      list.map((item) => this.toResponse(item)),
+      total,
+    );
   }
 
+  /**
+   * 查询 博客内容数据。
+   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   * @param current - current 输入；驱动 `this.normalizeSlug()` 的 博客步骤。
+   * @returns 博客内容查询结果。
+   */
   private async getArticleEntity(
     body: BlogArticleBodyDto,
     current?: BlogArticle,
@@ -318,6 +379,10 @@ export class BlogArticleService {
     return nextArticle;
   }
 
+  /**
+   * 转换 博客内容输入。
+   * @param values - 配置值字典；影响 normalizeTerms 的返回值。
+   */
   private normalizeTerms(values: Array<BlogArticleTerm | string>) {
     const seen = new Set<string>();
 
@@ -345,6 +410,10 @@ export class BlogArticleService {
       });
   }
 
+  /**
+   * 查询 博客内容数据。
+   * @param source - source 输入；使用 `contentHtml`、`content`、`contentMarkdown`、`status` 字段生成结果。
+   */
   private async getWordpressImportEntity(source: Record<string, any>) {
     const rawContentHtml = source.contentHtml || source.content?.rendered || '';
     const contentHtml = await this.markdownService.sanitizeHtml(rawContentHtml);
@@ -352,9 +421,9 @@ export class BlogArticleService {
       source.contentMarkdown ||
       this.markdownService.extractSource(source.content?.raw) ||
       (await this.markdownService.renderHtmlToMarkdown(rawContentHtml));
-    const status = (source.status === 'publish'
-      ? 'publish'
-      : 'draft') as BlogArticleStatus;
+    const status = (
+      source.status === 'publish' ? 'publish' : 'draft'
+    ) as BlogArticleStatus;
 
     return this.toolsService.pickDefined({
       authorName: source.authorName,
@@ -387,6 +456,10 @@ export class BlogArticleService {
     });
   }
 
+  /**
+   * 转换 博客内容输入。
+   * @param value - 待转换值；决定 博客条件分支。
+   */
   private normalizeQueryList(value?: string | string[]) {
     if (Array.isArray(value)) {
       return value
@@ -403,6 +476,10 @@ export class BlogArticleService {
       .filter(Boolean);
   }
 
+  /**
+   * 更新 博客内容状态。
+   * @param article - article 输入；使用 `categoryItems`、`tagItems` 字段生成结果。
+   */
   private async syncArticleTerms(article: Partial<BlogArticle>) {
     if (article.categoryItems) {
       await this.blogTermService.syncTerms('category', article.categoryItems);
@@ -413,6 +490,10 @@ export class BlogArticleService {
     }
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param article - article 输入；使用 `categoryItems`、`tagItems`、`excerpt`、`contentHtml` 字段生成结果。
+   */
   private toResponse(article: BlogArticle) {
     const categoriesResolved = article.categoryItems || [];
     const tagsResolved = article.tagItems || [];
@@ -429,10 +510,18 @@ export class BlogArticleService {
     });
   }
 
+  /**
+   * 转换 博客内容输入。
+   * @param value - 待转换值；驱动 `toolsService.normalizeSlugText()` 的 博客步骤。
+   */
   private normalizeSlug(value: string) {
     return this.toolsService.normalizeSlugText(value);
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param value - 待转换值；影响 stripHtml 的返回值。
+   */
   private stripHtml(value: string) {
     return value
       .replace(/<!--[\s\S]*?-->/g, '')
@@ -441,6 +530,10 @@ export class BlogArticleService {
       .trim();
   }
 
+  /**
+   * 解析Date。
+   * @param value - 待转换时间值；决定 博客条件分支。
+   */
   private parseDate(value: unknown) {
     if (!value) return null;
     const date = new Date(`${value}`);

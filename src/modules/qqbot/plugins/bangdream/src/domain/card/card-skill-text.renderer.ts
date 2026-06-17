@@ -13,6 +13,9 @@ import {
 const skillIcon: Partial<Record<BangDreamSkillIconKey, Image>> = {};
 let skillTextAssetsPreload: Promise<void> | undefined;
 
+/**
+ * 执行 BangDream 插件流程。
+ */
 export async function preloadBangDreamCardSkillTextAssets() {
   if (!skillTextAssetsPreload) {
     skillTextAssetsPreload = Promise.all([
@@ -37,7 +40,7 @@ export async function preloadBangDreamCardSkillTextAssets() {
 /**
  * 在图片布局层中绘制卡牌图标技能。
  *
- * @param skill - 技能参数。
+ * @param skill - skill 输入；执行 `skill.getEffectTypes()`、`skill.getScoreUpMaxValue()` 对应的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawCardIconSkill(skill: Skill): Promise<Canvas> {

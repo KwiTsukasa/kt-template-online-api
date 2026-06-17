@@ -2,11 +2,27 @@ jest.mock(
   '@/common',
   () => ({
     ensureSnowflakeId: jest.fn(),
+    /**
+     * 执行 测试回调。
+     */
     KtCreateDateColumn: () => () => undefined,
     KtDateTime: Date,
+    /**
+     * 执行 测试回调。
+     */
     KtDateTimeColumn: () => () => undefined,
+    /**
+     * 执行 测试回调。
+     */
     KtDateTimeField: () => () => undefined,
+    /**
+     * 执行 测试回调。
+     */
     KtUpdateDateColumn: () => () => undefined,
+    /**
+     * 执行 测试回调。
+     * @param value - 待转换时间值；构造时间对象。
+     */
     formatKtDateTime: (value: Date | number | string) => {
       const date = value instanceof Date ? value : new Date(value);
       return [
@@ -21,6 +37,10 @@ jest.mock(
       ].join(' ');
     },
     setDictDecodeCache: jest.fn(),
+    /**
+     * 执行 测试回调。
+     * @param value - 待转换时间值；影响 transformKtDateTimeFields 的返回值。
+     */
     transformKtDateTimeFields: (value: unknown) => value,
   }),
   { virtual: true },

@@ -1,6 +1,11 @@
 import type { QqbotNormalizedMessage } from '@/modules/qqbot/core/contract/qqbot.types';
 import { createPlugin } from '@/modules/qqbot/plugins/repeater/src';
 
+/**
+ * 创建 复读插件对象或配置。
+ * @param text - 待匹配文本；生成 测试对象。
+ * @returns 创建后的 复读插件对象或配置。
+ */
 function createMessage(text: string): QqbotNormalizedMessage {
   return {
     eventTime: new Date(),
@@ -16,6 +21,10 @@ function createMessage(text: string): QqbotNormalizedMessage {
   };
 }
 
+/**
+ * 创建 复读插件对象或配置。
+ * @param config - config 输入；构造 Jest mock 返回值。
+ */
 function createService(config: Record<string, number | string | undefined>) {
   const sendService = {
     sendText: jest.fn().mockResolvedValue({ status: 'ok' }),
@@ -24,7 +33,11 @@ function createService(config: Record<string, number | string | undefined>) {
     host: {
       bindEventPlugin: jest.fn(),
       getBoundEventPluginKeys: jest.fn().mockResolvedValue(['repeater']),
-      getConfig: (<T = string>(key: string) => config[key] as T),
+      /**
+       * 读取 测试回调数据。
+       * @param key - 键名；限定 测试查询范围。
+       */
+      getConfig: <T = string>(key: string) => config[key] as T,
       sendText: sendService.sendText,
       unbindEventPlugin: jest.fn(),
       warn: jest.fn(),
@@ -35,6 +48,9 @@ function createService(config: Record<string, number | string | undefined>) {
       pluginKey: 'repeater',
       version: '1.0.0',
     },
+    /**
+     * 执行 测试回调。
+     */
     now: () => Date.now(),
   });
   return { sendService, service };

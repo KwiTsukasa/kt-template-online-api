@@ -8,6 +8,12 @@ import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
 
 @Injectable()
 export class ComponentService {
+  /**
+   * 初始化 ComponentService 实例。
+   * @param userRepository - 用户仓库依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * @param dictService - dictService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(Component)
     private readonly userRepository: Repository<Component>,
@@ -15,6 +21,10 @@ export class ComponentService {
     private readonly dictService: DictService,
   ) {}
 
+  /**
+   * 执行 Admin 平台配置流程。
+   * @returns 异步完成后的 Admin 平台配置结果。
+   */
   async all(): Promise<Component[]> {
     await this.dictService.refreshDecodeCache();
 
@@ -24,6 +34,11 @@ export class ComponentService {
     return components;
   }
 
+  /**
+   * 获取分页数据。
+   * @param { pageNo, pageSize, ...args } - 解构的组件分页查询参数，用于拆出页码和页大小并把剩余筛选项传入查询条件。
+   * @returns 异步完成后的 Admin 平台配置结果。
+   */
   async page({
     pageNo,
     pageSize,
@@ -77,12 +92,22 @@ export class ComponentService {
     return this.toolsService.page<Component>(list, total);
   }
 
+  /**
+   * 保存数据。
+   * @param component - component 输入；驱动 `userRepository.create()` 的 Admin步骤。
+   * @returns 异步完成后的 Admin 平台配置结果。
+   */
   async save(component: Component): Promise<Component> {
     const link = this.userRepository.create(component);
     const save = await this.userRepository.save(link);
     return save;
   }
 
+  /**
+   * 删除数据。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @returns Admin 平台配置清理后的状态。
+   */
   async remove(id: string): Promise<boolean> {
     const link = await this.userRepository
       .createQueryBuilder('component')
@@ -94,6 +119,11 @@ export class ComponentService {
     return link.affected > 0;
   }
 
+  /**
+   * 更新数据。
+   * @param component - component 输入；使用 `id` 字段生成结果。
+   * @returns Admin 平台配置更新后的状态。
+   */
   async update(component: Component): Promise<boolean> {
     const link = await this.userRepository
       .createQueryBuilder('component')
@@ -105,6 +135,11 @@ export class ComponentService {
     return link.affected > 0;
   }
 
+  /**
+   * 查找业务数据。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @returns Admin 平台配置查询结果。
+   */
   async find(id: string): Promise<Component> {
     await this.dictService.refreshDecodeCache();
 

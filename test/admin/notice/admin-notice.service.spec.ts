@@ -1,6 +1,10 @@
 import { AdminNoticeService } from '@/modules/admin/platform-config/notice/admin-notice.service';
 import { ToolsService } from '@/common';
 
+/**
+ * 创建 测试断言对象或配置。
+ * @param overrides - Admin列表；构造 Jest mock 返回值。
+ */
 function createRepositoryMock(overrides: Record<string, jest.Mock> = {}) {
   const repository = {
     createQueryBuilder: jest.fn(),

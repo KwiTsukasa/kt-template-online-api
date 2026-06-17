@@ -1,5 +1,9 @@
 import { QqbotRateLimitService } from '@/modules/qqbot/core/application/send/qqbot-rate-limit.service';
 
+/**
+ * 创建 测试断言对象或配置。
+ * @param config - config 输入；构造 Jest mock 返回值。
+ */
 function createService(config: Record<string, number | string | undefined>) {
   return new QqbotRateLimitService({
     get: jest.fn((key: string) => config[key]),
@@ -32,8 +36,9 @@ describe('QqbotRateLimitService', () => {
 
     jest.advanceTimersByTime(2999);
     await Promise.resolve();
-    await expect(Promise.race([secondSend, Promise.resolve('pending')]))
-      .resolves.toBe('pending');
+    await expect(
+      Promise.race([secondSend, Promise.resolve('pending')]),
+    ).resolves.toBe('pending');
 
     jest.advanceTimersByTime(1);
     await Promise.resolve();
@@ -90,10 +95,7 @@ describe('QqbotRateLimitService', () => {
 
     await (service as any).waitForSendSlot('bot-1', 'group-1');
 
-    const sameTargetSend = (service as any).waitForSendSlot(
-      'bot-1',
-      'group-1',
-    );
+    const sameTargetSend = (service as any).waitForSendSlot('bot-1', 'group-1');
     const otherTargetSend = (service as any).waitForSendSlot(
       'bot-1',
       'group-2',
@@ -101,8 +103,9 @@ describe('QqbotRateLimitService', () => {
 
     jest.advanceTimersByTime(999);
     await Promise.resolve();
-    await expect(Promise.race([otherTargetSend, Promise.resolve('pending')]))
-      .resolves.toBe('pending');
+    await expect(
+      Promise.race([otherTargetSend, Promise.resolve('pending')]),
+    ).resolves.toBe('pending');
 
     jest.advanceTimersByTime(1);
     await Promise.resolve();

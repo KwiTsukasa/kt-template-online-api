@@ -21,6 +21,10 @@ function toServerCode(server: Server | undefined): string {
 }
 
 export class GachaResourceRepository {
+  /**
+   * 初始化 GachaResourceRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
@@ -28,8 +32,8 @@ export class GachaResourceRepository {
   /**
    * 获取卡池远端详情。
    *
-   * @param gachaId - 卡池 ID。
-   * @param update - 是否绕过缓存。
+   * @param gachaId - 卡池 ID；定位本次读取、更新、删除或关联的卡池。
+   * @param update - update 输入；限定 BangDream查询范围。
    */
   async getDetail(
     gachaId: number,
@@ -44,7 +48,7 @@ export class GachaResourceRepository {
   /**
    * 获取卡池横幅资源路径。
    *
-   * @param source - 卡池资源来源字段。
+   * @param source - source 输入；使用 `bannerAssetBundleName` 字段生成结果。
    */
   getBannerImagePath(source: GachaResourceSource): string | null {
     if (!source.bannerAssetBundleName) return null;
@@ -54,9 +58,9 @@ export class GachaResourceRepository {
   /**
    * 获取卡池 screen 资源路径。
    *
-   * @param source - 卡池资源来源字段。
-   * @param imageType - screen 图片类型。
-   * @param displayedServerList - 可展示服务器优先级。
+   * @param source - source 输入；使用 `publishedAt`、`resourceName` 字段生成结果。
+   * @param imageType - imageType 输入；限定 BangDream查询范围。
+   * @param displayedServerList - displayedServerList 输入；驱动 `toServerCode()` 的 BangDream步骤。
    */
   getScreenImagePath(
     source: GachaResourceSource,
@@ -78,8 +82,8 @@ export class GachaResourceRepository {
   /**
    * 下载卡池横幅资源，缺失时回退到 Logo。
    *
-   * @param source - 卡池资源来源字段。
-   * @param displayedServerList - 可展示服务器优先级。
+   * @param source - source 输入；驱动 `this.getBannerImagePath()`、`this.getLogoImageBuffer()` 的 BangDream步骤。
+   * @param displayedServerList - displayedServerList 输入；驱动 `this.getLogoImageBuffer()` 的 BangDream步骤。
    */
   async getBannerImageBuffer(
     source: GachaResourceSource,
@@ -99,8 +103,8 @@ export class GachaResourceRepository {
   /**
    * 下载卡池背景资源，`bg.png` 缺失时回退到 `bg1.png`。
    *
-   * @param source - 卡池资源来源字段。
-   * @param displayedServerList - 可展示服务器优先级。
+   * @param source - source 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * @param displayedServerList - displayedServerList 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
    */
   async getBackgroundImageBuffer(
     source: GachaResourceSource,
@@ -125,8 +129,8 @@ export class GachaResourceRepository {
   /**
    * 下载卡池 Logo 资源。
    *
-   * @param source - 卡池资源来源字段。
-   * @param displayedServerList - 可展示服务器优先级。
+   * @param source - source 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * @param displayedServerList - displayedServerList 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
    */
   async getLogoImageBuffer(
     source: GachaResourceSource,

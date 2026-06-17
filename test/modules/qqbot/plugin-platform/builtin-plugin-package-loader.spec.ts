@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { QqbotBuiltinPluginPackageLoaderService } from '@/modules/qqbot/plugin-platform/infrastructure/integration/package/builtin-plugin-package-loader.service';
 
 describe('QqbotBuiltinPluginPackageLoaderService', () => {
+  /**
+   * 创建 插件 loader。
+   */
   const createLoader = () =>
     new QqbotBuiltinPluginPackageLoaderService(
       {} as any,
@@ -21,7 +24,9 @@ describe('QqbotBuiltinPluginPackageLoaderService', () => {
     try {
       process.chdir(sandbox);
 
-      const pluginRoot = createLoader().resolvePluginRoot('bangdream') as string;
+      const pluginRoot = createLoader().resolvePluginRoot(
+        'bangdream',
+      ) as string;
       const normalized = pluginRoot.replace(/\\/g, '/');
 
       expect(normalized).toMatch(/modules\/qqbot\/plugins\/bangdream$/);

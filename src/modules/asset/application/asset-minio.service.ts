@@ -9,23 +9,44 @@ import type {
 
 @Injectable()
 export class MinioClientService {
+  /**
+   * 初始化 MinioClientService 实例。
+   * @param minioService - minioService 服务依赖；影响 constructor 的返回值。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly minioService: MinioService,
     private readonly configService: ConfigService,
   ) {}
 
+  /**
+   * 执行 MinIO 资源流程。
+   */
   private get client() {
     return this.minioService.client;
   }
 
+  /**
+   * 查询 MinIO 资源数据。
+   * @returns MinIO 资源查询结果。
+   */
   getDefaultBucket(): string {
     return this.configService.get('MINIO_BUCKET') || 'kt-template-online';
   }
 
+  /**
+   * 查询 MinIO 资源数据。
+   * @param bucketName - bucketName 输入；限定 MinIO查询范围。
+   * @returns MinIO 资源查询结果。
+   */
   getBucketName(bucketName?: string): string {
     return bucketName || this.getDefaultBucket();
   }
 
+  /**
+   * 执行 MinIO 资源流程。
+   * @param bucketName - bucketName 输入；驱动 `this.getBucketName()` 的 MinIO步骤。
+   */
   async checkConnection(bucketName?: string) {
     const targetBucket = this.getBucketName(bucketName);
     const exists = await this.client.bucketExists(targetBucket);
@@ -36,6 +57,11 @@ export class MinioClientService {
     };
   }
 
+  /**
+   * 确保Bucket。
+   * @param bucketName - bucketName 输入；驱动 `this.getBucketName()` 的 MinIO步骤。
+   * @returns MinIO 资源渲染后的图片、画布或文本。
+   */
   async ensureBucket(bucketName?: string): Promise<string> {
     const targetBucket = this.getBucketName(bucketName);
     const exists = await this.client.bucketExists(targetBucket);
@@ -47,6 +73,10 @@ export class MinioClientService {
     return targetBucket;
   }
 
+  /**
+   * 执行 MinIO 资源流程。
+   * @param { bucketName, objectName, file, } - 上传对象选项；`bucketName` 覆盖默认 bucket，`objectName` 指定 MinIO 对象键，`file` 是 Multer 上传文件载荷。
+   */
   async uploadObject({
     bucketName,
     objectName,
@@ -80,6 +110,10 @@ export class MinioClientService {
     };
   }
 
+  /**
+   * 列出Objects。
+   * @param { bucketName, prefix = '', recursive = true, } - 对象列表选项；`bucketName` 定位 bucket，`prefix` 限定对象键前缀，`recursive` 控制是否递归列出。
+   */
   async listObjects({
     bucketName,
     prefix = '',
@@ -102,6 +136,12 @@ export class MinioClientService {
     });
   }
 
+  /**
+   * 查询 MinIO 资源数据。
+   * @param objectName - objectName 输入；驱动 `BadRequestException()`、`client.statObject()`、`client.getObject()` 的 MinIO步骤。
+   * @param bucketName - bucketName 输入；驱动 `this.getBucketName()` 的 MinIO步骤。
+   * @returns MinIO 资源查询结果。
+   */
   async getObject(
     objectName: string,
     bucketName?: string,
@@ -122,6 +162,13 @@ export class MinioClientService {
     };
   }
 
+  /**
+   * 查询 MinIO 资源数据。
+   * @param objectName - objectName 输入；驱动 `BadRequestException()`、`client.presignedGetObject()` 的 MinIO步骤。
+   * @param bucketName - bucketName 输入；驱动 `client.presignedGetObject()` 的 MinIO步骤。
+   * @param expiry - expiry 输入；驱动 `client.presignedGetObject()` 的 MinIO步骤。
+   * @returns MinIO 资源查询结果。
+   */
   async getPresignedUrl(
     objectName: string,
     bucketName?: string,
@@ -138,6 +185,12 @@ export class MinioClientService {
     );
   }
 
+  /**
+   * 清理 MinIO 资源状态。
+   * @param objectName - objectName 输入；驱动 `BadRequestException()`、`client.removeObject()` 的 MinIO步骤。
+   * @param bucketName - bucketName 输入；驱动 `client.removeObject()` 的 MinIO步骤。
+   * @returns MinIO 资源清理后的状态。
+   */
   async removeObject(
     objectName: string,
     bucketName?: string,
@@ -150,6 +203,11 @@ export class MinioClientService {
     return true;
   }
 
+  /**
+   * 创建 MinIO 资源对象或配置。
+   * @param originalName - originalName 输入；生成规范化文本。
+   * @returns 创建后的 MinIO 资源对象或配置。
+   */
   private createObjectName(originalName: string): string {
     // 前端未指定对象名时，生成带时间和随机段的路径，降低同名文件覆盖概率。
     const safeName = originalName.replace(/[\\/]/g, '_');

@@ -8,8 +8,15 @@ import { QqbotDashboardService } from '../../application/dashboard/qqbot-dashboa
 @Controller('qqbot/dashboard')
 @UseGuards(JwtAuthGuard)
 export class QqbotDashboardController {
+  /**
+   * 初始化 QqbotDashboardController 实例。
+   * @param dashboardService - dashboardService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(private readonly dashboardService: QqbotDashboardService) {}
 
+  /**
+   * QQBot 工作台汇总。
+   */
   @Get('summary')
   @ApiOperation({ summary: 'QQBot 工作台汇总' })
   async summary() {

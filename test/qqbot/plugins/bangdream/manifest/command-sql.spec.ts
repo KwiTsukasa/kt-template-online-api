@@ -16,10 +16,7 @@ const BANGDREAM_FULL_SQL_ROW_PATTERN =
 const BANGDREAM_REFACTOR_V3_SQL_ROW_PATTERN =
   /\(\s*\d+,\s*'([^']+)',\s*'[^']+',\s*'[^']+',\s*'([^']*)',\s*'(\[[^']*\])',\s*'bangdream',\s*1,\s*(\d+)\s*\)/g;
 
-const pluginRoot = join(
-  process.cwd(),
-  'src/modules/qqbot/plugins/bangdream',
-);
+const pluginRoot = join(process.cwd(), 'src/modules/qqbot/plugins/bangdream');
 
 const manifest = parseQqbotPluginManifest(
   JSON.parse(readFileSync(join(pluginRoot, 'plugin.json'), 'utf8')) as Record<
@@ -32,7 +29,7 @@ const manifest = parseQqbotPluginManifest(
 /**
  * 从完整初始化 SQL 中提取 BangDream 在线命令行。
  *
- * @param sql - qqbot 初始化 SQL。
+ * @param sql - SQL 文本；提取正则匹配结果。
  */
 function getBangDreamFullSqlCommandRows(sql: string) {
   return Array.from(sql.matchAll(BANGDREAM_FULL_SQL_ROW_PATTERN)).map(
@@ -45,6 +42,10 @@ function getBangDreamFullSqlCommandRows(sql: string) {
   );
 }
 
+/**
+ * 查询 BangDream 插件数据。
+ * @param sql - SQL 文本；提取正则匹配结果。
+ */
 function getBangDreamRefactorV3SqlCommandRows(sql: string) {
   return Array.from(sql.matchAll(BANGDREAM_REFACTOR_V3_SQL_ROW_PATTERN)).map(
     (match): BangDreamSqlCommandRow => ({
@@ -56,6 +57,11 @@ function getBangDreamRefactorV3SqlCommandRows(sql: string) {
   );
 }
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param sqlRows - BangDream列表；转换 BangDream列表项。
+ * @param options - BangDream列表；使用 `aliasSource`、`requireRemark` 字段生成结果。
+ */
 function expectSqlRowsMatchManifest(
   sqlRows: BangDreamSqlCommandRow[],
   options: {
@@ -63,38 +69,38 @@ function expectSqlRowsMatchManifest(
     requireRemark?: boolean;
   } = {},
 ) {
-    const sqlOperationKeys = sqlRows.map((row) => row.operationKey);
-    const definedOperationKeys = manifest.operations.map(
-      (operation) => operation.key,
-    );
+  const sqlOperationKeys = sqlRows.map((row) => row.operationKey);
+  const definedOperationKeys = manifest.operations.map(
+    (operation) => operation.key,
+  );
 
-    expect([...sqlOperationKeys].sort()).toEqual(
-      [...definedOperationKeys].sort(),
-    );
-    expect(sqlOperationKeys).toHaveLength(15);
+  expect([...sqlOperationKeys].sort()).toEqual(
+    [...definedOperationKeys].sort(),
+  );
+  expect(sqlOperationKeys).toHaveLength(15);
 
-    const rowsByKey = new Map(
-      sqlRows.map((row) => [row.operationKey, row] as const),
-    );
+  const rowsByKey = new Map(
+    sqlRows.map((row) => [row.operationKey, row] as const),
+  );
 
-    for (const operation of manifest.operations) {
-      const row = rowsByKey.get(operation.key);
+  for (const operation of manifest.operations) {
+    const row = rowsByKey.get(operation.key);
 
-      if (options.aliasSource === 'plugin-manifest-only') {
-        expect(row?.aliases).toEqual([]);
-        expect(row?.name).toBe('');
-      } else {
-        expect(row).toEqual(
-          expect.objectContaining({
-            aliases: [...operation.aliases],
-          }),
-        );
-      }
-      expect(row?.cooldownMs).toBeGreaterThan(0);
-      if (options.requireRemark) {
-        expect(row?.remark).not.toHaveLength(0);
-      }
+    if (options.aliasSource === 'plugin-manifest-only') {
+      expect(row?.aliases).toEqual([]);
+      expect(row?.name).toBe('');
+    } else {
+      expect(row).toEqual(
+        expect.objectContaining({
+          aliases: [...operation.aliases],
+        }),
+      );
     }
+    expect(row?.cooldownMs).toBeGreaterThan(0);
+    if (options.requireRemark) {
+      expect(row?.remark).not.toHaveLength(0);
+    }
+  }
 }
 
 describe('qqbot BangDream command init SQL', () => {

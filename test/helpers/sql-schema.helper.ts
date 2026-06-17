@@ -23,6 +23,11 @@ export type SqlSchemaColumn = {
   name: string;
 };
 
+/**
+ * 解析Columns。
+ * @param tableBlock - CREATE TABLE 语句片段；影响 parseColumns 的返回值。
+ * @returns 测试断言转换后的值。
+ */
 const parseColumns = (tableBlock: string): SqlSchemaColumn[] => {
   return tableBlock
     .split(/\r?\n/)
@@ -43,6 +48,10 @@ const parseColumns = (tableBlock: string): SqlSchemaColumn[] => {
     });
 };
 
+/**
+ * 解析Schema。
+ * @param sql - SQL 文本；提取正则匹配结果。
+ */
 const parseSchema = (sql: string) => {
   const tables = new Map<string, SqlSchemaColumn[]>();
 
@@ -54,6 +63,10 @@ const parseSchema = (sql: string) => {
   return tables;
 };
 
+/**
+ * 读取 测试断言资源。
+ * @returns 测试断言产出的 SqlSchemaContract。
+ */
 export const readRefactorV3SqlSchema = (): SqlSchemaContract => {
   const schemaPath = path.resolve(
     __dirname,
@@ -66,8 +79,21 @@ export const readRefactorV3SqlSchema = (): SqlSchemaContract => {
   const tables = parseSchema(fs.readFileSync(schemaPath, 'utf8'));
 
   return {
+    /**
+     * 读取 测试回调数据。
+     * @param tableName - tableName 输入；驱动 `tables.get()` 的 测试步骤。
+     */
     getTableColumns: (tableName) => tables.get(tableName) || [],
+    /**
+     * 执行 测试回调。
+     * @param tableName - tableName 输入；驱动 `tables.has()` 的 测试步骤。
+     */
     hasTable: (tableName) => tables.has(tableName),
+    /**
+     * 执行 测试回调。
+     * @param tableName - tableName 输入；驱动 `tables.get()` 的 测试步骤。
+     * @param columns - 测试列表；构造测试断言。
+     */
     expectTableColumns: (tableName, columns) => {
       const tableColumns = tables.get(tableName);
 

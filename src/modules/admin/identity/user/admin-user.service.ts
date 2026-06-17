@@ -5,10 +5,19 @@ import { throwVbenError } from '@/common';
 import { AdminDept } from '../dept/admin-dept.entity';
 import { AdminRole } from '../role/admin-role.entity';
 import { AdminUser } from './admin-user.entity';
-import type { AdminUserInput, AdminUserListQuery } from '../../contract/admin.types';
+import type {
+  AdminUserInput,
+  AdminUserListQuery,
+} from '../../contract/admin.types';
 
 @Injectable()
 export class AdminUserService {
+  /**
+   * 初始化 AdminUserService 实例。
+   * @param userRepository - 用户仓库依赖；影响 constructor 的返回值。
+   * @param roleRepository - 角色仓库依赖；影响 constructor 的返回值。
+   * @param deptRepository - Admin仓库依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(AdminUser)
     private readonly userRepository: Repository<AdminUser>,
@@ -18,6 +27,10 @@ export class AdminUserService {
     private readonly deptRepository: Repository<AdminDept>,
   ) {}
 
+  /**
+   * 查询 Admin 身份权限数据。
+   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   */
   async getUserList(query: AdminUserListQuery) {
     const page = Number(query.page || 1);
     const pageSize = Number(query.pageSize || 20);
@@ -75,6 +88,10 @@ export class AdminUserService {
     };
   }
 
+  /**
+   * 创建 Admin 身份权限对象或配置。
+   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   */
   async createUser(data: AdminUserInput) {
     await this.ensureUsernameAvailable(String(data.username || ''));
 
@@ -92,6 +109,11 @@ export class AdminUserService {
     return null;
   }
 
+  /**
+   * 更新User。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   */
   async updateUser(id: string, data: AdminUserInput) {
     const user = await this.userRepository.findOne({
       relations: ['roles'],
@@ -118,6 +140,11 @@ export class AdminUserService {
     return null;
   }
 
+  /**
+   * 删除User。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @param currentUserId - 用户 ID；定位本次读取、更新、删除或关联的用户。
+   */
   async deleteUser(id: string, currentUserId?: string) {
     const user = await this.userRepository.findOne({
       where: {
@@ -142,6 +169,11 @@ export class AdminUserService {
     return null;
   }
 
+  /**
+   * 更新Current Profile。
+   * @param userId - 用户 ID；定位本次读取、更新、删除或关联的用户。
+   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   */
   async updateCurrentProfile(userId: string, data: AdminUserInput) {
     const user = await this.findActiveUser(userId);
 
@@ -161,6 +193,10 @@ export class AdminUserService {
     return this.findActiveUser(userId);
   }
 
+  /**
+   * 序列化User。
+   * @param user - user 输入；使用 `avatar`、`homePath`、`id`、`realName` 字段生成结果。
+   */
   serializeUser(user: AdminUser) {
     return {
       avatar: user.avatar || '',
@@ -176,6 +212,10 @@ export class AdminUserService {
     };
   }
 
+  /**
+   * 序列化User For List。
+   * @param user - user 输入；使用 `roles`、`createTime`、`dept`、`deptId` 字段生成结果。
+   */
   private serializeUserForList(user: AdminUser) {
     const activeRoles = (user.roles || []).filter((role) => !role.isDeleted);
     return {
@@ -207,6 +247,10 @@ export class AdminUserService {
     };
   }
 
+  /**
+   * 查询 Admin 身份权限数据。
+   * @param ids - Admin ID 列表；限定本次批量读取、渲染或关联的Admin范围。
+   */
   private async findRolesByIds(ids: string[]) {
     const normalizedIds = ids.map((id) => String(id)).filter(Boolean);
     if (!normalizedIds.length) return [];
@@ -218,6 +262,10 @@ export class AdminUserService {
     });
   }
 
+  /**
+   * 执行 Admin 身份权限流程。
+   * @param deptId - Admin ID；定位本次读取、更新、删除或关联的Admin。
+   */
   private async collectDeptIds(deptId: string) {
     if (deptId === '0') return ['0'];
 
@@ -242,6 +290,10 @@ export class AdminUserService {
     return Array.from(result);
   }
 
+  /**
+   * 查询 Admin 身份权限数据。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   private async findActiveUser(id: string) {
     const user = await this.userRepository.findOne({
       relations: ['roles', 'dept'],
@@ -255,6 +307,11 @@ export class AdminUserService {
     return user;
   }
 
+  /**
+   * 确保Username Available。
+   * @param username - username 输入；生成规范化文本。
+   * @param ignoreId - Admin ID；定位本次读取、更新、删除或关联的Admin。
+   */
   private async ensureUsernameAvailable(username: string, ignoreId?: string) {
     if (!username.trim()) {
       throwVbenError('用户名不能为空', HttpStatus.BAD_REQUEST);

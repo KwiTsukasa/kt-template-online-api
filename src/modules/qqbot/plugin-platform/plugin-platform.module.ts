@@ -47,6 +47,10 @@ import { QQBOT_PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.serv
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
+      /**
+       * 创建 插件平台依赖注入工厂产物。
+       * @param configService - Nest ConfigService 依赖；驱动 `resolveQqbotPluginQueueConnection()` 的 插件平台步骤。
+       */
       useFactory: (configService: ConfigService) => ({
         connection: resolveQqbotPluginQueueConnection(configService),
         prefix: resolveQqbotPluginQueuePrefix(configService),

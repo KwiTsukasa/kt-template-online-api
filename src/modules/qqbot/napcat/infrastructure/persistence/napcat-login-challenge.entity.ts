@@ -24,7 +24,12 @@ export class NapcatLoginChallengeEntity {
   @Column({ length: 32 })
   status: string;
 
-  @Column({ default: null, name: 'challenge_url', nullable: true, type: 'text' })
+  @Column({
+    default: null,
+    name: 'challenge_url',
+    nullable: true,
+    type: 'text',
+  })
   challengeUrl: null | string;
 
   @Column({
@@ -49,6 +54,9 @@ export class NapcatLoginChallengeEntity {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
+  /**
+   * 创建 NapCat 登录运行态对象或配置。
+   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

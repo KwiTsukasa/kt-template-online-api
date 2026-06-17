@@ -7,9 +7,9 @@ export class Color {
   /**
    * 构造 Color 实例，并初始化该模型的本地基础字段。
    *
-   * @param r - r参数。
-   * @param g - g参数。
-   * @param b - b参数。
+   * @param r - r 输入；影响 constructor 的返回值。
+   * @param g - g 输入；影响 constructor 的返回值。
+   * @param b - b 输入；影响 constructor 的返回值。
    */
   constructor(r: number, g: number, b: number) {
     this.r = r;
@@ -17,9 +17,9 @@ export class Color {
     this.b = b;
   }
   /**
-   * 在 Color 模型中获取RGBA。
+   * 查询 BangDream 插件数据。
    *
-   * @param alpha - alpha参数，未传入时使用默认值。
+   * @param alpha - alpha 输入；限定 BangDream查询范围。
    * @returns 格式化后的文本。
    */
   getRGBA(alpha = 1): string {
@@ -29,9 +29,9 @@ export class Color {
   /**
    * 在 Color 模型中设置RGB。
    *
-   * @param r - r参数。
-   * @param g - g参数。
-   * @param b - b参数。
+   * @param r - r 输入；写入 BangDream状态。
+   * @param g - g 输入；写入 BangDream状态。
+   * @param b - b 输入；写入 BangDream状态。
    */
   setRGB(r: number, g: number, b: number) {
     this.r = r;
@@ -42,7 +42,7 @@ export class Color {
   /**
    * 在 Color 模型中生成颜色块。
    *
-   * @param alpha - alpha参数，未传入时使用默认值。
+   * @param alpha - alpha 输入；驱动 `this.getRGBA()` 的 BangDream步骤。
    * @returns 渲染或资源结果。
    */
   generateColorBlock(alpha = 1): Canvas {
@@ -58,8 +58,8 @@ export class Color {
 /**
  * 在BangDream 领域模型层中获取颜色FromHex。
  *
- * @param hex - hex参数。
- * @returns 处理结果。
+ * @param hex - hex 输入；执行 `hex.substring()` 对应的 BangDream步骤。
+ * @returns BangDream 插件查询结果。
  */
 export function getColorFromHex(hex: string): Color {
   const color = new Color(
@@ -104,10 +104,10 @@ function randomRGB(): { r: number; g: number; b: number } {
 }
 
 /**
- * 在BangDream 领域模型层中获取Preset颜色。
+ * 查询 BangDream 插件数据。
  *
- * @param index - 当前列表下标，未传入时使用默认值。
- * @returns 处理结果。
+ * @param index - index 输入；决定 BangDream条件分支。
+ * @returns BangDream 插件查询结果。
  */
 export function getPresetColor(index?: number): Color {
   let tempColor: { r: number; g: number; b: number };

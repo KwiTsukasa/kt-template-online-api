@@ -16,6 +16,11 @@ export type QqbotPluginHttpClientRequest = {
 
 @Injectable()
 export class QqbotPluginHttpClientService {
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param input - input 输入；使用 `invalidJsonMessage`、`context` 字段生成结果。
+   * @returns 异步完成后的 QQBot 插件平台结果。
+   */
   async requestJson<T>(input: QqbotPluginHttpClientRequest): Promise<T> {
     const body = await this.requestText(input);
     try {
@@ -28,6 +33,11 @@ export class QqbotPluginHttpClientService {
     }
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param input - input 输入；使用 `url`、`method`、`timeoutMs`、`context` 字段生成结果。
+   * @returns QQBot 插件平台渲染后的图片、画布或文本。
+   */
   requestBuffer(input: QqbotPluginHttpClientRequest): Promise<Buffer> {
     const url = input.url instanceof URL ? input.url : new URL(input.url);
     const method = input.method || 'GET';
@@ -79,6 +89,11 @@ export class QqbotPluginHttpClientService {
     });
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param input - input 输入；使用 `url`、`method`、`timeoutMs`、`context` 字段生成结果。
+   * @returns QQBot 插件平台渲染后的图片、画布或文本。
+   */
   requestText(input: QqbotPluginHttpClientRequest): Promise<string> {
     const url = input.url instanceof URL ? input.url : new URL(input.url);
     const method = input.method || 'GET';
@@ -132,6 +147,11 @@ export class QqbotPluginHttpClientService {
   }
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @param message - message 输入；驱动 `Object.assign()` 的 插件平台步骤。
+ * @param statusCode - statusCode 输入；生成 插件平台对象。
+ */
 function createPluginHttpError(message: string, statusCode: number) {
   return Object.assign(new Error(message), {
     response: {

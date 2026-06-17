@@ -48,7 +48,7 @@ interface ListOptions {
 /**
  * 在图片布局层中绘制列表。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawList 的返回值。
  * @returns 渲染或资源结果。
  */
 export function drawList({
@@ -118,7 +118,7 @@ interface tipsOptions {
 /**
  * 在图片布局层中绘制TipsIn列表。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawTipsInList 的返回值。
  */
 export function drawTipsInList({
   text,
@@ -163,10 +163,10 @@ export function drawTipsInList({
 /**
  * 在图片布局层中绘制列表By服务器列表。
  *
- * @param content - content参数。
- * @param key - 当前字段键名，未传入时使用默认值。
- * @param serverList - 服务器列表参数，未传入时使用默认值。
- * @param maxWidth - max宽度参数，未传入时使用默认值。
+ * @param content - 待处理内容；驱动 `getServerByPriority()`、`tempcontent.push()` 的 BangDream步骤。
+ * @param key - 键名；影响 drawListByServerList 的返回值。
+ * @param serverList - serverList 输入；使用 `length` 字段生成结果。
+ * @param maxWidth - maxWidth 输入；影响 drawListByServerList 的返回值。
  */
 export async function drawListByServerList(
   content: Array<string | null>,
@@ -230,7 +230,7 @@ export async function drawListByServerList(
 /**
  * 在图片布局层中绘制列表Merge。
  *
- * @param imageList - 图片列表参数。
+ * @param imageList - imageList 输入；使用 `length` 字段生成结果。
  * @returns 渲染或资源结果。
  */
 export function drawListMerge(imageList: Array<Canvas | Image>): Canvas {
@@ -260,8 +260,8 @@ export function drawListMerge(imageList: Array<Canvas | Image>): Canvas {
 /**
  * 在图片布局层中绘制图片列表Center。
  *
- * @param imageList - 图片列表参数。
- * @param maxWidth - max宽度参数，未传入时使用默认值。
+ * @param imageList - imageList 输入；使用 `length`、`emptyWidth`、`emptyHeight` 字段生成结果。
+ * @param maxWidth - maxWidth 输入；驱动 `createCenteredImageRows()`、`Canvas()` 的 BangDream步骤。
  * @returns 渲染或资源结果。
  */
 export function drawImageListCenter(
@@ -298,7 +298,7 @@ export function drawImageListCenter(
 /**
  * 在图片布局层中绘制列表With线条。
  *
- * @param textImageList - 文本图片列表参数。
+ * @param textImageList - textImageList 输入；使用 `length` 字段生成结果。
  * @returns 渲染或资源结果。
  */
 export function drawListWithLine(textImageList: Array<Canvas | Image>): Canvas {

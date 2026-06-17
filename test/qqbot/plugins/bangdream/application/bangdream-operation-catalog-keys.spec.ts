@@ -124,6 +124,14 @@ describe('BangDream operation catalog keys', () => {
   });
 });
 
-function expectCatalogKeys(actual: readonly string[] | undefined, keys: string[]) {
+/**
+ * 执行 BangDream 插件流程。
+ * @param actual - actual 输入；构造测试断言。
+ * @param keys - BangDream列表；构造测试断言。
+ */
+function expectCatalogKeys(
+  actual: readonly string[] | undefined,
+  keys: string[],
+) {
   expect(actual).toEqual(keys);
 }

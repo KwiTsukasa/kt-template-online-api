@@ -1,10 +1,10 @@
 import { Canvas, Image, loadImage } from 'skia-canvas';
 
 /**
- * 在底层绘图工具层中获取Blurred图片。
+ * 查询 BangDream 插件数据。
  *
- * @param image - 待绘制图片。
- * @param blurRadius - 模糊Radius参数。
+ * @param image - image 输入；使用 `width`、`height` 字段生成结果。
+ * @param blurRadius - BangDream列表；限定 BangDream查询范围。
  * @returns 异步处理结果。
  */
 export async function getBlurredImage(

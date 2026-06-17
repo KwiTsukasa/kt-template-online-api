@@ -80,6 +80,11 @@ export const NAPCAT_LOGIN_PROGRESS_MESSAGES = {
   success: '登录成功',
 } as const;
 
+/**
+ * 创建 NapCat 登录运行态对象或配置。
+ * @param input - input 输入；使用 `hasHistoricalSession`、`accountId`、`hasSavedPassword`、`sessionId` 字段生成结果。
+ * @returns 创建后的 NapCat 登录运行态对象或配置。
+ */
 export function createNapcatLoginSession(
   input: CreateNapcatLoginSessionInput,
 ): NapcatLoginSessionState {
@@ -99,6 +104,12 @@ export function createNapcatLoginSession(
 }
 
 export class NapcatLoginStateMachine {
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `status`、`hasSavedPassword`、`challenge` 字段生成结果。
+   * @param event - event 输入；使用 `type`、`captchaUrl`、`newDevicePullQrCodeSig`、`qrcodeUrl` 字段生成结果。
+   * @returns NapCat 登录运行态产出的 NapcatLoginSessionState。
+   */
   advance(
     session: NapcatLoginSessionState,
     event: NapcatLoginStateEvent,
@@ -183,9 +194,7 @@ export class NapcatLoginStateMachine {
       case 'new-device-poll-pending':
         return this.updateNewDeviceChallenge(session, {
           qrcodeUrl:
-            event.type === 'new-device-qr-ready'
-              ? event.qrcodeUrl
-              : undefined,
+            event.type === 'new-device-qr-ready' ? event.qrcodeUrl : undefined,
           status: 'qr-pending',
           progressMessage: NAPCAT_LOGIN_PROGRESS_MESSAGES.newDeviceQrPending,
         });
@@ -244,13 +253,20 @@ export class NapcatLoginStateMachine {
       case 'login-failed':
         return {
           ...session,
-          progressMessage: event.reason || NAPCAT_LOGIN_PROGRESS_MESSAGES.failed,
+          progressMessage:
+            event.reason || NAPCAT_LOGIN_PROGRESS_MESSAGES.failed,
           stage: 'failure',
           status: 'failure',
         };
     }
   }
 
+  /**
+   * 更新New Device Challenge。
+   * @param session - session 输入；使用 `challenge` 字段生成结果。
+   * @param patch - patch 输入；使用 `qrcodeUrl`、`reason`、`status`、`progressMessage` 字段生成结果。
+   * @returns NapCat 登录运行态更新后的状态。
+   */
   private updateNewDeviceChallenge(
     session: NapcatLoginSessionState,
     patch: {

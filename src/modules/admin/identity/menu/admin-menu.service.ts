@@ -8,21 +8,36 @@ import type { AdminMenuInput, AdminMenuMeta } from '../../contract/admin.types';
 
 @Injectable()
 export class AdminMenuService {
+  /**
+   * 初始化 AdminMenuService 实例。
+   * @param menuRepository - 菜单仓库依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(AdminMenu)
     private readonly menuRepository: Repository<AdminMenu>,
   ) {}
 
+  /**
+   * 查询 Admin 身份权限数据。
+   * @param user - user 输入；驱动 `this.getAllowedMenus()` 的 Admin步骤。
+   */
   async getAccessCodes(user: AdminUser) {
     const menus = await this.getAllowedMenus(user);
     return menus.map((menu) => menu.authCode).filter((authCode) => !!authCode);
   }
 
+  /**
+   * 查询 Admin 身份权限数据。
+   * @param user - user 输入；驱动 `this.getAllowedMenus()` 的 Admin步骤。
+   */
   async getRouteMenus(user: AdminUser) {
     const menus = await this.getAllowedMenus(user);
     return this.buildMenuTree(menus.filter((menu) => menu.type !== 'button'));
   }
 
+  /**
+   * 查询 Admin 身份权限数据。
+   */
   async getMenuList() {
     const menus = await this.menuRepository.find({
       where: {
@@ -32,6 +47,11 @@ export class AdminMenuService {
     return this.buildMenuTree(menus);
   }
 
+  /**
+   * 判断 Admin 身份权限条件。
+   * @param name - 名称文本；计算 Admin判断结果。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   async isMenuNameExists(name: string, id?: string) {
     const menu = await this.menuRepository.findOne({
       where: {
@@ -42,6 +62,11 @@ export class AdminMenuService {
     return !!menu && (!id || menu.id !== id);
   }
 
+  /**
+   * 判断 Admin 身份权限条件。
+   * @param path - 路由或文件路径；决定 Admin条件分支。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   async isMenuPathExists(path: string, id?: string) {
     if (path === '/') return !id;
 
@@ -54,6 +79,10 @@ export class AdminMenuService {
     return !!menu && (!id || menu.id !== id);
   }
 
+  /**
+   * 创建 Admin 身份权限对象或配置。
+   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   */
   async createMenu(data: AdminMenuInput) {
     const entity = this.menuRepository.create({
       ...this.normalizeMenuInput(data, true),
@@ -62,6 +91,11 @@ export class AdminMenuService {
     return null;
   }
 
+  /**
+   * 更新Menu。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   */
   async updateMenu(id: string, data: AdminMenuInput) {
     await this.menuRepository.update(
       { id },
@@ -72,6 +106,10 @@ export class AdminMenuService {
     return null;
   }
 
+  /**
+   * 删除Menu。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   async deleteMenu(id: string) {
     const ids = await this.collectChildMenuIds(id);
     await this.menuRepository.update(
@@ -85,6 +123,10 @@ export class AdminMenuService {
     return null;
   }
 
+  /**
+   * 查询 Admin 身份权限数据。
+   * @param user - user 输入；使用 `roles` 字段生成结果。
+   */
   private async getAllowedMenus(user: AdminUser) {
     const activeRoles = (user.roles || []).filter(
       (role) => !role.isDeleted && role.status === 1,
@@ -108,11 +150,19 @@ export class AdminMenuService {
     return this.includeAncestorMenus([...menuMap.values()]);
   }
 
+  /**
+   * 执行 Admin 身份权限流程。
+   * @param menus - 菜单列表；遍历并累积 Admin结果。
+   */
   private async includeAncestorMenus(menus: AdminMenu[]) {
     const menuMap = new Map<string, AdminMenu>();
     menus.forEach((menu) => menuMap.set(menu.id, menu));
 
     const pendingParentIds = new Set<string>();
+    /**
+     * 收集 Admin 管理数据。
+     * @param pid - Admin ID；定位本次读取、更新、删除或关联的Admin。
+     */
     const collectMissingParent = (pid?: null | string) => {
       if (!pid || pid === '0' || menuMap.has(pid)) return;
       pendingParentIds.add(pid);
@@ -141,6 +191,12 @@ export class AdminMenuService {
     return [...menuMap.values()];
   }
 
+  /**
+   * 转换 Admin 身份权限输入。
+   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   * @param includeEmptyMeta - includeEmptyMeta 输入；决定 Admin条件分支。
+   * @returns Admin 身份权限转换后的值。
+   */
   private normalizeMenuInput(
     data: AdminMenuInput,
     includeEmptyMeta: boolean,
@@ -162,6 +218,11 @@ export class AdminMenuService {
     return menu;
   }
 
+  /**
+   * 转换 Admin 身份权限输入。
+   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   * @returns Admin 身份权限转换后的值。
+   */
   private normalizeMetaInput(data: AdminMenuInput): AdminMenuMeta {
     const meta = this.normalizeMetaValue(data.meta);
 
@@ -184,6 +245,11 @@ export class AdminMenuService {
     return meta;
   }
 
+  /**
+   * 转换 Admin 身份权限输入。
+   * @param meta - meta 输入；转换 JSON 文本。
+   * @returns Admin 身份权限转换后的值。
+   */
   private normalizeMetaValue(
     meta: AdminMenuMeta | null | string | undefined,
   ): AdminMenuMeta {
@@ -198,6 +264,10 @@ export class AdminMenuService {
     }
   }
 
+  /**
+   * 执行 Admin 身份权限流程。
+   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   */
   private async collectChildMenuIds(id: string) {
     const menus = await this.menuRepository.find({
       where: {
@@ -218,6 +288,10 @@ export class AdminMenuService {
     return [...ids];
   }
 
+  /**
+   * 创建 Admin 身份权限对象或配置。
+   * @param menus - 菜单列表；生成 Admin对象。
+   */
   private buildMenuTree(menus: AdminMenu[]) {
     const nodes = menus
       .map((menu) => this.serializeMenu(menu))
@@ -229,6 +303,10 @@ export class AdminMenuService {
     return toTree(nodes);
   }
 
+  /**
+   * 序列化Menu。
+   * @param menu - menu 输入；使用 `meta`、`name`、`authCode`、`component` 字段生成结果。
+   */
   private serializeMenu(menu: AdminMenu) {
     const meta = this.normalizeMetaValue(menu.meta);
     if (!meta.title) meta.title = menu.name;

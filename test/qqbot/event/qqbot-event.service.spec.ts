@@ -1,6 +1,9 @@
-jest.mock('@/modules/qqbot/core/application/rule/qqbot-rule-engine.service', () => ({
-  QqbotRuleEngineService: class QqbotRuleEngineService {},
-}));
+jest.mock(
+  '@/modules/qqbot/core/application/rule/qqbot-rule-engine.service',
+  () => ({
+    QqbotRuleEngineService: class QqbotRuleEngineService {},
+  }),
+);
 
 import { QqbotEventService } from '@/modules/qqbot/core/application/event/qqbot-event.service';
 
@@ -18,8 +21,16 @@ describe('QqbotEventService', () => {
       {} as any,
       {} as any,
       {
+        /**
+         * 读取 测试回调数据。
+         * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+         */
         getErrorMessage: (error: unknown) =>
           error instanceof Error ? error.message : `${error}`,
+        /**
+         * 执行 测试回调。
+         * @param value - 待转换值；影响 toStringId 的返回值。
+         */
         toStringId: (value: unknown) => `${value || ''}`,
       } as any,
       accountService as any,
@@ -74,8 +85,16 @@ describe('QqbotEventService', () => {
       {} as any,
       {} as any,
       {
+        /**
+         * 读取 测试回调数据。
+         * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+         */
         getErrorMessage: (error: unknown) =>
           error instanceof Error ? error.message : `${error}`,
+        /**
+         * 执行 测试回调。
+         * @param value - 待转换值；影响 toStringId 的返回值。
+         */
         toStringId: (value: unknown) => `${value || ''}`,
       } as any,
       accountService as any,

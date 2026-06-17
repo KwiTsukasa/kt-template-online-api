@@ -24,6 +24,13 @@ type RequestWithId = Request & {
 
 @Injectable()
 export class ApiRequestLogInterceptor implements NestInterceptor {
+  /**
+   * 初始化 ApiRequestLogInterceptor 实例。
+   * @param logger - 日志记录器实例；绑定日志上下文名称。
+   * @param lokiLogPublisherService - lokiLogPublisherService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * @param systemNoticePublisher - systemNoticePublisher 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly logger: PinoLogger,
     private readonly lokiLogPublisherService: LokiLogPublisherService,
@@ -35,6 +42,12 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
     this.logger.setContext(ApiRequestLogInterceptor.name);
   }
 
+  /**
+   * 拦截请求并处理横切逻辑。
+   * @param context - context 输入；执行 `context.getType()`、`context.switchToHttp()` 对应的 公共基础设施步骤。
+   * @param next - next 输入；执行 `next.handle()` 对应的 公共基础设施步骤。
+   * @returns 当前模块产出的 Observable<any>。
+   */
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     if (context.getType() !== 'http') {
       return next.handle();
@@ -68,6 +81,11 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
     );
   }
 
+  /**
+   * 确保Request Id。
+   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * @param response - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   */
   private ensureRequestId(request: RequestWithId, response: Response) {
     const requestId = this.toolsService.getRequestId(request) || randomUUID();
     request.id = requestId;
@@ -79,6 +97,10 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
     return requestId;
   }
 
+  /**
+   * 执行 当前模块流程。
+   * @param params - 公共基础设施列表；使用 `error`、`response`、`startedAt`、`request` 字段生成结果。
+   */
   private logRequest(params: {
     error?: unknown;
     request: RequestWithId;
@@ -134,6 +156,10 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
     this.logger.info(payload, 'HTTP request completed');
   }
 
+  /**
+   * 投递 当前模块消息或任务。
+   * @param params - 公共基础设施列表；使用 `payload`、`error`、`level`、`message` 字段生成结果。
+   */
   private publishRequestLog(params: {
     error?: unknown;
     level: 'error' | 'info' | 'warning';
@@ -153,6 +179,10 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
       .catch(() => undefined);
   }
 
+  /**
+   * 投递 当前模块消息或任务。
+   * @param params - 公共基础设施列表；使用 `payload`、`error` 字段生成结果。
+   */
   private publishSystemNotice(params: {
     error?: unknown;
     payload: Record<string, unknown>;
@@ -190,6 +220,10 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
       .catch(() => undefined);
   }
 
+  /**
+   * 判断 当前模块条件。
+   * @param path - 路由或文件路径；驱动 `toolsService.normalizeRequestPathValue()` 的 公共基础设施步骤。
+   */
   private shouldSkipLokiPublish(path: unknown) {
     const normalizedPath = this.toolsService.normalizeRequestPathValue(path);
     return (
@@ -198,6 +232,10 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
     );
   }
 
+  /**
+   * 判断 当前模块条件。
+   * @param path - 路由或文件路径；驱动 `toolsService.normalizeRequestPathValue()` 的 公共基础设施步骤。
+   */
   private shouldSkipSystemNotice(path: unknown) {
     const normalizedPath = this.toolsService.normalizeRequestPathValue(path);
     return (
@@ -208,6 +246,11 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
     );
   }
 
+  /**
+   * 查询 当前模块数据。
+   * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   * @param response - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   */
   private getStatusCode(error: unknown, response: Response) {
     if (error instanceof HttpException) {
       return error.getStatus();

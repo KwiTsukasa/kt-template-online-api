@@ -2,11 +2,20 @@ import type { FflogsApplication } from '../application/fflogs-application';
 
 export const fflogsCharacterSummaryHandlerName = 'getCharacterSummary';
 
+/**
+ * 创建 FFLogs 插件对象或配置。
+ * @param application - application 输入；执行 `application.parseCharacterInput()`、`application.getCharacterSummary()` 对应的 FFLogs步骤。
+ */
 export function createFflogsCharacterSummaryOperation(
   application: FflogsApplication,
 ) {
   return {
     cacheTtlMs: 60_000,
+    /**
+     * 执行插件操作处理器。
+     * @param input - input 输入；使用 `raw`、`text` 字段生成结果。
+     * @returns 插件处理结果。
+     */
     execute: async (input: Record<string, any>) => {
       const raw = `${input.raw ?? input.text ?? ''}`.trim();
       const parsed = raw ? await application.parseCharacterInput(raw) : {};
@@ -18,7 +27,8 @@ export function createFflogsCharacterSummaryOperation(
       properties: {
         characterName: { description: '角色名', type: 'string' },
         encounter: {
-          description: '高难任务名，按 FFLogs 公开报告中的任务名或 encounterID 匹配',
+          description:
+            '高难任务名，按 FFLogs 公开报告中的任务名或 encounterID 匹配',
           type: 'string',
         },
         limit: {
@@ -59,6 +69,10 @@ export function createFflogsCharacterSummaryOperation(
   };
 }
 
+/**
+ * 清理 FFLogs 插件状态。
+ * @param input - input 输入；驱动 `Object.entries()` 的 FFLogs步骤。
+ */
 function removeEmpty(input: Record<string, any>) {
   return Object.entries(input).reduce<Record<string, any>>(
     (result, [key, value]) => {

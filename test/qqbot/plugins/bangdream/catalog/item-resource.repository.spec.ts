@@ -5,6 +5,10 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/item-resource.repository';
 import { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model';
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @returns 创建后的 BangDream 插件对象或配置。
+ */
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {
     getAsset: jest.fn(),
@@ -15,6 +19,11 @@ function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   };
 }
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @param overrides - BangDream列表；生成 BangDream对象。
+ * @returns 创建后的 BangDream 插件对象或配置。
+ */
 function createItemSource(
   overrides: Partial<ItemResourceSource> = {},
 ): ItemResourceSource {

@@ -16,9 +16,7 @@ import type {
   FflogsCharacterSummaryResult,
   FflogsEncounterLogItem,
 } from '../../domain/fflogs.types';
-import type {
-  FflogsKnownWorldResolver,
-} from '../../application/fflogs-input-parser';
+import type { FflogsKnownWorldResolver } from '../../application/fflogs-input-parser';
 import { resolveFflogsConfig } from '../../config/fflogs-config';
 import { FflogsOAuthTokenCache } from '../storage/oauth-token-cache';
 
@@ -70,6 +68,10 @@ export class FflogsClient {
   private readonly tokenCache = new FflogsOAuthTokenCache();
   private readonly webBaseUrl: string;
 
+  /**
+   * 初始化 FflogsClient 实例。
+   * @param host - host 输入；驱动 `resolveFflogsConfig()` 的 FFLogs步骤。
+   */
   constructor(private readonly host: FflogsPluginHost) {
     const config = resolveFflogsConfig(host);
     this.webBaseUrl = config.webBaseUrl;
@@ -79,11 +81,19 @@ export class FflogsClient {
     this.clientSecret = config.clientSecret;
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   */
   async checkHealth() {
     await this.getAccessToken();
     return true;
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   * @param params - FFLogs列表；使用 `characterName`、`character`、`serverSlug`、`server` 字段生成结果。
+   * @returns FFLogs 插件查询结果。
+   */
   async getCharacterSummary(
     params: FflogsCharacterSummaryInput,
   ): Promise<FflogsCharacterSummaryResult> {
@@ -213,6 +223,11 @@ export class FflogsClient {
     };
   }
 
+  /**
+   * 创建 FFLogs 插件对象或配置。
+   * @param candidates - FFLogs列表；转换 FFLogs列表项。
+   * @returns 创建后的 FFLogs 插件对象或配置。
+   */
   async buildKnownWorldResolver(
     candidates: string[],
   ): Promise<FflogsKnownWorldResolver> {
@@ -227,10 +242,19 @@ export class FflogsClient {
     return (value: string) => resolved.get(value) || null;
   }
 
+  /**
+   * 解析Known World。
+   * @param value - 待转换值；影响 resolveKnownWorld 的返回值。
+   */
   async resolveKnownWorld(value: string) {
     return this.host.resolveKnownWorld?.(value) || null;
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   * @param params - FFLogs列表；使用 `characterName`、`character`、`serverSlug`、`server` 字段生成结果。
+   * @returns FFLogs 插件查询结果。
+   */
   private async getCharacterEncounterLogs(
     params: FflogsCharacterSummaryInput,
   ): Promise<FflogsCharacterSummaryResult> {
@@ -414,6 +438,10 @@ export class FflogsClient {
     };
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   * @param params - FFLogs列表；使用 `encounterLookup`、`characterName`、`partition`、`serverRegion` 字段生成结果。
+   */
   private async getEncounterRankingLogs(params: {
     characterName: string;
     encounterLookup: FflogsEncounterLookup;
@@ -488,6 +516,13 @@ export class FflogsClient {
       .slice(0, params.limit);
   }
 
+  /**
+   * 创建 FFLogs 插件对象或配置。
+   * @param damageRank - damageRank 输入；驱动 `this.toOptionalNumber()`、`this.pickNumber()` 的 FFLogs步骤。
+   * @param healingRank - healingRank 输入；驱动 `this.pickNumber()` 的 FFLogs步骤。
+   * @param encounterLookup - encounterLookup 输入；使用 `displayName` 字段生成结果。
+   * @returns 创建后的 FFLogs 插件对象或配置。
+   */
   private buildEncounterRankingLogItem(
     damageRank: any,
     healingRank: any,
@@ -529,12 +564,21 @@ export class FflogsClient {
     };
   }
 
+  /**
+   * 创建 FFLogs 插件对象或配置。
+   * @param rank - rank 输入；驱动 `this.toOptionalNumber()` 的 FFLogs步骤。
+   */
   private buildRankingFightKey(rank: any) {
     const code = `${rank?.report?.code || ''}`.trim();
     const fightId = this.toOptionalNumber(rank?.report?.fightID);
     return code && fightId !== undefined ? `${code}#${fightId}` : '';
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   * @param params - FFLogs列表；使用 `characterId`、`characterName`、`serverName`、`serverRegion` 字段生成结果。
+   * @returns FFLogs 插件查询结果。
+   */
   private async getEncounterFightLog(params: {
     candidate: FflogsEncounterFightCandidate;
     characterId?: number;
@@ -661,6 +705,9 @@ export class FflogsClient {
     };
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   */
   private async getAccessToken() {
     const cached = this.tokenCache.getValidToken();
     if (cached) return cached;
@@ -689,6 +736,11 @@ export class FflogsClient {
     return data.access_token;
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param query - 查询参数 DTO；限定 FFLogs分页、搜索或详情查询条件。
+   * @param variables - FFLogs列表；驱动 `this.removeUndefined()` 的 FFLogs步骤。
+   */
   private async requestGraphql<T>(
     query: string,
     variables: Record<string, any>,
@@ -719,6 +771,12 @@ export class FflogsClient {
     return response.data;
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param url - 访问地址；驱动 `this.getTimeoutMs()` 的 FFLogs步骤。
+   * @param method - HTTP 方法名；影响 requestJson 的返回值。
+   * @param options - FFLogs列表；使用 `body`、`headers` 字段生成结果。
+   */
   private requestJson<T>(
     url: URL,
     method: FflogsHttpMethod,
@@ -727,6 +785,10 @@ export class FflogsClient {
     return this.host.requestJson<T>({
       body: options.body,
       context: 'FFLogs',
+      /**
+       * 执行 FFLogs回调。
+       * @param statusCode - statusCode 输入；影响 failureMessage 的返回值。
+       */
       failureMessage: (statusCode) => `FFLogs 请求失败：${statusCode}`,
       headers: options.headers,
       invalidJsonMessage: 'FFLogs 返回不是合法 JSON',
@@ -737,6 +799,10 @@ export class FflogsClient {
     });
   }
 
+  /**
+   * 创建 FFLogs 插件对象或配置。
+   * @param params - FFLogs列表；使用 `serverRegion`、`localizationMaps`、`characterName`、`serverName` 字段生成结果。
+   */
   private buildReplyText(params: {
     allStarText?: string;
     characterId?: number;
@@ -778,6 +844,10 @@ export class FflogsClient {
       .join('\n');
   }
 
+  /**
+   * 创建 FFLogs 插件对象或配置。
+   * @param params - FFLogs列表；使用 `serverRegion`、`localizationMaps`、`characterName`、`serverName` 字段生成结果。
+   */
   private buildEncounterLogsReplyText(params: {
     characterId?: number;
     characterName: string;
@@ -832,10 +902,12 @@ export class FflogsClient {
       .join('\n');
   }
 
-  private formatEncounterLogLine(
-    item: FflogsEncounterLogItem,
-    index: number,
-  ) {
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param item - item 输入；使用 `kill`、`damageScore`、`healingScore`、`dps` 字段生成结果。
+   * @param index - index 输入；影响 formatEncounterLogLine 的返回值。
+   */
+  private formatEncounterLogLine(item: FflogsEncounterLogItem, index: number) {
     const status =
       item.kill === true ? '击杀' : item.kill === false ? '灭团' : '未知';
     const damageScore =
@@ -861,6 +933,13 @@ export class FflogsClient {
     ].join('\n');
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param reports - FFLogs列表；影响 pickEncounterFightCandidates 的返回值。
+   * @param encounterLookup - encounterLookup 输入；驱动 `this.matchEncounterFight()` 的 FFLogs步骤。
+   * @param difficulty - difficulty 输入；驱动 `Number()` 的 FFLogs步骤。
+   * @param encounterNameById - FFLogs ID；定位本次读取、更新、删除或关联的FFLogs。
+   */
   private pickEncounterFightCandidates(
     reports: FflogsRecentReport[],
     encounterLookup: FflogsEncounterLookup,
@@ -886,6 +965,11 @@ export class FflogsClient {
       .sort((a, b) => b.absoluteStartTime - a.absoluteStartTime);
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param reports - FFLogs列表；执行 `reports.flatMap()` 对应的 FFLogs步骤。
+   * @param encounterNameById - FFLogs ID；定位本次读取、更新、删除或关联的FFLogs。
+   */
   private pickRecentEncounterSuggestions(
     reports: FflogsRecentReport[],
     encounterNameById = new Map<number, string>(),
@@ -901,6 +985,10 @@ export class FflogsClient {
     return this.pickDistinctSuggestions(names, 8);
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param payload - payload 输入；驱动 `this.normalizeJsonPayload()` 的 FFLogs步骤。
+   */
   private pickRankingEncounterSuggestions(payload: unknown) {
     const rankingsPayload = this.normalizeJsonPayload(payload) as any;
     const rankings = this.pickRankings(rankingsPayload);
@@ -910,6 +998,10 @@ export class FflogsClient {
     return this.pickDistinctSuggestions(names, 8);
   }
 
+  /**
+   * 创建 FFLogs 插件对象或配置。
+   * @param payload - payload 输入；驱动 `this.normalizeJsonPayload()` 的 FFLogs步骤。
+   */
   private buildRankingEncounterNameById(payload: unknown) {
     const rankingsPayload = this.normalizeJsonPayload(payload) as any;
     const rankings = this.pickRankings(rankingsPayload);
@@ -926,6 +1018,11 @@ export class FflogsClient {
     return map;
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param values - 配置值字典；驱动 `for()` 的 FFLogs步骤。
+   * @param limit - limit 输入；决定 FFLogs条件分支。
+   */
   private pickDistinctSuggestions(values: any[], limit: number) {
     const suggestions: string[] = [];
     const keys = new Set<string>();
@@ -941,11 +1038,22 @@ export class FflogsClient {
     return suggestions;
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param label - 字典展示文本；影响 formatSuggestionLine 的返回值。
+   * @param values - 配置值字典；影响 formatSuggestionLine 的返回值。
+   */
   private formatSuggestionLine(label: string, values?: string[]) {
     const list = (values || []).filter(Boolean);
     return list.length ? `${label}：${list.join('、')}` : '';
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param fight - fight 输入；使用 `encounterID`、`name` 字段生成结果。
+   * @param encounterLookup - encounterLookup 输入；使用 `encounterId`、`keys` 字段生成结果。
+   * @param encounterNameById - FFLogs ID；定位本次读取、更新、删除或关联的FFLogs。
+   */
   private matchEncounterFight(
     fight: FflogsReportFight,
     encounterLookup: FflogsEncounterLookup,
@@ -966,6 +1074,11 @@ export class FflogsClient {
     return encounterLookup.keys.some((key) => fightKeys.includes(key));
   }
 
+  /**
+   * 解析Encounter Lookup。
+   * @param input - input 输入；驱动 `this.toOptionalNumber()` 的 FFLogs步骤。
+   * @returns FFLogs 插件转换后的值。
+   */
   private async resolveEncounterLookup(
     input: string,
   ): Promise<FflogsEncounterLookup> {
@@ -990,6 +1103,9 @@ export class FflogsClient {
     };
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   */
   private async getFflogsEncounterCatalog() {
     if (
       this.encounterCatalogCache &&
@@ -1047,6 +1163,11 @@ export class FflogsClient {
     return entries;
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   * @param inputKeys - FFLogs列表；计算 FFLogs布尔判断。
+   * @param catalog - catalog 输入；执行 `catalog.find()` 对应的 FFLogs步骤。
+   */
   private findEncounterCatalogMatch(
     inputKeys: string[],
     catalog: FflogsEncounterCatalogItem[],
@@ -1067,6 +1188,11 @@ export class FflogsClient {
     );
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   * @param payload - payload 输入；驱动 `this.normalizeJsonPayload()` 的 FFLogs步骤。
+   * @param target - target 输入；驱动 `characters.find()` 的 FFLogs步骤。
+   */
   private findRankingCharacter(
     payload: unknown,
     target: {
@@ -1094,6 +1220,11 @@ export class FflogsClient {
     return undefined;
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   * @param payload - payload 输入；驱动 `this.normalizeJsonPayload()` 的 FFLogs步骤。
+   * @param target - target 输入；使用 `characterName` 字段生成结果。
+   */
   private findTableEntry(
     payload: unknown,
     target: {
@@ -1110,6 +1241,11 @@ export class FflogsClient {
     );
   }
 
+  /**
+   * 判断 FFLogs 插件条件。
+   * @param item - item 输入；使用 `id`、`name`、`server` 字段计算判断结果。
+   * @param target - target 输入；使用 `characterId`、`characterName`、`serverName`、`serverSlug` 字段计算判断结果。
+   */
   private isTargetRankingCharacter(
     item: any,
     target: {
@@ -1141,6 +1277,11 @@ export class FflogsClient {
       .includes(serverKey);
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param item - item 输入；驱动 `this.pickNumber()` 的 FFLogs步骤。
+   * @returns FFLogs 插件产出的 FflogsParseMetric。
+   */
   private extractParseMetric(item: any): FflogsParseMetric {
     const percent = this.pickNumber(item?.rankPercent, item?.bracketPercent);
     return {
@@ -1151,6 +1292,13 @@ export class FflogsClient {
     };
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param item - item 输入；使用 `encounter`、`encounterName`、`name`、`rankPercent` 字段生成结果。
+   * @param index - index 输入；影响 formatRanking 的返回值。
+   * @param fallbackMetric - fallbackMetric 输入；驱动 `this.localizeMetric()` 的 FFLogs步骤。
+   * @param localizationMaps - FFLogs列表；驱动 `this.localizeSpec()`、`this.localizeMetric()` 的 FFLogs步骤。
+   */
   private formatRanking(
     item: FflogsRankingItem,
     index: number,
@@ -1197,6 +1345,11 @@ export class FflogsClient {
     return parts.join(' ｜ ');
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param payload - payload 输入；使用 `rankings`、`encounters` 字段生成结果。
+   * @returns FFLogs 插件产出的 FflogsRankingItem[]。
+   */
   private pickRankings(payload: any): FflogsRankingItem[] {
     const raw = Array.isArray(payload)
       ? payload
@@ -1214,6 +1367,10 @@ export class FflogsClient {
       });
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param payload - payload 输入；使用 `allStars` 字段生成结果。
+   */
   private pickAllStarText(payload: any) {
     const allStars = Array.isArray(payload?.allStars)
       ? payload.allStars[0]
@@ -1232,6 +1389,10 @@ export class FflogsClient {
     return parts.length ? parts.join(' / ') : undefined;
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换值；转换 JSON 文本。
+   */
   private normalizeJsonPayload(value: unknown) {
     if (typeof value === 'string') {
       try {
@@ -1243,6 +1404,10 @@ export class FflogsClient {
     return value;
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换时间值；驱动 `decodeURI()` 的 FFLogs步骤。
+   */
   private formatDisplayUrl(value: string) {
     try {
       return decodeURI(value);
@@ -1251,6 +1416,12 @@ export class FflogsClient {
     }
   }
 
+  /**
+   * 创建 FFLogs 插件对象或配置。
+   * @param serverRegion - serverRegion 输入；执行 `serverRegion.toLowerCase()` 对应的 FFLogs步骤。
+   * @param serverSlug - serverSlug 输入；驱动 `encodeURIComponent()` 的 FFLogs步骤。
+   * @param characterName - characterName 输入；驱动 `encodeURIComponent()` 的 FFLogs步骤。
+   */
   private buildCharacterUrl(
     serverRegion: string,
     serverSlug: string,
@@ -1261,6 +1432,12 @@ export class FflogsClient {
     )}/${encodeURIComponent(serverSlug)}/${encodeURIComponent(characterName)}`;
   }
 
+  /**
+   * 创建 FFLogs 插件对象或配置。
+   * @param url - 访问地址；生成 FFLogs对象。
+   * @param encounterLookup - encounterLookup 输入；使用 `encounterId`、`zoneId` 字段生成结果。
+   * @param partition - partition 输入；驱动 `this.toOptionalNumber()`、`searchParams.set()` 的 FFLogs步骤。
+   */
   private buildCharacterEncounterUrl(
     url: string,
     encounterLookup: FflogsEncounterLookup,
@@ -1277,16 +1454,29 @@ export class FflogsClient {
     return `${url}?${searchParams.toString()}`;
   }
 
+  /**
+   * 创建 FFLogs 插件对象或配置。
+   * @param code - 响应状态码；驱动 `encodeURIComponent()` 的 FFLogs步骤。
+   * @param fightId - FFLogs ID；定位本次读取、更新、删除或关联的FFLogs。
+   */
   private buildReportFightUrl(code: string, fightId: number) {
     return `${this.webBaseUrl}/reports/${encodeURIComponent(
       code,
     )}#fight=${encodeURIComponent(`${fightId}`)}`;
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param params - FFLogs列表；使用 `encounterName`、`encounter` 字段生成结果。
+   */
   private normalizeEncounterInput(params: FflogsCharacterSummaryInput) {
     return `${params.encounterName || params.encounter || ''}`.trim();
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换值；影响 normalizeMetric 的返回值。
+   */
   private normalizeMetric(value?: string) {
     const raw = `${value || ''}`.trim();
     if (!raw) return undefined;
@@ -1305,6 +1495,10 @@ export class FflogsClient {
     return map[lower] || raw;
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换值；影响 normalizeRole 的返回值。
+   */
   private normalizeRole(value?: string) {
     const raw = `${value || ''}`.trim();
     if (!raw) return undefined;
@@ -1320,6 +1514,10 @@ export class FflogsClient {
     return map[lower] || raw;
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换时间值；影响 normalizeTimeframe 的返回值。
+   */
   private normalizeTimeframe(value?: string) {
     const raw = `${value || ''}`.trim();
     if (!raw) return undefined;
@@ -1329,6 +1527,10 @@ export class FflogsClient {
     return raw;
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param value - 待转换值；驱动 `Number()` 的 FFLogs步骤。
+   */
   private toOptionalNumber(value?: number | string) {
     if (value === undefined || value === null || `${value}`.trim() === '') {
       return undefined;
@@ -1337,6 +1539,13 @@ export class FflogsClient {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param value - 待转换值；驱动 `this.toOptionalNumber()` 的 FFLogs步骤。
+   * @param fallback - 兜底值；影响 toLimitedPositiveNumber 的返回值。
+   * @param min - min 输入；影响 toLimitedPositiveNumber 的返回值。
+   * @param max - max 输入；驱动 `Math.min()` 的 FFLogs步骤。
+   */
   private toLimitedPositiveNumber(
     value: number | string | undefined,
     fallback: number,
@@ -1348,6 +1557,11 @@ export class FflogsClient {
     return Math.min(Math.max(Math.floor(normalized), min), max);
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param value - 待转换值；驱动 `this.pickNumber()` 的 FFLogs步骤。
+   * @param durationMs - FFLogs列表；决定 FFLogs条件分支。
+   */
   private toPerSecond(value: any, durationMs?: number) {
     const amount = this.pickNumber(value);
     if (amount === undefined || !durationMs || durationMs <= 0)
@@ -1355,11 +1569,19 @@ export class FflogsClient {
     return amount / (durationMs / 1000);
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换值；影响 normalizeOptionalString 的返回值。
+   */
   private normalizeOptionalString(value?: string) {
     const raw = `${value || ''}`.trim();
     return raw || undefined;
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param values - 配置值字典；执行 `values.find()` 对应的 FFLogs步骤。
+   */
   private pickText(...values: any[]) {
     const picked = values.find(
       (item) => item !== undefined && item !== null && `${item}`.trim() !== '',
@@ -1367,6 +1589,10 @@ export class FflogsClient {
     return picked === undefined ? '' : `${picked}`;
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param values - 配置值字典；驱动 `for()` 的 FFLogs步骤。
+   */
   private pickNumber(...values: any[]) {
     for (const value of values) {
       const parsed = Number(value);
@@ -1375,6 +1601,10 @@ export class FflogsClient {
     return undefined;
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换时间值；执行 `value.toLocaleString()` 对应的 FFLogs步骤。
+   */
   private formatNumber(value: number) {
     const digits = Math.abs(value) >= 100 ? 0 : 1;
     return value.toLocaleString('zh-CN', {
@@ -1383,10 +1613,18 @@ export class FflogsClient {
     });
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换时间值；驱动 `this.formatNumber()` 的 FFLogs步骤。
+   */
   private formatMetricNumber(value?: number) {
     return value === undefined ? '-' : this.formatNumber(value);
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换时间值；构造时间对象。
+   */
   private formatLogTime(value?: number) {
     if (!value) return '时间未知';
     return new Date(value).toLocaleString('zh-CN', {
@@ -1399,6 +1637,10 @@ export class FflogsClient {
     });
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   * @param percent - percent 输入；决定 FFLogs条件分支。
+   */
   private getParseColor(percent?: number) {
     if (percent === undefined) return '无色';
     if (percent >= 100) return '金';
@@ -1410,6 +1652,10 @@ export class FflogsClient {
     return '灰';
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换时间值；生成规范化文本。
+   */
   private formatRank(value: string) {
     const rank = value.replace(/^#/, '').trim();
     if (!rank) return '';
@@ -1417,6 +1663,11 @@ export class FflogsClient {
     return `排名第${rank}`;
   }
 
+  /**
+   * 判断 FFLogs 插件条件。
+   * @param percent - percent 输入；计算 FFLogs判断结果。
+   * @param amount - amount 输入；计算 FFLogs判断结果。
+   */
   private hasMeaningfulRanking(percent?: number, amount?: number) {
     return (
       (percent !== undefined && percent > 0) ||
@@ -1424,6 +1675,10 @@ export class FflogsClient {
     );
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   * @returns FFLogs 插件查询结果。
+   */
   private async getLocalizationMaps(): Promise<FflogsLocalizationMaps> {
     const [job, metric, role, serverRegion] = await Promise.all([
       this.getNormalizedDictMap(FFLOGS_LOCALIZATION_DICT_CODES.job),
@@ -1440,6 +1695,10 @@ export class FflogsClient {
     };
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   * @param dictCode - dictCode 输入；驱动 `host.getDictByKey()` 的 FFLogs步骤。
+   */
   private async getNormalizedDictMap(dictCode: string) {
     const dicts = await this.host.getDictByKey(dictCode);
     const map = new Map<string, string>();
@@ -1451,10 +1710,19 @@ export class FflogsClient {
     return map;
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param value - 待转换值；影响 localizeEncounter 的返回值。
+   */
   private localizeEncounter(value: string) {
     return value;
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param value - 待转换值；影响 localizeMetric 的返回值。
+   * @param localizationMaps - FFLogs列表；使用 `metric` 字段生成结果。
+   */
   private localizeMetric(
     value: string,
     localizationMaps: FflogsLocalizationMaps,
@@ -1466,6 +1734,11 @@ export class FflogsClient {
     );
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param value - 待转换值；执行 `value.toUpperCase()` 对应的 FFLogs步骤。
+   * @param localizationMaps - FFLogs列表；使用 `serverRegion` 字段生成结果。
+   */
   private localizeServerRegion(
     value: string,
     localizationMaps: FflogsLocalizationMaps,
@@ -1476,6 +1749,11 @@ export class FflogsClient {
     );
   }
 
+  /**
+   * 执行 FFLogs 插件流程。
+   * @param value - 待转换值；驱动 `this.normalizeLookupKey()` 的 FFLogs步骤。
+   * @param localizationMaps - FFLogs列表；使用 `job`、`role` 字段生成结果。
+   */
   private localizeSpec(
     value: string,
     localizationMaps: FflogsLocalizationMaps,
@@ -1486,6 +1764,10 @@ export class FflogsClient {
     );
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换值；影响 normalizeLookupKey 的返回值。
+   */
   private normalizeLookupKey(value: string) {
     return `${value || ''}`
       .normalize('NFKC')
@@ -1493,6 +1775,10 @@ export class FflogsClient {
       .replace(/[^\p{L}\p{N}]+/gu, '');
   }
 
+  /**
+   * 创建 FFLogs 插件对象或配置。
+   * @param values - 配置值字典；生成 FFLogs对象。
+   */
   private buildLookupKeys(...values: string[]) {
     const keys = values
       .flatMap((value) => {
@@ -1504,10 +1790,18 @@ export class FflogsClient {
     return [...new Set(keys)];
   }
 
+  /**
+   * 转换 FFLogs 插件输入。
+   * @param value - 待转换值；影响 normalizeCharacterKey 的返回值。
+   */
   private normalizeCharacterKey(value: string) {
     return `${value || ''}`.normalize('NFKC').toLowerCase().replace(/\s+/g, '');
   }
 
+  /**
+   * 清理 FFLogs 插件状态。
+   * @param input - input 输入；驱动 `Object.entries()` 的 FFLogs步骤。
+   */
   private removeUndefined(input: Record<string, any>) {
     return Object.entries(input).reduce<Record<string, any>>(
       (result, [key, value]) => {
@@ -1518,19 +1812,24 @@ export class FflogsClient {
     );
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   */
   private getDefaultServer() {
     return this.host.getConfig<string>('FFLOGS_DEFAULT_SERVER') || '';
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   */
   private getDefaultServerRegion() {
-    return (
-      this.host.getConfig<string>('FFLOGS_DEFAULT_SERVER_REGION') || 'CN'
-    );
+    return this.host.getConfig<string>('FFLOGS_DEFAULT_SERVER_REGION') || 'CN';
   }
 
+  /**
+   * 查询 FFLogs 插件数据。
+   */
   private getTimeoutMs() {
-    return Number(
-      this.host.getConfig('FFLOGS_REQUEST_TIMEOUT_MS') || 10_000,
-    );
+    return Number(this.host.getConfig('FFLOGS_REQUEST_TIMEOUT_MS') || 10_000);
   }
 }

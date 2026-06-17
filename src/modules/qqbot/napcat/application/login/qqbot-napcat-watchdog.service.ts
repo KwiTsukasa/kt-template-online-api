@@ -23,11 +23,19 @@ export class QqbotNapcatWatchdogService
   private timer?: ReturnType<typeof setInterval>;
   private running = false;
 
+  /**
+   * 初始化 QqbotNapcatWatchdogService 实例。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly configService: ConfigService,
     private readonly accountService: QqbotAccountService,
   ) {}
 
+  /**
+   * 处理 NapCat 登录运行态事件。
+   */
   onModuleInit() {
     if (!this.isEnabled()) return;
 
@@ -37,6 +45,9 @@ export class QqbotNapcatWatchdogService
     this.logger.log(`NapCat 离线看门狗已启用，巡检间隔 ${intervalMs}ms`);
   }
 
+  /**
+   * 处理 NapCat 登录运行态事件。
+   */
   onModuleDestroy() {
     if (this.timer) {
       clearInterval(this.timer);
@@ -44,6 +55,9 @@ export class QqbotNapcatWatchdogService
     }
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   */
   private async tick() {
     if (this.running) return;
     this.running = true;
@@ -60,6 +74,9 @@ export class QqbotNapcatWatchdogService
     }
   }
 
+  /**
+   * 判断 NapCat 登录运行态条件。
+   */
   private isEnabled() {
     const value = `${
       this.configService.get<string>('QQBOT_NAPCAT_WATCHDOG_ENABLED') ?? 'true'
@@ -69,6 +86,9 @@ export class QqbotNapcatWatchdogService
     return value !== 'false' && value !== '0' && value !== 'off';
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   */
   private getIntervalMs() {
     const value = Number(
       this.configService.get<string>('QQBOT_NAPCAT_WATCHDOG_INTERVAL_MS') ||

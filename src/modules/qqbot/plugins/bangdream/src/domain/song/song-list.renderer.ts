@@ -26,10 +26,10 @@ import {
 /**
  * 在图片布局层中绘制歌曲In列表。
  *
- * @param song - 歌曲参数。
- * @param difficulty - 难度参数，未传入时使用默认值。
- * @param text - 待绘制文本，未传入时使用默认值。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param song - song 输入；使用 `publishedAt`、`difficulty`、`songId`、`musicTitle` 字段生成结果。
+ * @param difficulty - difficulty 输入；驱动 `drawDifficultyList()` 的 BangDream步骤。
+ * @param text - 待匹配文本；决定 BangDream条件分支。
+ * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()`、`song.getSongJacketImage()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawSongInList(
@@ -99,10 +99,10 @@ export async function drawSongInList(
 /**
  * 在图片布局层中绘制歌曲列表In列表。
  *
- * @param songs - 歌曲列表参数。
- * @param difficulty - 难度参数，未传入时使用默认值。
- * @param text - 待绘制文本，未传入时使用默认值。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param songs - 歌曲列表；使用 `length` 字段生成结果。
+ * @param difficulty - difficulty 输入；驱动 `drawSongInList()` 的 BangDream步骤。
+ * @param text - 待匹配文本；驱动 `drawSongInList()` 的 BangDream步骤。
+ * @param displayedServerList - displayedServerList 输入；驱动 `drawSongInList()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawSongListInList(

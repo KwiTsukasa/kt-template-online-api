@@ -35,7 +35,7 @@ export const BANGDREAM_STAT_LIST_SPEC = {
 /**
  * 创建综合力数值行展示文本。
  *
- * @param params - 数值行文本参数。
+ * @param params - BangDream列表；使用 `label`、`value`、`limitBreakValue` 字段生成结果。
  */
 export function createStatLineText(params: StatLineTextParams): string {
   const baseText = `${params.label}: ${Math.floor(params.value)}`;
@@ -50,8 +50,8 @@ export function createStatLineText(params: StatLineTextParams): string {
 /**
  * 计算综合力数值条宽度。
  *
- * @param value - 当前数值。
- * @param total - 综合力总数值。
+ * @param value - 待转换值；限定 BangDream查询范围。
+ * @param total - 总记录数；限定 BangDream查询范围。
  */
 export function getStatLineBarWidth(value: number, total: number): number {
   return (
@@ -63,8 +63,8 @@ export function getStatLineBarWidth(value: number, total: number): number {
 /**
  * 生成综合力数值条绘制布局。
  *
- * @param value - 当前数值。
- * @param total - 综合力总数值。
+ * @param value - 待转换值；驱动 `getStatLineBarWidth()` 的 BangDream步骤。
+ * @param total - 总记录数；驱动 `getStatLineBarWidth()` 的 BangDream步骤。
  */
 export function getStatLineBarLayout(value: number, total: number) {
   const barSpec = BANGDREAM_STAT_LIST_SPEC.line.bar;

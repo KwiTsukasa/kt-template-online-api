@@ -19,7 +19,7 @@ interface DataBlockOptions {
 /**
  * 在图片布局层中绘制数据块。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawDataBlock 的返回值。
  * @returns 渲染或资源结果。
  */
 export function drawDataBlock({
@@ -47,7 +47,7 @@ export function drawDataBlock({
     withTitle: topLeftText != undefined,
   });
 
-  //创建Canvas
+  // 创建 Canvas
   const tempCanvas = new Canvas(canvasSize.width, canvasSize.height);
   const ctx = tempCanvas.getContext('2d');
 
@@ -141,7 +141,7 @@ export function drawDataBlock({
 /**
  * 在图片布局层中绘制数据块Horizontal。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawDataBlockHorizontal 的返回值。
  * @returns 渲染或资源结果。
  */
 export function drawDataBlockHorizontal({
@@ -262,7 +262,7 @@ export function drawDataBlockHorizontal({
 /**
  * 在图片布局层中绘制横幅图片画布。
  *
- * @param eventBannerImage - 活动横幅图片参数。
+ * @param eventBannerImage - eventBannerImage 输入；影响 drawBannerImageCanvas 的返回值。
  * @returns 渲染或资源结果。
  */
 export function drawBannerImageCanvas(eventBannerImage: Image): Canvas {

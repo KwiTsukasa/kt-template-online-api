@@ -14,7 +14,7 @@ interface AttributeInListOptions {
 /**
  * 在图片布局层中绘制属性In列表。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawAttributeInList 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawAttributeInList({

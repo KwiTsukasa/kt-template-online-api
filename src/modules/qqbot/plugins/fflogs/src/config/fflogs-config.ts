@@ -9,6 +9,11 @@ export type FflogsConfig = {
   webBaseUrl: string;
 };
 
+/**
+ * 解析Fflogs Config。
+ * @param host - host 输入；使用 `getConfig` 字段生成结果。
+ * @returns FFLogs 插件转换后的值。
+ */
 export function resolveFflogsConfig(host: FflogsPluginHost): FflogsConfig {
   const webBaseUrl = normalizeBaseUrl(
     host.getConfig<string>('FFLOGS_WEB_BASE_URL') ||
@@ -31,12 +36,15 @@ export function resolveFflogsConfig(host: FflogsPluginHost): FflogsConfig {
       host.getConfig<string>('FFLOGS_GRAPHQL_URL') ||
       `${baseUrl}/api/v2/client`,
     tokenUrl:
-      host.getConfig<string>('FFLOGS_TOKEN_URL') ||
-      `${baseUrl}/oauth/token`,
+      host.getConfig<string>('FFLOGS_TOKEN_URL') || `${baseUrl}/oauth/token`,
     webBaseUrl,
   };
 }
 
+/**
+ * 转换 FFLogs 插件输入。
+ * @param value - 待转换值；影响 normalizeBaseUrl 的返回值。
+ */
 function normalizeBaseUrl(value: string) {
   return `${value || ''}`.trim().replace(/\/+$/, '');
 }

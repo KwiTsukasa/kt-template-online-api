@@ -3,6 +3,11 @@ import { throwVbenError } from '@/common';
 
 const fieldPattern = /^[\d*/,\-]+$/;
 
+/**
+ * 转换 QQBot 插件平台输入。
+ * @param input - input 输入；影响 normalizeQqbotPluginTaskCron 的返回值。
+ * @returns QQBot 插件平台渲染后的图片、画布或文本。
+ */
 export function normalizeQqbotPluginTaskCron(input: unknown): string {
   const value = `${input || ''}`.trim().replace(/\s+/g, ' ');
   const fields = value.split(' ').filter(Boolean);
@@ -23,6 +28,11 @@ export function normalizeQqbotPluginTaskCron(input: unknown): string {
   return fields.join(' ');
 }
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param input - input 输入；驱动 `normalizeQqbotPluginTaskCron()` 的 插件平台步骤。
+ * @returns QQBot 插件平台渲染后的图片、画布或文本。
+ */
 export function requireQqbotPluginTaskCron(input: unknown): string {
   try {
     return normalizeQqbotPluginTaskCron(input);

@@ -6,6 +6,12 @@ import type { BangDreamOperationModule } from '@/modules/qqbot/plugins/bangdream
 export const cutoffRecentOperation: BangDreamOperationModule = {
   catalogKeys: BANGDREAM_CUTOFF_BASE_CATALOG_KEYS,
   handlerName: 'getCutoffRecent',
+  /**
+   * 执行插件操作处理器。
+   * @param input - input 输入；使用 `tier`、`eventId` 字段生成结果。
+   * @param context - context 输入；执行 `context.getTokens()`、`context.requireNumber()`、`context.pickMainServer()`、`context.optionalNumber()` 对应的 BangDream步骤。
+   * @returns 插件处理结果。
+   */
   execute: async (input, context) => {
     const tokens = context.getTokens(input);
     const tier = context.requireNumber(input.tier, tokens[0], '请提供档位');

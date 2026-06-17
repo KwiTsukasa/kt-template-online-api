@@ -42,7 +42,7 @@ export const BANGDREAM_CARD_PREFIX_SPEC = {
 /**
  * 计算卡牌标题块乐队 Logo 的等比缩放布局。
  *
- * @param source - 原始 Logo 尺寸。
+ * @param source - source 输入；使用 `height`、`width` 字段生成结果。
  */
 export function getCardPrefixBandLogoLayout(source: CardPrefixBandLogoSource) {
   const { width, x, y } = BANGDREAM_CARD_PREFIX_SPEC.bandLogo;

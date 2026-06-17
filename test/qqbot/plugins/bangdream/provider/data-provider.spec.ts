@@ -91,6 +91,10 @@ describe('BangDream data provider', () => {
       .mockResolvedValue({ ok: true });
     const baseProvider: BangDreamDataProvider = {
       name: 'Mock',
+      /**
+       * 执行 BangDream回调。
+       * @param pathOrUrl - BangDream路径；影响 resolveUrl 的返回值。
+       */
       resolveUrl: (pathOrUrl) => pathOrUrl,
       getJson,
       getAsset: jest.fn(),

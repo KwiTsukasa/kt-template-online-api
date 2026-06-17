@@ -12,10 +12,18 @@ const workspaceTmpRoot = path.resolve(
   'tmp',
 );
 
+/**
+ * 读取 QQBot 插件平台资源。
+ * @param filePath - 插件平台路径；转换 JSON 文本。
+ */
 const readJson = (filePath: string) => {
   return JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, any>;
 };
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param cwd - 当前工作目录；影响 silentCliOptions 的返回值。
+ */
 const silentCliOptions = (cwd: string) => ({
   cwd,
   stderr: jest.fn(),
@@ -219,7 +227,9 @@ describe('QQBot plugin CLI', () => {
       ['create', 'safe-plugin', '--out', pluginRoot],
       silentCliOptions(sandbox),
     );
-    expect(fs.existsSync(path.join(pluginRoot, 'src', 'operations'))).toBe(true);
+    expect(fs.existsSync(path.join(pluginRoot, 'src', 'operations'))).toBe(
+      true,
+    );
     expect(fs.existsSync(path.join(pluginRoot, 'src', 'events'))).toBe(true);
     fs.writeFileSync(path.join(pluginRoot, '.env'), 'SECRET=1\n');
 

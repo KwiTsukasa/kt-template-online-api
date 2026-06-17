@@ -1,6 +1,9 @@
 import bangdreamCatalogCache from '@/modules/qqbot/plugins/bangdream/src/application/catalog/bangdream-catalog-cache';
 import { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model';
-import { Card, Stat } from '@/modules/qqbot/plugins/bangdream/src/domain/card/card.model';
+import {
+  Card,
+  Stat,
+} from '@/modules/qqbot/plugins/bangdream/src/domain/card/card.model';
 
 export class AreaItem {
   areaItemId: number;
@@ -17,11 +20,12 @@ export class AreaItem {
   /**
    * 构造 AreaItem 实例，并初始化该模型的本地基础字段。
    *
-   * @param areaItemId - 区域道具ID参数。
+   * @param areaItemId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
    */
   constructor(areaItemId: number) {
     this.areaItemId = areaItemId;
-    const areaItemData = bangdreamCatalogCache['areaItems'][areaItemId.toString()];
+    const areaItemData =
+      bangdreamCatalogCache['areaItems'][areaItemId.toString()];
     if (areaItemData == undefined) {
       this.isExist = false;
       return;
@@ -39,11 +43,11 @@ export class AreaItem {
   /**
    * 在 AreaItem 模型中计算数值。
    *
-   * @param card - 卡牌参数。
-   * @param areaItemLevel - 区域道具等级参数。
-   * @param cardSTat - 卡牌STat参数。
-   * @param server - 目标服务器。
-   * @returns 处理结果。
+   * @param card - card 输入；使用 `attribute`、`bandId` 字段生成结果。
+   * @param areaItemLevel - areaItemLevel 输入；生成规范化文本。
+   * @param cardSTat - cardSTat 输入；使用 `performance`、`technique`、`visual` 字段生成结果。
+   * @param server - server 输入；驱动 `areaItemLevel.toString()` 的 BangDream步骤。
+   * @returns BangDream 插件产出的 Stat。
    */
   calcStat(
     card: Card,

@@ -14,7 +14,7 @@ export class Skill {
   /**
    * 构造 Skill 实例，并初始化该模型的本地基础字段。
    *
-   * @param skillId - 技能ID参数。
+   * @param skillId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
    */
   constructor(skillId: number) {
     this.skillId = skillId;
@@ -38,7 +38,7 @@ export class Skill {
     return this.data;
   }
   /**
-   * 在 Skill 模型中获取Effect类型列表。
+   * 查询 BangDream 插件数据。
    *
    * @returns 格式化后的文本。
    */

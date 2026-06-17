@@ -47,8 +47,8 @@ export const BANGDREAM_CARD_ART_SPEC = {
 /**
  * 创建卡牌小图边框资源路径。
  *
- * @param rarity - 卡牌稀有度。
- * @param attribute - 卡牌属性。
+ * @param rarity - rarity 输入；驱动 `createCardFramePath()` 的 BangDream步骤。
+ * @param attribute - attribute 输入；驱动 `createCardFramePath()` 的 BangDream步骤。
  */
 export function createCardIconFramePath(
   rarity: number,
@@ -60,8 +60,8 @@ export function createCardIconFramePath(
 /**
  * 创建卡牌插画边框资源路径。
  *
- * @param rarity - 卡牌稀有度。
- * @param attribute - 卡牌属性。
+ * @param rarity - rarity 输入；驱动 `createCardFramePath()` 的 BangDream步骤。
+ * @param attribute - attribute 输入；驱动 `createCardFramePath()` 的 BangDream步骤。
  */
 export function createCardIllustrationFramePath(
   rarity: number,
@@ -73,9 +73,9 @@ export function createCardIllustrationFramePath(
 /**
  * 根据 Bestdori 边框命名规则创建远程资源路径。
  *
- * @param prefix - 边框资源前缀。
- * @param rarity - 卡牌稀有度。
- * @param attribute - 卡牌属性。
+ * @param prefix - prefix 输入；生成 BangDream对象。
+ * @param rarity - rarity 输入；生成 BangDream对象。
+ * @param attribute - attribute 输入；生成 BangDream对象。
  */
 function createCardFramePath(
   prefix: 'card' | 'frame',

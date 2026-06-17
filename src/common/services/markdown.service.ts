@@ -15,10 +15,9 @@ type RehypeSanitizeModule = typeof import('rehype-sanitize');
 type RehypeStringifyModule = typeof import('rehype-stringify');
 type RemarkStringifyModule = typeof import('remark-stringify');
 
-const importEsm = new Function(
-  'specifier',
-  'return import(specifier)',
-) as <T>(specifier: string) => Promise<T>;
+const importEsm = new Function('specifier', 'return import(specifier)') as <T>(
+  specifier: string,
+) => Promise<T>;
 
 const MARKDOWN_SOURCE_PATTERN =
   /<!--\s*kt-markdown-source:([A-Za-z0-9+/=]+)\s*-->/;
@@ -59,6 +58,10 @@ export class MarkdownService {
   private htmlToMarkdownProcessorPromise?: Promise<MarkdownProcessor>;
   private sanitizeHtmlProcessorPromise?: Promise<MarkdownProcessor>;
 
+  /**
+   * 渲染 当前模块输出。
+   * @param markdown - markdown 输入；驱动 `processor.process()` 的 公共基础设施步骤。
+   */
   async renderToHtml(markdown?: string | null) {
     const processor = await this.getProcessor();
     const file = await processor.process(markdown || '');
@@ -66,6 +69,10 @@ export class MarkdownService {
     return `${file}`;
   }
 
+  /**
+   * 渲染 当前模块输出。
+   * @param html - html 输入；驱动 `processor.process()` 的 公共基础设施步骤。
+   */
   async renderHtmlToMarkdown(html?: string | null) {
     const processor = await this.getHtmlToMarkdownProcessor();
     const file = await processor.process(this.stripSourceMarker(html || ''));
@@ -73,6 +80,10 @@ export class MarkdownService {
     return `${file}`.trim();
   }
 
+  /**
+   * 执行 当前模块流程。
+   * @param html - html 输入；驱动 `processor.process()` 的 公共基础设施步骤。
+   */
   async sanitizeHtml(html?: string | null) {
     const processor = await this.getSanitizeHtmlProcessor();
     const file = await processor.process(this.stripSourceMarker(html || ''));
@@ -80,6 +91,11 @@ export class MarkdownService {
     return `${file}`.trim();
   }
 
+  /**
+   * 执行 当前模块流程。
+   * @param html - html 输入；驱动 `this.stripSourceMarker()` 的 公共基础设施步骤。
+   * @param markdown - markdown 输入；影响 embedSourceHtml 的返回值。
+   */
   embedSourceHtml(html: string, markdown?: string | null) {
     const source = markdown || '';
     if (!source) return this.stripSourceMarker(html);
@@ -90,6 +106,10 @@ export class MarkdownService {
     ).toString('base64')} -->`;
   }
 
+  /**
+   * 执行 当前模块流程。
+   * @param value - 待转换值；影响 extractSource 的返回值。
+   */
   extractSource(value?: unknown) {
     const text = `${value ?? ''}`;
     const source = MARKDOWN_SOURCE_PATTERN.exec(text)?.[1];
@@ -102,10 +122,17 @@ export class MarkdownService {
     }
   }
 
+  /**
+   * 执行 当前模块流程。
+   * @param value - 待转换值；影响 stripSourceMarker 的返回值。
+   */
   stripSourceMarker(value?: unknown) {
     return `${value ?? ''}`.replace(MARKDOWN_SOURCE_PATTERN, '').trim();
   }
 
+  /**
+   * 查询 当前模块数据。
+   */
   private getProcessor() {
     if (!this.processorPromise) {
       this.processorPromise = this.createProcessor();
@@ -114,6 +141,9 @@ export class MarkdownService {
     return this.processorPromise;
   }
 
+  /**
+   * 查询 当前模块数据。
+   */
   private getHtmlToMarkdownProcessor() {
     if (!this.htmlToMarkdownProcessorPromise) {
       this.htmlToMarkdownProcessorPromise =
@@ -123,6 +153,9 @@ export class MarkdownService {
     return this.htmlToMarkdownProcessorPromise;
   }
 
+  /**
+   * 查询 当前模块数据。
+   */
   private getSanitizeHtmlProcessor() {
     if (!this.sanitizeHtmlProcessorPromise) {
       this.sanitizeHtmlProcessorPromise = this.createSanitizeHtmlProcessor();
@@ -131,6 +164,10 @@ export class MarkdownService {
     return this.sanitizeHtmlProcessorPromise;
   }
 
+  /**
+   * 创建 当前模块对象或配置。
+   * @returns 创建后的 当前模块对象或配置。
+   */
   private async createProcessor(): Promise<MarkdownProcessor> {
     const [
       { unified },
@@ -166,6 +203,10 @@ export class MarkdownService {
       .use(rehypeStringify) as MarkdownProcessor;
   }
 
+  /**
+   * 创建 当前模块对象或配置。
+   * @returns 创建后的 当前模块对象或配置。
+   */
   private async createHtmlToMarkdownProcessor(): Promise<MarkdownProcessor> {
     const [
       { unified },
@@ -192,6 +233,10 @@ export class MarkdownService {
       }) as MarkdownProcessor;
   }
 
+  /**
+   * 创建 当前模块对象或配置。
+   * @returns 创建后的 当前模块对象或配置。
+   */
   private async createSanitizeHtmlProcessor(): Promise<MarkdownProcessor> {
     const [
       { unified },
@@ -211,6 +256,10 @@ export class MarkdownService {
       .use(rehypeStringify) as MarkdownProcessor;
   }
 
+  /**
+   * 创建 当前模块对象或配置。
+   * @param defaultSchema - defaultSchema 输入；生成 公共基础设施对象。
+   */
   private createSanitizeSchema(defaultSchema: unknown) {
     const schema = defaultSchema as Record<string, any>;
     const attributes = (schema.attributes || {}) as Record<string, any[]>;
@@ -223,12 +272,7 @@ export class MarkdownService {
 
     return {
       ...schema,
-      tagNames: [
-        ...new Set([
-          ...(schema.tagNames || []),
-          ...EXTRA_TAG_NAMES,
-        ]),
-      ],
+      tagNames: [...new Set([...(schema.tagNames || []), ...EXTRA_TAG_NAMES])],
       attributes: {
         ...attributes,
         ...classAttributes,

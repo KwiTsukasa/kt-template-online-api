@@ -19,6 +19,9 @@ const starList: { [type: string]: Image } = {};
 let limitBreakIcon: Image;
 let cardArtAssetsPreload: Promise<void> | undefined;
 
+/**
+ * 执行 BangDream 插件流程。
+ */
 export async function preloadBangDreamCardArtAssets() {
   if (!cardArtAssetsPreload) {
     cardArtAssetsPreload = Promise.all([
@@ -61,8 +64,8 @@ export async function preloadBangDreamCardArtAssets() {
 /**
  * 在图片布局层中获取卡牌图标Frame。
  *
- * @param rarity - rarity参数。
- * @param attribute - 属性参数。
+ * @param rarity - rarity 输入；驱动 `cardArtResourceRepository.getIconFrameBuffer()` 的 BangDream步骤。
+ * @param attribute - attribute 输入；驱动 `cardArtResourceRepository.getIconFrameBuffer()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function getCardIconFrame(
@@ -80,8 +83,8 @@ async function getCardIconFrame(
 /**
  * 在图片布局层中获取卡牌IllustrationFrame。
  *
- * @param rarity - rarity参数。
- * @param attribute - 属性参数。
+ * @param rarity - rarity 输入；驱动 `cardArtResourceRepository.getIllustrationFrameBuffer()` 的 BangDream步骤。
+ * @param attribute - attribute 输入；驱动 `cardArtResourceRepository.getIllustrationFrameBuffer()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function getCardIllustrationFrame(
@@ -112,7 +115,7 @@ interface DrawCardIconOptions {
 /**
  * 在图片布局层中绘制卡牌图标。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawCardIcon 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawCardIcon({
@@ -253,7 +256,7 @@ interface DrawCardIllustrationOptions {
 /**
  * 在图片布局层中绘制卡牌Illustration。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawCardIllustration 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawCardIllustration({

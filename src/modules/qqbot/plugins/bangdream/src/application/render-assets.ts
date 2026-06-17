@@ -6,6 +6,9 @@ import { preloadBangDreamBackgroundAssets } from '@/modules/qqbot/plugins/bangdr
 import { preloadBangDreamOutputAssets } from '@/modules/qqbot/plugins/bangdream/src/theme/canvas-output';
 import { preloadBangDreamTitleAssets } from '@/modules/qqbot/plugins/bangdream/src/theme/title.renderer';
 
+/**
+ * 执行 BangDream 插件流程。
+ */
 export async function preloadBangDreamRenderAssets() {
   await Promise.all([
     preloadBangDreamBackgroundAssets(),

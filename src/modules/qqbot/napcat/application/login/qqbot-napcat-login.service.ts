@@ -40,31 +40,68 @@ export class QqbotNapcatLoginService {
     Set<(event: QqbotLoginScanEvent) => void>
   > = {};
   readonly sessions = {
+    /**
+     * 清理 NapCat回调状态。
+     */
     clear: () => this.loginSessionStore.clear(),
+    /**
+     * 读取 NapCat回调数据。
+     * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+     */
     get: (sessionId: string) => this.loginSessionStore.getCached(sessionId),
+    /**
+     * 判断 NapCat回调条件。
+     * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+     */
     has: (sessionId: string) => this.loginSessionStore.has(sessionId),
+    /**
+     * 写入 NapCat回调数据。
+     * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+     * @param session - session 输入；使用 `id` 字段生成结果。
+     */
     set: (sessionId: string, session: QqbotLoginScanSession) => {
       if (!session.id) session.id = sessionId;
       this.loginSessionStore.set(session);
     },
   };
   readonly sessionEventLogs = {
+    /**
+     * 清理 NapCat回调状态。
+     */
     clear: () =>
       Object.keys(this.sessionEventLogCache).forEach((sessionId) => {
         delete this.sessionEventLogCache[sessionId];
       }),
+    /**
+     * 读取 NapCat回调数据。
+     * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+     */
     get: (sessionId: string) => this.sessionEventLogCache[sessionId],
   };
   readonly sessionEventListeners = {
+    /**
+     * 清理 NapCat回调状态。
+     */
     clear: () =>
       Object.keys(this.sessionEventListenerCache).forEach((sessionId) => {
         delete this.sessionEventListenerCache[sessionId];
       }),
   };
   private readonly webuiClient = new NapcatWebuiHttpClient({
+    /**
+     * 读取 NapCat回调数据。
+     */
     getTimeoutMs: () => this.getTimeout(),
   });
 
+  /**
+   * 初始化 QqbotNapcatLoginService 实例。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
+   * @param containerService - containerService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * @param loginStateStore - loginStateStore 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly configService: ConfigService,
     private readonly accountService: QqbotAccountService,
@@ -74,15 +111,25 @@ export class QqbotNapcatLoginService {
     private readonly loginStateStore?: NapcatLoginStateStoreService,
   ) {}
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   */
   private get loginSessionStore() {
     return this.loginStateStore || this.fallbackLoginSessionStore;
   }
 
+  /**
+   * 启动Create。
+   */
   async startCreate() {
     const container = await this.containerService.prepareCreateContainer();
     return this.startScan({ mode: 'create' }, container);
   }
 
+  /**
+   * 启动Refresh。
+   * @param accountId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async startRefresh(accountId: string) {
     const account =
       await this.accountService.findByIdWithNapcatLoginSecret(accountId);
@@ -106,6 +153,10 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   */
   async refreshQrcode(sessionId: string) {
     const session = await this.getSession(sessionId);
     if (session.status !== 'pending') {
@@ -185,6 +236,10 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   */
   async status(sessionId: string) {
     const session = await this.getSession(sessionId);
     if (session.status !== 'pending') {
@@ -292,6 +347,11 @@ export class QqbotNapcatLoginService {
     return this.completeLogin(session, container);
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   * @param input - input 输入；使用 `ticket`、`randstr`、`sid` 字段生成结果。
+   */
   async submitCaptcha(sessionId: string, input: QqbotLoginCaptchaSubmitInput) {
     const session = await this.getSession(sessionId);
     if (session.status !== 'pending') {
@@ -341,11 +401,7 @@ export class QqbotNapcatLoginService {
     }
 
     if (captchaResult?.needNewDevice) {
-      return this.startNewDeviceVerification(
-        session,
-        container,
-        captchaResult,
-      );
+      return this.startNewDeviceVerification(session, container, captchaResult);
     }
 
     return this.completePasswordLoginAfterChallenge(
@@ -355,11 +411,19 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   */
   events(sessionId: string) {
     if (!this.loginSessionStore.getCached(sessionId)) {
       void this.loginSessionStore.get(sessionId);
     }
     return new Observable<{ data: QqbotLoginScanEvent }>((subscriber) => {
+      /**
+       * 监听 NapCat 登录运行态事件。
+       * @param event - event 输入；限定 NapCat查询范围。
+       */
       const listener = (event: QqbotLoginScanEvent) => {
         subscriber.next({ data: event });
       };
@@ -385,6 +449,10 @@ export class QqbotNapcatLoginService {
     });
   }
 
+  /**
+   * 判断 NapCat 登录运行态条件。
+   * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   */
   async cancel(sessionId: string) {
     const session = await this.loginSessionStore.get(sessionId);
     if (session) {
@@ -402,6 +470,12 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
+  /**
+   * 启动Scan。
+   * @param options - NapCat列表；使用 `forceRelogin`、`loginPassword`、`hasExistingPrimaryBinding` 字段生成结果。
+   * @param container - container 输入；驱动 `this.prepareReloginQrcode()`、`this.getLoginStatus()`、`this.restartNapcatForLogin()`、`this.publishScanResultEvent()` 的 NapCat步骤。
+   * @returns 异步完成后的 NapCat 登录运行态结果。
+   */
   private async startScan(
     options: {
       accountId?: string;
@@ -512,6 +586,13 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `expectedSelfId`、`accountId`、`containerId`、`captchaUrl` 字段生成结果。
+   * @param container - container 输入；驱动 `this.getLoginInfo()` 的 NapCat步骤。
+   * @param options - NapCat列表；使用 `loginInfo`、`successMessage` 字段生成结果。
+   * @returns 异步完成后的 NapCat 登录运行态结果。
+   */
   private async completeLogin(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -560,6 +641,11 @@ export class QqbotNapcatLoginService {
     return result;
   }
 
+  /**
+   * 创建 NapCat 登录运行态对象或配置。
+   * @param input - input 输入；使用 `accountId`、`container`、`expectedSelfId`、`mode` 字段生成结果。
+   * @returns 创建后的 NapCat 登录运行态对象或配置。
+   */
   private createSession(input: {
     accountId?: string;
     container: QqbotNapcatRuntime;
@@ -586,6 +672,11 @@ export class QqbotNapcatLoginService {
     };
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `accountId`、`captchaUrl`、`containerId`、`containerName` 字段生成结果。
+   * @returns NapCat 登录运行态产出的 QqbotLoginScanResult。
+   */
   private toResult(session: QqbotLoginScanSession): QqbotLoginScanResult {
     return {
       accountId: session.accountId,
@@ -605,6 +696,12 @@ export class QqbotNapcatLoginService {
     };
   }
 
+  /**
+   * 启动New Device Verification。
+   * @param session - session 输入；使用 `status`、`captchaUrl`、`qrcode`、`deviceVerifyUrl` 字段生成结果。
+   * @param container - container 输入；驱动 `this.postNapcat()`、`this.refreshNewDeviceQrcode()` 的 NapCat步骤。
+   * @param captchaResult - captchaResult 输入；使用 `jumpUrl`、`newDevicePullQrCodeSig` 字段生成结果。
+   */
   private async startNewDeviceVerification(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -632,6 +729,11 @@ export class QqbotNapcatLoginService {
 
     try {
       const client = new NapcatLoginApiClient({
+        /**
+         * 发送 NapCat回调消息。
+         * @param path - 路由或文件路径；驱动 `this.postNapcat()` 的 NapCat步骤。
+         * @param body - 请求体 DTO；承载 NapCat新增、更新、导入或执行字段。
+         */
         post: (path, body) => this.postNapcat(container, path, body),
       });
       return this.refreshNewDeviceQrcode(session, container, client);
@@ -644,11 +746,21 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 轮询New Device Verification。
+   * @param session - session 输入；使用 `newDeviceBytesToken`、`expectedSelfId`、`newDevicePullQrCodeSig`、`newDeviceQrcode` 字段生成结果。
+   * @param container - container 输入；驱动 `this.postNapcat()`、`this.refreshNewDeviceQrcode()`、`this.failNewDeviceVerification()`、`this.startNewDeviceVerification()` 的 NapCat步骤。
+   */
   private async pollNewDeviceVerification(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
   ) {
     const client = new NapcatLoginApiClient({
+      /**
+       * 发送 NapCat回调消息。
+       * @param path - 路由或文件路径；驱动 `this.postNapcat()` 的 NapCat步骤。
+       * @param body - 请求体 DTO；承载 NapCat新增、更新、导入或执行字段。
+       */
       post: (path, body) => this.postNapcat(container, path, body),
     });
     if (!session.newDeviceBytesToken) {
@@ -751,13 +863,18 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 解析New Device Password Md5。
+   * @param session - session 输入；使用 `passwordMd5`、`accountId` 字段生成结果。
+   */
   private async resolveNewDevicePasswordMd5(session: QqbotLoginScanSession) {
     const existing = this.toolsService.toTrimmedString(session.passwordMd5);
     if (existing) return existing;
     if (!session.accountId) return '';
 
-    const account =
-      await this.accountService.findByIdWithNapcatLoginSecret(session.accountId);
+    const account = await this.accountService.findByIdWithNapcatLoginSecret(
+      session.accountId,
+    );
     const password = this.accountService.getNapcatLoginPassword(account);
     if (!password) return '';
 
@@ -768,6 +885,12 @@ export class QqbotNapcatLoginService {
     return session.passwordMd5;
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；驱动 `this.getNewDeviceQrRequest()`、`this.failNewDeviceVerification()`、`this.applyNewDeviceQrcode()`、`this.persistLoginSession()` 的 NapCat步骤。
+   * @param container - container 输入；驱动 `this.failNewDeviceVerification()` 的 NapCat步骤。
+   * @param client - client 输入；执行 `client.getNewDeviceQRCode()` 对应的 NapCat步骤。
+   */
   private async refreshNewDeviceQrcode(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -803,6 +926,11 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `newDeviceQrcode`、`newDeviceBytesToken`、`deviceVerifyUrl`、`newDevicePullQrCodeSig` 字段生成结果。
+   * @param qrcode - qrcode 输入；使用 `qrcodeUrl`、`bytesToken`、`deviceVerifyUrl`、`pullQrCodeSig` 字段生成结果。
+   */
   private applyNewDeviceQrcode(
     session: QqbotLoginScanSession,
     qrcode: NewDeviceQrCode,
@@ -818,6 +946,11 @@ export class QqbotNapcatLoginService {
     session.errorMessage = '新设备二维码待扫码';
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param session - session 输入；使用 `expectedSelfId`、`deviceVerifyUrl` 字段生成结果。
+   * @returns NapCat 登录运行态查询结果。
+   */
   private getNewDeviceQrRequest(
     session: QqbotLoginScanSession,
   ): NewDeviceQrRequest | null {
@@ -827,6 +960,10 @@ export class QqbotNapcatLoginService {
     return { jumpUrl, uin };
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param value - 待转换值；驱动 `toolsService.toTrimmedString()` 的 NapCat步骤。
+   */
   private pickNewDevicePullQrCodeSig(value: unknown) {
     if (value === undefined || value === null) return undefined;
     if (typeof value === 'string') {
@@ -836,6 +973,10 @@ export class QqbotNapcatLoginService {
     return value;
   }
 
+  /**
+   * 判断 NapCat 登录运行态条件。
+   * @param session - session 输入；使用 `newDevicePullQrCodeSig` 字段计算判断结果。
+   */
   private hasNewDevicePullQrCodeSig(session: QqbotLoginScanSession) {
     return (
       this.pickNewDevicePullQrCodeSig(session.newDevicePullQrCodeSig) !==
@@ -843,6 +984,13 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `newDeviceStatus`、`errorMessage`、`status`、`captchaUrl` 字段生成结果。
+   * @param status - NapCat列表；影响 keepNewDevicePending 的返回值。
+   * @param message - message 输入；驱动 `this.publishScanResultEvent()` 的 NapCat步骤。
+   * @param step - step 输入；驱动 `this.publishScanResultEvent()` 的 NapCat步骤。
+   */
   private keepNewDevicePending(
     session: QqbotLoginScanSession,
     status: NonNullable<QqbotLoginScanSession['newDeviceStatus']>,
@@ -864,6 +1012,12 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `newDeviceQrcode`、`newDeviceBytesToken`、`newDeviceStatus`、`errorMessage` 字段生成结果。
+   * @param container - container 输入；驱动 `this.failCaptchaLogin()` 的 NapCat步骤。
+   * @param message - message 输入；驱动 `this.failCaptchaLogin()` 的 NapCat步骤。
+   */
   private async failNewDeviceVerification(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -877,6 +1031,12 @@ export class QqbotNapcatLoginService {
     return this.failCaptchaLogin(session, container, message);
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `expectedSelfId` 字段生成结果。
+   * @param container - container 输入；驱动 `this.waitForPasswordLoginStatus()`、`this.failCaptchaLogin()`、`this.getLoginInfo()`、`this.clearRuntimeLoginPasswordAfterFailedPassword()` 的 NapCat步骤。
+   * @param successMessage - successMessage 输入；影响 completePasswordLoginAfterChallenge 的返回值。
+   */
   private async completePasswordLoginAfterChallenge(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -937,6 +1097,11 @@ export class QqbotNapcatLoginService {
     });
   }
 
+  /**
+   * 投递 NapCat 登录运行态消息或任务。
+   * @param session - session 输入；使用 `id` 字段生成结果。
+   * @param input - input 输入；影响 publishScanEvent 的返回值。
+   */
   private publishScanEvent(
     session: QqbotLoginScanSession,
     input: Omit<QqbotLoginScanEvent, 'createdAt'>,
@@ -953,6 +1118,13 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 投递 NapCat 登录运行态消息或任务。
+   * @param session - session 输入；使用 `status`、`expiresAt` 字段生成结果。
+   * @param step - step 输入；驱动 `this.toResult()` 的 NapCat步骤。
+   * @param status - NapCat列表；驱动 `this.toResult()` 的 NapCat步骤。
+   * @param message - message 输入；影响 publishScanResultEvent 的返回值。
+   */
   private publishScanResultEvent(
     session: QqbotLoginScanSession,
     step: string,
@@ -971,6 +1143,11 @@ export class QqbotNapcatLoginService {
     });
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   * @param listener - listener 输入；影响 emitCurrentSessionSnapshot 的返回值。
+   */
   private async emitCurrentSessionSnapshot(
     sessionId: string,
     listener: (event: QqbotLoginScanEvent) => void,
@@ -980,6 +1157,11 @@ export class QqbotNapcatLoginService {
     listener(this.toSessionSnapshotEvent(session));
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；驱动 `Date.now()` 的 NapCat步骤。
+   * @returns NapCat 登录运行态产出的 QqbotLoginScanEvent。
+   */
   private toSessionSnapshotEvent(
     session: QqbotLoginScanSession,
   ): QqbotLoginScanEvent {
@@ -992,6 +1174,11 @@ export class QqbotNapcatLoginService {
     };
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param session - session 输入；使用 `status` 字段生成结果。
+   * @returns NapCat 登录运行态查询结果。
+   */
   private getSessionSnapshotStatus(
     session: QqbotLoginScanSession,
   ): QqbotLoginScanEvent['status'] {
@@ -1002,6 +1189,10 @@ export class QqbotNapcatLoginService {
     return 'processing';
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param session - session 输入；使用 `status`、`newDeviceStatus`、`captchaUrl`、`qrcode` 字段生成结果。
+   */
   private getSessionSnapshotStep(session: QqbotLoginScanSession) {
     if (session.status === 'success') return 'login-success';
     if (session.status === 'error') return 'login-failed';
@@ -1029,6 +1220,10 @@ export class QqbotNapcatLoginService {
     return 'scan-status';
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param session - session 输入；使用 `errorMessage`、`status`、`newDeviceStatus`、`captchaUrl` 字段生成结果。
+   */
   private getSessionSnapshotMessage(session: QqbotLoginScanSession) {
     const message = this.toolsService.toTrimmedString(session.errorMessage);
     if (message) return message;
@@ -1043,6 +1238,10 @@ export class QqbotNapcatLoginService {
     return '登录处理中';
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `preparingRelogin`、`errorMessage` 字段生成结果。
+   */
   private recoverStaleReloginPreparation(session: QqbotLoginScanSession) {
     if (!this.isStaleReloginPreparation(session)) return false;
     session.preparingRelogin = false;
@@ -1056,14 +1255,20 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
+  /**
+   * 判断 NapCat 登录运行态条件。
+   * @param session - session 输入；使用 `preparingRelogin`、`lastRestartedAt` 字段计算判断结果。
+   */
   private isStaleReloginPreparation(session: QqbotLoginScanSession) {
     if (!session.preparingRelogin || !session.lastRestartedAt) return false;
     return (
-      Date.now() - session.lastRestartedAt >
-      this.getReloginPreparationStaleMs()
+      Date.now() - session.lastRestartedAt > this.getReloginPreparationStaleMs()
     );
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   */
   private getReloginPreparationStaleMs() {
     return this.getPositiveConfigNumber(
       'QQBOT_NAPCAT_RELOGIN_PREPARING_STALE_MS',
@@ -1073,11 +1278,21 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 清理 NapCat 登录运行态状态。
+   * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   */
   private cleanupSessionEvents(sessionId: string) {
     delete this.sessionEventLogCache[sessionId];
     delete this.sessionEventListenerCache[sessionId];
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `status`、`errorMessage`、`expiresAt`、`qrcode` 字段生成结果。
+   * @param errorMessage - errorMessage 输入；影响 keepSessionPending 的返回值。
+   * @param clearQrcode - clearQrcode 输入；决定 NapCat条件分支。
+   */
   private keepSessionPending(
     session: QqbotLoginScanSession,
     errorMessage: string,
@@ -1091,6 +1306,12 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `captchaUrl`、`errorMessage`、`status`、`preparingRelogin` 字段生成结果。
+   * @param captchaUrl - 访问地址；影响 keepPasswordCaptchaPending 的返回值。
+   * @param reason - reason 输入；驱动 `toolsService.isNapcatCaptchaRequiredMessage()` 的 NapCat步骤。
+   */
   private keepPasswordCaptchaPending(
     session: QqbotLoginScanSession,
     captchaUrl: string,
@@ -1123,6 +1344,11 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `errorMessage`、`status`、`captchaUrl`、`preparingRelogin` 字段生成结果。
+   * @param reason - reason 输入；驱动 `toolsService.toTrimmedString()` 的 NapCat步骤。
+   */
   private keepPasswordCaptchaWaitingForUrl(
     session: QqbotLoginScanSession,
     reason?: string,
@@ -1149,6 +1375,12 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `expectedSelfId`、`status`、`captchaUrl`、`errorMessage` 字段生成结果。
+   * @param container - container 输入；驱动 `this.cleanupPasswordLoginContext()` 的 NapCat步骤。
+   * @param errorMessage - errorMessage 输入；影响 failCaptchaLogin 的返回值。
+   */
   private async failCaptchaLogin(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -1176,6 +1408,13 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
+  /**
+   * 清理 NapCat 登录运行态状态。
+   * @param session - session 输入；使用 `passwordMd5`、`captchaUrl`、`status`、`expectedSelfId` 字段生成结果。
+   * @param container - container 输入；影响 cleanupPasswordLoginContext 的返回值。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param cleanupFailureMessage - cleanupFailureMessage 输入；影响 cleanupPasswordLoginContext 的返回值。
+   */
   private async cleanupPasswordLoginContext(
     session: QqbotLoginScanSession,
     container?: QqbotNapcatRuntime,
@@ -1227,16 +1466,29 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
+  /**
+   * 保存 NapCat 登录运行态数据。
+   * @param session - session 输入；驱动 `loginSessionStore.set()`、`this.persistLoginChallenge()` 的 NapCat步骤。
+   */
   private persistLoginSession(session: QqbotLoginScanSession) {
     this.loginSessionStore.set(session);
     this.persistLoginChallenge(session);
   }
 
+  /**
+   * 保存 NapCat 登录运行态数据。
+   * @param session - session 输入；驱动 `loginSessionStore.recordCaptchaChallenge()`、`loginSessionStore.recordNewDeviceChallenge()` 的 NapCat步骤。
+   */
   private persistLoginChallenge(session: QqbotLoginScanSession) {
     this.loginSessionStore.recordCaptchaChallenge(session);
     this.loginSessionStore.recordNewDeviceChallenge(session);
   }
 
+  /**
+   * 保存 NapCat 登录运行态数据。
+   * @param session - session 输入；驱动 `loginSessionStore.recordRuntimeCleanup()` 的 NapCat步骤。
+   * @param input - input 输入；影响 persistRuntimeCleanup 的返回值。
+   */
   private persistRuntimeCleanup(
     session: QqbotLoginScanSession,
     input: { errorMessage?: string; status: 'failed' | 'pending' | 'success' },
@@ -1247,6 +1499,10 @@ export class QqbotNapcatLoginService {
     });
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   */
   private async getSession(sessionId: string) {
     const session = await this.loginSessionStore.get(sessionId);
     if (!session) {
@@ -1255,10 +1511,17 @@ export class QqbotNapcatLoginService {
     return session;
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param session - session 输入；使用 `containerId` 字段生成结果。
+   */
   private async getSessionContainer(session: QqbotLoginScanSession) {
     return this.containerService.findRuntimeById(session.containerId);
   }
 
+  /**
+   * 清理 NapCat 登录运行态状态。
+   */
   private async cleanupSessions() {
     const now = Date.now();
     const expiredSessions: QqbotLoginScanSession[] = [];
@@ -1273,6 +1536,10 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `status`、`errorMessage`、`id` 字段生成结果。
+   */
   private async expireSession(session: QqbotLoginScanSession) {
     const cleaned = await this.cleanupPasswordLoginContext(session);
     if (!cleaned) return this.toResult(session);
@@ -1289,6 +1556,11 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `status`、`captchaUrl`、`errorMessage`、`passwordMd5` 字段生成结果。
+   * @param errorMessage - errorMessage 输入；驱动 `this.publishScanResultEvent()` 的 NapCat步骤。
+   */
   private async failSession(
     session: QqbotLoginScanSession,
     errorMessage: string,
@@ -1304,6 +1576,10 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `id` 字段生成结果。
+   */
   private async closeSession(session: QqbotLoginScanSession) {
     await this.cleanupPasswordLoginContext(session);
     await this.cleanupSessionContainer(session);
@@ -1311,6 +1587,10 @@ export class QqbotNapcatLoginService {
     this.cleanupSessionEvents(session.id);
   }
 
+  /**
+   * 清理 NapCat 登录运行态状态。
+   * @param session - session 输入；使用 `containerId`、`containerName`、`webuiPort`、`errorMessage` 字段生成结果。
+   */
   private async cleanupSessionContainer(session: QqbotLoginScanSession) {
     const cleanupError = await this.cleanupRuntimeContainer({
       baseUrl: '',
@@ -1325,6 +1605,12 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param container - container 输入；驱动 `this.getQrcode()` 的 NapCat步骤。
+   * @param session - session 输入；使用 `qrcode`、`errorMessage` 字段生成结果。
+   * @param status - NapCat列表；使用 `qrcodeurl`、`loginError` 字段生成结果。
+   */
   private async tryUpdatePendingQrcode(
     container: QqbotNapcatRuntime,
     session: QqbotLoginScanSession,
@@ -1355,6 +1641,10 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 清理 NapCat 登录运行态状态。
+   * @param container - container 输入；使用 `id` 字段生成结果。
+   */
   private async cleanupRuntimeContainer(container: QqbotNapcatRuntime) {
     try {
       await this.containerService.removeUnboundContainer(container.id);
@@ -1364,6 +1654,11 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param container - container 输入；驱动 `this.normalizeLoginStatus()` 的 NapCat步骤。
+   * @param retry - retry 输入；决定 NapCat条件分支。
+   */
   private async getLoginStatus(container: QqbotNapcatRuntime, retry = false) {
     if (!retry) {
       const status = await this.postNapcat<NapcatLoginStatus>(
@@ -1393,6 +1688,11 @@ export class QqbotNapcatLoginService {
     throw lastError;
   }
 
+  /**
+   * 转换 NapCat 登录运行态输入。
+   * @param container - container 输入；驱动 `this.getLoginInfo()` 的 NapCat步骤。
+   * @param status - NapCat列表；使用 `isLogin` 字段生成结果。
+   */
   private async normalizeLoginStatus(
     container: QqbotNapcatRuntime,
     status: NapcatLoginStatus,
@@ -1422,6 +1722,12 @@ export class QqbotNapcatLoginService {
     return status;
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param status - NapCat列表；使用 `loginError` 字段生成结果。
+   * @param errorMessage - errorMessage 输入；影响 toOfflineLoginStatus 的返回值。
+   * @returns NapCat 登录运行态产出的 NapcatLoginStatus。
+   */
   private toOfflineLoginStatus(
     status: NapcatLoginStatus,
     errorMessage = 'NapCat 账号已离线，请重新扫码登录',
@@ -1434,6 +1740,10 @@ export class QqbotNapcatLoginService {
     };
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param container - container 输入；限定 NapCat查询范围。
+   */
   private async getLoginInfo(container: QqbotNapcatRuntime) {
     return this.postNapcat<NapcatLoginInfo>(
       container,
@@ -1441,6 +1751,11 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param container - container 输入；影响 callRefreshQrcode 的返回值。
+   * @param retry - retry 输入；驱动 `this.executeNapcatRequest()` 的 NapCat步骤。
+   */
   private async callRefreshQrcode(
     container: QqbotNapcatRuntime,
     retry = false,
@@ -1459,6 +1774,12 @@ export class QqbotNapcatLoginService {
     });
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param container - container 输入；驱动 `this.getQrcodeFromStatus()`、`this.getLoginStatus()` 的 NapCat步骤。
+   * @param retry - retry 输入；驱动 `this.executeNapcatRequest()` 的 NapCat步骤。
+   * @param options - NapCat列表；驱动 `this.getQrcodeFromStatus()`、`toolsService.ensureFreshQrcode()` 的 NapCat步骤。
+   */
   private async getQrcode(
     container: QqbotNapcatRuntime,
     retry = false,
@@ -1491,6 +1812,12 @@ export class QqbotNapcatLoginService {
     });
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param container - container 输入；驱动 `this.restartNapcatForLogin()`、`this.callRefreshQrcode()`、`this.getQrcode()` 的 NapCat步骤。
+   * @param retry - retry 输入；驱动 `this.callRefreshQrcode()`、`this.getQrcode()` 的 NapCat步骤。
+   * @param options - NapCat列表；使用 `fallbackStatus`、`requireFresh`、`staleQrcode` 字段生成结果。
+   */
   private async refreshOrGetQrcode(
     container: QqbotNapcatRuntime,
     retry = false,
@@ -1526,6 +1853,11 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param container - container 输入；驱动 `this.getLoginStatus()` 的 NapCat步骤。
+   * @param options - NapCat列表；使用 `requireFresh` 字段生成结果。
+   */
   private async getQrcodeFromStatus(
     container: QqbotNapcatRuntime,
     options: QrcodeLookupOptions = {},
@@ -1543,6 +1875,12 @@ export class QqbotNapcatLoginService {
     throwVbenError('NapCat 未返回登录二维码');
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param container - container 输入；影响 postNapcat 的返回值。
+   * @param path - 路由或文件路径；影响 postNapcat 的返回值。
+   * @param body - 请求体 DTO；承载 NapCat新增、更新、导入或执行字段。
+   */
   private async postNapcat<T>(
     container: QqbotNapcatRuntime,
     path: string,
@@ -1556,6 +1894,13 @@ export class QqbotNapcatLoginService {
       });
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `lastRestartedAt`、`qrcode`、`errorMessage`、`expiresAt` 字段生成结果。
+   * @param container - container 输入；驱动 `this.tryQuickRelogin()`、`this.tryPasswordRelogin()`、`this.resetNapcatForLogin()`、`this.refreshOrGetQrcode()` 的 NapCat步骤。
+   * @param loginPassword - loginPassword 输入；驱动 `toolsService.toSecretText()` 的 NapCat步骤。
+   * @param hasExistingPrimaryBinding - hasExistingPrimaryBinding 输入；决定 NapCat条件分支。
+   */
   private async prepareReloginQrcode(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -1655,6 +2000,12 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `errorMessage`、`lastRestartedAt`、`expectedSelfId` 字段生成结果。
+   * @param container - container 输入；驱动 `this.clearRuntimeLoginPasswordBeforeQuick()`、`this.restartNapcatForLogin()`、`this.getLoginStatus()`、`this.getLoginInfo()` 的 NapCat步骤。
+   * @param hasPasswordFallback - hasPasswordFallback 输入；驱动 `this.publishQuickLoginFallback()` 的 NapCat步骤。
+   */
   private async tryQuickRelogin(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -1734,6 +2085,12 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `passwordMd5`、`errorMessage`、`expectedSelfId`、`lastRestartedAt` 字段生成结果。
+   * @param container - container 输入；驱动 `containerService.ensureRuntimeLoginEnv()`、`this.restartNapcatForLogin()`、`this.waitForPasswordLoginStatus()`、`this.getLoginInfo()` 的 NapCat步骤。
+   * @param loginPassword - loginPassword 输入；驱动 `toolsService.toSecretText()` 的 NapCat步骤。
+   */
   private async tryPasswordRelogin(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -1886,6 +2243,12 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - session 输入；使用 `expectedSelfId`、`qrcode`、`captchaUrl`、`errorMessage` 字段生成结果。
+   * @param container - container 输入；驱动 `this.clearRuntimeLoginPasswordAfterFailedPassword()`、`this.refreshOrGetQrcode()` 的 NapCat步骤。
+   * @param loginStatus - NapCat列表；使用 `qrcodeurl` 字段生成结果。
+   */
   private async keepPasswordQrcodePending(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -1925,6 +2288,12 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 解析Password Captcha Url。
+   * @param container - container 输入；驱动 `this.detectPasswordCaptchaUrl()`、`this.waitForPasswordCaptchaUrl()` 的 NapCat步骤。
+   * @param loginStatus - NapCat列表；使用 `loginError` 字段生成结果。
+   * @param sinceMs - NapCat列表；驱动 `this.detectPasswordCaptchaUrl()`、`this.waitForPasswordCaptchaUrl()` 的 NapCat步骤。
+   */
   private async resolvePasswordCaptchaUrl(
     container: QqbotNapcatRuntime,
     loginStatus: NapcatLoginStatus,
@@ -1946,6 +2315,12 @@ export class QqbotNapcatLoginService {
     return this.waitForPasswordCaptchaUrl(container, sinceMs);
   }
 
+  /**
+   * 解析Status Captcha Url。
+   * @param session - session 输入；使用 `lastCaptchaLookupAt`、`lastRestartedAt` 字段生成结果。
+   * @param container - container 输入；驱动 `this.detectPasswordCaptchaUrl()` 的 NapCat步骤。
+   * @param loginStatus - NapCat列表；决定 NapCat条件分支。
+   */
   private async resolveStatusCaptchaUrl(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -1958,6 +2333,10 @@ export class QqbotNapcatLoginService {
     return this.detectPasswordCaptchaUrl(container, session.lastRestartedAt);
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param status - NapCat列表；使用 `captchaUrl`、`loginError` 字段生成结果。
+   */
   private getCaptchaUrlFromStatus(status: NapcatLoginStatus) {
     return (
       this.toolsService.toTrimmedString(status.captchaUrl) ||
@@ -1965,6 +2344,10 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 判断 NapCat 登录运行态条件。
+   * @param session - session 输入；使用 `lastCaptchaLookupAt` 字段生成结果。
+   */
   private shouldLookupStatusCaptchaUrl(session: QqbotLoginScanSession) {
     const lastCheckedAt = Number(session.lastCaptchaLookupAt || 0);
     if (!Number.isFinite(lastCheckedAt) || lastCheckedAt <= 0) return true;
@@ -1972,6 +2355,10 @@ export class QqbotNapcatLoginService {
     return Date.now() - lastCheckedAt > cooldownMs;
   }
 
+  /**
+   * 判断 NapCat 登录运行态条件。
+   * @param status - NapCat列表；使用 `loginError` 字段计算判断结果。
+   */
   private isPasswordCaptchaStillRequired(status: NapcatLoginStatus) {
     if (this.getCaptchaUrlFromStatus(status)) return true;
     const message = this.toolsService.toTrimmedString(status.loginError);
@@ -1997,6 +2384,12 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param container - container 输入；驱动 `containerService.detectRuntimeCaptchaUrl()` 的 NapCat步骤。
+   * @param sinceMs - NapCat列表；驱动 `containerService.detectRuntimeCaptchaUrl()` 的 NapCat步骤。
+   * @param allowTailFallback - allowTailFallback 输入；决定 NapCat条件分支。
+   */
   private async detectPasswordCaptchaUrl(
     container: QqbotNapcatRuntime,
     sinceMs?: number,
@@ -2005,10 +2398,8 @@ export class QqbotNapcatLoginService {
     if (typeof this.containerService.detectRuntimeCaptchaUrl !== 'function') {
       return '';
     }
-    const recentCaptchaUrl = await this.containerService.detectRuntimeCaptchaUrl(
-      container,
-      sinceMs,
-    );
+    const recentCaptchaUrl =
+      await this.containerService.detectRuntimeCaptchaUrl(container, sinceMs);
     if (recentCaptchaUrl) return recentCaptchaUrl;
     if (!allowTailFallback) return '';
     return (
@@ -2016,6 +2407,11 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param container - container 输入；驱动 `this.detectPasswordCaptchaUrl()` 的 NapCat步骤。
+   * @param sinceMs - NapCat列表；驱动 `this.detectPasswordCaptchaUrl()` 的 NapCat步骤。
+   */
   private async waitForPasswordCaptchaUrl(
     container: QqbotNapcatRuntime,
     sinceMs?: number,
@@ -2035,6 +2431,10 @@ export class QqbotNapcatLoginService {
     return '';
   }
 
+  /**
+   * 判断 NapCat 登录运行态条件。
+   * @param status - NapCat列表；使用 `qrcodeurl` 字段计算判断结果。
+   */
   private isPasswordQrcodeChallenge(status: NapcatLoginStatus) {
     return (
       !!this.toolsService.toTrimmedString(status.qrcodeurl) ||
@@ -2042,6 +2442,11 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 清理Runtime Login Password Before Quick。
+   * @param session - session 输入；使用 `expectedSelfId` 字段生成结果。
+   * @param container - container 输入；驱动 `containerService.ensureRuntimeLoginEnv()` 的 NapCat步骤。
+   */
   private async clearRuntimeLoginPasswordBeforeQuick(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -2064,6 +2469,12 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 清理Runtime Login Password After Failed Password。
+   * @param session - session 输入；驱动 `this.cleanupPasswordLoginContext()` 的 NapCat步骤。
+   * @param container - container 输入；驱动 `this.cleanupPasswordLoginContext()` 的 NapCat步骤。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   private async clearRuntimeLoginPasswordAfterFailedPassword(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -2082,6 +2493,12 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 清理Runtime Login Password After Success。
+   * @param session - session 输入；驱动 `this.cleanupPasswordLoginContext()` 的 NapCat步骤。
+   * @param container - container 输入；驱动 `this.cleanupPasswordLoginContext()` 的 NapCat步骤。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   private async clearRuntimeLoginPasswordAfterSuccess(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -2100,6 +2517,10 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param options - NapCat列表；使用 `hasExistingPrimaryBinding`、`loginPassword` 字段生成结果。
+   */
   private getReloginPreparingMessage(options: {
     hasExistingPrimaryBinding?: boolean;
     loginPassword?: string;
@@ -2112,6 +2533,12 @@ export class QqbotNapcatLoginService {
       : 'NapCat 正在准备登录二维码，请稍后';
   }
 
+  /**
+   * 投递 NapCat 登录运行态消息或任务。
+   * @param session - session 输入；使用 `errorMessage` 字段生成结果。
+   * @param reason - reason 输入；影响 publishQuickLoginFallback 的返回值。
+   * @param hasPasswordFallback - hasPasswordFallback 输入；影响 publishQuickLoginFallback 的返回值。
+   */
   private publishQuickLoginFallback(
     session: QqbotLoginScanSession,
     reason?: string,
@@ -2132,6 +2559,11 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 投递 NapCat 登录运行态消息或任务。
+   * @param session - session 输入；使用 `errorMessage` 字段生成结果。
+   * @param reason - reason 输入；影响 publishPasswordLoginFallback 的返回值。
+   */
   private publishPasswordLoginFallback(
     session: QqbotLoginScanSession,
     reason?: string,
@@ -2148,6 +2580,12 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 重置Napcat For Login。
+   * @param container - container 输入；驱动 `containerService.resetRuntimeLoginState()`、`this.restartNapcatForLogin()`、`webuiClient.clearCredential()`、`this.getLoginStatus()` 的 NapCat步骤。
+   * @param options - NapCat列表；使用 `waitForReady` 字段生成结果。
+   * @param onProgress - NapCat列表；驱动 `containerService.resetRuntimeLoginState()` 的 NapCat步骤。
+   */
   private async resetNapcatForLogin(
     container: QqbotNapcatRuntime,
     options: NapcatRestartOptions = {},
@@ -2171,6 +2609,11 @@ export class QqbotNapcatLoginService {
     await this.getLoginStatus(container, true);
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param container - container 输入；驱动 `containerService.restartRuntimeContainer()`、`webuiClient.clearCredential()`、`this.getLoginStatus()` 的 NapCat步骤。
+   * @param options - NapCat列表；使用 `waitForReady` 字段生成结果。
+   */
   private async restartNapcatForLogin(
     container: QqbotNapcatRuntime,
     options: NapcatRestartOptions = {},
@@ -2195,22 +2638,36 @@ export class QqbotNapcatLoginService {
     await this.getLoginStatus(container, true);
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   */
   private getSessionTtlMs() {
     return Number(
       this.configService.get('NAPCAT_LOGIN_QR_EXPIRE_MS') || 2 * 60 * 1000,
     );
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   */
   private getTimeout() {
     return Number(this.configService.get('NAPCAT_WEBUI_TIMEOUT_MS') || 8000);
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   */
   private getRestartDelayMs() {
     return Number(
       this.configService.get('NAPCAT_WEBUI_RESTART_DELAY_MS') || 3000,
     );
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param container - container 输入；驱动 `this.getLoginStatus()`、`this.detectPasswordCaptchaUrl()`、`this.getCaptchaUrlFromStatus()` 的 NapCat步骤。
+   * @param sinceMs - NapCat列表；驱动 `this.detectPasswordCaptchaUrl()`、`Number.isFinite()`、`this.getCaptchaUrlFromStatus()` 的 NapCat步骤。
+   */
   private async waitForPasswordLoginStatus(
     container: QqbotNapcatRuntime,
     sinceMs?: number,
@@ -2230,10 +2687,7 @@ export class QqbotNapcatLoginService {
         const errorMessage = this.toolsService.getErrorMessage(err);
         if (this.toolsService.isNapcatCaptchaRequiredMessage(errorMessage)) {
           return {
-            captchaUrl: await this.detectPasswordCaptchaUrl(
-              container,
-              sinceMs,
-            ),
+            captchaUrl: await this.detectPasswordCaptchaUrl(container, sinceMs),
             isLogin: false,
             loginError: errorMessage,
           };
@@ -2260,10 +2714,7 @@ export class QqbotNapcatLoginService {
           ));
       }
       if (latestStatus.isLogin || qrcodeChallenge || captchaRequired) {
-        if (
-          !this.getCaptchaUrlFromStatus(latestStatus) &&
-          captchaRequired
-        ) {
+        if (!this.getCaptchaUrlFromStatus(latestStatus) && captchaRequired) {
           latestStatus.captchaUrl = await this.detectPasswordCaptchaUrl(
             container,
             sinceMs,
@@ -2277,6 +2728,11 @@ export class QqbotNapcatLoginService {
     return latestStatus;
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param waitMs - NapCat列表；驱动 `Number.isFinite()` 的 NapCat步骤。
+   * @param intervalMs - NapCat列表；驱动 `Number.isFinite()` 的 NapCat步骤。
+   */
   private getLoginPollAttempts(waitMs: number, intervalMs: number) {
     const normalizedWaitMs = Number.isFinite(waitMs) && waitMs > 0 ? waitMs : 1;
     const normalizedIntervalMs =
@@ -2284,6 +2740,9 @@ export class QqbotNapcatLoginService {
     return Math.max(1, Math.ceil(normalizedWaitMs / normalizedIntervalMs));
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   */
   private getPasswordLoginWaitMs() {
     return this.getPositiveConfigNumber(
       'QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS',
@@ -2291,6 +2750,9 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   */
   private getLoginPollIntervalMs() {
     return this.getPositiveConfigNumber(
       'QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS',
@@ -2298,11 +2760,21 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param key - 键名；驱动 `Number()` 的 NapCat步骤。
+   * @param fallback - 兜底值；驱动 `Number()`、`Number.isFinite()` 的 NapCat步骤。
+   */
   private getPositiveConfigNumber(key: string, fallback: number) {
     const value = Number(this.configService.get(key) || fallback);
     return Number.isFinite(value) && value > 0 ? value : fallback;
   }
 
+  /**
+   * 执行Napcat Request。
+   * @param retry - retry 输入；决定 NapCat条件分支。
+   * @param action - action 输入；影响 executeNapcatRequest 的返回值。
+   */
   private async executeNapcatRequest<T>(
     retry: boolean,
     action: () => Promise<T>,

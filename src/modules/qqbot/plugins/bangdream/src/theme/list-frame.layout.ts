@@ -56,7 +56,7 @@ export const BANGDREAM_LIST_FRAME_SPEC = {
 /**
  * 计算列表文本默认行高。
  *
- * @param textSize - 文本字号。
+ * @param textSize - textSize 输入；限定 BangDream查询范围。
  */
 export function getListFrameLineHeight(textSize: number) {
   return textSize * BANGDREAM_LIST_FRAME_SPEC.text.lineHeightRatio;
@@ -65,7 +65,7 @@ export function getListFrameLineHeight(textSize: number) {
 /**
  * 计算列表文本和图片之间的默认间距。
  *
- * @param textSize - 文本字号。
+ * @param textSize - textSize 输入；限定 BangDream查询范围。
  */
 export function getListFrameSpacing(textSize: number) {
   return textSize * BANGDREAM_LIST_FRAME_SPEC.text.spacingRatio;
@@ -74,7 +74,7 @@ export function getListFrameSpacing(textSize: number) {
 /**
  * 计算列表正文最大宽度。
  *
- * @param maxWidth - 列表总宽度。
+ * @param maxWidth - maxWidth 输入；限定 BangDream查询范围。
  */
 export function getListFrameTextMaxWidth(
   maxWidth: number = BANGDREAM_RENDER_THEME.layout.contentWidth,
@@ -85,7 +85,7 @@ export function getListFrameTextMaxWidth(
 /**
  * 计算带字段标签的列表行布局。
  *
- * @param options - 标签高度、正文高度和总宽度。
+ * @param options - BangDream列表；生成 BangDream对象。
  */
 export function createKeyedListFrameLayout({
   keyHeight,
@@ -106,7 +106,7 @@ export function createKeyedListFrameLayout({
 /**
  * 计算 tips 行布局。
  *
- * @param textHeight - tips 文本高度。
+ * @param textHeight - textHeight 输入；生成 BangDream对象。
  */
 export function createTipsInListLayout(textHeight: number) {
   return {
@@ -127,7 +127,7 @@ export function createTipsInListLayout(textHeight: number) {
 /**
  * 计算横向合并列表的列宽。
  *
- * @param itemCount - 合并项数量。
+ * @param itemCount - itemCount 输入；决定 BangDream条件分支。
  */
 export function getMergedListColumnWidth(itemCount: number) {
   if (itemCount <= 0) return 0;
@@ -137,8 +137,8 @@ export function getMergedListColumnWidth(itemCount: number) {
 /**
  * 计算居中图片列表的换行结果。
  *
- * @param imageList - 图片或画布尺寸列表。
- * @param maxWidth - 每行最大宽度。
+ * @param imageList - imageList 输入；驱动 `for()` 的 BangDream步骤。
+ * @param maxWidth - maxWidth 输入；决定 BangDream条件分支。
  */
 export function createCenteredImageRows<T extends ImageLike>(
   imageList: T[],
@@ -149,6 +149,9 @@ export function createCenteredImageRows<T extends ImageLike>(
   let tempHeight = 0;
   let tempImageList: T[] = [];
 
+  /**
+   * 创建 BangDream 插件中间结构。
+   */
   const newLine = () => {
     lineList.push({
       height: tempHeight,
@@ -185,7 +188,7 @@ export function createCenteredImageRows<T extends ImageLike>(
 /**
  * 计算居中图片列表总高度。
  *
- * @param lineList - 居中图片行。
+ * @param lineList - lineList 输入；遍历并累积 BangDream结果。
  */
 export function getCenteredImageRowsHeight(
   lineList: Array<ListFrameImageRow<ImageLike>>,
@@ -196,7 +199,7 @@ export function getCenteredImageRowsHeight(
 /**
  * 计算左侧竖线列表布局。
  *
- * @param contentHeight - 内容总高度。
+ * @param contentHeight - contentHeight 输入；生成 BangDream对象。
  */
 export function createListWithLineLayout(contentHeight: number) {
   return {

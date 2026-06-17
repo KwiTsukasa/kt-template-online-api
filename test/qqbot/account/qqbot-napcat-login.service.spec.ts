@@ -5,6 +5,10 @@ jest.mock('@/common', () => {
     ToolsService: actualCommon.ToolsService,
     ensureSnowflakeId: jest.fn(),
     setDictDecodeCache: jest.fn(),
+    /**
+     * 执行 测试回调。
+     * @param message - message 输入；驱动 `Error()` 的 测试步骤。
+     */
     throwVbenError: (message: string) => {
       throw new Error(message);
     },
@@ -243,8 +247,9 @@ describe('QqbotNapcatLoginService', () => {
     expect(getLoginStatus).toHaveBeenCalledWith(container);
     expect(result.status).toBe('pending');
     expect(result.qrcode).toBe('fresh-qrcode-after-restart');
-    expect((refreshService as any).sessions.get(session.id).preparingRelogin)
-      .toBe(false);
+    expect(
+      (refreshService as any).sessions.get(session.id).preparingRelogin,
+    ).toBe(false);
   });
 
   it('uses runtime logs to recover captcha url when status only says captcha required', async () => {
@@ -1061,10 +1066,13 @@ describe('QqbotNapcatLoginService', () => {
       preparingRelogin: true,
       status: 'pending',
     });
-    jest.spyOn(Date, 'now').mockImplementation(() =>
-      envRebuildStarted ? envRebuildStartedAt : passwordLogSinceMs,
-    );
-    jest.spyOn(refreshService as any, 'waitForPasswordLoginStatus')
+    jest
+      .spyOn(Date, 'now')
+      .mockImplementation(() =>
+        envRebuildStarted ? envRebuildStartedAt : passwordLogSinceMs,
+      );
+    jest
+      .spyOn(refreshService as any, 'waitForPasswordLoginStatus')
       .mockResolvedValue({
         isLogin: false,
         loginError: '密码回退需要验证码，请在 WebUi 中继续完成验证',
@@ -1090,9 +1098,7 @@ describe('QqbotNapcatLoginService', () => {
       expect.objectContaining({ isLogin: false }),
       passwordLogSinceMs,
     );
-    expect(session.lastRestartedAt).toBeGreaterThanOrEqual(
-      envRebuildStartedAt,
-    );
+    expect(session.lastRestartedAt).toBeGreaterThanOrEqual(envRebuildStartedAt);
     expect(session.captchaUrl).toBe(captchaUrl);
   });
 
@@ -1762,7 +1768,8 @@ describe('QqbotNapcatLoginService', () => {
       mode: 'refresh',
       status: 'pending',
     });
-    session.deviceVerifyUrl = 'https://accounts.qq.com/safe/verify?sig=sig&uin-token=token';
+    session.deviceVerifyUrl =
+      'https://accounts.qq.com/safe/verify?sig=sig&uin-token=token';
     session.newDeviceBytesToken = 'bytes-new-device';
     session.newDevicePullQrCodeSig = 'initial-sig';
     session.newDeviceQrcode = 'data:image/png;base64,new-device-qrcode';

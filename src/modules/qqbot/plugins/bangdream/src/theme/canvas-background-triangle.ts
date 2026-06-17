@@ -10,9 +10,9 @@ interface createBlurredTrianglePatternOptions {
 
 //输入图片，输出带有三角形效果的模糊图片
 /**
- * 在底层绘图工具层中创建BlurredTrianglePattern。
+ * 创建 BangDream 插件对象或配置。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；生成 BangDream对象。
  * @returns 异步处理结果。
  */
 export async function createBlurredTrianglePattern({
@@ -164,13 +164,13 @@ export async function createBlurredTrianglePattern({
 }
 
 /**
- * 在底层绘图工具层中判断InsideEquilateralTriangle。
+ * 判断 BangDream 插件条件。
  *
- * @param _x - 横坐标参数。
- * @param _y - 纵坐标参数。
- * @param px - px参数。
- * @param py - py参数。
- * @param size - size参数。
+ * @param _x - _x 输入；计算 BangDream判断结果。
+ * @param _y - _y 输入；计算 BangDream判断结果。
+ * @param px - px 输入；决定 BangDream条件分支。
+ * @param py - py 输入；计算 BangDream判断结果。
+ * @param size - 数量限制；计算 BangDream判断结果。
  * @returns 判断结果。
  */
 function isInsideEquilateralTriangle(

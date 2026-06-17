@@ -9,8 +9,8 @@ import { BANGDREAM_GACHA_LIST_SPEC } from '@/modules/qqbot/plugins/bangdream/src
 /**
  * 在图片布局层中绘制卡池概率In列表。
  *
- * @param gacha - 卡池参数。
- * @param server - 目标服务器。
+ * @param gacha - gacha 输入；使用 `rates` 字段生成结果。
+ * @param server - server 输入；影响 drawGachaRateInList 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawGachaRateInList(

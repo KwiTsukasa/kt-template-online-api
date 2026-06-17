@@ -27,6 +27,9 @@ import { playerRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/p
 let BGDefaultImage: Image;
 let playerAssetsPreload: Promise<void> | undefined;
 
+/**
+ * 执行 BangDream 插件流程。
+ */
 export async function preloadBangDreamPlayerAssets() {
   if (!playerAssetsPreload) {
     playerAssetsPreload = loadImageFromPath(
@@ -46,10 +49,10 @@ export async function preloadBangDreamPlayerAssets() {
 /**
  * 在QQBot 图片视图层中绘制玩家详情。
  *
- * @param playerId - 玩家ID参数。
- * @param mainServer - 主数据服务器参数。
- * @param useEasyBG - use简易背景参数。
- * @param compress - compress参数。
+ * @param playerId - 玩家 ID；定位本次读取、更新、删除或关联的玩家。
+ * @param mainServer - mainServer 输入；驱动 `playerRepository.create()` 的 BangDream步骤。
+ * @param useEasyBG - useEasyBG 输入；影响 drawPlayerDetail 的返回值。
+ * @param compress - BangDream列表；影响 drawPlayerDetail 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawPlayerDetail(

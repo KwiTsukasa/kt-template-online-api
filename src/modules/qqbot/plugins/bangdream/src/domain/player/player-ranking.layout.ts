@@ -53,7 +53,7 @@ export const BANGDREAM_PLAYER_RANKING_SPEC = {
 /**
  * 去掉玩家昵称和简介里的方括号标签。
  *
- * @param text - 原始文本。
+ * @param text - 待匹配文本；生成规范化文本。
  */
 export function stripPlayerRankingTextTags(text: string) {
   return text.replace(/\[[^\]]*\]/g, '');
@@ -62,7 +62,7 @@ export function stripPlayerRankingTextTags(text: string) {
 /**
  * 判断排名是否需要使用前三名徽章素材。
  *
- * @param ranking - 排名。
+ * @param ranking - ranking 输入；计算 BangDream判断结果。
  */
 export function isMedalRanking(ranking: number | undefined) {
   return (
@@ -75,9 +75,9 @@ export function isMedalRanking(ranking: number | undefined) {
 /**
  * 计算玩家排名行里称号的位置和缩放尺寸。
  *
- * @param index - 称号序号。
- * @param width - 原始称号宽度。
- * @param height - 原始称号高度。
+ * @param index - index 输入；生成 BangDream对象。
+ * @param width - width 输入；生成 BangDream对象。
+ * @param height - height 输入；生成 BangDream对象。
  */
 export function createRankingDegreeLayout({
   height,

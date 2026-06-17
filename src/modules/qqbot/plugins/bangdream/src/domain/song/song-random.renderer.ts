@@ -10,10 +10,10 @@ import { FuzzySearchResult } from '@/modules/qqbot/plugins/bangdream/src/domain/
 /**
  * 在QQBot 图片视图层中绘制歌曲Random。
  *
- * @param matches - 模糊搜索命中结果。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
- * @param useEasyBG - use简易背景参数。
- * @param compress - compress参数。
+ * @param matches - BangDream列表；驱动 `matchSongList()` 的 BangDream步骤。
+ * @param displayedServerList - displayedServerList 输入；驱动 `matchSongList()` 的 BangDream步骤。
+ * @param useEasyBG - useEasyBG 输入；影响 drawSongRandom 的返回值。
+ * @param compress - BangDream列表；影响 drawSongRandom 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawSongRandom(
@@ -52,9 +52,9 @@ export async function drawSongRandom(
 
 //输入max数字，返回一个0-max的随机整数
 /**
- * 在QQBot 图片视图层中获取RandomInt。
+ * 查询 BangDream 插件数据。
  *
- * @param max - max参数。
+ * @param max - max 输入；驱动 `Math.floor()` 的 BangDream步骤。
  * @returns 计算后的数值。
  */
 function getRandomInt(max: number): number {

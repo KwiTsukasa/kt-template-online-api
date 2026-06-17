@@ -8,6 +8,9 @@ import {
 @ApiTags('基础能力 - 根入口')
 @Controller()
 export class AppController {
+  /**
+   * 重定向到Swagger文档。
+   */
   @Get()
   @Redirect('/api#/', 301)
   @ApiOperation({ summary: '重定向到Swagger文档' })

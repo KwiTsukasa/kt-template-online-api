@@ -8,6 +8,11 @@ export type RepeaterRuntimeConfig = {
   threshold: number;
 };
 
+/**
+ * 读取 复读插件资源。
+ * @param host - host 输入；驱动 `getNumberConfig()` 的 模块步骤。
+ * @returns 复读插件产出的 RepeaterRuntimeConfig。
+ */
 export function readRepeaterRuntimeConfig(
   host: RepeaterPluginHost,
 ): RepeaterRuntimeConfig {
@@ -45,6 +50,13 @@ export function readRepeaterRuntimeConfig(
   };
 }
 
+/**
+ * 查询 复读插件数据。
+ * @param host - host 输入；执行 `host.getConfig()` 对应的 模块步骤。
+ * @param key - 键名；驱动 `Number()` 的 模块步骤。
+ * @param fallback - 兜底值；驱动 `Number.isInteger()` 的 模块步骤。
+ * @param valid - 模块 ID；定位本次读取、更新、删除或关联的模块。
+ */
 function getNumberConfig(
   host: RepeaterPluginHost,
   key: string,

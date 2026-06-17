@@ -14,7 +14,7 @@ interface ScatterProps {
 /**
  * 在底层绘图工具层中处理scatter图片列表。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 scatterImages 的返回值。
  */
 export async function scatterImages({
   canvas,

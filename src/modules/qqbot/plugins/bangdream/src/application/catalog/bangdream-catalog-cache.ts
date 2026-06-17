@@ -24,6 +24,10 @@ const REQUIRED_CATALOG_KEYS = [
 const DEFAULT_CATALOG_READY_TIMEOUT_MS = 15000;
 const catalogLoadPromises = new Map<BangDreamCatalogKey, Promise<void>>();
 
+/**
+ * 查询 BangDream 插件数据。
+ * @returns BangDream 插件查询结果。
+ */
 function getCatalogReadyTimeoutMs(): number {
   return normalizeBangDreamPositiveInteger(
     readBangDreamRuntimeConfig(BANGDREAM_TSUGU_ENV_KEYS.mainDataReadyTimeoutMs),
@@ -31,12 +35,22 @@ function getCatalogReadyTimeoutMs(): number {
   );
 }
 
+/**
+ * 转换 BangDream 插件输入。
+ * @param keys - BangDream列表；去重列表值。
+ * @returns BangDream 插件转换后的值。
+ */
 function normalizeCatalogKeys(
   keys: readonly BangDreamCatalogKey[] = REQUIRED_CATALOG_KEYS,
 ): BangDreamCatalogKey[] {
   return [...new Set(keys)].filter((key) => key in bestdoriApiPath);
 }
 
+/**
+ * 判断 BangDream 插件条件。
+ * @param key - 键名；计算 BangDream判断结果。
+ * @returns 布尔值，表示 BangDream 插件条件是否满足。
+ */
 function isCatalogKeyReady(key: BangDreamCatalogKey): boolean {
   const collection = bangdreamCatalogCache[key];
   if (!collection) return false;
@@ -45,6 +59,11 @@ function isCatalogKeyReady(key: BangDreamCatalogKey): boolean {
     : true;
 }
 
+/**
+ * 判断 BangDream 插件条件。
+ * @param keys - BangDream列表；驱动 `normalizeCatalogKeys()` 的 BangDream步骤。
+ * @returns 布尔值，表示 BangDream 插件条件是否满足。
+ */
 function isCatalogReady(keys?: readonly BangDreamCatalogKey[]): boolean {
   return normalizeCatalogKeys(keys).every((key) => {
     const collection = bangdreamCatalogCache[key];
@@ -52,6 +71,10 @@ function isCatalogReady(keys?: readonly BangDreamCatalogKey[]): boolean {
   });
 }
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param ms - 等待毫秒数；驱动 `sleepBangDreamRuntime()` 的 BangDream步骤。
+ */
 async function rejectAfter(ms: number): Promise<never> {
   await sleepBangDreamRuntime(ms);
   throw new Error(`BangDream 主数据首次加载超时：${ms}ms`);
@@ -60,7 +83,7 @@ async function rejectAfter(ms: number): Promise<never> {
 /**
  * 加载 BangDream 领域目录数据。
  *
- * @param useCache - use缓存参数，未传入时使用默认值。
+ * @param useCache - useCache 输入；驱动 `loadCatalogKey()` 的 BangDream步骤。
  */
 async function loadCatalogData(
   keys?: readonly BangDreamCatalogKey[],
@@ -77,6 +100,11 @@ async function loadCatalogData(
   logger('catalog', 'catalog loaded');
 }
 
+/**
+ * 加载Catalog Key。
+ * @param key - 键名；驱动 `catalogLoadPromises.get()`、`readBangDreamCatalogDataFromCache()`、`bangdreamBestdoriProvider.getJson()`、`catalogLoadPromises.set()` 的 BangDream步骤。
+ * @param useCache - useCache 输入；决定 BangDream条件分支。
+ */
 async function loadCatalogKey(key: BangDreamCatalogKey, useCache: boolean) {
   if (isCatalogKeyReady(key)) return;
   const pending = catalogLoadPromises.get(key);
@@ -85,9 +113,8 @@ async function loadCatalogKey(key: BangDreamCatalogKey, useCache: boolean) {
   const promise = (async () => {
     if (useCache) {
       try {
-        bangdreamCatalogCache[key] = await readBangDreamCatalogDataFromCache(
-          key,
-        );
+        bangdreamCatalogCache[key] =
+          await readBangDreamCatalogDataFromCache(key);
       } catch {
         bangdreamCatalogCache[key] = await bangdreamBestdoriProvider.getJson(
           bestdoriApiPath[key],
@@ -115,6 +142,10 @@ async function loadCatalogKey(key: BangDreamCatalogKey, useCache: boolean) {
   }
 }
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param keys - BangDream列表；去重列表值。
+ */
 async function applyStaticPatches(keys: readonly BangDreamCatalogKey[]) {
   const keySet = new Set(keys);
   if (keySet.has('cards')) {
@@ -165,6 +196,10 @@ async function applyStaticPatches(keys: readonly BangDreamCatalogKey[]) {
   }
 }
 
+/**
+ * 确保Catalog Initial Load。
+ * @param keys - BangDream列表；驱动 `normalizeCatalogKeys()` 的 BangDream步骤。
+ */
 async function ensureCatalogInitialLoad(keys?: readonly BangDreamCatalogKey[]) {
   const catalogKeys = normalizeCatalogKeys(keys);
   if (isCatalogReady(catalogKeys)) return;
@@ -192,6 +227,10 @@ export async function waitForBangDreamCatalogReady(
   }
 }
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param keys - BangDream列表；驱动 `normalizeCatalogKeys()` 的 BangDream步骤。
+ */
 export async function refreshBangDreamCatalogFromCache(
   keys?: readonly BangDreamCatalogKey[],
 ) {
@@ -202,6 +241,11 @@ export async function refreshBangDreamCatalogFromCache(
   await loadCatalogData(catalogKeys, true);
 }
 
+/**
+ * 解析Bang Dream Main Data Cache Path。
+ * @param cacheRoot - cacheRoot 输入；驱动 `join()` 的 BangDream步骤。
+ * @param key - 键名；影响 resolveBangDreamMainDataCachePath 的返回值。
+ */
 export function resolveBangDreamMainDataCachePath(
   cacheRoot: string,
   key: BangDreamCatalogKey,
@@ -209,6 +253,9 @@ export function resolveBangDreamMainDataCachePath(
   return join(cacheRoot, 'bestdori', `${key}.json`);
 }
 
+/**
+ * 解析Bang Dream Catalog Cache Root。
+ */
 function resolveBangDreamCatalogCacheRoot() {
   return (
     readBangDreamRuntimeConfig(BANGDREAM_TSUGU_ENV_KEYS.cacheRoot) ||
@@ -216,6 +263,10 @@ function resolveBangDreamCatalogCacheRoot() {
   );
 }
 
+/**
+ * 读取 BangDream 插件资源。
+ * @param key - 键名；驱动 `readBangDreamJsonFile()` 的 BangDream步骤。
+ */
 async function readBangDreamCatalogDataFromCache(key: BangDreamCatalogKey) {
   return readBangDreamJsonFile(
     resolveBangDreamMainDataCachePath(resolveBangDreamCatalogCacheRoot(), key),

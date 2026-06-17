@@ -5,6 +5,12 @@ import type { BangDreamOperationModule } from '@/modules/qqbot/plugins/bangdream
 export const playerSearchOperation: BangDreamOperationModule = {
   catalogKeys: BANGDREAM_PLAYER_CATALOG_KEYS,
   handlerName: 'searchPlayer',
+  /**
+   * 执行插件操作处理器。
+   * @param input - input 输入；使用 `playerId` 字段生成结果。
+   * @param context - context 输入；执行 `context.getTokens()`、`context.requireNumber()`、`context.pickMainServer()`、`context.getRenderOptions()` 对应的 BangDream步骤。
+   * @returns 插件处理结果。
+   */
   execute: async (input, context) => {
     const tokens = context.getTokens(input);
     const playerId = context.requireNumber(

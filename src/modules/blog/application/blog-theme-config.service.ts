@@ -11,6 +11,12 @@ const DEFAULT_THEME_ID = 'argon';
 
 @Injectable()
 export class BlogThemeConfigService {
+  /**
+   * 初始化 BlogThemeConfigService 实例。
+   * @param themeRepository - 博客仓库依赖；影响 constructor 的返回值。
+   * @param wordpressService - wordpressService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(BlogThemeConfig)
     private readonly themeRepository: Repository<BlogThemeConfig>,
@@ -18,6 +24,9 @@ export class BlogThemeConfigService {
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 执行 博客内容流程。
+   */
   async publicConfig() {
     const localConfig = await this.themeRepository.findOne({
       where: {
@@ -28,6 +37,10 @@ export class BlogThemeConfigService {
     return localConfig?.config || this.getDefaultConfig();
   }
 
+  /**
+   * 保存数据。
+   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   */
   async save(body: BlogThemeConfigBodyDto) {
     if (!body.config) {
       throwVbenError('请提供主题配置', HttpStatus.BAD_REQUEST);
@@ -39,12 +52,20 @@ export class BlogThemeConfigService {
     );
   }
 
+  /**
+   * 执行 博客内容流程。
+   */
   async importFromWordpress() {
     const config = await this.wordpressService.themeConfig();
 
     return this.upsertConfig(config, 'wordpress');
   }
 
+  /**
+   * 执行 博客内容流程。
+   * @param config - config 输入；影响 upsertConfig 的返回值。
+   * @param source - source 输入；影响 upsertConfig 的返回值。
+   */
   private async upsertConfig(
     config: WordpressArgonThemeConfig,
     source: string,
@@ -67,6 +88,10 @@ export class BlogThemeConfigService {
     return saved.config;
   }
 
+  /**
+   * 查询 博客内容数据。
+   * @returns 博客内容查询结果。
+   */
   private getDefaultConfig(): WordpressArgonThemeConfig {
     return {
       argonConfig: {

@@ -24,16 +24,30 @@ import {
 } from '../../../helpers/controller-route.helper';
 import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
+/**
+ * 查询 NapCat 登录运行态数据。
+ * @param moduleClass - Nest 模块类；读取装饰器 metadata。
+ * @param key - 键名；读取装饰器 metadata。
+ * @returns NapCat 登录运行态查询结果。
+ */
 const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] => {
   return Reflect.getMetadata(key, moduleClass) || [];
 };
 
+/**
+ * 查询 NapCat 登录运行态数据。
+ * @param items - NapCat列表；转换 NapCat列表项。
+ */
 const getNames = (items: unknown[]) =>
   items.map((item) => {
     if (typeof item === 'symbol') return item.description || item.toString();
     return (item as { name?: string }).name || `${item}`;
   });
 
+/**
+ * 执行 NapCat 登录运行态流程。
+ * @param item - item 输入；驱动 `maybeForwardRef.forwardRef()` 的 NapCat步骤。
+ */
 const unwrapForwardRef = (item: unknown) => {
   const maybeForwardRef = item as { forwardRef?: () => unknown };
   return typeof maybeForwardRef.forwardRef === 'function'
@@ -43,6 +57,10 @@ const unwrapForwardRef = (item: unknown) => {
 
 type EntityClass = new (...args: never[]) => unknown;
 
+/**
+ * 查询 NapCat 登录运行态数据。
+ * @param entity - entity 输入；驱动 `getMetadataArgsStorage()` 的 NapCat步骤。
+ */
 const getEntityTableName = (entity: EntityClass) => {
   return getMetadataArgsStorage().tables.find(
     (table) => table.target === entity,
@@ -165,12 +183,20 @@ describe('QQBot NapCat module ownership', () => {
       'utf8',
     );
 
-    expect(schemaSql).not.toContain('CREATE TABLE IF NOT EXISTS qqbot_account_napcat');
-    expect(schemaSql).not.toContain('CREATE TABLE IF NOT EXISTS qqbot_napcat_container');
+    expect(schemaSql).not.toContain(
+      'CREATE TABLE IF NOT EXISTS qqbot_account_napcat',
+    );
+    expect(schemaSql).not.toContain(
+      'CREATE TABLE IF NOT EXISTS qqbot_napcat_container',
+    );
     expect(qqbotInitSql).not.toContain('qqbot_account_napcat');
     expect(qqbotInitSql).not.toContain('qqbot_napcat_container');
-    expect(qqbotInitSql).toContain('CREATE TABLE IF NOT EXISTS `napcat_account_binding`');
-    expect(qqbotInitSql).toContain('CREATE TABLE IF NOT EXISTS `napcat_container`');
+    expect(qqbotInitSql).toContain(
+      'CREATE TABLE IF NOT EXISTS `napcat_account_binding`',
+    );
+    expect(qqbotInitSql).toContain(
+      'CREATE TABLE IF NOT EXISTS `napcat_container`',
+    );
     expect(
       getNames(QQBOT_NAPCAT_ENTITIES).filter((name) =>
         name.startsWith('Qqbot'),

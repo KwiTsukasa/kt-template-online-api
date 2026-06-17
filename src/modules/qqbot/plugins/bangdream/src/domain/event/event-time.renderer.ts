@@ -32,8 +32,8 @@ interface TimeInListOptions {
 /**
  * 在图片布局层中绘制时间In列表。
  *
- * @param options1 - options1参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param options1 - options1 输入；影响 drawTimeInList 的返回值。
+ * @param displayedServerList - displayedServerList 输入；驱动 `drawListByServerList()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawTimeInList(
@@ -73,10 +73,10 @@ export async function drawTimeInList(
 //获取当前活动与查询活动的大致时间差(国服)
 //注: 返回的并非时间差，而是活动预计开始的时间戳
 /**
- * 在图片布局层中获取Probable时间Difference。
+ * 查询 BangDream 插件数据。
  *
- * @param eventId - 活动 ID。
- * @param currentEvent - current活动参数。
+ * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+ * @param currentEvent - currentEvent 输入；驱动 `estimateCnEventStartAt()` 的 BangDream步骤。
  * @returns 计算后的数值。
  */
 export function getProbableTimeDifference(
@@ -89,16 +89,16 @@ export function getProbableTimeDifference(
 /**
  * 在图片布局层中格式化时间。
  *
- * @param timeStamp - 时间Stamp参数。
+ * @param timeStamp - timeStamp 输入；驱动 `formatBangDreamTime()` 的 BangDream步骤。
  */
 export function formatTime(timeStamp: number | null) {
   return formatBangDreamTime(timeStamp);
 }
 
 /**
- * 在图片布局层中格式化MonthDay。
+ * 转换 BangDream 插件输入。
  *
- * @param timeStamp - 时间Stamp参数。
+ * @param timeStamp - timeStamp 输入；驱动 `formatBangDreamMonthDay()` 的 BangDream步骤。
  */
 export function formatMonthDay(timeStamp: number | null) {
   return formatBangDreamMonthDay(timeStamp);
@@ -107,7 +107,7 @@ export function formatMonthDay(timeStamp: number | null) {
 /**
  * 在图片布局层中格式化时间Period。
  *
- * @param period - period参数。
+ * @param period - period 输入；驱动 `formatBangDreamPeriod()` 的 BangDream步骤。
  * @returns 格式化后的文本。
  */
 export function formatTimePeriod(period: number): string {
@@ -116,25 +116,18 @@ export function formatTimePeriod(period: number): string {
 
 //时间长度转时分秒函数
 /**
- * 在图片布局层中格式化Seconds。
+ * 转换 BangDream 插件输入。
  *
- * @param value - 当前处理的值。
+ * @param value - 待转换时间值；驱动 `formatBangDreamSeconds()` 的 BangDream步骤。
  */
 export function formatSeconds(value: number) {
   return formatBangDreamSeconds(value);
 }
 
 /**
- * 在图片布局层中处理occupiedDays。
+ * 转换 BangDream 插件输入。
  *
- * @param startTs - startTs参数。
- * @param endTs - endTs参数。
- * @returns 计算后的数值。
- */
-/**
- * 在图片布局层中规范化Timestamp。
- *
- * @param time - 谱面时间点。
+ * @param time - time 输入；驱动 `normalizeBangDreamTimestamp()` 的 BangDream步骤。
  * @returns 计算后的数值。
  */
 export function normalizeTimestamp(time: number | string): number {
@@ -144,7 +137,7 @@ export function normalizeTimestamp(time: number | string): number {
 /**
  * 在图片布局层中获取服务器UtcOffset。
  *
- * @param server - 目标服务器。
+ * @param server - server 输入；驱动 `getBangDreamServerUtcOffset()` 的 BangDream步骤。
  * @returns 计算后的数值。
  */
 export function getServerUtcOffset(server: Server): number {
@@ -152,11 +145,11 @@ export function getServerUtcOffset(server: Server): number {
 }
 
 /**
- * 在图片布局层中获取DateBy服务器Timezone。
+ * 查询 BangDream 插件数据。
  *
- * @param time - 谱面时间点。
- * @param server - 目标服务器。
- * @returns 处理结果。
+ * @param time - time 输入；驱动 `getBangDreamDateByServerTimezone()` 的 BangDream步骤。
+ * @param server - server 输入；驱动 `getBangDreamDateByServerTimezone()` 的 BangDream步骤。
+ * @returns BangDream 插件查询结果。
  */
 export function getDateByServerTimezone(
   time: number | string,

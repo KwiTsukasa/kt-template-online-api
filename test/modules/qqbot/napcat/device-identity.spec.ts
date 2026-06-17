@@ -14,18 +14,29 @@ import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
 type EntityClass = new (...args: never[]) => unknown;
 
+/**
+ * 查询 NapCat 登录运行态数据。
+ * @param entity - entity 输入；驱动 `getMetadataArgsStorage()` 的 NapCat步骤。
+ */
 const getEntityTableName = (entity: EntityClass) => {
   return getMetadataArgsStorage().tables.find(
     (table) => table.target === entity,
   )?.name;
 };
 
+/**
+ * 查询 NapCat 登录运行态数据。
+ * @param entity - entity 输入；驱动 `getMetadataArgsStorage()` 的 NapCat步骤。
+ */
 const getEntityColumnNames = (entity: EntityClass) => {
   return getMetadataArgsStorage()
     .columns.filter((column) => column.target === entity)
     .map((column) => `${column.options.name || column.propertyName}`);
 };
 
+/**
+ * 创建 NapCat 登录运行态对象或配置。
+ */
 const createIdentityRepository = () => {
   const identities = new Map<string, NapcatDeviceIdentity>();
 
@@ -40,14 +51,19 @@ const createIdentityRepository = () => {
       identities.set(identity.accountId, identity);
       return identity;
     }),
-    update: jest.fn(async ({ id }: { id: string }, input: Partial<NapcatDeviceIdentity>) => {
-      const current = [...identities.values()].find((item) => item.id === id);
-      if (current) Object.assign(current, input);
-      return { affected: current ? 1 : 0 };
-    }),
+    update: jest.fn(
+      async ({ id }: { id: string }, input: Partial<NapcatDeviceIdentity>) => {
+        const current = [...identities.values()].find((item) => item.id === id);
+        if (current) Object.assign(current, input);
+        return { affected: current ? 1 : 0 };
+      },
+    ),
   };
 };
 
+/**
+ * 创建 NapCat 登录运行态对象或配置。
+ */
 const createIdentityConfig = () =>
   ({
     get: jest.fn((key: string, defaultValue?: string) => {
@@ -370,7 +386,9 @@ describe('NapCat device identity persistence', () => {
     expect(createScript).toContain(
       `NAPCAT_MAC_ADDRESS='${identity.macAddress}'`,
     );
-    expect(createScript).toContain(`MACHINE_ID_PATH='${identity.machineIdPath}'`);
+    expect(createScript).toContain(
+      `MACHINE_ID_PATH='${identity.machineIdPath}'`,
+    );
     expect(createScript).toContain('--hostname "$NAPCAT_HOSTNAME"');
     expect(createScript).toContain('--mac-address "$NAPCAT_MAC_ADDRESS"');
     expect(createScript).toContain('-v "$MACHINE_ID_PATH:/etc/machine-id:ro"');

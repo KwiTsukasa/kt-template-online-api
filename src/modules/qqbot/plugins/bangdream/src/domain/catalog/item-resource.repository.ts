@@ -8,11 +8,20 @@ export interface ItemResourceSource {
   typeName: string;
 }
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param server - server 输入；影响 toServerCode 的返回值。
+ * @returns BangDream 插件渲染后的图片、画布或文本。
+ */
 function toServerCode(server: Server | undefined): string {
   return server == null ? 'undefined' : Server[server];
 }
 
 export class ItemResourceRepository {
+  /**
+   * 初始化 ItemResourceRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
@@ -20,8 +29,8 @@ export class ItemResourceRepository {
   /**
    * 获取道具缩略图资源路径。
    *
-   * @param source - 道具资源来源字段。
-   * @param server - 目标服务器。
+   * @param source - source 输入；使用 `typeName`、`resourceId` 字段生成结果。
+   * @param server - server 输入；驱动 `toServerCode()` 的 BangDream步骤。
    */
   getImagePath(source: ItemResourceSource, server: Server | undefined): string {
     const serverCode = toServerCode(server);
@@ -37,8 +46,8 @@ export class ItemResourceRepository {
   /**
    * 下载道具缩略图资源。
    *
-   * @param source - 道具资源来源字段。
-   * @param server - 目标服务器。
+   * @param source - source 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * @param server - server 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
    */
   async getImageBuffer(
     source: ItemResourceSource,

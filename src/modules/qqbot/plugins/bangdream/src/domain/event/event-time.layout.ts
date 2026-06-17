@@ -14,7 +14,7 @@ export const BANGDREAM_TIME_FORMAT_SPEC = {
 /**
  * 格式化分钟，保持历史输出只对分钟补零。
  *
- * @param minutes - 分钟数。
+ * @param minutes - BangDream列表；生成规范化文本。
  */
 export function formatBangDreamMinute(minutes: number) {
   return minutes < 10 ? `0${minutes}` : minutes.toString();
@@ -23,7 +23,7 @@ export function formatBangDreamMinute(minutes: number) {
 /**
  * 格式化完整时间。
  *
- * @param timeStamp - 毫秒时间戳。
+ * @param timeStamp - timeStamp 输入；构造时间对象。
  */
 export function formatBangDreamTime(timeStamp: number | null) {
   if (timeStamp == null) {
@@ -39,7 +39,7 @@ export function formatBangDreamTime(timeStamp: number | null) {
 /**
  * 把输入日期转换到日本时区。
  *
- * @param dateInput - 日期输入。
+ * @param dateInput - dateInput 输入；构造时间对象。
  */
 export function toBangDreamJapanTime(dateInput: number | string | Date) {
   const date = new Date(dateInput);
@@ -55,7 +55,7 @@ export function toBangDreamJapanTime(dateInput: number | string | Date) {
 /**
  * 格式化月日。
  *
- * @param timeStamp - 毫秒时间戳。
+ * @param timeStamp - timeStamp 输入；驱动 `toBangDreamJapanTime()` 的 BangDream步骤。
  */
 export function formatBangDreamMonthDay(timeStamp: number | null) {
   if (timeStamp == null) {
@@ -68,7 +68,7 @@ export function formatBangDreamMonthDay(timeStamp: number | null) {
 /**
  * 格式化毫秒时长。
  *
- * @param period - 毫秒时长。
+ * @param period - period 输入；驱动 `Math.floor()` 的 BangDream步骤。
  */
 export function formatBangDreamPeriod(period: number | null) {
   if (period == null) {
@@ -119,7 +119,7 @@ export function formatBangDreamPeriod(period: number | null) {
 /**
  * 格式化秒级时长。
  *
- * @param value - 秒数。
+ * @param value - 待转换时间值；影响 formatBangDreamSeconds 的返回值。
  */
 export function formatBangDreamSeconds(value: number) {
   let seconds = value;

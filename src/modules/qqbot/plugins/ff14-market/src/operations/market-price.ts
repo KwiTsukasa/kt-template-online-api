@@ -2,10 +2,19 @@ import type { Ff14MarketApplication } from '../application/ff14-market-applicati
 
 export const ff14PricePriceHandlerName = 'getPrice';
 
+/**
+ * 创建 FF14 市场插件对象或配置。
+ * @param application - application 输入；执行 `application.parsePriceInput()`、`application.getPrice()` 对应的 FF14 市场步骤。
+ */
 export function createFf14MarketPriceOperation(
   application: Ff14MarketApplication,
 ) {
   return {
+    /**
+     * 执行插件操作处理器。
+     * @param input - input 输入；使用 `raw`、`text` 字段生成结果。
+     * @returns 插件处理结果。
+     */
     execute: async (input: Record<string, any>) => {
       const raw = `${input.raw ?? input.text ?? ''}`.trim();
       const parsed = raw ? await application.parsePriceInput(raw) : {};
@@ -36,6 +45,10 @@ export function createFf14MarketPriceOperation(
   };
 }
 
+/**
+ * 清理 FF14 市场插件状态。
+ * @param input - input 输入；驱动 `Object.entries()` 的 FF14 市场步骤。
+ */
 function removeEmpty(input: Record<string, any>) {
   return Object.entries(input).reduce<Record<string, any>>(
     (result, [key, value]) => {

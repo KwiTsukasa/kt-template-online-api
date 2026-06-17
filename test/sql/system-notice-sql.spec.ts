@@ -3,6 +3,10 @@ import { join } from 'node:path';
 
 const projectRoot = join(__dirname, '..', '..');
 
+/**
+ * 读取 测试断言资源。
+ * @param relativePath - 相对文件路径；读取本地文件内容。
+ */
 function readSql(relativePath: string) {
   return readFileSync(join(projectRoot, relativePath), 'utf8');
 }

@@ -24,6 +24,11 @@ export interface BangDreamHhwxTrackerProviderOptions {
   retryCount?: number;
 }
 
+/**
+ * 查询 BangDream 插件数据。
+ * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 BangDream步骤。
+ * @returns BangDream 插件查询结果。
+ */
 function getRuntimeRetryCount(fallback: number): number {
   const parsed = Number(
     readBangDreamRuntimeConfig(BANGDREAM_TSUGU_ENV_KEYS.retryCount),
@@ -31,6 +36,11 @@ function getRuntimeRetryCount(fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @param options - BangDream列表；使用 `baseUrl`、`jsonClient`、`retryCount` 字段生成结果。
+ * @returns 创建后的 BangDream 插件对象或配置。
+ */
 export function createHhwxTrackerProvider(
   options: BangDreamHhwxTrackerProviderOptions = {},
 ): BangDreamDataProvider {
@@ -41,8 +51,17 @@ export function createHhwxTrackerProvider(
       callAPIAndCacheResponse(url, cacheTime, retryCount) as Promise<T>);
   const provider: BangDreamDataProvider = {
     name: 'HHWX',
+    /**
+     * 执行 BangDream回调。
+     * @param pathOrUrl - BangDream路径；驱动 `resolveBangDreamProviderUrl()` 的 BangDream步骤。
+     */
     resolveUrl: (pathOrUrl: string) =>
       resolveBangDreamProviderUrl(baseUrl, pathOrUrl),
+    /**
+     * 读取 BangDream回调数据。
+     * @param pathOrUrl - BangDream路径；驱动 `resolveBangDreamProviderUrl()` 的 BangDream步骤。
+     * @param requestOptions - BangDream列表；使用 `cacheTime`、`retryCount` 字段生成结果。
+     */
     getJson: async <T = unknown>(
       pathOrUrl: string,
       requestOptions: BangDreamJsonRequestOptions = {},
@@ -52,9 +71,16 @@ export function createHhwxTrackerProvider(
         requestOptions.cacheTime,
         requestOptions.retryCount,
       ),
+    /**
+     * 读取 BangDream回调数据。
+     */
     getAsset: async () => {
       throw new Error('HHWX provider does not support asset requests');
     },
+    /**
+     * 读取 BangDream回调数据。
+     * @param requestOptions - BangDream列表；使用 `server`、`eventId`、`tier`、`cacheTime` 字段生成结果。
+     */
     getTracker: async <T = unknown>(
       requestOptions: BangDreamTrackerRequestOptions,
     ) =>

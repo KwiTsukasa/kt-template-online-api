@@ -32,8 +32,8 @@ export type BangDreamTitleTextSlot = keyof typeof BANGDREAM_TITLE_SPEC.text;
 /**
  * 生成标题文字绘制参数。
  *
- * @param text - 标题文本。
- * @param slot - 标题第几行。
+ * @param text - 待匹配文本；生成 BangDream对象。
+ * @param slot - slot 输入；生成 BangDream对象。
  */
 export function createTitleTextDrawOptions(
   text: string,
@@ -54,7 +54,7 @@ export function createTitleTextDrawOptions(
 /**
  * 获取标题文字绘制位置。
  *
- * @param slot - 标题第几行。
+ * @param slot - slot 输入；限定 BangDream查询范围。
  */
 export function getTitleTextPosition(slot: BangDreamTitleTextSlot) {
   const spec = BANGDREAM_TITLE_SPEC.text[slot];

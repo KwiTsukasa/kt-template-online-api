@@ -49,8 +49,8 @@ export const BANGDREAM_DETAIL_BLOCK_SPEC = {
 /**
  * 计算歌曲 meta 相对百分比，保持历史两位小数舍入策略。
  *
- * @param meta - 当前歌曲 meta 值。
- * @param maxMeta - 当前榜单最大 meta 值。
+ * @param meta - meta 输入；限定 BangDream查询范围。
+ * @param maxMeta - maxMeta 输入；限定 BangDream查询范围。
  */
 export function getRelativeMetaPercent(meta: number, maxMeta: number): number {
   const { percentRoundScale, percentScale } =

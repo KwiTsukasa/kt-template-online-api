@@ -6,9 +6,18 @@ const repoRoot = join(__dirname, '../../../..');
 const pluginRoot = join(repoRoot, 'src/modules/qqbot/plugins');
 const legacyPluginRoot = join(repoRoot, 'src/qqbot/plugins');
 
+/**
+ * 读取 测试断言资源。
+ * @param filePath - 测试路径；转换 JSON 文本。
+ */
 const readJson = (filePath: string) =>
   JSON.parse(readFileSync(filePath, 'utf8')) as Record<string, unknown>;
 
+/**
+ * 执行 测试断言流程。
+ * @param root - root 输入；驱动 `readdirSync()`、`join()` 的 测试步骤。
+ * @returns 测试断言渲染后的图片、画布或文本。
+ */
 const collectFiles = (root: string): string[] => {
   if (!existsSync(root)) return [];
 
@@ -20,6 +29,10 @@ const collectFiles = (root: string): string[] => {
   });
 };
 
+/**
+ * 执行 测试断言流程。
+ * @param filePath - 测试路径；读取本地文件内容。
+ */
 const importSource = (filePath: string) => readFileSync(filePath, 'utf8');
 
 describe('QQBot existing plugin platform migration', () => {
@@ -164,16 +177,20 @@ describe('QQBot existing plugin platform migration', () => {
     ).toBe(false);
     expect(
       existsSync(
-        join(pluginRoot, 'bangdream/src/commands/qqbot-bangdream-command.definitions.ts'),
+        join(
+          pluginRoot,
+          'bangdream/src/commands/qqbot-bangdream-command.definitions.ts',
+        ),
       ),
     ).toBe(false);
   });
 
   it('routes FF14 Market and FFLogs HTTP through the plugin platform SDK', () => {
-    const externalHttpSources = ['ff14-market', 'fflogs'].flatMap((pluginName) =>
-      collectFiles(join(pluginRoot, pluginName)).filter((filePath) =>
-        filePath.endsWith('.ts'),
-      ),
+    const externalHttpSources = ['ff14-market', 'fflogs'].flatMap(
+      (pluginName) =>
+        collectFiles(join(pluginRoot, pluginName)).filter((filePath) =>
+          filePath.endsWith('.ts'),
+        ),
     );
 
     const directHttpImports = externalHttpSources

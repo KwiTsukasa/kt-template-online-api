@@ -25,8 +25,17 @@ import { BlogArticleService } from '../application/blog-article.service';
 @Controller('blog/article')
 @UseGuards(JwtAuthGuard)
 export class BlogArticleController {
+  /**
+   * 初始化 BlogArticleController 实例。
+   * @param blogArticleService - blogArticleService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(private readonly blogArticleService: BlogArticleService) {}
 
+  /**
+   * 获取公开博客文章分页列表。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   @Get('public/list')
   @Public()
   @ApiOperation({ summary: '获取公开博客文章分页列表' })
@@ -36,6 +45,12 @@ export class BlogArticleController {
     return res.send(vbenSuccess(list));
   }
 
+  /**
+   * 获取公开博客文章详情。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param slug - slug 输入；影响 publicDetail 的返回值。
+   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   */
   @Get('public/detail')
   @Public()
   @ApiOperation({ summary: '获取公开博客文章详情' })
@@ -54,6 +69,11 @@ export class BlogArticleController {
     return res.send(vbenSuccess(detail));
   }
 
+  /**
+   * 获取博客文章分页列表。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   @Get('list')
   @ApiOperation({ summary: '获取博客文章分页列表' })
   async list(@Res() res, @Query() query: BlogArticleListQueryDto) {
@@ -62,6 +82,11 @@ export class BlogArticleController {
     return res.send(vbenSuccess(list));
   }
 
+  /**
+   * 获取博客文章详情。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   */
   @Get('detail')
   @ApiOperation({ summary: '获取博客文章详情' })
   @ApiQuery({ name: 'id', type: String })
@@ -71,6 +96,11 @@ export class BlogArticleController {
     return res.send(vbenSuccess(detail));
   }
 
+  /**
+   * 新增博客文章。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   */
   @Post('save')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '新增博客文章' })
@@ -80,6 +110,11 @@ export class BlogArticleController {
     return res.send(vbenSuccess(result));
   }
 
+  /**
+   * 编辑博客文章。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   */
   @Post('update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '编辑博客文章' })
@@ -89,6 +124,11 @@ export class BlogArticleController {
     return res.send(vbenSuccess(result));
   }
 
+  /**
+   * 删除博客文章。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   */
   @Post('remove')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '删除博客文章' })
@@ -99,6 +139,11 @@ export class BlogArticleController {
     return res.send(vbenSuccess(result));
   }
 
+  /**
+   * 获取本地博客文章分类选项。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   @Get('category-options')
   @ApiOperation({ summary: '获取本地博客文章分类选项' })
   async categoryOptions(
@@ -110,17 +155,24 @@ export class BlogArticleController {
     return res.send(vbenSuccess(result));
   }
 
+  /**
+   * 获取本地博客文章标签选项。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   */
   @Get('tag-options')
   @ApiOperation({ summary: '获取本地博客文章标签选项' })
-  async tagOptions(
-    @Res() res,
-    @Query() query: BlogArticleTermOptionsQueryDto,
-  ) {
+  async tagOptions(@Res() res, @Query() query: BlogArticleTermOptionsQueryDto) {
     const result = await this.blogArticleService.tagOptions(query);
 
     return res.send(vbenSuccess(result));
   }
 
+  /**
+   * 从 WordPress 导入文章到本地博客。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   */
   @Post('import-wordpress')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '从 WordPress 导入文章到本地博客' })

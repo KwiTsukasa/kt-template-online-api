@@ -20,8 +20,8 @@ export const BANGDREAM_DIFFICULTY_DETAIL_LIST_SPEC = {
 /**
  * 计算难度详情项徽章绘制参数。
  *
- * @param difficultyName - 难度名称。
- * @param color - 难度颜色。
+ * @param difficultyName - difficultyName 输入；执行 `difficultyName.toUpperCase()` 对应的 BangDream步骤。
+ * @param color - color 输入；生成 BangDream对象。
  */
 export function createDifficultyDetailBadgeSpec(
   difficultyName: string,
@@ -51,7 +51,7 @@ export function createDifficultyDetailTextSpec() {
 /**
  * 计算难度详情项画布和内容位置。
  *
- * @param contentImage - 正文图片尺寸。
+ * @param contentImage - contentImage 输入；使用 `height`、`width` 字段生成结果。
  */
 export function createDifficultyDetailItemLayout(contentImage: ImageLike) {
   const item = BANGDREAM_DIFFICULTY_DETAIL_LIST_SPEC.item;
@@ -68,7 +68,7 @@ export function createDifficultyDetailItemLayout(contentImage: ImageLike) {
 /**
  * 计算难度详情列表传给通用列表框架的尺寸。
  *
- * @param firstItem - 第一个难度详情项。
+ * @param firstItem - firstItem 输入；生成 BangDream对象。
  */
 export function createDifficultyDetailListFrameSpec(firstItem?: ImageLike) {
   return {

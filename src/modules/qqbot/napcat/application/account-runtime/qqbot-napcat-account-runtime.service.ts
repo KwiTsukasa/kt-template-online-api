@@ -20,9 +20,14 @@ const NAPCAT_AUTO_LOGIN_CLEANUP_FAILED_MESSAGE =
   'NapCat 自动登录后运行态密码清理失败，请手动更新登录';
 
 @Injectable()
-export class QqbotNapcatAccountRuntimeService
-  implements QqbotAccountNapcatRuntimePort
-{
+export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRuntimePort {
+  /**
+   * 初始化 QqbotNapcatAccountRuntimeService 实例。
+   * @param accountNapcatRepository - 账号仓库依赖；影响 constructor 的返回值。
+   * @param napcatContainerRepository - NapCat仓库依赖；影响 constructor 的返回值。
+   * @param napcatContainerService - napcatContainerService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(NapcatAccountBinding)
     private readonly accountNapcatRepository: Repository<NapcatAccountBinding>,
@@ -32,6 +37,13 @@ export class QqbotNapcatAccountRuntimeService
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param accounts - 账号列表；使用 `length` 字段生成结果。
+   * @param options - NapCat列表；驱动 `this.syncNapcatRuntimeState()` 的 NapCat步骤。
+   * @param actions - NapCat列表；驱动 `this.syncNapcatRuntimeState()` 的 NapCat步骤。
+   * @returns 异步完成后的 NapCat 登录运行态结果。
+   */
   async appendRuntime(
     accounts: QqbotAccount[],
     options: { autoLogin?: boolean },
@@ -109,10 +121,21 @@ export class QqbotNapcatAccountRuntimeService
     );
   }
 
+  /**
+   * 清理 NapCat 登录运行态状态。
+   * @param accountId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   removeAccountContainers(accountId: string) {
     return this.napcatContainerService.removeAccountContainers(accountId);
   }
 
+  /**
+   * 更新 NapCat 登录运行态状态。
+   * @param account - account 输入；使用 `connectStatus` 字段生成结果。
+   * @param container - container 输入；使用 `status`、`lastCheckedAt` 字段生成结果。
+   * @param options - NapCat列表；使用 `autoLogin` 字段生成结果。
+   * @param actions - NapCat列表；驱动 `this.getNapcatRuntimeStatus()`、`this.applyNapcatOfflineState()` 的 NapCat步骤。
+   */
   private async syncNapcatRuntimeState(
     account: QqbotAccount,
     container: NapcatContainer | undefined,
@@ -195,6 +218,13 @@ export class QqbotNapcatAccountRuntimeService
     } as QqbotNapcatRuntimeStatusSnapshot;
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param account - account 输入；驱动 `this.clearQqLoginErrorIfConfirmedOnline()` 的 NapCat步骤。
+   * @param container - container 输入；使用 `status`、`lastCheckedAt`、`lastError` 字段生成结果。
+   * @param actions - NapCat列表；驱动 `this.clearQqLoginErrorIfConfirmedOnline()` 的 NapCat步骤。
+   * @returns NapCat 登录运行态查询结果。
+   */
   private async getNapcatRuntimeStatus(
     account: QqbotAccount,
     container: NapcatContainer | undefined,
@@ -221,6 +251,12 @@ export class QqbotNapcatAccountRuntimeService
     return inspected;
   }
 
+  /**
+   * 清理Qq Login Error If Confirmed Online。
+   * @param account - account 输入；使用 `lastError`、`selfId` 字段生成结果。
+   * @param runtimeStatus - NapCat列表；使用 `qqLoginStatus` 字段生成结果。
+   * @param actions - NapCat列表；执行 `actions.clearQqLoginError()` 对应的 NapCat步骤。
+   */
   private async clearQqLoginErrorIfConfirmedOnline(
     account: QqbotAccount,
     runtimeStatus: QqbotNapcatRuntimeStatusSnapshot,
@@ -234,6 +270,11 @@ export class QqbotNapcatAccountRuntimeService
     account.lastError = null;
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param container - container 输入；使用 `status`、`lastError`、`lastCheckedAt` 字段生成结果。
+   * @returns NapCat 登录运行态产出的 QqbotNapcatRuntimeStatusSnapshot。
+   */
   private toCachedNapcatRuntimeStatus(
     container: NapcatContainer,
   ): QqbotNapcatRuntimeStatusSnapshot {
@@ -254,6 +295,12 @@ export class QqbotNapcatAccountRuntimeService
     };
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param containerOnline - containerOnline 输入；决定 NapCat条件分支。
+   * @param lastError - lastError 输入；计算 NapCat布尔判断。
+   * @returns NapCat 登录运行态产出的 QqbotNapcatRuntimeStatusSnapshot['qqLoginStatus']。
+   */
   private toCachedQqLoginStatus(
     containerOnline: boolean,
     lastError: string,
@@ -271,6 +318,10 @@ export class QqbotNapcatAccountRuntimeService
     return 'unknown';
   }
 
+  /**
+   * 判断 NapCat 登录运行态条件。
+   * @param message - message 输入；计算 NapCat布尔判断。
+   */
   private isQqLoginStateError(message: string) {
     return (
       this.toolsService.isNapcatOfflineLoginMessage(message) ||
@@ -279,6 +330,10 @@ export class QqbotNapcatAccountRuntimeService
     );
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param runtimeStatus - NapCat列表；使用 `qqLoginStatus`、`qqLoginMessage`、`lastError` 字段生成结果。
+   */
   private getRuntimeStatusOfflineReason(
     runtimeStatus?: QqbotNapcatRuntimeStatusSnapshot,
   ) {
@@ -296,6 +351,12 @@ export class QqbotNapcatAccountRuntimeService
     );
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param account - account 输入；使用 `selfId`、`clientRole`、`connectStatus`、`lastConnectedAt` 字段生成结果。
+   * @param container - container 输入；驱动 `napcatContainerService.tryAutoLogin()`、`this.applyNapcatOfflineState()` 的 NapCat步骤。
+   * @param actions - NapCat列表；执行 `actions.getLoginPassword()`、`actions.markOnline()` 对应的 NapCat步骤。
+   */
   private async tryAutoLogin(
     account: QqbotAccount,
     container: NapcatContainer,
@@ -328,6 +389,13 @@ export class QqbotNapcatAccountRuntimeService
     }
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param account - account 输入；使用 `selfId`、`lastError` 字段生成结果。
+   * @param container - container 输入；使用 `id`、`name` 字段生成结果。
+   * @param offlineReason - offlineReason 输入；驱动 `actions.markQqLoginOffline()`、`actions.publishOfflineNotice()` 的 NapCat步骤。
+   * @param actions - NapCat列表；执行 `actions.markQqLoginOffline()`、`actions.publishOfflineNotice()` 对应的 NapCat步骤。
+   */
   private async applyNapcatOfflineState(
     account: QqbotAccount,
     container: NapcatContainer,
@@ -342,6 +410,10 @@ export class QqbotNapcatAccountRuntimeService
     });
   }
 
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param container - container 输入；使用 `lastCheckedAt`、`lastError` 字段生成结果。
+   */
   private getFreshCachedOfflineReason(container: NapcatContainer) {
     if (!this.isFreshRuntimeCheck(container.lastCheckedAt)) return null;
     const reason = this.toolsService.toTrimmedString(container.lastError);
@@ -350,6 +422,11 @@ export class QqbotNapcatAccountRuntimeService
       : null;
   }
 
+  /**
+   * 判断 NapCat 登录运行态条件。
+   * @param account - account 输入；使用 `lastConnectedAt` 字段计算判断结果。
+   * @param container - container 输入；使用 `lastCheckedAt` 字段计算判断结果。
+   */
   private isRecentConnectNewerThanRuntimeCheck(
     account: QqbotAccount,
     container: NapcatContainer,
@@ -362,6 +439,10 @@ export class QqbotNapcatAccountRuntimeService
     return Date.now() - connectedAt < NAPCAT_RUNTIME_CHECK_TTL_MS;
   }
 
+  /**
+   * 判断 NapCat 登录运行态条件。
+   * @param lastCheckedAt - lastCheckedAt 输入；驱动 `this.toTime()` 的 NapCat步骤。
+   */
   private isFreshRuntimeCheck(lastCheckedAt?: Date | null) {
     if (!lastCheckedAt) return false;
     const checkedAt = this.toTime(lastCheckedAt);
@@ -369,6 +450,10 @@ export class QqbotNapcatAccountRuntimeService
     return Date.now() - checkedAt < NAPCAT_RUNTIME_CHECK_TTL_MS;
   }
 
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param value - 待转换时间值；构造时间对象。
+   */
   private toTime(value?: Date | null) {
     if (!value) return 0;
     const time = new Date(value).getTime();

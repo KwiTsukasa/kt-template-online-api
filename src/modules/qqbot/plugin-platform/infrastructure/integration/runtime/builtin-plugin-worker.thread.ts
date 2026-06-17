@@ -108,6 +108,10 @@ port.on('message', (message: ParentMessage) => {
   void handleParentMessage(message);
 });
 
+/**
+ * 处理Parent Message。
+ * @param message - message 输入；使用 `type`、`requestId`、`ok`、`result` 字段生成结果。
+ */
 async function handleParentMessage(message: ParentMessage) {
   if (message.type === 'hostResponse') {
     const pending = pendingHostCalls.get(message.requestId);
@@ -139,6 +143,10 @@ async function handleParentMessage(message: ParentMessage) {
   }
 }
 
+/**
+ * 处理Worker Request。
+ * @param message - message 输入；使用 `type` 字段生成结果。
+ */
 async function handleWorkerRequest(message: QqbotPluginWorkerRequest) {
   switch (message.type) {
     case 'load':
@@ -164,6 +172,9 @@ async function handleWorkerRequest(message: QqbotPluginWorkerRequest) {
   }
 }
 
+/**
+ * 加载Plugin。
+ */
 async function loadPlugin() {
   await preloadHostConfig(getConfigKeysForPlugin(pluginKey));
   commandPlugin = createCommandPlugin(pluginKey);
@@ -180,6 +191,9 @@ async function loadPlugin() {
   };
 }
 
+/**
+ * 执行 QQBot 插件平台流程。
+ */
 async function health() {
   if (commandPlugin?.healthCheck) {
     return commandPlugin.healthCheck();
@@ -193,6 +207,10 @@ async function health() {
   throw new Error(`QQBot 插件运行时未加载：${pluginKey}`);
 }
 
+/**
+ * 执行Operation。
+ * @param message - message 输入；使用 `operationKey`、`input` 字段生成结果。
+ */
 async function executeOperation(message: QqbotPluginWorkerRequest) {
   const operation = commandPlugin?.operations.find(
     (item: QqbotPluginOperation) => item.key === message.operationKey,
@@ -206,6 +224,10 @@ async function executeOperation(message: QqbotPluginWorkerRequest) {
   );
 }
 
+/**
+ * 执行Task。
+ * @param message - message 输入；使用 `taskKey`、`taskHandlerName`、`input` 字段生成结果。
+ */
 async function executeTask(message: QqbotPluginWorkerRequest) {
   const task = commandPlugin?.tasks?.find(
     (item) =>
@@ -218,6 +240,10 @@ async function executeTask(message: QqbotPluginWorkerRequest) {
   return task.execute((message.input || {}) as Record<string, unknown>);
 }
 
+/**
+ * 处理Event。
+ * @param message - message 输入；使用 `eventKey`、`event` 字段生成结果。
+ */
 async function handleEvent(message: QqbotPluginWorkerRequest) {
   if (!eventPlugin) return false;
   const definition = eventPlugin.getDefinition();
@@ -234,6 +260,10 @@ async function handleEvent(message: QqbotPluginWorkerRequest) {
   );
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @param targetPluginKey - targetPluginKey 输入；生成 插件平台对象。
+ */
 function createCommandPlugin(targetPluginKey: string) {
   switch (targetPluginKey) {
     case 'bangdream':
@@ -247,19 +277,45 @@ function createCommandPlugin(targetPluginKey: string) {
   }
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @param targetPluginKey - targetPluginKey 输入；决定 插件平台条件分支。
+ */
 function createEventPlugin(targetPluginKey: string) {
   if (targetPluginKey !== 'repeater') return undefined;
   const manifest = loadManifest<RepeaterManifest>('repeater');
   return createRepeaterPlugin({
     host: {
+      /**
+       * 维护 插件平台事件绑定。
+       * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+       * @param targetPluginKey - targetPluginKey 输入；影响 bindEventPlugin 的返回值。
+       */
       bindEventPlugin: (selfId, targetPluginKey) =>
         callHost('bindEventPlugin', { pluginKey: targetPluginKey, selfId }),
+      /**
+       * 读取 插件平台回调数据。
+       * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+       */
       getBoundEventPluginKeys: (selfId) =>
         callHost<string[]>('getBoundEventPluginKeys', { selfId }),
       getConfig,
+      /**
+       * 发送 插件平台回调消息。
+       * @param input - input 输入；影响 sendText 的返回值。
+       */
       sendText: (input) => callHost('sendText', { input }),
+      /**
+       * 维护 插件平台事件绑定。
+       * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+       * @param targetPluginKey - targetPluginKey 输入；影响 unbindEventPlugin 的返回值。
+       */
       unbindEventPlugin: (selfId, targetPluginKey) =>
         callHost('unbindEventPlugin', { pluginKey: targetPluginKey, selfId }),
+      /**
+       * 记录 插件平台回调日志。
+       * @param message - message 输入；影响 warn 的返回值。
+       */
       warn: (message) => {
         void callHost('warn', { message });
       },
@@ -268,6 +324,9 @@ function createEventPlugin(targetPluginKey: string) {
   }) as RuntimeEventPlugin;
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ */
 function createBangDreamCommandPlugin() {
   const manifest = loadManifest('bangdream');
   return createBangDreamPlugin({
@@ -276,6 +335,10 @@ function createBangDreamCommandPlugin() {
     },
     description: manifest.description,
     dictionaryReader: {
+      /**
+       * 读取 插件平台回调数据。
+       * @param dictCode - dictCode 输入；限定 插件平台查询范围。
+       */
       getDictItemsByKey: (dictCode) =>
         callHost('getDictItemsByKey', { dictCode }),
     },
@@ -298,14 +361,29 @@ function createBangDreamCommandPlugin() {
   }) as RuntimeCommandPlugin;
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ */
 function createFf14MarketCommandPlugin() {
   const manifest = loadManifest<Ff14MarketManifest>('ff14-market');
   return createFf14MarketPlugin({
     host: {
       getConfig,
+      /**
+       * 读取 插件平台回调数据。
+       * @param dictCode - dictCode 输入；限定 插件平台查询范围。
+       */
       getDictItemsByKey: (dictCode) =>
         callHost('getDictItemsByKey', { dictCode }),
+      /**
+       * 执行 插件平台回调。
+       * @param input - input 输入；影响 relationTree 的返回值。
+       */
       relationTree: (input) => callHost('relationTree', { input }),
+      /**
+       * 执行 插件平台回调。
+       * @param options - 插件平台列表；驱动 `serializeHttpRequest()` 的 插件平台步骤。
+       */
       requestJson: (options) =>
         callHost('requestJson', { options: serializeHttpRequest(options) }),
     },
@@ -314,12 +392,23 @@ function createFf14MarketCommandPlugin() {
   }) as RuntimeCommandPlugin;
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ */
 function createFflogsCommandPlugin() {
   const manifest = loadManifest<FflogsManifest>('fflogs');
   return createFflogsPlugin({
     host: {
       getConfig,
+      /**
+       * 读取 插件平台回调数据。
+       * @param dictCode - dictCode 输入；限定 插件平台查询范围。
+       */
       getDictByKey: (dictCode) => callHost('getDictByKey', { dictCode }),
+      /**
+       * 执行 插件平台回调。
+       * @param options - 插件平台列表；驱动 `serializeHttpRequest()` 的 插件平台步骤。
+       */
       requestJson: (options) =>
         callHost('requestJson', { options: serializeHttpRequest(options) }),
       resolveKnownWorld,
@@ -329,22 +418,56 @@ function createFflogsCommandPlugin() {
   }) as RuntimeCommandPlugin;
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @returns 创建后的 QQBot 插件平台对象或配置。
+ */
 function createBangDreamRuntimeIo(): BangDreamRuntimeIo {
   return {
     getConfig,
+    /**
+     * 执行 插件平台回调。
+     * @param filePath - 插件平台路径；读取本地文件内容。
+     */
     readAssetFile: async (filePath) => readFileSync(filePath),
+    /**
+     * 执行 插件平台回调。
+     * @param filePath - 插件平台路径；驱动 `readExcelRows()` 的 插件平台步骤。
+     */
     readExcelRows: async (filePath) => readExcelRows(filePath),
+    /**
+     * 执行 插件平台回调。
+     * @param filePath - 插件平台路径；驱动 `readJsonFile()` 的 插件平台步骤。
+     */
     readJsonFile: async (filePath) => readJsonFile(filePath),
+    /**
+     * 执行 插件平台回调。
+     * @param filePath - 插件平台路径；驱动 `readJsonFile()` 的 插件平台步骤。
+     */
     readJsonFileSync: (filePath) => readJsonFile(filePath),
+    /**
+     * 执行 插件平台回调。
+     * @param from - from 输入；驱动 `renameSync()` 的 插件平台步骤。
+     * @param to - to 输入；驱动 `mkdirSync()`、`renameSync()` 的 插件平台步骤。
+     */
     renameFile: async (from, to) => {
       mkdirSync(dirname(to), { recursive: true });
       renameSync(from, to);
     },
+    /**
+     * 执行 插件平台回调。
+     * @param url - 访问地址；影响 requestArrayBuffer 的返回值。
+     * @param options - 插件平台列表；影响 requestArrayBuffer 的返回值。
+     */
     requestArrayBuffer: async (url, options) => ({
       body: Buffer.from(
         await callHost<Uint8Array>('requestBuffer', {
           options: serializeHttpRequest({
             context: 'BangDream 资源下载',
+            /**
+             * 执行 插件平台回调。
+             * @param statusCode - statusCode 输入；影响 failureMessage 的返回值。
+             */
             failureMessage: (statusCode: number) =>
               `BangDream 资源下载失败：${statusCode}`,
             headers: options?.headers,
@@ -355,10 +478,19 @@ function createBangDreamRuntimeIo(): BangDreamRuntimeIo {
         }),
       ),
     }),
+    /**
+     * 执行 插件平台回调。
+     * @param url - 访问地址；影响 requestJson 的返回值。
+     * @param options - 插件平台列表；影响 requestJson 的返回值。
+     */
     requestJson: async (url, options) => ({
       body: await callHost('bangdreamRequestJson', {
         options: serializeHttpRequest({
           context: 'BangDream 数据接口',
+          /**
+           * 执行 插件平台回调。
+           * @param statusCode - statusCode 输入；影响 failureMessage 的返回值。
+           */
           failureMessage: (statusCode: number) =>
             `BangDream 数据接口失败：${statusCode}`,
           headers: options?.headers,
@@ -369,8 +501,17 @@ function createBangDreamRuntimeIo(): BangDreamRuntimeIo {
         }),
       }),
     }),
+    /**
+     * 执行 插件平台回调。
+     * @param ms - 等待毫秒数；驱动 `Promise()` 的 插件平台步骤。
+     */
     sleep: async (ms) =>
       await new Promise((resolve) => setTimeout(resolve, ms)),
+    /**
+     * 执行 插件平台回调。
+     * @param filePath - 插件平台路径；驱动 `mkdirSync()`、`writeFileSync()` 的 插件平台步骤。
+     * @param data - 业务数据；承载 插件平台新增、更新、导入或执行字段。
+     */
     writeJsonFile: async (filePath, data) => {
       mkdirSync(dirname(filePath), { recursive: true });
       writeFileSync(filePath, JSON.stringify(data));
@@ -378,6 +519,10 @@ function createBangDreamRuntimeIo(): BangDreamRuntimeIo {
   };
 }
 
+/**
+ * 解析Known World。
+ * @param candidate - candidate 输入；驱动 `splitFf14WorldPath()` 的 插件平台步骤。
+ */
 async function resolveKnownWorld(candidate: string) {
   const catalog = await loadFf14MarketCatalog();
   if (!isFf14LocationName(catalog, candidate)) return null;
@@ -385,6 +530,9 @@ async function resolveKnownWorld(candidate: string) {
   return { serverSlug: worldPath.world || candidate };
 }
 
+/**
+ * 加载Ff14 Market Catalog。
+ */
 async function loadFf14MarketCatalog() {
   const treeCatalog = buildFf14MarketCatalogFromTree(
     await callHost('relationTree', {
@@ -413,6 +561,10 @@ async function loadFf14MarketCatalog() {
   });
 }
 
+/**
+ * 加载Manifest。
+ * @param targetPluginKey - targetPluginKey 输入；驱动 `resolvePluginRoot()` 的 插件平台步骤。
+ */
 function loadManifest<TManifest = QqbotPluginManifest>(
   targetPluginKey: string,
 ) {
@@ -423,6 +575,10 @@ function loadManifest<TManifest = QqbotPluginManifest>(
   ) as TManifest;
 }
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param keys - 插件平台列表；筛选 插件平台列表项。
+ */
 async function preloadHostConfig(keys: readonly string[]) {
   const uniqueKeys = [...new Set(keys.filter(Boolean))];
   const entries = await Promise.all(
@@ -436,6 +592,11 @@ async function preloadHostConfig(keys: readonly string[]) {
   }
 }
 
+/**
+ * 查询 QQBot 插件平台数据。
+ * @param key - 键名；驱动 `configCache.get()` 的 插件平台步骤。
+ * @returns QQBot 插件平台查询结果。
+ */
 function getConfig<T = string>(key: string): T | undefined {
   const value = configCache.get(key);
   return value === undefined || value === null || value === ''
@@ -443,6 +604,10 @@ function getConfig<T = string>(key: string): T | undefined {
     : (value as T);
 }
 
+/**
+ * 查询 QQBot 插件平台数据。
+ * @param targetPluginKey - targetPluginKey 输入；限定 插件平台查询范围。
+ */
 function getConfigKeysForPlugin(targetPluginKey: string) {
   switch (targetPluginKey) {
     case 'bangdream':
@@ -479,6 +644,10 @@ function getConfigKeysForPlugin(targetPluginKey: string) {
   }
 }
 
+/**
+ * 解析Plugin Root。
+ * @param targetPluginKey - targetPluginKey 输入；影响 resolvePluginRoot 的返回值。
+ */
 function resolvePluginRoot(targetPluginKey: string) {
   const sourceRoot = join(
     process.cwd(),
@@ -488,6 +657,11 @@ function resolvePluginRoot(targetPluginKey: string) {
   return join(__dirname, `../../../../plugins/${targetPluginKey}`);
 }
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param method - HTTP 方法名；影响 callHost 的返回值。
+ * @param args - 插件平台列表；影响 callHost 的返回值。
+ */
 function callHost<TResult = any>(
   method: string,
   args: Record<string, unknown> = {},
@@ -496,6 +670,10 @@ function callHost<TResult = any>(
   return new Promise<TResult>((resolve, reject) => {
     pendingHostCalls.set(requestId, {
       reject,
+      /**
+       * 执行 插件平台回调。
+       * @param value - 待转换值；驱动 `resolve()` 的 插件平台步骤。
+       */
       resolve: (value) => resolve(value as TResult),
     });
     port?.postMessage({
@@ -507,6 +685,10 @@ function callHost<TResult = any>(
   });
 }
 
+/**
+ * 序列化Http Request。
+ * @param input - input 输入；影响 serializeHttpRequest 的返回值。
+ */
 function serializeHttpRequest(input: WorkerHttpRequestInput) {
   const { failureMessage, url, ...rest } = input;
   return {
@@ -521,10 +703,18 @@ function serializeHttpRequest(input: WorkerHttpRequestInput) {
   };
 }
 
+/**
+ * 读取 QQBot 插件平台资源。
+ * @param filePath - 插件平台路径；转换 JSON 文本。
+ */
 function readJsonFile<T = unknown>(filePath: string) {
   return JSON.parse(readFileSync(filePath, 'utf8')) as T;
 }
 
+/**
+ * 读取 QQBot 插件平台资源。
+ * @param filePath - 插件平台路径；驱动 `XLSX.readFile()` 的 插件平台步骤。
+ */
 function readExcelRows<T extends Record<string, unknown>>(filePath: string) {
   const workbook = XLSX.readFile(filePath);
   const sheetName = workbook.SheetNames[0];
@@ -532,12 +722,21 @@ function readExcelRows<T extends Record<string, unknown>>(filePath: string) {
   return XLSX.utils.sheet_to_json<T>(worksheet);
 }
 
+/**
+ * 转换 QQBot 插件平台输入。
+ * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+ * @param fallback - 兜底值；影响 normalizeErrorMessage 的返回值。
+ */
 function normalizeErrorMessage(error: unknown, fallback = '插件执行失败') {
   if (error instanceof Error && error.message) return error.message;
   const message = `${error || ''}`.trim();
   return message || fallback;
 }
 
+/**
+ * 序列化Error。
+ * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+ */
 function serializeError(error: unknown) {
   return {
     message: error instanceof Error ? error.message : `${error}`,
@@ -546,6 +745,10 @@ function serializeError(error: unknown) {
   };
 }
 
+/**
+ * 反序列化Error。
+ * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+ */
 function deserializeError(error?: {
   message?: string;
   name?: string;
@@ -557,6 +760,10 @@ function deserializeError(error?: {
   return output;
 }
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param value - 待转换值；影响 assertNever 的返回值。
+ */
 function assertNever(value: never): never {
   throw new Error(`未知插件运行时请求：${value}`);
 }

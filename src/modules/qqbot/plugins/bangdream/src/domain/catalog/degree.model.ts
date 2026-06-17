@@ -16,7 +16,7 @@ export class Degree {
   /**
    * 构造 Degree 实例，并初始化该模型的本地基础字段。
    *
-   * @param degreeId - 称号 ID。
+   * @param degreeId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
    */
   constructor(degreeId) {
     this.degreeId = degreeId;
@@ -35,7 +35,7 @@ export class Degree {
   /**
    * 在 Degree 模型中获取称号图片。
    *
-   * @param server - 目标服务器。
+   * @param server - server 输入；驱动 `getFrameFromAnimatedDegreeAsset()`、`degreeResourceRepository.getThumbnailBuffer()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getDegreeImage(server: Server): Promise<Image | Canvas> {
@@ -59,7 +59,7 @@ export class Degree {
   /**
    * 在 Degree 模型中获取称号Frame。
    *
-   * @param server - 目标服务器。
+   * @param server - server 输入；驱动 `degreeResourceRepository.getFrameBuffer()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getDegreeFrame(server: Server): Promise<Image | Canvas> {
@@ -78,7 +78,7 @@ export class Degree {
   /**
    * 在 Degree 模型中获取称号图标。
    *
-   * @param server - 目标服务器。
+   * @param server - server 输入；驱动 `degreeResourceRepository.getIconBuffer()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getDegreeIcon(server: Server): Promise<Image | Canvas> {
@@ -111,11 +111,11 @@ class Frame {
 }
 
 /**
- * 在BangDream 领域模型层中获取FrameFromAnimated称号资源。
+ * 查询 BangDream 插件数据。
  *
- * @param baseImageName - 基础图片名称参数。
- * @param server - 目标服务器。
- * @param frame - frame参数，未传入时使用默认值。
+ * @param baseImageName - baseImageName 输入；驱动 `degreeResourceRepository.getAnimatedScriptBuffer()`、`degreeResourceRepository.getAnimatedTextureBuffer()` 的 BangDream步骤。
+ * @param server - server 输入；驱动 `degreeResourceRepository.getAnimatedScriptBuffer()`、`degreeResourceRepository.getAnimatedTextureBuffer()` 的 BangDream步骤。
+ * @param frame - frame 输入；决定 BangDream条件分支。
  * @returns 异步处理结果。
  */
 export async function getFrameFromAnimatedDegreeAsset(

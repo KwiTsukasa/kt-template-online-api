@@ -35,8 +35,8 @@ export const BANGDREAM_SONG_LIST_SPEC = {
 /**
  * 计算歌曲列表单行布局。
  *
- * @param difficultyImage - 难度图尺寸。
- * @param contentWidth - 内容宽度。
+ * @param difficultyImage - difficultyImage 输入；使用 `width`、`height` 字段生成结果。
+ * @param contentWidth - contentWidth 输入；生成 BangDream对象。
  */
 export function createSongInListLayout(
   difficultyImage: ImageLike,
@@ -74,7 +74,7 @@ export function getSongListContentWidth() {
 /**
  * 计算歌曲列表组画布高度。
  *
- * @param songCount - 歌曲数量。
+ * @param songCount - songCount 输入；限定 BangDream查询范围。
  */
 export function getSongListCanvasHeight(songCount: number) {
   const { item, list } = BANGDREAM_SONG_LIST_SPEC;
@@ -84,7 +84,7 @@ export function getSongListCanvasHeight(songCount: number) {
 /**
  * 计算歌曲列表外层行高。
  *
- * @param canvasHeight - 歌曲列表组画布高度。
+ * @param canvasHeight - canvasHeight 输入；限定 BangDream查询范围。
  */
 export function getSongListFrameLineHeight(canvasHeight: number) {
   return canvasHeight + BANGDREAM_SONG_LIST_SPEC.list.lineHeightPadding;

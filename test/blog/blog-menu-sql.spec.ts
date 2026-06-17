@@ -4,6 +4,13 @@ import { join } from 'node:path';
 describe('blog-menu.sql', () => {
   const sql = readFileSync(join(process.cwd(), 'sql/blog-menu.sql'), 'utf8');
 
+  /**
+   * 执行 博客内容流程。
+   * @param name - 名称文本；影响 expectMenuRoute 的返回值。
+   * @param path - 路由或文件路径；影响 expectMenuRoute 的返回值。
+   * @param component - component 输入；影响 expectMenuRoute 的返回值。
+   * @param authCode - authCode 输入；影响 expectMenuRoute 的返回值。
+   */
   function expectMenuRoute(
     name: string,
     path: string,
@@ -49,12 +56,7 @@ describe('blog-menu.sql', () => {
       '/blog/category/list',
       'Blog:Category:List',
     );
-    expectMenuRoute(
-      'BlogTag',
-      '/blog/tag',
-      '/blog/tag/list',
-      'Blog:Tag:List',
-    );
+    expectMenuRoute('BlogTag', '/blog/tag', '/blog/tag/list', 'Blog:Tag:List');
     expectMenuRoute(
       'BlogTheme',
       '/blog/theme',

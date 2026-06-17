@@ -13,9 +13,17 @@ type ExpectedOperation = {
   name: string;
 };
 
+/**
+ * 读取 测试断言资源。
+ * @param filePath - 测试路径；转换 JSON 文本。
+ */
 const readJson = (filePath: string) =>
   JSON.parse(readFileSync(filePath, 'utf8')) as Record<string, unknown>;
 
+/**
+ * 读取 测试断言资源。
+ * @param pluginDir - pluginDir 输入；驱动 `parseQqbotPluginManifest()`、`join()` 的 测试步骤。
+ */
 const readManifest = (pluginDir: string) =>
   parseQqbotPluginManifest(
     readJson(join(pluginRoot, pluginDir, 'plugin.json')),
@@ -215,8 +223,6 @@ describe('QQBot current operation matrix', () => {
 
     expect(seedSql).toContain(`'ff14-market', 'ff14.market.price'`);
     expect(seedSql).toContain(`'fflogs', 'fflogs.character.summary'`);
-    expect(seedSql).toContain(
-      `'bangdream', 'bangdream.event.stage', 'plain'`,
-    );
+    expect(seedSql).toContain(`'bangdream', 'bangdream.event.stage', 'plain'`);
   });
 });

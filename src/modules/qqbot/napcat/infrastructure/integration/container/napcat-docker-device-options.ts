@@ -9,6 +9,11 @@ export type NapcatDockerDeviceOptions = {
   runFlags: string[];
 };
 
+/**
+ * 执行 NapCat 登录运行态流程。
+ * @param identity - identity 输入；使用 `dataDir`、`hostname`、`machineIdPath`、`macAddress` 字段生成结果。
+ * @returns NapCat 登录运行态产出的 NapcatDockerDeviceOptions。
+ */
 export function toNapcatDockerDeviceOptions(
   identity: Pick<
     NapcatDeviceIdentity,

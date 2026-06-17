@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Req,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
@@ -26,8 +19,16 @@ import { WordpressService } from '../application/wordpress.service';
 @Controller('wordpress/auth')
 @UseGuards(JwtAuthGuard)
 export class WordpressAuthController {
+  /**
+   * 初始化 WordpressAuthController 实例。
+   * @param wordpressService - wordpressService 服务依赖；影响 constructor 的返回值。
+   */
   constructor(private readonly wordpressService: WordpressService) {}
 
+  /**
+   * 使用环境变量中的 WordPress 管理员账号自动认证。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   */
   @Post('login')
   @ApiOperation({ summary: '使用环境变量中的 WordPress 管理员账号自动认证' })
   async login(@Res({ passthrough: true }) res: Response) {
@@ -41,6 +42,10 @@ export class WordpressAuthController {
     });
   }
 
+  /**
+   * 清理本系统保存的 WordPress 授权态。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   */
   @Post('logout')
   @Public()
   @ApiOperation({ summary: '清理本系统保存的 WordPress 授权态' })
@@ -50,6 +55,11 @@ export class WordpressAuthController {
     return vbenSuccess(true);
   }
 
+  /**
+   * 校验 WordPress 客户端登录态。
+   * @param req - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   */
   @Get('check')
   @ApiOperation({ summary: '校验 WordPress 客户端登录态' })
   async check(@Req() req: Request, @Res() res) {

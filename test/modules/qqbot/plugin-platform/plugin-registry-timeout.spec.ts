@@ -3,6 +3,9 @@ import { QqbotPluginRegistryService } from '../../../../src/modules/qqbot/plugin
 describe('QQBot plugin registry operation timeout', () => {
   it('enforces manifest operation timeout for direct built-in command execution', async () => {
     const commandRegistry = new QqbotPluginRegistryService({
+      /**
+       * 执行 插件平台回调。
+       */
       loadCommandPlugins: () => [
         {
           key: 'demo-plugin',

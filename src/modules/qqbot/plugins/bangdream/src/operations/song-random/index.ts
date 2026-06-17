@@ -7,6 +7,12 @@ import type { BangDreamOperationModule } from '@/modules/qqbot/plugins/bangdream
 export const songRandomOperation: BangDreamOperationModule = {
   catalogKeys: BANGDREAM_SONG_CATALOG_KEYS,
   handlerName: 'randomSong',
+  /**
+   * 执行插件操作处理器。
+   * @param input - input 输入；驱动 `context.pickText()`、`context.getRenderOptions()` 的 BangDream步骤。
+   * @param context - context 输入；执行 `context.pickText()`、`context.getRenderOptions()`、`context.toImageReply()` 对应的 BangDream步骤。
+   * @returns 插件处理结果。
+   */
   execute: async (input, context) => {
     const query = context.pickText(input);
     const options = context.getRenderOptions(input);

@@ -19,7 +19,7 @@ interface RoundedRect {
 /**
  * 在底层绘图工具层中绘制RoundedRect。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawRoundedRect 的返回值。
  * @returns 渲染或资源结果。
  */
 export function drawRoundedRect({
@@ -116,7 +116,7 @@ interface RoundedRectWithText {
 /**
  * 在底层绘图工具层中绘制RoundedRectWith文本。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawRoundedRectWithText 的返回值。
  * @returns 渲染或资源结果。
  */
 export function drawRoundedRectWithText({

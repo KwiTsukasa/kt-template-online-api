@@ -5,8 +5,8 @@ export const BANGDREAM_ENTITY_LIST_SPEC = {
 /**
  * 判断实体列表是否应展示为单实体名称行。
  *
- * @param contentLength - 实体数量。
- * @param text - 外部指定展示文本。
+ * @param contentLength - contentLength 输入；计算 BangDream判断结果。
+ * @param text - 待匹配文本；计算 BangDream判断结果。
  */
 export function shouldUseSingleEntityLabel(
   contentLength: number,

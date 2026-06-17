@@ -33,6 +33,9 @@ export const BANGDREAM_OPERATION_MODULES: BangDreamOperationModule[] = [
   cutoffRecentOperation,
 ];
 
+/**
+ * 查询 BangDream 插件数据。
+ */
 export function getBangDreamOperationsByHandlerName() {
   return new Map(
     BANGDREAM_OPERATION_MODULES.map((operation) => [

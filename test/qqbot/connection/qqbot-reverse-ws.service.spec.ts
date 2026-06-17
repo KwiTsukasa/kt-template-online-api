@@ -11,17 +11,29 @@ class FakeWebSocket extends EventEmitter {
   readyState = 1;
   sent: string[] = [];
 
+  /**
+   * 执行 测试断言流程。
+   * @param code - 响应状态码；驱动 `this.emit()` 的 测试步骤。
+   * @param reason - reason 输入；驱动 `this.emit()` 的 测试步骤。
+   */
   close(code?: number, reason?: string) {
     this.closed.push({ code, reason });
     this.readyState = 3;
     this.emit('close', code, reason);
   }
 
+  /**
+   * 投递 测试断言消息或任务。
+   * @param payload - payload 输入；驱动 `sent.push()` 的 测试步骤。
+   */
   send(payload: string) {
     this.sent.push(payload);
   }
 }
 
+/**
+ * 创建 测试断言对象或配置。
+ */
 function createService() {
   const accountService = {
     ensureRuntimeAccount: jest.fn(),
@@ -55,6 +67,9 @@ function createService() {
   return { accountService, busService, service };
 }
 
+/**
+ * 创建 测试断言对象或配置。
+ */
 function createRequest() {
   return {
     headers: { host: '127.0.0.1:48085' },

@@ -37,6 +37,11 @@ export type QqbotPluginSdkFactoryInput = {
 
 export type QqbotPluginSdk = Readonly<QqbotPluginSdkFactoryInput>;
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @param input - input 输入；使用 `assets`、`config`、`eventContext`、`events` 字段生成结果。
+ * @returns 创建后的 QQBot 插件平台对象或配置。
+ */
 export const createQqbotPluginSdk = (
   input: QqbotPluginSdkFactoryInput,
 ): QqbotPluginSdk => {

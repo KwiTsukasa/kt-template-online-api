@@ -76,6 +76,9 @@ export class AdminDictTreeDto extends AdminDictDto {
   treeKey: string;
 
   @ApiPropertyOptional({
+    /**
+     * 提供 Admin装饰器需要的类型工厂。
+     */
     type: () => [AdminDictTreeDto],
   })
   children?: AdminDictTreeDto[];

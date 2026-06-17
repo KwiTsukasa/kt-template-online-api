@@ -11,11 +11,20 @@ export interface CostumeSdResourceSource {
   sdResourceName: string;
 }
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param server - server 输入；影响 toServerCode 的返回值。
+ * @returns BangDream 插件渲染后的图片、画布或文本。
+ */
 function toServerCode(server: Server | undefined): string {
   return server == null ? 'undefined' : Server[server];
 }
 
 export class CostumeResourceRepository {
+  /**
+   * 初始化 CostumeResourceRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
@@ -23,7 +32,7 @@ export class CostumeResourceRepository {
   /**
    * 获取服装详情。
    *
-   * @param costumeId - 服装 ID。
+   * @param costumeId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
    */
   async getDetail(costumeId: number): Promise<Record<string, any>> {
     return await this.provider.getJson<Record<string, any>>(
@@ -34,8 +43,8 @@ export class CostumeResourceRepository {
   /**
    * 获取 Live2D 缩略图资源路径。
    *
-   * @param source - 服装资源来源字段。
-   * @param displayedServerList - 可展示服务器优先级。
+   * @param source - source 输入；使用 `publishedAt`、`sdResourceName` 字段生成结果。
+   * @param displayedServerList - displayedServerList 输入；驱动 `toServerCode()` 的 BangDream步骤。
    */
   getSdCharacterPath(
     source: CostumeSdResourceSource,
@@ -50,8 +59,8 @@ export class CostumeResourceRepository {
   /**
    * 下载 Live2D 缩略图资源。
    *
-   * @param source - 服装资源来源字段。
-   * @param displayedServerList - 可展示服务器优先级。
+   * @param source - source 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * @param displayedServerList - displayedServerList 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
    */
   async getSdCharacterBuffer(
     source: CostumeSdResourceSource,

@@ -17,12 +17,24 @@ class RecordingDriver implements QqbotPluginWorkerDriver {
   readonly requests: QqbotPluginWorkerRequest[] = [];
   readonly responses = new Map<string, unknown>();
 
+  /**
+   * 初始化 RecordingDriver 实例。
+   * @param rejectTypes - 插件平台列表；影响 constructor 的返回值。
+   */
   constructor(private readonly rejectTypes = new Map<string, Error>()) {}
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   */
   async dispose() {
     this.disposed = true;
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param message - message 输入；使用 `type` 字段生成结果。
+   * @returns 异步完成后的 QQBot 插件平台结果。
+   */
   async request(message: QqbotPluginWorkerRequest): Promise<unknown> {
     this.requests.push(message);
 
@@ -43,12 +55,24 @@ class RecordingDriver implements QqbotPluginWorkerDriver {
 class RecordingRequestQueue implements QqbotPluginWorkerRequestQueue {
   private previous = Promise.resolve();
 
+  /**
+   * 初始化 RecordingRequestQueue 实例。
+   * @param driver - driver 输入；影响 constructor 的返回值。
+   */
   constructor(private readonly driver: QqbotPluginWorkerDriver) {}
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   */
   async close() {
     await this.driver.dispose();
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param message - message 输入；驱动 `catch()` 的 插件平台步骤。
+   * @returns 异步完成后的 QQBot 插件平台结果。
+   */
   request(message: QqbotPluginWorkerRequest): Promise<unknown> {
     const run = this.previous
       .catch(() => undefined)
@@ -60,6 +84,9 @@ class RecordingRequestQueue implements QqbotPluginWorkerRequestQueue {
     return run;
   }
 
+  /**
+   * 重置业务数据。
+   */
   async reset() {
     await this.driver.dispose();
   }
@@ -69,12 +96,24 @@ class GenerationAwareRequestQueue implements QqbotPluginWorkerRequestQueue {
   private generation = 0;
   private previous = Promise.resolve();
 
+  /**
+   * 初始化 GenerationAwareRequestQueue 实例。
+   * @param driver - driver 输入；影响 constructor 的返回值。
+   */
   constructor(private readonly driver: QqbotPluginWorkerDriver) {}
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   */
   async close() {
     await this.driver.dispose();
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param message - message 输入；驱动 `driver.request()` 的 插件平台步骤。
+   * @returns 异步完成后的 QQBot 插件平台结果。
+   */
   request(message: QqbotPluginWorkerRequest): Promise<unknown> {
     const generation = this.generation;
     const run = this.previous
@@ -101,6 +140,9 @@ class GenerationAwareRequestQueue implements QqbotPluginWorkerRequestQueue {
     return run;
   }
 
+  /**
+   * 重置业务数据。
+   */
   async reset() {
     this.generation += 1;
     await this.driver.dispose();
@@ -113,12 +155,24 @@ class TimeoutAwareRecordingRequestQueue extends RecordingRequestQueue {
 }
 
 class ExpiringOnceRequestQueue implements QqbotPluginWorkerRequestQueue {
+  /**
+   * 初始化 ExpiringOnceRequestQueue 实例。
+   * @param driver - driver 输入；影响 constructor 的返回值。
+   */
   constructor(private readonly driver: QqbotPluginWorkerDriver) {}
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   */
   async close() {
     await this.driver.dispose();
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param message - message 输入；使用 `operationId` 字段生成结果。
+   * @returns 异步完成后的 QQBot 插件平台结果。
+   */
   async request(message: QqbotPluginWorkerRequest): Promise<unknown> {
     if (message.operationId === 'op-expire') {
       await this.reset();
@@ -129,17 +183,27 @@ class ExpiringOnceRequestQueue implements QqbotPluginWorkerRequestQueue {
     return this.driver.request(message);
   }
 
+  /**
+   * 重置业务数据。
+   */
   async reset() {
     await this.driver.dispose();
   }
 }
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @param driver - driver 输入；驱动 `QqbotPluginWorkerRuntime()` 的 插件平台步骤。
+ */
 const createRuntime = (driver = new RecordingDriver()) => {
-  const runtime = new QqbotPluginWorkerRuntime(new RecordingRequestQueue(driver), {
-    defaultTimeoutMs: 50,
-    installationId: 'install-1',
-    pluginKey: 'demo-plugin',
-  });
+  const runtime = new QqbotPluginWorkerRuntime(
+    new RecordingRequestQueue(driver),
+    {
+      defaultTimeoutMs: 50,
+      installationId: 'install-1',
+      pluginKey: 'demo-plugin',
+    },
+  );
 
   return { driver, runtime };
 };
@@ -172,11 +236,14 @@ describe('QQBot plugin worker runtime', () => {
         };
       }),
     };
-    const runtime = new QqbotPluginWorkerRuntime(new RecordingRequestQueue(driver), {
-      defaultTimeoutMs: 100,
-      installationId: 'install-serial',
-      pluginKey: 'demo-plugin',
-    });
+    const runtime = new QqbotPluginWorkerRuntime(
+      new RecordingRequestQueue(driver),
+      {
+        defaultTimeoutMs: 100,
+        installationId: 'install-serial',
+        pluginKey: 'demo-plugin',
+      },
+    );
 
     const first = runtime.executeOperation({
       input: { text: 'first' },
@@ -266,11 +333,14 @@ describe('QQBot plugin worker runtime', () => {
         };
       }),
     };
-    const runtime = new QqbotPluginWorkerRuntime(new RecordingRequestQueue(driver), {
-      defaultTimeoutMs: 50,
-      installationId: 'install-recover',
-      pluginKey: 'demo-plugin',
-    });
+    const runtime = new QqbotPluginWorkerRuntime(
+      new RecordingRequestQueue(driver),
+      {
+        defaultTimeoutMs: 50,
+        installationId: 'install-recover',
+        pluginKey: 'demo-plugin',
+      },
+    );
     const manifest = {
       entry: 'src/index.ts',
       pluginKey: 'demo-plugin',
@@ -602,11 +672,14 @@ describe('QQBot plugin worker runtime', () => {
         () => new Promise((resolve) => setTimeout(resolve, 1000)),
       ),
     };
-    const runtime = new QqbotPluginWorkerRuntime(new RecordingRequestQueue(driver), {
-      defaultTimeoutMs: 5,
-      installationId: 'install-timeout',
-      pluginKey: 'demo-plugin',
-    });
+    const runtime = new QqbotPluginWorkerRuntime(
+      new RecordingRequestQueue(driver),
+      {
+        defaultTimeoutMs: 5,
+        installationId: 'install-timeout',
+        pluginKey: 'demo-plugin',
+      },
+    );
 
     await expect(
       runtime.executeOperation({
@@ -633,11 +706,14 @@ describe('QQBot plugin worker runtime', () => {
       dispose: jest.fn(async () => undefined),
       request: jest.fn(async () => ({ ok: true })),
     };
-    const runtime = new QqbotPluginWorkerRuntime(new RecordingRequestQueue(driver), {
-      defaultTimeoutMs: 5,
-      installationId: 'install-success',
-      pluginKey: 'demo-plugin',
-    });
+    const runtime = new QqbotPluginWorkerRuntime(
+      new RecordingRequestQueue(driver),
+      {
+        defaultTimeoutMs: 5,
+        installationId: 'install-success',
+        pluginKey: 'demo-plugin',
+      },
+    );
 
     await runtime.load({
       entry: 'src/index.ts',
@@ -653,6 +729,9 @@ describe('QQBot plugin worker runtime', () => {
   });
 });
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ */
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -663,6 +742,11 @@ function createDeferred<T>() {
   return { promise, reject, resolve };
 }
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param condition - condition 输入；驱动 `Error()` 的 插件平台步骤。
+ * @param timeoutMs - 插件平台列表；驱动 `Date.now()` 的 插件平台步骤。
+ */
 async function waitUntil(
   condition: () => boolean,
   timeoutMs = 100,
@@ -765,8 +849,17 @@ describe('QQBot plugin worker queue config', () => {
   });
 });
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ * @param values - 配置值字典；生成 插件平台对象。
+ * @returns 创建后的 QQBot 插件平台对象或配置。
+ */
 function createConfigService(values: Record<string, string>): ConfigService {
   return {
+    /**
+     * 读取 插件平台回调数据。
+     * @param key - 键名；限定 插件平台查询范围。
+     */
     get: <T = string | undefined>(key: string) => values[key] as T,
   } as ConfigService;
 }

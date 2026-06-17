@@ -18,6 +18,11 @@ export class QqbotPluginTaskSchedulerService
 {
   private readonly queue: Queue<QqbotPluginTaskJobData>;
 
+  /**
+   * 初始化 QqbotPluginTaskSchedulerService 实例。
+   * @param configService - Nest ConfigService 依赖；驱动 `resolveQqbotPluginTaskQueueConnection()` 的 插件平台步骤。
+   * @param taskRepository - 插件任务仓库依赖；影响 constructor 的返回值。
+   */
   constructor(
     configService: ConfigService,
     @InjectRepository(QqbotPluginTask)
@@ -29,16 +34,25 @@ export class QqbotPluginTaskSchedulerService
     });
   }
 
+  /**
+   * 处理 QQBot 插件平台事件。
+   */
   async onModuleInit() {
     await this.queue.waitUntilReady();
     await this.removeUnschedulableTaskSchedulers();
     await this.resyncEnabledTasks();
   }
 
+  /**
+   * 处理 QQBot 插件平台事件。
+   */
   async onModuleDestroy() {
     await this.queue.close();
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   */
   async resyncEnabledTasks() {
     const tasks = await this.findSchedulableTasks();
     for (const task of tasks) {
@@ -46,6 +60,9 @@ export class QqbotPluginTaskSchedulerService
     }
   }
 
+  /**
+   * 清理 QQBot 插件平台状态。
+   */
   async removeUnschedulableTaskSchedulers() {
     const tasks = await this.findUnschedulableEnabledTasks();
     for (const task of tasks) {
@@ -57,10 +74,19 @@ export class QqbotPluginTaskSchedulerService
     }
   }
 
+  /**
+   * 更新 QQBot 插件平台状态。
+   * @param task - task 输入；使用 `id`、`enabled`、`cronExpression` 字段生成结果。
+   */
   async syncTaskScheduler(
     task: Pick<
       QqbotPluginTask,
-      'cronExpression' | 'enabled' | 'id' | 'installationId' | 'taskKey' | 'timeoutMs'
+      | 'cronExpression'
+      | 'enabled'
+      | 'id'
+      | 'installationId'
+      | 'taskKey'
+      | 'timeoutMs'
     >,
   ) {
     const schedulerId = this.buildSchedulerId(task.id);
@@ -98,10 +124,18 @@ export class QqbotPluginTaskSchedulerService
     return { nextRunAt, runtimeStatus: 'scheduled' as const };
   }
 
+  /**
+   * 清理 QQBot 插件平台状态。
+   * @param taskId - 插件任务 ID；定位本次读取、更新、删除或关联的插件任务。
+   */
   async removeTaskScheduler(taskId: string) {
     await this.queue.removeJobScheduler(this.buildSchedulerId(taskId));
   }
 
+  /**
+   * 清理 QQBot 插件平台状态。
+   * @param installationId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
+   */
   async removeSchedulersForInstallation(installationId: string) {
     const tasks = await this.taskRepository.find({ where: { installationId } });
     for (const task of tasks) {
@@ -113,6 +147,11 @@ export class QqbotPluginTaskSchedulerService
     );
   }
 
+  /**
+   * 投递 QQBot 插件平台消息或任务。
+   * @param taskId - 插件任务 ID；定位本次读取、更新、删除或关联的插件任务。
+   * @param input - input 输入；影响 enqueueManualRun 的返回值。
+   */
   async enqueueManualRun(taskId: string, input: Record<string, unknown>) {
     return this.queue.add(
       QQBOT_PLUGIN_TASK_JOB_NAME,
@@ -129,14 +168,24 @@ export class QqbotPluginTaskSchedulerService
     );
   }
 
+  /**
+   * 创建 QQBot 插件平台对象或配置。
+   * @param taskId - 插件任务 ID；定位本次读取、更新、删除或关联的插件任务。
+   */
   private buildSchedulerId(taskId: string) {
     return `plugin-task:${taskId}`;
   }
 
+  /**
+   * 查询 QQBot 插件平台数据。
+   */
   private findSchedulableTasks() {
     return this.createSchedulableTaskQuery().getMany();
   }
 
+  /**
+   * 查询 QQBot 插件平台数据。
+   */
   private findUnschedulableEnabledTasks() {
     return this.taskRepository
       .createQueryBuilder('task')
@@ -150,6 +199,10 @@ export class QqbotPluginTaskSchedulerService
       .getMany();
   }
 
+  /**
+   * 判断 QQBot 插件平台条件。
+   * @param taskId - 插件任务 ID；定位本次读取、更新、删除或关联的插件任务。
+   */
   private async isTaskSchedulable(taskId: string) {
     const count = await this.createSchedulableTaskQuery()
       .andWhere('task.id = :taskId', { taskId })
@@ -157,6 +210,9 @@ export class QqbotPluginTaskSchedulerService
     return count > 0;
   }
 
+  /**
+   * 创建 QQBot 插件平台对象或配置。
+   */
   private createSchedulableTaskQuery() {
     return this.taskRepository
       .createQueryBuilder('task')
@@ -173,9 +229,11 @@ export class QqbotPluginTaskSchedulerService
 export const QQBOT_PLUGIN_TASK_QUEUE_NAME = 'qqbot-plugin-task';
 export const QQBOT_PLUGIN_TASK_JOB_NAME = 'execute-plugin-task';
 
-export function readQqbotPluginTaskQueuePrefix(
-  configService: ConfigService,
-) {
+/**
+ * 读取 QQBot 插件平台资源。
+ * @param configService - Nest ConfigService 依赖；驱动 `readStringConfig()` 的 插件平台步骤。
+ */
+export function readQqbotPluginTaskQueuePrefix(configService: ConfigService) {
   return readStringConfig(
     configService,
     [
@@ -187,6 +245,11 @@ export function readQqbotPluginTaskQueuePrefix(
   );
 }
 
+/**
+ * 解析Qqbot Plugin Task Queue Connection。
+ * @param configService - Nest ConfigService 依赖；驱动 `readStringConfig()`、`readNumberConfig()` 的 插件平台步骤。
+ * @returns QQBot 插件平台转换后的值。
+ */
 export function resolveQqbotPluginTaskQueueConnection(
   configService: ConfigService,
 ): ConnectionOptions {
@@ -229,6 +292,12 @@ export function resolveQqbotPluginTaskQueueConnection(
   };
 }
 
+/**
+ * 读取 QQBot 插件平台资源。
+ * @param configService - Nest ConfigService 依赖；使用 `get` 字段生成结果。
+ * @param keys - 插件平台列表；驱动 `for()` 的 插件平台步骤。
+ * @param fallback - 兜底值；影响 readStringConfig 的返回值。
+ */
 function readStringConfig(
   configService: ConfigService,
   keys: string[],
@@ -243,6 +312,12 @@ function readStringConfig(
   return fallback;
 }
 
+/**
+ * 读取 QQBot 插件平台资源。
+ * @param configService - Nest ConfigService 依赖；驱动 `readStringConfig()` 的 插件平台步骤。
+ * @param keys - 插件平台列表；驱动 `readStringConfig()` 的 插件平台步骤。
+ * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 插件平台步骤。
+ */
 function readNumberConfig(
   configService: ConfigService,
   keys: string[],
@@ -254,6 +329,10 @@ function readNumberConfig(
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/**
+ * 解析Next Qqbot Plugin Task Run At。
+ * @param cronExpression - cronExpression 输入；驱动 `parseExpression()` 的 插件平台步骤。
+ */
 export function resolveNextQqbotPluginTaskRunAt(cronExpression: string) {
   return parseExpression(cronExpression).next().toDate();
 }

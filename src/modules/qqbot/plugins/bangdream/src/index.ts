@@ -52,6 +52,10 @@ type BangDreamResolvedOperation = BangDreamManifestOperation & {
   execute: BangDreamOperationModule['execute'];
 };
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @param options - BangDream列表；使用 `io`、`operations`、`normalizeError`、`description` 字段生成结果。
+ */
 export function createPlugin(options: BangDreamPluginRuntimeOptions) {
   if (options.io) configureBangDreamRuntimeIo(options.io);
   const context = new BangDreamCommandContext(options);
@@ -66,6 +70,11 @@ export function createPlugin(options: BangDreamPluginRuntimeOptions) {
       (error instanceof Error ? error.message : `${error}`) ||
       'BangDream 命令执行失败');
 
+  /**
+   * 执行 BangDream 插件局部步骤。
+   * @param operationKey - operationKey 输入；影响 executeOperation 的返回值。
+   * @param input - input 输入；影响 executeOperation 的返回值。
+   */
   const executeOperation = (
     operationKey: BangDreamOperationKey,
     input: BangDreamCommandInput,
@@ -80,6 +89,10 @@ export function createPlugin(options: BangDreamPluginRuntimeOptions) {
     });
 
   return {
+    /**
+     * 激活插件运行时。
+     * @returns 插件处理结果。
+     */
     activate: async () => {
       await Promise.all([
         context.refreshDictionaryCache(),
@@ -87,9 +100,19 @@ export function createPlugin(options: BangDreamPluginRuntimeOptions) {
       ]);
     },
     description: options.description,
+    /**
+     * 释放插件运行时资源。
+     * @returns 插件处理结果。
+     */
     dispose: async () => undefined,
     executeOperation,
+    /**
+     * 执行 BangDream回调。
+     */
     health: () => context.checkHealth(),
+    /**
+     * 执行 BangDream回调。
+     */
     healthCheck: async () => {
       const checkedAt = formatBangDreamCheckedAt(new Date());
       try {
@@ -119,6 +142,11 @@ export function createPlugin(options: BangDreamPluginRuntimeOptions) {
       name: operation.name || operation.key,
       outputSchema: operation.outputSchema || getBangDreamOutputSchema(),
       timeoutMs: operation.timeoutMs,
+      /**
+       * 执行插件操作处理器。
+       * @param input - input 输入；驱动 `executeOperation()` 的 BangDream步骤。
+       * @returns 插件处理结果。
+       */
       execute: async (input: BangDreamCommandInput) =>
         await executeOperation(operation.key, input),
     })),
@@ -127,15 +155,17 @@ export function createPlugin(options: BangDreamPluginRuntimeOptions) {
   };
 }
 
+/**
+ * 解析Bang Dream Operations。
+ * @param operations - BangDream列表；转换 BangDream列表项。
+ */
 function resolveBangDreamOperations(operations: BangDreamManifestOperation[]) {
   const operationModules = getBangDreamOperationsByHandlerName();
   return new Map(
     operations.map((operation) => {
       const operationModule = operationModules.get(operation.handlerName);
       if (!operationModule) {
-        throw new Error(
-          `BangDream 插件执行器未实现：${operation.handlerName}`,
-        );
+        throw new Error(`BangDream 插件执行器未实现：${operation.handlerName}`);
       }
       return [
         operation.key,
@@ -149,6 +179,11 @@ function resolveBangDreamOperations(operations: BangDreamManifestOperation[]) {
   );
 }
 
+/**
+ * 执行Bang Dream Operation。
+ * @param options - BangDream列表；使用 `operationKey`、`input`、`lifecycle`、`operationsByKey` 字段生成结果。
+ * @returns 异步完成后的 BangDream 插件结果。
+ */
 async function executeBangDreamOperation(options: {
   context: BangDreamCommandContext;
   lifecycle: BangDreamOperationLifecycle;
@@ -191,6 +226,9 @@ async function executeBangDreamOperation(options: {
   }
 }
 
+/**
+ * 查询 BangDream 插件数据。
+ */
 function getBangDreamInputSchema() {
   return {
     properties: {
@@ -203,6 +241,9 @@ function getBangDreamInputSchema() {
   };
 }
 
+/**
+ * 查询 BangDream 插件数据。
+ */
 function getBangDreamOutputSchema() {
   return {
     properties: {
@@ -216,7 +257,15 @@ function getBangDreamOutputSchema() {
   };
 }
 
+/**
+ * 转换 BangDream 插件输入。
+ * @param date - date 输入；执行 `date.getFullYear()`、`date.getMonth()`、`date.getDate()`、`date.getHours()` 对应的 BangDream步骤。
+ */
 function formatBangDreamCheckedAt(date: Date) {
+  /**
+   * 补齐 BangDream 插件展示文本。
+   * @param input - input 输入；影响 pad 的返回值。
+   */
   const pad = (input: number) => `${input}`.padStart(2, '0');
   return [
     date.getFullYear(),

@@ -19,8 +19,8 @@ interface drawBandDetailsInListOptions {
 /**
  * 在图片布局层中绘制角色In列表。
  *
- * @param CharacterDetailsInListOptions - 角色详情列表In列表Options参数。
- * @param key - 当前字段键名，未传入时使用默认值。
+ * @param CharacterDetailsInListOptions - 角色列表；驱动 `for()` 的 BangDream步骤。
+ * @param key - 键名；影响 drawCharacterInList 的返回值。
  */
 async function drawCharacterInList(
   CharacterDetailsInListOptions: drawBandDetailsInListOptions,
@@ -63,8 +63,8 @@ async function drawCharacterInList(
 /**
  * 在图片布局层中绘制角色RankIn列表。
  *
- * @param player - 玩家参数。
- * @param key - 当前字段键名，未传入时使用默认值。
+ * @param player - player 输入；使用 `profile` 字段生成结果。
+ * @param key - 键名；驱动 `drawCharacterInList()` 的 BangDream步骤。
  */
 export async function drawCharacterRankInList(player: Player, key?: string) {
   const characterRankMap = player.profile.userCharacterRankMap?.entries;

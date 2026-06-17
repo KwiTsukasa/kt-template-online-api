@@ -15,7 +15,7 @@ export class Attribute {
   /**
    * 构造 Attribute 实例，并初始化该模型的本地基础字段。
    *
-   * @param name - 名称参数。
+   * @param name - 名称文本；驱动 `Error()` 的 BangDream步骤。
    */
   constructor(name: string) {
     if (['cool', 'happy', 'pure', 'powerful'].includes(name as this['name'])) {
@@ -41,7 +41,7 @@ const attributeIconCache: { [name: string]: Image } = {};
 /**
  * 在BangDream 领域模型层中获取属性图标。
  *
- * @param attributeName - 属性名称参数。
+ * @param attributeName - attributeName 输入；驱动 `attributeResourceRepository.getIconSvgBuffer()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function getAttributeIcon(attributeName: string): Promise<Image> {

@@ -6,6 +6,10 @@ import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/sr
 import { DeckRankResourceRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/player/deck-rank.repository';
 import { configureBangDreamRuntimeIo } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @returns 创建后的 BangDream 插件对象或配置。
+ */
 function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
   return {
     getAsset: jest.fn(),
@@ -44,6 +48,10 @@ describe('BangDream deck rank resource repository', () => {
     const localBuffer = Buffer.from('local-rank');
     writeFileSync(localImagePath, localBuffer);
     configureBangDreamRuntimeIo({
+      /**
+       * 执行 BangDream回调。
+       * @param filePath - BangDream路径；驱动 `fs.readFile()` 的 BangDream步骤。
+       */
       readAssetFile: async (filePath) => await fs.readFile(filePath),
     });
     const repository = new DeckRankResourceRepository(provider, localRootPath);
@@ -63,6 +71,9 @@ describe('BangDream deck rank resource repository', () => {
     const remoteBuffer = Buffer.from('remote-rank');
     provider.getAsset.mockResolvedValue(remoteBuffer);
     configureBangDreamRuntimeIo({
+      /**
+       * 执行 BangDream回调。
+       */
       readAssetFile: async () => {
         throw new Error('local asset missing');
       },

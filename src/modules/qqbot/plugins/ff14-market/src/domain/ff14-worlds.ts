@@ -22,6 +22,11 @@ export const QQBOT_FF14_MARKET_DICT_CODES = {
   world: 'FF14_MARKET_WORLD',
 };
 
+/**
+ * 创建 FF14 市场插件对象或配置。
+ * @param input - input 输入；使用 `regions`、`dataCenters`、`worlds` 字段生成结果。
+ * @returns 创建后的 FF14 市场插件对象或配置。
+ */
 export function buildFf14MarketCatalog(input: {
   dataCenters: Ff14DictItem[];
   regions: Ff14DictItem[];
@@ -35,8 +40,7 @@ export function buildFf14MarketCatalog(input: {
       if (!name) return null;
       return {
         name,
-        region:
-          normalizeFf14WorldValue(item.childrenCode) || defaultRegion,
+        region: normalizeFf14WorldValue(item.childrenCode) || defaultRegion,
         worlds: input.worlds
           .filter(({ childrenCode }) => childrenCode === getDictRawValue(item))
           .map(getDictDisplayValue)
@@ -52,6 +56,11 @@ export function buildFf14MarketCatalog(input: {
   };
 }
 
+/**
+ * 创建 FF14 市场插件对象或配置。
+ * @param roots - FF14 市场列表；筛选 FF14 市场列表项。
+ * @returns 创建后的 FF14 市场插件对象或配置。
+ */
 export function buildFf14MarketCatalogFromTree(
   roots: Ff14DictItem[],
 ): Ff14MarketCatalog {
@@ -86,6 +95,11 @@ export function buildFf14MarketCatalogFromTree(
   };
 }
 
+/**
+ * 判断 FF14 市场插件条件。
+ * @param catalog - catalog 输入；使用 `dataCenters` 字段计算判断结果。
+ * @param value - 待转换值；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ */
 export function isFf14DataCenterName(
   catalog: Ff14MarketCatalog,
   value?: string,
@@ -94,26 +108,32 @@ export function isFf14DataCenterName(
   return catalog.dataCenters.some((item) => item.name === name);
 }
 
-export function isFf14RegionName(
-  catalog: Ff14MarketCatalog,
-  value?: string,
-) {
+/**
+ * 判断 FF14 市场插件条件。
+ * @param catalog - catalog 输入；使用 `regions` 字段计算判断结果。
+ * @param value - 待转换值；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ */
+export function isFf14RegionName(catalog: Ff14MarketCatalog, value?: string) {
   const name = normalizeFf14WorldValue(value);
   return catalog.regions.includes(name);
 }
 
-export function isFf14WorldName(
-  catalog: Ff14MarketCatalog,
-  value?: string,
-) {
+/**
+ * 判断 FF14 市场插件条件。
+ * @param catalog - catalog 输入；使用 `dataCenters` 字段计算判断结果。
+ * @param value - 待转换值；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ */
+export function isFf14WorldName(catalog: Ff14MarketCatalog, value?: string) {
   const name = normalizeFf14WorldValue(value);
   return catalog.dataCenters.some((item) => item.worlds.includes(name));
 }
 
-export function isFf14LocationName(
-  catalog: Ff14MarketCatalog,
-  value?: string,
-) {
+/**
+ * 判断 FF14 市场插件条件。
+ * @param catalog - catalog 输入；计算 FF14 市场判断结果。
+ * @param value - 待转换值；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ */
+export function isFf14LocationName(catalog: Ff14MarketCatalog, value?: string) {
   const name = normalizeFf14WorldValue(value);
   const path = splitFf14WorldPath(name);
   return (
@@ -124,6 +144,10 @@ export function isFf14LocationName(
   );
 }
 
+/**
+ * 执行 FF14 市场插件流程。
+ * @param value - 待转换值；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ */
 export function splitFf14WorldPath(value?: string) {
   const raw = normalizeFf14WorldValue(value);
   if (!raw) return {};
@@ -148,6 +172,11 @@ export function splitFf14WorldPath(value?: string) {
   };
 }
 
+/**
+ * 查询 FF14 市场插件数据。
+ * @param catalog - catalog 输入；使用 `dataCenters` 字段生成结果。
+ * @param world - world 输入；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ */
 export function findFf14DataCenterByWorld(
   catalog: Ff14MarketCatalog,
   world?: string,
@@ -156,6 +185,12 @@ export function findFf14DataCenterByWorld(
   return catalog.dataCenters.find((item) => item.worlds.includes(worldName));
 }
 
+/**
+ * 解析Ff14 Market Target。
+ * @param catalog - catalog 输入；使用 `defaultRegion`、`dataCenters` 字段生成结果。
+ * @param params - FF14 市场列表；使用 `fallback`、`world`、`region`、`dataCenter` 字段生成结果。
+ * @returns FF14 市场插件转换后的值。
+ */
 export function resolveFf14MarketTarget(
   catalog: Ff14MarketCatalog,
   params: {
@@ -237,14 +272,26 @@ export function resolveFf14MarketTarget(
   };
 }
 
+/**
+ * 查询 FF14 市场插件数据。
+ * @param item - item 输入；使用 `label`、`value` 字段生成结果。
+ */
 function getDictDisplayValue(item: Ff14DictItem) {
   return normalizeFf14WorldValue(item.label || item.value);
 }
 
+/**
+ * 查询 FF14 市场插件数据。
+ * @param item - item 输入；使用 `value`、`label` 字段生成结果。
+ */
 function getDictRawValue(item: Ff14DictItem) {
   return normalizeFf14WorldValue(item.value || item.label);
 }
 
+/**
+ * 转换 FF14 市场插件输入。
+ * @param value - 待转换值；影响 normalizeFf14WorldValue 的返回值。
+ */
 function normalizeFf14WorldValue(value?: string | null) {
   return `${value || ''}`.trim();
 }

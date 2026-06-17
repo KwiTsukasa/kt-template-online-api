@@ -3,6 +3,10 @@ import { join } from 'path';
 
 const repoRoot = join(__dirname, '../../../..');
 
+/**
+ * 读取 QQBot 核心资源。
+ * @param relativePath - 相对文件路径；读取本地文件内容。
+ */
 const readSource = (relativePath: string) =>
   readFileSync(join(repoRoot, relativePath), 'utf8');
 

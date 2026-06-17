@@ -45,9 +45,9 @@ export class Cutoff {
   /**
    * 构造 Cutoff 实例，并初始化该模型的本地基础字段。
    *
-   * @param eventId - 活动 ID。
-   * @param server - 目标服务器。
-   * @param tier - tier参数。
+   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+   * @param server - server 输入；驱动 `getPresentEvent()` 的 BangDream步骤。
+   * @param tier - tier 输入；决定 BangDream条件分支。
    */
   constructor(eventId: number, server: Server, tier: number) {
     const event = new Event(eventId);
@@ -84,7 +84,7 @@ export class Cutoff {
   /**
    * 在 Cutoff 模型中获取最终 Tracker 数据源。
    *
-   * @param reverse - reverse参数。
+   * @param reverse - reverse 输入；决定 BangDream条件分支。
    */
   getFinalTrackerProvider(reverse: boolean): BangDreamDataProvider {
     // reverse:是否反向获取。假如useHHWX为False，当反向开启后就使用HHWX
@@ -106,8 +106,8 @@ export class Cutoff {
   /**
    * 在 Cutoff 模型中拉取最终档线列表数据。
    *
-   * @param reverse - reverse参数。
-   * @param cacheTime - 缓存时间参数。
+   * @param reverse - reverse 输入；驱动 `this.getFinalTrackerProvider()` 的 BangDream步骤。
+   * @param cacheTime - cacheTime 输入；影响 fetchFinalCutoffsData 的返回值。
    */
   async fetchFinalCutoffsData(reverse: boolean, cacheTime: number) {
     const provider = this.getFinalTrackerProvider(reverse);
@@ -121,7 +121,7 @@ export class Cutoff {
   /**
    * 在 Cutoff 模型中记录最终档线列表来源Problem。
    *
-   * @param e - e参数。
+   * @param e - e 输入；决定 BangDream条件分支。
    */
   reportFinalCutoffsSourceProblem(e) {
     if (e?.response?.status != 404 && this.server == Server.cn) {
@@ -131,7 +131,7 @@ export class Cutoff {
   /**
    * 在 Cutoff 模型中获取最终档线列表数据。
    *
-   * @param forceReadCache - forceRead缓存参数，未传入时使用默认值。
+   * @param forceReadCache - forceReadCache 输入；限定 BangDream查询范围。
    */
   async getFinalCutoffsData(forceReadCache: boolean = false) {
     const cacheTime = forceReadCache ? 1 / 0 : 0;
@@ -324,9 +324,9 @@ export class Cutoff {
     return history;
   }
   /**
-   * 在 Cutoff 模型中获取DaysOf活动。
+   * 查询 BangDream 插件数据。
    *
-   * @param ts - ts参数。
+   * @param ts - BangDream列表；驱动 `getCutoffDayIndex()` 的 BangDream步骤。
    */
   getDaysOfEvent(ts: number) {
     return getCutoffDayIndex(this.server, this.startAt, ts);
@@ -334,7 +334,7 @@ export class Cutoff {
   /**
    * 在 Cutoff 模型中判断日增Checkpoint。
    *
-   * @param date - date参数。
+   * @param date - date 输入；驱动 `isCutoffDailyCheckpoint()` 的 BangDream步骤。
    * @returns 判断结果。
    */
   isDailyCheckpoint(date: Date): boolean {
@@ -361,9 +361,9 @@ export class Cutoff {
   /**
    * 在 Cutoff 模型中追加MissingHead分数列表。
    *
-   * @param scoreFinal - 分数最终参数。
-   * @param invalidDays - invalidDays参数。
-   * @param cutoffLastDataDays - 档线Last数据Days参数。
+   * @param scoreFinal - scoreFinal 输入；使用 `length` 字段生成结果。
+   * @param invalidDays - BangDream列表；写入 BangDream集合、缓存或持久化状态。
+   * @param cutoffLastDataDays - BangDream列表；驱动 `Math.round()` 的 BangDream步骤。
    * @returns 计算后的数值。
    */
   appendMissingHeadScores(
@@ -388,11 +388,11 @@ export class Cutoff {
   /**
    * 在 Cutoff 模型中追加Interpolated分数列表。
    *
-   * @param scoreFinal - 分数最终参数。
-   * @param invalidDays - invalidDays参数。
-   * @param startScore - start分数参数。
-   * @param endScore - end分数参数。
-   * @param lostDays - lostDays参数。
+   * @param scoreFinal - scoreFinal 输入；使用 `length` 字段生成结果。
+   * @param invalidDays - BangDream列表；写入 BangDream集合、缓存或持久化状态。
+   * @param startScore - startScore 输入；驱动 `Math.round()`、`scoreFinal.push()` 的 BangDream步骤。
+   * @param endScore - endScore 输入；驱动 `Math.round()` 的 BangDream步骤。
+   * @param lostDays - BangDream列表；驱动 `Math.round()` 的 BangDream步骤。
    */
   appendInterpolatedScores(
     scoreFinal: number[],
@@ -410,11 +410,11 @@ export class Cutoff {
   /**
    * 在 Cutoff 模型中追加Checkpoint分数列表。
    *
-   * @param scoreFinal - 分数最终参数。
-   * @param invalidDays - invalidDays参数。
-   * @param score - 分数参数。
-   * @param time - 谱面时间点。
-   * @param startDayIndex - startDay索引参数。
+   * @param scoreFinal - scoreFinal 输入；写入 BangDream集合、缓存或持久化状态。
+   * @param invalidDays - BangDream列表；驱动 `this.appendInterpolatedScores()` 的 BangDream步骤。
+   * @param score - score 输入；使用 `length` 字段生成结果。
+   * @param time - time 输入；驱动 `this.getDaysOfEvent()` 的 BangDream步骤。
+   * @param startDayIndex - startDayIndex 输入；影响 appendCheckpointScores 的返回值。
    * @returns 计算后的数值。
    */
   appendCheckpointScores(
@@ -452,11 +452,11 @@ export class Cutoff {
   /**
    * 在 Cutoff 模型中追加MissingTail分数列表。
    *
-   * @param scoreFinal - 分数最终参数。
-   * @param invalidDays - invalidDays参数。
-   * @param score - 分数参数。
-   * @param time - 谱面时间点。
-   * @param cutoffLastDataDays - 档线Last数据Days参数。
+   * @param scoreFinal - scoreFinal 输入；使用 `length` 字段生成结果。
+   * @param invalidDays - BangDream列表；写入 BangDream集合、缓存或持久化状态。
+   * @param score - score 输入；使用 `length` 字段生成结果。
+   * @param time - time 输入；使用 `length` 字段生成结果。
+   * @param cutoffLastDataDays - BangDream列表；驱动 `this.getDaysOfEvent()` 的 BangDream步骤。
    */
   appendMissingTailScores(
     scoreFinal: number[],
@@ -487,8 +487,8 @@ export class Cutoff {
   /**
    * 在 Cutoff 模型中转换为日增增量列表。
    *
-   * @param scoreFinal - 分数最终参数。
-   * @param invalidDays - invalidDays参数。
+   * @param scoreFinal - scoreFinal 输入；使用 `length` 字段生成结果。
+   * @param invalidDays - BangDream列表；执行 `invalidDays.has()` 对应的 BangDream步骤。
    * @returns 格式化后的文本。
    */
   toDailyIncrementList(
@@ -552,7 +552,7 @@ export class Cutoff {
     this.dailyIncrement = this.toDailyIncrementList(scoreFinal, invalidDays);
   }
   /**
-   * 在 Cutoff 模型中获取Yesterday增量概率。
+   * 查询 BangDream 插件数据。
    */
   getYesterdayIncrementRate() {
     if (!this.cutoffs || this.cutoffs.length === 0) {
@@ -631,7 +631,7 @@ export class Cutoff {
   /**
    * 在 Cutoff 模型中获取谱面数据。
    *
-   * @param setStartToZero - setStartToZero参数，未传入时使用默认值。
+   * @param setStartToZero - setStartToZero 输入；决定 BangDream条件分支。
    * @returns 计算后的数值。
    */
   getChartData(setStartToZero = false): { x: number; y: number }[] {

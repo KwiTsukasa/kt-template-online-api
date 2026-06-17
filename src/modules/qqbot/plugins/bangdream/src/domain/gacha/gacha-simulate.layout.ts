@@ -58,7 +58,7 @@ export function getGachaSimulateGridMaxWidth(): number {
 /**
  * 创建抽卡结果图片混排参数。
  *
- * @param mode - 单次少量抽卡或汇总抽卡模式。
+ * @param mode - mode 输入；生成 BangDream对象。
  */
 export function createGachaSimulateWrapOptions(mode: 'single' | 'summary'): {
   lineHeight: number;
@@ -78,7 +78,7 @@ export function createGachaSimulateWrapOptions(mode: 'single' | 'summary'): {
 /**
  * 计算重复卡牌阴影层数。
  *
- * @param numberOfCard - 同一卡牌抽到的数量。
+ * @param numberOfCard - numberOfCard 输入；驱动 `Math.min()` 的 BangDream步骤。
  */
 export function getGachaDuplicateLayerCount(numberOfCard: number): number {
   return Math.min(
@@ -90,8 +90,8 @@ export function getGachaDuplicateLayerCount(numberOfCard: number): number {
 /**
  * 计算重复卡牌阴影层绘制区域。
  *
- * @param layerIndex - 从远到近的 0 基层索引。
- * @param layerCount - 阴影总层数。
+ * @param layerIndex - layerIndex 输入；限定 BangDream查询范围。
+ * @param layerCount - layerCount 输入；限定 BangDream查询范围。
  */
 export function getGachaDuplicateIconRect(
   layerIndex: number,
@@ -110,7 +110,7 @@ export function getGachaDuplicateIconRect(
 /**
  * 根据计数字样宽度计算右对齐绘制位置。
  *
- * @param textWidth - 计数字样图片宽度。
+ * @param textWidth - textWidth 输入；限定 BangDream查询范围。
  */
 export function getGachaCountTextPosition(
   textWidth: number,
@@ -134,7 +134,7 @@ export function getGachaBannerImageMaxWidth(): number {
 /**
  * 根据横幅内容高度计算外层画布尺寸。
  *
- * @param imageHeight - 横幅内容高度。
+ * @param imageHeight - imageHeight 输入；生成 BangDream对象。
  */
 export function createGachaBannerCanvasSize(imageHeight: number): {
   height: number;

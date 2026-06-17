@@ -3,7 +3,7 @@ import { Canvas, Image } from 'skia-canvas';
 /**
  * 在图片布局层中处理stack图片。
  *
- * @param list - 待处理列表。
+ * @param list - BangDream列表；使用 `length` 字段生成结果。
  */
 export function stackImage(list: Array<Image | Canvas>) {
   let maxW = 0;
@@ -27,7 +27,7 @@ export function stackImage(list: Array<Image | Canvas>) {
 /**
  * 在图片布局层中处理stack图片Horizontal。
  *
- * @param list - 待处理列表。
+ * @param list - BangDream列表；使用 `length` 字段生成结果。
  */
 export function stackImageHorizontal(list: Array<Image | Canvas>) {
   let maxH = 0;
@@ -57,7 +57,7 @@ interface ResizeImageOptions {
 /**
  * 在图片布局层中调整图片。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 resizeImage 的返回值。
  */
 export function resizeImage({
   image,

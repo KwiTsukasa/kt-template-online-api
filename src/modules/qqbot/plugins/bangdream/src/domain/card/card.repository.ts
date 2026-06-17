@@ -15,7 +15,7 @@ export class CardRepository {
   /**
    * 创建卡牌领域模型。
    *
-   * @param cardId - 卡牌 ID。
+   * @param cardId - 卡牌 ID；定位本次读取、更新、删除或关联的卡牌。
    */
   create(cardId: number): Card {
     return new Card(cardId);

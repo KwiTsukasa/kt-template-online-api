@@ -1,6 +1,11 @@
 import { ConfigService } from '@nestjs/config';
 import { QqbotNapcatWatchdogService } from '@/modules/qqbot/napcat/application/login/qqbot-napcat-watchdog.service';
 
+/**
+ * 创建 测试断言对象或配置。
+ * @param configValues - 测试列表；构造 Jest mock 返回值。
+ * @param runOfflineWatchdog - runOfflineWatchdog 输入；生成 测试对象。
+ */
 function buildService(
   configValues: Record<string, string | undefined>,
   runOfflineWatchdog: jest.Mock,
@@ -13,6 +18,9 @@ function buildService(
 }
 
 // 刷新微任务队列，让定时器回调里的 async tick（含 finally 复位 running）执行完。
+/**
+ * 执行 测试断言流程。
+ */
 async function flushMicrotasks() {
   await Promise.resolve();
   await Promise.resolve();

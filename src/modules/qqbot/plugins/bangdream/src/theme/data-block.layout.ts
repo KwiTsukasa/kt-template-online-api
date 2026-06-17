@@ -43,7 +43,7 @@ export const BANGDREAM_DATA_BLOCK_SPEC = {
 /**
  * 计算纵向数据块画布尺寸。
  *
- * @param options - 内容最大宽度、内容总高度和标题/背景开关。
+ * @param options - BangDream列表；影响 calculateVerticalDataBlockSize 的返回值。
  */
 export function calculateVerticalDataBlockSize({
   contentHeight,
@@ -76,7 +76,7 @@ export function calculateVerticalDataBlockSize({
 /**
  * 计算横向数据块画布尺寸。
  *
- * @param options - 内容总宽度、最大内容高度和标题/背景开关。
+ * @param options - BangDream列表；影响 calculateHorizontalDataBlockSize 的返回值。
  */
 export function calculateHorizontalDataBlockSize({
   contentWidth,

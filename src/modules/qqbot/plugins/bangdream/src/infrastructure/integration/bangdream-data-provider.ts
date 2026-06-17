@@ -30,6 +30,12 @@ export interface BangDreamDataProvider {
   getTracker<T = unknown>(options: BangDreamTrackerRequestOptions): Promise<T>;
 }
 
+/**
+ * 解析Bang Dream Provider Url。
+ * @param baseUrl - 访问地址；生成规范化文本。
+ * @param pathOrUrl - BangDream路径；计算 BangDream布尔判断。
+ * @returns BangDream 插件渲染后的图片、画布或文本。
+ */
 export function resolveBangDreamProviderUrl(
   baseUrl: string,
   pathOrUrl: string,

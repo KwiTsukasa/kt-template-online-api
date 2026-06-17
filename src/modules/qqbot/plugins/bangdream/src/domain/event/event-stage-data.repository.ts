@@ -19,6 +19,10 @@ export type EventStageDataRows<T extends EventStageDataType> =
   T extends 'stages' ? EventStageTypeRow[] : EventStageRotationMusicRow[];
 
 export class EventStageDataRepository {
+  /**
+   * 初始化 EventStageDataRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
@@ -26,9 +30,9 @@ export class EventStageDataRepository {
   /**
    * 获取试炼活动阶段或轮换歌曲数据。
    *
-   * @param eventId - 活动 ID。
-   * @param type - 试炼数据类型。
-   * @param update - 是否绕过缓存。
+   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+   * @param type - type 输入；限定 BangDream查询范围。
+   * @param update - update 输入；限定 BangDream查询范围。
    */
   async getFestivalData<T extends EventStageDataType>(
     eventId: number,

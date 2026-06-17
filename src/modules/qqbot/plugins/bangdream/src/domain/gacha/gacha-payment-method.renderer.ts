@@ -11,7 +11,7 @@ import {
 /**
  * 在图片布局层中绘制Gasha支付方式MethodIn列表。
  *
- * @param gacha - 卡池参数。
+ * @param gacha - gacha 输入；使用 `paymentMethods` 字段生成结果。
  */
 export async function drawGashaPaymentMethodInList(gacha: Gacha) {
   const list = [];

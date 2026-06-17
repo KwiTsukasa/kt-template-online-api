@@ -23,33 +23,39 @@ const QUOTE_EDGE_PATTERN = /^["“”『』「」]|["“”『』「」]$/g;
 const RESERVED_MATCH_KEYS = new Set(['_number', '_relationStr', '_all']);
 
 let cachedConfig: FuzzySearchConfig | undefined;
-let cachedRules:
-  | ReturnType<typeof createDefaultFuzzySearchRules>
-  | undefined;
+let cachedRules: ReturnType<typeof createDefaultFuzzySearchRules> | undefined;
 
 export const config = new Proxy({} as FuzzySearchConfig, {
+  /**
+   * 获取业务数据。
+   * @param _target - _target 输入；限定 BangDream查询范围。
+   * @param key - 键名；驱动 `getFuzzySearchConfig()` 的 BangDream步骤。
+   */
   get(_target, key: string) {
     return getFuzzySearchConfig()[key];
   },
 }) as FuzzySearchConfig;
 
+/**
+ * 查询 BangDream 插件数据。
+ */
 function getFuzzySearchConfig() {
   cachedConfig ??= searchDictionaryRepository.loadConfig();
   return cachedConfig;
 }
 
+/**
+ * 查询 BangDream 插件数据。
+ */
 function getFuzzySearchRules() {
-  cachedRules ??= createDefaultFuzzySearchRules(
-    getFuzzySearchConfig(),
-  );
+  cachedRules ??= createDefaultFuzzySearchRules(getFuzzySearchConfig());
   return cachedRules;
 }
 
 /**
- * 判断对象是否包含指定自有属性。
- *
- * @param source - 输入来源对象或数据集合。
- * @param key - 当前字段键名。
+ * 判断 BangDream 插件条件。
+ * @param source - source 输入；驱动 `hasOwnProperty.call()` 的 BangDream步骤。
+ * @param key - 键名；驱动 `hasOwnProperty.call()` 的 BangDream步骤。
  */
 const hasOwn = (source: object, key: string) =>
   Object.prototype.hasOwnProperty.call(source, key);
@@ -57,7 +63,7 @@ const hasOwn = (source: object, key: string) =>
 /**
  * 按空白和引号拆分搜索关键词。
  *
- * @param keyword - 用户输入的搜索关键词。
+ * @param keyword - keyword 输入；提取正则匹配结果。
  */
 function extractKeywords(keyword: string): string[] {
   return (keyword.match(KEYWORD_PATTERN) || []).map((item) =>
@@ -66,9 +72,9 @@ function extractKeywords(keyword: string): string[] {
 }
 
 /**
- * 创建向匹配结果追加值的写入器。
- *
- * @param matches - 模糊搜索命中结果。
+ * 执行 BangDream 插件流程。
+ * @param matches - BangDream列表；影响 appendTo 的返回值。
+ * @returns BangDream 插件产出的 FuzzySearchResultWriter。
  */
 const appendTo =
   (matches: FuzzySearchResult): FuzzySearchResultWriter =>
@@ -80,7 +86,7 @@ const appendTo =
 /**
  * 校验模糊搜索结果结构。
  *
- * @param value - 当前处理的值。
+ * @param value - 待转换值；驱动 `Object.values()` 的 BangDream步骤。
  */
 export function isFuzzySearchResult(
   value: unknown,
@@ -98,7 +104,7 @@ export function isFuzzySearchResult(
 /**
  * 把用户关键词解析成结构化匹配条件。
  *
- * @param keyword - 用户输入的搜索关键词。
+ * @param keyword - keyword 输入；驱动 `for()` 的 BangDream步骤。
  */
 export function fuzzySearch(keyword: string): FuzzySearchResult {
   const matches: FuzzySearchResult = {};
@@ -114,7 +120,7 @@ export function fuzzySearch(keyword: string): FuzzySearchResult {
 /**
  * 判断字段是否为模糊搜索保留键。
  *
- * @param key - 当前字段键名。
+ * @param key - 键名；驱动 `RESERVED_MATCH_KEYS.has()` 的 BangDream步骤。
  */
 function isReservedMatchKey(key: string): boolean {
   return RESERVED_MATCH_KEYS.has(key);
@@ -123,8 +129,8 @@ function isReservedMatchKey(key: string): boolean {
 /**
  * 判断候选值是否命中目标字段值。
  *
- * @param candidates - 候选匹配值列表。
- * @param targetValue - 待比较的目标值。
+ * @param candidates - BangDream列表；计算 BangDream布尔判断。
+ * @param targetValue - targetValue 输入；计算 BangDream布尔判断。
  */
 function candidateMatches(
   candidates: FuzzySearchMatchValue[],
@@ -151,10 +157,10 @@ function candidateMatches(
 /**
  * 判断数字别名是否命中目标字段。
  *
- * @param matches - 模糊搜索命中结果。
- * @param target - 待匹配或待写入的目标对象。
- * @param key - 当前字段键名。
- * @param numberTypeKey - 允许使用数字别名匹配的字段列表。
+ * @param matches - BangDream列表；使用 `_number` 字段生成结果。
+ * @param target - target 输入；影响 numberAliasMatches 的返回值。
+ * @param key - 键名；影响 numberAliasMatches 的返回值。
+ * @param numberTypeKey - numberTypeKey 输入；计算 BangDream布尔判断。
  */
 function numberAliasMatches(
   matches: FuzzySearchResult,
@@ -172,10 +178,10 @@ function numberAliasMatches(
 /**
  * 判断目标对象指定字段是否命中搜索条件。
  *
- * @param matches - 模糊搜索命中结果。
- * @param target - 待匹配或待写入的目标对象。
- * @param key - 当前字段键名。
- * @param numberTypeKey - 允许使用数字别名匹配的字段列表。
+ * @param matches - BangDream列表；驱动 `candidateMatches()`、`numberAliasMatches()` 的 BangDream步骤。
+ * @param target - target 输入；驱动 `candidateMatches()`、`numberAliasMatches()` 的 BangDream步骤。
+ * @param key - 键名；驱动 `candidateMatches()`、`numberAliasMatches()` 的 BangDream步骤。
+ * @param numberTypeKey - numberTypeKey 输入；驱动 `numberAliasMatches()` 的 BangDream步骤。
  */
 function targetMatchesKey(
   matches: FuzzySearchResult,
@@ -192,8 +198,8 @@ function targetMatchesKey(
 /**
  * 判断兜底关键词是否命中任意目标值。
  *
- * @param targetValue - 待比较的目标值。
- * @param searchValue - 标准化后的搜索值。
+ * @param targetValue - targetValue 输入；计算 BangDream布尔判断。
+ * @param searchValue - searchValue 输入；驱动 `targetValue.toLowerCase()`、`targetValue.some()` 的 BangDream步骤。
  */
 function allKeywordMatches(targetValue: unknown, searchValue: string): boolean {
   if (typeof targetValue === 'string') {
@@ -211,8 +217,8 @@ function allKeywordMatches(targetValue: unknown, searchValue: string): boolean {
 /**
  * 判断目标对象是否包含兜底关键词。
  *
- * @param target - 待匹配或待写入的目标对象。
- * @param rawSearchValue - 原始搜索值。
+ * @param target - target 输入；驱动 `for()` 的 BangDream步骤。
+ * @param rawSearchValue - rawSearchValue 输入；执行 `rawSearchValue.toLowerCase()` 对应的 BangDream步骤。
  */
 function targetIncludesAllKeyword(
   target: any,
@@ -234,7 +240,7 @@ function targetIncludesAllKeyword(
 /**
  * 获取匹配条件 key 数量。
  *
- * @param matches - 模糊搜索命中结果。
+ * @param matches - BangDream列表；驱动 `for()` 的 BangDream步骤。
  */
 function getMatchKeyCount(matches: FuzzySearchResult): number {
   let count = 0;
@@ -249,8 +255,8 @@ function getMatchKeyCount(matches: FuzzySearchResult): number {
 /**
  * 判断匹配结果是否只包含兜底关键词。
  *
- * @param matches - 模糊搜索命中结果。
- * @param keyCount - 匹配条件 key 数量。
+ * @param matches - BangDream列表；使用 `_all` 字段生成结果。
+ * @param keyCount - keyCount 输入；影响 matchesOnlyAll 的返回值。
  */
 function matchesOnlyAll(matches: FuzzySearchResult, keyCount: number): boolean {
   return matches._all !== undefined && keyCount === 1;
@@ -259,9 +265,9 @@ function matchesOnlyAll(matches: FuzzySearchResult, keyCount: number): boolean {
 /**
  * 执行结构化模糊搜索条件匹配。
  *
- * @param matches - 模糊搜索命中结果。
- * @param target - 待匹配或待写入的目标对象。
- * @param numberTypeKey - 允许使用数字别名匹配的字段列表。
+ * @param matches - BangDream列表；使用 `_all` 字段生成结果。
+ * @param target - target 输入；驱动 `_all.every()` 的 BangDream步骤。
+ * @param numberTypeKey - numberTypeKey 输入；决定 BangDream条件分支。
  */
 export function match(
   matches: FuzzySearchResult,

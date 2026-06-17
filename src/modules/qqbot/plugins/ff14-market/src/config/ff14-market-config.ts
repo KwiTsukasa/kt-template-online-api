@@ -6,6 +6,11 @@ export type Ff14MarketConfig = {
   xivapiChsBaseUrl: string;
 };
 
+/**
+ * 解析Ff14 Market Config。
+ * @param host - host 输入；使用 `getConfig` 字段生成结果。
+ * @returns FF14 市场插件转换后的值。
+ */
 export function resolveFf14MarketConfig(
   host: Ff14MarketPluginHost,
 ): Ff14MarketConfig {

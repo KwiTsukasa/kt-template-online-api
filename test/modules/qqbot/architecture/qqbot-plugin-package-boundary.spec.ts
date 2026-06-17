@@ -4,6 +4,11 @@ import { join, relative } from 'path';
 const repoRoot = join(__dirname, '../../../..');
 const pluginRoot = join(repoRoot, 'src/modules/qqbot/plugins');
 
+/**
+ * 执行 测试断言流程。
+ * @param root - root 输入；驱动 `readdirSync()`、`join()` 的 测试步骤。
+ * @returns 测试断言渲染后的图片、画布或文本。
+ */
 const collectTsFiles = (root: string): string[] => {
   if (!existsSync(root)) return [];
 
@@ -15,6 +20,11 @@ const collectTsFiles = (root: string): string[] => {
   });
 };
 
+/**
+ * 执行 测试断言流程。
+ * @param root - root 输入；驱动 `readdirSync()`、`join()` 的 测试步骤。
+ * @returns 测试断言渲染后的图片、画布或文本。
+ */
 const collectFiles = (root: string): string[] => {
   if (!existsSync(root)) return [];
 
@@ -26,6 +36,10 @@ const collectFiles = (root: string): string[] => {
   });
 };
 
+/**
+ * 执行 测试断言流程。
+ * @param filePath - 测试路径；驱动 `relative()` 的 测试步骤。
+ */
 const toRepoPath = (filePath: string) =>
   relative(repoRoot, filePath).replace(/\\/g, '/');
 
@@ -240,8 +254,7 @@ describe('QQBot plugin package boundary', () => {
         .filter(({ line }) => /^export\s+/.test(line))
         .filter(({ line }) => !/^export\s+function\s+createPlugin\b/.test(line))
         .map(
-          ({ index, line }) =>
-            `${toRepoPath(entryPath)}:${index} :: ${line}`,
+          ({ index, line }) => `${toRepoPath(entryPath)}:${index} :: ${line}`,
         );
     });
 

@@ -14,7 +14,7 @@ export class Band {
   /**
    * 构造 Band 实例，并初始化该模型的本地基础字段。
    *
-   * @param bandId - 乐队 ID。
+   * @param bandId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
    */
   constructor(bandId: number) {
     this.bandId = bandId;
@@ -32,7 +32,7 @@ export class Band {
     this.getMembers();
   }
   /**
-   * 在 Band 模型中获取Members。
+   * 查询 BangDream 插件数据。
    */
   getMembers() {
     const members = [];
@@ -54,7 +54,7 @@ export class Band {
     return await getBandIcon(this.bandId);
   }
   /**
-   * 在 Band 模型中获取Logo。
+   * 查询 BangDream 插件数据。
    *
    * @returns 异步处理结果。
    */
@@ -69,7 +69,7 @@ const bandIconCache: { [bandId: number]: Image } = {};
 /**
  * 在BangDream 领域模型层中获取乐队图标。
  *
- * @param bandId - 乐队 ID。
+ * @param bandId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
  * @returns 异步处理结果。
  */
 export async function getBandIcon(bandId: number): Promise<Image> {

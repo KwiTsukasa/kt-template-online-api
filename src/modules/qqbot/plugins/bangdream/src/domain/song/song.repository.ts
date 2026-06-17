@@ -15,7 +15,7 @@ export class SongRepository {
   /**
    * 创建歌曲领域模型。
    *
-   * @param songId - 歌曲 ID。
+   * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
    */
   create(songId: number): Song {
     return new Song(songId);

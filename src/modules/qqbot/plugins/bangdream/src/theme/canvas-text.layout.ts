@@ -39,7 +39,7 @@ export type BangDreamTextWithImageFont = 'default' | 'old';
 /**
  * 计算默认文本行高。
  *
- * @param textSize - 文本字号。
+ * @param textSize - textSize 输入；限定 BangDream查询范围。
  */
 export function getTextLineHeight(textSize: number) {
   return textSize * BANGDREAM_TEXT_SPEC.line.heightRatio;
@@ -48,7 +48,7 @@ export function getTextLineHeight(textSize: number) {
 /**
  * 计算文本和图片混排默认间距。
  *
- * @param textSize - 文本字号。
+ * @param textSize - textSize 输入；限定 BangDream查询范围。
  */
 export function getTextInlineSpacing(textSize: number) {
   return textSize * BANGDREAM_TEXT_SPEC.line.spacingRatio;
@@ -57,8 +57,8 @@ export function getTextInlineSpacing(textSize: number) {
 /**
  * 计算文本绘制 baseline。
  *
- * @param lineHeight - 行高。
- * @param textSize - 文本字号。
+ * @param lineHeight - lineHeight 输入；限定 BangDream查询范围。
+ * @param textSize - textSize 输入；限定 BangDream查询范围。
  */
 export function getTextBaselineY(lineHeight: number, textSize: number) {
   return (
@@ -70,8 +70,8 @@ export function getTextBaselineY(lineHeight: number, textSize: number) {
 /**
  * 计算内联图片按文本字号缩放后的宽度。
  *
- * @param image - 图片尺寸。
- * @param textSize - 文本字号。
+ * @param image - image 输入；使用 `width`、`height` 字段生成结果。
+ * @param textSize - textSize 输入；限定 BangDream查询范围。
  */
 export function getInlineImageWidth(image: ImageLike, textSize: number) {
   return (textSize * image.width) / image.height;
@@ -80,8 +80,8 @@ export function getInlineImageWidth(image: ImageLike, textSize: number) {
 /**
  * 计算内联图片绘制 Y 坐标。
  *
- * @param baselineY - 当前文本 baseline。
- * @param textSize - 文本字号。
+ * @param baselineY - baselineY 输入；限定 BangDream查询范围。
+ * @param textSize - textSize 输入；限定 BangDream查询范围。
  */
 export function getInlineImageY(baselineY: number, textSize: number) {
   return (
@@ -94,7 +94,7 @@ export function getInlineImageY(baselineY: number, textSize: number) {
 /**
  * 计算文本画布尺寸。
  *
- * @param options - 行数、行高、最大宽度和单行宽度。
+ * @param options - BangDream列表；生成 BangDream对象。
  */
 export function createTextCanvasSize({
   lineHeight,

@@ -14,9 +14,9 @@ import {
 /**
  * 在图片布局层中绘制称号。
  *
- * @param degree - 称号参数。
- * @param server - 目标服务器。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param degree - degree 输入；使用 `degreeName`、`degreeType`、`degreeId`、`rank` 字段生成结果。
+ * @param server - server 输入；驱动 `degree.getDegreeImage()`、`degree.getDegreeFrame()`、`degree.getDegreeIcon()` 的 BangDream步骤。
+ * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawDegree(

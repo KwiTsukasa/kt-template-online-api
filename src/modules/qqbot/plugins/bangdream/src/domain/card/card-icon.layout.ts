@@ -23,7 +23,7 @@ export const BANGDREAM_CARD_ICON_LIST_SPEC = {
 /**
  * 计算卡牌图标列表文本字号。
  *
- * @param lineHeight - 列表行高。
+ * @param lineHeight - lineHeight 输入；限定 BangDream查询范围。
  */
 export function getCardIconListTextSize(lineHeight: number) {
   return lineHeight * BANGDREAM_CARD_ICON_LIST_SPEC.list.textSizeRatio;
@@ -32,7 +32,7 @@ export function getCardIconListTextSize(lineHeight: number) {
 /**
  * 计算卡牌图标列表卡牌间距。
  *
- * @param lineHeight - 列表行高。
+ * @param lineHeight - lineHeight 输入；限定 BangDream查询范围。
  */
 export function getCardIconListSpacing(lineHeight: number) {
   return lineHeight * BANGDREAM_CARD_ICON_LIST_SPEC.list.spacingRatio;
@@ -41,8 +41,8 @@ export function getCardIconListSpacing(lineHeight: number) {
 /**
  * 按历史列表规则比较卡牌图标展示顺序。
  *
- * @param left - 左侧卡牌。
- * @param right - 右侧卡牌。
+ * @param left - left 输入；使用 `rarity`、`type`、`cardId` 字段生成结果。
+ * @param right - right 输入；使用 `rarity`、`type`、`cardId` 字段生成结果。
  */
 export function compareCardIconListCards(
   left: CardIconListSortTarget,
@@ -75,7 +75,7 @@ export function compareCardIconListCards(
 /**
  * 按卡牌图标列表展示规则原地排序。
  *
- * @param cards - 待排序卡牌。
+ * @param cards - 卡牌列表；执行 `cards.sort()` 对应的 BangDream步骤。
  */
 export function sortCardIconListCards<T extends CardIconListSortTarget>(
   cards: T[],

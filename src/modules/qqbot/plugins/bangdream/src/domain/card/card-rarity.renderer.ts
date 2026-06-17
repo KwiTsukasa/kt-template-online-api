@@ -17,6 +17,9 @@ interface RarityInListOptions {
 export const starList: { [type: string]: Image } = {};
 let rarityAssetsPreload: Promise<void> | undefined;
 
+/**
+ * 执行 BangDream 插件流程。
+ */
 export async function preloadBangDreamCardRarityAssets() {
   if (!rarityAssetsPreload) {
     rarityAssetsPreload = Promise.all([
@@ -38,7 +41,7 @@ export async function preloadBangDreamCardRarityAssets() {
 /**
  * 在图片布局层中绘制RarityIn列表。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawRarityInList 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawRarityInList({

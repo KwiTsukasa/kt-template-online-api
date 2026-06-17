@@ -15,7 +15,7 @@ interface BandInListOptions {
 /**
  * 在图片布局层中绘制乐队In列表。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawBandInList 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawBandInList({

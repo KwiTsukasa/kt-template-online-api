@@ -2,6 +2,10 @@ import { ConfigService } from '@nestjs/config';
 import { ToolsService } from '../../src/common';
 import { RuntimeConfigService } from '../../src/runtime/config/runtime-config.service';
 
+/**
+ * 创建 运行态健康检查对象或配置。
+ * @param values - 配置值字典；构造 Jest mock 返回值。
+ */
 function createService(values: Record<string, unknown>) {
   const configService = {
     get: jest.fn((key: string) => values[key]),

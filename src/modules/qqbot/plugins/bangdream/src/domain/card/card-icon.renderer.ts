@@ -22,7 +22,7 @@ interface CardIconInListOptions {
 /**
  * 在图片布局层中绘制卡牌列表In列表。
  *
- * @param options1 - options1参数。
+ * @param options1 - options1 输入；影响 drawCardListInList 的返回值。
  */
 export async function drawCardListInList({
   key,

@@ -13,6 +13,12 @@ import type { BangDreamOperationModule } from '@/modules/qqbot/plugins/bangdream
 export const gachaSimulateOperation: BangDreamOperationModule = {
   catalogKeys: BANGDREAM_GACHA_SIMULATE_CATALOG_KEYS,
   handlerName: 'simulateGacha',
+  /**
+   * 执行插件操作处理器。
+   * @param input - input 输入；使用 `times`、`gachaId` 字段生成结果。
+   * @param context - context 输入；执行 `context.getTokens()`、`context.pickMainServer()`、`context.optionalNumber()`、`context.firstNumber()` 对应的 BangDream步骤。
+   * @returns 插件处理结果。
+   */
   execute: async (input, context) => {
     const tokens = context.getTokens(input);
     const mainServer = context.pickMainServer(input, tokens);
@@ -35,6 +41,10 @@ export const gachaSimulateOperation: BangDreamOperationModule = {
   },
 };
 
+/**
+ * 执行 BangDream 插件流程。
+ * @param mainServer - mainServer 输入；驱动 `getPresentGachaList()` 的 BangDream步骤。
+ */
 async function pickPresentGacha(mainServer: number) {
   const gachaList = await getPresentGachaList(mainServer);
   const gacha = gachaList.find((item) => !isBirthdayGachaType(item.type));

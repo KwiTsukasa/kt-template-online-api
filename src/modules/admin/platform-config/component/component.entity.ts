@@ -83,12 +83,18 @@ export class Component {
   })
   is_deleted: boolean;
 
+  /**
+   * 转换 Admin 平台配置输入。
+   */
   @AfterLoad()
   decodeDictKeys() {
     // 查询结果初始化完成后再翻译，避免构造/赋值阶段覆盖派生字段。
     decodeDictKeys(this);
   }
 
+  /**
+   * 创建 Admin 平台配置对象或配置。
+   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

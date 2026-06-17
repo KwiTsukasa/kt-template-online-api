@@ -22,10 +22,10 @@ import { Canvas } from 'skia-canvas';
 /**
  * 在QQBot 图片视图层中绘制活动试炼。
  *
- * @param eventId - 活动 ID。
- * @param mainServer - 主数据服务器参数。
- * @param meta - Meta参数，未传入时使用默认值。
- * @param compress - compress参数。
+ * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
+ * @param mainServer - mainServer 输入；决定 BangDream条件分支。
+ * @param meta - meta 输入；驱动 `stackImage()` 的 BangDream步骤。
+ * @param compress - BangDream列表；影响 drawEventStage 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawEventStage(
@@ -67,7 +67,7 @@ export async function drawEventStage(
   /**
    * 在QQBot 图片视图层中绘制试炼歌曲。
    *
-   * @param stage - 试炼参数。
+   * @param stage - stage 输入；驱动 `stackImage()` 的 BangDream步骤。
    */
   async function drawStageSong(stage: Stage) {
     return stackImage([
@@ -76,6 +76,9 @@ export async function drawEventStage(
     ]);
   }
 
+  /**
+   * 执行 BangDream 插件流程。
+   */
   async function flushColumn() {
     if (currentColumn.length === 0) return;
     const columnBlock = drawDataBlock({ list: currentColumn });

@@ -28,6 +28,15 @@ import { QqbotCommand } from '../../infrastructure/persistence/command/qqbot-com
 
 @Injectable()
 export class QqbotCommandService {
+  /**
+   * 初始化 QqbotCommandService 实例。
+   * @param commandRepository - 命令仓库依赖；影响 constructor 的返回值。
+   * @param commandLogRepository - 命令仓库依赖；影响 constructor 的返回值。
+   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
+   * @param pluginExecution - pluginExecution 输入；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(QqbotCommand)
     private readonly commandRepository: Repository<QqbotCommand>,
@@ -40,6 +49,10 @@ export class QqbotCommandService {
     private readonly configService: ConfigService,
   ) {}
 
+  /**
+   * 获取分页数据。
+   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   */
   async page(query: QqbotCommandQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
       query,
@@ -100,6 +113,10 @@ export class QqbotCommandService {
     };
   }
 
+  /**
+   * 列出Enabled For Message。
+   * @param message - message 输入；使用 `selfId`、`messageType` 字段生成结果。
+   */
   async listEnabledForMessage(message: QqbotNormalizedMessage) {
     const boundIds = await this.accountService.getBoundCommandIds(
       message.selfId,
@@ -118,6 +135,10 @@ export class QqbotCommandService {
       .getMany();
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   */
   async findById(id: string) {
     const command = await this.commandRepository.findOne({
       where: { id, isDeleted: false },
@@ -126,6 +147,10 @@ export class QqbotCommandService {
     return command;
   }
 
+  /**
+   * 保存数据。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async save(body: QqbotCommandBodyDto) {
     const payload = await this.normalizeBody(body);
     await this.assertCodeAvailable(payload.code || '');
@@ -135,6 +160,10 @@ export class QqbotCommandService {
     return saved.id;
   }
 
+  /**
+   * 更新数据。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async update(body: QqbotCommandUpdateDto) {
     const current = await this.findById(body.id);
     const payload = await this.normalizeBody({
@@ -146,16 +175,29 @@ export class QqbotCommandService {
     return true;
   }
 
+  /**
+   * 删除数据。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   */
   async remove(id: string) {
     await this.commandRepository.update({ id }, { isDeleted: true });
     return true;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   * @param enabled - enabled 输入；影响 toggle 的返回值。
+   */
   async toggle(id: string, enabled: boolean) {
     await this.commandRepository.update({ id }, { enabled });
     return true;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param command - command 输入；使用 `id` 字段生成结果。
+   */
   async markHit(command: QqbotCommand) {
     await this.commandRepository.update(
       { id: command.id },
@@ -163,6 +205,10 @@ export class QqbotCommandService {
     );
   }
 
+  /**
+   * 判断 QQBot 核心条件。
+   * @param command - command 输入；使用 `cooldownMs`、`lastHitAt` 字段计算判断结果。
+   */
   isInCooldown(command: QqbotCommand) {
     return isWithinCooldown({
       cooldownMs: command.cooldownMs,
@@ -171,6 +217,10 @@ export class QqbotCommandService {
     });
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param params - QQBot列表；使用 `command`、`errorMessage`、`input`、`output` 字段生成结果。
+   */
   async logExecution(params: {
     command: QqbotCommand;
     errorMessage?: string;
@@ -201,10 +251,18 @@ export class QqbotCommandService {
     );
   }
 
+  /**
+   * 解析Default Params。
+   * @param command - command 输入；使用 `defaultParams` 字段生成结果。
+   */
   parseDefaultParams(command: QqbotCommand) {
     return this.parseJson(command.defaultParams);
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param command - command 输入；使用 `aliases`、`prefixes` 字段生成结果。
+   */
   toResponse(command: QqbotCommand) {
     return {
       ...command,
@@ -214,6 +272,10 @@ export class QqbotCommandService {
     };
   }
 
+  /**
+   * 转换 QQBot 核心输入。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   private async normalizeBody(body: QqbotCommandBodyDto) {
     const code = `${body.code || ''}`.trim();
     const pluginKey = `${body.pluginKey || ''}`.trim();
@@ -244,6 +306,11 @@ export class QqbotCommandService {
     } as Partial<QqbotCommand>;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param code - 响应状态码；影响 assertCodeAvailable 的返回值。
+   * @param currentId - QQBot ID；定位本次读取、更新、删除或关联的QQBot。
+   */
   private async assertCodeAvailable(code: string, currentId?: string) {
     const where = currentId
       ? { code, id: Not(currentId), isDeleted: false }
@@ -252,6 +319,11 @@ export class QqbotCommandService {
     if (existed) throwVbenError(`命令编码已存在：${code}`);
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param pluginKey - pluginKey 输入；决定 QQBot条件分支。
+   * @param operationKey - operationKey 输入；决定 QQBot条件分支。
+   */
   private async assertPluginOperation(
     pluginKey?: string,
     operationKey?: string,
@@ -268,6 +340,11 @@ export class QqbotCommandService {
     }
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param value - 待稳定序列化的值；驱动 `Array.isArray()` 的 QQBot步骤。
+   * @param fallback - 兜底值；转换 JSON 文本。
+   */
   private stringifyList(value: string[] | string | undefined, fallback = []) {
     const list = Array.isArray(value)
       ? value
@@ -280,6 +357,10 @@ export class QqbotCommandService {
     ]);
   }
 
+  /**
+   * 解析List。
+   * @param value - 待转换值；影响 parseList 的返回值。
+   */
   private parseList(value: string | null | undefined) {
     const source = `${value || ''}`.trim();
     if (!source) return [];
@@ -297,6 +378,10 @@ export class QqbotCommandService {
       .filter(Boolean);
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param value - 待稳定序列化的值；生成规范化文本。
+   */
   private stringifyParams(value: any) {
     if (value === undefined || value === null || value === '') return null;
     if (typeof value === 'string') {
@@ -308,6 +393,10 @@ export class QqbotCommandService {
     return JSON.stringify(value);
   }
 
+  /**
+   * 解析Json。
+   * @param value - 待转换值；转换 JSON 文本。
+   */
   private parseJson(value: string | null | undefined) {
     if (!value) return {};
     try {
@@ -317,6 +406,10 @@ export class QqbotCommandService {
     }
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param output - output 输入；使用 `replyText` 字段生成结果。
+   */
   private stringifyStoredOutput(output: any) {
     if (
       output &&
@@ -332,6 +425,11 @@ export class QqbotCommandService {
     return JSON.stringify(output);
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param command - command 输入；使用 `aliases`、`code`、`cooldownMs`、`enabled` 字段生成结果。
+   * @returns QQBot 核心产出的 QqbotCommandBodyDto。
+   */
   private toRawBody(command: QqbotCommand): QqbotCommandBodyDto {
     return {
       aliases: this.parseList(command.aliases),
@@ -352,8 +450,13 @@ export class QqbotCommandService {
     };
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   */
   private getMinCooldownMs() {
-    const value = Number(this.configService.get('QQBOT_COMMAND_MIN_COOLDOWN_MS'));
+    const value = Number(
+      this.configService.get('QQBOT_COMMAND_MIN_COOLDOWN_MS'),
+    );
     return Number.isInteger(value) && value > 0 ? value : 5000;
   }
 }

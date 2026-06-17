@@ -9,12 +9,10 @@ describe('BangDream song meta rank summary', () => {
       }),
     );
 
-    const { Server } = await import(
-      '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model'
-    );
-    const songModule = await import(
-      '@/modules/qqbot/plugins/bangdream/src/domain/song/song.model'
-    );
+    const { Server } =
+      await import('@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model');
+    const songModule =
+      await import('@/modules/qqbot/plugins/bangdream/src/domain/song/song.model');
     const { Song, getMetaRanking } = songModule;
     const getSongMetaRankSummary = (
       songModule as typeof songModule & {
@@ -76,9 +74,8 @@ describe('BangDream song meta rank summary', () => {
       loadImage,
     }));
 
-    const { Song } = await import(
-      '@/modules/qqbot/plugins/bangdream/src/domain/song/song.model'
-    );
+    const { Song } =
+      await import('@/modules/qqbot/plugins/bangdream/src/domain/song/song.model');
 
     const song = new Song(243);
     const first = await song.getSongJacketImage();
@@ -90,6 +87,9 @@ describe('BangDream song meta rank summary', () => {
   });
 });
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ */
 function createCatalogFixture() {
   return {
     meta: {
@@ -107,13 +107,11 @@ function createCatalogFixture() {
   };
 }
 
-function createSong({
-  id,
-  publishedCn,
-}: {
-  id: number;
-  publishedCn: boolean;
-}) {
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @param { id, publishedCn, } - 解构的歌曲测试元数据，用于构造包含 ID 和国服发布时间的 SongMetaSummary 断言样本。
+ */
+function createSong({ id, publishedCn }: { id: number; publishedCn: boolean }) {
   return {
     bandId: 1,
     bpm: {
@@ -138,6 +136,10 @@ function createSong({
   };
 }
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @param values - 配置值字典；驱动 `Object.fromEntries()` 的 BangDream步骤。
+ */
 function createMeta(values: Record<number, number>) {
   return Object.fromEntries(
     Object.entries(values).map(([difficulty, value]) => [

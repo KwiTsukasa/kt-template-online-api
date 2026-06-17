@@ -51,9 +51,9 @@ export const line2: Canvas = drawDottedLine(
 /**
  * 在QQBot 图片视图层中绘制活动列表。
  *
- * @param matches - 模糊搜索命中结果。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
- * @param compress - compress参数。
+ * @param matches - BangDream列表；驱动 `matchEventList()` 的 BangDream步骤。
+ * @param displayedServerList - displayedServerList 输入；驱动 `matchEventList()`、`sortEventList()`、`eventPromises.push()` 的 BangDream步骤。
+ * @param compress - BangDream列表；影响 drawEventList 的返回值。
  * @returns 异步处理结果。
  */
 export async function drawEventList(
@@ -137,32 +137,35 @@ export async function drawEventList(
 }
 
 const matchEventList = createBangDreamEntityMatcher<Event>({
+  /**
+   * 执行 BangDream回调。
+   */
   source: () => eventRepository.getSource(),
   /**
-   * 在QQBot 图片视图层中创建Entity。
+   * 创建 BangDream 插件对象或配置。
    *
-   * @param eventId - 活动 ID。
+   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
    */
   createEntity: (eventId) => eventRepository.create(eventId),
   /**
-   * 在QQBot 图片视图层中判断Released。
+   * 判断 BangDream 插件条件。
    *
-   * @param event - 活动参数。
-   * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
+   * @param event - event 输入；使用 `startAt` 字段计算判断结果。
+   * @param displayedServerList - displayedServerList 输入；计算 BangDream布尔判断。
    */
   isReleased: (event, displayedServerList) =>
     displayedServerList.some((server) => event.startAt[server] != null),
   /**
-   * 在QQBot 图片视图层中判断Matched。
+   * 判断 BangDream 插件条件。
    *
-   * @param matches - 模糊搜索命中结果。
-   * @param event - 活动参数。
+   * @param matches - BangDream列表；驱动 `match()` 的 BangDream步骤。
+   * @param event - event 输入；驱动 `match()` 的 BangDream步骤。
    */
   isMatched: (matches, event) => match(matches, event, []),
   /**
    * 在QQBot 图片视图层中处理关系表达式值。
    *
-   * @param event - 活动参数。
+   * @param event - event 输入；使用 `eventId` 字段生成结果。
    */
   relationValue: (event) => event.eventId,
 });
@@ -170,8 +173,8 @@ const matchEventList = createBangDreamEntityMatcher<Event>({
 /**
  * 在QQBot 图片视图层中绘制活动In列表。
  *
- * @param event - 活动参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param event - event 输入；使用 `eventId`、`startAt`、`endAt`、`eventCharacterParameterBonus` 字段生成结果。
+ * @param displayedServerList - displayedServerList 输入；使用 `length` 字段生成结果。
  * @returns 异步处理结果。
  */
 async function drawEventInList(

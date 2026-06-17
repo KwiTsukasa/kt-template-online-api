@@ -33,6 +33,15 @@ export class QqbotReverseWsService
   private readonly pendingActions = new Map<string, QqbotPendingAction>();
   private server: WebSocketServer | null = null;
 
+  /**
+   * 初始化 QqbotReverseWsService 实例。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   * @param httpAdapterHost - httpAdapterHost 输入；影响 constructor 的返回值。
+   * @param moduleRef - moduleRef 输入；影响 constructor 的返回值。
+   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
+   * @param busService - busService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly configService: ConfigService,
     private readonly httpAdapterHost: HttpAdapterHost,
@@ -42,6 +51,9 @@ export class QqbotReverseWsService
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 处理Application Bootstrap。
+   */
   onApplicationBootstrap() {
     if (!this.isEnabled()) {
       this.logger.log('QQBot runtime 未启用，跳过反向 WS 监听');
@@ -65,6 +77,9 @@ export class QqbotReverseWsService
     this.logger.log(`QQBot 反向 WS 已挂载: ${this.getReversePath()}`);
   }
 
+  /**
+   * 处理 QQBot 核心事件。
+   */
   onModuleDestroy() {
     this.pendingActions.forEach((pending) => {
       clearTimeout(pending.timer);
@@ -75,6 +90,12 @@ export class QqbotReverseWsService
     this.server?.close();
   }
 
+  /**
+   * 投递 QQBot 核心消息或任务。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param action - action 输入；驱动 `reject()` 的 QQBot步骤。
+   * @param params - QQBot列表；影响 sendAction 的返回值。
+   */
   async sendAction(
     selfId: string,
     action: string,
@@ -104,6 +125,10 @@ export class QqbotReverseWsService
     return responsePromise;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   async kick(selfId: string) {
     let count = 0;
     [...this.connections.entries()].forEach(([key, ws]) => {
@@ -116,6 +141,9 @@ export class QqbotReverseWsService
     return { count };
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   */
   getRuntimeStatus() {
     return {
       enabled: this.isEnabled(),
@@ -124,6 +152,11 @@ export class QqbotReverseWsService
     };
   }
 
+  /**
+   * 处理Connection。
+   * @param ws - QQBot列表；执行 `ws.on()`、`ws.close()` 对应的 QQBot步骤。
+   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   */
   private async handleConnection(ws: WebSocket, request: IncomingMessage) {
     let activeSelfId = '';
     const queuedMessages: string[] = [];
@@ -177,6 +210,11 @@ export class QqbotReverseWsService
     }
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param raw - raw 输入；驱动 `this.handleMessage()` 的 QQBot步骤。
+   */
   private async consumeMessage(selfId: string, raw: string) {
     try {
       await this.handleMessage(selfId, raw);
@@ -186,6 +224,11 @@ export class QqbotReverseWsService
     }
   }
 
+  /**
+   * 处理Message。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param raw - raw 输入；转换 JSON 文本。
+   */
   private async handleMessage(selfId: string, raw: string) {
     let payload: QqbotOneBotEvent;
     try {
@@ -218,6 +261,11 @@ export class QqbotReverseWsService
     });
   }
 
+  /**
+   * 解析Pending Action。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param payload - payload 输入；使用 `echo` 字段生成结果。
+   */
   private async resolvePendingAction(
     selfId: string,
     payload: QqbotOneBotActionResponse,
@@ -235,6 +283,11 @@ export class QqbotReverseWsService
     pending.resolve(payload);
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param ws - QQBot列表；影响 closeTimedOutConnection 的返回值。
+   */
   private closeTimedOutConnection(selfId: string, ws: WebSocket) {
     const reason = 'OneBot action timeout';
     let closedCurrentConnection = false;
@@ -258,10 +311,19 @@ export class QqbotReverseWsService
       .catch(() => undefined);
   }
 
+  /**
+   * 判断 QQBot 核心条件。
+   * @param key - 键名；驱动 `connections.get()` 的 QQBot步骤。
+   * @param ws - QQBot列表；驱动 `connections.get()` 的 QQBot步骤。
+   */
   private isCurrentConnection(key: string, ws: WebSocket) {
     return this.connections.get(key) === ws;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   */
   private async authorize(request: IncomingMessage) {
     const url = new URL(request.url || '', `http://${request.headers.host}`);
     const selfId = `${
@@ -280,9 +342,8 @@ export class QqbotReverseWsService
       return { ok: false as const, message: 'missing self id' };
     }
 
-    const account = await this.accountService.findEnabledBySelfIdWithToken(
-      selfId,
-    );
+    const account =
+      await this.accountService.findEnabledBySelfIdWithToken(selfId);
     const expectedToken =
       account?.accessToken ||
       this.configService.get<string>('QQBOT_REVERSE_WS_TOKEN') ||
@@ -304,6 +365,10 @@ export class QqbotReverseWsService
     return { ok: true as const, role, selfId };
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   */
   private getWritableConnection(selfId: string) {
     const universal = this.connections.get(
       this.getConnectionKey(selfId, 'Universal'),
@@ -316,10 +381,18 @@ export class QqbotReverseWsService
     return ws;
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param role - role 输入；限定 QQBot查询范围。
+   */
   private getConnectionKey(selfId: string, role: QqbotConnectionRole) {
     return `${selfId}:${role}`;
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   */
   private getReversePath() {
     return (
       this.configService.get<string>('QQBOT_REVERSE_WS_PATH') ||
@@ -327,14 +400,23 @@ export class QqbotReverseWsService
     );
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   */
   private getActionTimeout() {
     return Number(this.configService.get('QQBOT_API_TIMEOUT_MS') || 10_000);
   }
 
+  /**
+   * 判断 QQBot 核心条件。
+   */
   private isEnabled() {
     return `${this.configService.get('QQBOT_ENABLED') || 'false'}` === 'true';
   }
 
+  /**
+   * 判断 QQBot 核心条件。
+   */
   private isAutoRegisterEnabled() {
     return (
       `${this.configService.get('QQBOT_AUTO_REGISTER_ACCOUNT') || 'true'}` ===
@@ -342,16 +424,30 @@ export class QqbotReverseWsService
     );
   }
 
+  /**
+   * 判断 QQBot 核心条件。
+   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   */
   private isReversePath(request: IncomingMessage) {
     const url = new URL(request.url || '', `http://${request.headers.host}`);
     return url.pathname === this.getReversePath();
   }
 
+  /**
+   * 转换 QQBot 核心输入。
+   * @param role - role 输入；决定 QQBot条件分支。
+   * @returns QQBot 核心转换后的值。
+   */
   private normalizeRole(role: string): QqbotConnectionRole {
     if (role === 'API' || role === 'Event') return role;
     return 'Universal';
   }
 
+  /**
+   * 读取 QQBot 核心资源。
+   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * @param url - 访问地址；使用 `searchParams` 字段生成结果。
+   */
   private readToken(request: IncomingMessage, url: URL) {
     const authorization = `${request.headers.authorization || ''}`;
     if (authorization.startsWith('Bearer ')) return authorization.slice(7);

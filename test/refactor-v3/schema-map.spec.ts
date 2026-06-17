@@ -3,6 +3,9 @@ import { join } from 'path';
 
 const root = join(__dirname, '..', '..');
 
+/**
+ * 执行 测试断言流程。
+ */
 const extractSchemaMapTables = () => {
   const schemaMap = readFileSync(
     join(root, 'docs/refactor-v3/schema-map.md'),
@@ -106,7 +109,9 @@ describe('refactor v3 schema skeleton', () => {
     expect(seed).toContain("'bangdream.song.search'");
     expect(seed).toContain("'bd'");
     expect(seed).toContain("'[]'");
-    expect(seed).not.toContain('["查曲","bd","bangdream","bandori","邦邦","邦邦查歌"]');
+    expect(seed).not.toContain(
+      '["查曲","bd","bangdream","bandori","邦邦","邦邦查歌"]',
+    );
   });
 
   it('seeds qqbot admin menus and button permissions required by current pages', () => {

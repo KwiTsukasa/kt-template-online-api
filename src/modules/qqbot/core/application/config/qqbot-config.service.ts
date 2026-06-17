@@ -11,11 +11,19 @@ const QQBOT_PERMISSION_CONFIG_KEYS = {
 
 @Injectable()
 export class QqbotConfigService {
+  /**
+   * 初始化 QqbotConfigService 实例。
+   * @param configRepository - QQBot仓库依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(QqbotConfig)
     private readonly configRepository: Repository<QqbotConfig>,
   ) {}
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @returns QQBot 核心查询结果。
+   */
   async getPermissionConfig(): Promise<QqbotPermissionConfig> {
     const [allowlistEnabled, blocklistEnabled] = await Promise.all([
       this.getBooleanConfig(
@@ -31,6 +39,11 @@ export class QqbotConfigService {
     return { allowlistEnabled, blocklistEnabled };
   }
 
+  /**
+   * 更新Permission Config。
+   * @param config - config 输入；使用 `allowlistEnabled`、`blocklistEnabled` 字段生成结果。
+   * @returns QQBot 核心更新后的状态。
+   */
   async updatePermissionConfig(
     config: Partial<QqbotPermissionConfig>,
   ): Promise<QqbotPermissionConfig> {
@@ -59,6 +72,11 @@ export class QqbotConfigService {
     return this.getPermissionConfig();
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   * @param configKey - configKey 输入；限定 QQBot查询范围。
+   * @param defaultValue - defaultValue 输入；限定 QQBot查询范围。
+   */
   async getBooleanConfig(configKey: string, defaultValue: boolean) {
     const record = await this.configRepository.findOne({
       where: { configKey },
@@ -67,6 +85,12 @@ export class QqbotConfigService {
     return record.configValue === 'true';
   }
 
+  /**
+   * 设置Boolean Config。
+   * @param configKey - configKey 输入；写入 QQBot状态。
+   * @param value - 待转换值；写入 QQBot状态。
+   * @param remark - remark 输入；写入 QQBot状态。
+   */
   async setBooleanConfig(configKey: string, value: boolean, remark: string) {
     const exists = await this.configRepository.findOne({
       where: { configKey },

@@ -74,6 +74,9 @@ export class AdminRole {
   @ManyToMany(() => AdminUser, (user) => user.roles)
   users: AdminUser[];
 
+  /**
+   * 创建 Admin 身份权限对象或配置。
+   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

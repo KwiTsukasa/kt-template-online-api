@@ -28,6 +28,12 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   private readonly pluginAliases = new Map<string, string>();
   private readonly plugins = new Map<string, QqbotIntegrationPlugin>();
 
+  /**
+   * 初始化 QqbotPluginRegistryService 实例。
+   * @param builtinPluginLoader - builtinPluginLoader 输入；影响 constructor 的返回值。
+   * @param pluginRepository - 插件仓库依赖；影响 constructor 的返回值。
+   * @param installationRepository - 插件平台仓库依赖；影响 constructor 的返回值。
+   */
   constructor(
     @Optional()
     @Inject(forwardRef(() => QqbotBuiltinPluginPackageLoaderService))
@@ -40,6 +46,9 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     private readonly installationRepository?: Repository<QqbotPluginInstallation>,
   ) {}
 
+  /**
+   * 处理 QQBot 插件平台事件。
+   */
   async onModuleInit() {
     await this.hydrateInactivePluginKeys();
     for (const plugin of this.builtinPluginLoader?.loadCommandPlugins() || []) {
@@ -50,6 +59,10 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     }
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param plugin - plugin 输入；使用 `key`、`operations`、`legacyKeys` 字段生成结果。
+   */
   register(plugin: QqbotIntegrationPlugin) {
     if (!plugin.key || !plugin.operations.length) {
       throwVbenError('QQBot 插件必须包含 key 和 operation');
@@ -64,6 +77,11 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     }
   }
 
+  /**
+   * 设置Plugin Active。
+   * @param pluginKey - pluginKey 输入；驱动 `this.resolveCanonicalPluginKey()` 的 插件平台步骤。
+   * @param active - active 输入；决定 插件平台条件分支。
+   */
   setPluginActive(pluginKey: string, active: boolean) {
     const canonicalKey = this.resolveCanonicalPluginKey(pluginKey);
     if (active) {
@@ -73,6 +91,10 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     this.inactivePluginKeys.add(canonicalKey);
   }
 
+  /**
+   * 列出Plugins。
+   * @returns QQBot 插件平台查询结果。
+   */
   listPlugins(): QqbotPluginSummary[] {
     return [...this.plugins.values()]
       .filter((plugin) => this.isPluginActive(plugin.key))
@@ -86,6 +108,11 @@ export class QqbotPluginRegistryService implements OnModuleInit {
       }));
   }
 
+  /**
+   * 列出Operations。
+   * @param pluginKey - pluginKey 输入；驱动 `this.getPlugins()` 的 插件平台步骤。
+   * @returns QQBot 插件平台查询结果。
+   */
   listOperations(pluginKey?: string): QqbotPluginOperationSummary[] {
     return this.getPlugins(pluginKey).flatMap((plugin) =>
       plugin.operations.map((operation) => ({
@@ -103,6 +130,11 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     );
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param pluginKey - pluginKey 输入；驱动 `this.getPlugins()`、`formatKtDateTime()`、`plugin.healthCheck()` 的 插件平台步骤。
+   * @returns 异步完成后的 QQBot 插件平台结果。
+   */
   async health(pluginKey?: string): Promise<QqbotPluginHealth[]> {
     const plugins = this.getPlugins(pluginKey);
     return Promise.all(
@@ -127,6 +159,13 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     );
   }
 
+  /**
+   * 执行业务数据。
+   * @param pluginKey - pluginKey 输入；驱动 `this.getOperation()` 的 插件平台步骤。
+   * @param operationKey - operationKey 输入；驱动 `this.getOperation()` 的 插件平台步骤。
+   * @param input - input 输入；驱动 `this.executeWithTimeout()` 的 插件平台步骤。
+   * @param context - context 输入；驱动 `this.executeWithTimeout()` 的 插件平台步骤。
+   */
   async execute(
     pluginKey: string,
     operationKey: string,
@@ -137,6 +176,11 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     return this.executeWithTimeout(operation, input, context);
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   * @param pluginKey - pluginKey 输入；驱动 `this.getOperation()` 的 插件平台步骤。
+   * @param operationKey - operationKey 输入；驱动 `this.getOperation()` 的 插件平台步骤。
+   */
   assertOperation(pluginKey?: string, operationKey?: string) {
     if (!pluginKey || !operationKey) {
       throwVbenError('请选择插件和插件能力');
@@ -144,6 +188,11 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     this.getOperation(pluginKey, operationKey);
   }
 
+  /**
+   * 查询 QQBot 插件平台数据。
+   * @param pluginKey - pluginKey 输入；驱动 `this.getPluginByKey()` 的 插件平台步骤。
+   * @param operationKey - operationKey 输入；驱动 `operations.find()` 的 插件平台步骤。
+   */
   private getOperation(pluginKey: string, operationKey: string) {
     const plugin = this.getPluginByKey(pluginKey);
     if (!plugin) throwVbenError(`QQBot 插件不存在：${pluginKey}`);
@@ -160,6 +209,12 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     return operation;
   }
 
+  /**
+   * 执行With Timeout。
+   * @param operation - operation 输入；使用 `timeoutMs`、`key` 字段生成结果。
+   * @param input - input 输入；驱动 `Promise.resolve()` 的 插件平台步骤。
+   * @param context - context 输入；驱动 `Promise.resolve()` 的 插件平台步骤。
+   */
   private async executeWithTimeout(
     operation: QqbotIntegrationPlugin['operations'][number],
     input: Record<string, any>,
@@ -190,6 +245,10 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     }
   }
 
+  /**
+   * 查询 QQBot 插件平台数据。
+   * @param pluginKey - pluginKey 输入；驱动 `this.getPluginByKey()` 的 插件平台步骤。
+   */
   private getPlugins(pluginKey?: string) {
     if (!pluginKey) {
       return [...this.plugins.values()].filter((plugin) =>
@@ -200,6 +259,10 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     return plugin && this.isPluginActive(plugin.key) ? [plugin] : [];
   }
 
+  /**
+   * 查询 QQBot 插件平台数据。
+   * @param pluginKey - pluginKey 输入；限定 插件平台查询范围。
+   */
   private getPluginByKey(pluginKey: string) {
     return (
       this.plugins.get(pluginKey) ||
@@ -207,16 +270,27 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     );
   }
 
+  /**
+   * 判断 QQBot 插件平台条件。
+   * @param pluginKey - pluginKey 输入；驱动 `inactivePluginKeys.has()` 的 插件平台步骤。
+   */
   private isPluginActive(pluginKey: string) {
     return !this.inactivePluginKeys.has(
       this.resolveCanonicalPluginKey(pluginKey),
     );
   }
 
+  /**
+   * 解析Canonical Plugin Key。
+   * @param pluginKey - pluginKey 输入；驱动 `pluginAliases.get()` 的 插件平台步骤。
+   */
   private resolveCanonicalPluginKey(pluginKey: string) {
     return this.pluginAliases.get(pluginKey) || pluginKey;
   }
 
+  /**
+   * 执行 QQBot 插件平台流程。
+   */
   private async hydrateInactivePluginKeys() {
     if (!this.pluginRepository || !this.installationRepository) return;
 

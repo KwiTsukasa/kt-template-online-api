@@ -29,8 +29,8 @@ interface drawBandDetailsInListOptions {
 /**
  * 在图片布局层中绘制乐队详情列表In列表。
  *
- * @param BandDetailsInListOptions - 乐队详情列表In列表Options参数。
- * @param key - 当前字段键名，未传入时使用默认值。
+ * @param BandDetailsInListOptions - BangDream列表；驱动 `for()` 的 BangDream步骤。
+ * @param key - 键名；影响 drawBandDetailsInList 的返回值。
  */
 async function drawBandDetailsInList(
   BandDetailsInListOptions: drawBandDetailsInListOptions,
@@ -71,8 +71,8 @@ async function drawBandDetailsInList(
 /**
  * 在图片布局层中绘制玩家乐队RankIn列表。
  *
- * @param player - 玩家参数。
- * @param key - 当前字段键名，未传入时使用默认值。
+ * @param player - player 输入；使用 `profile` 字段生成结果。
+ * @param key - 键名；驱动 `drawBandDetailsInList()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawPlayerBandRankInList(
@@ -95,8 +95,8 @@ export async function drawPlayerBandRankInList(
 /**
  * 在图片布局层中绘制玩家试炼ChallengeRankIn列表。
  *
- * @param player - 玩家参数。
- * @param key - 当前字段键名，未传入时使用默认值。
+ * @param player - player 输入；使用 `profile` 字段生成结果。
+ * @param key - 键名；驱动 `drawBandDetailsInList()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawPlayerStageChallengeRankInList(
@@ -122,7 +122,7 @@ const rankImageCache: { [rankImageName: string]: Image } = {};
 /**
  * 在图片布局层中加载Rank图片。
  *
- * @param rankImageName - rank图片名称参数。
+ * @param rankImageName - rankImageName 输入；驱动 `deckRankResourceRepository.getRankImageBuffer()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function loadRankImage(rankImageName: string): Promise<Image> {
@@ -137,8 +137,8 @@ async function loadRankImage(rankImageName: string): Promise<Image> {
 /**
  * 在图片布局层中绘制玩家DeckTotalRatingIn列表。
  *
- * @param player - 玩家参数。
- * @param key - 当前字段键名，未传入时使用默认值。
+ * @param player - player 输入；使用 `profile` 字段生成结果。
+ * @param key - 键名；驱动 `drawBandDetailsInList()` 的 BangDream步骤。
  */
 export async function drawPlayerDeckTotalRatingInList(
   player: Player,

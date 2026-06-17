@@ -9,10 +9,17 @@ type FflogsPluginOptions = {
   now?: () => Date;
 };
 
+/**
+ * 创建 FFLogs 插件对象或配置。
+ * @param options - FFLogs列表；使用 `host`、`manifest`、`now`、`normalizeError` 字段生成结果。
+ */
 export function createPlugin(options: FflogsPluginOptions) {
   const application = new FflogsApplication(new FflogsClient(options.host));
   return {
     description: options.manifest.description,
+    /**
+     * 执行 FFLogs回调。
+     */
     healthCheck: async () => {
       const checkedAt = formatFflogsCheckedAt(options.now?.() || new Date());
       try {
@@ -39,7 +46,15 @@ export function createPlugin(options: FflogsPluginOptions) {
   };
 }
 
+/**
+ * 转换 FFLogs 插件输入。
+ * @param date - date 输入；执行 `date.getFullYear()`、`date.getMonth()`、`date.getDate()`、`date.getHours()` 对应的 FFLogs步骤。
+ */
 function formatFflogsCheckedAt(date: Date) {
+  /**
+   * 补齐 FFLogs 插件展示文本。
+   * @param input - input 输入；影响 pad 的返回值。
+   */
   const pad = (input: number) => `${input}`.padStart(2, '0');
   return [
     date.getFullYear(),

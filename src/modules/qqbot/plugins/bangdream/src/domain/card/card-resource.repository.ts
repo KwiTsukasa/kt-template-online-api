@@ -18,7 +18,7 @@ export type CardImageType = 'icon' | 'illustration' | 'trim';
 /**
  * 获取卡牌资源训练状态后缀。
  *
- * @param trainingStatus - 是否特训。
+ * @param trainingStatus - BangDream列表；影响 toTrainingSuffix 的返回值。
  */
 function toTrainingSuffix(trainingStatus: boolean): string {
   return trainingStatus ? '_after_training' : '_normal';
@@ -27,13 +27,17 @@ function toTrainingSuffix(trainingStatus: boolean): string {
 /**
  * 将服务器枚举值转换为 Bestdori 资源路径中的服务器编码。
  *
- * @param server - 服务器枚举值。
+ * @param server - server 输入；影响 toServerCode 的返回值。
  */
 function toServerCode(server: Server | undefined): string {
   return server == null ? 'undefined' : Server[server];
 }
 
 export class CardResourceRepository {
+  /**
+   * 初始化 CardResourceRepository 实例。
+   * @param provider - provider 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}
@@ -41,8 +45,8 @@ export class CardResourceRepository {
   /**
    * 获取卡牌远端详情。
    *
-   * @param cardId - 卡牌 ID。
-   * @param update - 是否绕过缓存。
+   * @param cardId - 卡牌 ID；定位本次读取、更新、删除或关联的卡牌。
+   * @param update - update 输入；限定 BangDream查询范围。
    */
   async getDetail(
     cardId: number,
@@ -57,7 +61,7 @@ export class CardResourceRepository {
   /**
    * 获取卡牌资源批次目录。
    *
-   * @param cardId - 卡牌 ID。
+   * @param cardId - 卡牌 ID；定位本次读取、更新、删除或关联的卡牌。
    */
   getRip(cardId: number): string {
     if (cardId >= 9999) return '200_rip';
@@ -68,10 +72,10 @@ export class CardResourceRepository {
   /**
    * 获取卡牌图片资源路径。
    *
-   * @param source - 卡牌资源来源字段。
-   * @param imageType - 图片类型。
-   * @param trainingStatus - 是否使用特训后资源。
-   * @param displayedServerList - 可展示服务器优先级。
+   * @param source - source 输入；使用 `releasedAt`、`cardId`、`resourceSetName` 字段生成结果。
+   * @param imageType - imageType 输入；决定 BangDream条件分支。
+   * @param trainingStatus - BangDream列表；驱动 `toTrainingSuffix()` 的 BangDream步骤。
+   * @param displayedServerList - displayedServerList 输入；驱动 `toServerCode()` 的 BangDream步骤。
    */
   getImagePath(
     source: CardResourceSource,
@@ -94,9 +98,9 @@ export class CardResourceRepository {
   /**
    * 下载卡牌图片资源。
    *
-   * @param source - 卡牌资源来源字段。
-   * @param imageType - 图片类型。
-   * @param trainingStatus - 是否使用特训后资源。
+   * @param source - source 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * @param imageType - imageType 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * @param trainingStatus - BangDream列表；驱动 `provider.getAsset()` 的 BangDream步骤。
    */
   async getImageBuffer(
     source: CardResourceSource,

@@ -12,6 +12,10 @@ type Ff14MarketPluginOptions = {
   now?: () => Date;
 };
 
+/**
+ * 创建 FF14 市场插件对象或配置。
+ * @param options - FF14 市场列表；使用 `host`、`manifest`、`now`、`normalizeError` 字段生成结果。
+ */
 export function createPlugin(options: Ff14MarketPluginOptions) {
   const application = new Ff14MarketApplication(
     new Ff14MarketClient(options.host),
@@ -19,6 +23,9 @@ export function createPlugin(options: Ff14MarketPluginOptions) {
 
   return {
     description: options.manifest.description,
+    /**
+     * 执行 FF14 市场回调。
+     */
     healthCheck: async () => {
       const checkedAt = formatFf14CheckedAt(options.now?.() || new Date());
       try {
@@ -48,7 +55,15 @@ export function createPlugin(options: Ff14MarketPluginOptions) {
   };
 }
 
+/**
+ * 转换 FF14 市场插件输入。
+ * @param date - date 输入；执行 `date.getFullYear()`、`date.getMonth()`、`date.getDate()`、`date.getHours()` 对应的 FF14 市场步骤。
+ */
 function formatFf14CheckedAt(date: Date) {
+  /**
+   * 补齐 FF14 市场插件展示文本。
+   * @param input - input 输入；影响 pad 的返回值。
+   */
   const pad = (input: number) => `${input}`.padStart(2, '0');
   return [
     date.getFullYear(),

@@ -24,10 +24,21 @@ import {
 } from '../../helpers/controller-route.helper';
 import { readRefactorV3SqlSchema } from '../../helpers/sql-schema.helper';
 
+/**
+ * 查询 WordPress 镜像数据。
+ * @param moduleClass - Nest 模块类；读取装饰器 metadata。
+ * @param key - 键名；读取装饰器 metadata。
+ * @returns WordPress 镜像查询结果。
+ */
 const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] => {
   return Reflect.getMetadata(key, moduleClass) || [];
 };
 
+/**
+ * 执行 WordPress 镜像流程。
+ * @param modules - 模块列表；计算 WordPress布尔判断。
+ * @param moduleName - 模块名称文本；构造测试断言。
+ */
 const expectNoModuleNamed = (modules: unknown[], moduleName: string) => {
   expect(
     modules.some(
@@ -114,7 +125,9 @@ describe('WordPress mirror module contract', () => {
     expect(
       getModuleMetadata(WordpressMirrorModule, MODULE_METADATA.PROVIDERS),
     ).toEqual(expect.arrayContaining([WordpressService]));
-    expect(wordpressExports).toEqual(expect.arrayContaining([WordpressService]));
+    expect(wordpressExports).toEqual(
+      expect.arrayContaining([WordpressService]),
+    );
     expect(WORDPRESS_MIRROR_CONTROLLERS).toEqual(
       expect.arrayContaining([
         WordpressAuthController,

@@ -91,13 +91,14 @@ export class Event {
   /**
    * 构造 Event 实例，并初始化该模型的本地基础字段。
    *
-   * @param eventId - 活动 ID。
+   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
    */
   constructor(eventId: number) {
     this.eventId = eventId;
-    const eventData = bangdreamCatalogRepository.getEntity<
-      Record<string, any>
-    >('events', eventId);
+    const eventData = bangdreamCatalogRepository.getEntity<Record<string, any>>(
+      'events',
+      eventId,
+    );
     if (eventData == undefined) {
       this.isExist = false;
       return;
@@ -144,7 +145,7 @@ export class Event {
   /**
    * 在 Event 模型中加载远端完整详情并标记初始化状态。
    *
-   * @param useCache - use缓存参数，未传入时使用默认值。
+   * @param useCache - useCache 输入；驱动 `this.getData()` 的 BangDream步骤。
    */
   async initFull(useCache: boolean = true) {
     if (this.isInitFull) {
@@ -192,7 +193,7 @@ export class Event {
   /**
    * 在 Event 模型中请求当前模型的远端详情数据。
    *
-   * @param update - update参数，未传入时使用默认值。
+   * @param update - update 输入；驱动 `eventDataRepository.getDetail()` 的 BangDream步骤。
    */
   async getData(update: boolean = true) {
     return await eventDataRepository.getDetail(this.eventId, update);
@@ -200,7 +201,7 @@ export class Event {
   /**
    * 在 Event 模型中获取横幅图片。
    *
-   * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+   * @param displayedServerList - displayedServerList 输入；驱动 `eventDataRepository.getBannerImage()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getBannerImage(
@@ -226,7 +227,7 @@ export class Event {
   /**
    * 在 Event 模型中获取活动Slide图片。
    *
-   * @param tempServer - temp服务器参数。
+   * @param tempServer - tempServer 输入；驱动 `eventDataRepository.getSlideImages()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getEventSlideImage(tempServer: Server): Promise<Image[]> {
@@ -249,7 +250,7 @@ export class Event {
   /**
    * 在 Event 模型中获取活动Logo图片。
    *
-   * @param tempServer - temp服务器参数。
+   * @param tempServer - tempServer 输入；驱动 `eventDataRepository.getLogoImage()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getEventLogoImage(tempServer: Server): Promise<Image> {
@@ -308,7 +309,7 @@ export class Event {
   /**
    * 在 Event 模型中获取奖励Stamp。
    *
-   * @param server - 目标服务器。
+   * @param server - server 输入；驱动 `eventDataRepository.getRewardStampImage()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getRewardStamp(server: Server): Promise<Image> {
@@ -317,7 +318,7 @@ export class Event {
   /**
    * 在 Event 模型中获取奖励Deco。
    *
-   * @param server - 目标服务器。
+   * @param server - server 输入；驱动 `eventDataRepository.getRewardDecoImage()` 的 BangDream步骤。
    * @returns 异步处理结果。
    */
   async getRewardDeco(server: Server): Promise<Image> {
@@ -327,10 +328,10 @@ export class Event {
 
 //获取当前进行中的活动,如果期间没有活动，则返回上一个刚结束的活动
 /**
- * 在BangDream 领域模型层中获取Present活动。
+ * 查询 BangDream 插件数据。
  *
- * @param server - 目标服务器。
- * @param time - 谱面时间点，未传入时使用默认值。
+ * @param server - server 输入；决定 BangDream条件分支。
+ * @param time - time 输入；决定 BangDream条件分支。
  */
 export function getPresentEvent(server: Server, time?: number) {
   if (!time) {
@@ -381,8 +382,8 @@ export function getPresentEvent(server: Server, time?: number) {
 /**
  * 在BangDream 领域模型层中排序活动列表。
  *
- * @param tempEventList - temp活动列表参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
+ * @param tempEventList - tempEventList 输入；执行 `tempEventList.sort()` 对应的 BangDream步骤。
+ * @param displayedServerList - displayedServerList 输入；使用 `length` 字段生成结果。
  */
 export function sortEventList(
   tempEventList: Event[],
@@ -424,10 +425,10 @@ export function sortEventList(
 /**
  * 在BangDream 领域模型层中获取最近活动列表By活动And服务器。
  *
- * @param event - 活动参数。
- * @param server - 目标服务器。
- * @param count - count参数。
- * @param sameType - same类型参数，未传入时使用默认值。
+ * @param event - event 输入；限定 BangDream查询范围。
+ * @param server - server 输入；限定 BangDream查询范围。
+ * @param count - count 输入；限定 BangDream查询范围。
+ * @param sameType - sameType 输入；限定 BangDream查询范围。
  */
 export function getRecentEventListByEventAndServer(
   event: Event,

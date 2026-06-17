@@ -77,10 +77,10 @@ export function getEventStageStageBatchSize(): number {
 /**
  * 判断下一张试炼 stage 图是否应该换到新列。
  *
- * @param currentHeight - 当前列高度。
- * @param nextImageHeight - 下一张 stage 图高度。
- * @param currentColumnLength - 当前列已有图片数量。
- * @param maxHeight - 单列最大高度，未传入时使用默认值。
+ * @param currentHeight - currentHeight 输入；计算 BangDream判断结果。
+ * @param nextImageHeight - nextImageHeight 输入；计算 BangDream判断结果。
+ * @param currentColumnLength - currentColumnLength 输入；计算 BangDream判断结果。
+ * @param maxHeight - maxHeight 输入；计算 BangDream判断结果。
  */
 export function shouldStartNewEventStageColumn(
   currentHeight: number,
@@ -94,8 +94,8 @@ export function shouldStartNewEventStageColumn(
 /**
  * 将试炼 stage 图片按最大列高拆成多列。
  *
- * @param images - 试炼 stage 图片列表。
- * @param maxHeight - 单列最大高度，未传入时使用默认值。
+ * @param images - BangDream列表；驱动 `for()` 的 BangDream步骤。
+ * @param maxHeight - maxHeight 输入；决定 BangDream条件分支。
  */
 export function splitEventStageImagesByColumnHeight<
   T extends EventStageCanvasLike,

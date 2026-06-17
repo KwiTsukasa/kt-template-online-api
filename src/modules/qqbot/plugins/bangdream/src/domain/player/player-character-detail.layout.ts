@@ -39,7 +39,7 @@ export function createCharacterDetailTextSpec() {
 /**
  * 计算角色详情项画布和内容位置。
  *
- * @param contentImage - 正文图片尺寸。
+ * @param contentImage - contentImage 输入；使用 `width` 字段生成结果。
  */
 export function createCharacterDetailItemLayout(contentImage: ImageLike) {
   const item = BANGDREAM_CHARACTER_DETAIL_LIST_SPEC.item;
@@ -56,7 +56,7 @@ export function createCharacterDetailItemLayout(contentImage: ImageLike) {
 /**
  * 计算角色详情列表传给通用列表框架的尺寸。
  *
- * @param firstItem - 第一个角色详情项。
+ * @param firstItem - firstItem 输入；生成 BangDream对象。
  */
 export function createCharacterDetailListFrameSpec(firstItem?: ImageLike) {
   return {

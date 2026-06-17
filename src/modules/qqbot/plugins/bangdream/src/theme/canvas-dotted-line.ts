@@ -15,7 +15,7 @@ interface DrawDottedLineOptions {
 /**
  * 在底层绘图工具层中绘制Dotted线条。
  *
- * @param options - 调用配置项。
+ * @param options - BangDream列表；影响 drawDottedLine 的返回值。
  * @returns 渲染或资源结果。
  */
 export function drawDottedLine(options: DrawDottedLineOptions): Canvas {

@@ -21,9 +21,9 @@ type CardAttribute = Card['attribute'];
 /**
  * 在QQBot 图片视图层中绘制卡牌列表。
  *
- * @param matches - 模糊搜索命中结果。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
- * @param compress - compress参数。
+ * @param matches - BangDream列表；驱动 `matchCardList()` 的 BangDream步骤。
+ * @param displayedServerList - displayedServerList 输入；驱动 `matchCardList()` 的 BangDream步骤。
+ * @param compress - BangDream列表；驱动 `outputCardListImage()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 export async function drawCardList(
@@ -63,38 +63,41 @@ export async function drawCardList(
 
 //计算模糊搜索结果
 export const matchCardList = createBangDreamEntityMatcher<Card>({
+  /**
+   * 执行 BangDream回调。
+   */
   source: () => cardRepository.getSource(),
   /**
-   * 在QQBot 图片视图层中创建Entity。
+   * 创建 BangDream 插件对象或配置。
    *
-   * @param cardId - 卡牌 ID。
+   * @param cardId - 卡牌 ID；定位本次读取、更新、删除或关联的卡牌。
    */
   createEntity: (cardId) => cardRepository.create(cardId),
   /**
-   * 在QQBot 图片视图层中判断Candidate。
+   * 判断 BangDream 插件条件。
    *
-   * @param card - 卡牌参数。
+   * @param card - card 输入；使用 `type` 字段计算判断结果。
    */
   isCandidate: (card) => card.type != 'others',
   /**
-   * 在QQBot 图片视图层中判断Released。
+   * 判断 BangDream 插件条件。
    *
-   * @param card - 卡牌参数。
-   * @param displayedServerList - 允许展示或下载资源的服务器优先级列表。
+   * @param card - card 输入；使用 `releasedAt` 字段计算判断结果。
+   * @param displayedServerList - displayedServerList 输入；计算 BangDream布尔判断。
    */
   isReleased: (card, displayedServerList) =>
     displayedServerList.some((server) => card.releasedAt[server] != null),
   /**
-   * 在QQBot 图片视图层中判断Matched。
+   * 判断 BangDream 插件条件。
    *
-   * @param matches - 模糊搜索命中结果。
-   * @param card - 卡牌参数。
+   * @param matches - BangDream列表；驱动 `match()` 的 BangDream步骤。
+   * @param card - card 输入；驱动 `match()` 的 BangDream步骤。
    */
   isMatched: (matches, card) => match(matches, card, ['scoreUpMaxValue']),
   /**
    * 在QQBot 图片视图层中处理关系表达式值。
    *
-   * @param card - 卡牌参数。
+   * @param card - card 输入；使用 `cardId` 字段生成结果。
    */
   relationValue: (card) => card.cardId,
 });
@@ -102,7 +105,7 @@ export const matchCardList = createBangDreamEntityMatcher<Card>({
 /**
  * 在QQBot 图片视图层中获取卡牌列表Axes。
  *
- * @param cardList - 卡牌列表参数。
+ * @param cardList - cardList 输入；驱动 `for()` 的 BangDream步骤。
  * @returns 计算后的数值。
  */
 function getCardListAxes(cardList: Card[]): {
@@ -124,7 +127,7 @@ function getCardListAxes(cardList: Card[]): {
 /**
  * 在QQBot 图片视图层中绘制角色图标。
  *
- * @param characterId - 角色 ID。
+ * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
  * @returns 异步处理结果。
  */
 async function drawCharacterIcon(characterId: number | null): Promise<Canvas> {
@@ -142,9 +145,9 @@ async function drawCharacterIcon(characterId: number | null): Promise<Canvas> {
 /**
  * 在QQBot 图片视图层中绘制Wide卡牌列表。
  *
- * @param cardList - 卡牌列表参数。
- * @param characterIdList - 角色ID列表参数。
- * @param attributeList - 属性列表参数。
+ * @param cardList - cardList 输入；驱动 `getCardListByAttributeAndCharacterId()` 的 BangDream步骤。
+ * @param characterIdList - 角色 ID 列表；限定本次批量读取、渲染或关联的角色范围。
+ * @param attributeList - attributeList 输入；驱动 `for()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function drawWideCardList(
@@ -191,9 +194,9 @@ async function drawWideCardList(
 /**
  * 在QQBot 图片视图层中绘制Compact卡牌列表。
  *
- * @param cardList - 卡牌列表参数。
- * @param characterIdList - 角色ID列表参数。
- * @param attributeList - 属性列表参数。
+ * @param cardList - cardList 输入；驱动 `getCardListByAttributeAndCharacterId()` 的 BangDream步骤。
+ * @param characterIdList - 角色 ID 列表；限定本次批量读取、渲染或关联的角色范围。
+ * @param attributeList - attributeList 输入；驱动 `for()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function drawCompactCardList(
@@ -231,8 +234,8 @@ async function drawCompactCardList(
 /**
  * 在QQBot 图片视图层中输出卡牌列表图片。
  *
- * @param cardListImage - 卡牌列表图片参数。
- * @param compress - compress参数。
+ * @param cardListImage - cardListImage 输入；驱动 `outputEasyImages()` 的 BangDream步骤。
+ * @param compress - BangDream列表；影响 outputCardListImage 的返回值。
  * @returns 异步处理结果。
  */
 async function outputCardListImage(
@@ -248,9 +251,9 @@ async function outputCardListImage(
 /**
  * 在QQBot 图片视图层中获取卡牌列表By属性And角色ID。
  *
- * @param cardFullList - 卡牌完整数据列表参数。
- * @param attribute - 属性参数。
- * @param characterId - 角色 ID。
+ * @param cardFullList - cardFullList 输入；使用 `length` 字段生成结果。
+ * @param attribute - attribute 输入；决定 BangDream条件分支。
+ * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
  */
 function getCardListByAttributeAndCharacterId(
   cardFullList: Card[],
@@ -274,7 +277,7 @@ function getCardListByAttributeAndCharacterId(
 /**
  * 在QQBot 图片视图层中绘制卡牌列表线条。
  *
- * @param cardList - 卡牌列表参数。
+ * @param cardList - cardList 输入；使用 `length` 字段生成结果。
  */
 async function drawCardListLine(cardList: Card[]) {
   if (cardList.length == 0) {

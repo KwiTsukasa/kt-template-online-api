@@ -35,9 +35,18 @@ export type QqbotValidatedPluginPackage = {
 const PACKAGE_EXTENSION = '.qqbot-plugin.json';
 const DEFAULT_MAX_PACKAGE_BYTES = 20 * 1024 * 1024;
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param content - 待处理内容；驱动 `createHash()` 的 插件平台步骤。
+ */
 const sha256 = (content: Buffer | string) =>
   createHash('sha256').update(content).digest('hex');
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param value - 待稳定序列化的值；转换 插件平台列表项。
+ * @returns QQBot 插件平台渲染后的图片、画布或文本。
+ */
 const stableStringify = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map((item) => stableStringify(item)).join(',')}]`;
@@ -54,6 +63,11 @@ const stableStringify = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
+/**
+ * 判断 QQBot 插件平台条件。
+ * @param parent - parent 输入；驱动 `relative()` 的 插件平台步骤。
+ * @param child - child 输入；驱动 `relative()` 的 插件平台步骤。
+ */
 const isInsideDirectory = (parent: string, child: string) => {
   const relativePath = relative(parent, child);
   return (
@@ -66,11 +80,20 @@ const isInsideDirectory = (parent: string, child: string) => {
 
 @Injectable()
 export class QqbotPluginPackageReaderService {
+  /**
+   * 初始化 QqbotPluginPackageReaderService 实例。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     @Optional()
     private readonly configService?: ConfigService,
   ) {}
 
+  /**
+   * 读取 QQBot 插件平台资源。
+   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * @returns QQBot 插件平台产出的 QqbotValidatedPluginPackage。
+   */
   readPackage(body: PluginPackageBody): QqbotValidatedPluginPackage {
     const packagePath = this.resolvePackagePath(body.packagePath);
     const packageSizeBytes = statSync(packagePath).size;
@@ -113,6 +136,10 @@ export class QqbotPluginPackageReaderService {
     };
   }
 
+  /**
+   * 解析Package Path。
+   * @param packagePath - 插件平台路径；驱动 `resolve()` 的 插件平台步骤。
+   */
   private resolvePackagePath(packagePath?: string) {
     if (!packagePath) throwVbenError('请选择插件包路径');
 
@@ -140,6 +167,9 @@ export class QqbotPluginPackageReaderService {
     return resolvedPath;
   }
 
+  /**
+   * 查询 QQBot 插件平台数据。
+   */
   private getControlledRoots() {
     const configuredRoots = [
       this.configService?.get<string>('QQBOT_PLUGIN_PACKAGE_ROOT'),
@@ -158,6 +188,9 @@ export class QqbotPluginPackageReaderService {
     return [...configuredRoots, ...defaultRoots].map((root) => resolve(root));
   }
 
+  /**
+   * 查询 QQBot 插件平台数据。
+   */
   private getMaxPackageBytes() {
     const configured = Number(
       this.configService?.get<string>('QQBOT_PLUGIN_PACKAGE_MAX_BYTES'),
@@ -167,13 +200,21 @@ export class QqbotPluginPackageReaderService {
       : DEFAULT_MAX_PACKAGE_BYTES;
   }
 
+  /**
+   * 转换 QQBot 插件平台输入。
+   * @param files - 插件平台列表；决定 插件平台条件分支。
+   * @returns QQBot 插件平台转换后的值。
+   */
   private normalizePackageFiles(files: unknown): PackedPluginFile[] {
     if (!Array.isArray(files)) {
       throwVbenError('QQBot 插件包文件清单不合法');
     }
     return (files as unknown[]).map((file) => {
       const record = file as Partial<PackedPluginFile>;
-      if (typeof record.path !== 'string' || typeof record.sha256 !== 'string') {
+      if (
+        typeof record.path !== 'string' ||
+        typeof record.sha256 !== 'string'
+      ) {
         throwVbenError('QQBot 插件包文件清单不合法');
       }
       return {
@@ -183,6 +224,10 @@ export class QqbotPluginPackageReaderService {
     });
   }
 
+  /**
+   * 转换 QQBot 插件平台输入。
+   * @param contentHash - contentHash 输入；驱动 `throwVbenError()` 的 插件平台步骤。
+   */
   private normalizeContentHash(contentHash: unknown) {
     if (typeof contentHash !== 'string' || !contentHash) {
       throwVbenError('QQBot 插件包缺少 contentHash');

@@ -42,7 +42,7 @@ export interface CutoffRecentEventSelectionOptions {
 /**
  * 获取指定服务器支持的档位列表。
  *
- * @param server - 目标服务器。
+ * @param server - server 输入；限定 BangDream查询范围。
  * @returns 档位列表。
  */
 export function getCutoffTierList(server: number): readonly number[] {
@@ -52,8 +52,8 @@ export function getCutoffTierList(server: number): readonly number[] {
 /**
  * 判断服务器是否支持指定档位。
  *
- * @param server - 目标服务器。
- * @param tier - 目标档位。
+ * @param server - server 输入；驱动 `getCutoffTierList()` 的 BangDream步骤。
+ * @param tier - tier 输入；驱动 `getCutoffTierList()` 的 BangDream步骤。
  * @returns 是否支持。
  */
 export function isCutoffTierSupported(server: number, tier: number): boolean {
@@ -63,7 +63,7 @@ export function isCutoffTierSupported(server: number, tier: number): boolean {
 /**
  * 解析档线活动时间，国服缺失时使用预估开始时间。
  *
- * @param input - 活动时间输入。
+ * @param input - input 输入；影响 resolveCutoffEventSchedule 的返回值。
  * @returns 档线可用的开始与结束时间。
  */
 export function resolveCutoffEventSchedule({
@@ -94,9 +94,9 @@ export function resolveCutoffEventSchedule({
 /**
  * 计算活动档线状态。
  *
- * @param startAt - 开始时间。
- * @param endAt - 结束时间。
- * @param now - 当前时间。
+ * @param startAt - startAt 输入；决定 BangDream条件分支。
+ * @param endAt - endAt 输入；决定 BangDream条件分支。
+ * @param now - now 输入；决定 BangDream条件分支。
  * @returns 活动状态。
  */
 export function getCutoffEventStatus(
@@ -113,8 +113,8 @@ export function getCutoffEventStatus(
 /**
  * 获取预测窗口，统一使用档线对象已解析的时间。
  *
- * @param startAt - 开始时间。
- * @param endAt - 结束时间。
+ * @param startAt - startAt 输入；驱动 `Math.floor()` 的 BangDream步骤。
+ * @param endAt - endAt 输入；驱动 `Math.floor()` 的 BangDream步骤。
  * @returns 秒级预测窗口。
  */
 export function getCutoffPredictionWindow(startAt: number, endAt: number) {
@@ -127,9 +127,9 @@ export function getCutoffPredictionWindow(startAt: number, endAt: number) {
 /**
  * 计算时间点位于活动第几天。
  *
- * @param server - 目标服务器。
- * @param eventStartAt - 活动开始时间。
- * @param time - 目标时间。
+ * @param server - server 输入；驱动 `getBangDreamServerUtcOffset()` 的 BangDream步骤。
+ * @param eventStartAt - eventStartAt 输入；驱动 `normalizeBangDreamTimestamp()` 的 BangDream步骤。
+ * @param time - time 输入；驱动 `normalizeBangDreamTimestamp()` 的 BangDream步骤。
  * @returns 活动天数索引。
  */
 export function getCutoffDayIndex(
@@ -159,8 +159,8 @@ export function getCutoffDayIndex(
 /**
  * 判断 Date 是否是档线日增 checkpoint。
  *
- * @param server - 目标服务器。
- * @param date - 已按服务器时区转换后的 Date。
+ * @param server - server 输入；驱动 `isBangDreamDailyCheckpoint()` 的 BangDream步骤。
+ * @param date - date 输入；驱动 `isBangDreamDailyCheckpoint()` 的 BangDream步骤。
  * @returns 是否为 checkpoint。
  */
 export function isCutoffDailyCheckpoint(server: number, date: Date): boolean {
@@ -170,8 +170,8 @@ export function isCutoffDailyCheckpoint(server: number, date: Date): boolean {
 /**
  * 将时间戳转换为服务器时区 Date。
  *
- * @param time - 秒级或毫秒级时间戳。
- * @param server - 目标服务器。
+ * @param time - time 输入；驱动 `getBangDreamDateByServerTimezone()` 的 BangDream步骤。
+ * @param server - server 输入；驱动 `getBangDreamDateByServerTimezone()` 的 BangDream步骤。
  * @returns 服务器时区 Date。
  */
 export function getCutoffDateByServerTimezone(
@@ -184,7 +184,7 @@ export function getCutoffDateByServerTimezone(
 /**
  * 选择用于档线对比的最近活动 ID。
  *
- * @param options - 活动候选和过滤条件。
+ * @param options - BangDream列表；影响 selectRecentCutoffEventIds 的返回值。
  * @returns 最近活动 ID 列表。
  */
 export function selectRecentCutoffEventIds({

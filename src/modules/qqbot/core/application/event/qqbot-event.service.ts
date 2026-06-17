@@ -22,6 +22,16 @@ import { QqbotAccountService } from '../account/qqbot-account.service';
 export class QqbotEventService {
   private readonly logger = new Logger(QqbotEventService.name);
 
+  /**
+   * 初始化 QqbotEventService 实例。
+   * @param busService - busService 服务依赖；影响 constructor 的返回值。
+   * @param dedupeService - dedupeService 服务依赖；影响 constructor 的返回值。
+   * @param messageService - messageService 服务依赖；影响 constructor 的返回值。
+   * @param ruleEngineService - ruleEngineService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
+   * @param systemNoticePublisher - systemNoticePublisher 输入；影响 constructor 的返回值。
+   */
   constructor(
     private readonly busService: QqbotBusService,
     private readonly dedupeService: QqbotDedupeService,
@@ -34,6 +44,10 @@ export class QqbotEventService {
     private readonly systemNoticePublisher?: SystemNoticePublisher,
   ) {}
 
+  /**
+   * 处理Incoming。
+   * @param payload - payload 输入；使用 `self_id` 字段生成结果。
+   */
   async handleIncoming(payload: QqbotOneBotEvent) {
     const selfId = `${payload.self_id || ''}`;
     if (selfId) {
@@ -64,10 +78,12 @@ export class QqbotEventService {
     await this.ruleEngineService.handleMessage(message);
   }
 
-  private async handleRuntimeNotice(
-    selfId: string,
-    payload: QqbotOneBotEvent,
-  ) {
+  /**
+   * 处理Runtime Notice。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param payload - payload 输入；驱动 `getOneBotOfflineReason()`、`this.publishOfflineNotice()` 的 QQBot步骤。
+   */
+  private async handleRuntimeNotice(selfId: string, payload: QqbotOneBotEvent) {
     if (!selfId) return;
     const offlineReason = getOneBotOfflineReason(payload);
     if (!offlineReason) return;
@@ -75,6 +91,12 @@ export class QqbotEventService {
     this.publishOfflineNotice(selfId, offlineReason, payload);
   }
 
+  /**
+   * 投递 QQBot 核心消息或任务。
+   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * @param offlineReason - offlineReason 输入；影响 publishOfflineNotice 的返回值。
+   * @param payload - payload 输入；影响 publishOfflineNotice 的返回值。
+   */
   private publishOfflineNotice(
     selfId: string,
     offlineReason: string,

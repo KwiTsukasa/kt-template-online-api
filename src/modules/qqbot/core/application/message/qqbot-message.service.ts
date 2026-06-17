@@ -19,6 +19,12 @@ import {
 
 @Injectable()
 export class QqbotMessageService {
+  /**
+   * 初始化 QqbotMessageService 实例。
+   * @param conversationRepository - QQBot仓库依赖；影响 constructor 的返回值。
+   * @param messageRepository - QQBot仓库依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(QqbotConversation)
     private readonly conversationRepository: Repository<QqbotConversation>,
@@ -27,6 +33,10 @@ export class QqbotMessageService {
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   */
   async conversationPage(query: QqbotConversationQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
       query,
@@ -61,6 +71,10 @@ export class QqbotMessageService {
     return { list, pageNo, pageSize, total };
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   */
   async messagePage(query: QqbotMessageQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
       query,
@@ -103,6 +117,10 @@ export class QqbotMessageService {
     return { list, pageNo, pageSize, total };
   }
 
+  /**
+   * 保存Incoming。
+   * @param message - message 输入；使用 `eventTime`、`groupId`、`messageId`、`messageText` 字段生成结果。
+   */
   async saveIncoming(message: QqbotNormalizedMessage) {
     const conversation = await this.upsertConversation(message);
     const entity = this.messageRepository.create({
@@ -123,6 +141,10 @@ export class QqbotMessageService {
     return this.messageRepository.save(entity);
   }
 
+  /**
+   * 保存Outgoing。
+   * @param params - QQBot列表；使用 `messageType`、`targetId`、`messageId`、`messageText` 字段生成结果。
+   */
   async saveOutgoing(params: {
     messageId?: string;
     messageText: string;
@@ -148,6 +170,10 @@ export class QqbotMessageService {
     return this.messageRepository.save(entity);
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param message - message 输入；使用 `selfId`、`targetId`、`messageType`、`messageId` 字段生成结果。
+   */
   private async upsertConversation(message: QqbotNormalizedMessage) {
     let conversation = await this.conversationRepository.findOne({
       where: {

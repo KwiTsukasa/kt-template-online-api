@@ -26,6 +26,10 @@ const allowedPermissionSet = new Set<string>(QQBOT_PLUGIN_ALLOWED_PERMISSIONS);
 const allowedWorkerTypeSet = new Set<string>(QQBOT_PLUGIN_WORKER_TYPES);
 
 export class QqbotPluginManifestValidationError extends Error {
+  /**
+   * 初始化 QqbotPluginManifestValidationError 实例。
+   * @param issues - 插件平台列表；影响 constructor 的返回值。
+   */
   constructor(readonly issues: QqbotPluginManifestValidationIssue[]) {
     super(
       `QQBot plugin manifest validation failed: ${issues
@@ -36,10 +40,21 @@ export class QqbotPluginManifestValidationError extends Error {
   }
 }
 
+/**
+ * 判断 QQBot 插件平台条件。
+ * @param value - 待转换值；驱动 `Array.isArray()` 的 插件平台步骤。
+ * @returns 布尔值，表示 QQBot 插件平台条件是否满足。
+ */
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 };
 
+/**
+ * 查询 QQBot 插件平台数据。
+ * @param source - source 输入；限定 插件平台查询范围。
+ * @param key - 键名；限定 插件平台查询范围。
+ * @returns QQBot 插件平台查询结果。
+ */
 const getString = (
   source: Record<string, unknown>,
   key: string,
@@ -48,6 +63,12 @@ const getString = (
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 };
 
+/**
+ * 查询 QQBot 插件平台数据。
+ * @param source - source 输入；限定 插件平台查询范围。
+ * @param key - 键名；限定 插件平台查询范围。
+ * @returns QQBot 插件平台查询结果。
+ */
 const getStringArray = (
   source: Record<string, unknown>,
   key: string,
@@ -61,6 +82,12 @@ const getStringArray = (
     .filter(Boolean);
 };
 
+/**
+ * 查询 QQBot 插件平台数据。
+ * @param source - source 输入；限定 插件平台查询范围。
+ * @param key - 键名；限定 插件平台查询范围。
+ * @returns QQBot 插件平台查询结果。
+ */
 const getNumber = (
   source: Record<string, unknown>,
   key: string,
@@ -71,6 +98,13 @@ const getNumber = (
     : undefined;
 };
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param issues - 插件平台列表；写入 插件平台集合、缓存或持久化状态。
+ * @param code - 响应状态码；影响 pushIssue 的返回值。
+ * @param pathName - 插件平台路径；影响 pushIssue 的返回值。
+ * @param message - message 输入；影响 pushIssue 的返回值。
+ */
 const pushIssue = (
   issues: QqbotPluginManifestValidationIssue[],
   code: string,
@@ -80,6 +114,13 @@ const pushIssue = (
   issues.push({ code, message, path: pathName });
 };
 
+/**
+ * 转换 QQBot 插件平台输入。
+ * @param value - 待转换值；生成规范化文本。
+ * @param pathName - 插件平台路径；驱动 `pushIssue()` 的 插件平台步骤。
+ * @param issues - 插件平台列表；驱动 `pushIssue()` 的 插件平台步骤。
+ * @returns QQBot 插件平台渲染后的图片、画布或文本。
+ */
 const normalizePackagePath = (
   value: unknown,
   pathName: string,
@@ -114,6 +155,13 @@ const normalizePackagePath = (
   return normalized;
 };
 
+/**
+ * 转换 QQBot 插件平台输入。
+ * @param value - 待转换值；遍历并累积 插件平台结果。
+ * @param pathName - 插件平台路径；影响 normalizePermissions 的返回值。
+ * @param issues - 插件平台列表；驱动 `pushIssue()` 的 插件平台步骤。
+ * @returns QQBot 插件平台转换后的值。
+ */
 const normalizePermissions = (
   value: unknown,
   pathName: string,
@@ -152,6 +200,12 @@ const normalizePermissions = (
   return result;
 };
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param value - 待转换值；决定 插件平台条件分支。
+ * @param pathName - 插件平台路径；驱动 `pushIssue()` 的 插件平台步骤。
+ * @param issues - 插件平台列表；驱动 `pushIssue()` 的 插件平台步骤。
+ */
 const requireSemver = (
   value: string | undefined,
   pathName: string,
@@ -167,6 +221,12 @@ const requireSemver = (
   }
 };
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param value - 待转换值；决定 插件平台条件分支。
+ * @param pathName - 插件平台路径；驱动 `pushIssue()` 的 插件平台步骤。
+ * @param issues - 插件平台列表；驱动 `pushIssue()` 的 插件平台步骤。
+ */
 const requireKey = (
   value: string | undefined,
   pathName: string,
@@ -182,6 +242,12 @@ const requireKey = (
   }
 };
 
+/**
+ * 解析Runtime。
+ * @param source - source 输入；使用 `runtime` 字段生成结果。
+ * @param issues - 插件平台列表；驱动 `pushIssue()` 的 插件平台步骤。
+ * @returns QQBot 插件平台转换后的值。
+ */
 const parseRuntime = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
@@ -217,6 +283,12 @@ const parseRuntime = (
   };
 };
 
+/**
+ * 解析Operations。
+ * @param source - source 输入；使用 `operations` 字段生成结果。
+ * @param issues - 插件平台列表；驱动 `pushIssue()` 的 插件平台步骤。
+ * @returns QQBot 插件平台转换后的值。
+ */
 const parseOperations = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
@@ -279,6 +351,12 @@ const parseOperations = (
   });
 };
 
+/**
+ * 解析Events。
+ * @param source - source 输入；使用 `events` 字段生成结果。
+ * @param issues - 插件平台列表；驱动 `pushIssue()` 的 插件平台步骤。
+ * @returns QQBot 插件平台转换后的值。
+ */
 const parseEvents = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
@@ -319,6 +397,12 @@ const parseEvents = (
   });
 };
 
+/**
+ * 解析Tasks。
+ * @param source - source 输入；使用 `tasks` 字段生成结果。
+ * @param issues - 插件平台列表；驱动 `pushIssue()` 的 插件平台步骤。
+ * @returns QQBot 插件平台转换后的值。
+ */
 const parseTasks = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
@@ -387,6 +471,12 @@ const parseTasks = (
   });
 };
 
+/**
+ * 解析Assets。
+ * @param source - source 输入；使用 `assets` 字段生成结果。
+ * @param issues - 插件平台列表；驱动 `pushIssue()` 的 插件平台步骤。
+ * @returns QQBot 插件平台转换后的值。
+ */
 const parseAssets = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
@@ -411,6 +501,12 @@ const parseAssets = (
   });
 };
 
+/**
+ * 解析Migrations。
+ * @param source - source 输入；使用 `migrations` 字段生成结果。
+ * @param issues - 插件平台列表；影响 parseMigrations 的返回值。
+ * @returns QQBot 插件平台转换后的值。
+ */
 const parseMigrations = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
@@ -431,6 +527,11 @@ const parseMigrations = (
   });
 };
 
+/**
+ * 解析Legacy Aliases。
+ * @param source - source 输入；驱动 `getStringArray()` 的 插件平台步骤。
+ * @param issues - 插件平台列表；驱动 `pushIssue()` 的 插件平台步骤。
+ */
 const parseLegacyAliases = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
@@ -449,6 +550,12 @@ const parseLegacyAliases = (
   });
 };
 
+/**
+ * 解析Qqbot Plugin Manifest。
+ * @param manifestLike - manifestLike 输入；使用 `configSchema`、`entry`、`permissions` 字段生成结果。
+ * @param options - 插件平台列表；影响 parseQqbotPluginManifest 的返回值。
+ * @returns QQBot 插件平台转换后的值。
+ */
 export const parseQqbotPluginManifest = (
   manifestLike: unknown,
   options: QqbotPluginManifestParseOptions = {},

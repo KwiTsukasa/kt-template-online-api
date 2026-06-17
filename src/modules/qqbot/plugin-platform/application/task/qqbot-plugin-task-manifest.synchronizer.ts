@@ -12,11 +12,19 @@ export type SyncPluginManifestTasksInput = {
 
 @Injectable()
 export class QqbotPluginTaskManifestSynchronizer {
+  /**
+   * 初始化 QqbotPluginTaskManifestSynchronizer 实例。
+   * @param taskRepository - 插件任务仓库依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(QqbotPluginTask)
     private readonly taskRepository: Repository<QqbotPluginTask>,
   ) {}
 
+  /**
+   * 更新 QQBot 插件平台状态。
+   * @param input - input 输入；使用 `manifestTasks`、`installationId`、`pluginId` 字段生成结果。
+   */
   async syncManifestTasks(input: SyncPluginManifestTasksInput) {
     const tasks: QqbotPluginTask[] = [];
     for (const manifestTask of input.manifestTasks) {

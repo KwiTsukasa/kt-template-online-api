@@ -36,14 +36,25 @@ type BangDreamBestdoriMainDataSyncOutput = {
   syncedKeys: BangDreamBestdoriMainDataKey[];
 };
 
+/**
+ * 创建 BangDream 插件对象或配置。
+ */
 export function createBestdoriMainDataSyncTask() {
   return {
+    /**
+     * 执行 Bestdori 主数据同步任务。
+     */
     execute: syncBestdoriMainData,
     handlerName: 'syncBestdoriMainData',
     key: 'bangdream.bestdori.sync-main-data',
   };
 }
 
+/**
+ * 更新 BangDream 插件状态。
+ * @param input - input 输入；使用 `keys` 字段生成结果。
+ * @returns BangDream 插件更新后的状态。
+ */
 async function syncBestdoriMainData(
   input: Record<string, unknown>,
 ): Promise<BangDreamBestdoriMainDataSyncOutput> {
@@ -95,6 +106,11 @@ async function syncBestdoriMainData(
   };
 }
 
+/**
+ * 转换 BangDream 插件输入。
+ * @param input - input 输入；驱动 `Array.isArray()` 的 BangDream步骤。
+ * @returns BangDream 插件转换后的值。
+ */
 function normalizeKeys(input: unknown): BangDreamBestdoriMainDataKey[] {
   const requested = Array.isArray(input) ? input : [];
   const allowed = new Set<string>(BANGDREAM_BESTDORI_MAIN_DATA_KEYS);
@@ -111,6 +127,9 @@ function normalizeKeys(input: unknown): BangDreamBestdoriMainDataKey[] {
     : [...BANGDREAM_BESTDORI_MAIN_DATA_KEYS];
 }
 
+/**
+ * 解析Cache Root。
+ */
 function resolveCacheRoot() {
   return (
     readBangDreamRuntimeConfig(BANGDREAM_TSUGU_ENV_KEYS.cacheRoot) ||

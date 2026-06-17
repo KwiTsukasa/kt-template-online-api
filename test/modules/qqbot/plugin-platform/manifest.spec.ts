@@ -4,6 +4,9 @@ import {
   QqbotPluginManifestValidationError,
 } from '../../../../src/modules/qqbot/plugin-platform/domain/manifest';
 
+/**
+ * 创建 QQBot 插件平台对象或配置。
+ */
 const createValidManifest = () => ({
   assets: [
     {
@@ -75,6 +78,12 @@ const createValidManifest = () => ({
   version: '1.2.3',
 });
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param manifest - manifest 输入；驱动 `parseQqbotPluginManifest()`、`Error()` 的 插件平台步骤。
+ * @param code - 响应状态码；影响 expectValidationError 的返回值。
+ * @param path - 路由或文件路径；影响 expectValidationError 的返回值。
+ */
 const expectValidationError = (
   manifest: unknown,
   code: string,
@@ -227,15 +236,7 @@ describe('QQBot plugin manifest contract', () => {
       'events[0].handlerName',
     );
     expectValidationError(manifest, 'MISSING_ASSET_KEY', 'assets[0].key');
-    expectValidationError(
-      manifest,
-      'INVALID_SEMVER',
-      'migrations[0].version',
-    );
-    expectValidationError(
-      manifest,
-      'INVALID_LEGACY_ALIAS',
-      'legacyAliases[0]',
-    );
+    expectValidationError(manifest, 'INVALID_SEMVER', 'migrations[0].version');
+    expectValidationError(manifest, 'INVALID_LEGACY_ALIAS', 'legacyAliases[0]');
   });
 });

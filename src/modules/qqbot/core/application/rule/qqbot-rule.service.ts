@@ -23,6 +23,13 @@ import { isWithinCooldown } from '../../domain/qqbot-cooldown.policy';
 
 @Injectable()
 export class QqbotRuleService {
+  /**
+   * 初始化 QqbotRuleService 实例。
+   * @param ruleRepository - QQBot仓库依赖；影响 constructor 的返回值。
+   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     @InjectRepository(QqbotRule)
     private readonly ruleRepository: Repository<QqbotRule>,
@@ -31,6 +38,10 @@ export class QqbotRuleService {
     private readonly configService: ConfigService,
   ) {}
 
+  /**
+   * 获取分页数据。
+   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   */
   async page(query: QqbotRuleQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
       query,
@@ -81,6 +92,10 @@ export class QqbotRuleService {
     };
   }
 
+  /**
+   * 列出Enabled For Message。
+   * @param message - message 输入；使用 `selfId`、`messageType` 字段生成结果。
+   */
   async listEnabledForMessage(message: QqbotNormalizedMessage) {
     const boundIds = await this.accountService.getBoundRuleIds(message.selfId);
     if (boundIds.length === 0) return [];
@@ -97,6 +112,10 @@ export class QqbotRuleService {
       .getMany();
   }
 
+  /**
+   * 保存数据。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async save(body: QqbotRuleBodyDto) {
     this.assertRuleValid(body.matchType, body.keyword);
     const saved = await this.ruleRepository.save(
@@ -105,6 +124,10 @@ export class QqbotRuleService {
     return saved.id;
   }
 
+  /**
+   * 更新数据。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   async update(body: QqbotRuleUpdateDto) {
     if (body.matchType || body.keyword) {
       this.assertRuleValid(body.matchType || 'keyword', body.keyword || '');
@@ -115,16 +138,29 @@ export class QqbotRuleService {
     return true;
   }
 
+  /**
+   * 删除数据。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   */
   async remove(id: string) {
     await this.ruleRepository.update({ id }, { isDeleted: true });
     return true;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   * @param enabled - enabled 输入；影响 toggle 的返回值。
+   */
   async toggle(id: string, enabled: boolean) {
     await this.ruleRepository.update({ id }, { enabled });
     return true;
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param rule - rule 输入；使用 `id` 字段生成结果。
+   */
   async markHit(rule: QqbotRule) {
     await this.ruleRepository.update(
       { id: rule.id },
@@ -132,6 +168,11 @@ export class QqbotRuleService {
     );
   }
 
+  /**
+   * 判断 QQBot 核心条件。
+   * @param rule - rule 输入；使用 `matchType`、`keyword` 字段计算判断结果。
+   * @param message - message 输入；使用 `messageText` 字段计算判断结果。
+   */
   isMatched(rule: QqbotRule, message: QqbotNormalizedMessage) {
     const source = message.messageText || '';
     if (!source) return false;
@@ -147,6 +188,10 @@ export class QqbotRuleService {
     return source.includes(rule.keyword);
   }
 
+  /**
+   * 判断 QQBot 核心条件。
+   * @param rule - rule 输入；使用 `cooldownMs`、`lastHitAt` 字段计算判断结果。
+   */
   isInCooldown(rule: QqbotRule) {
     return isWithinCooldown({
       cooldownMs: rule.cooldownMs,
@@ -155,6 +200,11 @@ export class QqbotRuleService {
     });
   }
 
+  /**
+   * 执行 QQBot 核心流程。
+   * @param matchType - matchType 输入；决定 QQBot条件分支。
+   * @param keyword - keyword 输入；驱动 `RegExp()` 的 QQBot步骤。
+   */
   private assertRuleValid(matchType: QqbotRuleMatchType, keyword: string) {
     if (!keyword?.trim()) {
       throwVbenError('规则关键词不能为空');
@@ -168,6 +218,10 @@ export class QqbotRuleService {
     }
   }
 
+  /**
+   * 转换 QQBot 核心输入。
+   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   */
   private normalizeBody(body: Partial<QqbotRuleBodyDto>) {
     return {
       cooldownMs: Math.max(
@@ -185,6 +239,9 @@ export class QqbotRuleService {
     } as Partial<QqbotRule>;
   }
 
+  /**
+   * 查询 QQBot 核心数据。
+   */
   private getMinCooldownMs() {
     const value = Number(this.configService.get('QQBOT_RULE_MIN_COOLDOWN_MS'));
     return Number.isInteger(value) && value > 0 ? value : 30000;

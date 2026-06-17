@@ -6,6 +6,11 @@ export type FflogsCharacterInputParseOptions = {
   resolveKnownWorld?: FflogsKnownWorldResolver;
 };
 
+/**
+ * 解析Fflogs Character Input。
+ * @param rawArgs - FFLogs列表；生成规范化文本。
+ * @param options - FFLogs列表；使用 `resolveKnownWorld` 字段生成结果。
+ */
 export function parseFflogsCharacterInput(
   rawArgs: string,
   options: FflogsCharacterInputParseOptions = {},
@@ -128,6 +133,11 @@ export function parseFflogsCharacterInput(
   };
 }
 
+/**
+ * 执行 FFLogs 插件流程。
+ * @param positional - positional 输入；使用 `length` 字段生成结果。
+ * @param resolveKnownWorld - resolveKnownWorld 输入；决定 FFLogs条件分支。
+ */
 function pickPositionalsByKnownWorld(
   positional: string[],
   resolveKnownWorld?: FflogsKnownWorldResolver,
@@ -153,6 +163,10 @@ function pickPositionalsByKnownWorld(
   return null;
 }
 
+/**
+ * 转换 FFLogs 插件输入。
+ * @param value - 待转换值；决定 FFLogs条件分支。
+ */
 function normalizeString(value?: string | true) {
   if (value === true) return '';
   return `${value || ''}`.trim();

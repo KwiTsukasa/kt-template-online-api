@@ -185,8 +185,8 @@ export class Player {
   /**
    * 构造 Player 实例，并初始化该模型的本地基础字段。
    *
-   * @param playerId - 玩家ID参数。
-   * @param server - 目标服务器。
+   * @param playerId - 玩家 ID；定位本次读取、更新、删除或关联的玩家。
+   * @param server - server 输入；影响 constructor 的返回值。
    */
   constructor(
     playerId: number,
@@ -199,8 +199,8 @@ export class Player {
   /**
    * 在 Player 模型中加载远端完整详情并标记初始化状态。
    *
-   * @param useCache - use缓存参数，未传入时使用默认值。
-   * @param mode - mode参数，未传入时使用默认值。
+   * @param useCache - useCache 输入；驱动 `dataRepository.getDetail()` 的 BangDream步骤。
+   * @param mode - mode 输入；驱动 `dataRepository.getDetail()` 的 BangDream步骤。
    */
   async initFull(useCache: boolean = false, mode: PlayerDetailMode = 2) {
     if (this.isInitfull) {
@@ -295,7 +295,7 @@ export class Player {
   /**
    * 在 Player 模型中计算数值。
    *
-   * @param event - 活动参数，未传入时使用默认值。
+   * @param event - event 输入；使用 `characters`、`attributes`、`eventAttributeAndCharacterBonus` 字段生成结果。
    * @returns 异步处理结果。
    */
   async calcStat(event?: Event): Promise<Stat> {
@@ -439,7 +439,7 @@ export class Player {
     return hsr;
   }
   /**
-   * 在 Player 模型中获取UserIllustration。
+   * 查询 BangDream 插件数据。
    *
    * @returns 判断结果。
    */

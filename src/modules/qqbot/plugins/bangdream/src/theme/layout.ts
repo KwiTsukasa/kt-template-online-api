@@ -10,7 +10,7 @@ interface SeparatorSpecOptions {
 /**
  * 创建横向虚线分割规格。
  *
- * @param options - 分割线宽高和横向端点。
+ * @param options - BangDream列表；生成 BangDream对象。
  */
 export function createHorizontalSeparatorSpec({
   width = BANGDREAM_RENDER_THEME.layout.contentWidth,
@@ -35,8 +35,8 @@ export function createHorizontalSeparatorSpec({
 /**
  * 创建纵向虚线分割规格。
  *
- * @param height - 分割线高度。
- * @param options - 纵向端点配置。
+ * @param height - height 输入；生成 BangDream对象。
+ * @param options - BangDream列表；生成 BangDream对象。
  */
 export function createVerticalSeparatorSpec(
   height: number,

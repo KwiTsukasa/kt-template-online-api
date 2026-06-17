@@ -11,10 +11,10 @@ import { globalDefaultServer } from '@/modules/qqbot/plugins/bangdream/src/confi
 /**
  * 在QQBot 图片视图层中绘制歌曲谱面。
  *
- * @param songId - 歌曲 ID。
- * @param difficultyId - 难度ID参数。
- * @param displayedServerList - 允许展示或下载资源的服务器优先级列表，未传入时使用默认值。
- * @param compress - compress参数。
+ * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
+ * @param difficultyId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
+ * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()`、`song.getSongJacketImageURL()` 的 BangDream步骤。
+ * @param compress - BangDream列表；决定 BangDream条件分支。
  * @returns 异步处理结果。
  */
 export async function drawSongChart(

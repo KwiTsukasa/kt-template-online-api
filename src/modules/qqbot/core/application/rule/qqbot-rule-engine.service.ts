@@ -14,6 +14,15 @@ import { QqbotRuleService } from './qqbot-rule.service';
 export class QqbotRuleEngineService {
   private readonly logger = new Logger(QqbotRuleEngineService.name);
 
+  /**
+   * 初始化 QqbotRuleEngineService 实例。
+   * @param commandEngineService - commandEngineService 服务依赖；影响 constructor 的返回值。
+   * @param permissionService - permissionService 服务依赖；影响 constructor 的返回值。
+   * @param pluginExecution - pluginExecution 输入；影响 constructor 的返回值。
+   * @param ruleService - ruleService 服务依赖；影响 constructor 的返回值。
+   * @param sendService - sendService 服务依赖；影响 constructor 的返回值。
+   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   */
   constructor(
     private readonly commandEngineService: QqbotCommandEngineService,
     private readonly permissionService: QqbotPermissionService,
@@ -24,6 +33,10 @@ export class QqbotRuleEngineService {
     private readonly toolsService: ToolsService,
   ) {}
 
+  /**
+   * 处理Message。
+   * @param message - message 输入；使用 `channelId`、`rawEvent`、`selfId`、`targetId` 字段生成结果。
+   */
   async handleMessage(message: QqbotNormalizedMessage) {
     if (await this.permissionService.isBlocked(message)) return;
     if (!(await this.permissionService.isAllowed(message))) return;

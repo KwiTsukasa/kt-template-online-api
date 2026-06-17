@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseQqbotPluginManifest } from '@/modules/qqbot/plugin-platform/domain/manifest';
 
-const pluginRoot = join(
-  process.cwd(),
-  'src/modules/qqbot/plugins/bangdream',
-);
+const pluginRoot = join(process.cwd(), 'src/modules/qqbot/plugins/bangdream');
 
+/**
+ * 读取 BangDream 插件资源。
+ */
 const readManifest = () =>
   parseQqbotPluginManifest(
     JSON.parse(readFileSync(join(pluginRoot, 'plugin.json'), 'utf8')) as Record<
@@ -44,9 +44,7 @@ describe('BangDream operation manifest', () => {
       manifest.operations.map((operation) => [operation.key, operation]),
     );
 
-    expect(
-      byKey.get('bangdream.song.search'),
-    ).toMatchObject({
+    expect(byKey.get('bangdream.song.search')).toMatchObject({
       handlerName: 'searchSong',
       name: '查曲',
     });

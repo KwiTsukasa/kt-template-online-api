@@ -20,10 +20,10 @@ const memoryCache: { [url: string]: Buffer } = {};
 /**
  * 在数据下载与缓存层中下载File。
  *
- * @param url - 远端资源地址。
- * @param ignoreError - ignoreError参数，未传入时使用默认值。
- * @param overwrite - overwrite参数，未传入时使用默认值。
- * @param retryCount - retryCount参数，未传入时使用默认值。
+ * @param url - 访问地址；计算 BangDream布尔判断。
+ * @param ignoreError - ignoreError 输入；影响 downloadFile 的返回值。
+ * @param overwrite - overwrite 输入；影响 downloadFile 的返回值。
+ * @param retryCount - retryCount 输入；影响 downloadFile 的返回值。
  * @returns 异步处理结果。
  */
 async function downloadFile(
@@ -51,6 +51,9 @@ async function downloadFile(
 
     let assetNotExists = false;
     return await runWithCacheClientRetry({
+      /**
+       * 执行 BangDream回调。
+       */
       action: async () => {
         assetNotExists = false;
         const data = await fetchRemoteResourceBuffer(
@@ -69,12 +72,20 @@ async function downloadFile(
         }
         return data;
       },
+      /**
+       * 执行 BangDream回调。
+       * @param nextAttempt - nextAttempt 输入；影响 onRetry 的返回值。
+       * @param normalizedRetryCount - normalizedRetryCount 输入；影响 onRetry 的返回值。
+       */
       onRetry: (nextAttempt, normalizedRetryCount) =>
         logger(
           `downloader`,
           `Retrying download for "${url}" (attempt ${nextAttempt}/${normalizedRetryCount})`,
         ),
       retryCount,
+      /**
+       * 执行 BangDream回调。
+       */
       shouldRetry: () => !assetNotExists,
     });
   } catch (e) {
@@ -98,8 +109,8 @@ async function downloadFile(
 /**
  * 在数据下载与缓存层中下载File缓存。
  *
- * @param url - 远端资源地址。
- * @param ignoreError - ignoreError参数，未传入时使用默认值。
+ * @param url - 访问地址；驱动 `downloadFile()` 的 BangDream步骤。
+ * @param ignoreError - ignoreError 输入；驱动 `downloadFile()` 的 BangDream步骤。
  * @returns 异步处理结果。
  */
 async function downloadFileCache(

@@ -5,6 +5,11 @@ import type {
   QqbotOneBotEvent,
 } from '../../contract/qqbot.types';
 
+/**
+ * 判断 QQBot 核心条件。
+ * @param payload - payload 输入；使用 `message_type` 字段计算判断结果。
+ * @returns 布尔值，表示 QQBot 核心条件是否满足。
+ */
 export function isOneBotMessageEvent(
   payload: QqbotOneBotEvent,
 ): payload is QqbotOneBotEvent & { message_type: string } {
@@ -14,6 +19,12 @@ export function isOneBotMessageEvent(
   );
 }
 
+/**
+ * 转换 QQBot 核心输入。
+ * @param payload - payload 输入；使用 `message_type`、`channel_id`、`guild_id`、`group_id` 字段生成结果。
+ * @param toolsService - ToolsService 依赖；执行 `toolsService.toStringId()` 对应的 QQBot步骤。
+ * @returns QQBot 核心转换后的值。
+ */
 export function normalizeOneBotMessage(
   payload: QqbotOneBotEvent,
   toolsService: ToolsService,
@@ -57,6 +68,10 @@ export function normalizeOneBotMessage(
   };
 }
 
+/**
+ * 创建 QQBot 核心对象或配置。
+ * @param message - message 输入；使用 `selfId`、`messageType`、`targetId`、`userId` 字段生成结果。
+ */
 export function buildDedupeKey(message: QqbotNormalizedMessage) {
   return [
     message.selfId,
@@ -67,6 +82,10 @@ export function buildDedupeKey(message: QqbotNormalizedMessage) {
   ].join(':');
 }
 
+/**
+ * 查询 QQBot 核心数据。
+ * @param payload - payload 输入；使用 `notice_type`、`sub_type`、`message`、`reason` 字段生成结果。
+ */
 export function getOneBotOfflineReason(payload: QqbotOneBotEvent) {
   if (payload?.post_type !== 'notice') return null;
 
@@ -105,6 +124,10 @@ export function getOneBotOfflineReason(payload: QqbotOneBotEvent) {
   return `${source}：${message || '账号已离线，请重新登录'}`;
 }
 
+/**
+ * 执行 QQBot 核心流程。
+ * @param payload - payload 输入；使用 `raw_message`、`message` 字段生成结果。
+ */
 function extractMessageText(payload: QqbotOneBotEvent) {
   if (payload.raw_message) return payload.raw_message;
   if (typeof payload.message === 'string') return payload.message;
@@ -117,6 +140,11 @@ function extractMessageText(payload: QqbotOneBotEvent) {
     .trim();
 }
 
+/**
+ * 转换 QQBot 核心输入。
+ * @param messageType - messageType 输入；决定 QQBot条件分支。
+ * @returns QQBot 核心转换后的值。
+ */
 function normalizeMessageType(messageType?: string): QqbotMessageType | null {
   if (messageType === 'private' || messageType === 'group') {
     return messageType;

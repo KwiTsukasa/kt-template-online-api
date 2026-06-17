@@ -6,6 +6,10 @@ type DependencyMetadata = {
   param: unknown;
 };
 
+/**
+ * 执行 QQBot 插件平台流程。
+ * @param token - 协议 token；使用 `forwardRef` 字段生成结果。
+ */
 const unwrapForwardRef = (token: unknown) => {
   if (
     token &&
@@ -18,6 +22,11 @@ const unwrapForwardRef = (token: unknown) => {
   return token;
 };
 
+/**
+ * 解析Constructor Token。
+ * @param target - target 输入；读取装饰器 metadata。
+ * @param index - index 输入；驱动 `explicitDependencies.find()`、`unwrapForwardRef()` 的 插件平台步骤。
+ */
 const resolveConstructorToken = (target: unknown, index: number) => {
   const explicitDependencies = (Reflect.getMetadata(
     SELF_DECLARED_DEPS_METADATA,
@@ -39,15 +48,12 @@ describe('QQBot plugin platform DI tokens', () => {
   });
 
   it('keeps the built-in plugin loader injection token stable across require order', async () => {
-    const { QqbotBuiltinPluginPackageLoaderService } = await import(
-      '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/package/builtin-plugin-package-loader.service'
-    );
-    const { QqbotPluginRegistryService } = await import(
-      '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-plugin-registry.service'
-    );
-    const { QqbotPluginPlatformService } = await import(
-      '../../../../src/modules/qqbot/plugin-platform/application/plugin-platform.service'
-    );
+    const { QqbotBuiltinPluginPackageLoaderService } =
+      await import('../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/package/builtin-plugin-package-loader.service');
+    const { QqbotPluginRegistryService } =
+      await import('../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-plugin-registry.service');
+    const { QqbotPluginPlatformService } =
+      await import('../../../../src/modules/qqbot/plugin-platform/application/plugin-platform.service');
 
     expect(resolveConstructorToken(QqbotPluginRegistryService, 0)).toBe(
       QqbotBuiltinPluginPackageLoaderService,

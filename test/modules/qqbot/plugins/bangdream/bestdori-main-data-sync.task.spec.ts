@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path';
 import {
   BANGDREAM_BESTDORI_MAIN_DATA_KEYS,
   createBestdoriMainDataSyncTask,
-} from '../../../../../src/modules/qqbot/plugins/bangdream/src/application/tasks';
+} from '../../../../../src/modules/qqbot/plugins/bangdream/src/application/tasks/bestdori-main-data-sync.task';
 import { BANGDREAM_TSUGU_ENV_KEYS } from '../../../../../src/modules/qqbot/plugins/bangdream/src/config/runtime-options';
 import { configureBangDreamRuntimeIo } from '../../../../../src/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
 

@@ -11,7 +11,7 @@ import {
   configureBangDreamRuntimeIo,
   type BangDreamRuntimeIo,
 } from './infrastructure/integration/runtime-io';
-import { createBestdoriMainDataSyncTask } from './application/tasks';
+import { createBestdoriMainDataSyncTask } from './application/tasks/bestdori-main-data-sync.task';
 import {
   getBangDreamOperationsByHandlerName,
   type BangDreamOperationModule,

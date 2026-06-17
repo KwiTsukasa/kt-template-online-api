@@ -9,6 +9,7 @@ const mockContext = {
   refreshDictionaryCache: jest.fn(),
 };
 const mockConfigureBangDreamRuntimeIo = jest.fn();
+const mockReadBangDreamRuntimeConfig = jest.fn(() => undefined);
 const mockPreloadBangDreamRenderAssets = jest.fn();
 const mockOperationModules = new Map<string, jest.Mock>();
 const mockManifestOperations = [
@@ -40,6 +41,7 @@ jest.mock(
   '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io',
   () => ({
     configureBangDreamRuntimeIo: mockConfigureBangDreamRuntimeIo,
+    readBangDreamRuntimeConfig: mockReadBangDreamRuntimeConfig,
   }),
 );
 

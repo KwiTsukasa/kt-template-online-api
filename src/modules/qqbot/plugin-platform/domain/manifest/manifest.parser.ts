@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { normalizeQqbotPluginTaskCron } from '../../application/task';
 import {
   QQBOT_PLUGIN_ALLOWED_PERMISSIONS,
   QQBOT_PLUGIN_WORKER_TYPES,
@@ -11,6 +12,7 @@ import {
   type QqbotPluginOperationManifest,
   type QqbotPluginPermission,
   type QqbotPluginRuntimeManifest,
+  type QqbotPluginTaskManifest,
   type QqbotPluginWorkerType,
 } from './manifest.types';
 
@@ -317,6 +319,74 @@ const parseEvents = (
   });
 };
 
+const parseTasks = (
+  source: Record<string, unknown>,
+  issues: QqbotPluginManifestValidationIssue[],
+): QqbotPluginTaskManifest[] => {
+  const tasks = Array.isArray(source.tasks) ? source.tasks : [];
+  const seenKeys = new Set<string>();
+
+  return tasks.filter(isPlainObject).map((task, index) => {
+    const pathPrefix = `tasks[${index}]`;
+    const key = getString(task, 'key') || '';
+    const timeoutMs = getNumber(task, 'timeoutMs');
+    let defaultCron = getString(task, 'defaultCron') || '';
+
+    requireKey(key, `${pathPrefix}.key`, issues);
+    if (seenKeys.has(key)) {
+      pushIssue(
+        issues,
+        'DUPLICATE_TASK_KEY',
+        pathPrefix,
+        `Duplicate task key: ${key}.`,
+      );
+    }
+    seenKeys.add(key);
+
+    if (!getString(task, 'handlerName')) {
+      pushIssue(
+        issues,
+        'MISSING_TASK_HANDLER',
+        `${pathPrefix}.handlerName`,
+        'Task handlerName is required.',
+      );
+    }
+    if (!timeoutMs) {
+      pushIssue(
+        issues,
+        'MISSING_TASK_TIMEOUT',
+        `${pathPrefix}.timeoutMs`,
+        'Task timeoutMs is required.',
+      );
+    }
+    try {
+      defaultCron = normalizeQqbotPluginTaskCron(defaultCron);
+    } catch (error) {
+      pushIssue(
+        issues,
+        'INVALID_TASK_CRON',
+        `${pathPrefix}.defaultCron`,
+        error instanceof Error ? error.message : 'Task cron is invalid.',
+      );
+    }
+
+    return {
+      defaultCron,
+      description: getString(task, 'description'),
+      enabled: task.enabled !== false,
+      handlerName: getString(task, 'handlerName') || '',
+      key,
+      name: getString(task, 'name') || key,
+      permissions: normalizePermissions(
+        task.permissions,
+        `${pathPrefix}.permissions`,
+        issues,
+      ),
+      timeoutMs: timeoutMs || 1000,
+    };
+  });
+};
+
 const parseAssets = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
@@ -435,6 +505,7 @@ export const parseQqbotPluginManifest = (
     ),
     pluginKey,
     runtime: parseRuntime(manifestLike, issues),
+    tasks: parseTasks(manifestLike, issues),
     version,
   };
 

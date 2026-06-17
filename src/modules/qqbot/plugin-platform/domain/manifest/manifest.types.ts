@@ -47,6 +47,17 @@ export type QqbotPluginEventManifest = {
   name: string;
 };
 
+export type QqbotPluginTaskManifest = {
+  defaultCron: string;
+  description?: string;
+  enabled: boolean;
+  handlerName: string;
+  key: string;
+  name: string;
+  permissions: QqbotPluginPermission[];
+  timeoutMs: number;
+};
+
 export type QqbotPluginAssetManifest = {
   contentHash?: string;
   key: string;
@@ -75,6 +86,7 @@ export type QqbotPluginManifest = {
   permissions: QqbotPluginPermission[];
   pluginKey: string;
   runtime: QqbotPluginRuntimeManifest;
+  tasks: QqbotPluginTaskManifest[];
   version: string;
 };
 

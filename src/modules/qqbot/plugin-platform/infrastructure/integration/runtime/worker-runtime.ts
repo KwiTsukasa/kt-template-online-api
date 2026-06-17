@@ -236,21 +236,19 @@ export class QqbotPluginWorkerRuntime {
         error instanceof QqbotPluginWorkerExpiredRequestError ||
         isNamedError(error, 'QqbotPluginWorkerExpiredRequestError')
       ) {
+        const safeSummary = {
+          correlationId: message.correlationId,
+          operationId: message.operationId,
+          timeoutMs,
+          type,
+        };
         const runtimeError = new QqbotPluginRuntimeError(
           'PLUGIN_WORKER_TIMEOUT',
           this.options.pluginKey,
           'QQBot plugin worker queue request expired.',
-          {
-            correlationId: message.correlationId,
-            operationId: message.operationId,
-            timeoutMs,
-            type,
-          },
+          safeSummary,
         );
-        this.recordRuntimeEvent(
-          'worker-request-expired',
-          runtimeError.safeSummary,
-        );
+        await this.markWorkerFailed('worker-request-expired', safeSummary);
         throw runtimeError;
       }
       if (error instanceof QqbotPluginWorkerResponseError) {

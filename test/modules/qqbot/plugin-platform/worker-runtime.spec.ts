@@ -2,6 +2,7 @@ import type { ConfigService } from '@nestjs/config';
 import {
   createQqbotBullmqWorkerQueueOptions,
   QqbotPluginRuntimeError,
+  QqbotPluginWorkerExpiredRequestError,
   QqbotPluginWorkerResponseError,
   QqbotPluginWorkerRuntime,
   resolveQqbotPluginQueueConnection,
@@ -109,6 +110,28 @@ class GenerationAwareRequestQueue implements QqbotPluginWorkerRequestQueue {
 class TimeoutAwareRecordingRequestQueue extends RecordingRequestQueue {
   readonly handlesRequestTimeout = true;
   readonly queueWaitTimeoutMs = 50;
+}
+
+class ExpiringOnceRequestQueue implements QqbotPluginWorkerRequestQueue {
+  constructor(private readonly driver: QqbotPluginWorkerDriver) {}
+
+  async close() {
+    await this.driver.dispose();
+  }
+
+  async request(message: QqbotPluginWorkerRequest): Promise<unknown> {
+    if (message.operationId === 'op-expire') {
+      await this.reset();
+      throw new QqbotPluginWorkerExpiredRequestError(
+        'worker-request-execution-timeout',
+      );
+    }
+    return this.driver.request(message);
+  }
+
+  async reset() {
+    await this.driver.dispose();
+  }
 }
 
 const createRuntime = (driver = new RecordingDriver()) => {
@@ -345,6 +368,66 @@ describe('QQBot plugin worker runtime', () => {
       'load',
       'activate',
       'op-after-crash',
+    ]);
+    expect(runtime.status).toBe('active');
+  });
+
+  it('recovers after the queue expires and disposes a slow worker request', async () => {
+    const requestTypes: string[] = [];
+    const driver: QqbotPluginWorkerDriver = {
+      dispose: jest.fn(async () => undefined),
+      request: jest.fn(async (message) => {
+        requestTypes.push(message.operationId || message.type);
+        return {
+          ok: true,
+          operationId: message.operationId,
+          type: message.type,
+        };
+      }),
+    };
+    const runtime = new QqbotPluginWorkerRuntime(
+      new ExpiringOnceRequestQueue(driver),
+      {
+        defaultTimeoutMs: 50,
+        installationId: 'install-expired-recover',
+        pluginKey: 'demo-plugin',
+      },
+    );
+
+    await runtime.load({
+      entry: 'src/index.ts',
+      pluginKey: 'demo-plugin',
+      version: '0.1.0',
+    });
+    await runtime.activate();
+
+    await expect(
+      runtime.executeOperation({
+        input: { text: 'slow' },
+        operationId: 'op-expire',
+        operationKey: 'demo-plugin.echo',
+      }),
+    ).rejects.toMatchObject({
+      code: 'PLUGIN_WORKER_TIMEOUT',
+    });
+    expect(runtime.status).toBe('failed');
+
+    await expect(
+      runtime.executeOperation({
+        input: { text: 'after expired' },
+        operationId: 'op-after-expire',
+        operationKey: 'demo-plugin.echo',
+      }),
+    ).resolves.toMatchObject({
+      operationId: 'op-after-expire',
+    });
+
+    expect(requestTypes).toEqual([
+      'load',
+      'activate',
+      'load',
+      'activate',
+      'op-after-expire',
     ]);
     expect(runtime.status).toBe('active');
   });

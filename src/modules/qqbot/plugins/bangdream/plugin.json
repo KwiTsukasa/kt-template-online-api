@@ -90,7 +90,7 @@
         "plugin.config.read",
         "plugin.storage.read"
       ],
-      "timeoutMs": 30000
+      "timeoutMs": 120000
     },
     {
       "key": "bangdream.card.search",

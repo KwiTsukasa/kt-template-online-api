@@ -52,4 +52,15 @@ describe('BangDream operation manifest', () => {
     });
     expect(byKey.get('bangdream.unknown')).toBeUndefined();
   });
+
+  it('keeps heavyweight list renderers on an extended timeout budget', () => {
+    const manifest = readManifest();
+    const byKey = new Map(
+      manifest.operations.map((operation) => [operation.key, operation]),
+    );
+
+    expect(byKey.get('bangdream.song.meta')?.timeoutMs).toBeGreaterThanOrEqual(
+      120000,
+    );
+  });
 });

@@ -32,6 +32,10 @@ spec:
               value: Asia/Shanghai
             - name: QQBOT_NAPCAT_SSH_KEY_PATH
               value: /app/secrets/napcat-ssh/id_rsa
+            - name: QQBOT_PLUGIN_TASK_QUEUE_REDIS_PREFIX
+              value: kt:qqbot:plugin-task
+            - name: BANGDREAM_TSUGU_CACHE_ROOT
+              value: /data/qqbot/plugins/bangdream/cache
           # Jenkins 每次发布会从 Agent 私有 .env.production 重建这个 Secret。
           envFrom:
             - secretRef:
@@ -40,6 +44,8 @@ spec:
             - name: napcat-ssh-key
               mountPath: /app/secrets/napcat-ssh
               readOnly: true
+            - name: qqbot-plugin-data
+              mountPath: /data/qqbot/plugins
           readinessProbe:
             tcpSocket:
               port: 48085
@@ -67,6 +73,10 @@ spec:
             secretName: kt-qqbot-napcat-ssh-key
             optional: true
             defaultMode: 0400
+        - name: qqbot-plugin-data
+          hostPath:
+            path: /vol1/docker/kt-template-online-api/qqbot-plugins
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service

@@ -324,6 +324,55 @@ CREATE TABLE IF NOT EXISTS `qqbot_dedupe` (
   UNIQUE KEY `uk_qqbot_dedupe_event_key` (`event_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `qqbot_plugin_task` (
+  `id` bigint NOT NULL,
+  `plugin_id` bigint NOT NULL,
+  `installation_id` bigint NOT NULL,
+  `task_key` varchar(128) NOT NULL,
+  `task_name` varchar(128) NOT NULL,
+  `handler_name` varchar(128) NOT NULL,
+  `description` text DEFAULT NULL,
+  `default_cron` varchar(64) NOT NULL,
+  `cron_expression` varchar(64) NOT NULL,
+  `enabled` tinyint(1) NOT NULL DEFAULT 1,
+  `timeout_ms` int NOT NULL,
+  `runtime_status` varchar(32) NOT NULL DEFAULT 'idle',
+  `last_run_id` bigint DEFAULT NULL,
+  `last_run_at` datetime DEFAULT NULL,
+  `last_status` varchar(32) DEFAULT NULL,
+  `last_error` text DEFAULT NULL,
+  `last_duration_ms` int DEFAULT NULL,
+  `next_run_at` datetime DEFAULT NULL,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_qqbot_plugin_task` (`installation_id`, `task_key`),
+  KEY `idx_qqbot_plugin_task_plugin` (`plugin_id`),
+  KEY `idx_qqbot_plugin_task_enabled` (`enabled`),
+  KEY `idx_qqbot_plugin_task_status` (`runtime_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `qqbot_plugin_task_run` (
+  `id` bigint NOT NULL,
+  `task_id` bigint NOT NULL,
+  `plugin_id` bigint NOT NULL,
+  `installation_id` bigint NOT NULL,
+  `task_key` varchar(128) NOT NULL,
+  `trigger_type` varchar(32) NOT NULL,
+  `status` varchar(32) NOT NULL,
+  `job_id` varchar(191) DEFAULT NULL,
+  `started_at` datetime DEFAULT NULL,
+  `finished_at` datetime DEFAULT NULL,
+  `duration_ms` int DEFAULT NULL,
+  `safe_summary` json DEFAULT NULL,
+  `error_message` text DEFAULT NULL,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  KEY `idx_qqbot_plugin_task_run_task_time` (`task_id`, `create_time`),
+  KEY `idx_qqbot_plugin_task_run_plugin_time` (`plugin_id`, `create_time`),
+  KEY `idx_qqbot_plugin_task_run_status_time` (`status`, `create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET @qqbot_sql = (
   SELECT IF(
     COUNT(*) = 0,
@@ -886,12 +935,18 @@ VALUES
   (2041700000000120444, 2041700000000100408, 'QqBotCommandToggle', NULL, NULL, NULL, 'QqBot:Command:Toggle', 'button', '{"title":"启停"}', 1, 0),
   (2041700000000120445, 2041700000000100408, 'QqBotCommandTest', NULL, NULL, NULL, 'QqBot:Command:Test', 'button', '{"title":"测试命令"}', 1, 0),
   (2041700000000100409, 2041700000000100400, 'QqBotPlugin', '/qqbot/plugin', '/qqbot/plugin/list', NULL, 'QqBot:Plugin:List', 'menu', '{"icon":"lucide:plug","title":"插件能力"}', 1, 4),
-  (2041700000000100404, 2041700000000100400, 'QqBotConversation', '/qqbot/conversation', '/qqbot/conversation/list', NULL, 'QqBot:Conversation:List', 'menu', '{"icon":"lucide:messages-square","title":"会话管理"}', 1, 5),
-  (2041700000000100405, 2041700000000100400, 'QqBotMessage', '/qqbot/message', '/qqbot/message/list', NULL, 'QqBot:Message:List', 'menu', '{"icon":"lucide:message-square-text","title":"消息日志"}', 1, 6),
-  (2041700000000100406, 2041700000000100400, 'QqBotSendLog', '/qqbot/sendLog', '/qqbot/sendLog/list', NULL, 'QqBot:SendLog:List', 'menu', '{"icon":"lucide:send","title":"发送日志"}', 1, 7),
+  (2041700000000100411, 2041700000000100400, 'QqBotPluginTask', '/qqbot/plugin-task', '/qqbot/plugin-task/list', NULL, 'QqBot:PluginTask:List', 'menu', '{"icon":"lucide:calendar-clock","title":"插件定时任务"}', 1, 5),
+  (2041700000000120451, 2041700000000100411, 'QqBotPluginTaskUpdateCron', NULL, NULL, NULL, 'QqBot:PluginTask:UpdateCron', 'button', '{"title":"修改 Cron"}', 1, 0),
+  (2041700000000120452, 2041700000000100411, 'QqBotPluginTaskEnable', NULL, NULL, NULL, 'QqBot:PluginTask:Enable', 'button', '{"title":"启用"}', 1, 0),
+  (2041700000000120453, 2041700000000100411, 'QqBotPluginTaskDisable', NULL, NULL, NULL, 'QqBot:PluginTask:Disable', 'button', '{"title":"停用"}', 1, 0),
+  (2041700000000120454, 2041700000000100411, 'QqBotPluginTaskRun', NULL, NULL, NULL, 'QqBot:PluginTask:Run', 'button', '{"title":"手动运行"}', 1, 0),
+  (2041700000000120455, 2041700000000100411, 'QqBotPluginTaskRunLog', NULL, NULL, NULL, 'QqBot:PluginTask:RunLog', 'button', '{"title":"运行记录"}', 1, 0),
+  (2041700000000100404, 2041700000000100400, 'QqBotConversation', '/qqbot/conversation', '/qqbot/conversation/list', NULL, 'QqBot:Conversation:List', 'menu', '{"icon":"lucide:messages-square","title":"会话管理"}', 1, 6),
+  (2041700000000100405, 2041700000000100400, 'QqBotMessage', '/qqbot/message', '/qqbot/message/list', NULL, 'QqBot:Message:List', 'menu', '{"icon":"lucide:message-square-text","title":"消息日志"}', 1, 7),
+  (2041700000000100406, 2041700000000100400, 'QqBotSendLog', '/qqbot/sendLog', '/qqbot/sendLog/list', NULL, 'QqBot:SendLog:List', 'menu', '{"icon":"lucide:send","title":"发送日志"}', 1, 8),
   (2041700000000120421, 2041700000000100406, 'QqBotSendPrivate', NULL, NULL, NULL, 'QqBot:Send:Private', 'button', '{"title":"发送私聊"}', 1, 0),
   (2041700000000120422, 2041700000000100406, 'QqBotSendGroup', NULL, NULL, NULL, 'QqBot:Send:Group', 'button', '{"title":"发送群聊"}', 1, 0),
-  (2041700000000100407, 2041700000000100400, 'QqBotPermission', '/qqbot/permission', '/qqbot/permission/list', NULL, 'QqBot:Permission:List', 'menu', '{"icon":"lucide:shield-check","title":"权限名单"}', 1, 8),
+  (2041700000000100407, 2041700000000100400, 'QqBotPermission', '/qqbot/permission', '/qqbot/permission/list', NULL, 'QqBot:Permission:List', 'menu', '{"icon":"lucide:shield-check","title":"权限名单"}', 1, 9),
   (2041700000000120431, 2041700000000100407, 'QqBotPermissionCreate', NULL, NULL, NULL, 'QqBot:Permission:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120432, 2041700000000100407, 'QqBotPermissionEdit', NULL, NULL, NULL, 'QqBot:Permission:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120433, 2041700000000100407, 'QqBotPermissionDelete', NULL, NULL, NULL, 'QqBot:Permission:Delete', 'button', '{"title":"common.delete"}', 1, 0)

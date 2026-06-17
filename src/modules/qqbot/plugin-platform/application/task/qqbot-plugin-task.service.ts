@@ -64,13 +64,15 @@ export class QqbotPluginTaskService {
     task.enabled = true;
     task.runtimeStatus = 'scheduled';
     const saved = await this.taskRepository.save(task);
-    await this.requireScheduler().syncTaskScheduler(saved);
+    const schedulerState = await this.requireScheduler().syncTaskScheduler(saved);
+    if (schedulerState) Object.assign(saved, schedulerState);
     return saved;
   }
 
   async disableTask(id: string) {
     const task = await this.getTaskDetail(id);
     task.enabled = false;
+    task.nextRunAt = null;
     task.runtimeStatus = 'disabled';
     const saved = await this.taskRepository.save(task);
     await this.requireScheduler().removeTaskScheduler(id);
@@ -81,7 +83,8 @@ export class QqbotPluginTaskService {
     const task = await this.getTaskDetail(id);
     task.cronExpression = requireQqbotPluginTaskCron(body.cronExpression);
     const saved = await this.taskRepository.save(task);
-    await this.requireScheduler().syncTaskScheduler(saved);
+    const schedulerState = await this.requireScheduler().syncTaskScheduler(saved);
+    if (schedulerState) Object.assign(saved, schedulerState);
     return saved;
   }
 

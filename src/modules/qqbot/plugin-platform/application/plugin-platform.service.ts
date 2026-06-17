@@ -639,25 +639,76 @@ export class QqbotPluginPlatformService
 
       const persistedInstallation =
         persistedState.enabledInstallationsByPluginKey.get(manifest.pluginKey);
-      const installation =
-        persistedInstallation ||
-        ({
-          id: `builtin-${manifest.pluginKey}`,
-          installedPath: `builtin://${manifest.pluginKey}`,
-          pluginId: manifest.pluginKey,
-          runtimeStatus: 'stopped',
-          status: 'installed',
-          versionId: `builtin-${manifest.pluginKey}-${manifest.version}`,
-        } as QqbotPluginInstallation);
+      const { installation, version } = persistedInstallation
+        ? this.resolvePersistedBuiltinRuntime(manifest, persistedInstallation)
+        : await this.ensureBuiltinRuntimePersistence(manifest);
 
-      await this.startWorker(installation, {
-        id: `builtin-${manifest.pluginKey}-${manifest.version}`,
+      await this.startWorker(installation, version);
+    }
+  }
+
+  private resolvePersistedBuiltinRuntime(
+    manifest: QqbotPluginManifest,
+    installation: QqbotPluginInstallation,
+  ) {
+    return {
+      installation,
+      version: {
+        id: installation.versionId,
         manifestJson: manifest as unknown as Record<string, unknown>,
         packageHash: `builtin-${manifest.pluginKey}`,
-        pluginId: manifest.pluginKey,
+        pluginId: installation.pluginId,
         version: manifest.version,
-      } as QqbotPluginVersion);
-    }
+      } as QqbotPluginVersion,
+    };
+  }
+
+  private async ensureBuiltinRuntimePersistence(manifest: QqbotPluginManifest) {
+    const plugin = await this.ensureBuiltinPlugin(manifest);
+    const version = await this.ensureBuiltinPluginVersion(plugin.id, manifest);
+    const installation = await this.installationRepository.save({
+      installedPath: `builtin://${manifest.pluginKey}`,
+      pluginId: plugin.id,
+      runtimeStatus: 'stopped',
+      status: 'enabled',
+      versionId: version.id,
+    });
+
+    return { installation, version };
+  }
+
+  private async ensureBuiltinPlugin(manifest: QqbotPluginManifest) {
+    const existing = await this.pluginRepository.findOne({
+      where: { pluginKey: manifest.pluginKey },
+    });
+    if (existing) return existing;
+
+    return this.pluginRepository.save({
+      description: manifest.description || null,
+      pluginKey: manifest.pluginKey,
+      pluginName: manifest.name,
+      status: 'installed',
+    });
+  }
+
+  private async ensureBuiltinPluginVersion(
+    pluginId: string,
+    manifest: QqbotPluginManifest,
+  ) {
+    const existing = await this.versionRepository.findOne({
+      where: {
+        pluginId,
+        version: manifest.version,
+      },
+    });
+    if (existing) return existing;
+
+    return this.versionRepository.save({
+      manifestJson: manifest as unknown as Record<string, unknown>,
+      packageHash: `builtin-${manifest.pluginKey}`,
+      pluginId,
+      version: manifest.version,
+    });
   }
 
   private async resolvePersistedPluginRuntimeState(): Promise<PersistedPluginRuntimeState> {
@@ -757,6 +808,12 @@ export class QqbotPluginPlatformService
     scheduleEnabledTasks: boolean,
   ) {
     if (!this.taskSynchronizer || !manifest.tasks.length) return [];
+    if (
+      !this.isPersistablePluginId(installation.pluginId) ||
+      !this.isPersistablePluginId(installation.id)
+    ) {
+      return [];
+    }
 
     const tasks = await this.taskSynchronizer.syncManifestTasks({
       installationId: installation.id,

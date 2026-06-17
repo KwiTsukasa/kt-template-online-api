@@ -767,6 +767,126 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     expect(worker.executeOperation).not.toHaveBeenCalled();
   });
 
+  it('persists built-in installations before syncing manifest tasks', async () => {
+    const manifest = {
+      assets: [],
+      configSchema: {},
+      entry: 'src/index.ts',
+      events: [],
+      legacyAliases: [],
+      migrations: [],
+      minApiSdkVersion: '1.0.0',
+      name: 'Demo Plugin',
+      operations: [],
+      permissions: ['runtime.http'],
+      pluginKey: 'demo-plugin',
+      runtime: {
+        maxConcurrency: 1,
+        memoryMb: 128,
+        timeoutMs: 456,
+        workerType: 'node-worker',
+      },
+      tasks: [
+        {
+          defaultCron: '0 */6 * * *',
+          enabled: true,
+          handlerName: 'syncDemo',
+          key: 'demo-plugin.sync',
+          name: '同步 Demo',
+          permissions: ['runtime.http'],
+          timeoutMs: 120000,
+        },
+      ],
+      version: '0.1.0',
+    };
+    const createRepository = (ids: string[]) => {
+      const rows: any[] = [];
+      return {
+        find: jest.fn(async () => rows),
+        findAndCount: jest.fn(async () => [rows, rows.length]),
+        findOne: jest.fn(async ({ where }: any) =>
+          rows.find((row) =>
+            Object.entries(where || {}).every(
+              ([key, value]) => row[key] === value,
+            ),
+          ) || null,
+        ),
+        save: jest.fn(async (value: any) => {
+          const saved = { id: value.id || ids.shift(), ...value };
+          rows.push(saved);
+          return saved;
+        }),
+        update: jest.fn(async () => ({ affected: 1 })),
+      };
+    };
+    const pluginRepository = createRepository(['2041700000000200001']);
+    const versionRepository = createRepository(['2041700000000200002']);
+    const installationRepository = createRepository(['2041700000000200003']);
+    const worker = {
+      activate: jest.fn(async () => ({ ok: true })),
+      deactivate: jest.fn(async () => ({ ok: true })),
+      dispose: jest.fn(async () => undefined),
+      drainRuntimeEvents: jest.fn(() => []),
+      health: jest.fn(async () => ({ ok: true })),
+      load: jest.fn(async () => ({ ok: true })),
+    };
+    const taskSynchronizer = {
+      syncManifestTasks: jest.fn(async () => []),
+    };
+    const service = new (QqbotPluginPlatformService as any)(
+      pluginRepository,
+      versionRepository,
+      installationRepository,
+      createRepository([]),
+      createRepository([]),
+      createRepository([]),
+      createRepository([]),
+      createRepository([]),
+      createRepository([]),
+      undefined,
+      {
+        create: jest.fn(() => worker),
+      },
+      undefined,
+      undefined,
+      undefined,
+      {
+        loadBuiltinManifests: jest.fn(() => [manifest]),
+      },
+      taskSynchronizer,
+      {
+        syncTaskScheduler: jest.fn(),
+      },
+    ) as QqbotPluginPlatformService;
+
+    await service.onModuleInit();
+
+    expect(pluginRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pluginKey: 'demo-plugin',
+        status: 'installed',
+      }),
+    );
+    expect(versionRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pluginId: '2041700000000200001',
+        version: '0.1.0',
+      }),
+    );
+    expect(installationRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pluginId: '2041700000000200001',
+        status: 'enabled',
+        versionId: '2041700000000200002',
+      }),
+    );
+    expect(taskSynchronizer.syncManifestTasks).toHaveBeenCalledWith({
+      installationId: '2041700000000200003',
+      manifestTasks: manifest.tasks,
+      pluginId: '2041700000000200001',
+    });
+  });
+
   it('clears built-in worker contexts when a persisted installation disables the same plugin', async () => {
     const manifest = {
       assets: [],

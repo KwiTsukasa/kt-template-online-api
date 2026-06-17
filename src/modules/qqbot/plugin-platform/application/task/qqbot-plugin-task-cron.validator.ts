@@ -1,3 +1,4 @@
+import { parseExpression } from 'cron-parser';
 import { throwVbenError } from '@/common';
 
 const fieldPattern = /^[\d*/,\-]+$/;
@@ -13,6 +14,11 @@ export function normalizeQqbotPluginTaskCron(input: unknown): string {
   }
   if (fields[0] === '*') {
     throw new Error('定时任务 cron 不允许每分钟执行');
+  }
+  try {
+    parseExpression(fields.join(' '));
+  } catch {
+    throw new Error('定时任务 cron 表达式不合法');
   }
   return fields.join(' ');
 }

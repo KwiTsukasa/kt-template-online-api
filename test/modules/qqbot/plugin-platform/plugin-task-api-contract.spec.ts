@@ -102,4 +102,44 @@ describe('QQBot plugin task API contract', () => {
       },
     });
   });
+
+  it('clears stale next run time when disabling one task', async () => {
+    const taskRepository = createRepositoryMock();
+    const runRepository = createRepositoryMock();
+    const pluginRepository = createRepositoryMock();
+    const scheduler = {
+      removeTaskScheduler: jest.fn(async () => undefined),
+    };
+    const nextRunAt = new Date('2026-06-17T06:00:00.000Z');
+    taskRepository.findOne.mockResolvedValue({
+      cronExpression: '0 */6 * * *',
+      enabled: true,
+      id: 'task-1',
+      nextRunAt,
+      runtimeStatus: 'scheduled',
+    });
+    const service = new QqbotPluginTaskService(
+      taskRepository as any,
+      runRepository as any,
+      pluginRepository as any,
+      new ToolsService(),
+      scheduler as any,
+    );
+
+    const task = await service.disableTask('task-1');
+
+    expect(taskRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enabled: false,
+        nextRunAt: null,
+        runtimeStatus: 'disabled',
+      }),
+    );
+    expect(scheduler.removeTaskScheduler).toHaveBeenCalledWith('task-1');
+    expect(task).toMatchObject({
+      enabled: false,
+      nextRunAt: null,
+      runtimeStatus: 'disabled',
+    });
+  });
 });

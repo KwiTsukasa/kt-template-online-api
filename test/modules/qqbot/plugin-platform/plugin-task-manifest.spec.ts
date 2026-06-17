@@ -100,4 +100,10 @@ describe('QQBot plugin task manifest contract', () => {
       '定时任务 cron 不允许每分钟执行',
     );
   });
+
+  it('rejects cron ranges that BullMQ cannot schedule', () => {
+    expect(() => normalizeQqbotPluginTaskCron('99 99 99 99 99')).toThrow(
+      '定时任务 cron 表达式不合法',
+    );
+  });
 });

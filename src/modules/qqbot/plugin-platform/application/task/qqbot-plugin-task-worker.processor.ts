@@ -20,6 +20,7 @@ import {
   QQBOT_PLUGIN_TASK_QUEUE_NAME,
   readQqbotPluginTaskQueuePrefix,
   resolveQqbotPluginTaskQueueConnection,
+  resolveNextQqbotPluginTaskRunAt,
   type QqbotPluginTaskJobData,
 } from './qqbot-plugin-task-scheduler.service';
 
@@ -77,6 +78,17 @@ export class QqbotPluginTaskWorkerProcessor
         `${job.id || ''}`,
         job.data.triggerType,
         'task-disabled',
+      );
+    }
+    if (
+      job.data.triggerType === 'schedule' &&
+      !(await this.isInstallationEnabled(task.id))
+    ) {
+      return this.writeSkippedRun(
+        task,
+        `${job.id || ''}`,
+        job.data.triggerType,
+        'installation-disabled',
       );
     }
 
@@ -243,6 +255,7 @@ export class QqbotPluginTaskWorkerProcessor
         lastRunAt: result.finishedAt,
         lastRunId: run.id,
         lastStatus: result.status,
+        nextRunAt: this.resolveNextRunAt(task),
         runtimeStatus:
           result.status === 'failed'
             ? 'failed'
@@ -251,6 +264,25 @@ export class QqbotPluginTaskWorkerProcessor
               : 'idle',
       },
     );
+  }
+
+  private resolveNextRunAt(task: QqbotPluginTask) {
+    if (!task.enabled || !task.cronExpression) return null;
+    return resolveNextQqbotPluginTaskRunAt(task.cronExpression);
+  }
+
+  private async isInstallationEnabled(taskId: string) {
+    const count = await this.taskRepository
+      .createQueryBuilder('task')
+      .innerJoin(
+        'qqbot_plugin_installation',
+        'installation',
+        'installation.id = task.installation_id',
+      )
+      .where('task.id = :taskId', { taskId })
+      .andWhere('installation.status = :status', { status: 'enabled' })
+      .getCount();
+    return count > 0;
   }
 
   private getOutputKeys(output: unknown) {

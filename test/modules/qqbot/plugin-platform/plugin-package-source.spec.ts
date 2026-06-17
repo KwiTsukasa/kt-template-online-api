@@ -51,7 +51,11 @@ describe('QqbotPluginPackageSourceService', () => {
       expect.objectContaining({
         entry: 'src/index.ts',
         entryFile: join(packageRoot, 'src', 'index.ts'),
-        manifest: expect.objectContaining({ key: 'sample' }),
+        manifest: expect.objectContaining({
+          key: 'sample',
+          pluginKey: 'sample',
+          runtime: expect.objectContaining({ workerType: 'thread' }),
+        }),
         packageRoot,
         pluginKey: 'sample',
       }),

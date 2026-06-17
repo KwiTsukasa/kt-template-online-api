@@ -13,6 +13,7 @@ export const QQBOT_PLUGIN_ALLOWED_PERMISSIONS = [
 export const QQBOT_PLUGIN_WORKER_TYPES = [
   'child-process',
   'node-worker',
+  'thread',
 ] as const;
 
 export type QqbotPluginPermission =
@@ -85,6 +86,7 @@ export type QqbotPluginManifest = {
   name: string;
   operations: QqbotPluginOperationManifest[];
   permissions: QqbotPluginPermission[];
+  key: string;
   pluginKey: string;
   runtime: QqbotPluginRuntimeManifest;
   tasks: QqbotPluginTaskManifest[];

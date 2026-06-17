@@ -176,6 +176,23 @@ describe('QQBot plugin manifest contract', () => {
     ]);
   });
 
+  it('accepts package key and thread worker type without platform transfer shims', () => {
+    const validManifest = createValidManifest();
+    const manifest = parseQqbotPluginManifest({
+      ...validManifest,
+      key: 'sample-plugin',
+      pluginKey: undefined,
+      runtime: {
+        ...validManifest.runtime,
+        workerType: 'thread',
+      },
+    });
+
+    expect(manifest.key).toBe('sample-plugin');
+    expect(manifest.pluginKey).toBe('sample-plugin');
+    expect(manifest.runtime.workerType).toBe('thread');
+  });
+
   it('rejects unknown permissions from both plugin and operation scopes', () => {
     const manifest = createValidManifest();
     manifest.permissions = ['qqbot.send', 'host.env.read'];

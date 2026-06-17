@@ -597,18 +597,21 @@ export const parseQqbotPluginManifest = (
     ]);
   }
 
-  const pluginKey = getString(manifestLike, 'pluginKey') || '';
+  const pluginKey =
+    getString(manifestLike, 'key') || getString(manifestLike, 'pluginKey') || '';
+  const pluginKeyPath = getString(manifestLike, 'key') ? 'key' : 'pluginKey';
   if (!pluginKeyPattern.test(pluginKey)) {
     pushIssue(
       issues,
       'INVALID_PLUGIN_KEY',
-      'pluginKey',
+      pluginKeyPath,
       'Plugin key must be lower-case kebab-case.',
     );
   }
 
   const version = getString(manifestLike, 'version') || '';
-  const minApiSdkVersion = getString(manifestLike, 'minApiSdkVersion') || '';
+  const minApiSdkVersion =
+    getString(manifestLike, 'minApiSdkVersion') || '1.0.0';
   requireSemver(version, 'version', issues);
   requireSemver(minApiSdkVersion, 'minApiSdkVersion', issues);
 
@@ -633,6 +636,7 @@ export const parseQqbotPluginManifest = (
       'permissions',
       issues,
     ),
+    key: pluginKey,
     pluginKey,
     runtime: parseRuntime(manifestLike, issues),
     tasks: parseTasks(manifestLike, issues),

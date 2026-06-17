@@ -16,7 +16,9 @@ export class QqbotPluginPackageSourceService {
    * Creates a manifest-only package descriptor source.
    * @param pathPolicy - Root and entry policy that keeps package discovery inside controlled directories.
    */
-  constructor(private readonly pathPolicy: QqbotPluginPackagePathPolicyService) {}
+  constructor(
+    private readonly pathPolicy: QqbotPluginPackagePathPolicyService,
+  ) {}
 
   /**
    * Discovers package descriptors from one-level package directories under controlled roots.
@@ -54,6 +56,21 @@ export class QqbotPluginPackageSourceService {
     }
 
     const manifestLike = JSON.parse(readFileSync(manifestFile, 'utf8'));
+    return this.resolveDescriptor(controlledPackageRoot, manifestLike);
+  }
+
+  /**
+   * Resolves a descriptor from an already available manifest without re-reading `plugin.json`.
+   * @param packageRoot - Installed or discovered QQBot plugin package directory.
+   * @param manifestLike - Manifest JSON stored for the package version or read from disk.
+   * @returns Descriptor with a policy-normalized package root and entry file.
+   */
+  resolveDescriptor(
+    packageRoot: string,
+    manifestLike: unknown,
+  ): QqbotPluginPackageDescriptor {
+    const controlledPackageRoot =
+      this.pathPolicy.assertControlledPackageRoot(packageRoot);
     const manifest = parseQqbotPluginManifest(manifestLike, {
       pluginRoot: controlledPackageRoot,
     });
@@ -61,14 +78,13 @@ export class QqbotPluginPackageSourceService {
       controlledPackageRoot,
       manifest.entry,
     );
-    const pluginKey = manifest.key;
 
     return {
       entry: manifest.entry,
       entryFile,
       manifest,
       packageRoot: controlledPackageRoot,
-      pluginKey,
+      pluginKey: manifest.key,
     };
   }
 

@@ -8,7 +8,10 @@ import { QqbotEventPluginRegistryService } from '../../../../src/modules/qqbot/p
 import { QqbotPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-plugin-registry.service';
 import { QqbotPluginPlatformModule } from '../../../../src/modules/qqbot/plugin-platform/plugin-platform.module';
 import { QqbotBuiltinPluginPackageLoaderService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/package/builtin-plugin-package-loader.service';
+import { QqbotPluginPackageSourceService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/package/plugin-package-source.service';
+import { QqbotPluginHostBridgeService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/plugin-host-bridge.service';
 import { QqbotBuiltinPluginWorkerRuntimeFactoryService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime';
+import { QqbotPluginWorkerRuntimeFactoryService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime';
 
 const repoRoot = join(__dirname, '../../../..');
 
@@ -60,6 +63,35 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
 
     expect(dependencies?.[0]).toBe(QqbotBuiltinPluginPackageLoaderService);
     expect(dependencies?.[1]).toBe(ConfigService);
+  });
+
+  it('keeps the generic worker runtime factory dependency visible to Nest DI', () => {
+    const dependencies = Reflect.getMetadata(
+      'design:paramtypes',
+      QqbotPluginWorkerRuntimeFactoryService,
+    );
+
+    expect(dependencies?.[0]).toBe(ConfigService);
+    expect(dependencies?.[1]).toBe(QqbotPluginPackageSourceService);
+    expect(dependencies?.[2]).toBe(QqbotPluginHostBridgeService);
+  });
+
+  it('keeps the generic worker runtime descriptor-based and plugin-agnostic', () => {
+    const source = [
+      readSource(
+        'src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/plugin-worker-runtime.factory.ts',
+      ),
+      readSource(
+        'src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/plugin-worker.thread.ts',
+      ),
+    ].join('\n');
+
+    expect(source).toContain('node:worker_threads');
+    expect(source).toContain('descriptor');
+    expect(source).not.toContain('QqbotBuiltinPluginPackageLoaderService');
+    expect(source).not.toMatch(
+      /@\/modules\/qqbot\/plugins|src\/modules\/qqbot\/plugins|createBangDreamPlugin|createFf14MarketPlugin|createFflogsPlugin|createRepeaterPlugin|pluginKey\s*===|case\s+['"]/,
+    );
   });
 
   it('uses a real worker-thread boundary for built-in plugin runtimes', () => {

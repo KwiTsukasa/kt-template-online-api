@@ -59,6 +59,7 @@ export type QqbotPluginWorkerRequestQueue = {
 };
 
 export type QqbotPluginWorkerRuntimeOptions = {
+  configSnapshot?: QqbotPluginRuntimeConfigSnapshot;
   defaultTimeoutMs: number;
   descriptor?: QqbotPluginPackageDescriptor;
   installationId: string;

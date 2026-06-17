@@ -33,6 +33,8 @@ describe('QQBot plugin platform persistence contract', () => {
       'qqbot_plugin_config',
       'qqbot_plugin_asset',
       'qqbot_plugin_runtime_event',
+      'qqbot_plugin_task',
+      'qqbot_plugin_task_run',
     ]);
 
     for (const table of QQBOT_PLUGIN_PLATFORM_DOMAIN_CONTRACT.tables) {
@@ -52,6 +54,8 @@ describe('QQBot plugin platform persistence contract', () => {
         'QqbotPluginConfig',
         'QqbotPluginAsset',
         'QqbotPluginRuntimeEvent',
+        'QqbotPluginTask',
+        'QqbotPluginTaskRun',
       ],
     );
 

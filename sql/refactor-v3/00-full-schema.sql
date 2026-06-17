@@ -875,6 +875,53 @@ CREATE TABLE IF NOT EXISTS qqbot_plugin_runtime_event (
   KEY idx_qqbot_plugin_runtime_event_plugin (plugin_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS qqbot_plugin_task (
+  id BIGINT NOT NULL PRIMARY KEY,
+  plugin_id BIGINT NOT NULL,
+  installation_id BIGINT NOT NULL,
+  task_key VARCHAR(128) NOT NULL,
+  task_name VARCHAR(128) NOT NULL,
+  handler_name VARCHAR(128) NOT NULL,
+  description TEXT NULL,
+  default_cron VARCHAR(64) NOT NULL,
+  cron_expression VARCHAR(64) NOT NULL,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  timeout_ms INT NOT NULL,
+  runtime_status VARCHAR(32) NOT NULL DEFAULT 'idle',
+  last_run_id BIGINT NULL,
+  last_run_at DATETIME NULL,
+  last_status VARCHAR(32) NULL,
+  last_error TEXT NULL,
+  last_duration_ms INT NULL,
+  next_run_at DATETIME NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_qqbot_plugin_task (installation_id, task_key),
+  KEY idx_qqbot_plugin_task_plugin (plugin_id),
+  KEY idx_qqbot_plugin_task_enabled (enabled),
+  KEY idx_qqbot_plugin_task_status (runtime_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_plugin_task_run (
+  id BIGINT NOT NULL PRIMARY KEY,
+  task_id BIGINT NOT NULL,
+  plugin_id BIGINT NOT NULL,
+  installation_id BIGINT NOT NULL,
+  task_key VARCHAR(128) NOT NULL,
+  trigger_type VARCHAR(32) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  job_id VARCHAR(191) NULL,
+  started_at DATETIME NULL,
+  finished_at DATETIME NULL,
+  duration_ms INT NULL,
+  safe_summary JSON NULL,
+  error_message TEXT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_qqbot_plugin_task_run_task_time (task_id, create_time),
+  KEY idx_qqbot_plugin_task_run_plugin_time (plugin_id, create_time),
+  KEY idx_qqbot_plugin_task_run_status_time (status, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS napcat_container (
   id BIGINT NOT NULL PRIMARY KEY,
   account_id BIGINT NULL,

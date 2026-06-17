@@ -273,7 +273,7 @@ describe('QQBot plugin platform API contract', () => {
 
   it('keeps TypeORM entity registration aligned with the persistence contract', () => {
     expect(QqbotPluginPlatformModule).toBeDefined();
-    expect(QQBOT_PLUGIN_PLATFORM_ENTITIES).toHaveLength(9);
+    expect(QQBOT_PLUGIN_PLATFORM_ENTITIES).toHaveLength(11);
   });
 
   it('passes runtime-event filters to persistence', async () => {

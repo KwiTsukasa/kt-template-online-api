@@ -4,6 +4,7 @@ export const QQBOT_PLUGIN_PLATFORM_DOMAIN_CONTRACT = {
     installLocal: '/qqbot/plugin-platform/install-local',
     installations: '/qqbot/plugin-platform/installations',
     runtimeEvents: '/qqbot/plugin-platform/runtime-events',
+    tasks: '/qqbot/plugin-platform/tasks',
     validate: '/qqbot/plugin-platform/validate',
   },
   tables: [
@@ -16,5 +17,7 @@ export const QQBOT_PLUGIN_PLATFORM_DOMAIN_CONTRACT = {
     'qqbot_plugin_config',
     'qqbot_plugin_asset',
     'qqbot_plugin_runtime_event',
+    'qqbot_plugin_task',
+    'qqbot_plugin_task_run',
   ],
 } as const;

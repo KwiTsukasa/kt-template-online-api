@@ -11,6 +11,8 @@ SELECT 'napcat_account_binding' AS table_name, COUNT(*) AS row_count FROM napcat
 SELECT 'napcat_login_session' AS table_name, COUNT(*) AS row_count FROM napcat_login_session;
 SELECT 'napcat_login_challenge' AS table_name, COUNT(*) AS row_count FROM napcat_login_challenge;
 SELECT 'napcat_runtime_cleanup' AS table_name, COUNT(*) AS row_count FROM napcat_runtime_cleanup;
+SELECT 'qqbot_plugin_task' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task;
+SELECT 'qqbot_plugin_task_run' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task_run;
 
 SELECT 'seed_admin_user' AS check_name, COUNT(*) AS matched_rows
 FROM admin_user

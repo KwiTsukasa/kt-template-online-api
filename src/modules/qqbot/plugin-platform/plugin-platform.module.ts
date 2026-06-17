@@ -11,6 +11,11 @@ import { QqbotEventPluginRegistryService } from './application/registry/qqbot-ev
 import { QqbotPluginRegistryService } from './application/registry/qqbot-plugin-registry.service';
 import { QqbotPluginExecutionAdapter } from './application/plugin-execution.adapter';
 import { QqbotPluginPlatformService } from './application/plugin-platform.service';
+import {
+  QqbotPluginTaskManifestSynchronizer,
+  QqbotPluginTaskService,
+} from './application/task';
+import { QqbotPluginPlatformTaskController } from './contract/plugin-platform-task.controller';
 import { QqbotPluginPlatformController } from './contract/plugin-platform.controller';
 import { QqbotPluginController } from './contract/qqbot-plugin.controller';
 import { QQBOT_PLUGIN_PLATFORM_ENTITIES } from './infrastructure/persistence';
@@ -25,7 +30,11 @@ import {
 import { QQBOT_PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.service';
 
 @Module({
-  controllers: [QqbotPluginController, QqbotPluginPlatformController],
+  controllers: [
+    QqbotPluginController,
+    QqbotPluginPlatformController,
+    QqbotPluginPlatformTaskController,
+  ],
   exports: [
     QQBOT_PLUGIN_EXECUTION_PORT,
     QqbotPluginHttpClientService,
@@ -53,6 +62,8 @@ import { QQBOT_PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.serv
     QqbotBuiltinPluginPackageLoaderService,
     QqbotBuiltinPluginWorkerRuntimeFactoryService,
     QqbotPluginPackageReaderService,
+    QqbotPluginTaskManifestSynchronizer,
+    QqbotPluginTaskService,
     {
       provide: QQBOT_PLUGIN_EXECUTION_PORT,
       useExisting: QqbotPluginExecutionAdapter,

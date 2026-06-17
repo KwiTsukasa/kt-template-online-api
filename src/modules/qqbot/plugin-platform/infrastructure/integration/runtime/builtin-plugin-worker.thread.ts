@@ -1,5 +1,11 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
 import { parentPort, workerData } from 'node:worker_threads';
 import * as XLSX from 'xlsx';
 import type {
@@ -330,6 +336,10 @@ function createBangDreamRuntimeIo(): BangDreamRuntimeIo {
     readExcelRows: async (filePath) => readExcelRows(filePath),
     readJsonFile: async (filePath) => readJsonFile(filePath),
     readJsonFileSync: (filePath) => readJsonFile(filePath),
+    renameFile: async (from, to) => {
+      mkdirSync(dirname(to), { recursive: true });
+      renameSync(from, to);
+    },
     requestArrayBuffer: async (url, options) => ({
       body: Buffer.from(
         await callHost<Uint8Array>('requestBuffer', {
@@ -361,8 +371,10 @@ function createBangDreamRuntimeIo(): BangDreamRuntimeIo {
     }),
     sleep: async (ms) =>
       await new Promise((resolve) => setTimeout(resolve, ms)),
-    writeJsonFile: async (filePath, data) =>
-      writeFileSync(filePath, JSON.stringify(data)),
+    writeJsonFile: async (filePath, data) => {
+      mkdirSync(dirname(filePath), { recursive: true });
+      writeFileSync(filePath, JSON.stringify(data));
+    },
   };
 }
 

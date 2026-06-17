@@ -6,6 +6,7 @@ export type BangDreamRuntimeIo = {
   ) => Promise<T[]>;
   readJsonFile?: <T = unknown>(filePath: string) => Promise<T>;
   readJsonFileSync?: <T = unknown>(filePath: string) => T;
+  renameFile?: (from: string, to: string) => Promise<void>;
   requestArrayBuffer?: (
     url: string,
     options?: {
@@ -109,6 +110,18 @@ export async function readBangDreamExcelRows<
 export async function writeBangDreamJsonFile(filePath: string, data: unknown) {
   if (!runtimeIo.writeJsonFile) return;
   await runtimeIo.writeJsonFile(filePath, data);
+}
+
+export async function writeBangDreamJsonFileAtomic(
+  filePath: string,
+  data: unknown,
+) {
+  if (!runtimeIo.writeJsonFile || !runtimeIo.renameFile) {
+    throw new Error('BangDream JSON 原子写入器未初始化');
+  }
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await runtimeIo.writeJsonFile(tempPath, data);
+  await runtimeIo.renameFile(tempPath, filePath);
 }
 
 export async function sleepBangDreamRuntime(ms: number) {

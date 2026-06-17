@@ -11,6 +11,7 @@ import {
   configureBangDreamRuntimeIo,
   type BangDreamRuntimeIo,
 } from './infrastructure/integration/runtime-io';
+import { createBestdoriMainDataSyncTask } from './application/tasks';
 import {
   getBangDreamOperationsByHandlerName,
   type BangDreamOperationModule,
@@ -58,6 +59,7 @@ export function createPlugin(options: BangDreamPluginRuntimeOptions) {
     createBangDreamOperationLogObserver(),
   ]);
   const operationsByKey = resolveBangDreamOperations(options.operations);
+  const tasks = [createBestdoriMainDataSyncTask()];
   const normalizeError =
     options.normalizeError ||
     ((error: unknown) =>
@@ -120,6 +122,7 @@ export function createPlugin(options: BangDreamPluginRuntimeOptions) {
       execute: async (input: BangDreamCommandInput) =>
         await executeOperation(operation.key, input),
     })),
+    tasks,
     version: options.version || '2.0.0',
   };
 }

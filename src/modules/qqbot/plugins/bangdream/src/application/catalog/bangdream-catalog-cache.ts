@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { bestdoriApiPath } from '@/modules/qqbot/plugins/bangdream/src/config/runtime-config';
 import { bangdreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bestdori.provider';
 import { bangdreamStaticPatchProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/static-patch.provider';
@@ -7,6 +8,7 @@ import {
   normalizeBangDreamPositiveInteger,
 } from '@/modules/qqbot/plugins/bangdream/src/config/runtime-options';
 import {
+  readBangDreamJsonFile,
   readBangDreamRuntimeConfig,
   sleepBangDreamRuntime,
 } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
@@ -82,12 +84,18 @@ async function loadCatalogKey(key: BangDreamCatalogKey, useCache: boolean) {
 
   const promise = (async () => {
     if (useCache) {
-      bangdreamCatalogCache[key] = await bangdreamBestdoriProvider.getJson(
-        bestdoriApiPath[key],
-        {
-          cacheTime: 1 / 0,
-        },
-      );
+      try {
+        bangdreamCatalogCache[key] = await readBangDreamCatalogDataFromCache(
+          key,
+        );
+      } catch {
+        bangdreamCatalogCache[key] = await bangdreamBestdoriProvider.getJson(
+          bestdoriApiPath[key],
+          {
+            cacheTime: 1 / 0,
+          },
+        );
+      }
       return;
     }
 
@@ -182,6 +190,36 @@ export async function waitForBangDreamCatalogReady(
   if (!isCatalogReady(catalogKeys)) {
     throw new Error('BangDream 主数据未完成关键集合加载');
   }
+}
+
+export async function refreshBangDreamCatalogFromCache(
+  keys?: readonly BangDreamCatalogKey[],
+) {
+  const catalogKeys = normalizeCatalogKeys(keys);
+  for (const key of catalogKeys) {
+    bangdreamCatalogCache[key] = {};
+  }
+  await loadCatalogData(catalogKeys, true);
+}
+
+export function resolveBangDreamMainDataCachePath(
+  cacheRoot: string,
+  key: BangDreamCatalogKey,
+) {
+  return join(cacheRoot, 'bestdori', `${key}.json`);
+}
+
+function resolveBangDreamCatalogCacheRoot() {
+  return (
+    readBangDreamRuntimeConfig(BANGDREAM_TSUGU_ENV_KEYS.cacheRoot) ||
+    join(process.cwd(), '.kt-workspace', 'cache', 'bangdream')
+  );
+}
+
+async function readBangDreamCatalogDataFromCache(key: BangDreamCatalogKey) {
+  return readBangDreamJsonFile(
+    resolveBangDreamMainDataCachePath(resolveBangDreamCatalogCacheRoot(), key),
+  );
 }
 
 export default bangdreamCatalogCache;

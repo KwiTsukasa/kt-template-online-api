@@ -13,7 +13,8 @@
     "runtime.http",
     "asset.read",
     "plugin.config.read",
-    "plugin.storage.read"
+    "plugin.storage.read",
+    "plugin.storage.write"
   ],
   "runtime": {
     "workerType": "node-worker",
@@ -255,6 +256,22 @@
         "plugin.storage.read"
       ],
       "timeoutMs": 30000
+    }
+  ],
+  "tasks": [
+    {
+      "key": "bangdream.bestdori.sync-main-data",
+      "name": "同步 Bestdori 主数据",
+      "handlerName": "syncBestdoriMainData",
+      "description": "同步 BangDream 重命令依赖的 Bestdori JSON 主数据。",
+      "defaultCron": "0 */6 * * *",
+      "enabled": true,
+      "timeoutMs": 120000,
+      "permissions": [
+        "runtime.http",
+        "plugin.storage.read",
+        "plugin.storage.write"
+      ]
     }
   ],
   "events": [],

@@ -9,7 +9,7 @@ type RepeaterPluginOptions = {
   now?: () => number;
 };
 
-export type QqbotGenericPluginCreateOptions = {
+type QqbotGenericPluginCreateOptions = {
   host: Record<string, unknown>;
   manifest: RepeaterManifest & { key?: string };
   normalizeError: (error: unknown, fallback?: string) => string | Error;
@@ -25,27 +25,27 @@ type RepeaterPluginCreateOptions =
   | QqbotGenericPluginCreateOptions;
 
 /**
- * Creates the Repeater plugin entry for the legacy loader or generic worker runtime.
+ * Creates the Repeater plugin entry for package-local calls or the generic worker runtime.
  * @param options - Legacy package-local options or generic worker options with config snapshot and host RPC facade.
  * @returns Repeater event plugin instance.
  */
 export function createPlugin(options: RepeaterPluginCreateOptions) {
   if (isRepeaterGenericPluginCreateOptions(options)) {
-    return createRepeaterPluginFromOptions({
+    return buildRepeaterPlugin({
       host: createRepeaterGenericHostAdapter(options),
       manifest: normalizeRepeaterManifest(options.manifest),
       now: () => options.now().getTime(),
     });
   }
-  return createRepeaterPluginFromOptions(options);
+  return buildRepeaterPlugin(options);
 }
 
 /**
  * Creates the Repeater plugin from the package-local host contract.
  * @param options - Package-local host, manifest, and millisecond clock used by repeat policy state.
- * @returns Repeater event plugin used by current tests, legacy loaders, and generic workers.
+ * @returns Repeater event plugin used by package-local callers, tests, and generic workers.
  */
-function createRepeaterPluginFromOptions(options: RepeaterPluginOptions) {
+function buildRepeaterPlugin(options: RepeaterPluginOptions) {
   const application = new RepeaterApplication(
     options.host,
     options.manifest,

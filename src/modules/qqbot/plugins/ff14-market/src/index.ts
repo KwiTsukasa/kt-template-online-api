@@ -15,7 +15,7 @@ type Ff14MarketPluginOptions = {
   now?: () => Date;
 };
 
-export type QqbotGenericPluginCreateOptions = {
+type QqbotGenericPluginCreateOptions = {
   host: Record<string, unknown>;
   manifest: Ff14MarketManifest & { key?: string };
   normalizeError: (error: unknown, fallback?: string) => string | Error;
@@ -31,13 +31,13 @@ type Ff14MarketPluginCreateOptions =
   | QqbotGenericPluginCreateOptions;
 
 /**
- * Creates the FF14 Market plugin entry for the legacy loader or generic worker runtime.
+ * Creates the FF14 Market plugin entry for package-local calls or the generic worker runtime.
  * @param options - Legacy package-local options or generic worker options with config snapshot and host RPC facade.
  * @returns FF14 Market command plugin instance.
  */
 export function createPlugin(options: Ff14MarketPluginCreateOptions) {
   if (isFf14GenericPluginCreateOptions(options)) {
-    return createFf14MarketPluginFromOptions({
+    return buildFf14MarketPlugin({
       host: createFf14MarketGenericHostAdapter(options),
       manifest: normalizeFf14MarketManifest(options.manifest),
       normalizeError: (error, fallback) =>
@@ -49,15 +49,15 @@ export function createPlugin(options: Ff14MarketPluginCreateOptions) {
       now: options.now,
     });
   }
-  return createFf14MarketPluginFromOptions(options);
+  return buildFf14MarketPlugin(options);
 }
 
 /**
  * Creates the FF14 Market plugin from the package-local host contract.
  * @param options - Package-local host, manifest, clock, and error normalizer.
- * @returns FF14 Market command plugin used by current tests and legacy loaders.
+ * @returns FF14 Market command plugin used by package-local callers and tests.
  */
-function createFf14MarketPluginFromOptions(options: Ff14MarketPluginOptions) {
+function buildFf14MarketPlugin(options: Ff14MarketPluginOptions) {
   const application = new Ff14MarketApplication(
     new Ff14MarketClient(options.host),
   );

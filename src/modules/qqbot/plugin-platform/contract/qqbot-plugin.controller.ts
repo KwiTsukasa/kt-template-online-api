@@ -12,7 +12,6 @@ import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { vbenSuccess } from '@/common';
 import { QqbotPluginPlatformService } from '../application/plugin-platform.service';
 import { QqbotEventPluginRegistryService } from '../application/registry/qqbot-event-plugin-registry.service';
-import { QqbotPluginRegistryService } from '../application/registry/qqbot-plugin-registry.service';
 import type { QqbotPluginTriggerMode } from '@/modules/qqbot/core/contract/qqbot.types';
 
 type QqbotPluginOperationPageQuery = {
@@ -28,19 +27,17 @@ type QqbotPluginOperationPageQuery = {
 export class QqbotPluginController {
   /**
    * 初始化 QqbotPluginController 实例。
-   * @param eventPluginRegistry - eventPluginRegistry 输入；影响 constructor 的返回值。
-   * @param pluginRegistry - pluginRegistry 输入；影响 constructor 的返回值。
-   * @param service - service 输入；影响 constructor 的返回值。
+   * @param eventPluginRegistry - 事件插件 registry；提供 Admin 事件插件定义、健康状态和账号绑定入口。
+   * @param service - 插件平台服务；提供 descriptor worker 的命令插件列表、健康状态和能力分页。
    */
   constructor(
     private readonly eventPluginRegistry: QqbotEventPluginRegistryService,
-    private readonly pluginRegistry: QqbotPluginRegistryService,
     private readonly service: QqbotPluginPlatformService,
   ) {}
 
   /**
    * QQBot 插件列表。
-   * @param triggerMode - triggerMode 输入；驱动 `vbenSuccess()` 的 插件平台步骤。
+   * @param triggerMode - 可选触发模式；决定返回 command worker 插件、event 插件或二者合并列表。
    */
   @Get('list')
   @ApiOperation({ summary: 'QQBot 插件列表' })
@@ -52,7 +49,7 @@ export class QqbotPluginController {
   async list(@Query('triggerMode') triggerMode?: QqbotPluginTriggerMode) {
     return vbenSuccess([
       ...(this.includesTriggerMode('command', triggerMode)
-        ? this.pluginRegistry.listPlugins()
+        ? await this.service.listPluginSummaries()
         : []),
       ...(this.includesTriggerMode('event', triggerMode)
         ? this.eventPluginRegistry.listDefinitions().map((definition) => ({
@@ -126,7 +123,7 @@ export class QqbotPluginController {
   ) {
     const [commandHealth, eventHealth] = await Promise.all([
       this.includesTriggerMode('command', triggerMode)
-        ? this.pluginRegistry.health(pluginKey)
+        ? this.service.listPluginHealth(pluginKey)
         : Promise.resolve([]),
       this.includesTriggerMode('event', triggerMode)
         ? this.eventPluginRegistry.health(pluginKey)

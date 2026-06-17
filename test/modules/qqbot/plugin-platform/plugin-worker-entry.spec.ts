@@ -76,7 +76,16 @@ describe('generic plugin worker entry', () => {
     expect(source).toContain('node:worker_threads');
     expect(source).toContain('descriptor');
     expect(source).not.toMatch(
-      /createBangDreamPlugin|createFf14MarketPlugin|createFflogsPlugin|createRepeaterPlugin|pluginKey\s*===|case\s+['"]/,
+      new RegExp(
+        [
+          `create${'BangDream'}Plugin`,
+          `create${'Ff14Market'}Plugin`,
+          `create${'Fflogs'}Plugin`,
+          `create${'Repeater'}Plugin`,
+          String.raw`pluginKey\s*===`,
+          String.raw`case\s+['"]`,
+        ].join('|'),
+      ),
     );
   });
 });

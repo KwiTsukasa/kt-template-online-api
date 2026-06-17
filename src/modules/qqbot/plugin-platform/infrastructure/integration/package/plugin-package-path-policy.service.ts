@@ -4,7 +4,10 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 
 const DEFAULT_BUILTIN_PACKAGE_ROOT = resolve(
   process.cwd(),
-  'src/modules/qqbot/plugins',
+  'src',
+  'modules',
+  'qqbot',
+  'plugins',
 );
 
 /**

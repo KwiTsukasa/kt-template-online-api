@@ -1,10 +1,4 @@
-import {
-  forwardRef,
-  Inject,
-  Injectable,
-  OnModuleInit,
-  Optional,
-} from '@nestjs/common';
+import { Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { formatKtDateTime, throwVbenError } from '@/common';
@@ -15,7 +9,6 @@ import type {
   QqbotPluginOperationSummary,
   QqbotPluginSummary,
 } from '@/modules/qqbot/core/contract/qqbot.types';
-import { QqbotBuiltinPluginPackageLoaderService } from '@/modules/qqbot/plugin-platform/infrastructure/integration/package/builtin-plugin-package-loader.service';
 import {
   QqbotPlugin,
   QqbotPluginInstallation,
@@ -30,14 +23,10 @@ export class QqbotPluginRegistryService implements OnModuleInit {
 
   /**
    * 初始化 QqbotPluginRegistryService 实例。
-   * @param builtinPluginLoader - builtinPluginLoader 输入；影响 constructor 的返回值。
-   * @param pluginRepository - 插件仓库依赖；影响 constructor 的返回值。
-   * @param installationRepository - 插件平台仓库依赖；影响 constructor 的返回值。
+   * @param pluginRepository - 插件主表仓库；用于从持久化安装状态还原禁用的命令插件 key。
+   * @param installationRepository - 插件安装仓库；用于判定哪些插件安装记录在启动时应保持 inactive。
    */
   constructor(
-    @Optional()
-    @Inject(forwardRef(() => QqbotBuiltinPluginPackageLoaderService))
-    private readonly builtinPluginLoader?: QqbotBuiltinPluginPackageLoaderService,
     @Optional()
     @InjectRepository(QqbotPlugin)
     private readonly pluginRepository?: Repository<QqbotPlugin>,
@@ -47,21 +36,16 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   ) {}
 
   /**
-   * 处理 QQBot 插件平台事件。
+   * Initializes inactive plugin state without importing built-in plugin packages.
+   * @returns Promise that resolves after persisted installation state is loaded.
    */
   async onModuleInit() {
     await this.hydrateInactivePluginKeys();
-    for (const plugin of this.builtinPluginLoader?.loadCommandPlugins() || []) {
-      this.register(plugin);
-      if (this.isPluginActive(plugin.key)) {
-        await plugin.activate?.();
-      }
-    }
   }
 
   /**
    * 执行 QQBot 插件平台流程。
-   * @param plugin - plugin 输入；使用 `key`、`operations`、`legacyKeys` 字段生成结果。
+   * @param plugin - 由运行时或测试显式注册的命令插件；提供平台 key、能力清单和 legacy key 映射。
    */
   register(plugin: QqbotIntegrationPlugin) {
     if (!plugin.key || !plugin.operations.length) {

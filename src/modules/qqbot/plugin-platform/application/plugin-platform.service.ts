@@ -1,13 +1,7 @@
-import {
-  forwardRef,
-  Inject,
-  Injectable,
-  OnModuleInit,
-  Optional,
-} from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
-import { throwVbenError } from '@/common';
+import { formatKtDateTime, throwVbenError } from '@/common';
 import {
   type QqbotPluginEventDispatchInput,
   type QqbotPluginExecutionInput,
@@ -15,7 +9,10 @@ import {
   type QqbotPluginOperationLookup,
 } from '@/modules/qqbot/core/domain/plugin-execution.port';
 import type {
+  QqbotEventPluginDefinition,
+  QqbotPluginHealth,
   QqbotPluginOperationSummary,
+  QqbotPluginSummary,
   QqbotPluginTriggerMode,
 } from '@/modules/qqbot/core/contract/qqbot.types';
 import {
@@ -30,8 +27,9 @@ import { QqbotPluginTaskManifestSynchronizer } from './task/qqbot-plugin-task-ma
 import { QqbotPluginTaskSchedulerService } from './task/qqbot-plugin-task-scheduler.service';
 import type { QqbotPluginTaskTriggerType } from './task/qqbot-plugin-task.types';
 import { QqbotPluginArgumentParserService } from './argument/qqbot-plugin-argument-parser.service';
-import { QqbotBuiltinPluginPackageLoaderService } from '../infrastructure/integration/package/builtin-plugin-package-loader.service';
 import { QqbotPluginPackageReaderService } from '../infrastructure/integration/package/plugin-package-reader.service';
+import { QqbotPluginPackageSourceService } from '../infrastructure/integration/package/plugin-package-source.service';
+import type { QqbotPluginPackageDescriptor } from '../infrastructure/integration/package/plugin-package.types';
 import { QqbotEventPluginRegistryService } from './registry/qqbot-event-plugin-registry.service';
 import { resolveInactivePluginKeys } from './registry/plugin-installation-state';
 import { QqbotPluginRegistryService } from './registry/qqbot-plugin-registry.service';
@@ -139,23 +137,23 @@ export class QqbotPluginPlatformService
 
   /**
    * 初始化 QqbotPluginPlatformService 实例。
-   * @param pluginRepository - 插件仓库依赖；影响 constructor 的返回值。
-   * @param versionRepository - 插件平台仓库依赖；影响 constructor 的返回值。
-   * @param installationRepository - 插件平台仓库依赖；影响 constructor 的返回值。
-   * @param operationRepository - 插件平台仓库依赖；影响 constructor 的返回值。
-   * @param eventHandlerRepository - 活动仓库依赖；影响 constructor 的返回值。
-   * @param accountBindingRepository - 账号仓库依赖；影响 constructor 的返回值。
-   * @param configRepository - 插件平台仓库依赖；影响 constructor 的返回值。
-   * @param assetRepository - 插件平台仓库依赖；影响 constructor 的返回值。
-   * @param runtimeEventRepository - 活动仓库依赖；影响 constructor 的返回值。
-   * @param argumentParser - argumentParser 输入；影响 constructor 的返回值。
-   * @param runtimeFactory - runtimeFactory 输入；影响 constructor 的返回值。
-   * @param pluginRegistry - pluginRegistry 输入；影响 constructor 的返回值。
-   * @param eventPluginRegistry - eventPluginRegistry 输入；影响 constructor 的返回值。
-   * @param packageReader - packageReader 输入；影响 constructor 的返回值。
-   * @param builtinPluginLoader - builtinPluginLoader 输入；影响 constructor 的返回值。
-   * @param taskSynchronizer - taskSynchronizer 输入；影响 constructor 的返回值。
-   * @param taskScheduler - taskScheduler 输入；影响 constructor 的返回值。
+   * @param pluginRepository - 插件主表仓库；维护 package key、名称和安装状态的持久化真相。
+   * @param versionRepository - 插件版本仓库；保存 manifest 快照和 package hash 供 worker 启动。
+   * @param installationRepository - 插件安装仓库；记录 installedPath、versionId 和 runtime/status 状态。
+   * @param operationRepository - 命令能力仓库；写入和启停 manifest 声明的 command operation。
+   * @param eventHandlerRepository - 事件能力仓库；写入和启停 manifest 声明的 event handler。
+   * @param accountBindingRepository - 账号绑定仓库；查询插件与账号的绑定关系。
+   * @param configRepository - 插件配置仓库；保存 Admin 修改的插件配置项。
+   * @param assetRepository - 插件资产仓库；保存 manifest 声明的资源路径和 hash。
+   * @param runtimeEventRepository - 运行时事件仓库；持久化 worker lifecycle、命令和任务安全摘要。
+   * @param argumentParser - 命令参数解析器；在执行 worker operation 前规范化输入。
+   * @param runtimeFactory - worker runtime 工厂；根据 installation/version 创建隔离执行实例。
+   * @param pluginRegistry - 命令 registry；在没有 active worker 时作为显式注册插件的查询兜底。
+   * @param eventPluginRegistry - 事件 registry；接收 worker manifest 元数据并支撑 Admin 绑定页面。
+   * @param packageReader - 本地安装包读取器；处理 Admin 上传/安装插件包的 manifest 校验。
+   * @param packageSource - 插件包描述符来源；启动内置包时只读取 manifest 和受控路径。
+   * @param taskSynchronizer - 定时任务同步器；把 manifest tasks 投影到平台任务表。
+   * @param taskScheduler - 定时任务调度器；在插件启停时同步或移除 BullMQ cron 调度。
    */
   constructor(
     @InjectRepository(QqbotPlugin)
@@ -188,8 +186,7 @@ export class QqbotPluginPlatformService
     @Optional()
     private readonly packageReader?: QqbotPluginPackageReaderService,
     @Optional()
-    @Inject(forwardRef(() => QqbotBuiltinPluginPackageLoaderService))
-    private readonly builtinPluginLoader?: QqbotBuiltinPluginPackageLoaderService,
+    private readonly packageSource?: QqbotPluginPackageSourceService,
     @Optional()
     private readonly taskSynchronizer?: QqbotPluginTaskManifestSynchronizer,
     @Optional()
@@ -232,6 +229,47 @@ export class QqbotPluginPlatformService
    */
   async listOperations(pluginId?: string) {
     return this.listOperationSummaries({ pluginId });
+  }
+
+  /**
+   * Lists command plugin summaries from active descriptor-backed workers.
+   * @param pluginKey - Optional package or legacy key used by Admin to narrow the command plugin list.
+   * @returns Command plugin summaries sourced from active worker manifests, with registry fallback only when no workers are active.
+   */
+  async listPluginSummaries(pluginKey?: string): Promise<QqbotPluginSummary[]> {
+    const workerSummaries = this.listActiveWorkerPluginSummaries(pluginKey);
+    if (workerSummaries.length > 0 || this.activeWorkerContexts.size > 0) {
+      return workerSummaries;
+    }
+
+    return (this.pluginRegistry?.listPlugins() || []).filter(
+      (plugin) => !pluginKey || plugin.key === pluginKey,
+    );
+  }
+
+  /**
+   * Reads health for command plugins from active descriptor-backed workers.
+   * @param pluginKey - Optional package or legacy key used by Admin to narrow the health check.
+   * @returns Health entries normalized for Admin command plugin status display.
+   */
+  async listPluginHealth(pluginKey?: string): Promise<QqbotPluginHealth[]> {
+    const workerContexts = this.listActiveWorkerCommandContexts(pluginKey);
+    if (workerContexts.length <= 0 && this.activeWorkerContexts.size <= 0) {
+      return this.pluginRegistry?.health(pluginKey) || [];
+    }
+
+    return Promise.all(
+      workerContexts.map(async (workerContext) => {
+        try {
+          return this.toWorkerPluginHealth(
+            workerContext,
+            await workerContext.worker.health(),
+          );
+        } finally {
+          await this.flushWorkerRuntimeEvents(workerContext);
+        }
+      }),
+    );
   }
 
   /**
@@ -777,106 +815,164 @@ export class QqbotPluginPlatformService
   }
 
   /**
-   * 启动Builtin Workers。
+   * Starts built-in plugin packages discovered from controlled package roots.
+   * @returns Count of descriptor-backed workers that reached the active registry.
    */
-  private async startBuiltinWorkers() {
-    if (!this.runtimeFactory || !this.builtinPluginLoader) return;
+  async startBuiltinWorkers(): Promise<number> {
+    if (!this.runtimeFactory || !this.packageSource) return 0;
 
     const persistedState = await this.resolvePersistedPluginRuntimeState();
-    for (const manifest of this.builtinPluginLoader.loadBuiltinManifests()) {
-      if (persistedState.inactivePluginKeys.has(manifest.pluginKey)) continue;
-      if (this.activeWorkersByPluginKey.has(manifest.pluginKey)) continue;
+    const descriptors = await this.packageSource.discoverPackages();
+    let startedCount = 0;
+
+    for (const descriptor of descriptors) {
+      if (persistedState.inactivePluginKeys.has(descriptor.pluginKey)) {
+        continue;
+      }
+      if (this.activeWorkersByPluginKey.has(descriptor.pluginKey)) {
+        continue;
+      }
 
       const persistedInstallation =
-        persistedState.enabledInstallationsByPluginKey.get(manifest.pluginKey);
-      const { installation, version } = persistedInstallation
-        ? this.resolvePersistedBuiltinRuntime(manifest, persistedInstallation)
-        : await this.ensureBuiltinRuntimePersistence(manifest);
+        persistedState.enabledInstallationsByPluginKey.get(
+          descriptor.pluginKey,
+        );
+      const { installation, version } =
+        await this.ensureBuiltinRuntimePersistence(
+          descriptor,
+          persistedInstallation,
+        );
 
       await this.startWorker(installation, version);
+      startedCount += 1;
     }
+
+    return startedCount;
   }
 
   /**
-   * 解析Persisted Builtin Runtime。
-   * @param manifest - manifest 输入；使用 `pluginKey`、`version` 字段生成结果。
-   * @param installation - installation 输入；使用 `versionId`、`pluginId` 字段生成结果。
+   * Ensures descriptor-discovered built-in package state is persisted.
+   * @param descriptor - Manifest descriptor discovered from a controlled plugin package root.
+   * @param persistedInstallation - Existing enabled installation for the same plugin key, when present.
+   * @returns Installation and version rows aligned to the descriptor package root and manifest snapshot.
    */
-  private resolvePersistedBuiltinRuntime(
-    manifest: QqbotPluginManifest,
-    installation: QqbotPluginInstallation,
+  private async ensureBuiltinRuntimePersistence(
+    descriptor: QqbotPluginPackageDescriptor,
+    persistedInstallation?: QqbotPluginInstallation,
   ) {
-    return {
-      installation,
-      version: {
-        id: installation.versionId,
-        manifestJson: manifest as unknown as Record<string, unknown>,
-        packageHash: `builtin-${manifest.pluginKey}`,
-        pluginId: installation.pluginId,
-        version: manifest.version,
-      } as QqbotPluginVersion,
-    };
-  }
-
-  /**
-   * 确保Builtin Runtime Persistence。
-   * @param manifest - manifest 输入；使用 `pluginKey` 字段生成结果。
-   */
-  private async ensureBuiltinRuntimePersistence(manifest: QqbotPluginManifest) {
-    const plugin = await this.ensureBuiltinPlugin(manifest);
-    const version = await this.ensureBuiltinPluginVersion(plugin.id, manifest);
-    const installation = await this.installationRepository.save({
-      installedPath: `builtin://${manifest.pluginKey}`,
-      pluginId: plugin.id,
-      runtimeStatus: 'stopped',
-      status: 'enabled',
-      versionId: version.id,
-    });
+    const plugin = await this.ensureBuiltinPlugin(descriptor);
+    const version = await this.ensureBuiltinPluginVersion(
+      plugin.id,
+      descriptor,
+    );
+    const installation = persistedInstallation
+      ? await this.alignBuiltinInstallation(
+          persistedInstallation,
+          version,
+          descriptor,
+        )
+      : await this.installationRepository.save({
+          installedPath: descriptor.packageRoot,
+          pluginId: plugin.id,
+          runtimeStatus: 'stopped',
+          status: 'enabled',
+          versionId: version.id,
+        });
 
     return { installation, version };
   }
 
   /**
-   * 确保Builtin Plugin。
-   * @param manifest - manifest 输入；使用 `pluginKey`、`description`、`name` 字段生成结果。
+   * Ensures the plugin row exists for a descriptor-discovered package.
+   * @param descriptor - Package descriptor whose manifest owns the plugin key, name, and description.
+   * @returns Persisted plugin row for the descriptor package.
    */
-  private async ensureBuiltinPlugin(manifest: QqbotPluginManifest) {
+  private async ensureBuiltinPlugin(
+    descriptor: QqbotPluginPackageDescriptor,
+  ) {
     const existing = await this.pluginRepository.findOne({
-      where: { pluginKey: manifest.pluginKey },
+      where: { pluginKey: descriptor.pluginKey },
     });
     if (existing) return existing;
 
     return this.pluginRepository.save({
-      description: manifest.description || null,
-      pluginKey: manifest.pluginKey,
-      pluginName: manifest.name,
+      description: descriptor.manifest.description || null,
+      pluginKey: descriptor.pluginKey,
+      pluginName: descriptor.manifest.name,
       status: 'installed',
     });
   }
 
   /**
-   * 确保Builtin Plugin Version。
-   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
-   * @param manifest - manifest 输入；使用 `version`、`pluginKey` 字段生成结果。
+   * Ensures a version row exists for the descriptor manifest version.
+   * @param pluginId - Persisted plugin id used for the `pluginId + version` uniqueness boundary.
+   * @param descriptor - Package descriptor whose manifest is stored as the version snapshot.
+   * @returns Persisted version row for this plugin and manifest version.
    */
   private async ensureBuiltinPluginVersion(
     pluginId: string,
-    manifest: QqbotPluginManifest,
+    descriptor: QqbotPluginPackageDescriptor,
   ) {
+    const manifestJson =
+      descriptor.manifest as unknown as Record<string, unknown>;
+    const packageHash = `${descriptor.pluginKey}:${descriptor.manifest.version}`;
     const existing = await this.versionRepository.findOne({
       where: {
         pluginId,
-        version: manifest.version,
+        version: descriptor.manifest.version,
       },
     });
-    if (existing) return existing;
+    if (existing) {
+      const shouldUpdateSnapshot =
+        existing.packageHash !== packageHash ||
+        JSON.stringify(existing.manifestJson) !== JSON.stringify(manifestJson);
+      if (shouldUpdateSnapshot) {
+        await this.versionRepository.update(
+          { id: existing.id },
+          {
+            manifestJson,
+            packageHash,
+          },
+        );
+        existing.manifestJson = manifestJson;
+        existing.packageHash = packageHash;
+      }
+      return existing;
+    }
 
     return this.versionRepository.save({
-      manifestJson: manifest as unknown as Record<string, unknown>,
-      packageHash: `builtin-${manifest.pluginKey}`,
+      manifestJson,
+      packageHash,
       pluginId,
-      version: manifest.version,
+      version: descriptor.manifest.version,
     });
+  }
+
+  /**
+   * Aligns an existing enabled installation with the current descriptor package version.
+   * @param installation - Enabled installation previously persisted for the package plugin key.
+   * @param version - Current descriptor-backed version row that should be launched.
+   * @param descriptor - Package descriptor whose package root must become the installation path.
+   * @returns Installation row updated in-memory for runtime startup.
+   */
+  private async alignBuiltinInstallation(
+    installation: QqbotPluginInstallation,
+    version: QqbotPluginVersion,
+    descriptor: QqbotPluginPackageDescriptor,
+  ) {
+    const desiredPath = descriptor.packageRoot;
+    const patch: Partial<QqbotPluginInstallation> = {};
+    if (installation.installedPath !== desiredPath) {
+      patch.installedPath = desiredPath;
+    }
+    if (installation.versionId !== version.id) {
+      patch.versionId = version.id;
+    }
+    if (Object.keys(patch).length) {
+      await this.installationRepository.update({ id: installation.id }, patch);
+      Object.assign(installation, patch);
+    }
+    return installation;
   }
 
   /**
@@ -930,6 +1026,87 @@ export class QqbotPluginPlatformService
    */
   private resolveActivePluginKey(pluginKey: string) {
     return this.activeWorkerPluginAliases.get(pluginKey) || pluginKey;
+  }
+
+  /**
+   * Lists active command worker contexts filtered by canonical or legacy plugin key.
+   * @param pluginKey - Optional package or legacy key supplied by Admin or compatibility callers.
+   * @returns Active worker contexts whose manifests expose command operations.
+   */
+  private listActiveWorkerCommandContexts(
+    pluginKey?: string,
+  ): ActiveWorkerContext[] {
+    const resolvedPluginKey = pluginKey
+      ? this.resolveActivePluginKey(pluginKey)
+      : undefined;
+    return [...this.activeWorkerContexts.values()].filter(
+      (workerContext) =>
+        workerContext.manifest.operations.length > 0 &&
+        (!resolvedPluginKey || workerContext.pluginKey === resolvedPluginKey),
+    );
+  }
+
+  /**
+   * Builds Admin command plugin summaries from active worker manifests.
+   * @param pluginKey - Optional package or legacy key used to filter active worker contexts.
+   * @returns Plugin summaries that do not depend on command registry plugin instances.
+   */
+  private listActiveWorkerPluginSummaries(
+    pluginKey?: string,
+  ): QqbotPluginSummary[] {
+    return this.listActiveWorkerCommandContexts(pluginKey).map(
+      (workerContext) => ({
+        description: workerContext.manifest.description,
+        key: workerContext.pluginKey,
+        name: workerContext.manifest.name,
+        operationCount: workerContext.manifest.operations.length,
+        triggerMode: 'command',
+        version: workerContext.manifest.version,
+      }),
+    );
+  }
+
+  /**
+   * Normalizes an arbitrary worker health payload into the Admin health contract.
+   * @param workerContext - Active worker context that owns the package key and manifest display data.
+   * @param healthPayload - Worker health response returned by the plugin package runtime.
+   * @returns Command plugin health entry for Admin display.
+   */
+  private toWorkerPluginHealth(
+    workerContext: ActiveWorkerContext,
+    healthPayload: unknown,
+  ): QqbotPluginHealth {
+    const health =
+      healthPayload && typeof healthPayload === 'object'
+        ? (healthPayload as Record<string, unknown>)
+        : {};
+    return {
+      checkedAt:
+        typeof health.checkedAt === 'string'
+          ? health.checkedAt
+          : formatKtDateTime(new Date()),
+      message: typeof health.message === 'string' ? health.message : undefined,
+      name:
+        typeof health.name === 'string'
+          ? health.name
+          : workerContext.manifest.name,
+      pluginKey: workerContext.pluginKey,
+      status: this.normalizePluginHealthStatus(health.status),
+      triggerMode: 'command',
+    };
+  }
+
+  /**
+   * Converts worker health status into the public QQBot plugin health enum.
+   * @param status - Raw status value returned by a plugin health hook.
+   * @returns Supported health status, defaulting to healthy for generic `{ ok: true }` payloads.
+   */
+  private normalizePluginHealthStatus(
+    status: unknown,
+  ): QqbotPluginHealth['status'] {
+    return status === 'degraded' || status === 'offline' || status === 'healthy'
+      ? status
+      : 'healthy';
   }
 
   /**
@@ -989,7 +1166,29 @@ export class QqbotPluginPlatformService
       this.activeWorkerPluginAliases.set(alias, manifest.pluginKey);
       this.activeWorkersByPluginKey.set(alias, workerContext);
     }
+    this.eventPluginRegistry?.registerRuntimeEvents(
+      manifest.pluginKey,
+      this.buildRuntimeEventDefinitions(manifest),
+    );
     await this.syncManifestTasksForInstallation(installation, manifest, true);
+  }
+
+  /**
+   * Builds Admin-facing event metadata from a worker runtime manifest.
+   * @param manifest - Active worker manifest that owns event handler metadata.
+   * @returns Event plugin definitions grouped under the package plugin key.
+   */
+  private buildRuntimeEventDefinitions(
+    manifest: QqbotPluginManifest,
+  ): QqbotEventPluginDefinition[] {
+    return manifest.events.map((event) => ({
+      description: event.description,
+      key: manifest.pluginKey,
+      name: event.name || manifest.name,
+      remark: event.key,
+      triggerType: 'message',
+      version: manifest.version,
+    }));
   }
 
   /**
@@ -1053,6 +1252,7 @@ export class QqbotPluginPlatformService
     this.activeWorkerContexts.delete(installationId);
     if (!workerContext) return;
 
+    this.eventPluginRegistry?.unregisterRuntimeEvents(workerContext.pluginKey);
     for (const pluginKey of [
       workerContext.pluginKey,
       ...workerContext.manifest.legacyAliases,

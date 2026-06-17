@@ -75,7 +75,7 @@ type BangDreamGenericManifest = {
   version?: string;
 };
 
-export type QqbotGenericPluginCreateOptions = {
+type QqbotGenericPluginCreateOptions = {
   host: Record<string, unknown>;
   manifest: BangDreamGenericManifest;
   normalizeError: (error: unknown, fallback?: string) => string | Error;
@@ -91,13 +91,13 @@ type BangDreamPluginCreateOptions =
   | QqbotGenericPluginCreateOptions;
 
 type BangDreamCommandPlugin = ReturnType<
-  typeof createBangDreamPluginFromRuntimeOptions
+  typeof buildBangDreamRuntimePlugin
 >;
 
 type BangDreamGenericPathMapper = (filePath: string) => string;
 
 /**
- * Creates the BangDream plugin entry for either the legacy package loader or the generic worker runtime.
+ * Creates the BangDream plugin entry for package-local calls or the generic worker runtime.
  * @param options - Legacy BangDream runtime options or generic worker create context with manifest and config snapshot.
  * @returns BangDream command plugin instance exposing operations, health checks, and scheduled tasks.
  */
@@ -111,17 +111,17 @@ export function createPlugin(
   options: BangDreamPluginCreateOptions,
 ): BangDreamCommandPlugin | Promise<BangDreamCommandPlugin> {
   if (isBangDreamGenericPluginCreateOptions(options)) {
-    return createBangDreamPluginFromGenericOptions(options);
+    return buildBangDreamGenericPlugin(options);
   }
-  return createBangDreamPluginFromRuntimeOptions(options);
+  return buildBangDreamRuntimePlugin(options);
 }
 
 /**
  * Creates the BangDream plugin through the historical package-local option shape.
  * @param options - Package-local options carrying synchronous config, optional runtime IO, and manifest operations.
- * @returns BangDream command plugin used by legacy loaders and tests.
+ * @returns BangDream command plugin used by package-local callers and tests.
  */
-function createBangDreamPluginFromRuntimeOptions(
+function buildBangDreamRuntimePlugin(
   options: BangDreamPluginRuntimeOptions,
 ) {
   if (options.io) configureBangDreamRuntimeIo(options.io);
@@ -227,7 +227,7 @@ function createBangDreamPluginFromRuntimeOptions(
  * @param options - Generic worker context; config is read from the snapshot and IO calls delegate to host RPC methods.
  * @returns BangDream command plugin compatible with the generic worker runtime.
  */
-async function createBangDreamPluginFromGenericOptions(
+async function buildBangDreamGenericPlugin(
   options: QqbotGenericPluginCreateOptions,
 ): Promise<BangDreamCommandPlugin> {
   const manifest = options.manifest;
@@ -238,7 +238,7 @@ async function createBangDreamPluginFromGenericOptions(
     options.host,
     pathMapper,
   );
-  return createBangDreamPluginFromRuntimeOptions({
+  return buildBangDreamRuntimePlugin({
     configReader: createBangDreamGenericConfigReader(
       options.runtime.configSnapshot,
     ),
@@ -257,7 +257,7 @@ async function createBangDreamPluginFromGenericOptions(
 
 /**
  * Checks whether a create call is using the generic worker runtime shape.
- * @param options - Unknown BangDream create options supplied by a loader.
+ * @param options - Unknown BangDream create options supplied by package-local callers or generic workers.
  * @returns `true` when the options include a runtime config snapshot.
  */
 function isBangDreamGenericPluginCreateOptions(

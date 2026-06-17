@@ -21,11 +21,13 @@ import { QqbotPluginPlatformTaskController } from './contract/plugin-platform-ta
 import { QqbotPluginPlatformController } from './contract/plugin-platform.controller';
 import { QqbotPluginController } from './contract/qqbot-plugin.controller';
 import { QQBOT_PLUGIN_PLATFORM_ENTITIES } from './infrastructure/persistence';
-import { QqbotBuiltinPluginPackageLoaderService } from './infrastructure/integration/package/builtin-plugin-package-loader.service';
+import { QqbotPluginPackagePathPolicyService } from './infrastructure/integration/package/plugin-package-path-policy.service';
 import { QqbotPluginPackageReaderService } from './infrastructure/integration/package/plugin-package-reader.service';
+import { QqbotPluginPackageSourceService } from './infrastructure/integration/package/plugin-package-source.service';
 import { QqbotPluginHttpClientService } from './infrastructure/integration/sdk';
 import {
-  QqbotBuiltinPluginWorkerRuntimeFactoryService,
+  QqbotPluginHostBridgeService,
+  QqbotPluginWorkerRuntimeFactoryService,
   resolveQqbotPluginQueueConnection,
   resolveQqbotPluginQueuePrefix,
 } from './infrastructure/integration/runtime';
@@ -65,8 +67,10 @@ import { QQBOT_PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.serv
     QqbotEventPluginRegistryService,
     QqbotPluginArgumentParserService,
     QqbotPluginExecutionAdapter,
-    QqbotBuiltinPluginPackageLoaderService,
-    QqbotBuiltinPluginWorkerRuntimeFactoryService,
+    QqbotPluginPackagePathPolicyService,
+    QqbotPluginPackageSourceService,
+    QqbotPluginHostBridgeService,
+    QqbotPluginWorkerRuntimeFactoryService,
     QqbotPluginPackageReaderService,
     QqbotPluginTaskManifestSynchronizer,
     QqbotPluginTaskSchedulerService,
@@ -78,7 +82,7 @@ import { QQBOT_PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.serv
     },
     {
       provide: QQBOT_PLUGIN_RUNTIME_FACTORY,
-      useExisting: QqbotBuiltinPluginWorkerRuntimeFactoryService,
+      useExisting: QqbotPluginWorkerRuntimeFactoryService,
     },
     QqbotPluginHttpClientService,
     QqbotPluginPlatformService,

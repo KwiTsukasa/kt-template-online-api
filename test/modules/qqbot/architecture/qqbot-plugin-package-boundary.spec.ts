@@ -298,3 +298,66 @@ describe('QQBot plugin package boundary', () => {
     expect(transferFiles).toEqual([]);
   });
 });
+
+describe('plugin platform package decoupling', () => {
+  const platformRoot = join(repoRoot, 'src/modules/qqbot/plugin-platform');
+  const forbiddenPattern = new RegExp(
+    [
+      `@/modules/qqbot/${'plugins'}`,
+      ['src', 'modules', 'qqbot', 'plugins'].join('/'),
+      `Qqbot${'Builtin'}PluginPackageLoaderService`,
+      `BUILTIN_${'PLUGIN_KEYS'}`,
+      `get${'ConfigKeysForPlugin'}`,
+      `create${'BangDream'}Plugin`,
+      `create${'Ff14Market'}Plugin`,
+      `create${'Fflogs'}Plugin`,
+      `create${'Repeater'}Plugin`,
+      `builtin-plugin-${'worker'}`,
+      `builtin-plugin-${'package-loader'}`,
+    ]
+      .map(escapeRegExp)
+      .join('|'),
+  );
+  const forbiddenBranchPattern =
+    /pluginKey\s*(?:={2,3})\s*['"`](bangdream|ff14-market|fflogs|repeater)['"`]|case\s+['"`](bangdream|ff14-market|fflogs|repeater)['"`]/;
+
+  /**
+   * Escapes a literal token before it is placed into the architecture gate regexp.
+   * @param token - Forbidden source token built without leaving the raw token in test source.
+   * @returns RegExp-safe literal token.
+   */
+  function escapeRegExp(token: string): string {
+    return token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
+   * Walks plugin-platform source files for concrete coupling assertions.
+   * @param dir - Directory being scanned for TypeScript platform sources.
+   * @returns TypeScript source files under the platform tree.
+   */
+  function walkSourceFiles(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const file = join(dir, name);
+      const stat = statSync(file);
+      if (stat.isDirectory()) {
+        return walkSourceFiles(file);
+      }
+      return file.endsWith('.ts') ? [file] : [];
+    });
+  }
+
+  it('does not import, instantiate, or branch on concrete built-in plugins', () => {
+    const offenders = walkSourceFiles(platformRoot)
+      .map((file) => ({
+        file,
+        source: readFileSync(file, 'utf8'),
+      }))
+      .filter(
+        ({ source }) =>
+          forbiddenPattern.test(source) || forbiddenBranchPattern.test(source),
+      )
+      .map(({ file }) => toRepoPath(file));
+
+    expect(offenders).toEqual([]);
+  });
+});

@@ -25,22 +25,18 @@ const createPlugin = (
 });
 
 describe('QQBot plugin registry platform key compatibility', () => {
-  it('activates builtin command plugins before they are registered', async () => {
+  it('keeps command plugin registration explicit during module init', async () => {
     const activate = jest.fn(async () => undefined);
     const plugin = {
       ...createPlugin('demo-plugin', []),
       activate,
     };
-    const registry = new QqbotPluginRegistryService({
-      /**
-       * 执行 测试回调。
-       */
-      loadCommandPlugins: () => [plugin],
-    } as any);
+    const registry = new QqbotPluginRegistryService();
+    registry.register(plugin);
 
     await registry.onModuleInit();
 
-    expect(activate).toHaveBeenCalledTimes(1);
+    expect(activate).not.toHaveBeenCalled();
     expect(registry.listPlugins().map((item) => item.key)).toEqual([
       'demo-plugin',
     ]);

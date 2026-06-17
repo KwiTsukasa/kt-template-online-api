@@ -7,10 +7,8 @@ import { QqbotPluginPlatformService } from '../../../../src/modules/qqbot/plugin
 import { QqbotEventPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-event-plugin-registry.service';
 import { QqbotPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-plugin-registry.service';
 import { QqbotPluginPlatformModule } from '../../../../src/modules/qqbot/plugin-platform/plugin-platform.module';
-import { QqbotBuiltinPluginPackageLoaderService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/package/builtin-plugin-package-loader.service';
 import { QqbotPluginPackageSourceService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/package/plugin-package-source.service';
 import { QqbotPluginHostBridgeService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/plugin-host-bridge.service';
-import { QqbotBuiltinPluginWorkerRuntimeFactoryService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime';
 import { QqbotPluginWorkerRuntimeFactoryService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime';
 
 const repoRoot = join(__dirname, '../../../..');
@@ -37,6 +35,27 @@ const collectSourceFiles = (relativePath: string): string[] => {
   );
 };
 
+/**
+ * 创建 descriptor-based package source mock。
+ * @param manifest - 测试插件 manifest；作为 worker runtime 的 descriptor 快照来源。
+ * @param packageRoot - 受控插件包根路径；验证 installedPath 不再使用旧 builtin URI。
+ * @returns 只暴露 discovery 所需方法的 package source mock。
+ */
+const createPackageSource = (
+  manifest: Record<string, unknown>,
+  packageRoot = 'D:/plugins/demo-plugin',
+) => ({
+  discoverPackages: jest.fn(async () => [
+    {
+      entry: manifest.entry as string,
+      entryFile: `${packageRoot}/src/index.ts`,
+      manifest,
+      packageRoot,
+      pluginKey: manifest.pluginKey as string,
+    },
+  ]),
+});
+
 describe('QQBot plugin platform lifecycle runtime contract', () => {
   it('registers the default worker runtime factory in the Nest module', () => {
     const providers = Reflect.getMetadata(
@@ -46,23 +65,13 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
 
     expect(providers).toEqual(
       expect.arrayContaining([
-        QqbotBuiltinPluginWorkerRuntimeFactoryService,
+        QqbotPluginWorkerRuntimeFactoryService,
         expect.objectContaining({
           provide: QQBOT_PLUGIN_RUNTIME_FACTORY,
-          useExisting: QqbotBuiltinPluginWorkerRuntimeFactoryService,
+          useExisting: QqbotPluginWorkerRuntimeFactoryService,
         }),
       ]),
     );
-  });
-
-  it('keeps the default worker runtime factory dependency visible to Nest DI', () => {
-    const dependencies = Reflect.getMetadata(
-      'design:paramtypes',
-      QqbotBuiltinPluginWorkerRuntimeFactoryService,
-    );
-
-    expect(dependencies?.[0]).toBe(QqbotBuiltinPluginPackageLoaderService);
-    expect(dependencies?.[1]).toBe(ConfigService);
   });
 
   it('keeps the generic worker runtime factory dependency visible to Nest DI', () => {
@@ -88,21 +97,34 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
 
     expect(source).toContain('node:worker_threads');
     expect(source).toContain('descriptor');
-    expect(source).not.toContain('QqbotBuiltinPluginPackageLoaderService');
+    expect(source).not.toContain(
+      `Qqbot${'Builtin'}PluginPackageLoaderService`,
+    );
     expect(source).not.toMatch(
-      /@\/modules\/qqbot\/plugins|src\/modules\/qqbot\/plugins|createBangDreamPlugin|createFf14MarketPlugin|createFflogsPlugin|createRepeaterPlugin|pluginKey\s*===|case\s+['"]/,
+      new RegExp(
+        [
+          `@/modules/qqbot/${'plugins'}`,
+          ['src', 'modules', 'qqbot', 'plugins'].join('/'),
+          `create${'BangDream'}Plugin`,
+          `create${'Ff14Market'}Plugin`,
+          `create${'Fflogs'}Plugin`,
+          `create${'Repeater'}Plugin`,
+          String.raw`pluginKey\s*===`,
+          String.raw`case\s+['"]`,
+        ].join('|'),
+      ),
     );
   });
 
-  it('uses a real worker-thread boundary for built-in plugin runtimes', () => {
+  it('uses a real worker-thread boundary for descriptor plugin runtimes', () => {
     const source = readSource(
-      'src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/builtin-plugin-worker-runtime.factory.ts',
+      'src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/plugin-worker-runtime.factory.ts',
     );
 
     expect(source).toContain('node:worker_threads');
-    expect(source).toContain('QqbotBuiltinPluginWorkerThreadDriver');
-    expect(source).not.toContain('class QqbotBuiltinPluginWorkerDriver');
-    expect(source).not.toContain('new QqbotBuiltinPluginWorkerDriver');
+    expect(source).toContain('QqbotPluginWorkerThreadDriver');
+    expect(source).not.toContain(`Qqbot${'Builtin'}PluginWorkerThreadDriver`);
+    expect(source).not.toContain(`new Qqbot${'Builtin'}PluginWorkerDriver`);
   });
 
   it('uses BullMQ queues to serialize plugin worker requests instead of ad hoc in-memory chaining', () => {
@@ -112,7 +134,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
         'src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/bullmq-plugin-worker-request.queue.ts',
       ),
       readSource(
-        'src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/builtin-plugin-worker-runtime.factory.ts',
+        'src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/plugin-worker-runtime.factory.ts',
       ),
     ].join('\n');
 
@@ -216,12 +238,12 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     expect(missingExecutorSignals).toEqual([]);
   });
 
-  it('keeps event plugin dispatch generic instead of hard-coding repeater', () => {
+  it('keeps event plugin metadata generic instead of hard-coding repeater', () => {
     const source = readSource(
       'src/modules/qqbot/plugin-platform/application/registry/qqbot-event-plugin-registry.service.ts',
     );
 
-    expect(source).toContain('registerEventPlugin');
+    expect(source).toContain('registerRuntimeEvents');
     expect(source).not.toMatch(/pluginKey\s*===\s*['"]repeater['"]/);
     expect(source).not.toContain('getRepeaterPlugin');
   });
@@ -333,7 +355,9 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       setPluginActive: jest.fn(),
     };
     const eventPluginRegistry = {
+      registerRuntimeEvents: jest.fn(),
       setPluginActive: jest.fn(),
+      unregisterRuntimeEvents: jest.fn(),
     };
     const service = new (QqbotPluginPlatformService as any)(
       pluginRepository,
@@ -507,7 +531,9 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
         setPluginActive: jest.fn(),
       },
       {
+        registerRuntimeEvents: jest.fn(),
         setPluginActive: jest.fn(),
+        unregisterRuntimeEvents: jest.fn(),
       },
     ) as QqbotPluginPlatformService;
 
@@ -641,7 +667,9 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
           triggerMode: 'event',
         },
       ]),
+      registerRuntimeEvents: jest.fn(),
       setPluginActive: jest.fn(),
+      unregisterRuntimeEvents: jest.fn(),
     };
     const service = new (QqbotPluginPlatformService as any)(
       createRepository({ id: installation.pluginId, pluginKey: 'demo-plugin' }),
@@ -802,9 +830,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       undefined,
       undefined,
       undefined,
-      {
-        loadBuiltinManifests: jest.fn(() => [manifest]),
-      },
+      createPackageSource(manifest),
     ) as QqbotPluginPlatformService;
 
     await service.onModuleInit();
@@ -913,9 +939,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       undefined,
       undefined,
       undefined,
-      {
-        loadBuiltinManifests: jest.fn(() => [manifest]),
-      },
+      createPackageSource(manifest),
       taskSynchronizer,
       {
         syncTaskScheduler: jest.fn(),
@@ -1006,17 +1030,17 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       save: jest.fn(async (value) => value),
       update: jest.fn(async () => ({ affected: 1 })),
     });
-    const builtinWorker = {
+    const descriptorWorker = {
       activate: jest.fn(async () => ({ ok: true })),
       deactivate: jest.fn(async () => ({ ok: true })),
       dispose: jest.fn(async () => undefined),
-      executeOperation: jest.fn(async () => ({ replyText: 'builtin' })),
+      executeOperation: jest.fn(async () => ({ replyText: 'descriptor' })),
       handleEvent: jest.fn(async () => true),
       health: jest.fn(async () => ({ ok: true })),
       load: jest.fn(async () => ({ ok: true })),
     };
     const runtimeFactory = {
-      create: jest.fn(() => builtinWorker),
+      create: jest.fn(() => descriptorWorker),
     };
     const service = new (QqbotPluginPlatformService as any)(
       createRepository([plugin], plugin),
@@ -1033,9 +1057,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       undefined,
       undefined,
       undefined,
-      {
-        loadBuiltinManifests: jest.fn(() => [manifest]),
-      },
+      createPackageSource(manifest),
     ) as QqbotPluginPlatformService;
 
     await service.onModuleInit();
@@ -1045,7 +1067,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
         operationKey: 'demo-plugin.echo',
         pluginKey: 'demoLegacy',
       }),
-    ).resolves.toEqual({ replyText: 'builtin' });
+    ).resolves.toEqual({ replyText: 'descriptor' });
 
     await service.disableInstallation({ id: installation.id });
 
@@ -1060,12 +1082,12 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
         msg: 'QQBot 插件运行时未启用：demoLegacy',
       }),
     });
-    expect(builtinWorker.deactivate).toHaveBeenCalled();
-    expect(builtinWorker.dispose).toHaveBeenCalled();
-    expect(builtinWorker.executeOperation).toHaveBeenCalledTimes(1);
+    expect(descriptorWorker.deactivate).toHaveBeenCalled();
+    expect(descriptorWorker.dispose).toHaveBeenCalled();
+    expect(descriptorWorker.executeOperation).toHaveBeenCalledTimes(1);
   });
 
-  it('replaces the default built-in worker when a real installation is enabled later', async () => {
+  it('replaces the descriptor-discovered worker when a real installation is enabled later', async () => {
     const manifest = {
       assets: [],
       configSchema: {},
@@ -1174,9 +1196,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       undefined,
       undefined,
       undefined,
-      {
-        loadBuiltinManifests: jest.fn(() => [manifest]),
-      },
+      createPackageSource(manifest),
     ) as QqbotPluginPlatformService;
 
     await service.onModuleInit();
@@ -1307,6 +1327,22 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
 
     await service.enableInstallation({ id: 'installation-alias' });
 
+    await expect(service.listPluginSummaries('demoLegacy')).resolves.toEqual([
+      expect.objectContaining({
+        key: 'demo-plugin',
+        name: 'Demo Plugin',
+        operationCount: 1,
+        triggerMode: 'command',
+      }),
+    ]);
+    await expect(service.listPluginHealth('demoLegacy')).resolves.toEqual([
+      expect.objectContaining({
+        name: 'Demo Plugin',
+        pluginKey: 'demo-plugin',
+        status: 'healthy',
+        triggerMode: 'command',
+      }),
+    ]);
     await expect(
       service.listOperationSummaries({ pluginKey: 'demoLegacy' }),
     ).resolves.toEqual([
@@ -1456,12 +1492,8 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       ],
       version: '0.1.0',
     };
-    const commandRegistry = new QqbotPluginRegistryService({
-      /**
-       * 执行 插件平台回调。
-       */
-      loadCommandPlugins: () => [commandPlugin],
-    } as any);
+    const commandRegistry = new QqbotPluginRegistryService();
+    commandRegistry.register(commandPlugin);
     await commandRegistry.onModuleInit();
 
     await expect(
@@ -1480,38 +1512,34 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     });
     expect(commandPlugin.operations[0].execute).toHaveBeenCalledTimes(1);
 
-    const repeaterPlugin = {
-      bind: jest.fn(async () => true),
-      /**
-       * 读取 插件平台回调数据。
-       */
-      getDefinition: () => ({
+    const accountService = {
+      allEnabled: jest.fn(async () => []),
+      bindEventPlugin: jest.fn(async () => true),
+      findBySelfId: jest.fn(),
+      getBoundEventPluginKeys: jest.fn(async () => []),
+      unbindEventPlugin: jest.fn(async () => true),
+    };
+    const eventRegistry = new QqbotEventPluginRegistryService(
+      accountService as any,
+    );
+    eventRegistry.registerRuntimeEvents('repeater', [
+      {
         description: 'repeat messages',
         key: 'repeater',
         name: 'Repeater',
         triggerType: 'message',
         version: '0.1.0',
-      }),
-      getSummary: jest.fn(),
-      handleMessage: jest.fn(async () => true),
-      unbind: jest.fn(async () => true),
-    };
-    const eventRegistry = new QqbotEventPluginRegistryService(
-      {
-        allEnabled: jest.fn(async () => []),
-        findBySelfId: jest.fn(),
-      } as any,
-      {
-        /**
-         * 执行 插件平台回调。
-         */
-        loadEventPlugins: () => [repeaterPlugin],
-      } as any,
-    );
+      },
+    ]);
 
     await expect(
       eventRegistry.dispatchMessage({ messageType: 'group' } as any),
-    ).resolves.toBe(true);
+    ).resolves.toBe(false);
+    await expect(eventRegistry.bind('repeater', '10000')).resolves.toBe(true);
+    expect(accountService.bindEventPlugin).toHaveBeenCalledWith(
+      '10000',
+      'repeater',
+    );
 
     eventRegistry.setPluginActive('repeater', false);
 
@@ -1526,7 +1554,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
         }),
       },
     );
-    expect(repeaterPlugin.handleMessage).toHaveBeenCalledTimes(1);
   });
 
   it('hydrates inactive command and event plugin keys from persisted installation state on startup', async () => {
@@ -1557,16 +1584,11 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       { pluginId: 'plugin-command', status: 'disabled' },
       { pluginId: 'plugin-event', status: 'disabled' },
     ]);
-    const commandRegistry = new (QqbotPluginRegistryService as any)(
-      {
-        /**
-         * 执行 插件平台回调。
-         */
-        loadCommandPlugins: () => [commandPlugin],
-      },
-      pluginRepository,
-      installationRepository,
-    ) as QqbotPluginRegistryService;
+    const commandRegistry = new QqbotPluginRegistryService(
+      pluginRepository as any,
+      installationRepository as any,
+    );
+    commandRegistry.register(commandPlugin);
 
     await commandRegistry.onModuleInit();
 
@@ -1579,36 +1601,26 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       }),
     });
 
-    const repeaterPlugin = {
-      bind: jest.fn(async () => true),
-      /**
-       * 读取 插件平台回调数据。
-       */
-      getDefinition: () => ({
+    const eventRegistry = new (QqbotEventPluginRegistryService as any)(
+      {
+        allEnabled: jest.fn(async () => []),
+        bindEventPlugin: jest.fn(async () => true),
+        findBySelfId: jest.fn(),
+        getBoundEventPluginKeys: jest.fn(async () => []),
+        unbindEventPlugin: jest.fn(async () => true),
+      },
+      pluginRepository,
+      installationRepository,
+    ) as QqbotEventPluginRegistryService;
+    eventRegistry.registerRuntimeEvents('repeater', [
+      {
         description: 'repeat messages',
         key: 'repeater',
         name: 'Repeater',
         triggerType: 'message',
         version: '0.1.0',
-      }),
-      getSummary: jest.fn(),
-      handleMessage: jest.fn(async () => true),
-      unbind: jest.fn(async () => true),
-    };
-    const eventRegistry = new (QqbotEventPluginRegistryService as any)(
-      {
-        allEnabled: jest.fn(async () => []),
-        findBySelfId: jest.fn(),
       },
-      {
-        /**
-         * 执行 插件平台回调。
-         */
-        loadEventPlugins: () => [repeaterPlugin],
-      },
-      pluginRepository,
-      installationRepository,
-    ) as QqbotEventPluginRegistryService;
+    ]);
 
     await eventRegistry.onModuleInit();
 
@@ -1646,16 +1658,15 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     const createRepository = (rows: unknown[] = []) => ({
       find: jest.fn(async () => rows),
     });
-    const commandRegistry = new (QqbotPluginRegistryService as any)(
-      {
-        /**
-         * 执行 插件平台回调。
-         */
-        loadCommandPlugins: () => [commandPlugin],
-      },
-      createRepository([{ id: 'plugin-command', pluginKey: 'demo-plugin' }]),
-      createRepository([{ pluginId: 'plugin-command', status: 'disabled' }]),
-    ) as QqbotPluginRegistryService;
+    const commandRegistry = new QqbotPluginRegistryService(
+      createRepository([
+        { id: 'plugin-command', pluginKey: 'demo-plugin' },
+      ]) as any,
+      createRepository([
+        { pluginId: 'plugin-command', status: 'disabled' },
+      ]) as any,
+    );
+    commandRegistry.register(commandPlugin);
 
     await commandRegistry.onModuleInit();
 

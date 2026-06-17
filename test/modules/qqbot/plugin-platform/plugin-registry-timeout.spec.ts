@@ -1,29 +1,23 @@
 import { QqbotPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-plugin-registry.service';
 
 describe('QQBot plugin registry operation timeout', () => {
-  it('enforces manifest operation timeout for direct built-in command execution', async () => {
-    const commandRegistry = new QqbotPluginRegistryService({
-      /**
-       * 执行 插件平台回调。
-       */
-      loadCommandPlugins: () => [
+  it('enforces manifest operation timeout for explicitly registered command plugins', async () => {
+    const commandRegistry = new QqbotPluginRegistryService();
+    commandRegistry.register({
+      key: 'demo-plugin',
+      name: 'Demo Plugin',
+      operations: [
         {
-          key: 'demo-plugin',
-          name: 'Demo Plugin',
-          operations: [
-            {
-              execute: jest.fn(
-                () => new Promise((resolve) => setTimeout(resolve, 1000)),
-              ),
-              key: 'demo.slow',
-              name: 'slow',
-              timeoutMs: 5,
-            },
-          ],
-          version: '0.1.0',
+          execute: jest.fn(
+            () => new Promise((resolve) => setTimeout(resolve, 1000)),
+          ),
+          key: 'demo.slow',
+          name: 'slow',
+          timeoutMs: 5,
         },
       ],
-    } as any);
+      version: '0.1.0',
+    });
     await commandRegistry.onModuleInit();
 
     await expect(

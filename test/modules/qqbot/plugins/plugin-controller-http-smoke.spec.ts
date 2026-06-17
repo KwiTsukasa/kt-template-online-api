@@ -82,7 +82,26 @@ describe('QQBot plugin controller local HTTP smoke', () => {
           useValue: {
             health: jest.fn(async () => []),
             listOperations: jest.fn(listOperationSummaries),
-            listPlugins: jest.fn(() =>
+            listPlugins: jest.fn(() => []),
+          },
+        },
+        {
+          provide: QqbotPluginPlatformService,
+          useValue: {
+            listPluginHealth: jest.fn(async () =>
+              [
+                createPlugin('bangdream', ['bangDream']),
+                createPlugin('ff14-market', ['ff14Market']),
+                createPlugin('fflogs'),
+              ].map((plugin) => ({
+                checkedAt: '2026-06-18 00:00:00',
+                name: plugin.name,
+                pluginKey: plugin.key,
+                status: 'healthy',
+                triggerMode: 'command',
+              })),
+            ),
+            listPluginSummaries: jest.fn(async () =>
               [
                 createPlugin('bangdream', ['bangDream']),
                 createPlugin('ff14-market', ['ff14Market']),
@@ -95,11 +114,6 @@ describe('QQBot plugin controller local HTTP smoke', () => {
                 version: plugin.version,
               })),
             ),
-          },
-        },
-        {
-          provide: QqbotPluginPlatformService,
-          useValue: {
             listOperationSummaries: jest.fn(async (query) =>
               listOperationSummaries(query?.pluginKey),
             ),
@@ -179,5 +193,21 @@ describe('QQBot plugin controller local HTTP smoke', () => {
         triggerMode: 'command',
       }),
     ]);
+  });
+
+  it('returns command plugin health through platform runtime summaries', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/qqbot/plugin/health')
+      .query({ triggerMode: 'command' })
+      .expect(200);
+
+    expect(response.body.data.map((plugin) => plugin.pluginKey)).toEqual([
+      'bangdream',
+      'ff14-market',
+      'fflogs',
+    ]);
+    expect(
+      response.body.data.every((plugin) => plugin.status === 'healthy'),
+    ).toBe(true);
   });
 });

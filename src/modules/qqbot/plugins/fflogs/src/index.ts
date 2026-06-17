@@ -12,7 +12,7 @@ type FflogsPluginOptions = {
   now?: () => Date;
 };
 
-export type QqbotGenericPluginCreateOptions = {
+type QqbotGenericPluginCreateOptions = {
   host: Record<string, unknown>;
   manifest: FflogsManifest & { key?: string };
   normalizeError: (error: unknown, fallback?: string) => string | Error;
@@ -28,13 +28,13 @@ type FflogsPluginCreateOptions =
   | QqbotGenericPluginCreateOptions;
 
 /**
- * Creates the FFLogs plugin entry for the legacy loader or generic worker runtime.
+ * Creates the FFLogs plugin entry for package-local calls or the generic worker runtime.
  * @param options - Legacy package-local options or generic worker options with config snapshot and host RPC facade.
  * @returns FFLogs command plugin instance.
  */
 export function createPlugin(options: FflogsPluginCreateOptions) {
   if (isFflogsGenericPluginCreateOptions(options)) {
-    return createFflogsPluginFromOptions({
+    return buildFflogsPlugin({
       host: createFflogsGenericHostAdapter(options),
       manifest: normalizeFflogsManifest(options.manifest),
       normalizeError: (error, fallback) =>
@@ -42,15 +42,15 @@ export function createPlugin(options: FflogsPluginCreateOptions) {
       now: options.now,
     });
   }
-  return createFflogsPluginFromOptions(options);
+  return buildFflogsPlugin(options);
 }
 
 /**
  * Creates the FFLogs plugin from the package-local host contract.
  * @param options - Package-local host, manifest, clock, and error normalizer.
- * @returns FFLogs command plugin used by current tests and legacy loaders.
+ * @returns FFLogs command plugin used by package-local callers and tests.
  */
-function createFflogsPluginFromOptions(options: FflogsPluginOptions) {
+function buildFflogsPlugin(options: FflogsPluginOptions) {
   const application = new FflogsApplication(new FflogsClient(options.host));
   return {
     description: options.manifest.description,

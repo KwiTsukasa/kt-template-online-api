@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { normalizeQqbotPluginTaskCron } from '../../application/task';
+import { normalizeQqbotPluginTaskCron } from '../../application/task/qqbot-plugin-task-cron.validator';
 import {
   QQBOT_PLUGIN_ALLOWED_PERMISSIONS,
   QQBOT_PLUGIN_WORKER_TYPES,

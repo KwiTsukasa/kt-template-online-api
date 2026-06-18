@@ -4,9 +4,9 @@
 
 **Goal:** 将 Admin `/dashboard/analytics` 改造成多站点环境状态总览总控面板，覆盖本机开发、NAS 线上、腾讯云、r4se 远程环境，并明确展示未接入证据，第一版只做观测与只读自检，不提供高风险写操作。
 
-**Architecture:** 后端在 API `admin/platform-config` 下新增环境面板聚合模块，以 `Site -> Node -> Service -> Signal` 为统一模型；内部服务信号从现有 Nest 服务读取，远程信号通过只读适配器读取 Jenkins、Kubernetes、Tencent Cloud、Caddy、WireGuard、OpenClash/Mihomo；前端保留 Vben Dashboard 路由，替换为 A 方案布局：顶部状态条、左侧站点栏、中间拓扑、右侧证据/动作抽屉、底部事件流。
+**Architecture:** 后端在 API `admin/platform-config` 下新增环境面板聚合模块，以 `Site -> Node -> Service -> Signal` 为统一模型；HTTP dashboard/self-check 负责状态快照和只读兜底，平台级 EnvironmentEventBus 通过 local/mqtt 模式收口 topic 事件并驱动 recent events 与 cache invalidation；内部服务信号从现有 Nest 服务读取，远程信号通过只读适配器读取 Jenkins、Kubernetes、Tencent Cloud、Caddy、WireGuard、OpenClash/Mihomo；前端保留 Vben Dashboard 路由，替换为 A 方案布局：顶部状态条、左侧站点栏、中间拓扑、右侧证据/动作抽屉、底部事件流。
 
-**Tech Stack:** NestJS、TypeScript、TypeORM、axios、tencentcloud-sdk-nodejs、Vben Admin、Vue 3、antdv-next、Vitest/Jest、Playwright 轻量页面烟测。
+**Tech Stack:** NestJS、TypeScript、TypeORM、axios、mqtt、tencentcloud-sdk-nodejs、Vben Admin、Vue 3、antdv-next、Vitest/Jest、Playwright 轻量页面烟测。
 
 ---
 
@@ -23,11 +23,15 @@
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\domain\environment-dashboard.types.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\application\environment-dashboard-status.mapper.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\application\environment-dashboard-action.catalog.ts`
+- `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\application\environment-event.materializer.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\application\environment-dashboard.service.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\application\environment-dashboard-self-check.service.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\environment-dashboard-config.service.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\environment-dashboard-cache.service.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\environment-dashboard-evidence.mapper.ts`
+- `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\event\environment-event-bus.service.ts`
+- `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\event\environment-mqtt-topic.catalog.ts`
+- `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\event\qqbot-environment-event.bridge.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\adapters\environment-readonly-http.client.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\adapters\jenkins-readonly.adapter.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\adapters\kubernetes-readonly.adapter.ts`
@@ -95,6 +99,22 @@ export interface EnvironmentDashboardResponse {
   actions: EnvironmentAction[];
   events: EnvironmentEvent[];
 }
+
+export interface EnvironmentEventEnvelope {
+  eventId: string;
+  topic: string;
+  siteId: string;
+  nodeId?: string;
+  serviceId?: string;
+  signalId?: string;
+  severity: EnvironmentHealthStatus;
+  sourceKind: 'local' | 'mqtt' | EnvironmentSignalSourceKind;
+  observedAt: string;
+  expiresAt?: string;
+  retained?: boolean;
+  summary: string;
+  evidence?: EnvironmentEvidence[];
+}
 ```
 
 Severity aggregation order is fixed:
@@ -118,6 +138,8 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
 - Every new or touched function/method/hook/event handler/exported arrow function must include JSDoc explaining purpose, parameter origin, return semantics, and side effects when present.
 - High-risk actions are represented by disabled action records with `enabled: false` and `disabledReason`; controller must reject execution paths because this plan does not add a generic write-action endpoint.
 - `unwired` and `unknown` are valid product states. A missing integration must be visible evidence, not a green health badge.
+- MQTT is an event layer, not the only source of truth. Retained messages require `observedAt` and `expiresAt`; expired retained messages must become `unknown` or `unwired`.
+- Admin must not connect to MQTT directly. Broker credentials and internal topics stay inside API runtime.
 - For interface changes, verify through a real local HTTP request against the Nest app or an already running local service.
 
 ---
@@ -162,6 +184,13 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   pnpm add tencentcloud-sdk-nodejs
   ```
   Expected output: dependency added to `package.json` and lockfile. No credential values are written.
+
+- [ ] Confirm the existing MQTT client dependency before adding any event-bus code:
+  ```powershell
+  cd D:\MyFiles\KT\Node\kt-template-online-api
+  rg -n '"mqtt"' package.json pnpm-lock.yaml
+  ```
+  Expected output: `mqtt` is already present in `package.json`; do not add a second broker/client package.
 
 ## Task 1: API Contract, Status Mapper, And RED Tests
 
@@ -256,6 +285,43 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   pnpm exec jest --runTestsByPath test/modules/admin/environment-dashboard/environment-dashboard-evidence.mapper.spec.ts test/modules/admin/environment-dashboard/environment-readonly-http.client.spec.ts --runInBand
   ```
   Expected output: tests pass; no real network access is required because axios is mocked.
+
+## Task 3A: API Platform Event Bus And MQTT Topic Contract
+
+- [ ] Create `infrastructure/event/environment-mqtt-topic.catalog.ts` with documented topic builders:
+  - `signal(siteId, nodeId, serviceId)`
+  - `event(siteId, nodeId, serviceId)`
+  - `selfCheckResult(siteId)`
+  - `qqbotRuntime(selfId)`
+  - `qqbotNapcatLogin(selfId)`
+  - `pluginTaskRun(pluginKey, taskKey)`
+
+- [ ] Create `infrastructure/event/environment-event-bus.service.ts`:
+  - supports `ENV_DASHBOARD_EVENT_BUS=local|mqtt`
+  - uses `ENV_DASHBOARD_MQTT_URL`, `ENV_DASHBOARD_MQTT_CLIENT_ID`, `ENV_DASHBOARD_MQTT_USERNAME`, `ENV_DASHBOARD_MQTT_PASSWORD`, and `ENV_DASHBOARD_MQTT_TOPIC_PREFIX`
+  - subscribes only to the environment dashboard topic prefix
+  - publishes local events through in-process subscribers for tests and dev
+  - marks broker disconnect as an environment event
+  - never logs broker credentials or full payloads
+
+- [ ] Create `application/environment-event.materializer.ts`:
+  - accepts `EnvironmentEventEnvelope`
+  - rejects stale retained messages when `expiresAt` is earlier than current time
+  - appends safe recent events for dashboard response
+  - invalidates `environment-dashboard-cache.service.ts` when a non-stale signal event arrives
+  - never turns MQTT-only data into green status without fresh `observedAt` evidence
+
+- [ ] Create `infrastructure/event/qqbot-environment-event.bridge.ts`:
+  - maps QQBot/NapCat runtime events into environment event envelopes
+  - depends on a narrow bus interface, not QQBot topic constants inside dashboard application code
+  - does not make environment dashboard depend on `QqbotBusService` implementation details
+
+- [ ] Add RED/GREEN tests:
+  ```powershell
+  cd D:\MyFiles\KT\Node\kt-template-online-api
+  pnpm exec jest --runTestsByPath test/modules/admin/environment-dashboard/environment-mqtt-topic.catalog.spec.ts test/modules/admin/environment-dashboard/environment-event-bus.service.spec.ts test/modules/admin/environment-dashboard/environment-event.materializer.spec.ts test/modules/admin/environment-dashboard/qqbot-environment-event.bridge.spec.ts --runInBand
+  ```
+  Expected output after implementation: topic mapping is deterministic, expired retained signal becomes non-green, broker disconnect creates an event without marking every service down, and QQBot bridge tests pass without importing dashboard code from QQBot-specific topic constants.
 
 ## Task 4: API Remote Adapters For Jenkins And Kubernetes
 
@@ -365,6 +431,7 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
 - [ ] Create `environment-dashboard.service.ts`:
   - assembles four sites: `local-dev`, `nas-prod`, `tencent-cloud`, `r4se`
   - aggregates summary counters
+  - merges safe recent events from `environment-event.materializer.ts`
   - builds topology edges:
     - local-dev -> API/Admin local services
     - nas-prod -> Jenkins/K8s/API/Admin/MySQL/Redis/Loki/MinIO/WordPress/QQBot/NapCat/Plugin Platform/Plugin Tasks
@@ -376,7 +443,7 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
 - [ ] Create `environment-dashboard-self-check.service.ts`:
   - runs the same collectors with `forceRefresh: true`
   - returns `EnvironmentDashboardResponse`
-  - records event entries for failed adapters
+  - records event entries for failed adapters through `EnvironmentEventBus`
   - performs no write operation
 
 - [ ] Add service tests:
@@ -403,6 +470,12 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   ```env
   ENV_DASHBOARD_CACHE_TTL_MS=15000
   ENV_DASHBOARD_SIGNAL_TIMEOUT_MS=5000
+  ENV_DASHBOARD_EVENT_BUS=local
+  ENV_DASHBOARD_MQTT_URL=
+  ENV_DASHBOARD_MQTT_CLIENT_ID=kt-template-online-api-environment
+  ENV_DASHBOARD_MQTT_USERNAME=
+  ENV_DASHBOARD_MQTT_PASSWORD=
+  ENV_DASHBOARD_MQTT_TOPIC_PREFIX=kt/env
   ENV_DASHBOARD_JENKINS_URL=
   ENV_DASHBOARD_JENKINS_JOB=KT-Template/KT-Template-API/main
   ENV_DASHBOARD_JENKINS_USERNAME=
@@ -543,6 +616,7 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   - mocked API returns all four sites
   - disabled write actions render disabled
   - unwired Jenkins/K8s evidence renders as evidence, not healthy state
+  - MQTT-origin recent event renders only after API returns it; page does not instantiate an MQTT client
   - self-check button calls the POST wrapper
 
 - [ ] Run:
@@ -569,6 +643,7 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   - topology contains Jenkins, K8s, QQBot/NapCat, Plugin Tasks, Tencent Caddy/WireGuard, r4se OpenClash/WireGuard
   - right panel shows evidence for selected item
   - bottom event stream appears
+  - event stream can display an API-provided MQTT-origin event without exposing broker configuration in frontend state
   - Jenkins/K8s missing config appears as `unwired` or `unknown`, never green
   - disabled write actions cannot be clicked
 
@@ -657,6 +732,8 @@ Online completion evidence must include:
 
 - `GET /system/environment/dashboard` returns four sites.
 - `POST /system/environment/self-check` returns fresh evidence.
+- MQTT event bus is either `local` with explicit configured evidence, or `mqtt` with broker connection status shown as evidence.
+- A synthetic non-secret MQTT signal event invalidates dashboard cache and appears in recent events; an expired retained signal does not create a green status.
 - Jenkins/K8s nodes show live evidence when configured, or explicit missing-key evidence when not configured.
 - Tencent Cloud and r4se nodes do not show green health without a live/configured source.
 - Admin page displays the same state without console errors.

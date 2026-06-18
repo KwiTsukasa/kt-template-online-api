@@ -7,6 +7,9 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { throwVbenError, ToolsService } from '@/common';
+import { NapcatConfigWriterService } from '../../../application/runtime/napcat-config-writer.service';
+import { NapcatRuntimeProfileService } from '../../../application/runtime/napcat-runtime-profile.service';
+import type { NapcatConfigFile } from '../../../domain/runtime/napcat-profile.types';
 import {
   toNapcatDockerDeviceOptions,
   type NapcatDockerDeviceOptions,
@@ -50,13 +53,19 @@ type NapcatAutoLoginResult = {
 
 @Injectable()
 export class QqbotNapcatContainerService {
+  private readonly configWriterService: NapcatConfigWriterService;
+
+  private readonly runtimeProfileService: NapcatRuntimeProfileService;
+
   /**
    * 初始化 QqbotNapcatContainerService 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   * @param containerRepository - NapCat仓库依赖；影响 constructor 的返回值。
-   * @param bindingRepository - NapCat仓库依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param deviceIdentityService - deviceIdentityService 服务依赖；影响 constructor 的返回值。
+   * @param configService - Runtime configuration source for NAS SSH, Docker image, port pool, and profile defaults.
+   * @param containerRepository - Persistence adapter for NapCat container rows created or updated by runtime actions.
+   * @param bindingRepository - Persistence adapter that links QQBot accounts to their primary NapCat containers.
+   * @param toolsService - Shared helper for error extraction, text truncation, and bounded sleeps.
+   * @param deviceIdentityService - Device identity resolver that supplies stable hostname, MAC, data-dir, and machine-id values.
+   * @param runtimeProfileService - Runtime profile resolver used to generate Docker env and mount settings.
+   * @param configWriterService - Config writer used to generate NapCat and OneBot config files.
    */
   constructor(
     private readonly configService: ConfigService,
@@ -66,7 +75,14 @@ export class QqbotNapcatContainerService {
     private readonly bindingRepository: Repository<NapcatAccountBinding>,
     private readonly toolsService: ToolsService,
     private readonly deviceIdentityService?: NapcatDeviceIdentityService,
-  ) {}
+    runtimeProfileService?: NapcatRuntimeProfileService,
+    configWriterService?: NapcatConfigWriterService,
+  ) {
+    this.runtimeProfileService =
+      runtimeProfileService || new NapcatRuntimeProfileService(configService);
+    this.configWriterService =
+      configWriterService || new NapcatConfigWriterService(toolsService);
+  }
 
   /**
    * 执行 NapCat 登录运行态流程。
@@ -1159,11 +1175,12 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param input - input 输入；使用 `dataDir`、`image`、`name`、`reverseWsUrl` 字段生成结果。
+   * Builds the remote shell script that creates or recreates a managed NapCat container.
+   * @param input - Container image, account, data-dir, device identity, and reverse-WS values that become Docker flags and config files.
    */
   private buildRemoteCreateScript(input: {
     account?: string;
+    containerId?: string;
     dataDir: string;
     deviceIdentity?: NapcatDockerDeviceOptions;
     image: string;
@@ -1181,6 +1198,18 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     const token = this.sh(input.token);
     const account = `${input.account || ''}`.trim();
     const loginPassword = this.toolsService.toSecretText(input.loginPassword);
+    const runtimeProfile = this.runtimeProfileService.resolveRuntimeProfile({
+      accountId: account || input.name,
+      containerId: input.containerId,
+      dataDir: input.dataDir,
+      deviceIdentityId: input.deviceIdentity?.deviceIdentityId,
+    });
+    const configBundle = this.configWriterService.buildConfigFiles({
+      account,
+      reverseWsUrl: '$REVERSE_WS_URL',
+      token: '$WEBUI_TOKEN',
+    });
+    const configWriteScript = this.renderConfigFiles(configBundle.files);
     const accountHeader = account ? `ACCOUNT=${this.sh(account)}\n` : '';
     const accountRunFlag = account ? '  -e ACCOUNT="$ACCOUNT" \\\n' : '';
     const passwordHeader = loginPassword
@@ -1222,61 +1251,59 @@ NAME=${name}
 PORT=${input.port}
 REVERSE_WS_URL=${reverseWsUrl}
 WEBUI_TOKEN=${token}
+NAPCAT_UID=${this.sh(`${runtimeProfile.runtimeUid}`)}
+NAPCAT_GID=${this.sh(`${runtimeProfile.runtimeGid}`)}
+NAPCAT_SHM_SIZE=${this.sh(runtimeProfile.shmSize)}
 ${accountHeader}
 ${passwordHeader}
 ${deviceHeader}
-mkdir -p "$DATA_DIR/QQ" "$DATA_DIR/config" "$DATA_DIR/plugins" "$DATA_DIR/logs"
+mkdir -p "$DATA_DIR/QQ" "$DATA_DIR/config" "$DATA_DIR/plugins" "$DATA_DIR/logs" "$DATA_DIR/cache" "$DATA_DIR/local-share"
 chmod 700 "$DATA_DIR"
 ${devicePrepareScript}
 
-cat > "$DATA_DIR/config/webui.json" <<EOF
-{
-  "host": "0.0.0.0",
-  "port": 6099,
-  "token": "$WEBUI_TOKEN",
-  "loginRate": 3
-}
-EOF
-
-cat > "$DATA_DIR/config/onebot11.json" <<EOF
-{
-  "network": {
-    "httpServers": [],
-    "httpClients": [],
-    "websocketServers": [],
-    "websocketClients": [
-      {
-        "name": "kt-template-online-api-reverse",
-        "enable": true,
-        "url": "$REVERSE_WS_URL",
-        "messagePostFormat": "array",
-        "reportSelfMessage": false,
-        "reconnectInterval": 5000,
-        "token": "",
-        "debug": false,
-        "heartInterval": 30000
-      }
-    ]
-  },
-  "musicSignUrl": "",
-  "enableLocalFile2Url": false,
-  "parseMultMsg": false
-}
-EOF
+${configWriteScript}
 
 ${pullCmd}docker rm -f "$NAME" >/dev/null 2>&1 || true
 docker run -d \\
   --name "$NAME" \\
   --restart unless-stopped \\
-  -e NAPCAT_UID=0 \\
-  -e NAPCAT_GID=0 \\
+  --init \\
+  --shm-size "$NAPCAT_SHM_SIZE" \\
+  -e NAPCAT_UID="$NAPCAT_UID" \\
+  -e NAPCAT_GID="$NAPCAT_GID" \\
   -e WEBUI_TOKEN="$WEBUI_TOKEN" \\
+  -e LANG=${runtimeProfile.locale} \\
+  -e LC_ALL=${runtimeProfile.locale} \\
+  -e LANGUAGE=zh_CN:zh \\
+  -e TZ=${runtimeProfile.timezone} \\
+  -e HOME=/app \\
+  -e XDG_CONFIG_HOME=${runtimeProfile.xdgConfigHome} \\
+  -e XDG_CACHE_HOME=${runtimeProfile.xdgCacheHome} \\
+  -e XDG_DATA_HOME=${runtimeProfile.xdgDataHome} \\
+  -e XDG_RUNTIME_DIR=/tmp/runtime-napcat \\
 ${accountRunFlag}${passwordRunFlag}${deviceRunFlags}  -p "$PORT:6099" \\
   -v "$DATA_DIR/QQ:/app/.config/QQ" \\
   -v "$DATA_DIR/config:/app/napcat/config" \\
   -v "$DATA_DIR/plugins:/app/napcat/plugins" \\
+  -v "$DATA_DIR/cache:/app/.cache" \\
+  -v "$DATA_DIR/local-share:/app/.local/share" \\
+  -v "$DATA_DIR/logs:/app/napcat/logs" \\
   "$IMAGE" >/dev/null
 `;
+  }
+
+  /**
+   * Renders NapCat config files as shell here-doc writes under the account config directory.
+   * @param files - Config files generated by `NapcatConfigWriterService` for this container.
+   * @returns Shell fragment that writes each config file before Docker starts.
+   */
+  private renderConfigFiles(files: NapcatConfigFile[]) {
+    return files
+      .map((file) => {
+        return `cat > "$DATA_DIR/config/${file.path}" <<EOF
+${file.content}EOF`;
+      })
+      .join('\n\n');
   }
 
   /**

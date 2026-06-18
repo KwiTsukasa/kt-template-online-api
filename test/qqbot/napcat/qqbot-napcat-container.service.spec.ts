@@ -342,6 +342,62 @@ describe('QqbotNapcatContainerService', () => {
     ).not.toContain('docker pull');
   });
 
+  it('generates Chinese desktop runtime flags and account config files', () => {
+    const service = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string, defaultValue?: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_IMAGE: 'kt-napcat-desktop-cn@sha256:profiledigest',
+            QQBOT_NAPCAT_RUNTIME_GID: '1101',
+            QQBOT_NAPCAT_RUNTIME_UID: '1101',
+            QQBOT_NAPCAT_SHM_SIZE: '512m',
+          };
+          return values[key] || defaultValue || '';
+        }),
+      } as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+
+    const script = service.buildRemoteCreateScript({
+      account: '10001',
+      dataDir: '/vol1/docker/kt-qqbot/napcat-instances/linux-pc-a1b2',
+      image: 'kt-napcat-desktop-cn@sha256:profiledigest',
+      name: 'linux-pc-a1b2',
+      port: 6100,
+      reverseWsUrl: 'ws://127.0.0.1:48085/qqbot/onebot/reverse',
+      token: 'token-test',
+    });
+
+    expect(script).toContain(
+      'mkdir -p "$DATA_DIR/QQ" "$DATA_DIR/config" "$DATA_DIR/plugins" "$DATA_DIR/logs" "$DATA_DIR/cache" "$DATA_DIR/local-share"',
+    );
+    expect(script).toContain("NAPCAT_UID='1101'");
+    expect(script).toContain("NAPCAT_GID='1101'");
+    expect(script).toContain("NAPCAT_SHM_SIZE='512m'");
+    expect(script).toContain('--init \\');
+    expect(script).toContain('--shm-size "$NAPCAT_SHM_SIZE"');
+    expect(script).toContain('-e NAPCAT_UID="$NAPCAT_UID"');
+    expect(script).toContain('-e NAPCAT_GID="$NAPCAT_GID"');
+    expect(script).toContain('-e LANG=zh_CN.UTF-8');
+    expect(script).toContain('-e LC_ALL=zh_CN.UTF-8');
+    expect(script).toContain('-e LANGUAGE=zh_CN:zh');
+    expect(script).toContain('-e TZ=Asia/Shanghai');
+    expect(script).toContain('-e HOME=/app');
+    expect(script).toContain('-e XDG_CONFIG_HOME=/app/.config');
+    expect(script).toContain('-e XDG_CACHE_HOME=/app/.cache');
+    expect(script).toContain('-e XDG_DATA_HOME=/app/.local/share');
+    expect(script).toContain('-e XDG_RUNTIME_DIR=/tmp/runtime-napcat');
+    expect(script).toContain('-v "$DATA_DIR/cache:/app/.cache"');
+    expect(script).toContain(
+      '-v "$DATA_DIR/local-share:/app/.local/share"',
+    );
+    expect(script).toContain('-v "$DATA_DIR/logs:/app/napcat/logs"');
+    expect(script).toContain('cat > "$DATA_DIR/config/napcat_10001.json"');
+    expect(script).toContain('cat > "$DATA_DIR/config/onebot11_10001.json"');
+  });
+
   it('skips quick-login recreate when the container already carries ACCOUNT', async () => {
     const containerRepository = {
       createQueryBuilder: jest.fn(() => ({

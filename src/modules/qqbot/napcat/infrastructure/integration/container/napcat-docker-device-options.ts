@@ -3,6 +3,7 @@ import type { NapcatDeviceIdentity } from '../../persistence/napcat-device-ident
 export type NapcatDockerDeviceOptions = {
   dataDir: string;
   deviceEnvPath: string;
+  deviceIdentityId?: string;
   hostname: string;
   machineIdPath: string;
   macAddress: string;
@@ -11,18 +12,19 @@ export type NapcatDockerDeviceOptions = {
 
 /**
  * 执行 NapCat 登录运行态流程。
- * @param identity - identity 输入；使用 `dataDir`、`hostname`、`machineIdPath`、`macAddress` 字段生成结果。
- * @returns NapCat 登录运行态产出的 NapcatDockerDeviceOptions。
+ * @param identity - Persisted device identity row that supplies stable directory, hostname, machine-id, and MAC values for Docker.
+ * @returns Docker option bundle used by remote create scripts.
  */
 export function toNapcatDockerDeviceOptions(
   identity: Pick<
     NapcatDeviceIdentity,
-    'dataDir' | 'hostname' | 'machineIdPath' | 'macAddress'
+    'dataDir' | 'hostname' | 'id' | 'machineIdPath' | 'macAddress'
   >,
 ): NapcatDockerDeviceOptions {
   return {
     dataDir: identity.dataDir,
     deviceEnvPath: `${identity.dataDir}/device.env`,
+    deviceIdentityId: identity.id,
     hostname: identity.hostname,
     machineIdPath: identity.machineIdPath,
     macAddress: identity.macAddress,

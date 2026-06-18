@@ -4,7 +4,7 @@
 
 **Goal:** 将 Admin `/dashboard/analytics` 改造成多站点环境状态总览总控面板，覆盖本机开发、NAS 线上、腾讯云、r4se 远程环境，并明确展示未接入证据，第一版只做观测与只读自检，不提供高风险写操作。
 
-**Architecture:** 后端在 API `admin/platform-config` 下新增环境面板聚合模块，以 `Site -> Node -> Service -> Signal` 为统一模型；HTTP dashboard/self-check 负责状态快照和只读兜底，平台级 EnvironmentEventBus 通过 local/mqtt 模式收口 topic 事件并驱动 recent events 与 cache invalidation；内部服务信号从现有 Nest 服务读取，远程信号通过只读适配器读取 Jenkins、Kubernetes、Tencent Cloud、Caddy、WireGuard、OpenClash/Mihomo；前端保留 Vben Dashboard 路由，替换为 A 方案布局：顶部状态条、左侧站点栏、中间拓扑、右侧证据/动作抽屉、底部事件流。
+**Architecture:** 后端在 API `admin/platform-config` 下新增环境面板聚合模块，以 `Site -> Node -> Service -> Signal` 为统一模型；HTTP dashboard/self-check 负责状态快照和只读兜底，平台级 EnvironmentEventBus 通过 local/mqtt 模式收口 topic 事件并驱动 recent events 与 cache invalidation，API SSE stream 把脱敏后的增量事件推送给 Admin；内部服务信号从现有 Nest 服务读取，远程信号通过只读适配器读取 Jenkins、Kubernetes、Tencent Cloud、Caddy、WireGuard、OpenClash/Mihomo；前端保留 Vben Dashboard 路由，替换为 A 方案布局：顶部状态条、左侧站点栏、中间拓扑、右侧证据/动作抽屉、底部事件流。Admin 不跑轮询或定时刷新。
 
 **Tech Stack:** NestJS、TypeScript、TypeORM、axios、mqtt、tencentcloud-sdk-nodejs、Vben Admin、Vue 3、antdv-next、Vitest/Jest、Playwright 轻量页面烟测。
 
@@ -26,6 +26,7 @@
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\application\environment-event.materializer.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\application\environment-dashboard.service.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\application\environment-dashboard-self-check.service.ts`
+- `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\application\environment-event-stream.service.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\environment-dashboard-config.service.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\environment-dashboard-cache.service.ts`
 - `D:\MyFiles\KT\Node\kt-template-online-api\src\modules\admin\platform-config\environment-dashboard\infrastructure\environment-dashboard-evidence.mapper.ts`
@@ -60,6 +61,7 @@
 - `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\views\dashboard\analytics\components\EnvironmentTopology.vue`
 - `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\views\dashboard\analytics\components\EnvironmentEvidencePanel.vue`
 - `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\views\dashboard\analytics\components\EnvironmentEventStream.vue`
+- `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\views\dashboard\analytics\composables\useEnvironmentDashboardStream.ts`
 - `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\views\dashboard\analytics\types.ts`
 - `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\views\dashboard\analytics\environment-dashboard.spec.tsx`
 - `D:\MyFiles\KT\Vue\kt-template-admin\apps\web-antdv-next\src\api\system\environment.spec.ts`
@@ -115,6 +117,13 @@ export interface EnvironmentEventEnvelope {
   summary: string;
   evidence?: EnvironmentEvidence[];
 }
+
+export type EnvironmentStreamEventType =
+  | 'environment-event'
+  | 'environment-signal'
+  | 'snapshot-required'
+  | 'heartbeat'
+  | 'error';
 ```
 
 Severity aggregation order is fixed:
@@ -140,6 +149,7 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
 - `unwired` and `unknown` are valid product states. A missing integration must be visible evidence, not a green health badge.
 - MQTT is an event layer, not the only source of truth. Retained messages require `observedAt` and `expiresAt`; expired retained messages must become `unknown` or `unwired`.
 - Admin must not connect to MQTT directly. Broker credentials and internal topics stay inside API runtime.
+- Admin must not poll or use timer-based dashboard refresh. After the first snapshot, fresh state arrives through SSE; only user actions and `snapshot-required` may trigger another dashboard request.
 - For interface changes, verify through a real local HTTP request against the Nest app or an already running local service.
 
 ---
@@ -323,6 +333,25 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   ```
   Expected output after implementation: topic mapping is deterministic, expired retained signal becomes non-green, broker disconnect creates an event without marking every service down, and QQBot bridge tests pass without importing dashboard code from QQBot-specific topic constants.
 
+## Task 3B: API SSE Stream For Admin Realtime Updates
+
+- [ ] Create `application/environment-event-stream.service.ts`:
+  - exposes an RxJS Observable stream compatible with Nest `@Sse`
+  - subscribes to `EnvironmentEventBus` / `environment-event.materializer.ts`
+  - emits `environment-event`, `environment-signal`, `snapshot-required`, `heartbeat`, and `error`
+  - supports browser `Last-Event-ID` or `lastEventId` query fallback for replay
+  - maintains a bounded in-memory replay buffer controlled by `ENV_DASHBOARD_SSE_REPLAY_LIMIT`
+  - emits `snapshot-required` when the requested event id is older than the replay buffer
+  - uses `ENV_DASHBOARD_SSE_HEARTBEAT_MS` only for connection keepalive, not for dashboard refresh
+  - never opens MQTT or remote HTTP connections from the SSE method itself
+
+- [ ] Add RED/GREEN tests:
+  ```powershell
+  cd D:\MyFiles\KT\Node\kt-template-online-api
+  pnpm exec jest --runTestsByPath test/modules/admin/environment-dashboard/environment-event-stream.service.spec.ts --runInBand
+  ```
+  Expected output after implementation: replay by last event id works, stale replay id emits `snapshot-required`, heartbeat does not trigger dashboard service calls, and stream payloads contain no broker credentials.
+
 ## Task 4: API Remote Adapters For Jenkins And Kubernetes
 
 - [ ] Create `environment-dashboard-config.service.ts` that reads optional dashboard integration env vars. It returns explicit missing-key lists for each integration instead of throwing.
@@ -460,9 +489,11 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
 - [ ] Create `presentation/environment-dashboard.controller.ts`:
   - `GET /system/environment/dashboard`
   - `POST /system/environment/self-check`
+  - `GET /system/environment/events/stream`
   - guards: `JwtAuthGuard`
   - response wrapper: existing `vbenSuccess`
-  - JSDoc on controller methods states Admin route origin and no side effects beyond read-only probes/cache refresh
+  - `events/stream` uses Nest `@Sse` and returns `EnvironmentStreamEvent`
+  - JSDoc on controller methods states Admin route origin and no side effects beyond read-only probes/cache refresh/SSE subscription
 
 - [ ] Update `admin-platform-config.module.ts` imports/providers/controllers. Include only required modules.
 
@@ -476,6 +507,8 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   ENV_DASHBOARD_MQTT_USERNAME=
   ENV_DASHBOARD_MQTT_PASSWORD=
   ENV_DASHBOARD_MQTT_TOPIC_PREFIX=kt/env
+  ENV_DASHBOARD_SSE_REPLAY_LIMIT=200
+  ENV_DASHBOARD_SSE_HEARTBEAT_MS=25000
   ENV_DASHBOARD_JENKINS_URL=
   ENV_DASHBOARD_JENKINS_JOB=KT-Template/KT-Template-API/main
   ENV_DASHBOARD_JENKINS_USERNAME=
@@ -505,6 +538,13 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   ```
   Expected output: controller spec passes.
 
+- [ ] Add controller spec coverage for SSE:
+  ```powershell
+  cd D:\MyFiles\KT\Node\kt-template-online-api
+  pnpm exec jest --runTestsByPath test/modules/admin/environment-dashboard/environment-dashboard.events.controller.spec.ts --runInBand
+  ```
+  Expected output: authenticated request can subscribe to SSE, `Last-Event-ID` is passed to stream service, and no dashboard polling timer exists in API code.
+
 - [ ] Run API typecheck:
   ```powershell
   cd D:\MyFiles\KT\Node\kt-template-online-api
@@ -516,20 +556,23 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   ```powershell
   curl.exe -H "Authorization: Bearer <local-admin-token>" http://127.0.0.1:<api-port>/system/environment/dashboard
   curl.exe -X POST -H "Authorization: Bearer <local-admin-token>" http://127.0.0.1:<api-port>/system/environment/self-check
+  curl.exe -N -H "Authorization: Bearer <local-admin-token>" http://127.0.0.1:<api-port>/system/environment/events/stream
   ```
-  Expected output: both return `code: 0` or existing success wrapper equivalent, four site records, and at least one `unwired` evidence item when remote env vars are absent.
+  Expected output: dashboard and self-check return `code: 0` or existing success wrapper equivalent, four site records, and at least one `unwired` evidence item when remote env vars are absent; SSE stream returns `text/event-stream` and emits a heartbeat or synthetic environment event without closing immediately.
 
 ## Task 9: Admin API Wrapper And RED Tests
 
 - [ ] Create `apps/web-antdv-next/src/api/system/environment.ts` with exported interfaces matching the API response and functions:
   - `getEnvironmentDashboard()`
   - `runEnvironmentSelfCheck()`
+  - `getEnvironmentDashboardEventsUrl(lastEventId?)`
 
 - [ ] Add `apps/web-antdv-next/src/api/system/environment.spec.ts`:
   ```ts
   import { requestClient } from '#/api/request';
   import {
     getEnvironmentDashboard,
+    getEnvironmentDashboardEventsUrl,
     runEnvironmentSelfCheck,
   } from './environment';
 
@@ -549,6 +592,11 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
     it('runs readonly self check', async () => {
       await runEnvironmentSelfCheck();
       expect(requestClient.post).toHaveBeenCalledWith('/system/environment/self-check');
+    });
+
+    it('builds the SSE stream url without exposing MQTT config', () => {
+      expect(getEnvironmentDashboardEventsUrl()).toContain('/system/environment/events/stream');
+      expect(getEnvironmentDashboardEventsUrl('evt-1')).toContain('lastEventId=evt-1');
     });
   });
   ```
@@ -601,12 +649,25 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
 ## Task 11: Admin Page Integration, Locales, And Tests
 
 - [ ] Wire `index.vue`:
-  - load dashboard on mount
+  - load dashboard once on mount
+  - start `useEnvironmentDashboardStream.ts` EventSource after the first snapshot succeeds
   - refresh with `getEnvironmentDashboard`
   - self-check with `runEnvironmentSelfCheck`
+  - process `environment-event` and `environment-signal` without fetching dashboard again
+  - process `snapshot-required` by running exactly one dashboard snapshot request
+  - ignore `heartbeat` for state updates
   - preserve selected site/service when IDs still exist after refresh
   - select first degraded/down/blocked service by default, else first site
   - display explicit empty/error state when API fails
+  - close EventSource on route leave/unmount
+
+- [ ] Create `composables/useEnvironmentDashboardStream.ts`:
+  - wraps browser `EventSource`
+  - uses `getEnvironmentDashboardEventsUrl(lastEventId?)`
+  - stores last accepted event id in component state only
+  - exposes connection state for the status bar
+  - does not use `setInterval`, `setTimeout` refresh loops, or background polling
+  - lets native EventSource reconnect; after server sends `snapshot-required`, caller performs one snapshot fetch
 
 - [ ] Update locale title from analytics sample to environment dashboard:
   - `apps/web-antdv-next/src/locales/langs/zh-CN/page.json`: `环境总览`
@@ -617,6 +678,9 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   - disabled write actions render disabled
   - unwired Jenkins/K8s evidence renders as evidence, not healthy state
   - MQTT-origin recent event renders only after API returns it; page does not instantiate an MQTT client
+  - SSE `environment-signal` updates one node without calling `getEnvironmentDashboard`
+  - SSE `snapshot-required` calls `getEnvironmentDashboard` once
+  - no dashboard polling or timer-based refresh is registered
   - self-check button calls the POST wrapper
 
 - [ ] Run:
@@ -644,6 +708,8 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   - right panel shows evidence for selected item
   - bottom event stream appears
   - event stream can display an API-provided MQTT-origin event without exposing broker configuration in frontend state
+  - Network tab shows one dashboard snapshot and one `events/stream` long connection after page load, with no repeated dashboard polling
+  - closing/reopening the route closes the old EventSource before creating a new one
   - Jenkins/K8s missing config appears as `unwired` or `unknown`, never green
   - disabled write actions cannot be clicked
 
@@ -654,6 +720,7 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   Store under `.kt-workspace/test-artifacts/environment-dashboard/`.
 
 - [ ] Make one real local HTTP call from Admin session to both endpoints through the browser network panel or request logs. Evidence must include endpoint, HTTP status, and presence of four site IDs.
+- [ ] Make one real local SSE connection from Admin session. Evidence must include endpoint, HTTP status, `text/event-stream`, and no repeated dashboard GET requests after the initial snapshot.
 
 - [ ] Stop Node/Vite processes started by this task if they were not already running before the task.
 
@@ -732,6 +799,7 @@ Online completion evidence must include:
 
 - `GET /system/environment/dashboard` returns four sites.
 - `POST /system/environment/self-check` returns fresh evidence.
+- `GET /system/environment/events/stream` establishes an SSE stream; a backend environment event reaches Admin without polling.
 - MQTT event bus is either `local` with explicit configured evidence, or `mqtt` with broker connection status shown as evidence.
 - A synthetic non-secret MQTT signal event invalidates dashboard cache and appears in recent events; an expired retained signal does not create a green status.
 - Jenkins/K8s nodes show live evidence when configured, or explicit missing-key evidence when not configured.

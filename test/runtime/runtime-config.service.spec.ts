@@ -132,6 +132,7 @@ describe('RuntimeConfigService', () => {
       QQBOT_NAPCAT_SSH_TARGET: 'nas',
       QQBOT_NAPCAT_SSH_PORT: '2202',
       QQBOT_NAPCAT_SSH_KEY_PATH: '/home/kt/.ssh/napcat',
+      NAPCAT_LOGIN_HUMAN_VERIFY_EXPIRE_MS: '900000',
       QQBOT_NAPCAT_REVERSE_WS_BASE: 'ws://api.example.test/onebot',
       QQBOT_REVERSE_WS_PATH: '/qqbot/reverse',
       QQBOT_REVERSE_WS_TOKEN: 'qq-reverse-token',
@@ -191,6 +192,13 @@ describe('RuntimeConfigService', () => {
     expect(checks).toContainEqual(
       expect.objectContaining({
         key: 'QQBOT_NAPCAT_REVERSE_WS_URL|QQBOT_NAPCAT_REVERSE_WS_BASE',
+        level: 'optional',
+        present: true,
+      }),
+    );
+    expect(checks).toContainEqual(
+      expect.objectContaining({
+        key: 'NAPCAT_LOGIN_HUMAN_VERIFY_EXPIRE_MS',
         level: 'optional',
         present: true,
       }),

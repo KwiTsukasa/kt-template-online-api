@@ -1004,7 +1004,7 @@ export class QqbotNapcatLoginService {
     session.qrcode = undefined;
     session.newDeviceStatus = status;
     session.errorMessage = message;
-    session.expiresAt = Date.now() + this.getSessionTtlMs();
+    this.renewSessionExpiry(session);
     this.persistLoginSession(session);
     if (shouldPublish) {
       this.publishScanResultEvent(session, step, 'processing', message);
@@ -1132,7 +1132,7 @@ export class QqbotNapcatLoginService {
     message: string,
   ) {
     if (session.status === 'pending') {
-      session.expiresAt = Date.now() + this.getSessionTtlMs();
+      this.renewSessionExpiry(session);
       this.persistLoginSession(session);
     }
     this.publishScanEvent(session, {
@@ -1300,7 +1300,7 @@ export class QqbotNapcatLoginService {
   ) {
     session.status = 'pending';
     session.errorMessage = errorMessage;
-    session.expiresAt = Date.now() + this.getSessionTtlMs();
+    this.renewSessionExpiry(session);
     if (clearQrcode) session.qrcode = undefined;
     this.persistLoginSession(session);
     return this.toResult(session);
@@ -1331,7 +1331,7 @@ export class QqbotNapcatLoginService {
     session.preparingRelogin = false;
     session.qrcode = undefined;
     session.errorMessage = message;
-    session.expiresAt = Date.now() + this.getSessionTtlMs();
+    this.renewSessionExpiry(session);
     this.persistLoginSession(session);
     if (shouldPublish) {
       this.publishScanResultEvent(
@@ -1362,7 +1362,7 @@ export class QqbotNapcatLoginService {
     session.preparingRelogin = false;
     session.qrcode = undefined;
     session.errorMessage = message;
-    session.expiresAt = Date.now() + this.getSessionTtlMs();
+    this.renewSessionExpiry(session);
     this.persistLoginSession(session);
     if (shouldPublish) {
       this.publishScanResultEvent(
@@ -2645,6 +2645,45 @@ export class QqbotNapcatLoginService {
     return Number(
       this.configService.get('NAPCAT_LOGIN_QR_EXPIRE_MS') || 2 * 60 * 1000,
     );
+  }
+
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @returns 人工验证码与新设备验证会话的保活窗口，至少不短于普通登录二维码窗口。
+   */
+  private getHumanVerificationSessionTtlMs() {
+    const configured = Number(
+      this.configService.get('NAPCAT_LOGIN_HUMAN_VERIFY_EXPIRE_MS') ||
+        15 * 60 * 1000,
+    );
+    const fallback = 15 * 60 * 1000;
+    const ttl =
+      Number.isFinite(configured) && configured > 0 ? configured : fallback;
+    return Math.max(ttl, this.getSessionTtlMs());
+  }
+
+  /**
+   * 查询 NapCat 登录运行态数据。
+   * @param session - 当前登录会话；根据验证码、新设备链接或新设备二维码判断是否需要人工验证保活窗口。
+   */
+  private getSessionRenewalTtlMs(session: QqbotLoginScanSession) {
+    if (
+      session.captchaUrl ||
+      session.deviceVerifyUrl ||
+      session.newDeviceQrcode ||
+      session.newDeviceStatus
+    ) {
+      return this.getHumanVerificationSessionTtlMs();
+    }
+    return this.getSessionTtlMs();
+  }
+
+  /**
+   * 执行 NapCat 登录运行态流程。
+   * @param session - 当前登录会话；写回下一次状态轮询前允许保持 pending 的截止时间。
+   */
+  private renewSessionExpiry(session: QqbotLoginScanSession) {
+    session.expiresAt = Date.now() + this.getSessionRenewalTtlMs(session);
   }
 
   /**

@@ -198,6 +198,54 @@ describe('QqbotNapcatLoginService', () => {
     expect((refreshService as any).sessions.has(session.id)).toBe(true);
   });
 
+  it('uses a longer TTL for human captcha and new-device verification states', () => {
+    const now = new Date('2026-06-19T04:10:00+08:00').getTime();
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          if (key === 'NAPCAT_LOGIN_QR_EXPIRE_MS') return '120000';
+          if (key === 'NAPCAT_LOGIN_HUMAN_VERIFY_EXPIRE_MS') return '900000';
+          return '';
+        }),
+      } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      {} as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+
+    const qrcodeSession = (refreshService as any).createSession({
+      container: { id: 'container-qr', name: 'napcat-qr' },
+      mode: 'refresh',
+      status: 'pending',
+    });
+    const captchaSession = (refreshService as any).createSession({
+      container: { id: 'container-captcha', name: 'napcat-captcha' },
+      mode: 'refresh',
+      status: 'pending',
+    });
+    const newDeviceSession = (refreshService as any).createSession({
+      container: { id: 'container-device', name: 'napcat-device' },
+      mode: 'refresh',
+      status: 'pending',
+    });
+
+    const captcha = (refreshService as any).keepPasswordCaptchaPending(
+      captchaSession,
+      'https://ti.qq.com/safe/tools/captcha/sms-verify-login',
+    );
+    const newDevice = (refreshService as any).keepNewDevicePending(
+      newDeviceSession,
+      'qr-pending',
+      '新设备二维码待扫码',
+      'new-device-qrcode-ready',
+    );
+
+    expect(qrcodeSession.expiresAt).toBe(now + 120_000);
+    expect(captcha.expiresAt).toBe(now + 900_000);
+    expect(newDevice.expiresAt).toBe(now + 900_000);
+  });
+
   it('recovers stale refresh preparation left by a restarted API pod', async () => {
     const container = {
       baseUrl: 'http://127.0.0.1:6103/',

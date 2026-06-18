@@ -51,6 +51,13 @@ const createIdentityRepository = () => {
       identities.set(identity.accountId, identity);
       return identity;
     }),
+    /**
+     * Seeds a persisted identity so migration tests can start from legacy Docker-style values.
+     * @param identity - In-memory row keyed by account id for the repository fake.
+     */
+    seedIdentity: jest.fn((identity: NapcatDeviceIdentity) => {
+      identities.set(identity.accountId, identity);
+    }),
     update: jest.fn(
       async ({ id }: { id: string }, input: Partial<NapcatDeviceIdentity>) => {
         const current = [...identities.values()].find((item) => item.id === id);
@@ -79,14 +86,21 @@ describe('NapCat device identity persistence', () => {
   const schema = readRefactorV3SqlSchema();
 
   it('declares Batch 7 NapCat runtime persistence tables', () => {
-    expect(NAPCAT_RUNTIME_DOMAIN_CONTRACT.tables).toEqual([
-      'napcat_container',
-      'napcat_device_identity',
-      'napcat_account_binding',
-      'napcat_login_session',
-      'napcat_login_challenge',
-      'napcat_runtime_cleanup',
-    ]);
+    expect(NAPCAT_RUNTIME_DOMAIN_CONTRACT.tables).toEqual(
+      expect.arrayContaining([
+        'napcat_container',
+        'napcat_device_identity',
+        'napcat_account_binding',
+        'napcat_login_session',
+        'napcat_login_challenge',
+        'napcat_runtime_cleanup',
+        'napcat_runtime_profile',
+        'napcat_protocol_profile',
+        'napcat_session_behavior_profile',
+        'napcat_login_event',
+        'napcat_risk_mode',
+      ]),
+    );
 
     for (const table of NAPCAT_RUNTIME_DOMAIN_CONTRACT.tables) {
       expect(schema.hasTable(table)).toBe(true);
@@ -156,6 +170,82 @@ describe('NapCat device identity persistence', () => {
         containerId: 'container-rebuilt',
       }),
     );
+  });
+
+  it('generates a real-device style hostname without QQBot or container words', async () => {
+    const repository = createIdentityRepository();
+    const service = new NapcatDeviceIdentityService(
+      repository as any,
+      createIdentityConfig(),
+    );
+
+    const identity = await service.resolveForAccount({
+      accountId: 'account-10001',
+      containerId: 'container-first',
+      selfId: '10001',
+    });
+
+    expect(identity.hostname).toMatch(/^(ubuntu|linux)-pc-[a-f0-9]{8,12}$/);
+    expect(identity.hostname).not.toMatch(/10001|qq|bot|napcat|docker/i);
+  });
+
+  it('generates a stable MAC from approved physical OUI prefixes', async () => {
+    const repository = createIdentityRepository();
+    const service = new NapcatDeviceIdentityService(
+      repository as any,
+      createIdentityConfig(),
+    );
+
+    const identity = await service.resolveForAccount({
+      accountId: 'account-10001',
+      containerId: 'container-first',
+      selfId: '10001',
+    });
+
+    expect(identity.macAddress).toMatch(/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/);
+    expect(identity.macAddress).not.toMatch(/^02:42/i);
+    expect(identity.macAddress).not.toMatch(/^52:54:00/i);
+    expect(identity.macAddress).not.toMatch(
+      /^(00:05:69|00:0c:29|00:1c:14|00:50:56)/i,
+    );
+    expect(identity.macStrategy).toBe('physical-oui-v1');
+  });
+
+  it('records migration evidence when an existing Docker-style identity is upgraded', async () => {
+    const repository = createIdentityRepository();
+    repository.seedIdentity({
+      accountId: 'account-10001',
+      containerId: 'container-first',
+      dataDir:
+        '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-10001',
+      hostname: 'kt-qqbot-napcat-10001',
+      id: 'identity-1',
+      lastLoginEvidence: null,
+      macAddress: '02:42:aa:bb:cc:dd',
+      machineIdPath:
+        '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-10001/machine-id',
+      verificationStatus: 'pending',
+    } as NapcatDeviceIdentity);
+    const service = new NapcatDeviceIdentityService(
+      repository as any,
+      createIdentityConfig(),
+    );
+
+    const identity = await service.resolveForAccount({
+      accountId: 'account-10001',
+      containerId: 'container-rebuilt',
+      selfId: '10001',
+    });
+
+    expect(identity.macAddress).not.toBe('02:42:aa:bb:cc:dd');
+    expect(identity.hostname).not.toBe('kt-qqbot-napcat-10001');
+    expect(identity.lastLoginEvidence).toMatchObject({
+      migration: {
+        fromMacAddress: '02:42:aa:bb:cc:dd',
+        strategy: 'physical-oui-v1',
+        trigger: 'legacy-docker-identity-upgrade',
+      },
+    });
   });
 
   it('turns a persisted device identity into Docker device options', async () => {

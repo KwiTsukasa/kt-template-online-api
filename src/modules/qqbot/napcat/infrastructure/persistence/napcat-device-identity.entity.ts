@@ -36,11 +36,17 @@ export class NapcatDeviceIdentity {
   @Column({ length: 128 })
   hostname: string;
 
+  @Column({ default: 'legacy', length: 64, name: 'hostname_strategy' })
+  hostnameStrategy: string;
+
   @Column({ length: 512, name: 'machine_id_path' })
   machineIdPath: string;
 
   @Column({ length: 64, name: 'mac_address' })
   macAddress: string;
+
+  @Column({ default: 'legacy', length: 64, name: 'mac_strategy' })
+  macStrategy: string;
 
   @Column({ length: 32, name: 'verification_status' })
   verificationStatus: NapcatDeviceVerificationStatus;

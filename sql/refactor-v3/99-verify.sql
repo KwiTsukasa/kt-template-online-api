@@ -183,3 +183,17 @@ WHERE table_schema = DATABASE()
   AND table_name = 'napcat_runtime_cleanup'
   AND column_name = 'session_id'
   AND column_type = 'varchar(64)';
+
+SELECT 'column_napcat_device_identity_hostname_strategy' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_device_identity'
+  AND column_name = 'hostname_strategy'
+  AND column_type = 'varchar(64)';
+
+SELECT 'column_napcat_device_identity_mac_strategy' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_device_identity'
+  AND column_name = 'mac_strategy'
+  AND column_type = 'varchar(64)';

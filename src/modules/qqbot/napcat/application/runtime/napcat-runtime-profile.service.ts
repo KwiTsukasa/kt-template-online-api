@@ -83,8 +83,8 @@ export class NapcatRuntimeProfileService {
   }
 
   /**
-   * Persists the planned runtime and protocol profile after Docker accepts a managed container rebuild.
-   * @param input - Account/container identity, generated runtime profile, and config hashes that establish the expected state before live inspection.
+   * Persists the planned runtime and protocol profile after managed runtime creation succeeds.
+   * @param input - Account/runtime identity, generated runtime profile, and config hashes that establish the expected state before live inspection.
    */
   async recordPlannedProfiles(input: RecordPlannedProfilesInput) {
     const accountId = `${input.accountId || ''}`.trim();
@@ -120,8 +120,7 @@ export class NapcatRuntimeProfileService {
           lastCheckedAt: null,
           locale: input.runtimeProfile.locale,
           localeAvailable: false,
-          macStrategy:
-            input.deviceIdentity?.macStrategy || 'docker-bridge-mac-v1',
+          macStrategy: input.deviceIdentity?.macStrategy || 'managed-mac-v1',
           migrateDeviceIdentity: !!input.deviceIdentity,
           persistCache: input.runtimeProfile.persistCache,
           persistLocalShare: input.runtimeProfile.persistLocalShare,

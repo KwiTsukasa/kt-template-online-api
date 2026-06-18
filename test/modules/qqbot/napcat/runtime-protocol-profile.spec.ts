@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-au
 import { NapcatConfigWriterService } from '../../../../src/modules/qqbot/napcat/application/runtime/napcat-config-writer.service';
 import { NapcatRuntimeProfileService } from '../../../../src/modules/qqbot/napcat/application/runtime/napcat-runtime-profile.service';
 import { NapcatRuntimeProfileInspectorService } from '../../../../src/modules/qqbot/napcat/application/runtime/napcat-runtime-profile-inspector.service';
+import { NapcatRuntimeProfileInspectionScriptService } from '../../../../src/modules/qqbot/napcat/infrastructure/integration/container/napcat-runtime-profile-inspection-script.service';
 import { QqbotNapcatRuntimeController } from '../../../../src/modules/qqbot/napcat/contract/qqbot-napcat-runtime.controller';
 import {
   NapcatLoginEvent,
@@ -178,12 +179,7 @@ describe('NapCat runtime profile generation', () => {
 
 describe('NapCat runtime profile inspector', () => {
   it('builds a bounded SSH inspection script without exposing secrets', () => {
-    const service = new NapcatRuntimeProfileInspectorService(
-      {} as any,
-      {} as any,
-      {} as any,
-      new ToolsService(),
-    ) as any;
+    const service = new NapcatRuntimeProfileInspectionScriptService();
 
     const script = service.buildInspectScript('kt-qqbot-napcat-10001');
 

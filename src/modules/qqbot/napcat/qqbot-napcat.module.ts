@@ -14,6 +14,7 @@ import { NapcatRuntimeProfileService } from './application/runtime/napcat-runtim
 import { NapcatSessionBehaviorService } from './application/runtime/napcat-session-behavior.service';
 import { QqbotNapcatLoginController } from './contract/qqbot-napcat-login.controller';
 import { QqbotNapcatRuntimeController } from './contract/qqbot-napcat-runtime.controller';
+import { NapcatRuntimeProfileInspectionScriptService } from './infrastructure/integration/container/napcat-runtime-profile-inspection-script.service';
 import { QqbotNapcatContainerService } from './infrastructure/integration/container/qqbot-napcat-container.service';
 import { NapcatDeviceIdentityService } from './infrastructure/integration/device/napcat-device-identity.service';
 import { NAPCAT_RUNTIME_ENTITIES } from './infrastructure/persistence';
@@ -32,6 +33,7 @@ export const QQBOT_NAPCAT_PROVIDERS = [
   NapcatLoginStateStoreService,
   NapcatLoginEventService,
   NapcatRuntimeProfileInspectorService,
+  NapcatRuntimeProfileInspectionScriptService,
   NapcatRuntimeProfileService,
   NapcatSessionBehaviorService,
   QqbotNapcatAccountRuntimeService,

@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ToolsService } from '@/common';
+import { NapcatRuntimeProfileInspectionScriptService } from '../../infrastructure/integration/container/napcat-runtime-profile-inspection-script.service';
 import { NapcatProtocolProfile } from '../../infrastructure/persistence/napcat-protocol-profile.entity';
 import { NapcatRuntimeProfile } from '../../infrastructure/persistence/napcat-runtime-profile.entity';
 
@@ -22,11 +23,12 @@ export type NapcatRuntimeProfileSummary = {
 @Injectable()
 export class NapcatRuntimeProfileInspectorService {
   /**
-   * Initializes runtime inspection over the existing SSH-managed container model.
-   * @param runtimeProfileRepository - Runtime profile repository updated with latest Docker and desktop evidence.
+   * Initializes runtime inspection over the existing remote-managed runtime model.
+   * @param runtimeProfileRepository - Runtime profile repository updated with latest container and desktop evidence.
    * @param protocolProfileRepository - Protocol profile repository updated with config hashes and drift state.
-   * @param configService - Runtime config provider used for SSH target and inspection timeout defaults.
+   * @param configService - Runtime config provider used for inspection timeout defaults.
    * @param toolsService - Shared helper used to normalize string evidence before redaction.
+   * @param inspectionScriptService - Infrastructure helper that owns remote script construction.
    */
   constructor(
     @InjectRepository(NapcatRuntimeProfile)
@@ -35,25 +37,26 @@ export class NapcatRuntimeProfileInspectorService {
     private readonly protocolProfileRepository: Repository<NapcatProtocolProfile>,
     private readonly configService: ConfigService,
     private readonly toolsService: ToolsService,
-  ) {}
+    @Optional()
+    private readonly inspectionScriptService?: NapcatRuntimeProfileInspectionScriptService,
+  ) {
+    this.inspectionScriptService =
+      inspectionScriptService ||
+      new NapcatRuntimeProfileInspectionScriptService();
+  }
 
   /**
-   * Builds the remote inspection script for Docker and in-container profile evidence.
-   * @param containerName - Docker container name selected from the persisted NapCat container row.
-   * @returns Shell script that collects runtime evidence without reading secret env values.
+   * Delegates remote profile evidence script creation to the infrastructure helper.
+   * @param containerName - Runtime container name selected from the persisted NapCat container row.
+   * @returns Read-only profile evidence script without secret environment reads.
    */
   buildInspectScript(containerName: string) {
-    return `
-set -eu
-NAME=${this.sh(containerName)}
-docker inspect "$NAME"
-docker exec "$NAME" sh -lc 'locale -a; locale; date +%Z; fc-match "Noto Sans CJK SC"; test ! -e /.dockerenv; cat /proc/1/cgroup; id; ps -eo user,args | grep -E "qq|NapCat|Xvfb" | grep -v grep || true'
-`;
+    return this.inspectionScriptService.buildInspectScript(containerName);
   }
 
   /**
    * Redacts secrets before evidence is stored, logged, or returned to Admin.
-   * @param value - Evidence object or primitive produced by Docker, NapCat, or config writers.
+   * @param value - Evidence object or primitive produced by runtime, NapCat, or config writers.
    * @returns Evidence with sensitive keys and token query values replaced by placeholders.
    */
   sanitizeEvidence(value: unknown): unknown {
@@ -140,7 +143,7 @@ docker exec "$NAME" sh -lc 'locale -a; locale; date +%Z; fc-match "Noto Sans CJK
 
   /**
    * Reads the bounded runtime profile inspection timeout.
-   * @returns Positive timeout in milliseconds for future SSH inspection calls.
+   * @returns Positive timeout in milliseconds for future remote inspection calls.
    */
   private getInspectionTimeoutMs() {
     const value = Number(
@@ -172,14 +175,5 @@ docker exec "$NAME" sh -lc 'locale -a; locale; date +%Z; fc-match "Noto Sans CJK
    */
   private redactString(value: string) {
     return value.replace(/token=[^&\s]+/gi, 'token=[REDACTED]');
-  }
-
-  /**
-   * Quotes shell literals used by read-only inspection scripts.
-   * @param value - Container name selected from trusted persistence.
-   * @returns POSIX-safe single-quoted shell literal.
-   */
-  private sh(value: string) {
-    return `'${`${value}`.replace(/'/g, `'\\''`)}'`;
   }
 }

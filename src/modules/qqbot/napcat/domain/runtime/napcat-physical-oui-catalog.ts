@@ -28,7 +28,7 @@ export const NAPCAT_REJECTED_VIRTUAL_OUI_PREFIXES = [
 ] as const;
 
 /**
- * Checks whether a generated MAC starts with a Docker or VM-style prefix.
+ * Checks whether a generated MAC starts with a container or VM-style prefix.
  * @param macAddress - Stable MAC candidate generated from account/device seed.
  * @returns True when the prefix belongs to a rejected container or virtualization range.
  */

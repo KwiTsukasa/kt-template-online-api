@@ -26,7 +26,7 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
   /**
    * Creates the account-list runtime adapter that joins persisted bindings, container status, and optional profile summaries.
    * @param accountNapcatRepository - Binding repository used to pick the primary NapCat container for each QQBot account.
-   * @param napcatContainerRepository - Container repository used for cached Docker/WebUI status and non-secret metadata.
+   * @param napcatContainerRepository - Container repository used for cached runtime/WebUI status and non-secret metadata.
    * @param napcatContainerService - Runtime integration service for bounded NapCat/WebUI status probes and auto-login.
    * @param toolsService - Shared helpers for status text normalization and NapCat offline-message classification.
    * @param runtimeProfileInspector - Optional profile reader that enriches list rows without changing login state.

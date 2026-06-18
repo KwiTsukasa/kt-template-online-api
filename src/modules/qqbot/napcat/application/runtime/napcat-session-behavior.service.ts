@@ -41,7 +41,7 @@ export class NapcatSessionBehaviorService {
   /**
    * Converts housekeeping failure into an evidence-only action.
    * @param input - Account and failure summary from a low-side-effect housekeeping call.
-   * @returns Decision that disables behavior extensions without resetting login, retrying password, recreating Docker, or refreshing QR.
+   * @returns Decision that disables behavior extensions without resetting login, retrying password, recreating runtime, or refreshing QR.
    */
   handleHousekeepingFailure(input: {
     accountId: string;

@@ -5,7 +5,7 @@ import type { NapcatRuntimeProfileSnapshot } from '../../domain/runtime/napcat-p
 @Injectable()
 export class NapcatRuntimeProfileService {
   /**
-   * Initializes the profile resolver used before Docker script generation.
+   * Initializes the profile resolver used before managed runtime script generation.
    * @param configService - Nest config provider that supplies image ref, UID/GID, shm size, and profile version.
    */
   constructor(private readonly configService: ConfigService) {}
@@ -13,7 +13,7 @@ export class NapcatRuntimeProfileService {
   /**
    * Resolves the runtime profile for an account-owned NapCat container.
    * @param input - Account, container, data directory, and device identity ids that tie generated profile evidence to persistence.
-   * @returns Runtime profile snapshot used by Docker script generation and later persistence.
+   * @returns Runtime profile snapshot used by managed runtime script generation and later persistence.
    */
   resolveRuntimeProfile(input: {
     accountId: string;
@@ -49,7 +49,7 @@ export class NapcatRuntimeProfileService {
    * Reads a trimmed string config value for profile generation.
    * @param key - Environment key that controls NapCat runtime profile generation.
    * @param defaultValue - Value used when the key is absent from runtime config.
-   * @returns Trimmed string value consumed by Docker script generation.
+   * @returns Trimmed string value consumed by managed runtime script generation.
    */
   private getString(key: string, defaultValue: string) {
     return `${this.configService.get<string>(key) || defaultValue}`.trim();

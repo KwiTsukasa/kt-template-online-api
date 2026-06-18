@@ -19,4 +19,5 @@ export * from './application/runtime/napcat-login-event.service';
 export * from './application/runtime/napcat-runtime-profile-inspector.service';
 export * from './application/runtime/napcat-session-behavior.service';
 export * from './infrastructure/persistence';
+export * from './infrastructure/integration/container/napcat-runtime-profile-inspection-script.service';
 export * from './infrastructure/integration/container/qqbot-napcat-container.service';

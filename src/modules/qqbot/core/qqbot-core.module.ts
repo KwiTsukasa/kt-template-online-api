@@ -91,6 +91,7 @@ export const QQBOT_CORE_PROVIDERS = [
 
 export const QQBOT_CORE_EXPORTS = [
   QqbotAccountService,
+  QqbotConfigService,
   QqbotSendService,
   QqbotReverseWsService,
 ];

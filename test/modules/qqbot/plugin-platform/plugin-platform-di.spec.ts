@@ -39,4 +39,16 @@ describe('QQBot plugin platform DI tokens', () => {
       QqbotPluginPackagePathPolicyService,
     );
   });
+
+  it('exports QQBot config service for plugin host bridge dependencies', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'src/modules/qqbot/core/qqbot-core.module.ts'),
+      'utf8',
+    );
+    const exportsBlock = source.match(
+      /export const QQBOT_CORE_EXPORTS = \[([\s\S]*?)\];/,
+    )?.[1];
+
+    expect(exportsBlock).toContain('QqbotConfigService');
+  });
 });

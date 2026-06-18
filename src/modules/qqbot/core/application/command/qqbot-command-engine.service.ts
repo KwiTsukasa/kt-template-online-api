@@ -1,5 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ToolsService } from '@/common';
+import {
+  NapcatSessionBehaviorService,
+  type NapcatAutoCapabilityStage,
+} from '@/modules/qqbot/napcat/application/runtime/napcat-session-behavior.service';
 import {
   QQBOT_PLUGIN_EXECUTION_PORT,
   type QqbotPluginExecutionPort,
@@ -24,6 +28,7 @@ export class QqbotCommandEngineService {
    * @param replyTemplate - replyTemplate 输入；影响 constructor 的返回值。
    * @param sendService - sendService 服务依赖；影响 constructor 的返回值。
    * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * @param sessionBehaviorService - Optional NapCat staged behavior gate for command replies.
    */
   constructor(
     private readonly commandParser: QqbotCommandParserService,
@@ -33,6 +38,8 @@ export class QqbotCommandEngineService {
     private readonly replyTemplate: QqbotReplyTemplateService,
     private readonly sendService: QqbotSendService,
     private readonly toolsService: ToolsService,
+    @Optional()
+    private readonly sessionBehaviorService?: NapcatSessionBehaviorService,
   ) {}
 
   /**
@@ -45,6 +52,16 @@ export class QqbotCommandEngineService {
       const matched = await this.commandParser.match(command, message);
       if (!matched) continue;
       if (this.commandService.isInCooldown(command)) return true;
+      const behaviorDecision = this.sessionBehaviorService?.decideAutomation({
+        automationKind: 'command_reply',
+        stage: this.getBehaviorStage(message),
+      }) || { allowed: true };
+      if (!behaviorDecision.allowed) {
+        this.logger.warn(
+          `QQBot 命令回复已按 NapCat 会话行为阶段跳过: ${behaviorDecision.reason}`,
+        );
+        return true;
+      }
 
       await this.commandService.markHit(command);
       const input = this.mergeInput(command, matched.input);
@@ -288,5 +305,33 @@ export class QqbotCommandEngineService {
       targetId,
       userId,
     };
+  }
+
+  /**
+   * Reads a behavior stage hint from raw event metadata when NapCat runtime supplied one.
+   * @param message - Normalized OneBot message that may carry staged behavior metadata.
+   * @returns Valid behavior stage or `undefined` when command handling should use default behavior.
+   */
+  private getBehaviorStage(
+    message: QqbotNormalizedMessage,
+  ): NapcatAutoCapabilityStage | undefined {
+    const stage =
+      message.rawEvent.napcatBehaviorStage ||
+      message.rawEvent.napcat_behavior_stage;
+    return this.isBehaviorStage(stage) ? stage : undefined;
+  }
+
+  /**
+   * Validates raw behavior-stage metadata before passing it to NapCat behavior decisions.
+   * @param stage - Raw event metadata value.
+   * @returns Whether the value is a supported NapCat automation capability stage.
+   */
+  private isBehaviorStage(stage: unknown): stage is NapcatAutoCapabilityStage {
+    return (
+      stage === 'automation' ||
+      stage === 'image_and_large_message' ||
+      stage === 'low_risk_text' ||
+      stage === 'manual_command'
+    );
   }
 }

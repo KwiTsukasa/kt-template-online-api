@@ -136,6 +136,74 @@ describe('QqbotPluginPackageSourceService', () => {
     );
   });
 
+  it('resolves TypeScript manifest entries to compiled JavaScript files in dist packages', async () => {
+    const packageRoot = join(tempRoot, 'compiled-entry');
+    mkdirSync(join(packageRoot, 'src'), { recursive: true });
+    writeFileSync(
+      join(packageRoot, 'plugin.json'),
+      JSON.stringify({
+        key: 'compiled-entry',
+        name: 'Compiled Entry',
+        version: '1.0.0',
+        entry: 'src/index.ts',
+        runtime: {
+          workerType: 'thread',
+          timeoutMs: 5000,
+          memoryMb: 128,
+          maxConcurrency: 1,
+        },
+        operations: [],
+      }),
+      'utf8',
+    );
+    writeFileSync(
+      join(packageRoot, 'src', 'index.js'),
+      'module.exports = { createPlugin() {} };',
+      'utf8',
+    );
+
+    const source = new QqbotPluginPackageSourceService(
+      new QqbotPluginPackagePathPolicyService([tempRoot]),
+    );
+
+    await expect(source.discoverPackages()).resolves.toEqual([
+      expect.objectContaining({
+        entry: 'src/index.ts',
+        entryFile: join(packageRoot, 'src', 'index.js'),
+        pluginKey: 'compiled-entry',
+      }),
+    ]);
+  });
+
+  it('discovers the default built-in plugin root from production dist output', async () => {
+    const previousCwd = process.cwd();
+    const productionRoot = join(tempRoot, 'production-app');
+    const distPluginRoot = join(
+      productionRoot,
+      'dist',
+      'modules',
+      'qqbot',
+      'plugins',
+    );
+    mkdirSync(distPluginRoot, { recursive: true });
+
+    try {
+      process.chdir(productionRoot);
+      jest.resetModules();
+      const {
+        QqbotPluginPackagePathPolicyService: RuntimePathPolicyService,
+      } = await import(
+        '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/package/plugin-package-path-policy.service'
+      );
+      const pathPolicy = new RuntimePathPolicyService();
+
+      expect(pathPolicy.listExistingRoots()).toEqual([distPluginRoot]);
+    } finally {
+      process.chdir(previousCwd);
+      jest.resetModules();
+    }
+  });
+
   it('does not keep platform-side manifest transfer shims', () => {
     const source = readFileSync(
       join(

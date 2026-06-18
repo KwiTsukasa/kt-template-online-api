@@ -2,13 +2,10 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
-const DEFAULT_BUILTIN_PACKAGE_ROOT = resolve(
-  process.cwd(),
-  'src',
-  'modules',
-  'qqbot',
-  'plugins',
-);
+const DEFAULT_BUILTIN_PACKAGE_ROOT_SEGMENTS = [
+  ['src', 'modules', 'qqbot', 'plugins'],
+  ['dist', 'modules', 'qqbot', 'plugins'],
+];
 export const QQBOT_PLUGIN_PACKAGE_CONTROLLED_ROOTS = Symbol(
   'QQBOT_PLUGIN_PACKAGE_CONTROLLED_ROOTS',
 );
@@ -30,7 +27,9 @@ export class QqbotPluginPackagePathPolicyService {
     controlledRoots?: string[],
   ) {
     this.controlledRoots = (
-      controlledRoots?.length ? controlledRoots : [DEFAULT_BUILTIN_PACKAGE_ROOT]
+      controlledRoots?.length
+        ? controlledRoots
+        : resolveDefaultBuiltinPackageRoots()
     ).map((root) => resolve(root));
   }
 
@@ -58,7 +57,7 @@ export class QqbotPluginPackagePathPolicyService {
       throw new Error('Plugin entry must stay inside the package root');
     }
 
-    return entryFile;
+    return this.resolveCompiledEntryFile(entryFile);
   }
 
   /**
@@ -95,4 +94,33 @@ export class QqbotPluginPackagePathPolicyService {
       isAbsolute(relation)
     );
   }
+
+  /**
+   * Resolves a manifest entry to the file Node can import in the current runtime.
+   * @param entryFile - Policy-checked entry path declared by `plugin.json`.
+   * @returns The declared file when it exists, otherwise the compiled `.js` sibling for TypeScript entries.
+   */
+  private resolveCompiledEntryFile(entryFile: string): string {
+    if (existsSync(entryFile)) return entryFile;
+
+    if (entryFile.endsWith('.ts')) {
+      const compiledEntryFile = `${entryFile.slice(0, -3)}.js`;
+      if (existsSync(compiledEntryFile)) {
+        return compiledEntryFile;
+      }
+    }
+
+    return entryFile;
+  }
+}
+
+/**
+ * Resolves the default built-in package root for source development or production `dist` output.
+ * @returns A single preferred controlled root so package discovery does not duplicate source and dist manifests.
+ */
+function resolveDefaultBuiltinPackageRoots(): string[] {
+  const candidates = DEFAULT_BUILTIN_PACKAGE_ROOT_SEGMENTS.map((segments) =>
+    resolve(process.cwd(), ...segments),
+  );
+  return [candidates.find((candidate) => existsSync(candidate)) || candidates[0]];
 }

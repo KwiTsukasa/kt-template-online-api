@@ -11,6 +11,11 @@ SELECT 'napcat_account_binding' AS table_name, COUNT(*) AS row_count FROM napcat
 SELECT 'napcat_login_session' AS table_name, COUNT(*) AS row_count FROM napcat_login_session;
 SELECT 'napcat_login_challenge' AS table_name, COUNT(*) AS row_count FROM napcat_login_challenge;
 SELECT 'napcat_runtime_cleanup' AS table_name, COUNT(*) AS row_count FROM napcat_runtime_cleanup;
+SELECT 'napcat_runtime_profile' AS table_name, COUNT(*) AS row_count FROM napcat_runtime_profile;
+SELECT 'napcat_protocol_profile' AS table_name, COUNT(*) AS row_count FROM napcat_protocol_profile;
+SELECT 'napcat_session_behavior_profile' AS table_name, COUNT(*) AS row_count FROM napcat_session_behavior_profile;
+SELECT 'napcat_login_event' AS table_name, COUNT(*) AS row_count FROM napcat_login_event;
+SELECT 'napcat_risk_mode' AS table_name, COUNT(*) AS row_count FROM napcat_risk_mode;
 SELECT 'qqbot_plugin_task' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task;
 SELECT 'qqbot_plugin_task_run' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task_run;
 
@@ -110,6 +115,60 @@ FROM information_schema.statistics
 WHERE table_schema = DATABASE()
   AND table_name = 'napcat_runtime_cleanup'
   AND index_name = 'idx_napcat_runtime_cleanup_session';
+
+SELECT 'index_napcat_runtime_profile_account' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_runtime_profile'
+  AND index_name = 'idx_napcat_runtime_profile_account';
+
+SELECT 'index_napcat_runtime_profile_container' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_runtime_profile'
+  AND index_name = 'idx_napcat_runtime_profile_container';
+
+SELECT 'index_napcat_protocol_profile_account' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_protocol_profile'
+  AND index_name = 'idx_napcat_protocol_profile_account';
+
+SELECT 'index_napcat_protocol_profile_container' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_protocol_profile'
+  AND index_name = 'idx_napcat_protocol_profile_container';
+
+SELECT 'index_napcat_session_behavior_profile_account' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_session_behavior_profile'
+  AND index_name = 'idx_napcat_session_behavior_profile_account';
+
+SELECT 'index_napcat_login_event_account' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_login_event'
+  AND index_name = 'idx_napcat_login_event_account';
+
+SELECT 'index_napcat_login_event_container' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_login_event'
+  AND index_name = 'idx_napcat_login_event_container';
+
+SELECT 'index_napcat_risk_mode_account' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_risk_mode'
+  AND index_name = 'uk_napcat_risk_mode_account';
+
+SELECT 'index_napcat_risk_mode_mode' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_risk_mode'
+  AND index_name = 'idx_napcat_risk_mode_mode';
 
 SELECT 'column_napcat_login_challenge_session_id_varchar' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.columns

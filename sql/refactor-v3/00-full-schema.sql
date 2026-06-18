@@ -1016,3 +1016,110 @@ CREATE TABLE IF NOT EXISTS napcat_runtime_cleanup (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_napcat_runtime_cleanup_session (session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS napcat_runtime_profile (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  container_id BIGINT NULL,
+  device_identity_id BIGINT NULL,
+  profile_version VARCHAR(64) NOT NULL,
+  image_ref VARCHAR(255) NOT NULL,
+  image_digest VARCHAR(255) NULL,
+  base_image_digest VARCHAR(255) NULL,
+  desktop_profile_version VARCHAR(64) NULL,
+  locale_available TINYINT NOT NULL DEFAULT 0,
+  fontconfig_evidence JSON NULL,
+  timezone_evidence JSON NULL,
+  runtime_uid INT NULL,
+  runtime_gid INT NULL,
+  shm_size VARCHAR(32) NULL,
+  locale VARCHAR(64) NULL,
+  xdg_config_home VARCHAR(255) NULL,
+  xdg_cache_home VARCHAR(255) NULL,
+  xdg_data_home VARCHAR(255) NULL,
+  persist_cache TINYINT NOT NULL DEFAULT 1,
+  persist_local_share TINYINT NOT NULL DEFAULT 1,
+  persist_logs TINYINT NOT NULL DEFAULT 1,
+  hostname_strategy VARCHAR(64) NOT NULL,
+  mac_strategy VARCHAR(64) NOT NULL,
+  migrate_device_identity TINYINT NOT NULL DEFAULT 0,
+  profile_status VARCHAR(32) NOT NULL,
+  last_check_evidence JSON NULL,
+  last_checked_at DATETIME NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_napcat_runtime_profile_account (account_id),
+  KEY idx_napcat_runtime_profile_container (container_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS napcat_protocol_profile (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  container_id BIGINT NULL,
+  profile_version VARCHAR(64) NOT NULL,
+  packet_backend VARCHAR(64) NOT NULL,
+  packet_server VARCHAR(255) NOT NULL DEFAULT '',
+  o3_hook_mode INT NOT NULL DEFAULT 1,
+  o3_hook_gray_enabled TINYINT NOT NULL DEFAULT 0,
+  onebot_config_hash VARCHAR(128) NULL,
+  onebot_config_json JSON NULL,
+  napcat_config_hash VARCHAR(128) NULL,
+  napcat_config_json JSON NULL,
+  profile_status VARCHAR(32) NOT NULL,
+  last_check_evidence JSON NULL,
+  last_checked_at DATETIME NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_napcat_protocol_profile_account (account_id),
+  KEY idx_napcat_protocol_profile_container (container_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS napcat_session_behavior_profile (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  profile_version VARCHAR(64) NOT NULL,
+  enabled TINYINT NOT NULL DEFAULT 1,
+  cold_start_until DATETIME NULL,
+  housekeeping_enabled TINYINT NOT NULL DEFAULT 0,
+  housekeeping_interval_ms INT NULL,
+  next_housekeeping_at DATETIME NULL,
+  last_housekeeping_at DATETIME NULL,
+  last_housekeeping_result JSON NULL,
+  presence_enabled TINYINT NOT NULL DEFAULT 0,
+  presence_strategy VARCHAR(64) NULL,
+  last_presence_event_at DATETIME NULL,
+  next_presence_event_at DATETIME NULL,
+  auto_capability_stage VARCHAR(32) NOT NULL,
+  last_behavior_evidence JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_napcat_session_behavior_profile_account (account_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS napcat_login_event (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  container_id BIGINT NULL,
+  event_kind VARCHAR(64) NOT NULL,
+  event_source VARCHAR(32) NOT NULL,
+  event_status VARCHAR(32) NOT NULL,
+  evidence JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_napcat_login_event_account (account_id, create_time),
+  KEY idx_napcat_login_event_container (container_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS napcat_risk_mode (
+  id BIGINT NOT NULL PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  risk_mode VARCHAR(32) NOT NULL,
+  reason VARCHAR(255) NULL,
+  source_event VARCHAR(64) NULL,
+  expires_at DATETIME NULL,
+  last_evidence JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_napcat_risk_mode_account (account_id),
+  KEY idx_napcat_risk_mode_mode (risk_mode)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

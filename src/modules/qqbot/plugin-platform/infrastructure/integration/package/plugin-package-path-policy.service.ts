@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
@@ -8,6 +8,9 @@ const DEFAULT_BUILTIN_PACKAGE_ROOT = resolve(
   'modules',
   'qqbot',
   'plugins',
+);
+export const QQBOT_PLUGIN_PACKAGE_CONTROLLED_ROOTS = Symbol(
+  'QQBOT_PLUGIN_PACKAGE_CONTROLLED_ROOTS',
 );
 
 /**
@@ -19,10 +22,16 @@ export class QqbotPluginPackagePathPolicyService {
 
   /**
    * Creates a path policy for package roots that the plugin platform may scan.
-   * @param controlledRoots - Directory roots that may contain one-level QQBot plugin package folders.
+   * @param controlledRoots - Optional DI-provided package roots; production omits this token so the platform scans the standard built-in plugin root.
    */
-  constructor(controlledRoots = [DEFAULT_BUILTIN_PACKAGE_ROOT]) {
-    this.controlledRoots = controlledRoots.map((root) => resolve(root));
+  constructor(
+    @Optional()
+    @Inject(QQBOT_PLUGIN_PACKAGE_CONTROLLED_ROOTS)
+    controlledRoots?: string[],
+  ) {
+    this.controlledRoots = (
+      controlledRoots?.length ? controlledRoots : [DEFAULT_BUILTIN_PACKAGE_ROOT]
+    ).map((root) => resolve(root));
   }
 
   /**

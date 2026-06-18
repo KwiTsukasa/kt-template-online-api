@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Test } from '@nestjs/testing';
 import { QqbotPluginPlatformService } from '../../../../src/modules/qqbot/plugin-platform/application/plugin-platform.service';
+import { QqbotPluginPackagePathPolicyService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/package/plugin-package-path-policy.service';
 import { QqbotPluginTaskWorkerProcessor } from '../../../../src/modules/qqbot/plugin-platform/application/task/qqbot-plugin-task-worker.processor';
 
 describe('QQBot plugin platform DI tokens', () => {
@@ -26,5 +28,15 @@ describe('QQBot plugin platform DI tokens', () => {
       [];
 
     expect(paramTypes[1]).toBe(QqbotPluginPlatformService);
+  });
+
+  it('lets Nest instantiate the package path policy without a config-array provider', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [QqbotPluginPackagePathPolicyService],
+    }).compile();
+
+    expect(moduleRef.get(QqbotPluginPackagePathPolicyService)).toBeInstanceOf(
+      QqbotPluginPackagePathPolicyService,
+    );
   });
 });

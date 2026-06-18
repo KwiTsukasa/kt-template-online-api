@@ -17,6 +17,7 @@ function createSnapshot(
       database: 'kt',
       username: 'root',
       synchronize: false,
+      timezone: '+08:00',
     },
     loki: {
       transportEnabled: true,

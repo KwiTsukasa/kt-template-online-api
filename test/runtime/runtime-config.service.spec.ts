@@ -36,7 +36,31 @@ describe('RuntimeConfigService', () => {
       database: 'kt',
       username: 'admin',
       synchronize: true,
+      timezone: '+08:00',
     });
+  });
+
+  it('surfaces DB_TIMEZONE in the safe runtime database profile and config checks', () => {
+    const service = createService({
+      DB_HOST: '127.0.0.1',
+      DB_PORT: '3307',
+      DB_DATABASE: 'kt',
+      DB_USERNAME: 'admin',
+      DB_TIMEZONE: 'Z',
+    });
+
+    expect(service.readDatabaseProfile()).toEqual(
+      expect.objectContaining({
+        timezone: 'Z',
+      }),
+    );
+    expect(service.getConfigChecks()).toContainEqual(
+      expect.objectContaining({
+        key: 'DB_TIMEZONE',
+        level: 'optional',
+        present: true,
+      }),
+    );
   });
 
   it('masks secrets in checks and snapshots', () => {

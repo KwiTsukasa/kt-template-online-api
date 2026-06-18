@@ -19,6 +19,7 @@ export interface RuntimeDatabaseConfig {
   database: string;
   username: string;
   synchronize: boolean;
+  timezone: string;
 }
 
 export interface RuntimeLokiConfig {

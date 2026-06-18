@@ -135,6 +135,94 @@ describe('NapCat runtime profile generation', () => {
     expect(profile.locale).not.toBe('C.UTF-8');
   });
 
+  it('persists planned runtime and protocol profiles when a managed container is rebuilt', async () => {
+    const runtimeProfileRepository = {
+      create: jest.fn((input) => ({ ...input })),
+      save: jest.fn(async (input) => input),
+    };
+    const protocolProfileRepository = {
+      create: jest.fn((input) => ({ ...input })),
+      save: jest.fn(async (input) => input),
+    };
+    const service = new (NapcatRuntimeProfileService as any)(
+      {
+        get: jest.fn((key: string, defaultValue?: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_IMAGE: 'kt-napcat-desktop-cn@sha256:profiledigest',
+            QQBOT_NAPCAT_PROFILE_VERSION: 'napcat-runtime-profile-v1',
+            QQBOT_NAPCAT_PROTOCOL_PROFILE_VERSION: 'napcat-protocol-profile-v1',
+          };
+          return values[key] || defaultValue || '';
+        }),
+      },
+      runtimeProfileRepository,
+      protocolProfileRepository,
+    );
+    const runtimeProfile = service.resolveRuntimeProfile({
+      accountId: 'account-1',
+      containerId: 'container-1',
+      dataDir: '/vol1/docker/kt-qqbot/napcat-instances/pc-a1b2c3d4',
+      deviceIdentityId: 'identity-1',
+    });
+
+    await service.recordPlannedProfiles({
+      accountId: 'account-1',
+      containerId: 'container-1',
+      dataDir: runtimeProfile.dataDir,
+      deviceIdentity: {
+        deviceIdentityId: 'identity-1',
+        hostname: 'pc-a1b2c3d4',
+        hostnameStrategy: 'qqnt-visible-hostname-v1',
+        machineInfoPath:
+          '/vol1/docker/kt-qqbot/napcat-instances/pc-a1b2c3d4/QQ/nt_qq/global/nt_data/msf/machine-info',
+        macAddress: '02:42:aa:bb:cc:dd',
+        macStrategy: 'docker-bridge-mac-v1',
+      },
+      protocolProfile: {
+        napcatConfigHash: 'napcat-hash',
+        napcatConfigJson: { o3HookMode: 1 },
+        o3HookGrayEnabled: false,
+        o3HookMode: 1,
+        onebotConfigHash: 'onebot-hash',
+        onebotConfigJson: { network: { websocketClients: [] } },
+        packetBackend: 'auto',
+        packetServer: '',
+      },
+      runtimeProfile,
+    });
+
+    expect(runtimeProfileRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 'account-1',
+        containerId: 'container-1',
+        deviceIdentityId: 'identity-1',
+        hostnameStrategy: 'qqnt-visible-hostname-v1',
+        lastCheckEvidence: expect.objectContaining({
+          dataDir: runtimeProfile.dataDir,
+          machineInfoPath:
+            '/vol1/docker/kt-qqbot/napcat-instances/pc-a1b2c3d4/QQ/nt_qq/global/nt_data/msf/machine-info',
+          macAddress: '02:42:aa:bb:cc:dd',
+        }),
+        macStrategy: 'docker-bridge-mac-v1',
+        profileStatus: 'pending',
+        profileVersion: 'napcat-runtime-profile-v1',
+        timezoneEvidence: {
+          expectedTimezone: 'Asia/Shanghai',
+        },
+      }),
+    );
+    expect(protocolProfileRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 'account-1',
+        containerId: 'container-1',
+        napcatConfigHash: 'napcat-hash',
+        onebotConfigHash: 'onebot-hash',
+        profileStatus: 'pending',
+        profileVersion: 'napcat-protocol-profile-v1',
+      }),
+    );
+  });
+
   it('writes account-level NapCat and OneBot configs with minimal reverse WS only', () => {
     const writer = new NapcatConfigWriterService(new ToolsService());
     const webuiAuthValue = 'KT_TEST_WEBUI_AUTH_VALUE';

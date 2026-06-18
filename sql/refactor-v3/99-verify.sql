@@ -197,3 +197,10 @@ WHERE table_schema = DATABASE()
   AND table_name = 'napcat_device_identity'
   AND column_name = 'mac_strategy'
   AND column_type = 'varchar(64)';
+
+SELECT 'column_napcat_account_binding_device_identity_id' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_account_binding'
+  AND column_name = 'device_identity_id'
+  AND column_type = 'bigint';

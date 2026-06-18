@@ -1,12 +1,17 @@
 import type { NapcatDeviceIdentity } from '../../persistence/napcat-device-identity.entity';
 
 export type NapcatDockerDeviceOptions = {
+  accountId: string;
   dataDir: string;
   deviceEnvPath: string;
   deviceIdentityId?: string;
   hostname: string;
   machineIdPath: string;
+  machineInfoPath: string;
   macAddress: string;
+  macAddressHyphen: string;
+  hostnameStrategy?: string;
+  macStrategy?: string;
   runFlags: string[];
 };
 
@@ -18,16 +23,30 @@ export type NapcatDockerDeviceOptions = {
 export function toNapcatDockerDeviceOptions(
   identity: Pick<
     NapcatDeviceIdentity,
-    'dataDir' | 'hostname' | 'id' | 'machineIdPath' | 'macAddress'
+    | 'accountId'
+    | 'dataDir'
+    | 'hostname'
+    | 'hostnameStrategy'
+    | 'id'
+    | 'machineIdPath'
+    | 'macAddress'
+    | 'macStrategy'
   >,
 ): NapcatDockerDeviceOptions {
+  const machineInfoPath = `${identity.dataDir}/QQ/nt_qq/global/nt_data/msf/machine-info`;
+
   return {
+    accountId: identity.accountId,
     dataDir: identity.dataDir,
     deviceEnvPath: `${identity.dataDir}/device.env`,
     deviceIdentityId: identity.id,
     hostname: identity.hostname,
+    hostnameStrategy: identity.hostnameStrategy,
     machineIdPath: identity.machineIdPath,
+    machineInfoPath,
     macAddress: identity.macAddress,
+    macAddressHyphen: identity.macAddress.replace(/:/g, '-').toLowerCase(),
+    macStrategy: identity.macStrategy,
     runFlags: [
       '--hostname "$NAPCAT_HOSTNAME"',
       '--mac-address "$NAPCAT_MAC_ADDRESS"',

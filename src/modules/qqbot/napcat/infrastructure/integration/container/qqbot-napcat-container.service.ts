@@ -177,6 +177,8 @@ export class QqbotNapcatContainerService {
       );
       await this.createRemoteDockerContainer({
         account,
+        accountId: deviceIdentity?.accountId,
+        containerId: container.id,
         dataDir:
           deviceIdentity?.dataDir ||
           container.dataDir ||
@@ -244,6 +246,24 @@ export class QqbotNapcatContainerService {
       selfId,
     });
     return toNapcatDockerDeviceOptions(identity);
+  }
+
+  /**
+   * Resolves the device identity id that belongs to an account/container binding.
+   * @param accountId - Internal QQBot account id used to select the persistent device identity.
+   * @param containerId - Managed NapCat container id that should be stored on the identity row.
+   * @returns Device identity id when the identity service is available.
+   */
+  private async resolveBindingDeviceIdentityId(
+    accountId: string,
+    containerId: string,
+  ) {
+    if (!this.deviceIdentityService) return undefined;
+    const identity = await this.deviceIdentityService.resolveForAccount({
+      accountId,
+      containerId,
+    });
+    return identity.id;
   }
 
   /**
@@ -611,6 +631,10 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
       { accountId, isDeleted: false },
       { isPrimary: false },
     );
+    const deviceIdentityId = await this.resolveBindingDeviceIdentityId(
+      accountId,
+      containerId,
+    );
 
     const existing = await this.bindingRepository.findOne({
       where: {
@@ -627,6 +651,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
           isDeleted: false,
           lastLoginAt: new Date(),
           remark: '',
+          ...(deviceIdentityId ? { deviceIdentityId } : {}),
         },
       );
       await this.removeOtherAccountContainers(accountId, containerId);
@@ -638,6 +663,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
         accountId,
         bindStatus: 'bound',
         containerId,
+        ...(deviceIdentityId ? { deviceIdentityId } : {}),
         isPrimary: true,
         lastLoginAt: new Date(),
         remark: '',
@@ -1319,6 +1345,8 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     try {
       await this.createRemoteDockerContainer({
         account: selfId,
+        accountId,
+        containerId: container.id,
         dataDir,
         deviceIdentity,
         image,
@@ -1337,11 +1365,15 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
         },
       );
       if (accountId && this.deviceIdentityService) {
-        await this.deviceIdentityService.resolveForAccount({
+        const identity = await this.deviceIdentityService.resolveForAccount({
           accountId,
           containerId: container.id,
           selfId,
         });
+        await this.bindingRepository.update(
+          { accountId, containerId: container.id, isDeleted: false },
+          { deviceIdentityId: identity.id },
+        );
       }
       return {
         baseUrl,
@@ -1370,6 +1402,8 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
    */
   private async createRemoteDockerContainer(input: {
     account?: string;
+    accountId?: string;
+    containerId?: string;
     dataDir: string;
     deviceIdentity?: NapcatDockerDeviceOptions;
     image: string;
@@ -1382,6 +1416,7 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
   }) {
     const script = this.buildRemoteCreateScript(input);
     await this.runProcess('ssh', [...this.getSshArgs(), 'sh -s'], script);
+    await this.recordPlannedProfiles(input);
   }
 
   /**
@@ -1390,6 +1425,7 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
    */
   private buildRemoteCreateScript(input: {
     account?: string;
+    accountId?: string;
     containerId?: string;
     dataDir: string;
     deviceIdentity?: NapcatDockerDeviceOptions;
@@ -1433,20 +1469,36 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
       ? [
           `NAPCAT_HOSTNAME=${this.sh(input.deviceIdentity.hostname)}`,
           `NAPCAT_MAC_ADDRESS=${this.sh(input.deviceIdentity.macAddress)}`,
+          `NAPCAT_MAC_HYPHEN=${this.sh(input.deviceIdentity.macAddressHyphen)}`,
           `MACHINE_ID_PATH=${this.sh(input.deviceIdentity.machineIdPath)}`,
+          `MACHINE_INFO_PATH=${this.sh(input.deviceIdentity.machineInfoPath)}`,
           `DEVICE_ENV_PATH=${this.sh(input.deviceIdentity.deviceEnvPath)}`,
         ].join('\n') + '\n'
       : '';
     const devicePrepareScript = input.deviceIdentity
       ? `
+mkdir -p "$(dirname "$DEVICE_ENV_PATH")" "$(dirname "$MACHINE_INFO_PATH")"
 cat > "$DEVICE_ENV_PATH" <<EOF
 NAPCAT_HOSTNAME=$NAPCAT_HOSTNAME
 NAPCAT_MAC_ADDRESS=$NAPCAT_MAC_ADDRESS
+NAPCAT_MAC_HYPHEN=$NAPCAT_MAC_HYPHEN
 MACHINE_ID_PATH=$MACHINE_ID_PATH
+MACHINE_INFO_PATH=$MACHINE_INFO_PATH
 EOF
 if [ ! -s "$MACHINE_ID_PATH" ]; then
   printf '%s' "$NAME" | sha256sum | cut -c 1-32 > "$MACHINE_ID_PATH"
 fi
+if [ -s "$MACHINE_INFO_PATH" ]; then
+  CURRENT_MACHINE_INFO_MAC="$(dd if="$MACHINE_INFO_PATH" bs=1 skip=4 2>/dev/null | tr 'A-Za-z' 'N-ZA-Mn-za-m' || true)"
+  if [ "$CURRENT_MACHINE_INFO_MAC" != "$NAPCAT_MAC_HYPHEN" ]; then
+    cp "$MACHINE_INFO_PATH" "$MACHINE_INFO_PATH.bak.$(date +%Y%m%d%H%M%S)"
+  fi
+fi
+MACHINE_INFO_TMP="$MACHINE_INFO_PATH.tmp"
+printf '\\000\\000\\000\\021' > "$MACHINE_INFO_TMP"
+printf '%s' "$NAPCAT_MAC_HYPHEN" | tr 'A-Za-z' 'N-ZA-Mn-za-m' >> "$MACHINE_INFO_TMP"
+mv "$MACHINE_INFO_TMP" "$MACHINE_INFO_PATH"
+chmod 644 "$MACHINE_INFO_PATH"
 `
       : '';
     const deviceRunFlags = input.deviceIdentity
@@ -1467,8 +1519,9 @@ NAPCAT_SHM_SIZE=${this.sh(runtimeProfile.shmSize)}
 ${accountHeader}
 ${passwordHeader}
 ${deviceHeader}
-mkdir -p "$DATA_DIR/QQ" "$DATA_DIR/config" "$DATA_DIR/plugins" "$DATA_DIR/logs" "$DATA_DIR/cache" "$DATA_DIR/local-share"
+mkdir -p "$DATA_DIR/QQ" "$DATA_DIR/config" "$DATA_DIR/plugins" "$DATA_DIR/logs" "$DATA_DIR/cache" "$DATA_DIR/local-share" "$DATA_DIR/runtime"
 chmod 700 "$DATA_DIR"
+chmod 700 "$DATA_DIR/runtime"
 ${devicePrepareScript}
 
 ${configWriteScript}
@@ -1497,9 +1550,72 @@ ${accountRunFlag}${passwordRunFlag}${deviceRunFlags}  -p "$PORT:6099" \\
   -v "$DATA_DIR/plugins:/app/napcat/plugins" \\
   -v "$DATA_DIR/cache:/app/.cache" \\
   -v "$DATA_DIR/local-share:/app/.local/share" \\
+  -v "$DATA_DIR/runtime:/tmp/runtime-napcat" \\
   -v "$DATA_DIR/logs:/app/napcat/logs" \\
   "$IMAGE" >/dev/null
 `;
+  }
+
+  /**
+   * Records the expected runtime and protocol state for a successfully created managed container.
+   * @param input - Docker creation request whose identity and config values define the planned profile.
+   */
+  private async recordPlannedProfiles(input: {
+    account?: string;
+    accountId?: string;
+    containerId?: string;
+    dataDir: string;
+    deviceIdentity?: NapcatDockerDeviceOptions;
+    image: string;
+    loginPassword?: string;
+    name: string;
+    port: number;
+    reverseWsUrl: string;
+    skipPull?: boolean;
+    token: string;
+  }) {
+    const accountId =
+      this.toolsService.toTrimmedString(input.accountId) ||
+      this.toolsService.toTrimmedString(input.deviceIdentity?.accountId);
+    if (!accountId || !input.deviceIdentity) return;
+
+    const account = `${input.account || ''}`.trim();
+    const runtimeProfile = this.runtimeProfileService.resolveRuntimeProfile({
+      accountId,
+      containerId: input.containerId,
+      dataDir: input.dataDir,
+      deviceIdentityId: input.deviceIdentity.deviceIdentityId,
+    });
+    const configBundle = this.configWriterService.buildConfigFiles({
+      account,
+      reverseWsUrl: input.reverseWsUrl,
+      token: input.token,
+    });
+
+    await this.runtimeProfileService.recordPlannedProfiles({
+      accountId,
+      containerId: input.containerId,
+      dataDir: input.dataDir,
+      deviceIdentity: {
+        deviceIdentityId: input.deviceIdentity.deviceIdentityId,
+        hostname: input.deviceIdentity.hostname,
+        hostnameStrategy: input.deviceIdentity.hostnameStrategy,
+        machineInfoPath: input.deviceIdentity.machineInfoPath,
+        macAddress: input.deviceIdentity.macAddress,
+        macStrategy: input.deviceIdentity.macStrategy,
+      },
+      protocolProfile: {
+        napcatConfigHash: configBundle.napcatConfigHash,
+        napcatConfigJson: configBundle.napcatConfig,
+        o3HookGrayEnabled: false,
+        o3HookMode: configBundle.napcatConfig.o3HookMode,
+        onebotConfigHash: configBundle.onebotConfigHash,
+        onebotConfigJson: configBundle.onebotConfig,
+        packetBackend: configBundle.napcatConfig.packetBackend,
+        packetServer: configBundle.napcatConfig.packetServer,
+      },
+      runtimeProfile,
+    });
   }
 
   /**

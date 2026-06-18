@@ -172,7 +172,7 @@ describe('NapCat device identity persistence', () => {
     );
   });
 
-  it('generates a real-device style hostname without QQBot or container words', async () => {
+  it('generates a short QQNT-visible hostname without QQBot or container words', async () => {
     const repository = createIdentityRepository();
     const service = new NapcatDeviceIdentityService(
       repository as any,
@@ -185,11 +185,11 @@ describe('NapCat device identity persistence', () => {
       selfId: '10001',
     });
 
-    expect(identity.hostname).toMatch(/^(ubuntu|linux)-pc-[a-f0-9]{8,12}$/);
+    expect(identity.hostname).toMatch(/^pc-[a-f0-9]{8}$/);
     expect(identity.hostname).not.toMatch(/10001|qq|bot|napcat|docker/i);
   });
 
-  it('generates a stable MAC from approved physical OUI prefixes', async () => {
+  it('generates a stable Docker bridge MAC that matches QQNT machine-info expectations', async () => {
     const repository = createIdentityRepository();
     const service = new NapcatDeviceIdentityService(
       repository as any,
@@ -202,16 +202,15 @@ describe('NapCat device identity persistence', () => {
       selfId: '10001',
     });
 
-    expect(identity.macAddress).toMatch(/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/);
-    expect(identity.macAddress).not.toMatch(/^02:42/i);
+    expect(identity.macAddress).toMatch(/^02:42:([0-9a-f]{2}:){3}[0-9a-f]{2}$/);
     expect(identity.macAddress).not.toMatch(/^52:54:00/i);
     expect(identity.macAddress).not.toMatch(
       /^(00:05:69|00:0c:29|00:1c:14|00:50:56)/i,
     );
-    expect(identity.macStrategy).toBe('physical-oui-v1');
+    expect(identity.macStrategy).toBe('docker-bridge-mac-v1');
   });
 
-  it('records migration evidence when an existing Docker-style identity is upgraded', async () => {
+  it('records regression-repair evidence when an existing identity is realigned for QQNT', async () => {
     const repository = createIdentityRepository();
     repository.seedIdentity({
       accountId: 'account-10001',
@@ -237,13 +236,14 @@ describe('NapCat device identity persistence', () => {
       selfId: '10001',
     });
 
+    expect(identity.macAddress).toMatch(/^02:42:/i);
     expect(identity.macAddress).not.toBe('02:42:aa:bb:cc:dd');
     expect(identity.hostname).not.toBe('kt-qqbot-napcat-10001');
     expect(identity.lastLoginEvidence).toMatchObject({
       migration: {
         fromMacAddress: '02:42:aa:bb:cc:dd',
-        strategy: 'physical-oui-v1',
-        trigger: 'legacy-docker-identity-upgrade',
+        strategy: 'docker-bridge-mac-v1',
+        trigger: 'qqnt-device-name-regression-repair',
       },
     });
   });
@@ -268,7 +268,9 @@ describe('NapCat device identity persistence', () => {
         deviceEnvPath: `${identity.dataDir}/device.env`,
         hostname: identity.hostname,
         machineIdPath: identity.machineIdPath,
+        machineInfoPath: `${identity.dataDir}/QQ/nt_qq/global/nt_data/msf/machine-info`,
         macAddress: identity.macAddress,
+        macAddressHyphen: identity.macAddress.replace(/:/g, '-'),
       }),
     );
     expect(dockerOptions.runFlags).toEqual(
@@ -311,10 +313,20 @@ describe('NapCat device identity persistence', () => {
     expect(script).toContain(`NAPCAT_HOSTNAME='${identity.hostname}'`);
     expect(script).toContain(`NAPCAT_MAC_ADDRESS='${identity.macAddress}'`);
     expect(script).toContain(`MACHINE_ID_PATH='${identity.machineIdPath}'`);
+    expect(script).toContain(
+      `MACHINE_INFO_PATH='${identity.dataDir}/QQ/nt_qq/global/nt_data/msf/machine-info'`,
+    );
+    expect(script).toContain(
+      `NAPCAT_MAC_HYPHEN='${identity.macAddress.replace(/:/g, '-')}'`,
+    );
     expect(script).toContain('cat > "$DEVICE_ENV_PATH" <<EOF');
+    expect(script).toContain('MACHINE_INFO_PATH.bak.$(date +%Y%m%d%H%M%S)');
+    expect(script).toContain("printf '\\000\\000\\000\\021'");
+    expect(script).toContain("tr 'A-Za-z' 'N-ZA-Mn-za-m'");
     expect(script).toContain('--hostname "$NAPCAT_HOSTNAME"');
     expect(script).toContain('--mac-address "$NAPCAT_MAC_ADDRESS"');
     expect(script).toContain('-v "$MACHINE_ID_PATH:/etc/machine-id:ro"');
+    expect(script).toContain('-v "$DATA_DIR/runtime:/tmp/runtime-napcat"');
   });
 
   it('uses persisted device identity when preparing an account managed container', async () => {
@@ -330,6 +342,7 @@ describe('NapCat device identity persistence', () => {
         where: jest.fn().mockReturnThis(),
       })),
       findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn(),
     };
     const containerRepository = {
       create: jest.fn((input) => input),
@@ -386,9 +399,19 @@ describe('NapCat device identity persistence', () => {
       }),
     );
     const createScript = containerService.runProcess.mock.calls[0][2];
+    expect(bindingRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 'account-10001',
+        containerId: 'container-created',
+      }),
+      expect.objectContaining({
+        deviceIdentityId: expect.any(String),
+      }),
+    );
     expect(createScript).toContain('--hostname "$NAPCAT_HOSTNAME"');
     expect(createScript).toContain('--mac-address "$NAPCAT_MAC_ADDRESS"');
     expect(createScript).toContain('-v "$MACHINE_ID_PATH:/etc/machine-id:ro"');
+    expect(createScript).toContain('-v "$DATA_DIR/runtime:/tmp/runtime-napcat"');
   });
 
   it('reuses persisted device identity when rebuilding an existing account container login env', async () => {

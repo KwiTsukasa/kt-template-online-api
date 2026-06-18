@@ -23,6 +23,7 @@ const REQUIRED_CONFIG_KEYS = [
 ] as const;
 
 const OPTIONAL_CONFIG_CHECKS: ReadonlyArray<string | readonly string[]> = [
+  'DB_TIMEZONE',
   'MINIO_ENDPOINT',
   'MINIO_PORT',
   'MINIO_ACCESS_KEY',
@@ -95,6 +96,7 @@ export class RuntimeConfigService {
       database: this.getString('DB_DATABASE'),
       username: this.getString('DB_USERNAME'),
       synchronize: this.getBoolean('DB_SYNC', false),
+      timezone: this.getString('DB_TIMEZONE', '+08:00'),
     };
   }
 

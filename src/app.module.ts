@@ -22,6 +22,29 @@ import { QqbotPluginPlatformModule } from './modules/qqbot/plugin-platform/plugi
 import { WordpressMirrorModule } from './modules/wordpress/wordpress-mirror.module';
 import { RuntimeModule } from './runtime';
 
+/**
+ * Builds TypeORM MySQL options from runtime config with an explicit session timezone.
+ * @param configService - Nest ConfigService source for DB connection fields and DB_TIMEZONE override.
+ * @returns TypeORM MySQL options consumed by AppModule startup.
+ */
+export function buildTypeOrmOptions(configService: ConfigService) {
+  return {
+    type: 'mysql' as const,
+    host: configService.get('DB_HOST'),
+    port: configService.get('DB_PORT'),
+    username: configService.get('DB_USERNAME'),
+    password: configService.get('DB_PASSWORD'),
+    database: configService.get('DB_DATABASE'),
+    timezone: configService.get<string>('DB_TIMEZONE') || '+08:00',
+    synchronize: configService.get<string>('DB_SYNC') === 'true',
+    entities: [
+      __dirname + '/**/*.entity{.ts,.js}',
+      __dirname + '/**/*.entities{.ts,.js}',
+    ],
+    subscribers: [__dirname + '/**/*.subscriber{.ts,.js}'],
+  };
+}
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -44,22 +67,8 @@ import { RuntimeModule } from './runtime';
        * 创建 模块依赖注入工厂产物。
        * @param configService - Nest ConfigService 依赖；使用 `get` 字段生成结果。
        */
-      useFactory: async (configService: ConfigService) => {
-        return {
-          type: 'mysql',
-          host: configService.get('DB_HOST'),
-          port: configService.get('DB_PORT'),
-          username: configService.get('DB_USERNAME'),
-          password: configService.get('DB_PASSWORD'),
-          database: configService.get('DB_DATABASE'),
-          synchronize: configService.get<string>('DB_SYNC') === 'true',
-          entities: [
-            __dirname + '/**/*.entity{.ts,.js}',
-            __dirname + '/**/*.entities{.ts,.js}',
-          ],
-          subscribers: [__dirname + '/**/*.subscriber{.ts,.js}'],
-        };
-      },
+      useFactory: async (configService: ConfigService) =>
+        buildTypeOrmOptions(configService),
       inject: [ConfigService],
     }),
     MinioModule.registerAsync({

@@ -15,6 +15,7 @@ export * from './infrastructure/integration/napcat-login-api.client';
 export * from './domain/login/napcat-login-state-machine';
 export * from './application/login/qqbot-napcat-login.service';
 export * from './application/login/qqbot-napcat-watchdog.service';
+export * from './application/runtime/napcat-login-event.service';
 export * from './application/runtime/napcat-runtime-profile-inspector.service';
 export * from './infrastructure/persistence';
 export * from './infrastructure/integration/container/qqbot-napcat-container.service';

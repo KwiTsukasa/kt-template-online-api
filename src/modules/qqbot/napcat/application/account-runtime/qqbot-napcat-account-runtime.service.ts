@@ -11,6 +11,7 @@ import type {
   QqbotAccountListItem,
   QqbotNapcatRuntimeStatusSnapshot,
 } from '@/modules/qqbot/core/contract/qqbot.types';
+import { NapcatLoginEventService } from '../runtime/napcat-login-event.service';
 import { NapcatRuntimeProfileInspectorService } from '../runtime/napcat-runtime-profile-inspector.service';
 import { QqbotNapcatContainerService } from '../../infrastructure/integration/container/qqbot-napcat-container.service';
 import { NapcatAccountBinding } from '../../infrastructure/persistence/napcat-account-binding.entity';
@@ -29,6 +30,7 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
    * @param napcatContainerService - Runtime integration service for bounded NapCat/WebUI status probes and auto-login.
    * @param toolsService - Shared helpers for status text normalization and NapCat offline-message classification.
    * @param runtimeProfileInspector - Optional profile reader that enriches list rows without changing login state.
+   * @param loginEventService - Optional login-event gate that prevents watchdog from repeating suspended recovery flows.
    */
   constructor(
     @InjectRepository(NapcatAccountBinding)
@@ -38,6 +40,7 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
     private readonly napcatContainerService: QqbotNapcatContainerService,
     private readonly toolsService: ToolsService,
     private readonly runtimeProfileInspector?: NapcatRuntimeProfileInspectorService,
+    private readonly loginEventService?: NapcatLoginEventService,
   ) {}
 
   /**
@@ -371,6 +374,25 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
     actions: QqbotAccountNapcatRuntimeActions,
   ) {
     try {
+      const recoveryGate =
+        await this.loginEventService?.canAttemptAutomaticRecovery({
+          accountId: account.id,
+          containerId: container.id,
+          resetAfter: account.lastConnectedAt,
+        });
+      if (recoveryGate && !recoveryGate.allowed) {
+        await this.loginEventService?.recordSuspended({
+          accountId: account.id,
+          containerId: container.id,
+          evidence: {
+            reason: recoveryGate.reason,
+          },
+          reason: recoveryGate.reason || 'recovery_suspended',
+          source: 'watchdog',
+        });
+        return false;
+      }
+
       const result = await this.napcatContainerService.tryAutoLogin(container, {
         loginPassword: actions.getLoginPassword(account),
         selfId: account.selfId,

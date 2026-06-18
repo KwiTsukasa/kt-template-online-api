@@ -1,4 +1,4 @@
-# QQBot NapCat 会话行为、Linux Runtime 与协议风险 Profile 设计
+# QQBot NapCat 会话行为、Chinese Desktop Runtime 与协议风险 Profile 设计
 
 ## 背景
 
@@ -34,7 +34,7 @@
 1. 建立 `NapCat Session Behavior Profile`：降低“零客户端行为 + 永久死在线”的异常画像，而不是只做环境拟真。
 2. 最小化登录事件：watchdog 恢复必须优先稳定 quick -> password，避免频繁 `docker rm -f`、重建容器、生成二维码和反复扫码。
 3. 建立 `NapCat Protocol Risk Profile`：把 NapCat/OneBot 配置、`o3HookMode` 灰度、版本 pin、IP/代理证据和自动行为降噪纳入统一 profile。
-4. 建立 `NapCat Linux Runtime Profile`：让托管 NapCat 容器在可控范围内更接近普通 Linux 桌面程序运行环境，但只作为运行卫生和漂移可观测项。
+4. 建立 `NapCat Chinese Desktop Runtime Profile`：基于 NapCat 上游镜像派生真实中国桌面环境镜像，包含 `zh_CN.UTF-8`、中文字体、fontconfig、时区、XDG/Home、DBus/Xvfb/QQ 进程环境；它仍作为运行卫生和漂移可观测项，不替代会话/行为画像。
 5. 对现有已风控账号执行受控设备身份迁移，改为真实设备风格 hostname/MAC/machine-id 组合，并保留迁移前后证据。
 6. 提供线上自检证据：容器运行态、NapCat 配置、OneBot 配置、协议风险状态、会话行为状态都能被 API 查询或记录。
 7. 先以测试账号验证策略，再按账号批次直接迁移现有风控账号的 hostname/MAC。
@@ -76,7 +76,7 @@ profile 分为四层：
 1. **设备身份层**：账号稳定的 dataDir、hostname、MAC、machine-id。
 2. **会话行为层**：低噪声 housekeeping、presence 状态、冷启动窗口、自动行为降噪。
 3. **协议风险层**：NapCat `packetBackend` / `o3HookMode`、OneBot 配置、IP/代理证据、登录事件最小化和风险事件降载。
-4. **Linux runtime 层**：镜像、UID/GID、shm、init、locale、XDG、持久目录、日志目录。
+4. **Chinese desktop runtime 层**：派生镜像、`zh_CN.UTF-8`、中文字体、fontconfig、UID/GID、shm、init、XDG、持久目录、日志目录。
 
 ## 风险重心与优先级
 
@@ -85,11 +85,11 @@ profile 分为四层：
 1. **会话/行为画像**：处理零客户端行为、永久死在线、冷启动后立即高频响应、自动回复长期无节律的问题。
 2. **登录事件最小化**：减少 `docker rm -f`、重建、扫码、验证码、新设备验证这些登录侧风控事件。
 3. **官方建议的协议杠杆**：测试账号优先灰度 `o3HookMode=0`，同时记录 IP/代理/出口证据；现有已风控账号按批次迁移设备身份。
-4. **环境/runtime 卫生**：image pin、版本 drift、shm、locale、XDG、非 root、持久目录，用于降低噪声和提高可观测性，但不承诺解决服务端会话注销。
+4. **环境/runtime 卫生**：派生中国桌面镜像、image pin、版本 drift、shm、`zh_CN.UTF-8`、fontconfig、XDG、非 root、持久目录，用于降低噪声和提高可观测性，但不承诺单独解决服务端会话注销。
 
 Docker/Linux runtime profile 的验收标准不是“看起来更像真人机器”，而是“不引入新的登录事件、不破坏现有 entrypoint 反检测、不制造 profile drift，并提供诊断证据”。
 
-## Docker 与 Linux Runtime Profile
+## Docker 与 Chinese Desktop Runtime Profile
 
 本层是卫生项和可观测项，不是主要风控缓解项。它的设计目标是减少明显运行态漂移、提升诊断质量、避免默认容器参数造成 QQ/Chromium 异常；若某个 runtime 改动会削弱已有 entrypoint 反检测或触发登录事件，应让位给会话/行为和登录稳定性。
 
@@ -102,6 +102,27 @@ Docker/Linux runtime profile 的验收标准不是“看起来更像真人机器
 - 不推荐：`mlikiowa/napcat-docker:latest`。
 
 API 的 profile inspector 需要记录当前容器实际 `RepoDigest` 与 `ImageId`，用于判断线上是否漂移。
+
+### 中国桌面派生镜像
+
+本轮必须构建并使用 KT 受控派生镜像，不再直接以 `mlikiowa/napcat-docker` 原镜像作为最终运行镜像。派生镜像命名建议：
+
+```text
+kt-napcat-desktop-cn:<baseDigestShort>-<profileVersion>
+```
+
+派生镜像必须满足：
+
+- 基础镜像使用已 pin 的 NapCat Docker digest，不使用漂移的 `latest`。
+- 生成并启用 `zh_CN.UTF-8`，默认环境为 `LANG=zh_CN.UTF-8`、`LC_ALL=zh_CN.UTF-8`、`LANGUAGE=zh_CN:zh`。
+- 时区固定为 `Asia/Shanghai`，`/etc/localtime` 与 `TZ` 一致。
+- 安装中文字体和 fontconfig，优先使用可再分发的 `Noto Sans CJK`、`Noto Serif CJK`、`WenQuanYi Micro Hei` 等字体；不得打包无授权的商业字体。
+- 预生成 fontconfig cache，验证 `fc-match` 能解析常见中文字体族。
+- 保留并验证上游 QQ/Xvfb/NapCat entrypoint 行为，不破坏其隐藏容器痕迹的初始化逻辑。
+- 保持 `/app`、XDG、cache、local-share、config、plugins、logs 的持久化路径兼容。
+- 提供镜像自检脚本或 inspector 证据，输出 locale、timezone、fontconfig、QQ/Xvfb 进程用户、entrypoint 隐藏能力、image digest。
+
+“真实中国桌面环境”的验收标准不是安装一个 locale 包就结束，而是容器内运行 QQ/Chromium 时看到一致的中文桌面运行上下文：中文 UTF-8 locale、中文字体 fallback、上海时区、正常 XDG/Home、可用 DBus/Xvfb 运行环境和稳定的普通用户进程身份。
 
 ### 进程与共享内存
 
@@ -122,21 +143,23 @@ Docker run 增加：
 
 远程创建脚本在启动容器前必须检查并修正 QQ、cache、config、plugins、logs、local-share 目录归属，再用目标 UID/GID 做写入探测。权限不满足时，容器创建失败应明确记录为 runtime profile failure，而不是被吞成普通登录失败，也不能静默回退成 root 运行。
 
-交叉风险：镜像 entrypoint 依赖 root 初始化来伪造或隐藏部分容器痕迹，然后再 `gosu napcat` 降权。实现时必须验证非 root UID/GID 不会削弱这些已存在的 entrypoint 行为，例如 `/proc`/cgroup/DMI 处理、隐藏 `/.dockerenv`、Xvfb/QQ 启动链路和 `/app` 权限。如果验证发现非 root 会破坏当前隐藏能力或登录稳定性，则非 root 只能作为后续派生镜像方案，不能在本轮静默推广。
+交叉风险：镜像 entrypoint 依赖 root 初始化来伪造或隐藏部分容器痕迹，然后再 `gosu napcat` 降权。实现时必须验证非 root UID/GID 不会削弱这些已存在的 entrypoint 行为，例如 `/proc`/cgroup/DMI 处理、隐藏 `/.dockerenv`、Xvfb/QQ 启动链路和 `/app` 权限。如果验证发现非 root 会破坏当前隐藏能力或登录稳定性，则只回退非 root 运行项，Chinese Desktop 派生镜像仍然保留，不能把 QQ/Xvfb 降权失败扩大成放弃 `zh_CN.UTF-8`/字体/时区环境。
 
-### Locale 与 XDG
+### Locale、Desktop Env 与 XDG
 
 Docker env 增加：
 
-- `LANG=C.UTF-8`
-- `LC_ALL=C.UTF-8`
+- `LANG=zh_CN.UTF-8`
+- `LC_ALL=zh_CN.UTF-8`
+- `LANGUAGE=zh_CN:zh`
 - `HOME=/app`
 - `XDG_CONFIG_HOME=/app/.config`
 - `XDG_CACHE_HOME=/app/.cache`
 - `XDG_DATA_HOME=/app/.local/share`
+- `XDG_RUNTIME_DIR=/tmp/runtime-napcat`
 - `TZ=Asia/Shanghai`
 
-当前镜像只有 `C/C.utf8/POSIX`，所以第一阶段不强行生成 `zh_CN.UTF-8`，避免需要派生镜像。`C.UTF-8` 只能解决编码和稳定性问题，不能被描述成真实中国桌面环境；若后续要做更完整 locale 拟真，必须走派生镜像，包含 `zh_CN.UTF-8`、字体、时区和桌面相关环境的一致验证。
+派生镜像必须让 `locale -a` 包含 `zh_CN.utf8`，容器内 `locale` 输出与上述环境一致。`C.UTF-8` 只允许作为构建失败时的调试 fallback，不能作为生产 profile 通过条件。
 
 ### 持久目录
 
@@ -464,6 +487,11 @@ profile 自检必须记录：
 - `profile_version`
 - `image_ref`
 - `image_digest`
+- `base_image_digest`
+- `desktop_profile_version`
+- `locale_available`
+- `fontconfig_evidence` JSON
+- `timezone_evidence`
 - `runtime_uid`
 - `runtime_gid`
 - `shm_size`
@@ -589,7 +617,8 @@ profile 自检必须记录：
 Admin 第一阶段只需要只读展示：
 
 - 镜像 ref/digest。
-- UID/GID、shm、locale、XDG，并标注这些属于运行卫生项。
+- 派生镜像 ref/digest、base image digest、desktop profile version。
+- UID/GID、shm、`zh_CN.UTF-8`、中文字体/fontconfig、时区、XDG，并标注这些属于运行卫生项。
 - hostname/MAC/machine-id 是否与 profile 一致。
 - `packetBackend`、`o3HookMode`、OneBot 配置 hash。
 - session behavior profile：冷启动窗口、housekeeping、presence、自动能力阶段。
@@ -613,7 +642,8 @@ Admin 第一阶段只需要只读展示：
 
 ### 本地/单测
 
-- Docker create script 包含 `--init`、`--shm-size`、非 root UID/GID、locale/XDG env、cache/local-share/logs 挂载。
+- Docker create script 包含 `--init`、`--shm-size`、非 root UID/GID、`zh_CN.UTF-8`/XDG env、cache/local-share/logs 挂载。
+- 派生镜像测试覆盖 base digest pin、`locale -a` 包含 `zh_CN.utf8`、`locale` 输出中文环境、`date`/`TZ` 为 `Asia/Shanghai`、`fc-match` 中文字体 fallback、fontconfig cache、DBus/Xvfb/QQ 进程启动链路。
 - 新账号 hostname/MAC 策略不包含 QQ 号、bot、napcat、docker 等词。
 - MAC 策略使用真实物理设备风格 OUI catalog，明确排除 Docker `02:42`、QEMU/KVM `52:54:00`、VMware、Hyper-V 等虚拟化前缀。
 - 现有已风控账号进入受控设备身份迁移，测试覆盖迁移前 evidence、迁移后 evidence、新设备验证链路和单账号回滚。
@@ -629,7 +659,7 @@ Admin 第一阶段只需要只读展示：
 - 容器重建测试明确区分人工更新登录、首次创建、profile 迁移、密码环境清理 rebuild 和 watchdog 自动恢复。
 - 非 root 测试必须验证 entrypoint 原有容器隐藏行为仍存在；若不存在，该 runtime profile 不允许通过。
 - MAC 策略测试明确断言不得使用 QEMU/KVM `52:54:00` 或其他常见虚拟化前缀作为目标设备风格。
-- locale 测试明确标注 `C.UTF-8` 只是编码卫生项，不能作为完整环境拟真通过条件。
+- locale 测试明确断言生产 profile 不允许以 `C.UTF-8` 通过；必须使用 `zh_CN.UTF-8` 派生镜像和中文桌面证据。
 
 ### 线上灰度
 
@@ -640,7 +670,7 @@ Admin 第一阶段只需要只读展示：
 5. 对测试账号灰度 `o3HookMode=0`，记录 NapCat/QQNT 版本、收发结果和掉线情况。
 6. 记录 IP/代理/出口证据，确认 QQ 相关连接变化窗口。
 7. 对测试账号验证真实设备风格 OUI、hostname、machine-id 生成和新设备验证链路。
-8. 再启用 Linux Runtime Profile 卫生项，自检 Docker inspect 与容器内 runtime evidence，重点验证非 root 不破坏 entrypoint 隐藏能力。
+8. 再启用 Chinese Desktop Runtime Profile，自检 Docker inspect 与容器内 runtime evidence，重点验证 `zh_CN.UTF-8`、中文字体/fontconfig、时区、XDG、DBus/Xvfb/QQ 进程环境，以及非 root 不破坏 entrypoint 隐藏能力。
 9. 执行手动命令、图片命令、自动回复、复读机 smoke。
 10. 按账号批次迁移现有风控账号，并逐账号记录迁移 evidence、登录事件和收发结果。
 
@@ -652,7 +682,7 @@ Admin 第一阶段只需要只读展示：
 4. 测试账号灰度 `o3HookMode=0`，同步记录 IP/代理/出口证据。
 5. 对测试账号验证真实设备风格 hostname/MAC/machine-id 和新设备验证链路。
 6. 对现有已风控账号执行受控设备身份批次迁移，逐账号记录和回滚。
-7. 最后启用其他 Linux Runtime Profile 卫生项，先验证非 root、locale 不带来负向效果。
+7. 构建并启用 Chinese Desktop Runtime 派生镜像，先验证 `zh_CN.UTF-8`、字体/fontconfig、时区、XDG、DBus/Xvfb/QQ 进程环境和非 root 不带来负向效果。
 8. 验证登录、收发和行为 evidence 闭环。
 
 ## 参考来源

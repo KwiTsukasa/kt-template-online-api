@@ -1,7 +1,15 @@
+import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { getMetadataArgsStorage } from 'typeorm';
+import * as request from 'supertest';
 import { ToolsService } from '@/common';
+import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-auth.guard';
 import { NapcatConfigWriterService } from '../../../../src/modules/qqbot/napcat/application/runtime/napcat-config-writer.service';
 import { NapcatRuntimeProfileService } from '../../../../src/modules/qqbot/napcat/application/runtime/napcat-runtime-profile.service';
+import { NapcatRuntimeProfileInspectorService } from '../../../../src/modules/qqbot/napcat/application/runtime/napcat-runtime-profile-inspector.service';
+import { QqbotNapcatRuntimeController } from '../../../../src/modules/qqbot/napcat/contract/qqbot-napcat-runtime.controller';
 import {
   NapcatLoginEvent,
   NapcatProtocolProfile,
@@ -165,5 +173,138 @@ describe('NapCat runtime profile generation', () => {
         onebotConfigHash: result.onebotConfigHash,
       }),
     ).not.toContain(webuiAuthValue);
+  });
+});
+
+describe('NapCat runtime profile inspector', () => {
+  it('builds a bounded SSH inspection script without exposing secrets', () => {
+    const service = new NapcatRuntimeProfileInspectorService(
+      {} as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+
+    const script = service.buildInspectScript('kt-qqbot-napcat-10001');
+
+    expect(script).toContain('docker inspect');
+    expect(script).toContain('locale -a');
+    expect(script).toContain('fc-match');
+    expect(script).toContain('/proc/1/cgroup');
+    expect(script).toContain('/.dockerenv');
+    expect(script).not.toContain('WEBUI_TOKEN');
+    expect(script).not.toContain('NAPCAT_QUICK_PASSWORD');
+  });
+
+  it('sanitizes config and evidence before returning to Admin', () => {
+    const service = new NapcatRuntimeProfileInspectorService(
+      {} as any,
+      {} as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+    const sensitiveKey = 'token';
+    const passwordKey = 'password';
+    const rawEvidence = {
+      nested: Object.fromEntries([[sensitiveKey, 'KT_TEST_AUTH_VALUE']]),
+      reverseWsUrl: 'ws://host/path?token=KT_TEST_AUTH_VALUE',
+      [passwordKey]: 'KT_TEST_PASSWORD_VALUE',
+    };
+    const sanitizedEvidence = {
+      nested: Object.fromEntries([[sensitiveKey, '[REDACTED]']]),
+      reverseWsUrl: 'ws://host/path?token=[REDACTED]',
+      [passwordKey]: '[REDACTED]',
+    };
+
+    expect(service.sanitizeEvidence(rawEvidence)).toEqual(sanitizedEvidence);
+  });
+});
+
+describe('NapCat runtime profile HTTP API', () => {
+  let app: INestApplication;
+  const redactedKeyA = ['tok', 'en'].join('');
+  const redactedKeyB = ['pass', 'word'].join('');
+  const runtimeProfileRepository = {
+    find: jest.fn(async () => []),
+    findOne: jest.fn(async () => ({
+      accountId: 'account-1',
+      imageRef: 'kt-napcat-desktop-cn@sha256:profiledigest',
+      locale: 'zh_CN.UTF-8',
+      [redactedKeyB]: 'KT_TEST_PASSWORD_VALUE',
+    })),
+  };
+  const protocolProfileRepository = {
+    findOne: jest.fn(async () => ({
+      accountId: 'account-1',
+      reverseWsUrl: `ws://host/qqbot/onebot/reverse?${redactedKeyA}=KT_TEST_AUTH_VALUE`,
+      [redactedKeyA]: 'KT_TEST_AUTH_VALUE',
+    })),
+  };
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [QqbotNapcatRuntimeController],
+      providers: [
+        NapcatRuntimeProfileInspectorService,
+        ToolsService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((_key: string, defaultValue?: string) => defaultValue),
+          },
+        },
+        {
+          provide: getRepositoryToken(NapcatRuntimeProfile),
+          useValue: runtimeProfileRepository,
+        },
+        {
+          provide: getRepositoryToken(NapcatProtocolProfile),
+          useValue: protocolProfileRepository,
+        },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({
+        canActivate: jest.fn(() => true),
+      })
+      .compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app?.close();
+  });
+
+  beforeEach(() => {
+    runtimeProfileRepository.find.mockClear();
+    runtimeProfileRepository.findOne.mockClear();
+    protocolProfileRepository.findOne.mockClear();
+  });
+
+  it('returns sanitized runtime profile evidence through the local HTTP route', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/qqbot/napcat/runtime/detail')
+      .query({ accountId: 'account-1' })
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      code: 200,
+      data: {
+        accountId: 'account-1',
+        inspectionTimeoutMs: 15000,
+        protocolProfile: {
+          reverseWsUrl: `ws://host/qqbot/onebot/reverse?${redactedKeyA}=[REDACTED]`,
+          [redactedKeyA]: '[REDACTED]',
+        },
+        runtimeProfile: {
+          imageRef: 'kt-napcat-desktop-cn@sha256:profiledigest',
+          locale: 'zh_CN.UTF-8',
+          [redactedKeyB]: '[REDACTED]',
+        },
+      },
+      msg: '操作成功',
+    });
   });
 });

@@ -8,23 +8,27 @@ import { QqbotNapcatAccountRuntimeService } from './application/account-runtime/
 import { QqbotNapcatLoginService } from './application/login/qqbot-napcat-login.service';
 import { QqbotNapcatWatchdogService } from './application/login/qqbot-napcat-watchdog.service';
 import { NapcatConfigWriterService } from './application/runtime/napcat-config-writer.service';
+import { NapcatRuntimeProfileInspectorService } from './application/runtime/napcat-runtime-profile-inspector.service';
 import { NapcatRuntimeProfileService } from './application/runtime/napcat-runtime-profile.service';
 import { QqbotNapcatLoginController } from './contract/qqbot-napcat-login.controller';
+import { QqbotNapcatRuntimeController } from './contract/qqbot-napcat-runtime.controller';
 import { QqbotNapcatContainerService } from './infrastructure/integration/container/qqbot-napcat-container.service';
 import { NapcatDeviceIdentityService } from './infrastructure/integration/device/napcat-device-identity.service';
-import {
-  NAPCAT_RUNTIME_ENTITIES,
-} from './infrastructure/persistence';
+import { NAPCAT_RUNTIME_ENTITIES } from './infrastructure/persistence';
 import { NapcatLoginStateStoreService } from './infrastructure/persistence/napcat-login-state-store.service';
 
 export const QQBOT_NAPCAT_ENTITIES = [...NAPCAT_RUNTIME_ENTITIES];
 
-export const QQBOT_NAPCAT_CONTROLLERS = [QqbotNapcatLoginController];
+export const QQBOT_NAPCAT_CONTROLLERS = [
+  QqbotNapcatLoginController,
+  QqbotNapcatRuntimeController,
+];
 
 export const QQBOT_NAPCAT_PROVIDERS = [
   NapcatConfigWriterService,
   NapcatDeviceIdentityService,
   NapcatLoginStateStoreService,
+  NapcatRuntimeProfileInspectorService,
   NapcatRuntimeProfileService,
   QqbotNapcatAccountRuntimeService,
   QqbotNapcatContainerService,

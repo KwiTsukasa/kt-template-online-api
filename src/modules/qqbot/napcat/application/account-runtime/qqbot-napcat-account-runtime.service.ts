@@ -11,6 +11,7 @@ import type {
   QqbotAccountListItem,
   QqbotNapcatRuntimeStatusSnapshot,
 } from '@/modules/qqbot/core/contract/qqbot.types';
+import { NapcatRuntimeProfileInspectorService } from '../runtime/napcat-runtime-profile-inspector.service';
 import { QqbotNapcatContainerService } from '../../infrastructure/integration/container/qqbot-napcat-container.service';
 import { NapcatAccountBinding } from '../../infrastructure/persistence/napcat-account-binding.entity';
 import { NapcatContainer } from '../../infrastructure/persistence/napcat-container.entity';
@@ -22,11 +23,12 @@ const NAPCAT_AUTO_LOGIN_CLEANUP_FAILED_MESSAGE =
 @Injectable()
 export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRuntimePort {
   /**
-   * 初始化 QqbotNapcatAccountRuntimeService 实例。
-   * @param accountNapcatRepository - 账号仓库依赖；影响 constructor 的返回值。
-   * @param napcatContainerRepository - NapCat仓库依赖；影响 constructor 的返回值。
-   * @param napcatContainerService - napcatContainerService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
+   * Creates the account-list runtime adapter that joins persisted bindings, container status, and optional profile summaries.
+   * @param accountNapcatRepository - Binding repository used to pick the primary NapCat container for each QQBot account.
+   * @param napcatContainerRepository - Container repository used for cached Docker/WebUI status and non-secret metadata.
+   * @param napcatContainerService - Runtime integration service for bounded NapCat/WebUI status probes and auto-login.
+   * @param toolsService - Shared helpers for status text normalization and NapCat offline-message classification.
+   * @param runtimeProfileInspector - Optional profile reader that enriches list rows without changing login state.
    */
   constructor(
     @InjectRepository(NapcatAccountBinding)
@@ -35,6 +37,7 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
     private readonly napcatContainerRepository: Repository<NapcatContainer>,
     private readonly napcatContainerService: QqbotNapcatContainerService,
     private readonly toolsService: ToolsService,
+    private readonly runtimeProfileInspector?: NapcatRuntimeProfileInspectorService,
   ) {}
 
   /**
@@ -82,6 +85,10 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
         containerMap.set(container.id, container);
       }
     }
+    const runtimeProfileSummaryMap =
+      (await this.runtimeProfileInspector?.getAccountRuntimeSummaryMap(
+        accountIds,
+      )) || new Map();
 
     return Promise.all(
       accounts.map(async (account) => {
@@ -113,6 +120,7 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
             oneBotOnline: account.connectStatus === 'online',
             qqLoginMessage: runtimeStatus?.qqLoginMessage,
             qqLoginStatus: runtimeStatus?.qqLoginStatus,
+            ...runtimeProfileSummaryMap.get(account.id),
             webuiOnline: runtimeStatus?.webuiOnline,
             webuiPort: container?.webuiPort,
           },

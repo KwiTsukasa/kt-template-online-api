@@ -102,6 +102,16 @@ export type QqbotAccountNapcatRuntimeInfo = {
   containerName?: string;
   containerOnline?: boolean;
   containerStatus?: QqbotNapcatContainerStatus;
+  profileStatus?: 'drift' | 'failed' | 'ok' | 'unknown';
+  recoveryState?: 'idle' | 'password' | 'quick' | 'suspended';
+  riskMode?: 'cooldown' | 'manual_only' | 'normal';
+  runtimeProfile?: {
+    desktopProfileVersion?: string;
+    imageDigest?: string;
+    imageRef?: string;
+    locale?: string;
+    shmSize?: string;
+  };
   lastCheckedAt?: Date | null;
   lastError?: null | string;
   lastLoginAt?: Date | null;

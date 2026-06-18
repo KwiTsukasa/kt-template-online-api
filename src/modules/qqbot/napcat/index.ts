@@ -1,6 +1,8 @@
 export * from './qqbot-napcat.module';
 export * from './contract/qqbot-napcat-login.controller';
 export * from './contract/qqbot-napcat-login.dto';
+export * from './contract/qqbot-napcat-runtime.controller';
+export * from './contract/qqbot-napcat-runtime.dto';
 export * from './infrastructure/persistence/napcat-account-binding.entity';
 export * from './infrastructure/persistence/napcat-container.entity';
 export * from './infrastructure/persistence/napcat-device-identity.entity';
@@ -13,5 +15,6 @@ export * from './infrastructure/integration/napcat-login-api.client';
 export * from './domain/login/napcat-login-state-machine';
 export * from './application/login/qqbot-napcat-login.service';
 export * from './application/login/qqbot-napcat-watchdog.service';
+export * from './application/runtime/napcat-runtime-profile-inspector.service';
 export * from './infrastructure/persistence';
 export * from './infrastructure/integration/container/qqbot-napcat-container.service';

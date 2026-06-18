@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { getEnvironmentDashboardActions } from './environment-dashboard-action.catalog';
 import {
   countSignals,
@@ -6,36 +6,87 @@ import {
   pickWorstHealthStatus,
 } from './environment-dashboard-status.mapper';
 import { EnvironmentEventMaterializer } from './environment-event.materializer';
-import { unwiredEvidence } from '../infrastructure/environment-dashboard-evidence.mapper';
+import { EnvironmentDashboardCacheService } from '../infrastructure/environment-dashboard-cache.service';
+import { EnvironmentDashboardConfigService } from '../infrastructure/environment-dashboard-config.service';
+import {
+  errorEvidence,
+  unwiredEvidence,
+} from '../infrastructure/environment-dashboard-evidence.mapper';
+import { LocalDevSignalCollector } from '../infrastructure/collectors/local-dev-signal.collector';
+import { NasProdSignalCollector } from '../infrastructure/collectors/nas-prod-signal.collector';
+import { CaddyReadonlyAdapter } from '../infrastructure/adapters/caddy-readonly.adapter';
+import { MihomoReadonlyAdapter } from '../infrastructure/adapters/mihomo-readonly.adapter';
+import { TencentCloudReadonlyAdapter } from '../infrastructure/adapters/tencent-cloud-readonly.adapter';
+import { WireguardReadonlyAdapter } from '../infrastructure/adapters/wireguard-readonly.adapter';
 import type {
   EnvironmentDashboardResponse,
-  EnvironmentHealthStatus,
   EnvironmentNode,
   EnvironmentService,
+  EnvironmentSignal,
   EnvironmentSite,
   EnvironmentTopology,
 } from '../domain/environment-dashboard.types';
+
+export interface EnvironmentDashboardSnapshotOptions {
+  forceRefresh?: boolean;
+}
 
 @Injectable()
 export class EnvironmentDashboardService {
   /**
    * Initializes the dashboard snapshot service.
    * @param eventMaterializer - Recent-event materializer fed by local/MQTT event sources.
+   * @param cache - Short-lived dashboard cache invalidated by fresh backend events.
+   * @param localDevCollector - Collector for local development API/Admin state.
+   * @param nasProdCollector - Collector for NAS production internal service state.
+   * @param tencentAdapter - Tencent Cloud readonly adapter for CVM evidence.
+   * @param caddyAdapter - Caddy readonly adapter for public route evidence.
+   * @param wireguardAdapter - WireGuard readonly adapter for Tencent/r4se reachability.
+   * @param mihomoAdapter - Mihomo/OpenClash readonly adapter for r4se evidence.
+   * @param config - Dashboard config reader used for explicit missing-key evidence.
    */
   constructor(
+    @Optional()
     private readonly eventMaterializer: EnvironmentEventMaterializer,
+    @Optional()
+    private readonly cache: EnvironmentDashboardCacheService = new EnvironmentDashboardCacheService(),
+    @Optional()
+    private readonly localDevCollector: LocalDevSignalCollector = new LocalDevSignalCollector(),
+    @Optional()
+    private readonly nasProdCollector: NasProdSignalCollector = new NasProdSignalCollector(),
+    @Optional()
+    private readonly tencentAdapter?: TencentCloudReadonlyAdapter,
+    @Optional()
+    private readonly caddyAdapter?: CaddyReadonlyAdapter,
+    @Optional()
+    private readonly wireguardAdapter?: WireguardReadonlyAdapter,
+    @Optional()
+    private readonly mihomoAdapter?: MihomoReadonlyAdapter,
+    @Optional()
+    private readonly config: EnvironmentDashboardConfigService = new EnvironmentDashboardConfigService(),
   ) {}
 
   /**
    * Builds the current environment dashboard snapshot for Admin.
+   * @param options - Snapshot control from Admin refresh/self-check; self-check sets `forceRefresh`.
    * @returns Aggregate status tree, topology, readonly actions, and recent events.
    */
-  async getDashboard(): Promise<EnvironmentDashboardResponse> {
+  async getDashboard(
+    options: EnvironmentDashboardSnapshotOptions = {},
+  ): Promise<EnvironmentDashboardResponse> {
+    return this.cache.getOrCreate(() => this.buildDashboard(), options);
+  }
+
+  /**
+   * Runs all readonly collectors and assembles the dashboard response.
+   * @returns Fresh dashboard snapshot before cache decoration.
+   */
+  private async buildDashboard(): Promise<EnvironmentDashboardResponse> {
     const generatedAt = new Date().toISOString();
-    const sites = this.createSites(generatedAt);
+    const sites = await this.createSites(generatedAt);
     return {
       actions: getEnvironmentDashboardActions(),
-      events: this.eventMaterializer.getRecentEvents(),
+      events: this.eventMaterializer?.getRecentEvents?.() || [],
       generatedAt,
       refreshedAt: generatedAt,
       sites,
@@ -49,103 +100,165 @@ export class EnvironmentDashboardService {
    * @param observedAt - Snapshot timestamp shared by generated signals.
    * @returns Four configured dashboard sites.
    */
-  private createSites(observedAt: string): EnvironmentSite[] {
+  private async createSites(observedAt: string): Promise<EnvironmentSite[]> {
     return [
-      {
-        id: 'local-dev',
-        label: 'Local Dev',
-        nodes: [
-          this.createNode('local-dev-api', 'Local API', [
-            this.createService('local-api', 'API Runtime', [
-              {
-                evidence: [
-                  {
-                    observedAt,
-                    source: 'runtime',
-                    sourceKind: 'live',
-                    summary: 'NestJS process answered dashboard request',
-                  },
-                ],
-                id: 'local-api-process',
-                label: 'API Process',
-                observedAt,
-                sourceKind: 'live',
-                status: 'ok',
-                summary: 'API process is reachable',
-              },
-            ]),
-          ]),
-        ],
-        status: 'online',
-        summary: 'Local development runtime snapshot',
-      },
-      this.createSiteWithUnwiredSignals('nas-prod', 'NAS Production', [
-        ['jenkins-build', 'Jenkins Build', ['ENV_DASHBOARD_JENKINS_URL']],
-        ['k8s-deployment', 'K8s Deployment', ['ENV_DASHBOARD_K8S_API_SERVER']],
-        ['qqbot-runtime', 'QQBot/NapCat', []],
-        ['plugin-tasks', 'Plugin Tasks', []],
-      ]),
-      this.createSiteWithUnwiredSignals('tencent-cloud', 'Tencent Cloud', [
-        ['tencent-cvm', 'Tencent CVM', ['ENV_DASHBOARD_TENCENT_SECRET_ID']],
-        [
-          'caddy-public',
-          'Caddy Public Route',
-          ['ENV_DASHBOARD_CADDY_PUBLIC_URL'],
-        ],
-        [
-          'tencent-wireguard',
-          'WireGuard',
-          ['ENV_DASHBOARD_TENCENT_WIREGUARD_HEALTH_URL'],
-        ],
-      ]),
-      this.createSiteWithUnwiredSignals('r4se', 'r4se', [
-        [
-          'r4se-wireguard',
-          'WireGuard',
-          ['ENV_DASHBOARD_R4SE_WIREGUARD_HEALTH_URL'],
-        ],
-        ['r4se-mihomo', 'Mihomo/OpenClash', ['ENV_DASHBOARD_R4SE_MIHOMO_URL']],
-      ]),
+      await this.localDevCollector.collect({ observedAt }),
+      await this.nasProdCollector.collect({ observedAt }),
+      await this.createTencentCloudSite(),
+      await this.createR4seSite(),
     ];
   }
 
   /**
-   * Creates a remote site whose first version starts from explicit unwired evidence.
-   * @param id - Stable site id used by Admin selection and SSE events.
-   * @param label - Human-readable site label.
-   * @param signals - Signal id, label, and missing configuration keys.
-   * @returns Site object with service-level status derived from child signals.
+   * Creates Tencent Cloud site from CVM, Caddy, and WireGuard readonly evidence.
+   * @returns Tencent Cloud site with missing configuration surfaced as unwired signals.
    */
-  private createSiteWithUnwiredSignals(
-    id: string,
-    label: string,
-    signals: Array<[string, string, string[]]>,
-  ): EnvironmentSite {
-    const node = this.createNode(
-      `${id}-node`,
-      label,
-      signals.map(([signalId, signalLabel, missingKeys]) =>
-        this.createService(signalId, signalLabel, [
-          {
-            evidence: [unwiredEvidence(signalLabel, missingKeys)],
-            id: signalId,
-            label: signalLabel,
-            sourceKind: missingKeys.length > 0 ? 'unwired' : 'derived',
-            status: missingKeys.length > 0 ? 'unwired' : 'unknown',
-            summary:
-              missingKeys.length > 0
-                ? '只读观测配置未接入'
-                : '等待运行态事件或专项适配器接入',
-          },
-        ]),
+  private async createTencentCloudSite(): Promise<EnvironmentSite> {
+    const services = [
+      await this.createRemoteAdapterService(
+        'tencent-cvm',
+        'Tencent Cloud CVM',
+        'tencent-cvm',
+        'Tencent Cloud CVM',
+        [
+          'ENV_DASHBOARD_TENCENT_SECRET_ID',
+          'ENV_DASHBOARD_TENCENT_SECRET_KEY',
+          'ENV_DASHBOARD_TENCENT_REGION',
+          'ENV_DASHBOARD_TENCENT_INSTANCE_ID',
+        ],
+        this.tencentAdapter,
       ),
+      await this.createRemoteAdapterService(
+        'caddy-public',
+        'Caddy Public Route',
+        'caddy-public',
+        'Caddy Public Route',
+        ['ENV_DASHBOARD_CADDY_PUBLIC_URL'],
+        this.caddyAdapter,
+      ),
+      await this.createRemoteAdapterService(
+        'tencent-wireguard',
+        'WireGuard',
+        'tencent-wireguard',
+        'Tencent WireGuard',
+        ['ENV_DASHBOARD_TENCENT_WIREGUARD_HEALTH_URL'],
+        this.wireguardAdapter,
+      ),
+    ];
+    return this.createSiteFromServices(
+      'tencent-cloud',
+      'Tencent Cloud',
+      'Tencent Cloud Node',
+      services,
     );
+  }
+
+  /**
+   * Creates r4se site from WireGuard and Mihomo/OpenClash readonly evidence.
+   * @returns r4se site with missing configuration surfaced as unwired signals.
+   */
+  private async createR4seSite(): Promise<EnvironmentSite> {
+    const services = [
+      await this.createRemoteAdapterService(
+        'r4se-wireguard',
+        'WireGuard',
+        'r4se-wireguard',
+        'r4se WireGuard',
+        ['ENV_DASHBOARD_R4SE_WIREGUARD_HEALTH_URL'],
+        this.wireguardAdapter,
+      ),
+      await this.createRemoteAdapterService(
+        'r4se-mihomo',
+        'Mihomo/OpenClash',
+        'r4se-mihomo',
+        'Mihomo/OpenClash',
+        ['ENV_DASHBOARD_R4SE_MIHOMO_URL', 'ENV_DASHBOARD_R4SE_MIHOMO_SECRET'],
+        this.mihomoAdapter,
+      ),
+    ];
+    return this.createSiteFromServices('r4se', 'r4se', 'r4se Node', services);
+  }
+
+  /**
+   * Creates one remote service from an adapter or explicit missing configuration.
+   * @param serviceId - Stable service id used by topology.
+   * @param serviceLabel - Operator-facing service label.
+   * @param signalId - Stable signal id used by Admin selection.
+   * @param signalLabel - Operator-facing signal label.
+   * @param requiredKeys - Public env keys required before adapter output can be trusted.
+   * @param adapter - Optional readonly adapter implementation.
+   * @returns Remote service with one normalized signal.
+   */
+  private async createRemoteAdapterService(
+    serviceId: string,
+    serviceLabel: string,
+    signalId: string,
+    signalLabel: string,
+    requiredKeys: string[],
+    adapter?: { inspect(): Promise<Partial<EnvironmentSignal>> },
+  ): Promise<EnvironmentService> {
+    const missing = this.config.missing(requiredKeys);
+    if (missing.length > 0 || !adapter) {
+      return this.createService(serviceId, serviceLabel, [
+        {
+          evidence: [unwiredEvidence(signalLabel, missing)],
+          id: signalId,
+          label: signalLabel,
+          sourceKind: 'unwired',
+          status: 'unwired',
+          summary: '只读观测配置未接入',
+        },
+      ]);
+    }
+
+    try {
+      const signal = await adapter.inspect();
+      return this.createService(serviceId, serviceLabel, [
+        {
+          evidence: signal.evidence || [],
+          id: signal.id || signalId,
+          label: signal.label || signalLabel,
+          observedAt: signal.observedAt,
+          sourceKind: signal.sourceKind || 'live',
+          status: signal.status || 'unknown',
+          summary: signal.summary || '只读观测已返回信号',
+        },
+      ]);
+    } catch (error) {
+      return this.createService(serviceId, serviceLabel, [
+        {
+          evidence: [errorEvidence(signalLabel, error)],
+          id: signalId,
+          label: signalLabel,
+          sourceKind: 'derived',
+          status: 'down',
+          summary: '只读观测失败',
+        },
+      ]);
+    }
+  }
+
+  /**
+   * Creates a site wrapper around a single environment node.
+   * @param siteId - Stable site id used by Admin selection and SSE events.
+   * @param siteLabel - Operator-facing site label.
+   * @param nodeLabel - Operator-facing node label.
+   * @param services - Services collected for the site.
+   * @returns Site object with status derived from child services.
+   */
+  private createSiteFromServices(
+    siteId: string,
+    siteLabel: string,
+    nodeLabel: string,
+    services: EnvironmentService[],
+  ): EnvironmentSite {
+    const node = this.createNode(`${siteId}-node`, nodeLabel, services);
     return {
-      id,
-      label,
+      id: siteId,
+      label: siteLabel,
       nodes: [node],
-      status: mapSiteStatus(this.collectNodeStatuses([node])),
-      summary: `${label} readonly evidence snapshot`,
+      status: mapSiteStatus(services.map((service) => service.status)),
+      summary: `${siteLabel} readonly evidence snapshot`,
     };
   }
 
@@ -188,19 +301,6 @@ export class EnvironmentDashboardService {
       status: pickWorstHealthStatus(signals.map((signal) => signal.status)),
       summary: signals.map((signal) => signal.summary).join('；'),
     };
-  }
-
-  /**
-   * Aggregates node statuses from nested service status.
-   * @param nodes - Nodes belonging to a site.
-   * @returns Flat list of service health statuses.
-   */
-  private collectNodeStatuses(
-    nodes: EnvironmentNode[],
-  ): EnvironmentHealthStatus[] {
-    return nodes.flatMap((node) =>
-      node.services.map((service) => service.status),
-    );
   }
 
   /**

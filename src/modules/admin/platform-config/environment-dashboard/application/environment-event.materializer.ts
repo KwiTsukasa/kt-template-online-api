@@ -1,5 +1,6 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { Subject } from 'rxjs';
+import { EnvironmentDashboardCacheService } from '../infrastructure/environment-dashboard-cache.service';
 import type {
   EnvironmentEvent,
   EnvironmentEventEnvelope,
@@ -21,6 +22,7 @@ export class EnvironmentEventMaterializer {
    */
   constructor(
     @Optional()
+    @Inject(EnvironmentDashboardCacheService)
     private readonly cache?: EnvironmentDashboardCacheInvalidator,
     @Optional()
     private readonly maxRecentEvents = 200,

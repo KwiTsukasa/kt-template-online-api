@@ -2,7 +2,7 @@ import { EnvironmentDashboardService } from '../../../../src/modules/admin/platf
 import { EnvironmentEventMaterializer } from '../../../../src/modules/admin/platform-config/environment-dashboard/application/environment-event.materializer';
 
 describe('EnvironmentDashboardService', () => {
-  it('returns four sites with explicit unwired remote evidence', async () => {
+  it('returns four sites with explicit unwired remote evidence and full NAS topology', async () => {
     const service = new EnvironmentDashboardService(
       new EnvironmentEventMaterializer(),
     );
@@ -16,6 +16,25 @@ describe('EnvironmentDashboardService', () => {
       'r4se',
     ]);
     expect(dashboard.summary.totalSignals).toBeGreaterThan(0);
+    expect(dashboard.topology.nodes.map((node) => node.id)).toEqual(
+      expect.arrayContaining([
+        'local-dev',
+        'nas-prod',
+        'tencent-cloud',
+        'r4se',
+        'nas-api',
+        'nas-admin',
+        'mysql',
+        'redis',
+        'loki',
+        'minio',
+        'wordpress',
+        'qqbot-core',
+        'napcat-runtime',
+        'plugin-platform',
+        'plugin-tasks',
+      ]),
+    );
     expect(
       dashboard.sites
         .flatMap((site) => site.nodes)

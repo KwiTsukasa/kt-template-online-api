@@ -30,6 +30,6 @@ export class EnvironmentDashboardSelfCheckService {
       summary: '环境总览只读自检已触发',
       topic: 'kt/env/local-dev/self-check/result',
     });
-    return this.dashboardService.getDashboard();
+    return this.dashboardService.getDashboard({ forceRefresh: true });
   }
 }

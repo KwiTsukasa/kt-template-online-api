@@ -43,6 +43,7 @@ import { QQBOT_PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.serv
     QQBOT_PLUGIN_EXECUTION_PORT,
     QqbotPluginHttpClientService,
     QqbotPluginPlatformService,
+    QqbotPluginTaskService,
   ],
   imports: [
     ConfigModule,

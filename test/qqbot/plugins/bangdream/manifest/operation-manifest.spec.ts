@@ -57,8 +57,13 @@ describe('BangDream operation manifest', () => {
       manifest.operations.map((operation) => [operation.key, operation]),
     );
 
-    expect(byKey.get('bangdream.song.meta')?.timeoutMs).toBeGreaterThanOrEqual(
-      120000,
-    );
+    const heavyweightOperationKeys = [
+      'bangdream.song.meta',
+      'bangdream.card.search',
+    ];
+
+    for (const operationKey of heavyweightOperationKeys) {
+      expect(byKey.get(operationKey)?.timeoutMs).toBeGreaterThanOrEqual(120000);
+    }
   });
 });

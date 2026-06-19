@@ -4,7 +4,8 @@ import {
   isAllowedBilibiliUrl,
 } from './bilibili-url-parser';
 
-const URL_PATTERN = /https?:\/\/[^\s<>"',;:!，。！？；、\]\)}]+/giu;
+const URL_PATTERN = /https?:\/\/[^\s<>"',:!，。！？；、\]\)}]+/giu;
+const HTML_ENTITY_BEFORE_SEMICOLON = /&(?:amp|quot|lt|gt|#34|#60|#62)$/iu;
 const MAX_DEPTH = 7;
 const MAX_NODES = 200;
 const MAX_STRINGS = 200;
@@ -31,7 +32,9 @@ export function extractBilibiliUrls(input: BilibiliUrlExtractionInput) {
 
   for (const text of candidates) {
     for (const rawUrl of text.match(URL_PATTERN) || []) {
-      const cleaned = cleanBilibiliUrlCandidate(rawUrl);
+      const cleaned = cleanBilibiliUrlCandidate(
+        trimNonEntitySemicolonTail(rawUrl),
+      );
       if (!isAllowedBilibiliUrl(cleaned) || seen.has(cleaned)) continue;
       seen.add(cleaned);
       output.push(cleaned);
@@ -40,6 +43,20 @@ export function extractBilibiliUrls(input: BilibiliUrlExtractionInput) {
   }
 
   return output;
+}
+
+/**
+ * Removes semicolon-delimited CQ tail text while keeping common HTML entities intact.
+ * @param rawUrl - Raw URL token collected by the extractor regex.
+ * @returns URL token that can still be decoded by `cleanBilibiliUrlCandidate`.
+ */
+function trimNonEntitySemicolonTail(rawUrl: string) {
+  for (let index = 0; index < rawUrl.length; index += 1) {
+    if (rawUrl[index] !== ';') continue;
+    if (HTML_ENTITY_BEFORE_SEMICOLON.test(rawUrl.slice(0, index))) continue;
+    return rawUrl.slice(0, index);
+  }
+  return rawUrl;
 }
 
 /**

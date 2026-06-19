@@ -135,4 +135,36 @@ describe('Bilibili URL extractor', () => {
       }),
     ).toEqual(['https://b23.tv/abc123']);
   });
+
+  it('keeps html entity wrappers intact until URL cleanup runs', () => {
+    expect(
+      extractBilibiliUrls({
+        messageText: '',
+        rawEvent: {
+          message: [
+            {
+              data: {
+                data: '&lt;【https://www.bilibili.com/video/BV1xx411c7mD】&gt;',
+              },
+              type: 'xml',
+            },
+          ],
+        },
+        rawMessage: '',
+      }),
+    ).toEqual(['https://www.bilibili.com/video/BV1xx411c7mD']);
+  });
+
+  it('preserves ampersand query entities while removing CQ separators', () => {
+    expect(
+      extractBilibiliUrls({
+        messageText:
+          '[CQ:share,url=https://www.bilibili.com/video/BV1xx411c7mD?foo=1&amp;bar=2,title=视频]',
+        rawEvent: {},
+        rawMessage: '',
+      }),
+    ).toEqual([
+      'https://www.bilibili.com/video/BV1xx411c7mD?foo=1&bar=2',
+    ]);
+  });
 });

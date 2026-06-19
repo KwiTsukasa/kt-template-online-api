@@ -2,10 +2,10 @@ import type { BilibiliVideoReference } from './bilibili-card.types';
 
 const BILIBILI_HOST = 'bilibili.com';
 const B23_HOST = 'b23.tv';
-const TRAILING_WRAPPERS = /[\s"'<>，。！？、；：）)\]}]+$/u;
-const LEADING_WRAPPERS = /^[\s"'<>（([{]+/u;
-const BVID_PATTERN = /(?:^|\/)(BV[0-9A-Za-z]{10,})/;
-const AID_PATTERN = /(?:^|\/)(?:av|AV)(\d+)(?:$|[/?#])/;
+const TRAILING_WRAPPERS = /[\s"'<>，。！？、；：）)\]}】]+$/u;
+const LEADING_WRAPPERS = /^[\s"'<>（([{【]+/u;
+const BVID_PATTERN = /^BV[0-9A-Za-z]{10}$/;
+const AID_PATTERN = /^(?:av|AV)(\d+)$/;
 
 /**
  * Removes QQ card wrappers and punctuation that often stick to copied URLs.
@@ -17,6 +17,10 @@ export function cleanBilibiliUrlCandidate(candidate: string) {
     .replaceAll('&amp;', '&')
     .replaceAll('&quot;', '"')
     .replaceAll('&#34;', '"')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&#60;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&#62;', '>')
     .replace(LEADING_WRAPPERS, '')
     .replace(TRAILING_WRAPPERS, '')
     .trim();
@@ -54,18 +58,23 @@ export function parseBilibiliVideoReference(
   if (!isAllowedBilibiliUrl(cleaned)) return null;
 
   const url = new URL(cleaned);
-  const probe = `${url.pathname}${url.search}${url.hash}`;
-  const bvid = probe.match(BVID_PATTERN)?.[1];
-  if (bvid) {
+  const pathSegments = url.pathname.split('/').filter(Boolean);
+  const videoSegmentIndex = pathSegments.findIndex(
+    (segment) => segment.toLowerCase() === 'video',
+  );
+  if (videoSegmentIndex < 0) return null;
+
+  const videoIdSegment = pathSegments[videoSegmentIndex + 1];
+  if (videoIdSegment && BVID_PATTERN.test(videoIdSegment)) {
     return {
-      canonicalVideoId: bvid,
+      canonicalVideoId: videoIdSegment,
       kind: 'bvid',
       sourceUrl: cleaned,
-      value: bvid,
+      value: videoIdSegment,
     };
   }
 
-  const aid = `${url.pathname}/`.match(AID_PATTERN)?.[1];
+  const aid = videoIdSegment?.match(AID_PATTERN)?.[1];
   if (aid) {
     return {
       canonicalVideoId: `av${aid}`,

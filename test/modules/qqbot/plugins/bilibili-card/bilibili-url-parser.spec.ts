@@ -44,4 +44,33 @@ describe('Bilibili URL parser', () => {
       ),
     ).toBe('https://www.bilibili.com/video/BV1xx411c7mD?p=1');
   });
+
+  it('does not parse video ids from query or hash on non-video Bilibili pages', () => {
+    expect(
+      parseBilibiliVideoReference(
+        'https://space.bilibili.com/1?from=/video/BV1xx411c7mD',
+      ),
+    ).toBeNull();
+    expect(
+      parseBilibiliVideoReference(
+        'https://www.bilibili.com/search?keyword=BV1xx411c7mD',
+      ),
+    ).toBeNull();
+  });
+
+  it('rejects malformed BV path segments with extra characters', () => {
+    expect(
+      parseBilibiliVideoReference(
+        'https://www.bilibili.com/video/BV1xx411c7mDextra',
+      ),
+    ).toBeNull();
+  });
+
+  it('cleans xml html entities and full-width brackets', () => {
+    expect(
+      cleanBilibiliUrlCandidate(
+        '&lt;【https://www.bilibili.com/video/BV1xx411c7mD】&gt;',
+      ),
+    ).toBe('https://www.bilibili.com/video/BV1xx411c7mD');
+  });
 });

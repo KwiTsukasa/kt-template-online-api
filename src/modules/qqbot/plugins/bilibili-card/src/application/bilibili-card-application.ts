@@ -11,10 +11,6 @@ import { parseBilibiliVideoReference } from '../domain/bilibili-url-parser';
 import { BilibiliVideoClient } from '../infrastructure/integration/bilibili-video-client';
 
 export class BilibiliCardApplication {
-  private readonly boundCache = new Map<
-    string,
-    { expiresAt: number; value: boolean }
-  >();
   private readonly dedupe = new Map<string, { expiresAt: number }>();
   private readonly videoClient: BilibiliVideoClient;
 
@@ -117,20 +113,10 @@ export class BilibiliCardApplication {
     const normalizedSelfId = `${selfId || ''}`.trim();
     if (!normalizedSelfId) return false;
 
-    const current = this.now();
-    const cached = this.boundCache.get(normalizedSelfId);
-    if (cached && cached.expiresAt > current) return cached.value;
-
-    const config = readBilibiliCardRuntimeConfig(this.host);
     try {
-      const value = (
+      return (
         await this.host.getBoundEventPluginKeys(normalizedSelfId)
       ).includes(this.manifest.pluginKey);
-      this.boundCache.set(normalizedSelfId, {
-        expiresAt: current + Math.min(config.dedupeTtlMs, 60000),
-        value,
-      });
-      return value;
     } catch (error) {
       this.warn(`Bilibili 事件绑定查询失败: ${normalizeError(error)}`);
       return false;

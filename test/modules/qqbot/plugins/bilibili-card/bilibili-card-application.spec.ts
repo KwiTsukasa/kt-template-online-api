@@ -150,6 +150,33 @@ describe('Bilibili card application', () => {
     expect(host.sendText).toHaveBeenCalledTimes(1);
   });
 
+  it('rechecks binding after an unbound message so newly bound accounts work immediately', async () => {
+    let current = 1000;
+    const host = createHost({
+      getBoundEventPluginKeys: jest
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(['bilibili-card']),
+      requestJson: jest.fn().mockResolvedValue(createBilibiliViewResponse()),
+    });
+    const application = new BilibiliCardApplication(
+      host,
+      createManifest(),
+      () => current,
+    );
+    const message = createMessage({
+      messageText: 'https://www.bilibili.com/video/BV1xx411c7mD',
+    });
+
+    await expect(application.handleMessage(message)).resolves.toBe(false);
+    current += 1000;
+    await expect(application.handleMessage(message)).resolves.toBe(true);
+
+    expect(host.getBoundEventPluginKeys).toHaveBeenCalledTimes(2);
+    expect(host.requestJson).toHaveBeenCalledTimes(1);
+    expect(host.sendText).toHaveBeenCalledTimes(1);
+  });
+
   it('routes generic worker message events to package handler', async () => {
     const host = createHost({
       getBoundEventPluginKeys: jest.fn().mockResolvedValue(['bilibili-card']),

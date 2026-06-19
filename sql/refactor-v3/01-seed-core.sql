@@ -272,18 +272,68 @@ INSERT INTO qqbot_plugin_version (
   1000000000000001105,
   1000000000000000105,
   '1.0.0',
-  'builtin-bilibili-card-1.0.0',
+  'bilibili-card:1.0.0',
   JSON_OBJECT(
-    'key', 'bilibili-card',
+    'pluginKey', 'bilibili-card',
     'name', 'Bilibili Card',
     'version', '1.0.0',
+    'minApiSdkVersion', '1.0.0',
+    'description', '解析 QQ 中的 Bilibili 视频链接卡片并回复视频摘要。',
+    'author', 'KT',
     'entry', 'src/index.ts',
+    'permissions', JSON_ARRAY(
+      'qqbot.event.receive',
+      'qqbot.send',
+      'runtime.http',
+      'plugin.config.read'
+    ),
+    'runtime', JSON_OBJECT(
+      'workerType', 'thread',
+      'timeoutMs', 10000,
+      'memoryMb', 128,
+      'maxConcurrency', 1,
+      'configKeys', JSON_ARRAY(
+        'QQBOT_BILIBILI_CARD_HTTP_TIMEOUT_MS',
+        'QQBOT_BILIBILI_CARD_MAX_REDIRECTS',
+        'QQBOT_BILIBILI_CARD_DEDUPE_TTL_MS',
+        'QQBOT_BILIBILI_CARD_DESC_MAX_LENGTH'
+      )
+    ),
+    'configSchema', JSON_OBJECT(
+      'type', 'object',
+      'properties', JSON_OBJECT(
+        'QQBOT_BILIBILI_CARD_HTTP_TIMEOUT_MS', JSON_OBJECT(
+          'type', 'number',
+          'title', 'HTTP 超时毫秒',
+          'default', 6000
+        ),
+        'QQBOT_BILIBILI_CARD_MAX_REDIRECTS', JSON_OBJECT(
+          'type', 'number',
+          'title', '短链最大跳转次数',
+          'default', 5
+        ),
+        'QQBOT_BILIBILI_CARD_DEDUPE_TTL_MS', JSON_OBJECT(
+          'type', 'number',
+          'title', '同视频去重毫秒',
+          'default', 600000
+        ),
+        'QQBOT_BILIBILI_CARD_DESC_MAX_LENGTH', JSON_OBJECT(
+          'type', 'number',
+          'title', '简介最大长度',
+          'default', 80
+        )
+      )
+    ),
+    'operations', JSON_ARRAY(),
     'events', JSON_ARRAY(JSON_OBJECT(
       'key', 'bilibili-card.message',
       'eventName', 'message',
       'handlerName', 'handleMessage',
-      'name', 'Bilibili 卡片解析'
-    ))
+      'name', 'Bilibili 卡片解析',
+      'description', '解析 QQ 中的 Bilibili 视频链接卡片并回复视频摘要。'
+    )),
+    'assets', JSON_ARRAY(),
+    'migrations', JSON_ARRAY()
   )
 ) ON DUPLICATE KEY UPDATE
   package_hash = VALUES(package_hash),
@@ -300,10 +350,11 @@ INSERT INTO qqbot_plugin_installation (
   1000000000000001205,
   1000000000000000105,
   1000000000000001105,
-  'installed',
-  'idle',
+  'enabled',
+  'stopped',
   'src/modules/qqbot/plugins/bilibili-card'
 ) ON DUPLICATE KEY UPDATE
+  version_id = VALUES(version_id),
   status = VALUES(status),
   runtime_status = VALUES(runtime_status),
   installed_path = VALUES(installed_path);

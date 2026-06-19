@@ -95,9 +95,32 @@ describe('QQBot existing plugin platform migration', () => {
       join(repoRoot, 'sql/refactor-v3/01-seed-core.sql'),
       'utf8',
     );
+    const refactorVerifySql = readFileSync(
+      join(repoRoot, 'sql/refactor-v3/99-verify.sql'),
+      'utf8',
+    );
 
     expect(refactorSeedSql).toContain(`'bilibili-card'`);
     expect(refactorSeedSql).toContain(`'bilibili-card.message'`);
+    expect(refactorSeedSql).toContain(`'pluginKey', 'bilibili-card'`);
+    expect(refactorSeedSql).toContain(`'runtime', JSON_OBJECT(`);
+    expect(refactorSeedSql).toContain(`'permissions', JSON_ARRAY(`);
+    expect(refactorSeedSql).toContain(`'configSchema', JSON_OBJECT(`);
+    expect(refactorSeedSql).toContain(`'bilibili-card:1.0.0'`);
+    expect(refactorSeedSql).toContain(`'enabled',`);
+    expect(refactorSeedSql).toContain(`'stopped',`);
+    expect(refactorSeedSql).toContain(
+      `version_id = VALUES(version_id),`,
+    );
+    expect(refactorVerifySql).toContain(
+      `'seed_qqbot_plugin_version_bilibili_card'`,
+    );
+    expect(refactorVerifySql).toContain(
+      `'seed_qqbot_plugin_installation_bilibili_card'`,
+    );
+    expect(refactorVerifySql).toContain(
+      `JOIN qqbot_plugin p ON p.id = h.plugin_id`,
+    );
   });
 
   it('keeps BangDream manifest operations as the single metadata source', () => {

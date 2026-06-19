@@ -59,12 +59,19 @@ export function parseBilibiliVideoReference(
 
   const url = new URL(cleaned);
   const pathSegments = url.pathname.split('/').filter(Boolean);
-  const videoSegmentIndex = pathSegments.findIndex(
-    (segment) => segment.toLowerCase() === 'video',
-  );
-  if (videoSegmentIndex < 0) return null;
+  const hostname = url.hostname.toLowerCase();
+  let videoIdSegment: string | undefined;
 
-  const videoIdSegment = pathSegments[videoSegmentIndex + 1];
+  if (hostname === B23_HOST) {
+    videoIdSegment = pathSegments[0];
+  } else {
+    const videoSegmentIndex = pathSegments.findIndex(
+      (segment) => segment.toLowerCase() === 'video',
+    );
+    if (videoSegmentIndex < 0) return null;
+    videoIdSegment = pathSegments[videoSegmentIndex + 1];
+  }
+
   if (videoIdSegment && BVID_PATTERN.test(videoIdSegment)) {
     return {
       canonicalVideoId: videoIdSegment,

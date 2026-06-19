@@ -29,6 +29,22 @@ describe('Bilibili URL parser', () => {
     });
   });
 
+  it('parses b23.tv paths that directly embed BV or av ids', () => {
+    expect(parseBilibiliVideoReference('https://b23.tv/BV1xx411c7mD')).toEqual({
+      canonicalVideoId: 'BV1xx411c7mD',
+      kind: 'bvid',
+      sourceUrl: 'https://b23.tv/BV1xx411c7mD',
+      value: 'BV1xx411c7mD',
+    });
+    expect(parseBilibiliVideoReference('https://b23.tv/av170001')).toMatchObject(
+      {
+        canonicalVideoId: 'av170001',
+        kind: 'aid',
+        value: '170001',
+      },
+    );
+  });
+
   it('allows only Bilibili and b23.tv hosts', () => {
     expect(isAllowedBilibiliUrl('https://b23.tv/abc123')).toBe(true);
     expect(isAllowedBilibiliUrl('https://space.bilibili.com/1')).toBe(true);
@@ -54,6 +70,11 @@ describe('Bilibili URL parser', () => {
     expect(
       parseBilibiliVideoReference(
         'https://www.bilibili.com/search?keyword=BV1xx411c7mD',
+      ),
+    ).toBeNull();
+    expect(
+      parseBilibiliVideoReference(
+        'https://space.bilibili.com/1#/video/BV1xx411c7mD',
       ),
     ).toBeNull();
   });

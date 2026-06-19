@@ -9,6 +9,7 @@ import type { QqbotPluginPackageDescriptor } from '@/modules/qqbot/plugin-platfo
 import {
   QqbotPluginHttpClientService,
   type QqbotPluginHttpClientRequest,
+  type QqbotPluginResolveRedirectRequest,
 } from '../sdk/plugin-http-client.service';
 import type {
   QqbotPluginHostCallRequest,
@@ -108,6 +109,8 @@ export class QqbotPluginHostBridgeService {
         return this.httpClient.requestBuffer(getHttpRequestOptions(args));
       case 'requestJson':
         return this.httpClient.requestJson(getHttpRequestOptions(args));
+      case 'resolveRedirect':
+        return this.httpClient.resolveRedirect(getRedirectRequestOptions(args));
       case 'sendText':
         return this.sendService.sendText(
           args.input as Parameters<QqbotSendService['sendText']>[0],
@@ -348,6 +351,21 @@ function getHttpRequestOptions(
     delete request.failureMessageTemplate;
   }
   return request;
+}
+
+/**
+ * Normalizes host-call redirect options from `{ input }`, `{ options }`, or raw option arguments.
+ * @param args - Worker-supplied host-call arguments.
+ * @returns Redirect resolver options safe to pass to QqbotPluginHttpClientService.
+ */
+function getRedirectRequestOptions(
+  args: Record<string, unknown>,
+): QqbotPluginResolveRedirectRequest {
+  const candidate = args.input || args.options || args;
+  if (!isRecord(candidate)) {
+    throw new Error('Plugin host redirect options must be an object');
+  }
+  return candidate as QqbotPluginResolveRedirectRequest;
 }
 
 /**

@@ -16,6 +16,7 @@ export type QqbotPluginHttpClientRequest = {
 
 export type QqbotPluginResolveRedirectRequest = {
   context?: string;
+  failureMessage?: (statusCode: number) => string;
   headers?: Record<string, string>;
   maxRedirects?: number;
   timeoutMessage?: string;
@@ -194,7 +195,7 @@ export class QqbotPluginHttpClientService {
    * Requests one URL and returns its redirect Location after the response body is drained.
    * @param url - Validated HTTP(S) URL to request.
    * @param input - Headers and timeout options shared across the redirect chain.
-   * @returns Redirect Location header when the response is 3xx, otherwise `undefined`.
+   * @returns Redirect Location header when the response is 3xx, otherwise `undefined`; rejects for HTTP error statuses.
    */
   private requestRedirectLocation(
     url: URL,
@@ -222,6 +223,16 @@ export class QqbotPluginHttpClientService {
 
           response.on('error', reject);
           response.on('end', () => {
+            if (statusCode >= 400) {
+              reject(
+                createPluginHttpError(
+                  input.failureMessage?.(statusCode) ||
+                    `${context}请求失败：${statusCode}`,
+                  statusCode,
+                ),
+              );
+              return;
+            }
             if (
               statusCode >= 300 &&
               statusCode < 400 &&

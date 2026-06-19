@@ -23,6 +23,11 @@ describe('QQBot plugin HTTP client redirect resolver', () => {
         response.end();
         return;
       }
+      if (request.url === '/missing') {
+        response.writeHead(404, { 'Content-Type': 'text/plain' });
+        response.end('missing');
+        return;
+      }
       response.writeHead(200, { 'Content-Type': 'text/plain' });
       response.end('ok');
     });
@@ -66,5 +71,14 @@ describe('QQBot plugin HTTP client redirect resolver', () => {
         url: 'file:///etc/passwd',
       }),
     ).rejects.toThrow('插件 HTTP 重定向仅支持 http/https');
+  });
+
+  it('rejects HTTP error statuses while resolving redirects', async () => {
+    await expect(
+      new QqbotPluginHttpClientService().resolveRedirect({
+        timeoutMs: 1000,
+        url: `${baseUrl}/missing`,
+      }),
+    ).rejects.toMatchObject({ statusCode: 404 });
   });
 });

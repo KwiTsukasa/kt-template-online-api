@@ -132,11 +132,11 @@ describe('QQBot plugin host bridge', () => {
     const options = {
       maxRedirects: 3,
       timeoutMs: 1000,
-      url: 'https://b23.tv/abc123',
+      url: 'https://short.example/abc123',
     };
     httpClient.resolveRedirect.mockResolvedValue({
-      finalUrl: 'https://www.bilibili.com/video/BV1xx411c7mD',
-      redirects: ['https://www.bilibili.com/video/BV1xx411c7mD'],
+      finalUrl: 'https://target.example/video/123',
+      redirects: ['https://target.example/video/123'],
     });
 
     await expect(
@@ -148,8 +148,8 @@ describe('QQBot plugin host bridge', () => {
     ).resolves.toEqual({
       ok: true,
       value: {
-        finalUrl: 'https://www.bilibili.com/video/BV1xx411c7mD',
-        redirects: ['https://www.bilibili.com/video/BV1xx411c7mD'],
+        finalUrl: 'https://target.example/video/123',
+        redirects: ['https://target.example/video/123'],
       },
     });
     expect(httpClient.resolveRedirect).toHaveBeenCalledWith(options);

@@ -361,7 +361,7 @@ function getHttpRequestOptions(
 function getRedirectRequestOptions(
   args: Record<string, unknown>,
 ): QqbotPluginResolveRedirectRequest {
-  const candidate = args.input || args.options || args;
+  const candidate = args.input ?? args.options ?? args;
   if (!isRecord(candidate)) {
     throw new Error('Plugin host redirect options must be an object');
   }

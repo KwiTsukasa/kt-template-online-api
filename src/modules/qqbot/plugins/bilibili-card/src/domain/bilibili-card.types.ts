@@ -11,3 +11,9 @@ export type BilibiliVideoReference =
       sourceUrl: string;
       value: string;
     };
+
+export type BilibiliUrlExtractionInput = {
+  messageText?: string;
+  rawEvent?: Record<string, unknown>;
+  rawMessage?: string;
+};

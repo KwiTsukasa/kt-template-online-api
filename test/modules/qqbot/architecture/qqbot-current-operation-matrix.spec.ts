@@ -142,6 +142,7 @@ describe('QQBot current operation matrix', () => {
   it('freezes built-in plugin manifests and exposed capabilities', () => {
     const manifests = {
       bangdream: readManifest('bangdream'),
+      bilibiliCard: readManifest('bilibili-card'),
       ff14: readManifest('ff14-market'),
       fflogs: readManifest('fflogs'),
       repeater: readManifest('repeater'),
@@ -156,6 +157,23 @@ describe('QQBot current operation matrix', () => {
         name: operation.name,
       })),
     ).toEqual(bangdreamOperations);
+
+    expect(
+      manifests.bilibiliCard.events.map((event) => ({
+        eventName: event.eventName,
+        handlerName: event.handlerName,
+        key: event.key,
+        name: event.name,
+      })),
+    ).toEqual([
+      {
+        eventName: 'message',
+        handlerName: 'handleMessage',
+        key: 'bilibili-card.message',
+        name: 'Bilibili 卡片解析',
+      },
+    ]);
+    expect(manifests.bilibiliCard.operations).toEqual([]);
 
     expect(
       manifests.ff14.operations.map((operation) => ({
@@ -215,6 +233,10 @@ describe('QQBot current operation matrix', () => {
 
   it('freezes current online command seed linkage for command plugins', () => {
     const seedSql = readFileSync(join(repoRoot, 'sql/qqbot-init.sql'), 'utf8');
+    const refactorSeedSql = readFileSync(
+      join(repoRoot, 'sql/refactor-v3/01-seed-core.sql'),
+      'utf8',
+    );
 
     for (const operation of bangdreamOperations) {
       expect(seedSql).toContain(`'${operation.key}'`);
@@ -224,5 +246,7 @@ describe('QQBot current operation matrix', () => {
     expect(seedSql).toContain(`'ff14-market', 'ff14.market.price'`);
     expect(seedSql).toContain(`'fflogs', 'fflogs.character.summary'`);
     expect(seedSql).toContain(`'bangdream', 'bangdream.event.stage', 'plain'`);
+    expect(refactorSeedSql).toContain(`'bilibili-card'`);
+    expect(refactorSeedSql).toContain(`'bilibili-card.message'`);
   });
 });

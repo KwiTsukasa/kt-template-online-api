@@ -36,6 +36,17 @@ FROM qqbot_plugin
 WHERE plugin_key = 'bangdream'
   AND status = 'installed';
 
+SELECT 'seed_qqbot_plugin_bilibili_card' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_plugin
+WHERE plugin_key = 'bilibili-card'
+  AND status = 'installed';
+
+SELECT 'seed_qqbot_plugin_event_bilibili_card' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_plugin_event_handler
+WHERE event_key = 'bilibili-card.message'
+  AND handler_name = 'handleMessage'
+  AND enabled = 1;
+
 SELECT 'seed_qqbot_command_bangdream_song' AS check_name, COUNT(*) AS matched_rows
 FROM qqbot_command
 WHERE command_key = 'bangdream_song'

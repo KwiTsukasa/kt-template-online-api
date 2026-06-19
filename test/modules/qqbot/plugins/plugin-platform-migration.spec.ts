@@ -41,7 +41,13 @@ describe('QQBot existing plugin platform migration', () => {
       readdirSync(pluginRoot)
         .filter((name) => statSync(join(pluginRoot, name)).isDirectory())
         .sort(),
-    ).toEqual(['bangdream', 'ff14-market', 'fflogs', 'repeater']);
+    ).toEqual([
+      'bangdream',
+      'bilibili-card',
+      'ff14-market',
+      'fflogs',
+      'repeater',
+    ]);
 
     const legacySources = collectFiles(legacyPluginRoot).filter((filePath) =>
       filePath.endsWith('.ts'),
@@ -50,21 +56,26 @@ describe('QQBot existing plugin platform migration', () => {
   });
 
   it('declares parseable platform manifests for every existing plugin', () => {
-    const manifests = ['bangdream', 'ff14-market', 'fflogs', 'repeater'].map(
-      (pluginName) => {
-        const root = join(pluginRoot, pluginName);
-        const manifest = parseQqbotPluginManifest(
-          readJson(join(root, 'plugin.json')),
-          {
-            pluginRoot: root,
-          },
-        );
-        return manifest;
-      },
-    );
+    const manifests = [
+      'bangdream',
+      'bilibili-card',
+      'ff14-market',
+      'fflogs',
+      'repeater',
+    ].map((pluginName) => {
+      const root = join(pluginRoot, pluginName);
+      const manifest = parseQqbotPluginManifest(
+        readJson(join(root, 'plugin.json')),
+        {
+          pluginRoot: root,
+        },
+      );
+      return manifest;
+    });
 
     expect(manifests.map((manifest) => manifest.pluginKey).sort()).toEqual([
       'bangdream',
+      'bilibili-card',
       'ff14-market',
       'fflogs',
       'repeater',
@@ -77,6 +88,16 @@ describe('QQBot existing plugin platform migration', () => {
           manifest.runtime.maxConcurrency > 0,
       ),
     ).toBe(true);
+  });
+
+  it('seeds Bilibili card plugin event metadata in refactor v3 SQL', () => {
+    const refactorSeedSql = readFileSync(
+      join(repoRoot, 'sql/refactor-v3/01-seed-core.sql'),
+      'utf8',
+    );
+
+    expect(refactorSeedSql).toContain(`'bilibili-card'`);
+    expect(refactorSeedSql).toContain(`'bilibili-card.message'`);
   });
 
   it('keeps BangDream manifest operations as the single metadata source', () => {

@@ -97,6 +97,7 @@ describe('QQBot plugin package boundary', () => {
 
     expect(pluginDirs).toEqual([
       'bangdream',
+      'bilibili-card',
       'ff14-market',
       'fflogs',
       'repeater',
@@ -104,23 +105,27 @@ describe('QQBot plugin package boundary', () => {
   });
 
   it('uses the same package shape for every built-in plugin', () => {
-    const missing = ['bangdream', 'ff14-market', 'fflogs', 'repeater'].flatMap(
-      (pluginKey) => {
-        const manifest = JSON.parse(
-          readFileSync(join(pluginRoot, pluginKey, 'plugin.json'), 'utf8'),
-        ) as { events?: unknown[]; operations?: unknown[] };
-        const requiredPaths = [
-          ...requiredPluginPaths,
-          ...((manifest.operations || []).length
-            ? requiredCommandPluginPaths
-            : []),
-          ...((manifest.events || []).length ? requiredEventPluginPaths : []),
-        ];
-        return requiredPaths
-          .map((pathName) => `${pluginKey}/${pathName}`)
-          .filter((pathName) => !existsSync(join(pluginRoot, pathName)));
-      },
-    );
+    const missing = [
+      'bangdream',
+      'bilibili-card',
+      'ff14-market',
+      'fflogs',
+      'repeater',
+    ].flatMap((pluginKey) => {
+      const manifest = JSON.parse(
+        readFileSync(join(pluginRoot, pluginKey, 'plugin.json'), 'utf8'),
+      ) as { events?: unknown[]; operations?: unknown[] };
+      const requiredPaths = [
+        ...requiredPluginPaths,
+        ...((manifest.operations || []).length
+          ? requiredCommandPluginPaths
+          : []),
+        ...((manifest.events || []).length ? requiredEventPluginPaths : []),
+      ];
+      return requiredPaths
+        .map((pathName) => `${pluginKey}/${pathName}`)
+        .filter((pathName) => !existsSync(join(pluginRoot, pathName)));
+    });
 
     expect(missing).toEqual([]);
   });
@@ -128,6 +133,7 @@ describe('QQBot plugin package boundary', () => {
   it('does not keep third-phase package directories as empty shells', () => {
     const emptyRequiredDirs = [
       'bangdream',
+      'bilibili-card',
       'ff14-market',
       'fflogs',
       'repeater',
@@ -242,6 +248,7 @@ describe('QQBot plugin package boundary', () => {
   it('keeps plugin package entrypoints limited to createPlugin', () => {
     const extraExports = [
       'bangdream',
+      'bilibili-card',
       'ff14-market',
       'fflogs',
       'repeater',
@@ -319,7 +326,7 @@ describe('plugin platform package decoupling', () => {
       .join('|'),
   );
   const forbiddenBranchPattern =
-    /pluginKey\s*(?:={2,3})\s*['"`](bangdream|ff14-market|fflogs|repeater)['"`]|case\s+['"`](bangdream|ff14-market|fflogs|repeater)['"`]/;
+    /pluginKey\s*(?:={2,3})\s*['"`](bangdream|bilibili-card|ff14-market|fflogs|repeater)['"`]|case\s+['"`](bangdream|bilibili-card|ff14-market|fflogs|repeater)['"`]/;
 
   /**
    * Escapes a literal token before it is placed into the architecture gate regexp.

@@ -249,11 +249,80 @@ INSERT INTO qqbot_plugin (
     'Repeater',
     'Built-in repeater event plugin metadata.',
     'installed'
+  ),
+  (
+    1000000000000000105,
+    'bilibili-card',
+    'Bilibili Card',
+    'Built-in Bilibili card event plugin metadata.',
+    'installed'
   )
 ON DUPLICATE KEY UPDATE
   plugin_name = VALUES(plugin_name),
   description = VALUES(description),
   status = VALUES(status);
+
+INSERT INTO qqbot_plugin_version (
+  id,
+  plugin_id,
+  version,
+  package_hash,
+  manifest_json
+) VALUES (
+  1000000000000001105,
+  1000000000000000105,
+  '1.0.0',
+  'builtin-bilibili-card-1.0.0',
+  JSON_OBJECT(
+    'key', 'bilibili-card',
+    'name', 'Bilibili Card',
+    'version', '1.0.0',
+    'entry', 'src/index.ts',
+    'events', JSON_ARRAY(JSON_OBJECT(
+      'key', 'bilibili-card.message',
+      'eventName', 'message',
+      'handlerName', 'handleMessage',
+      'name', 'Bilibili 卡片解析'
+    ))
+  )
+) ON DUPLICATE KEY UPDATE
+  package_hash = VALUES(package_hash),
+  manifest_json = VALUES(manifest_json);
+
+INSERT INTO qqbot_plugin_installation (
+  id,
+  plugin_id,
+  version_id,
+  status,
+  runtime_status,
+  installed_path
+) VALUES (
+  1000000000000001205,
+  1000000000000000105,
+  1000000000000001105,
+  'installed',
+  'idle',
+  'src/modules/qqbot/plugins/bilibili-card'
+) ON DUPLICATE KEY UPDATE
+  status = VALUES(status),
+  runtime_status = VALUES(runtime_status),
+  installed_path = VALUES(installed_path);
+
+INSERT INTO qqbot_plugin_event_handler (
+  id,
+  plugin_id,
+  event_key,
+  handler_name,
+  enabled
+) VALUES (
+  1000000000000001305,
+  1000000000000000105,
+  'bilibili-card.message',
+  'handleMessage',
+  1
+) ON DUPLICATE KEY UPDATE
+  handler_name = VALUES(handler_name),
+  enabled = VALUES(enabled);
 
 INSERT INTO qqbot_command (
   id,

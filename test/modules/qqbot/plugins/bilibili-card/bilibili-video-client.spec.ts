@@ -1,6 +1,7 @@
 import { readBilibiliCardRuntimeConfig } from '../../../../../src/modules/qqbot/plugins/bilibili-card/src/config/bilibili-card-config';
 import type { BilibiliCardPluginHost } from '../../../../../src/modules/qqbot/plugins/bilibili-card/src/domain/bilibili-card.types';
 import { formatBilibiliVideoReply } from '../../../../../src/modules/qqbot/plugins/bilibili-card/src/domain/bilibili-reply-formatter';
+import { createBilibiliCardGenericHostAdapter } from '../../../../../src/modules/qqbot/plugins/bilibili-card/src/infrastructure/integration/bilibili-card-host';
 import { BilibiliVideoClient } from '../../../../../src/modules/qqbot/plugins/bilibili-card/src/infrastructure/integration/bilibili-video-client';
 
 describe('Bilibili video client', () => {
@@ -146,6 +147,19 @@ describe('Bilibili video client', () => {
       httpTimeoutMs: 1000,
       maxRedirects: 10,
     });
+  });
+
+  it('emits generic host warnings without surfacing rejected log calls', async () => {
+    const host = {
+      warn: jest.fn().mockRejectedValue(new Error('log down')),
+    };
+    const adapter = createBilibiliCardGenericHostAdapter(host, {});
+
+    adapter.warn?.('hello');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(host.warn).toHaveBeenCalledWith('hello');
   });
 });
 

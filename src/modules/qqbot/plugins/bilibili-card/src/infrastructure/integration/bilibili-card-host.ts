@@ -60,8 +60,9 @@ export function createBilibiliCardGenericHostAdapter(
      * @param message - Warning message safe for platform logs.
      */
     warn: (message) => {
-      const warn = host.warn;
-      if (typeof warn === 'function') warn(message);
+      void callBilibiliCardGenericHost(host, 'warn', message).catch(
+        () => undefined,
+      );
     },
   };
 }

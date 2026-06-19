@@ -78,4 +78,61 @@ describe('Bilibili URL extractor', () => {
       }),
     ).toEqual(['https://m.bilibili.com/video/av170001']);
   });
+
+  it('stops URL tokens at CQ separators and ASCII punctuation', () => {
+    expect(
+      extractBilibiliUrls({
+        messageText:
+          '[CQ:share,url=https://b23.tv/abc123,title=视频] https://www.bilibili.com/video/BV1xx411c7mD.',
+        rawEvent: {},
+        rawMessage: '',
+      }),
+    ).toEqual([
+      'https://b23.tv/abc123',
+      'https://www.bilibili.com/video/BV1xx411c7mD',
+    ]);
+  });
+
+  it('does not scan unrelated rawEvent string fields', () => {
+    expect(
+      extractBilibiliUrls({
+        messageText: '',
+        rawMessage: '',
+        rawEvent: {
+          debug: 'https://www.bilibili.com/video/BV1xx411c7mD',
+          message: [],
+        },
+      }),
+    ).toEqual([]);
+  });
+
+  it('keeps exact cleaned URL dedupe while preserving distinct query URLs', () => {
+    expect(
+      extractBilibiliUrls({
+        messageText:
+          'https://b23.tv/abc123 https://b23.tv/abc123 https://b23.tv/abc123?share=qq',
+        rawEvent: {},
+        rawMessage: 'https://b23.tv/abc123',
+      }),
+    ).toEqual(['https://b23.tv/abc123', 'https://b23.tv/abc123?share=qq']);
+  });
+
+  it('handles invalid JSON card strings without aborting extraction', () => {
+    expect(
+      extractBilibiliUrls({
+        messageText: '',
+        rawMessage: '',
+        rawEvent: {
+          message: [
+            {
+              data: {
+                data: '{"jumpUrl":"https://b23.tv/abc123"',
+              },
+              type: 'json',
+            },
+          ],
+        },
+      }),
+    ).toEqual(['https://b23.tv/abc123']);
+  });
 });

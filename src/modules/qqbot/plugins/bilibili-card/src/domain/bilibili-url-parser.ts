@@ -2,7 +2,7 @@ import type { BilibiliVideoReference } from './bilibili-card.types';
 
 const BILIBILI_HOST = 'bilibili.com';
 const B23_HOST = 'b23.tv';
-const TRAILING_WRAPPERS = /[\s"'<>，。！？、；：）)\]}】]+$/u;
+const TRAILING_WRAPPERS = /[\s"'<>.,!?;:，。！？、；：）)\]}】]+$/u;
 const LEADING_WRAPPERS = /^[\s"'<>（([{【]+/u;
 const BVID_PATTERN = /^BV[0-9A-Za-z]{10}$/;
 const AID_PATTERN = /^(?:av|AV)(\d+)$/;

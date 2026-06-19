@@ -204,6 +204,51 @@ describe('QqbotPluginPackageSourceService', () => {
     }
   });
 
+  it('resolves persisted source package paths to the current dist controlled root', () => {
+    const distPluginRoot = join(
+      tempRoot,
+      'production-app',
+      'dist',
+      'modules',
+      'qqbot',
+      'plugins',
+    );
+    const packageRoot = join(distPluginRoot, 'bilibili-card');
+    mkdirSync(join(packageRoot, 'src'), { recursive: true });
+    writeFileSync(
+      join(packageRoot, 'src', 'index.js'),
+      'module.exports = { createPlugin() {} };',
+      'utf8',
+    );
+
+    const source = new QqbotPluginPackageSourceService(
+      new QqbotPluginPackagePathPolicyService([distPluginRoot]),
+    );
+
+    expect(
+      source.resolveDescriptor('src/modules/qqbot/plugins/bilibili-card', {
+        key: 'bilibili-card',
+        name: 'Bilibili Card',
+        version: '1.0.0',
+        entry: 'src/index.ts',
+        runtime: {
+          workerType: 'thread',
+          timeoutMs: 10000,
+          memoryMb: 128,
+          maxConcurrency: 1,
+        },
+        operations: [],
+        events: [],
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        entryFile: join(packageRoot, 'src', 'index.js'),
+        packageRoot,
+        pluginKey: 'bilibili-card',
+      }),
+    );
+  });
+
   it('does not keep platform-side manifest transfer shims', () => {
     const source = readFileSync(
       join(

@@ -66,7 +66,9 @@ export class QqbotPluginPackagePathPolicyService {
    * @returns Normalized absolute package directory when it is inside a controlled root.
    */
   assertControlledPackageRoot(packageRoot: string): string {
-    const normalizedPackageRoot = resolve(packageRoot);
+    const normalizedPackageRoot =
+      this.resolvePersistedBuiltinPackageRoot(packageRoot) ||
+      resolve(packageRoot);
     const isControlled = this.controlledRoots.some(
       (root) =>
         normalizedPackageRoot === root ||
@@ -81,6 +83,35 @@ export class QqbotPluginPackagePathPolicyService {
   }
 
   /**
+   * Maps persisted built-in source package paths to the controlled root used by the current runtime.
+   * @param packageRoot - Package root persisted by seed SQL or install records; built-ins may store source-relative paths.
+   * @returns Runtime package directory under the active controlled root, or null for ordinary paths.
+   */
+  private resolvePersistedBuiltinPackageRoot(
+    packageRoot: string,
+  ): string | null {
+    if (isAbsolute(packageRoot)) return null;
+
+    const packageSegments = this.toPathSegments(packageRoot);
+    const builtinPrefix = DEFAULT_BUILTIN_PACKAGE_ROOT_SEGMENTS.find(
+      (segments) => this.startsWithSegments(packageSegments, segments),
+    );
+    if (!builtinPrefix || packageSegments.length !== builtinPrefix.length + 1) {
+      return null;
+    }
+
+    const packageName = packageSegments[packageSegments.length - 1];
+    if (!packageName || packageName === '..') return null;
+
+    const controlledRoot = this.controlledRoots.find((root) =>
+      DEFAULT_BUILTIN_PACKAGE_ROOT_SEGMENTS.some((segments) =>
+        this.endsWithSegments(this.toPathSegments(root), segments),
+      ),
+    );
+    return controlledRoot ? resolve(controlledRoot, packageName) : null;
+  }
+
+  /**
    * Checks whether a candidate package path escapes a controlled root.
    * @param root - Absolute controlled root that bounds package discovery.
    * @param candidate - Absolute package directory or entry file being validated.
@@ -92,6 +123,42 @@ export class QqbotPluginPackagePathPolicyService {
       relation === '..' ||
       relation.startsWith(`..${sep}`) ||
       isAbsolute(relation)
+    );
+  }
+
+  /**
+   * Splits a path with either Windows or POSIX separators for suffix/prefix policy checks.
+   * @param pathValue - Raw absolute or relative filesystem path.
+   * @returns Non-empty path segments excluding current-directory markers.
+   */
+  private toPathSegments(pathValue: string): string[] {
+    return pathValue
+      .replace(/\\/g, '/')
+      .split('/')
+      .filter((segment) => segment && segment !== '.');
+  }
+
+  /**
+   * Checks whether a path segment list starts with an expected built-in root prefix.
+   * @param candidate - Candidate package root split into path segments.
+   * @param expected - Built-in source or dist root segment sequence.
+   * @returns Whether candidate begins with the expected sequence.
+   */
+  private startsWithSegments(candidate: string[], expected: string[]): boolean {
+    return expected.every((segment, index) => candidate[index] === segment);
+  }
+
+  /**
+   * Checks whether a controlled root ends with an expected built-in root segment sequence.
+   * @param candidate - Controlled root split into path segments.
+   * @param expected - Built-in source or dist root segment sequence.
+   * @returns Whether candidate ends with the expected sequence.
+   */
+  private endsWithSegments(candidate: string[], expected: string[]): boolean {
+    const offset = candidate.length - expected.length;
+    if (offset < 0) return false;
+    return expected.every(
+      (segment, index) => candidate[offset + index] === segment,
     );
   }
 

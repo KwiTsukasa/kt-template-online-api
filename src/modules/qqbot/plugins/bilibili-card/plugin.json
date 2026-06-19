@@ -1,0 +1,64 @@
+{
+  "pluginKey": "bilibili-card",
+  "name": "Bilibili Card",
+  "version": "1.0.0",
+  "minApiSdkVersion": "1.0.0",
+  "description": "解析 QQ 中的 Bilibili 视频链接卡片并回复视频摘要。",
+  "author": "KT",
+  "entry": "src/index.ts",
+  "permissions": [
+    "qqbot.event.receive",
+    "qqbot.send",
+    "runtime.http",
+    "plugin.config.read"
+  ],
+  "runtime": {
+    "workerType": "thread",
+    "timeoutMs": 10000,
+    "memoryMb": 128,
+    "maxConcurrency": 1,
+    "configKeys": [
+      "QQBOT_BILIBILI_CARD_HTTP_TIMEOUT_MS",
+      "QQBOT_BILIBILI_CARD_MAX_REDIRECTS",
+      "QQBOT_BILIBILI_CARD_DEDUPE_TTL_MS",
+      "QQBOT_BILIBILI_CARD_DESC_MAX_LENGTH"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "QQBOT_BILIBILI_CARD_HTTP_TIMEOUT_MS": {
+        "type": "number",
+        "title": "HTTP 超时毫秒",
+        "default": 6000
+      },
+      "QQBOT_BILIBILI_CARD_MAX_REDIRECTS": {
+        "type": "number",
+        "title": "短链最大跳转次数",
+        "default": 5
+      },
+      "QQBOT_BILIBILI_CARD_DEDUPE_TTL_MS": {
+        "type": "number",
+        "title": "同视频去重毫秒",
+        "default": 600000
+      },
+      "QQBOT_BILIBILI_CARD_DESC_MAX_LENGTH": {
+        "type": "number",
+        "title": "简介最大长度",
+        "default": 80
+      }
+    }
+  },
+  "operations": [],
+  "events": [
+    {
+      "key": "bilibili-card.message",
+      "name": "Bilibili 卡片解析",
+      "eventName": "message",
+      "handlerName": "handleMessage",
+      "description": "解析 QQ 中的 Bilibili 视频链接卡片并回复视频摘要。"
+    }
+  ],
+  "assets": [],
+  "migrations": []
+}

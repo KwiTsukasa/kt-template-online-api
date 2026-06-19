@@ -18,6 +18,31 @@ export type BilibiliUrlExtractionInput = {
   rawMessage?: string;
 };
 
+export type BilibiliCardManifest = {
+  description?: string;
+  events: Array<{
+    description?: string;
+    eventName: string;
+    handlerName: string;
+    key: string;
+    name: string;
+  }>;
+  name: string;
+  pluginKey: string;
+  version: string;
+};
+
+export type BilibiliCardMessage = {
+  channelId?: string;
+  messageText: string;
+  messageType: string;
+  rawEvent: Record<string, any>;
+  rawMessage?: string;
+  selfId: string;
+  targetId: string;
+  userId: string;
+};
+
 export type BilibiliCardRuntimeConfig = {
   dedupeTtlMs: number;
   descMaxLength: number;

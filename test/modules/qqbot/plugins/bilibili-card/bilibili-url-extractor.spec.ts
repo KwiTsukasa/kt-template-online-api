@@ -106,6 +106,19 @@ describe('Bilibili URL extractor', () => {
     ).toEqual([]);
   });
 
+  it('does not scan root rawEvent URL-like metadata fields', () => {
+    expect(
+      extractBilibiliUrls({
+        messageText: '',
+        rawMessage: '',
+        rawEvent: {
+          debugUrl: 'https://www.bilibili.com/video/BV1xx411c7mD',
+          message: [],
+        },
+      }),
+    ).toEqual([]);
+  });
+
   it('keeps exact cleaned URL dedupe while preserving distinct query URLs', () => {
     expect(
       extractBilibiliUrls({

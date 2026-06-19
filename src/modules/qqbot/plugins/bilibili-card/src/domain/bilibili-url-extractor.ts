@@ -85,7 +85,7 @@ function createExtractionState(): ExtractionState {
 }
 
 /**
- * Collects raw event candidates from explicit OneBot message segments and URL-like fields.
+ * Collects raw event candidates from explicit OneBot message segments.
  * @param rawEvent - Raw OneBot event payload from NapCat.
  * @param state - Mutable extraction state with traversal counters.
  */
@@ -95,7 +95,6 @@ function collectRawEventCandidates(
 ) {
   if (!isRecord(rawEvent)) return;
   collectMessageSegments(rawEvent.message, state);
-  collectUrlLikeFields(rawEvent, state, new WeakSet<object>(), 0);
 }
 
 /**

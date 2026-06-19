@@ -90,6 +90,7 @@ const HOST_ARGUMENT_MAPPERS: Record<string, HostArgumentMapper> = {
   renameFile: (from, to) => ({ from, to }),
   requestBuffer: (options) => ({ options }),
   requestJson: (options) => ({ options }),
+  resolveRedirect: (input) => ({ input }),
   sendText: (input) => ({ input }),
   sleep: (ms) => ({ ms }),
   unbindEventPlugin: (selfId, pluginKey) => ({ pluginKey, selfId }),

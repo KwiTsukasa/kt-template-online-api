@@ -36,6 +36,39 @@ FROM qqbot_plugin
 WHERE plugin_key = 'bangdream'
   AND status = 'installed';
 
+SELECT 'seed_qqbot_plugin_bilibili_card' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_plugin
+WHERE plugin_key = 'bilibili-card'
+  AND status = 'installed';
+
+SELECT 'seed_qqbot_plugin_version_bilibili_card' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_plugin_version v
+JOIN qqbot_plugin p ON p.id = v.plugin_id
+WHERE p.plugin_key = 'bilibili-card'
+  AND v.version = '1.0.0'
+  AND v.package_hash = 'bilibili-card:1.0.0'
+  AND JSON_UNQUOTE(JSON_EXTRACT(v.manifest_json, '$.pluginKey')) = 'bilibili-card'
+  AND JSON_UNQUOTE(JSON_EXTRACT(v.manifest_json, '$.runtime.workerType')) = 'thread'
+  AND JSON_UNQUOTE(JSON_EXTRACT(v.manifest_json, '$.events[0].key')) = 'bilibili-card.message';
+
+SELECT 'seed_qqbot_plugin_installation_bilibili_card' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_plugin_installation i
+JOIN qqbot_plugin p ON p.id = i.plugin_id
+JOIN qqbot_plugin_version v ON v.id = i.version_id
+WHERE p.plugin_key = 'bilibili-card'
+  AND v.version = '1.0.0'
+  AND i.status = 'enabled'
+  AND i.runtime_status = 'stopped'
+  AND i.installed_path = 'src/modules/qqbot/plugins/bilibili-card';
+
+SELECT 'seed_qqbot_plugin_event_bilibili_card' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_plugin_event_handler h
+JOIN qqbot_plugin p ON p.id = h.plugin_id
+WHERE p.plugin_key = 'bilibili-card'
+  AND h.event_key = 'bilibili-card.message'
+  AND h.handler_name = 'handleMessage'
+  AND h.enabled = 1;
+
 SELECT 'seed_qqbot_command_bangdream_song' AS check_name, COUNT(*) AS matched_rows
 FROM qqbot_command
 WHERE command_key = 'bangdream_song'

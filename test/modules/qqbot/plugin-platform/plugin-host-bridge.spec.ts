@@ -13,7 +13,11 @@ describe('QQBot plugin host bridge', () => {
   let tempRoot: string;
   let bridge: QqbotPluginHostBridgeService;
   let configValues: Record<string, string | undefined>;
-  let httpClient: { requestBuffer: jest.Mock; requestJson: jest.Mock };
+  let httpClient: {
+    requestBuffer: jest.Mock;
+    requestJson: jest.Mock;
+    resolveRedirect: jest.Mock;
+  };
   let accountService: {
     bindEventPlugin: jest.Mock;
     getBoundEventPluginKeys: jest.Mock;
@@ -38,6 +42,7 @@ describe('QQBot plugin host bridge', () => {
     httpClient = {
       requestBuffer: jest.fn(),
       requestJson: jest.fn().mockResolvedValue({ ok: true }),
+      resolveRedirect: jest.fn(),
     };
     accountService = {
       bindEventPlugin: jest.fn().mockResolvedValue(true),
@@ -121,6 +126,33 @@ describe('QQBot plugin host bridge', () => {
       }),
     ).resolves.toEqual({ ok: true, value: { ok: true } });
     expect(httpClient.requestJson).toHaveBeenCalledWith(options);
+  });
+
+  it('delegates resolveRedirect host calls to the plugin HTTP client', async () => {
+    const options = {
+      maxRedirects: 3,
+      timeoutMs: 1000,
+      url: 'https://short.example/abc123',
+    };
+    httpClient.resolveRedirect.mockResolvedValue({
+      finalUrl: 'https://target.example/video/123',
+      redirects: ['https://target.example/video/123'],
+    });
+
+    await expect(
+      bridge.handleHostCall(createDescriptor(), {
+        args: { input: options },
+        method: 'resolveRedirect',
+        pluginKey: 'sample',
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      value: {
+        finalUrl: 'https://target.example/video/123',
+        redirects: ['https://target.example/video/123'],
+      },
+    });
+    expect(httpClient.resolveRedirect).toHaveBeenCalledWith(options);
   });
 
   it('delegates event binding and text sends to core QQBot services', async () => {

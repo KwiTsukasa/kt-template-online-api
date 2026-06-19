@@ -25,6 +25,29 @@ describe('Bilibili card application', () => {
     expect(host.sendText).not.toHaveBeenCalled();
   });
 
+  it('warns and returns false when binding lookup fails', async () => {
+    const host = createHost({
+      getBoundEventPluginKeys: jest
+        .fn()
+        .mockRejectedValue(new Error('binding down')),
+    });
+    const application = new BilibiliCardApplication(host, createManifest());
+
+    await expect(
+      application.handleMessage(
+        createMessage({
+          messageText: 'https://www.bilibili.com/video/BV1xx411c7mD',
+        }),
+      ),
+    ).resolves.toBe(false);
+
+    expect(host.warn).toHaveBeenCalledWith(
+      expect.stringContaining('binding down'),
+    );
+    expect(host.requestJson).not.toHaveBeenCalled();
+    expect(host.sendText).not.toHaveBeenCalled();
+  });
+
   it('ignores messages sent by the bot itself', async () => {
     const host = createHost({
       getBoundEventPluginKeys: jest.fn().mockResolvedValue(['bilibili-card']),
@@ -167,6 +190,70 @@ describe('Bilibili card application', () => {
     expect(host.resolveRedirect).not.toHaveBeenCalled();
     expect(host.requestJson).not.toHaveBeenCalled();
     expect(host.sendText).not.toHaveBeenCalled();
+  });
+
+  it('returns false when warning throws during binding lookup failure', async () => {
+    const host = createHost({
+      getBoundEventPluginKeys: jest
+        .fn()
+        .mockRejectedValue(new Error('binding down')),
+      warn: jest.fn(() => {
+        throw new Error('logger down');
+      }),
+    });
+    const application = new BilibiliCardApplication(host, createManifest());
+
+    await expect(
+      application.handleMessage(
+        createMessage({
+          messageText: 'https://www.bilibili.com/video/BV1xx411c7mD',
+        }),
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it('returns false when warning throws during short-link failure', async () => {
+    const host = createHost({
+      getBoundEventPluginKeys: jest.fn().mockResolvedValue(['bilibili-card']),
+      resolveRedirect: jest.fn().mockRejectedValue(new Error('redirect down')),
+      warn: jest.fn(() => {
+        throw new Error('logger down');
+      }),
+    });
+    const application = new BilibiliCardApplication(host, createManifest());
+
+    await expect(
+      application.handleMessage(
+        createMessage({
+          messageText: 'https://b23.tv/abc123',
+        }),
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it('attaches a rejection handler when warning returns a promise', async () => {
+    const catchSpy = jest.fn();
+    const host = createHost({
+      getBoundEventPluginKeys: jest.fn().mockResolvedValue(['bilibili-card']),
+      resolveRedirect: jest.fn().mockRejectedValue(new Error('redirect down')),
+      warn: jest.fn(
+        () =>
+          ({
+            catch: catchSpy,
+          }) as unknown as void,
+      ),
+    });
+    const application = new BilibiliCardApplication(host, createManifest());
+
+    await expect(
+      application.handleMessage(
+        createMessage({
+          messageText: 'https://b23.tv/abc123',
+        }),
+      ),
+    ).resolves.toBe(false);
+
+    expect(catchSpy).toHaveBeenCalledWith(expect.any(Function));
   });
 
   it('warns and returns false when short-link resolution fails', async () => {

@@ -122,14 +122,19 @@ export class BilibiliCardApplication {
     if (cached && cached.expiresAt > current) return cached.value;
 
     const config = readBilibiliCardRuntimeConfig(this.host);
-    const value = (
-      await this.host.getBoundEventPluginKeys(normalizedSelfId)
-    ).includes(this.manifest.pluginKey);
-    this.boundCache.set(normalizedSelfId, {
-      expiresAt: current + Math.min(config.dedupeTtlMs, 60000),
-      value,
-    });
-    return value;
+    try {
+      const value = (
+        await this.host.getBoundEventPluginKeys(normalizedSelfId)
+      ).includes(this.manifest.pluginKey);
+      this.boundCache.set(normalizedSelfId, {
+        expiresAt: current + Math.min(config.dedupeTtlMs, 60000),
+        value,
+      });
+      return value;
+    } catch (error) {
+      this.warn(`Bilibili 事件绑定查询失败: ${normalizeError(error)}`);
+      return false;
+    }
   }
 
   /**
@@ -147,7 +152,14 @@ export class BilibiliCardApplication {
    * @param message - Warning message safe for platform logs.
    */
   private warn(message: string) {
-    this.host.warn?.(message);
+    try {
+      const result = this.host.warn?.(message) as unknown;
+      if (isThenable(result)) {
+        result.catch(() => undefined);
+      }
+    } catch {
+      return;
+    }
   }
 }
 
@@ -180,6 +192,22 @@ function isB23ShortLink(url: string) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Detects promise-like warning results so rejected async loggers cannot escape later.
+ * @param value - Return value from the optional host warning hook.
+ * @returns `true` when the value exposes a callable `catch` method.
+ */
+function isThenable(
+  value: unknown,
+): value is { catch: (handler: () => void) => unknown } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'catch' in value &&
+    typeof value.catch === 'function'
+  );
 }
 
 /**

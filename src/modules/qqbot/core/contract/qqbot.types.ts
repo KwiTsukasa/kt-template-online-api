@@ -76,9 +76,12 @@ export type QqbotNapcatContainerStatus =
   | 'creating'
   | 'error'
   | 'running'
-  | 'stopped';
+  | 'stopped'
+  | 'unknown';
 
 export type QqbotAccountNapcatBindStatus = 'bound' | 'disabled' | 'pending';
+
+export type QqbotNapcatWebuiStatus = 'offline' | 'online' | 'unknown';
 
 export type QqbotNapcatRuntimeLoginStatus =
   | 'offline'

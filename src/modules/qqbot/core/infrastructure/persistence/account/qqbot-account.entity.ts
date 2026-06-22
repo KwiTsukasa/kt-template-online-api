@@ -10,6 +10,9 @@ import type {
   QqbotConnectionMode,
   QqbotConnectionRole,
   QqbotConnectionStatus,
+  QqbotNapcatContainerStatus,
+  QqbotNapcatRuntimeLoginStatus,
+  QqbotNapcatWebuiStatus,
 } from '../../../contract/qqbot.types';
 
 @Entity('qqbot_account')
@@ -40,6 +43,18 @@ export class QqbotAccount {
 
   @Column({ default: 'offline', length: 32, name: 'connect_status' })
   connectStatus: QqbotConnectionStatus;
+
+  @Column({ default: 'offline', length: 32, name: 'onebot_status' })
+  oneBotStatus: QqbotConnectionStatus;
+
+  @Column({ default: 'unknown', length: 32, name: 'container_status' })
+  containerStatus: QqbotNapcatContainerStatus;
+
+  @Column({ default: 'unknown', length: 32, name: 'webui_status' })
+  webuiStatus: QqbotNapcatWebuiStatus;
+
+  @Column({ default: 'unknown', length: 32, name: 'qq_login_status' })
+  qqLoginStatus: QqbotNapcatRuntimeLoginStatus;
 
   @Column({ default: null, length: 32, name: 'client_role', nullable: true })
   clientRole: null | QqbotConnectionRole;

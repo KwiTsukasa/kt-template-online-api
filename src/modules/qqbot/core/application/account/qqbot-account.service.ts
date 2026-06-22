@@ -28,6 +28,8 @@ import type {
   QqbotAccountAbilityType,
   QqbotAccountListItem,
   QqbotConnectionRole,
+  QqbotNapcatContainerStatus,
+  QqbotNapcatWebuiStatus,
 } from '../../contract/qqbot.types';
 
 const INSECURE_ACCOUNT_SECRET_VALUES = new Set([
@@ -291,13 +293,17 @@ export class QqbotAccountService {
     const payload: Partial<QqbotAccount> = {
       accessToken: null,
       clientRole: null,
+      containerStatus: 'unknown',
       connectStatus: 'offline',
       connectionMode: 'reverse-ws',
       enabled: true,
       isDeleted: false,
       lastError: null,
       name: input.name || existing?.name || `QQ ${selfId}`,
+      oneBotStatus: 'offline',
+      qqLoginStatus: 'unknown',
       selfId,
+      webuiStatus: 'unknown',
     };
 
     if (existing) {
@@ -337,11 +343,15 @@ export class QqbotAccountService {
       await this.accountRepository.update(
         { id: existing.id },
         {
+          containerStatus: 'unknown',
           connectStatus: 'offline',
           enabled: true,
           isDeleted: false,
           lastError: null,
           name: existing.name || `QQ ${normalizedSelfId}`,
+          oneBotStatus: 'offline',
+          qqLoginStatus: 'unknown',
+          webuiStatus: 'unknown',
         },
       );
       return;
@@ -350,11 +360,15 @@ export class QqbotAccountService {
     await this.accountRepository.save(
       this.accountRepository.create({
         connectionMode: 'reverse-ws',
+        containerStatus: 'unknown',
         connectStatus: 'offline',
         enabled: true,
         name: `QQ ${normalizedSelfId}`,
+        oneBotStatus: 'offline',
+        qqLoginStatus: 'unknown',
         remark: '',
         selfId: normalizedSelfId,
+        webuiStatus: 'unknown',
       }),
     );
   }
@@ -420,9 +434,13 @@ export class QqbotAccountService {
     await this.accountRepository.update(
       { id },
       {
+        containerStatus: 'unknown',
         connectStatus: 'offline',
         enabled: false,
         isDeleted: true,
+        oneBotStatus: 'offline',
+        qqLoginStatus: 'unknown',
+        webuiStatus: 'unknown',
       },
     );
     await this.accountAbilityRepository.update(
@@ -449,6 +467,7 @@ export class QqbotAccountService {
       clientRole,
       connectStatus: 'online',
       lastConnectedAt: new Date(),
+      oneBotStatus: 'online',
     };
     if (lastError !== undefined) {
       payload.lastError = lastError
@@ -468,6 +487,7 @@ export class QqbotAccountService {
       {
         connectStatus: 'online',
         lastHeartbeatAt: new Date(),
+        oneBotStatus: 'online',
       },
     );
   }
@@ -501,6 +521,7 @@ export class QqbotAccountService {
   async markOffline(selfId: string, lastError?: string) {
     const payload: Partial<QqbotAccount> = {
       connectStatus: 'offline',
+      oneBotStatus: 'offline',
     };
     if (lastError !== undefined) {
       payload.lastError = lastError
@@ -520,6 +541,7 @@ export class QqbotAccountService {
       { selfId },
       {
         lastError: this.toolsService.toColumnText(lastError, 500),
+        qqLoginStatus: 'offline',
       },
     );
   }
@@ -555,7 +577,7 @@ export class QqbotAccountService {
       );
     }
 
-    return this.napcatRuntime.appendRuntime(accounts, {
+    const list = await this.napcatRuntime.appendRuntime(accounts, {
       /**
        * 执行 QQBot回调。
        * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
@@ -579,6 +601,90 @@ export class QqbotAccountService {
       publishOfflineNotice: (selfId, offlineReason, metadata) =>
         this.publishOfflineNotice(selfId, offlineReason, metadata),
     });
+    await Promise.all(
+      list.map((account) => this.syncPersistedNapcatSplitStatus(account)),
+    );
+    return list;
+  }
+
+  /**
+   * Persists computed NapCat split statuses back to qqbot_account when the entity exposes the v3 status columns.
+   * @param account - Enriched account list row; its `napcat` snapshot is the latest runtime evidence produced for Admin.
+   */
+  private async syncPersistedNapcatSplitStatus(
+    account: QqbotAccountListItem,
+  ) {
+    if (!this.hasPersistedNapcatSplitStatus(account)) return;
+
+    const payload = this.buildNapcatSplitStatusPayload(account);
+    const current = account as unknown as Record<string, unknown>;
+    const changed = Object.entries(payload).some(
+      ([key, value]) => current[key] !== value,
+    );
+    if (!changed) return;
+
+    await this.accountRepository.update({ id: account.id }, payload);
+    Object.assign(account, payload);
+  }
+
+  /**
+   * Checks whether a hydrated account row includes the v3 split-status properties that should be kept in sync.
+   * @param account - Account row or test double; legacy test doubles without these properties skip persistence.
+   * @returns True when status synchronization can write meaningful column updates.
+   */
+  private hasPersistedNapcatSplitStatus(account: QqbotAccountListItem) {
+    return [
+      'oneBotStatus',
+      'containerStatus',
+      'webuiStatus',
+      'qqLoginStatus',
+    ].some((key) => Object.prototype.hasOwnProperty.call(account, key));
+  }
+
+  /**
+   * Converts the latest account-list runtime evidence into qqbot_account split-status column values.
+   * @param account - Account row plus optional NapCat runtime evidence returned from the runtime adapter.
+   * @returns Partial account payload containing only the status columns owned by the split-status contract.
+   */
+  private buildNapcatSplitStatusPayload(
+    account: QqbotAccountListItem,
+  ): Pick<
+    QqbotAccount,
+    'containerStatus' | 'oneBotStatus' | 'qqLoginStatus' | 'webuiStatus'
+  > {
+    const napcat = account.napcat || null;
+    return {
+      containerStatus: this.toPersistedContainerStatus(napcat),
+      oneBotStatus: account.connectStatus === 'online' ? 'online' : 'offline',
+      qqLoginStatus: napcat?.qqLoginStatus || 'unknown',
+      webuiStatus: this.toPersistedWebuiStatus(napcat?.webuiOnline),
+    };
+  }
+
+  /**
+   * Normalizes container evidence for the qqbot_account.container_status cache column.
+   * @param napcat - Optional NapCat runtime info attached to the account-list row.
+   * @returns Running/stopped/error/creating when known, otherwise unknown.
+   */
+  private toPersistedContainerStatus(
+    napcat?: null | QqbotAccountListItem['napcat'],
+  ): QqbotNapcatContainerStatus {
+    if (napcat?.containerStatus) return napcat.containerStatus;
+    if (napcat?.containerOnline) return 'running';
+    return 'unknown';
+  }
+
+  /**
+   * Normalizes WebUI probe evidence for the qqbot_account.webui_status cache column.
+   * @param webuiOnline - Runtime probe value; null/undefined means no fresh WebUI probe was performed.
+   * @returns Persisted WebUI status suitable for filtering and raw DB inspection.
+   */
+  private toPersistedWebuiStatus(
+    webuiOnline?: boolean | null,
+  ): QqbotNapcatWebuiStatus {
+    if (webuiOnline === true) return 'online';
+    if (webuiOnline === false) return 'offline';
+    return 'unknown';
   }
 
   /**

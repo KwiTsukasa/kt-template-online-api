@@ -127,7 +127,7 @@ export class NapcatRuntimeProfileService {
           lastCheckedAt: null,
           locale: input.runtimeProfile.locale,
           localeAvailable: false,
-          macStrategy: input.deviceIdentity?.macStrategy || 'managed-mac-v1',
+          macStrategy: input.deviceIdentity?.macStrategy || 'physical-oui-mac-v1',
           migrateDeviceIdentity: !!input.deviceIdentity,
           persistCache: input.runtimeProfile.persistCache,
           persistLocalShare: input.runtimeProfile.persistLocalShare,

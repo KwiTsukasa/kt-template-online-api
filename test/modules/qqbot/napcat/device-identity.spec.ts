@@ -10,6 +10,10 @@ import {
 } from '../../../../src/modules/qqbot/napcat';
 import { toNapcatDockerDeviceOptions } from '../../../../src/modules/qqbot/napcat/infrastructure/integration/container/napcat-docker-device-options';
 import { QqbotNapcatContainerService } from '../../../../src/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
+import {
+  hasPhysicalOuiMacPrefix,
+  isRejectedVirtualMacPrefix,
+} from '../../../../src/modules/qqbot/napcat/domain/runtime/napcat-physical-oui-catalog';
 import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
 type EntityClass = new (...args: never[]) => unknown;
@@ -212,7 +216,7 @@ describe('NapCat device identity persistence', () => {
     expect(identity.hostname).not.toMatch(/10001|qq|bot|napcat|docker/i);
   });
 
-  it('generates a stable Docker bridge MAC that matches QQNT machine-info expectations', async () => {
+  it('generates a stable physical-OUI MAC that rejects virtual adapter prefixes', async () => {
     const repository = createIdentityRepository();
     const service = new NapcatDeviceIdentityService(
       repository as any,
@@ -225,12 +229,10 @@ describe('NapCat device identity persistence', () => {
       selfId: '10001',
     });
 
-    expect(identity.macAddress).toMatch(/^02:42:([0-9a-f]{2}:){3}[0-9a-f]{2}$/);
-    expect(identity.macAddress).not.toMatch(/^52:54:00/i);
-    expect(identity.macAddress).not.toMatch(
-      /^(00:05:69|00:0c:29|00:1c:14|00:50:56)/i,
-    );
-    expect(identity.macStrategy).toBe('docker-bridge-mac-v1');
+    expect(identity.macAddress).toMatch(/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/);
+    expect(hasPhysicalOuiMacPrefix(identity.macAddress)).toBe(true);
+    expect(isRejectedVirtualMacPrefix(identity.macAddress)).toBe(false);
+    expect(identity.macStrategy).toBe('physical-oui-mac-v1');
   });
 
   it('records regression-repair evidence when an existing identity is realigned for QQNT', async () => {
@@ -258,13 +260,14 @@ describe('NapCat device identity persistence', () => {
       selfId: '10001',
     });
 
-    expect(identity.macAddress).toMatch(/^02:42:/i);
+    expect(hasPhysicalOuiMacPrefix(identity.macAddress)).toBe(true);
+    expect(isRejectedVirtualMacPrefix(identity.macAddress)).toBe(false);
     expect(identity.macAddress).not.toBe('02:42:aa:bb:cc:dd');
     expect(identity.hostname).not.toBe('kt-qqbot-napcat-10001');
     expect(identity.lastLoginEvidence).toMatchObject({
       migration: {
         fromMacAddress: '02:42:aa:bb:cc:dd',
-        strategy: 'docker-bridge-mac-v1',
+        strategy: 'physical-oui-mac-v1',
         trigger: 'qqnt-device-name-regression-repair',
       },
     });
@@ -536,8 +539,8 @@ describe('NapCat device identity persistence', () => {
       hostnameStrategy: 'qqnt-visible-hostname-v1',
       id: 'identity-created',
       lastLoginEvidence: null,
-      macAddress: '02:42:aa:bb:cc:dd',
-      macStrategy: 'docker-bridge-mac-v1',
+      macAddress: '3c:97:0e:aa:bb:cc',
+      macStrategy: 'physical-oui-mac-v1',
       machineIdPath:
         '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-container-created/machine-id',
       verificationStatus: 'pending',
@@ -608,8 +611,8 @@ describe('NapCat device identity persistence', () => {
       hostnameStrategy: 'qqnt-visible-hostname-v1',
       id: 'identity-created',
       lastLoginEvidence: null,
-      macAddress: '02:42:aa:bb:cc:dd',
-      macStrategy: 'docker-bridge-mac-v1',
+      macAddress: '3c:97:0e:aa:bb:cc',
+      macStrategy: 'physical-oui-mac-v1',
       machineIdPath:
         '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-container-created/machine-id',
       verificationStatus: 'pending',

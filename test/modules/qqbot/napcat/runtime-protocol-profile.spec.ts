@@ -175,8 +175,8 @@ describe('NapCat runtime profile generation', () => {
         hostnameStrategy: 'qqnt-visible-hostname-v1',
         machineInfoPath:
           '/vol1/docker/kt-qqbot/napcat-instances/pc-a1b2c3d4/QQ/nt_qq/global/nt_data/msf/machine-info',
-        macAddress: '02:42:aa:bb:cc:dd',
-        macStrategy: 'docker-bridge-mac-v1',
+        macAddress: '3c:97:0e:aa:bb:cc',
+        macStrategy: 'physical-oui-mac-v1',
       },
       protocolProfile: {
         napcatConfigHash: 'napcat-hash',
@@ -201,9 +201,9 @@ describe('NapCat runtime profile generation', () => {
           dataDir: runtimeProfile.dataDir,
           machineInfoPath:
             '/vol1/docker/kt-qqbot/napcat-instances/pc-a1b2c3d4/QQ/nt_qq/global/nt_data/msf/machine-info',
-          macAddress: '02:42:aa:bb:cc:dd',
+          macAddress: '3c:97:0e:aa:bb:cc',
         }),
-        macStrategy: 'docker-bridge-mac-v1',
+        macStrategy: 'physical-oui-mac-v1',
         profileStatus: 'pending',
         profileVersion: 'napcat-runtime-profile-v1',
         timezoneEvidence: {

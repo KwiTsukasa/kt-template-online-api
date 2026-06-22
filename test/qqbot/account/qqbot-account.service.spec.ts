@@ -242,9 +242,10 @@ describe('QqbotAccountService', () => {
 
     expect(accountRepository.update).toHaveBeenCalledWith(
       { selfId: '1914728559' },
-      {
+      expect.objectContaining({
         connectStatus: 'offline',
-      },
+        oneBotStatus: 'offline',
+      }),
     );
   });
 
@@ -286,6 +287,24 @@ describe('QqbotAccountService', () => {
     );
   });
 
+  it('persists split OneBot online status when heartbeat arrives', async () => {
+    const accountRepository = {
+      update: jest.fn(),
+    };
+    const service = createAccountService({ accountRepository });
+
+    await service.markHeartbeat('1914728559');
+
+    expect(accountRepository.update).toHaveBeenCalledWith(
+      { selfId: '1914728559' },
+      expect.objectContaining({
+        connectStatus: 'online',
+        lastHeartbeatAt: expect.any(Date),
+        oneBotStatus: 'online',
+      }),
+    );
+  });
+
   it('truncates offline reason before writing lastError column', async () => {
     const accountRepository = {
       update: jest.fn(),
@@ -296,10 +315,11 @@ describe('QqbotAccountService', () => {
 
     expect(accountRepository.update).toHaveBeenCalledWith(
       { selfId: '1914728559' },
-      {
+      expect.objectContaining({
         connectStatus: 'offline',
         lastError: `${'错误'.repeat(248)}错...`,
-      },
+        oneBotStatus: 'offline',
+      }),
     );
   });
 
@@ -384,9 +404,10 @@ describe('QqbotAccountService', () => {
 
     expect(accountRepository.update).toHaveBeenCalledWith(
       { selfId: '1914728559' },
-      {
+      expect.objectContaining({
         lastError: 'NapCat 账号状态变更为离线',
-      },
+        qqLoginStatus: 'offline',
+      }),
     );
     expect(page.list[0]).toEqual(
       expect.objectContaining({
@@ -887,9 +908,10 @@ describe('QqbotAccountService', () => {
     );
     expect(accountRepository.update).toHaveBeenCalledWith(
       { selfId: '1914728559' },
-      {
+      expect.objectContaining({
         lastError: '账号状态变更为离线',
-      },
+        qqLoginStatus: 'offline',
+      }),
     );
     expect(page.list[0]).toEqual(
       expect.objectContaining({
@@ -906,6 +928,7 @@ describe('QqbotAccountService', () => {
   it('clears previous QQ login error when NapCat WebUI confirms QQ is online', async () => {
     const checkedAt = new Date(Date.now() - 60_000);
     const account = {
+      containerStatus: 'unknown',
       connectStatus: 'online',
       enabled: true,
       id: 'account-1',
@@ -913,7 +936,10 @@ describe('QqbotAccountService', () => {
       lastConnectedAt: new Date(Date.now() - 120_000),
       lastError: '账号状态变更为离线',
       name: '主账号',
+      oneBotStatus: 'offline',
+      qqLoginStatus: 'unknown',
       selfId: '1914728559',
+      webuiStatus: 'unknown',
     };
     const binding = {
       accountId: 'account-1',
@@ -980,6 +1006,15 @@ describe('QqbotAccountService', () => {
     expect(accountRepository.update).toHaveBeenCalledWith(
       { selfId: '1914728559' },
       { lastError: null },
+    );
+    expect(accountRepository.update).toHaveBeenCalledWith(
+      { id: 'account-1' },
+      expect.objectContaining({
+        containerStatus: 'running',
+        oneBotStatus: 'online',
+        qqLoginStatus: 'online',
+        webuiStatus: 'online',
+      }),
     );
     expect(page.list[0]).toEqual(
       expect.objectContaining({
@@ -1072,9 +1107,10 @@ describe('QqbotAccountService', () => {
     expect(result).toEqual({ checked: 1 });
     expect(accountRepository.update).toHaveBeenCalledWith(
       { selfId: '1914728559' },
-      {
+      expect.objectContaining({
         lastError: 'NapCat 账号状态变更为离线',
-      },
+        qqLoginStatus: 'offline',
+      }),
     );
     expect(systemNoticePublisher.publishSystemNotice).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1168,9 +1204,10 @@ describe('QqbotAccountService', () => {
     expect(accountRepository.update).toHaveBeenCalledTimes(1);
     expect(accountRepository.update).toHaveBeenCalledWith(
       { selfId: '1914728559' },
-      {
+      expect.objectContaining({
         lastError: 'NapCat 账号状态变更为离线',
-      },
+        qqLoginStatus: 'offline',
+      }),
     );
     expect(systemNoticePublisher.publishSystemNotice).toHaveBeenCalledWith(
       expect.objectContaining({

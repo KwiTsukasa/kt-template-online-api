@@ -1,4 +1,4 @@
-ARG NAPCAT_BASE_IMAGE=
+ARG NAPCAT_BASE_IMAGE=mlikiowa/napcat-docker:latest
 FROM ${NAPCAT_BASE_IMAGE}
 
 USER root
@@ -11,7 +11,8 @@ RUN set -eux; \
     fonts-noto-cjk \
     fonts-wqy-microhei \
     locales \
-    tzdata; \
+    tzdata \
+    xdg-utils; \
   sed -i 's/^# *zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen; \
   locale-gen zh_CN.UTF-8; \
   ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime; \

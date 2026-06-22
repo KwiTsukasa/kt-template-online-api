@@ -1,5 +1,7 @@
 import { QQBOT_CORE_DOMAIN_CONTRACT } from '../../../../src/modules/qqbot/core/contract/qqbot-core.contract';
+import { QqbotAccount } from '../../../../src/modules/qqbot/core/infrastructure/persistence/account/qqbot-account.entity';
 import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
+import { getMetadataArgsStorage } from 'typeorm';
 
 describe('QQBot core status contract', () => {
   const schema = readRefactorV3SqlSchema();
@@ -35,5 +37,20 @@ describe('QQBot core status contract', () => {
       'disconnected_at',
       'close_reason',
     ]);
+  });
+
+  it('maps split account status columns on the QqbotAccount entity', () => {
+    const columns = getMetadataArgsStorage()
+      .columns.filter((column) => column.target === QqbotAccount)
+      .map((column) => `${column.options.name || column.propertyName}`);
+
+    expect(columns).toEqual(
+      expect.arrayContaining([
+        'onebot_status',
+        'container_status',
+        'webui_status',
+        'qq_login_status',
+      ]),
+    );
   });
 });

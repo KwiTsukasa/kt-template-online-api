@@ -5,9 +5,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ensureSnowflakeId } from '@/common';
 import { NapcatDeviceIdentity } from '../../persistence/napcat-device-identity.entity';
+import {
+  hasPhysicalOuiMacPrefix,
+  isRejectedVirtualMacPrefix,
+  NAPCAT_PHYSICAL_OUI_PREFIXES,
+} from '../../../domain/runtime/napcat-physical-oui-catalog';
 
 const QQNT_VISIBLE_HOSTNAME_STRATEGY = 'qqnt-visible-hostname-v1';
-const QQNT_DOCKER_BRIDGE_MAC_STRATEGY = 'docker-bridge-mac-v1';
+const QQNT_PHYSICAL_OUI_MAC_STRATEGY = 'physical-oui-mac-v1';
 
 type ResolveNapcatDeviceIdentityInput = {
   accountId: string;
@@ -72,8 +77,8 @@ export class NapcatDeviceIdentityService {
       ),
       hostnameStrategy: QQNT_VISIBLE_HOSTNAME_STRATEGY,
       lastLoginEvidence: null,
-      macAddress: this.buildDockerBridgeMacAddress(accountId, containerName),
-      macStrategy: QQNT_DOCKER_BRIDGE_MAC_STRATEGY,
+      macAddress: this.buildPhysicalOuiMacAddress(accountId, containerName),
+      macStrategy: QQNT_PHYSICAL_OUI_MAC_STRATEGY,
       machineIdPath: `${dataDir}/machine-id`,
       verificationStatus: 'pending',
     });
@@ -231,26 +236,30 @@ export class NapcatDeviceIdentityService {
   }
 
   /**
-   * Builds a stable Docker bridge MAC that can be mirrored into QQNT machine-info.
+   * Builds a stable physical-OUI MAC that can be mirrored into QQNT machine-info without using VM/container prefixes.
    * @param accountId - Account id used as a deterministic seed, not as visible output.
    * @param containerName - Container name mixed into the deterministic seed.
+   * @returns Lower-case MAC address with a curated physical-device OUI prefix.
    */
-  private buildDockerBridgeMacAddress(
+  private buildPhysicalOuiMacAddress(
     accountId: string,
     containerName: string,
   ) {
     const hash = createHash('sha256')
       .update(
-        `${accountId}:${containerName}:${QQNT_DOCKER_BRIDGE_MAC_STRATEGY}`,
+        `${accountId}:${containerName}:${QQNT_PHYSICAL_OUI_MAC_STRATEGY}`,
       )
       .digest('hex');
+    const prefix =
+      NAPCAT_PHYSICAL_OUI_PREFIXES[
+        parseInt(hash.slice(0, 8), 16) % NAPCAT_PHYSICAL_OUI_PREFIXES.length
+      ];
     const suffix = [
-      hash.slice(0, 2),
-      hash.slice(2, 4),
-      hash.slice(4, 6),
-      hash.slice(6, 8),
+      hash.slice(8, 10),
+      hash.slice(10, 12),
+      hash.slice(12, 14),
     ];
-    return `02:42:${suffix.join(':')}`.toLowerCase();
+    return `${prefix}:${suffix.join(':')}`.toLowerCase();
   }
 
   /**
@@ -269,15 +278,16 @@ export class NapcatDeviceIdentityService {
     const nextHostname = this.buildQqntVisibleHostname(
       `${input.accountId}:${input.selfId}`,
     );
-    const nextMacAddress = this.buildDockerBridgeMacAddress(
+    const nextMacAddress = this.buildPhysicalOuiMacAddress(
       input.accountId,
       input.containerName,
     );
     const needsMigration =
       identity.hostnameStrategy !== QQNT_VISIBLE_HOSTNAME_STRATEGY ||
-      identity.macStrategy !== QQNT_DOCKER_BRIDGE_MAC_STRATEGY ||
+      identity.macStrategy !== QQNT_PHYSICAL_OUI_MAC_STRATEGY ||
       !/^pc-[a-f0-9]{8}$/.test(identity.hostname || '') ||
-      !/^02:42:([0-9a-f]{2}:){3}[0-9a-f]{2}$/i.test(identity.macAddress || '');
+      !hasPhysicalOuiMacPrefix(identity.macAddress || '') ||
+      isRejectedVirtualMacPrefix(identity.macAddress || '');
 
     if (!needsMigration) {
       return;
@@ -287,7 +297,7 @@ export class NapcatDeviceIdentityService {
       migration: {
         fromHostname: identity.hostname,
         fromMacAddress: identity.macAddress,
-        strategy: QQNT_DOCKER_BRIDGE_MAC_STRATEGY,
+        strategy: QQNT_PHYSICAL_OUI_MAC_STRATEGY,
         toHostname: nextHostname,
         toMacAddress: nextMacAddress,
         trigger: 'qqnt-device-name-regression-repair',
@@ -301,7 +311,7 @@ export class NapcatDeviceIdentityService {
         hostnameStrategy: QQNT_VISIBLE_HOSTNAME_STRATEGY,
         lastLoginEvidence: migrationEvidence,
         macAddress: nextMacAddress,
-        macStrategy: QQNT_DOCKER_BRIDGE_MAC_STRATEGY,
+        macStrategy: QQNT_PHYSICAL_OUI_MAC_STRATEGY,
       },
     );
     Object.assign(identity, {
@@ -309,7 +319,7 @@ export class NapcatDeviceIdentityService {
       hostnameStrategy: QQNT_VISIBLE_HOSTNAME_STRATEGY,
       lastLoginEvidence: migrationEvidence,
       macAddress: nextMacAddress,
-      macStrategy: QQNT_DOCKER_BRIDGE_MAC_STRATEGY,
+      macStrategy: QQNT_PHYSICAL_OUI_MAC_STRATEGY,
     });
   }
 

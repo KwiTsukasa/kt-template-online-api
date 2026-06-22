@@ -123,7 +123,7 @@ export class QqbotNapcatLoginService {
   }
 
   /**
-   * Starts a create-login session without waiting for remote Docker startup.
+   * Starts a create-login session without waiting for remote container startup.
    * @returns Pending scan session snapshot; the container startup and QR fetch continue in the background.
    */
   async startCreate() {
@@ -699,8 +699,8 @@ export class QqbotNapcatLoginService {
 
   /**
    * Starts a reserved create-login container and publishes QR progress back to the existing session.
-   * @param session - Pending create-login session returned to Admin before the remote Docker operation starts.
-   * @param container - Reserved container runtime whose provisional device identity must be used for the first Docker run.
+   * @param session - Pending create-login session returned to Admin before the remote container operation starts.
+   * @param container - Reserved container runtime whose provisional device identity must be used for the first startup.
    */
   private async prepareCreateContainerQrcode(
     session: QqbotLoginScanSession,
@@ -1528,7 +1528,7 @@ export class QqbotNapcatLoginService {
 
   /**
    * Reads the stale window for create-login container startup recovery.
-   * @returns Milliseconds to wait before assuming the original Docker-start background task was lost.
+   * @returns Milliseconds to wait before assuming the original remote-start background task was lost.
    */
   private getCreateContainerPreparationStaleMs() {
     return this.getPositiveConfigNumber(
@@ -1863,7 +1863,7 @@ export class QqbotNapcatLoginService {
   /**
    * 清理 NapCat 登录运行态状态。
    * @param container - container 输入；使用 `id` 字段生成结果。
-   * @param options - Cleanup switches; create-login cleanup may revisit already-deleted provisional rows after async Docker races.
+   * @param options - Cleanup switches; create-login cleanup may revisit already-deleted provisional rows after async startup races.
    */
   private async cleanupRuntimeContainer(
     container: QqbotNapcatRuntime,

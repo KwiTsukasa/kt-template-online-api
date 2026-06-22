@@ -212,7 +212,7 @@ export class NapcatRuntimeProfileService {
 
   /**
    * Builds the narrow update condition for provisional profile adoption.
-   * @param fromAccountId - Temporary account id used during first Docker startup, usually the reserved container id.
+   * @param fromAccountId - Temporary account id used during first container startup, usually the reserved container id.
    * @param containerId - Reserved container id; included when present so unrelated historical rows are untouched.
    * @returns TypeORM partial where object used by both runtime and protocol profile repositories.
    */

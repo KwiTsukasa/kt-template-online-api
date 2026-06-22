@@ -123,11 +123,29 @@ export class QqbotNapcatLoginService {
   }
 
   /**
-   * 启动Create。
+   * Starts a create-login session without waiting for remote Docker startup.
+   * @returns Pending scan session snapshot; the container startup and QR fetch continue in the background.
    */
   async startCreate() {
-    const container = await this.containerService.prepareCreateContainer();
-    return this.startScan({ mode: 'create' }, container);
+    await this.cleanupSessions();
+    const container = await this.containerService.reserveCreateContainer();
+    const session = this.createSession({
+      container,
+      mode: 'create',
+      preparingContainer: true,
+      status: 'pending',
+    });
+    session.lastRestartedAt = Date.now();
+    session.errorMessage = 'NapCat 正在创建登录容器，请稍后';
+    this.persistLoginSession(session);
+    this.publishScanResultEvent(
+      session,
+      'container-starting',
+      'processing',
+      session.errorMessage,
+    );
+    void this.prepareCreateContainerQrcode(session, container);
+    return this.toResult(session);
   }
 
   /**
@@ -229,6 +247,18 @@ export class QqbotNapcatLoginService {
         session.errorMessage || 'NapCat 正在尝试快速登录，请稍后',
       );
     }
+    if (session.preparingContainer) {
+      if (Date.now() > session.expiresAt) {
+        return this.expireSession(session);
+      }
+      if (this.recoverStaleCreateContainerPreparation(session)) {
+        return this.toResult(session);
+      }
+      return this.keepSessionPending(
+        session,
+        session.errorMessage || 'NapCat 正在创建登录容器，请稍后',
+      );
+    }
 
     const container = await this.getSessionContainer(session);
     let loginStatus: NapcatLoginStatus;
@@ -298,6 +328,15 @@ export class QqbotNapcatLoginService {
     }
     if (Date.now() > session.expiresAt) {
       return this.expireSession(session);
+    }
+    if (session.preparingContainer) {
+      if (this.recoverStaleCreateContainerPreparation(session)) {
+        return this.toResult(session);
+      }
+      return this.keepSessionPending(
+        session,
+        session.errorMessage || 'NapCat 正在创建登录容器，请稍后',
+      );
     }
 
     const container = await this.getSessionContainer(session);
@@ -555,7 +594,7 @@ export class QqbotNapcatLoginService {
         options.loginPassword,
         options.hasExistingPrimaryBinding,
       );
-      void reloginTask;
+      void reloginTask.catch(() => undefined);
       return this.toResult(session);
     }
 
@@ -659,6 +698,98 @@ export class QqbotNapcatLoginService {
   }
 
   /**
+   * Starts a reserved create-login container and publishes QR progress back to the existing session.
+   * @param session - Pending create-login session returned to Admin before the remote Docker operation starts.
+   * @param container - Reserved container runtime whose provisional device identity must be used for the first Docker run.
+   */
+  private async prepareCreateContainerQrcode(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+  ) {
+    try {
+      await this.containerService.startCreateContainer(container);
+      if (!this.loginSessionStore.getCached(session.id)) {
+        await this.cleanupRuntimeContainer(container, {
+          includeDeletedCreateContainer: true,
+        });
+        return;
+      }
+
+      session.preparingContainer = false;
+      session.errorMessage = undefined;
+      this.publishScanResultEvent(
+        session,
+        'container-ready',
+        'processing',
+        'NapCat 登录容器已启动',
+      );
+      await this.prepareCreateQrcodeAfterContainerReady(session, container);
+    } catch (err) {
+      session.preparingContainer = false;
+      const cleanupError = await this.cleanupRuntimeContainer(container, {
+        includeDeletedCreateContainer: true,
+      });
+      const message = this.toolsService.getErrorMessage(err);
+      await this.failSession(
+        session,
+        cleanupError
+          ? `${message}；清理未绑定容器失败：${cleanupError}`
+          : message,
+      );
+    }
+  }
+
+  /**
+   * Reads login state from a running create-login container and updates the original session with a QR or success result.
+   * @param session - Pending create-login session whose id is already known by Admin and SSE listeners.
+   * @param container - Running container that should now answer NapCat WebUI login endpoints.
+   */
+  private async prepareCreateQrcodeAfterContainerReady(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+  ) {
+    const loginStatus = await this.getLoginStatus(container, true);
+    if (loginStatus.isOffline) {
+      await this.restartNapcatForLogin(container, { waitForReady: false });
+      session.lastRestartedAt = Date.now();
+      session.errorMessage =
+        loginStatus.loginError || 'NapCat 账号已离线，已重新生成二维码';
+      this.publishScanResultEvent(
+        session,
+        'container-restarted',
+        'processing',
+        session.errorMessage,
+      );
+      return;
+    }
+
+    if (loginStatus.isLogin) {
+      await this.completeLogin(session, container);
+      return;
+    }
+
+    session.qrcode = await this.refreshOrGetQrcode(container, true, {
+      fallbackStatus: loginStatus,
+      requireFresh: this.toolsService.isNapcatExpiredQrcodeStatus(loginStatus),
+      staleQrcode: loginStatus.qrcodeurl,
+    });
+    session.errorMessage = undefined;
+    this.persistLoginSession(session);
+    this.publishScanResultEvent(
+      session,
+      'qrcode-ready',
+      'success',
+      '登录二维码已生成',
+    );
+    this.publishScanResultEvent(
+      session,
+      'waiting-scan',
+      'processing',
+      '等待扫码确认',
+    );
+  }
+
+  /**
    * 执行 NapCat 登录运行态流程。
    * @param session - session 输入；使用 `expectedSelfId`、`accountId`、`containerId`、`captchaUrl` 字段生成结果。
    * @param container - container 输入；驱动 `this.getLoginInfo()` 的 NapCat步骤。
@@ -691,12 +822,17 @@ export class QqbotNapcatLoginService {
       name: this.toolsService.pickNapcatNickname(loginInfo),
       selfId,
     });
-    await this.containerService.bindAccount(accountId, session.containerId);
+    await this.containerService.bindAccount(
+      accountId,
+      session.containerId,
+      selfId,
+    );
     session.accountId = accountId;
     session.captchaUrl = undefined;
     session.status = 'success';
     session.errorMessage = undefined;
     session.passwordMd5 = undefined;
+    session.preparingContainer = false;
     session.preparingRelogin = false;
     this.persistLoginSession(session);
     const result = {
@@ -723,6 +859,7 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime;
     expectedSelfId?: string;
     mode: QqbotLoginScanMode;
+    preparingContainer?: boolean;
     preparingRelogin?: boolean;
     qrcode?: string;
     runtimeRebuildCount?: number;
@@ -739,6 +876,7 @@ export class QqbotNapcatLoginService {
       expiresAt: now + this.getSessionTtlMs(),
       id: randomUUID(),
       mode: input.mode,
+      preparingContainer: input.preparingContainer,
       preparingRelogin: input.preparingRelogin,
       qrcode: input.qrcode,
       runtimeRebuildCount:
@@ -1280,6 +1418,7 @@ export class QqbotNapcatLoginService {
       if (message.includes('快速')) return 'quick-login-start';
       return 'relogin-preparing';
     }
+    if (session.preparingContainer) return 'container-starting';
     if (session.passwordMd5) return 'password-login';
     return 'scan-status';
   }
@@ -1299,6 +1438,7 @@ export class QqbotNapcatLoginService {
     if (session.newDeviceStatus) return '新设备二维码待扫码';
     if (session.captchaUrl) return '密码登录需要完成 QQ 安全验证';
     if (session.qrcode) return '登录二维码已生成';
+    if (session.preparingContainer) return 'NapCat 正在创建登录容器，请稍后';
     return '登录处理中';
   }
 
@@ -1320,6 +1460,38 @@ export class QqbotNapcatLoginService {
   }
 
   /**
+   * Restarts a lost create-login background task after a persisted preparing session becomes stale.
+   * @param session - Pending create-login session restored from persistence or left behind by a lost async task.
+   * @returns True when a recovery task was launched and the session snapshot was updated.
+   */
+  private recoverStaleCreateContainerPreparation(
+    session: QqbotLoginScanSession,
+  ) {
+    if (!this.isStaleCreateContainerPreparation(session)) return false;
+    session.lastRestartedAt = Date.now();
+    session.errorMessage = 'NapCat 创建任务已恢复，继续创建登录容器';
+    this.publishScanResultEvent(
+      session,
+      'container-start-recovered',
+      'processing',
+      session.errorMessage,
+    );
+    void this.resumeCreateContainerPreparation(session).catch(() => undefined);
+    return true;
+  }
+
+  /**
+   * Reattaches a stale create-login session to its reserved container and continues the QR preparation flow.
+   * @param session - Pending create-login session whose original in-memory background promise may have been lost.
+   */
+  private async resumeCreateContainerPreparation(
+    session: QqbotLoginScanSession,
+  ) {
+    const container = await this.getSessionContainer(session);
+    await this.prepareCreateContainerQrcode(session, container);
+  }
+
+  /**
    * 判断 NapCat 登录运行态条件。
    * @param session - session 输入；使用 `preparingRelogin`、`lastRestartedAt` 字段计算判断结果。
    */
@@ -1331,6 +1503,18 @@ export class QqbotNapcatLoginService {
   }
 
   /**
+   * Checks whether create-login container preparation is old enough to be recovered by a new background task.
+   * @param session - Create-login session; `lastRestartedAt` marks the last background task launch and `createdAt` is the fallback seed.
+   * @returns True when the session is still pending but the previous create task should be considered lost.
+   */
+  private isStaleCreateContainerPreparation(session: QqbotLoginScanSession) {
+    if (!session.preparingContainer) return false;
+    const startedAt = session.lastRestartedAt || session.createdAt;
+    if (!startedAt) return false;
+    return Date.now() - startedAt > this.getCreateContainerPreparationStaleMs();
+  }
+
+  /**
    * 查询 NapCat 登录运行态数据。
    */
   private getReloginPreparationStaleMs() {
@@ -1339,6 +1523,20 @@ export class QqbotNapcatLoginService {
       this.getPasswordLoginWaitMs() +
         Math.max(this.getRestartDelayMs(), this.getTimeout()) +
         this.getLoginPollIntervalMs() * 2,
+    );
+  }
+
+  /**
+   * Reads the stale window for create-login container startup recovery.
+   * @returns Milliseconds to wait before assuming the original Docker-start background task was lost.
+   */
+  private getCreateContainerPreparationStaleMs() {
+    return this.getPositiveConfigNumber(
+      'QQBOT_NAPCAT_CREATE_PREPARING_STALE_MS',
+      Math.max(
+        this.getSessionTtlMs(),
+        this.getTimeout() * 3 + this.getLoginPollIntervalMs() * 2,
+      ),
     );
   }
 
@@ -1461,6 +1659,7 @@ export class QqbotNapcatLoginService {
     session.captchaUrl = undefined;
     session.errorMessage = errorMessage;
     session.passwordMd5 = undefined;
+    session.preparingContainer = false;
     session.preparingRelogin = false;
     this.persistLoginSession(session);
     this.publishScanEvent(session, {
@@ -1607,12 +1806,17 @@ export class QqbotNapcatLoginService {
    * @param session - session 输入；使用 `containerId`、`containerName`、`webuiPort`、`errorMessage` 字段生成结果。
    */
   private async cleanupSessionContainer(session: QqbotLoginScanSession) {
-    const cleanupError = await this.cleanupRuntimeContainer({
-      baseUrl: '',
-      id: session.containerId,
-      name: session.containerName || '',
-      webuiPort: session.webuiPort,
-    });
+    const cleanupError = await this.cleanupRuntimeContainer(
+      {
+        baseUrl: '',
+        id: session.containerId,
+        name: session.containerName || '',
+        webuiPort: session.webuiPort,
+      },
+      {
+        includeDeletedCreateContainer: session.mode === 'create',
+      },
+    );
     if (cleanupError) {
       session.errorMessage = session.errorMessage
         ? `${session.errorMessage}；清理未绑定容器失败：${cleanupError}`
@@ -1659,9 +1863,17 @@ export class QqbotNapcatLoginService {
   /**
    * 清理 NapCat 登录运行态状态。
    * @param container - container 输入；使用 `id` 字段生成结果。
+   * @param options - Cleanup switches; create-login cleanup may revisit already-deleted provisional rows after async Docker races.
    */
-  private async cleanupRuntimeContainer(container: QqbotNapcatRuntime) {
+  private async cleanupRuntimeContainer(
+    container: QqbotNapcatRuntime,
+    options: { includeDeletedCreateContainer?: boolean } = {},
+  ) {
     try {
+      if (options.includeDeletedCreateContainer) {
+        await this.containerService.removeUnboundCreateContainer(container.id);
+        return null;
+      }
       await this.containerService.removeUnboundContainer(container.id);
       return null;
     } catch (err) {
@@ -2202,10 +2414,7 @@ export class QqbotNapcatLoginService {
         }
         return true;
       }
-      this.publishPasswordLoginFallback(
-        session,
-        errorMessage,
-      );
+      this.publishPasswordLoginFallback(session, errorMessage);
       return false;
     }
 
@@ -2318,10 +2527,7 @@ export class QqbotNapcatLoginService {
       this.keepPasswordCaptchaPending(session, proofWaterUrl);
       return true;
     }
-    const captchaUrl = await this.waitForPasswordCaptchaUrl(
-      container,
-      sinceMs,
-    );
+    const captchaUrl = await this.waitForPasswordCaptchaUrl(container, sinceMs);
     if (captchaUrl) {
       this.keepPasswordCaptchaPending(session, captchaUrl);
       return true;

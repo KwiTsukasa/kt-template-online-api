@@ -128,6 +128,78 @@ describe('QqbotNapcatContainerService', () => {
     );
   });
 
+  it('removes an unbound create-login container even after the row was marked deleted', async () => {
+    const container = {
+      accountId: null,
+      dataDir: '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-create',
+      id: 'container-create',
+      isDeleted: true,
+      name: 'kt-qqbot-napcat-create',
+    };
+    const bindingRepository = {
+      count: jest.fn().mockResolvedValue(0),
+    };
+    const containerRepository = {
+      findOne: jest.fn().mockResolvedValue(container),
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      { get: jest.fn().mockReturnValue('') } as unknown as ConfigService,
+      containerRepository as any,
+      bindingRepository as any,
+      new ToolsService(),
+    ) as any;
+    jest.spyOn(service, 'getManagedMode').mockReturnValue('ssh');
+    service.runProcess = jest.fn().mockResolvedValue({
+      stderr: '',
+      stdout: '',
+    });
+
+    const removed =
+      await service.removeUnboundCreateContainer('container-create');
+
+    expect(removed).toBe(true);
+    expect(service.runProcess.mock.calls[0][2]).toContain(
+      'docker rm -f "$NAME"',
+    );
+    expect(containerRepository.update).toHaveBeenCalledWith(
+      { id: 'container-create' },
+      expect.objectContaining({
+        isDeleted: true,
+        status: 'stopped',
+      }),
+    );
+  });
+
+  it('does not remove a container that already has an account owner during binding', async () => {
+    const bindingRepository = {
+      count: jest.fn().mockResolvedValue(0),
+    };
+    const containerRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        accountId: 'account-1',
+        dataDir: '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-bound',
+        id: 'container-binding',
+        isDeleted: false,
+        name: 'kt-qqbot-napcat-bound',
+      }),
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      { get: jest.fn().mockReturnValue('') } as unknown as ConfigService,
+      containerRepository as any,
+      bindingRepository as any,
+      new ToolsService(),
+    ) as any;
+    service.runProcess = jest.fn();
+
+    const removed = await service.removeUnboundContainer('container-binding');
+
+    expect(removed).toBe(false);
+    expect(service.runProcess).not.toHaveBeenCalled();
+    expect(containerRepository.update).not.toHaveBeenCalled();
+  });
+
   it('uses the latest NapCat account status line as runtime offline truth', () => {
     const service = new QqbotNapcatContainerService(
       { get: jest.fn() } as any,

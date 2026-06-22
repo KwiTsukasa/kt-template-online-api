@@ -44,8 +44,31 @@ const createIdentityRepository = () => {
     create: jest.fn((input: Partial<NapcatDeviceIdentity>) => ({
       ...input,
     })),
-    findOne: jest.fn(async ({ where }: { where: { accountId: string } }) => {
-      return identities.get(where.accountId) || null;
+    findOne: jest.fn(
+      async ({
+        where,
+      }: {
+        where: { accountId?: string; containerId?: string };
+      }) => {
+        if (where.accountId) return identities.get(where.accountId) || null;
+        if (where.containerId) {
+          return (
+            [...identities.values()].find(
+              (identity) => identity.containerId === where.containerId,
+            ) || null
+          );
+        }
+        return null;
+      },
+    ),
+    delete: jest.fn(async ({ id }: { id: string }) => {
+      for (const [accountId, identity] of identities.entries()) {
+        if (identity.id === id) {
+          identities.delete(accountId);
+          return { affected: 1 };
+        }
+      }
+      return { affected: 0 };
     }),
     save: jest.fn(async (identity: NapcatDeviceIdentity) => {
       identities.set(identity.accountId, identity);
@@ -215,8 +238,7 @@ describe('NapCat device identity persistence', () => {
     repository.seedIdentity({
       accountId: 'account-10001',
       containerId: 'container-first',
-      dataDir:
-        '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-10001',
+      dataDir: '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-10001',
       hostname: 'kt-qqbot-napcat-10001',
       id: 'identity-1',
       lastLoginEvidence: null,
@@ -411,7 +433,219 @@ describe('NapCat device identity persistence', () => {
     expect(createScript).toContain('--hostname "$NAPCAT_HOSTNAME"');
     expect(createScript).toContain('--mac-address "$NAPCAT_MAC_ADDRESS"');
     expect(createScript).toContain('-v "$MACHINE_ID_PATH:/etc/machine-id:ro"');
-    expect(createScript).toContain('-v "$DATA_DIR/runtime:/tmp/runtime-napcat"');
+    expect(createScript).toContain(
+      '-v "$DATA_DIR/runtime:/tmp/runtime-napcat"',
+    );
+  });
+
+  it('reserves create-login containers with a provisional device identity before remote startup', async () => {
+    const identityRepository = createIdentityRepository();
+    const identityService = new NapcatDeviceIdentityService(
+      identityRepository as any,
+      createIdentityConfig(),
+    );
+    let savedContainer: any;
+    const queryBuilder = {
+      addSelect: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getOne: jest.fn(async () => savedContainer),
+      where: jest.fn().mockReturnThis(),
+    };
+    const containerRepository = {
+      create: jest.fn((input) => ({ ...input })),
+      createQueryBuilder: jest.fn(() => queryBuilder),
+      find: jest.fn().mockResolvedValue([]),
+      save: jest.fn(async (input) => {
+        savedContainer = { ...input };
+        return savedContainer;
+      }),
+      update: jest.fn(async ({ id }: { id: string }, input) => {
+        if (savedContainer?.id === id) Object.assign(savedContainer, input);
+        return { affected: savedContainer?.id === id ? 1 : 0 };
+      }),
+    };
+    const bindingRepository = {
+      update: jest.fn(),
+    };
+    const containerService = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string, defaultValue?: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
+            QQBOT_NAPCAT_CONTAINER_PREFIX: 'kt-qqbot-napcat',
+            QQBOT_NAPCAT_IMAGE: 'kt-napcat-desktop-cn@sha256:profiledigest',
+            QQBOT_NAPCAT_PORT_START: '6100',
+            QQBOT_NAPCAT_ROOT: '/vol1/docker/kt-qqbot/napcat-instances',
+            QQBOT_NAPCAT_SSH_TARGET: 'nas',
+          };
+          return values[key] || defaultValue || '';
+        }),
+      } as any,
+      containerRepository as any,
+      bindingRepository as any,
+      new ToolsService(),
+      identityService,
+    ) as any;
+    containerService.runProcess = jest.fn().mockResolvedValue({
+      stderr: '',
+      stdout: '',
+    });
+
+    const runtime = await containerService.reserveCreateContainer();
+
+    expect(containerService.runProcess).not.toHaveBeenCalled();
+    expect(runtime).toEqual(
+      expect.objectContaining({
+        dataDir: expect.stringContaining(`kt-qqbot-napcat-${runtime.id}`),
+        id: expect.any(String),
+        name: expect.stringContaining(`kt-qqbot-napcat-${runtime.id}`),
+      }),
+    );
+    expect(identityRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: runtime.id,
+        containerId: runtime.id,
+        dataDir: runtime.dataDir,
+      }),
+    );
+
+    await containerService.startCreateContainer(runtime);
+
+    const createScript = containerService.runProcess.mock.calls[0][2];
+    expect(createScript).toContain('--hostname "$NAPCAT_HOSTNAME"');
+    expect(createScript).toContain('--mac-address "$NAPCAT_MAC_ADDRESS"');
+    expect(createScript).toContain('-v "$MACHINE_ID_PATH:/etc/machine-id:ro"');
+    expect(createScript).toContain('-e LANG=zh_CN.UTF-8');
+    expect(createScript).toContain('-e LC_ALL=zh_CN.UTF-8');
+    expect(createScript).toContain('-e TZ=Asia/Shanghai');
+    expect(createScript).toContain('-e XDG_RUNTIME_DIR=/tmp/runtime-napcat');
+  });
+
+  it('adopts the provisional create-login identity when binding the scanned account', async () => {
+    const identityRepository = createIdentityRepository();
+    const identityService = new NapcatDeviceIdentityService(
+      identityRepository as any,
+      createIdentityConfig(),
+    );
+    const provisionalIdentity = {
+      accountId: 'container-created',
+      containerId: 'container-created',
+      dataDir:
+        '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-container-created',
+      hostname: 'pc-a1b2c3d4',
+      hostnameStrategy: 'qqnt-visible-hostname-v1',
+      id: 'identity-created',
+      lastLoginEvidence: null,
+      macAddress: '02:42:aa:bb:cc:dd',
+      macStrategy: 'docker-bridge-mac-v1',
+      machineIdPath:
+        '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-container-created/machine-id',
+      verificationStatus: 'pending',
+    } as NapcatDeviceIdentity;
+    identityRepository.seedIdentity(provisionalIdentity);
+    const bindingRepository = {
+      create: jest.fn((input) => ({ ...input })),
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn(async (input) => input),
+      update: jest.fn(),
+    };
+    const containerRepository = {
+      update: jest.fn(),
+    };
+    const containerService = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string, defaultValue?: string) => {
+          const values: Record<string, string> = {
+            QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
+            QQBOT_NAPCAT_CONTAINER_PREFIX: 'kt-qqbot-napcat',
+            QQBOT_NAPCAT_ROOT: '/vol1/docker/kt-qqbot/napcat-instances',
+          };
+          return values[key] || defaultValue || '';
+        }),
+      } as any,
+      containerRepository as any,
+      bindingRepository as any,
+      new ToolsService(),
+      identityService,
+    );
+
+    await (containerService as any).bindAccount(
+      'account-final',
+      'container-created',
+      '10001',
+    );
+
+    expect(identityRepository.update).toHaveBeenCalledWith(
+      { id: 'identity-created' },
+      expect.objectContaining({
+        accountId: 'account-final',
+        containerId: 'container-created',
+      }),
+    );
+    expect(bindingRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 'account-final',
+        containerId: 'container-created',
+        deviceIdentityId: 'identity-created',
+      }),
+    );
+    expect(identityRepository.save).toHaveBeenCalledTimes(0);
+  });
+
+  it('adopts provisional runtime profiles when binding a create-login container', async () => {
+    const identityRepository = createIdentityRepository();
+    const identityService = new NapcatDeviceIdentityService(
+      identityRepository as any,
+      createIdentityConfig(),
+    );
+    identityRepository.seedIdentity({
+      accountId: 'container-created',
+      containerId: 'container-created',
+      dataDir:
+        '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-container-created',
+      hostname: 'pc-a1b2c3d4',
+      hostnameStrategy: 'qqnt-visible-hostname-v1',
+      id: 'identity-created',
+      lastLoginEvidence: null,
+      macAddress: '02:42:aa:bb:cc:dd',
+      macStrategy: 'docker-bridge-mac-v1',
+      machineIdPath:
+        '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-container-created/machine-id',
+      verificationStatus: 'pending',
+    } as NapcatDeviceIdentity);
+    const runtimeProfileService = {
+      adoptPlannedProfiles: jest.fn(),
+    };
+    const containerService = new QqbotNapcatContainerService(
+      createIdentityConfig(),
+      {
+        update: jest.fn(),
+      } as any,
+      {
+        create: jest.fn((input) => ({ ...input })),
+        find: jest.fn().mockResolvedValue([]),
+        findOne: jest.fn().mockResolvedValue(null),
+        save: jest.fn(async (input) => input),
+        update: jest.fn(),
+      } as any,
+      new ToolsService(),
+      identityService,
+      runtimeProfileService as any,
+    );
+
+    await containerService.bindAccount(
+      'account-final',
+      'container-created',
+      '10001',
+    );
+
+    expect(runtimeProfileService.adoptPlannedProfiles).toHaveBeenCalledWith({
+      containerId: 'container-created',
+      deviceIdentityId: 'identity-created',
+      fromAccountId: 'container-created',
+      toAccountId: 'account-final',
+    });
   });
 
   it('reuses persisted device identity when rebuilding an existing account container login env', async () => {

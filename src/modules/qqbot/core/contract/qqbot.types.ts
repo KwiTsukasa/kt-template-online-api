@@ -337,6 +337,7 @@ export type QqbotLoginScanSession = {
   newDeviceQrcode?: string;
   newDeviceStatus?: QqbotLoginNewDeviceStatus;
   passwordMd5?: string;
+  preparingContainer?: boolean;
   preparingRelogin?: boolean;
   qrcode?: string;
   runtimeRebuildCount?: number;

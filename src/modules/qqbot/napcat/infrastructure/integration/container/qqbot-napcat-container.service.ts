@@ -6,7 +6,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { throwVbenError, ToolsService } from '@/common';
+import { ensureSnowflakeId, throwVbenError, ToolsService } from '@/common';
 import { NapcatConfigWriterService } from '../../../application/runtime/napcat-config-writer.service';
 import { NapcatRuntimeProfileService } from '../../../application/runtime/napcat-runtime-profile.service';
 import type { NapcatConfigFile } from '../../../domain/runtime/napcat-profile.types';
@@ -43,6 +43,10 @@ type NapcatLoginEnvOptions = {
 type NapcatLoginEnvUpdateResult = {
   changed: boolean;
   ok: boolean;
+};
+
+type CreateManagedContainerOptions = {
+  startRemote?: boolean;
 };
 
 @Injectable()
@@ -86,7 +90,87 @@ export class QqbotNapcatContainerService {
       return this.getLegacyRuntime();
     }
 
-    return this.createManagedContainer();
+    const runtime = await this.reserveCreateContainer();
+    await this.startCreateContainer(runtime);
+    return runtime;
+  }
+
+  /**
+   * Reserves a create-login container row and provisional device identity without waiting for NAS Docker startup.
+   * @returns Pending NapCat runtime metadata that Admin can use immediately for SSE/status tracking.
+   */
+  async reserveCreateContainer() {
+    if (!this.isManagedMode()) {
+      return this.getLegacyRuntime();
+    }
+
+    return this.createManagedContainer(undefined, undefined, undefined, {
+      startRemote: false,
+    });
+  }
+
+  /**
+   * Starts the remote Docker container previously reserved for create-login.
+   * @param runtime - Reserved runtime row returned by `reserveCreateContainer`.
+   * @returns True after the remote container has been started and persistence marked running.
+   */
+  async startCreateContainer(runtime: QqbotNapcatRuntime) {
+    if (this.getManagedMode() !== 'ssh' || !runtime.id) return true;
+
+    const container = await this.findContainerWithToken(runtime.id);
+    if (
+      !container ||
+      !container.name ||
+      !container.webuiPort ||
+      !container.webuiToken
+    ) {
+      throwVbenError('NapCat 创建容器不存在或缺少 WebUI 配置');
+    }
+    if (container.status === 'running') return true;
+
+    try {
+      const deviceIdentity =
+        await this.resolveCreateContainerDeviceIdentity(container);
+      await this.createRemoteDockerContainer({
+        account: undefined,
+        accountId:
+          deviceIdentity?.accountId || container.accountId || container.id,
+        containerId: container.id,
+        dataDir:
+          deviceIdentity?.dataDir ||
+          container.dataDir ||
+          `${this.getRootDir()}/${container.name}`,
+        deviceIdentity,
+        image: container.image,
+        name: container.name,
+        port: container.webuiPort,
+        reverseWsUrl: container.reverseWsUrl || this.buildReverseWsUrl(),
+        token: container.webuiToken,
+      });
+      await this.containerRepository.update(
+        { id: container.id },
+        {
+          dataDir:
+            deviceIdentity?.dataDir ||
+            container.dataDir ||
+            `${this.getRootDir()}/${container.name}`,
+          lastError: null,
+          lastStartedAt: new Date(),
+          status: 'running',
+        },
+      );
+      return true;
+    } catch (err) {
+      const message = this.toolsService.getErrorMessage(err);
+      await this.containerRepository.update(
+        { id: container.id },
+        {
+          lastError: this.toolsService.toColumnText(message, 500),
+          status: 'error',
+        },
+      );
+      throw err;
+    }
   }
 
   /**
@@ -287,20 +371,48 @@ export class QqbotNapcatContainerService {
   }
 
   /**
+   * Resolves the provisional identity used by first-time QR login before the QQ self id exists.
+   * @param container - Reserved container row; its bigint id is the temporary account-level seed.
+   * @returns Docker device options that must be applied to the first remote `docker run`.
+   */
+  private async resolveCreateContainerDeviceIdentity(
+    container: NapcatContainer,
+  ): Promise<NapcatDockerDeviceOptions | undefined> {
+    if (!this.deviceIdentityService || !container.id) return undefined;
+    const accountId =
+      this.toolsService.toTrimmedString(container.accountId) || container.id;
+    const identity = await this.deviceIdentityService.resolveForAccount({
+      accountId,
+      containerId: container.id,
+    });
+    return toNapcatDockerDeviceOptions(identity);
+  }
+
+  /**
    * Resolves the device identity id that belongs to an account/container binding.
    * @param accountId - Internal QQBot account id used to select the persistent device identity.
    * @param containerId - Managed NapCat container id that should be stored on the identity row.
+   * @param selfId - QQ self id observed from NapCat after scanning; stored as adoption evidence only.
    * @returns Device identity id when the identity service is available.
    */
   private async resolveBindingDeviceIdentityId(
     accountId: string,
     containerId: string,
+    selfId?: string,
   ) {
     if (!this.deviceIdentityService) return undefined;
-    const identity = await this.deviceIdentityService.resolveForAccount({
-      accountId,
-      containerId,
-    });
+    const identity =
+      typeof this.deviceIdentityService.adoptContainerIdentity === 'function'
+        ? await this.deviceIdentityService.adoptContainerIdentity({
+            accountId,
+            containerId,
+            selfId,
+          })
+        : await this.deviceIdentityService.resolveForAccount({
+            accountId,
+            containerId,
+            selfId,
+          });
     return identity.id;
   }
 
@@ -397,8 +509,9 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
    * 执行 NapCat 登录运行态流程。
    * @param accountId - 账号 ID；定位本次读取、更新、删除或关联的账号。
    * @param containerId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   * @param selfId - QQ 号；用于把创建期临时设备身份归属到真实账号时留下登录证据。
    */
-  async bindAccount(accountId: string, containerId?: string) {
+  async bindAccount(accountId: string, containerId?: string, selfId?: string) {
     if (!containerId) return;
 
     await this.bindingRepository.update(
@@ -408,7 +521,14 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     const deviceIdentityId = await this.resolveBindingDeviceIdentityId(
       accountId,
       containerId,
+      selfId,
     );
+    await this.runtimeProfileService.adoptPlannedProfiles({
+      containerId,
+      deviceIdentityId,
+      fromAccountId: containerId,
+      toAccountId: accountId,
+    });
     await this.containerRepository.update(
       { id: containerId, isDeleted: false },
       { accountId },
@@ -506,7 +626,53 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     });
     if (bindingCount > 0) return false;
 
+    const container = await this.containerRepository.findOne({
+      where: {
+        id: containerId,
+        isDeleted: false,
+      },
+    });
+    if (container?.accountId) return false;
+
     return this.removeContainer(containerId);
+  }
+
+  /**
+   * Removes a create-login container even if its row was already marked deleted during an async startup race.
+   * @param containerId - Reserved create-login container id whose row must have no account owner and no live binding.
+   * @returns True when a matching create-login container row was cleaned up.
+   */
+  async removeUnboundCreateContainer(containerId?: string) {
+    if (!containerId) return false;
+
+    const bindingCount = await this.bindingRepository.count({
+      where: {
+        containerId,
+        isDeleted: false,
+      },
+    });
+    if (bindingCount > 0) return false;
+
+    const container = await this.containerRepository.findOne({
+      where: {
+        id: containerId,
+      },
+    });
+    if (!container || container.accountId) return false;
+
+    if (this.getManagedMode() === 'ssh') {
+      await this.removeRemoteDockerContainer(container);
+    }
+
+    await this.containerRepository.update(
+      { id: container.id },
+      {
+        isDeleted: true,
+        lastError: null,
+        status: 'stopped',
+      },
+    );
+    return true;
   }
 
   /**
@@ -1062,6 +1228,7 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     selfId?: string,
     loginPassword?: string,
     accountId?: string,
+    options: CreateManagedContainerOptions = {},
   ) {
     const mode = this.getManagedMode();
     if (mode !== 'ssh') {
@@ -1073,75 +1240,83 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
       throwVbenError('NapCat 镜像未配置，请先设置 QQBOT_NAPCAT_IMAGE');
     }
     const port = await this.allocatePort();
-    const name = this.buildContainerName(selfId);
     const token = randomBytes(24).toString('hex');
+    const container = this.containerRepository.create({
+      baseUrl: this.buildBaseUrl(port),
+      accountId: accountId || null,
+      dataDir: '',
+      image,
+      isDeleted: false,
+      lastError: null,
+      name: '',
+      remark: '',
+      reverseWsUrl: this.buildReverseWsUrl(),
+      status: 'creating',
+      webuiPort: port,
+      webuiToken: token,
+    });
+    ensureSnowflakeId(container);
+    const identityAccountId = accountId || container.id;
+    const name = this.buildContainerName(selfId || identityAccountId);
     let dataDir = `${this.getRootDir()}/${name}`;
     let deviceIdentity: NapcatDockerDeviceOptions | undefined;
-    if (accountId && this.deviceIdentityService) {
+    if (identityAccountId && this.deviceIdentityService) {
       const identity = await this.deviceIdentityService.resolveForAccount({
-        accountId,
+        accountId: identityAccountId,
+        containerId: container.id,
         selfId,
       });
       dataDir = identity.dataDir || dataDir;
       deviceIdentity = toNapcatDockerDeviceOptions(identity);
     }
-    const baseUrl = this.buildBaseUrl(port);
-    const reverseWsUrl = this.buildReverseWsUrl();
+    const baseUrl = container.baseUrl;
+    const reverseWsUrl = container.reverseWsUrl;
+    Object.assign(container, {
+      dataDir,
+      name,
+    });
 
-    const container = await this.containerRepository.save(
-      this.containerRepository.create({
-        baseUrl,
-        accountId: accountId || null,
-        dataDir,
-        image,
-        isDeleted: false,
-        lastError: null,
-        name,
-        remark: '',
-        reverseWsUrl,
-        status: 'creating',
-        webuiPort: port,
-        webuiToken: token,
-      }),
-    );
+    const savedContainer = await this.containerRepository.save(container);
 
     try {
-      await this.createRemoteDockerContainer({
-        account: selfId,
-        accountId,
-        containerId: container.id,
-        dataDir,
-        deviceIdentity,
-        image,
-        loginPassword,
-        name,
-        port,
-        reverseWsUrl,
-        token,
-      });
-      await this.containerRepository.update(
-        { id: container.id },
-        {
-          lastError: null,
-          lastStartedAt: new Date(),
-          status: 'running',
-        },
-      );
+      if (options.startRemote !== false) {
+        await this.createRemoteDockerContainer({
+          account: selfId,
+          accountId: identityAccountId,
+          containerId: savedContainer.id,
+          dataDir,
+          deviceIdentity,
+          image,
+          loginPassword,
+          name,
+          port,
+          reverseWsUrl,
+          token,
+        });
+        await this.containerRepository.update(
+          { id: savedContainer.id },
+          {
+            lastError: null,
+            lastStartedAt: new Date(),
+            status: 'running',
+          },
+        );
+      }
       if (accountId && this.deviceIdentityService) {
         const identity = await this.deviceIdentityService.resolveForAccount({
           accountId,
-          containerId: container.id,
+          containerId: savedContainer.id,
           selfId,
         });
         await this.bindingRepository.update(
-          { accountId, containerId: container.id, isDeleted: false },
+          { accountId, containerId: savedContainer.id, isDeleted: false },
           { deviceIdentityId: identity.id },
         );
       }
       return {
         baseUrl,
         dataDir,
-        id: container.id,
+        id: savedContainer.id,
         name,
         webuiPort: port,
         webuiToken: token,
@@ -1149,7 +1324,7 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     } catch (err) {
       const message = this.toolsService.getErrorMessage(err);
       await this.containerRepository.update(
-        { id: container.id },
+        { id: savedContainer.id },
         {
           lastError: this.toolsService.toColumnText(message, 500),
           status: 'error',

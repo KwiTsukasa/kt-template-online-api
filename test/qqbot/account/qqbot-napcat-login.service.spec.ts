@@ -37,11 +37,9 @@ describe('QqbotNapcatLoginService', () => {
       quickResult?: null | Record<string, unknown>;
     } = {},
   ) =>
-    jest.spyOn(target as any, 'postNapcat').mockImplementation(
-      async (
-        _container: unknown,
-        path: string,
-      ) => {
+    jest
+      .spyOn(target as any, 'postNapcat')
+      .mockImplementation(async (_container: unknown, path: string) => {
         if (path === '/api/QQLogin/SetQuickLogin') {
           if (options.quickError) throw new Error(options.quickError);
           return options.quickResult ?? null;
@@ -51,8 +49,7 @@ describe('QqbotNapcatLoginService', () => {
           return options.passwordResult ?? null;
         }
         return null;
-      },
-    );
+      });
 
   const toolsService = new ToolsService();
   const service = new QqbotNapcatLoginService(
@@ -621,6 +618,7 @@ describe('QqbotNapcatLoginService', () => {
     expect(containerService.bindAccount).toHaveBeenCalledWith(
       'account-1',
       'container-quick',
+      '10001',
     );
     expect(session.status).toBe('success');
     const events = (refreshService as any).sessionEventLogs.get(session.id);
@@ -693,6 +691,7 @@ describe('QqbotNapcatLoginService', () => {
     expect(containerService.bindAccount).toHaveBeenCalledWith(
       'account-1',
       'container-quick-cleanup-failed',
+      '10001',
     );
     expect(session.status).toBe('success');
     const steps = (
@@ -757,6 +756,141 @@ describe('QqbotNapcatLoginService', () => {
     );
     expect(steps.indexOf('quick-login-fallback')).toBeLessThan(
       steps.indexOf('qrcode-fetch'),
+    );
+  });
+
+  it('returns create login scan before remote container startup finishes', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6104/',
+      id: 'container-create',
+      name: 'napcat-create',
+      webuiPort: 6104,
+    };
+    const never = new Promise<never>(() => undefined);
+    const containerService = {
+      prepareCreateContainer: jest.fn().mockReturnValue(never),
+      reserveCreateContainer: jest.fn().mockResolvedValue(container),
+      startCreateContainer: jest.fn().mockReturnValue(never),
+    };
+    const createService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+
+    const result = await Promise.race([
+      createService.startCreate(),
+      new Promise((resolve) => {
+        setTimeout(() => resolve({ timedOut: true }), 20);
+      }),
+    ]);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        containerId: 'container-create',
+        errorMessage: 'NapCat 正在创建登录容器，请稍后',
+        mode: 'create',
+        qrcode: undefined,
+        status: 'pending',
+      }),
+    );
+    expect(containerService.prepareCreateContainer).not.toHaveBeenCalled();
+    expect(containerService.reserveCreateContainer).toHaveBeenCalledTimes(1);
+    expect(containerService.startCreateContainer).toHaveBeenCalledWith(
+      container,
+    );
+  });
+
+  it('keeps create login pending while the remote container is still starting', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6104/',
+      id: 'container-create',
+      name: 'napcat-create',
+      webuiPort: 6104,
+    };
+    const never = new Promise<never>(() => undefined);
+    const containerService = {
+      reserveCreateContainer: jest.fn().mockResolvedValue(container),
+      startCreateContainer: jest.fn().mockReturnValue(never),
+    };
+    const createService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const getSessionContainer = jest.spyOn(
+      createService as any,
+      'getSessionContainer',
+    );
+    const result = await createService.startCreate();
+
+    const status = await createService.status(result.sessionId || '');
+
+    expect(status).toEqual(
+      expect.objectContaining({
+        errorMessage: 'NapCat 正在创建登录容器，请稍后',
+        mode: 'create',
+        qrcode: undefined,
+        status: 'pending',
+      }),
+    );
+    expect(getSessionContainer).not.toHaveBeenCalled();
+  });
+
+  it('recovers stale create login preparation after the background task was lost', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6105/',
+      id: 'container-create-stale',
+      name: 'napcat-create-stale',
+      webuiPort: 6105,
+    };
+    const never = new Promise<never>(() => undefined);
+    const containerService = {
+      findRuntimeById: jest.fn().mockResolvedValue(container),
+      startCreateContainer: jest.fn().mockReturnValue(never),
+    };
+    const createService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          if (key === 'QQBOT_NAPCAT_CREATE_PREPARING_STALE_MS') return '1';
+          return undefined;
+        }),
+      } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (createService as any).createSession({
+      container,
+      mode: 'create',
+      preparingContainer: true,
+      status: 'pending',
+    });
+    const old = Date.now() - 10_000;
+    session.createdAt = old;
+    session.errorMessage = 'NapCat 正在创建登录容器，请稍后';
+    session.expiresAt = Date.now() + 60_000;
+    session.lastRestartedAt = old;
+    (createService as any).sessions.set(session.id, session);
+
+    const status = await createService.status(session.id);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(status).toEqual(
+      expect.objectContaining({
+        errorMessage: 'NapCat 创建任务已恢复，继续创建登录容器',
+        mode: 'create',
+        status: 'pending',
+      }),
+    );
+    expect(containerService.findRuntimeById).toHaveBeenCalledWith(
+      'container-create-stale',
+    );
+    expect(containerService.startCreateContainer).toHaveBeenCalledWith(
+      container,
     );
   });
 
@@ -1022,23 +1156,16 @@ describe('QqbotNapcatLoginService', () => {
       .mockResolvedValue(undefined);
     const postNapcat = jest
       .spyOn(refreshService as any, 'postNapcat')
-      .mockImplementation(
-        async (
-          _container: unknown,
-          path: string,
-        ) => {
-          if (path === '/api/QQLogin/SetQuickLogin') {
-            throw new Error('快速登录未找到历史会话');
-          }
-          if (path === '/api/QQLogin/PasswordLogin') return null;
-          return null;
-        },
-      );
-    jest
-      .spyOn(refreshService as any, 'getLoginStatus')
-      .mockResolvedValueOnce({
-        isLogin: true,
+      .mockImplementation(async (_container: unknown, path: string) => {
+        if (path === '/api/QQLogin/SetQuickLogin') {
+          throw new Error('快速登录未找到历史会话');
+        }
+        if (path === '/api/QQLogin/PasswordLogin') return null;
+        return null;
       });
+    jest.spyOn(refreshService as any, 'getLoginStatus').mockResolvedValueOnce({
+      isLogin: true,
+    });
     jest.spyOn(refreshService as any, 'getLoginInfo').mockResolvedValue({
       nickname: 'Kwi',
       online: true,
@@ -2706,6 +2833,7 @@ describe('QqbotNapcatLoginService', () => {
     expect(containerService.bindAccount).toHaveBeenCalledWith(
       'account-1',
       'container-password-cleanup-failed',
+      '10001',
     );
     expect(session.status).toBe('success');
     const steps = (

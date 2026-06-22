@@ -31,6 +31,13 @@ type RecordPlannedProfilesInput = {
   runtimeProfile: NapcatRuntimeProfileSnapshot;
 };
 
+type AdoptPlannedProfilesInput = {
+  containerId?: string;
+  deviceIdentityId?: string;
+  fromAccountId?: string;
+  toAccountId: string;
+};
+
 @Injectable()
 export class NapcatRuntimeProfileService {
   /**
@@ -168,6 +175,57 @@ export class NapcatRuntimeProfileService {
         }),
       );
     }
+  }
+
+  /**
+   * Moves planned create-login runtime evidence from a provisional account seed to the scanned account.
+   * @param input - Target account id plus the reserved container/provisional account id used before QQ self id was known.
+   */
+  async adoptPlannedProfiles(input: AdoptPlannedProfilesInput) {
+    const toAccountId = `${input.toAccountId || ''}`.trim();
+    const fromAccountId =
+      `${input.fromAccountId || input.containerId || ''}`.trim();
+    const containerId = `${input.containerId || ''}`.trim();
+    if (!toAccountId || !fromAccountId) return;
+
+    if (this.runtimeProfileRepository) {
+      await this.runtimeProfileRepository.update(
+        this.buildProfileAdoptionWhere(fromAccountId, containerId),
+        {
+          accountId: toAccountId,
+          containerId: containerId || null,
+          deviceIdentityId: input.deviceIdentityId || null,
+        },
+      );
+    }
+
+    if (this.protocolProfileRepository) {
+      await this.protocolProfileRepository.update(
+        this.buildProfileAdoptionWhere(fromAccountId, containerId),
+        {
+          accountId: toAccountId,
+          containerId: containerId || null,
+        },
+      );
+    }
+  }
+
+  /**
+   * Builds the narrow update condition for provisional profile adoption.
+   * @param fromAccountId - Temporary account id used during first Docker startup, usually the reserved container id.
+   * @param containerId - Reserved container id; included when present so unrelated historical rows are untouched.
+   * @returns TypeORM partial where object used by both runtime and protocol profile repositories.
+   */
+  private buildProfileAdoptionWhere(
+    fromAccountId: string,
+    containerId: string,
+  ) {
+    return containerId
+      ? {
+          accountId: fromAccountId,
+          containerId,
+        }
+      : { accountId: fromAccountId };
   }
 
   /**

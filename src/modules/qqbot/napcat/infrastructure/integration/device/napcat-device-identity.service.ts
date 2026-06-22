@@ -15,6 +15,12 @@ type ResolveNapcatDeviceIdentityInput = {
   selfId?: string;
 };
 
+type AdoptNapcatDeviceIdentityInput = {
+  accountId: string;
+  containerId: string;
+  selfId?: string;
+};
+
 @Injectable()
 export class NapcatDeviceIdentityService {
   /**
@@ -77,6 +83,130 @@ export class NapcatDeviceIdentityService {
   }
 
   /**
+   * Reassigns a create-login provisional identity to the scanned account without changing visible device values.
+   * @param input - Final account id and container id; container id selects the provisional identity created before QQ self id was known.
+   * @returns Existing provisional identity after adoption, or a newly resolved account identity when no provisional row exists.
+   */
+  async adoptContainerIdentity(input: AdoptNapcatDeviceIdentityInput) {
+    const accountId = `${input.accountId}`.trim();
+    const containerId = `${input.containerId}`.trim();
+    const provisionalIdentity = await this.identityRepository.findOne({
+      where: { containerId },
+    });
+
+    if (!provisionalIdentity) {
+      return this.resolveForAccount({
+        accountId,
+        containerId,
+        selfId: input.selfId,
+      });
+    }
+
+    if (provisionalIdentity.accountId === accountId) {
+      return provisionalIdentity;
+    }
+
+    const targetIdentity = await this.identityRepository.findOne({
+      where: { accountId },
+    });
+    if (targetIdentity && targetIdentity.id !== provisionalIdentity.id) {
+      return this.mergeProvisionalIdentityIntoTarget({
+        accountId,
+        containerId,
+        provisionalIdentity,
+        selfId: input.selfId,
+        targetIdentity,
+      });
+    }
+
+    const lastLoginEvidence = this.buildAdoptionEvidence({
+      existingEvidence: provisionalIdentity.lastLoginEvidence,
+      fromAccountId: provisionalIdentity.accountId,
+      selfId: input.selfId,
+      toAccountId: accountId,
+    });
+    await this.identityRepository.update(
+      { id: provisionalIdentity.id },
+      {
+        accountId,
+        containerId,
+        lastLoginEvidence,
+      },
+    );
+    Object.assign(provisionalIdentity, {
+      accountId,
+      containerId,
+      lastLoginEvidence,
+    });
+
+    return provisionalIdentity;
+  }
+
+  /**
+   * Copies first-run device values into an existing account identity and removes the temporary row.
+   * @param input - Existing target row plus the provisional row created before the scanned QQ account was known.
+   * @returns Target account identity after it has adopted the running container's visible device values.
+   */
+  private async mergeProvisionalIdentityIntoTarget(input: {
+    accountId: string;
+    containerId: string;
+    provisionalIdentity: NapcatDeviceIdentity;
+    selfId?: string;
+    targetIdentity: NapcatDeviceIdentity;
+  }) {
+    const lastLoginEvidence = this.buildAdoptionEvidence({
+      existingEvidence: input.targetIdentity.lastLoginEvidence,
+      fromAccountId: input.provisionalIdentity.accountId,
+      replacedIdentityId: input.provisionalIdentity.id,
+      selfId: input.selfId,
+      toAccountId: input.accountId,
+    });
+    const nextIdentity = {
+      accountId: input.accountId,
+      containerId: input.containerId,
+      dataDir: input.provisionalIdentity.dataDir,
+      hostname: input.provisionalIdentity.hostname,
+      hostnameStrategy: input.provisionalIdentity.hostnameStrategy,
+      lastLoginEvidence,
+      machineIdPath: input.provisionalIdentity.machineIdPath,
+      macAddress: input.provisionalIdentity.macAddress,
+      macStrategy: input.provisionalIdentity.macStrategy,
+      verificationStatus: input.provisionalIdentity.verificationStatus,
+    };
+    await this.identityRepository.update(
+      { id: input.targetIdentity.id },
+      nextIdentity,
+    );
+    await this.identityRepository.delete({ id: input.provisionalIdentity.id });
+    Object.assign(input.targetIdentity, nextIdentity);
+    return input.targetIdentity;
+  }
+
+  /**
+   * Builds evidence for the one-time provisional identity adoption after a create-login scan succeeds.
+   * @param input - Source/target ids and optional QQ self id used to make later audits explain the ownership change.
+   * @returns JSON-safe evidence merged into the device identity row before returning it to the container binding.
+   */
+  private buildAdoptionEvidence(input: {
+    existingEvidence: null | Record<string, unknown>;
+    fromAccountId: string;
+    replacedIdentityId?: string;
+    selfId?: string;
+    toAccountId: string;
+  }) {
+    return {
+      ...(input.existingEvidence || {}),
+      adoption: {
+        fromAccountId: input.fromAccountId,
+        replacedIdentityId: input.replacedIdentityId || null,
+        selfId: input.selfId || null,
+        strategy: 'create-login-provisional-identity-adoption-v1',
+        toAccountId: input.toAccountId,
+      },
+    };
+  }
+
+  /**
    * Builds the stable container directory name used for data-dir ownership.
    * @param seed - QQ self id or account id used in container path compatibility, not in the public hostname.
    */
@@ -110,7 +240,9 @@ export class NapcatDeviceIdentityService {
     containerName: string,
   ) {
     const hash = createHash('sha256')
-      .update(`${accountId}:${containerName}:${QQNT_DOCKER_BRIDGE_MAC_STRATEGY}`)
+      .update(
+        `${accountId}:${containerName}:${QQNT_DOCKER_BRIDGE_MAC_STRATEGY}`,
+      )
       .digest('hex');
     const suffix = [
       hash.slice(0, 2),
@@ -145,9 +277,7 @@ export class NapcatDeviceIdentityService {
       identity.hostnameStrategy !== QQNT_VISIBLE_HOSTNAME_STRATEGY ||
       identity.macStrategy !== QQNT_DOCKER_BRIDGE_MAC_STRATEGY ||
       !/^pc-[a-f0-9]{8}$/.test(identity.hostname || '') ||
-      !/^02:42:([0-9a-f]{2}:){3}[0-9a-f]{2}$/i.test(
-        identity.macAddress || '',
-      );
+      !/^02:42:([0-9a-f]{2}:){3}[0-9a-f]{2}$/i.test(identity.macAddress || '');
 
     if (!needsMigration) {
       return;

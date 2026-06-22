@@ -436,7 +436,7 @@ describe('QqbotNapcatContainerService', () => {
     expect(withoutAccount).not.toContain('NAPCAT_QUICK_PASSWORD');
   });
 
-  it('skips docker pull when recreating in place for quick login', () => {
+  it('checks the local image before pulling when creating a container', () => {
     const service = new QqbotNapcatContainerService(
       { get: jest.fn().mockReturnValue('') } as any,
       {} as any,
@@ -453,10 +453,21 @@ describe('QqbotNapcatContainerService', () => {
       token: 'token-test',
     };
 
-    expect(service.buildRemoteCreateScript(baseInput)).toContain('docker pull');
-    expect(
-      service.buildRemoteCreateScript({ ...baseInput, skipPull: true }),
-    ).not.toContain('docker pull');
+    const createScript = service.buildRemoteCreateScript(baseInput);
+    expect(createScript).toContain(
+      'if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then',
+    );
+    expect(createScript).toContain('docker pull "$IMAGE" >/dev/null');
+    expect(createScript.indexOf('docker image inspect')).toBeLessThan(
+      createScript.indexOf('docker pull "$IMAGE"'),
+    );
+
+    const quickLoginScript = service.buildRemoteCreateScript({
+      ...baseInput,
+      skipPull: true,
+    });
+    expect(quickLoginScript).not.toContain('docker image inspect "$IMAGE"');
+    expect(quickLoginScript).not.toContain('docker pull');
   });
 
   it('generates Chinese desktop runtime flags and account config files', () => {

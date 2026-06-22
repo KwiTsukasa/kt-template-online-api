@@ -1402,7 +1402,12 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     const passwordRunFlag = loginPassword
       ? '  -e NAPCAT_QUICK_PASSWORD="$NAPCAT_QUICK_PASSWORD" \\\n'
       : '';
-    const pullCmd = input.skipPull ? '' : 'docker pull "$IMAGE" >/dev/null\n';
+    const pullCmd = input.skipPull
+      ? ''
+      : `if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  docker pull "$IMAGE" >/dev/null
+fi
+`;
     const deviceHeader = input.deviceIdentity
       ? [
           `NAPCAT_HOSTNAME=${this.sh(input.deviceIdentity.hostname)}`,

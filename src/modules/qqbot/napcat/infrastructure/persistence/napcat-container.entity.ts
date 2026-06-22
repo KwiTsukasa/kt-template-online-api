@@ -6,7 +6,7 @@ import {
   KtDateTimeColumn,
   KtUpdateDateColumn,
 } from '@/common';
-import type { QqbotNapcatContainerStatus } from '@/modules/qqbot/core/contract/qqbot.types';
+import type { QqbotRuntimeContainerStatus } from '@/modules/qqbot/core/contract/qqbot.types';
 
 @Entity('napcat_container')
 @Index('uk_napcat_container_name', ['name'], { unique: true })
@@ -47,7 +47,7 @@ export class NapcatContainer {
   reverseWsUrl: string;
 
   @Column({ default: 'creating', length: 32 })
-  status: QqbotNapcatContainerStatus;
+  status: QqbotRuntimeContainerStatus;
 
   @KtDateTimeColumn({
     default: null,

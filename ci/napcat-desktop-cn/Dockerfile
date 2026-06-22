@@ -1,4 +1,4 @@
-ARG NAPCAT_BASE_IMAGE=mlikiowa/napcat-docker:latest
+ARG NAPCAT_BASE_IMAGE=
 FROM ${NAPCAT_BASE_IMAGE}
 
 USER root

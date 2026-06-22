@@ -72,12 +72,14 @@ export type QqbotMessageDirection = 'inbound' | 'outbound';
 
 export type QqbotMessageType = 'channel' | 'group' | 'private';
 
-export type QqbotNapcatContainerStatus =
+export type QqbotRuntimeContainerStatus =
   | 'creating'
   | 'error'
   | 'running'
   | 'stopped'
   | 'unknown';
+
+export type QqbotNapcatContainerStatus = QqbotRuntimeContainerStatus;
 
 export type QqbotAccountNapcatBindStatus = 'bound' | 'disabled' | 'pending';
 
@@ -106,7 +108,7 @@ export type QqbotAccountNapcatRuntimeInfo = {
   containerId?: string;
   containerName?: string;
   containerOnline?: boolean;
-  containerStatus?: QqbotNapcatContainerStatus;
+  containerStatus?: QqbotRuntimeContainerStatus;
   profileStatus?: 'drift' | 'failed' | 'ok' | 'unknown';
   recoveryState?: 'idle' | 'password' | 'quick' | 'suspended';
   riskMode?: 'cooldown' | 'manual_only' | 'normal';

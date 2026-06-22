@@ -28,8 +28,8 @@ import type {
   QqbotAccountAbilityType,
   QqbotAccountListItem,
   QqbotConnectionRole,
-  QqbotNapcatContainerStatus,
   QqbotNapcatWebuiStatus,
+  QqbotRuntimeContainerStatus,
 } from '../../contract/qqbot.types';
 
 const INSECURE_ACCOUNT_SECRET_VALUES = new Set([
@@ -668,7 +668,7 @@ export class QqbotAccountService {
    */
   private toPersistedContainerStatus(
     napcat?: null | QqbotAccountListItem['napcat'],
-  ): QqbotNapcatContainerStatus {
+  ): QqbotRuntimeContainerStatus {
     if (napcat?.containerStatus) return napcat.containerStatus;
     if (napcat?.containerOnline) return 'running';
     return 'unknown';

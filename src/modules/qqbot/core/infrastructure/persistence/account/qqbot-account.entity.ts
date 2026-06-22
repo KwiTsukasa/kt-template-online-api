@@ -10,9 +10,9 @@ import type {
   QqbotConnectionMode,
   QqbotConnectionRole,
   QqbotConnectionStatus,
-  QqbotNapcatContainerStatus,
   QqbotNapcatRuntimeLoginStatus,
   QqbotNapcatWebuiStatus,
+  QqbotRuntimeContainerStatus,
 } from '../../../contract/qqbot.types';
 
 @Entity('qqbot_account')
@@ -48,7 +48,7 @@ export class QqbotAccount {
   oneBotStatus: QqbotConnectionStatus;
 
   @Column({ default: 'unknown', length: 32, name: 'container_status' })
-  containerStatus: QqbotNapcatContainerStatus;
+  containerStatus: QqbotRuntimeContainerStatus;
 
   @Column({ default: 'unknown', length: 32, name: 'webui_status' })
   webuiStatus: QqbotNapcatWebuiStatus;

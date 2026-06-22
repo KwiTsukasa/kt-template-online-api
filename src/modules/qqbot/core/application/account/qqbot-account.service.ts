@@ -475,7 +475,7 @@ export class QqbotAccountService {
   /**
    * 看门狗：主动巡检在线的已绑定账号，复用既有离线检测 + 站内信告警逻辑，
    * 让掉线/被踢能被及时发现并通知超管，而不必等管理员打开账号列表页。
-   * 检测到离线后先尝试快速登录，再尝试密码登录；扫码登录仍只由管理员手动触发。
+   * 风控下线后不再自动尝试快速/密码登录，只通知管理员手动重新登录。
    */
   async runOfflineWatchdog(): Promise<{ checked: number }> {
     const accounts = await this.accountRepository
@@ -489,7 +489,7 @@ export class QqbotAccountService {
       .getMany();
     if (accounts.length <= 0) return { checked: 0 };
 
-    await this.appendNapcatRuntime(accounts, { autoLogin: true });
+    await this.appendNapcatRuntime(accounts);
     return { checked: accounts.length };
   }
 
@@ -544,12 +544,10 @@ export class QqbotAccountService {
   /**
    * 执行 QQBot 核心流程。
    * @param accounts - 账号列表；转换 QQBot列表项。
-   * @param options - QQBot列表；驱动 `napcatRuntime.appendRuntime()` 的 QQBot步骤。
    * @returns 异步完成后的 QQBot 核心结果。
    */
   private async appendNapcatRuntime(
     accounts: QqbotAccount[],
-    options: { autoLogin?: boolean } = {},
   ): Promise<QqbotAccountListItem[]> {
     if (!this.napcatRuntime) {
       return accounts.map((account) =>
@@ -557,7 +555,7 @@ export class QqbotAccountService {
       );
     }
 
-    return this.napcatRuntime.appendRuntime(accounts, options, {
+    return this.napcatRuntime.appendRuntime(accounts, {
       /**
        * 执行 QQBot回调。
        * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
@@ -565,19 +563,6 @@ export class QqbotAccountService {
       clearQqLoginError: async (selfId) => {
         await this.accountRepository.update({ selfId }, { lastError: null });
       },
-      /**
-       * 读取 QQBot回调数据。
-       * @param account - account 输入；驱动 `this.getNapcatLoginPassword()` 的 QQBot步骤。
-       */
-      getLoginPassword: (account) => this.getNapcatLoginPassword(account),
-      /**
-       * 执行 QQBot回调。
-       * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-       * @param clientRole - clientRole 输入；驱动 `this.markOnline()` 的 QQBot步骤。
-       * @param lastError - lastError 输入；驱动 `this.markOnline()` 的 QQBot步骤。
-       */
-      markOnline: (selfId, clientRole, lastError) =>
-        this.markOnline(selfId, clientRole, lastError),
       /**
        * 执行 QQBot回调。
        * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
@@ -609,9 +594,10 @@ export class QqbotAccountService {
   ) {
     if (!this.systemNoticePublisher) return;
 
+    const noticeContent = `${offlineReason}\n请在 Admin 的 QQBot 账号页面手动点击「更新登录」重新登录。`;
     void this.systemNoticePublisher
       .publishSystemNotice({
-        content: offlineReason,
+        content: noticeContent,
         dedupeKey: `qqbot:offline:${selfId}`,
         eventType: 'qqbot.account.offline',
         metadata: {
@@ -621,7 +607,7 @@ export class QqbotAccountService {
         notifyRoleCode: 'super',
         severity: 'error',
         source: 'qqbot',
-        summary: offlineReason,
+        summary: noticeContent,
         title: `QQBot 账号已下线：${selfId}`,
       })
       .catch(() => undefined);

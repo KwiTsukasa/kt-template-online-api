@@ -83,6 +83,51 @@ describe('QqbotNapcatContainerService', () => {
     );
   });
 
+  it('backfills container ownership when binding an account to a legacy container', async () => {
+    const bindingRepository = {
+      create: jest.fn((input) => input),
+      createQueryBuilder: jest.fn(() => ({
+        andWhere: jest.fn().mockReturnThis(),
+        getCount: jest.fn().mockResolvedValue(0),
+        where: jest.fn().mockReturnThis(),
+      })),
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue({
+        accountId: 'account-1',
+        containerId: 'container-old',
+        id: 'binding-1',
+        isDeleted: false,
+      }),
+      save: jest.fn(),
+      update: jest.fn(),
+    };
+    const containerRepository = {
+      findOne: jest.fn(),
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      { get: jest.fn().mockReturnValue('') } as unknown as ConfigService,
+      containerRepository as any,
+      bindingRepository as any,
+      new ToolsService(),
+    );
+
+    await service.bindAccount('account-1', 'container-1');
+
+    expect(containerRepository.update).toHaveBeenCalledWith(
+      { id: 'container-1', isDeleted: false },
+      { accountId: 'account-1' },
+    );
+    expect(bindingRepository.update).toHaveBeenCalledWith(
+      { id: 'binding-1' },
+      expect.objectContaining({
+        bindStatus: 'bound',
+        containerId: 'container-1',
+        isPrimary: true,
+      }),
+    );
+  });
+
   it('uses the latest NapCat account status line as runtime offline truth', () => {
     const service = new QqbotNapcatContainerService(
       { get: jest.fn() } as any,
@@ -390,9 +435,7 @@ describe('QqbotNapcatContainerService', () => {
     expect(script).toContain('-e XDG_DATA_HOME=/app/.local/share');
     expect(script).toContain('-e XDG_RUNTIME_DIR=/tmp/runtime-napcat');
     expect(script).toContain('-v "$DATA_DIR/cache:/app/.cache"');
-    expect(script).toContain(
-      '-v "$DATA_DIR/local-share:/app/.local/share"',
-    );
+    expect(script).toContain('-v "$DATA_DIR/local-share:/app/.local/share"');
     expect(script).toContain('-v "$DATA_DIR/logs:/app/napcat/logs"');
     expect(script).toContain('cat > "$DATA_DIR/config/napcat_10001.json"');
     expect(script).toContain('cat > "$DATA_DIR/config/onebot11_10001.json"');
@@ -445,6 +488,141 @@ describe('QqbotNapcatContainerService', () => {
       'docker inspect --format \'{{range .Config.Env}}{{println .}}{{end}}\' "$NAME"',
     );
     expect(containerRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('does not recreate quick-login env when the bound source container is already online', async () => {
+    const bindingRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        accountId: 'account-1',
+        bindStatus: 'bound',
+        containerId: 'container-online',
+        isDeleted: false,
+        isPrimary: true,
+      }),
+    };
+    const containerRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        addSelect: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          baseUrl: 'http://127.0.0.1:6100/',
+          dataDir: '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-x',
+          id: 'container-online',
+          image: 'mlikiowa/napcat-docker:latest',
+          lastError: null,
+          name: 'kt-qqbot-napcat-x',
+          reverseWsUrl: 'ws://127.0.0.1:48085/qqbot/onebot/reverse',
+          status: 'running',
+          webuiPort: 6100,
+          webuiToken: 'token-x',
+        }),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string) =>
+          key === 'QQBOT_NAPCAT_CONTAINER_MODE' ? 'ssh' : '',
+        ),
+      } as any,
+      containerRepository as any,
+      bindingRepository as any,
+      new ToolsService(),
+    ) as any;
+    const ensureQuickLogin = jest.spyOn(service, 'ensureRuntimeQuickLogin');
+    jest.spyOn(service, 'inspectRuntimeStatus').mockResolvedValue({
+      containerOnline: true,
+      qqLoginStatus: 'online',
+      webuiOnline: true,
+    });
+
+    const runtime = await service.prepareAccountContainer({
+      id: 'account-1',
+      selfId: '2354598417',
+    });
+
+    expect(ensureQuickLogin).not.toHaveBeenCalled();
+    expect(runtime).toEqual(
+      expect.objectContaining({
+        hasExistingPrimaryBinding: true,
+        runtimeRebuildCount: 0,
+        sourceContainerOnline: true,
+      }),
+    );
+  });
+
+  it('starts a stopped primary container when login env already matches', async () => {
+    const bindingRepository = {
+      findOne: jest.fn().mockResolvedValue({
+        accountId: 'account-1',
+        bindStatus: 'bound',
+        containerId: 'container-stopped',
+        isDeleted: false,
+        isPrimary: true,
+      }),
+    };
+    const containerRepository = {
+      createQueryBuilder: jest.fn(() => ({
+        addSelect: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          baseUrl: 'http://127.0.0.1:6100/',
+          dataDir: '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-x',
+          id: 'container-stopped',
+          image: 'mlikiowa/napcat-docker:latest',
+          lastError: null,
+          name: 'kt-qqbot-napcat-x',
+          reverseWsUrl: 'ws://127.0.0.1:48085/qqbot/onebot/reverse',
+          status: 'stopped',
+          webuiPort: 6100,
+          webuiToken: 'token-x',
+        }),
+        where: jest.fn().mockReturnThis(),
+      })),
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      {
+        get: jest.fn((key: string) =>
+          key === 'QQBOT_NAPCAT_CONTAINER_MODE' ? 'ssh' : '',
+        ),
+      } as any,
+      containerRepository as any,
+      bindingRepository as any,
+      new ToolsService(),
+    ) as any;
+    service.runProcess = jest
+      .fn()
+      .mockResolvedValueOnce({
+        stderr: '',
+        stdout: 'ACCOUNT=2354598417\nPATH=/x',
+      })
+      .mockResolvedValueOnce({ stderr: '', stdout: 'kt-qqbot-napcat-x\n' });
+
+    const runtime = await service.prepareAccountContainer({
+      id: 'account-1',
+      selfId: '2354598417',
+    });
+
+    expect(runtime).toEqual(
+      expect.objectContaining({
+        hasExistingPrimaryBinding: true,
+        runtimeRebuildCount: 0,
+        sourceContainerOnline: false,
+      }),
+    );
+    expect(service.runProcess).toHaveBeenCalledTimes(2);
+    expect(service.runProcess.mock.calls[1][1]).toEqual(
+      expect.arrayContaining(['docker', 'start', 'kt-qqbot-napcat-x']),
+    );
+    expect(containerRepository.update).toHaveBeenCalledWith(
+      { id: 'container-stopped' },
+      expect.objectContaining({
+        lastError: null,
+        status: 'running',
+      }),
+    );
   });
 
   it('recreates login env when docker env inspection fails', async () => {
@@ -660,176 +838,6 @@ describe('QqbotNapcatContainerService', () => {
     expect(service.runProcess.mock.calls[1][2]).not.toContain(
       'NAPCAT_QUICK_PASSWORD=',
     );
-  });
-
-  it('does not report password auto-login success when password env cleanup fails', async () => {
-    const containerRepository = {
-      createQueryBuilder: jest.fn(() => ({
-        addSelect: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue({
-          baseUrl: 'http://127.0.0.1:6100/',
-          id: 'container-1',
-          name: 'kt-qqbot-napcat-x',
-          webuiPort: 6100,
-          webuiToken: 'token-x',
-        }),
-        where: jest.fn().mockReturnThis(),
-      })),
-    };
-    const service = new QqbotNapcatContainerService(
-      {
-        get: jest.fn((key: string) =>
-          key === 'QQBOT_NAPCAT_CONTAINER_MODE' ? 'ssh' : '',
-        ),
-      } as any,
-      containerRepository as any,
-      {} as any,
-      new ToolsService(),
-    ) as any;
-    jest
-      .spyOn(service, 'ensureRuntimeLoginEnv')
-      .mockResolvedValueOnce({ changed: false, ok: true })
-      .mockResolvedValueOnce({ changed: true, ok: true })
-      .mockResolvedValueOnce({ changed: false, ok: false });
-    jest
-      .spyOn(service, 'restartAndDetectLoginState')
-      .mockResolvedValueOnce({
-        offlineReason: '历史会话失效',
-        state: 'offline',
-      })
-      .mockResolvedValueOnce({ offlineReason: null, state: 'online' });
-
-    const result = await service.tryAutoLogin(
-      { id: 'container-1' },
-      {
-        loginPassword: 'qq-password',
-        selfId: '2354598417',
-      },
-    );
-
-    expect(result).toEqual({
-      cleanupFailed: true,
-      success: false,
-    });
-    expect(service.ensureRuntimeLoginEnv).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({ id: 'container-1' }),
-      {
-        clearLoginPassword: true,
-        selfId: '2354598417',
-      },
-    );
-  });
-
-  it('does not leave password env untracked when password auto-login fails and cleanup fails', async () => {
-    const containerRepository = {
-      createQueryBuilder: jest.fn(() => ({
-        addSelect: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue({
-          baseUrl: 'http://127.0.0.1:6100/',
-          id: 'container-1',
-          name: 'kt-qqbot-napcat-x',
-          webuiPort: 6100,
-          webuiToken: 'token-x',
-        }),
-        where: jest.fn().mockReturnThis(),
-      })),
-    };
-    const service = new QqbotNapcatContainerService(
-      {
-        get: jest.fn((key: string) =>
-          key === 'QQBOT_NAPCAT_CONTAINER_MODE' ? 'ssh' : '',
-        ),
-      } as any,
-      containerRepository as any,
-      {} as any,
-      new ToolsService(),
-    ) as any;
-    jest
-      .spyOn(service, 'ensureRuntimeLoginEnv')
-      .mockResolvedValueOnce({ changed: false, ok: true })
-      .mockResolvedValueOnce({ changed: true, ok: true })
-      .mockResolvedValueOnce({ changed: false, ok: false });
-    jest
-      .spyOn(service, 'restartAndDetectLoginState')
-      .mockResolvedValueOnce({
-        offlineReason: '历史会话失效',
-        state: 'offline',
-      })
-      .mockResolvedValueOnce({
-        offlineReason: '密码登录失败',
-        state: 'offline',
-      });
-
-    const result = await service.tryAutoLogin(
-      { id: 'container-1' },
-      {
-        loginPassword: 'qq-password',
-        selfId: '2354598417',
-      },
-    );
-
-    expect(result).toEqual({
-      cleanupFailed: true,
-      success: false,
-    });
-    expect(service.ensureRuntimeLoginEnv).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({ id: 'container-1' }),
-      {
-        clearLoginPassword: true,
-        selfId: '2354598417',
-      },
-    );
-  });
-
-  it('does not restart quick auto-login when password env cleanup fails first', async () => {
-    const containerRepository = {
-      createQueryBuilder: jest.fn(() => ({
-        addSelect: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue({
-          baseUrl: 'http://127.0.0.1:6100/',
-          id: 'container-1',
-          name: 'kt-qqbot-napcat-x',
-          webuiPort: 6100,
-          webuiToken: 'token-x',
-        }),
-        where: jest.fn().mockReturnThis(),
-      })),
-    };
-    const service = new QqbotNapcatContainerService(
-      {
-        get: jest.fn((key: string) =>
-          key === 'QQBOT_NAPCAT_CONTAINER_MODE' ? 'ssh' : '',
-        ),
-      } as any,
-      containerRepository as any,
-      {} as any,
-      new ToolsService(),
-    ) as any;
-    jest
-      .spyOn(service, 'ensureRuntimeLoginEnv')
-      .mockResolvedValueOnce({ changed: false, ok: false });
-    jest
-      .spyOn(service, 'restartAndDetectLoginState')
-      .mockResolvedValueOnce({ offlineReason: null, state: 'online' });
-
-    const result = await service.tryAutoLogin(
-      { id: 'container-1' },
-      {
-        loginPassword: 'qq-password',
-        selfId: '2354598417',
-      },
-    );
-
-    expect(result).toEqual({
-      cleanupFailed: true,
-      success: false,
-    });
-    expect(service.restartAndDetectLoginState).not.toHaveBeenCalled();
   });
 
   it('requires an explicit NapCat image when creating a managed container', async () => {

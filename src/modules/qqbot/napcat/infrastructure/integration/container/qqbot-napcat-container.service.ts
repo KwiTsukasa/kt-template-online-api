@@ -2,13 +2,12 @@ import * as http from 'http';
 import * as https from 'https';
 import { spawn } from 'child_process';
 import { createHash, randomBytes, randomUUID } from 'crypto';
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { throwVbenError, ToolsService } from '@/common';
 import { NapcatConfigWriterService } from '../../../application/runtime/napcat-config-writer.service';
-import { NapcatLoginEventService } from '../../../application/runtime/napcat-login-event.service';
 import { NapcatRuntimeProfileService } from '../../../application/runtime/napcat-runtime-profile.service';
 import type { NapcatConfigFile } from '../../../domain/runtime/napcat-profile.types';
 import {
@@ -19,7 +18,6 @@ import { NapcatDeviceIdentityService } from '../device/napcat-device-identity.se
 import { QqbotAccount } from '@/modules/qqbot/core/infrastructure/persistence/account/qqbot-account.entity';
 import { NapcatAccountBinding } from '../../persistence/napcat-account-binding.entity';
 import { NapcatContainer } from '../../persistence/napcat-container.entity';
-import type { NapcatLoginEventKind } from '../../persistence/napcat-login-event.entity';
 import type {
   NapcatApiResponse,
   NapcatCredential,
@@ -47,12 +45,6 @@ type NapcatLoginEnvUpdateResult = {
   ok: boolean;
 };
 
-type NapcatAutoLoginResult = {
-  cleanupFailed?: boolean;
-  method?: 'password' | 'quick';
-  success: boolean;
-};
-
 @Injectable()
 export class QqbotNapcatContainerService {
   private readonly configWriterService: NapcatConfigWriterService;
@@ -68,7 +60,6 @@ export class QqbotNapcatContainerService {
    * @param deviceIdentityService - Device identity resolver that supplies stable hostname, MAC, data-dir, and machine-id values.
    * @param runtimeProfileService - Runtime profile resolver used to generate Docker env and mount settings.
    * @param configWriterService - Config writer used to generate NapCat and OneBot config files.
-   * @param loginEventService - Optional login-event recorder used by watchdog auto-login attempts.
    */
   constructor(
     private readonly configService: ConfigService,
@@ -80,8 +71,6 @@ export class QqbotNapcatContainerService {
     private readonly deviceIdentityService?: NapcatDeviceIdentityService,
     runtimeProfileService?: NapcatRuntimeProfileService,
     configWriterService?: NapcatConfigWriterService,
-    @Optional()
-    private readonly loginEventService?: NapcatLoginEventService,
   ) {
     this.runtimeProfileService =
       runtimeProfileService || new NapcatRuntimeProfileService(configService);
@@ -101,26 +90,51 @@ export class QqbotNapcatContainerService {
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param account - account 输入；使用 `id`、`selfId` 字段生成结果。
+   * 为账号更新登录准备 NapCat 容器。
+   * @param account - QQBot 账号；提供主绑定容器查询条件和创建期 ACCOUNT env。
+   * @param loginPassword - 已保存的 QQ 登录密码明文；仅在新建或 Docker 离线重建容器时注入创建期 env。
+   * @returns 可用于登录流程的 NapCat 运行态，携带源 Docker 容器是否在线的门禁证据。
    */
-  async prepareAccountContainer(account: QqbotAccount) {
+  async prepareAccountContainer(account: QqbotAccount, loginPassword?: string) {
     if (!this.isManagedMode()) {
       return this.getLegacyRuntime();
     }
 
     const existing = await this.getPrimaryRuntime(account.id);
     if (existing) {
-      await this.ensureRuntimeQuickLogin(existing, account.selfId);
-      return { ...existing, hasExistingPrimaryBinding: true };
+      const sourceContainerOnline = existing.sourceContainerOnline !== false;
+      const quickLoginEnv = sourceContainerOnline
+        ? { changed: false, ok: true }
+        : await this.ensureRuntimeLoginEnv(existing, {
+            loginPassword,
+            selfId: account.selfId,
+          });
+      if (
+        !sourceContainerOnline &&
+        quickLoginEnv.ok &&
+        !quickLoginEnv.changed &&
+        !(await this.startRuntimeContainer(existing))
+      ) {
+        throwVbenError('NapCat Docker 容器未运行，启动失败');
+      }
+      return {
+        ...existing,
+        hasExistingPrimaryBinding: true,
+        sourceContainerOnline,
+        runtimeRebuildCount: quickLoginEnv.changed ? 1 : 0,
+      };
     }
 
     const created = await this.createManagedContainer(
       account.selfId,
-      undefined,
+      loginPassword,
       account.id,
     );
-    return { ...created, hasExistingPrimaryBinding: false };
+    return {
+      ...created,
+      hasExistingPrimaryBinding: false,
+      sourceContainerOnline: false,
+    };
   }
 
   /**
@@ -213,6 +227,30 @@ export class QqbotNapcatContainerService {
   }
 
   /**
+   * 只读检查托管容器当前登录环境是否已经符合目标状态。
+   * @param runtime - NapCat 运行态；用 id 找到容器名和当前 Docker env。
+   * @param options - 目标 ACCOUNT / 运行态密码状态；决定是否要求清除或保留密码 env。
+   * @returns 当前 Docker env 已匹配时返回 true；不可检查或不匹配时返回 false。
+   */
+  async runtimeLoginEnvMatches(
+    runtime: QqbotNapcatRuntime,
+    options: NapcatLoginEnvOptions,
+  ) {
+    if (this.getManagedMode() !== 'ssh' || !runtime.id) return true;
+
+    const account = this.toolsService.toTrimmedString(options.selfId);
+    if (!account) return false;
+
+    const container = await this.findContainerWithToken(runtime.id);
+    if (!container?.name) return false;
+
+    return this.runtimeMatchesLoginEnv(container.name, {
+      ...options,
+      selfId: account,
+    });
+  }
+
+  /**
    * 解析Runtime Device Identity。
    * @param container - container 输入；使用 `id` 字段生成结果。
    * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
@@ -264,270 +302,6 @@ export class QqbotNapcatContainerService {
       containerId,
     });
     return identity.id;
-  }
-
-  /**
-   * 执行 NapCat 登录运行态流程。
-   * @param container - container 输入；使用 `id` 字段生成结果。
-   * @param options - NapCat列表；使用 `selfId`、`loginPassword` 字段生成结果。
-   * @returns 异步完成后的 NapCat 登录运行态结果。
-   */
-  async tryAutoLogin(
-    container: NapcatContainer,
-    options: NapcatLoginEnvOptions,
-  ): Promise<NapcatAutoLoginResult> {
-    const selfId = this.toolsService.toTrimmedString(options.selfId);
-    if (!selfId || this.getManagedMode() !== 'ssh' || !container.id) {
-      return { success: false };
-    }
-
-    const runtimeContainer = await this.findContainerWithToken(container.id);
-    if (!runtimeContainer?.name) return { success: false };
-    const runtime = this.toRuntime(runtimeContainer);
-    const accountId = this.getAutoLoginAccountId(container, runtimeContainer);
-
-    await this.recordAutoLoginEvent({
-      accountId,
-      container,
-      eventKind: 'quick_attempt',
-      eventStatus: 'pending',
-      evidence: { containerName: runtime.name },
-    });
-    const quickCleanup = await this.ensureRuntimeLoginEnv(runtime, {
-      clearLoginPassword: true,
-      selfId,
-    });
-    if (!quickCleanup.ok) {
-      await this.recordAutoLoginEvent({
-        accountId,
-        container,
-        eventKind: 'quick_attempt',
-        eventStatus: 'failed',
-        evidence: {
-          containerName: runtime.name,
-          reason: 'login-env-cleanup-failed',
-        },
-      });
-      return { cleanupFailed: true, success: false };
-    }
-
-    const quickState = await this.restartAndDetectLoginState(runtime);
-    if (quickState.state === 'online') {
-      await this.recordAutoLoginEvent({
-        accountId,
-        container,
-        eventKind: 'quick_attempt',
-        eventStatus: 'success',
-        evidence: { containerName: runtime.name },
-      });
-      return { method: 'quick', success: true };
-    }
-    await this.recordAutoLoginEvent({
-      accountId,
-      container,
-      eventKind: 'quick_attempt',
-      eventStatus: 'failed',
-      evidence: {
-        containerName: runtime.name,
-        offlineReason: quickState.offlineReason,
-      },
-    });
-    const quickBlockReason = this.toAutoLoginSuspendedReason(
-      quickState.offlineReason,
-    );
-    if (quickBlockReason) {
-      await this.recordAutoLoginSuspended({
-        accountId,
-        container,
-        offlineReason: quickState.offlineReason,
-        reason: quickBlockReason,
-      });
-      return { success: false };
-    }
-
-    const loginPassword = this.toolsService.toSecretText(options.loginPassword);
-    if (!loginPassword) {
-      await this.recordAutoLoginSuspended({
-        accountId,
-        container,
-        offlineReason: quickState.offlineReason,
-        reason: 'recovery_suspended',
-        suspendedReason: 'login-password-missing',
-      });
-      return { success: false };
-    }
-
-    await this.recordAutoLoginEvent({
-      accountId,
-      container,
-      eventKind: 'password_attempt',
-      eventStatus: 'pending',
-      evidence: { containerName: runtime.name },
-    });
-    const passwordEnv = await this.ensureRuntimeLoginEnv(runtime, {
-      loginPassword,
-      selfId,
-    });
-    if (!passwordEnv.ok) {
-      await this.recordAutoLoginEvent({
-        accountId,
-        container,
-        eventKind: 'password_attempt',
-        eventStatus: 'failed',
-        evidence: {
-          containerName: runtime.name,
-          reason: 'login-env-prepare-failed',
-        },
-      });
-      await this.recordAutoLoginSuspended({
-        accountId,
-        container,
-        reason: 'recovery_suspended',
-        suspendedReason: 'login-env-prepare-failed',
-      });
-      return { success: false };
-    }
-
-    const passwordState = await this.restartAndDetectLoginState(runtime);
-    if (passwordState.state !== 'online') {
-      const cleaned = await this.ensureRuntimeLoginEnv(runtime, {
-        clearLoginPassword: true,
-        selfId,
-      });
-      await this.recordAutoLoginEvent({
-        accountId,
-        container,
-        eventKind: 'password_attempt',
-        eventStatus: 'failed',
-        evidence: {
-          cleanupOk: cleaned.ok,
-          containerName: runtime.name,
-          offlineReason: passwordState.offlineReason,
-        },
-      });
-      await this.recordAutoLoginSuspended({
-        accountId,
-        container,
-        offlineReason: passwordState.offlineReason,
-        reason:
-          this.toAutoLoginSuspendedReason(passwordState.offlineReason) ||
-          'recovery_suspended',
-        suspendedReason: 'password-auto-login-failed',
-      });
-      return cleaned.ok
-        ? { success: false }
-        : { cleanupFailed: true, success: false };
-    }
-
-    const cleaned = await this.ensureRuntimeLoginEnv(runtime, {
-      clearLoginPassword: true,
-      selfId,
-    });
-    if (!cleaned.ok) {
-      await this.recordAutoLoginEvent({
-        accountId,
-        container,
-        eventKind: 'password_attempt',
-        eventStatus: 'failed',
-        evidence: {
-          containerName: runtime.name,
-          reason: 'login-env-cleanup-failed',
-        },
-      });
-      return { cleanupFailed: true, success: false };
-    }
-
-    await this.recordAutoLoginEvent({
-      accountId,
-      container,
-      eventKind: 'password_attempt',
-      eventStatus: 'success',
-      evidence: { containerName: runtime.name },
-    });
-    return { method: 'password', success: true };
-  }
-
-  /**
-   * Chooses the account id used by watchdog login-event records.
-   * @param inputContainer - Container row passed by account runtime, usually carrying account ownership.
-   * @param runtimeContainer - Container row reloaded with WebUI token for runtime actions.
-   * @returns Account id when it can be derived without looking up additional state.
-   */
-  private getAutoLoginAccountId(
-    inputContainer: NapcatContainer,
-    runtimeContainer: NapcatContainer,
-  ) {
-    return this.toolsService.toTrimmedString(
-      inputContainer.accountId || runtimeContainer.accountId,
-    );
-  }
-
-  /**
-   * Records a watchdog quick/password attempt when the owning account is known.
-   * @param input - Attempt kind, status, container, and non-secret runtime evidence.
-   */
-  private async recordAutoLoginEvent(input: {
-    accountId: string;
-    container: NapcatContainer;
-    eventKind: 'password_attempt' | 'quick_attempt';
-    eventStatus: 'failed' | 'pending' | 'success';
-    evidence?: Record<string, unknown>;
-  }) {
-    if (!this.loginEventService || !input.accountId) return;
-    await this.loginEventService.record({
-      accountId: input.accountId,
-      containerId: input.container.id,
-      eventKind: input.eventKind,
-      eventSource: 'watchdog',
-      eventStatus: input.eventStatus,
-      evidence: input.evidence,
-    });
-  }
-
-  /**
-   * Records that watchdog auto-login must stop and wait for a human-visible login path.
-   * @param input - Account/container plus the reason automation cannot safely continue.
-   */
-  private async recordAutoLoginSuspended(input: {
-    accountId: string;
-    container: NapcatContainer;
-    offlineReason?: null | string;
-    reason: NapcatLoginEventKind;
-    suspendedReason?: string;
-  }) {
-    if (!this.loginEventService || !input.accountId) return;
-    await this.loginEventService.recordSuspended({
-      accountId: input.accountId,
-      containerId: input.container.id,
-      evidence: {
-        offlineReason: input.offlineReason || undefined,
-        reason: input.suspendedReason || input.reason,
-      },
-      reason: input.reason,
-      source: 'watchdog',
-    });
-  }
-
-  /**
-   * Maps runtime login failure text to the first manual login path watchdog must not enter.
-   * @param offlineReason - NapCat log/status text produced after quick or password login attempt.
-   * @returns Blocking event kind when the next step requires captcha, new-device verification, or manual QR.
-   */
-  private toAutoLoginSuspendedReason(
-    offlineReason?: null | string,
-  ): NapcatLoginEventKind | null {
-    const reason = this.toolsService.toTrimmedString(offlineReason);
-    if (!reason) return null;
-    if (/captcha|proofWater|验证码|安全验证/i.test(reason)) {
-      return 'captcha_required';
-    }
-    if (/new.?device|新设备|设备验证/i.test(reason)) {
-      return 'new_device_required';
-    }
-    if (/qr.?code|二维码/i.test(reason)) {
-      return 'manual_qr_created';
-    }
-    return null;
   }
 
   /**
@@ -634,6 +408,10 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     const deviceIdentityId = await this.resolveBindingDeviceIdentityId(
       accountId,
       containerId,
+    );
+    await this.containerRepository.update(
+      { id: containerId, isDeleted: false },
+      { accountId },
     );
 
     const existing = await this.bindingRepository.findOne({
@@ -743,6 +521,32 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     await this.runProcess(
       'ssh',
       [...this.getSshArgs(), 'docker', 'restart', runtime.name],
+      '',
+    );
+    await this.containerRepository.update(
+      { id: runtime.id },
+      {
+        lastError: null,
+        lastStartedAt: new Date(),
+        status: 'running',
+      },
+    );
+    return true;
+  }
+
+  /**
+   * Starts an existing managed NapCat container without rebuilding or restarting it.
+   * @param runtime - Persisted runtime row whose Docker name and id identify the stopped container to start.
+   * @returns True when the Docker start command was issued and the persisted row was marked running.
+   */
+  private async startRuntimeContainer(runtime: QqbotNapcatRuntime) {
+    if (this.getManagedMode() !== 'ssh' || !runtime.id || !runtime.name) {
+      return false;
+    }
+
+    await this.runProcess(
+      'ssh',
+      [...this.getSshArgs(), 'docker', 'start', runtime.name],
       '',
     );
     await this.containerRepository.update(
@@ -1154,47 +958,6 @@ NAME=${this.sh(name)}
 SINCE=${this.sh(since)}
 docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
 `;
-  }
-
-  /**
-   * 执行 NapCat 登录运行态流程。
-   * @param runtime - runtime 输入；使用 `name` 字段生成结果。
-   */
-  private async restartAndDetectLoginState(runtime: QqbotNapcatRuntime) {
-    const since = new Date(Date.now() - 1000).toISOString();
-    await this.restartRuntimeContainer(runtime);
-    const attempts = Number(
-      this.getConfig('QQBOT_NAPCAT_AUTO_LOGIN_RETRIES', '10'),
-    );
-    const delayMs = Number(
-      this.getConfig('QQBOT_NAPCAT_AUTO_LOGIN_INTERVAL_MS', '2000'),
-    );
-    let latest: NapcatLoginLogResult = {
-      offlineReason: null,
-      state: 'unknown',
-    };
-    for (let index = 0; index < attempts; index += 1) {
-      await this.toolsService.sleep(Number.isFinite(delayMs) ? delayMs : 2000);
-      latest = await this.detectRuntimeLoginStateSince(runtime.name, since);
-      if (latest.state !== 'unknown') return latest;
-    }
-    return latest;
-  }
-
-  /**
-   * 执行 NapCat 登录运行态流程。
-   * @param name - 名称文本；驱动 `this.runProcess()` 的 NapCat步骤。
-   * @param since - since 输入；驱动 `this.runProcess()` 的 NapCat步骤。
-   */
-  private async detectRuntimeLoginStateSince(name: string, since: string) {
-    const result = await this.runProcess(
-      'ssh',
-      [...this.getSshArgs(), 'sh -s'],
-      this.buildRemoteRecentLogsSinceScript(name, since),
-      undefined,
-      this.getRuntimeCheckTimeoutMs(),
-    );
-    return this.extractLoginState(result.stdout);
   }
 
   /**
@@ -1733,6 +1496,7 @@ ${file.content}EOF`;
       baseUrl: this.normalizeBaseUrl(container.baseUrl),
       id: container.id,
       name: container.name,
+      sourceContainerOnline: container.status === 'running',
       webuiPort: container.webuiPort,
       webuiToken: container.webuiToken,
     };

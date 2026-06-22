@@ -11,15 +11,12 @@ import type {
   QqbotAccountListItem,
   QqbotNapcatRuntimeStatusSnapshot,
 } from '@/modules/qqbot/core/contract/qqbot.types';
-import { NapcatLoginEventService } from '../runtime/napcat-login-event.service';
 import { NapcatRuntimeProfileInspectorService } from '../runtime/napcat-runtime-profile-inspector.service';
 import { QqbotNapcatContainerService } from '../../infrastructure/integration/container/qqbot-napcat-container.service';
 import { NapcatAccountBinding } from '../../infrastructure/persistence/napcat-account-binding.entity';
 import { NapcatContainer } from '../../infrastructure/persistence/napcat-container.entity';
 
 const NAPCAT_RUNTIME_CHECK_TTL_MS = 30_000;
-const NAPCAT_AUTO_LOGIN_CLEANUP_FAILED_MESSAGE =
-  'NapCat 自动登录后运行态密码清理失败，请手动更新登录';
 
 @Injectable()
 export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRuntimePort {
@@ -27,10 +24,9 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
    * Creates the account-list runtime adapter that joins persisted bindings, container status, and optional profile summaries.
    * @param accountNapcatRepository - Binding repository used to pick the primary NapCat container for each QQBot account.
    * @param napcatContainerRepository - Container repository used for cached runtime/WebUI status and non-secret metadata.
-   * @param napcatContainerService - Runtime integration service for bounded NapCat/WebUI status probes and auto-login.
+   * @param napcatContainerService - Runtime integration service for bounded NapCat/WebUI status probes.
    * @param toolsService - Shared helpers for status text normalization and NapCat offline-message classification.
    * @param runtimeProfileInspector - Optional profile reader that enriches list rows without changing login state.
-   * @param loginEventService - Optional login-event gate that prevents watchdog from repeating suspended recovery flows.
    */
   constructor(
     @InjectRepository(NapcatAccountBinding)
@@ -40,19 +36,16 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
     private readonly napcatContainerService: QqbotNapcatContainerService,
     private readonly toolsService: ToolsService,
     private readonly runtimeProfileInspector?: NapcatRuntimeProfileInspectorService,
-    private readonly loginEventService?: NapcatLoginEventService,
   ) {}
 
   /**
    * 执行 NapCat 登录运行态流程。
    * @param accounts - 账号列表；使用 `length` 字段生成结果。
-   * @param options - NapCat列表；驱动 `this.syncNapcatRuntimeState()` 的 NapCat步骤。
    * @param actions - NapCat列表；驱动 `this.syncNapcatRuntimeState()` 的 NapCat步骤。
    * @returns 异步完成后的 NapCat 登录运行态结果。
    */
   async appendRuntime(
     accounts: QqbotAccount[],
-    options: { autoLogin?: boolean },
     actions: QqbotAccountNapcatRuntimeActions,
   ): Promise<QqbotAccountListItem[]> {
     if (accounts.length <= 0) return [];
@@ -104,7 +97,6 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
         const runtimeStatus = await this.syncNapcatRuntimeState(
           account,
           container,
-          options,
           actions,
         );
         return Object.assign(account, {
@@ -144,13 +136,11 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
    * 更新 NapCat 登录运行态状态。
    * @param account - account 输入；使用 `connectStatus` 字段生成结果。
    * @param container - container 输入；使用 `status`、`lastCheckedAt` 字段生成结果。
-   * @param options - NapCat列表；使用 `autoLogin` 字段生成结果。
    * @param actions - NapCat列表；驱动 `this.getNapcatRuntimeStatus()`、`this.applyNapcatOfflineState()` 的 NapCat步骤。
    */
   private async syncNapcatRuntimeState(
     account: QqbotAccount,
     container: NapcatContainer | undefined,
-    options: { autoLogin?: boolean },
     actions: QqbotAccountNapcatRuntimeActions,
   ) {
     const runtimeStatus = await this.getNapcatRuntimeStatus(
@@ -168,12 +158,6 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
     const runtimeOfflineReason =
       this.getRuntimeStatusOfflineReason(runtimeStatus);
     if (runtimeOfflineReason) {
-      if (
-        options.autoLogin &&
-        (await this.tryAutoLogin(account, container, actions))
-      ) {
-        return this.toCachedNapcatRuntimeStatus(container);
-      }
       await this.applyNapcatOfflineState(
         account,
         container,
@@ -185,12 +169,6 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
 
     const cachedOfflineReason = this.getFreshCachedOfflineReason(container);
     if (cachedOfflineReason) {
-      if (
-        options.autoLogin &&
-        (await this.tryAutoLogin(account, container, actions))
-      ) {
-        return this.toCachedNapcatRuntimeStatus(container);
-      }
       await this.applyNapcatOfflineState(
         account,
         container,
@@ -206,13 +184,6 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
     const offlineReason =
       await this.napcatContainerService.detectRuntimeOffline(container);
     if (!offlineReason) return runtimeStatus;
-
-    if (
-      options.autoLogin &&
-      (await this.tryAutoLogin(account, container, actions))
-    ) {
-      return this.toCachedNapcatRuntimeStatus(container);
-    }
 
     await this.applyNapcatOfflineState(
       account,
@@ -360,63 +331,6 @@ export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRunti
       this.toolsService.toTrimmedString(runtimeStatus.lastError) ||
       'NapCat QQ 登录态不可用'
     );
-  }
-
-  /**
-   * 执行 NapCat 登录运行态流程。
-   * @param account - account 输入；使用 `selfId`、`clientRole`、`connectStatus`、`lastConnectedAt` 字段生成结果。
-   * @param container - container 输入；驱动 `napcatContainerService.tryAutoLogin()`、`this.applyNapcatOfflineState()` 的 NapCat步骤。
-   * @param actions - NapCat列表；执行 `actions.getLoginPassword()`、`actions.markOnline()` 对应的 NapCat步骤。
-   */
-  private async tryAutoLogin(
-    account: QqbotAccount,
-    container: NapcatContainer,
-    actions: QqbotAccountNapcatRuntimeActions,
-  ) {
-    try {
-      const recoveryGate =
-        await this.loginEventService?.canAttemptAutomaticRecovery({
-          accountId: account.id,
-          containerId: container.id,
-          resetAfter: account.lastConnectedAt,
-        });
-      if (recoveryGate && !recoveryGate.allowed) {
-        await this.loginEventService?.recordSuspended({
-          accountId: account.id,
-          containerId: container.id,
-          evidence: {
-            reason: recoveryGate.reason,
-          },
-          reason: recoveryGate.reason || 'recovery_suspended',
-          source: 'watchdog',
-        });
-        return false;
-      }
-
-      const result = await this.napcatContainerService.tryAutoLogin(container, {
-        loginPassword: actions.getLoginPassword(account),
-        selfId: account.selfId,
-      });
-      if (result.cleanupFailed) {
-        await this.applyNapcatOfflineState(
-          account,
-          container,
-          NAPCAT_AUTO_LOGIN_CLEANUP_FAILED_MESSAGE,
-          actions,
-        );
-        return true;
-      }
-      if (!result.success) return false;
-
-      await actions.markOnline(account.selfId, 'Universal', null);
-      account.clientRole = 'Universal';
-      account.connectStatus = 'online';
-      account.lastConnectedAt = new Date() as any;
-      account.lastError = null;
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   /**

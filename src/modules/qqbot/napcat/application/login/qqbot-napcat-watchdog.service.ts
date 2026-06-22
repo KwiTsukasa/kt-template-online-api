@@ -13,7 +13,7 @@ const MIN_INTERVAL_MS = 30_000;
 /**
  * NapCat 离线看门狗：定时主动巡检在线账号，及时发现掉线/被踢并触发既有站内信告警。
  * 不依赖 @nestjs/schedule，采用 OnModuleInit + setInterval（与代码库既有定时器一致）。
- * 仅检测 + 告警，自动重登由容器运行时适配器负责。
+ * 仅检测 + 告警，登录恢复必须由管理员在 Admin 手动触发更新登录。
  */
 @Injectable()
 export class QqbotNapcatWatchdogService

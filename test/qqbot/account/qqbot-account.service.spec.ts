@@ -400,7 +400,8 @@ describe('QqbotAccountService', () => {
     );
     expect(systemNoticePublisher.publishSystemNotice).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: 'NapCat 账号状态变更为离线',
+        content:
+          'NapCat 账号状态变更为离线\n请在 Admin 的 QQBot 账号页面手动点击「更新登录」重新登录。',
         dedupeKey: 'qqbot:offline:1914728559',
         eventType: 'qqbot.account.offline',
         notifyRoleCode: 'super',
@@ -990,7 +991,7 @@ describe('QqbotAccountService', () => {
     );
   });
 
-  it('lets watchdog auto-login before marking an account offline', async () => {
+  it('notifies manual re-login instead of auto-login when watchdog detects QQ login offline', async () => {
     const toolsService = new ToolsService();
     const account = {
       connectStatus: 'online',
@@ -1034,10 +1035,6 @@ describe('QqbotAccountService', () => {
       detectRuntimeOffline: jest
         .fn()
         .mockResolvedValue('NapCat 账号状态变更为离线'),
-      tryAutoLogin: jest.fn().mockResolvedValue({
-        method: 'password',
-        success: true,
-      }),
     };
     const systemNoticePublisher = {
       publishSystemNotice: jest.fn().mockResolvedValue(undefined),
@@ -1073,26 +1070,24 @@ describe('QqbotAccountService', () => {
     const result = await service.runOfflineWatchdog();
 
     expect(result).toEqual({ checked: 1 });
-    expect(napcatContainerService.tryAutoLogin).toHaveBeenCalledWith(
-      container,
-      {
-        loginPassword: 'qq-login-password',
-        selfId: '1914728559',
-      },
-    );
     expect(accountRepository.update).toHaveBeenCalledWith(
       { selfId: '1914728559' },
+      {
+        lastError: 'NapCat 账号状态变更为离线',
+      },
+    );
+    expect(systemNoticePublisher.publishSystemNotice).toHaveBeenCalledWith(
       expect.objectContaining({
-        clientRole: 'Universal',
-        connectStatus: 'online',
-        lastConnectedAt: expect.any(Date),
-        lastError: null,
+        content:
+          'NapCat 账号状态变更为离线\n请在 Admin 的 QQBot 账号页面手动点击「更新登录」重新登录。',
+        eventType: 'qqbot.account.offline',
+        severity: 'error',
+        title: 'QQBot 账号已下线：1914728559',
       }),
     );
-    expect(systemNoticePublisher.publishSystemNotice).not.toHaveBeenCalled();
   });
 
-  it('records a cleanup failure when watchdog auto-login leaves runtime password env uncertain', async () => {
+  it('never reports auto-login cleanup failure from watchdog because watchdog no longer logs in', async () => {
     const toolsService = new ToolsService();
     const account = {
       connectStatus: 'online',
@@ -1136,10 +1131,6 @@ describe('QqbotAccountService', () => {
       detectRuntimeOffline: jest
         .fn()
         .mockResolvedValue('NapCat 账号状态变更为离线'),
-      tryAutoLogin: jest.fn().mockResolvedValue({
-        cleanupFailed: true,
-        success: false,
-      }),
     };
     const systemNoticePublisher = {
       publishSystemNotice: jest.fn().mockResolvedValue(undefined),
@@ -1178,19 +1169,20 @@ describe('QqbotAccountService', () => {
     expect(accountRepository.update).toHaveBeenCalledWith(
       { selfId: '1914728559' },
       {
-        lastError: 'NapCat 自动登录后运行态密码清理失败，请手动更新登录',
+        lastError: 'NapCat 账号状态变更为离线',
       },
     );
     expect(systemNoticePublisher.publishSystemNotice).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: 'NapCat 自动登录后运行态密码清理失败，请手动更新登录',
+        content:
+          'NapCat 账号状态变更为离线\n请在 Admin 的 QQBot 账号页面手动点击「更新登录」重新登录。',
         eventType: 'qqbot.account.offline',
         severity: 'error',
         title: 'QQBot 账号已下线：1914728559',
       }),
     );
     expect(JSON.stringify(accountRepository.update.mock.calls)).not.toContain(
-      'NapCat 账号状态变更为离线',
+      'NapCat 自动登录后运行态密码清理失败，请手动更新登录',
     );
   });
 });

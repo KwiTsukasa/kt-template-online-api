@@ -34,8 +34,10 @@ export type NapcatLoginStatus = {
 
 export type NapcatCaptchaLoginResult = {
   jumpUrl?: string;
+  needCaptcha?: boolean;
   needNewDevice?: boolean;
   newDevicePullQrCodeSig?: unknown;
+  proofWaterUrl?: string;
 };
 
 export type NapcatQrcode = {
@@ -337,6 +339,8 @@ export type QqbotLoginScanSession = {
   passwordMd5?: string;
   preparingRelogin?: boolean;
   qrcode?: string;
+  runtimeRebuildCount?: number;
+  sourceContainerOnline?: boolean;
   status: QqbotLoginScanStatus;
   webuiPort?: null | number;
 };
@@ -353,6 +357,8 @@ export type QqbotNapcatRuntime = {
   hasExistingPrimaryBinding?: boolean;
   id?: string;
   name: string;
+  runtimeRebuildCount?: number;
+  sourceContainerOnline?: boolean;
   webuiPort?: null | number;
   webuiToken?: null | string;
 };

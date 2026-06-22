@@ -3107,6 +3107,87 @@ describe('QqbotNapcatLoginService', () => {
     expect(getLoginStatus).not.toHaveBeenCalled();
   });
 
+  it('refreshes stale relogin qrcode from NapCat status instead of staying in quick login pending', async () => {
+    (service as any).sessions.set('session-stale-relogin-qrcode', {
+      accountId: 'account-1',
+      containerId: 'container-stale-relogin',
+      containerName: 'napcat-stale-relogin',
+      createdAt: Date.now(),
+      errorMessage: 'NapCat 正在尝试快速登录，请稍后',
+      expectedSelfId: '10001',
+      expiresAt: Date.now() + 60_000,
+      id: 'session-stale-relogin-qrcode',
+      lastRestartedAt: 1,
+      mode: 'refresh',
+      preparingRelogin: true,
+      status: 'pending',
+      webuiPort: 6110,
+    });
+    const container = { id: 'container-stale-relogin' };
+    jest
+      .spyOn(service as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest.spyOn(service as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      qrcodeurl: 'status-qrcode',
+    });
+    jest
+      .spyOn(service as any, 'callRefreshQrcode')
+      .mockResolvedValue('fresh-qrcode');
+
+    const result = await service.refreshQrcode('session-stale-relogin-qrcode');
+
+    expect(result.status).toBe('pending');
+    expect(result.qrcode).toBe('fresh-qrcode');
+    expect(result.errorMessage).toBeUndefined();
+    expect((service as any).sessions.get('session-stale-relogin-qrcode')).toEqual(
+      expect.objectContaining({
+        preparingRelogin: false,
+        qrcode: 'fresh-qrcode',
+      }),
+    );
+  });
+
+  it('syncs account qrcode status when scan status reads a NapCat qrcode', async () => {
+    const accountService = {
+      markQqLoginStatus: jest.fn(),
+    };
+    const syncService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      {} as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    (syncService as any).sessions.set('session-sync-qrcode-status', {
+      accountId: 'account-1',
+      containerId: 'container-sync-status',
+      containerName: 'napcat-sync-status',
+      createdAt: Date.now(),
+      expectedSelfId: '10001',
+      expiresAt: Date.now() + 60_000,
+      id: 'session-sync-qrcode-status',
+      mode: 'refresh',
+      status: 'pending',
+      webuiPort: 6111,
+    });
+    jest
+      .spyOn(syncService as any, 'getSessionContainer')
+      .mockResolvedValue({ id: 'container-sync-status' });
+    jest.spyOn(syncService as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      qrcodeurl: 'status-qrcode',
+    });
+
+    const result = await syncService.status('session-sync-qrcode-status');
+
+    expect(result.qrcode).toBe('status-qrcode');
+    expect(accountService.markQqLoginStatus).toHaveBeenCalledWith(
+      '10001',
+      'qrcode_pending',
+      null,
+    );
+  });
+
   it('replays scan progress events to late SSE subscribers', () => {
     const session = {
       containerId: 'container-events',

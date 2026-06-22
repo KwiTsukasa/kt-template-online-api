@@ -264,6 +264,37 @@ describe('NapCat persistent login state contract', () => {
     );
   });
 
+  it('does not mark a still-pending scan session completed when it is removed from the runtime cache', async () => {
+    const loginSessionRepository = createRepository<NapcatLoginSession>();
+    const store = new NapcatLoginStateStoreService(
+      loginSessionRepository as any,
+    );
+
+    store.set({
+      containerId: 'container-pending-delete',
+      containerName: 'kt-qqbot-napcat-pending-delete',
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      id: 'pending-delete-session',
+      mode: 'refresh',
+      qrcode: 'https://txz.qq.com/p?k=fresh',
+      status: 'pending',
+      webuiPort: 6099,
+    });
+    await store.flushSessionWrites('pending-delete-session');
+
+    store.delete('pending-delete-session');
+    await store.flushSessionWrites('pending-delete-session');
+
+    expect(loginSessionRepository.rows[0]).toEqual(
+      expect.objectContaining({
+        completedAt: null,
+        sessionKey: 'pending-delete-session',
+        status: 'pending',
+      }),
+    );
+  });
+
   it('recovers captcha, new-device, and cleanup blockers after cache miss', async () => {
     const loginSessionRepository = createRepository<NapcatLoginSession>();
     const loginChallengeRepository =

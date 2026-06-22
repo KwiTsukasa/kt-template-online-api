@@ -28,6 +28,7 @@ import type {
   QqbotAccountAbilityType,
   QqbotAccountListItem,
   QqbotConnectionRole,
+  QqbotNapcatRuntimeLoginStatus,
   QqbotNapcatWebuiStatus,
   QqbotRuntimeContainerStatus,
 } from '../../contract/qqbot.types';
@@ -544,6 +545,28 @@ export class QqbotAccountService {
         qqLoginStatus: 'offline',
       },
     );
+  }
+
+  /**
+   * Persists the QQ-login-only status reported by NapCat WebUI without changing OneBot or container connectivity.
+   * @param selfId - QQ account number whose NapCat login state was just probed.
+   * @param qqLoginStatus - WebUI login state such as qrcode pending, offline, or online.
+   * @param lastError - Optional human-facing reason; null clears stale risk/offline text when the state is actionable.
+   */
+  async markQqLoginStatus(
+    selfId: string,
+    qqLoginStatus: QqbotNapcatRuntimeLoginStatus,
+    lastError?: null | string,
+  ) {
+    const payload: Partial<QqbotAccount> = {
+      qqLoginStatus,
+    };
+    if (lastError !== undefined) {
+      payload.lastError = lastError
+        ? this.toolsService.toColumnText(lastError, 500)
+        : null;
+    }
+    await this.accountRepository.update({ selfId }, payload);
   }
 
   /**

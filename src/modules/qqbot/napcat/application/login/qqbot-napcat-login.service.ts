@@ -21,6 +21,7 @@ import type {
   QqbotLoginScanResult,
   QqbotLoginScanSession,
   QqbotLoginScanStatus,
+  QqbotNapcatRuntimeLoginStatus,
   QqbotNapcatRuntime,
   QrcodeLookupOptions,
   QrcodeRefreshOptions,
@@ -242,6 +243,9 @@ export class QqbotNapcatLoginService {
       return this.toResult(session);
     }
     if (session.preparingRelogin) {
+      if (this.recoverStaleReloginPreparation(session)) {
+        return this.refreshQrcode(sessionId);
+      }
       return this.keepSessionPending(
         session,
         session.errorMessage || 'NapCat 正在尝试快速登录，请稍后',
@@ -271,6 +275,9 @@ export class QqbotNapcatLoginService {
         'NapCat 通信超时，请稍后重试或确认运行容器仍在线',
         true,
       );
+    }
+    if (!loginStatus.isLogin) {
+      await this.syncSessionQqLoginStatus(session, loginStatus);
     }
 
     if (loginStatus.isOffline && session.mode !== 'refresh') {
@@ -354,6 +361,7 @@ export class QqbotNapcatLoginService {
       );
     }
     if (!status.isLogin) {
+      await this.syncSessionQqLoginStatus(session, status);
       const captchaUrl = this.getCaptchaUrlFromStatus(status);
       if (captchaUrl) {
         return this.keepPasswordCaptchaPending(
@@ -910,6 +918,83 @@ export class QqbotNapcatLoginService {
       status: session.status,
       webuiPort: session.webuiPort,
     };
+  }
+
+  /**
+   * Persists the QQ-login-only status observed during a scan session without altering container or OneBot state.
+   * @param session - Login session that carries the target QQ number for refresh-login flows.
+   * @param status - Latest NapCat WebUI CheckLoginStatus response used as the QQ login source of truth.
+   */
+  private async syncSessionQqLoginStatus(
+    session: QqbotLoginScanSession,
+    status: NapcatLoginStatus,
+  ) {
+    const selfId = this.toolsService.toTrimmedString(session.expectedSelfId);
+    if (!selfId) return;
+
+    const marker = (
+      this.accountService as unknown as {
+        markQqLoginStatus?: (
+          selfId: string,
+          qqLoginStatus: QqbotNapcatRuntimeLoginStatus,
+          lastError?: null | string,
+        ) => Promise<void>;
+      }
+    ).markQqLoginStatus;
+    if (!marker) return;
+
+    const qqLoginStatus = this.toSessionQqLoginStatus(status);
+    const lastError = this.toSessionQqLoginError(status, qqLoginStatus);
+    await marker.call(this.accountService, selfId, qqLoginStatus, lastError);
+  }
+
+  /**
+   * Converts a NapCat WebUI login probe into the account-table QQ login status vocabulary.
+   * @param status - Raw WebUI CheckLoginStatus payload returned by the current container.
+   * @returns Persistable QQ-login-only state.
+   */
+  private toSessionQqLoginStatus(
+    status: NapcatLoginStatus,
+  ): QqbotNapcatRuntimeLoginStatus {
+    const message = this.toolsService.toTrimmedString(status.loginError);
+    if (status.isLogin) return 'online';
+    if (
+      this.toolsService.isNapcatExpiredQrcodeStatus(status) ||
+      message.includes('二维码已过期')
+    ) {
+      return 'qrcode_expired';
+    }
+    if (status.qrcodeurl) return 'qrcode_pending';
+    if (
+      status.isOffline ||
+      this.toolsService.isNapcatOfflineLoginMessage(message)
+    ) {
+      return 'offline';
+    }
+    return 'unknown';
+  }
+
+  /**
+   * Selects the account error text that should accompany a QQ-login-only status update.
+   * @param status - Raw WebUI status containing the optional NapCat login error text.
+   * @param qqLoginStatus - Normalized state that decides whether stale error text should be cleared.
+   * @returns Null to clear stale errors, a reason string, or undefined when the account row should be left unchanged.
+   */
+  private toSessionQqLoginError(
+    status: NapcatLoginStatus,
+    qqLoginStatus: QqbotNapcatRuntimeLoginStatus,
+  ) {
+    const message = this.toolsService.toTrimmedString(status.loginError);
+    if (qqLoginStatus === 'online' || qqLoginStatus === 'qrcode_pending') {
+      return message || null;
+    }
+    if (qqLoginStatus === 'offline') {
+      return message || 'NapCat 账号已离线，请重新扫码登录';
+    }
+    if (qqLoginStatus === 'qrcode_expired') {
+      return message || 'NapCat 登录二维码已过期';
+    }
+    return message || undefined;
   }
 
   /**
@@ -2178,6 +2263,10 @@ export class QqbotNapcatLoginService {
         'processing',
         '等待扫码确认',
       );
+      await this.syncSessionQqLoginStatus(session, {
+        isLogin: false,
+        qrcodeurl: session.qrcode,
+      });
     } catch (err) {
       const message = this.toolsService.getErrorMessage(err);
       if (this.toolsService.isNapcatTemporaryError(err)) {

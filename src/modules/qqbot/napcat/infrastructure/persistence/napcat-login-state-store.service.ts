@@ -251,6 +251,11 @@ export class NapcatLoginStateStoreService {
    */
   private async markCompleted(sessionId: string) {
     if (!this.loginSessionRepository) return;
+    const current = await this.loginSessionRepository.findOne({
+      where: { sessionKey: sessionId },
+    });
+    if (!current || current.status === 'pending') return;
+
     await this.loginSessionRepository.update(
       { sessionKey: sessionId },
       {

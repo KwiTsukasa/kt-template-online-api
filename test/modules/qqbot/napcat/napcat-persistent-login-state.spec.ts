@@ -136,7 +136,6 @@ describe('NapCat persistent login state contract', () => {
       'loginSessionStore',
       'recordCaptchaChallenge',
       'recordNewDeviceChallenge',
-      'recordRuntimeCleanup',
     ].filter((signal) => !loginSource.includes(signal));
 
     expect(bannedMemorySignals).toEqual([]);

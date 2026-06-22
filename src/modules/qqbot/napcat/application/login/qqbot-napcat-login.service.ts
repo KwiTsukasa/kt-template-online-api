@@ -238,7 +238,7 @@ export class QqbotNapcatLoginService {
       if (!this.toolsService.isNapcatTemporaryError(err)) throw err;
       return this.keepSessionPending(
         session,
-        'NapCat 通信超时，请稍后重试或确认 Docker 容器仍在线',
+        'NapCat 通信超时，请稍后重试或确认运行容器仍在线',
         true,
       );
     }
@@ -1998,7 +1998,7 @@ export class QqbotNapcatLoginService {
   }
 
   /**
-   * 处理 Docker 源容器仍在线的更新登录流程。
+   * 处理源运行容器仍在线的更新登录流程。
    * @param session - 更新登录会话；若当前容器已经登录目标账号则直接完成。
    * @param container - NapCat 运行态；用于只读检查当前 QQ 登录态。
    * @returns 当前容器已登录目标账号并完成会话时返回 true，否则返回 false 继续 WebUI 登录流程。

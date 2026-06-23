@@ -295,6 +295,46 @@ describe('NapCat persistent login state contract', () => {
     );
   });
 
+  it('replaces the persisted qrcode snapshot when a later status poll returns a fresher qrcode', async () => {
+    const loginSessionRepository = createRepository<NapcatLoginSession>();
+    const store = new NapcatLoginStateStoreService(
+      loginSessionRepository as any,
+    );
+
+    const session = {
+      containerId: 'container-refreshing-qrcode',
+      containerName: 'kt-qqbot-napcat-refreshing-qrcode',
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      id: 'refreshing-qrcode-session',
+      mode: 'refresh',
+      qrcode: 'https://txz.qq.com/p?k=old',
+      status: 'pending',
+      webuiPort: 6099,
+    } as const;
+
+    store.set(session);
+    await store.flushSessionWrites(session.id);
+
+    store.set({
+      ...session,
+      qrcode: 'https://txz.qq.com/p?k=fresh',
+    });
+    await store.flushSessionWrites(session.id);
+
+    expect(loginSessionRepository.rows).toHaveLength(1);
+    expect(loginSessionRepository.rows[0]).toEqual(
+      expect.objectContaining({
+        loginStage: 'manual-qr',
+        sessionKey: session.id,
+        status: 'pending',
+      }),
+    );
+    expect(loginSessionRepository.rows[0].sessionPayload?.qrcode).toBe(
+      'https://txz.qq.com/p?k=fresh',
+    );
+  });
+
   it('recovers captcha, new-device, and cleanup blockers after cache miss', async () => {
     const loginSessionRepository = createRepository<NapcatLoginSession>();
     const loginChallengeRepository =

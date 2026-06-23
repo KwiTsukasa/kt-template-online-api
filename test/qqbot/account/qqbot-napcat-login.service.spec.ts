@@ -20,6 +20,8 @@ import { ToolsService } from '@/common';
 import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
 import { QqbotNapcatLoginService } from '@/modules/qqbot/napcat/application/login/qqbot-napcat-login.service';
 import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
+import { NapcatLoginSession } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-login-session.entity';
+import { NapcatLoginStateStoreService } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-login-state-store.service';
 
 describe('QqbotNapcatLoginService', () => {
   /**
@@ -52,6 +54,52 @@ describe('QqbotNapcatLoginService', () => {
       });
 
   const toolsService = new ToolsService();
+  /**
+   * 创建用于登录会话持久化断言的 TypeORM Repository 替身。
+   * @returns 带内存 rows 的最小 Repository；按 sessionKey 模拟 update/save 行为。
+   */
+  const createLoginSessionRepository = () => {
+    const rows: NapcatLoginSession[] = [];
+    return {
+      create: jest.fn(
+        (input: Partial<NapcatLoginSession>) =>
+          ({ ...input }) as NapcatLoginSession,
+      ),
+      findOne: jest.fn(async ({ where }: { where: Record<string, any> }) => {
+        return (
+          rows.find((row) =>
+            Object.entries(where).every(([key, value]) => row[key] === value),
+          ) || null
+        );
+      }),
+      rows,
+      save: jest.fn(async (input: NapcatLoginSession) => {
+        const index = rows.findIndex(
+          (row) =>
+            (input.id && row.id === input.id) ||
+            (input.sessionKey && row.sessionKey === input.sessionKey),
+        );
+        if (index >= 0) {
+          rows[index] = { ...rows[index], ...input } as NapcatLoginSession;
+          return rows[index];
+        }
+        rows.push(input);
+        return input;
+      }),
+      update: jest.fn(
+        async (
+          where: Record<string, any>,
+          input: Partial<NapcatLoginSession>,
+        ) => {
+          const row = rows.find((item) =>
+            Object.entries(where).every(([key, value]) => item[key] === value),
+          );
+          if (row) Object.assign(row, input);
+          return { affected: row ? 1 : 0 };
+        },
+      ),
+    };
+  };
   const service = new QqbotNapcatLoginService(
     { get: jest.fn() } as unknown as ConfigService,
     {} as QqbotAccountService,
@@ -3237,6 +3285,54 @@ describe('QqbotNapcatLoginService', () => {
     expect(result.status).toBe('error');
     expect(result.errorMessage).toBe('NapCat 快速登录失败');
     expect(getLoginStatus).not.toHaveBeenCalled();
+  });
+
+  it('persists expired scan sessions before removing them from the runtime cache', async () => {
+    const loginSessionRepository = createLoginSessionRepository();
+    const loginStateStore = new NapcatLoginStateStoreService(
+      loginSessionRepository as any,
+    );
+    const expireService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      {
+        removeUnboundContainer: jest.fn().mockResolvedValue(undefined),
+      } as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+      loginStateStore,
+    );
+
+    const session = {
+      containerId: 'container-expired-persist',
+      containerName: 'napcat-expired-persist',
+      createdAt: Date.now() - 120_000,
+      expiresAt: Date.now() - 1,
+      id: 'session-expired-persist',
+      mode: 'refresh',
+      qrcode: 'expired-qrcode',
+      status: 'pending',
+      webuiPort: 6110,
+    } as const;
+    (expireService as any).sessions.set(session.id, session);
+    await loginStateStore.flushSessionWrites(session.id);
+
+    const result = await expireService.status(session.id);
+    await loginStateStore.flushSessionWrites(session.id);
+
+    expect(result.status).toBe('expired');
+    expect(loginSessionRepository.rows).toHaveLength(1);
+    expect(loginSessionRepository.rows[0]).toEqual(
+      expect.objectContaining({
+        sessionKey: session.id,
+        status: 'expired',
+      }),
+    );
+    expect(loginSessionRepository.rows[0].completedAt).toEqual(
+      expect.any(Date),
+    );
+    expect(loginSessionRepository.rows[0].sessionPayload?.status).toBe(
+      'expired',
+    );
   });
 
   it('refreshes stale relogin qrcode from NapCat status instead of staying in quick login pending', async () => {

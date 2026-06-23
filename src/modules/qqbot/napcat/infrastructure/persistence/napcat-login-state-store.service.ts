@@ -215,7 +215,9 @@ export class NapcatLoginStateStoreService {
       }
     });
     this.pendingSessionWrites[sessionId] = tracked;
-    void tracked.catch(() => undefined);
+    void tracked.catch((err) =>
+      this.warnPersistenceError('登录会话持久化失败', err),
+    );
   }
 
   /**
@@ -224,11 +226,37 @@ export class NapcatLoginStateStoreService {
    */
   private async persistSession(session: QqbotLoginScanSession) {
     if (!this.loginSessionRepository) return;
-    const current = await this.loginSessionRepository.findOne({
-      where: { sessionKey: session.id },
-    });
-    const entity = this.loginSessionRepository.create({
-      ...(current || {}),
+    const snapshot = this.toSessionPersistenceSnapshot(session);
+    const updateResult = await this.loginSessionRepository.update(
+      { sessionKey: session.id },
+      snapshot as any,
+    );
+    if (updateResult.affected) return;
+
+    try {
+      const entity = this.loginSessionRepository.create({
+        ...snapshot,
+        sessionKey: session.id,
+      });
+      await this.loginSessionRepository.save(entity);
+    } catch (err) {
+      if (!this.isDuplicateSessionKeyError(err)) throw err;
+      await this.loginSessionRepository.update(
+        { sessionKey: session.id },
+        snapshot as any,
+      );
+    }
+  }
+
+  /**
+   * Builds the database snapshot for a scan session without carrying stale entity fields from an older row.
+   * @param session - Runtime scan session whose status, QR, expiry and challenge markers are the source of truth.
+   * @returns Partial entity used for update-first persistence by session key.
+   */
+  private toSessionPersistenceSnapshot(
+    session: QqbotLoginScanSession,
+  ): Partial<NapcatLoginSession> {
+    return {
       accountId: session.accountId || null,
       completedAt:
         session.status === 'pending'
@@ -238,11 +266,28 @@ export class NapcatLoginStateStoreService {
       loginStage: this.pickLoginStage(session),
       progressMessage:
         session.errorMessage || this.pickProgressMessage(session),
-      sessionKey: session.id,
       sessionPayload: session,
       status: session.status,
-    });
-    await this.loginSessionRepository.save(entity);
+    };
+  }
+
+  /**
+   * Detects the session-key duplicate race that can happen when two workers insert the same scan session concurrently.
+   * @param err - Database error raised by TypeORM save; MySQL duplicate-key metadata may appear as code, errno or message text.
+   * @returns True when retrying as an update by sessionKey is safe.
+   */
+  private isDuplicateSessionKeyError(err: unknown) {
+    const detail =
+      err && typeof err === 'object'
+        ? (err as { code?: string; errno?: number; message?: string })
+        : undefined;
+    const message = detail?.message || '';
+    return (
+      detail?.code === 'ER_DUP_ENTRY' ||
+      detail?.errno === 1062 ||
+      message.includes('uk_napcat_login_session_key') ||
+      message.includes('Duplicate entry')
+    );
   }
 
   /**

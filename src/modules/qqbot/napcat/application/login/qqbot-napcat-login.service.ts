@@ -1844,6 +1844,8 @@ export class QqbotNapcatLoginService {
     if (!cleaned) return this.toResult(session);
     session.status = 'expired';
     session.errorMessage = session.errorMessage || '扫码会话已过期';
+    this.persistLoginSession(session);
+    await this.loginSessionStore.flushSessionWrites(session.id);
     this.publishScanResultEvent(
       session,
       'session-expired',

@@ -7,14 +7,18 @@ $baseImage = docker image inspect mlikiowa/napcat-docker:latest --format '{{inde
 if (-not $baseImage) { throw 'NapCat upstream image digest not found; pull and inspect the image before building.' }
 docker build `
   --build-arg NAPCAT_BASE_IMAGE=$baseImage `
-  -t kt-napcat-desktop-cn:desktop-cn-v1 `
+  -t kt-napcat-desktop-cn:desktop-cn-v2 `
   -f ci/napcat-desktop-cn/Dockerfile .
 ```
 
 Verify:
 
-```powershell
-docker run --rm kt-napcat-desktop-cn:desktop-cn-v1 sh /ci/napcat-desktop-cn/verify.sh
+```bash
+name="kt-napcat-verify-$(date +%s)"
+trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+docker run -d --name "$name" kt-napcat-desktop-cn:desktop-cn-v2 >/dev/null
+sleep 3
+docker exec "$name" sh /ci/napcat-desktop-cn/verify.sh
 ```
 
 Record the final digest in `QQBOT_NAPCAT_IMAGE`.

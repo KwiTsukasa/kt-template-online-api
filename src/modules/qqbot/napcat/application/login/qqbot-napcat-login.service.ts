@@ -2110,6 +2110,9 @@ export class QqbotNapcatLoginService {
         return this.toolsService.ensureFreshQrcode(qrcode, options);
       } catch (err) {
         if (this.toolsService.isNapcatAlreadyLoggedInError(err)) {
+          if (options.requireFresh) {
+            throw new Error('NapCat WebUI 登录态仍阻止生成新二维码');
+          }
           const status = await this.getLoginStatus(container);
           return this.toolsService.ensureFreshQrcode(
             status.qrcodeurl || '',
@@ -2405,6 +2408,13 @@ export class QqbotNapcatLoginService {
         return false;
       }
     } catch (err) {
+      if (this.toolsService.isNapcatAlreadyLoggedInError(err)) {
+        return this.completeAlreadyLoggedInQuickRelogin(
+          session,
+          container,
+          hasPasswordFallback,
+        );
+      }
       this.publishQuickLoginFallback(
         session,
         this.toolsService.getErrorMessage(err),
@@ -2416,6 +2426,81 @@ export class QqbotNapcatLoginService {
     await this.completeLogin(session, container, {
       loginInfo,
       successMessage: '快速登录成功',
+    });
+    return true;
+  }
+
+  /**
+   * 在 NapCat WebUI 拒绝重复 quick 登录时读取真实 QQ 在线态。
+   * @param session - 当前更新登录会话；成功时直接完成会话，失败时写入 fallback 进度。
+   * @param container - 当前 NapCat WebUI 容器；只读调用 CheckLoginStatus/GetQQLoginInfo。
+   * @param hasPasswordFallback - 是否还有密码登录分支；决定 fallback 文案里的下一步。
+   * @returns 真实 QQ 在线且账号匹配时返回 true，否则返回 false 继续后续登录分支。
+   */
+  private async completeAlreadyLoggedInQuickRelogin(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    hasPasswordFallback: boolean,
+  ) {
+    this.publishScanResultEvent(
+      session,
+      'quick-login-status-check',
+      'processing',
+      'NapCat 报告账号已登录，正在确认真实在线状态',
+    );
+
+    let loginInfo: NapcatLoginInfo;
+    try {
+      const loginStatus = await this.getLoginStatus(container, true);
+      if (!loginStatus.isLogin) {
+        await this.syncSessionQqLoginStatus(session, loginStatus);
+        this.publishQuickLoginFallback(
+          session,
+          loginStatus.loginError || 'NapCat 已登录标记残留但真实 QQ 已离线',
+          hasPasswordFallback,
+        );
+        return false;
+      }
+
+      loginInfo = await this.getLoginInfo(container);
+      if (loginInfo.online === false) {
+        this.publishQuickLoginFallback(
+          session,
+          'NapCat 已登录标记残留但真实 QQ 已离线',
+          hasPasswordFallback,
+        );
+        return false;
+      }
+
+      const selfId = this.toolsService.pickNapcatSelfId(loginInfo);
+      if (!selfId) {
+        this.publishQuickLoginFallback(
+          session,
+          'NapCat 未返回 QQ 号',
+          hasPasswordFallback,
+        );
+        return false;
+      }
+      if (session.expectedSelfId && session.expectedSelfId !== selfId) {
+        this.publishQuickLoginFallback(
+          session,
+          `当前已登录账号 ${selfId} 与目标账号 ${session.expectedSelfId} 不一致`,
+          hasPasswordFallback,
+        );
+        return false;
+      }
+    } catch (err) {
+      this.publishQuickLoginFallback(
+        session,
+        this.toolsService.getErrorMessage(err),
+        hasPasswordFallback,
+      );
+      return false;
+    }
+
+    await this.completeLogin(session, container, {
+      loginInfo,
+      successMessage: 'NapCat 已登录，已确认真实在线状态',
     });
     return true;
   }

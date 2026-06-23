@@ -596,6 +596,7 @@ export class ToolsService {
       'NapCat 请求超时',
       'NapCat 未返回登录二维码',
       'NapCat 二维码仍未刷新',
+      'NapCat WebUI 登录态仍阻止生成新二维码',
       'QRCode Get Error',
       'socket hang up',
     ]);

@@ -71,7 +71,7 @@ export class NapcatRuntimeProfileService {
       dataDir: input.dataDir,
       desktopProfileVersion: this.getString(
         'QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION',
-        'desktop-cn-v1',
+        'desktop-cn-v2',
       ),
       deviceIdentityId: input.deviceIdentityId,
       imageRef: this.getString('QQBOT_NAPCAT_IMAGE', ''),

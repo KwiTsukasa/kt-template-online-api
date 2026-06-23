@@ -25,12 +25,12 @@ $baseImage = docker image inspect mlikiowa/napcat-docker:latest --format '{{inde
 if (-not $baseImage) { throw 'NapCat upstream image digest not found; pull and inspect the image before building.' }
 docker build `
   --build-arg NAPCAT_BASE_IMAGE=$baseImage `
-  -t kt-napcat-desktop-cn:desktop-cn-v5 `
+  -t kt-napcat-desktop-cn:desktop-cn-v6 `
   -f .kt-workspace/napcat-desktop-cn-build/ci/napcat-desktop-cn/Dockerfile `
   .kt-workspace/napcat-desktop-cn-build
 
-$name = "kt-napcat-v5-verify-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
-docker run -d --name $name kt-napcat-desktop-cn:desktop-cn-v5
+$name = "kt-napcat-v6-verify-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+docker run -d --name $name kt-napcat-desktop-cn:desktop-cn-v6
 docker exec $name sh /ci/napcat-desktop-cn/verify.sh
 docker rm -f $name
 ```

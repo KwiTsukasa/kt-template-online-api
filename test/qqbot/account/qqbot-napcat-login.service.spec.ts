@@ -3776,7 +3776,7 @@ describe('QqbotNapcatLoginService', () => {
     ).rejects.toThrow('NapCat WebUI 登录态仍阻止生成新二维码');
   });
 
-  it('keeps refresh status pending instead of reusing stale WebUI qrcode', async () => {
+  it('keeps the current refresh qrcode during ordinary status polling', async () => {
     (service as any).sessions.set('session-status-stale-qrcode', {
       accountId: 'account-1',
       containerId: 'container-status-stale',
@@ -3804,12 +3804,9 @@ describe('QqbotNapcatLoginService', () => {
     const result = await service.status('session-status-stale-qrcode');
 
     expect(result.status).toBe('pending');
-    expect(result.qrcode).toBeUndefined();
-    expect(result.errorMessage).toContain('正在重新生成二维码');
-    expect(getQrcode).toHaveBeenCalledWith(container, false, {
-      requireFresh: true,
-      staleQrcode: 'old-qrcode',
-    });
+    expect(result.qrcode).toBe('old-qrcode');
+    expect(result.errorMessage).toBeUndefined();
+    expect(getQrcode).not.toHaveBeenCalled();
   });
 
   it('does not replace current qrcode with expired status qrcode', async () => {

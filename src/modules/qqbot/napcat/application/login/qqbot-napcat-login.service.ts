@@ -437,6 +437,12 @@ export class QqbotNapcatLoginService {
         }
       } else if (status.isOffline && session.mode !== 'refresh') {
         session.qrcode = undefined;
+      } else if (
+        session.mode === 'refresh' &&
+        session.qrcode &&
+        !this.toolsService.isNapcatExpiredQrcodeStatus(status)
+      ) {
+        session.errorMessage = undefined;
       } else if (!this.toolsService.isNapcatExpiredQrcodeStatus(status)) {
         await this.tryUpdatePendingQrcode(container, session, status, {
           clearStaleQrcode: session.mode === 'refresh',

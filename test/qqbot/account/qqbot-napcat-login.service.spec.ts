@@ -276,6 +276,43 @@ describe('QqbotNapcatLoginService', () => {
     expect(prepareReloginQrcode).toHaveBeenCalledTimes(1);
   });
 
+  it('does not return a stale qrcode when reusing an active refresh session', async () => {
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {} as QqbotAccountService,
+      {} as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    (refreshService as any).sessions.set('session-active-stale-qrcode', {
+      accountId: 'account-1',
+      containerId: 'container-1',
+      containerName: 'napcat-1',
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      id: 'session-active-stale-qrcode',
+      mode: 'refresh',
+      qrcode: 'old-qrcode',
+      status: 'pending',
+      webuiPort: 6101,
+    });
+    const refreshQrcode = jest
+      .spyOn(refreshService, 'refreshQrcode')
+      .mockResolvedValue({
+        errorMessage: 'NapCat 正在重新生成二维码，请稍后刷新或等待自动更新',
+        mode: 'refresh',
+        qrcode: undefined,
+        sessionId: 'session-active-stale-qrcode',
+        status: 'pending',
+      });
+
+    const result = await refreshService.startRefresh('account-1');
+
+    expect(result.sessionId).toBe('session-active-stale-qrcode');
+    expect(result.qrcode).toBeUndefined();
+    expect(result.errorMessage).toContain('正在重新生成二维码');
+    expect(refreshQrcode).toHaveBeenCalledWith('session-active-stale-qrcode');
+  });
+
   it('shares an in-flight refresh task before the first session is created', async () => {
     const account = {
       id: 'account-1',
@@ -453,6 +490,9 @@ describe('QqbotNapcatLoginService', () => {
         isLogin: false,
         qrcodeurl: 'fresh-qrcode-after-restart',
       });
+    jest
+      .spyOn(refreshService as any, 'getQrcode')
+      .mockResolvedValue('fresh-qrcode-after-restart');
 
     const result = await refreshService.status(session.id);
 
@@ -3405,6 +3445,9 @@ describe('QqbotNapcatLoginService', () => {
       isLogin: false,
       qrcodeurl: 'status-qrcode',
     });
+    jest
+      .spyOn(syncService as any, 'getQrcode')
+      .mockResolvedValue('status-qrcode');
 
     const result = await syncService.status('session-sync-qrcode-status');
 
@@ -3699,6 +3742,42 @@ describe('QqbotNapcatLoginService', () => {
         requireFresh: true,
       }),
     ).rejects.toThrow('NapCat WebUI 登录态仍阻止生成新二维码');
+  });
+
+  it('keeps refresh status pending instead of reusing stale WebUI qrcode', async () => {
+    (service as any).sessions.set('session-status-stale-qrcode', {
+      accountId: 'account-1',
+      containerId: 'container-status-stale',
+      containerName: 'napcat-status-stale',
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      id: 'session-status-stale-qrcode',
+      mode: 'refresh',
+      qrcode: 'old-qrcode',
+      status: 'pending',
+      webuiPort: 6101,
+    });
+    const container = { id: 'container-status-stale' };
+    jest
+      .spyOn(service as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest.spyOn(service as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      qrcodeurl: 'old-qrcode',
+    });
+    const getQrcode = jest
+      .spyOn(service as any, 'getQrcode')
+      .mockRejectedValue(new Error('NapCat 二维码仍未刷新'));
+
+    const result = await service.status('session-status-stale-qrcode');
+
+    expect(result.status).toBe('pending');
+    expect(result.qrcode).toBeUndefined();
+    expect(result.errorMessage).toContain('正在重新生成二维码');
+    expect(getQrcode).toHaveBeenCalledWith(container, false, {
+      requireFresh: true,
+      staleQrcode: 'old-qrcode',
+    });
   });
 
   it('does not replace current qrcode with expired status qrcode', async () => {

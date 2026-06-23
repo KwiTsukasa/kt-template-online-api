@@ -30,6 +30,11 @@ import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qq
 import { NapcatLoginStateStoreService } from '../../infrastructure/persistence/napcat-login-state-store.service';
 import { QqbotNapcatContainerService } from '../../infrastructure/integration/container/qqbot-napcat-container.service';
 
+type PendingQrcodeUpdateOptions = {
+  clearStaleQrcode?: boolean;
+  requireFresh?: boolean;
+};
+
 @Injectable()
 export class QqbotNapcatLoginService {
   private readonly fallbackLoginSessionStore =
@@ -155,7 +160,10 @@ export class QqbotNapcatLoginService {
    */
   async startRefresh(accountId: string) {
     const activeSession = this.findActiveRefreshSession(accountId);
-    if (activeSession) return this.toResult(activeSession);
+    if (activeSession) {
+      if (activeSession.qrcode) return this.refreshQrcode(activeSession.id);
+      return this.toResult(activeSession);
+    }
 
     const runningTask = this.refreshStartTasks[accountId];
     if (runningTask) return runningTask;
@@ -413,6 +421,7 @@ export class QqbotNapcatLoginService {
       session.errorMessage = status.loginError || undefined;
       if (
         status.qrcodeurl &&
+        session.mode !== 'refresh' &&
         !this.toolsService.isNapcatExpiredQrcodeStatus(status)
       ) {
         const qrcodeChanged = session.qrcode !== status.qrcodeurl;
@@ -425,10 +434,13 @@ export class QqbotNapcatLoginService {
             '登录二维码已生成',
           );
         }
-      } else if (status.isOffline) {
+      } else if (status.isOffline && session.mode !== 'refresh') {
         session.qrcode = undefined;
       } else if (!this.toolsService.isNapcatExpiredQrcodeStatus(status)) {
-        await this.tryUpdatePendingQrcode(container, session, status);
+        await this.tryUpdatePendingQrcode(container, session, status, {
+          clearStaleQrcode: session.mode === 'refresh',
+          requireFresh: session.mode === 'refresh',
+        });
       }
       this.persistLoginSession(session);
       return this.toResult(session);
@@ -1916,15 +1928,18 @@ export class QqbotNapcatLoginService {
    * @param container - container 输入；驱动 `this.getQrcode()` 的 NapCat步骤。
    * @param session - session 输入；使用 `qrcode`、`errorMessage` 字段生成结果。
    * @param status - NapCat列表；使用 `qrcodeurl`、`loginError` 字段生成结果。
+   * @param options - refresh 会话要求二维码必须区别于已知旧码，失败时避免继续把旧码回传给 Admin。
    */
   private async tryUpdatePendingQrcode(
     container: QqbotNapcatRuntime,
     session: QqbotLoginScanSession,
     status: NapcatLoginStatus,
+    options: PendingQrcodeUpdateOptions = {},
   ) {
+    const requireFresh = options.requireFresh ?? !!session.qrcode;
     try {
       const qrcode = await this.getQrcode(container, false, {
-        requireFresh: !!session.qrcode,
+        requireFresh,
         staleQrcode: session.qrcode || status.qrcodeurl,
       });
       if (qrcode) {
@@ -1942,6 +1957,9 @@ export class QqbotNapcatLoginService {
       }
     } catch (err) {
       if (!this.toolsService.isNapcatTemporaryError(err)) throw err;
+      if (options.clearStaleQrcode || requireFresh) {
+        session.qrcode = undefined;
+      }
       session.errorMessage =
         session.errorMessage || 'NapCat 正在重新生成二维码，请稍后';
     }

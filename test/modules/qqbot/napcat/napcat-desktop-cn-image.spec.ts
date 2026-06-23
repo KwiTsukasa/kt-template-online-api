@@ -72,4 +72,14 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).toContain('qrcodeRevision');
     expect(verify).not.toContain('selfInfo?.online !== false');
   });
+
+  it('deploys the production API with the verified desktop-cn-v3 runtime profile', () => {
+    const manifest = readSource('k8s/prod/api.yaml');
+
+    expect(manifest).toContain('name: QQBOT_NAPCAT_IMAGE');
+    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v3');
+    expect(manifest).toContain('name: QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION');
+    expect(manifest).toContain('value: desktop-cn-v3');
+    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v2');
+  });
 });

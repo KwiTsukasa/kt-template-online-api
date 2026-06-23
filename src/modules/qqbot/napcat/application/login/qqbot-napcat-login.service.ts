@@ -421,11 +421,12 @@ export class QqbotNapcatLoginService {
       session.errorMessage = status.loginError || undefined;
       if (
         status.qrcodeurl &&
-        session.mode !== 'refresh' &&
+        (session.mode !== 'refresh' || !session.qrcode) &&
         !this.toolsService.isNapcatExpiredQrcodeStatus(status)
       ) {
         const qrcodeChanged = session.qrcode !== status.qrcodeurl;
         session.qrcode = status.qrcodeurl;
+        session.errorMessage = undefined;
         if (qrcodeChanged) {
           this.publishScanResultEvent(
             session,

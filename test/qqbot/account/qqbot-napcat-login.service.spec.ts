@@ -3591,6 +3591,38 @@ describe('QqbotNapcatLoginService', () => {
     expect(result.errorMessage).toContain('正在重新生成二维码');
   });
 
+  it('accepts qrcode from login status for refresh session without stored qrcode', async () => {
+    (service as any).sessions.set('session-status-qrcode', {
+      accountId: 'account-1',
+      containerId: 'container-status-qrcode',
+      containerName: 'napcat-status-qrcode',
+      createdAt: Date.now(),
+      errorMessage: 'NapCat 正在重新生成二维码，请稍后',
+      expiresAt: Date.now() + 60_000,
+      id: 'session-status-qrcode',
+      mode: 'refresh',
+      status: 'pending',
+      webuiPort: 6106,
+    });
+    jest
+      .spyOn(service as any, 'getSessionContainer')
+      .mockResolvedValue({ id: 'container-status-qrcode' });
+    jest.spyOn(service as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      qrcodeurl: 'fresh-status-qrcode',
+    });
+    const getQrcode = jest
+      .spyOn(service as any, 'getQrcode')
+      .mockRejectedValue(new Error('NapCat 二维码仍未刷新'));
+
+    const result = await service.status('session-status-qrcode');
+
+    expect(result.status).toBe('pending');
+    expect(result.qrcode).toBe('fresh-status-qrcode');
+    expect(result.errorMessage).toBeUndefined();
+    expect(getQrcode).not.toHaveBeenCalled();
+  });
+
   it('normalizes login status to offline when login info reports offline', async () => {
     jest
       .spyOn(service as any, 'postNapcat')

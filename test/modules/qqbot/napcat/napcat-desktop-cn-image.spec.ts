@@ -38,6 +38,7 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).toContain('zh_CN.utf8');
     expect(verify).toContain('fc-match');
     expect(verify).toContain('/.dockerenv');
+    expect(verify).toContain('wait_for_absent');
     expect(verify).toContain('/proc/1/cgroup');
     expect(verify).toContain('XDG_CONFIG_HOME=/app/.config');
     expect(verify).toContain('Asia/Shanghai');
@@ -70,16 +71,19 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).toContain('napcatMjsSha256');
     expect(verify).toContain('getQQLoginRuntimeState');
     expect(verify).toContain('qrcodeRevision');
+    expect(verify).toContain('needsLoginServiceReset');
+    expect(verify).toContain('重置已失效登录服务后重新生成二维码');
     expect(verify).not.toContain('selfInfo?.online !== false');
   });
 
-  it('deploys the production API with the verified desktop-cn-v3 runtime profile', () => {
+  it('deploys the production API with the verified desktop-cn-v4 runtime profile', () => {
     const manifest = readSource('k8s/prod/api.yaml');
 
     expect(manifest).toContain('name: QQBOT_NAPCAT_IMAGE');
-    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v3');
+    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v4');
     expect(manifest).toContain('name: QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION');
-    expect(manifest).toContain('value: desktop-cn-v3');
+    expect(manifest).toContain('value: desktop-cn-v4');
+    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v3');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v2');
   });
 });

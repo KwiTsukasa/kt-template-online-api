@@ -5,6 +5,17 @@ MARKER=/ci/napcat-desktop-cn/fork-artifact.json
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+wait_for_absent() {
+  path="$1"
+  timeout_seconds="$2"
+  elapsed=0
+  while [ -e "$path" ] && [ "$elapsed" -lt "$timeout_seconds" ]; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  test ! -e "$path"
+}
+
 locale -a | grep -i '^zh_CN.utf8$'
 locale | grep 'LANG=zh_CN.UTF-8'
 test "$(cat /etc/timezone)" = "Asia/Shanghai"
@@ -12,7 +23,7 @@ fc-match "Noto Sans CJK SC" | grep -E 'Noto|WenQuanYi|wqy'
 test "XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-}" = "XDG_CONFIG_HOME=/app/.config"
 test "XDG_CACHE_HOME=${XDG_CACHE_HOME:-}" = "XDG_CACHE_HOME=/app/.cache"
 test "XDG_DATA_HOME=${XDG_DATA_HOME:-}" = "XDG_DATA_HOME=/app/.local/share"
-test ! -e /.dockerenv
+wait_for_absent /.dockerenv 10
 grep -q '^0::/$' /proc/1/cgroup
 
 test -s "$MARKER"
@@ -31,3 +42,5 @@ test "$EXPECTED_MJS_SHA" = "$ACTUAL_MJS_SHA"
 
 grep -R -q 'getQQLoginRuntimeState' "$TMP_DIR"
 grep -R -q 'qrcodeRevision' "$TMP_DIR"
+grep -R -q 'needsLoginServiceReset' "$TMP_DIR"
+grep -R -q '重置已失效登录服务后重新生成二维码' "$TMP_DIR"

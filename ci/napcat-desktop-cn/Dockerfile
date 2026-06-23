@@ -22,15 +22,13 @@ RUN set -eux; \
   fc-cache -fv; \
   rm -rf /var/lib/apt/lists/*
 
-COPY ci/napcat-desktop-cn/patches/qq-login-real-online-guard.sh /tmp/qq-login-real-online-guard.sh
+COPY NapCat.Shell /tmp/NapCat.Shell
+COPY ci/napcat-desktop-cn/fork-artifact.json /ci/napcat-desktop-cn/fork-artifact.json
 RUN set -eux; \
-  sed -i 's/\r$//' /tmp/qq-login-real-online-guard.sh; \
-  rm -rf /tmp/NapCat.Shell; \
-  unzip -q /app/NapCat.Shell.zip -d /tmp/NapCat.Shell; \
-  NAPCAT_PATCH_ROOT=/tmp/NapCat.Shell sh /tmp/qq-login-real-online-guard.sh; \
   cd /tmp/NapCat.Shell; \
   zip -qr /app/NapCat.Shell.zip .; \
-  rm -rf /tmp/NapCat.Shell /tmp/qq-login-real-online-guard.sh
+  sha256sum /app/NapCat.Shell.zip | awk '{print $1}' > /ci/napcat-desktop-cn/NapCat.Shell.zip.sha256; \
+  rm -rf /tmp/NapCat.Shell
 COPY ci/napcat-desktop-cn/verify.sh /ci/napcat-desktop-cn/verify.sh
 RUN sed -i 's/\r$//' /ci/napcat-desktop-cn/verify.sh && chmod +x /ci/napcat-desktop-cn/verify.sh
 

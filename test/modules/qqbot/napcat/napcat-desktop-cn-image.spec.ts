@@ -41,39 +41,35 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).toContain('/proc/1/cgroup');
     expect(verify).toContain('XDG_CONFIG_HOME=/app/.config');
     expect(verify).toContain('Asia/Shanghai');
-    expect(verify).toContain('selfInfo?.online !== false');
-    expect(verify).toContain('setQQLoginStatus(false)');
   });
 
-  it('patches NapCat WebUI login guards to allow qrcode refresh after real QQ offline', () => {
-    const dockerfile = readSource('ci/napcat-desktop-cn/Dockerfile');
-    expect(dockerfile).toContain(
-      'ci/napcat-desktop-cn/patches/qq-login-real-online-guard.sh',
-    );
-    expect(dockerfile).toContain(
-      'sh /tmp/qq-login-real-online-guard.sh',
-    );
-    expect(dockerfile).toContain(
-      "sed -i 's/\\r$//' /tmp/qq-login-real-online-guard.sh",
-    );
-    expect(dockerfile).toContain('NAPCAT_PATCH_ROOT=/tmp/NapCat.Shell');
-    expect(dockerfile).toContain('zip -qr /app/NapCat.Shell.zip .');
-    expect(dockerfile).toContain(
-      'COPY ci/napcat-desktop-cn/verify.sh /ci/napcat-desktop-cn/verify.sh',
-    );
-    expect(dockerfile).toContain(
-      "sed -i 's/\\r$//' /ci/napcat-desktop-cn/verify.sh",
-    );
+  it('stages source-built NapCat Shell artifacts for Docker build context', () => {
+    const script = readSource('scripts/napcat-desktop-cn-stage-build.mjs');
 
-    const patch = readSource(
-      'ci/napcat-desktop-cn/patches/qq-login-real-online-guard.sh',
-    );
-    expect(patch).toContain('QQ Is Logined');
-    expect(patch).toContain('getQQLoginStatus');
-    expect(patch).toContain('selfInfo?.online');
-    expect(patch).toContain('setQQLoginStatus(false)');
-    expect(patch).toContain('RefreshQRcode');
-    expect(patch).toContain('[A-Za-z_\\$]');
-    expect(patch).toContain('[\\w\\$]');
+    expect(script).toContain('napcatMjsSha256');
+    expect(script).toContain('forkCommit');
+    expect(script).toContain('upstreamBaseCommit');
+    expect(script).toContain('packages/napcat-shell/dist');
+    expect(script).toContain('fork-artifact.json');
+    expect(script).toContain('.kt-workspace/napcat-desktop-cn-build');
+    expect(script).toContain('assertSafeOutputRoot');
+    expect(script).toContain('workspaceRoot');
+    expect(script).toContain('Output root must stay inside');
+    expect(script).toContain('Refusing to delete unsafe output root');
+  });
+
+  it('uses source-built NapCat Shell artifact instead of bundled JS patching', () => {
+    const dockerfile = readSource('ci/napcat-desktop-cn/Dockerfile');
+    const verify = readSource('ci/napcat-desktop-cn/verify.sh');
+
+    expect(dockerfile).toContain('COPY NapCat.Shell /tmp/NapCat.Shell');
+    expect(dockerfile).toContain('fork-artifact.json');
+    expect(dockerfile).toContain('zip -qr /app/NapCat.Shell.zip .');
+    expect(dockerfile).not.toContain('qq-login-real-online-guard.sh');
+    expect(dockerfile).not.toContain('NAPCAT_PATCH_ROOT');
+    expect(verify).toContain('napcatMjsSha256');
+    expect(verify).toContain('getQQLoginRuntimeState');
+    expect(verify).toContain('qrcodeRevision');
+    expect(verify).not.toContain('selfInfo?.online !== false');
   });
 });

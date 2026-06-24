@@ -1054,6 +1054,66 @@ describe('QqbotNapcatLoginService', () => {
     );
   });
 
+  it('confirms real login status when quick login reports already logged in using the NapCat Chinese message', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-quick-already-online-cn',
+      name: 'napcat-1914728559',
+    };
+    const accountService = {
+      ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
+    };
+    const containerService = {
+      bindAccount: jest.fn().mockResolvedValue(undefined),
+      resetRuntimeLoginState: jest.fn(),
+      restartRuntimeContainer: jest.fn(),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '1914728559',
+      mode: 'refresh',
+      preparingRelogin: true,
+      status: 'pending',
+    });
+    (refreshService as any).sessions.set(session.id, session);
+    mockWebuiLoginPost(refreshService, {
+      quickError: '当前账号(1914728559)已登录,无法重复登录',
+    });
+    const getLoginStatus = jest
+      .spyOn(refreshService as any, 'getLoginStatus')
+      .mockResolvedValue({ isLogin: true });
+    jest.spyOn(refreshService as any, 'getLoginInfo').mockResolvedValue({
+      nickname: 'Mirror',
+      online: true,
+      uin: '1914728559',
+    });
+    const refreshQrcode = jest
+      .spyOn(refreshService as any, 'refreshOrGetQrcode')
+      .mockResolvedValue('fallback-qrcode');
+
+    await (refreshService as any).prepareReloginQrcode(session, container);
+
+    expect(getLoginStatus).toHaveBeenCalledWith(container, true);
+    expect(refreshQrcode).not.toHaveBeenCalled();
+    expect(session.status).toBe('success');
+    const events = (refreshService as any).sessionEventLogs.get(session.id);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: 'NapCat 已登录，已确认真实在线状态',
+          step: 'login-success',
+        }),
+      ]),
+    );
+  });
+
   it('keeps binding errors terminal after already-logged quick status is confirmed online', async () => {
     const container = {
       baseUrl: 'http://127.0.0.1:6103/',
@@ -1112,6 +1172,200 @@ describe('QqbotNapcatLoginService', () => {
     expect(steps).toContain('quick-login-status-check');
     expect(steps).not.toContain('quick-login-fallback');
     expect(steps).toContain('relogin-error');
+  });
+
+  it('monitors a ready qrcode session and publishes login success without frontend polling', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-monitor-qrcode',
+      name: 'napcat-monitor-qrcode',
+    };
+    const accountService = {
+      ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
+    };
+    const containerService = {
+      bindAccount: jest.fn().mockResolvedValue(undefined),
+    };
+    const monitorService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) =>
+          key === 'QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS' ? 10 : undefined,
+        ),
+      } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (monitorService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '1914728559',
+      mode: 'refresh',
+      qrcode: 'https://txz.qq.com/p?k=ready&f=1600001615',
+      status: 'pending',
+    });
+    (monitorService as any).sessions.set(session.id, session);
+    jest
+      .spyOn(monitorService as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    const getLoginStatus = jest
+      .spyOn(monitorService as any, 'getLoginStatus')
+      .mockResolvedValue({ isLogin: true });
+    jest.spyOn(monitorService as any, 'getLoginInfo').mockResolvedValue({
+      nick: 'Mirror',
+      online: true,
+      uin: '1914728559',
+    });
+
+    (monitorService as any).publishScanResultEvent(
+      session,
+      'qrcode-ready',
+      'success',
+      '登录二维码已生成',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(getLoginStatus).toHaveBeenCalledWith(container);
+    expect(session.status).toBe('success');
+    expect((monitorService as any).sessionEventLogs.get(session.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ step: 'login-success' }),
+      ]),
+    );
+  });
+
+  it('does not let the server-side qrcode monitor extend the original qrcode deadline on temporary errors', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-monitor-temporary-error',
+      name: 'napcat-monitor-temporary-error',
+    };
+    const monitorService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          if (key === 'QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS') return 10;
+          if (key === 'NAPCAT_LOGIN_QR_EXPIRE_MS') return 25;
+          return undefined;
+        }),
+      } as unknown as ConfigService,
+      {
+        ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
+      } as unknown as QqbotAccountService,
+      {
+        bindAccount: jest.fn().mockResolvedValue(undefined),
+      } as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (monitorService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '1914728559',
+      mode: 'refresh',
+      qrcode: 'https://txz.qq.com/p?k=temporary&f=1600001615',
+      status: 'pending',
+    });
+    (monitorService as any).sessions.set(session.id, session);
+    jest
+      .spyOn(monitorService as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest
+      .spyOn(monitorService as any, 'getLoginStatus')
+      .mockRejectedValue(new Error('NapCat 请求超时'));
+    const publishResult = jest.spyOn(
+      monitorService as any,
+      'publishScanResultEvent',
+    );
+
+    (monitorService as any).publishScanResultEvent(
+      session,
+      'qrcode-ready',
+      'success',
+      '登录二维码已生成',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    expect(session.status).toBe('expired');
+    expect(publishResult).toHaveBeenCalledWith(
+      session,
+      'session-expired',
+      'error',
+      expect.any(String),
+    );
+  });
+
+  it('refreshes the monitor deadline when a new qrcode is published while a timer is already active', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-monitor-new-qrcode',
+      name: 'napcat-monitor-new-qrcode',
+    };
+    let qrTtlReads = 0;
+    const monitorService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          if (key === 'QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS') return 60;
+          if (key === 'NAPCAT_LOGIN_QR_EXPIRE_MS') {
+            qrTtlReads += 1;
+            return qrTtlReads <= 2 ? 25 : 120;
+          }
+          return undefined;
+        }),
+      } as unknown as ConfigService,
+      {
+        ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
+      } as unknown as QqbotAccountService,
+      {
+        bindAccount: jest.fn().mockResolvedValue(undefined),
+      } as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const firstQrcode = 'https://txz.qq.com/p?k=first&f=1600001615';
+    const nextQrcode = 'https://txz.qq.com/p?k=next&f=1600001615';
+    const session = (monitorService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '1914728559',
+      mode: 'refresh',
+      qrcode: firstQrcode,
+      status: 'pending',
+    });
+    (monitorService as any).sessions.set(session.id, session);
+    jest
+      .spyOn(monitorService as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest.spyOn(monitorService as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      qrcodeurl: nextQrcode,
+    });
+    const publishResult = jest.spyOn(
+      monitorService as any,
+      'publishScanResultEvent',
+    );
+
+    (monitorService as any).publishScanResultEvent(
+      session,
+      'qrcode-ready',
+      'success',
+      '登录二维码已生成',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    session.qrcode = nextQrcode;
+    (monitorService as any).publishScanResultEvent(
+      session,
+      'qrcode-ready',
+      'success',
+      '登录二维码已刷新',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    expect(session.status).toBe('pending');
+    expect(
+      (monitorService as any).scanStatusMonitorDeadlines[session.id]?.qrcode,
+    ).toBe(nextQrcode);
+    expect(
+      publishResult.mock.calls.some((call) => call[1] === 'session-expired'),
+    ).toBe(false);
+    (monitorService as any).sessions.clear();
   });
 
   it('does not rebuild even when the refresh session already has a rebuild count', async () => {

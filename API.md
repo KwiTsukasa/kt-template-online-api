@@ -383,6 +383,8 @@ NapCat Chinese Desktop Runtime v8 使用 KT `NapCatQQ` fork 源码构建出的 `
 
 NapCat WebUI Gateway 是独立部署的内部代理服务，生产镜像由 `dockerfile.gateway` 打包 `dist/apps/napcat-webui-gateway/main.js`，K8s 服务名为 `kt-napcat-webui-gateway`，端口 `48086`。API 侧只通过内部路由 `NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL` 创建、续期、撤销会话和交换一次性 ticket；浏览器只访问公开前缀 `NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL` 下的代理页面、静态资源和 WebSocket 转发，不能直连 NapCat 容器 WebUI。
 
+Gateway 只改写 NapCat HTML/JS/CSS 中需要浏览器直连的绝对根路径：`/webui/*`、`/api/*`、`/files/*` 和 `/plugin/*`。NapCat 文件管理的 `File` 路由属于 axios `baseURL="/api"` 下的 API 子路径，页面源码里的 `"/File/list"` 必须保持原样，由浏览器最终请求 `/api/File/list`；不能把 `/File/*` 当作独立静态根路径改写到 Gateway session 前缀，否则会形成 `/webui/api/napcat-webui/session/.../File/list` 并让文件管理拿到 HTML。
+
 必需环境变量：`NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL`、`NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL`、`NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET`、`NAPCAT_WEBUI_GATEWAY_REDIS_HOST`、`NAPCAT_WEBUI_GATEWAY_REDIS_PORT`、`NAPCAT_WEBUI_GATEWAY_SESSION_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_TICKET_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_UPSTREAM_TIMEOUT_MS`。生产 `NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET` 只来自 Jenkins 私有 `.env.production` 生成的 `kt-template-online-api-env` Secret，不写入 Git 或 manifest 字面量。
 
 部署验收使用：`pnpm exec jest --runTestsByPath test/modules/qqbot/napcat-webui-gateway/gateway-deployment.spec.ts --runInBand`、`pnpm run typecheck`、`pnpm run build`、`Test-Path .\dist\apps\napcat-webui-gateway\main.js`、`git diff --check`。安全验收要求浏览器永远不接收 WebUI token、Credential、上游 URL/端口、Docker 拓扑、Redis 地址或内部 secret。

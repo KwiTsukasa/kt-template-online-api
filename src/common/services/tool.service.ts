@@ -581,7 +581,13 @@ export class ToolsService {
    * @param err - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
    */
   isNapcatAlreadyLoggedInError(err: unknown) {
-    return this.getErrorMessage(err).includes('QQ Is Logined');
+    const message = this.getErrorMessage(err);
+    return (
+      message.includes('QQ Is Logined') ||
+      (message.includes('当前账号') &&
+        message.includes('已登录') &&
+        message.includes('无法重复登录'))
+    );
   }
 
   /**

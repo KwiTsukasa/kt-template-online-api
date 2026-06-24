@@ -351,6 +351,11 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
   let credentialClient: {
     getCredential: jest.Mock;
   };
+  let upstreamRequests: Array<{
+    authorization?: string;
+    method?: string;
+    url?: string;
+  }>;
 
   /**
    * Starts a tiny NapCat-like upstream that redirects `/webui` to `/webui/`.
@@ -358,6 +363,25 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
    */
   async function startRedirectUpstream() {
     const server = createServer((req, res) => {
+      upstreamRequests.push({
+        authorization: req.headers.authorization,
+        method: req.method,
+        url: req.url,
+      });
+
+      if (req.url === '/api/File/list?path=%2F') {
+        res.statusCode = HttpStatus.OK;
+        res.setHeader('content-type', 'application/json; charset=UTF-8');
+        res.end(
+          JSON.stringify({
+            code: 0,
+            data: [{ isDirectory: true, name: 'app', size: 0 }],
+            message: 'success',
+          }),
+        );
+        return;
+      }
+
       if (req.url === '/webui') {
         res.statusCode = HttpStatus.MOVED_PERMANENTLY;
         res.setHeader('content-type', 'text/html; charset=UTF-8');
@@ -386,6 +410,7 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
   }
 
   beforeEach(async () => {
+    upstreamRequests = [];
     const started = await startRedirectUpstream();
     upstream = started.server;
     upstreamBaseUrl = started.baseUrl;
@@ -445,5 +470,27 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
     expect(response.headers.location).toBe(
       `/napcat-webui/session/${SESSION_ID}/webui/webui/`,
     );
+  });
+
+  it('forwards NapCat File API requests under /api without duplicating the Gateway session prefix', async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/napcat-webui/session/${SESSION_ID}/webui/api/File/list?path=%2F`)
+      .expect(HttpStatus.OK);
+
+    expect(response.body).toEqual({
+      code: 0,
+      data: [{ isDirectory: true, name: 'app', size: 0 }],
+      message: 'success',
+    });
+    expect(upstreamRequests).toContainEqual({
+      authorization: 'Bearer credential-1',
+      method: 'GET',
+      url: '/api/File/list?path=%2F',
+    });
+    expect(
+      upstreamRequests.some((item) =>
+        item.url?.includes('/api/napcat-webui/session/'),
+      ),
+    ).toBe(false);
   });
 });

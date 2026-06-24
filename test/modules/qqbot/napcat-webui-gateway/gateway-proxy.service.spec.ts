@@ -17,7 +17,7 @@ describe('NapcatWebuiProxyService response rewriting', () => {
       body: [
         '<script type="module" src="/webui/assets/index.js"></script>',
         '<link rel="stylesheet" href="/webui/assets/index.css">',
-        '<script>const baseURL="/api"; const file="/File/font/upload/webui";</script>',
+        '<script>const baseURL="/api"; const file="/File/list?path=%2F"; const theme="/files/theme.css";</script>',
         'url("/webui/fonts/CustomFont.woff")',
       ].join(''),
       sessionId: 'sess_1',
@@ -32,8 +32,10 @@ describe('NapcatWebuiProxyService response rewriting', () => {
     expect(rewritten).toContain(
       'baseURL="/napcat-webui/session/sess_1/webui/api"',
     );
+    expect(rewritten).toContain('file="/File/list?path=%2F"');
+    expect(rewritten).not.toContain('/webui/api/napcat-webui/session');
     expect(rewritten).toContain(
-      'file="/napcat-webui/session/sess_1/webui/File/font/upload/webui"',
+      'theme="/napcat-webui/session/sess_1/webui/files/theme.css"',
     );
     expect(rewritten).toContain(
       'url("/napcat-webui/session/sess_1/webui/webui/fonts/CustomFont.woff")',

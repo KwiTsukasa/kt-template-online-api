@@ -34,6 +34,10 @@ type PendingQrcodeUpdateOptions = {
   clearStaleQrcode?: boolean;
   requireFresh?: boolean;
 };
+type ScanStatusMonitorDeadline = {
+  expiresAt: number;
+  qrcode: string;
+};
 
 @Injectable()
 export class QqbotNapcatLoginService {
@@ -45,6 +49,14 @@ export class QqbotNapcatLoginService {
     string,
     Set<(event: QqbotLoginScanEvent) => void>
   > = {};
+  private readonly scanStatusMonitorTimers: Record<
+    string,
+    NodeJS.Timeout | undefined
+  > = {};
+  private readonly scanStatusMonitorDeadlines: Record<
+    string,
+    ScanStatusMonitorDeadline | undefined
+  > = {};
   private readonly refreshStartTasks: Record<
     string,
     Promise<QqbotLoginScanResult> | undefined
@@ -53,7 +65,10 @@ export class QqbotNapcatLoginService {
     /**
      * 清理 NapCat回调状态。
      */
-    clear: () => this.loginSessionStore.clear(),
+    clear: () => {
+      this.stopAllScanStatusMonitors();
+      this.loginSessionStore.clear();
+    },
     /**
      * 读取 NapCat回调数据。
      * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
@@ -1507,6 +1522,9 @@ export class QqbotNapcatLoginService {
       status,
       step,
     });
+    if (this.shouldMonitorScanStatus(session)) {
+      this.startScanStatusMonitor(session);
+    }
   }
 
   /**
@@ -1709,8 +1727,128 @@ export class QqbotNapcatLoginService {
    * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
    */
   private cleanupSessionEvents(sessionId: string) {
+    this.stopScanStatusMonitor(sessionId);
     delete this.sessionEventLogCache[sessionId];
     delete this.sessionEventListenerCache[sessionId];
+  }
+
+  /**
+   * Determines whether a pending QR session needs server-side polling so SSE can progress without browser polling.
+   * @param session - Login session whose QR, preparation flags, and terminal status decide monitor ownership.
+   * @returns True when the backend should keep reconciling NapCat status for this session.
+   */
+  private shouldMonitorScanStatus(session: QqbotLoginScanSession) {
+    return (
+      session.status === 'pending' &&
+      !!session.qrcode &&
+      !session.preparingContainer &&
+      !session.preparingRelogin
+    );
+  }
+
+  /**
+   * Starts one bounded status monitor for a QR session and lets the timer avoid holding the Node process open.
+   * @param session - Pending QR session whose id is used to drive later status reconciliation.
+   */
+  private startScanStatusMonitor(session: QqbotLoginScanSession) {
+    this.ensureScanStatusMonitorDeadline(session);
+    if (this.hasScanStatusMonitorDeadlinePassed(session)) {
+      void this.expireSession(session);
+      return;
+    }
+    if (this.scanStatusMonitorTimers[session.id]) return;
+    const timer = setTimeout(() => {
+      this.scanStatusMonitorTimers[session.id] = undefined;
+      void this.runScanStatusMonitor(session.id);
+    }, this.getLoginPollIntervalMs());
+    timer.unref?.();
+    this.scanStatusMonitorTimers[session.id] = timer;
+  }
+
+  /**
+   * Stops any server-side status monitor for a login session.
+   * @param sessionId - Session key whose timer should no longer reconcile NapCat state.
+   */
+  private stopScanStatusMonitor(sessionId: string) {
+    const timer = this.scanStatusMonitorTimers[sessionId];
+    if (timer) clearTimeout(timer);
+    delete this.scanStatusMonitorTimers[sessionId];
+    delete this.scanStatusMonitorDeadlines[sessionId];
+  }
+
+  /**
+   * Stops every server-side QR status monitor before the backing session store is cleared.
+   */
+  private stopAllScanStatusMonitors() {
+    Object.keys(this.scanStatusMonitorTimers).forEach((sessionId) => {
+      this.stopScanStatusMonitor(sessionId);
+    });
+  }
+
+  /**
+   * Captures the active QR code deadline so monitor polling cannot extend the same QR session forever.
+   * @param session - Pending QR session whose current QR URL and expiry form the monitor deadline snapshot.
+   */
+  private ensureScanStatusMonitorDeadline(session: QqbotLoginScanSession) {
+    if (!session.qrcode) return;
+    const current = this.scanStatusMonitorDeadlines[session.id];
+    if (current?.qrcode === session.qrcode) return;
+    this.scanStatusMonitorDeadlines[session.id] = {
+      expiresAt: session.expiresAt,
+      qrcode: session.qrcode,
+    };
+  }
+
+  /**
+   * Checks the monitor-owned QR deadline instead of the session expiry that status polling may renew.
+   * @param session - Pending QR session whose monitor snapshot decides terminal expiry.
+   * @returns True when the monitored QR should be expired by the backend monitor.
+   */
+  private hasScanStatusMonitorDeadlinePassed(
+    session: QqbotLoginScanSession,
+  ) {
+    const deadline = this.scanStatusMonitorDeadlines[session.id];
+    if (deadline && session.qrcode && deadline.qrcode !== session.qrcode) {
+      this.ensureScanStatusMonitorDeadline(session);
+      return false;
+    }
+    return !!deadline && Date.now() > deadline.expiresAt;
+  }
+
+  /**
+   * Polls the same status path used by Admin so SSE can emit success/expired events after QR generation.
+   * @param sessionId - Pending QR session id to reload from the session store before each poll.
+   */
+  private async runScanStatusMonitor(sessionId: string) {
+    try {
+      const session = await this.loginSessionStore.get(sessionId);
+      if (!session || !this.shouldMonitorScanStatus(session)) return;
+      if (this.hasScanStatusMonitorDeadlinePassed(session)) {
+        await this.expireSession(session);
+        return;
+      }
+      const result = await this.status(sessionId);
+      if (result.status !== 'pending') return;
+      const current =
+        this.loginSessionStore.getCached(sessionId) ||
+        (await this.loginSessionStore.get(sessionId));
+      if (current && this.shouldMonitorScanStatus(current)) {
+        if (this.hasScanStatusMonitorDeadlinePassed(current)) {
+          await this.expireSession(current);
+          return;
+        }
+        this.startScanStatusMonitor(current);
+      }
+    } catch {
+      const current = this.loginSessionStore.getCached(sessionId);
+      if (current && this.shouldMonitorScanStatus(current)) {
+        if (this.hasScanStatusMonitorDeadlinePassed(current)) {
+          await this.expireSession(current);
+          return;
+        }
+        this.startScanStatusMonitor(current);
+      }
+    }
   }
 
   /**

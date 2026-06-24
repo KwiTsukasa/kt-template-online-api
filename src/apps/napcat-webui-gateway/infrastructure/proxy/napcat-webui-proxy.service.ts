@@ -141,7 +141,7 @@ export function rewriteNapcatTextResponse(input: RewriteTextResponseInput) {
   )}/webui`;
 
   const rewritten = input.body.replace(
-    /(^|[\s"'`(=,:])\/(webui|api|File|plugin)(?=\/|[?#"'`)]|$)/g,
+    /(^|[\s"'`(=,:])\/(webui|api|files|plugin)(?=\/|[?#"'`)]|$)/g,
     (_match, leader: string, root: string) =>
       `${leader}${gatewayWebuiPrefix}/${root}`,
   );

@@ -12,8 +12,8 @@ async function bootstrap() {
     bufferLogs: true,
   });
   app.useLogger(app.get(Logger));
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ extended: true, limit: '50mb' }));
+  app.use(json({ limit: '64kb' }));
+  app.use(urlencoded({ extended: true, limit: '64kb' }));
   await app.listen(app.get(NapcatWebuiGatewayConfigService).port());
 }
 

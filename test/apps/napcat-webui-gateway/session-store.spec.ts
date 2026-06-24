@@ -143,6 +143,30 @@ class FakeRedis {
     });
     return deleted;
   }
+
+  /**
+   * Simulates the compare-and-delete Lua script used by Redis index cleanup.
+   * @param script - Lua script text.
+   * @param keyCount - Number of Redis keys in the script call.
+   * @param key - Redis key to conditionally delete.
+   * @param expectedValue - Value that must match before deletion.
+   * @returns 1 when the index was deleted, otherwise 0.
+   */
+  async eval(
+    script: string,
+    keyCount: number,
+    key: string,
+    expectedValue: string,
+  ) {
+    this.calls.push(`eval:${keyCount}:${key}:${expectedValue}`);
+    if (!script.includes('redis.call') || keyCount !== 1) {
+      throw new Error('Unexpected Redis script');
+    }
+    if (this.values.get(key) !== expectedValue) return 0;
+    this.values.delete(key);
+    this.ttl.delete(key);
+    return 1;
+  }
 }
 
 /**
@@ -246,6 +270,49 @@ describe('NapcatWebuiGatewaySessionService', () => {
     ).rejects.toThrow('Gateway session is not active');
   });
 
+  it('does not allow terminal sessions to become active again', async () => {
+    const store = new MemorySessionStore();
+    const service = new NapcatWebuiGatewaySessionService(
+      store,
+      createConfig({ value: 1000 }) as never,
+    );
+    const session = await service.create(createSessionInput());
+
+    await service.revoke({
+      adminUserId: 'admin-1',
+      sessionId: session.sessionId,
+    });
+
+    await expect(service.markActive(session.sessionId)).rejects.toThrow(
+      'Gateway session is not active',
+    );
+    await expect(
+      service.heartbeat({
+        adminUserId: 'admin-1',
+        sessionId: session.sessionId,
+      }),
+    ).rejects.toThrow('Gateway session is not active');
+    expect(await store.find(session.sessionId)).toMatchObject({
+      status: 'revoked',
+    });
+  });
+
+  it('rejects blank required create fields and invalid upstream URLs', async () => {
+    const store = new MemorySessionStore();
+    const service = new NapcatWebuiGatewaySessionService(
+      store,
+      createConfig({ value: 1000 }) as never,
+    );
+
+    await expect(
+      service.create(createSessionInput({ webuiToken: ' ' })),
+    ).rejects.toThrow('Gateway session field webuiToken is required');
+    await expect(
+      service.create(createSessionInput({ upstreamBaseUrl: 'ftp://127.0.0.1' })),
+    ).rejects.toThrow('Gateway session upstream URL is invalid');
+    expect(store.sessions.size).toBe(0);
+  });
+
   it('rejects heartbeat and revoke owner mismatches', async () => {
     const store = new MemorySessionStore();
     const service = new NapcatWebuiGatewaySessionService(
@@ -314,6 +381,40 @@ describe('NapcatWebuiGatewayRedisStore', () => {
     await expect(
       store.findActiveByUserAndAccount('admin-1', 'account-1'),
     ).resolves.toBeUndefined();
+  });
+
+  it('keeps the newer user-account index when an older revoked session is revoked again', async () => {
+    const redis = new FakeRedis();
+    const config = createConfig({ value: 1000 });
+    const store = new NapcatWebuiGatewayRedisStore(
+      redis as never,
+      config as never,
+    );
+    const service = new NapcatWebuiGatewaySessionService(
+      store,
+      config as never,
+    );
+
+    const first = await service.create(createSessionInput());
+    const second = await service.create(createSessionInput());
+
+    await expect(
+      service.revoke({
+        adminUserId: 'admin-1',
+        sessionId: first.sessionId,
+      }),
+    ).rejects.toThrow('Gateway session is not active');
+    await expect(
+      store.findActiveByUserAndAccount('admin-1', 'account-1'),
+    ).resolves.toMatchObject({
+      sessionId: second.sessionId,
+      status: 'created',
+    });
+    expect(
+      redis.calls.some((call) =>
+        call.startsWith('eval:1:napcat:webui:user-account:admin-1:account-1:'),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -434,5 +535,49 @@ describe('InternalSessionController', () => {
     await request(app.getHttpServer())
       .get('/internal/health')
       .expect(HttpStatus.OK);
+  });
+
+  it('returns lifecycle HTTP errors for missing, revoked, and owner mismatch sessions', async () => {
+    await request(app.getHttpServer())
+      .post('/internal/sessions/missing-session/heartbeat')
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send({ adminUserId: 'admin-1' })
+      .expect(HttpStatus.GONE);
+
+    const createResponse = await request(app.getHttpServer())
+      .post('/internal/sessions')
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send(createSessionInput())
+      .expect(HttpStatus.CREATED);
+    const sessionId = createResponse.body.sessionId;
+
+    await request(app.getHttpServer())
+      .post(`/internal/sessions/${sessionId}/heartbeat`)
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send({ adminUserId: 'admin-2' })
+      .expect(HttpStatus.FORBIDDEN);
+    await request(app.getHttpServer())
+      .post(`/internal/sessions/${sessionId}/revoke`)
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send({ adminUserId: 'admin-1' })
+      .expect(HttpStatus.CREATED);
+    await request(app.getHttpServer())
+      .post(`/internal/sessions/${sessionId}/heartbeat`)
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send({ adminUserId: 'admin-1' })
+      .expect(HttpStatus.GONE);
+  });
+
+  it('rejects invalid create-session payloads with bad request status', async () => {
+    await request(app.getHttpServer())
+      .post('/internal/sessions')
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send(createSessionInput({ adminUserId: ' ' }))
+      .expect(HttpStatus.BAD_REQUEST);
+    await request(app.getHttpServer())
+      .post('/internal/sessions')
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send(createSessionInput({ upstreamBaseUrl: 'not-a-url' }))
+      .expect(HttpStatus.BAD_REQUEST);
   });
 });

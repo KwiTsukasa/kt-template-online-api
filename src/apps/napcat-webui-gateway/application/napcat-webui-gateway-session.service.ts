@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  GoneException,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
 import { NapcatWebuiGatewayConfigService } from '../config/napcat-webui-gateway-config.service';
 import {
   NAPCAT_WEBUI_GATEWAY_SESSION_STORE,
@@ -30,9 +36,10 @@ export class NapcatWebuiGatewaySessionService {
    * @returns Created session persisted in the store.
    */
   async create(input: NapcatWebuiGatewayCreateSessionInput) {
+    const normalizedInput = this.validateCreateInput(input);
     const existing = await this.store.findActiveByUserAndAccount(
-      input.adminUserId,
-      input.accountId,
+      normalizedInput.adminUserId,
+      normalizedInput.accountId,
     );
     if (existing) {
       await this.store.update(existing.sessionId, {
@@ -43,19 +50,19 @@ export class NapcatWebuiGatewaySessionService {
 
     const now = this.config.now();
     const session: NapcatWebuiGatewaySession = {
-      accountId: input.accountId,
-      adminUserId: input.adminUserId,
-      clientIp: this.toOptionalText(input.clientIp),
-      containerId: input.containerId,
-      containerName: input.containerName,
+      accountId: normalizedInput.accountId,
+      adminUserId: normalizedInput.adminUserId,
+      clientIp: this.toOptionalText(normalizedInput.clientIp),
+      containerId: normalizedInput.containerId,
+      containerName: normalizedInput.containerName,
       createdAt: now,
       expiresAt: now + this.config.ttlMs(),
-      selfId: input.selfId,
+      selfId: normalizedInput.selfId,
       sessionId: randomUUID(),
       status: 'created',
-      upstreamBaseUrl: input.upstreamBaseUrl,
-      userAgent: this.toOptionalText(input.userAgent),
-      webuiToken: input.webuiToken,
+      upstreamBaseUrl: normalizedInput.upstreamBaseUrl,
+      userAgent: this.toOptionalText(normalizedInput.userAgent),
+      webuiToken: normalizedInput.webuiToken,
     };
 
     return this.store.create(session);
@@ -110,8 +117,7 @@ export class NapcatWebuiGatewaySessionService {
    * @returns Browser-safe lifecycle result.
    */
   async revoke(input: NapcatWebuiGatewayLifecycleInput) {
-    const session = await this.store.find(input.sessionId);
-    if (!session) throw new Error('Gateway session is not active');
+    const session = await this.requireUsableSession(input.sessionId);
     this.assertOwner(session, input.adminUserId);
 
     const updated = await this.store.update(input.sessionId, {
@@ -145,11 +151,11 @@ export class NapcatWebuiGatewaySessionService {
   private async requireUsableSession(sessionId: string) {
     const session = await this.store.find(sessionId);
     if (!session || TERMINAL_SESSION_STATUSES.includes(session.status)) {
-      throw new Error('Gateway session is not active');
+      throw new GoneException('Gateway session is not active');
     }
     if (session.expiresAt <= this.config.now()) {
       await this.store.update(sessionId, { status: 'expired' });
-      throw new Error('Gateway session is not active');
+      throw new GoneException('Gateway session is not active');
     }
 
     return session;
@@ -165,7 +171,62 @@ export class NapcatWebuiGatewaySessionService {
     adminUserId: string,
   ) {
     if (session.adminUserId !== adminUserId) {
-      throw new Error('Gateway session owner mismatch');
+      throw new ForbiddenException('Gateway session owner mismatch');
+    }
+  }
+
+  /**
+   * Validates and normalizes the internal create-session payload before persistence.
+   * @param input - Internal API payload supplied by the main API process.
+   * @returns Normalized create payload with required fields trimmed.
+   */
+  private validateCreateInput(input: NapcatWebuiGatewayCreateSessionInput) {
+    const normalized = {
+      ...input,
+      accountId: this.requireText(input.accountId, 'accountId'),
+      adminUserId: this.requireText(input.adminUserId, 'adminUserId'),
+      containerId: this.requireText(input.containerId, 'containerId'),
+      containerName: this.requireText(input.containerName, 'containerName'),
+      selfId: this.requireText(input.selfId, 'selfId'),
+      upstreamBaseUrl: this.requireUpstreamBaseUrl(input.upstreamBaseUrl),
+      webuiToken: this.requireText(input.webuiToken, 'webuiToken'),
+    };
+
+    return normalized;
+  }
+
+  /**
+   * Requires a non-empty text field from the internal create-session payload.
+   * @param value - Candidate field value.
+   * @param fieldName - Payload field name used in the error message.
+   * @returns Trimmed field text.
+   */
+  private requireText(value: string, fieldName: string) {
+    const text = this.toOptionalText(value);
+    if (!text) {
+      throw new BadRequestException(
+        `Gateway session field ${fieldName} is required`,
+      );
+    }
+
+    return text;
+  }
+
+  /**
+   * Validates the upstream WebUI base URL without restricting Docker host shape.
+   * @param value - Candidate upstream URL.
+   * @returns Trimmed http or https URL.
+   */
+  private requireUpstreamBaseUrl(value: string) {
+    const text = this.requireText(value, 'upstreamBaseUrl');
+    try {
+      const url = new URL(text);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw new Error('Unsupported protocol');
+      }
+      return text;
+    } catch {
+      throw new BadRequestException('Gateway session upstream URL is invalid');
     }
   }
 

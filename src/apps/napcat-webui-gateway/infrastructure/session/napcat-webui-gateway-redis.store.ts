@@ -10,6 +10,12 @@ import type {
 const SESSION_KEY_PREFIX = 'napcat:webui:session:';
 const USER_ACCOUNT_KEY_PREFIX = 'napcat:webui:user-account:';
 const TERMINAL_SESSION_STATUSES = ['expired', 'failed', 'revoked'];
+const COMPARE_DELETE_SCRIPT = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+end
+return 0
+`;
 
 @Injectable()
 export class NapcatWebuiGatewayRedisStore
@@ -84,12 +90,13 @@ export class NapcatWebuiGatewayRedisStore
       ...patch,
       sessionId,
     };
+    if (this.isTerminal(current) && !this.isTerminal(next)) {
+      throw new Error('Gateway terminal session cannot become active');
+    }
 
     await this.writeSession(next);
     if (this.isTerminal(next)) {
-      await this.redis.del(
-        this.userAccountKey(next.adminUserId, next.accountId),
-      );
+      await this.deleteUserAccountIndexIfCurrent(next);
     } else {
       await this.writeUserAccountIndex(next);
     }
@@ -119,6 +126,21 @@ export class NapcatWebuiGatewayRedisStore
       session.sessionId,
       'PX',
       this.remainingTtlMs(session),
+    );
+  }
+
+  /**
+   * Deletes the user/account index only when it still points at the terminal session.
+   * @param session - Terminal Gateway session whose index may need cleanup.
+   */
+  private async deleteUserAccountIndexIfCurrent(
+    session: NapcatWebuiGatewaySession,
+  ) {
+    await this.redis.eval(
+      COMPARE_DELETE_SCRIPT,
+      1,
+      this.userAccountKey(session.adminUserId, session.accountId),
+      session.sessionId,
     );
   }
 

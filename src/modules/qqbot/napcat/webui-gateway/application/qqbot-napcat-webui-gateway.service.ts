@@ -17,6 +17,27 @@ import type { QqbotNapcatWebuiSessionResponseDto } from '../contract/qqbot-napca
 
 const SENSITIVE_DETAIL_KEY_PATTERN =
   /^(baseurl|captcha|captchaticket|credential|credentialheader|dockerip|headers|hostport|internalsecret|naspath|nasroute|password|qrpayload|qrcode|rawheaders|secret|targetbaseurl|ticket|token|upstreambaseurl|upstreamurl|webuiport|webuitoken)$/i;
+const SENSITIVE_DETAIL_KEY_FAMILIES = [
+  'authorization',
+  'captcha',
+  'cookie',
+  'credential',
+  'password',
+  'secret',
+  'ticket',
+  'token',
+];
+const SENSITIVE_DETAIL_KEY_SUBSTRINGS = [
+  'dockerip',
+  'hostport',
+  'naspath',
+  'nasroute',
+  'targetbaseurl',
+  'upstreambaseurl',
+  'upstreamurl',
+  'webuiport',
+  'webuitoken',
+];
 const UNSAFE_DETAIL_STRING_PATTERN =
   /(\bBearer\s+\S+|\bCredential\b|(?:^|[?&\s])(token|ticket|secret|password|credential|captcha)=|webui[_-]?token|https?:\/\/(?:127\.0\.0\.1|localhost|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|[^/\s]*:\d+)|\/internal\/sessions\b|\bnas(?:route|path)?\b|\/vol\d\b|\bdocker[_-]?ip\b)/i;
 const REDACTED_DETAIL_VALUE = '[REDACTED]';
@@ -119,7 +140,15 @@ export class NapcatWebuiGatewayAuditService {
    */
   private isSensitiveDetailKey(key: string) {
     const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-    return SENSITIVE_DETAIL_KEY_PATTERN.test(normalized);
+    return (
+      SENSITIVE_DETAIL_KEY_PATTERN.test(normalized) ||
+      SENSITIVE_DETAIL_KEY_FAMILIES.some((family) =>
+        normalized.includes(family),
+      ) ||
+      SENSITIVE_DETAIL_KEY_SUBSTRINGS.some((substring) =>
+        normalized.includes(substring),
+      )
+    );
   }
 
   /**

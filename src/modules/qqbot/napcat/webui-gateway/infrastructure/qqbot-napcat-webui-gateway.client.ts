@@ -237,24 +237,31 @@ export class QqbotNapcatWebuiGatewayClient {
     }
     if (iframeUrl.includes('\\')) return false;
 
-    const [path, query = ''] = iframeUrl.split('?');
+    const queryStart = iframeUrl.indexOf('?');
+    const path =
+      queryStart >= 0 ? iframeUrl.slice(0, queryStart) : iframeUrl;
+    const query = queryStart >= 0 ? iframeUrl.slice(queryStart + 1) : '';
     const expectedPrefix = `${GATEWAY_PUBLIC_SESSION_PREFIX}${sessionId}/`;
     if (!path.startsWith(expectedPrefix)) return false;
 
+    const isBootstrapRoute = path === `${expectedPrefix}bootstrap`;
+    if (query.includes('?') || /%3f/i.test(query)) return false;
+    if (query && this.hasUnsafeGatewayEvidence(query)) return false;
+
     const params = new URLSearchParams(query);
-    const hasTicket = params.has('ticket');
-    if (hasTicket) {
-      const ticket = params.get('ticket') || '';
-      if (path !== `${expectedPrefix}bootstrap`) return false;
-      if ([...params.keys()].some((key) => key !== 'ticket')) return false;
+    const entries = [...params.entries()];
+    const ticketValues = params.getAll('ticket');
+    if (query) {
+      if (!isBootstrapRoute) return false;
+      if (entries.length !== 1 || ticketValues.length !== 1) return false;
+      const [key, ticket] = entries[0];
+      if (key !== 'ticket') return false;
       if (!SAFE_BOOTSTRAP_TICKET_PATTERN.test(ticket)) return false;
     } else if (/ticket/i.test(iframeUrl)) {
       return false;
-    } else if (query) {
-      return false;
     }
 
-    const unsafeScanValue = hasTicket
+    const unsafeScanValue = query
       ? `${path}?ticket=`
       : iframeUrl;
     return !this.hasUnsafeGatewayEvidence(unsafeScanValue);

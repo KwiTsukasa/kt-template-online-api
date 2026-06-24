@@ -191,6 +191,65 @@ describe('QqbotNapcatWebuiGatewayController', () => {
     expect(gatewayService.createSession).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [
+      'deleted role',
+      [
+        {
+          isDeleted: true,
+          menus: [{ authCode: WEBUI_PERMISSION, status: 1 }],
+          roleCode: 'operator',
+          status: 1,
+        },
+      ],
+    ],
+    [
+      'inactive role',
+      [
+        {
+          menus: [{ authCode: WEBUI_PERMISSION, status: 1 }],
+          roleCode: 'operator',
+          status: 0,
+        },
+      ],
+    ],
+    [
+      'deleted menu',
+      [
+        {
+          menus: [
+            {
+              authCode: WEBUI_PERMISSION,
+              isDeleted: true,
+              status: 1,
+            },
+          ],
+          roleCode: 'operator',
+          status: 1,
+        },
+      ],
+    ],
+    [
+      'inactive menu',
+      [
+        {
+          menus: [{ authCode: WEBUI_PERMISSION, status: 0 }],
+          roleCode: 'operator',
+          status: 1,
+        },
+      ],
+    ],
+  ])('denies WebUI access for %s', async (_case, roles) => {
+    currentAdminUser = createAdminUser(roles);
+
+    await request(app.getHttpServer())
+      .post('/qqbot/napcat/webui/session')
+      .send({ accountId: '1001' })
+      .expect(HttpStatus.FORBIDDEN);
+
+    expect(gatewayService.createSession).not.toHaveBeenCalled();
+  });
+
   it('allows Admin users with WebUI permission and passes create-session evidence', async () => {
     const response = await request(app.getHttpServer())
       .post('/qqbot/napcat/webui/session')
@@ -538,6 +597,10 @@ describe('QqbotNapcatWebuiGatewayService', () => {
       clientIp: '127.0.0.1',
       containerId: '2001',
       detailJson: {
+        ['access' + 'Token']: 'plain-secret',
+        apiToken: 'plain-secret',
+        authorizationHeader: 'Basic abc',
+        cookie: 'sid=abc',
         credentialHeader: 'Credential abc',
         docker_ip: '172.18.0.23',
         hostPort: '6099',
@@ -545,9 +608,12 @@ describe('QqbotNapcatWebuiGatewayService', () => {
         nested: {
           display: 'visible',
           loginMessage: 'Bearer abc',
+          refreshToken: 'plain-secret',
           redirectPath: '/napcat-webui/session/sess_1/bootstrap?ticket=abc',
         },
+        refreshToken: 'plain-secret',
         safe: 'visible',
+        setCookie: 'sid=abc; HttpOnly',
         unsafeList: [
           'plain text',
           'token=abc',
@@ -773,6 +839,41 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
       {
         expiresAt: EXPIRES_AT_FIXTURE,
         iframeUrl: '/napcat-webui/session/sess_1/ticket/abc',
+        sessionId: 'sess_1',
+      },
+    ],
+    [
+      'multiple query separators',
+      {
+        expiresAt: EXPIRES_AT_FIXTURE,
+        iframeUrl:
+          '/napcat-webui/session/sess_1/bootstrap?ticket=abc?token=secret',
+        sessionId: 'sess_1',
+      },
+    ],
+    [
+      'duplicate ticket query',
+      {
+        expiresAt: EXPIRES_AT_FIXTURE,
+        iframeUrl:
+          '/napcat-webui/session/sess_1/bootstrap?ticket=abc&ticket=def',
+        sessionId: 'sess_1',
+      },
+    ],
+    [
+      'encoded secret query evidence',
+      {
+        expiresAt: EXPIRES_AT_FIXTURE,
+        iframeUrl:
+          '/napcat-webui/session/sess_1/bootstrap?ticket=abc%3Ftoken%3Dsecret',
+        sessionId: 'sess_1',
+      },
+    ],
+    [
+      'non-bootstrap query',
+      {
+        expiresAt: EXPIRES_AT_FIXTURE,
+        iframeUrl: '/napcat-webui/session/sess_1/?ticket=abc',
         sessionId: 'sess_1',
       },
     ],

@@ -248,8 +248,6 @@ export class QqbotNapcatWebuiGatewayService {
         selfId: account.selfId,
       },
       container: {
-        id: runtime.id,
-        name: runtime.name,
         webuiStatus,
       },
       expiresAt: gatewaySession.expiresAt,

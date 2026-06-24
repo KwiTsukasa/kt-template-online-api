@@ -18,12 +18,6 @@ export class QqbotNapcatWebuiSessionAccountDto {
 }
 
 export class QqbotNapcatWebuiSessionContainerDto {
-  @ApiProperty({ description: 'NapCat container id.' })
-  id: string;
-
-  @ApiProperty({ description: 'NapCat container name.' })
-  name: string;
-
   @ApiProperty({
     description: 'Browser-safe WebUI availability status.',
     enum: ['offline', 'online', 'unknown'],

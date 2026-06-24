@@ -97,8 +97,6 @@ const createSafeSessionResponse = () => ({
     selfId: '1914728559',
   },
   container: {
-    id: '2001',
-    name: 'kt-qqbot-napcat-1914728559',
     webuiStatus: 'online',
   },
   expiresAt: EXPIRES_AT_FIXTURE,
@@ -394,8 +392,6 @@ describe('QqbotNapcatWebuiGatewayService', () => {
         selfId: '1914728559',
       },
       container: {
-        id: '2001',
-        name: 'kt-qqbot-napcat-1914728559',
         webuiStatus: 'online',
       },
       expiresAt: EXPIRES_AT_FIXTURE,
@@ -416,6 +412,8 @@ describe('QqbotNapcatWebuiGatewayService', () => {
     });
     expect(serialized).not.toContain(WEBUI_TOKEN_FIXTURE);
     expect(serialized).not.toContain('Credential');
+    expect(serialized).not.toContain('2001');
+    expect(serialized).not.toContain('kt-qqbot-napcat-1914728559');
     expect(serialized).not.toContain('172.18.0.23');
     expect(serialized).not.toContain('6099');
     expect(serialized).not.toContain(INTERNAL_SECRET_FIXTURE);

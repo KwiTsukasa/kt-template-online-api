@@ -4,6 +4,7 @@ import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 import {
   createProxyMiddleware,
+  fixRequestBody,
   type RequestHandler,
 } from 'http-proxy-middleware';
 import { NapcatWebuiGatewaySessionService } from '../../application/napcat-webui-gateway-session.service';
@@ -74,30 +75,33 @@ export function rewriteNapcatLocationHeader(input: RewriteLocationInput) {
   const location = input.location.trim();
   if (!location) return location;
 
+  const fallback = `${gatewayPrefix}/webui`;
   if (location.startsWith('//')) {
     try {
       const upstream = new URL(input.upstreamBaseUrl);
       const target = new URL(`${upstream.protocol}${location}`);
-      return `${gatewayPrefix}${target.pathname}${target.search}${target.hash}`;
+      return toGatewayRedirectLocation(gatewayPrefix, target.pathname);
     } catch {
-      return `${gatewayPrefix}/webui`;
+      return fallback;
     }
   }
-  if (location.startsWith('/')) {
-    return `${gatewayPrefix}${location}`;
-  }
   if (!/^[a-z][a-z0-9+.-]*:/i.test(location)) {
-    return `${gatewayPrefix}/${location.replace(/^\/+/, '')}`;
+    try {
+      const target = new URL(location, 'http://gateway.local');
+      return toGatewayRedirectLocation(gatewayPrefix, target.pathname);
+    } catch {
+      return fallback;
+    }
   }
 
   try {
     const target = new URL(location);
     if (target.protocol === 'http:' || target.protocol === 'https:') {
-      return `${gatewayPrefix}${target.pathname}${target.search}${target.hash}`;
+      return toGatewayRedirectLocation(gatewayPrefix, target.pathname);
     }
-    return `${gatewayPrefix}/webui`;
+    return fallback;
   } catch {
-    return `${gatewayPrefix}/webui`;
+    return fallback;
   }
 }
 
@@ -132,6 +136,25 @@ function decodeProxyPath(value: string) {
   }
 
   throw new BadRequestException('Gateway proxy path is invalid');
+}
+
+/**
+ * Builds a browser redirect that keeps only the upstream pathname.
+ * @param gatewayPrefix - Public Gateway session route prefix for one Admin session.
+ * @param upstreamPathname - Upstream redirect pathname after URL parsing removed search/hash.
+ * @returns Gateway-scoped Location header, falling back to WebUI root for unsafe paths.
+ */
+function toGatewayRedirectLocation(
+  gatewayPrefix: string,
+  upstreamPathname: string,
+) {
+  try {
+    return `${gatewayPrefix}${sanitizeGatewayProxyPath(
+      upstreamPathname || '/webui',
+    )}`;
+  } catch {
+    return `${gatewayPrefix}/webui`;
+  }
 }
 
 @Injectable()
@@ -227,9 +250,10 @@ export class NapcatWebuiProxyService {
         error: (_error, _req, res) => {
           this.writeProxyError(res);
         },
-        proxyReq: (proxyReq) => {
+        proxyReq: (proxyReq, req) => {
           proxyReq.removeHeader('cookie');
           proxyReq.setHeader('Authorization', `Bearer ${credential}`);
+          fixRequestBody(proxyReq, req);
         },
         proxyReqWs: (proxyReq) => {
           proxyReq.removeHeader('cookie');

@@ -10,11 +10,12 @@ import { NapcatWebuiGatewayModule } from './napcat-webui-gateway.module';
  */
 async function bootstrap() {
   const app = await NestFactory.create(NapcatWebuiGatewayModule, {
+    bodyParser: false,
     bufferLogs: true,
   });
   app.useLogger(app.get(Logger));
-  app.use(json({ limit: '64kb' }));
-  app.use(urlencoded({ extended: true, limit: '64kb' }));
+  app.use('/internal', json({ limit: '64kb' }));
+  app.use('/internal', urlencoded({ extended: true, limit: '64kb' }));
   await app.listen(app.get(NapcatWebuiGatewayConfigService).port());
   app.get(NapcatWebuiProxyService).bindWebSocketUpgrade(app.getHttpServer());
 }

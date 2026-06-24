@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { HttpStatus, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import axios from 'axios';
@@ -19,6 +21,7 @@ jest.mock('axios');
 
 const SESSION_ID = 'session-1';
 const UPSTREAM_BASE_URL = 'http://127.0.0.1:6099';
+const repoRoot = resolve(__dirname, '../../..');
 const mockedAxiosPost = axios.post as jest.Mock;
 
 /**
@@ -55,6 +58,15 @@ function createCredentialConfig(currentTime: { value: number }) {
     now: () => currentTime.value,
     upstreamTimeoutMs: () => 5000,
   };
+}
+
+/**
+ * Reads source files from the API repository for proxy bootstrap boundary checks.
+ * @param relativePath - Repository-relative TypeScript source path.
+ * @returns File text used by structural regression assertions.
+ */
+function readApiSource(relativePath: string) {
+  return readFileSync(resolve(repoRoot, relativePath), 'utf8');
 }
 
 describe('Napcat WebUI proxy rewrite helpers', () => {
@@ -111,9 +123,7 @@ describe('Napcat WebUI proxy rewrite helpers', () => {
         sessionId: SESSION_ID,
         upstreamBaseUrl: UPSTREAM_BASE_URL,
       }),
-    ).toBe(
-      `/napcat-webui/session/${SESSION_ID}/webui/webui/login?next=/`,
-    );
+    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui/login`);
     expect(
       rewriteNapcatLocationHeader({
         location: 'http://container.internal:6099/webui/login',
@@ -130,9 +140,24 @@ describe('Napcat WebUI proxy rewrite helpers', () => {
         sessionId: SESSION_ID,
         upstreamBaseUrl: UPSTREAM_BASE_URL,
       }),
-    ).toBe(
-      `/napcat-webui/session/${SESSION_ID}/webui/webui/login?next=/`,
-    );
+    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui/login`);
+  });
+
+  it('drops upstream redirect query and hash fragments before returning browser locations', () => {
+    expect(
+      rewriteNapcatLocationHeader({
+        location: '/webui/login?Credential=secret#token',
+        sessionId: SESSION_ID,
+        upstreamBaseUrl: UPSTREAM_BASE_URL,
+      }),
+    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui/login`);
+    expect(
+      rewriteNapcatLocationHeader({
+        location: 'webui/login?ticket=secret#hash',
+        sessionId: SESSION_ID,
+        upstreamBaseUrl: UPSTREAM_BASE_URL,
+      }),
+    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui/login`);
   });
 
   it('fails closed for malformed absolute redirects', () => {
@@ -156,6 +181,20 @@ describe('Napcat WebUI proxy rewrite helpers', () => {
     expect(buildGatewayCookiePathRewrite({ sessionId: SESSION_ID })).toEqual({
       '*': `/napcat-webui/session/${SESSION_ID}/webui`,
     });
+  });
+
+  it('keeps request bodies available for the public proxy route', () => {
+    const mainSource = readApiSource('src/apps/napcat-webui-gateway/main.ts');
+    const proxySource = readApiSource(
+      'src/apps/napcat-webui-gateway/infrastructure/proxy/napcat-webui-proxy.service.ts',
+    );
+
+    expect(mainSource).toContain("app.use('/internal', json");
+    expect(mainSource).toContain("app.use('/internal', urlencoded");
+    expect(mainSource).toContain('bodyParser: false');
+    expect(mainSource).not.toContain('app.use(json({ limit');
+    expect(mainSource).not.toContain('app.use(urlencoded({ extended');
+    expect(proxySource).toContain('fixRequestBody');
   });
 });
 

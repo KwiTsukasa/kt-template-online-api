@@ -122,7 +122,7 @@ Expected: FAIL because `QqBot:Account:WebUI` and `qqbot_napcat_webui_gateway_aud
 Add these rows next to existing QQBot account rows in both `sql/qqbot-init.sql` and `sql/refactor-v3/01-seed-core.sql`:
 
 ```sql
-(2041700000000100411, 2041700000000100400, 'QqBotAccountNapcatWebui', '/qqbot/account/:accountId/napcat-webui', '/qqbot/account/napcat-webui/index', NULL, 'QqBot:Account:WebUI', 'menu', '{"activePath":"/qqbot/account","hideInMenu":true,"title":"NapCat WebUI"}', 1, 0),
+(2041700000000100412, 2041700000000100400, 'QqBotAccountNapcatWebui', '/qqbot/account/:accountId/napcat-webui', '/qqbot/account/napcat-webui/index', NULL, 'QqBot:Account:WebUI', 'menu', '{"activePath":"/qqbot/account","hideInMenu":true,"title":"NapCat WebUI"}', 1, 0),
 (2041700000000120407, 2041700000000100402, 'QqBotAccountWebUI', NULL, NULL, NULL, 'QqBot:Account:WebUI', 'button', '{"title":"NapCat WebUI"}', 1, 0),
 ```
 

@@ -42,6 +42,81 @@ describe('NapcatWebuiProxyService response rewriting', () => {
     expect(rewritten).not.toContain('"/api"');
   });
 
+  it('injects a Gateway-only browser token so NapCat WebUI can enter authenticated routes without leaking secrets', () => {
+    const rewriteNapcatTextResponse = (
+      proxyModule as {
+        rewriteNapcatTextResponse?: (input: {
+          body: string;
+          sessionId: string;
+        }) => string;
+      }
+    ).rewriteNapcatTextResponse;
+
+    expect(typeof rewriteNapcatTextResponse).toBe('function');
+
+    const rewritten = rewriteNapcatTextResponse?.({
+      body: [
+        '<!doctype html><html><head>',
+        '<script type="module" src="/webui/assets/index.js"></script>',
+        '</head><body></body></html>',
+      ].join(''),
+      sessionId: 'sess_1',
+    });
+
+    expect(rewritten).toContain('data-kt-napcat-webui-gateway-sso');
+    expect(rewritten).toContain('localStorage.setItem("token"');
+    expect(rewritten).toContain('kt-napcat-webui-gateway:sess_1');
+    expect(rewritten).not.toContain('Credential');
+    expect(rewritten).not.toContain('webui-token-fixture');
+  });
+
+  it('keeps non-HTML text responses free of Gateway browser-token injection', () => {
+    const rewriteNapcatTextResponse = (
+      proxyModule as {
+        rewriteNapcatTextResponse?: (input: {
+          body: string;
+          sessionId: string;
+        }) => string;
+      }
+    ).rewriteNapcatTextResponse;
+
+    const rewritten = rewriteNapcatTextResponse?.({
+      body: 'const baseURL="/api";',
+      sessionId: 'sess_1',
+    });
+
+    expect(rewritten).not.toContain('localStorage.setItem("token"');
+  });
+
+  it('replaces browser terminal WebSocket token query with the server-side Credential', () => {
+    const rewriteNapcatWebSocketSearch = (
+      proxyModule as {
+        rewriteNapcatWebSocketSearch?: (input: {
+          credential: string;
+          search: string;
+          upstreamPath: string;
+        }) => string;
+      }
+    ).rewriteNapcatWebSocketSearch;
+
+    expect(typeof rewriteNapcatWebSocketSearch).toBe('function');
+
+    expect(
+      rewriteNapcatWebSocketSearch?.({
+        credential: 'credential-1',
+        search: '?id=terminal-1&token=browser-dummy',
+        upstreamPath: '/api/ws/terminal',
+      }),
+    ).toBe('?id=terminal-1&token=credential-1');
+    expect(
+      rewriteNapcatWebSocketSearch?.({
+        credential: 'credential-1',
+        search: '?id=other&token=browser-dummy',
+        upstreamPath: '/api/ws/other',
+      }),
+    ).toBe('?id=other&token=browser-dummy');
+  });
+
   it('does not buffer NapCat API or SSE responses for text rewriting', () => {
     const shouldRewriteNapcatTextResponse = (
       proxyModule as {

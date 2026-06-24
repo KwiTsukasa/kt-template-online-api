@@ -13,6 +13,7 @@ import type { NapcatWebuiGatewaySession } from '../../domain/napcat-webui-gatewa
 import { NapcatWebuiCredentialClient } from '../napcat-webui-credential.client';
 
 const GATEWAY_WEBUI_PREFIX = '/napcat-webui/session';
+const GATEWAY_BROWSER_TOKEN_PREFIX = 'kt-napcat-webui-gateway:';
 const TEXT_REWRITE_EXTENSIONS = ['.css', '.html', '.js', '.mjs'] as const;
 const STRIPPED_UPSTREAM_HEADERS = [
   'authorization',
@@ -40,6 +41,12 @@ type CookiePathRewriteInput = {
 type RewriteTextResponseInput = {
   body: string;
   sessionId: string;
+};
+
+type RewriteWebSocketSearchInput = {
+  credential: string;
+  search: string;
+  upstreamPath: string;
 };
 
 /**
@@ -133,11 +140,78 @@ export function rewriteNapcatTextResponse(input: RewriteTextResponseInput) {
     input.sessionId,
   )}/webui`;
 
-  return input.body.replace(
+  const rewritten = input.body.replace(
     /(^|[\s"'`(=,:])\/(webui|api|File|plugin)(?=\/|[?#"'`)]|$)/g,
     (_match, leader: string, root: string) =>
       `${leader}${gatewayWebuiPrefix}/${root}`,
   );
+
+  return injectGatewayBrowserToken({
+    body: rewritten,
+    sessionId: input.sessionId,
+  });
+}
+
+/**
+ * Rewrites WebSocket query strings that NapCat authenticates with query tokens instead of headers.
+ * @param input - Upstream path, browser search string, and server-side Credential for the active session.
+ * @returns Search string safe to send upstream without preserving browser-supplied terminal tokens.
+ */
+export function rewriteNapcatWebSocketSearch(
+  input: RewriteWebSocketSearchInput,
+) {
+  if (input.upstreamPath !== '/api/ws/terminal') {
+    return input.search;
+  }
+
+  const params = new URLSearchParams(input.search);
+  params.set('token', input.credential);
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : '';
+}
+
+/**
+ * Injects a non-secret local token into NapCat WebUI HTML so React enters authenticated routes while Gateway handles real auth server-side.
+ * @param input - HTML body candidate and Gateway session id used to build the browser-only token.
+ * @returns HTML with a one-time SSO bootstrap script, or unchanged non-HTML text.
+ */
+function injectGatewayBrowserToken(input: RewriteTextResponseInput) {
+  if (
+    input.body.includes('data-kt-napcat-webui-gateway-sso') ||
+    !/<html[\s>]/i.test(input.body)
+  ) {
+    return input.body;
+  }
+
+  const script = buildGatewayBrowserTokenScript(input.sessionId);
+  if (/<head[\s>]/i.test(input.body)) {
+    return input.body.replace(/<head(\s[^>]*)?>/i, (headTag) => {
+      return `${headTag}${script}`;
+    });
+  }
+
+  return input.body.replace(
+    /<script\b/i,
+    `${script}<script`,
+  );
+}
+
+/**
+ * Builds the SSO bootstrap script that writes only a Gateway-scoped dummy token, never NapCat WebUI token or Credential.
+ * @param sessionId - Gateway session id already visible in the iframe URL.
+ * @returns Inline script placed before NapCat's module entry runs.
+ */
+function buildGatewayBrowserTokenScript(sessionId: string) {
+  const browserToken = `${GATEWAY_BROWSER_TOKEN_PREFIX}${sessionId}`;
+  const storedTokenLiteral = JSON.stringify(JSON.stringify(browserToken));
+
+  return [
+    '<script data-kt-napcat-webui-gateway-sso>',
+    'try{',
+    `localStorage.setItem("token",${storedTokenLiteral});`,
+    '}catch(_error){}',
+    '</script>',
+  ].join('');
 }
 
 /**
@@ -273,7 +347,11 @@ export class NapcatWebuiProxyService {
       );
       const credential = await this.credentialClient.getCredential(session);
       this.stripBrowserHeaders(req);
-      req.url = `${match.proxyPath}${match.search}`;
+      req.url = `${match.proxyPath}${rewriteNapcatWebSocketSearch({
+        credential,
+        search: match.search,
+        upstreamPath: match.proxyPath,
+      })}`;
       const proxy = this.createProxy(session, credential);
       proxy.upgrade(req, socket, head);
     } catch {

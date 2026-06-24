@@ -50,6 +50,10 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(script).toContain('napcatMjsSha256');
     expect(script).toContain('forkCommit');
     expect(script).toContain('upstreamBaseCommit');
+    expect(script).toContain('upstreamReleaseTag');
+    expect(script).toContain('upstreamReleaseCommit');
+    expect(script).toContain('napcatBaseImageDigest');
+    expect(script).toContain('jenkinsBuildUrl');
     expect(script).toContain('packages/napcat-shell/dist');
     expect(script).toContain('fork-artifact.json');
     expect(script).toContain('.kt-workspace/napcat-desktop-cn-build');

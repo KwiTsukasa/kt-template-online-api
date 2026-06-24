@@ -136,6 +136,10 @@ const napcatRootArg = readArg('napcat-root');
 const napcatRoot = resolve(napcatRootArg);
 const outputRoot = resolve(apiRoot, readArg('out', DEFAULT_OUTPUT));
 const upstreamBaseCommit = readArg('upstream-base-commit', DEFAULT_UPSTREAM_BASE);
+const upstreamReleaseTag = readArg('upstream-release-tag', 'unknown');
+const upstreamReleaseCommit = readArg('upstream-release-commit', upstreamBaseCommit);
+const napcatBaseImageDigest = readArg('napcat-base-image-digest', '');
+const jenkinsBuildUrl = readArg('jenkins-build-url', '');
 const shellDist = resolve(napcatRoot, 'packages/napcat-shell/dist');
 const napcatMjs = resolve(shellDist, 'napcat.mjs');
 
@@ -163,8 +167,12 @@ const marker = {
   builtAt: new Date().toISOString(),
   distSha256: sha256Directory(shellDist),
   forkCommit: gitCommit(napcatRoot),
+  jenkinsBuildUrl,
+  napcatBaseImageDigest,
   napcatMjsSha256: sha256File(napcatMjs),
   upstreamBaseCommit,
+  upstreamReleaseCommit,
+  upstreamReleaseTag,
 };
 
 writeFileSync(

@@ -86,13 +86,13 @@ export class NapcatWebuiGatewaySessionService {
   }
 
   /**
-   * Extends an Admin-owned active Gateway session.
+   * Extends an Admin-owned Gateway session that bootstrap already activated.
    * @param input - Session id plus Admin ownership and request evidence.
    * @returns Browser-safe lifecycle result.
    */
   async heartbeat(input: NapcatWebuiGatewayLifecycleInput) {
     const adminUserId = this.requireLifecycleAdminUserId(input.adminUserId);
-    const session = await this.requireUsableSession(input.sessionId);
+    const session = await this.requireProxySession(input.sessionId);
     this.assertOwner(session, adminUserId);
     const now = this.config.now();
     const expiresAt = now + this.config.ttlMs();

@@ -302,7 +302,7 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api jest --runTestsByPath test/
 
 - [ ] **Step 6：实现 session service**
 
-创建 `NapcatWebuiGatewaySessionService`，包含 `create`、`markActive`、`heartbeat`、`revoke`、`requireBootstrapSession`、`requireProxySession`。每个方法必须有 JSDoc。`create()` 必须撤销同用户同账号旧 session。`requireBootstrapSession()` 只接受非终态、未过期且 user/account index 仍指向当前 `sessionId` 的 session；`requireProxySession()` 只接受 `active`、未过期且 index 仍指向当前 `sessionId` 的 session。
+创建 `NapcatWebuiGatewaySessionService`，包含 `create`、`markActive`、`heartbeat`、`revoke`、`requireBootstrapSession`、`requireProxySession`。每个方法必须有 JSDoc。`create()` 必须撤销同用户同账号旧 session。`heartbeat()` 只延长 active session，必须拒绝 `created`、终态、过期、缺失或 user/account index 不再指向当前 `sessionId` 的 session。`requireBootstrapSession()` 只接受非终态、未过期且 user/account index 仍指向当前 `sessionId` 的 session；只有 `markActive()` 可以把 `created` session 提升为 `active`；`requireProxySession()` 只接受 `active`、未过期且 index 仍指向当前 `sessionId` 的 session。
 
 - [ ] **Step 7：实现 Redis store 和 ticket service**
 

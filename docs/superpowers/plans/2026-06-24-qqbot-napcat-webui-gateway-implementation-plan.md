@@ -773,7 +773,7 @@ if (older) {
 }
 ```
 
-The `heartbeat()` implementation must reject `revoked`, `expired`, `failed`, missing sessions, and sessions whose user/account index no longer points at the requested `sessionId`. `requireBootstrapSession()` accepts only non-terminal, non-expired, currently indexed sessions for one-time ticket bootstrap. `requireProxySession()` accepts only `active`, non-expired, currently indexed sessions.
+The `heartbeat()` implementation must extend active sessions only. It must reject `created`, `revoked`, `expired`, `failed`, missing sessions, and sessions whose user/account index no longer points at the requested `sessionId`. `requireBootstrapSession()` accepts only non-terminal, non-expired, currently indexed sessions for one-time ticket bootstrap. `markActive()` is the only method that may promote a `created` session to `active`. `requireProxySession()` accepts only `active`, non-expired, currently indexed sessions.
 
 - [ ] **Step 7: Implement Redis store and ticket service**
 

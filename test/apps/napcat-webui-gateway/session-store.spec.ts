@@ -381,6 +381,8 @@ describe('NapcatWebuiGatewaySessionService', () => {
     );
     const session = await service.create(createSessionInput());
 
+    await service.markActive(session.sessionId);
+
     await expect(
       service.heartbeat({
         adminUserId: 'admin-2',
@@ -393,6 +395,25 @@ describe('NapcatWebuiGatewaySessionService', () => {
         sessionId: session.sessionId,
       }),
     ).rejects.toThrow('Gateway session owner mismatch');
+  });
+
+  it('rejects heartbeat for created sessions without activating them', async () => {
+    const store = new MemorySessionStore();
+    const service = new NapcatWebuiGatewaySessionService(
+      store,
+      createConfig({ value: 1000 }) as never,
+    );
+    const session = await service.create(createSessionInput());
+
+    await expect(
+      service.heartbeat({
+        adminUserId: 'admin-1',
+        sessionId: session.sessionId,
+      }),
+    ).rejects.toThrow('Gateway session is not active');
+    expect(await store.find(session.sessionId)).toMatchObject({
+      status: 'created',
+    });
   });
 
   it('keeps created sessions out of proxy access until bootstrap marks them active', async () => {
@@ -813,6 +834,11 @@ describe('InternalSessionController', () => {
       .send(createSessionInput())
       .expect(HttpStatus.CREATED);
     const sessionId = createResponse.body.sessionId;
+    await store.update(sessionId, {
+      activeAt: 1000,
+      lastSeenAt: 1000,
+      status: 'active',
+    });
 
     await request(app.getHttpServer())
       .post(`/internal/sessions/${sessionId}/heartbeat`)
@@ -849,6 +875,24 @@ describe('InternalSessionController', () => {
       .set('x-kt-gateway-secret', INTERNAL_SECRET)
       .send({ adminUserId: ' ' })
       .expect(HttpStatus.BAD_REQUEST);
+  });
+
+  it('rejects heartbeat for created sessions with gone status', async () => {
+    const createResponse = await request(app.getHttpServer())
+      .post('/internal/sessions')
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send(createSessionInput())
+      .expect(HttpStatus.CREATED);
+    const sessionId = createResponse.body.sessionId;
+
+    await request(app.getHttpServer())
+      .post(`/internal/sessions/${sessionId}/heartbeat`)
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send({ adminUserId: 'admin-1' })
+      .expect(HttpStatus.GONE);
+    expect(await store.find(sessionId)).toMatchObject({
+      status: 'created',
+    });
   });
 
   it('rejects invalid create-session payloads with bad request status', async () => {

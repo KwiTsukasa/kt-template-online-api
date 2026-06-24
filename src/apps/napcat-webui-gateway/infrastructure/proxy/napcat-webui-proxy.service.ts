@@ -5,6 +5,7 @@ import type { NextFunction, Request, Response } from 'express';
 import {
   createProxyMiddleware,
   fixRequestBody,
+  responseInterceptor,
   type RequestHandler,
 } from 'http-proxy-middleware';
 import { NapcatWebuiGatewaySessionService } from '../../application/napcat-webui-gateway-session.service';
@@ -12,6 +13,7 @@ import type { NapcatWebuiGatewaySession } from '../../domain/napcat-webui-gatewa
 import { NapcatWebuiCredentialClient } from '../napcat-webui-credential.client';
 
 const GATEWAY_WEBUI_PREFIX = '/napcat-webui/session';
+const TEXT_REWRITE_EXTENSIONS = ['.css', '.html', '.js', '.mjs'] as const;
 const STRIPPED_UPSTREAM_HEADERS = [
   'authorization',
   'cookie',
@@ -32,6 +34,11 @@ type RewriteLocationInput = {
 };
 
 type CookiePathRewriteInput = {
+  sessionId: string;
+};
+
+type RewriteTextResponseInput = {
+  body: string;
   sessionId: string;
 };
 
@@ -117,6 +124,23 @@ export function buildGatewayCookiePathRewrite(input: CookiePathRewriteInput) {
 }
 
 /**
+ * Rewrites absolute NapCat WebUI browser paths so assets, APIs, and plugin resources stay under the active Gateway session.
+ * @param input - Text response body from NapCat plus the Gateway session id that owns the browser lifecycle.
+ * @returns Body text whose absolute NapCat root paths point back through the Gateway session prefix.
+ */
+export function rewriteNapcatTextResponse(input: RewriteTextResponseInput) {
+  const gatewayWebuiPrefix = `${GATEWAY_WEBUI_PREFIX}/${encodeURIComponent(
+    input.sessionId,
+  )}/webui`;
+
+  return input.body.replace(
+    /(^|[\s"'`(=,:])\/(webui|api|File|plugin)(?=\/|[?#"'`)]|$)/g,
+    (_match, leader: string, root: string) =>
+      `${leader}${gatewayWebuiPrefix}/${root}`,
+  );
+}
+
+/**
  * Decodes path text until stable so nested encoded traversal cannot pass through.
  * @param value - Raw route path text.
  * @returns Decoded path text.
@@ -157,6 +181,28 @@ function toGatewayRedirectLocation(
   }
 }
 
+/**
+ * Checks whether a proxied upstream path may contain browser-executable absolute paths that need Gateway prefix rewriting.
+ * @param upstreamPath - Sanitized upstream pathname with an optional query string.
+ * @returns Whether the response should be buffered for text rewriting.
+ */
+export function shouldRewriteNapcatTextResponse(upstreamPath: string) {
+  const pathname = new URL(upstreamPath, 'http://gateway.local').pathname;
+  const filename = pathname.split('/').pop() || '';
+  const extensionIndex = filename.lastIndexOf('.');
+  const extension =
+    extensionIndex >= 0 ? filename.slice(extensionIndex).toLowerCase() : '';
+
+  if (TEXT_REWRITE_EXTENSIONS.includes(extension as never)) {
+    return true;
+  }
+
+  return (
+    pathname === '/webui' ||
+    (pathname.startsWith('/webui/') && extensionIndex < 0)
+  );
+}
+
 @Injectable()
 export class NapcatWebuiProxyService {
   /**
@@ -190,7 +236,11 @@ export class NapcatWebuiProxyService {
     this.stripBrowserHeaders(req);
     req.url = upstreamPath;
 
-    const proxy = this.createProxy(session, credential);
+    const proxy = this.createProxy(
+      session,
+      credential,
+      shouldRewriteNapcatTextResponse(upstreamPath),
+    );
     return proxy(req, res, next);
   }
 
@@ -240,6 +290,7 @@ export class NapcatWebuiProxyService {
   private createProxy(
     session: NapcatWebuiGatewaySession,
     credential: string,
+    rewriteTextResponse = false,
   ): RequestHandler<Request, Response, NextFunction> {
     return createProxyMiddleware<Request, Response, NextFunction>({
       changeOrigin: true,
@@ -259,21 +310,42 @@ export class NapcatWebuiProxyService {
           proxyReq.removeHeader('cookie');
           proxyReq.setHeader('Authorization', `Bearer ${credential}`);
         },
-        proxyRes: (proxyRes) => {
-          const location = proxyRes.headers.location;
-          if (typeof location === 'string') {
-            proxyRes.headers.location = rewriteNapcatLocationHeader({
-              location,
-              sessionId: session.sessionId,
-              upstreamBaseUrl: session.upstreamBaseUrl,
-            });
-          }
-        },
+        proxyRes: rewriteTextResponse
+          ? responseInterceptor(async (responseBuffer, proxyRes) => {
+              this.rewriteLocationHeader(proxyRes.headers, session);
+              return rewriteNapcatTextResponse({
+                body: responseBuffer.toString('utf8'),
+                sessionId: session.sessionId,
+              });
+            })
+          : (proxyRes) => {
+              this.rewriteLocationHeader(proxyRes.headers, session);
+            },
       },
       secure: false,
+      selfHandleResponse: rewriteTextResponse,
       target: session.upstreamBaseUrl,
       ws: true,
     });
+  }
+
+  /**
+   * Rewrites one upstream Location header in-place so browser redirects remain inside the Gateway route.
+   * @param headers - Upstream response headers exposed by HPM.
+   * @param session - Active Gateway session whose public prefix should own redirects.
+   */
+  private rewriteLocationHeader(
+    headers: Record<string, number | string | string[] | undefined>,
+    session: NapcatWebuiGatewaySession,
+  ) {
+    const location = headers.location;
+    if (typeof location === 'string') {
+      headers.location = rewriteNapcatLocationHeader({
+        location,
+        sessionId: session.sessionId,
+        upstreamBaseUrl: session.upstreamBaseUrl,
+      });
+    }
   }
 
   /**

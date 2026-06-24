@@ -302,7 +302,7 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api jest --runTestsByPath test/
 
 - [ ] **Step 6：实现 session service**
 
-创建 `NapcatWebuiGatewaySessionService`，包含 `create`、`markActive`、`heartbeat`、`revoke`、`requireProxySession`。每个方法必须有 JSDoc。`create()` 必须撤销同用户同账号旧 session。
+创建 `NapcatWebuiGatewaySessionService`，包含 `create`、`markActive`、`heartbeat`、`revoke`、`requireBootstrapSession`、`requireProxySession`。每个方法必须有 JSDoc。`create()` 必须撤销同用户同账号旧 session。`requireBootstrapSession()` 只接受非终态、未过期且 user/account index 仍指向当前 `sessionId` 的 session；`requireProxySession()` 只接受 `active`、未过期且 index 仍指向当前 `sessionId` 的 session。
 
 - [ ] **Step 7：实现 Redis store 和 ticket service**
 
@@ -431,7 +431,7 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api jest --runTestsByPath test/
 }
 ```
 
-代理前必须解析 session，拒绝非 active/created session，换取 Credential，注入 `Authorization: Bearer <credential>`，删除浏览器传入的 API/Admin cookies，不允许浏览器改变 target。
+代理前必须通过 `sessionService.requireProxySession(sessionId)` 解析 active session，拒绝非 active、stale、终态、过期或缺失 session，换取 Credential，注入 `Authorization: Bearer <credential>`，删除浏览器传入的 API/Admin cookies，不允许浏览器改变 target。Proxy 路径不要再调用 `markActive()`；session 必须在 bootstrap redirect 前完成激活。
 
 WebSocket upgrade 必须仍走 `http-proxy-middleware`，不能通过 MQTT 搬运 WebUI 数据帧，也不要手写 WebSocket tunnel。`NapcatWebuiProxyService` 暴露 `bindWebSocketUpgrade(server)`，内部用 HPM 的 `proxy.upgrade(req, socket, head)`；`main.ts` 在 `app.listen()` 后调用：
 
@@ -449,7 +449,7 @@ GET /napcat-webui/session/:sessionId/bootstrap
 ALL /napcat-webui/session/:sessionId/webui/*
 ```
 
-bootstrap 兑换一次性 ticket，设置 HttpOnly session cookie，跳转到 `/napcat-webui/session/:sessionId/webui/webui`。Proxy route 委托给 `NapcatWebuiProxyService`，由该服务统一负责 path sanitize、session 校验、Credential 注入、HPM `cookiePathRewrite`、HTTP proxy 和 WebSocket upgrade。
+bootstrap 兑换一次性 ticket，通过 `sessionService.requireBootstrapSession(sessionId)` 校验 bootstrap session，调用 `sessionService.markActive(sessionId)`，设置 HttpOnly session cookie，跳转到 `/napcat-webui/session/:sessionId/webui/webui`。Proxy route 委托给 `NapcatWebuiProxyService`，由该服务统一负责 path sanitize、active-only session 校验、Credential 注入、HPM `cookiePathRewrite`、HTTP proxy 和 WebSocket upgrade。
 
 - [ ] **Step 7：运行测试和类型检查**
 

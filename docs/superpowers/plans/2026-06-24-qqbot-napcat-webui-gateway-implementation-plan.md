@@ -756,7 +756,7 @@ export interface NapcatWebuiGatewaySessionStore {
 
 - [ ] **Step 6: Implement session service**
 
-Create `src/apps/napcat-webui-gateway/application/napcat-webui-gateway-session.service.ts` with `create`, `markActive`, `heartbeat`, `revoke`, and `requireProxySession`. Every method needs JSDoc. Use `crypto.randomUUID()` for `sessionId`.
+Create `src/apps/napcat-webui-gateway/application/napcat-webui-gateway-session.service.ts` with `create`, `markActive`, `heartbeat`, `revoke`, `requireBootstrapSession`, and `requireProxySession`. Every method needs JSDoc. Use `crypto.randomUUID()` for `sessionId`.
 
 The `create()` implementation must:
 
@@ -773,7 +773,7 @@ if (older) {
 }
 ```
 
-The `heartbeat()` implementation must reject `revoked`, `expired`, `failed`, and missing sessions.
+The `heartbeat()` implementation must reject `revoked`, `expired`, `failed`, missing sessions, and sessions whose user/account index no longer points at the requested `sessionId`. `requireBootstrapSession()` accepts only non-terminal, non-expired, currently indexed sessions for one-time ticket bootstrap. `requireProxySession()` accepts only `active`, non-expired, currently indexed sessions.
 
 - [ ] **Step 7: Implement Redis store and ticket service**
 
@@ -1006,14 +1006,14 @@ Use `createProxyMiddleware` from `http-proxy-middleware` with:
 
 Before proxying:
 
-- resolve session by `sessionId`;
-- reject non-active/non-created sessions with 410;
+- resolve an active session by `sessionId` through `sessionService.requireProxySession(sessionId)`;
+- reject non-active, stale, terminal, expired, or missing sessions with 410;
 - redeem Credential through `NapcatWebuiCredentialClient`;
 - add `Authorization: Bearer ${credential}` upstream;
 - never forward API/Admin cookies upstream;
 - never allow the browser to override `target`.
 
-On first successful upstream response, call `sessionService.markActive(sessionId)`.
+Do not mark sessions active from the proxy path; bootstrap activates the session before redirecting into the proxied WebUI.
 
 For WebSocket upgrade, do not tunnel frames through MQTT and do not hand-roll a WebSocket bridge. Expose a method on `NapcatWebuiProxyService` and bind HPM's upgrade handler from `main.ts`:
 
@@ -1046,9 +1046,9 @@ GET /napcat-webui/session/:sessionId/bootstrap
 ALL /napcat-webui/session/:sessionId/webui/*
 ```
 
-Bootstrap must redeem `ticket`, set an HttpOnly gateway cookie scoped to `/napcat-webui/session/:sessionId`, and redirect to `/napcat-webui/session/:sessionId/webui/webui`.
+Bootstrap must redeem `ticket`, validate the redeemed session through `sessionService.requireBootstrapSession(sessionId)`, call `sessionService.markActive(sessionId)`, set an HttpOnly gateway cookie scoped to `/napcat-webui/session/:sessionId`, and redirect to `/napcat-webui/session/:sessionId/webui/webui`.
 
-Proxy route delegates to `NapcatWebuiProxyService`. The proxy service remains responsible for path sanitization, session validation, Credential injection, HPM `cookiePathRewrite`, HPM HTTP proxying, and HPM WebSocket upgrade handling.
+Proxy route delegates to `NapcatWebuiProxyService`. The proxy service remains responsible for path sanitization, active-only session validation, Credential injection, HPM `cookiePathRewrite`, HPM HTTP proxying, and HPM WebSocket upgrade handling.
 
 - [ ] **Step 7: Run tests and typecheck**
 

@@ -74,7 +74,7 @@ export class NapcatWebuiGatewaySessionService {
    * @returns Updated active session.
    */
   async markActive(sessionId: string) {
-    const session = await this.requireUsableSession(sessionId);
+    const session = await this.requireBootstrapSession(sessionId);
     const now = this.config.now();
 
     return this.updateSession(sessionId, {
@@ -97,7 +97,7 @@ export class NapcatWebuiGatewaySessionService {
     const now = this.config.now();
     const expiresAt = now + this.config.ttlMs();
 
-    await this.updateSession(input.sessionId, {
+    const updated = await this.updateSession(input.sessionId, {
       clientIp: this.toOptionalText(input.clientIp) || session.clientIp,
       expiresAt,
       lastSeenAt: now,
@@ -106,7 +106,7 @@ export class NapcatWebuiGatewaySessionService {
     });
 
     return {
-      expiresAt,
+      expiresAt: updated.expiresAt,
       sessionId: input.sessionId,
       status: 'active' as const,
     };
@@ -137,16 +137,30 @@ export class NapcatWebuiGatewaySessionService {
   }
 
   /**
-   * Loads a session only when it is usable for later proxy handling.
-   * @param sessionId - Gateway session id from a public Gateway route.
-   * @returns Stored server-only session metadata for proxy setup.
+   * Loads a session only when it is eligible for one-time bootstrap.
+   * @param sessionId - Gateway session id redeemed from a bootstrap ticket.
+   * @returns Indexed non-terminal session that may be marked active.
    */
-  async requireProxySession(sessionId: string) {
+  async requireBootstrapSession(sessionId: string) {
     return this.requireUsableSession(sessionId);
   }
 
   /**
-   * Loads and validates a non-terminal, non-expired session.
+   * Loads a session only when it is active and usable for proxy handling.
+   * @param sessionId - Gateway session id from a public Gateway route.
+   * @returns Stored server-only session metadata for proxy setup.
+   */
+  async requireProxySession(sessionId: string) {
+    const session = await this.requireUsableSession(sessionId);
+    if (session.status !== 'active') {
+      throw new GoneException('Gateway session is not active');
+    }
+
+    return session;
+  }
+
+  /**
+   * Loads and validates a non-terminal, non-expired, currently indexed session.
    * @param sessionId - Gateway session id.
    * @returns Usable Gateway session.
    */
@@ -157,6 +171,14 @@ export class NapcatWebuiGatewaySessionService {
     }
     if (session.expiresAt <= this.config.now()) {
       await this.updateSession(sessionId, { status: 'expired' });
+      throw new GoneException('Gateway session is not active');
+    }
+
+    const indexed = await this.store.findActiveByUserAndAccount(
+      session.adminUserId,
+      session.accountId,
+    );
+    if (!indexed || indexed.sessionId !== session.sessionId) {
       throw new GoneException('Gateway session is not active');
     }
 

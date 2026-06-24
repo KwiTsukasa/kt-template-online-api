@@ -156,27 +156,52 @@ class FakeRedis {
     if (!script.includes('redis.call')) {
       throw new Error('Unexpected Redis script');
     }
-    if (keyCount !== 2) {
+    if (keyCount !== 1) {
       throw new Error('Unexpected Redis key count');
     }
 
     const [
       sessionKey,
-      indexKey,
       sessionId,
-      nextSessionJson,
-      sessionTtlMs,
-      indexTtlMs,
+      patchJson,
+      userAccountKeyPrefix,
+      now,
     ] = args;
     const currentJson = this.values.get(sessionKey);
     if (!currentJson) return [0, 'Gateway session is not active'];
 
     const current = JSON.parse(currentJson) as NapcatWebuiGatewaySession;
-    const next = JSON.parse(nextSessionJson) as NapcatWebuiGatewaySession;
+    const patch = JSON.parse(
+      patchJson,
+    ) as Partial<NapcatWebuiGatewaySession>;
+    const next = {
+      ...current,
+      ...patch,
+      accountId: current.accountId,
+      adminUserId: current.adminUserId,
+      sessionId,
+    } as NapcatWebuiGatewaySession;
+    next.expiresAt = Math.max(current.expiresAt, patch.expiresAt || 0);
+    if (current.lastSeenAt || patch.lastSeenAt) {
+      next.lastSeenAt = Math.max(
+        current.lastSeenAt || 0,
+        patch.lastSeenAt || 0,
+      );
+    }
+    if (current.activeAt) {
+      next.activeAt = current.activeAt;
+    }
+    if (current.revokedAt) {
+      next.revokedAt = current.revokedAt;
+    }
+
     const terminalStatuses = ['expired', 'failed', 'revoked'];
     const currentTerminal = terminalStatuses.includes(current.status);
     const nextTerminal = terminalStatuses.includes(next.status);
+    const indexKey = `${userAccountKeyPrefix}${current.adminUserId}:${current.accountId}`;
     const indexValue = this.values.get(indexKey);
+    const ttlMs = Math.max(1, next.expiresAt - Number(now));
+    const nextSessionJson = JSON.stringify(next);
 
     if (currentTerminal && !nextTerminal) {
       return [0, 'Gateway session is not active'];
@@ -184,7 +209,7 @@ class FakeRedis {
 
     if (nextTerminal) {
       this.values.set(sessionKey, nextSessionJson);
-      this.ttl.set(sessionKey, Number(sessionTtlMs));
+      this.ttl.set(sessionKey, ttlMs);
       if (indexValue === sessionId) {
         this.values.delete(indexKey);
         this.ttl.delete(indexKey);
@@ -197,9 +222,9 @@ class FakeRedis {
     }
 
     this.values.set(sessionKey, nextSessionJson);
-    this.ttl.set(sessionKey, Number(sessionTtlMs));
+    this.ttl.set(sessionKey, ttlMs);
     this.values.set(indexKey, sessionId);
-    this.ttl.set(indexKey, Number(indexTtlMs));
+    this.ttl.set(indexKey, ttlMs);
     return [1, nextSessionJson];
   }
 }
@@ -370,6 +395,37 @@ describe('NapcatWebuiGatewaySessionService', () => {
     ).rejects.toThrow('Gateway session owner mismatch');
   });
 
+  it('keeps created sessions out of proxy access until bootstrap marks them active', async () => {
+    const store = new MemorySessionStore();
+    const currentTime = { value: 1000 };
+    const service = new NapcatWebuiGatewaySessionService(
+      store,
+      createConfig(currentTime) as never,
+    );
+    const session = await service.create(createSessionInput());
+
+    await expect(service.requireProxySession(session.sessionId)).rejects.toThrow(
+      'Gateway session is not active',
+    );
+    await expect(
+      service.requireBootstrapSession(session.sessionId),
+    ).resolves.toMatchObject({
+      sessionId: session.sessionId,
+      status: 'created',
+    });
+
+    currentTime.value = 5000;
+    await service.markActive(session.sessionId);
+
+    await expect(
+      service.requireProxySession(session.sessionId),
+    ).resolves.toMatchObject({
+      activeAt: 5000,
+      sessionId: session.sessionId,
+      status: 'active',
+    });
+  });
+
   it('rejects expired proxy sessions and marks them expired', async () => {
     const store = new MemorySessionStore();
     const currentTime = { value: 1000 };
@@ -387,6 +443,24 @@ describe('NapcatWebuiGatewaySessionService', () => {
     expect(await store.find(session.sessionId)).toMatchObject({
       status: 'expired',
     });
+  });
+
+  it('rejects revoked sessions for proxy access', async () => {
+    const store = new MemorySessionStore();
+    const service = new NapcatWebuiGatewaySessionService(
+      store,
+      createConfig({ value: 1000 }) as never,
+    );
+    const session = await service.create(createSessionInput());
+
+    await service.revoke({
+      adminUserId: 'admin-1',
+      sessionId: session.sessionId,
+    });
+
+    await expect(service.requireProxySession(session.sessionId)).rejects.toThrow(
+      'Gateway session is not active',
+    );
   });
 });
 
@@ -519,6 +593,90 @@ describe('NapcatWebuiGatewayRedisStore', () => {
       store.findActiveByUserAndAccount('admin-1', 'account-1'),
     ).resolves.toMatchObject({
       sessionId: second.sessionId,
+    });
+  });
+
+  it('rejects stale replaced sessions from bootstrap and proxy loaders', async () => {
+    const redis = new FakeRedis();
+    const config = createConfig({ value: 1000 });
+    const store = new NapcatWebuiGatewayRedisStore(
+      redis as never,
+      config as never,
+    );
+    const service = new NapcatWebuiGatewaySessionService(
+      store,
+      config as never,
+    );
+    const first = await service.create(createSessionInput());
+    const second = await service.create(createSessionInput());
+    const firstSessionKey = `napcat:webui:session:${first.sessionId}`;
+    const indexKey = 'napcat:webui:user-account:admin-1:account-1';
+
+    redis.values.set(
+      firstSessionKey,
+      JSON.stringify({
+        ...first,
+        status: 'created',
+      }),
+    );
+    redis.values.set(indexKey, second.sessionId);
+
+    await expect(
+      service.requireBootstrapSession(first.sessionId),
+    ).rejects.toThrow('Gateway session is not active');
+
+    redis.values.set(
+      firstSessionKey,
+      JSON.stringify({
+        ...first,
+        activeAt: 2000,
+        lastSeenAt: 2000,
+        status: 'active',
+      }),
+    );
+
+    await expect(service.requireProxySession(first.sessionId)).rejects.toThrow(
+      'Gateway session is not active',
+    );
+  });
+
+  it('merges delayed lifecycle patches without reducing monotonic timestamps', async () => {
+    const redis = new FakeRedis();
+    const currentTime = { value: 1000 };
+    const config = createConfig(currentTime);
+    const store = new NapcatWebuiGatewayRedisStore(
+      redis as never,
+      config as never,
+    );
+    const service = new NapcatWebuiGatewaySessionService(
+      store,
+      config as never,
+    );
+    const session = await service.create(createSessionInput());
+
+    currentTime.value = 5000;
+    await service.markActive(session.sessionId);
+
+    currentTime.value = 2000;
+    const heartbeat = await service.heartbeat({
+      adminUserId: 'admin-1',
+      sessionId: session.sessionId,
+    });
+    const markActive = await service.markActive(session.sessionId);
+    const stored = await store.find(session.sessionId);
+
+    expect(heartbeat.expiresAt).toBe(65_000);
+    expect(markActive).toMatchObject({
+      activeAt: 5000,
+      expiresAt: 65_000,
+      lastSeenAt: 5000,
+      status: 'active',
+    });
+    expect(stored).toMatchObject({
+      activeAt: 5000,
+      expiresAt: 65_000,
+      lastSeenAt: 5000,
+      status: 'active',
     });
   });
 });

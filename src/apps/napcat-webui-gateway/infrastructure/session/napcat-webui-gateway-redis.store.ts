@@ -17,29 +17,59 @@ if not currentJson then
 end
 
 local current = cjson.decode(currentJson)
-local next = cjson.decode(ARGV[2])
+local patch = cjson.decode(ARGV[2])
 local terminal = { expired = true, failed = true, revoked = true }
-local indexValue = redis.call("GET", KEYS[2])
+local next = {}
+
+for key, value in pairs(current) do
+  next[key] = value
+end
+for key, value in pairs(patch) do
+  next[key] = value
+end
+
+next["sessionId"] = ARGV[1]
+next["adminUserId"] = current["adminUserId"]
+next["accountId"] = current["accountId"]
+
+if current["expiresAt"] and patch["expiresAt"] and tonumber(current["expiresAt"]) > tonumber(patch["expiresAt"]) then
+  next["expiresAt"] = current["expiresAt"]
+end
+if current["lastSeenAt"] and patch["lastSeenAt"] and tonumber(current["lastSeenAt"]) > tonumber(patch["lastSeenAt"]) then
+  next["lastSeenAt"] = current["lastSeenAt"]
+end
+if current["activeAt"] then
+  next["activeAt"] = current["activeAt"]
+end
+if current["revokedAt"] then
+  next["revokedAt"] = current["revokedAt"]
+end
+
+local indexKey = ARGV[3] .. current["adminUserId"] .. ":" .. current["accountId"]
+local indexValue = redis.call("GET", indexKey)
+local now = tonumber(ARGV[4])
+local ttl = math.max(1, tonumber(next["expiresAt"]) - now)
+local nextJson = cjson.encode(next)
 
 if terminal[current["status"]] and not terminal[next["status"]] then
   return {0, "Gateway session is not active"}
 end
 
 if terminal[next["status"]] then
-  redis.call("PSETEX", KEYS[1], ARGV[3], ARGV[2])
+  redis.call("PSETEX", KEYS[1], ttl, nextJson)
   if indexValue == ARGV[1] then
-    redis.call("DEL", KEYS[2])
+    redis.call("DEL", indexKey)
   end
-  return {1, ARGV[2]}
+  return {1, nextJson}
 end
 
 if indexValue and indexValue ~= ARGV[1] then
   return {0, "Gateway session is not active"}
 end
 
-redis.call("PSETEX", KEYS[1], ARGV[3], ARGV[2])
-redis.call("SET", KEYS[2], ARGV[1], "PX", ARGV[4])
-return {1, ARGV[2]}
+redis.call("PSETEX", KEYS[1], ttl, nextJson)
+redis.call("SET", indexKey, ARGV[1], "PX", ttl)
+return {1, nextJson}
 `;
 
 @Injectable()
@@ -107,21 +137,7 @@ export class NapcatWebuiGatewayRedisStore
     sessionId: string,
     patch: Partial<NapcatWebuiGatewaySession>,
   ) {
-    const current = await this.find(sessionId);
-    if (!current) throw new Error('Gateway session is not active');
-
-    const next = {
-      ...current,
-      ...patch,
-      sessionId,
-    };
-    if (this.isTerminal(current) && !this.isTerminal(next)) {
-      throw new Error('Gateway terminal session cannot become active');
-    }
-
-    await this.writeSessionAndIndexAtomically(next);
-
-    return next;
+    return this.mergeSessionPatchAtomically(sessionId, patch);
   }
 
   /**
@@ -178,26 +194,29 @@ export class NapcatWebuiGatewayRedisStore
   }
 
   /**
-   * Atomically writes session JSON and maintains the user/account index.
-   * @param session - Already-merged Gateway session to commit.
+   * Atomically merges a patch into current Redis JSON and maintains the index.
+   * @param sessionId - Gateway session id to update.
+   * @param patch - Partial session fields to merge inside Redis.
+   * @returns Final merged session returned by the Lua script.
    */
-  private async writeSessionAndIndexAtomically(
-    session: NapcatWebuiGatewaySession,
+  private async mergeSessionPatchAtomically(
+    sessionId: string,
+    patch: Partial<NapcatWebuiGatewaySession>,
   ) {
-    const sessionJson = JSON.stringify(session);
     const result = (await this.redis.eval(
       UPDATE_SESSION_SCRIPT,
-      2,
-      this.sessionKey(session.sessionId),
-      this.userAccountKey(session.adminUserId, session.accountId),
-      session.sessionId,
-      sessionJson,
-      this.remainingTtlMs(session),
-      this.remainingTtlMs(session),
+      1,
+      this.sessionKey(sessionId),
+      sessionId,
+      JSON.stringify(patch),
+      USER_ACCOUNT_KEY_PREFIX,
+      this.config.now(),
     )) as [number, string];
     if (!Array.isArray(result) || Number(result[0]) !== 1) {
       throw new Error(String(result?.[1] || 'Gateway session is not active'));
     }
+
+    return JSON.parse(result[1]) as NapcatWebuiGatewaySession;
   }
 
   /**

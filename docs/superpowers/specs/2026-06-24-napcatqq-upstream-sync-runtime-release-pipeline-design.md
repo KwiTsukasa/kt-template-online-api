@@ -40,6 +40,7 @@ Primary upstream metadata sources:
 7. Keep production release completion tied to online smoke evidence, not Jenkins/K8s success alone.
 8. Install and configure a NAS-resident Codex CLI environment with a full KT workspace so remote development can continue when the laptop is unavailable.
 9. Run scheduled upstream audits on the NAS through Jenkins or a NAS service timer, never from the laptop.
+10. Version Codex CLI automation prompts for upstream audit, sync candidate review, release readiness review, and remote-development handoff.
 
 ## Non-Goals
 
@@ -52,6 +53,7 @@ Primary upstream metadata sources:
 - Do not automatically migrate existing production accounts to a new runtime image without explicit release confirmation.
 - Do not store copied Codex secrets, sessions, logs, SQLite state, browser state, or auth files in Git or release artifacts.
 - Do not run unattended Codex agent sessions that modify code or merge upstream without explicit human approval.
+- Do not let Codex CLI automation read live credentials unless the prompt task explicitly needs them. Upstream release auditing should run from Git metadata and generated context packets.
 
 ## Repositories and Ownership
 
@@ -140,6 +142,18 @@ Codex configuration parity is logical parity, not a byte-for-byte copy of the Wi
 - Keep `CODEX_HOME=/vol1/docker/kt-codex/home/.codex` for NAS services so scheduled jobs do not write into root's default home by accident.
 
 The scheduled upstream audit should be deterministic shell/Jenkins work by default. Codex CLI is installed for remote development, review, and manual takeover, not for silent unattended code modification. If a future job invokes Codex non-interactively, it must run in a throwaway branch/worktree, emit a full artifact report, and require human review before commit, push, merge, or deployment.
+
+The intended automation split is:
+
+```text
+deterministic collector
+  -> context packet with git/GitHub/build facts
+  -> Codex CLI prompt for reasoning and classification
+  -> structured JSON/Markdown report
+  -> human-approved follow-up action
+```
+
+This gives Codex CLI the parts it is good at: reading diffs, explaining risk, checking hot-zone interactions, drafting candidate actions, and writing handoff reports. It does not make Codex the authority that silently mutates production state.
 
 ## Pipeline Overview
 
@@ -235,6 +249,7 @@ CREATE_CANDIDATE_BRANCH=false by default
    - Write reports under `/vol1/docker/kt-codex/artifacts/napcat-upstream-sync/<timestamp>`.
    - Jenkins must archive the same reports.
    - Reports must include the NAS runner hostname, Codex CLI version when available, Git version, and workspace manifest revision.
+   - If Codex CLI automation is enabled, archive the exact prompt, context packet, JSONL event log, final response, and output schema validation result.
 
 ### Hot Zones
 
@@ -382,6 +397,135 @@ CANARY_ACCOUNT_ID=<optional>
 
 The runtime release job must use a clean NAS job workspace rather than the long-lived remote development workspace. This prevents a remote Codex session and a Jenkins release from modifying the same checkout at the same time.
 
+## Codex CLI Automation Prompt Pack
+
+Implementation should add a versioned prompt pack under the API repository, for example:
+
+```text
+ci/codex-prompts/
+  napcat-upstream-audit.md
+  napcat-sync-candidate-review.md
+  napcat-runtime-release-readiness.md
+  napcat-remote-dev-handoff.md
+  schemas/
+    napcat-upstream-audit.schema.json
+    napcat-runtime-release-readiness.schema.json
+```
+
+Prompts are source-controlled because they are part of the automation contract. Secrets are never embedded in prompts. Each prompt must accept a generated context packet path or stdin payload and must produce a structured JSON result plus a short Markdown explanation.
+
+### `napcat-upstream-audit.md`
+
+Purpose: classify a new upstream latest release from already-collected facts.
+
+Prompt contract:
+
+```text
+You are auditing whether KT's NapCatQQ fork can safely sync an upstream NapNeko/NapCatQQ release.
+
+Inputs:
+- Upstream release metadata.
+- Last accepted upstream base.
+- KT fork branch and head commit.
+- Upstream changed file list and commit list.
+- KT fork patch file list and commit list.
+- Hot-zone file list.
+- Dry merge or range-diff output.
+
+Rules:
+- Do not run merge, commit, push, deploy, or edit files.
+- Do not infer success from missing data.
+- Classify exactly one of: safe-candidate, manual-review, blocked.
+- Explain every reasonCode with file-level evidence.
+- Recommend next action: no-op, create candidate branch, request human review, or block.
+
+Output:
+- JSON matching ci/codex-prompts/schemas/napcat-upstream-audit.schema.json.
+- A concise Markdown summary safe for Jenkins artifacts.
+```
+
+Recommended command shape on NAS:
+
+```bash
+CODEX_HOME=/vol1/docker/kt-codex/home/.codex \
+codex exec \
+  --cd /vol1/docker/kt-codex/workspace/KT \
+  --profile-v2 automation \
+  --sandbox workspace-write \
+  --ask-for-approval never \
+  --json \
+  --ephemeral \
+  --output-schema ci/codex-prompts/schemas/napcat-upstream-audit.schema.json \
+  --output-last-message "$ARTIFACT_DIR/codex-upstream-audit.md" \
+  - < "$CONTEXT_PACKET"
+```
+
+`workspace-write` is used so Codex can write only the requested report files under the job artifact directory. The prompt still forbids source edits and push/merge/deploy actions.
+
+### `napcat-sync-candidate-review.md`
+
+Purpose: review a generated `kt/sync/<release-tag>` candidate branch before any merge.
+
+Prompt contract:
+
+```text
+Review the candidate branch against KT's NapCat login/runtime requirements.
+
+Must inspect:
+- login service reset behavior
+- QR refresh and stale QR handling
+- WebUI login runtime state
+- captcha and new-device flow boundaries
+- package/build output structure
+- test delta and missing coverage
+
+Must not:
+- edit files
+- commit
+- push
+- mark production ready
+
+Output:
+- Critical/Important findings first.
+- Required tests before merge.
+- Whether this candidate can proceed to manual code review.
+```
+
+### `napcat-runtime-release-readiness.md`
+
+Purpose: decide whether a built runtime image can be promoted to API.
+
+Inputs:
+
+- NapCatQQ test/typecheck/build summaries.
+- `fork-artifact.json`.
+- Docker image inspect output.
+- `verify.sh` output.
+- API integration test output.
+- planned runtime image/profile values.
+
+Output must separate:
+
+- source validation
+- image validation
+- API promotion readiness
+- online smoke readiness
+- rollback pointer
+
+### `napcat-remote-dev-handoff.md`
+
+Purpose: create a safe handoff when a human opens NAS Codex CLI for remote development.
+
+It should summarize:
+
+- active branch and dirty status for each repo
+- relevant artifact directories
+- latest Jenkins job state
+- current blockers
+- exact commands that are safe to run next
+
+It must not ask Codex to modify files automatically.
+
 ## API Promotion Contract
 
 The API Jenkinsfile should gain optional parameters:
@@ -433,6 +577,8 @@ sequenceDiagram
 - NAS runner lacks Node, pnpm, Docker, Git, Codex, or KT workspace manifest: mark setup incomplete and do not enable the scheduled trigger.
 - NAS Codex auth is missing: remote development is unavailable until interactive login or trusted auth-file sync completes; deterministic Jenkins audits may still run if they do not need Codex auth.
 - NAS Codex config drifts from the generated template: fail the remote-development smoke and require config regeneration.
+- Codex CLI automation prompt or schema is missing: deterministic audit may still run, but AI-assisted classification is marked unavailable.
+- Codex CLI output does not match the required schema: mark the audit `blocked` and archive the raw output for review.
 - Laptop is offline or away from the LAN: scheduled audits and runtime release jobs must continue on NAS.
 - Upstream release has no resolvable tag commit: mark `blocked`.
 - Fork writable remote points to upstream: fail before push.
@@ -499,6 +645,23 @@ Remote development smoke:
 - A dry-run upstream audit can write reports into `/vol1/docker/kt-codex/artifacts`.
 - No laptop-only Windows path remains in the NAS `config.toml`.
 
+Codex automation prompt smoke:
+
+```bash
+CODEX_HOME=/vol1/docker/kt-codex/home/.codex \
+codex exec --cd /vol1/docker/kt-codex/workspace/KT \
+  --profile-v2 automation \
+  --sandbox workspace-write \
+  --ask-for-approval never \
+  --json \
+  --ephemeral \
+  --output-schema ci/codex-prompts/schemas/napcat-upstream-audit.schema.json \
+  --output-last-message /vol1/docker/kt-codex/artifacts/smoke/codex-upstream-audit.md \
+  - < /vol1/docker/kt-codex/artifacts/smoke/context-packet.md
+```
+
+Expected result: schema-valid JSON, no source changes, and a Markdown report in the artifact directory.
+
 ### Runtime Release Job
 
 NapCatQQ:
@@ -542,6 +705,7 @@ Online:
 - NAS has a resident Codex CLI and full KT workspace environment for scheduled audits and remote development.
 - A scheduled audit detects upstream latest releases and writes safe reports.
 - The scheduled audit runs from NAS service/Jenkins, not from the laptop.
+- Codex CLI automation prompts are versioned, schema-validated, and archived with every AI-assisted audit.
 - Upstream sync never auto-merges into KT maintenance branches.
 - Hot-zone conflicts are blocked or marked for manual review.
 - Runtime images are built from approved fork refs and verified inside containers.

@@ -40,6 +40,7 @@ kt-napcat-desktop-cn:<profile>
 7. 线上完成标准必须包含真实 smoke，不把 Jenkins/K8s 成功当成功能闭环。
 8. 在 NAS 上安装并配置常驻 Codex CLI 与 KT 全量 workspace，保证笔记本不在线时仍可远程开发。
 9. 上游定时审计必须跑在 NAS 的 Jenkins 或 NAS 服务定时器中，不能跑在笔记本。
+10. 把 Codex CLI 自动化提示词版本化，覆盖上游审计、候选分支审查、运行时发布就绪审查和远程开发交接。
 
 ## 非目标
 
@@ -52,6 +53,7 @@ kt-napcat-desktop-cn:<profile>
 - 不在没有明确确认时自动迁移线上账号到新运行时镜像。
 - 不把同步到 NAS 的 Codex secrets、sessions、logs、SQLite 状态、浏览器状态或 auth 文件写入 Git 或 release artifact。
 - 不运行会在无人值守状态下修改代码或合并 upstream 的 Codex agent。
+- 不让 Codex CLI 自动化读取实时凭据，除非该提示词任务明确需要。上游 release 审计应只基于 Git 元数据和生成的 context packet。
 
 ## 仓库职责
 
@@ -140,6 +142,18 @@ Codex 配置一致指“逻辑一致”，不是把 Windows profile 原样复制
 - NAS 服务统一使用 `CODEX_HOME=/vol1/docker/kt-codex/home/.codex`，避免定时任务意外写入 root 默认 home。
 
 上游定时审计默认只运行确定性的 shell/Jenkins 逻辑。Codex CLI 安装的目的，是远程开发、人工审查和接管，不是默默无人值守改代码。未来如果需要非交互调用 Codex，也必须在一次性分支/worktree 中运行，产出完整 artifact，并在 commit、push、merge 或 deployment 前要求人工审查。
+
+自动化分工如下：
+
+```text
+确定性采集脚本
+  -> 包含 git/GitHub/build 事实的 context packet
+  -> Codex CLI 提示词负责推理和分类
+  -> 结构化 JSON/Markdown 报告
+  -> 人工确认后的后续动作
+```
+
+这样 Codex CLI 做它擅长的部分：读 diff、解释风险、检查 hot-zone 交互、草拟候选动作、写交接报告。它不成为无人值守修改生产状态的最终权威。
 
 ## 流水线总览
 
@@ -235,6 +249,7 @@ CREATE_CANDIDATE_BRANCH=false
    - 报告写入 `/vol1/docker/kt-codex/artifacts/napcat-upstream-sync/<timestamp>`。
    - Jenkins 归档同一份报告。
    - 报告必须包含 NAS runner hostname、可用时的 Codex CLI version、Git version、workspace manifest revision。
+   - 启用 Codex CLI 自动化时，必须归档精确 prompt、context packet、JSONL event log、final response 和 output schema 校验结果。
 
 ### Hot Zone
 
@@ -382,6 +397,135 @@ CANARY_ACCOUNT_ID=<可选>
 
 运行时发布 job 必须使用干净的 NAS job workspace，而不是长期远程开发 workspace，避免远程 Codex 会话和 Jenkins 发布同时修改同一个 checkout。
 
+## Codex CLI 自动化提示词包
+
+实现阶段应在 API 仓库增加版本化提示词包，例如：
+
+```text
+ci/codex-prompts/
+  napcat-upstream-audit.md
+  napcat-sync-candidate-review.md
+  napcat-runtime-release-readiness.md
+  napcat-remote-dev-handoff.md
+  schemas/
+    napcat-upstream-audit.schema.json
+    napcat-runtime-release-readiness.schema.json
+```
+
+提示词属于自动化契约，所以需要进 Git。secret 绝不写进 prompt。每个 prompt 接收生成好的 context packet 路径或 stdin payload，并输出结构化 JSON 加短 Markdown 解释。
+
+### `napcat-upstream-audit.md`
+
+用途：根据已采集事实，对上游 latest release 做同步风险分类。
+
+提示词契约：
+
+```text
+You are auditing whether KT's NapCatQQ fork can safely sync an upstream NapNeko/NapCatQQ release.
+
+Inputs:
+- Upstream release metadata.
+- Last accepted upstream base.
+- KT fork branch and head commit.
+- Upstream changed file list and commit list.
+- KT fork patch file list and commit list.
+- Hot-zone file list.
+- Dry merge or range-diff output.
+
+Rules:
+- Do not run merge, commit, push, deploy, or edit files.
+- Do not infer success from missing data.
+- Classify exactly one of: safe-candidate, manual-review, blocked.
+- Explain every reasonCode with file-level evidence.
+- Recommend next action: no-op, create candidate branch, request human review, or block.
+
+Output:
+- JSON matching ci/codex-prompts/schemas/napcat-upstream-audit.schema.json.
+- A concise Markdown summary safe for Jenkins artifacts.
+```
+
+NAS 推荐命令形态：
+
+```bash
+CODEX_HOME=/vol1/docker/kt-codex/home/.codex \
+codex exec \
+  --cd /vol1/docker/kt-codex/workspace/KT \
+  --profile-v2 automation \
+  --sandbox workspace-write \
+  --ask-for-approval never \
+  --json \
+  --ephemeral \
+  --output-schema ci/codex-prompts/schemas/napcat-upstream-audit.schema.json \
+  --output-last-message "$ARTIFACT_DIR/codex-upstream-audit.md" \
+  - < "$CONTEXT_PACKET"
+```
+
+这里用 `workspace-write` 是为了允许 Codex 只写 job artifact 目录下的报告文件。prompt 仍禁止源码编辑、push、merge 和 deployment。
+
+### `napcat-sync-candidate-review.md`
+
+用途：在任何 merge 之前审查生成的 `kt/sync/<release-tag>` 候选分支。
+
+提示词契约：
+
+```text
+Review the candidate branch against KT's NapCat login/runtime requirements.
+
+Must inspect:
+- login service reset behavior
+- QR refresh and stale QR handling
+- WebUI login runtime state
+- captcha and new-device flow boundaries
+- package/build output structure
+- test delta and missing coverage
+
+Must not:
+- edit files
+- commit
+- push
+- mark production ready
+
+Output:
+- Critical/Important findings first.
+- Required tests before merge.
+- Whether this candidate can proceed to manual code review.
+```
+
+### `napcat-runtime-release-readiness.md`
+
+用途：判断已构建运行时镜像是否可以推广到 API。
+
+输入：
+
+- NapCatQQ test/typecheck/build 摘要。
+- `fork-artifact.json`。
+- Docker image inspect 输出。
+- `verify.sh` 输出。
+- API integration test 输出。
+- 计划发布的 runtime image/profile 值。
+
+输出必须拆开：
+
+- source validation
+- image validation
+- API promotion readiness
+- online smoke readiness
+- rollback pointer
+
+### `napcat-remote-dev-handoff.md`
+
+用途：人工打开 NAS Codex CLI 远程开发前，生成安全交接。
+
+需要总结：
+
+- 每个仓库的当前分支和 dirty 状态。
+- 相关 artifact 目录。
+- 最新 Jenkins job 状态。
+- 当前 blocker。
+- 下一步可安全执行的精确命令。
+
+它不能要求 Codex 自动修改文件。
+
 ## API 推广契约
 
 API Jenkinsfile 增加可选参数：
@@ -433,6 +577,8 @@ sequenceDiagram
 - NAS runner 缺 Node、pnpm、Docker、Git、Codex 或 KT workspace manifest：标记 setup incomplete，不启用定时触发。
 - NAS Codex auth 缺失：远程开发不可用，直到交互式登录或可信 auth 文件同步完成；如果确定性 Jenkins 审计不需要 Codex auth，则审计仍可运行。
 - NAS Codex config 与生成模板漂移：remote-development smoke 失败，要求重新生成配置。
+- Codex CLI 自动化 prompt 或 schema 缺失：确定性审计仍可运行，但 AI 辅助分类标记为 unavailable。
+- Codex CLI 输出不符合 schema：审计标记 `blocked`，并归档原始输出供人工查看。
 - 笔记本离线或不在局域网：定时审计和运行时发布仍必须在 NAS 继续运行。
 - 上游 release tag 无法解析 commit：标记 `blocked`。
 - fork 可写 remote 指向上游：push 前失败。
@@ -499,6 +645,23 @@ pnpm --dir mcp/ktWorkflow run self-test
 - 上游审计 dry-run 能把报告写入 `/vol1/docker/kt-codex/artifacts`。
 - NAS `config.toml` 中没有笔记本 Windows-only 路径。
 
+Codex 自动化提示词 smoke：
+
+```bash
+CODEX_HOME=/vol1/docker/kt-codex/home/.codex \
+codex exec --cd /vol1/docker/kt-codex/workspace/KT \
+  --profile-v2 automation \
+  --sandbox workspace-write \
+  --ask-for-approval never \
+  --json \
+  --ephemeral \
+  --output-schema ci/codex-prompts/schemas/napcat-upstream-audit.schema.json \
+  --output-last-message /vol1/docker/kt-codex/artifacts/smoke/codex-upstream-audit.md \
+  - < /vol1/docker/kt-codex/artifacts/smoke/context-packet.md
+```
+
+预期结果：JSON 符合 schema、源码无改动、Markdown 报告写入 artifact 目录。
+
 ### 运行时发布 Job
 
 NapCatQQ：
@@ -542,6 +705,7 @@ docker tag "$IMMUTABLE_TAG" "$PROMOTION_TAG"
 - NAS 有常驻 Codex CLI 和 KT 全量 workspace 环境，可支撑定时审计和远程开发。
 - 定时审计能发现上游 latest release 并生成安全报告。
 - 定时审计从 NAS 服务/Jenkins 运行，不从笔记本运行。
+- Codex CLI 自动化提示词已版本化、schema 校验，并随每次 AI 辅助审计归档。
 - 上游同步不会自动合并进 KT 维护分支。
 - hot-zone 冲突会阻断或进入人工审查。
 - 运行时镜像只从已确认 fork ref 构建，并经过容器内 verify。

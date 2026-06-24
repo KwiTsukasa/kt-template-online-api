@@ -812,6 +812,13 @@ describe('InternalSessionController', () => {
       .expect(HttpStatus.CREATED);
 
     expect(response.body).toEqual({
+      account: {
+        accountId: 'account-1',
+        selfId: '1914728559',
+      },
+      container: {
+        containerName: 'kt-qqbot-napcat-1914728559',
+      },
       expiresAt: 61_000,
       iframeUrl: expect.stringMatching(
         /^\/napcat-webui\/session\/[0-9a-f-]+\/bootstrap\?ticket=[A-Za-z0-9_-]+$/,

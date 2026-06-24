@@ -36,7 +36,7 @@ export class InternalSessionController {
    * Creates a Gateway session and returns only browser-safe bootstrap metadata.
    * @param secret - Shared API-to-Gateway secret header.
    * @param body - Internal create-session payload from the API service.
-   * @returns Browser-safe session id, expiry, and relative iframe URL.
+   * @returns Browser-safe session id, expiry, relative iframe URL, and display metadata.
    */
   @Post('sessions')
   async createSession(
@@ -48,6 +48,13 @@ export class InternalSessionController {
     const ticket = await this.ticketService.issue(session.sessionId);
 
     return {
+      account: {
+        accountId: session.accountId,
+        selfId: session.selfId,
+      },
+      container: {
+        containerName: session.containerName,
+      },
       expiresAt: session.expiresAt,
       iframeUrl: `${this.config.publicSessionPrefix()}/${
         session.sessionId

@@ -63,7 +63,7 @@ if terminal[next["status"]] then
   return {1, nextJson}
 end
 
-if indexValue and indexValue ~= ARGV[1] then
+if indexValue ~= ARGV[1] then
   return {0, "Gateway session is not active"}
 end
 

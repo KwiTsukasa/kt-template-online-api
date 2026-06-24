@@ -217,7 +217,7 @@ class FakeRedis {
       return [1, nextSessionJson];
     }
 
-    if (indexValue && indexValue !== sessionId) {
+    if (indexValue !== sessionId) {
       return [0, 'Gateway session is not active'];
     }
 
@@ -580,6 +580,41 @@ describe('NapcatWebuiGatewayRedisStore', () => {
     ).rejects.toThrow('Gateway session is not active');
     expect(redis.values.get(indexKey)).toBe(second.sessionId);
     expect(JSON.parse(redis.values.get(firstSessionKey) || '{}')).toMatchObject({
+      status: 'created',
+    });
+  });
+
+  it('rejects non-terminal updates when the user-account index is missing', async () => {
+    const redis = new FakeRedis();
+    const config = createConfig({ value: 1000 });
+    const store = new NapcatWebuiGatewayRedisStore(
+      redis as never,
+      config as never,
+    );
+    const session: NapcatWebuiGatewaySession = {
+      ...createSessionInput(),
+      createdAt: 1000,
+      expiresAt: 61_000,
+      sessionId: 'session-missing-index',
+      status: 'created',
+    };
+    const sessionKey = `napcat:webui:session:${session.sessionId}`;
+    const indexKey = 'napcat:webui:user-account:admin-1:account-1';
+
+    await store.create(session);
+    redis.values.delete(indexKey);
+    redis.ttl.delete(indexKey);
+
+    await expect(
+      store.update(session.sessionId, {
+        activeAt: 2000,
+        expiresAt: 62_000,
+        lastSeenAt: 2000,
+        status: 'active',
+      }),
+    ).rejects.toThrow('Gateway session is not active');
+    expect(redis.values.get(indexKey)).toBeUndefined();
+    expect(JSON.parse(redis.values.get(sessionKey) || '{}')).toMatchObject({
       status: 'created',
     });
   });

@@ -6,7 +6,7 @@
 
 **架构：** API 继续作为 Admin 鉴权和 QQBot 账号绑定解析的权威，只负责创建短期 Gateway session。新增 `kt-napcat-webui-gateway` 进程负责 session 存储、一次性 bootstrap ticket、NapCat WebUI Credential 交换、HTTP/静态资源/API/WebSocket 代理和审计。Admin 打开 `/qqbot/account/:accountId/napcat-webui`，页面 mounted 创建 session，mounted 期间 heartbeat，路由离开时 revoke。
 
-**技术栈：** NestJS 11、Express adapter、TypeORM/MySQL、Redis via `ioredis`、`http-proxy-middleware` 代理 Express/WebSocket、Vue 3 TSX、Vben Admin、antdv-next、K8s、Jenkins、Caddy/Admin 域路由。
+**技术栈：** NestJS 11、Express adapter、TypeORM/MySQL、Redis via `@nestjs-modules/ioredis` + `ioredis`、`http-proxy-middleware` 代理 Express/WebSocket、Vue 3 TSX、VueUse `useIntervalFn`、Vben Admin、antdv-next、K8s、Jenkins、Caddy/Admin 域路由。
 
 ---
 
@@ -15,7 +15,10 @@
 - 设计文档：`docs/superpowers/specs/2026-06-24-qqbot-napcat-webui-gateway-design.md`
 - 中文设计：`docs/superpowers/specs/2026-06-24-qqbot-napcat-webui-gateway-design.zh-CN.md`
 - `http-proxy-middleware` 支持 Express proxy middleware 和 WebSocket upgrade：<https://github.com/chimurai/http-proxy-middleware>
-- Redis 官方 Node 入门文档列出 `ioredis`，适合 Redis TTL 租约：<https://redis.io/tutorials/develop/node/gettingstarted/>
+- `http-proxy-middleware` WebSocket recipe 说明了 `ws: true`、手动 `server.on('upgrade', proxy.upgrade)`、多 target 和 path rewrite：<https://github.com/chimurai/http-proxy-middleware/blob/master/recipes/websocket.md>
+- `@nestjs-modules/ioredis` 提供 Nest `RedisModule.forRoot` 和 `@InjectRedis()`，底层使用 `ioredis`：<https://github.com/nest-modules/ioredis>
+- 明确不使用 `connect-redis`，因为它是 Express session store，而 Gateway 需要 API 预创建 session、一次性 ticket、target 元数据、同账号并发撤销、Credential 缓存和审计事件：<https://github.com/tj/connect-redis>
+- VueUse `useIntervalFn` 是带 pause/resume 控制的 `setInterval` wrapper，Admin 已有该依赖：<https://vueuse.org/shared/useintervalfn/>
 
 ## 范围检查
 
@@ -25,9 +28,9 @@
 
 ### API 仓库：`D:\MyFiles\KT\Node\kt-template-online-api`
 
-- 修改 `package.json` 和 `pnpm-lock.yaml`：加入 `ioredis`、`http-proxy-middleware` 和 Gateway 启动脚本。
+- 修改 `package.json` 和 `pnpm-lock.yaml`：加入 `@nestjs-modules/ioredis`、`ioredis`、`http-proxy-middleware` 和 Gateway 启动脚本。
 - 新增 `src/apps/napcat-webui-gateway/main.ts`：Gateway 独立 Nest bootstrap，端口 `48086`。
-- 新增 `src/apps/napcat-webui-gateway/napcat-webui-gateway.module.ts`：Gateway module，导入配置、日志、TypeORM 和 Gateway provider/controller。
+- 新增 `src/apps/napcat-webui-gateway/napcat-webui-gateway.module.ts`：Gateway module，导入配置、日志、TypeORM、`RedisModule` 和 Gateway provider/controller。
 - 新增 `src/apps/napcat-webui-gateway/config/napcat-webui-gateway-config.service.ts`：读取 Gateway env 和安全默认值。
 - 新增 `src/apps/napcat-webui-gateway/domain/napcat-webui-gateway.types.ts`：session、audit、target、proxy 类型。
 - 新增 `src/apps/napcat-webui-gateway/infrastructure/session/napcat-webui-gateway-redis.store.ts`：Redis session/ticket store。
@@ -259,10 +262,10 @@ git -C D:\MyFiles\KT\Node\kt-template-online-api commit -m "feat: 增加NapCat W
 - [ ] **Step 1：增加依赖**
 
 ```powershell
-pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api add ioredis http-proxy-middleware
+pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api add @nestjs-modules/ioredis ioredis http-proxy-middleware
 ```
 
-期望：更新 `package.json` 和 `pnpm-lock.yaml`。保留已有 `ws`。
+期望：更新 `package.json` 和 `pnpm-lock.yaml`。保留已有 `ws`。不要加 `connect-redis`，因为 Gateway session 是领域 session，不是 Express 登录 session。
 
 - [ ] **Step 2：增加启动脚本**
 
@@ -303,7 +306,7 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api jest --runTestsByPath test/
 
 - [ ] **Step 7：实现 Redis store 和 ticket service**
 
-Redis key：
+使用 `@nestjs-modules/ioredis` 的 `@InjectRedis()` 注入 Redis client，不自写 Redis provider。Redis key：
 
 ```text
 napcat:webui:session:{sessionId}
@@ -314,6 +317,30 @@ napcat:webui:ticket:{ticket}
 ticket TTL 不超过 60 秒，redeem 时先删除 ticket 再返回 session id。
 
 - [ ] **Step 8：增加 Gateway module 和内部 controller**
+
+`napcat-webui-gateway.module.ts` 必须通过 `RedisModule.forRootAsync` 接入 Redis：
+
+```ts
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { RedisModule } from '@nestjs-modules/ioredis';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    RedisModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'single',
+        url:
+          config.get<string>('NAPCAT_WEBUI_GATEWAY_REDIS_URL') ||
+          `redis://${config.get<string>('NAPCAT_WEBUI_GATEWAY_REDIS_HOST') || '127.0.0.1'}:${config.get<number>('NAPCAT_WEBUI_GATEWAY_REDIS_PORT') || 6379}`,
+      }),
+    }),
+  ],
+})
+export class NapcatWebuiGatewayModule {}
+```
 
 内部路径：
 
@@ -355,6 +382,7 @@ git -C D:\MyFiles\KT\Node\kt-template-online-api commit -m "feat: 增加NapCat W
 - Create: `src/apps/napcat-webui-gateway/infrastructure/napcat-webui-credential.client.ts`
 - Create: `src/apps/napcat-webui-gateway/infrastructure/proxy/napcat-webui-proxy.service.ts`
 - Create: `src/apps/napcat-webui-gateway/presentation/public-webui.controller.ts`
+- Modify: `src/apps/napcat-webui-gateway/main.ts`
 - Modify: `src/apps/napcat-webui-gateway/napcat-webui-gateway.module.ts`
 
 - [ ] **Step 1：写代理重写测试**
@@ -365,7 +393,7 @@ git -C D:\MyFiles\KT\Node\kt-template-online-api commit -m "feat: 增加NapCat W
 - 禁止 `../api/auth/login`。
 - `api/QQLogin/CheckLoginStatus` 规范化成 `/api/QQLogin/CheckLoginStatus`。
 - `Location: /webui/login` 重写到 `/napcat-webui/session/:sessionId/webui/webui/login`。
-- `Set-Cookie` 的 Path 改写到当前 session。
+- `buildGatewayCookiePathRewrite({ sessionId })` 返回 `http-proxy-middleware` 的 `cookiePathRewrite` 配置，把 cookie path 限定到当前 session。
 
 - [ ] **Step 2：运行测试确认 RED**
 
@@ -381,7 +409,7 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api jest --runTestsByPath test/
 
 - [ ] **Step 4：实现 proxy helper**
 
-导出 `sanitizeGatewayProxyPath`、`rewriteNapcatLocationHeader`、`rewriteNapcatSetCookieHeader`，逻辑与英文计划一致。
+导出 `sanitizeGatewayProxyPath`、`rewriteNapcatLocationHeader`、`buildGatewayCookiePathRewrite`，逻辑与英文计划一致。Cookie path 改写交给 `http-proxy-middleware` 的 `cookiePathRewrite`，不要手写 `Set-Cookie` 字符串替换。
 
 - [ ] **Step 5：实现 proxy service**
 
@@ -390,6 +418,13 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api jest --runTestsByPath test/
 ```ts
 {
   changeOrigin: true,
+  cookiePathRewrite: buildGatewayCookiePathRewrite({ sessionId }),
+  on: {
+    proxyReq: handleProxyReq,
+    proxyReqWs: handleProxyReqWs,
+    proxyRes: handleProxyRes,
+  },
+  pathRewrite: (_path, req) => sanitizeGatewayProxyPath(req.params[0] || ''),
   secure: false,
   ws: true,
   selfHandleResponse: false,
@@ -397,6 +432,13 @@ pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api jest --runTestsByPath test/
 ```
 
 代理前必须解析 session，拒绝非 active/created session，换取 Credential，注入 `Authorization: Bearer <credential>`，删除浏览器传入的 API/Admin cookies，不允许浏览器改变 target。
+
+WebSocket upgrade 必须仍走 `http-proxy-middleware`，不能通过 MQTT 搬运 WebUI 数据帧，也不要手写 WebSocket tunnel。`NapcatWebuiProxyService` 暴露 `bindWebSocketUpgrade(server)`，内部用 HPM 的 `proxy.upgrade(req, socket, head)`；`main.ts` 在 `app.listen()` 后调用：
+
+```ts
+const server = app.getHttpServer();
+app.get(NapcatWebuiProxyService).bindWebSocketUpgrade(server);
+```
 
 - [ ] **Step 6：实现公开 controller**
 
@@ -407,7 +449,7 @@ GET /napcat-webui/session/:sessionId/bootstrap
 ALL /napcat-webui/session/:sessionId/webui/*
 ```
 
-bootstrap 兑换一次性 ticket，设置 HttpOnly session cookie，跳转到 `/napcat-webui/session/:sessionId/webui/webui`。
+bootstrap 兑换一次性 ticket，设置 HttpOnly session cookie，跳转到 `/napcat-webui/session/:sessionId/webui/webui`。Proxy route 委托给 `NapcatWebuiProxyService`，由该服务统一负责 path sanitize、session 校验、Credential 注入、HPM `cookiePathRewrite`、HTTP proxy 和 WebSocket upgrade。
 
 - [ ] **Step 7：运行测试和类型检查**
 
@@ -611,7 +653,7 @@ pnpm --dir D:\MyFiles\KT\Vue\kt-template-admin --filter @vben/web-antdv-next vit
 
 - [ ] **Step 3：实现生命周期 composable**
 
-创建 `useNapcatWebuiGatewaySession.ts`，状态为 `idle/loading/ready/error/revoked`。`open()` 创建 session，ready 后每 20 秒 heartbeat，heartbeat 失败进入 error 并停止心跳，`revoke()` 停心跳并调用 revoke endpoint，`onBeforeUnmount` 自动 revoke。每个函数补 JSDoc。
+创建 `useNapcatWebuiGatewaySession.ts`，状态为 `idle/loading/ready/error/revoked`。使用 Admin 已有的 `@vueuse/core` `useIntervalFn(callback, 20_000, { immediate: false })` 管理 heartbeat，不手写原生定时器。`open()` 创建 session，ready 后 `resumeHeartbeat()`；heartbeat 失败进入 error 并 `pauseHeartbeat()`；`revoke()` 先 `pauseHeartbeat()` 再调 revoke endpoint；`onBeforeUnmount` 自动 revoke。每个函数补 JSDoc。
 
 - [ ] **Step 4：实现 route 页面**
 

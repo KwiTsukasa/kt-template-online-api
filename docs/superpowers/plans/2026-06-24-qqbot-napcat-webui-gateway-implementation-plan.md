@@ -6,7 +6,7 @@
 
 **Architecture:** The API service remains the Admin-authenticated authority that resolves a QQBot account to its active NapCat container and requests a short-lived Gateway session. The new `kt-napcat-webui-gateway` process owns session storage, one-time bootstrap tickets, NapCat WebUI credential exchange, HTTP/static/API/WebSocket proxying, and audit events. Admin opens `/qqbot/account/:accountId/napcat-webui`, creates a route-bound session, heartbeats while mounted, and revokes on route leave.
 
-**Tech Stack:** NestJS 11, Express adapter, TypeORM/MySQL, Redis through `ioredis`, `http-proxy-middleware` for Express/WebSocket proxying, Vue 3 TSX, Vben Admin, antdv-next, K8s, Jenkins, Caddy/Admin domain route.
+**Tech Stack:** NestJS 11, Express adapter, TypeORM/MySQL, Redis through `@nestjs-modules/ioredis` + `ioredis`, `http-proxy-middleware` for Express/WebSocket proxying, Vue 3 TSX, VueUse `useIntervalFn`, Vben Admin, antdv-next, K8s, Jenkins, Caddy/Admin domain route.
 
 ---
 
@@ -15,7 +15,10 @@
 - Spec: `docs/superpowers/specs/2026-06-24-qqbot-napcat-webui-gateway-design.md`
 - Chinese spec: `docs/superpowers/specs/2026-06-24-qqbot-napcat-webui-gateway-design.zh-CN.md`
 - `http-proxy-middleware` supports Express proxy middleware and WebSocket upgrades through `ws: true` and upgrade handling: <https://github.com/chimurai/http-proxy-middleware>
-- Redis documents `ioredis` as a Node Redis client option, and the package has async Redis primitives suitable for TTL leases: <https://redis.io/tutorials/develop/node/gettingstarted/>
+- `http-proxy-middleware` WebSocket recipe documents `ws: true`, manual `server.on('upgrade', proxy.upgrade)`, multiple targets, and path rewriting: <https://github.com/chimurai/http-proxy-middleware/blob/master/recipes/websocket.md>
+- `@nestjs-modules/ioredis` provides Nest `RedisModule.forRoot` and `@InjectRedis()` over `ioredis`: <https://github.com/nest-modules/ioredis>
+- `connect-redis` is intentionally not used because it is an Express session store, while this Gateway needs API-created sessions, one-time tickets, target metadata, concurrent-session revocation, Credential cache, and audit events: <https://github.com/tj/connect-redis>
+- VueUse `useIntervalFn` wraps `setInterval` with pause/resume controls and is already available in Admin: <https://vueuse.org/shared/useintervalfn/>
 
 ## Scope Check
 
@@ -25,9 +28,9 @@ This is one deployable workstream even though it spans API, Gateway, Admin, and 
 
 ### API repository: `D:\MyFiles\KT\Node\kt-template-online-api`
 
-- Modify `package.json` and `pnpm-lock.yaml`: add `ioredis` and `http-proxy-middleware`, plus gateway start scripts.
+- Modify `package.json` and `pnpm-lock.yaml`: add `@nestjs-modules/ioredis`, `ioredis`, and `http-proxy-middleware`, plus gateway start scripts.
 - Create `src/apps/napcat-webui-gateway/main.ts`: standalone Nest bootstrap on port `48086`.
-- Create `src/apps/napcat-webui-gateway/napcat-webui-gateway.module.ts`: Gateway module imports config, logger, TypeORM, and gateway providers/controllers.
+- Create `src/apps/napcat-webui-gateway/napcat-webui-gateway.module.ts`: Gateway module imports config, logger, TypeORM, `RedisModule`, and gateway providers/controllers.
 - Create `src/apps/napcat-webui-gateway/config/napcat-webui-gateway-config.service.ts`: reads Gateway env with bounded defaults.
 - Create `src/apps/napcat-webui-gateway/domain/napcat-webui-gateway.types.ts`: session, audit, target, and proxy types.
 - Create `src/apps/napcat-webui-gateway/infrastructure/session/napcat-webui-gateway-redis.store.ts`: Redis-backed session and ticket store.
@@ -572,10 +575,10 @@ git -C D:\MyFiles\KT\Node\kt-template-online-api commit -m "feat: 增加NapCat W
 Run:
 
 ```powershell
-pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api add ioredis http-proxy-middleware
+pnpm --dir D:\MyFiles\KT\Node\kt-template-online-api add @nestjs-modules/ioredis ioredis http-proxy-middleware
 ```
 
-Expected: `package.json` and `pnpm-lock.yaml` update. Keep `ws` unchanged because it already exists.
+Expected: `package.json` and `pnpm-lock.yaml` update. Keep `ws` unchanged because it already exists. Do not add `connect-redis` because Gateway sessions are domain sessions, not Express login sessions.
 
 - [ ] **Step 2: Add package scripts**
 
@@ -774,7 +777,26 @@ The `heartbeat()` implementation must reject `revoked`, `expired`, `failed`, and
 
 - [ ] **Step 7: Implement Redis store and ticket service**
 
-Create `src/apps/napcat-webui-gateway/infrastructure/session/napcat-webui-gateway-redis.store.ts`. Use `ioredis` `set(key, value, 'PX', ttlMs)`, `get`, and a secondary index key:
+Create `src/apps/napcat-webui-gateway/infrastructure/session/napcat-webui-gateway-redis.store.ts`. Inject Redis through `@nestjs-modules/ioredis`:
+
+```ts
+import { Injectable } from '@nestjs/common';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import type Redis from 'ioredis';
+
+@Injectable()
+export class NapcatWebuiGatewayRedisStore
+  implements NapcatWebuiGatewaySessionStore
+{
+  /**
+   * Initializes the Redis-backed Gateway session store.
+   * @param redis Shared Gateway Redis client managed by Nest RedisModule.
+   */
+  constructor(@InjectRedis() private readonly redis: Redis) {}
+}
+```
+
+Use Redis `set(key, value, 'PX', ttlMs)`, `get`, and a secondary index key:
 
 ```text
 napcat:webui:session:{sessionId}
@@ -791,7 +813,31 @@ Ticket TTL must be 60 seconds or less. Redemption deletes the ticket key before 
 
 - [ ] **Step 8: Add Gateway module and internal controller**
 
-Create `src/apps/napcat-webui-gateway/napcat-webui-gateway.module.ts` and `presentation/internal-session.controller.ts`. Internal controller paths:
+Create `src/apps/napcat-webui-gateway/napcat-webui-gateway.module.ts` and `presentation/internal-session.controller.ts`. The module must use the community Redis module rather than a custom Redis provider:
+
+```ts
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { RedisModule } from '@nestjs-modules/ioredis';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    RedisModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'single',
+        url:
+          config.get<string>('NAPCAT_WEBUI_GATEWAY_REDIS_URL') ||
+          `redis://${config.get<string>('NAPCAT_WEBUI_GATEWAY_REDIS_HOST') || '127.0.0.1'}:${config.get<number>('NAPCAT_WEBUI_GATEWAY_REDIS_PORT') || 6379}`,
+      }),
+    }),
+  ],
+})
+export class NapcatWebuiGatewayModule {}
+```
+
+Internal controller paths:
 
 ```text
 POST /internal/sessions
@@ -853,6 +899,7 @@ git -C D:\MyFiles\KT\Node\kt-template-online-api commit -m "feat: 增加NapCat W
 - Create: `src/apps/napcat-webui-gateway/infrastructure/napcat-webui-credential.client.ts`
 - Create: `src/apps/napcat-webui-gateway/infrastructure/proxy/napcat-webui-proxy.service.ts`
 - Create: `src/apps/napcat-webui-gateway/presentation/public-webui.controller.ts`
+- Modify: `src/apps/napcat-webui-gateway/main.ts`
 - Modify: `src/apps/napcat-webui-gateway/napcat-webui-gateway.module.ts`
 
 - [ ] **Step 1: Write proxy rewrite tests**
@@ -861,8 +908,8 @@ Create `test/apps/napcat-webui-gateway/proxy-rewrite.spec.ts`:
 
 ```ts
 import {
+  buildGatewayCookiePathRewrite,
   rewriteNapcatLocationHeader,
-  rewriteNapcatSetCookieHeader,
   sanitizeGatewayProxyPath,
 } from '../../../src/apps/napcat-webui-gateway/infrastructure/proxy/napcat-webui-proxy.service';
 
@@ -887,12 +934,10 @@ describe('NapCat WebUI Gateway proxy rewriting', () => {
     ).toBe('/napcat-webui/session/session-1/webui/webui/login');
   });
 
-  it('scopes cookies to the active session path', () => {
-    expect(
-      rewriteNapcatSetCookieHeader('napcat=value; Path=/; HttpOnly', {
-        sessionId: 'session-1',
-      }),
-    ).toContain('Path=/napcat-webui/session/session-1');
+  it('delegates cookie path rewriting to http-proxy-middleware options', () => {
+    expect(buildGatewayCookiePathRewrite({ sessionId: 'session-1' })).toEqual({
+      '*': '/napcat-webui/session/session-1',
+    });
   });
 });
 ```
@@ -913,7 +958,7 @@ Do not log `webuiToken`, hash, or Credential.
 
 - [ ] **Step 4: Implement proxy helpers**
 
-Create pure helper exports in `src/apps/napcat-webui-gateway/infrastructure/proxy/napcat-webui-proxy.service.ts`:
+Create pure helper exports in `src/apps/napcat-webui-gateway/infrastructure/proxy/napcat-webui-proxy.service.ts`. Keep cookie rewriting as a `http-proxy-middleware` option instead of rewriting `Set-Cookie` by hand:
 
 ```ts
 export function sanitizeGatewayProxyPath(rawPath: string): string {
@@ -932,14 +977,10 @@ export function rewriteNapcatLocationHeader(
   return `/napcat-webui/session/${input.sessionId}/webui/${location.replace(/^\/+/, '')}`;
 }
 
-export function rewriteNapcatSetCookieHeader(
-  value: string,
-  input: { sessionId: string },
-) {
-  return value.replace(
-    /Path=[^;]*/i,
-    `Path=/napcat-webui/session/${input.sessionId}`,
-  );
+export function buildGatewayCookiePathRewrite(input: { sessionId: string }) {
+  return {
+    '*': `/napcat-webui/session/${input.sessionId}`,
+  };
 }
 ```
 
@@ -950,6 +991,13 @@ Use `createProxyMiddleware` from `http-proxy-middleware` with:
 ```ts
 {
   changeOrigin: true,
+  cookiePathRewrite: buildGatewayCookiePathRewrite({ sessionId }),
+  on: {
+    proxyReq: handleProxyReq,
+    proxyReqWs: handleProxyReqWs,
+    proxyRes: handleProxyRes,
+  },
+  pathRewrite: (_path, req) => sanitizeGatewayProxyPath(req.params[0] || ''),
   secure: false,
   ws: true,
   selfHandleResponse: false,
@@ -967,6 +1015,28 @@ Before proxying:
 
 On first successful upstream response, call `sessionService.markActive(sessionId)`.
 
+For WebSocket upgrade, do not tunnel frames through MQTT and do not hand-roll a WebSocket bridge. Expose a method on `NapcatWebuiProxyService` and bind HPM's upgrade handler from `main.ts`:
+
+```ts
+/**
+ * Binds NapCat WebUI WebSocket upgrades to the same proxy middleware.
+ * @param server HTTP server created by Nest's Express adapter.
+ */
+bindWebSocketUpgrade(server: import('http').Server) {
+  server.on('upgrade', (req, socket, head) => {
+    if (!req.url?.startsWith('/napcat-webui/session/')) return;
+    this.proxy.upgrade(req, socket, head);
+  });
+}
+```
+
+Modify `src/apps/napcat-webui-gateway/main.ts` after `app.listen()`:
+
+```ts
+  const server = app.getHttpServer();
+  app.get(NapcatWebuiProxyService).bindWebSocketUpgrade(server);
+```
+
 - [ ] **Step 6: Implement public controller**
 
 Create `src/apps/napcat-webui-gateway/presentation/public-webui.controller.ts`:
@@ -978,7 +1048,7 @@ ALL /napcat-webui/session/:sessionId/webui/*
 
 Bootstrap must redeem `ticket`, set an HttpOnly gateway cookie scoped to `/napcat-webui/session/:sessionId`, and redirect to `/napcat-webui/session/:sessionId/webui/webui`.
 
-Proxy route delegates to `NapcatWebuiProxyService`.
+Proxy route delegates to `NapcatWebuiProxyService`. The proxy service remains responsible for path sanitization, session validation, Credential injection, HPM `cookiePathRewrite`, HPM HTTP proxying, and HPM WebSocket upgrade handling.
 
 - [ ] **Step 7: Run tests and typecheck**
 
@@ -1445,6 +1515,7 @@ Expected: FAIL because the page does not exist.
 Create `useNapcatWebuiGatewaySession.ts` with:
 
 ```ts
+import { useIntervalFn } from '@vueuse/core';
 import { onBeforeUnmount, ref } from 'vue';
 import {
   createQqbotNapcatWebuiSession,
@@ -1465,42 +1536,43 @@ export function useNapcatWebuiGatewaySession(accountId: string) {
   const errorMessage = ref('');
   const session = ref<QqbotNapcatApi.WebuiGatewaySession>();
   const state = ref<NapcatWebuiSessionState>('idle');
-  let heartbeatTimer: number | undefined;
 
+  const { pause: pauseHeartbeat, resume: resumeHeartbeat } = useIntervalFn(
+    () => {
+      const sessionId = session.value?.sessionId;
+      if (!sessionId) return;
+      void heartbeatQqbotNapcatWebuiSession(sessionId).catch(() => {
+        errorMessage.value = 'NapCat WebUI 会话心跳失败，请重新打开';
+        state.value = 'error';
+        pauseHeartbeat();
+      });
+    },
+    20_000,
+    { immediate: false },
+  );
+
+  /**
+   * Creates a Gateway session and starts the route-bound heartbeat.
+   */
   async function open() {
     state.value = 'loading';
     errorMessage.value = '';
     try {
       session.value = await createQqbotNapcatWebuiSession(accountId);
       state.value = 'ready';
-      startHeartbeat();
+      resumeHeartbeat();
     } catch (error: any) {
       errorMessage.value = error?.message || 'NapCat WebUI 会话创建失败';
       state.value = 'error';
+      pauseHeartbeat();
     }
   }
 
-  function startHeartbeat() {
-    stopHeartbeat();
-    heartbeatTimer = window.setInterval(() => {
-      const sessionId = session.value?.sessionId;
-      if (!sessionId) return;
-      void heartbeatQqbotNapcatWebuiSession(sessionId).catch(() => {
-        errorMessage.value = 'NapCat WebUI 会话心跳失败，请重新打开';
-        state.value = 'error';
-        stopHeartbeat();
-      });
-    }, 20_000);
-  }
-
-  function stopHeartbeat() {
-    if (!heartbeatTimer) return;
-    window.clearInterval(heartbeatTimer);
-    heartbeatTimer = undefined;
-  }
-
+  /**
+   * Revokes the current Gateway session and stops heartbeat traffic.
+   */
   async function revoke() {
-    stopHeartbeat();
+    pauseHeartbeat();
     const sessionId = session.value?.sessionId;
     if (!sessionId) return;
     await revokeQqbotNapcatWebuiSession(sessionId).catch(() => undefined);

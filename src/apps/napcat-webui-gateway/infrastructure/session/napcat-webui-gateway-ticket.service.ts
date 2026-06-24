@@ -35,14 +35,13 @@ export class NapcatWebuiGatewayTicketService {
   }
 
   /**
-   * Redeems a ticket once by deleting the Redis key before returning the session id.
+   * Redeems a ticket once with Redis GETDEL so deletion happens before returning.
    * @param ticket - Opaque ticket from the bootstrap iframe URL.
    * @returns Session id when the ticket existed, otherwise undefined.
    */
   async redeem(ticket: string) {
     const key = this.ticketKey(ticket);
-    const sessionId = await this.redis.get(key);
-    await this.redis.del(key);
+    const sessionId = await this.redis.getdel(key);
     return sessionId || undefined;
   }
 

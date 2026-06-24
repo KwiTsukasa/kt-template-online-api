@@ -117,6 +117,19 @@ class FakeRedis {
   }
 
   /**
+   * Atomically reads and deletes one key from the fake Redis store.
+   * @param key - Redis key to consume.
+   * @returns Stored value before deletion or null.
+   */
+  async getdel(key: string) {
+    this.calls.push(`getdel:${key}`);
+    const value = this.values.get(key) ?? null;
+    this.values.delete(key);
+    this.ttl.delete(key);
+    return value;
+  }
+
+  /**
    * Deletes one or more keys from the fake Redis store.
    * @param keys - Redis keys to delete.
    * @returns Number of deleted keys.
@@ -318,13 +331,16 @@ describe('NapcatWebuiGatewayTicketService', () => {
 
     expect(sessionId).toBe('session-1');
     expect(secondRedeem).toBeUndefined();
-    expect(redis.values.get(`napcat:webui:ticket:${ticket}`)).toBeUndefined();
-    expect(redis.calls).toEqual(
-      expect.arrayContaining([
-        `get:napcat:webui:ticket:${ticket}`,
-        `del:napcat:webui:ticket:${ticket}`,
-      ]),
-    );
+    const ticketKey = `napcat:webui:ticket:${ticket}`;
+    const ticketCalls = redis.calls.filter((call) => call.includes(ticketKey));
+    expect(redis.values.get(ticketKey)).toBeUndefined();
+    expect(ticketCalls).toEqual([
+      `set:${ticketKey}:PX:60000`,
+      `getdel:${ticketKey}`,
+      `getdel:${ticketKey}`,
+    ]);
+    expect(ticketCalls).not.toContain(`get:${ticketKey}`);
+    expect(ticketCalls).not.toContain(`del:${ticketKey}`);
   });
 });
 

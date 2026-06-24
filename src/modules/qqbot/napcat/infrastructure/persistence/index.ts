@@ -9,6 +9,7 @@ import { NapcatRiskMode } from './napcat-risk-mode.entity';
 import { NapcatRuntimeCleanup } from './napcat-runtime-cleanup.entity';
 import { NapcatRuntimeProfile } from './napcat-runtime-profile.entity';
 import { NapcatSessionBehaviorProfile } from './napcat-session-behavior-profile.entity';
+import { NapcatWebuiGatewayAudit } from '../../webui-gateway/infrastructure/persistence/napcat-webui-gateway-audit.entity';
 
 export const NAPCAT_RUNTIME_DOMAIN_CONTRACT = {
   tables: [
@@ -23,6 +24,7 @@ export const NAPCAT_RUNTIME_DOMAIN_CONTRACT = {
     'napcat_session_behavior_profile',
     'napcat_login_event',
     'napcat_risk_mode',
+    'qqbot_napcat_webui_gateway_audit',
   ],
 } as const;
 
@@ -38,6 +40,7 @@ export const NAPCAT_RUNTIME_ENTITIES = [
   NapcatSessionBehaviorProfile,
   NapcatLoginEvent,
   NapcatRiskMode,
+  NapcatWebuiGatewayAudit,
 ];
 
 export {
@@ -46,4 +49,5 @@ export {
   NapcatRiskMode,
   NapcatRuntimeProfile,
   NapcatSessionBehaviorProfile,
+  NapcatWebuiGatewayAudit,
 };

@@ -1206,6 +1206,15 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
   }
 
   /**
+   * Finds the primary bound NapCat container runtime for an account.
+   * @param accountId - QQBot account id whose primary NapCat binding should be resolved.
+   * @returns Primary runtime with WebUI token selected, or null when no active binding exists.
+   */
+  async findPrimaryContainerByAccountId(accountId: string) {
+    return this.getPrimaryRuntime(accountId);
+  }
+
+  /**
    * 查询 NapCat 登录运行态数据。
    * @param containerId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
    */

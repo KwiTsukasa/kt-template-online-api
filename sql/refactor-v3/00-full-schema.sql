@@ -1125,3 +1125,20 @@ CREATE TABLE IF NOT EXISTS napcat_risk_mode (
   UNIQUE KEY uk_napcat_risk_mode_account (account_id),
   KEY idx_napcat_risk_mode_mode (risk_mode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_napcat_webui_gateway_audit (
+  id BIGINT NOT NULL PRIMARY KEY,
+  session_id VARCHAR(64) NOT NULL,
+  admin_user_id BIGINT NOT NULL,
+  account_id BIGINT NOT NULL,
+  self_id VARCHAR(32) NOT NULL,
+  container_id BIGINT NOT NULL,
+  event_type VARCHAR(64) NOT NULL,
+  client_ip VARCHAR(128) NULL,
+  user_agent VARCHAR(512) NULL,
+  detail_json JSON NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_napcat_webui_gateway_audit_session (session_id),
+  KEY idx_napcat_webui_gateway_audit_account_event (account_id, event_type),
+  KEY idx_napcat_webui_gateway_audit_admin_time (admin_user_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

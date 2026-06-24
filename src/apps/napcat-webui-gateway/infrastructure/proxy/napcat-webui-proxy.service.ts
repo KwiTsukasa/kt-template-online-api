@@ -310,23 +310,46 @@ export class NapcatWebuiProxyService {
           proxyReq.removeHeader('cookie');
           proxyReq.setHeader('Authorization', `Bearer ${credential}`);
         },
-        proxyRes: rewriteTextResponse
-          ? responseInterceptor(async (responseBuffer, proxyRes) => {
-              this.rewriteLocationHeader(proxyRes.headers, session);
-              return rewriteNapcatTextResponse({
-                body: responseBuffer.toString('utf8'),
-                sessionId: session.sessionId,
-              });
-            })
-          : (proxyRes) => {
-              this.rewriteLocationHeader(proxyRes.headers, session);
-            },
+        proxyRes: this.createProxyResponseHandler(
+          session,
+          rewriteTextResponse,
+        ),
       },
       secure: false,
       selfHandleResponse: rewriteTextResponse,
       target: session.upstreamBaseUrl,
       ws: true,
     });
+  }
+
+  /**
+   * Builds the upstream response handler and rewrites redirect headers before HPM copies them to Express.
+   * @param session - Active Gateway session whose route prefix owns browser redirects.
+   * @param rewriteTextResponse - Whether this response is buffered for body path rewriting.
+   * @returns HPM proxy response handler.
+   */
+  private createProxyResponseHandler(
+    session: NapcatWebuiGatewaySession,
+    rewriteTextResponse: boolean,
+  ) {
+    if (!rewriteTextResponse) {
+      return (proxyRes: IncomingMessage) => {
+        this.rewriteLocationHeader(proxyRes.headers, session);
+      };
+    }
+
+    const interceptTextResponse = responseInterceptor(
+      async (responseBuffer) =>
+        rewriteNapcatTextResponse({
+          body: responseBuffer.toString('utf8'),
+          sessionId: session.sessionId,
+        }),
+    );
+
+    return (proxyRes: IncomingMessage, req: Request, res: Response) => {
+      this.rewriteLocationHeader(proxyRes.headers, session);
+      return interceptTextResponse(proxyRes, req, res);
+    };
   }
 
   /**

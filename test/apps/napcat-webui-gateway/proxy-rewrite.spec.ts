@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { HttpStatus, type INestApplication } from '@nestjs/common';
@@ -337,5 +338,112 @@ describe('PublicWebuiController bootstrap', () => {
 
     expect(sessionService.requireBootstrapSession).not.toHaveBeenCalled();
     expect(sessionService.markActive).not.toHaveBeenCalled();
+  });
+});
+
+describe('NapcatWebuiProxyService redirect rewriting', () => {
+  let app: INestApplication;
+  let upstream: Server;
+  let upstreamBaseUrl: string;
+  let sessionService: {
+    requireProxySession: jest.Mock;
+  };
+  let credentialClient: {
+    getCredential: jest.Mock;
+  };
+
+  /**
+   * Starts a tiny NapCat-like upstream that redirects `/webui` to `/webui/`.
+   * @returns Upstream server plus the loopback base URL assigned by the OS.
+   */
+  async function startRedirectUpstream() {
+    const server = createServer((req, res) => {
+      if (req.url === '/webui') {
+        res.statusCode = HttpStatus.MOVED_PERMANENTLY;
+        res.setHeader('content-type', 'text/html; charset=UTF-8');
+        res.setHeader('location', '/webui/');
+        res.end('<a href="/webui/">Redirecting</a>');
+        return;
+      }
+
+      res.statusCode = HttpStatus.OK;
+      res.setHeader('content-type', 'text/html; charset=UTF-8');
+      res.end('<script type="module" src="/webui/assets/index.js"></script>');
+    });
+
+    await new Promise<void>((resolveListen) => {
+      server.listen(0, '127.0.0.1', resolveListen);
+    });
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+      throw new Error('proxy rewrite test upstream did not expose a port');
+    }
+
+    return {
+      baseUrl: `http://127.0.0.1:${address.port}`,
+      server,
+    };
+  }
+
+  beforeEach(async () => {
+    const started = await startRedirectUpstream();
+    upstream = started.server;
+    upstreamBaseUrl = started.baseUrl;
+
+    sessionService = {
+      requireProxySession: jest.fn(),
+    };
+    credentialClient = {
+      getCredential: jest.fn().mockResolvedValue('credential-1'),
+    };
+
+    sessionService.requireProxySession.mockResolvedValue(
+      createGatewaySession({
+        status: 'active',
+        upstreamBaseUrl,
+      }),
+    );
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [PublicWebuiController],
+      providers: [
+        {
+          provide: NapcatWebuiGatewaySessionService,
+          useValue: sessionService,
+        },
+        {
+          provide: NapcatWebuiGatewayTicketService,
+          useValue: {
+            redeem: jest.fn(),
+          },
+        },
+        {
+          provide: NapcatWebuiCredentialClient,
+          useValue: credentialClient,
+        },
+        NapcatWebuiProxyService,
+      ],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+  });
+
+  afterEach(async () => {
+    await app?.close();
+    await new Promise<void>((resolveClose) =>
+      upstream.close(() => resolveClose()),
+    );
+  });
+
+  it('rewrites upstream WebUI redirects before intercepted headers are copied to the browser', async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/napcat-webui/session/${SESSION_ID}/webui/webui`)
+      .redirects(0)
+      .expect(HttpStatus.MOVED_PERMANENTLY);
+
+    expect(response.headers.location).toBe(
+      `/napcat-webui/session/${SESSION_ID}/webui/webui/`,
+    );
   });
 });

@@ -100,6 +100,8 @@ pipeline {
     string(name: 'K8S_CONTAINER', defaultValue: 'api', description: 'Deployment 内业务容器名称')
     string(name: 'K8S_ENV_SECRET', defaultValue: 'kt-template-online-api-env', description: '由 .env.production 生成的 K8s Secret 名称')
     string(name: 'K8S_ROLLOUT_TIMEOUT', defaultValue: '180s', description: 'kubectl rollout status 超时时间')
+    string(name: 'QQBOT_NAPCAT_IMAGE_OVERRIDE', defaultValue: '', description: 'Verified NapCat runtime image to inject into API deployment; empty keeps manifest/default env')
+    string(name: 'QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE', defaultValue: '', description: 'Verified NapCat runtime profile version to inject into API deployment; empty keeps manifest/default env')
   }
 
   environment {
@@ -337,6 +339,8 @@ pipeline {
           def kubeConfigArg = "--kubeconfig ${shellQuote(kubeConfigFile)}"
           def namespaceArg = "-n ${shellQuote(namespace)}"
           def changeCause = "Jenkins ${env.JOB_NAME} #${env.BUILD_NUMBER} ${env.GIT_COMMIT ?: 'unknown'}"
+          def napcatImageOverride = params.QQBOT_NAPCAT_IMAGE_OVERRIDE?.trim()
+          def napcatProfileOverride = params.QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE?.trim()
 
           // 每次发布都从 Agent 私有 env 文件重建 Secret，避免真实配置进入 Git。
           runCmd("""
@@ -367,6 +371,17 @@ pipeline {
             kubectl ${kubeConfigArg} apply -f ${shellQuote(manifestFile)}
             kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote("deployment/${deploymentName}")} ${shellQuote("${containerName}=${env.DOCKER_IMAGE}")}
             kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote('deployment/kt-napcat-webui-gateway')} ${shellQuote("gateway=${env.GATEWAY_DOCKER_IMAGE}")}
+          """.stripIndent())
+
+          if (napcatImageOverride) {
+            runCmd("kubectl ${kubeConfigArg} ${namespaceArg} set env ${shellQuote("deployment/${deploymentName}")} ${shellQuote("QQBOT_NAPCAT_IMAGE=${napcatImageOverride}")}")
+          }
+          if (napcatProfileOverride) {
+            runCmd("kubectl ${kubeConfigArg} ${namespaceArg} set env ${shellQuote("deployment/${deploymentName}")} ${shellQuote("QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION=${napcatProfileOverride}")}")
+          }
+
+          runCmd("""
+            set -e
             kubectl ${kubeConfigArg} ${namespaceArg} annotate ${shellQuote("deployment/${deploymentName}")} \\
               ${shellQuote("kubernetes.io/change-cause=${changeCause}")} --overwrite
             kubectl ${kubeConfigArg} ${namespaceArg} annotate ${shellQuote('deployment/kt-napcat-webui-gateway')} \\

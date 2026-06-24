@@ -23,6 +23,8 @@ ENV FFLOGS_GRAPHQL_URL=https://cn.fflogs.com/api/v2/client
 ENV FFLOGS_TOKEN_URL=https://cn.fflogs.com/oauth/token
 ENV FFLOGS_DEFAULT_SERVER_REGION=CN
 ENV FFLOGS_REQUEST_TIMEOUT_MS=10000
+# skia-canvas uses binary.module_name=index, so node-pre-gyp reads this mirror key.
+ENV npm_config_index_binary_host_mirror=https://registry.npmmirror.com/-/binary/skia-canvas/
 
 COPY package.json pnpm-lock.yaml ./
 

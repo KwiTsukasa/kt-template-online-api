@@ -43,6 +43,9 @@ describe('NapCat WebUI Gateway deployment configuration', () => {
       expect(dockerfile).toContain('mirrors.aliyun.com/debian');
       expect(dockerfile).toContain('mirrors.aliyun.com/debian-security');
       expect(dockerfile).toContain('Acquire::Retries=5');
+      expect(dockerfile).toContain(
+        'npm_config_index_binary_host_mirror=https://registry.npmmirror.com/-/binary/skia-canvas/',
+      );
     }
   });
 

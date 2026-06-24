@@ -63,6 +63,21 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(script).toContain('Refusing to delete unsafe output root');
   });
 
+  /**
+   * Verifies the checked-in operator guide documents the full release evidence contract.
+   */
+  it('documents complete release metadata for staging NapCat Shell artifacts', () => {
+    const readme = readSource('ci/napcat-desktop-cn/README.md');
+
+    expect(readme).toContain('--upstream-release-tag');
+    expect(readme).toContain('--upstream-release-commit');
+    expect(readme).toContain('--napcat-base-image-digest');
+    expect(readme).toContain('--jenkins-build-url');
+    expect(readme).toContain('NapCat.Shell.zip');
+    expect(readme).toContain('fork-artifact.json');
+    expect(readme).toContain('sha256:');
+  });
+
   it('uses source-built NapCat Shell artifact instead of bundled JS patching', () => {
     const dockerfile = readSource('ci/napcat-desktop-cn/Dockerfile');
     const verify = readSource('ci/napcat-desktop-cn/verify.sh');

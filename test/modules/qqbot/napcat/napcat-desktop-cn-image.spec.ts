@@ -76,14 +76,14 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).not.toContain('selfInfo?.online !== false');
   });
 
-  it('deploys the production API with the verified desktop-cn-v6 runtime profile', () => {
+  it('deploys the production API with the verified desktop-cn-v7 runtime profile', () => {
     const manifest = readSource('k8s/prod/api.yaml');
 
     expect(manifest).toContain('name: QQBOT_NAPCAT_IMAGE');
-    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v6');
+    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v7');
     expect(manifest).toContain('name: QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION');
-    expect(manifest).toContain('value: desktop-cn-v6');
-    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v5');
+    expect(manifest).toContain('value: desktop-cn-v7');
+    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v6');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v4');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v3');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v2');

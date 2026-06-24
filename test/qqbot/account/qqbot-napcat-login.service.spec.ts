@@ -3375,6 +3375,63 @@ describe('QqbotNapcatLoginService', () => {
     );
   });
 
+  it('does not complete an expired refresh session from a delayed background relogin task', async () => {
+    const loginSessionRepository = createLoginSessionRepository();
+    const loginStateStore = new NapcatLoginStateStoreService(
+      loginSessionRepository as any,
+    );
+    const accountService = {
+      ensureScannedAccount: jest.fn().mockResolvedValue('account-expired'),
+    };
+    const containerService = {
+      bindAccount: jest.fn().mockResolvedValue(undefined),
+      findRuntimeById: jest.fn().mockResolvedValue({ id: 'container-expired' }),
+      removeUnboundContainer: jest.fn().mockResolvedValue(undefined),
+    };
+    const expireService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+      loginStateStore,
+    );
+    const session = {
+      accountId: 'account-expired',
+      containerId: 'container-expired',
+      containerName: 'napcat-expired',
+      createdAt: Date.now() - 180_000,
+      expectedSelfId: '10001',
+      expiresAt: Date.now() - 1,
+      id: 'session-expired-background',
+      mode: 'refresh',
+      qrcode: 'expired-qrcode',
+      status: 'pending',
+      webuiPort: 6110,
+    };
+    (expireService as any).sessions.set(session.id, session);
+    await loginStateStore.flushSessionWrites(session.id);
+    jest.spyOn(expireService as any, 'getLoginInfo').mockResolvedValue({
+      nick: 'Mirror',
+      online: true,
+      uin: '10001',
+    });
+
+    const result = await (expireService as any).completeLogin(session, {
+      id: 'container-expired',
+    });
+    await loginStateStore.flushSessionWrites(session.id);
+
+    expect(result.status).toBe('expired');
+    expect(accountService.ensureScannedAccount).not.toHaveBeenCalled();
+    expect(containerService.bindAccount).not.toHaveBeenCalled();
+    expect(loginSessionRepository.rows[0]).toEqual(
+      expect.objectContaining({
+        sessionKey: session.id,
+        status: 'expired',
+      }),
+    );
+  });
+
   it('refreshes stale relogin qrcode from NapCat status instead of staying in quick login pending', async () => {
     (service as any).sessions.set('session-stale-relogin-qrcode', {
       accountId: 'account-1',

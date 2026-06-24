@@ -828,6 +828,9 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime,
     options: { loginInfo?: NapcatLoginInfo; successMessage?: string } = {},
   ): Promise<QqbotLoginScanResult> {
+    const stalePendingResult = await this.resolveStalePendingSession(session);
+    if (stalePendingResult) return stalePendingResult;
+
     const loginInfo = options.loginInfo ?? (await this.getLoginInfo(container));
     if (loginInfo.online === false) {
       return this.failSession(session, 'NapCat 当前账号已离线，请重新更新登录');
@@ -1877,6 +1880,23 @@ export class QqbotNapcatLoginService {
   }
 
   /**
+   * Stops delayed background login work from mutating a pending session after it expired or was replaced.
+   * @param session - Pending scan session captured by an async relogin task; its cache identity and TTL decide whether writes are still valid.
+   * @returns A terminal or current result when the task must stop, otherwise undefined to allow the caller to continue.
+   */
+  private async resolveStalePendingSession(session: QqbotLoginScanSession) {
+    if (session.status !== 'pending') return undefined;
+    if (Date.now() > session.expiresAt) return this.expireSession(session);
+
+    const current = this.loginSessionStore.getCached(session.id);
+    if (current === session) return undefined;
+    if (current) return this.toResult(current);
+
+    session.errorMessage = '登录会话已失效，请重新发起更新登录';
+    return this.toResult(session);
+  }
+
+  /**
    * 执行 NapCat 登录运行态流程。
    * @param session - session 输入；使用 `status`、`captchaUrl`、`errorMessage`、`passwordMd5` 字段生成结果。
    * @param errorMessage - errorMessage 输入；驱动 `this.publishScanResultEvent()` 的 NapCat步骤。
@@ -2262,6 +2282,7 @@ export class QqbotNapcatLoginService {
         );
         if (quickLoginCompleted) return;
       }
+      if (await this.resolveStalePendingSession(session)) return;
 
       const passwordLoginCompleted = await this.tryPasswordRelogin(
         session,
@@ -2269,6 +2290,7 @@ export class QqbotNapcatLoginService {
         password,
       );
       if (passwordLoginCompleted) return;
+      if (await this.resolveStalePendingSession(session)) return;
 
       this.publishScanResultEvent(
         session,

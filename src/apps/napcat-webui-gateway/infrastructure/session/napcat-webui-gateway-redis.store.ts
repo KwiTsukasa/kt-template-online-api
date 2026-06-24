@@ -10,11 +10,36 @@ import type {
 const SESSION_KEY_PREFIX = 'napcat:webui:session:';
 const USER_ACCOUNT_KEY_PREFIX = 'napcat:webui:user-account:';
 const TERMINAL_SESSION_STATUSES = ['expired', 'failed', 'revoked'];
-const COMPARE_DELETE_SCRIPT = `
-if redis.call("GET", KEYS[1]) == ARGV[1] then
-  return redis.call("DEL", KEYS[1])
+const UPDATE_SESSION_SCRIPT = `
+local currentJson = redis.call("GET", KEYS[1])
+if not currentJson then
+  return {0, "Gateway session is not active"}
 end
-return 0
+
+local current = cjson.decode(currentJson)
+local next = cjson.decode(ARGV[2])
+local terminal = { expired = true, failed = true, revoked = true }
+local indexValue = redis.call("GET", KEYS[2])
+
+if terminal[current["status"]] and not terminal[next["status"]] then
+  return {0, "Gateway session is not active"}
+end
+
+if terminal[next["status"]] then
+  redis.call("PSETEX", KEYS[1], ARGV[3], ARGV[2])
+  if indexValue == ARGV[1] then
+    redis.call("DEL", KEYS[2])
+  end
+  return {1, ARGV[2]}
+end
+
+if indexValue and indexValue ~= ARGV[1] then
+  return {0, "Gateway session is not active"}
+end
+
+redis.call("PSETEX", KEYS[1], ARGV[3], ARGV[2])
+redis.call("SET", KEYS[2], ARGV[1], "PX", ARGV[4])
+return {1, ARGV[2]}
 `;
 
 @Injectable()
@@ -94,12 +119,7 @@ export class NapcatWebuiGatewayRedisStore
       throw new Error('Gateway terminal session cannot become active');
     }
 
-    await this.writeSession(next);
-    if (this.isTerminal(next)) {
-      await this.deleteUserAccountIndexIfCurrent(next);
-    } else {
-      await this.writeUserAccountIndex(next);
-    }
+    await this.writeSessionAndIndexAtomically(next);
 
     return next;
   }
@@ -130,21 +150,6 @@ export class NapcatWebuiGatewayRedisStore
   }
 
   /**
-   * Deletes the user/account index only when it still points at the terminal session.
-   * @param session - Terminal Gateway session whose index may need cleanup.
-   */
-  private async deleteUserAccountIndexIfCurrent(
-    session: NapcatWebuiGatewaySession,
-  ) {
-    await this.redis.eval(
-      COMPARE_DELETE_SCRIPT,
-      1,
-      this.userAccountKey(session.adminUserId, session.accountId),
-      session.sessionId,
-    );
-  }
-
-  /**
    * Builds the Redis session key.
    * @param sessionId - Gateway session id.
    * @returns Redis key for session JSON.
@@ -170,6 +175,29 @@ export class NapcatWebuiGatewayRedisStore
    */
   private remainingTtlMs(session: NapcatWebuiGatewaySession) {
     return Math.max(1, session.expiresAt - this.config.now());
+  }
+
+  /**
+   * Atomically writes session JSON and maintains the user/account index.
+   * @param session - Already-merged Gateway session to commit.
+   */
+  private async writeSessionAndIndexAtomically(
+    session: NapcatWebuiGatewaySession,
+  ) {
+    const sessionJson = JSON.stringify(session);
+    const result = (await this.redis.eval(
+      UPDATE_SESSION_SCRIPT,
+      2,
+      this.sessionKey(session.sessionId),
+      this.userAccountKey(session.adminUserId, session.accountId),
+      session.sessionId,
+      sessionJson,
+      this.remainingTtlMs(session),
+      this.remainingTtlMs(session),
+    )) as [number, string];
+    if (!Array.isArray(result) || Number(result[0]) !== 1) {
+      throw new Error(String(result?.[1] || 'Gateway session is not active'));
+    }
   }
 
   /**

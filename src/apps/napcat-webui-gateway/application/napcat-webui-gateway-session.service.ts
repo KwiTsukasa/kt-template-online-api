@@ -42,7 +42,7 @@ export class NapcatWebuiGatewaySessionService {
       normalizedInput.accountId,
     );
     if (existing) {
-      await this.store.update(existing.sessionId, {
+      await this.updateSession(existing.sessionId, {
         revokedAt: this.config.now(),
         status: 'revoked',
       });
@@ -77,7 +77,7 @@ export class NapcatWebuiGatewaySessionService {
     const session = await this.requireUsableSession(sessionId);
     const now = this.config.now();
 
-    return this.store.update(sessionId, {
+    return this.updateSession(sessionId, {
       activeAt: session.activeAt || now,
       expiresAt: now + this.config.ttlMs(),
       lastSeenAt: now,
@@ -91,12 +91,13 @@ export class NapcatWebuiGatewaySessionService {
    * @returns Browser-safe lifecycle result.
    */
   async heartbeat(input: NapcatWebuiGatewayLifecycleInput) {
+    const adminUserId = this.requireLifecycleAdminUserId(input.adminUserId);
     const session = await this.requireUsableSession(input.sessionId);
-    this.assertOwner(session, input.adminUserId);
+    this.assertOwner(session, adminUserId);
     const now = this.config.now();
     const expiresAt = now + this.config.ttlMs();
 
-    await this.store.update(input.sessionId, {
+    await this.updateSession(input.sessionId, {
       clientIp: this.toOptionalText(input.clientIp) || session.clientIp,
       expiresAt,
       lastSeenAt: now,
@@ -117,10 +118,11 @@ export class NapcatWebuiGatewaySessionService {
    * @returns Browser-safe lifecycle result.
    */
   async revoke(input: NapcatWebuiGatewayLifecycleInput) {
+    const adminUserId = this.requireLifecycleAdminUserId(input.adminUserId);
     const session = await this.requireUsableSession(input.sessionId);
-    this.assertOwner(session, input.adminUserId);
+    this.assertOwner(session, adminUserId);
 
-    const updated = await this.store.update(input.sessionId, {
+    const updated = await this.updateSession(input.sessionId, {
       clientIp: this.toOptionalText(input.clientIp) || session.clientIp,
       revokedAt: this.config.now(),
       status: 'revoked',
@@ -154,7 +156,7 @@ export class NapcatWebuiGatewaySessionService {
       throw new GoneException('Gateway session is not active');
     }
     if (session.expiresAt <= this.config.now()) {
-      await this.store.update(sessionId, { status: 'expired' });
+      await this.updateSession(sessionId, { status: 'expired' });
       throw new GoneException('Gateway session is not active');
     }
 
@@ -173,6 +175,48 @@ export class NapcatWebuiGatewaySessionService {
     if (session.adminUserId !== adminUserId) {
       throw new ForbiddenException('Gateway session owner mismatch');
     }
+  }
+
+  /**
+   * Applies a store update and maps expected stale lifecycle rejections to 410.
+   * @param sessionId - Gateway session id to update.
+   * @param patch - Session fields to merge in the store.
+   * @returns Updated session from the backing store.
+   */
+  private async updateSession(
+    sessionId: string,
+    patch: Partial<NapcatWebuiGatewaySession>,
+  ) {
+    try {
+      return await this.store.update(sessionId, patch);
+    } catch (error) {
+      if (this.isInactiveStoreError(error)) {
+        throw new GoneException('Gateway session is not active');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Detects stale or inactive store errors that should not become HTTP 500.
+   * @param error - Error thrown by the session store.
+   * @returns Whether the error represents an expected inactive session race.
+   */
+  private isInactiveStoreError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return (
+      message.includes('Gateway session is not active') ||
+      message.includes('Gateway terminal session cannot become active')
+    );
+  }
+
+  /**
+   * Requires a lifecycle Admin actor before owner comparison.
+   * @param adminUserId - Candidate Admin actor id from heartbeat or revoke body.
+   * @returns Trimmed Admin actor id.
+   */
+  private requireLifecycleAdminUserId(adminUserId: string) {
+    return this.requireText(adminUserId, 'adminUserId');
   }
 
   /**

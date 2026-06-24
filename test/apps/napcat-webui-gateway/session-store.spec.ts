@@ -145,27 +145,62 @@ class FakeRedis {
   }
 
   /**
-   * Simulates the compare-and-delete Lua script used by Redis index cleanup.
+   * Simulates Gateway Redis Lua scripts used by ticket and session store tests.
    * @param script - Lua script text.
    * @param keyCount - Number of Redis keys in the script call.
-   * @param key - Redis key to conditionally delete.
-   * @param expectedValue - Value that must match before deletion.
-   * @returns 1 when the index was deleted, otherwise 0.
+   * @param args - Redis keys and script arguments after `keyCount`.
+   * @returns Script-shaped response used by the store.
    */
-  async eval(
-    script: string,
-    keyCount: number,
-    key: string,
-    expectedValue: string,
-  ) {
-    this.calls.push(`eval:${keyCount}:${key}:${expectedValue}`);
-    if (!script.includes('redis.call') || keyCount !== 1) {
+  async eval(script: string, keyCount: number, ...args: string[]) {
+    this.calls.push(`eval:${keyCount}:${args.join(':')}`);
+    if (!script.includes('redis.call')) {
       throw new Error('Unexpected Redis script');
     }
-    if (this.values.get(key) !== expectedValue) return 0;
-    this.values.delete(key);
-    this.ttl.delete(key);
-    return 1;
+    if (keyCount !== 2) {
+      throw new Error('Unexpected Redis key count');
+    }
+
+    const [
+      sessionKey,
+      indexKey,
+      sessionId,
+      nextSessionJson,
+      sessionTtlMs,
+      indexTtlMs,
+    ] = args;
+    const currentJson = this.values.get(sessionKey);
+    if (!currentJson) return [0, 'Gateway session is not active'];
+
+    const current = JSON.parse(currentJson) as NapcatWebuiGatewaySession;
+    const next = JSON.parse(nextSessionJson) as NapcatWebuiGatewaySession;
+    const terminalStatuses = ['expired', 'failed', 'revoked'];
+    const currentTerminal = terminalStatuses.includes(current.status);
+    const nextTerminal = terminalStatuses.includes(next.status);
+    const indexValue = this.values.get(indexKey);
+
+    if (currentTerminal && !nextTerminal) {
+      return [0, 'Gateway session is not active'];
+    }
+
+    if (nextTerminal) {
+      this.values.set(sessionKey, nextSessionJson);
+      this.ttl.set(sessionKey, Number(sessionTtlMs));
+      if (indexValue === sessionId) {
+        this.values.delete(indexKey);
+        this.ttl.delete(indexKey);
+      }
+      return [1, nextSessionJson];
+    }
+
+    if (indexValue && indexValue !== sessionId) {
+      return [0, 'Gateway session is not active'];
+    }
+
+    this.values.set(sessionKey, nextSessionJson);
+    this.ttl.set(sessionKey, Number(sessionTtlMs));
+    this.values.set(indexKey, sessionId);
+    this.ttl.set(indexKey, Number(indexTtlMs));
+    return [1, nextSessionJson];
   }
 }
 
@@ -410,11 +445,81 @@ describe('NapcatWebuiGatewayRedisStore', () => {
       sessionId: second.sessionId,
       status: 'created',
     });
-    expect(
-      redis.calls.some((call) =>
-        call.startsWith('eval:1:napcat:webui:user-account:admin-1:account-1:'),
-      ),
-    ).toBe(true);
+    expect(redis.values.get('napcat:webui:user-account:admin-1:account-1')).toBe(
+      second.sessionId,
+    );
+  });
+
+  it('rejects stale non-terminal updates when the index points at a newer session', async () => {
+    const redis = new FakeRedis();
+    const config = createConfig({ value: 1000 });
+    const store = new NapcatWebuiGatewayRedisStore(
+      redis as never,
+      config as never,
+    );
+    const service = new NapcatWebuiGatewaySessionService(
+      store,
+      config as never,
+    );
+    const first = await service.create(createSessionInput());
+    const second = await service.create(createSessionInput());
+    const firstSessionKey = `napcat:webui:session:${first.sessionId}`;
+    const indexKey = 'napcat:webui:user-account:admin-1:account-1';
+
+    redis.values.set(
+      firstSessionKey,
+      JSON.stringify({
+        ...first,
+        status: 'created',
+      }),
+    );
+    redis.values.set(indexKey, second.sessionId);
+
+    await expect(
+      store.update(first.sessionId, {
+        activeAt: 2000,
+        expiresAt: 62_000,
+        lastSeenAt: 2000,
+        status: 'active',
+      }),
+    ).rejects.toThrow('Gateway session is not active');
+    expect(redis.values.get(indexKey)).toBe(second.sessionId);
+    expect(JSON.parse(redis.values.get(firstSessionKey) || '{}')).toMatchObject({
+      status: 'created',
+    });
+  });
+
+  it('keeps delayed old heartbeat and activation from reviving a replaced session', async () => {
+    const redis = new FakeRedis();
+    const currentTime = { value: 1000 };
+    const config = createConfig(currentTime);
+    const store = new NapcatWebuiGatewayRedisStore(
+      redis as never,
+      config as never,
+    );
+    const service = new NapcatWebuiGatewaySessionService(
+      store,
+      config as never,
+    );
+    const first = await service.create(createSessionInput());
+    const second = await service.create(createSessionInput());
+
+    currentTime.value = 2000;
+
+    await expect(service.markActive(first.sessionId)).rejects.toThrow(
+      'Gateway session is not active',
+    );
+    await expect(
+      service.heartbeat({
+        adminUserId: 'admin-1',
+        sessionId: first.sessionId,
+      }),
+    ).rejects.toThrow('Gateway session is not active');
+    await expect(
+      store.findActiveByUserAndAccount('admin-1', 'account-1'),
+    ).resolves.toMatchObject({
+      sessionId: second.sessionId,
+    });
   });
 });
 
@@ -566,6 +671,26 @@ describe('InternalSessionController', () => {
       .set('x-kt-gateway-secret', INTERNAL_SECRET)
       .send({ adminUserId: 'admin-1' })
       .expect(HttpStatus.GONE);
+  });
+
+  it('rejects blank lifecycle admin user ids with bad request status', async () => {
+    const createResponse = await request(app.getHttpServer())
+      .post('/internal/sessions')
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send(createSessionInput())
+      .expect(HttpStatus.CREATED);
+    const sessionId = createResponse.body.sessionId;
+
+    await request(app.getHttpServer())
+      .post(`/internal/sessions/${sessionId}/heartbeat`)
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send({})
+      .expect(HttpStatus.BAD_REQUEST);
+    await request(app.getHttpServer())
+      .post(`/internal/sessions/${sessionId}/revoke`)
+      .set('x-kt-gateway-secret', INTERNAL_SECRET)
+      .send({ adminUserId: ' ' })
+      .expect(HttpStatus.BAD_REQUEST);
   });
 
   it('rejects invalid create-session payloads with bad request status', async () => {

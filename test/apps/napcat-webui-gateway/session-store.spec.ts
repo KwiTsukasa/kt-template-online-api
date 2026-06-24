@@ -403,7 +403,7 @@ describe('InternalSessionController', () => {
     expect(response.body.iframeUrl).not.toContain('127.0.0.1');
   });
 
-  it('rejects missing or wrong secrets for mutating calls', async () => {
+  it('rejects missing or wrong secrets for all mutating calls', async () => {
     await request(app.getHttpServer())
       .post('/internal/sessions')
       .send(createSessionInput())
@@ -412,6 +412,24 @@ describe('InternalSessionController', () => {
       .post('/internal/sessions')
       .set('x-kt-gateway-secret', 'wrong-secret')
       .send(createSessionInput())
+      .expect(HttpStatus.UNAUTHORIZED);
+    await request(app.getHttpServer())
+      .post('/internal/sessions/session-1/heartbeat')
+      .send({ adminUserId: 'admin-1' })
+      .expect(HttpStatus.UNAUTHORIZED);
+    await request(app.getHttpServer())
+      .post('/internal/sessions/session-1/heartbeat')
+      .set('x-kt-gateway-secret', 'wrong-secret')
+      .send({ adminUserId: 'admin-1' })
+      .expect(HttpStatus.UNAUTHORIZED);
+    await request(app.getHttpServer())
+      .post('/internal/sessions/session-1/revoke')
+      .send({ adminUserId: 'admin-1' })
+      .expect(HttpStatus.UNAUTHORIZED);
+    await request(app.getHttpServer())
+      .post('/internal/sessions/session-1/revoke')
+      .set('x-kt-gateway-secret', 'wrong-secret')
+      .send({ adminUserId: 'admin-1' })
       .expect(HttpStatus.UNAUTHORIZED);
     await request(app.getHttpServer())
       .get('/internal/health')

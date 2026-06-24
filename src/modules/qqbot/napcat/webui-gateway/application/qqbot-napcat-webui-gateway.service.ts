@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
@@ -16,12 +16,24 @@ import {
 import type { QqbotNapcatWebuiSessionResponseDto } from '../contract/qqbot-napcat-webui-gateway.dto';
 
 const SENSITIVE_DETAIL_KEY_PATTERN =
-  /^(baseUrl|captcha|captchaTicket|credential|dockerIp|headers|internalSecret|nasPath|password|qrPayload|qrcode|rawHeaders|secret|targetBaseUrl|ticket|token|upstreamBaseUrl|webuiPort|webuiToken)$/i;
+  /^(baseurl|captcha|captchaticket|credential|credentialheader|dockerip|headers|hostport|internalsecret|naspath|nasroute|password|qrpayload|qrcode|rawheaders|secret|targetbaseurl|ticket|token|upstreambaseurl|upstreamurl|webuiport|webuitoken)$/i;
+const UNSAFE_DETAIL_STRING_PATTERN =
+  /(\bBearer\s+\S+|\bCredential\b|(?:^|[?&\s])(token|ticket|secret|password|credential|captcha)=|webui[_-]?token|https?:\/\/(?:127\.0\.0\.1|localhost|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|[^/\s]*:\d+)|\/internal\/sessions\b|\bnas(?:route|path)?\b|\/vol\d\b|\bdocker[_-]?ip\b)/i;
+const REDACTED_DETAIL_VALUE = '[REDACTED]';
+const ACCOUNT_ID_PATTERN = /^[1-9]\d{0,31}$/;
+const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 export type QqbotNapcatWebuiGatewaySessionCreateInput = {
   accountId: string;
   adminUserId: string;
   clientIp?: string | null;
+  userAgent?: string | null;
+};
+
+export type QqbotNapcatWebuiGatewaySessionLifecycleInput = {
+  adminUserId: string;
+  clientIp?: string | null;
+  sessionId: string;
   userAgent?: string | null;
 };
 
@@ -88,13 +100,35 @@ export class NapcatWebuiGatewayAuditService {
     if (Array.isArray(value)) {
       return value.map((item) => this.sanitizeValue(item));
     }
+    if (typeof value === 'string') {
+      return this.isUnsafeDetailString(value) ? REDACTED_DETAIL_VALUE : value;
+    }
     if (!value || typeof value !== 'object') return value;
 
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
-        .filter(([key]) => !SENSITIVE_DETAIL_KEY_PATTERN.test(key))
+        .filter(([key]) => !this.isSensitiveDetailKey(key))
         .map(([key, item]) => [key, this.sanitizeValue(item)]),
     );
+  }
+
+  /**
+   * Normalizes key style variants before checking whether a field can carry secrets.
+   * @param key - Raw object key from audit detail.
+   * @returns Whether the key should be dropped from persisted audit JSON.
+   */
+  private isSensitiveDetailKey(key: string) {
+    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return SENSITIVE_DETAIL_KEY_PATTERN.test(normalized);
+  }
+
+  /**
+   * Detects secret-bearing string values that should never be persisted in audit detail.
+   * @param value - Raw string value from audit detail.
+   * @returns Whether the value should be replaced with a redaction marker.
+   */
+  private isUnsafeDetailString(value: string) {
+    return UNSAFE_DETAIL_STRING_PATTERN.test(value);
   }
 
   /**
@@ -133,7 +167,8 @@ export class QqbotNapcatWebuiGatewayService {
   async createSession(
     input: QqbotNapcatWebuiGatewaySessionCreateInput,
   ): Promise<QqbotNapcatWebuiSessionResponseDto> {
-    const account = await this.accountService.findById(input.accountId);
+    const accountId = this.requireAccountId(input.accountId);
+    const account = await this.accountService.findById(accountId);
     if (!account) {
       throwVbenError('QQBot 账号不存在');
     }
@@ -169,7 +204,6 @@ export class QqbotNapcatWebuiGatewayService {
       detailJson: {
         accountName: account.name,
         containerName: runtime.name,
-        iframeUrl: gatewaySession.iframeUrl,
         webuiStatus,
       },
       eventType: 'session.create',
@@ -197,22 +231,60 @@ export class QqbotNapcatWebuiGatewayService {
 
   /**
    * Forwards a Gateway heartbeat for an existing Admin WebUI session.
-   * @param sessionId - Gateway session id returned by `createSession()`.
+   * @param input - Gateway session id plus Admin actor and request evidence.
    * @returns Gateway lifecycle response.
    */
   heartbeat(
-    sessionId: string,
+    input: QqbotNapcatWebuiGatewaySessionLifecycleInput,
   ): Promise<QqbotNapcatWebuiGatewayLifecycleResult> {
-    return this.gatewayClient.heartbeat(sessionId);
+    return this.gatewayClient.heartbeat({
+      adminUserId: input.adminUserId,
+      clientIp: input.clientIp || undefined,
+      sessionId: this.requireSessionId(input.sessionId),
+      userAgent: input.userAgent || undefined,
+    });
   }
 
   /**
    * Revokes an existing Admin WebUI Gateway session.
-   * @param sessionId - Gateway session id returned by `createSession()`.
+   * @param input - Gateway session id plus Admin actor and request evidence.
    * @returns Gateway lifecycle response.
    */
-  revoke(sessionId: string): Promise<QqbotNapcatWebuiGatewayLifecycleResult> {
-    return this.gatewayClient.revoke(sessionId);
+  revoke(
+    input: QqbotNapcatWebuiGatewaySessionLifecycleInput,
+  ): Promise<QqbotNapcatWebuiGatewayLifecycleResult> {
+    return this.gatewayClient.revoke({
+      adminUserId: input.adminUserId,
+      clientIp: input.clientIp || undefined,
+      sessionId: this.requireSessionId(input.sessionId),
+      userAgent: input.userAgent || undefined,
+    });
+  }
+
+  /**
+   * Validates a QQBot account id before querying persistence or container state.
+   * @param accountId - Candidate account id supplied by Admin.
+   * @returns Trimmed account id.
+   */
+  private requireAccountId(accountId: string) {
+    const normalized = String(accountId || '').trim();
+    if (!ACCOUNT_ID_PATTERN.test(normalized)) {
+      throwVbenError('QQBot 账号ID不合法', HttpStatus.BAD_REQUEST);
+    }
+    return normalized;
+  }
+
+  /**
+   * Validates a Gateway session id before forwarding lifecycle calls.
+   * @param sessionId - Candidate session id from the Admin route.
+   * @returns Trimmed Gateway session id.
+   */
+  private requireSessionId(sessionId: string) {
+    const normalized = String(sessionId || '').trim();
+    if (!SESSION_ID_PATTERN.test(normalized)) {
+      throwVbenError('Gateway 会话ID不合法', HttpStatus.BAD_REQUEST);
+    }
+    return normalized;
   }
 
   /**

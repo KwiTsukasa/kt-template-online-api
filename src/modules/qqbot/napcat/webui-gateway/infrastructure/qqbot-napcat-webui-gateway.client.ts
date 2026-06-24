@@ -5,6 +5,11 @@ import { throwVbenError } from '@/common';
 
 const DEFAULT_GATEWAY_BASE_URL = 'http://127.0.0.1:48086';
 const DEFAULT_GATEWAY_TIMEOUT_MS = 5000;
+const GATEWAY_PUBLIC_SESSION_PREFIX = '/napcat-webui/session/';
+const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+const SAFE_BOOTSTRAP_TICKET_PATTERN = /^[A-Za-z0-9._~-]+$/;
+const UNSAFE_GATEWAY_RESULT_PATTERN =
+  /(\bCredential\b|\bBearer\s+\S+|webui[_-]?token|(?:^|[?&\s])(token|secret|password|credential|captcha)=|https?:\/\/|\/\/|127\.0\.0\.1|localhost|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|:\d{2,5}\b|\bdocker\b|\bnas\b|\/vol\d\b|\/internal\/sessions\b)/i;
 
 export type QqbotNapcatWebuiGatewayCreateSessionRequest = {
   accountId: string;
@@ -16,6 +21,13 @@ export type QqbotNapcatWebuiGatewayCreateSessionRequest = {
   upstreamBaseUrl: string;
   userAgent?: string;
   webuiToken: string;
+};
+
+export type QqbotNapcatWebuiGatewayLifecycleRequest = {
+  adminUserId: string;
+  clientIp?: string;
+  sessionId: string;
+  userAgent?: string;
 };
 
 export type QqbotNapcatWebuiGatewaySessionResult = {
@@ -41,32 +53,38 @@ export class QqbotNapcatWebuiGatewayClient {
    * @param input - Server-only target metadata, including WebUI token and upstream endpoint.
    * @returns Browser-safe Gateway session metadata.
    */
-  createSession(input: QqbotNapcatWebuiGatewayCreateSessionRequest) {
-    return this.post<QqbotNapcatWebuiGatewaySessionResult>(
-      '/internal/sessions',
-      input,
+  async createSession(input: QqbotNapcatWebuiGatewayCreateSessionRequest) {
+    return this.validateSessionResult(
+      await this.post<QqbotNapcatWebuiGatewaySessionResult>(
+        '/internal/sessions',
+        input,
+      ),
     );
   }
 
   /**
    * Refreshes one Gateway session heartbeat without exposing internal target data.
-   * @param sessionId - Gateway session id previously returned to Admin.
+   * @param input - Gateway session id plus Admin actor and request evidence.
    * @returns Gateway lifecycle response body.
    */
-  heartbeat(sessionId: string) {
+  heartbeat(input: QqbotNapcatWebuiGatewayLifecycleRequest) {
+    const { sessionId, ...data } = input;
     return this.post<QqbotNapcatWebuiGatewayLifecycleResult>(
       `/internal/sessions/${encodeURIComponent(sessionId)}/heartbeat`,
+      data,
     );
   }
 
   /**
    * Revokes one Gateway session without exposing internal target data.
-   * @param sessionId - Gateway session id previously returned to Admin.
+   * @param input - Gateway session id plus Admin actor and request evidence.
    * @returns Gateway lifecycle response body.
    */
-  revoke(sessionId: string) {
+  revoke(input: QqbotNapcatWebuiGatewayLifecycleRequest) {
+    const { sessionId, ...data } = input;
     return this.post<QqbotNapcatWebuiGatewayLifecycleResult>(
       `/internal/sessions/${encodeURIComponent(sessionId)}/revoke`,
+      data,
     );
   }
 
@@ -121,12 +139,29 @@ export class QqbotNapcatWebuiGatewayClient {
    * @returns Header map when a secret is configured, otherwise undefined.
    */
   private getHeaders() {
-    const secret = (
+    const secret = this.getInternalSecret();
+
+    return { 'x-kt-gateway-secret': secret };
+  }
+
+  /**
+   * Reads the required internal Gateway secret and fails closed when it is missing.
+   * @returns Configured non-empty shared secret.
+   */
+  private getInternalSecret() {
+    const secret = String(
       this.configService.get<string>('NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET') ||
-      ''
+        '',
     ).trim();
 
-    return secret ? { 'x-kt-gateway-secret': secret } : undefined;
+    if (!secret) {
+      throwVbenError(
+        'NapCat WebUI Gateway 内部密钥未配置',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    return secret;
   }
 
   /**
@@ -154,5 +189,107 @@ export class QqbotNapcatWebuiGatewayClient {
     }
 
     return body as T;
+  }
+
+  /**
+   * Validates the create-session result before returning it to Admin callers.
+   * @param result - Raw Gateway create-session result.
+   * @returns Browser-safe session result.
+   */
+  private validateSessionResult(
+    result: QqbotNapcatWebuiGatewaySessionResult,
+  ): QqbotNapcatWebuiGatewaySessionResult {
+    if (!result || typeof result !== 'object') {
+      this.throwInvalidSessionResult();
+    }
+
+    const sessionId = String(result.sessionId || '').trim();
+    if (!SESSION_ID_PATTERN.test(sessionId)) {
+      this.throwInvalidSessionResult();
+    }
+    if (!Number.isFinite(result.expiresAt)) {
+      this.throwInvalidSessionResult();
+    }
+    if (!this.isSafeIframeUrl(result.iframeUrl, sessionId)) {
+      this.throwInvalidSessionResult();
+    }
+
+    return {
+      expiresAt: result.expiresAt,
+      iframeUrl: result.iframeUrl,
+      sessionId,
+    };
+  }
+
+  /**
+   * Ensures the iframe URL is a relative Gateway-owned route with only an optional bootstrap ticket.
+   * @param iframeUrl - Raw iframe URL returned by Gateway.
+   * @param sessionId - Validated Gateway session id.
+   * @returns Whether the URL is safe for the browser response.
+   */
+  private isSafeIframeUrl(iframeUrl: unknown, sessionId: string) {
+    if (typeof iframeUrl !== 'string' || iframeUrl.trim() !== iframeUrl) {
+      return false;
+    }
+    if (!iframeUrl.startsWith(GATEWAY_PUBLIC_SESSION_PREFIX)) return false;
+    if (iframeUrl.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(iframeUrl)) {
+      return false;
+    }
+    if (iframeUrl.includes('\\')) return false;
+
+    const [path, query = ''] = iframeUrl.split('?');
+    const expectedPrefix = `${GATEWAY_PUBLIC_SESSION_PREFIX}${sessionId}/`;
+    if (!path.startsWith(expectedPrefix)) return false;
+
+    const params = new URLSearchParams(query);
+    const hasTicket = params.has('ticket');
+    if (hasTicket) {
+      const ticket = params.get('ticket') || '';
+      if (path !== `${expectedPrefix}bootstrap`) return false;
+      if ([...params.keys()].some((key) => key !== 'ticket')) return false;
+      if (!SAFE_BOOTSTRAP_TICKET_PATTERN.test(ticket)) return false;
+    } else if (/ticket/i.test(iframeUrl)) {
+      return false;
+    } else if (query) {
+      return false;
+    }
+
+    const unsafeScanValue = hasTicket
+      ? `${path}?ticket=`
+      : iframeUrl;
+    return !this.hasUnsafeGatewayEvidence(unsafeScanValue);
+  }
+
+  /**
+   * Detects host, secret, and internal-route evidence in Gateway browser-facing URLs.
+   * @param value - Candidate iframe URL with allowed bootstrap ticket value stripped.
+   * @returns Whether the string contains unsafe evidence.
+   */
+  private hasUnsafeGatewayEvidence(value: string) {
+    const decoded = this.tryDecodeURIComponent(value);
+    return UNSAFE_GATEWAY_RESULT_PATTERN.test(decoded);
+  }
+
+  /**
+   * Decodes URL text for security scanning without leaking parsing errors to callers.
+   * @param value - URL text to decode.
+   * @returns Decoded value when possible, otherwise the original text.
+   */
+  private tryDecodeURIComponent(value: string) {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+
+  /**
+   * Throws the sanitized error used for invalid Gateway create-session responses.
+   */
+  private throwInvalidSessionResult(): never {
+    return throwVbenError(
+      'NapCat WebUI Gateway 返回无效会话',
+      HttpStatus.BAD_GATEWAY,
+    );
   }
 }

@@ -34,6 +34,18 @@ describe('NapCat WebUI Gateway deployment configuration', () => {
     expect(dockerfile).toContain('LOG_APP_NAME=kt-napcat-webui-gateway');
   });
 
+  it('uses reachable Debian mirrors with apt retries in runtime images', () => {
+    const runtimeDockerfiles = ['dockerfile', 'dockerfile.gateway'].map(
+      readRepoFile,
+    );
+
+    for (const dockerfile of runtimeDockerfiles) {
+      expect(dockerfile).toContain('mirrors.aliyun.com/debian');
+      expect(dockerfile).toContain('mirrors.aliyun.com/debian-security');
+      expect(dockerfile).toContain('Acquire::Retries=5');
+    }
+  });
+
   it('declares gateway API linkage and cluster runtime without literal secrets', () => {
     const manifest = readRepoFile('k8s/prod/api.yaml');
 

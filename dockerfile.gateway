@@ -26,7 +26,12 @@ ENV FFLOGS_REQUEST_TIMEOUT_MS=10000
 
 COPY package.json pnpm-lock.yaml ./
 
-RUN apt-get update \
+RUN sed -i \
+    -e 's#http://deb.debian.org/debian-security#http://mirrors.aliyun.com/debian-security#g' \
+    -e 's#http://security.debian.org/debian-security#http://mirrors.aliyun.com/debian-security#g' \
+    -e 's#http://deb.debian.org/debian#http://mirrors.aliyun.com/debian#g' \
+    /etc/apt/sources.list.d/debian.sources \
+  && apt-get update -o Acquire::Retries=5 \
   && apt-get install -y --no-install-recommends fontconfig fonts-noto-cjk openssh-client \
   && fc-cache -f \
   && rm -rf /var/lib/apt/lists/*

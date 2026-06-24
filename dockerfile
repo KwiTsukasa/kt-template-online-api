@@ -33,8 +33,8 @@ RUN apt-get update \
 
 # 生产镜像只安装运行依赖，dist 由 Jenkins Build stage 提前产出。
 # 跳过安装阶段脚本，避免 NODE_ENV=production 时 devDependency 中的 husky 不存在导致 prepare 失败。
-RUN corepack enable \
-  && corepack prepare pnpm@9 --activate \
+RUN npm install -g pnpm@9.15.9 --registry=https://registry.npmmirror.com \
+  && pnpm config set registry https://registry.npmmirror.com \
   && pnpm install --prod --frozen-lockfile --ignore-scripts \
   && pnpm rebuild skia-canvas
 

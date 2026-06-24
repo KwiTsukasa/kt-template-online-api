@@ -172,13 +172,14 @@ metadata:
   labels:
     app: kt-napcat-webui-gateway
 spec:
-  type: ClusterIP
+  type: NodePort
   selector:
     app: kt-napcat-webui-gateway
   ports:
     - name: http
       port: 48086
       targetPort: 48086
+      nodePort: 30086
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -54,6 +54,8 @@ describe('NapCat WebUI Gateway deployment configuration', () => {
 
     expect(manifest).toContain('kt-napcat-webui-gateway');
     expect(manifest).toContain('containerPort: 48086');
+    expect(manifest).toContain('type: NodePort');
+    expect(manifest).toContain('nodePort: 30086');
     expect(manifest).toContain('NAPCAT_WEBUI_GATEWAY_REDIS_HOST');
     expect(manifest).toContain('NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET');
     expect(manifest).toContain('NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL');

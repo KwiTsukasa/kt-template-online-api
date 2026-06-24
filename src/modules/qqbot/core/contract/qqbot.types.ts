@@ -29,6 +29,8 @@ export type NapcatLoginStatus = {
   isLogin?: boolean;
   isOffline?: boolean;
   loginError?: string;
+  qrcodeRevision?: number;
+  qrcodeUpdatedAt?: number;
   qrcodeurl?: string;
 };
 

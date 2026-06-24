@@ -342,6 +342,8 @@ export class QqbotNapcatLoginService {
       }
     }
     if (Date.now() > session.expiresAt) {
+      const recovered = await this.recoverExpiredQrcodeSession(session);
+      if (recovered) return recovered;
       return this.expireSession(session);
     }
     if (session.preparingContainer) {
@@ -416,6 +418,10 @@ export class QqbotNapcatLoginService {
           session,
           status.loginError,
         );
+      }
+
+      if (this.shouldRefreshNearlyExpiredQrcode(status)) {
+        return this.refreshNearlyExpiredQrcode(session, container, status);
       }
 
       session.errorMessage = status.loginError || undefined;
@@ -968,6 +974,57 @@ export class QqbotNapcatLoginService {
     const qqLoginStatus = this.toSessionQqLoginStatus(status);
     const lastError = this.toSessionQqLoginError(status, qqLoginStatus);
     await marker.call(this.accountService, selfId, qqLoginStatus, lastError);
+  }
+
+  /**
+   * Reconciles an API-side QR TTL timeout with NapCat's current login state before marking the scan as expired.
+   * @param session - Pending scan session whose local `expiresAt` has elapsed; its current QR and container binding decide whether recovery is safe.
+   * @returns A pending or success result when NapCat still exposes a usable QR or has already logged in; otherwise undefined so the caller can expire the session.
+   */
+  private async recoverExpiredQrcodeSession(
+    session: QqbotLoginScanSession,
+  ): Promise<QqbotLoginScanResult | undefined> {
+    if (!session.qrcode || session.preparingContainer) return undefined;
+    if (typeof this.containerService.findRuntimeById !== 'function') {
+      return undefined;
+    }
+
+    const container = await this.getSessionContainer(session);
+    let status: NapcatLoginStatus;
+    try {
+      status = await this.getLoginStatus(container);
+    } catch (err) {
+      if (!this.toolsService.isNapcatTemporaryError(err)) throw err;
+      return this.keepSessionPending(
+        session,
+        'NapCat 正在确认二维码状态，请稍后',
+        true,
+      );
+    }
+
+    if (status.isLogin) {
+      this.renewSessionExpiry(session);
+      return this.completeLogin(session, container);
+    }
+
+    await this.syncSessionQqLoginStatus(session, status);
+    if (this.toolsService.isNapcatExpiredQrcodeStatus(status)) {
+      session.errorMessage = status.loginError || session.errorMessage;
+      this.persistLoginSession(session);
+      return undefined;
+    }
+
+    if (this.shouldRefreshNearlyExpiredQrcode(status)) {
+      return this.refreshNearlyExpiredQrcode(session, container, status);
+    }
+
+    if (status.qrcodeurl) {
+      session.qrcode = status.qrcodeurl;
+      session.errorMessage = undefined;
+      return this.keepSessionPending(session, '等待扫码确认');
+    }
+
+    return undefined;
   }
 
   /**
@@ -2097,6 +2154,82 @@ export class QqbotNapcatLoginService {
       isOffline: true,
       loginError: status.loginError || errorMessage,
     };
+  }
+
+  /**
+   * Refreshes a QR code that is still present in NapCat but too close to the native QQ expiry window for human scanning.
+   * @param session - Pending scan session that would otherwise return the nearly expired QR to Admin.
+   * @param container - NapCat WebUI runtime used to request a fresh QR from the same login service.
+   * @param status - Latest WebUI login status containing the stale QR URL and its native update timestamp.
+   * @returns Pending scan result with a fresh QR when NapCat accepts refresh, or a pending no-QR result while refresh is still in progress.
+   */
+  private async refreshNearlyExpiredQrcode(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    status: NapcatLoginStatus,
+  ) {
+    try {
+      session.qrcode = await this.refreshOrGetQrcode(container, false, {
+        fallbackStatus: status,
+        requireFresh: true,
+        staleQrcode: status.qrcodeurl,
+      });
+      session.errorMessage = undefined;
+      this.publishScanResultEvent(
+        session,
+        'qrcode-ready',
+        'success',
+        '登录二维码已刷新',
+      );
+      return this.toResult(session);
+    } catch (err) {
+      if (!this.toolsService.isNapcatTemporaryError(err)) throw err;
+      session.qrcode = undefined;
+      return this.keepSessionPending(
+        session,
+        '登录二维码即将过期，NapCat 正在重新生成二维码',
+      );
+    }
+  }
+
+  /**
+   * Determines whether a NapCat QR is close enough to QQ's native timeout that Admin should not show it for a new scan.
+   * @param status - WebUI status carrying `qrcodeUpdatedAt`; missing timestamps are treated as safe to avoid refreshing every legacy response.
+   * @returns True when the QR is present, not already expired, and has less than the configured safe remaining window.
+   */
+  private shouldRefreshNearlyExpiredQrcode(status: NapcatLoginStatus) {
+    if (
+      !status.qrcodeurl ||
+      this.toolsService.isNapcatExpiredQrcodeStatus(status)
+    ) {
+      return false;
+    }
+    const updatedAt = Number(status.qrcodeUpdatedAt);
+    if (!Number.isFinite(updatedAt) || updatedAt <= 0) return false;
+    const ageMs = Date.now() - updatedAt;
+    return ageMs >= this.getNativeQrcodeTtlMs() - this.getQrcodeSafeScanMs();
+  }
+
+  /**
+   * Reads the expected native QQ QR lifetime used only for safe-display decisions.
+   * @returns Milliseconds before a QR is considered too old to show without refreshing.
+   */
+  private getNativeQrcodeTtlMs() {
+    return this.getPositiveConfigNumber(
+      'NAPCAT_LOGIN_NATIVE_QR_EXPIRE_MS',
+      2 * 60 * 1000,
+    );
+  }
+
+  /**
+   * Reads the minimum QR lifetime that must remain before Admin is allowed to show an existing QR for manual scanning.
+   * @returns Milliseconds kept as human scanning/confirmation safety margin.
+   */
+  private getQrcodeSafeScanMs() {
+    return this.getPositiveConfigNumber(
+      'NAPCAT_LOGIN_QR_SAFE_SCAN_MS',
+      45 * 1000,
+    );
   }
 
   /**

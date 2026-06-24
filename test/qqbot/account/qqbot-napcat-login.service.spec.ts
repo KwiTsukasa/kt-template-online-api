@@ -3375,6 +3375,124 @@ describe('QqbotNapcatLoginService', () => {
     );
   });
 
+  it('keeps an API-expired refresh session pending while NapCat still exposes the same live qrcode', async () => {
+    const loginSessionRepository = createLoginSessionRepository();
+    const loginStateStore = new NapcatLoginStateStoreService(
+      loginSessionRepository as any,
+    );
+    const expireService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          if (key === 'NAPCAT_LOGIN_NATIVE_QR_EXPIRE_MS') return '120000';
+          if (key === 'NAPCAT_LOGIN_QR_SAFE_SCAN_MS') return '45000';
+          if (key === 'NAPCAT_LOGIN_QR_EXPIRE_MS') return '120000';
+          return '';
+        }),
+      } as unknown as ConfigService,
+      {
+        markQqLoginStatus: jest.fn().mockResolvedValue(undefined),
+      } as unknown as QqbotAccountService,
+      {
+        findRuntimeById: jest
+          .fn()
+          .mockResolvedValue({ id: 'container-expired-live' }),
+        removeUnboundContainer: jest.fn().mockResolvedValue(undefined),
+      } as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+      loginStateStore,
+    );
+    const session = {
+      accountId: 'account-expired-live',
+      containerId: 'container-expired-live',
+      containerName: 'napcat-expired-live',
+      createdAt: Date.now() - 180_000,
+      expectedSelfId: '1914728559',
+      expiresAt: Date.now() - 1,
+      id: 'session-expired-live-qrcode',
+      mode: 'refresh',
+      qrcode: 'live-qrcode',
+      status: 'pending',
+      webuiPort: 6110,
+    };
+    (expireService as any).sessions.set(session.id, session);
+    jest.spyOn(expireService as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      qrcodeUpdatedAt: Date.now(),
+      qrcodeurl: 'live-qrcode',
+    });
+    await loginStateStore.flushSessionWrites(session.id);
+
+    const result = await expireService.status(session.id);
+    await loginStateStore.flushSessionWrites(session.id);
+
+    expect(result.status).toBe('pending');
+    expect(result.qrcode).toBe('live-qrcode');
+    expect(result.expiresAt).toBeGreaterThan(Date.now());
+    expect(loginSessionRepository.rows[0]).toEqual(
+      expect.objectContaining({
+        sessionKey: session.id,
+        status: 'pending',
+      }),
+    );
+    expect(loginSessionRepository.rows[0].completedAt).toBeNull();
+  });
+
+  it('refreshes a qrcode that is too close to the native QQ expiry window', async () => {
+    const expiringService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) => {
+          if (key === 'NAPCAT_LOGIN_NATIVE_QR_EXPIRE_MS') return '120000';
+          if (key === 'NAPCAT_LOGIN_QR_SAFE_SCAN_MS') return '45000';
+          return '';
+        }),
+      } as unknown as ConfigService,
+      {
+        markQqLoginStatus: jest.fn().mockResolvedValue(undefined),
+      } as unknown as QqbotAccountService,
+      {
+        findRuntimeById: jest
+          .fn()
+          .mockResolvedValue({ id: 'container-near-expiry' }),
+      } as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (expiringService as any).createSession({
+      accountId: 'account-near-expiry',
+      container: {
+        id: 'container-near-expiry',
+        name: 'napcat-near-expiry',
+        webuiPort: 6110,
+      },
+      expectedSelfId: '1914728559',
+      mode: 'refresh',
+      qrcode: 'old-qrcode',
+      status: 'pending',
+    });
+    (expiringService as any).sessions.set(session.id, session);
+    jest.spyOn(expiringService as any, 'getLoginStatus').mockResolvedValue({
+      isLogin: false,
+      qrcodeUpdatedAt: Date.now() - 90_000,
+      qrcodeurl: 'old-qrcode',
+    });
+    jest
+      .spyOn(expiringService as any, 'refreshOrGetQrcode')
+      .mockResolvedValue('fresh-qrcode');
+
+    const result = await expiringService.status(session.id);
+
+    expect(result.status).toBe('pending');
+    expect(result.qrcode).toBe('fresh-qrcode');
+    expect((expiringService as any).refreshOrGetQrcode).toHaveBeenCalledWith(
+      { id: 'container-near-expiry' },
+      false,
+      {
+        fallbackStatus: expect.objectContaining({ qrcodeurl: 'old-qrcode' }),
+        requireFresh: true,
+        staleQrcode: 'old-qrcode',
+      },
+    );
+  });
+
   it('does not complete an expired refresh session from a delayed background relogin task', async () => {
     const loginSessionRepository = createLoginSessionRepository();
     const loginStateStore = new NapcatLoginStateStoreService(

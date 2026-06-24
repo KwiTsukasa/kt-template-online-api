@@ -40,7 +40,7 @@ kt-napcat-desktop-cn:<profile>
 7. 线上完成标准必须包含真实 smoke，不把 Jenkins/K8s 成功当成功能闭环。
 8. 在 NAS 上安装并配置常驻 Codex CLI 与 KT 全量 workspace，保证笔记本不在线时仍可远程开发。
 9. 上游定时审计必须跑在 NAS 的 Jenkins 或 NAS 服务定时器中，不能跑在笔记本。
-10. 把 Codex CLI 自动化提示词版本化，覆盖上游审计、候选分支审查、运行时发布就绪审查和远程开发交接。
+10. 把 Codex CLI 自动化编排放进 `mcp/ktWorkflow`，由 ktWorkflow 统一管理提示词模板、schema、context 采集器和 Jenkins/systemd 命令入口。
 
 ## 非目标
 
@@ -99,6 +99,20 @@ API 仓库不提交 `NapCat.Shell.zip` 二进制 artifact。
 - 在 NAS 本地构建并验证 Docker 镜像。
 - 保存运行时发布元数据和部署观测 artifact。
 
+### `D:\MyFiles\KT\mcp\ktWorkflow`
+
+负责自动化控制面。Jenkins 和 NAS 定时器应该调用 ktWorkflow，而不是各自复制一份临时 shell 逻辑。
+
+必备能力：
+
+- 基于 Git/GitHub 事实生成上游审计 context packet。
+- 调用 Codex CLI 自动化提示词，并完成 schema 校验和 artifact 捕获。
+- 给 Codex Desktop 和 Codex CLI 都提供 MCP tools。
+- 给 Jenkins/systemd 提供 npm scripts，例如 `napcat-upstream-audit`、`napcat-sync-candidate-review`、`napcat-runtime-release-readiness`、`nas-codex-bootstrap`。
+- 把确定性采集器、提示词模板、schema、输出规范化、artifact 写入统一收口在一个可复用实现里。
+
+API 仓库继续负责运行时 Docker 集成和 API 部署契约，不负责通用自动化 runner。
+
 ### NAS Codex Worker 与 KT 全量 Workspace
 
 NAS 必须承载稳定的远程开发和定时审计环境。当前只读探测结果：
@@ -146,9 +160,9 @@ Codex 配置一致指“逻辑一致”，不是把 Windows profile 原样复制
 自动化分工如下：
 
 ```text
-确定性采集脚本
+ktWorkflow 确定性采集器
   -> 包含 git/GitHub/build 事实的 context packet
-  -> Codex CLI 提示词负责推理和分类
+  -> ktWorkflow Codex CLI 提示词 runner
   -> 结构化 JSON/Markdown 报告
   -> 人工确认后的后续动作
 ```
@@ -397,24 +411,49 @@ CANARY_ACCOUNT_ID=<可选>
 
 运行时发布 job 必须使用干净的 NAS job workspace，而不是长期远程开发 workspace，避免远程 Codex 会话和 Jenkins 发布同时修改同一个 checkout。
 
-## Codex CLI 自动化提示词包
+## ktWorkflow Codex CLI 自动化
 
-实现阶段应在 API 仓库增加版本化提示词包，例如：
+实现阶段应在 `mcp/ktWorkflow` 增加 NapCat 自动化模块，例如：
 
 ```text
-ci/codex-prompts/
-  napcat-upstream-audit.md
-  napcat-sync-candidate-review.md
-  napcat-runtime-release-readiness.md
-  napcat-remote-dev-handoff.md
-  schemas/
-    napcat-upstream-audit.schema.json
-    napcat-runtime-release-readiness.schema.json
+mcp/ktWorkflow/
+  prompts/napcat/
+    upstream-audit.md
+    sync-candidate-review.md
+    runtime-release-readiness.md
+    remote-dev-handoff.md
+    schemas/
+      upstream-audit.schema.json
+      runtime-release-readiness.schema.json
+  src/tools/napcatAutomation.ts
+  src/tools/napcatAutomation.types.ts
+  src/tools/napcatAutomation.prompts.ts
 ```
 
-提示词属于自动化契约，所以需要进 Git。secret 绝不写进 prompt。每个 prompt 接收生成好的 context packet 路径或 stdin payload，并输出结构化 JSON 加短 Markdown 解释。
+提示词和 schema 属于自动化契约，所以需要进 Git。secret 绝不写进 prompt。每个 ktWorkflow tool 接收显式输入、生成 context packet、可选调用 Codex CLI、校验输出 schema，并把 artifact 写到本地 `.kt-workspace` 或 NAS `/vol1/docker/kt-codex/artifacts`。
 
-### `napcat-upstream-audit.md`
+MCP tools 应包含：
+
+```text
+kt_napcat_upstream_audit
+kt_napcat_sync_candidate_review
+kt_napcat_runtime_release_readiness
+kt_napcat_remote_dev_handoff
+kt_nas_codex_bootstrap_plan
+```
+
+CLI scripts 应包含：
+
+```text
+pnpm --dir mcp/ktWorkflow run napcat-upstream-audit -- --execute --artifact-root /vol1/docker/kt-codex/artifacts/napcat-upstream-sync
+pnpm --dir mcp/ktWorkflow run napcat-sync-candidate-review -- --source-ref kt/sync/<tag>
+pnpm --dir mcp/ktWorkflow run napcat-runtime-release-readiness -- --release-artifact <path>
+pnpm --dir mcp/ktWorkflow run nas-codex-bootstrap -- --dry-run
+```
+
+这些 scripts 是唯一支持的 scheduler 入口。Jenkins 和 `systemd` 只调用这些 scripts，不复制审计算法。
+
+### `upstream-audit.md`
 
 用途：根据已采集事实，对上游 latest release 做同步风险分类。
 
@@ -440,7 +479,7 @@ Rules:
 - Recommend next action: no-op, create candidate branch, request human review, or block.
 
 Output:
-- JSON matching ci/codex-prompts/schemas/napcat-upstream-audit.schema.json.
+- JSON matching mcp/ktWorkflow/prompts/napcat/schemas/upstream-audit.schema.json.
 - A concise Markdown summary safe for Jenkins artifacts.
 ```
 
@@ -455,14 +494,14 @@ codex exec \
   --ask-for-approval never \
   --json \
   --ephemeral \
-  --output-schema ci/codex-prompts/schemas/napcat-upstream-audit.schema.json \
+  --output-schema /vol1/docker/kt-codex/workspace/KT/mcp/ktWorkflow/prompts/napcat/schemas/upstream-audit.schema.json \
   --output-last-message "$ARTIFACT_DIR/codex-upstream-audit.md" \
   - < "$CONTEXT_PACKET"
 ```
 
-这里用 `workspace-write` 是为了允许 Codex 只写 job artifact 目录下的报告文件。prompt 仍禁止源码编辑、push、merge 和 deployment。
+这个命令由 ktWorkflow 封装并捕获 JSONL event stream。这里用 `workspace-write` 是为了允许 Codex 只写 job artifact 目录下的报告文件。prompt 仍禁止源码编辑、push、merge 和 deployment。
 
-### `napcat-sync-candidate-review.md`
+### `sync-candidate-review.md`
 
 用途：在任何 merge 之前审查生成的 `kt/sync/<release-tag>` 候选分支。
 
@@ -491,7 +530,7 @@ Output:
 - Whether this candidate can proceed to manual code review.
 ```
 
-### `napcat-runtime-release-readiness.md`
+### `runtime-release-readiness.md`
 
 用途：判断已构建运行时镜像是否可以推广到 API。
 
@@ -512,7 +551,7 @@ Output:
 - online smoke readiness
 - rollback pointer
 
-### `napcat-remote-dev-handoff.md`
+### `remote-dev-handoff.md`
 
 用途：人工打开 NAS Codex CLI 远程开发前，生成安全交接。
 
@@ -577,7 +616,7 @@ sequenceDiagram
 - NAS runner 缺 Node、pnpm、Docker、Git、Codex 或 KT workspace manifest：标记 setup incomplete，不启用定时触发。
 - NAS Codex auth 缺失：远程开发不可用，直到交互式登录或可信 auth 文件同步完成；如果确定性 Jenkins 审计不需要 Codex auth，则审计仍可运行。
 - NAS Codex config 与生成模板漂移：remote-development smoke 失败，要求重新生成配置。
-- Codex CLI 自动化 prompt 或 schema 缺失：确定性审计仍可运行，但 AI 辅助分类标记为 unavailable。
+- ktWorkflow NapCat automation tool、prompt 或 schema 缺失：确定性审计仍可运行，但 AI 辅助分类标记为 unavailable。
 - Codex CLI 输出不符合 schema：审计标记 `blocked`，并归档原始输出供人工查看。
 - 笔记本离线或不在局域网：定时审计和运行时发布仍必须在 NAS 继续运行。
 - 上游 release tag 无法解析 commit：标记 `blocked`。
@@ -655,12 +694,16 @@ codex exec --cd /vol1/docker/kt-codex/workspace/KT \
   --ask-for-approval never \
   --json \
   --ephemeral \
-  --output-schema ci/codex-prompts/schemas/napcat-upstream-audit.schema.json \
+  --output-schema /vol1/docker/kt-codex/workspace/KT/mcp/ktWorkflow/prompts/napcat/schemas/upstream-audit.schema.json \
   --output-last-message /vol1/docker/kt-codex/artifacts/smoke/codex-upstream-audit.md \
   - < /vol1/docker/kt-codex/artifacts/smoke/context-packet.md
 ```
 
-预期结果：JSON 符合 schema、源码无改动、Markdown 报告写入 artifact 目录。
+预期结果：JSON 符合 schema、源码无改动、Markdown 报告写入 artifact 目录。首选 smoke 通过 ktWorkflow 执行：
+
+```bash
+pnpm --dir /vol1/docker/kt-codex/workspace/KT/mcp/ktWorkflow run napcat-upstream-audit -- --dry-run --use-codex
+```
 
 ### 运行时发布 Job
 
@@ -705,7 +748,7 @@ docker tag "$IMMUTABLE_TAG" "$PROMOTION_TAG"
 - NAS 有常驻 Codex CLI 和 KT 全量 workspace 环境，可支撑定时审计和远程开发。
 - 定时审计能发现上游 latest release 并生成安全报告。
 - 定时审计从 NAS 服务/Jenkins 运行，不从笔记本运行。
-- Codex CLI 自动化提示词已版本化、schema 校验，并随每次 AI 辅助审计归档。
+- Codex CLI 自动化通过 ktWorkflow 执行；提示词已版本化、schema 校验，并随每次 AI 辅助审计归档。
 - 上游同步不会自动合并进 KT 维护分支。
 - hot-zone 冲突会阻断或进入人工审查。
 - 运行时镜像只从已确认 fork ref 构建，并经过容器内 verify。

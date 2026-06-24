@@ -40,7 +40,7 @@ Primary upstream metadata sources:
 7. Keep production release completion tied to online smoke evidence, not Jenkins/K8s success alone.
 8. Install and configure a NAS-resident Codex CLI environment with a full KT workspace so remote development can continue when the laptop is unavailable.
 9. Run scheduled upstream audits on the NAS through Jenkins or a NAS service timer, never from the laptop.
-10. Version Codex CLI automation prompts for upstream audit, sync candidate review, release readiness review, and remote-development handoff.
+10. Put Codex CLI automation orchestration in `mcp/ktWorkflow`, including prompt templates, schemas, context collectors, and Jenkins/systemd command entry points.
 
 ## Non-Goals
 
@@ -99,6 +99,20 @@ Own:
 - NAS-local Docker image build and verification.
 - Runtime promotion metadata and deployment observation artifacts.
 
+### `D:\MyFiles\KT\mcp\ktWorkflow`
+
+Owns the automation control plane. Jenkins and NAS timers should call ktWorkflow instead of embedding bespoke shell logic.
+
+Required capabilities:
+
+- Generate upstream audit context packets from Git/GitHub facts.
+- Run Codex CLI automation prompts with schema validation and artifact capture.
+- Provide MCP tools for interactive use by Codex Desktop and CLI.
+- Provide npm scripts for Jenkins/systemd, such as `napcat-upstream-audit`, `napcat-sync-candidate-review`, `napcat-runtime-release-readiness`, and `nas-codex-bootstrap`.
+- Keep deterministic collectors, prompt templates, schemas, output normalization, and artifact writing in one reusable implementation.
+
+The API repository remains the owner of runtime Docker integration and API deployment contract. It should not own the general automation runner.
+
 ### NAS Codex Worker and Full KT Workspace
 
 The NAS must host a stable remote development and scheduled-audit environment. Current discovery shows:
@@ -146,9 +160,9 @@ The scheduled upstream audit should be deterministic shell/Jenkins work by defau
 The intended automation split is:
 
 ```text
-deterministic collector
+ktWorkflow deterministic collector
   -> context packet with git/GitHub/build facts
-  -> Codex CLI prompt for reasoning and classification
+  -> ktWorkflow Codex CLI prompt runner
   -> structured JSON/Markdown report
   -> human-approved follow-up action
 ```
@@ -397,24 +411,49 @@ CANARY_ACCOUNT_ID=<optional>
 
 The runtime release job must use a clean NAS job workspace rather than the long-lived remote development workspace. This prevents a remote Codex session and a Jenkins release from modifying the same checkout at the same time.
 
-## Codex CLI Automation Prompt Pack
+## ktWorkflow Codex CLI Automation
 
-Implementation should add a versioned prompt pack under the API repository, for example:
+Implementation should add a NapCat automation module inside `mcp/ktWorkflow`, for example:
 
 ```text
-ci/codex-prompts/
-  napcat-upstream-audit.md
-  napcat-sync-candidate-review.md
-  napcat-runtime-release-readiness.md
-  napcat-remote-dev-handoff.md
-  schemas/
-    napcat-upstream-audit.schema.json
-    napcat-runtime-release-readiness.schema.json
+mcp/ktWorkflow/
+  prompts/napcat/
+    upstream-audit.md
+    sync-candidate-review.md
+    runtime-release-readiness.md
+    remote-dev-handoff.md
+    schemas/
+      upstream-audit.schema.json
+      runtime-release-readiness.schema.json
+  src/tools/napcatAutomation.ts
+  src/tools/napcatAutomation.types.ts
+  src/tools/napcatAutomation.prompts.ts
 ```
 
-Prompts are source-controlled because they are part of the automation contract. Secrets are never embedded in prompts. Each prompt must accept a generated context packet path or stdin payload and must produce a structured JSON result plus a short Markdown explanation.
+Prompts and schemas are source-controlled because they are part of the automation contract. Secrets are never embedded in prompts. Each ktWorkflow tool must accept explicit inputs, generate a context packet, optionally call Codex CLI, validate the output schema, and write artifacts under `.kt-workspace` locally or `/vol1/docker/kt-codex/artifacts` on NAS.
 
-### `napcat-upstream-audit.md`
+MCP tools should include:
+
+```text
+kt_napcat_upstream_audit
+kt_napcat_sync_candidate_review
+kt_napcat_runtime_release_readiness
+kt_napcat_remote_dev_handoff
+kt_nas_codex_bootstrap_plan
+```
+
+CLI scripts should include:
+
+```text
+pnpm --dir mcp/ktWorkflow run napcat-upstream-audit -- --execute --artifact-root /vol1/docker/kt-codex/artifacts/napcat-upstream-sync
+pnpm --dir mcp/ktWorkflow run napcat-sync-candidate-review -- --source-ref kt/sync/<tag>
+pnpm --dir mcp/ktWorkflow run napcat-runtime-release-readiness -- --release-artifact <path>
+pnpm --dir mcp/ktWorkflow run nas-codex-bootstrap -- --dry-run
+```
+
+The scripts are the only supported scheduler entry points. Jenkins and `systemd` should call these scripts and should not duplicate the audit algorithm.
+
+### `upstream-audit.md`
 
 Purpose: classify a new upstream latest release from already-collected facts.
 
@@ -440,7 +479,7 @@ Rules:
 - Recommend next action: no-op, create candidate branch, request human review, or block.
 
 Output:
-- JSON matching ci/codex-prompts/schemas/napcat-upstream-audit.schema.json.
+- JSON matching mcp/ktWorkflow/prompts/napcat/schemas/upstream-audit.schema.json.
 - A concise Markdown summary safe for Jenkins artifacts.
 ```
 
@@ -455,14 +494,14 @@ codex exec \
   --ask-for-approval never \
   --json \
   --ephemeral \
-  --output-schema ci/codex-prompts/schemas/napcat-upstream-audit.schema.json \
+  --output-schema /vol1/docker/kt-codex/workspace/KT/mcp/ktWorkflow/prompts/napcat/schemas/upstream-audit.schema.json \
   --output-last-message "$ARTIFACT_DIR/codex-upstream-audit.md" \
   - < "$CONTEXT_PACKET"
 ```
 
-`workspace-write` is used so Codex can write only the requested report files under the job artifact directory. The prompt still forbids source edits and push/merge/deploy actions.
+ktWorkflow owns this command invocation and must capture the JSONL event stream. `workspace-write` is used so Codex can write only the requested report files under the job artifact directory. The prompt still forbids source edits and push/merge/deploy actions.
 
-### `napcat-sync-candidate-review.md`
+### `sync-candidate-review.md`
 
 Purpose: review a generated `kt/sync/<release-tag>` candidate branch before any merge.
 
@@ -491,7 +530,7 @@ Output:
 - Whether this candidate can proceed to manual code review.
 ```
 
-### `napcat-runtime-release-readiness.md`
+### `runtime-release-readiness.md`
 
 Purpose: decide whether a built runtime image can be promoted to API.
 
@@ -512,7 +551,7 @@ Output must separate:
 - online smoke readiness
 - rollback pointer
 
-### `napcat-remote-dev-handoff.md`
+### `remote-dev-handoff.md`
 
 Purpose: create a safe handoff when a human opens NAS Codex CLI for remote development.
 
@@ -577,7 +616,7 @@ sequenceDiagram
 - NAS runner lacks Node, pnpm, Docker, Git, Codex, or KT workspace manifest: mark setup incomplete and do not enable the scheduled trigger.
 - NAS Codex auth is missing: remote development is unavailable until interactive login or trusted auth-file sync completes; deterministic Jenkins audits may still run if they do not need Codex auth.
 - NAS Codex config drifts from the generated template: fail the remote-development smoke and require config regeneration.
-- Codex CLI automation prompt or schema is missing: deterministic audit may still run, but AI-assisted classification is marked unavailable.
+- ktWorkflow NapCat automation tool, prompt, or schema is missing: deterministic audit may still run, but AI-assisted classification is marked unavailable.
 - Codex CLI output does not match the required schema: mark the audit `blocked` and archive the raw output for review.
 - Laptop is offline or away from the LAN: scheduled audits and runtime release jobs must continue on NAS.
 - Upstream release has no resolvable tag commit: mark `blocked`.
@@ -655,12 +694,16 @@ codex exec --cd /vol1/docker/kt-codex/workspace/KT \
   --ask-for-approval never \
   --json \
   --ephemeral \
-  --output-schema ci/codex-prompts/schemas/napcat-upstream-audit.schema.json \
+  --output-schema /vol1/docker/kt-codex/workspace/KT/mcp/ktWorkflow/prompts/napcat/schemas/upstream-audit.schema.json \
   --output-last-message /vol1/docker/kt-codex/artifacts/smoke/codex-upstream-audit.md \
   - < /vol1/docker/kt-codex/artifacts/smoke/context-packet.md
 ```
 
-Expected result: schema-valid JSON, no source changes, and a Markdown report in the artifact directory.
+Expected result: schema-valid JSON, no source changes, and a Markdown report in the artifact directory. The preferred smoke is through ktWorkflow:
+
+```bash
+pnpm --dir /vol1/docker/kt-codex/workspace/KT/mcp/ktWorkflow run napcat-upstream-audit -- --dry-run --use-codex
+```
 
 ### Runtime Release Job
 
@@ -705,7 +748,7 @@ Online:
 - NAS has a resident Codex CLI and full KT workspace environment for scheduled audits and remote development.
 - A scheduled audit detects upstream latest releases and writes safe reports.
 - The scheduled audit runs from NAS service/Jenkins, not from the laptop.
-- Codex CLI automation prompts are versioned, schema-validated, and archived with every AI-assisted audit.
+- Codex CLI automation runs through ktWorkflow; prompts are versioned, schema-validated, and archived with every AI-assisted audit.
 - Upstream sync never auto-merges into KT maintenance branches.
 - Hot-zone conflicts are blocked or marked for manual review.
 - Runtime images are built from approved fork refs and verified inside containers.

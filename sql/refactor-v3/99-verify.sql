@@ -19,6 +19,11 @@ SELECT 'napcat_risk_mode' AS table_name, COUNT(*) AS row_count FROM napcat_risk_
 SELECT 'qqbot_plugin_task' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task;
 SELECT 'qqbot_plugin_task_run' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task_run;
 
+SELECT 'qqbot_napcat_webui_gateway_audit table exists' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.tables
+WHERE table_schema = DATABASE()
+  AND table_name = 'qqbot_napcat_webui_gateway_audit';
+
 SELECT 'seed_admin_user' AS check_name, COUNT(*) AS matched_rows
 FROM admin_user
 WHERE username = 'admin'
@@ -82,6 +87,10 @@ WHERE plugin_key = 'bangdream'
   AND operation_key LIKE 'bangdream.%'
   AND enabled = 1
   AND is_deleted = 0;
+
+SELECT 'seed_qqbot_account_webui_permission' AS check_name, COUNT(*) AS matched_rows
+FROM admin_menu
+WHERE auth_code = 'QqBot:Account:WebUI';
 
 SELECT 'index_admin_user_username' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics

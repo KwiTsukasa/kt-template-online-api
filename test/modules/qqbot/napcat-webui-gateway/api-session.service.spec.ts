@@ -18,6 +18,7 @@ jest.mock('axios');
 
 const repoRoot = resolve(__dirname, '../../../..');
 const requestMock = axios.request as jest.Mock;
+const EXPIRES_AT_FIXTURE = 1782268000000;
 const INTERNAL_SECRET_FIXTURE = ['internal', 'secret'].join('-');
 const WEBUI_TOKEN_FIXTURE = ['webui', 'token', 'fixture'].join('-');
 
@@ -87,7 +88,7 @@ describe('QqbotNapcatWebuiGatewayService', () => {
       webuiToken: WEBUI_TOKEN_FIXTURE,
     };
     const gatewayResult = {
-      expiresAt: '2026-06-24T10:00:00.000Z',
+      expiresAt: EXPIRES_AT_FIXTURE,
       iframeUrl: '/napcat-webui-gateway/session/sess_1/',
       sessionId: 'sess_1',
     };
@@ -132,18 +133,19 @@ describe('QqbotNapcatWebuiGatewayService', () => {
         name: 'kt-qqbot-napcat-1914728559',
         webuiStatus: 'online',
       },
-      expiresAt: '2026-06-24T10:00:00.000Z',
+      expiresAt: EXPIRES_AT_FIXTURE,
       iframeUrl: '/napcat-webui-gateway/session/sess_1/',
       sessionId: 'sess_1',
     });
     expect(client.createSession).toHaveBeenCalledWith({
       accountId: '1001',
-      accountName: '主机器人',
+      adminUserId: '3001',
+      clientIp: '127.0.0.1',
       containerId: '2001',
       containerName: 'kt-qqbot-napcat-1914728559',
       selfId: '1914728559',
-      targetBaseUrl: 'http://172.18.0.23:6099',
-      webuiPort: 6099,
+      upstreamBaseUrl: 'http://172.18.0.23:6099',
+      userAgent: 'jest-agent',
       webuiToken: WEBUI_TOKEN_FIXTURE,
     });
     expect(serialized).not.toContain(WEBUI_TOKEN_FIXTURE);
@@ -258,7 +260,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
     requestMock.mockResolvedValue({
       data: {
         data: {
-          expiresAt: '2026-06-24T10:00:00.000Z',
+          expiresAt: EXPIRES_AT_FIXTURE,
           iframeUrl: '/napcat-webui-gateway/session/sess_1/',
           sessionId: 'sess_1',
         },
@@ -277,20 +279,28 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
 
     const result = await client.createSession({
       accountId: '1001',
-      accountName: '主机器人',
+      adminUserId: '3001',
+      clientIp: '127.0.0.1',
       containerId: '2001',
       containerName: 'kt-qqbot-napcat-1914728559',
       selfId: '1914728559',
-      targetBaseUrl: 'http://172.18.0.23:6099',
-      webuiPort: 6099,
+      upstreamBaseUrl: 'http://172.18.0.23:6099',
+      userAgent: 'jest-agent',
       webuiToken: WEBUI_TOKEN_FIXTURE,
     });
 
     expect(requestMock).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        targetBaseUrl: 'http://172.18.0.23:6099',
+      data: {
+        accountId: '1001',
+        adminUserId: '3001',
+        clientIp: '127.0.0.1',
+        containerId: '2001',
+        containerName: 'kt-qqbot-napcat-1914728559',
+        selfId: '1914728559',
+        upstreamBaseUrl: 'http://172.18.0.23:6099',
+        userAgent: 'jest-agent',
         webuiToken: WEBUI_TOKEN_FIXTURE,
-      }),
+      },
       headers: {
         'x-kt-gateway-secret': INTERNAL_SECRET_FIXTURE,
       },
@@ -299,7 +309,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
       url: 'http://127.0.0.1:48086/internal/sessions',
     });
     expect(result).toEqual({
-      expiresAt: '2026-06-24T10:00:00.000Z',
+      expiresAt: EXPIRES_AT_FIXTURE,
       iframeUrl: '/napcat-webui-gateway/session/sess_1/',
       sessionId: 'sess_1',
     });
@@ -326,12 +336,13 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
     try {
       await client.createSession({
         accountId: '1001',
-        accountName: '主机器人',
+        adminUserId: '3001',
+        clientIp: '127.0.0.1',
         containerId: '2001',
         containerName: 'kt-qqbot-napcat-1914728559',
         selfId: '1914728559',
-        targetBaseUrl: 'http://172.18.0.23:6099',
-        webuiPort: 6099,
+        upstreamBaseUrl: 'http://172.18.0.23:6099',
+        userAgent: 'jest-agent',
         webuiToken: WEBUI_TOKEN_FIXTURE,
       });
     } catch (error) {

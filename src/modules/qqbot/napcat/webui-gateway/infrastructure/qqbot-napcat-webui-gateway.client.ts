@@ -8,17 +8,18 @@ const DEFAULT_GATEWAY_TIMEOUT_MS = 5000;
 
 export type QqbotNapcatWebuiGatewayCreateSessionRequest = {
   accountId: string;
-  accountName: string;
+  adminUserId: string;
+  clientIp?: string;
   containerId: string;
   containerName: string;
   selfId: string;
-  targetBaseUrl: string;
-  webuiPort: number;
+  upstreamBaseUrl: string;
+  userAgent?: string;
   webuiToken: string;
 };
 
 export type QqbotNapcatWebuiGatewaySessionResult = {
-  expiresAt: string;
+  expiresAt: number;
   iframeUrl: string;
   sessionId: string;
 };

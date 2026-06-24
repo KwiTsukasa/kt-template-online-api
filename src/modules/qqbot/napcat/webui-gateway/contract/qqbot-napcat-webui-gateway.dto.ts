@@ -38,8 +38,10 @@ export class QqbotNapcatWebuiSessionResponseDto {
   @ApiProperty({ type: QqbotNapcatWebuiSessionContainerDto })
   container: QqbotNapcatWebuiSessionContainerDto;
 
-  @ApiProperty({ description: 'Gateway session expiry time in ISO format.' })
-  expiresAt: string;
+  @ApiProperty({
+    description: 'Gateway session expiry timestamp in milliseconds.',
+  })
+  expiresAt: number;
 
   @ApiProperty({ description: 'Browser-safe iframe URL served by Gateway.' })
   iframeUrl: string;

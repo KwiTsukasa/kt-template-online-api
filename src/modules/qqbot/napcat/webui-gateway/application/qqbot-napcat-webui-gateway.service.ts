@@ -151,10 +151,12 @@ export class QqbotNapcatWebuiGatewayService {
     const target = this.toGatewayTarget(runtime);
     const gatewaySession = await this.gatewayClient.createSession({
       accountId: account.id,
-      accountName: account.name,
+      adminUserId: input.adminUserId,
+      clientIp: input.clientIp || undefined,
       containerId: runtime.id,
       containerName: runtime.name,
       selfId: account.selfId,
+      userAgent: input.userAgent || undefined,
       ...target,
     });
     const webuiStatus = this.toWebuiStatus(runtime);
@@ -216,14 +218,14 @@ export class QqbotNapcatWebuiGatewayService {
   /**
    * Converts private NapCat runtime fields into the Gateway client payload.
    * @param runtime - Primary NapCat runtime containing upstream URL, port, and WebUI token.
-   * @returns Internal-only Gateway target metadata.
+   * @returns Internal-only Gateway target metadata without exposing the raw WebUI port separately.
    */
   private toGatewayTarget(runtime: QqbotNapcatRuntime) {
-    const targetBaseUrl = String(runtime.baseUrl || '').trim();
+    const upstreamBaseUrl = String(runtime.baseUrl || '').trim();
     const webuiToken = String(runtime.webuiToken || '').trim();
     const webuiPort = Number(runtime.webuiPort);
 
-    if (!targetBaseUrl || !webuiToken || !Number.isFinite(webuiPort)) {
+    if (!upstreamBaseUrl || !webuiToken || !Number.isFinite(webuiPort)) {
       throwVbenError('NapCat WebUI 配置不完整');
     }
     if (webuiPort <= 0) {
@@ -231,8 +233,7 @@ export class QqbotNapcatWebuiGatewayService {
     }
 
     return {
-      targetBaseUrl,
-      webuiPort,
+      upstreamBaseUrl,
       webuiToken,
     };
   }

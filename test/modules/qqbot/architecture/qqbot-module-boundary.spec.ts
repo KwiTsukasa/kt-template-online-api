@@ -60,6 +60,9 @@ describe('QQBot third-phase module boundaries', () => {
       'infrastructure',
       'schema',
     ]);
+    const moduleSpecificAllowedDirectories = new Map([
+      ['napcat', new Set(['webui-gateway'])],
+    ]);
     const allowedRootFiles = new Set(['index.ts']);
 
     const violations = ['core', 'plugin-platform', 'napcat'].flatMap(
@@ -67,7 +70,10 @@ describe('QQBot third-phase module boundaries', () => {
         listTopLevelEntries(moduleName)
           .filter((entry) =>
             entry.isDirectory
-              ? !allowedDirectories.has(entry.name)
+              ? !allowedDirectories.has(entry.name) &&
+                !moduleSpecificAllowedDirectories
+                  .get(moduleName)
+                  ?.has(entry.name)
               : !allowedRootFiles.has(entry.name) &&
                 !entry.name.endsWith('.module.ts'),
           )

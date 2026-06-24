@@ -21,6 +21,8 @@ That is too easy to drift. It also does not answer a bigger operational question
 
 This design makes `NapCatQQ` its own release unit and adds a separate upstream release audit loop. The audit loop is read-only by default. It never merges upstream into KT automatically.
 
+The scheduled audit must not depend on the laptop. The laptop moves between networks and cannot be treated as a reliable scheduler or runner. The NAS becomes the resident execution node for scheduled checks, release artifacts, Docker image builds, and future remote Codex development sessions.
+
 Primary upstream metadata sources:
 
 - GitHub latest release REST API: `GET /repos/{owner}/{repo}/releases/latest`.
@@ -36,6 +38,8 @@ Primary upstream metadata sources:
 5. Build verified `kt-napcat-desktop-cn` images from selected KT fork refs.
 6. Promote verified runtime images into API deployment through explicit parameters or promotion metadata, not ad hoc manifest edits.
 7. Keep production release completion tied to online smoke evidence, not Jenkins/K8s success alone.
+8. Install and configure a NAS-resident Codex CLI environment with a full KT workspace so remote development can continue when the laptop is unavailable.
+9. Run scheduled upstream audits on the NAS through Jenkins or a NAS service timer, never from the laptop.
 
 ## Non-Goals
 
@@ -46,6 +50,8 @@ Primary upstream metadata sources:
 - Do not make the API repository own NapCat source patches.
 - Do not store GitHub tokens, Jenkins credentials, SSH keys, WebUI tokens, or Docker registry credentials in Git.
 - Do not automatically migrate existing production accounts to a new runtime image without explicit release confirmation.
+- Do not store copied Codex secrets, sessions, logs, SQLite state, browser state, or auth files in Git or release artifacts.
+- Do not run unattended Codex agent sessions that modify code or merge upstream without explicit human approval.
 
 ## Repositories and Ownership
 
@@ -91,11 +97,56 @@ Own:
 - NAS-local Docker image build and verification.
 - Runtime promotion metadata and deployment observation artifacts.
 
+### NAS Codex Worker and Full KT Workspace
+
+The NAS must host a stable remote development and scheduled-audit environment. Current discovery shows:
+
+```text
+host: Tsukasa-NAS
+os: Debian GNU/Linux 12 (bookworm), x86_64
+available: git 2.43.0, Docker 28.5.2
+missing: node, npm, pnpm, corepack, codex
+laptop surface: Codex Desktop; local CLI wrapper currently reports codex-cli 0.131.0
+```
+
+Recommended resident layout:
+
+```text
+/vol1/docker/kt-codex/
+  home/.codex/                 # CODEX_HOME for NAS, chmod 700
+  workspace/KT/                # Full KT workspace checkout
+  artifacts/                   # Audit and release artifacts
+  logs/                        # Service logs, rotated
+  jenkins-workspaces/          # Clean job-specific worktrees/checkouts
+```
+
+The NAS setup must install Node and Codex before enabling scheduled jobs:
+
+1. Install Node on the NAS with a pinned version that satisfies KT engines, currently at least Node `>=20.19.0` for `mcp/ktWorkflow`.
+2. Enable `corepack` and install `pnpm` according to each repository's `packageManager`.
+3. Install the latest stable Codex CLI on the NAS. The laptop runs Codex Desktop, so NAS CLI does not need to match the Desktop wrapper version.
+4. Verify `node --version`, `corepack --version`, `pnpm --version`, `git --version`, `docker --version`, and `codex --version`.
+
+The KT workspace on NAS must be a real full checkout, not a copy of temporary laptop state. Implementation must create a workspace manifest that lists every KT subrepo path, remote, default branch, and writable/push policy. Repositories without a reliable remote must be called out explicitly before the first bootstrap. Ignored runtime folders such as `.kt-workspace`, build outputs, logs, sessions, and DB sync drafts must not be mirrored as source of truth.
+
+Codex configuration parity is logical parity, not a byte-for-byte copy of the Windows profile:
+
+- Copy or generate non-secret configuration for trusted KT projects, model defaults, approval policy, sandbox policy, Superpowers skills, custom KT skills, and `ktWorkflow` MCP.
+- Convert Windows paths in `config.toml` to NAS Linux paths.
+- Keep GUI-only integrations such as local browser, computer-use, and Windows Figma local context disabled unless a NAS-compatible backend is explicitly installed.
+- Because the NAS is fully trusted, sensitive Codex files may be copied from the laptop when needed. The sync must still use a direct trusted channel, keep owner-only permissions, and exclude those files from Git, Jenkins artifacts, Docker build contexts, and public logs.
+- Bootstrap Codex auth either by interactive `codex login` on NAS or by directly copying the required auth material into `CODEX_HOME` with `chmod 600`.
+- Sessions, logs, SQLite state, browser state, and generated images may be copied only if they are useful for remote continuity; they remain local runtime state and must not become source-control or release artifacts.
+- Keep `CODEX_HOME=/vol1/docker/kt-codex/home/.codex` for NAS services so scheduled jobs do not write into root's default home by accident.
+
+The scheduled upstream audit should be deterministic shell/Jenkins work by default. Codex CLI is installed for remote development, review, and manual takeover, not for silent unattended code modification. If a future job invokes Codex non-interactively, it must run in a throwaway branch/worktree, emit a full artifact report, and require human review before commit, push, merge, or deployment.
+
 ## Pipeline Overview
 
 ```mermaid
 flowchart TD
   Upstream["NapNeko/NapCatQQ latest release"] --> Audit["KT-NapCatQQ-Upstream-Sync"]
+  Nas["NAS resident runner"] --> Audit
   Fork["KT NapCatQQ fork"] --> Audit
   Audit --> Report["Audit report artifact"]
   Audit --> Candidate["Optional kt/sync/<tag> candidate branch"]
@@ -116,11 +167,13 @@ KT-NapCatQQ-Runtime-Release
 
 The upstream sync job is scheduled and read-only by default. The runtime release job is manually triggered, or triggered by an approved candidate branch.
 
+All scheduled executions run on the NAS. Jenkins is the preferred scheduler because it already owns build logs and artifacts. If Jenkins is unavailable for this job, use a NAS service timer such as `systemd` with the same script and artifact directory. The laptop may trigger jobs manually, but it must not be the scheduler.
+
 ## Upstream Sync Audit Job
 
 ### Trigger
 
-- Scheduled, for example once per day.
+- Scheduled on the NAS, for example once per day.
 - Manual trigger with `UPSTREAM_RELEASE_TAG` override.
 
 ### Inputs
@@ -177,6 +230,11 @@ CREATE_CANDIDATE_BRANCH=false by default
    - Candidate creation applies KT patches on top of upstream release without merging back to `FORK_BRANCH`.
    - Candidate branch must be pushed only to KT writable remote.
    - Candidate branch must never auto-merge.
+
+9. Archive NAS-local artifacts.
+   - Write reports under `/vol1/docker/kt-codex/artifacts/napcat-upstream-sync/<timestamp>`.
+   - Jenkins must archive the same reports.
+   - Reports must include the NAS runner hostname, Codex CLI version when available, Git version, and workspace manifest revision.
 
 ### Hot Zones
 
@@ -322,6 +380,8 @@ CANARY_ACCOUNT_ID=<optional>
    - Verify K8s deployment generation, pod image, ready replicas, restart count, and logs.
    - For QQ login behavior, complete only after a real account smoke or a clearly documented manual-scan wait state.
 
+The runtime release job must use a clean NAS job workspace rather than the long-lived remote development workspace. This prevents a remote Codex session and a Jenkins release from modifying the same checkout at the same time.
+
 ## API Promotion Contract
 
 The API Jenkinsfile should gain optional parameters:
@@ -345,6 +405,7 @@ API tests must enforce:
 ```mermaid
 sequenceDiagram
   participant Upstream as GitHub Upstream
+  participant Nas as NAS Runner
   participant Sync as Upstream Sync Jenkins
   participant Fork as KT NapCatQQ Fork
   participant Release as Runtime Release Jenkins
@@ -352,6 +413,7 @@ sequenceDiagram
   participant Docker as NAS Docker
   participant ApiDeploy as API Jenkins
 
+  Nas->>Sync: scheduled trigger
   Sync->>Upstream: read latest release metadata
   Sync->>Fork: fetch maintained branch
   Sync->>Sync: diff upstream delta vs KT fork patch
@@ -368,6 +430,10 @@ sequenceDiagram
 ## Error Handling
 
 - GitHub API rate limit or outage: mark audit as `blocked` with retry advice; do not infer latest release from stale data unless explicitly allowed.
+- NAS runner lacks Node, pnpm, Docker, Git, Codex, or KT workspace manifest: mark setup incomplete and do not enable the scheduled trigger.
+- NAS Codex auth is missing: remote development is unavailable until interactive login or trusted auth-file sync completes; deterministic Jenkins audits may still run if they do not need Codex auth.
+- NAS Codex config drifts from the generated template: fail the remote-development smoke and require config regeneration.
+- Laptop is offline or away from the LAN: scheduled audits and runtime release jobs must continue on NAS.
 - Upstream release has no resolvable tag commit: mark `blocked`.
 - Fork writable remote points to upstream: fail before push.
 - Dirty workspace: fail before audit candidate or release.
@@ -406,6 +472,32 @@ Jenkins dry run must show:
 - Fork patch file list.
 - Overlap/hot-zone classification.
 - Report artifact paths.
+- NAS runner hostname and artifact directory.
+- Workspace manifest revision.
+
+### NAS Codex and Workspace
+
+NAS setup validation:
+
+```bash
+node --version
+corepack --version
+pnpm --version
+git --version
+docker --version
+codex --version
+cd /vol1/docker/kt-codex/workspace/KT
+git status --short --branch
+pnpm --dir mcp/ktWorkflow run self-test
+```
+
+Remote development smoke:
+
+- `codex --version` reports the latest installed NAS CLI version.
+- `CODEX_HOME` points at `/vol1/docker/kt-codex/home/.codex`.
+- `ktWorkflow` MCP can start from Linux paths.
+- A dry-run upstream audit can write reports into `/vol1/docker/kt-codex/artifacts`.
+- No laptop-only Windows path remains in the NAS `config.toml`.
 
 ### Runtime Release Job
 
@@ -447,7 +539,9 @@ Online:
 ## Completion Criteria
 
 - `NapCatQQ` has a standalone Jenkins release path.
+- NAS has a resident Codex CLI and full KT workspace environment for scheduled audits and remote development.
 - A scheduled audit detects upstream latest releases and writes safe reports.
+- The scheduled audit runs from NAS service/Jenkins, not from the laptop.
 - Upstream sync never auto-merges into KT maintenance branches.
 - Hot-zone conflicts are blocked or marked for manual review.
 - Runtime images are built from approved fork refs and verified inside containers.

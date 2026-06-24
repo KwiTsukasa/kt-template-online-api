@@ -21,6 +21,8 @@ kt-napcat-desktop-cn:<profile>
 
 本设计把 `NapCatQQ` fork 变成独立发布单元，并新增一个上游 release 审计循环。审计循环默认只读，只产报告和候选分支，绝不自动合并到 KT 维护分支。
 
+定时审计不能依赖笔记本。笔记本需要通勤和切换网络，不能作为稳定 scheduler 或 runner。NAS 必须成为常驻执行节点，负责定时检查、release artifact、Docker 镜像构建，以及后续远程 Codex 开发会话。
+
 主要上游元数据来源：
 
 - GitHub latest release REST API：`GET /repos/{owner}/{repo}/releases/latest`。
@@ -36,6 +38,8 @@ kt-napcat-desktop-cn:<profile>
 5. 从已确认的 KT fork ref 构建并验证 `kt-napcat-desktop-cn` 镜像。
 6. 通过显式参数或发布元数据把已验证镜像推广到 API 部署，不再手工临时改 manifest。
 7. 线上完成标准必须包含真实 smoke，不把 Jenkins/K8s 成功当成功能闭环。
+8. 在 NAS 上安装并配置常驻 Codex CLI 与 KT 全量 workspace，保证笔记本不在线时仍可远程开发。
+9. 上游定时审计必须跑在 NAS 的 Jenkins 或 NAS 服务定时器中，不能跑在笔记本。
 
 ## 非目标
 
@@ -46,6 +50,8 @@ kt-napcat-desktop-cn:<profile>
 - 不让 API 仓库持有 NapCat 源码补丁。
 - 不把 GitHub token、Jenkins 凭证、SSH key、WebUI token、Docker registry 凭证写进 Git。
 - 不在没有明确确认时自动迁移线上账号到新运行时镜像。
+- 不把同步到 NAS 的 Codex secrets、sessions、logs、SQLite 状态、浏览器状态或 auth 文件写入 Git 或 release artifact。
+- 不运行会在无人值守状态下修改代码或合并 upstream 的 Codex agent。
 
 ## 仓库职责
 
@@ -91,11 +97,56 @@ API 仓库不提交 `NapCat.Shell.zip` 二进制 artifact。
 - 在 NAS 本地构建并验证 Docker 镜像。
 - 保存运行时发布元数据和部署观测 artifact。
 
+### NAS Codex Worker 与 KT 全量 Workspace
+
+NAS 必须承载稳定的远程开发和定时审计环境。当前只读探测结果：
+
+```text
+host: Tsukasa-NAS
+os: Debian GNU/Linux 12 (bookworm), x86_64
+available: git 2.43.0, Docker 28.5.2
+missing: node, npm, pnpm, corepack, codex
+laptop surface: Codex Desktop；本机 CLI wrapper 当前显示 codex-cli 0.131.0
+```
+
+推荐常驻目录：
+
+```text
+/vol1/docker/kt-codex/
+  home/.codex/                 # NAS 的 CODEX_HOME，chmod 700
+  workspace/KT/                # KT 全量 workspace checkout
+  artifacts/                   # 审计和发布 artifact
+  logs/                        # 服务日志，按周期轮转
+  jenkins-workspaces/          # Jenkins 干净 job workspace/worktree
+```
+
+启用定时任务前，NAS 必须先安装 Node 和 Codex：
+
+1. 安装满足 KT engines 的 Node 版本，目前 `mcp/ktWorkflow` 至少需要 Node `>=20.19.0`。
+2. 启用 `corepack`，并按各仓库 `packageManager` 使用对应 `pnpm`。
+3. NAS 安装最新稳定版 Codex CLI。笔记本使用的是 Codex Desktop，NAS CLI 不需要和 Desktop wrapper 版本锁死一致。
+4. 验证 `node --version`、`corepack --version`、`pnpm --version`、`git --version`、`docker --version`、`codex --version`。
+
+NAS 上的 KT workspace 必须是真实全量 checkout，不是笔记本临时状态复制。实现阶段要创建 workspace manifest，列出每个 KT 子仓库的路径、remote、默认分支和是否允许 push。没有稳定 remote 的仓库必须在首次 bootstrap 前明确列出。`.kt-workspace`、构建输出、日志、session、DB sync 草稿等 ignored runtime 目录不能作为源码真相源同步。
+
+Codex 配置一致指“逻辑一致”，不是把 Windows profile 原样复制到 Linux：
+
+- 同步或生成非敏感配置：KT trusted projects、model 默认值、approval policy、sandbox policy、Superpowers skills、自定义 KT skills、`ktWorkflow` MCP。
+- 把 `config.toml` 里的 Windows 路径转换成 NAS Linux 路径。
+- 本地浏览器、computer-use、Windows Figma local context 这类 GUI-only 能力默认禁用，除非后续安装了 NAS 可用 backend。
+- NAS 是完全可信环境，需要时可以从笔记本复制敏感 Codex 文件。同步仍必须走可信直连通道，文件 owner-only 权限，并排除在 Git、Jenkins artifact、Docker build context 和公开日志之外。
+- Codex auth 可通过 NAS 上交互式 `codex login` 完成，也可以直接把所需 auth material 同步到 `CODEX_HOME` 并设置 `chmod 600`。
+- sessions、logs、SQLite state、browser state、generated images 只有在远程连续性有价值时才复制；它们仍是本地运行态，不是源码或发布 artifact。
+- NAS 服务统一使用 `CODEX_HOME=/vol1/docker/kt-codex/home/.codex`，避免定时任务意外写入 root 默认 home。
+
+上游定时审计默认只运行确定性的 shell/Jenkins 逻辑。Codex CLI 安装的目的，是远程开发、人工审查和接管，不是默默无人值守改代码。未来如果需要非交互调用 Codex，也必须在一次性分支/worktree 中运行，产出完整 artifact，并在 commit、push、merge 或 deployment 前要求人工审查。
+
 ## 流水线总览
 
 ```mermaid
 flowchart TD
   Upstream["NapNeko/NapCatQQ latest release"] --> Audit["KT-NapCatQQ-Upstream-Sync"]
+  Nas["NAS 常驻 runner"] --> Audit
   Fork["KT NapCatQQ fork"] --> Audit
   Audit --> Report["审计报告 artifact"]
   Audit --> Candidate["可选 kt/sync/<tag> 候选分支"]
@@ -116,11 +167,13 @@ KT-NapCatQQ-Runtime-Release
 
 上游同步 job 定时执行，默认只读。运行时发布 job 手动触发，或者由已经人工确认的候选分支触发。
 
+所有定时执行都必须跑在 NAS 上。优先使用 Jenkins，因为它已经负责构建日志和 artifact；如果这个 job 暂时不适合放 Jenkins，就用 NAS 服务定时器，例如 `systemd` timer，执行同一套脚本和 artifact 目录。笔记本可以手动触发任务，但不能作为 scheduler。
+
 ## 上游同步审计 Job
 
 ### 触发方式
 
-- 定时触发，例如每天一次。
+- 在 NAS 上定时触发，例如每天一次。
 - 手动触发，可指定 `UPSTREAM_RELEASE_TAG`。
 
 ### 输入
@@ -177,6 +230,11 @@ CREATE_CANDIDATE_BRANCH=false
    - 候选分支是在上游 release 上应用 KT patch，不合回 `FORK_BRANCH`。
    - 候选分支只能推到 KT 可写 remote。
    - 候选分支永远不能自动 merge。
+
+9. 归档 NAS 本地 artifact。
+   - 报告写入 `/vol1/docker/kt-codex/artifacts/napcat-upstream-sync/<timestamp>`。
+   - Jenkins 归档同一份报告。
+   - 报告必须包含 NAS runner hostname、可用时的 Codex CLI version、Git version、workspace manifest revision。
 
 ### Hot Zone
 
@@ -322,6 +380,8 @@ CANARY_ACCOUNT_ID=<可选>
    - 验证 K8s deployment generation、pod image、ready replicas、restart count 和日志。
    - 涉及 QQ 登录行为时，必须等真实账号 smoke 或明确记录“等待人工扫码”的状态，不能只凭 Jenkins/K8s 完成。
 
+运行时发布 job 必须使用干净的 NAS job workspace，而不是长期远程开发 workspace，避免远程 Codex 会话和 Jenkins 发布同时修改同一个 checkout。
+
 ## API 推广契约
 
 API Jenkinsfile 增加可选参数：
@@ -345,6 +405,7 @@ API 测试需要保证：
 ```mermaid
 sequenceDiagram
   participant Upstream as GitHub 上游
+  participant Nas as NAS Runner
   participant Sync as 上游审计 Jenkins
   participant Fork as KT NapCatQQ Fork
   participant Release as 运行时发布 Jenkins
@@ -352,6 +413,7 @@ sequenceDiagram
   participant Docker as NAS Docker
   participant ApiDeploy as API Jenkins
 
+  Nas->>Sync: 定时触发
   Sync->>Upstream: 读取 latest release 元数据
   Sync->>Fork: fetch 维护分支
   Sync->>Sync: 对比上游 delta 与 KT fork patch
@@ -368,6 +430,10 @@ sequenceDiagram
 ## 错误处理
 
 - GitHub API 限流或不可用：审计标记 `blocked`，给出重试建议；除非明确允许，不用陈旧数据推断 latest。
+- NAS runner 缺 Node、pnpm、Docker、Git、Codex 或 KT workspace manifest：标记 setup incomplete，不启用定时触发。
+- NAS Codex auth 缺失：远程开发不可用，直到交互式登录或可信 auth 文件同步完成；如果确定性 Jenkins 审计不需要 Codex auth，则审计仍可运行。
+- NAS Codex config 与生成模板漂移：remote-development smoke 失败，要求重新生成配置。
+- 笔记本离线或不在局域网：定时审计和运行时发布仍必须在 NAS 继续运行。
 - 上游 release tag 无法解析 commit：标记 `blocked`。
 - fork 可写 remote 指向上游：push 前失败。
 - 工作区不干净：候选或发布前失败。
@@ -406,6 +472,32 @@ Jenkins dry run 必须看到：
 - KT fork patch 文件列表。
 - overlap/hot-zone 分类。
 - 报告 artifact 路径。
+- NAS runner hostname 和 artifact 目录。
+- workspace manifest revision。
+
+### NAS Codex 与 Workspace
+
+NAS setup 验证：
+
+```bash
+node --version
+corepack --version
+pnpm --version
+git --version
+docker --version
+codex --version
+cd /vol1/docker/kt-codex/workspace/KT
+git status --short --branch
+pnpm --dir mcp/ktWorkflow run self-test
+```
+
+远程开发 smoke：
+
+- `codex --version` 返回 NAS 已安装的最新 CLI 版本。
+- `CODEX_HOME` 指向 `/vol1/docker/kt-codex/home/.codex`。
+- `ktWorkflow` MCP 能从 Linux 路径启动。
+- 上游审计 dry-run 能把报告写入 `/vol1/docker/kt-codex/artifacts`。
+- NAS `config.toml` 中没有笔记本 Windows-only 路径。
 
 ### 运行时发布 Job
 
@@ -447,7 +539,9 @@ docker tag "$IMMUTABLE_TAG" "$PROMOTION_TAG"
 ## 完成标准
 
 - `NapCatQQ` 有独立 Jenkins 发布链路。
+- NAS 有常驻 Codex CLI 和 KT 全量 workspace 环境，可支撑定时审计和远程开发。
 - 定时审计能发现上游 latest release 并生成安全报告。
+- 定时审计从 NAS 服务/Jenkins 运行，不从笔记本运行。
 - 上游同步不会自动合并进 KT 维护分支。
 - hot-zone 冲突会阻断或进入人工审查。
 - 运行时镜像只从已确认 fork ref 构建，并经过容器内 verify。

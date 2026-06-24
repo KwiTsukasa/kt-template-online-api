@@ -42,6 +42,10 @@ spec:
               value: kt:qqbot:plugin-task
             - name: BANGDREAM_TSUGU_CACHE_ROOT
               value: /data/qqbot/plugins/bangdream/cache
+            - name: NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL
+              value: http://kt-napcat-webui-gateway:48086
+            - name: NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL
+              value: /napcat-webui
           # Jenkins 每次发布会从 Agent 私有 .env.production 重建这个 Secret。
           envFrom:
             - secretRef:
@@ -159,6 +163,87 @@ spec:
       volumes:
         - name: redis-data
           emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kt-napcat-webui-gateway
+  namespace: kt-prod
+  labels:
+    app: kt-napcat-webui-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: kt-napcat-webui-gateway
+  ports:
+    - name: http
+      port: 48086
+      targetPort: 48086
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kt-napcat-webui-gateway
+  namespace: kt-prod
+  labels:
+    app: kt-napcat-webui-gateway
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kt-napcat-webui-gateway
+  template:
+    metadata:
+      labels:
+        app: kt-napcat-webui-gateway
+    spec:
+      containers:
+        - name: gateway
+          image: k3d-kt-registry.localhost:5000/kt-napcat-webui-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 48086
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: TZ
+              value: Asia/Shanghai
+            - name: NAPCAT_WEBUI_GATEWAY_PORT
+              value: "48086"
+            - name: NAPCAT_WEBUI_GATEWAY_REDIS_HOST
+              value: kt-qqbot-plugin-redis
+            - name: NAPCAT_WEBUI_GATEWAY_REDIS_PORT
+              value: "6379"
+            - name: NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: kt-template-online-api-env
+                  key: NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET
+          readinessProbe:
+            tcpSocket:
+              port: 48086
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: 48086
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
 ---
 apiVersion: v1
 kind: Service

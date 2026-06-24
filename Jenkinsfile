@@ -38,6 +38,7 @@ def requiredRuntimeEnvKeys() {
     'FFLOGS_CLIENT_SECRET',
     'QQBOT_PLUGIN_QUEUE_REDIS_HOST',
     'QQBOT_PLUGIN_QUEUE_REDIS_PORT',
+    'NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET',
   ]
 }
 
@@ -85,6 +86,7 @@ pipeline {
     string(name: 'PUBLISH_BRANCH_PATTERN', defaultValue: '^(main|master|release/.+)$', description: '允许推送镜像的分支正则')
     string(name: 'DOCKER_REGISTRY', defaultValue: 'k3d-kt-registry.localhost:5000', description: '镜像仓库地址；K8s 发布默认使用 fnOS NAS 上的 k3d 本地 registry')
     string(name: 'IMAGE_NAME', defaultValue: 'kt-template-online-api', description: 'Docker 镜像名称')
+    string(name: 'GATEWAY_IMAGE_NAME', defaultValue: 'kt-napcat-webui-gateway', description: 'NapCat WebUI Gateway Docker 镜像名称')
     string(name: 'IMAGE_TAG', defaultValue: '', description: '镜像标签，为空时使用 分支名-BUILD_NUMBER；PR 使用源分支名')
     string(name: 'CONTAINER_NAME', defaultValue: 'kt-template-online-api', description: '业务容器名称')
     string(name: 'CONTAINER_PORT', defaultValue: '48085', description: '宿主机映射端口，容器内固定使用 48085')
@@ -133,6 +135,8 @@ pipeline {
           env.DOCKER_REGISTRY_EFFECTIVE = registry ?: ''
           env.DOCKER_IMAGE = registry ? "${registry}/${params.IMAGE_NAME}:${env.IMAGE_TAG_FINAL}" : "${params.IMAGE_NAME}:${env.IMAGE_TAG_FINAL}"
           env.DOCKER_IMAGE_LATEST = registry ? "${registry}/${params.IMAGE_NAME}:latest" : "${params.IMAGE_NAME}:latest"
+          env.GATEWAY_DOCKER_IMAGE = registry ? "${registry}/${params.GATEWAY_IMAGE_NAME}:${env.IMAGE_TAG_FINAL}" : "${params.GATEWAY_IMAGE_NAME}:${env.IMAGE_TAG_FINAL}"
+          env.GATEWAY_DOCKER_IMAGE_LATEST = registry ? "${registry}/${params.GATEWAY_IMAGE_NAME}:latest" : "${params.GATEWAY_IMAGE_NAME}:latest"
 
           // Agent 由 NAS 侧预先创建；这里仅确认 CI 所需的 Node/pnpm 环境可用。
           if (isUnix()) {
@@ -183,6 +187,8 @@ pipeline {
             Docker registry: ${env.DOCKER_REGISTRY_EFFECTIVE ?: '-'}
             Docker image: ${env.DOCKER_IMAGE}
             Docker latest: ${env.DOCKER_IMAGE_LATEST}
+            Gateway image: ${env.GATEWAY_DOCKER_IMAGE}
+            Gateway latest: ${env.GATEWAY_DOCKER_IMAGE_LATEST}
             Deploy target: ${params.DEPLOY_TARGET}
             Publish branch: ${env.IS_PUBLISH_BRANCH}
             Run container: ${params.RUN_DOCKER_CONTAINER}
@@ -237,16 +243,24 @@ pipeline {
           if (isUnix()) {
             runCmd("""
               test -f dist/main.js
+              test -f dist/apps/napcat-webui-gateway/main.js
               docker build -f dockerfile -t ${env.DOCKER_IMAGE} .
+              docker build -f dockerfile.gateway -t ${env.GATEWAY_DOCKER_IMAGE} .
               if [ '${env.DOCKER_IMAGE}' != '${env.DOCKER_IMAGE_LATEST}' ]; then
                 docker tag ${env.DOCKER_IMAGE} ${env.DOCKER_IMAGE_LATEST}
+              fi
+              if [ '${env.GATEWAY_DOCKER_IMAGE}' != '${env.GATEWAY_DOCKER_IMAGE_LATEST}' ]; then
+                docker tag ${env.GATEWAY_DOCKER_IMAGE} ${env.GATEWAY_DOCKER_IMAGE_LATEST}
               fi
             """.stripIndent())
           } else {
             runCmd('', """
               if not exist dist\\main.js exit /b 1
+              if not exist dist\\apps\\napcat-webui-gateway\\main.js exit /b 1
               docker build -f dockerfile -t ${env.DOCKER_IMAGE} .
+              docker build -f dockerfile.gateway -t ${env.GATEWAY_DOCKER_IMAGE} .
               if not "${env.DOCKER_IMAGE}"=="${env.DOCKER_IMAGE_LATEST}" docker tag ${env.DOCKER_IMAGE} ${env.DOCKER_IMAGE_LATEST}
+              if not "${env.GATEWAY_DOCKER_IMAGE}"=="${env.GATEWAY_DOCKER_IMAGE_LATEST}" docker tag ${env.GATEWAY_DOCKER_IMAGE} ${env.GATEWAY_DOCKER_IMAGE_LATEST}
             """.stripIndent())
           }
         }
@@ -267,9 +281,14 @@ pipeline {
             runCmd("""
               docker push ${env.DOCKER_IMAGE}
               docker push ${env.DOCKER_IMAGE_LATEST}
+              docker push ${env.GATEWAY_DOCKER_IMAGE}
+              docker push ${env.GATEWAY_DOCKER_IMAGE_LATEST}
             """.stripIndent())
           } else {
-            runCmd("docker push ${env.DOCKER_IMAGE}")
+            runCmd("""
+              docker push ${env.DOCKER_IMAGE}
+              docker push ${env.GATEWAY_DOCKER_IMAGE}
+            """.stripIndent())
           }
         }
       }
@@ -295,6 +314,7 @@ pipeline {
           def namespace = params.K8S_NAMESPACE?.trim() ?: 'kt-prod'
           def deploymentName = params.K8S_DEPLOYMENT?.trim() ?: 'kt-template-online-api'
           def containerName = params.K8S_CONTAINER?.trim() ?: 'api'
+          def gatewayDeploymentName = 'kt-napcat-webui-gateway'
           def envSecret = params.K8S_ENV_SECRET?.trim() ?: 'kt-template-online-api-env'
           def rolloutTimeout = params.K8S_ROLLOUT_TIMEOUT?.trim() ?: '180s'
           def containerEnvFile = params.CONTAINER_ENV_FILE?.trim()
@@ -338,10 +358,14 @@ pipeline {
 
             kubectl ${kubeConfigArg} apply -f ${shellQuote(manifestFile)}
             kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote("deployment/${deploymentName}")} ${shellQuote("${containerName}=${env.DOCKER_IMAGE}")}
+            kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote('deployment/kt-napcat-webui-gateway')} ${shellQuote("gateway=${env.GATEWAY_DOCKER_IMAGE}")}
             kubectl ${kubeConfigArg} ${namespaceArg} annotate ${shellQuote("deployment/${deploymentName}")} \\
               ${shellQuote("kubernetes.io/change-cause=${changeCause}")} --overwrite
+            kubectl ${kubeConfigArg} ${namespaceArg} annotate ${shellQuote('deployment/kt-napcat-webui-gateway')} \\
+              ${shellQuote("kubernetes.io/change-cause=${changeCause}")} --overwrite
             kubectl ${kubeConfigArg} ${namespaceArg} rollout status ${shellQuote("deployment/${deploymentName}")} --timeout=${shellQuote(rolloutTimeout)}
-            kubectl ${kubeConfigArg} ${namespaceArg} get pod,svc -l app=${shellQuote(deploymentName)}
+            kubectl ${kubeConfigArg} ${namespaceArg} rollout status ${shellQuote('deployment/kt-napcat-webui-gateway')} --timeout=${shellQuote(rolloutTimeout)}
+            kubectl ${kubeConfigArg} ${namespaceArg} get pod,svc -l ${shellQuote("app in (${deploymentName},${gatewayDeploymentName})")}
           """.stripIndent())
         }
       }
@@ -407,7 +431,7 @@ pipeline {
 
   post {
     success {
-      archiveArtifacts artifacts: 'dist/**,package.json,pnpm-lock.yaml,dockerfile,k8s/**,ci/fnos-k8s/**', fingerprint: true, allowEmptyArchive: true
+      archiveArtifacts artifacts: 'dist/**,package.json,pnpm-lock.yaml,dockerfile,dockerfile.gateway,k8s/**,ci/fnos-k8s/**', fingerprint: true, allowEmptyArchive: true
     }
   }
 }

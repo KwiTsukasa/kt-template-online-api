@@ -6,9 +6,12 @@ import { createPinoLoggerParams } from '@/common';
 import { NapcatWebuiGatewaySessionService } from './application/napcat-webui-gateway-session.service';
 import { NapcatWebuiGatewayConfigService } from './config/napcat-webui-gateway-config.service';
 import { NAPCAT_WEBUI_GATEWAY_SESSION_STORE } from './domain/napcat-webui-gateway.types';
+import { NapcatWebuiCredentialClient } from './infrastructure/napcat-webui-credential.client';
+import { NapcatWebuiProxyService } from './infrastructure/proxy/napcat-webui-proxy.service';
 import { NapcatWebuiGatewayRedisStore } from './infrastructure/session/napcat-webui-gateway-redis.store';
 import { NapcatWebuiGatewayTicketService } from './infrastructure/session/napcat-webui-gateway-ticket.service';
 import { InternalSessionController } from './presentation/internal-session.controller';
+import { PublicWebuiController } from './presentation/public-webui.controller';
 
 @Module({
   imports: [
@@ -44,9 +47,11 @@ import { InternalSessionController } from './presentation/internal-session.contr
       },
     }),
   ],
-  controllers: [InternalSessionController],
+  controllers: [InternalSessionController, PublicWebuiController],
   providers: [
     NapcatWebuiGatewayConfigService,
+    NapcatWebuiCredentialClient,
+    NapcatWebuiProxyService,
     NapcatWebuiGatewaySessionService,
     NapcatWebuiGatewayRedisStore,
     NapcatWebuiGatewayTicketService,

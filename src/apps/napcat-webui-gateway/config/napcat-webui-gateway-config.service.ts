@@ -5,6 +5,7 @@ const DEFAULT_GATEWAY_PORT = 48086;
 const DEFAULT_REDIS_HOST = '127.0.0.1';
 const DEFAULT_REDIS_PORT = 6379;
 const DEFAULT_SESSION_TTL_MS = 60_000;
+const DEFAULT_UPSTREAM_TIMEOUT_MS = 5000;
 const MAX_TICKET_TTL_MS = 60_000;
 
 @Injectable()
@@ -56,6 +57,17 @@ export class NapcatWebuiGatewayConfigService {
     return this.getPositiveNumber(
       'NAPCAT_WEBUI_GATEWAY_PORT',
       DEFAULT_GATEWAY_PORT,
+    );
+  }
+
+  /**
+   * Reads the bounded timeout for NapCat WebUI upstream HTTP calls.
+   * @returns Positive timeout in milliseconds, defaulting to 5 seconds.
+   */
+  upstreamTimeoutMs() {
+    return this.getPositiveNumber(
+      'NAPCAT_WEBUI_GATEWAY_UPSTREAM_TIMEOUT_MS',
+      DEFAULT_UPSTREAM_TIMEOUT_MS,
     );
   }
 

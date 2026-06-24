@@ -8,6 +8,7 @@ import {
   type NapcatWebuiGatewaySession,
   type NapcatWebuiGatewaySessionStore,
 } from '../../../src/apps/napcat-webui-gateway/domain/napcat-webui-gateway.types';
+import { NapcatWebuiCredentialClient } from '../../../src/apps/napcat-webui-gateway/infrastructure/napcat-webui-credential.client';
 import { NapcatWebuiGatewayRedisStore } from '../../../src/apps/napcat-webui-gateway/infrastructure/session/napcat-webui-gateway-redis.store';
 import { NapcatWebuiGatewayTicketService } from '../../../src/apps/napcat-webui-gateway/infrastructure/session/napcat-webui-gateway-ticket.service';
 import { InternalSessionController } from '../../../src/apps/napcat-webui-gateway/presentation/internal-session.controller';
@@ -60,10 +61,7 @@ class MemorySessionStore implements NapcatWebuiGatewaySessionStore {
    * @param patch - Fields to merge into the stored session.
    * @returns Updated session.
    */
-  async update(
-    sessionId: string,
-    patch: Partial<NapcatWebuiGatewaySession>,
-  ) {
+  async update(sessionId: string, patch: Partial<NapcatWebuiGatewaySession>) {
     const current = this.sessions.get(sessionId);
     if (!current) throw new Error(`Missing session ${sessionId}`);
     const next = { ...current, ...patch };
@@ -160,20 +158,12 @@ class FakeRedis {
       throw new Error('Unexpected Redis key count');
     }
 
-    const [
-      sessionKey,
-      sessionId,
-      patchJson,
-      userAccountKeyPrefix,
-      now,
-    ] = args;
+    const [sessionKey, sessionId, patchJson, userAccountKeyPrefix, now] = args;
     const currentJson = this.values.get(sessionKey);
     if (!currentJson) return [0, 'Gateway session is not active'];
 
     const current = JSON.parse(currentJson) as NapcatWebuiGatewaySession;
-    const patch = JSON.parse(
-      patchJson,
-    ) as Partial<NapcatWebuiGatewaySession>;
+    const patch = JSON.parse(patchJson) as Partial<NapcatWebuiGatewaySession>;
     const next = {
       ...current,
       ...patch,
@@ -235,7 +225,9 @@ class FakeRedis {
  * @returns Session creation payload.
  */
 function createSessionInput(
-  override: Partial<Parameters<NapcatWebuiGatewaySessionService['create']>[0]> = {},
+  override: Partial<
+    Parameters<NapcatWebuiGatewaySessionService['create']>[0]
+  > = {},
 ) {
   return {
     accountId: 'account-1',
@@ -368,7 +360,9 @@ describe('NapcatWebuiGatewaySessionService', () => {
       service.create(createSessionInput({ webuiToken: ' ' })),
     ).rejects.toThrow('Gateway session field webuiToken is required');
     await expect(
-      service.create(createSessionInput({ upstreamBaseUrl: 'ftp://127.0.0.1' })),
+      service.create(
+        createSessionInput({ upstreamBaseUrl: 'ftp://127.0.0.1' }),
+      ),
     ).rejects.toThrow('Gateway session upstream URL is invalid');
     expect(store.sessions.size).toBe(0);
   });
@@ -425,9 +419,9 @@ describe('NapcatWebuiGatewaySessionService', () => {
     );
     const session = await service.create(createSessionInput());
 
-    await expect(service.requireProxySession(session.sessionId)).rejects.toThrow(
-      'Gateway session is not active',
-    );
+    await expect(
+      service.requireProxySession(session.sessionId),
+    ).rejects.toThrow('Gateway session is not active');
     await expect(
       service.requireBootstrapSession(session.sessionId),
     ).resolves.toMatchObject({
@@ -458,9 +452,9 @@ describe('NapcatWebuiGatewaySessionService', () => {
 
     currentTime.value = 70_000;
 
-    await expect(service.requireProxySession(session.sessionId)).rejects.toThrow(
-      'Gateway session is not active',
-    );
+    await expect(
+      service.requireProxySession(session.sessionId),
+    ).rejects.toThrow('Gateway session is not active');
     expect(await store.find(session.sessionId)).toMatchObject({
       status: 'expired',
     });
@@ -479,9 +473,9 @@ describe('NapcatWebuiGatewaySessionService', () => {
       sessionId: session.sessionId,
     });
 
-    await expect(service.requireProxySession(session.sessionId)).rejects.toThrow(
-      'Gateway session is not active',
-    );
+    await expect(
+      service.requireProxySession(session.sessionId),
+    ).rejects.toThrow('Gateway session is not active');
   });
 });
 
@@ -540,9 +534,9 @@ describe('NapcatWebuiGatewayRedisStore', () => {
       sessionId: second.sessionId,
       status: 'created',
     });
-    expect(redis.values.get('napcat:webui:user-account:admin-1:account-1')).toBe(
-      second.sessionId,
-    );
+    expect(
+      redis.values.get('napcat:webui:user-account:admin-1:account-1'),
+    ).toBe(second.sessionId);
   });
 
   it('rejects stale non-terminal updates when the index points at a newer session', async () => {
@@ -579,9 +573,11 @@ describe('NapcatWebuiGatewayRedisStore', () => {
       }),
     ).rejects.toThrow('Gateway session is not active');
     expect(redis.values.get(indexKey)).toBe(second.sessionId);
-    expect(JSON.parse(redis.values.get(firstSessionKey) || '{}')).toMatchObject({
-      status: 'created',
-    });
+    expect(JSON.parse(redis.values.get(firstSessionKey) || '{}')).toMatchObject(
+      {
+        status: 'created',
+      },
+    );
   });
 
   it('rejects non-terminal updates when the user-account index is missing', async () => {
@@ -766,6 +762,9 @@ describe('NapcatWebuiGatewayTicketService', () => {
 
 describe('InternalSessionController', () => {
   let app: INestApplication;
+  const credentialClient = {
+    clear: jest.fn(),
+  };
   const store = new MemorySessionStore();
   const currentTime = { value: 1000 };
   const config = createConfig(currentTime);
@@ -779,6 +778,10 @@ describe('InternalSessionController', () => {
         {
           provide: NapcatWebuiGatewayConfigService,
           useValue: config,
+        },
+        {
+          provide: NapcatWebuiCredentialClient,
+          useValue: credentialClient,
         },
         {
           provide: NAPCAT_WEBUI_GATEWAY_SESSION_STORE,
@@ -796,6 +799,7 @@ describe('InternalSessionController', () => {
   });
 
   beforeEach(() => {
+    credentialClient.clear.mockReset();
     store.sessions.clear();
     currentTime.value = 1000;
   });
@@ -892,6 +896,7 @@ describe('InternalSessionController', () => {
       .set('x-kt-gateway-secret', INTERNAL_SECRET)
       .send({ adminUserId: 'admin-1' })
       .expect(HttpStatus.CREATED);
+    expect(credentialClient.clear).toHaveBeenCalledWith(sessionId);
     await request(app.getHttpServer())
       .post(`/internal/sessions/${sessionId}/heartbeat`)
       .set('x-kt-gateway-secret', INTERNAL_SECRET)

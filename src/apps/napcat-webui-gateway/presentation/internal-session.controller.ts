@@ -13,6 +13,7 @@ import type {
   NapcatWebuiGatewayCreateSessionInput,
   NapcatWebuiGatewayLifecycleInput,
 } from '../domain/napcat-webui-gateway.types';
+import { NapcatWebuiCredentialClient } from '../infrastructure/napcat-webui-credential.client';
 import { NapcatWebuiGatewayTicketService } from '../infrastructure/session/napcat-webui-gateway-ticket.service';
 
 type CreateSessionBody = NapcatWebuiGatewayCreateSessionInput;
@@ -24,11 +25,13 @@ export class InternalSessionController {
    * Creates the internal API-to-Gateway session controller.
    * @param sessionService - Gateway session lifecycle application service.
    * @param ticketService - One-time bootstrap ticket service.
+   * @param credentialClient - Server-side credential cache cleared on revoke.
    * @param config - Gateway config used for secret validation and public URL prefix.
    */
   constructor(
     private readonly sessionService: NapcatWebuiGatewaySessionService,
     private readonly ticketService: NapcatWebuiGatewayTicketService,
+    private readonly credentialClient: NapcatWebuiCredentialClient,
     private readonly config: NapcatWebuiGatewayConfigService,
   ) {}
 
@@ -91,16 +94,18 @@ export class InternalSessionController {
    * @returns Browser-safe revoke lifecycle result.
    */
   @Post('sessions/:sessionId/revoke')
-  revoke(
+  async revoke(
     @Param('sessionId') sessionId: string,
     @Headers('x-kt-gateway-secret') secret: string,
     @Body() body: LifecycleBody,
   ) {
     this.requireInternalSecret(secret);
-    return this.sessionService.revoke({
+    const result = await this.sessionService.revoke({
       ...body,
       sessionId,
     });
+    this.credentialClient.clear(sessionId);
+    return result;
   }
 
   /**

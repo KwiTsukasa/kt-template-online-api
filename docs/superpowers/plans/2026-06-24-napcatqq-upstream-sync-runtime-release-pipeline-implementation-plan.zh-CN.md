@@ -239,7 +239,7 @@ pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run self-test
 CODEX_HOME=/vol1/docker/kt-codex/home/.codex \
 codex exec \
   --cd /vol1/docker/kt-codex/workspace/KT \
-  --profile-v2 automation \
+  --profile automation \
   --sandbox workspace-write \
   --ask-for-approval never \
   --json \

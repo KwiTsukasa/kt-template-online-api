@@ -49,11 +49,28 @@ type CreateManagedContainerOptions = {
   startRemote?: boolean;
 };
 
+type NapcatWebuiCredentialCacheEntry = {
+  credential: string;
+  expiresAt: number;
+};
+
+const NAPCAT_WEBUI_CREDENTIAL_TTL_MS = 50 * 60 * 1000;
+
 @Injectable()
 export class QqbotNapcatContainerService {
   private readonly configWriterService: NapcatConfigWriterService;
 
   private readonly runtimeProfileService: NapcatRuntimeProfileService;
+
+  private readonly webuiCredentials: Record<
+    string,
+    NapcatWebuiCredentialCacheEntry | undefined
+  > = {};
+
+  private readonly webuiCredentialRequests: Record<
+    string,
+    Promise<string> | undefined
+  > = {};
 
   /**
    * 初始化 QqbotNapcatContainerService 实例。
@@ -894,13 +911,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
 
     try {
       const runtime = this.toRuntime(container);
-      const credential = await this.getNapcatCredential(runtime);
-      const status = await this.requestNapcat<NapcatLoginStatus>(
-        runtime,
-        '/api/QQLogin/CheckLoginStatus',
-        {},
-        credential,
-      );
+      const status = await this.requestNapcatLoginStatus(runtime);
       const snapshot = this.toRuntimeStatusSnapshot(
         status,
         containerOnline,
@@ -1693,9 +1704,40 @@ ${file.content}EOF`;
 
   /**
    * 查询 NapCat 登录运行态数据。
-   * @param runtime - runtime 输入；使用 `webuiToken` 字段生成结果。
+   * @param runtime - NapCat runtime；使用容器身份、WebUI 地址和 token 边界复用短期 Credential。
+   * @returns 可用于 NapCat WebUI Bearer 鉴权的 Credential。
    */
   private async getNapcatCredential(runtime: QqbotNapcatRuntime) {
+    const cacheKey = this.getNapcatCredentialCacheKey(runtime);
+    const cached = this.webuiCredentials[cacheKey];
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.credential;
+    }
+
+    const pending = this.webuiCredentialRequests[cacheKey];
+    if (pending) {
+      return pending;
+    }
+
+    const request = this.fetchNapcatCredential(runtime, cacheKey);
+    this.webuiCredentialRequests[cacheKey] = request;
+    try {
+      return await request;
+    } finally {
+      delete this.webuiCredentialRequests[cacheKey];
+    }
+  }
+
+  /**
+   * 从 NapCat WebUI 换取并缓存新的 Bearer Credential。
+   * @param runtime - NapCat runtime；提供 WebUI 地址和 token 以调用 `/api/auth/login`。
+   * @param cacheKey - 已由调用方按容器身份和 token 生成的缓存键，用于落入同一 single-flight 槽位。
+   * @returns 可用于后续 NapCat WebUI 请求的 Credential。
+   */
+  private async fetchNapcatCredential(
+    runtime: QqbotNapcatRuntime,
+    cacheKey: string,
+  ) {
     const token = runtime.webuiToken || '';
     const hash = createHash('sha256').update(`${token}.napcat`).digest('hex');
     const data = await this.requestNapcat<NapcatCredential>(
@@ -1706,7 +1748,76 @@ ${file.content}EOF`;
     if (!data.Credential) {
       throwVbenError('NapCat WebUI 登录失败');
     }
+    this.webuiCredentials[cacheKey] = {
+      credential: data.Credential,
+      expiresAt: Date.now() + NAPCAT_WEBUI_CREDENTIAL_TTL_MS,
+    };
     return data.Credential;
+  }
+
+  /**
+   * 请求 NapCat QQ 登录状态，并在 WebUI Credential 失效时刷新一次。
+   * @param runtime - NapCat runtime；提供 WebUI 地址、token 和容器身份以完成鉴权与状态读取。
+   * @returns NapCat WebUI 返回的 QQ 登录状态。
+   */
+  private async requestNapcatLoginStatus(runtime: QqbotNapcatRuntime) {
+    const credential = await this.getNapcatCredential(runtime);
+    try {
+      return await this.requestNapcat<NapcatLoginStatus>(
+        runtime,
+        '/api/QQLogin/CheckLoginStatus',
+        {},
+        credential,
+      );
+    } catch (err) {
+      if (!this.isNapcatCredentialRejected(err)) {
+        throw err;
+      }
+      this.clearNapcatCredential(runtime, credential);
+      const refreshedCredential = await this.getNapcatCredential(runtime);
+      return this.requestNapcat<NapcatLoginStatus>(
+        runtime,
+        '/api/QQLogin/CheckLoginStatus',
+        {},
+        refreshedCredential,
+      );
+    }
+  }
+
+  /**
+   * 清理当前容器的 NapCat WebUI Credential 缓存。
+   * @param runtime - NapCat runtime；`id/baseUrl/token` 决定需要失效的进程内缓存条目。
+   * @param rejectedCredential - NapCat 刚拒绝的 Credential；有值时只清理仍等于它的缓存，避免旧请求删除已刷新的新缓存。
+   */
+  private clearNapcatCredential(
+    runtime: QqbotNapcatRuntime,
+    rejectedCredential?: string,
+  ) {
+    const cacheKey = this.getNapcatCredentialCacheKey(runtime);
+    const cached = this.webuiCredentials[cacheKey];
+    if (rejectedCredential && cached?.credential !== rejectedCredential) {
+      return;
+    }
+    delete this.webuiCredentials[cacheKey];
+  }
+
+  /**
+   * 判断 NapCat WebUI 是否拒绝了当前 Credential。
+   * @param err - NapCat 请求异常；来源可能是 WebUI `Unauthorized` 或旧 token 失效提示。
+   * @returns 为 true 时调用方可安全刷新一次 Credential 后重试状态请求。
+   */
+  private isNapcatCredentialRejected(err: unknown) {
+    const message = this.toolsService.getErrorMessage(err);
+    return /Unauthorized|token is invalid/i.test(message);
+  }
+
+  /**
+   * 生成 NapCat WebUI Credential 缓存键。
+   * @param runtime - NapCat runtime；`id/baseUrl` 定位容器实例，`webuiToken` 区分重建或换密钥后的鉴权边界。
+   * @returns 当前 API 进程内 credential 缓存使用的稳定键。
+   */
+  private getNapcatCredentialCacheKey(runtime: QqbotNapcatRuntime) {
+    return [runtime.id || runtime.baseUrl, runtime.webuiToken || ''].join('\n');
   }
 
   /**

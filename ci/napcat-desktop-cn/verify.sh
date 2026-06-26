@@ -44,3 +44,15 @@ grep -R -q 'getQQLoginRuntimeState' "$TMP_DIR"
 grep -R -q 'qrcodeRevision' "$TMP_DIR"
 grep -R -q 'needsLoginServiceReset' "$TMP_DIR"
 grep -R -q '重置已失效登录服务后重新生成二维码' "$TMP_DIR"
+
+grep -q 'KT device profile patch defaults' /app/entrypoint.sh
+grep -q 'NAPCAT_REQUIRE_DEVICE_PROFILE' /app/entrypoint.sh
+grep -q '/proc/1/cmdline' /app/entrypoint.sh
+grep -q '/proc/1/sched' /app/entrypoint.sh
+grep -q '/proc/1/status' /app/entrypoint.sh
+grep -q '/proc/1/stat' /app/entrypoint.sh
+grep -q '/proc/self/mountinfo' /app/entrypoint.sh
+grep -q '/sys/class/dmi/id/product_name' /app/entrypoint.sh
+grep -q '/sys/class/dmi/id/bios_vendor' /app/entrypoint.sh
+grep -q '/sys/class/dmi/id/bios_version' /app/entrypoint.sh
+grep -q '/etc/hosts' /app/entrypoint.sh

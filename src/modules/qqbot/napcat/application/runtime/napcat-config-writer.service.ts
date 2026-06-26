@@ -36,7 +36,7 @@ type NapcatConfig = {
     process: false;
     window: false;
   };
-  o3HookMode: 1;
+  o3HookMode: 0;
   packetBackend: 'auto';
   packetServer: '';
 };
@@ -75,7 +75,7 @@ export class NapcatConfigWriterService {
         process: false,
         window: false,
       },
-      o3HookMode: 1,
+      o3HookMode: 0,
       packetBackend: 'auto',
       packetServer: '',
     };

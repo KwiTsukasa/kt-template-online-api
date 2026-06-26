@@ -162,7 +162,7 @@ export class NapcatRuntimeProfileService {
           napcatConfigHash: input.protocolProfile.napcatConfigHash || null,
           napcatConfigJson: input.protocolProfile.napcatConfigJson || null,
           o3HookGrayEnabled: !!input.protocolProfile.o3HookGrayEnabled,
-          o3HookMode: input.protocolProfile.o3HookMode ?? 1,
+          o3HookMode: input.protocolProfile.o3HookMode ?? 0,
           onebotConfigHash: input.protocolProfile.onebotConfigHash || null,
           onebotConfigJson: input.protocolProfile.onebotConfigJson || null,
           packetBackend: input.protocolProfile.packetBackend || 'auto',

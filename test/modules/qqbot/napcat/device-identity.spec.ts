@@ -436,6 +436,15 @@ describe('NapCat device identity persistence', () => {
     expect(createScript).toContain('--hostname "$NAPCAT_HOSTNAME"');
     expect(createScript).toContain('--mac-address "$NAPCAT_MAC_ADDRESS"');
     expect(createScript).toContain('-v "$MACHINE_ID_PATH:/etc/machine-id:ro"');
+    expect(createScript).toContain('--cap-add SYS_ADMIN \\');
+    expect(createScript).toContain('--security-opt apparmor=unconfined \\');
+    expect(createScript).toContain('--security-opt seccomp=unconfined \\');
+    expect(createScript).toContain(
+      '-e NAPCAT_DEVICE_MACHINE_ID="$NAPCAT_DEVICE_MACHINE_ID"',
+    );
+    expect(createScript).toContain(
+      '-e NAPCAT_DEVICE_CPU_MODEL="$NAPCAT_DEVICE_CPU_MODEL"',
+    );
     expect(createScript).toContain(
       '-v "$DATA_DIR/runtime:/tmp/runtime-napcat"',
     );
@@ -518,6 +527,15 @@ describe('NapCat device identity persistence', () => {
     expect(createScript).toContain('--hostname "$NAPCAT_HOSTNAME"');
     expect(createScript).toContain('--mac-address "$NAPCAT_MAC_ADDRESS"');
     expect(createScript).toContain('-v "$MACHINE_ID_PATH:/etc/machine-id:ro"');
+    expect(createScript).toContain('--cap-add SYS_ADMIN \\');
+    expect(createScript).toContain('--security-opt apparmor=unconfined \\');
+    expect(createScript).toContain('--security-opt seccomp=unconfined \\');
+    expect(createScript).toContain(
+      '-e NAPCAT_DMI_PRODUCT_NAME="$NAPCAT_DMI_PRODUCT_NAME"',
+    );
+    expect(createScript).toContain(
+      '-e NAPCAT_DEVICE_TTY_ACTIVE="$NAPCAT_DEVICE_TTY_ACTIVE"',
+    );
     expect(createScript).toContain('-e LANG=zh_CN.UTF-8');
     expect(createScript).toContain('-e LC_ALL=zh_CN.UTF-8');
     expect(createScript).toContain('-e TZ=Asia/Shanghai');

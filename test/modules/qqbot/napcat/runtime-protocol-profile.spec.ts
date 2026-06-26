@@ -181,9 +181,9 @@ describe('NapCat runtime profile generation', () => {
       },
       protocolProfile: {
         napcatConfigHash: 'napcat-hash',
-        napcatConfigJson: { o3HookMode: 1 },
+        napcatConfigJson: { o3HookMode: 0 },
         o3HookGrayEnabled: false,
-        o3HookMode: 1,
+        o3HookMode: 0,
         onebotConfigHash: 'onebot-hash',
         onebotConfigJson: { network: { websocketClients: [] } },
         packetBackend: 'auto',
@@ -253,6 +253,7 @@ describe('NapCat runtime profile generation', () => {
       reconnectInterval: 5000,
       reportSelfMessage: false,
     });
+    expect(result.napcatConfig.o3HookMode).toBe(0);
     expect(
       result.files.find((file) => file.path === 'webui.json')?.content,
     ).toContain(webuiAuthValue);

@@ -40,8 +40,45 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).toContain('/.dockerenv');
     expect(verify).toContain('wait_for_absent');
     expect(verify).toContain('/proc/1/cgroup');
+    expect(verify).toContain('/proc/1/cmdline');
+    expect(verify).toContain('/proc/1/sched');
+    expect(verify).toContain('/proc/1/status');
+    expect(verify).toContain('/proc/1/stat');
+    expect(verify).toContain('/proc/self/mountinfo');
+    expect(verify).toContain('/sys/class/dmi/id/product_name');
+    expect(verify).toContain('/sys/class/dmi/id/bios_vendor');
+    expect(verify).toContain('/sys/class/dmi/id/bios_version');
+    expect(verify).toContain('/etc/hosts');
     expect(verify).toContain('XDG_CONFIG_HOME=/app/.config');
     expect(verify).toContain('Asia/Shanghai');
+  });
+
+  it('patches entrypoint device profile probes that QQCore opens at runtime', () => {
+    const dockerfile = readSource('ci/napcat-desktop-cn/Dockerfile');
+    const entrypointPatch = readSource(
+      'ci/napcat-desktop-cn/entrypoint-device-profile.patch.sh',
+    );
+    const source = `${dockerfile}\n${entrypointPatch}`;
+
+    expect(source).toContain('entrypoint-device-profile.patch.sh');
+    expect(source).toContain('NAPCAT_REQUIRE_DEVICE_PROFILE');
+    expect(source).toContain('NAPCAT_DMI_BIOS_VENDOR');
+    expect(source).toContain('NAPCAT_DMI_BIOS_VERSION');
+    expect(source).toContain('NAPCAT_DMI_MODALIAS');
+    expect(source).toContain('NAPCAT_DEVICE_BOOT_ID');
+    expect(source).toContain('NAPCAT_DEVICE_KERNEL_RELEASE');
+    expect(source).toContain('NAPCAT_DEVICE_CPU_MODEL');
+    expect(source).toContain('NAPCAT_DEVICE_UPTIME');
+    expect(source).toContain('NAPCAT_DEVICE_TTY_ACTIVE');
+    expect(source).toContain('/proc/uptime');
+    expect(source).toContain('/proc/cpuinfo');
+    expect(source).toContain('/sys/devices/virtual/tty/tty0/active');
+    expect(source).toContain('/proc/self/mountinfo');
+    expect(source).toContain('mount --bind "$FAKE_CMDLINE" /proc/1/cmdline');
+    expect(source).toContain('kt_require_device_profile');
+    expect(source).toContain('exit 78');
+    expect(source).toContain('dmi-modalias');
+    expect(source).toContain('proc-devices-host-leak');
   });
 
   it('stages source-built NapCat Shell artifacts for Docker build context', () => {
@@ -56,6 +93,7 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(script).toContain('jenkinsBuildUrl');
     expect(script).toContain('packages/napcat-shell/dist');
     expect(script).toContain('fork-artifact.json');
+    expect(script).toContain('entrypoint-device-profile.patch.sh');
     expect(script).toContain('.kt-workspace/napcat-desktop-cn-build');
     expect(script).toContain('assertSafeOutputRoot');
     expect(script).toContain('workspaceRoot');

@@ -134,7 +134,7 @@ if [ "${NAPCAT_REQUIRE_DEVICE_PROFILE:-0}" = "1" ]; then
         echo "NapCat device profile check failed: mountinfo-host-leak:/proc/1/mountinfo" >&2
         exit 78
     fi
-    if grep -q "$(hostname)" /etc/hosts; then
+    if [ "$(hostname)" != "localhost" ] && grep -q "$(hostname)" /etc/hosts; then
         echo "NapCat device profile check failed: hosts-still-contains-hostname" >&2
         exit 78
     fi

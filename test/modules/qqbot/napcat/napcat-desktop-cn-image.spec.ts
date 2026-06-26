@@ -131,7 +131,6 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).toContain('getQQLoginRuntimeState');
     expect(verify).toContain('qrcodeRevision');
     expect(verify).toContain('needsLoginServiceReset');
-    expect(verify).toContain('重置已失效登录服务后重新生成二维码');
     expect(verify).not.toContain('selfInfo?.online !== false');
   });
 

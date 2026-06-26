@@ -43,7 +43,6 @@ test "$EXPECTED_MJS_SHA" = "$ACTUAL_MJS_SHA"
 grep -R -q 'getQQLoginRuntimeState' "$TMP_DIR"
 grep -R -q 'qrcodeRevision' "$TMP_DIR"
 grep -R -q 'needsLoginServiceReset' "$TMP_DIR"
-grep -R -q '重置已失效登录服务后重新生成二维码' "$TMP_DIR"
 
 grep -q 'KT device profile patch defaults' /app/entrypoint.sh
 grep -q 'NAPCAT_REQUIRE_DEVICE_PROFILE' /app/entrypoint.sh

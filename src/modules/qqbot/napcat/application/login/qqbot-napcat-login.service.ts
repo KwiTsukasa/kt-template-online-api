@@ -439,6 +439,10 @@ export class QqbotNapcatLoginService {
         return this.refreshNearlyExpiredQrcode(session, container, status);
       }
 
+      if (this.shouldAutoRefreshPendingQrcode(session, status)) {
+        return this.refreshPendingQrcodeFromStatus(session, container, status);
+      }
+
       session.errorMessage = status.loginError || undefined;
       if (
         status.qrcodeurl &&
@@ -2349,6 +2353,82 @@ export class QqbotNapcatLoginService {
   }
 
   /**
+   * Decides whether a pending scan status poll should actively ask NapCat for a QR again.
+   * @param session - Pending scan session; challenge states and recent refresh attempts suppress automatic retries.
+   * @param status - Latest WebUI status; existing, expired, or successful QR/login states are handled elsewhere.
+   * @returns True when the status poll should call the same-container RefreshQRcode path once per cooldown window.
+   */
+  private shouldAutoRefreshPendingQrcode(
+    session: QqbotLoginScanSession,
+    status: NapcatLoginStatus,
+  ) {
+    if (session.preparingContainer || session.preparingRelogin) return false;
+    if (session.captchaUrl || session.newDeviceStatus) return false;
+    if (session.qrcode || status.qrcodeurl || status.isLogin) return false;
+    if (this.toolsService.isNapcatExpiredQrcodeStatus(status)) return false;
+
+    const lastRefreshAt = Number(session.lastQrcodeRefreshAt || 0);
+    if (!Number.isFinite(lastRefreshAt) || lastRefreshAt <= 0) return true;
+    return Date.now() - lastRefreshAt >= this.getQrcodeAutoRefreshCooldownMs();
+  }
+
+  /**
+   * Requests a fresh QR during status polling so SSE can recover from a previous accepted-but-not-updated refresh.
+   * @param session - Pending scan session whose result is returned to Admin/SSE.
+   * @param container - Current NapCat WebUI runtime; the method never rebuilds or restarts it.
+   * @param status - Latest WebUI status used as fallback metadata for QR freshness checks.
+   * @returns Updated scan result, either with a fresh QR or a bounded pending message.
+   */
+  private async refreshPendingQrcodeFromStatus(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    status: NapcatLoginStatus,
+  ) {
+    session.lastQrcodeRefreshAt = Date.now();
+    this.persistLoginSession(session);
+    this.publishScanResultEvent(
+      session,
+      'qrcode-fetch',
+      'processing',
+      '正在重新生成登录二维码',
+    );
+
+    try {
+      session.qrcode = await this.refreshOrGetQrcode(container, false, {
+        fallbackStatus: status,
+        requireFresh:
+          session.mode === 'refresh' ||
+          !!session.qrcode ||
+          this.toolsService.isNapcatExpiredQrcodeStatus(status),
+        staleQrcode: session.qrcode || status.qrcodeurl,
+      });
+      session.errorMessage = undefined;
+      session.expiresAt = Date.now() + this.getSessionTtlMs();
+      this.persistLoginSession(session);
+      this.publishScanResultEvent(
+        session,
+        'qrcode-ready',
+        'success',
+        '登录二维码已生成',
+      );
+      this.publishScanResultEvent(
+        session,
+        'waiting-scan',
+        'processing',
+        '等待扫码确认',
+      );
+      return this.toResult(session);
+    } catch (err) {
+      if (!this.toolsService.isNapcatTemporaryError(err)) throw err;
+      session.qrcode = undefined;
+      session.errorMessage =
+        'NapCat 正在重新生成二维码，请稍后刷新或等待自动更新';
+      this.persistLoginSession(session);
+      return this.toResult(session);
+    }
+  }
+
+  /**
    * Reads the expected native QQ QR lifetime used only for safe-display decisions.
    * @returns Milliseconds before a QR is considered too old to show without refreshing.
    */
@@ -2367,6 +2447,17 @@ export class QqbotNapcatLoginService {
     return this.getPositiveConfigNumber(
       'NAPCAT_LOGIN_QR_SAFE_SCAN_MS',
       45 * 1000,
+    );
+  }
+
+  /**
+   * Reads the cooldown between automatic QR refresh attempts during status polling.
+   * @returns Milliseconds to wait before SSE/status may request another QR regeneration.
+   */
+  private getQrcodeAutoRefreshCooldownMs() {
+    return this.getPositiveConfigNumber(
+      'NAPCAT_LOGIN_QR_AUTO_REFRESH_COOLDOWN_MS',
+      Math.max(5000, this.getLoginPollIntervalMs() * 2),
     );
   }
 

@@ -4052,6 +4052,55 @@ describe('QqbotNapcatLoginService', () => {
     expect(getQrcode).not.toHaveBeenCalled();
   });
 
+  it('auto refreshes a pending refresh session when WebUI has no cached qrcode', async () => {
+    (service as any).sessions.set('session-auto-refresh-qrcode', {
+      accountId: 'account-1',
+      containerId: 'container-auto-refresh-qrcode',
+      containerName: 'napcat-auto-refresh-qrcode',
+      createdAt: Date.now(),
+      errorMessage: 'NapCat 正在重新生成二维码，请稍后刷新或等待自动更新',
+      expiresAt: Date.now() + 60_000,
+      expectedSelfId: '10001',
+      id: 'session-auto-refresh-qrcode',
+      mode: 'refresh',
+      status: 'pending',
+      webuiPort: 6106,
+    });
+    const container = { id: 'container-auto-refresh-qrcode' };
+    const loginStatus = {
+      isLogin: false,
+      loginError: '网络连接异常!',
+    };
+    jest
+      .spyOn(service as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest
+      .spyOn(service as any, 'getLoginStatus')
+      .mockResolvedValue(loginStatus);
+    const getQrcode = jest
+      .spyOn(service as any, 'getQrcode')
+      .mockRejectedValue(new Error('NapCat 未返回登录二维码'));
+    const refreshOrGetQrcode = jest
+      .spyOn(service as any, 'refreshOrGetQrcode')
+      .mockResolvedValue('auto-refresh-qrcode');
+
+    const result = await service.status('session-auto-refresh-qrcode');
+
+    expect(result.status).toBe('pending');
+    expect(result.qrcode).toBe('auto-refresh-qrcode');
+    expect(result.errorMessage).toBeUndefined();
+    expect(getQrcode).not.toHaveBeenCalled();
+    expect(refreshOrGetQrcode).toHaveBeenCalledWith(container, false, {
+      fallbackStatus: loginStatus,
+      requireFresh: true,
+      staleQrcode: undefined,
+    });
+    expect(
+      (service as any).sessions.get('session-auto-refresh-qrcode')
+        .lastQrcodeRefreshAt,
+    ).toEqual(expect.any(Number));
+  });
+
   it('normalizes login status to offline when login info reports offline', async () => {
     jest
       .spyOn(service as any, 'postNapcat')

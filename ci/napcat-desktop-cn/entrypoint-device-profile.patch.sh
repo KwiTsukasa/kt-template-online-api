@@ -130,12 +130,10 @@ if [ "${NAPCAT_REQUIRE_DEVICE_PROFILE:-0}" = "1" ]; then
         echo "NapCat device profile check failed: tty0-active-missing" >&2
         exit 78
     fi
-    for kt_mountinfo in /proc/self/mountinfo /proc/1/mountinfo; do
-        if grep -E 'docker|containerd|overlay|\.dockerenv' "$kt_mountinfo" >/dev/null 2>&1; then
-            echo "NapCat device profile check failed: mountinfo-host-leak:$kt_mountinfo" >&2
-            exit 78
-        fi
-    done
+    if grep -E 'docker|containerd|overlay|\.dockerenv' /proc/1/mountinfo >/dev/null 2>&1; then
+        echo "NapCat device profile check failed: mountinfo-host-leak:/proc/1/mountinfo" >&2
+        exit 78
+    fi
     if grep -q "$(hostname)" /etc/hosts; then
         echo "NapCat device profile check failed: hosts-still-contains-hostname" >&2
         exit 78

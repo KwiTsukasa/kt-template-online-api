@@ -48,7 +48,12 @@ docker build `
   .kt-workspace/napcat-desktop-cn-build
 
 $name = "kt-napcat-v8-verify-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
-docker run -d --name $name kt-napcat-desktop-cn:desktop-cn-v8
+docker run -d --name $name `
+  --cap-add SYS_ADMIN `
+  --security-opt apparmor=unconfined `
+  --security-opt seccomp=unconfined `
+  -e NAPCAT_REQUIRE_DEVICE_PROFILE=1 `
+  kt-napcat-desktop-cn:desktop-cn-v8
 docker exec $name sh /ci/napcat-desktop-cn/verify.sh
 docker rm -f $name
 ```

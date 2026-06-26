@@ -51,6 +51,7 @@ grep -q '/proc/1/cmdline' /app/entrypoint.sh
 grep -q '/proc/1/sched' /app/entrypoint.sh
 grep -q '/proc/1/status' /app/entrypoint.sh
 grep -q '/proc/1/stat' /app/entrypoint.sh
+grep -q '/proc/1/mountinfo' /app/entrypoint.sh
 grep -q '/proc/self/mountinfo' /app/entrypoint.sh
 grep -q '/sys/class/dmi/id/product_name' /app/entrypoint.sh
 grep -q '/sys/class/dmi/id/bios_vendor' /app/entrypoint.sh

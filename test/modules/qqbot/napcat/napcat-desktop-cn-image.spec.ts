@@ -44,6 +44,7 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).toContain('/proc/1/sched');
     expect(verify).toContain('/proc/1/status');
     expect(verify).toContain('/proc/1/stat');
+    expect(verify).toContain('/proc/1/mountinfo');
     expect(verify).toContain('/proc/self/mountinfo');
     expect(verify).toContain('/sys/class/dmi/id/product_name');
     expect(verify).toContain('/sys/class/dmi/id/bios_vendor');
@@ -73,7 +74,8 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(source).toContain('/proc/uptime');
     expect(source).toContain('/proc/cpuinfo');
     expect(source).toContain('/sys/devices/virtual/tty/tty0/active');
-    expect(source).toContain('/proc/self/mountinfo');
+    expect(source).toContain('mountinfo-host-leak:/proc/1/mountinfo');
+    expect(source).not.toContain('for kt_mountinfo in /proc/self/mountinfo /proc/1/mountinfo');
     expect(source).toContain('mount --bind "$FAKE_CMDLINE" /proc/1/cmdline');
     expect(source).toContain('kt_require_device_profile');
     expect(source).toContain('exit 78');

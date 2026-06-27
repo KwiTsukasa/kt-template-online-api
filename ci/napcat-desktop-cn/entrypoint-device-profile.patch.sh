@@ -120,6 +120,11 @@ kt_is_mountinfo_target() {
     kt_target_comm="$1"
     kt_target_cmdline="$2"
     kt_target_argv0="${kt_target_cmdline%% *}"
+    kt_target_rest="${kt_target_cmdline#* }"
+    if [ "$kt_target_rest" = "$kt_target_cmdline" ]; then
+        kt_target_rest=""
+    fi
+    kt_target_argv1="${kt_target_rest%% *}"
     kt_target_argv0_base="${kt_target_argv0##*/}"
 
     case "$kt_target_comm" in
@@ -132,8 +137,13 @@ kt_is_mountinfo_target() {
             return 0
             ;;
     esac
-    case "$kt_target_cmdline" in
-        /opt/QQ/*|/app/napcat/*|/app/NapCat*|*/NapCat.Shell*|*/napcat.mjs*)
+    case "$kt_target_argv0" in
+        /opt/QQ/*|/app/napcat/*|/app/NapCat*)
+            return 0
+            ;;
+    esac
+    case "$kt_target_argv1" in
+        /app/napcat/*|/app/NapCat*|*/NapCat.Shell*|*/napcat.mjs*)
             return 0
             ;;
     esac

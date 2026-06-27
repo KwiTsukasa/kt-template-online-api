@@ -123,7 +123,7 @@ describe('NapCat runtime profile generation', () => {
     });
 
     expect(profile).toMatchObject({
-      desktopProfileVersion: 'desktop-cn-v10',
+      desktopProfileVersion: 'desktop-cn-v12',
       imageRef: 'kt-napcat-desktop-cn@sha256:profiledigest',
       locale: 'zh_CN.UTF-8',
       runtimeGid: 1101,

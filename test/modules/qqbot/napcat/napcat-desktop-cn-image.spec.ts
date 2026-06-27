@@ -46,6 +46,11 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).toContain('/proc/1/stat');
     expect(verify).toContain('/proc/1/mountinfo');
     expect(verify).toContain('/proc/self/mountinfo');
+    expect(verify).toContain('/proc/$kt_mountinfo_pid/mountinfo');
+    expect(verify).toContain('/proc/[0-9]*');
+    expect(verify).toContain(
+      'overlay|/vol1/docker|docker-init|/docker/containers|napcat-instances|btrfs|/dev/mapper/trim',
+    );
     expect(verify).toContain('/sys/class/dmi/id/product_name');
     expect(verify).toContain('/sys/class/dmi/id/bios_vendor');
     expect(verify).toContain('/sys/class/dmi/id/bios_version');
@@ -74,8 +79,19 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(source).toContain('/proc/uptime');
     expect(source).toContain('/proc/cpuinfo');
     expect(source).toContain('/sys/devices/virtual/tty/tty0/active');
-    expect(source).toContain('mountinfo-host-leak:/proc/1/mountinfo');
-    expect(source).not.toContain('for kt_mountinfo in /proc/self/mountinfo /proc/1/mountinfo');
+    expect(source).toContain('kt_mountinfo_guard_loop');
+    expect(source).toContain('KT_FAKE_MOUNTINFO');
+    expect(source).toContain('/proc/$kt_mountinfo_pid/mountinfo');
+    expect(source).toContain(
+      'mount --bind "$KT_FAKE_MOUNTINFO" "$kt_mountinfo"',
+    );
+    expect(source).toContain('mountinfo-host-leak:$kt_mountinfo');
+    expect(source).toContain(
+      'overlay|/vol1/docker|docker-init|/docker/containers|napcat-instances|btrfs|/dev/mapper/trim',
+    );
+    expect(source).not.toContain(
+      'for mfile in /proc/self/mountinfo /proc/1/mountinfo',
+    );
     expect(source).toContain('mount --bind "$FAKE_CMDLINE" /proc/1/cmdline');
     expect(source).toContain('kt_require_device_profile');
     expect(source).toContain('exit 78');
@@ -134,13 +150,13 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).not.toContain('selfInfo?.online !== false');
   });
 
-  it('deploys the production API with the verified desktop-cn-v10 runtime profile', () => {
+  it('deploys the production API with the verified desktop-cn-v12 runtime profile', () => {
     const manifest = readSource('k8s/prod/api.yaml');
 
     expect(manifest).toContain('name: QQBOT_NAPCAT_IMAGE');
-    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v10');
+    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v12');
     expect(manifest).toContain('name: QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION');
-    expect(manifest).toContain('value: desktop-cn-v10');
+    expect(manifest).toContain('value: desktop-cn-v12');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v8');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v7');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v4');

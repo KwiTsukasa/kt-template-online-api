@@ -28,6 +28,8 @@ cat >/tmp/kt-device-profile-defaults.sh <<'EOF'
 : "${NAPCAT_DEVICE_CPU_MODEL:=AMD Ryzen 7 8845H w/ Radeon 780M Graphics}"
 : "${NAPCAT_DEVICE_UPTIME:=7200.00 14400.00}"
 : "${NAPCAT_DEVICE_TTY_ACTIVE:=tty1}"
+: "${NAPCAT_DEVICE_MOUNTINFO_GUARD_ENABLED:=1}"
+: "${NAPCAT_DEVICE_MOUNTINFO_GUARD_INTERVAL:=1}"
 
 kt_fake_file() {
     kt_target="$1"
@@ -91,6 +93,55 @@ if [ -f /etc/hosts ]; then
     } > "$KT_FAKE_HOSTS"
     mount --bind "$KT_FAKE_HOSTS" /etc/hosts 2>/dev/null || true
 fi
+
+# KT device profile mountinfo guard for long-lived QQ/NapCat processes.
+KT_MOUNTINFO_HOST_LEAK_PATTERN='overlay|/vol1/docker|docker-init|/docker/containers|napcat-instances|btrfs|/dev/mapper/trim'
+KT_FAKE_MOUNTINFO="$FAKE_CGROUP_DIR/kt_device_profile_mountinfo"
+cat > "$KT_FAKE_MOUNTINFO" <<'KT_MOUNTINFO_EOF'
+22 1 259:2 / / rw,relatime - ext4 /dev/nvme0n1p2 rw,errors=remount-ro
+23 22 0:6 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw
+24 22 0:22 / /dev rw,nosuid,relatime - tmpfs udev rw,size=4096000k,nr_inodes=1024000,mode=755,inode64
+25 24 0:23 / /dev/pts rw,nosuid,noexec,relatime - devpts devpts rw,gid=5,mode=620,ptmxmode=000
+26 22 0:24 / /sys rw,nosuid,nodev,noexec,relatime - sysfs sysfs rw
+27 22 0:25 / /run rw,nosuid,nodev,relatime - tmpfs tmpfs rw,mode=755,inode64
+28 22 259:2 /home/napcat/.config /app/.config rw,relatime - ext4 /dev/nvme0n1p2 rw,errors=remount-ro
+29 22 259:2 /home/napcat/.cache /app/.cache rw,relatime - ext4 /dev/nvme0n1p2 rw,errors=remount-ro
+30 22 259:2 /home/napcat/.local/share /app/.local/share rw,relatime - ext4 /dev/nvme0n1p2 rw,errors=remount-ro
+KT_MOUNTINFO_EOF
+
+kt_mask_mountinfo_target() {
+    kt_mountinfo="$1"
+    if [ -f "$kt_mountinfo" ] && grep -E "$KT_MOUNTINFO_HOST_LEAK_PATTERN" "$kt_mountinfo" >/dev/null 2>&1; then
+        mount --bind "$KT_FAKE_MOUNTINFO" "$kt_mountinfo" 2>/dev/null || true
+    fi
+}
+
+kt_mountinfo_guard_once() {
+    for kt_mountinfo_pid_dir in /proc/[0-9]*; do
+        [ -d "$kt_mountinfo_pid_dir" ] || continue
+        kt_mountinfo_pid="${kt_mountinfo_pid_dir#/proc/}"
+        kt_mountinfo_comm="$(cat "$kt_mountinfo_pid_dir/comm" 2>/dev/null || true)"
+        kt_mountinfo_cmdline="$(tr '\000' ' ' < "$kt_mountinfo_pid_dir/cmdline" 2>/dev/null || true)"
+        case "$kt_mountinfo_comm $kt_mountinfo_cmdline" in
+            *qq*|*QQ*|*napcat*|*NapCat*|*Xvfb*)
+                kt_mask_mountinfo_target "/proc/$kt_mountinfo_pid/mountinfo"
+                ;;
+        esac
+    done
+}
+
+kt_mountinfo_guard_loop() {
+    while :; do
+        kt_mountinfo_guard_once
+        sleep "${NAPCAT_DEVICE_MOUNTINFO_GUARD_INTERVAL:-1}"
+    done
+}
+
+kt_mask_mountinfo_target /proc/1/mountinfo
+kt_mask_mountinfo_target /proc/self/mountinfo
+if [ "${NAPCAT_DEVICE_MOUNTINFO_GUARD_ENABLED:-1}" = "1" ]; then
+    kt_mountinfo_guard_loop >/dev/null 2>&1 &
+fi
 EOF
 
 cat >/tmp/kt-device-profile-verify.sh <<'EOF'
@@ -130,10 +181,13 @@ if [ "${NAPCAT_REQUIRE_DEVICE_PROFILE:-0}" = "1" ]; then
         echo "NapCat device profile check failed: tty0-active-missing" >&2
         exit 78
     fi
-    if grep -E 'docker|containerd|overlay|\.dockerenv' /proc/1/mountinfo >/dev/null 2>&1; then
-        echo "NapCat device profile check failed: mountinfo-host-leak:/proc/1/mountinfo" >&2
-        exit 78
-    fi
+    KT_MOUNTINFO_HOST_LEAK_PATTERN='overlay|/vol1/docker|docker-init|/docker/containers|napcat-instances|btrfs|/dev/mapper/trim'
+    for kt_mountinfo in /proc/1/mountinfo; do
+        if grep -E "$KT_MOUNTINFO_HOST_LEAK_PATTERN" "$kt_mountinfo" >/dev/null 2>&1; then
+            echo "NapCat device profile check failed: mountinfo-host-leak:$kt_mountinfo" >&2
+            exit 78
+        fi
+    done
     if [ "$(hostname)" != "localhost" ] && grep -q "$(hostname)" /etc/hosts; then
         echo "NapCat device profile check failed: hosts-still-contains-hostname" >&2
         exit 78

@@ -52,7 +52,32 @@ grep -q '/proc/1/status' /app/entrypoint.sh
 grep -q '/proc/1/stat' /app/entrypoint.sh
 grep -q '/proc/1/mountinfo' /app/entrypoint.sh
 grep -q '/proc/self/mountinfo' /app/entrypoint.sh
+grep -q '/proc/$kt_mountinfo_pid/mountinfo' /app/entrypoint.sh
+grep -q 'kt_mountinfo_guard_loop' /app/entrypoint.sh
+grep -q 'overlay|/vol1/docker|docker-init|/docker/containers|napcat-instances|btrfs|/dev/mapper/trim' /app/entrypoint.sh
 grep -q '/sys/class/dmi/id/product_name' /app/entrypoint.sh
 grep -q '/sys/class/dmi/id/bios_vendor' /app/entrypoint.sh
 grep -q '/sys/class/dmi/id/bios_version' /app/entrypoint.sh
 grep -q '/etc/hosts' /app/entrypoint.sh
+
+MOUNTINFO_HOST_LEAK_PATTERN='overlay|/vol1/docker|docker-init|/docker/containers|napcat-instances|btrfs|/dev/mapper/trim'
+assert_no_mountinfo_host_leak() {
+  kt_mountinfo="$1"
+  if [ -r "$kt_mountinfo" ] && grep -E "$MOUNTINFO_HOST_LEAK_PATTERN" "$kt_mountinfo" >/dev/null 2>&1; then
+    echo "NapCat desktop-cn verify failed: mountinfo-host-leak:$kt_mountinfo" >&2
+    exit 78
+  fi
+}
+
+assert_no_mountinfo_host_leak /proc/1/mountinfo
+for kt_mountinfo_pid_dir in /proc/[0-9]*; do
+  [ -d "$kt_mountinfo_pid_dir" ] || continue
+  kt_mountinfo_pid="${kt_mountinfo_pid_dir#/proc/}"
+  kt_mountinfo_comm="$(cat "$kt_mountinfo_pid_dir/comm" 2>/dev/null || true)"
+  kt_mountinfo_cmdline="$(tr '\000' ' ' < "$kt_mountinfo_pid_dir/cmdline" 2>/dev/null || true)"
+  case "$kt_mountinfo_comm $kt_mountinfo_cmdline" in
+    *qq*|*QQ*|*napcat*|*NapCat*|*Xvfb*)
+      assert_no_mountinfo_host_leak "/proc/$kt_mountinfo_pid/mountinfo"
+      ;;
+  esac
+done

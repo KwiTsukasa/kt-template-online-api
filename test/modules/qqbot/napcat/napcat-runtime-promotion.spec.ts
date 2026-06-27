@@ -33,7 +33,7 @@ describe('NapCat runtime promotion contract', () => {
   it('keeps a safe default runtime profile in the K8s manifest', () => {
     const manifest = readSource('k8s/prod/api.yaml');
 
-    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v12');
-    expect(manifest).toContain('value: desktop-cn-v12');
+    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v13');
+    expect(manifest).toContain('value: desktop-cn-v13');
   });
 });

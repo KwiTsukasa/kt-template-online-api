@@ -116,17 +116,39 @@ kt_mask_mountinfo_target() {
     fi
 }
 
+kt_is_mountinfo_target() {
+    kt_target_comm="$1"
+    kt_target_cmdline="$2"
+    kt_target_argv0="${kt_target_cmdline%% *}"
+    kt_target_argv0_base="${kt_target_argv0##*/}"
+
+    case "$kt_target_comm" in
+        qq|QQ|NapCat|napcat|Xvfb)
+            return 0
+            ;;
+    esac
+    case "$kt_target_argv0_base" in
+        qq|QQ|NapCat|napcat|Xvfb)
+            return 0
+            ;;
+    esac
+    case "$kt_target_cmdline" in
+        /opt/QQ/*|/app/napcat/*|/app/NapCat*|*/NapCat.Shell*|*/napcat.mjs*)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
 kt_mountinfo_guard_once() {
     for kt_mountinfo_pid_dir in /proc/[0-9]*; do
         [ -d "$kt_mountinfo_pid_dir" ] || continue
         kt_mountinfo_pid="${kt_mountinfo_pid_dir#/proc/}"
         kt_mountinfo_comm="$(cat "$kt_mountinfo_pid_dir/comm" 2>/dev/null || true)"
         kt_mountinfo_cmdline="$(tr '\000' ' ' < "$kt_mountinfo_pid_dir/cmdline" 2>/dev/null || true)"
-        case "$kt_mountinfo_comm $kt_mountinfo_cmdline" in
-            *qq*|*QQ*|*napcat*|*NapCat*|*Xvfb*)
-                kt_mask_mountinfo_target "/proc/$kt_mountinfo_pid/mountinfo"
-                ;;
-        esac
+        if kt_is_mountinfo_target "$kt_mountinfo_comm" "$kt_mountinfo_cmdline"; then
+            kt_mask_mountinfo_target "/proc/$kt_mountinfo_pid/mountinfo"
+        fi
     done
 }
 

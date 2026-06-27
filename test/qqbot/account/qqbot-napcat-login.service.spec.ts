@@ -1234,6 +1234,116 @@ describe('QqbotNapcatLoginService', () => {
     );
   });
 
+  it('keeps scan pending when NapCat is login-positive before QQ number is readable', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-login-wait-self-id',
+      name: 'napcat-login-wait-self-id',
+    };
+    const accountService = {
+      ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
+    };
+    const containerService = {
+      bindAccount: jest.fn().mockResolvedValue(undefined),
+    };
+    const loginService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (loginService as any).createSession({
+      container,
+      mode: 'create',
+      qrcode: 'https://txz.qq.com/p?k=ready&f=1600001615',
+      status: 'pending',
+    });
+    (loginService as any).sessions.set(session.id, session);
+    jest
+      .spyOn(loginService as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest
+      .spyOn(loginService as any, 'getLoginStatus')
+      .mockResolvedValue({ isLogin: true });
+    jest.spyOn(loginService as any, 'getLoginInfo').mockResolvedValue({
+      nick: 'Mirror',
+      online: true,
+    });
+
+    const result = await loginService.status(session.id);
+
+    expect(result.status).toBe('pending');
+    expect(result.errorMessage).toBe('NapCat 已登录，正在读取 QQ 号');
+    expect((loginService as any).sessions.get(session.id)).toEqual(
+      expect.objectContaining({
+        errorMessage: 'NapCat 已登录，正在读取 QQ 号',
+        status: 'pending',
+      }),
+    );
+    expect(accountService.ensureScannedAccount).not.toHaveBeenCalled();
+    expect(containerService.bindAccount).not.toHaveBeenCalled();
+  });
+
+  it('completes scan after a login-positive session later exposes QQ number', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-login-late-self-id',
+      name: 'napcat-login-late-self-id',
+    };
+    const accountService = {
+      ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
+    };
+    const containerService = {
+      bindAccount: jest.fn().mockResolvedValue(undefined),
+    };
+    const loginService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (loginService as any).createSession({
+      container,
+      mode: 'create',
+      qrcode: 'https://txz.qq.com/p?k=ready&f=1600001615',
+      status: 'pending',
+    });
+    (loginService as any).sessions.set(session.id, session);
+    jest
+      .spyOn(loginService as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest
+      .spyOn(loginService as any, 'getLoginStatus')
+      .mockResolvedValue({ isLogin: true });
+    jest
+      .spyOn(loginService as any, 'getLoginInfo')
+      .mockResolvedValueOnce({
+        nick: 'Mirror',
+        online: true,
+      })
+      .mockResolvedValueOnce({
+        nick: 'Mirror',
+        online: true,
+        uin: '1914728559',
+      });
+
+    const pending = await loginService.status(session.id);
+    const completed = await loginService.status(session.id);
+
+    expect(pending.status).toBe('pending');
+    expect(completed.status).toBe('success');
+    expect(accountService.ensureScannedAccount).toHaveBeenCalledWith({
+      name: 'Mirror',
+      selfId: '1914728559',
+    });
+    expect(containerService.bindAccount).toHaveBeenCalledWith(
+      'account-1',
+      'container-login-late-self-id',
+      '1914728559',
+    );
+    expect(session.loginSelfIdMissingSince).toBeUndefined();
+  });
+
   it('does not let the server-side qrcode monitor extend the original qrcode deadline on temporary errors', async () => {
     const container = {
       baseUrl: 'http://127.0.0.1:6103/',
@@ -3626,6 +3736,62 @@ describe('QqbotNapcatLoginService', () => {
     );
     expect(loginSessionRepository.rows[0].sessionPayload?.status).toBe(
       'expired',
+    );
+  });
+
+  it('persists failed scan sessions before cleaning runtime state', async () => {
+    const loginSessionRepository = createLoginSessionRepository();
+    const loginStateStore = new NapcatLoginStateStoreService(
+      loginSessionRepository as any,
+    );
+    const failService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {
+        ensureScannedAccount: jest.fn(),
+      } as unknown as QqbotAccountService,
+      {
+        removeUnboundCreateContainer: jest.fn().mockResolvedValue(undefined),
+      } as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+      loginStateStore,
+    );
+    const session = (failService as any).createSession({
+      container: {
+        id: 'container-fail-persist',
+        name: 'napcat-fail-persist',
+        webuiPort: 6110,
+      },
+      mode: 'create',
+      qrcode: 'login-qrcode',
+      status: 'pending',
+    });
+    (failService as any).sessions.set(session.id, session);
+    await loginStateStore.flushSessionWrites(session.id);
+    const flushSessionWrites = jest.spyOn(
+      loginStateStore,
+      'flushSessionWrites',
+    );
+
+    const result = await (failService as any).failSession(
+      session,
+      'NapCat 已登录但未返回 QQ 号',
+    );
+
+    expect(result.status).toBe('error');
+    expect(result.errorMessage).toBe('NapCat 已登录但未返回 QQ 号');
+    expect(flushSessionWrites).toHaveBeenCalledWith(session.id);
+    expect(loginSessionRepository.rows[0]).toEqual(
+      expect.objectContaining({
+        progressMessage: 'NapCat 已登录但未返回 QQ 号',
+        sessionKey: session.id,
+        status: 'error',
+      }),
+    );
+    expect(loginSessionRepository.rows[0].completedAt).toEqual(
+      expect.any(Date),
+    );
+    expect(loginSessionRepository.rows[0].sessionPayload?.status).toBe(
+      'error',
     );
   });
 

@@ -863,8 +863,9 @@ export class QqbotNapcatLoginService {
 
     const selfId = this.toolsService.pickNapcatSelfId(loginInfo);
     if (!selfId) {
-      return this.failSession(session, 'NapCat 已登录但未返回 QQ 号');
+      return this.keepLoginSelfIdPending(session);
     }
+    session.loginSelfIdMissingSince = undefined;
     if (session.expectedSelfId && session.expectedSelfId !== selfId) {
       return this.failSession(
         session,
@@ -2079,6 +2080,39 @@ export class QqbotNapcatLoginService {
   }
 
   /**
+   * Keeps a login-positive session alive while NapCat finishes exposing the logged-in QQ number.
+   * @param session - Scan session whose WebUI status is already logged in but whose `GetQQLoginInfo` payload lacks `uin`/`selfId`.
+   * @returns Pending result during the bounded wait window, or a terminal failure once the missing-self-id window is exhausted.
+   */
+  private async keepLoginSelfIdPending(session: QqbotLoginScanSession) {
+    const now = Date.now();
+    session.loginSelfIdMissingSince ??= now;
+    if (now - session.loginSelfIdMissingSince > this.getLoginSelfIdWaitMs()) {
+      return this.failSession(session, 'NapCat 已登录但未返回 QQ 号');
+    }
+
+    const message = 'NapCat 已登录，正在读取 QQ 号';
+    const shouldPublish = session.errorMessage !== message;
+    session.status = 'pending';
+    session.captchaUrl = undefined;
+    session.errorMessage = message;
+    session.preparingContainer = false;
+    session.preparingRelogin = false;
+    session.qrcode = undefined;
+    this.renewSessionExpiry(session);
+    this.persistLoginSession(session);
+    if (shouldPublish) {
+      this.publishScanResultEvent(
+        session,
+        'login-self-id-wait',
+        'processing',
+        message,
+      );
+    }
+    return this.toResult(session);
+  }
+
+  /**
    * Stops delayed background login work from mutating a pending session after it expired or was replaced.
    * @param session - Pending scan session captured by an async relogin task; its cache identity and TTL decide whether writes are still valid.
    * @returns A terminal or current result when the task must stop, otherwise undefined to allow the caller to continue.
@@ -2109,6 +2143,8 @@ export class QqbotNapcatLoginService {
     session.errorMessage = errorMessage;
     session.passwordMd5 = undefined;
     session.preparingRelogin = false;
+    this.persistLoginSession(session);
+    await this.loginSessionStore.flushSessionWrites(session.id);
     this.publishScanResultEvent(session, 'login-error', 'error', errorMessage);
     this.loginSessionStore.delete(session.id);
     await this.closeSession(session);
@@ -2458,6 +2494,17 @@ export class QqbotNapcatLoginService {
     return this.getPositiveConfigNumber(
       'NAPCAT_LOGIN_QR_AUTO_REFRESH_COOLDOWN_MS',
       Math.max(5000, this.getLoginPollIntervalMs() * 2),
+    );
+  }
+
+  /**
+   * Reads the bounded wait window for NapCat to expose QQ number after WebUI already reports login-positive.
+   * @returns Milliseconds allowed for `GetQQLoginInfo` to start returning `uin`/`selfId` before treating the state as inconsistent.
+   */
+  private getLoginSelfIdWaitMs() {
+    return this.getPositiveConfigNumber(
+      'NAPCAT_LOGIN_SELF_ID_WAIT_MS',
+      30_000,
     );
   }
 

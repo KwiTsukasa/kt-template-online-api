@@ -33,9 +33,9 @@ spec:
             - name: DB_TIMEZONE
               value: "+08:00"
             - name: QQBOT_NAPCAT_IMAGE
-              value: kt-napcat-desktop-cn:desktop-cn-v18
+              value: kt-napcat-desktop-cn:desktop-cn-v19
             - name: QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION
-              value: desktop-cn-v18
+              value: desktop-cn-v19
             - name: QQBOT_NAPCAT_SSH_KEY_PATH
               value: /app/secrets/napcat-ssh/id_rsa
             - name: QQBOT_PLUGIN_TASK_QUEUE_REDIS_PREFIX

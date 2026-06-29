@@ -10,6 +10,9 @@ import type {
   AdminUserListQuery,
 } from '../../contract/admin.types';
 
+const BUILTIN_ADMIN_USER_ID = '2041700000000000002';
+const DEFAULT_ADMIN_HOME_PATH = '/analytics';
+
 @Injectable()
 export class AdminUserService {
   /**
@@ -97,7 +100,7 @@ export class AdminUserService {
 
     const user = this.userRepository.create({
       deptId: data.deptId || null,
-      homePath: data.homePath || '/workspace',
+      homePath: data.homePath || DEFAULT_ADMIN_HOME_PATH,
       password: data.password || '123456',
       realName: data.realName,
       status: data.status ?? 1,
@@ -156,7 +159,11 @@ export class AdminUserService {
     if (id === currentUserId) {
       throwVbenError('不能删除当前登录用户', HttpStatus.BAD_REQUEST);
     }
-    if (user.username === 'admin') {
+    if (
+      user.id === BUILTIN_ADMIN_USER_ID ||
+      user.username === 'admin' ||
+      user.username === 'kwitsukasa'
+    ) {
       throwVbenError('不能删除内置管理员账号', HttpStatus.BAD_REQUEST);
     }
 
@@ -183,7 +190,8 @@ export class AdminUserService {
       user.realName = realName;
     }
     if (data.homePath !== undefined) {
-      user.homePath = String(data.homePath || '').trim() || '/workspace';
+      user.homePath =
+        String(data.homePath || '').trim() || DEFAULT_ADMIN_HOME_PATH;
     }
     if (data.avatar !== undefined) {
       user.avatar = String(data.avatar || '').trim();

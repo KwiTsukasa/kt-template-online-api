@@ -7,7 +7,6 @@ UPDATE `admin_menu`
 SET `meta` = CASE `name`
   WHEN 'Dashboard' THEN '{"order":-1,"title":"page.dashboard.title"}'
   WHEN 'Analytics' THEN '{"affixTab":true,"title":"page.dashboard.analytics"}'
-  WHEN 'Workspace' THEN '{"icon":"carbon:workspace","title":"page.dashboard.workspace"}'
   WHEN 'System' THEN '{"badge":"new","badgeType":"normal","badgeVariants":"primary","icon":"carbon:settings","order":9997,"title":"system.title"}'
   WHEN 'SystemRole' THEN '{"icon":"carbon:user-role","title":"system.role.title"}'
   WHEN 'SystemRoleCreate' THEN '{"title":"common.create"}'
@@ -34,7 +33,6 @@ END
 WHERE `name` IN (
   'Dashboard',
   'Analytics',
-  'Workspace',
   'System',
   'SystemRole',
   'SystemRoleCreate',

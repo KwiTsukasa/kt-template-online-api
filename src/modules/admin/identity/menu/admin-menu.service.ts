@@ -210,6 +210,7 @@ export class AdminMenuService {
       pid: data.pid || '0',
       redirect: data.redirect || null,
       status: data.status ?? 1,
+      sort: Number(data.sort ?? 0),
       type: data.type || 'menu',
     };
     if (includeEmptyMeta || Object.keys(meta).length > 0) {
@@ -321,6 +322,7 @@ export class AdminMenuService {
       pid: menu.pid || '0',
       redirect: menu.redirect,
       status: menu.status,
+      sort: menu.sort,
       type: menu.type,
     } as any;
 

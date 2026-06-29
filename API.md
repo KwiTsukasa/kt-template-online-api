@@ -149,6 +149,8 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `PUT`    | `/system/user/:id`         | 更新用户           |
 | `DELETE` | `/system/user/:id`         | 删除用户           |
 
+系统菜单实体包含 `sort` 字段；菜单树输出按 `meta.order` 优先，其次按 `sort` 升序排列。Admin 菜单管理页面维护 `sort`，不要把普通菜单排序写进隐藏的 route meta。
+
 ### Dict
 
 | 方法     | 路径                           | 说明                                                                               |

@@ -3074,10 +3074,15 @@ describe('QqbotNapcatLoginService', () => {
       'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001';
     session.passwordMd5 = '0123456789abcdef0123456789abcdef';
     (refreshService as any).sessions.set(session.id, session);
+    const flushSessionWrites = jest.spyOn(
+      (refreshService as any).loginSessionStore,
+      'flushSessionWrites',
+    );
 
     await refreshService.cancel(session.id);
 
     expect(containerService.ensureRuntimeLoginEnv).not.toHaveBeenCalled();
+    expect(flushSessionWrites).toHaveBeenCalledWith(session.id);
     expect(session.passwordMd5).toBeUndefined();
     expect(session.captchaUrl).toBeUndefined();
   });

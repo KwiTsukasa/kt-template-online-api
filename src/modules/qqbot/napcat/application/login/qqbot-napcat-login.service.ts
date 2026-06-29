@@ -622,6 +622,7 @@ export class QqbotNapcatLoginService {
         step: 'session-cancelled',
       });
       this.loginSessionStore.delete(sessionId);
+      await this.loginSessionStore.flushSessionWrites(sessionId);
       await this.cleanupSessionContainer(session);
       this.cleanupSessionEvents(sessionId);
     }

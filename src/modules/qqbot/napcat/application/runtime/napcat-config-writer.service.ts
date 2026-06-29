@@ -29,12 +29,12 @@ type OnebotConfig = {
 
 type NapcatConfig = {
   bypass: {
-    container: false;
-    hook: false;
-    js: false;
-    module: false;
-    process: false;
-    window: false;
+    container: true;
+    hook: true;
+    js: true;
+    module: true;
+    process: true;
+    window: true;
   };
   o3HookMode: 0;
   packetBackend: 'auto';
@@ -68,12 +68,12 @@ export class NapcatConfigWriterService {
     };
     const napcatConfig: NapcatConfig = {
       bypass: {
-        container: false,
-        hook: false,
-        js: false,
-        module: false,
-        process: false,
-        window: false,
+        container: true,
+        hook: true,
+        js: true,
+        module: true,
+        process: true,
+        window: true,
       },
       o3HookMode: 0,
       packetBackend: 'auto',

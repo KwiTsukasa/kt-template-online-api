@@ -253,6 +253,14 @@ describe('NapCat runtime profile generation', () => {
       reconnectInterval: 5000,
       reportSelfMessage: false,
     });
+    expect(result.napcatConfig.bypass).toEqual({
+      container: true,
+      hook: true,
+      js: true,
+      module: true,
+      process: true,
+      window: true,
+    });
     expect(result.napcatConfig.o3HookMode).toBe(0);
     expect(
       result.files.find((file) => file.path === 'webui.json')?.content,

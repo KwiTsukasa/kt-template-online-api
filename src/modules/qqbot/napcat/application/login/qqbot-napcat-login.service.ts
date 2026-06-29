@@ -2925,7 +2925,7 @@ export class QqbotNapcatLoginService {
 
   /**
    * Decides whether this refresh session may spend its single same-container worker restart budget.
-   * @param session - Login refresh session; its source-container flag proves Docker is already alive and the attempt flag prevents restart storms.
+   * @param session - Login refresh session; its source-runtime flag proves the managed runtime is already alive and the attempt flag prevents restart storms.
    * @returns True only before the first NapCat worker restart attempt in this online-source refresh session.
    */
   private shouldRestartNapcatWorkerForOnlineRefresh(
@@ -2939,9 +2939,9 @@ export class QqbotNapcatLoginService {
   }
 
   /**
-   * Restarts only the NapCat worker when the Docker container is alive but QQCore login service is stale.
+   * Restarts only the NapCat worker when the managed runtime is alive but QQCore login service is stale.
    * @param session - Refresh login session that owns progress messages and retry timestamps.
-   * @param container - Current online Docker/WebUI runtime; its device identity and environment must be preserved.
+   * @param container - Current online WebUI runtime; its device identity and environment must be preserved.
    * @param reason - Latest QQ login-state evidence shown to Admin before the worker restart.
    * @returns Fresh WebUI login status after the worker restart completes.
    */

@@ -341,6 +341,7 @@ export type QqbotLoginScanSession = {
   loginSelfIdMissingSince?: number;
   lastQrcodeRefreshAt?: number;
   lastRestartedAt?: number;
+  loginPasswordAvailable?: boolean;
   mode: QqbotLoginScanMode;
   newDeviceBytesToken?: string;
   newDevicePullQrCodeSig?: unknown;

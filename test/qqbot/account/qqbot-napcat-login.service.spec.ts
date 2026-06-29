@@ -187,13 +187,14 @@ describe('QqbotNapcatLoginService', () => {
       'qq-password',
     );
     expect(startScan).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         accountId: 'account-1',
         expectedSelfId: '10001',
         forceRelogin: true,
+        loginPasswordAvailable: true,
         loginPassword: 'qq-password',
         mode: 'refresh',
-      },
+      }),
       existingContainer,
     );
   });
@@ -280,6 +281,65 @@ describe('QqbotNapcatLoginService', () => {
     );
     expect(containerService.prepareAccountContainer).toHaveBeenCalledTimes(1);
     expect(prepareReloginQrcode).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts a new refresh session after password is maintained on an account with an old pending session', async () => {
+    const account = {
+      id: 'account-1',
+      selfId: '10001',
+    };
+    const existingContainer = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      hasExistingPrimaryBinding: true,
+      id: 'container-current',
+      name: 'napcat-10001',
+    };
+    const accountService = {
+      findByIdWithNapcatLoginSecret: jest.fn().mockResolvedValue(account),
+      getNapcatLoginPassword: jest.fn().mockReturnValue('qq-password'),
+    };
+    const containerService = {
+      prepareAccountContainer: jest.fn().mockResolvedValue(existingContainer),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    (refreshService as any).sessions.set('session-without-password', {
+      accountId: 'account-1',
+      containerId: 'container-current',
+      containerName: 'napcat-10001',
+      createdAt: Date.now(),
+      errorMessage: '密码登录未完成：未配置 QQ 登录密码，开始生成二维码',
+      expiresAt: Date.now() + 60_000,
+      id: 'session-without-password',
+      mode: 'refresh',
+      status: 'pending',
+      webuiPort: 6103,
+    });
+    const prepareReloginQrcode = jest
+      .spyOn(refreshService as any, 'prepareReloginQrcode')
+      .mockResolvedValue(undefined);
+
+    const result = await refreshService.startRefresh('account-1');
+
+    expect(result.sessionId).not.toBe('session-without-password');
+    expect(accountService.findByIdWithNapcatLoginSecret).toHaveBeenCalledWith(
+      'account-1',
+    );
+    expect(accountService.getNapcatLoginPassword).toHaveBeenCalledWith(account);
+    expect(prepareReloginQrcode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 'account-1',
+        expectedSelfId: '10001',
+        status: 'pending',
+      }),
+      existingContainer,
+      'qq-password',
+      existingContainer.hasExistingPrimaryBinding,
+    );
   });
 
   it('does not return a stale qrcode when reusing an active refresh session', async () => {

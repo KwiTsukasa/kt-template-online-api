@@ -176,8 +176,15 @@ export class QqbotNapcatLoginService {
   async startRefresh(accountId: string) {
     const activeSession = this.findActiveRefreshSession(accountId);
     if (activeSession) {
-      if (activeSession.qrcode) return this.refreshQrcode(activeSession.id);
-      return this.toResult(activeSession);
+      if (
+        !(await this.invalidatePasswordlessRefreshSessionWhenPasswordExists(
+          accountId,
+          activeSession,
+        ))
+      ) {
+        if (activeSession.qrcode) return this.refreshQrcode(activeSession.id);
+        return this.toResult(activeSession);
+      }
     }
 
     const runningTask = this.refreshStartTasks[accountId];
@@ -216,6 +223,7 @@ export class QqbotNapcatLoginService {
       expectedSelfId: string;
       forceRelogin: true;
       hasExistingPrimaryBinding?: boolean;
+      loginPasswordAvailable?: boolean;
       loginPassword?: string;
       mode: 'refresh';
       sourceContainerOnline?: boolean;
@@ -224,6 +232,7 @@ export class QqbotNapcatLoginService {
       expectedSelfId: account.selfId,
       forceRelogin: true,
       hasExistingPrimaryBinding: container.hasExistingPrimaryBinding,
+      loginPasswordAvailable: !!this.toolsService.toSecretText(loginPassword),
       loginPassword,
       mode: 'refresh',
     };
@@ -254,6 +263,80 @@ export class QqbotNapcatLoginService {
       }
     });
     return activeSession;
+  }
+
+  /**
+   * 当账号后续维护了 QQ 登录密码时，废弃旧的无密码更新登录会话。
+   * @param accountId - 正在更新登录态的账号 ID，用于重新读取账号表里的最新登录密码密文。
+   * @param session - 可能早于密码维护动作创建的 pending 更新登录会话。
+   * @returns 旧会话已退役且调用方应重新创建更新登录会话时返回 true。
+   */
+  private async invalidatePasswordlessRefreshSessionWhenPasswordExists(
+    accountId: string,
+    session: QqbotLoginScanSession,
+  ) {
+    if (this.hasRefreshPasswordContext(session)) return false;
+
+    const accountService = this.accountService as Partial<
+      Pick<
+        QqbotAccountService,
+        'findByIdWithNapcatLoginSecret' | 'getNapcatLoginPassword'
+      >
+    >;
+    if (
+      !accountService.findByIdWithNapcatLoginSecret ||
+      !accountService.getNapcatLoginPassword
+    ) {
+      return false;
+    }
+
+    const account =
+      await accountService.findByIdWithNapcatLoginSecret(accountId);
+    if (!account) return false;
+    const loginPassword = accountService.getNapcatLoginPassword(account);
+    if (!this.toolsService.toSecretText(loginPassword)) return false;
+
+    await this.retireRefreshSessionForPasswordReload(session);
+    return true;
+  }
+
+  /**
+   * 判断更新登录会话是否已经携带或进入过密码登录相关上下文。
+   * @param session - 待复用的 pending 更新登录会话。
+   * @returns 复用该会话不会忽略账号已维护登录密码时返回 true。
+   */
+  private hasRefreshPasswordContext(session: QqbotLoginScanSession) {
+    return !!(
+      session.loginPasswordAvailable ||
+      session.passwordMd5 ||
+      session.captchaUrl ||
+      session.deviceVerifyUrl ||
+      session.newDeviceQrcode ||
+      session.newDeviceStatus
+    );
+  }
+
+  /**
+   * 仅退役过期的更新登录会话记录，不移除已绑定的 NapCat 容器。
+   * @param session - 不应继续提供旧二维码或旧 pending 状态的无密码更新登录会话。
+   */
+  private async retireRefreshSessionForPasswordReload(
+    session: QqbotLoginScanSession,
+  ) {
+    session.errorMessage = '账号登录密码已更新，重新创建更新登录会话';
+    session.preparingRelogin = false;
+    session.qrcode = undefined;
+    session.status = 'expired';
+    this.persistLoginSession(session);
+    this.publishScanResultEvent(
+      session,
+      'session-recreated',
+      'processing',
+      session.errorMessage,
+    );
+    await this.loginSessionStore.flushSessionWrites(session.id);
+    this.loginSessionStore.delete(session.id);
+    this.cleanupSessionEvents(session.id);
   }
 
   /**
@@ -641,6 +724,7 @@ export class QqbotNapcatLoginService {
       expectedSelfId?: string;
       forceRelogin?: boolean;
       hasExistingPrimaryBinding?: boolean;
+      loginPasswordAvailable?: boolean;
       loginPassword?: string;
       mode: QqbotLoginScanMode;
       sourceContainerOnline?: boolean;
@@ -940,6 +1024,7 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime;
     expectedSelfId?: string;
     mode: QqbotLoginScanMode;
+    loginPasswordAvailable?: boolean;
     preparingContainer?: boolean;
     preparingRelogin?: boolean;
     qrcode?: string;
@@ -956,6 +1041,7 @@ export class QqbotNapcatLoginService {
       expectedSelfId: input.expectedSelfId,
       expiresAt: now + this.getSessionTtlMs(),
       id: randomUUID(),
+      loginPasswordAvailable: input.loginPasswordAvailable,
       mode: input.mode,
       preparingContainer: input.preparingContainer,
       preparingRelogin: input.preparingRelogin,

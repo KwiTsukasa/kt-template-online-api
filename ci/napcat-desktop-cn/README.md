@@ -58,4 +58,6 @@ docker exec $name sh /ci/napcat-desktop-cn/verify.sh
 docker rm -f $name
 ```
 
+`verify.sh` checks long-lived QQ/NapCat/Xvfb process `/proc/<pid>/mountinfo` after the entrypoint guard has had a bounded convergence window. If a target process still exposes host paths after `MOUNTINFO_GUARD_TIMEOUT_SECONDS`, verification exits with 78 and prints the target PID, `comm`, `cmdline`, and first leaked mountinfo line.
+
 Record the final image digest in `QQBOT_NAPCAT_IMAGE`, and keep the matching `fork-artifact.json` with the release evidence. For local Windows rehearsal, placeholder `$upstreamReleaseTag`, `$upstreamReleaseCommit`, and `$jenkinsBuildUrl` values are acceptable only if the image is not promoted.

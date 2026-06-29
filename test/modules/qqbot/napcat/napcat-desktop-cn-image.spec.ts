@@ -63,6 +63,21 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).toContain('Asia/Shanghai');
   });
 
+  it('waits for the mountinfo guard to converge before failing target process leaks', () => {
+    const verify = readSource('ci/napcat-desktop-cn/verify.sh');
+
+    expect(verify).toContain('MOUNTINFO_GUARD_TIMEOUT_SECONDS');
+    expect(verify).toContain('wait_for_mountinfo_guard_converged');
+    expect(verify).toContain('kt_mountinfo_guard_deadline=');
+    expect(verify).toContain('sleep 1');
+    expect(verify).toContain(
+      'assert_target_mountinfo_guard_converged "$kt_mountinfo_pid"',
+    );
+    expect(verify).not.toContain(
+      'assert_no_mountinfo_host_leak "/proc/$kt_mountinfo_pid/mountinfo"',
+    );
+  });
+
   it('patches entrypoint device profile probes that QQCore opens at runtime', () => {
     const dockerfile = readSource('ci/napcat-desktop-cn/Dockerfile');
     const entrypointPatch = readSource(

@@ -62,12 +62,51 @@ grep -q '/sys/class/dmi/id/bios_version' /app/entrypoint.sh
 grep -q '/etc/hosts' /app/entrypoint.sh
 
 MOUNTINFO_HOST_LEAK_PATTERN='overlay|/vol1/docker|docker-init|/docker/containers|napcat-instances|btrfs|/dev/mapper/trim'
-assert_no_mountinfo_host_leak() {
+MOUNTINFO_GUARD_TIMEOUT_SECONDS="${MOUNTINFO_GUARD_TIMEOUT_SECONDS:-12}"
+
+mountinfo_has_host_leak() {
   kt_mountinfo="$1"
   if [ -r "$kt_mountinfo" ] && grep -E "$MOUNTINFO_HOST_LEAK_PATTERN" "$kt_mountinfo" >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+assert_no_mountinfo_host_leak() {
+  kt_mountinfo="$1"
+  if mountinfo_has_host_leak "$kt_mountinfo"; then
     echo "NapCat desktop-cn verify failed: mountinfo-host-leak:$kt_mountinfo" >&2
     exit 78
   fi
+}
+
+wait_for_mountinfo_guard_converged() {
+  kt_mountinfo_pid="$1"
+  kt_mountinfo_guard_deadline="$MOUNTINFO_GUARD_TIMEOUT_SECONDS"
+  kt_mountinfo_guard_elapsed=0
+  while [ "$kt_mountinfo_guard_elapsed" -le "$kt_mountinfo_guard_deadline" ]; do
+    if [ ! -d "/proc/$kt_mountinfo_pid" ]; then
+      return 0
+    fi
+    if ! mountinfo_has_host_leak "/proc/$kt_mountinfo_pid/mountinfo"; then
+      return 0
+    fi
+    sleep 1
+    kt_mountinfo_guard_elapsed=$((kt_mountinfo_guard_elapsed + 1))
+  done
+  return 1
+}
+
+assert_target_mountinfo_guard_converged() {
+  kt_mountinfo_pid="$1"
+  if wait_for_mountinfo_guard_converged "$kt_mountinfo_pid"; then
+    return 0
+  fi
+  kt_mountinfo_comm="$(cat "/proc/$kt_mountinfo_pid/comm" 2>/dev/null || true)"
+  kt_mountinfo_cmdline="$(tr '\000' ' ' < "/proc/$kt_mountinfo_pid/cmdline" 2>/dev/null || true)"
+  echo "NapCat desktop-cn verify failed: mountinfo-host-leak:/proc/$kt_mountinfo_pid/mountinfo comm=$kt_mountinfo_comm cmdline=$kt_mountinfo_cmdline" >&2
+  grep -E "$MOUNTINFO_HOST_LEAK_PATTERN" "/proc/$kt_mountinfo_pid/mountinfo" 2>/dev/null | head -n 1 >&2 || true
+  exit 78
 }
 
 kt_is_mountinfo_target() {
@@ -111,6 +150,6 @@ for kt_mountinfo_pid_dir in /proc/[0-9]*; do
   kt_mountinfo_comm="$(cat "$kt_mountinfo_pid_dir/comm" 2>/dev/null || true)"
   kt_mountinfo_cmdline="$(tr '\000' ' ' < "$kt_mountinfo_pid_dir/cmdline" 2>/dev/null || true)"
   if kt_is_mountinfo_target "$kt_mountinfo_comm" "$kt_mountinfo_cmdline"; then
-    assert_no_mountinfo_host_leak "/proc/$kt_mountinfo_pid/mountinfo"
+    assert_target_mountinfo_guard_converged "$kt_mountinfo_pid"
   fi
 done

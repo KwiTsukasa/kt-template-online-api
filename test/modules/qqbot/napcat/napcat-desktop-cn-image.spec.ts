@@ -122,6 +122,28 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(source).toContain('proc-devices-host-leak');
   });
 
+  it('preserves API-written NapCat config during the first shell install', () => {
+    const entrypointPatch = readSource(
+      'ci/napcat-desktop-cn/entrypoint-device-profile.patch.sh',
+    );
+    const verify = readSource('ci/napcat-desktop-cn/verify.sh');
+
+    expect(entrypointPatch).toContain('KT preserve mounted NapCat config');
+    expect(entrypointPatch).toContain(
+      "find NapCat.Shell -mindepth 1 -maxdepth 1 ! -name config",
+    );
+    expect(entrypointPatch).toContain(
+      'if [ ! -f \\"napcat/config/napcat.json\\" ]; then',
+    );
+    expect(entrypointPatch).toContain(
+      'cp -rf NapCat.Shell/config/* napcat/config/',
+    );
+    expect(verify).toContain('KT preserve mounted NapCat config');
+    expect(verify).toContain(
+      "! grep -q 'cp -rf NapCat.Shell/\\* napcat/' /app/entrypoint.sh",
+    );
+  });
+
   it('stages source-built NapCat Shell artifacts for Docker build context', () => {
     const script = readSource('scripts/napcat-desktop-cn-stage-build.mjs');
 
@@ -173,13 +195,15 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).not.toContain('selfInfo?.online !== false');
   });
 
-  it('deploys the production API with the verified desktop-cn-v19 runtime profile', () => {
+  it('deploys the production API with the verified desktop-cn-v20 runtime profile', () => {
     const manifest = readSource('k8s/prod/api.yaml');
 
     expect(manifest).toContain('name: QQBOT_NAPCAT_IMAGE');
-    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v19');
+    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v20');
     expect(manifest).toContain('name: QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION');
-    expect(manifest).toContain('value: desktop-cn-v19');
+    expect(manifest).toContain('value: desktop-cn-v20');
+    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v19');
+    expect(manifest).not.toContain('value: desktop-cn-v19');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v18');
     expect(manifest).not.toContain('value: desktop-cn-v18');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v16');
@@ -190,6 +214,6 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v7');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v4');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v3');
-    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v2');
+    expect(manifest).not.toMatch(/kt-napcat-desktop-cn:desktop-cn-v2(?!\d)/);
   });
 });

@@ -60,6 +60,9 @@ grep -q '/sys/class/dmi/id/product_name' /app/entrypoint.sh
 grep -q '/sys/class/dmi/id/bios_vendor' /app/entrypoint.sh
 grep -q '/sys/class/dmi/id/bios_version' /app/entrypoint.sh
 grep -q '/etc/hosts' /app/entrypoint.sh
+grep -q 'KT preserve mounted NapCat config' /app/entrypoint.sh
+grep -q 'find NapCat.Shell -mindepth 1 -maxdepth 1 ! -name config' /app/entrypoint.sh
+! grep -q 'cp -rf NapCat.Shell/\* napcat/' /app/entrypoint.sh
 
 MOUNTINFO_HOST_LEAK_PATTERN='overlay|/vol1/docker|docker-init|/docker/containers|napcat-instances|btrfs|/dev/mapper/trim'
 MOUNTINFO_GUARD_TIMEOUT_SECONDS="${MOUNTINFO_GUARD_TIMEOUT_SECONDS:-12}"

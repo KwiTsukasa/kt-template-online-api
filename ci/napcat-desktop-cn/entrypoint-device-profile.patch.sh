@@ -3,6 +3,29 @@ set -eu
 
 ENTRYPOINT=/app/entrypoint.sh
 
+if grep -q 'KT device profile patch defaults' "$ENTRYPOINT" \
+    && grep -q 'KT preserve mounted NapCat config' "$ENTRYPOINT"; then
+  exit 0
+fi
+
+if ! grep -q 'KT preserve mounted NapCat config' "$ENTRYPOINT"; then
+    grep -Fq 'cp -rf NapCat.Shell/* napcat/' "$ENTRYPOINT"
+    awk '
+        /cp -rf NapCat\.Shell\/\* napcat\// {
+            print "    # KT preserve mounted NapCat config."
+            print "    find NapCat.Shell -mindepth 1 -maxdepth 1 ! -name config -exec cp -rf {} napcat/ \\;"
+            print "    if [ ! -f \"napcat/config/napcat.json\" ]; then"
+            print "        mkdir -p napcat/config"
+            print "        cp -rf NapCat.Shell/config/* napcat/config/"
+            print "    fi"
+            next
+        }
+        { print }
+    ' "$ENTRYPOINT" > "$ENTRYPOINT.tmp"
+    mv "$ENTRYPOINT.tmp" "$ENTRYPOINT"
+    chmod +x "$ENTRYPOINT"
+fi
+
 if grep -q 'KT device profile patch defaults' "$ENTRYPOINT"; then
   exit 0
 fi

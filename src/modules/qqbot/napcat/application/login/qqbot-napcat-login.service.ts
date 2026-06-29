@@ -303,7 +303,16 @@ export class QqbotNapcatLoginService {
       await this.syncSessionQqLoginStatus(session, loginStatus);
     }
 
-    if (loginStatus.isOffline && session.mode !== 'refresh') {
+    if (
+      loginStatus.isOffline &&
+      this.shouldRestartNapcatWorkerForOnlineRefresh(session)
+    ) {
+      loginStatus = await this.restartNapcatWorkerForOnlineRefresh(
+        session,
+        container,
+        loginStatus.loginError || 'NapCat 账号已离线，正在重启登录服务',
+      );
+    } else if (loginStatus.isOffline && session.mode !== 'refresh') {
       await this.restartNapcatForLogin(container, { waitForReady: false });
       session.lastRestartedAt = Date.now();
       return this.keepSessionPending(
@@ -433,6 +442,21 @@ export class QqbotNapcatLoginService {
           session,
           status.loginError,
         );
+      }
+
+      if (
+        status.isOffline &&
+        this.shouldRestartNapcatWorkerForOnlineRefresh(session)
+      ) {
+        status = await this.restartNapcatWorkerForOnlineRefresh(
+          session,
+          container,
+          status.loginError || 'NapCat 账号已离线，正在重启登录服务',
+        );
+        if (status.isLogin) {
+          return this.completeLogin(session, container);
+        }
+        await this.syncSessionQqLoginStatus(session, status);
       }
 
       if (this.shouldRefreshNearlyExpiredQrcode(status)) {
@@ -2770,6 +2794,17 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime,
   ) {
     const loginStatus = await this.getLoginStatus(container, true);
+    if (
+      loginStatus.isOffline &&
+      this.shouldRestartNapcatWorkerForOnlineRefresh(session)
+    ) {
+      await this.restartNapcatWorkerForOnlineRefresh(
+        session,
+        container,
+        loginStatus.loginError || 'NapCat 账号已离线，正在重启登录服务',
+      );
+      return false;
+    }
     if (!loginStatus.isLogin) return false;
 
     const loginInfo = await this.getLoginInfo(container);
@@ -2886,6 +2921,50 @@ export class QqbotNapcatLoginService {
       successMessage: '快速登录成功',
     });
     return true;
+  }
+
+  /**
+   * Decides whether this refresh session may spend its single same-container worker restart budget.
+   * @param session - Login refresh session; its source-container flag proves Docker is already alive and the attempt flag prevents restart storms.
+   * @returns True only before the first NapCat worker restart attempt in this online-source refresh session.
+   */
+  private shouldRestartNapcatWorkerForOnlineRefresh(
+    session: QqbotLoginScanSession,
+  ) {
+    return (
+      session.mode === 'refresh' &&
+      session.sourceContainerOnline === true &&
+      session.onlineSourceWorkerRestartAttempted !== true
+    );
+  }
+
+  /**
+   * Restarts only the NapCat worker when the Docker container is alive but QQCore login service is stale.
+   * @param session - Refresh login session that owns progress messages and retry timestamps.
+   * @param container - Current online Docker/WebUI runtime; its device identity and environment must be preserved.
+   * @param reason - Latest QQ login-state evidence shown to Admin before the worker restart.
+   * @returns Fresh WebUI login status after the worker restart completes.
+   */
+  private async restartNapcatWorkerForOnlineRefresh(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    reason: string,
+  ) {
+    session.lastRestartedAt = Date.now();
+    session.onlineSourceWorkerRestartAttempted = true;
+    session.errorMessage = reason;
+    this.persistLoginSession(session);
+    this.publishScanResultEvent(
+      session,
+      'napcat-worker-restart',
+      'processing',
+      reason,
+    );
+    await this.restartNapcatForLogin(container, {
+      processOnly: true,
+      waitForReady: true,
+    });
+    return this.getLoginStatus(container, true);
   }
 
   /**
@@ -3438,8 +3517,9 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime,
     options: NapcatRestartOptions = {},
   ) {
-    const restartedByContainer =
-      await this.containerService.restartRuntimeContainer(container);
+    const restartedByContainer = options.processOnly
+      ? false
+      : await this.containerService.restartRuntimeContainer(container);
     if (!restartedByContainer) {
       try {
         await this.postNapcat<Record<string, any> | null>(

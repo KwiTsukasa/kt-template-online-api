@@ -49,6 +49,7 @@ export type NapcatQrcode = {
 };
 
 export type NapcatRestartOptions = {
+  processOnly?: boolean;
   waitForReady?: boolean;
 };
 
@@ -345,6 +346,7 @@ export type QqbotLoginScanSession = {
   newDevicePullQrCodeSig?: unknown;
   newDeviceQrcode?: string;
   newDeviceStatus?: QqbotLoginNewDeviceStatus;
+  onlineSourceWorkerRestartAttempted?: boolean;
   passwordMd5?: string;
   preparingContainer?: boolean;
   preparingRelogin?: boolean;

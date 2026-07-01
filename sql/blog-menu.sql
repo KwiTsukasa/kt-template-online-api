@@ -11,6 +11,8 @@ VALUES
   (2041700000000120302, 2041700000000100301, 'BlogArticleEdit', NULL, NULL, NULL, 'Blog:Article:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120303, 2041700000000100301, 'BlogArticleDelete', NULL, NULL, NULL, 'Blog:Article:Delete', 'button', '{"title":"common.delete"}', 1, 0),
   (2041700000000120304, 2041700000000100301, 'BlogArticleImport', NULL, NULL, NULL, 'Blog:Article:Import', 'button', '{"title":"导入 WordPress"}', 1, 1),
+  (2041700000000120305, 2041700000000100301, 'BlogArticlePreviewButton', NULL, NULL, NULL, 'Blog:Article:Preview', 'button', '{"title":"预览"}', 1, 2),
+  (2041700000000100305, 2041700000000100300, 'BlogArticlePreview', '/blog/article/:articleId/preview', '/blog/article/preview/index', NULL, 'Blog:Article:Preview', 'menu', '{"activePath":"/blog/article","hideInMenu":true,"title":"文章预览"}', 1, 4),
   (2041700000000100302, 2041700000000100300, 'BlogCategory', '/blog/category', '/blog/category/list', NULL, 'Blog:Category:List', 'menu', '{"icon":"lucide:folder-tree","title":"分类管理"}', 1, 1),
   (2041700000000120311, 2041700000000100302, 'BlogCategoryCreate', NULL, NULL, NULL, 'Blog:Category:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120312, 2041700000000100302, 'BlogCategoryEdit', NULL, NULL, NULL, 'Blog:Category:Edit', 'button', '{"title":"common.edit"}', 1, 0),

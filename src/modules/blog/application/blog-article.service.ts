@@ -362,7 +362,7 @@ export class BlogArticleService {
         );
       } else {
         nextArticle.contentMarkdown = current?.contentMarkdown || '';
-        nextArticle.contentHtml = await this.markdownService.renderToHtml(
+        nextArticle.contentHtml = await this.markdownService.sanitizeHtml(
           body.content,
         );
       }

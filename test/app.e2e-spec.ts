@@ -643,12 +643,16 @@ const routeTestCases: Record<string, RouteTestCase> = {
     const response = await request(server)
       .post('/blog/article/update')
       .send({
+        content: '<pre class="wp-block-code hljs-codeblock"></pre>',
+        contentFormat: 'html',
         id: blogArticle.id,
         title: '本地文章',
       })
       .expect(200);
 
     expect(blogArticleServiceMock.update).toHaveBeenCalledWith({
+      content: '<pre class="wp-block-code hljs-codeblock"></pre>',
+      contentFormat: 'html',
       id: blogArticle.id,
       title: '本地文章',
     });

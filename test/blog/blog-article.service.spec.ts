@@ -119,6 +119,38 @@ describe('BlogArticleService', () => {
     });
   });
 
+  it('sanitizes html content without markdown rerendering when updating imported articles', async () => {
+    const rawArgonCodeblock =
+      '<pre class="wp-block-code hljs-codeblock" id="demo"><code class="hljs sql"><table class="hljs-ln"><tbody><tr><td class="hljs-ln-line hljs-ln-code">select 1;</td></tr></tbody></table></code><div class="hljs-control"><div class="hljs-control-btn hljs-control-copy"></div></div></pre><script>alert(1)</script>';
+    const currentArticle = {
+      contentHtml: '<p>旧正文</p>',
+      contentMarkdown: '旧正文',
+      id: '50',
+      isDeleted: false,
+      slug: 'wordpress-post',
+      status: 'publish',
+      title: 'WordPress 文章',
+    };
+    repository.findOne.mockResolvedValue(currentArticle);
+
+    await service.update({
+      content: rawArgonCodeblock,
+      contentFormat: 'html',
+      id: '50',
+      title: 'WordPress 文章',
+    });
+
+    expect(markdownService.renderToHtml).not.toHaveBeenCalled();
+    expect(markdownService.sanitizeHtml).toHaveBeenCalledWith(rawArgonCodeblock);
+    expect(repository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contentHtml:
+          '<pre class="wp-block-code hljs-codeblock" id="demo"><code class="hljs sql"><table class="hljs-ln"><tbody><tr><td class="hljs-ln-line hljs-ln-code">select 1;</td></tr></tbody></table></code><div class="hljs-control"><div class="hljs-control-btn hljs-control-copy"></div></div></pre>',
+        contentMarkdown: '旧正文',
+      }),
+    );
+  });
+
   it('queries public list with publish status and maps response fields', async () => {
     const builder = createQueryBuilderMock([
       {

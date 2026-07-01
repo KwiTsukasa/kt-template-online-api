@@ -264,7 +264,7 @@ describe('NapCat persistent login state contract', () => {
     );
   });
 
-  it('does not mark a still-pending scan session completed when it is removed from the runtime cache', async () => {
+  it('marks a cancelled pending scan session completed instead of restoring it as active', async () => {
     const loginSessionRepository = createRepository<NapcatLoginSession>();
     const store = new NapcatLoginStateStoreService(
       loginSessionRepository as any,
@@ -288,9 +288,17 @@ describe('NapCat persistent login state contract', () => {
 
     expect(loginSessionRepository.rows[0]).toEqual(
       expect.objectContaining({
-        completedAt: null,
+        completedAt: expect.any(Date),
+        loginStage: 'cancelled',
+        progressMessage: '扫码会话已取消',
         sessionKey: 'pending-delete-session',
-        status: 'pending',
+        status: 'error',
+      }),
+    );
+    expect(loginSessionRepository.rows[0].sessionPayload).toEqual(
+      expect.objectContaining({
+        errorMessage: '扫码会话已取消',
+        status: 'error',
       }),
     );
   });

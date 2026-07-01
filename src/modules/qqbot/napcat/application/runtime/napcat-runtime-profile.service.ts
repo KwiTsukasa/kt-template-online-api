@@ -71,7 +71,7 @@ export class NapcatRuntimeProfileService {
       dataDir: input.dataDir,
       desktopProfileVersion: this.getString(
         'QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION',
-        'desktop-cn-v8',
+        'desktop-cn-v20',
       ),
       deviceIdentityId: input.deviceIdentityId,
       imageRef: this.getString('QQBOT_NAPCAT_IMAGE', ''),
@@ -162,7 +162,7 @@ export class NapcatRuntimeProfileService {
           napcatConfigHash: input.protocolProfile.napcatConfigHash || null,
           napcatConfigJson: input.protocolProfile.napcatConfigJson || null,
           o3HookGrayEnabled: !!input.protocolProfile.o3HookGrayEnabled,
-          o3HookMode: input.protocolProfile.o3HookMode ?? 1,
+          o3HookMode: input.protocolProfile.o3HookMode ?? 0,
           onebotConfigHash: input.protocolProfile.onebotConfigHash || null,
           onebotConfigJson: input.protocolProfile.onebotConfigJson || null,
           packetBackend: input.protocolProfile.packetBackend || 'auto',

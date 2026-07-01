@@ -2,8 +2,10 @@ import { AdminUserService } from '../../src/modules/admin/identity/user/admin-us
 
 describe('AdminUserService profile', () => {
   const userRepository = {
+    create: jest.fn((input) => ({ ...input })),
     findOne: jest.fn(),
     save: jest.fn(),
+    update: jest.fn(),
   };
   const roleRepository = {
     find: jest.fn(),
@@ -22,10 +24,33 @@ describe('AdminUserService profile', () => {
     jest.clearAllMocks();
   });
 
+  it('uses environment overview as the default home path for created users', async () => {
+    userRepository.findOne.mockResolvedValue(null);
+    roleRepository.find.mockResolvedValue([]);
+
+    await service.createUser({
+      realName: '新用户',
+      roleIds: [],
+      username: 'new-user',
+    });
+
+    expect(userRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        homePath: '/analytics',
+        username: 'new-user',
+      }),
+    );
+    expect(userRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        homePath: '/analytics',
+      }),
+    );
+  });
+
   it('updates current profile fields including uploaded avatar url', async () => {
     const user = {
       avatar: '',
-      homePath: '/workspace',
+      homePath: '/analytics',
       id: '2041700000000000001',
       realName: '旧姓名',
       roles: [],
@@ -61,11 +86,51 @@ describe('AdminUserService profile', () => {
     expect(result).toEqual(user);
   });
 
+  it('falls back to environment overview when current profile clears home path', async () => {
+    const user = {
+      avatar: '',
+      homePath: '/profile',
+      id: '2041700000000000002',
+      realName: 'KwiTsukasa',
+      roles: [],
+      timezone: 'Asia/Shanghai',
+      username: 'kwitsukasa',
+    };
+    userRepository.findOne.mockResolvedValue(user);
+
+    await service.updateCurrentProfile(user.id, {
+      homePath: '',
+    });
+
+    expect(userRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        homePath: '/analytics',
+      }),
+    );
+  });
+
+  it('prevents deleting the renamed built-in administrator account', async () => {
+    userRepository.findOne.mockResolvedValue({
+      id: '2041700000000000002',
+      isDeleted: false,
+      username: 'kwitsukasa',
+    });
+
+    await expect(service.deleteUser('2041700000000000002')).rejects.toMatchObject(
+      {
+        response: expect.objectContaining({
+          msg: '不能删除内置管理员账号',
+        }),
+      },
+    );
+    expect(userRepository.update).not.toHaveBeenCalled();
+  });
+
   it('serializes avatar and userId for Admin frontend user store', () => {
     expect(
       service.serializeUser({
         avatar: '/api/minio/download?objectName=avatars%2Favatar.jpg',
-        homePath: '/workspace',
+        homePath: '/analytics',
         id: '2041700000000000001',
         realName: '管理员',
         roles: [],
@@ -74,7 +139,7 @@ describe('AdminUserService profile', () => {
       } as any),
     ).toEqual({
       avatar: '/api/minio/download?objectName=avatars%2Favatar.jpg',
-      homePath: '/workspace',
+      homePath: '/analytics',
       id: '2041700000000000001',
       realName: '管理员',
       roles: [],

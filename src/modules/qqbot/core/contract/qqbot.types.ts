@@ -49,6 +49,7 @@ export type NapcatQrcode = {
 };
 
 export type NapcatRestartOptions = {
+  processOnly?: boolean;
   waitForReady?: boolean;
 };
 
@@ -337,12 +338,16 @@ export type QqbotLoginScanSession = {
   expectedSelfId?: string;
   id: string;
   lastCaptchaLookupAt?: number;
+  loginSelfIdMissingSince?: number;
+  lastQrcodeRefreshAt?: number;
   lastRestartedAt?: number;
+  loginPasswordAvailable?: boolean;
   mode: QqbotLoginScanMode;
   newDeviceBytesToken?: string;
   newDevicePullQrCodeSig?: unknown;
   newDeviceQrcode?: string;
   newDeviceStatus?: QqbotLoginNewDeviceStatus;
+  onlineSourceWorkerRestartAttempted?: boolean;
   passwordMd5?: string;
   preparingContainer?: boolean;
   preparingRelogin?: boolean;

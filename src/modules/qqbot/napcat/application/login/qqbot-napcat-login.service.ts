@@ -176,8 +176,15 @@ export class QqbotNapcatLoginService {
   async startRefresh(accountId: string) {
     const activeSession = this.findActiveRefreshSession(accountId);
     if (activeSession) {
-      if (activeSession.qrcode) return this.refreshQrcode(activeSession.id);
-      return this.toResult(activeSession);
+      if (
+        !(await this.invalidatePasswordlessRefreshSessionWhenPasswordExists(
+          accountId,
+          activeSession,
+        ))
+      ) {
+        if (activeSession.qrcode) return this.refreshQrcode(activeSession.id);
+        return this.toResult(activeSession);
+      }
     }
 
     const runningTask = this.refreshStartTasks[accountId];
@@ -216,6 +223,7 @@ export class QqbotNapcatLoginService {
       expectedSelfId: string;
       forceRelogin: true;
       hasExistingPrimaryBinding?: boolean;
+      loginPasswordAvailable?: boolean;
       loginPassword?: string;
       mode: 'refresh';
       sourceContainerOnline?: boolean;
@@ -224,6 +232,7 @@ export class QqbotNapcatLoginService {
       expectedSelfId: account.selfId,
       forceRelogin: true,
       hasExistingPrimaryBinding: container.hasExistingPrimaryBinding,
+      loginPasswordAvailable: !!this.toolsService.toSecretText(loginPassword),
       loginPassword,
       mode: 'refresh',
     };
@@ -254,6 +263,80 @@ export class QqbotNapcatLoginService {
       }
     });
     return activeSession;
+  }
+
+  /**
+   * 当账号后续维护了 QQ 登录密码时，废弃旧的无密码更新登录会话。
+   * @param accountId - 正在更新登录态的账号 ID，用于重新读取账号表里的最新登录密码密文。
+   * @param session - 可能早于密码维护动作创建的 pending 更新登录会话。
+   * @returns 旧会话已退役且调用方应重新创建更新登录会话时返回 true。
+   */
+  private async invalidatePasswordlessRefreshSessionWhenPasswordExists(
+    accountId: string,
+    session: QqbotLoginScanSession,
+  ) {
+    if (this.hasRefreshPasswordContext(session)) return false;
+
+    const accountService = this.accountService as Partial<
+      Pick<
+        QqbotAccountService,
+        'findByIdWithNapcatLoginSecret' | 'getNapcatLoginPassword'
+      >
+    >;
+    if (
+      !accountService.findByIdWithNapcatLoginSecret ||
+      !accountService.getNapcatLoginPassword
+    ) {
+      return false;
+    }
+
+    const account =
+      await accountService.findByIdWithNapcatLoginSecret(accountId);
+    if (!account) return false;
+    const loginPassword = accountService.getNapcatLoginPassword(account);
+    if (!this.toolsService.toSecretText(loginPassword)) return false;
+
+    await this.retireRefreshSessionForPasswordReload(session);
+    return true;
+  }
+
+  /**
+   * 判断更新登录会话是否已经携带或进入过密码登录相关上下文。
+   * @param session - 待复用的 pending 更新登录会话。
+   * @returns 复用该会话不会忽略账号已维护登录密码时返回 true。
+   */
+  private hasRefreshPasswordContext(session: QqbotLoginScanSession) {
+    return !!(
+      session.loginPasswordAvailable ||
+      session.passwordMd5 ||
+      session.captchaUrl ||
+      session.deviceVerifyUrl ||
+      session.newDeviceQrcode ||
+      session.newDeviceStatus
+    );
+  }
+
+  /**
+   * 仅退役过期的更新登录会话记录，不移除已绑定的 NapCat 容器。
+   * @param session - 不应继续提供旧二维码或旧 pending 状态的无密码更新登录会话。
+   */
+  private async retireRefreshSessionForPasswordReload(
+    session: QqbotLoginScanSession,
+  ) {
+    session.errorMessage = '账号登录密码已更新，重新创建更新登录会话';
+    session.preparingRelogin = false;
+    session.qrcode = undefined;
+    session.status = 'expired';
+    this.persistLoginSession(session);
+    this.publishScanResultEvent(
+      session,
+      'session-recreated',
+      'processing',
+      session.errorMessage,
+    );
+    await this.loginSessionStore.flushSessionWrites(session.id);
+    this.loginSessionStore.delete(session.id);
+    this.cleanupSessionEvents(session.id);
   }
 
   /**
@@ -303,7 +386,16 @@ export class QqbotNapcatLoginService {
       await this.syncSessionQqLoginStatus(session, loginStatus);
     }
 
-    if (loginStatus.isOffline && session.mode !== 'refresh') {
+    if (
+      loginStatus.isOffline &&
+      this.shouldRestartNapcatWorkerForOnlineRefresh(session)
+    ) {
+      loginStatus = await this.restartNapcatWorkerForOnlineRefresh(
+        session,
+        container,
+        loginStatus.loginError || 'NapCat 账号已离线，正在重启登录服务',
+      );
+    } else if (loginStatus.isOffline && session.mode !== 'refresh') {
       await this.restartNapcatForLogin(container, { waitForReady: false });
       session.lastRestartedAt = Date.now();
       return this.keepSessionPending(
@@ -435,8 +527,27 @@ export class QqbotNapcatLoginService {
         );
       }
 
+      if (
+        status.isOffline &&
+        this.shouldRestartNapcatWorkerForOnlineRefresh(session)
+      ) {
+        status = await this.restartNapcatWorkerForOnlineRefresh(
+          session,
+          container,
+          status.loginError || 'NapCat 账号已离线，正在重启登录服务',
+        );
+        if (status.isLogin) {
+          return this.completeLogin(session, container);
+        }
+        await this.syncSessionQqLoginStatus(session, status);
+      }
+
       if (this.shouldRefreshNearlyExpiredQrcode(status)) {
         return this.refreshNearlyExpiredQrcode(session, container, status);
+      }
+
+      if (this.shouldAutoRefreshPendingQrcode(session, status)) {
+        return this.refreshPendingQrcodeFromStatus(session, container, status);
       }
 
       session.errorMessage = status.loginError || undefined;
@@ -594,6 +705,7 @@ export class QqbotNapcatLoginService {
         step: 'session-cancelled',
       });
       this.loginSessionStore.delete(sessionId);
+      await this.loginSessionStore.flushSessionWrites(sessionId);
       await this.cleanupSessionContainer(session);
       this.cleanupSessionEvents(sessionId);
     }
@@ -612,6 +724,7 @@ export class QqbotNapcatLoginService {
       expectedSelfId?: string;
       forceRelogin?: boolean;
       hasExistingPrimaryBinding?: boolean;
+      loginPasswordAvailable?: boolean;
       loginPassword?: string;
       mode: QqbotLoginScanMode;
       sourceContainerOnline?: boolean;
@@ -859,8 +972,9 @@ export class QqbotNapcatLoginService {
 
     const selfId = this.toolsService.pickNapcatSelfId(loginInfo);
     if (!selfId) {
-      return this.failSession(session, 'NapCat 已登录但未返回 QQ 号');
+      return this.keepLoginSelfIdPending(session);
     }
+    session.loginSelfIdMissingSince = undefined;
     if (session.expectedSelfId && session.expectedSelfId !== selfId) {
       return this.failSession(
         session,
@@ -910,6 +1024,7 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime;
     expectedSelfId?: string;
     mode: QqbotLoginScanMode;
+    loginPasswordAvailable?: boolean;
     preparingContainer?: boolean;
     preparingRelogin?: boolean;
     qrcode?: string;
@@ -926,6 +1041,7 @@ export class QqbotNapcatLoginService {
       expectedSelfId: input.expectedSelfId,
       expiresAt: now + this.getSessionTtlMs(),
       id: randomUUID(),
+      loginPasswordAvailable: input.loginPasswordAvailable,
       mode: input.mode,
       preparingContainer: input.preparingContainer,
       preparingRelogin: input.preparingRelogin,
@@ -2075,6 +2191,39 @@ export class QqbotNapcatLoginService {
   }
 
   /**
+   * Keeps a login-positive session alive while NapCat finishes exposing the logged-in QQ number.
+   * @param session - Scan session whose WebUI status is already logged in but whose `GetQQLoginInfo` payload lacks `uin`/`selfId`.
+   * @returns Pending result during the bounded wait window, or a terminal failure once the missing-self-id window is exhausted.
+   */
+  private async keepLoginSelfIdPending(session: QqbotLoginScanSession) {
+    const now = Date.now();
+    session.loginSelfIdMissingSince ??= now;
+    if (now - session.loginSelfIdMissingSince > this.getLoginSelfIdWaitMs()) {
+      return this.failSession(session, 'NapCat 已登录但未返回 QQ 号');
+    }
+
+    const message = 'NapCat 已登录，正在读取 QQ 号';
+    const shouldPublish = session.errorMessage !== message;
+    session.status = 'pending';
+    session.captchaUrl = undefined;
+    session.errorMessage = message;
+    session.preparingContainer = false;
+    session.preparingRelogin = false;
+    session.qrcode = undefined;
+    this.renewSessionExpiry(session);
+    this.persistLoginSession(session);
+    if (shouldPublish) {
+      this.publishScanResultEvent(
+        session,
+        'login-self-id-wait',
+        'processing',
+        message,
+      );
+    }
+    return this.toResult(session);
+  }
+
+  /**
    * Stops delayed background login work from mutating a pending session after it expired or was replaced.
    * @param session - Pending scan session captured by an async relogin task; its cache identity and TTL decide whether writes are still valid.
    * @returns A terminal or current result when the task must stop, otherwise undefined to allow the caller to continue.
@@ -2105,6 +2254,8 @@ export class QqbotNapcatLoginService {
     session.errorMessage = errorMessage;
     session.passwordMd5 = undefined;
     session.preparingRelogin = false;
+    this.persistLoginSession(session);
+    await this.loginSessionStore.flushSessionWrites(session.id);
     this.publishScanResultEvent(session, 'login-error', 'error', errorMessage);
     this.loginSessionStore.delete(session.id);
     await this.closeSession(session);
@@ -2349,6 +2500,82 @@ export class QqbotNapcatLoginService {
   }
 
   /**
+   * Decides whether a pending scan status poll should actively ask NapCat for a QR again.
+   * @param session - Pending scan session; challenge states and recent refresh attempts suppress automatic retries.
+   * @param status - Latest WebUI status; existing, expired, or successful QR/login states are handled elsewhere.
+   * @returns True when the status poll should call the same-container RefreshQRcode path once per cooldown window.
+   */
+  private shouldAutoRefreshPendingQrcode(
+    session: QqbotLoginScanSession,
+    status: NapcatLoginStatus,
+  ) {
+    if (session.preparingContainer || session.preparingRelogin) return false;
+    if (session.captchaUrl || session.newDeviceStatus) return false;
+    if (session.qrcode || status.qrcodeurl || status.isLogin) return false;
+    if (this.toolsService.isNapcatExpiredQrcodeStatus(status)) return false;
+
+    const lastRefreshAt = Number(session.lastQrcodeRefreshAt || 0);
+    if (!Number.isFinite(lastRefreshAt) || lastRefreshAt <= 0) return true;
+    return Date.now() - lastRefreshAt >= this.getQrcodeAutoRefreshCooldownMs();
+  }
+
+  /**
+   * Requests a fresh QR during status polling so SSE can recover from a previous accepted-but-not-updated refresh.
+   * @param session - Pending scan session whose result is returned to Admin/SSE.
+   * @param container - Current NapCat WebUI runtime; the method never rebuilds or restarts it.
+   * @param status - Latest WebUI status used as fallback metadata for QR freshness checks.
+   * @returns Updated scan result, either with a fresh QR or a bounded pending message.
+   */
+  private async refreshPendingQrcodeFromStatus(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    status: NapcatLoginStatus,
+  ) {
+    session.lastQrcodeRefreshAt = Date.now();
+    this.persistLoginSession(session);
+    this.publishScanResultEvent(
+      session,
+      'qrcode-fetch',
+      'processing',
+      '正在重新生成登录二维码',
+    );
+
+    try {
+      session.qrcode = await this.refreshOrGetQrcode(container, false, {
+        fallbackStatus: status,
+        requireFresh:
+          session.mode === 'refresh' ||
+          !!session.qrcode ||
+          this.toolsService.isNapcatExpiredQrcodeStatus(status),
+        staleQrcode: session.qrcode || status.qrcodeurl,
+      });
+      session.errorMessage = undefined;
+      session.expiresAt = Date.now() + this.getSessionTtlMs();
+      this.persistLoginSession(session);
+      this.publishScanResultEvent(
+        session,
+        'qrcode-ready',
+        'success',
+        '登录二维码已生成',
+      );
+      this.publishScanResultEvent(
+        session,
+        'waiting-scan',
+        'processing',
+        '等待扫码确认',
+      );
+      return this.toResult(session);
+    } catch (err) {
+      if (!this.toolsService.isNapcatTemporaryError(err)) throw err;
+      session.qrcode = undefined;
+      session.errorMessage =
+        'NapCat 正在重新生成二维码，请稍后刷新或等待自动更新';
+      this.persistLoginSession(session);
+      return this.toResult(session);
+    }
+  }
+
+  /**
    * Reads the expected native QQ QR lifetime used only for safe-display decisions.
    * @returns Milliseconds before a QR is considered too old to show without refreshing.
    */
@@ -2367,6 +2594,28 @@ export class QqbotNapcatLoginService {
     return this.getPositiveConfigNumber(
       'NAPCAT_LOGIN_QR_SAFE_SCAN_MS',
       45 * 1000,
+    );
+  }
+
+  /**
+   * Reads the cooldown between automatic QR refresh attempts during status polling.
+   * @returns Milliseconds to wait before SSE/status may request another QR regeneration.
+   */
+  private getQrcodeAutoRefreshCooldownMs() {
+    return this.getPositiveConfigNumber(
+      'NAPCAT_LOGIN_QR_AUTO_REFRESH_COOLDOWN_MS',
+      Math.max(5000, this.getLoginPollIntervalMs() * 2),
+    );
+  }
+
+  /**
+   * Reads the bounded wait window for NapCat to expose QQ number after WebUI already reports login-positive.
+   * @returns Milliseconds allowed for `GetQQLoginInfo` to start returning `uin`/`selfId` before treating the state as inconsistent.
+   */
+  private getLoginSelfIdWaitMs() {
+    return this.getPositiveConfigNumber(
+      'NAPCAT_LOGIN_SELF_ID_WAIT_MS',
+      30_000,
     );
   }
 
@@ -2632,6 +2881,17 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime,
   ) {
     const loginStatus = await this.getLoginStatus(container, true);
+    if (
+      loginStatus.isOffline &&
+      this.shouldRestartNapcatWorkerForOnlineRefresh(session)
+    ) {
+      await this.restartNapcatWorkerForOnlineRefresh(
+        session,
+        container,
+        loginStatus.loginError || 'NapCat 账号已离线，正在重启登录服务',
+      );
+      return false;
+    }
     if (!loginStatus.isLogin) return false;
 
     const loginInfo = await this.getLoginInfo(container);
@@ -2748,6 +3008,50 @@ export class QqbotNapcatLoginService {
       successMessage: '快速登录成功',
     });
     return true;
+  }
+
+  /**
+   * Decides whether this refresh session may spend its single same-container worker restart budget.
+   * @param session - Login refresh session; its source-runtime flag proves the managed runtime is already alive and the attempt flag prevents restart storms.
+   * @returns True only before the first NapCat worker restart attempt in this online-source refresh session.
+   */
+  private shouldRestartNapcatWorkerForOnlineRefresh(
+    session: QqbotLoginScanSession,
+  ) {
+    return (
+      session.mode === 'refresh' &&
+      session.sourceContainerOnline === true &&
+      session.onlineSourceWorkerRestartAttempted !== true
+    );
+  }
+
+  /**
+   * Restarts only the NapCat worker when the managed runtime is alive but QQCore login service is stale.
+   * @param session - Refresh login session that owns progress messages and retry timestamps.
+   * @param container - Current online WebUI runtime; its device identity and environment must be preserved.
+   * @param reason - Latest QQ login-state evidence shown to Admin before the worker restart.
+   * @returns Fresh WebUI login status after the worker restart completes.
+   */
+  private async restartNapcatWorkerForOnlineRefresh(
+    session: QqbotLoginScanSession,
+    container: QqbotNapcatRuntime,
+    reason: string,
+  ) {
+    session.lastRestartedAt = Date.now();
+    session.onlineSourceWorkerRestartAttempted = true;
+    session.errorMessage = reason;
+    this.persistLoginSession(session);
+    this.publishScanResultEvent(
+      session,
+      'napcat-worker-restart',
+      'processing',
+      reason,
+    );
+    await this.restartNapcatForLogin(container, {
+      processOnly: true,
+      waitForReady: true,
+    });
+    return this.getLoginStatus(container, true);
   }
 
   /**
@@ -3300,8 +3604,9 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime,
     options: NapcatRestartOptions = {},
   ) {
-    const restartedByContainer =
-      await this.containerService.restartRuntimeContainer(container);
+    const restartedByContainer = options.processOnly
+      ? false
+      : await this.containerService.restartRuntimeContainer(container);
     if (!restartedByContainer) {
       try {
         await this.postNapcat<Record<string, any> | null>(

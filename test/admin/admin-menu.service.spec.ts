@@ -65,6 +65,75 @@ describe('AdminMenuService', () => {
       expect.arrayContaining(['Blog:Theme:List', 'Blog:Theme:Import']),
     );
   });
+
+  it('returns and orders menus by the persisted sort field', async () => {
+    const service = new AdminMenuService({
+      find: jest.fn(async () => [
+        createMenu({
+          id: '2',
+          meta: { title: 'Second' },
+          name: 'Second',
+          path: '/second',
+          sort: 20,
+          type: 'menu',
+        }),
+        createMenu({
+          id: '1',
+          meta: { title: 'First' },
+          name: 'First',
+          path: '/first',
+          sort: 10,
+          type: 'menu',
+        }),
+      ]),
+    } as any);
+    const user = {
+      roles: [
+        {
+          isDeleted: false,
+          roleCode: 'super',
+          status: 1,
+        },
+      ],
+    } as AdminUser;
+
+    await expect(service.getRouteMenus(user)).resolves.toEqual([
+      expect.objectContaining({ name: 'First', sort: 10 }),
+      expect.objectContaining({ name: 'Second', sort: 20 }),
+    ]);
+  });
+
+  it('persists menu sort values from create and update inputs', async () => {
+    const repository = {
+      create: jest.fn((input) => input),
+      save: jest.fn(),
+      update: jest.fn(),
+    };
+    const service = new AdminMenuService(repository as any);
+
+    await service.createMenu({
+      name: 'SortedMenu',
+      path: '/sorted',
+      sort: 8,
+      type: 'menu',
+    } as any);
+    await service.updateMenu('menu-1', {
+      name: 'SortedMenu',
+      path: '/sorted',
+      sort: 9,
+      type: 'menu',
+    } as any);
+
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 8 }),
+    );
+    expect(repository.update).toHaveBeenCalledWith(
+      {
+        id: 'menu-1',
+      },
+      expect.objectContaining({ sort: 9 }),
+    );
+  });
 });
 
 /**

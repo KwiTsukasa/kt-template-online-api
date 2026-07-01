@@ -210,7 +210,6 @@ INSERT INTO `admin_menu` (`id`, `pid`, `name`, `path`, `component`, `redirect`, 
 VALUES
   (2041700000000100001, 0, 'Dashboard', '/dashboard', NULL, '/analytics', NULL, 'catalog', '{"order":-1,"title":"page.dashboard.title"}', 1, 0),
   (2041700000000100101, 2041700000000100001, 'Analytics', '/analytics', '/dashboard/analytics/index', NULL, NULL, 'menu', '{"affixTab":true,"title":"page.dashboard.analytics"}', 1, 0),
-  (2041700000000100102, 2041700000000100001, 'Workspace', '/workspace', '/dashboard/workspace/index', NULL, NULL, 'menu', '{"icon":"carbon:workspace","title":"page.dashboard.workspace"}', 1, 0),
   (2041700000000100002, 0, 'System', '/system', NULL, NULL, NULL, 'catalog', '{"badge":"new","badgeType":"normal","badgeVariants":"primary","icon":"carbon:settings","order":9997,"title":"system.title"}', 1, 9997),
   (2041700000000100199, 2041700000000100002, 'SystemUser', '/system/user', '/system/user/list', NULL, 'System:User:List', 'menu', '{"icon":"carbon:user-profile","title":"system.user.title"}', 1, 0),
   (2041700000000120191, 2041700000000100199, 'SystemUserCreate', NULL, NULL, NULL, 'System:User:Create', 'button', '{"title":"common.create"}', 1, 0),
@@ -277,7 +276,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO `admin_role` (`id`, `role_code`, `name`, `remark`, `status`)
 VALUES
   (2041700000000010001, 'super', '超级管理员', '拥有所有后台权限', 1),
-  (2041700000000010002, 'admin', '管理员', '拥有系统管理与工作台权限', 1),
+  (2041700000000010002, 'admin', '管理员', '拥有系统管理与环境总览权限', 1),
   (2041700000000010003, 'user', '普通用户', '仅拥有基础查看权限', 1)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
@@ -287,11 +286,9 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO `admin_user` (`id`, `username`, `password`, `real_name`, `avatar`, `dept_id`, `home_path`, `timezone`, `status`)
 VALUES
-  (2041700000000000001, 'vben', '123456', 'Vben', '', 2041700000000200002, '/workspace', 'Asia/Shanghai', 1),
-  (2041700000000000002, 'admin', '123456', 'Admin', '', 2041700000000200001, '/workspace', 'Asia/Shanghai', 1),
-  (2041700000000000003, 'jack', '123456', 'Jack', '', 2041700000000200003, '/analytics', 'Asia/Shanghai', 1)
+  (2041700000000000002, 'kwitsukasa', '123456', 'KwiTsukasa', '', 2041700000000200001, '/analytics', 'Asia/Shanghai', 1)
 ON DUPLICATE KEY UPDATE
-  `password` = VALUES(`password`),
+  `username` = VALUES(`username`),
   `real_name` = VALUES(`real_name`),
   `dept_id` = VALUES(`dept_id`),
   `home_path` = VALUES(`home_path`),
@@ -331,16 +328,12 @@ ON DUPLICATE KEY UPDATE
 
 DELETE FROM `admin_user_role`
 WHERE `user_id` IN (
-  2041700000000000001,
-  2041700000000000002,
-  2041700000000000003
+  2041700000000000002
 );
 
 INSERT INTO `admin_user_role` (`user_id`, `role_id`)
 VALUES
-  (2041700000000000001, 2041700000000010001),
-  (2041700000000000002, 2041700000000010002),
-  (2041700000000000003, 2041700000000010003);
+  (2041700000000000002, 2041700000000010002);
 
 DELETE FROM `admin_role_menu`
 WHERE `role_id` IN (

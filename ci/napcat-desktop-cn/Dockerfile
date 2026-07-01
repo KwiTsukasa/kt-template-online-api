@@ -30,7 +30,11 @@ RUN set -eux; \
   sha256sum /app/NapCat.Shell.zip | awk '{print $1}' > /ci/napcat-desktop-cn/NapCat.Shell.zip.sha256; \
   rm -rf /tmp/NapCat.Shell
 COPY ci/napcat-desktop-cn/verify.sh /ci/napcat-desktop-cn/verify.sh
-RUN sed -i 's/\r$//' /ci/napcat-desktop-cn/verify.sh && chmod +x /ci/napcat-desktop-cn/verify.sh
+COPY ci/napcat-desktop-cn/entrypoint-device-profile.patch.sh /ci/napcat-desktop-cn/entrypoint-device-profile.patch.sh
+RUN set -eux; \
+  sed -i 's/\r$//' /ci/napcat-desktop-cn/verify.sh /ci/napcat-desktop-cn/entrypoint-device-profile.patch.sh; \
+  chmod +x /ci/napcat-desktop-cn/verify.sh /ci/napcat-desktop-cn/entrypoint-device-profile.patch.sh; \
+  /ci/napcat-desktop-cn/entrypoint-device-profile.patch.sh
 
 ENV LANG=zh_CN.UTF-8 \
   LC_ALL=zh_CN.UTF-8 \

@@ -43,14 +43,21 @@ Build and verify:
 ```powershell
 docker build `
   --build-arg NAPCAT_BASE_IMAGE=$napcatBaseImageDigest `
-  -t kt-napcat-desktop-cn:desktop-cn-v8 `
+  -t kt-napcat-desktop-cn:desktop-cn-v16 `
   -f .kt-workspace/napcat-desktop-cn-build/ci/napcat-desktop-cn/Dockerfile `
   .kt-workspace/napcat-desktop-cn-build
 
-$name = "kt-napcat-v8-verify-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
-docker run -d --name $name kt-napcat-desktop-cn:desktop-cn-v8
+$name = "kt-napcat-v16-verify-$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
+docker run -d --name $name `
+  --cap-add SYS_ADMIN `
+  --security-opt apparmor=unconfined `
+  --security-opt seccomp=unconfined `
+  -e NAPCAT_REQUIRE_DEVICE_PROFILE=1 `
+  kt-napcat-desktop-cn:desktop-cn-v16
 docker exec $name sh /ci/napcat-desktop-cn/verify.sh
 docker rm -f $name
 ```
+
+`verify.sh` checks long-lived QQ/NapCat/Xvfb process `/proc/<pid>/mountinfo` after the entrypoint guard has had a bounded convergence window. If a target process still exposes host paths after `MOUNTINFO_GUARD_TIMEOUT_SECONDS`, verification exits with 78 and prints the target PID, `comm`, `cmdline`, and first leaked mountinfo line.
 
 Record the final image digest in `QQBOT_NAPCAT_IMAGE`, and keep the matching `fork-artifact.json` with the release evidence. For local Windows rehearsal, placeholder `$upstreamReleaseTag`, `$upstreamReleaseCommit`, and `$jenkinsBuildUrl` values are acceptable only if the image is not promoted.

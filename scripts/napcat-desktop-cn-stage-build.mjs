@@ -161,6 +161,10 @@ copyIntoContext(
   resolve(apiRoot, 'ci/napcat-desktop-cn/verify.sh'),
   resolve(outputRoot, 'ci/napcat-desktop-cn/verify.sh'),
 );
+copyIntoContext(
+  resolve(apiRoot, 'ci/napcat-desktop-cn/entrypoint-device-profile.patch.sh'),
+  resolve(outputRoot, 'ci/napcat-desktop-cn/entrypoint-device-profile.patch.sh'),
+);
 copyIntoContext(shellDist, resolve(outputRoot, 'NapCat.Shell'));
 
 const marker = {

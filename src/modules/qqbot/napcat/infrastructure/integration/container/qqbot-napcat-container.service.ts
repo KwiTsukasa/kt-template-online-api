@@ -49,11 +49,28 @@ type CreateManagedContainerOptions = {
   startRemote?: boolean;
 };
 
+type NapcatWebuiCredentialCacheEntry = {
+  credential: string;
+  expiresAt: number;
+};
+
+const NAPCAT_WEBUI_CREDENTIAL_TTL_MS = 50 * 60 * 1000;
+
 @Injectable()
 export class QqbotNapcatContainerService {
   private readonly configWriterService: NapcatConfigWriterService;
 
   private readonly runtimeProfileService: NapcatRuntimeProfileService;
+
+  private readonly webuiCredentials: Record<
+    string,
+    NapcatWebuiCredentialCacheEntry | undefined
+  > = {};
+
+  private readonly webuiCredentialRequests: Record<
+    string,
+    Promise<string> | undefined
+  > = {};
 
   /**
    * 初始化 QqbotNapcatContainerService 实例。
@@ -894,13 +911,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
 
     try {
       const runtime = this.toRuntime(container);
-      const credential = await this.getNapcatCredential(runtime);
-      const status = await this.requestNapcat<NapcatLoginStatus>(
-        runtime,
-        '/api/QQLogin/CheckLoginStatus',
-        {},
-        credential,
-      );
+      const status = await this.requestNapcatLoginStatus(runtime);
       const snapshot = this.toRuntimeStatusSnapshot(
         status,
         containerOnline,
@@ -1427,6 +1438,31 @@ fi
           `DEVICE_ENV_PATH=${this.sh(input.deviceIdentity.deviceEnvPath)}`,
         ].join('\n') + '\n'
       : '';
+    const deviceProfileHeader = [
+      `NAPCAT_DMI_PRODUCT_NAME=${this.sh('imini Pro')}`,
+      `NAPCAT_DMI_SYS_VENDOR=${this.sh('MECHREVO')}`,
+      `NAPCAT_DMI_BOARD_VENDOR=${this.sh('MECHREVO')}`,
+      `NAPCAT_DMI_BOARD_NAME=${this.sh('imini Pro')}`,
+      `NAPCAT_DMI_BIOS_VENDOR=${this.sh(
+        'American Megatrends International, LLC.',
+      )}`,
+      `NAPCAT_DMI_BIOS_VERSION=${this.sh('imini Pro 1.10')}`,
+      `NAPCAT_DMI_MODALIAS=${this.sh(
+        'dmi:bvnAmericanMegatrendsInternational,LLC.:bvriminiPro1.10:bd03/31/2024:br1.10:efr1.10:svnMECHREVO:pniminiPro:pvrStandard:rvnMECHREVO:rniminiPro:rvrStandard:cvnMECHREVO:ct3:cvrDefaultstring:skuStandard:',
+      )}`,
+      `NAPCAT_DEVICE_KERNEL_RELEASE=${this.sh('6.8.0-60-generic')}`,
+      `NAPCAT_DEVICE_KERNEL_VERSION=${this.sh(
+        '#63-Ubuntu SMP PREEMPT_DYNAMIC Tue Apr 15 19:04:15 UTC 2025',
+      )}`,
+      `NAPCAT_DEVICE_PROC_VERSION=${this.sh(
+        'Linux version 6.8.0-60-generic (buildd@lcy02-amd64-001) (x86_64-linux-gnu-gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0, GNU ld (GNU Binutils for Ubuntu) 2.42) #63-Ubuntu SMP PREEMPT_DYNAMIC Tue Apr 15 19:04:15 UTC 2025',
+      )}`,
+      `NAPCAT_DEVICE_CPU_MODEL=${this.sh(
+        'AMD Ryzen 7 8845H w/ Radeon 780M Graphics',
+      )}`,
+      `NAPCAT_DEVICE_UPTIME=${this.sh('7200.00 14400.00')}`,
+      `NAPCAT_DEVICE_TTY_ACTIVE=${this.sh('tty1')}`,
+    ].join('\n');
     const devicePrepareScript = input.deviceIdentity
       ? `
 mkdir -p "$(dirname "$DEVICE_ENV_PATH")" "$(dirname "$MACHINE_INFO_PATH")"
@@ -1453,9 +1489,33 @@ mv "$MACHINE_INFO_TMP" "$MACHINE_INFO_PATH"
 chmod 644 "$MACHINE_INFO_PATH"
 `
       : '';
+    const deviceProfilePrepareScript = `
+if [ -z "\${MACHINE_ID_PATH:-}" ]; then
+  MACHINE_ID_PATH="$DATA_DIR/machine-id"
+fi
+mkdir -p "$(dirname "$MACHINE_ID_PATH")"
+if [ ! -s "$MACHINE_ID_PATH" ]; then
+  printf '%s' "$NAME" | sha256sum | cut -c 1-32 > "$MACHINE_ID_PATH"
+fi
+NAPCAT_DEVICE_MACHINE_ID="$(tr -d '\\r\\n' < "$MACHINE_ID_PATH" | cut -c 1-64)"
+format_uuid_from_seed() {
+  uuid_hash="$(printf '%s' "$1" | sha256sum | awk '{print $1}')"
+  printf '%s-%s-%s-%s-%s' \\
+    "$(printf '%s' "$uuid_hash" | cut -c 1-8)" \\
+    "$(printf '%s' "$uuid_hash" | cut -c 9-12)" \\
+    "$(printf '%s' "$uuid_hash" | cut -c 13-16)" \\
+    "$(printf '%s' "$uuid_hash" | cut -c 17-20)" \\
+    "$(printf '%s' "$uuid_hash" | cut -c 21-32)"
+}
+if [ ! -s "$DATA_DIR/device-boot-id" ]; then
+  format_uuid_from_seed "$NAPCAT_DEVICE_MACHINE_ID:boot" > "$DATA_DIR/device-boot-id"
+fi
+NAPCAT_DEVICE_BOOT_ID="$(tr -d '\\r\\n' < "$DATA_DIR/device-boot-id" | cut -c 1-36)"
+NAPCAT_DMI_PRODUCT_UUID="$(format_uuid_from_seed "$NAPCAT_DEVICE_MACHINE_ID:dmi")"
+`;
     const deviceRunFlags = input.deviceIdentity
       ? '  --hostname "$NAPCAT_HOSTNAME" \\\n  --mac-address "$NAPCAT_MAC_ADDRESS" \\\n  -v "$MACHINE_ID_PATH:/etc/machine-id:ro" \\\n'
-      : '';
+      : '  -v "$MACHINE_ID_PATH:/etc/machine-id:ro" \\\n';
 
     return `
 set -eu
@@ -1471,10 +1531,12 @@ NAPCAT_SHM_SIZE=${this.sh(runtimeProfile.shmSize)}
 ${accountHeader}
 ${passwordHeader}
 ${deviceHeader}
+${deviceProfileHeader}
 mkdir -p "$DATA_DIR/QQ" "$DATA_DIR/config" "$DATA_DIR/plugins" "$DATA_DIR/logs" "$DATA_DIR/cache" "$DATA_DIR/local-share" "$DATA_DIR/runtime"
 chmod 700 "$DATA_DIR"
 chmod 700 "$DATA_DIR/runtime"
 ${devicePrepareScript}
+${deviceProfilePrepareScript}
 
 ${configWriteScript}
 
@@ -1483,9 +1545,29 @@ docker run -d \\
   --name "$NAME" \\
   --restart unless-stopped \\
   --init \\
+  --cap-add SYS_ADMIN \\
+  --security-opt apparmor=unconfined \\
+  --security-opt seccomp=unconfined \\
   --shm-size "$NAPCAT_SHM_SIZE" \\
   -e NAPCAT_UID="$NAPCAT_UID" \\
   -e NAPCAT_GID="$NAPCAT_GID" \\
+  -e NAPCAT_REQUIRE_DEVICE_PROFILE=1 \\
+  -e NAPCAT_DEVICE_MACHINE_ID="$NAPCAT_DEVICE_MACHINE_ID" \\
+  -e NAPCAT_DEVICE_BOOT_ID="$NAPCAT_DEVICE_BOOT_ID" \\
+  -e NAPCAT_DEVICE_KERNEL_RELEASE="$NAPCAT_DEVICE_KERNEL_RELEASE" \\
+  -e NAPCAT_DEVICE_KERNEL_VERSION="$NAPCAT_DEVICE_KERNEL_VERSION" \\
+  -e NAPCAT_DEVICE_PROC_VERSION="$NAPCAT_DEVICE_PROC_VERSION" \\
+  -e NAPCAT_DEVICE_CPU_MODEL="$NAPCAT_DEVICE_CPU_MODEL" \\
+  -e NAPCAT_DEVICE_UPTIME="$NAPCAT_DEVICE_UPTIME" \\
+  -e NAPCAT_DEVICE_TTY_ACTIVE="$NAPCAT_DEVICE_TTY_ACTIVE" \\
+  -e NAPCAT_DMI_PRODUCT_NAME="$NAPCAT_DMI_PRODUCT_NAME" \\
+  -e NAPCAT_DMI_PRODUCT_UUID="$NAPCAT_DMI_PRODUCT_UUID" \\
+  -e NAPCAT_DMI_SYS_VENDOR="$NAPCAT_DMI_SYS_VENDOR" \\
+  -e NAPCAT_DMI_BOARD_VENDOR="$NAPCAT_DMI_BOARD_VENDOR" \\
+  -e NAPCAT_DMI_BOARD_NAME="$NAPCAT_DMI_BOARD_NAME" \\
+  -e NAPCAT_DMI_BIOS_VENDOR="$NAPCAT_DMI_BIOS_VENDOR" \\
+  -e NAPCAT_DMI_BIOS_VERSION="$NAPCAT_DMI_BIOS_VERSION" \\
+  -e NAPCAT_DMI_MODALIAS="$NAPCAT_DMI_MODALIAS" \\
   -e WEBUI_TOKEN="$WEBUI_TOKEN" \\
   -e LANG=${runtimeProfile.locale} \\
   -e LC_ALL=${runtimeProfile.locale} \\
@@ -1693,9 +1775,40 @@ ${file.content}EOF`;
 
   /**
    * 查询 NapCat 登录运行态数据。
-   * @param runtime - runtime 输入；使用 `webuiToken` 字段生成结果。
+   * @param runtime - NapCat runtime；使用容器身份、WebUI 地址和 token 边界复用短期 Credential。
+   * @returns 可用于 NapCat WebUI Bearer 鉴权的 Credential。
    */
   private async getNapcatCredential(runtime: QqbotNapcatRuntime) {
+    const cacheKey = this.getNapcatCredentialCacheKey(runtime);
+    const cached = this.webuiCredentials[cacheKey];
+    if (cached && Date.now() < cached.expiresAt) {
+      return cached.credential;
+    }
+
+    const pending = this.webuiCredentialRequests[cacheKey];
+    if (pending) {
+      return pending;
+    }
+
+    const request = this.fetchNapcatCredential(runtime, cacheKey);
+    this.webuiCredentialRequests[cacheKey] = request;
+    try {
+      return await request;
+    } finally {
+      delete this.webuiCredentialRequests[cacheKey];
+    }
+  }
+
+  /**
+   * 从 NapCat WebUI 换取并缓存新的 Bearer Credential。
+   * @param runtime - NapCat runtime；提供 WebUI 地址和 token 以调用 `/api/auth/login`。
+   * @param cacheKey - 已由调用方按容器身份和 token 生成的缓存键，用于落入同一 single-flight 槽位。
+   * @returns 可用于后续 NapCat WebUI 请求的 Credential。
+   */
+  private async fetchNapcatCredential(
+    runtime: QqbotNapcatRuntime,
+    cacheKey: string,
+  ) {
     const token = runtime.webuiToken || '';
     const hash = createHash('sha256').update(`${token}.napcat`).digest('hex');
     const data = await this.requestNapcat<NapcatCredential>(
@@ -1706,7 +1819,76 @@ ${file.content}EOF`;
     if (!data.Credential) {
       throwVbenError('NapCat WebUI 登录失败');
     }
+    this.webuiCredentials[cacheKey] = {
+      credential: data.Credential,
+      expiresAt: Date.now() + NAPCAT_WEBUI_CREDENTIAL_TTL_MS,
+    };
     return data.Credential;
+  }
+
+  /**
+   * 请求 NapCat QQ 登录状态，并在 WebUI Credential 失效时刷新一次。
+   * @param runtime - NapCat runtime；提供 WebUI 地址、token 和容器身份以完成鉴权与状态读取。
+   * @returns NapCat WebUI 返回的 QQ 登录状态。
+   */
+  private async requestNapcatLoginStatus(runtime: QqbotNapcatRuntime) {
+    const credential = await this.getNapcatCredential(runtime);
+    try {
+      return await this.requestNapcat<NapcatLoginStatus>(
+        runtime,
+        '/api/QQLogin/CheckLoginStatus',
+        {},
+        credential,
+      );
+    } catch (err) {
+      if (!this.isNapcatCredentialRejected(err)) {
+        throw err;
+      }
+      this.clearNapcatCredential(runtime, credential);
+      const refreshedCredential = await this.getNapcatCredential(runtime);
+      return this.requestNapcat<NapcatLoginStatus>(
+        runtime,
+        '/api/QQLogin/CheckLoginStatus',
+        {},
+        refreshedCredential,
+      );
+    }
+  }
+
+  /**
+   * 清理当前容器的 NapCat WebUI Credential 缓存。
+   * @param runtime - NapCat runtime；`id/baseUrl/token` 决定需要失效的进程内缓存条目。
+   * @param rejectedCredential - NapCat 刚拒绝的 Credential；有值时只清理仍等于它的缓存，避免旧请求删除已刷新的新缓存。
+   */
+  private clearNapcatCredential(
+    runtime: QqbotNapcatRuntime,
+    rejectedCredential?: string,
+  ) {
+    const cacheKey = this.getNapcatCredentialCacheKey(runtime);
+    const cached = this.webuiCredentials[cacheKey];
+    if (rejectedCredential && cached?.credential !== rejectedCredential) {
+      return;
+    }
+    delete this.webuiCredentials[cacheKey];
+  }
+
+  /**
+   * 判断 NapCat WebUI 是否拒绝了当前 Credential。
+   * @param err - NapCat 请求异常；来源可能是 WebUI `Unauthorized` 或旧 token 失效提示。
+   * @returns 为 true 时调用方可安全刷新一次 Credential 后重试状态请求。
+   */
+  private isNapcatCredentialRejected(err: unknown) {
+    const message = this.toolsService.getErrorMessage(err);
+    return /Unauthorized|token is invalid/i.test(message);
+  }
+
+  /**
+   * 生成 NapCat WebUI Credential 缓存键。
+   * @param runtime - NapCat runtime；`id/baseUrl` 定位容器实例，`webuiToken` 区分重建或换密钥后的鉴权边界。
+   * @returns 当前 API 进程内 credential 缓存使用的稳定键。
+   */
+  private getNapcatCredentialCacheKey(runtime: QqbotNapcatRuntime) {
+    return [runtime.id || runtime.baseUrl, runtime.webuiToken || ''].join('\n');
   }
 
   /**

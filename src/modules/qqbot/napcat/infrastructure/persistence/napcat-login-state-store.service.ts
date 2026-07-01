@@ -299,12 +299,33 @@ export class NapcatLoginStateStoreService {
     const current = await this.loginSessionRepository.findOne({
       where: { sessionKey: sessionId },
     });
-    if (!current || current.status === 'pending') return;
+    if (!current) return;
+
+    const completedAt = new Date() as NapcatLoginSession['completedAt'];
+    if (current.status === 'pending') {
+      await this.loginSessionRepository.update(
+        { sessionKey: sessionId },
+        {
+          completedAt,
+          loginStage: 'cancelled',
+          progressMessage: '扫码会话已取消',
+          sessionPayload: current.sessionPayload
+            ? {
+                ...current.sessionPayload,
+                errorMessage: '扫码会话已取消',
+                status: 'error',
+              }
+            : current.sessionPayload,
+          status: 'error',
+        },
+      );
+      return;
+    }
 
     await this.loginSessionRepository.update(
       { sessionKey: sessionId },
       {
-        completedAt: new Date() as NapcatLoginSession['completedAt'],
+        completedAt,
       },
     );
   }

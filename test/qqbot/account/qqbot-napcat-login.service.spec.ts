@@ -37,6 +37,8 @@ describe('QqbotNapcatLoginService', () => {
       passwordResult?: null | Record<string, unknown>;
       quickError?: string;
       quickResult?: null | Record<string, unknown>;
+      restartError?: string;
+      restartResult?: null | Record<string, unknown>;
     } = {},
   ) =>
     jest
@@ -49,6 +51,10 @@ describe('QqbotNapcatLoginService', () => {
         if (path === '/api/QQLogin/PasswordLogin') {
           if (options.passwordError) throw new Error(options.passwordError);
           return options.passwordResult ?? null;
+        }
+        if (path === '/api/QQLogin/RestartNapCat') {
+          if (options.restartError) throw new Error(options.restartError);
+          return options.restartResult ?? null;
         }
         return null;
       });
@@ -181,13 +187,14 @@ describe('QqbotNapcatLoginService', () => {
       'qq-password',
     );
     expect(startScan).toHaveBeenCalledWith(
-      {
+      expect.objectContaining({
         accountId: 'account-1',
         expectedSelfId: '10001',
         forceRelogin: true,
+        loginPasswordAvailable: true,
         loginPassword: 'qq-password',
         mode: 'refresh',
-      },
+      }),
       existingContainer,
     );
   });
@@ -276,9 +283,72 @@ describe('QqbotNapcatLoginService', () => {
     expect(prepareReloginQrcode).toHaveBeenCalledTimes(1);
   });
 
-  it('does not return a stale qrcode when reusing an active refresh session', async () => {
+  it('starts a new refresh session after password is maintained on an account with an old pending session', async () => {
+    const account = {
+      id: 'account-1',
+      selfId: '10001',
+    };
+    const existingContainer = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      hasExistingPrimaryBinding: true,
+      id: 'container-current',
+      name: 'napcat-10001',
+    };
+    const accountService = {
+      findByIdWithNapcatLoginSecret: jest.fn().mockResolvedValue(account),
+      getNapcatLoginPassword: jest.fn().mockReturnValue('qq-password'),
+    };
+    const containerService = {
+      prepareAccountContainer: jest.fn().mockResolvedValue(existingContainer),
+    };
     const refreshService = new QqbotNapcatLoginService(
       { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    (refreshService as any).sessions.set('session-without-password', {
+      accountId: 'account-1',
+      containerId: 'container-current',
+      containerName: 'napcat-10001',
+      createdAt: Date.now(),
+      errorMessage: '密码登录未完成：未配置 QQ 登录密码，开始生成二维码',
+      expiresAt: Date.now() + 60_000,
+      id: 'session-without-password',
+      mode: 'refresh',
+      status: 'pending',
+      webuiPort: 6103,
+    });
+    const prepareReloginQrcode = jest
+      .spyOn(refreshService as any, 'prepareReloginQrcode')
+      .mockResolvedValue(undefined);
+
+    const result = await refreshService.startRefresh('account-1');
+
+    expect(result.sessionId).not.toBe('session-without-password');
+    expect(accountService.findByIdWithNapcatLoginSecret).toHaveBeenCalledWith(
+      'account-1',
+    );
+    expect(accountService.getNapcatLoginPassword).toHaveBeenCalledWith(account);
+    expect(prepareReloginQrcode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 'account-1',
+        expectedSelfId: '10001',
+        status: 'pending',
+      }),
+      existingContainer,
+      'qq-password',
+      existingContainer.hasExistingPrimaryBinding,
+    );
+  });
+
+  it('does not return a stale qrcode when reusing an active refresh session', async () => {
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) =>
+          key === 'NAPCAT_WEBUI_RESTART_DELAY_MS' ? '1' : undefined,
+        ),
+      } as unknown as ConfigService,
       {} as QqbotAccountService,
       {} as QqbotNapcatContainerService,
       new ToolsService(),
@@ -1234,6 +1304,116 @@ describe('QqbotNapcatLoginService', () => {
     );
   });
 
+  it('keeps scan pending when NapCat is login-positive before QQ number is readable', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-login-wait-self-id',
+      name: 'napcat-login-wait-self-id',
+    };
+    const accountService = {
+      ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
+    };
+    const containerService = {
+      bindAccount: jest.fn().mockResolvedValue(undefined),
+    };
+    const loginService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (loginService as any).createSession({
+      container,
+      mode: 'create',
+      qrcode: 'https://txz.qq.com/p?k=ready&f=1600001615',
+      status: 'pending',
+    });
+    (loginService as any).sessions.set(session.id, session);
+    jest
+      .spyOn(loginService as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest
+      .spyOn(loginService as any, 'getLoginStatus')
+      .mockResolvedValue({ isLogin: true });
+    jest.spyOn(loginService as any, 'getLoginInfo').mockResolvedValue({
+      nick: 'Mirror',
+      online: true,
+    });
+
+    const result = await loginService.status(session.id);
+
+    expect(result.status).toBe('pending');
+    expect(result.errorMessage).toBe('NapCat 已登录，正在读取 QQ 号');
+    expect((loginService as any).sessions.get(session.id)).toEqual(
+      expect.objectContaining({
+        errorMessage: 'NapCat 已登录，正在读取 QQ 号',
+        status: 'pending',
+      }),
+    );
+    expect(accountService.ensureScannedAccount).not.toHaveBeenCalled();
+    expect(containerService.bindAccount).not.toHaveBeenCalled();
+  });
+
+  it('completes scan after a login-positive session later exposes QQ number', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-login-late-self-id',
+      name: 'napcat-login-late-self-id',
+    };
+    const accountService = {
+      ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
+    };
+    const containerService = {
+      bindAccount: jest.fn().mockResolvedValue(undefined),
+    };
+    const loginService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (loginService as any).createSession({
+      container,
+      mode: 'create',
+      qrcode: 'https://txz.qq.com/p?k=ready&f=1600001615',
+      status: 'pending',
+    });
+    (loginService as any).sessions.set(session.id, session);
+    jest
+      .spyOn(loginService as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest
+      .spyOn(loginService as any, 'getLoginStatus')
+      .mockResolvedValue({ isLogin: true });
+    jest
+      .spyOn(loginService as any, 'getLoginInfo')
+      .mockResolvedValueOnce({
+        nick: 'Mirror',
+        online: true,
+      })
+      .mockResolvedValueOnce({
+        nick: 'Mirror',
+        online: true,
+        uin: '1914728559',
+      });
+
+    const pending = await loginService.status(session.id);
+    const completed = await loginService.status(session.id);
+
+    expect(pending.status).toBe('pending');
+    expect(completed.status).toBe('success');
+    expect(accountService.ensureScannedAccount).toHaveBeenCalledWith({
+      name: 'Mirror',
+      selfId: '1914728559',
+    });
+    expect(containerService.bindAccount).toHaveBeenCalledWith(
+      'account-1',
+      'container-login-late-self-id',
+      '1914728559',
+    );
+    expect(session.loginSelfIdMissingSince).toBeUndefined();
+  });
+
   it('does not let the server-side qrcode monitor extend the original qrcode deadline on temporary errors', async () => {
     const container = {
       baseUrl: 'http://127.0.0.1:6103/',
@@ -1419,7 +1599,7 @@ describe('QqbotNapcatLoginService', () => {
     expect(session.qrcode).toBe('budget-qrcode');
   });
 
-  it('refreshes qrcode through WebUI when the source Docker container is online but QQ is offline', async () => {
+  it('restarts the NapCat worker before refreshing qrcode when source Docker is online but QQ is offline', async () => {
     const container = {
       baseUrl: 'http://127.0.0.1:6103/',
       id: 'container-online-source',
@@ -1438,7 +1618,11 @@ describe('QqbotNapcatLoginService', () => {
       ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
     };
     const refreshService = new QqbotNapcatLoginService(
-      { get: jest.fn() } as unknown as ConfigService,
+      {
+        get: jest.fn((key: string) =>
+          key === 'NAPCAT_WEBUI_RESTART_DELAY_MS' ? '1' : undefined,
+        ),
+      } as unknown as ConfigService,
       accountService as unknown as QqbotAccountService,
       containerService as unknown as QqbotNapcatContainerService,
       new ToolsService(),
@@ -1453,6 +1637,9 @@ describe('QqbotNapcatLoginService', () => {
       status: 'pending',
     });
     (refreshService as any).sessions.set(session.id, session);
+    jest
+      .spyOn((refreshService as any).toolsService, 'sleep')
+      .mockResolvedValue(undefined);
     jest.spyOn(refreshService as any, 'getLoginStatus').mockResolvedValue({
       isOffline: true,
       isLogin: false,
@@ -1461,11 +1648,16 @@ describe('QqbotNapcatLoginService', () => {
     const refreshOrGetQrcode = jest
       .spyOn(refreshService as any, 'refreshOrGetQrcode')
       .mockResolvedValue('online-source-qrcode');
+    const postNapcat = mockWebuiLoginPost(refreshService);
 
     const result = await refreshService.refreshQrcode(session.id);
 
     expect(containerService.resetRuntimeLoginState).not.toHaveBeenCalled();
     expect(containerService.restartRuntimeContainer).not.toHaveBeenCalled();
+    expect(postNapcat).toHaveBeenCalledWith(
+      container,
+      '/api/QQLogin/RestartNapCat',
+    );
     expect(refreshOrGetQrcode).toHaveBeenCalledWith(container, false, {
       fallbackStatus: expect.objectContaining({ isOffline: true }),
       requireFresh: true,
@@ -1473,6 +1665,68 @@ describe('QqbotNapcatLoginService', () => {
     });
     expect(result.status).toBe('pending');
     expect(result.qrcode).toBe('online-source-qrcode');
+  });
+
+  it('does not restart the NapCat worker repeatedly for the same online-source refresh session', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6103/',
+      id: 'container-online-source',
+      name: 'napcat-10001',
+      sourceContainerOnline: true,
+    };
+    const containerService = {
+      ensureRuntimeLoginEnv: jest
+        .fn()
+        .mockResolvedValue({ changed: false, ok: true }),
+      findRuntimeById: jest.fn().mockResolvedValue(container),
+      resetRuntimeLoginState: jest.fn().mockResolvedValue(true),
+      restartRuntimeContainer: jest.fn().mockResolvedValue(true),
+    };
+    const accountService = {
+      ensureScannedAccount: jest.fn().mockResolvedValue('account-1'),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) =>
+          key === 'NAPCAT_WEBUI_RESTART_DELAY_MS' ? '1' : undefined,
+        ),
+      } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    const session = (refreshService as any).createSession({
+      accountId: 'account-1',
+      container,
+      expectedSelfId: '10001',
+      mode: 'refresh',
+      preparingRelogin: false,
+      sourceContainerOnline: true,
+      status: 'pending',
+    });
+    (refreshService as any).sessions.set(session.id, session);
+    jest
+      .spyOn((refreshService as any).toolsService, 'sleep')
+      .mockResolvedValue(undefined);
+    jest.spyOn(refreshService as any, 'getLoginStatus').mockResolvedValue({
+      isOffline: true,
+      isLogin: false,
+      loginError: 'NapCat 账号状态变更为离线',
+    });
+    jest
+      .spyOn(refreshService as any, 'refreshOrGetQrcode')
+      .mockResolvedValue('online-source-qrcode');
+    const postNapcat = mockWebuiLoginPost(refreshService);
+
+    await refreshService.refreshQrcode(session.id);
+    await refreshService.refreshQrcode(session.id);
+
+    expect(containerService.restartRuntimeContainer).not.toHaveBeenCalled();
+    expect(
+      postNapcat.mock.calls.filter(
+        ([, path]) => path === '/api/QQLogin/RestartNapCat',
+      ),
+    ).toHaveLength(1);
   });
 
   it('does not perform runtime env rebuild inside the refresh session', async () => {
@@ -1573,12 +1827,13 @@ describe('QqbotNapcatLoginService', () => {
     });
     (refreshService as any).sessions.set(session.id, session);
     jest.spyOn(refreshService as any, 'getLoginStatus').mockResolvedValue({
+      isOffline: true,
       isLogin: false,
       loginError: 'Docker 容器在线但 QQ 账号离线',
     });
-    jest
-      .spyOn(refreshService as any, 'postNapcat')
-      .mockRejectedValue(new Error('快速登录未成功'));
+    const postNapcat = mockWebuiLoginPost(refreshService, {
+      quickError: '快速登录未成功',
+    });
     jest
       .spyOn(refreshService as any, 'refreshOrGetQrcode')
       .mockResolvedValue('online-source-qrcode');
@@ -1589,6 +1844,10 @@ describe('QqbotNapcatLoginService', () => {
     expect(containerService.runtimeLoginEnvMatches).not.toHaveBeenCalled();
     expect(containerService.resetRuntimeLoginState).not.toHaveBeenCalled();
     expect(containerService.restartRuntimeContainer).not.toHaveBeenCalled();
+    expect(postNapcat.mock.calls.map(([, path]) => path)).toEqual([
+      '/api/QQLogin/RestartNapCat',
+      '/api/QQLogin/SetQuickLogin',
+    ]);
     expect(session.status).toBe('pending');
     expect(session.qrcode).toBe('online-source-qrcode');
   });
@@ -2875,10 +3134,15 @@ describe('QqbotNapcatLoginService', () => {
       'https://ti.qq.com/safe/tools/captcha/sms-verify-login?uin=10001';
     session.passwordMd5 = '0123456789abcdef0123456789abcdef';
     (refreshService as any).sessions.set(session.id, session);
+    const flushSessionWrites = jest.spyOn(
+      (refreshService as any).loginSessionStore,
+      'flushSessionWrites',
+    );
 
     await refreshService.cancel(session.id);
 
     expect(containerService.ensureRuntimeLoginEnv).not.toHaveBeenCalled();
+    expect(flushSessionWrites).toHaveBeenCalledWith(session.id);
     expect(session.passwordMd5).toBeUndefined();
     expect(session.captchaUrl).toBeUndefined();
   });
@@ -3629,6 +3893,62 @@ describe('QqbotNapcatLoginService', () => {
     );
   });
 
+  it('persists failed scan sessions before cleaning runtime state', async () => {
+    const loginSessionRepository = createLoginSessionRepository();
+    const loginStateStore = new NapcatLoginStateStoreService(
+      loginSessionRepository as any,
+    );
+    const failService = new QqbotNapcatLoginService(
+      { get: jest.fn() } as unknown as ConfigService,
+      {
+        ensureScannedAccount: jest.fn(),
+      } as unknown as QqbotAccountService,
+      {
+        removeUnboundCreateContainer: jest.fn().mockResolvedValue(undefined),
+      } as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+      loginStateStore,
+    );
+    const session = (failService as any).createSession({
+      container: {
+        id: 'container-fail-persist',
+        name: 'napcat-fail-persist',
+        webuiPort: 6110,
+      },
+      mode: 'create',
+      qrcode: 'login-qrcode',
+      status: 'pending',
+    });
+    (failService as any).sessions.set(session.id, session);
+    await loginStateStore.flushSessionWrites(session.id);
+    const flushSessionWrites = jest.spyOn(
+      loginStateStore,
+      'flushSessionWrites',
+    );
+
+    const result = await (failService as any).failSession(
+      session,
+      'NapCat 已登录但未返回 QQ 号',
+    );
+
+    expect(result.status).toBe('error');
+    expect(result.errorMessage).toBe('NapCat 已登录但未返回 QQ 号');
+    expect(flushSessionWrites).toHaveBeenCalledWith(session.id);
+    expect(loginSessionRepository.rows[0]).toEqual(
+      expect.objectContaining({
+        progressMessage: 'NapCat 已登录但未返回 QQ 号',
+        sessionKey: session.id,
+        status: 'error',
+      }),
+    );
+    expect(loginSessionRepository.rows[0].completedAt).toEqual(
+      expect.any(Date),
+    );
+    expect(loginSessionRepository.rows[0].sessionPayload?.status).toBe(
+      'error',
+    );
+  });
+
   it('keeps an API-expired refresh session pending while NapCat still exposes the same live qrcode', async () => {
     const loginSessionRepository = createLoginSessionRepository();
     const loginStateStore = new NapcatLoginStateStoreService(
@@ -4050,6 +4370,127 @@ describe('QqbotNapcatLoginService', () => {
     expect(result.qrcode).toBe('fresh-status-qrcode');
     expect(result.errorMessage).toBeUndefined();
     expect(getQrcode).not.toHaveBeenCalled();
+  });
+
+  it('auto refreshes a pending refresh session when WebUI has no cached qrcode', async () => {
+    (service as any).sessions.set('session-auto-refresh-qrcode', {
+      accountId: 'account-1',
+      containerId: 'container-auto-refresh-qrcode',
+      containerName: 'napcat-auto-refresh-qrcode',
+      createdAt: Date.now(),
+      errorMessage: 'NapCat 正在重新生成二维码，请稍后刷新或等待自动更新',
+      expiresAt: Date.now() + 60_000,
+      expectedSelfId: '10001',
+      id: 'session-auto-refresh-qrcode',
+      mode: 'refresh',
+      status: 'pending',
+      webuiPort: 6106,
+    });
+    const container = { id: 'container-auto-refresh-qrcode' };
+    const loginStatus = {
+      isLogin: false,
+      loginError: '网络连接异常!',
+    };
+    jest
+      .spyOn(service as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest
+      .spyOn(service as any, 'getLoginStatus')
+      .mockResolvedValue(loginStatus);
+    const getQrcode = jest
+      .spyOn(service as any, 'getQrcode')
+      .mockRejectedValue(new Error('NapCat 未返回登录二维码'));
+    const refreshOrGetQrcode = jest
+      .spyOn(service as any, 'refreshOrGetQrcode')
+      .mockResolvedValue('auto-refresh-qrcode');
+
+    const result = await service.status('session-auto-refresh-qrcode');
+
+    expect(result.status).toBe('pending');
+    expect(result.qrcode).toBe('auto-refresh-qrcode');
+    expect(result.errorMessage).toBeUndefined();
+    expect(getQrcode).not.toHaveBeenCalled();
+    expect(refreshOrGetQrcode).toHaveBeenCalledWith(container, false, {
+      fallbackStatus: loginStatus,
+      requireFresh: true,
+      staleQrcode: undefined,
+    });
+    expect(
+      (service as any).sessions.get('session-auto-refresh-qrcode')
+        .lastQrcodeRefreshAt,
+    ).toEqual(expect.any(Number));
+  });
+
+  it('restarts the NapCat worker once before status auto-refresh for a restored online-source refresh session', async () => {
+    const container = {
+      baseUrl: 'http://127.0.0.1:6106/',
+      id: 'container-status-worker-restart',
+      name: 'napcat-10001',
+      sourceContainerOnline: true,
+    };
+    const containerService = {
+      findRuntimeById: jest.fn().mockResolvedValue(container),
+      restartRuntimeContainer: jest.fn().mockResolvedValue(true),
+    };
+    const accountService = {
+      markQqLoginStatus: jest.fn().mockResolvedValue(undefined),
+    };
+    const refreshService = new QqbotNapcatLoginService(
+      {
+        get: jest.fn((key: string) =>
+          key === 'NAPCAT_WEBUI_RESTART_DELAY_MS' ? '1' : undefined,
+        ),
+      } as unknown as ConfigService,
+      accountService as unknown as QqbotAccountService,
+      containerService as unknown as QqbotNapcatContainerService,
+      new ToolsService(),
+    );
+    (refreshService as any).sessions.set('session-status-worker-restart', {
+      accountId: 'account-1',
+      containerId: container.id,
+      containerName: container.name,
+      createdAt: Date.now(),
+      errorMessage: 'NapCat 正在重新生成二维码，请稍后刷新或等待自动更新',
+      expiresAt: Date.now() + 60_000,
+      expectedSelfId: '10001',
+      id: 'session-status-worker-restart',
+      mode: 'refresh',
+      sourceContainerOnline: true,
+      status: 'pending',
+      webuiPort: 6106,
+    });
+    const loginStatus = {
+      isLogin: false,
+      isOffline: true,
+      loginError: 'NapCat 账号状态变更为离线',
+    };
+    jest
+      .spyOn(refreshService as any, 'getSessionContainer')
+      .mockResolvedValue(container);
+    jest
+      .spyOn(refreshService as any, 'getLoginStatus')
+      .mockResolvedValue(loginStatus);
+    jest
+      .spyOn(refreshService as any, 'refreshOrGetQrcode')
+      .mockResolvedValue('status-worker-restart-qrcode');
+    const postNapcat = mockWebuiLoginPost(refreshService);
+
+    const firstResult = await refreshService.status(
+      'session-status-worker-restart',
+    );
+    const secondResult = await refreshService.status(
+      'session-status-worker-restart',
+    );
+
+    expect(firstResult.status).toBe('pending');
+    expect(firstResult.qrcode).toBe('status-worker-restart-qrcode');
+    expect(secondResult.status).toBe('pending');
+    expect(containerService.restartRuntimeContainer).not.toHaveBeenCalled();
+    expect(
+      postNapcat.mock.calls.filter(
+        ([, path]) => path === '/api/QQLogin/RestartNapCat',
+      ),
+    ).toHaveLength(1);
   });
 
   it('normalizes login status to offline when login info reports offline', async () => {

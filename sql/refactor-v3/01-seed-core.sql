@@ -47,16 +47,16 @@ INSERT INTO admin_user (
   status
 ) VALUES (
   2041700000000000002,
-  'admin',
+  'kwitsukasa',
   '123456',
-  'Admin',
+  'KwiTsukasa',
   '',
   2041700000000200001,
-  '/workspace',
+  '/analytics',
   'Asia/Shanghai',
   1
 ) ON DUPLICATE KEY UPDATE
-  password = VALUES(password),
+  username = VALUES(username),
   real_name = VALUES(real_name),
   avatar = VALUES(avatar),
   dept_id = VALUES(dept_id),
@@ -84,7 +84,7 @@ INSERT INTO admin_menu (
     'Dashboard',
     '/dashboard',
     NULL,
-    '/workspace',
+    '/analytics',
     NULL,
     'catalog',
     '{"order":-1,"title":"page.dashboard.title"}',
@@ -92,15 +92,15 @@ INSERT INTO admin_menu (
     0
   ),
   (
-    2041700000000100102,
+    2041700000000100101,
     2041700000000100001,
-    'Workspace',
-    '/workspace',
-    '/dashboard/workspace/index',
+    'Analytics',
+    '/analytics',
+    '/dashboard/analytics/index',
     NULL,
     NULL,
     'menu',
-    '{"icon":"carbon:workspace","title":"page.dashboard.workspace"}',
+    '{"affixTab":true,"title":"page.dashboard.analytics"}',
     1,
     0
   ),

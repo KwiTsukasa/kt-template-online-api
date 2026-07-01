@@ -40,8 +40,108 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).toContain('/.dockerenv');
     expect(verify).toContain('wait_for_absent');
     expect(verify).toContain('/proc/1/cgroup');
+    expect(verify).toContain('/proc/1/cmdline');
+    expect(verify).toContain('/proc/1/sched');
+    expect(verify).toContain('/proc/1/status');
+    expect(verify).toContain('/proc/1/stat');
+    expect(verify).toContain('/proc/1/mountinfo');
+    expect(verify).toContain('/proc/self/mountinfo');
+    expect(verify).toContain('/proc/$kt_mountinfo_pid/mountinfo');
+    expect(verify).toContain('/proc/[0-9]*');
+    expect(verify).toContain('kt_is_mountinfo_target');
+    expect(verify).toContain('kt_target_argv1');
+    expect(verify).toContain(
+      'overlay|/vol1/docker|docker-init|/docker/containers|napcat-instances|btrfs|/dev/mapper/trim',
+    );
+    expect(verify).not.toContain('*qq*|*QQ*|*napcat*|*NapCat*|*Xvfb*');
+    expect(verify).not.toContain('case "$kt_target_cmdline" in');
+    expect(verify).toContain('/sys/class/dmi/id/product_name');
+    expect(verify).toContain('/sys/class/dmi/id/bios_vendor');
+    expect(verify).toContain('/sys/class/dmi/id/bios_version');
+    expect(verify).toContain('/etc/hosts');
     expect(verify).toContain('XDG_CONFIG_HOME=/app/.config');
     expect(verify).toContain('Asia/Shanghai');
+  });
+
+  it('waits for the mountinfo guard to converge before failing target process leaks', () => {
+    const verify = readSource('ci/napcat-desktop-cn/verify.sh');
+
+    expect(verify).toContain('MOUNTINFO_GUARD_TIMEOUT_SECONDS');
+    expect(verify).toContain('wait_for_mountinfo_guard_converged');
+    expect(verify).toContain('kt_mountinfo_guard_deadline=');
+    expect(verify).toContain('sleep 1');
+    expect(verify).toContain(
+      'assert_target_mountinfo_guard_converged "$kt_mountinfo_pid"',
+    );
+    expect(verify).not.toContain(
+      'assert_no_mountinfo_host_leak "/proc/$kt_mountinfo_pid/mountinfo"',
+    );
+  });
+
+  it('patches entrypoint device profile probes that QQCore opens at runtime', () => {
+    const dockerfile = readSource('ci/napcat-desktop-cn/Dockerfile');
+    const entrypointPatch = readSource(
+      'ci/napcat-desktop-cn/entrypoint-device-profile.patch.sh',
+    );
+    const source = `${dockerfile}\n${entrypointPatch}`;
+
+    expect(source).toContain('entrypoint-device-profile.patch.sh');
+    expect(source).toContain('NAPCAT_REQUIRE_DEVICE_PROFILE');
+    expect(source).toContain('NAPCAT_DMI_BIOS_VENDOR');
+    expect(source).toContain('NAPCAT_DMI_BIOS_VERSION');
+    expect(source).toContain('NAPCAT_DMI_MODALIAS');
+    expect(source).toContain('NAPCAT_DEVICE_BOOT_ID');
+    expect(source).toContain('NAPCAT_DEVICE_KERNEL_RELEASE');
+    expect(source).toContain('NAPCAT_DEVICE_CPU_MODEL');
+    expect(source).toContain('NAPCAT_DEVICE_UPTIME');
+    expect(source).toContain('NAPCAT_DEVICE_TTY_ACTIVE');
+    expect(source).toContain('/proc/uptime');
+    expect(source).toContain('/proc/cpuinfo');
+    expect(source).toContain('/sys/devices/virtual/tty/tty0/active');
+    expect(source).toContain('kt_mountinfo_guard_loop');
+    expect(source).toContain('kt_is_mountinfo_target');
+    expect(source).toContain('kt_target_argv1');
+    expect(source).toContain('KT_FAKE_MOUNTINFO');
+    expect(source).toContain('/proc/$kt_mountinfo_pid/mountinfo');
+    expect(source).toContain(
+      'mount --bind "$KT_FAKE_MOUNTINFO" "$kt_mountinfo"',
+    );
+    expect(source).toContain('mountinfo-host-leak:$kt_mountinfo');
+    expect(source).toContain(
+      'overlay|/vol1/docker|docker-init|/docker/containers|napcat-instances|btrfs|/dev/mapper/trim',
+    );
+    expect(source).not.toContain(
+      'for mfile in /proc/self/mountinfo /proc/1/mountinfo',
+    );
+    expect(source).not.toContain('*qq*|*QQ*|*napcat*|*NapCat*|*Xvfb*');
+    expect(source).not.toContain('case "$kt_target_cmdline" in');
+    expect(source).toContain('mount --bind "$FAKE_CMDLINE" /proc/1/cmdline');
+    expect(source).toContain('kt_require_device_profile');
+    expect(source).toContain('exit 78');
+    expect(source).toContain('dmi-modalias');
+    expect(source).toContain('proc-devices-host-leak');
+  });
+
+  it('preserves API-written NapCat config during the first shell install', () => {
+    const entrypointPatch = readSource(
+      'ci/napcat-desktop-cn/entrypoint-device-profile.patch.sh',
+    );
+    const verify = readSource('ci/napcat-desktop-cn/verify.sh');
+
+    expect(entrypointPatch).toContain('KT preserve mounted NapCat config');
+    expect(entrypointPatch).toContain(
+      "find NapCat.Shell -mindepth 1 -maxdepth 1 ! -name config",
+    );
+    expect(entrypointPatch).toContain(
+      'if [ ! -f \\"napcat/config/napcat.json\\" ]; then',
+    );
+    expect(entrypointPatch).toContain(
+      'cp -rf NapCat.Shell/config/* napcat/config/',
+    );
+    expect(verify).toContain('KT preserve mounted NapCat config');
+    expect(verify).toContain(
+      "! grep -q 'cp -rf NapCat.Shell/\\* napcat/' /app/entrypoint.sh",
+    );
   });
 
   it('stages source-built NapCat Shell artifacts for Docker build context', () => {
@@ -56,6 +156,7 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(script).toContain('jenkinsBuildUrl');
     expect(script).toContain('packages/napcat-shell/dist');
     expect(script).toContain('fork-artifact.json');
+    expect(script).toContain('entrypoint-device-profile.patch.sh');
     expect(script).toContain('.kt-workspace/napcat-desktop-cn-build');
     expect(script).toContain('assertSafeOutputRoot');
     expect(script).toContain('workspaceRoot');
@@ -91,20 +192,28 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(verify).toContain('getQQLoginRuntimeState');
     expect(verify).toContain('qrcodeRevision');
     expect(verify).toContain('needsLoginServiceReset');
-    expect(verify).toContain('重置已失效登录服务后重新生成二维码');
     expect(verify).not.toContain('selfInfo?.online !== false');
   });
 
-  it('deploys the production API with the verified desktop-cn-v8 runtime profile', () => {
+  it('deploys the production API with the verified desktop-cn-v20 runtime profile', () => {
     const manifest = readSource('k8s/prod/api.yaml');
 
     expect(manifest).toContain('name: QQBOT_NAPCAT_IMAGE');
-    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v8');
+    expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v20');
     expect(manifest).toContain('name: QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION');
-    expect(manifest).toContain('value: desktop-cn-v8');
+    expect(manifest).toContain('value: desktop-cn-v20');
+    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v19');
+    expect(manifest).not.toContain('value: desktop-cn-v19');
+    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v18');
+    expect(manifest).not.toContain('value: desktop-cn-v18');
+    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v16');
+    expect(manifest).not.toContain('value: desktop-cn-v16');
+    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v15');
+    expect(manifest).not.toContain('value: desktop-cn-v15');
+    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v8');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v7');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v4');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v3');
-    expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v2');
+    expect(manifest).not.toMatch(/kt-napcat-desktop-cn:desktop-cn-v2(?!\d)/);
   });
 });

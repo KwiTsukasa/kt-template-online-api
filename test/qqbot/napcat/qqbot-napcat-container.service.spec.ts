@@ -505,9 +505,32 @@ describe('QqbotNapcatContainerService', () => {
     expect(script).toContain("NAPCAT_GID='1101'");
     expect(script).toContain("NAPCAT_SHM_SIZE='512m'");
     expect(script).toContain('--init \\');
+    expect(script).toContain('--cap-add SYS_ADMIN \\');
+    expect(script).toContain('--security-opt apparmor=unconfined \\');
+    expect(script).toContain('--security-opt seccomp=unconfined \\');
     expect(script).toContain('--shm-size "$NAPCAT_SHM_SIZE"');
     expect(script).toContain('-e NAPCAT_UID="$NAPCAT_UID"');
     expect(script).toContain('-e NAPCAT_GID="$NAPCAT_GID"');
+    expect(script).toContain('-e NAPCAT_REQUIRE_DEVICE_PROFILE=1');
+    expect(script).toContain('-e NAPCAT_DMI_SYS_VENDOR="$NAPCAT_DMI_SYS_VENDOR"');
+    expect(script).toContain(
+      '-e NAPCAT_DMI_PRODUCT_UUID="$NAPCAT_DMI_PRODUCT_UUID"',
+    );
+    expect(script).toContain(
+      '-e NAPCAT_DEVICE_BOOT_ID="$NAPCAT_DEVICE_BOOT_ID"',
+    );
+    expect(script).toContain(
+      '-e NAPCAT_DEVICE_KERNEL_RELEASE="$NAPCAT_DEVICE_KERNEL_RELEASE"',
+    );
+    expect(script).toContain(
+      '-e NAPCAT_DEVICE_CPU_MODEL="$NAPCAT_DEVICE_CPU_MODEL"',
+    );
+    expect(script).toContain(
+      '-e NAPCAT_DEVICE_UPTIME="$NAPCAT_DEVICE_UPTIME"',
+    );
+    expect(script).toContain(
+      '-e NAPCAT_DEVICE_TTY_ACTIVE="$NAPCAT_DEVICE_TTY_ACTIVE"',
+    );
     expect(script).toContain('-e LANG=zh_CN.UTF-8');
     expect(script).toContain('-e LC_ALL=zh_CN.UTF-8');
     expect(script).toContain('-e LANGUAGE=zh_CN:zh');

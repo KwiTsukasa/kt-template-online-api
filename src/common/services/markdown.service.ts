@@ -4,6 +4,13 @@ type MarkdownProcessor = {
   process: (value: string) => Promise<unknown>;
 };
 
+type HastNode = {
+  children?: HastNode[];
+  properties?: Record<string, unknown>;
+  tagName?: string;
+  type?: string;
+};
+
 type UnifiedModule = typeof import('unified');
 type RemarkParseModule = typeof import('remark-parse');
 type RemarkGfmModule = typeof import('remark-gfm');
@@ -22,9 +29,40 @@ const importEsm = new Function('specifier', 'return import(specifier)') as <T>(
 const MARKDOWN_SOURCE_PATTERN =
   /<!--\s*kt-markdown-source:([A-Za-z0-9+/=]+)\s*-->/;
 const CONTENT_CLASS_PATTERN =
-  /^(kt-md-|wp-|align|size-|is-|has-|language-|attachment-)/;
+  /^(kt-md-|wp-|align|size-|is-|has-|language-|attachment-|hljs(?:-|$)|fa(?:-|$)|fancybox-|lazyload(?:-|$)|collapse-block|bash$|coffeescript$|css$|dockerfile$|html$|java$|javascript$|json$|markdown$|md$|nginx$|php$|plaintext$|python$|scss$|shell$|sql$|text$|typescript$|xml$|yaml$|yml$)/;
 const CONTENT_CLASS_ATTRIBUTE = ['className', CONTENT_CLASS_PATTERN];
-const EXTRA_TAG_NAMES = ['figcaption', 'figure'];
+const CONTENT_HTML_ATTRIBUTES = [
+  'dataLineNumber',
+  'data-line-number',
+  'hljsCodeblockInner',
+  'hljs-codeblock-inner',
+  'id',
+  'tooltip',
+  'tooltipDisableBreakline',
+  'tooltip-disable-breakline',
+  'tooltipEnableBreakline',
+  'tooltip-enable-breakline',
+  'tooltipExitFullscreen',
+  'tooltip-exit-fullscreen',
+  'tooltipFullscreen',
+  'tooltip-fullscreen',
+  'tooltipHideLinenumber',
+  'tooltip-hide-linenumber',
+  'tooltipShowLinenumber',
+  'tooltip-show-linenumber',
+];
+const EXTRA_TAG_NAMES = [
+  'div',
+  'figcaption',
+  'figure',
+  'i',
+  'table',
+  'tbody',
+  'td',
+  'th',
+  'thead',
+  'tr',
+];
 const CONTENT_CLASS_TAG_NAMES = [
   'a',
   'blockquote',
@@ -38,6 +76,7 @@ const CONTENT_CLASS_TAG_NAMES = [
   'h4',
   'h5',
   'h6',
+  'i',
   'li',
   'ol',
   'p',
@@ -199,6 +238,7 @@ export class MarkdownService {
         footnoteLabel: '脚注',
       })
       .use(rehypeRaw)
+      .use(this.createArgonCodeblockPlugin())
       .use(rehypeSanitize, schema)
       .use(rehypeStringify) as MarkdownProcessor;
   }
@@ -264,21 +304,137 @@ export class MarkdownService {
     const schema = defaultSchema as Record<string, any>;
     const attributes = (schema.attributes || {}) as Record<string, any[]>;
     const classAttributes = Object.fromEntries(
-      CONTENT_CLASS_TAG_NAMES.map((tagName) => [
-        tagName,
-        [...(attributes[tagName] || []), CONTENT_CLASS_ATTRIBUTE],
-      ]),
+      CONTENT_CLASS_TAG_NAMES.map((tagName) => {
+        const tagAttributes = (attributes[tagName] || []).filter(
+          (attribute) =>
+            !Array.isArray(attribute) || attribute[0] !== 'className',
+        );
+
+        return [
+          tagName,
+          [...tagAttributes, ...CONTENT_HTML_ATTRIBUTES, CONTENT_CLASS_ATTRIBUTE],
+        ];
+      }),
     );
 
     return {
       ...schema,
+      clobberPrefix: '',
       tagNames: [...new Set([...(schema.tagNames || []), ...EXTRA_TAG_NAMES])],
       attributes: {
         ...attributes,
         ...classAttributes,
-        a: [...(attributes.a || []), 'target', 'rel', CONTENT_CLASS_ATTRIBUTE],
-        img: [...(attributes.img || []), 'loading', CONTENT_CLASS_ATTRIBUTE],
+        a: [
+          ...(attributes.a || []).filter(
+            (attribute) =>
+              !Array.isArray(attribute) || attribute[0] !== 'className',
+          ),
+          'target',
+          'rel',
+          ...CONTENT_HTML_ATTRIBUTES,
+          CONTENT_CLASS_ATTRIBUTE,
+        ],
+        img: [
+          ...(attributes.img || []).filter(
+            (attribute) =>
+              !Array.isArray(attribute) || attribute[0] !== 'className',
+          ),
+          'loading',
+          ...CONTENT_HTML_ATTRIBUTES,
+          CONTENT_CLASS_ATTRIBUTE,
+        ],
       },
     };
+  }
+
+  /**
+   * 创建 Markdown code fence 到 Argon 代码块 DOM 的 rehype 转换插件。
+   * @returns rehype transformer；会原地补齐 pre/code class，最终仍由 sanitizer 过滤。
+   */
+  private createArgonCodeblockPlugin() {
+    return () => (tree: HastNode) => {
+      this.visitHast(tree, (node) => {
+        if (node.type !== 'element' || node.tagName !== 'pre') return;
+
+        const codeNode = node.children?.find(
+          (child) => child.type === 'element' && child.tagName === 'code',
+        );
+        if (!codeNode) return;
+
+        const language = this.normalizeCodeLanguage(
+          codeNode.properties?.className,
+        );
+        const codeClassNames = this.toClassList(
+          codeNode.properties?.className,
+        ).filter((className) => !className.startsWith('language-'));
+
+        node.properties = {
+          ...node.properties,
+          className: this.mergeClassNames(node.properties?.className, [
+            'wp-block-code',
+            'hljs-codeblock',
+          ]),
+        };
+        codeNode.properties = {
+          ...codeNode.properties,
+          className: this.mergeClassNames(codeClassNames, ['hljs', language]),
+        };
+      });
+    };
+  }
+
+  /**
+   * 深度遍历 HAST 节点树，供无额外依赖的小型 rehype 转换使用。
+   * @param node - 当前 HAST 节点；缺少 children 时只访问当前节点。
+   * @param visitor - 对每个节点执行的同步访问函数。
+   */
+  private visitHast(node: HastNode, visitor: (node: HastNode) => void) {
+    visitor(node);
+    node.children?.forEach((child) => this.visitHast(child, visitor));
+  }
+
+  /**
+   * 将 remark-rehype 生成的 language-* class 规范化为 Blog Argon 使用的 hljs 语言名。
+   * @param className - HAST className 属性，可能是数组、字符串或空值。
+   * @returns sanitizer 白名单允许的标准语言名；无语言时返回 plaintext。
+   */
+  private normalizeCodeLanguage(className: unknown) {
+    const language = this.toClassList(className)
+      .find((className) => className.startsWith('language-'))
+      ?.replace(/^language-/, '')
+      .toLowerCase();
+
+    if (!language) return 'plaintext';
+    if (language === 'ts') return 'typescript';
+    if (language === 'js') return 'javascript';
+    if (language === 'bash' || language === 'sh') return 'shell';
+
+    return language;
+  }
+
+  /**
+   * 合并 className 属性并保持必需 class 在前，避免重复 class 影响 Argon 选择器。
+   * @param current - 现有 className 属性或 class 数组。
+   * @param required - 当前转换必须注入的 Argon/hljs class。
+   * @returns 去重后的 className 数组，交给 rehype-stringify 输出。
+   */
+  private mergeClassNames(current: unknown, required: string[]) {
+    return [...new Set([...required, ...this.toClassList(current)])];
+  }
+
+  /**
+   * 将 HAST className 属性转换成可安全合并的字符串数组。
+   * @param value - HAST className 属性，支持字符串、字符串数组和空值。
+   * @returns 过滤空白后的 class 名列表。
+   */
+  private toClassList(value: unknown) {
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => this.toClassList(item));
+    }
+    if (typeof value === 'string') {
+      return value.split(/\s+/).filter(Boolean);
+    }
+
+    return [];
   }
 }

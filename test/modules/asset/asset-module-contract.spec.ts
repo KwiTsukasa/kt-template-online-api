@@ -4,6 +4,7 @@ jest.mock('../../../src/modules/qqbot/core/qqbot-core.module', () => ({
 
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { ConfigModule } from '@nestjs/config';
+import { IS_PUBLIC_KEY } from '../../../src/common';
 import { AppModule } from '../../../src/app.module';
 import { AdminAuthGuardModule } from '../../../src/modules/admin/identity/auth/admin-auth-guard.module';
 import {
@@ -13,6 +14,8 @@ import {
   AssetModule,
 } from '../../../src/modules/asset/asset.module';
 import { MinioClientService } from '../../../src/modules/asset/application/asset-minio.service';
+import { BlogLive2DAssetService } from '../../../src/modules/asset/application/blog-live2d-asset.service';
+import { BlogLive2DAssetController } from '../../../src/modules/asset/contract/blog-live2d-asset.controller';
 import { MinioClientController } from '../../../src/modules/asset/contract/asset-minio.controller';
 import { AdminPlatformConfigModule } from '../../../src/modules/admin/platform-config/admin-platform-config.module';
 import {
@@ -61,6 +64,7 @@ describe('Asset module contract', () => {
         'GET /minio/resource-proxy',
         'GET /minio/download',
         'DELETE /minio/remove',
+        'GET /blog/live2d/pio/:version/*assetPath',
       ]),
     );
   });
@@ -97,18 +101,35 @@ describe('Asset module contract', () => {
     );
 
     expect(getModuleMetadata(AssetModule, MODULE_METADATA.CONTROLLERS)).toEqual(
-      expect.arrayContaining([MinioClientController]),
+      expect.arrayContaining([
+        MinioClientController,
+        BlogLive2DAssetController,
+      ]),
     );
     expect(getModuleMetadata(AssetModule, MODULE_METADATA.PROVIDERS)).toEqual(
-      expect.arrayContaining([MinioClientService]),
+      expect.arrayContaining([MinioClientService, BlogLive2DAssetService]),
     );
-    expect(assetExports).toEqual(expect.arrayContaining([MinioClientService]));
+    expect(assetExports).toEqual(
+      expect.arrayContaining([MinioClientService, BlogLive2DAssetService]),
+    );
     expect(ASSET_CONTROLLERS).toEqual(
-      expect.arrayContaining([MinioClientController]),
+      expect.arrayContaining([
+        MinioClientController,
+        BlogLive2DAssetController,
+      ]),
     );
     expect(ASSET_PROVIDERS).toEqual(
-      expect.arrayContaining([MinioClientService]),
+      expect.arrayContaining([MinioClientService, BlogLive2DAssetService]),
     );
+  });
+
+  it('marks the Blog Live2D runtime stream as an explicit public asset route', () => {
+    expect(
+      Reflect.getMetadata(
+        IS_PUBLIC_KEY,
+        BlogLive2DAssetController.prototype.getPioAsset,
+      ),
+    ).toBe(true);
   });
 
   it('matches the real Batch 3 Asset SQL schema and boundary contract', () => {

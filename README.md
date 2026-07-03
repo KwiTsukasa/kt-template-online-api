@@ -27,7 +27,7 @@
 | `qqbot/plugins/bilibili-card`   | 解析 QQ/NapCat Bilibili 卡片和短链，按账号事件绑定回复封面图和视频文字摘要                                 |
 | `qqbot/plugins/ff14-market`     | XIVAPI + Universalis 物品解析和 FF14 市场查价                                                              |
 | `qqbot/plugins/fflogs`          | FFLogs v2 GraphQL 角色排名和指定高难最近记录查询                                                           |
-| `minio`                         | Bucket 检查、上传、列表、临时 URL、代理下载、删除                                                          |
+| `minio`                         | Bucket 检查、上传、列表、临时 URL、代理下载、删除，以及 Blog Live2D 运行包受控读取入口                    |
 | `common`                        | 响应封装、异常过滤、请求日志、日期格式化、字典解码、Snowflake、工具服务                                    |
 
 ## 目录结构
@@ -59,7 +59,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 | 分组                  | 变量                                                                                                                                                                                                                                                                                                                |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MySQL                 | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC`                                                                                                                                                                                                                                        |
-| MinIO                 | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`                                                                                                                                                                                                                              |
+| MinIO                 | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`BLOG_LIVE2D_ALLOWED_ORIGINS`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_PREFIX`                                                                                                                                                    |
 | Admin                 | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                       |
 | WordPress             | `WORDPRESS_BASE_URL`、`WORDPRESS_HOST_HEADER`、`WORDPRESS_ADMIN_USERNAME`、`WORDPRESS_ADMIN_PASSWORD`、`WORDPRESS_*_TIMEOUT_MS`                                                                                                                                                                                     |
 | Logging/Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*`                                                                                                                                                                                                                                                |
@@ -70,6 +70,8 @@ ci/            Jenkins Agent/Docker 辅助文件
 | FFLogs                | `FFLOGS_BASE_URL`、`FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET`                                                                                                                                                                                                             |
 
 `DB_SYNC=true` 只适合本地开发或明确允许自动同步表结构的环境；生产应关闭并使用 SQL/迁移脚本。
+
+Blog Live2D 运行包存放在 MinIO，公开读取入口为 `/blog/live2d/pio/:version/*assetPath`。`BLOG_LIVE2D_ALLOWED_ORIGINS` 是允许加载 Pio runtime 的 Blog 域名白名单，`BLOG_LIVE2D_BUCKET` 和 `BLOG_LIVE2D_PREFIX` 指向运行包对象位置；未通过 Referer/Origin 白名单的请求会在读取 MinIO 前拒绝。
 
 QQBot 插件 worker 使用 BullMQ 队列串行执行同一插件安装实例的请求。K8s 生产清单包含内部服务 `kt-qqbot-plugin-redis`，生产 env 可将 `QQBOT_PLUGIN_QUEUE_REDIS_HOST` 配为该服务名。`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS` 控制排队等待窗口，插件 `operation.timeoutMs` 仍表示单次执行预算。
 

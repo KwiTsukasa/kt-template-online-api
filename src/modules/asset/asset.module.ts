@@ -2,11 +2,16 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
 import { MinioClientService } from './application/asset-minio.service';
+import { BlogLive2DAssetService } from './application/blog-live2d-asset.service';
+import { BlogLive2DAssetController } from './contract/blog-live2d-asset.controller';
 import { MinioClientController } from './contract/asset-minio.controller';
 
-export const ASSET_CONTROLLERS = [MinioClientController];
+export const ASSET_CONTROLLERS = [
+  MinioClientController,
+  BlogLive2DAssetController,
+];
 
-export const ASSET_PROVIDERS = [MinioClientService];
+export const ASSET_PROVIDERS = [MinioClientService, BlogLive2DAssetService];
 
 export const ASSET_DOMAIN_CONTRACT = {
   tables: [

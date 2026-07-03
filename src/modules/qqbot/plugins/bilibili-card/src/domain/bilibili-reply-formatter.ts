@@ -4,16 +4,18 @@ import type {
 } from './bilibili-card.types';
 
 /**
- * Formats a Bilibili video summary as plain text for QQBot replies.
+ * Formats a Bilibili video summary as a leading cover CQ image plus text for QQBot replies.
  * @param video - Normalized video info returned by the package-local Bilibili client.
  * @param config - Runtime config that controls the maximum displayed description length.
- * @returns Concise plain text reply with a canonical Bilibili video URL.
+ * @returns Concise CQ-compatible reply with a cover image and canonical Bilibili video URL.
  */
 export function formatBilibiliVideoReply(
   video: BilibiliVideoInfo,
   config: BilibiliCardRuntimeConfig,
 ) {
+  const coverImageSegment = buildBilibiliCoverImageSegment(video.pic);
   const lines = [
+    ...(coverImageSegment ? [coverImageSegment] : []),
     'Bilibili 视频解析',
     `标题：${video.title || '未知标题'}`,
     `UP：${video.ownerName || '未知UP主'}`,
@@ -26,6 +28,30 @@ export function formatBilibiliVideoReply(
   const desc = truncateBilibiliDescription(video.desc, config.descMaxLength);
   if (desc) lines.push(`简介：${desc}`);
   return lines.join('\n');
+}
+
+/**
+ * Builds the leading CQ image segment from the Bilibili cover URL.
+ * @param pic - Cover URL returned by the Bilibili video API; used as the OneBot image `file` parameter.
+ * @returns CQ image segment placed before the text summary, or an empty string when no cover URL exists.
+ */
+function buildBilibiliCoverImageSegment(pic: string) {
+  const normalizedPic = `${pic || ''}`.trim();
+  if (!normalizedPic) return '';
+  return `[CQ:image,file=${escapeCqParam(normalizedPic)}]`;
+}
+
+/**
+ * Escapes values embedded in a CQ segment parameter.
+ * @param value - Raw parameter value that may contain CQ delimiters or HTML entity characters.
+ * @returns Value safe to embed in a single CQ parameter.
+ */
+function escapeCqParam(value: string) {
+  return value
+    .replace(/&/gu, '&amp;')
+    .replace(/\[/gu, '&#91;')
+    .replace(/\]/gu, '&#93;')
+    .replace(/,/gu, '&#44;');
 }
 
 /**

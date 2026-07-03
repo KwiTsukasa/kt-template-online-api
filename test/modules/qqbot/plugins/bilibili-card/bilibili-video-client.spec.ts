@@ -113,6 +113,7 @@ describe('Bilibili video client', () => {
       ),
     ).toBe(
       [
+        '[CQ:image,file=https://i0.hdslb.com/bfs/archive/demo.jpg]',
         'Bilibili 视频解析',
         '标题：夏祭',
         'UP：UP主',

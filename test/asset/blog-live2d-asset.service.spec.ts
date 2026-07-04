@@ -117,6 +117,28 @@ describe('BlogLive2DAssetService', () => {
     );
   });
 
+  it('maps missing MinIO runtime objects to HTTP 404', async () => {
+    const minio = createMinio();
+    minio.getObject.mockRejectedValueOnce(
+      Object.assign(new Error('Not Found'), { code: 'NotFound' }),
+    );
+    const service = new BlogLive2DAssetService(
+      minio as never,
+      createConfig() as never,
+    );
+
+    await expect(
+      service.getRuntimeObject('v1', ['manifest.json']),
+    ).rejects.toMatchObject({
+      status: HttpStatus.NOT_FOUND,
+      message: 'Live2D runtime asset not found',
+    });
+    expect(minio.getObject).toHaveBeenCalledWith(
+      'blog/live2d/pio/v1/manifest.json',
+      'kt-template-online',
+    );
+  });
+
   it('rejects runtime path traversal before touching MinIO', async () => {
     const minio = createMinio();
     const service = new BlogLive2DAssetService(

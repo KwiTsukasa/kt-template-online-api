@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MinioClientService } from './asset-minio.service';
 import type {
@@ -10,6 +14,24 @@ const DEFAULT_ALLOWED_ORIGINS = 'https://blog.kwitsukasa.top';
 const DEFAULT_LIVE2D_BUCKET = 'kt-template-online';
 const DEFAULT_LIVE2D_PREFIX = 'blog/live2d/pio';
 const MAX_DECODE_DEPTH = 6;
+
+/**
+ * Detects MinIO/S3 object-missing errors from `statObject` and `getObject`.
+ * @param error - Unknown failure thrown by the MinIO client while resolving a runtime object.
+ * @returns `true` when the failure means the requested object key does not exist.
+ */
+function isMinioObjectNotFound(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const candidate = error as { code?: unknown; message?: unknown };
+  return (
+    candidate.code === 'NotFound' ||
+    candidate.code === 'NoSuchKey' ||
+    candidate.message === 'Not Found'
+  );
+}
 
 @Injectable()
 export class BlogLive2DAssetService {
@@ -54,10 +76,17 @@ export class BlogLive2DAssetService {
     version: string,
     objectPath: BlogLive2DRuntimeAssetPath,
   ): Promise<BlogLive2DAssetResult> {
-    return this.minioClientService.getObject(
-      this.resolveRuntimeObjectPath(version, objectPath),
-      this.getBucketName(),
-    );
+    try {
+      return await this.minioClientService.getObject(
+        this.resolveRuntimeObjectPath(version, objectPath),
+        this.getBucketName(),
+      );
+    } catch (error) {
+      if (isMinioObjectNotFound(error)) {
+        throw new NotFoundException('Live2D runtime asset not found');
+      }
+      throw error;
+    }
   }
 
   /**

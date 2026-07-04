@@ -138,6 +138,28 @@ function buildBangDreamRuntimePlugin(
       'BangDream 命令执行失败');
 
   /**
+   * Checks BangDream runtime health without turning external catalog outages into worker startup failures.
+   * @returns Health payload consumed by the plugin platform and Admin health view.
+   */
+  const checkBangDreamHealth = async () => {
+    const checkedAt = formatBangDreamCheckedAt(new Date());
+    try {
+      await context.checkHealth();
+      return {
+        checkedAt,
+        message: 'BangDream 插件可用',
+        status: 'healthy',
+      };
+    } catch (error) {
+      return {
+        checkedAt,
+        message: normalizeError(error) || 'BangDream 插件不可用',
+        status: 'degraded',
+      };
+    }
+  };
+
+  /**
    * 执行 BangDream 插件局部步骤。
    * @param operationKey - operationKey 输入；影响 executeOperation 的返回值。
    * @param input - input 输入；影响 executeOperation 的返回值。
@@ -176,27 +198,11 @@ function buildBangDreamRuntimePlugin(
     /**
      * 执行 BangDream回调。
      */
-    health: () => context.checkHealth(),
+    health: checkBangDreamHealth,
     /**
      * 执行 BangDream回调。
      */
-    healthCheck: async () => {
-      const checkedAt = formatBangDreamCheckedAt(new Date());
-      try {
-        await context.checkHealth();
-        return {
-          checkedAt,
-          message: 'BangDream 插件可用',
-          status: 'healthy',
-        };
-      } catch (error) {
-        return {
-          checkedAt,
-          message: normalizeError(error) || 'BangDream 插件不可用',
-          status: 'degraded',
-        };
-      }
-    },
+    healthCheck: checkBangDreamHealth,
     key: options.pluginKey || 'bangdream',
     legacyKeys: options.legacyAliases,
     name: options.name || 'BangDream 查询',

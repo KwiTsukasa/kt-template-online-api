@@ -843,11 +843,40 @@ export class QqbotPluginPlatformService
           persistedInstallation,
         );
 
-      await this.startWorker(installation, version);
-      startedCount += 1;
+      try {
+        await this.startWorker(installation, version);
+        startedCount += 1;
+      } catch (error) {
+        await this.recordBuiltinWorkerStartFailure(installation, error);
+      }
     }
 
     return startedCount;
+  }
+
+  /**
+   * Records one failed built-in worker boot without blocking other built-in plugin packages.
+   * @param installation - Persisted installation whose worker failed during module startup.
+   * @param error - Startup error from worker load, activate, or health checks.
+   */
+  private async recordBuiltinWorkerStartFailure(
+    installation: QqbotPluginInstallation,
+    error: unknown,
+  ) {
+    const message = error instanceof Error ? error.message : `${error}`;
+    await this.updateInstallationRuntime(
+      installation,
+      'enabled',
+      'unhealthy',
+    );
+    await this.recordRuntimeEvent(
+      installation,
+      'builtin-start-failed',
+      'error',
+      {
+        message,
+      },
+    );
   }
 
   /**

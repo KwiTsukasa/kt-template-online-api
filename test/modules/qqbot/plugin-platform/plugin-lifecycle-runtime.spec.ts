@@ -851,6 +851,176 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
     expect(worker.executeOperation).not.toHaveBeenCalled();
   });
 
+  it('continues starting other built-in workers when one worker health check fails', async () => {
+    /**
+     * 创建测试 manifest。
+     * @param pluginKey - 插件 key；用于区分当前被发现的内置插件包。
+     * @returns 可被插件平台解析的内置插件 manifest。
+     */
+    const createManifest = (pluginKey: string) => ({
+      assets: [],
+      configSchema: {},
+      entry: 'src/index.ts',
+      events: [],
+      legacyAliases: [],
+      migrations: [],
+      minApiSdkVersion: '1.0.0',
+      name: pluginKey,
+      operations: [
+        {
+          handlerName: 'echo',
+          key: `${pluginKey}.echo`,
+          name: 'Echo',
+          permissions: [],
+          timeoutMs: 123,
+        },
+      ],
+      permissions: [],
+      pluginKey,
+      runtime: {
+        maxConcurrency: 1,
+        memoryMb: 128,
+        timeoutMs: 456,
+        workerType: 'node-worker',
+      },
+      version: '0.1.0',
+    });
+    const failingManifest = createManifest('failing-plugin');
+    const healthyManifest = createManifest('healthy-plugin');
+    const savedPlugins: any[] = [];
+    const savedVersions: any[] = [];
+    const savedInstallations: any[] = [];
+    const runtimeEvents: any[] = [];
+    const pluginRepository = {
+      find: jest.fn(async () => savedPlugins),
+      findAndCount: jest.fn(async () => [savedPlugins, savedPlugins.length]),
+      findOne: jest.fn(async ({ where }: any) =>
+        savedPlugins.find((plugin) => plugin.id === where?.id),
+      ),
+      save: jest.fn(async (value) => {
+        const row = { id: `plugin-${value.pluginKey}`, ...value };
+        savedPlugins.push(row);
+        return row;
+      }),
+      update: jest.fn(async () => ({ affected: 1 })),
+    };
+    const versionRepository = {
+      findOne: jest.fn(async ({ where }: any) =>
+        savedVersions.find((version) => version.id === where?.id),
+      ),
+      save: jest.fn(async (value) => {
+        const row = { id: `version-${value.pluginId}`, ...value };
+        savedVersions.push(row);
+        return row;
+      }),
+      update: jest.fn(async () => ({ affected: 1 })),
+    };
+    const installationRepository = {
+      find: jest.fn(async () => savedInstallations),
+      findAndCount: jest.fn(async () => [
+        savedInstallations,
+        savedInstallations.length,
+      ]),
+      findOne: jest.fn(async ({ where }: any) =>
+        savedInstallations.find(
+          (installation) => installation.id === where?.id,
+        ),
+      ),
+      save: jest.fn(async (value) => {
+        const row = { id: `installation-${value.pluginId}`, ...value };
+        savedInstallations.push(row);
+        return row;
+      }),
+      update: jest.fn(async () => ({ affected: 1 })),
+    };
+    const runtimeEventRepository = {
+      save: jest.fn(async (value) => {
+        runtimeEvents.push(value);
+        return value;
+      }),
+    };
+    const failingWorker = {
+      activate: jest.fn(async () => ({ ok: true })),
+      deactivate: jest.fn(async () => ({ ok: true })),
+      dispose: jest.fn(async () => undefined),
+      drainRuntimeEvents: jest.fn(() => []),
+      executeOperation: jest.fn(),
+      handleEvent: jest.fn(),
+      health: jest.fn(async () => {
+        throw new Error('Bestdori unavailable');
+      }),
+      load: jest.fn(async () => ({ ok: true })),
+    };
+    const healthyWorker = {
+      activate: jest.fn(async () => ({ ok: true })),
+      deactivate: jest.fn(async () => ({ ok: true })),
+      dispose: jest.fn(async () => undefined),
+      drainRuntimeEvents: jest.fn(() => []),
+      executeOperation: jest.fn(async () => ({ replyText: 'ok' })),
+      handleEvent: jest.fn(async () => true),
+      health: jest.fn(async () => ({ ok: true })),
+      load: jest.fn(async () => ({ ok: true })),
+    };
+    const runtimeFactory = {
+      create: jest.fn((_installation, version) =>
+        version.manifestJson.pluginKey === 'failing-plugin'
+          ? failingWorker
+          : healthyWorker,
+      ),
+    };
+    const packageSource = {
+      discoverPackages: jest.fn(async () =>
+        [failingManifest, healthyManifest].map((manifest) => ({
+          entry: manifest.entry,
+          entryFile: `D:/plugins/${manifest.pluginKey}/src/index.ts`,
+          manifest,
+          packageRoot: `D:/plugins/${manifest.pluginKey}`,
+          pluginKey: manifest.pluginKey,
+        })),
+      ),
+    };
+    const service = new (QqbotPluginPlatformService as any)(
+      pluginRepository,
+      versionRepository,
+      installationRepository,
+      { update: jest.fn(async () => ({ affected: 1 })) },
+      { update: jest.fn(async () => ({ affected: 1 })) },
+      { find: jest.fn(async () => []) },
+      {},
+      {},
+      runtimeEventRepository,
+      undefined,
+      runtimeFactory,
+      undefined,
+      undefined,
+      undefined,
+      packageSource,
+    ) as QqbotPluginPlatformService;
+
+    await expect(service.onModuleInit()).resolves.toBeUndefined();
+
+    expect(failingWorker.dispose).toHaveBeenCalled();
+    expect(healthyWorker.health).toHaveBeenCalled();
+    await expect(
+      service.executeOperation({
+        input: {},
+        operationKey: 'healthy-plugin.echo',
+        pluginKey: 'healthy-plugin',
+      }),
+    ).resolves.toEqual({ replyText: 'ok' });
+    expect(runtimeEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: 'builtin-start-failed',
+          level: 'error',
+          safeSummary: expect.objectContaining({
+            message: 'Bestdori unavailable',
+          }),
+        }),
+      ]),
+    );
+  });
+
   it('persists built-in installations before syncing manifest tasks', async () => {
     const manifest = {
       assets: [],

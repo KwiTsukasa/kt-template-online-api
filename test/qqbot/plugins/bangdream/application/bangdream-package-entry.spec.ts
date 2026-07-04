@@ -214,7 +214,10 @@ describe('BangDream package entry', () => {
     });
 
     await plugin.activate();
-    await expect(plugin.health()).resolves.toBe(true);
+    await expect(plugin.health()).resolves.toMatchObject({
+      message: 'BangDream 插件可用',
+      status: 'healthy',
+    });
     await expect(
       plugin.executeOperation('bangdream.song.search', { text: '夏祭り' }),
     ).resolves.toMatchObject({
@@ -234,6 +237,20 @@ describe('BangDream package entry', () => {
     ]);
     expect(songSearch).toHaveBeenCalledWith({ text: '夏祭り' }, mockContext);
     expect(manifestOperations).toHaveLength(15);
+  });
+
+  it('reports degraded health when catalog health fails instead of throwing', async () => {
+    mockContext.checkHealth.mockRejectedValueOnce(
+      new Error('Bestdori unavailable'),
+    );
+    const plugin = createPlugin({
+      operations: manifestOperations,
+    });
+
+    await expect(plugin.health()).resolves.toMatchObject({
+      message: 'Bestdori unavailable',
+      status: 'degraded',
+    });
   });
 
   it('normalizes operation errors without an application-service wrapper', async () => {

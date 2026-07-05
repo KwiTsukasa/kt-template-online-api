@@ -64,6 +64,7 @@ describe('Asset module contract', () => {
         'GET /minio/resource-proxy',
         'GET /minio/download',
         'DELETE /minio/remove',
+        'GET /blog/live2d/pio/catalog.json',
         'GET /blog/live2d/pio/:version/*assetPath',
       ]),
     );
@@ -124,6 +125,12 @@ describe('Asset module contract', () => {
   });
 
   it('marks the Blog Live2D runtime stream as an explicit public asset route', () => {
+    expect(
+      Reflect.getMetadata(
+        IS_PUBLIC_KEY,
+        BlogLive2DAssetController.prototype.getPioCatalog,
+      ),
+    ).toBe(true);
     expect(
       Reflect.getMetadata(
         IS_PUBLIC_KEY,

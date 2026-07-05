@@ -71,7 +71,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 
 `DB_SYNC=true` 只适合本地开发或明确允许自动同步表结构的环境；生产应关闭并使用 SQL/迁移脚本。
 
-Blog Live2D 运行包存放在 MinIO，公开读取入口为 `/blog/live2d/pio/:version/*assetPath`。`BLOG_LIVE2D_ALLOWED_ORIGINS` 是允许加载 Pio runtime 的 Blog 域名白名单，`BLOG_LIVE2D_BUCKET` 和 `BLOG_LIVE2D_PREFIX` 指向运行包对象位置；未通过 Referer/Origin 白名单的请求会在读取 MinIO 前拒绝。
+Blog Live2D 运行包存放在 MinIO，公开读取入口为 `/blog/live2d/pio/catalog.json` 和 `/blog/live2d/pio/:version/*assetPath`。`catalog.json` 是 Pio 公共目录索引，versioned asset 路由读取 `v1/manifest.json`、runtime、model、motion、shader、source texture 等文件。`BLOG_LIVE2D_ALLOWED_ORIGINS` 是允许加载 Pio runtime 的 Blog 域名白名单，`BLOG_LIVE2D_BUCKET` 和 `BLOG_LIVE2D_PREFIX` 指向运行包对象位置；未通过 Referer/Origin 白名单的请求会在读取 MinIO 前拒绝。
 
 QQBot 插件 worker 使用 BullMQ 队列串行执行同一插件安装实例的请求。K8s 生产清单包含内部服务 `kt-qqbot-plugin-redis`，生产 env 可将 `QQBOT_PLUGIN_QUEUE_REDIS_HOST` 配为该服务名。`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS` 控制排队等待窗口，插件 `operation.timeoutMs` 仍表示单次执行预算。
 

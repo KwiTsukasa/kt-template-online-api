@@ -33,21 +33,22 @@ function createConfig(overrides: Record<string, string | undefined> = {}) {
 function createMinio() {
   return {
     getDefaultBucket: jest.fn(() => 'kt-template-online'),
-    getObject: jest.fn(async (objectName: string, bucketName?: string) => ({
-      bucketName,
-      objectName,
-      stat: {
-        etag: 'etag-1',
-        lastModified: new Date('2026-07-04T00:00:00.000Z'),
-        metaData: {
-          'content-type': objectName.endsWith('.json')
-            ? 'application/json'
-            : 'image/png',
+    getObject: jest.fn(async (objectName: string, bucketName?: string) => {
+      const isJson = objectName.endsWith('.json');
+      return {
+        bucketName,
+        objectName,
+        stat: {
+          etag: 'etag-1',
+          lastModified: new Date('2026-07-04T00:00:00.000Z'),
+          metaData: {
+            'content-type': isJson ? 'application/json' : 'image/png',
+          },
+          size: 2,
         },
-        size: 2,
-      },
-      stream: Readable.from(['ok']),
-    })),
+        stream: Readable.from([isJson ? '{"ok":true}' : 'ok']),
+      };
+    }),
   };
 }
 
@@ -102,6 +103,21 @@ describe('BlogLive2DAssetService', () => {
     );
   });
 
+  it('maps the root catalog below the configured MinIO prefix', async () => {
+    const minio = createMinio();
+    const service = new BlogLive2DAssetService(
+      minio as never,
+      createConfig() as never,
+    );
+
+    await service.getCatalogObject();
+
+    expect(minio.getObject).toHaveBeenCalledWith(
+      'blog/live2d/pio/catalog.json',
+      'kt-template-online',
+    );
+  });
+
   it('maps nested runtime files below the configured MinIO prefix', async () => {
     const minio = createMinio();
     const service = new BlogLive2DAssetService(
@@ -109,10 +125,15 @@ describe('BlogLive2DAssetService', () => {
       createConfig() as never,
     );
 
-    await service.getRuntimeObject('v1', ['textures', 'texture_00.png']);
+    await service.getRuntimeObject('v1', [
+      'assets',
+      'model',
+      'motions',
+      'breath1.motion3.json',
+    ]);
 
     expect(minio.getObject).toHaveBeenCalledWith(
-      'blog/live2d/pio/v1/textures/texture_00.png',
+      'blog/live2d/pio/v1/assets/model/motions/breath1.motion3.json',
       'kt-template-online',
     );
   });
@@ -176,6 +197,43 @@ describe('BlogLive2DAssetService', () => {
 });
 
 describe('BlogLive2DAssetController', () => {
+  it('streams the Pio root catalog for allowed blog requests', async () => {
+    const minio = createMinio();
+    const moduleRef = await Test.createTestingModule({
+      controllers: [BlogLive2DAssetController],
+      providers: [
+        BlogLive2DAssetService,
+        {
+          provide: MinioClientService,
+          useValue: minio,
+        },
+        {
+          provide: ConfigService,
+          useValue: createConfig(),
+        },
+      ],
+    }).compile();
+    const app = moduleRef.createNestApplication();
+    await app.init();
+
+    try {
+      const response = await request(app.getHttpServer())
+        .get('/blog/live2d/pio/catalog.json')
+        .set('Referer', 'https://blog.kwitsukasa.top/post/1')
+        .expect(HttpStatus.OK);
+
+      expect(response.body).toEqual({ ok: true });
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.headers['cache-control']).toBe('public, max-age=60');
+      expect(minio.getObject).toHaveBeenCalledWith(
+        'blog/live2d/pio/catalog.json',
+        'kt-template-online',
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
   it('streams nested Pio runtime assets for allowed blog requests', async () => {
     const minio = createMinio();
     const moduleRef = await Test.createTestingModule({
@@ -197,7 +255,7 @@ describe('BlogLive2DAssetController', () => {
 
     try {
       const response = await request(app.getHttpServer())
-        .get('/blog/live2d/pio/v1/textures/texture_00.png')
+        .get('/blog/live2d/pio/v1/assets/textures/default-costume.png')
         .set('Referer', 'https://blog.kwitsukasa.top/post/1')
         .expect(HttpStatus.OK);
 
@@ -207,7 +265,7 @@ describe('BlogLive2DAssetController', () => {
         'public, max-age=31536000, immutable',
       );
       expect(minio.getObject).toHaveBeenCalledWith(
-        'blog/live2d/pio/v1/textures/texture_00.png',
+        'blog/live2d/pio/v1/assets/textures/default-costume.png',
         'kt-template-online',
       );
     } finally {
@@ -236,7 +294,7 @@ describe('BlogLive2DAssetController', () => {
 
     try {
       await request(app.getHttpServer())
-        .get('/blog/live2d/pio/v1/pio.model3.json')
+        .get('/blog/live2d/pio/v1/assets/model/pio.moc-reconstructed.model3.json')
         .set('Referer', 'https://example.com/post/1')
         .expect(HttpStatus.BAD_REQUEST);
       expect(minio.getObject).not.toHaveBeenCalled();

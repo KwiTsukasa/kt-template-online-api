@@ -11,7 +11,8 @@ export class BlogLive2DManifestDto {
   desktopOnly: boolean;
 
   @ApiProperty({
-    example: '/api/blog/live2d/pio/v1/pio.model3.json',
+    example:
+      '/api/blog/live2d/pio/v1/assets/model/pio.moc-reconstructed.model3.json',
   })
   model3: string;
 }

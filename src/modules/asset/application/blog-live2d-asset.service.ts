@@ -90,6 +90,24 @@ export class BlogLive2DAssetService {
   }
 
   /**
+   * Streams the Pio root catalog from the configured MinIO prefix.
+   * @returns MinIO stream and stat metadata for `catalog.json`.
+   */
+  async getCatalogObject(): Promise<BlogLive2DAssetResult> {
+    try {
+      return await this.minioClientService.getObject(
+        [...this.getPrefixSegments(), 'catalog.json'].join('/'),
+        this.getBucketName(),
+      );
+    } catch (error) {
+      if (isMinioObjectNotFound(error)) {
+        throw new NotFoundException('Live2D runtime asset not found');
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Builds the MinIO object key for a versioned Pio runtime file.
    * @param version - Runtime release segment supplied by the route.
    * @param objectPath - Route tail supplied by the wildcard parameter.

@@ -15,6 +15,34 @@ export class BlogLive2DAssetController {
   constructor(private readonly blogLive2DAssetService: BlogLive2DAssetService) {}
 
   /**
+   * Streams the public Pio root catalog after Origin/Referer validation.
+   * @param referer - Browser Referer header used by the hotlink protection policy.
+   * @param origin - Browser Origin header used when the request type supplies it.
+   * @param res - Express response that receives MinIO content headers and stream bytes.
+   * @returns Promise resolved after the stream is attached to the Express response; no Vben body is returned.
+   */
+  @Get('pio/catalog.json')
+  @ApiOperation({ summary: '获取 Pio Live2D 目录规范索引' })
+  @ApiFileDownloadResponse('Pio Live2D root catalog stream')
+  @Public()
+  async getPioCatalog(
+    @Headers('referer') referer: string | undefined,
+    @Headers('origin') origin: string | undefined,
+    @Res() res: Response,
+  ) {
+    this.blogLive2DAssetService.assertAllowedRequest(referer, origin);
+    const { stream, stat, objectName } =
+      await this.blogLive2DAssetService.getCatalogObject();
+
+    res.setHeader(
+      'Content-Type',
+      stat.metaData?.['content-type'] || 'application/json',
+    );
+    res.setHeader('Cache-Control', this.getCacheControl(objectName));
+    stream.pipe(res);
+  }
+
+  /**
    * Streams a versioned Pio runtime asset after Origin/Referer validation.
    * @param version - Runtime version segment such as `v1`.
    * @param assetPath - Wildcard asset path under the version, including nested texture or motion folders.
@@ -55,6 +83,7 @@ export class BlogLive2DAssetController {
    */
   private getCacheControl(objectName: string): string {
     return objectName.endsWith('manifest.json') ||
+      objectName.endsWith('catalog.json') ||
       objectName.endsWith('.model3.json')
       ? 'public, max-age=60'
       : 'public, max-age=31536000, immutable';

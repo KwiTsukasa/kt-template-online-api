@@ -14,6 +14,7 @@ const DEFAULT_ALLOWED_ORIGINS = 'https://blog.kwitsukasa.top';
 const DEFAULT_LIVE2D_BUCKET = 'kt-template-online';
 const DEFAULT_LIVE2D_PREFIX = 'blog/live2d/pio';
 const MAX_DECODE_DEPTH = 6;
+const ALLOWED_RUNTIME_FAMILIES = new Set(['moc', 'moc3']);
 
 /**
  * Detects MinIO/S3 object-missing errors from `statObject` and `getObject`.
@@ -37,7 +38,7 @@ function isMinioObjectNotFound(error: unknown): boolean {
 export class BlogLive2DAssetService {
   /**
    * Creates the guarded Blog Live2D asset service.
-   * @param minioClientService - Existing MinIO helper used to stream versioned Pio runtime files.
+   * @param minioClientService - Existing MinIO helper used to stream Pio runtime family files.
    * @param configService - Runtime config source for bucket, object prefix, and allowed browser origins.
    */
   constructor(
@@ -68,17 +69,17 @@ export class BlogLive2DAssetService {
 
   /**
    * Streams one Pio runtime asset from the configured MinIO bucket and prefix.
-   * @param version - Runtime release segment such as `v1`; kept separate from object path to prevent route traversal.
-   * @param objectPath - Route tail below the version, including nested paths such as `textures/texture_00.png`.
+   * @param family - Runtime family segment; only `moc` and `moc3` are allowed under the public Pio root.
+   * @param objectPath - Route tail below the family, including nested paths such as `textures/default-costume.png`.
    * @returns MinIO stream and stat metadata for the requested object.
    */
   async getRuntimeObject(
-    version: string,
+    family: string,
     objectPath: BlogLive2DRuntimeAssetPath,
   ): Promise<BlogLive2DAssetResult> {
     try {
       return await this.minioClientService.getObject(
-        this.resolveRuntimeObjectPath(version, objectPath),
+        this.resolveRuntimeObjectPath(family, objectPath),
         this.getBucketName(),
       );
     } catch (error) {
@@ -108,20 +109,20 @@ export class BlogLive2DAssetService {
   }
 
   /**
-   * Builds the MinIO object key for a versioned Pio runtime file.
-   * @param version - Runtime release segment supplied by the route.
+   * Builds the MinIO object key for a fixed-family Pio runtime file.
+   * @param family - Runtime family segment supplied by the route.
    * @param objectPath - Route tail supplied by the wildcard parameter.
    * @returns Full MinIO object key under the configured Pio prefix.
    */
   resolveRuntimeObjectPath(
-    version: string,
+    family: string,
     objectPath: BlogLive2DRuntimeAssetPath,
   ): string {
     const prefix = this.getPrefixSegments();
-    const versionSegment = this.normalizeRouteSegments(version, 'version');
+    const familySegment = this.normalizeRuntimeFamily(family);
     const assetSegments = this.normalizeRouteSegments(objectPath, 'asset path');
 
-    return [...prefix, ...versionSegment, ...assetSegments].join('/');
+    return [...prefix, ...familySegment, ...assetSegments].join('/');
   }
 
   /**
@@ -206,6 +207,20 @@ export class BlogLive2DAssetService {
       segments.some((segment) => segment === '.' || segment === '..')
     ) {
       throw new BadRequestException(`Invalid Live2D ${label}`);
+    }
+
+    return segments;
+  }
+
+  /**
+   * Normalizes and validates the public Pio runtime family segment.
+   * @param family - Public runtime family requested by Blog Web; custom version directories are not allowed.
+   * @returns Single safe family segment, either `moc` or `moc3`.
+   */
+  private normalizeRuntimeFamily(family: string): string[] {
+    const segments = this.normalizeRouteSegments(family, 'family');
+    if (segments.length !== 1 || !ALLOWED_RUNTIME_FAMILIES.has(segments[0])) {
+      throw new BadRequestException('Invalid Live2D family');
     }
 
     return segments;

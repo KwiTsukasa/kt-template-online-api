@@ -65,7 +65,7 @@ describe('Asset module contract', () => {
         'GET /minio/download',
         'DELETE /minio/remove',
         'GET /blog/live2d/pio/catalog.json',
-        'GET /blog/live2d/pio/:version/*assetPath',
+        'GET /blog/live2d/pio/:family/*assetPath',
       ]),
     );
   });

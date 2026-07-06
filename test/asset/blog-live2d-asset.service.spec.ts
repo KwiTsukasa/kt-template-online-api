@@ -118,14 +118,14 @@ describe('BlogLive2DAssetService', () => {
     );
   });
 
-  it('maps nested runtime files below the configured MinIO prefix', async () => {
+  it('maps nested MOC3 runtime files below the configured MinIO prefix', async () => {
     const minio = createMinio();
     const service = new BlogLive2DAssetService(
       minio as never,
       createConfig() as never,
     );
 
-    await service.getRuntimeObject('v1', [
+    await service.getRuntimeObject('moc3', [
       'assets',
       'model',
       'motions',
@@ -133,7 +133,22 @@ describe('BlogLive2DAssetService', () => {
     ]);
 
     expect(minio.getObject).toHaveBeenCalledWith(
-      'blog/live2d/pio/v1/assets/model/motions/breath1.motion3.json',
+      'blog/live2d/pio/moc3/assets/model/motions/breath1.motion3.json',
+      'kt-template-online',
+    );
+  });
+
+  it('maps the fixed MOC family entry below the configured MinIO prefix', async () => {
+    const minio = createMinio();
+    const service = new BlogLive2DAssetService(
+      minio as never,
+      createConfig() as never,
+    );
+
+    await service.getRuntimeObject('moc', ['index.json']);
+
+    expect(minio.getObject).toHaveBeenCalledWith(
+      'blog/live2d/pio/moc/index.json',
       'kt-template-online',
     );
   });
@@ -149,13 +164,13 @@ describe('BlogLive2DAssetService', () => {
     );
 
     await expect(
-      service.getRuntimeObject('v1', ['manifest.json']),
+      service.getRuntimeObject('moc', ['manifest.json']),
     ).rejects.toMatchObject({
       status: HttpStatus.NOT_FOUND,
       message: 'Live2D runtime asset not found',
     });
     expect(minio.getObject).toHaveBeenCalledWith(
-      'blog/live2d/pio/v1/manifest.json',
+      'blog/live2d/pio/moc/manifest.json',
       'kt-template-online',
     );
   });
@@ -168,27 +183,28 @@ describe('BlogLive2DAssetService', () => {
     );
 
     await expect(
-      service.getRuntimeObject('v1', ['%252e%252e', 'secret.env']),
+      service.getRuntimeObject('moc', ['%252e%252e', 'secret.env']),
     ).rejects.toThrow(BadRequestException);
     expect(minio.getObject).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['absolute URL', 'v1', ['https://evil.test', 'texture.png']],
-    ['absolute path', 'v1', ['/textures', 'texture.png']],
-    ['backslash path', 'v1', ['textures\\texture.png']],
-    ['dot segment', 'v1', ['.', 'texture.png']],
-    ['version traversal', '../v1', ['texture.png']],
+    ['absolute URL', 'moc', ['https://evil.test', 'texture.png']],
+    ['absolute path', 'moc', ['/textures', 'texture.png']],
+    ['backslash path', 'moc', ['textures\\texture.png']],
+    ['dot segment', 'moc', ['.', 'texture.png']],
+    ['family traversal', '../moc', ['texture.png']],
+    ['custom version family', 'v1', ['manifest.json']],
   ])(
     'rejects unsafe %s runtime paths before touching MinIO',
-    async (_name, version, objectPath) => {
+    async (_name, family, objectPath) => {
       const minio = createMinio();
       const service = new BlogLive2DAssetService(
         minio as never,
         createConfig() as never,
       );
 
-      await expect(service.getRuntimeObject(version, objectPath)).rejects.toThrow(
+      await expect(service.getRuntimeObject(family, objectPath)).rejects.toThrow(
         BadRequestException,
       );
       expect(minio.getObject).not.toHaveBeenCalled();
@@ -255,7 +271,7 @@ describe('BlogLive2DAssetController', () => {
 
     try {
       const response = await request(app.getHttpServer())
-        .get('/blog/live2d/pio/v1/assets/textures/default-costume.png')
+        .get('/blog/live2d/pio/moc3/assets/textures/default-costume.png')
         .set('Referer', 'https://blog.kwitsukasa.top/post/1')
         .expect(HttpStatus.OK);
 
@@ -265,7 +281,44 @@ describe('BlogLive2DAssetController', () => {
         'public, max-age=31536000, immutable',
       );
       expect(minio.getObject).toHaveBeenCalledWith(
-        'blog/live2d/pio/v1/assets/textures/default-costume.png',
+        'blog/live2d/pio/moc3/assets/textures/default-costume.png',
+        'kt-template-online',
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('streams fixed Pio MOC JSON assets with a short cache policy', async () => {
+    const minio = createMinio();
+    const moduleRef = await Test.createTestingModule({
+      controllers: [BlogLive2DAssetController],
+      providers: [
+        BlogLive2DAssetService,
+        {
+          provide: MinioClientService,
+          useValue: minio,
+        },
+        {
+          provide: ConfigService,
+          useValue: createConfig(),
+        },
+      ],
+    }).compile();
+    const app = moduleRef.createNestApplication();
+    await app.init();
+
+    try {
+      const response = await request(app.getHttpServer())
+        .get('/blog/live2d/pio/moc/index.json')
+        .set('Referer', 'https://blog.kwitsukasa.top/post/1')
+        .expect(HttpStatus.OK);
+
+      expect(response.body).toEqual({ ok: true });
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.headers['cache-control']).toBe('public, max-age=60');
+      expect(minio.getObject).toHaveBeenCalledWith(
+        'blog/live2d/pio/moc/index.json',
         'kt-template-online',
       );
     } finally {
@@ -294,7 +347,7 @@ describe('BlogLive2DAssetController', () => {
 
     try {
       await request(app.getHttpServer())
-        .get('/blog/live2d/pio/v1/assets/model/pio.moc-reconstructed.model3.json')
+        .get('/blog/live2d/pio/moc3/assets/model/pio.moc-reconstructed.model3.json')
         .set('Referer', 'https://example.com/post/1')
         .expect(HttpStatus.BAD_REQUEST);
       expect(minio.getObject).not.toHaveBeenCalled();

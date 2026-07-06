@@ -43,22 +43,22 @@ export class BlogLive2DAssetController {
   }
 
   /**
-   * Streams a versioned Pio runtime asset after Origin/Referer validation.
-   * @param version - Runtime version segment such as `v1`.
-   * @param assetPath - Wildcard asset path under the version, including nested texture or motion folders.
+   * Streams a fixed-family Pio runtime asset after Origin/Referer validation.
+   * @param family - Runtime family segment, either `moc` for WordPress Cubism2 parity or `moc3` for reconstructed Cubism3 assets.
+   * @param assetPath - Wildcard asset path under the family, including nested texture or motion folders.
    * @param referer - Browser Referer header used by the hotlink protection policy.
    * @param origin - Browser Origin header used when the request type supplies it.
    * @param res - Express response that receives MinIO content headers and stream bytes.
    * @returns Promise resolved after the stream is attached to the Express response; no Vben body is returned.
    */
-  @Get('pio/:version/*assetPath')
+  @Get('pio/:family/*assetPath')
   @ApiOperation({ summary: '获取 Pio Live2D 运行时资源' })
-  @ApiParam({ name: 'version', example: 'v1' })
-  @ApiParam({ name: 'assetPath', example: 'textures/texture_00.png' })
+  @ApiParam({ name: 'family', example: 'moc' })
+  @ApiParam({ name: 'assetPath', example: 'textures/default-costume.png' })
   @ApiFileDownloadResponse('Pio Live2D runtime asset stream')
   @Public()
   async getPioAsset(
-    @Param('version') version: string,
+    @Param('family') family: string,
     @Param('assetPath') assetPath: BlogLive2DRuntimeAssetPath,
     @Headers('referer') referer: string | undefined,
     @Headers('origin') origin: string | undefined,
@@ -66,7 +66,7 @@ export class BlogLive2DAssetController {
   ) {
     this.blogLive2DAssetService.assertAllowedRequest(referer, origin);
     const { stream, stat, objectName } =
-      await this.blogLive2DAssetService.getRuntimeObject(version, assetPath);
+      await this.blogLive2DAssetService.getRuntimeObject(family, assetPath);
 
     res.setHeader(
       'Content-Type',
@@ -79,12 +79,10 @@ export class BlogLive2DAssetController {
   /**
    * Chooses browser cache policy based on the streamed Live2D object name.
    * @param objectName - MinIO object key returned by the asset service.
-   * @returns Short cache for manifests and immutable cache for hashed or versioned runtime assets.
+   * @returns Short cache for mutable JSON entries and immutable cache for binary model, motion, and texture files.
    */
   private getCacheControl(objectName: string): string {
-    return objectName.endsWith('manifest.json') ||
-      objectName.endsWith('catalog.json') ||
-      objectName.endsWith('.model3.json')
+    return objectName.endsWith('.json')
       ? 'public, max-age=60'
       : 'public, max-age=31536000, immutable';
   }

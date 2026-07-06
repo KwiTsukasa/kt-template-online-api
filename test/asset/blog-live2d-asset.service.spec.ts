@@ -153,6 +153,21 @@ describe('BlogLive2DAssetService', () => {
     );
   });
 
+  it('maps the fixed MOC texture manifest below the configured MinIO prefix', async () => {
+    const minio = createMinio();
+    const service = new BlogLive2DAssetService(
+      minio as never,
+      createConfig() as never,
+    );
+
+    await service.getRuntimeObject('moc', ['textures', 'manifest.json']);
+
+    expect(minio.getObject).toHaveBeenCalledWith(
+      'blog/live2d/pio/moc/textures/manifest.json',
+      'kt-template-online',
+    );
+  });
+
   it('maps missing MinIO runtime objects to HTTP 404', async () => {
     const minio = createMinio();
     minio.getObject.mockRejectedValueOnce(
@@ -319,6 +334,43 @@ describe('BlogLive2DAssetController', () => {
       expect(response.headers['cache-control']).toBe('public, max-age=60');
       expect(minio.getObject).toHaveBeenCalledWith(
         'blog/live2d/pio/moc/index.json',
+        'kt-template-online',
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('streams fixed Pio MOC texture manifests with a short cache policy', async () => {
+    const minio = createMinio();
+    const moduleRef = await Test.createTestingModule({
+      controllers: [BlogLive2DAssetController],
+      providers: [
+        BlogLive2DAssetService,
+        {
+          provide: MinioClientService,
+          useValue: minio,
+        },
+        {
+          provide: ConfigService,
+          useValue: createConfig(),
+        },
+      ],
+    }).compile();
+    const app = moduleRef.createNestApplication();
+    await app.init();
+
+    try {
+      const response = await request(app.getHttpServer())
+        .get('/blog/live2d/pio/moc/textures/manifest.json')
+        .set('Referer', 'https://blog.kwitsukasa.top/post/1')
+        .expect(HttpStatus.OK);
+
+      expect(response.body).toEqual({ ok: true });
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.headers['cache-control']).toBe('public, max-age=60');
+      expect(minio.getObject).toHaveBeenCalledWith(
+        'blog/live2d/pio/moc/textures/manifest.json',
         'kt-template-online',
       );
     } finally {

@@ -15,24 +15,27 @@ export class BlogLive2DAssetController {
   constructor(private readonly blogLive2DAssetService: BlogLive2DAssetService) {}
 
   /**
-   * Streams the public Pio root catalog after Origin/Referer validation.
+   * Streams a public Blog Live2D character root catalog after Origin/Referer validation.
+   * @param character - Public character segment, currently `pio` or `tia`.
    * @param referer - Browser Referer header used by the hotlink protection policy.
    * @param origin - Browser Origin header used when the request type supplies it.
    * @param res - Express response that receives MinIO content headers and stream bytes.
    * @returns Promise resolved after the stream is attached to the Express response; no Vben body is returned.
    */
-  @Get('pio/catalog.json')
-  @ApiOperation({ summary: '获取 Pio Live2D 目录规范索引' })
-  @ApiFileDownloadResponse('Pio Live2D root catalog stream')
+  @Get(':character/catalog.json')
+  @ApiOperation({ summary: '获取 Blog Live2D 角色目录规范索引' })
+  @ApiParam({ name: 'character', enum: ['pio', 'tia'], example: 'pio' })
+  @ApiFileDownloadResponse('Blog Live2D character root catalog stream')
   @Public()
-  async getPioCatalog(
+  async getCharacterCatalog(
+    @Param('character') character: string,
     @Headers('referer') referer: string | undefined,
     @Headers('origin') origin: string | undefined,
     @Res() res: Response,
   ) {
     this.blogLive2DAssetService.assertAllowedRequest(referer, origin);
     const { stream, stat, objectName } =
-      await this.blogLive2DAssetService.getCatalogObject();
+      await this.blogLive2DAssetService.getCatalogObject(character);
 
     res.setHeader(
       'Content-Type',
@@ -43,7 +46,8 @@ export class BlogLive2DAssetController {
   }
 
   /**
-   * Streams a fixed-family Pio runtime asset after Origin/Referer validation.
+   * Streams a fixed-family Blog Live2D runtime asset after Origin/Referer validation.
+   * @param character - Public character segment, currently `pio` or `tia`.
    * @param family - Runtime family segment, either `moc` for WordPress Cubism2 parity or `moc3` for reconstructed Cubism3 assets.
    * @param assetPath - Wildcard asset path under the family, including nested texture or motion folders.
    * @param referer - Browser Referer header used by the hotlink protection policy.
@@ -51,13 +55,15 @@ export class BlogLive2DAssetController {
    * @param res - Express response that receives MinIO content headers and stream bytes.
    * @returns Promise resolved after the stream is attached to the Express response; no Vben body is returned.
    */
-  @Get('pio/:family/*assetPath')
-  @ApiOperation({ summary: '获取 Pio Live2D 运行时资源' })
+  @Get(':character/:family/*assetPath')
+  @ApiOperation({ summary: '获取 Blog Live2D 角色运行时资源' })
+  @ApiParam({ name: 'character', enum: ['pio', 'tia'], example: 'tia' })
   @ApiParam({ name: 'family', example: 'moc' })
   @ApiParam({ name: 'assetPath', example: 'textures/default-costume.png' })
-  @ApiFileDownloadResponse('Pio Live2D runtime asset stream')
+  @ApiFileDownloadResponse('Blog Live2D runtime asset stream')
   @Public()
-  async getPioAsset(
+  async getCharacterAsset(
+    @Param('character') character: string,
     @Param('family') family: string,
     @Param('assetPath') assetPath: BlogLive2DRuntimeAssetPath,
     @Headers('referer') referer: string | undefined,
@@ -66,7 +72,11 @@ export class BlogLive2DAssetController {
   ) {
     this.blogLive2DAssetService.assertAllowedRequest(referer, origin);
     const { stream, stat, objectName } =
-      await this.blogLive2DAssetService.getRuntimeObject(family, assetPath);
+      await this.blogLive2DAssetService.getRuntimeObject(
+        character,
+        family,
+        assetPath,
+      );
 
     res.setHeader(
       'Content-Type',

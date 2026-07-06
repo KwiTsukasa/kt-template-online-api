@@ -64,8 +64,8 @@ describe('Asset module contract', () => {
         'GET /minio/resource-proxy',
         'GET /minio/download',
         'DELETE /minio/remove',
-        'GET /blog/live2d/pio/catalog.json',
-        'GET /blog/live2d/pio/:family/*assetPath',
+        'GET /blog/live2d/:character/catalog.json',
+        'GET /blog/live2d/:character/:family/*assetPath',
       ]),
     );
   });
@@ -128,13 +128,13 @@ describe('Asset module contract', () => {
     expect(
       Reflect.getMetadata(
         IS_PUBLIC_KEY,
-        BlogLive2DAssetController.prototype.getPioCatalog,
+        BlogLive2DAssetController.prototype.getCharacterCatalog,
       ),
     ).toBe(true);
     expect(
       Reflect.getMetadata(
         IS_PUBLIC_KEY,
-        BlogLive2DAssetController.prototype.getPioAsset,
+        BlogLive2DAssetController.prototype.getCharacterAsset,
       ),
     ).toBe(true);
   });

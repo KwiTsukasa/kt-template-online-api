@@ -7,13 +7,16 @@ import { ConfigService } from '@nestjs/config';
 import { MinioClientService } from './asset-minio.service';
 import type {
   BlogLive2DAssetResult,
+  BlogLive2DCharacter,
   BlogLive2DRuntimeAssetPath,
 } from '../domain/blog-live2d-asset.types';
 
 const DEFAULT_ALLOWED_ORIGINS = 'https://blog.kwitsukasa.top';
 const DEFAULT_LIVE2D_BUCKET = 'kt-template-online';
+const DEFAULT_LIVE2D_ROOT_PREFIX = 'blog/live2d';
 const DEFAULT_LIVE2D_PREFIX = 'blog/live2d/pio';
 const MAX_DECODE_DEPTH = 6;
+const ALLOWED_LIVE2D_CHARACTERS = new Set(['pio', 'tia']);
 const ALLOWED_RUNTIME_FAMILIES = new Set(['moc', 'moc3']);
 
 /**
@@ -68,18 +71,20 @@ export class BlogLive2DAssetService {
   }
 
   /**
-   * Streams one Pio runtime asset from the configured MinIO bucket and prefix.
+   * Streams one Blog Live2D runtime asset from the configured MinIO bucket.
+   * @param character - Public character segment; only `pio` and `tia` are exposed so arbitrary MinIO prefixes cannot be streamed.
    * @param family - Runtime family segment; only `moc` and `moc3` are allowed under the public Pio root.
    * @param objectPath - Route tail below the family, including nested paths such as `textures/default-costume.png`.
    * @returns MinIO stream and stat metadata for the requested object.
    */
   async getRuntimeObject(
+    character: string,
     family: string,
     objectPath: BlogLive2DRuntimeAssetPath,
   ): Promise<BlogLive2DAssetResult> {
     try {
       return await this.minioClientService.getObject(
-        this.resolveRuntimeObjectPath(family, objectPath),
+        this.resolveRuntimeObjectPath(character, family, objectPath),
         this.getBucketName(),
       );
     } catch (error) {
@@ -91,13 +96,18 @@ export class BlogLive2DAssetService {
   }
 
   /**
-   * Streams the Pio root catalog from the configured MinIO prefix.
+   * Streams one character root catalog from the configured MinIO root prefix.
+   * @param character - Public character segment; keeps catalog streaming inside the `pio|tia` allowlist.
    * @returns MinIO stream and stat metadata for `catalog.json`.
    */
-  async getCatalogObject(): Promise<BlogLive2DAssetResult> {
+  async getCatalogObject(character: string): Promise<BlogLive2DAssetResult> {
     try {
       return await this.minioClientService.getObject(
-        [...this.getPrefixSegments(), 'catalog.json'].join('/'),
+        [
+          ...this.getRootPrefixSegments(),
+          this.normalizeCharacter(character),
+          'catalog.json',
+        ].join('/'),
         this.getBucketName(),
       );
     } catch (error) {
@@ -109,20 +119,25 @@ export class BlogLive2DAssetService {
   }
 
   /**
-   * Builds the MinIO object key for a fixed-family Pio runtime file.
+   * Builds the MinIO object key for a fixed-family character runtime file.
+   * @param character - Public character segment placed between root prefix and family.
    * @param family - Runtime family segment supplied by the route.
    * @param objectPath - Route tail supplied by the wildcard parameter.
-   * @returns Full MinIO object key under the configured Pio prefix.
+   * @returns Full MinIO object key under the configured Blog Live2D root prefix.
    */
   resolveRuntimeObjectPath(
+    character: string,
     family: string,
     objectPath: BlogLive2DRuntimeAssetPath,
   ): string {
-    const prefix = this.getPrefixSegments();
+    const prefix = this.getRootPrefixSegments();
+    const characterSegment = this.normalizeCharacter(character);
     const familySegment = this.normalizeRuntimeFamily(family);
     const assetSegments = this.normalizeRouteSegments(objectPath, 'asset path');
 
-    return [...prefix, ...familySegment, ...assetSegments].join('/');
+    return [...prefix, characterSegment, ...familySegment, ...assetSegments].join(
+      '/',
+    );
   }
 
   /**
@@ -137,13 +152,25 @@ export class BlogLive2DAssetService {
   }
 
   /**
-   * @returns Sanitized MinIO object-key prefix for Pio runtime files.
+   * @returns Sanitized MinIO object-key root prefix before the character segment.
    */
-  private getPrefixSegments(): string[] {
-    return this.normalizeRouteSegments(
+  private getRootPrefixSegments(): string[] {
+    const rootPrefix = this.configService.get<string>('BLOG_LIVE2D_ROOT_PREFIX');
+    if (rootPrefix) {
+      return this.normalizeRouteSegments(rootPrefix, 'root prefix');
+    }
+
+    const legacyPrefix =
       this.configService.get<string>('BLOG_LIVE2D_PREFIX') ||
-        DEFAULT_LIVE2D_PREFIX,
-      'prefix',
+      DEFAULT_LIVE2D_PREFIX;
+    const segments = this.normalizeRouteSegments(legacyPrefix, 'prefix');
+    if (segments.at(-1) === 'pio') {
+      return segments.slice(0, -1);
+    }
+
+    return this.normalizeRouteSegments(
+      DEFAULT_LIVE2D_ROOT_PREFIX,
+      'root prefix',
     );
   }
 
@@ -176,6 +203,23 @@ export class BlogLive2DAssetService {
     } catch {
       throw new BadRequestException('Live2D asset request source is invalid');
     }
+  }
+
+  /**
+   * Normalizes and validates the public Blog Live2D character segment.
+   * @param character - Route character segment requested by Blog Web.
+   * @returns Safe character key used as the first public child below the root prefix.
+   */
+  private normalizeCharacter(character: string): BlogLive2DCharacter {
+    const segments = this.normalizeRouteSegments(character, 'character');
+    if (
+      segments.length !== 1 ||
+      !ALLOWED_LIVE2D_CHARACTERS.has(segments[0])
+    ) {
+      throw new BadRequestException('Invalid Live2D character');
+    }
+
+    return segments[0] as BlogLive2DCharacter;
   }
 
   /**

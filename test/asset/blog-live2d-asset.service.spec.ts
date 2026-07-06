@@ -110,7 +110,7 @@ describe('BlogLive2DAssetService', () => {
       createConfig() as never,
     );
 
-    await service.getCatalogObject();
+    await service.getCatalogObject('pio');
 
     expect(minio.getObject).toHaveBeenCalledWith(
       'blog/live2d/pio/catalog.json',
@@ -125,7 +125,7 @@ describe('BlogLive2DAssetService', () => {
       createConfig() as never,
     );
 
-    await service.getRuntimeObject('moc3', [
+    await service.getRuntimeObject('pio', 'moc3', [
       'assets',
       'model',
       'motions',
@@ -145,7 +145,7 @@ describe('BlogLive2DAssetService', () => {
       createConfig() as never,
     );
 
-    await service.getRuntimeObject('moc', ['index.json']);
+    await service.getRuntimeObject('pio', 'moc', ['index.json']);
 
     expect(minio.getObject).toHaveBeenCalledWith(
       'blog/live2d/pio/moc/index.json',
@@ -160,7 +160,10 @@ describe('BlogLive2DAssetService', () => {
       createConfig() as never,
     );
 
-    await service.getRuntimeObject('moc', ['textures', 'manifest.json']);
+    await service.getRuntimeObject('pio', 'moc', [
+      'textures',
+      'manifest.json',
+    ]);
 
     expect(minio.getObject).toHaveBeenCalledWith(
       'blog/live2d/pio/moc/textures/manifest.json',
@@ -179,7 +182,7 @@ describe('BlogLive2DAssetService', () => {
     );
 
     await expect(
-      service.getRuntimeObject('moc', ['manifest.json']),
+      service.getRuntimeObject('pio', 'moc', ['manifest.json']),
     ).rejects.toMatchObject({
       status: HttpStatus.NOT_FOUND,
       message: 'Live2D runtime asset not found',
@@ -198,7 +201,7 @@ describe('BlogLive2DAssetService', () => {
     );
 
     await expect(
-      service.getRuntimeObject('moc', ['%252e%252e', 'secret.env']),
+      service.getRuntimeObject('pio', 'moc', ['%252e%252e', 'secret.env']),
     ).rejects.toThrow(BadRequestException);
     expect(minio.getObject).not.toHaveBeenCalled();
   });
@@ -219,12 +222,58 @@ describe('BlogLive2DAssetService', () => {
         createConfig() as never,
       );
 
-      await expect(service.getRuntimeObject(family, objectPath)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.getRuntimeObject('pio', family, objectPath),
+      ).rejects.toThrow(BadRequestException);
       expect(minio.getObject).not.toHaveBeenCalled();
     },
   );
+
+  it('maps the Tia root catalog below the shared Blog Live2D root prefix', async () => {
+    const minio = createMinio();
+    const service = new BlogLive2DAssetService(
+      minio as never,
+      createConfig({ BLOG_LIVE2D_ROOT_PREFIX: 'blog/live2d' }) as never,
+    );
+
+    await service.getCatalogObject('tia');
+
+    expect(minio.getObject).toHaveBeenCalledWith(
+      'blog/live2d/tia/catalog.json',
+      'kt-template-online',
+    );
+  });
+
+  it('maps Tia MOC runtime files below the Tia public root', async () => {
+    const minio = createMinio();
+    const service = new BlogLive2DAssetService(
+      minio as never,
+      createConfig({ BLOG_LIVE2D_ROOT_PREFIX: 'blog/live2d' }) as never,
+    );
+
+    await service.getRuntimeObject('tia', 'moc', [
+      'textures',
+      'default-costume.png',
+    ]);
+
+    expect(minio.getObject).toHaveBeenCalledWith(
+      'blog/live2d/tia/moc/textures/default-costume.png',
+      'kt-template-online',
+    );
+  });
+
+  it('rejects unsupported Live2D characters before touching MinIO', async () => {
+    const minio = createMinio();
+    const service = new BlogLive2DAssetService(
+      minio as never,
+      createConfig({ BLOG_LIVE2D_ROOT_PREFIX: 'blog/live2d' }) as never,
+    );
+
+    await expect(
+      service.getRuntimeObject('evil', 'moc', ['index.json']),
+    ).rejects.toThrow(BadRequestException);
+    expect(minio.getObject).not.toHaveBeenCalled();
+  });
 });
 
 describe('BlogLive2DAssetController', () => {
@@ -373,6 +422,77 @@ describe('BlogLive2DAssetController', () => {
         'blog/live2d/pio/moc/textures/manifest.json',
         'kt-template-online',
       );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('streams Tia MOC assets for allowed blog requests', async () => {
+    const minio = createMinio();
+    const moduleRef = await Test.createTestingModule({
+      controllers: [BlogLive2DAssetController],
+      providers: [
+        BlogLive2DAssetService,
+        {
+          provide: MinioClientService,
+          useValue: minio,
+        },
+        {
+          provide: ConfigService,
+          useValue: createConfig({ BLOG_LIVE2D_ROOT_PREFIX: 'blog/live2d' }),
+        },
+      ],
+    }).compile();
+    const app = moduleRef.createNestApplication();
+    await app.init();
+
+    try {
+      const response = await request(app.getHttpServer())
+        .get('/blog/live2d/tia/moc/index.json')
+        .set('Referer', 'https://blog.kwitsukasa.top/post/1')
+        .expect(HttpStatus.OK);
+
+      expect(response.body).toEqual({ ok: true });
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.headers['cache-control']).toBe('public, max-age=60');
+      expect(minio.getObject).toHaveBeenCalledWith(
+        'blog/live2d/tia/moc/index.json',
+        'kt-template-online',
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects unsupported character requests before streaming assets', async () => {
+    const minio = createMinio();
+    const moduleRef = await Test.createTestingModule({
+      controllers: [BlogLive2DAssetController],
+      providers: [
+        BlogLive2DAssetService,
+        {
+          provide: MinioClientService,
+          useValue: minio,
+        },
+        {
+          provide: ConfigService,
+          useValue: createConfig({ BLOG_LIVE2D_ROOT_PREFIX: 'blog/live2d' }),
+        },
+      ],
+    }).compile();
+    const app = moduleRef.createNestApplication();
+    await app.init();
+
+    try {
+      await request(app.getHttpServer())
+        .get('/blog/live2d/evil/catalog.json')
+        .set('Referer', 'https://blog.kwitsukasa.top/post/1')
+        .expect(HttpStatus.BAD_REQUEST);
+      await request(app.getHttpServer())
+        .get('/blog/live2d/evil/moc/index.json')
+        .set('Referer', 'https://blog.kwitsukasa.top/post/1')
+        .expect(HttpStatus.BAD_REQUEST);
+      expect(minio.getObject).not.toHaveBeenCalled();
     } finally {
       await app.close();
     }

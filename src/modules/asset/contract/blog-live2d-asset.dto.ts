@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class BlogLive2DManifestDto {
-  @ApiProperty({ example: 'pio' })
+  @ApiProperty({ enum: ['pio', 'tia'], example: 'tia' })
   character: string;
 
   @ApiProperty({ example: 'moc' })
@@ -11,7 +11,7 @@ export class BlogLive2DManifestDto {
   desktopOnly: boolean;
 
   @ApiProperty({
-    example: '/api/blog/live2d/pio/moc/index.json',
+    example: '/api/blog/live2d/tia/moc/index.json',
   })
   entry: string;
 }

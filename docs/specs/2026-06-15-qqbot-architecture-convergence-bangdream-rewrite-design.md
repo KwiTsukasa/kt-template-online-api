@@ -380,7 +380,7 @@ API caller 保持第三期规划：
 7. 拆分 NapCat Runtime 到第三期模块结构。
 8. Admin 同步拆 caller 和页面状态。
 9. 删除旧目录、旧 facade、旧 registry、旧大桶 shared、旧 Nest plugin services。
-10. 运行本地验证、全局 review、Superpowers review，再进入上线闭环。
+10. 运行本地验证、全局 review、KT global review，再进入上线闭环。
 
 ## 完成标准
 

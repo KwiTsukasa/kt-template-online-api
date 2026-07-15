@@ -1,6 +1,6 @@
 # NapCatQQ Upstream Sync Runtime Release Pipeline Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Build a ktWorkflow-owned automation path that audits upstream NapCatQQ releases, assists review with Codex CLI, builds verified KT NapCat runtime images, and promotes them to API through explicit deployment parameters.
 
@@ -1026,11 +1026,11 @@ git -C D:\MyFiles\KT commit -m "docs: 记录NapCatQQ自动化实施结果"
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-06-24-napcatqq-upstream-sync-runtime-release-pipeline-implementation-plan.md`.
+Plan complete and saved to `docs/plans/2026-06-24-napcatqq-upstream-sync-runtime-release-pipeline-implementation-plan.md`.
 
 Two execution options:
 
 1. **Subagent-Driven (recommended)** - Dispatch a fresh subagent per task, review between tasks, and keep ktWorkflow/API/NapCatQQ commits independent.
-2. **Inline Execution** - Execute tasks in this session using `superpowers:executing-plans`, with review checkpoints after each repository boundary.
+2. **Inline Execution** - Execute tasks in this session using `KT local execution`, with review checkpoints after each repository boundary.
 
 Recommended choice: **1**. This work touches three repositories and two runtime environments, so task-level subagents plus parent review will keep scope cleaner.

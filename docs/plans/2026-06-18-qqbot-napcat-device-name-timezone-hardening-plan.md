@@ -1,6 +1,6 @@
 # QQBot NapCat Device Name And Timezone Hardening Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Restore a visible QQ security-page device name while keeping NapCat device identity persistent, fix mixed UTC/Asia-Shanghai timestamps, and make runtime/profile evidence persist online.
 

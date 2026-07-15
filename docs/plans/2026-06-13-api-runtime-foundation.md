@@ -1,6 +1,6 @@
 # API Runtime Foundation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Implement Phase 1 of the approved API runtime foundation: typed runtime config, classified runtime errors, structured runtime evidence, and a lightweight `GET /health/runtime` endpoint that can be used by Jenkins/K8s/ktWorkflow in the next plan.
 
@@ -1232,7 +1232,7 @@ pnpm run typecheck
 
 ```powershell
 git status --short
-git add src/runtime src/app.module.ts src/main.ts test/runtime docs/superpowers/plans/2026-06-13-api-runtime-foundation.md
+git add src/runtime src/app.module.ts src/main.ts test/runtime docs/plans/2026-06-13-api-runtime-foundation.md
 git diff --cached --check
 git commit -m "feat: 添加API运行时健康检查"
 ```
@@ -1342,10 +1342,10 @@ git diff --check
 pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run global-review -- --project D:\MyFiles\KT\Node\kt-template-online-api --changed-files README.md API.md src/runtime src/app.module.ts src/main.ts test/runtime
 ```
 
-- [ ] Run the Superpowers code-review gate after implementation:
+- [ ] Run the KT global review gate after implementation:
 
 ```text
-Use superpowers:requesting-code-review, then address actionable findings with superpowers:receiving-code-review if findings are returned.
+Use `KT global review`, then address actionable findings with `KT review follow-up` if findings are returned.
 ```
 
 - [ ] Commit API docs after verification and review pass:
@@ -1391,7 +1391,7 @@ typecheck command and result
 local GET /health/runtime result or explicit local-start blocker
 KT doc sync result
 KT global review result
-Superpowers review result
+KT global review result
 cleanup action for any started local process
 ```
 

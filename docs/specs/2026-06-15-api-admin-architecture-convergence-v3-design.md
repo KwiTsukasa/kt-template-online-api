@@ -101,7 +101,7 @@ Admin 当前结构证据：
 - API 行为验证：typecheck、聚焦 Jest、核心接口真实本地 smoke。
 - Admin 行为验证：typecheck、关键 QQBot/插件/NapCat 页面 smoke。
 - 文档同步：架构收敛说明、必要 API/Admin 契约说明、`TASKS.md` 简短记录。
-- KT global review 与 Superpowers code review。
+- KT global review。
 
 ## 非目标
 
@@ -315,7 +315,7 @@ Admin 瘦身完成证据：
 - API 本地真实 smoke 覆盖 `/health/runtime`、Admin 登录/菜单、Blog public、Asset 上传/下载、QQBot command test、插件平台、NapCat 模拟登录状态机。
 - Admin typecheck 通过。
 - Admin 关键页面 smoke 通过。
-- KT global review 与 Superpowers review 无阻断。
+- KT global review 无阻断。
 
 ## 提交策略
 
@@ -351,9 +351,9 @@ Admin 瘦身完成证据：
 - 代码 review 门禁通过。
 - 工作区最终干净。
 
-## 交接到 writing-plans
+## 交接到 KT plan writing
 
-用户审阅并确认本 spec 后，下一步进入 Superpowers `writing-plans`。计划必须把本 spec 拆成可执行任务，尤其要写清：
+用户审阅并确认本 spec 后，下一步进入 KT workflow `KT plan writing`。计划必须把本 spec 拆成可执行任务，尤其要写清：
 
 - 结构测试的 RED/GREEN 步骤和精确文件路径。
 - 每个旧根迁移到哪个目标模块。

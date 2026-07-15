@@ -147,7 +147,7 @@ The KT workspace on NAS must be a real full checkout, not a copy of temporary la
 
 Codex configuration parity is logical parity, not a byte-for-byte copy of the Windows profile:
 
-- Copy or generate non-secret configuration for trusted KT projects, model defaults, approval policy, sandbox policy, Superpowers skills, custom KT skills, and `ktWorkflow` MCP.
+- Copy or generate non-secret configuration for trusted KT projects, model defaults, approval policy, sandbox policy, KT-local skills, custom KT skills, and `ktWorkflow` MCP.
 - Convert Windows paths in `config.toml` to NAS Linux paths.
 - Keep GUI-only integrations such as local browser, computer-use, and Windows Figma local context disabled unless a NAS-compatible backend is explicitly installed.
 - Because the NAS is fully trusted, sensitive Codex files may be copied from the laptop when needed. The sync must still use a direct trusted channel, keep owner-only permissions, and exclude those files from Git, Jenkins artifacts, Docker build contexts, and public logs.

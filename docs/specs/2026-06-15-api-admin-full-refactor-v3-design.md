@@ -6,7 +6,7 @@
 
 当前业务数据不重要，因此第三期允许从头设计数据库表，允许破坏式重建 schema，允许重写旧初始化 SQL 和旧模块结构。破坏式不等于无保护：本阶段必须把备份、回滚、验证 SQL、本地 dry run、线上发布观测和真实功能 smoke 作为同一条闭环的一部分。
 
-本文件是 Superpowers brainstorming 的第三期设计落地文档。它只固化设计和执行边界，不创建实现分支，不清理 Admin 旧产物，不写业务实现。用户 review 本文件后，下一步进入 Superpowers `writing-plans`。
+本文件是 KT requirements and design review 的第三期设计落地文档。它只固化设计和执行边界，不创建实现分支，不清理 Admin 旧产物，不写业务实现。用户 review 本文件后，下一步进入 KT workflow `KT plan writing`。
 
 ## 已确认决策
 
@@ -35,7 +35,7 @@
 - 现有 QQBot 插件重写。
 - NapCat Runtime。
 - 全量初始化 SQL、schema 文档、验证 SQL、备份和恢复脚本。
-- 本地、发布、线上 smoke 和 KT/Superpowers review 证据。
+- 本地、发布、线上 smoke 和 KT global review 证据。
 
 ### Admin 仓库
 
@@ -320,7 +320,7 @@ SSE/Admin 状态至少覆盖：
 
 - 空库 schema dry run 可执行。
 - 初始 seed 覆盖 Admin 登录、菜单、基础设置、插件 metadata 和 QQBot 基础命令。
-- writing-plans 输出的任务能够映射到 Batch 1-8。
+- KT plan writing 输出的任务能够映射到 Batch 1-8。
 
 ### Batch 1：Runtime/Common
 
@@ -465,7 +465,7 @@ SSE/Admin 状态至少覆盖：
 3. 本地验证：按批次风险运行 typecheck、scoped lint、scoped Jest、真实 API 请求和 Admin smoke。
 4. 文档同步：更新 schema、README/API、TASKS 或相关 docs。
 5. KT global review。
-6. Superpowers code review。
+6. KT global review。
 7. 批次提交，API/Admin 分仓提交。
 
 接口变化必须真实本地调用一次。发布或线上功能必须通过对应线上 self-test 后才能声明完成。
@@ -498,16 +498,16 @@ SSE/Admin 状态至少覆盖：
 
 本设计阶段完成条件：
 
-1. 本文件写入 `docs/superpowers/specs/`。
+1. 本文件写入 `docs/specs/`。
 2. 本文件通过占位、矛盾、范围和模糊性自检。
 3. `TASKS.md` 记录第三期设计上下文。
 4. API 和根仓库文档变更分别提交。
 5. 用户 review 本文件。
-6. 用户确认后进入 Superpowers `writing-plans`，再产出可执行计划。
+6. 用户确认后进入 KT workflow `KT plan writing`，再产出可执行计划。
 
-## 交接到 writing-plans
+## 交接到 KT plan writing
 
-`writing-plans` 必须把本设计转换为可执行计划，至少包含：
+`KT plan writing` 必须把本设计转换为可执行计划，至少包含：
 
 - Batch 0-8 逐批任务清单。
 - 每批 RED/GREEN 测试入口。

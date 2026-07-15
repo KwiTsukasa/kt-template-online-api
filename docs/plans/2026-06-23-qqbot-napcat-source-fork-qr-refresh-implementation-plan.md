@@ -1,6 +1,6 @@
 # QQBot NapCat Source Fork QR Refresh Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Build and ship a source-level NapCatQQ fork fix so stale WebUI login state no longer blocks fresh QR generation, then consume that fork through the KT `desktop-cn-v3` NapCat image.
 

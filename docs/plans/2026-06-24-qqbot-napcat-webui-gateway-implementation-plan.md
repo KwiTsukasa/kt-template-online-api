@@ -1,6 +1,6 @@
 # QQBot NapCat WebUI Gateway Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Build an independent NapCat WebUI Gateway service and an Admin second-level route that opens the selected QQBot account's original NapCat WebUI with full operation capability and route-bound session cleanup.
 
@@ -12,8 +12,8 @@
 
 ## Source References
 
-- Spec: `docs/superpowers/specs/2026-06-24-qqbot-napcat-webui-gateway-design.md`
-- Chinese spec: `docs/superpowers/specs/2026-06-24-qqbot-napcat-webui-gateway-design.zh-CN.md`
+- Spec: `docs/specs/2026-06-24-qqbot-napcat-webui-gateway-design.md`
+- Chinese spec: `docs/specs/2026-06-24-qqbot-napcat-webui-gateway-design.zh-CN.md`
 - `http-proxy-middleware` supports Express proxy middleware and WebSocket upgrades through `ws: true` and upgrade handling: <https://github.com/chimurai/http-proxy-middleware>
 - `http-proxy-middleware` WebSocket recipe documents `ws: true`, manual `server.on('upgrade', proxy.upgrade)`, multiple targets, and path rewriting: <https://github.com/chimurai/http-proxy-middleware/blob/master/recipes/websocket.md>
 - `@nestjs-modules/ioredis` provides Nest `RedisModule.forRoot` and `@InjectRedis()` over `ioredis`: <https://github.com/nest-modules/ioredis>
@@ -1864,11 +1864,11 @@ Report:
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-06-24-qqbot-napcat-webui-gateway-implementation-plan.md`.
+Plan complete and saved to `docs/plans/2026-06-24-qqbot-napcat-webui-gateway-implementation-plan.md`.
 
 Two execution options:
 
 1. **Subagent-Driven (recommended)** - Dispatch a fresh subagent per task, review between tasks, fast iteration.
-2. **Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints.
+2. **Inline Execution** - Execute tasks in this session using the KT-local execution loop, batch execution with checkpoints.
 
 Which approach?

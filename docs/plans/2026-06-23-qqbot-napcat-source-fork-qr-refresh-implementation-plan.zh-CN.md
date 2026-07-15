@@ -1,6 +1,6 @@
 # QQBot NapCat 源码 Fork 二维码刷新修复实施计划（中文）
 
-> **给执行代理的要求：** 实施时必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`，按任务逐项执行并用复选框追踪。英文计划 `2026-06-23-qqbot-napcat-source-fork-qr-refresh-implementation-plan.md` 是精确执行版，包含完整测试代码和源码片段；本文件是同任务、同顺序、同验收标准的中文审核版，供用户确认范围和节奏。
+> **执行说明：** 按 KT 本地工作流逐项执行，并用文内复选框跟踪计划状态。
 
 **目标：** fork NapCatQQ 源码，在源代码层修复 WebUI 登录态 stale 导致二维码无法刷新的问题，并通过 KT `desktop-cn-v3` 派生镜像上线验证。
 

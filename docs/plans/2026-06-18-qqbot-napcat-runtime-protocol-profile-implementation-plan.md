@@ -1,6 +1,6 @@
 # QQBot NapCat Runtime Protocol Profile Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Implement the confirmed NapCat session behavior, login-event minimization, protocol risk profile, real-device identity migration, and Chinese Desktop Runtime profile without adding unsafe automation or hourly/daily send budgets.
 
@@ -16,7 +16,7 @@
   - API: `D:/MyFiles/KT/Node/kt-template-online-api`
   - Admin: `D:/MyFiles/KT/Vue/kt-template-admin`
   - Root docs index: `D:/MyFiles/KT/TASKS.md` after files change.
-- Source spec: `D:/MyFiles/KT/Node/kt-template-online-api/docs/superpowers/specs/2026-06-18-qqbot-napcat-linux-runtime-protocol-profile-design.md`
+- Source spec: `D:/MyFiles/KT/Node/kt-template-online-api/docs/specs/2026-06-18-qqbot-napcat-linux-runtime-protocol-profile-design.md`
 - Preserve behavior:
   - Existing scan create/refresh, captcha, new-device verification, OneBot reverse WS, and QQBot command execution must keep working.
   - Existing watchdog order remains quick login, then saved password login; it must not enter QR scanning automatically.
@@ -2051,7 +2051,7 @@ git -C D:/MyFiles/KT/Vue/kt-template-admin commit -m "feat: 展示NapCat运行�
 **Files:**
 - Modify: `API.md`
 - Modify: `README.md`
-- Modify: `docs/superpowers/specs/2026-06-18-qqbot-napcat-linux-runtime-protocol-profile-design.md` only if implementation changes the confirmed design boundary.
+- Modify: `docs/specs/2026-06-18-qqbot-napcat-linux-runtime-protocol-profile-design.md` only if implementation changes the confirmed design boundary.
 - Modify: `D:/MyFiles/KT/docs/qqbot-nas-runtime.md`
 - Modify: `D:/MyFiles/KT/docs/obsidian/modules/KT 模块 - QQBot BangDream FFLogs.md`
 - Modify: `D:/MyFiles/KT/TASKS.md`

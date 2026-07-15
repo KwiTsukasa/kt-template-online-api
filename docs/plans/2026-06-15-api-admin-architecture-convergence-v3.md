@@ -1,12 +1,12 @@
 # API/Admin Architecture Convergence V3 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Make the third-phase target architecture true in code by migrating all API legacy roots into `src/modules/**`, enforcing structure tests, slimming every API/Admin domain, preserving behavior, and deleting `src/admin`, `src/blog`, `src/minio`, `src/wordpress`, and `src/qqbot`.
 
 **Architecture:** Work from hard RED structure gates, then migrate one domain at a time. Each domain task includes three inseparable pieces: move ownership into the target module, remove duplicate/unused transitional code, and run behavior checks that prove existing routes and Admin pages still work. The final task deletes old roots and runs the full convergence gate.
 
-**Tech Stack:** NestJS 11, TypeORM 0.3, MySQL, Jest, pnpm 9 API workspace, Vben Admin 5, Vue 3 TSX/Vue SFC, Vitest, pnpm 10 Admin workspace, ktWorkflow global review, Superpowers review.
+**Tech Stack:** NestJS 11, TypeORM 0.3, MySQL, Jest, pnpm 9 API workspace, Vben Admin 5, Vue 3 TSX/Vue SFC, Vitest, pnpm 10 Admin workspace, ktWorkflow global review, KT global review.
 
 ---
 
@@ -1227,7 +1227,7 @@ Create `docs/refactor-v3/architecture-convergence-verification.md`:
 ## Review
 
 - KT global review: pass.
-- Superpowers review: pass.
+- KT global review: pass.
 ```
 
 - [ ] **Step 8: Update TASKS**
@@ -1239,7 +1239,7 @@ Update `D:\MyFiles\KT\TASKS.md` with a short record:
 
 - 范围：`Node/kt-template-online-api`、`Vue/kt-template-admin`、`TASKS.md`。
 - 关键词：旧根删除、`src/modules/**` 强门禁、全模块瘦身、Admin 全域边界、结构测试、API/Admin 本地验证。
-- 验证：记录结构 gate、API typecheck/Jest、Admin Vitest/typecheck、local smoke、global review、Superpowers review 的最终结果。
+- 验证：记录结构 gate、API typecheck/Jest、Admin Vitest/typecheck、local smoke、KT global review 的最终结果。
 ```
 
 - [ ] **Step 9: Run review gates**
@@ -1252,7 +1252,7 @@ pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run global-review -- --contentScanMode c
 
 Expected: `findings=[]`.
 
-Use Superpowers requesting-code-review before declaring implementation complete.
+Use KT workflow KT global review before declaring implementation complete.
 
 - [ ] **Step 10: Commit final verification**
 
@@ -1313,7 +1313,7 @@ global-review findings=[].
 | Behavior preservation | Focused Jest, typecheck, local smoke, Admin Vitest/typecheck |
 | No meaningless backup artifacts | Execution Rules and commit scopes |
 | Documentation and TASKS update | Tasks 0 and 7 |
-| KT global review and Superpowers review | Task 7 |
+| KT global review | Task 7 |
 
 ### Placeholder Scan
 

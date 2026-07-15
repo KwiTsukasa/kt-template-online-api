@@ -1,6 +1,6 @@
 # NapCatQQ 上游同步与运行时发布流水线实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **执行说明：** 按 KT 本地工作流逐项执行，并用文内复选框跟踪计划状态。
 
 **Goal:** 把 NapCatQQ 上游 release 审计、Codex CLI 辅助审查、KT 派生运行时镜像构建、API 显式参数推广全部收敛到可验证的 ktWorkflow 自动化链路。
 
@@ -608,11 +608,11 @@ git -C D:\MyFiles\KT commit -m "docs: 记录NapCatQQ自动化实施结果"
 
 ## 执行交接
 
-计划已保存到 `docs/superpowers/plans/2026-06-24-napcatqq-upstream-sync-runtime-release-pipeline-implementation-plan.zh-CN.md`。
+计划已保存到 `docs/plans/2026-06-24-napcatqq-upstream-sync-runtime-release-pipeline-implementation-plan.zh-CN.md`。
 
 两种执行方式：
 
 1. **Subagent-Driven（推荐）**：每个 task 派一个新 subagent，父线程逐 task review，ktWorkflow/API/NapCatQQ 分仓提交。
-2. **Inline Execution**：本线程用 `superpowers:executing-plans` 批次执行，每个仓库边界做 review checkpoint。
+2. **Inline Execution**：本线程用 `KT local execution` 批次执行，每个仓库边界做 review checkpoint。
 
 推荐选 **1**。这条线跨三个仓库和两个运行环境，用 task 级 subagent 更容易守住边界。

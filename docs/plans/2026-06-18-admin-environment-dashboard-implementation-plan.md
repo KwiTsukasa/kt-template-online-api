@@ -1,6 +1,6 @@
 # Admin Environment Dashboard Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** 将 Admin `/dashboard/analytics` 改造成多站点环境状态总览总控面板，覆盖本机开发、NAS 线上、腾讯云、r4se 远程环境，并明确展示未接入证据，第一版只做观测与只读自检，不提供高风险写操作。
 
@@ -12,7 +12,7 @@
 
 ## Source Spec
 
-- `D:\MyFiles\KT\Node\kt-template-online-api\docs\superpowers\specs\2026-06-18-admin-environment-dashboard-design.md`
+- `D:\MyFiles\KT\Node\kt-template-online-api\docs\specs\2026-06-18-admin-environment-dashboard-design.md`
 - 当前确认的页面方向：方案 A `Site Command Center`
 - 第一版能力边界：观测与只读自检；重启、部署、迁移、重建容器、插件启停、任务立即执行、Caddy/OpenClash 改配置等动作必须展示为禁用。
 
@@ -755,7 +755,7 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   ```powershell
   cd D:\MyFiles\KT\Node\kt-template-online-api
   git status --short
-  git add package.json pnpm-lock.yaml .env.example README.md API.md src/modules/admin/platform-config src/modules/qqbot/core/qqbot-core.module.ts src/modules/qqbot/plugin-platform/qqbot-plugin-platform.module.ts test/modules/admin/environment-dashboard docs/superpowers/plans/2026-06-18-admin-environment-dashboard-implementation-plan.md
+  git add package.json pnpm-lock.yaml .env.example README.md API.md src/modules/admin/platform-config src/modules/qqbot/core/qqbot-core.module.ts src/modules/qqbot/plugin-platform/qqbot-plugin-platform.module.ts test/modules/admin/environment-dashboard docs/plans/2026-06-18-admin-environment-dashboard-implementation-plan.md
   git commit -m "feat: 新增环境总览总控面板接口"
   ```
   Expected output: one API commit. Do not stage secrets.

@@ -8,8 +8,8 @@
 
 ## 当前状态
 
-- 设计文档已确认：`docs/superpowers/specs/2026-06-18-qqbot-napcat-linux-runtime-protocol-profile-design.md`。
-- 英文实施计划已生成：`docs/superpowers/plans/2026-06-18-qqbot-napcat-runtime-protocol-profile-implementation-plan.md`。
+- 设计文档已确认：`docs/specs/2026-06-18-qqbot-napcat-linux-runtime-protocol-profile-design.md`。
+- 英文实施计划已生成：`docs/plans/2026-06-18-qqbot-napcat-runtime-protocol-profile-implementation-plan.md`。
 - 当前还没有进入代码实现阶段，线上规则仍按现有 NapCat 链路运行。
 - 用户已确认：现有账号已经进入风控，可以做受控设备身份迁移；MAC 不走 Docker/QEMU/KVM/VMware/Hyper-V 风格前缀；`zh_CN.UTF-8` 派生镜像和真实中国桌面环境必须做；不做账号级每小时/每日发送预算。
 
@@ -309,5 +309,5 @@ Admin 首版做只读 Drawer：
 
 - 本中文文档用于确认方向、边界、风险和验收。
 - 英文实施计划用于执行，里面有具体文件、测试、提交节奏和任务拆分。
-- 后续开始实现时，应按英文计划走 `superpowers:subagent-driven-development` 或 `superpowers:executing-plans`。
+- 后续开始实现时，应按英文计划走 `KT batch execution` 或 `KT local execution`。
 - 如果实现阶段发现英文计划与本中文方案冲突，以本中文方案的目标和边界为准，再同步修订英文计划。

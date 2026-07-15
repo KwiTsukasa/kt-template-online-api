@@ -386,4 +386,4 @@ Admin TDD：
 
 实现计划应拆成后端平台能力、BangDream 任务、Admin 页面和上线闭环四段。每段都必须有独立 RED/GREEN 检查，不能先写 UI 再补接口，也不能让 BangDream 直接绕过平台调度。
 
-本 spec 通过后，下一步进入 Superpowers `writing-plans`。
+本 spec 通过后，下一步进入 KT workflow `KT plan writing`。

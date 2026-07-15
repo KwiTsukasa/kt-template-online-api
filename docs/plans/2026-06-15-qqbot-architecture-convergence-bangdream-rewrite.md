@@ -1,6 +1,6 @@
 # QQBot Architecture Convergence And BangDream Rewrite Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Make the approved third-phase QQBot target architecture true in code: core, plugin-platform, napcat, built-in plugins, BangDream, Admin callers/pages, local validation, deployment observation, and online account smoke must all close.
 
@@ -22,7 +22,7 @@ This plan is complete only when all of these are true:
 - FF14 Market, FFLogs, and Repeater are rebuilt as `ff14-market`, `fflogs`, and `repeater` packages with no Nest/Admin/Core/env/direct HTTP or direct fs dependencies.
 - NapCat device identity, container runtime, login session, challenge, new-device flow, and cleanup failure semantics are recoverable from persistence.
 - Admin callers and pages are split by QQBot core, Plugin Platform, and NapCat state domains.
-- Local API/Admin tests, local real interface smoke, browser smoke, KT global review, Superpowers review, push/deploy observation, and online QQBot/NapCat smoke are recorded.
+- Local API/Admin tests, local real interface smoke, browser smoke, KT global review, KT global review, push/deploy observation, and online QQBot/NapCat smoke are recorded.
 
 ## Current Baseline
 
@@ -816,7 +816,7 @@ pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run global-review -- --project admin --c
 pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run global-review -- --project root --content-scan-mode changed
 ```
 
-- [ ] Use Superpowers `requesting-code-review` before claiming local closure.
+- [ ] Use KT workflow `KT global review` before claiming local closure.
 - [ ] Resolve real Important findings and re-run focused review.
 
 ## Batch 10: Push, Deploy Observation, And Online Closure
@@ -907,8 +907,8 @@ pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run global-review -- --project admin --c
 pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run global-review -- --project root --content-scan-mode changed
 ```
 
-- [ ] Run Superpowers `verification-before-completion`.
-- [ ] Run Superpowers `finishing-a-development-branch`.
+- [ ] Run KT workflow `KT completion audit`.
+- [ ] Run KT workflow `KT branch closeout`.
 - [ ] Report final evidence with:
   - API/Admin/root commit hashes
   - pushed branch names
@@ -922,7 +922,7 @@ pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run global-review -- --project root --co
 - Every batch that changes code runs `git diff --check`.
 - Every batch that changes API/Admin contracts updates `API.md`, `docs/refactor-v3/**`, SQL seed/schema, Admin caller, and tests in the same or immediately following batch.
 - Every batch commit is preceded by KT global review for the changed repo.
-- After implementation batches, use Superpowers `requesting-code-review` before claiming the batch done.
+- After implementation batches, use KT workflow `KT global review` before claiming the batch done.
 - If review reports a real Important issue, fix and re-run the relevant review before commit.
 - If a reviewer reports a false positive caused by workflow rules, solidify the false-positive handling in `mcp/ktWorkflow` instead of leaving it as chat context.
 
@@ -946,4 +946,4 @@ pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run global-review -- --project root --co
 
 ## Implementation Entry
 
-Start execution with Superpowers `subagent-driven-development`. Use subagents only for independent read-only audit or code-review work with a Context Packet. Main-thread implementation should begin at Batch 0 and must not skip RED gates in Batch 1.
+Start execution with KT workflow `KT batch execution`. Use subagents only for independent read-only audit or code-review work with a Context Packet. Main-thread implementation should begin at Batch 0 and must not skip RED gates in Batch 1.

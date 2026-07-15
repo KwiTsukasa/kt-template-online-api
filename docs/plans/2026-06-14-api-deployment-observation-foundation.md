@@ -1,6 +1,6 @@
 # API Deployment Observation Foundation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Build Phase 2 of the approved API Runtime Foundation: a ktWorkflow deployment observation adapter that gathers Jenkins, K8s, Pod, `/health/runtime`, and task smoke evidence before any deployed feature is called complete.
 
@@ -1458,9 +1458,9 @@ No Critical or Important findings caused by this change.
 Known pre-existing dirty files are classified separately.
 ```
 
-- [ ] **Step 5: Request Superpowers code review**
+- [ ] **Step 5: Request KT global review**
 
-Use `superpowers:requesting-code-review` after implementation and before declaring the work complete. Review must cover:
+Use `KT global review` after implementation and before declaring the work complete. Review must cover:
 
 ```text
 mcp/ktWorkflow deploy observation command safety
@@ -1480,7 +1480,7 @@ All Critical and Important findings are fixed or explicitly rejected with eviden
 Run:
 
 ```powershell
-pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run workstream-closeout -- --title "API Runtime Foundation Phase 2 部署观测" --project mcp --project api --verification "typecheck/self-test/deploy-observation dry-run/read-only observation evidence" --doc-sync "kt_change_doc_sync README handled; API health contract unchanged" --cleanup "cleanup-history final dry-run deleted=[]" --cleanup-final-deleted 0 --review "global-review no Critical/Important findings caused by this change" --superpowers-review "Superpowers reviewer completed; no Critical/Important findings remain" --problem "无新卡点或已记录 NAS/Jenkins/K8s 只读观测阻塞" --solution "kt_deploy_observation 固化 Jenkins/K8s/health/smoke 观测" --pattern deploy-observation --kt-workflow-updated --upgrade-notes "新增 kt_deploy_observation 工具和 CLI"
+pnpm --dir D:\MyFiles\KT\mcp\ktWorkflow run workstream-closeout -- --title "API Runtime Foundation Phase 2 部署观测" --project mcp --project api --verification "typecheck/self-test/deploy-observation dry-run/read-only observation evidence" --doc-sync "kt_change_doc_sync README handled; API health contract unchanged" --cleanup "cleanup-history final dry-run deleted=[]" --cleanup-final-deleted 0 --review "global-review no Critical/Important findings caused by this change" --problem "无新卡点或已记录 NAS/Jenkins/K8s 只读观测阻塞" --solution "kt_deploy_observation 固化 Jenkins/K8s/health/smoke 观测" --pattern deploy-observation --kt-workflow-updated --upgrade-notes "新增 kt_deploy_observation 工具和 CLI"
 ```
 
 Expected:

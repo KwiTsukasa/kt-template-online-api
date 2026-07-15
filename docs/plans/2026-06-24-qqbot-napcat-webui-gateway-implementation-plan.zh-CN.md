@@ -1,6 +1,6 @@
 # QQBot NapCat WebUI Gateway 实施计划
 
-> **给 agent worker：** 必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` 按任务执行本计划。步骤使用 checkbox（`- [ ]`）跟踪。
+> **执行说明：** 按 KT 本地工作流逐项执行，并用文内复选框跟踪计划状态。
 
 **目标：** 实现独立 NapCat WebUI Gateway 微服务，并在 Admin 二级页面中打开指定 QQBot 账号的原版 NapCat WebUI，支持完整操作和页面生命周期清理。
 
@@ -12,8 +12,8 @@
 
 ## 来源参考
 
-- 设计文档：`docs/superpowers/specs/2026-06-24-qqbot-napcat-webui-gateway-design.md`
-- 中文设计：`docs/superpowers/specs/2026-06-24-qqbot-napcat-webui-gateway-design.zh-CN.md`
+- 设计文档：`docs/specs/2026-06-24-qqbot-napcat-webui-gateway-design.md`
+- 中文设计：`docs/specs/2026-06-24-qqbot-napcat-webui-gateway-design.zh-CN.md`
 - `http-proxy-middleware` 支持 Express proxy middleware 和 WebSocket upgrade：<https://github.com/chimurai/http-proxy-middleware>
 - `http-proxy-middleware` WebSocket recipe 说明了 `ws: true`、手动 `server.on('upgrade', proxy.upgrade)`、多 target 和 path rewrite：<https://github.com/chimurai/http-proxy-middleware/blob/master/recipes/websocket.md>
 - `@nestjs-modules/ioredis` 提供 Nest `RedisModule.forRoot` 和 `@InjectRedis()`，底层使用 `ioredis`：<https://github.com/nest-modules/ioredis>
@@ -871,11 +871,11 @@ https://admin.kwitsukasa.top/#/qqbot/account
 
 ## 执行交接
 
-计划已保存到 `docs/superpowers/plans/2026-06-24-qqbot-napcat-webui-gateway-implementation-plan.zh-CN.md`。
+计划已保存到 `docs/plans/2026-06-24-qqbot-napcat-webui-gateway-implementation-plan.zh-CN.md`。
 
 两个执行选项：
 
 1. **Subagent-Driven（推荐）**：每个任务派一个新 subagent，任务之间主线程 review，迭代更快。
-2. **Inline Execution**：在当前会话用 executing-plans 执行，按批次检查。
+2. **Inline Execution**：在当前会话用 KT 本地执行流程 执行，按批次检查。
 
 你选哪个？

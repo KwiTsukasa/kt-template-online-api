@@ -1,6 +1,6 @@
 # QQBot Bilibili Card Plugin Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Build a QQBot built-in event plugin that parses Bilibili links from QQ/NapCat card messages and replies with a concise video summary.
 

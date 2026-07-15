@@ -944,7 +944,7 @@ EnvironmentDashboardPage
 
 ### 设计验收
 
-- 用户确认本 spec 后，进入 Superpowers writing-plans。
+- 用户确认本 spec 后，进入 KT workflow KT plan writing。
 - 实施计划必须拆 API 合同、API 聚合、远程只读 adapter、Admin 页面、测试/线上闭环五部分。
 
 ### API 验收

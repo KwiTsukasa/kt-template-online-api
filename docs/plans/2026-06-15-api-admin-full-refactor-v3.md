@@ -1,10 +1,10 @@
 # API/Admin Full Refactor V3 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Complete the third-phase API/Admin full-module refactor from the approved design: rebuild schema, migrate all API modules, rebuild the QQBot plugin platform, finish NapCat device/login flow, sync Admin, and close locally before one unified push and online smoke.
 
-**Architecture:** Execute as a batch-gated migration. API owns schema, domain contracts, runtime state, plugin execution, and deployment smoke; Admin follows API contracts in the same batch or the next immediate task. Each batch starts with RED checks, ends with local verification, KT review, Superpowers review, and separate API/Admin commits.
+**Architecture:** Execute as a batch-gated migration. API owns schema, domain contracts, runtime state, plugin execution, and deployment smoke; Admin follows API contracts in the same batch or the next immediate task. Each batch starts with RED checks, ends with local verification, KT review, KT global review, and separate API/Admin commits.
 
 **Tech Stack:** NestJS 11, TypeORM 0.3, MySQL, pnpm 9 API workspace, Vben Admin 5 / Vue 3 / TSX / Ant Design Vue, pnpm 10 Admin workspace, Jest, Playwright, ktWorkflow MCP, Jenkins/K8s/NapCat runtime.
 
@@ -1534,10 +1534,10 @@ kt_change_doc_sync(...)
 kt_global_code_review(...)
 ```
 
-Run Superpowers review before claiming a batch is finished:
+Run KT global review before claiming a batch is finished:
 
 ```text
-superpowers:requesting-code-review
+`KT global review`
 ```
 
 If review finds a real Important issue, fix it and re-review before commit.
@@ -1584,5 +1584,5 @@ The third phase is complete only when all of these are true:
 - Online functional smoke passes.
 - NapCat real account flow completes, including device persistence and new-device flow when triggered.
 - TASKS and required docs are updated.
-- KT global review and Superpowers review are clean.
+- KT global review are clean.
 - No Node/Vite validation process started by the run remains alive.

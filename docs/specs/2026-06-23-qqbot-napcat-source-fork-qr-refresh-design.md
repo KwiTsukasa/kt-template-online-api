@@ -334,7 +334,7 @@ docker rm -f kt-napcat-v3-verify
 ## 上线顺序
 
 1. 在 API 仓库提交本设计文档。
-2. 进入 `superpowers:writing-plans`，把源码 fork、KT 镜像集成、测试和线上 canary 拆成实施任务。
+2. 进入 `KT plan writing`，把源码 fork、KT 镜像集成、测试和线上 canary 拆成实施任务。
 3. 创建或更新 `D:\MyFiles\KT\GitHub\NapCatQQ` fork 分支。
 4. 先实现并验证 NapCatQQ 源码修复。
 5. 再修改 API 仓库的派生镜像构建脚本和测试。

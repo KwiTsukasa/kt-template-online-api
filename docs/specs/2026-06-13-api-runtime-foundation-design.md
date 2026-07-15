@@ -67,7 +67,7 @@ This spec covers the first API-wide subproject:
   module boundaries, contract stability, and testability without large,
   unrelated rewrites.
 
-Future subprojects should receive their own Superpowers specs:
+Future subprojects should receive their own KT specifications:
 
 - API module boundary refactor.
 - API contract and DTO stability.
@@ -467,7 +467,7 @@ Completion of the full workstream requires:
 - KT documentation sync.
 - cleanup-history final `deleted=[]` evidence when artifacts are produced.
 - KT global review with no blocking findings.
-- Superpowers code review evidence.
+- KT global review evidence.
 - ktWorkflow closeout evidence.
 
 ## Worktree Cleanliness

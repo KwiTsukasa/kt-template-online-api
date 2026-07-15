@@ -1,6 +1,6 @@
 # QQBot Plugin Scheduled Tasks Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Build a unified QQBot plugin scheduled-task platform, expose it in Admin, and land BangDream Bestdori main-data sync as the first managed plugin task.
 
@@ -14,7 +14,7 @@
 
 - API repo: `D:\MyFiles\KT\Node\kt-template-online-api`
 - Admin repo: `D:\MyFiles\KT\Vue\kt-template-admin`
-- Design spec: `D:\MyFiles\KT\Node\kt-template-online-api\docs\superpowers\specs\2026-06-16-qqbot-plugin-scheduled-tasks-design.md`
+- Design spec: `D:\MyFiles\KT\Node\kt-template-online-api\docs\specs\2026-06-16-qqbot-plugin-scheduled-tasks-design.md`
 - Online interface stage is already closed: final smoke artifact `.kt-workspace/test-artifacts/online-full-smoke/20260616-164531/api-full-interface-smoke-20260616091328.json` reported 175 OpenAPI operations, 102 pass, 4 expectedBlocked, 69 skipped, 0 failed. QQBot concurrent `/查分数表 cn` + `/查卡 472` both passed after the queue-wait timeout fix deployed as API `14e2ec9`.
 - Existing plugin-platform owns manifest parsing, worker runtime, persistence entities, controller, and operation/event capabilities under `src/modules/qqbot/plugin-platform/**`.
 - Existing BangDream package root is `src/modules/qqbot/plugins/bangdream`; do not create transfer layers or `builtins/**`.

@@ -1,6 +1,6 @@
 # QQBot Plugin Platform Decoupling Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Execution note:** Execute this plan task-by-task with the KT-local workflow and use the checkboxes to track plan state.
 
 **Goal:** Make `src/modules/qqbot/plugin-platform` a generic plugin runtime that never imports or branches on BangDream, FF14 Market, FFLogs, or Repeater package code.
 
@@ -1818,7 +1818,7 @@ $patterns = @(
   'write tests' + ' for'
 )
 foreach ($pattern in $patterns) {
-  rg -n --fixed-strings $pattern docs/superpowers/plans/2026-06-18-qqbot-plugin-platform-decoupling-implementation-plan.md
+  rg -n --fixed-strings $pattern docs/plans/2026-06-18-qqbot-plugin-platform-decoupling-implementation-plan.md
 }
 ```
 

@@ -161,20 +161,21 @@ describe('refactor v3 schema skeleton', () => {
     expect(seed).toContain('INSERT IGNORE INTO admin_role_menu');
   });
 
-  it('runs dry-run SQL sources with utf8mb4 and fails on native mysql errors', () => {
+  it('runs dry-run SQL sources with utf8mb4 and bounded native mysql errors', () => {
     const dryRunScript = readFileSync(
-      join(root, 'scripts/refactor-v3/db-dry-run.ps1'),
+      join(root, 'scripts/refactor-v3/db-dry-run.sh'),
       'utf8',
     );
 
+    expect(dryRunScript).toContain('set -Eeuo pipefail');
     expect(dryRunScript).toContain('--default-character-set=utf8mb4');
-    expect(dryRunScript).toContain('$LASTEXITCODE');
-    expect(dryRunScript).toContain('throw');
+    expect(dryRunScript).toContain('timeout --foreground');
+    expect(dryRunScript).toContain('if [[ $execute != true ]]');
   });
 
   it('uses the Nest listen port as the local smoke default base URL', () => {
     const localSmokeScript = readFileSync(
-      join(root, 'scripts/refactor-v3/local-smoke.ps1'),
+      join(root, 'scripts/refactor-v3/local-smoke.sh'),
       'utf8',
     );
     const main = readFileSync(join(root, 'src/main.ts'), 'utf8');

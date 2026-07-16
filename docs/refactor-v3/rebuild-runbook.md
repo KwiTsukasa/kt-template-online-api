@@ -7,12 +7,12 @@
 3. Apply `sql/refactor-v3/01-seed-core.sql`.
 4. Run `sql/refactor-v3/99-verify.sql`.
 5. Start API against the dry-run database.
-6. Run `scripts/refactor-v3/local-smoke.ps1`.
+6. Run `bash scripts/refactor-v3/local-smoke.sh`.
 
 ## Online Backup
 
 1. Confirm the exact API image tag and current database name.
-2. Run `scripts/refactor-v3/db-backup-online.ps1`.
+2. Run `bash scripts/refactor-v3/db-backup-online.sh --database <name> --output-directory <path>`.
 3. Record backup path, timestamp, source database, and restore command.
 
 ## Online Rebuild

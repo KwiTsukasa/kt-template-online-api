@@ -79,6 +79,16 @@ describe('Admin module route contract', () => {
         'DELETE /system/notice/:id',
         'POST /system/notice/toggle',
         'POST /system/notice/top',
+        'GET /system/network/port-forward/list',
+        'POST /system/network/port-forward',
+        'PUT /system/network/port-forward/:id',
+        'DELETE /system/network/port-forward/:id',
+        'POST /system/network/port-forward/:id/retry',
+        'POST /system/network/port-forward/:id/keeper/enable',
+        'POST /system/network/port-forward/:id/keeper/disable',
+        'POST /system/network/port-forward/:id/probe',
+        'GET /system/network/port-forward/:id/endpoint-history',
+        'GET /system/network/agent/status',
       ]),
     );
   });

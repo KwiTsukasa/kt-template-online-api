@@ -65,6 +65,25 @@ INSERT INTO admin_user (
   status = VALUES(status),
   is_deleted = 0;
 
+INSERT INTO network_agent_state (
+  agent_id,
+  target_ipv4,
+  desired_revision,
+  desired_issued_at,
+  published_revision,
+  applied_revision,
+  online
+) VALUES (
+  'nas-main',
+  '192.168.31.224',
+  0,
+  CURRENT_TIMESTAMP(6),
+  0,
+  0,
+  0
+) ON DUPLICATE KEY UPDATE
+  agent_id = VALUES(agent_id);
+
 INSERT INTO admin_menu (
   id,
   pid,

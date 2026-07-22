@@ -239,6 +239,15 @@ VALUES
   (2041700000000100206, 2041700000000100002, 'SystemNotice', '/system/notice', '/system/notice/list', NULL, 'System:Notice:List', 'menu', '{"icon":"mdi:bell-outline","title":"system.notice.title"}', 1, 7),
   (2041700000000120212, 2041700000000100206, 'SystemNoticeEdit', NULL, NULL, NULL, 'System:Notice:Edit', 'button', '{"title":"system.notice.markHandled"}', 1, 1),
   (2041700000000120213, 2041700000000100206, 'SystemNoticeDelete', NULL, NULL, NULL, 'System:Notice:Delete', 'button', '{"title":"common.delete"}', 1, 2),
+  (2041700000000100207, 2041700000000100002, 'SystemNetwork', '/system/network', '/system/network/list', NULL, NULL, 'menu', '{"icon":"lucide:router","title":"system.network.title"}', 1, 8),
+  (2041700000000120214, 2041700000000100207, 'SystemNetworkPortForwardList', NULL, NULL, NULL, 'System:Network:PortForward:List', 'button', '{"title":"common.list"}', 1, 1),
+  (2041700000000120215, 2041700000000100207, 'SystemNetworkPortForwardCreate', NULL, NULL, NULL, 'System:Network:PortForward:Create', 'button', '{"title":"common.create"}', 1, 2),
+  (2041700000000120216, 2041700000000100207, 'SystemNetworkPortForwardUpdate', NULL, NULL, NULL, 'System:Network:PortForward:Update', 'button', '{"title":"common.edit"}', 1, 3),
+  (2041700000000120217, 2041700000000100207, 'SystemNetworkPortForwardDelete', NULL, NULL, NULL, 'System:Network:PortForward:Delete', 'button', '{"title":"common.delete"}', 1, 4),
+  (2041700000000120218, 2041700000000100207, 'SystemNetworkPortForwardRetry', NULL, NULL, NULL, 'System:Network:PortForward:Retry', 'button', '{"title":"common.retry"}', 1, 5),
+  (2041700000000120219, 2041700000000100207, 'SystemNetworkPortForwardKeeper', NULL, NULL, NULL, 'System:Network:PortForward:Keeper', 'button', '{"title":"system.network.keeper"}', 1, 6),
+  (2041700000000120220, 2041700000000100207, 'SystemNetworkPortForwardProbe', NULL, NULL, NULL, 'System:Network:PortForward:Probe', 'button', '{"title":"system.network.probe"}', 1, 7),
+  (2041700000000120221, 2041700000000100207, 'SystemNetworkPortForwardHistory', NULL, NULL, NULL, 'System:Network:PortForward:History', 'button', '{"title":"system.network.history"}', 1, 8),
   (2041700000000100300, 0, 'Blog', '/blog', NULL, '/blog/article', NULL, 'catalog', '{"icon":"lucide:newspaper","order":100,"title":"博客管理"}', 1, 100),
   (2041700000000100301, 2041700000000100300, 'BlogArticle', '/blog/article', '/blog/article/list', NULL, 'Blog:Article:List', 'menu', '{"icon":"lucide:file-text","title":"文章管理"}', 1, 0),
   (2041700000000120301, 2041700000000100301, 'BlogArticleCreate', NULL, NULL, NULL, 'Blog:Article:Create', 'button', '{"title":"common.create"}', 1, 0),
@@ -264,6 +273,7 @@ VALUES
   (2041700000000100010, 0, 'About', '/about', '_core/about/index', NULL, NULL, 'menu', '{"icon":"lucide:copyright","order":9999,"title":"demos.vben.about"}', 1, 9999),
   (2041700000000100011, 0, 'Profile', '/profile', '_core/profile/index', NULL, NULL, 'menu', '{"hideInMenu":true,"icon":"lucide:user","title":"page.auth.profile"}', 1, 10000)
 ON DUPLICATE KEY UPDATE
+  `name` = VALUES(`name`),
   `pid` = VALUES(`pid`),
   `path` = VALUES(`path`),
   `component` = VALUES(`component`),
@@ -353,7 +363,20 @@ INSERT INTO `admin_role_menu` (`role_id`, `menu_id`)
 SELECT 2041700000000010002, `id`
 FROM `admin_menu`
 WHERE `is_deleted` = 0
-  AND `name` NOT IN ('SystemNotice', 'SystemNoticeEdit', 'SystemNoticeDelete');
+  AND `name` NOT IN (
+    'SystemNotice',
+    'SystemNoticeEdit',
+    'SystemNoticeDelete',
+    'SystemNetwork',
+    'SystemNetworkPortForwardList',
+    'SystemNetworkPortForwardCreate',
+    'SystemNetworkPortForwardUpdate',
+    'SystemNetworkPortForwardDelete',
+    'SystemNetworkPortForwardRetry',
+    'SystemNetworkPortForwardKeeper',
+    'SystemNetworkPortForwardProbe',
+    'SystemNetworkPortForwardHistory'
+  );
 
 INSERT INTO `admin_role_menu` (`role_id`, `menu_id`)
 VALUES

@@ -1,6 +1,9 @@
 SELECT 'admin_user' AS table_name, COUNT(*) AS row_count FROM admin_user;
 SELECT 'admin_role' AS table_name, COUNT(*) AS row_count FROM admin_role;
 SELECT 'admin_menu' AS table_name, COUNT(*) AS row_count FROM admin_menu;
+SELECT 'network_port_forward' AS table_name, COUNT(*) AS row_count FROM network_port_forward;
+SELECT 'network_agent_state' AS table_name, COUNT(*) AS row_count FROM network_agent_state;
+SELECT 'network_endpoint_history' AS table_name, COUNT(*) AS row_count FROM network_endpoint_history;
 SELECT 'platform_setting' AS table_name, COUNT(*) AS row_count FROM platform_setting;
 SELECT 'admin_dict' AS table_name, COUNT(*) AS row_count FROM admin_dict;
 SELECT 'qqbot_command' AS table_name, COUNT(*) AS row_count FROM qqbot_command;
@@ -35,6 +38,23 @@ SELECT 'seed_platform_schema_version' AS check_name, COUNT(*) AS matched_rows
 FROM platform_setting
 WHERE setting_key = 'schema.version'
   AND setting_value = 'refactor-v3';
+
+SELECT 'seed_network_agent_state' AS check_name, COUNT(*) AS matched_rows
+FROM network_agent_state
+WHERE agent_id = 'nas-main'
+  AND target_ipv4 = '192.168.31.224';
+
+SELECT 'index_network_port_forward_active_key' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'network_port_forward'
+  AND index_name = 'uk_network_port_forward_active_key';
+
+SELECT 'index_network_endpoint_history_event_id' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'network_endpoint_history'
+  AND index_name = 'uk_network_endpoint_history_event_id';
 
 SELECT 'seed_qqbot_plugin_bangdream' AS check_name, COUNT(*) AS matched_rows
 FROM qqbot_plugin

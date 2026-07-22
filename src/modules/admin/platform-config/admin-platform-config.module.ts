@@ -8,6 +8,12 @@ import { DictController } from '@/modules/admin/platform-config/dict/dict.contro
 import { DictModule } from '@/modules/admin/platform-config/dict/dict.module';
 import { AdminNoticeController } from '@/modules/admin/platform-config/notice/admin-notice.controller';
 import { NoticeModule } from '@/modules/admin/platform-config/notice/notice.module';
+import { NetworkAgentMqttService } from '@/modules/admin/platform-config/network-management/network-agent-mqtt.service';
+import { NetworkAgentState } from '@/modules/admin/platform-config/network-management/network-agent-state.entity';
+import { NetworkEndpointHistory } from '@/modules/admin/platform-config/network-management/network-endpoint-history.entity';
+import { NetworkManagementController } from '@/modules/admin/platform-config/network-management/network-management.controller';
+import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/network-management.entity';
+import { NetworkManagementService } from '@/modules/admin/platform-config/network-management/network-management.service';
 import { SystemLogController } from '@/modules/admin/platform-config/system-log/system-log.controller';
 import { SystemLogService } from '@/modules/admin/platform-config/system-log/system-log.service';
 import { AdminTimezoneController } from '@/modules/admin/platform-config/timezone/admin-timezone.controller';
@@ -41,6 +47,7 @@ export const ADMIN_PLATFORM_CONFIG_DIRECT_CONTROLLERS = [
   SystemLogController,
   AdminTimezoneController,
   EnvironmentDashboardController,
+  NetworkManagementController,
 ];
 
 export const ADMIN_PLATFORM_CONFIG_IMPORTED_CONTROLLERS = [
@@ -73,11 +80,19 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   EnvironmentEventBusService,
   EnvironmentEventMaterializer,
   EnvironmentEventStreamService,
+  NetworkManagementService,
+  NetworkAgentMqttService,
 ];
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Component, AdminUser]),
+    TypeOrmModule.forFeature([
+      Component,
+      AdminUser,
+      NetworkPortForward,
+      NetworkAgentState,
+      NetworkEndpointHistory,
+    ]),
     AdminAuthGuardModule,
     DictModule,
     NoticeModule,

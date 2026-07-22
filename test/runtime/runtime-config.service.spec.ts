@@ -233,5 +233,44 @@ describe('RuntimeConfigService', () => {
         message: 'DB_PASSWORD is not configured',
       }),
     );
+    expect(checks).toContainEqual(
+      expect.objectContaining({
+        key: 'NETWORK_AGENT_MQTT_URL',
+        level: 'required',
+        present: false,
+        message: 'NETWORK_AGENT_MQTT_URL is not configured',
+      }),
+    );
+  });
+
+  it('requires the complete Network Agent production connection contract', () => {
+    const service = createService({
+      NETWORK_AGENT_ID: 'nas-main',
+      NETWORK_AGENT_TARGET_IPV4: '192.168.31.224',
+      NETWORK_AGENT_MQTT_URL: 'mqtt://192.168.31.224:1883',
+      NETWORK_AGENT_MQTT_CLIENT_ID: 'kt-template-online-api-network-nas-main',
+      NETWORK_AGENT_MQTT_USERNAME: 'network-api',
+      NETWORK_AGENT_MQTT_PASSWORD: 'network-api-password',
+      NETWORK_AGENT_MQTT_RETRY_MS: '5000',
+    });
+
+    const networkChecks = service
+      .getConfigChecks()
+      .filter((check) => check.key.startsWith('NETWORK_AGENT_'));
+
+    expect(networkChecks).toHaveLength(7);
+    expect(networkChecks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'NETWORK_AGENT_MQTT_PASSWORD',
+          level: 'required',
+          present: true,
+          maskedValue: 'ne***rd',
+        }),
+      ]),
+    );
+    expect(JSON.stringify(networkChecks)).not.toContain(
+      'network-api-password',
+    );
   });
 });

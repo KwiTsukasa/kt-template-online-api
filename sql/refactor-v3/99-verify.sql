@@ -32,9 +32,9 @@ SELECT 'qqbot_message_delivery' AS table_name, COUNT(*) AS row_count FROM qqbot_
 SELECT 'seed_qqbot_message_template' AS check_name, COUNT(*) AS matched_rows
 FROM qqbot_message_template
 WHERE id = 2041700000000200601
-  AND name = 'STUN 映射端口变更默认模板'
-  AND source_key = 'network.stun.mapping-port-changed'
-  AND content = '当前STUN的端口已变更为${{endpoint}}'
+  AND BINARY name = BINARY 'STUN 映射端口变更默认模板'
+  AND BINARY source_key = BINARY 'network.stun.mapping-port-changed'
+  AND BINARY content = BINARY '当前STUN的端口已变更为${{endpoint}}'
   AND enabled = 1
   AND is_deleted = 0;
 

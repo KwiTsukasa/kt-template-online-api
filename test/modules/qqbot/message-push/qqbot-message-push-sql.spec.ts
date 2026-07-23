@@ -437,6 +437,27 @@ describe('QQBot message-push SQL contract', () => {
     for (const sql of [bootstrapSql, seedSql]) expect(sql).toContain(expectedTemplate);
   });
 
+  it('verifies the default template stable values with case-sensitive text comparisons', () => {
+    const defaultTemplateVerify = extractVerificationStatement(verifySql, 'seed_qqbot_message_template');
+    expect(defaultTemplateVerify).toBe(normalizeSql(`
+      select 'seed_qqbot_message_template' as check_name, count(*) as matched_rows
+      from qqbot_message_template
+      where id = 2041700000000200601
+        and binary name = binary 'STUN 映射端口变更默认模板'
+        and binary source_key = binary 'network.stun.mapping-port-changed'
+        and binary content = binary '当前STUN的端口已变更为\${{endpoint}}'
+        and enabled = 1
+        and is_deleted = 0;
+    `));
+  });
+
+  it('verifies every message-push table with its own complete row-count statement', () => {
+    for (const table of Object.keys(messagePushTableDefinitions)) {
+      const statement = extractVerificationStatement(verifySql, table);
+      expect(statement).toBe(`select '${table}' as table_name, count(*) as row_count from ${table};`);
+    }
+  });
+
   it('keeps every stable menu tuple together and exactly once in every seed file', () => {
     for (const sql of [bootstrapSql, seedSql, vbenSql]) {
       const rows = extractMessagePushMenuRows(sql);

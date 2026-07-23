@@ -47,6 +47,7 @@ import { QqbotMessagePublishBinding } from '@/modules/qqbot/core/infrastructure/
 import { QqbotMessagePublishTarget } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-target.entity';
 import { QqbotMessageSubscription } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-subscription.entity';
 import { QqbotMessageTemplate } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-template.entity';
+import { SystemMessageSourceRegistry } from './application/message-push/system-message-source.registry';
 
 export { QQBOT_CORE_DOMAIN_CONTRACT } from './contract/qqbot-core.contract';
 
@@ -82,6 +83,7 @@ export const QQBOT_CORE_CONTROLLERS = [
 ];
 
 export const QQBOT_CORE_PROVIDERS = [
+  SystemMessageSourceRegistry,
   QqbotAccountService,
   QqbotBusService,
   QqbotCommandEngineService,
@@ -102,6 +104,7 @@ export const QQBOT_CORE_PROVIDERS = [
 ];
 
 export const QQBOT_CORE_EXPORTS = [
+  SystemMessageSourceRegistry,
   QqbotAccountService,
   QqbotConfigService,
   QqbotDashboardService,

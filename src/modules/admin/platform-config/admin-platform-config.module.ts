@@ -18,6 +18,7 @@ import { NetworkManagementController } from '@/modules/admin/platform-config/net
 import { NetworkManagementEventStreamService } from '@/modules/admin/platform-config/network-management/network-management-event-stream.service';
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/network-management.entity';
 import { NetworkManagementService } from '@/modules/admin/platform-config/network-management/network-management.service';
+import { NetworkStunMessageSourceAdapter } from '@/modules/admin/platform-config/network-management/network-stun-message-source.adapter';
 import { SystemLogController } from '@/modules/admin/platform-config/system-log/system-log.controller';
 import { SystemLogService } from '@/modules/admin/platform-config/system-log/system-log.service';
 import { AdminTimezoneController } from '@/modules/admin/platform-config/timezone/admin-timezone.controller';
@@ -88,6 +89,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   NetworkManagementEventStreamService,
   NetworkDnsPodClient,
   NetworkDdnsService,
+  NetworkStunMessageSourceAdapter,
   NetworkAgentMqttService,
 ];
 

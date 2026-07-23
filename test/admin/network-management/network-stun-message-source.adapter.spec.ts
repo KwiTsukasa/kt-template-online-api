@@ -1,0 +1,228 @@
+import type { Repository } from 'typeorm';
+import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/network-ddns.entity';
+import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
+import { NetworkStunMessageSourceAdapter } from '../../../src/modules/admin/platform-config/network-management/network-stun-message-source.adapter';
+import { SystemMessageSourceRegistry } from '../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
+
+type Harness = {
+  adapter: NetworkStunMessageSourceAdapter;
+  ddns: NetworkDdnsRecord;
+  mapping: NetworkPortForward;
+  registry: SystemMessageSourceRegistry;
+};
+
+/** Creates a mutable in-memory repository harness for the adapter contract. */
+function createHarness(): Harness {
+  const mapping = Object.assign(new NetworkPortForward(), {
+    currentPublicIpv4: '203.0.113.10',
+    currentPublicPort: 38213,
+    currentValidUntil: new Date('2026-07-24T13:00:00.000Z'),
+    desiredPresence: 'present' as const,
+    externalPort: 8213,
+    id: '2041700000000000001',
+    internalPort: 8213,
+    isDeleted: false,
+    keeperDesiredEnabled: true,
+    name: '帕鲁新世界',
+    protocol: 'udp' as const,
+  });
+  const ddns = Object.assign(new NetworkDdnsRecord(), {
+    appliedAddress: '203.0.113.10',
+    domain: 'kwitsukasa.top',
+    enabled: true,
+    id: '2041700000000000002',
+    isDeleted: false,
+    name: '帕鲁域名',
+    portForwardId: mapping.id,
+    recordType: 'A' as const,
+    sourceType: 'port_forward_ipv4' as const,
+    subDomain: 'pal',
+    syncStatus: 'synced' as const,
+  });
+  const mappings = [mapping];
+  const records = [ddns];
+  const mappingRepository = {
+    find: jest.fn(async () => mappings),
+    findOne: jest.fn(
+      async ({ where }) =>
+        mappings.find((item) => item.id === where.id) || null,
+    ),
+  } as unknown as Repository<NetworkPortForward>;
+  const recordRepository = {
+    find: jest.fn(async () => records),
+    findOne: jest.fn(
+      async ({ where }) => records.find((item) => item.id === where.id) || null,
+    ),
+  } as unknown as Repository<NetworkDdnsRecord>;
+  const registry = new SystemMessageSourceRegistry();
+  return {
+    adapter: new NetworkStunMessageSourceAdapter(
+      mappingRepository,
+      recordRepository,
+      registry,
+    ),
+    ddns,
+    mapping,
+    registry,
+  };
+}
+
+/** Returns a valid event payload, with optional untrusted-field overrides. */
+function eventPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    changedAt: '2026-07-24T12:30:00.000Z',
+    currentPort: 38213,
+    endpoint: 'attacker.example:1',
+    portForwardId: '2041700000000000001',
+    previousPort: 8213,
+    publicIpv4: '203.0.113.10',
+    ...overrides,
+  };
+}
+
+describe('NetworkStunMessageSourceAdapter', () => {
+  it('registers once and only unregisters its own source instance', () => {
+    const { adapter, registry } = createHarness();
+    adapter.onModuleInit();
+    adapter.onModuleInit();
+    expect(registry.get(adapter.definition.sourceKey)).toBe(adapter);
+    adapter.onModuleDestroy();
+    expect(() => registry.get(adapter.definition.sourceKey)).toThrow(
+      'unknown_message_source',
+    );
+  });
+
+  it('accepts only an enabled equal-port UDP Keeper and its linked enabled A record', async () => {
+    const { adapter } = createHarness();
+    await expect(
+      adapter.normalizeSubscriptionConfig({
+        ddnsRecordId: '2041700000000000002',
+        ignored: 'removed',
+        portForwardId: '2041700000000000001',
+      }),
+    ).resolves.toEqual({
+      canonicalConfig: {
+        ddnsRecordId: '2041700000000000002',
+        portForwardId: '2041700000000000001',
+      },
+      resourceKey: '2041700000000000001',
+      sourceSummary: '帕鲁新世界 · pal.kwitsukasa.top',
+    });
+  });
+
+  it.each([
+    ['tcp', (harness: Harness) => (harness.mapping.protocol = 'tcp')],
+    ['unequal ports', (harness: Harness) => (harness.mapping.internalPort = 1)],
+    [
+      'disabled keeper',
+      (harness: Harness) => (harness.mapping.keeperDesiredEnabled = false),
+    ],
+    [
+      'deleted mapping',
+      (harness: Harness) => (harness.mapping.isDeleted = true),
+    ],
+    ['disabled DDNS', (harness: Harness) => (harness.ddns.enabled = false)],
+    ['deleted DDNS', (harness: Harness) => (harness.ddns.isDeleted = true)],
+    ['non-A DDNS', (harness: Harness) => (harness.ddns.recordType = 'AAAA')],
+    [
+      'mismatched DDNS mapping',
+      (harness: Harness) =>
+        (harness.ddns.portForwardId = '2041700000000000003'),
+    ],
+  ])('rejects %s subscriptions', async (_name, mutate) => {
+    const harness = createHarness();
+    mutate(harness);
+    await expect(
+      harness.adapter.normalizeSubscriptionConfig({
+        ddnsRecordId: harness.ddns.id,
+        portForwardId: harness.mapping.id,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects malformed Snowflake IDs and strips unknown event/config fields', async () => {
+    const { adapter } = createHarness();
+    await expect(
+      adapter.normalizeSubscriptionConfig({
+        ddnsRecordId: 2041700000000000002,
+        portForwardId: 'not-an-id',
+      }),
+    ).rejects.toThrow('invalid_message_source_config');
+    expect(adapter.validateEventPayload(eventPayload())).toEqual({
+      changedAt: '2026-07-24T12:30:00.000Z',
+      currentPort: 38213,
+      portForwardId: '2041700000000000001',
+      previousPort: 8213,
+      publicIpv4: '203.0.113.10',
+    });
+    expect(() =>
+      adapter.validateEventPayload(eventPayload({ currentPort: '38213' })),
+    ).toThrow('invalid_message_event_payload');
+  });
+
+  it('returns ready variables derived from the server-owned DDNS FQDN and Shanghai time', async () => {
+    const { adapter } = createHarness();
+    await expect(
+      adapter.resolveDelivery({
+        eventPayload: eventPayload(),
+        subscriptionConfig: {
+          ddnsRecordId: '2041700000000000002',
+          portForwardId: '2041700000000000001',
+        },
+      }),
+    ).resolves.toEqual({
+      reasonCode: null,
+      status: 'ready',
+      variables: {
+        changedAt: '2026-07-24 20:30:00',
+        domain: 'pal.kwitsukasa.top',
+        endpoint: 'pal.kwitsukasa.top:38213',
+        mappingName: '帕鲁新世界',
+        port: 38213,
+        previousPort: 8213,
+        publicIpv4: '203.0.113.10',
+      },
+    });
+  });
+
+  it('waits for DDNS, supersedes a replaced endpoint, and cancels a changed relationship', async () => {
+    const waiting = createHarness();
+    waiting.ddns.appliedAddress = null;
+    await expect(
+      waiting.adapter.resolveDelivery({
+        eventPayload: eventPayload(),
+        subscriptionConfig: {
+          ddnsRecordId: waiting.ddns.id,
+          portForwardId: waiting.mapping.id,
+        },
+      }),
+    ).resolves.toMatchObject({
+      reasonCode: 'ddns_not_synced',
+      status: 'waiting_ddns',
+    });
+
+    const superseded = createHarness();
+    superseded.mapping.currentPublicPort = 39000;
+    await expect(
+      superseded.adapter.resolveDelivery({
+        eventPayload: eventPayload(),
+        subscriptionConfig: {
+          ddnsRecordId: superseded.ddns.id,
+          portForwardId: superseded.mapping.id,
+        },
+      }),
+    ).resolves.toMatchObject({ status: 'superseded' });
+
+    const cancelled = createHarness();
+    cancelled.ddns.enabled = false;
+    await expect(
+      cancelled.adapter.resolveDelivery({
+        eventPayload: eventPayload(),
+        subscriptionConfig: {
+          ddnsRecordId: cancelled.ddns.id,
+          portForwardId: cancelled.mapping.id,
+        },
+      }),
+    ).resolves.toMatchObject({ status: 'cancelled' });
+  });
+});

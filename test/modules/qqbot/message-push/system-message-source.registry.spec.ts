@@ -1,0 +1,60 @@
+import type { SystemMessageSourceAdapter } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
+import { SystemMessageSourceRegistry } from '../../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
+
+/** Creates a minimal adapter whose definition can be safely registered. */
+function createAdapter(sourceKey: string): SystemMessageSourceAdapter {
+  return {
+    definition: {
+      description: 'test',
+      displayName: sourceKey,
+      sourceKey,
+      subscriptionFields: [],
+      variables: [],
+      version: 1,
+    },
+    inspectSubscription: jest.fn(),
+    listSubscriptionOptions: jest.fn(),
+    normalizeSubscriptionConfig: jest.fn(),
+    resolveDelivery: jest.fn(),
+    validateEventPayload: jest.fn(),
+  };
+}
+
+describe('SystemMessageSourceRegistry', () => {
+  it('rejects duplicate source registration and returns immutable definitions', () => {
+    const registry = new SystemMessageSourceRegistry();
+    const adapter = createAdapter('network.stun.mapping-port-changed');
+    registry.register(adapter);
+
+    expect(() => registry.register(adapter)).toThrow(
+      'duplicate_message_source',
+    );
+    expect(registry.list()).toEqual([adapter.definition]);
+    expect(() => registry.get('missing')).toThrow('unknown_message_source');
+
+    const [definition] = registry.list();
+    definition.displayName = 'mutated';
+    expect(
+      registry.get(adapter.definition.sourceKey).definition.displayName,
+    ).toBe(adapter.definition.displayName);
+  });
+
+  it('sorts definitions and unregisters only the same adapter instance', () => {
+    const registry = new SystemMessageSourceRegistry();
+    const first = createAdapter('z.source');
+    const second = createAdapter('a.source');
+    const replacement = createAdapter('z.source');
+    registry.register(first);
+    registry.register(second);
+
+    registry.unregister('z.source', replacement);
+    expect(registry.list().map((definition) => definition.sourceKey)).toEqual([
+      'a.source',
+      'z.source',
+    ]);
+    registry.unregister('z.source', first);
+    expect(registry.list().map((definition) => definition.sourceKey)).toEqual([
+      'a.source',
+    ]);
+  });
+});

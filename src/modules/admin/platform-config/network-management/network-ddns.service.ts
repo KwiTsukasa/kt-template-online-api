@@ -17,6 +17,7 @@ import {
 } from './network-dnspod.client';
 import { NetworkManagementEventStreamService } from './network-management-event-stream.service';
 import { NetworkPortForward } from './network-management.entity';
+import { classifyStunEndpointSource } from './network-source-eligibility';
 import type {
   NetworkDdnsListQuery,
   NetworkDdnsRecordInput,
@@ -757,21 +758,13 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
   private portForwardSourceOption(
     mapping: NetworkPortForward,
   ): NetworkDdnsSourceOption {
-    let disabledReasonCode: null | string = null;
-    if (mapping.isDeleted || mapping.desiredPresence !== 'present') {
-      disabledReasonCode = 'SOURCE_DELETING';
-    } else if (mapping.protocol !== 'udp') {
-      disabledReasonCode = 'UDP_REQUIRED';
-    } else if (mapping.externalPort !== mapping.internalPort) {
-      disabledReasonCode = 'PORT_MISMATCH';
-    } else if (!mapping.keeperDesiredEnabled) {
-      disabledReasonCode = 'KEEPER_DISABLED';
-    }
+    const { disabledReasonCode, eligible } =
+      classifyStunEndpointSource(mapping);
     const leaseValid =
       isIP(mapping.currentPublicIpv4 || '') === 4 &&
       !!mapping.currentValidUntil &&
       new Date(mapping.currentValidUntil).getTime() > Date.now();
-    const sourceUsable = disabledReasonCode === null && leaseValid;
+    const sourceUsable = eligible && leaseValid;
     return {
       currentAddress: sourceUsable ? mapping.currentPublicIpv4 || null : null,
       disabledReasonCode,
@@ -996,13 +989,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     const mapping = await this.mappingRepository.findOne({
       where: { id: portForwardId as string, isDeleted: false },
     });
-    if (
-      !mapping ||
-      mapping.desiredPresence !== 'present' ||
-      mapping.protocol !== 'udp' ||
-      mapping.externalPort !== mapping.internalPort ||
-      !mapping.keeperDesiredEnabled
-    ) {
+    if (!mapping || !classifyStunEndpointSource(mapping).eligible) {
       throwVbenError(
         'A 记录来源必须是已启用 Keeper 的同端口 UDP 转发',
         HttpStatus.BAD_REQUEST,

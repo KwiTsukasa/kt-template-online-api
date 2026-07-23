@@ -467,15 +467,17 @@ describe('QQBot message-push SQL contract', () => {
     }
   });
 
-  it('grants only the seeded message-push menus to active super and admin roles after refactor seeding', () => {
-    const roleGrant = extractMessagePushMenuRoleGrantStatement(seedSql);
-    expect(roleGrant).toContain('insert ignore into admin_role_menu (role_id, menu_id)');
-    expect(extractMenuRoleGrantIds(roleGrant)).toEqual(menuEntries.map(([id]) => id));
-    expect(roleGrant).toContain("role.role_code in ('super', 'admin')");
-    expect(roleGrant).toContain('role.status = 1');
-    expect(roleGrant).toContain('role.is_deleted = 0');
-    expect(roleGrant).toContain('menu.status = 1');
-    expect(roleGrant).toContain('menu.is_deleted = 0');
+  it('grants only the seeded message-push menus to active super and admin roles after every menu seed', () => {
+    for (const sql of [bootstrapSql, seedSql, vbenSql]) {
+      const roleGrant = extractMessagePushMenuRoleGrantStatement(sql);
+      expect(roleGrant).toContain('insert ignore into admin_role_menu (role_id, menu_id)');
+      expect(extractMenuRoleGrantIds(roleGrant)).toEqual(menuEntries.map(([id]) => id));
+      expect(roleGrant).toContain("role.role_code in ('super', 'admin')");
+      expect(roleGrant).toContain('role.status = 1');
+      expect(roleGrant).toContain('role.is_deleted = 0');
+      expect(roleGrant).toContain('menu.status = 1');
+      expect(roleGrant).toContain('menu.is_deleted = 0');
+    }
   });
 
   it('uses an exact mismatch CTE and null-safe predicates for every stable menu tuple', () => {

@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Like, Repository, type FindOptionsWhere } from 'typeorm';
+import {
+  Like,
+  Repository,
+  type EntityManager,
+  type FindOptionsWhere,
+} from 'typeorm';
 import type {
   MessageTemplateInput,
   MessageTemplateListQuery,
@@ -124,16 +129,31 @@ export class QqbotMessageTemplateService {
    * @throws {SystemMessageContractError} When any non-deleted binding still references it.
    */
   async remove(id: string): Promise<boolean> {
-    const current = await this.findActive(id);
-    const referenceCount = await this.bindingRepository.count({
-      where: { isDeleted: false, templateId: id },
-    });
-    if (referenceCount > 0)
-      throw new SystemMessageContractError('template_invalid');
-    current.enabled = false;
-    current.isDeleted = true;
-    await this.templateRepository.save(current);
-    return true;
+    return this.templateRepository.manager.transaction(
+      /** Holds the template write lock until the reference check and soft deletion commit together. */
+      async (manager) => {
+        const templateRepository = manager.getRepository(QqbotMessageTemplate);
+        const bindingRepository = manager.getRepository(
+          QqbotMessagePublishBinding,
+        );
+        const current = await templateRepository.findOne({
+          lock: { mode: 'pessimistic_write' },
+          where: { id, isDeleted: false },
+        });
+        if (!current) throw new SystemMessageContractError('template_invalid');
+
+        const referenceCount = await bindingRepository.count({
+          where: { isDeleted: false, templateId: id },
+        });
+        if (referenceCount > 0) {
+          throw new SystemMessageContractError('template_invalid');
+        }
+        current.enabled = false;
+        current.isDeleted = true;
+        await templateRepository.save(current);
+        return true;
+      },
+    );
   }
 
   /**
@@ -154,7 +174,12 @@ export class QqbotMessageTemplateService {
   }
 
   /**
-   * Enforces the reusable template gate before a publish binding is created or enabled.
+   * Enforces the template lock order before a publish binding is created, updated, or revived.
+   *
+   * Callers must invoke this inside their current transaction before saving a non-deleted
+   * binding, and must retain that transaction through the binding save and commit. Disabled
+   * bindings also require the lock because they still create a live template reference.
+   * @param manager - Current binding-write transaction manager; never pass a global manager.
    * @param templateId - Candidate template's string Snowflake identity.
    * @param sourceKey - Source subscribed by the binding.
    * @param bindingEnabled - Whether the binding is being created or enabled for delivery.
@@ -162,11 +187,13 @@ export class QqbotMessageTemplateService {
    * @throws {SystemMessageContractError} With `template_invalid` for every unavailable binding choice.
    */
   async requireAvailableForBinding(
+    manager: EntityManager,
     templateId: string,
     sourceKey: string,
     bindingEnabled: boolean,
   ): Promise<QqbotMessageTemplate> {
-    const template = await this.templateRepository.findOne({
+    const template = await manager.getRepository(QqbotMessageTemplate).findOne({
+      lock: { mode: 'pessimistic_write' },
       where: { id: templateId, isDeleted: false },
     });
     if (!template || template.sourceKey !== sourceKey) {

@@ -1,4 +1,4 @@
-import type { Repository } from 'typeorm';
+import type { EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { KtDateTime } from '../../../../src/common';
 import { SystemMessageTemplateRendererService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-template-renderer.service';
 import { QqbotMessageTemplateService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-message-template.service';
@@ -26,6 +26,45 @@ function template(
     updateTime: NOW as never,
     ...overrides,
   };
+}
+
+/** Creates a publish-binding fixture used to prove live-reference filtering. */
+function binding(
+  overrides: Partial<QqbotMessagePublishBinding> = {},
+): QqbotMessagePublishBinding {
+  return {
+    accountId: '200',
+    activeKey: '200:300',
+    createId: jest.fn(),
+    createTime: NOW as never,
+    enabled: true,
+    id: '400',
+    isDeleted: false,
+    selfId: '123456',
+    subscriptionId: '300',
+    templateId: '100',
+    updateTime: NOW as never,
+    ...overrides,
+  };
+}
+
+/** Reads the value held by TypeORM's private Like find operator for fake filtering. */
+function likeValue(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const candidate = value as { _value?: unknown };
+  return typeof candidate._value === 'string' ? candidate._value : undefined;
+}
+
+/** Builds a promise gate whose resolution is controlled by the test. */
+function deferred(): {
+  promise: Promise<void>;
+  resolve: () => void;
+} {
+  let resolve!: () => void;
+  const promise = new Promise<void>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }
 
 /** Registers the source definition used by template lifecycle tests. */
@@ -72,10 +111,37 @@ function registry(): SystemMessageSourceRegistry {
 }
 
 /** Constructs a template service with narrow repository fakes for unit-level lifecycle checks. */
-function setup(items: QqbotMessageTemplate[] = [template()]) {
+function setup(
+  items: QqbotMessageTemplate[] = [template()],
+  bindings: QqbotMessagePublishBinding[] = [],
+) {
   const templateRepository = {
     create: jest.fn((input) => template(input)),
-    findAndCount: jest.fn().mockResolvedValue([items, items.length]),
+    findAndCount: jest.fn(
+      async ({
+        skip = 0,
+        take = items.length,
+        where,
+      }: {
+        skip?: number;
+        take?: number;
+        where: FindOptionsWhere<QqbotMessageTemplate>;
+      }) => {
+        const namePattern = likeValue(where.name);
+        const name = namePattern?.slice(1, -1);
+        const filtered = items.filter((item) => {
+          if (item.isDeleted !== where.isDeleted) return false;
+          if (where.enabled !== undefined && item.enabled !== where.enabled) {
+            return false;
+          }
+          if (where.sourceKey && item.sourceKey !== where.sourceKey) {
+            return false;
+          }
+          return !name || item.name.includes(name);
+        });
+        return [filtered.slice(skip, skip + take), filtered.length];
+      },
+    ),
     findOne: jest.fn(
       async ({ where: { id } }) =>
         items.find((item) => item.id === id && !item.isDeleted) ?? null,
@@ -83,30 +149,53 @@ function setup(items: QqbotMessageTemplate[] = [template()]) {
     save: jest.fn(async (item) => item),
   } as unknown as jest.Mocked<Repository<QqbotMessageTemplate>>;
   const bindingRepository = {
-    count: jest.fn().mockResolvedValue(0),
+    count: jest.fn(
+      async ({ where: { isDeleted, templateId } }) =>
+        bindings.filter(
+          (item) =>
+            item.isDeleted === isDeleted && item.templateId === templateId,
+        ).length,
+    ),
   } as unknown as jest.Mocked<Repository<QqbotMessagePublishBinding>>;
+  const manager = {
+    getRepository: jest.fn((entity) => {
+      if (entity === QqbotMessageTemplate) return templateRepository;
+      if (entity === QqbotMessagePublishBinding) return bindingRepository;
+      throw new Error('unexpected repository');
+    }),
+  } as unknown as jest.Mocked<EntityManager>;
+  Object.assign(templateRepository, {
+    manager: {
+      transaction: jest.fn((callback) => callback(manager)),
+    },
+  });
   const service = new QqbotMessageTemplateService(
     templateRepository,
     bindingRepository,
     registry(),
     new SystemMessageTemplateRendererService(),
   );
-  return { bindingRepository, service, templateRepository };
+  return { bindingRepository, manager, service, templateRepository };
 }
 
 describe('QqbotMessageTemplateService', () => {
   it('pages undeleted templates with filters, source names, and every live binding reference', async () => {
-    const { bindingRepository, service, templateRepository } = setup([
-      template({ id: '100' }),
-      template({ id: '101', name: '另一模板' }),
-    ]);
-    bindingRepository.count.mockResolvedValueOnce(2).mockResolvedValueOnce(1);
+    const { bindingRepository, service, templateRepository } = setup(
+      [
+        template({ id: '100' }),
+        template({ id: '101', isDeleted: true }),
+        template({ id: '102', enabled: false }),
+        template({ id: '103', sourceKey: 'other.source' }),
+        template({ id: '104', name: '名称不匹配' }),
+      ],
+      [binding({ enabled: false }), binding({ id: '401', isDeleted: true })],
+    );
 
     await expect(
       service.page({
         enabled: true,
         name: '端口',
-        pageNo: 2,
+        pageNo: 1,
         pageSize: 10,
         sourceKey: SOURCE_KEY,
       }),
@@ -114,19 +203,23 @@ describe('QqbotMessageTemplateService', () => {
       items: [
         expect.objectContaining({
           id: '100',
-          referenceCount: 2,
-          sourceName: 'STUN 端口变化',
-        }),
-        expect.objectContaining({
-          id: '101',
           referenceCount: 1,
           sourceName: 'STUN 端口变化',
         }),
       ],
-      total: 2,
+      total: 1,
     });
     expect(templateRepository.findAndCount).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: 10, take: 10 }),
+      expect.objectContaining({
+        skip: 0,
+        take: 10,
+        where: {
+          enabled: true,
+          isDeleted: false,
+          name: expect.objectContaining({ _type: 'like', _value: '%端口%' }),
+          sourceKey: SOURCE_KEY,
+        },
+      }),
     );
     expect(bindingRepository.count).toHaveBeenNthCalledWith(1, {
       where: { isDeleted: false, templateId: '100' },
@@ -205,7 +298,7 @@ describe('QqbotMessageTemplateService', () => {
   });
 
   it('blocks soft deletion when any non-deleted binding references the template, including disabled bindings', async () => {
-    const { bindingRepository, service, templateRepository } = setup();
+    const { bindingRepository, manager, service, templateRepository } = setup();
     bindingRepository.count.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
 
     await expect(service.remove('100')).rejects.toMatchObject({
@@ -215,28 +308,132 @@ describe('QqbotMessageTemplateService', () => {
     expect(templateRepository.save).toHaveBeenLastCalledWith(
       expect.objectContaining({ enabled: false, isDeleted: true }),
     );
+    expect(templateRepository.manager.transaction).toHaveBeenCalledTimes(2);
+    expect(manager.getRepository).toHaveBeenCalledWith(QqbotMessageTemplate);
+    expect(templateRepository.findOne).toHaveBeenLastCalledWith({
+      lock: { mode: 'pessimistic_write' },
+      where: { id: '100', isDeleted: false },
+    });
   });
 
   it('gates publish bindings by source, deletion, enabled state, and current template validity', async () => {
     const current = template();
-    const { service } = setup([current]);
+    const { manager, service, templateRepository } = setup([current]);
 
     await expect(
-      service.requireAvailableForBinding('100', SOURCE_KEY, true),
+      service.requireAvailableForBinding(manager, '100', SOURCE_KEY, true),
     ).resolves.toBe(current);
     current.enabled = false;
     await expect(
-      service.requireAvailableForBinding('100', SOURCE_KEY, true),
+      service.requireAvailableForBinding(manager, '100', SOURCE_KEY, true),
     ).rejects.toMatchObject({ code: 'template_invalid' });
     await expect(
-      service.requireAvailableForBinding('100', SOURCE_KEY, false),
+      service.requireAvailableForBinding(manager, '100', SOURCE_KEY, false),
     ).resolves.toBe(current);
     await expect(
-      service.requireAvailableForBinding('100', 'other.source', false),
+      service.requireAvailableForBinding(manager, '100', 'other.source', false),
     ).rejects.toMatchObject({ code: 'template_invalid' });
     current.isDeleted = true;
     await expect(
-      service.requireAvailableForBinding('100', SOURCE_KEY, false),
+      service.requireAvailableForBinding(manager, '100', SOURCE_KEY, false),
     ).rejects.toMatchObject({ code: 'template_invalid' });
+    expect(templateRepository.findOne).toHaveBeenCalledWith({
+      lock: { mode: 'pessimistic_write' },
+      where: { id: '100', isDeleted: false },
+    });
+  });
+
+  it('holds the binding template lock through commit so deletion re-counts the committed live binding', async () => {
+    const current = template();
+    const bindings: QqbotMessagePublishBinding[] = [];
+    const bindingHasLock = deferred();
+    const allowBindingCommit = deferred();
+    let lockTail = Promise.resolve();
+    let deleteCountStarted = false;
+
+    /** Creates a transaction manager whose pessimistic lock is held until callback completion. */
+    const createTransactionManager = (): EntityManager => {
+      let releaseTemplateLock: (() => void) | undefined;
+      const acquireTemplateLock = async (): Promise<void> => {
+        const previous = lockTail;
+        const lockReleased = deferred();
+        lockTail = lockReleased.promise;
+        await previous;
+        releaseTemplateLock = lockReleased.resolve;
+      };
+      const manager = {
+        getRepository: jest.fn((entity) => {
+          if (entity === QqbotMessageTemplate) {
+            return {
+              findOne: jest.fn(async (options) => {
+                if (options.lock?.mode === 'pessimistic_write') {
+                  await acquireTemplateLock();
+                }
+                return current.isDeleted ? null : current;
+              }),
+              save: jest.fn(async (item) => item),
+            };
+          }
+          if (entity === QqbotMessagePublishBinding) {
+            return {
+              count: jest.fn(async () => {
+                deleteCountStarted = true;
+                return bindings.filter(
+                  (item) => !item.isDeleted && item.templateId === current.id,
+                ).length;
+              }),
+            };
+          }
+          throw new Error('unexpected repository');
+        }),
+      } as unknown as EntityManager;
+      Object.assign(manager, {
+        transaction: async <T>(
+          callback: (currentManager: EntityManager) => Promise<T>,
+        ) => {
+          try {
+            return await callback(manager);
+          } finally {
+            releaseTemplateLock?.();
+          }
+        },
+      });
+      return manager;
+    };
+    const transactionManager = createTransactionManager();
+    const templateRepository = {
+      manager: transactionManager,
+    } as unknown as Repository<QqbotMessageTemplate>;
+    const service = new QqbotMessageTemplateService(
+      templateRepository,
+      {} as Repository<QqbotMessagePublishBinding>,
+      registry(),
+      new SystemMessageTemplateRendererService(),
+    );
+
+    const bindingTransaction = transactionManager.transaction(
+      async (manager) => {
+        await service.requireAvailableForBinding(
+          manager,
+          '100',
+          SOURCE_KEY,
+          true,
+        );
+        bindingHasLock.resolve();
+        await allowBindingCommit.promise;
+        bindings.push(binding());
+      },
+    );
+    await bindingHasLock.promise;
+
+    const deletion = service.remove('100');
+    await Promise.resolve();
+    expect(deleteCountStarted).toBe(false);
+
+    allowBindingCommit.resolve();
+    await bindingTransaction;
+    await expect(deletion).rejects.toMatchObject({ code: 'template_invalid' });
+    expect(current.isDeleted).toBe(false);
+    expect(bindings).toHaveLength(1);
   });
 });

@@ -24,6 +24,7 @@ type MqttHarness = {
   publishCommitted: jest.Mock;
   mapping: NetworkPortForward;
   publishCallback: () => (error?: Error) => void;
+  requestDdnsReconcile: jest.Mock;
   service: NetworkAgentMqttService;
   state: NetworkAgentState;
   stateSave: jest.Mock;
@@ -137,11 +138,13 @@ function createHarness(): MqttHarness {
   const eventStream = {
     publishCommitted,
   } as unknown as NetworkManagementEventStreamService;
+  const requestDdnsReconcile = jest.fn();
   const service = new NetworkAgentMqttService(
     configService,
     dataSource,
     eventStream,
     factory,
+    { requestReconcile: requestDdnsReconcile } as never,
   );
   return {
     client,
@@ -151,6 +154,7 @@ function createHarness(): MqttHarness {
     mapping,
     publishCallback: () => publishAck,
     publishCommitted,
+    requestDdnsReconcile,
     service,
     state,
     stateSave,
@@ -498,6 +502,7 @@ describe('NetworkAgentMqttService', () => {
     expect(harness.stateSave).toHaveBeenCalledTimes(stateSavesAfterFirstReport);
     expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
     expect(harness.publishCommitted).toHaveBeenCalledWith('reported');
+    expect(harness.requestDdnsReconcile).toHaveBeenCalledTimes(1);
   });
 
   /** Proves lease renewal is persisted without turning timestamps into page reloads. */
@@ -507,6 +512,7 @@ describe('NetworkAgentMqttService', () => {
 
     await harness.service.consumeMessage(topic, reported(harness, 7));
     harness.publishCommitted.mockClear();
+    harness.requestDdnsReconcile.mockClear();
     const savesBeforeRenewal = harness.mappingSave.mock.calls.length;
     await harness.service.consumeMessage(
       topic,
@@ -534,6 +540,7 @@ describe('NetworkAgentMqttService', () => {
     );
     expect(harness.mappingSave).toHaveBeenCalledTimes(savesBeforeRenewal + 1);
     expect(harness.publishCommitted).not.toHaveBeenCalled();
+    expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
 
     await harness.service.consumeMessage(
       topic,
@@ -548,6 +555,7 @@ describe('NetworkAgentMqttService', () => {
     );
     expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
     expect(harness.publishCommitted).toHaveBeenCalledWith('reported');
+    expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
   });
 
   it('does not let an out-of-order same-revision withdrawal erase a newer lease', async () => {
@@ -786,6 +794,7 @@ describe('NetworkAgentMqttService', () => {
     );
     expect(harness.stateSave).toHaveBeenCalledTimes(savesBeforeHeartbeat + 1);
     expect(harness.publishCommitted).not.toHaveBeenCalled();
+    expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
 
     await harness.service.consumeMessage(
       topic,
@@ -793,6 +802,44 @@ describe('NetworkAgentMqttService', () => {
     );
     expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
     expect(harness.publishCommitted).toHaveBeenCalledWith('status');
+    expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+  });
+
+  /** Proves only public IPv6 semantic changes wake automatic DDNS. */
+  it('requests DDNS reconciliation for IPv6 changes but not identical heartbeats', async () => {
+    const harness = createHarness();
+    const topic = 'kt/network/v1/agents/nas-main/status';
+    const status = (observedAt: string, publicIpv6: string) =>
+      Buffer.from(
+        JSON.stringify({
+          agentId: 'nas-main',
+          observedAt,
+          online: true,
+          publicIpv6,
+          schemaVersion: 1,
+          startedAt: '2026-07-22T01:00:00.000Z',
+          version: '0.1.0',
+        }),
+      );
+
+    await harness.service.consumeMessage(
+      topic,
+      status('2026-07-22T01:01:00.000Z', '2409:8a31::1'),
+    );
+    expect(harness.requestDdnsReconcile).toHaveBeenCalledTimes(1);
+    harness.requestDdnsReconcile.mockClear();
+
+    await harness.service.consumeMessage(
+      topic,
+      status('2026-07-22T01:02:00.000Z', '2409:8a31::1'),
+    );
+    expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+
+    await harness.service.consumeMessage(
+      topic,
+      status('2026-07-22T01:03:00.000Z', '2409:8a31::2'),
+    );
+    expect(harness.requestDdnsReconcile).toHaveBeenCalledTimes(1);
   });
 
   it('accepts a same-instance LWT without regressing heartbeat and ignores an old-instance LWT', async () => {

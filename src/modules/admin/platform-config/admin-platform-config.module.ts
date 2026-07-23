@@ -10,6 +10,9 @@ import { AdminNoticeController } from '@/modules/admin/platform-config/notice/ad
 import { NoticeModule } from '@/modules/admin/platform-config/notice/notice.module';
 import { NetworkAgentMqttService } from '@/modules/admin/platform-config/network-management/network-agent-mqtt.service';
 import { NetworkAgentState } from '@/modules/admin/platform-config/network-management/network-agent-state.entity';
+import { NetworkDdnsRecord } from '@/modules/admin/platform-config/network-management/network-ddns.entity';
+import { NetworkDdnsService } from '@/modules/admin/platform-config/network-management/network-ddns.service';
+import { NetworkDnsPodClient } from '@/modules/admin/platform-config/network-management/network-dnspod.client';
 import { NetworkEndpointHistory } from '@/modules/admin/platform-config/network-management/network-endpoint-history.entity';
 import { NetworkManagementController } from '@/modules/admin/platform-config/network-management/network-management.controller';
 import { NetworkManagementEventStreamService } from '@/modules/admin/platform-config/network-management/network-management-event-stream.service';
@@ -83,6 +86,8 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   EnvironmentEventStreamService,
   NetworkManagementService,
   NetworkManagementEventStreamService,
+  NetworkDnsPodClient,
+  NetworkDdnsService,
   NetworkAgentMqttService,
 ];
 
@@ -94,6 +99,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
       NetworkPortForward,
       NetworkAgentState,
       NetworkEndpointHistory,
+      NetworkDdnsRecord,
     ]),
     AdminAuthGuardModule,
     DictModule,

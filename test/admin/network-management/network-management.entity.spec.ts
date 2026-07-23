@@ -6,19 +6,26 @@ import {
 } from '../../../src/modules/admin/platform-config/admin-platform-config.module';
 import { NetworkAgentMqttService } from '../../../src/modules/admin/platform-config/network-management/network-agent-mqtt.service';
 import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/network-agent-state.entity';
+import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/network-ddns.entity';
+import { NetworkDdnsService } from '../../../src/modules/admin/platform-config/network-management/network-ddns.service';
+import { NetworkDnsPodClient } from '../../../src/modules/admin/platform-config/network-management/network-dnspod.client';
 import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/network-endpoint-history.entity';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
 import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/network-management.service';
 
 describe('network management persistence module', () => {
-  it('registers the three exact database entity tables', () => {
+  it('registers the four exact database entity tables', () => {
     const tables = getMetadataArgsStorage().tables.filter((table) =>
-      [NetworkPortForward, NetworkAgentState, NetworkEndpointHistory].includes(
-        table.target as never,
-      ),
+      [
+        NetworkPortForward,
+        NetworkAgentState,
+        NetworkEndpointHistory,
+        NetworkDdnsRecord,
+      ].includes(table.target as never),
     );
     expect(tables.map((table) => table.name).sort()).toEqual([
       'network_agent_state',
+      'network_ddns_record',
       'network_endpoint_history',
       'network_port_forward',
     ]);
@@ -32,12 +39,16 @@ describe('network management persistence module', () => {
     expect(ADMIN_PLATFORM_CONFIG_PROVIDERS).toEqual(
       expect.arrayContaining([
         NetworkManagementService,
+        NetworkDdnsService,
+        NetworkDnsPodClient,
         NetworkAgentMqttService,
       ]),
     );
     expect(providers).toEqual(
       expect.arrayContaining([
         NetworkManagementService,
+        NetworkDdnsService,
+        NetworkDnsPodClient,
         NetworkAgentMqttService,
       ]),
     );

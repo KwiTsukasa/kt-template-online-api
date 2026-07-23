@@ -269,8 +269,56 @@ describe('RuntimeConfigService', () => {
         }),
       ]),
     );
-    expect(JSON.stringify(networkChecks)).not.toContain(
-      'network-api-password',
+    expect(JSON.stringify(networkChecks)).not.toContain('network-api-password');
+  });
+
+  it('reports DDNS runtime keys as optional without exposing provider credentials', () => {
+    const secretId = 'ddns-id-fixture-123';
+    const secretKey = 'ddns-key-fixture-456';
+    const service = createService({
+      NETWORK_DDNS_DNSPOD_ENABLED: 'true',
+      NETWORK_DDNS_DNSPOD_SECRET_ID: secretId,
+      NETWORK_DDNS_DNSPOD_SECRET_KEY: secretKey,
+      NETWORK_DDNS_RECONCILE_INTERVAL_MS: '60000',
+      NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS: '60000',
+    });
+
+    const checks = service
+      .getConfigChecks()
+      .filter((check) => check.key.startsWith('NETWORK_DDNS_'));
+    const serialized = JSON.stringify(checks);
+
+    expect(checks).toHaveLength(5);
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'NETWORK_DDNS_DNSPOD_ENABLED',
+          level: 'optional',
+          present: true,
+        }),
+        expect.objectContaining({
+          key: 'NETWORK_DDNS_DNSPOD_SECRET_ID',
+          level: 'optional',
+          present: true,
+        }),
+        expect.objectContaining({
+          key: 'NETWORK_DDNS_DNSPOD_SECRET_KEY',
+          level: 'optional',
+          present: true,
+        }),
+        expect.objectContaining({
+          key: 'NETWORK_DDNS_RECONCILE_INTERVAL_MS',
+          level: 'optional',
+          present: true,
+        }),
+        expect.objectContaining({
+          key: 'NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS',
+          level: 'optional',
+          present: true,
+        }),
+      ]),
     );
+    expect(serialized).not.toContain(secretId);
+    expect(serialized).not.toContain(secretKey);
   });
 });

@@ -22,11 +22,15 @@ import { vbenPage, vbenSuccess } from '@/common';
 import { AdminSuperGuard } from '@/modules/admin/identity/auth/admin-super.guard';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import {
+  NetworkDdnsListQueryDto,
+  NetworkDdnsRecordInputDto,
+  NetworkDdnsSourceOptionsQueryDto,
   NetworkEndpointHistoryQueryDto,
   NetworkPortForwardCreateDto,
   NetworkPortForwardListQueryDto,
   NetworkPortForwardUpdateDto,
 } from './network-management.dto';
+import { NetworkDdnsService } from './network-ddns.service';
 import { NetworkManagementService } from './network-management.service';
 import { NetworkManagementEventStreamService } from './network-management-event-stream.service';
 
@@ -44,10 +48,12 @@ export class NetworkManagementController {
   /**
    * Creates the super-admin-only network desired-state controller.
    * @param service - Persisted port-forward and Agent state service.
+   * @param ddnsService - Persisted Tencent Cloud DNS automatic-update service.
    * @param eventStream - Committed MQTT change stream exposed to Admin through SSE.
    */
   constructor(
     private readonly service: NetworkManagementService,
+    private readonly ddnsService: NetworkDdnsService,
     private readonly eventStream: NetworkManagementEventStreamService,
   ) {}
 
@@ -179,6 +185,85 @@ export class NetworkManagementController {
   async agentStatus(@Res({ passthrough: true }) response: Response) {
     this.noStore(response);
     return vbenSuccess(await this.service.agentStatus());
+  }
+
+  /** Lists persisted automatic-DDNS bindings independently from port forwards. */
+  @Get('ddns/list')
+  @ApiOperation({ summary: '分页查询自动 DDNS' })
+  async listDdns(
+    @Query() query: NetworkDdnsListQueryDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    const page = await this.ddnsService.list(query);
+    return vbenPage(page.items, page.total);
+  }
+
+  /** Returns server-evaluated IPv4 or IPv6 source choices for one record type. */
+  @Get('ddns/source-options')
+  @ApiOperation({ summary: '查询自动 DDNS 地址来源' })
+  async ddnsSourceOptions(
+    @Query() query: NetworkDdnsSourceOptionsQueryDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess({
+      items: await this.ddnsService.sourceOptions(query),
+    });
+  }
+
+  /** Returns redacted Tencent Cloud DNS readiness without any credential value. */
+  @Get('ddns/provider-status')
+  @ApiOperation({ summary: '查询腾讯云云解析 DNS 状态' })
+  async ddnsProviderStatus(@Res({ passthrough: true }) response: Response) {
+    this.noStore(response);
+    return vbenSuccess(this.ddnsService.getProviderStatus());
+  }
+
+  /** Persists one asynchronous A or AAAA automatic-update binding. */
+  @Post('ddns')
+  @ApiOperation({ summary: '新增自动 DDNS' })
+  async createDdns(
+    @Body() body: NetworkDdnsRecordInputDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.ddnsService.create(body));
+  }
+
+  /** Replaces the editable identity and source of one DDNS binding. */
+  @Put('ddns/:id')
+  @ApiOperation({ summary: '修改自动 DDNS' })
+  async updateDdns(
+    @Param('id') id: string,
+    @Body() body: NetworkDdnsRecordInputDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.ddnsService.update(id, body));
+  }
+
+  /** Deletes only the local updater while leaving the Tencent Cloud DNS record intact. */
+  @Delete('ddns/:id')
+  @ApiOperation({ summary: '删除本地自动 DDNS' })
+  async removeDdns(
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.ddnsService.remove(id));
+  }
+
+  /** Requeues one enabled DDNS binding for immediate provider reconciliation. */
+  @Post('ddns/:id/retry')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '重试自动 DDNS 同步' })
+  async retryDdns(
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.ddnsService.retry(id));
   }
 
   /**

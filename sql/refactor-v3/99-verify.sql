@@ -2,6 +2,7 @@ SELECT 'admin_user' AS table_name, COUNT(*) AS row_count FROM admin_user;
 SELECT 'admin_role' AS table_name, COUNT(*) AS row_count FROM admin_role;
 SELECT 'admin_menu' AS table_name, COUNT(*) AS row_count FROM admin_menu;
 SELECT 'network_port_forward' AS table_name, COUNT(*) AS row_count FROM network_port_forward;
+SELECT 'network_ddns_record' AS table_name, COUNT(*) AS row_count FROM network_ddns_record;
 SELECT 'network_agent_state' AS table_name, COUNT(*) AS row_count FROM network_agent_state;
 SELECT 'network_endpoint_history' AS table_name, COUNT(*) AS row_count FROM network_endpoint_history;
 SELECT 'platform_setting' AS table_name, COUNT(*) AS row_count FROM platform_setting;
@@ -44,11 +45,44 @@ FROM network_agent_state
 WHERE agent_id = 'nas-main'
   AND target_ipv4 = '192.168.31.224';
 
+SELECT 'column_network_agent_state_current_public_ipv6' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'network_agent_state'
+  AND column_name = 'current_public_ipv6'
+  AND column_type = 'varchar(45)';
+
+SELECT 'column_network_agent_state_current_ipv6_observed_at' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'network_agent_state'
+  AND column_name = 'current_ipv6_observed_at'
+  AND column_type = 'datetime(3)';
+
 SELECT 'index_network_port_forward_active_key' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics
 WHERE table_schema = DATABASE()
   AND table_name = 'network_port_forward'
   AND index_name = 'uk_network_port_forward_active_key';
+
+SELECT 'index_network_ddns_record_active_key' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'network_ddns_record'
+  AND index_name = 'uk_network_ddns_record_active_key'
+  AND non_unique = 0;
+
+SELECT 'index_network_ddns_record_status' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'network_ddns_record'
+  AND index_name = 'idx_network_ddns_record_status';
+
+SELECT 'index_network_ddns_record_port_forward' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'network_ddns_record'
+  AND index_name = 'idx_network_ddns_record_port_forward';
 
 SELECT 'index_network_endpoint_history_event_id' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics
@@ -111,6 +145,48 @@ WHERE plugin_key = 'bangdream'
 SELECT 'seed_qqbot_account_webui_permission' AS check_name, COUNT(*) AS matched_rows
 FROM admin_menu
 WHERE auth_code = 'QqBot:Account:WebUI';
+
+SELECT 'seed_network_ddns_permissions' AS check_name, COUNT(*) AS matched_rows
+FROM admin_menu
+WHERE auth_code IN (
+  'System:Network:Ddns:List',
+  'System:Network:Ddns:Create',
+  'System:Network:Ddns:Update',
+  'System:Network:Ddns:Delete',
+  'System:Network:Ddns:Retry'
+)
+  AND status = 1
+  AND is_deleted = 0;
+
+SELECT 'seed_network_ddns_super_permissions' AS check_name, COUNT(*) AS matched_rows
+FROM admin_role_menu role_menu
+JOIN admin_role role ON role.id = role_menu.role_id
+JOIN admin_menu menu ON menu.id = role_menu.menu_id
+WHERE role.role_code = 'super'
+  AND role.status = 1
+  AND role.is_deleted = 0
+  AND menu.auth_code IN (
+    'System:Network:Ddns:List',
+    'System:Network:Ddns:Create',
+    'System:Network:Ddns:Update',
+    'System:Network:Ddns:Delete',
+    'System:Network:Ddns:Retry'
+  )
+  AND menu.status = 1
+  AND menu.is_deleted = 0;
+
+SELECT 'network_ddns_non_super_permissions_should_be_zero' AS check_name, COUNT(*) AS matched_rows
+FROM admin_role_menu role_menu
+JOIN admin_role role ON role.id = role_menu.role_id
+JOIN admin_menu menu ON menu.id = role_menu.menu_id
+WHERE role.role_code <> 'super'
+  AND menu.auth_code IN (
+    'System:Network:Ddns:List',
+    'System:Network:Ddns:Create',
+    'System:Network:Ddns:Update',
+    'System:Network:Ddns:Delete',
+    'System:Network:Ddns:Retry'
+  );
 
 SELECT 'index_admin_user_username' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics

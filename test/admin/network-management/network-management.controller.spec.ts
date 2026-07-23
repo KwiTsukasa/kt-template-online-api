@@ -5,6 +5,7 @@ import * as request from 'supertest';
 import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/admin-super.guard';
 import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
 import { NetworkManagementController } from '../../../src/modules/admin/platform-config/network-management/network-management.controller';
+import { NetworkDdnsService } from '../../../src/modules/admin/platform-config/network-management/network-ddns.service';
 import {
   NetworkManagementEventStreamService,
   type NetworkManagementStreamEvent,
@@ -42,6 +43,15 @@ describe('NetworkManagementController', () => {
       }),
     ),
   };
+  const ddnsService = {
+    create: jest.fn(),
+    getProviderStatus: jest.fn(),
+    list: jest.fn(),
+    remove: jest.fn(),
+    retry: jest.fn(),
+    sourceOptions: jest.fn(),
+    update: jest.fn(),
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -49,6 +59,7 @@ describe('NetworkManagementController', () => {
       providers: [
         AdminSuperGuard,
         { provide: NetworkManagementService, useValue: service },
+        { provide: NetworkDdnsService, useValue: ddnsService },
         {
           provide: NetworkManagementEventStreamService,
           useValue: eventStream,
@@ -79,6 +90,21 @@ describe('NetworkManagementController', () => {
       agentId: 'nas-main',
       online: false,
     });
+    ddnsService.list.mockResolvedValue({ items: [], total: 0 });
+    ddnsService.sourceOptions.mockResolvedValue([]);
+    ddnsService.getProviderStatus.mockReturnValue({
+      configured: true,
+      enabled: true,
+      provider: 'dnspod',
+    });
+    ddnsService.create.mockResolvedValue({
+      id: '200',
+      recordType: 'AAAA',
+      syncStatus: 'pending',
+    });
+    ddnsService.update.mockResolvedValue({ id: '200' });
+    ddnsService.remove.mockResolvedValue({ id: '200' });
+    ddnsService.retry.mockResolvedValue({ id: '200' });
   });
 
   afterAll(async () => {
@@ -201,6 +227,112 @@ describe('NetworkManagementController', () => {
     expect(service.list).not.toHaveBeenCalled();
     expect(service.agentStatus).not.toHaveBeenCalled();
   });
+
+  it('exposes strict dual-stack DDNS CRUD without provider credentials', async () => {
+    await request(apiUrl)
+      .get('/system/network/ddns/list?pageNo=1&pageSize=20&recordType=AAAA')
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+    const sources = await request(apiUrl)
+      .get('/system/network/ddns/source-options?recordType=AAAA')
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+    expect(sources.body.data).toEqual({ items: [] });
+    const provider = await request(apiUrl)
+      .get('/system/network/ddns/provider-status')
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+    expect(provider.body.data).toEqual({
+      configured: true,
+      enabled: true,
+      provider: 'dnspod',
+    });
+    expect(JSON.stringify(provider.body)).not.toMatch(
+      /secret|credential|token/i,
+    );
+
+    await request(apiUrl)
+      .post('/system/network/ddns')
+      .send({
+        domain: 'kwitsukasa.top',
+        enabled: true,
+        name: 'NAS IPv6',
+        recordType: 'AAAA',
+        secretKey: 'must-not-be-accepted',
+        sourceType: 'agent_ipv6',
+        subDomain: 'nas6',
+      })
+      .expect(400);
+    expect(ddnsService.create).not.toHaveBeenCalled();
+
+    await request(apiUrl)
+      .post('/system/network/ddns')
+      .send({
+        domain: 'kwitsukasa.top',
+        enabled: true,
+        name: 'NAS IPv4',
+        recordType: 'A',
+        sourceType: 'port_forward_ipv4',
+        subDomain: 'nas',
+      })
+      .expect(400);
+
+    const created = await request(apiUrl)
+      .post('/system/network/ddns')
+      .send({
+        domain: 'kwitsukasa.top',
+        enabled: true,
+        name: 'NAS IPv6',
+        recordType: 'AAAA',
+        sourceType: 'agent_ipv6',
+        subDomain: 'nas6',
+      })
+      .expect(201);
+    expect(created.body.data).toMatchObject({
+      id: '200',
+      recordType: 'AAAA',
+    });
+    expect(ddnsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordType: 'AAAA',
+        sourceType: 'agent_ipv6',
+      }),
+    );
+
+    await request(apiUrl)
+      .put('/system/network/ddns/200')
+      .send({
+        domain: 'kwitsukasa.top',
+        enabled: false,
+        name: 'NAS IPv6',
+        recordType: 'AAAA',
+        sourceType: 'agent_ipv6',
+        subDomain: 'nas6',
+      })
+      .expect(200);
+    await request(apiUrl).post('/system/network/ddns/200/retry').expect(200);
+    await request(apiUrl).delete('/system/network/ddns/200').expect(200);
+  });
+
+  it.each([123, '', '100'])(
+    'rejects an AAAA request that supplies portForwardId=%p',
+    async (portForwardId) => {
+      await request(apiUrl)
+        .post('/system/network/ddns')
+        .send({
+          domain: 'kwitsukasa.top',
+          enabled: true,
+          name: 'NAS IPv6',
+          portForwardId,
+          recordType: 'AAAA',
+          sourceType: 'agent_ipv6',
+          subDomain: 'nas6',
+        })
+        .expect(400);
+
+      expect(ddnsService.create).not.toHaveBeenCalled();
+    },
+  );
 
   it('keeps an empty heartbeat cursor instead of accepting a Nest-generated ID', async () => {
     let parsed = false;

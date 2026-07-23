@@ -181,4 +181,38 @@ describe('network management MQTT contracts', () => {
       }),
     ).toThrow();
   });
+
+  it('accepts one canonicalizable global IPv6 status field and rejects unsafe IPv6', () => {
+    expect(
+      parseStatusSnapshot({
+        agentId: 'nas-main',
+        observedAt: '2026-07-23T01:02:04.000Z',
+        online: true,
+        publicIpv6: '2409:8A31:05E1:6020:A5EA:838E:843F:BE5E',
+        schemaVersion: 1,
+      }),
+    ).toMatchObject({
+      publicIpv6: '2409:8a31:5e1:6020:a5ea:838e:843f:be5e',
+    });
+
+    for (const publicIpv6 of [
+      '::',
+      '::1',
+      '::ffff:192.0.2.1',
+      'fc00::1',
+      'fe80::1',
+      'ff02::1',
+      '192.0.2.1',
+    ]) {
+      expect(() =>
+        parseStatusSnapshot({
+          agentId: 'nas-main',
+          observedAt: '2026-07-23T01:02:04.000Z',
+          online: true,
+          publicIpv6,
+          schemaVersion: 1,
+        }),
+      ).toThrow();
+    }
+  });
 });

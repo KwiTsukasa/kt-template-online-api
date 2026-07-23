@@ -160,6 +160,35 @@ CREATE TABLE IF NOT EXISTS network_port_forward (
   KEY idx_network_port_forward_protocol (protocol, external_port)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS network_ddns_record (
+  id BIGINT NOT NULL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  remark TEXT NULL,
+  record_type VARCHAR(8) NOT NULL,
+  source_type VARCHAR(32) NOT NULL,
+  port_forward_id BIGINT NULL,
+  domain VARCHAR(253) NOT NULL,
+  sub_domain VARCHAR(253) NOT NULL,
+  active_key VARCHAR(300) NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 0,
+  sync_status VARCHAR(32) NOT NULL DEFAULT 'disabled',
+  provider_record_id VARCHAR(32) NULL,
+  source_address VARCHAR(45) NULL,
+  applied_address VARCHAR(45) NULL,
+  retry_count INT UNSIGNED NOT NULL DEFAULT 0,
+  next_retry_at DATETIME(3) NULL,
+  last_attempt_at DATETIME(3) NULL,
+  last_synced_at DATETIME(3) NULL,
+  last_error_code VARCHAR(64) NULL,
+  last_error_message VARCHAR(512) NULL,
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  update_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_network_ddns_record_active_key (active_key),
+  KEY idx_network_ddns_record_status (is_deleted, enabled, sync_status, next_retry_at),
+  KEY idx_network_ddns_record_port_forward (port_forward_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS network_agent_state (
   agent_id VARCHAR(64) NOT NULL PRIMARY KEY,
   target_ipv4 VARCHAR(15) NOT NULL,
@@ -171,6 +200,8 @@ CREATE TABLE IF NOT EXISTS network_agent_state (
   version VARCHAR(64) NULL,
   started_at DATETIME(6) NULL,
   last_heartbeat_at DATETIME(6) NULL,
+  current_public_ipv6 VARCHAR(45) NULL,
+  current_ipv6_observed_at DATETIME(3) NULL,
   last_mqtt_error_code VARCHAR(64) NULL,
   last_mqtt_error_message VARCHAR(500) NULL,
   last_reconcile_error_code VARCHAR(64) NULL,

@@ -42,6 +42,17 @@ export class NetworkAgentState {
   })
   lastHeartbeatAt?: KtDateTime | null;
 
+  @Column({ length: 45, name: 'current_public_ipv6', nullable: true })
+  currentPublicIpv6?: string | null;
+
+  @KtDateTimeColumn({
+    name: 'current_ipv6_observed_at',
+    nullable: true,
+    precision: 3,
+    type: 'datetime',
+  })
+  currentIpv6ObservedAt?: KtDateTime | null;
+
   @Column({ length: 64, name: 'last_mqtt_error_code', nullable: true })
   lastMqttErrorCode?: string | null;
 

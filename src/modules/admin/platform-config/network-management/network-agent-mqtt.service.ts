@@ -13,6 +13,7 @@ import type { IClientOptions, MqttClient } from 'mqtt';
 import { KtDateTime } from '@/common';
 import { NetworkAgentState } from './network-agent-state.entity';
 import { NetworkEndpointHistory } from './network-endpoint-history.entity';
+import { NetworkDdnsService } from './network-ddns.service';
 import { NetworkManagementEventStreamService } from './network-management-event-stream.service';
 import { NetworkPortForward } from './network-management.entity';
 import {
@@ -60,6 +61,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
    * @param dataSource - Transaction boundary for publish acknowledgements and inbound state.
    * @param eventStream - SSE fan-out notified only after accepted inbound commits.
    * @param clientFactory - Optional deterministic MQTT client factory used by tests.
+   * @param ddnsService - Optional automatic-DDNS reconciler notified after address semantics commit.
    */
   constructor(
     private readonly configService: ConfigService,
@@ -68,6 +70,8 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     @Optional()
     @Inject(NETWORK_MQTT_CLIENT_FACTORY)
     private readonly clientFactory?: NetworkMqttClientFactory,
+    @Optional()
+    private readonly ddnsService?: NetworkDdnsService,
   ) {}
 
   /** Opens a persistent MQTT 5 session and schedules convergence publication. */
@@ -175,13 +179,18 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     }
 
     let changed = false;
+    let ddnsSourceChanged = false;
     let source: NetworkStateChangeSource;
     if (topic === this.topic('reported')) {
       source = 'reported';
-      changed = await this.applyReported(parseReportedSnapshot(parsed));
+      const result = await this.applyReported(parseReportedSnapshot(parsed));
+      changed = result.visibleStateChanged;
+      ddnsSourceChanged = result.ddnsSourceChanged;
     } else if (topic === this.topic('status')) {
       source = 'status';
-      changed = await this.applyStatus(parseStatusSnapshot(parsed));
+      const result = await this.applyStatus(parseStatusSnapshot(parsed));
+      changed = result.visibleStateChanged;
+      ddnsSourceChanged = result.ddnsSourceChanged;
     } else if (topic === this.topic('events')) {
       source = 'events';
       changed = await this.appendEndpointEvent(parseEndpointEvent(parsed));
@@ -189,6 +198,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       throw new NetworkMessageValidationError('Unexpected network MQTT topic');
     }
     if (changed) this.eventStream.publishCommitted(source);
+    if (ddnsSourceChanged) this.ddnsService?.requestReconcile();
   }
 
   /** Restores exact subscriptions and one retained desired republish after each connection. */
@@ -315,11 +325,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   /**
    * Applies a full reported snapshot transactionally without creating desired rows.
    * @param report - Strict Agent report parsed from the retained topic.
-   * @returns True only when persisted Admin-visible state changed.
+   * @returns Independent Admin-refresh and DDNS-address semantic changes.
    */
-  private async applyReported(
-    report: NetworkReportedSnapshot,
-  ): Promise<boolean> {
+  private async applyReported(report: NetworkReportedSnapshot): Promise<{
+    ddnsSourceChanged: boolean;
+    visibleStateChanged: boolean;
+  }> {
     this.assertAgentId(report.agentId);
     const result = await this.dataSource.transaction(async (manager) => {
       const stateRepository = manager.getRepository(NetworkAgentState);
@@ -335,9 +346,14 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         throw new NetworkMessageValidationError('Invalid reported revision');
       }
       if (BigInt(report.appliedRevision) < BigInt(state.appliedRevision)) {
-        return { desiredChanged: false, visibleStateChanged: false };
+        return {
+          ddnsSourceChanged: false,
+          desiredChanged: false,
+          visibleStateChanged: false,
+        };
       }
       const stateBefore = this.reportedAgentStateFingerprint(state);
+      let ddnsSourceChanged = false;
       let visibleStateChanged = false;
       const isCurrentRevision =
         BigInt(report.appliedRevision) === BigInt(state.desiredRevision);
@@ -407,6 +423,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
           this.reportedPersistedMappingStateFingerprint(mapping);
         const refreshMappingBefore =
           this.reportedRefreshMappingStateFingerprint(mapping);
+        const publicIpv4Before = mapping.currentPublicIpv4;
         mapping.reportedRevision = String(item.revision);
         mapping.syncStatus = item.syncStatus;
         mapping.keeperStatus = item.keeperStatus;
@@ -418,6 +435,9 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
           item.lastObservedEndpoint,
           report.reportedAt,
         );
+        if (mapping.currentPublicIpv4 !== publicIpv4Before) {
+          ddnsSourceChanged = true;
+        }
 
         if (
           mapping.desiredPresence === 'absent' &&
@@ -471,12 +491,16 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         await stateRepository.save(state);
       }
       return {
+        ddnsSourceChanged,
         desiredChanged: finalizedDeletion,
         visibleStateChanged,
       };
     });
     if (result.desiredChanged) this.requestDesiredPublish();
-    return result.visibleStateChanged;
+    return {
+      ddnsSourceChanged: result.ddnsSourceChanged,
+      visibleStateChanged: result.visibleStateChanged,
+    };
   }
 
   /**
@@ -531,9 +555,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   /**
    * Applies retained Agent online status without changing mapping sync semantics.
    * @param status - Strict retained status or LWT snapshot.
-   * @returns True only when semantic Admin status changed; heartbeat time is still persisted.
+   * @returns Independent Admin-refresh and DDNS-address semantic changes.
    */
-  private async applyStatus(status: NetworkStatusSnapshot): Promise<boolean> {
+  private async applyStatus(status: NetworkStatusSnapshot): Promise<{
+    ddnsSourceChanged: boolean;
+    visibleStateChanged: boolean;
+  }> {
     this.assertAgentId(status.agentId);
     return await this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(NetworkAgentState);
@@ -556,7 +583,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         currentStartedAt &&
         incomingStartedAt.getTime() < currentStartedAt.getTime()
       ) {
-        return false;
+        return { ddnsSourceChanged: false, visibleStateChanged: false };
       }
       const isSameSessionWill =
         status.online === false &&
@@ -568,10 +595,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         observedAt.getTime() < new Date(state.lastHeartbeatAt).getTime() &&
         !isSameSessionWill
       ) {
-        return false;
+        return { ddnsSourceChanged: false, visibleStateChanged: false };
       }
       const persistedStateBefore = this.statusPersistedStateFingerprint(state);
       const refreshStateBefore = this.statusRefreshStateFingerprint(state);
+      const publicIpv6Before = state.currentPublicIpv6 || null;
       state.online = status.online;
       state.version = status.version || null;
       state.startedAt = incomingStartedAt
@@ -582,12 +610,21 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       }
       state.lastMqttErrorCode = status.errorCode || null;
       state.lastMqttErrorMessage = status.errorMessage || null;
+      state.currentPublicIpv6 =
+        status.online && status.publicIpv6 ? status.publicIpv6 : null;
+      state.currentIpv6ObservedAt =
+        status.online && status.publicIpv6 ? new KtDateTime(observedAt) : null;
       if (
         this.statusPersistedStateFingerprint(state) !== persistedStateBefore
       ) {
         await repository.save(state);
       }
-      return this.statusRefreshStateFingerprint(state) !== refreshStateBefore;
+      return {
+        ddnsSourceChanged:
+          (state.currentPublicIpv6 || null) !== publicIpv6Before,
+        visibleStateChanged:
+          this.statusRefreshStateFingerprint(state) !== refreshStateBefore,
+      };
     });
   }
 
@@ -710,6 +747,8 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   private statusPersistedStateFingerprint(state: NetworkAgentState): string {
     return JSON.stringify([
       state.lastHeartbeatAt,
+      state.currentIpv6ObservedAt,
+      state.currentPublicIpv6,
       state.lastMqttErrorCode,
       state.lastMqttErrorMessage,
       state.online,
@@ -727,6 +766,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     return JSON.stringify([
       state.lastMqttErrorCode,
       state.lastMqttErrorMessage,
+      state.currentPublicIpv6,
       state.online,
       state.startedAt,
       state.version,

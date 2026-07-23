@@ -1,4 +1,4 @@
--- 增量初始化通用网络端口转发菜单；仅授予启用中的超级管理员。
+-- 增量初始化通用网络管理菜单；仅授予启用中的超级管理员。
 
 SET NAMES utf8mb4;
 
@@ -14,7 +14,12 @@ VALUES
   (2041700000000120218, 2041700000000100207, 'SystemNetworkPortForwardRetry', NULL, NULL, NULL, 'System:Network:PortForward:Retry', 'button', '{"title":"common.retry"}', 1, 5),
   (2041700000000120219, 2041700000000100207, 'SystemNetworkPortForwardKeeper', NULL, NULL, NULL, 'System:Network:PortForward:Keeper', 'button', '{"title":"system.network.keeper"}', 1, 6),
   (2041700000000120220, 2041700000000100207, 'SystemNetworkPortForwardProbe', NULL, NULL, NULL, 'System:Network:PortForward:Probe', 'button', '{"title":"system.network.probe"}', 1, 7),
-  (2041700000000120221, 2041700000000100207, 'SystemNetworkPortForwardHistory', NULL, NULL, NULL, 'System:Network:PortForward:History', 'button', '{"title":"system.network.history"}', 1, 8)
+  (2041700000000120221, 2041700000000100207, 'SystemNetworkPortForwardHistory', NULL, NULL, NULL, 'System:Network:PortForward:History', 'button', '{"title":"system.network.history"}', 1, 8),
+  (2041700000000120222, 2041700000000100207, 'SystemNetworkDdnsList', NULL, NULL, NULL, 'System:Network:Ddns:List', 'button', '{"title":"common.list"}', 1, 9),
+  (2041700000000120223, 2041700000000100207, 'SystemNetworkDdnsCreate', NULL, NULL, NULL, 'System:Network:Ddns:Create', 'button', '{"title":"common.create"}', 1, 10),
+  (2041700000000120224, 2041700000000100207, 'SystemNetworkDdnsUpdate', NULL, NULL, NULL, 'System:Network:Ddns:Update', 'button', '{"title":"common.edit"}', 1, 11),
+  (2041700000000120225, 2041700000000100207, 'SystemNetworkDdnsDelete', NULL, NULL, NULL, 'System:Network:Ddns:Delete', 'button', '{"title":"common.delete"}', 1, 12),
+  (2041700000000120226, 2041700000000100207, 'SystemNetworkDdnsRetry', NULL, NULL, NULL, 'System:Network:Ddns:Retry', 'button', '{"title":"common.retry"}', 1, 13)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `pid` = VALUES(`pid`),
@@ -42,7 +47,12 @@ WHERE role.`role_code` <> 'super'
     'SystemNetworkPortForwardRetry',
     'SystemNetworkPortForwardKeeper',
     'SystemNetworkPortForwardProbe',
-    'SystemNetworkPortForwardHistory'
+    'SystemNetworkPortForwardHistory',
+    'SystemNetworkDdnsList',
+    'SystemNetworkDdnsCreate',
+    'SystemNetworkDdnsUpdate',
+    'SystemNetworkDdnsDelete',
+    'SystemNetworkDdnsRetry'
   );
 
 INSERT IGNORE INTO `admin_role_menu` (`role_id`, `menu_id`)
@@ -57,7 +67,12 @@ JOIN `admin_menu` menu ON menu.`name` IN (
   'SystemNetworkPortForwardRetry',
   'SystemNetworkPortForwardKeeper',
   'SystemNetworkPortForwardProbe',
-  'SystemNetworkPortForwardHistory'
+  'SystemNetworkPortForwardHistory',
+  'SystemNetworkDdnsList',
+  'SystemNetworkDdnsCreate',
+  'SystemNetworkDdnsUpdate',
+  'SystemNetworkDdnsDelete',
+  'SystemNetworkDdnsRetry'
 )
 WHERE role.`role_code` = 'super'
   AND role.`status` = 1

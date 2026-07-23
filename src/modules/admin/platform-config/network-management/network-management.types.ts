@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
+import type { KtDateTime } from '@/common';
 import type { NetworkAgentState } from './network-agent-state.entity';
 import type { NetworkPortForward } from './network-management.entity';
 
@@ -28,12 +30,61 @@ export type EndpointEventType =
   | 'published'
   | 'restored'
   | 'withdrawn';
-export type NetworkStateChangeSource = 'events' | 'reported' | 'status';
+export type NetworkStateChangeSource =
+  | 'ddns'
+  | 'events'
+  | 'reported'
+  | 'status';
 
 export type NetworkStateChangeEvent = {
   eventId: string;
   observedAt: string;
   source: NetworkStateChangeSource;
+};
+
+export type NetworkDdnsRecordType = 'A' | 'AAAA';
+export type NetworkDdnsSourceType = 'agent_ipv6' | 'port_forward_ipv4';
+export type NetworkDdnsSyncStatus =
+  | 'disabled'
+  | 'failed'
+  | 'pending'
+  | 'synced'
+  | 'syncing'
+  | 'waiting_source';
+
+export type NetworkDdnsRecordInput = {
+  domain: string;
+  enabled: boolean;
+  name: string;
+  portForwardId?: string;
+  recordType: NetworkDdnsRecordType;
+  remark?: string;
+  sourceType: NetworkDdnsSourceType;
+  subDomain: string;
+};
+
+export type NetworkDdnsRecordUpdateInput = Partial<NetworkDdnsRecordInput>;
+
+export type NetworkDdnsListQuery = {
+  enabled?: boolean;
+  name?: string;
+  pageNo?: number;
+  pageSize?: number;
+  recordType?: NetworkDdnsRecordType;
+  syncStatus?: NetworkDdnsSyncStatus;
+};
+
+export type NetworkDdnsSourceOption = {
+  currentAddress: null | string;
+  disabledReasonCode: null | string;
+  eligible: boolean;
+  externalPort?: number;
+  id: string;
+  name: string;
+  observedAt: null | KtDateTime;
+  protocol?: PortForwardProtocol;
+  sourceType: NetworkDdnsSourceType;
+  validUntil: null | KtDateTime;
 };
 
 export type NetworkDesiredMapping = {
@@ -98,6 +149,7 @@ export type NetworkStatusSnapshot = {
   errorMessage?: string | null;
   observedAt: string;
   online: boolean;
+  publicIpv6?: string | null;
   schemaVersion: typeof NETWORK_AGENT_SCHEMA_VERSION;
   startedAt?: string | null;
   version?: string | null;
@@ -290,21 +342,51 @@ export function parseStatusSnapshot(value: unknown): NetworkStatusSnapshot {
   const record = exactRecord(
     value,
     ['agentId', 'observedAt', 'online', 'schemaVersion'],
-    ['errorCode', 'errorMessage', 'startedAt', 'version'],
+    ['errorCode', 'errorMessage', 'publicIpv6', 'startedAt', 'version'],
     'status',
   );
   assertSchema(record.schemaVersion);
   if (typeof record.online !== 'boolean') invalid('status.online');
+  const publicIpv6 = optionalGlobalIpv6(record.publicIpv6, 'status.publicIpv6');
+  if (!record.online && publicIpv6) invalid('status.publicIpv6');
   return {
     agentId: boundedString(record.agentId, 'agentId', 64),
     errorCode: optionalString(record.errorCode, 'errorCode', 64),
     errorMessage: optionalString(record.errorMessage, 'errorMessage', 500),
     observedAt: isoString(record.observedAt, 'observedAt'),
     online: record.online,
+    publicIpv6,
     schemaVersion: NETWORK_AGENT_SCHEMA_VERSION,
     startedAt: optionalIsoString(record.startedAt, 'startedAt'),
     version: optionalString(record.version, 'version', 64),
   };
+}
+
+/**
+ * Normalizes an optional globally routable IPv6 string from the Agent.
+ * @param value - Omitted value or untrusted status field.
+ * @param label - Stable validation label used without echoing the address.
+ * @returns Canonical lowercase IPv6, or undefined when the field is omitted.
+ */
+function optionalGlobalIpv6(value: unknown, label: string): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string' || isIP(value) !== 6) invalid(label);
+  let normalized: string;
+  try {
+    const hostname = new URL(`http://[${value}]/`).hostname;
+    normalized = hostname.slice(1, -1).toLowerCase();
+  } catch {
+    invalid(label);
+  }
+  const firstHextet = Number.parseInt(normalized.split(':', 1)[0], 16);
+  if (
+    !Number.isInteger(firstHextet) ||
+    firstHextet < 0x2000 ||
+    firstHextet > 0x3fff
+  ) {
+    invalid(label);
+  }
+  return normalized;
 }
 
 /**

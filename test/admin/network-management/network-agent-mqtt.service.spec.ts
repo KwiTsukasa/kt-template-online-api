@@ -20,11 +20,13 @@ type MqttHarness = {
   client: MqttClient & EventEmitter;
   clientOptions: () => IClientOptions;
   histories: NetworkEndpointHistory[];
+  mappingSave: jest.Mock;
   publishCommitted: jest.Mock;
   mapping: NetworkPortForward;
   publishCallback: () => (error?: Error) => void;
   service: NetworkAgentMqttService;
   state: NetworkAgentState;
+  stateSave: jest.Mock;
   transactionCalls: () => number;
 };
 
@@ -61,14 +63,16 @@ function createHarness(): MqttHarness {
     targetIpv4: '192.168.31.224',
   });
   const histories: NetworkEndpointHistory[] = [];
+  const stateSave = jest.fn(async (value) => Object.assign(state, value));
   const stateRepository = {
     findOne: async () => state,
-    save: async (value) => Object.assign(state, value),
+    save: stateSave,
   } as unknown as Repository<NetworkAgentState>;
+  const mappingSave = jest.fn(async (value) => Object.assign(mapping, value));
   const mappingRepository = {
     find: async () => (mapping.isDeleted ? [] : [mapping]),
     findOne: async ({ where }) => (where.id === mapping.id ? mapping : null),
-    save: async (value) => Object.assign(mapping, value),
+    save: mappingSave,
   } as unknown as Repository<NetworkPortForward>;
   const historyRepository = {
     create: (input) => Object.assign(new NetworkEndpointHistory(), input),
@@ -143,11 +147,13 @@ function createHarness(): MqttHarness {
     client,
     clientOptions: () => options,
     histories,
+    mappingSave,
     mapping,
     publishCallback: () => publishAck,
     publishCommitted,
     service,
     state,
+    stateSave,
     transactionCalls: () => transactionCallCount,
   };
 }
@@ -482,8 +488,64 @@ describe('NetworkAgentMqttService', () => {
     });
 
     await harness.service.consumeMessage(topic, payload);
+    const mappingSavesAfterFirstReport = harness.mappingSave.mock.calls.length;
+    const stateSavesAfterFirstReport = harness.stateSave.mock.calls.length;
     await harness.service.consumeMessage(topic, payload);
 
+    expect(harness.mappingSave).toHaveBeenCalledTimes(
+      mappingSavesAfterFirstReport,
+    );
+    expect(harness.stateSave).toHaveBeenCalledTimes(stateSavesAfterFirstReport);
+    expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.publishCommitted).toHaveBeenCalledWith('reported');
+  });
+
+  /** Proves lease renewal is persisted without turning timestamps into page reloads. */
+  it('suppresses Admin events for reported lease-only timestamp renewal', async () => {
+    const harness = createHarness();
+    const topic = 'kt/network/v1/agents/nas-main/reported';
+
+    await harness.service.consumeMessage(topic, reported(harness, 7));
+    harness.publishCommitted.mockClear();
+    const savesBeforeRenewal = harness.mappingSave.mock.calls.length;
+    await harness.service.consumeMessage(
+      topic,
+      reported(harness, 7, {
+        currentEndpoint: {
+          observedAt: '2026-07-22T01:03:04.000Z',
+          publicIpv4: '8.8.8.8',
+          publicPort: 45000,
+          validUntil: '2026-07-22T01:05:04.000Z',
+        },
+        lastObservedEndpoint: {
+          observedAt: '2026-07-22T01:03:04.000Z',
+          publicIpv4: '8.8.8.8',
+          publicPort: 45000,
+          validUntil: '2026-07-22T01:05:04.000Z',
+        },
+      }),
+    );
+
+    expect(harness.mapping.currentValidUntil?.toISOString()).toBe(
+      '2026-07-22T01:05:04.000Z',
+    );
+    expect(harness.mapping.lastObservedAt?.toISOString()).toBe(
+      '2026-07-22T01:03:04.000Z',
+    );
+    expect(harness.mappingSave).toHaveBeenCalledTimes(savesBeforeRenewal + 1);
+    expect(harness.publishCommitted).not.toHaveBeenCalled();
+
+    await harness.service.consumeMessage(
+      topic,
+      reported(harness, 7, {
+        currentEndpoint: {
+          observedAt: '2026-07-22T01:04:04.000Z',
+          publicIpv4: '8.8.8.8',
+          publicPort: 45001,
+          validUntil: '2026-07-22T01:06:04.000Z',
+        },
+      }),
+    );
     expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
     expect(harness.publishCommitted).toHaveBeenCalledWith('reported');
   });
@@ -690,6 +752,47 @@ describe('NetworkAgentMqttService', () => {
     expect(harness.histories).toHaveLength(1);
     expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
     expect(harness.publishCommitted).toHaveBeenCalledWith('events');
+  });
+
+  /** Proves liveness persistence does not become a periodic browser refresh. */
+  it('suppresses Admin events for status heartbeat-only timestamp renewal', async () => {
+    const harness = createHarness();
+    const topic = 'kt/network/v1/agents/nas-main/status';
+    const status = (observedAt: string, online = true) =>
+      Buffer.from(
+        JSON.stringify({
+          agentId: 'nas-main',
+          observedAt,
+          online,
+          schemaVersion: 1,
+          startedAt: '2026-07-22T01:00:00.000Z',
+          version: '0.1.0',
+        }),
+      );
+
+    await harness.service.consumeMessage(
+      topic,
+      status('2026-07-22T01:01:00.000Z'),
+    );
+    harness.publishCommitted.mockClear();
+    const savesBeforeHeartbeat = harness.stateSave.mock.calls.length;
+    await harness.service.consumeMessage(
+      topic,
+      status('2026-07-22T01:02:00.000Z'),
+    );
+
+    expect(harness.state.lastHeartbeatAt?.toISOString()).toBe(
+      '2026-07-22T01:02:00.000Z',
+    );
+    expect(harness.stateSave).toHaveBeenCalledTimes(savesBeforeHeartbeat + 1);
+    expect(harness.publishCommitted).not.toHaveBeenCalled();
+
+    await harness.service.consumeMessage(
+      topic,
+      status('2026-07-22T01:03:00.000Z', false),
+    );
+    expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.publishCommitted).toHaveBeenCalledWith('status');
   });
 
   it('accepts a same-instance LWT without regressing heartbeat and ignores an old-instance LWT', async () => {

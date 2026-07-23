@@ -403,7 +403,10 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
             'Reported mapping Keeper intent does not match',
           );
         }
-        const mappingBefore = this.reportedMappingStateFingerprint(mapping);
+        const persistedMappingBefore =
+          this.reportedPersistedMappingStateFingerprint(mapping);
+        const refreshMappingBefore =
+          this.reportedRefreshMappingStateFingerprint(mapping);
         mapping.reportedRevision = String(item.revision);
         mapping.syncStatus = item.syncStatus;
         mapping.keeperStatus = item.keeperStatus;
@@ -432,9 +435,17 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
           mapping.isDeleted = true;
           finalizedDeletion = true;
         }
-        if (this.reportedMappingStateFingerprint(mapping) !== mappingBefore) {
-          visibleStateChanged = true;
+        if (
+          this.reportedPersistedMappingStateFingerprint(mapping) !==
+          persistedMappingBefore
+        ) {
           await mappingRepository.save(mapping);
+        }
+        if (
+          this.reportedRefreshMappingStateFingerprint(mapping) !==
+          refreshMappingBefore
+        ) {
+          visibleStateChanged = true;
         }
       }
 
@@ -520,7 +531,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   /**
    * Applies retained Agent online status without changing mapping sync semantics.
    * @param status - Strict retained status or LWT snapshot.
-   * @returns True only when persisted Agent status changed.
+   * @returns True only when semantic Admin status changed; heartbeat time is still persisted.
    */
   private async applyStatus(status: NetworkStatusSnapshot): Promise<boolean> {
     this.assertAgentId(status.agentId);
@@ -559,7 +570,8 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       ) {
         return false;
       }
-      const stateBefore = this.statusStateFingerprint(state);
+      const persistedStateBefore = this.statusPersistedStateFingerprint(state);
+      const refreshStateBefore = this.statusRefreshStateFingerprint(state);
       state.online = status.online;
       state.version = status.version || null;
       state.startedAt = incomingStartedAt
@@ -570,9 +582,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       }
       state.lastMqttErrorCode = status.errorCode || null;
       state.lastMqttErrorMessage = status.errorMessage || null;
-      if (this.statusStateFingerprint(state) === stateBefore) return false;
-      await repository.save(state);
-      return true;
+      if (
+        this.statusPersistedStateFingerprint(state) !== persistedStateBefore
+      ) {
+        await repository.save(state);
+      }
+      return this.statusRefreshStateFingerprint(state) !== refreshStateBefore;
     });
   }
 
@@ -624,11 +639,13 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Serializes only mapping fields rendered by Admin or used for row availability.
+   * Serializes every report-owned mapping field that must be persisted.
    * @param mapping - Current persisted mapping before or after one report application.
-   * @returns Stable comparison string for suppressing QoS 1 redelivery refreshes.
+   * @returns Stable comparison including lease timestamps for database writes.
    */
-  private reportedMappingStateFingerprint(mapping: NetworkPortForward): string {
+  private reportedPersistedMappingStateFingerprint(
+    mapping: NetworkPortForward,
+  ): string {
     return JSON.stringify([
       mapping.activeKey,
       mapping.currentObservedAt,
@@ -640,6 +657,29 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       mapping.lastErrorCode,
       mapping.lastErrorMessage,
       mapping.lastObservedAt,
+      mapping.lastObservedIpv4,
+      mapping.lastObservedPort,
+      mapping.reportedRevision,
+      mapping.syncStatus,
+    ]);
+  }
+
+  /**
+   * Serializes only semantic mapping changes that justify reloading the Admin page.
+   * @param mapping - Current persisted mapping before or after one report application.
+   * @returns Stable comparison excluding lease-renewal timestamps.
+   */
+  private reportedRefreshMappingStateFingerprint(
+    mapping: NetworkPortForward,
+  ): string {
+    return JSON.stringify([
+      mapping.activeKey,
+      mapping.currentPublicIpv4,
+      mapping.currentPublicPort,
+      mapping.isDeleted,
+      mapping.keeperStatus,
+      mapping.lastErrorCode,
+      mapping.lastErrorMessage,
       mapping.lastObservedIpv4,
       mapping.lastObservedPort,
       mapping.reportedRevision,
@@ -663,13 +703,28 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Serializes status-topic fields shown by the network page.
+   * Serializes every status-topic field that must be persisted.
    * @param state - Agent singleton before or after one status snapshot.
-   * @returns Stable comparison string for duplicate status suppression.
+   * @returns Stable comparison including heartbeat time for database writes.
    */
-  private statusStateFingerprint(state: NetworkAgentState): string {
+  private statusPersistedStateFingerprint(state: NetworkAgentState): string {
     return JSON.stringify([
       state.lastHeartbeatAt,
+      state.lastMqttErrorCode,
+      state.lastMqttErrorMessage,
+      state.online,
+      state.startedAt,
+      state.version,
+    ]);
+  }
+
+  /**
+   * Serializes semantic Agent status without the continuously advancing heartbeat.
+   * @param state - Agent singleton before or after one status snapshot.
+   * @returns Stable comparison used to suppress heartbeat-only browser reloads.
+   */
+  private statusRefreshStateFingerprint(state: NetworkAgentState): string {
+    return JSON.stringify([
       state.lastMqttErrorCode,
       state.lastMqttErrorMessage,
       state.online,

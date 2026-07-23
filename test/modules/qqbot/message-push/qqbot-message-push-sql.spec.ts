@@ -129,12 +129,13 @@ const menuEntries: readonly MenuEntry[] = [
  */
 const advanceSqlQuoteState = (sql: string, index: number, quoted: boolean) => {
   if (sql[index] !== "'") return { quoted, skipNext: false };
-  if (quoted && sql[index + 1] === "'") return { quoted, skipNext: true };
 
   let precedingBackslashes = 0;
   for (let cursor = index - 1; sql[cursor] === '\\'; cursor -= 1) precedingBackslashes += 1;
+  if (precedingBackslashes % 2 === 1) return { quoted, skipNext: false };
+  if (quoted && sql[index + 1] === "'") return { quoted, skipNext: true };
   return {
-    quoted: precedingBackslashes % 2 === 1 ? quoted : !quoted,
+    quoted: !quoted,
     skipNext: false,
   };
 };
@@ -373,6 +374,21 @@ describe('QQBot message-push SQL contract', () => {
     expect(splitSqlTuple("'closed', next")).toEqual(["'closed'", 'next']);
     expect(splitSqlTuple("'it''s closed', next")).toEqual(["'it's closed'", 'next']);
     expect(splitSqlTuple(String.raw`'odd\' quote', next`)).toEqual([String.raw`'odd\' quote'`, 'next']);
+    const oddEscapedQuoteThenEnd = String.raw`'odd\''`;
+    expect(splitSqlTuple(`${oddEscapedQuoteThenEnd}, next`)).toEqual([oddEscapedQuoteThenEnd, 'next']);
+    expect(extractSqlTuples(`(${oddEscapedQuoteThenEnd}), ('next')`)).toEqual([
+      oddEscapedQuoteThenEnd,
+      "'next'",
+    ]);
+    expect(splitSqlStatements(`select ${oddEscapedQuoteThenEnd}; select 'next';`)).toEqual([
+      `select ${oddEscapedQuoteThenEnd};`,
+      "select 'next';",
+    ]);
+    const cteStatements = splitSqlStatements(
+      `with expected_menu as (select ${oddEscapedQuoteThenEnd} as id); select 'next';`,
+    );
+    expect(cteStatements).toHaveLength(2);
+    expect(extractExpectedMenuCte(cteStatements[0])).toBe(`select ${oddEscapedQuoteThenEnd} as id`);
     expect(splitSqlTuple(String.raw`'even\\', next`)).toEqual([String.raw`'even\\'`, 'next']);
     expect(extractSqlTuples(String.raw`('even\\'), ('next')`)).toEqual([String.raw`'even\\'`, "'next'"]);
     expect(splitSqlStatements(String.raw`select 'even\\'; select 'next';`)).toEqual([

@@ -210,6 +210,134 @@ function setup(
   return { items, manager, service, source, subscriptionRepository };
 }
 
+/**
+ * Builds two controlled create transactions that reject forbidden range locks with MySQL 1213.
+ * @param historical - Optional deleted candidate both transactions must contend to revive.
+ * @returns Shared rows, the service, and repository call evidence for concurrent-create assertions.
+ */
+function setupConcurrentCreateRace(historical?: QqbotMessageSubscription) {
+  const items = historical ? [historical] : [];
+  const bothActiveChecks = deferred();
+  const bothHistoricalLookups = deferred();
+  const contenderRequested = deferred();
+  const historicalRowReleased = deferred();
+  let activeChecks = 0;
+  let historicalLookups = 0;
+  let historicalLockAttempts = 0;
+  let createSequence = 1000;
+  const subscriptionRepository = {
+    create: jest.fn((input) =>
+      subscription({ id: String(createSequence++), ...input }),
+    ),
+    findOne: jest.fn(async (options) => {
+      const where = options.where as FindOptionsWhere<QqbotMessageSubscription>;
+      if (where.activeKey !== undefined) {
+        if (options.lock?.mode === 'pessimistic_write') {
+          throw { code: 'ER_LOCK_DEADLOCK', errno: 1213 };
+        }
+        activeChecks += 1;
+        if (activeChecks === 2) bothActiveChecks.resolve();
+        await bothActiveChecks.promise;
+        return null;
+      }
+      if (
+        where.sourceConfigDigest !== undefined &&
+        where.sourceKey !== undefined
+      ) {
+        if (options.lock?.mode === 'pessimistic_write') {
+          throw { code: 'ER_LOCK_DEADLOCK', errno: 1213 };
+        }
+        historicalLookups += 1;
+        if (historicalLookups === 2) bothHistoricalLookups.resolve();
+        await bothHistoricalLookups.promise;
+        return (
+          items
+            .filter(
+              (item) =>
+                item.isDeleted &&
+                item.sourceConfigDigest === where.sourceConfigDigest &&
+                item.sourceKey === where.sourceKey,
+            )
+            .sort((left, right) => {
+              const time = String(right.updateTime).localeCompare(
+                String(left.updateTime),
+              );
+              return time || right.id.localeCompare(left.id);
+            })[0] ?? null
+        );
+      }
+      if (where.id !== undefined && where.isDeleted === true) {
+        if (options.lock?.mode !== 'pessimistic_write') {
+          throw new Error('historical candidate must be locked by primary key');
+        }
+        historicalLockAttempts += 1;
+        if (historicalLockAttempts === 1) {
+          await contenderRequested.promise;
+        } else {
+          contenderRequested.resolve();
+          await historicalRowReleased.promise;
+        }
+        return (
+          items.find(
+            (item) => item.id === where.id && item.isDeleted === true,
+          ) ?? null
+        );
+      }
+      throw new Error('unexpected subscription lookup');
+    }),
+    save: jest.fn(async (item: QqbotMessageSubscription) => {
+      const duplicate = items.find(
+        (candidate) =>
+          candidate.id !== item.id &&
+          !candidate.isDeleted &&
+          candidate.activeKey === item.activeKey,
+      );
+      if (duplicate) throw { code: 'ER_DUP_ENTRY', errno: 1062 };
+      const existing = items.find((candidate) => candidate.id === item.id);
+      if (existing) {
+        Object.assign(existing, item);
+        historicalRowReleased.resolve();
+      } else {
+        items.push(item);
+      }
+      return item;
+    }),
+  } as unknown as jest.Mocked<Repository<QqbotMessageSubscription>>;
+  const manager = {
+    getRepository: jest.fn((entity) => {
+      if (entity === QqbotMessageSubscription) return subscriptionRepository;
+      throw new Error('unexpected repository');
+    }),
+  } as unknown as jest.Mocked<EntityManager>;
+  Object.assign(subscriptionRepository, {
+    manager: { transaction: jest.fn((callback) => callback(manager)) },
+  });
+  return {
+    items,
+    service: new QqbotMessageSubscriptionService(
+      subscriptionRepository,
+      registry(adapter()),
+    ),
+    subscriptionRepository,
+  };
+}
+
+/** Runs two same-key creates and returns their success or failure values without short-circuiting. */
+async function runConcurrentCreates(
+  service: QqbotMessageSubscriptionService,
+): Promise<unknown[]> {
+  const input = {
+    enabled: true,
+    name: '并发订阅',
+    sourceConfig: CONFIG,
+    sourceKey: SOURCE_KEY,
+  };
+  return Promise.all([
+    service.create(input).catch((error: unknown) => error),
+    service.create(input).catch((error: unknown) => error),
+  ]);
+}
+
 describe('QqbotMessageSubscriptionService', () => {
   it('uses sorted allowlisted config JSON for the active natural key', async () => {
     const source = adapter();
@@ -289,6 +417,61 @@ describe('QqbotMessageSubscriptionService', () => {
         sourceKey: SOURCE_KEY,
       }),
     ).rejects.toThrow('database unavailable');
+  });
+
+  it('lets the unique key settle concurrent creates for a previously unseen natural key', async () => {
+    const { items, service, subscriptionRepository } =
+      setupConcurrentCreateRace();
+
+    const results = await runConcurrentCreates(service);
+    const failures = results.filter((result) => result instanceof Error);
+    const successes = results.filter((result) => !(result instanceof Error));
+
+    expect(successes).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toBeInstanceOf(HttpException);
+    expect(failures[0]).toMatchObject({ status: HttpStatus.CONFLICT });
+    expect(failures[0]).not.toMatchObject({ errno: 1213 });
+    expect(items.filter((item) => !item.isDeleted)).toHaveLength(1);
+    for (const [options] of subscriptionRepository.findOne.mock.calls) {
+      const where = options.where as FindOptionsWhere<QqbotMessageSubscription>;
+      if (
+        where.activeKey !== undefined ||
+        where.sourceConfigDigest !== undefined
+      ) {
+        expect(options.lock).toBeUndefined();
+      }
+    }
+  });
+
+  it('locks only the selected history row before one concurrent revival wins', async () => {
+    const historical = subscription({
+      activeKey: null,
+      id: '102',
+      isDeleted: true,
+    });
+    const { items, service, subscriptionRepository } =
+      setupConcurrentCreateRace(historical);
+
+    const results = await runConcurrentCreates(service);
+    const failures = results.filter((result) => result instanceof Error);
+    const successes = results.filter((result) => !(result instanceof Error));
+
+    expect(successes).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toBeInstanceOf(HttpException);
+    expect(failures[0]).toMatchObject({ status: HttpStatus.CONFLICT });
+    expect(failures[0]).not.toMatchObject({ errno: 1213 });
+    expect(items).toEqual([
+      expect.objectContaining({ id: '102', isDeleted: false }),
+    ]);
+    const candidateLocks = subscriptionRepository.findOne.mock.calls.filter(
+      ([options]) => options.lock?.mode === 'pessimistic_write',
+    );
+    expect(candidateLocks).toHaveLength(2);
+    for (const [options] of candidateLocks) {
+      expect(options.where).toEqual({ id: '102', isDeleted: true });
+    }
   });
 
   it('soft deletes safely and revives the newest matching historical row with its original ID', async () => {

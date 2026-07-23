@@ -98,17 +98,15 @@ export class QqbotMessageSubscriptionService {
     const normalized = await this.normalizeInput(input);
     try {
       const saved = await this.subscriptionRepository.manager.transaction(
-        /** Serializes active-key ownership and deleted-row revival in one transaction. */
+        /** Lets the unique active key arbitrate new rows while locking only a selected history row. */
         async (manager) => {
           const repository = manager.getRepository(QqbotMessageSubscription);
           const active = await repository.findOne({
-            lock: { mode: 'pessimistic_write' },
             where: { activeKey: normalized.activeKey, isDeleted: false },
           });
           if (active) this.throwNaturalKeyConflict();
 
-          const historical = await repository.findOne({
-            lock: { mode: 'pessimistic_write' },
+          const historicalCandidate = await repository.findOne({
             order: { updateTime: 'DESC', id: 'DESC' },
             where: {
               isDeleted: true,
@@ -116,9 +114,15 @@ export class QqbotMessageSubscriptionService {
               sourceKey: normalized.sourceKey,
             },
           });
-          if (historical) {
-            Object.assign(historical, normalized, { isDeleted: false });
-            return repository.save(historical);
+          if (historicalCandidate) {
+            const historical = await repository.findOne({
+              lock: { mode: 'pessimistic_write' },
+              where: { id: historicalCandidate.id, isDeleted: true },
+            });
+            if (historical) {
+              Object.assign(historical, normalized, { isDeleted: false });
+              return repository.save(historical);
+            }
           }
           return repository.save(
             repository.create({ ...normalized, isDeleted: false }),

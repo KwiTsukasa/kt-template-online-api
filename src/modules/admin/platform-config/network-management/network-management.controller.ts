@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -10,6 +11,7 @@ import {
   Put,
   Query,
   Res,
+  Sse,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -26,6 +28,7 @@ import {
   NetworkPortForwardUpdateDto,
 } from './network-management.dto';
 import { NetworkManagementService } from './network-management.service';
+import { NetworkManagementEventStreamService } from './network-management-event-stream.service';
 
 @ApiTags('Admin - 网络端口转发')
 @Controller('system/network')
@@ -41,8 +44,27 @@ export class NetworkManagementController {
   /**
    * Creates the super-admin-only network desired-state controller.
    * @param service - Persisted port-forward and Agent state service.
+   * @param eventStream - Committed MQTT change stream exposed to Admin through SSE.
    */
-  constructor(private readonly service: NetworkManagementService) {}
+  constructor(
+    private readonly service: NetworkManagementService,
+    private readonly eventStream: NetworkManagementEventStreamService,
+  ) {}
+
+  /**
+   * Subscribes Admin to committed network-state changes without exposing MQTT credentials.
+   * @param lastEventIdHeader - Native EventSource replay cursor.
+   * @param lastEventIdQuery - Query fallback retained across keep-alive deactivation.
+   * @returns SSE observable containing typed state changes and cursor-pinned heartbeats.
+   */
+  @Sse('events/stream')
+  @ApiOperation({ summary: '订阅网络管理状态变化' })
+  stream(
+    @Headers('last-event-id') lastEventIdHeader?: string,
+    @Query('lastEventId') lastEventIdQuery?: string,
+  ) {
+    return this.eventStream.stream(lastEventIdHeader || lastEventIdQuery);
+  }
 
   /** Lists persisted mappings without returning expired endpoint leases. */
   @Get('port-forward/list')

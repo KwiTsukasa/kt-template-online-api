@@ -1,9 +1,14 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { type Observable, of } from 'rxjs';
 import * as request from 'supertest';
 import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/admin-super.guard';
 import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
 import { NetworkManagementController } from '../../../src/modules/admin/platform-config/network-management/network-management.controller';
+import {
+  NetworkManagementEventStreamService,
+  type NetworkManagementStreamEvent,
+} from '../../../src/modules/admin/platform-config/network-management/network-management-event-stream.service';
 import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/network-management.service';
 
 describe('NetworkManagementController', () => {
@@ -21,6 +26,22 @@ describe('NetworkManagementController', () => {
     retry: jest.fn(),
     update: jest.fn(),
   };
+  const eventStream = {
+    stream: jest.fn<
+      Observable<NetworkManagementStreamEvent>,
+      [lastEventId?: string]
+    >(() =>
+      of<NetworkManagementStreamEvent>({
+        data: {
+          eventId: 'network-event-1',
+          observedAt: '2026-07-23T00:00:00.000Z',
+          source: 'reported',
+        },
+        id: 'network-event-1',
+        type: 'network-state-changed',
+      }),
+    ),
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -28,6 +49,10 @@ describe('NetworkManagementController', () => {
       providers: [
         AdminSuperGuard,
         { provide: NetworkManagementService, useValue: service },
+        {
+          provide: NetworkManagementEventStreamService,
+          useValue: eventStream,
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -159,5 +184,53 @@ describe('NetworkManagementController', () => {
       lastErrorCode: 'router_conflict',
       lastErrorMessage: 'router conflict',
     });
+  });
+
+  it('streams committed MQTT updates through a real SSE HTTP request', async () => {
+    await request(apiUrl)
+      .get('/system/network/events/stream?lastEventId=query-event')
+      .set('Last-Event-ID', 'header-event')
+      .buffer(true)
+      .parse((response, callback) => {
+        response.once('data', () => callback(null, 'ok'));
+      })
+      .expect('content-type', /text\/event-stream/)
+      .expect(200);
+
+    expect(eventStream.stream).toHaveBeenCalledWith('header-event');
+    expect(service.list).not.toHaveBeenCalled();
+    expect(service.agentStatus).not.toHaveBeenCalled();
+  });
+
+  it('keeps an empty heartbeat cursor instead of accepting a Nest-generated ID', async () => {
+    let parsed = false;
+    let serialized = '';
+    eventStream.stream.mockReturnValueOnce(
+      of({
+        data: {
+          message: 'alive',
+          observedAt: '2026-07-23T00:00:00.000Z',
+        },
+        id: '',
+        type: 'heartbeat',
+      }),
+    );
+
+    await request(apiUrl)
+      .get('/system/network/events/stream')
+      .buffer(true)
+      .parse((response, callback) => {
+        response.on('data', (chunk) => {
+          serialized += chunk.toString('utf8');
+          if (!parsed && serialized.includes('event: heartbeat')) {
+            parsed = true;
+            callback(null, 'ok');
+          }
+        });
+      })
+      .expect(200);
+
+    expect(serialized).toContain('event: heartbeat\nid: \n');
+    expect(serialized).not.toContain('id: 1\n');
   });
 });

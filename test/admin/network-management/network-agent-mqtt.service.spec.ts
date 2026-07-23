@@ -9,6 +9,7 @@ import {
 } from '../../../src/modules/admin/platform-config/network-management/network-agent-mqtt.service';
 import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/network-agent-state.entity';
 import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/network-endpoint-history.entity';
+import type { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/network-management-event-stream.service';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
 import {
   buildDesiredSnapshot,
@@ -19,6 +20,7 @@ type MqttHarness = {
   client: MqttClient & EventEmitter;
   clientOptions: () => IClientOptions;
   histories: NetworkEndpointHistory[];
+  publishCommitted: jest.Mock;
   mapping: NetworkPortForward;
   publishCallback: () => (error?: Error) => void;
   service: NetworkAgentMqttService;
@@ -127,9 +129,14 @@ function createHarness(): MqttHarness {
     options = clientOptions;
     return client;
   };
+  const publishCommitted = jest.fn();
+  const eventStream = {
+    publishCommitted,
+  } as unknown as NetworkManagementEventStreamService;
   const service = new NetworkAgentMqttService(
     configService,
     dataSource,
+    eventStream,
     factory,
   );
   return {
@@ -138,6 +145,7 @@ function createHarness(): MqttHarness {
     histories,
     mapping,
     publishCallback: () => publishAck,
+    publishCommitted,
     service,
     state,
     transactionCalls: () => transactionCallCount,
@@ -464,6 +472,22 @@ describe('NetworkAgentMqttService', () => {
     );
   });
 
+  it('publishes one Admin event only after a reported transaction changes visible state', async () => {
+    const harness = createHarness();
+    const topic = 'kt/network/v1/agents/nas-main/reported';
+    const payload = reported(harness, 7);
+    harness.publishCommitted.mockImplementation(() => {
+      expect(harness.mapping.syncStatus).toBe('synced');
+      expect(harness.state.appliedRevision).toBe('7');
+    });
+
+    await harness.service.consumeMessage(topic, payload);
+    await harness.service.consumeMessage(topic, payload);
+
+    expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.publishCommitted).toHaveBeenCalledWith('reported');
+  });
+
   it('does not let an out-of-order same-revision withdrawal erase a newer lease', async () => {
     const harness = createHarness();
     const topic = 'kt/network/v1/agents/nas-main/reported';
@@ -664,6 +688,8 @@ describe('NetworkAgentMqttService', () => {
     await harness.service.consumeMessage(topic, payload);
     await harness.service.consumeMessage(topic, payload);
     expect(harness.histories).toHaveLength(1);
+    expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.publishCommitted).toHaveBeenCalledWith('events');
   });
 
   it('accepts a same-instance LWT without regressing heartbeat and ignores an old-instance LWT', async () => {
@@ -697,5 +723,7 @@ describe('NetworkAgentMqttService', () => {
     expect(harness.state.startedAt?.toISOString()).toBe(
       '2026-07-22T02:00:00.000Z',
     );
+    expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.publishCommitted).toHaveBeenCalledWith('status');
   });
 });

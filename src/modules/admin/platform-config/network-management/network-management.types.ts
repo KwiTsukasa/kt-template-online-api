@@ -28,6 +28,13 @@ export type EndpointEventType =
   | 'published'
   | 'restored'
   | 'withdrawn';
+export type NetworkStateChangeSource = 'events' | 'reported' | 'status';
+
+export type NetworkStateChangeEvent = {
+  eventId: string;
+  observedAt: string;
+  source: NetworkStateChangeSource;
+};
 
 export type NetworkDesiredMapping = {
   externalPort: number;

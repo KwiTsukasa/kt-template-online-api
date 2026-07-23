@@ -12,6 +12,7 @@ import { NetworkAgentMqttService } from '@/modules/admin/platform-config/network
 import { NetworkAgentState } from '@/modules/admin/platform-config/network-management/network-agent-state.entity';
 import { NetworkEndpointHistory } from '@/modules/admin/platform-config/network-management/network-endpoint-history.entity';
 import { NetworkManagementController } from '@/modules/admin/platform-config/network-management/network-management.controller';
+import { NetworkManagementEventStreamService } from '@/modules/admin/platform-config/network-management/network-management-event-stream.service';
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/network-management.entity';
 import { NetworkManagementService } from '@/modules/admin/platform-config/network-management/network-management.service';
 import { SystemLogController } from '@/modules/admin/platform-config/system-log/system-log.controller';
@@ -81,6 +82,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   EnvironmentEventMaterializer,
   EnvironmentEventStreamService,
   NetworkManagementService,
+  NetworkManagementEventStreamService,
   NetworkAgentMqttService,
 ];
 

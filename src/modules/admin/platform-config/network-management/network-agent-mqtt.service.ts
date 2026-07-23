@@ -13,6 +13,7 @@ import type { IClientOptions, MqttClient } from 'mqtt';
 import { KtDateTime } from '@/common';
 import { NetworkAgentState } from './network-agent-state.entity';
 import { NetworkEndpointHistory } from './network-endpoint-history.entity';
+import { NetworkManagementEventStreamService } from './network-management-event-stream.service';
 import { NetworkPortForward } from './network-management.entity';
 import {
   buildDesiredSnapshot,
@@ -24,6 +25,7 @@ import {
   parseStatusSnapshot,
   type NetworkEndpointEvent,
   type NetworkReportedSnapshot,
+  type NetworkStateChangeSource,
   type NetworkStatusSnapshot,
 } from './network-management.types';
 
@@ -56,11 +58,13 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
    * Creates the dedicated network Agent MQTT bridge.
    * @param configService - Runtime broker, Agent, and client identity settings.
    * @param dataSource - Transaction boundary for publish acknowledgements and inbound state.
+   * @param eventStream - SSE fan-out notified only after accepted inbound commits.
    * @param clientFactory - Optional deterministic MQTT client factory used by tests.
    */
   constructor(
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
+    private readonly eventStream: NetworkManagementEventStreamService,
     @Optional()
     @Inject(NETWORK_MQTT_CLIENT_FACTORY)
     private readonly clientFactory?: NetworkMqttClientFactory,
@@ -170,19 +174,21 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       throw new NetworkMessageValidationError('Invalid network MQTT JSON');
     }
 
+    let changed = false;
+    let source: NetworkStateChangeSource;
     if (topic === this.topic('reported')) {
-      await this.applyReported(parseReportedSnapshot(parsed));
-      return;
+      source = 'reported';
+      changed = await this.applyReported(parseReportedSnapshot(parsed));
+    } else if (topic === this.topic('status')) {
+      source = 'status';
+      changed = await this.applyStatus(parseStatusSnapshot(parsed));
+    } else if (topic === this.topic('events')) {
+      source = 'events';
+      changed = await this.appendEndpointEvent(parseEndpointEvent(parsed));
+    } else {
+      throw new NetworkMessageValidationError('Unexpected network MQTT topic');
     }
-    if (topic === this.topic('status')) {
-      await this.applyStatus(parseStatusSnapshot(parsed));
-      return;
-    }
-    if (topic === this.topic('events')) {
-      await this.appendEndpointEvent(parseEndpointEvent(parsed));
-      return;
-    }
-    throw new NetworkMessageValidationError('Unexpected network MQTT topic');
+    if (changed) this.eventStream.publishCommitted(source);
   }
 
   /** Restores exact subscriptions and one retained desired republish after each connection. */
@@ -306,145 +312,160 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Applies a full reported snapshot transactionally without creating desired rows. */
-  private async applyReported(report: NetworkReportedSnapshot): Promise<void> {
+  /**
+   * Applies a full reported snapshot transactionally without creating desired rows.
+   * @param report - Strict Agent report parsed from the retained topic.
+   * @returns True only when persisted Admin-visible state changed.
+   */
+  private async applyReported(
+    report: NetworkReportedSnapshot,
+  ): Promise<boolean> {
     this.assertAgentId(report.agentId);
-    const desiredChanged = await this.dataSource.transaction(
-      async (manager) => {
-        const stateRepository = manager.getRepository(NetworkAgentState);
-        const mappingRepository = manager.getRepository(NetworkPortForward);
-        const state = await stateRepository.findOne({
-          lock: { mode: 'pessimistic_write' },
-          where: { agentId: report.agentId },
+    const result = await this.dataSource.transaction(async (manager) => {
+      const stateRepository = manager.getRepository(NetworkAgentState);
+      const mappingRepository = manager.getRepository(NetworkPortForward);
+      const state = await stateRepository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { agentId: report.agentId },
+      });
+      if (
+        !state ||
+        BigInt(report.appliedRevision) > BigInt(state.desiredRevision)
+      ) {
+        throw new NetworkMessageValidationError('Invalid reported revision');
+      }
+      if (BigInt(report.appliedRevision) < BigInt(state.appliedRevision)) {
+        return { desiredChanged: false, visibleStateChanged: false };
+      }
+      const stateBefore = this.reportedAgentStateFingerprint(state);
+      let visibleStateChanged = false;
+      const isCurrentRevision =
+        BigInt(report.appliedRevision) === BigInt(state.desiredRevision);
+      const desiredMappings = await mappingRepository.find({
+        where: { isDeleted: false },
+      });
+      if (isCurrentRevision) {
+        const currentSnapshot = buildDesiredSnapshot(state, desiredMappings);
+        if (desiredSnapshotDigest(currentSnapshot) !== report.desiredDigest) {
+          throw new NetworkMessageValidationError(
+            'Reported desired digest does not match current revision',
+          );
+        }
+      }
+      const mappingById = new Map(
+        desiredMappings.map((mapping) => [mapping.id, mapping]),
+      );
+      const finalizedIds = new Set<string>();
+      let finalizedDeletion = false;
+      for (const item of report.mappings) {
+        const mapping = mappingById.get(item.id);
+        if (mapping) continue;
+        if (isCurrentRevision) {
+          throw new NetworkMessageValidationError(
+            'Unknown mapping in current reported snapshot',
+          );
+        }
+        const historical = await mappingRepository.findOne({
+          where: { id: item.id },
         });
         if (
-          !state ||
-          BigInt(report.appliedRevision) > BigInt(state.desiredRevision)
+          historical?.isDeleted &&
+          item.desiredState === 'absent' &&
+          item.syncStatus === 'synced'
         ) {
-          throw new NetworkMessageValidationError('Invalid reported revision');
+          finalizedIds.add(item.id);
+        } else {
+          throw new NetworkMessageValidationError('Unknown reported mapping');
         }
-        if (BigInt(report.appliedRevision) < BigInt(state.appliedRevision)) {
-          return;
-        }
-        const isCurrentRevision =
-          BigInt(report.appliedRevision) === BigInt(state.desiredRevision);
-        const desiredMappings = await mappingRepository.find({
-          where: { isDeleted: false },
-        });
-        if (isCurrentRevision) {
-          const currentSnapshot = buildDesiredSnapshot(state, desiredMappings);
-          if (desiredSnapshotDigest(currentSnapshot) !== report.desiredDigest) {
-            throw new NetworkMessageValidationError(
-              'Reported desired digest does not match current revision',
-            );
-          }
-        }
-        const mappingById = new Map(
-          desiredMappings.map((mapping) => [mapping.id, mapping]),
-        );
-        const finalizedIds = new Set<string>();
-        let finalizedDeletion = false;
-        for (const item of report.mappings) {
-          const mapping = mappingById.get(item.id);
-          if (mapping) continue;
-          if (isCurrentRevision) {
-            throw new NetworkMessageValidationError(
-              'Unknown mapping in current reported snapshot',
-            );
-          }
-          const historical = await mappingRepository.findOne({
-            where: { id: item.id },
-          });
-          if (
-            historical?.isDeleted &&
-            item.desiredState === 'absent' &&
-            item.syncStatus === 'synced'
-          ) {
-            finalizedIds.add(item.id);
-          } else {
-            throw new NetworkMessageValidationError('Unknown reported mapping');
-          }
-        }
-        if (isCurrentRevision) {
-          const reportedIds = new Set(report.mappings.map((item) => item.id));
-          if (desiredMappings.some((mapping) => !reportedIds.has(mapping.id))) {
-            throw new NetworkMessageValidationError(
-              'Incomplete current reported snapshot',
-            );
-          }
-        }
-
-        for (const item of report.mappings) {
-          if (finalizedIds.has(item.id)) continue;
-          const mapping = mappingById.get(item.id) as NetworkPortForward;
-          if (BigInt(item.revision) < BigInt(mapping.desiredRevision)) {
-            continue;
-          }
-          if (item.desiredState !== mapping.desiredPresence) {
-            throw new NetworkMessageValidationError(
-              'Reported mapping desired state does not match',
-            );
-          }
-          if (item.keeperDesiredEnabled !== mapping.keeperDesiredEnabled) {
-            throw new NetworkMessageValidationError(
-              'Reported mapping Keeper intent does not match',
-            );
-          }
-          mapping.reportedRevision = String(item.revision);
-          mapping.syncStatus = item.syncStatus;
-          mapping.keeperStatus = item.keeperStatus;
-          mapping.lastErrorCode = item.errorCode || null;
-          mapping.lastErrorMessage = item.errorMessage || null;
-          this.applyReportedEndpoints(
-            mapping,
-            item.currentEndpoint,
-            item.lastObservedEndpoint,
-            report.reportedAt,
+      }
+      if (isCurrentRevision) {
+        const reportedIds = new Set(report.mappings.map((item) => item.id));
+        if (desiredMappings.some((mapping) => !reportedIds.has(mapping.id))) {
+          throw new NetworkMessageValidationError(
+            'Incomplete current reported snapshot',
           );
+        }
+      }
 
-          if (
-            mapping.desiredPresence === 'absent' &&
-            item.desiredState === 'absent' &&
-            item.syncStatus === 'synced' &&
-            item.routerPresent === false &&
-            item.routePresent === false &&
-            report.helperStatus === 'confirmed' &&
-            report.helperAppliedRevision === report.appliedRevision &&
-            item.keeperDesiredEnabled === false &&
-            item.keeperStatus === 'disabled' &&
-            !item.currentEndpoint
-          ) {
-            mapping.activeKey = null;
-            mapping.isDeleted = true;
-            finalizedDeletion = true;
-          }
+      for (const item of report.mappings) {
+        if (finalizedIds.has(item.id)) continue;
+        const mapping = mappingById.get(item.id) as NetworkPortForward;
+        if (BigInt(item.revision) < BigInt(mapping.desiredRevision)) {
+          continue;
+        }
+        if (item.desiredState !== mapping.desiredPresence) {
+          throw new NetworkMessageValidationError(
+            'Reported mapping desired state does not match',
+          );
+        }
+        if (item.keeperDesiredEnabled !== mapping.keeperDesiredEnabled) {
+          throw new NetworkMessageValidationError(
+            'Reported mapping Keeper intent does not match',
+          );
+        }
+        const mappingBefore = this.reportedMappingStateFingerprint(mapping);
+        mapping.reportedRevision = String(item.revision);
+        mapping.syncStatus = item.syncStatus;
+        mapping.keeperStatus = item.keeperStatus;
+        mapping.lastErrorCode = item.errorCode || null;
+        mapping.lastErrorMessage = item.errorMessage || null;
+        this.applyReportedEndpoints(
+          mapping,
+          item.currentEndpoint,
+          item.lastObservedEndpoint,
+          report.reportedAt,
+        );
+
+        if (
+          mapping.desiredPresence === 'absent' &&
+          item.desiredState === 'absent' &&
+          item.syncStatus === 'synced' &&
+          item.routerPresent === false &&
+          item.routePresent === false &&
+          report.helperStatus === 'confirmed' &&
+          report.helperAppliedRevision === report.appliedRevision &&
+          item.keeperDesiredEnabled === false &&
+          item.keeperStatus === 'disabled' &&
+          !item.currentEndpoint
+        ) {
+          mapping.activeKey = null;
+          mapping.isDeleted = true;
+          finalizedDeletion = true;
+        }
+        if (this.reportedMappingStateFingerprint(mapping) !== mappingBefore) {
+          visibleStateChanged = true;
           await mappingRepository.save(mapping);
         }
+      }
 
-        if (BigInt(report.appliedRevision) > BigInt(state.appliedRevision)) {
-          state.appliedRevision = String(report.appliedRevision);
-        }
-        const failedMapping = report.mappings.find(
-          (item) =>
-            item.syncStatus === 'conflict' || item.syncStatus === 'failed',
-        );
-        state.lastReconcileErrorCode = failedMapping
-          ? failedMapping.errorCode || `sync_${failedMapping.syncStatus}`
-          : report.helperStatus === 'failed'
-            ? 'route_helper_failed'
-            : null;
-        state.lastReconcileErrorMessage = failedMapping?.errorMessage || null;
-        if (finalizedDeletion) {
-          state.desiredRevision = (
-            BigInt(state.desiredRevision) + 1n
-          ).toString();
-          state.desiredIssuedAt = new KtDateTime();
-        }
+      if (BigInt(report.appliedRevision) > BigInt(state.appliedRevision)) {
+        state.appliedRevision = String(report.appliedRevision);
+      }
+      const failedMapping = report.mappings.find(
+        (item) =>
+          item.syncStatus === 'conflict' || item.syncStatus === 'failed',
+      );
+      state.lastReconcileErrorCode = failedMapping
+        ? failedMapping.errorCode || `sync_${failedMapping.syncStatus}`
+        : report.helperStatus === 'failed'
+          ? 'route_helper_failed'
+          : null;
+      state.lastReconcileErrorMessage = failedMapping?.errorMessage || null;
+      if (finalizedDeletion) {
+        state.desiredRevision = (BigInt(state.desiredRevision) + 1n).toString();
+        state.desiredIssuedAt = new KtDateTime();
+      }
+      if (this.reportedAgentStateFingerprint(state) !== stateBefore) {
+        visibleStateChanged = true;
         await stateRepository.save(state);
-        return finalizedDeletion;
-      },
-    );
-    if (desiredChanged) this.requestDesiredPublish();
+      }
+      return {
+        desiredChanged: finalizedDeletion,
+        visibleStateChanged,
+      };
+    });
+    if (result.desiredChanged) this.requestDesiredPublish();
+    return result.visibleStateChanged;
   }
 
   /**
@@ -496,10 +517,14 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Applies retained Agent online status without changing mapping sync semantics. */
-  private async applyStatus(status: NetworkStatusSnapshot): Promise<void> {
+  /**
+   * Applies retained Agent online status without changing mapping sync semantics.
+   * @param status - Strict retained status or LWT snapshot.
+   * @returns True only when persisted Agent status changed.
+   */
+  private async applyStatus(status: NetworkStatusSnapshot): Promise<boolean> {
     this.assertAgentId(status.agentId);
-    await this.dataSource.transaction(async (manager) => {
+    return await this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(NetworkAgentState);
       const state = await repository.findOne({
         lock: { mode: 'pessimistic_write' },
@@ -520,7 +545,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         currentStartedAt &&
         incomingStartedAt.getTime() < currentStartedAt.getTime()
       ) {
-        return;
+        return false;
       }
       const isSameSessionWill =
         status.online === false &&
@@ -532,8 +557,9 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         observedAt.getTime() < new Date(state.lastHeartbeatAt).getTime() &&
         !isSameSessionWill
       ) {
-        return;
+        return false;
       }
+      const stateBefore = this.statusStateFingerprint(state);
       state.online = status.online;
       state.version = status.version || null;
       state.startedAt = incomingStartedAt
@@ -544,16 +570,22 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       }
       state.lastMqttErrorCode = status.errorCode || null;
       state.lastMqttErrorMessage = status.errorMessage || null;
+      if (this.statusStateFingerprint(state) === stateBefore) return false;
       await repository.save(state);
+      return true;
     });
   }
 
-  /** Appends one endpoint change event exactly once by event ID. */
+  /**
+   * Appends one endpoint change event exactly once by event ID.
+   * @param event - Strict endpoint transition parsed from the events topic.
+   * @returns True only when a new history row committed.
+   */
   private async appendEndpointEvent(
     event: NetworkEndpointEvent,
-  ): Promise<void> {
+  ): Promise<boolean> {
     this.assertAgentId(event.agentId);
-    await this.dataSource.transaction(async (manager) => {
+    return await this.dataSource.transaction(async (manager) => {
       const state = await manager.getRepository(NetworkAgentState).findOne({
         where: { agentId: event.agentId },
       });
@@ -568,7 +600,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       }
       const repository = manager.getRepository(NetworkEndpointHistory);
       if (await repository.findOne({ where: { eventId: event.eventId } })) {
-        return;
+        return false;
       }
       const history = repository.create({
         eventId: event.eventId,
@@ -583,10 +615,67 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       });
       try {
         await repository.save(history);
+        return true;
       } catch (error) {
         if (!this.isDuplicateKeyError(error)) throw error;
+        return false;
       }
     });
+  }
+
+  /**
+   * Serializes only mapping fields rendered by Admin or used for row availability.
+   * @param mapping - Current persisted mapping before or after one report application.
+   * @returns Stable comparison string for suppressing QoS 1 redelivery refreshes.
+   */
+  private reportedMappingStateFingerprint(mapping: NetworkPortForward): string {
+    return JSON.stringify([
+      mapping.activeKey,
+      mapping.currentObservedAt,
+      mapping.currentPublicIpv4,
+      mapping.currentPublicPort,
+      mapping.currentValidUntil,
+      mapping.isDeleted,
+      mapping.keeperStatus,
+      mapping.lastErrorCode,
+      mapping.lastErrorMessage,
+      mapping.lastObservedAt,
+      mapping.lastObservedIpv4,
+      mapping.lastObservedPort,
+      mapping.reportedRevision,
+      mapping.syncStatus,
+    ]);
+  }
+
+  /**
+   * Serializes report-owned Agent fields shown by the network page.
+   * @param state - Agent singleton before or after one reported snapshot.
+   * @returns Stable comparison string for committed report changes.
+   */
+  private reportedAgentStateFingerprint(state: NetworkAgentState): string {
+    return JSON.stringify([
+      state.appliedRevision,
+      state.desiredIssuedAt,
+      state.desiredRevision,
+      state.lastReconcileErrorCode,
+      state.lastReconcileErrorMessage,
+    ]);
+  }
+
+  /**
+   * Serializes status-topic fields shown by the network page.
+   * @param state - Agent singleton before or after one status snapshot.
+   * @returns Stable comparison string for duplicate status suppression.
+   */
+  private statusStateFingerprint(state: NetworkAgentState): string {
+    return JSON.stringify([
+      state.lastHeartbeatAt,
+      state.lastMqttErrorCode,
+      state.lastMqttErrorMessage,
+      state.online,
+      state.startedAt,
+      state.version,
+    ]);
   }
 
   /** Validates that an inbound message belongs to the one configured Agent. */

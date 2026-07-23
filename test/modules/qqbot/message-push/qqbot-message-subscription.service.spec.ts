@@ -389,6 +389,36 @@ describe('QqbotMessageSubscriptionService', () => {
     );
   });
 
+  it('maps duplicate-key update races to Vben HTTP 409 and propagates other save failures', async () => {
+    const duplicateKeyRace = setup([subscription()]);
+    duplicateKeyRace.subscriptionRepository.save.mockRejectedValueOnce({
+      code: 'ER_DUP_ENTRY',
+      errno: 1062,
+    });
+    await expect(
+      duplicateKeyRace.service.update('100', {
+        enabled: true,
+        name: '更新竞态',
+        sourceConfig: CONFIG,
+        sourceKey: SOURCE_KEY,
+      }),
+    ).rejects.toMatchObject({ status: HttpStatus.CONFLICT });
+
+    const infrastructureFailure = new Error('database unavailable');
+    const persistenceFailure = setup([subscription()]);
+    persistenceFailure.subscriptionRepository.save.mockRejectedValueOnce(
+      infrastructureFailure,
+    );
+    await expect(
+      persistenceFailure.service.update('100', {
+        enabled: true,
+        name: '更新故障',
+        sourceConfig: CONFIG,
+        sourceKey: SOURCE_KEY,
+      }),
+    ).rejects.toBe(infrastructureFailure);
+  });
+
   it('pages only undeleted records with real filters and returns detached, real-time source status', async () => {
     const source = adapter({
       invalidReasonCode: 'ddns_mapping_mismatch',

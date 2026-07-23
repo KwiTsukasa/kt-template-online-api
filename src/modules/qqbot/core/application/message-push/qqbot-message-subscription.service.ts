@@ -144,23 +144,28 @@ export class QqbotMessageSubscriptionService {
     input: MessageSubscriptionInput,
   ): Promise<MessageSubscriptionView> {
     const normalized = await this.normalizeInput(input);
-    const saved = await this.subscriptionRepository.manager.transaction(
-      /** Holds both target and prospective active-key rows through the update save. */
-      async (manager) => {
-        const repository = manager.getRepository(QqbotMessageSubscription);
-        const current = await this.findActiveForWrite(repository, id);
-        const conflict = await repository.findOne({
-          lock: { mode: 'pessimistic_write' },
-          where: { activeKey: normalized.activeKey, isDeleted: false },
-        });
-        if (conflict && conflict.id !== current.id) {
-          this.throwNaturalKeyConflict();
-        }
-        Object.assign(current, normalized);
-        return repository.save(current);
-      },
-    );
-    return this.toView(saved);
+    try {
+      const saved = await this.subscriptionRepository.manager.transaction(
+        /** Holds both target and prospective active-key rows through the update save. */
+        async (manager) => {
+          const repository = manager.getRepository(QqbotMessageSubscription);
+          const current = await this.findActiveForWrite(repository, id);
+          const conflict = await repository.findOne({
+            lock: { mode: 'pessimistic_write' },
+            where: { activeKey: normalized.activeKey, isDeleted: false },
+          });
+          if (conflict && conflict.id !== current.id) {
+            this.throwNaturalKeyConflict();
+          }
+          Object.assign(current, normalized);
+          return repository.save(current);
+        },
+      );
+      return this.toView(saved);
+    } catch (error) {
+      if (this.isDuplicateKeyError(error)) this.throwNaturalKeyConflict();
+      throw error;
+    }
   }
 
   /**

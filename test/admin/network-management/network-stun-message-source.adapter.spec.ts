@@ -7,7 +7,9 @@ import { SystemMessageSourceRegistry } from '../../../src/modules/qqbot/core/app
 type Harness = {
   adapter: NetworkStunMessageSourceAdapter;
   ddns: NetworkDdnsRecord;
+  ddnsRepository: Repository<NetworkDdnsRecord>;
   mapping: NetworkPortForward;
+  mappingRepository: Repository<NetworkPortForward>;
   registry: SystemMessageSourceRegistry;
 };
 
@@ -62,7 +64,9 @@ function createHarness(): Harness {
       registry,
     ),
     ddns,
+    ddnsRepository: recordRepository,
     mapping,
+    mappingRepository,
     registry,
   };
 }
@@ -81,6 +85,15 @@ function eventPayload(overrides: Record<string, unknown> = {}) {
 }
 
 describe('NetworkStunMessageSourceAdapter', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-24T12:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('registers once and only unregisters its own source instance', () => {
     const { adapter, registry } = createHarness();
     adapter.onModuleInit();
@@ -111,43 +124,94 @@ describe('NetworkStunMessageSourceAdapter', () => {
   });
 
   it.each([
-    ['tcp', (harness: Harness) => (harness.mapping.protocol = 'tcp')],
-    ['unequal ports', (harness: Harness) => (harness.mapping.internalPort = 1)],
+    [
+      'tcp',
+      'mapping_not_udp',
+      (harness: Harness) => (harness.mapping.protocol = 'tcp'),
+    ],
+    [
+      'unequal ports',
+      'mapping_port_mismatch',
+      (harness: Harness) => (harness.mapping.internalPort = 1),
+    ],
     [
       'disabled keeper',
+      'keeper_disabled',
       (harness: Harness) => (harness.mapping.keeperDesiredEnabled = false),
     ],
     [
       'deleted mapping',
+      'mapping_not_managed',
       (harness: Harness) => (harness.mapping.isDeleted = true),
     ],
-    ['disabled DDNS', (harness: Harness) => (harness.ddns.enabled = false)],
-    ['deleted DDNS', (harness: Harness) => (harness.ddns.isDeleted = true)],
-    ['non-A DDNS', (harness: Harness) => (harness.ddns.recordType = 'AAAA')],
+    [
+      'disabled DDNS',
+      'ddns_disabled',
+      (harness: Harness) => (harness.ddns.enabled = false),
+    ],
+    [
+      'deleted DDNS',
+      'ddns_not_found',
+      (harness: Harness) => (harness.ddns.isDeleted = true),
+    ],
+    [
+      'non-A DDNS',
+      'ddns_not_ipv4',
+      (harness: Harness) => (harness.ddns.recordType = 'AAAA'),
+    ],
+    [
+      'non-port-forward DDNS',
+      'ddns_not_ipv4',
+      (harness: Harness) => (harness.ddns.sourceType = 'agent_ipv6'),
+    ],
     [
       'mismatched DDNS mapping',
+      'ddns_mapping_mismatch',
       (harness: Harness) =>
         (harness.ddns.portForwardId = '2041700000000000003'),
     ],
-  ])('rejects %s subscriptions', async (_name, mutate) => {
-    const harness = createHarness();
-    mutate(harness);
-    await expect(
-      harness.adapter.normalizeSubscriptionConfig({
+  ])(
+    'rejects %s subscriptions with the locked %s code',
+    async (_name, code, mutate) => {
+      const harness = createHarness();
+      mutate(harness);
+      const config = {
         ddnsRecordId: harness.ddns.id,
         portForwardId: harness.mapping.id,
-      }),
-    ).rejects.toThrow();
-  });
+      };
+      await expect(
+        harness.adapter.normalizeSubscriptionConfig(config),
+      ).rejects.toMatchObject({
+        code,
+      });
+      await expect(
+        harness.adapter.inspectSubscription(config),
+      ).resolves.toEqual({
+        invalidReasonCode: code,
+        sourceSummary: '未选择有效的 STUN 映射与 DDNS',
+        valid: false,
+      });
+    },
+  );
 
-  it('rejects malformed Snowflake IDs and strips unknown event/config fields', async () => {
+  it('rejects malformed subscription/event payloads and strips unknown fields', async () => {
     const { adapter } = createHarness();
     await expect(
       adapter.normalizeSubscriptionConfig({
         ddnsRecordId: 2041700000000000002,
         portForwardId: 'not-an-id',
       }),
-    ).rejects.toThrow('invalid_message_source_config');
+    ).rejects.toMatchObject({ code: 'invalid_source_config' });
+    await expect(
+      adapter.inspectSubscription({
+        ddnsRecordId: 2041700000000000002,
+        portForwardId: 'not-an-id',
+      }),
+    ).resolves.toEqual({
+      invalidReasonCode: 'invalid_source_config',
+      sourceSummary: '未选择有效的 STUN 映射与 DDNS',
+      valid: false,
+    });
     expect(adapter.validateEventPayload(eventPayload())).toEqual({
       changedAt: '2026-07-24T12:30:00.000Z',
       currentPort: 38213,
@@ -157,7 +221,88 @@ describe('NetworkStunMessageSourceAdapter', () => {
     });
     expect(() =>
       adapter.validateEventPayload(eventPayload({ currentPort: '38213' })),
-    ).toThrow('invalid_message_event_payload');
+    ).toThrow('invalid_source_config');
+    expect(() =>
+      adapter.validateEventPayload(eventPayload({ publicIpv4: '2001:db8::1' })),
+    ).toThrow('invalid_source_config');
+    expect(() => adapter.validateEventPayload(null as never)).toThrow(
+      'invalid_source_config',
+    );
+  });
+
+  it('maps an absent mapping to the locked subscription and inspection code', async () => {
+    const { adapter } = createHarness();
+    const config = {
+      ddnsRecordId: '2041700000000000002',
+      portForwardId: '2041700000000000003',
+    };
+    await expect(
+      adapter.normalizeSubscriptionConfig(config),
+    ).rejects.toMatchObject({
+      code: 'mapping_not_found',
+    });
+    await expect(adapter.inspectSubscription(config)).resolves.toEqual({
+      invalidReasonCode: 'mapping_not_found',
+      sourceSummary: '未选择有效的 STUN 映射与 DDNS',
+      valid: false,
+    });
+  });
+
+  it('maps an absent DDNS record to the locked subscription and inspection code', async () => {
+    const { adapter } = createHarness();
+    const config = {
+      ddnsRecordId: '2041700000000000003',
+      portForwardId: '2041700000000000001',
+    };
+    await expect(
+      adapter.normalizeSubscriptionConfig(config),
+    ).rejects.toMatchObject({
+      code: 'ddns_not_found',
+    });
+    await expect(adapter.inspectSubscription(config)).resolves.toEqual({
+      invalidReasonCode: 'ddns_not_found',
+      sourceSummary: '未选择有效的 STUN 映射与 DDNS',
+      valid: false,
+    });
+  });
+
+  it('preserves uppercase Network eligibility reasons in subscription options', async () => {
+    const { adapter, mapping } = createHarness();
+    mapping.protocol = 'tcp';
+    await expect(adapter.listSubscriptionOptions()).resolves.toMatchObject({
+      portForwards: [
+        {
+          disabledReasonCode: 'UDP_REQUIRED',
+          eligible: false,
+          externalPort: 8213,
+          id: mapping.id,
+          internalPort: 8213,
+          name: '帕鲁新世界',
+          protocol: 'tcp',
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ['invalid month', '2026-13-01T12:00:00Z'],
+    ['non-leap-day', '2026-02-29T12:00:00Z'],
+    ['invalid February day', '2026-02-30T12:00:00Z'],
+    ['invalid offset', '2026-02-28T12:00:00+24:00'],
+  ])('rejects an RFC3339 timestamp with %s', (_name, changedAt) => {
+    const { adapter } = createHarness();
+    expect(() =>
+      adapter.validateEventPayload(eventPayload({ changedAt })),
+    ).toThrow('invalid_source_config');
+  });
+
+  it('normalizes a leap-day RFC3339 timestamp with an offset', () => {
+    const { adapter } = createHarness();
+    expect(
+      adapter.validateEventPayload(
+        eventPayload({ changedAt: '2024-02-29T23:59:59.123+08:00' }),
+      ),
+    ).toMatchObject({ changedAt: '2024-02-29T15:59:59.123Z' });
   });
 
   it('returns ready variables derived from the server-owned DDNS FQDN and Shanghai time', async () => {
@@ -185,7 +330,7 @@ describe('NetworkStunMessageSourceAdapter', () => {
     });
   });
 
-  it('waits for DDNS, supersedes a replaced endpoint, and cancels a changed relationship', async () => {
+  it('waits for DDNS, supersedes replaced or expired endpoints, and cancels a changed relationship', async () => {
     const waiting = createHarness();
     waiting.ddns.appliedAddress = null;
     await expect(
@@ -211,7 +356,25 @@ describe('NetworkStunMessageSourceAdapter', () => {
           portForwardId: superseded.mapping.id,
         },
       }),
-    ).resolves.toMatchObject({ status: 'superseded' });
+    ).resolves.toMatchObject({
+      reasonCode: 'endpoint_superseded',
+      status: 'superseded',
+    });
+
+    const expired = createHarness();
+    expired.mapping.currentValidUntil = new Date('2026-07-24T11:59:59.999Z');
+    await expect(
+      expired.adapter.resolveDelivery({
+        eventPayload: eventPayload(),
+        subscriptionConfig: {
+          ddnsRecordId: expired.ddns.id,
+          portForwardId: expired.mapping.id,
+        },
+      }),
+    ).resolves.toEqual({
+      reasonCode: 'endpoint_superseded',
+      status: 'superseded',
+    });
 
     const cancelled = createHarness();
     cancelled.ddns.enabled = false;
@@ -223,6 +386,62 @@ describe('NetworkStunMessageSourceAdapter', () => {
           portForwardId: cancelled.mapping.id,
         },
       }),
-    ).resolves.toMatchObject({ status: 'cancelled' });
+    ).resolves.toMatchObject({
+      reasonCode: 'ddns_disabled',
+      status: 'cancelled',
+    });
   });
+
+  it('cancels event mapping identity mismatches with invalid_source_config', async () => {
+    const { adapter } = createHarness();
+    await expect(
+      adapter.resolveDelivery({
+        eventPayload: eventPayload({ portForwardId: '2041700000000000003' }),
+        subscriptionConfig: {
+          ddnsRecordId: '2041700000000000002',
+          portForwardId: '2041700000000000001',
+        },
+      }),
+    ).resolves.toEqual({
+      reasonCode: 'invalid_source_config',
+      status: 'cancelled',
+    });
+  });
+
+  it('cancels malformed event payloads with invalid_source_config', async () => {
+    const { adapter } = createHarness();
+    await expect(
+      adapter.resolveDelivery({
+        eventPayload: eventPayload({ currentPort: '38213' }),
+        subscriptionConfig: {
+          ddnsRecordId: '2041700000000000002',
+          portForwardId: '2041700000000000001',
+        },
+      }),
+    ).resolves.toEqual({
+      reasonCode: 'invalid_source_config',
+      status: 'cancelled',
+    });
+  });
+
+  it.each([
+    ['mapping', 'mappingRepository'],
+    ['DDNS', 'ddnsRepository'],
+  ] as const)(
+    'rethrows an unexpected %s repository error for delivery retry',
+    async (_name, repository) => {
+      const harness = createHarness();
+      const failure = new Error(`${repository} unavailable`);
+      jest.spyOn(harness[repository], 'findOne').mockRejectedValueOnce(failure);
+      await expect(
+        harness.adapter.resolveDelivery({
+          eventPayload: eventPayload(),
+          subscriptionConfig: {
+            ddnsRecordId: harness.ddns.id,
+            portForwardId: harness.mapping.id,
+          },
+        }),
+      ).rejects.toBe(failure);
+    },
+  );
 });

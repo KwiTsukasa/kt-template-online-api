@@ -20,7 +20,7 @@ import { classifyStunEndpointSource } from './network-source-eligibility';
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
 const SNOWFLAKE_ID_PATTERN = /^[1-9]\d{0,23}$/;
 const RFC3339_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|([+-])(\d{2}):(\d{2}))$/;
 
 type StunSubscriptionConfig = {
   ddnsRecordId: string;
@@ -194,8 +194,9 @@ export class NetworkStunMessageSourceAdapter
         valid: true,
       };
     } catch (error) {
+      if (!(error instanceof SystemMessageContractError)) throw error;
       return {
-        invalidReasonCode: messageSourceErrorCode(error),
+        invalidReasonCode: error.code,
         sourceSummary: '未选择有效的 STUN 映射与 DDNS',
         valid: false,
       };
@@ -256,7 +257,7 @@ export class NetworkStunMessageSourceAdapter
     payload: Record<string, unknown>,
   ): Record<string, SystemMessageScalar> {
     if (!isPlainRecord(payload)) {
-      throw new SystemMessageContractError('invalid_message_event_payload');
+      throw new SystemMessageContractError('invalid_source_config');
     }
     const changedAt = normalizeRfc3339(payload.changedAt);
     const currentPort = normalizePort(payload.currentPort);
@@ -267,7 +268,7 @@ export class NetworkStunMessageSourceAdapter
       isIP(payload.publicIpv4) !== 4 ||
       currentPort === previousPort
     ) {
-      throw new SystemMessageContractError('invalid_message_event_payload');
+      throw new SystemMessageContractError('invalid_source_config');
     }
     return {
       changedAt,
@@ -291,25 +292,27 @@ export class NetworkStunMessageSourceAdapter
     try {
       resolved = await this.resolveSubscription(input.subscriptionConfig);
     } catch (error) {
-      return { reasonCode: messageSourceErrorCode(error), status: 'cancelled' };
+      if (!(error instanceof SystemMessageContractError)) throw error;
+      return { reasonCode: error.code, status: 'cancelled' };
     }
     let event: StunEventPayload;
     try {
       event = this.validateEventPayload(input.eventPayload) as StunEventPayload;
     } catch (error) {
-      return { reasonCode: messageSourceErrorCode(error), status: 'cancelled' };
+      if (!(error instanceof SystemMessageContractError)) throw error;
+      return { reasonCode: error.code, status: 'cancelled' };
     }
     if (event.portForwardId !== resolved.config.portForwardId) {
-      return { reasonCode: 'event_resource_mismatch', status: 'cancelled' };
+      return { reasonCode: 'invalid_source_config', status: 'cancelled' };
     }
     if (!hasCurrentEndpoint(resolved.mapping)) {
-      return { reasonCode: 'endpoint_unavailable', status: 'superseded' };
+      return { reasonCode: 'endpoint_superseded', status: 'superseded' };
     }
     if (
       resolved.mapping.currentPublicPort !== event.currentPort ||
       resolved.mapping.currentPublicIpv4 !== event.publicIpv4
     ) {
-      return { reasonCode: 'endpoint_changed', status: 'superseded' };
+      return { reasonCode: 'endpoint_superseded', status: 'superseded' };
     }
     const variables = deliveryVariables(resolved, event);
     if (
@@ -334,7 +337,7 @@ export class NetworkStunMessageSourceAdapter
     input: unknown,
   ): Promise<ResolvedSubscription> {
     if (!isPlainRecord(input)) {
-      throw new SystemMessageContractError('invalid_message_source_config');
+      throw new SystemMessageContractError('invalid_source_config');
     }
     let config: StunSubscriptionConfig;
     try {
@@ -343,24 +346,28 @@ export class NetworkStunMessageSourceAdapter
         portForwardId: normalizeSnowflakeId(input.portForwardId),
       };
     } catch {
-      throw new SystemMessageContractError('invalid_message_source_config');
+      throw new SystemMessageContractError('invalid_source_config');
     }
     const mapping = await this.mappingRepository.findOne({
       where: { id: config.portForwardId },
     });
     if (!mapping) {
-      throw new SystemMessageContractError('source_not_found');
+      throw new SystemMessageContractError('mapping_not_found');
     }
     const sourceEligibility = classifyStunEndpointSource(mapping);
     if (!sourceEligibility.eligible) {
       throw new SystemMessageContractError(
-        sourceEligibility.disabledReasonCode as string,
+        messageSourceEligibilityReason(
+          sourceEligibility.disabledReasonCode as NonNullable<
+            typeof sourceEligibility.disabledReasonCode
+          >,
+        ),
       );
     }
     const ddnsRecord = await this.ddnsRepository.findOne({
       where: { id: config.ddnsRecordId },
     });
-    const ddnsReason = ddnsOptionReason(ddnsRecord, mapping);
+    const ddnsReason = ddnsMessageSourceReason(ddnsRecord, mapping);
     if (ddnsReason) {
       throw new SystemMessageContractError(ddnsReason);
     }
@@ -389,7 +396,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
  */
 function normalizeSnowflakeId(value: unknown): string {
   if (typeof value !== 'string' || !SNOWFLAKE_ID_PATTERN.test(value)) {
-    throw new SystemMessageContractError('invalid_message_source_config');
+    throw new SystemMessageContractError('invalid_source_config');
   }
   return value;
 }
@@ -406,7 +413,7 @@ function normalizePort(value: unknown): number {
     value < 1 ||
     value > 65_535
   ) {
-    throw new SystemMessageContractError('invalid_message_event_payload');
+    throw new SystemMessageContractError('invalid_source_config');
   }
   return value;
 }
@@ -417,14 +424,72 @@ function normalizePort(value: unknown): number {
  * @returns Canonical ISO string safe for later Shanghai rendering.
  */
 function normalizeRfc3339(value: unknown): string {
-  if (typeof value !== 'string' || !RFC3339_PATTERN.test(value)) {
-    throw new SystemMessageContractError('invalid_message_event_payload');
+  if (typeof value !== 'string') {
+    throw new SystemMessageContractError('invalid_source_config');
+  }
+  const match = RFC3339_PATTERN.exec(value);
+  if (!match || !isValidRfc3339Calendar(match)) {
+    throw new SystemMessageContractError('invalid_source_config');
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    throw new SystemMessageContractError('invalid_message_event_payload');
+    throw new SystemMessageContractError('invalid_source_config');
   }
   return date.toISOString();
+}
+
+/**
+ * Validates RFC3339 calendar and offset components before JavaScript can normalize them.
+ * @param match - Capture groups produced by the source timestamp pattern.
+ * @returns Whether all calendar, wall-clock, and offset fields are in range.
+ */
+function isValidRfc3339Calendar(match: RegExpExecArray): boolean {
+  const [
+    ,
+    yearText,
+    monthText,
+    dayText,
+    hourText,
+    minuteText,
+    secondText,
+    ,
+    ,
+    offsetHourText,
+    offsetMinuteText,
+  ] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const offsetHour = offsetHourText ? Number(offsetHourText) : 0;
+  const offsetMinute = offsetMinuteText ? Number(offsetMinuteText) : 0;
+  const daysInMonth = [
+    31,
+    year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ];
+  return (
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= daysInMonth[month - 1] &&
+    hour <= 23 &&
+    minute <= 59 &&
+    second <= 59 &&
+    offsetHour <= 23 &&
+    offsetMinute <= 59
+  );
 }
 
 /**
@@ -448,6 +513,65 @@ function ddnsOptionReason(
   }
   const source = classifyStunEndpointSource(mapping);
   return source.disabledReasonCode;
+}
+
+/**
+ * Converts a shared Network structural reason to the locked message-source contract.
+ * @param reason - Existing uppercase Network eligibility reason.
+ * @returns Lowercase reason code safe for message subscription views and delivery state.
+ */
+function messageSourceEligibilityReason(
+  reason: NonNullable<
+    ReturnType<typeof classifyStunEndpointSource>['disabledReasonCode']
+  >,
+):
+  | 'keeper_disabled'
+  | 'mapping_not_managed'
+  | 'mapping_not_udp'
+  | 'mapping_port_mismatch' {
+  switch (reason) {
+    case 'KEEPER_DISABLED':
+      return 'keeper_disabled';
+    case 'PORT_MISMATCH':
+      return 'mapping_port_mismatch';
+    case 'SOURCE_DELETING':
+      return 'mapping_not_managed';
+    case 'UDP_REQUIRED':
+      return 'mapping_not_udp';
+  }
+}
+
+/**
+ * Determines the locked message-source reason for a DDNS record and its selected mapping.
+ * @param record - Candidate DDNS record, including deleted or absent state.
+ * @param mapping - Canonical selected mapping after its structural validation.
+ * @returns Null when valid or a locked lowercase message-source reason.
+ */
+function ddnsMessageSourceReason(
+  record: NetworkDdnsRecord | null | undefined,
+  mapping: NetworkPortForward,
+):
+  | 'ddns_disabled'
+  | 'ddns_mapping_mismatch'
+  | 'ddns_not_found'
+  | 'ddns_not_ipv4'
+  | 'keeper_disabled'
+  | 'mapping_not_managed'
+  | 'mapping_not_udp'
+  | 'mapping_port_mismatch'
+  | null {
+  if (!record || record.isDeleted) return 'ddns_not_found';
+  if (!record.enabled) return 'ddns_disabled';
+  if (record.recordType !== 'A' || record.sourceType !== 'port_forward_ipv4') {
+    return 'ddns_not_ipv4';
+  }
+  if (String(record.portForwardId) !== String(mapping.id)) {
+    return 'ddns_mapping_mismatch';
+  }
+  const source = classifyStunEndpointSource(mapping);
+  return source.disabledReasonCode
+    ? messageSourceEligibilityReason(source.disabledReasonCode)
+    : null;
 }
 
 /**
@@ -519,15 +643,4 @@ function formatShanghaiDateTime(value: string): string {
   const part = (type: Intl.DateTimeFormatPartTypes): string =>
     parts.find((item) => item.type === type)?.value || '';
   return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`;
-}
-
-/**
- * Converts adapter validation failures to one stable, non-sensitive reason code.
- * @param error - Unknown caught adapter or repository error.
- * @returns Domain code for expected contract failures or a generic source-unavailable code.
- */
-function messageSourceErrorCode(error: unknown): string {
-  return error instanceof SystemMessageContractError
-    ? error.code
-    : 'message_source_unavailable';
 }

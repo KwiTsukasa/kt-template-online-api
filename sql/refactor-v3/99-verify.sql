@@ -38,13 +38,73 @@ WHERE id = 2041700000000200601
   AND enabled = 1
   AND is_deleted = 0;
 
-SELECT 'seed_qqbot_message_push_menu' AS check_name, COUNT(*) AS matched_rows
-FROM admin_menu
-WHERE auth_code IN (
-  'QqBot:MessageSubscription:List', 'QqBot:MessageSubscription:Create', 'QqBot:MessageSubscription:Update', 'QqBot:MessageSubscription:Delete', 'QqBot:MessageSubscription:Toggle',
-  'QqBot:MessageTemplate:List', 'QqBot:MessageTemplate:Create', 'QqBot:MessageTemplate:Update', 'QqBot:MessageTemplate:Delete', 'QqBot:MessageTemplate:Toggle', 'QqBot:MessageTemplate:Preview',
-  'QqBot:Account:MessagePush:List', 'QqBot:Account:MessagePush:Create', 'QqBot:Account:MessagePush:Update', 'QqBot:Account:MessagePush:Delete', 'QqBot:Account:MessagePush:Toggle'
-) AND status = 1 AND is_deleted = 0;
+WITH expected_menu AS (
+  SELECT 2041700000000100413 AS id, 2041700000000100400 AS pid, 'QqBotMessageSubscription' AS name, 'QqBot:MessageSubscription:List' AS auth_code, 10 AS sort
+  UNION ALL SELECT 2041700000000100414, 2041700000000100400, 'QqBotMessageTemplate', 'QqBot:MessageTemplate:List', 11
+  UNION ALL SELECT 2041700000000120461, 2041700000000100413, 'QqBotMessageSubscriptionList', 'QqBot:MessageSubscription:List', 0
+  UNION ALL SELECT 2041700000000120462, 2041700000000100413, 'QqBotMessageSubscriptionCreate', 'QqBot:MessageSubscription:Create', 0
+  UNION ALL SELECT 2041700000000120463, 2041700000000100413, 'QqBotMessageSubscriptionUpdate', 'QqBot:MessageSubscription:Update', 0
+  UNION ALL SELECT 2041700000000120464, 2041700000000100413, 'QqBotMessageSubscriptionDelete', 'QqBot:MessageSubscription:Delete', 0
+  UNION ALL SELECT 2041700000000120465, 2041700000000100413, 'QqBotMessageSubscriptionToggle', 'QqBot:MessageSubscription:Toggle', 0
+  UNION ALL SELECT 2041700000000120471, 2041700000000100414, 'QqBotMessageTemplateList', 'QqBot:MessageTemplate:List', 0
+  UNION ALL SELECT 2041700000000120472, 2041700000000100414, 'QqBotMessageTemplateCreate', 'QqBot:MessageTemplate:Create', 0
+  UNION ALL SELECT 2041700000000120473, 2041700000000100414, 'QqBotMessageTemplateUpdate', 'QqBot:MessageTemplate:Update', 0
+  UNION ALL SELECT 2041700000000120474, 2041700000000100414, 'QqBotMessageTemplateDelete', 'QqBot:MessageTemplate:Delete', 0
+  UNION ALL SELECT 2041700000000120475, 2041700000000100414, 'QqBotMessageTemplateToggle', 'QqBot:MessageTemplate:Toggle', 0
+  UNION ALL SELECT 2041700000000120476, 2041700000000100414, 'QqBotMessageTemplatePreview', 'QqBot:MessageTemplate:Preview', 0
+  UNION ALL SELECT 2041700000000120481, 2041700000000100410, 'QqBotAccountMessagePushList', 'QqBot:Account:MessagePush:List', 0
+  UNION ALL SELECT 2041700000000120482, 2041700000000100410, 'QqBotAccountMessagePushCreate', 'QqBot:Account:MessagePush:Create', 0
+  UNION ALL SELECT 2041700000000120483, 2041700000000100410, 'QqBotAccountMessagePushUpdate', 'QqBot:Account:MessagePush:Update', 0
+  UNION ALL SELECT 2041700000000120484, 2041700000000100410, 'QqBotAccountMessagePushDelete', 'QqBot:Account:MessagePush:Delete', 0
+  UNION ALL SELECT 2041700000000120485, 2041700000000100410, 'QqBotAccountMessagePushToggle', 'QqBot:Account:MessagePush:Toggle', 0
+)
+SELECT 'seed_qqbot_message_push_menu_mismatch' AS check_name,
+       expected.id, expected.pid, expected.name, expected.auth_code, expected.sort,
+       actual.id AS actual_id, actual.pid AS actual_pid, actual.name AS actual_name,
+       actual.auth_code AS actual_auth_code, actual.sort AS actual_sort,
+       actual.status AS actual_status, actual.is_deleted AS actual_is_deleted
+FROM expected_menu expected
+LEFT JOIN admin_menu actual ON actual.id = expected.id
+WHERE actual.id IS NULL
+   OR actual.name <> expected.name
+   OR actual.auth_code <> expected.auth_code
+   OR actual.pid <> expected.pid
+   OR actual.sort <> expected.sort
+   OR actual.status <> 1
+   OR actual.is_deleted <> 0;
+
+WITH expected_menu AS (
+  SELECT 2041700000000100413 AS id UNION ALL SELECT 2041700000000100414 UNION ALL SELECT 2041700000000120461
+  UNION ALL SELECT 2041700000000120462 UNION ALL SELECT 2041700000000120463 UNION ALL SELECT 2041700000000120464
+  UNION ALL SELECT 2041700000000120465 UNION ALL SELECT 2041700000000120471 UNION ALL SELECT 2041700000000120472
+  UNION ALL SELECT 2041700000000120473 UNION ALL SELECT 2041700000000120474 UNION ALL SELECT 2041700000000120475
+  UNION ALL SELECT 2041700000000120476 UNION ALL SELECT 2041700000000120481 UNION ALL SELECT 2041700000000120482
+  UNION ALL SELECT 2041700000000120483 UNION ALL SELECT 2041700000000120484 UNION ALL SELECT 2041700000000120485
+)
+SELECT 'seed_qqbot_message_push_menu_cardinality' AS check_name,
+       COUNT(*) AS expected_count, COUNT(actual.id) AS actual_count,
+       COUNT(*) - COUNT(actual.id) AS missing_count
+FROM expected_menu expected
+LEFT JOIN admin_menu actual ON actual.id = expected.id
+  AND actual.status = 1
+  AND actual.is_deleted = 0;
+
+WITH expected_menu AS (
+  SELECT 2041700000000100413 AS id UNION ALL SELECT 2041700000000100414 UNION ALL SELECT 2041700000000120461
+  UNION ALL SELECT 2041700000000120462 UNION ALL SELECT 2041700000000120463 UNION ALL SELECT 2041700000000120464
+  UNION ALL SELECT 2041700000000120465 UNION ALL SELECT 2041700000000120471 UNION ALL SELECT 2041700000000120472
+  UNION ALL SELECT 2041700000000120473 UNION ALL SELECT 2041700000000120474 UNION ALL SELECT 2041700000000120475
+  UNION ALL SELECT 2041700000000120476 UNION ALL SELECT 2041700000000120481 UNION ALL SELECT 2041700000000120482
+  UNION ALL SELECT 2041700000000120483 UNION ALL SELECT 2041700000000120484 UNION ALL SELECT 2041700000000120485
+)
+SELECT 'seed_qqbot_message_push_menu_role_grant_missing' AS check_name,
+       role.role_code, expected.id AS menu_id
+FROM admin_role role CROSS JOIN expected_menu expected
+LEFT JOIN admin_role_menu role_menu ON role_menu.role_id = role.id AND role_menu.menu_id = expected.id
+WHERE role.role_code IN ('super', 'admin')
+  AND role.status = 1
+  AND role.is_deleted = 0
+  AND role_menu.menu_id IS NULL;
 
 SELECT 'qqbot_napcat_webui_gateway_audit table exists' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.tables

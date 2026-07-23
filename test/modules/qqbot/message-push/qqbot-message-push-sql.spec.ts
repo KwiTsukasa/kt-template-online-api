@@ -117,12 +117,46 @@ const menuEntries: readonly MenuEntry[] = [
   ['2041700000000120485', '2041700000000100410', 'QqBotAccountMessagePushToggle', 'QqBot:Account:MessagePush:Toggle', '0'],
 ];
 
-/** Normalizes SQL formatting while preserving the exact statement content. */
-const normalizeSql = (sql: string) => sql
-  .toLowerCase()
-  .replace(/`/g, '')
-  .replace(/\s+/g, ' ')
-  .trim();
+/**
+ * Normalizes SQL syntax while preserving the exact casing and whitespace inside
+ * single-quoted contract values.
+ */
+const normalizeSql = (sql: string) => {
+  let normalized = '';
+  let quoted = false;
+  let previousWasWhitespace = false;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const character = sql[index];
+    if (quoted) {
+      normalized += character;
+      if (character === "'" && sql[index + 1] === "'") {
+        normalized += sql[index + 1];
+        index += 1;
+      } else if (character === "'" && sql[index - 1] !== '\\') {
+        quoted = false;
+      }
+      previousWasWhitespace = false;
+      continue;
+    }
+    if (character === "'") {
+      quoted = true;
+      normalized += character;
+      previousWasWhitespace = false;
+      continue;
+    }
+    if (character === '`') continue;
+    if (/\s/.test(character)) {
+      if (!previousWasWhitespace) normalized += ' ';
+      previousWasWhitespace = true;
+      continue;
+    }
+    normalized += character.toLowerCase();
+    previousWasWhitespace = false;
+  }
+
+  return normalized.trim();
+};
 
 /** Reads a repository SQL file as normalized text. */
 const readNormalizedSql = (relativePath: string) =>
@@ -146,6 +180,11 @@ const splitSqlTuple = (tuple: string) => {
   let quoted = false;
   for (let index = 0; index < tuple.length; index += 1) {
     const character = tuple[index];
+    if (character === "'" && tuple[index + 1] === "'") {
+      current += tuple[index + 1];
+      index += 1;
+      continue;
+    }
     if (character === "'" && tuple[index - 1] !== '\\') quoted = !quoted;
     if (character === ',' && !quoted) {
       values.push(current.trim());
@@ -169,6 +208,11 @@ const extractSqlTuples = (values: string) => {
   let quoted = false;
   for (let index = 0; index < values.length; index += 1) {
     const character = values[index];
+    if (character === "'" && values[index + 1] === "'") {
+      current += values[index + 1];
+      index += 1;
+      continue;
+    }
     if (character === "'" && values[index - 1] !== '\\') quoted = !quoted;
     if (!quoted && character === '(') {
       depth += 1;
@@ -187,7 +231,7 @@ const extractSqlTuples = (values: string) => {
   return tuples;
 };
 
-/** Extracts the message-push menu VALUES rows from the matching seed statement. */
+/** Extracts every top-level VALUES row from the message-push admin-menu seed statement. */
 const extractMessagePushMenuRows = (sql: string) => {
   const statements = [...sql.matchAll(/insert into admin_menu \([^)]*\) values (.*?) on duplicate key update/gs)];
   const statement = statements.find((candidate) => candidate[1].includes(menuEntries[0][0]));
@@ -200,9 +244,74 @@ const extractMessagePushMenuRows = (sql: string) => {
       unquoteSqlValue(fields[0]), unquoteSqlValue(fields[1]),
       unquoteSqlValue(fields[2]), unquoteSqlValue(fields[6]),
       unquoteSqlValue(fields[10]),
-    ] as MenuEntry)
-    .filter(([id]) => menuEntries.some(([expectedId]) => expectedId === id));
+    ] as MenuEntry);
 };
+
+/** Splits SQL statements only at semicolons outside single-quoted values. */
+const splitSqlStatements = (sql: string) => {
+  const statements: string[] = [];
+  let current = '';
+  let quoted = false;
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const character = sql[index];
+    current += character;
+    if (quoted && character === "'" && sql[index + 1] === "'") {
+      current += sql[index + 1];
+      index += 1;
+      continue;
+    }
+    if (character === "'" && sql[index - 1] !== '\\') quoted = !quoted;
+    if (character === ';' && !quoted) {
+      statements.push(current.trim());
+      current = '';
+    }
+  }
+  if (current.trim()) statements.push(current.trim());
+  return statements;
+};
+
+/** Locates one complete verification statement by its stable check-name literal. */
+const extractVerificationStatement = (sql: string, checkName: string) => {
+  const statement = splitSqlStatements(sql).find((candidate) => candidate.includes(`'${checkName}'`));
+  expect(statement).toBeTruthy();
+  return statement || '';
+};
+
+/** Extracts the body of the expected_menu CTE without crossing quoted literals. */
+const extractExpectedMenuCte = (statement: string) => {
+  const cteStart = statement.match(/with expected_menu as \(/);
+  expect(cteStart).toBeTruthy();
+  const openIndex = (cteStart?.index || 0) + (cteStart?.[0].length || 0) - 1;
+  let depth = 0;
+  let quoted = false;
+  for (let index = openIndex; index < statement.length; index += 1) {
+    const character = statement[index];
+    if (quoted && character === "'" && statement[index + 1] === "'") {
+      index += 1;
+      continue;
+    }
+    if (character === "'" && statement[index - 1] !== '\\') quoted = !quoted;
+    if (quoted) continue;
+    if (character === '(') depth += 1;
+    if (character === ')') {
+      depth -= 1;
+      if (depth === 0) return statement.slice(openIndex + 1, index);
+    }
+  }
+  throw new Error('expected_menu CTE is not closed');
+};
+
+/** Extracts exact five-column expected-menu tuples from the mismatch CTE. */
+const extractMismatchMenuRows = (statement: string): MenuEntry[] => {
+  const cte = extractExpectedMenuCte(statement);
+  return [...cte.matchAll(/select (\d+)(?: as id)?, (\d+)(?: as pid)?, '((?:''|[^'])*)'(?: as name)?, '((?:''|[^'])*)'(?: as auth_code)?, (\d+)(?: as sort)?/g)]
+    .map(([, id, pid, name, authCode, sort]) => [id, pid, name.replace(/''/g, "'"), authCode.replace(/''/g, "'"), sort] as MenuEntry);
+};
+
+/** Extracts exact expected-menu IDs from a cardinality or role-grant CTE. */
+const extractExpectedMenuIds = (statement: string) =>
+  [...extractExpectedMenuCte(statement).matchAll(/select (\d+)(?: as id)?/g)].map(([, id]) => id);
 
 describe('QQBot message-push SQL contract', () => {
   const bootstrapSql = readNormalizedSql('sql/qqbot-init.sql');
@@ -210,6 +319,11 @@ describe('QQBot message-push SQL contract', () => {
   const seedSql = readNormalizedSql('sql/refactor-v3/01-seed-core.sql');
   const verifySql = readNormalizedSql('sql/refactor-v3/99-verify.sql');
   const vbenSql = readNormalizedSql('sql/vben-admin-init.sql');
+
+  it('normalizes only SQL syntax and preserves single-quoted contract values exactly', () => {
+    expect(normalizeSql("SELECT `AUTH_CODE`, 'QqBot:MessageTemplate:List', '${{endpoint}}'"))
+      .toBe("select auth_code, 'QqBot:MessageTemplate:List', '${{endpoint}}'");
+  });
 
   it('keeps each table DDL and index tuple exact in current and refactor schemas', () => {
     for (const [table, expected] of Object.entries(messagePushTableDefinitions)) {
@@ -256,30 +370,39 @@ describe('QQBot message-push SQL contract', () => {
       const rows = extractMessagePushMenuRows(sql);
       expect(rows).toHaveLength(18);
       expect(new Set(rows.map(([id]) => id)).size).toBe(18);
-      expect(rows).toEqual(menuEntries.map((entry) => entry.map((value) => value.toLowerCase())));
+      expect(rows).toEqual(menuEntries);
     }
   });
 
-  it('uses an inline exact menu expected set to verify rows, cardinality, and enabled-role grants', () => {
-    for (const [index, [id, pid, name, authCode, sort]] of menuEntries.entries()) {
-      expect(verifySql).toContain(normalizeSql(
-        `${index === 0 ? 'select' : 'union all select'} ${id}${index === 0 ? ' as id' : ''}, ${pid}${index === 0 ? ' as pid' : ''}, '${name}'${index === 0 ? ' as name' : ''}, '${authCode}'${index === 0 ? ' as auth_code' : ''}, ${sort}${index === 0 ? ' as sort' : ''}`,
-      ));
-    }
-    expect(verifySql).toContain('left join admin_menu actual on actual.id = expected.id');
-    expect(verifySql).toContain('actual.name <> expected.name');
-    expect(verifySql).toContain('actual.auth_code <> expected.auth_code');
-    expect(verifySql).toContain('actual.pid <> expected.pid');
-    expect(verifySql).toContain('actual.sort <> expected.sort');
-    expect(verifySql).toContain('actual.status <> 1');
-    expect(verifySql).toContain('actual.is_deleted <> 0');
-    expect(verifySql).toContain('count(*) as expected_count');
-    expect(verifySql).toContain('count(actual.id) as actual_count');
-    expect(verifySql).toContain('from admin_role role cross join expected_menu expected');
-    expect(verifySql).toContain('left join admin_role_menu role_menu');
-    expect(verifySql).toContain("role.role_code in ('super', 'admin')");
-    expect(verifySql).toContain('role.status = 1');
-    expect(verifySql).toContain('role.is_deleted = 0');
-    expect(verifySql).toContain('role_menu.menu_id is null');
+  it('uses an exact mismatch CTE and null-safe predicates for every stable menu tuple', () => {
+    const mismatch = extractVerificationStatement(verifySql, 'seed_qqbot_message_push_menu_mismatch');
+    expect(extractMismatchMenuRows(mismatch)).toEqual(menuEntries);
+    expect(mismatch).toContain('left join admin_menu actual on actual.id = expected.id');
+    expect(mismatch).toContain('actual.name <> expected.name');
+    expect(mismatch).toContain('not (actual.auth_code <=> expected.auth_code)');
+    expect(mismatch).toContain('actual.pid <> expected.pid');
+    expect(mismatch).toContain('actual.sort <> expected.sort');
+    expect(mismatch).toContain('actual.status <> 1');
+    expect(mismatch).toContain('actual.is_deleted <> 0');
+  });
+
+  it('uses an exact cardinality CTE with expected, actual, and missing counts', () => {
+    const cardinality = extractVerificationStatement(verifySql, 'seed_qqbot_message_push_menu_cardinality');
+    expect(extractExpectedMenuIds(cardinality)).toEqual(menuEntries.map(([id]) => id));
+    expect(cardinality).toContain('left join admin_menu actual on actual.id = expected.id');
+    expect(cardinality).toContain('count(*) as expected_count');
+    expect(cardinality).toContain('count(actual.id) as actual_count');
+    expect(cardinality).toContain('count(*) - count(actual.id) as missing_count');
+  });
+
+  it('uses an exact role-grant CTE for enabled super and admin roles', () => {
+    const roleGrant = extractVerificationStatement(verifySql, 'seed_qqbot_message_push_menu_role_grant_missing');
+    expect(extractExpectedMenuIds(roleGrant)).toEqual(menuEntries.map(([id]) => id));
+    expect(roleGrant).toContain('from admin_role role cross join expected_menu expected');
+    expect(roleGrant).toContain('left join admin_role_menu role_menu');
+    expect(roleGrant).toContain("role.role_code in ('super', 'admin')");
+    expect(roleGrant).toContain('role.status = 1');
+    expect(roleGrant).toContain('role.is_deleted = 0');
+    expect(roleGrant).toContain('role_menu.menu_id is null');
   });
 });

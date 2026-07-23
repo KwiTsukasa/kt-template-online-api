@@ -67,7 +67,7 @@ FROM expected_menu expected
 LEFT JOIN admin_menu actual ON actual.id = expected.id
 WHERE actual.id IS NULL
    OR actual.name <> expected.name
-   OR actual.auth_code <> expected.auth_code
+   OR NOT (actual.auth_code <=> expected.auth_code)
    OR actual.pid <> expected.pid
    OR actual.sort <> expected.sort
    OR actual.status <> 1

@@ -123,6 +123,10 @@ const normalizeColumnType = (type: unknown) => {
   return `${type}`.toLowerCase();
 };
 
+/** Sorts metadata tuples by property name so declaration order cannot affect the contract. */
+const sortByPropertyName = <T extends { propertyName: string }>(values: readonly T[]) =>
+  [...values].sort((left, right) => left.propertyName.localeCompare(right.propertyName));
+
 /** Reads an entity's TypeORM column metadata into a stable comparison tuple. */
 const getColumns = (entity: EntityClass): ColumnContract[] => getMetadataArgsStorage()
   .columns.filter((column) => column.target === entity)
@@ -138,7 +142,16 @@ const getColumns = (entity: EntityClass): ColumnContract[] => getMetadataArgsSto
       ? 'datetime'
       : normalizeColumnType(column.options.type),
     unsigned: column.options.unsigned === true,
-  }));
+  }))
+  .sort((left, right) => left.propertyName.localeCompare(right.propertyName));
+
+/** Selects registered QQBot Core entities whose TypeORM table is in the message-push namespace. */
+const getRegisteredMessagePushEntities = () => QQBOT_CORE_ENTITIES
+  .filter((entity) => {
+    const table = getMetadataArgsStorage().tables.find((entry) => entry.target === entity);
+    return typeof table?.name === 'string' && table.name.startsWith('qqbot_message_');
+  })
+  .sort((left, right) => left.name.localeCompare(right.name));
 
 /** Reads an entity's TypeORM index definitions into exact name/column/unique tuples. */
 const getIndexes = (entity: EntityClass) => getMetadataArgsStorage().indices
@@ -152,14 +165,16 @@ const getIndexes = (entity: EntityClass) => getMetadataArgsStorage().indices
 
 describe('QQBot message-push persistence contract', () => {
   it('registers exactly the six message-push entities in QQBot Core', () => {
-    expect(QQBOT_CORE_ENTITIES).toEqual(expect.arrayContaining(persistenceContract.map(({ entity }) => entity)));
+    expect(getRegisteredMessagePushEntities()).toEqual(
+      [...persistenceContract.map(({ entity }) => entity)].sort((left, right) => left.name.localeCompare(right.name)),
+    );
   });
 
   it('maps every table to its independent exact column metadata matrix', () => {
     for (const { columns, entity, table } of persistenceContract) {
       const metadataTable = getMetadataArgsStorage().tables.find((entry) => entry.target === entity);
       expect(metadataTable?.name).toBe(table);
-      expect(getColumns(entity)).toEqual(columns);
+      expect(getColumns(entity)).toEqual(sortByPropertyName(columns));
     }
   });
 
@@ -171,11 +186,12 @@ describe('QQBot message-push persistence contract', () => {
         .map((column) => ({
           mode: column.mode,
           precision: column.options.precision,
+          propertyName: `${column.propertyName}`,
           type: column.options.type === undefined ? 'datetime' : normalizeColumnType(column.options.type),
         }));
-      expect(timestamps).toEqual([
-        { mode: 'createDate', precision: 6, type: 'datetime' },
-        { mode: 'updateDate', precision: 6, type: 'datetime' },
+      expect(sortByPropertyName(timestamps)).toEqual([
+        { mode: 'createDate', precision: 6, propertyName: 'createTime', type: 'datetime' },
+        { mode: 'updateDate', precision: 6, propertyName: 'updateTime', type: 'datetime' },
       ]);
     }
   });

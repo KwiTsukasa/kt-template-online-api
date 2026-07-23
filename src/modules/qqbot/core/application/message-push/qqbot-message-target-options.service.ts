@@ -35,7 +35,8 @@ export class QqbotMessageTargetOptionsService {
       ];
       const unique = new Map<string, QqbotMessagePushTargetOption>();
       options.forEach((option) => {
-        unique.set(`${option.targetType}:${option.targetId}`, option);
+        const key = `${option.targetType}:${option.targetId}`;
+        unique.set(key, this.preferCandidate(unique.get(key), option));
       });
       return {
         available: true,
@@ -96,6 +97,22 @@ export class QqbotMessageTargetOptionsService {
   /** Trims an optional OneBot display name without inventing a replacement name. */
   private knownName(value: unknown): null | string {
     return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+
+  /** Selects a stable duplicate candidate, retaining known names before lexically ordering conflicts. */
+  private preferCandidate(
+    current: QqbotMessagePushTargetOption | undefined,
+    candidate: QqbotMessagePushTargetOption,
+  ): QqbotMessagePushTargetOption {
+    if (!current) return candidate;
+    const currentKnown = current.label !== current.targetId;
+    const candidateKnown = candidate.label !== candidate.targetId;
+    if (currentKnown !== candidateKnown) {
+      return candidateKnown ? candidate : current;
+    }
+    return candidate.label.localeCompare(current.label) < 0
+      ? candidate
+      : current;
   }
 
   /** Produces the stable HTTP-safe empty candidate response. */

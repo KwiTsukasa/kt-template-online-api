@@ -169,13 +169,20 @@ function setup(
       transaction: jest.fn((callback) => callback(manager)),
     },
   });
+  const sourceRegistry = registry();
   const service = new QqbotMessageTemplateService(
     templateRepository,
     bindingRepository,
-    registry(),
+    sourceRegistry,
     new SystemMessageTemplateRendererService(),
   );
-  return { bindingRepository, manager, service, templateRepository };
+  return {
+    bindingRepository,
+    manager,
+    service,
+    sourceRegistry,
+    templateRepository,
+  };
 }
 
 describe('QqbotMessageTemplateService', () => {
@@ -295,6 +302,42 @@ describe('QqbotMessageTemplateService', () => {
     await expect(service.setEnabled('100', false)).resolves.toEqual(
       expect.objectContaining({ enabled: false }),
     );
+  });
+
+  it('locks template source changes through reference counting but permits same-source edits', async () => {
+    const { bindingRepository, service, sourceRegistry, templateRepository } =
+      setup([template()], [binding({ enabled: false })]);
+    sourceRegistry.register({
+      ...registry().get(SOURCE_KEY),
+      definition: {
+        ...registry().get(SOURCE_KEY).definition,
+        sourceKey: 'other.source',
+      },
+    });
+    const input = {
+      content: '端口 ${{port}}，就绪：${{ready}}',
+      enabled: false,
+      name: '改源',
+      sourceKey: 'other.source',
+    };
+
+    await expect(service.update('100', input)).rejects.toMatchObject({
+      code: 'template_invalid',
+    });
+    await expect(
+      service.update('100', {
+        ...input,
+        name: '同源编辑',
+        sourceKey: SOURCE_KEY,
+      }),
+    ).resolves.toEqual(expect.objectContaining({ name: '同源编辑' }));
+    expect(templateRepository.findOne).toHaveBeenCalledWith({
+      lock: { mode: 'pessimistic_write' },
+      where: { id: '100', isDeleted: false },
+    });
+    expect(bindingRepository.count).toHaveBeenCalledWith({
+      where: { isDeleted: false, templateId: '100' },
+    });
   });
 
   it('blocks soft deletion when any non-deleted binding references the template, including disabled bindings', async () => {

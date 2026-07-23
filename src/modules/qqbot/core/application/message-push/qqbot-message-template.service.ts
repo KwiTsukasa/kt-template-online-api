@@ -103,10 +103,32 @@ export class QqbotMessageTemplateService {
     id: string,
     input: MessageTemplateInput,
   ): Promise<MessageTemplateView> {
-    const current = await this.findActive(id);
     this.validateInput(input);
-    Object.assign(current, this.toPersistenceInput(input));
-    return this.toView(await this.templateRepository.save(current));
+    const saved = await this.templateRepository.manager.transaction(
+      /** Holds the dependency row through reference counting and its source-safe save. */
+      async (manager) => {
+        const templateRepository = manager.getRepository(QqbotMessageTemplate);
+        const bindingRepository = manager.getRepository(
+          QqbotMessagePublishBinding,
+        );
+        const current = await templateRepository.findOne({
+          lock: { mode: 'pessimistic_write' },
+          where: { id, isDeleted: false },
+        });
+        if (!current) throw new SystemMessageContractError('template_invalid');
+        if (current.sourceKey !== input.sourceKey) {
+          const referenceCount = await bindingRepository.count({
+            where: { isDeleted: false, templateId: id },
+          });
+          if (referenceCount > 0) {
+            throw new SystemMessageContractError('template_invalid');
+          }
+        }
+        Object.assign(current, this.toPersistenceInput(input));
+        return templateRepository.save(current);
+      },
+    );
+    return this.toView(saved);
   }
 
   /**

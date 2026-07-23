@@ -12,6 +12,7 @@ import { NetworkStunMessageSourceAdapter } from '../../../../src/modules/admin/p
 import { NetworkDdnsRecord } from '../../../../src/modules/admin/platform-config/network-management/network-ddns.entity';
 import { NetworkPortForward } from '../../../../src/modules/admin/platform-config/network-management/network-management.entity';
 import { QqbotMessageSubscription } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-subscription.entity';
+import { QqbotMessagePublishBinding } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
 
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
 const NOW = new KtDateTime('2026-07-24 08:09:10');
@@ -122,6 +123,8 @@ function registry(
 function setup(
   items: QqbotMessageSubscription[] = [],
   source: SystemMessageSourceAdapter = adapter(),
+  bindings: Array<{ isDeleted: boolean; subscriptionId: string }> = [],
+  additionalSources: SystemMessageSourceAdapter[] = [],
 ) {
   let createSequence = 1000;
   const subscriptionRepository = {
@@ -194,20 +197,41 @@ function setup(
       return item;
     }),
   } as unknown as jest.Mocked<Repository<QqbotMessageSubscription>>;
+  const bindingRepository = {
+    count: jest.fn(
+      async ({ where: { isDeleted, subscriptionId } }) =>
+        bindings.filter(
+          (binding) =>
+            binding.isDeleted === isDeleted &&
+            binding.subscriptionId === subscriptionId,
+        ).length,
+    ),
+  } as unknown as jest.Mocked<Repository<QqbotMessagePublishBinding>>;
   const manager = {
     getRepository: jest.fn((entity) => {
       if (entity === QqbotMessageSubscription) return subscriptionRepository;
+      if (entity === QqbotMessagePublishBinding) return bindingRepository;
       throw new Error('unexpected repository');
     }),
   } as unknown as jest.Mocked<EntityManager>;
   Object.assign(subscriptionRepository, {
     manager: { transaction: jest.fn((callback) => callback(manager)) },
   });
+  const sourceRegistry = registry(source);
+  additionalSources.forEach((item) => sourceRegistry.register(item));
   const service = new QqbotMessageSubscriptionService(
     subscriptionRepository,
-    registry(source),
+    sourceRegistry,
   );
-  return { items, manager, service, source, subscriptionRepository };
+  return {
+    bindingRepository,
+    items,
+    manager,
+    service,
+    source,
+    sourceRegistry,
+    subscriptionRepository,
+  };
 }
 
 /**
@@ -878,6 +902,44 @@ describe('QqbotMessageSubscriptionService', () => {
     });
   });
 
+  it('rejects deletion and source changes while enabled or disabled live bindings reference the subscription', async () => {
+    const other = adapter();
+    Object.assign(other.definition, { sourceKey: 'other.source' });
+    const { bindingRepository, service, subscriptionRepository } = setup(
+      [subscription()],
+      adapter(),
+      [{ isDeleted: false, subscriptionId: '100' }],
+      [other],
+    );
+
+    await expect(service.remove('100')).rejects.toMatchObject({
+      code: 'invalid_source_config',
+    });
+    await expect(
+      service.update('100', {
+        enabled: false,
+        name: '改源',
+        sourceConfig: CONFIG,
+        sourceKey: 'other.source',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_source_config' });
+    await expect(
+      service.update('100', {
+        enabled: false,
+        name: '同源编辑',
+        sourceConfig: CONFIG,
+        sourceKey: SOURCE_KEY,
+      }),
+    ).resolves.toEqual(expect.objectContaining({ name: '同源编辑' }));
+
+    expect(bindingRepository.count).toHaveBeenCalledWith({
+      where: { isDeleted: false, subscriptionId: '100' },
+    });
+    expect(subscriptionRepository.save).not.toHaveBeenCalledWith(
+      expect.objectContaining({ isDeleted: true }),
+    );
+  });
+
   it('makes a binding transaction observe deletion after the shared subscription row lock commits', async () => {
     const current = subscription();
     const deleteHasLock = deferred();
@@ -910,6 +972,9 @@ describe('QqbotMessageSubscriptionService', () => {
       const manager = {
         getRepository: jest.fn((entity) => {
           if (entity === QqbotMessageSubscription) return repository;
+          if (entity === QqbotMessagePublishBinding) {
+            return { count: jest.fn(async () => 0) };
+          }
           throw new Error('unexpected repository');
         }),
       } as unknown as EntityManager;

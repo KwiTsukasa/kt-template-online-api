@@ -103,7 +103,13 @@ export class QqbotAccountMessagePushService {
           if (historicalCandidate) {
             const historical = await bindings.findOne({
               lock: { mode: 'pessimistic_write' },
-              where: { id: historicalCandidate.id, isDeleted: true },
+              where: {
+                accountId: String(account.id),
+                id: historicalCandidate.id,
+                isDeleted: true,
+                selfId: String(account.selfId),
+                subscriptionId: String(input.subscriptionId),
+              },
             });
             if (historical) {
               Object.assign(
@@ -364,9 +370,11 @@ export class QqbotAccountMessagePushService {
   ): Promise<QqbotMessagePublishBindingView> {
     const [subscription, template, targets] = await Promise.all([
       this.subscriptionRepository.findOne({
-        where: { id: binding.subscriptionId },
+        where: { id: binding.subscriptionId, isDeleted: false },
       }),
-      this.templateRepository.findOne({ where: { id: binding.templateId } }),
+      this.templateRepository.findOne({
+        where: { id: binding.templateId, isDeleted: false },
+      }),
       this.targetRepository.find({
         order: { createTime: 'ASC', id: 'ASC' },
         where: { bindingId: String(binding.id), isDeleted: false },
@@ -573,7 +581,7 @@ export class QqbotAccountMessagePushService {
 
   /** Signals that a target binding is missing, deleted, or owned by another account. */
   private throwBindingUnavailable(): never {
-    throw new SystemMessageContractError('binding_invalid');
+    throw new SystemMessageContractError('binding_disabled');
   }
 
   /** Recognizes only MySQL's duplicate-key conflict used as final concurrency authority. */

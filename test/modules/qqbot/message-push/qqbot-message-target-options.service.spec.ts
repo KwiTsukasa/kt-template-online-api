@@ -98,4 +98,55 @@ describe('QqbotMessageTargetOptionsService', () => {
       reasonCode: 'onebot_unavailable',
     });
   });
+
+  it('deduplicates equivalent OneBot candidates deterministically without discarding known names', async () => {
+    const responses = [
+      {
+        data: [
+          { group_id: '20000000000000001' },
+          { group_id: '20000000000000001', group_name: 'Beta' },
+          { group_id: '20000000000000001', group_name: 'Alpha' },
+        ],
+        status: 'ok',
+      },
+      { data: [], status: 'ok' },
+    ];
+    const accountService = {
+      findBySelfId: jest.fn().mockResolvedValue({ id: '1' }),
+    };
+    const reverseWsService = {
+      sendAction: jest.fn(async () => responses.shift()),
+    };
+    const service = new QqbotMessageTargetOptionsService(
+      accountService as never,
+      reverseWsService as never,
+    );
+
+    const first = await service.listTargetOptions('10001');
+    responses.push(
+      {
+        data: [
+          { group_id: '20000000000000001', group_name: 'Alpha' },
+          { group_id: '20000000000000001', group_name: 'Beta' },
+          { group_id: '20000000000000001' },
+        ],
+        status: 'ok',
+      },
+      { data: [], status: 'ok' },
+    );
+    const second = await service.listTargetOptions('10001');
+
+    expect(first).toEqual({
+      available: true,
+      options: [
+        {
+          label: 'Alpha (20000000000000001)',
+          targetId: '20000000000000001',
+          targetType: 'group',
+        },
+      ],
+      reasonCode: null,
+    });
+    expect(second).toEqual(first);
+  });
 });

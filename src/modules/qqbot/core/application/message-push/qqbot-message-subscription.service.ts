@@ -15,6 +15,7 @@ import {
   type MessageSubscriptionView,
 } from '../../contract/message-push/qqbot-message-push.types';
 import { QqbotMessageSubscription } from '../../infrastructure/persistence/message-push/qqbot-message-subscription.entity';
+import { QqbotMessagePublishBinding } from '../../infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
 import { SystemMessageSourceRegistry } from './system-message-source.registry';
 
 const DEFAULT_PAGE_NO = 1;
@@ -154,6 +155,9 @@ export class QqbotMessageSubscriptionService {
         async (manager) => {
           const repository = manager.getRepository(QqbotMessageSubscription);
           const current = await this.findActiveForWrite(repository, id);
+          if (current.sourceKey !== normalized.sourceKey) {
+            await this.assertNoLiveBindings(manager, id);
+          }
           const conflict = await repository.findOne({
             where: { activeKey: normalized.activeKey, isDeleted: false },
           });
@@ -215,6 +219,7 @@ export class QqbotMessageSubscriptionService {
       async (manager) => {
         const repository = manager.getRepository(QqbotMessageSubscription);
         const current = await this.findActiveForWrite(repository, id);
+        await this.assertNoLiveBindings(manager, id);
         current.activeKey = null;
         current.enabled = false;
         current.isDeleted = true;
@@ -323,6 +328,21 @@ export class QqbotMessageSubscriptionService {
     });
     if (!current) throw new SystemMessageContractError('invalid_source_config');
     return current;
+  }
+
+  /** Rejects a dependency lifecycle mutation while any enabled or disabled live binding references it. */
+  private async assertNoLiveBindings(
+    manager: EntityManager,
+    subscriptionId: string,
+  ): Promise<void> {
+    const count = await manager
+      .getRepository(QqbotMessagePublishBinding)
+      .count({
+        where: { isDeleted: false, subscriptionId },
+      });
+    if (count > 0) {
+      throw new SystemMessageContractError('invalid_source_config');
+    }
   }
 
   /**

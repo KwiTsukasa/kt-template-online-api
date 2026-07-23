@@ -399,4 +399,36 @@ VALUES
   (2041700000000010003, 2041700000000100010),
   (2041700000000010003, 2041700000000100011);
 
+INSERT INTO `admin_menu` (`id`, `pid`, `name`, `path`, `component`, `redirect`, `auth_code`, `type`, `meta`, `status`, `sort`)
+VALUES
+  (2041700000000100413, 2041700000000100400, 'QqBotMessageSubscription', '/qqbot/message-subscription', '/qqbot/message-subscription/list', NULL, 'QqBot:MessageSubscription:List', 'menu', '{"icon":"lucide:bell-ring","title":"系统消息订阅"}', 1, 10),
+  (2041700000000100414, 2041700000000100400, 'QqBotMessageTemplate', '/qqbot/message-template', '/qqbot/message-template/list', NULL, 'QqBot:MessageTemplate:List', 'menu', '{"icon":"lucide:message-square-plus","title":"系统消息模板"}', 1, 11),
+  (2041700000000120461, 2041700000000100413, 'QqBotMessageSubscriptionList', NULL, NULL, NULL, 'QqBot:MessageSubscription:List', 'button', '{"title":"common.list"}', 1, 0),
+  (2041700000000120462, 2041700000000100413, 'QqBotMessageSubscriptionCreate', NULL, NULL, NULL, 'QqBot:MessageSubscription:Create', 'button', '{"title":"common.create"}', 1, 0),
+  (2041700000000120463, 2041700000000100413, 'QqBotMessageSubscriptionUpdate', NULL, NULL, NULL, 'QqBot:MessageSubscription:Update', 'button', '{"title":"common.edit"}', 1, 0),
+  (2041700000000120464, 2041700000000100413, 'QqBotMessageSubscriptionDelete', NULL, NULL, NULL, 'QqBot:MessageSubscription:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000120465, 2041700000000100413, 'QqBotMessageSubscriptionToggle', NULL, NULL, NULL, 'QqBot:MessageSubscription:Toggle', 'button', '{"title":"启停"}', 1, 0),
+  (2041700000000120471, 2041700000000100414, 'QqBotMessageTemplateList', NULL, NULL, NULL, 'QqBot:MessageTemplate:List', 'button', '{"title":"common.list"}', 1, 0),
+  (2041700000000120472, 2041700000000100414, 'QqBotMessageTemplateCreate', NULL, NULL, NULL, 'QqBot:MessageTemplate:Create', 'button', '{"title":"common.create"}', 1, 0),
+  (2041700000000120473, 2041700000000100414, 'QqBotMessageTemplateUpdate', NULL, NULL, NULL, 'QqBot:MessageTemplate:Update', 'button', '{"title":"common.edit"}', 1, 0),
+  (2041700000000120474, 2041700000000100414, 'QqBotMessageTemplateDelete', NULL, NULL, NULL, 'QqBot:MessageTemplate:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000120475, 2041700000000100414, 'QqBotMessageTemplateToggle', NULL, NULL, NULL, 'QqBot:MessageTemplate:Toggle', 'button', '{"title":"启停"}', 1, 0),
+  (2041700000000120476, 2041700000000100414, 'QqBotMessageTemplatePreview', NULL, NULL, NULL, 'QqBot:MessageTemplate:Preview', 'button', '{"title":"预览"}', 1, 0),
+  (2041700000000120481, 2041700000000100410, 'QqBotAccountMessagePushList', NULL, NULL, NULL, 'QqBot:Account:MessagePush:List', 'button', '{"title":"common.list"}', 1, 0),
+  (2041700000000120482, 2041700000000100410, 'QqBotAccountMessagePushCreate', NULL, NULL, NULL, 'QqBot:Account:MessagePush:Create', 'button', '{"title":"common.create"}', 1, 0),
+  (2041700000000120483, 2041700000000100410, 'QqBotAccountMessagePushUpdate', NULL, NULL, NULL, 'QqBot:Account:MessagePush:Update', 'button', '{"title":"common.edit"}', 1, 0),
+  (2041700000000120484, 2041700000000100410, 'QqBotAccountMessagePushDelete', NULL, NULL, NULL, 'QqBot:Account:MessagePush:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000120485, 2041700000000100410, 'QqBotAccountMessagePushToggle', NULL, NULL, NULL, 'QqBot:Account:MessagePush:Toggle', 'button', '{"title":"启停"}', 1, 0)
+ON DUPLICATE KEY UPDATE
+  `pid` = VALUES(`pid`), `path` = VALUES(`path`), `component` = VALUES(`component`), `redirect` = VALUES(`redirect`), `auth_code` = VALUES(`auth_code`), `type` = VALUES(`type`), `meta` = VALUES(`meta`), `status` = VALUES(`status`), `sort` = VALUES(`sort`), `is_deleted` = 0;
+
+INSERT IGNORE INTO `admin_role_menu` (`role_id`, `menu_id`)
+SELECT role.`id`, menu.`id`
+FROM `admin_role` role
+JOIN `admin_menu` menu ON menu.`name` LIKE 'QqBot%'
+WHERE role.`role_code` IN ('super', 'admin')
+  AND role.`status` = 1
+  AND role.`is_deleted` = 0
+  AND menu.`is_deleted` = 0;
+
 SET FOREIGN_KEY_CHECKS = 1;

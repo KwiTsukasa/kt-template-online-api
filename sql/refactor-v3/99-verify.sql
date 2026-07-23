@@ -22,6 +22,29 @@ SELECT 'napcat_login_event' AS table_name, COUNT(*) AS row_count FROM napcat_log
 SELECT 'napcat_risk_mode' AS table_name, COUNT(*) AS row_count FROM napcat_risk_mode;
 SELECT 'qqbot_plugin_task' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task;
 SELECT 'qqbot_plugin_task_run' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task_run;
+SELECT 'qqbot_message_subscription' AS table_name, COUNT(*) AS row_count FROM qqbot_message_subscription;
+SELECT 'qqbot_message_template' AS table_name, COUNT(*) AS row_count FROM qqbot_message_template;
+SELECT 'qqbot_message_publish_binding' AS table_name, COUNT(*) AS row_count FROM qqbot_message_publish_binding;
+SELECT 'qqbot_message_publish_target' AS table_name, COUNT(*) AS row_count FROM qqbot_message_publish_target;
+SELECT 'qqbot_message_event' AS table_name, COUNT(*) AS row_count FROM qqbot_message_event;
+SELECT 'qqbot_message_delivery' AS table_name, COUNT(*) AS row_count FROM qqbot_message_delivery;
+
+SELECT 'seed_qqbot_message_template' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_message_template
+WHERE id = 2041700000000200601
+  AND name = 'STUN 映射端口变更默认模板'
+  AND source_key = 'network.stun.mapping-port-changed'
+  AND content = '当前STUN的端口已变更为${{endpoint}}'
+  AND enabled = 1
+  AND is_deleted = 0;
+
+SELECT 'seed_qqbot_message_push_menu' AS check_name, COUNT(*) AS matched_rows
+FROM admin_menu
+WHERE auth_code IN (
+  'QqBot:MessageSubscription:List', 'QqBot:MessageSubscription:Create', 'QqBot:MessageSubscription:Update', 'QqBot:MessageSubscription:Delete', 'QqBot:MessageSubscription:Toggle',
+  'QqBot:MessageTemplate:List', 'QqBot:MessageTemplate:Create', 'QqBot:MessageTemplate:Update', 'QqBot:MessageTemplate:Delete', 'QqBot:MessageTemplate:Toggle', 'QqBot:MessageTemplate:Preview',
+  'QqBot:Account:MessagePush:List', 'QqBot:Account:MessagePush:Create', 'QqBot:Account:MessagePush:Update', 'QqBot:Account:MessagePush:Delete', 'QqBot:Account:MessagePush:Toggle'
+) AND status = 1 AND is_deleted = 0;
 
 SELECT 'qqbot_napcat_webui_gateway_audit table exists' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.tables

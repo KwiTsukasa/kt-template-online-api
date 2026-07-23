@@ -1242,3 +1242,107 @@ CREATE TABLE IF NOT EXISTS qqbot_napcat_webui_gateway_audit (
   KEY idx_napcat_webui_gateway_audit_account_event (account_id, event_type),
   KEY idx_napcat_webui_gateway_audit_admin_time (admin_user_id, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_message_subscription (
+  id BIGINT NOT NULL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  source_key VARCHAR(128) NOT NULL,
+  source_config JSON NOT NULL,
+  source_config_digest CHAR(64) NOT NULL,
+  active_key VARCHAR(255) NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  remark VARCHAR(500) NULL,
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_qqbot_message_subscription_active_key (active_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_message_template (
+  id BIGINT NOT NULL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  source_key VARCHAR(128) NOT NULL,
+  content TEXT NOT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  remark VARCHAR(500) NULL,
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_message_publish_binding (
+  id BIGINT NOT NULL PRIMARY KEY,
+  subscription_id BIGINT NOT NULL,
+  account_id BIGINT NOT NULL,
+  self_id VARCHAR(64) NOT NULL,
+  template_id BIGINT NOT NULL,
+  active_key VARCHAR(255) NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_qqbot_message_publish_binding_active_key (active_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_message_publish_target (
+  id BIGINT NOT NULL PRIMARY KEY,
+  binding_id BIGINT NOT NULL,
+  target_type VARCHAR(16) NOT NULL,
+  target_id VARCHAR(64) NOT NULL,
+  target_name VARCHAR(120) NULL,
+  active_key VARCHAR(300) NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_qqbot_message_publish_target_active_key (active_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_message_event (
+  id BIGINT NOT NULL PRIMARY KEY,
+  event_id VARCHAR(128) NOT NULL,
+  source_key VARCHAR(128) NOT NULL,
+  resource_key VARCHAR(128) NOT NULL,
+  occurred_at DATETIME(6) NOT NULL,
+  payload JSON NOT NULL,
+  fanout_status VARCHAR(32) NOT NULL DEFAULT 'accepted',
+  fanout_attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+  next_fanout_at DATETIME(6) NULL,
+  fanout_lease_until DATETIME(6) NULL,
+  last_error_code VARCHAR(64) NULL,
+  last_error_message VARCHAR(500) NULL,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_qqbot_message_event_event_id (event_id),
+  KEY idx_qqbot_message_event_dispatch (fanout_status, next_fanout_at),
+  KEY idx_qqbot_message_event_lease (fanout_lease_until)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS qqbot_message_delivery (
+  id BIGINT NOT NULL PRIMARY KEY,
+  message_event_id BIGINT NOT NULL,
+  publish_target_id BIGINT NOT NULL,
+  binding_id BIGINT NOT NULL,
+  subscription_id BIGINT NOT NULL,
+  self_id VARCHAR(64) NOT NULL,
+  target_type VARCHAR(16) NOT NULL,
+  target_id VARCHAR(64) NOT NULL,
+  template_id BIGINT NOT NULL,
+  template_content TEXT NOT NULL,
+  variable_snapshot JSON NOT NULL,
+  rendered_message TEXT NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+  next_attempt_at DATETIME(6) NULL,
+  processing_lease_until DATETIME(6) NULL,
+  send_log_id BIGINT NULL,
+  last_error_code VARCHAR(64) NULL,
+  last_error_message VARCHAR(500) NULL,
+  expires_at DATETIME(6) NOT NULL,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_qqbot_message_delivery_event_target (message_event_id, publish_target_id),
+  KEY idx_qqbot_message_delivery_dispatch (status, next_attempt_at),
+  KEY idx_qqbot_message_delivery_lease (processing_lease_until),
+  KEY idx_qqbot_message_delivery_history (subscription_id, message_event_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

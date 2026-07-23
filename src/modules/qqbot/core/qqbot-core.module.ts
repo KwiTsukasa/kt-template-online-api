@@ -41,6 +41,12 @@ import { QqbotRateLimitService } from '@/modules/qqbot/core/application/send/qqb
 import { QqbotSendController } from '@/modules/qqbot/core/contract/send/qqbot-send.controller';
 import { QqbotSendLog } from '@/modules/qqbot/core/infrastructure/persistence/send/qqbot-send-log.entity';
 import { QqbotSendService } from '@/modules/qqbot/core/application/send/qqbot-send.service';
+import { QqbotMessageDelivery } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-delivery.entity';
+import { QqbotMessageEvent } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-event.entity';
+import { QqbotMessagePublishBinding } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
+import { QqbotMessagePublishTarget } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-target.entity';
+import { QqbotMessageSubscription } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-subscription.entity';
+import { QqbotMessageTemplate } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-template.entity';
 
 export { QQBOT_CORE_DOMAIN_CONTRACT } from './contract/qqbot-core.contract';
 
@@ -55,6 +61,12 @@ export const QQBOT_CORE_ENTITIES = [
   QqbotConversation,
   QqbotDedupe,
   QqbotMessage,
+  QqbotMessageDelivery,
+  QqbotMessageEvent,
+  QqbotMessagePublishBinding,
+  QqbotMessagePublishTarget,
+  QqbotMessageSubscription,
+  QqbotMessageTemplate,
   QqbotRule,
   QqbotSendLog,
 ];

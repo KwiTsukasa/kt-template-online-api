@@ -66,8 +66,8 @@ SELECT 'seed_qqbot_message_push_menu_mismatch' AS check_name,
 FROM expected_menu expected
 LEFT JOIN admin_menu actual ON actual.id = expected.id
 WHERE actual.id IS NULL
-   OR actual.name <> expected.name
-   OR NOT (actual.auth_code <=> expected.auth_code)
+   OR NOT (BINARY actual.name <=> BINARY expected.name)
+   OR NOT (BINARY actual.auth_code <=> BINARY expected.auth_code)
    OR actual.pid <> expected.pid
    OR actual.sort <> expected.sort
    OR actual.status <> 1

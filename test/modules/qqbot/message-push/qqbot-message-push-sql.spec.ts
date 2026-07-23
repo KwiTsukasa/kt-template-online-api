@@ -118,6 +118,28 @@ const menuEntries: readonly MenuEntry[] = [
 ];
 
 /**
+ * Advances SQL single-quote state at one character, respecting SQL doubled
+ * quotes and MySQL backslash escaping. An odd number of preceding backslashes
+ * escapes a quote; an even number lets it open or close a string.
+ *
+ * @param sql SQL source being scanned.
+ * @param index Index of the current character in {@link sql}.
+ * @param quoted Whether the scanner is currently inside a single-quoted value.
+ * @returns The next quote state and whether the following doubled quote is consumed.
+ */
+const advanceSqlQuoteState = (sql: string, index: number, quoted: boolean) => {
+  if (sql[index] !== "'") return { quoted, skipNext: false };
+  if (quoted && sql[index + 1] === "'") return { quoted, skipNext: true };
+
+  let precedingBackslashes = 0;
+  for (let cursor = index - 1; sql[cursor] === '\\'; cursor -= 1) precedingBackslashes += 1;
+  return {
+    quoted: precedingBackslashes % 2 === 1 ? quoted : !quoted,
+    skipNext: false,
+  };
+};
+
+/**
  * Normalizes SQL syntax while preserving the exact casing and whitespace inside
  * single-quoted contract values.
  */
@@ -130,17 +152,17 @@ const normalizeSql = (sql: string) => {
     const character = sql[index];
     if (quoted) {
       normalized += character;
-      if (character === "'" && sql[index + 1] === "'") {
+      const quoteState = advanceSqlQuoteState(sql, index, quoted);
+      if (quoteState.skipNext) {
         normalized += sql[index + 1];
         index += 1;
-      } else if (character === "'" && sql[index - 1] !== '\\') {
-        quoted = false;
       }
+      quoted = quoteState.quoted;
       previousWasWhitespace = false;
       continue;
     }
     if (character === "'") {
-      quoted = true;
+      quoted = advanceSqlQuoteState(sql, index, quoted).quoted;
       normalized += character;
       previousWasWhitespace = false;
       continue;
@@ -180,12 +202,13 @@ const splitSqlTuple = (tuple: string) => {
   let quoted = false;
   for (let index = 0; index < tuple.length; index += 1) {
     const character = tuple[index];
-    if (character === "'" && tuple[index + 1] === "'") {
+    const quoteState = advanceSqlQuoteState(tuple, index, quoted);
+    if (quoteState.skipNext) {
       current += tuple[index + 1];
       index += 1;
       continue;
     }
-    if (character === "'" && tuple[index - 1] !== '\\') quoted = !quoted;
+    quoted = quoteState.quoted;
     if (character === ',' && !quoted) {
       values.push(current.trim());
       current = '';
@@ -208,12 +231,13 @@ const extractSqlTuples = (values: string) => {
   let quoted = false;
   for (let index = 0; index < values.length; index += 1) {
     const character = values[index];
-    if (character === "'" && values[index + 1] === "'") {
+    const quoteState = advanceSqlQuoteState(values, index, quoted);
+    if (quoteState.skipNext) {
       current += values[index + 1];
       index += 1;
       continue;
     }
-    if (character === "'" && values[index - 1] !== '\\') quoted = !quoted;
+    quoted = quoteState.quoted;
     if (!quoted && character === '(') {
       depth += 1;
       if (depth === 1) current = '';
@@ -247,6 +271,24 @@ const extractMessagePushMenuRows = (sql: string) => {
     ] as MenuEntry);
 };
 
+/** Extracts the statement that grants the seeded message-push menus to active roles. */
+const extractMessagePushMenuRoleGrantStatement = (sql: string) => {
+  const statements = splitSqlStatements(sql);
+  const menuSeedIndex = statements.findIndex((statement) =>
+    statement.startsWith('insert into admin_menu') && statement.includes(menuEntries[0][0]));
+  expect(menuSeedIndex).toBeGreaterThanOrEqual(0);
+  const roleGrantIndex = statements.findIndex((statement, index) =>
+    index > menuSeedIndex && statement.startsWith('insert ignore into admin_role_menu'));
+  expect(roleGrantIndex).toBeGreaterThan(menuSeedIndex);
+  return statements[roleGrantIndex] || '';
+};
+
+/** Extracts the explicit stable menu IDs from a menu-role grant statement. */
+const extractMenuRoleGrantIds = (statement: string) => {
+  const ids = statement.match(/menu\.id in \(([^)]*)\)/)?.[1].match(/\d+/g) || [];
+  return ids;
+};
+
 /** Splits SQL statements only at semicolons outside single-quoted values. */
 const splitSqlStatements = (sql: string) => {
   const statements: string[] = [];
@@ -256,12 +298,13 @@ const splitSqlStatements = (sql: string) => {
   for (let index = 0; index < sql.length; index += 1) {
     const character = sql[index];
     current += character;
-    if (quoted && character === "'" && sql[index + 1] === "'") {
+    const quoteState = advanceSqlQuoteState(sql, index, quoted);
+    if (quoteState.skipNext) {
       current += sql[index + 1];
       index += 1;
       continue;
     }
-    if (character === "'" && sql[index - 1] !== '\\') quoted = !quoted;
+    quoted = quoteState.quoted;
     if (character === ';' && !quoted) {
       statements.push(current.trim());
       current = '';
@@ -287,11 +330,12 @@ const extractExpectedMenuCte = (statement: string) => {
   let quoted = false;
   for (let index = openIndex; index < statement.length; index += 1) {
     const character = statement[index];
-    if (quoted && character === "'" && statement[index + 1] === "'") {
+    const quoteState = advanceSqlQuoteState(statement, index, quoted);
+    if (quoteState.skipNext) {
       index += 1;
       continue;
     }
-    if (character === "'" && statement[index - 1] !== '\\') quoted = !quoted;
+    quoted = quoteState.quoted;
     if (quoted) continue;
     if (character === '(') depth += 1;
     if (character === ')') {
@@ -323,6 +367,18 @@ describe('QQBot message-push SQL contract', () => {
   it('normalizes only SQL syntax and preserves single-quoted contract values exactly', () => {
     expect(normalizeSql("SELECT `AUTH_CODE`, 'QqBot:MessageTemplate:List', '${{endpoint}}'"))
       .toBe("select auth_code, 'QqBot:MessageTemplate:List', '${{endpoint}}'");
+  });
+
+  it('recognizes SQL quote endings, doubled quotes, and odd or even backslashes in every scanner', () => {
+    expect(splitSqlTuple("'closed', next")).toEqual(["'closed'", 'next']);
+    expect(splitSqlTuple("'it''s closed', next")).toEqual(["'it's closed'", 'next']);
+    expect(splitSqlTuple(String.raw`'odd\' quote', next`)).toEqual([String.raw`'odd\' quote'`, 'next']);
+    expect(splitSqlTuple(String.raw`'even\\', next`)).toEqual([String.raw`'even\\'`, 'next']);
+    expect(extractSqlTuples(String.raw`('even\\'), ('next')`)).toEqual([String.raw`'even\\'`, "'next'"]);
+    expect(splitSqlStatements(String.raw`select 'even\\'; select 'next';`)).toEqual([
+      String.raw`select 'even\\';`,
+      "select 'next';",
+    ]);
   });
 
   it('keeps each table DDL and index tuple exact in current and refactor schemas', () => {
@@ -374,12 +430,23 @@ describe('QQBot message-push SQL contract', () => {
     }
   });
 
+  it('grants only the seeded message-push menus to active super and admin roles after refactor seeding', () => {
+    const roleGrant = extractMessagePushMenuRoleGrantStatement(seedSql);
+    expect(roleGrant).toContain('insert ignore into admin_role_menu (role_id, menu_id)');
+    expect(extractMenuRoleGrantIds(roleGrant)).toEqual(menuEntries.map(([id]) => id));
+    expect(roleGrant).toContain("role.role_code in ('super', 'admin')");
+    expect(roleGrant).toContain('role.status = 1');
+    expect(roleGrant).toContain('role.is_deleted = 0');
+    expect(roleGrant).toContain('menu.status = 1');
+    expect(roleGrant).toContain('menu.is_deleted = 0');
+  });
+
   it('uses an exact mismatch CTE and null-safe predicates for every stable menu tuple', () => {
     const mismatch = extractVerificationStatement(verifySql, 'seed_qqbot_message_push_menu_mismatch');
     expect(extractMismatchMenuRows(mismatch)).toEqual(menuEntries);
     expect(mismatch).toContain('left join admin_menu actual on actual.id = expected.id');
-    expect(mismatch).toContain('actual.name <> expected.name');
-    expect(mismatch).toContain('not (actual.auth_code <=> expected.auth_code)');
+    expect(mismatch).toContain('not (binary actual.name <=> binary expected.name)');
+    expect(mismatch).toContain('not (binary actual.auth_code <=> binary expected.auth_code)');
     expect(mismatch).toContain('actual.pid <> expected.pid');
     expect(mismatch).toContain('actual.sort <> expected.sort');
     expect(mismatch).toContain('actual.status <> 1');
@@ -404,5 +471,16 @@ describe('QQBot message-push SQL contract', () => {
     expect(roleGrant).toContain('role.status = 1');
     expect(roleGrant).toContain('role.is_deleted = 0');
     expect(roleGrant).toContain('role_menu.menu_id is null');
+  });
+
+  it('extracts the three message-push verification CTEs as separate statements', () => {
+    const checkNames = splitSqlStatements(verifySql)
+      .filter((statement) => statement.includes('seed_qqbot_message_push_menu_'))
+      .map((statement) => statement.match(/'([^']+)' as check_name/)?.[1]);
+    expect(checkNames).toEqual([
+      'seed_qqbot_message_push_menu_mismatch',
+      'seed_qqbot_message_push_menu_cardinality',
+      'seed_qqbot_message_push_menu_role_grant_missing',
+    ]);
   });
 });

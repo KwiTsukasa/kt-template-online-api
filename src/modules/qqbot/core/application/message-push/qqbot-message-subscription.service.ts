@@ -146,12 +146,11 @@ export class QqbotMessageSubscriptionService {
     const normalized = await this.normalizeInput(input);
     try {
       const saved = await this.subscriptionRepository.manager.transaction(
-        /** Holds both target and prospective active-key rows through the update save. */
+        /** Holds the target row through save; the unique index resolves prospective-key races. */
         async (manager) => {
           const repository = manager.getRepository(QqbotMessageSubscription);
           const current = await this.findActiveForWrite(repository, id);
           const conflict = await repository.findOne({
-            lock: { mode: 'pessimistic_write' },
             where: { activeKey: normalized.activeKey, isDeleted: false },
           });
           if (conflict && conflict.id !== current.id) {

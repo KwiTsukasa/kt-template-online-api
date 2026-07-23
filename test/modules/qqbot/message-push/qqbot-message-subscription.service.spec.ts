@@ -419,6 +419,121 @@ describe('QqbotMessageSubscriptionService', () => {
     ).rejects.toBe(infrastructureFailure);
   });
 
+  it('rejects opposite active-key updates as conflicts without taking a second write lock', async () => {
+    const secondConfig = {
+      ddnsRecordId: '2041700000000000004',
+      portForwardId: '2041700000000000003',
+    };
+    const first = subscription({ id: '100' });
+    const second = subscription({
+      activeKey: `${SOURCE_KEY}:${digestFor(secondConfig)}`,
+      id: '101',
+      sourceConfig: secondConfig,
+      sourceConfigDigest: digestFor(secondConfig),
+    });
+    const rows = [first, second];
+    const bothTargetsLocked = deferred();
+    let targetLocks = 0;
+    const repositories = ['100', '101'].map(
+      () =>
+        ({
+          findOne: jest.fn(async (options) => {
+            const where =
+              options.where as FindOptionsWhere<QqbotMessageSubscription>;
+            if (where.id) {
+              if (options.lock?.mode === 'pessimistic_write') {
+                targetLocks += 1;
+                if (targetLocks === 2) bothTargetsLocked.resolve();
+                await bothTargetsLocked.promise;
+              }
+              return rows.find((row) => row.id === where.id) ?? null;
+            }
+            if (options.lock?.mode === 'pessimistic_write') {
+              throw { code: 'ER_LOCK_DEADLOCK', errno: 1213 };
+            }
+            return (
+              rows.find((row) => row.activeKey === where.activeKey) ?? null
+            );
+          }),
+          save: jest.fn(),
+        }) as unknown as jest.Mocked<Repository<QqbotMessageSubscription>>,
+    );
+    const managers = repositories.map(
+      (repository) =>
+        ({
+          getRepository: jest.fn((entity) => {
+            if (entity === QqbotMessageSubscription) return repository;
+            throw new Error('unexpected repository');
+          }),
+        }) as unknown as EntityManager,
+    );
+    const source = adapter();
+    source.normalizeSubscriptionConfig.mockImplementation(async (input) => {
+      const config = input as typeof CONFIG;
+      const canonicalConfig =
+        config.portForwardId === secondConfig.portForwardId
+          ? secondConfig
+          : CONFIG;
+      return {
+        canonicalConfig,
+        resourceKey: canonicalConfig.portForwardId,
+        sourceSummary: '交叉更新',
+      };
+    });
+    const transaction = jest.fn((callback) => {
+      const manager = managers.shift();
+      if (!manager) throw new Error('unexpected transaction');
+      return callback(manager);
+    });
+    const service = new QqbotMessageSubscriptionService(
+      {
+        manager: { transaction },
+      } as unknown as Repository<QqbotMessageSubscription>,
+      registry(source),
+    );
+
+    const [firstError, secondError] = await Promise.all([
+      service
+        .update('100', {
+          enabled: true,
+          name: '改为第二条配置',
+          sourceConfig: secondConfig,
+          sourceKey: SOURCE_KEY,
+        })
+        .catch((error: unknown) => error),
+      service
+        .update('101', {
+          enabled: true,
+          name: '改为第一条配置',
+          sourceConfig: CONFIG,
+          sourceKey: SOURCE_KEY,
+        })
+        .catch((error: unknown) => error),
+    ]);
+
+    expect(firstError).toMatchObject({ status: HttpStatus.CONFLICT });
+    expect(secondError).toMatchObject({ status: HttpStatus.CONFLICT });
+    for (const repository of repositories) {
+      expect(repository.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lock: { mode: 'pessimistic_write' },
+          where: expect.objectContaining({ id: expect.any(String) }),
+        }),
+      );
+      expect(repository.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ activeKey: expect.any(String) }),
+        }),
+      );
+      const prospectiveRead = repository.findOne.mock.calls.find(
+        ([options]) =>
+          (options.where as FindOptionsWhere<QqbotMessageSubscription>)
+            .activeKey !== undefined,
+      )?.[0];
+      expect(prospectiveRead?.lock).toBeUndefined();
+    }
+  });
+
   it('pages only undeleted records with real filters and returns detached, real-time source status', async () => {
     const source = adapter({
       invalidReasonCode: 'ddns_mapping_mismatch',

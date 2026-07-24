@@ -145,6 +145,11 @@ export class QqbotReverseWsService
       } catch {
         clearTimeout(timer);
         this.pendingActions.delete(echo);
+        this.closeCurrentConnection(
+          selfId,
+          ws,
+          'OneBot connection send failed',
+        );
         reject(
           new QqbotReverseWsActionError(
             'onebot_disconnected',
@@ -314,12 +319,25 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param ws - QQBot列表；影响 closeTimedOutConnection 的返回值。
+   * Retires the current connection after an action timeout using the stable timeout reason.
+   * @param selfId - The account owning the timed-out OneBot action.
+   * @param ws - The exact socket that timed out.
    */
   private closeTimedOutConnection(selfId: string, ws: WebSocket) {
-    const reason = 'OneBot action timeout';
+    this.closeCurrentConnection(selfId, ws, 'OneBot action timeout');
+  }
+
+  /**
+   * Retires exactly the currently registered failing connection and publishes its offline state.
+   * @param selfId - The account owning the attempted OneBot action.
+   * @param ws - The exact socket that failed; replaced sockets must remain registered.
+   * @param reason - A non-sensitive reason used for socket close and offline observation.
+   */
+  private closeCurrentConnection(
+    selfId: string,
+    ws: WebSocket,
+    reason: string,
+  ) {
     let closedCurrentConnection = false;
     [...this.connections.entries()].forEach(([key, connection]) => {
       if (!key.startsWith(`${selfId}:`) || connection !== ws) return;

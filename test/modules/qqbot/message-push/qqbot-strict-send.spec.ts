@@ -196,35 +196,45 @@ describe('QQBot strict plain-text sender', () => {
     });
   });
 
-  it('rejects OneBot non-success responses permanently and retains the pending log', async () => {
-    const { messageService, reverseWs, sendLogRepository, service } =
-      createHarness();
-    reverseWs.sendAction.mockResolvedValue({
-      message: 'bad target',
-      retcode: 1404,
-      status: 'failed',
-    });
+  it.each([
+    ['failed status despite zero retcode', { retcode: 0, status: 'failed' }],
+    ['ok status with nonzero retcode', { retcode: 1404, status: 'ok' }],
+    ['missing status', { retcode: 0 }],
+    ['missing retcode', { status: 'ok' }],
+  ])(
+    'rejects strict OneBot responses with %s permanently and retains the pending log',
+    async (_caseName, response) => {
+      const { messageService, reverseWs, sendLogRepository, service } =
+        createHarness();
+      reverseWs.sendAction.mockResolvedValue({
+        message: 'bad target',
+        ...response,
+      });
 
-    await expect(
-      service.sendStrictPlainText({
-        attemptNumber: 1,
-        deliveryId: 'delivery-1',
-        message: 'plain text',
-        selfId: '10001',
-        targetId: '20001',
-        targetType: 'group',
-      }),
-    ).rejects.toMatchObject({
-      code: 'onebot_rejected',
-      retryable: false,
-      sendLogId: 'log-1',
-    });
-    expect(sendLogRepository.update).toHaveBeenCalledWith(
-      { id: 'log-1' },
-      expect.objectContaining({ errorMessage: 'bad target', status: 'failed' }),
-    );
-    expect(messageService.saveOutgoing).not.toHaveBeenCalled();
-  });
+      await expect(
+        service.sendStrictPlainText({
+          attemptNumber: 1,
+          deliveryId: 'delivery-1',
+          message: 'plain text',
+          selfId: '10001',
+          targetId: '20001',
+          targetType: 'group',
+        }),
+      ).rejects.toMatchObject({
+        code: 'onebot_rejected',
+        retryable: false,
+        sendLogId: 'log-1',
+      });
+      expect(sendLogRepository.update).toHaveBeenCalledWith(
+        { id: 'log-1' },
+        expect.objectContaining({
+          errorMessage: 'bad target',
+          status: 'failed',
+        }),
+      );
+      expect(messageService.saveOutgoing).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     [
@@ -320,6 +330,11 @@ describe('QQBot strict plain-text sender', () => {
       sendLogRepository,
       service,
     } = createHarness();
+    reverseWs.sendAction.mockResolvedValue({
+      data: { message_id: 'message-1' },
+      retcode: 0,
+      status: 'failed',
+    });
 
     await service.sendText({
       message: '[CQ:at,qq=12345]',
@@ -343,6 +358,10 @@ describe('QQBot strict plain-text sender', () => {
     expect(busService.publish).toHaveBeenCalledTimes(1);
     expect(sendLogRepository.save).toHaveBeenCalledTimes(1);
     expect(messageService.saveOutgoing).toHaveBeenCalledTimes(1);
+    expect(sendLogRepository.update).toHaveBeenCalledWith(
+      { id: 'log-1' },
+      expect.objectContaining({ status: 'success' }),
+    );
   });
 });
 
@@ -432,6 +451,46 @@ describe('QQBot reverse WS action classification', () => {
         status: 'ok',
       });
       expect((service as any).pendingActions.size).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('retires an OPEN socket whose send throws without leaving a timeout behind', async () => {
+    jest.useFakeTimers();
+    try {
+      const { accountService, busService, service } = createReverseWsHarness();
+      const ws = {
+        close: jest.fn(),
+        readyState: 1,
+        send: jest.fn(() => {
+          throw new Error('send failed');
+        }),
+      };
+      (service as any).connections.set('10001:Universal', ws);
+
+      await expect(
+        service.sendAction('10001', 'send_group_msg', {}),
+      ).rejects.toMatchObject({ code: 'onebot_disconnected' });
+      expect((service as any).pendingActions.size).toBe(0);
+      expect((service as any).connections.has('10001:Universal')).toBe(false);
+      expect(ws.close).toHaveBeenCalledWith(
+        1011,
+        'OneBot connection send failed',
+      );
+      expect(accountService.markOffline).toHaveBeenCalledWith(
+        '10001',
+        'OneBot connection send failed',
+      );
+      expect(busService.publish).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ selfId: '10001', status: 'offline' }),
+      );
+
+      jest.advanceTimersByTime(10);
+      expect(ws.close).toHaveBeenCalledTimes(1);
+      expect(accountService.markOffline).toHaveBeenCalledTimes(1);
+      expect(busService.publish).toHaveBeenCalledTimes(1);
     } finally {
       jest.useRealTimers();
     }

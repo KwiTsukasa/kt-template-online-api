@@ -272,7 +272,9 @@ export class QqbotSendService {
         input.action,
         input.actionParams,
       );
-      const success = response.status === 'ok' || response.retcode === 0;
+      const success = input.strict
+        ? response.status === 'ok' && response.retcode === 0
+        : response.status === 'ok' || response.retcode === 0;
       const messageId = response.data?.message_id
         ? `${response.data.message_id}`
         : null;

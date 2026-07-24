@@ -279,6 +279,7 @@ function setup(seed: Partial<Store> = {}) {
     | null
     | ((authoritative: Store, where: Record<string, unknown>) => void) = null;
   let beforePreparationDeliveryRead: null | ((draft: Store) => void) = null;
+  let afterClaimCommit: null | ((authoritative: Store) => void) = null;
   let pauseNextClaim: null | { entered: () => void; resume: Promise<void> } =
     null;
 
@@ -518,6 +519,11 @@ function setup(seed: Partial<Store> = {}) {
             repository(entity, draft, context, transactionLocks),
         });
         mergeCommitted(draft, baseline);
+        if (context.claim && afterClaimCommit) {
+          const callback = afterClaimCommit;
+          afterClaimCommit = null;
+          callback(state);
+        }
         operations.push(
           context.claim
             ? 'claim:commit'
@@ -543,6 +549,9 @@ function setup(seed: Partial<Store> = {}) {
     sender as never,
   );
   return {
+    afterClaimCommit: (callback: null | ((authoritative: Store) => void)) => {
+      afterClaimCommit = callback;
+    },
     adapter,
     beforeExternalUpdate: (
       callback:
@@ -797,6 +806,32 @@ describe('System message delivery runner direct preflight contracts', () => {
       attemptCount: 2,
       lastErrorCode: 'old_error',
       status: 'processing',
+    });
+  });
+
+  it('5 loses ownership when a canonical config change cancels the claimed old-identity row', async () => {
+    const harness = setup();
+    harness.afterClaimCommit((state) => {
+      state.subscriptions[0].sourceConfig = {
+        ddnsRecordId: 'new-ddns-record',
+        portForwardId: RESOURCE_KEY,
+      };
+      Object.assign(state.deliveries[0], {
+        nextAttemptAt: null,
+        processingLeaseUntil: null,
+        status: 'cancelled',
+      });
+    });
+
+    await harness.runner.runOnce(NOW);
+
+    expect(harness.adapter.resolveDelivery).not.toHaveBeenCalled();
+    expect(harness.sender.sendStrictPlainText).not.toHaveBeenCalled();
+    expect(harness.getState().deliveries[0]).toMatchObject({
+      attemptCount: 1,
+      lastErrorCode: 'old_error',
+      processingLeaseUntil: null,
+      status: 'cancelled',
     });
   });
 
@@ -1066,12 +1101,37 @@ describe('System message delivery runner direct preflight contracts', () => {
     expect(harness.getState().deliveries[0]).toMatchObject({
       attemptCount: 1,
       lastErrorCode: 'onebot_timeout',
-      lastErrorMessage: 'OneBot action timeout',
+      lastErrorMessage: 'OneBot send timed out',
       nextAttemptAt: new KtDateTime(NOW.getTime() + 10_000),
       processingLeaseUntil: null,
       sendLogId: '90001',
       status: 'retry',
     });
+  });
+
+  it('17 never persists arbitrary text carried by an explicitly typed strict-send error', async () => {
+    const harness = setup();
+    harness.sender.sendStrictPlainText.mockRejectedValueOnce(
+      new QqbotSendAttemptError({
+        code: 'onebot_disconnected',
+        message:
+          'password=delivery-secret SELECT * FROM qqbot_private connection=mysql://root@db',
+        retryable: true,
+        sendLogId: '90002',
+      }),
+    );
+
+    await harness.runner.runOnce(NOW);
+
+    expect(harness.getState().deliveries[0]).toMatchObject({
+      lastErrorCode: 'onebot_disconnected',
+      lastErrorMessage: 'OneBot connection unavailable',
+      sendLogId: '90002',
+      status: 'retry',
+    });
+    expect(JSON.stringify(harness.getState().deliveries[0])).not.toContain(
+      'delivery-secret',
+    );
   });
 
   it('18 caps exponential backoff at fifteen minutes', async () => {
@@ -1231,6 +1291,65 @@ describe('System message delivery runner direct preflight contracts', () => {
       new KtDateTime(NOW.getTime() + SYSTEM_MESSAGE_LEASE_MS),
     );
     expect(harness.getState().deliveries[0].processingLeaseUntil).toBeNull();
+  });
+
+  it('samples a fresh production clock for each claim after a slow prior send', async () => {
+    jest.useFakeTimers().setSystemTime(NOW);
+    try {
+      const harness = setup({
+        deliveries: [
+          delivery({ id: '801', publishTargetId: '701' }),
+          delivery({ id: '802', publishTargetId: '702' }),
+        ],
+        targets: [target(), target({ id: '702' })],
+      });
+      const observedLeases: Array<Date | null> = [];
+      harness.beforeExternalUpdate((state) => {
+        const processing = state.deliveries.find(
+          (item) => item.status === 'processing',
+        );
+        observedLeases.push(processing?.processingLeaseUntil ?? null);
+      });
+      harness.sender.sendStrictPlainText.mockImplementation(async () => {
+        if (harness.sender.sendStrictPlainText.mock.calls.length === 1) {
+          jest.setSystemTime(NOW.getTime() + 31_000);
+        }
+        return { logId: 'send-log' };
+      });
+
+      await harness.runner.runOnce();
+
+      expect(observedLeases).toEqual([
+        new KtDateTime(NOW.getTime() + SYSTEM_MESSAGE_LEASE_MS),
+        new KtDateTime(NOW.getTime() + 31_000 + SYSTEM_MESSAGE_LEASE_MS),
+      ]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('schedules a production retry from the fresh post-I/O clock', async () => {
+    jest.useFakeTimers().setSystemTime(NOW);
+    try {
+      const harness = setup();
+      harness.sender.sendStrictPlainText.mockImplementationOnce(async () => {
+        jest.setSystemTime(NOW.getTime() + 31_000);
+        throw new QqbotSendAttemptError({
+          code: 'onebot_timeout',
+          message: 'raw timeout detail',
+          retryable: true,
+          sendLogId: 'slow-log',
+        });
+      });
+
+      await harness.runner.runOnce();
+
+      expect(harness.getState().deliveries[0].nextAttemptAt).toEqual(
+        new KtDateTime(NOW.getTime() + 41_000),
+      );
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 

@@ -287,7 +287,7 @@ export class QqbotSendService {
             retryable: false,
             sendLogId: log!.id,
           });
-          await this.markFailedLog(log!.id, message);
+          await this.markFailedLog(log!.id, error.message);
           throw error;
         }
         await this.sendLogRepository.update(
@@ -330,7 +330,7 @@ export class QqbotSendService {
         'OneBot send failed',
       );
       if (input.strict) {
-        const error = this.toStrictSendError(err, message, log!.id);
+        const error = this.toStrictSendError(err, log!.id);
         await this.markFailedLog(log!.id, error.message);
         throw error;
       }
@@ -370,26 +370,21 @@ export class QqbotSendService {
   /**
    * Converts strict transport and infrastructure failures to stable delivery classifications.
    * @param err - The original failure.
-   * @param message - Its non-sensitive safe summary.
    * @param sendLogId - The pending log ID, if creation succeeded.
    * @returns A stable strict delivery error.
    */
-  private toStrictSendError(
-    err: unknown,
-    message: string,
-    sendLogId: null | string,
-  ) {
+  private toStrictSendError(err: unknown, sendLogId: null | string) {
     if (err instanceof QqbotReverseWsActionError) {
       return new QqbotSendAttemptError({
         code: err.code,
-        message,
+        message: err.message,
         retryable: true,
         sendLogId,
       });
     }
     return new QqbotSendAttemptError({
       code: 'onebot_disconnected',
-      message,
+      message: 'OneBot send failed',
       retryable: true,
       sendLogId,
     });
@@ -406,11 +401,11 @@ export class QqbotSendService {
     err: unknown,
     sendLogId: null | string,
   ): never {
+    if (strict) throw this.toStrictSendError(err, sendLogId);
     const message = this.toolsService.getErrorMessage(
       err,
       'OneBot send failed',
     );
-    if (strict) throw this.toStrictSendError(err, message, sendLogId);
     throwVbenError(message);
     throw new Error(message);
   }

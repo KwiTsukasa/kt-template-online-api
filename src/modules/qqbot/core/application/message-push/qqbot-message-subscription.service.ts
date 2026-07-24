@@ -172,9 +172,13 @@ export class QqbotMessageSubscriptionService {
           Object.assign(current, normalized);
           const saved = await repository.save(current);
           if (!saved.enabled || sourceIdentityChanged) {
-            await this.cancelUnfinishedDeliveries(manager, {
-              subscriptionId: saved.id,
-            });
+            await this.cancelUnfinishedDeliveries(
+              manager,
+              {
+                subscriptionId: saved.id,
+              },
+              sourceIdentityChanged,
+            );
           }
           return saved;
         },
@@ -365,13 +369,27 @@ export class QqbotMessageSubscriptionService {
     }
   }
 
-  /** Cancels only claimable historical deliveries in the caller's configuration transaction. */
+  /**
+   * Cancels historical deliveries in the caller's configuration transaction.
+   * @param manager - Transaction manager that already owns the subscription mutation.
+   * @param where - Exact subscription identity whose historical rows are invalidated.
+   * @param includeProcessing - Whether a canonical identity change must revoke active owners too.
+   */
   private async cancelUnfinishedDeliveries(
     manager: EntityManager,
     where: Pick<QqbotMessageDelivery, 'subscriptionId'>,
+    includeProcessing = false,
   ): Promise<void> {
     await manager.getRepository(QqbotMessageDelivery).update(
-      { ...where, status: In(['waiting_ddns', 'pending', 'retry']) },
+      {
+        ...where,
+        status: In([
+          'waiting_ddns',
+          'pending',
+          'retry',
+          ...(includeProcessing ? (['processing'] as const) : []),
+        ]),
+      },
       {
         status: 'cancelled',
         nextAttemptAt: null,

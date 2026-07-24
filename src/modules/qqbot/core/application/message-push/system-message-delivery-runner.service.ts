@@ -11,7 +11,10 @@ import { QqbotMessageEvent } from '../../infrastructure/persistence/message-push
 import { QqbotMessagePublishBinding } from '../../infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
 import { QqbotMessagePublishTarget } from '../../infrastructure/persistence/message-push/qqbot-message-publish-target.entity';
 import { QqbotMessageSubscription } from '../../infrastructure/persistence/message-push/qqbot-message-subscription.entity';
-import { QqbotSendAttemptError } from '../send/qqbot-send.error';
+import {
+  QqbotSendAttemptError,
+  strictSendErrorSummary,
+} from '../send/qqbot-send.error';
 import { QqbotSendService } from '../send/qqbot-send.service';
 import {
   SYSTEM_MESSAGE_BATCH_SIZE,
@@ -61,16 +64,16 @@ export class SystemMessageDeliveryRunnerService {
   ) {}
 
   /** Processes up to one bounded batch of due deliveries and returns its claim count. */
-  async runOnce(now: Date = new Date()): Promise<number> {
+  async runOnce(now?: Date): Promise<number> {
     let claimed = 0;
     for (let index = 0; index < SYSTEM_MESSAGE_BATCH_SIZE; index += 1) {
-      const token = await this.claimOne(now);
+      const token = await this.claimOne(now ?? new Date());
       if (!token) break;
       claimed += 1;
       try {
         await this.processClaim(token, now);
       } catch {
-        await this.handleUnexpectedClaimFailure(token, now);
+        await this.handleUnexpectedClaimFailure(token, now ?? new Date());
       }
     }
     return claimed;
@@ -115,8 +118,12 @@ export class SystemMessageDeliveryRunnerService {
   }
 
   /** Rechecks one claimed delivery before doing external I/O and then performs its final CAS. */
-  private async processClaim(token: ClaimToken, now: Date): Promise<void> {
-    if (now.getTime() >= token.delivery.expiresAt.getTime()) {
+  private async processClaim(
+    token: ClaimToken,
+    fixedNow?: Date,
+  ): Promise<void> {
+    const preparationNow = fixedNow ?? new Date();
+    if (preparationNow.getTime() >= token.delivery.expiresAt.getTime()) {
       await this.finish(
         token,
         'failed',
@@ -126,17 +133,33 @@ export class SystemMessageDeliveryRunnerService {
       );
       return;
     }
-    const prepared = await this.prepare(token, now);
+    const prepared = await this.prepare(token);
     if (prepared.kind === 'stale') return;
     if (prepared.kind === 'finish') {
       if (prepared.status === 'waiting_ddns') {
+        const schedulingNow = fixedNow ?? new Date();
+        if (
+          schedulingNow.getTime() + SYSTEM_MESSAGE_DDNS_RECHECK_MS >=
+          token.delivery.expiresAt.getTime()
+        ) {
+          await this.finish(
+            token,
+            'failed',
+            DELIVERY_EXPIRED,
+            'delivery deadline reached',
+            null,
+          );
+          return;
+        }
         await this.finish(
           token,
           'waiting_ddns',
           prepared.code,
           'DDNS is not synchronized',
           null,
-          new KtDateTime(now.getTime() + SYSTEM_MESSAGE_DDNS_RECHECK_MS),
+          new KtDateTime(
+            schedulingNow.getTime() + SYSTEM_MESSAGE_DDNS_RECHECK_MS,
+          ),
         );
       } else {
         await this.finish(
@@ -147,6 +170,17 @@ export class SystemMessageDeliveryRunnerService {
           null,
         );
       }
+      return;
+    }
+    const sendNow = fixedNow ?? new Date();
+    if (sendNow.getTime() >= token.delivery.expiresAt.getTime()) {
+      await this.finish(
+        token,
+        'failed',
+        DELIVERY_EXPIRED,
+        'delivery deadline reached',
+        null,
+      );
       return;
     }
     try {
@@ -166,23 +200,23 @@ export class SystemMessageDeliveryRunnerService {
             token,
             'failed',
             error.code,
-            this.safeMessage(error),
+            strictSendErrorSummary(error.code),
             error.sendLogId,
           );
           return;
         }
         await this.retryOrFail(
           token,
-          now,
+          fixedNow ?? new Date(),
           error.code,
-          this.safeMessage(error),
+          strictSendErrorSummary(error.code),
           error.sendLogId,
         );
         return;
       }
       await this.retryOrFail(
         token,
-        now,
+        fixedNow ?? new Date(),
         TRANSIENT_ERROR,
         'delivery transport unavailable',
         null,
@@ -191,10 +225,7 @@ export class SystemMessageDeliveryRunnerService {
   }
 
   /** Locks current configuration before locking the delivery and returns a safe next action. */
-  private async prepare(
-    token: ClaimToken,
-    now: Date,
-  ): Promise<PreparedDelivery> {
+  private async prepare(token: ClaimToken): Promise<PreparedDelivery> {
     return this.dataSource.transaction(async (manager) => {
       const event = await manager.getRepository(QqbotMessageEvent).findOne({
         where: { id: token.delivery.messageEventId },
@@ -285,11 +316,6 @@ export class SystemMessageDeliveryRunnerService {
           subscriptionConfig: subscription.sourceConfig,
         });
       if (readiness.status === 'waiting_ddns') {
-        if (
-          now.getTime() + SYSTEM_MESSAGE_DDNS_RECHECK_MS >=
-          delivery.expiresAt.getTime()
-        )
-          return { code: DELIVERY_EXPIRED, kind: 'finish', status: 'failed' };
         return {
           code: readiness.reasonCode,
           kind: 'finish',
@@ -427,12 +453,5 @@ export class SystemMessageDeliveryRunnerService {
       delivery.attemptCount === token.attempt &&
       delivery.processingLeaseUntil?.getTime() === token.leaseUntil.getTime()
     );
-  }
-
-  /** Converts unexpected error text into a bounded persistence-safe summary. */
-  private safeMessage(error: Error): string {
-    return String(error.message || 'delivery failed')
-      .replace(/[\r\n]/g, ' ')
-      .slice(0, 500);
   }
 }

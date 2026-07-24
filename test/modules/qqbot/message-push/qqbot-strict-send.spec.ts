@@ -228,7 +228,7 @@ describe('QQBot strict plain-text sender', () => {
       expect(sendLogRepository.update).toHaveBeenCalledWith(
         { id: 'log-1' },
         expect.objectContaining({
-          errorMessage: 'bad target',
+          errorMessage: 'OneBot rejected the send action',
           status: 'failed',
         }),
       );
@@ -289,6 +289,41 @@ describe('QQBot strict plain-text sender', () => {
       retryable: true,
       sendLogId: 'log-1',
     });
+  });
+
+  it('redacts raw infrastructure details from both the typed error and failed send log', async () => {
+    const { busService, sendLogRepository, service } = createHarness();
+    busService.publish.mockRejectedValue(
+      new Error(
+        'password=broker-secret SELECT * FROM qqbot_private mqtt://admin@broker',
+      ),
+    );
+
+    await expect(
+      service.sendStrictPlainText({
+        attemptNumber: 1,
+        deliveryId: 'delivery-1',
+        message: 'plain text',
+        selfId: '10001',
+        targetId: '20001',
+        targetType: 'group',
+      }),
+    ).rejects.toMatchObject({
+      code: 'onebot_disconnected',
+      message: 'OneBot connection unavailable',
+      retryable: true,
+      sendLogId: 'log-1',
+    });
+    expect(sendLogRepository.update).toHaveBeenCalledWith(
+      { id: 'log-1' },
+      {
+        errorMessage: 'OneBot connection unavailable',
+        status: 'failed',
+      },
+    );
+    expect(JSON.stringify(sendLogRepository.update.mock.calls)).not.toContain(
+      'broker-secret',
+    );
   });
 
   it('rejects an invalid strict target before rate limiting, logs, or transport', async () => {
@@ -366,6 +401,25 @@ describe('QQBot strict plain-text sender', () => {
 });
 
 describe('QQBot reverse WS action classification', () => {
+  it.each([
+    ['account_unavailable', 'Configured QQBot account is unavailable'],
+    ['invalid_target_type', 'Strict QQBot delivery target type is invalid'],
+    ['onebot_rejected', 'OneBot rejected the send action'],
+    ['onebot_timeout', 'OneBot send timed out'],
+    ['onebot_disconnected', 'OneBot connection unavailable'],
+    ['future_unknown_code', 'QQBot delivery failed'],
+  ])('maps strict-send code %s to a stable safe summary', (code, message) => {
+    const error = new QqbotSendAttemptError({
+      code,
+      message: 'password=must-not-survive',
+      retryable: true,
+      sendLogId: null,
+    });
+
+    expect(error.message).toBe(message);
+    expect(error.message).not.toContain('must-not-survive');
+  });
+
   it('keeps the typed strict send error fields explicit', () => {
     const error = new QqbotSendAttemptError({
       code: 'onebot_timeout',

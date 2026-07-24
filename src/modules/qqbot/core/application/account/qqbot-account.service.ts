@@ -392,8 +392,10 @@ export class QqbotAccountService {
   }
 
   /**
-   * 更新数据。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * Updates the account and ability identity atomically, cancelling its claimable deliveries
+   * in the same transaction when an administrator disables it or replaces its self ID.
+   * @param body - Complete administrative account update with the target account ID.
+   * @returns `true` after the account, ability, and required delivery cancellations commit.
    */
   async update(body: QqbotAccountUpdateDto) {
     if (body.selfId) {
@@ -429,8 +431,10 @@ export class QqbotAccountService {
   }
 
   /**
-   * 删除数据。
-   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   * Removes NapCat containers first, then soft-deletes the account and ability and cancels
+   * claimable deliveries in one database transaction; a later DB failure cannot restore containers.
+   * @param id - QQBot account ID to remove.
+   * @returns `{ deletedContainers: number }` for containers removed before the transaction.
    */
   async remove(id: string) {
     const account = await this.accountRepository.findOne({

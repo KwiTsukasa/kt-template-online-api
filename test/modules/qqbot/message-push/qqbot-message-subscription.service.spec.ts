@@ -873,11 +873,13 @@ describe('QqbotMessageSubscriptionService', () => {
         'disable',
         async (service: QqbotMessageSubscriptionService) =>
           service.setEnabled('100', false),
+        false,
       ],
       [
         'soft delete',
         async (service: QqbotMessageSubscriptionService) =>
           service.remove('100'),
+        false,
       ],
       [
         'canonical config change',
@@ -892,19 +894,26 @@ describe('QqbotMessageSubscriptionService', () => {
             },
             sourceKey: SOURCE_KEY,
           }),
+        true,
       ],
     ])(
-      '%s commits config and cancels only exact claimable rows without rewriting snapshots',
-      async (_name, mutate) => {
+      '%s commits config and applies the exact identity-sensitive cancellation fence',
+      async (_name, mutate, cancelsProcessing) => {
         const harness = cancellationHarness();
         const before = structuredClone(harness.deliveries);
+        const cancellableStatuses = [
+          'waiting_ddns',
+          'pending',
+          'retry',
+          ...(cancelsProcessing ? ['processing'] : []),
+        ];
 
         await mutate(harness.service);
 
         expect(harness.deliveries).toEqual(
           before.map((delivery) =>
             delivery.subscriptionId === '100' &&
-            ['waiting_ddns', 'pending', 'retry'].includes(delivery.status)
+            cancellableStatuses.includes(delivery.status)
               ? {
                   ...delivery,
                   nextAttemptAt: null,
@@ -916,7 +925,7 @@ describe('QqbotMessageSubscriptionService', () => {
         );
         expect(
           (harness.deliveryUpdates[0].status as { _value: string[] })._value,
-        ).toEqual(['waiting_ddns', 'pending', 'retry']);
+        ).toEqual(cancellableStatuses);
       },
     );
 

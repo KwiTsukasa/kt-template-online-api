@@ -92,6 +92,7 @@ const persistenceContract: ReadonlyArray<{
       { name: 'uk_qqbot_message_event_event_id', columns: ['eventId'], unique: true },
       { name: 'idx_qqbot_message_event_dispatch', columns: ['fanoutStatus', 'nextFanoutAt'], unique: false },
       { name: 'idx_qqbot_message_event_lease', columns: ['fanoutLeaseUntil'], unique: false },
+      { name: 'idx_qqbot_message_event_source_resource_order', columns: ['sourceKey', 'resourceKey', 'occurredAt', 'id'], unique: false },
     ],
   },
   {

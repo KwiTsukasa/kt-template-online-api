@@ -70,6 +70,7 @@ const messagePushTableDefinitions = {
       'primary key (id)', 'unique key uk_qqbot_message_event_event_id (event_id)',
       'key idx_qqbot_message_event_dispatch (fanout_status, next_fanout_at)',
       'key idx_qqbot_message_event_lease (fanout_lease_until)',
+      'key idx_qqbot_message_event_source_resource_order (source_key, resource_key, occurred_at, id)',
     ],
   },
   qqbot_message_delivery: {

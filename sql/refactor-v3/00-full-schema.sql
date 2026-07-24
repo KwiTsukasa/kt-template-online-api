@@ -1315,7 +1315,8 @@ CREATE TABLE IF NOT EXISTS qqbot_message_event (
   update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   UNIQUE KEY uk_qqbot_message_event_event_id (event_id),
   KEY idx_qqbot_message_event_dispatch (fanout_status, next_fanout_at),
-  KEY idx_qqbot_message_event_lease (fanout_lease_until)
+  KEY idx_qqbot_message_event_lease (fanout_lease_until),
+  KEY idx_qqbot_message_event_source_resource_order (source_key, resource_key, occurred_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS qqbot_message_delivery (

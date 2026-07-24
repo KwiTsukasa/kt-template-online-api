@@ -1143,7 +1143,7 @@ CREATE TABLE IF NOT EXISTS `qqbot_message_event` (
   `payload` json NOT NULL, `fanout_status` varchar(32) NOT NULL DEFAULT 'accepted', `fanout_attempt_count` int unsigned NOT NULL DEFAULT 0,
   `next_fanout_at` datetime(6) DEFAULT NULL, `fanout_lease_until` datetime(6) DEFAULT NULL, `last_error_code` varchar(64) DEFAULT NULL, `last_error_message` varchar(500) DEFAULT NULL,
   `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-  PRIMARY KEY (`id`), UNIQUE KEY `uk_qqbot_message_event_event_id` (`event_id`), KEY `idx_qqbot_message_event_dispatch` (`fanout_status`, `next_fanout_at`), KEY `idx_qqbot_message_event_lease` (`fanout_lease_until`)
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_qqbot_message_event_event_id` (`event_id`), KEY `idx_qqbot_message_event_dispatch` (`fanout_status`, `next_fanout_at`), KEY `idx_qqbot_message_event_lease` (`fanout_lease_until`), KEY `idx_qqbot_message_event_source_resource_order` (`source_key`, `resource_key`, `occurred_at`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `qqbot_message_delivery` (

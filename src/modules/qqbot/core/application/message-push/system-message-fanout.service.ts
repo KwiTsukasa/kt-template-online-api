@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DataSource, Brackets, type EntityManager } from 'typeorm';
+import { DataSource, Brackets, In, type EntityManager } from 'typeorm';
 import { KtDateTime } from '@/common';
 import {
   SystemMessageContractError,
@@ -29,7 +29,7 @@ const STUN_MAPPING_PORT_SOURCE = 'network.stun.mapping-port-changed';
 const TRANSIENT_ERROR_CODE = 'fanout_transient_error';
 const EVENT_EXPIRED_ERROR_CODE = 'fanout_expired';
 const EVENT_RESOURCE_MISMATCH_ERROR_CODE = 'event_resource_mismatch';
-const SUPERSEDED_STATUSES = new Set(['waiting_ddns', 'pending', 'retry']);
+const SUPERSEDED_STATUSES = ['waiting_ddns', 'pending', 'retry'];
 
 interface ClaimToken {
   attempt: number;
@@ -297,6 +297,8 @@ export class SystemMessageFanoutService {
             );
         }),
       )
+      .orderBy('newerEvent.occurredAt', 'ASC')
+      .addOrderBy('newerEvent.id', 'ASC')
       .take(1)
       .getOne();
     return !!newerEvent;
@@ -314,15 +316,14 @@ export class SystemMessageFanoutService {
     subscriptionId: string,
   ): Promise<void> {
     const deliveries = manager.getRepository(QqbotMessageDelivery);
-    const candidates = await deliveries.find({
-      where: { messageEventId: event.id, subscriptionId },
-    });
-    for (const delivery of candidates) {
-      if (SUPERSEDED_STATUSES.has(delivery.status)) {
-        delivery.status = 'superseded';
-        await deliveries.save(delivery);
-      }
-    }
+    await deliveries.update(
+      {
+        messageEventId: event.id,
+        status: In(SUPERSEDED_STATUSES),
+        subscriptionId,
+      },
+      { status: 'superseded' },
+    );
   }
 
   /**
@@ -340,24 +341,20 @@ export class SystemMessageFanoutService {
     const priorEvents = await events.find({
       where: { resourceKey: event.resourceKey, sourceKey: event.sourceKey },
     });
-    const priorIds = new Set(
-      priorEvents
-        .filter((candidate) => this.isStrictlyEarlier(candidate, event))
-        .map((candidate) => candidate.id),
-    );
-    if (!priorIds.size) return;
+    const priorIds = priorEvents
+      .filter((candidate) => this.isStrictlyEarlier(candidate, event))
+      .map((candidate) => candidate.id);
+    if (!priorIds.length) return;
 
     const deliveries = manager.getRepository(QqbotMessageDelivery);
-    const candidates = await deliveries.find({ where: { subscriptionId } });
-    for (const delivery of candidates) {
-      if (
-        priorIds.has(delivery.messageEventId) &&
-        SUPERSEDED_STATUSES.has(delivery.status)
-      ) {
-        delivery.status = 'superseded';
-        await deliveries.save(delivery);
-      }
-    }
+    await deliveries.update(
+      {
+        messageEventId: In(priorIds),
+        status: In(SUPERSEDED_STATUSES),
+        subscriptionId,
+      },
+      { status: 'superseded' },
+    );
   }
 
   /**

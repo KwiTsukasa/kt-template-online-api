@@ -6,6 +6,7 @@ import type { SystemMessageFanoutStatus, SystemMessageScalar } from '../../../co
 @Index('uk_qqbot_message_event_event_id', ['eventId'], { unique: true })
 @Index('idx_qqbot_message_event_dispatch', ['fanoutStatus', 'nextFanoutAt'])
 @Index('idx_qqbot_message_event_lease', ['fanoutLeaseUntil'])
+@Index('idx_qqbot_message_event_source_resource_order', ['sourceKey', 'resourceKey', 'occurredAt', 'id'])
 export class QqbotMessageEvent {
   @PrimaryColumn({ type: 'bigint' }) id: string;
   @Column({ length: 128, name: 'event_id' }) eventId: string;

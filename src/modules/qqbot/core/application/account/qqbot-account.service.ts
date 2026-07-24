@@ -1,7 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository, type EntityManager } from 'typeorm';
 import {
   SYSTEM_NOTICE_PUBLISHER,
   SystemNoticePublisher,
@@ -15,6 +15,8 @@ import {
 } from './qqbot-account-napcat-runtime.port';
 import { QqbotAccountAbility } from '../../infrastructure/persistence/account/qqbot-account-ability.entity';
 import { QqbotAccount } from '../../infrastructure/persistence/account/qqbot-account.entity';
+import { QqbotMessageDelivery } from '../../infrastructure/persistence/message-push/qqbot-message-delivery.entity';
+import { QqbotMessagePublishBinding } from '../../infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
 import type {
   QqbotAccountBodyDto,
   QqbotAccountQueryDto,
@@ -402,13 +404,27 @@ export class QqbotAccountService {
     if (!body.accessToken) {
       delete payload.accessToken;
     }
-    await this.accountRepository.update({ id: body.id }, payload);
-    if (payload.selfId) {
-      await this.accountAbilityRepository.update(
-        { accountId: body.id },
-        { selfId: payload.selfId },
-      );
-    }
+    await this.accountRepository.manager.transaction(async (manager) => {
+      const accounts = manager.getRepository(QqbotAccount);
+      const current = await accounts.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { id: body.id, isDeleted: false },
+      });
+      if (!current) {
+        throwVbenError('QQBot 账号不存在或已删除');
+      }
+      const selfIdChanged =
+        typeof payload.selfId === 'string' && payload.selfId !== current.selfId;
+      await accounts.update({ id: body.id }, payload);
+      if (selfIdChanged) {
+        await manager
+          .getRepository(QqbotAccountAbility)
+          .update({ accountId: body.id }, { selfId: payload.selfId! });
+      }
+      if (selfIdChanged || payload.enabled === false) {
+        await this.cancelAccountDeliveries(manager, body.id);
+      }
+    });
     return true;
   }
 
@@ -432,22 +448,32 @@ export class QqbotAccountService {
     )) || {
       deletedContainers: 0,
     };
-    await this.accountRepository.update(
-      { id },
-      {
-        containerStatus: 'unknown',
-        connectStatus: 'offline',
-        enabled: false,
-        isDeleted: true,
-        oneBotStatus: 'offline',
-        qqLoginStatus: 'unknown',
-        webuiStatus: 'unknown',
-      },
-    );
-    await this.accountAbilityRepository.update(
-      { accountId: id },
-      { isDeleted: true },
-    );
+    await this.accountRepository.manager.transaction(async (manager) => {
+      const accounts = manager.getRepository(QqbotAccount);
+      const current = await accounts.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { id, isDeleted: false },
+      });
+      if (!current) {
+        throwVbenError('QQBot 账号不存在或已删除');
+      }
+      await accounts.update(
+        { id },
+        {
+          containerStatus: 'unknown',
+          connectStatus: 'offline',
+          enabled: false,
+          isDeleted: true,
+          oneBotStatus: 'offline',
+          qqLoginStatus: 'unknown',
+          webuiStatus: 'unknown',
+        },
+      );
+      await manager
+        .getRepository(QqbotAccountAbility)
+        .update({ accountId: id }, { isDeleted: true });
+      await this.cancelAccountDeliveries(manager, id);
+    });
     return {
       deletedContainers: containerResult.deletedContainers,
     };
@@ -476,6 +502,27 @@ export class QqbotAccountService {
         : null;
     }
     await this.accountRepository.update({ selfId }, payload);
+  }
+
+  /** Cancels only claimable rows through an account's bindings in the caller transaction. */
+  private async cancelAccountDeliveries(
+    manager: EntityManager,
+    accountId: string,
+  ): Promise<void> {
+    const bindings = await manager
+      .getRepository(QqbotMessagePublishBinding)
+      .find({
+        select: { id: true },
+        where: { accountId: String(accountId) },
+      });
+    if (!bindings.length) return;
+    await manager.getRepository(QqbotMessageDelivery).update(
+      {
+        bindingId: In(bindings.map((binding) => binding.id)),
+        status: In(['waiting_ddns', 'pending', 'retry']),
+      },
+      { nextAttemptAt: null, processingLeaseUntil: null, status: 'cancelled' },
+    );
   }
 
   /**
@@ -634,9 +681,7 @@ export class QqbotAccountService {
    * Persists computed NapCat split statuses back to qqbot_account when the entity exposes the v3 status columns.
    * @param account - Enriched account list row; its `napcat` snapshot is the latest runtime evidence produced for Admin.
    */
-  private async syncPersistedNapcatSplitStatus(
-    account: QqbotAccountListItem,
-  ) {
+  private async syncPersistedNapcatSplitStatus(account: QqbotAccountListItem) {
     if (!this.hasPersistedNapcatSplitStatus(account)) return;
 
     const payload = this.buildNapcatSplitStatusPayload(account);

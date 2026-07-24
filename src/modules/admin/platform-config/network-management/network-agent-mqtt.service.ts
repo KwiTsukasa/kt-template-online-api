@@ -12,7 +12,9 @@ import * as mqtt from 'mqtt';
 import type { IClientOptions, MqttClient } from 'mqtt';
 import { KtDateTime } from '@/common';
 import {
+  SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
   SYSTEM_MESSAGE_EVENT_STAGER,
+  type SystemMessageDeliveryCoordinator,
   type SystemMessageEventStager,
 } from '@/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import { NetworkAgentState } from './network-agent-state.entity';
@@ -65,6 +67,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
    * @param dataSource - Transaction boundary for publish acknowledgements and inbound state.
    * @param eventStream - SSE fan-out notified only after accepted inbound commits.
    * @param eventStager - Core-owned Outbox port that shares endpoint-history transactions.
+   * @param deliveryCoordinator - Core-owned durable delivery wake port used only after commit.
    * @param clientFactory - Optional deterministic MQTT client factory used by tests.
    * @param ddnsService - Optional automatic-DDNS reconciler notified after address semantics commit.
    */
@@ -74,6 +77,8 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     private readonly eventStream: NetworkManagementEventStreamService,
     @Inject(SYSTEM_MESSAGE_EVENT_STAGER)
     private readonly eventStager: SystemMessageEventStager,
+    @Inject(SYSTEM_MESSAGE_DELIVERY_COORDINATOR)
+    private readonly deliveryCoordinator: SystemMessageDeliveryCoordinator,
     @Optional()
     @Inject(NETWORK_MQTT_CLIENT_FACTORY)
     private readonly clientFactory?: NetworkMqttClientFactory,
@@ -200,7 +205,17 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       ddnsSourceChanged = result.ddnsSourceChanged;
     } else if (topic === this.topic('events')) {
       source = 'events';
-      changed = await this.appendEndpointEvent(parseEndpointEvent(parsed));
+      const endpointResult = await this.appendEndpointEvent(
+        parseEndpointEvent(parsed),
+      );
+      changed = endpointResult.changed;
+      if (endpointResult.deliveryAccepted) {
+        try {
+          this.deliveryCoordinator.requestDrain();
+        } catch {
+          this.logger.warn('System message delivery wake failed');
+        }
+      }
     } else {
       throw new NetworkMessageValidationError('Unexpected network MQTT topic');
     }
@@ -638,11 +653,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   /**
    * Appends one endpoint change event exactly once by event ID.
    * @param event - Strict endpoint transition parsed from the events topic.
-   * @returns True only when a new history row committed.
+   * @returns Committed history visibility plus whether the same transaction accepted Outbox work.
    */
   private async appendEndpointEvent(
     event: NetworkEndpointEvent,
-  ): Promise<boolean> {
+  ): Promise<{ changed: boolean; deliveryAccepted: boolean }> {
     this.assertAgentId(event.agentId);
     return await this.dataSource.transaction(async (manager) => {
       const state = await manager.getRepository(NetworkAgentState).findOne({
@@ -660,7 +675,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       }
       const repository = manager.getRepository(NetworkEndpointHistory);
       if (await repository.findOne({ where: { eventId: event.eventId } })) {
-        return false;
+        return { changed: false, deliveryAccepted: false };
       }
       const previousHistory = await repository.findOne({
         lock: { mode: 'pessimistic_read' },
@@ -680,25 +695,27 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       });
       try {
         await repository.save(history);
+        let deliveryAccepted = false;
         if (this.shouldStagePortChange(event, previousHistory)) {
-          await this.eventStager.stage(manager, {
-            eventId: event.eventId,
-            occurredAt: event.occurredAt,
-            payload: {
-              changedAt: event.occurredAt,
-              currentPort: event.endpoint.publicPort,
-              portForwardId: event.mappingId,
-              previousPort: previousHistory.publicPort,
-              publicIpv4: event.endpoint.publicIpv4,
-            },
-            resourceKey: event.mappingId,
-            sourceKey: 'network.stun.mapping-port-changed',
-          });
+          deliveryAccepted =
+            (await this.eventStager.stage(manager, {
+              eventId: event.eventId,
+              occurredAt: event.occurredAt,
+              payload: {
+                changedAt: event.occurredAt,
+                currentPort: event.endpoint.publicPort,
+                portForwardId: event.mappingId,
+                previousPort: previousHistory.publicPort,
+                publicIpv4: event.endpoint.publicIpv4,
+              },
+              resourceKey: event.mappingId,
+              sourceKey: 'network.stun.mapping-port-changed',
+            })) === 'accepted';
         }
-        return true;
+        return { changed: true, deliveryAccepted };
       } catch (error) {
         if (!this.isDuplicateKeyError(error)) throw error;
-        return false;
+        return { changed: false, deliveryAccepted: false };
       }
     });
   }

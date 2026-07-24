@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { throwVbenError } from '@/common';
 import {
   Like,
+  In,
   Repository,
   type EntityManager,
   type FindOptionsWhere,
@@ -16,6 +17,7 @@ import {
 } from '../../contract/message-push/qqbot-message-push.types';
 import { QqbotMessageSubscription } from '../../infrastructure/persistence/message-push/qqbot-message-subscription.entity';
 import { QqbotMessagePublishBinding } from '../../infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
+import { QqbotMessageDelivery } from '../../infrastructure/persistence/message-push/qqbot-message-delivery.entity';
 import { SystemMessageSourceRegistry } from './system-message-source.registry';
 
 const DEFAULT_PAGE_NO = 1;
@@ -164,8 +166,17 @@ export class QqbotMessageSubscriptionService {
           if (conflict && conflict.id !== current.id) {
             this.throwNaturalKeyConflict();
           }
+          const sourceIdentityChanged =
+            current.sourceKey !== normalized.sourceKey ||
+            current.sourceConfigDigest !== normalized.sourceConfigDigest;
           Object.assign(current, normalized);
-          return repository.save(current);
+          const saved = await repository.save(current);
+          if (!saved.enabled || sourceIdentityChanged) {
+            await this.cancelUnfinishedDeliveries(manager, {
+              subscriptionId: saved.id,
+            });
+          }
+          return saved;
         },
       );
       return this.toView(saved);
@@ -202,7 +213,13 @@ export class QqbotMessageSubscriptionService {
           }
         }
         current.enabled = enabled;
-        return repository.save(current);
+        const saved = await repository.save(current);
+        if (!saved.enabled) {
+          await this.cancelUnfinishedDeliveries(manager, {
+            subscriptionId: saved.id,
+          });
+        }
+        return saved;
       },
     );
     return this.toView(saved);
@@ -224,6 +241,9 @@ export class QqbotMessageSubscriptionService {
         current.enabled = false;
         current.isDeleted = true;
         await repository.save(current);
+        await this.cancelUnfinishedDeliveries(manager, {
+          subscriptionId: current.id,
+        });
         return true;
       },
     );
@@ -343,6 +363,21 @@ export class QqbotMessageSubscriptionService {
     if (count > 0) {
       throw new SystemMessageContractError('invalid_source_config');
     }
+  }
+
+  /** Cancels only claimable historical deliveries in the caller's configuration transaction. */
+  private async cancelUnfinishedDeliveries(
+    manager: EntityManager,
+    where: Pick<QqbotMessageDelivery, 'subscriptionId'>,
+  ): Promise<void> {
+    await manager.getRepository(QqbotMessageDelivery).update(
+      { ...where, status: In(['waiting_ddns', 'pending', 'retry']) },
+      {
+        status: 'cancelled',
+        nextAttemptAt: null,
+        processingLeaseUntil: null,
+      },
+    );
   }
 
   /**

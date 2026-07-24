@@ -13,6 +13,7 @@ import { NetworkDdnsRecord } from '../../../../src/modules/admin/platform-config
 import { NetworkPortForward } from '../../../../src/modules/admin/platform-config/network-management/network-management.entity';
 import { QqbotMessageSubscription } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-subscription.entity';
 import { QqbotMessagePublishBinding } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
+import { QqbotMessageDelivery } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-delivery.entity';
 
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
 const NOW = new KtDateTime('2026-07-24 08:09:10');
@@ -211,6 +212,9 @@ function setup(
     getRepository: jest.fn((entity) => {
       if (entity === QqbotMessageSubscription) return subscriptionRepository;
       if (entity === QqbotMessagePublishBinding) return bindingRepository;
+      if (entity === QqbotMessageDelivery) {
+        return { update: jest.fn(async () => ({ affected: 0 })) };
+      }
       throw new Error('unexpected repository');
     }),
   } as unknown as jest.Mocked<EntityManager>;
@@ -741,6 +745,215 @@ describe('QqbotMessageSubscriptionService', () => {
     }
   });
 
+  describe('delivery cancellation transaction', () => {
+    /**
+     * Builds authoritative subscription/delivery stores whose transaction drafts commit only
+     * when the complete lifecycle callback resolves.
+     */
+    function cancellationHarness() {
+      const subscriptions = [subscription()];
+      const deliveries = [
+        ...[
+          'waiting_ddns',
+          'pending',
+          'retry',
+          'processing',
+          'success',
+          'failed',
+          'superseded',
+          'cancelled',
+        ].map((status, index) => ({
+          frozen: `exact-${status}`,
+          id: `delivery-${index}`,
+          nextAttemptAt: `schedule-${status}`,
+          processingLeaseUntil: `lease-${status}`,
+          status,
+          subscriptionId: '100',
+        })),
+        {
+          frozen: 'other',
+          id: 'delivery-other',
+          nextAttemptAt: 'schedule-other',
+          processingLeaseUntil: 'lease-other',
+          status: 'pending',
+          subscriptionId: '101',
+        },
+      ];
+      let failCancellation = false;
+      const deliveryUpdates: Array<Record<string, unknown>> = [];
+      const transaction = jest.fn(
+        async (work: (manager: EntityManager) => Promise<unknown>) => {
+          const draftSubscriptions = subscriptions.map((row) => ({
+            ...row,
+            sourceConfig: { ...row.sourceConfig },
+          })) as QqbotMessageSubscription[];
+          const draftDeliveries = structuredClone(deliveries);
+          const subscriptionStore = {
+            findOne: jest.fn(
+              async ({ where }: { where: Record<string, unknown> }) =>
+                draftSubscriptions.find((row) =>
+                  Object.entries(where).every(
+                    ([key, value]) => row[key] === value,
+                  ),
+                ) ?? null,
+            ),
+            save: jest.fn(async (row: QqbotMessageSubscription) => row),
+          };
+          const manager = {
+            getRepository: jest.fn((entity) => {
+              if (entity === QqbotMessageSubscription) return subscriptionStore;
+              if (entity === QqbotMessagePublishBinding) {
+                return { count: jest.fn().mockResolvedValue(0) };
+              }
+              if (entity === QqbotMessageDelivery) {
+                return {
+                  update: jest.fn(
+                    async (
+                      where: Record<string, unknown>,
+                      patch: Record<string, unknown>,
+                    ) => {
+                      deliveryUpdates.push(where);
+                      const statuses = (where.status as { _value?: unknown[] })
+                        ._value;
+                      let affected = 0;
+                      draftDeliveries.forEach((row) => {
+                        if (
+                          row.subscriptionId === where.subscriptionId &&
+                          statuses?.includes(row.status)
+                        ) {
+                          Object.assign(row, patch);
+                          affected += 1;
+                        }
+                      });
+                      if (failCancellation) {
+                        throw new Error('cancellation persistence failed');
+                      }
+                      return { affected };
+                    },
+                  ),
+                };
+              }
+              throw new Error('unexpected cancellation repository');
+            }),
+          } as unknown as EntityManager;
+          const result = await work(manager);
+          subscriptions.splice(0, subscriptions.length, ...draftSubscriptions);
+          deliveries.splice(0, deliveries.length, ...draftDeliveries);
+          return result;
+        },
+      );
+      const source = adapter();
+      source.normalizeSubscriptionConfig.mockImplementation(async (input) => {
+        const canonicalConfig = input as Record<string, string>;
+        return {
+          canonicalConfig,
+          resourceKey: canonicalConfig.portForwardId,
+          sourceSummary: 'transaction fixture',
+        };
+      });
+      const service = new QqbotMessageSubscriptionService(
+        {
+          manager: { transaction },
+        } as unknown as Repository<QqbotMessageSubscription>,
+        registry(source),
+      );
+      return {
+        deliveries,
+        deliveryUpdates,
+        failCancellation: () => {
+          failCancellation = true;
+        },
+        service,
+        subscriptions,
+      };
+    }
+
+    it.each([
+      [
+        'disable',
+        async (service: QqbotMessageSubscriptionService) =>
+          service.setEnabled('100', false),
+      ],
+      [
+        'soft delete',
+        async (service: QqbotMessageSubscriptionService) =>
+          service.remove('100'),
+      ],
+      [
+        'canonical config change',
+        async (service: QqbotMessageSubscriptionService) =>
+          service.update('100', {
+            enabled: true,
+            name: '端口提醒',
+            remark: null,
+            sourceConfig: {
+              ddnsRecordId: '2041700000000000099',
+              portForwardId: CONFIG.portForwardId,
+            },
+            sourceKey: SOURCE_KEY,
+          }),
+      ],
+    ])(
+      '%s commits config and cancels only exact claimable rows without rewriting snapshots',
+      async (_name, mutate) => {
+        const harness = cancellationHarness();
+        const before = structuredClone(harness.deliveries);
+
+        await mutate(harness.service);
+
+        expect(harness.deliveries).toEqual(
+          before.map((delivery) =>
+            delivery.subscriptionId === '100' &&
+            ['waiting_ddns', 'pending', 'retry'].includes(delivery.status)
+              ? {
+                  ...delivery,
+                  nextAttemptAt: null,
+                  processingLeaseUntil: null,
+                  status: 'cancelled',
+                }
+              : delivery,
+          ),
+        );
+        expect(
+          (harness.deliveryUpdates[0].status as { _value: string[] })._value,
+        ).toEqual(['waiting_ddns', 'pending', 'retry']);
+      },
+    );
+
+    it('does not cancel for name/remark-only edits or the same canonical identity', async () => {
+      const harness = cancellationHarness();
+      const before = structuredClone(harness.deliveries);
+
+      await harness.service.update('100', {
+        enabled: true,
+        name: '新名称',
+        remark: '新备注',
+        sourceConfig: { ...CONFIG },
+        sourceKey: SOURCE_KEY,
+      });
+
+      expect(harness.deliveries).toEqual(before);
+      expect(harness.deliveryUpdates).toHaveLength(0);
+    });
+
+    it('rolls back both subscription mutation and draft cancellations when cancellation persistence fails', async () => {
+      const harness = cancellationHarness();
+      const subscriptionsBefore = harness.subscriptions.map((row) => ({
+        ...row,
+        sourceConfig: { ...row.sourceConfig },
+      }));
+      const deliveriesBefore = structuredClone(harness.deliveries);
+      harness.failCancellation();
+
+      await expect(harness.service.setEnabled('100', false)).rejects.toThrow(
+        'cancellation persistence failed',
+      );
+
+      expect(harness.subscriptions).toEqual(subscriptionsBefore);
+      expect(harness.deliveries).toEqual(deliveriesBefore);
+    });
+  });
+
   it('pages only undeleted records with real filters and returns detached, real-time source status', async () => {
     const source = adapter({
       invalidReasonCode: 'ddns_mapping_mismatch',
@@ -974,6 +1187,9 @@ describe('QqbotMessageSubscriptionService', () => {
           if (entity === QqbotMessageSubscription) return repository;
           if (entity === QqbotMessagePublishBinding) {
             return { count: jest.fn(async () => 0) };
+          }
+          if (entity === QqbotMessageDelivery) {
+            return { update: jest.fn(async () => ({ affected: 0 })) };
           }
           throw new Error('unexpected repository');
         }),

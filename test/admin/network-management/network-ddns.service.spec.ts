@@ -14,6 +14,7 @@ import { NetworkPortForward } from '../../../src/modules/admin/platform-config/n
 
 type Harness = {
   client: jest.Mocked<Pick<NetworkDnsPodClient, 'getStatus' | 'reconcile'>>;
+  deliveryCoordinator: { notifyDdnsSynced: jest.Mock };
   mapping: NetworkPortForward;
   recordUpdate: jest.Mock;
   records: NetworkDdnsRecord[];
@@ -161,6 +162,10 @@ function createHarness(): Harness {
   const eventStream = {
     publishCommitted: jest.fn(),
   } as unknown as NetworkManagementEventStreamService;
+  const deliveryCoordinator = {
+    notifyDdnsSynced: jest.fn().mockResolvedValue(undefined),
+    requestDrain: jest.fn(),
+  };
   const service = new NetworkDdnsService(
     recordRepository,
     mappingRepository,
@@ -168,8 +173,32 @@ function createHarness(): Harness {
     config,
     client as unknown as NetworkDnsPodClient,
     eventStream,
+    deliveryCoordinator,
   );
-  return { client, mapping, recordUpdate, records, service, state };
+  return {
+    client,
+    deliveryCoordinator,
+    mapping,
+    recordUpdate,
+    records,
+    service,
+    state,
+  };
+}
+
+/** Persists one enabled pending IPv4 DDNS row for reconcile-path assertions. */
+async function prepareEnabledA(harness: Harness): Promise<void> {
+  await harness.service.create({
+    domain: 'kwitsukasa.top',
+    enabled: false,
+    name: 'Pal A',
+    portForwardId: '100',
+    recordType: 'A',
+    sourceType: 'port_forward_ipv4',
+    subDomain: 'pal',
+  });
+  harness.records[0].enabled = true;
+  harness.records[0].syncStatus = 'pending';
 }
 
 /** Creates the fluent list query subset used by the service. */
@@ -347,6 +376,181 @@ describe('NetworkDdnsService', () => {
       'synced',
       'synced',
     ]);
+    expect(harness.deliveryCoordinator.notifyDdnsSynced).toHaveBeenCalledTimes(
+      2,
+    );
+    expect(harness.deliveryCoordinator.notifyDdnsSynced).toHaveBeenCalledWith(
+      expect.objectContaining({
+        appliedAddress: '8.8.8.8',
+        ddnsRecordId: '200',
+      }),
+    );
+  });
+
+  it('notifies exactly once only after the final guarded synced update commits', async () => {
+    const harness = createHarness();
+    let providerStarted!: () => void;
+    let resolveProvider!: (result: {
+      appliedAddress: string;
+      changed: boolean;
+      providerRecordId: string;
+    }) => void;
+    const started = new Promise<void>((resolve) => {
+      providerStarted = resolve;
+    });
+    const providerResult = new Promise<{
+      appliedAddress: string;
+      changed: boolean;
+      providerRecordId: string;
+    }>((resolve) => {
+      resolveProvider = resolve;
+    });
+    harness.client.reconcile.mockImplementation(async () => {
+      providerStarted();
+      return providerResult;
+    });
+    await prepareEnabledA(harness);
+
+    const reconcile = harness.service.reconcileNow('200', true);
+    await started;
+    expect(harness.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
+    resolveProvider({
+      appliedAddress: '8.8.8.8',
+      changed: true,
+      providerRecordId: '300',
+    });
+    await reconcile;
+    await Promise.resolve();
+
+    expect(harness.recordUpdate).toHaveBeenCalledTimes(2);
+    expect(harness.records[0]).toMatchObject({
+      appliedAddress: '8.8.8.8',
+      syncStatus: 'synced',
+    });
+    expect(harness.deliveryCoordinator.notifyDdnsSynced).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(harness.deliveryCoordinator.notifyDdnsSynced).toHaveBeenCalledWith({
+      appliedAddress: '8.8.8.8',
+      ddnsRecordId: '200',
+    });
+    expect(harness.recordUpdate.mock.invocationCallOrder[1]).toBeLessThan(
+      harness.deliveryCoordinator.notifyDdnsSynced.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('does not notify when the final guarded synced update affects zero rows', async () => {
+    const harness = createHarness();
+    const update = harness.recordUpdate.getMockImplementation()!;
+    harness.recordUpdate
+      .mockImplementationOnce(update)
+      .mockResolvedValueOnce({ affected: 0, generatedMaps: [], raw: [] });
+    harness.client.reconcile.mockResolvedValue({
+      appliedAddress: '8.8.8.8',
+      changed: true,
+      providerRecordId: '300',
+    });
+    await prepareEnabledA(harness);
+
+    await harness.service.reconcileNow('200', true);
+    await Promise.resolve();
+
+    expect(harness.recordUpdate).toHaveBeenCalledTimes(2);
+    expect(harness.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
+    expect(harness.records[0].syncStatus).toBe('syncing');
+  });
+
+  it('does not notify on pre-provider stale CAS, provider failure, disabled reread, or synced no-op', async () => {
+    const stale = createHarness();
+    stale.recordUpdate.mockResolvedValueOnce({
+      affected: 0,
+      generatedMaps: [],
+      raw: [],
+    });
+    await prepareEnabledA(stale);
+    await stale.service.reconcileNow('200', true);
+    expect(stale.client.reconcile).not.toHaveBeenCalled();
+    expect(stale.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
+
+    const failed = createHarness();
+    failed.client.reconcile.mockRejectedValueOnce(
+      new NetworkDnsPodClientError('DNSPOD_RATE_LIMITED', 'rate limited', true),
+    );
+    await prepareEnabledA(failed);
+    await failed.service.reconcileNow('200', true);
+    expect(failed.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
+
+    const disabled = createHarness();
+    let providerStarted!: () => void;
+    let resolveProvider!: (result: {
+      appliedAddress: string;
+      changed: boolean;
+      providerRecordId: string;
+    }) => void;
+    const started = new Promise<void>((resolve) => {
+      providerStarted = resolve;
+    });
+    disabled.client.reconcile.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveProvider = resolve;
+          providerStarted();
+        }),
+    );
+    await prepareEnabledA(disabled);
+    const disabledRun = disabled.service.reconcileNow('200', true);
+    await started;
+    disabled.records[0].enabled = false;
+    resolveProvider({
+      appliedAddress: '8.8.8.8',
+      changed: true,
+      providerRecordId: '300',
+    });
+    await disabledRun;
+    expect(
+      disabled.deliveryCoordinator.notifyDdnsSynced,
+    ).not.toHaveBeenCalled();
+
+    const synced = createHarness();
+    await prepareEnabledA(synced);
+    synced.records[0].appliedAddress = '8.8.8.8';
+    synced.records[0].providerRecordId = '300';
+    synced.records[0].sourceAddress = '8.8.8.8';
+    synced.records[0].syncStatus = 'synced';
+    await synced.service.reconcileNow('200');
+    expect(synced.client.reconcile).not.toHaveBeenCalled();
+    expect(synced.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
+  });
+
+  it('logs notification rejection without changing authoritative DDNS success', async () => {
+    const harness = createHarness();
+    const wakeFailure = new Error('wake unavailable');
+    harness.deliveryCoordinator.notifyDdnsSynced.mockRejectedValueOnce(
+      wakeFailure,
+    );
+    const loggerWarn = jest
+      .spyOn((harness.service as any).logger, 'warn')
+      .mockImplementation();
+    harness.client.reconcile.mockResolvedValue({
+      appliedAddress: '8.8.8.8',
+      changed: true,
+      providerRecordId: '300',
+    });
+    await prepareEnabledA(harness);
+
+    await expect(
+      harness.service.reconcileNow('200', true),
+    ).resolves.toBeUndefined();
+    await Promise.resolve();
+
+    expect(harness.records[0]).toMatchObject({
+      appliedAddress: '8.8.8.8',
+      providerRecordId: '300',
+      syncStatus: 'synced',
+    });
+    expect(loggerWarn).toHaveBeenCalledWith(
+      'System message delivery wake failed after DDNS sync',
+    );
   });
 
   it('waits without calling DNSPod when the IPv6 source is stale', async () => {
@@ -373,6 +577,7 @@ describe('NetworkDdnsService', () => {
       syncStatus: 'waiting_source',
     });
     expect(harness.client.reconcile).not.toHaveBeenCalled();
+    expect(harness.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
   });
 
   it('waits without calling the provider when an IPv4 source keeps an ineligible residual lease', async () => {

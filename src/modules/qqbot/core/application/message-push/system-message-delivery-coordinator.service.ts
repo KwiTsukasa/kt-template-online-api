@@ -91,8 +91,10 @@ export class SystemMessageDeliveryCoordinatorService
   }): Promise<void> {
     if (
       this.destroyed ||
+      typeof input.appliedAddress !== 'string' ||
       isIP(input.appliedAddress) !== 4 ||
-      !input.ddnsRecordId
+      typeof input.ddnsRecordId !== 'string' ||
+      input.ddnsRecordId.length === 0
     )
       return;
     const advanced = await this.dataSource.transaction(async (manager) => {

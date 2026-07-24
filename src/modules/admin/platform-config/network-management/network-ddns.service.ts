@@ -1,7 +1,9 @@
 import { isIP } from 'node:net';
 import {
   HttpStatus,
+  Inject,
   Injectable,
+  Logger,
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
@@ -9,6 +11,10 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { KtDateTime, throwVbenError } from '@/common';
+import {
+  SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
+  type SystemMessageDeliveryCoordinator,
+} from '@/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import { NetworkAgentState } from './network-agent-state.entity';
 import { NetworkDdnsRecord } from './network-ddns.entity';
 import {
@@ -72,6 +78,7 @@ const PROVIDER_ERROR_CODES: Record<string, string> = {
  */
 @Injectable()
 export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(NetworkDdnsService.name);
   private destroyed = false;
   private reconcileInterval?: NodeJS.Timeout;
   private reconcileRequestTimer?: NodeJS.Timeout;
@@ -88,6 +95,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
    * @param configService - Reconcile cadence and Agent identity configuration.
    * @param dnsPodClient - Redacted Tencent Cloud DNS provider boundary.
    * @param eventStream - Committed semantic-change notification stream.
+   * @param deliveryCoordinator - Core-owned wake port notified only after authoritative DDNS sync.
    */
   constructor(
     @InjectRepository(NetworkDdnsRecord)
@@ -99,6 +107,8 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly dnsPodClient: NetworkDnsPodClient,
     private readonly eventStream: NetworkManagementEventStreamService,
+    @Inject(SYSTEM_MESSAGE_DELIVERY_COORDINATOR)
+    private readonly deliveryCoordinator: SystemMessageDeliveryCoordinator,
   ) {}
 
   /**
@@ -593,11 +603,19 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     current.retryCount = 0;
     current.sourceAddress = targetAddress;
     current.syncStatus = 'synced';
-    await this.saveReconcileState(
+    const saved = await this.saveReconcileState(
       current,
       beforeSynced,
       expectedProviderRecordId,
     );
+    if (saved && current.syncStatus === 'synced' && current.appliedAddress) {
+      void this.deliveryCoordinator
+        .notifyDdnsSynced({
+          appliedAddress: current.appliedAddress,
+          ddnsRecordId: String(current.id),
+        })
+        .catch(() => this.loggerWarnDeliveryWake());
+    }
   }
 
   /**
@@ -1207,6 +1225,11 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     } catch {
       // Persistence is authoritative; a later HTTP snapshot repairs missed SSE.
     }
+  }
+
+  /** Logs a non-authoritative delivery wake failure without changing DDNS commit success. */
+  private loggerWarnDeliveryWake(): void {
+    this.logger.warn('System message delivery wake failed after DDNS sync');
   }
 
   /**

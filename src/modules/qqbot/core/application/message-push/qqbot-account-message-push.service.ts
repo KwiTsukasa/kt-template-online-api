@@ -1,7 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { throwVbenError } from '@/common';
-import { Repository, type EntityManager } from 'typeorm';
+import { In, Repository, type EntityManager } from 'typeorm';
 import {
   SystemMessageContractError,
   type QqbotMessagePublishBindingInput,
@@ -13,6 +13,7 @@ import {
 import { QqbotAccountService } from '../account/qqbot-account.service';
 import { QqbotMessagePublishBinding } from '../../infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
 import { QqbotMessagePublishTarget } from '../../infrastructure/persistence/message-push/qqbot-message-publish-target.entity';
+import { QqbotMessageDelivery } from '../../infrastructure/persistence/message-push/qqbot-message-delivery.entity';
 import { QqbotMessageSubscription } from '../../infrastructure/persistence/message-push/qqbot-message-subscription.entity';
 import { QqbotMessageTemplate } from '../../infrastructure/persistence/message-push/qqbot-message-template.entity';
 import { QqbotMessageSubscriptionService } from './qqbot-message-subscription.service';
@@ -197,6 +198,14 @@ export class QqbotAccountMessagePushService {
           );
           const saved = await bindings.save(current);
           await this.synchronizeTargets(manager, saved, normalizedTargets);
+          if (
+            !saved.enabled ||
+            snapshot!.subscriptionId !== saved.subscriptionId
+          ) {
+            await this.cancelUnfinishedDeliveries(manager, {
+              bindingId: saved.id,
+            });
+          }
           return saved;
         },
       );
@@ -240,7 +249,13 @@ export class QqbotAccountMessagePushService {
         );
         this.assertStableBindingSnapshot(current, snapshot!);
         current.enabled = enabled;
-        return bindings.save(current);
+        const saved = await bindings.save(current);
+        if (!saved.enabled) {
+          await this.cancelUnfinishedDeliveries(manager, {
+            bindingId: saved.id,
+          });
+        }
+        return saved;
       },
     );
     return this.toView(binding);
@@ -267,6 +282,7 @@ export class QqbotAccountMessagePushService {
       binding.enabled = false;
       binding.isDeleted = true;
       await bindings.save(binding);
+      await this.cancelUnfinishedDeliveries(manager, { bindingId: binding.id });
     });
     return true;
   }
@@ -362,6 +378,22 @@ export class QqbotAccountMessagePushService {
       saves.push(target);
     });
     if (saves.length > 0) await targets.save(saves);
+    const removedIds = saves
+      .filter((target) => target.isDeleted)
+      .map((target) => target.id);
+    if (removedIds.length > 0) {
+      await manager.getRepository(QqbotMessageDelivery).update(
+        {
+          publishTargetId: In(removedIds),
+          status: In(['waiting_ddns', 'pending', 'retry']),
+        },
+        {
+          nextAttemptAt: null,
+          processingLeaseUntil: null,
+          status: 'cancelled',
+        },
+      );
+    }
   }
 
   /** Builds a detached binding view using live dependency availability and active targets only. */
@@ -589,5 +621,20 @@ export class QqbotAccountMessagePushService {
     if (!error || typeof error !== 'object') return false;
     const value = error as { code?: unknown; errno?: unknown };
     return value.code === 'ER_DUP_ENTRY' || value.errno === 1062;
+  }
+
+  /** Cancels only not-yet-processing deliveries in the active binding mutation transaction. */
+  private async cancelUnfinishedDeliveries(
+    manager: EntityManager,
+    where: Pick<QqbotMessageDelivery, 'bindingId'>,
+  ): Promise<void> {
+    await manager.getRepository(QqbotMessageDelivery).update(
+      { ...where, status: In(['waiting_ddns', 'pending', 'retry']) },
+      {
+        nextAttemptAt: null,
+        processingLeaseUntil: null,
+        status: 'cancelled',
+      },
+    );
   }
 }

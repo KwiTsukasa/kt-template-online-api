@@ -23,10 +23,12 @@ import {
 type MqttHarness = {
   client: MqttClient & EventEmitter;
   clientOptions: () => IClientOptions;
+  deliveryCoordinator: { requestDrain: jest.Mock };
   histories: NetworkEndpointHistory[];
   historyFindOne: jest.Mock;
   historySave: jest.Mock;
   mappingSave: jest.Mock;
+  operations: string[];
   publishCommitted: jest.Mock;
   mapping: NetworkPortForward;
   publishCallback: () => (error?: Error) => void;
@@ -64,6 +66,7 @@ function createDeferred<T>(): Deferred<T> {
 
 /** Creates a fake MQTT client plus in-memory TypeORM state for bridge tests. */
 function createHarness(): MqttHarness {
+  const operations: string[] = [];
   const state = Object.assign(new NetworkAgentState(), {
     agentId: 'nas-main',
     appliedRevision: '0',
@@ -150,6 +153,7 @@ function createHarness(): MqttHarness {
   const stagedEvents: SystemMessageEventInput[] = [];
   const stager = {
     stage: jest.fn(async (_manager, input) => {
+      operations.push('stager:accepted');
       stagedEvents.push(input);
       return 'accepted' as const;
     }),
@@ -159,13 +163,17 @@ function createHarness(): MqttHarness {
     getRepository: manager.getRepository.bind(manager),
     transaction: async (work) => {
       transactionCallCount += 1;
+      operations.push('transaction:start');
       const historiesBefore = [...histories];
       const stagedEventsBefore = [...stagedEvents];
       try {
-        return await work(manager);
+        const result = await work(manager);
+        operations.push('transaction:commit');
+        return result;
       } catch (error) {
         histories.splice(0, histories.length, ...historiesBefore);
         stagedEvents.splice(0, stagedEvents.length, ...stagedEventsBefore);
+        operations.push('transaction:rollback');
         throw error;
       }
     },
@@ -209,22 +217,31 @@ function createHarness(): MqttHarness {
     publishCommitted,
   } as unknown as NetworkManagementEventStreamService;
   const requestDdnsReconcile = jest.fn();
+  const deliveryCoordinator = {
+    notifyDdnsSynced: jest.fn().mockResolvedValue(undefined),
+    requestDrain: jest.fn(() => {
+      operations.push('delivery:wake');
+    }),
+  };
   const service = new NetworkAgentMqttService(
     configService,
     dataSource,
     eventStream,
     stager,
+    deliveryCoordinator,
     factory,
     { requestReconcile: requestDdnsReconcile } as never,
   );
   return {
     client,
     clientOptions: () => options,
+    deliveryCoordinator,
     histories,
     historyFindOne,
     historySave,
     mappingSave,
     mapping,
+    operations,
     publishCallback: () => publishAck,
     publishCommitted,
     requestDdnsReconcile,
@@ -389,6 +406,10 @@ function createConcurrentEndpointHarness(): ConcurrentEndpointHarness {
     dataSource,
     { publishCommitted: jest.fn() } as never,
     stager,
+    {
+      notifyDdnsSynced: jest.fn().mockResolvedValue(undefined),
+      requestDrain: jest.fn(),
+    },
   );
   return {
     historyStageEntered: firstStageEntered.promise,
@@ -1064,6 +1085,52 @@ describe('NetworkAgentMqttService', () => {
     );
     expect(harness.histories).toHaveLength(2);
     expect(harness.stagedEvents).toHaveLength(1);
+    expect(harness.deliveryCoordinator.requestDrain).toHaveBeenCalledTimes(1);
+    expect(harness.operations).toEqual([
+      'transaction:start',
+      'stager:accepted',
+      'transaction:commit',
+      'delivery:wake',
+    ]);
+  });
+
+  it('wakes accepted work only after commit and never for duplicate or non-port transitions', async () => {
+    const accepted = createHarness();
+    accepted.histories.push(endpointHistory());
+    await accepted.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/events',
+      endpointEvent(),
+    );
+    expect(accepted.operations.indexOf('transaction:commit')).toBeLessThan(
+      accepted.operations.indexOf('delivery:wake'),
+    );
+
+    const duplicate = createHarness();
+    duplicate.histories.push(endpointHistory());
+    duplicate.stager.stage.mockImplementationOnce(async () => {
+      duplicate.operations.push('stager:duplicate');
+      return 'duplicate';
+    });
+    await duplicate.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/events',
+      endpointEvent(),
+    );
+    expect(duplicate.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+
+    const nonPort = createHarness();
+    nonPort.histories.push(endpointHistory());
+    await nonPort.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/events',
+      endpointEvent({
+        endpoint: {
+          observedAt: '2026-07-22T01:02:04.000Z',
+          publicIpv4: '8.8.4.4',
+          publicPort: 8213,
+          validUntil: '2026-07-22T01:04:04.000Z',
+        },
+      }),
+    );
+    expect(nonPort.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
   });
 
   it.each(['published', 'withdrawn', 'restored'])(
@@ -1252,6 +1319,58 @@ describe('NetworkAgentMqttService', () => {
     ).rejects.toThrow('outbox unavailable');
     expect(harness.histories).toHaveLength(1);
     expect(harness.stagedEvents).toHaveLength(0);
+    expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+    expect(harness.operations).toContain('transaction:rollback');
+    expect(harness.operations).not.toContain('transaction:commit');
+  });
+
+  it('keeps a committed event ACK-successful when the post-commit wake throws synchronously', async () => {
+    const harness = createHarness();
+    harness.histories.push(endpointHistory());
+    harness.deliveryCoordinator.requestDrain.mockImplementationOnce(() => {
+      harness.operations.push('delivery:wake-throw');
+      throw new Error('wake failed');
+    });
+    const loggerWarn = jest
+      .spyOn((harness.service as any).logger, 'warn')
+      .mockImplementation();
+    const callback = jest.fn();
+
+    await (harness.service as any).acknowledgeIncoming(
+      'kt/network/v1/agents/nas-main/events',
+      endpointEvent(),
+      callback,
+    );
+
+    expect(harness.histories).toHaveLength(2);
+    expect(harness.stagedEvents).toHaveLength(1);
+    expect(harness.operations.indexOf('transaction:commit')).toBeLessThan(
+      harness.operations.indexOf('delivery:wake-throw'),
+    );
+    expect(callback).toHaveBeenCalledWith(0);
+    expect(loggerWarn).toHaveBeenCalledWith(
+      'System message delivery wake failed',
+    );
+  });
+
+  it('keeps staging failures ACK-negative and never wakes after rollback', async () => {
+    const harness = createHarness();
+    harness.histories.push(endpointHistory());
+    harness.stager.stage.mockRejectedValueOnce(new Error('outbox unavailable'));
+    const callback = jest.fn();
+
+    await (harness.service as any).acknowledgeIncoming(
+      'kt/network/v1/agents/nas-main/events',
+      endpointEvent(),
+      callback,
+    );
+
+    expect(callback).toHaveBeenCalledWith(expect.any(Error));
+    expect(callback.mock.calls[0][0]).toMatchObject({
+      message: 'outbox unavailable',
+    });
+    expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+    expect(harness.operations).toContain('transaction:rollback');
   });
 
   it('leaves no staged event when history persistence fails', async () => {

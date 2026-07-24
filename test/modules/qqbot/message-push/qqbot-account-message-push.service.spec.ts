@@ -3,6 +3,7 @@ import { QqbotAccountMessagePushService } from '../../../../src/modules/qqbot/co
 import { SystemMessageContractError } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import { QqbotMessagePublishBinding } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
 import { QqbotMessagePublishTarget } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-target.entity';
+import { QqbotMessageDelivery } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-delivery.entity';
 
 const ACCOUNT = {
   id: '2041700000000000000',
@@ -150,6 +151,9 @@ function setupBindingFixture(options: BindingFixtureOptions = {}) {
     getRepository: jest.fn((entity) => {
       if (entity === QqbotMessagePublishBinding) return bindingStore;
       if (entity === QqbotMessagePublishTarget) return targetStore;
+      if (entity === QqbotMessageDelivery) {
+        return { update: jest.fn(async () => ({ affected: 0 })) };
+      }
       throw new Error('unexpected repository');
     }),
   };
@@ -248,6 +252,333 @@ describe('QqbotAccountMessagePushService', () => {
         { targetId: '10001', targetType: 'channel' },
       ]),
     ).toThrow(new SystemMessageContractError('invalid_target_type'));
+  });
+
+  describe('binding and target delivery cancellation transaction', () => {
+    /** Builds isolated binding/target/delivery drafts and commits them only on transaction success. */
+    function cancellationHarness() {
+      const subscription = {
+        enabled: true,
+        id: '2041700000000000001',
+        isDeleted: false,
+        name: '订阅',
+        sourceConfig: {},
+        sourceKey: SOURCE_KEY,
+      };
+      const template = {
+        content: '正文',
+        enabled: true,
+        id: '2041700000000000002',
+        isDeleted: false,
+        name: '模板',
+        sourceKey: SOURCE_KEY,
+      };
+      const bindings = [bindingRow()];
+      const targets = [
+        targetRow({ id: 'target-retained' }),
+        targetRow({
+          id: 'target-removed',
+          targetId: '30000000000000001',
+          targetType: 'private',
+        }),
+      ];
+      const deliveries = [
+        ...['waiting_ddns', 'pending', 'retry', 'processing', 'success'].map(
+          (status) => ({
+            bindingId: bindings[0].id,
+            frozen: `binding-${status}`,
+            id: `binding-${status}`,
+            nextAttemptAt: `schedule-${status}`,
+            processingLeaseUntil: `lease-${status}`,
+            publishTargetId: 'target-retained',
+            status,
+          }),
+        ),
+        {
+          bindingId: bindings[0].id,
+          frozen: 'removed',
+          id: 'removed-target-delivery',
+          nextAttemptAt: 'schedule-removed',
+          processingLeaseUntil: 'lease-removed',
+          publishTargetId: 'target-removed',
+          status: 'pending',
+        },
+        {
+          bindingId: 'other-binding',
+          frozen: 'other-binding',
+          id: 'other-binding-delivery',
+          nextAttemptAt: 'schedule-other',
+          processingLeaseUntil: 'lease-other',
+          publishTargetId: 'other-target',
+          status: 'pending',
+        },
+      ];
+      const deliveryUpdates: Array<Record<string, unknown>> = [];
+      let failCancellation = false;
+      let nextTargetId = 1;
+      const transaction = jest.fn(
+        async (work: (manager: any) => Promise<unknown>) => {
+          const draftBindings = structuredClone(bindings);
+          const draftTargets = structuredClone(targets);
+          const draftDeliveries = structuredClone(deliveries);
+          const bindingStore = {
+            create: (value: Record<string, unknown>) => bindingRow(value),
+            findOne: jest.fn(
+              async ({ where }: { where: Record<string, unknown> }) =>
+                structuredClone(
+                  draftBindings.find((row) =>
+                    Object.entries(where).every(
+                      ([key, value]) => row[key] === value,
+                    ),
+                  ) ?? null,
+                ),
+            ),
+            save: jest.fn(async (row: Record<string, unknown>) => {
+              const index = draftBindings.findIndex(
+                (candidate) => candidate.id === row.id,
+              );
+              if (index >= 0) draftBindings[index] = structuredClone(row);
+              else draftBindings.push(structuredClone(row));
+              return row;
+            }),
+          };
+          const targetStore = {
+            create: (value: Record<string, unknown>) =>
+              targetRow({ id: `target-new-${nextTargetId++}`, ...value }),
+            find: jest.fn(
+              async ({ where }: { where: Record<string, unknown> }) =>
+                structuredClone(
+                  draftTargets.filter((row) =>
+                    Object.entries(where).every(
+                      ([key, value]) => row[key] === value,
+                    ),
+                  ),
+                ),
+            ),
+            save: jest.fn(async (rows: Array<Record<string, unknown>>) => {
+              rows.forEach((row) => {
+                const index = draftTargets.findIndex(
+                  (candidate) => candidate.id === row.id,
+                );
+                if (index >= 0) draftTargets[index] = structuredClone(row);
+                else draftTargets.push(structuredClone(row));
+              });
+              return rows;
+            }),
+          };
+          const manager = {
+            getRepository: (entity: unknown) => {
+              if (entity === QqbotMessagePublishBinding) return bindingStore;
+              if (entity === QqbotMessagePublishTarget) return targetStore;
+              if (entity === QqbotMessageDelivery) {
+                return {
+                  update: async (
+                    where: Record<string, any>,
+                    patch: Record<string, unknown>,
+                  ) => {
+                    deliveryUpdates.push(where);
+                    const statuses = where.status._value as string[];
+                    const targetIds = where.publishTargetId?._value as
+                      | string[]
+                      | undefined;
+                    let affected = 0;
+                    draftDeliveries.forEach((row) => {
+                      const identityMatches =
+                        (where.bindingId &&
+                          row.bindingId === where.bindingId) ||
+                        (targetIds &&
+                          targetIds.includes(String(row.publishTargetId)));
+                      if (identityMatches && statuses.includes(row.status)) {
+                        Object.assign(row, patch);
+                        affected += 1;
+                      }
+                    });
+                    if (failCancellation) {
+                      throw new Error('delivery cancellation failed');
+                    }
+                    return { affected };
+                  },
+                };
+              }
+              throw new Error('unexpected cancellation repository');
+            },
+          };
+          const result = await work(manager);
+          bindings.splice(0, bindings.length, ...draftBindings);
+          targets.splice(0, targets.length, ...draftTargets);
+          deliveries.splice(0, deliveries.length, ...draftDeliveries);
+          return result;
+        },
+      );
+      const outerBindingRepository = {
+        find: async () => bindings,
+        manager: { transaction },
+      };
+      const service = new QqbotAccountMessagePushService(
+        outerBindingRepository as never,
+        {
+          find: async ({ where }: { where: Record<string, unknown> }) =>
+            targets.filter((row) =>
+              Object.entries(where).every(([key, value]) => row[key] === value),
+            ),
+        } as never,
+        { findOne: async () => subscription } as never,
+        { findOne: async () => template } as never,
+        { findBySelfId: async () => ACCOUNT } as never,
+        {
+          requireAvailableForBinding: async (
+            _manager: unknown,
+            subscriptionId: string,
+          ) => ({ ...subscription, id: subscriptionId }),
+        } as never,
+        {
+          requireAvailableForBinding: async (
+            _manager: unknown,
+            templateId: string,
+          ) => ({ ...template, id: templateId }),
+        } as never,
+        {
+          get: () => ({
+            definition: { displayName: 'STUN 映射', variables: [] },
+            inspectSubscription: async () => ({ valid: true }),
+          }),
+        } as never,
+        { validate: jest.fn() } as never,
+      );
+      return {
+        bindings,
+        deliveries,
+        deliveryUpdates,
+        failCancellation: () => {
+          failCancellation = true;
+        },
+        service,
+        targets,
+      };
+    }
+
+    it.each([
+      [
+        'disable',
+        async (service: QqbotAccountMessagePushService) =>
+          service.setBindingEnabled(ACCOUNT.selfId, bindingRow().id, false),
+      ],
+      [
+        'remove',
+        async (service: QqbotAccountMessagePushService) =>
+          service.removeBinding(ACCOUNT.selfId, bindingRow().id),
+      ],
+      [
+        'subscription change',
+        async (service: QqbotAccountMessagePushService) =>
+          service.updateBinding(ACCOUNT.selfId, bindingRow().id, {
+            enabled: true,
+            subscriptionId: '2041700000000000099',
+            targets: [
+              { targetId: '20000000000000001', targetType: 'group' },
+              { targetId: '30000000000000001', targetType: 'private' },
+            ],
+            templateId: bindingRow().templateId,
+          }),
+      ],
+    ])(
+      '%s cancels only exact binding unfinished rows',
+      async (_name, mutate) => {
+        const harness = cancellationHarness();
+        const before = structuredClone(harness.deliveries);
+
+        await mutate(harness.service);
+
+        expect(harness.deliveries).toEqual(
+          before.map((delivery) =>
+            delivery.bindingId === bindingRow().id &&
+            ['waiting_ddns', 'pending', 'retry'].includes(delivery.status)
+              ? {
+                  ...delivery,
+                  nextAttemptAt: null,
+                  processingLeaseUntil: null,
+                  status: 'cancelled',
+                }
+              : delivery,
+          ),
+        );
+      },
+    );
+
+    it('keeps frozen deliveries on template-only switch', async () => {
+      const harness = cancellationHarness();
+      const before = structuredClone(harness.deliveries);
+
+      await harness.service.updateBinding(ACCOUNT.selfId, bindingRow().id, {
+        enabled: true,
+        subscriptionId: bindingRow().subscriptionId,
+        targets: [
+          { targetId: '20000000000000001', targetType: 'group' },
+          { targetId: '30000000000000001', targetType: 'private' },
+        ],
+        templateId: '2041700000000000098',
+      });
+
+      expect(harness.deliveries).toEqual(before);
+      expect(harness.deliveryUpdates).toHaveLength(0);
+    });
+
+    it('target synchronization cancels only removed target IDs and retains new/sibling scopes', async () => {
+      const harness = cancellationHarness();
+      const before = structuredClone(harness.deliveries);
+
+      await harness.service.updateBinding(ACCOUNT.selfId, bindingRow().id, {
+        enabled: true,
+        subscriptionId: bindingRow().subscriptionId,
+        targets: [
+          { targetId: '20000000000000001', targetType: 'group' },
+          { targetId: '40000000000000001', targetType: 'private' },
+        ],
+        templateId: bindingRow().templateId,
+      });
+
+      expect(harness.deliveries).toEqual(
+        before.map((delivery) =>
+          delivery.id === 'removed-target-delivery'
+            ? {
+                ...delivery,
+                nextAttemptAt: null,
+                processingLeaseUntil: null,
+                status: 'cancelled',
+              }
+            : delivery,
+        ),
+      );
+      expect(
+        harness.targets.find((target) => target.id === 'target-retained'),
+      ).toMatchObject({ enabled: true, isDeleted: false });
+      expect(
+        harness.targets.find((target) => target.id === 'target-new-1'),
+      ).toMatchObject({ enabled: true, isDeleted: false });
+    });
+
+    it('rolls back binding, target, and cancellation drafts on a cancellation write failure', async () => {
+      const harness = cancellationHarness();
+      const before = {
+        bindings: structuredClone(harness.bindings),
+        deliveries: structuredClone(harness.deliveries),
+        targets: structuredClone(harness.targets),
+      };
+      harness.failCancellation();
+
+      await expect(
+        harness.service.updateBinding(ACCOUNT.selfId, bindingRow().id, {
+          enabled: false,
+          subscriptionId: bindingRow().subscriptionId,
+          targets: [{ targetId: '20000000000000001', targetType: 'group' }],
+          templateId: bindingRow().templateId,
+        }),
+      ).rejects.toThrow('delivery cancellation failed');
+
+      expect(harness.bindings).toEqual(before.bindings);
+      expect(harness.targets).toEqual(before.targets);
+      expect(harness.deliveries).toEqual(before.deliveries);
+    });
   });
 
   it('holds subscription then template gates through multi-target persistence without coercing IDs', async () => {

@@ -652,6 +652,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         throw new NetworkMessageValidationError('Invalid event revision');
       }
       const mapping = await manager.getRepository(NetworkPortForward).findOne({
+        lock: { mode: 'pessimistic_write' },
         where: { id: event.mappingId },
       });
       if (!mapping) {
@@ -662,7 +663,8 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         return false;
       }
       const previousHistory = await repository.findOne({
-        order: { id: 'DESC', occurredAt: 'DESC' },
+        lock: { mode: 'pessimistic_read' },
+        order: { occurredAt: 'DESC', id: 'DESC' },
         where: { mappingId: event.mappingId },
       });
       const history = repository.create({

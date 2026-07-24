@@ -61,6 +61,9 @@ import {
   SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
   SYSTEM_MESSAGE_EVENT_STAGER,
 } from './contract/message-push/qqbot-message-push.types';
+import { QqbotMessagePushController } from './contract/message-push/qqbot-message-push.controller';
+import { QqbotAccountMessagePushController } from './contract/message-push/qqbot-account-message-push.controller';
+import { QqbotMessagePushPermissionGuard } from './contract/message-push/qqbot-message-push-permission.guard';
 
 export { QQBOT_CORE_DOMAIN_CONTRACT } from './contract/qqbot-core.contract';
 
@@ -87,9 +90,11 @@ export const QQBOT_CORE_ENTITIES = [
 
 export const QQBOT_CORE_CONTROLLERS = [
   QqbotAccountController,
+  QqbotAccountMessagePushController,
   QqbotCommandController,
   QqbotDashboardController,
   QqbotMessageController,
+  QqbotMessagePushController,
   QqbotPermissionController,
   QqbotRuleController,
   QqbotSendController,
@@ -114,6 +119,7 @@ export const QQBOT_CORE_PROVIDERS = [
   QqbotMessageTemplateService,
   QqbotAccountMessagePushService,
   QqbotMessageTargetOptionsService,
+  QqbotMessagePushPermissionGuard,
   QqbotAccountService,
   QqbotBusService,
   QqbotCommandEngineService,

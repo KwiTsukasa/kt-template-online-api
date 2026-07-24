@@ -5,6 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { getMetadataArgsStorage } from 'typeorm';
 import { AdminAuthGuardModule } from '../../../../src/modules/admin/identity/auth/admin-auth-guard.module';
+import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-auth.guard';
 import { DictModule } from '../../../../src/modules/admin/platform-config/dict/dict.module';
 import { AppModule } from '../../../../src/app.module';
 import { QqbotAccountController } from '../../../../src/modules/qqbot/core/contract/account/qqbot-account.controller';
@@ -14,6 +15,9 @@ import { QqbotMessageController } from '../../../../src/modules/qqbot/core/contr
 import { QqbotPermissionController } from '../../../../src/modules/qqbot/core/contract/permission/qqbot-permission.controller';
 import { QqbotRuleController } from '../../../../src/modules/qqbot/core/contract/rule/qqbot-rule.controller';
 import { QqbotSendController } from '../../../../src/modules/qqbot/core/contract/send/qqbot-send.controller';
+import { QqbotAccountMessagePushController } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-account-message-push.controller';
+import { QqbotMessagePushController } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.controller';
+import { QqbotMessagePushPermissionGuard } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push-permission.guard';
 import { SystemMessageEventStagerService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-event-stager.service';
 import { SystemMessageFanoutService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-fanout.service';
 import { SystemMessageDeliveryCoordinatorService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-delivery-coordinator.service';
@@ -137,6 +141,41 @@ describe('QQBot core module contract', () => {
     );
   });
 
+  it('registers the strict message-push HTTP boundary without internal worker routes', () => {
+    const messagePushRoutes = collectControllerRoutes([
+      QqbotMessagePushController,
+      QqbotAccountMessagePushController,
+    ]).map(routeKey);
+
+    expect(messagePushRoutes).toEqual(
+      [
+        'DELETE /qqbot/accounts/:selfId/message-push/bindings/:id',
+        'DELETE /qqbot/message-push/subscriptions/:id',
+        'DELETE /qqbot/message-push/templates/:id',
+        'GET /qqbot/accounts/:selfId/message-push/bindings',
+        'GET /qqbot/accounts/:selfId/message-push/targets',
+        'GET /qqbot/message-push/sources',
+        'GET /qqbot/message-push/sources/:sourceKey',
+        'GET /qqbot/message-push/sources/network.stun.mapping-port-changed/options',
+        'GET /qqbot/message-push/subscriptions',
+        'GET /qqbot/message-push/templates',
+        'POST /qqbot/accounts/:selfId/message-push/bindings',
+        'POST /qqbot/message-push/subscriptions',
+        'POST /qqbot/message-push/templates',
+        'POST /qqbot/message-push/templates/preview',
+        'PUT /qqbot/accounts/:selfId/message-push/bindings/:id',
+        'PUT /qqbot/accounts/:selfId/message-push/bindings/:id/enabled',
+        'PUT /qqbot/message-push/subscriptions/:id',
+        'PUT /qqbot/message-push/subscriptions/:id/enabled',
+        'PUT /qqbot/message-push/templates/:id',
+        'PUT /qqbot/message-push/templates/:id/enabled',
+      ].sort(),
+    );
+    expect(messagePushRoutes.join('\n')).not.toMatch(
+      /\/(?:publish|events|deliveries|fanout|retry)(?:\/|$)/,
+    );
+  });
+
   it('routes QQBot through the core module as the owning Nest boundary', () => {
     const legacyWrapperName = ['Qqbot', 'Module'].join('');
     const legacyWrapperPath = join(
@@ -197,6 +236,32 @@ describe('QQBot core module contract', () => {
     ).toHaveLength(1);
     expect(
       QQBOT_CORE_PROVIDERS.filter(
+        (provider) =>
+          typeof provider === 'object' &&
+          provider !== null &&
+          'provide' in provider &&
+          provider.provide === SYSTEM_MESSAGE_EVENT_STAGER,
+      ),
+    ).toEqual([
+      {
+        provide: SYSTEM_MESSAGE_EVENT_STAGER,
+        useExisting: SystemMessageEventStagerService,
+      },
+    ]);
+    expect(
+      QQBOT_CORE_PROVIDERS.filter(
+        (provider) => provider === QqbotMessagePushPermissionGuard,
+      ),
+    ).toHaveLength(1);
+    expect(new Set(QQBOT_CORE_CONTROLLERS).size).toBe(
+      QQBOT_CORE_CONTROLLERS.length,
+    );
+    expect(new Set(QQBOT_CORE_PROVIDERS).size).toBe(
+      QQBOT_CORE_PROVIDERS.length,
+    );
+    expect(QQBOT_CORE_PROVIDERS).not.toContain(JwtAuthGuard);
+    expect(
+      QQBOT_CORE_PROVIDERS.filter(
         (provider) => provider === SystemMessageDeliveryRunnerService,
       ),
     ).toHaveLength(1);
@@ -241,9 +306,11 @@ describe('QQBot core module contract', () => {
     expect(QQBOT_CORE_CONTROLLERS).toEqual(
       expect.arrayContaining([
         QqbotAccountController,
+        QqbotAccountMessagePushController,
         QqbotCommandController,
         QqbotDashboardController,
         QqbotMessageController,
+        QqbotMessagePushController,
         QqbotPermissionController,
         QqbotRuleController,
         QqbotSendController,

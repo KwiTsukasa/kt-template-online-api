@@ -415,6 +415,39 @@ QQBot 运行态包括 NapCat 容器登录、OneBot v11 反向 WebSocket、MQTT �
 
 托管 NapCat 容器按账号持久化设备身份，`napcat_device_identity` 保存账号对应的数据目录、hostname、machine-id 路径、MAC 地址、验证状态和最近登录证据。重建同一账号容器时会复用 `pc-<8hex>` hostname、实体 OUI 风格 MAC 和 machine-id，并明确排除 Docker `02:42`、QEMU/KVM `52:54:00`、VMware、Hyper-V 等虚拟化前缀；新增账号创建期在真实 QQ selfId 未知时使用预留容器 id 创建临时设备身份，第一次 Docker run 就注入完整拟真参数，扫码成功后再把该身份和 runtime/protocol profile 归属到真实账号。Docker run 会注入 `--hostname`、`--mac-address`、只读 `/etc/machine-id` 挂载、`SYS_ADMIN`、`apparmor=unconfined`、`seccomp=unconfined` 和 `NAPCAT_REQUIRE_DEVICE_PROFILE=1`；后端还会同步写入 QQNT Linux `machine-info`，让 QQNT 计算 GUID 时使用的 MAC 与 Docker 网卡一致。派生镜像 entrypoint 会用同一设备 profile 覆盖 QQCore 实际打开的 DMI、boot_id、kernel release/version/proc version、CPU model、uptime、TTY active、mountinfo、`/etc/hosts` 和 `/proc/devices` 等探针；NapCat fork native login 和 core session config 的 `machineId` 与 `systemVersion` 也从该 profile 读取，避免 QQ native 入参和 Docker 可见探针不一致。当前策略名为 `qqnt-visible-hostname-v1` / `physical-oui-mac-v1`，绑定关系会回填 `napcat_account_binding.device_identity_id`。
 
+### System Message Push
+
+所有接口先通过 Admin JWT，再按路由声明的权限码执行 OR 校验；只有启用且未删除的角色/菜单生效，启用且未删除的 `super` 可放行。下表中 `/` 分隔的权限表示任一项即可，写接口始终只接受该动作自己的权限。
+
+| 方法     | 路径                                                                    | 权限                                                                                                               |
+| -------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `GET`    | `/qqbot/message-push/sources`                                           | Subscription `List/Create/Update`；Template `List/Create/Update/Preview`；Account MessagePush `List/Create/Update` |
+| `GET`    | `/qqbot/message-push/sources/:sourceKey`                                | 同 source list                                                                                                     |
+| `GET`    | `/qqbot/message-push/sources/network.stun.mapping-port-changed/options` | Subscription `Create/Update`；Account MessagePush `Create/Update`                                                  |
+| `GET`    | `/qqbot/message-push/subscriptions`                                     | Subscription `List`；Account MessagePush `List/Create/Update`                                                      |
+| `POST`   | `/qqbot/message-push/subscriptions`                                     | Subscription `Create`                                                                                              |
+| `PUT`    | `/qqbot/message-push/subscriptions/:id`                                 | Subscription `Update`                                                                                              |
+| `PUT`    | `/qqbot/message-push/subscriptions/:id/enabled`                         | Subscription `Toggle`                                                                                              |
+| `DELETE` | `/qqbot/message-push/subscriptions/:id`                                 | Subscription `Delete`                                                                                              |
+| `GET`    | `/qqbot/message-push/templates`                                         | Template `List`；Account MessagePush `List/Create/Update`                                                          |
+| `POST`   | `/qqbot/message-push/templates`                                         | Template `Create`                                                                                                  |
+| `PUT`    | `/qqbot/message-push/templates/:id`                                     | Template `Update`                                                                                                  |
+| `PUT`    | `/qqbot/message-push/templates/:id/enabled`                             | Template `Toggle`                                                                                                  |
+| `DELETE` | `/qqbot/message-push/templates/:id`                                     | Template `Delete`                                                                                                  |
+| `POST`   | `/qqbot/message-push/templates/preview`                                 | Template `Preview`                                                                                                 |
+| `GET`    | `/qqbot/accounts/:selfId/message-push/bindings`                         | Account MessagePush `List`                                                                                         |
+| `POST`   | `/qqbot/accounts/:selfId/message-push/bindings`                         | Account MessagePush `Create`                                                                                       |
+| `PUT`    | `/qqbot/accounts/:selfId/message-push/bindings/:id`                     | Account MessagePush `Update`                                                                                       |
+| `PUT`    | `/qqbot/accounts/:selfId/message-push/bindings/:id/enabled`             | Account MessagePush `Toggle`                                                                                       |
+| `DELETE` | `/qqbot/accounts/:selfId/message-push/bindings/:id`                     | Account MessagePush `Delete`                                                                                       |
+| `GET`    | `/qqbot/accounts/:selfId/message-push/targets`                          | Account MessagePush `Create/Update`                                                                                |
+
+完整权限码前缀分别为 `QqBot:MessageSubscription:*`、`QqBot:MessageTemplate:*` 和 `QqBot:Account:MessagePush:*`。订阅与模板列表返回 `data.items/data.total`，source 与 binding 列表直接返回数组，其余接口返回单个对象或布尔值；全部 `POST` 使用 HTTP 200。账号离线或 OneBot 不可用时 targets 仍返回 HTTP 200 和 `{ available: false, options: [], reasonCode }`。
+
+请求采用严格白名单：Snowflake/外键 ID 是 1–24 位正十进制字符串，`selfId` 和 QQ 目标 ID 必须匹配 `^[1-9]\d{4,19}$`，禁止 number 转换。订阅 `name` 为 1–100 字符且不能全空白，`sourceConfig` 必须且仅含字符串 `portForwardId/ddnsRecordId`；模板 `name` 同限，`content` 最多 2,000 Unicode 字符；`remark` 最多 500 字符。Binding 必须含 1–100 个严格嵌套 target，类型仅 `group/private`，`targetName` 最多 120 字符。Body、query、path 及嵌套对象的未知字段都会拒绝，query boolean 只接受字面量 `true/false`。
+
+响应仅返回管理契约字段：source definition/field/variable 白名单；STUN 的 port-forward/DDNS 候选白名单；subscription、template、preview、binding/target 和 target option 视图。不会返回 adapter、entity/repository、`activeKey`、digest、软删除字段、账号内部 ID、事件 payload/delivery/lease/retry 状态、凭据、access token、Provider/OneBot/MQTT 原始对象。系统事件只能通过 Nest 内部 Outbox stager 暂存，不存在 publish、event、delivery、fan-out、retry 或 worker HTTP 发布接口。
+
 ### NapCat Runtime Profile
 
 | 方法  | 路径                                      | 说明                                                                                  |

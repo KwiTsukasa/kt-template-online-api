@@ -236,6 +236,15 @@ export class SystemMessageFanoutService {
     });
     if (!event || !this.ownsClaim(event, token)) return 'stale_claim';
 
+    if (await this.hasStrictlyNewerEvent(manager, event)) {
+      await this.supersedeCurrentEventDeliveries(
+        manager,
+        event,
+        subscriptionId,
+      );
+      return 'handled';
+    }
+
     const subscriptions = manager.getRepository(QqbotMessageSubscription);
     const subscription = await subscriptions.findOne({
       where: { id: subscriptionId },
@@ -256,6 +265,64 @@ export class SystemMessageFanoutService {
 
     await this.createDeliveries(manager, event, subscription, readiness, now);
     return 'handled';
+  }
+
+  /**
+   * Uses a locking current read to detect committed newer facts before any subscription work.
+   * @param manager - Current subscription transaction manager that already owns the event lock.
+   * @param event - Locked claimed event that must not create work after a later fact exists.
+   * @returns Whether an exact source/resource event is strictly newer by occurrence then BIGINT ID.
+   */
+  private async hasStrictlyNewerEvent(
+    manager: EntityManager,
+    event: QqbotMessageEvent,
+  ): Promise<boolean> {
+    const newerEvent = await manager
+      .getRepository(QqbotMessageEvent)
+      .createQueryBuilder('newerEvent')
+      .setLock('pessimistic_read')
+      .where(
+        'newerEvent.sourceKey = :sourceKey AND newerEvent.resourceKey = :resourceKey',
+        { resourceKey: event.resourceKey, sourceKey: event.sourceKey },
+      )
+      .andWhere(
+        new Brackets((where) => {
+          where
+            .where('newerEvent.occurredAt > :occurredAt', {
+              occurredAt: event.occurredAt,
+            })
+            .orWhere(
+              'newerEvent.occurredAt = :occurredAt AND newerEvent.id > :eventId',
+              { eventId: event.id, occurredAt: event.occurredAt },
+            );
+        }),
+      )
+      .take(1)
+      .getOne();
+    return !!newerEvent;
+  }
+
+  /**
+   * Supersedes only the current old event's mutable rows after a newer fact is committed.
+   * @param manager - Current subscription transaction manager.
+   * @param event - Older locked event whose existing unfinished rows are being retired.
+   * @param subscriptionId - Exact subscription scope that excludes newer and unrelated work.
+   */
+  private async supersedeCurrentEventDeliveries(
+    manager: EntityManager,
+    event: QqbotMessageEvent,
+    subscriptionId: string,
+  ): Promise<void> {
+    const deliveries = manager.getRepository(QqbotMessageDelivery);
+    const candidates = await deliveries.find({
+      where: { messageEventId: event.id, subscriptionId },
+    });
+    for (const delivery of candidates) {
+      if (SUPERSEDED_STATUSES.has(delivery.status)) {
+        delivery.status = 'superseded';
+        await deliveries.save(delivery);
+      }
+    }
   }
 
   /**

@@ -212,13 +212,27 @@ function setup(seed: Partial<Store> = {}) {
     lock: '',
     onLocked: '',
     order: [] as string[],
+    predicates: [] as Array<{ expression: string; parameters: object }>,
     take: 0,
   };
   const transactions: string[] = [];
   const locked = new Set<string>();
+  const activeClaimLocks = new Set<string>();
+  const deliveryReadLocks: Array<null | string> = [];
   let deliverySequence = 1000;
   let duplicateRace: 'exact' | 'wrong' | null = null;
+  const concurrentDeliveries: QqbotMessageDelivery[] = [];
   let failSubscription: null | string = null;
+  let failAfterDeliverySaves: null | number = null;
+  let deliverySaveCount = 0;
+  let pauseClaim: null | {
+    entered: () => void;
+    resume: Promise<void>;
+  } = null;
+  let pauseEventLock: null | {
+    entered: () => void;
+    resume: Promise<void>;
+  } = null;
 
   /** Returns a repository facade bound to exactly one authoritative or transaction-local store. */
   const repository = (entity: unknown, store: Store) => {
@@ -241,46 +255,67 @@ function setup(seed: Partial<Store> = {}) {
       create: (input: object) =>
         Object.assign(new (entity as new () => object)(), input),
       createQueryBuilder: () => {
+        let builderLock = '';
         const builder = {
           addOrderBy: (field: string) => {
             query.order.push(field);
             return builder;
           },
-          getOne: async () =>
-            rows
-              .filter((row) => {
-                const item = row as unknown as QqbotMessageEvent;
-                return (
-                  ((item.fanoutStatus === 'accepted' ||
-                    item.fanoutStatus === 'retry') &&
-                    !!item.nextFanoutAt &&
-                    item.nextFanoutAt.getTime() <= NOW.getTime()) ||
-                  (item.fanoutStatus === 'processing' &&
-                    !!item.fanoutLeaseUntil &&
-                    item.fanoutLeaseUntil.getTime() <= NOW.getTime())
-                );
-              })
-              .filter(
-                (row) => !locked.has((row as unknown as QqbotMessageEvent).id),
-              )
-              .sort((left, right) => {
-                const a = left as unknown as QqbotMessageEvent;
-                const b = right as unknown as QqbotMessageEvent;
-                return (
-                  a.occurredAt.getTime() - b.occurredAt.getTime() ||
-                  (BigInt(a.id) < BigInt(b.id)
-                    ? -1
-                    : BigInt(a.id) > BigInt(b.id)
-                      ? 1
-                      : 0)
-                );
-              })[0] ?? null,
+          getOne: async () => {
+            const claimed =
+              rows
+                .filter((row) => {
+                  const item = row as unknown as QqbotMessageEvent;
+                  return (
+                    ((item.fanoutStatus === 'accepted' ||
+                      item.fanoutStatus === 'retry') &&
+                      !!item.nextFanoutAt &&
+                      item.nextFanoutAt.getTime() <= NOW.getTime()) ||
+                    (item.fanoutStatus === 'processing' &&
+                      !!item.fanoutLeaseUntil &&
+                      item.fanoutLeaseUntil.getTime() <= NOW.getTime())
+                  );
+                })
+                .filter(
+                  (row) =>
+                    !locked.has((row as unknown as QqbotMessageEvent).id) &&
+                    !activeClaimLocks.has(
+                      (row as unknown as QqbotMessageEvent).id,
+                    ),
+                )
+                .sort((left, right) => {
+                  const a = left as unknown as QqbotMessageEvent;
+                  const b = right as unknown as QqbotMessageEvent;
+                  return (
+                    a.occurredAt.getTime() - b.occurredAt.getTime() ||
+                    (BigInt(a.id) < BigInt(b.id)
+                      ? -1
+                      : BigInt(a.id) > BigInt(b.id)
+                        ? 1
+                        : 0)
+                  );
+                })[0] ?? null;
+            if (
+              !claimed ||
+              !pauseClaim ||
+              builderLock !== 'pessimistic_write'
+            ) {
+              return claimed;
+            }
+            const id = (claimed as unknown as QqbotMessageEvent).id;
+            activeClaimLocks.add(id);
+            pauseClaim.entered();
+            await pauseClaim.resume;
+            activeClaimLocks.delete(id);
+            return claimed;
+          },
           orderBy: (field: string) => {
             query.order.push(field);
             return builder;
           },
           setLock: (value: string) => {
             query.lock = value;
+            builderLock = value;
             return builder;
           },
           setOnLocked: (value: string) => {
@@ -293,6 +328,23 @@ function setup(seed: Partial<Store> = {}) {
           },
           where: (value: unknown) => {
             query.brackets = value.constructor.name === 'Brackets';
+            const brackets = value as {
+              whereFactory?: (where: {
+                orWhere: (expression: string, parameters: object) => void;
+                where: (expression: string, parameters: object) => void;
+              }) => void;
+            };
+            const expressionRecorder = {
+              orWhere: (expression: string, parameters: object) => {
+                query.predicates.push({ expression, parameters });
+                return expressionRecorder;
+              },
+              where: (expression: string, parameters: object) => {
+                query.predicates.push({ expression, parameters });
+                return expressionRecorder;
+              },
+            };
+            brackets.whereFactory?.(expressionRecorder);
             return builder;
           },
         };
@@ -311,8 +363,38 @@ function setup(seed: Partial<Store> = {}) {
             )
           : result;
       },
-      findOne: async ({ where }: { where: Record<string, unknown> }) =>
-        rows.find((row) => matches(row, where)) ?? null,
+      findOne: async ({
+        lock,
+        where,
+      }: {
+        lock?: { mode: string };
+        where: Record<string, unknown>;
+      }) => {
+        if (
+          entity === QqbotMessageEvent &&
+          lock?.mode === 'pessimistic_write' &&
+          pauseEventLock
+        ) {
+          const event = rows.find((row) => matches(row, where));
+          if (!event) return null;
+          const id = (event as unknown as QqbotMessageEvent).id;
+          activeClaimLocks.add(id);
+          pauseEventLock.entered();
+          await pauseEventLock.resume;
+          activeClaimLocks.delete(id);
+          return event;
+        }
+        if (entity === QqbotMessageDelivery) {
+          deliveryReadLocks.push(lock?.mode ?? null);
+          const visible = lock ? [...rows, ...concurrentDeliveries] : rows;
+          return (
+            visible.find((row) =>
+              matches(row as Record<string, unknown>, where),
+            ) ?? null
+          );
+        }
+        return rows.find((row) => matches(row, where)) ?? null;
+      },
       save: async (item: Record<string, unknown>) => {
         if (
           entity === QqbotMessageDelivery &&
@@ -320,6 +402,7 @@ function setup(seed: Partial<Store> = {}) {
         )
           throw new Error('repository offline');
         if (entity === QqbotMessageDelivery) {
+          deliverySaveCount += 1;
           const pair = rows.find((row) =>
             matches(row, {
               messageEventId: item.messageEventId,
@@ -327,16 +410,23 @@ function setup(seed: Partial<Store> = {}) {
             }),
           );
           if (!item.id && duplicateRace) {
-            if (duplicateRace === 'exact')
-              rows.push(
+            if (duplicateRace === 'exact') {
+              concurrentDeliveries.push(
                 Object.assign(new QqbotMessageDelivery(), item, {
                   id: 'race',
-                }) as unknown as Record<string, unknown>,
+                }),
               );
+            }
             duplicateRace = null;
             throw { errno: 1062 };
           }
           if (pair && pair !== item) throw { errno: 1062 };
+          if (
+            failAfterDeliverySaves !== null &&
+            deliverySaveCount > failAfterDeliverySaves
+          ) {
+            throw new Error('repository offline after delivery mutation');
+          }
           if (!item.id) item.id = `${deliverySequence++}`;
         }
         const index = rows.findIndex(
@@ -370,6 +460,11 @@ function setup(seed: Partial<Store> = {}) {
         const result = await callback({
           getRepository: (entity) => repository(entity, draft),
         });
+        for (const delivery of concurrentDeliveries) {
+          if (!draft.deliveries.some((item) => item.id === delivery.id)) {
+            draft.deliveries.push(structuredClone(delivery));
+          }
+        }
         state = draft;
         transactions.push('commit');
         return result;
@@ -386,17 +481,48 @@ function setup(seed: Partial<Store> = {}) {
   );
   return {
     adapter,
+    bindings: () => state.bindings,
     events: () => state.events,
     deliveries: () => state.deliveries,
+    deliveryReadLocks,
     failSubscription: (id: null | string) => {
       failSubscription = id;
     },
+    failAfterDeliverySaves: (count: null | number) => {
+      failAfterDeliverySaves = count;
+    },
     lock: (id: string) => locked.add(id),
     query,
+    pauseNextClaim: () => {
+      let entered!: () => void;
+      const reached = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let resume!: () => void;
+      const wait = new Promise<void>((resolve) => {
+        resume = resolve;
+      });
+      pauseClaim = { entered, resume: wait };
+      return { reached, resume };
+    },
+    pauseNextEventLock: () => {
+      let entered!: () => void;
+      const reached = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let resume!: () => void;
+      const wait = new Promise<void>((resolve) => {
+        resume = resolve;
+      });
+      pauseEventLock = { entered, resume: wait };
+      return { reached, resume };
+    },
     setDuplicateRace: (value: 'exact' | 'wrong' | null) => {
       duplicateRace = value;
     },
     service,
+    targets: () => state.targets,
+    templates: () => state.templates,
     transactions,
   };
 }
@@ -584,6 +710,7 @@ describe('SystemMessageFanoutService', () => {
     race.setDuplicateRace('exact');
     await race.service.runOnce(NOW);
     expect(race.deliveries()).toHaveLength(1);
+    expect(race.deliveryReadLocks).toEqual([null, 'pessimistic_read']);
 
     const wrong = setup();
     wrong.setDuplicateRace('wrong');
@@ -604,6 +731,47 @@ describe('SystemMessageFanoutService', () => {
       take: 1,
     });
     expect(fixture.query.order).toEqual(['event.occurredAt', 'event.id']);
+    expect(fixture.query.predicates).toEqual([
+      {
+        expression:
+          'event.fanoutStatus IN (:...due) AND event.nextFanoutAt <= :now',
+        parameters: { due: ['accepted', 'retry'], now: NOW },
+      },
+      {
+        expression:
+          'event.fanoutStatus = :processing AND event.fanoutLeaseUntil <= :now',
+        parameters: { processing: 'processing', now: NOW },
+      },
+    ]);
+  });
+
+  it('gives overlapping claim transactions one owner only through write lock and skip-locked selection', async () => {
+    const fixture = setup();
+    const gate = fixture.pauseNextClaim();
+    const first = fixture.service.runOnce(NOW);
+    await gate.reached;
+    await expect(fixture.service.runOnce(NOW)).resolves.toBe(0);
+    gate.resume();
+    await expect(first).resolves.toBe(1);
+    expect(fixture.events()[0].fanoutAttemptCount).toBe(1);
+  });
+
+  it('lets the current event-lock holder finish atomically while an expired-lease reclaim waits', async () => {
+    const fixture = setup();
+    const gate = fixture.pauseNextEventLock();
+    const currentOwner = fixture.service.runOnce(NOW);
+    await gate.reached;
+
+    await expect(
+      fixture.service.runOnce(
+        new Date(NOW.getTime() + SYSTEM_MESSAGE_LEASE_MS),
+      ),
+    ).resolves.toBe(0);
+
+    gate.resume();
+    await expect(currentOwner).resolves.toBe(1);
+    expect(fixture.events()[0].fanoutStatus).toBe('completed');
+    expect(fixture.deliveries()).toHaveLength(1);
   });
 
   it('skips a locked oldest due event and reclaims expired processing with an exact new lease', async () => {
@@ -632,15 +800,20 @@ describe('SystemMessageFanoutService', () => {
     });
   });
 
-  it('uses a lease-and-attempt ownership fence so stale completion cannot clobber a new owner', async () => {
+  it('uses independent attempt and lease ownership fences so stale completion cannot clobber a new owner', async () => {
     const fixture = setup({ events: [] });
     const staleEvent = event({
       fanoutAttemptCount: 1,
       fanoutLeaseUntil: new KtDateTime(NOW.getTime() + SYSTEM_MESSAGE_LEASE_MS),
       fanoutStatus: 'processing',
     });
-    const current = event({
+    const attemptMismatch = event({
       fanoutAttemptCount: 2,
+      fanoutLeaseUntil: staleEvent.fanoutLeaseUntil,
+      fanoutStatus: 'processing',
+    });
+    const leaseMismatch = event({
+      fanoutAttemptCount: 1,
       fanoutLeaseUntil: new KtDateTime(
         NOW.getTime() + SYSTEM_MESSAGE_LEASE_MS + 1,
       ),
@@ -658,7 +831,7 @@ describe('SystemMessageFanoutService', () => {
     ).finish;
     (fixture as unknown as { events: () => QqbotMessageEvent[] })
       .events()
-      .push(current);
+      .push(attemptMismatch);
 
     await finish.call(
       fixture.service,
@@ -672,6 +845,73 @@ describe('SystemMessageFanoutService', () => {
       null,
     );
     expect(fixture.events()[0].fanoutStatus).toBe('processing');
+
+    fixture.events().splice(0, 1, leaseMismatch);
+    await finish.call(
+      fixture.service,
+      {
+        attempt: 1,
+        event: staleEvent,
+        leaseUntil: staleEvent.fanoutLeaseUntil,
+      },
+      'completed',
+      null,
+      null,
+    );
+    expect(fixture.events()[0].fanoutStatus).toBe('processing');
+  });
+
+  it('stops a stale owner before supersession or inserts after a newer owner completes', async () => {
+    const staleEvent = event({
+      fanoutAttemptCount: 1,
+      fanoutLeaseUntil: new KtDateTime(NOW.getTime() + SYSTEM_MESSAGE_LEASE_MS),
+      fanoutStatus: 'processing',
+    });
+    const winningEvent = event({
+      fanoutAttemptCount: 2,
+      fanoutLeaseUntil: null,
+      fanoutStatus: 'completed',
+    });
+    const prior = Object.assign(new QqbotMessageDelivery(), {
+      id: 'prior',
+      messageEventId: '100',
+      publishTargetId: 'old-target',
+      status: 'pending',
+      subscriptionId: '300',
+    });
+    const fixture = setup({
+      deliveries: [prior],
+      events: [
+        winningEvent,
+        event({
+          id: '100',
+          occurredAt: new KtDateTime(NOW.getTime() - 1),
+          nextFanoutAt: new KtDateTime(NOW.getTime() + 1),
+        }),
+      ],
+    });
+    const processClaim = (
+      fixture.service as unknown as {
+        processClaim: (token: object, now: Date) => Promise<void>;
+      }
+    ).processClaim;
+
+    await processClaim.call(
+      fixture.service,
+      {
+        attempt: 1,
+        event: staleEvent,
+        leaseUntil: staleEvent.fanoutLeaseUntil,
+      },
+      NOW,
+    );
+
+    expect(fixture.deliveries()).toEqual([prior]);
+    expect(fixture.events()[0]).toMatchObject({
+      fanoutAttemptCount: 2,
+      fanoutStatus: 'completed',
+    });
+    expect(fixture.adapter.resolveDelivery).not.toHaveBeenCalled();
   });
 
   it('rolls back one failing subscription, retains valid work, then retries and recovers idempotently', async () => {
@@ -699,6 +939,44 @@ describe('SystemMessageFanoutService', () => {
     ).toEqual(new Set(['700', '701']));
     expect(fixture.events()[0].fanoutStatus).toBe('completed');
     expect(fixture.transactions).toContain('rollback');
+  });
+
+  it('rolls back supersession and an earlier target insert when a subscription later fails', async () => {
+    const older = event({
+      id: '100',
+      occurredAt: new KtDateTime(NOW.getTime() - 1),
+      nextFanoutAt: new KtDateTime(NOW.getTime() + 1),
+    });
+    const priorFailed = Object.assign(new QqbotMessageDelivery(), {
+      id: 'old-failed',
+      messageEventId: '100',
+      publishTargetId: 'old-failed-target',
+      status: 'pending',
+      subscriptionId: '301',
+    });
+    const fixture = setup({
+      deliveries: [priorFailed],
+      events: [older, event()],
+      subscriptions: [subscription(), subscription({ id: '301' })],
+      bindings: [binding(), binding({ id: '501', subscriptionId: '301' })],
+      targets: [
+        target(),
+        target({ bindingId: '501', id: '701' }),
+        target({ bindingId: '501', id: '702', targetId: 'group-3' }),
+      ],
+    });
+    fixture.failAfterDeliverySaves(2);
+
+    await fixture.service.runOnce(NOW);
+
+    expect(
+      fixture.deliveries().find((item) => item.id === 'old-failed'),
+    ).toMatchObject({ status: 'pending' });
+    expect(fixture.deliveries().map((item) => item.publishTargetId)).toEqual([
+      'old-failed-target',
+      '700',
+    ]);
+    expect(fixture.events()[1].fanoutStatus).toBe('retry');
   });
 
   it('fails at the occurrence deadline and permanently rejects malformed source facts', async () => {
@@ -946,15 +1224,34 @@ describe('SystemMessageFanoutService', () => {
     ).toEqual(statuses);
   });
 
-  it('preserves snapshots after later in-memory configuration edits', async () => {
+  it('preserves every delivery snapshot after source configuration rows later change', async () => {
     const fixture = setup();
     await fixture.service.runOnce(NOW);
-    const frozen = fixture.deliveries()[0];
-    frozen.templateContent = 'endpoint=${{endpoint}}';
+    const frozen = structuredClone(fixture.deliveries()[0]);
+    fixture.templates()[0].content = 'changed=${{endpoint}}';
+    fixture.bindings()[0].selfId = 'changed-bot';
+    fixture.targets()[0].targetId = 'changed-target';
     expect(frozen).toMatchObject({
+      attemptCount: 0,
+      bindingId: '500',
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      messageEventId: '200',
+      processingLeaseUntil: null,
       renderedMessage: 'endpoint=pal.example.com:38213',
+      sendLogId: null,
       selfId: 'bot-a',
+      status: 'pending',
+      subscriptionId: '300',
+      templateContent: 'endpoint=${{endpoint}}',
+      templateId: '600',
       targetId: 'group-1',
+      targetType: 'group',
+      variableSnapshot: { endpoint: 'pal.example.com:38213' },
     });
+    expect(frozen.nextAttemptAt.getTime()).toBe(NOW.getTime());
+    expect(frozen.expiresAt.getTime()).toBe(
+      NOW.getTime() + SYSTEM_MESSAGE_RETRY_WINDOW_MS,
+    );
   });
 });

@@ -37,6 +37,8 @@ interface ClaimToken {
   leaseUntil: KtDateTime;
 }
 
+type SubscriptionFanOutOutcome = 'handled' | 'stale_claim';
+
 /**
  * Creates frozen, idempotent delivery work from committed system-message Outbox facts.
  *
@@ -141,16 +143,16 @@ export class SystemMessageFanoutService {
 
       for (const subscription of subscriptions) {
         try {
-          await this.dataSource.transaction((manager) =>
+          const outcome = await this.dataSource.transaction((manager) =>
             this.fanOutSubscription(
               manager,
-              token.event,
+              token,
               subscription.id,
               adapter,
-              payload,
               now,
             ),
           );
+          if (outcome === 'stale_claim') return;
         } catch {
           transientFailure = true;
         }
@@ -211,35 +213,45 @@ export class SystemMessageFanoutService {
   /**
    * Executes one subscription's isolated persistence unit.
    * @param manager - Transaction manager whose mutations commit only for this subscription.
-   * @param event - Frozen Outbox event currently owned by the caller.
+   * @param token - Exact claim token that must still own the locked Outbox row.
    * @param subscriptionId - Primary key of the subscription to lock and recheck.
    * @param adapter - Source adapter already used to validate the frozen payload.
-   * @param payload - Validated scalar payload passed to the adapter exactly once.
    * @param now - Stable scheduling instant for newly created delivery rows.
    */
   private async fanOutSubscription(
     manager: EntityManager,
-    event: QqbotMessageEvent,
+    token: ClaimToken,
     subscriptionId: string,
     adapter: SystemMessageSourceAdapter,
-    payload: Record<string, SystemMessageScalar>,
     now: Date,
-  ): Promise<void> {
+  ): Promise<SubscriptionFanOutOutcome> {
+    const events = manager.getRepository(QqbotMessageEvent);
+    const event = await events.findOne({
+      where: { id: token.event.id },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (!event || !this.ownsClaim(event, token)) return 'stale_claim';
+
     const subscriptions = manager.getRepository(QqbotMessageSubscription);
     const subscription = await subscriptions.findOne({
       where: { id: subscriptionId },
       lock: { mode: 'pessimistic_write' },
     });
-    if (!subscription || !this.matchesSubscription(subscription, event)) return;
+    if (!subscription || !this.matchesSubscription(subscription, event)) {
+      return 'handled';
+    }
 
+    const payload = adapter.validateEventPayload(event.payload);
+    this.assertResourceIdentity(event, payload);
     const readiness = await adapter.resolveDelivery({
       eventPayload: payload,
       subscriptionConfig: subscription.sourceConfig,
     });
     await this.supersedeEarlierDeliveries(manager, event, subscription.id);
-    if (!this.hasRenderableVariables(readiness)) return;
+    if (!this.hasRenderableVariables(readiness)) return 'handled';
 
     await this.createDeliveries(manager, event, subscription, readiness, now);
+    return 'handled';
   }
 
   /**
@@ -419,7 +431,10 @@ export class SystemMessageFanoutService {
       await deliveries.save(delivery);
     } catch (error) {
       if (!this.isDuplicateKeyError(error)) throw error;
-      const existing = await deliveries.findOne({ where: key });
+      const existing = await deliveries.findOne({
+        where: key,
+        lock: { mode: 'pessimistic_read' },
+      });
       if (!existing) throw error;
     }
   }
@@ -566,6 +581,22 @@ export class SystemMessageFanoutService {
     return (
       now.getTime() >=
       event.occurredAt.getTime() + SYSTEM_MESSAGE_RETRY_WINDOW_MS
+    );
+  }
+
+  /**
+   * Verifies that a locked event row still belongs to the exact claim attempt.
+   * @param event - Event row freshly locked in the subscription transaction.
+   * @param token - Attempt and lease values returned by the original claim.
+   * @returns Whether this transaction may mutate deliveries for the claim.
+   */
+  private ownsClaim(event: QqbotMessageEvent, token: ClaimToken): boolean {
+    return (
+      event.id === token.event.id &&
+      event.fanoutStatus === 'processing' &&
+      event.fanoutAttemptCount === token.attempt &&
+      !!event.fanoutLeaseUntil &&
+      event.fanoutLeaseUntil.getTime() === token.leaseUntil.getTime()
     );
   }
 

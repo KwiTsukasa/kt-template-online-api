@@ -179,6 +179,11 @@ describe('QQBot core module contract', () => {
         },
       ]),
     );
+    expect(
+      QQBOT_CORE_PROVIDERS.filter(
+        (provider) => provider === SystemMessageFanoutService,
+      ),
+    ).toHaveLength(1);
     expect(QQBOT_CORE_EXPORTS).toEqual(
       expect.arrayContaining([SYSTEM_MESSAGE_EVENT_STAGER]),
     );

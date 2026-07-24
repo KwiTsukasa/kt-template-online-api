@@ -11,6 +11,10 @@ import { NetworkAgentState } from '../../../src/modules/admin/platform-config/ne
 import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/network-endpoint-history.entity';
 import type { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/network-management-event-stream.service';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
+import type {
+  SystemMessageEventInput,
+  SystemMessageEventStager,
+} from '../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import {
   buildDesiredSnapshot,
   desiredSnapshotDigest,
@@ -20,12 +24,16 @@ type MqttHarness = {
   client: MqttClient & EventEmitter;
   clientOptions: () => IClientOptions;
   histories: NetworkEndpointHistory[];
+  historyFindOne: jest.Mock;
+  historySave: jest.Mock;
   mappingSave: jest.Mock;
   publishCommitted: jest.Mock;
   mapping: NetworkPortForward;
   publishCallback: () => (error?: Error) => void;
   requestDdnsReconcile: jest.Mock;
   service: NetworkAgentMqttService;
+  stagedEvents: SystemMessageEventInput[];
+  stager: jest.Mocked<SystemMessageEventStager>;
   state: NetworkAgentState;
   stateSave: jest.Mock;
   transactionCalls: () => number;
@@ -75,14 +83,31 @@ function createHarness(): MqttHarness {
     findOne: async ({ where }) => (where.id === mapping.id ? mapping : null),
     save: mappingSave,
   } as unknown as Repository<NetworkPortForward>;
+  const historyFindOne = jest.fn(async ({ order, where }) => {
+    if (where.eventId) {
+      return histories.find((item) => item.eventId === where.eventId) || null;
+    }
+    const matches = histories.filter(
+      (item) => item.mappingId === where.mappingId,
+    );
+    if (!order) return matches[0] || null;
+    return (
+      [...matches].sort((left, right) => {
+        const occurredAt =
+          right.occurredAt.getTime() - left.occurredAt.getTime();
+        return occurredAt || String(right.id).localeCompare(String(left.id));
+      })[0] || null
+    );
+  });
+  const historySave = jest.fn(async (value: NetworkEndpointHistory) => {
+    value.id ||= String(histories.length + 1);
+    histories.push(value);
+    return value;
+  });
   const historyRepository = {
     create: (input) => Object.assign(new NetworkEndpointHistory(), input),
-    findOne: async ({ where }) =>
-      histories.find((item) => item.eventId === where.eventId) || null,
-    save: async (value) => {
-      histories.push(value);
-      return value;
-    },
+    findOne: historyFindOne,
+    save: historySave,
   } as unknown as Repository<NetworkEndpointHistory>;
   const manager = {
     getRepository: (entity) => {
@@ -92,12 +117,27 @@ function createHarness(): MqttHarness {
       throw new Error('unexpected repository');
     },
   } as unknown as EntityManager;
+  const stagedEvents: SystemMessageEventInput[] = [];
+  const stager = {
+    stage: jest.fn(async (_manager, input) => {
+      stagedEvents.push(input);
+      return 'accepted' as const;
+    }),
+  } as jest.Mocked<SystemMessageEventStager>;
   let transactionCallCount = 0;
   const dataSource = {
     getRepository: manager.getRepository.bind(manager),
     transaction: async (work) => {
       transactionCallCount += 1;
-      return await work(manager);
+      const historiesBefore = [...histories];
+      const stagedEventsBefore = [...stagedEvents];
+      try {
+        return await work(manager);
+      } catch (error) {
+        histories.splice(0, histories.length, ...historiesBefore);
+        stagedEvents.splice(0, stagedEvents.length, ...stagedEventsBefore);
+        throw error;
+      }
     },
   } as unknown as DataSource;
   const configService = {
@@ -143,6 +183,7 @@ function createHarness(): MqttHarness {
     configService,
     dataSource,
     eventStream,
+    stager,
     factory,
     { requestReconcile: requestDdnsReconcile } as never,
   );
@@ -150,16 +191,58 @@ function createHarness(): MqttHarness {
     client,
     clientOptions: () => options,
     histories,
+    historyFindOne,
+    historySave,
     mappingSave,
     mapping,
     publishCallback: () => publishAck,
     publishCommitted,
     requestDdnsReconcile,
     service,
+    stagedEvents,
     state,
     stateSave,
+    stager,
     transactionCalls: () => transactionCallCount,
   };
+}
+
+/** Builds one endpoint event payload with a valid STUN endpoint transition shape. */
+function endpointEvent(overrides: Record<string, unknown> = {}): Buffer {
+  return Buffer.from(
+    JSON.stringify({
+      agentId: 'nas-main',
+      endpoint: {
+        observedAt: '2026-07-22T01:02:04.000Z',
+        publicIpv4: '8.8.4.4',
+        publicPort: 38213,
+        validUntil: '2026-07-22T01:04:04.000Z',
+      },
+      eventId: 'endpoint-event-2',
+      mappingId: '100',
+      occurredAt: '2026-07-22T01:02:05.000Z',
+      revision: 7,
+      schemaVersion: 1,
+      type: 'changed',
+      ...overrides,
+    }),
+  );
+}
+
+/** Builds a persisted endpoint-history fixture for direct prior-port comparisons. */
+function endpointHistory(
+  overrides: Partial<NetworkEndpointHistory> = {},
+): NetworkEndpointHistory {
+  return Object.assign(new NetworkEndpointHistory(), {
+    eventId: 'endpoint-event-1',
+    eventType: 'changed',
+    id: '1',
+    mappingId: '100',
+    occurredAt: new KtDateTime('2026-07-22T01:02:03.000Z'),
+    publicIpv4: '8.8.8.8',
+    publicPort: 8213,
+    ...overrides,
+  });
 }
 
 /** Waits for promise continuations scheduled by the MQTT bridge. */
@@ -760,6 +843,176 @@ describe('NetworkAgentMqttService', () => {
     expect(harness.histories).toHaveLength(1);
     expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
     expect(harness.publishCommitted).toHaveBeenCalledWith('events');
+  });
+
+  it('stages one fact for a direct valid port change with the same transaction manager', async () => {
+    const harness = createHarness();
+    harness.histories.push(endpointHistory());
+    const topic = 'kt/network/v1/agents/nas-main/events';
+
+    await harness.service.consumeMessage(topic, endpointEvent());
+
+    expect(harness.stager.stage).toHaveBeenCalledTimes(1);
+    expect(harness.stager.stage).toHaveBeenCalledWith(
+      expect.objectContaining({ getRepository: expect.any(Function) }),
+      {
+        eventId: 'endpoint-event-2',
+        occurredAt: '2026-07-22T01:02:05.000Z',
+        payload: {
+          changedAt: '2026-07-22T01:02:05.000Z',
+          currentPort: 38213,
+          portForwardId: '100',
+          previousPort: 8213,
+          publicIpv4: '8.8.4.4',
+        },
+        resourceKey: '100',
+        sourceKey: 'network.stun.mapping-port-changed',
+      },
+    );
+    expect(harness.histories).toHaveLength(2);
+    expect(harness.stagedEvents).toHaveLength(1);
+  });
+
+  it.each(['published', 'withdrawn', 'restored'])(
+    'does not stage a %s endpoint event',
+    async (type) => {
+      const harness = createHarness();
+      harness.histories.push(endpointHistory());
+
+      await harness.service.consumeMessage(
+        'kt/network/v1/agents/nas-main/events',
+        endpointEvent({ type }),
+      );
+
+      expect(harness.stager.stage).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    [
+      'an IP-only change',
+      endpointEvent({
+        endpoint: {
+          observedAt: '2026-07-22T01:02:04.000Z',
+          publicIpv4: '1.1.1.1',
+          publicPort: 8213,
+          validUntil: '2026-07-22T01:04:04.000Z',
+        },
+      }),
+    ],
+    ['a first event', endpointEvent()],
+  ])('does not stage %s', async (_name, payload) => {
+    const harness = createHarness();
+    if (_name === 'an IP-only change')
+      harness.histories.push(endpointHistory());
+
+    await harness.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/events',
+      payload,
+    );
+
+    expect(harness.stager.stage).not.toHaveBeenCalled();
+  });
+
+  it('does not stage a changed event after a withdrawn history row or invalid prior port', async () => {
+    const topic = 'kt/network/v1/agents/nas-main/events';
+    const withdrawn = createHarness();
+    withdrawn.histories.push(endpointHistory({ eventType: 'withdrawn' }));
+    await withdrawn.service.consumeMessage(topic, endpointEvent());
+    expect(withdrawn.stager.stage).not.toHaveBeenCalled();
+
+    const invalidPort = createHarness();
+    invalidPort.histories.push(endpointHistory({ publicPort: null }));
+    await invalidPort.service.consumeMessage(topic, endpointEvent());
+    expect(invalidPort.stager.stage).not.toHaveBeenCalled();
+  });
+
+  it('orders prior history by occurredAt then id before deciding the previous port', async () => {
+    const harness = createHarness();
+    harness.histories.push(
+      endpointHistory({ id: '2', publicPort: 8213 }),
+      endpointHistory({
+        eventId: 'endpoint-event-older',
+        id: '1',
+        publicPort: 38213,
+      }),
+      endpointHistory({
+        eventId: 'endpoint-event-newest',
+        id: '3',
+        publicPort: 45000,
+      }),
+    );
+
+    await harness.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/events',
+      endpointEvent(),
+    );
+
+    expect(harness.historyFindOne).toHaveBeenCalledWith({
+      order: { id: 'DESC', occurredAt: 'DESC' },
+      where: { mappingId: '100' },
+    });
+    expect(harness.stagedEvents[0]?.payload).toMatchObject({
+      previousPort: 45000,
+    });
+  });
+
+  it('does not save or stage a duplicate endpoint event ID', async () => {
+    const harness = createHarness();
+    harness.histories.push(endpointHistory({ eventId: 'endpoint-event-2' }));
+
+    await harness.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/events',
+      endpointEvent(),
+    );
+
+    expect(harness.historySave).not.toHaveBeenCalled();
+    expect(harness.stager.stage).not.toHaveBeenCalled();
+  });
+
+  it('commits history when the stager reports an outbox duplicate', async () => {
+    const harness = createHarness();
+    harness.histories.push(endpointHistory());
+    harness.stager.stage.mockResolvedValueOnce('duplicate');
+
+    await harness.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/events',
+      endpointEvent(),
+    );
+
+    expect(harness.histories).toHaveLength(2);
+  });
+
+  it('rolls back history and staged events when staging fails', async () => {
+    const harness = createHarness();
+    harness.histories.push(endpointHistory());
+    harness.stager.stage.mockImplementationOnce(async (_manager, input) => {
+      harness.stagedEvents.push(input);
+      throw new Error('outbox unavailable');
+    });
+
+    await expect(
+      harness.service.consumeMessage(
+        'kt/network/v1/agents/nas-main/events',
+        endpointEvent(),
+      ),
+    ).rejects.toThrow('outbox unavailable');
+    expect(harness.histories).toHaveLength(1);
+    expect(harness.stagedEvents).toHaveLength(0);
+  });
+
+  it('leaves no staged event when history persistence fails', async () => {
+    const harness = createHarness();
+    harness.histories.push(endpointHistory());
+    harness.historySave.mockRejectedValueOnce(new Error('history unavailable'));
+
+    await expect(
+      harness.service.consumeMessage(
+        'kt/network/v1/agents/nas-main/events',
+        endpointEvent(),
+      ),
+    ).rejects.toThrow('history unavailable');
+    expect(harness.stagedEvents).toHaveLength(0);
   });
 
   /** Proves liveness persistence does not become a periodic browser refresh. */

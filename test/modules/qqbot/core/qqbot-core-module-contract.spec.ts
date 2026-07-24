@@ -14,6 +14,8 @@ import { QqbotMessageController } from '../../../../src/modules/qqbot/core/contr
 import { QqbotPermissionController } from '../../../../src/modules/qqbot/core/contract/permission/qqbot-permission.controller';
 import { QqbotRuleController } from '../../../../src/modules/qqbot/core/contract/rule/qqbot-rule.controller';
 import { QqbotSendController } from '../../../../src/modules/qqbot/core/contract/send/qqbot-send.controller';
+import { SystemMessageEventStagerService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-event-stager.service';
+import { SYSTEM_MESSAGE_EVENT_STAGER } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import {
   QQBOT_CORE_CONTROLLERS,
   QQBOT_CORE_ENTITIES,
@@ -165,6 +167,18 @@ describe('QQBot core module contract', () => {
     ).toEqual(expect.arrayContaining(QQBOT_CORE_PROVIDERS));
     expect(getModuleMetadata(QqbotCoreModule, MODULE_METADATA.EXPORTS)).toEqual(
       expect.arrayContaining(QQBOT_CORE_EXPORTS),
+    );
+    expect(QQBOT_CORE_PROVIDERS).toEqual(
+      expect.arrayContaining([
+        SystemMessageEventStagerService,
+        {
+          provide: SYSTEM_MESSAGE_EVENT_STAGER,
+          useExisting: SystemMessageEventStagerService,
+        },
+      ]),
+    );
+    expect(QQBOT_CORE_EXPORTS).toEqual(
+      expect.arrayContaining([SYSTEM_MESSAGE_EVENT_STAGER]),
     );
   });
 

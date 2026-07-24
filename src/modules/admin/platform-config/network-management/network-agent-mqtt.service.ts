@@ -11,6 +11,10 @@ import { DataSource } from 'typeorm';
 import * as mqtt from 'mqtt';
 import type { IClientOptions, MqttClient } from 'mqtt';
 import { KtDateTime } from '@/common';
+import {
+  SYSTEM_MESSAGE_EVENT_STAGER,
+  type SystemMessageEventStager,
+} from '@/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import { NetworkAgentState } from './network-agent-state.entity';
 import { NetworkEndpointHistory } from './network-endpoint-history.entity';
 import { NetworkDdnsService } from './network-ddns.service';
@@ -60,6 +64,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
    * @param configService - Runtime broker, Agent, and client identity settings.
    * @param dataSource - Transaction boundary for publish acknowledgements and inbound state.
    * @param eventStream - SSE fan-out notified only after accepted inbound commits.
+   * @param eventStager - Core-owned Outbox port that shares endpoint-history transactions.
    * @param clientFactory - Optional deterministic MQTT client factory used by tests.
    * @param ddnsService - Optional automatic-DDNS reconciler notified after address semantics commit.
    */
@@ -67,6 +72,8 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
     private readonly eventStream: NetworkManagementEventStreamService,
+    @Inject(SYSTEM_MESSAGE_EVENT_STAGER)
+    private readonly eventStager: SystemMessageEventStager,
     @Optional()
     @Inject(NETWORK_MQTT_CLIENT_FACTORY)
     private readonly clientFactory?: NetworkMqttClientFactory,
@@ -654,6 +661,10 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       if (await repository.findOne({ where: { eventId: event.eventId } })) {
         return false;
       }
+      const previousHistory = await repository.findOne({
+        order: { id: 'DESC', occurredAt: 'DESC' },
+        where: { mappingId: event.mappingId },
+      });
       const history = repository.create({
         eventId: event.eventId,
         eventType: event.type,
@@ -667,12 +678,62 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       });
       try {
         await repository.save(history);
+        if (this.shouldStagePortChange(event, previousHistory)) {
+          await this.eventStager.stage(manager, {
+            eventId: event.eventId,
+            occurredAt: event.occurredAt,
+            payload: {
+              changedAt: event.occurredAt,
+              currentPort: event.endpoint.publicPort,
+              portForwardId: event.mappingId,
+              previousPort: previousHistory.publicPort,
+              publicIpv4: event.endpoint.publicIpv4,
+            },
+            resourceKey: event.mappingId,
+            sourceKey: 'network.stun.mapping-port-changed',
+          });
+        }
         return true;
       } catch (error) {
         if (!this.isDuplicateKeyError(error)) throw error;
         return false;
       }
     });
+  }
+
+  /**
+   * Determines whether adjacent endpoint-history rows prove a direct valid port transition.
+   * @param event - Current validated Agent endpoint event.
+   * @param previousHistory - Newest history row for the same mapping before this event.
+   * @returns Whether exactly one Outbox fact must be staged in the current transaction.
+   */
+  private shouldStagePortChange(
+    event: NetworkEndpointEvent,
+    previousHistory: NetworkEndpointHistory | null,
+  ): boolean {
+    const previousPort = previousHistory?.publicPort;
+    const currentPort = event.endpoint.publicPort;
+    return (
+      event.type === 'changed' &&
+      previousHistory?.eventType !== 'withdrawn' &&
+      this.isValidPort(previousPort) &&
+      this.isValidPort(currentPort) &&
+      previousPort !== currentPort
+    );
+  }
+
+  /**
+   * Checks whether a candidate is a concrete transport port suitable for a message payload.
+   * @param value - Persisted or incoming endpoint port.
+   * @returns Whether the value is an integer in the legal TCP/UDP port range.
+   */
+  private isValidPort(value: unknown): value is number {
+    return (
+      typeof value === 'number' &&
+      Number.isInteger(value) &&
+      value >= 1 &&
+      value <= 65_535
+    );
   }
 
   /**

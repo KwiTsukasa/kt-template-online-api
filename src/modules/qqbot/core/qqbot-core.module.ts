@@ -48,11 +48,13 @@ import { QqbotMessagePublishTarget } from '@/modules/qqbot/core/infrastructure/p
 import { QqbotMessageSubscription } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-subscription.entity';
 import { QqbotMessageTemplate } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-template.entity';
 import { SystemMessageSourceRegistry } from './application/message-push/system-message-source.registry';
+import { SystemMessageEventStagerService } from './application/message-push/system-message-event-stager.service';
 import { SystemMessageTemplateRendererService } from './application/message-push/system-message-template-renderer.service';
 import { QqbotMessageSubscriptionService } from './application/message-push/qqbot-message-subscription.service';
 import { QqbotMessageTemplateService } from './application/message-push/qqbot-message-template.service';
 import { QqbotAccountMessagePushService } from './application/message-push/qqbot-account-message-push.service';
 import { QqbotMessageTargetOptionsService } from './application/message-push/qqbot-message-target-options.service';
+import { SYSTEM_MESSAGE_EVENT_STAGER } from './contract/message-push/qqbot-message-push.types';
 
 export { QQBOT_CORE_DOMAIN_CONTRACT } from './contract/qqbot-core.contract';
 
@@ -89,6 +91,11 @@ export const QQBOT_CORE_CONTROLLERS = [
 
 export const QQBOT_CORE_PROVIDERS = [
   SystemMessageSourceRegistry,
+  SystemMessageEventStagerService,
+  {
+    provide: SYSTEM_MESSAGE_EVENT_STAGER,
+    useExisting: SystemMessageEventStagerService,
+  },
   SystemMessageTemplateRendererService,
   QqbotMessageSubscriptionService,
   QqbotMessageTemplateService,
@@ -114,6 +121,7 @@ export const QQBOT_CORE_PROVIDERS = [
 ];
 
 export const QQBOT_CORE_EXPORTS = [
+  SYSTEM_MESSAGE_EVENT_STAGER,
   SystemMessageSourceRegistry,
   SystemMessageTemplateRendererService,
   QqbotMessageSubscriptionService,

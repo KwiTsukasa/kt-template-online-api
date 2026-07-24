@@ -15,6 +15,7 @@ import { QqbotPermissionController } from '../../../../src/modules/qqbot/core/co
 import { QqbotRuleController } from '../../../../src/modules/qqbot/core/contract/rule/qqbot-rule.controller';
 import { QqbotSendController } from '../../../../src/modules/qqbot/core/contract/send/qqbot-send.controller';
 import { SystemMessageEventStagerService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-event-stager.service';
+import { SystemMessageFanoutService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-fanout.service';
 import { SYSTEM_MESSAGE_EVENT_STAGER } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import {
   QQBOT_CORE_CONTROLLERS,
@@ -171,6 +172,7 @@ describe('QQBot core module contract', () => {
     expect(QQBOT_CORE_PROVIDERS).toEqual(
       expect.arrayContaining([
         SystemMessageEventStagerService,
+        SystemMessageFanoutService,
         {
           provide: SYSTEM_MESSAGE_EVENT_STAGER,
           useExisting: SystemMessageEventStagerService,

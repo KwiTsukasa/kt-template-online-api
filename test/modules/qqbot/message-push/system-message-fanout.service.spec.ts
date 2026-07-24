@@ -1,0 +1,960 @@
+import { KtDateTime } from '../../../../src/common';
+import {
+  SystemMessageContractError,
+  type SystemMessageSourceAdapter,
+} from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
+import { SystemMessageFanoutService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-fanout.service';
+import { SystemMessageSourceRegistry } from '../../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
+import { SystemMessageTemplateRendererService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-template-renderer.service';
+import { QqbotAccount } from '../../../../src/modules/qqbot/core/infrastructure/persistence/account/qqbot-account.entity';
+import { QqbotMessageDelivery } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-delivery.entity';
+import { QqbotMessageEvent } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-event.entity';
+import { QqbotMessagePublishBinding } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
+import { QqbotMessagePublishTarget } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-target.entity';
+import { QqbotMessageSubscription } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-subscription.entity';
+import { QqbotMessageTemplate } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-template.entity';
+import {
+  SYSTEM_MESSAGE_BATCH_SIZE,
+  SYSTEM_MESSAGE_DDNS_RECHECK_MS,
+  SYSTEM_MESSAGE_LEASE_MS,
+  SYSTEM_MESSAGE_RETRY_BASE_MS,
+  SYSTEM_MESSAGE_RETRY_WINDOW_MS,
+} from '../../../../src/modules/qqbot/core/application/message-push/system-message-runner.constants';
+
+const NOW = new Date('2026-07-24T00:00:00.000Z');
+const SOURCE_KEY = 'network.stun.mapping-port-changed';
+const RESOURCE_KEY = '9007199254740993';
+
+type Store = {
+  accounts: QqbotAccount[];
+  bindings: QqbotMessagePublishBinding[];
+  deliveries: QqbotMessageDelivery[];
+  events: QqbotMessageEvent[];
+  subscriptions: QqbotMessageSubscription[];
+  targets: QqbotMessagePublishTarget[];
+  templates: QqbotMessageTemplate[];
+};
+
+/** Builds a consistent current event whose payload preserves string Snowflake identity. */
+function event(overrides: Partial<QqbotMessageEvent> = {}): QqbotMessageEvent {
+  return Object.assign(new QqbotMessageEvent(), {
+    fanoutAttemptCount: 0,
+    fanoutLeaseUntil: null,
+    fanoutStatus: 'accepted',
+    id: '200',
+    lastErrorCode: null,
+    lastErrorMessage: null,
+    nextFanoutAt: new KtDateTime(NOW),
+    occurredAt: new KtDateTime(NOW),
+    payload: { endpoint: 'pal.example.com:38213', portForwardId: RESOURCE_KEY },
+    resourceKey: RESOURCE_KEY,
+    sourceKey: SOURCE_KEY,
+    ...overrides,
+  });
+}
+
+/** Builds an active strict JSON-matched subscription. */
+function subscription(
+  overrides: Partial<QqbotMessageSubscription> = {},
+): QqbotMessageSubscription {
+  return Object.assign(new QqbotMessageSubscription(), {
+    enabled: true,
+    id: '300',
+    isDeleted: false,
+    sourceConfig: { portForwardId: RESOURCE_KEY },
+    sourceKey: SOURCE_KEY,
+    ...overrides,
+  });
+}
+
+/** Builds an enabled account without relying on its runtime online state. */
+function account(overrides: Partial<QqbotAccount> = {}): QqbotAccount {
+  return Object.assign(new QqbotAccount(), {
+    enabled: true,
+    id: '400',
+    isDeleted: false,
+    selfId: 'bot-a',
+    ...overrides,
+  });
+}
+
+/** Builds an active account-scoped publishing binding. */
+function binding(
+  overrides: Partial<QqbotMessagePublishBinding> = {},
+): QqbotMessagePublishBinding {
+  return Object.assign(new QqbotMessagePublishBinding(), {
+    accountId: '400',
+    enabled: true,
+    id: '500',
+    isDeleted: false,
+    selfId: 'bot-a',
+    subscriptionId: '300',
+    templateId: '600',
+    ...overrides,
+  });
+}
+
+/** Builds an active source-compatible literal template. */
+function template(
+  overrides: Partial<QqbotMessageTemplate> = {},
+): QqbotMessageTemplate {
+  return Object.assign(new QqbotMessageTemplate(), {
+    content: 'endpoint=${{endpoint}}',
+    enabled: true,
+    id: '600',
+    isDeleted: false,
+    sourceKey: SOURCE_KEY,
+    ...overrides,
+  });
+}
+
+/** Builds one active group/private target under a binding. */
+function target(
+  overrides: Partial<QqbotMessagePublishTarget> = {},
+): QqbotMessagePublishTarget {
+  return Object.assign(new QqbotMessagePublishTarget(), {
+    bindingId: '500',
+    enabled: true,
+    id: '700',
+    isDeleted: false,
+    targetId: 'group-1',
+    targetType: 'group',
+    ...overrides,
+  });
+}
+
+/** Builds a controllable source adapter while retaining a real source registry boundary. */
+function sourceAdapter(): jest.Mocked<SystemMessageSourceAdapter> {
+  return {
+    definition: {
+      description: 'test',
+      displayName: 'test',
+      sourceKey: SOURCE_KEY,
+      subscriptionFields: [],
+      variables: [],
+      version: 1,
+    },
+    inspectSubscription: jest.fn(),
+    listSubscriptionOptions: jest.fn(),
+    normalizeSubscriptionConfig: jest.fn(),
+    resolveDelivery: jest.fn(async (_input) => {
+      void _input;
+      return {
+        reasonCode: null,
+        status: 'ready' as const,
+        variables: { endpoint: 'pal.example.com:38213' },
+      };
+    }),
+    validateEventPayload: jest.fn(
+      (payload) => payload as Record<string, boolean | null | number | string>,
+    ),
+  };
+}
+
+/** Clones transaction-visible rows while preserving Date objects and entity prototypes. */
+function cloneStore(value: Store): Store {
+  const clone = <T>(items: T[]) =>
+    items.map((item) =>
+      Object.assign(
+        Object.create(Object.getPrototypeOf(item)),
+        structuredClone(item),
+      ),
+    );
+  return {
+    accounts: clone(value.accounts),
+    bindings: clone(value.bindings),
+    deliveries: clone(value.deliveries),
+    events: clone(value.events),
+    subscriptions: clone(value.subscriptions),
+    targets: clone(value.targets),
+    templates: clone(value.templates),
+  };
+}
+
+/** Matches the intentionally small TypeORM `where` subset used by the fan-out service. */
+function matches(
+  row: Record<string, unknown>,
+  where: Record<string, unknown> = {},
+): boolean {
+  return Object.entries(where).every(([key, value]) => {
+    const actual = row[key];
+    if (
+      actual &&
+      value &&
+      typeof actual === 'object' &&
+      typeof value === 'object' &&
+      'getTime' in actual &&
+      'getTime' in value &&
+      typeof actual.getTime === 'function' &&
+      typeof value.getTime === 'function'
+    )
+      return actual.getTime() === value.getTime();
+    return actual === value;
+  });
+}
+
+/** Creates a transaction-faithful in-memory persistence harness rather than fan-out logic. */
+function setup(seed: Partial<Store> = {}) {
+  let state: Store = {
+    accounts: seed.accounts ?? [account()],
+    bindings: seed.bindings ?? [binding()],
+    deliveries: seed.deliveries ?? [],
+    events: seed.events ?? [event()],
+    subscriptions: seed.subscriptions ?? [subscription()],
+    targets: seed.targets ?? [target()],
+    templates: seed.templates ?? [template()],
+  };
+  const adapter = sourceAdapter();
+  const registry = new SystemMessageSourceRegistry();
+  registry.register(adapter);
+  const query = {
+    brackets: false,
+    lock: '',
+    onLocked: '',
+    order: [] as string[],
+    take: 0,
+  };
+  const transactions: string[] = [];
+  const locked = new Set<string>();
+  let deliverySequence = 1000;
+  let duplicateRace: 'exact' | 'wrong' | null = null;
+  let failSubscription: null | string = null;
+
+  /** Returns a repository facade bound to exactly one authoritative or transaction-local store. */
+  const repository = (entity: unknown, store: Store) => {
+    const rows = (entity === QqbotMessageEvent
+      ? store.events
+      : entity === QqbotMessageSubscription
+        ? store.subscriptions
+        : entity === QqbotMessagePublishBinding
+          ? store.bindings
+          : entity === QqbotAccount
+            ? store.accounts
+            : entity === QqbotMessageTemplate
+              ? store.templates
+              : entity === QqbotMessagePublishTarget
+                ? store.targets
+                : store.deliveries) as unknown as Array<
+      Record<string, unknown>
+    >;
+    return {
+      create: (input: object) =>
+        Object.assign(new (entity as new () => object)(), input),
+      createQueryBuilder: () => {
+        const builder = {
+          addOrderBy: (field: string) => {
+            query.order.push(field);
+            return builder;
+          },
+          getOne: async () =>
+            rows
+              .filter((row) => {
+                const item = row as unknown as QqbotMessageEvent;
+                return (
+                  ((item.fanoutStatus === 'accepted' ||
+                    item.fanoutStatus === 'retry') &&
+                    !!item.nextFanoutAt &&
+                    item.nextFanoutAt.getTime() <= NOW.getTime()) ||
+                  (item.fanoutStatus === 'processing' &&
+                    !!item.fanoutLeaseUntil &&
+                    item.fanoutLeaseUntil.getTime() <= NOW.getTime())
+                );
+              })
+              .filter(
+                (row) => !locked.has((row as unknown as QqbotMessageEvent).id),
+              )
+              .sort((left, right) => {
+                const a = left as unknown as QqbotMessageEvent;
+                const b = right as unknown as QqbotMessageEvent;
+                return (
+                  a.occurredAt.getTime() - b.occurredAt.getTime() ||
+                  (BigInt(a.id) < BigInt(b.id)
+                    ? -1
+                    : BigInt(a.id) > BigInt(b.id)
+                      ? 1
+                      : 0)
+                );
+              })[0] ?? null,
+          orderBy: (field: string) => {
+            query.order.push(field);
+            return builder;
+          },
+          setLock: (value: string) => {
+            query.lock = value;
+            return builder;
+          },
+          setOnLocked: (value: string) => {
+            query.onLocked = value;
+            return builder;
+          },
+          take: (value: number) => {
+            query.take = value;
+            return builder;
+          },
+          where: (value: unknown) => {
+            query.brackets = value.constructor.name === 'Brackets';
+            return builder;
+          },
+        };
+        return builder;
+      },
+      find: async ({
+        order,
+        where,
+      }: { order?: { id?: 'ASC' }; where?: Record<string, unknown> } = {}) => {
+        const result = rows.filter((row) => matches(row, where));
+        return order?.id
+          ? result.sort((left, right) =>
+              `${(left as { id: string }).id}`.localeCompare(
+                `${(right as { id: string }).id}`,
+              ),
+            )
+          : result;
+      },
+      findOne: async ({ where }: { where: Record<string, unknown> }) =>
+        rows.find((row) => matches(row, where)) ?? null,
+      save: async (item: Record<string, unknown>) => {
+        if (
+          entity === QqbotMessageDelivery &&
+          failSubscription === item.bindingId
+        )
+          throw new Error('repository offline');
+        if (entity === QqbotMessageDelivery) {
+          const pair = rows.find((row) =>
+            matches(row, {
+              messageEventId: item.messageEventId,
+              publishTargetId: item.publishTargetId,
+            }),
+          );
+          if (!item.id && duplicateRace) {
+            if (duplicateRace === 'exact')
+              rows.push(
+                Object.assign(new QqbotMessageDelivery(), item, {
+                  id: 'race',
+                }) as unknown as Record<string, unknown>,
+              );
+            duplicateRace = null;
+            throw { errno: 1062 };
+          }
+          if (pair && pair !== item) throw { errno: 1062 };
+          if (!item.id) item.id = `${deliverySequence++}`;
+        }
+        const index = rows.findIndex(
+          (row) => (row as { id?: string }).id === item.id,
+        );
+        if (index >= 0) Object.assign(rows[index] as object, item);
+        else rows.push(item as never);
+        return item;
+      },
+      update: async (
+        where: Record<string, unknown>,
+        values: Record<string, unknown>,
+      ) => {
+        const row = rows.find((candidate) => matches(candidate, where));
+        if (!row) return { affected: 0 };
+        Object.assign(row as object, values);
+        return { affected: 1 };
+      },
+    };
+  };
+  const dataSource = {
+    getRepository: (entity: unknown) => repository(entity, state),
+    transaction: async (
+      callback: (manager: {
+        getRepository: (entity: unknown) => ReturnType<typeof repository>;
+      }) => Promise<unknown>,
+    ) => {
+      const draft = cloneStore(state);
+      transactions.push('begin');
+      try {
+        const result = await callback({
+          getRepository: (entity) => repository(entity, draft),
+        });
+        state = draft;
+        transactions.push('commit');
+        return result;
+      } catch (error) {
+        transactions.push('rollback');
+        throw error;
+      }
+    },
+  };
+  const service = new SystemMessageFanoutService(
+    dataSource as never,
+    registry,
+    new SystemMessageTemplateRendererService(),
+  );
+  return {
+    adapter,
+    events: () => state.events,
+    deliveries: () => state.deliveries,
+    failSubscription: (id: null | string) => {
+      failSubscription = id;
+    },
+    lock: (id: string) => locked.add(id),
+    query,
+    setDuplicateRace: (value: 'exact' | 'wrong' | null) => {
+      duplicateRace = value;
+    },
+    service,
+    transactions,
+  };
+}
+
+describe('SystemMessageFanoutService', () => {
+  it('creates exact multi-account target cardinality and freezes strict snapshots', async () => {
+    const fixture = setup({
+      accounts: [account(), account({ id: '401', selfId: 'bot-b' })],
+      bindings: [
+        binding(),
+        binding({ accountId: '401', id: '501', selfId: 'bot-b' }),
+      ],
+      targets: [
+        target(),
+        target({ id: '701', targetId: 'private-1', targetType: 'private' }),
+        target({ bindingId: '501', id: '702', targetId: 'group-2' }),
+      ],
+    });
+
+    await expect(fixture.service.runOnce(NOW)).resolves.toBe(1);
+    expect(fixture.deliveries()).toHaveLength(3);
+    expect(
+      new Set(fixture.deliveries().map((item) => item.publishTargetId)).size,
+    ).toBe(3);
+    expect(fixture.deliveries()[0]).toMatchObject({
+      attemptCount: 0,
+      bindingId: '500',
+      renderedMessage: 'endpoint=pal.example.com:38213',
+      selfId: 'bot-a',
+      status: 'pending',
+      subscriptionId: '300',
+      templateContent: 'endpoint=${{endpoint}}',
+      templateId: '600',
+      variableSnapshot: { endpoint: 'pal.example.com:38213' },
+    });
+    expect(fixture.deliveries()[0].expiresAt.getTime()).toBe(
+      NOW.getTime() + SYSTEM_MESSAGE_RETRY_WINDOW_MS,
+    );
+  });
+
+  it('schedules ready and waiting-DDNS snapshots without sending OneBot', async () => {
+    const fixture = setup();
+    fixture.adapter.resolveDelivery.mockResolvedValueOnce({
+      reasonCode: 'ddns_not_synced',
+      status: 'waiting_ddns',
+      variables: { endpoint: 'wait.example:1' },
+    });
+
+    await fixture.service.runOnce(NOW);
+    expect(fixture.deliveries()[0]).toMatchObject({
+      renderedMessage: 'endpoint=wait.example:1',
+      status: 'waiting_ddns',
+    });
+    expect(fixture.deliveries()[0].nextAttemptAt.getTime()).toBe(
+      NOW.getTime() + SYSTEM_MESSAGE_DDNS_RECHECK_MS,
+    );
+    expect(fixture.events()[0].fanoutStatus).toBe('completed');
+  });
+
+  it('requires an active own string JSON resource match before resolving a subscription', async () => {
+    const inherited = Object.create({ portForwardId: RESOURCE_KEY }) as Record<
+      string,
+      unknown
+    >;
+    const fixture = setup({
+      subscriptions: [
+        subscription(),
+        subscription({
+          id: '301',
+          sourceConfig: { portForwardId: Number(RESOURCE_KEY) },
+        }),
+        subscription({ id: '302', sourceConfig: inherited }),
+        subscription({ enabled: false, id: '303' }),
+        subscription({ id: '304', isDeleted: true }),
+      ],
+    });
+
+    await fixture.service.runOnce(NOW);
+    expect(fixture.adapter.resolveDelivery).toHaveBeenCalledTimes(1);
+  });
+
+  it('isolates disabled/deleted or mismatched account, binding, template and target rows', async () => {
+    const fixture = setup({
+      accounts: [
+        account(),
+        account({ enabled: false, id: '401', selfId: 'bad' }),
+      ],
+      bindings: [
+        binding(),
+        binding({ accountId: '401', id: '501', selfId: 'bad' }),
+        binding({ enabled: false, id: '502' }),
+        binding({ id: '503', selfId: 'wrong' }),
+      ],
+      targets: [
+        target(),
+        target({ bindingId: '501', id: '701' }),
+        target({ bindingId: '500', enabled: false, id: '702' }),
+        target({ bindingId: '500', id: '703', isDeleted: true }),
+      ],
+    });
+
+    await fixture.service.runOnce(NOW);
+    expect(fixture.deliveries().map((item) => item.publishTargetId)).toEqual([
+      '700',
+    ]);
+  });
+
+  it.each(['cancelled', 'superseded'] as const)(
+    'completes %s readiness without current delivery or render',
+    async (status) => {
+      const fixture = setup();
+      fixture.adapter.resolveDelivery.mockResolvedValueOnce({
+        reasonCode: status,
+        status,
+      });
+
+      await fixture.service.runOnce(NOW);
+      expect(fixture.deliveries()).toHaveLength(0);
+      expect(fixture.events()[0].fanoutStatus).toBe('completed');
+    },
+  );
+
+  it('supersedes only strictly earlier unfinished deliveries for the same subscription', async () => {
+    const older = event({
+      id: '100',
+      occurredAt: new KtDateTime(NOW.getTime() - 1),
+    });
+    const newer = event({
+      id: '201',
+      occurredAt: new KtDateTime(NOW.getTime() + 1),
+      nextFanoutAt: new KtDateTime(NOW.getTime() + 1),
+    });
+    const makeDelivery = (
+      id: string,
+      messageEventId: string,
+      status: QqbotMessageDelivery['status'],
+    ) =>
+      Object.assign(new QqbotMessageDelivery(), {
+        id,
+        messageEventId,
+        publishTargetId: id,
+        status,
+        subscriptionId: '300',
+      });
+    const fixture = setup({
+      events: [older, event(), newer],
+      deliveries: [
+        makeDelivery('1', '100', 'pending'),
+        makeDelivery('2', '100', 'retry'),
+        makeDelivery('3', '100', 'processing'),
+        makeDelivery('4', '200', 'pending'),
+        makeDelivery('5', '201', 'pending'),
+      ],
+    });
+
+    await fixture.service.runOnce(NOW);
+    expect(
+      fixture
+        .deliveries()
+        .filter((item) => item.messageEventId === '100')
+        .map((item) => item.status),
+    ).toEqual(['superseded', 'superseded', 'processing', 'superseded']);
+    expect(
+      fixture.deliveries().find((item) => item.messageEventId === '201')
+        ?.status,
+    ).toBe('pending');
+    expect(
+      fixture.deliveries().find((item) => item.messageEventId === '200')
+        ?.status,
+    ).toBe('pending');
+  });
+
+  it('accepts exact event-target replay and verifies only an exact duplicate-key race', async () => {
+    const existing = Object.assign(new QqbotMessageDelivery(), {
+      id: 'old',
+      messageEventId: '200',
+      publishTargetId: '700',
+      status: 'pending',
+    });
+    const replay = setup({ deliveries: [existing] });
+    await replay.service.runOnce(NOW);
+    expect(replay.deliveries()).toHaveLength(1);
+
+    const race = setup();
+    race.setDuplicateRace('exact');
+    await race.service.runOnce(NOW);
+    expect(race.deliveries()).toHaveLength(1);
+
+    const wrong = setup();
+    wrong.setDuplicateRace('wrong');
+    await wrong.service.runOnce(NOW);
+    expect(wrong.events()[0]).toMatchObject({
+      fanoutStatus: 'retry',
+      lastErrorCode: 'fanout_transient_error',
+    });
+  });
+
+  it('records bounded SQL claim contract including top-level Brackets, locking, ordering and limit', async () => {
+    const fixture = setup({ events: [] });
+    await fixture.service.runOnce(NOW);
+    expect(fixture.query).toMatchObject({
+      brackets: true,
+      lock: 'pessimistic_write',
+      onLocked: 'skip_locked',
+      take: 1,
+    });
+    expect(fixture.query.order).toEqual(['event.occurredAt', 'event.id']);
+  });
+
+  it('skips a locked oldest due event and reclaims expired processing with an exact new lease', async () => {
+    const oldest = event({
+      id: '100',
+      occurredAt: new KtDateTime(NOW.getTime() - 2),
+    });
+    const expired = event({
+      fanoutAttemptCount: 4,
+      fanoutLeaseUntil: new KtDateTime(NOW.getTime() - 1),
+      fanoutStatus: 'processing',
+      id: '101',
+      nextFanoutAt: null,
+      occurredAt: new KtDateTime(NOW.getTime() - 1),
+    });
+    const fixture = setup({ events: [oldest, expired] });
+    fixture.lock('100');
+
+    await fixture.service.runOnce(NOW);
+    expect(fixture.events().find((item) => item.id === '101')).toMatchObject({
+      fanoutAttemptCount: 5,
+      fanoutStatus: 'completed',
+    });
+    expect(fixture.events().find((item) => item.id === '100')).toMatchObject({
+      fanoutStatus: 'accepted',
+    });
+  });
+
+  it('uses a lease-and-attempt ownership fence so stale completion cannot clobber a new owner', async () => {
+    const fixture = setup({ events: [] });
+    const staleEvent = event({
+      fanoutAttemptCount: 1,
+      fanoutLeaseUntil: new KtDateTime(NOW.getTime() + SYSTEM_MESSAGE_LEASE_MS),
+      fanoutStatus: 'processing',
+    });
+    const current = event({
+      fanoutAttemptCount: 2,
+      fanoutLeaseUntil: new KtDateTime(
+        NOW.getTime() + SYSTEM_MESSAGE_LEASE_MS + 1,
+      ),
+      fanoutStatus: 'processing',
+    });
+    const finish = (
+      fixture.service as unknown as {
+        finish: (
+          token: object,
+          status: 'completed',
+          code: null,
+          message: null,
+        ) => Promise<void>;
+      }
+    ).finish;
+    (fixture as unknown as { events: () => QqbotMessageEvent[] })
+      .events()
+      .push(current);
+
+    await finish.call(
+      fixture.service,
+      {
+        attempt: 1,
+        event: staleEvent,
+        leaseUntil: staleEvent.fanoutLeaseUntil,
+      },
+      'completed',
+      null,
+      null,
+    );
+    expect(fixture.events()[0].fanoutStatus).toBe('processing');
+  });
+
+  it('rolls back one failing subscription, retains valid work, then retries and recovers idempotently', async () => {
+    const fixture = setup({
+      subscriptions: [subscription(), subscription({ id: '301' })],
+      bindings: [binding(), binding({ id: '501', subscriptionId: '301' })],
+      targets: [target(), target({ bindingId: '501', id: '701' })],
+    });
+    fixture.failSubscription('501');
+    await fixture.service.runOnce(NOW);
+    expect(fixture.deliveries().map((item) => item.publishTargetId)).toEqual([
+      '700',
+    ]);
+    expect(fixture.events()[0]).toMatchObject({
+      fanoutStatus: 'retry',
+      nextFanoutAt: new KtDateTime(
+        NOW.getTime() + SYSTEM_MESSAGE_RETRY_BASE_MS,
+      ),
+    });
+    fixture.failSubscription(null);
+    fixture.events()[0].nextFanoutAt = new KtDateTime(NOW);
+    await fixture.service.runOnce(NOW);
+    expect(
+      new Set(fixture.deliveries().map((item) => item.publishTargetId)),
+    ).toEqual(new Set(['700', '701']));
+    expect(fixture.events()[0].fanoutStatus).toBe('completed');
+    expect(fixture.transactions).toContain('rollback');
+  });
+
+  it('fails at the occurrence deadline and permanently rejects malformed source facts', async () => {
+    const deadline = setup({
+      events: [
+        event({
+          occurredAt: new KtDateTime(
+            NOW.getTime() - SYSTEM_MESSAGE_RETRY_WINDOW_MS,
+          ),
+        }),
+      ],
+    });
+    await deadline.service.runOnce(NOW);
+    expect(deadline.events()[0]).toMatchObject({
+      fanoutStatus: 'failed',
+      lastErrorCode: 'fanout_expired',
+    });
+    expect(deadline.deliveries()).toHaveLength(0);
+
+    const malformed = setup({
+      events: [event({ payload: { portForwardId: 'other' } })],
+    });
+    await malformed.service.runOnce(NOW);
+    expect(malformed.events()[0]).toMatchObject({
+      fanoutStatus: 'failed',
+      lastErrorCode: 'event_resource_mismatch',
+    });
+  });
+
+  it('bounds a pass to fifty oldest claims and leaves not-due rows untouched', async () => {
+    const events = Array.from(
+      { length: SYSTEM_MESSAGE_BATCH_SIZE + 1 },
+      (_, index) =>
+        event({
+          id: `${1000 + index}`,
+          occurredAt: new KtDateTime(
+            NOW.getTime() - SYSTEM_MESSAGE_BATCH_SIZE + index,
+          ),
+        }),
+    );
+    const fixture = setup({ events });
+    await expect(fixture.service.runOnce(NOW)).resolves.toBe(
+      SYSTEM_MESSAGE_BATCH_SIZE,
+    );
+    expect(
+      fixture.events().filter((item) => item.fanoutStatus === 'completed'),
+    ).toHaveLength(SYSTEM_MESSAGE_BATCH_SIZE);
+    expect(fixture.events().at(-1)?.fanoutStatus).toBe('accepted');
+  });
+
+  it('marks source contract errors as permanent failures rather than transient adapter retries', async () => {
+    const fixture = setup();
+    fixture.adapter.validateEventPayload.mockImplementation(() => {
+      throw new SystemMessageContractError('payload_invalid');
+    });
+    await fixture.service.runOnce(NOW);
+    expect(fixture.events()[0]).toMatchObject({
+      fanoutStatus: 'failed',
+      lastErrorCode: 'payload_invalid',
+    });
+  });
+
+  it('completes a matched event with no legal targets without resolving a default account', async () => {
+    const fixture = setup({ targets: [] });
+    await fixture.service.runOnce(NOW);
+    expect(fixture.deliveries()).toHaveLength(0);
+    expect(fixture.events()[0].fanoutStatus).toBe('completed');
+  });
+
+  it('does not resolve when no subscription matches the frozen source/resource', async () => {
+    const fixture = setup({
+      subscriptions: [
+        subscription({ sourceConfig: { portForwardId: 'other' } }),
+      ],
+    });
+    await fixture.service.runOnce(NOW);
+    expect(fixture.adapter.resolveDelivery).not.toHaveBeenCalled();
+    expect(fixture.events()[0].fanoutStatus).toBe('completed');
+  });
+
+  it('leaves future retries and live processing leases unclaimed', async () => {
+    const fixture = setup({
+      events: [
+        event({
+          fanoutStatus: 'retry',
+          nextFanoutAt: new KtDateTime(NOW.getTime() + 1),
+        }),
+        event({
+          fanoutLeaseUntil: new KtDateTime(NOW.getTime() + 1),
+          fanoutStatus: 'processing',
+          id: '201',
+          nextFanoutAt: null,
+        }),
+      ],
+    });
+    await expect(fixture.service.runOnce(NOW)).resolves.toBe(0);
+    expect(fixture.events().map((item) => item.fanoutStatus)).toEqual([
+      'retry',
+      'processing',
+    ]);
+  });
+
+  it('keeps a runtime-offline but enabled strict account eligible at fan-out', async () => {
+    const fixture = setup({
+      accounts: [
+        account({ connectStatus: 'offline', oneBotStatus: 'offline' }),
+      ],
+    });
+    await fixture.service.runOnce(NOW);
+    expect(fixture.deliveries()).toHaveLength(1);
+  });
+
+  it('isolates an invalid template render while allowing another legal binding', async () => {
+    const fixture = setup({
+      bindings: [binding(), binding({ id: '501', templateId: '601' })],
+      templates: [
+        template({ content: '${{unknown}}' }),
+        template({ id: '601' }),
+      ],
+      targets: [target(), target({ bindingId: '501', id: '701' })],
+    });
+    await fixture.service.runOnce(NOW);
+    expect(fixture.deliveries().map((item) => item.publishTargetId)).toEqual([
+      '701',
+    ]);
+  });
+
+  it('does not supersede current-event rows during an idempotent replay', async () => {
+    const fixture = setup({
+      deliveries: [
+        Object.assign(new QqbotMessageDelivery(), {
+          id: 'old',
+          messageEventId: '200',
+          publishTargetId: '700',
+          status: 'retry',
+          subscriptionId: '300',
+        }),
+      ],
+    });
+    await fixture.service.runOnce(NOW);
+    expect(fixture.deliveries()[0].status).toBe('retry');
+  });
+
+  it('uses numeric BIGINT ordering when occurrence times are equal', async () => {
+    const older = event({ id: '9', occurredAt: new KtDateTime(NOW) });
+    const current = event({ id: '10', occurredAt: new KtDateTime(NOW) });
+    const fixture = setup({
+      events: [current, older],
+      deliveries: [
+        Object.assign(new QqbotMessageDelivery(), {
+          id: 'old',
+          messageEventId: '9',
+          publishTargetId: 'old-target',
+          status: 'pending',
+          subscriptionId: '300',
+        }),
+      ],
+    });
+    await fixture.service.runOnce(NOW);
+    expect(fixture.deliveries()[0].status).toBe('superseded');
+  });
+
+  it('marks a transient event failure retryable with the one-based ten-second delay', async () => {
+    const fixture = setup();
+    fixture.adapter.resolveDelivery.mockRejectedValueOnce(
+      new Error('adapter unavailable'),
+    );
+    await fixture.service.runOnce(NOW);
+    expect(fixture.events()[0]).toMatchObject({
+      fanoutStatus: 'retry',
+      lastErrorCode: 'fanout_transient_error',
+    });
+    expect(fixture.events()[0].nextFanoutAt.getTime()).toBe(
+      NOW.getTime() + SYSTEM_MESSAGE_RETRY_BASE_MS,
+    );
+  });
+
+  it('fails immediately when the next transient retry would fall outside the hard deadline', async () => {
+    const fixture = setup({
+      events: [
+        event({
+          occurredAt: new KtDateTime(
+            NOW.getTime() - SYSTEM_MESSAGE_RETRY_WINDOW_MS + 1,
+          ),
+        }),
+      ],
+    });
+    fixture.adapter.resolveDelivery.mockRejectedValueOnce(
+      new Error('adapter unavailable'),
+    );
+    await fixture.service.runOnce(NOW);
+    expect(fixture.events()[0]).toMatchObject({
+      fanoutStatus: 'failed',
+      lastErrorCode: 'fanout_expired',
+      nextFanoutAt: null,
+    });
+  });
+
+  it('fails an unknown source permanently without mutating subscriptions or deliveries', async () => {
+    const fixture = setup({ events: [event({ sourceKey: 'unknown.source' })] });
+    await fixture.service.runOnce(NOW);
+    expect(fixture.events()[0]).toMatchObject({
+      fanoutStatus: 'failed',
+      lastErrorCode: 'unknown_message_source',
+    });
+    expect(fixture.deliveries()).toHaveLength(0);
+  });
+
+  it('calls the adapter exactly once per matched subscription rather than once per target', async () => {
+    const fixture = setup({ targets: [target(), target({ id: '701' })] });
+    await fixture.service.runOnce(NOW);
+    expect(fixture.adapter.resolveDelivery).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps processing and terminal historical deliveries outside supersession', async () => {
+    const older = event({
+      id: '100',
+      occurredAt: new KtDateTime(NOW.getTime() - 1),
+    });
+    const statuses: QqbotMessageDelivery['status'][] = [
+      'processing',
+      'success',
+      'failed',
+      'superseded',
+      'cancelled',
+    ];
+    const fixture = setup({
+      events: [older, event()],
+      deliveries: statuses.map((status, index) =>
+        Object.assign(new QqbotMessageDelivery(), {
+          id: `${index}`,
+          messageEventId: '100',
+          publishTargetId: `${index}`,
+          status,
+          subscriptionId: '300',
+        }),
+      ),
+    });
+    await fixture.service.runOnce(NOW);
+    expect(
+      fixture
+        .deliveries()
+        .filter((item) => ['0', '1', '2', '3', '4'].includes(item.id))
+        .map((item) => item.status),
+    ).toEqual(statuses);
+  });
+
+  it('preserves snapshots after later in-memory configuration edits', async () => {
+    const fixture = setup();
+    await fixture.service.runOnce(NOW);
+    const frozen = fixture.deliveries()[0];
+    frozen.templateContent = 'endpoint=${{endpoint}}';
+    expect(frozen).toMatchObject({
+      renderedMessage: 'endpoint=pal.example.com:38213',
+      selfId: 'bot-a',
+      targetId: 'group-1',
+    });
+  });
+});

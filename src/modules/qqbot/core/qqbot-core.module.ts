@@ -49,6 +49,7 @@ import { QqbotMessageSubscription } from '@/modules/qqbot/core/infrastructure/pe
 import { QqbotMessageTemplate } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-template.entity';
 import { SystemMessageSourceRegistry } from './application/message-push/system-message-source.registry';
 import { SystemMessageEventStagerService } from './application/message-push/system-message-event-stager.service';
+import { SystemMessageFanoutService } from './application/message-push/system-message-fanout.service';
 import { SystemMessageTemplateRendererService } from './application/message-push/system-message-template-renderer.service';
 import { QqbotMessageSubscriptionService } from './application/message-push/qqbot-message-subscription.service';
 import { QqbotMessageTemplateService } from './application/message-push/qqbot-message-template.service';
@@ -92,6 +93,7 @@ export const QQBOT_CORE_CONTROLLERS = [
 export const QQBOT_CORE_PROVIDERS = [
   SystemMessageSourceRegistry,
   SystemMessageEventStagerService,
+  SystemMessageFanoutService,
   {
     provide: SYSTEM_MESSAGE_EVENT_STAGER,
     useExisting: SystemMessageEventStagerService,

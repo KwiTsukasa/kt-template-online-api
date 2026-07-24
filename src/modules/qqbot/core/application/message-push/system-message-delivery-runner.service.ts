@@ -35,6 +35,16 @@ type ClaimToken = {
   leaseUntil: KtDateTime;
 };
 
+type OwnerTransition = Pick<
+  QqbotMessageDelivery,
+  | 'lastErrorCode'
+  | 'lastErrorMessage'
+  | 'nextAttemptAt'
+  | 'processingLeaseUntil'
+  | 'sendLogId'
+  | 'status'
+>;
+
 type PreparedDelivery =
   | { kind: 'send'; delivery: QqbotMessageDelivery }
   | { kind: 'stale' }
@@ -395,17 +405,14 @@ export class SystemMessageDeliveryRunnerService {
     sendLogId: null | string,
     nextAttemptAt: KtDateTime | null = null,
   ): Promise<void> {
-    const result = await this.dataSource
-      .getRepository(QqbotMessageDelivery)
-      .update(this.ownerWhere(token), {
-        lastErrorCode: code,
-        lastErrorMessage: message,
-        nextAttemptAt,
-        processingLeaseUntil: null,
-        sendLogId: sendLogId ?? token.delivery.sendLogId,
-        status,
-      });
-    if (result.affected !== 1) return;
+    await this.persistOwnerTransition(token, {
+      lastErrorCode: code,
+      lastErrorMessage: message,
+      nextAttemptAt,
+      processingLeaseUntil: null,
+      sendLogId: sendLogId ?? token.delivery.sendLogId,
+      status,
+    });
   }
 
   /** Retries until the event-derived expiration boundary and otherwise writes a final failure. */
@@ -423,17 +430,39 @@ export class SystemMessageDeliveryRunnerService {
       await this.finish(token, 'failed', code, message, sendLogId);
       return;
     }
-    const result = await this.dataSource
-      .getRepository(QqbotMessageDelivery)
-      .update(this.ownerWhere(token), {
-        lastErrorCode: code,
-        lastErrorMessage: message,
-        nextAttemptAt: next,
-        processingLeaseUntil: null,
-        sendLogId: sendLogId ?? token.delivery.sendLogId,
-        status: 'retry',
-      });
-    if (result.affected !== 1) return;
+    await this.persistOwnerTransition(token, {
+      lastErrorCode: code,
+      lastErrorMessage: message,
+      nextAttemptAt: next,
+      processingLeaseUntil: null,
+      sendLogId: sendLogId ?? token.delivery.sendLogId,
+      status: 'retry',
+    });
+  }
+
+  /**
+   * Persists one authoritative owner transition with one identical bounded retry.
+   * Repeated failure leaves the processing lease for durable recovery instead of
+   * replacing the known business outcome with a generic classification.
+   * @param token - The exact attempt-and-lease owner fence.
+   * @param values - The complete authoritative transition payload to repeat.
+   * @returns A promise that settles after success, stale ownership, or retry exhaustion.
+   */
+  private async persistOwnerTransition(
+    token: ClaimToken,
+    values: OwnerTransition,
+  ): Promise<void> {
+    const deliveries = this.dataSource.getRepository(QqbotMessageDelivery);
+    const owner = this.ownerWhere(token);
+    try {
+      await deliveries.update(owner, values);
+    } catch {
+      try {
+        await deliveries.update(owner, values);
+      } catch {
+        // A later scan recovers the lease if neither ambiguous write committed.
+      }
+    }
   }
 
   /** Builds the exact attempt-and-lease owner fence used by every post-claim mutation. */

@@ -272,6 +272,10 @@ function setup(seed: Partial<Store> = {}) {
   const queries: QueryRecord[] = [];
   const senderDepths: number[] = [];
   const preparationClaimLocks: boolean[] = [];
+  const externalUpdates: Array<{
+    values: Record<string, unknown>;
+    where: Record<string, unknown>;
+  }> = [];
   const activeLocks = new Set<string>();
   let transactionDepth = 0;
   let externalUpdateFailures = 0;
@@ -481,6 +485,7 @@ function setup(seed: Partial<Store> = {}) {
         values: Record<string, unknown>,
       ) => {
         if (!context) {
+          externalUpdates.push({ values, where });
           beforeExternalUpdate?.(state, where);
           if (externalUpdateFailures > 0) {
             externalUpdateFailures -= 1;
@@ -565,6 +570,7 @@ function setup(seed: Partial<Store> = {}) {
     ) => {
       beforePreparationDeliveryRead = callback;
     },
+    externalUpdates,
     failExternalUpdates: (count: number) => {
       externalUpdateFailures = count;
     },
@@ -1087,6 +1093,79 @@ describe('System message delivery runner direct preflight contracts', () => {
     },
   );
 
+  it('16 retries the exact permanent outcome after one final persistence failure', async () => {
+    const harness = setup();
+    harness.sender.sendStrictPlainText.mockRejectedValueOnce(
+      new QqbotSendAttemptError({
+        code: 'onebot_rejected',
+        message: 'unsafe raw permanent rejection',
+        retryable: false,
+        sendLogId: 'latest-log',
+      }),
+    );
+    harness.failExternalUpdates(1);
+
+    await harness.runner.runOnce(NOW);
+
+    expect(harness.externalUpdates).toHaveLength(2);
+    expect(harness.externalUpdates[1]).toEqual(harness.externalUpdates[0]);
+    expect(harness.getState().deliveries[0]).toMatchObject({
+      lastErrorCode: 'onebot_rejected',
+      lastErrorMessage: 'OneBot rejected the send action',
+      nextAttemptAt: null,
+      processingLeaseUntil: null,
+      sendLogId: 'latest-log',
+      status: 'failed',
+    });
+
+    await harness.runner.runOnce(new Date(NOW.getTime() + 10_000));
+    expect(harness.sender.sendStrictPlainText).toHaveBeenCalledTimes(1);
+  });
+
+  it('6 retries the exact successful outcome after one final persistence failure', async () => {
+    const harness = setup();
+    harness.failExternalUpdates(1);
+
+    await harness.runner.runOnce(NOW);
+
+    expect(harness.externalUpdates).toHaveLength(2);
+    expect(harness.externalUpdates[1]).toEqual(harness.externalUpdates[0]);
+    expect(harness.getState().deliveries[0]).toMatchObject({
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      nextAttemptAt: null,
+      processingLeaseUntil: null,
+      sendLogId: 'send-log-1',
+      status: 'success',
+    });
+  });
+
+  it('17 retries the exact typed retry outcome after one final persistence failure', async () => {
+    const harness = setup();
+    harness.sender.sendStrictPlainText.mockRejectedValueOnce(
+      new QqbotSendAttemptError({
+        code: 'onebot_timeout',
+        message: 'unsafe raw timeout',
+        retryable: true,
+        sendLogId: 'retry-log',
+      }),
+    );
+    harness.failExternalUpdates(1);
+
+    await harness.runner.runOnce(NOW);
+
+    expect(harness.externalUpdates).toHaveLength(2);
+    expect(harness.externalUpdates[1]).toEqual(harness.externalUpdates[0]);
+    expect(harness.getState().deliveries[0]).toMatchObject({
+      lastErrorCode: 'onebot_timeout',
+      lastErrorMessage: 'OneBot send timed out',
+      nextAttemptAt: new KtDateTime(NOW.getTime() + 10_000),
+      processingLeaseUntil: null,
+      sendLogId: 'retry-log',
+      status: 'retry',
+    });
+  });
+
   it('17 retries a typed first failure after 10 seconds with exact safe details', async () => {
     const harness = setup();
     harness.sender.sendStrictPlainText.mockRejectedValueOnce(
@@ -1272,9 +1351,23 @@ describe('System message delivery runner direct preflight contracts', () => {
       ],
       targets: [target(), target({ id: '702' })],
     });
-    harness.failExternalUpdates(3);
+    harness.failExternalUpdates(2);
     expect(await harness.runner.runOnce(NOW)).toBe(2);
     expect(harness.sender.sendStrictPlainText).toHaveBeenCalledTimes(2);
+    expect(harness.externalUpdates.slice(0, 2)).toEqual([
+      harness.externalUpdates[0],
+      harness.externalUpdates[0],
+    ]);
+    expect(
+      harness.getState().deliveries.find((item) => item.id === '801'),
+    ).toMatchObject({
+      lastErrorCode: 'old_error',
+      processingLeaseUntil: new KtDateTime(
+        NOW.getTime() + SYSTEM_MESSAGE_LEASE_MS,
+      ),
+      sendLogId: 'old-log',
+      status: 'processing',
+    });
     expect(
       harness.getState().deliveries.find((item) => item.id === '802')?.status,
     ).toBe('success');

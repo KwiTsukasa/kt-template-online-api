@@ -1,7 +1,13 @@
-import { GUARDS_METADATA, PIPES_METADATA } from '@nestjs/common/constants';
+import {
+  GUARDS_METADATA,
+  INTERCEPTORS_METADATA,
+  PIPES_METADATA,
+} from '@nestjs/common/constants';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
+import { PinoLogger } from 'nestjs-pino';
+import { ApiExceptionFilter } from '../../../../src/common/filters/api-exception.filter';
 import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-auth.guard';
 import { QqbotAccountMessagePushService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-account-message-push.service';
 import { QqbotMessageSubscriptionService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-message-subscription.service';
@@ -11,7 +17,9 @@ import { SystemMessageSourceRegistry } from '../../../../src/modules/qqbot/core/
 import { QqbotAccountMessagePushController } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-account-message-push.controller';
 import { QqbotMessagePushController } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.controller';
 import { QqbotMessagePushPermissionGuard } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push-permission.guard';
+import { QqbotMessagePushContractErrorInterceptor } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push-contract-error.interceptor';
 import { QQBOT_MESSAGE_PUSH_PERMISSION } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push-permission.decorator';
+import { SystemMessageContractError } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import {
   collectControllerRoutes,
   routeKey,
@@ -95,6 +103,12 @@ const EXPECTED_ROUTE_PERMISSIONS: Record<string, string[]> = {
 
 const STRING_ID = '123456789012345678901234';
 const SELF_ID = '12345';
+
+const pinoLogger = {
+  error: jest.fn(),
+  setContext: jest.fn(),
+  warn: jest.fn(),
+};
 
 /** Builds one valid strict STUN subscription payload. */
 const subscriptionBody = () => ({
@@ -305,6 +319,9 @@ describe('QQBot message-push management controllers', () => {
       .compile();
 
     app = moduleRef.createNestApplication();
+    app.useGlobalFilters(
+      new ApiExceptionFilter(pinoLogger as unknown as PinoLogger),
+    );
     await app.listen(0, '127.0.0.1');
     apiUrl = await app.getUrl();
   });
@@ -455,6 +472,94 @@ describe('QQBot message-push management controllers', () => {
       });
       expect(pipes[0].isTransformEnabled).toBe(true);
     }
+  });
+
+  it('shares one contract-error boundary across both message-push controllers', () => {
+    for (const ControllerClass of [
+      QqbotMessagePushController,
+      QqbotAccountMessagePushController,
+    ]) {
+      expect(
+        Reflect.getMetadata(INTERCEPTORS_METADATA, ControllerClass),
+      ).toEqual([QqbotMessagePushContractErrorInterceptor]);
+    }
+  });
+
+  it('maps a synchronous unknown source registry error to a safe HTTP 404', async () => {
+    registry.get.mockImplementationOnce(() => {
+      throw new SystemMessageContractError('unknown_message_source');
+    });
+
+    const response = await request(apiUrl)
+      .get('/qqbot/message-push/sources/missing-source')
+      .expect(404);
+
+    expect(response.body).toEqual({
+      code: 404,
+      err: 'unknown_message_source',
+      msg: 'unknown_message_source',
+    });
+  });
+
+  it('maps template contract errors to a safe HTTP 400', async () => {
+    templates.preview.mockImplementationOnce(() => {
+      throw new SystemMessageContractError('template_invalid');
+    });
+
+    const response = await request(apiUrl)
+      .post('/qqbot/message-push/templates/preview')
+      .send({
+        content: 'Endpoint: ${{endpoint}}',
+        sourceKey: 'network.stun.mapping-port-changed',
+      })
+      .expect(400);
+
+    expect(response.body).toEqual({
+      code: 400,
+      err: 'template_invalid',
+      msg: 'template_invalid',
+    });
+  });
+
+  it.each(['account_unavailable', 'ddns_not_synced'])(
+    'maps async account binding contract error %s to a safe HTTP 409',
+    async (code) => {
+      bindings.createBinding.mockRejectedValueOnce(
+        new SystemMessageContractError(code),
+      );
+
+      const response = await request(apiUrl)
+        .post(`/qqbot/accounts/${SELF_ID}/message-push/bindings`)
+        .send(bindingBody())
+        .expect(409);
+
+      expect(response.body).toEqual({
+        code: 409,
+        err: code,
+        msg: code,
+      });
+    },
+  );
+
+  it('leaves ordinary failures at HTTP 500 without leaking their detail', async () => {
+    templates.preview.mockImplementationOnce(() => {
+      throw new Error('database password must-not-leak');
+    });
+
+    const response = await request(apiUrl)
+      .post('/qqbot/message-push/templates/preview')
+      .send({
+        content: 'Endpoint: ${{endpoint}}',
+        sourceKey: 'network.stun.mapping-port-changed',
+      })
+      .expect(500);
+
+    expect(response.body).toEqual({
+      code: 500,
+      err: 'Internal server error',
+      msg: 'Internal server error',
+    });
+    expect(JSON.stringify(response.body)).not.toContain('must-not-leak');
   });
 
   it('returns HTTP 200 and a Vben wrapper for every POST route', async () => {

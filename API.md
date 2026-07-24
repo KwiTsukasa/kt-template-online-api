@@ -446,6 +446,8 @@ QQBot 运行态包括 NapCat 容器登录、OneBot v11 反向 WebSocket、MQTT �
 
 请求采用严格白名单：Snowflake/外键 ID 是 1–24 位正十进制字符串，`selfId` 和 QQ 目标 ID 必须匹配 `^[1-9]\d{4,19}$`，禁止 number 转换。订阅 `name` 为 1–100 字符且不能全空白，`sourceConfig` 必须且仅含字符串 `portForwardId/ddnsRecordId`；模板 `name` 同限，`content` 最多 2,000 Unicode 字符；`remark` 最多 500 字符。Binding 必须含 1–100 个严格嵌套 target，类型仅 `group/private`，`targetName` 最多 120 字符。Body、query、path 及嵌套对象的未知字段都会拒绝，query boolean 只接受字面量 `true/false`。
 
+管理边界将 `SystemMessageContractError` 仅转换为 Vben 安全错误，响应只包含其稳定 `code`，不会暴露原始消息、实体或 provider 对象：`unknown_message_source`、`mapping_not_found`、`ddns_not_found` 返回 HTTP 404；重复、禁用、不可用、已取代、映射不匹配、DDNS 未同步、错误协议/管理状态及 OneBot 可用性或拒绝状态返回 HTTP 409；其余来源、目标、模板、长度和契约校验错误返回 HTTP 400。非该领域错误维持 HTTP 500，且不返回其内部细节。
+
 响应仅返回管理契约字段：source definition/field/variable 白名单；STUN 的 port-forward/DDNS 候选白名单；subscription、template、preview、binding/target 和 target option 视图。不会返回 adapter、entity/repository、`activeKey`、digest、软删除字段、账号内部 ID、事件 payload/delivery/lease/retry 状态、凭据、access token、Provider/OneBot/MQTT 原始对象。系统事件只能通过 Nest 内部 Outbox stager 暂存，不存在 publish、event、delivery、fan-out、retry 或 worker HTTP 发布接口。
 
 ### NapCat Runtime Profile

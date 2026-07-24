@@ -9,6 +9,7 @@ import {
   Post,
   Put,
   UseGuards,
+  UseInterceptors,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
@@ -23,6 +24,7 @@ import {
   MessagePushEnabledDto,
 } from './qqbot-message-push.dto';
 import { QqbotMessagePushPermission } from './qqbot-message-push-permission.decorator';
+import { QqbotMessagePushContractErrorInterceptor } from './qqbot-message-push-contract-error.interceptor';
 import { QqbotMessagePushPermissionGuard } from './qqbot-message-push-permission.guard';
 import type {
   QqbotMessagePublishBindingView,
@@ -77,6 +79,7 @@ const allowlistTargetOptions = (
 
 @Controller('qqbot/accounts/:selfId/message-push')
 @UseGuards(JwtAuthGuard, QqbotMessagePushPermissionGuard)
+@UseInterceptors(QqbotMessagePushContractErrorInterceptor)
 @UsePipes(
   new ValidationPipe({
     forbidNonWhitelisted: true,

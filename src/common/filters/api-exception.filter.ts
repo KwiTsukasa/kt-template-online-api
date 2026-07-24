@@ -135,6 +135,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
     exception: unknown,
     fallback: string,
   ) {
+    if (
+      status >= HttpStatus.INTERNAL_SERVER_ERROR &&
+      !(exception instanceof HttpException)
+    ) {
+      return 'Internal server error';
+    }
     if (typeof body === 'string') return normalizeVbenErrorText(body, fallback);
     if (body?.err !== undefined)
       return normalizeVbenErrorText(body.err, fallback);

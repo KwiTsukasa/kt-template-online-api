@@ -1,4 +1,5 @@
 import { QQBOT_CORE_DOMAIN_CONTRACT } from '../../../../src/modules/qqbot/core/contract/qqbot-core.contract';
+import { QqbotSendAttemptError } from '../../../../src/modules/qqbot/core/application/send/qqbot-send.error';
 import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
 describe('QQBot core send contract', () => {
@@ -63,5 +64,21 @@ describe('QQBot core send contract', () => {
       'account_id',
       'expires_at',
     ]);
+  });
+
+  it('keeps strict delivery error classification explicit', () => {
+    const error = new QqbotSendAttemptError({
+      code: 'onebot_disconnected',
+      message: 'OneBot unavailable',
+      retryable: true,
+      sendLogId: null,
+    });
+
+    expect(error).toMatchObject({
+      code: 'onebot_disconnected',
+      name: 'QqbotSendAttemptError',
+      retryable: true,
+      sendLogId: null,
+    });
   });
 });

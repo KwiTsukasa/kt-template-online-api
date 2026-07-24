@@ -24,6 +24,22 @@ import { QqbotAccountService } from '../../../application/account/qqbot-account.
 import { QqbotEventService } from '../../../application/event/qqbot-event.service';
 import { QqbotBusService } from '../bus/qqbot-bus.service';
 
+/** Represents a machine-readable reverse WebSocket availability failure. */
+export class QqbotReverseWsActionError extends Error {
+  /**
+   * Creates a stable reverse WebSocket action failure.
+   * @param code - Distinguishes a disconnected socket from an action timeout.
+   * @param message - A non-sensitive operator-facing error summary.
+   */
+  constructor(
+    public readonly code: 'onebot_disconnected' | 'onebot_timeout',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'QqbotReverseWsActionError';
+  }
+}
+
 @Injectable()
 export class QqbotReverseWsService
   implements OnApplicationBootstrap, OnModuleDestroy
@@ -111,18 +127,32 @@ export class QqbotReverseWsService
       params,
     };
 
-    const responsePromise = new Promise<QqbotOneBotActionResponse>(
-      (resolve, reject) => {
-        const timer = setTimeout(() => {
-          this.pendingActions.delete(echo);
-          this.closeTimedOutConnection(selfId, ws);
-          reject(new Error('OneBot action timeout'));
-        }, this.getActionTimeout());
-        this.pendingActions.set(echo, { reject, resolve, timer });
-      },
-    );
-    ws.send(JSON.stringify(payload));
-    return responsePromise;
+    return new Promise<QqbotOneBotActionResponse>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingActions.delete(echo);
+        this.closeTimedOutConnection(selfId, ws);
+        reject(
+          new QqbotReverseWsActionError(
+            'onebot_timeout',
+            'OneBot action timed out',
+          ),
+        );
+      }, this.getActionTimeout());
+      this.pendingActions.set(echo, { reject, resolve, timer });
+
+      try {
+        ws.send(JSON.stringify(payload));
+      } catch {
+        clearTimeout(timer);
+        this.pendingActions.delete(echo);
+        reject(
+          new QqbotReverseWsActionError(
+            'onebot_disconnected',
+            'OneBot connection is unavailable',
+          ),
+        );
+      }
+    });
   }
 
   /**
@@ -376,7 +406,10 @@ export class QqbotReverseWsService
     const api = this.connections.get(this.getConnectionKey(selfId, 'API'));
     const ws = api || universal;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      throw new Error(`QQBot ${selfId} 未连接可用 API WS`);
+      throw new QqbotReverseWsActionError(
+        'onebot_disconnected',
+        'OneBot connection is unavailable',
+      );
     }
     return ws;
   }

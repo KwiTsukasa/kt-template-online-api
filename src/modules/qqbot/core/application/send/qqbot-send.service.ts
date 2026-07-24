@@ -16,12 +16,26 @@ import {
   QQBOT_DEFAULT_PAGE_SIZE,
 } from '../../contract/qqbot.constants';
 import { QqbotRateLimitService } from './qqbot-rate-limit.service';
+import { QqbotSendAttemptError } from './qqbot-send.error';
 import { QqbotSendLog } from '../../infrastructure/persistence/send/qqbot-send-log.entity';
+import { QqbotReverseWsActionError } from '../../infrastructure/integration/connection/qqbot-reverse-ws.service';
+import type { QqbotAccount } from '../../infrastructure/persistence/account/qqbot-account.entity';
 import type {
   QqbotSendGroupDto,
   QqbotSendLogQueryDto,
   QqbotSendPrivateDto,
 } from '../../contract/send/qqbot-send.dto';
+import type { StrictPlainTextSendInput } from '../../contract/message-push/qqbot-message-push.types';
+
+type SendPipelineInput = {
+  action: string;
+  actionParams: Record<string, any>;
+  audit?: { attemptNumber: number; deliveryId: string };
+  message: string;
+  strict: boolean;
+  targetId: string;
+  targetType: QqbotMessageType;
+};
 
 @Injectable()
 export class QqbotSendService {
@@ -126,88 +140,65 @@ export class QqbotSendService {
       throwVbenError('没有可用 QQBot 账号');
     }
 
-    await this.rateLimitService.waitForSendSlot(
-      account.selfId,
-      params.targetId,
-    );
-
     const { action, actionParams } = this.buildAction(params);
-    const storedMessageText = this.toolsService.toStoredMessageText(
-      params.message,
-    );
-    const storedActionParams = this.toStoredActionParams(
+    return this.sendWithAccount(account, {
+      action,
       actionParams,
-      storedMessageText,
-    );
+      message: params.message,
+      strict: false,
+      targetId: params.targetId,
+      targetType: params.targetType,
+    });
+  }
 
-    const log = await this.sendLogRepository.save(
-      this.sendLogRepository.create({
-        action,
-        messageText: storedMessageText,
-        params: storedActionParams,
-        selfId: account.selfId,
-        status: 'pending',
-        targetId: params.targetId,
-        targetType: params.targetType,
-      }),
-    );
-
-    await this.busService.publish(
-      QQBOT_MQTT_TOPICS.commandSend(account.selfId),
-      {
-        action,
-        logId: log.id,
-        params: actionParams,
-        selfId: account.selfId,
-      },
-    );
-
-    try {
-      const reverseWsService = await this.getReverseWsService();
-      const response = await reverseWsService.sendAction(
-        account.selfId,
-        action,
-        actionParams,
-      );
-      const success = response.status === 'ok' || response.retcode === 0;
-      const messageId = response.data?.message_id
-        ? `${response.data.message_id}`
-        : null;
-      await this.sendLogRepository.update(
-        { id: log.id },
-        {
-          echo: response.echo || null,
-          errorMessage: success ? null : response.message || 'OneBot 发送失败',
-          messageId,
-          response: response as any,
-          status: success ? 'success' : 'failed',
-        },
-      );
-
-      if (success) {
-        await this.messageService.saveOutgoing({
-          messageId,
-          messageText: storedMessageText,
-          messageType: params.targetType,
-          selfId: account.selfId,
-          targetId: params.targetId,
-          userId:
-            params.targetType === 'private' ? params.targetId : account.selfId,
-        });
-      }
-      if (!success) throwVbenError(response.message || 'OneBot 发送失败');
-      return { ...response, logId: log.id };
-    } catch (err) {
-      const message = this.toolsService.getErrorMessage(err, 'OneBot 发送失败');
-      await this.sendLogRepository.update(
-        { id: log.id },
-        {
-          errorMessage: message,
-          status: 'failed',
-        },
-      );
-      throwVbenError(message);
+  /**
+   * Sends a single text segment through exactly the configured enabled QQBot account.
+   * @param input - A durable delivery attempt whose account and target must not fall back.
+   * @returns The OneBot response together with the created send-log ID.
+   */
+  async sendStrictPlainText(input: StrictPlainTextSendInput) {
+    const account = await this.accountService.findBySelfId(input.selfId);
+    if (!account || account.isDeleted || !account.enabled) {
+      throw new QqbotSendAttemptError({
+        code: 'account_unavailable',
+        message: 'Configured QQBot account is unavailable',
+        retryable: true,
+        sendLogId: null,
+      });
     }
+    if (input.targetType !== 'group' && input.targetType !== 'private') {
+      throw new QqbotSendAttemptError({
+        code: 'invalid_target_type',
+        message: 'Strict QQBot delivery only supports group or private targets',
+        retryable: false,
+        sendLogId: null,
+      });
+    }
+
+    const action =
+      input.targetType === 'group' ? 'send_group_msg' : 'send_private_msg';
+    const actionParams =
+      input.targetType === 'group'
+        ? {
+            group_id: input.targetId,
+            message: this.toTextSegment(input.message),
+          }
+        : {
+            message: this.toTextSegment(input.message),
+            user_id: input.targetId,
+          };
+    return this.sendWithAccount(account, {
+      action,
+      actionParams,
+      audit: {
+        attemptNumber: input.attemptNumber,
+        deliveryId: input.deliveryId,
+      },
+      message: input.message,
+      strict: true,
+      targetId: input.targetId,
+      targetType: input.targetType,
+    });
   }
 
   /**
@@ -220,6 +211,206 @@ export class QqbotSendService {
     return this.moduleRef.get<QqbotReverseActionSender>(QqbotReverseWsService, {
       strict: false,
     });
+  }
+
+  /**
+   * Runs the common QQBot send lifecycle for legacy and strict callers.
+   * @param account - The already selected QQBot account.
+   * @param input - The wire action and storage-safe delivery metadata.
+   * @returns The OneBot response together with the created send-log ID.
+   */
+  private async sendWithAccount(
+    account: QqbotAccount,
+    input: SendPipelineInput,
+  ) {
+    try {
+      await this.rateLimitService.waitForSendSlot(
+        account.selfId,
+        input.targetId,
+      );
+    } catch (err) {
+      this.throwSendFailure(input.strict, err, null);
+    }
+
+    const storedMessageText = this.toolsService.toStoredMessageText(
+      input.message,
+    );
+    const storedActionParams = {
+      ...this.toStoredActionParams(input.actionParams, storedMessageText),
+      ...(input.audit ? { messagePush: input.audit } : {}),
+    };
+    let log: QqbotSendLog;
+    try {
+      log = await this.sendLogRepository.save(
+        this.sendLogRepository.create({
+          action: input.action,
+          messageText: storedMessageText,
+          params: storedActionParams,
+          selfId: account.selfId,
+          status: 'pending',
+          targetId: input.targetId,
+          targetType: input.targetType,
+        }),
+      );
+    } catch (err) {
+      this.throwSendFailure(input.strict, err, null);
+    }
+
+    try {
+      await this.busService.publish(
+        QQBOT_MQTT_TOPICS.commandSend(account.selfId),
+        {
+          action: input.action,
+          logId: log!.id,
+          params: input.actionParams,
+          selfId: account.selfId,
+        },
+      );
+      const reverseWsService = await this.getReverseWsService();
+      const response = await reverseWsService.sendAction(
+        account.selfId,
+        input.action,
+        input.actionParams,
+      );
+      const success = response.status === 'ok' || response.retcode === 0;
+      const messageId = response.data?.message_id
+        ? `${response.data.message_id}`
+        : null;
+      if (!success) {
+        const message = response.message || 'OneBot rejected the send action';
+        if (input.strict) {
+          const error = new QqbotSendAttemptError({
+            code: 'onebot_rejected',
+            message,
+            retryable: false,
+            sendLogId: log!.id,
+          });
+          await this.markFailedLog(log!.id, message);
+          throw error;
+        }
+        await this.sendLogRepository.update(
+          { id: log!.id },
+          {
+            echo: response.echo || null,
+            errorMessage: message,
+            messageId,
+            response: response as any,
+            status: 'failed',
+          },
+        );
+        throwVbenError(message);
+      }
+
+      await this.sendLogRepository.update(
+        { id: log!.id },
+        {
+          echo: response.echo || null,
+          errorMessage: null,
+          messageId,
+          response: response as any,
+          status: 'success',
+        },
+      );
+      await this.messageService.saveOutgoing({
+        messageId,
+        messageText: storedMessageText,
+        messageType: input.targetType,
+        selfId: account.selfId,
+        targetId: input.targetId,
+        userId:
+          input.targetType === 'private' ? input.targetId : account.selfId,
+      });
+      return { ...response, logId: log!.id };
+    } catch (err) {
+      if (input.strict && err instanceof QqbotSendAttemptError) throw err;
+      const message = this.toolsService.getErrorMessage(
+        err,
+        'OneBot send failed',
+      );
+      if (input.strict) {
+        const error = this.toStrictSendError(err, message, log!.id);
+        await this.markFailedLog(log!.id, error.message);
+        throw error;
+      }
+      await this.sendLogRepository.update(
+        { id: log!.id },
+        { errorMessage: message, status: 'failed' },
+      );
+      throwVbenError(message);
+    }
+  }
+
+  /**
+   * Converts an arbitrary string into the sole strict OneBot text segment.
+   * @param message - The literal text that must not be interpreted as CQ code.
+   * @returns A single OneBot text segment.
+   */
+  private toTextSegment(message: string) {
+    return [{ data: { text: message }, type: 'text' }];
+  }
+
+  /**
+   * Marks a pending strict send log as failed without masking the original failure.
+   * @param logId - The pending send-log ID.
+   * @param message - A non-sensitive failure summary.
+   */
+  private async markFailedLog(logId: string, message: string) {
+    try {
+      await this.sendLogRepository.update(
+        { id: logId },
+        { errorMessage: message, status: 'failed' },
+      );
+    } catch {
+      // The typed delivery failure is more important than a secondary log-update failure.
+    }
+  }
+
+  /**
+   * Converts strict transport and infrastructure failures to stable delivery classifications.
+   * @param err - The original failure.
+   * @param message - Its non-sensitive safe summary.
+   * @param sendLogId - The pending log ID, if creation succeeded.
+   * @returns A stable strict delivery error.
+   */
+  private toStrictSendError(
+    err: unknown,
+    message: string,
+    sendLogId: null | string,
+  ) {
+    if (err instanceof QqbotReverseWsActionError) {
+      return new QqbotSendAttemptError({
+        code: err.code,
+        message,
+        retryable: true,
+        sendLogId,
+      });
+    }
+    return new QqbotSendAttemptError({
+      code: 'onebot_disconnected',
+      message,
+      retryable: true,
+      sendLogId,
+    });
+  }
+
+  /**
+   * Throws either the strict typed error or the legacy Vben-compatible error.
+   * @param strict - Whether the caller requires stable delivery retry metadata.
+   * @param err - The original failure.
+   * @param sendLogId - The pending log ID, if creation succeeded.
+   */
+  private throwSendFailure(
+    strict: boolean,
+    err: unknown,
+    sendLogId: null | string,
+  ): never {
+    const message = this.toolsService.getErrorMessage(
+      err,
+      'OneBot send failed',
+    );
+    if (strict) throw this.toStrictSendError(err, message, sendLogId);
+    throwVbenError(message);
+    throw new Error(message);
   }
 
   /**
@@ -265,11 +456,16 @@ export class QqbotSendService {
     actionParams: Record<string, any>,
     storedMessageText: string,
   ) {
+    const message = actionParams.message;
     return {
       ...actionParams,
-      ...(actionParams.message === undefined
+      ...(message === undefined
         ? {}
-        : { message: storedMessageText }),
+        : {
+            message: Array.isArray(message)
+              ? this.toTextSegment(storedMessageText)
+              : storedMessageText,
+          }),
     };
   }
 }

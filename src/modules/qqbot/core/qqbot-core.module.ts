@@ -50,12 +50,17 @@ import { QqbotMessageTemplate } from '@/modules/qqbot/core/infrastructure/persis
 import { SystemMessageSourceRegistry } from './application/message-push/system-message-source.registry';
 import { SystemMessageEventStagerService } from './application/message-push/system-message-event-stager.service';
 import { SystemMessageFanoutService } from './application/message-push/system-message-fanout.service';
+import { SystemMessageDeliveryRunnerService } from './application/message-push/system-message-delivery-runner.service';
+import { SystemMessageDeliveryCoordinatorService } from './application/message-push/system-message-delivery-coordinator.service';
 import { SystemMessageTemplateRendererService } from './application/message-push/system-message-template-renderer.service';
 import { QqbotMessageSubscriptionService } from './application/message-push/qqbot-message-subscription.service';
 import { QqbotMessageTemplateService } from './application/message-push/qqbot-message-template.service';
 import { QqbotAccountMessagePushService } from './application/message-push/qqbot-account-message-push.service';
 import { QqbotMessageTargetOptionsService } from './application/message-push/qqbot-message-target-options.service';
-import { SYSTEM_MESSAGE_EVENT_STAGER } from './contract/message-push/qqbot-message-push.types';
+import {
+  SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
+  SYSTEM_MESSAGE_EVENT_STAGER,
+} from './contract/message-push/qqbot-message-push.types';
 
 export { QQBOT_CORE_DOMAIN_CONTRACT } from './contract/qqbot-core.contract';
 
@@ -94,9 +99,15 @@ export const QQBOT_CORE_PROVIDERS = [
   SystemMessageSourceRegistry,
   SystemMessageEventStagerService,
   SystemMessageFanoutService,
+  SystemMessageDeliveryRunnerService,
+  SystemMessageDeliveryCoordinatorService,
   {
     provide: SYSTEM_MESSAGE_EVENT_STAGER,
     useExisting: SystemMessageEventStagerService,
+  },
+  {
+    provide: SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
+    useExisting: SystemMessageDeliveryCoordinatorService,
   },
   SystemMessageTemplateRendererService,
   QqbotMessageSubscriptionService,
@@ -124,6 +135,7 @@ export const QQBOT_CORE_PROVIDERS = [
 
 export const QQBOT_CORE_EXPORTS = [
   SYSTEM_MESSAGE_EVENT_STAGER,
+  SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
   SystemMessageSourceRegistry,
   SystemMessageTemplateRendererService,
   QqbotMessageSubscriptionService,

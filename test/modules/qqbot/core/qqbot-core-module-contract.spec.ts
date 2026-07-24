@@ -1,4 +1,4 @@
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { ConfigModule } from '@nestjs/config';
@@ -16,7 +16,12 @@ import { QqbotRuleController } from '../../../../src/modules/qqbot/core/contract
 import { QqbotSendController } from '../../../../src/modules/qqbot/core/contract/send/qqbot-send.controller';
 import { SystemMessageEventStagerService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-event-stager.service';
 import { SystemMessageFanoutService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-fanout.service';
-import { SYSTEM_MESSAGE_EVENT_STAGER } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
+import { SystemMessageDeliveryCoordinatorService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-delivery-coordinator.service';
+import { SystemMessageDeliveryRunnerService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-delivery-runner.service';
+import {
+  SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
+  SYSTEM_MESSAGE_EVENT_STAGER,
+} from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import {
   QQBOT_CORE_CONTROLLERS,
   QQBOT_CORE_ENTITIES,
@@ -173,9 +178,15 @@ describe('QQBot core module contract', () => {
       expect.arrayContaining([
         SystemMessageEventStagerService,
         SystemMessageFanoutService,
+        SystemMessageDeliveryRunnerService,
+        SystemMessageDeliveryCoordinatorService,
         {
           provide: SYSTEM_MESSAGE_EVENT_STAGER,
           useExisting: SystemMessageEventStagerService,
+        },
+        {
+          provide: SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
+          useExisting: SystemMessageDeliveryCoordinatorService,
         },
       ]),
     );
@@ -184,8 +195,45 @@ describe('QQBot core module contract', () => {
         (provider) => provider === SystemMessageFanoutService,
       ),
     ).toHaveLength(1);
+    expect(
+      QQBOT_CORE_PROVIDERS.filter(
+        (provider) => provider === SystemMessageDeliveryRunnerService,
+      ),
+    ).toHaveLength(1);
+    expect(
+      QQBOT_CORE_PROVIDERS.filter(
+        (provider) => provider === SystemMessageDeliveryCoordinatorService,
+      ),
+    ).toHaveLength(1);
     expect(QQBOT_CORE_EXPORTS).toEqual(
-      expect.arrayContaining([SYSTEM_MESSAGE_EVENT_STAGER]),
+      expect.arrayContaining([
+        SYSTEM_MESSAGE_EVENT_STAGER,
+        SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
+      ]),
+    );
+    expect(QQBOT_CORE_EXPORTS).not.toContain(
+      SystemMessageDeliveryCoordinatorService,
+    );
+    expect(
+      QQBOT_CORE_PROVIDERS.filter(
+        (provider) =>
+          typeof provider === 'object' &&
+          provider !== null &&
+          'provide' in provider &&
+          provider.provide === SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
+      ),
+    ).toEqual([
+      {
+        provide: SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
+        useExisting: SystemMessageDeliveryCoordinatorService,
+      },
+    ]);
+    const coreModuleSource = readFileSync(
+      join(process.cwd(), 'src/modules/qqbot/core/qqbot-core.module.ts'),
+      'utf8',
+    );
+    expect(coreModuleSource).not.toMatch(
+      /network-(?:agent-mqtt|ddns|stun-message-source)/,
     );
   });
 

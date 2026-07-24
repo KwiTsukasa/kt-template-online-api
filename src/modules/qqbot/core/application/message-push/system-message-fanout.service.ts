@@ -91,8 +91,12 @@ export class SystemMessageFanoutService {
           new Brackets((where) => {
             where
               .where(
-                'event.fanoutStatus IN (:...due) AND event.nextFanoutAt <= :now',
-                { due: ['accepted', 'retry'], now },
+                new Brackets((due) => {
+                  due.where(
+                    'event.fanoutStatus IN (:...due) AND (event.nextFanoutAt IS NULL OR event.nextFanoutAt <= :now)',
+                    { due: ['accepted', 'retry'], now },
+                  );
+                }),
               )
               .orWhere(
                 'event.fanoutStatus = :processing AND event.fanoutLeaseUntil <= :now',

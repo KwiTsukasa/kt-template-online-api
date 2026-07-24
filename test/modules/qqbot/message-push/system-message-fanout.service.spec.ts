@@ -35,6 +35,10 @@ type Store = {
   templates: QqbotMessageTemplate[];
 };
 
+type RecordedPredicate =
+  | { brackets: RecordedPredicate[] }
+  | { expression: string; parameters: object };
+
 /** Builds a consistent current event whose payload preserves string Snowflake identity. */
 function event(overrides: Partial<QqbotMessageEvent> = {}): QqbotMessageEvent {
   return Object.assign(new QqbotMessageEvent(), {
@@ -212,19 +216,19 @@ function setup(seed: Partial<Store> = {}) {
     lock: '',
     onLocked: '',
     order: [] as string[],
-    predicates: [] as Array<{ expression: string; parameters: object }>,
+    predicates: [] as RecordedPredicate[],
     take: 0,
   };
   const transactions: string[] = [];
   const locked = new Set<string>();
   const activeClaimLocks = new Set<string>();
   const deliveryReadLocks: Array<null | string> = [];
+  const savedDeliveryTargets: string[] = [];
   let deliverySequence = 1000;
   let duplicateRace: 'exact' | 'wrong' | null = null;
   const concurrentDeliveries: QqbotMessageDelivery[] = [];
   let failSubscription: null | string = null;
-  let failAfterDeliverySaves: null | number = null;
-  let deliverySaveCount = 0;
+  let failDeliveryTarget: null | string = null;
   let pauseClaim: null | {
     entered: () => void;
     resume: Promise<void>;
@@ -235,7 +239,11 @@ function setup(seed: Partial<Store> = {}) {
   } = null;
 
   /** Returns a repository facade bound to exactly one authoritative or transaction-local store. */
-  const repository = (entity: unknown, store: Store) => {
+  const repository = (
+    entity: unknown,
+    store: Store,
+    transactionLocks?: Set<string>,
+  ) => {
     const rows = (entity === QqbotMessageEvent
       ? store.events
       : entity === QqbotMessageSubscription
@@ -256,6 +264,43 @@ function setup(seed: Partial<Store> = {}) {
         Object.assign(new (entity as new () => object)(), input),
       createQueryBuilder: () => {
         let builderLock = '';
+        let queryNow: Date | null = null;
+        /** Records the nested TypeORM predicate structure and its bound values. */
+        const recordBrackets = (value: {
+          whereFactory?: (where: {
+            orWhere: (expression: unknown, parameters?: object) => void;
+            where: (expression: unknown, parameters?: object) => void;
+          }) => void;
+        }): RecordedPredicate => {
+          const predicates: RecordedPredicate[] = [];
+          const recorder = {} as {
+            orWhere: (expression: unknown, parameters?: object) => unknown;
+            where: (expression: unknown, parameters?: object) => unknown;
+          };
+          const record = (expression: unknown, parameters: object = {}) => {
+            if (typeof expression === 'string') {
+              const now = (parameters as { now?: unknown }).now;
+              if (now instanceof Date) queryNow = now;
+              predicates.push({ expression, parameters });
+              return recorder;
+            }
+            predicates.push(
+              recordBrackets(
+                expression as {
+                  whereFactory?: (where: {
+                    orWhere: (value: unknown, values?: object) => void;
+                    where: (value: unknown, values?: object) => void;
+                  }) => void;
+                },
+              ),
+            );
+            return recorder;
+          };
+          recorder.orWhere = record;
+          recorder.where = record;
+          value.whereFactory?.(recorder);
+          return { brackets: predicates };
+        };
         const builder = {
           addOrderBy: (field: string) => {
             query.order.push(field);
@@ -269,11 +314,13 @@ function setup(seed: Partial<Store> = {}) {
                   return (
                     ((item.fanoutStatus === 'accepted' ||
                       item.fanoutStatus === 'retry') &&
-                      !!item.nextFanoutAt &&
-                      item.nextFanoutAt.getTime() <= NOW.getTime()) ||
+                      (item.nextFanoutAt === null ||
+                        item.nextFanoutAt.getTime() <=
+                          (queryNow ?? NOW).getTime())) ||
                     (item.fanoutStatus === 'processing' &&
                       !!item.fanoutLeaseUntil &&
-                      item.fanoutLeaseUntil.getTime() <= NOW.getTime())
+                      item.fanoutLeaseUntil.getTime() <=
+                        (queryNow ?? NOW).getTime())
                   );
                 })
                 .filter(
@@ -328,23 +375,16 @@ function setup(seed: Partial<Store> = {}) {
           },
           where: (value: unknown) => {
             query.brackets = value.constructor.name === 'Brackets';
-            const brackets = value as {
-              whereFactory?: (where: {
-                orWhere: (expression: string, parameters: object) => void;
-                where: (expression: string, parameters: object) => void;
-              }) => void;
-            };
-            const expressionRecorder = {
-              orWhere: (expression: string, parameters: object) => {
-                query.predicates.push({ expression, parameters });
-                return expressionRecorder;
-              },
-              where: (expression: string, parameters: object) => {
-                query.predicates.push({ expression, parameters });
-                return expressionRecorder;
-              },
-            };
-            brackets.whereFactory?.(expressionRecorder);
+            query.predicates.push(
+              recordBrackets(
+                value as {
+                  whereFactory?: (where: {
+                    orWhere: (expression: unknown, parameters?: object) => void;
+                    where: (expression: unknown, parameters?: object) => void;
+                  }) => void;
+                },
+              ),
+            );
             return builder;
           },
         };
@@ -372,16 +412,17 @@ function setup(seed: Partial<Store> = {}) {
       }) => {
         if (
           entity === QqbotMessageEvent &&
-          lock?.mode === 'pessimistic_write' &&
-          pauseEventLock
+          lock?.mode === 'pessimistic_write'
         ) {
           const event = rows.find((row) => matches(row, where));
           if (!event) return null;
           const id = (event as unknown as QqbotMessageEvent).id;
           activeClaimLocks.add(id);
-          pauseEventLock.entered();
-          await pauseEventLock.resume;
-          activeClaimLocks.delete(id);
+          transactionLocks?.add(id);
+          if (pauseEventLock) {
+            pauseEventLock.entered();
+            await pauseEventLock.resume;
+          }
           return event;
         }
         if (entity === QqbotMessageDelivery) {
@@ -402,7 +443,6 @@ function setup(seed: Partial<Store> = {}) {
         )
           throw new Error('repository offline');
         if (entity === QqbotMessageDelivery) {
-          deliverySaveCount += 1;
           const pair = rows.find((row) =>
             matches(row, {
               messageEventId: item.messageEventId,
@@ -421,10 +461,7 @@ function setup(seed: Partial<Store> = {}) {
             throw { errno: 1062 };
           }
           if (pair && pair !== item) throw { errno: 1062 };
-          if (
-            failAfterDeliverySaves !== null &&
-            deliverySaveCount > failAfterDeliverySaves
-          ) {
+          if (failDeliveryTarget === item.publishTargetId) {
             throw new Error('repository offline after delivery mutation');
           }
           if (!item.id) item.id = `${deliverySequence++}`;
@@ -434,6 +471,9 @@ function setup(seed: Partial<Store> = {}) {
         );
         if (index >= 0) Object.assign(rows[index] as object, item);
         else rows.push(item as never);
+        if (entity === QqbotMessageDelivery) {
+          savedDeliveryTargets.push(item.publishTargetId as string);
+        }
         return item;
       },
       update: async (
@@ -455,10 +495,12 @@ function setup(seed: Partial<Store> = {}) {
       }) => Promise<unknown>,
     ) => {
       const draft = cloneStore(state);
+      const transactionLocks = new Set<string>();
       transactions.push('begin');
       try {
         const result = await callback({
-          getRepository: (entity) => repository(entity, draft),
+          getRepository: (entity) =>
+            repository(entity, draft, transactionLocks),
         });
         for (const delivery of concurrentDeliveries) {
           if (!draft.deliveries.some((item) => item.id === delivery.id)) {
@@ -471,6 +513,8 @@ function setup(seed: Partial<Store> = {}) {
       } catch (error) {
         transactions.push('rollback');
         throw error;
+      } finally {
+        for (const id of transactionLocks) activeClaimLocks.delete(id);
       }
     },
   };
@@ -488,11 +532,12 @@ function setup(seed: Partial<Store> = {}) {
     failSubscription: (id: null | string) => {
       failSubscription = id;
     },
-    failAfterDeliverySaves: (count: null | number) => {
-      failAfterDeliverySaves = count;
+    failDeliveryTarget: (id: null | string) => {
+      failDeliveryTarget = id;
     },
     lock: (id: string) => locked.add(id),
     query,
+    savedDeliveryTargets: () => savedDeliveryTargets,
     pauseNextClaim: () => {
       let entered!: () => void;
       const reached = new Promise<void>((resolve) => {
@@ -733,17 +778,38 @@ describe('SystemMessageFanoutService', () => {
     expect(fixture.query.order).toEqual(['event.occurredAt', 'event.id']);
     expect(fixture.query.predicates).toEqual([
       {
-        expression:
-          'event.fanoutStatus IN (:...due) AND event.nextFanoutAt <= :now',
-        parameters: { due: ['accepted', 'retry'], now: NOW },
-      },
-      {
-        expression:
-          'event.fanoutStatus = :processing AND event.fanoutLeaseUntil <= :now',
-        parameters: { processing: 'processing', now: NOW },
+        brackets: [
+          {
+            brackets: [
+              {
+                expression:
+                  'event.fanoutStatus IN (:...due) AND (event.nextFanoutAt IS NULL OR event.nextFanoutAt <= :now)',
+                parameters: { due: ['accepted', 'retry'], now: NOW },
+              },
+            ],
+          },
+          {
+            expression:
+              'event.fanoutStatus = :processing AND event.fanoutLeaseUntil <= :now',
+            parameters: { processing: 'processing', now: NOW },
+          },
+        ],
       },
     ]);
   });
+
+  it.each(['accepted', 'retry'] as const)(
+    'claims %s events with a null schedule as immediately due',
+    async (fanoutStatus) => {
+      const fixture = setup({
+        events: [event({ fanoutStatus, nextFanoutAt: null })],
+      });
+
+      await expect(fixture.service.runOnce(NOW)).resolves.toBe(1);
+      expect(fixture.events()[0].fanoutStatus).toBe('completed');
+      expect(fixture.deliveries()).toHaveLength(1);
+    },
+  );
 
   it('gives overlapping claim transactions one owner only through write lock and skip-locked selection', async () => {
     const fixture = setup();
@@ -761,6 +827,9 @@ describe('SystemMessageFanoutService', () => {
     const gate = fixture.pauseNextEventLock();
     const currentOwner = fixture.service.runOnce(NOW);
     await gate.reached;
+    expect(fixture.events()[0].fanoutLeaseUntil?.getTime()).toBe(
+      NOW.getTime() + SYSTEM_MESSAGE_LEASE_MS,
+    );
 
     await expect(
       fixture.service.runOnce(
@@ -965,7 +1034,7 @@ describe('SystemMessageFanoutService', () => {
         target({ bindingId: '501', id: '702', targetId: 'group-3' }),
       ],
     });
-    fixture.failAfterDeliverySaves(2);
+    fixture.failDeliveryTarget('702');
 
     await fixture.service.runOnce(NOW);
 
@@ -975,6 +1044,11 @@ describe('SystemMessageFanoutService', () => {
     expect(fixture.deliveries().map((item) => item.publishTargetId)).toEqual([
       'old-failed-target',
       '700',
+    ]);
+    expect(fixture.savedDeliveryTargets()).toEqual([
+      '700',
+      'old-failed-target',
+      '701',
     ]);
     expect(fixture.events()[1].fanoutStatus).toBe('retry');
   });
@@ -1227,17 +1301,21 @@ describe('SystemMessageFanoutService', () => {
   it('preserves every delivery snapshot after source configuration rows later change', async () => {
     const fixture = setup();
     await fixture.service.runOnce(NOW);
-    const frozen = structuredClone(fixture.deliveries()[0]);
+    const expectedFrozenDelivery = structuredClone(fixture.deliveries()[0]);
     fixture.templates()[0].content = 'changed=${{endpoint}}';
     fixture.bindings()[0].selfId = 'changed-bot';
     fixture.targets()[0].targetId = 'changed-target';
-    expect(frozen).toMatchObject({
+    const persistedDelivery = fixture.deliveries()[0];
+
+    expect(persistedDelivery).toEqual(expectedFrozenDelivery);
+    expect(persistedDelivery).toMatchObject({
       attemptCount: 0,
       bindingId: '500',
       lastErrorCode: null,
       lastErrorMessage: null,
       messageEventId: '200',
       processingLeaseUntil: null,
+      publishTargetId: '700',
       renderedMessage: 'endpoint=pal.example.com:38213',
       sendLogId: null,
       selfId: 'bot-a',
@@ -1249,8 +1327,8 @@ describe('SystemMessageFanoutService', () => {
       targetType: 'group',
       variableSnapshot: { endpoint: 'pal.example.com:38213' },
     });
-    expect(frozen.nextAttemptAt.getTime()).toBe(NOW.getTime());
-    expect(frozen.expiresAt.getTime()).toBe(
+    expect(persistedDelivery.nextAttemptAt.getTime()).toBe(NOW.getTime());
+    expect(persistedDelivery.expiresAt.getTime()).toBe(
       NOW.getTime() + SYSTEM_MESSAGE_RETRY_WINDOW_MS,
     );
   });

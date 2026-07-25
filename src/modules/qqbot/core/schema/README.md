@@ -170,10 +170,10 @@ Before applying SQL, take a transaction-consistent backup of all six
 rolling back Admin and API while retaining events, deliveries, and send logs;
 do not use `DROP TABLE` or history deletion as an application rollback.
 
-Verification output must contain only counts or ID/index summaries. Never query
-or print `payload`, `rendered_message`, `target_id`, credentials, provider
-objects, or production values. The implementation and automated API evidence
-exist, but real local CRUD, browser pages, database-backed Outbox/DDNS flow,
-and authorized QQ delivery remain unverified because safe local prerequisites
-are unavailable; this documentation change performed no push, deployment, or
-production SQL.
+Verification output must contain only counts or ID/index summaries. Never
+select/project or print raw `payload`, `rendered_message`, `target_id`,
+credentials, provider objects, or production values. The implementation and
+automated API evidence exist, but real local CRUD, browser pages,
+database-backed Outbox/DDNS flow, and authorized QQ delivery remain unverified
+because safe local prerequisites are unavailable; this documentation change
+performed no push, deployment, or production SQL.

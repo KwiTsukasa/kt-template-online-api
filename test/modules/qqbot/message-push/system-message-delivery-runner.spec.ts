@@ -235,6 +235,7 @@ function setup(seed: Partial<Store> = {}) {
       ],
       version: 1,
     },
+    eventResourceKey: jest.fn(),
     inspectSubscription: jest.fn(),
     listSubscriptionOptions: jest.fn(),
     normalizeSubscriptionConfig: jest.fn(),
@@ -250,6 +251,7 @@ function setup(seed: Partial<Store> = {}) {
         };
       },
     ),
+    subscriptionResourceKey: jest.fn(),
     validateEventPayload: jest.fn(
       (payload) => payload as Record<string, boolean | null | number | string>,
     ),

@@ -10,7 +10,9 @@ import {
   SystemMessageContractError,
   type SystemMessageDeliveryReadiness,
   type SystemMessageScalar,
+  type SystemMessageSourceAdapter,
   type SystemMessageSourceDefinition,
+  type SystemMessageSourceOptionsResponse,
 } from '@/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import { SystemMessageSourceRegistry } from '@/modules/qqbot/core/application/message-push/system-message-source.registry';
 import { NetworkDdnsRecord } from './network-ddns.entity';
@@ -44,7 +46,7 @@ type ResolvedSubscription = {
 
 @Injectable()
 export class NetworkStunMessageSourceAdapter
-  implements OnModuleDestroy, OnModuleInit
+  implements OnModuleDestroy, OnModuleInit, SystemMessageSourceAdapter
 {
   private registered = false;
 
@@ -143,6 +145,17 @@ export class NetworkStunMessageSourceAdapter
     this.registered = false;
   }
 
+  /** 从已校验事件中提取 STUN 映射的稳定资源键。 */
+  eventResourceKey(payload: Record<string, SystemMessageScalar>): string {
+    if (
+      !Object.prototype.hasOwnProperty.call(payload, 'portForwardId') ||
+      typeof payload.portForwardId !== 'string'
+    ) {
+      throw new SystemMessageContractError('invalid_source_config');
+    }
+    return payload.portForwardId;
+  }
+
   async normalizeSubscriptionConfig(input: unknown): Promise<{
     canonicalConfig: Record<string, string>;
     resourceKey: string;
@@ -178,7 +191,8 @@ export class NetworkStunMessageSourceAdapter
     }
   }
 
-  async listSubscriptionOptions(): Promise<Record<string, unknown>> {
+  /** 将网络实体转换成供动态订阅表单使用的标准选项。 */
+  async listSubscriptionOptions(): Promise<SystemMessageSourceOptionsResponse> {
     const [mappings, records] = await Promise.all([
       this.mappingRepository.find({ order: { id: 'ASC', name: 'ASC' } }),
       this.ddnsRepository.find({ order: { id: 'ASC', name: 'ASC' } }),
@@ -193,30 +207,59 @@ export class NetworkStunMessageSourceAdapter
           : undefined;
         const disabledReasonCode = ddnsOptionReason(record, mapping);
         return {
+          ...(record.portForwardId
+            ? { dependsOnValue: String(record.portForwardId) }
+            : {}),
+          disabled: disabledReasonCode !== null,
           disabledReasonCode,
           eligible: disabledReasonCode === null,
           fqdn: ddnsFqdn(record),
           id: String(record.id),
+          label: [record.name, ddnsFqdn(record), disabledReasonCode]
+            .filter((value) => value !== null)
+            .join(' · '),
           name: record.name,
           portForwardId: record.portForwardId
             ? String(record.portForwardId)
             : '',
+          value: String(record.id),
         };
       }),
       portForwards: mappings.map((mapping) => {
         const { disabledReasonCode, eligible } =
           classifyStunEndpointSource(mapping);
         return {
+          disabled: !eligible,
           disabledReasonCode,
           eligible,
           externalPort: mapping.externalPort,
           id: String(mapping.id),
           internalPort: mapping.internalPort,
+          label: [
+            mapping.name,
+            `${mapping.protocol.toUpperCase()}:${mapping.externalPort}`,
+            disabledReasonCode,
+          ]
+            .filter((value) => value !== null)
+            .join(' · '),
           name: mapping.name,
           protocol: mapping.protocol,
+          value: String(mapping.id),
         };
       }),
     };
+  }
+
+  /** 从订阅配置中提取自有的字符串资源键，无效配置不参与匹配。 */
+  subscriptionResourceKey(config: Record<string, unknown>): null | string {
+    if (
+      !isPlainRecord(config) ||
+      !Object.prototype.hasOwnProperty.call(config, 'portForwardId') ||
+      typeof config.portForwardId !== 'string'
+    ) {
+      return null;
+    }
+    return config.portForwardId;
   }
 
   validateEventPayload(

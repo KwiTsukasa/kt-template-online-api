@@ -4,7 +4,6 @@ import { KtDateTime } from '@/common';
 import {
   SystemMessageContractError,
   type SystemMessageDeliveryReadiness,
-  type SystemMessageScalar,
   type SystemMessageSourceAdapter,
 } from '../../contract/message-push/qqbot-message-push.types';
 import { QqbotAccount } from '../../infrastructure/persistence/account/qqbot-account.entity';
@@ -25,7 +24,6 @@ import {
 import { SystemMessageSourceRegistry } from './system-message-source.registry';
 import { SystemMessageTemplateRendererService } from './system-message-template-renderer.service';
 
-const STUN_MAPPING_PORT_SOURCE = 'network.stun.mapping-port-changed';
 const TRANSIENT_ERROR_CODE = 'fanout_transient_error';
 const EVENT_EXPIRED_ERROR_CODE = 'fanout_expired';
 const EVENT_RESOURCE_MISMATCH_ERROR_CODE = 'event_resource_mismatch';
@@ -114,8 +112,14 @@ export class SystemMessageFanoutService {
     try {
       const adapter = this.sourceRegistry.get(token.event.sourceKey);
       const payload = adapter.validateEventPayload(token.event.payload);
-      this.assertResourceIdentity(token.event, payload);
-      const subscriptions = await this.findMatchingSubscriptions(token.event);
+      this.assertResourceIdentity(
+        token.event,
+        adapter.eventResourceKey(payload),
+      );
+      const subscriptions = await this.findMatchingSubscriptions(
+        token.event,
+        adapter,
+      );
       let transientFailure = false;
 
       for (const subscription of subscriptions) {
@@ -170,6 +174,7 @@ export class SystemMessageFanoutService {
 
   private async findMatchingSubscriptions(
     event: QqbotMessageEvent,
+    adapter: SystemMessageSourceAdapter,
   ): Promise<QqbotMessageSubscription[]> {
     const subscriptions = await this.dataSource
       .getRepository(QqbotMessageSubscription)
@@ -178,7 +183,7 @@ export class SystemMessageFanoutService {
         order: { id: 'ASC' },
       });
     return subscriptions.filter((subscription) =>
-      this.matchesSubscription(subscription, event),
+      this.matchesSubscription(subscription, event, adapter),
     );
   }
 
@@ -210,12 +215,15 @@ export class SystemMessageFanoutService {
       where: { id: subscriptionId },
       lock: { mode: 'pessimistic_write' },
     });
-    if (!subscription || !this.matchesSubscription(subscription, event)) {
+    if (
+      !subscription ||
+      !this.matchesSubscription(subscription, event, adapter)
+    ) {
       return 'handled';
     }
 
     const payload = adapter.validateEventPayload(event.payload);
-    this.assertResourceIdentity(event, payload);
+    this.assertResourceIdentity(event, adapter.eventResourceKey(payload));
     const readiness = await adapter.resolveDelivery({
       eventPayload: payload,
       subscriptionConfig: subscription.sourceConfig,
@@ -490,21 +498,21 @@ export class SystemMessageFanoutService {
     );
   }
 
+  /** 确认适配器解析的事件资源与冻结事件身份一致。 */
   private assertResourceIdentity(
     event: QqbotMessageEvent,
-    payload: Record<string, SystemMessageScalar>,
+    resourceKey: string,
   ): void {
-    if (
-      event.sourceKey === STUN_MAPPING_PORT_SOURCE &&
-      payload.portForwardId !== event.resourceKey
-    ) {
+    if (resourceKey !== event.resourceKey) {
       throw new EventResourceMismatchError();
     }
   }
 
+  /** 使用消息源适配器自己的资源键规则匹配订阅。 */
   private matchesSubscription(
     subscription: QqbotMessageSubscription,
     event: QqbotMessageEvent,
+    adapter: SystemMessageSourceAdapter,
   ): boolean {
     const config = subscription.sourceConfig;
     return (
@@ -512,9 +520,7 @@ export class SystemMessageFanoutService {
       !subscription.isDeleted &&
       subscription.sourceKey === event.sourceKey &&
       !!config &&
-      Object.prototype.hasOwnProperty.call(config, 'portForwardId') &&
-      typeof config.portForwardId === 'string' &&
-      config.portForwardId === event.resourceKey
+      adapter.subscriptionResourceKey(config) === event.resourceKey
     );
   }
 
@@ -569,6 +575,6 @@ export class SystemMessageFanoutService {
 
 class EventResourceMismatchError extends Error {
   constructor() {
-    super('validated port-forward identity does not match event resource');
+    super('validated source identity does not match event resource');
   }
 }

@@ -103,13 +103,13 @@ Admin、Component、Dict、MinIO、Blog 管理、WordPress 管理和 QQBot 管�
 | `GET`    | `/system/network/port-forward/:id/endpoint-history` | `super` | 查询端点状态变化历史                      |
 | `GET`    | `/system/network/agent/status`                      | `super` | 查询 Agent 在线与 revision 收敛状态       |
 | `GET`    | `/system/network/events/stream`                     | `super` | SSE 推送已提交的 MQTT 状态变化            |
-| `GET`    | `/system/network/ddns/list`                         | `super` | 分页查询双栈自动 DDNS 绑定                 |
-| `GET`    | `/system/network/ddns/source-options`               | `super` | 查询 A/AAAA 的安全地址来源选项             |
-| `GET`    | `/system/network/ddns/provider-status`              | `super` | 查询腾讯云云解析 DNS 配置状态，不返回凭据  |
-| `POST`   | `/system/network/ddns`                              | `super` | 新增本地 DDNS 自动更新绑定                 |
-| `PUT`    | `/system/network/ddns/:id`                          | `super` | 修改并按需立即协调 DDNS 绑定               |
-| `DELETE` | `/system/network/ddns/:id`                          | `super` | 删除本地绑定，不删除云端 DNS 记录          |
-| `POST`   | `/system/network/ddns/:id/retry`                    | `super` | 手动重试一条已启用 DDNS 绑定               |
+| `GET`    | `/system/network/ddns/list`                         | `super` | 分页查询双栈自动 DDNS 绑定                |
+| `GET`    | `/system/network/ddns/source-options`               | `super` | 查询 A/AAAA 的安全地址来源选项            |
+| `GET`    | `/system/network/ddns/provider-status`              | `super` | 查询腾讯云云解析 DNS 配置状态，不返回凭据 |
+| `POST`   | `/system/network/ddns`                              | `super` | 新增本地 DDNS 自动更新绑定                |
+| `PUT`    | `/system/network/ddns/:id`                          | `super` | 修改并按需立即协调 DDNS 绑定              |
+| `DELETE` | `/system/network/ddns/:id`                          | `super` | 删除本地绑定，不删除云端 DNS 记录         |
+| `POST`   | `/system/network/ddns/:id/retry`                    | `super` | 手动重试一条已启用 DDNS 绑定              |
 
 新增和修改请求只接受名称、备注、`tcp|udp`、外部端口和内部端口；目标 NAS IPv4 固定来自 `NETWORK_AGENT_TARGET_IPV4`，请求体中的未知字段会返回 400。Snowflake ID 与 revision 在 HTTP JSON 中保留为字符串。所有动态响应设置 `Cache-Control: no-store`。
 
@@ -129,21 +129,21 @@ Agent 状态响应额外包含可选的 `currentPublicIpv6/currentIpv6ObservedAt
 
 ## 环境变量分组
 
-| 分组          | 关键变量                                                                                                                                                                                                                                                                                                                    |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MySQL         | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC`                                                                                                                                                                                                                                                |
-| MinIO         | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`BLOG_LIVE2D_ALLOWED_ORIGINS`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`                                                                                                                                 |
-| Admin         | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                               |
-| WordPress     | `WORDPRESS_BASE_URL`、`WORDPRESS_HOST_HEADER`、`WORDPRESS_ADMIN_USERNAME`、`WORDPRESS_ADMIN_PASSWORD`                                                                                                                                                                                                                       |
-| Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_QUERY_SELECTOR`                                                                                                                                                                                                                                           |
-| QQBot         | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_REVERSE_WS_PATH`、`QQBOT_REVERSE_WS_TOKEN`、`QQBOT_EVENT_BUS`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*` |
-| NapCat        | `NAPCAT_WEBUI_BASE_URL`、`NAPCAT_WEBUI_TOKEN`、`QQBOT_NAPCAT_*`                                                                                                                                                                                                                                                             |
-| MQTT          | `MQTT_URL`、`MQTT_USERNAME`、`MQTT_PASSWORD`、`MQTT_CLIENT_ID`                                                                                                                                                                                                                                                              |
-| Env Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_JENKINS_*`、`ENV_DASHBOARD_K8S_*`、`ENV_DASHBOARD_TENCENT_*`、`ENV_DASHBOARD_CADDY_*`、`ENV_DASHBOARD_R4SE_*`                                                     |
+| 分组          | 关键变量                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| MySQL         | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC`                                                                                                                                                                                                                                                                                                                                                                                       |
+| MinIO         | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`BLOG_LIVE2D_ALLOWED_ORIGINS`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`                                                                                                                                                                                                                                                                       |
+| Admin         | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                                                                                                                                      |
+| WordPress     | `WORDPRESS_BASE_URL`、`WORDPRESS_HOST_HEADER`、`WORDPRESS_ADMIN_USERNAME`、`WORDPRESS_ADMIN_PASSWORD`                                                                                                                                                                                                                                                                                                                                                              |
+| Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_QUERY_SELECTOR`                                                                                                                                                                                                                                                                                                                                                                                  |
+| QQBot         | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_REVERSE_WS_PATH`、`QQBOT_REVERSE_WS_TOKEN`、`QQBOT_EVENT_BUS`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`                                                                                                                                        |
+| NapCat        | `NAPCAT_WEBUI_BASE_URL`、`NAPCAT_WEBUI_TOKEN`、`QQBOT_NAPCAT_*`                                                                                                                                                                                                                                                                                                                                                                                                    |
+| MQTT          | `MQTT_URL`、`MQTT_USERNAME`、`MQTT_PASSWORD`、`MQTT_CLIENT_ID`                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Env Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_JENKINS_*`、`ENV_DASHBOARD_K8S_*`、`ENV_DASHBOARD_TENCENT_*`、`ENV_DASHBOARD_CADDY_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                            |
 | Network       | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_ENABLED`、`NETWORK_DDNS_DNSPOD_SECRET_ID`、`NETWORK_DDNS_DNSPOD_SECRET_KEY`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
-| BangDream     | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT`                                                                                                                                                                                                                            |
-| FF14 Market   | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_DEFAULT_WORLD`                                                                                                                                                                                                                                                   |
-| FFLogs        | `FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET`                                                                                                                                                                                                                                        |
+| BangDream     | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT`                                                                                                                                                                                                                                                                                                                                                                   |
+| FF14 Market   | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_DEFAULT_WORLD`                                                                                                                                                                                                                                                                                                                                                                                          |
+| FFLogs        | `FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET`                                                                                                                                                                                                                                                                                                                                                                               |
 
 真实密码、Token、OAuth secret 和生产 env 不提交到 Git。
 
@@ -361,17 +361,17 @@ WordPress rewrite 未开启导致 `/wp-json/*` 返回 404 时，后端会回退�
 
 ## MinIO
 
-| 方法     | 路径                    | 说明                            |
-| -------- | ----------------------- | ------------------------------- |
-| `GET`    | `/minio/check`          | 检查连接和 bucket               |
-| `POST`   | `/minio/bucket`         | 创建 bucket                     |
-| `POST`   | `/minio/upload`         | 上传文件，`multipart/form-data` |
-| `GET`    | `/minio/list`           | 文件列表                        |
-| `GET`    | `/minio/url`            | 临时访问 URL                    |
-| `GET`    | `/minio/resource-proxy` | 代理读取资源                    |
-| `GET`    | `/minio/download`       | 下载文件流                      |
-| `DELETE` | `/minio/remove`         | 删除文件                        |
-| `GET`    | `/blog/live2d/:character/catalog.json` | 公开读取 Pio/Tia Live2D 公共目录索引，按 Referer/Origin 白名单防盗链 |
+| 方法     | 路径                                         | 说明                                                                                                                             |
+| -------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/minio/check`                               | 检查连接和 bucket                                                                                                                |
+| `POST`   | `/minio/bucket`                              | 创建 bucket                                                                                                                      |
+| `POST`   | `/minio/upload`                              | 上传文件，`multipart/form-data`                                                                                                  |
+| `GET`    | `/minio/list`                                | 文件列表                                                                                                                         |
+| `GET`    | `/minio/url`                                 | 临时访问 URL                                                                                                                     |
+| `GET`    | `/minio/resource-proxy`                      | 代理读取资源                                                                                                                     |
+| `GET`    | `/minio/download`                            | 下载文件流                                                                                                                       |
+| `DELETE` | `/minio/remove`                              | 删除文件                                                                                                                         |
+| `GET`    | `/blog/live2d/:character/catalog.json`       | 公开读取 Pio/Tia Live2D 公共目录索引，按 Referer/Origin 白名单防盗链                                                             |
 | `GET`    | `/blog/live2d/:character/:family/*assetPath` | 公开读取 Pio/Tia Live2D 运行包资源，`character` 只允许 `pio`/`tia`，`family` 只允许 `moc`/`moc3`，按 Referer/Origin 白名单防盗链 |
 
 `bucketName` 不传时使用 `MINIO_BUCKET`。
@@ -423,7 +423,8 @@ QQBot 运行态包括 NapCat 容器登录、OneBot v11 反向 WebSocket、MQTT �
 | -------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `GET`    | `/qqbot/message-push/sources`                                           | Subscription `List/Create/Update`；Template `List/Create/Update/Preview`；Account MessagePush `List/Create/Update` |
 | `GET`    | `/qqbot/message-push/sources/:sourceKey`                                | 同 source list                                                                                                     |
-| `GET`    | `/qqbot/message-push/sources/network.stun.mapping-port-changed/options` | Subscription `Create/Update`；Account MessagePush `Create/Update`                                                  |
+| `GET`    | `/qqbot/message-push/sources/:sourceKey/subscription-options`           | Subscription `Create/Update`；Account MessagePush `Create/Update`                                                  |
+| `GET`    | `/qqbot/message-push/sources/network.stun.mapping-port-changed/options` | 旧版 Admin 的一个发布周期兼容入口；权限同通用 subscription-options                                                 |
 | `GET`    | `/qqbot/message-push/subscriptions`                                     | Subscription `List`；Account MessagePush `List/Create/Update`                                                      |
 | `POST`   | `/qqbot/message-push/subscriptions`                                     | Subscription `Create`                                                                                              |
 | `PUT`    | `/qqbot/message-push/subscriptions/:id`                                 | Subscription `Update`                                                                                              |
@@ -444,11 +445,11 @@ QQBot 运行态包括 NapCat 容器登录、OneBot v11 反向 WebSocket、MQTT �
 
 完整权限码前缀分别为 `QqBot:MessageSubscription:*`、`QqBot:MessageTemplate:*` 和 `QqBot:Account:MessagePush:*`。订阅与模板列表返回 `data.items/data.total`，source 与 binding 列表直接返回数组，其余接口返回单个对象或布尔值；全部 `POST` 使用 HTTP 200。账号离线或 OneBot 不可用时 targets 仍返回 HTTP 200 和 `{ available: false, options: [], reasonCode }`。
 
-请求采用严格白名单：Snowflake/外键 ID 是 1–24 位正十进制字符串，`selfId` 和 QQ 目标 ID 必须匹配 `^[1-9]\d{4,19}$`，禁止 number 转换。订阅 `name` 为 1–100 字符且不能全空白，`sourceConfig` 必须且仅含字符串 `portForwardId/ddnsRecordId`；模板 `name` 同限，`content` 最多 2,000 Unicode 字符；`remark` 最多 500 字符。Binding 必须含 1–100 个严格嵌套 target，类型仅 `group/private`，`targetName` 最多 120 字符。Body、query、path 及嵌套对象的未知字段都会拒绝，query boolean 只接受字面量 `true/false`。
+请求采用严格白名单：Snowflake/外键 ID 是 1–24 位正十进制字符串，`selfId` 和 QQ 目标 ID 必须匹配 `^[1-9]\d{4,19}$`，禁止 number 转换。订阅 `name` 为 1–100 字符且不能全空白；`sourceConfig` 必须是仅含字符串值的普通对象，其字段集合、必填项和领域校验由所选 `sourceKey` 的 `subscriptionFields` 与 adapter 决定，未知字段会拒绝。模板 `name` 同限，`content` 最多 2,000 Unicode 字符；`remark` 最多 500 字符。Binding 必须含 1–100 个严格嵌套 target，类型仅 `group/private`，`targetName` 最多 120 字符。Body、query、path 及嵌套对象的未知字段都会拒绝，query boolean 只接受字面量 `true/false`。
 
 管理边界将 `SystemMessageContractError` 仅转换为 Vben 安全错误，响应只包含其稳定 `code`，不会暴露原始消息、实体或 provider 对象：`unknown_message_source`、`mapping_not_found`、`ddns_not_found` 返回 HTTP 404；重复、禁用、不可用、已取代、映射不匹配、DDNS 未同步、错误协议/管理状态及 OneBot 可用性或拒绝状态返回 HTTP 409；其余来源、目标、模板、长度和契约校验错误返回 HTTP 400。非该领域错误维持 HTTP 500，且不返回其内部细节。
 
-响应仅返回管理契约字段：source definition/field/variable 白名单；STUN 的 port-forward/DDNS 候选白名单；subscription、template、preview、binding/target 和 target option 视图。不会返回 adapter、entity/repository、`activeKey`、digest、软删除字段、账号内部 ID、事件 payload/delivery/lease/retry 状态、凭据、access token、Provider/OneBot/MQTT 原始对象。系统事件只能通过 Nest 内部 Outbox stager 暂存，不存在 publish、event、delivery、fan-out、retry 或 worker HTTP 发布接口。
+响应仅返回管理契约字段：source definition/field/variable 白名单；通用 `subscription-options` 按来源声明的集合返回统一 `value/label/disabled/disabledReasonCode/dependsOnValue` 候选项；旧 STUN options 入口在兼容期内继续返回旧版 Admin 所需的专用字段。subscription 的 `sourceConfig` 只回显当前来源公开声明且值为字符串的字段；template、preview、binding/target 和 target option 仍使用各自视图白名单。不会返回 adapter、entity/repository、`activeKey`、digest、软删除字段、账号内部 ID、事件 payload/delivery/lease/retry 状态、凭据、access token、Provider/OneBot/MQTT 原始对象。系统事件只能通过 Nest 内部 Outbox stager 暂存，不存在 publish、event、delivery、fan-out、retry 或 worker HTTP 发布接口。
 
 #### 内部事件与投递生命周期
 
@@ -465,8 +466,8 @@ QQBot 运行态包括 NapCat 容器登录、OneBot v11 反向 WebSocket、MQTT �
 
 ### NapCat Runtime Profile
 
-| 方法  | 路径                                      | 说明                                                                                  |
-| ----- | ----------------------------------------- | ------------------------------------------------------------------------------------- |
+| 方法  | 路径                                      | 说明                                                                                        |
+| ----- | ----------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `GET` | `/qqbot/napcat/runtime/detail?accountId=` | 读取账号 NapCat runtime/protocol/session behavior profile、风险降载和历史登录事件兼容表状态 |
 
 该接口只返回脱敏后的运行态证据，供 Admin 排查镜像、locale、shm、配置 hash、漂移状态、风险模式和 watchdog 巡检告警状态；不会返回 WebUI token、reverse WS token、QQ 登录密码、SSH 私钥或运行态密码环境。账号列表只挂载 `napcat.profileStatus`、`napcat.runtimeProfile` 等摘要字段，不触发登录、重建或修复动作。watchdog 不执行登录恢复：遇到 QQ 登录态离线只记录离线原因并通知 `super`，登录恢复统一由 Admin 手动「更新登录」触发；session behavior profile 只做冷启动、housekeeping、presence 和自动能力分阶段降载，不实现账号级每小时/每日累计发送预算。
@@ -623,20 +624,20 @@ Admin 入口为 `/qqbot/plugin-task`，用于分页查看任务、启停、修�
 
 插件 key：`bilibili-card`。这是事件型内置插件，不新增在线命令；启用后仍需通过账号事件绑定让指定 QQBot 账号接收 `bilibili-card.message`。
 
-| event key                | 触发来源 | 说明                                                                 |
-| ------------------------ | -------- | -------------------------------------------------------------------- |
-| `bilibili-card.message`  | message  | 从 QQ/NapCat `share/json/xml/lightapp` 卡片和文本中提取 Bilibili 链接 |
+| event key               | 触发来源 | 说明                                                                  |
+| ----------------------- | -------- | --------------------------------------------------------------------- |
+| `bilibili-card.message` | message  | 从 QQ/NapCat `share/json/xml/lightapp` 卡片和文本中提取 Bilibili 链接 |
 
 插件会解析 `www.bilibili.com`、`m.bilibili.com` 和 `b23.tv`。短链通过插件平台受控 `resolveRedirect` host 能力限制跳转次数和超时；视频信息来自 Bilibili `x/web-interface/view`，回复首行使用视频封面 CQ image，随后输出标题、UP 主、时长、播放/弹幕/点赞等文本摘要和标准视频链接。同一账号、同一会话、同一视频在 `QQBOT_BILIBILI_CARD_DEDUPE_TTL_MS` 内去重。
 
 可配置键：
 
-| 配置键                                      | 默认值 | 说明                 |
-| ------------------------------------------- | ------ | -------------------- |
-| `QQBOT_BILIBILI_CARD_HTTP_TIMEOUT_MS`       | 6000   | HTTP 请求超时毫秒    |
-| `QQBOT_BILIBILI_CARD_MAX_REDIRECTS`         | 5      | `b23.tv` 最大跳转数  |
-| `QQBOT_BILIBILI_CARD_DEDUPE_TTL_MS`         | 600000 | 同视频去重毫秒       |
-| `QQBOT_BILIBILI_CARD_DESC_MAX_LENGTH`       | 80     | 回复中简介最大字符数 |
+| 配置键                                | 默认值 | 说明                 |
+| ------------------------------------- | ------ | -------------------- |
+| `QQBOT_BILIBILI_CARD_HTTP_TIMEOUT_MS` | 6000   | HTTP 请求超时毫秒    |
+| `QQBOT_BILIBILI_CARD_MAX_REDIRECTS`   | 5      | `b23.tv` 最大跳转数  |
+| `QQBOT_BILIBILI_CARD_DEDUPE_TTL_MS`   | 600000 | 同视频去重毫秒       |
+| `QQBOT_BILIBILI_CARD_DESC_MAX_LENGTH` | 80     | 回复中简介最大字符数 |
 
 ### BangDream
 

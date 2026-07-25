@@ -23,6 +23,7 @@ import {
 
 const NOW = new Date('2026-07-24T00:00:00.000Z');
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
+const JOB_SOURCE_KEY = 'system.job.completed';
 const RESOURCE_KEY = '9007199254740993';
 
 type Store = {
@@ -121,16 +122,21 @@ function target(
   });
 }
 
-function sourceAdapter(): jest.Mocked<SystemMessageSourceAdapter> {
+function sourceAdapter(
+  sourceKey = SOURCE_KEY,
+): jest.Mocked<SystemMessageSourceAdapter> {
   return {
     definition: {
       description: 'test',
       displayName: 'test',
-      sourceKey: SOURCE_KEY,
+      sourceKey,
       subscriptionFields: [],
       variables: [],
       version: 1,
     },
+    eventResourceKey: jest.fn((payload) =>
+      typeof payload.portForwardId === 'string' ? payload.portForwardId : '',
+    ),
     inspectSubscription: jest.fn(),
     listSubscriptionOptions: jest.fn(),
     normalizeSubscriptionConfig: jest.fn(),
@@ -142,6 +148,12 @@ function sourceAdapter(): jest.Mocked<SystemMessageSourceAdapter> {
         variables: { endpoint: 'pal.example.com:38213' },
       };
     }),
+    subscriptionResourceKey: jest.fn((config) =>
+      Object.prototype.hasOwnProperty.call(config, 'portForwardId') &&
+      typeof config.portForwardId === 'string'
+        ? config.portForwardId
+        : null,
+    ),
     validateEventPayload: jest.fn(
       (payload) => payload as Record<string, boolean | null | number | string>,
     ),
@@ -219,7 +231,7 @@ function normalizeConditionalWhere(where: Record<string, unknown>) {
   );
 }
 
-function setup(seed: Partial<Store> = {}) {
+function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
   let state: Store = {
     accounts: seed.accounts ?? [account()],
     bindings: seed.bindings ?? [binding()],
@@ -229,7 +241,6 @@ function setup(seed: Partial<Store> = {}) {
     targets: seed.targets ?? [target()],
     templates: seed.templates ?? [template()],
   };
-  const adapter = sourceAdapter();
   const registry = new SystemMessageSourceRegistry();
   registry.register(adapter);
   const query = {
@@ -828,6 +839,42 @@ describe('SystemMessageFanoutService', () => {
 
     await fixture.service.runOnce(NOW);
     expect(fixture.adapter.resolveDelivery).toHaveBeenCalledTimes(1);
+  });
+
+  it('matches a synthetic source through adapter-owned job resource keys', async () => {
+    const jobAdapter = sourceAdapter(JOB_SOURCE_KEY);
+    jobAdapter.eventResourceKey.mockImplementation((payload) =>
+      typeof payload.jobId === 'string' ? payload.jobId : '',
+    );
+    jobAdapter.subscriptionResourceKey.mockImplementation((config) =>
+      Object.prototype.hasOwnProperty.call(config, 'jobId') &&
+      typeof config.jobId === 'string'
+        ? config.jobId
+        : null,
+    );
+    const fixture = setup(
+      {
+        events: [
+          event({
+            payload: { endpoint: 'job.example.com:443', jobId: RESOURCE_KEY },
+            sourceKey: JOB_SOURCE_KEY,
+          }),
+        ],
+        subscriptions: [
+          subscription({
+            sourceConfig: { jobId: RESOURCE_KEY },
+            sourceKey: JOB_SOURCE_KEY,
+          }),
+        ],
+        templates: [template({ sourceKey: JOB_SOURCE_KEY })],
+      },
+      jobAdapter,
+    );
+
+    await expect(fixture.service.runOnce(NOW)).resolves.toBe(1);
+    expect(fixture.adapter.resolveDelivery).toHaveBeenCalledTimes(1);
+    expect(fixture.deliveries()).toHaveLength(1);
+    expect(fixture.events()[0].fanoutStatus).toBe('completed');
   });
 
   it('isolates disabled/deleted or mismatched account, binding, template and target rows', async () => {

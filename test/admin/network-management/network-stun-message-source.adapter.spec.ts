@@ -228,6 +228,29 @@ describe('NetworkStunMessageSourceAdapter', () => {
     );
   });
 
+  it('owns event and subscription resource-key extraction', () => {
+    const { adapter } = createHarness();
+    const payload = adapter.validateEventPayload(eventPayload());
+
+    expect(adapter.eventResourceKey(payload)).toBe('2041700000000000001');
+    expect(
+      adapter.subscriptionResourceKey({
+        ddnsRecordId: '2041700000000000002',
+        portForwardId: '2041700000000000001',
+      }),
+    ).toBe('2041700000000000001');
+    expect(
+      adapter.subscriptionResourceKey(
+        Object.create({ portForwardId: '2041700000000000001' }),
+      ),
+    ).toBeNull();
+    expect(
+      adapter.subscriptionResourceKey({
+        portForwardId: 2041700000000000001,
+      }),
+    ).toBeNull();
+  });
+
   it('maps an absent mapping to the locked subscription and inspection code', async () => {
     const { adapter } = createHarness();
     const config = {
@@ -264,19 +287,36 @@ describe('NetworkStunMessageSourceAdapter', () => {
     });
   });
 
-  it('preserves uppercase Network eligibility reasons in subscription options', async () => {
+  it('returns generic options with the temporary legacy STUN fields', async () => {
     const { adapter, mapping } = createHarness();
     mapping.protocol = 'tcp';
-    await expect(adapter.listSubscriptionOptions()).resolves.toMatchObject({
+    await expect(adapter.listSubscriptionOptions()).resolves.toEqual({
+      ddnsRecords: [
+        {
+          dependsOnValue: mapping.id,
+          disabled: true,
+          disabledReasonCode: 'UDP_REQUIRED',
+          eligible: false,
+          fqdn: 'pal.kwitsukasa.top',
+          id: '2041700000000000002',
+          label: '帕鲁域名 · pal.kwitsukasa.top · UDP_REQUIRED',
+          name: '帕鲁域名',
+          portForwardId: mapping.id,
+          value: '2041700000000000002',
+        },
+      ],
       portForwards: [
         {
+          disabled: true,
           disabledReasonCode: 'UDP_REQUIRED',
           eligible: false,
           externalPort: 8213,
           id: mapping.id,
           internalPort: 8213,
+          label: '帕鲁新世界 · TCP:8213 · UDP_REQUIRED',
           name: '帕鲁新世界',
           protocol: 'tcp',
+          value: mapping.id,
         },
       ],
     });

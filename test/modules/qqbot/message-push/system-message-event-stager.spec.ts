@@ -20,10 +20,12 @@ function createRegistry() {
       variables: [],
       version: 1,
     },
+    eventResourceKey: jest.fn(),
     inspectSubscription: jest.fn(),
     listSubscriptionOptions: jest.fn(),
     normalizeSubscriptionConfig: jest.fn(),
     resolveDelivery: jest.fn(),
+    subscriptionResourceKey: jest.fn(),
     validateEventPayload,
   });
   return { registry, validateEventPayload };

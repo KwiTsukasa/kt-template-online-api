@@ -55,6 +55,12 @@ const EXPECTED_ROUTE_PERMISSIONS: Record<string, string[]> = {
   ],
   'GET /qqbot/message-push/sources': SOURCE_READ_PERMISSIONS,
   'GET /qqbot/message-push/sources/:sourceKey': SOURCE_READ_PERMISSIONS,
+  'GET /qqbot/message-push/sources/:sourceKey/subscription-options': [
+    'QqBot:MessageSubscription:Create',
+    'QqBot:MessageSubscription:Update',
+    'QqBot:Account:MessagePush:Create',
+    'QqBot:Account:MessagePush:Update',
+  ],
   'GET /qqbot/message-push/sources/network.stun.mapping-port-changed/options': [
     'QqBot:MessageSubscription:Create',
     'QqBot:MessageSubscription:Update',
@@ -102,6 +108,7 @@ const EXPECTED_ROUTE_PERMISSIONS: Record<string, string[]> = {
 };
 
 const STRING_ID = '123456789012345678901234';
+const FORBIDDEN_FIELD_FIXTURE = 'test-only-redacted-value';
 const SELF_ID = '12345';
 
 const pinoLogger = {
@@ -166,7 +173,7 @@ const sourceDefinition = () =>
     ],
     variables: [
       {
-        accessToken: 'must-not-leak',
+        accessToken: FORBIDDEN_FIELD_FIXTURE,
         description: 'Endpoint',
         example: 'example.test:10000',
         key: 'endpoint',
@@ -330,24 +337,31 @@ describe('QQBot message-push management controllers', () => {
         ddnsRecords: [
           {
             credential: 'must-not-leak',
+            dependsOnValue: '1234567890123456789',
+            disabled: false,
             disabledReasonCode: null,
             eligible: true,
             fqdn: 'example.test',
             id: STRING_ID,
+            label: 'DDNS · example.test',
             name: 'DDNS',
             portForwardId: '1234567890123456789',
+            value: STRING_ID,
           },
         ],
         portForwards: [
           {
-            accessToken: 'must-not-leak',
+            accessToken: FORBIDDEN_FIELD_FIXTURE,
+            disabled: false,
             disabledReasonCode: null,
             eligible: true,
-            externalPort: 10000,
+            externalPort: 10_000,
             id: '1234567890123456789',
-            internalPort: 10000,
+            internalPort: 8211,
+            label: 'STUN · UDP:10000',
             name: 'STUN',
             protocol: 'udp',
+            value: '1234567890123456789',
           },
         ],
       }),
@@ -386,7 +400,7 @@ describe('QQBot message-push management controllers', () => {
     await app?.close();
   });
 
-  it('exposes exactly the approved 20 routes with exact permission metadata', () => {
+  it('exposes exactly the approved 21 routes with exact permission metadata', () => {
     const routes = collectControllerRoutes([
       QqbotMessagePushController,
       QqbotAccountMessagePushController,
@@ -409,6 +423,76 @@ describe('QQBot message-push management controllers', () => {
       expect(
         Reflect.getMetadata(QQBOT_MESSAGE_PUSH_PERMISSION, handler),
       ).toEqual(EXPECTED_ROUTE_PERMISSIONS[routeKey(route)]);
+    });
+  });
+
+  it('resolves options and subscription config from arbitrary source metadata', async () => {
+    const definition = {
+      description: '后台任务完成',
+      displayName: '任务完成',
+      sourceKey: 'system.job.completed',
+      subscriptionFields: [
+        {
+          key: 'jobId',
+          label: '任务',
+          optionCollection: 'jobs',
+          required: true,
+          type: 'select',
+        },
+      ],
+      variables: [],
+      version: 1,
+    };
+    registry.get.mockReturnValueOnce({
+      definition,
+      listSubscriptionOptions: jest.fn().mockResolvedValue({
+        jobs: [
+          {
+            credential: 'must-not-leak',
+            disabled: false,
+            disabledReasonCode: null,
+            label: '夜间同步',
+            value: 'job-1',
+          },
+        ],
+      }),
+    });
+    const options = await request(apiUrl)
+      .get(
+        '/qqbot/message-push/sources/system.job.completed/subscription-options',
+      )
+      .expect(200);
+    expect(options.body.data).toEqual({
+      jobs: [
+        {
+          disabled: false,
+          disabledReasonCode: null,
+          label: '夜间同步',
+          value: 'job-1',
+        },
+      ],
+    });
+
+    subscriptions.page.mockResolvedValueOnce({
+      items: [
+        {
+          ...(subscriptionView() as unknown as Record<string, unknown>),
+          sourceConfig: {
+            credential: 'must-not-leak',
+            jobId: 'job-1',
+          },
+          sourceKey: definition.sourceKey,
+          sourceName: definition.displayName,
+        },
+      ],
+      total: 1,
+    });
+    registry.get.mockReturnValueOnce({ definition });
+    const subscriptionsResponse = await request(apiUrl)
+      .get('/qqbot/message-push/subscriptions')
+      .expect(200);
+    expect(subscriptionsResponse.body.data.items[0].sourceConfig).toEqual({
+      jobId: 'job-1',
     });
   });
 
@@ -601,10 +685,10 @@ describe('QQBot message-push management controllers', () => {
       .expect(400);
   });
 
-  it('rejects unknown enabled, sourceConfig, and target fields', async () => {
+  it('rejects unknown enabled and target fields plus non-string source config', async () => {
     await request(apiUrl)
       .put(`/qqbot/message-push/subscriptions/${STRING_ID}/enabled`)
-      .send({ enabled: false, secret: 'must-reject' })
+      .send({ enabled: false, secret: FORBIDDEN_FIELD_FIXTURE })
       .expect(400);
     await request(apiUrl)
       .post('/qqbot/message-push/subscriptions')
@@ -612,14 +696,14 @@ describe('QQBot message-push management controllers', () => {
         ...subscriptionBody(),
         sourceConfig: {
           ...subscriptionBody().sourceConfig,
-          credential: 'must-reject',
+          credential: 123,
         },
       })
       .expect(400);
     const binding = bindingBody();
     binding.targets[0] = {
       ...binding.targets[0],
-      accessToken: 'must-reject',
+      accessToken: FORBIDDEN_FIELD_FIXTURE,
     } as never;
     await request(apiUrl)
       .post(`/qqbot/accounts/${SELF_ID}/message-push/bindings`)
@@ -771,7 +855,7 @@ describe('QQBot message-push management controllers', () => {
 
   it('returns only exact public response fields and recursively excludes secrets', async () => {
     targets.listTargetOptions.mockResolvedValueOnce({
-      accessToken: 'must-not-leak',
+      accessToken: FORBIDDEN_FIELD_FIXTURE,
       available: true,
       options: [
         {
@@ -787,6 +871,11 @@ describe('QQBot message-push management controllers', () => {
       request(apiUrl).get('/qqbot/message-push/sources').expect(200),
       request(apiUrl)
         .get('/qqbot/message-push/sources/network.stun.mapping-port-changed')
+        .expect(200),
+      request(apiUrl)
+        .get(
+          '/qqbot/message-push/sources/network.stun.mapping-port-changed/subscription-options',
+        )
         .expect(200),
       request(apiUrl)
         .get(
@@ -813,6 +902,7 @@ describe('QQBot message-push management controllers', () => {
       sourceList,
       sourceDetail,
       options,
+      legacyStunOptions,
       subscriptionPage,
       templatePage,
       preview,
@@ -855,6 +945,18 @@ describe('QQBot message-push management controllers', () => {
     ]);
     expect(Object.keys(options.ddnsRecords[0]).sort()).toEqual(
       [
+        'dependsOnValue',
+        'disabled',
+        'disabledReasonCode',
+        'label',
+        'value',
+      ].sort(),
+    );
+    expect(Object.keys(options.portForwards[0]).sort()).toEqual(
+      ['disabled', 'disabledReasonCode', 'label', 'value'].sort(),
+    );
+    expect(Object.keys(legacyStunOptions.ddnsRecords[0]).sort()).toEqual(
+      [
         'disabledReasonCode',
         'eligible',
         'fqdn',
@@ -863,7 +965,7 @@ describe('QQBot message-push management controllers', () => {
         'portForwardId',
       ].sort(),
     );
-    expect(Object.keys(options.portForwards[0]).sort()).toEqual(
+    expect(Object.keys(legacyStunOptions.portForwards[0]).sort()).toEqual(
       [
         'disabledReasonCode',
         'eligible',

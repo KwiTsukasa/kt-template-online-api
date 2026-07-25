@@ -130,6 +130,7 @@ describe('QQBot core module contract', () => {
         'GET /qqbot/accounts/:selfId/message-push/targets',
         'GET /qqbot/message-push/sources',
         'GET /qqbot/message-push/sources/:sourceKey',
+        'GET /qqbot/message-push/sources/:sourceKey/subscription-options',
         'GET /qqbot/message-push/sources/network.stun.mapping-port-changed/options',
         'GET /qqbot/message-push/subscriptions',
         'GET /qqbot/message-push/templates',

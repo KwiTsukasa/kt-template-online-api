@@ -84,10 +84,27 @@ function adapter(
       description: 'STUN 映射端口变化',
       displayName: 'STUN 端口变化',
       sourceKey: SOURCE_KEY,
-      subscriptionFields: [],
+      subscriptionFields: [
+        {
+          key: 'portForwardId',
+          label: '端口转发',
+          optionCollection: 'portForwards',
+          required: true,
+          type: 'select',
+        },
+        {
+          dependsOn: 'portForwardId',
+          key: 'ddnsRecordId',
+          label: 'IPv4 DDNS',
+          optionCollection: 'ddnsRecords',
+          required: true,
+          type: 'select',
+        },
+      ],
       variables: [],
       version: 1,
     },
+    eventResourceKey: jest.fn(),
     inspectSubscription: jest.fn(async (config: Record<string, unknown>) => {
       void config;
       return inspect;
@@ -102,6 +119,7 @@ function adapter(
       };
     }),
     resolveDelivery: jest.fn(),
+    subscriptionResourceKey: jest.fn(),
     validateEventPayload: jest.fn(),
   };
 }
@@ -371,7 +389,7 @@ describe('QqbotMessageSubscriptionService', () => {
         enabled: true,
         name: '帕鲁端口变更',
         remark: '',
-        sourceConfig: { ...CONFIG, ignored: 'discarded' },
+        sourceConfig: CONFIG,
         sourceKey: SOURCE_KEY,
       }),
     ).resolves.toEqual(expect.objectContaining({ sourceConfig: CONFIG }));
@@ -383,8 +401,27 @@ describe('QqbotMessageSubscriptionService', () => {
     expect(saved.activeKey).toBe(`${SOURCE_KEY}:${expectedDigest}`);
     expect(source.normalizeSubscriptionConfig).toHaveBeenCalledWith({
       ...CONFIG,
-      ignored: 'discarded',
     });
+  });
+
+  it('rejects source config fields that are missing, unknown, or non-string', async () => {
+    const { service, source } = setup();
+
+    for (const sourceConfig of [
+      { portForwardId: CONFIG.portForwardId },
+      { ...CONFIG, unexpected: 'must-reject' },
+      { ...CONFIG, ddnsRecordId: 2041700000000000002 },
+    ]) {
+      await expect(
+        service.create({
+          enabled: true,
+          name: '非法配置',
+          sourceConfig,
+          sourceKey: SOURCE_KEY,
+        }),
+      ).rejects.toMatchObject({ code: 'invalid_source_config' });
+    }
+    expect(source.normalizeSubscriptionConfig).not.toHaveBeenCalled();
   });
 
   it('returns Vben HTTP 409 for an active duplicate and a duplicate-key create race', async () => {

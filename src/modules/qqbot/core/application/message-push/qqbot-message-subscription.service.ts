@@ -14,6 +14,7 @@ import {
   type MessageSubscriptionInput,
   type MessageSubscriptionListQuery,
   type MessageSubscriptionView,
+  type SystemMessageSourceDefinition,
 } from '../../contract/message-push/qqbot-message-push.types';
 import { QqbotMessageSubscription } from '../../infrastructure/persistence/message-push/qqbot-message-subscription.entity';
 import { QqbotMessagePublishBinding } from '../../infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
@@ -238,12 +239,17 @@ export class QqbotMessageSubscriptionService {
     return subscription;
   }
 
+  /** 校验来源配置后生成稳定摘要和持久化字段。 */
   private async normalizeInput(
     input: MessageSubscriptionInput,
   ): Promise<NormalizedSubscriptionInput> {
     const adapter = this.sourceRegistry.get(input.sourceKey);
-    const normalized = await adapter.normalizeSubscriptionConfig(
+    const validatedSourceConfig = this.validateSourceConfig(
       input.sourceConfig,
+      adapter.definition,
+    );
+    const normalized = await adapter.normalizeSubscriptionConfig(
+      validatedSourceConfig,
     );
     const sourceConfig = this.sortConfig(normalized.canonicalConfig);
     const sourceConfigDigest = createHash('sha256')
@@ -258,6 +264,35 @@ export class QqbotMessageSubscriptionService {
       sourceConfigDigest,
       sourceKey: input.sourceKey,
     };
+  }
+
+  /** 按来源元数据精确接收自有字符串字段，并拒绝缺失或额外字段。 */
+  private validateSourceConfig(
+    input: Record<string, unknown>,
+    definition: SystemMessageSourceDefinition,
+  ): Record<string, string> {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new SystemMessageContractError('invalid_source_config');
+    }
+    const fields = new Map(
+      definition.subscriptionFields.map((field) => [field.key, field]),
+    );
+    const sourceConfig: Record<string, string> = {};
+    for (const [key, value] of Object.entries(input)) {
+      if (!fields.has(key) || typeof value !== 'string') {
+        throw new SystemMessageContractError('invalid_source_config');
+      }
+      sourceConfig[key] = value;
+    }
+    for (const field of definition.subscriptionFields) {
+      if (
+        field.required &&
+        !Object.prototype.hasOwnProperty.call(sourceConfig, field.key)
+      ) {
+        throw new SystemMessageContractError('invalid_source_config');
+      }
+    }
+    return sourceConfig;
   }
 
   private sortConfig(config: Record<string, string>): Record<string, string> {

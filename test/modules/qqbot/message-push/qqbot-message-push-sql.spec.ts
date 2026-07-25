@@ -9,6 +9,16 @@ type MenuEntry = readonly [
   sort: string,
 ];
 
+type MessageMenuTitle = readonly [id: string, title: string];
+
+type IndexDefinition = readonly [
+  tableName: string,
+  indexName: string,
+  nonUnique: string,
+  sequence: string,
+  columnName: string,
+];
+
 const messagePushTableDefinitions = {
   qqbot_message_subscription: {
     columns: [
@@ -116,6 +126,38 @@ const menuEntries: readonly MenuEntry[] = [
   ['2041700000000120483', '2041700000000100410', 'QqBotAccountMessagePushUpdate', 'QqBot:Account:MessagePush:Update', '0'],
   ['2041700000000120484', '2041700000000100410', 'QqBotAccountMessagePushDelete', 'QqBot:Account:MessagePush:Delete', '0'],
   ['2041700000000120485', '2041700000000100410', 'QqBotAccountMessagePushToggle', 'QqBot:Account:MessagePush:Toggle', '0'],
+];
+
+const messageMenuTitles: readonly MessageMenuTitle[] = [
+  ['2041700000000100413', '消息订阅'],
+  ['2041700000000100414', '消息模板'],
+];
+
+const requiredIndexDefinitions: readonly IndexDefinition[] = [
+  ['qqbot_message_subscription', 'PRIMARY', '0', '1', 'id'],
+  ['qqbot_message_subscription', 'uk_qqbot_message_subscription_active_key', '0', '1', 'active_key'],
+  ['qqbot_message_template', 'PRIMARY', '0', '1', 'id'],
+  ['qqbot_message_publish_binding', 'PRIMARY', '0', '1', 'id'],
+  ['qqbot_message_publish_binding', 'uk_qqbot_message_publish_binding_active_key', '0', '1', 'active_key'],
+  ['qqbot_message_publish_target', 'PRIMARY', '0', '1', 'id'],
+  ['qqbot_message_publish_target', 'uk_qqbot_message_publish_target_active_key', '0', '1', 'active_key'],
+  ['qqbot_message_event', 'PRIMARY', '0', '1', 'id'],
+  ['qqbot_message_event', 'uk_qqbot_message_event_event_id', '0', '1', 'event_id'],
+  ['qqbot_message_event', 'idx_qqbot_message_event_dispatch', '1', '1', 'fanout_status'],
+  ['qqbot_message_event', 'idx_qqbot_message_event_dispatch', '1', '2', 'next_fanout_at'],
+  ['qqbot_message_event', 'idx_qqbot_message_event_lease', '1', '1', 'fanout_lease_until'],
+  ['qqbot_message_event', 'idx_qqbot_message_event_source_resource_order', '1', '1', 'source_key'],
+  ['qqbot_message_event', 'idx_qqbot_message_event_source_resource_order', '1', '2', 'resource_key'],
+  ['qqbot_message_event', 'idx_qqbot_message_event_source_resource_order', '1', '3', 'occurred_at'],
+  ['qqbot_message_event', 'idx_qqbot_message_event_source_resource_order', '1', '4', 'id'],
+  ['qqbot_message_delivery', 'PRIMARY', '0', '1', 'id'],
+  ['qqbot_message_delivery', 'uk_qqbot_message_delivery_event_target', '0', '1', 'message_event_id'],
+  ['qqbot_message_delivery', 'uk_qqbot_message_delivery_event_target', '0', '2', 'publish_target_id'],
+  ['qqbot_message_delivery', 'idx_qqbot_message_delivery_dispatch', '1', '1', 'status'],
+  ['qqbot_message_delivery', 'idx_qqbot_message_delivery_dispatch', '1', '2', 'next_attempt_at'],
+  ['qqbot_message_delivery', 'idx_qqbot_message_delivery_lease', '1', '1', 'processing_lease_until'],
+  ['qqbot_message_delivery', 'idx_qqbot_message_delivery_history', '1', '1', 'subscription_id'],
+  ['qqbot_message_delivery', 'idx_qqbot_message_delivery_history', '1', '2', 'message_event_id'],
 ];
 
 const advanceSqlQuoteState = (sql: string, index: number, quoted: boolean) => {
@@ -253,6 +295,19 @@ const extractMessagePushMenuRows = (sql: string) => {
     ] as MenuEntry);
 };
 
+const extractMessagePushMenuTitles = (sql: string): MessageMenuTitle[] => {
+  const statements = [...sql.matchAll(/insert into admin_menu \([^)]*\) values (.*?) on duplicate key update/gs)];
+  const statement = statements.find((candidate) => candidate[1].includes(menuEntries[0][0]));
+  expect(statement).toBeTruthy();
+  return extractSqlTuples(statement?.[1] || '')
+    .map(splitSqlTuple)
+    .filter((fields) => messageMenuTitles.some(([id]) => id === unquoteSqlValue(fields[0])))
+    .map((fields) => [
+      unquoteSqlValue(fields[0]),
+      JSON.parse(unquoteSqlValue(fields[8])).title,
+    ] as MessageMenuTitle);
+};
+
 const extractMessagePushMenuRoleGrantStatement = (sql: string) => {
   const statements = splitSqlStatements(sql);
   const menuSeedIndex = statements.findIndex((statement) =>
@@ -299,6 +354,23 @@ const extractVerificationStatement = (sql: string, checkName: string) => {
   return statement || '';
 };
 
+const extractRequiredIndexDefinitions = (statement: string): IndexDefinition[] =>
+  [...statement.matchAll(/(?:select|union all select) '([^']+)'(?: as table_name)?, '([^']+)'(?: as index_name)?, (\d+)(?: as non_unique)?, (\d+)(?: as seq_in_index)?, '([^']+)'(?: as column_name)?/g)]
+    .map(([, tableName, indexName, nonUnique, sequence, columnName]) =>
+      [tableName, indexName, nonUnique, sequence, columnName] as IndexDefinition);
+
+const summarizeIndexDefinitions = (
+  required: readonly IndexDefinition[],
+  actual: readonly IndexDefinition[],
+) => {
+  const requiredKeys = new Set(required.map((definition) => definition.join('\u0000')));
+  const actualKeys = new Set(actual.map((definition) => definition.join('\u0000')));
+  return {
+    missing: [...requiredKeys].filter((key) => !actualKeys.has(key)).length,
+    unexpected: [...actualKeys].filter((key) => !requiredKeys.has(key)).length,
+  };
+};
+
 const extractExpectedMenuCte = (statement: string) => {
   const cteStart = statement.match(/with expected_menu as \(/);
   expect(cteStart).toBeTruthy();
@@ -334,6 +406,8 @@ const extractExpectedMenuIds = (statement: string) =>
 
 describe('QQBot message-push SQL contract', () => {
   const bootstrapSql = readNormalizedSql('sql/qqbot-init.sql');
+  const migrationSql = readNormalizedSql('sql/qqbot-message-push-init.sql');
+  const migrationVerifySql = readNormalizedSql('sql/qqbot-message-push-verify.sql');
   const schemaSql = readNormalizedSql('sql/refactor-v3/00-full-schema.sql');
   const seedSql = readNormalizedSql('sql/refactor-v3/01-seed-core.sql');
   const verifySql = readNormalizedSql('sql/refactor-v3/99-verify.sql');
@@ -373,7 +447,7 @@ describe('QQBot message-push SQL contract', () => {
 
   it('keeps each table DDL and index tuple exact in current and refactor schemas', () => {
     for (const [table, expected] of Object.entries(messagePushTableDefinitions)) {
-      for (const sql of [bootstrapSql, schemaSql]) {
+      for (const sql of [bootstrapSql, schemaSql, migrationSql]) {
         const block = extractCreateTableBlock(sql, table);
         let expectedColumns = sql === bootstrapSql
           ? expected.columns.map((column) => column.endsWith(' null') && !column.endsWith('not null')
@@ -381,7 +455,7 @@ describe('QQBot message-push SQL contract', () => {
             : column)
           : expected.columns;
         const expectedIndexes = [...expected.indexes];
-        if (sql === schemaSql) {
+        if (sql !== bootstrapSql) {
           expectedColumns = expectedColumns.map((column, index) => index === 0
             ? `${column} primary key`
             : column);
@@ -408,7 +482,7 @@ describe('QQBot message-push SQL contract', () => {
           and name = 'STUN 映射端口变更默认模板' and is_deleted = 0
       );
     `);
-    for (const sql of [bootstrapSql, seedSql]) expect(sql).toContain(expectedTemplate);
+    for (const sql of [bootstrapSql, seedSql, migrationSql]) expect(sql).toContain(expectedTemplate);
   });
 
   it('verifies the default template stable values with case-sensitive text comparisons', () => {
@@ -433,16 +507,23 @@ describe('QQBot message-push SQL contract', () => {
   });
 
   it('keeps every stable menu tuple together and exactly once in every seed file', () => {
-    for (const sql of [bootstrapSql, seedSql, vbenSql]) {
+    for (const sql of [bootstrapSql, seedSql, vbenSql, migrationSql]) {
       const rows = extractMessagePushMenuRows(sql);
       expect(rows).toHaveLength(18);
       expect(new Set(rows.map(([id]) => id)).size).toBe(18);
       expect(rows).toEqual(menuEntries);
+      expect(sql).toMatch(/name\s*=\s*values\(name\)/);
+    }
+  });
+
+  it('keeps the production menu titles aligned with the Admin route titles', () => {
+    for (const sql of [bootstrapSql, seedSql, vbenSql, migrationSql]) {
+      expect(extractMessagePushMenuTitles(sql)).toEqual(messageMenuTitles);
     }
   });
 
   it('grants only the seeded message-push menus to active super and admin roles after every menu seed', () => {
-    for (const sql of [bootstrapSql, seedSql, vbenSql]) {
+    for (const sql of [bootstrapSql, seedSql, vbenSql, migrationSql]) {
       const roleGrant = extractMessagePushMenuRoleGrantStatement(sql);
       expect(roleGrant).toContain('insert ignore into admin_role_menu (role_id, menu_id)');
       expect(extractMenuRoleGrantIds(roleGrant)).toEqual(menuEntries.map(([id]) => id));
@@ -454,16 +535,71 @@ describe('QQBot message-push SQL contract', () => {
     }
   });
 
+  it('keeps the production migration scoped to message-push creation and idempotent seeds', () => {
+    expect(migrationSql).not.toMatch(/\b(?:alter table|drop table|drop column|truncate table|delete from)\b/);
+    expect(migrationSql).not.toContain('set foreign_key_checks = 0');
+    expect(migrationSql.match(/create table if not exists qqbot_message_/g)).toHaveLength(6);
+    expect(migrationSql).toContain('on duplicate key update');
+    expect(migrationSql).toContain('insert ignore into admin_role_menu');
+  });
+
+  it('keeps the production verification scoped to safe summaries', () => {
+    for (const table of Object.keys(messagePushTableDefinitions)) {
+      expect(migrationVerifySql).toContain(`'${table}'`);
+    }
+    expect(extractVerificationStatement(
+      migrationVerifySql,
+      'seed_qqbot_message_template',
+    )).toContain("binary content = binary '当前STUN的端口已变更为${{endpoint}}'");
+    expect(extractVerificationStatement(
+      migrationVerifySql,
+      'seed_qqbot_message_push_menu',
+    )).toContain('count(*) as matched_rows');
+    const requiredIndexes = extractVerificationStatement(
+      migrationVerifySql,
+      'qqbot_message_push_required_indexes',
+    );
+    expect(extractRequiredIndexDefinitions(requiredIndexes)).toEqual(requiredIndexDefinitions);
+    expect(requiredIndexes).toContain('actual_index.non_unique = required_index.non_unique');
+    expect(requiredIndexes).toContain('actual_index.seq_in_index = required_index.seq_in_index');
+    expect(requiredIndexes).toContain('binary actual_index.column_name = binary required_index.column_name');
+    expect(requiredIndexes).toContain('unexpected_column_count');
+    const pageMenus = extractVerificationStatement(
+      migrationVerifySql,
+      'seed_qqbot_message_push_page_menu',
+    );
+    expect(pageMenus).toContain("binary json_unquote(json_extract(meta, '$.title')) = binary '消息订阅'");
+    expect(pageMenus).toContain("binary json_unquote(json_extract(meta, '$.title')) = binary '消息模板'");
+    expect(extractVerificationStatement(
+      migrationVerifySql,
+      'seed_qqbot_message_push_role_grant_missing',
+    )).toContain('role_menu.menu_id is null');
+    expect(migrationVerifySql).not.toMatch(/\b(?:insert|update|delete|alter|drop|truncate|replace)\b/);
+  });
+
+  it('rejects a same-name index whose uniqueness, sequence, or column definition drifts', () => {
+    const driftedDefinitions = requiredIndexDefinitions.map((definition) =>
+      definition[1] === 'idx_qqbot_message_event_dispatch' && definition[3] === '2'
+        ? [definition[0], definition[1], definition[2], definition[3], 'occurred_at'] as IndexDefinition
+        : definition);
+    expect(summarizeIndexDefinitions(requiredIndexDefinitions, driftedDefinitions)).toEqual({
+      missing: 1,
+      unexpected: 1,
+    });
+  });
+
   it('uses an exact mismatch CTE and null-safe predicates for every stable menu tuple', () => {
-    const mismatch = extractVerificationStatement(verifySql, 'seed_qqbot_message_push_menu_mismatch');
-    expect(extractMismatchMenuRows(mismatch)).toEqual(menuEntries);
-    expect(mismatch).toContain('left join admin_menu actual on actual.id = expected.id');
-    expect(mismatch).toContain('not (binary actual.name <=> binary expected.name)');
-    expect(mismatch).toContain('not (binary actual.auth_code <=> binary expected.auth_code)');
-    expect(mismatch).toContain('actual.pid <> expected.pid');
-    expect(mismatch).toContain('actual.sort <> expected.sort');
-    expect(mismatch).toContain('actual.status <> 1');
-    expect(mismatch).toContain('actual.is_deleted <> 0');
+    for (const sql of [verifySql, migrationVerifySql]) {
+      const mismatch = extractVerificationStatement(sql, 'seed_qqbot_message_push_menu_mismatch');
+      expect(extractMismatchMenuRows(mismatch)).toEqual(menuEntries);
+      expect(mismatch).toContain('left join admin_menu actual on actual.id = expected.id');
+      expect(mismatch).toContain('not (binary actual.name <=> binary expected.name)');
+      expect(mismatch).toContain('not (binary actual.auth_code <=> binary expected.auth_code)');
+      expect(mismatch).toContain('actual.pid <> expected.pid');
+      expect(mismatch).toContain('actual.sort <> expected.sort');
+      expect(mismatch).toContain('actual.status <> 1');
+      expect(mismatch).toContain('actual.is_deleted <> 0');
+    }
   });
 
   it('uses an exact cardinality CTE with expected, actual, and missing counts', () => {

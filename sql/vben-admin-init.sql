@@ -401,8 +401,8 @@ VALUES
 
 INSERT INTO `admin_menu` (`id`, `pid`, `name`, `path`, `component`, `redirect`, `auth_code`, `type`, `meta`, `status`, `sort`)
 VALUES
-  (2041700000000100413, 2041700000000100400, 'QqBotMessageSubscription', '/qqbot/message-subscription', '/qqbot/message-subscription/list', NULL, 'QqBot:MessageSubscription:List', 'menu', '{"icon":"lucide:bell-ring","title":"系统消息订阅"}', 1, 10),
-  (2041700000000100414, 2041700000000100400, 'QqBotMessageTemplate', '/qqbot/message-template', '/qqbot/message-template/list', NULL, 'QqBot:MessageTemplate:List', 'menu', '{"icon":"lucide:message-square-plus","title":"系统消息模板"}', 1, 11),
+  (2041700000000100413, 2041700000000100400, 'QqBotMessageSubscription', '/qqbot/message-subscription', '/qqbot/message-subscription/list', NULL, 'QqBot:MessageSubscription:List', 'menu', '{"icon":"lucide:bell-ring","title":"消息订阅"}', 1, 10),
+  (2041700000000100414, 2041700000000100400, 'QqBotMessageTemplate', '/qqbot/message-template', '/qqbot/message-template/list', NULL, 'QqBot:MessageTemplate:List', 'menu', '{"icon":"lucide:message-square-plus","title":"消息模板"}', 1, 11),
   (2041700000000120461, 2041700000000100413, 'QqBotMessageSubscriptionList', NULL, NULL, NULL, 'QqBot:MessageSubscription:List', 'button', '{"title":"common.list"}', 1, 0),
   (2041700000000120462, 2041700000000100413, 'QqBotMessageSubscriptionCreate', NULL, NULL, NULL, 'QqBot:MessageSubscription:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120463, 2041700000000100413, 'QqBotMessageSubscriptionUpdate', NULL, NULL, NULL, 'QqBot:MessageSubscription:Update', 'button', '{"title":"common.edit"}', 1, 0),
@@ -420,7 +420,7 @@ VALUES
   (2041700000000120484, 2041700000000100410, 'QqBotAccountMessagePushDelete', NULL, NULL, NULL, 'QqBot:Account:MessagePush:Delete', 'button', '{"title":"common.delete"}', 1, 0),
   (2041700000000120485, 2041700000000100410, 'QqBotAccountMessagePushToggle', NULL, NULL, NULL, 'QqBot:Account:MessagePush:Toggle', 'button', '{"title":"启停"}', 1, 0)
 ON DUPLICATE KEY UPDATE
-  `pid` = VALUES(`pid`), `path` = VALUES(`path`), `component` = VALUES(`component`), `redirect` = VALUES(`redirect`), `auth_code` = VALUES(`auth_code`), `type` = VALUES(`type`), `meta` = VALUES(`meta`), `status` = VALUES(`status`), `sort` = VALUES(`sort`), `is_deleted` = 0;
+  `pid` = VALUES(`pid`), `name` = VALUES(`name`), `path` = VALUES(`path`), `component` = VALUES(`component`), `redirect` = VALUES(`redirect`), `auth_code` = VALUES(`auth_code`), `type` = VALUES(`type`), `meta` = VALUES(`meta`), `status` = VALUES(`status`), `sort` = VALUES(`sort`), `is_deleted` = 0;
 
 INSERT IGNORE INTO `admin_role_menu` (`role_id`, `menu_id`)
 SELECT role.`id`, menu.`id`

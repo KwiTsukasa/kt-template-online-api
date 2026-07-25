@@ -166,14 +166,17 @@ WHERE status IN ('waiting_ddns', 'pending', 'processing', 'retry');
 
 Before applying SQL, take a transaction-consistent backup of all six
 `qqbot_message_*` push tables plus the relevant `admin_menu` and
-`admin_role_menu` rows. Roll back by disabling publish bindings first, then
-rolling back Admin and API while retaining events, deliveries, and send logs;
-do not use `DROP TABLE` or history deletion as an application rollback.
+`admin_role_menu` rows. Existing environments must apply only
+`sql/qqbot-message-push-init.sql`, followed by the read-only
+`sql/qqbot-message-push-verify.sql`; the broader `sql/qqbot-init.sql` contains
+historical migrations and is not the production entry for this feature. Roll
+back by disabling publish bindings first, then rolling back Admin and API while
+retaining events, deliveries, and send logs; do not use `DROP TABLE` or history
+deletion as an application rollback.
 
 Verification output must contain only counts or ID/index summaries. Never
 select/project or print raw `payload`, `rendered_message`, `target_id`,
-credentials, provider objects, or production values. The implementation and
-automated API evidence exist, but real local CRUD, browser pages,
-database-backed Outbox/DDNS flow, and authorized QQ delivery remain unverified
-because safe local prerequisites are unavailable; this documentation change
-performed no push, deployment, or production SQL.
+credentials, provider objects, or production values. Release evidence must
+record database, HTTP, browser, Outbox/DDNS, and authorized QQ delivery gates
+separately. Never choose a QQ target without explicit authorization, and never
+use deployment success as a substitute for an unverified delivery gate.

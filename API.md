@@ -459,9 +459,9 @@ QQBot 运行态包括 NapCat 容器登录、OneBot v11 反向 WebSocket、MQTT �
 
 #### SQL、发布与回滚
 
-既有环境使用幂等增量入口 `sql/qqbot-init.sql`；只有一次性、可丢弃的全量初始化环境才依次使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`。发布顺序是：备份六表及相关菜单/角色授权行 → 应用对应 SQL 入口 → 验证表、唯一/调度索引、默认模板与权限 → 先验证 API 再发布 Admin → 创建订阅和逐账号绑定 → 使用授权非生产目标完成有界 A→B 验收。
+既有环境使用本功能幂等增量入口 `sql/qqbot-message-push-init.sql`，随后执行只读的 `sql/qqbot-message-push-verify.sql`；包含历史迁移的 `sql/qqbot-init.sql` 不能作为本功能生产迁移。只有一次性、可丢弃的全量初始化环境才依次使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`。发布顺序是：备份六表及相关菜单/角色授权行 → 应用对应 SQL 入口 → 验证表、17 个精确索引、默认模板与权限 → 先验证 API 再发布 Admin → 创建订阅和逐账号绑定 → 使用授权非生产目标完成有界 A→B 验收。
 
-回滚先停用全部发布绑定，再回滚 Admin 和 API，并保留事件、投递及发送日志；Network Agent、端口转发、STUN Keeper 和 DDNS 继续运行。Jenkins/K8s 通过只证明版本已部署，不能替代真实 CRUD、页面或事件到消息的功能验收。当前已有实现和自动化 API 证据，但因缺少安全隔离的本地前置条件，真实本地 CRUD、Admin 页面、数据库支持的 Outbox/DDNS 流程和授权 QQ 投递仍未验证；本次文档变更没有推送、部署或执行生产 SQL。
+回滚先停用全部发布绑定，再回滚 Admin 和 API，并保留事件、投递及发送日志；Network Agent、端口转发、STUN Keeper 和 DDNS 继续运行。Jenkins/K8s 通过只证明版本已部署，不能替代真实 CRUD、页面或事件到消息的功能验收。每次发布必须分别记录生产 SQL、真实 API、页面、Outbox/DDNS 和授权 QQ 投递证据；没有明确授权的 QQ 群或 QQ 号时不得任选目标，并应把真实投递单独标记为未验证。
 
 ### NapCat Runtime Profile
 

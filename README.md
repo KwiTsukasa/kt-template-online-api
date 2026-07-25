@@ -233,14 +233,14 @@ bash scripts/bangdream-render-smoke.sh --operation-key bangdream.event.stage --t
 QQBot 系统消息推送按以下顺序发布和回滚：
 
 1. 备份 `qqbot_message_subscription`、`qqbot_message_template`、`qqbot_message_publish_binding`、`qqbot_message_publish_target`、`qqbot_message_event`、`qqbot_message_delivery`，以及本功能相关的 `admin_menu` / `admin_role_menu` 行。
-2. 既有环境只应用审查后的幂等增量入口 `sql/qqbot-init.sql`；仅一次性、可丢弃的全量初始化环境按顺序使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`，不要把两种入口混用。
-3. 验证六表、活动自然键与事件/事件-目标唯一键、事件和投递调度/租约索引、默认模板，以及页面/按钮菜单和角色授权。
+2. 既有环境只应用本功能的幂等增量入口 `sql/qqbot-message-push-init.sql`，随后执行只读的 `sql/qqbot-message-push-verify.sql`；不要把包含历史迁移的 `sql/qqbot-init.sql` 作为本功能生产迁移。仅一次性、可丢弃的全量初始化环境按顺序使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`。
+3. 验证六表、17 个精确索引、默认模板、18 个页面/按钮菜单和活动 `super/admin` 角色授权。
 4. 先发布并验证 API 健康检查、旧 QQBot 发送能力和新只读接口，再发布并验证 Admin。
 5. 管理员显式创建订阅，并在每个发布账号中选择模板、配置群聊/私聊目标和启用绑定；随后用授权的非生产目标做一次有界 A→B 端口变化、DDNS 门禁、发送日志和幂等验收。
 6. 回滚时先停用全部消息推送绑定，再回滚 Admin 和 API；保留事件、投递和 `qqbot_send_log` 历史供审计，不停止 Network Agent、端口转发、STUN Keeper 或 DDNS。
 7. Jenkins/K8s 成功只属于部署证据，不能代替真实 CRUD、页面、Outbox/DDNS 或 QQ 投递功能验收。
 
-当前分支已有实现和自动化 API 证据；由于缺少安全隔离的本地前置条件，真实本地 CRUD、Admin 页面、数据库支持的 Outbox/DDNS 流程和授权 QQ 投递仍未验证。本次文档变更没有推送、部署或执行生产 SQL，不能据此声明功能已上线或已完整验收。
+每次发布记录必须分别写明代码部署、生产 SQL、真实 CRUD、Admin 页面、Outbox/DDNS 和授权 QQ 投递的证据；没有明确授权的 QQ 群或 QQ 号时不得任选目标，且必须把真实投递标记为未验证，不能用 Jenkins/K8s 成功替代。
 
 ## 来源与许可证
 

@@ -86,6 +86,10 @@ System 网络管理以 MySQL 中的 TCP/UDP 端口转发期望状态为唯一事
 
 QQBot 系统消息推送由全局消息订阅和模板、账号范围发布绑定及耐久事件/投递共同管理；账号接口严格使用路由 `selfId`，不会回退到其他机器人。群聊和私聊目标分别使用 `group` / `private`，Snowflake、QQ 账号和目标 ID 在 HTTP 与数据库边界始终保持字符串。系统事件只能通过内部 Outbox stager 暂存，不提供 publish/event/worker HTTP 路由；管理响应仅返回字段白名单，不暴露账号凭据、Provider/OneBot/MQTT 运行对象、原始事件载荷或内部持久化键。
 
+`qqbot_message_event` 同时承担事件 Outbox：扇出状态为 `accepted`、`processing`、`retry`、`completed`、`failed`；按目标冻结的 `qqbot_message_delivery` 状态为 `waiting_ddns`、`pending`、`processing`、`retry`、`success`、`failed`、`superseded`、`cancelled`。扇出和投递每次各领取最多 50 行，处理租约为 30 秒；进程启动后立即恢复，并每 5 秒扫描一次。`waiting_ddns` 每 60 秒持久化复检；临时错误从 10 秒开始指数退避，单次最长 15 分钟，并以事件发生后 24 小时为截止时间。
+
+Network 端点历史事务提交后才调用 `requestDrain()`；DDNS 只有在 optimistic `synced` / `appliedAddress` 状态成功持久化后才调用 `notifyDdnsSynced()` 提前唤醒相关等待任务，周期扫描仍负责恢复漏唤醒。每次正式发送都重新检查来源和配置，只使用投递冻结的准确 `selfId`，正文作为一个 OneBot `text` segment 下发。数据库唯一键避免重复事件和重复事件-目标任务，但 OneBot 超时后的重试具有至少一次语义：超时结果不明确时，收件端仍可能收到重复消息。
+
 NapCat Runtime/Protocol Profile 已完成本地 API/Admin 实施，线上发布和账号闭环按 `docs/plans/2026-06-18-qqbot-napcat-runtime-protocol-profile-implementation-plan.md` 的 Task 10 执行。当前实现覆盖运行态/协议/会话行为/历史登录事件兼容表/风险模式表，真实物理设备风格 hostname/MAC，NapCat/OneBot 配置 hash，KT `zh_CN.UTF-8` 中国桌面派生镜像资产，只读 `/qqbot/napcat/runtime/detail` 证据接口，watchdog 离线巡检告警，以及 Admin 账号页“运行态”抽屉；不绕过 QQ/Tencent 验证码、不修改 QQ/NTQQ 签名协议、不启用 privileged/host network，也不做账号级每小时/每日累计发送预算。NapCat Chinese Desktop Runtime v20 使用 KT `NapCatQQ` fork 源码构建出的 `NapCat.Shell` artifact，并在 QQ `KickedOffLine` 后标记 native login service stale；API 在源 Docker 容器在线但 WebUI 明确 QQ 离线时会同容器调用 `RestartNapCat` 重启 NapCat worker，重建 QQCore login service 后再推进 quick/password/qrcode，不做 Docker 重建、补 env 或设备身份迁移，且同一个更新登录 session 只消费一次 worker restart 预算；v14 起还会对 QQ/NapCat/Xvfb 长期进程的 `/proc/<pid>/mountinfo` 做 PID 级遮蔽，防止 `overlay`、`/vol1/docker`、`docker-init`、`/docker/containers`、`napcat-instances` 等宿主路径泄露；v15 修复扫码成功时 `QQLoginInfo` 晚于登录态写入造成的 QQ 号回读空窗；v16 在 native reset 缺少 `offline()` 时改用 `destroy()` 硬重置半登录服务，并让镜像 verify 等待 mountinfo guard 收敛；v17/v18 增加 WebUI 鉴权的 `/api/Debug/RuntimeViewProbe` 同进程诊断并修正 native maps 截断导致的 hook 证据假阴性；v19 保留 WebUI `RestartNapCat` 重启 worker 时的 `-q <uin>` 快速登录参数，避免重启后退回无账号扫码；v20 保护 API 预写的 `/app/napcat/config`，避免上游首次解包 `NapCat.Shell/*` 覆盖 `bypass.*=true` 与 `o3HookMode=0`。镜像必须先用 `scripts/napcat-desktop-cn-stage-build.mjs` staged build context，生产 `QQBOT_NAPCAT_IMAGE` 应指向验证过的 `kt-napcat-desktop-cn:desktop-cn-v20` digest。`k8s/prod/api.yaml` 保留 `desktop-cn-v20` 稳定默认值；Jenkins `QQBOT_NAPCAT_IMAGE_OVERRIDE` 和 `QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE` 仅在填写时通过 `kubectl set env` 推广已验证运行时镜像/profile，空值会继续使用 manifest/default env。回滚时重新运行 Jenkins 并填入上一版 digest/profile，或清空两个 override 后重新部署 manifest 默认值。
 
 运行时发布时，API 仓库不提交 `NapCat.Shell.zip`；生产镜像必须从 staged context 构建，`fork-artifact.json` 必须带完整 marker metadata，包括 upstream release tag/commit、fork commit、base image digest、Jenkins URL 和 artifact hashes。release evidence 里的 NapCat base image 必须用 digest pin。API Jenkins 只消费人工确认后的运行时推广参数，不自动合并上游、不自动构建隐藏镜像，也不在 override 为空时覆盖 K8s manifest 中的默认 env。
@@ -225,6 +229,18 @@ bash scripts/bangdream-render-smoke.sh --operation-key bangdream.event.stage --t
 ## 发布
 
 主线发布由 Jenkins 构建镜像、推送 NAS 本地 Registry，并滚动更新 K8s `kt-prod/kt-template-online-api`。推送后不能只看 Git push 成功，需要继续观察 Jenkins、K8s rollout、新 Pod 状态和至少一条真实运行态 smoke。
+
+QQBot 系统消息推送按以下顺序发布和回滚：
+
+1. 备份 `qqbot_message_subscription`、`qqbot_message_template`、`qqbot_message_publish_binding`、`qqbot_message_publish_target`、`qqbot_message_event`、`qqbot_message_delivery`，以及本功能相关的 `admin_menu` / `admin_role_menu` 行。
+2. 既有环境只应用审查后的幂等增量入口 `sql/qqbot-init.sql`；仅一次性、可丢弃的全量初始化环境按顺序使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`，不要把两种入口混用。
+3. 验证六表、活动自然键与事件/事件-目标唯一键、事件和投递调度/租约索引、默认模板，以及页面/按钮菜单和角色授权。
+4. 先发布并验证 API 健康检查、旧 QQBot 发送能力和新只读接口，再发布并验证 Admin。
+5. 管理员显式创建订阅，并在每个发布账号中选择模板、配置群聊/私聊目标和启用绑定；随后用授权的非生产目标做一次有界 A→B 端口变化、DDNS 门禁、发送日志和幂等验收。
+6. 回滚时先停用全部消息推送绑定，再回滚 Admin 和 API；保留事件、投递和 `qqbot_send_log` 历史供审计，不停止 Network Agent、端口转发、STUN Keeper 或 DDNS。
+7. Jenkins/K8s 成功只属于部署证据，不能代替真实 CRUD、页面、Outbox/DDNS 或 QQ 投递功能验收。
+
+当前分支已有实现和自动化 API 证据；由于缺少安全隔离的本地前置条件，真实本地 CRUD、Admin 页面、数据库支持的 Outbox/DDNS 流程和授权 QQ 投递仍未验证。本次文档变更没有推送、部署或执行生产 SQL，不能据此声明功能已上线或已完整验收。
 
 ## 来源与许可证
 

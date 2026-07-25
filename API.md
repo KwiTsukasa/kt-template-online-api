@@ -450,6 +450,19 @@ QQBot 运行态包括 NapCat 容器登录、OneBot v11 反向 WebSocket、MQTT �
 
 响应仅返回管理契约字段：source definition/field/variable 白名单；STUN 的 port-forward/DDNS 候选白名单；subscription、template、preview、binding/target 和 target option 视图。不会返回 adapter、entity/repository、`activeKey`、digest、软删除字段、账号内部 ID、事件 payload/delivery/lease/retry 状态、凭据、access token、Provider/OneBot/MQTT 原始对象。系统事件只能通过 Nest 内部 Outbox stager 暂存，不存在 publish、event、delivery、fan-out、retry 或 worker HTTP 发布接口。
 
+#### 内部事件与投递生命周期
+
+- 只有一个既有有效端口直接变化为另一个有效端口的 `changed` 事件，才会在 endpoint-history 同一事务内以生产者 `eventId` 幂等写入 `qqbot_message_event` Outbox。首次 `published`、租约续期、仅 IPv4 变化、`withdrawn`、`restored`、重复事件和回滚事务都不产生消息事件；事务提交后才调用 `requestDrain()`。
+- Outbox 扇出状态为 `accepted`、`processing`、`retry`、`completed`、`failed`；投递状态为 `waiting_ddns`、`pending`、`processing`、`retry`、`success`、`failed`、`superseded`、`cancelled`。每个 runner 每次最多领取 50 行并设置 30 秒租约；启动后立即恢复且每 5 秒扫描。过期 `processing` 租约可由重启后的进程重新领取。
+- DDNS 未就绪的投递进入 `waiting_ddns` 并每 60 秒复检。只有对应 A 记录的 optimistic `synced` / `appliedAddress` 更新成功持久化后，`notifyDdnsSynced()` 才提前推进相关任务；发送前仍重检当前 endpoint、DDNS、订阅、绑定、目标和账号。更新 endpoint 使旧未完成任务成为 `superseded`，配置停用或删除使其成为 `cancelled`。
+- 扇出和投递的临时错误从 10 秒开始指数退避，单次最长 15 分钟，并在事件发生 24 小时后截止。`sendStrictPlainText()` 只选择投递冻结的 `selfId`，把正文作为一个 OneBot `text` segment 发送，并在成功时关联 `qqbot_send_log`。数据库唯一键保证事件和事件-目标任务幂等；OneBot 超时可重试，因此外部结果不明确时仍是可能重复的至少一次投递，而不是跨系统恰好一次。
+
+#### SQL、发布与回滚
+
+既有环境使用幂等增量入口 `sql/qqbot-init.sql`；只有一次性、可丢弃的全量初始化环境才依次使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`。发布顺序是：备份六表及相关菜单/角色授权行 → 应用对应 SQL 入口 → 验证表、唯一/调度索引、默认模板与权限 → 先验证 API 再发布 Admin → 创建订阅和逐账号绑定 → 使用授权非生产目标完成有界 A→B 验收。
+
+回滚先停用全部发布绑定，再回滚 Admin 和 API，并保留事件、投递及发送日志；Network Agent、端口转发、STUN Keeper 和 DDNS 继续运行。Jenkins/K8s 通过只证明版本已部署，不能替代真实 CRUD、页面或事件到消息的功能验收。当前已有实现和自动化 API 证据，但因缺少安全隔离的本地前置条件，真实本地 CRUD、Admin 页面、数据库支持的 Outbox/DDNS 流程和授权 QQ 投递仍未验证；本次文档变更没有推送、部署或执行生产 SQL。
+
 ### NapCat Runtime Profile
 
 | 方法  | 路径                                      | 说明                                                                                  |

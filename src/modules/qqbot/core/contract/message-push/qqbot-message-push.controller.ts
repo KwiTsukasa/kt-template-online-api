@@ -53,11 +53,6 @@ const SOURCE_READ_PERMISSIONS = [
   'QqBot:Account:MessagePush:Update',
 ] as const;
 
-/**
- * Returns an allowlisted detached source definition without exposing its adapter.
- * @param definition - Registered source definition owned by an internal adapter.
- * @returns A cloned definition containing only the public management contract.
- */
 const cloneSourceDefinition = (
   definition: SystemMessageSourceDefinition,
 ): SystemMessageSourceDefinition => ({
@@ -82,11 +77,6 @@ const cloneSourceDefinition = (
   version: definition.version,
 });
 
-/**
- * Narrows weakly typed adapter options to the locked STUN management response.
- * @param value - Source adapter result after its domain-side eligibility checks.
- * @returns Detached port-forward and DDNS option rows with public fields only.
- */
 const allowlistStunOptions = (
   value: Record<string, unknown>,
 ): StunMappingPortChangedOptionsResponse => {
@@ -112,11 +102,6 @@ const allowlistStunOptions = (
   };
 };
 
-/**
- * Narrows one subscription result to the public management view.
- * @param view - Detached service result that may evolve independently of HTTP.
- * @returns Only the locked subscription response fields and STUN config keys.
- */
 const allowlistSubscription = (
   view: MessageSubscriptionView,
 ): MessageSubscriptionView => ({
@@ -137,11 +122,6 @@ const allowlistSubscription = (
   valid: view.valid,
 });
 
-/**
- * Narrows one template result to the public management view.
- * @param view - Detached service result that may evolve independently of HTTP.
- * @returns Only the locked template response fields.
- */
 const allowlistTemplate = (view: MessageTemplateView): MessageTemplateView => ({
   content: view.content,
   createTime: view.createTime,
@@ -155,11 +135,6 @@ const allowlistTemplate = (view: MessageTemplateView): MessageTemplateView => ({
   updateTime: view.updateTime,
 });
 
-/**
- * Narrows a renderer preview to the public message and example variable values.
- * @param preview - Template service preview result.
- * @returns Detached preview without parser or event internals.
- */
 const allowlistPreview = (
   preview: MessageTemplatePreview,
 ): MessageTemplatePreview => ({
@@ -178,28 +153,18 @@ const allowlistPreview = (
   }),
 )
 export class QqbotMessagePushController {
-  /**
-   * Initializes global source, subscription, and template management routes.
-   * @param sourceRegistry - Process-local public source definitions and adapters.
-   * @param subscriptionService - Global subscription lifecycle service.
-   * @param templateService - Global template lifecycle and preview service.
-   */
   constructor(
     private readonly sourceRegistry: SystemMessageSourceRegistry,
     private readonly subscriptionService: QqbotMessageSubscriptionService,
     private readonly templateService: QqbotMessageTemplateService,
   ) {}
 
-  /** Lists detached source definitions available to authorized management flows. */
   @Get('sources')
   @QqbotMessagePushPermission(...SOURCE_READ_PERMISSIONS)
   listSources() {
     return vbenSuccess(this.sourceRegistry.list().map(cloneSourceDefinition));
   }
 
-  /**
-   * Returns the concrete STUN configuration candidates without provider state.
-   */
   @Get('sources/network.stun.mapping-port-changed/options')
   @QqbotMessagePushPermission(
     'QqBot:MessageSubscription:Create',
@@ -214,10 +179,6 @@ export class QqbotMessagePushController {
     return vbenSuccess(allowlistStunOptions(result));
   }
 
-  /**
-   * Reads one known public source definition.
-   * @param params - Validated source key route parameters.
-   */
   @Get('sources/:sourceKey')
   @QqbotMessagePushPermission(...SOURCE_READ_PERMISSIONS)
   sourceDetail(@Param() params: MessagePushSourceParamDto) {
@@ -225,10 +186,6 @@ export class QqbotMessagePushController {
     return vbenSuccess(cloneSourceDefinition(definition));
   }
 
-  /**
-   * Pages global subscriptions.
-   * @param query - Strict name, source, enabled, and pagination filters.
-   */
   @Get('subscriptions')
   @QqbotMessagePushPermission(
     'QqBot:MessageSubscription:List',
@@ -241,10 +198,6 @@ export class QqbotMessagePushController {
     return vbenPage(page.items.map(allowlistSubscription), page.total);
   }
 
-  /**
-   * Creates one global subscription.
-   * @param body - Complete strict STUN subscription input.
-   */
   @Post('subscriptions')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Create')
@@ -254,11 +207,6 @@ export class QqbotMessagePushController {
     );
   }
 
-  /**
-   * Replaces one global subscription.
-   * @param params - Validated string Snowflake route identity.
-   * @param body - Complete strict STUN subscription input.
-   */
   @Put('subscriptions/:id')
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Update')
   async updateSubscription(
@@ -272,11 +220,6 @@ export class QqbotMessagePushController {
     );
   }
 
-  /**
-   * Toggles one global subscription.
-   * @param params - Validated string Snowflake route identity.
-   * @param body - Required JSON boolean state.
-   */
   @Put('subscriptions/:id/enabled')
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Toggle')
   async toggleSubscription(
@@ -290,20 +233,12 @@ export class QqbotMessagePushController {
     );
   }
 
-  /**
-   * Soft-deletes one global subscription.
-   * @param params - Validated string Snowflake route identity.
-   */
   @Delete('subscriptions/:id')
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Delete')
   async removeSubscription(@Param() params: MessagePushIdParamDto) {
     return vbenSuccess(await this.subscriptionService.remove(params.id));
   }
 
-  /**
-   * Pages global templates.
-   * @param query - Strict name, source, enabled, and pagination filters.
-   */
   @Get('templates')
   @QqbotMessagePushPermission(
     'QqBot:MessageTemplate:List',
@@ -316,10 +251,6 @@ export class QqbotMessagePushController {
     return vbenPage(page.items.map(allowlistTemplate), page.total);
   }
 
-  /**
-   * Creates one global template.
-   * @param body - Complete strict source template input.
-   */
   @Post('templates')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Create')
@@ -329,11 +260,6 @@ export class QqbotMessagePushController {
     );
   }
 
-  /**
-   * Replaces one global template.
-   * @param params - Validated string Snowflake route identity.
-   * @param body - Complete strict source template input.
-   */
   @Put('templates/:id')
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Update')
   async updateTemplate(
@@ -345,11 +271,6 @@ export class QqbotMessagePushController {
     );
   }
 
-  /**
-   * Toggles one global template.
-   * @param params - Validated string Snowflake route identity.
-   * @param body - Required JSON boolean state.
-   */
   @Put('templates/:id/enabled')
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Toggle')
   async toggleTemplate(
@@ -363,20 +284,12 @@ export class QqbotMessagePushController {
     );
   }
 
-  /**
-   * Soft-deletes one unreferenced global template.
-   * @param params - Validated string Snowflake route identity.
-   */
   @Delete('templates/:id')
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Delete')
   async removeTemplate(@Param() params: MessagePushIdParamDto) {
     return vbenSuccess(await this.templateService.remove(params.id));
   }
 
-  /**
-   * Safely renders one unsaved template with source examples.
-   * @param body - Strict source key and content only.
-   */
   @Post('templates/preview')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Preview')

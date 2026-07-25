@@ -11,11 +11,6 @@ export class Skill {
   //'judge'|'score'|'damage'|'score_continued_note_judge'|'score_over_life'|'score_under_great_half'|'score'
   scoreUpMaxValue: number;
 
-  /**
-   * 构造 Skill 实例，并初始化该模型的本地基础字段。
-   *
-   * @param skillId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
-   */
   constructor(skillId: number) {
     this.skillId = skillId;
     if (bangdreamCatalogCache['skills'][this.skillId.toString()] == undefined) {

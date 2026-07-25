@@ -63,42 +63,12 @@ export async function drawCardList(
 
 //计算模糊搜索结果
 export const matchCardList = createBangDreamEntityMatcher<Card>({
-  /**
-   * 执行 BangDream回调。
-   */
   source: () => cardRepository.getSource(),
-  /**
-   * 创建 BangDream 插件对象或配置。
-   *
-   * @param cardId - 卡牌 ID；定位本次读取、更新、删除或关联的卡牌。
-   */
   createEntity: (cardId) => cardRepository.create(cardId),
-  /**
-   * 判断 BangDream 插件条件。
-   *
-   * @param card - card 输入；使用 `type` 字段计算判断结果。
-   */
   isCandidate: (card) => card.type != 'others',
-  /**
-   * 判断 BangDream 插件条件。
-   *
-   * @param card - card 输入；使用 `releasedAt` 字段计算判断结果。
-   * @param displayedServerList - displayedServerList 输入；计算 BangDream布尔判断。
-   */
   isReleased: (card, displayedServerList) =>
     displayedServerList.some((server) => card.releasedAt[server] != null),
-  /**
-   * 判断 BangDream 插件条件。
-   *
-   * @param matches - BangDream列表；驱动 `match()` 的 BangDream步骤。
-   * @param card - card 输入；驱动 `match()` 的 BangDream步骤。
-   */
   isMatched: (matches, card) => match(matches, card, ['scoreUpMaxValue']),
-  /**
-   * 在QQBot 图片视图层中处理关系表达式值。
-   *
-   * @param card - card 输入；使用 `cardId` 字段生成结果。
-   */
   relationValue: (card) => card.cardId,
 });
 

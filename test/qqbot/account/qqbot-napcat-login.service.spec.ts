@@ -5,10 +5,6 @@ jest.mock('@/common', () => {
     ToolsService: actualCommon.ToolsService,
     ensureSnowflakeId: jest.fn(),
     setDictDecodeCache: jest.fn(),
-    /**
-     * 执行 测试回调。
-     * @param message - message 输入；驱动 `Error()` 的 测试步骤。
-     */
     throwVbenError: (message: string) => {
       throw new Error(message);
     },
@@ -24,12 +20,6 @@ import { NapcatLoginSession } from '@/modules/qqbot/napcat/infrastructure/persis
 import { NapcatLoginStateStoreService } from '@/modules/qqbot/napcat/infrastructure/persistence/napcat-login-state-store.service';
 
 describe('QqbotNapcatLoginService', () => {
-  /**
-   * 为更新登录测试模拟 NapCat WebUI quick/password 登录接口。
-   * @param target - 被测登录服务；其私有 postNapcat 会被替换为可控实现。
-   * @param options - quick/password 分支的返回或错误，用来驱动目标状态机路径。
-   * @returns Jest spy，供用例继续断言 WebUI 请求体。
-   */
   const mockWebuiLoginPost = (
     target: QqbotNapcatLoginService,
     options: {
@@ -60,10 +50,6 @@ describe('QqbotNapcatLoginService', () => {
       });
 
   const toolsService = new ToolsService();
-  /**
-   * 创建用于登录会话持久化断言的 TypeORM Repository 替身。
-   * @returns 带内存 rows 的最小 Repository；按 sessionKey 模拟 update/save 行为。
-   */
   const createLoginSessionRepository = () => {
     const rows: NapcatLoginSession[] = [];
     return {

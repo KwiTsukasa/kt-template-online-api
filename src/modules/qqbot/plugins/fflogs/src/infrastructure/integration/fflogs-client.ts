@@ -78,10 +78,6 @@ export class FflogsClient {
   private readonly tokenCache = new FflogsOAuthTokenCache();
   private readonly webBaseUrl: string;
 
-  /**
-   * 初始化 FflogsClient 实例。
-   * @param host - host 输入；驱动 `resolveFflogsConfig()` 的 FFLogs步骤。
-   */
   constructor(private readonly host: FflogsPluginHost) {
     const config = resolveFflogsConfig(host);
     this.webBaseUrl = config.webBaseUrl;
@@ -805,10 +801,6 @@ export class FflogsClient {
     return this.host.requestJson<T>({
       body: options.body,
       context: 'FFLogs',
-      /**
-       * 执行 FFLogs回调。
-       * @param statusCode - statusCode 输入；影响 failureMessage 的返回值。
-       */
       failureMessage: (statusCode) => `FFLogs 请求失败：${statusCode}`,
       headers: options.headers,
       invalidJsonMessage: 'FFLogs 返回不是合法 JSON',
@@ -1730,10 +1722,6 @@ export class FflogsClient {
     return map;
   }
 
-  /**
-   * Loads the FF14 market dictionary catalog inside the FFLogs package for known-world parsing.
-   * @returns FF14 region/data-center/world catalog assembled from generic host dictionary methods.
-   */
   private async loadFf14MarketCatalog() {
     if (this.host.relationTree) {
       const treeCatalog = buildFf14MarketCatalogFromTree(
@@ -1756,11 +1744,6 @@ export class FflogsClient {
     });
   }
 
-  /**
-   * Reads dictionary items through whichever generic or legacy host dictionary method is available.
-   * @param dictCode - Dictionary code used by FFLogs localization or FF14 world catalog lookup.
-   * @returns Dictionary items from `getDictItemsByKey`, legacy `getDictByKey`, or an empty list.
-   */
   private async getDictItems(dictCode: string): Promise<Ff14DictItem[]> {
     if (this.host.getDictItemsByKey) {
       return this.host.getDictItemsByKey(dictCode);

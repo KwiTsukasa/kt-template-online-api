@@ -22,12 +22,6 @@ type CountedBlogTerm = BlogArticleTerm & {
 
 @Injectable()
 export class BlogTermService {
-  /**
-   * 初始化 BlogTermService 实例。
-   * @param termRepository - 博客仓库依赖；影响 constructor 的返回值。
-   * @param articleRepository - 文章仓库依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(BlogTerm)
     private readonly termRepository: Repository<BlogTerm>,

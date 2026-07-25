@@ -8,10 +8,6 @@ import {
 
 @Injectable()
 export class RuntimeHealthService {
-  /**
-   * 初始化 RuntimeHealthService 实例。
-   * @param runtimeConfigService - runtimeConfigService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly runtimeConfigService: RuntimeConfigService) {}
 
   /**

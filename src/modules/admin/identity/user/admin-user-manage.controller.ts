@@ -19,10 +19,6 @@ import { AdminUserService } from './admin-user.service';
 @Controller('system/user')
 @UseGuards(JwtAuthGuard)
 export class AdminUserManageController {
-  /**
-   * 初始化 AdminUserManageController 实例。
-   * @param userService - userService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly userService: AdminUserService) {}
 
   /**

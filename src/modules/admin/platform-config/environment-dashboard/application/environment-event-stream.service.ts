@@ -20,12 +20,6 @@ export class EnvironmentEventStreamService {
   private readonly heartbeatMs: number;
   private readonly replayLimit: number;
 
-  /**
-   * Initializes the SSE stream fan-out from the environment event bus.
-   * @param eventBus - Local/MQTT event bus that receives backend environment events.
-   * @param materializer - Event materializer that sanitizes events and invalidates cache.
-   * @param options - Test/runtime overrides for replay window and heartbeat interval.
-   */
   constructor(
     private readonly eventBus: EnvironmentEventBusService,
     private readonly materializer: EnvironmentEventMaterializer,
@@ -45,11 +39,6 @@ export class EnvironmentEventStreamService {
     });
   }
 
-  /**
-   * Opens an SSE-compatible observable with optional replay cursor.
-   * @param lastEventId - Browser Last-Event-ID header or query fallback.
-   * @returns Observable carrying replay, live events, and heartbeat notices.
-   */
   stream(lastEventId?: string): Observable<EnvironmentStreamEvent> {
     const replayEvents = this.getReplayEvents(lastEventId);
     const heartbeat$ = timer(this.heartbeatMs, this.heartbeatMs).pipe(
@@ -62,10 +51,6 @@ export class EnvironmentEventStreamService {
     );
   }
 
-  /**
-   * Adds a materialized event to replay history and current SSE subscribers.
-   * @param event - Sanitized dashboard event.
-   */
   private pushEvent(event: EnvironmentEvent) {
     const streamEvent: EnvironmentStreamEvent = {
       data: event,
@@ -79,11 +64,6 @@ export class EnvironmentEventStreamService {
     this.streamSubject.next(streamEvent);
   }
 
-  /**
-   * Replays recent events or asks the browser to reload one snapshot.
-   * @param lastEventId - Last event id reported by the browser.
-   * @returns Replay events for the new SSE subscription.
-   */
   private getReplayEvents(lastEventId?: string): EnvironmentStreamEvent[] {
     if (!lastEventId) return [];
     const index = this.replay.findIndex((event) => event.id === lastEventId);
@@ -91,10 +71,6 @@ export class EnvironmentEventStreamService {
     return this.replay.slice(index + 1);
   }
 
-  /**
-   * Creates a heartbeat event that keeps the connection alive without refreshing state.
-   * @returns SSE heartbeat event.
-   */
   private createHeartbeatEvent(): EnvironmentStreamEvent {
     const observedAt = new Date().toISOString();
     return {
@@ -104,10 +80,6 @@ export class EnvironmentEventStreamService {
     };
   }
 
-  /**
-   * Creates a snapshot instruction when replay continuity cannot be guaranteed.
-   * @returns SSE snapshot-required notice.
-   */
   private createSnapshotRequiredEvent(): EnvironmentStreamEvent {
     return {
       data: {

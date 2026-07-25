@@ -19,7 +19,6 @@ import { SystemMessageFanoutService } from './system-message-fanout.service';
 
 const NETWORK_STUN_SOURCE = 'network.stun.mapping-port-changed';
 
-/** Coordinates durable fan-out and delivery recovery without coupling Core to Admin providers. */
 @Injectable()
 export class SystemMessageDeliveryCoordinatorService
   implements OnModuleInit, OnModuleDestroy
@@ -33,14 +32,12 @@ export class SystemMessageDeliveryCoordinatorService
   private scanInterval?: NodeJS.Timeout;
   private startupTimer?: NodeJS.Timeout;
 
-  /** Creates the Core-owned coordinator and both bounded persistence runners. */
   constructor(
     private readonly dataSource: DataSource,
     private readonly fanoutRunner: SystemMessageFanoutService,
     private readonly deliveryRunner: SystemMessageDeliveryRunnerService,
   ) {}
 
-  /** Starts one post-init wake and an unref'ed durable five-second recovery scan. */
   onModuleInit(): void {
     if (this.destroyed || this.scanInterval) return;
     this.startupTimer = setTimeout(() => {
@@ -55,7 +52,6 @@ export class SystemMessageDeliveryCoordinatorService
     this.scanInterval.unref?.();
   }
 
-  /** Stops timers and waits for the active bounded pass without allowing a replacement pass. */
   async onModuleDestroy(): Promise<void> {
     this.destroyed = true;
     this.drainRequested = false;
@@ -66,7 +62,6 @@ export class SystemMessageDeliveryCoordinatorService
     await this.drainPromise;
   }
 
-  /** Coalesces one or many post-commit wakeups into at most one active drain loop. */
   requestDrain(): void {
     if (this.destroyed) return;
     this.drainRequested = true;
@@ -84,7 +79,6 @@ export class SystemMessageDeliveryCoordinatorService
       });
   }
 
-  /** Wakes only address-relevant DDNS-blocked rows after the DDNS transition has committed. */
   async notifyDdnsSynced(input: {
     appliedAddress: string;
     ddnsRecordId: string;
@@ -135,7 +129,6 @@ export class SystemMessageDeliveryCoordinatorService
     if (advanced > 0) this.requestDrain();
   }
 
-  /** Runs ordered fan-out then delivery passes, isolating each runner's failure and backlog signal. */
   private async drainLoop(): Promise<void> {
     while (!this.destroyed && this.drainRequested) {
       this.drainRequested = false;
@@ -153,7 +146,6 @@ export class SystemMessageDeliveryCoordinatorService
     }
   }
 
-  /** Executes one runner without allowing its rejection to starve the other durable queue. */
   private async runBounded(
     name: string,
     runner: () => Promise<number>,

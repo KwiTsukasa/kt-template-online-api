@@ -33,10 +33,6 @@ function createService(config: Record<string, number | string | undefined>) {
     host: {
       bindEventPlugin: jest.fn(),
       getBoundEventPluginKeys: jest.fn().mockResolvedValue(['repeater']),
-      /**
-       * 读取 测试回调数据。
-       * @param key - 键名；限定 测试查询范围。
-       */
       getConfig: <T = string>(key: string) => config[key] as T,
       sendText: sendService.sendText,
       unbindEventPlugin: jest.fn(),
@@ -48,9 +44,6 @@ function createService(config: Record<string, number | string | undefined>) {
       pluginKey: 'repeater',
       version: '1.0.0',
     },
-    /**
-     * 执行 测试回调。
-     */
     now: () => Date.now(),
   });
   return { sendService, service };

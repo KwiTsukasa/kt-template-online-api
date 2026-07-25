@@ -10,32 +10,14 @@ interface RelationChecker {
 const RELATION_CHECKERS: RelationChecker[] = [
   {
     pattern: /^<(\d+)$/,
-    /**
-     * 判断数字是否小于关系表达式右值。
-     *
-     * @param num - num 输入；影响 test 的返回值。
-     * @param match - match 输入；驱动 `parseFloat()` 的 BangDream步骤。
-     */
     test: (num, match) => num < parseFloat(match[1]),
   },
   {
     pattern: /^>(\d+)$/,
-    /**
-     * 判断数字是否大于关系表达式右值。
-     *
-     * @param num - num 输入；影响 test 的返回值。
-     * @param match - match 输入；驱动 `parseFloat()` 的 BangDream步骤。
-     */
     test: (num, match) => num > parseFloat(match[1]),
   },
   {
     pattern: /^(\d+)-(\d+)$/,
-    /**
-     * 判断数字是否落入关系表达式闭区间。
-     *
-     * @param num - num 输入；驱动 `parseFloat()` 的 BangDream步骤。
-     * @param match - match 输入；驱动 `parseFloat()` 的 BangDream步骤。
-     */
     test: (num, match) =>
       num >= parseFloat(match[1]) && num <= parseFloat(match[2]),
   },

@@ -26,18 +26,9 @@ type KtDateTimeRuleTarget = Record<PropertyKey, any> & {
 
 type KtDateTimeDecoratorOptions = string | ColumnOptions;
 
-/**
- * 执行 KT 日期时间流程。
- * @param value - 待转换时间值；影响 padDateUnit 的返回值。
- */
 const padDateUnit = (value: number) => `${value}`.padStart(2, '0');
 
 export class KtDateTime extends Date {
-  /**
-   * 初始化 KtDateTime 实例。
-   * @param value - 待转换值；执行 `value.getTime()` 对应的 公共基础设施步骤。
-   * @param format - format 输入；驱动 `KT_DATETIME_INSTANCE_FORMATS.set()` 的 公共基础设施步骤。
-   */
   constructor(value?: Date | number | string, format = KT_DATETIME_FORMAT) {
     super(value instanceof Date ? value.getTime() : (value ?? Date.now()));
     KT_DATETIME_INSTANCE_FORMATS.set(this, format);
@@ -81,12 +72,6 @@ export class KtDateTime extends Date {
   }
 }
 
-/**
- * 转换 KT 日期时间输入。
- * @param value - 待转换时间值；构造时间对象。
- * @param format - format 输入；生成规范化文本。
- * @returns KT 日期时间渲染后的图片、画布或文本。
- */
 export const formatKtDateTime = (
   value: Date | number | string,
   format = KT_DATETIME_FORMAT,
@@ -106,11 +91,6 @@ export const formatKtDateTime = (
   return format.replace(/YYYY|MM|DD|HH|mm|ss/g, (token) => tokens[token]);
 };
 
-/**
- * 执行 KT 日期时间流程。
- * @param value - 待转换时间值；驱动 `KtDateTime()` 的 公共基础设施步骤。
- * @param format - format 输入；驱动 `KtDateTime()` 的 公共基础设施步骤。
- */
 export const toKtDateTime = (
   value: Date | number | string,
   format = KT_DATETIME_FORMAT,
@@ -119,23 +99,10 @@ export const toKtDateTime = (
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-/**
- * 创建 KT 日期时间对象或配置。
- * @param format - format 输入；驱动 `transformKtDateTimeValue()`、`toKtDateTime()` 的 公共基础设施步骤。
- * @returns 创建后的 KT 日期时间对象或配置。
- */
 export const createKtDateTimeTransformer = (
   format = KT_DATETIME_FORMAT,
 ): ValueTransformer => ({
-  /**
-   * 执行 公共基础设施回调。
-   * @param value - 待转换值；驱动 `transformKtDateTimeValue()` 的 公共基础设施步骤。
-   */
   from: (value: unknown) => transformKtDateTimeValue(value, format),
-  /**
-   * 执行 公共基础设施回调。
-   * @param value - 待转换值；执行 `value.getTime()` 对应的 公共基础设施步骤。
-   */
   to: (value: unknown) => {
     if (value instanceof Date) return new Date(value.getTime());
     if (
@@ -290,11 +257,6 @@ export function KtUpdateDateColumn(
   });
 }
 
-/**
- * 执行 KT 日期时间流程。
- * @param format - format 输入；影响 KtDateTimeField 的返回值。
- * @returns KT 日期时间产出的 PropertyDecorator。
- */
 export const KtDateTimeField = (
   format = KT_DATETIME_FORMAT,
 ): PropertyDecorator => {

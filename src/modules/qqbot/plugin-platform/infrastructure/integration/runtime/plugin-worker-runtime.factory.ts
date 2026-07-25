@@ -57,24 +57,12 @@ type QqbotPluginWorkerThreadDriverOptions = {
 
 @Injectable()
 export class QqbotPluginWorkerRuntimeFactoryService implements QqbotPluginRuntimeFactory {
-  /**
-   * Creates the descriptor-based worker runtime factory.
-   * @param configService - Nest config source used for BullMQ queue options and runtime config snapshots.
-   * @param packageSource - Package descriptor resolver that applies controlled-root and entry policies.
-   * @param hostBridge - Generic host bridge used by worker host-call RPC messages.
-   */
   constructor(
     private readonly configService: ConfigService,
     private readonly packageSource: QqbotPluginPackageSourceService,
     private readonly hostBridge: QqbotPluginHostBridgeService,
   ) {}
 
-  /**
-   * Creates a worker runtime for one plugin installation and version descriptor.
-   * @param installation - Installation row whose `installedPath` identifies the package root.
-   * @param version - Version row whose `manifestJson` is the source of runtime manifest semantics.
-   * @returns Worker runtime backed by a descriptor-based worker thread and BullMQ serialization queue.
-   */
   create(
     installation: QqbotPluginInstallation,
     version: QqbotPluginVersion,
@@ -110,11 +98,6 @@ export class QqbotPluginWorkerRuntimeFactoryService implements QqbotPluginRuntim
     );
   }
 
-  /**
-   * Captures manifest-declared runtime config keys without hard-coding plugin-specific names.
-   * @param descriptor - Package descriptor whose manifest owns the config key declarations.
-   * @returns String snapshot preserving missing keys as `undefined`.
-   */
   private createConfigSnapshot(
     descriptor: QqbotPluginPackageDescriptor,
   ): QqbotPluginRuntimeConfigSnapshot {
@@ -136,21 +119,11 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
   private readonly pendingRequests = new Map<string, PendingRequest>();
   private worker?: Worker;
 
-  /**
-   * Creates a thread driver for one descriptor-based plugin runtime.
-   * @param hostBridge - Generic platform host bridge used to satisfy worker host calls.
-   * @param options - Descriptor, installation id, plugin key, and config snapshot passed to workerData.
-   */
   constructor(
     private readonly hostBridge: QqbotPluginHostBridgeService,
     private readonly options: QqbotPluginWorkerThreadDriverOptions,
   ) {}
 
-  /**
-   * Sends one runtime request to the worker thread and waits for its response.
-   * @param message - Lifecycle, operation, task, or event request produced by QqbotPluginWorkerRuntime.
-   * @returns Worker response payload for the requested plugin action.
-   */
   async request(message: QqbotPluginWorkerRequest): Promise<unknown> {
     const worker = this.ensureWorker();
     return new Promise((resolve, reject) => {
@@ -163,9 +136,6 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     });
   }
 
-  /**
-   * Terminates the worker thread and rejects in-flight requests for this runtime instance.
-   */
   async dispose(): Promise<void> {
     const worker = this.worker;
     this.worker = undefined;
@@ -175,10 +145,6 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     }
   }
 
-  /**
-   * Lazily starts the worker thread with descriptor, installation, plugin key, and config snapshot workerData.
-   * @returns Active worker thread for the current descriptor runtime.
-   */
   private ensureWorker() {
     if (this.worker) return this.worker;
 
@@ -208,10 +174,6 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     return worker;
   }
 
-  /**
-   * Handles worker responses and host-call requests emitted by the child thread.
-   * @param message - Worker bridge message containing either a runtime response or a host capability request.
-   */
   private async handleWorkerMessage(message: WorkerBridgeMessage) {
     if (message.type === 'response') {
       this.settleWorkerResponse(message);
@@ -256,10 +218,6 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     }
   }
 
-  /**
-   * Resolves or rejects one pending runtime request from a worker response message.
-   * @param message - Worker response carrying the original request id and serialized result or error.
-   */
   private settleWorkerResponse(
     message: Extract<WorkerBridgeMessage, { type: 'response' }>,
   ) {
@@ -273,10 +231,6 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     pending.reject(new QqbotPluginWorkerResponseError(message.error || {}));
   }
 
-  /**
-   * Rejects all in-flight requests when the worker exits or is disposed.
-   * @param error - Runtime boundary error propagated to all pending callers.
-   */
   private rejectPending(error: Error) {
     for (const pending of this.pendingRequests.values()) {
       pending.reject(error);
@@ -285,19 +239,11 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
   }
 }
 
-/**
- * Resolves the generic worker thread entrypoint next to the compiled factory file.
- * @returns Absolute worker entry file path with the current TypeScript or JavaScript extension.
- */
 function resolveWorkerEntrypoint() {
   const extension = __filename.endsWith('.ts') ? '.ts' : '.js';
   return join(__dirname, `plugin-worker.thread${extension}`);
 }
 
-/**
- * Resolves worker exec arguments needed when tests or local dev run TypeScript sources directly.
- * @returns Node exec arguments that register ts-node only for `.ts` runtime files.
- */
 function resolveWorkerExecArgv() {
   if (!__filename.endsWith('.ts')) return [];
   return ['-r', 'ts-node/register', '-r', 'tsconfig-paths/register'];

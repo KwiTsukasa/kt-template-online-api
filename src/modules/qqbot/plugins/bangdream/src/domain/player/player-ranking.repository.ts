@@ -3,10 +3,6 @@ import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/sr
 import { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/server.model';
 
 export class PlayerRankingResourceRepository {
-  /**
-   * 初始化 PlayerRankingResourceRepository 实例。
-   * @param provider - provider 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}

@@ -19,10 +19,6 @@ import { WordpressService } from '../application/wordpress.service';
 @Controller('wordpress/auth')
 @UseGuards(JwtAuthGuard)
 export class WordpressAuthController {
-  /**
-   * 初始化 WordpressAuthController 实例。
-   * @param wordpressService - wordpressService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly wordpressService: WordpressService) {}
 
   /**

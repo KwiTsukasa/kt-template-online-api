@@ -8,21 +8,10 @@ import {
 import { QqbotMessageEvent } from '../../infrastructure/persistence/message-push/qqbot-message-event.entity';
 import { SystemMessageSourceRegistry } from './system-message-source.registry';
 
-/** Validates and atomically stages one producer-owned system-message Outbox fact. */
 @Injectable()
 export class SystemMessageEventStagerService implements SystemMessageEventStager {
-  /**
-   * Creates the transaction-bound Outbox stager.
-   * @param sourceRegistry - Registry that owns source-specific event payload validation.
-   */
   constructor(private readonly sourceRegistry: SystemMessageSourceRegistry) {}
 
-  /**
-   * Validates and inserts one Outbox fact through the caller's transaction manager.
-   * @param manager - Active caller-owned transaction manager; never replaced with a new connection.
-   * @param input - Producer event identity, occurrence time, source, resource, and scalar payload.
-   * @returns `accepted` for a new event or `duplicate` for the same persisted event ID.
-   */
   async stage(
     manager: EntityManager,
     input: SystemMessageEventInput,
@@ -57,11 +46,6 @@ export class SystemMessageEventStagerService implements SystemMessageEventStager
     }
   }
 
-  /**
-   * Recognizes only MySQL duplicate-key failures as idempotent races.
-   * @param error - Unknown persistence error caught from the caller's manager.
-   * @returns Whether the error is MySQL's duplicate key signal.
-   */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const record = error as { code?: unknown; errno?: unknown };

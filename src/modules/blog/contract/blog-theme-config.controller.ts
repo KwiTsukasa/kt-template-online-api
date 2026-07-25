@@ -18,10 +18,6 @@ import { BlogThemeConfigService } from '../application/blog-theme-config.service
 @Controller('blog/theme')
 @UseGuards(JwtAuthGuard)
 export class BlogThemeConfigController {
-  /**
-   * 初始化 BlogThemeConfigController 实例。
-   * @param blogThemeConfigService - blogThemeConfigService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly blogThemeConfigService: BlogThemeConfigService,
   ) {}

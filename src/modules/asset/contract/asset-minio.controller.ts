@@ -54,11 +54,6 @@ const PROXY_RESOURCE_EXTENSION_RE =
 @ApiTags('基础能力 - MinIO')
 @UseGuards(JwtAuthGuard)
 export class MinioClientController {
-  /**
-   * 初始化 MinioClientController 实例。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param minioClientService - minioClientService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly toolsService: ToolsService,
     private readonly minioClientService: MinioClientService,

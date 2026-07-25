@@ -6,10 +6,6 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/common/model-utils';
 
 export class BangDreamStaticPatchProvider {
-  /**
-   * 初始化 BangDreamStaticPatchProvider 实例。
-   * @param rootPath - BangDream路径；影响 constructor 的返回值。
-   */
   constructor(private readonly rootPath: string = configPath) {}
 
   /**

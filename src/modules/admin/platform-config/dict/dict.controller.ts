@@ -56,10 +56,6 @@ const chartDictExample = [
 @Controller('dict')
 @UseGuards(JwtAuthGuard)
 export class DictController {
-  /**
-   * 初始化 DictController 实例。
-   * @param dictService - dictService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly dictService: DictService) {}
 
   /**

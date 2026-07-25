@@ -5,7 +5,6 @@ import { QqbotMessageEvent } from '../../../../src/modules/qqbot/core/infrastruc
 
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
 
-/** Registers a source whose payload normalizer proves the stager uses the registry. */
 function createRegistry() {
   const registry = new SystemMessageSourceRegistry();
   const validateEventPayload = jest.fn((payload: Record<string, unknown>) => ({
@@ -30,7 +29,6 @@ function createRegistry() {
   return { registry, validateEventPayload };
 }
 
-/** Builds one valid producer input for idempotent outbox staging tests. */
 function input(overrides: Record<string, unknown> = {}) {
   return {
     eventId: 'endpoint-event-1',
@@ -42,7 +40,6 @@ function input(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/** Creates a manager fake that exposes only the caller-owned outbox repository. */
 function createManager(events: QqbotMessageEvent[] = [], saveError?: unknown) {
   const repository = {
     create: jest.fn((value) => Object.assign(new QqbotMessageEvent(), value)),

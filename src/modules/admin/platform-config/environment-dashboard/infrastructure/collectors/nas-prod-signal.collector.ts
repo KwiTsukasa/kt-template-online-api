@@ -31,17 +31,6 @@ type QqbotSummaryProbe =
 
 @Injectable()
 export class NasProdSignalCollector {
-  /**
-   * Initializes NAS production collector from narrow readonly service ports.
-   * @param runtimeHealthService - Runtime health reader proving API process/config state without touching deploy state.
-   * @param qqbotDashboardService - QQBot summary reader; failures affect only QQBot/NapCat signals.
-   * @param pluginTaskService - Plugin task page reader used to summarize scheduler state without executing tasks.
-   * @param minioClientService - MinIO connection checker; errors remain scoped to the MinIO service.
-   * @param wordpressService - WordPress optional admin login probe that reports availability without changing content.
-   * @param jenkinsAdapter - Jenkins readonly adapter owned by the remote integration layer.
-   * @param kubernetesAdapter - Kubernetes readonly adapter owned by the remote integration layer.
-   * @param config - Dashboard config reader used to expose missing integration keys as unwired evidence.
-   */
   constructor(
     @Optional()
     private readonly runtimeHealthService?: RuntimeHealthService,
@@ -61,11 +50,6 @@ export class NasProdSignalCollector {
     private readonly config: EnvironmentDashboardConfigService = new EnvironmentDashboardConfigService(),
   ) {}
 
-  /**
-   * Collects NAS production service evidence from internal modules and readonly remote adapters.
-   * @param context - Snapshot context from the dashboard aggregator; `observedAt` aligns all evidence timestamps.
-   * @returns NAS production site with individual service statuses and no cross-service failure leakage.
-   */
   async collect(context: NasProdSignalCollectContext = {}): Promise<EnvironmentSite> {
     const observedAt = context.observedAt || new Date().toISOString();
     const qqbotSummary = await this.readQqbotSummary();
@@ -127,10 +111,6 @@ export class NasProdSignalCollector {
     };
   }
 
-  /**
-   * Reads QQBot summary once so QQBot and NapCat services share the same evidence source.
-   * @returns Probe result containing either summary data or a captured failure.
-   */
   private async readQqbotSummary(): Promise<QqbotSummaryProbe> {
     if (!this.qqbotDashboardService) return { error: new Error('QQBot dashboard service is not wired') };
     try {
@@ -140,11 +120,6 @@ export class NasProdSignalCollector {
     }
   }
 
-  /**
-   * Builds NAS API status from RuntimeHealthService without coupling it to QQBot state.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns API service signal.
-   */
   private createNasApiService(observedAt: string): EnvironmentService {
     const report = this.runtimeHealthService?.getRuntimeHealth();
     const status = this.mapRuntimeStatus(report?.status);
@@ -173,11 +148,6 @@ export class NasProdSignalCollector {
     ]);
   }
 
-  /**
-   * Builds NAS Admin evidence from known public route configuration.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns Admin frontend service.
-   */
   private createNasAdminService(observedAt: string): EnvironmentService {
     const publicUrl =
       this.config.get('ENV_DASHBOARD_ADMIN_PUBLIC_URL') ||
@@ -216,14 +186,6 @@ export class NasProdSignalCollector {
     return this.createService('nas-admin', 'Admin Frontend', [signal]);
   }
 
-  /**
-   * Creates a dependency service that is visible but not falsely marked live.
-   * @param id - Stable service and signal id prefix.
-   * @param label - Operator-facing service label.
-   * @param summary - Why this dependency is observed as configured/derived evidence.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns Dependency service with unknown status.
-   */
   private createConfiguredDependencyService(
     id: string,
     label: string,
@@ -250,11 +212,6 @@ export class NasProdSignalCollector {
     ]);
   }
 
-  /**
-   * Builds MinIO service evidence and scopes connection errors to MinIO only.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns MinIO service.
-   */
   private async createMinioService(observedAt: string): Promise<EnvironmentService> {
     if (!this.minioClientService) {
       return this.createUnknownService('minio', 'MinIO', 'MinioClientService 未接入', observedAt);
@@ -293,11 +250,6 @@ export class NasProdSignalCollector {
     }
   }
 
-  /**
-   * Builds WordPress availability evidence using the existing optional login probe.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns WordPress service.
-   */
   private async createWordpressService(observedAt: string): Promise<EnvironmentService> {
     if (!this.wordpressService) {
       return this.createUnknownService('wordpress', 'WordPress', 'WordpressService 未接入', observedAt);
@@ -335,12 +287,6 @@ export class NasProdSignalCollector {
     }
   }
 
-  /**
-   * Builds QQBot core status from dashboard summary without affecting API service status.
-   * @param probe - Shared QQBot summary probe.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns QQBot core service.
-   */
   private createQqbotService(
     probe: QqbotSummaryProbe,
     observedAt: string,
@@ -381,12 +327,6 @@ export class NasProdSignalCollector {
     ]);
   }
 
-  /**
-   * Builds NapCat runtime visibility from QQBot runtime session evidence.
-   * @param probe - Shared QQBot summary probe.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns NapCat runtime service.
-   */
   private createNapcatService(
     probe: QqbotSummaryProbe,
     observedAt: string,
@@ -421,11 +361,6 @@ export class NasProdSignalCollector {
     ]);
   }
 
-  /**
-   * Builds plugin platform presence evidence without exposing write actions.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns Plugin platform service.
-   */
   private createPluginPlatformService(observedAt: string): EnvironmentService {
     return this.createService('plugin-platform', 'Plugin Platform', [
       {
@@ -451,11 +386,6 @@ export class NasProdSignalCollector {
     ]);
   }
 
-  /**
-   * Builds scheduled plugin task evidence without executing task jobs.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns Plugin task service.
-   */
   private async createPluginTaskService(observedAt: string): Promise<EnvironmentService> {
     if (!this.pluginTaskService) {
       return this.createUnknownService('plugin-tasks', 'Plugin Tasks', 'QqbotPluginTaskService 未接入', observedAt);
@@ -502,16 +432,6 @@ export class NasProdSignalCollector {
     }
   }
 
-  /**
-   * Builds service evidence from a readonly remote adapter or explicit missing config keys.
-   * @param serviceId - Stable service id used by topology.
-   * @param serviceLabel - Operator-facing service label.
-   * @param fallbackSignalId - Signal id used when config is missing.
-   * @param fallbackSignalLabel - Signal label used when config is missing.
-   * @param requiredKeys - Public env keys required for this readonly adapter.
-   * @param adapter - Optional adapter implementation.
-   * @returns Remote integration service.
-   */
   private async createAdapterService(
     serviceId: string,
     serviceLabel: string,
@@ -560,14 +480,6 @@ export class NasProdSignalCollector {
     }
   }
 
-  /**
-   * Creates a visible unknown service for dependencies whose safe reader is absent.
-   * @param id - Stable service id.
-   * @param label - Operator-facing service label.
-   * @param summary - Reason why the service is not live evidence.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns Unknown service with derived evidence.
-   */
   private createUnknownService(
     id: string,
     label: string,
@@ -594,11 +506,6 @@ export class NasProdSignalCollector {
     ]);
   }
 
-  /**
-   * Maps runtime module health into environment dashboard signal status.
-   * @param status - RuntimeHealthService status value.
-   * @returns Dashboard health status preserving blocked/degraded semantics.
-   */
   private mapRuntimeStatus(status?: RuntimeHealthStatus): EnvironmentHealthStatus {
     if (status === 'live' || status === 'ready') return 'ok';
     if (status === 'blocked') return 'blocked';
@@ -606,13 +513,6 @@ export class NasProdSignalCollector {
     return 'unknown';
   }
 
-  /**
-   * Creates a service from child signals and derives aggregate status.
-   * @param id - Stable service id used by topology and Admin selection.
-   * @param label - Operator-facing service label.
-   * @param signals - Signals supporting the service.
-   * @returns Service object with worst-signal status.
-   */
   private createService(
     id: string,
     label: string,
@@ -627,13 +527,6 @@ export class NasProdSignalCollector {
     };
   }
 
-  /**
-   * Creates a NAS node and derives aggregate status from services.
-   * @param id - Stable node id for topology edges.
-   * @param label - Operator-facing node label.
-   * @param services - Services owned by the NAS node.
-   * @returns Node object with worst-service status.
-   */
   private createNode(
     id: string,
     label: string,

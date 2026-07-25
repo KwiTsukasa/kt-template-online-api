@@ -41,9 +41,6 @@ type BangDreamBestdoriMainDataSyncOutput = {
  */
 export function createBestdoriMainDataSyncTask() {
   return {
-    /**
-     * 执行 Bestdori 主数据同步任务。
-     */
     execute: syncBestdoriMainData,
     handlerName: 'syncBestdoriMainData',
     key: 'bangdream.bestdori.sync-main-data',

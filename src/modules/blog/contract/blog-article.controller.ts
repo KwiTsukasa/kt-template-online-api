@@ -25,10 +25,6 @@ import { BlogArticleService } from '../application/blog-article.service';
 @Controller('blog/article')
 @UseGuards(JwtAuthGuard)
 export class BlogArticleController {
-  /**
-   * 初始化 BlogArticleController 实例。
-   * @param blogArticleService - blogArticleService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly blogArticleService: BlogArticleService) {}
 
   /**

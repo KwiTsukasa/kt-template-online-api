@@ -23,13 +23,6 @@ import { isWithinCooldown } from '../../domain/qqbot-cooldown.policy';
 
 @Injectable()
 export class QqbotRuleService {
-  /**
-   * 初始化 QqbotRuleService 实例。
-   * @param ruleRepository - QQBot仓库依赖；影响 constructor 的返回值。
-   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(QqbotRule)
     private readonly ruleRepository: Repository<QqbotRule>,

@@ -15,7 +15,6 @@ export class QqbotMessagePublishBinding {
   @KtCreateDateColumn({ name: 'create_time', precision: 6 }) createTime: KtDateTime;
   @KtUpdateDateColumn({ name: 'update_time', precision: 6 }) updateTime: KtDateTime;
 
-  /** Assigns the Snowflake primary key before this account binding is persisted. */
   @BeforeInsert()
   createId() { ensureSnowflakeId(this); }
 }

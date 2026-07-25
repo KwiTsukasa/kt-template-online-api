@@ -9,10 +9,6 @@ import {
 import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/network-agent-state.entity';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
 
-/**
- * Creates a stable singleton state fixture used by desired snapshot tests.
- * @returns Agent state at desired revision seven.
- */
 function createAgentState(): NetworkAgentState {
   return Object.assign(new NetworkAgentState(), {
     agentId: 'nas-main',
@@ -22,12 +18,6 @@ function createAgentState(): NetworkAgentState {
   });
 }
 
-/**
- * Creates a persisted desired mapping fixture.
- * @param id - Stable Snowflake-like identifier.
- * @param externalPort - WAN-side port used to verify deterministic sorting.
- * @returns Desired UDP mapping entity.
- */
 function createMapping(id: string, externalPort: number): NetworkPortForward {
   return Object.assign(new NetworkPortForward(), {
     desiredPresence: 'present',

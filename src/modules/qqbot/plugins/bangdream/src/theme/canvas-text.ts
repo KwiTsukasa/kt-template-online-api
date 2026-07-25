@@ -299,12 +299,6 @@ function wrapTextWithImages({
   };
 }
 
-/**
- * 设置Font Style。
- * @param ctx - ctx 输入；使用 `font` 字段生成结果。
- * @param textSize - textSize 输入；写入 BangDream状态。
- * @param font - font 输入；使用 `fallback` 字段生成结果。
- */
 export const setFontStyle = function (
   ctx: CanvasRenderingContext2D,
   textSize: number,

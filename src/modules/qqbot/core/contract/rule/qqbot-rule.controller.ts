@@ -22,11 +22,6 @@ import { QqbotRuleService } from '../../application/rule/qqbot-rule.service';
 @Controller('qqbot/rule')
 @UseGuards(JwtAuthGuard)
 export class QqbotRuleController {
-  /**
-   * 初始化 QqbotRuleController 实例。
-   * @param ruleService - ruleService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly ruleService: QqbotRuleService,
     private readonly toolsService: ToolsService,

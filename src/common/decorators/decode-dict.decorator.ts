@@ -7,18 +7,9 @@ import type {
 const DICT_DECODE_RULES = Symbol('DICT_DECODE_RULES');
 const DICT_DECODE_CACHE = new Map<string, Map<string, string>>();
 
-/**
- * 查询 字典翻译数据。
- * @param value - 待转换值；驱动 `String()` 的 公共基础设施步骤。
- */
 const getDictValueKey = (value: unknown) => String(value);
 
 // 字典翻译规则挂在类原型上，实例加载完成后再统一读取并执行。
-/**
- * 查询 字典翻译数据。
- * @param target - target 输入；驱动 `Object.getPrototypeOf()` 的 公共基础设施步骤。
- * @returns 字典翻译查询结果。
- */
 const getDecodeRules = (target: object): DictDecodeRule[] => {
   const prototype = Object.getPrototypeOf(target);
 
@@ -26,10 +17,6 @@ const getDecodeRules = (target: object): DictDecodeRule[] => {
 };
 
 // 未指定 dictKey 时会在所有字典分组里查找，适合全局唯一的业务枚举值。
-/**
- * 查询 字典翻译数据。
- * @param dictKeys - 公共基础设施列表；使用 `length` 字段生成结果。
- */
 const getTargetDictMaps = (dictKeys: string[]) => {
   if (dictKeys.length) {
     return dictKeys

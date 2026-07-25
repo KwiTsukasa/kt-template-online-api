@@ -216,10 +216,6 @@ describe('QQBot plugin host bridge', () => {
     ).resolves.toEqual({ ok: true, value: { enabled: true } });
   });
 
-  /**
-   * Creates a descriptor fixture rooted at this test's temporary package directory.
-   * @returns Descriptor used to constrain host bridge file-system access.
-   */
   function createDescriptor(): QqbotPluginPackageDescriptor {
     return {
       entry: 'src/index.ts',
@@ -253,19 +249,9 @@ describe('QQBot plugin host bridge', () => {
   }
 });
 
-/**
- * Creates a minimal config repository that lets QqbotConfigService read fixture values through its real raw-value method.
- * @param values - Config key/value fixture; absent keys behave like missing records.
- * @returns Repository-shaped fixture used by QqbotConfigService in host bridge tests.
- */
 function createConfigRepository(
   values: Record<string, string | undefined>,
 ): ConstructorParameters<typeof QqbotConfigService>[0] {
-  /**
-   * Finds one QQBot config fixture using the TypeORM `where.configKey` query shape.
-   * @param query - TypeORM-style lookup object produced by QqbotConfigService.
-   * @returns Fixture record with the stored config value, or `null` when the key is not present.
-   */
   const findOne = async (query: { where?: { configKey?: string } }) => {
     const configKey = query.where?.configKey;
     if (

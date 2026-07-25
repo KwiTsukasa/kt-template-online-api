@@ -92,36 +92,11 @@ export async function drawSongList(
 
 // 计算歌曲模糊搜索结果
 export const matchSongList = createBangDreamEntityMatcher<Song>({
-  /**
-   * 执行 BangDream回调。
-   */
   source: () => songRepository.getSource(),
-  /**
-   * 创建 BangDream 插件对象或配置。
-   *
-   * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
-   */
   createEntity: (songId) => songRepository.create(songId),
-  /**
-   * 判断 BangDream 插件条件。
-   *
-   * @param song - song 输入；使用 `publishedAt` 字段计算判断结果。
-   * @param displayedServerList - displayedServerList 输入；计算 BangDream布尔判断。
-   */
   isReleased: (song, displayedServerList) =>
     displayedServerList.some((server) => song.publishedAt[server] != null),
-  /**
-   * 判断 BangDream 插件条件。
-   *
-   * @param matches - BangDream列表；驱动 `match()` 的 BangDream步骤。
-   * @param song - song 输入；驱动 `match()` 的 BangDream步骤。
-   */
   isMatched: (matches, song) => match(matches, song, []),
-  /**
-   * 在QQBot 图片视图层中处理关系表达式值。
-   *
-   * @param song - song 输入；使用 `songId` 字段生成结果。
-   */
   relationValue: (song) => song.songId,
 });
 

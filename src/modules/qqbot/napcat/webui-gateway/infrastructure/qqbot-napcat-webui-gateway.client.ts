@@ -42,17 +42,8 @@ type GatewayResponseBody<T> = T | { data: T };
 
 @Injectable()
 export class QqbotNapcatWebuiGatewayClient {
-  /**
-   * Creates the internal Gateway client backed by bounded axios requests.
-   * @param configService - Nest config source for Gateway base URL, internal secret, and timeout.
-   */
   constructor(private readonly configService: ConfigService) {}
 
-  /**
-   * Creates a proxied NapCat WebUI session through the internal Gateway.
-   * @param input - Server-only target metadata, including WebUI token and upstream endpoint.
-   * @returns Browser-safe Gateway session metadata.
-   */
   async createSession(input: QqbotNapcatWebuiGatewayCreateSessionRequest) {
     return this.validateSessionResult(
       await this.post<QqbotNapcatWebuiGatewaySessionResult>(
@@ -62,11 +53,6 @@ export class QqbotNapcatWebuiGatewayClient {
     );
   }
 
-  /**
-   * Refreshes one Gateway session heartbeat without exposing internal target data.
-   * @param input - Gateway session id plus Admin actor and request evidence.
-   * @returns Gateway lifecycle response body.
-   */
   heartbeat(input: QqbotNapcatWebuiGatewayLifecycleRequest) {
     const { sessionId, ...data } = input;
     return this.post<QqbotNapcatWebuiGatewayLifecycleResult>(
@@ -75,11 +61,6 @@ export class QqbotNapcatWebuiGatewayClient {
     );
   }
 
-  /**
-   * Revokes one Gateway session without exposing internal target data.
-   * @param input - Gateway session id plus Admin actor and request evidence.
-   * @returns Gateway lifecycle response body.
-   */
   revoke(input: QqbotNapcatWebuiGatewayLifecycleRequest) {
     const { sessionId, ...data } = input;
     return this.post<QqbotNapcatWebuiGatewayLifecycleResult>(
@@ -88,12 +69,6 @@ export class QqbotNapcatWebuiGatewayClient {
     );
   }
 
-  /**
-   * Sends one bounded POST request to the internal Gateway and strips raw axios errors.
-   * @param path - Internal Gateway path starting with `/internal`.
-   * @param data - Optional JSON payload sent only server-to-server.
-   * @returns Unwrapped Gateway response data.
-   */
   private async post<T>(path: string, data?: unknown): Promise<T> {
     const config: AxiosRequestConfig = {
       data,
@@ -114,19 +89,10 @@ export class QqbotNapcatWebuiGatewayClient {
     }
   }
 
-  /**
-   * Builds the complete Gateway URL from a configured base URL and fixed internal path.
-   * @param path - Internal Gateway path supplied by the service method.
-   * @returns Absolute Gateway URL without duplicate slashes.
-   */
   private buildUrl(path: string) {
     return `${this.getBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
   }
 
-  /**
-   * Reads and normalizes the internal Gateway base URL.
-   * @returns Configured base URL or the local Gateway default.
-   */
   private getBaseUrl() {
     const configured = this.configService.get<string>(
       'NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL',
@@ -134,20 +100,12 @@ export class QqbotNapcatWebuiGatewayClient {
     return (configured || DEFAULT_GATEWAY_BASE_URL).replace(/\/+$/, '');
   }
 
-  /**
-   * Reads the optional Gateway shared secret and maps it to the internal header.
-   * @returns Header map when a secret is configured, otherwise undefined.
-   */
   private getHeaders() {
     const secret = this.getInternalSecret();
 
     return { 'x-kt-gateway-secret': secret };
   }
 
-  /**
-   * Reads the required internal Gateway secret and fails closed when it is missing.
-   * @returns Configured non-empty shared secret.
-   */
   private getInternalSecret() {
     const secret = String(
       this.configService.get<string>('NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET') ||
@@ -164,10 +122,6 @@ export class QqbotNapcatWebuiGatewayClient {
     return secret;
   }
 
-  /**
-   * Reads and validates the Gateway request timeout.
-   * @returns Positive timeout in milliseconds.
-   */
   private getTimeoutMs() {
     const configured = Number(
       this.configService.get<string>('NAPCAT_WEBUI_GATEWAY_TIMEOUT_MS') || '',
@@ -178,11 +132,6 @@ export class QqbotNapcatWebuiGatewayClient {
       : DEFAULT_GATEWAY_TIMEOUT_MS;
   }
 
-  /**
-   * Accepts both raw Gateway bodies and Vben-like `{ data }` wrappers.
-   * @param body - Axios response body returned by the internal Gateway.
-   * @returns The unwrapped data payload expected by API callers.
-   */
   private unwrapGatewayBody<T>(body: GatewayResponseBody<T>): T {
     if (body && typeof body === 'object' && 'data' in body) {
       return (body as { data: T }).data;
@@ -191,11 +140,6 @@ export class QqbotNapcatWebuiGatewayClient {
     return body as T;
   }
 
-  /**
-   * Validates the create-session result before returning it to Admin callers.
-   * @param result - Raw Gateway create-session result.
-   * @returns Browser-safe session result.
-   */
   private validateSessionResult(
     result: QqbotNapcatWebuiGatewaySessionResult,
   ): QqbotNapcatWebuiGatewaySessionResult {
@@ -221,12 +165,6 @@ export class QqbotNapcatWebuiGatewayClient {
     };
   }
 
-  /**
-   * Ensures the iframe URL is a relative Gateway-owned route with only an optional bootstrap ticket.
-   * @param iframeUrl - Raw iframe URL returned by Gateway.
-   * @param sessionId - Validated Gateway session id.
-   * @returns Whether the URL is safe for the browser response.
-   */
   private isSafeIframeUrl(iframeUrl: unknown, sessionId: string) {
     if (typeof iframeUrl !== 'string' || iframeUrl.trim() !== iframeUrl) {
       return false;
@@ -267,21 +205,11 @@ export class QqbotNapcatWebuiGatewayClient {
     return !this.hasUnsafeGatewayEvidence(unsafeScanValue);
   }
 
-  /**
-   * Detects host, secret, and internal-route evidence in Gateway browser-facing URLs.
-   * @param value - Candidate iframe URL with allowed bootstrap ticket value stripped.
-   * @returns Whether the string contains unsafe evidence.
-   */
   private hasUnsafeGatewayEvidence(value: string) {
     const decoded = this.tryDecodeURIComponent(value);
     return UNSAFE_GATEWAY_RESULT_PATTERN.test(decoded);
   }
 
-  /**
-   * Decodes URL text for security scanning without leaking parsing errors to callers.
-   * @param value - URL text to decode.
-   * @returns Decoded value when possible, otherwise the original text.
-   */
   private tryDecodeURIComponent(value: string) {
     try {
       return decodeURIComponent(value);
@@ -290,9 +218,6 @@ export class QqbotNapcatWebuiGatewayClient {
     }
   }
 
-  /**
-   * Throws the sanitized error used for invalid Gateway create-session responses.
-   */
   private throwInvalidSessionResult(): never {
     return throwVbenError(
       'NapCat WebUI Gateway 返回无效会话',

@@ -18,11 +18,6 @@ type Harness = {
   state: NetworkAgentState;
 };
 
-/**
- * Creates an in-memory TypeORM-shaped transaction harness for desired-state tests.
- * @param initialMappings - Existing active mappings copied into the fake repository.
- * @returns Mutable persistence state and real application service.
- */
 function createHarness(initialMappings: NetworkPortForward[] = []): Harness {
   const mappings = initialMappings;
   const histories: NetworkEndpointHistory[] = [];
@@ -118,11 +113,6 @@ function createHarness(initialMappings: NetworkPortForward[] = []): Harness {
   };
 }
 
-/**
- * Creates a complete persisted mapping fixture.
- * @param patch - Desired field overrides.
- * @returns Active mapping entity suitable for mutation tests.
- */
 function createMapping(
   patch: Partial<NetworkPortForward> = {},
 ): NetworkPortForward {
@@ -150,11 +140,6 @@ function createMapping(
   });
 }
 
-/**
- * Creates the fluent query builder subset used by the service list method.
- * @param mappings - Current in-memory rows.
- * @returns Chainable fake returning all rows.
- */
 function createListBuilder(mappings: NetworkPortForward[]) {
   const builder = {
     andWhere: () => builder,
@@ -167,7 +152,6 @@ function createListBuilder(mappings: NetworkPortForward[]) {
   return builder;
 }
 
-/** Extracts the Nest status from a rejected desired-state operation. */
 function errorStatus(error: unknown): number {
   return error instanceof HttpException ? error.getStatus() : 0;
 }

@@ -9,9 +9,6 @@ export class AdminPasswordCryptoService {
 
   private readonly publicKey: string;
 
-  /**
-   * 初始化 AdminPasswordCryptoService 实例。
-   */
   constructor() {
     const keyPair = generateKeyPairSync('rsa', {
       modulusLength: 2048,

@@ -2,10 +2,6 @@ import { Ff14MarketClient } from '../infrastructure/integration/ff14-market-clie
 import { parseFf14MarketPriceInput } from './ff14-market-input-parser';
 
 export class Ff14MarketApplication {
-  /**
-   * 初始化 Ff14MarketApplication 实例。
-   * @param client - client 输入；影响 constructor 的返回值。
-   */
   constructor(private readonly client: Ff14MarketClient) {}
 
   /**

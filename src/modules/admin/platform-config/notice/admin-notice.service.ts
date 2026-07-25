@@ -32,11 +32,6 @@ type NormalizedSystemNoticeInput = {
 
 @Injectable()
 export class AdminNoticeService implements SystemNoticePublisher {
-  /**
-   * 初始化 AdminNoticeService 实例。
-   * @param noticeRepository - Admin仓库依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(AdminNotice)
     private readonly noticeRepository: Repository<AdminNotice>,
@@ -423,9 +418,6 @@ export class AdminNoticeService implements SystemNoticePublisher {
       .set({
         ...normalizedInput,
         lastSeenAt,
-        /**
-         * 执行 Admin回调。
-         */
         occurrenceCount: () => 'occurrence_count + 1',
         status: 1,
       } as any)

@@ -5,20 +5,11 @@ import type { EnvironmentDashboardResponse } from '../domain/environment-dashboa
 
 @Injectable()
 export class EnvironmentDashboardSelfCheckService {
-  /**
-   * Initializes the readonly self-check service.
-   * @param dashboardService - Snapshot service reused after publishing self-check evidence.
-   * @param eventBus - Environment event bus receiving self-check lifecycle events.
-   */
   constructor(
     private readonly dashboardService: EnvironmentDashboardService,
     private readonly eventBus: EnvironmentEventBusService,
   ) {}
 
-  /**
-   * Runs a readonly self-check without invoking any write action.
-   * @returns Fresh dashboard snapshot after a self-check event is emitted.
-   */
   async runSelfCheck(): Promise<EnvironmentDashboardResponse> {
     const observedAt = new Date().toISOString();
     await this.eventBus.publish({

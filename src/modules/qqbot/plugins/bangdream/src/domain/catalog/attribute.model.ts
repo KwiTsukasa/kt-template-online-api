@@ -12,11 +12,6 @@ const attributeColor = {
 export class Attribute {
   name: 'cool' | 'happy' | 'pure' | 'powerful';
   color: string;
-  /**
-   * 构造 Attribute 实例，并初始化该模型的本地基础字段。
-   *
-   * @param name - 名称文本；驱动 `Error()` 的 BangDream步骤。
-   */
   constructor(name: string) {
     if (['cool', 'happy', 'pure', 'powerful'].includes(name as this['name'])) {
       this.name = name as this['name'];

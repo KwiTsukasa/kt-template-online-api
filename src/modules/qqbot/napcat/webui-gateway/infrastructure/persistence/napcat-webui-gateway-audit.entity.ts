@@ -45,9 +45,6 @@ export class NapcatWebuiGatewayAudit {
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
 
-  /**
-   * Assigns a Snowflake id before persisting an Admin WebUI gateway audit row.
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

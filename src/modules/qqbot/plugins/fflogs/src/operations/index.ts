@@ -15,9 +15,6 @@ export function buildFflogsOperations(
   operations: FflogsManifestOperation[],
 ) {
   const operationFactories = {
-    /**
-     * 执行 FFLogs回调。
-     */
     [fflogsCharacterSummaryHandlerName]: () =>
       createFflogsCharacterSummaryOperation(application),
   } satisfies Record<

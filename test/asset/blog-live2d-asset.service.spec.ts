@@ -7,11 +7,6 @@ import { MinioClientService } from '../../src/modules/asset/application/asset-mi
 import { BlogLive2DAssetService } from '../../src/modules/asset/application/blog-live2d-asset.service';
 import { BlogLive2DAssetController } from '../../src/modules/asset/contract/blog-live2d-asset.controller';
 
-/**
- * Creates the config facade used by Blog Live2D asset tests.
- * @param overrides - Runtime config values that should replace the default fixture.
- * @returns ConfigService-compatible object for direct service construction.
- */
 function createConfig(overrides: Record<string, string | undefined> = {}) {
   const values: Record<string, string | undefined> = {
     BLOG_LIVE2D_ALLOWED_ORIGINS:
@@ -26,10 +21,6 @@ function createConfig(overrides: Record<string, string | undefined> = {}) {
   };
 }
 
-/**
- * Creates a MinIO client facade that records requested object names.
- * @returns Mocked MinIO client service used by the service and controller tests.
- */
 function createMinio() {
   return {
     getDefaultBucket: jest.fn(() => 'kt-template-online'),

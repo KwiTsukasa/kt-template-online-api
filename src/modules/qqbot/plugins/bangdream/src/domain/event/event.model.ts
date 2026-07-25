@@ -88,11 +88,6 @@ export class Event {
 
   isInitfull: boolean = false;
 
-  /**
-   * 构造 Event 实例，并初始化该模型的本地基础字段。
-   *
-   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
-   */
   constructor(eventId: number) {
     this.eventId = eventId;
     const eventData = bangdreamCatalogRepository.getEntity<Record<string, any>>(

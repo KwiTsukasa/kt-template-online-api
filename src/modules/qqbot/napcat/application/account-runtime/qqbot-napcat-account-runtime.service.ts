@@ -20,14 +20,6 @@ const NAPCAT_RUNTIME_CHECK_TTL_MS = 30_000;
 
 @Injectable()
 export class QqbotNapcatAccountRuntimeService implements QqbotAccountNapcatRuntimePort {
-  /**
-   * Creates the account-list runtime adapter that joins persisted bindings, container status, and optional profile summaries.
-   * @param accountNapcatRepository - Binding repository used to pick the primary NapCat container for each QQBot account.
-   * @param napcatContainerRepository - Container repository used for cached runtime/WebUI status and non-secret metadata.
-   * @param napcatContainerService - Runtime integration service for bounded NapCat/WebUI status probes.
-   * @param toolsService - Shared helpers for status text normalization and NapCat offline-message classification.
-   * @param runtimeProfileInspector - Optional profile reader that enriches list rows without changing login state.
-   */
   constructor(
     @InjectRepository(NapcatAccountBinding)
     private readonly accountNapcatRepository: Repository<NapcatAccountBinding>,

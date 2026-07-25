@@ -18,10 +18,6 @@ import { AdminDeptService } from './admin-dept.service';
 @Controller('system/dept')
 @UseGuards(JwtAuthGuard)
 export class AdminDeptController {
-  /**
-   * 初始化 AdminDeptController 实例。
-   * @param deptService - deptService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly deptService: AdminDeptService) {}
 
   /**

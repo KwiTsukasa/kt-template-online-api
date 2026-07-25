@@ -2,10 +2,6 @@ jest.mock('@/common', () => {
   const actualCommon = jest.requireActual('@/common');
   return {
     ...actualCommon,
-    /**
-     * 执行 NapCat回调。
-     * @param message - message 输入；驱动 `Error()` 的 NapCat步骤。
-     */
     throwVbenError: (message: string) => {
       throw new Error(message);
     },
@@ -16,10 +12,6 @@ import { ToolsService } from '@/common';
 import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
 
 describe('QqbotNapcatContainerService runtime status', () => {
-  /**
-   * 创建 NapCat 登录运行态。
-   * @param repository - repository 输入；生成 NapCat对象。
-   */
   const createService = (repository: { update: jest.Mock }) =>
     new QqbotNapcatContainerService(
       { get: jest.fn() } as any,

@@ -11,7 +11,6 @@ const account = {
   selfId: '10001',
 };
 
-/** Creates bounded fakes for the strict QQBot send contract. */
 const createHarness = () => {
   const accountService = {
     findBySelfId: jest.fn().mockResolvedValue(account),
@@ -436,7 +435,6 @@ describe('QQBot reverse WS action classification', () => {
     });
   });
 
-  /** Creates a reverse WS service with no real server or network dependency. */
   const createReverseWsHarness = () => {
     const accountService = {
       markOffline: jest.fn().mockResolvedValue(undefined),

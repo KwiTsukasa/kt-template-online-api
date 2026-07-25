@@ -12,10 +12,6 @@ import type { ExceptionBody, KtErrorResponse } from '../types';
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
-  /**
-   * 初始化 ApiExceptionFilter 实例。
-   * @param logger - 日志记录器实例；绑定日志上下文名称。
-   */
   constructor(private readonly logger: PinoLogger) {
     this.logger.setContext(ApiExceptionFilter.name);
   }

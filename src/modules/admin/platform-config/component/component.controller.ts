@@ -65,11 +65,6 @@ class CompPageDto
 @ApiExtraModels(PaginatedDto)
 @UseGuards(JwtAuthGuard)
 export class ComponentController {
-  /**
-   * 初始化 ComponentController 实例。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param componentService - componentService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly toolsService: ToolsService,
     private readonly componentService: ComponentService,

@@ -72,20 +72,11 @@ export type NapcatWebuiGatewayAuditRecordInput = {
 
 @Injectable()
 export class NapcatWebuiGatewayAuditService {
-  /**
-   * Creates the audit recorder for browser Gateway session lifecycle evidence.
-   * @param auditRepository - TypeORM repository for sanitized WebUI Gateway audit rows.
-   */
   constructor(
     @InjectRepository(NapcatWebuiGatewayAudit)
     private readonly auditRepository: Repository<NapcatWebuiGatewayAudit>,
   ) {}
 
-  /**
-   * Persists one sanitized Gateway audit event.
-   * @param input - Event identity, actor, client evidence, and already-safe detail fields.
-   * @returns Saved audit entity.
-   */
   async record(input: NapcatWebuiGatewayAuditRecordInput) {
     const entity = this.auditRepository.create({
       accountId: input.accountId,
@@ -102,21 +93,11 @@ export class NapcatWebuiGatewayAuditService {
     return this.auditRepository.save(entity);
   }
 
-  /**
-   * Removes known secret-bearing keys from nested audit detail objects.
-   * @param detail - Candidate detail payload supplied by the application service.
-   * @returns Sanitized detail object or null when no detail is supplied.
-   */
   private sanitizeDetail(detail?: null | Record<string, unknown>) {
     if (!detail) return null;
     return this.sanitizeValue(detail) as Record<string, unknown>;
   }
 
-  /**
-   * Recursively sanitizes arrays and objects without preserving sensitive keys.
-   * @param value - Arbitrary audit detail value.
-   * @returns Value safe to serialize into the audit table.
-   */
   private sanitizeValue(value: unknown): unknown {
     if (Array.isArray(value)) {
       return value.map((item) => this.sanitizeValue(item));
@@ -133,11 +114,6 @@ export class NapcatWebuiGatewayAuditService {
     );
   }
 
-  /**
-   * Normalizes key style variants before checking whether a field can carry secrets.
-   * @param key - Raw object key from audit detail.
-   * @returns Whether the key should be dropped from persisted audit JSON.
-   */
   private isSensitiveDetailKey(key: string) {
     const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
     return (
@@ -151,21 +127,10 @@ export class NapcatWebuiGatewayAuditService {
     );
   }
 
-  /**
-   * Detects secret-bearing string values that should never be persisted in audit detail.
-   * @param value - Raw string value from audit detail.
-   * @returns Whether the value should be replaced with a redaction marker.
-   */
   private isUnsafeDetailString(value: string) {
     return UNSAFE_DETAIL_STRING_PATTERN.test(value);
   }
 
-  /**
-   * Converts optional client evidence into a bounded nullable column value.
-   * @param value - Raw IP or user-agent value from the request.
-   * @param limit - Database column length limit.
-   * @returns Trimmed string or null for empty input.
-   */
   private toNullableText(value: null | string | undefined, limit: number) {
     const text = String(value || '').trim();
     return text ? text.slice(0, limit) : null;
@@ -174,13 +139,6 @@ export class NapcatWebuiGatewayAuditService {
 
 @Injectable()
 export class QqbotNapcatWebuiGatewayService {
-  /**
-   * Creates the Admin-facing WebUI Gateway application service.
-   * @param accountService - QQBot account reader used to validate and serialize account identity.
-   * @param containerService - NapCat runtime resolver that supplies server-only WebUI target data.
-   * @param gatewayClient - Internal Gateway client used for session lifecycle requests.
-   * @param auditService - Sanitized audit recorder for Admin session events.
-   */
   constructor(
     private readonly accountService: QqbotAccountService,
     private readonly containerService: QqbotNapcatContainerService,
@@ -188,11 +146,6 @@ export class QqbotNapcatWebuiGatewayService {
     private readonly auditService: NapcatWebuiGatewayAuditService,
   ) {}
 
-  /**
-   * Creates a browser-safe WebUI Gateway session for one QQBot account.
-   * @param input - Admin actor, client evidence, and target QQBot account id.
-   * @returns Browser-safe session response without WebUI token, upstream URL, or port.
-   */
   async createSession(
     input: QqbotNapcatWebuiGatewaySessionCreateInput,
   ): Promise<QqbotNapcatWebuiSessionResponseDto> {
@@ -256,11 +209,6 @@ export class QqbotNapcatWebuiGatewayService {
     };
   }
 
-  /**
-   * Forwards a Gateway heartbeat for an existing Admin WebUI session.
-   * @param input - Gateway session id plus Admin actor and request evidence.
-   * @returns Gateway lifecycle response.
-   */
   heartbeat(
     input: QqbotNapcatWebuiGatewaySessionLifecycleInput,
   ): Promise<QqbotNapcatWebuiGatewayLifecycleResult> {
@@ -272,11 +220,6 @@ export class QqbotNapcatWebuiGatewayService {
     });
   }
 
-  /**
-   * Revokes an existing Admin WebUI Gateway session.
-   * @param input - Gateway session id plus Admin actor and request evidence.
-   * @returns Gateway lifecycle response.
-   */
   revoke(
     input: QqbotNapcatWebuiGatewaySessionLifecycleInput,
   ): Promise<QqbotNapcatWebuiGatewayLifecycleResult> {
@@ -288,11 +231,6 @@ export class QqbotNapcatWebuiGatewayService {
     });
   }
 
-  /**
-   * Validates a QQBot account id before querying persistence or container state.
-   * @param accountId - Candidate account id supplied by Admin.
-   * @returns Trimmed account id.
-   */
   private requireAccountId(accountId: string) {
     const normalized = String(accountId || '').trim();
     if (!ACCOUNT_ID_PATTERN.test(normalized)) {
@@ -301,11 +239,6 @@ export class QqbotNapcatWebuiGatewayService {
     return normalized;
   }
 
-  /**
-   * Validates a Gateway session id before forwarding lifecycle calls.
-   * @param sessionId - Candidate session id from the Admin route.
-   * @returns Trimmed Gateway session id.
-   */
   private requireSessionId(sessionId: string) {
     const normalized = String(sessionId || '').trim();
     if (!SESSION_ID_PATTERN.test(normalized)) {
@@ -314,11 +247,6 @@ export class QqbotNapcatWebuiGatewayService {
     return normalized;
   }
 
-  /**
-   * Converts private NapCat runtime fields into the Gateway client payload.
-   * @param runtime - Primary NapCat runtime containing upstream URL, port, and WebUI token.
-   * @returns Internal-only Gateway target metadata without exposing the raw WebUI port separately.
-   */
   private toGatewayTarget(runtime: QqbotNapcatRuntime) {
     const upstreamBaseUrl = String(runtime.baseUrl || '').trim();
     const webuiToken = String(runtime.webuiToken || '').trim();
@@ -337,11 +265,6 @@ export class QqbotNapcatWebuiGatewayService {
     };
   }
 
-  /**
-   * Maps runtime evidence to the browser-safe WebUI status field.
-   * @param runtime - Primary NapCat runtime with container online evidence.
-   * @returns Browser-safe WebUI status string.
-   */
   private toWebuiStatus(
     runtime: QqbotNapcatRuntime,
   ): QqbotNapcatWebuiStatus {

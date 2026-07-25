@@ -81,17 +81,8 @@ export function createBestdoriProvider(
   const assetClient = options.assetClient ?? defaultAssetClient;
   const provider: BangDreamDataProvider = {
     name: 'Bestdori',
-    /**
-     * 执行 BangDream回调。
-     * @param pathOrUrl - BangDream路径；驱动 `resolveBangDreamProviderUrl()` 的 BangDream步骤。
-     */
     resolveUrl: (pathOrUrl: string) =>
       resolveBangDreamProviderUrl(baseUrl, pathOrUrl),
-    /**
-     * 读取 BangDream回调数据。
-     * @param pathOrUrl - BangDream路径；驱动 `resolveBangDreamProviderUrl()` 的 BangDream步骤。
-     * @param requestOptions - BangDream列表；使用 `cacheTime`、`retryCount` 字段生成结果。
-     */
     getJson: async <T = unknown>(
       pathOrUrl: string,
       requestOptions: BangDreamJsonRequestOptions = {},
@@ -101,11 +92,6 @@ export function createBestdoriProvider(
         requestOptions.cacheTime,
         requestOptions.retryCount,
       ),
-    /**
-     * 读取 BangDream回调数据。
-     * @param pathOrUrl - BangDream路径；驱动 `assetClient()` 的 BangDream步骤。
-     * @param requestOptions - BangDream列表；驱动 `assetClient()` 的 BangDream步骤。
-     */
     getAsset: async (
       pathOrUrl: string,
       requestOptions: BangDreamAssetRequestOptions = {},
@@ -114,10 +100,6 @@ export function createBestdoriProvider(
         resolveBangDreamProviderUrl(baseUrl, pathOrUrl),
         requestOptions,
       ),
-    /**
-     * 读取 BangDream回调数据。
-     * @param requestOptions - BangDream列表；使用 `server`、`eventId`、`tier`、`cacheTime` 字段生成结果。
-     */
     getTracker: async <T = unknown>(
       requestOptions: BangDreamTrackerRequestOptions,
     ) =>

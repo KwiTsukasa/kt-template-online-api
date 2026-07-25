@@ -20,7 +20,6 @@ type BindingFixtureOptions = {
   templateGateError?: Error;
 };
 
-/** Builds a complete persisted binding row while keeping every Snowflake identity textual. */
 function bindingRow(overrides: Record<string, unknown> = {}): any {
   return {
     accountId: ACCOUNT.id,
@@ -37,7 +36,6 @@ function bindingRow(overrides: Record<string, unknown> = {}): any {
   };
 }
 
-/** Builds a target row with the natural key state needed by transaction fakes. */
 function targetRow(overrides: Record<string, unknown> = {}): any {
   const bindingId = String(overrides.bindingId ?? '2041700000000000003');
   const targetId = String(overrides.targetId ?? '20000000000000001');
@@ -57,11 +55,6 @@ function targetRow(overrides: Record<string, unknown> = {}): any {
   };
 }
 
-/**
- * Creates deterministic repository and dependency-gate fakes for public binding methods.
- * @param options - Initial records or injected persistence/gate failures for one scenario.
- * @returns The service, its stores, and ordered transaction events for assertions.
- */
 function setupBindingFixture(options: BindingFixtureOptions = {}) {
   const bindings = options.bindings ?? [];
   const targets = options.targets ?? [];
@@ -255,7 +248,6 @@ describe('QqbotAccountMessagePushService', () => {
   });
 
   describe('binding and target delivery cancellation transaction', () => {
-    /** Builds isolated binding/target/delivery drafts and commits them only on transaction success. */
     function cancellationHarness() {
       const subscription = {
         enabled: true,

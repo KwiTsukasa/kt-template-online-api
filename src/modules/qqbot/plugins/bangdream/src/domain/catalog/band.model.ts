@@ -11,11 +11,6 @@ export class Band {
   bandName: Array<string | null>;
   members: Array<Character | null>;
   hasIcon: boolean = false;
-  /**
-   * 构造 Band 实例，并初始化该模型的本地基础字段。
-   *
-   * @param bandId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
-   */
   constructor(bandId: number) {
     this.bandId = bandId;
     const bandData = bangdreamCatalogCache['singer'][bandId.toString()];

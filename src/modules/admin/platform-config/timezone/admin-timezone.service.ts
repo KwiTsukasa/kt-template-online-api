@@ -6,10 +6,6 @@ import { AdminUser } from '../../identity/user/admin-user.entity';
 
 @Injectable()
 export class AdminTimezoneService {
-  /**
-   * 初始化 AdminTimezoneService 实例。
-   * @param userRepository - 用户仓库依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(AdminUser)
     private readonly userRepository: Repository<AdminUser>,

@@ -35,10 +35,6 @@ import { WordpressService } from '../application/wordpress.service';
 @Controller('wordpress/category')
 @UseGuards(JwtAuthGuard)
 export class WordpressCategoryController {
-  /**
-   * 初始化 WordpressCategoryController 实例。
-   * @param wordpressService - wordpressService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly wordpressService: WordpressService) {}
 
   /**

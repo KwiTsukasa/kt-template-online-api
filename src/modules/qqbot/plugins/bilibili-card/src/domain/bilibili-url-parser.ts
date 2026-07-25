@@ -7,11 +7,6 @@ const LEADING_WRAPPERS = /^[\s"'<>（([{【]+/u;
 const BVID_PATTERN = /^BV[0-9A-Za-z]{10}$/;
 const AID_PATTERN = /^(?:av|AV)(\d+)$/;
 
-/**
- * Removes QQ card wrappers and punctuation that often stick to copied URLs.
- * @param candidate - Raw string fragment found in text or card JSON.
- * @returns Cleaned URL candidate ready for `URL` parsing.
- */
 export function cleanBilibiliUrlCandidate(candidate: string) {
   return candidate
     .replaceAll('&amp;', '&')
@@ -26,11 +21,6 @@ export function cleanBilibiliUrlCandidate(candidate: string) {
     .trim();
 }
 
-/**
- * Checks whether a URL belongs to the Bilibili domains this plugin is allowed to parse.
- * @param candidate - URL string collected from a QQ message or redirect result.
- * @returns `true` when the host is Bilibili-owned or `b23.tv`.
- */
 export function isAllowedBilibiliUrl(candidate: string) {
   try {
     const url = new URL(cleanBilibiliUrlCandidate(candidate));
@@ -46,11 +36,6 @@ export function isAllowedBilibiliUrl(candidate: string) {
   }
 }
 
-/**
- * Extracts a Bilibili video identifier from a supported URL.
- * @param candidate - Direct Bilibili video URL or short-link URL that already embeds BV/av.
- * @returns Parsed video reference, or `null` when the URL is not a supported video URL.
- */
 export function parseBilibiliVideoReference(
   candidate: string,
 ): BilibiliVideoReference | null {

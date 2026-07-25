@@ -5,11 +5,6 @@ jest.mock('bullmq', () => ({
   Queue: class MockQueue {
     readonly schedulers = new Map<string, unknown>();
 
-    /**
-     * 初始化 当前类 实例。
-     * @param name - 名称文本；影响 constructor 的返回值。
-     * @param options - 插件平台列表；影响 constructor 的返回值。
-     */
     constructor(
       public name: string,
       public options: unknown,
@@ -58,12 +53,6 @@ jest.mock('bullmq', () => ({
     async waitUntilReady() {}
   },
   Worker: class MockWorker {
-    /**
-     * 初始化 当前类 实例。
-     * @param name - 名称文本；影响 constructor 的返回值。
-     * @param processor - processor 输入；影响 constructor 的返回值。
-     * @param options - 插件平台列表；影响 constructor 的返回值。
-     */
     constructor(
       public name: string,
       public processor: (job: unknown) => Promise<unknown> | unknown,
@@ -407,10 +396,6 @@ describe('QQBot plugin task scheduler', () => {
  */
 function createConfigService(): any {
   return {
-    /**
-     * 读取 插件平台回调数据。
-     * @param key - 键名；限定 插件平台查询范围。
-     */
     get: (key: string) =>
       ({
         QQBOT_PLUGIN_QUEUE_REDIS_HOST: 'redis.local',

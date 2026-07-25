@@ -18,10 +18,6 @@ import { QqbotPluginTaskService } from '../application/task';
 @Controller('qqbot/plugin-platform/tasks')
 @UseGuards(JwtAuthGuard)
 export class QqbotPluginPlatformTaskController {
-  /**
-   * 初始化 QqbotPluginPlatformTaskController 实例。
-   * @param service - service 输入；影响 constructor 的返回值。
-   */
   constructor(private readonly service: QqbotPluginTaskService) {}
 
   /**

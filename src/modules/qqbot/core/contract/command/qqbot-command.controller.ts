@@ -24,12 +24,6 @@ import { QqbotCommandService } from '../../application/command/qqbot-command.ser
 @Controller('qqbot/command')
 @UseGuards(JwtAuthGuard)
 export class QqbotCommandController {
-  /**
-   * 初始化 QqbotCommandController 实例。
-   * @param commandEngine - commandEngine 输入；影响 constructor 的返回值。
-   * @param commandService - commandService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly commandEngine: QqbotCommandEngineService,
     private readonly commandService: QqbotCommandService,

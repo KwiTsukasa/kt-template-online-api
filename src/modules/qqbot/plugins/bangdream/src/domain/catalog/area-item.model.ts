@@ -17,11 +17,6 @@ export class AreaItem {
   visual: { [areaItemLevel: number]: Array<string | null> };
   targetAttributes: Array<'cool' | 'happy' | 'pure' | 'powerful'>;
   targetBandIds: Array<number>;
-  /**
-   * 构造 AreaItem 实例，并初始化该模型的本地基础字段。
-   *
-   * @param areaItemId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
-   */
   constructor(areaItemId: number) {
     this.areaItemId = areaItemId;
     const areaItemData =

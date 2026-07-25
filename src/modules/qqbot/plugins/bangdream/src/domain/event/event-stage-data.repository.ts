@@ -19,10 +19,6 @@ export type EventStageDataRows<T extends EventStageDataType> =
   T extends 'stages' ? EventStageTypeRow[] : EventStageRotationMusicRow[];
 
 export class EventStageDataRepository {
-  /**
-   * 初始化 EventStageDataRepository 实例。
-   * @param provider - provider 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}

@@ -14,11 +14,6 @@ const primitiveTypeMap = {
   boolean: Boolean,
 };
 
-/**
- * 设置Class Name。
- * @param target - target 输入；驱动 `Object.defineProperty()` 的 公共基础设施步骤。
- * @param name - 名称文本；驱动 `Object.defineProperty()` 的 公共基础设施步骤。
- */
 const setClassName = (target: Type<any>, name: string) => {
   Object.defineProperty(target, 'name', {
     value: name,
@@ -52,20 +47,12 @@ export class ApiResponseDto<TData> {
   data: TData;
 }
 
-/**
- * 查询 当前模块数据。
- * @param example - example 输入；限定 公共基础设施查询范围。
- */
 const getResponseExample = (example: any) => ({
   code: 200,
   msg: '操作成功',
   data: example,
 });
 
-/**
- * 执行 当前模块流程。
- * @param { description = '操作成功', schema, example, } - Swagger 响应示例数据，用于生成 OpenAPI 成功或错误响应示例，读取 `description`、`schema`、`example` 字段。
- */
 export const ApiSuccessResponse = ({
   description = '操作成功',
   schema,
@@ -93,12 +80,6 @@ export const ApiSuccessResponse = ({
   );
 };
 
-/**
- * 执行 当前模块流程。
- * @param model - model 输入；使用 `name` 字段生成结果。
- * @param example - example 输入；驱动 `getResponseExample()` 的 公共基础设施步骤。
- * @param description - description 输入；影响 ApiModelResponse 的返回值。
- */
 export const ApiModelResponse = <TModel extends Type<any>>(
   model: TModel,
   example: any,
@@ -123,12 +104,6 @@ export const ApiModelResponse = <TModel extends Type<any>>(
   );
 };
 
-/**
- * 执行 当前模块流程。
- * @param model - model 输入；使用 `name` 字段生成结果。
- * @param example - example 输入；驱动 `getResponseExample()` 的 公共基础设施步骤。
- * @param description - description 输入；影响 ApiArrayResponse 的返回值。
- */
 export const ApiArrayResponse = <TModel extends Type<any>>(
   model: TModel,
   example: any[],
@@ -153,13 +128,6 @@ export const ApiArrayResponse = <TModel extends Type<any>>(
   );
 };
 
-/**
- * 执行 当前模块流程。
- * @param model - model 输入；使用 `name` 字段生成结果。
- * @param example - example 输入；影响 ApiPageResponse 的返回值。
- * @param total - 总记录数；影响 ApiPageResponse 的返回值。
- * @param description - description 输入；影响 ApiPageResponse 的返回值。
- */
 export const ApiPageResponse = <TModel extends Type<any>>(
   model: TModel,
   example: any[],
@@ -196,10 +164,6 @@ export const ApiPageResponse = <TModel extends Type<any>>(
   );
 };
 
-/**
- * 执行 当前模块流程。
- * @param description - description 输入；影响 ApiFileDownloadResponse 的返回值。
- */
 export const ApiFileDownloadResponse = (description = '文件下载成功') =>
   applyDecorators(
     ApiOkResponse({
@@ -247,10 +211,6 @@ const standardErrorSchema = {
   },
 };
 
-/**
- * 执行 当前模块流程。
- * @param document - document 输入；使用 `paths` 字段生成结果。
- */
 export const applySwaggerResponseExamples = (document: OpenAPIObject) => {
   const components = ensureDocumentComponents(document);
   components.schemas.KtApiErrorResponse ||= standardErrorSchema;

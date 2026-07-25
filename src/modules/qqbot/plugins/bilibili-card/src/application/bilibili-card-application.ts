@@ -14,12 +14,6 @@ export class BilibiliCardApplication {
   private readonly dedupe = new Map<string, { expiresAt: number }>();
   private readonly videoClient: BilibiliVideoClient;
 
-  /**
-   * Initializes the Bilibili card application service.
-   * @param host - Package-local host facade for bindings, HTTP, send and warning capabilities.
-   * @param manifest - Package manifest metadata containing the plugin key.
-   * @param now - Millisecond clock used by binding cache and conversation dedupe.
-   */
   constructor(
     private readonly host: BilibiliCardPluginHost,
     private readonly manifest: BilibiliCardManifest,
@@ -28,11 +22,6 @@ export class BilibiliCardApplication {
     this.videoClient = new BilibiliVideoClient(host);
   }
 
-  /**
-   * Handles one normalized QQBot message event and replies with a Bilibili video summary when applicable.
-   * @param message - Normalized QQBot message plus raw OneBot event/card payload.
-   * @returns `true` when a summary was sent; otherwise `false`.
-   */
   async handleMessage(message: BilibiliCardMessage) {
     if (message.userId === message.selfId) return false;
     if (!(await this.isBound(message.selfId))) return false;
@@ -77,12 +66,6 @@ export class BilibiliCardApplication {
     return false;
   }
 
-  /**
-   * Resolves direct Bilibili URLs or `b23.tv` short links into video references.
-   * @param url - Candidate URL extracted from normalized text or raw card payload.
-   * @param config - Runtime redirect settings read from the plugin config snapshot.
-   * @returns Parsed video reference, or `null` when the URL is unsupported or resolution fails.
-   */
   private async resolveReference(
     url: string,
     config: { httpTimeoutMs: number; maxRedirects: number },
@@ -104,11 +87,6 @@ export class BilibiliCardApplication {
     }
   }
 
-  /**
-   * Checks whether this event plugin is bound to the current QQBot account.
-   * @param selfId - QQBot self account id from the normalized message.
-   * @returns `true` when the account has the Bilibili card event plugin bound.
-   */
   private async isBound(selfId: string) {
     const normalizedSelfId = `${selfId || ''}`.trim();
     if (!normalizedSelfId) return false;
@@ -123,9 +101,6 @@ export class BilibiliCardApplication {
     }
   }
 
-  /**
-   * Removes expired conversation/video dedupe entries before processing a new candidate.
-   */
   private pruneDedupe() {
     const current = this.now();
     for (const [key, state] of this.dedupe.entries()) {
@@ -133,10 +108,6 @@ export class BilibiliCardApplication {
     }
   }
 
-  /**
-   * Emits a warning through the package host without failing event dispatch.
-   * @param message - Warning message safe for platform logs.
-   */
   private warn(message: string) {
     try {
       const result = this.host.warn?.(message) as unknown;
@@ -149,12 +120,6 @@ export class BilibiliCardApplication {
   }
 }
 
-/**
- * Builds a dedupe key scoped by account, conversation target and canonical video id.
- * @param message - Normalized QQBot message being handled.
- * @param reference - Parsed Bilibili video reference.
- * @returns Stable dedupe key for one video in one conversation.
- */
 function buildBilibiliCardDedupeKey(
   message: BilibiliCardMessage,
   reference: BilibiliVideoReference,
@@ -167,11 +132,6 @@ function buildBilibiliCardDedupeKey(
   ].join(':');
 }
 
-/**
- * Checks whether a candidate URL is a `b23.tv` short link that requires redirect resolution.
- * @param url - Candidate URL extracted by the domain extractor.
- * @returns `true` when the hostname is exactly `b23.tv`.
- */
 function isB23ShortLink(url: string) {
   try {
     return new URL(url).hostname.toLowerCase() === 'b23.tv';
@@ -180,11 +140,6 @@ function isB23ShortLink(url: string) {
   }
 }
 
-/**
- * Detects promise-like warning results so rejected async loggers cannot escape later.
- * @param value - Return value from the optional host warning hook.
- * @returns `true` when the value exposes a callable `catch` method.
- */
 function isThenable(
   value: unknown,
 ): value is { catch: (handler: () => void) => unknown } {
@@ -196,11 +151,6 @@ function isThenable(
   );
 }
 
-/**
- * Converts thrown values to stable warning text.
- * @param error - Error or arbitrary thrown value from host or domain code.
- * @returns Human-readable message.
- */
 function normalizeError(error: unknown) {
   return error instanceof Error && error.message ? error.message : `${error}`;
 }

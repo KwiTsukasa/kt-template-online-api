@@ -15,7 +15,6 @@ type RoleInput = {
   status?: number;
 };
 
-/** Builds the smallest HTTP execution context used by the permission guard. */
 const contextFor = (
   roles: RoleInput[],
   handler: () => void = () => undefined,
@@ -28,7 +27,6 @@ const contextFor = (
     }),
   }) as unknown as ExecutionContext;
 
-/** Creates a handler decorated with one exact management permission. */
 const handlerWithPermission = (...authCodes: string[]): (() => void) => {
   class PermissionFixture {
     @QqbotMessagePushPermission(...authCodes)

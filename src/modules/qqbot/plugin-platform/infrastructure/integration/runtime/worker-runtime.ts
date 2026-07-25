@@ -13,13 +13,6 @@ import {
 } from './worker-runtime.types';
 
 export class QqbotPluginRuntimeError extends Error {
-  /**
-   * 初始化 QqbotPluginRuntimeError 实例。
-   * @param code - 响应状态码；影响 constructor 的返回值。
-   * @param pluginKey - pluginKey 输入；影响 constructor 的返回值。
-   * @param message - message 输入；驱动 `super()` 的 插件平台步骤。
-   * @param safeSummary - safeSummary 输入；影响 constructor 的返回值。
-   */
   constructor(
     readonly code: QqbotPluginRuntimeErrorCode,
     readonly pluginKey: string,
@@ -38,10 +31,6 @@ export type QqbotPluginWorkerResponseErrorInput = {
 };
 
 export class QqbotPluginWorkerResponseError extends Error {
-  /**
-   * 初始化 QqbotPluginWorkerResponseError 实例。
-   * @param serializedError - serializedError 输入；使用 `message`、`name`、`stack` 字段生成结果。
-   */
   constructor(readonly serializedError: QqbotPluginWorkerResponseErrorInput) {
     super(serializedError.message || 'QQBot 插件 worker 请求失败');
     this.name = serializedError.name || 'QqbotPluginWorkerResponseError';
@@ -49,11 +38,6 @@ export class QqbotPluginWorkerResponseError extends Error {
   }
 }
 
-/**
- * 序列化Plugin Worker Response Error。
- * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
- * @returns QQBot 插件平台产出的 QqbotPluginWorkerResponseErrorInput。
- */
 export const serializePluginWorkerResponseError = (
   error: unknown,
 ): QqbotPluginWorkerResponseErrorInput => ({
@@ -63,10 +47,6 @@ export const serializePluginWorkerResponseError = (
 });
 
 export class QqbotPluginWorkerStaleRequestError extends Error {
-  /**
-   * 初始化 QqbotPluginWorkerStaleRequestError 实例。
-   * @param message - message 输入；驱动 `super()` 的 插件平台步骤。
-   */
   constructor(message = 'QQBot 插件 worker 队列请求已过期，需要恢复后重试') {
     super(message);
     this.name = 'QqbotPluginWorkerStaleRequestError';
@@ -74,37 +54,20 @@ export class QqbotPluginWorkerStaleRequestError extends Error {
 }
 
 export class QqbotPluginWorkerExpiredRequestError extends Error {
-  /**
-   * 初始化 QqbotPluginWorkerExpiredRequestError 实例。
-   * @param message - message 输入；驱动 `super()` 的 插件平台步骤。
-   */
   constructor(message = 'QQBot 插件 worker 队列请求已超时') {
     super(message);
     this.name = 'QqbotPluginWorkerExpiredRequestError';
   }
 }
 
-/**
- * 判断 QQBot 插件平台条件。
- * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
- * @param name - 名称文本；计算 插件平台判断结果。
- */
 const isNamedError = (error: unknown, name: string) => {
   return error instanceof Error && error.name === name;
 };
 
-/**
- * 创建 QQBot 插件平台对象或配置。
- */
 const createCorrelationId = () => {
   return `qqbot-plugin-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-/**
- * 执行 QQBot 插件平台流程。
- * @param input - input 输入；驱动 `Object.keys()` 的 插件平台步骤。
- * @returns QQBot 插件平台产出的 QqbotPluginSafeInputSummary。
- */
 const summarizeInput = (
   input: Record<string, unknown>,
 ): QqbotPluginSafeInputSummary => {
@@ -122,11 +85,6 @@ export class QqbotPluginWorkerRuntime {
 
   status: QqbotPluginRuntimeStatus = 'stopped';
 
-  /**
-   * 初始化 QqbotPluginWorkerRuntime 实例。
-   * @param requestQueue - requestQueue 输入；影响 constructor 的返回值。
-   * @param options - 插件平台列表；影响 constructor 的返回值。
-   */
   constructor(
     private readonly requestQueue: QqbotPluginWorkerRequestQueue,
     private readonly options: QqbotPluginWorkerRuntimeOptions,
@@ -387,9 +345,6 @@ export class QqbotPluginWorkerRuntime {
       timer.unref?.();
     });
     return {
-      /**
-       * 清理 插件平台回调状态。
-       */
       clear: () => {
         if (timer) clearTimeout(timer);
       },

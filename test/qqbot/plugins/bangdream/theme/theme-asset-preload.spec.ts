@@ -34,15 +34,7 @@ describe('BangDream theme asset preload', () => {
     );
     const plugin = createPlugin({
       io: {
-        /**
-         * 执行 BangDream回调。
-         * @param filePath - BangDream路径；驱动 `readFile()` 的 BangDream步骤。
-         */
         readAssetFile: async (filePath) => readFile(filePath),
-        /**
-         * 执行 BangDream回调。
-         * @param filePath - BangDream路径；驱动 `XLSX.readFile()` 的 BangDream步骤。
-         */
         readExcelRows: async (filePath) => {
           const workbook = XLSX.readFile(filePath);
           return XLSX.utils.sheet_to_json(

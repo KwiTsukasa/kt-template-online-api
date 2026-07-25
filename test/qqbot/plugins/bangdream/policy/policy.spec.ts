@@ -80,10 +80,6 @@ describe('BangDream CN event estimate policy', () => {
     const result = calculateCnEventEstimateStartAt({
       currentEvent: { eventId: 100, ...schedules[100] },
       eventId: 101,
-      /**
-       * 读取 BangDream回调数据。
-       * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
-       */
       getSchedule: (eventId) => schedules[eventId] || null,
       options: {
         defaultNoBangDays: 1,

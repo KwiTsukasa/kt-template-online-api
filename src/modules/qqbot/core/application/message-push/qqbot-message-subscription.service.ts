@@ -33,30 +33,14 @@ type NormalizedSubscriptionInput = {
   sourceKey: string;
 };
 
-/**
- * Manages source-normalized global system-message subscriptions and their binding lock gate.
- *
- * Database errors other than MySQL duplicate-key conflicts deliberately propagate so callers
- * cannot treat incomplete persistence as a valid subscription lifecycle transition.
- */
 @Injectable()
 export class QqbotMessageSubscriptionService {
-  /**
-   * Initializes subscription persistence and the live process-local source registry.
-   * @param subscriptionRepository - Persistence root used to open lifecycle transactions.
-   * @param sourceRegistry - Current registered source definitions and adapters.
-   */
   constructor(
     @InjectRepository(QqbotMessageSubscription)
     private readonly subscriptionRepository: Repository<QqbotMessageSubscription>,
     private readonly sourceRegistry: SystemMessageSourceRegistry,
   ) {}
 
-  /**
-   * Pages non-deleted subscriptions with current source validity rather than stale snapshots.
-   * @param query - Optional name, source key, enabled state, and pagination filters.
-   * @returns Deterministically ordered detached subscription views and their total count.
-   */
   async page(query: MessageSubscriptionListQuery): Promise<{
     items: MessageSubscriptionView[];
     total: number;
@@ -89,19 +73,12 @@ export class QqbotMessageSubscriptionService {
     };
   }
 
-  /**
-   * Creates a source-normalized subscription or revives its most recently updated history row.
-   * @param input - Untrusted metadata and source configuration submitted by management UI.
-   * @returns The new or revived subscription view.
-   * @throws {HttpException} HTTP 409 when another active row owns the same natural key.
-   */
   async create(
     input: MessageSubscriptionInput,
   ): Promise<MessageSubscriptionView> {
     const normalized = await this.normalizeInput(input);
     try {
       const saved = await this.subscriptionRepository.manager.transaction(
-        /** Lets the unique active key arbitrate new rows while locking only a selected history row. */
         async (manager) => {
           const repository = manager.getRepository(QqbotMessageSubscription);
           const active = await repository.findOne({
@@ -139,13 +116,6 @@ export class QqbotMessageSubscriptionService {
     }
   }
 
-  /**
-   * Replaces one active subscription's metadata and canonical source configuration.
-   * @param id - String Snowflake identity of the subscription being changed.
-   * @param input - Complete replacement metadata and untrusted source configuration.
-   * @returns The updated view for the same subscription ID.
-   * @throws {HttpException} HTTP 409 when another active subscription owns the new natural key.
-   */
   async update(
     id: string,
     input: MessageSubscriptionInput,
@@ -153,7 +123,6 @@ export class QqbotMessageSubscriptionService {
     const normalized = await this.normalizeInput(input);
     try {
       const saved = await this.subscriptionRepository.manager.transaction(
-        /** Holds the target row through save; the unique index resolves prospective-key races. */
         async (manager) => {
           const repository = manager.getRepository(QqbotMessageSubscription);
           const current = await this.findActiveForWrite(repository, id);
@@ -190,19 +159,11 @@ export class QqbotMessageSubscriptionService {
     }
   }
 
-  /**
-   * Changes an active subscription's enabled state after a live source validation when enabling.
-   * @param id - String Snowflake identity of the active subscription.
-   * @param enabled - Requested future enabled state.
-   * @returns The updated detached subscription view.
-   * @throws {SystemMessageContractError} With the current source reason when enabling is unsafe.
-   */
   async setEnabled(
     id: string,
     enabled: boolean,
   ): Promise<MessageSubscriptionView> {
     const saved = await this.subscriptionRepository.manager.transaction(
-      /** Holds the subscription row while current source validity is checked and persisted. */
       async (manager) => {
         const repository = manager.getRepository(QqbotMessageSubscription);
         const current = await this.findActiveForWrite(repository, id);
@@ -229,14 +190,9 @@ export class QqbotMessageSubscriptionService {
     return this.toView(saved);
   }
 
-  /**
-   * Soft-deletes one active subscription and releases its active natural key atomically.
-   * @param id - String Snowflake identity of the subscription to remove.
-   * @returns `true` once disabled/deleted state and null active key were persisted.
-   */
   async remove(id: string): Promise<boolean> {
     return this.subscriptionRepository.manager.transaction(
-      /** Holds the active row until its deletion-safe fields are stored together. */
+      // 保持活跃订阅行锁，直至删除安全字段一并持久化。
       async (manager) => {
         const repository = manager.getRepository(QqbotMessageSubscription);
         const current = await this.findActiveForWrite(repository, id);
@@ -253,19 +209,6 @@ export class QqbotMessageSubscriptionService {
     );
   }
 
-  /**
-   * Enforces the subscription half of the binding lock order before any live binding save.
-   *
-   * Callers must pass their current binding-write transaction manager, invoke this before
-   * saving every new, updated, or revived non-deleted binding, and keep that transaction open
-   * through the binding save and commit. Disabled bindings require this same lock because they
-   * still reference the subscription and must not race a concurrent removal.
-   * @param manager - Current binding transaction manager; never substitute a global manager.
-   * @param subscriptionId - Candidate subscription's string Snowflake identity.
-   * @param bindingEnabled - Whether the binding will be enabled for message delivery.
-   * @returns The locked active subscription available to the requested binding state.
-   * @throws {SystemMessageContractError} For deleted/missing subscriptions, disabled enabled-bindings, or invalid sources.
-   */
   async requireAvailableForBinding(
     manager: EntityManager,
     subscriptionId: string,
@@ -295,11 +238,6 @@ export class QqbotMessageSubscriptionService {
     return subscription;
   }
 
-  /**
-   * Normalizes user input through the exact source adapter before any transaction begins.
-   * @param input - Untrusted management payload with a requested source key.
-   * @returns Detached canonical persistence fields and their stable SHA-256 natural key.
-   */
   private async normalizeInput(
     input: MessageSubscriptionInput,
   ): Promise<NormalizedSubscriptionInput> {
@@ -322,11 +260,6 @@ export class QqbotMessageSubscriptionService {
     };
   }
 
-  /**
-   * Sorts a canonical configuration into a detached ordinary object for stable JSON hashing.
-   * @param config - Adapter-owned allowlisted scalar configuration.
-   * @returns New key-sorted object that cannot mutate the adapter-owned input object.
-   */
   private sortConfig(config: Record<string, string>): Record<string, string> {
     return Object.fromEntries(
       Object.entries(config).sort(([left], [right]) =>
@@ -335,13 +268,6 @@ export class QqbotMessageSubscriptionService {
     );
   }
 
-  /**
-   * Locks and loads one active subscription for a direct lifecycle mutation.
-   * @param repository - Repository obtained from the caller's current transaction manager.
-   * @param id - String Snowflake identity of the expected active subscription.
-   * @returns Locked active subscription row.
-   * @throws {SystemMessageContractError} When the row is absent or already soft-deleted.
-   */
   private async findActiveForWrite(
     repository: Repository<QqbotMessageSubscription>,
     id: string,
@@ -354,7 +280,6 @@ export class QqbotMessageSubscriptionService {
     return current;
   }
 
-  /** Rejects a dependency lifecycle mutation while any enabled or disabled live binding references it. */
   private async assertNoLiveBindings(
     manager: EntityManager,
     subscriptionId: string,
@@ -369,12 +294,6 @@ export class QqbotMessageSubscriptionService {
     }
   }
 
-  /**
-   * Cancels historical deliveries in the caller's configuration transaction.
-   * @param manager - Transaction manager that already owns the subscription mutation.
-   * @param where - Exact subscription identity whose historical rows are invalidated.
-   * @param includeProcessing - Whether a canonical identity change must revoke active owners too.
-   */
   private async cancelUnfinishedDeliveries(
     manager: EntityManager,
     where: Pick<QqbotMessageDelivery, 'subscriptionId'>,
@@ -398,30 +317,16 @@ export class QqbotMessageSubscriptionService {
     );
   }
 
-  /**
-   * Maps duplicate natural keys to the existing Vben-compatible HTTP conflict response.
-   * @returns Never returns because it always throws an HTTP 409 exception.
-   */
   private throwNaturalKeyConflict(): never {
     return throwVbenError('相同消息源配置的订阅已存在', HttpStatus.CONFLICT);
   }
 
-  /**
-   * Recognizes only MySQL duplicate-key failures that are the database's concurrency authority.
-   * @param error - Unknown exception returned by transaction, repository, or driver layers.
-   * @returns Whether the error represents MySQL `ER_DUP_ENTRY` / errno 1062.
-   */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const value = error as { code?: unknown; errno?: unknown };
     return value.code === 'ER_DUP_ENTRY' || value.errno === 1062;
   }
 
-  /**
-   * Maps a persistence row to a detached view using its current source definition and validity.
-   * @param subscription - Persisted subscription row whose source configuration must not leak mutability.
-   * @returns Serializable management view with live source summary and validity fields.
-   */
   private async toView(
     subscription: QqbotMessageSubscription,
   ): Promise<MessageSubscriptionView> {
@@ -447,11 +352,6 @@ export class QqbotMessageSubscriptionService {
     };
   }
 
-  /**
-   * Serializes project datetime values without silently converting them to UTC ISO text.
-   * @param value - Entity date value transformed by the project's KtDateTime column type.
-   * @returns Project-formatted datetime text used by the management contract.
-   */
   private serializeTime(value: QqbotMessageSubscription['createTime']): string {
     return String(value);
   }

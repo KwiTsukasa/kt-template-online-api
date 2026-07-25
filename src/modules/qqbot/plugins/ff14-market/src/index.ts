@@ -30,11 +30,6 @@ type Ff14MarketPluginCreateOptions =
   | Ff14MarketPluginOptions
   | QqbotGenericPluginCreateOptions;
 
-/**
- * Creates the FF14 Market plugin entry for package-local calls or the generic worker runtime.
- * @param options - Legacy package-local options or generic worker options with config snapshot and host RPC facade.
- * @returns FF14 Market command plugin instance.
- */
 export function createPlugin(options: Ff14MarketPluginCreateOptions) {
   if (isFf14GenericPluginCreateOptions(options)) {
     return buildFf14MarketPlugin({
@@ -52,11 +47,6 @@ export function createPlugin(options: Ff14MarketPluginCreateOptions) {
   return buildFf14MarketPlugin(options);
 }
 
-/**
- * Creates the FF14 Market plugin from the package-local host contract.
- * @param options - Package-local host, manifest, clock, and error normalizer.
- * @returns FF14 Market command plugin used by package-local callers and tests.
- */
 function buildFf14MarketPlugin(options: Ff14MarketPluginOptions) {
   const application = new Ff14MarketApplication(
     new Ff14MarketClient(options.host),
@@ -64,9 +54,6 @@ function buildFf14MarketPlugin(options: Ff14MarketPluginOptions) {
 
   return {
     description: options.manifest.description,
-    /**
-     * 执行 FF14 市场回调。
-     */
     healthCheck: async () => {
       const checkedAt = formatFf14CheckedAt(options.now?.() || new Date());
       try {
@@ -96,11 +83,6 @@ function buildFf14MarketPlugin(options: Ff14MarketPluginOptions) {
   };
 }
 
-/**
- * Checks whether FF14 Market create options came from the generic worker runtime.
- * @param options - Candidate create options supplied by the plugin loader.
- * @returns `true` when a runtime config snapshot is present.
- */
 function isFf14GenericPluginCreateOptions(
   options: Ff14MarketPluginCreateOptions,
 ): options is QqbotGenericPluginCreateOptions {
@@ -110,11 +92,6 @@ function isFf14GenericPluginCreateOptions(
   );
 }
 
-/**
- * Normalizes generic manifest aliases so FF14 Market keeps a package-local plugin key.
- * @param manifest - Manifest supplied by the generic worker descriptor.
- * @returns Manifest with `pluginKey` filled from `key` when needed.
- */
 function normalizeFf14MarketManifest(
   manifest: QqbotGenericPluginCreateOptions['manifest'],
 ): Ff14MarketManifest {
@@ -124,42 +101,17 @@ function normalizeFf14MarketManifest(
   };
 }
 
-/**
- * Builds the FF14 Market client host over generic worker host methods.
- * @param options - Generic worker context containing host RPC methods and config snapshot.
- * @returns Package-local host expected by `Ff14MarketClient`.
- */
 function createFf14MarketGenericHostAdapter(
   options: QqbotGenericPluginCreateOptions,
 ): Ff14MarketPluginHost {
   const { host, runtime } = options;
   return {
-    /**
-     * Reads FF14 Market config synchronously from the worker startup snapshot.
-     * @param key - Runtime config key declared by the FF14 Market package manifest.
-     * @returns Snapshot value cast to the requested config type.
-     */
     getConfig: <T = string>(key: string) =>
       runtime.configSnapshot[key] as T | undefined,
-    /**
-     * Reads dictionary items through the generic host bridge.
-     * @param dictCode - FF14 dictionary code used for region, data center, or world lookup.
-     * @returns Dictionary items returned by the host dictionary service.
-     */
     getDictItemsByKey: async (dictCode) =>
       await callFf14GenericHost(host, 'getDictItemsByKey', dictCode),
-    /**
-     * Reads the FF14 dictionary relation tree through the generic host bridge.
-     * @param input - Relation tree root dictionary code requested by the FF14 catalog builder.
-     * @returns Relation tree nodes returned by the host dictionary service.
-     */
     relationTree: async (input) =>
       await callFf14GenericHost(host, 'relationTree', input),
-    /**
-     * Performs FF14 Market HTTP JSON requests through the generic host bridge.
-     * @param request - Package-local HTTP request options from `Ff14MarketClient`.
-     * @returns Parsed JSON payload returned by the host HTTP client.
-     */
     requestJson: async <T>(request) =>
       await callFf14GenericHost<T>(
         host,
@@ -169,13 +121,6 @@ function createFf14MarketGenericHostAdapter(
   };
 }
 
-/**
- * Calls one FF14 Market generic host method and fails with a package-owned error when absent.
- * @param host - Generic worker host facade supplied by the platform runtime.
- * @param method - Host capability required by the FF14 Market adapter.
- * @param args - Positional arguments accepted by the host facade method.
- * @returns Host method result cast to the requested package-local type.
- */
 async function callFf14GenericHost<TResult = any>(
   host: Record<string, unknown>,
   method: string,
@@ -188,11 +133,6 @@ async function callFf14GenericHost<TResult = any>(
   return (await fn(...args)) as TResult;
 }
 
-/**
- * Converts package-local HTTP options to worker-safe generic host request data.
- * @param request - FF14 Market HTTP request containing URL and function-based failure message.
- * @returns Serializable request data accepted by the generic host bridge.
- */
 function serializeFf14GenericHttpRequest(
   request: Parameters<Ff14MarketPluginHost['requestJson']>[0],
 ) {
@@ -212,13 +152,6 @@ function serializeFf14GenericHttpRequest(
   };
 }
 
-/**
- * Normalizes generic worker errors to the legacy FF14 Market string error contract.
- * @param normalizeError - Generic worker error normalizer supplied by the platform runtime.
- * @param error - Error or arbitrary thrown value from package code.
- * @param fallback - FF14 Market fallback message used by health checks.
- * @returns String message consumed by legacy plugin health output.
- */
 function normalizeFf14MarketGenericError(
   normalizeError: QqbotGenericPluginCreateOptions['normalizeError'],
   error: unknown,
@@ -233,10 +166,6 @@ function normalizeFf14MarketGenericError(
  * @param date - date 输入；执行 `date.getFullYear()`、`date.getMonth()`、`date.getDate()`、`date.getHours()` 对应的 FF14 市场步骤。
  */
 function formatFf14CheckedAt(date: Date) {
-  /**
-   * 补齐 FF14 市场插件展示文本。
-   * @param input - input 输入；影响 pad 的返回值。
-   */
   const pad = (input: number) => `${input}`.padStart(2, '0');
   return [
     date.getFullYear(),

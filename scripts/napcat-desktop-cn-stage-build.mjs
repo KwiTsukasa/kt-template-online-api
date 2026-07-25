@@ -16,40 +16,19 @@ import { fileURLToPath } from 'node:url';
 const DEFAULT_OUTPUT = '.kt-workspace/napcat-desktop-cn-build';
 const DEFAULT_UPSTREAM_BASE = '5c18a62530d87dbadf53d267002894faa6ca7e90';
 
-/**
- * Reads a named CLI argument in `--key value` form.
- * @param {string} name - Argument name without the leading dashes.
- * @param {string} fallback - Value used when the argument is absent.
- * @returns {string} Parsed argument value.
- */
 function readArg(name, fallback = '') {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback;
 }
 
-/**
- * Computes a SHA256 digest for a file.
- * @param {string} filePath - Absolute path to the file being fingerprinted.
- * @returns {string} Lowercase hex SHA256 digest.
- */
 function sha256File(filePath) {
   return createHash('sha256').update(readFileSync(filePath)).digest('hex');
 }
 
-/**
- * Lists directory entries in stable order.
- * @param {string} directory - Directory to list.
- * @returns {string[]} Sorted child names.
- */
 function listDirectory(directory) {
   return readdirSync(directory).sort();
 }
 
-/**
- * Recursively computes a stable digest for a directory from relative paths and file contents.
- * @param {string} directory - Absolute directory path.
- * @returns {string} Lowercase hex SHA256 digest.
- */
 function sha256Directory(directory) {
   const hash = createHash('sha256');
   const stack = [directory];
@@ -75,43 +54,21 @@ function sha256Directory(directory) {
   return hash.digest('hex');
 }
 
-/**
- * Reads the current git commit for the NapCat fork.
- * @param {string} repoRoot - Absolute repository path.
- * @returns {string} Current commit hash.
- */
 function gitCommit(repoRoot) {
   return execFileSync('git', ['-C', repoRoot, 'rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();
 }
 
-/**
- * Copies one file or directory into the staged Docker context.
- * @param {string} source - Source path.
- * @param {string} target - Target path.
- */
 function copyIntoContext(source, target) {
   cpSync(source, target, { recursive: true });
 }
 
-/**
- * Checks whether a candidate path is inside an expected parent directory.
- * @param {string} parent - Absolute parent directory that owns the allowed subtree.
- * @param {string} candidate - Absolute path requested by the caller.
- * @returns {boolean} Whether candidate is inside parent and is not parent itself.
- */
 function isInsideDirectory(parent, candidate) {
   const relativePath = relative(parent, candidate);
   return Boolean(relativePath) && !relativePath.startsWith('..') && !isAbsolute(relativePath);
 }
 
-/**
- * Rejects recursive-delete targets outside the API `.kt-workspace` staging area.
- * @param {string} outputRootToCheck - Absolute output path that will be cleaned and regenerated.
- * @param {string} apiRoot - Absolute API repository root.
- * @param {string} napcatRootToCheck - Absolute NapCatQQ fork path passed as source input.
- */
 function assertSafeOutputRoot(outputRootToCheck, apiRoot, napcatRootToCheck) {
   const workspaceRoot = resolve(apiRoot, '.kt-workspace');
   const forbiddenRoots = new Set([

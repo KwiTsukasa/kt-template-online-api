@@ -22,11 +22,6 @@ export const SNOWFLAKE_ID_PATTERN = /^[1-9]\d{0,23}$/;
 export const QQ_TARGET_ID_PATTERN = /^[1-9]\d{4,19}$/;
 const SOURCE_KEY_MAX_LENGTH = 128;
 
-/**
- * Converts only literal query booleans, leaving every other value for `IsBoolean` to reject.
- * @param value - Raw query-string value supplied by Nest.
- * @returns A boolean for `true`/`false`, otherwise the original invalid value.
- */
 const strictQueryBoolean = ({ value }: { value: unknown }): unknown => {
   if (value === 'true' || value === true) return true;
   if (value === 'false' || value === false) return false;

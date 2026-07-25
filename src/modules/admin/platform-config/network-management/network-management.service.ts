@@ -24,15 +24,6 @@ const DEFAULT_TARGET_IPV4 = '192.168.31.224';
 
 @Injectable()
 export class NetworkManagementService {
-  /**
-   * Creates the persisted network desired-state application service.
-   * @param mappingRepository - Read model for port-forward list queries.
-   * @param historyRepository - Read model for endpoint history queries.
-   * @param stateRepository - Read model for Agent status queries.
-   * @param dataSource - Transaction boundary serializing global desired revision changes.
-   * @param configService - Fixed Agent and NAS target identity settings.
-   * @param mqttService - Asynchronous retained desired snapshot publisher.
-   */
   constructor(
     @InjectRepository(NetworkPortForward)
     private readonly mappingRepository: Repository<NetworkPortForward>,
@@ -45,11 +36,6 @@ export class NetworkManagementService {
     private readonly mqttService: NetworkAgentMqttService,
   ) {}
 
-  /**
-   * Lists active desired mappings with independent sync, Keeper, and lease state.
-   * @param query - Validated pagination and filter query.
-   * @returns Page whose endpoint fields hide expired leases.
-   */
   async list(query: NetworkPortForwardListQueryDto = {}) {
     const pageNo = query.pageNo || 1;
     const pageSize = query.pageSize || 20;
@@ -79,11 +65,6 @@ export class NetworkManagementService {
     return { items: items.map((item) => this.serialize(item)), total };
   }
 
-  /**
-   * Creates one TCP or UDP desired mapping under the global revision lock.
-   * @param input - Strict mutable fields; target IPv4 comes from server configuration.
-   * @returns Latest desired record in pending state.
-   */
   async create(input: NetworkPortForwardCreateDto) {
     const saved = await this.dataSource.transaction(async (manager) => {
       const state = await this.lockAgentState(manager);
@@ -136,12 +117,6 @@ export class NetworkManagementService {
     return this.serialize(saved);
   }
 
-  /**
-   * Updates editable desired fields while preserving Keeper prerequisites.
-   * @param id - Active mapping identifier.
-   * @param input - Non-empty strict update payload.
-   * @returns Latest desired record in pending state.
-   */
   async update(id: string, input: NetworkPortForwardUpdateDto) {
     if (Object.keys(input).length === 0) {
       throwVbenError('至少提供一个修改字段', HttpStatus.BAD_REQUEST);
@@ -186,11 +161,6 @@ export class NetworkManagementService {
     });
   }
 
-  /**
-   * Writes an absent tombstone while retaining the active key until explicit Agent proof.
-   * @param id - Active mapping identifier.
-   * @returns Latest deleting desired record.
-   */
   async remove(id: string) {
     return this.mutate(id, async (mapping) => {
       if (mapping.desiredPresence === 'absent') {
@@ -204,11 +174,6 @@ export class NetworkManagementService {
     });
   }
 
-  /**
-   * Advances revision to retry reconciliation without rewriting actual state.
-   * @param id - Active or deleting mapping identifier.
-   * @returns Latest desired record.
-   */
   async retry(id: string) {
     return this.mutate(id, async (mapping) => {
       mapping.lastErrorCode = null;
@@ -218,11 +183,6 @@ export class NetworkManagementService {
     });
   }
 
-  /**
-   * Enables continuous STUN only for same-port UDP and emits a new probe request ID.
-   * @param id - Active mapping identifier.
-   * @returns Latest desired record.
-   */
   async enableKeeper(id: string) {
     return this.mutate(id, async (mapping) => {
       this.assertKeeperCapable(mapping);
@@ -232,11 +192,6 @@ export class NetworkManagementService {
     });
   }
 
-  /**
-   * Disables continuous STUN and immediately hides the current public lease.
-   * @param id - Active mapping identifier.
-   * @returns Latest desired record.
-   */
   async disableKeeper(id: string) {
     return this.mutate(id, async (mapping) => {
       this.assertKeeperCapable(mapping);
@@ -247,11 +202,6 @@ export class NetworkManagementService {
     });
   }
 
-  /**
-   * Requests an immediate idempotent probe for an already-enabled UDP Keeper.
-   * @param id - Active mapping identifier.
-   * @returns Latest desired record.
-   */
   async probe(id: string) {
     return this.mutate(id, async (mapping) => {
       this.assertKeeperCapable(mapping);
@@ -263,12 +213,6 @@ export class NetworkManagementService {
     });
   }
 
-  /**
-   * Lists append-only endpoint events for one active desired mapping.
-   * @param id - Active mapping identifier.
-   * @param query - Validated pagination query.
-   * @returns Endpoint event page ordered newest first.
-   */
   async endpointHistory(
     id: string,
     query: NetworkEndpointHistoryQueryDto = {},
@@ -289,10 +233,6 @@ export class NetworkManagementService {
     return { items: items.map((item) => this.serializeHistory(item)), total };
   }
 
-  /**
-   * Returns Agent connectivity and the three independent revision cursors.
-   * @returns Persisted singleton state or a safe offline bootstrap view.
-   */
   async agentStatus() {
     const agentId = this.agentId();
     const state = await this.stateRepository.findOne({ where: { agentId } });
@@ -335,12 +275,6 @@ export class NetworkManagementService {
     };
   }
 
-  /**
-   * Serializes one mutation under the singleton pessimistic revision lock.
-   * @param id - Active mapping identifier.
-   * @param change - Scoped desired-state mutation executed before revision advance.
-   * @returns Latest serialized desired record.
-   */
   private async mutate(
     id: string,
     change: (
@@ -374,11 +308,6 @@ export class NetworkManagementService {
     return this.serialize(saved);
   }
 
-  /**
-   * Locks or initializes the one configured Agent state row.
-   * @param manager - Active desired-state transaction manager.
-   * @returns Pessimistically locked singleton Agent state.
-   */
   private async lockAgentState(
     manager: EntityManager,
   ): Promise<NetworkAgentState> {
@@ -415,11 +344,6 @@ export class NetworkManagementService {
     throwVbenError('Agent 状态行初始化失败', HttpStatus.INTERNAL_SERVER_ERROR);
   }
 
-  /**
-   * Increments the global revision exactly once and stamps stable issue time on both rows.
-   * @param state - Locked singleton Agent state.
-   * @param mapping - Mapping changed by the current transaction.
-   */
   private advanceRevision(
     state: NetworkAgentState,
     mapping: NetworkPortForward,
@@ -432,7 +356,6 @@ export class NetworkManagementService {
     mapping.desiredIssuedAt = issuedAt;
   }
 
-  /** Rejects TCP, mismatched ports, and deleting records for raw UDP Keeper actions. */
   private assertKeeperCapable(mapping: NetworkPortForward): void {
     if (mapping.desiredPresence !== 'present') {
       throwVbenError('删除中的记录不能操作 Keeper', HttpStatus.CONFLICT);
@@ -448,7 +371,6 @@ export class NetworkManagementService {
     }
   }
 
-  /** Clears only current publishable lease fields while preserving last observation. */
   private withdrawCurrentEndpoint(mapping: NetworkPortForward): void {
     mapping.currentPublicIpv4 = null;
     mapping.currentPublicPort = null;
@@ -456,11 +378,6 @@ export class NetworkManagementService {
     mapping.currentValidUntil = null;
   }
 
-  /**
-   * Converts one entity to the Admin contract and hides an expired current endpoint.
-   * @param mapping - Persisted desired and reported record.
-   * @returns Response-safe record with bigint fields kept as strings.
-   */
   private serialize(mapping: NetworkPortForward) {
     const leaseValid =
       !!mapping.currentPublicIpv4 &&
@@ -501,11 +418,6 @@ export class NetworkManagementService {
     };
   }
 
-  /**
-   * Converts one append-only endpoint event to the Admin history contract.
-   * @param history - Persisted endpoint transition.
-   * @returns Stable string IDs and Admin-facing field names.
-   */
   private serializeHistory(history: NetworkEndpointHistory) {
     return {
       id: String(history.id),
@@ -522,7 +434,6 @@ export class NetworkManagementService {
     };
   }
 
-  /** Schedules MQTT publication without allowing broker errors to reject HTTP state. */
   private notifyDesiredChanged(): void {
     try {
       this.mqttService.requestDesiredPublish();
@@ -531,21 +442,18 @@ export class NetworkManagementService {
     }
   }
 
-  /** Validates decimal Snowflake path input without number coercion. */
   private assertId(id: string): void {
     if (!/^\d{1,24}$/.test(id)) {
       throwVbenError('端口转发 ID 无效', HttpStatus.BAD_REQUEST);
     }
   }
 
-  /** Returns the one configured Agent identifier. */
   private agentId(): string {
     return (
       this.configService.get<string>('NETWORK_AGENT_ID') || DEFAULT_AGENT_ID
     );
   }
 
-  /** Returns and validates the fixed NAS target IPv4. */
   private targetIpv4(): string {
     const target =
       this.configService.get<string>('NETWORK_AGENT_TARGET_IPV4') ||
@@ -559,11 +467,6 @@ export class NetworkManagementService {
     return target;
   }
 
-  /**
-   * Normalizes a display name and enforces the Go schema-v1 UTF-8 byte limit.
-   * @param value - DTO-validated mapping display name.
-   * @returns Trimmed name safe for both MySQL and Agent validation.
-   */
   private normalizeName(value: string): string {
     const normalized = value.trim();
     if (!normalized || Buffer.byteLength(normalized, 'utf8') > 128) {
@@ -575,7 +478,6 @@ export class NetworkManagementService {
     return normalized;
   }
 
-  /** Detects MySQL nullable-unique active-key conflicts. */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const record = error as { code?: unknown; errno?: unknown };

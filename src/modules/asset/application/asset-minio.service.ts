@@ -9,11 +9,6 @@ import type {
 
 @Injectable()
 export class MinioClientService {
-  /**
-   * 初始化 MinioClientService 实例。
-   * @param minioService - minioService 服务依赖；影响 constructor 的返回值。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly minioService: MinioService,
     private readonly configService: ConfigService,

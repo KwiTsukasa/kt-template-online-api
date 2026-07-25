@@ -52,11 +52,6 @@ function getFuzzySearchRules() {
   return cachedRules;
 }
 
-/**
- * 判断 BangDream 插件条件。
- * @param source - source 输入；驱动 `hasOwnProperty.call()` 的 BangDream步骤。
- * @param key - 键名；驱动 `hasOwnProperty.call()` 的 BangDream步骤。
- */
 const hasOwn = (source: object, key: string) =>
   Object.prototype.hasOwnProperty.call(source, key);
 
@@ -71,11 +66,6 @@ function extractKeywords(keyword: string): string[] {
   );
 }
 
-/**
- * 执行 BangDream 插件流程。
- * @param matches - BangDream列表；影响 appendTo 的返回值。
- * @returns BangDream 插件产出的 FuzzySearchResultWriter。
- */
 const appendTo =
   (matches: FuzzySearchResult): FuzzySearchResultWriter =>
   (key: string) =>

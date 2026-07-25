@@ -24,10 +24,6 @@ import { BlogTermService } from '../application/blog-term.service';
 @Controller('blog')
 @UseGuards(JwtAuthGuard)
 export class BlogTermController {
-  /**
-   * 初始化 BlogTermController 实例。
-   * @param blogTermService - blogTermService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly blogTermService: BlogTermService) {}
 
   /**

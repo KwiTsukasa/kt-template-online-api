@@ -10,11 +10,6 @@ export function createFf14ResolveItemOperation(
   application: Ff14MarketApplication,
 ) {
   return {
-    /**
-     * 执行插件操作处理器。
-     * @param input - input 输入；使用 `item`、`raw`、`text` 字段生成结果。
-     * @returns 插件处理结果。
-     */
     execute: (input: Record<string, any>) =>
       application.resolveItem({
         ...input,

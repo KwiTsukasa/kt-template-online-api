@@ -1,12 +1,6 @@
 import { QqbotPluginRegistryService } from '../../../../src/modules/qqbot/plugin-platform/application/registry/qqbot-plugin-registry.service';
 import type { QqbotIntegrationPlugin } from '../../../../src/modules/qqbot/core/contract/qqbot.types';
 
-/**
- * 创建 测试断言对象或配置。
- * @param key - 键名；生成 测试对象。
- * @param legacyKeys - 测试列表；生成 测试对象。
- * @returns 创建后的 测试断言对象或配置。
- */
 const createPlugin = (
   key: string,
   legacyKeys: string[],

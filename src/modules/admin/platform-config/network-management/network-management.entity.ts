@@ -116,10 +116,6 @@ export class NetworkPortForward {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * Assigns a Snowflake string before the desired mapping is first persisted.
-   * @returns The assigned stable mapping identifier.
-   */
   @BeforeInsert()
   createId(): string {
     return ensureSnowflakeId(this);

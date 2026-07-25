@@ -24,13 +24,7 @@ import { QqbotAccountService } from '../../../application/account/qqbot-account.
 import { QqbotEventService } from '../../../application/event/qqbot-event.service';
 import { QqbotBusService } from '../bus/qqbot-bus.service';
 
-/** Represents a machine-readable reverse WebSocket availability failure. */
 export class QqbotReverseWsActionError extends Error {
-  /**
-   * Creates a stable reverse WebSocket action failure.
-   * @param code - Distinguishes a disconnected socket from an action timeout.
-   * @param message - A non-sensitive operator-facing error summary.
-   */
   constructor(
     public readonly code: 'onebot_disconnected' | 'onebot_timeout',
     message: string,
@@ -49,15 +43,6 @@ export class QqbotReverseWsService
   private readonly pendingActions = new Map<string, QqbotPendingAction>();
   private server: WebSocketServer | null = null;
 
-  /**
-   * 初始化 QqbotReverseWsService 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   * @param httpAdapterHost - httpAdapterHost 输入；影响 constructor 的返回值。
-   * @param moduleRef - moduleRef 输入；影响 constructor 的返回值。
-   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
-   * @param busService - busService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly configService: ConfigService,
     private readonly httpAdapterHost: HttpAdapterHost,
@@ -67,9 +52,6 @@ export class QqbotReverseWsService
     private readonly toolsService: ToolsService,
   ) {}
 
-  /**
-   * 处理Application Bootstrap。
-   */
   onApplicationBootstrap() {
     if (!this.isEnabled()) {
       this.logger.log('QQBot runtime 未启用，跳过反向 WS 监听');
@@ -93,9 +75,6 @@ export class QqbotReverseWsService
     this.logger.log(`QQBot 反向 WS 已挂载: ${this.getReversePath()}`);
   }
 
-  /**
-   * 处理 QQBot 核心事件。
-   */
   onModuleDestroy() {
     this.pendingActions.forEach((pending) => {
       clearTimeout(pending.timer);
@@ -187,11 +166,6 @@ export class QqbotReverseWsService
     };
   }
 
-  /**
-   * 处理Connection。
-   * @param ws - QQBot列表；执行 `ws.on()`、`ws.close()` 对应的 QQBot步骤。
-   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
-   */
   private async handleConnection(ws: WebSocket, request: IncomingMessage) {
     let activeSelfId = '';
     const queuedMessages: string[] = [];
@@ -318,21 +292,10 @@ export class QqbotReverseWsService
     pending.resolve(payload);
   }
 
-  /**
-   * Retires the current connection after an action timeout using the stable timeout reason.
-   * @param selfId - The account owning the timed-out OneBot action.
-   * @param ws - The exact socket that timed out.
-   */
   private closeTimedOutConnection(selfId: string, ws: WebSocket) {
     this.closeCurrentConnection(selfId, ws, 'OneBot action timeout');
   }
 
-  /**
-   * Retires exactly the currently registered failing connection and publishes its offline state.
-   * @param selfId - The account owning the attempted OneBot action.
-   * @param ws - The exact socket that failed; replaced sockets must remain registered.
-   * @param reason - A non-sensitive reason used for socket close and offline observation.
-   */
   private closeCurrentConnection(
     selfId: string,
     ws: WebSocket,

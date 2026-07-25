@@ -54,7 +54,6 @@ type PreparedDelivery =
       status: 'cancelled' | 'failed' | 'superseded' | 'waiting_ddns';
     };
 
-/** Calculates the bounded delay for a one-based durable delivery attempt. */
 export function deliveryRetryDelayMs(attemptCount: number): number {
   return Math.min(
     SYSTEM_MESSAGE_RETRY_BASE_MS * 2 ** Math.max(0, attemptCount - 1),
@@ -62,10 +61,8 @@ export function deliveryRetryDelayMs(attemptCount: number): number {
   );
 }
 
-/** Claims, rechecks, and sends a bounded set of durable system-message deliveries. */
 @Injectable()
 export class SystemMessageDeliveryRunnerService {
-  /** Creates the runner from Core persistence, source, renderer, and strict-send boundaries. */
   constructor(
     private readonly dataSource: DataSource,
     private readonly sourceRegistry: SystemMessageSourceRegistry,
@@ -73,7 +70,6 @@ export class SystemMessageDeliveryRunnerService {
     private readonly sendService: QqbotSendService,
   ) {}
 
-  /** Processes up to one bounded batch of due deliveries and returns its claim count. */
   async runOnce(now?: Date): Promise<number> {
     let claimed = 0;
     for (let index = 0; index < SYSTEM_MESSAGE_BATCH_SIZE; index += 1) {
@@ -89,7 +85,6 @@ export class SystemMessageDeliveryRunnerService {
     return claimed;
   }
 
-  /** Claims one oldest due row in a short transaction and returns its exact owner token. */
   private async claimOne(now: Date): Promise<ClaimToken | null> {
     return this.dataSource.transaction(async (manager) => {
       const deliveries = manager.getRepository(QqbotMessageDelivery);
@@ -127,7 +122,6 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
-  /** Rechecks one claimed delivery before doing external I/O and then performs its final CAS. */
   private async processClaim(
     token: ClaimToken,
     fixedNow?: Date,
@@ -234,7 +228,6 @@ export class SystemMessageDeliveryRunnerService {
     }
   }
 
-  /** Locks current configuration before locking the delivery and returns a safe next action. */
   private async prepare(token: ClaimToken): Promise<PreparedDelivery> {
     return this.dataSource.transaction(async (manager) => {
       const event = await manager.getRepository(QqbotMessageEvent).findOne({
@@ -342,7 +335,6 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
-  /** Validates only immutable frozen content; current templates never replace historical work. */
   private validateFrozen(
     delivery: QqbotMessageDelivery,
     sourceKey: string,
@@ -378,7 +370,6 @@ export class SystemMessageDeliveryRunnerService {
       throw new SystemMessageContractError('rendered_message_mismatch');
   }
 
-  /** Best-effort fences an unexpected dependency failure without starving later claims. */
   private async handleUnexpectedClaimFailure(
     token: ClaimToken,
     now: Date,
@@ -396,7 +387,6 @@ export class SystemMessageDeliveryRunnerService {
     }
   }
 
-  /** Persists a terminal, wait, or successful state only while this worker owns its lease. */
   private async finish(
     token: ClaimToken,
     status: 'cancelled' | 'failed' | 'success' | 'superseded' | 'waiting_ddns',
@@ -415,7 +405,6 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
-  /** Retries until the event-derived expiration boundary and otherwise writes a final failure. */
   private async retryOrFail(
     token: ClaimToken,
     now: Date,
@@ -440,14 +429,6 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
-  /**
-   * Persists one authoritative owner transition with one identical bounded retry.
-   * Repeated failure leaves the processing lease for durable recovery instead of
-   * replacing the known business outcome with a generic classification.
-   * @param token - The exact attempt-and-lease owner fence.
-   * @param values - The complete authoritative transition payload to repeat.
-   * @returns A promise that settles after success, stale ownership, or retry exhaustion.
-   */
   private async persistOwnerTransition(
     token: ClaimToken,
     values: OwnerTransition,
@@ -465,7 +446,6 @@ export class SystemMessageDeliveryRunnerService {
     }
   }
 
-  /** Builds the exact attempt-and-lease owner fence used by every post-claim mutation. */
   private ownerWhere(token: ClaimToken) {
     return {
       attemptCount: token.attempt,
@@ -475,7 +455,6 @@ export class SystemMessageDeliveryRunnerService {
     };
   }
 
-  /** Tests whether a locked delivery still belongs to the detached claim owner. */
   private owns(delivery: QqbotMessageDelivery, token: ClaimToken): boolean {
     return (
       delivery.status === 'processing' &&

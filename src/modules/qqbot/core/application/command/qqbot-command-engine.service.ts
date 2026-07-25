@@ -20,16 +20,6 @@ import { QqbotReplyTemplateService } from './qqbot-reply-template.service';
 export class QqbotCommandEngineService {
   private readonly logger = new Logger(QqbotCommandEngineService.name);
 
-  /**
-   * 初始化 QqbotCommandEngineService 实例。
-   * @param commandParser - commandParser 输入；影响 constructor 的返回值。
-   * @param commandService - commandService 服务依赖；影响 constructor 的返回值。
-   * @param pluginExecution - pluginExecution 输入；影响 constructor 的返回值。
-   * @param replyTemplate - replyTemplate 输入；影响 constructor 的返回值。
-   * @param sendService - sendService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param sessionBehaviorService - Optional NapCat staged behavior gate for command replies.
-   */
   constructor(
     private readonly commandParser: QqbotCommandParserService,
     private readonly commandService: QqbotCommandService,
@@ -307,11 +297,6 @@ export class QqbotCommandEngineService {
     };
   }
 
-  /**
-   * Reads a behavior stage hint from raw event metadata when NapCat runtime supplied one.
-   * @param message - Normalized OneBot message that may carry staged behavior metadata.
-   * @returns Valid behavior stage or `undefined` when command handling should use default behavior.
-   */
   private getBehaviorStage(
     message: QqbotNormalizedMessage,
   ): NapcatAutoCapabilityStage | undefined {
@@ -321,11 +306,6 @@ export class QqbotCommandEngineService {
     return this.isBehaviorStage(stage) ? stage : undefined;
   }
 
-  /**
-   * Validates raw behavior-stage metadata before passing it to NapCat behavior decisions.
-   * @param stage - Raw event metadata value.
-   * @returns Whether the value is a supported NapCat automation capability stage.
-   */
   private isBehaviorStage(stage: unknown): stage is NapcatAutoCapabilityStage {
     return (
       stage === 'automation' ||

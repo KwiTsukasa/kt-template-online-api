@@ -9,17 +9,9 @@ export type RepeaterPolicyConfig = {
   threshold: number;
 };
 
-/**
- * 转换 复读插件输入。
- * @param value - 待转文本值；影响 normalizeRepeaterText 的返回值。
- */
 export const normalizeRepeaterText = (value: string) =>
   `${value || ''}`.replace(/\s+/g, ' ').trim();
 
-/**
- * 创建 复读插件对象或配置。
- * @param message - message 输入；使用 `selfId`、`messageType`、`targetId` 字段生成结果。
- */
 export const buildRepeaterStateKey = (message: RepeaterMessage) =>
   [message.selfId, message.messageType, message.targetId].join(':');
 

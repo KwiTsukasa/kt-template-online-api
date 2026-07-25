@@ -5,10 +5,6 @@ jest.mock('@/common', () => {
     ToolsService: actualCommon.ToolsService,
     ensureSnowflakeId: jest.fn(),
     setDictDecodeCache: jest.fn(),
-    /**
-     * 执行 NapCat回调。
-     * @param message - message 输入；驱动 `Error()` 的 NapCat步骤。
-     */
     throwVbenError: (message: string) => {
       throw new Error(message);
     },

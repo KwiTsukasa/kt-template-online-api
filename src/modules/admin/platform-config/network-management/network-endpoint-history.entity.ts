@@ -44,10 +44,6 @@ export class NetworkEndpointHistory {
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
 
-  /**
-   * Assigns a Snowflake string before the append-only event is persisted.
-   * @returns The assigned endpoint history identifier.
-   */
   @BeforeInsert()
   createId(): string {
     return ensureSnowflakeId(this);

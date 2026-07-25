@@ -29,10 +29,8 @@ type NormalizedTarget = {
   targetType: QqbotMessagePushTargetType;
 };
 
-/** Manages one QQBot account's publish bindings and their atomic target snapshots. */
 @Injectable()
 export class QqbotAccountMessagePushService {
-  /** Initializes account-scoped binding persistence and the shared dependency gates. */
   constructor(
     @InjectRepository(QqbotMessagePublishBinding)
     private readonly bindingRepository: Repository<QqbotMessagePublishBinding>,
@@ -49,7 +47,6 @@ export class QqbotAccountMessagePushService {
     private readonly renderer: SystemMessageTemplateRendererService,
   ) {}
 
-  /** Lists active bindings belonging only to the requested account in deterministic order. */
   async listBindings(
     selfId: string,
   ): Promise<QqbotMessagePublishBindingView[]> {
@@ -61,7 +58,6 @@ export class QqbotAccountMessagePushService {
     return Promise.all(bindings.map((binding) => this.toView(binding)));
   }
 
-  /** Creates or revives the account/subscription binding and replaces its targets atomically. */
   async createBinding(
     selfId: string,
     input: QqbotMessagePublishBindingInput,
@@ -148,7 +144,6 @@ export class QqbotAccountMessagePushService {
     }
   }
 
-  /** Replaces an account-scoped binding's dependencies, enabled switch, and targets atomically. */
   async updateBinding(
     selfId: string,
     id: string,
@@ -216,7 +211,6 @@ export class QqbotAccountMessagePushService {
     }
   }
 
-  /** Changes a binding's user switch while applying both dependency gates in lock order. */
   async setBindingEnabled(
     selfId: string,
     id: string,
@@ -261,7 +255,6 @@ export class QqbotAccountMessagePushService {
     return this.toView(binding);
   }
 
-  /** Soft-deletes one account-scoped binding and every active target in the same transaction. */
   async removeBinding(selfId: string, id: string): Promise<boolean> {
     const account = await this.requireAccount(selfId);
     await this.bindingRepository.manager.transaction(async (manager) => {
@@ -287,7 +280,6 @@ export class QqbotAccountMessagePushService {
     return true;
   }
 
-  /** Validates, trims, and deduplicates targets without converting IDs to numbers. */
   private normalizeTargets(
     inputs: QqbotMessagePublishTargetInput[],
   ): NormalizedTarget[] {
@@ -314,7 +306,6 @@ export class QqbotAccountMessagePushService {
     );
   }
 
-  /** Retains, revives, creates, and soft-deletes targets while holding the binding lock. */
   private async synchronizeTargets(
     manager: EntityManager,
     binding: QqbotMessagePublishBinding,
@@ -396,7 +387,6 @@ export class QqbotAccountMessagePushService {
     }
   }
 
-  /** Builds a detached binding view using live dependency availability and active targets only. */
   private async toView(
     binding: QqbotMessagePublishBinding,
   ): Promise<QqbotMessagePublishBindingView> {
@@ -430,7 +420,6 @@ export class QqbotAccountMessagePushService {
     };
   }
 
-  /** Computes live binding eligibility without changing its independent user enabled switch. */
   private async inspectAvailability(
     subscription: QqbotMessageSubscription | null,
     template: QqbotMessageTemplate | null,
@@ -505,7 +494,6 @@ export class QqbotAccountMessagePushService {
     return { available: true, invalidReasonCode: null, sourceName };
   }
 
-  /** Maps one persisted target to the detached active-target response contract. */
   private toTargetView(
     target: QqbotMessagePublishTarget,
   ): QqbotMessagePublishTargetView {
@@ -518,14 +506,12 @@ export class QqbotAccountMessagePushService {
     };
   }
 
-  /** Loads the configured non-deleted account and preserves its string identity. */
   private async requireAccount(selfId: string) {
     const account = await this.accountService.findBySelfId(selfId);
     if (!account) throw new SystemMessageContractError('account_unavailable');
     return account;
   }
 
-  /** Locks one active binding for the resolved account without allowing cross-account access. */
   private async findBindingForWrite(
     repository: Repository<QqbotMessagePublishBinding>,
     accountId: string,
@@ -539,7 +525,6 @@ export class QqbotAccountMessagePushService {
     return binding!;
   }
 
-  /** Refuses stale snapshots before a binding write can use changed account ownership. */
   private assertStableAccountSnapshot(
     binding: QqbotMessagePublishBinding,
     snapshot: QqbotMessagePublishBinding,
@@ -552,7 +537,6 @@ export class QqbotAccountMessagePushService {
     }
   }
 
-  /** Refuses stale snapshots when a toggle's dependency identities changed before its write lock. */
   private assertStableBindingSnapshot(
     binding: QqbotMessagePublishBinding,
     snapshot: QqbotMessagePublishBinding,
@@ -566,12 +550,10 @@ export class QqbotAccountMessagePushService {
     }
   }
 
-  /** Builds the active natural key for a single account and subscription. */
   private bindingActiveKey(accountId: string, subscriptionId: string): string {
     return `${String(accountId)}:${String(subscriptionId)}`;
   }
 
-  /** Builds the active natural key for a single binding target without number coercion. */
   private targetActiveKey(
     bindingId: string,
     target: Pick<NormalizedTarget, 'targetId' | 'targetType'>,
@@ -579,7 +561,6 @@ export class QqbotAccountMessagePushService {
     return `${String(bindingId)}:${target.targetType}:${target.targetId}`;
   }
 
-  /** Converts complete UI input into the binding fields owned by this service. */
   private toBindingFields(
     account: { id: string; selfId: string },
     input: QqbotMessagePublishBindingInput,
@@ -603,7 +584,6 @@ export class QqbotAccountMessagePushService {
     };
   }
 
-  /** Maps duplicate active binding or target natural keys to the management HTTP conflict. */
   private throwNaturalKeyConflict(): never {
     return throwVbenError(
       '同一账号订阅的消息发布配置已存在',
@@ -611,19 +591,16 @@ export class QqbotAccountMessagePushService {
     );
   }
 
-  /** Signals that a target binding is missing, deleted, or owned by another account. */
   private throwBindingUnavailable(): never {
     throw new SystemMessageContractError('binding_disabled');
   }
 
-  /** Recognizes only MySQL's duplicate-key conflict used as final concurrency authority. */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const value = error as { code?: unknown; errno?: unknown };
     return value.code === 'ER_DUP_ENTRY' || value.errno === 1062;
   }
 
-  /** Cancels only not-yet-processing deliveries in the active binding mutation transaction. */
   private async cancelUnfinishedDeliveries(
     manager: EntityManager,
     where: Pick<QqbotMessageDelivery, 'bindingId'>,

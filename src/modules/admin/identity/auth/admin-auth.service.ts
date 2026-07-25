@@ -11,12 +11,6 @@ const REFRESH_TOKEN_COOKIE = 'jwt';
 
 @Injectable()
 export class AdminAuthService {
-  /**
-   * 初始化 AdminAuthService 实例。
-   * @param userRepository - 用户仓库依赖；影响 constructor 的返回值。
-   * @param tokenService - tokenService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(AdminUser)
     private readonly userRepository: Repository<AdminUser>,

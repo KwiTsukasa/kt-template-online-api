@@ -23,13 +23,6 @@ import type {
 
 @Injectable()
 export class QqbotPermissionService {
-  /**
-   * 初始化 QqbotPermissionService 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   * @param allowlistRepository - QQBot仓库依赖；影响 constructor 的返回值。
-   * @param blocklistRepository - QQBot仓库依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly configService: QqbotConfigService,
     @InjectRepository(QqbotAllowlist)

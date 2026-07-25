@@ -9,10 +9,6 @@ import { QqbotPluginPlatformService } from './plugin-platform.service';
 
 @Injectable()
 export class QqbotPluginExecutionAdapter implements QqbotPluginExecutionPort {
-  /**
-   * 初始化 QqbotPluginExecutionAdapter 实例。
-   * @param platformService - platformService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly platformService: QqbotPluginPlatformService) {}
 
   /**

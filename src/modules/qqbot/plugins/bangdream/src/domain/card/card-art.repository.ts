@@ -7,10 +7,6 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/card/card-art.layout';
 
 export class CardArtResourceRepository {
-  /**
-   * 初始化 CardArtResourceRepository 实例。
-   * @param provider - provider 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}

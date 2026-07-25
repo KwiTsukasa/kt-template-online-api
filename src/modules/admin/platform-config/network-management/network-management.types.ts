@@ -167,15 +167,8 @@ export type NetworkEndpointEvent = {
   type: EndpointEventType;
 };
 
-/** Permanent MQTT schema validation failure safe to acknowledge and drop. */
 export class NetworkMessageValidationError extends Error {}
 
-/**
- * Builds the exact Go schema-v1 desired snapshot with stable field and mapping order.
- * @param state - Persisted singleton Agent state.
- * @param mappings - Non-finalized mappings, including absent tombstones.
- * @returns Complete retained desired snapshot.
- */
 export function buildDesiredSnapshot(
   state: NetworkAgentState,
   mappings: NetworkPortForward[],
@@ -207,20 +200,10 @@ export function buildDesiredSnapshot(
   };
 }
 
-/**
- * Serializes a desired snapshot into deterministic retained MQTT bytes.
- * @param snapshot - Snapshot returned by `buildDesiredSnapshot`.
- * @returns Stable UTF-8 JSON bytes.
- */
 export function desiredSnapshotBytes(snapshot: NetworkDesiredSnapshot): Buffer {
   return Buffer.from(JSON.stringify(snapshot), 'utf8');
 }
 
-/**
- * Computes the exact Go canonical semantic digest, excluding revision and issue time.
- * @param snapshot - Complete desired snapshot.
- * @returns Lowercase hexadecimal SHA-256 digest accepted by the Agent contract.
- */
 export function desiredSnapshotDigest(
   snapshot: NetworkDesiredSnapshot,
 ): string {
@@ -256,7 +239,6 @@ export function desiredSnapshotDigest(
     .digest('hex');
 }
 
-/** Serializes JSON with the additional HTML and line-separator escaping used by Go. */
 function goJsonStringify(value: unknown): string {
   return JSON.stringify(value)
     .replace(/</g, '\\u003c')
@@ -266,11 +248,6 @@ function goJsonStringify(value: unknown): string {
     .replace(/\u2029/g, '\\u2029');
 }
 
-/**
- * Parses the exact Go schema-v1 full reported snapshot without coercion.
- * @param value - Untrusted MQTT JSON value.
- * @returns Strict reported snapshot safe for transactional consumption.
- */
 export function parseReportedSnapshot(value: unknown): NetworkReportedSnapshot {
   const record = exactRecord(
     value,
@@ -333,11 +310,6 @@ export function parseReportedSnapshot(value: unknown): NetworkReportedSnapshot {
   };
 }
 
-/**
- * Parses the retained Agent liveness contract used by the runtime/LWT layer.
- * @param value - Untrusted MQTT JSON value.
- * @returns Strict liveness status independent from mapping state.
- */
 export function parseStatusSnapshot(value: unknown): NetworkStatusSnapshot {
   const record = exactRecord(
     value,
@@ -362,12 +334,6 @@ export function parseStatusSnapshot(value: unknown): NetworkStatusSnapshot {
   };
 }
 
-/**
- * Normalizes an optional globally routable IPv6 string from the Agent.
- * @param value - Omitted value or untrusted status field.
- * @param label - Stable validation label used without echoing the address.
- * @returns Canonical lowercase IPv6, or undefined when the field is omitted.
- */
 function optionalGlobalIpv6(value: unknown, label: string): string | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   if (typeof value !== 'string' || isIP(value) !== 6) invalid(label);
@@ -389,11 +355,6 @@ function optionalGlobalIpv6(value: unknown, label: string): string | undefined {
   return normalized;
 }
 
-/**
- * Parses the exact Go schema-v1 append-only endpoint event.
- * @param value - Untrusted MQTT JSON value.
- * @returns Strict idempotent endpoint transition.
- */
 export function parseEndpointEvent(value: unknown): NetworkEndpointEvent {
   const record = exactRecord(
     value,
@@ -428,11 +389,6 @@ export function parseEndpointEvent(value: unknown): NetworkEndpointEvent {
   };
 }
 
-/**
- * Validates a canonical IPv4 string without accepting octal-looking octets.
- * @param value - Untrusted address text.
- * @returns True only for four canonical decimal octets.
- */
 export function isIpv4Address(value: string): boolean {
   const parts = value.split('.');
   return (
@@ -445,12 +401,6 @@ export function isIpv4Address(value: string): boolean {
   );
 }
 
-/**
- * Produces the nullable-unique active key for one protocol and WAN port.
- * @param protocol - TCP or UDP desired protocol.
- * @param externalPort - WAN-side port.
- * @returns Stable database key.
- */
 export function portForwardActiveKey(
   protocol: PortForwardProtocol,
   externalPort: number,
@@ -458,7 +408,6 @@ export function portForwardActiveKey(
   return `${protocol}:${externalPort}`;
 }
 
-/** Parses one mapping using the exact Go MappingReport contract. */
 function parseReportedMapping(
   value: unknown,
   index: number,
@@ -569,7 +518,6 @@ function parseReportedMapping(
   };
 }
 
-/** Parses a required endpoint lease and mirrors Go public-address checks. */
 function parseEndpointLease(
   value: unknown,
   label: string,
@@ -595,7 +543,6 @@ function parseEndpointLease(
   };
 }
 
-/** Parses an omitted-or-present endpoint lease from Go `omitempty` fields. */
 function optionalEndpointLease(
   value: unknown,
   label: string,
@@ -603,7 +550,6 @@ function optionalEndpointLease(
   return value === undefined ? undefined : parseEndpointLease(value, label);
 }
 
-/** Validates the helper revision/digest invariants from Go schema-v1. */
 function validateHelperState(
   status: HelperStatus,
   revision: number,
@@ -626,7 +572,6 @@ function validateHelperState(
   }
 }
 
-/** Requires an object to contain all and only declared keys. */
 function exactRecord(
   value: unknown,
   required: readonly string[],
@@ -647,17 +592,14 @@ function exactRecord(
   return record;
 }
 
-/** Throws the stable validation error without including payload content. */
 function invalid(label: string): never {
   throw new NetworkMessageValidationError(`Invalid network message: ${label}`);
 }
 
-/** Validates the one supported schema version. */
 function assertSchema(value: unknown): void {
   if (value !== NETWORK_AGENT_SCHEMA_VERSION) invalid('schemaVersion');
 }
 
-/** Parses a bounded non-empty string. */
 function boundedString(value: unknown, label: string, max: number): string {
   if (
     typeof value !== 'string' ||
@@ -669,7 +611,6 @@ function boundedString(value: unknown, label: string, max: number): string {
   return value;
 }
 
-/** Parses a bounded optionally-empty string. */
 function stringValue(
   value: unknown,
   label: string,
@@ -686,7 +627,6 @@ function stringValue(
   return value;
 }
 
-/** Parses a nullable or omitted bounded string. */
 function optionalString(
   value: unknown,
   label: string,
@@ -698,26 +638,22 @@ function optionalString(
   return stringValue(value, label, max, true);
 }
 
-/** Parses a decimal mapping ID. */
 function idString(value: unknown, label: string): string {
   const text = boundedString(value, label, 32);
   if (!/^\d{1,32}$/.test(text)) invalid(label);
   return text;
 }
 
-/** Parses the Go request/event ID character contract. */
 function requestId(value: unknown, label: string): string {
   const text = boundedString(value, label, 128);
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(text)) invalid(label);
   return text;
 }
 
-/** Parses an omitted request ID. */
 function optionalRequestId(value: unknown, label: string): string | undefined {
   return value === undefined ? undefined : requestId(value, label);
 }
 
-/** Parses the RFC3339Nano timestamps emitted by Go time.Time JSON. */
 function isoString(value: unknown, label: string): string {
   if (typeof value !== 'string') invalid(label);
   const match = RFC3339_NANO_PATTERN.exec(value);
@@ -746,7 +682,6 @@ function isoString(value: unknown, label: string): string {
   return value;
 }
 
-/** Returns the Gregorian day count for one validated year and month. */
 function daysInMonth(year: number, month: number): number {
   if (month === 2) {
     const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
@@ -755,7 +690,6 @@ function daysInMonth(year: number, month: number): number {
   return [4, 6, 9, 11].includes(month) ? 30 : 31;
 }
 
-/** Parses a nullable or omitted exact ISO timestamp. */
 function optionalIsoString(
   value: unknown,
   label: string,
@@ -766,25 +700,21 @@ function optionalIsoString(
   return isoString(value, label);
 }
 
-/** Parses a safe non-negative JSON revision. */
 function safeRevision(value: unknown, label: string): number {
   if (!Number.isSafeInteger(value) || Number(value) < 0) invalid(label);
   return Number(value);
 }
 
-/** Parses a safe positive JSON revision. */
 function positiveRevision(value: unknown, label: string): number {
   const revision = safeRevision(value, label);
   if (revision === 0) invalid(label);
   return revision;
 }
 
-/** Converts a persisted bigint revision into the schema-v1 JSON number. */
 function toSafeRevision(value: string, label: string): number {
   return positiveRevision(Number(value), label);
 }
 
-/** Parses an integer port without coercion. */
 function port(value: unknown, label: string): number {
   if (!Number.isInteger(value) || Number(value) < 1 || Number(value) > 65535) {
     invalid(label);
@@ -792,13 +722,11 @@ function port(value: unknown, label: string): number {
   return Number(value);
 }
 
-/** Parses a canonical IPv4 address. */
 function ipv4(value: unknown, label: string): string {
   if (typeof value !== 'string' || !isIpv4Address(value)) invalid(label);
   return value;
 }
 
-/** Parses one fixed string enum. */
 function enumValue<T extends string>(
   value: unknown,
   allowed: readonly T[],
@@ -810,18 +738,15 @@ function enumValue<T extends string>(
   return value as T;
 }
 
-/** Parses one 64-character hexadecimal digest. */
 function digest(value: unknown, label: string): string {
   if (typeof value !== 'string' || !isDigest(value)) invalid(label);
   return value;
 }
 
-/** Checks the Go canonical SHA-256 digest representation. */
 function isDigest(value: string): boolean {
   return /^[0-9a-f]{64}$/.test(value);
 }
 
-/** Mirrors Go STUN public IPv4 exclusions for reported leases. */
 function isPublicIpv4(value: string): boolean {
   const [a, b, c] = value.split('.').map(Number);
   if (
@@ -845,21 +770,18 @@ function isPublicIpv4(value: string): boolean {
   return true;
 }
 
-/** Converts a TypeORM date value into exact ISO text. */
 function toIsoString(value: Date | string): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) invalid('issuedAt');
   return date.toISOString();
 }
 
-/** Sorts decimal IDs numerically without bigint precision loss. */
 function compareIds(left: string, right: string): number {
   const leftValue = BigInt(left);
   const rightValue = BigInt(right);
   return leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
 }
 
-/** Compares ASCII contract identifiers without locale-dependent collation. */
 function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }

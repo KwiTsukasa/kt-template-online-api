@@ -23,14 +23,6 @@ import { WordpressService } from '@/modules/wordpress/application/wordpress.serv
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class AdminAuthController {
-  /**
-   * 初始化 AdminAuthController 实例。
-   * @param authService - authService 服务依赖；影响 constructor 的返回值。
-   * @param passwordCryptoService - passwordCryptoService 服务依赖；影响 constructor 的返回值。
-   * @param menuService - menuService 服务依赖；影响 constructor 的返回值。
-   * @param userService - userService 服务依赖；影响 constructor 的返回值。
-   * @param wordpressService - wordpressService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly authService: AdminAuthService,
     private readonly passwordCryptoService: AdminPasswordCryptoService,

@@ -31,11 +31,6 @@ import type {
   QqbotMessagePushTargetOptionsResponse,
 } from './qqbot-message-push.types';
 
-/**
- * Narrows one account binding to the public management view and target fields.
- * @param view - Detached account binding service result.
- * @returns Only the locked binding and nested target response fields.
- */
 const allowlistBinding = (
   view: QqbotMessagePublishBindingView,
 ): QqbotMessagePublishBindingView => ({
@@ -60,11 +55,6 @@ const allowlistBinding = (
   updateTime: view.updateTime,
 });
 
-/**
- * Narrows OneBot candidates to stable labels and string identifiers only.
- * @param value - Safe target-option service result.
- * @returns Detached availability result without runtime/provider objects.
- */
 const allowlistTargetOptions = (
   value: QqbotMessagePushTargetOptionsResponse,
 ): QqbotMessagePushTargetOptionsResponse => ({
@@ -88,20 +78,11 @@ const allowlistTargetOptions = (
   }),
 )
 export class QqbotAccountMessagePushController {
-  /**
-   * Initializes strict account-scoped binding and target management routes.
-   * @param bindingService - Account binding lifecycle service.
-   * @param targetOptionsService - HTTP-safe OneBot candidate service.
-   */
   constructor(
     private readonly bindingService: QqbotAccountMessagePushService,
     private readonly targetOptionsService: QqbotMessageTargetOptionsService,
   ) {}
 
-  /**
-   * Lists binding views for exactly one account.
-   * @param params - Validated QQ account route identity.
-   */
   @Get('bindings')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:List')
   async listBindings(@Param() params: AccountMessagePushParamDto) {
@@ -109,11 +90,6 @@ export class QqbotAccountMessagePushController {
     return vbenSuccess(views.map(allowlistBinding));
   }
 
-  /**
-   * Creates one binding for exactly one account.
-   * @param params - Validated QQ account route identity.
-   * @param body - Strict subscription, template, target, and enabled input.
-   */
   @Post('bindings')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Create')
@@ -128,11 +104,6 @@ export class QqbotAccountMessagePushController {
     );
   }
 
-  /**
-   * Replaces one binding for exactly one account.
-   * @param params - Validated QQ account and binding route identities.
-   * @param body - Strict subscription, template, target, and enabled input.
-   */
   @Put('bindings/:id')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Update')
   async updateBinding(
@@ -146,11 +117,6 @@ export class QqbotAccountMessagePushController {
     );
   }
 
-  /**
-   * Toggles one binding for exactly one account.
-   * @param params - Validated QQ account and binding route identities.
-   * @param body - Required JSON boolean state.
-   */
   @Put('bindings/:id/enabled')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Toggle')
   async toggleBinding(
@@ -168,10 +134,6 @@ export class QqbotAccountMessagePushController {
     );
   }
 
-  /**
-   * Soft-deletes one binding for exactly one account.
-   * @param params - Validated QQ account and binding route identities.
-   */
   @Delete('bindings/:id')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Delete')
   async removeBinding(@Param() params: AccountMessagePushBindingParamDto) {
@@ -180,10 +142,6 @@ export class QqbotAccountMessagePushController {
     );
   }
 
-  /**
-   * Lists HTTP-safe group and friend candidates for exactly one account.
-   * @param params - Validated QQ account route identity.
-   */
   @Get('targets')
   @QqbotMessagePushPermission(
     'QqBot:Account:MessagePush:Create',

@@ -3,11 +3,6 @@ import { join } from 'path';
 
 const repoRoot = join(__dirname, '../../../..');
 
-/**
- * Reads a repo file as UTF-8 text for static runtime promotion contract assertions.
- * @param relativePath - Repository-relative path under `Node/kt-template-online-api`.
- * @returns The file contents as UTF-8 text.
- */
 const readSource = (relativePath: string) =>
   readFileSync(join(repoRoot, relativePath), 'utf8');
 

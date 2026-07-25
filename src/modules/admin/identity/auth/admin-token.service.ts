@@ -5,10 +5,6 @@ import type { AdminTokenPayload } from '../../contract/admin.types';
 
 @Injectable()
 export class AdminTokenService {
-  /**
-   * 初始化 AdminTokenService 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly configService: ConfigService) {}
 
   /**

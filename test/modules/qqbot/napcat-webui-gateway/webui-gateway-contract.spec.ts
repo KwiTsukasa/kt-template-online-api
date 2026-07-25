@@ -3,11 +3,6 @@ import { resolve } from 'path';
 
 const repoRoot = resolve(__dirname, '../../../..');
 
-/**
- * 读取仓库内契约文件内容。
- * @param path - 相对仓库根目录的文件路径。
- * @returns UTF-8 文本内容，用于结构契约断言。
- */
 const readSource = (path: string) => {
   return readFileSync(resolve(repoRoot, path), 'utf8');
 };

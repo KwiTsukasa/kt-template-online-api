@@ -103,10 +103,6 @@ export class ToolsService {
     values: Partial<T>,
     operator: 'AND' | 'OR' = 'AND',
   ): [string, Record<string, unknown>] {
-    /**
-     * 判断 公共基础设施条件。
-     * @param value - 待转换值；计算 公共基础设施判断结果。
-     */
     const hasValue = (value: unknown) =>
       value !== undefined && value !== null && value !== '';
 

@@ -12,12 +12,6 @@ import { EnvironmentDashboardConfigService } from '../../../../src/modules/admin
 
 type ReadonlyHttpMock = jest.Mocked<EnvironmentReadonlyHttpClient>;
 
-/**
- * Creates a deterministic sanitized HTTP response for readonly adapter tests.
- * @param body - Response body preview returned by the fake HTTP client.
- * @param status - HTTP status code observed by the adapter.
- * @returns HTTP response shaped like EnvironmentReadonlyHttpClient output.
- */
 function httpResponse(
   body: unknown,
   status = 200,
@@ -31,10 +25,6 @@ function httpResponse(
   };
 }
 
-/**
- * Creates a mocked readonly HTTP client exposing only safe GET and HEAD probes.
- * @returns Jest mock for readonly HTTP client methods used by adapters.
- */
 function createHttpMock(): ReadonlyHttpMock {
   return {
     get: jest.fn(),

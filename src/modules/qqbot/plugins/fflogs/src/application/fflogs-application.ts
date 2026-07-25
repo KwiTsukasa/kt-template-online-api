@@ -3,10 +3,6 @@ import type { FflogsCharacterSummaryInput } from '../domain/fflogs.types';
 import { parseFflogsCharacterInput } from './fflogs-input-parser';
 
 export class FflogsApplication {
-  /**
-   * 初始化 FflogsApplication 实例。
-   * @param client - client 输入；影响 constructor 的返回值。
-   */
   constructor(private readonly client: FflogsClient) {}
 
   /**

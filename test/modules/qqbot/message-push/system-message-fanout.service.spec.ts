@@ -39,7 +39,6 @@ type RecordedPredicate =
   | { brackets: RecordedPredicate[] }
   | { expression: string; parameters: object };
 
-/** Builds a consistent current event whose payload preserves string Snowflake identity. */
 function event(overrides: Partial<QqbotMessageEvent> = {}): QqbotMessageEvent {
   return Object.assign(new QqbotMessageEvent(), {
     fanoutAttemptCount: 0,
@@ -57,7 +56,6 @@ function event(overrides: Partial<QqbotMessageEvent> = {}): QqbotMessageEvent {
   });
 }
 
-/** Builds an active strict JSON-matched subscription. */
 function subscription(
   overrides: Partial<QqbotMessageSubscription> = {},
 ): QqbotMessageSubscription {
@@ -71,7 +69,6 @@ function subscription(
   });
 }
 
-/** Builds an enabled account without relying on its runtime online state. */
 function account(overrides: Partial<QqbotAccount> = {}): QqbotAccount {
   return Object.assign(new QqbotAccount(), {
     enabled: true,
@@ -82,7 +79,6 @@ function account(overrides: Partial<QqbotAccount> = {}): QqbotAccount {
   });
 }
 
-/** Builds an active account-scoped publishing binding. */
 function binding(
   overrides: Partial<QqbotMessagePublishBinding> = {},
 ): QqbotMessagePublishBinding {
@@ -98,7 +94,6 @@ function binding(
   });
 }
 
-/** Builds an active source-compatible literal template. */
 function template(
   overrides: Partial<QqbotMessageTemplate> = {},
 ): QqbotMessageTemplate {
@@ -112,7 +107,6 @@ function template(
   });
 }
 
-/** Builds one active group/private target under a binding. */
 function target(
   overrides: Partial<QqbotMessagePublishTarget> = {},
 ): QqbotMessagePublishTarget {
@@ -127,7 +121,6 @@ function target(
   });
 }
 
-/** Builds a controllable source adapter while retaining a real source registry boundary. */
 function sourceAdapter(): jest.Mocked<SystemMessageSourceAdapter> {
   return {
     definition: {
@@ -155,7 +148,6 @@ function sourceAdapter(): jest.Mocked<SystemMessageSourceAdapter> {
   };
 }
 
-/** Clones transaction-visible rows while preserving Date objects and entity prototypes. */
 function cloneStore(value: Store): Store {
   const clone = <T>(items: T[]) =>
     items.map((item) =>
@@ -175,7 +167,6 @@ function cloneStore(value: Store): Store {
   };
 }
 
-/** Matches the intentionally small TypeORM `where` subset used by the fan-out service. */
 function matches(
   row: Record<string, unknown>,
   where: Record<string, unknown> = {},
@@ -207,7 +198,6 @@ function matches(
   });
 }
 
-/** Compares transaction rows without relying on their entity object identity. */
 function hasRowChanged(
   current: Record<string, unknown> | undefined,
   baseline: Record<string, unknown> | undefined,
@@ -215,7 +205,6 @@ function hasRowChanged(
   return JSON.stringify(current) !== JSON.stringify(baseline);
 }
 
-/** Normalizes TypeORM's in-memory find operators for independent update assertions. */
 function normalizeConditionalWhere(where: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(where).map(([key, value]) => [
@@ -230,7 +219,6 @@ function normalizeConditionalWhere(where: Record<string, unknown>) {
   );
 }
 
-/** Creates a transaction-faithful in-memory persistence harness rather than fan-out logic. */
 function setup(seed: Partial<Store> = {}) {
   let state: Store = {
     accounts: seed.accounts ?? [account()],
@@ -288,7 +276,6 @@ function setup(seed: Partial<Store> = {}) {
     | null
     | ((deliveries: QqbotMessageDelivery[]) => void) = null;
 
-  /** Merges one committed transaction draft without losing separately committed rows. */
   const mergeRows = <T extends { id: string }>(
     authoritative: T[],
     draft: T[],
@@ -305,7 +292,6 @@ function setup(seed: Partial<Store> = {}) {
     return [...merged.values()];
   };
 
-  /** Merges locally changed transaction state with authoritative concurrent commits. */
   const mergeCommittedStore = (draft: Store, baseline: Store): Store => ({
     accounts: mergeRows(state.accounts, draft.accounts, baseline.accounts),
     bindings: mergeRows(state.bindings, draft.bindings, baseline.bindings),
@@ -324,7 +310,6 @@ function setup(seed: Partial<Store> = {}) {
     templates: mergeRows(state.templates, draft.templates, baseline.templates),
   });
 
-  /** Returns a repository facade bound to exactly one authoritative or transaction-local store. */
   const repository = (
     entity: unknown,
     store: Store,
@@ -358,7 +343,6 @@ function setup(seed: Partial<Store> = {}) {
           take: 0,
         };
         const newerEventParameters: Record<string, unknown> = {};
-        /** Records the nested TypeORM predicate structure and its bound values. */
         const recordBrackets = (value: {
           whereFactory?: (where: {
             orWhere: (expression: unknown, parameters?: object) => void;

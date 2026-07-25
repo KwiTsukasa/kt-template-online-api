@@ -6,11 +6,6 @@ import { assetsRootPath } from '@/modules/qqbot/plugins/bangdream/src/config/run
 import { readBangDreamAsset } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
 
 export class DeckRankResourceRepository {
-  /**
-   * 初始化 DeckRankResourceRepository 实例。
-   * @param provider - provider 输入；影响 constructor 的返回值。
-   * @param localRankRootPath - BangDream路径；影响 constructor 的返回值。
-   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
     private readonly localRankRootPath: string = path.join(

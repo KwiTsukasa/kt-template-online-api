@@ -1,11 +1,6 @@
 import { ToolsService } from '@/common';
 import { QqbotNapcatAccountRuntimeService } from '../../../../src/modules/qqbot/napcat/application/account-runtime/qqbot-napcat-account-runtime.service';
 
-/**
- * Creates the chained query builder shape used by account runtime joins.
- * @param rows - Rows returned by `getMany()` for the current query.
- * @returns Query builder mock with chainable filter and ordering methods.
- */
 const createManyQueryBuilder = <T>(rows: T[]) => ({
   addOrderBy: jest.fn().mockReturnThis(),
   addSelect: jest.fn().mockReturnThis(),

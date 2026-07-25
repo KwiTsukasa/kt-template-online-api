@@ -8,15 +8,9 @@ describe('BangDream operation lifecycle', () => {
     const events: string[] = [];
     const lifecycle = new BangDreamOperationLifecycle([
       {
-        /**
-         * 执行 BangDream回调。
-         */
         afterOutput: () => {
           events.push('afterOutput:2');
         },
-        /**
-         * 执行 BangDream回调。
-         */
         beforeParse: () => {
           events.push('beforeParse:2');
         },
@@ -24,15 +18,9 @@ describe('BangDream operation lifecycle', () => {
         order: 2,
       },
       {
-        /**
-         * 执行 BangDream回调。
-         */
         afterOutput: () => {
           events.push('afterOutput:1');
         },
-        /**
-         * 执行 BangDream回调。
-         */
         beforeParse: () => {
           events.push('beforeParse:1');
         },
@@ -63,11 +51,6 @@ describe('BangDream operation lifecycle', () => {
     const lifecycle = new BangDreamOperationLifecycle([
       {
         name: 'error-recorder',
-        /**
-         * 执行 BangDream回调。
-         * @param context - context 输入；使用 `operationKey`、`stage` 字段生成结果。
-         * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
-         */
         onError: (context, error) => {
           errors.push(`${context.operationKey}:${context.stage}:${error}`);
         },

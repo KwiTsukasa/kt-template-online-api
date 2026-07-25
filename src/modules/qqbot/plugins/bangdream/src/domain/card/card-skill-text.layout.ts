@@ -29,48 +29,28 @@ export type BangDreamSkillTextFragment =
 const BANGDREAM_SKILL_SCORE_SUFFIX_RULES = [
   {
     suffix: 'G',
-    /**
-     * 执行 BangDream回调。
-     * @param effectTypes - BangDream列表；计算 BangDream布尔判断。
-     */
     matches: (effectTypes: readonly string[]) =>
       effectTypes.includes('score_continued_note_judge'),
   },
   {
     suffix: 'L',
-    /**
-     * 执行 BangDream回调。
-     * @param effectTypes - BangDream列表；计算 BangDream布尔判断。
-     */
     matches: (effectTypes: readonly string[]) =>
       effectTypes.includes('score_over_life') &&
       effectTypes.includes('score_under_life'),
   },
   {
     suffix: '/',
-    /**
-     * 执行 BangDream回调。
-     * @param effectTypes - BangDream列表；计算 BangDream布尔判断。
-     */
     matches: (effectTypes: readonly string[]) =>
       effectTypes.includes('score_over_life'),
   },
   {
     suffix: 'P',
-    /**
-     * 执行 BangDream回调。
-     * @param effectTypes - BangDream列表；计算 BangDream布尔判断。
-     */
     matches: (effectTypes: readonly string[]) =>
       effectTypes.includes('score_under_great_half') ||
       effectTypes.includes('score_perfect'),
   },
   {
     suffix: '+0.5*P',
-    /**
-     * 执行 BangDream回调。
-     * @param effectTypes - BangDream列表；计算 BangDream布尔判断。
-     */
     matches: (effectTypes: readonly string[]) =>
       effectTypes.includes('score_rate_up_with_perfect'),
   },

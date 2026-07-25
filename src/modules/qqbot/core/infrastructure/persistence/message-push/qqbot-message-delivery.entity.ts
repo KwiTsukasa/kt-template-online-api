@@ -31,7 +31,6 @@ export class QqbotMessageDelivery {
   @KtCreateDateColumn({ name: 'create_time', precision: 6 }) createTime: KtDateTime;
   @KtUpdateDateColumn({ name: 'update_time', precision: 6 }) updateTime: KtDateTime;
 
-  /** Assigns the Snowflake primary key before this delivery task is persisted. */
   @BeforeInsert()
   createId() { ensureSnowflakeId(this); }
 }

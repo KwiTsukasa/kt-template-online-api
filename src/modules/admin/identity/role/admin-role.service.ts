@@ -11,11 +11,6 @@ import type {
 
 @Injectable()
 export class AdminRoleService {
-  /**
-   * 初始化 AdminRoleService 实例。
-   * @param roleRepository - 角色仓库依赖；影响 constructor 的返回值。
-   * @param menuRepository - 菜单仓库依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(AdminRole)
     private readonly roleRepository: Repository<AdminRole>,

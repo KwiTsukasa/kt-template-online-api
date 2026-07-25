@@ -72,11 +72,6 @@ export class Gacha {
   pickUpCardId: Array<number>;
   isInitFull = false;
 
-  /**
-   * 构造 Gacha 实例，并初始化该模型的本地基础字段。
-   *
-   * @param gachaId - 卡池 ID；定位本次读取、更新、删除或关联的卡池。
-   */
   constructor(gachaId: number) {
     this.gachaId = gachaId;
     const gachaData = bangdreamCatalogRepository.getEntity<Record<string, any>>(

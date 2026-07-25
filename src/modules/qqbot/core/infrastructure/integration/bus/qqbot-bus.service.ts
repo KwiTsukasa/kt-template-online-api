@@ -16,15 +16,8 @@ export class QqbotBusService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(QqbotBusService.name);
   private client: MqttClient | null = null;
 
-  /**
-   * 初始化 QqbotBusService 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly configService: ConfigService) {}
 
-  /**
-   * 处理 QQBot 核心事件。
-   */
   onModuleInit() {
     if (this.getEventBusMode() !== 'mqtt') return;
 
@@ -50,9 +43,6 @@ export class QqbotBusService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * 处理 QQBot 核心事件。
-   */
   async onModuleDestroy() {
     if (!this.client) return;
     await new Promise<void>((resolve) => {

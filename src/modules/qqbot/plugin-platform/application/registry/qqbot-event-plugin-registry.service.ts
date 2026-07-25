@@ -24,12 +24,6 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     QqbotEventPluginDefinition[]
   >();
 
-  /**
-   * 初始化 QqbotEventPluginRegistryService 实例。
-   * @param accountService - QQBot 账号服务；读写账号与事件插件能力绑定关系。
-   * @param pluginRepository - 插件仓库依赖；用于启动时恢复禁用插件状态。
-   * @param installationRepository - 插件安装仓库依赖；用于启动时恢复禁用插件状态。
-   */
   constructor(
     private readonly accountService: QqbotAccountService,
     @Optional()
@@ -40,19 +34,10 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     private readonly installationRepository?: Repository<QqbotPluginInstallation>,
   ) {}
 
-  /**
-   * Initializes inactive event plugin state without loading package instances.
-   * @returns Promise that resolves after persisted installation state is loaded.
-   */
   async onModuleInit(): Promise<void> {
     await this.hydrateInactivePluginKeys();
   }
 
-  /**
-   * Registers event metadata emitted by an active plugin worker.
-   * @param pluginKey - Package key from the active worker descriptor.
-   * @param events - Event definitions returned from the runtime manifest summary.
-   */
   registerRuntimeEvents(
     pluginKey: string,
     events: QqbotEventPluginDefinition[],
@@ -64,10 +49,6 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     this.runtimeEventsByPluginKey.set(pluginKey, events);
   }
 
-  /**
-   * Removes event metadata when the owning runtime worker stops.
-   * @param pluginKey - Package key whose active runtime metadata should be removed.
-   */
   unregisterRuntimeEvents(pluginKey: string): void {
     this.runtimeEventsByPluginKey.delete(pluginKey);
   }
@@ -162,11 +143,6 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     }));
   }
 
-  /**
-   * Keeps the historical registry dispatch method inert while platform workers own event execution.
-   * @param message - Normalized QQBot message supplied by old registry callers; ignored after worker routing.
-   * @returns Always `false` because worker event execution is routed through `QqbotPluginPlatformService`.
-   */
   async dispatchMessage(message: QqbotNormalizedMessage): Promise<boolean> {
     void message;
     return false;
@@ -192,11 +168,6 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     return this.accountService.unbindEventPlugin(selfId, pluginKey);
   }
 
-  /**
-   * Requires active runtime event metadata for an event plugin key.
-   * @param pluginKey - Event plugin package key requested by Admin binding APIs.
-   * @returns Runtime event definition for the active plugin.
-   */
   private requireDefinition(pluginKey: string) {
     const definition = this.getDefinitions(pluginKey)[0];
     if (!definition) {
@@ -230,9 +201,6 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     return !this.inactivePluginKeys.has(pluginKey);
   }
 
-  /**
-   * Hydrates inactive event plugin keys from persisted plugin installations.
-   */
   private async hydrateInactivePluginKeys() {
     if (!this.pluginRepository || !this.installationRepository) return;
 

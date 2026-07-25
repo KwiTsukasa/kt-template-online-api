@@ -13,11 +13,6 @@ export class Degree {
   baseImageName: Array<string | null>;
   rank: Array<string | null>;
   degreeName: Array<string | null>;
-  /**
-   * 构造 Degree 实例，并初始化该模型的本地基础字段。
-   *
-   * @param degreeId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
-   */
   constructor(degreeId) {
     this.degreeId = degreeId;
     const degreeData = bangdreamCatalogCache['degrees'][degreeId.toString()];

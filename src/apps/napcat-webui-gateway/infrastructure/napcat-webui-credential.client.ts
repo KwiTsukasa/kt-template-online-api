@@ -21,17 +21,8 @@ export class NapcatWebuiCredentialClient {
     { credential: string; expiresAt: number }
   >();
 
-  /**
-   * Creates the standalone Gateway credential client.
-   * @param config - Gateway config used for bounded upstream requests and time.
-   */
   constructor(private readonly config: NapcatWebuiGatewayConfigService) {}
 
-  /**
-   * Returns a cached or freshly exchanged NapCat WebUI credential for one Gateway session.
-   * @param session - Server-only Gateway session metadata containing token and upstream URL.
-   * @returns NapCat WebUI Credential string for upstream Authorization.
-   */
   async getCredential(session: NapcatWebuiGatewaySession) {
     const cached = this.credentials.get(session.sessionId);
     const now = this.config.now();
@@ -51,19 +42,10 @@ export class NapcatWebuiCredentialClient {
     return credential;
   }
 
-  /**
-   * Clears a cached credential when a Gateway session is revoked.
-   * @param sessionId - Gateway session id whose cached credential should be removed.
-   */
   clear(sessionId: string) {
     this.credentials.delete(sessionId);
   }
 
-  /**
-   * Exchanges the server-only WebUI token for a NapCat Credential.
-   * @param session - Gateway session containing upstream base URL and WebUI token.
-   * @returns Credential returned by NapCat WebUI.
-   */
   private async exchangeCredential(session: NapcatWebuiGatewaySession) {
     const hash = createHash('sha256')
       .update(`${session.webuiToken}.napcat`)
@@ -87,11 +69,6 @@ export class NapcatWebuiCredentialClient {
     }
   }
 
-  /**
-   * Reads Credential from either the raw NapCat payload or its data wrapper.
-   * @param body - Axios response body from `/api/auth/login`.
-   * @returns Credential when present.
-   */
   private extractCredential(body: NapcatCredentialResponse) {
     if ('data' in body) {
       return body.data?.Credential;

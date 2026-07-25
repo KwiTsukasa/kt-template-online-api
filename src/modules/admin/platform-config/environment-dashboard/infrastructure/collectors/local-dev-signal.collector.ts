@@ -21,11 +21,6 @@ export interface LocalDevSignalCollectContext {
 
 @Injectable()
 export class LocalDevSignalCollector {
-  /**
-   * Initializes local development signal collection.
-   * @param runtimeHealthService - Runtime module health reader; absent in narrow unit tests means the API signal is unknown instead of green.
-   * @param config - Environment dashboard config reader used for Admin local route evidence.
-   */
   constructor(
     @Optional()
     private readonly runtimeHealthService?: RuntimeHealthService,
@@ -33,11 +28,6 @@ export class LocalDevSignalCollector {
     private readonly config: EnvironmentDashboardConfigService = new EnvironmentDashboardConfigService(),
   ) {}
 
-  /**
-   * Collects local development API/Admin service evidence for the dashboard.
-   * @param context - Snapshot context from the aggregator; `observedAt` keeps evidence timestamps aligned.
-   * @returns Local development site with API runtime and Admin route signals.
-   */
   async collect(context: LocalDevSignalCollectContext = {}): Promise<EnvironmentSite> {
     const observedAt = context.observedAt || new Date().toISOString();
     const services = [
@@ -54,11 +44,6 @@ export class LocalDevSignalCollector {
     };
   }
 
-  /**
-   * Builds the local API service from RuntimeHealthService output.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns API service with runtime health evidence.
-   */
   private createApiService(observedAt: string): EnvironmentService {
     const report = this.runtimeHealthService?.getRuntimeHealth();
     const status = this.mapRuntimeStatus(report?.status);
@@ -91,11 +76,6 @@ export class LocalDevSignalCollector {
     return this.createService('local-api', 'API Runtime', [signal]);
   }
 
-  /**
-   * Builds the local Admin route signal from optional local URL configuration.
-   * @param observedAt - Shared snapshot timestamp.
-   * @returns Admin service with configured or unwired evidence.
-   */
   private createAdminService(observedAt: string): EnvironmentService {
     const adminUrl = this.config.get('ENV_DASHBOARD_ADMIN_LOCAL_URL');
     const signal: EnvironmentSignal = adminUrl
@@ -129,11 +109,6 @@ export class LocalDevSignalCollector {
     return this.createService('local-admin', 'Admin Frontend', [signal]);
   }
 
-  /**
-   * Maps runtime module health into environment dashboard signal status.
-   * @param status - RuntimeHealthService status value.
-   * @returns Dashboard health status preserving blocked/degraded semantics.
-   */
   private mapRuntimeStatus(status?: RuntimeHealthStatus): EnvironmentHealthStatus {
     if (status === 'live' || status === 'ready') return 'ok';
     if (status === 'blocked') return 'blocked';
@@ -141,13 +116,6 @@ export class LocalDevSignalCollector {
     return 'unknown';
   }
 
-  /**
-   * Creates a service from child signals and derives aggregate status.
-   * @param id - Stable service id used by topology and Admin selection.
-   * @param label - Operator-facing service label.
-   * @param signals - Signals supporting the service.
-   * @returns Service object with worst-signal status.
-   */
   private createService(
     id: string,
     label: string,
@@ -162,13 +130,6 @@ export class LocalDevSignalCollector {
     };
   }
 
-  /**
-   * Creates a local node and derives aggregate status from services.
-   * @param id - Stable node id for topology edges.
-   * @param label - Operator-facing node label.
-   * @param services - Services owned by the local node.
-   * @returns Node object with worst-service status.
-   */
   private createNode(
     id: string,
     label: string,

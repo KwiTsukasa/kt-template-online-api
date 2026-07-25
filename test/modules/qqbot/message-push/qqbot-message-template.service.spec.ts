@@ -9,7 +9,6 @@ import { QqbotMessageTemplate } from '../../../../src/modules/qqbot/core/infrast
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
 const NOW = new Date('2026-07-24T00:00:00.000Z');
 
-/** Creates an in-memory template fixture with explicit serializable timestamps. */
 function template(
   overrides: Partial<QqbotMessageTemplate> = {},
 ): QqbotMessageTemplate {
@@ -28,7 +27,6 @@ function template(
   };
 }
 
-/** Creates a publish-binding fixture used to prove live-reference filtering. */
 function binding(
   overrides: Partial<QqbotMessagePublishBinding> = {},
 ): QqbotMessagePublishBinding {
@@ -48,14 +46,12 @@ function binding(
   };
 }
 
-/** Reads the value held by TypeORM's private Like find operator for fake filtering. */
 function likeValue(value: unknown): string | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   const candidate = value as { _value?: unknown };
   return typeof candidate._value === 'string' ? candidate._value : undefined;
 }
 
-/** Builds a promise gate whose resolution is controlled by the test. */
 function deferred(): {
   promise: Promise<void>;
   resolve: () => void;
@@ -67,7 +63,6 @@ function deferred(): {
   return { promise, resolve };
 }
 
-/** Registers the source definition used by template lifecycle tests. */
 function registry(): SystemMessageSourceRegistry {
   const value = new SystemMessageSourceRegistry();
   value.register({
@@ -110,7 +105,6 @@ function registry(): SystemMessageSourceRegistry {
   return value;
 }
 
-/** Constructs a template service with narrow repository fakes for unit-level lifecycle checks. */
 function setup(
   items: QqbotMessageTemplate[] = [template()],
   bindings: QqbotMessagePublishBinding[] = [],
@@ -394,7 +388,6 @@ describe('QqbotMessageTemplateService', () => {
     let lockTail = Promise.resolve();
     let deleteCountStarted = false;
 
-    /** Creates a transaction manager whose pessimistic lock is held until callback completion. */
     const createTransactionManager = (): EntityManager => {
       let releaseTemplateLock: (() => void) | undefined;
       const acquireTemplateLock = async (): Promise<void> => {

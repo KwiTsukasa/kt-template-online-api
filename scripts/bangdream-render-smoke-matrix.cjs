@@ -28,10 +28,6 @@ const cases = [
   { name: 'cutoff-recent', operationKey: 'bangdream.cutoff.recent', text: '1000 50 cn', expectedImageCount: 1 },
 ];
 
-/**
- * Reads the Bash-validated matrix payload from environment variables.
- * @returns {{outDir: string, skipExternalPlayer: boolean}} Matrix payload.
- */
 function readPayload() {
   const outDir = process.env.BANGDREAM_MATRIX_OUT_DIR || '';
   if (!outDir) {
@@ -44,12 +40,6 @@ function readPayload() {
   };
 }
 
-/**
- * Creates an HTTP-shaped error compatible with the BangDream adapters.
- * @param {string} message Error message.
- * @param {number} statusCode HTTP response status.
- * @returns {Error & {response: {status: number}, statusCode: number}} Compatible error.
- */
 function createHttpError(message, statusCode) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -57,12 +47,6 @@ function createHttpError(message, statusCode) {
   return error;
 }
 
-/**
- * Fetches one resource with an adapter-level timeout.
- * @param {string | URL} url Resource URL.
- * @param {{headers?: object, timeoutMs?: number}} [options] Request options.
- * @returns {Promise<Response>} Fetch response.
- */
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timeoutMs = options.timeoutMs || 30000;
@@ -77,32 +61,16 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-/**
- * Reads and parses a JSON file synchronously.
- * @param {string} filePath JSON file path.
- * @returns {unknown} Parsed JSON value.
- */
 function readJsonFile(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-/**
- * Reads the first worksheet from an Excel file as row objects.
- * @param {string} filePath Excel file path.
- * @returns {object[]} Worksheet rows.
- */
 function readExcelRows(filePath) {
   const workbook = XLSX.readFile(filePath);
   const sheetName = workbook.SheetNames[0];
   return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 }
 
-/**
- * Requests a binary resource for the BangDream plugin.
- * @param {string | URL} url Resource URL.
- * @param {{headers?: object, timeoutMs?: number}} [options] Request options.
- * @returns {Promise<{body: Buffer, statusCode: number}>} Binary response body and status.
- */
 async function requestBuffer(url, options) {
   const response = await fetchWithTimeout(url, options);
   const body = Buffer.from(await response.arrayBuffer());
@@ -115,12 +83,6 @@ async function requestBuffer(url, options) {
   return { body, statusCode: response.status };
 }
 
-/**
- * Requests and parses a JSON resource for the BangDream plugin.
- * @param {string | URL} url Resource URL.
- * @param {{headers?: object, timeoutMs?: number}} [options] Request options.
- * @returns {Promise<{body: unknown, statusCode: number}>} Parsed response body and status.
- */
 async function requestJson(url, options) {
   const response = await fetchWithTimeout(url, options);
   const responseText = await response.text();
@@ -133,39 +95,28 @@ async function requestJson(url, options) {
   return { body: JSON.parse(responseText), statusCode: response.status };
 }
 
-/**
- * Creates the filesystem and network adapter expected by the BangDream plugin.
- * @returns {object} Plugin IO adapter.
- */
 function createIoAdapter() {
   return {
-    /** @param {string} key Environment key. @returns {string | undefined} Config value. */
     getConfig(key) {
       return process.env[key];
     },
-    /** @param {string} filePath Asset path. @returns {Promise<Buffer>} Asset bytes. */
     async readAssetFile(filePath) {
       return fs.promises.readFile(filePath);
     },
-    /** @param {string} filePath Excel path. @returns {Promise<object[]>} Worksheet rows. */
     async readExcelRows(filePath) {
       return readExcelRows(filePath);
     },
-    /** @param {string} filePath JSON path. @returns {Promise<unknown>} Parsed value. */
     async readJsonFile(filePath) {
       return readJsonFile(filePath);
     },
-    /** @param {string} filePath JSON path. @returns {unknown} Parsed value. */
     readJsonFileSync(filePath) {
       return readJsonFile(filePath);
     },
     requestArrayBuffer: requestBuffer,
     requestJson,
-    /** @param {number} milliseconds Delay length. @returns {Promise<void>} Delay completion. */
     async sleep(milliseconds) {
       await delay(milliseconds);
     },
-    /** @param {string} filePath Output path. @param {unknown} data JSON value. @returns {Promise<void>} Write completion. */
     async writeJsonFile(filePath, data) {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       fs.writeFileSync(filePath, JSON.stringify(data));
@@ -173,31 +124,14 @@ function createIoAdapter() {
   };
 }
 
-/**
- * Converts plugin errors to their stable human-readable representation.
- * @param {unknown} error Error-like value.
- * @returns {string} Normalized message.
- */
 function normalizeError(error) {
   return String(error?.message || error || 'BangDream command failed');
 }
 
-/**
- * Converts a case name into a safe output filename component.
- * @param {string} name Matrix case name.
- * @returns {string} Filesystem-safe name.
- */
 function safeName(name) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, '-');
 }
 
-/**
- * Writes and decodes all images returned by one matrix case.
- * @param {object} testCase Matrix case contract.
- * @param {object} result Plugin operation result.
- * @param {string} outDir Matrix output directory.
- * @returns {Promise<object[]>} Image file metadata.
- */
 async function writeCaseImages(testCase, result, outDir) {
   const matches = [...result.replyText.matchAll(/base64:\/\/([A-Za-z0-9+/=]+)/g)];
   if (matches.length === 0) {
@@ -239,10 +173,6 @@ async function writeCaseImages(testCase, result, outDir) {
   return files;
 }
 
-/**
- * Executes the full render matrix and writes its machine-readable summary.
- * @returns {Promise<void>} Resolves after the summary has been written.
- */
 async function main() {
   const payload = readPayload();
   fs.mkdirSync(payload.outDir, { recursive: true });
@@ -328,11 +258,6 @@ async function main() {
   );
 }
 
-/**
- * Writes an uncaught matrix error to stderr and fails the process.
- * @param {unknown} error Error-like value.
- * @returns {void}
- */
 function handleFatalError(error) {
   process.stderr.write(`${String(error?.stack || error)}\n`);
   process.exit(1);

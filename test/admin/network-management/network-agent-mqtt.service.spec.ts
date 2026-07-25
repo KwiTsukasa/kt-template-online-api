@@ -55,7 +55,6 @@ type ConcurrentEndpointHarness = {
   stagedEvents: SystemMessageEventInput[];
 };
 
-/** Creates one externally controlled promise for deterministic transaction interleaving. */
 function createDeferred<T>(): Deferred<T> {
   let resolve: (value: T | PromiseLike<T>) => void = () => undefined;
   const promise = new Promise<T>((nextResolve) => {
@@ -64,7 +63,6 @@ function createDeferred<T>(): Deferred<T> {
   return { promise, resolve };
 }
 
-/** Creates a fake MQTT client plus in-memory TypeORM state for bridge tests. */
 function createHarness(): MqttHarness {
   const operations: string[] = [];
   const state = Object.assign(new NetworkAgentState(), {
@@ -254,10 +252,6 @@ function createHarness(): MqttHarness {
   };
 }
 
-/**
- * Creates isolated transaction views with a mapping-row lock and delayed first Outbox stage.
- * The committed arrays change only after each transaction callback returns successfully.
- */
 function createConcurrentEndpointHarness(): ConcurrentEndpointHarness {
   const state = Object.assign(new NetworkAgentState(), {
     agentId: 'nas-main',
@@ -282,7 +276,6 @@ function createConcurrentEndpointHarness(): ConcurrentEndpointHarness {
   >();
   let mappingLockTail = Promise.resolve();
 
-  /** Acquires the fake exclusive mapping-row lock in transaction commit order. */
   async function acquireMappingLock(manager: object): Promise<void> {
     const predecessor = mappingLockTail;
     const released = createDeferred<void>();
@@ -294,7 +287,6 @@ function createConcurrentEndpointHarness(): ConcurrentEndpointHarness {
     }
   }
 
-  /** Sorts histories according to the precise TypeORM order-property insertion order. */
   function findNewestHistory(
     rows: readonly NetworkEndpointHistory[],
     order: Record<string, 'ASC' | 'DESC'>,
@@ -316,7 +308,6 @@ function createConcurrentEndpointHarness(): ConcurrentEndpointHarness {
   }
 
   const stager = {
-    /** Stages into the caller transaction and pauses only the first event before commit. */
     stage: jest.fn(
       async (manager: EntityManager, input: SystemMessageEventInput) => {
         stageCalls.push(input);
@@ -421,7 +412,6 @@ function createConcurrentEndpointHarness(): ConcurrentEndpointHarness {
   };
 }
 
-/** Builds one endpoint event payload with a valid STUN endpoint transition shape. */
 function endpointEvent(overrides: Record<string, unknown> = {}): Buffer {
   return Buffer.from(
     JSON.stringify({
@@ -443,7 +433,6 @@ function endpointEvent(overrides: Record<string, unknown> = {}): Buffer {
   );
 }
 
-/** Builds a persisted endpoint-history fixture for direct prior-port comparisons. */
 function endpointHistory(
   overrides: Partial<NetworkEndpointHistory> = {},
 ): NetworkEndpointHistory {
@@ -459,12 +448,10 @@ function endpointHistory(
   });
 }
 
-/** Waits for promise continuations scheduled by the MQTT bridge. */
 async function flushPromises(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
-/** Mirrors MQTT.js by emitting callback errors through the client error event. */
 function createProtocolAck(
   client: MqttClient & EventEmitter,
 ): jest.Mock<void, [Error | number, number?]> {
@@ -473,7 +460,6 @@ function createProtocolAck(
   });
 }
 
-/** Builds one valid full reported snapshot. */
 function reported(
   harness: MqttHarness,
   revision: number,
@@ -802,7 +788,6 @@ describe('NetworkAgentMqttService', () => {
     expect(harness.requestDdnsReconcile).toHaveBeenCalledTimes(1);
   });
 
-  /** Proves lease renewal is persisted without turning timestamps into page reloads. */
   it('suppresses Admin events for reported lease-only timestamp renewal', async () => {
     const harness = createHarness();
     const topic = 'kt/network/v1/agents/nas-main/reported';
@@ -1387,7 +1372,6 @@ describe('NetworkAgentMqttService', () => {
     expect(harness.stagedEvents).toHaveLength(0);
   });
 
-  /** Proves liveness persistence does not become a periodic browser refresh. */
   it('suppresses Admin events for status heartbeat-only timestamp renewal', async () => {
     const harness = createHarness();
     const topic = 'kt/network/v1/agents/nas-main/status';
@@ -1430,7 +1414,6 @@ describe('NetworkAgentMqttService', () => {
     expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
   });
 
-  /** Proves only public IPv6 semantic changes wake automatic DDNS. */
   it('requests DDNS reconciliation for IPv6 changes but not identical heartbeats', async () => {
     const harness = createHarness();
     const topic = 'kt/network/v1/agents/nas-main/status';

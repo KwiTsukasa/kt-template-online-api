@@ -8,10 +8,6 @@ import type { AdminMenuInput, AdminMenuMeta } from '../../contract/admin.types';
 
 @Injectable()
 export class AdminMenuService {
-  /**
-   * 初始化 AdminMenuService 实例。
-   * @param menuRepository - 菜单仓库依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(AdminMenu)
     private readonly menuRepository: Repository<AdminMenu>,
@@ -159,10 +155,6 @@ export class AdminMenuService {
     menus.forEach((menu) => menuMap.set(menu.id, menu));
 
     const pendingParentIds = new Set<string>();
-    /**
-     * 收集 Admin 管理数据。
-     * @param pid - Admin ID；定位本次读取、更新、删除或关联的Admin。
-     */
     const collectMissingParent = (pid?: null | string) => {
       if (!pid || pid === '0' || menuMap.has(pid)) return;
       pendingParentIds.add(pid);

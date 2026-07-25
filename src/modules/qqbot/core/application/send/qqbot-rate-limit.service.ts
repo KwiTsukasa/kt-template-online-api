@@ -7,10 +7,6 @@ export class QqbotRateLimitService {
   private readonly globalReservedAt = new Map<string, number[]>();
   private readonly targetReservedAt = new Map<string, number>();
 
-  /**
-   * 初始化 QqbotRateLimitService 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly configService: ConfigService) {}
 
   /**

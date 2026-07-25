@@ -90,12 +90,6 @@ describe('generic plugin worker entry', () => {
   });
 });
 
-/**
- * Builds a minimal parsed-manifest-shaped descriptor manifest for direct worker entry tests.
- * @param key - Plugin package key used by the temp descriptor and health assertion.
- * @param entry - Package-relative entry file that the descriptor resolves to the temp module.
- * @returns Manifest payload accepted by descriptor-based worker creation.
- */
 function createManifest(key: string, entry: string): QqbotPluginManifest {
   return {
     assets: [],

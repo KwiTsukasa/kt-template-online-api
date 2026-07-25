@@ -17,24 +17,12 @@ import { NapcatWebuiGatewayTicketService } from '../infrastructure/session/napca
 
 @Controller('napcat-webui')
 export class PublicWebuiController {
-  /**
-   * Creates the browser-facing NapCat WebUI controller.
-   * @param sessionService - Gateway session lifecycle service.
-   * @param ticketService - One-time bootstrap ticket service.
-   * @param proxyService - HTTP/WebSocket proxy delegation service.
-   */
   constructor(
     private readonly sessionService: NapcatWebuiGatewaySessionService,
     private readonly ticketService: NapcatWebuiGatewayTicketService,
     private readonly proxyService: NapcatWebuiProxyService,
   ) {}
 
-  /**
-   * Redeems a one-time bootstrap ticket, activates the session, and enters WebUI.
-   * @param sessionId - Gateway session id from the public route.
-   * @param ticket - One-time ticket issued by the internal create-session endpoint.
-   * @param res - Express response used to set the scoped cookie and redirect.
-   */
   @Get('session/:sessionId/bootstrap')
   async bootstrap(
     @Param('sessionId') sessionId: string,
@@ -61,14 +49,6 @@ export class PublicWebuiController {
     );
   }
 
-  /**
-   * Delegates Gateway-owned WebUI HTTP routes to the proxy service.
-   * @param sessionId - Gateway session id from the public route.
-   * @param proxyPath - Path-to-regexp route tail for the upstream pathname.
-   * @param req - Express request passed through to HPM.
-   * @param res - Express response passed through to HPM.
-   * @param next - Express next callback passed through to HPM.
-   */
   @All('session/:sessionId/webui/*proxyPath')
   proxy(
     @Param('sessionId') sessionId: string,
@@ -86,11 +66,6 @@ export class PublicWebuiController {
     );
   }
 
-  /**
-   * Requires a non-empty bootstrap ticket before touching the ticket store.
-   * @param ticket - Candidate query ticket.
-   * @returns Trimmed ticket value.
-   */
   private requireTicket(ticket: string) {
     const value = String(ticket || '').trim();
     if (!value) {

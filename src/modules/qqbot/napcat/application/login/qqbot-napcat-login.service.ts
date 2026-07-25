@@ -62,71 +62,34 @@ export class QqbotNapcatLoginService {
     Promise<QqbotLoginScanResult> | undefined
   > = {};
   readonly sessions = {
-    /**
-     * 清理 NapCat回调状态。
-     */
     clear: () => {
       this.stopAllScanStatusMonitors();
       this.loginSessionStore.clear();
     },
-    /**
-     * 读取 NapCat回调数据。
-     * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
-     */
     get: (sessionId: string) => this.loginSessionStore.getCached(sessionId),
-    /**
-     * 判断 NapCat回调条件。
-     * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
-     */
     has: (sessionId: string) => this.loginSessionStore.has(sessionId),
-    /**
-     * 写入 NapCat回调数据。
-     * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
-     * @param session - session 输入；使用 `id` 字段生成结果。
-     */
     set: (sessionId: string, session: QqbotLoginScanSession) => {
       if (!session.id) session.id = sessionId;
       this.loginSessionStore.set(session);
     },
   };
   readonly sessionEventLogs = {
-    /**
-     * 清理 NapCat回调状态。
-     */
     clear: () =>
       Object.keys(this.sessionEventLogCache).forEach((sessionId) => {
         delete this.sessionEventLogCache[sessionId];
       }),
-    /**
-     * 读取 NapCat回调数据。
-     * @param sessionId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
-     */
     get: (sessionId: string) => this.sessionEventLogCache[sessionId],
   };
   readonly sessionEventListeners = {
-    /**
-     * 清理 NapCat回调状态。
-     */
     clear: () =>
       Object.keys(this.sessionEventListenerCache).forEach((sessionId) => {
         delete this.sessionEventListenerCache[sessionId];
       }),
   };
   private readonly webuiClient = new NapcatWebuiHttpClient({
-    /**
-     * 读取 NapCat回调数据。
-     */
     getTimeoutMs: () => this.getTimeout(),
   });
 
-  /**
-   * 初始化 QqbotNapcatLoginService 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
-   * @param containerService - containerService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param loginStateStore - loginStateStore 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly configService: ConfigService,
     private readonly accountService: QqbotAccountService,
@@ -143,10 +106,6 @@ export class QqbotNapcatLoginService {
     return this.loginStateStore || this.fallbackLoginSessionStore;
   }
 
-  /**
-   * Starts a create-login session without waiting for remote container startup.
-   * @returns Pending scan session snapshot; the container startup and QR fetch continue in the background.
-   */
   async startCreate() {
     await this.cleanupSessions();
     const container = await this.containerService.reserveCreateContainer();
@@ -661,10 +620,6 @@ export class QqbotNapcatLoginService {
       void this.loginSessionStore.get(sessionId);
     }
     return new Observable<{ data: QqbotLoginScanEvent }>((subscriber) => {
-      /**
-       * 监听 NapCat 登录运行态事件。
-       * @param event - event 输入；限定 NapCat查询范围。
-       */
       const listener = (event: QqbotLoginScanEvent) => {
         subscriber.next({ data: event });
       };
@@ -858,11 +813,6 @@ export class QqbotNapcatLoginService {
     }
   }
 
-  /**
-   * Starts a reserved create-login container and publishes QR progress back to the existing session.
-   * @param session - Pending create-login session returned to Admin before the remote container operation starts.
-   * @param container - Reserved container runtime whose provisional device identity must be used for the first startup.
-   */
   private async prepareCreateContainerQrcode(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -900,11 +850,6 @@ export class QqbotNapcatLoginService {
     }
   }
 
-  /**
-   * Reads login state from a running create-login container and updates the original session with a QR or success result.
-   * @param session - Pending create-login session whose id is already known by Admin and SSE listeners.
-   * @param container - Running container that should now answer NapCat WebUI login endpoints.
-   */
   private async prepareCreateQrcodeAfterContainerReady(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -1079,11 +1024,6 @@ export class QqbotNapcatLoginService {
     };
   }
 
-  /**
-   * Persists the QQ-login-only status observed during a scan session without altering container or OneBot state.
-   * @param session - Login session that carries the target QQ number for refresh-login flows.
-   * @param status - Latest NapCat WebUI CheckLoginStatus response used as the QQ login source of truth.
-   */
   private async syncSessionQqLoginStatus(
     session: QqbotLoginScanSession,
     status: NapcatLoginStatus,
@@ -1107,11 +1047,6 @@ export class QqbotNapcatLoginService {
     await marker.call(this.accountService, selfId, qqLoginStatus, lastError);
   }
 
-  /**
-   * Reconciles an API-side QR TTL timeout with NapCat's current login state before marking the scan as expired.
-   * @param session - Pending scan session whose local `expiresAt` has elapsed; its current QR and container binding decide whether recovery is safe.
-   * @returns A pending or success result when NapCat still exposes a usable QR or has already logged in; otherwise undefined so the caller can expire the session.
-   */
   private async recoverExpiredQrcodeSession(
     session: QqbotLoginScanSession,
   ): Promise<QqbotLoginScanResult | undefined> {
@@ -1158,11 +1093,6 @@ export class QqbotNapcatLoginService {
     return undefined;
   }
 
-  /**
-   * Converts a NapCat WebUI login probe into the account-table QQ login status vocabulary.
-   * @param status - Raw WebUI CheckLoginStatus payload returned by the current container.
-   * @returns Persistable QQ-login-only state.
-   */
   private toSessionQqLoginStatus(
     status: NapcatLoginStatus,
   ): QqbotNapcatRuntimeLoginStatus {
@@ -1184,12 +1114,6 @@ export class QqbotNapcatLoginService {
     return 'unknown';
   }
 
-  /**
-   * Selects the account error text that should accompany a QQ-login-only status update.
-   * @param status - Raw WebUI status containing the optional NapCat login error text.
-   * @param qqLoginStatus - Normalized state that decides whether stale error text should be cleared.
-   * @returns Null to clear stale errors, a reason string, or undefined when the account row should be left unchanged.
-   */
   private toSessionQqLoginError(
     status: NapcatLoginStatus,
     qqLoginStatus: QqbotNapcatRuntimeLoginStatus,
@@ -1240,11 +1164,6 @@ export class QqbotNapcatLoginService {
 
     try {
       const client = new NapcatLoginApiClient({
-        /**
-         * 发送 NapCat回调消息。
-         * @param path - 路由或文件路径；驱动 `this.postNapcat()` 的 NapCat步骤。
-         * @param body - 请求体 DTO；承载 NapCat新增、更新、导入或执行字段。
-         */
         post: (path, body) => this.postNapcat(container, path, body),
       });
       return this.refreshNewDeviceQrcode(session, container, client);
@@ -1267,11 +1186,6 @@ export class QqbotNapcatLoginService {
     container: QqbotNapcatRuntime,
   ) {
     const client = new NapcatLoginApiClient({
-      /**
-       * 发送 NapCat回调消息。
-       * @param path - 路由或文件路径；驱动 `this.postNapcat()` 的 NapCat步骤。
-       * @param body - 请求体 DTO；承载 NapCat新增、更新、导入或执行字段。
-       */
       post: (path, body) => this.postNapcat(container, path, body),
     });
     if (!session.newDeviceBytesToken) {
@@ -1757,11 +1671,6 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
-  /**
-   * Restarts a lost create-login background task after a persisted preparing session becomes stale.
-   * @param session - Pending create-login session restored from persistence or left behind by a lost async task.
-   * @returns True when a recovery task was launched and the session snapshot was updated.
-   */
   private recoverStaleCreateContainerPreparation(
     session: QqbotLoginScanSession,
   ) {
@@ -1778,10 +1687,6 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
-  /**
-   * Reattaches a stale create-login session to its reserved container and continues the QR preparation flow.
-   * @param session - Pending create-login session whose original in-memory background promise may have been lost.
-   */
   private async resumeCreateContainerPreparation(
     session: QqbotLoginScanSession,
   ) {
@@ -1800,11 +1705,6 @@ export class QqbotNapcatLoginService {
     );
   }
 
-  /**
-   * Checks whether create-login container preparation is old enough to be recovered by a new background task.
-   * @param session - Create-login session; `lastRestartedAt` marks the last background task launch and `createdAt` is the fallback seed.
-   * @returns True when the session is still pending but the previous create task should be considered lost.
-   */
   private isStaleCreateContainerPreparation(session: QqbotLoginScanSession) {
     if (!session.preparingContainer) return false;
     const startedAt = session.lastRestartedAt || session.createdAt;
@@ -1824,10 +1724,6 @@ export class QqbotNapcatLoginService {
     );
   }
 
-  /**
-   * Reads the stale window for create-login container startup recovery.
-   * @returns Milliseconds to wait before assuming the original remote-start background task was lost.
-   */
   private getCreateContainerPreparationStaleMs() {
     return this.getPositiveConfigNumber(
       'QQBOT_NAPCAT_CREATE_PREPARING_STALE_MS',
@@ -1848,11 +1744,6 @@ export class QqbotNapcatLoginService {
     delete this.sessionEventListenerCache[sessionId];
   }
 
-  /**
-   * Determines whether a pending QR session needs server-side polling so SSE can progress without browser polling.
-   * @param session - Login session whose QR, preparation flags, and terminal status decide monitor ownership.
-   * @returns True when the backend should keep reconciling NapCat status for this session.
-   */
   private shouldMonitorScanStatus(session: QqbotLoginScanSession) {
     return (
       session.status === 'pending' &&
@@ -1862,10 +1753,6 @@ export class QqbotNapcatLoginService {
     );
   }
 
-  /**
-   * Starts one bounded status monitor for a QR session and lets the timer avoid holding the Node process open.
-   * @param session - Pending QR session whose id is used to drive later status reconciliation.
-   */
   private startScanStatusMonitor(session: QqbotLoginScanSession) {
     this.ensureScanStatusMonitorDeadline(session);
     if (this.hasScanStatusMonitorDeadlinePassed(session)) {
@@ -1881,10 +1768,6 @@ export class QqbotNapcatLoginService {
     this.scanStatusMonitorTimers[session.id] = timer;
   }
 
-  /**
-   * Stops any server-side status monitor for a login session.
-   * @param sessionId - Session key whose timer should no longer reconcile NapCat state.
-   */
   private stopScanStatusMonitor(sessionId: string) {
     const timer = this.scanStatusMonitorTimers[sessionId];
     if (timer) clearTimeout(timer);
@@ -1892,19 +1775,12 @@ export class QqbotNapcatLoginService {
     delete this.scanStatusMonitorDeadlines[sessionId];
   }
 
-  /**
-   * Stops every server-side QR status monitor before the backing session store is cleared.
-   */
   private stopAllScanStatusMonitors() {
     Object.keys(this.scanStatusMonitorTimers).forEach((sessionId) => {
       this.stopScanStatusMonitor(sessionId);
     });
   }
 
-  /**
-   * Captures the active QR code deadline so monitor polling cannot extend the same QR session forever.
-   * @param session - Pending QR session whose current QR URL and expiry form the monitor deadline snapshot.
-   */
   private ensureScanStatusMonitorDeadline(session: QqbotLoginScanSession) {
     if (!session.qrcode) return;
     const current = this.scanStatusMonitorDeadlines[session.id];
@@ -1915,11 +1791,6 @@ export class QqbotNapcatLoginService {
     };
   }
 
-  /**
-   * Checks the monitor-owned QR deadline instead of the session expiry that status polling may renew.
-   * @param session - Pending QR session whose monitor snapshot decides terminal expiry.
-   * @returns True when the monitored QR should be expired by the backend monitor.
-   */
   private hasScanStatusMonitorDeadlinePassed(
     session: QqbotLoginScanSession,
   ) {
@@ -1931,10 +1802,6 @@ export class QqbotNapcatLoginService {
     return !!deadline && Date.now() > deadline.expiresAt;
   }
 
-  /**
-   * Polls the same status path used by Admin so SSE can emit success/expired events after QR generation.
-   * @param sessionId - Pending QR session id to reload from the session store before each poll.
-   */
   private async runScanStatusMonitor(sessionId: string) {
     try {
       const session = await this.loginSessionStore.get(sessionId);
@@ -2190,11 +2057,6 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
-  /**
-   * Keeps a login-positive session alive while NapCat finishes exposing the logged-in QQ number.
-   * @param session - Scan session whose WebUI status is already logged in but whose `GetQQLoginInfo` payload lacks `uin`/`selfId`.
-   * @returns Pending result during the bounded wait window, or a terminal failure once the missing-self-id window is exhausted.
-   */
   private async keepLoginSelfIdPending(session: QqbotLoginScanSession) {
     const now = Date.now();
     session.loginSelfIdMissingSince ??= now;
@@ -2223,11 +2085,6 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
-  /**
-   * Stops delayed background login work from mutating a pending session after it expired or was replaced.
-   * @param session - Pending scan session captured by an async relogin task; its cache identity and TTL decide whether writes are still valid.
-   * @returns A terminal or current result when the task must stop, otherwise undefined to allow the caller to continue.
-   */
   private async resolveStalePendingSession(session: QqbotLoginScanSession) {
     if (session.status !== 'pending') return undefined;
     if (Date.now() > session.expiresAt) return this.expireSession(session);
@@ -2445,13 +2302,6 @@ export class QqbotNapcatLoginService {
     };
   }
 
-  /**
-   * Refreshes a QR code that is still present in NapCat but too close to the native QQ expiry window for human scanning.
-   * @param session - Pending scan session that would otherwise return the nearly expired QR to Admin.
-   * @param container - NapCat WebUI runtime used to request a fresh QR from the same login service.
-   * @param status - Latest WebUI login status containing the stale QR URL and its native update timestamp.
-   * @returns Pending scan result with a fresh QR when NapCat accepts refresh, or a pending no-QR result while refresh is still in progress.
-   */
   private async refreshNearlyExpiredQrcode(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -2481,11 +2331,6 @@ export class QqbotNapcatLoginService {
     }
   }
 
-  /**
-   * Determines whether a NapCat QR is close enough to QQ's native timeout that Admin should not show it for a new scan.
-   * @param status - WebUI status carrying `qrcodeUpdatedAt`; missing timestamps are treated as safe to avoid refreshing every legacy response.
-   * @returns True when the QR is present, not already expired, and has less than the configured safe remaining window.
-   */
   private shouldRefreshNearlyExpiredQrcode(status: NapcatLoginStatus) {
     if (
       !status.qrcodeurl ||
@@ -2499,12 +2344,6 @@ export class QqbotNapcatLoginService {
     return ageMs >= this.getNativeQrcodeTtlMs() - this.getQrcodeSafeScanMs();
   }
 
-  /**
-   * Decides whether a pending scan status poll should actively ask NapCat for a QR again.
-   * @param session - Pending scan session; challenge states and recent refresh attempts suppress automatic retries.
-   * @param status - Latest WebUI status; existing, expired, or successful QR/login states are handled elsewhere.
-   * @returns True when the status poll should call the same-container RefreshQRcode path once per cooldown window.
-   */
   private shouldAutoRefreshPendingQrcode(
     session: QqbotLoginScanSession,
     status: NapcatLoginStatus,
@@ -2519,13 +2358,6 @@ export class QqbotNapcatLoginService {
     return Date.now() - lastRefreshAt >= this.getQrcodeAutoRefreshCooldownMs();
   }
 
-  /**
-   * Requests a fresh QR during status polling so SSE can recover from a previous accepted-but-not-updated refresh.
-   * @param session - Pending scan session whose result is returned to Admin/SSE.
-   * @param container - Current NapCat WebUI runtime; the method never rebuilds or restarts it.
-   * @param status - Latest WebUI status used as fallback metadata for QR freshness checks.
-   * @returns Updated scan result, either with a fresh QR or a bounded pending message.
-   */
   private async refreshPendingQrcodeFromStatus(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -2575,10 +2407,6 @@ export class QqbotNapcatLoginService {
     }
   }
 
-  /**
-   * Reads the expected native QQ QR lifetime used only for safe-display decisions.
-   * @returns Milliseconds before a QR is considered too old to show without refreshing.
-   */
   private getNativeQrcodeTtlMs() {
     return this.getPositiveConfigNumber(
       'NAPCAT_LOGIN_NATIVE_QR_EXPIRE_MS',
@@ -2586,10 +2414,6 @@ export class QqbotNapcatLoginService {
     );
   }
 
-  /**
-   * Reads the minimum QR lifetime that must remain before Admin is allowed to show an existing QR for manual scanning.
-   * @returns Milliseconds kept as human scanning/confirmation safety margin.
-   */
   private getQrcodeSafeScanMs() {
     return this.getPositiveConfigNumber(
       'NAPCAT_LOGIN_QR_SAFE_SCAN_MS',
@@ -2597,10 +2421,6 @@ export class QqbotNapcatLoginService {
     );
   }
 
-  /**
-   * Reads the cooldown between automatic QR refresh attempts during status polling.
-   * @returns Milliseconds to wait before SSE/status may request another QR regeneration.
-   */
   private getQrcodeAutoRefreshCooldownMs() {
     return this.getPositiveConfigNumber(
       'NAPCAT_LOGIN_QR_AUTO_REFRESH_COOLDOWN_MS',
@@ -2608,10 +2428,6 @@ export class QqbotNapcatLoginService {
     );
   }
 
-  /**
-   * Reads the bounded wait window for NapCat to expose QQ number after WebUI already reports login-positive.
-   * @returns Milliseconds allowed for `GetQQLoginInfo` to start returning `uin`/`selfId` before treating the state as inconsistent.
-   */
   private getLoginSelfIdWaitMs() {
     return this.getPositiveConfigNumber(
       'NAPCAT_LOGIN_SELF_ID_WAIT_MS',
@@ -3010,11 +2826,6 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
-  /**
-   * Decides whether this refresh session may spend its single same-container worker restart budget.
-   * @param session - Login refresh session; its source-runtime flag proves the managed runtime is already alive and the attempt flag prevents restart storms.
-   * @returns True only before the first NapCat worker restart attempt in this online-source refresh session.
-   */
   private shouldRestartNapcatWorkerForOnlineRefresh(
     session: QqbotLoginScanSession,
   ) {
@@ -3025,13 +2836,6 @@ export class QqbotNapcatLoginService {
     );
   }
 
-  /**
-   * Restarts only the NapCat worker when the managed runtime is alive but QQCore login service is stale.
-   * @param session - Refresh login session that owns progress messages and retry timestamps.
-   * @param container - Current online WebUI runtime; its device identity and environment must be preserved.
-   * @param reason - Latest QQ login-state evidence shown to Admin before the worker restart.
-   * @returns Fresh WebUI login status after the worker restart completes.
-   */
   private async restartNapcatWorkerForOnlineRefresh(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,

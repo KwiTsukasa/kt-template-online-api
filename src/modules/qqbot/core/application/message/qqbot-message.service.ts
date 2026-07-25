@@ -19,12 +19,6 @@ import {
 
 @Injectable()
 export class QqbotMessageService {
-  /**
-   * 初始化 QqbotMessageService 实例。
-   * @param conversationRepository - QQBot仓库依赖；影响 constructor 的返回值。
-   * @param messageRepository - QQBot仓库依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(QqbotConversation)
     private readonly conversationRepository: Repository<QqbotConversation>,

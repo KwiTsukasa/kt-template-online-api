@@ -69,11 +69,6 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
   private closed = false;
   private generation = 0;
 
-  /**
-   * 初始化 QqbotBullmqPluginWorkerRequestQueue 实例。
-   * @param driver - driver 输入；影响 constructor 的返回值。
-   * @param options - 插件平台列表；使用 `queueWaitTimeoutMs`、`pluginKey`、`installationId`、`connection` 字段生成结果。
-   */
   constructor(
     private readonly driver: QqbotPluginWorkerDriver,
     private readonly options: QqbotBullmqWorkerRequestQueueOptions,

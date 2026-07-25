@@ -19,14 +19,8 @@ export function buildFf14MarketOperations(
   operations: Ff14MarketManifestOperation[],
 ) {
   const operationFactories = {
-    /**
-     * 执行 FF14 市场回调。
-     */
     [ff14PricePriceHandlerName]: () =>
       createFf14MarketPriceOperation(application),
-    /**
-     * 执行 FF14 市场回调。
-     */
     [ff14ResolveItemHandlerName]: () =>
       createFf14ResolveItemOperation(application),
   } satisfies Record<

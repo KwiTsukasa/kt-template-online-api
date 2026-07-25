@@ -43,17 +43,8 @@ type NapcatConfig = {
 
 @Injectable()
 export class NapcatConfigWriterService {
-  /**
-   * Initializes the config writer with shared text helpers for sanitization.
-   * @param toolsService - Shared helper used to trim account and URL values before writing config files.
-   */
   constructor(private readonly toolsService: ToolsService) {}
 
-  /**
-   * Builds all NapCat and OneBot config files for one account container.
-   * @param input - Account id, reverse WS URL, and WebUI token used to build runtime config files.
-   * @returns Config file bundle plus sanitized hashes for protocol-profile evidence.
-   */
   buildConfigFiles(input: {
     account?: string;
     reverseWsUrl: string;
@@ -130,11 +121,6 @@ export class NapcatConfigWriterService {
     };
   }
 
-  /**
-   * Serializes config JSON with stable indentation for script and hash tests.
-   * @param value - Config object that will be written to `/app/napcat/config`.
-   * @returns Pretty JSON content with trailing newline for here-doc output.
-   */
   private stringify(value: Record<string, unknown>) {
     return `${JSON.stringify(value, null, 2)}\n`;
   }

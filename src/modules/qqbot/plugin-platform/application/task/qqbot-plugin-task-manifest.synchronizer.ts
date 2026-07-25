@@ -12,10 +12,6 @@ export type SyncPluginManifestTasksInput = {
 
 @Injectable()
 export class QqbotPluginTaskManifestSynchronizer {
-  /**
-   * 初始化 QqbotPluginTaskManifestSynchronizer 实例。
-   * @param taskRepository - 插件任务仓库依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(QqbotPluginTask)
     private readonly taskRepository: Repository<QqbotPluginTask>,

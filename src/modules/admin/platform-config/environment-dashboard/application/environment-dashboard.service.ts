@@ -33,18 +33,6 @@ export interface EnvironmentDashboardSnapshotOptions {
 
 @Injectable()
 export class EnvironmentDashboardService {
-  /**
-   * Initializes the dashboard snapshot service.
-   * @param eventMaterializer - Recent-event materializer fed by local/MQTT event sources.
-   * @param cache - Short-lived dashboard cache invalidated by fresh backend events.
-   * @param localDevCollector - Collector for local development API/Admin state.
-   * @param nasProdCollector - Collector for NAS production internal service state.
-   * @param tencentAdapter - Tencent Cloud readonly adapter for CVM evidence.
-   * @param caddyAdapter - Caddy readonly adapter for public route evidence.
-   * @param wireguardAdapter - WireGuard readonly adapter for Tencent/r4se reachability.
-   * @param mihomoAdapter - Mihomo/OpenClash readonly adapter for r4se evidence.
-   * @param config - Dashboard config reader used for explicit missing-key evidence.
-   */
   constructor(
     @Optional()
     private readonly eventMaterializer: EnvironmentEventMaterializer,
@@ -66,21 +54,12 @@ export class EnvironmentDashboardService {
     private readonly config: EnvironmentDashboardConfigService = new EnvironmentDashboardConfigService(),
   ) {}
 
-  /**
-   * Builds the current environment dashboard snapshot for Admin.
-   * @param options - Snapshot control from Admin refresh/self-check; self-check sets `forceRefresh`.
-   * @returns Aggregate status tree, topology, readonly actions, and recent events.
-   */
   async getDashboard(
     options: EnvironmentDashboardSnapshotOptions = {},
   ): Promise<EnvironmentDashboardResponse> {
     return this.cache.getOrCreate(() => this.buildDashboard(), options);
   }
 
-  /**
-   * Runs all readonly collectors and assembles the dashboard response.
-   * @returns Fresh dashboard snapshot before cache decoration.
-   */
   private async buildDashboard(): Promise<EnvironmentDashboardResponse> {
     const generatedAt = new Date().toISOString();
     const sites = await this.createSites(generatedAt);
@@ -95,11 +74,6 @@ export class EnvironmentDashboardService {
     };
   }
 
-  /**
-   * Creates the first-version site tree with explicit unwired remote evidence.
-   * @param observedAt - Snapshot timestamp shared by generated signals.
-   * @returns Four configured dashboard sites.
-   */
   private async createSites(observedAt: string): Promise<EnvironmentSite[]> {
     return [
       await this.localDevCollector.collect({ observedAt }),
@@ -109,10 +83,6 @@ export class EnvironmentDashboardService {
     ];
   }
 
-  /**
-   * Creates Tencent Cloud site from CVM, Caddy, and WireGuard readonly evidence.
-   * @returns Tencent Cloud site with missing configuration surfaced as unwired signals.
-   */
   private async createTencentCloudSite(): Promise<EnvironmentSite> {
     const services = [
       await this.createRemoteAdapterService(
@@ -153,10 +123,6 @@ export class EnvironmentDashboardService {
     );
   }
 
-  /**
-   * Creates r4se site from WireGuard and Mihomo/OpenClash readonly evidence.
-   * @returns r4se site with missing configuration surfaced as unwired signals.
-   */
   private async createR4seSite(): Promise<EnvironmentSite> {
     const services = [
       await this.createRemoteAdapterService(
@@ -179,16 +145,6 @@ export class EnvironmentDashboardService {
     return this.createSiteFromServices('r4se', 'r4se', 'r4se Node', services);
   }
 
-  /**
-   * Creates one remote service from an adapter or explicit missing configuration.
-   * @param serviceId - Stable service id used by topology.
-   * @param serviceLabel - Operator-facing service label.
-   * @param signalId - Stable signal id used by Admin selection.
-   * @param signalLabel - Operator-facing signal label.
-   * @param requiredKeys - Public env keys required before adapter output can be trusted.
-   * @param adapter - Optional readonly adapter implementation.
-   * @returns Remote service with one normalized signal.
-   */
   private async createRemoteAdapterService(
     serviceId: string,
     serviceLabel: string,
@@ -238,14 +194,6 @@ export class EnvironmentDashboardService {
     }
   }
 
-  /**
-   * Creates a site wrapper around a single environment node.
-   * @param siteId - Stable site id used by Admin selection and SSE events.
-   * @param siteLabel - Operator-facing site label.
-   * @param nodeLabel - Operator-facing node label.
-   * @param services - Services collected for the site.
-   * @returns Site object with status derived from child services.
-   */
   private createSiteFromServices(
     siteId: string,
     siteLabel: string,
@@ -262,13 +210,6 @@ export class EnvironmentDashboardService {
     };
   }
 
-  /**
-   * Creates a node and derives its status from child service status.
-   * @param id - Stable node id for topology references.
-   * @param label - Operator-facing node label.
-   * @param services - Services owned by this node.
-   * @returns Node with derived status.
-   */
   private createNode(
     id: string,
     label: string,
@@ -282,13 +223,6 @@ export class EnvironmentDashboardService {
     };
   }
 
-  /**
-   * Creates a service and derives its status from child signals.
-   * @param id - Stable service id for topology and actions.
-   * @param label - Operator-facing service label.
-   * @param signals - Signals that support this service.
-   * @returns Service with derived status.
-   */
   private createService(
     id: string,
     label: string,
@@ -303,11 +237,6 @@ export class EnvironmentDashboardService {
     };
   }
 
-  /**
-   * Builds summary counters used by status cards.
-   * @param sites - Dashboard site tree.
-   * @returns Signal count summary in both compact and by-status forms.
-   */
   private createSummary(sites: EnvironmentSite[]) {
     const byStatus = countSignals(sites);
     return {
@@ -320,11 +249,6 @@ export class EnvironmentDashboardService {
     };
   }
 
-  /**
-   * Builds a simple topology graph from sites, nodes, and services.
-   * @param sites - Dashboard site tree.
-   * @returns Topology nodes and service edges for Admin rendering.
-   */
   private createTopology(sites: EnvironmentSite[]): EnvironmentTopology {
     const nodes = sites.flatMap((site) => [
       {

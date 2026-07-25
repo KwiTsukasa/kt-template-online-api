@@ -5,10 +5,6 @@ import { QqbotDedupe } from '../../infrastructure/persistence/dedupe/qqbot-dedup
 
 @Injectable()
 export class QqbotDedupeService {
-  /**
-   * 初始化 QqbotDedupeService 实例。
-   * @param dedupeRepository - QQBot仓库依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(QqbotDedupe)
     private readonly dedupeRepository: Repository<QqbotDedupe>,

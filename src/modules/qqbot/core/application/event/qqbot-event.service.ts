@@ -22,16 +22,6 @@ import { QqbotAccountService } from '../account/qqbot-account.service';
 export class QqbotEventService {
   private readonly logger = new Logger(QqbotEventService.name);
 
-  /**
-   * 初始化 QqbotEventService 实例。
-   * @param busService - busService 服务依赖；影响 constructor 的返回值。
-   * @param dedupeService - dedupeService 服务依赖；影响 constructor 的返回值。
-   * @param messageService - messageService 服务依赖；影响 constructor 的返回值。
-   * @param ruleEngineService - ruleEngineService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
-   * @param systemNoticePublisher - systemNoticePublisher 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly busService: QqbotBusService,
     private readonly dedupeService: QqbotDedupeService,

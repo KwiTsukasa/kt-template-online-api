@@ -35,10 +35,6 @@ type RewardWithId = {
 };
 
 export class EventDataRepository {
-  /**
-   * 初始化 EventDataRepository 实例。
-   * @param provider - provider 输入；影响 constructor 的返回值。
-   */
   constructor(private readonly provider = bangdreamBestdoriProvider) {}
 
   /**

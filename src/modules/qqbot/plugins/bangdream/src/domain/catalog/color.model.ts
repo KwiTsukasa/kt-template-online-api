@@ -4,13 +4,6 @@ export class Color {
   r: number;
   g: number;
   b: number;
-  /**
-   * 构造 Color 实例，并初始化该模型的本地基础字段。
-   *
-   * @param r - r 输入；影响 constructor 的返回值。
-   * @param g - g 输入；影响 constructor 的返回值。
-   * @param b - b 输入；影响 constructor 的返回值。
-   */
   constructor(r: number, g: number, b: number) {
     this.r = r;
     this.g = g;

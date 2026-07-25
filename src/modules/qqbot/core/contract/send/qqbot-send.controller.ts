@@ -22,10 +22,6 @@ import { QqbotSendService } from '../../application/send/qqbot-send.service';
 @Controller('qqbot/send')
 @UseGuards(JwtAuthGuard)
 export class QqbotSendController {
-  /**
-   * 初始化 QqbotSendController 实例。
-   * @param sendService - sendService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly sendService: QqbotSendService) {}
 
   /**

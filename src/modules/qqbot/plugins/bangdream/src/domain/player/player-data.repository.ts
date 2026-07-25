@@ -15,10 +15,6 @@ export interface PlayerDetailResponse {
 }
 
 export class PlayerDataRepository {
-  /**
-   * 初始化 PlayerDataRepository 实例。
-   * @param provider - provider 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}

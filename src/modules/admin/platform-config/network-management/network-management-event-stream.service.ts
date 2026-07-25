@@ -25,10 +25,6 @@ export class NetworkManagementEventStreamService {
   private readonly replayLimit: number;
   private eventSequence = 0;
 
-  /**
-   * Creates the network-management SSE fan-out without exposing MQTT to browsers.
-   * @param options - Optional heartbeat and replay bounds used by runtime or tests.
-   */
   constructor(@Optional() options: NetworkManagementEventStreamOptions = {}) {
     this.heartbeatMs =
       options.heartbeatMs ||
@@ -40,11 +36,6 @@ export class NetworkManagementEventStreamService {
       100;
   }
 
-  /**
-   * Opens a replayable SSE stream plus heartbeats pinned to the committed cursor.
-   * @param lastEventId - Browser replay cursor from the previous committed state event.
-   * @returns Observable containing replay, live changes, or keepalive messages.
-   */
   stream(lastEventId?: string): Observable<NetworkManagementStreamEvent> {
     const replayEvents = this.getReplayEvents(lastEventId);
     const heartbeat$ = timer(this.heartbeatMs, this.heartbeatMs).pipe(
@@ -57,11 +48,6 @@ export class NetworkManagementEventStreamService {
     );
   }
 
-  /**
-   * Publishes one browser-safe notice after an inbound MQTT transaction commits.
-   * @param source - Accepted Agent topic category that changed persisted state.
-   * @returns Exact stream event stored for reconnect replay.
-   */
   publishCommitted(
     source: NetworkStateChangeSource,
   ): NetworkManagementStreamEvent {
@@ -80,11 +66,6 @@ export class NetworkManagementEventStreamService {
     return event;
   }
 
-  /**
-   * Resolves the bounded replay window without treating a first connection as stale.
-   * @param lastEventId - Last committed event applied by the current Admin page.
-   * @returns Subsequent events or one snapshot instruction when continuity is lost.
-   */
   private getReplayEvents(
     lastEventId?: string,
   ): NetworkManagementStreamEvent[] {
@@ -94,7 +75,6 @@ export class NetworkManagementEventStreamService {
     return this.replay.slice(index + 1);
   }
 
-  /** Creates a keepalive pinned to the latest committed replay cursor. */
   private createHeartbeatEvent(): NetworkManagementStreamEvent {
     return {
       data: { message: 'alive', observedAt: new Date().toISOString() },
@@ -103,7 +83,6 @@ export class NetworkManagementEventStreamService {
     };
   }
 
-  /** Creates a snapshot instruction aligned to the latest committed replay cursor. */
   private createSnapshotRequiredEvent(): NetworkManagementStreamEvent {
     return {
       data: {
@@ -115,7 +94,6 @@ export class NetworkManagementEventStreamService {
     };
   }
 
-  /** Returns the latest real state-event ID or an explicit empty initial cursor. */
   private currentReplayCursor(): string {
     return this.replay.at(-1)?.id || '';
   }

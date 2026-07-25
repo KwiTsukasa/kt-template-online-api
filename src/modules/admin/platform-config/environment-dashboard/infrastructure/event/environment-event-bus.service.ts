@@ -34,10 +34,6 @@ export class EnvironmentEventBusService
   private readonly subscribers = new Set<EnvironmentEventSubscriber>();
   private client: MqttClient | null = null;
 
-  /**
-   * Initializes the local or MQTT-backed dashboard event bus.
-   * @param options - Optional test/runtime overrides; production defaults come from ENV_DASHBOARD_* variables.
-   */
   constructor(@Optional() options: EnvironmentEventBusOptions = {}) {
     this.options = {
       clientId:
@@ -58,9 +54,6 @@ export class EnvironmentEventBusService
     };
   }
 
-  /**
-   * Starts the MQTT subscription when configured; local mode has no external side effects.
-   */
   onModuleInit() {
     if (this.options.mode !== 'mqtt') return;
     if (!this.options.url) {
@@ -79,10 +72,6 @@ export class EnvironmentEventBusService
     this.client.on('error', this.handleMqttError.bind(this));
   }
 
-  /**
-   * Closes the MQTT client opened by this service.
-   * @returns Promise that resolves after the client closes or immediately in local mode.
-   */
   async onModuleDestroy() {
     if (!this.client) return;
     await new Promise<void>((resolve) => {
@@ -90,11 +79,6 @@ export class EnvironmentEventBusService
     });
   }
 
-  /**
-   * Registers an in-process subscriber for local development, tests, and SSE fan-out.
-   * @param subscriber - Callback owned by the consumer; invoked synchronously for each accepted event.
-   * @returns Unsubscribe function that removes only the registered callback.
-   */
   subscribe(subscriber: EnvironmentEventSubscriber): () => void {
     this.subscribers.add(subscriber);
     return () => {
@@ -102,22 +86,12 @@ export class EnvironmentEventBusService
     };
   }
 
-  /**
-   * Publishes an environment event through local subscribers and MQTT when connected.
-   * @param event - Dashboard event envelope from collectors, bridges, or readonly adapters.
-   */
   async publish(event: EnvironmentEventEnvelope) {
     this.emitLocal(event);
     if (!this.client?.connected) return;
     this.client.publish(event.topic, JSON.stringify(event));
   }
 
-  /**
-   * Parses an inbound MQTT payload and dispatches valid environment events locally.
-   * @param topic - MQTT topic delivered by the subscribed environment prefix.
-   * @param payload - Raw MQTT payload expected to contain an EnvironmentEventEnvelope JSON object.
-   * @param packet - MQTT packet metadata; retained messages are marked when the payload omits it.
-   */
   private handleMqttMessage(
     topic: string,
     payload: Buffer,
@@ -145,36 +119,20 @@ export class EnvironmentEventBusService
     }
   }
 
-  /**
-   * Converts a broker close event into dashboard evidence without changing all services to down.
-   */
   private handleMqttClose() {
     this.emitLocal(this.createBrokerStatusEvent('MQTT broker disconnected'));
   }
 
-  /**
-   * Converts broker errors into local dashboard evidence without logging credentials or payloads.
-   * @param err - MQTT client error emitted by the broker connection.
-   */
   private handleMqttError(err: Error) {
     this.emitLocal(
       this.createBrokerStatusEvent(`MQTT broker error: ${err.message}`),
     );
   }
 
-  /**
-   * Dispatches an event to current local subscribers.
-   * @param event - Environment event envelope accepted by the bus.
-   */
   private emitLocal(event: EnvironmentEventEnvelope) {
     this.subscribers.forEach((subscriber) => subscriber(event));
   }
 
-  /**
-   * Builds a low-severity broker status event for dashboard evidence.
-   * @param summary - Operator-facing broker status summary.
-   * @returns Local event envelope that represents event-layer health only.
-   */
   private createBrokerStatusEvent(summary: string): EnvironmentEventEnvelope {
     return {
       eventId: `env-bus-${Date.now()}`,

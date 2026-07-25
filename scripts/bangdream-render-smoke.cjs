@@ -4,10 +4,6 @@ const { setTimeout: delay } = require('timers/promises');
 const XLSX = require('xlsx');
 const { createPlugin } = require('../src/modules/qqbot/plugins/bangdream/src');
 
-/**
- * Reads the Bash-validated render payload from environment variables.
- * @returns {{expectedImageCount: number, input: object, operationKey: string, outFile: string}} Render payload.
- */
 function readPayload() {
   const expectedImageCount = Number.parseInt(
     process.env.BANGDREAM_EXPECTED_IMAGE_COUNT || '0',
@@ -36,12 +32,6 @@ function readPayload() {
   };
 }
 
-/**
- * Creates an HTTP-shaped error compatible with the BangDream adapters.
- * @param {string} message Error message.
- * @param {number} statusCode HTTP response status.
- * @returns {Error & {response: {status: number}, statusCode: number}} Compatible error.
- */
 function createHttpError(message, statusCode) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -49,12 +39,6 @@ function createHttpError(message, statusCode) {
   return error;
 }
 
-/**
- * Fetches one resource with an adapter-level timeout.
- * @param {string | URL} url Resource URL.
- * @param {{headers?: object, timeoutMs?: number}} [options] Request options.
- * @returns {Promise<Response>} Fetch response.
- */
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timeoutMs = options.timeoutMs || 30000;
@@ -69,32 +53,16 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-/**
- * Reads and parses a JSON file synchronously.
- * @param {string} filePath JSON file path.
- * @returns {unknown} Parsed JSON value.
- */
 function readJsonFile(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-/**
- * Reads the first worksheet from an Excel file as row objects.
- * @param {string} filePath Excel file path.
- * @returns {object[]} Worksheet rows.
- */
 function readExcelRows(filePath) {
   const workbook = XLSX.readFile(filePath);
   const sheetName = workbook.SheetNames[0];
   return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 }
 
-/**
- * Requests a binary resource for the BangDream plugin.
- * @param {string | URL} url Resource URL.
- * @param {{headers?: object, timeoutMs?: number}} [options] Request options.
- * @returns {Promise<{body: Buffer, statusCode: number}>} Binary response body and status.
- */
 async function requestBuffer(url, options) {
   const response = await fetchWithTimeout(url, options);
   const body = Buffer.from(await response.arrayBuffer());
@@ -107,12 +75,6 @@ async function requestBuffer(url, options) {
   return { body, statusCode: response.status };
 }
 
-/**
- * Requests and parses a JSON resource for the BangDream plugin.
- * @param {string | URL} url Resource URL.
- * @param {{headers?: object, timeoutMs?: number}} [options] Request options.
- * @returns {Promise<{body: unknown, statusCode: number}>} Parsed response body and status.
- */
 async function requestJson(url, options) {
   const response = await fetchWithTimeout(url, options);
   const responseText = await response.text();
@@ -125,39 +87,28 @@ async function requestJson(url, options) {
   return { body: JSON.parse(responseText), statusCode: response.status };
 }
 
-/**
- * Creates the filesystem and network adapter expected by the BangDream plugin.
- * @returns {object} Plugin IO adapter.
- */
 function createIoAdapter() {
   return {
-    /** @param {string} key Environment key. @returns {string | undefined} Config value. */
     getConfig(key) {
       return process.env[key];
     },
-    /** @param {string} filePath Asset path. @returns {Promise<Buffer>} Asset bytes. */
     async readAssetFile(filePath) {
       return fs.promises.readFile(filePath);
     },
-    /** @param {string} filePath Excel path. @returns {Promise<object[]>} Worksheet rows. */
     async readExcelRows(filePath) {
       return readExcelRows(filePath);
     },
-    /** @param {string} filePath JSON path. @returns {Promise<unknown>} Parsed value. */
     async readJsonFile(filePath) {
       return readJsonFile(filePath);
     },
-    /** @param {string} filePath JSON path. @returns {unknown} Parsed value. */
     readJsonFileSync(filePath) {
       return readJsonFile(filePath);
     },
     requestArrayBuffer: requestBuffer,
     requestJson,
-    /** @param {number} milliseconds Delay length. @returns {Promise<void>} Delay completion. */
     async sleep(milliseconds) {
       await delay(milliseconds);
     },
-    /** @param {string} filePath Output path. @param {unknown} data JSON value. @returns {Promise<void>} Write completion. */
     async writeJsonFile(filePath, data) {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       fs.writeFileSync(filePath, JSON.stringify(data));
@@ -165,19 +116,10 @@ function createIoAdapter() {
   };
 }
 
-/**
- * Converts plugin errors to their stable human-readable representation.
- * @param {unknown} error Error-like value.
- * @returns {string} Normalized message.
- */
 function normalizeError(error) {
   return String(error?.message || error || 'BangDream command failed');
 }
 
-/**
- * Executes the requested operation and writes every CQ base64 image to disk.
- * @returns {Promise<void>} Resolves after output metadata has been written to stdout.
- */
 async function main() {
   const payload = readPayload();
   const manifest = readJsonFile(
@@ -240,11 +182,6 @@ async function main() {
   process.exit(0);
 }
 
-/**
- * Writes an uncaught render error to stderr and fails the process.
- * @param {unknown} error Error-like value.
- * @returns {void}
- */
 function handleFatalError(error) {
   process.stderr.write(`${String(error?.stack || error)}\n`);
   process.exit(1);

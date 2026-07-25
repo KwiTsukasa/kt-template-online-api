@@ -27,21 +27,10 @@ const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 @Controller('qqbot/napcat/webui')
 @UseGuards(JwtAuthGuard)
 export class QqbotNapcatWebuiGatewayController {
-  /**
-   * Creates the Admin-authenticated WebUI Gateway controller.
-   * @param gatewayService - Application service that creates, heartbeats, and revokes Gateway sessions.
-   */
   constructor(
     private readonly gatewayService: QqbotNapcatWebuiGatewayService,
   ) {}
 
-  /**
-   * Creates a browser-safe Gateway session for an account-bound NapCat WebUI.
-   * @param body - Request body containing the QQBot account id.
-   * @param user - Authenticated Admin user from JwtAuthGuard.
-   * @param req - Express request used only for IP and user-agent audit evidence.
-   * @returns Vben response containing safe session metadata for the Admin page.
-   */
   @Post('session')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '创建 NapCat WebUI Gateway 会话' })
@@ -61,13 +50,6 @@ export class QqbotNapcatWebuiGatewayController {
     );
   }
 
-  /**
-   * Refreshes the Gateway heartbeat for one active WebUI session.
-   * @param sessionId - Gateway session id returned by the create-session endpoint.
-   * @param user - Authenticated Admin user from JwtAuthGuard.
-   * @param req - Express request used only for IP and user-agent Gateway evidence.
-   * @returns Vben response containing Gateway lifecycle state.
-   */
   @Post('session/:sessionId/heartbeat')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '刷新 NapCat WebUI Gateway 会话心跳' })
@@ -86,13 +68,6 @@ export class QqbotNapcatWebuiGatewayController {
     );
   }
 
-  /**
-   * Revokes one active WebUI Gateway session.
-   * @param sessionId - Gateway session id returned by the create-session endpoint.
-   * @param user - Authenticated Admin user from JwtAuthGuard.
-   * @param req - Express request used only for IP and user-agent Gateway evidence.
-   * @returns Vben response containing Gateway lifecycle state.
-   */
   @Post('session/:sessionId/revoke')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '撤销 NapCat WebUI Gateway 会话' })
@@ -111,21 +86,12 @@ export class QqbotNapcatWebuiGatewayController {
     );
   }
 
-  /**
-   * Enforces the Admin menu permission required for NapCat WebUI session access.
-   * @param user - Authenticated Admin user with eager role/menu relations.
-   */
   private assertWebuiPermission(user: AdminUser) {
     if (!this.hasWebuiPermission(user)) {
       throwVbenError('无权访问 NapCat WebUI', HttpStatus.FORBIDDEN);
     }
   }
 
-  /**
-   * Checks active roles for WebUI menu permission, allowing active super role as bypass.
-   * @param user - Authenticated Admin user.
-   * @returns Whether the user may create or manage WebUI Gateway sessions.
-   */
   private hasWebuiPermission(user: AdminUser) {
     const roles = Array.isArray(user?.roles) ? user.roles : [];
     return roles.some((role) => {
@@ -144,11 +110,6 @@ export class QqbotNapcatWebuiGatewayController {
     });
   }
 
-  /**
-   * Validates a QQBot account id before handing work to the application service.
-   * @param accountId - Candidate account id from the request body.
-   * @returns Trimmed account id.
-   */
   private requireAccountId(accountId: string) {
     const normalized = String(accountId || '').trim();
     if (!ACCOUNT_ID_PATTERN.test(normalized)) {
@@ -157,11 +118,6 @@ export class QqbotNapcatWebuiGatewayController {
     return normalized;
   }
 
-  /**
-   * Validates a Gateway session id before lifecycle forwarding.
-   * @param sessionId - Candidate session id from the route.
-   * @returns Trimmed Gateway session id.
-   */
   private requireSessionId(sessionId: string) {
     const normalized = String(sessionId || '').trim();
     if (!SESSION_ID_PATTERN.test(normalized)) {
@@ -170,12 +126,6 @@ export class QqbotNapcatWebuiGatewayController {
     return normalized;
   }
 
-  /**
-   * Builds the Admin actor and client evidence passed through to Gateway ownership checks.
-   * @param user - Authenticated Admin user.
-   * @param req - Express request carrying IP and user-agent.
-   * @returns Lifecycle evidence for application and Gateway calls.
-   */
   private toClientEvidence(user: AdminUser, req: AdminRequest) {
     const userAgent = req.headers['user-agent'];
 

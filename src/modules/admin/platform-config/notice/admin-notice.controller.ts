@@ -18,10 +18,6 @@ import { AdminNoticeService } from './admin-notice.service';
 @Controller('system/notice')
 @UseGuards(JwtAuthGuard, AdminSuperGuard)
 export class AdminNoticeController {
-  /**
-   * 初始化 AdminNoticeController 实例。
-   * @param noticeService - noticeService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly noticeService: AdminNoticeService) {}
 
   /**

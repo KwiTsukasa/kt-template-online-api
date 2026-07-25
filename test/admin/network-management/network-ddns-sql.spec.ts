@@ -3,11 +3,6 @@ import { resolve } from 'path';
 
 const REPO_ROOT = resolve(__dirname, '../../..');
 
-/**
- * Reads one repository SQL artifact as normalized lowercase text.
- * @param relativePath - Path relative to the API repository root.
- * @returns SQL text with identifier quotes and repeated whitespace removed.
- */
 function readNormalizedSql(relativePath: string): string {
   return readFileSync(resolve(REPO_ROOT, relativePath), 'utf8')
     .replace(/`/g, '')
@@ -16,12 +11,6 @@ function readNormalizedSql(relativePath: string): string {
     .toLowerCase();
 }
 
-/**
- * Extracts one CREATE TABLE body from normalized SQL.
- * @param sql - Normalized SQL text.
- * @param tableName - Table whose declaration is required.
- * @returns CREATE TABLE body used by focused schema assertions.
- */
 function extractCreateTable(sql: string, tableName: string): string {
   const match = sql.match(
     new RegExp(
@@ -33,11 +22,6 @@ function extractCreateTable(sql: string, tableName: string): string {
   return match?.[1] ?? '';
 }
 
-/**
- * Asserts the complete DDNS table contract shared by incremental and bootstrap SQL.
- * @param sql - Normalized SQL containing the network DDNS table.
- * @returns Nothing; Jest assertions fail when one schema fragment drifts.
- */
 function expectDdnsTableContract(sql: string): void {
   const table = extractCreateTable(sql, 'network_ddns_record');
   const requiredColumns = [

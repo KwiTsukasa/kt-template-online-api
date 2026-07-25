@@ -45,10 +45,6 @@ export class Ff14MarketClient {
   private readonly xivapiChsBaseUrl: string;
   private readonly universalisBaseUrl: string;
 
-  /**
-   * 初始化 Ff14MarketClient 实例。
-   * @param host - host 输入；驱动 `resolveFf14MarketConfig()` 的 FF14 市场步骤。
-   */
   constructor(private readonly host: Ff14MarketPluginHost) {
     const config = resolveFf14MarketConfig(host);
     this.xivapiBaseUrl = config.xivapiBaseUrl;
@@ -483,10 +479,6 @@ export class Ff14MarketClient {
   private requestJson<T>(url: URL, method: Ff14HttpMethod, context: string) {
     return this.host.requestJson<T>({
       context,
-      /**
-       * 执行 FF14 市场回调。
-       * @param statusCode - statusCode 输入；影响 failureMessage 的返回值。
-       */
       failureMessage: (statusCode) => `${context}失败：${statusCode}`,
       invalidJsonMessage: 'FF14 接口返回不是合法 JSON',
       method,
@@ -503,10 +495,6 @@ export class Ff14MarketClient {
  */
 function formatFf14DateTime(value: number) {
   const date = new Date(value);
-  /**
-   * 补齐 FF14 市场插件展示文本。
-   * @param input - input 输入；影响 pad 的返回值。
-   */
   const pad = (input: number) => `${input}`.padStart(2, '0');
   return [
     date.getFullYear(),

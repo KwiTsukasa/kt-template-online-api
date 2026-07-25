@@ -11,12 +11,6 @@ const DEFAULT_THEME_ID = 'argon';
 
 @Injectable()
 export class BlogThemeConfigService {
-  /**
-   * 初始化 BlogThemeConfigService 实例。
-   * @param themeRepository - 博客仓库依赖；影响 constructor 的返回值。
-   * @param wordpressService - wordpressService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(BlogThemeConfig)
     private readonly themeRepository: Repository<BlogThemeConfig>,

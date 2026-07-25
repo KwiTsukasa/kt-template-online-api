@@ -69,13 +69,6 @@ const PROVIDER_ERROR_CODES: Record<string, string> = {
   DNSPOD_VERIFICATION_FAILED: 'provider_write_unverified',
 };
 
-/**
- * Owns local automatic-DDNS bindings and serializes provider reconciliation.
- *
- * The single-flight lock is deliberately process-local because production runs
- * one Recreate API replica. A database claim or leader lease is required before
- * this service can safely run in multiple replicas.
- */
 @Injectable()
 export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NetworkDdnsService.name);
@@ -87,16 +80,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
   private readonly recordMutationTails = new Map<string, Promise<void>>();
   private requestedForce = false;
 
-  /**
-   * Creates the persistent DDNS application service.
-   * @param recordRepository - Local updater bindings and persistent retry state.
-   * @param mappingRepository - IPv4 address sources produced by UDP Keepers.
-   * @param stateRepository - Singleton Agent state containing the current IPv6.
-   * @param configService - Reconcile cadence and Agent identity configuration.
-   * @param dnsPodClient - Redacted Tencent Cloud DNS provider boundary.
-   * @param eventStream - Committed semantic-change notification stream.
-   * @param deliveryCoordinator - Core-owned wake port notified only after authoritative DDNS sync.
-   */
   constructor(
     @InjectRepository(NetworkDdnsRecord)
     private readonly recordRepository: Repository<NetworkDdnsRecord>,
@@ -111,10 +94,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     private readonly deliveryCoordinator: SystemMessageDeliveryCoordinator,
   ) {}
 
-  /**
-   * Recovers durable pending work and starts the bounded due-retry scan.
-   * @returns Nothing; provider work remains asynchronous from Nest startup.
-   */
   onModuleInit(): void {
     this.requestReconcile();
     this.reconcileInterval = setInterval(
@@ -124,10 +103,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     this.reconcileInterval.unref?.();
   }
 
-  /**
-   * Stops new scheduling and waits for the one bounded provider flight to finish.
-   * @returns A promise resolved after in-flight reconciliation has settled.
-   */
   async onModuleDestroy(): Promise<void> {
     this.destroyed = true;
     if (this.reconcileRequestTimer) {
@@ -143,11 +118,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     await this.reconcileWorker;
   }
 
-  /**
-   * Lists active bindings with API-owned FQDN and live source classification.
-   * @param query - Validated pagination and independent DDNS filters.
-   * @returns Page of response-safe bindings.
-   */
   async list(query: NetworkDdnsListQuery = {}) {
     const pageNo = query.pageNo || 1;
     const pageSize = query.pageSize || 20;
@@ -187,11 +157,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /**
-   * Returns server-classified sources for one address family.
-   * @param query - Requested A or AAAA record family.
-   * @returns IPv4 Keeper choices or the singleton Agent IPv6 choice.
-   */
   async sourceOptions(query: {
     recordType: NetworkDdnsRecordType;
   }): Promise<NetworkDdnsSourceOption[]> {
@@ -208,19 +173,10 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return mappings.map((mapping) => this.portForwardSourceOption(mapping));
   }
 
-  /**
-   * Returns redacted provider readiness without creating an SDK client.
-   * @returns Provider name plus enabled and configured flags.
-   */
   getProviderStatus() {
     return this.dnsPodClient.getStatus();
   }
 
-  /**
-   * Creates one local automatic updater after normalizing its DNS identity.
-   * @param input - User-editable fields without provider identity or credentials.
-   * @returns Persisted response-safe binding.
-   */
   async create(input: NetworkDdnsRecordInput) {
     const normalized = await this.normalizeCreateInput(input);
     await this.assertActiveKeyAvailable(normalized.activeKey);
@@ -259,12 +215,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return this.serializeRecord(record);
   }
 
-  /**
-   * Updates one binding while preserving provider identity for the same DNS name.
-   * @param id - Active local updater identifier.
-   * @param input - Non-empty partial editable fields.
-   * @returns Updated response-safe binding.
-   */
   async update(id: string, input: NetworkDdnsRecordUpdateInput) {
     this.assertId(id);
     return this.withRecordMutation(id, async () => {
@@ -341,11 +291,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * Soft-deletes only the local updater and never calls the DNS provider.
-   * @param id - Active local updater identifier.
-   * @returns Deleted local record state for the mutation response.
-   */
   async remove(id: string) {
     this.assertId(id);
     return this.withRecordMutation(id, async () => {
@@ -360,11 +305,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * Clears persistent backoff and requests one immediate forced reconciliation.
-   * @param id - Enabled local updater identifier.
-   * @returns Pending response-safe binding; provider work continues asynchronously.
-   */
   async retry(id: string) {
     this.assertId(id);
     return this.withRecordMutation(id, async () => {
@@ -382,10 +322,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * Coalesces one asynchronous all-record reconcile request.
-   * @param force - Whether the next scan should bypass durable retry timing.
-   */
   requestReconcile(force = false): void {
     if (this.destroyed) return;
     this.requestedForce ||= force;
@@ -401,12 +337,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     this.reconcileRequestTimer.unref?.();
   }
 
-  /**
-   * Queues one record or all active records behind the process-local single flight.
-   * @param id - Optional specific binding; omitted means scan all active bindings.
-   * @param force - Whether to bypass identical-state and retry timing gates.
-   * @returns Promise settled after the coalesced batch finishes.
-   */
   reconcileNow(id?: string, force = false): Promise<void> {
     if (id !== undefined) this.assertId(id);
     if (this.destroyed) return Promise.resolve();
@@ -421,7 +351,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Starts the one queue worker when no provider flight currently owns it. */
   private ensureReconcileWorker(): void {
     if (this.reconcileWorker || this.destroyed) return;
     this.reconcileWorker = this.drainReconcileRequests().finally(() => {
@@ -432,12 +361,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * Serializes one binding's HTTP mutations with its provider flight.
-   * @param id - Local updater identifier used as the lock key.
-   * @param operation - Mutation or reconciliation work to run exclusively.
-   * @returns The operation result after all earlier work for the same row settles.
-   */
   private async withRecordMutation<T>(
     id: string,
     operation: () => Promise<T>,
@@ -460,7 +383,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Drains coalesced requests serially so different records cannot overlap provider I/O. */
   private async drainReconcileRequests(): Promise<void> {
     while (!this.destroyed && this.reconcileRequests.length > 0) {
       const requests = this.reconcileRequests.splice(0);
@@ -473,10 +395,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Expands one coalesced batch into deterministic per-record work.
-   * @param requests - Current pending callers sharing this single flight.
-   */
   private async reconcileBatch(requests: ReconcileRequest[]): Promise<void> {
     const recordForces = new Map<string, boolean>();
     const allRequests = requests.filter((request) => request.id === null);
@@ -505,22 +423,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Reconciles one durable binding without holding a database transaction over I/O.
-   * @param id - Local updater identifier.
-   * @param force - Whether an operator explicitly requested provider verification.
-   */
   private async reconcileRecord(id: string, force: boolean): Promise<void> {
     await this.withRecordMutation(id, () =>
       this.reconcileRecordLocked(id, force),
     );
   }
 
-  /**
-   * Reconciles one binding while its row-level process lock excludes HTTP writes.
-   * @param id - Local updater identifier.
-   * @param force - Whether to bypass identical-state and retry timing gates.
-   */
   private async reconcileRecordLocked(
     id: string,
     force: boolean,
@@ -618,13 +526,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Re-reads row and source after provider I/O before accepting its result.
-   * @param id - Binding that initiated the provider request.
-   * @param expectedIdentity - DNS/source identity captured before I/O.
-   * @param targetAddress - Source address sent to the provider.
-   * @returns Current row only when both identity and source are unchanged.
-   */
   private async reReadForProviderResult(
     id: string,
     expectedIdentity: string,
@@ -656,10 +557,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return null;
   }
 
-  /**
-   * Appends an internal rerun after a source or binding changed during provider I/O.
-   * @param id - Active binding that needs a fresh source snapshot.
-   */
   private enqueueInternalReconcile(id: string): void {
     if (this.destroyed) return;
     this.reconcileRequests.push({
@@ -671,10 +568,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     this.ensureReconcileWorker();
   }
 
-  /**
-   * Persists waiting-source state without invoking the provider.
-   * @param record - Enabled binding whose current source is unavailable.
-   */
   private async persistWaitingSource(record: NetworkDdnsRecord): Promise<void> {
     const beforeSemantic = this.semanticFingerprint(record);
     record.lastAttemptAt = new KtDateTime();
@@ -687,11 +580,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     await this.saveReconcileState(record, beforeSemantic);
   }
 
-  /**
-   * Persists one redacted permanent failure or bounded exponential retry.
-   * @param record - Current unchanged binding after provider I/O.
-   * @param error - Stable provider-boundary classification.
-   */
   private async persistProviderFailure(
     record: NetworkDdnsRecord,
     error: SafeProviderError,
@@ -711,11 +599,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     await this.saveReconcileState(record, beforeSemantic);
   }
 
-  /**
-   * Converts provider failures into stable redacted application errors.
-   * @param error - Unknown rejection from the provider boundary.
-   * @returns Bounded safe code/message and retry classification.
-   */
   private safeProviderError(error: unknown): SafeProviderError {
     if (error instanceof NetworkDnsPodClientError) {
       const passthroughCode = /^[a-z][a-z0-9_]{0,63}$/.test(error.code)
@@ -737,11 +620,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /**
-   * Resolves the current source option for one persisted binding.
-   * @param record - DDNS binding with server-controlled source identity.
-   * @returns Live source classification and address.
-   */
   private async resolveRecordSource(
     record: NetworkDdnsRecord,
   ): Promise<NetworkDdnsSourceOption> {
@@ -768,11 +646,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /**
-   * Classifies one port-forward row without deriving DNS data from its port.
-   * @param mapping - Candidate UDP Keeper source.
-   * @returns Source option with a current IPv4 only while its lease is valid.
-   */
   private portForwardSourceOption(
     mapping: NetworkPortForward,
   ): NetworkDdnsSourceOption {
@@ -797,10 +670,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /**
-   * Returns a stable unavailable option when an A binding lost its source row.
-   * @param id - Persisted source identifier.
-   */
   private missingPortForwardSourceOption(id: string): NetworkDdnsSourceOption {
     return {
       currentAddress: null,
@@ -814,10 +683,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /**
-   * Classifies the singleton online, fresh, global Agent IPv6 source.
-   * @returns Stable `agent-ipv6` option without any port semantics.
-   */
   private async agentIpv6SourceOption(): Promise<NetworkDdnsSourceOption> {
     const state = await this.stateRepository.findOne({
       where: { agentId: this.agentId() },
@@ -851,11 +716,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /**
-   * Builds and validates a fully normalized create model.
-   * @param input - Untrusted service-boundary input after DTO transformation.
-   * @returns Canonical user fields plus derived active key.
-   */
   private async normalizeCreateInput(input: NetworkDdnsRecordInput) {
     const normalized = this.normalizeInput({
       ...input,
@@ -869,12 +729,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return normalized;
   }
 
-  /**
-   * Merges a partial update over the persisted canonical model.
-   * @param record - Existing active binding.
-   * @param input - Non-empty partial editable fields.
-   * @returns Canonical next model plus derived active key.
-   */
   private async normalizeUpdateInput(
     record: NetworkDdnsRecord,
     input: NetworkDdnsRecordUpdateInput,
@@ -913,11 +767,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return normalized;
   }
 
-  /**
-   * Canonicalizes the user-editable model and validates DNS syntax.
-   * @param input - Complete service-boundary input.
-   * @returns Canonical model with a nullable source ID and active key.
-   */
   private normalizeInput(input: NetworkDdnsRecordInput) {
     if (input.recordType !== 'A' && input.recordType !== 'AAAA') {
       throwVbenError('DDNS 记录类型无效', HttpStatus.BAD_REQUEST);
@@ -958,12 +807,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /**
-   * Enforces address-family/source identity without querying current source state.
-   * @param recordType - A or AAAA family.
-   * @param sourceType - Server-recognized source family.
-   * @param portForwardId - Optional A source identifier.
-   */
   private assertBindingShape(
     recordType: NetworkDdnsRecordType,
     sourceType: string,
@@ -991,12 +834,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Ensures an A binding points at an active same-port UDP Keeper.
-   * @param recordType - A or AAAA family.
-   * @param sourceType - Server-recognized source family.
-   * @param portForwardId - Required A source identifier.
-   */
   private async assertBindingSource(
     recordType: NetworkDdnsRecordType,
     sourceType: string,
@@ -1015,11 +852,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Normalizes and validates one public DNS zone.
-   * @param value - Raw domain input.
-   * @returns Lowercase multi-label zone without one trailing dot.
-   */
   private normalizeDomain(value: string): string {
     const normalized =
       typeof value === 'string'
@@ -1031,11 +863,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return normalized;
   }
 
-  /**
-   * Normalizes and validates one DNSPod host record.
-   * @param value - Raw host-record input; apex must be explicit `@`.
-   * @returns Lowercase `@` or dot-separated host labels.
-   */
   private normalizeSubDomain(value: string): string {
     const normalized =
       typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -1045,11 +872,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return normalized;
   }
 
-  /**
-   * Normalizes a required Admin display name.
-   * @param value - Raw name input.
-   * @returns Trimmed value safe for the entity column.
-   */
   private normalizeName(value: string): string {
     const normalized = typeof value === 'string' ? value.trim() : '';
     if (!normalized || normalized.length > 100) {
@@ -1058,11 +880,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return normalized;
   }
 
-  /**
-   * Normalizes an optional Admin remark.
-   * @param value - Raw optional remark.
-   * @returns Trimmed remark or null.
-   */
   private normalizeRemark(value?: string): null | string {
     if (value === undefined || value === null) return null;
     if (typeof value !== 'string' || value.trim().length > 500) {
@@ -1071,11 +888,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return value.trim() || null;
   }
 
-  /**
-   * Serializes one binding without exposing provider identity.
-   * @param record - Persisted local updater.
-   * @returns Admin contract with normalized FQDN and live source state.
-   */
   private async serializeRecord(record: NetworkDdnsRecord) {
     const source = await this.resolveRecordSource(record);
     return {
@@ -1107,11 +919,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /**
-   * Finds one active binding or throws a Vben-compatible not-found error.
-   * @param id - Valid decimal Snowflake identifier.
-   * @returns Active local updater.
-   */
   private async findActiveRecord(id: string): Promise<NetworkDdnsRecord> {
     const record = await this.recordRepository.findOne({
       where: { id, isDeleted: false },
@@ -1122,32 +929,18 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return record;
   }
 
-  /**
-   * Finds one active DNS identity.
-   * @param activeKey - Canonical lower-family plus FQDN key.
-   * @returns Conflicting record or null.
-   */
   private findByActiveKey(
     activeKey: string,
   ): Promise<NetworkDdnsRecord | null> {
     return this.recordRepository.findOne({ where: { activeKey } });
   }
 
-  /**
-   * Rejects an already-owned active DNS identity.
-   * @param activeKey - Canonical lower-family plus FQDN key.
-   */
   private async assertActiveKeyAvailable(activeKey: string): Promise<void> {
     if (await this.findByActiveKey(activeKey)) {
       throwVbenError('同类型完整域名已存在自动更新配置', HttpStatus.CONFLICT);
     }
   }
 
-  /**
-   * Persists one record and publishes only when response semantics changed.
-   * @param record - Mutated entity.
-   * @param beforeSemantic - Fingerprint captured before mutation.
-   */
   private async saveWithSemanticEvent(
     record: NetworkDdnsRecord,
     beforeSemantic: string,
@@ -1158,13 +951,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Persists only reconciler-owned fields with an optimistic identity/time guard.
-   * @param record - Mutated current binding snapshot.
-   * @param beforeSemantic - Fingerprint captured before the reconciler mutation.
-   * @param expectedProviderRecordId - Provider identity read before this mutation.
-   * @returns True when exactly one unchanged active row accepted the update.
-   */
   private async saveReconcileState(
     record: NetworkDdnsRecord,
     beforeSemantic: string,
@@ -1218,7 +1004,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return true;
   }
 
-  /** Publishes a committed DDNS semantic event without coupling persistence to SSE. */
   private publishSemanticChange(): void {
     try {
       this.eventStream.publishCommitted('ddns');
@@ -1227,16 +1012,10 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Logs a non-authoritative delivery wake failure without changing DDNS commit success. */
   private loggerWarnDeliveryWake(): void {
     this.logger.warn('System message delivery wake failed after DDNS sync');
   }
 
-  /**
-   * Captures user-visible fields while excluding retry counts and timestamp-only churn.
-   * @param record - Current persisted or pending entity state.
-   * @returns Stable comparison string for SSE emission.
-   */
   private semanticFingerprint(record: NetworkDdnsRecord): string {
     return JSON.stringify([
       record.appliedAddress || null,
@@ -1256,11 +1035,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /**
-   * Captures only fields that make a provider response applicable.
-   * @param record - Binding immediately before provider I/O.
-   * @returns Stable identity excluding display and retry state.
-   */
   private reconcileIdentity(record: NetworkDdnsRecord): string {
     return JSON.stringify([
       record.domain,
@@ -1274,10 +1048,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /**
-   * Resets one enabled binding to durable pending state.
-   * @param record - Binding requested for immediate reconciliation.
-   */
   private markPending(record: NetworkDdnsRecord): void {
     record.lastErrorCode = null;
     record.lastErrorMessage = null;
@@ -1286,10 +1056,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     record.syncStatus = 'pending';
   }
 
-  /**
-   * Stops local scheduling without clearing the last provider-confirmed address.
-   * @param record - Disabled or deleted local updater.
-   */
   private markDisabled(record: NetworkDdnsRecord): void {
     record.lastErrorCode = null;
     record.lastErrorMessage = null;
@@ -1298,11 +1064,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     record.syncStatus = 'disabled';
   }
 
-  /**
-   * Calculates persistent exponential retry delay.
-   * @param retryCount - One-based bounded failed-attempt count.
-   * @returns Delay capped at fifteen minutes.
-   */
   private retryDelayMs(retryCount: number): number {
     return Math.min(
       RETRY_BASE_DELAY_MS * 2 ** Math.max(0, retryCount - 1),
@@ -1310,14 +1071,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** Returns the configured singleton Agent identifier. */
   private agentId(): string {
     return (
       this.configService.get<string>('NETWORK_AGENT_ID') || DEFAULT_AGENT_ID
     );
   }
 
-  /** Returns the bounded freshness window for Agent IPv6 status. */
   private agentIpv6MaxAgeMs(): number {
     return this.durationConfig(
       'NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS',
@@ -1325,7 +1084,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** Returns the bounded periodic recovery and due-retry cadence. */
   private reconcileIntervalMs(): number {
     return this.durationConfig(
       'NETWORK_DDNS_RECONCILE_INTERVAL_MS',
@@ -1333,12 +1091,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /**
-   * Reads a positive bounded millisecond duration.
-   * @param key - Runtime configuration key.
-   * @param fallback - Safe default when absent or invalid.
-   * @returns Duration between one second and one day.
-   */
   private durationConfig(key: string, fallback: number): number {
     const value = Number(this.configService.get<unknown>(key));
     return Number.isFinite(value) && value >= 1_000 && value <= 86_400_000
@@ -1346,21 +1098,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       : fallback;
   }
 
-  /**
-   * Validates decimal Snowflake path input without number coercion.
-   * @param id - Route or internal record identifier.
-   */
   private assertId(id: string): void {
     if (!/^\d{1,24}$/.test(id)) {
       throwVbenError('DDNS 配置 ID 无效', HttpStatus.BAD_REQUEST);
     }
   }
 
-  /**
-   * Detects MySQL nullable-unique active-key conflicts.
-   * @param error - Unknown repository failure.
-   * @returns True only for MySQL duplicate-key metadata.
-   */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const record = error as { code?: unknown; errno?: unknown };
@@ -1368,12 +1111,6 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
   }
 }
 
-/**
- * Validates dot-separated ASCII DNS labels.
- * @param value - Canonical candidate without a trailing dot.
- * @param requireMultipleLabels - Whether a public zone-style name is required.
- * @returns True when every label and total length are valid.
- */
 function isValidDnsName(
   value: string,
   requireMultipleLabels: boolean,
@@ -1386,11 +1123,6 @@ function isValidDnsName(
   );
 }
 
-/**
- * Canonicalizes a globally routable IPv6 address from persisted Agent state.
- * @param value - Optional persisted address.
- * @returns Lowercase canonical address or null for non-global/invalid input.
- */
 function normalizeGlobalIpv6(value?: null | string): null | string {
   if (!value || isIP(value) !== 6) return null;
   let normalized: string;
@@ -1408,12 +1140,6 @@ function normalizeGlobalIpv6(value?: null | string): null | string {
     : null;
 }
 
-/**
- * Orders decimal Snowflake strings without lossy number coercion.
- * @param left - First decimal identifier.
- * @param right - Second decimal identifier.
- * @returns Standard ascending comparator result.
- */
 function compareDecimalIds(left: string, right: string): number {
   if (left.length !== right.length) return left.length - right.length;
   return left.localeCompare(right);

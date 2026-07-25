@@ -24,18 +24,10 @@ import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
 type EntityClass = new (...args: never[]) => unknown;
 
-/**
- * Reads a TypeORM entity table name from decorator metadata.
- * @param entity - Entity class selected by the test to compare against SQL schema ownership.
- */
 const getEntityTableName = (entity: EntityClass) =>
   getMetadataArgsStorage().tables.find((table) => table.target === entity)
     ?.name;
 
-/**
- * Reads entity column names as they are persisted in MySQL.
- * @param entity - Entity class whose decorator column metadata must match refactor-v3 SQL.
- */
 const getEntityColumnNames = (entity: EntityClass) =>
   getMetadataArgsStorage()
     .columns.filter((column) => column.target === entity)

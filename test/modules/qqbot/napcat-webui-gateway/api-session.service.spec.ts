@@ -49,19 +49,10 @@ type MockRepository<T extends object> = {
   save: jest.Mock<Promise<T>, [T]>;
 };
 
-/**
- * Reads a source or SQL file from the API repository root.
- * @param relativePath - Repository-relative file path.
- * @returns File text used by schema and contract assertions.
- */
 const readSource = (relativePath: string) => {
   return readFileSync(resolve(repoRoot, relativePath), 'utf8');
 };
 
-/**
- * Creates the minimal TypeORM repository mock needed by audit recording tests.
- * @returns Repository-like object that stores saved rows for assertions.
- */
 const createRepository = <T extends object>() => {
   const rows: T[] = [];
   const repository: MockRepository<T> = {
@@ -76,20 +67,11 @@ const createRepository = <T extends object>() => {
   return repository;
 };
 
-/**
- * Creates a minimal Admin user shape consumed by `@CurrentAdminUser()`.
- * @param roles - Roles and menu auth codes to attach to the test user.
- * @returns Admin user-like object for controller tests.
- */
 const createAdminUser = (roles: TestAdminRole[]): TestAdminUser => ({
   id: '3001',
   roles,
 });
 
-/**
- * Creates a reusable browser-safe session result for controller tests.
- * @returns Safe Gateway session payload returned by the mocked service.
- */
 const createSafeSessionResponse = () => ({
   account: {
     id: '1001',
@@ -104,11 +86,6 @@ const createSafeSessionResponse = () => ({
   sessionId: 'sess_1',
 });
 
-/**
- * Extracts a readable message from Vben-style HTTP exceptions.
- * @param error - Error thrown by the service under test.
- * @returns Vben `msg` or regular error message.
- */
 const getThrownMessage = (error: unknown) => {
   if (error instanceof HttpException) {
     const response = error.getResponse() as { msg?: string };
@@ -138,11 +115,6 @@ describe('QqbotNapcatWebuiGatewayController', () => {
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({
-        /**
-         * Supplies a request-scoped Admin user while bypassing JWT parsing.
-         * @param context - Nest execution context for the current HTTP request.
-         * @returns Always true so controller-level authorization can be tested.
-         */
         canActivate: (context) => {
           context.switchToHttp().getRequest().adminUser = currentAdminUser;
           return true;

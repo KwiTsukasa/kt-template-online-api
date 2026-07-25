@@ -20,10 +20,6 @@ import { SystemLogService } from './system-log.service';
 @Controller('system/logs')
 @UseGuards(JwtAuthGuard)
 export class SystemLogController {
-  /**
-   * 初始化 SystemLogController 实例。
-   * @param systemLogService - systemLogService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly systemLogService: SystemLogService) {}
 
   /**

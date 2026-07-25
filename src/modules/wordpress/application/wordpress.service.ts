@@ -37,12 +37,6 @@ const WORDPRESS_AUTH_COOKIE = 'kt_wordpress_auth';
 export class WordpressService {
   private availabilityCache: null | WordpressAvailabilityCache = null;
 
-  /**
-   * 初始化 WordpressService 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   * @param markdownService - markdownService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly configService: ConfigService,
     private readonly markdownService: MarkdownService,

@@ -22,10 +22,6 @@ import {
 @Controller('qqbot/account')
 @UseGuards(JwtAuthGuard)
 export class QqbotNapcatLoginController {
-  /**
-   * 初始化 QqbotNapcatLoginController 实例。
-   * @param napcatLoginService - napcatLoginService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly napcatLoginService: QqbotNapcatLoginService) {}
 
   /**

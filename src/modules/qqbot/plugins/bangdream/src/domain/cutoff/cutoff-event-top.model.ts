@@ -17,12 +17,6 @@ export class CutoffEventTop {
   isExist = false;
   points: CutoffEventTopPoint[];
   users: CutoffEventTopUser[];
-  /**
-   * 构造 CutoffEventTop 实例，并初始化该模型的本地基础字段。
-   *
-   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
-   * @param server - server 输入；决定 BangDream条件分支。
-   */
   constructor(eventId: number, server: Server) {
     const event = new Event(eventId);
     if (!event.isExist) {

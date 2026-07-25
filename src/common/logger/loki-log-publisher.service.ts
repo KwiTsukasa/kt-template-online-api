@@ -30,11 +30,6 @@ export class LokiLogPublisherService {
   private readonly environment: string;
   private readonly host: string;
 
-  /**
-   * 初始化 LokiLogPublisherService 实例。
-   * @param configService - Nest ConfigService 依赖；驱动 `getAppName()`、`getLokiEnvironment()` 的 公共基础设施步骤。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly configService: ConfigService,
     private readonly toolsService: ToolsService,

@@ -24,20 +24,12 @@ const COMPONENT_TYPE_DICT_KEY = 'COMPONENT_TYPE';
 
 @Injectable()
 export class DictService implements OnApplicationBootstrap {
-  /**
-   * 初始化 DictService 实例。
-   * @param dictRepository - Admin仓库依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(AdminDict)
     private readonly dictRepository: Repository<AdminDict>,
     private readonly toolsService: ToolsService,
   ) {}
 
-  /**
-   * 处理Application Bootstrap。
-   */
   async onApplicationBootstrap() {
     await this.refreshDecodeCache();
   }

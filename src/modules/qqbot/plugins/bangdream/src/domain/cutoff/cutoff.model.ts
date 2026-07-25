@@ -42,13 +42,6 @@ export class Cutoff {
   useHHWX = preferHhwxSource;
   dailyIncrement = [];
   currentGetDataTime;
-  /**
-   * 构造 Cutoff 实例，并初始化该模型的本地基础字段。
-   *
-   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
-   * @param server - server 输入；驱动 `getPresentEvent()` 的 BangDream步骤。
-   * @param tier - tier 输入；决定 BangDream条件分支。
-   */
   constructor(eventId: number, server: Server, tier: number) {
     const event = new Event(eventId);
     //如果活动不存在，直接返回

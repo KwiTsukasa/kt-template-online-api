@@ -118,16 +118,6 @@ const menuEntries: readonly MenuEntry[] = [
   ['2041700000000120485', '2041700000000100410', 'QqBotAccountMessagePushToggle', 'QqBot:Account:MessagePush:Toggle', '0'],
 ];
 
-/**
- * Advances SQL single-quote state at one character, respecting SQL doubled
- * quotes and MySQL backslash escaping. An odd number of preceding backslashes
- * escapes a quote; an even number lets it open or close a string.
- *
- * @param sql SQL source being scanned.
- * @param index Index of the current character in {@link sql}.
- * @param quoted Whether the scanner is currently inside a single-quoted value.
- * @returns The next quote state and whether the following doubled quote is consumed.
- */
 const advanceSqlQuoteState = (sql: string, index: number, quoted: boolean) => {
   if (sql[index] !== "'") return { quoted, skipNext: false };
 
@@ -141,10 +131,6 @@ const advanceSqlQuoteState = (sql: string, index: number, quoted: boolean) => {
   };
 };
 
-/**
- * Normalizes SQL syntax while preserving the exact casing and whitespace inside
- * single-quoted contract values.
- */
 const normalizeSql = (sql: string) => {
   let normalized = '';
   let quoted = false;
@@ -182,11 +168,9 @@ const normalizeSql = (sql: string) => {
   return normalized.trim();
 };
 
-/** Reads a repository SQL file as normalized text. */
 const readNormalizedSql = (relativePath: string) =>
   normalizeSql(readFileSync(resolve(process.cwd(), relativePath), 'utf8'));
 
-/** Extracts one CREATE TABLE block so assertions cannot match another table. */
 const extractCreateTableBlock = (sql: string, table: string) => {
   const escapedTable = table.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = sql.match(new RegExp(
@@ -197,7 +181,6 @@ const extractCreateTableBlock = (sql: string, table: string) => {
   return match?.[0] || '';
 };
 
-/** Splits a SQL VALUES tuple without treating quoted JSON or text commas as separators. */
 const splitSqlTuple = (tuple: string) => {
   const values: string[] = [];
   let current = '';
@@ -222,10 +205,8 @@ const splitSqlTuple = (tuple: string) => {
   return values;
 };
 
-/** Removes SQL string delimiters from one already-split VALUES field. */
 const unquoteSqlValue = (value: string) => value.replace(/^'|'$/g, '');
 
-/** Extracts top-level SQL VALUES tuples while preserving quoted payloads. */
 const extractSqlTuples = (values: string) => {
   const tuples: string[] = [];
   let current = '';
@@ -257,7 +238,6 @@ const extractSqlTuples = (values: string) => {
   return tuples;
 };
 
-/** Extracts every top-level VALUES row from the message-push admin-menu seed statement. */
 const extractMessagePushMenuRows = (sql: string) => {
   const statements = [...sql.matchAll(/insert into admin_menu \([^)]*\) values (.*?) on duplicate key update/gs)];
   const statement = statements.find((candidate) => candidate[1].includes(menuEntries[0][0]));
@@ -273,7 +253,6 @@ const extractMessagePushMenuRows = (sql: string) => {
     ] as MenuEntry);
 };
 
-/** Extracts the statement that grants the seeded message-push menus to active roles. */
 const extractMessagePushMenuRoleGrantStatement = (sql: string) => {
   const statements = splitSqlStatements(sql);
   const menuSeedIndex = statements.findIndex((statement) =>
@@ -285,13 +264,11 @@ const extractMessagePushMenuRoleGrantStatement = (sql: string) => {
   return statements[roleGrantIndex] || '';
 };
 
-/** Extracts the explicit stable menu IDs from a menu-role grant statement. */
 const extractMenuRoleGrantIds = (statement: string) => {
   const ids = statement.match(/menu\.id in \(([^)]*)\)/)?.[1].match(/\d+/g) || [];
   return ids;
 };
 
-/** Splits SQL statements only at semicolons outside single-quoted values. */
 const splitSqlStatements = (sql: string) => {
   const statements: string[] = [];
   let current = '';
@@ -316,14 +293,12 @@ const splitSqlStatements = (sql: string) => {
   return statements;
 };
 
-/** Locates one complete verification statement by its stable check-name literal. */
 const extractVerificationStatement = (sql: string, checkName: string) => {
   const statement = splitSqlStatements(sql).find((candidate) => candidate.includes(`'${checkName}'`));
   expect(statement).toBeTruthy();
   return statement || '';
 };
 
-/** Extracts the body of the expected_menu CTE without crossing quoted literals. */
 const extractExpectedMenuCte = (statement: string) => {
   const cteStart = statement.match(/with expected_menu as \(/);
   expect(cteStart).toBeTruthy();
@@ -348,14 +323,12 @@ const extractExpectedMenuCte = (statement: string) => {
   throw new Error('expected_menu CTE is not closed');
 };
 
-/** Extracts exact five-column expected-menu tuples from the mismatch CTE. */
 const extractMismatchMenuRows = (statement: string): MenuEntry[] => {
   const cte = extractExpectedMenuCte(statement);
   return [...cte.matchAll(/select (\d+)(?: as id)?, (\d+)(?: as pid)?, '((?:''|[^'])*)'(?: as name)?, '((?:''|[^'])*)'(?: as auth_code)?, (\d+)(?: as sort)?/g)]
     .map(([, id, pid, name, authCode, sort]) => [id, pid, name.replace(/''/g, "'"), authCode.replace(/''/g, "'"), sort] as MenuEntry);
 };
 
-/** Extracts exact expected-menu IDs from a cardinality or role-grant CTE. */
 const extractExpectedMenuIds = (statement: string) =>
   [...extractExpectedMenuCte(statement).matchAll(/select (\d+)(?: as id)?/g)].map(([, id]) => id);
 

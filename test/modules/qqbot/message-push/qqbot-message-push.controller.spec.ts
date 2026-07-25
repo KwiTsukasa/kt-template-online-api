@@ -110,7 +110,6 @@ const pinoLogger = {
   warn: jest.fn(),
 };
 
-/** Builds one valid strict STUN subscription payload. */
 const subscriptionBody = () => ({
   enabled: true,
   name: 'STUN port changed',
@@ -122,7 +121,6 @@ const subscriptionBody = () => ({
   sourceKey: 'network.stun.mapping-port-changed',
 });
 
-/** Builds one valid strict template payload. */
 const templateBody = () => ({
   content: 'Endpoint: ${{endpoint}}',
   enabled: true,
@@ -131,7 +129,6 @@ const templateBody = () => ({
   sourceKey: 'network.stun.mapping-port-changed',
 });
 
-/** Builds one valid strict account binding payload with a selectable target count. */
 const bindingBody = (targetCount = 1) => ({
   enabled: true,
   subscriptionId: STRING_ID,
@@ -143,7 +140,6 @@ const bindingBody = (targetCount = 1) => ({
   templateId: '1234567890123456789',
 });
 
-/** Returns a complete public source definition plus an internal field to detect leakage. */
 const sourceDefinition = () =>
   ({
     credential: 'must-not-leak',
@@ -181,7 +177,6 @@ const sourceDefinition = () =>
     version: 1,
   }) as never;
 
-/** Returns a detached subscription view plus persistence-only fields to detect leakage. */
 const subscriptionView = () =>
   ({
     activeKey: 'must-not-leak',
@@ -205,7 +200,6 @@ const subscriptionView = () =>
     valid: true,
   }) as never;
 
-/** Returns a detached template view plus persistence-only fields to detect leakage. */
 const templateView = () =>
   ({
     activeKey: 'must-not-leak',
@@ -222,7 +216,6 @@ const templateView = () =>
     updateTime: '2026-07-24T00:00:00.000Z',
   }) as never;
 
-/** Returns a detached binding view plus account and active-key fields to detect leakage. */
 const bindingView = () =>
   ({
     accountId: 'must-not-leak',
@@ -253,7 +246,6 @@ const bindingView = () =>
     updateTime: '2026-07-24T00:00:00.000Z',
   }) as never;
 
-/** Recursively collects response object keys for sensitive-field assertions. */
 const collectKeys = (value: unknown): string[] => {
   if (Array.isArray(value)) return value.flatMap(collectKeys);
   if (!value || typeof value !== 'object') return [];

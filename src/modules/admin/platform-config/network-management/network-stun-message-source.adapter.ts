@@ -42,19 +42,12 @@ type ResolvedSubscription = {
   sourceSummary: string;
 };
 
-/**
- * Adapts Network-owned STUN mappings and DDNS records to the QQBot source contract.
- *
- * It deliberately owns no event staging or delivery queue state; every delivery is
- * recomputed from the current Network records to prevent stale endpoint sends.
- */
 @Injectable()
 export class NetworkStunMessageSourceAdapter
   implements OnModuleDestroy, OnModuleInit
 {
   private registered = false;
 
-  /** Immutable public schema for the first Network-owned system message source. */
   readonly definition: SystemMessageSourceDefinition = {
     description: '当 UDP STUN 映射端口变更且 IPv4 DDNS 已同步时发送消息。',
     displayName: 'STUN 映射端口变更',
@@ -130,12 +123,6 @@ export class NetworkStunMessageSourceAdapter
     version: 1,
   };
 
-  /**
-   * Creates the Network-owned source adapter.
-   * @param mappingRepository - Current port-forward and Keeper state reader.
-   * @param ddnsRepository - Current A-record DDNS binding reader.
-   * @param sourceRegistry - Core-owned process registry exported to Network.
-   */
   constructor(
     @InjectRepository(NetworkPortForward)
     private readonly mappingRepository: Repository<NetworkPortForward>,
@@ -144,25 +131,18 @@ export class NetworkStunMessageSourceAdapter
     private readonly sourceRegistry: SystemMessageSourceRegistry,
   ) {}
 
-  /** Registers this instance once after its owning Network module initializes. */
   onModuleInit(): void {
     if (this.registered) return;
     this.sourceRegistry.register(this);
     this.registered = true;
   }
 
-  /** Unregisters only this instance during Network module teardown. */
   onModuleDestroy(): void {
     if (!this.registered) return;
     this.sourceRegistry.unregister(this.definition.sourceKey, this);
     this.registered = false;
   }
 
-  /**
-   * Normalizes a submitted subscription to the two supported string identifiers.
-   * @param input - Untrusted admin configuration; unknown fields are intentionally discarded.
-   * @returns Canonical IDs, the mapping resource key, and a server-derived summary.
-   */
   async normalizeSubscriptionConfig(input: unknown): Promise<{
     canonicalConfig: Record<string, string>;
     resourceKey: string;
@@ -176,11 +156,6 @@ export class NetworkStunMessageSourceAdapter
     };
   }
 
-  /**
-   * Checks current subscription validity without writing subscription or Network state.
-   * @param config - Persisted or submitted source configuration.
-   * @returns Stable validity result with a safe source summary for management UI.
-   */
   async inspectSubscription(config: Record<string, unknown>): Promise<{
     invalidReasonCode: null | string;
     sourceSummary: string;
@@ -203,10 +178,6 @@ export class NetworkStunMessageSourceAdapter
     }
   }
 
-  /**
-   * Lists current mapping and DDNS candidates with structural, lease-independent eligibility.
-   * @returns Locked `portForwards` and `ddnsRecords` option collections.
-   */
   async listSubscriptionOptions(): Promise<Record<string, unknown>> {
     const [mappings, records] = await Promise.all([
       this.mappingRepository.find({ order: { id: 'ASC', name: 'ASC' } }),
@@ -248,11 +219,6 @@ export class NetworkStunMessageSourceAdapter
     };
   }
 
-  /**
-   * Rejects unsafe event data and retains only the source's permitted scalar fields.
-   * @param payload - Network event candidate before it is staged in the QQBot Outbox.
-   * @returns Canonical event variables with no client-controlled endpoint field.
-   */
   validateEventPayload(
     payload: Record<string, unknown>,
   ): Record<string, SystemMessageScalar> {
@@ -279,11 +245,6 @@ export class NetworkStunMessageSourceAdapter
     };
   }
 
-  /**
-   * Re-evaluates a frozen event against the current mapping and DDNS state before sending.
-   * @param input - Event payload and persisted subscription configuration.
-   * @returns Ready variables, a DDNS wait result, or terminal cancellation/supersession.
-   */
   async resolveDelivery(input: {
     eventPayload: Record<string, SystemMessageScalar>;
     subscriptionConfig: Record<string, unknown>;
@@ -328,11 +289,6 @@ export class NetworkStunMessageSourceAdapter
     return { reasonCode: null, status: 'ready', variables };
   }
 
-  /**
-   * Resolves and structurally validates both persisted resources selected by a subscription.
-   * @param input - Unknown configuration from an Admin request or persisted subscription.
-   * @returns Current resource rows and canonical identity when their relationship is valid.
-   */
   private async resolveSubscription(
     input: unknown,
   ): Promise<ResolvedSubscription> {
@@ -380,20 +336,10 @@ export class NetworkStunMessageSourceAdapter
   }
 }
 
-/**
- * Verifies that a value is a non-array object with string-addressable own values.
- * @param value - Untrusted input at an adapter boundary.
- * @returns Whether the value is safe to inspect as a plain record.
- */
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-/**
- * Validates a Snowflake at JSON boundaries without converting it to an unsafe number.
- * @param value - Candidate string identifier.
- * @returns The unchanged decimal string.
- */
 function normalizeSnowflakeId(value: unknown): string {
   if (typeof value !== 'string' || !SNOWFLAKE_ID_PATTERN.test(value)) {
     throw new SystemMessageContractError('invalid_source_config');
@@ -401,11 +347,6 @@ function normalizeSnowflakeId(value: unknown): string {
   return value;
 }
 
-/**
- * Validates an event port as an integer transport port.
- * @param value - Candidate event scalar.
- * @returns The safe port number.
- */
 function normalizePort(value: unknown): number {
   if (
     typeof value !== 'number' ||
@@ -418,11 +359,6 @@ function normalizePort(value: unknown): number {
   return value;
 }
 
-/**
- * Normalizes a timezone-qualified event timestamp to canonical ISO UTC text.
- * @param value - Candidate RFC3339 timestamp.
- * @returns Canonical ISO string safe for later Shanghai rendering.
- */
 function normalizeRfc3339(value: unknown): string {
   if (typeof value !== 'string') {
     throw new SystemMessageContractError('invalid_source_config');
@@ -438,11 +374,6 @@ function normalizeRfc3339(value: unknown): string {
   return date.toISOString();
 }
 
-/**
- * Validates RFC3339 calendar and offset components before JavaScript can normalize them.
- * @param match - Capture groups produced by the source timestamp pattern.
- * @returns Whether all calendar, wall-clock, and offset fields are in range.
- */
 function isValidRfc3339Calendar(match: RegExpExecArray): boolean {
   const [
     ,
@@ -492,12 +423,6 @@ function isValidRfc3339Calendar(match: RegExpExecArray): boolean {
   );
 }
 
-/**
- * Determines whether a persisted DDNS record is a usable structural subscription target.
- * @param record - Candidate A-record binding, possibly absent or deleted.
- * @param mapping - Mapping selected by the subscription, if currently present.
- * @returns Null when structurally valid or a stable invalid-reason code.
- */
 function ddnsOptionReason(
   record: NetworkDdnsRecord | null | undefined,
   mapping: NetworkPortForward | undefined,
@@ -515,11 +440,6 @@ function ddnsOptionReason(
   return source.disabledReasonCode;
 }
 
-/**
- * Converts a shared Network structural reason to the locked message-source contract.
- * @param reason - Existing uppercase Network eligibility reason.
- * @returns Lowercase reason code safe for message subscription views and delivery state.
- */
 function messageSourceEligibilityReason(
   reason: NonNullable<
     ReturnType<typeof classifyStunEndpointSource>['disabledReasonCode']
@@ -541,12 +461,6 @@ function messageSourceEligibilityReason(
   }
 }
 
-/**
- * Determines the locked message-source reason for a DDNS record and its selected mapping.
- * @param record - Candidate DDNS record, including deleted or absent state.
- * @param mapping - Canonical selected mapping after its structural validation.
- * @returns Null when valid or a locked lowercase message-source reason.
- */
 function ddnsMessageSourceReason(
   record: NetworkDdnsRecord | null | undefined,
   mapping: NetworkPortForward,
@@ -574,22 +488,12 @@ function ddnsMessageSourceReason(
     : null;
 }
 
-/**
- * Forms the normalized fully-qualified hostname from persisted server-owned DDNS fields.
- * @param record - Canonical DDNS binding.
- * @returns Lowercase FQDN without a trailing dot.
- */
 function ddnsFqdn(record: NetworkDdnsRecord): string {
   const domain = record.domain.trim().toLowerCase().replace(/\.$/, '');
   const subDomain = record.subDomain.trim().toLowerCase().replace(/\.$/, '');
   return subDomain === '@' ? domain : `${subDomain}.${domain}`;
 }
 
-/**
- * Checks current Keeper endpoint readiness independently of structural subscription validity.
- * @param mapping - Current mapping row after structural eligibility passed.
- * @returns Whether a live public IPv4 endpoint is available at this instant.
- */
 function hasCurrentEndpoint(mapping: NetworkPortForward): boolean {
   return (
     isIP(mapping.currentPublicIpv4 || '') === 4 &&
@@ -602,12 +506,6 @@ function hasCurrentEndpoint(mapping: NetworkPortForward): boolean {
   );
 }
 
-/**
- * Builds the whitelisted template variables from current Network records and frozen event data.
- * @param resolved - Current structurally valid subscription resources.
- * @param event - Validated immutable event payload.
- * @returns Server-derived scalar values ready for formal template rendering.
- */
 function deliveryVariables(
   resolved: ResolvedSubscription,
   event: StunEventPayload,
@@ -624,11 +522,6 @@ function deliveryVariables(
   };
 }
 
-/**
- * Formats an event timestamp as the locked Asia/Shanghai template variable value.
- * @param value - Valid RFC3339 event timestamp.
- * @returns `YYYY-MM-DD HH:mm:ss` assembled without locale punctuation assumptions.
- */
 function formatShanghaiDateTime(value: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     day: '2-digit',

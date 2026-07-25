@@ -4,9 +4,6 @@ import { parseQqbotPluginManifest } from '@/modules/qqbot/plugin-platform/domain
 
 const pluginRoot = join(process.cwd(), 'src/modules/qqbot/plugins/bangdream');
 
-/**
- * 读取 BangDream 插件资源。
- */
 const readManifest = () =>
   parseQqbotPluginManifest(
     JSON.parse(readFileSync(join(pluginRoot, 'plugin.json'), 'utf8')) as Record<

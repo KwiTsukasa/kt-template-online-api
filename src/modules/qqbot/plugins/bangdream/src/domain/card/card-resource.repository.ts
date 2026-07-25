@@ -34,10 +34,6 @@ function toServerCode(server: Server | undefined): string {
 }
 
 export class CardResourceRepository {
-  /**
-   * 初始化 CardResourceRepository 实例。
-   * @param provider - provider 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}

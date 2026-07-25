@@ -1,7 +1,6 @@
 import type { SystemMessageSourceAdapter } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import { SystemMessageSourceRegistry } from '../../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
 
-/** Creates a minimal adapter whose definition can be safely registered. */
 function createAdapter(sourceKey: string): SystemMessageSourceAdapter {
   return {
     definition: {

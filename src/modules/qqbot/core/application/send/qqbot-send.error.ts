@@ -8,21 +8,15 @@ const STRICT_SEND_ERROR_SUMMARIES: Readonly<Record<string, string>> = {
   onebot_timeout: 'OneBot send timed out',
 };
 
-/** Maps a strict-send classification to its allowlisted non-sensitive summary. */
 export function strictSendErrorSummary(code: string): string {
   return STRICT_SEND_ERROR_SUMMARIES[code] ?? 'QQBot delivery failed';
 }
 
-/** Represents a retryable or permanent strict QQBot delivery attempt failure. */
 export class QqbotSendAttemptError extends Error {
   readonly code: string;
   readonly retryable: boolean;
   readonly sendLogId: null | string;
 
-  /**
-   * Preserves stable retry metadata while replacing all caller text with an allowlisted summary.
-   * @param options - The stable code, ignored raw message, retry policy, and optional log ID.
-   */
   constructor(options: QqbotSendAttemptErrorOptions) {
     super(strictSendErrorSummary(options.code));
     this.name = 'QqbotSendAttemptError';

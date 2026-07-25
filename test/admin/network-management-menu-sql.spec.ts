@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Reads one repository SQL artifact as UTF-8 text. */
 function readSql(path: string): string {
   return readFileSync(join(process.cwd(), path), 'utf8');
 }

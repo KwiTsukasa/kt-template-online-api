@@ -9,16 +9,13 @@ import { QqbotReverseWsService } from '../../infrastructure/integration/connecti
 
 const TARGET_ID_PATTERN = /^[1-9]\d{4,19}$/;
 
-/** Provides HTTP-safe OneBot group and friend candidates for exactly one configured account. */
 @Injectable()
 export class QqbotMessageTargetOptionsService {
-  /** Initializes strict account lookup and the existing account-keyed OneBot action path. */
   constructor(
     private readonly accountService: QqbotAccountService,
     private readonly reverseWsService: QqbotReverseWsService,
   ) {}
 
-  /** Lists normalized group and friend candidates, returning a safe unavailable result on OneBot failure. */
   async listTargetOptions(
     selfId: string,
   ): Promise<QqbotMessagePushTargetOptionsResponse> {
@@ -52,7 +49,6 @@ export class QqbotMessageTargetOptionsService {
     }
   }
 
-  /** Validates one successful OneBot list response and maps every row to a searchable option. */
   private normalizeResponse(
     response: { data?: unknown; retcode?: number; status?: string },
     targetType: QqbotMessagePushTargetType,
@@ -69,7 +65,6 @@ export class QqbotMessageTargetOptionsService {
     );
   }
 
-  /** Normalizes one OneBot row while preserving its identifier as a string. */
   private normalizeCandidate(
     candidate: unknown,
     targetType: QqbotMessagePushTargetType,
@@ -94,12 +89,10 @@ export class QqbotMessageTargetOptionsService {
     };
   }
 
-  /** Trims an optional OneBot display name without inventing a replacement name. */
   private knownName(value: unknown): null | string {
     return typeof value === 'string' && value.trim() ? value.trim() : null;
   }
 
-  /** Selects a stable duplicate candidate, retaining known names before lexically ordering conflicts. */
   private preferCandidate(
     current: QqbotMessagePushTargetOption | undefined,
     candidate: QqbotMessagePushTargetOption,
@@ -115,7 +108,6 @@ export class QqbotMessageTargetOptionsService {
       : current;
   }
 
-  /** Produces the stable HTTP-safe empty candidate response. */
   private unavailable(
     reasonCode: string,
   ): QqbotMessagePushTargetOptionsResponse {

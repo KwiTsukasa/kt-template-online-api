@@ -9,9 +9,6 @@ export interface DetailBlockDataOptions {
   topLeftText?: string;
 }
 
-/**
- * 按详情页顺序收集区块，并统一处理区块分割线。
- */
 export class DetailBlockBuilder {
   private readonly list: Array<Canvas | Image> = [];
 

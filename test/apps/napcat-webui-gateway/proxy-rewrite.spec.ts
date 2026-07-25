@@ -25,11 +25,6 @@ const UPSTREAM_BASE_URL = 'http://127.0.0.1:6099';
 const repoRoot = resolve(__dirname, '../../..');
 const mockedAxiosPost = axios.post as jest.Mock;
 
-/**
- * Creates server-only Gateway session metadata for public bootstrap tests.
- * @param override - Session fields that should replace the default fixture.
- * @returns Gateway session fixture.
- */
 function createGatewaySession(
   override: Partial<NapcatWebuiGatewaySession> = {},
 ): NapcatWebuiGatewaySession {
@@ -49,11 +44,6 @@ function createGatewaySession(
   };
 }
 
-/**
- * Creates a Gateway config fixture for credential client tests.
- * @param currentTime - Mutable timestamp source used to check cache expiry decisions.
- * @returns Config facade shape required by NapcatWebuiCredentialClient.
- */
 function createCredentialConfig(currentTime: { value: number }) {
   return {
     now: () => currentTime.value,
@@ -61,11 +51,6 @@ function createCredentialConfig(currentTime: { value: number }) {
   };
 }
 
-/**
- * Reads source files from the API repository for proxy bootstrap boundary checks.
- * @param relativePath - Repository-relative TypeScript source path.
- * @returns File text used by structural regression assertions.
- */
 function readApiSource(relativePath: string) {
   return readFileSync(resolve(repoRoot, relativePath), 'utf8');
 }
@@ -357,10 +342,6 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
     url?: string;
   }>;
 
-  /**
-   * Starts a tiny NapCat-like upstream that redirects `/webui` to `/webui/`.
-   * @returns Upstream server plus the loopback base URL assigned by the OS.
-   */
   async function startRedirectUpstream() {
     const server = createServer((req, res) => {
       upstreamRequests.push({

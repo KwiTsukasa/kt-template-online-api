@@ -15,11 +15,6 @@ import {
 export class JenkinsReadonlyAdapter {
   private readonly http: EnvironmentReadonlyHttpClient;
 
-  /**
-   * Initializes Jenkins readonly adapter.
-   * @param config - Environment dashboard config reader.
-   * @param http - Readonly HTTP client used for Jenkins JSON API probes.
-   */
   constructor(
     private readonly config: EnvironmentDashboardConfigService,
     @Optional() http?: EnvironmentReadonlyHttpClient,
@@ -27,10 +22,6 @@ export class JenkinsReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
-  /**
-   * Inspects Jenkins readonly integration readiness.
-   * @returns Jenkins signal; missing configuration is explicit unwired evidence.
-   */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_JENKINS_URL',
@@ -79,10 +70,6 @@ export class JenkinsReadonlyAdapter {
     }
   }
 
-  /**
-   * Builds Jenkins last-build JSON API URL from folder-style job names.
-   * @returns Jenkins readonly JSON API URL for the configured job.
-   */
   private buildLastBuildUrl(): string {
     const jobPath = this.config
       .get('ENV_DASHBOARD_JENKINS_JOB')
@@ -96,10 +83,6 @@ export class JenkinsReadonlyAdapter {
     );
   }
 
-  /**
-   * Creates optional Jenkins basic-auth headers without returning token values as evidence.
-   * @returns Headers for outbound Jenkins API request, or undefined when credentials are absent.
-   */
   private createAuthHeaders(): Record<string, string> | undefined {
     const username = this.config.get('ENV_DASHBOARD_JENKINS_USERNAME');
     const token = this.config.get('ENV_DASHBOARD_JENKINS_TOKEN');

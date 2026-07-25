@@ -22,14 +22,6 @@ import { QqbotPluginTaskSchedulerService } from './qqbot-plugin-task-scheduler.s
 
 @Injectable()
 export class QqbotPluginTaskService {
-  /**
-   * 初始化 QqbotPluginTaskService 实例。
-   * @param taskRepository - 插件任务仓库依赖；影响 constructor 的返回值。
-   * @param runRepository - 插件平台仓库依赖；影响 constructor 的返回值。
-   * @param pluginRepository - 插件仓库依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param scheduler - scheduler 输入；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(QqbotPluginTask)
     private readonly taskRepository: Repository<QqbotPluginTask>,

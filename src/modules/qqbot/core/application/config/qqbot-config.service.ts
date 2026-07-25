@@ -11,10 +11,6 @@ const QQBOT_PERMISSION_CONFIG_KEYS = {
 
 @Injectable()
 export class QqbotConfigService {
-  /**
-   * 初始化 QqbotConfigService 实例。
-   * @param configRepository - QQBot仓库依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(QqbotConfig)
     private readonly configRepository: Repository<QqbotConfig>,
@@ -39,11 +35,6 @@ export class QqbotConfigService {
     return { allowlistEnabled, blocklistEnabled };
   }
 
-  /**
-   * Reads a raw QQBot config value for plugin runtime host calls.
-   * @param configKey - Package-owned config key requested by a plugin manifest or worker host call.
-   * @returns Stored config value, or `undefined` when the key is not configured.
-   */
   async getConfigValue(configKey: string): Promise<string | undefined> {
     const record = await this.configRepository.findOne({
       where: { configKey },

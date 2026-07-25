@@ -24,11 +24,6 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   blocked: 5,
 };
 
-/**
- * Picks the strongest health status from service or signal statuses.
- * @param statuses - Aggregated statuses from collectors, retained events, or derived signals.
- * @returns The most severe status, defaulting to `unknown` when no evidence exists.
- */
 export function pickWorstHealthStatus(
   statuses: EnvironmentHealthStatus[],
 ): EnvironmentHealthStatus {
@@ -42,11 +37,6 @@ export function pickWorstHealthStatus(
     );
 }
 
-/**
- * Maps nested health statuses into the site-level status used by Admin.
- * @param statuses - Service or signal statuses collected for a single site.
- * @returns Site status that preserves isolation and avoids marking missing integrations green.
- */
 export function mapSiteStatus(
   statuses: EnvironmentHealthStatus[],
 ): EnvironmentSiteStatus {
@@ -59,11 +49,6 @@ export function mapSiteStatus(
   return 'unknown';
 }
 
-/**
- * Counts every signal status across all sites for dashboard summary cards.
- * @param sites - Dashboard site tree assembled by collectors and event materializers.
- * @returns Count map keyed by every supported health status.
- */
 export function countSignals(
   sites: EnvironmentSite[],
 ): Record<EnvironmentHealthStatus, number> {
@@ -84,11 +69,6 @@ export function countSignals(
   return counts;
 }
 
-/**
- * Normalizes collector timestamps before they are persisted as evidence.
- * @param dateLike - Date, epoch milliseconds, or string timestamp from local/remote evidence.
- * @returns ISO timestamp when parseable; otherwise the current time so evidence is never blank.
- */
 export function normalizeObservedAt(dateLike?: Date | number | string): string {
   if (dateLike === undefined || dateLike === null || dateLike === '') {
     return new Date().toISOString();

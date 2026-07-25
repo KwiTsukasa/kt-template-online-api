@@ -15,11 +15,6 @@ export class EnvironmentEventMaterializer {
   private readonly events: EnvironmentEvent[] = [];
   private readonly eventSubject = new Subject<EnvironmentEvent>();
 
-  /**
-   * Initializes the materializer with an optional cache invalidator.
-   * @param cache - Dashboard cache dependency; invalidated only for fresh signal events.
-   * @param maxRecentEvents - Bounded recent-event history retained for dashboard snapshots.
-   */
   constructor(
     @Optional()
     @Inject(EnvironmentDashboardCacheService)
@@ -28,20 +23,10 @@ export class EnvironmentEventMaterializer {
     private readonly maxRecentEvents = 200,
   ) {}
 
-  /**
-   * Exposes materialized events for SSE stream fan-out.
-   * @returns RxJS subject stream carrying already-sanitized dashboard events.
-   */
   events$() {
     return this.eventSubject.asObservable();
   }
 
-  /**
-   * Converts a raw envelope into safe dashboard event state.
-   * @param envelope - Event from local collectors, MQTT retained messages, or bridge services.
-   * @param now - Clock override used by tests to validate retained expiry behavior.
-   * @returns Materialized event, with stale retained messages downgraded to unknown.
-   */
   materialize(
     envelope: EnvironmentEventEnvelope,
     now = new Date(),
@@ -74,20 +59,10 @@ export class EnvironmentEventMaterializer {
     return event;
   }
 
-  /**
-   * Reads recent materialized events for the dashboard HTTP snapshot.
-   * @returns Newest retained event array in insertion order.
-   */
   getRecentEvents() {
     return [...this.events];
   }
 
-  /**
-   * Determines whether retained MQTT evidence is missing expiry or already expired.
-   * @param envelope - Raw environment event envelope.
-   * @param now - Clock used to compare the retained expiry boundary.
-   * @returns True when the event must not create green status.
-   */
   private isStaleRetained(
     envelope: EnvironmentEventEnvelope,
     now: Date,
@@ -97,10 +72,6 @@ export class EnvironmentEventMaterializer {
     return new Date(envelope.expiresAt).getTime() <= now.getTime();
   }
 
-  /**
-   * Adds an event to bounded recent history.
-   * @param event - Materialized dashboard event to retain for snapshots and replay.
-   */
   private appendRecentEvent(event: EnvironmentEvent) {
     this.events.push(event);
     if (this.events.length > this.maxRecentEvents) {

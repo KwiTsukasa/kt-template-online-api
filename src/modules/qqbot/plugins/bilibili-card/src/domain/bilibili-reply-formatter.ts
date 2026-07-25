@@ -3,12 +3,6 @@ import type {
   BilibiliVideoInfo,
 } from './bilibili-card.types';
 
-/**
- * Formats a Bilibili video summary as a leading cover CQ image plus text for QQBot replies.
- * @param video - Normalized video info returned by the package-local Bilibili client.
- * @param config - Runtime config that controls the maximum displayed description length.
- * @returns Concise CQ-compatible reply with a cover image and canonical Bilibili video URL.
- */
 export function formatBilibiliVideoReply(
   video: BilibiliVideoInfo,
   config: BilibiliCardRuntimeConfig,
@@ -30,22 +24,12 @@ export function formatBilibiliVideoReply(
   return lines.join('\n');
 }
 
-/**
- * Builds the leading CQ image segment from the Bilibili cover URL.
- * @param pic - Cover URL returned by the Bilibili video API; used as the OneBot image `file` parameter.
- * @returns CQ image segment placed before the text summary, or an empty string when no cover URL exists.
- */
 function buildBilibiliCoverImageSegment(pic: string) {
   const normalizedPic = `${pic || ''}`.trim();
   if (!normalizedPic) return '';
   return `[CQ:image,file=${escapeCqParam(normalizedPic)}]`;
 }
 
-/**
- * Escapes values embedded in a CQ segment parameter.
- * @param value - Raw parameter value that may contain CQ delimiters or HTML entity characters.
- * @returns Value safe to embed in a single CQ parameter.
- */
 function escapeCqParam(value: string) {
   return value
     .replace(/&/gu, '&amp;')
@@ -54,11 +38,6 @@ function escapeCqParam(value: string) {
     .replace(/,/gu, '&#44;');
 }
 
-/**
- * Builds the canonical public Bilibili video URL used in replies.
- * @param video - Normalized video info containing either a BV id or an av id fallback.
- * @returns Public Bilibili video URL that does not echo short links.
- */
 function buildCanonicalBilibiliVideoUrl(video: BilibiliVideoInfo) {
   const videoId = video.bvid || `av${video.aid}`;
   return `https://www.bilibili.com/video/${videoId}`;
@@ -77,11 +56,6 @@ function formatBilibiliStat(value: number) {
   return `${formatted.replace(/\.0$/, '')}万`;
 }
 
-/**
- * Formats a duration in seconds as `mm:ss` or `hh:mm:ss`.
- * @param seconds - Duration seconds from the Bilibili video API response.
- * @returns Padded duration suitable for compact message replies.
- */
 function formatBilibiliDuration(seconds: number) {
   const normalized = Math.max(0, Math.floor(seconds || 0));
   const hours = Math.floor(normalized / 3600);
@@ -97,12 +71,6 @@ function formatBilibiliDuration(seconds: number) {
     .join(':');
 }
 
-/**
- * Converts multi-line descriptions into one compact line and applies the configured limit.
- * @param desc - Raw Bilibili description text from the video API response.
- * @param maxLength - Maximum number of visible characters configured for this plugin.
- * @returns Trimmed description, with an ellipsis when content was shortened.
- */
 function truncateBilibiliDescription(desc: string, maxLength: number) {
   const normalized = desc.replace(/\s+/gu, ' ').trim();
   if (!normalized || maxLength <= 0) return '';

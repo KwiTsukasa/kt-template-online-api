@@ -7,23 +7,12 @@ import { parseQqbotPluginManifest } from '@/modules/qqbot/plugin-platform/domain
 import { QqbotPluginPackagePathPolicyService } from './plugin-package-path-policy.service';
 import type { QqbotPluginPackageDescriptor } from './plugin-package.types';
 
-/**
- * Discovers QQBot plugin packages by reading package manifests without importing package code.
- */
 @Injectable()
 export class QqbotPluginPackageSourceService {
-  /**
-   * Creates a manifest-only package descriptor source.
-   * @param pathPolicy - Root and entry policy that keeps package discovery inside controlled directories.
-   */
   constructor(
     private readonly pathPolicy: QqbotPluginPackagePathPolicyService,
   ) {}
 
-  /**
-   * Discovers package descriptors from one-level package directories under controlled roots.
-   * @returns Parsed descriptors sorted by plugin key for deterministic plugin-platform startup.
-   */
   async discoverPackages(): Promise<QqbotPluginPackageDescriptor[]> {
     const descriptors: QqbotPluginPackageDescriptor[] = [];
 
@@ -41,11 +30,6 @@ export class QqbotPluginPackageSourceService {
     );
   }
 
-  /**
-   * Reads one package descriptor from `plugin.json` without loading the package entry module.
-   * @param packageRoot - Candidate QQBot plugin package directory that may contain `plugin.json`.
-   * @returns Descriptor when a manifest exists, otherwise `null`.
-   */
   readDescriptor(packageRoot: string): QqbotPluginPackageDescriptor | null {
     const controlledPackageRoot =
       this.pathPolicy.assertControlledPackageRoot(packageRoot);
@@ -59,12 +43,6 @@ export class QqbotPluginPackageSourceService {
     return this.resolveDescriptor(controlledPackageRoot, manifestLike);
   }
 
-  /**
-   * Resolves a descriptor from an already available manifest without re-reading `plugin.json`.
-   * @param packageRoot - Installed or discovered QQBot plugin package directory.
-   * @param manifestLike - Manifest JSON stored for the package version or read from disk.
-   * @returns Descriptor with a policy-normalized package root and entry file.
-   */
   resolveDescriptor(
     packageRoot: string,
     manifestLike: unknown,
@@ -88,11 +66,6 @@ export class QqbotPluginPackageSourceService {
     };
   }
 
-  /**
-   * Lists first-level child directories that may represent QQBot plugin packages.
-   * @param root - Existing controlled root that contains package directories.
-   * @returns Absolute candidate package directories under the root.
-   */
   private listPackageRoots(root: string): string[] {
     return readdirSync(root, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())

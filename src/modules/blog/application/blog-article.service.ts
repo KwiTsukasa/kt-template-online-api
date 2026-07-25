@@ -19,14 +19,6 @@ import { BlogTermService } from './blog-term.service';
 
 @Injectable()
 export class BlogArticleService {
-  /**
-   * 初始化 BlogArticleService 实例。
-   * @param articleRepository - 文章仓库依赖；影响 constructor 的返回值。
-   * @param markdownService - markdownService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param wordpressService - wordpressService 服务依赖；影响 constructor 的返回值。
-   * @param blogTermService - blogTermService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(BlogArticle)
     private readonly articleRepository: Repository<BlogArticle>,

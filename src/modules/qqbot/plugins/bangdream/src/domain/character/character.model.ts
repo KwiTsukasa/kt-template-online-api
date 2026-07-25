@@ -32,11 +32,6 @@ export class Character {
   };
   isInitFull: boolean = false;
 
-  /**
-   * 构造 Character 实例，并初始化该模型的本地基础字段。
-   *
-   * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
-   */
   constructor(characterId: number) {
     const characterData =
       bangdreamCatalogCache['characters'][characterId.toString()];

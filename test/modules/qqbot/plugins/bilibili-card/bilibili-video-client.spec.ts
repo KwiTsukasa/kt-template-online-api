@@ -127,11 +127,6 @@ describe('Bilibili video client', () => {
 
   it('clamps runtime config values from the plugin host', () => {
     const host = createHost({
-      /**
-       * Reads test config values by Bilibili card runtime key.
-       * @param key - Runtime config key requested by `readBilibiliCardRuntimeConfig`.
-       * @returns String value supplied by the current clamp scenario.
-       */
       getConfig: (<T = string>(key: string) => {
         return {
           QQBOT_BILIBILI_CARD_DEDUPE_TTL_MS: '9999999',
@@ -164,11 +159,6 @@ describe('Bilibili video client', () => {
   });
 });
 
-/**
- * Builds the package-local Bilibili host contract used by client and config tests.
- * @param overrides - Test doubles for host methods involved in the current assertion.
- * @returns Host object with harmless defaults for unused plugin capabilities.
- */
 function createHost(
   overrides: Partial<BilibiliCardPluginHost> = {},
 ): BilibiliCardPluginHost {

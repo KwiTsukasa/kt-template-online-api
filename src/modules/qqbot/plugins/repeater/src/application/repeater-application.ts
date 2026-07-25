@@ -20,12 +20,6 @@ export class RepeaterApplication {
   >();
   private readonly states = new Map<string, RepeaterConversationState>();
 
-  /**
-   * 初始化 RepeaterApplication 实例。
-   * @param host - host 输入；影响 constructor 的返回值。
-   * @param manifest - manifest 输入；影响 constructor 的返回值。
-   * @param now - now 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly host: RepeaterPluginHost,
     private readonly manifest: RepeaterManifest,

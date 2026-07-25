@@ -77,10 +77,6 @@ export class NapcatWebuiHttpClient {
     { credential: string; expiresAt: number } | undefined
   > = {};
 
-  /**
-   * 初始化 NapcatWebuiHttpClient 实例。
-   * @param options - NapCat列表；影响 constructor 的返回值。
-   */
   constructor(
     private readonly options: {
       getTimeoutMs: () => number;
@@ -226,10 +222,6 @@ export class NapcatWebuiHttpClient {
 }
 
 export class NapcatLoginApiClient {
-  /**
-   * 初始化 NapcatLoginApiClient 实例。
-   * @param transport - transport 输入；影响 constructor 的返回值。
-   */
   constructor(private readonly transport: NapcatLoginApiTransport) {}
 
   /**

@@ -12,11 +12,6 @@ import {
 export class WireguardReadonlyAdapter {
   private readonly http: EnvironmentReadonlyHttpClient;
 
-  /**
-   * Initializes WireGuard readonly adapter.
-   * @param config - Environment dashboard config reader.
-   * @param http - Readonly HTTP client used for WireGuard health endpoints.
-   */
   constructor(
     private readonly config: EnvironmentDashboardConfigService,
     @Optional() http?: EnvironmentReadonlyHttpClient,
@@ -24,10 +19,6 @@ export class WireguardReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
-  /**
-   * Inspects WireGuard readonly health endpoint readiness.
-   * @returns WireGuard signal; missing configuration is explicit unwired evidence.
-   */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_TENCENT_WIREGUARD_HEALTH_URL',

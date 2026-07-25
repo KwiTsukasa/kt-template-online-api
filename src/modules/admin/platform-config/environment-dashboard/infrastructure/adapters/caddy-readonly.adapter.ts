@@ -13,11 +13,6 @@ import {
 export class CaddyReadonlyAdapter {
   private readonly http: EnvironmentReadonlyHttpClient;
 
-  /**
-   * Initializes Caddy readonly adapter.
-   * @param config - Environment dashboard config reader.
-   * @param http - Readonly HTTP client used for public/admin probes.
-   */
   constructor(
     private readonly config: EnvironmentDashboardConfigService,
     @Optional() http?: EnvironmentReadonlyHttpClient,
@@ -25,10 +20,6 @@ export class CaddyReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
-  /**
-   * Inspects Caddy readonly integration readiness.
-   * @returns Caddy signal; missing configuration is explicit unwired evidence.
-   */
   async inspect() {
     const missing = this.config.missing(['ENV_DASHBOARD_CADDY_PUBLIC_URL']);
     if (missing.length > 0) {

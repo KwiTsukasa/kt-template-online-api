@@ -121,11 +121,6 @@ export function withRetry(
   const delayMs = options.delayMs ?? 0;
   return {
     ...provider,
-    /**
-     * 读取 BangDream回调数据。
-     * @param pathOrUrl - BangDream路径；驱动 `retryProviderCall()` 的 BangDream步骤。
-     * @param requestOptions - BangDream列表；驱动 `retryProviderCall()` 的 BangDream步骤。
-     */
     getJson: <T = unknown>(
       pathOrUrl: string,
       requestOptions?: BangDreamJsonRequestOptions,
@@ -138,11 +133,6 @@ export function withRetry(
         () =>
           provider.getJson<T>(pathOrUrl, withRequestRetryCount(requestOptions)),
       ),
-    /**
-     * 读取 BangDream回调数据。
-     * @param pathOrUrl - BangDream路径；驱动 `retryProviderCall()` 的 BangDream步骤。
-     * @param requestOptions - BangDream列表；驱动 `retryProviderCall()` 的 BangDream步骤。
-     */
     getAsset: (
       pathOrUrl: string,
       requestOptions?: BangDreamAssetRequestOptions,
@@ -158,10 +148,6 @@ export function withRetry(
             retryCount: 1,
           }),
       ),
-    /**
-     * 读取 BangDream回调数据。
-     * @param requestOptions - BangDream列表；使用 `retryCount` 字段生成结果。
-     */
     getTracker: <T = unknown>(requestOptions: BangDreamTrackerRequestOptions) =>
       retryProviderCall(
         provider.name,
@@ -183,13 +169,6 @@ export function withTiming(
   provider: BangDreamDataProvider,
   options: BangDreamProviderTimingOptions = {},
 ): BangDreamDataProvider {
-  /**
-   * 执行 BangDream 插件步骤。
-   * @param methodName - methodName 输入；决定 BangDream条件分支。
-   * @param target - target 输入；影响 runTimed 的返回值。
-   * @param action - action 输入；影响 runTimed 的返回值。
-   * @returns BangDream 插件产出的 Promise<T>。
-   */
   const runTimed = async <T>(
     methodName: ProviderMethodName,
     target: string,
@@ -216,11 +195,6 @@ export function withTiming(
   };
   return {
     ...provider,
-    /**
-     * 读取 BangDream回调数据。
-     * @param pathOrUrl - BangDream路径；驱动 `runTimed()` 的 BangDream步骤。
-     * @param requestOptions - BangDream列表；驱动 `runTimed()` 的 BangDream步骤。
-     */
     getJson: <T = unknown>(
       pathOrUrl: string,
       requestOptions?: BangDreamJsonRequestOptions,
@@ -228,11 +202,6 @@ export function withTiming(
       runTimed('getJson', pathOrUrl, () =>
         provider.getJson<T>(pathOrUrl, requestOptions),
       ),
-    /**
-     * 读取 BangDream回调数据。
-     * @param pathOrUrl - BangDream路径；驱动 `runTimed()` 的 BangDream步骤。
-     * @param requestOptions - BangDream列表；驱动 `runTimed()` 的 BangDream步骤。
-     */
     getAsset: (
       pathOrUrl: string,
       requestOptions?: BangDreamAssetRequestOptions,
@@ -240,10 +209,6 @@ export function withTiming(
       runTimed('getAsset', pathOrUrl, () =>
         provider.getAsset(pathOrUrl, requestOptions),
       ),
-    /**
-     * 读取 BangDream回调数据。
-     * @param requestOptions - BangDream列表；使用 `server`、`eventId`、`tier` 字段生成结果。
-     */
     getTracker: <T = unknown>(requestOptions: BangDreamTrackerRequestOptions) =>
       runTimed(
         'getTracker',
@@ -265,11 +230,6 @@ export function withCache(
 ): BangDreamDataProvider {
   return {
     ...provider,
-    /**
-     * 读取 BangDream回调数据。
-     * @param pathOrUrl - BangDream路径；限定 BangDream查询范围。
-     * @param requestOptions - BangDream列表；限定 BangDream查询范围。
-     */
     getJson: <T = unknown>(
       pathOrUrl: string,
       requestOptions?: BangDreamJsonRequestOptions,
@@ -278,10 +238,6 @@ export function withCache(
         ...requestOptions,
         cacheTime: requestOptions?.cacheTime ?? options.jsonCacheTime,
       }),
-    /**
-     * 读取 BangDream回调数据。
-     * @param requestOptions - BangDream列表；使用 `cacheTime` 字段生成结果。
-     */
     getTracker: <T = unknown>(requestOptions: BangDreamTrackerRequestOptions) =>
       provider.getTracker<T>({
         ...requestOptions,

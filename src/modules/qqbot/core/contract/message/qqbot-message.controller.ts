@@ -12,10 +12,6 @@ import { QqbotMessageService } from '../../application/message/qqbot-message.ser
 @Controller('qqbot')
 @UseGuards(JwtAuthGuard)
 export class QqbotMessageController {
-  /**
-   * 初始化 QqbotMessageController 实例。
-   * @param messageService - messageService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly messageService: QqbotMessageService) {}
 
   /**

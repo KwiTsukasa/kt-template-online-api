@@ -22,7 +22,6 @@ const CONFIG = {
   portForwardId: '2041700000000000001',
 };
 
-/** Creates a subscription fixture with deterministic string IDs and project timestamps. */
 function subscription(
   overrides: Partial<QqbotMessageSubscription> = {},
 ): QqbotMessageSubscription {
@@ -45,7 +44,6 @@ function subscription(
   };
 }
 
-/** Calculates the exact stable digest that production natural-key persistence requires. */
 function digestFor(config: Record<string, string>): string {
   const json = JSON.stringify(
     Object.fromEntries(
@@ -57,14 +55,12 @@ function digestFor(config: Record<string, string>): string {
   return createHash('sha256').update(json).digest('hex');
 }
 
-/** Reads TypeORM Like's internal test value for high-fidelity in-memory filtering. */
 function likeValue(value: unknown): string | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const candidate = value as { _value?: unknown };
   return typeof candidate._value === 'string' ? candidate._value : undefined;
 }
 
-/** Builds a promise gate whose release is controlled by a concurrency test. */
 function deferred(): {
   promise: Promise<void>;
   resolve: () => void;
@@ -76,7 +72,6 @@ function deferred(): {
   return { promise, resolve };
 }
 
-/** Builds a controllable adapter whose current validity can change after persistence. */
 function adapter(
   inspect = {
     invalidReasonCode: null,
@@ -111,7 +106,6 @@ function adapter(
   };
 }
 
-/** Registers one test source adapter in a fresh process-local source registry. */
 function registry(
   source: SystemMessageSourceAdapter,
 ): SystemMessageSourceRegistry {
@@ -120,7 +114,6 @@ function registry(
   return value;
 }
 
-/** Builds a transaction-aware repository fake backed by mutable subscription rows. */
 function setup(
   items: QqbotMessageSubscription[] = [],
   source: SystemMessageSourceAdapter = adapter(),
@@ -238,11 +231,6 @@ function setup(
   };
 }
 
-/**
- * Builds two controlled create transactions that reject forbidden range locks with MySQL 1213.
- * @param historical - Optional deleted candidate both transactions must contend to revive.
- * @returns Shared rows, the service, and repository call evidence for concurrent-create assertions.
- */
 function setupConcurrentCreateRace(historical?: QqbotMessageSubscription) {
   const items = historical ? [historical] : [];
   const bothActiveChecks = deferred();
@@ -350,7 +338,6 @@ function setupConcurrentCreateRace(historical?: QqbotMessageSubscription) {
   };
 }
 
-/** Runs two same-key creates and returns their success or failure values without short-circuiting. */
 async function runConcurrentCreates(
   service: QqbotMessageSubscriptionService,
 ): Promise<unknown[]> {
@@ -746,10 +733,6 @@ describe('QqbotMessageSubscriptionService', () => {
   });
 
   describe('delivery cancellation transaction', () => {
-    /**
-     * Builds authoritative subscription/delivery stores whose transaction drafts commit only
-     * when the complete lifecycle callback resolves.
-     */
     function cancellationHarness() {
       const subscriptions = [subscription()];
       const deliveries = [
@@ -1168,7 +1151,6 @@ describe('QqbotMessageSubscriptionService', () => {
     const allowDeleteCommit = deferred();
     let lockTail = Promise.resolve();
 
-    /** Creates a manager whose pessimistic row lock lasts until its transaction callback settles. */
     const transactionManager = (() => {
       let releaseLock: (() => void) | undefined;
       const acquireLock = async (): Promise<void> => {

@@ -6,11 +6,6 @@ import type { AdminRequest } from '../../contract/admin.types';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  /**
-   * 初始化 JwtAuthGuard 实例。
-   * @param authService - authService 服务依赖；影响 constructor 的返回值。
-   * @param reflector - Nest Reflector 实例；影响 constructor 的返回值。
-   */
   constructor(
     private readonly authService: AdminAuthService,
     private readonly reflector: Reflector,

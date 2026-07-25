@@ -20,10 +20,6 @@ import { AdminMenuService } from './admin-menu.service';
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class AdminMenuController {
-  /**
-   * 初始化 AdminMenuController 实例。
-   * @param menuService - menuService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly menuService: AdminMenuService) {}
 
   /**

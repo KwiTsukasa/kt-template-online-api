@@ -106,10 +106,6 @@ export class NetworkDdnsRecord {
   @KtUpdateDateColumn({ name: 'update_time', precision: 3, type: 'datetime' })
   updateTime: KtDateTime;
 
-  /**
-   * Assigns a Snowflake string before the local automatic updater is persisted.
-   * @returns The stable DDNS binding identifier.
-   */
   @BeforeInsert()
   createId(): string {
     return ensureSnowflakeId(this);

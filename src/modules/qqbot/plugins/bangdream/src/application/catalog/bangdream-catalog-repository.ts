@@ -5,10 +5,6 @@ export type BangDreamCatalogKey = keyof typeof BANGDREAM_BESTDORI_API_PATHS;
 export type BangDreamCatalogCollection<T = unknown> = Record<string, T>;
 
 export class BangDreamCatalogRepository {
-  /**
-   * 初始化 BangDreamCatalogRepository 实例。
-   * @param catalog - catalog 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly catalog: Record<
       string,

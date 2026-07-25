@@ -7,11 +7,6 @@ export interface EnvironmentMqttTopics {
   pluginTaskRun(pluginKey: string, taskKey: string): string;
 }
 
-/**
- * Normalizes a dynamic MQTT topic segment without allowing wildcard escapes.
- * @param value - Site, node, service, account, plugin, or task identifier from runtime data.
- * @returns Safe single topic segment with MQTT wildcards and slashes removed.
- */
 export function normalizeEnvironmentTopicSegment(value: string): string {
   const normalized = value
     .trim()
@@ -22,11 +17,6 @@ export function normalizeEnvironmentTopicSegment(value: string): string {
   return normalized || 'unknown';
 }
 
-/**
- * Creates the environment dashboard topic catalog for a configured prefix.
- * @param topicPrefix - Non-secret MQTT topic prefix; defaults to `ENV_DASHBOARD_MQTT_TOPIC_PREFIX`.
- * @returns Topic builders used by dashboard adapters and QQBot bridge code.
- */
 export function buildEnvironmentMqttTopics(
   topicPrefix = process.env.ENV_DASHBOARD_MQTT_TOPIC_PREFIX || 'kt/env',
 ): EnvironmentMqttTopics {

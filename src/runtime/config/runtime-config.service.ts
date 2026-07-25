@@ -77,11 +77,6 @@ const OPTIONAL_CONFIG_CHECKS: ReadonlyArray<string | readonly string[]> = [
 
 @Injectable()
 export class RuntimeConfigService {
-  /**
-   * 初始化 RuntimeConfigService 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly configService: ConfigService,
     private readonly toolsService: ToolsService,

@@ -10,11 +10,6 @@ import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qq
 const DEFAULT_INTERVAL_MS = 120_000;
 const MIN_INTERVAL_MS = 30_000;
 
-/**
- * NapCat 离线看门狗：定时主动巡检在线账号，及时发现掉线/被踢并触发既有站内信告警。
- * 不依赖 @nestjs/schedule，采用 OnModuleInit + setInterval（与代码库既有定时器一致）。
- * 仅检测 + 告警，登录恢复必须由管理员在 Admin 手动触发更新登录。
- */
 @Injectable()
 export class QqbotNapcatWatchdogService
   implements OnModuleInit, OnModuleDestroy
@@ -23,19 +18,11 @@ export class QqbotNapcatWatchdogService
   private timer?: ReturnType<typeof setInterval>;
   private running = false;
 
-  /**
-   * 初始化 QqbotNapcatWatchdogService 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly configService: ConfigService,
     private readonly accountService: QqbotAccountService,
   ) {}
 
-  /**
-   * 处理 NapCat 登录运行态事件。
-   */
   onModuleInit() {
     if (!this.isEnabled()) return;
 
@@ -45,9 +32,6 @@ export class QqbotNapcatWatchdogService
     this.logger.log(`NapCat 离线看门狗已启用，巡检间隔 ${intervalMs}ms`);
   }
 
-  /**
-   * 处理 NapCat 登录运行态事件。
-   */
   onModuleDestroy() {
     if (this.timer) {
       clearInterval(this.timer);

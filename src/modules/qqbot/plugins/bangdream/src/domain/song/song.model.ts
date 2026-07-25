@@ -91,11 +91,6 @@ export class Song {
 
   isInitfull = false;
 
-  /**
-   * 构造 Song 实例，并初始化该模型的本地基础字段。
-   *
-   * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
-   */
   constructor(songId: number) {
     this.songId = songId;
     const songData = bangdreamCatalogRepository.getEntity<Record<string, any>>(

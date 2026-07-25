@@ -3,11 +3,6 @@ import { resolve } from 'path';
 
 const REPO_ROOT = resolve(__dirname, '../../..');
 
-/**
- * Reads one repository deployment artifact as UTF-8 text.
- * @param relativePath - Path relative to the API repository root.
- * @returns Deployment artifact contents.
- */
 function readDeploymentFile(relativePath: string): string {
   return readFileSync(resolve(REPO_ROOT, relativePath), 'utf8');
 }

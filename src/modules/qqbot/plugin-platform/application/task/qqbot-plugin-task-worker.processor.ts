@@ -31,13 +31,6 @@ export class QqbotPluginTaskWorkerProcessor
   private readonly logger = new Logger(QqbotPluginTaskWorkerProcessor.name);
   private worker?: Worker<QqbotPluginTaskJobData>;
 
-  /**
-   * 初始化 QqbotPluginTaskWorkerProcessor 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   * @param platformService - platformService 服务依赖；影响 constructor 的返回值。
-   * @param taskRepository - 插件任务仓库依赖；影响 constructor 的返回值。
-   * @param runRepository - 插件平台仓库依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly configService: ConfigService,
     private readonly platformService: QqbotPluginPlatformService,
@@ -47,9 +40,6 @@ export class QqbotPluginTaskWorkerProcessor
     private readonly runRepository: Repository<QqbotPluginTaskRun>,
   ) {}
 
-  /**
-   * 处理 QQBot 插件平台事件。
-   */
   async onModuleInit() {
     this.worker = new Worker<QqbotPluginTaskJobData>(
       QQBOT_PLUGIN_TASK_QUEUE_NAME,
@@ -66,9 +56,6 @@ export class QqbotPluginTaskWorkerProcessor
     await this.worker.waitUntilReady();
   }
 
-  /**
-   * 处理 QQBot 插件平台事件。
-   */
   async onModuleDestroy() {
     await this.worker?.close();
   }

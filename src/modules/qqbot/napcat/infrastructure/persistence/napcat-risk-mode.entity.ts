@@ -50,9 +50,6 @@ export class NapcatRiskMode {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * Assigns a stable Snowflake id before persisting account risk-mode state.
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

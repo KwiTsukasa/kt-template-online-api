@@ -24,13 +24,6 @@ type RequestWithId = Request & {
 
 @Injectable()
 export class ApiRequestLogInterceptor implements NestInterceptor {
-  /**
-   * 初始化 ApiRequestLogInterceptor 实例。
-   * @param logger - 日志记录器实例；绑定日志上下文名称。
-   * @param lokiLogPublisherService - lokiLogPublisherService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param systemNoticePublisher - systemNoticePublisher 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly logger: PinoLogger,
     private readonly lokiLogPublisherService: LokiLogPublisherService,

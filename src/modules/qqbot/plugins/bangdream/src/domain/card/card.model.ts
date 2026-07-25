@@ -87,11 +87,6 @@ export class Card {
   releaseGacha: Array<Array<number>>;
   releaseEvent: Array<Array<number>>;
 
-  /**
-   * 构造 Card 实例，并初始化该模型的本地基础字段。
-   *
-   * @param cardId - 卡牌 ID；定位本次读取、更新、删除或关联的卡牌。
-   */
   constructor(cardId: number) {
     this.cardId = cardId;
     const cardData = bangdreamCatalogRepository.getEntity<Record<string, any>>(

@@ -25,11 +25,6 @@ type QqbotPluginOperationPageQuery = {
 @Controller('qqbot/plugin')
 @UseGuards(JwtAuthGuard)
 export class QqbotPluginController {
-  /**
-   * 初始化 QqbotPluginController 实例。
-   * @param eventPluginRegistry - 事件插件 registry；提供 Admin 事件插件定义、健康状态和账号绑定入口。
-   * @param service - 插件平台服务；提供 descriptor worker 的命令插件列表、健康状态和能力分页。
-   */
   constructor(
     private readonly eventPluginRegistry: QqbotEventPluginRegistryService,
     private readonly service: QqbotPluginPlatformService,

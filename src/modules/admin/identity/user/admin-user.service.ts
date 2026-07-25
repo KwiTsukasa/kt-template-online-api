@@ -15,12 +15,6 @@ const DEFAULT_ADMIN_HOME_PATH = '/analytics';
 
 @Injectable()
 export class AdminUserService {
-  /**
-   * 初始化 AdminUserService 实例。
-   * @param userRepository - 用户仓库依赖；影响 constructor 的返回值。
-   * @param roleRepository - 角色仓库依赖；影响 constructor 的返回值。
-   * @param deptRepository - Admin仓库依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(AdminUser)
     private readonly userRepository: Repository<AdminUser>,

@@ -2,7 +2,14 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { extname } from 'node:path';
 
-const CHECK_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
+const CHECK_EXTENSIONS = new Set([
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+]);
 const CHECK_ROOTS = ['src/', 'test/', 'apps/', 'libs/'];
 const MAX_COMMAND_LENGTH = process.platform === 'win32' ? 4000 : 120000;
 
@@ -82,6 +89,8 @@ function getStagedFiles() {
     .map((file) => file.replaceAll('\\', '/'))
     .filter(Boolean);
 }
+
+run(getPnpmCommand(), ['run', 'check:jsdoc']);
 
 const files = getStagedFiles().filter((file) => {
   if (!existsSync(file)) return false;

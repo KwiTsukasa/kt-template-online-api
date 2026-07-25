@@ -1,10 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { buildTypeOrmOptions } from '../../src/app.module';
 
-/**
- * Creates a minimal ConfigService test double for TypeORM option generation.
- * @param values - Environment-like values returned by ConfigService.get().
- */
 function createConfig(values: Record<string, unknown>) {
   return {
     get: jest.fn((key: string) => values[key]),

@@ -22,9 +22,6 @@ jest.mock(
 import { drawCutoffDetail } from '@/modules/qqbot/plugins/bangdream/src/domain/cutoff/cutoff-detail.renderer';
 import { cutoffDetailOperation } from '@/modules/qqbot/plugins/bangdream/src/operations/cutoff-detail';
 
-/**
- * 创建 BangDream 插件对象或配置。
- */
 const createContext = () =>
   ({
     firstNumber: jest.fn((tokens: string[]) =>

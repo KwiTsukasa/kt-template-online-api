@@ -39,49 +39,27 @@ import {
 } from '../../../helpers/controller-route.helper';
 import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
-/**
- * 查询 QQBot 核心数据。
- * @param moduleClass - Nest 模块类；读取装饰器 metadata。
- * @param key - 键名；读取装饰器 metadata。
- * @returns QQBot 核心查询结果。
- */
 const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] => {
   return Reflect.getMetadata(key, moduleClass) || [];
 };
 
-/**
- * 查询 QQBot 核心数据。
- * @param items - QQBot列表；转换 QQBot列表项。
- */
 const getNames = (items: unknown[]) =>
   items.map((item) => (item as { name?: string }).name || `${item}`);
 
 type EntityClass = new (...args: never[]) => unknown;
 
-/**
- * 查询 QQBot 核心数据。
- * @param entity - entity 输入；驱动 `getMetadataArgsStorage()` 的 QQBot步骤。
- */
 const getEntityTableName = (entity: EntityClass) => {
   return getMetadataArgsStorage().tables.find(
     (table) => table.target === entity,
   )?.name;
 };
 
-/**
- * 查询 QQBot 核心数据。
- * @param entity - entity 输入；驱动 `getMetadataArgsStorage()` 的 QQBot步骤。
- */
 const getEntityColumnNames = (entity: EntityClass) => {
   return getMetadataArgsStorage()
     .columns.filter((column) => column.target === entity)
     .map((column) => `${column.options.name || column.propertyName}`);
 };
 
-/**
- * 查询 QQBot 核心数据。
- * @param entity - entity 输入；驱动 `getMetadataArgsStorage()` 的 QQBot步骤。
- */
 const getEntityNullableColumnNames = (entity: EntityClass) => {
   return getMetadataArgsStorage()
     .columns.filter((column) => column.target === entity)
@@ -89,10 +67,6 @@ const getEntityNullableColumnNames = (entity: EntityClass) => {
     .map((column) => `${column.options.name || column.propertyName}`);
 };
 
-/**
- * 判断 QQBot 核心条件。
- * @param definition - definition 输入；计算 QQBot判断结果。
- */
 const isOptionalSqlColumnForEntityInsert = (definition: string) => {
   return (
     !/\bNOT\s+NULL\b/i.test(definition) ||

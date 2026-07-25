@@ -1,23 +1,16 @@
 import type { NetworkPortForward } from './network-management.entity';
 
-/** Stable reason returned when a mapping cannot structurally act as a STUN endpoint source. */
 export type StunEndpointSourceDisabledReason =
   | 'KEEPER_DISABLED'
   | 'PORT_MISMATCH'
   | 'SOURCE_DELETING'
   | 'UDP_REQUIRED';
 
-/** Structural, lease-independent STUN source classification shared by DDNS and message delivery. */
 export type StunEndpointSourceEligibility = {
   disabledReasonCode: null | StunEndpointSourceDisabledReason;
   eligible: boolean;
 };
 
-/**
- * Classifies whether a mapping may own a UDP STUN endpoint, excluding its current lease.
- * @param mapping - Persisted port-forward mapping including desired Keeper configuration.
- * @returns Stable structural eligibility and existing DDNS-compatible reason codes.
- */
 export function classifyStunEndpointSource(
   mapping: Pick<
     NetworkPortForward,

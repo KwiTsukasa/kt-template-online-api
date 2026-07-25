@@ -17,10 +17,6 @@ const TIMEZONE_OPTIONS = [
 @Controller('timezone')
 @UseGuards(JwtAuthGuard)
 export class AdminTimezoneController {
-  /**
-   * 初始化 AdminTimezoneController 实例。
-   * @param timezoneService - timezoneService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly timezoneService: AdminTimezoneService) {}
 
   /**

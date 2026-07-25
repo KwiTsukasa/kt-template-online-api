@@ -61,16 +61,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   private recoveryInProgress = false;
   private shuttingDown = false;
 
-  /**
-   * Creates the dedicated network Agent MQTT bridge.
-   * @param configService - Runtime broker, Agent, and client identity settings.
-   * @param dataSource - Transaction boundary for publish acknowledgements and inbound state.
-   * @param eventStream - SSE fan-out notified only after accepted inbound commits.
-   * @param eventStager - Core-owned Outbox port that shares endpoint-history transactions.
-   * @param deliveryCoordinator - Core-owned durable delivery wake port used only after commit.
-   * @param clientFactory - Optional deterministic MQTT client factory used by tests.
-   * @param ddnsService - Optional automatic-DDNS reconciler notified after address semantics commit.
-   */
   constructor(
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
@@ -86,7 +76,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     private readonly ddnsService?: NetworkDdnsService,
   ) {}
 
-  /** Opens a persistent MQTT 5 session and schedules convergence publication. */
   onModuleInit(): void {
     const url = this.configService.get<string>('NETWORK_AGENT_MQTT_URL');
     if (!url) {
@@ -119,7 +108,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     this.retryTimer.unref();
   }
 
-  /** Prevents new recovery work, then closes timers and the persistent MQTT connection. */
   async onModuleDestroy(): Promise<void> {
     this.shuttingDown = true;
     if (this.retryTimer) clearInterval(this.retryTimer);
@@ -133,20 +121,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     this.recoveryInProgress = false;
   }
 
-  /**
-   * Schedules publication after a committed desired-state mutation.
-   * Broker unavailability never rejects the already accepted HTTP operation.
-   */
   requestDesiredPublish(): void {
     this.publishRequested = true;
     this.startPublishDrain();
   }
 
-  /**
-   * Publishes the latest complete desired snapshot and waits for QoS 1 PUBACK.
-   * @param force - Republish once even when published and desired revisions match.
-   * @returns True when a snapshot reached PUBACK, otherwise false.
-   */
   async publishLatestDesired(force = false): Promise<boolean> {
     if (!this.client?.connected) return false;
     const snapshot = await this.dataSource.transaction(async (manager) => {
@@ -174,11 +153,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     return true;
   }
 
-  /**
-   * Consumes one exact inbound Agent topic after parsing bounded JSON.
-   * @param topic - Exact reported, status, or events topic.
-   * @param payload - Untrusted MQTT payload.
-   */
   async consumeMessage(topic: string, payload: Buffer): Promise<void> {
     if (payload.byteLength > MAX_MESSAGE_BYTES) {
       throw new NetworkMessageValidationError('Network MQTT message too large');
@@ -223,7 +197,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     if (ddnsSourceChanged) this.ddnsService?.requestReconcile();
   }
 
-  /** Restores exact subscriptions and one retained desired republish after each connection. */
   private handleConnect(): void {
     const client = this.client;
     if (this.shuttingDown || !client) return;
@@ -247,13 +220,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /**
-   * Delays MQTT QoS 1 acknowledgement until protocol validation and DB commit finish.
-   * Permanent malformed messages are acknowledged and dropped; transient DB errors are not.
-   * @param topic - Inbound exact topic.
-   * @param payload - Raw MQTT bytes.
-   * @param callback - MQTT.js protocol acknowledgement callback.
-   */
   private async acknowledgeIncoming(
     topic: string,
     payload: Buffer,
@@ -276,7 +242,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Starts one serialized publisher drain without overlapping retained sends. */
   private startPublishDrain(): void {
     if (this.publishPromise) return;
     this.publishPromise = this.drainPublishRequests().finally(() => {
@@ -285,7 +250,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Drains the current publication request and preserves retry state on failure. */
   private async drainPublishRequests(): Promise<void> {
     while (this.publishRequested) {
       const force = this.forcePublishRequested;
@@ -302,11 +266,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Resolves only after MQTT.js receives PUBACK for a retained QoS 1 publication.
-   * @param topic - Fixed Agent desired topic.
-   * @param payload - Stable snapshot bytes.
-   */
   private async publishWithPuback(
     topic: string,
     payload: Buffer,
@@ -321,10 +280,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * Advances published revision only after PUBACK and never beyond current desired state.
-   * @param revision - PUBACK-confirmed desired revision.
-   */
   private async markRevisionPublished(revision: string): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(NetworkAgentState);
@@ -344,11 +299,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * Applies a full reported snapshot transactionally without creating desired rows.
-   * @param report - Strict Agent report parsed from the retained topic.
-   * @returns Independent Admin-refresh and DDNS-address semantic changes.
-   */
   private async applyReported(report: NetworkReportedSnapshot): Promise<{
     ddnsSourceChanged: boolean;
     visibleStateChanged: boolean;
@@ -525,13 +475,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /**
-   * Refreshes or withdraws the current lease while retaining the last observation.
-   * @param mapping - Persisted desired mapping being updated.
-   * @param endpoint - Full current endpoint or explicit null withdrawal.
-   * @param lastObserved - Most recent successful endpoint evidence, when available.
-   * @param reportedAt - Snapshot time used to reject an out-of-order withdrawal.
-   */
   private applyReportedEndpoints(
     mapping: NetworkPortForward,
     endpoint: NetworkReportedSnapshot['mappings'][number]['currentEndpoint'],
@@ -574,11 +517,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /**
-   * Applies retained Agent online status without changing mapping sync semantics.
-   * @param status - Strict retained status or LWT snapshot.
-   * @returns Independent Admin-refresh and DDNS-address semantic changes.
-   */
   private async applyStatus(status: NetworkStatusSnapshot): Promise<{
     ddnsSourceChanged: boolean;
     visibleStateChanged: boolean;
@@ -650,11 +588,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * Appends one endpoint change event exactly once by event ID.
-   * @param event - Strict endpoint transition parsed from the events topic.
-   * @returns Committed history visibility plus whether the same transaction accepted Outbox work.
-   */
   private async appendEndpointEvent(
     event: NetworkEndpointEvent,
   ): Promise<{ changed: boolean; deliveryAccepted: boolean }> {
@@ -720,12 +653,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * Determines whether adjacent endpoint-history rows prove a direct valid port transition.
-   * @param event - Current validated Agent endpoint event.
-   * @param previousHistory - Newest history row for the same mapping before this event.
-   * @returns Whether exactly one Outbox fact must be staged in the current transaction.
-   */
   private shouldStagePortChange(
     event: NetworkEndpointEvent,
     previousHistory: NetworkEndpointHistory | null,
@@ -741,11 +668,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /**
-   * Checks whether a candidate is a concrete transport port suitable for a message payload.
-   * @param value - Persisted or incoming endpoint port.
-   * @returns Whether the value is an integer in the legal TCP/UDP port range.
-   */
   private isValidPort(value: unknown): value is number {
     return (
       typeof value === 'number' &&
@@ -755,11 +677,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /**
-   * Serializes every report-owned mapping field that must be persisted.
-   * @param mapping - Current persisted mapping before or after one report application.
-   * @returns Stable comparison including lease timestamps for database writes.
-   */
   private reportedPersistedMappingStateFingerprint(
     mapping: NetworkPortForward,
   ): string {
@@ -781,11 +698,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /**
-   * Serializes only semantic mapping changes that justify reloading the Admin page.
-   * @param mapping - Current persisted mapping before or after one report application.
-   * @returns Stable comparison excluding lease-renewal timestamps.
-   */
   private reportedRefreshMappingStateFingerprint(
     mapping: NetworkPortForward,
   ): string {
@@ -804,11 +716,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /**
-   * Serializes report-owned Agent fields shown by the network page.
-   * @param state - Agent singleton before or after one reported snapshot.
-   * @returns Stable comparison string for committed report changes.
-   */
   private reportedAgentStateFingerprint(state: NetworkAgentState): string {
     return JSON.stringify([
       state.appliedRevision,
@@ -819,11 +726,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /**
-   * Serializes every status-topic field that must be persisted.
-   * @param state - Agent singleton before or after one status snapshot.
-   * @returns Stable comparison including heartbeat time for database writes.
-   */
   private statusPersistedStateFingerprint(state: NetworkAgentState): string {
     return JSON.stringify([
       state.lastHeartbeatAt,
@@ -837,11 +739,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /**
-   * Serializes semantic Agent status without the continuously advancing heartbeat.
-   * @param state - Agent singleton before or after one status snapshot.
-   * @returns Stable comparison used to suppress heartbeat-only browser reloads.
-   */
   private statusRefreshStateFingerprint(state: NetworkAgentState): string {
     return JSON.stringify([
       state.lastMqttErrorCode,
@@ -853,26 +750,22 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /** Validates that an inbound message belongs to the one configured Agent. */
   private assertAgentId(agentId: string): void {
     if (agentId !== this.agentId()) {
       throw new NetworkMessageValidationError('Unexpected network Agent ID');
     }
   }
 
-  /** Returns the fixed configured Agent identifier. */
   private agentId(): string {
     return (
       this.configService.get<string>('NETWORK_AGENT_ID') || DEFAULT_AGENT_ID
     );
   }
 
-  /** Builds one exact topic under the fixed Agent namespace. */
   private topic(kind: 'desired' | 'events' | 'reported' | 'status'): string {
     return `kt/network/v1/agents/${this.agentId()}/${kind}`;
   }
 
-  /** Returns the bounded publisher retry interval. */
   private retryMs(): number {
     const configured = Number(
       this.configService.get<string>('NETWORK_AGENT_MQTT_RETRY_MS'),
@@ -882,10 +775,6 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       : DEFAULT_RETRY_MS;
   }
 
-  /**
-   * Closes a stuck MQTT packet pipeline once, then reconnects the same persistent client.
-   * A successful connect clears the single-flight guard; shutdown permanently suppresses recovery.
-   */
   private recoverClient(): void {
     const client = this.client;
     if (this.shuttingDown || this.recoveryInProgress || !client) return;
@@ -899,17 +788,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * Logs a safe broker error classification and recovers a potentially stuck pipeline.
-   * @param error - MQTT client error whose type is safe to expose in service logs.
-   */
   private handleClientError(error: Error): void {
     if (this.shuttingDown) return;
     this.logger.warn(`Network Agent MQTT client error (${error.name})`);
     this.recoverClient();
   }
 
-  /** Detects MySQL duplicate-key failures for QoS 1 event redelivery races. */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const record = error as { code?: unknown; errno?: unknown };

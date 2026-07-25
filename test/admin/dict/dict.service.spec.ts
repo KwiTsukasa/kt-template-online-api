@@ -3,10 +3,6 @@ jest.mock('@/common', () => {
   return {
     ...actual,
     setDictDecodeCache: jest.fn(),
-    /**
-     * 执行 Admin回调。
-     * @param message - message 输入；驱动 `Error()` 的 Admin步骤。
-     */
     throwVbenError: (message: string) => {
       throw new Error(message);
     },

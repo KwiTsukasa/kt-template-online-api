@@ -135,26 +135,6 @@ export class QqbotPluginPlatformService
   >();
   private readonly activeWorkerPluginAliases = new Map<string, string>();
 
-  /**
-   * 初始化 QqbotPluginPlatformService 实例。
-   * @param pluginRepository - 插件主表仓库；维护 package key、名称和安装状态的持久化真相。
-   * @param versionRepository - 插件版本仓库；保存 manifest 快照和 package hash 供 worker 启动。
-   * @param installationRepository - 插件安装仓库；记录 installedPath、versionId 和 runtime/status 状态。
-   * @param operationRepository - 命令能力仓库；写入和启停 manifest 声明的 command operation。
-   * @param eventHandlerRepository - 事件能力仓库；写入和启停 manifest 声明的 event handler。
-   * @param accountBindingRepository - 账号绑定仓库；查询插件与账号的绑定关系。
-   * @param configRepository - 插件配置仓库；保存 Admin 修改的插件配置项。
-   * @param assetRepository - 插件资产仓库；保存 manifest 声明的资源路径和 hash。
-   * @param runtimeEventRepository - 运行时事件仓库；持久化 worker lifecycle、命令和任务安全摘要。
-   * @param argumentParser - 命令参数解析器；在执行 worker operation 前规范化输入。
-   * @param runtimeFactory - worker runtime 工厂；根据 installation/version 创建隔离执行实例。
-   * @param pluginRegistry - 命令 registry；在没有 active worker 时作为显式注册插件的查询兜底。
-   * @param eventPluginRegistry - 事件 registry；接收 worker manifest 元数据并支撑 Admin 绑定页面。
-   * @param packageReader - 本地安装包读取器；处理 Admin 上传/安装插件包的 manifest 校验。
-   * @param packageSource - 插件包描述符来源；启动内置包时只读取 manifest 和受控路径。
-   * @param taskSynchronizer - 定时任务同步器；把 manifest tasks 投影到平台任务表。
-   * @param taskScheduler - 定时任务调度器；在插件启停时同步或移除 BullMQ cron 调度。
-   */
   constructor(
     @InjectRepository(QqbotPlugin)
     private readonly pluginRepository: Repository<QqbotPlugin>,
@@ -193,9 +173,6 @@ export class QqbotPluginPlatformService
     private readonly taskScheduler?: QqbotPluginTaskSchedulerService,
   ) {}
 
-  /**
-   * 处理 QQBot 插件平台事件。
-   */
   async onModuleInit() {
     await this.startBuiltinWorkers();
   }
@@ -231,11 +208,6 @@ export class QqbotPluginPlatformService
     return this.listOperationSummaries({ pluginId });
   }
 
-  /**
-   * Lists command plugin summaries from active descriptor-backed workers.
-   * @param pluginKey - Optional package or legacy key used by Admin to narrow the command plugin list.
-   * @returns Command plugin summaries sourced from active worker manifests, with registry fallback only when no workers are active.
-   */
   async listPluginSummaries(pluginKey?: string): Promise<QqbotPluginSummary[]> {
     const workerSummaries = this.listActiveWorkerPluginSummaries(pluginKey);
     if (workerSummaries.length > 0 || this.activeWorkerContexts.size > 0) {
@@ -247,11 +219,6 @@ export class QqbotPluginPlatformService
     );
   }
 
-  /**
-   * Reads health for command plugins from active descriptor-backed workers.
-   * @param pluginKey - Optional package or legacy key used by Admin to narrow the health check.
-   * @returns Health entries normalized for Admin command plugin status display.
-   */
   async listPluginHealth(pluginKey?: string): Promise<QqbotPluginHealth[]> {
     const workerContexts = this.listActiveWorkerCommandContexts(pluginKey);
     if (workerContexts.length <= 0 && this.activeWorkerContexts.size <= 0) {
@@ -814,10 +781,6 @@ export class QqbotPluginPlatformService
     this.eventPluginRegistry?.setPluginActive(pluginKey, enabled);
   }
 
-  /**
-   * Starts built-in plugin packages discovered from controlled package roots.
-   * @returns Count of descriptor-backed workers that reached the active registry.
-   */
   async startBuiltinWorkers(): Promise<number> {
     if (!this.runtimeFactory || !this.packageSource) return 0;
 
@@ -854,11 +817,6 @@ export class QqbotPluginPlatformService
     return startedCount;
   }
 
-  /**
-   * Records one failed built-in worker boot without blocking other built-in plugin packages.
-   * @param installation - Persisted installation whose worker failed during module startup.
-   * @param error - Startup error from worker load, activate, or health checks.
-   */
   private async recordBuiltinWorkerStartFailure(
     installation: QqbotPluginInstallation,
     error: unknown,
@@ -879,12 +837,6 @@ export class QqbotPluginPlatformService
     );
   }
 
-  /**
-   * Ensures descriptor-discovered built-in package state is persisted.
-   * @param descriptor - Manifest descriptor discovered from a controlled plugin package root.
-   * @param persistedInstallation - Existing enabled installation for the same plugin key, when present.
-   * @returns Installation and version rows aligned to the descriptor package root and manifest snapshot.
-   */
   private async ensureBuiltinRuntimePersistence(
     descriptor: QqbotPluginPackageDescriptor,
     persistedInstallation?: QqbotPluginInstallation,
@@ -911,11 +863,6 @@ export class QqbotPluginPlatformService
     return { installation, version };
   }
 
-  /**
-   * Ensures the plugin row exists for a descriptor-discovered package.
-   * @param descriptor - Package descriptor whose manifest owns the plugin key, name, and description.
-   * @returns Persisted plugin row for the descriptor package.
-   */
   private async ensureBuiltinPlugin(
     descriptor: QqbotPluginPackageDescriptor,
   ) {
@@ -932,12 +879,6 @@ export class QqbotPluginPlatformService
     });
   }
 
-  /**
-   * Ensures a version row exists for the descriptor manifest version.
-   * @param pluginId - Persisted plugin id used for the `pluginId + version` uniqueness boundary.
-   * @param descriptor - Package descriptor whose manifest is stored as the version snapshot.
-   * @returns Persisted version row for this plugin and manifest version.
-   */
   private async ensureBuiltinPluginVersion(
     pluginId: string,
     descriptor: QqbotPluginPackageDescriptor,
@@ -977,13 +918,6 @@ export class QqbotPluginPlatformService
     });
   }
 
-  /**
-   * Aligns an existing enabled installation with the current descriptor package version.
-   * @param installation - Enabled installation previously persisted for the package plugin key.
-   * @param version - Current descriptor-backed version row that should be launched.
-   * @param descriptor - Package descriptor whose package root must become the installation path.
-   * @returns Installation row updated in-memory for runtime startup.
-   */
   private async alignBuiltinInstallation(
     installation: QqbotPluginInstallation,
     version: QqbotPluginVersion,
@@ -1057,11 +991,6 @@ export class QqbotPluginPlatformService
     return this.activeWorkerPluginAliases.get(pluginKey) || pluginKey;
   }
 
-  /**
-   * Lists active command worker contexts filtered by canonical or legacy plugin key.
-   * @param pluginKey - Optional package or legacy key supplied by Admin or compatibility callers.
-   * @returns Active worker contexts whose manifests expose command operations.
-   */
   private listActiveWorkerCommandContexts(
     pluginKey?: string,
   ): ActiveWorkerContext[] {
@@ -1075,11 +1004,6 @@ export class QqbotPluginPlatformService
     );
   }
 
-  /**
-   * Builds Admin command plugin summaries from active worker manifests.
-   * @param pluginKey - Optional package or legacy key used to filter active worker contexts.
-   * @returns Plugin summaries that do not depend on command registry plugin instances.
-   */
   private listActiveWorkerPluginSummaries(
     pluginKey?: string,
   ): QqbotPluginSummary[] {
@@ -1095,12 +1019,6 @@ export class QqbotPluginPlatformService
     );
   }
 
-  /**
-   * Normalizes an arbitrary worker health payload into the Admin health contract.
-   * @param workerContext - Active worker context that owns the package key and manifest display data.
-   * @param healthPayload - Worker health response returned by the plugin package runtime.
-   * @returns Command plugin health entry for Admin display.
-   */
   private toWorkerPluginHealth(
     workerContext: ActiveWorkerContext,
     healthPayload: unknown,
@@ -1125,11 +1043,6 @@ export class QqbotPluginPlatformService
     };
   }
 
-  /**
-   * Converts worker health status into the public QQBot plugin health enum.
-   * @param status - Raw status value returned by a plugin health hook.
-   * @returns Supported health status, defaulting to healthy for generic `{ ok: true }` payloads.
-   */
   private normalizePluginHealthStatus(
     status: unknown,
   ): QqbotPluginHealth['status'] {
@@ -1202,11 +1115,6 @@ export class QqbotPluginPlatformService
     await this.syncManifestTasksForInstallation(installation, manifest, true);
   }
 
-  /**
-   * Builds Admin-facing event metadata from a worker runtime manifest.
-   * @param manifest - Active worker manifest that owns event handler metadata.
-   * @returns Event plugin definitions grouped under the package plugin key.
-   */
   private buildRuntimeEventDefinitions(
     manifest: QqbotPluginManifest,
   ): QqbotEventPluginDefinition[] {

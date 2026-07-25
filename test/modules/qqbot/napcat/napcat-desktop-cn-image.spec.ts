@@ -3,10 +3,6 @@ import { join } from 'path';
 
 const repoRoot = join(__dirname, '../../../..');
 
-/**
- * Reads a repo file as UTF-8 text for static image asset assertions.
- * @param relativePath - Repository-relative path under `Node/kt-template-online-api`.
- */
 const readSource = (relativePath: string) =>
   readFileSync(join(repoRoot, relativePath), 'utf8');
 
@@ -164,9 +160,6 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(script).toContain('Refusing to delete unsafe output root');
   });
 
-  /**
-   * Verifies the checked-in operator guide documents the full release evidence contract.
-   */
   it('documents complete release metadata for staging NapCat Shell artifacts', () => {
     const readme = readSource('ci/napcat-desktop-cn/README.md');
 

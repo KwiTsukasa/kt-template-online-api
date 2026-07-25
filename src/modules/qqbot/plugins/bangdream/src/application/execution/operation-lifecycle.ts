@@ -51,10 +51,6 @@ type BangDreamLifecycleObserverMethod =
 export class BangDreamOperationLifecycle {
   private readonly observers: BangDreamOperationLifecycleObserver[];
 
-  /**
-   * 初始化 BangDreamOperationLifecycle 实例。
-   * @param observers - 服务器列表；影响 constructor 的返回值。
-   */
   constructor(observers: readonly BangDreamOperationLifecycleObserver[] = []) {
     this.observers = [...observers].sort(
       (a, b) => (a.order ?? 0) - (b.order ?? 0),
@@ -147,20 +143,12 @@ export function createBangDreamOperationLifecycleContext(
  */
 export function createBangDreamOperationLogObserver(): BangDreamOperationLifecycleObserver {
   return {
-    /**
-     * 执行 BangDream回调。
-     * @param context - context 输入；驱动 `logger()` 的 BangDream步骤。
-     */
     afterOutput: (context) => {
       logger(
         'operation',
         formatBangDreamOperationLifecycleObserverMessage('success', context),
       );
     },
-    /**
-     * 执行 BangDream回调。
-     * @param context - context 输入；驱动 `logger()` 的 BangDream步骤。
-     */
     beforeParse: (context) => {
       logger(
         'operation',
@@ -168,11 +156,6 @@ export function createBangDreamOperationLogObserver(): BangDreamOperationLifecyc
       );
     },
     name: 'BangDreamOperationLogObserver',
-    /**
-     * 执行 BangDream回调。
-     * @param context - context 输入；驱动 `formatBangDreamOperationLifecycleObserverMessage()` 的 BangDream步骤。
-     * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
-     */
     onError: (context, error) => {
       logger(
         'operation',

@@ -19,11 +19,6 @@ const MAX_DECODE_DEPTH = 6;
 const ALLOWED_LIVE2D_CHARACTERS = new Set(['pio', 'tia']);
 const ALLOWED_RUNTIME_FAMILIES = new Set(['moc', 'moc3']);
 
-/**
- * Detects MinIO/S3 object-missing errors from `statObject` and `getObject`.
- * @param error - Unknown failure thrown by the MinIO client while resolving a runtime object.
- * @returns `true` when the failure means the requested object key does not exist.
- */
 function isMinioObjectNotFound(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
     return false;
@@ -39,21 +34,11 @@ function isMinioObjectNotFound(error: unknown): boolean {
 
 @Injectable()
 export class BlogLive2DAssetService {
-  /**
-   * Creates the guarded Blog Live2D asset service.
-   * @param minioClientService - Existing MinIO helper used to stream Pio runtime family files.
-   * @param configService - Runtime config source for bucket, object prefix, and allowed browser origins.
-   */
   constructor(
     private readonly minioClientService: MinioClientService,
     private readonly configService: ConfigService,
   ) {}
 
-  /**
-   * Rejects browser asset requests that do not come from the configured Blog origins.
-   * @param referer - Browser Referer header; used for normal `<script>/<img>/<canvas>` asset loads.
-   * @param origin - Browser Origin header; used by CORS-capable requests when Referer is absent.
-   */
   assertAllowedRequest(referer?: string, origin?: string): void {
     const candidates = [referer, origin].filter(Boolean) as string[];
     if (!candidates.length) {
@@ -70,13 +55,6 @@ export class BlogLive2DAssetService {
     }
   }
 
-  /**
-   * Streams one Blog Live2D runtime asset from the configured MinIO bucket.
-   * @param character - Public character segment; only `pio` and `tia` are exposed so arbitrary MinIO prefixes cannot be streamed.
-   * @param family - Runtime family segment; only `moc` and `moc3` are allowed under the public Pio root.
-   * @param objectPath - Route tail below the family, including nested paths such as `textures/default-costume.png`.
-   * @returns MinIO stream and stat metadata for the requested object.
-   */
   async getRuntimeObject(
     character: string,
     family: string,
@@ -95,11 +73,6 @@ export class BlogLive2DAssetService {
     }
   }
 
-  /**
-   * Streams one character root catalog from the configured MinIO root prefix.
-   * @param character - Public character segment; keeps catalog streaming inside the `pio|tia` allowlist.
-   * @returns MinIO stream and stat metadata for `catalog.json`.
-   */
   async getCatalogObject(character: string): Promise<BlogLive2DAssetResult> {
     try {
       return await this.minioClientService.getObject(
@@ -118,13 +91,6 @@ export class BlogLive2DAssetService {
     }
   }
 
-  /**
-   * Builds the MinIO object key for a fixed-family character runtime file.
-   * @param character - Public character segment placed between root prefix and family.
-   * @param family - Runtime family segment supplied by the route.
-   * @param objectPath - Route tail supplied by the wildcard parameter.
-   * @returns Full MinIO object key under the configured Blog Live2D root prefix.
-   */
   resolveRuntimeObjectPath(
     character: string,
     family: string,
@@ -140,9 +106,6 @@ export class BlogLive2DAssetService {
     );
   }
 
-  /**
-   * @returns Configured MinIO bucket for Blog Live2D runtime files.
-   */
   private getBucketName(): string {
     return (
       this.configService.get<string>('BLOG_LIVE2D_BUCKET') ||
@@ -151,9 +114,6 @@ export class BlogLive2DAssetService {
     );
   }
 
-  /**
-   * @returns Sanitized MinIO object-key root prefix before the character segment.
-   */
   private getRootPrefixSegments(): string[] {
     const rootPrefix = this.configService.get<string>('BLOG_LIVE2D_ROOT_PREFIX');
     if (rootPrefix) {
@@ -174,9 +134,6 @@ export class BlogLive2DAssetService {
     );
   }
 
-  /**
-   * @returns Allowed absolute origins for Blog Live2D asset requests.
-   */
   private getAllowedOrigins(): string[] {
     return (
       this.configService.get<string>('BLOG_LIVE2D_ALLOWED_ORIGINS') ||
@@ -188,11 +145,6 @@ export class BlogLive2DAssetService {
       .map((item) => this.toOrigin(item));
   }
 
-  /**
-   * Converts a header value or configured URL to an absolute origin string.
-   * @param value - Referer, Origin, or allowlist entry that must parse as an HTTP(S) URL.
-   * @returns Protocol and host pair used for allowlist comparison.
-   */
   private toOrigin(value: string): string {
     try {
       const url = new URL(value);
@@ -205,11 +157,6 @@ export class BlogLive2DAssetService {
     }
   }
 
-  /**
-   * Normalizes and validates the public Blog Live2D character segment.
-   * @param character - Route character segment requested by Blog Web.
-   * @returns Safe character key used as the first public child below the root prefix.
-   */
   private normalizeCharacter(character: string): BlogLive2DCharacter {
     const segments = this.normalizeRouteSegments(character, 'character');
     if (
@@ -222,12 +169,6 @@ export class BlogLive2DAssetService {
     return segments[0] as BlogLive2DCharacter;
   }
 
-  /**
-   * Normalizes route and config path values into safe object-key segments.
-   * @param input - String or wildcard array supplied by Nest/path-to-regexp or runtime config.
-   * @param label - Human-readable source name used in the rejection message.
-   * @returns Decoded path segments with traversal, absolute URL, and backslash escapes rejected.
-   */
   private normalizeRouteSegments(
     input: BlogLive2DRuntimeAssetPath,
     label: string,
@@ -256,11 +197,6 @@ export class BlogLive2DAssetService {
     return segments;
   }
 
-  /**
-   * Normalizes and validates the public Pio runtime family segment.
-   * @param family - Public runtime family requested by Blog Web; custom version directories are not allowed.
-   * @returns Single safe family segment, either `moc` or `moc3`.
-   */
   private normalizeRuntimeFamily(family: string): string[] {
     const segments = this.normalizeRouteSegments(family, 'family');
     if (segments.length !== 1 || !ALLOWED_RUNTIME_FAMILIES.has(segments[0])) {
@@ -270,12 +206,6 @@ export class BlogLive2DAssetService {
     return segments;
   }
 
-  /**
-   * Decodes route path text until stable so encoded traversal cannot pass through.
-   * @param value - Raw path text from a route segment or config value.
-   * @param label - Human-readable source name used in the rejection message.
-   * @returns Fully decoded path text when decoding converges within the bounded depth.
-   */
   private decodeRepeated(value: string, label: string): string {
     try {
       let decoded = value;

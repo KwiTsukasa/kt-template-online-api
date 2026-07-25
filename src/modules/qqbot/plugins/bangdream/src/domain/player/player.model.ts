@@ -182,12 +182,6 @@ export class Player {
 
   isInitfull: boolean = false;
 
-  /**
-   * 构造 Player 实例，并初始化该模型的本地基础字段。
-   *
-   * @param playerId - 玩家 ID；定位本次读取、更新、删除或关联的玩家。
-   * @param server - server 输入；影响 constructor 的返回值。
-   */
   constructor(
     playerId: number,
     server: Server,

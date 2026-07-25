@@ -96,11 +96,6 @@ type BangDreamCommandPlugin = ReturnType<
 
 type BangDreamGenericPathMapper = (filePath: string) => string;
 
-/**
- * Creates the BangDream plugin entry for package-local calls or the generic worker runtime.
- * @param options - Legacy BangDream runtime options or generic worker create context with manifest and config snapshot.
- * @returns BangDream command plugin instance exposing operations, health checks, and scheduled tasks.
- */
 export function createPlugin(
   options: BangDreamPluginRuntimeOptions,
 ): BangDreamCommandPlugin;
@@ -116,11 +111,6 @@ export function createPlugin(
   return buildBangDreamRuntimePlugin(options);
 }
 
-/**
- * Creates the BangDream plugin through the historical package-local option shape.
- * @param options - Package-local options carrying synchronous config, optional runtime IO, and manifest operations.
- * @returns BangDream command plugin used by package-local callers and tests.
- */
 function buildBangDreamRuntimePlugin(
   options: BangDreamPluginRuntimeOptions,
 ) {
@@ -137,10 +127,6 @@ function buildBangDreamRuntimePlugin(
       (error instanceof Error ? error.message : `${error}`) ||
       'BangDream 命令执行失败');
 
-  /**
-   * Checks BangDream runtime health without turning external catalog outages into worker startup failures.
-   * @returns Health payload consumed by the plugin platform and Admin health view.
-   */
   const checkBangDreamHealth = async () => {
     const checkedAt = formatBangDreamCheckedAt(new Date());
     try {
@@ -159,11 +145,6 @@ function buildBangDreamRuntimePlugin(
     }
   };
 
-  /**
-   * 执行 BangDream 插件局部步骤。
-   * @param operationKey - operationKey 输入；影响 executeOperation 的返回值。
-   * @param input - input 输入；影响 executeOperation 的返回值。
-   */
   const executeOperation = (
     operationKey: BangDreamOperationKey,
     input: BangDreamCommandInput,
@@ -178,10 +159,6 @@ function buildBangDreamRuntimePlugin(
     });
 
   return {
-    /**
-     * 激活插件运行时。
-     * @returns 插件处理结果。
-     */
     activate: async () => {
       await Promise.all([
         context.refreshDictionaryCache(),
@@ -189,19 +166,9 @@ function buildBangDreamRuntimePlugin(
       ]);
     },
     description: options.description,
-    /**
-     * 释放插件运行时资源。
-     * @returns 插件处理结果。
-     */
     dispose: async () => undefined,
     executeOperation,
-    /**
-     * 执行 BangDream回调。
-     */
     health: checkBangDreamHealth,
-    /**
-     * 执行 BangDream回调。
-     */
     healthCheck: checkBangDreamHealth,
     key: options.pluginKey || 'bangdream',
     legacyKeys: options.legacyAliases,
@@ -215,11 +182,6 @@ function buildBangDreamRuntimePlugin(
       name: operation.name || operation.key,
       outputSchema: operation.outputSchema || getBangDreamOutputSchema(),
       timeoutMs: operation.timeoutMs,
-      /**
-       * 执行插件操作处理器。
-       * @param input - input 输入；驱动 `executeOperation()` 的 BangDream步骤。
-       * @returns 插件处理结果。
-       */
       execute: async (input: BangDreamCommandInput) =>
         await executeOperation(operation.key, input),
     })),
@@ -228,11 +190,6 @@ function buildBangDreamRuntimePlugin(
   };
 }
 
-/**
- * Creates the BangDream plugin from the generic worker contract while keeping adapters inside the package.
- * @param options - Generic worker context; config is read from the snapshot and IO calls delegate to host RPC methods.
- * @returns BangDream command plugin compatible with the generic worker runtime.
- */
 async function buildBangDreamGenericPlugin(
   options: QqbotGenericPluginCreateOptions,
 ): Promise<BangDreamCommandPlugin> {
@@ -261,11 +218,6 @@ async function buildBangDreamGenericPlugin(
   });
 }
 
-/**
- * Checks whether a create call is using the generic worker runtime shape.
- * @param options - Unknown BangDream create options supplied by package-local callers or generic workers.
- * @returns `true` when the options include a runtime config snapshot.
- */
 function isBangDreamGenericPluginCreateOptions(
   options: BangDreamPluginCreateOptions,
 ): options is QqbotGenericPluginCreateOptions {
@@ -275,50 +227,23 @@ function isBangDreamGenericPluginCreateOptions(
   );
 }
 
-/**
- * Creates a synchronous BangDream config reader over the worker startup snapshot.
- * @param snapshot - Manifest-owned config key snapshot captured before the worker call.
- * @returns Config reader that never performs async host RPC during BangDream command execution.
- */
 function createBangDreamGenericConfigReader(
   snapshot: Record<string, string | undefined>,
 ): BangDreamConfigReader {
   return {
-    /**
-     * Reads one BangDream config value from the immutable worker snapshot.
-     * @param key - Runtime config key declared by the BangDream package manifest.
-     * @returns Snapshot value cast to the requested BangDream config type.
-     */
     get: <T = string>(key: string) => snapshot[key] as T | undefined,
   };
 }
 
-/**
- * Creates a dictionary reader that delegates BangDream dictionary lookups to the generic host.
- * @param host - Generic worker host facade with dictionary RPC methods.
- * @returns Dictionary reader used by BangDream command context cache refresh.
- */
 function createBangDreamGenericDictionaryReader(
   host: Record<string, unknown>,
 ): BangDreamDictionaryReader {
   return {
-    /**
-     * Reads dictionary items through the worker host bridge.
-     * @param dictCode - Admin dictionary code requested by BangDream alias/config lookup.
-     * @returns Dictionary items normalized to label/value pairs by the command context.
-     */
     getDictItemsByKey: async (dictCode) =>
       await callBangDreamGenericHost(host, 'getDictItemsByKey', dictCode),
   };
 }
 
-/**
- * Builds BangDream runtime IO adapters over generic worker host methods.
- * @param options - Generic worker context containing host RPC methods and config snapshot.
- * @param pathMapper - Converts BangDream absolute package paths into host-safe package-relative paths.
- * @param syncJsonCache - Preloaded JSON payloads available to synchronous BangDream readers.
- * @returns Runtime IO implementation consumed by BangDream package infrastructure.
- */
 function createBangDreamGenericRuntimeIo(
   options: QqbotGenericPluginCreateOptions,
   pathMapper: BangDreamGenericPathMapper,
@@ -326,17 +251,7 @@ function createBangDreamGenericRuntimeIo(
 ): BangDreamRuntimeIo {
   const { host, runtime } = options;
   return {
-    /**
-     * Reads a BangDream config value from the startup snapshot.
-     * @param key - Runtime config key declared by the BangDream package manifest.
-     * @returns Snapshot value or `undefined` when the key is not configured.
-     */
     getConfig: (key) => runtime.configSnapshot[key],
-    /**
-     * Reads a package asset file through the generic host bridge.
-     * @param filePath - Package-relative asset path requested by BangDream rendering or catalog code.
-     * @returns Asset bytes from the package root.
-     */
     readAssetFile: async (filePath) =>
       normalizeBangDreamHostBuffer(
         await callBangDreamGenericHost(
@@ -345,11 +260,6 @@ function createBangDreamGenericRuntimeIo(
           pathMapper(filePath),
         ),
       ),
-    /**
-     * Reads Excel rows from a package-local workbook buffer through the generic host bridge.
-     * @param filePath - Absolute or relative BangDream static workbook path requested by package code.
-     * @returns First-sheet rows parsed from host-provided XLSX bytes.
-     */
     readExcelRows: async <T extends Record<string, unknown>>(
       filePath: string,
     ) =>
@@ -362,22 +272,12 @@ function createBangDreamGenericRuntimeIo(
           ),
         ),
       ),
-    /**
-     * Reads a package-local JSON file through the generic host bridge.
-     * @param filePath - Package-relative JSON path requested by BangDream storage or static data code.
-     * @returns Parsed JSON payload returned by the host bridge.
-     */
     readJsonFile: async <T = unknown>(filePath: string) =>
       await callBangDreamGenericHost<T>(
         host,
         'readJsonFile',
         pathMapper(filePath),
       ),
-    /**
-     * Reads preloaded package-local JSON synchronously for BangDream search/config modules.
-     * @param filePath - Absolute or relative BangDream JSON path requested by synchronous package code.
-     * @returns Cached JSON payload populated during generic plugin creation.
-     */
     readJsonFileSync: <T = unknown>(filePath: string) => {
       const relativePath = pathMapper(filePath);
       if (!syncJsonCache.has(relativePath)) {
@@ -387,11 +287,6 @@ function createBangDreamGenericRuntimeIo(
       }
       return syncJsonCache.get(relativePath) as T;
     },
-    /**
-     * Renames a package-local file through the generic host bridge.
-     * @param from - Package-relative temporary path created by BangDream storage code.
-     * @param to - Package-relative final path for the atomic write target.
-     */
     renameFile: async (from, to) => {
       await callBangDreamGenericHost(
         host,
@@ -400,12 +295,6 @@ function createBangDreamGenericRuntimeIo(
         pathMapper(to),
       );
     },
-    /**
-     * Requests binary HTTP content through the generic host bridge.
-     * @param url - Absolute HTTP URL requested by BangDream external integrations.
-     * @param requestOptions - Optional headers and timeout used for the host-mediated request.
-     * @returns Buffer body wrapped in the BangDream runtime IO response shape.
-     */
     requestArrayBuffer: async (url, requestOptions) => ({
       body: normalizeBangDreamHostBuffer(
         await callBangDreamGenericHost(host, 'requestBuffer', {
@@ -418,12 +307,6 @@ function createBangDreamGenericRuntimeIo(
         }),
       ),
     }),
-    /**
-     * Requests JSON HTTP content through the generic host bridge.
-     * @param url - Absolute HTTP URL requested by BangDream external integrations.
-     * @param requestOptions - Optional headers and timeout used for the host-mediated request.
-     * @returns JSON body wrapped in the BangDream runtime IO response shape.
-     */
     requestJson: async <T = unknown>(url: string, requestOptions) => ({
       body: await callBangDreamGenericHost<T>(host, 'requestJson', {
         context: 'BangDream 数据接口',
@@ -435,18 +318,9 @@ function createBangDreamGenericRuntimeIo(
         url,
       }),
     }),
-    /**
-     * Sleeps through the generic host bridge so worker delays remain bounded by platform policy.
-     * @param ms - Delay duration in milliseconds requested by BangDream retry logic.
-     */
     sleep: async (ms) => {
       await callBangDreamGenericHost(host, 'sleep', ms);
     },
-    /**
-     * Writes a package-local JSON file through the generic host bridge.
-     * @param filePath - Package-relative storage path requested by BangDream cache code.
-     * @param data - JSON-serializable payload to persist in package storage.
-     */
     writeJsonFile: async (filePath, data) => {
       await callBangDreamGenericHost(
         host,
@@ -458,11 +332,6 @@ function createBangDreamGenericRuntimeIo(
   };
 }
 
-/**
- * Creates a BangDream package path mapper for generic host file calls.
- * @param installationId - Runtime installation id used to namespace package-external cache paths.
- * @returns Function converting absolute package paths to package-relative host paths with forward slashes.
- */
 function createBangDreamGenericPathMapper(
   installationId: string,
 ): BangDreamGenericPathMapper {
@@ -471,11 +340,6 @@ function createBangDreamGenericPathMapper(
     installationId || 'default',
   )}`;
 
-  /**
-   * Converts a BangDream runtime file path into a host-safe package-relative path.
-   * @param filePath - Absolute package path, package-relative path, or package-external cache path from BangDream code.
-   * @returns Forward-slash relative path accepted by the generic host bridge.
-   */
   return (filePath: string) => {
     if (!path.isAbsolute(filePath)) {
       return normalizeBangDreamHostPath(filePath);
@@ -496,12 +360,6 @@ function createBangDreamGenericPathMapper(
   };
 }
 
-/**
- * Preloads synchronous BangDream JSON files through async generic host methods before the plugin is returned.
- * @param host - Generic worker host facade used to read package JSON files.
- * @param pathMapper - Converts BangDream absolute paths to host-safe package-relative paths.
- * @returns Map keyed by normalized package-relative JSON paths for sync readers.
- */
 async function preloadBangDreamGenericSyncJson(
   host: Record<string, unknown>,
   pathMapper: BangDreamGenericPathMapper,
@@ -517,11 +375,6 @@ async function preloadBangDreamGenericSyncJson(
   return cache;
 }
 
-/**
- * Parses rows from the first worksheet of a host-provided XLSX buffer.
- * @param buffer - Workbook bytes read through the generic host bridge.
- * @returns JSON rows from the first workbook sheet.
- */
 function parseBangDreamExcelRows<T extends Record<string, unknown>>(
   buffer: Buffer,
 ): T[] {
@@ -531,11 +384,6 @@ function parseBangDreamExcelRows<T extends Record<string, unknown>>(
   return XLSX.utils.sheet_to_json<T>(workbook.Sheets[sheetName]);
 }
 
-/**
- * Normalizes a host path to forward-slash package-relative form.
- * @param filePath - Package-relative path with either Windows or POSIX separators.
- * @returns Forward-slash path without leading current-directory markers.
- */
 function normalizeBangDreamHostPath(filePath: string) {
   return filePath
     .replace(/\\/g, '/')
@@ -545,35 +393,18 @@ function normalizeBangDreamHostPath(filePath: string) {
     .join('/');
 }
 
-/**
- * Converts an absolute package-external path into a stable runtime storage key.
- * @param filePath - Absolute cache or storage path outside the BangDream package root.
- * @returns Forward-slash runtime storage suffix that is safe for package-local host APIs.
- */
 function normalizeBangDreamExternalPath(filePath: string) {
   return normalizeBangDreamHostPath(
     filePath.replace(/^[A-Za-z]:/, (drive) => drive.slice(0, 1)),
   );
 }
 
-/**
- * Sanitizes one path segment used by generic runtime storage prefixes.
- * @param value - Installation id or other untrusted segment value.
- * @returns Path-safe segment with separators and punctuation collapsed.
- */
 function normalizeBangDreamPathSegment(value: string) {
   return (
     value.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'default'
   );
 }
 
-/**
- * Calls one generic BangDream host capability and fails with a package-owned error when absent.
- * @param host - Generic worker host facade supplied to `createPlugin`.
- * @param method - Host capability name required by the BangDream adapter.
- * @param args - Positional arguments accepted by the host facade method.
- * @returns Host method result cast to the requested package-local type.
- */
 async function callBangDreamGenericHost<TResult = any>(
   host: Record<string, unknown>,
   method: string,
@@ -586,11 +417,6 @@ async function callBangDreamGenericHost<TResult = any>(
   return (await fn(...args)) as TResult;
 }
 
-/**
- * Converts a generic host binary response into a Node Buffer for BangDream render code.
- * @param value - Buffer, Uint8Array, or object containing a `body` field returned by the host bridge.
- * @returns Buffer instance safe for BangDream runtime IO consumers.
- */
 function normalizeBangDreamHostBuffer(value: unknown): Buffer {
   const body =
     value && typeof value === 'object' && 'body' in value
@@ -602,12 +428,6 @@ function normalizeBangDreamHostBuffer(value: unknown): Buffer {
   return Buffer.from([]);
 }
 
-/**
- * Normalizes generic worker errors to the legacy BangDream string error contract.
- * @param normalizeError - Generic worker error normalizer supplied by the platform runtime.
- * @param error - Error or arbitrary thrown value from BangDream package code.
- * @returns Error message consumed by BangDream lifecycle logging and thrown operation errors.
- */
 function normalizeBangDreamGenericError(
   normalizeError: QqbotGenericPluginCreateOptions['normalizeError'],
   error: unknown,
@@ -723,10 +543,6 @@ function getBangDreamOutputSchema() {
  * @param date - date 输入；执行 `date.getFullYear()`、`date.getMonth()`、`date.getDate()`、`date.getHours()` 对应的 BangDream步骤。
  */
 function formatBangDreamCheckedAt(date: Date) {
-  /**
-   * 补齐 BangDream 插件展示文本。
-   * @param input - input 输入；影响 pad 的返回值。
-   */
   const pad = (input: number) => `${input}`.padStart(2, '0');
   return [
     date.getFullYear(),

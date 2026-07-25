@@ -102,9 +102,6 @@ export class NapcatProtocolProfile {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * Assigns a stable Snowflake id before persisting protocol-profile evidence.
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

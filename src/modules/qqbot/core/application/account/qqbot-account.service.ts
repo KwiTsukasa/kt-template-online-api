@@ -42,16 +42,6 @@ const INSECURE_ACCOUNT_SECRET_VALUES = new Set([
 
 @Injectable()
 export class QqbotAccountService {
-  /**
-   * 初始化 QqbotAccountService 实例。
-   * @param accountRepository - 账号仓库依赖；影响 constructor 的返回值。
-   * @param accountAbilityRepository - 账号仓库依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param napcatRuntime - napcatRuntime 输入；影响 constructor 的返回值。
-   * @param systemNoticePublisher - systemNoticePublisher 输入；影响 constructor 的返回值。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   * @param passwordCryptoService - passwordCryptoService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(QqbotAccount)
     private readonly accountRepository: Repository<QqbotAccount>,
@@ -391,12 +381,6 @@ export class QqbotAccountService {
     return saved.id;
   }
 
-  /**
-   * Updates the account and ability identity atomically, cancelling its claimable deliveries
-   * in the same transaction when an administrator disables it or replaces its self ID.
-   * @param body - Complete administrative account update with the target account ID.
-   * @returns `true` after the account, ability, and required delivery cancellations commit.
-   */
   async update(body: QqbotAccountUpdateDto) {
     if (body.selfId) {
       await this.assertSelfIdAvailable(body.selfId, body.id);
@@ -430,12 +414,6 @@ export class QqbotAccountService {
     return true;
   }
 
-  /**
-   * Removes NapCat containers first, then soft-deletes the account and ability and cancels
-   * claimable deliveries in one database transaction; a later DB failure cannot restore containers.
-   * @param id - QQBot account ID to remove.
-   * @returns `{ deletedContainers: number }` for containers removed before the transaction.
-   */
   async remove(id: string) {
     const account = await this.accountRepository.findOne({
       where: {
@@ -508,7 +486,6 @@ export class QqbotAccountService {
     await this.accountRepository.update({ selfId }, payload);
   }
 
-  /** Cancels only claimable rows through an account's bindings in the caller transaction. */
   private async cancelAccountDeliveries(
     manager: EntityManager,
     accountId: string,
@@ -598,12 +575,6 @@ export class QqbotAccountService {
     );
   }
 
-  /**
-   * Persists the QQ-login-only status reported by NapCat WebUI without changing OneBot or container connectivity.
-   * @param selfId - QQ account number whose NapCat login state was just probed.
-   * @param qqLoginStatus - WebUI login state such as qrcode pending, offline, or online.
-   * @param lastError - Optional human-facing reason; null clears stale risk/offline text when the state is actionable.
-   */
   async markQqLoginStatus(
     selfId: string,
     qqLoginStatus: QqbotNapcatRuntimeLoginStatus,
@@ -652,26 +623,11 @@ export class QqbotAccountService {
     }
 
     const list = await this.napcatRuntime.appendRuntime(accounts, {
-      /**
-       * 执行 QQBot回调。
-       * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-       */
       clearQqLoginError: async (selfId) => {
         await this.accountRepository.update({ selfId }, { lastError: null });
       },
-      /**
-       * 执行 QQBot回调。
-       * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-       * @param lastError - lastError 输入；驱动 `this.markQqLoginOffline()` 的 QQBot步骤。
-       */
       markQqLoginOffline: (selfId, lastError) =>
         this.markQqLoginOffline(selfId, lastError),
-      /**
-       * 执行 QQBot回调。
-       * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-       * @param offlineReason - offlineReason 输入；驱动 `this.publishOfflineNotice()` 的 QQBot步骤。
-       * @param metadata - metadata 输入；驱动 `this.publishOfflineNotice()` 的 QQBot步骤。
-       */
       publishOfflineNotice: (selfId, offlineReason, metadata) =>
         this.publishOfflineNotice(selfId, offlineReason, metadata),
     });
@@ -681,10 +637,6 @@ export class QqbotAccountService {
     return list;
   }
 
-  /**
-   * Persists computed NapCat split statuses back to qqbot_account when the entity exposes the v3 status columns.
-   * @param account - Enriched account list row; its `napcat` snapshot is the latest runtime evidence produced for Admin.
-   */
   private async syncPersistedNapcatSplitStatus(account: QqbotAccountListItem) {
     if (!this.hasPersistedNapcatSplitStatus(account)) return;
 
@@ -699,11 +651,6 @@ export class QqbotAccountService {
     Object.assign(account, payload);
   }
 
-  /**
-   * Checks whether a hydrated account row includes the v3 split-status properties that should be kept in sync.
-   * @param account - Account row or test double; legacy test doubles without these properties skip persistence.
-   * @returns True when status synchronization can write meaningful column updates.
-   */
   private hasPersistedNapcatSplitStatus(account: QqbotAccountListItem) {
     return [
       'oneBotStatus',
@@ -713,11 +660,6 @@ export class QqbotAccountService {
     ].some((key) => Object.prototype.hasOwnProperty.call(account, key));
   }
 
-  /**
-   * Converts the latest account-list runtime evidence into qqbot_account split-status column values.
-   * @param account - Account row plus optional NapCat runtime evidence returned from the runtime adapter.
-   * @returns Partial account payload containing only the status columns owned by the split-status contract.
-   */
   private buildNapcatSplitStatusPayload(
     account: QqbotAccountListItem,
   ): Pick<
@@ -733,11 +675,6 @@ export class QqbotAccountService {
     };
   }
 
-  /**
-   * Normalizes container evidence for the qqbot_account.container_status cache column.
-   * @param napcat - Optional NapCat runtime info attached to the account-list row.
-   * @returns Running/stopped/error/creating when known, otherwise unknown.
-   */
   private toPersistedContainerStatus(
     napcat?: null | QqbotAccountListItem['napcat'],
   ): QqbotRuntimeContainerStatus {
@@ -746,11 +683,6 @@ export class QqbotAccountService {
     return 'unknown';
   }
 
-  /**
-   * Normalizes WebUI probe evidence for the qqbot_account.webui_status cache column.
-   * @param webuiOnline - Runtime probe value; null/undefined means no fresh WebUI probe was performed.
-   * @returns Persisted WebUI status suitable for filtering and raw DB inspection.
-   */
   private toPersistedWebuiStatus(
     webuiOnline?: boolean | null,
   ): QqbotNapcatWebuiStatus {

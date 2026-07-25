@@ -23,10 +23,6 @@ import { QqbotPermissionService } from '../../application/permission/qqbot-permi
 @Controller('qqbot/permission')
 @UseGuards(JwtAuthGuard)
 export class QqbotPermissionController {
-  /**
-   * 初始化 QqbotPermissionController 实例。
-   * @param permissionService - permissionService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly permissionService: QqbotPermissionService) {}
 
   /**

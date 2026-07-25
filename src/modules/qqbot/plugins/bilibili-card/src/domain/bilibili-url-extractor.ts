@@ -20,11 +20,6 @@ type ExtractionState = {
   strings: number;
 };
 
-/**
- * Extracts Bilibili URL candidates from normalized message text and raw QQ card payloads.
- * @param input - Normalized QQBot message fields and raw OneBot event payload from NapCat.
- * @returns Unique allowed Bilibili URL strings in discovery order.
- */
 export function extractBilibiliUrls(input: BilibiliUrlExtractionInput) {
   const candidates = collectStringCandidates(input);
   const seen = new Set<string>();
@@ -45,11 +40,6 @@ export function extractBilibiliUrls(input: BilibiliUrlExtractionInput) {
   return output;
 }
 
-/**
- * Removes semicolon-delimited CQ tail text while keeping common HTML entities intact.
- * @param rawUrl - Raw URL token collected by the extractor regex.
- * @returns URL token that can still be decoded by `cleanBilibiliUrlCandidate`.
- */
 function trimNonEntitySemicolonTail(rawUrl: string) {
   for (let index = 0; index < rawUrl.length; index += 1) {
     if (rawUrl[index] !== ';') continue;
@@ -59,11 +49,6 @@ function trimNonEntitySemicolonTail(rawUrl: string) {
   return rawUrl;
 }
 
-/**
- * Collects string values that may contain links from text fields and nested QQ card objects.
- * @param input - Extraction input built from normalized message state.
- * @returns Candidate strings that may contain URLs.
- */
 function collectStringCandidates(input: BilibiliUrlExtractionInput) {
   const state = createExtractionState();
   pushText(state, input.messageText);
@@ -72,10 +57,6 @@ function collectStringCandidates(input: BilibiliUrlExtractionInput) {
   return state.candidates;
 }
 
-/**
- * Creates mutable extraction counters used to keep event traversal predictable.
- * @returns Empty extraction state with bounded candidate storage.
- */
 function createExtractionState(): ExtractionState {
   return {
     candidates: [],
@@ -84,11 +65,6 @@ function createExtractionState(): ExtractionState {
   };
 }
 
-/**
- * Collects raw event candidates from explicit OneBot message segments.
- * @param rawEvent - Raw OneBot event payload from NapCat.
- * @param state - Mutable extraction state with traversal counters.
- */
 function collectRawEventCandidates(
   rawEvent: BilibiliUrlExtractionInput['rawEvent'],
   state: ExtractionState,
@@ -97,11 +73,6 @@ function collectRawEventCandidates(
   collectMessageSegments(rawEvent.message, state);
 }
 
-/**
- * Collects candidates from OneBot message segment arrays or a single segment object.
- * @param value - Raw `message` field from a OneBot event.
- * @param state - Mutable extraction state with traversal counters.
- */
 function collectMessageSegments(value: unknown, state: ExtractionState) {
   if (Array.isArray(value)) {
     for (const segment of value) {
@@ -112,11 +83,6 @@ function collectMessageSegments(value: unknown, state: ExtractionState) {
   collectMessageSegment(value, state);
 }
 
-/**
- * Collects URL-like fields and known card text payloads from one OneBot message segment.
- * @param value - Raw OneBot segment value.
- * @param state - Mutable extraction state with traversal counters.
- */
 function collectMessageSegment(value: unknown, state: ExtractionState) {
   if (!isRecord(value)) return;
   const type = typeof value.type === 'string' ? value.type.toLowerCase() : '';
@@ -135,13 +101,6 @@ function collectMessageSegment(value: unknown, state: ExtractionState) {
   }
 }
 
-/**
- * Walks object payloads while collecting only values held by URL-like keys.
- * @param value - Unknown raw event value to inspect.
- * @param state - Mutable extraction state with traversal counters.
- * @param seen - Object identity set used to avoid cyclic payloads.
- * @param depth - Current recursion depth used to bound malformed payloads.
- */
 function collectUrlLikeFields(
   value: unknown,
   state: ExtractionState,
@@ -166,11 +125,6 @@ function collectUrlLikeFields(
   }
 }
 
-/**
- * Parses a JSON card string when possible and ignores invalid JSON without aborting extraction.
- * @param value - Raw segment `data.data` value that may be JSON.
- * @param state - Mutable extraction state with traversal counters.
- */
 function collectJsonCardPayload(value: unknown, state: ExtractionState) {
   if (typeof value !== 'string' || value.length > MAX_JSON_BYTES) return;
   const trimmed = value.trim();
@@ -187,11 +141,6 @@ function collectJsonCardPayload(value: unknown, state: ExtractionState) {
   }
 }
 
-/**
- * Adds a non-empty string candidate to the output list.
- * @param state - Mutable extraction state with traversal counters.
- * @param value - Candidate value from normalized text or raw card payload.
- */
 function pushText(state: ExtractionState, value: unknown) {
   if (state.strings >= MAX_STRINGS) return;
   if (typeof value === 'string' && value.trim()) {
@@ -200,23 +149,10 @@ function pushText(state: ExtractionState, value: unknown) {
   }
 }
 
-/**
- * Checks whether an unknown value is a non-null object record.
- * @param value - Unknown value from the raw event tree.
- * @returns `true` when the value can be inspected with object keys.
- */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-/**
- * Enters an object node when recursion and node-count bounds allow it.
- * @param value - Unknown value being traversed.
- * @param state - Mutable extraction state with traversal counters.
- * @param seen - Object identity set used to avoid cyclic payloads.
- * @param depth - Current recursion depth used to bound malformed payloads.
- * @returns `true` when callers may inspect the object's children.
- */
 function enterObjectNode(
   value: unknown,
   state: ExtractionState,
@@ -232,11 +168,6 @@ function enterObjectNode(
   return true;
 }
 
-/**
- * Identifies card fields that commonly carry jump URLs instead of display text.
- * @param key - Raw object key from a OneBot segment or card payload.
- * @returns `true` when the key name suggests URL content.
- */
 function isUrlLikeKey(key: string) {
   return URL_LIKE_KEY_PATTERN.test(key);
 }

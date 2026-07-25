@@ -3,10 +3,6 @@ import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/sr
 import { getBangDreamAssetPath } from '@/modules/qqbot/plugins/bangdream/src/theme/asset-manifest';
 
 export class ServerResourceRepository {
-  /**
-   * 初始化 ServerResourceRepository 实例。
-   * @param provider - provider 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}

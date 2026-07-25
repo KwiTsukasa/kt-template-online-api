@@ -28,11 +28,6 @@ type TencentCloudCvmClientFactory = (
   clientConfig: ClientConfig,
 ) => TencentCloudCvmClient;
 
-/**
- * Creates the official Tencent Cloud CVM SDK client for readonly Describe APIs.
- * @param clientConfig - SDK credential, region, and endpoint configuration.
- * @returns CVM client limited by adapter usage to DescribeInstances.
- */
 function createTencentCloudCvmClient(
   clientConfig: ClientConfig,
 ): TencentCloudCvmClient {
@@ -45,11 +40,6 @@ function createTencentCloudCvmClient(
 export class TencentCloudReadonlyAdapter {
   private readonly createClient: TencentCloudCvmClientFactory;
 
-  /**
-   * Initializes Tencent Cloud readonly adapter.
-   * @param config - Environment dashboard config reader.
-   * @param createClient - Optional factory used by tests to mock the Tencent SDK.
-   */
   constructor(
     private readonly config: EnvironmentDashboardConfigService,
     @Optional() createClient?: TencentCloudCvmClientFactory,
@@ -57,10 +47,6 @@ export class TencentCloudReadonlyAdapter {
     this.createClient = createClient || createTencentCloudCvmClient;
   }
 
-  /**
-   * Inspects Tencent Cloud readonly integration readiness.
-   * @returns Tencent Cloud signal; missing configuration is explicit unwired evidence.
-   */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_TENCENT_CLOUD_ENABLED',
@@ -119,10 +105,6 @@ export class TencentCloudReadonlyAdapter {
     }
   }
 
-  /**
-   * Checks the explicit Tencent Cloud enablement guard before creating SDK clients.
-   * @returns True only when the dashboard Tencent integration is explicitly enabled.
-   */
   private isEnabled(): boolean {
     return (
       this.config
@@ -131,10 +113,6 @@ export class TencentCloudReadonlyAdapter {
     );
   }
 
-  /**
-   * Builds Tencent Cloud SDK config without exposing credentials as evidence.
-   * @returns ClientConfig accepted by the official Tencent Cloud SDK.
-   */
   private clientConfig(): ClientConfig {
     return {
       credential: {

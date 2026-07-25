@@ -9,10 +9,6 @@ import type { QqbotCommand } from '../../infrastructure/persistence/command/qqbo
 
 @Injectable()
 export class QqbotCommandParserService {
-  /**
-   * 初始化 QqbotCommandParserService 实例。
-   * @param pluginExecution - pluginExecution 输入；影响 constructor 的返回值。
-   */
   constructor(
     @Optional()
     @Inject(QQBOT_PLUGIN_EXECUTION_PORT)

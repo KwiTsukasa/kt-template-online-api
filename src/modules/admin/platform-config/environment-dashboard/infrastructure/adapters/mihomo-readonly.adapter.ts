@@ -17,11 +17,6 @@ import {
 export class MihomoReadonlyAdapter {
   private readonly http: EnvironmentReadonlyHttpClient;
 
-  /**
-   * Initializes Mihomo/OpenClash readonly adapter.
-   * @param config - Environment dashboard config reader.
-   * @param http - Readonly HTTP client used for Mihomo external controller probes.
-   */
   constructor(
     private readonly config: EnvironmentDashboardConfigService,
     @Optional() http?: EnvironmentReadonlyHttpClient,
@@ -29,10 +24,6 @@ export class MihomoReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
-  /**
-   * Inspects Mihomo/OpenClash readonly API readiness.
-   * @returns Mihomo signal; missing configuration is explicit unwired evidence.
-   */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_R4SE_MIHOMO_URL',
@@ -93,11 +84,6 @@ export class MihomoReadonlyAdapter {
     }
   }
 
-  /**
-   * Builds a Mihomo readonly external-controller URL.
-   * @param path - Readonly API path such as version, configs, or proxies.
-   * @returns Full Mihomo external-controller endpoint URL.
-   */
   private apiUrl(path: 'configs' | 'proxies' | 'version'): string {
     return joinReadonlyUrl(
       this.config.get('ENV_DASHBOARD_R4SE_MIHOMO_URL'),
@@ -105,10 +91,6 @@ export class MihomoReadonlyAdapter {
     );
   }
 
-  /**
-   * Creates Mihomo authorization headers without returning the secret as evidence.
-   * @returns Bearer authorization header for outbound readonly requests.
-   */
   private authHeaders(): Record<string, string> {
     return {
       Authorization: `Bearer ${this.config.get(
@@ -117,11 +99,6 @@ export class MihomoReadonlyAdapter {
     };
   }
 
-  /**
-   * Counts proxies from Mihomo response shapes without retaining proxy payloads.
-   * @param body - Parsed proxies response body.
-   * @returns Number of proxies reported by the readonly endpoint.
-   */
   private countProxies(body: Record<string, unknown>): number {
     const proxies = body.proxies;
     const proxyRecord = asRecord(proxies);

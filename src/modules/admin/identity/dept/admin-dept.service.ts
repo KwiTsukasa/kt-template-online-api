@@ -6,10 +6,6 @@ import { AdminDept } from './admin-dept.entity';
 
 @Injectable()
 export class AdminDeptService {
-  /**
-   * 初始化 AdminDeptService 实例。
-   * @param deptRepository - Admin仓库依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(AdminDept)
     private readonly deptRepository: Repository<AdminDept>,

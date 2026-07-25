@@ -21,11 +21,6 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   private readonly pluginAliases = new Map<string, string>();
   private readonly plugins = new Map<string, QqbotIntegrationPlugin>();
 
-  /**
-   * 初始化 QqbotPluginRegistryService 实例。
-   * @param pluginRepository - 插件主表仓库；用于从持久化安装状态还原禁用的命令插件 key。
-   * @param installationRepository - 插件安装仓库；用于判定哪些插件安装记录在启动时应保持 inactive。
-   */
   constructor(
     @Optional()
     @InjectRepository(QqbotPlugin)
@@ -35,10 +30,6 @@ export class QqbotPluginRegistryService implements OnModuleInit {
     private readonly installationRepository?: Repository<QqbotPluginInstallation>,
   ) {}
 
-  /**
-   * Initializes inactive plugin state without importing built-in plugin packages.
-   * @returns Promise that resolves after persisted installation state is loaded.
-   */
   async onModuleInit() {
     await this.hydrateInactivePluginKeys();
   }

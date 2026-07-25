@@ -49,11 +49,6 @@ type RewriteWebSocketSearchInput = {
   upstreamPath: string;
 };
 
-/**
- * Normalizes a Gateway route tail into a safe upstream pathname.
- * @param input - Route parameter from Nest/path-to-regexp.
- * @returns Absolute upstream pathname beginning with `/`.
- */
 export function sanitizeGatewayProxyPath(input: ProxyPathInput) {
   const raw = Array.isArray(input) ? input.join('/') : String(input || '');
   const trimmed = raw.trim();
@@ -77,11 +72,6 @@ export function sanitizeGatewayProxyPath(input: ProxyPathInput) {
   return path;
 }
 
-/**
- * Rewrites NapCat redirects so browsers stay under the Gateway session route.
- * @param input - Upstream Location header plus Gateway session context.
- * @returns Rewritten safe Location header.
- */
 export function rewriteNapcatLocationHeader(input: RewriteLocationInput) {
   const gatewayPrefix = `${GATEWAY_WEBUI_PREFIX}/${encodeURIComponent(
     input.sessionId,
@@ -119,22 +109,12 @@ export function rewriteNapcatLocationHeader(input: RewriteLocationInput) {
   }
 }
 
-/**
- * Builds HPM cookie path rewrite config for Gateway-scoped upstream cookies.
- * @param input - Gateway session id used in the public route prefix.
- * @returns HPM cookiePathRewrite object.
- */
 export function buildGatewayCookiePathRewrite(input: CookiePathRewriteInput) {
   return {
     '*': `${GATEWAY_WEBUI_PREFIX}/${encodeURIComponent(input.sessionId)}/webui`,
   };
 }
 
-/**
- * Rewrites absolute NapCat WebUI browser paths so assets, APIs, and plugin resources stay under the active Gateway session.
- * @param input - Text response body from NapCat plus the Gateway session id that owns the browser lifecycle.
- * @returns Body text whose absolute NapCat root paths point back through the Gateway session prefix.
- */
 export function rewriteNapcatTextResponse(input: RewriteTextResponseInput) {
   const gatewayWebuiPrefix = `${GATEWAY_WEBUI_PREFIX}/${encodeURIComponent(
     input.sessionId,
@@ -152,11 +132,6 @@ export function rewriteNapcatTextResponse(input: RewriteTextResponseInput) {
   });
 }
 
-/**
- * Rewrites WebSocket query strings that NapCat authenticates with query tokens instead of headers.
- * @param input - Upstream path, browser search string, and server-side Credential for the active session.
- * @returns Search string safe to send upstream without preserving browser-supplied terminal tokens.
- */
 export function rewriteNapcatWebSocketSearch(
   input: RewriteWebSocketSearchInput,
 ) {
@@ -170,11 +145,6 @@ export function rewriteNapcatWebSocketSearch(
   return serialized ? `?${serialized}` : '';
 }
 
-/**
- * Injects a non-secret local token into NapCat WebUI HTML so React enters authenticated routes while Gateway handles real auth server-side.
- * @param input - HTML body candidate and Gateway session id used to build the browser-only token.
- * @returns HTML with a one-time SSO bootstrap script, or unchanged non-HTML text.
- */
 function injectGatewayBrowserToken(input: RewriteTextResponseInput) {
   if (
     input.body.includes('data-kt-napcat-webui-gateway-sso') ||
@@ -196,11 +166,6 @@ function injectGatewayBrowserToken(input: RewriteTextResponseInput) {
   );
 }
 
-/**
- * Builds the SSO bootstrap script that writes only a Gateway-scoped dummy token, never NapCat WebUI token or Credential.
- * @param sessionId - Gateway session id already visible in the iframe URL.
- * @returns Inline script placed before NapCat's module entry runs.
- */
 function buildGatewayBrowserTokenScript(sessionId: string) {
   const browserToken = `${GATEWAY_BROWSER_TOKEN_PREFIX}${sessionId}`;
   const storedTokenLiteral = JSON.stringify(JSON.stringify(browserToken));
@@ -214,11 +179,6 @@ function buildGatewayBrowserTokenScript(sessionId: string) {
   ].join('');
 }
 
-/**
- * Decodes path text until stable so nested encoded traversal cannot pass through.
- * @param value - Raw route path text.
- * @returns Decoded path text.
- */
 function decodeProxyPath(value: string) {
   try {
     let decoded = value;
@@ -236,12 +196,6 @@ function decodeProxyPath(value: string) {
   throw new BadRequestException('Gateway proxy path is invalid');
 }
 
-/**
- * Builds a browser redirect that keeps only the upstream pathname.
- * @param gatewayPrefix - Public Gateway session route prefix for one Admin session.
- * @param upstreamPathname - Upstream redirect pathname after URL parsing removed search/hash.
- * @returns Gateway-scoped Location header, falling back to WebUI root for unsafe paths.
- */
 function toGatewayRedirectLocation(
   gatewayPrefix: string,
   upstreamPathname: string,
@@ -255,11 +209,6 @@ function toGatewayRedirectLocation(
   }
 }
 
-/**
- * Checks whether a proxied upstream path may contain browser-executable absolute paths that need Gateway prefix rewriting.
- * @param upstreamPath - Sanitized upstream pathname with an optional query string.
- * @returns Whether the response should be buffered for text rewriting.
- */
 export function shouldRewriteNapcatTextResponse(upstreamPath: string) {
   const pathname = new URL(upstreamPath, 'http://gateway.local').pathname;
   const filename = pathname.split('/').pop() || '';
@@ -279,24 +228,11 @@ export function shouldRewriteNapcatTextResponse(upstreamPath: string) {
 
 @Injectable()
 export class NapcatWebuiProxyService {
-  /**
-   * Creates the Gateway proxy service.
-   * @param sessionService - Session lifecycle guard for bootstrap/proxy eligibility.
-   * @param credentialClient - NapCat WebUI credential exchange/cache client.
-   */
   constructor(
     private readonly sessionService: NapcatWebuiGatewaySessionService,
     private readonly credentialClient: NapcatWebuiCredentialClient,
   ) {}
 
-  /**
-   * Proxies one HTTP request to the active session's NapCat WebUI.
-   * @param sessionId - Gateway session id from the public route.
-   * @param proxyPath - Route tail mapped to the upstream pathname.
-   * @param req - Express request delegated from the public controller.
-   * @param res - Express response owned by HPM after delegation.
-   * @param next - Express next callback used by HPM.
-   */
   async handleHttpProxy(
     sessionId: string,
     proxyPath: ProxyPathInput,
@@ -318,22 +254,12 @@ export class NapcatWebuiProxyService {
     return proxy(req, res, next);
   }
 
-  /**
-   * Subscribes the Gateway HTTP server to NapCat WebUI WebSocket upgrades.
-   * @param server - HTTP server returned by the Nest application.
-   */
   bindWebSocketUpgrade(server: Server) {
     server.on('upgrade', (req, socket, head) => {
       void this.handleWebSocketUpgrade(req, socket as Socket, head);
     });
   }
 
-  /**
-   * Handles one matching WebSocket upgrade and ignores unrelated upgrade URLs.
-   * @param req - Raw Node upgrade request.
-   * @param socket - TCP socket for the upgrade.
-   * @param head - First packet of the upgraded stream.
-   */
   private async handleWebSocketUpgrade(
     req: IncomingMessage,
     socket: Socket,
@@ -359,12 +285,6 @@ export class NapcatWebuiProxyService {
     }
   }
 
-  /**
-   * Creates one HPM proxy bound to a validated session and server-side credential.
-   * @param session - Active Gateway session metadata.
-   * @param credential - NapCat WebUI Credential for upstream Authorization.
-   * @returns HPM request handler with HTTP and WebSocket support.
-   */
   private createProxy(
     session: NapcatWebuiGatewaySession,
     credential: string,
@@ -400,12 +320,6 @@ export class NapcatWebuiProxyService {
     });
   }
 
-  /**
-   * Builds the upstream response handler and rewrites redirect headers before HPM copies them to Express.
-   * @param session - Active Gateway session whose route prefix owns browser redirects.
-   * @param rewriteTextResponse - Whether this response is buffered for body path rewriting.
-   * @returns HPM proxy response handler.
-   */
   private createProxyResponseHandler(
     session: NapcatWebuiGatewaySession,
     rewriteTextResponse: boolean,
@@ -430,11 +344,6 @@ export class NapcatWebuiProxyService {
     };
   }
 
-  /**
-   * Rewrites one upstream Location header in-place so browser redirects remain inside the Gateway route.
-   * @param headers - Upstream response headers exposed by HPM.
-   * @param session - Active Gateway session whose public prefix should own redirects.
-   */
   private rewriteLocationHeader(
     headers: Record<string, number | string | string[] | undefined>,
     session: NapcatWebuiGatewaySession,
@@ -449,12 +358,6 @@ export class NapcatWebuiProxyService {
     }
   }
 
-  /**
-   * Builds the upstream URL path while preserving the original query string.
-   * @param proxyPath - Gateway route tail to sanitize.
-   * @param originalUrl - Original Express URL containing the query string.
-   * @returns Upstream path plus query string.
-   */
   private buildUpstreamPath(proxyPath: ProxyPathInput, originalUrl?: string) {
     const pathname = sanitizeGatewayProxyPath(proxyPath);
     const queryIndex = String(originalUrl || '').indexOf('?');
@@ -462,11 +365,6 @@ export class NapcatWebuiProxyService {
     return `${pathname}${query}`;
   }
 
-  /**
-   * Parses a public WebSocket upgrade URL into Gateway session and upstream path.
-   * @param rawUrl - Raw URL from the Node upgrade request.
-   * @returns Parsed session id, sanitized upstream path, and query string when matched.
-   */
   private matchGatewayUpgrade(rawUrl: string) {
     const url = new URL(rawUrl, 'http://gateway.local');
     const match = url.pathname.match(
@@ -481,20 +379,12 @@ export class NapcatWebuiProxyService {
     };
   }
 
-  /**
-   * Removes browser-provided auth/session headers before HPM builds upstream requests.
-   * @param req - Express or Node request whose headers are being proxied.
-   */
   private stripBrowserHeaders(req: IncomingMessage) {
     STRIPPED_UPSTREAM_HEADERS.forEach((header) => {
       delete req.headers[header];
     });
   }
 
-  /**
-   * Writes a generic HTTP proxy failure without exposing upstream target data.
-   * @param res - HTTP response object passed by HPM.
-   */
   private writeProxyError(res: Response | Socket) {
     if ('headersSent' in res) {
       if (res.headersSent) return;
@@ -507,10 +397,6 @@ export class NapcatWebuiProxyService {
     this.rejectUpgrade(res);
   }
 
-  /**
-   * Sends a compact HTTP error for failed WebSocket upgrade validation.
-   * @param socket - Upgrade socket to close after the error response.
-   */
   private rejectUpgrade(socket: Socket) {
     if (socket.writable) {
       socket.write(

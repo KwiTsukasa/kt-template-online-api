@@ -72,16 +72,6 @@ export class QqbotNapcatContainerService {
     Promise<string> | undefined
   > = {};
 
-  /**
-   * 初始化 QqbotNapcatContainerService 实例。
-   * @param configService - Runtime configuration source for NAS SSH, Docker image, port pool, and profile defaults.
-   * @param containerRepository - Persistence adapter for NapCat container rows created or updated by runtime actions.
-   * @param bindingRepository - Persistence adapter that links QQBot accounts to their primary NapCat containers.
-   * @param toolsService - Shared helper for error extraction, text truncation, and bounded sleeps.
-   * @param deviceIdentityService - Device identity resolver that supplies stable hostname, MAC, data-dir, and machine-id values.
-   * @param runtimeProfileService - Runtime profile resolver used to generate Docker env and mount settings.
-   * @param configWriterService - Config writer used to generate NapCat and OneBot config files.
-   */
   constructor(
     private readonly configService: ConfigService,
     @InjectRepository(NapcatContainer)
@@ -112,10 +102,6 @@ export class QqbotNapcatContainerService {
     return runtime;
   }
 
-  /**
-   * Reserves a create-login container row and provisional device identity without waiting for NAS Docker startup.
-   * @returns Pending NapCat runtime metadata that Admin can use immediately for SSE/status tracking.
-   */
   async reserveCreateContainer() {
     if (!this.isManagedMode()) {
       return this.getLegacyRuntime();
@@ -126,11 +112,6 @@ export class QqbotNapcatContainerService {
     });
   }
 
-  /**
-   * Starts the remote Docker container previously reserved for create-login.
-   * @param runtime - Reserved runtime row returned by `reserveCreateContainer`.
-   * @returns True after the remote container has been started and persistence marked running.
-   */
   async startCreateContainer(runtime: QqbotNapcatRuntime) {
     if (this.getManagedMode() !== 'ssh' || !runtime.id) return true;
 
@@ -387,11 +368,6 @@ export class QqbotNapcatContainerService {
     return toNapcatDockerDeviceOptions(identity);
   }
 
-  /**
-   * Resolves the provisional identity used by first-time QR login before the QQ self id exists.
-   * @param container - Reserved container row; its bigint id is the temporary account-level seed.
-   * @returns Docker device options that must be applied to the first remote `docker run`.
-   */
   private async resolveCreateContainerDeviceIdentity(
     container: NapcatContainer,
   ): Promise<NapcatDockerDeviceOptions | undefined> {
@@ -405,13 +381,6 @@ export class QqbotNapcatContainerService {
     return toNapcatDockerDeviceOptions(identity);
   }
 
-  /**
-   * Resolves the device identity id that belongs to an account/container binding.
-   * @param accountId - Internal QQBot account id used to select the persistent device identity.
-   * @param containerId - Managed NapCat container id that should be stored on the identity row.
-   * @param selfId - QQ self id observed from NapCat after scanning; stored as adoption evidence only.
-   * @returns Device identity id when the identity service is available.
-   */
   private async resolveBindingDeviceIdentityId(
     accountId: string,
     containerId: string,
@@ -654,11 +623,6 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     return this.removeContainer(containerId);
   }
 
-  /**
-   * Removes a create-login container even if its row was already marked deleted during an async startup race.
-   * @param containerId - Reserved create-login container id whose row must have no account owner and no live binding.
-   * @returns True when a matching create-login container row was cleaned up.
-   */
   async removeUnboundCreateContainer(containerId?: string) {
     if (!containerId) return false;
 
@@ -717,11 +681,6 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     return true;
   }
 
-  /**
-   * Starts an existing managed NapCat container without rebuilding or restarting it.
-   * @param runtime - Persisted runtime row whose Docker name and id identify the stopped container to start.
-   * @returns True when the Docker start command was issued and the persisted row was marked running.
-   */
   private async startRuntimeContainer(runtime: QqbotNapcatRuntime) {
     if (this.getManagedMode() !== 'ssh' || !runtime.id || !runtime.name) {
       return false;
@@ -1216,11 +1175,6 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     return container ? this.toRuntime(container) : null;
   }
 
-  /**
-   * Finds the primary bound NapCat container runtime for an account.
-   * @param accountId - QQBot account id whose primary NapCat binding should be resolved.
-   * @returns Primary runtime with WebUI token selected, or null when no active binding exists.
-   */
   async findPrimaryContainerByAccountId(accountId: string) {
     return this.getPrimaryRuntime(accountId);
   }
@@ -1377,10 +1331,6 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     await this.recordPlannedProfiles(input);
   }
 
-  /**
-   * Builds the remote shell script that creates or recreates a managed NapCat container.
-   * @param input - Container image, account, data-dir, device identity, and reverse-WS values that become Docker flags and config files.
-   */
   private buildRemoteCreateScript(input: {
     account?: string;
     accountId?: string;
@@ -1590,10 +1540,6 @@ ${accountRunFlag}${passwordRunFlag}${deviceRunFlags}  -p "$PORT:6099" \\
 `;
   }
 
-  /**
-   * Records the expected runtime and protocol state for a successfully created managed container.
-   * @param input - Docker creation request whose identity and config values define the planned profile.
-   */
   private async recordPlannedProfiles(input: {
     account?: string;
     accountId?: string;
@@ -1652,11 +1598,6 @@ ${accountRunFlag}${passwordRunFlag}${deviceRunFlags}  -p "$PORT:6099" \\
     });
   }
 
-  /**
-   * Renders NapCat config files as shell here-doc writes under the account config directory.
-   * @param files - Config files generated by `NapcatConfigWriterService` for this container.
-   * @returns Shell fragment that writes each config file before Docker starts.
-   */
   private renderConfigFiles(files: NapcatConfigFile[]) {
     return files
       .map((file) => {
@@ -2141,10 +2082,6 @@ ${file.content}EOF`;
           child.kill('SIGTERM');
           reject(new Error(`${command} timeout after ${timeoutMs}ms`));
         }, timeoutMs);
-        /**
-         * 收束 NapCat 登录运行态异步流程。
-         * @param callback - callback 输入；影响 finish 的返回值。
-         */
         const finish = (callback: () => void) => {
           if (settled) return;
           settled = true;

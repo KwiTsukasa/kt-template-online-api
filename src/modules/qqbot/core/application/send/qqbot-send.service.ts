@@ -39,16 +39,6 @@ type SendPipelineInput = {
 
 @Injectable()
 export class QqbotSendService {
-  /**
-   * 初始化 QqbotSendService 实例。
-   * @param sendLogRepository - QQBot仓库依赖；影响 constructor 的返回值。
-   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
-   * @param busService - busService 服务依赖；影响 constructor 的返回值。
-   * @param messageService - messageService 服务依赖；影响 constructor 的返回值。
-   * @param moduleRef - moduleRef 输入；影响 constructor 的返回值。
-   * @param rateLimitService - rateLimitService 服务依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(QqbotSendLog)
     private readonly sendLogRepository: Repository<QqbotSendLog>,
@@ -151,11 +141,6 @@ export class QqbotSendService {
     });
   }
 
-  /**
-   * Sends a single text segment through exactly the configured enabled QQBot account.
-   * @param input - A durable delivery attempt whose account and target must not fall back.
-   * @returns The OneBot response together with the created send-log ID.
-   */
   async sendStrictPlainText(input: StrictPlainTextSendInput) {
     const account = await this.accountService.findBySelfId(input.selfId);
     if (!account || account.isDeleted || !account.enabled) {
@@ -213,12 +198,6 @@ export class QqbotSendService {
     });
   }
 
-  /**
-   * Runs the common QQBot send lifecycle for legacy and strict callers.
-   * @param account - The already selected QQBot account.
-   * @param input - The wire action and storage-safe delivery metadata.
-   * @returns The OneBot response together with the created send-log ID.
-   */
   private async sendWithAccount(
     account: QqbotAccount,
     input: SendPipelineInput,
@@ -342,20 +321,10 @@ export class QqbotSendService {
     }
   }
 
-  /**
-   * Converts an arbitrary string into the sole strict OneBot text segment.
-   * @param message - The literal text that must not be interpreted as CQ code.
-   * @returns A single OneBot text segment.
-   */
   private toTextSegment(message: string) {
     return [{ data: { text: message }, type: 'text' }];
   }
 
-  /**
-   * Marks a pending strict send log as failed without masking the original failure.
-   * @param logId - The pending send-log ID.
-   * @param message - A non-sensitive failure summary.
-   */
   private async markFailedLog(logId: string, message: string) {
     try {
       await this.sendLogRepository.update(
@@ -367,12 +336,6 @@ export class QqbotSendService {
     }
   }
 
-  /**
-   * Converts strict transport and infrastructure failures to stable delivery classifications.
-   * @param err - The original failure.
-   * @param sendLogId - The pending log ID, if creation succeeded.
-   * @returns A stable strict delivery error.
-   */
   private toStrictSendError(err: unknown, sendLogId: null | string) {
     if (err instanceof QqbotReverseWsActionError) {
       return new QqbotSendAttemptError({
@@ -390,12 +353,6 @@ export class QqbotSendService {
     });
   }
 
-  /**
-   * Throws either the strict typed error or the legacy Vben-compatible error.
-   * @param strict - Whether the caller requires stable delivery retry metadata.
-   * @param err - The original failure.
-   * @param sendLogId - The pending log ID, if creation succeeded.
-   */
   private throwSendFailure(
     strict: boolean,
     err: unknown,

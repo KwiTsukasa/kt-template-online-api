@@ -51,9 +51,6 @@ async function downloadFile(
 
     let assetNotExists = false;
     return await runWithCacheClientRetry({
-      /**
-       * 执行 BangDream回调。
-       */
       action: async () => {
         assetNotExists = false;
         const data = await fetchRemoteResourceBuffer(
@@ -72,20 +69,12 @@ async function downloadFile(
         }
         return data;
       },
-      /**
-       * 执行 BangDream回调。
-       * @param nextAttempt - nextAttempt 输入；影响 onRetry 的返回值。
-       * @param normalizedRetryCount - normalizedRetryCount 输入；影响 onRetry 的返回值。
-       */
       onRetry: (nextAttempt, normalizedRetryCount) =>
         logger(
           `downloader`,
           `Retrying download for "${url}" (attempt ${nextAttempt}/${normalizedRetryCount})`,
         ),
       retryCount,
-      /**
-       * 执行 BangDream回调。
-       */
       shouldRetry: () => !assetNotExists,
     });
   } catch (e) {

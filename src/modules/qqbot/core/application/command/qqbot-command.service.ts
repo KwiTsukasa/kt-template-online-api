@@ -28,15 +28,6 @@ import { QqbotCommand } from '../../infrastructure/persistence/command/qqbot-com
 
 @Injectable()
 export class QqbotCommandService {
-  /**
-   * 初始化 QqbotCommandService 实例。
-   * @param commandRepository - 命令仓库依赖；影响 constructor 的返回值。
-   * @param commandLogRepository - 命令仓库依赖；影响 constructor 的返回值。
-   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
-   * @param pluginExecution - pluginExecution 输入；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(QqbotCommand)
     private readonly commandRepository: Repository<QqbotCommand>,

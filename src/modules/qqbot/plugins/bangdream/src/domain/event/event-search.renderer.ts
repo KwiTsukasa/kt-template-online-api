@@ -137,36 +137,11 @@ export async function drawEventList(
 }
 
 const matchEventList = createBangDreamEntityMatcher<Event>({
-  /**
-   * 执行 BangDream回调。
-   */
   source: () => eventRepository.getSource(),
-  /**
-   * 创建 BangDream 插件对象或配置。
-   *
-   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
-   */
   createEntity: (eventId) => eventRepository.create(eventId),
-  /**
-   * 判断 BangDream 插件条件。
-   *
-   * @param event - event 输入；使用 `startAt` 字段计算判断结果。
-   * @param displayedServerList - displayedServerList 输入；计算 BangDream布尔判断。
-   */
   isReleased: (event, displayedServerList) =>
     displayedServerList.some((server) => event.startAt[server] != null),
-  /**
-   * 判断 BangDream 插件条件。
-   *
-   * @param matches - BangDream列表；驱动 `match()` 的 BangDream步骤。
-   * @param event - event 输入；驱动 `match()` 的 BangDream步骤。
-   */
   isMatched: (matches, event) => match(matches, event, []),
-  /**
-   * 在QQBot 图片视图层中处理关系表达式值。
-   *
-   * @param event - event 输入；使用 `eventId` 字段生成结果。
-   */
   relationValue: (event) => event.eventId,
 });
 

@@ -54,11 +54,6 @@ const enabledConfig = {
   NETWORK_DDNS_DNSPOD_SECRET_KEY: 'test-secret-key',
 };
 
-/**
- * Creates a ConfigService-compatible readonly key/value reader.
- * @param values - Runtime values exposed to the client under test.
- * @returns Minimal ConfigService mock.
- */
 function createConfig(
   values: Record<string, string | undefined>,
 ): ConfigService {
@@ -67,10 +62,6 @@ function createConfig(
   } as unknown as ConfigService;
 }
 
-/**
- * Creates a DNSPod SDK mock with successful defaults.
- * @returns Mocked DescribeRecordFilterList and ModifyDynamicDNS methods.
- */
 function createSdkClient(): MockDnsPodSdkClient {
   return {
     DescribeRecordFilterList: jest.fn(),
@@ -78,11 +69,6 @@ function createSdkClient(): MockDnsPodSdkClient {
   };
 }
 
-/**
- * Creates a valid enabled DNSPod record.
- * @param overrides - Record fields replaced for a focused test.
- * @returns Provider record suitable for DescribeRecordFilterList.
- */
 function createRecord(overrides: MockRecord = {}): MockRecord {
   return {
     Line: '默认',
@@ -97,12 +83,6 @@ function createRecord(overrides: MockRecord = {}): MockRecord {
   };
 }
 
-/**
- * Creates an initialized client and captures SDK factory calls.
- * @param sdkClient - SDK behavior used by the test.
- * @param values - Runtime configuration overrides.
- * @returns Client under test and its SDK factory mock.
- */
 function createClient(
   sdkClient = createSdkClient(),
   values: Record<string, string | undefined> = enabledConfig,

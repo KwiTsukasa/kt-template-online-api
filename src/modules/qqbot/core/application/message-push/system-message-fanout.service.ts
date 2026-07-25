@@ -39,31 +39,14 @@ interface ClaimToken {
 
 type SubscriptionFanOutOutcome = 'handled' | 'stale_claim';
 
-/**
- * Creates frozen, idempotent delivery work from committed system-message Outbox facts.
- *
- * It deliberately only persists work. The later delivery coordinator owns DDNS wakeups
- * and every OneBot call.
- */
 @Injectable()
 export class SystemMessageFanoutService {
-  /**
-   * Creates the durable Outbox fan-out service.
-   * @param dataSource - Core database source used for short claim and subscription transactions.
-   * @param sourceRegistry - Registered source adapters for payload validation and readiness.
-   * @param templateRenderer - Safe literal-only renderer used to freeze final text.
-   */
   constructor(
     private readonly dataSource: DataSource,
     private readonly sourceRegistry: SystemMessageSourceRegistry,
     private readonly templateRenderer: SystemMessageTemplateRendererService,
   ) {}
 
-  /**
-   * Claims and processes at most one bounded batch of due Outbox events.
-   * @param now - Stable clock instant for leases, schedules, and retry decisions.
-   * @returns Count of rows successfully claimed, including rows that become retry or failed.
-   */
   async runOnce(now: Date = new Date()): Promise<number> {
     let claimed = 0;
     for (let index = 0; index < SYSTEM_MESSAGE_BATCH_SIZE; index += 1) {
@@ -75,11 +58,6 @@ export class SystemMessageFanoutService {
     return claimed;
   }
 
-  /**
-   * Atomically claims the oldest due Outbox event using an exact lease ownership token.
-   * @param now - Clock instant against which due rows and expired leases are evaluated.
-   * @returns Claimed event with its new attempt and lease, or null when no eligible row exists.
-   */
   private async claimOne(now: Date): Promise<ClaimToken | null> {
     return this.dataSource.transaction(async (manager) => {
       const events = manager.getRepository(QqbotMessageEvent);
@@ -122,11 +100,6 @@ export class SystemMessageFanoutService {
     });
   }
 
-  /**
-   * Validates one owned event and fans it out without allowing stale owners to finish it.
-   * @param token - Attempt-plus-lease token returned by the successful claim transaction.
-   * @param now - Stable clock instant for expiry and next retry time.
-   */
   private async processClaim(token: ClaimToken, now: Date): Promise<void> {
     if (this.isExpired(token.event, now)) {
       await this.finish(
@@ -195,11 +168,6 @@ export class SystemMessageFanoutService {
     }
   }
 
-  /**
-   * Selects active subscriptions whose own JSON resource field exactly matches the event.
-   * @param event - Frozen Outbox event being fanned out.
-   * @returns Deterministically ordered eligible subscription rows.
-   */
   private async findMatchingSubscriptions(
     event: QqbotMessageEvent,
   ): Promise<QqbotMessageSubscription[]> {
@@ -214,14 +182,6 @@ export class SystemMessageFanoutService {
     );
   }
 
-  /**
-   * Executes one subscription's isolated persistence unit.
-   * @param manager - Transaction manager whose mutations commit only for this subscription.
-   * @param token - Exact claim token that must still own the locked Outbox row.
-   * @param subscriptionId - Primary key of the subscription to lock and recheck.
-   * @param adapter - Source adapter already used to validate the frozen payload.
-   * @param now - Stable scheduling instant for newly created delivery rows.
-   */
   private async fanOutSubscription(
     manager: EntityManager,
     token: ClaimToken,
@@ -267,12 +227,6 @@ export class SystemMessageFanoutService {
     return 'handled';
   }
 
-  /**
-   * Uses a locking current read to detect committed newer facts before any subscription work.
-   * @param manager - Current subscription transaction manager that already owns the event lock.
-   * @param event - Locked claimed event that must not create work after a later fact exists.
-   * @returns Whether an exact source/resource event is strictly newer by occurrence then BIGINT ID.
-   */
   private async hasStrictlyNewerEvent(
     manager: EntityManager,
     event: QqbotMessageEvent,
@@ -304,12 +258,6 @@ export class SystemMessageFanoutService {
     return !!newerEvent;
   }
 
-  /**
-   * Supersedes only the current old event's mutable rows after a newer fact is committed.
-   * @param manager - Current subscription transaction manager.
-   * @param event - Older locked event whose existing unfinished rows are being retired.
-   * @param subscriptionId - Exact subscription scope that excludes newer and unrelated work.
-   */
   private async supersedeCurrentEventDeliveries(
     manager: EntityManager,
     event: QqbotMessageEvent,
@@ -326,12 +274,6 @@ export class SystemMessageFanoutService {
     );
   }
 
-  /**
-   * Supersedes only unfinished deliveries of events strictly earlier than the current event.
-   * @param manager - Current subscription transaction manager.
-   * @param event - Current event that supersedes older work for this subscription.
-   * @param subscriptionId - Subscription scope that prevents unrelated fan-out interference.
-   */
   private async supersedeEarlierDeliveries(
     manager: EntityManager,
     event: QqbotMessageEvent,
@@ -357,14 +299,6 @@ export class SystemMessageFanoutService {
     );
   }
 
-  /**
-   * Builds every currently legal binding/target delivery with frozen snapshots.
-   * @param manager - Current isolated subscription transaction manager.
-   * @param event - Frozen Outbox event.
-   * @param subscription - Locked and rechecked active subscription.
-   * @param readiness - Ready or DDNS-waiting variables from the source adapter.
-   * @param now - Stable scheduling instant for the newly created rows.
-   */
   private async createDeliveries(
     manager: EntityManager,
     event: QqbotMessageEvent,
@@ -440,18 +374,6 @@ export class SystemMessageFanoutService {
     }
   }
 
-  /**
-   * Persists one delivery, accepting only the exact event-target duplicate-key race.
-   * @param manager - Current isolated subscription transaction manager.
-   * @param event - Frozen source event.
-   * @param subscription - Subscription snapshot identity.
-   * @param binding - Active strict-account publishing binding.
-   * @param template - Source-compatible template whose content is frozen.
-   * @param target - Active target that defines this row's idempotency key.
-   * @param readiness - Ready or DDNS-waiting result that supplies frozen variables.
-   * @param renderedMessage - Already validated literal rendered content.
-   * @param now - Stable schedule time for the new row.
-   */
   private async createDeliveryIfAbsent(
     manager: EntityManager,
     event: QqbotMessageEvent,
@@ -507,13 +429,6 @@ export class SystemMessageFanoutService {
     }
   }
 
-  /**
-   * Completes, retries, or fails only while the original claim still owns the event.
-   * @param token - Original attempt and exact lease ownership token.
-   * @param status - Terminal or retry fan-out state to persist.
-   * @param code - Safe stable error classification, or null for completion.
-   * @param message - Bounded safe error summary, or null for completion.
-   */
   private async finish(
     token: ClaimToken,
     status: 'completed' | 'failed' | 'retry',
@@ -537,13 +452,6 @@ export class SystemMessageFanoutService {
     );
   }
 
-  /**
-   * Schedules a safe retry only when another attempt can occur before the hard deadline.
-   * @param token - Original claim ownership token.
-   * @param now - Stable clock instant used to calculate retry timing.
-   * @param code - Stable safe transient error code.
-   * @param message - Sanitized transient error summary.
-   */
   private async retryOrFail(
     token: ClaimToken,
     now: Date,
@@ -582,11 +490,6 @@ export class SystemMessageFanoutService {
     );
   }
 
-  /**
-   * Checks the strict current source/resource identity without coercing Snowflake strings.
-   * @param event - Event whose immutable resource key is authoritative.
-   * @param payload - Source-validated scalar payload.
-   */
   private assertResourceIdentity(
     event: QqbotMessageEvent,
     payload: Record<string, SystemMessageScalar>,
@@ -599,12 +502,6 @@ export class SystemMessageFanoutService {
     }
   }
 
-  /**
-   * Checks whether a subscription remains active and has an own string resource ID match.
-   * @param subscription - Candidate subscription row.
-   * @param event - Current immutable Outbox event.
-   * @returns Whether this row is a strict fan-out match.
-   */
   private matchesSubscription(
     subscription: QqbotMessageSubscription,
     event: QqbotMessageEvent,
@@ -621,12 +518,6 @@ export class SystemMessageFanoutService {
     );
   }
 
-  /**
-   * Compares source events by their required occurrence-time then string-ID ordering.
-   * @param candidate - Potential historical event.
-   * @param current - Event whose older deliveries may be superseded.
-   * @returns Whether candidate is strictly earlier than current.
-   */
   private isStrictlyEarlier(
     candidate: QqbotMessageEvent,
     current: QqbotMessageEvent,
@@ -639,12 +530,6 @@ export class SystemMessageFanoutService {
     );
   }
 
-  /**
-   * Checks whether creating a new delivery would violate the occurrence-based fan-out deadline.
-   * @param event - Claimed Outbox event.
-   * @param now - Stable invocation clock.
-   * @returns Whether the event is at or beyond its 24-hour deadline.
-   */
   private isExpired(event: QqbotMessageEvent, now: Date): boolean {
     return (
       now.getTime() >=
@@ -652,12 +537,6 @@ export class SystemMessageFanoutService {
     );
   }
 
-  /**
-   * Verifies that a locked event row still belongs to the exact claim attempt.
-   * @param event - Event row freshly locked in the subscription transaction.
-   * @param token - Attempt and lease values returned by the original claim.
-   * @returns Whether this transaction may mutate deliveries for the claim.
-   */
   private ownsClaim(event: QqbotMessageEvent, token: ClaimToken): boolean {
     return (
       event.id === token.event.id &&
@@ -668,11 +547,6 @@ export class SystemMessageFanoutService {
     );
   }
 
-  /**
-   * Narrows the source union to outcomes that provide variables required by delivery rows.
-   * @param readiness - Source adapter result for the locked subscription.
-   * @returns Whether a frozen ready or DDNS-waiting delivery can be persisted.
-   */
   private hasRenderableVariables(
     readiness: SystemMessageDeliveryReadiness,
   ): readiness is Extract<
@@ -682,30 +556,18 @@ export class SystemMessageFanoutService {
     return readiness.status === 'ready' || readiness.status === 'waiting_ddns';
   }
 
-  /**
-   * Recognizes MySQL's duplicate-key signal without treating other writes as idempotent.
-   * @param error - Unknown persistence failure from an individual delivery insert.
-   * @returns Whether the error is a MySQL duplicate-key failure.
-   */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const record = error as { code?: unknown; errno?: unknown };
     return record.code === 'ER_DUP_ENTRY' || record.errno === 1062;
   }
 
-  /**
-   * Converts a domain error into a bounded, non-stack persistence summary.
-   * @param error - Domain contract error whose stable code is safe to retain.
-   * @returns At most 500 characters of non-sensitive message text.
-   */
   private safeMessage(error: SystemMessageContractError): string {
     return error.message.slice(0, 500);
   }
 }
 
-/** Signals frozen STUN payload identity that conflicts with the immutable event resource. */
 class EventResourceMismatchError extends Error {
-  /** Creates the stable permanent event/resource mismatch classification. */
   constructor() {
     super('validated port-forward identity does not match event resource');
   }

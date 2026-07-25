@@ -27,9 +27,6 @@ import {
   routeKey,
 } from '../../../helpers/controller-route.helper';
 
-/**
- * 创建 QQBot 插件平台对象或配置。
- */
 const createRepositoryMock = () => ({
   find: jest.fn(async () => []),
   findAndCount: jest.fn(async () => [[], 0]),
@@ -37,9 +34,6 @@ const createRepositoryMock = () => ({
   update: jest.fn(async () => ({ affected: 1 })),
 });
 
-/**
- * 创建 QQBot 插件平台对象或配置。
- */
 const createManifest = () => ({
   assets: [],
   configSchema: {
@@ -69,11 +63,6 @@ const createManifest = () => ({
   version: '0.1.0',
 });
 
-/**
- * 执行 QQBot 插件平台流程。
- * @param value - 待稳定序列化的值；转换 插件平台列表项。
- * @returns QQBot 插件平台渲染后的图片、画布或文本。
- */
 const stableStringify = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map((item) => stableStringify(item)).join(',')}]`;
@@ -89,10 +78,6 @@ const stableStringify = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
-/**
- * 执行 QQBot 插件平台流程。
- * @param content - 待处理内容；驱动 `createHash()` 的 插件平台步骤。
- */
 const sha256 = (content: Buffer | string) =>
   createHash('sha256').update(content).digest('hex');
 
@@ -103,10 +88,6 @@ const packageRoot = join(
   'api-contract',
 );
 
-/**
- * 执行 QQBot 插件平台流程。
- * @param manifest - manifest 输入；使用 `pluginKey`、`version` 字段生成结果。
- */
 const writePluginPackage = (manifest: ReturnType<typeof createManifest>) => {
   mkdirSync(packageRoot, { recursive: true });
   const packageBody = {
@@ -154,9 +135,6 @@ describe('QQBot plugin platform API contract', () => {
           QqbotPluginRuntimeEvent,
         ].map((entity) => ({
           provide: getRepositoryToken(entity),
-          /**
-           * 创建 插件平台依赖注入工厂产物。
-           */
           useFactory: () => {
             const repository = createRepositoryMock();
             repositoryMocks.set(entity, repository);
@@ -167,9 +145,6 @@ describe('QQBot plugin platform API contract', () => {
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({
-        /**
-         * 判断 插件平台回调条件。
-         */
         canActivate: () => true,
       })
       .compile();
@@ -346,10 +321,6 @@ describe('QQBot plugin platform API contract', () => {
       pluginId: installation.pluginId,
       version: manifest.version,
     };
-    /**
-     * 创建 仓库 mock。
-     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
-     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),

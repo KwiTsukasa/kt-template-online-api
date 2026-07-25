@@ -37,21 +37,9 @@ function createHttpContext(
   response: Record<string, any>,
 ) {
   return {
-    /**
-     * 读取 公共基础设施回调数据。
-     */
     getType: () => 'http',
-    /**
-     * 执行 公共基础设施回调。
-     */
     switchToHttp: () => ({
-      /**
-       * 读取 公共基础设施回调数据。
-       */
       getRequest: () => request,
-      /**
-       * 读取 公共基础设施回调数据。
-       */
       getResponse: () => response,
     }),
   } as any;
@@ -112,9 +100,6 @@ describe('ApiRequestLogInterceptor', () => {
 
     await lastValueFrom(
       interceptor.intercept(createHttpContext(request, response), {
-        /**
-         * 执行 公共基础设施回调。
-         */
         handle: () => of({ ok: true }),
       }),
     );
@@ -169,9 +154,6 @@ describe('ApiRequestLogInterceptor', () => {
 
     await lastValueFrom(
       interceptor.intercept(createHttpContext(request, response), {
-        /**
-         * 执行 公共基础设施回调。
-         */
         handle: () => of({ ok: true }),
       }),
     );
@@ -212,9 +194,6 @@ describe('ApiRequestLogInterceptor', () => {
     await expect(
       lastValueFrom(
         interceptor.intercept(createHttpContext(request, response), {
-          /**
-           * 执行 公共基础设施回调。
-           */
           handle: () => throwError(() => error),
         }),
       ),
@@ -271,9 +250,6 @@ describe('ApiRequestLogInterceptor', () => {
     await expect(
       lastValueFrom(
         interceptor.intercept(createHttpContext(request, response), {
-          /**
-           * 执行 公共基础设施回调。
-           */
           handle: () => throwError(() => error),
         }),
       ),

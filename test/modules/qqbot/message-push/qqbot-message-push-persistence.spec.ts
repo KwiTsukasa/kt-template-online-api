@@ -20,13 +20,9 @@ type ColumnContract = {
   unsigned: boolean;
 };
 
-/** Builds an expected varchar metadata tuple without consulting production contracts. */
 const varchar = (propertyName: string, length: number, nullable = false): ColumnContract => ({ default: null, length, name: propertyName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), nullable, precision: null, primary: false, propertyName, type: 'varchar', unsigned: false });
-/** Builds an expected bigint metadata tuple without consulting production contracts. */
 const bigint = (propertyName: string, nullable = false, primary = false): ColumnContract => ({ default: null, length: null, name: propertyName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), nullable, precision: null, primary, propertyName, type: 'bigint', unsigned: false });
-/** Builds an expected datetime(6) metadata tuple without consulting production contracts. */
 const datetime = (propertyName: string, nullable = false): ColumnContract => ({ default: null, length: null, name: propertyName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), nullable, precision: 6, primary: false, propertyName, type: 'datetime', unsigned: false });
-/** Builds an expected tinyint boolean metadata tuple without consulting production contracts. */
 const boolean = (propertyName: string, defaultValue: boolean): ColumnContract => ({ default: defaultValue, length: null, name: propertyName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), nullable: false, precision: null, primary: false, propertyName, type: 'tinyint', unsigned: false });
 
 const persistenceContract: ReadonlyArray<{
@@ -117,18 +113,15 @@ const persistenceContract: ReadonlyArray<{
   },
 ];
 
-/** Converts TypeORM's constructor shorthand into its SQL-facing type name. */
 const normalizeColumnType = (type: unknown) => {
   if (type === String) return 'varchar';
   if (type === Boolean) return 'tinyint';
   return `${type}`.toLowerCase();
 };
 
-/** Sorts metadata tuples by property name so declaration order cannot affect the contract. */
 const sortByPropertyName = <T extends { propertyName: string }>(values: readonly T[]) =>
   [...values].sort((left, right) => left.propertyName.localeCompare(right.propertyName));
 
-/** Reads an entity's TypeORM column metadata into a stable comparison tuple. */
 const getColumns = (entity: EntityClass): ColumnContract[] => getMetadataArgsStorage()
   .columns.filter((column) => column.target === entity)
   .map((column) => ({
@@ -146,7 +139,6 @@ const getColumns = (entity: EntityClass): ColumnContract[] => getMetadataArgsSto
   }))
   .sort((left, right) => left.propertyName.localeCompare(right.propertyName));
 
-/** Selects registered QQBot Core entities whose TypeORM table is in the message-push namespace. */
 const getRegisteredMessagePushEntities = () => QQBOT_CORE_ENTITIES
   .filter((entity) => {
     const table = getMetadataArgsStorage().tables.find((entry) => entry.target === entity);
@@ -154,7 +146,6 @@ const getRegisteredMessagePushEntities = () => QQBOT_CORE_ENTITIES
   })
   .sort((left, right) => left.name.localeCompare(right.name));
 
-/** Reads an entity's TypeORM index definitions into exact name/column/unique tuples. */
 const getIndexes = (entity: EntityClass) => getMetadataArgsStorage().indices
   .filter((index) => index.target === entity)
   .map((index) => ({

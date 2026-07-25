@@ -64,10 +64,6 @@ const highRiskLabels: Record<
   'wordpress-import': '导入 WordPress 内容',
 };
 
-/**
- * Builds the visible dashboard action catalog without adding write endpoints.
- * @returns Readonly actions plus disabled high-risk records with operator-facing reasons.
- */
 export function getEnvironmentDashboardActions(): EnvironmentAction[] {
   const highRiskActions = HIGH_RISK_ENVIRONMENT_ACTION_IDS.map((id) => ({
     disabledReason: '第一版环境总览只读展示，高风险写操作需走专项流程。',

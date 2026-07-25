@@ -24,10 +24,6 @@ export interface FuzzySearchRule {
 }
 
 export class FuzzySearchRules {
-  /**
-   * 初始化 FuzzySearchRules 实例。
-   * @param rules - BangDream列表；影响 constructor 的返回值。
-   */
   constructor(private readonly rules: readonly FuzzySearchRule[]) {}
 
   /**
@@ -80,16 +76,7 @@ export function createDefaultFuzzySearchRules(config: FuzzySearchConfig) {
  */
 function createNumberRule(): FuzzySearchRule {
   return {
-    /**
-     * 判断 BangDream回调条件。
-     * @param lowerKeyword - lowerKeyword 输入；驱动 `isInteger()` 的 BangDream步骤。
-     */
     canHandle: ({ lowerKeyword }) => isInteger(lowerKeyword),
-    /**
-     * 执行 BangDream回调。
-     * @param lowerKeyword - lowerKeyword 输入；驱动 `push()` 的 BangDream步骤。
-     * @param push - push 输入；影响 match 的返回值。
-     */
     match: ({ lowerKeyword }, push) =>
       push('_number')(parseInt(lowerKeyword, 10)),
     name: 'number',
@@ -101,17 +88,8 @@ function createNumberRule(): FuzzySearchRule {
  */
 function createLevelRule(): FuzzySearchRule {
   return {
-    /**
-     * 判断 BangDream回调条件。
-     * @param normalizedKeyword - normalizedKeyword 输入；驱动 `extractLvNumber()` 的 BangDream步骤。
-     */
     canHandle: ({ normalizedKeyword }) =>
       extractLvNumber(normalizedKeyword) !== null,
-    /**
-     * 执行 BangDream回调。
-     * @param normalizedKeyword - normalizedKeyword 输入；驱动 `push()` 的 BangDream步骤。
-     * @param push - push 输入；影响 match 的返回值。
-     */
     match: ({ normalizedKeyword }, push) =>
       push('songLevels')(extractLvNumber(normalizedKeyword) ?? 0),
     name: 'level',
@@ -123,16 +101,7 @@ function createLevelRule(): FuzzySearchRule {
  */
 function createRelationRule(): FuzzySearchRule {
   return {
-    /**
-     * 判断 BangDream回调条件。
-     * @param normalizedKeyword - normalizedKeyword 输入；驱动 `isValidRelationStr()` 的 BangDream步骤。
-     */
     canHandle: ({ normalizedKeyword }) => isValidRelationStr(normalizedKeyword),
-    /**
-     * 执行 BangDream回调。
-     * @param normalizedKeyword - normalizedKeyword 输入；驱动 `push()` 的 BangDream步骤。
-     * @param push - push 输入；影响 match 的返回值。
-     */
     match: ({ normalizedKeyword }, push) =>
       push('_relationStr')(normalizedKeyword),
     name: 'relation',
@@ -146,17 +115,8 @@ function createRelationRule(): FuzzySearchRule {
  */
 function createConfigRule(config: FuzzySearchConfig): FuzzySearchRule {
   return {
-    /**
-     * 判断 BangDream回调条件。
-     * @param normalizedKeyword - normalizedKeyword 输入；驱动 `collectConfigMatches()` 的 BangDream步骤。
-     */
     canHandle: ({ normalizedKeyword }) =>
       collectConfigMatches(config, normalizedKeyword).length > 0,
-    /**
-     * 执行 BangDream回调。
-     * @param normalizedKeyword - normalizedKeyword 输入；驱动 `for()` 的 BangDream步骤。
-     * @param push - push 输入；影响 match 的返回值。
-     */
     match: ({ normalizedKeyword }, push) => {
       for (const item of collectConfigMatches(config, normalizedKeyword)) {
         push(item.type)(item.value);
@@ -171,15 +131,7 @@ function createConfigRule(config: FuzzySearchConfig): FuzzySearchRule {
  */
 function createFallbackRule(): FuzzySearchRule {
   return {
-    /**
-     * 判断 BangDream回调条件。
-     */
     canHandle: () => true,
-    /**
-     * 执行 BangDream回调。
-     * @param rawKeyword - rawKeyword 输入；驱动 `push()` 的 BangDream步骤。
-     * @param push - push 输入；影响 match 的返回值。
-     */
     match: ({ rawKeyword }, push) => push('_all')(rawKeyword),
     name: 'fallback',
   };
@@ -204,11 +156,6 @@ function isInteger(value: string): boolean {
   return INTEGER_PATTERN.test(value);
 }
 
-/**
- * 判断 BangDream 插件条件。
- * @param source - source 输入；驱动 `hasOwnProperty.call()` 的 BangDream步骤。
- * @param key - 键名；驱动 `hasOwnProperty.call()` 的 BangDream步骤。
- */
 const hasOwn = (source: object, key: string) =>
   Object.prototype.hasOwnProperty.call(source, key);
 

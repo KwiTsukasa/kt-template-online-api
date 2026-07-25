@@ -306,10 +306,6 @@ describe('Bilibili card application', () => {
   });
 });
 
-/**
- * Creates the Bilibili card manifest used by package-local application tests.
- * @returns Manifest object with one message event and plugin key metadata.
- */
 function createManifest(): BilibiliCardManifest {
   return {
     description: '解析 QQ 中的 Bilibili 视频链接卡片并回复视频摘要。',
@@ -327,11 +323,6 @@ function createManifest(): BilibiliCardManifest {
   };
 }
 
-/**
- * Builds a normalized QQBot message with overridable fields for one test case.
- * @param overrides - Message fields that differ from the default group message.
- * @returns Normalized Bilibili card message accepted by the application.
- */
 function createMessage(
   overrides: Partial<BilibiliCardMessage> = {},
 ): BilibiliCardMessage {
@@ -348,11 +339,6 @@ function createMessage(
   };
 }
 
-/**
- * Builds the package-local Bilibili host contract used by application tests.
- * @param overrides - Test doubles for host methods involved in a scenario.
- * @returns Host object with harmless defaults for unused plugin capabilities.
- */
 function createHost(
   overrides: Partial<BilibiliCardPluginHost> = {},
 ): BilibiliCardPluginHost {
@@ -367,10 +353,6 @@ function createHost(
   };
 }
 
-/**
- * Creates a successful Bilibili view API response fixture.
- * @returns Minimal API payload consumed by `BilibiliVideoClient`.
- */
 function createBilibiliViewResponse() {
   return {
     code: 0,

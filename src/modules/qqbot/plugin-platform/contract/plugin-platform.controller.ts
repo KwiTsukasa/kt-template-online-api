@@ -17,10 +17,6 @@ import { QqbotPluginPlatformService } from '../application/plugin-platform.servi
 @Controller('qqbot/plugin-platform')
 @UseGuards(JwtAuthGuard)
 export class QqbotPluginPlatformController {
-  /**
-   * 初始化 QqbotPluginPlatformController 实例。
-   * @param service - service 输入；影响 constructor 的返回值。
-   */
   constructor(private readonly service: QqbotPluginPlatformService) {}
 
   /**

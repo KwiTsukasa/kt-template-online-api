@@ -116,16 +116,7 @@ const RETRYABLE_NETWORK_CODES = new Set([
   'EAI_AGAIN',
 ]);
 
-/**
- * Represents a stable, redacted error at the DNSPod provider boundary.
- */
 export class NetworkDnsPodClientError extends Error {
-  /**
-   * Creates a safe provider-boundary error without retaining the raw SDK error.
-   * @param code - Stable application error code.
-   * @param message - Redacted operator-facing message.
-   * @param retryable - Whether a later retry may recover automatically.
-   */
   constructor(
     public readonly code: string,
     message: string,
@@ -136,22 +127,12 @@ export class NetworkDnsPodClientError extends Error {
   }
 }
 
-/**
- * Creates the official DNSPod SDK client used in production.
- * @param clientConfig - Credential and bounded HTTP profile.
- * @returns DNSPod client restricted to the two operations required by DDNS.
- */
 function createDnsPodSdkClient(clientConfig: ClientConfig): DnsPodSdkClient {
   return new dnspod.v20210323.Client(
     clientConfig,
   ) as unknown as DnsPodSdkClient;
 }
 
-/**
- * Validates a DNS label without accepting wildcard or URL syntax.
- * @param value - Candidate DNS label.
- * @returns True when the label is safe for an exact DNSPod query.
- */
 function isValidDnsLabel(value: string): boolean {
   return (
     value.length >= 1 &&
@@ -160,12 +141,6 @@ function isValidDnsLabel(value: string): boolean {
   );
 }
 
-/**
- * Validates a dot-separated ASCII DNS name.
- * @param value - Candidate domain or host-record name.
- * @param requireMultipleLabels - Whether a public zone-style name is required.
- * @returns True when every label is valid and the total length is bounded.
- */
 function isValidDnsName(
   value: string,
   requireMultipleLabels: boolean,
@@ -176,12 +151,6 @@ function isValidDnsName(
   return labels.every(isValidDnsLabel);
 }
 
-/**
- * Canonicalizes and validates an address for a DNS record family.
- * @param address - Raw address supplied by configuration or DNSPod.
- * @param recordType - DNS address record family.
- * @returns Canonical address, or null when the value is unsafe or mismatched.
- */
 function normalizeAddress(
   address: unknown,
   recordType: 'A' | 'AAAA',
@@ -217,11 +186,6 @@ function normalizeAddress(
   return canonicalAddress;
 }
 
-/**
- * Converts an optional persisted record ID into a safe comparison value.
- * @param value - Expected DNSPod record ID from persisted configuration.
- * @returns Canonical decimal ID or null when no expectation was supplied.
- */
 function normalizeExpectedRecordId(
   value: NetworkDnsPodReconcileInput['expectedRecordId'],
 ): null | string {
@@ -244,11 +208,6 @@ function normalizeExpectedRecordId(
   return numericValue.toString();
 }
 
-/**
- * Normalizes and validates all reconcile input before any SDK client is created.
- * @param input - Reconcile request from the DDNS service.
- * @returns Safe normalized values for exact provider requests.
- */
 function normalizeInput(
   input: NetworkDnsPodReconcileInput,
 ): NormalizedReconcileInput {
@@ -286,23 +245,12 @@ function normalizeInput(
   };
 }
 
-/**
- * Extracts a string property from an unknown provider error.
- * @param value - Unknown SDK error.
- * @param key - Property name to inspect.
- * @returns String property when present.
- */
 function errorString(value: unknown, key: string): string {
   if (!value || typeof value !== 'object') return '';
   const property = (value as Record<string, unknown>)[key];
   return typeof property === 'string' ? property : '';
 }
 
-/**
- * Extracts an HTTP status from common SDK error shapes.
- * @param value - Unknown SDK error.
- * @returns HTTP status or zero when unavailable.
- */
 function errorHttpStatus(value: unknown): number {
   if (!value || typeof value !== 'object') return 0;
   const record = value as Record<string, unknown>;
@@ -318,11 +266,6 @@ function errorHttpStatus(value: unknown): number {
   return 0;
 }
 
-/**
- * Determines whether the SDK failure belongs to an explicitly retryable class.
- * @param error - Unknown raw SDK error.
- * @returns True only for rate limit, internal/service, HTTP 429/5xx, timeout, or network errors.
- */
 function isRetryableProviderError(error: unknown): boolean {
   const code = errorString(error, 'code');
   const name = errorString(error, 'name');
@@ -339,23 +282,12 @@ function isRetryableProviderError(error: unknown): boolean {
   );
 }
 
-/**
- * Matches one provider error code against exact or dotted-prefix categories.
- * @param code - SDK error code without using its raw message.
- * @param categories - Stable provider code families.
- * @returns True when the code belongs to one category.
- */
 function matchesProviderCode(code: string, categories: string[]): boolean {
   return categories.some(
     (category) => code === category || code.startsWith(`${category}.`),
   );
 }
 
-/**
- * Maps an unknown SDK failure to a stable error without retaining provider details.
- * @param error - Raw SDK error used only for retry classification.
- * @returns Redacted provider-boundary error.
- */
 function mapProviderError(error: unknown): NetworkDnsPodClientError {
   const code = errorString(error, 'code');
   const status = errorHttpStatus(error);
@@ -394,12 +326,6 @@ function mapProviderError(error: unknown): NetworkDnsPodClientError {
   );
 }
 
-/**
- * Validates a single exact DNSPod record and protects subsequent mutation metadata.
- * @param records - Provider records returned by the exact list request.
- * @param input - Normalized reconcile request.
- * @returns Safe record metadata and canonical current address.
- */
 function validateRecord(
   records: DnsPodRecord[] | undefined,
   input: NormalizedReconcileInput,
@@ -486,11 +412,6 @@ function validateRecord(
 export class NetworkDnsPodClient {
   private readonly createClient: NetworkDnsPodClientFactory;
 
-  /**
-   * Initializes the DNSPod boundary with lazy SDK client creation.
-   * @param config - Runtime configuration reader.
-   * @param createClient - Optional factory used by isolated tests.
-   */
   constructor(
     private readonly config: ConfigService,
     @Optional() createClient?: NetworkDnsPodClientFactory,
@@ -498,10 +419,6 @@ export class NetworkDnsPodClient {
     this.createClient = createClient || createDnsPodSdkClient;
   }
 
-  /**
-   * Reports explicit provider enablement and credential readiness.
-   * @returns DNSPod provider status without creating an SDK client.
-   */
   getStatus(): NetworkDnsPodProviderStatus {
     return {
       configured:
@@ -514,11 +431,6 @@ export class NetworkDnsPodClient {
     };
   }
 
-  /**
-   * Reconciles one existing DNSPod A or AAAA record and verifies provider read-back.
-   * @param input - Exact zone, host record, family, target, and optional record identity.
-   * @returns Applied canonical address and provider record identity.
-   */
   async reconcile(
     input: NetworkDnsPodReconcileInput,
   ): Promise<NetworkDnsPodReconcileResult> {
@@ -581,12 +493,6 @@ export class NetworkDnsPodClient {
     }
   }
 
-  /**
-   * Reads one exact address record and validates all provider metadata.
-   * @param client - Initialized DNSPod SDK boundary.
-   * @param input - Normalized exact-record query.
-   * @returns Validated record safe for comparison or mutation.
-   */
   private async describeExactRecord(
     client: DnsPodSdkClient,
     input: NormalizedReconcileInput,
@@ -604,10 +510,6 @@ export class NetworkDnsPodClient {
     return validateRecord(response.RecordList, input);
   }
 
-  /**
-   * Builds the official SDK configuration with bounded HTTP behavior.
-   * @returns DNSPod client configuration; region is intentionally omitted.
-   */
   private clientConfig(): ClientConfig {
     return {
       credential: {
@@ -623,11 +525,6 @@ export class NetworkDnsPodClient {
     };
   }
 
-  /**
-   * Reads one configuration value as a trimmed string.
-   * @param key - Runtime configuration key.
-   * @returns String value or an empty string when absent.
-   */
   private configValue(key: string): string {
     const value = this.config.get<unknown>(key);
     return typeof value === 'string' ? value.trim() : '';

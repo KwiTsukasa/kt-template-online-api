@@ -4,11 +4,6 @@ import { join, relative } from 'path';
 const repoRoot = join(__dirname, '../../../..');
 const pluginRoot = join(repoRoot, 'src/modules/qqbot/plugins');
 
-/**
- * 执行 测试断言流程。
- * @param root - root 输入；驱动 `readdirSync()`、`join()` 的 测试步骤。
- * @returns 测试断言渲染后的图片、画布或文本。
- */
 const collectTsFiles = (root: string): string[] => {
   if (!existsSync(root)) return [];
 
@@ -20,11 +15,6 @@ const collectTsFiles = (root: string): string[] => {
   });
 };
 
-/**
- * 执行 测试断言流程。
- * @param root - root 输入；驱动 `readdirSync()`、`join()` 的 测试步骤。
- * @returns 测试断言渲染后的图片、画布或文本。
- */
 const collectFiles = (root: string): string[] => {
   if (!existsSync(root)) return [];
 
@@ -36,10 +26,6 @@ const collectFiles = (root: string): string[] => {
   });
 };
 
-/**
- * 执行 测试断言流程。
- * @param filePath - 测试路径；驱动 `relative()` 的 测试步骤。
- */
 const toRepoPath = (filePath: string) =>
   relative(repoRoot, filePath).replace(/\\/g, '/');
 
@@ -328,20 +314,10 @@ describe('plugin platform package decoupling', () => {
   const forbiddenBranchPattern =
     /pluginKey\s*(?:={2,3})\s*['"`](bangdream|bilibili-card|ff14-market|fflogs|repeater)['"`]|case\s+['"`](bangdream|bilibili-card|ff14-market|fflogs|repeater)['"`]/;
 
-  /**
-   * Escapes a literal token before it is placed into the architecture gate regexp.
-   * @param token - Forbidden source token built without leaving the raw token in test source.
-   * @returns RegExp-safe literal token.
-   */
   function escapeRegExp(token: string): string {
     return token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  /**
-   * Walks plugin-platform source files for concrete coupling assertions.
-   * @param dir - Directory being scanned for TypeScript platform sources.
-   * @returns TypeScript source files under the platform tree.
-   */
   function walkSourceFiles(dir: string): string[] {
     return readdirSync(dir).flatMap((name) => {
       const file = join(dir, name);

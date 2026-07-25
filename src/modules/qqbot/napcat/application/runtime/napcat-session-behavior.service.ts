@@ -18,12 +18,6 @@ export type NapcatAutomationDecision = {
 
 @Injectable()
 export class NapcatSessionBehaviorService {
-  /**
-   * Creates the first behavior profile after account login or profile migration.
-   * @param accountId - Account id whose automation stage and housekeeping schedule are initialized.
-   * @param now - Current time supplied by caller for deterministic tests and evidence.
-   * @returns Default cold-start behavior profile without any send quota counters.
-   */
   createDefaultProfile(accountId: string, now = new Date()) {
     return {
       accountId,
@@ -38,11 +32,6 @@ export class NapcatSessionBehaviorService {
     };
   }
 
-  /**
-   * Converts housekeeping failure into an evidence-only action.
-   * @param input - Account and failure summary from a low-side-effect housekeeping call.
-   * @returns Decision that disables behavior extensions without resetting login, retrying password, recreating runtime, or refreshing QR.
-   */
   handleHousekeepingFailure(input: {
     accountId: string;
     failureMessage: string;
@@ -55,11 +44,6 @@ export class NapcatSessionBehaviorService {
     };
   }
 
-  /**
-   * Calculates the next automation recovery stage after the current observation window passes.
-   * @param stage - Current staged capability value persisted for the account.
-   * @returns Next capability stage, capped at full automation.
-   */
   nextCapabilityStage(
     stage: NapcatAutoCapabilityStage,
   ): NapcatAutoCapabilityStage {
@@ -68,11 +52,6 @@ export class NapcatSessionBehaviorService {
     return 'automation';
   }
 
-  /**
-   * Decides whether a behavior extension may run for the current staged capability.
-   * @param input - Automation kind and optional stage; missing stage means no persisted behavior profile is active yet.
-   * @returns Allow/skip decision that never writes or checks hourly/daily send counters.
-   */
   decideAutomation(input: {
     automationKind: NapcatAutomationKind;
     manual?: boolean;

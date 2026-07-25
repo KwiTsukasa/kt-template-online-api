@@ -30,11 +30,6 @@ const CONFIG_RULES = {
   },
 } as const;
 
-/**
- * Reads Bilibili card runtime config from the package host and clamps unsafe values.
- * @param host - Package-local host facade backed by the worker config snapshot.
- * @returns Runtime config used by redirect resolution, API requests, dedupe and reply text.
- */
 export function readBilibiliCardRuntimeConfig(
   host: BilibiliCardPluginHost,
 ): BilibiliCardRuntimeConfig {
@@ -46,12 +41,6 @@ export function readBilibiliCardRuntimeConfig(
   };
 }
 
-/**
- * Reads one numeric config value and constrains it to the allowed runtime range.
- * @param host - Package-local host facade that exposes manifest config values.
- * @param rule - Config key, fallback and inclusive bounds for one Bilibili setting.
- * @returns Integer value clamped between the rule's minimum and maximum.
- */
 function readClampedInteger(
   host: BilibiliCardPluginHost,
   rule: {

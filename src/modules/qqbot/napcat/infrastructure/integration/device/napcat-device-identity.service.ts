@@ -28,21 +28,12 @@ type AdoptNapcatDeviceIdentityInput = {
 
 @Injectable()
 export class NapcatDeviceIdentityService {
-  /**
-   * 初始化 NapcatDeviceIdentityService 实例。
-   * @param identityRepository - NapCat仓库依赖；影响 constructor 的返回值。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(NapcatDeviceIdentity)
     private readonly identityRepository: Repository<NapcatDeviceIdentity>,
     private readonly configService: ConfigService,
   ) {}
 
-  /**
-   * Resolves the stable device identity used when an account creates or rebuilds its NapCat container.
-   * @param input - Account id selects the persistent identity row, container id updates the active binding, and self id seeds non-visible deterministic device values.
-   */
   async resolveForAccount(input: ResolveNapcatDeviceIdentityInput) {
     const accountId = `${input.accountId}`.trim();
     const containerName = this.buildContainerName(input.selfId || accountId);
@@ -87,11 +78,6 @@ export class NapcatDeviceIdentityService {
     return this.identityRepository.save(identity);
   }
 
-  /**
-   * Reassigns a create-login provisional identity to the scanned account without changing visible device values.
-   * @param input - Final account id and container id; container id selects the provisional identity created before QQ self id was known.
-   * @returns Existing provisional identity after adoption, or a newly resolved account identity when no provisional row exists.
-   */
   async adoptContainerIdentity(input: AdoptNapcatDeviceIdentityInput) {
     const accountId = `${input.accountId}`.trim();
     const containerId = `${input.containerId}`.trim();
@@ -147,11 +133,6 @@ export class NapcatDeviceIdentityService {
     return provisionalIdentity;
   }
 
-  /**
-   * Copies first-run device values into an existing account identity and removes the temporary row.
-   * @param input - Existing target row plus the provisional row created before the scanned QQ account was known.
-   * @returns Target account identity after it has adopted the running container's visible device values.
-   */
   private async mergeProvisionalIdentityIntoTarget(input: {
     accountId: string;
     containerId: string;
@@ -187,11 +168,6 @@ export class NapcatDeviceIdentityService {
     return input.targetIdentity;
   }
 
-  /**
-   * Builds evidence for the one-time provisional identity adoption after a create-login scan succeeds.
-   * @param input - Source/target ids and optional QQ self id used to make later audits explain the ownership change.
-   * @returns JSON-safe evidence merged into the device identity row before returning it to the container binding.
-   */
   private buildAdoptionEvidence(input: {
     existingEvidence: null | Record<string, unknown>;
     fromAccountId: string;
@@ -211,10 +187,6 @@ export class NapcatDeviceIdentityService {
     };
   }
 
-  /**
-   * Builds the stable container directory name used for data-dir ownership.
-   * @param seed - QQ self id or account id used in container path compatibility, not in the public hostname.
-   */
   private buildContainerName(seed: string) {
     const prefix = this.getConfig(
       'QQBOT_NAPCAT_CONTAINER_PREFIX',
@@ -226,21 +198,11 @@ export class NapcatDeviceIdentityService {
     return `${prefix}-${suffix}`.replace(/-+/g, '-').slice(0, 120);
   }
 
-  /**
-   * Builds a short stable hostname that survives the upstream Docker entrypoint rewrite and remains visible to QQNT.
-   * @param seed - Account/self-id seed used only for deterministic hashing, never copied into visible hostname text.
-   */
   private buildQqntVisibleHostname(seed: string) {
     const hash = createHash('sha256').update(seed).digest('hex');
     return `pc-${hash.slice(0, 8)}`;
   }
 
-  /**
-   * Builds a stable physical-OUI MAC that can be mirrored into QQNT machine-info without using VM/container prefixes.
-   * @param accountId - Account id used as a deterministic seed, not as visible output.
-   * @param containerName - Container name mixed into the deterministic seed.
-   * @returns Lower-case MAC address with a curated physical-device OUI prefix.
-   */
   private buildPhysicalOuiMacAddress(
     accountId: string,
     containerName: string,
@@ -262,11 +224,6 @@ export class NapcatDeviceIdentityService {
     return `${prefix}:${suffix.join(':')}`.toLowerCase();
   }
 
-  /**
-   * Migrates an existing Docker-style identity to the stable desktop profile once.
-   * @param identity - Persisted identity row loaded for the account being prepared.
-   * @param input - Current account/container seed used to derive deterministic target values.
-   */
   private async migrateLegacyIdentityIfNeeded(
     identity: NapcatDeviceIdentity,
     input: {

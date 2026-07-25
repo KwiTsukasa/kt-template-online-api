@@ -8,12 +8,6 @@ import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
 
 @Injectable()
 export class ComponentService {
-  /**
-   * 初始化 ComponentService 实例。
-   * @param userRepository - 用户仓库依赖；影响 constructor 的返回值。
-   * @param toolsService - ToolsService 依赖；影响 constructor 的返回值。
-   * @param dictService - dictService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(
     @InjectRepository(Component)
     private readonly userRepository: Repository<Component>,

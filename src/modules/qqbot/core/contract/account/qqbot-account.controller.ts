@@ -23,11 +23,6 @@ import { QqbotReverseWsService } from '../../infrastructure/integration/connecti
 @Controller('qqbot/account')
 @UseGuards(JwtAuthGuard)
 export class QqbotAccountController {
-  /**
-   * 初始化 QqbotAccountController 实例。
-   * @param accountService - accountService 服务依赖；影响 constructor 的返回值。
-   * @param reverseWsService - reverseWsService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(
     private readonly accountService: QqbotAccountService,
     private readonly reverseWsService: QqbotReverseWsService,

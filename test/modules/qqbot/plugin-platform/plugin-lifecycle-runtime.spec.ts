@@ -13,18 +13,9 @@ import { QqbotPluginWorkerRuntimeFactoryService } from '../../../../src/modules/
 
 const repoRoot = join(__dirname, '../../../..');
 
-/**
- * 读取 QQBot 插件平台资源。
- * @param relativePath - 相对文件路径；读取本地文件内容。
- */
 const readSource = (relativePath: string) =>
   readFileSync(join(repoRoot, relativePath), 'utf8');
 
-/**
- * 执行 QQBot 插件平台流程。
- * @param relativePath - 相对文件路径；驱动 `join()`、`flatMap()` 的 插件平台步骤。
- * @returns QQBot 插件平台渲染后的图片、画布或文本。
- */
 const collectSourceFiles = (relativePath: string): string[] => {
   const absolutePath = join(repoRoot, relativePath);
   if (!existsSync(absolutePath)) return [];
@@ -35,12 +26,6 @@ const collectSourceFiles = (relativePath: string): string[] => {
   );
 };
 
-/**
- * 创建 descriptor-based package source mock。
- * @param manifest - 测试插件 manifest；作为 worker runtime 的 descriptor 快照来源。
- * @param packageRoot - 受控插件包根路径；验证 installedPath 不再使用旧 builtin URI。
- * @returns 只暴露 discovery 所需方法的 package source mock。
- */
 const createPackageSource = (
   manifest: Record<string, unknown>,
   packageRoot = 'D:/plugins/demo-plugin',
@@ -304,10 +289,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: 'plugin-1',
       version: '0.1.0',
     };
-    /**
-     * 创建 仓库 mock。
-     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
-     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),
@@ -466,10 +447,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: installation.pluginId,
       version: '0.1.0',
     };
-    /**
-     * 创建 仓库 mock。
-     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
-     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),
@@ -604,10 +581,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: installation.pluginId,
       version: manifest.version,
     };
-    /**
-     * 创建 仓库 mock。
-     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
-     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),
@@ -788,11 +761,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       status: 'disabled',
       versionId: 'version-disabled',
     };
-    /**
-     * 创建 仓库 mock。
-     * @param rows - 插件平台列表；使用 `length` 字段生成结果。
-     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
-     */
     const createRepository = (
       rows: unknown[] = [],
       findOneValue?: unknown,
@@ -852,11 +820,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
   });
 
   it('continues starting other built-in workers when one worker health check fails', async () => {
-    /**
-     * 创建测试 manifest。
-     * @param pluginKey - 插件 key；用于区分当前被发现的内置插件包。
-     * @returns 可被插件平台解析的内置插件 manifest。
-     */
     const createManifest = (pluginKey: string) => ({
       assets: [],
       configSchema: {},
@@ -1053,10 +1016,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       ],
       version: '0.1.0',
     };
-    /**
-     * 创建 仓库 mock。
-     * @param ids - 插件平台 ID 列表；限定本次批量读取、渲染或关联的插件平台范围。
-     */
     const createRepository = (ids: string[]) => {
       const rows: any[] = [];
       return {
@@ -1185,11 +1144,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       status: 'enabled',
       versionId: 'version-enabled',
     };
-    /**
-     * 创建 仓库 mock。
-     * @param rows - 插件平台列表；使用 `length` 字段生成结果。
-     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
-     */
     const createRepository = (
       rows: unknown[] = [],
       findOneValue?: unknown,
@@ -1312,11 +1266,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: plugin.id,
       version: manifest.version,
     };
-    /**
-     * 创建 仓库 mock。
-     * @param rows - 插件平台列表；使用 `length` 字段生成结果。
-     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
-     */
     const createRepository = (
       rows: unknown[] = [],
       findOneValue?: unknown,
@@ -1446,10 +1395,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       },
       version: '0.1.0',
     };
-    /**
-     * 创建 仓库 mock。
-     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
-     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),
@@ -1576,10 +1521,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: installation.pluginId,
       version: manifest.version,
     };
-    /**
-     * 创建 仓库 mock。
-     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
-     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),
@@ -1739,10 +1680,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       ],
       version: '0.1.0',
     };
-    /**
-     * 创建 仓库 mock。
-     * @param rows - 插件平台列表；构造 Jest mock 返回值。
-     */
     const createRepository = (rows: unknown[] = []) => ({
       find: jest.fn(async () => rows),
     });
@@ -1821,10 +1758,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       ],
       version: '0.1.0',
     };
-    /**
-     * 创建 仓库 mock。
-     * @param rows - 插件平台列表；构造 Jest mock 返回值。
-     */
     const createRepository = (rows: unknown[] = []) => ({
       find: jest.fn(async () => rows),
     });
@@ -1879,10 +1812,6 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       pluginId: installation.pluginId,
       version: '0.2.0',
     };
-    /**
-     * 创建 仓库 mock。
-     * @param findOneValue - findOneValue 输入；构造 Jest mock 返回值。
-     */
     const createRepository = (findOneValue?: unknown) => ({
       find: jest.fn(async () => []),
       findAndCount: jest.fn(async () => [[], 0]),

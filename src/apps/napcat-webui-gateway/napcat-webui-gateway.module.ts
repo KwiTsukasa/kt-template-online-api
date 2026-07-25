@@ -22,22 +22,12 @@ import { PublicWebuiController } from './presentation/public-webui.controller';
     LoggerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      /**
-       * Builds pino logger options from the shared API logging config.
-       * @param configService - Nest ConfigService dependency.
-       * @returns LoggerModule options.
-       */
       useFactory: (configService: ConfigService) =>
         createPinoLoggerParams(configService),
     }),
     RedisModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      /**
-       * Builds the Gateway Redis module options.
-       * @param configService - Nest ConfigService dependency.
-       * @returns @nestjs-modules/ioredis single-connection options.
-       */
       useFactory: (configService: ConfigService) => {
         const config = new NapcatWebuiGatewayConfigService(configService);
         return {

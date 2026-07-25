@@ -22,14 +22,6 @@ export type NapcatRuntimeProfileSummary = {
 
 @Injectable()
 export class NapcatRuntimeProfileInspectorService {
-  /**
-   * Initializes runtime inspection over the existing remote-managed runtime model.
-   * @param runtimeProfileRepository - Runtime profile repository updated with latest container and desktop evidence.
-   * @param protocolProfileRepository - Protocol profile repository updated with config hashes and drift state.
-   * @param configService - Runtime config provider used for inspection timeout defaults.
-   * @param toolsService - Shared helper used to normalize string evidence before redaction.
-   * @param inspectionScriptService - Infrastructure helper that owns remote script construction.
-   */
   constructor(
     @InjectRepository(NapcatRuntimeProfile)
     private readonly runtimeProfileRepository: Repository<NapcatRuntimeProfile>,
@@ -45,20 +37,10 @@ export class NapcatRuntimeProfileInspectorService {
       new NapcatRuntimeProfileInspectionScriptService();
   }
 
-  /**
-   * Delegates remote profile evidence script creation to the infrastructure helper.
-   * @param containerName - Runtime container name selected from the persisted NapCat container row.
-   * @returns Read-only profile evidence script without secret environment reads.
-   */
   buildInspectScript(containerName: string) {
     return this.inspectionScriptService.buildInspectScript(containerName);
   }
 
-  /**
-   * Redacts secrets before evidence is stored, logged, or returned to Admin.
-   * @param value - Evidence object or primitive produced by runtime, NapCat, or config writers.
-   * @returns Evidence with sensitive keys and token query values replaced by placeholders.
-   */
   sanitizeEvidence(value: unknown): unknown {
     if (Array.isArray(value)) {
       return value.map((item) => this.sanitizeEvidence(item));
@@ -80,11 +62,6 @@ export class NapcatRuntimeProfileInspectorService {
     );
   }
 
-  /**
-   * Returns sanitized runtime and protocol profile detail for one account.
-   * @param accountId - Account id used to locate profile rows for the Admin detail view.
-   * @returns Sanitized profile evidence suitable for API responses.
-   */
   async getAccountRuntimeDetail(accountId: string) {
     const normalizedAccountId = this.toolsService.toTrimmedString(accountId);
     const [runtimeProfile, protocolProfile] = await Promise.all([
@@ -106,11 +83,6 @@ export class NapcatRuntimeProfileInspectorService {
     };
   }
 
-  /**
-   * Loads lightweight runtime-profile summaries for account list rows.
-   * @param accountIds - Account ids from the current list page.
-   * @returns Map keyed by account id with optional runtime profile summary.
-   */
   async getAccountRuntimeSummaryMap(accountIds: string[]) {
     const normalizedIds = accountIds
       .map((accountId) => this.toolsService.toTrimmedString(accountId))
@@ -141,10 +113,6 @@ export class NapcatRuntimeProfileInspectorService {
     return summaryMap;
   }
 
-  /**
-   * Reads the bounded runtime profile inspection timeout.
-   * @returns Positive timeout in milliseconds for future remote inspection calls.
-   */
   private getInspectionTimeoutMs() {
     const value = Number(
       this.configService.get<string>(
@@ -154,11 +122,6 @@ export class NapcatRuntimeProfileInspectorService {
     return Number.isFinite(value) && value > 0 ? value : 15_000;
   }
 
-  /**
-   * Converts persisted profile status into the account-list API vocabulary.
-   * @param status - Runtime profile persistence status from the latest profile row.
-   * @returns Compact status label consumed by Admin list rows.
-   */
   private toProfileStatus(
     status?: string,
   ): NapcatRuntimeProfileSummary['profileStatus'] {
@@ -168,11 +131,6 @@ export class NapcatRuntimeProfileInspectorService {
     return 'unknown';
   }
 
-  /**
-   * Redacts token query values from URL-like evidence strings.
-   * @param value - Evidence string that may include token query parameters.
-   * @returns String with token values replaced by `[REDACTED]`.
-   */
   private redactString(value: string) {
     return value.replace(/token=[^&\s]+/gi, 'token=[REDACTED]');
   }

@@ -2,10 +2,6 @@ import { bangdreamBestdoriProvider } from '@/modules/qqbot/plugins/bangdream/src
 import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/bangdream-data-provider';
 
 export class AttributeResourceRepository {
-  /**
-   * 初始化 AttributeResourceRepository 实例。
-   * @param provider - provider 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}

@@ -55,20 +55,11 @@ export function createPinoLoggerParams(configService: ConfigService): Params {
       customAttributeKeys: {
         responseTime: 'durationMs',
       },
-      /**
-       * 执行 公共基础设施回调。
-       * @param req - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
-       */
       customProps: (req: Request) => ({
         meta: {
           requestId: getRequestId(req),
         },
       }),
-      /**
-       * 执行 公共基础设施回调。
-       * @param req - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
-       * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-       */
       genReqId: (req: Request, res: Response) => {
         const requestId =
           getHeader(req, 'x-request-id') ||

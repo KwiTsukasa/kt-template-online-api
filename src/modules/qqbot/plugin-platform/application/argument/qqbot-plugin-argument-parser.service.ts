@@ -7,10 +7,6 @@ import {
 
 @Injectable()
 export class QqbotPluginArgumentParserService {
-  /**
-   * 初始化 QqbotPluginArgumentParserService 实例。
-   * @param normalizer - normalizer 输入；影响 constructor 的返回值。
-   */
   constructor(
     @Optional()
     @Inject(QQBOT_PLUGIN_INPUT_NORMALIZER)

@@ -149,9 +149,6 @@ export function createCenteredImageRows<T extends ImageLike>(
   let tempHeight = 0;
   let tempImageList: T[] = [];
 
-  /**
-   * 创建 BangDream 插件中间结构。
-   */
   const newLine = () => {
     lineList.push({
       height: tempHeight,

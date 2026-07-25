@@ -66,9 +66,6 @@ export class NapcatLoginEvent {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * Assigns a stable Snowflake id before persisting a login-side risk event.
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

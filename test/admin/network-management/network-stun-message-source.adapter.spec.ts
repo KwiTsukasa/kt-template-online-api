@@ -13,7 +13,6 @@ type Harness = {
   registry: SystemMessageSourceRegistry;
 };
 
-/** Creates a mutable in-memory repository harness for the adapter contract. */
 function createHarness(): Harness {
   const mapping = Object.assign(new NetworkPortForward(), {
     currentPublicIpv4: '203.0.113.10',
@@ -71,7 +70,6 @@ function createHarness(): Harness {
   };
 }
 
-/** Returns a valid event payload, with optional untrusted-field overrides. */
 function eventPayload(overrides: Record<string, unknown> = {}) {
   return {
     changedAt: '2026-07-24T12:30:00.000Z',

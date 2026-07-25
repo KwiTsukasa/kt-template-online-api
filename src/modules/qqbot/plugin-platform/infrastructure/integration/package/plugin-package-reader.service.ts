@@ -35,18 +35,9 @@ export type QqbotValidatedPluginPackage = {
 const PACKAGE_EXTENSION = '.qqbot-plugin.json';
 const DEFAULT_MAX_PACKAGE_BYTES = 20 * 1024 * 1024;
 
-/**
- * 执行 QQBot 插件平台流程。
- * @param content - 待处理内容；驱动 `createHash()` 的 插件平台步骤。
- */
 const sha256 = (content: Buffer | string) =>
   createHash('sha256').update(content).digest('hex');
 
-/**
- * 执行 QQBot 插件平台流程。
- * @param value - 待稳定序列化的值；转换 插件平台列表项。
- * @returns QQBot 插件平台渲染后的图片、画布或文本。
- */
 const stableStringify = (value: unknown): string => {
   if (Array.isArray(value)) {
     return `[${value.map((item) => stableStringify(item)).join(',')}]`;
@@ -63,11 +54,6 @@ const stableStringify = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
-/**
- * 判断 QQBot 插件平台条件。
- * @param parent - parent 输入；驱动 `relative()` 的 插件平台步骤。
- * @param child - child 输入；驱动 `relative()` 的 插件平台步骤。
- */
 const isInsideDirectory = (parent: string, child: string) => {
   const relativePath = relative(parent, child);
   return (
@@ -80,10 +66,6 @@ const isInsideDirectory = (parent: string, child: string) => {
 
 @Injectable()
 export class QqbotPluginPackageReaderService {
-  /**
-   * 初始化 QqbotPluginPackageReaderService 实例。
-   * @param configService - Nest ConfigService 依赖；影响 constructor 的返回值。
-   */
   constructor(
     @Optional()
     private readonly configService?: ConfigService,

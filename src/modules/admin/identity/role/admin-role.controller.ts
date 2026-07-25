@@ -18,10 +18,6 @@ import { AdminRoleService } from './admin-role.service';
 @Controller('system/role')
 @UseGuards(JwtAuthGuard)
 export class AdminRoleController {
-  /**
-   * 初始化 AdminRoleController 实例。
-   * @param roleService - roleService 服务依赖；影响 constructor 的返回值。
-   */
   constructor(private readonly roleService: AdminRoleService) {}
 
   /**

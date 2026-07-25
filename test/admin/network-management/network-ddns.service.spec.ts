@@ -22,21 +22,10 @@ type Harness = {
   state: NetworkAgentState;
 };
 
-/**
- * Clones one entity to model TypeORM snapshots instead of shared object identity.
- * @param record - In-memory database row.
- * @returns Detached entity snapshot.
- */
 function cloneRecord(record: NetworkDdnsRecord): NetworkDdnsRecord {
   return Object.assign(new NetworkDdnsRecord(), record);
 }
 
-/**
- * Matches a repository update criterion, including TypeORM's IsNull operator.
- * @param actual - Stored entity field value.
- * @param expected - Plain value or FindOperator-like criterion.
- * @returns True when the in-memory row satisfies the criterion.
- */
 function matchesUpdateCriterion(actual: unknown, expected: unknown): boolean {
   if (
     expected &&
@@ -51,7 +40,6 @@ function matchesUpdateCriterion(actual: unknown, expected: unknown): boolean {
   return actual === expected;
 }
 
-/** Creates an in-memory repository boundary around the real DDNS service. */
 function createHarness(): Harness {
   const records: NetworkDdnsRecord[] = [];
   const mapping = Object.assign(new NetworkPortForward(), {
@@ -186,7 +174,6 @@ function createHarness(): Harness {
   };
 }
 
-/** Persists one enabled pending IPv4 DDNS row for reconcile-path assertions. */
 async function prepareEnabledA(harness: Harness): Promise<void> {
   await harness.service.create({
     domain: 'kwitsukasa.top',
@@ -201,7 +188,6 @@ async function prepareEnabledA(harness: Harness): Promise<void> {
   harness.records[0].syncStatus = 'pending';
 }
 
-/** Creates the fluent list query subset used by the service. */
 function createListBuilder(records: NetworkDdnsRecord[]) {
   const builder = {
     andWhere: () => builder,
@@ -217,7 +203,6 @@ function createListBuilder(records: NetworkDdnsRecord[]) {
   return builder;
 }
 
-/** Reads a Nest HTTP status from one rejected service operation. */
 function errorStatus(error: unknown): number {
   return error instanceof HttpException ? error.getStatus() : 0;
 }

@@ -23,12 +23,6 @@ export class NapcatLoginStateStoreService {
     Promise<void> | undefined
   > = {};
 
-  /**
-   * 初始化 NapcatLoginStateStoreService 实例。
-   * @param loginSessionRepository - NapCat仓库依赖；影响 constructor 的返回值。
-   * @param loginChallengeRepository - NapCat仓库依赖；影响 constructor 的返回值。
-   * @param runtimeCleanupRepository - NapCat仓库依赖；影响 constructor 的返回值。
-   */
   constructor(
     @Optional()
     @InjectRepository(NapcatLoginSession)
@@ -248,11 +242,6 @@ export class NapcatLoginStateStoreService {
     }
   }
 
-  /**
-   * Builds the database snapshot for a scan session without carrying stale entity fields from an older row.
-   * @param session - Runtime scan session whose status, QR, expiry and challenge markers are the source of truth.
-   * @returns Partial entity used for update-first persistence by session key.
-   */
   private toSessionPersistenceSnapshot(
     session: QqbotLoginScanSession,
   ): Partial<NapcatLoginSession> {
@@ -271,11 +260,6 @@ export class NapcatLoginStateStoreService {
     };
   }
 
-  /**
-   * Detects the session-key duplicate race that can happen when two workers insert the same scan session concurrently.
-   * @param err - Database error raised by TypeORM save; MySQL duplicate-key metadata may appear as code, errno or message text.
-   * @returns True when retrying as an update by sessionKey is safe.
-   */
   private isDuplicateSessionKeyError(err: unknown) {
     const detail =
       err && typeof err === 'object'

@@ -26,37 +26,21 @@ const adminSwaggerPathPrefixes = [
 
 const swaggerGroups: SwaggerDocumentGroup[] = [
   {
-    /**
-     * 执行 模块回调。
-     * @param path - 路由或文件路径；驱动 `matchPathPrefixes()` 的 模块步骤。
-     */
     matcher: (path) => matchPathPrefixes(path, adminSwaggerPathPrefixes),
     name: 'Admin 后台管理',
     path: 'api/admin',
   },
   {
-    /**
-     * 执行 模块回调。
-     * @param path - 路由或文件路径；计算 模块布尔判断。
-     */
     matcher: (path) => path.startsWith('/qqbot'),
     name: 'QQBot 机器人',
     path: 'api/qqbot',
   },
   {
-    /**
-     * 执行 模块回调。
-     * @param path - 路由或文件路径；计算 模块布尔判断。
-     */
     matcher: (path) => path.startsWith('/wordpress'),
     name: 'WordPress 博客',
     path: 'api/wordpress',
   },
   {
-    /**
-     * 执行 模块回调。
-     * @param path - 路由或文件路径；计算 模块布尔判断。
-     */
     matcher: (path) =>
       path === '/' || path.startsWith('/minio') || path.startsWith('/health'),
     name: '基础能力',

@@ -3,10 +3,6 @@ import type { BangDreamDataProvider } from '@/modules/qqbot/plugins/bangdream/sr
 import { formatNumber } from '@/modules/qqbot/plugins/bangdream/src/domain/common/model-utils';
 
 export class CharacterResourceRepository {
-  /**
-   * 初始化 CharacterResourceRepository 实例。
-   * @param provider - provider 输入；影响 constructor 的返回值。
-   */
   constructor(
     private readonly provider: BangDreamDataProvider = bangdreamBestdoriProvider,
   ) {}

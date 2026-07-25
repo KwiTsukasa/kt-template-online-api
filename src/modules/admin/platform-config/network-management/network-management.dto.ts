@@ -34,12 +34,6 @@ const DECIMAL_ID_PATTERN = /^\d{1,24}$/;
 
 @ValidatorConstraint({ async: false, name: 'networkDdnsPortForwardId' })
 class NetworkDdnsPortForwardIdConstraint implements ValidatorConstraintInterface {
-  /**
-   * Enforces the A-required and AAAA-forbidden source-ID discriminated union.
-   * @param value - Candidate port-forward identifier.
-   * @param args - Validation context containing the sibling record type.
-   * @returns True only for an A decimal string or an omitted AAAA field.
-   */
   validate(value: unknown, args: ValidationArguments): boolean {
     const input = args.object as { recordType?: unknown };
     if (input.recordType === 'A') {
@@ -49,10 +43,6 @@ class NetworkDdnsPortForwardIdConstraint implements ValidatorConstraintInterface
     return true;
   }
 
-  /**
-   * Returns a stable request-contract error without echoing the supplied value.
-   * @returns Safe validation message.
-   */
   defaultMessage(): string {
     return 'portForwardId is required for A and forbidden for AAAA';
   }
@@ -320,21 +310,10 @@ export class NetworkPortForwardResponseDto {
   currentPublicEndpoint?: string | null;
 }
 
-/**
- * Runs update validation for every supplied value, including explicit null.
- * @param _object - DTO instance required by class-validator's predicate contract.
- * @param value - Candidate property value.
- * @returns True unless the property was omitted entirely.
- */
 function isProvided(_object: object, value: unknown): boolean {
   return value !== undefined;
 }
 
-/**
- * Converts literal HTTP query booleans without treating every non-empty string as true.
- * @param params - class-transformer field input.
- * @returns Parsed boolean or the original invalid value for class-validator to reject.
- */
 function parseBooleanQuery({ value }: TransformFnParams): unknown {
   if (value === 'true' || value === true) return true;
   if (value === 'false' || value === false) return false;

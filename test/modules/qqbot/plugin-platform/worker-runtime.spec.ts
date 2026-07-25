@@ -22,10 +22,6 @@ class RecordingDriver implements QqbotPluginWorkerDriver {
   readonly requests: QqbotPluginWorkerRequest[] = [];
   readonly responses = new Map<string, unknown>();
 
-  /**
-   * 初始化 RecordingDriver 实例。
-   * @param rejectTypes - 插件平台列表；影响 constructor 的返回值。
-   */
   constructor(private readonly rejectTypes = new Map<string, Error>()) {}
 
   /**
@@ -60,10 +56,6 @@ class RecordingDriver implements QqbotPluginWorkerDriver {
 class RecordingRequestQueue implements QqbotPluginWorkerRequestQueue {
   private previous = Promise.resolve();
 
-  /**
-   * 初始化 RecordingRequestQueue 实例。
-   * @param driver - driver 输入；影响 constructor 的返回值。
-   */
   constructor(private readonly driver: QqbotPluginWorkerDriver) {}
 
   /**
@@ -101,10 +93,6 @@ class GenerationAwareRequestQueue implements QqbotPluginWorkerRequestQueue {
   private generation = 0;
   private previous = Promise.resolve();
 
-  /**
-   * 初始化 GenerationAwareRequestQueue 实例。
-   * @param driver - driver 输入；影响 constructor 的返回值。
-   */
   constructor(private readonly driver: QqbotPluginWorkerDriver) {}
 
   /**
@@ -160,10 +148,6 @@ class TimeoutAwareRecordingRequestQueue extends RecordingRequestQueue {
 }
 
 class ExpiringOnceRequestQueue implements QqbotPluginWorkerRequestQueue {
-  /**
-   * 初始化 ExpiringOnceRequestQueue 实例。
-   * @param driver - driver 输入；影响 constructor 的返回值。
-   */
   constructor(private readonly driver: QqbotPluginWorkerDriver) {}
 
   /**
@@ -196,10 +180,6 @@ class ExpiringOnceRequestQueue implements QqbotPluginWorkerRequestQueue {
   }
 }
 
-/**
- * 创建 QQBot 插件平台对象或配置。
- * @param driver - driver 输入；驱动 `QqbotPluginWorkerRuntime()` 的 插件平台步骤。
- */
 const createRuntime = (driver = new RecordingDriver()) => {
   const runtime = new QqbotPluginWorkerRuntime(
     new RecordingRequestQueue(driver),
@@ -903,10 +883,6 @@ describe('QQBot plugin worker queue config', () => {
  */
 function createConfigService(values: Record<string, string>): ConfigService {
   return {
-    /**
-     * 读取 插件平台回调数据。
-     * @param key - 键名；限定 插件平台查询范围。
-     */
     get: <T = string | undefined>(key: string) => values[key] as T,
   } as ConfigService;
 }

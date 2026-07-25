@@ -6,9 +6,6 @@ import {
   routeKey,
 } from '../../../helpers/controller-route.helper';
 
-/**
- * 创建 QQBot 插件平台对象或配置。
- */
 const createRepositoryMock = () => ({
   findAndCount: jest.fn(async () => [[], 0]),
   findOne: jest.fn(async () => null),

@@ -31,11 +31,6 @@ export type QqbotPluginRedirectResult = {
 
 @Injectable()
 export class QqbotPluginHttpClientService {
-  /**
-   * Resolves an HTTP(S) URL through bounded 3xx redirects for plugin host calls without platform-specific URL rules.
-   * @param input - Initial URL, optional headers, timeout, and redirect limit supplied by plugin runtime code.
-   * @returns Final URL and the ordered chain of redirect target URLs.
-   */
   async resolveRedirect(
     input: QqbotPluginResolveRedirectRequest,
   ): Promise<QqbotPluginRedirectResult> {
@@ -191,12 +186,6 @@ export class QqbotPluginHttpClientService {
     });
   }
 
-  /**
-   * Requests one URL and returns its redirect Location after the response body is drained.
-   * @param url - Validated HTTP(S) URL to request.
-   * @param input - Headers and timeout options shared across the redirect chain.
-   * @returns Redirect Location header when the response is 3xx, otherwise `undefined`; rejects for HTTP error statuses.
-   */
   private requestRedirectLocation(
     url: URL,
     input: QqbotPluginResolveRedirectRequest,
@@ -272,11 +261,6 @@ function createPluginHttpError(message: string, statusCode: number) {
   });
 }
 
-/**
- * Builds a URL and enforces the plugin redirect resolver's HTTP(S)-only protocol boundary.
- * @param value - Worker-supplied string or URL value.
- * @returns URL instance safe to request with node:http or node:https.
- */
 function normalizePluginHttpUrl(value: string | URL) {
   const url = value instanceof URL ? value : new URL(value);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
@@ -285,11 +269,6 @@ function normalizePluginHttpUrl(value: string | URL) {
   return url;
 }
 
-/**
- * Normalizes the redirect limit used to stop infinite or overly long redirect chains.
- * @param value - Optional max redirect count supplied by plugin runtime code.
- * @returns Non-negative redirect count limit.
- */
 function normalizeMaxRedirects(value: number | undefined) {
   const maxRedirects = value ?? 5;
   return Number.isFinite(maxRedirects) && maxRedirects >= 0
@@ -297,11 +276,6 @@ function normalizeMaxRedirects(value: number | undefined) {
     : 5;
 }
 
-/**
- * Selects the Node HTTP module for a validated redirect URL.
- * @param url - HTTP(S) URL accepted by `normalizePluginHttpUrl`.
- * @returns Node request module matching the URL protocol.
- */
 function getPluginHttpModule(url: URL) {
   return url.protocol === 'http:' ? http : https;
 }

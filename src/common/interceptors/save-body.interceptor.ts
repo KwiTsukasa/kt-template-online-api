@@ -11,18 +11,11 @@ import type { Request } from 'express';
 
 const SKIP_SAVE_BODY_NORMALIZE = 'SKIP_SAVE_BODY_NORMALIZE';
 
-/**
- * 执行 当前模块流程。
- */
 export const SkipSaveBodyNormalize = () =>
   SetMetadata(SKIP_SAVE_BODY_NORMALIZE, true);
 
 @Injectable()
 export class SaveBodyInterceptor implements NestInterceptor {
-  /**
-   * 初始化 SaveBodyInterceptor 实例。
-   * @param reflector - Nest Reflector 实例；影响 constructor 的返回值。
-   */
   constructor(private readonly reflector: Reflector) {}
 
   /**

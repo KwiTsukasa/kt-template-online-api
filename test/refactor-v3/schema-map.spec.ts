@@ -3,9 +3,6 @@ import { join } from 'path';
 
 const root = join(__dirname, '..', '..');
 
-/**
- * 执行 测试断言流程。
- */
 const extractSchemaMapTables = () => {
   const schemaMap = readFileSync(
     join(root, 'docs/refactor-v3/schema-map.md'),

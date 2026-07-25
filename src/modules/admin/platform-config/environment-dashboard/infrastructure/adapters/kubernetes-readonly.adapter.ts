@@ -17,11 +17,6 @@ import {
 export class KubernetesReadonlyAdapter {
   private readonly http: EnvironmentReadonlyHttpClient;
 
-  /**
-   * Initializes Kubernetes readonly adapter.
-   * @param config - Environment dashboard config reader.
-   * @param http - Readonly HTTP client used for Kubernetes API probes.
-   */
   constructor(
     private readonly config: EnvironmentDashboardConfigService,
     @Optional() http?: EnvironmentReadonlyHttpClient,
@@ -29,10 +24,6 @@ export class KubernetesReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
-  /**
-   * Inspects Kubernetes readonly integration readiness.
-   * @returns K8s signal; missing configuration is explicit unwired evidence.
-   */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_K8S_API_SERVER',
@@ -101,10 +92,6 @@ export class KubernetesReadonlyAdapter {
     }
   }
 
-  /**
-   * Builds Kubernetes deployment API URL for the configured namespace and deployment.
-   * @returns Readonly apps/v1 deployment endpoint.
-   */
   private deploymentUrl(): string {
     const namespace = encodeURIComponent(
       this.config.get('ENV_DASHBOARD_K8S_NAMESPACE'),
@@ -118,10 +105,6 @@ export class KubernetesReadonlyAdapter {
     );
   }
 
-  /**
-   * Builds Kubernetes pods API URL for the configured namespace.
-   * @returns Readonly core/v1 pods endpoint.
-   */
   private podsUrl(): string {
     const namespace = encodeURIComponent(
       this.config.get('ENV_DASHBOARD_K8S_NAMESPACE'),
@@ -132,30 +115,17 @@ export class KubernetesReadonlyAdapter {
     );
   }
 
-  /**
-   * Creates optional Kubernetes bearer-auth headers without exposing token values.
-   * @returns Headers for outbound Kubernetes API request, or undefined when token is absent.
-   */
   private createAuthHeaders(): Record<string, string> | undefined {
     const token = this.config.get('ENV_DASHBOARD_K8S_BEARER_TOKEN');
     if (!token) return undefined;
     return { Authorization: `Bearer ${token}` };
   }
 
-  /**
-   * Creates optional Kubernetes pod list query params from safe selector config.
-   * @returns Params object accepted by the readonly HTTP client.
-   */
   private podsParams(): Record<string, string> | undefined {
     const labelSelector = this.config.get('ENV_DASHBOARD_K8S_LABEL_SELECTOR');
     return labelSelector ? { labelSelector } : undefined;
   }
 
-  /**
-   * Extracts deployment replica readiness from Kubernetes deployment JSON.
-   * @param body - Parsed deployment JSON body from Kubernetes API.
-   * @returns Replica counts used for dashboard status.
-   */
   private extractDeploymentReadiness(body: Record<string, unknown>) {
     const spec = asRecord(body.spec) || {};
     const status = asRecord(body.status) || {};
@@ -169,11 +139,6 @@ export class KubernetesReadonlyAdapter {
     };
   }
 
-  /**
-   * Extracts pod phase and ready-condition counts from Kubernetes pod list JSON.
-   * @param body - Parsed pod list JSON body from Kubernetes API.
-   * @returns Pod counts used for dashboard evidence.
-   */
   private extractPodReadiness(body: Record<string, unknown>) {
     const pods = asArray(body.items);
     const podRunningCount = pods.filter((pod) => {

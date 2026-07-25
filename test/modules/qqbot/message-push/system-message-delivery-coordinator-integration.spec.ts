@@ -23,19 +23,16 @@ type CoordinatorHarness = {
   transaction: jest.Mock;
 };
 
-/** Deep-clones the JSON-shaped coordinator fixture while preserving project timestamps. */
 function cloneStore(store: CoordinatorStore): CoordinatorStore {
   return structuredClone(store);
 }
 
-/** Reads the value carried by TypeORM's in-memory `In` find operator. */
 function inValues(value: unknown): unknown[] {
   if (!value || typeof value !== 'object') return [];
   const values = (value as { _value?: unknown })._value;
   return Array.isArray(values) ? values : [];
 }
 
-/** Builds a transaction-faithful Core harness with commit-on-resolve and discard-on-reject. */
 function createCoordinatorHarness(): CoordinatorHarness {
   const store: CoordinatorStore = {
     deliveries: [

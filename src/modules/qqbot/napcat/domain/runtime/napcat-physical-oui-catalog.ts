@@ -27,11 +27,6 @@ export const NAPCAT_REJECTED_VIRTUAL_OUI_PREFIXES = [
   '00:03:FF',
 ] as const;
 
-/**
- * Checks whether a generated MAC starts with a container or VM-style prefix.
- * @param macAddress - Stable MAC candidate generated from account/device seed.
- * @returns True when the prefix belongs to a rejected container or virtualization range.
- */
 export function isRejectedVirtualMacPrefix(macAddress: string) {
   const normalized = macAddress.toUpperCase();
   return NAPCAT_REJECTED_VIRTUAL_OUI_PREFIXES.some((prefix) =>
@@ -39,11 +34,6 @@ export function isRejectedVirtualMacPrefix(macAddress: string) {
   );
 }
 
-/**
- * Checks whether a generated MAC starts with one of the allowed physical-device OUIs.
- * @param macAddress - Stable MAC candidate generated for a NapCat device identity.
- * @returns True when the MAC prefix belongs to the curated physical OUI catalog.
- */
 export function hasPhysicalOuiMacPrefix(macAddress: string) {
   const normalized = macAddress.toUpperCase();
   return NAPCAT_PHYSICAL_OUI_PREFIXES.some((prefix) =>

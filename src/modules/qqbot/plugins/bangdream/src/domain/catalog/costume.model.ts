@@ -16,11 +16,6 @@ export class Costume {
   cards: Array<number>;
   sdResourceName: string;
   isInitfull: boolean = false;
-  /**
-   * 构造 Costume 实例，并初始化该模型的本地基础字段。
-   *
-   * @param costumeId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
-   */
   constructor(costumeId: number) {
     this.costumeId = costumeId;
     const costumeData = bangdreamCatalogCache['costumes'][costumeId.toString()];

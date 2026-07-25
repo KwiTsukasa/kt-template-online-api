@@ -46,10 +46,6 @@ export class BangDreamCommandContext {
   private readonly dictionaryLoader = new BangDreamDictionaryLoader();
   private readonly dictionaryReader?: BangDreamDictionaryReader;
 
-  /**
-   * 初始化 BangDreamCommandContext 实例。
-   * @param options - BangDream列表；使用 `configReader`、`dictionaryReader` 字段生成结果。
-   */
   constructor(options: BangDreamCommandContextOptions = {}) {
     this.configReader = options.configReader;
     this.dictionaryReader = options.dictionaryReader;

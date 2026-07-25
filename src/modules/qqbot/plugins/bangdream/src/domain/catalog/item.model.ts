@@ -15,11 +15,6 @@ export class Item {
   type: string;
   typeName: string;
   isExist = false;
-  /**
-   * 构造 Item 实例，并初始化该模型的本地基础字段。
-   *
-   * @param itemId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
-   */
   constructor(itemId: string) {
     //如果是星石
     if (itemId == 'paid_star' || itemId == 'free_star') {

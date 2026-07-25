@@ -110,9 +110,6 @@ export class NapcatSessionBehaviorProfile {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * Assigns a stable Snowflake id before persisting session-behavior profile state.
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

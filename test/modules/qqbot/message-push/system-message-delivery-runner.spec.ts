@@ -50,7 +50,6 @@ type QueryRecord = {
   topLevelBrackets: boolean;
 };
 
-/** Creates a deferred promise used to force claim and lifecycle interleavings. */
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -61,7 +60,6 @@ function deferred<T = void>() {
   return { promise, reject, resolve };
 }
 
-/** Builds one immutable source event with Snowflake identities retained as strings. */
 function event(overrides: Partial<QqbotMessageEvent> = {}) {
   return Object.assign(new QqbotMessageEvent(), {
     id: '201',
@@ -78,7 +76,6 @@ function event(overrides: Partial<QqbotMessageEvent> = {}) {
   });
 }
 
-/** Builds one active source subscription. */
 function subscription(overrides: Partial<QqbotMessageSubscription> = {}) {
   return Object.assign(new QqbotMessageSubscription(), {
     enabled: true,
@@ -93,7 +90,6 @@ function subscription(overrides: Partial<QqbotMessageSubscription> = {}) {
   });
 }
 
-/** Builds one enabled administrative account; runtime online state is deliberately irrelevant. */
 function account(overrides: Partial<QqbotAccount> = {}) {
   return Object.assign(new QqbotAccount(), {
     enabled: true,
@@ -104,7 +100,6 @@ function account(overrides: Partial<QqbotAccount> = {}) {
   });
 }
 
-/** Builds one enabled account-to-subscription publishing binding. */
 function binding(overrides: Partial<QqbotMessagePublishBinding> = {}) {
   return Object.assign(new QqbotMessagePublishBinding(), {
     accountId: '401',
@@ -118,7 +113,6 @@ function binding(overrides: Partial<QqbotMessagePublishBinding> = {}) {
   });
 }
 
-/** Builds one enabled frozen group target. */
 function target(overrides: Partial<QqbotMessagePublishTarget> = {}) {
   return Object.assign(new QqbotMessagePublishTarget(), {
     bindingId: '501',
@@ -131,7 +125,6 @@ function target(overrides: Partial<QqbotMessagePublishTarget> = {}) {
   });
 }
 
-/** Builds one due delivery with a complete immutable template and variable snapshot. */
 function delivery(overrides: Partial<QqbotMessageDelivery> = {}) {
   return Object.assign(new QqbotMessageDelivery(), {
     attemptCount: 0,
@@ -161,7 +154,6 @@ function delivery(overrides: Partial<QqbotMessageDelivery> = {}) {
   });
 }
 
-/** Clones all rows for an isolated transaction draft while preserving entity prototypes. */
 function cloneStore(value: Store): Store {
   const clone = <T>(items: T[]) =>
     items.map((item) =>
@@ -180,14 +172,12 @@ function cloneStore(value: Store): Store {
   };
 }
 
-/** Compares scalar and date fields used by the repository condition harness. */
 function sameValue(actual: unknown, expected: unknown): boolean {
   if (actual instanceof Date && expected instanceof Date)
     return actual.getTime() === expected.getTime();
   return actual === expected;
 }
 
-/** Expands TypeORM `In()` operators without interpreting production control flow. */
 function conditionValues(value: unknown): unknown[] | null {
   if (
     value &&
@@ -199,7 +189,6 @@ function conditionValues(value: unknown): unknown[] | null {
   return null;
 }
 
-/** Matches the small equality/IN repository condition subset exercised by the runner. */
 function matches(
   row: Record<string, unknown>,
   where: Record<string, unknown> = {},
@@ -212,7 +201,6 @@ function matches(
   });
 }
 
-/** Creates an authoritative-store runner harness with commit/rollback, locks, and exact CAS. */
 function setup(seed: Partial<Store> = {}) {
   let state: Store = {
     accounts: seed.accounts ?? [account()],
@@ -298,7 +286,6 @@ function setup(seed: Partial<Store> = {}) {
     ),
   };
 
-  /** Merges only locally changed draft rows so overlapping transactions retain both commits. */
   const mergeRows = <T extends { id: string }>(
     authoritative: T[],
     draft: T[],
@@ -316,7 +303,6 @@ function setup(seed: Partial<Store> = {}) {
     return [...merged.values()];
   };
 
-  /** Applies a committed draft without replacing unrelated concurrent authoritative rows. */
   const mergeCommitted = (draft: Store, baseline: Store): void => {
     state = {
       accounts: mergeRows(state.accounts, draft.accounts, baseline.accounts),
@@ -336,7 +322,6 @@ function setup(seed: Partial<Store> = {}) {
     };
   };
 
-  /** Returns the entity array belonging to one authoritative or transaction-local store. */
   const rowsFor = (entity: unknown, store: Store) => {
     if (entity === QqbotAccount) return store.accounts;
     if (entity === QqbotMessageEvent) return store.events;
@@ -346,7 +331,6 @@ function setup(seed: Partial<Store> = {}) {
     return store.deliveries;
   };
 
-  /** Creates a repository facade over one store and transaction lock scope. */
   const repository = (
     entity: unknown,
     store: Store,
@@ -589,7 +573,6 @@ function setup(seed: Partial<Store> = {}) {
   };
 }
 
-/** Flushes coordinator promise continuations without reading its private fields. */
 async function flushPromises(rounds = 8): Promise<void> {
   for (let index = 0; index < rounds; index += 1) await Promise.resolve();
 }

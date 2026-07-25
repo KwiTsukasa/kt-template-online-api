@@ -25,60 +25,21 @@ export type SystemMessageDeliveryReadiness =
 
 export interface SystemMessageSourceAdapter {
   readonly definition: SystemMessageSourceDefinition;
-  /**
-   * 检查订阅配置当前是否仍可用。
-   * @param config - 待检查的来源配置。
-   * @returns 有效性、稳定错误码与可展示的来源摘要；不写入状态。
-   */
   inspectSubscription(config: Record<string, unknown>): Promise<{ invalidReasonCode: null | string; sourceSummary: string; valid: boolean; }>;
-  /**
-   * 列出创建或编辑订阅时可选择的来源资源。
-   * @returns 来源专属的候选项快照；不创建订阅或事务状态。
-   */
   listSubscriptionOptions(): Promise<Record<string, unknown>>;
-  /**
-   * 规范化并验证用户提交的订阅配置。
-   * @param input - 未信任的订阅配置输入。
-   * @returns 可持久化的规范配置、资源键及来源摘要；调用方在事务中保存返回值。
-   */
   normalizeSubscriptionConfig(input: unknown): Promise<{ canonicalConfig: Record<string, string>; resourceKey: string; sourceSummary: string; }>;
-  /**
-   * 根据事件和订阅配置重新计算一次投递就绪状态。
-   * @param input - 冻结的事件载荷及当前订阅配置。
-   * @returns 可发送变量、等待 DDNS 或取消/被取代状态；不直接发送消息。
-   */
   resolveDelivery(input: { eventPayload: Record<string, SystemMessageScalar>; subscriptionConfig: Record<string, unknown>; }): Promise<SystemMessageDeliveryReadiness>;
-  /**
-   * 校验并收窄生产者事件载荷至允许的标量值。
-   * @param payload - 来自系统事件的未验证载荷。
-   * @returns 可安全写入 Outbox 的规范化标量载荷；非法输入抛出稳定契约错误。
-   */
   validateEventPayload(payload: Record<string, unknown>): Record<string, SystemMessageScalar>;
 }
 
 export interface SystemMessageEventInput { eventId: string; occurredAt: string; payload: Record<string, SystemMessageScalar>; resourceKey: string; sourceKey: string; }
 export const SYSTEM_MESSAGE_EVENT_STAGER = Symbol('SYSTEM_MESSAGE_EVENT_STAGER');
 export interface SystemMessageEventStager {
-  /**
-   * 在调用方事务中幂等写入一条系统消息 Outbox 事件。
-   * @param manager - 当前事务的实体管理器；不得替换为独立连接。
-   * @param input - 已验证的事件标识、来源、资源和标量载荷。
-   * @returns 新事件为 `accepted`，相同事件 ID 已存在时为 `duplicate`；不在事务内唤醒或发送消息。
-   */
   stage(manager: EntityManager, input: SystemMessageEventInput): Promise<'accepted' | 'duplicate'>;
 }
 export const SYSTEM_MESSAGE_DELIVERY_COORDINATOR = Symbol('SYSTEM_MESSAGE_DELIVERY_COORDINATOR');
 export interface SystemMessageDeliveryCoordinator {
-  /**
-   * 在 DDNS 同步提交后通知协调器重新评估等待中的投递。
-   * @param input - 已应用地址及对应 DDNS 记录 ID。
-   * @returns 唤醒请求已被接收；实现应在提交后异步合并 drain，不在调用事务内发送消息。
-   */
   notifyDdnsSynced(input: { appliedAddress: string; ddnsRecordId: string; }): Promise<void>;
-  /**
-   * 请求一次可合并的异步投递 drain。
-   * @returns 无返回值；实现会安排 worker 唤醒，不保证本调用完成任何发送。
-   */
   requestDrain(): void;
 }
 
@@ -94,7 +55,6 @@ export interface StrictPlainTextSendInput { attemptNumber: number; deliveryId: s
 export interface QqbotSendAttemptErrorOptions { code: string; message: string; retryable: boolean; sendLogId: null | string; }
 
 export class SystemMessageContractError extends Error {
-  /** Creates a stable, non-sensitive domain contract error. */
   constructor(public readonly code: string) { super(code); this.name = 'SystemMessageContractError'; }
 }
 

@@ -18,11 +18,6 @@ export class QqbotPluginTaskSchedulerService
 {
   private readonly queue: Queue<QqbotPluginTaskJobData>;
 
-  /**
-   * 初始化 QqbotPluginTaskSchedulerService 实例。
-   * @param configService - Nest ConfigService 依赖；驱动 `resolveQqbotPluginTaskQueueConnection()` 的 插件平台步骤。
-   * @param taskRepository - 插件任务仓库依赖；影响 constructor 的返回值。
-   */
   constructor(
     configService: ConfigService,
     @InjectRepository(QqbotPluginTask)
@@ -34,18 +29,12 @@ export class QqbotPluginTaskSchedulerService
     });
   }
 
-  /**
-   * 处理 QQBot 插件平台事件。
-   */
   async onModuleInit() {
     await this.queue.waitUntilReady();
     await this.removeUnschedulableTaskSchedulers();
     await this.resyncEnabledTasks();
   }
 
-  /**
-   * 处理 QQBot 插件平台事件。
-   */
   async onModuleDestroy() {
     await this.queue.close();
   }

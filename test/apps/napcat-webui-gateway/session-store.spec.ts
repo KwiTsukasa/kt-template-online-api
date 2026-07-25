@@ -18,32 +18,16 @@ const INTERNAL_SECRET = ['internal', 'secret', 'fixture'].join('-');
 class MemorySessionStore implements NapcatWebuiGatewaySessionStore {
   readonly sessions = new Map<string, NapcatWebuiGatewaySession>();
 
-  /**
-   * Stores a new in-memory session for service lifecycle tests.
-   * @param session - Session object created by the Gateway session service.
-   * @returns Stored session.
-   */
   async create(session: NapcatWebuiGatewaySession) {
     this.sessions.set(session.sessionId, { ...session });
     return { ...session };
   }
 
-  /**
-   * Finds a session by id from the in-memory fixture store.
-   * @param sessionId - Gateway session id.
-   * @returns Matching session or undefined.
-   */
   async find(sessionId: string) {
     const session = this.sessions.get(sessionId);
     return session ? { ...session } : undefined;
   }
 
-  /**
-   * Finds the currently usable session for the Admin user and QQBot account pair.
-   * @param adminUserId - Admin actor id.
-   * @param accountId - QQBot account id.
-   * @returns Existing non-terminal session or undefined.
-   */
   async findActiveByUserAndAccount(adminUserId: string, accountId: string) {
     const session = [...this.sessions.values()].find(
       (item) =>
@@ -55,12 +39,6 @@ class MemorySessionStore implements NapcatWebuiGatewaySessionStore {
     return session ? { ...session } : undefined;
   }
 
-  /**
-   * Applies a partial update to an existing test session.
-   * @param sessionId - Gateway session id.
-   * @param patch - Fields to merge into the stored session.
-   * @returns Updated session.
-   */
   async update(sessionId: string, patch: Partial<NapcatWebuiGatewaySession>) {
     const current = this.sessions.get(sessionId);
     if (!current) throw new Error(`Missing session ${sessionId}`);
@@ -75,13 +53,6 @@ class FakeRedis {
   readonly values = new Map<string, string>();
   readonly ttl = new Map<string, number>();
 
-  /**
-   * Stores a value with an expiration marker for Redis-backed store tests.
-   * @param key - Redis key.
-   * @param ttlMs - Millisecond TTL.
-   * @param value - Serialized value.
-   * @returns Redis OK marker.
-   */
   async psetex(key: string, ttlMs: number, value: string) {
     this.calls.push(`psetex:${key}:${ttlMs}`);
     this.values.set(key, value);
@@ -89,14 +60,6 @@ class FakeRedis {
     return 'OK';
   }
 
-  /**
-   * Stores a string value with optional PX expiration arguments.
-   * @param key - Redis key.
-   * @param value - Serialized value.
-   * @param mode - Optional Redis expiration mode.
-   * @param ttlMs - Optional Redis TTL.
-   * @returns Redis OK marker.
-   */
   async set(key: string, value: string, mode?: string, ttlMs?: number) {
     this.calls.push(`set:${key}:${mode || ''}:${ttlMs || ''}`);
     this.values.set(key, value);
@@ -104,21 +67,11 @@ class FakeRedis {
     return 'OK';
   }
 
-  /**
-   * Reads a string value by key from the fake Redis store.
-   * @param key - Redis key.
-   * @returns Stored value or null.
-   */
   async get(key: string) {
     this.calls.push(`get:${key}`);
     return this.values.get(key) ?? null;
   }
 
-  /**
-   * Atomically reads and deletes one key from the fake Redis store.
-   * @param key - Redis key to consume.
-   * @returns Stored value before deletion or null.
-   */
   async getdel(key: string) {
     this.calls.push(`getdel:${key}`);
     const value = this.values.get(key) ?? null;
@@ -127,11 +80,6 @@ class FakeRedis {
     return value;
   }
 
-  /**
-   * Deletes one or more keys from the fake Redis store.
-   * @param keys - Redis keys to delete.
-   * @returns Number of deleted keys.
-   */
   async del(...keys: string[]) {
     this.calls.push(`del:${keys.join(',')}`);
     let deleted = 0;
@@ -142,13 +90,6 @@ class FakeRedis {
     return deleted;
   }
 
-  /**
-   * Simulates Gateway Redis Lua scripts used by ticket and session store tests.
-   * @param script - Lua script text.
-   * @param keyCount - Number of Redis keys in the script call.
-   * @param args - Redis keys and script arguments after `keyCount`.
-   * @returns Script-shaped response used by the store.
-   */
   async eval(script: string, keyCount: number, ...args: string[]) {
     this.calls.push(`eval:${keyCount}:${args.join(':')}`);
     if (!script.includes('redis.call')) {
@@ -219,11 +160,6 @@ class FakeRedis {
   }
 }
 
-/**
- * Creates a Gateway session creation input with safe server-only target data.
- * @param override - Fields to replace in the default fixture.
- * @returns Session creation payload.
- */
 function createSessionInput(
   override: Partial<
     Parameters<NapcatWebuiGatewaySessionService['create']>[0]
@@ -243,11 +179,6 @@ function createSessionInput(
   };
 }
 
-/**
- * Creates a lightweight config fixture for Gateway service tests.
- * @param currentTime - Mutable time supplier used by lifecycle assertions.
- * @returns Config service shape consumed by Gateway services.
- */
 function createConfig(currentTime: { value: number }) {
   return {
     internalSecret: () => INTERNAL_SECRET,

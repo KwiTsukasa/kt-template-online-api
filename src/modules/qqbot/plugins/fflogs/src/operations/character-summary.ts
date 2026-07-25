@@ -11,11 +11,6 @@ export function createFflogsCharacterSummaryOperation(
 ) {
   return {
     cacheTtlMs: 60_000,
-    /**
-     * 执行插件操作处理器。
-     * @param input - input 输入；使用 `raw`、`text` 字段生成结果。
-     * @returns 插件处理结果。
-     */
     execute: async (input: Record<string, any>) => {
       const raw = `${input.raw ?? input.text ?? ''}`.trim();
       const parsed = raw ? await application.parseCharacterInput(raw) : {};

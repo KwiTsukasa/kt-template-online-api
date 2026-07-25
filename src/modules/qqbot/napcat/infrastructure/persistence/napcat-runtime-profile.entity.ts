@@ -161,9 +161,6 @@ export class NapcatRuntimeProfile {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * Assigns a stable Snowflake id before persisting runtime-profile evidence.
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

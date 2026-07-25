@@ -15,11 +15,6 @@ export type NapcatDockerDeviceOptions = {
   runFlags: string[];
 };
 
-/**
- * 执行 NapCat 登录运行态流程。
- * @param identity - Persisted device identity row that supplies stable directory, hostname, machine-id, and MAC values for Docker.
- * @returns Docker option bundle used by remote create scripts.
- */
 export function toNapcatDockerDeviceOptions(
   identity: Pick<
     NapcatDeviceIdentity,

@@ -55,9 +55,6 @@ export class QqbotSendLog {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 核心对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

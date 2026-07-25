@@ -65,9 +65,6 @@ export class QqbotPlugin {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 插件平台对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);
@@ -95,9 +92,6 @@ export class QqbotPluginVersion {
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 插件平台对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);
@@ -131,9 +125,6 @@ export class QqbotPluginInstallation {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 插件平台对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);
@@ -166,9 +157,6 @@ export class QqbotPluginOperation {
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 插件平台对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);
@@ -198,9 +186,6 @@ export class QqbotPluginEventHandler {
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 插件平台对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);
@@ -227,9 +212,6 @@ export class QqbotPluginAccountBinding {
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 插件平台对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);
@@ -257,9 +239,6 @@ export class QqbotPluginConfig {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 插件平台对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);
@@ -287,9 +266,6 @@ export class QqbotPluginAsset {
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 插件平台对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);
@@ -325,9 +301,6 @@ export class QqbotPluginRuntimeEvent {
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 插件平台对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);
@@ -402,9 +375,6 @@ export class QqbotPluginTask {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 插件平台对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);
@@ -458,9 +428,6 @@ export class QqbotPluginTaskRun {
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
 
-  /**
-   * 创建 QQBot 插件平台对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

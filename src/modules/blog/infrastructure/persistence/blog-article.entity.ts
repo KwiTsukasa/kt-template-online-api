@@ -147,9 +147,6 @@ export class BlogArticle {
   @ApiPropertyOptional()
   excerptText?: string;
 
-  /**
-   * 创建 博客内容对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

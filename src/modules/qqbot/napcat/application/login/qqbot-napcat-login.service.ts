@@ -2195,11 +2195,6 @@ export class QqbotNapcatLoginService {
     }
   }
 
-  /**
-   * 清理 NapCat 登录运行态状态。
-   * @param container - container 输入；使用 `id` 字段生成结果。
-   * @param options - Cleanup switches; create-login cleanup may revisit already-deleted provisional rows after async startup races.
-   */
   private async cleanupRuntimeContainer(
     container: QqbotNapcatRuntime,
     options: { includeDeletedCreateContainer?: boolean } = {},

@@ -248,11 +248,6 @@ export class FflogsClient {
     return (value: string) => resolved.get(value) || null;
   }
 
-  /**
-   * 解析Known World。
-   * @param value - FF14 server, region, data-center, or path token parsed from FFLogs command text.
-   * @returns Legacy host resolution when available, otherwise package-owned dictionary fallback for generic workers.
-   */
   async resolveKnownWorld(value: string) {
     if (this.host.resolveKnownWorld) {
       return this.host.resolveKnownWorld(value);

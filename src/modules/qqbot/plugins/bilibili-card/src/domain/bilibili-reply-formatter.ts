@@ -43,11 +43,6 @@ function buildCanonicalBilibiliVideoUrl(video: BilibiliVideoInfo) {
   return `https://www.bilibili.com/video/${videoId}`;
 }
 
-/**
- * Formats Bilibili stat counters using compact Chinese units.
- * @param value - Raw counter from the Bilibili video API response.
- * @returns Counter text such as `7890` or `12.3万`.
- */
 function formatBilibiliStat(value: number) {
   const normalized = Math.max(0, Math.floor(value || 0));
   if (normalized < 10000) return `${normalized}`;

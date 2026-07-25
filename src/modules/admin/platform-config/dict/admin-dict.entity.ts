@@ -72,9 +72,6 @@ export class AdminDict {
   })
   updateTime: KtDateTime;
 
-  /**
-   * 创建 Admin 平台配置对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

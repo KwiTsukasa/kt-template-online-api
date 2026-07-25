@@ -63,9 +63,6 @@ export class NapcatLoginSession {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /**
-   * 创建 NapCat 登录运行态对象或配置。
-   */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

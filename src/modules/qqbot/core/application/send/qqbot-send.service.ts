@@ -18,7 +18,6 @@ import {
 import { QqbotRateLimitService } from './qqbot-rate-limit.service';
 import { QqbotSendAttemptError } from './qqbot-send.error';
 import { QqbotSendLog } from '../../infrastructure/persistence/send/qqbot-send-log.entity';
-import { QqbotReverseWsActionError } from '../../infrastructure/integration/connection/qqbot-reverse-ws.service';
 import type { QqbotAccount } from '../../infrastructure/persistence/account/qqbot-account.entity';
 import type {
   QqbotSendGroupDto,
@@ -337,7 +336,7 @@ export class QqbotSendService {
   }
 
   private toStrictSendError(err: unknown, sendLogId: null | string) {
-    if (err instanceof QqbotReverseWsActionError) {
+    if (this.isReverseWsActionError(err)) {
       return new QqbotSendAttemptError({
         code: err.code,
         message: err.message,
@@ -351,6 +350,23 @@ export class QqbotSendService {
       retryable: true,
       sendLogId,
     });
+  }
+
+  /**
+   * 判断异常是否来自 OneBot 反向 WebSocket 动作，避免静态加载运行时服务形成循环依赖。
+   * @param err - 待识别的异常。
+   * @returns 是否为受支持的反向 WebSocket 动作异常。
+   */
+  private isReverseWsActionError(
+    err: unknown,
+  ): err is Error & {
+    code: 'onebot_disconnected' | 'onebot_timeout';
+  } {
+    if (!(err instanceof Error) || err.name !== 'QqbotReverseWsActionError') {
+      return false;
+    }
+    const code = (err as Error & { code?: unknown }).code;
+    return code === 'onebot_disconnected' || code === 'onebot_timeout';
   }
 
   private throwSendFailure(

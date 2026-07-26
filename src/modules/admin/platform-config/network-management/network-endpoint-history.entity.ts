@@ -23,6 +23,9 @@ export class NetworkEndpointHistory {
   @Column({ length: 16, name: 'event_type' })
   eventType: EndpointEventType;
 
+  @Column({ default: 'udp_stun', length: 16, name: 'mechanism' })
+  mechanism: string;
+
   @Column({ length: 15, name: 'public_ipv4', nullable: true })
   publicIpv4?: string | null;
 

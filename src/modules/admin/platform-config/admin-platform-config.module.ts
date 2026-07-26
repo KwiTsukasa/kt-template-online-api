@@ -17,6 +17,7 @@ import { NetworkEndpointHistory } from '@/modules/admin/platform-config/network-
 import { NetworkManagementController } from '@/modules/admin/platform-config/network-management/network-management.controller';
 import { NetworkManagementEventStreamService } from '@/modules/admin/platform-config/network-management/network-management-event-stream.service';
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/network-management.entity';
+import { NetworkPortForwardGroup } from '@/modules/admin/platform-config/network-management/network-port-forward-group.entity';
 import { NetworkManagementService } from '@/modules/admin/platform-config/network-management/network-management.service';
 import { NetworkStunMessageSourceAdapter } from '@/modules/admin/platform-config/network-management/network-stun-message-source.adapter';
 import { SystemLogController } from '@/modules/admin/platform-config/system-log/system-log.controller';
@@ -99,6 +100,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
       Component,
       AdminUser,
       NetworkPortForward,
+      NetworkPortForwardGroup,
       NetworkAgentState,
       NetworkEndpointHistory,
       NetworkDdnsRecord,

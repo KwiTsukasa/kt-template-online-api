@@ -23,6 +23,33 @@ export class NetworkAgentState {
   @Column({ default: '0', name: 'published_revision', type: 'bigint' })
   publishedRevision: string;
 
+  @Column({
+    default: 1,
+    name: 'desired_schema_version',
+    type: 'int',
+    unsigned: true,
+  })
+  desiredSchemaVersion: number;
+
+  @Column({
+    default: 1,
+    name: 'published_schema_version',
+    type: 'int',
+    unsigned: true,
+  })
+  publishedSchemaVersion: number;
+
+  @Column({
+    default: 1,
+    name: 'max_supported_schema_version',
+    type: 'int',
+    unsigned: true,
+  })
+  maxSupportedSchemaVersion: number;
+
+  @Column({ default: false, name: 'tcp_natmap_capable', type: 'boolean' })
+  tcpNatmapCapable: boolean;
+
   @Column({ default: '0', name: 'applied_revision', type: 'bigint' })
   appliedRevision: string;
 

@@ -15,6 +15,10 @@ import type {
 
 @Entity('network_port_forward')
 @Index('uk_network_port_forward_active_key', ['activeKey'], { unique: true })
+@Index('uk_network_port_forward_active_group_protocol_key', [
+  'activeGroupProtocolKey',
+], { unique: true })
+@Index('idx_network_port_forward_group', ['groupId', 'isDeleted', 'protocol'])
 export class NetworkPortForward {
   @PrimaryColumn({ type: 'bigint' })
   id: string;
@@ -24,6 +28,9 @@ export class NetworkPortForward {
 
   @Column({ nullable: true, type: 'text' })
   remark?: string | null;
+
+  @Column({ name: 'group_id', type: 'bigint' })
+  groupId: string;
 
   @Column({ length: 8 })
   protocol: PortForwardProtocol;
@@ -37,6 +44,13 @@ export class NetworkPortForward {
   @Column({ length: 32, name: 'active_key', nullable: true })
   activeKey?: string | null;
 
+  @Column({
+    length: 64,
+    name: 'active_group_protocol_key',
+    nullable: true,
+  })
+  activeGroupProtocolKey?: string | null;
+
   @Column({ length: 15, name: 'target_ipv4' })
   targetIpv4: string;
 
@@ -49,6 +63,13 @@ export class NetworkPortForward {
     type: 'boolean',
   })
   keeperDesiredEnabled: boolean;
+
+  @Column({
+    default: false,
+    name: 'natmap_desired_enabled',
+    type: 'boolean',
+  })
+  natmapDesiredEnabled: boolean;
 
   @Column({ length: 64, name: 'probe_request_id', nullable: true })
   probeRequestId?: string | null;
@@ -68,6 +89,9 @@ export class NetworkPortForward {
   @Column({ default: 'disabled', length: 16, name: 'keeper_status' })
   keeperStatus: KeeperStatus;
 
+  @Column({ default: 'disabled', length: 16, name: 'natmap_status' })
+  natmapStatus: string;
+
   @Column({ length: 15, name: 'current_public_ipv4', nullable: true })
   currentPublicIpv4?: string | null;
 
@@ -80,6 +104,14 @@ export class NetworkPortForward {
     type: 'datetime',
   })
   currentObservedAt?: KtDateTime | null;
+
+  @KtDateTimeColumn({
+    name: 'current_validated_at',
+    nullable: true,
+    precision: 6,
+    type: 'datetime',
+  })
+  currentValidatedAt?: KtDateTime | null;
 
   @KtDateTimeColumn({
     name: 'current_valid_until',
@@ -101,11 +133,67 @@ export class NetworkPortForward {
   })
   lastObservedAt?: KtDateTime | null;
 
+  @KtDateTimeColumn({
+    name: 'last_observed_validated_at',
+    nullable: true,
+    precision: 6,
+    type: 'datetime',
+  })
+  lastObservedValidatedAt?: KtDateTime | null;
+
+  @Column({ length: 15, name: 'candidate_public_ipv4', nullable: true })
+  candidatePublicIpv4?: string | null;
+
+  @Column({ name: 'candidate_public_port', nullable: true, type: 'int' })
+  candidatePublicPort?: number | null;
+
+  @KtDateTimeColumn({
+    name: 'candidate_observed_at',
+    nullable: true,
+    precision: 6,
+    type: 'datetime',
+  })
+  candidateObservedAt?: KtDateTime | null;
+
+  @KtDateTimeColumn({
+    name: 'candidate_validated_at',
+    nullable: true,
+    precision: 6,
+    type: 'datetime',
+  })
+  candidateValidatedAt?: KtDateTime | null;
+
+  @Column({ length: 15, name: 'last_published_public_ipv4', nullable: true })
+  lastPublishedPublicIpv4?: string | null;
+
+  @Column({ name: 'last_published_public_port', nullable: true, type: 'int' })
+  lastPublishedPublicPort?: number | null;
+
+  @KtDateTimeColumn({
+    name: 'last_published_at',
+    nullable: true,
+    precision: 6,
+    type: 'datetime',
+  })
+  lastPublishedAt?: KtDateTime | null;
+
   @Column({ length: 64, name: 'last_error_code', nullable: true })
   lastErrorCode?: string | null;
 
   @Column({ length: 512, name: 'last_error_message', nullable: true })
   lastErrorMessage?: string | null;
+
+  @Column({ length: 64, name: 'keeper_last_error_code', nullable: true })
+  keeperLastErrorCode?: string | null;
+
+  @Column({ length: 512, name: 'keeper_last_error_message', nullable: true })
+  keeperLastErrorMessage?: string | null;
+
+  @Column({ length: 64, name: 'natmap_last_error_code', nullable: true })
+  natmapLastErrorCode?: string | null;
+
+  @Column({ length: 512, name: 'natmap_last_error_message', nullable: true })
+  natmapLastErrorMessage?: string | null;
 
   @Column({ default: false, name: 'is_deleted', type: 'boolean' })
   isDeleted: boolean;

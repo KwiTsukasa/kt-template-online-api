@@ -26,6 +26,63 @@ const udp = (overrides = {}) => ({
   ...overrides,
 });
 
+const INVALID_MUTATION_MESSAGE = 'Invalid TCP NATMap mutation';
+const validMutationCases = [
+  {
+    kind: 'create',
+    mutation: { after: tcp(), kind: 'create' },
+    stateKeys: ['after'],
+  },
+  {
+    kind: 'update',
+    mutation: { after: tcp(), before: tcp(), kind: 'update' },
+    stateKeys: ['after', 'before'],
+  },
+  {
+    kind: 'retry',
+    mutation: { current: tcp(), kind: 'retry' },
+    stateKeys: ['current'],
+  },
+  {
+    kind: 'natmap-enable',
+    mutation: { current: tcp(), kind: 'natmap-enable' },
+    stateKeys: ['current'],
+  },
+  {
+    kind: 'natmap-disable',
+    mutation: {
+      after: tcp({ natmapDesiredEnabled: false }),
+      before: tcp(),
+      kind: 'natmap-disable',
+    },
+    stateKeys: ['after', 'before'],
+  },
+  {
+    kind: 'protocol-shrink',
+    mutation: {
+      after: udp({ externalPort: 48213, internalPort: 48213 }),
+      before: tcp({ protocolMode: 'tcp_udp' }),
+      kind: 'protocol-shrink',
+    },
+    stateKeys: ['after', 'before'],
+  },
+  {
+    kind: 'delete',
+    mutation: { current: tcp(), kind: 'delete' },
+    stateKeys: ['current'],
+  },
+] as const;
+
+function expectInvalidMutation(mutation: unknown): void {
+  const service = policy({
+    NETWORK_TCP_NATMAP_CANARY_PORTS: 'not-a-port',
+    NETWORK_TCP_NATMAP_RELEASE_MODE: 'not-a-mode',
+  });
+  const validate = () => service.assertMutationAllowed(mutation as never);
+  expect(validate).toThrow(NetworkTcpReleasePolicyError);
+  expect(validate).toThrow(INVALID_MUTATION_MESSAGE);
+}
+
 describe('NetworkTcpReleasePolicyService', () => {
   it('fails closed by default and parses the four release modes', () => {
     expect(policy({}).readMode()).toBe('off');
@@ -197,5 +254,123 @@ describe('NetworkTcpReleasePolicyService', () => {
     expect(() =>
       service.assertMutationAllowed({ current: tcp(), kind: 'retry' }),
     ).toThrow(NetworkTcpReleasePolicyError);
+  });
+
+  it.each(validMutationCases)(
+    'accepts the exact valid $kind mutation record',
+    ({ mutation }) => {
+      expect(() =>
+        policy({
+          NETWORK_TCP_NATMAP_RELEASE_MODE: 'on',
+        }).assertMutationAllowed(mutation),
+      ).not.toThrow();
+    },
+  );
+
+  it.each(validMutationCases)(
+    'rejects malformed top-level and nested records for $kind before reading release config',
+    ({ mutation, stateKeys }) => {
+      const record = mutation as unknown as Record<string, unknown>;
+      expectInvalidMutation({ ...record, unexpected: true });
+      expectInvalidMutation(
+        Object.fromEntries(
+          Object.entries(record).filter(([key]) => key !== 'kind'),
+        ),
+      );
+
+      for (const stateKey of stateKeys) {
+        expectInvalidMutation(
+          Object.fromEntries(
+            Object.entries(record).filter(([key]) => key !== stateKey),
+          ),
+        );
+        for (const invalidState of [null, [], {}, 'tcp', 1]) {
+          expectInvalidMutation({ ...record, [stateKey]: invalidState });
+        }
+        expectInvalidMutation({
+          ...record,
+          [stateKey]: {
+            ...(record[stateKey] as Record<string, unknown>),
+            unexpected: true,
+          },
+        });
+      }
+    },
+  );
+
+  it.each([
+    ['missing protocol', { ...tcp(), protocolMode: undefined }],
+    ['unknown protocol', { ...tcp(), protocolMode: 'icmp' }],
+    ['missing external port', { ...tcp(), externalPort: undefined }],
+    ['NaN external port', { ...tcp(), externalPort: Number.NaN }],
+    ['fractional external port', { ...tcp(), externalPort: 48213.5 }],
+    ['zero external port', { ...tcp(), externalPort: 0 }],
+    ['out-of-range external port', { ...tcp(), externalPort: 65_536 }],
+    ['string external port', { ...tcp(), externalPort: '48213' }],
+    ['missing internal port', { ...tcp(), internalPort: undefined }],
+    ['NaN internal port', { ...tcp(), internalPort: Number.NaN }],
+    ['fractional internal port', { ...tcp(), internalPort: 48213.5 }],
+    ['zero internal port', { ...tcp(), internalPort: 0 }],
+    ['out-of-range internal port', { ...tcp(), internalPort: 65_536 }],
+    ['string internal port', { ...tcp(), internalPort: '48213' }],
+    [
+      'missing NATMap intent',
+      { ...tcp(), natmapDesiredEnabled: undefined },
+    ],
+    ['non-boolean NATMap intent', { ...tcp(), natmapDesiredEnabled: 1 }],
+    ['UDP with NATMap enabled', { ...udp(), natmapDesiredEnabled: true }],
+  ])('rejects a state with %s', (_label, after) => {
+    expectInvalidMutation({ after, kind: 'create' });
+  });
+
+  it.each([
+    [
+      'NATMap enable on UDP',
+      { current: udp(), kind: 'natmap-enable' },
+    ],
+    [
+      'NATMap enable without enabled intent',
+      {
+        current: tcp({ natmapDesiredEnabled: false }),
+        kind: 'natmap-enable',
+      },
+    ],
+    [
+      'NATMap disable on UDP',
+      {
+        after: udp(),
+        before: udp(),
+        kind: 'natmap-disable',
+      },
+    ],
+    [
+      'NATMap disable without an intent transition',
+      {
+        after: tcp(),
+        before: tcp(),
+        kind: 'natmap-disable',
+      },
+    ],
+    [
+      'protocol shrink from TCP-only',
+      {
+        after: udp({ externalPort: 48213, internalPort: 48213 }),
+        before: tcp(),
+        kind: 'protocol-shrink',
+      },
+    ],
+  ])('rejects the impossible %s mutation', (_label, mutation) => {
+    expectInvalidMutation(mutation);
+  });
+
+  it.each([
+    ['null', null],
+    ['array', []],
+    ['string', 'create'],
+    ['number', 1],
+    ['empty object', {}],
+    ['unknown kind', { after: tcp(), kind: 'replace' }],
+  ])('rejects a %s mutation container', (_label, mutation) => {
+    expectInvalidMutation(mutation);
   });
 });

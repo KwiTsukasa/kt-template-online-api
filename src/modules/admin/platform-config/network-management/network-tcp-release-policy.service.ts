@@ -30,6 +30,14 @@ export type TcpReleaseMutation =
 
 export class NetworkTcpReleasePolicyError extends Error {}
 
+const INVALID_MUTATION_MESSAGE = 'Invalid TCP NATMap mutation';
+const RELEASE_STATE_KEYS = [
+  'externalPort',
+  'internalPort',
+  'natmapDesiredEnabled',
+  'protocolMode',
+] as const;
+
 @Injectable()
 export class NetworkTcpReleasePolicyService {
   constructor(private readonly configService: ConfigService) {}
@@ -102,28 +110,64 @@ export class NetworkTcpReleasePolicyService {
   }
 
   private assertMutationShape(mutation: TcpReleaseMutation): void {
-    const value = mutation as Partial<{
-      after: TcpReleaseState;
-      before: TcpReleaseState;
-      current: TcpReleaseState;
-      kind: TcpReleaseMutation['kind'];
-    }>;
+    const value = this.record(mutation);
     switch (value.kind) {
-      case 'create':
-        if (value.after) return;
-        break;
-      case 'update':
-      case 'natmap-disable':
-      case 'protocol-shrink':
-        if (value.before && value.after) return;
-        break;
+      case 'create': {
+        this.assertExactKeys(value, ['after', 'kind']);
+        this.releaseState(value.after);
+        return;
+      }
+      case 'update': {
+        this.assertExactKeys(value, ['after', 'before', 'kind']);
+        this.releaseState(value.before);
+        this.releaseState(value.after);
+        return;
+      }
       case 'retry':
-      case 'natmap-enable':
-      case 'delete':
-        if (value.current) return;
-        break;
+      case 'delete': {
+        this.assertExactKeys(value, ['current', 'kind']);
+        this.releaseState(value.current);
+        return;
+      }
+      case 'natmap-enable': {
+        this.assertExactKeys(value, ['current', 'kind']);
+        const current = this.releaseState(value.current);
+        if (!this.hasTcp(current) || !current.natmapDesiredEnabled) {
+          this.invalidMutation();
+        }
+        return;
+      }
+      case 'natmap-disable': {
+        this.assertExactKeys(value, ['after', 'before', 'kind']);
+        const before = this.releaseState(value.before);
+        const after = this.releaseState(value.after);
+        if (
+          !this.hasTcp(before) ||
+          before.protocolMode !== after.protocolMode ||
+          !this.portsUnchanged(before, after) ||
+          !before.natmapDesiredEnabled ||
+          after.natmapDesiredEnabled
+        ) {
+          this.invalidMutation();
+        }
+        return;
+      }
+      case 'protocol-shrink': {
+        this.assertExactKeys(value, ['after', 'before', 'kind']);
+        const before = this.releaseState(value.before);
+        const after = this.releaseState(value.after);
+        if (
+          before.protocolMode !== 'tcp_udp' ||
+          after.protocolMode !== 'udp' ||
+          !this.portsUnchanged(before, after) ||
+          after.natmapDesiredEnabled
+        ) {
+          this.invalidMutation();
+        }
+        return;
+      }
     }
-    throw new NetworkTcpReleasePolicyError('Invalid TCP NATMap mutation');
+    this.invalidMutation();
   }
 
   private touchesTcp(mutation: TcpReleaseMutation): boolean {
@@ -138,34 +182,10 @@ export class NetworkTcpReleasePolicyService {
     if (mutation.kind === 'delete') {
       return mutation.current.protocolMode === 'tcp';
     }
-    if (mutation.kind === 'natmap-disable') {
-      const valid =
-        this.hasTcp(mutation.before) &&
-        mutation.before.protocolMode === mutation.after.protocolMode &&
-        this.portsUnchanged(mutation.before, mutation.after) &&
-        mutation.before.natmapDesiredEnabled &&
-        !mutation.after.natmapDesiredEnabled;
-      if (!valid) {
-        throw new NetworkTcpReleasePolicyError(
-          'Invalid TCP NATMap disable mutation',
-        );
-      }
-      return true;
-    }
-    if (mutation.kind === 'protocol-shrink') {
-      const valid =
-        mutation.before.protocolMode === 'tcp_udp' &&
-        mutation.after.protocolMode === 'udp' &&
-        this.portsUnchanged(mutation.before, mutation.after) &&
-        !mutation.after.natmapDesiredEnabled;
-      if (!valid) {
-        throw new NetworkTcpReleasePolicyError(
-          'Invalid TCP NATMap protocol shrink',
-        );
-      }
-      return true;
-    }
-    return false;
+    return (
+      mutation.kind === 'natmap-disable' ||
+      mutation.kind === 'protocol-shrink'
+    );
   }
 
   private mutationPort(mutation: TcpReleaseMutation): number {
@@ -181,6 +201,66 @@ export class NetworkTcpReleasePolicyService {
       before.externalPort === after.externalPort &&
       before.internalPort === after.internalPort
     );
+  }
+
+  private record(value: unknown): Record<string, unknown> {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      this.invalidMutation();
+    }
+    return value as Record<string, unknown>;
+  }
+
+  private assertExactKeys(
+    value: Record<string, unknown>,
+    expected: readonly string[],
+  ): void {
+    const expectedKeys = new Set(expected);
+    const actualKeys = Reflect.ownKeys(value);
+    if (
+      actualKeys.length !== expected.length ||
+      actualKeys.some(
+        (key) => typeof key !== 'string' || !expectedKeys.has(key),
+      ) ||
+      expected.some(
+        (key) => !Object.prototype.hasOwnProperty.call(value, key),
+      )
+    ) {
+      this.invalidMutation();
+    }
+  }
+
+  private releaseState(value: unknown): TcpReleaseState {
+    const state = this.record(value);
+    this.assertExactKeys(state, RELEASE_STATE_KEYS);
+    const protocolMode = state.protocolMode;
+    const externalPort = state.externalPort;
+    const internalPort = state.internalPort;
+    const natmapDesiredEnabled = state.natmapDesiredEnabled;
+    if (
+      (protocolMode !== 'tcp' &&
+        protocolMode !== 'tcp_udp' &&
+        protocolMode !== 'udp') ||
+      !this.isPort(externalPort) ||
+      !this.isPort(internalPort) ||
+      typeof natmapDesiredEnabled !== 'boolean' ||
+      (protocolMode === 'udp' && natmapDesiredEnabled)
+    ) {
+      this.invalidMutation();
+    }
+    return state as TcpReleaseState;
+  }
+
+  private isPort(value: unknown): value is number {
+    return (
+      typeof value === 'number' &&
+      Number.isInteger(value) &&
+      value >= 1 &&
+      value <= 65_535
+    );
+  }
+
+  private invalidMutation(): never {
+    throw new NetworkTcpReleasePolicyError(INVALID_MUTATION_MESSAGE);
   }
 
   private invalidCanaryPorts(): never {

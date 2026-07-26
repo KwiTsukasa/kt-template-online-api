@@ -26,6 +26,7 @@ import { NetworkPortForwardGroup } from './network-port-forward-group.entity';
 import { NetworkTcpReleasePolicyService } from './network-tcp-release-policy.service';
 import {
   buildDesiredSnapshotV2,
+  NetworkV2MessageValidationError,
   parseStatusSnapshotV2,
   type NetworkStatusSnapshotV2,
 } from './network-agent-v2.types';
@@ -273,7 +274,10 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       await this.consumeMessage(topic, payload);
       callback(0);
     } catch (error) {
-      if (error instanceof NetworkMessageValidationError) {
+      if (
+        error instanceof NetworkMessageValidationError ||
+        error instanceof NetworkV2MessageValidationError
+      ) {
         this.logger.warn(error.message);
         callback(0);
         return;

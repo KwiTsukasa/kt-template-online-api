@@ -230,7 +230,13 @@ export function buildDesiredSnapshotV2(
           };
     desired.channelDesiredDigest = canonicalDesiredChannelDigestV2(desired);
     return desired;
-  });
+  }).sort(compareDesiredChannelsV2);
+  if (
+    new Set(desiredChannels.map((channel) => channel.channelId)).size !==
+    desiredChannels.length
+  ) {
+    invalid('desired duplicate channel');
+  }
   const snapshot: NetworkDesiredSnapshotV2 = {
     agentId: state.agentId,
     channels: desiredChannels,
@@ -243,7 +249,7 @@ export function buildDesiredSnapshotV2(
     ),
   };
   snapshot.snapshotDigest = canonicalDesiredSnapshotDigestV2(snapshot);
-  return snapshot;
+  return parseDesiredSnapshotV2(JSON.stringify(snapshot));
 }
 
 export function parseDesiredSnapshotV2(

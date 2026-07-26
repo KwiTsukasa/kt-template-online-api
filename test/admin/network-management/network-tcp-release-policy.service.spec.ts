@@ -12,8 +12,17 @@ function policy(values: Record<string, string | undefined>) {
 
 const tcp = (overrides = {}) => ({
   externalPort: 48213,
+  internalPort: 48213,
   natmapDesiredEnabled: true,
   protocolMode: 'tcp' as const,
+  ...overrides,
+});
+
+const udp = (overrides = {}) => ({
+  externalPort: 8213,
+  internalPort: 8211,
+  natmapDesiredEnabled: false,
+  protocolMode: 'udp' as const,
   ...overrides,
 });
 
@@ -53,9 +62,14 @@ describe('NetworkTcpReleasePolicyService', () => {
       NETWORK_TCP_NATMAP_CANARY_PORTS: '48213',
       NETWORK_TCP_NATMAP_RELEASE_MODE: 'canary',
     });
-    expect(() => service.assertMutationAllowed({ after: tcp() })).not.toThrow();
     expect(() =>
-      service.assertMutationAllowed({ after: tcp({ externalPort: 48214 }) }),
+      service.assertMutationAllowed({ after: tcp(), kind: 'create' }),
+    ).not.toThrow();
+    expect(() =>
+      service.assertMutationAllowed({
+        after: tcp({ externalPort: 48214 }),
+        kind: 'create',
+      }),
     ).toThrow(NetworkTcpReleasePolicyError);
     expect(service.isTcpVisibleToAdmin()).toBe(false);
     expect(
@@ -79,35 +93,109 @@ describe('NetworkTcpReleasePolicyService', () => {
       const service = policy({ NETWORK_TCP_NATMAP_RELEASE_MODE: mode });
       expect(() =>
         service.assertMutationAllowed({
+          kind: 'natmap-disable',
           before: tcp(),
           after: tcp({ natmapDesiredEnabled: false }),
         }),
       ).not.toThrow();
       expect(() =>
         service.assertMutationAllowed({
+          kind: 'protocol-shrink',
           before: { ...tcp(), protocolMode: 'tcp_udp' },
           after: { ...tcp(), natmapDesiredEnabled: false, protocolMode: 'udp' },
         }),
       ).not.toThrow();
-      expect(() => service.assertMutationAllowed({ before: tcp() })).not.toThrow();
       expect(() =>
-        service.assertMutationAllowed({ before: tcp(), after: { ...tcp(), protocolMode: 'udp' } }),
+        service.assertMutationAllowed({ current: tcp(), kind: 'delete' }),
+      ).not.toThrow();
+      expect(() =>
+        service.assertMutationAllowed({
+          after: { ...tcp(), protocolMode: 'udp' },
+          before: tcp(),
+          kind: 'update',
+        }),
       ).toThrow(NetworkTcpReleasePolicyError);
       expect(() =>
         service.assertMutationAllowed({
+          kind: 'update',
           before: { ...tcp(), protocolMode: 'tcp_udp' },
           after: tcp(),
         }),
       ).toThrow(NetworkTcpReleasePolicyError);
       expect(() =>
-        service.assertMutationAllowed({ after: tcp({ externalPort: 48214 }) }),
+        service.assertMutationAllowed({ current: tcp(), kind: 'retry' }),
+      ).toThrow(NetworkTcpReleasePolicyError);
+      expect(() =>
+        service.assertMutationAllowed({ current: tcp(), kind: 'natmap-enable' }),
       ).toThrow(NetworkTcpReleasePolicyError);
       expect(() =>
         service.assertMutationAllowed({
-          before: { externalPort: 8213, natmapDesiredEnabled: false, protocolMode: 'udp' },
-          after: { externalPort: 8214, natmapDesiredEnabled: false, protocolMode: 'udp' },
+          after: udp({ externalPort: 8214 }),
+          before: udp(),
+          kind: 'update',
         }),
       ).not.toThrow();
     },
   );
+
+  it('requires an explicit safe cleanup kind and unchanged ports for protocol shrink', () => {
+    const service = policy({ NETWORK_TCP_NATMAP_RELEASE_MODE: 'off' });
+    expect(() =>
+      service.assertMutationAllowed({
+        after: {
+          ...tcp(),
+          externalPort: 48214,
+          natmapDesiredEnabled: false,
+          protocolMode: 'udp',
+        },
+        before: { ...tcp(), protocolMode: 'tcp_udp' },
+        kind: 'protocol-shrink',
+      }),
+    ).toThrow(NetworkTcpReleasePolicyError);
+    expect(() =>
+      service.assertMutationAllowed({
+        after: {
+          ...tcp(),
+          internalPort: 48214,
+          natmapDesiredEnabled: false,
+          protocolMode: 'udp',
+        },
+        before: { ...tcp(), protocolMode: 'tcp_udp' },
+        kind: 'protocol-shrink',
+      }),
+    ).toThrow(NetworkTcpReleasePolicyError);
+    expect(() =>
+      service.assertMutationAllowed({
+        before: tcp(),
+        kind: 'update',
+      } as never),
+    ).toThrow(NetworkTcpReleasePolicyError);
+    expect(() =>
+      service.assertMutationAllowed({
+        after: tcp(),
+        before: tcp(),
+        kind: 'natmap-disable',
+      }),
+    ).toThrow(NetworkTcpReleasePolicyError);
+  });
+
+  it('allows cleanup after a canary port leaves the allowlist but still gates retry', () => {
+    const service = policy({
+      NETWORK_TCP_NATMAP_CANARY_PORTS: '48214',
+      NETWORK_TCP_NATMAP_RELEASE_MODE: 'canary',
+    });
+    expect(() =>
+      service.assertMutationAllowed({ current: tcp(), kind: 'delete' }),
+    ).not.toThrow();
+    expect(() =>
+      service.assertMutationAllowed({
+        after: tcp({ natmapDesiredEnabled: false }),
+        before: tcp(),
+        kind: 'natmap-disable',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      service.assertMutationAllowed({ current: tcp(), kind: 'retry' }),
+    ).toThrow(NetworkTcpReleasePolicyError);
+  });
 });

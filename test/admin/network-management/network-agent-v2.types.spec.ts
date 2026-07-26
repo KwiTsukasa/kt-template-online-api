@@ -221,4 +221,53 @@ describe('network agent MQTT v2 contract', () => {
       buildDesiredSnapshotV2({ ...state, desiredRevision: '9007199254740992' }, channels),
     ).toThrow();
   });
+
+  it('sorts built channels canonically and returns a snapshot accepted by the strict parser', () => {
+    const state = {
+      agentId: 'nas-main',
+      desiredIssuedAt: new Date('2026-07-26T00:01:10Z'),
+      desiredRevision: '7',
+    };
+    const channel = (id: string) => ({
+      desiredPresence: 'present' as const,
+      desiredRevision: '7',
+      externalPort: 48213,
+      groupId: '1',
+      id,
+      internalPort: 48213,
+      keeperDesiredEnabled: false,
+      name: `channel-${id}`,
+      natmapDesiredEnabled: true,
+      protocol: 'tcp' as const,
+    });
+
+    const desired = buildDesiredSnapshotV2(state, [channel('20'), channel('10')]);
+    expect(desired.channels.map((item) => item.channelId)).toEqual(['10', '20']);
+    expect(parseDesiredSnapshotV2(JSON.stringify(desired))).toEqual(desired);
+  });
+
+  it('rejects duplicate channel IDs and rows invalid under the strict desired contract', () => {
+    const state = {
+      agentId: 'nas-main',
+      desiredIssuedAt: new Date('2026-07-26T00:01:10Z'),
+      desiredRevision: '7',
+    };
+    const channel = {
+      desiredPresence: 'present' as const,
+      desiredRevision: '7',
+      externalPort: 48213,
+      groupId: '1',
+      id: '10',
+      internalPort: 48213,
+      keeperDesiredEnabled: false,
+      name: 'TCP NATMap',
+      natmapDesiredEnabled: true,
+      protocol: 'tcp' as const,
+    };
+
+    expect(() => buildDesiredSnapshotV2(state, [channel, { ...channel }])).toThrow();
+    expect(() =>
+      buildDesiredSnapshotV2(state, [{ ...channel, externalPort: 0 }]),
+    ).toThrow();
+  });
 });

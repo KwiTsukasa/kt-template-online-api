@@ -7,6 +7,7 @@ import { NetworkAgentState } from '../../../src/modules/admin/platform-config/ne
 import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/network-endpoint-history.entity';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
 import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/network-management.service';
+import { NetworkTcpReleasePolicyService } from '../../../src/modules/admin/platform-config/network-management/network-tcp-release-policy.service';
 
 type Harness = {
   bootstrapOrder: string[];
@@ -18,7 +19,15 @@ type Harness = {
   state: NetworkAgentState;
 };
 
-function createHarness(initialMappings: NetworkPortForward[] = []): Harness {
+type ReleaseConfig = {
+  canaryPorts?: string;
+  mode?: string;
+};
+
+function createHarness(
+  initialMappings: NetworkPortForward[] = [],
+  releaseConfig: ReleaseConfig = {},
+): Harness {
   const mappings = initialMappings;
   const histories: NetworkEndpointHistory[] = [];
   const bootstrapOrder: string[] = [];
@@ -85,11 +94,12 @@ function createHarness(initialMappings: NetworkPortForward[] = []): Harness {
   } as unknown as DataSource;
   const configService = {
     get: (key) =>
-      key === 'NETWORK_AGENT_TARGET_IPV4'
-        ? '192.168.31.224'
-        : key === 'NETWORK_AGENT_ID'
-          ? 'nas-main'
-          : undefined,
+      ({
+        NETWORK_AGENT_ID: 'nas-main',
+        NETWORK_AGENT_TARGET_IPV4: '192.168.31.224',
+        NETWORK_TCP_NATMAP_CANARY_PORTS: releaseConfig.canaryPorts,
+        NETWORK_TCP_NATMAP_RELEASE_MODE: releaseConfig.mode,
+      })[key],
   } as ConfigService;
   const mqtt = {
     requestDesiredPublish: jest.fn(),
@@ -101,6 +111,7 @@ function createHarness(initialMappings: NetworkPortForward[] = []): Harness {
     dataSource,
     configService,
     mqtt as unknown as NetworkAgentMqttService,
+    new NetworkTcpReleasePolicyService(configService),
   );
   return {
     bootstrapExecute,
@@ -141,12 +152,37 @@ function createMapping(
 }
 
 function createListBuilder(mappings: NetworkPortForward[]) {
+  let rows = mappings.filter((mapping) => !mapping.isDeleted);
+  let offset = 0;
+  let limit = rows.length;
   const builder = {
-    andWhere: () => builder,
-    getManyAndCount: async () => [mappings, mappings.length],
+    andWhere: (clause: string, values: Record<string, unknown>) => {
+      if (clause.includes('mapping.protocol <>')) {
+        rows = rows.filter(
+          (mapping) => mapping.protocol !== values.hiddenProtocol,
+        );
+      } else if (clause.includes('mapping.protocol =')) {
+        rows = rows.filter((mapping) => mapping.protocol === values.protocol);
+      } else if (clause.includes('mapping.syncStatus =')) {
+        rows = rows.filter(
+          (mapping) => mapping.syncStatus === values.syncStatus,
+        );
+      } else if (clause.includes('mapping.name LIKE')) {
+        const name = String(values.name).replaceAll('%', '');
+        rows = rows.filter((mapping) => mapping.name.includes(name));
+      }
+      return builder;
+    },
+    getManyAndCount: async () => [rows.slice(offset, offset + limit), rows.length],
     orderBy: () => builder,
-    skip: () => builder,
-    take: () => builder,
+    skip: (value: number) => {
+      offset = value;
+      return builder;
+    },
+    take: (value: number) => {
+      limit = value;
+      return builder;
+    },
     where: () => builder,
   };
   return builder;
@@ -372,6 +408,150 @@ describe('NetworkManagementService', () => {
       lastErrorMessage: 'router conflict',
       lastMqttErrorCode: 'mqtt_fallback',
       lastReconcileErrorCode: 'router_conflict',
+    });
+  });
+
+  it('hides TCP mappings outside on mode while keeping the ordinary list shape and count', async () => {
+    const udpMapping = createMapping({ id: '100' });
+    const tcpMapping = createMapping({
+      activeKey: 'tcp:48213',
+      externalPort: 48213,
+      id: '101',
+      internalPort: 48213,
+      protocol: 'tcp',
+    });
+    const hidden = createHarness([udpMapping, tcpMapping]);
+    const visible = createHarness([udpMapping, tcpMapping], { mode: 'on' });
+
+    await expect(hidden.service.list()).resolves.toMatchObject({
+      items: [{ id: '100', protocol: 'udp' }],
+      total: 1,
+    });
+    await expect(visible.service.list()).resolves.toMatchObject({
+      items: [{ id: '100' }, { id: '101' }],
+      total: 2,
+    });
+  });
+
+  it('gates TCP create by release mode and canary allowlist before persistence', async () => {
+    const off = createHarness();
+    await expect(
+      off.service.create({
+        externalPort: 48213,
+        internalPort: 48213,
+        name: 'tcp-off',
+        protocol: 'tcp',
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(off.state.desiredRevision).toBe('0');
+    expect(off.mappings).toHaveLength(0);
+
+    const rejectedCanary = createHarness([], {
+      canaryPorts: '48214',
+      mode: 'canary',
+    });
+    await expect(
+      rejectedCanary.service.create({
+        externalPort: 48213,
+        internalPort: 48213,
+        name: 'tcp-canary-rejected',
+        protocol: 'tcp',
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+
+    const acceptedCanary = createHarness([], {
+      canaryPorts: '48213',
+      mode: 'canary',
+    });
+    await expect(
+      acceptedCanary.service.create({
+        externalPort: 48213,
+        internalPort: 48213,
+        name: 'tcp-canary',
+        protocol: 'tcp',
+      }),
+    ).resolves.toMatchObject({ protocol: 'tcp' });
+  });
+
+  it('rejects TCP update and retry in off mode while permitting explicit TCP deletion cleanup', async () => {
+    const mapping = createMapping({
+      activeKey: 'tcp:48213',
+      externalPort: 48213,
+      internalPort: 48213,
+      protocol: 'tcp',
+    });
+    const harness = createHarness([mapping], { mode: 'off' });
+
+    await expect(
+      harness.service.update('100', { externalPort: 48214 }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(harness.service.retry('100')).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(harness.state.desiredRevision).toBe('3');
+    await expect(harness.service.remove('100')).resolves.toMatchObject({
+      desiredPresence: 'absent',
+      protocol: 'tcp',
+    });
+  });
+
+  it('allows canary TCP writes only on listed ports while cleanup survives allowlist removal', async () => {
+    const allowedMapping = createMapping({
+      activeKey: 'tcp:48213',
+      externalPort: 48213,
+      internalPort: 48213,
+      protocol: 'tcp',
+    });
+    const allowed = createHarness([allowedMapping], {
+      canaryPorts: '48213',
+      mode: 'canary',
+    });
+    await expect(
+      allowed.service.update('100', { remark: 'canary' }),
+    ).resolves.toMatchObject({ remark: 'canary' });
+    await expect(allowed.service.retry('100')).resolves.toMatchObject({
+      protocol: 'tcp',
+    });
+
+    const removedMapping = createMapping({
+      activeKey: 'tcp:48213',
+      externalPort: 48213,
+      internalPort: 48213,
+      protocol: 'tcp',
+    });
+    const removed = createHarness([removedMapping], {
+      canaryPorts: '48214',
+      mode: 'canary',
+    });
+    await expect(removed.service.retry('100')).rejects.toMatchObject({
+      status: 409,
+    });
+    await expect(removed.service.remove('100')).resolves.toMatchObject({
+      desiredPresence: 'absent',
+    });
+  });
+
+  it('keeps UDP update, retry, delete, Keeper, and probe paths unchanged while release is off', async () => {
+    const mapping = createMapping();
+    const harness = createHarness([mapping], { mode: 'off' });
+
+    await expect(
+      harness.service.update('100', { remark: 'udp' }),
+    ).resolves.toMatchObject({ remark: 'udp' });
+    await expect(harness.service.retry('100')).resolves.toMatchObject({
+      protocol: 'udp',
+    });
+    await expect(harness.service.enableKeeper('100')).resolves.toMatchObject({
+      keeperDesiredEnabled: true,
+    });
+    await expect(harness.service.probe('100')).resolves.toMatchObject({
+      keeperDesiredEnabled: true,
+    });
+    await expect(harness.service.disableKeeper('100')).resolves.toMatchObject({
+      keeperDesiredEnabled: false,
+    });
+    await expect(harness.service.remove('100')).resolves.toMatchObject({
+      desiredPresence: 'absent',
     });
   });
 });

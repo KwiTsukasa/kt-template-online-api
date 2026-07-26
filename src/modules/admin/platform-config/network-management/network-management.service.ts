@@ -18,6 +18,13 @@ import {
   isIpv4Address,
   portForwardActiveKey,
 } from './network-management.types';
+import {
+  NetworkTcpReleasePolicyError,
+  NetworkTcpReleasePolicyService,
+  type TcpProtocolMode,
+  type TcpReleaseMutation,
+  type TcpReleaseState,
+} from './network-tcp-release-policy.service';
 
 const DEFAULT_AGENT_ID = 'nas-main';
 const DEFAULT_TARGET_IPV4 = '192.168.31.224';
@@ -34,6 +41,7 @@ export class NetworkManagementService {
     private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
     private readonly mqttService: NetworkAgentMqttService,
+    private readonly tcpReleasePolicy: NetworkTcpReleasePolicyService,
   ) {}
 
   async list(query: NetworkPortForwardListQueryDto = {}) {
@@ -42,6 +50,11 @@ export class NetworkManagementService {
     const builder = this.mappingRepository
       .createQueryBuilder('mapping')
       .where('mapping.isDeleted = :isDeleted', { isDeleted: false });
+    if (!this.tcpReleasePolicy.isTcpVisibleToAdmin()) {
+      builder.andWhere('mapping.protocol <> :hiddenProtocol', {
+        hiddenProtocol: 'tcp',
+      });
+    }
     if (query.name) {
       builder.andWhere('mapping.name LIKE :name', {
         name: `%${query.name.trim()}%`,
@@ -66,6 +79,15 @@ export class NetworkManagementService {
   }
 
   async create(input: NetworkPortForwardCreateDto) {
+    this.assertReleaseMutation({
+      after: this.releaseState({
+        externalPort: input.externalPort,
+        internalPort: input.internalPort,
+        natmapDesiredEnabled: false,
+        protocol: input.protocol,
+      }),
+      kind: 'create',
+    });
     const saved = await this.dataSource.transaction(async (manager) => {
       const state = await this.lockAgentState(manager);
       const repository = manager.getRepository(NetworkPortForward);
@@ -128,6 +150,16 @@ export class NetworkManagementService {
       const protocol = input.protocol || mapping.protocol;
       const externalPort = input.externalPort || mapping.externalPort;
       const internalPort = input.internalPort || mapping.internalPort;
+      this.assertReleaseMutation({
+        after: this.releaseState({
+          externalPort,
+          internalPort,
+          natmapDesiredEnabled: mapping.natmapDesiredEnabled,
+          protocol,
+        }),
+        before: this.releaseState(mapping),
+        kind: 'update',
+      });
       if (
         mapping.keeperDesiredEnabled &&
         (protocol !== 'udp' || externalPort !== internalPort)
@@ -166,6 +198,10 @@ export class NetworkManagementService {
       if (mapping.desiredPresence === 'absent') {
         throwVbenError('端口转发正在删除', HttpStatus.CONFLICT);
       }
+      this.assertReleaseMutation({
+        current: this.releaseState(mapping),
+        kind: 'delete',
+      });
       mapping.desiredPresence = 'absent';
       mapping.keeperDesiredEnabled = false;
       mapping.probeRequestId = null;
@@ -176,6 +212,10 @@ export class NetworkManagementService {
 
   async retry(id: string) {
     return this.mutate(id, async (mapping) => {
+      this.assertReleaseMutation({
+        current: this.releaseState(mapping),
+        kind: 'retry',
+      });
       mapping.lastErrorCode = null;
       mapping.lastErrorMessage = null;
       mapping.syncStatus =
@@ -342,6 +382,34 @@ export class NetworkManagementService {
       return existing;
     }
     throwVbenError('Agent 状态行初始化失败', HttpStatus.INTERNAL_SERVER_ERROR);
+  }
+
+  private assertReleaseMutation(mutation: TcpReleaseMutation): void {
+    try {
+      this.tcpReleasePolicy.assertMutationAllowed(mutation);
+    } catch (error) {
+      if (error instanceof NetworkTcpReleasePolicyError) {
+        throwVbenError(
+          '当前发布模式不允许该 TCP 操作',
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
+  }
+
+  private releaseState(value: {
+    externalPort: number;
+    internalPort: number;
+    natmapDesiredEnabled?: boolean;
+    protocol: TcpProtocolMode;
+  }): TcpReleaseState {
+    return {
+      externalPort: value.externalPort,
+      internalPort: value.internalPort,
+      natmapDesiredEnabled: value.natmapDesiredEnabled ?? false,
+      protocolMode: value.protocol,
+    };
   }
 
   private advanceRevision(

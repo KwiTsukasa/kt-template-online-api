@@ -597,6 +597,27 @@ describe('NetworkAgentMqttService', () => {
     await harness.service.onModuleDestroy();
   });
 
+  it('acknowledges and drops malformed v2 status without reconnecting', async () => {
+    const harness = createHarness();
+    harness.service.onModuleInit();
+    const ack = createProtocolAck(harness.client);
+
+    harness
+      .clientOptions()
+      .customHandleAcks?.(
+        'kt/network/v2/agents/nas-main/status',
+        v2Status({ supportedSchemaVersions: [2] }),
+        { qos: 1 },
+        ack,
+      );
+    await flushPromises();
+
+    expect(ack).toHaveBeenCalledWith(0);
+    expect(harness.client.end).not.toHaveBeenCalled();
+    expect(harness.client.reconnect).not.toHaveBeenCalled();
+    await harness.service.onModuleDestroy();
+  });
+
   it('recovers from SUBACK failure before restoring exact subscriptions and forced retained desired publication', async () => {
     const harness = createHarness();
     harness.state.publishedRevision = harness.state.desiredRevision;

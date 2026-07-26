@@ -6,14 +6,27 @@ export type TcpProtocolMode = 'tcp' | 'tcp_udp' | 'udp';
 
 export type TcpReleaseState = {
   externalPort: number;
+  internalPort: number;
   natmapDesiredEnabled: boolean;
   protocolMode: TcpProtocolMode;
 };
 
-export type TcpReleaseMutation = {
-  after?: TcpReleaseState;
-  before?: TcpReleaseState;
-};
+export type TcpReleaseMutation =
+  | { after: TcpReleaseState; kind: 'create' }
+  | { after: TcpReleaseState; before: TcpReleaseState; kind: 'update' }
+  | { current: TcpReleaseState; kind: 'retry' }
+  | { current: TcpReleaseState; kind: 'natmap-enable' }
+  | {
+      after: TcpReleaseState;
+      before: TcpReleaseState;
+      kind: 'natmap-disable';
+    }
+  | {
+      after: TcpReleaseState;
+      before: TcpReleaseState;
+      kind: 'protocol-shrink';
+    }
+  | { current: TcpReleaseState; kind: 'delete' };
 
 export class NetworkTcpReleasePolicyError extends Error {}
 
@@ -70,18 +83,17 @@ export class NetworkTcpReleasePolicyService {
   }
 
   assertMutationAllowed(mutation: TcpReleaseMutation): void {
-    const before = mutation.before;
-    const after = mutation.after;
-    if (!this.hasTcp(before) && !this.hasTcp(after)) return;
+    this.assertMutationShape(mutation);
+    const safeCleanup = this.isSafeCleanup(mutation);
+    if (!this.touchesTcp(mutation)) return;
 
     const mode = this.readMode();
     if (mode === 'on') return;
+    if (safeCleanup) return;
     if (mode === 'canary') {
-      const port = after?.externalPort ?? before?.externalPort;
-      if (port !== undefined && this.readCanaryPorts().has(port)) return;
+      if (this.readCanaryPorts().has(this.mutationPort(mutation))) return;
       throw new NetworkTcpReleasePolicyError('TCP NATMap release policy rejects this port');
     }
-    if (this.isSafeCleanup(before, after)) return;
     throw new NetworkTcpReleasePolicyError('TCP NATMap release policy permits cleanup only');
   }
 
@@ -89,23 +101,85 @@ export class NetworkTcpReleasePolicyService {
     return value?.protocolMode === 'tcp' || value?.protocolMode === 'tcp_udp';
   }
 
-  private isSafeCleanup(
-    before?: TcpReleaseState,
-    after?: TcpReleaseState,
-  ): boolean {
-    if (!before) return false;
-    if (!after) return before.protocolMode === 'tcp';
-    if (
-      before.protocolMode === 'tcp_udp' &&
-      after.protocolMode === 'udp'
-    ) {
+  private assertMutationShape(mutation: TcpReleaseMutation): void {
+    const value = mutation as Partial<{
+      after: TcpReleaseState;
+      before: TcpReleaseState;
+      current: TcpReleaseState;
+      kind: TcpReleaseMutation['kind'];
+    }>;
+    switch (value.kind) {
+      case 'create':
+        if (value.after) return;
+        break;
+      case 'update':
+      case 'natmap-disable':
+      case 'protocol-shrink':
+        if (value.before && value.after) return;
+        break;
+      case 'retry':
+      case 'natmap-enable':
+      case 'delete':
+        if (value.current) return;
+        break;
+    }
+    throw new NetworkTcpReleasePolicyError('Invalid TCP NATMap mutation');
+  }
+
+  private touchesTcp(mutation: TcpReleaseMutation): boolean {
+    if ('current' in mutation) return this.hasTcp(mutation.current);
+    return (
+      this.hasTcp(mutation.after) ||
+      ('before' in mutation && this.hasTcp(mutation.before))
+    );
+  }
+
+  private isSafeCleanup(mutation: TcpReleaseMutation): boolean {
+    if (mutation.kind === 'delete') {
+      return mutation.current.protocolMode === 'tcp';
+    }
+    if (mutation.kind === 'natmap-disable') {
+      const valid =
+        this.hasTcp(mutation.before) &&
+        mutation.before.protocolMode === mutation.after.protocolMode &&
+        this.portsUnchanged(mutation.before, mutation.after) &&
+        mutation.before.natmapDesiredEnabled &&
+        !mutation.after.natmapDesiredEnabled;
+      if (!valid) {
+        throw new NetworkTcpReleasePolicyError(
+          'Invalid TCP NATMap disable mutation',
+        );
+      }
       return true;
     }
+    if (mutation.kind === 'protocol-shrink') {
+      const valid =
+        mutation.before.protocolMode === 'tcp_udp' &&
+        mutation.after.protocolMode === 'udp' &&
+        this.portsUnchanged(mutation.before, mutation.after) &&
+        !mutation.after.natmapDesiredEnabled;
+      if (!valid) {
+        throw new NetworkTcpReleasePolicyError(
+          'Invalid TCP NATMap protocol shrink',
+        );
+      }
+      return true;
+    }
+    return false;
+  }
+
+  private mutationPort(mutation: TcpReleaseMutation): number {
+    if ('after' in mutation) return mutation.after.externalPort;
+    return mutation.current.externalPort;
+  }
+
+  private portsUnchanged(
+    before: TcpReleaseState,
+    after: TcpReleaseState,
+  ): boolean {
     return (
-      before.protocolMode === after.protocolMode &&
       before.externalPort === after.externalPort &&
-      before.natmapDesiredEnabled &&
-      !after.natmapDesiredEnabled
+      before.internalPort === after.internalPort
     );
   }
 

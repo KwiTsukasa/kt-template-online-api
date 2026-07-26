@@ -117,7 +117,7 @@ describe('network agent MQTT v2 contract', () => {
     ).toThrow();
   });
 
-  it.each(['192.0.0.1', '::ffff:8.8.8.8'])(
+  it.each(['192.0.0.1', '192.0.2.1', '::ffff:8.8.8.8'])(
     'rejects non-dotted-public IPv4 %s',
     (publicIpv4) => {
       expect(() =>
@@ -138,6 +138,25 @@ describe('network agent MQTT v2 contract', () => {
       ).toThrow();
     },
   );
+
+  it('accepts 192.0.1.1 outside the reserved /24 ranges', () => {
+    expect(
+      parseEndpointEventV2(
+        JSON.stringify({
+          ...eventValue(),
+          endpoint: {
+            mechanism: 'tcp_natmap',
+            observedAt: '2026-07-26T00:01:00Z',
+            publicIpv4: '192.0.1.1',
+            publicPort: 443,
+            validatedAt: '2026-07-26T00:01:10Z',
+            validUntil: '2026-07-26T00:03:00Z',
+          },
+          type: 'published',
+        }),
+      ),
+    ).toMatchObject({ endpoint: { publicIpv4: '192.0.1.1' } });
+  });
 
   it('uses shared UTF-8 byte limits for name, version, and global IPv6', () => {
     const desiredWithName = (name: string) => {

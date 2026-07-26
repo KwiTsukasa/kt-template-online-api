@@ -20,7 +20,7 @@ export class NetworkPortForwardGroupCreateDto {
   @ApiProperty({ maxLength: 100 })
   @IsString()
   @Length(1, 100)
-  @Matches(/\S/, { message: 'name must contain a non-whitespace character' })
+  @Matches(/\S/, { message: '名称必须包含非空白字符' })
   name: string;
 
   @ApiPropertyOptional({ maxLength: 500 })
@@ -51,7 +51,7 @@ export class NetworkPortForwardGroupUpdateDto {
   @ValidateIf(isProvided)
   @IsString()
   @Length(1, 100)
-  @Matches(/\S/, { message: 'name must contain a non-whitespace character' })
+  @Matches(/\S/, { message: '名称必须包含非空白字符' })
   name?: string;
 
   @ApiPropertyOptional({ maxLength: 500, nullable: true })

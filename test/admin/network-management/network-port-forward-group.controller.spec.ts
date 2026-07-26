@@ -89,7 +89,7 @@ describe('NetworkPortForwardGroupController', () => {
       )
       .expect(200)
       .expect('Cache-Control', 'no-store');
-    await request(apiUrl)
+    const invalidProtocol = await request(apiUrl)
       .post('/system/network/port-forward-group')
       .send({
         externalPort: 9000,
@@ -98,7 +98,8 @@ describe('NetworkPortForwardGroupController', () => {
         protocolMode: 'icmp',
       })
       .expect(400);
-    await request(apiUrl)
+    expectChineseVbenValidation(invalidProtocol.body);
+    const forbiddenField = await request(apiUrl)
       .post('/system/network/port-forward-group')
       .send({
         externalPort: 9000,
@@ -108,6 +109,9 @@ describe('NetworkPortForwardGroupController', () => {
         routerPassword: 'forbidden',
       })
       .expect(400);
+    expectChineseVbenValidation(forbiddenField.body);
+    expect(JSON.stringify(forbiddenField.body)).not.toContain('forbidden');
+    expect(JSON.stringify(forbiddenField.body)).not.toContain('routerPassword');
 
     const created = await request(apiUrl)
       .post('/system/network/port-forward-group')
@@ -229,14 +233,26 @@ describe('NetworkPortForwardGroupController', () => {
   });
 
   it('rejects invalid group IDs and protocols before calling the service', async () => {
-    await request(apiUrl)
+    const invalidId = await request(apiUrl)
       .post(
         '/system/network/port-forward-group/not-a-number/channels/tcp/retry',
       )
       .expect(400);
-    await request(apiUrl)
+    expectChineseVbenValidation(invalidId.body);
+    const invalidProtocol = await request(apiUrl)
       .post('/system/network/port-forward-group/200/channels/icmp/retry')
       .expect(400);
+    expectChineseVbenValidation(invalidProtocol.body);
     expect(service.retry).not.toHaveBeenCalled();
   });
 });
+
+function expectChineseVbenValidation(body: unknown): void {
+  expect(body).toEqual({
+    err: expect.any(String),
+    msg: expect.any(String),
+  });
+  const response = body as { err: string; msg: string };
+  expect(response.msg).toMatch(/[\u4e00-\u9fff]/);
+  expect(response.err).toMatch(/[\u4e00-\u9fff]/);
+}

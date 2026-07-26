@@ -629,18 +629,49 @@ describe('NetworkManagementService', () => {
     await expect(harness.service.retry('100')).resolves.toMatchObject({
       protocol: 'udp',
     });
+    mapping.syncStatus = 'synced';
     await expect(harness.service.enableKeeper('100')).resolves.toMatchObject({
       keeperDesiredEnabled: true,
     });
+    mapping.syncStatus = 'synced';
     await expect(harness.service.probe('100')).resolves.toMatchObject({
       keeperDesiredEnabled: true,
     });
+    mapping.syncStatus = 'synced';
     await expect(harness.service.disableKeeper('100')).resolves.toMatchObject({
       keeperDesiredEnabled: false,
     });
     mapping.syncStatus = 'synced';
     await expect(harness.service.remove('100')).resolves.toMatchObject({
       desiredPresence: 'absent',
+    });
+  });
+
+  it('keeps repeated v1 Keeper switches idempotent while preserving channel-ID semantics', async () => {
+    const mapping = createMapping();
+    const harness = createHarness([mapping], { mode: 'off' });
+
+    await harness.service.enableKeeper('100');
+    const enabledRevision = harness.state.desiredRevision;
+    const enabledChannelRevision = mapping.desiredRevision;
+    const probeRequestId = mapping.probeRequestId;
+    await harness.service.enableKeeper('100');
+    expect(mapping.probeRequestId).toBe(probeRequestId);
+    expect(mapping.desiredRevision).toBe(enabledChannelRevision);
+    expect(harness.state.desiredRevision).toBe(enabledRevision);
+    expect(harness.mqtt.requestDesiredPublish).toHaveBeenCalledTimes(1);
+
+    mapping.syncStatus = 'synced';
+    await harness.service.disableKeeper('100');
+    const disabledRevision = harness.state.desiredRevision;
+    const disabledChannelRevision = mapping.desiredRevision;
+    await harness.service.disableKeeper('100');
+    expect(mapping.desiredRevision).toBe(disabledChannelRevision);
+    expect(harness.state.desiredRevision).toBe(disabledRevision);
+    expect(harness.mqtt.requestDesiredPublish).toHaveBeenCalledTimes(2);
+
+    await expect(harness.service.enableKeeper('200')).rejects.toMatchObject({
+      status: 404,
     });
   });
 });

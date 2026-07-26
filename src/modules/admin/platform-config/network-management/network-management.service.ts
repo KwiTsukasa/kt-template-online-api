@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -103,33 +102,15 @@ export class NetworkManagementService {
   }
 
   async enableKeeper(id: string) {
-    return this.mutate(id, async (mapping) => {
-      this.assertKeeperCapable(mapping);
-      mapping.keeperDesiredEnabled = true;
-      mapping.probeRequestId = randomUUID();
-      mapping.syncStatus = 'pending';
-    });
+    return this.groupService.enableKeeperV1(id);
   }
 
   async disableKeeper(id: string) {
-    return this.mutate(id, async (mapping) => {
-      this.assertKeeperCapable(mapping);
-      mapping.keeperDesiredEnabled = false;
-      mapping.probeRequestId = null;
-      mapping.syncStatus = 'pending';
-      this.withdrawCurrentEndpoint(mapping);
-    });
+    return this.groupService.disableKeeperV1(id);
   }
 
   async probe(id: string) {
-    return this.mutate(id, async (mapping) => {
-      this.assertKeeperCapable(mapping);
-      if (!mapping.keeperDesiredEnabled) {
-        throwVbenError('请先启用 UDP Keeper', HttpStatus.BAD_REQUEST);
-      }
-      mapping.probeRequestId = randomUUID();
-      mapping.syncStatus = 'pending';
-    });
+    return this.groupService.probeV1(id);
   }
 
   async endpointHistory(
@@ -298,28 +279,6 @@ export class NetworkManagementService {
     state.desiredIssuedAt = issuedAt;
     mapping.desiredRevision = revision;
     mapping.desiredIssuedAt = issuedAt;
-  }
-
-  private assertKeeperCapable(mapping: NetworkPortForward): void {
-    if (mapping.desiredPresence !== 'present') {
-      throwVbenError('删除中的记录不能操作 Keeper', HttpStatus.CONFLICT);
-    }
-    if (mapping.protocol !== 'udp') {
-      throwVbenError('TCP 仅支持端口转发 CRUD', HttpStatus.BAD_REQUEST);
-    }
-    if (mapping.externalPort !== mapping.internalPort) {
-      throwVbenError(
-        'UDP Keeper 要求外部端口与内部端口一致',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-  }
-
-  private withdrawCurrentEndpoint(mapping: NetworkPortForward): void {
-    mapping.currentPublicIpv4 = null;
-    mapping.currentPublicPort = null;
-    mapping.currentObservedAt = null;
-    mapping.currentValidUntil = null;
   }
 
   private serialize(mapping: NetworkPortForward) {

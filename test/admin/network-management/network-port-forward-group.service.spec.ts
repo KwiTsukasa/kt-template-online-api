@@ -488,4 +488,26 @@ describe('NetworkPortForwardGroupService', () => {
       .enableNatmap('200')
       .catch((error) => expect(errorStatus(error)).toBe(400));
   });
+
+  it('treats an already-disabled asymmetric UDP Keeper switch as a no-op', async () => {
+    const group = createGroup({
+      externalPort: 9000,
+      internalPort: 9001,
+      protocolMode: 'udp',
+    });
+    const udp = createMapping({
+      externalPort: 9000,
+      internalPort: 9001,
+      keeperDesiredEnabled: false,
+      protocol: 'udp',
+    });
+    const harness = createHarness([group], [udp]);
+
+    await expect(harness.service.disableKeeper('200')).resolves.toMatchObject({
+      desiredRevision: '3',
+      keeperDesiredEnabled: false,
+    });
+    expect(harness.state.desiredRevision).toBe('3');
+    expect(harness.mqtt.requestDesiredPublish).not.toHaveBeenCalled();
+  });
 });

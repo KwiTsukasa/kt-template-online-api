@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpException,
   HttpCode,
   HttpStatus,
   Param,
@@ -34,6 +35,14 @@ import { NetworkPortForwardGroupService } from './network-port-forward-group.ser
 @UseGuards(JwtAuthGuard, AdminSuperGuard)
 @UsePipes(
   new ValidationPipe({
+    exceptionFactory: () =>
+      new HttpException(
+        {
+          err: '请求参数不符合接口约束',
+          msg: '请求参数校验失败',
+        },
+        HttpStatus.BAD_REQUEST,
+      ),
     forbidNonWhitelisted: true,
     transform: true,
     whitelist: true,

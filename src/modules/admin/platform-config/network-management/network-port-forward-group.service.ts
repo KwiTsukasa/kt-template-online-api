@@ -268,8 +268,8 @@ export class NetworkPortForwardGroupService {
       groupId,
       'udp',
       async (_, channel, channels) => {
-        this.assertKeeperPorts(channel);
         if (channel.keeperDesiredEnabled) return false;
+        this.assertKeeperPorts(channel);
         this.assertMechanismTransitionAllowed(channels);
         channel.keeperDesiredEnabled = true;
         channel.probeRequestId = randomUUID();
@@ -285,8 +285,8 @@ export class NetworkPortForwardGroupService {
       groupId,
       'udp',
       async (_, channel, channels) => {
-        this.assertKeeperPorts(channel);
         if (!channel.keeperDesiredEnabled) return false;
+        this.assertKeeperPorts(channel);
         this.assertMechanismTransitionAllowed(channels);
         channel.keeperDesiredEnabled = false;
         channel.probeRequestId = null;
@@ -295,6 +295,24 @@ export class NetworkPortForwardGroupService {
         return true;
       },
       true,
+    );
+  }
+
+  async enableKeeperV1(channelId: string) {
+    return this.enableKeeper(
+      await this.resolveV1GroupId(channelId, 'udp', 'UDP Keeper'),
+    );
+  }
+
+  async disableKeeperV1(channelId: string) {
+    return this.disableKeeper(
+      await this.resolveV1GroupId(channelId, 'udp', 'UDP Keeper'),
+    );
+  }
+
+  async probeV1(channelId: string) {
+    return this.probe(
+      await this.resolveV1GroupId(channelId, 'udp', 'UDP Keeper'),
     );
   }
 
@@ -620,6 +638,25 @@ export class NetworkPortForwardGroupService {
     });
     if (!group) throwVbenError('逻辑端口转发组不存在', HttpStatus.NOT_FOUND);
     return group;
+  }
+
+  private async resolveV1GroupId(
+    channelId: string,
+    protocol: PortForwardProtocol,
+    action: string,
+  ): Promise<string> {
+    this.assertId(channelId, '端口转发');
+    const channel = await this.mappingRepository.findOne({
+      where: { id: channelId, isDeleted: false },
+    });
+    if (!channel) throwVbenError('端口转发不存在', HttpStatus.NOT_FOUND);
+    if (channel.protocol !== protocol) {
+      throwVbenError(
+        `${channel.protocol.toUpperCase()} 通道不支持 ${action}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return String(channel.groupId);
   }
 
   private async findChannels(

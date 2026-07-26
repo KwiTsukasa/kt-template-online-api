@@ -22,6 +22,102 @@ function extractCreateTable(sql: string, tableName: string): string {
   return match?.[1] ?? '';
 }
 
+function splitSqlList(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quoted = false;
+  let start = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "'") {
+      if (quoted && value[index + 1] === "'") {
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (!quoted && character === '(') {
+      depth += 1;
+    } else if (!quoted && character === ')') {
+      depth -= 1;
+    } else if (!quoted && depth === 0 && character === ',') {
+      parts.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start).trim());
+  return parts.filter(Boolean);
+}
+
+function canonicalTableMetadata(sql: string, tableName: string): string[] {
+  return splitSqlList(extractCreateTable(sql, tableName))
+    .flatMap((clause) => {
+      const inlinePrimaryKey = clause.match(
+        /^([a-z0-9_]+) ([\s\S]+) primary key$/,
+      );
+      if (!inlinePrimaryKey) return [clause];
+      return [
+        `${inlinePrimaryKey[1]} ${inlinePrimaryKey[2]}`,
+        `primary key (${inlinePrimaryKey[1]})`,
+      ];
+    })
+    .sort();
+}
+
+type FixtureRow = Record<string, null | string>;
+
+function parseFixtureRows(sql: string): Record<string, FixtureRow> {
+  const rows: Record<string, FixtureRow> = {};
+  const normalized = sql
+    .replace(/--.*$/gm, '')
+    .replace(/`/g, '')
+    .trim();
+  const inserts = normalized.matchAll(
+    /insert into ([a-z0-9_]+)\s*\(([\s\S]*?)\)\s*values\s*\(([\s\S]*?)\);/gi,
+  );
+
+  for (const insert of inserts) {
+    const columns = splitSqlList(insert[2]).map((column) => column.trim());
+    const values = splitSqlList(insert[3]).map((value) => {
+      const trimmed = value.trim();
+      if (trimmed.toLowerCase() === 'null') return null;
+      if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+        return trimmed.slice(1, -1).replace(/''/g, "'");
+      }
+      return trimmed;
+    });
+    expect(values).toHaveLength(columns.length);
+    rows[insert[1].toLowerCase()] = Object.fromEntries(
+      columns.map((column, index) => [column, values[index]]),
+    );
+  }
+  return rows;
+}
+
+function mutationAssignmentTargets(sql: string, tableName: string): string[] {
+  const targets = new Set<string>();
+  const updates = sql.matchAll(
+    new RegExp(
+      `update ${tableName}(?: [a-z0-9_]+)? set ([\\s\\S]*?) where [\\s\\S]*?;`,
+      'g',
+    ),
+  );
+  for (const update of updates) {
+    for (const assignment of splitSqlList(update[1])) {
+      const target = assignment.match(/^(?:[a-z0-9_]+\.)?([a-z0-9_]+)\s*=/);
+      expect(target).not.toBeNull();
+      if (target) targets.add(target[1]);
+    }
+  }
+  return [...targets].sort();
+}
+
+function withoutProperties(row: FixtureRow, properties: string[]): FixtureRow {
+  return Object.fromEntries(
+    Object.entries(row).filter(([key]) => !properties.includes(key)),
+  );
+}
+
 function expectFinalSchema(sql: string): void {
   const group = extractCreateTable(sql, 'network_port_forward_group');
   const channel = extractCreateTable(sql, 'network_port_forward');
@@ -84,8 +180,20 @@ function expectFinalSchema(sql: string): void {
 
 describe('TCP NATMap v2 schema SQL', () => {
   it('keeps clean init and refactor-v3 schema contracts aligned', () => {
-    expectFinalSchema(readNormalizedSql('sql/network-management-init.sql'));
-    expectFinalSchema(readNormalizedSql('sql/refactor-v3/00-full-schema.sql'));
+    const cleanInit = readNormalizedSql('sql/network-management-init.sql');
+    const refactor = readNormalizedSql('sql/refactor-v3/00-full-schema.sql');
+
+    expectFinalSchema(cleanInit);
+    for (const tableName of [
+      'network_port_forward_group',
+      'network_port_forward',
+      'network_agent_state',
+      'network_endpoint_history',
+    ]) {
+      expect(canonicalTableMetadata(cleanInit, tableName)).toEqual(
+        canonicalTableMetadata(refactor, tableName),
+      );
+    }
   });
 
   it('uses an additive idempotent migration with ordered group backfill', () => {
@@ -103,10 +211,53 @@ describe('TCP NATMap v2 schema SQL', () => {
     );
     expect(migration).toContain('network_port_forward_group_id_null_count');
     expect(migration).toContain('modify column group_id bigint not null');
+    expect(migration).not.toContain('group_concat');
+    for (const columnName of [
+      'natmap_last_error_code',
+      'natmap_last_error_message',
+      'keeper_last_error_code',
+      'keeper_last_error_message',
+      'candidate_public_ipv4',
+      'candidate_public_port',
+      'candidate_observed_at',
+      'candidate_validated_at',
+      'current_validated_at',
+      'last_observed_validated_at',
+      'last_published_public_ipv4',
+      'last_published_public_port',
+      'last_published_at',
+      'desired_schema_version',
+      'published_schema_version',
+      'max_supported_schema_version',
+      'tcp_natmap_capable',
+    ]) {
+      expect(migration).toContain(`column_name = '${columnName}'`);
+    }
+
+    const nullGroupAbort = migration.indexOf(
+      "signal sqlstate ''45000'' set message_text = ''network_port_forward.group_id backfill incomplete''",
+    );
+    const groupNotNull = migration.indexOf(
+      'modify column group_id bigint not null',
+    );
+    const activeKeyAbort = migration.indexOf(
+      "signal sqlstate ''45000'' set message_text = ''network_port_forward active group/protocol key conflict''",
+    );
+    const activeKeyUnique = migration.indexOf(
+      'add unique key uk_network_port_forward_active_group_protocol_key',
+    );
+
+    expect(nullGroupAbort).toBeGreaterThan(-1);
+    expect(activeKeyAbort).toBeGreaterThan(-1);
+    expect(nullGroupAbort).toBeLessThan(groupNotNull);
+    expect(activeKeyAbort).toBeLessThan(activeKeyUnique);
+    expect(migration).toMatch(
+      /where not \( ?channel\.active_group_protocol_key <=> case when channel\.is_deleted = 0 then concat\(channel\.group_id, ':', channel\.protocol\) else null end ?\)/,
+    );
 
     expect(
       migration.indexOf('network_port_forward_group_id_null_count'),
-    ).toBeLessThan(migration.indexOf('modify column group_id bigint not null'));
+    ).toBeLessThan(groupNotNull);
     expect(migration).not.toMatch(/\b(drop|truncate|delete)\b/);
     expect(migration).not.toMatch(/\b(rename\s+(table|column))\b/);
     expect(migration).not.toMatch(/foreign\s+key/);
@@ -126,17 +277,56 @@ describe('TCP NATMap v2 schema SQL', () => {
   });
 
   it('preserves the sanitized existing 8213 UDP channel, history, and DDNS binding', () => {
-    const fixture = readNormalizedSql(
-      'test/admin/network-management/fixtures/network-tcp-natmap-v2-existing-udp.sql',
+    const fixturePath =
+      'test/admin/network-management/fixtures/network-tcp-natmap-v2-existing-udp.sql';
+    const fixture = readNormalizedSql(fixturePath);
+    const migration = readNormalizedSql('sql/network-tcp-natmap-v2.sql');
+    const before = parseFixtureRows(
+      readFileSync(resolve(REPO_ROOT, fixturePath), 'utf8'),
     );
+    const beforeChannel = before.network_port_forward;
+    const beforeHistory = before.network_endpoint_history;
+    const beforeDdns = before.network_ddns_record;
+    const afterChannel: FixtureRow = {
+      ...beforeChannel,
+      active_group_protocol_key: `${beforeChannel.id}:${beforeChannel.protocol}`,
+      group_id: beforeChannel.id,
+    };
+    const afterHistory: FixtureRow = {
+      ...beforeHistory,
+      mechanism: 'udp_stun',
+    };
+    const afterDdns: FixtureRow = { ...beforeDdns };
 
-    expect(fixture).toContain('2041600000000008213');
-    expect(fixture).toContain("'udp', 8213, 8211, 'udp:8213'");
-    expect(fixture).toContain("17, '2026-07-26 08:00:00.000000', 17, 'synced', 'active'");
-    expect(fixture).toContain("'203.0.113.13', 8213");
-    expect(fixture).toContain('network_endpoint_history');
-    expect(fixture).toContain('network_ddns_record');
-    expect(fixture).toContain("'port_forward_ipv4', 2041600000000008213");
+    expect(mutationAssignmentTargets(migration, 'network_port_forward')).toEqual(
+      ['active_group_protocol_key', 'group_id'],
+    );
+    expect(
+      mutationAssignmentTargets(migration, 'network_endpoint_history'),
+    ).toEqual(['mechanism']);
+    expect(migration).not.toMatch(
+      /\b(?:update|insert into|replace into) network_ddns_record\b/,
+    );
+    expect(migration).not.toMatch(
+      /\binsert into (?:network_port_forward|network_endpoint_history)\b/,
+    );
+    expect(
+      withoutProperties(afterChannel, [
+        'active_group_protocol_key',
+        'group_id',
+      ]),
+    ).toEqual(beforeChannel);
+    expect(withoutProperties(afterHistory, ['mechanism'])).toEqual(
+      beforeHistory,
+    );
+    expect(afterDdns).toEqual(beforeDdns);
+    expect(afterChannel.id).toBe('2041600000000008213');
+    expect(afterChannel.active_key).toBe('udp:8213');
+    expect(afterChannel.desired_revision).toBe('17');
+    expect(afterChannel.reported_revision).toBe('17');
+    expect(afterChannel.keeper_status).toBe('active');
+    expect(afterHistory.mapping_id).toBe(afterChannel.id);
+    expect(afterDdns.port_forward_id).toBe(afterChannel.id);
     expect(fixture).not.toContain('tcp');
   });
 });

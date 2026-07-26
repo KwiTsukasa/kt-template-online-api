@@ -16,13 +16,16 @@ type Harness = {
   bootstrapExecute: jest.Mock;
   groups: NetworkPortForwardGroup[];
   histories: NetworkEndpointHistory[];
+  injectedMappingFindOne: jest.Mock;
   mappings: NetworkPortForward[];
   mqtt: jest.Mocked<Pick<NetworkAgentMqttService, 'requestDesiredPublish'>>;
   service: NetworkManagementService;
   state: NetworkAgentState;
+  transactionalMappingFindOne: jest.Mock;
 };
 
 type ReleaseConfig = {
+  beforeTransaction?: () => void;
   canaryPorts?: string;
   mode?: string;
 };
@@ -56,6 +59,12 @@ function createHarness(
     bootstrapOrder.push('insert-ignore');
     return { identifiers: [] };
   });
+  const findMapping = async ({ where }: { where: Record<string, unknown> }) =>
+    mappings.find((mapping) =>
+      Object.entries(where).every(([key, value]) => mapping[key] === value),
+    ) || null;
+  const injectedMappingFindOne = jest.fn(findMapping);
+  const transactionalMappingFindOne = jest.fn(findMapping);
   const state = Object.assign(new NetworkAgentState(), {
     agentId: 'nas-main',
     appliedRevision: '0',
@@ -74,10 +83,7 @@ function createHarness(
       mappings.filter((mapping) =>
         Object.entries(where).every(([key, value]) => mapping[key] === value),
       ),
-    findOne: async ({ where }) =>
-      mappings.find((mapping) =>
-        Object.entries(where).every(([key, value]) => mapping[key] === value),
-      ) || null,
+    findOne: injectedMappingFindOne,
     save: async (value) => {
       const values = Array.isArray(value) ? value : [value];
       for (const mapping of values) {
@@ -87,6 +93,10 @@ function createHarness(
       }
       return value;
     },
+  } as unknown as Repository<NetworkPortForward>;
+  const transactionalMappingRepository = {
+    ...mappingRepository,
+    findOne: transactionalMappingFindOne,
   } as unknown as Repository<NetworkPortForward>;
   const groupRepository = {
     create: (input) =>
@@ -128,7 +138,7 @@ function createHarness(
   } as unknown as Repository<NetworkEndpointHistory>;
   const manager = {
     getRepository: (entity) => {
-      if (entity === NetworkPortForward) return mappingRepository;
+      if (entity === NetworkPortForward) return transactionalMappingRepository;
       if (entity === NetworkPortForwardGroup) return groupRepository;
       if (entity === NetworkAgentState) return stateRepository;
       if (entity === NetworkEndpointHistory) return historyRepository;
@@ -136,7 +146,10 @@ function createHarness(
     },
   } as unknown as EntityManager;
   const dataSource = {
-    transaction: async (work) => await work(manager),
+    transaction: async (work) => {
+      releaseConfig.beforeTransaction?.();
+      return await work(manager);
+    },
   } as unknown as DataSource;
   const configService = {
     get: (key) =>
@@ -173,10 +186,12 @@ function createHarness(
     bootstrapOrder,
     groups,
     histories,
+    injectedMappingFindOne,
     mappings,
     mqtt,
     service,
     state,
+    transactionalMappingFindOne,
   };
 }
 
@@ -673,5 +688,36 @@ describe('NetworkManagementService', () => {
     await expect(harness.service.enableKeeper('200')).rejects.toMatchObject({
       status: 404,
     });
+  });
+
+  it('locks the exact v1 channel ID in-transaction and never mutates its replacement', async () => {
+    const stale = createMapping({ id: '100' });
+    const replacement = createMapping({ id: '102', probeRequestId: null });
+    const mappings = [stale];
+    const harness = createHarness(mappings, {
+      beforeTransaction: () => {
+        stale.activeGroupProtocolKey = null;
+        stale.activeKey = null;
+        stale.isDeleted = true;
+        mappings.push(replacement);
+      },
+      mode: 'off',
+    });
+
+    await expect(harness.service.enableKeeper('100')).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(harness.transactionalMappingFindOne).toHaveBeenCalledWith({
+      lock: { mode: 'pessimistic_write' },
+      where: { id: '100', isDeleted: false },
+    });
+    expect(harness.injectedMappingFindOne).not.toHaveBeenCalled();
+    expect(replacement).toMatchObject({
+      desiredRevision: '3',
+      keeperDesiredEnabled: false,
+      probeRequestId: null,
+    });
+    expect(harness.state.desiredRevision).toBe('3');
+    expect(harness.mqtt.requestDesiredPublish).not.toHaveBeenCalled();
   });
 });

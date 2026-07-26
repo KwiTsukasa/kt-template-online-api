@@ -42,6 +42,11 @@ type GroupTransactionResult = {
   group: NetworkPortForwardGroup;
 };
 
+type V1ChannelMutationTarget = {
+  action: string;
+  channelId: string;
+};
+
 @Injectable()
 export class NetworkPortForwardGroupService {
   constructor(
@@ -264,8 +269,32 @@ export class NetworkPortForwardGroupService {
   }
 
   async enableKeeper(groupId: string) {
+    return this.enableKeeperTarget(groupId);
+  }
+
+  async disableKeeper(groupId: string) {
+    return this.disableKeeperTarget(groupId);
+  }
+
+  async enableKeeperV1(channelId: string) {
+    return this.enableKeeperTarget({ action: 'UDP Keeper', channelId });
+  }
+
+  async disableKeeperV1(channelId: string) {
+    return this.disableKeeperTarget({ action: 'UDP Keeper', channelId });
+  }
+
+  async probeV1(channelId: string) {
+    return this.probeTarget({ action: 'UDP Keeper', channelId });
+  }
+
+  async probe(groupId: string) {
+    return this.probeTarget(groupId);
+  }
+
+  private enableKeeperTarget(target: string | V1ChannelMutationTarget) {
     return this.mutateChannel(
-      groupId,
+      target,
       'udp',
       async (_, channel, channels) => {
         if (channel.keeperDesiredEnabled) return false;
@@ -280,9 +309,9 @@ export class NetworkPortForwardGroupService {
     );
   }
 
-  async disableKeeper(groupId: string) {
+  private disableKeeperTarget(target: string | V1ChannelMutationTarget) {
     return this.mutateChannel(
-      groupId,
+      target,
       'udp',
       async (_, channel, channels) => {
         if (!channel.keeperDesiredEnabled) return false;
@@ -298,27 +327,9 @@ export class NetworkPortForwardGroupService {
     );
   }
 
-  async enableKeeperV1(channelId: string) {
-    return this.enableKeeper(
-      await this.resolveV1GroupId(channelId, 'udp', 'UDP Keeper'),
-    );
-  }
-
-  async disableKeeperV1(channelId: string) {
-    return this.disableKeeper(
-      await this.resolveV1GroupId(channelId, 'udp', 'UDP Keeper'),
-    );
-  }
-
-  async probeV1(channelId: string) {
-    return this.probe(
-      await this.resolveV1GroupId(channelId, 'udp', 'UDP Keeper'),
-    );
-  }
-
-  async probe(groupId: string) {
+  private probeTarget(target: string | V1ChannelMutationTarget) {
     return this.mutateChannel(
-      groupId,
+      target,
       'udp',
       async (_, channel, channels) => {
         this.assertMechanismTransitionAllowed(channels);
@@ -590,7 +601,7 @@ export class NetworkPortForwardGroupService {
   }
 
   private async mutateChannel(
-    groupId: string,
+    target: string | V1ChannelMutationTarget,
     protocol: PortForwardProtocol,
     change: (
       group: NetworkPortForwardGroup,
@@ -599,12 +610,46 @@ export class NetworkPortForwardGroupService {
     ) => Promise<boolean>,
     invalidProtocolIsBadRequest = false,
   ) {
-    this.assertId(groupId, '逻辑组');
+    const v1Target = typeof target === 'string' ? null : target;
+    const targetId = typeof target === 'string' ? target : target.channelId;
+    this.assertId(targetId, v1Target ? '端口转发' : '逻辑组');
     const result = await this.dataSource.transaction(async (manager) => {
       const state = await this.lockAgentState(manager);
+      const mappingRepository = manager.getRepository(NetworkPortForward);
+      const requested = v1Target
+        ? await mappingRepository.findOne({
+            lock: { mode: 'pessimistic_write' },
+            where: { id: v1Target.channelId, isDeleted: false },
+          })
+        : null;
+      if (v1Target && !requested) {
+        throwVbenError('端口转发不存在', HttpStatus.NOT_FOUND);
+      }
+      if (v1Target && requested && requested.protocol !== protocol) {
+        throwVbenError(
+          `${requested.protocol.toUpperCase()} 通道不支持 ${v1Target.action}`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const groupId = requested ? String(requested.groupId) : targetId;
       const group = await this.findLockedGroup(manager, groupId);
       const channels = await this.findChannels(manager, groupId);
-      const channel = channels.find((item) => item.protocol === protocol);
+      const requestedIndex = requested
+        ? channels.findIndex((item) => item.id === requested.id)
+        : -1;
+      if (
+        requested &&
+        (requested.isDeleted ||
+          requested.groupId !== group.id ||
+          requestedIndex < 0 ||
+          channels[requestedIndex].groupId !== group.id ||
+          channels[requestedIndex].protocol !== protocol)
+      ) {
+        throwVbenError('端口转发通道已失效或被替换', HttpStatus.CONFLICT);
+      }
+      if (requested) channels[requestedIndex] = requested;
+      const channel =
+        requested || channels.find((item) => item.protocol === protocol);
       if (!channel) {
         throwVbenError(
           `逻辑组不包含 ${protocol.toUpperCase()} 协议通道`,
@@ -620,7 +665,7 @@ export class NetworkPortForwardGroupService {
       if (!changed) return { changed, channel };
       const revision = this.advanceGlobalRevision(state);
       this.assignRevision([channel], revision, state.desiredIssuedAt);
-      await manager.getRepository(NetworkPortForward).save(channel);
+      await mappingRepository.save(channel);
       await manager.getRepository(NetworkAgentState).save(state);
       return { changed, channel };
     });
@@ -638,25 +683,6 @@ export class NetworkPortForwardGroupService {
     });
     if (!group) throwVbenError('逻辑端口转发组不存在', HttpStatus.NOT_FOUND);
     return group;
-  }
-
-  private async resolveV1GroupId(
-    channelId: string,
-    protocol: PortForwardProtocol,
-    action: string,
-  ): Promise<string> {
-    this.assertId(channelId, '端口转发');
-    const channel = await this.mappingRepository.findOne({
-      where: { id: channelId, isDeleted: false },
-    });
-    if (!channel) throwVbenError('端口转发不存在', HttpStatus.NOT_FOUND);
-    if (channel.protocol !== protocol) {
-      throwVbenError(
-        `${channel.protocol.toUpperCase()} 通道不支持 ${action}`,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    return String(channel.groupId);
   }
 
   private async findChannels(

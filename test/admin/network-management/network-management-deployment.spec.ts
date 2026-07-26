@@ -59,4 +59,14 @@ describe('Network management production deployment contract', () => {
     expect(envExample).toMatch(/^NETWORK_DDNS_DNSPOD_SECRET_ID=$/m);
     expect(envExample).toMatch(/^NETWORK_DDNS_DNSPOD_SECRET_KEY=$/m);
   });
+
+  it('documents fail-closed TCP NATMap release defaults without promoting them to Jenkins secrets', () => {
+    const envExample = readDeploymentFile('.env.example');
+    const jenkinsfile = readDeploymentFile('Jenkinsfile');
+
+    expect(envExample).toMatch(/^NETWORK_TCP_NATMAP_RELEASE_MODE=off$/m);
+    expect(envExample).toMatch(/^NETWORK_TCP_NATMAP_CANARY_PORTS=$/m);
+    expect(jenkinsfile).not.toContain('NETWORK_TCP_NATMAP_RELEASE_MODE');
+    expect(jenkinsfile).not.toContain('NETWORK_TCP_NATMAP_CANARY_PORTS');
+  });
 });

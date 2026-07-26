@@ -22,6 +22,13 @@ import { NetworkEndpointHistory } from './network-endpoint-history.entity';
 import { NetworkDdnsService } from './network-ddns.service';
 import { NetworkManagementEventStreamService } from './network-management-event-stream.service';
 import { NetworkPortForward } from './network-management.entity';
+import { NetworkPortForwardGroup } from './network-port-forward-group.entity';
+import { NetworkTcpReleasePolicyService } from './network-tcp-release-policy.service';
+import {
+  buildDesiredSnapshotV2,
+  parseStatusSnapshotV2,
+  type NetworkStatusSnapshotV2,
+} from './network-agent-v2.types';
 import {
   buildDesiredSnapshot,
   desiredSnapshotDigest,
@@ -74,6 +81,8 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     private readonly clientFactory?: NetworkMqttClientFactory,
     @Optional()
     private readonly ddnsService?: NetworkDdnsService,
+    @Optional()
+    private readonly releasePolicy?: NetworkTcpReleasePolicyService,
   ) {}
 
   onModuleInit(): void {
@@ -128,28 +137,57 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
 
   async publishLatestDesired(force = false): Promise<boolean> {
     if (!this.client?.connected) return false;
-    const snapshot = await this.dataSource.transaction(async (manager) => {
+    const publication = await this.dataSource.transaction(async (manager) => {
       const state = await manager.getRepository(NetworkAgentState).findOne({
         where: { agentId: this.agentId() },
       });
       if (!state || BigInt(state.desiredRevision) === 0n) return null;
+      const desiredSchemaVersion: 1 | 2 =
+        state.desiredSchemaVersion === 2 ? 2 : 1;
+      const publishedSchemaVersion: 1 | 2 =
+        state.publishedSchemaVersion === 2 ? 2 : 1;
       if (
         !force &&
-        BigInt(state.publishedRevision) >= BigInt(state.desiredRevision)
+        BigInt(state.publishedRevision) >= BigInt(state.desiredRevision) &&
+        publishedSchemaVersion === desiredSchemaVersion
       ) {
         return null;
       }
       const mappings = await manager.getRepository(NetworkPortForward).find({
         where: { isDeleted: false },
       });
-      return buildDesiredSnapshot(state, mappings);
+      if (desiredSchemaVersion === 2) {
+        const snapshot = buildDesiredSnapshotV2(state, mappings);
+        return {
+          payload: Buffer.from(JSON.stringify(snapshot), 'utf8'),
+          publishedSchemaVersion,
+          revision: String(snapshot.snapshotRevision),
+          schemaVersion: 2 as const,
+        };
+      }
+      const snapshot = buildDesiredSnapshot(state, mappings);
+      return {
+        payload: desiredSnapshotBytes(snapshot),
+        publishedSchemaVersion,
+        revision: String(snapshot.revision),
+        schemaVersion: 1 as const,
+      };
     });
-    if (!snapshot) return false;
+    if (!publication) return false;
+    if (publication.publishedSchemaVersion !== publication.schemaVersion) {
+      await this.publishWithPuback(
+        this.topic(publication.publishedSchemaVersion, 'desired'),
+        Buffer.alloc(0),
+      );
+    }
     await this.publishWithPuback(
-      this.topic('desired'),
-      desiredSnapshotBytes(snapshot),
+      this.topic(publication.schemaVersion, 'desired'),
+      publication.payload,
     );
-    await this.markRevisionPublished(String(snapshot.revision));
+    await this.markRevisionPublished(
+      publication.revision,
+      publication.schemaVersion,
+    );
     return true;
   }
 
@@ -167,17 +205,22 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     let changed = false;
     let ddnsSourceChanged = false;
     let source: NetworkStateChangeSource;
-    if (topic === this.topic('reported')) {
+    if (topic === this.topic(1, 'reported')) {
       source = 'reported';
       const result = await this.applyReported(parseReportedSnapshot(parsed));
       changed = result.visibleStateChanged;
       ddnsSourceChanged = result.ddnsSourceChanged;
-    } else if (topic === this.topic('status')) {
+    } else if (topic === this.topic(1, 'status')) {
       source = 'status';
       const result = await this.applyStatus(parseStatusSnapshot(parsed));
       changed = result.visibleStateChanged;
       ddnsSourceChanged = result.ddnsSourceChanged;
-    } else if (topic === this.topic('events')) {
+    } else if (topic === this.topic(2, 'status')) {
+      source = 'status';
+      const result = await this.applyV2Status(parseStatusSnapshotV2(payload));
+      changed = result.visibleStateChanged;
+      ddnsSourceChanged = result.ddnsSourceChanged;
+    } else if (topic === this.topic(1, 'events')) {
       source = 'events';
       const endpointResult = await this.appendEndpointEvent(
         parseEndpointEvent(parsed),
@@ -203,9 +246,10 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     this.recoveryInProgress = false;
     client.subscribe(
       {
-        [this.topic('reported')]: { qos: 1 },
-        [this.topic('status')]: { qos: 1 },
-        [this.topic('events')]: { qos: 1 },
+        [this.topic(1, 'reported')]: { qos: 1 },
+        [this.topic(1, 'status')]: { qos: 1 },
+        [this.topic(1, 'events')]: { qos: 1 },
+        [this.topic(2, 'status')]: { qos: 1 },
       },
       (error) => {
         if (this.shuttingDown || this.client !== client) return;
@@ -280,7 +324,10 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async markRevisionPublished(revision: string): Promise<void> {
+  private async markRevisionPublished(
+    revision: string,
+    schemaVersion: 1 | 2,
+  ): Promise<void> {
     await this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(NetworkAgentState);
       const state = await repository.findOne({
@@ -289,11 +336,16 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       });
       if (!state) return;
       const confirmed = BigInt(revision);
+      const desiredSchemaVersion =
+        state.desiredSchemaVersion === 2 ? 2 : 1;
       if (
-        confirmed > BigInt(state.publishedRevision) &&
-        confirmed <= BigInt(state.desiredRevision)
+        confirmed <= BigInt(state.desiredRevision) &&
+        desiredSchemaVersion === schemaVersion &&
+        (confirmed > BigInt(state.publishedRevision) ||
+          state.publishedSchemaVersion !== schemaVersion)
       ) {
         state.publishedRevision = revision;
+        state.publishedSchemaVersion = schemaVersion;
         await repository.save(state);
       }
     });
@@ -522,6 +574,54 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     visibleStateChanged: boolean;
   }> {
     this.assertAgentId(status.agentId);
+    return await this.applyStatusSnapshot(status, true);
+  }
+
+  private async applyV2Status(status: NetworkStatusSnapshotV2): Promise<{
+    ddnsSourceChanged: boolean;
+    visibleStateChanged: boolean;
+  }> {
+    this.assertAgentId(status.agentId);
+    await this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(NetworkAgentState);
+      const state = await repository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { agentId: status.agentId },
+      });
+      if (!state) {
+        throw new NetworkMessageValidationError('Unknown network Agent');
+      }
+      if (
+        state.maxSupportedSchemaVersion !== 2 ||
+        state.tcpNatmapCapable !== status.tcpNatmapCapable
+      ) {
+        state.maxSupportedSchemaVersion = 2;
+        state.tcpNatmapCapable = status.tcpNatmapCapable;
+        await repository.save(state);
+      }
+    });
+    const result = await this.applyStatusSnapshot(status, false);
+    if (await this.activateV2DesiredSchema()) this.requestDesiredPublish();
+    return result;
+  }
+
+  private async applyStatusSnapshot(
+    status: Pick<
+      NetworkStatusSnapshot,
+      | 'agentId'
+      | 'errorCode'
+      | 'errorMessage'
+      | 'observedAt'
+      | 'online'
+      | 'publicIpv6'
+      | 'startedAt'
+      | 'version'
+    >,
+    ignoreAfterV2Capability: boolean,
+  ): Promise<{
+    ddnsSourceChanged: boolean;
+    visibleStateChanged: boolean;
+  }> {
     return await this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(NetworkAgentState);
       const state = await repository.findOne({
@@ -530,6 +630,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       });
       if (!state) {
         throw new NetworkMessageValidationError('Unknown network Agent');
+      }
+      if (
+        ignoreAfterV2Capability &&
+        state.maxSupportedSchemaVersion >= 2
+      ) {
+        return { ddnsSourceChanged: false, visibleStateChanged: false };
       }
       const observedAt = new Date(status.observedAt);
       const incomingStartedAt = status.startedAt
@@ -586,6 +692,48 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
           this.statusRefreshStateFingerprint(state) !== refreshStateBefore,
       };
     });
+  }
+
+  async requestV2Downgrade(): Promise<boolean> {
+    if (!this.tcpReleasePolicy().mayExplicitlyDowngradeToV1()) return false;
+    const changed = await this.dataSource.transaction(async (manager) => {
+      const stateRepository = manager.getRepository(NetworkAgentState);
+      const state = await stateRepository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { agentId: this.agentId() },
+      });
+      if (
+        !state ||
+        state.desiredSchemaVersion !== 2 ||
+        state.publishedSchemaVersion !== 2 ||
+        BigInt(state.publishedRevision) !== BigInt(state.desiredRevision) ||
+        BigInt(state.appliedRevision) !== BigInt(state.desiredRevision)
+      ) {
+        return false;
+      }
+      const groups = await manager.getRepository(NetworkPortForwardGroup).find({
+        lock: { mode: 'pessimistic_read' },
+        where: { isDeleted: false },
+      });
+      if (
+        groups.some(
+          (group) =>
+            group.protocolMode === 'tcp' || group.protocolMode === 'tcp_udp',
+        )
+      ) {
+        return false;
+      }
+      const tcpChannels = await manager.getRepository(NetworkPortForward).find({
+        lock: { mode: 'pessimistic_read' },
+        where: { protocol: 'tcp' },
+      });
+      if (tcpChannels.some((channel) => !channel.isDeleted)) return false;
+      state.desiredSchemaVersion = 1;
+      await stateRepository.save(state);
+      return true;
+    });
+    if (changed) this.requestDesiredPublish();
+    return changed;
   }
 
   private async appendEndpointEvent(
@@ -762,8 +910,37 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private topic(kind: 'desired' | 'events' | 'reported' | 'status'): string {
-    return `kt/network/v1/agents/${this.agentId()}/${kind}`;
+  private async activateV2DesiredSchema(): Promise<boolean> {
+    if (!this.tcpReleasePolicy().mayAutomaticallyActivateV2()) return false;
+    return await this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(NetworkAgentState);
+      const state = await repository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { agentId: this.agentId() },
+      });
+      if (
+        !state ||
+        state.desiredSchemaVersion === 2 ||
+        state.maxSupportedSchemaVersion < 2 ||
+        !state.tcpNatmapCapable
+      ) {
+        return false;
+      }
+      state.desiredSchemaVersion = 2;
+      await repository.save(state);
+      return true;
+    });
+  }
+
+  private tcpReleasePolicy(): NetworkTcpReleasePolicyService {
+    return this.releasePolicy || new NetworkTcpReleasePolicyService(this.configService);
+  }
+
+  private topic(
+    schemaVersion: 1 | 2,
+    kind: 'desired' | 'events' | 'reported' | 'status',
+  ): string {
+    return `kt/network/v${schemaVersion}/agents/${this.agentId()}/${kind}`;
   }
 
   private retryMs(): number {

@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import { TextDecoder } from 'node:util';
+import type { NetworkAgentState } from './network-agent-state.entity';
+import type { NetworkPortForward } from './network-management.entity';
 
 export const NETWORK_AGENT_V2_SCHEMA_VERSION = 2 as const;
 export const NETWORK_AGENT_V2_MAX_CHANNELS = 64;
@@ -65,6 +67,21 @@ export type NetworkDesiredSnapshotV2 = {
   snapshotDigest: string;
   snapshotRevision: number;
 };
+
+type NetworkDesiredChannelSourceV2 = Pick<
+  NetworkPortForward,
+  | 'desiredPresence'
+  | 'desiredRevision'
+  | 'externalPort'
+  | 'groupId'
+  | 'id'
+  | 'internalPort'
+  | 'keeperDesiredEnabled'
+  | 'name'
+  | 'natmapDesiredEnabled'
+  | 'probeRequestId'
+  | 'protocol'
+>;
 
 export type NetworkEndpointLeaseV2 = {
   mechanism: NetworkV2EndpointMechanism;
@@ -175,6 +192,58 @@ export function canonicalDesiredSnapshotDigestV2(
       .sort(compareDesiredChannelsV2)
       .map(canonicalDesiredChannelV2),
   });
+}
+
+export function buildDesiredSnapshotV2(
+  state: Pick<NetworkAgentState, 'agentId' | 'desiredIssuedAt' | 'desiredRevision'>,
+  channels: NetworkDesiredChannelSourceV2[],
+): NetworkDesiredSnapshotV2 {
+  if (channels.length > NETWORK_AGENT_V2_MAX_CHANNELS) invalid('desired.channels');
+  const desiredChannels = channels.map((channel) => {
+    const base = {
+      channelDesiredDigest: '',
+      channelDesiredRevision: safeRevisionFromString(
+        channel.desiredRevision,
+        'channelDesiredRevision',
+      ),
+      channelId: String(channel.id),
+      desiredPresence: channel.desiredPresence,
+      externalPort: channel.externalPort,
+      groupId: String(channel.groupId),
+      internalPort: channel.internalPort,
+      name: channel.name,
+    };
+    const desired: NetworkDesiredChannelV2 =
+      channel.protocol === 'tcp'
+        ? {
+            ...base,
+            natmapDesiredEnabled: channel.natmapDesiredEnabled,
+            protocol: 'tcp',
+          }
+        : {
+            ...base,
+            keeperDesiredEnabled: channel.keeperDesiredEnabled,
+            ...(channel.probeRequestId
+              ? { probeRequestId: channel.probeRequestId }
+              : {}),
+            protocol: 'udp',
+          };
+    desired.channelDesiredDigest = canonicalDesiredChannelDigestV2(desired);
+    return desired;
+  });
+  const snapshot: NetworkDesiredSnapshotV2 = {
+    agentId: state.agentId,
+    channels: desiredChannels,
+    issuedAt: isoFromDateTime(state.desiredIssuedAt, 'issuedAt'),
+    schemaVersion: NETWORK_AGENT_V2_SCHEMA_VERSION,
+    snapshotDigest: '',
+    snapshotRevision: safeRevisionFromString(
+      state.desiredRevision,
+      'snapshotRevision',
+    ),
+  };
+  snapshot.snapshotDigest = canonicalDesiredSnapshotDigestV2(snapshot);
+  return snapshot;
 }
 
 export function parseDesiredSnapshotV2(
@@ -350,6 +419,8 @@ function errorCode(value: unknown, name: string): string { const result = string
 function boundedString(value: unknown, name: string, max: number): string { const result = stringValue(value, name, max); if (result.length === 0) invalid(name); return result; }
 function stringValue(value: unknown, name: string, max: number): string { if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > max) invalid(name); return value; }
 function positiveRevision(value: unknown, name: string): number { if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) invalid(name); return value; }
+function safeRevisionFromString(value: string, name: string): number { if (!/^\d+$/.test(value)) invalid(name); const parsed = BigInt(value); if (parsed <= 0n || parsed > BigInt(Number.MAX_SAFE_INTEGER)) invalid(name); return Number(parsed); }
+function isoFromDateTime(value: unknown, name: string): string { const date = new Date(value as string | number | Date); if (Number.isNaN(date.getTime())) invalid(name); return date.toISOString(); }
 function port(value: unknown, name: string): number { if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 65535) invalid(name); return value; }
 function booleanValue(value: unknown, name: string): boolean { if (typeof value !== 'boolean') invalid(name); return value; }
 function enumValue<T extends string>(value: unknown, allowed: readonly T[], name: string): T { if (typeof value !== 'string' || !allowed.includes(value as T)) invalid(name); return value as T; }

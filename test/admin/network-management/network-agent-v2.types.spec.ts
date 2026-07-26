@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   NETWORK_AGENT_V2_MAX_MESSAGE_BYTES,
+  buildDesiredSnapshotV2,
   canonicalDesiredChannelDigestV2,
   canonicalDesiredSnapshotDigestV2,
   parseDesiredSnapshotV2,
@@ -189,6 +190,35 @@ describe('network agent MQTT v2 contract', () => {
       parseStatusSnapshotV2(
         JSON.stringify({ ...statusValue(), version: '界'.repeat(43) }),
       ),
+    ).toThrow();
+  });
+
+  it('builds v2 desired channels with canonical digests and rejects unsafe bigint revisions', () => {
+    const state = {
+      agentId: 'nas-main',
+      desiredIssuedAt: new Date('2026-07-26T00:01:10Z'),
+      desiredRevision: '7',
+    };
+    const channels = [
+      {
+        desiredPresence: 'present' as const,
+        desiredRevision: '7',
+        externalPort: 48213,
+        groupId: '1',
+        id: '10',
+        internalPort: 48213,
+        keeperDesiredEnabled: false,
+        name: 'TCP NATMap',
+        natmapDesiredEnabled: true,
+        protocol: 'tcp' as const,
+      },
+    ];
+    const desired = buildDesiredSnapshotV2(state, channels);
+    expect(desired).toMatchObject({ schemaVersion: 2, snapshotRevision: 7 });
+    expect(desired.channels[0].channelDesiredDigest).toMatch(/^[0-9a-f]{64}$/);
+    expect(desired.snapshotDigest).toBe(canonicalDesiredSnapshotDigestV2(desired));
+    expect(() =>
+      buildDesiredSnapshotV2({ ...state, desiredRevision: '9007199254740992' }, channels),
     ).toThrow();
   });
 });

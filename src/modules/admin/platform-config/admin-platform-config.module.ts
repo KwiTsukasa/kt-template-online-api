@@ -20,6 +20,7 @@ import { NetworkPortForward } from '@/modules/admin/platform-config/network-mana
 import { NetworkPortForwardGroup } from '@/modules/admin/platform-config/network-management/network-port-forward-group.entity';
 import { NetworkManagementService } from '@/modules/admin/platform-config/network-management/network-management.service';
 import { NetworkStunMessageSourceAdapter } from '@/modules/admin/platform-config/network-management/network-stun-message-source.adapter';
+import { NetworkTcpReleasePolicyService } from '@/modules/admin/platform-config/network-management/network-tcp-release-policy.service';
 import { SystemLogController } from '@/modules/admin/platform-config/system-log/system-log.controller';
 import { SystemLogService } from '@/modules/admin/platform-config/system-log/system-log.service';
 import { AdminTimezoneController } from '@/modules/admin/platform-config/timezone/admin-timezone.controller';
@@ -91,6 +92,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   NetworkDnsPodClient,
   NetworkDdnsService,
   NetworkStunMessageSourceAdapter,
+  NetworkTcpReleasePolicyService,
   NetworkAgentMqttService,
 ];
 

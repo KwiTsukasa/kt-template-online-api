@@ -11,6 +11,7 @@ import { NetworkAgentState } from '../../../src/modules/admin/platform-config/ne
 import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/network-endpoint-history.entity';
 import type { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/network-management-event-stream.service';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
+import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
 import type {
   SystemMessageEventInput,
   SystemMessageEventStager,
@@ -621,6 +622,7 @@ describe('NetworkAgentMqttService', () => {
       'kt/network/v1/agents/nas-main/events': { qos: 1 },
       'kt/network/v1/agents/nas-main/reported': { qos: 1 },
       'kt/network/v1/agents/nas-main/status': { qos: 1 },
+      'kt/network/v2/agents/nas-main/status': { qos: 1 },
     };
     harness.service.onModuleInit();
 
@@ -1484,4 +1486,205 @@ describe('NetworkAgentMqttService', () => {
     expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
     expect(harness.publishCommitted).toHaveBeenCalledWith('status');
   });
+
+  it('subscribes to v2 status, persists capability before desired schema activation, and keeps v2 status authoritative', async () => {
+    const harness = createHarness();
+    (harness.service as any).configService.get = (key: string) =>
+      ({
+        NETWORK_AGENT_ID: 'nas-main',
+        NETWORK_AGENT_MQTT_RETRY_MS: '60000',
+        NETWORK_AGENT_MQTT_URL: 'mqtt://broker.test:1883',
+        NETWORK_TCP_NATMAP_RELEASE_MODE: 'on',
+      })[key];
+    harness.service.onModuleInit();
+    harness.client.emit('connect');
+    expect(harness.client.subscribe).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'kt/network/v2/agents/nas-main/status': { qos: 1 },
+      }),
+      expect.any(Function),
+    );
+
+    await harness.service.consumeMessage(
+      'kt/network/v2/agents/nas-main/status',
+      v2Status({ online: false }),
+    );
+    expect(harness.state.maxSupportedSchemaVersion).toBe(2);
+    expect(harness.state.tcpNatmapCapable).toBe(true);
+    expect(harness.state.desiredSchemaVersion).toBe(2);
+    expect(harness.stateSave.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+    await harness.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/status',
+      Buffer.from(
+        JSON.stringify({
+          agentId: 'nas-main',
+          observedAt: '2026-07-26T00:02:00Z',
+          online: true,
+          schemaVersion: 1,
+        }),
+      ),
+    );
+    expect(harness.state.online).toBe(false);
+    await harness.service.onModuleDestroy();
+  });
+
+  it('clears the old retained owner before v2 publication, commits schema only after PUBACK, and retries toward v2', async () => {
+    const harness = createHarness();
+    Object.assign(harness.state, {
+      desiredSchemaVersion: 2,
+      maxSupportedSchemaVersion: 2,
+      publishedRevision: '7',
+      publishedSchemaVersion: 1,
+      tcpNatmapCapable: true,
+    });
+    Object.assign(harness.mapping, {
+      groupId: '1',
+      natmapDesiredEnabled: false,
+    });
+    harness.service.onModuleInit();
+
+    const first = harness.service.publishLatestDesired();
+    await flushPromises();
+    expect(harness.client.publish).toHaveBeenNthCalledWith(
+      1,
+      'kt/network/v1/agents/nas-main/desired',
+      Buffer.alloc(0),
+      { qos: 1, retain: true },
+      expect.any(Function),
+    );
+    harness.publishCallback()(undefined);
+    await flushPromises();
+    expect(harness.client.publish).toHaveBeenNthCalledWith(
+      2,
+      'kt/network/v2/agents/nas-main/desired',
+      expect.any(Buffer),
+      { qos: 1, retain: true },
+      expect.any(Function),
+    );
+    expect(harness.state.publishedSchemaVersion).toBe(1);
+    harness.publishCallback()(new Error('PUBACK failed'));
+    await expect(first).rejects.toThrow('PUBACK failed');
+
+    const retry = harness.service.publishLatestDesired();
+    await flushPromises();
+    expect(harness.client.publish).toHaveBeenNthCalledWith(
+      3,
+      'kt/network/v1/agents/nas-main/desired',
+      Buffer.alloc(0),
+      { qos: 1, retain: true },
+      expect.any(Function),
+    );
+    harness.publishCallback()(undefined);
+    await flushPromises();
+    expect(harness.client.publish).toHaveBeenNthCalledWith(
+      4,
+      'kt/network/v2/agents/nas-main/desired',
+      expect.any(Buffer),
+      { qos: 1, retain: true },
+      expect.any(Function),
+    );
+    harness.publishCallback()(undefined);
+    await expect(retry).resolves.toBe(true);
+    expect(harness.state.publishedSchemaVersion).toBe(2);
+  });
+
+  it('allows explicit v2 downgrade only after every release, snapshot, group, and TCP tombstone gate passes', async () => {
+    const accepted = createDowngradeHarness();
+    await expect(accepted.service.requestV2Downgrade()).resolves.toBe(true);
+    expect(accepted.state.desiredSchemaVersion).toBe(1);
+    expect(accepted.groupFind).toHaveBeenCalledWith(
+      expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
+    );
+    expect(accepted.channelFind).toHaveBeenCalledWith(
+      expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
+    );
+
+    const releaseOn = createDowngradeHarness('on');
+    await expect(releaseOn.service.requestV2Downgrade()).resolves.toBe(false);
+    const unpublished = createDowngradeHarness();
+    unpublished.state.appliedRevision = '6';
+    await expect(unpublished.service.requestV2Downgrade()).resolves.toBe(false);
+    const mixedGroup = createDowngradeHarness();
+    mixedGroup.groups[0].protocolMode = 'tcp_udp';
+    await expect(mixedGroup.service.requestV2Downgrade()).resolves.toBe(false);
+    const tcpChannel = createDowngradeHarness();
+    tcpChannel.tcpChannels.push(
+      Object.assign(new NetworkPortForward(), {
+        desiredPresence: 'present',
+        isDeleted: false,
+        protocol: 'tcp',
+      }),
+    );
+    await expect(tcpChannel.service.requestV2Downgrade()).resolves.toBe(false);
+    const tcpTombstone = createDowngradeHarness();
+    tcpTombstone.tcpChannels.push(
+      Object.assign(new NetworkPortForward(), {
+        desiredPresence: 'absent',
+        isDeleted: false,
+        protocol: 'tcp',
+      }),
+    );
+    await expect(tcpTombstone.service.requestV2Downgrade()).resolves.toBe(false);
+  });
 });
+
+function v2Status(overrides: Record<string, unknown> = {}): Buffer {
+  return Buffer.from(
+    JSON.stringify({
+      agentId: 'nas-main',
+      observedAt: '2026-07-26T00:01:10Z',
+      online: true,
+      schemaVersion: 2,
+      supportedSchemaVersions: [1, 2],
+      tcpNatmapCapable: true,
+      ...overrides,
+    }),
+  );
+}
+
+function createDowngradeHarness(mode = 'off') {
+  const state = Object.assign(new NetworkAgentState(), {
+    agentId: 'nas-main',
+    appliedRevision: '7',
+    desiredRevision: '7',
+    desiredSchemaVersion: 2,
+    publishedRevision: '7',
+    publishedSchemaVersion: 2,
+  });
+  const groups = [
+    Object.assign(new NetworkPortForwardGroup(), {
+      isDeleted: false,
+      protocolMode: 'udp',
+    }),
+  ];
+  const tcpChannels: NetworkPortForward[] = [];
+  const groupFind = jest.fn(async () => groups);
+  const channelFind = jest.fn(async () => tcpChannels);
+  const stateRepository = {
+    findOne: async () => state,
+    save: jest.fn(async (value) => Object.assign(state, value)),
+  };
+  const manager = {
+    getRepository: (entity) => {
+      if (entity === NetworkAgentState) return stateRepository;
+      if (entity === NetworkPortForwardGroup) return { find: groupFind };
+      if (entity === NetworkPortForward) return { find: channelFind };
+      throw new Error('unexpected downgrade repository');
+    },
+  } as unknown as EntityManager;
+  const service = new NetworkAgentMqttService(
+    {
+      get: (key: string) =>
+        ({
+          NETWORK_AGENT_ID: 'nas-main',
+          NETWORK_TCP_NATMAP_RELEASE_MODE: mode,
+        })[key],
+    } as ConfigService,
+    { transaction: async (work) => await work(manager) } as unknown as DataSource,
+    { publishCommitted: jest.fn() } as never,
+    { stage: jest.fn() } as never,
+    { requestDrain: jest.fn() } as never,
+  );
+  return { channelFind, groupFind, groups, service, state, tcpChannels };
+}

@@ -48,6 +48,7 @@ describe('network management MQTT contracts', () => {
     expect(JSON.stringify(first)).not.toMatch(/password|secret|token/i);
     expect(first.mappings[0]).toMatchObject({ state: 'present' });
     expect(first.mappings[0]).not.toHaveProperty('desiredPresence');
+    expect(first).not.toHaveProperty('snapshotDigest');
     expect(first.mappings[0]).not.toHaveProperty('remark');
     expect(desiredSnapshotDigest(first)).toMatch(/^[0-9a-f]{64}$/);
     expect(first).toMatchObject({

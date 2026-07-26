@@ -159,6 +159,30 @@ describe('NetworkManagementController', () => {
     );
   });
 
+  it('keeps v1 responses flat and forwards only the channel ID', async () => {
+    service.update.mockResolvedValue({
+      groupId: '200',
+      id: '100',
+      protocol: 'udp',
+    });
+
+    const response = await request(apiUrl)
+      .put('/system/network/port-forward/100')
+      .send({ remark: 'legacy' })
+      .expect(200);
+
+    expect(response.body.data).toMatchObject({
+      groupId: '200',
+      id: '100',
+      protocol: 'udp',
+    });
+    expect(response.body.data.channels).toBeUndefined();
+    expect(service.update).toHaveBeenCalledWith(
+      '100',
+      expect.objectContaining({ remark: 'legacy' }),
+    );
+  });
+
   it('exposes asynchronous actions, history, and agent status routes', async () => {
     service.retry.mockResolvedValue({ id: '100' });
     service.enableKeeper.mockResolvedValue({ id: '100' });

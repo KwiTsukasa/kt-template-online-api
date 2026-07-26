@@ -7,11 +7,14 @@ import { NetworkAgentState } from '../../../src/modules/admin/platform-config/ne
 import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/network-endpoint-history.entity';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
 import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/network-management.service';
+import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
+import { NetworkPortForwardGroupService } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.service';
 import { NetworkTcpReleasePolicyService } from '../../../src/modules/admin/platform-config/network-management/network-tcp-release-policy.service';
 
 type Harness = {
   bootstrapOrder: string[];
   bootstrapExecute: jest.Mock;
+  groups: NetworkPortForwardGroup[];
   histories: NetworkEndpointHistory[];
   mappings: NetworkPortForward[];
   mqtt: jest.Mocked<Pick<NetworkAgentMqttService, 'requestDesiredPublish'>>;
@@ -29,6 +32,24 @@ function createHarness(
   releaseConfig: ReleaseConfig = {},
 ): Harness {
   const mappings = initialMappings;
+  const groups = Array.from(
+    new Set(mappings.map((mapping) => mapping.groupId)),
+  ).map((groupId) => {
+    const channels = mappings.filter((mapping) => mapping.groupId === groupId);
+    const protocols = new Set(channels.map((mapping) => mapping.protocol));
+    const first = channels[0];
+    return Object.assign(new NetworkPortForwardGroup(), {
+      externalPort: first.externalPort,
+      id: groupId,
+      internalPort: first.internalPort,
+      isDeleted: false,
+      name: first.name,
+      protocolMode:
+        protocols.size === 2 ? 'tcp_udp' : protocols.has('tcp') ? 'tcp' : 'udp',
+      remark: first.remark || null,
+      targetIpv4: first.targetIpv4,
+    });
+  });
   const histories: NetworkEndpointHistory[] = [];
   const bootstrapOrder: string[] = [];
   const bootstrapExecute = jest.fn().mockImplementation(async () => {
@@ -49,17 +70,41 @@ function createHarness(
     create: (input) =>
       Object.assign(new NetworkPortForward(), { id: '100' }, input),
     createQueryBuilder: () => createListBuilder(mappings),
+    find: async ({ where }) =>
+      mappings.filter((mapping) =>
+        Object.entries(where).every(([key, value]) => mapping[key] === value),
+      ),
     findOne: async ({ where }) =>
       mappings.find((mapping) =>
         Object.entries(where).every(([key, value]) => mapping[key] === value),
       ) || null,
-    save: async (mapping) => {
-      const index = mappings.findIndex((item) => item.id === mapping.id);
-      if (index >= 0) mappings[index] = mapping;
-      else mappings.push(mapping);
-      return mapping;
+    save: async (value) => {
+      const values = Array.isArray(value) ? value : [value];
+      for (const mapping of values) {
+        const index = mappings.findIndex((item) => item.id === mapping.id);
+        if (index >= 0) mappings[index] = mapping;
+        else mappings.push(mapping);
+      }
+      return value;
     },
   } as unknown as Repository<NetworkPortForward>;
+  const groupRepository = {
+    create: (input) =>
+      Object.assign(new NetworkPortForwardGroup(), { id: '200' }, input),
+    findOne: async ({ where }) =>
+      groups.find((group) =>
+        Object.entries(where).every(([key, value]) => group[key] === value),
+      ) || null,
+    save: async (value) => {
+      const values = Array.isArray(value) ? value : [value];
+      for (const group of values) {
+        const index = groups.findIndex((item) => item.id === group.id);
+        if (index >= 0) groups[index] = group;
+        else groups.push(group);
+      }
+      return value;
+    },
+  } as unknown as Repository<NetworkPortForwardGroup>;
   const stateRepository = {
     create: (input) => Object.assign(new NetworkAgentState(), input),
     createQueryBuilder: () => {
@@ -84,6 +129,7 @@ function createHarness(
   const manager = {
     getRepository: (entity) => {
       if (entity === NetworkPortForward) return mappingRepository;
+      if (entity === NetworkPortForwardGroup) return groupRepository;
       if (entity === NetworkAgentState) return stateRepository;
       if (entity === NetworkEndpointHistory) return historyRepository;
       throw new Error('unexpected repository');
@@ -112,10 +158,20 @@ function createHarness(
     configService,
     mqtt as unknown as NetworkAgentMqttService,
     new NetworkTcpReleasePolicyService(configService),
+    new NetworkPortForwardGroupService(
+      groupRepository,
+      mappingRepository,
+      historyRepository,
+      dataSource,
+      configService,
+      mqtt as unknown as NetworkAgentMqttService,
+      new NetworkTcpReleasePolicyService(configService),
+    ),
   );
   return {
     bootstrapExecute,
     bootstrapOrder,
+    groups,
     histories,
     mappings,
     mqtt,
@@ -129,6 +185,7 @@ function createMapping(
 ): NetworkPortForward {
   return Object.assign(new NetworkPortForward(), {
     activeKey: 'udp:9000',
+    activeGroupProtocolKey: '200:udp',
     currentObservedAt: null,
     currentPublicIpv4: null,
     currentPublicPort: null,
@@ -137,12 +194,15 @@ function createMapping(
     desiredPresence: 'present',
     desiredRevision: '3',
     externalPort: 9000,
+    groupId: '200',
     id: '100',
     internalPort: 9000,
     isDeleted: false,
     keeperDesiredEnabled: false,
     keeperStatus: 'disabled',
     name: 'rule',
+    natmapDesiredEnabled: false,
+    natmapStatus: 'disabled',
     protocol: 'udp',
     reportedRevision: '0',
     syncStatus: 'synced',
@@ -173,7 +233,10 @@ function createListBuilder(mappings: NetworkPortForward[]) {
       }
       return builder;
     },
-    getManyAndCount: async () => [rows.slice(offset, offset + limit), rows.length],
+    getManyAndCount: async () => [
+      rows.slice(offset, offset + limit),
+      rows.length,
+    ],
     orderBy: () => builder,
     skip: (value: number) => {
       offset = value;
@@ -212,14 +275,39 @@ describe('NetworkManagementService', () => {
     });
     expect(harness.state.desiredRevision).toBe('1');
     expect(harness.mappings[0]).toMatchObject({
+      activeGroupProtocolKey: expect.any(String),
       activeKey: 'udp:9000',
       desiredRevision: '1',
+      groupId: expect.any(String),
     });
     expect(harness.mappings[0].desiredIssuedAt.toISOString()).toBe(
       harness.state.desiredIssuedAt.toISOString(),
     );
     expect(harness.mqtt.requestDesiredPublish).toHaveBeenCalledTimes(1);
     expect(harness.bootstrapExecute).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps v1 channel-ID update and delete from mutating a multi-channel group', async () => {
+    const udp = createMapping({
+      activeGroupProtocolKey: '200:udp',
+      groupId: '200',
+    });
+    const tcp = createMapping({
+      activeGroupProtocolKey: '200:tcp',
+      activeKey: 'tcp:9000',
+      groupId: '200',
+      id: '101',
+      protocol: 'tcp',
+    });
+    const harness = createHarness([udp, tcp], { mode: 'on' });
+
+    await expect(
+      harness.service.update('100', { remark: 'legacy update' }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(harness.service.remove('100')).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(harness.state.desiredRevision).toBe('3');
   });
 
   it('uses insert-ignore bootstrap before the singleton pessimistic lock', async () => {
@@ -550,6 +638,7 @@ describe('NetworkManagementService', () => {
     await expect(harness.service.disableKeeper('100')).resolves.toMatchObject({
       keeperDesiredEnabled: false,
     });
+    mapping.syncStatus = 'synced';
     await expect(harness.service.remove('100')).resolves.toMatchObject({
       desiredPresence: 'absent',
     });

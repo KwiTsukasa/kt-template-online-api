@@ -14,10 +14,7 @@ import {
   NetworkPortForwardUpdateDto,
 } from './network-management.dto';
 import { NetworkPortForward } from './network-management.entity';
-import {
-  isIpv4Address,
-  portForwardActiveKey,
-} from './network-management.types';
+import { isIpv4Address } from './network-management.types';
 import {
   NetworkTcpReleasePolicyError,
   NetworkTcpReleasePolicyService,
@@ -25,6 +22,7 @@ import {
   type TcpReleaseMutation,
   type TcpReleaseState,
 } from './network-tcp-release-policy.service';
+import { NetworkPortForwardGroupService } from './network-port-forward-group.service';
 
 const DEFAULT_AGENT_ID = 'nas-main';
 const DEFAULT_TARGET_IPV4 = '192.168.31.224';
@@ -42,6 +40,7 @@ export class NetworkManagementService {
     private readonly configService: ConfigService,
     private readonly mqttService: NetworkAgentMqttService,
     private readonly tcpReleasePolicy: NetworkTcpReleasePolicyService,
+    private readonly groupService: NetworkPortForwardGroupService,
   ) {}
 
   async list(query: NetworkPortForwardListQueryDto = {}) {
@@ -79,135 +78,15 @@ export class NetworkManagementService {
   }
 
   async create(input: NetworkPortForwardCreateDto) {
-    this.assertReleaseMutation({
-      after: this.releaseState({
-        externalPort: input.externalPort,
-        internalPort: input.internalPort,
-        natmapDesiredEnabled: false,
-        protocol: input.protocol,
-      }),
-      kind: 'create',
-    });
-    const saved = await this.dataSource.transaction(async (manager) => {
-      const state = await this.lockAgentState(manager);
-      const repository = manager.getRepository(NetworkPortForward);
-      if ((await repository.count({ where: { isDeleted: false } })) >= 64) {
-        throwVbenError('端口转发记录已达到 64 条上限', HttpStatus.CONFLICT);
-      }
-      const activeKey = portForwardActiveKey(
-        input.protocol,
-        input.externalPort,
-      );
-      if (await repository.findOne({ where: { activeKey } })) {
-        throwVbenError('同协议外部端口已存在', HttpStatus.CONFLICT);
-      }
-      const mapping = repository.create({
-        activeKey,
-        currentObservedAt: null,
-        currentPublicIpv4: null,
-        currentPublicPort: null,
-        currentValidUntil: null,
-        desiredPresence: 'present',
-        externalPort: input.externalPort,
-        internalPort: input.internalPort,
-        isDeleted: false,
-        keeperDesiredEnabled: false,
-        keeperStatus: 'disabled',
-        lastErrorCode: null,
-        lastErrorMessage: null,
-        name: this.normalizeName(input.name),
-        probeRequestId: null,
-        protocol: input.protocol,
-        remark: input.remark?.trim() || null,
-        reportedRevision: '0',
-        syncStatus: 'pending',
-        targetIpv4: state.targetIpv4,
-      });
-      this.advanceRevision(state, mapping);
-      try {
-        await repository.save(mapping);
-        await manager.getRepository(NetworkAgentState).save(state);
-      } catch (error) {
-        if (this.isDuplicateKeyError(error)) {
-          throwVbenError('同协议外部端口已存在', HttpStatus.CONFLICT);
-        }
-        throw error;
-      }
-      return mapping;
-    });
-    this.notifyDesiredChanged();
-    return this.serialize(saved);
+    return this.groupService.createV1(input);
   }
 
   async update(id: string, input: NetworkPortForwardUpdateDto) {
-    if (Object.keys(input).length === 0) {
-      throwVbenError('至少提供一个修改字段', HttpStatus.BAD_REQUEST);
-    }
-    return this.mutate(id, async (mapping, manager) => {
-      if (mapping.desiredPresence === 'absent') {
-        throwVbenError('端口转发正在删除', HttpStatus.CONFLICT);
-      }
-      const protocol = input.protocol || mapping.protocol;
-      const externalPort = input.externalPort || mapping.externalPort;
-      const internalPort = input.internalPort || mapping.internalPort;
-      this.assertReleaseMutation({
-        after: this.releaseState({
-          externalPort,
-          internalPort,
-          natmapDesiredEnabled: mapping.natmapDesiredEnabled,
-          protocol,
-        }),
-        before: this.releaseState(mapping),
-        kind: 'update',
-      });
-      if (
-        mapping.keeperDesiredEnabled &&
-        (protocol !== 'udp' || externalPort !== internalPort)
-      ) {
-        throwVbenError(
-          '请先停用 Keeper 再修改协议或同源端口',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      const activeKey = portForwardActiveKey(protocol, externalPort);
-      if (activeKey !== mapping.activeKey) {
-        const conflict = await manager
-          .getRepository(NetworkPortForward)
-          .findOne({ where: { activeKey } });
-        if (conflict && conflict.id !== mapping.id) {
-          throwVbenError('同协议外部端口已存在', HttpStatus.CONFLICT);
-        }
-      }
-      if (input.name !== undefined) {
-        mapping.name = this.normalizeName(input.name);
-      }
-      mapping.remark =
-        input.remark === undefined
-          ? mapping.remark
-          : input.remark.trim() || null;
-      mapping.protocol = protocol;
-      mapping.externalPort = externalPort;
-      mapping.internalPort = internalPort;
-      mapping.activeKey = activeKey;
-      mapping.syncStatus = 'pending';
-    });
+    return this.groupService.updateV1(id, input);
   }
 
   async remove(id: string) {
-    return this.mutate(id, async (mapping) => {
-      if (mapping.desiredPresence === 'absent') {
-        throwVbenError('端口转发正在删除', HttpStatus.CONFLICT);
-      }
-      this.assertReleaseMutation({
-        current: this.releaseState(mapping),
-        kind: 'delete',
-      });
-      mapping.desiredPresence = 'absent';
-      mapping.keeperDesiredEnabled = false;
-      mapping.probeRequestId = null;
-      mapping.syncStatus = 'deleting';
-      this.withdrawCurrentEndpoint(mapping);
-    });
+    return this.groupService.removeV1(id);
   }
 
   async retry(id: string) {
@@ -389,10 +268,7 @@ export class NetworkManagementService {
       this.tcpReleasePolicy.assertMutationAllowed(mutation);
     } catch (error) {
       if (error instanceof NetworkTcpReleasePolicyError) {
-        throwVbenError(
-          '当前发布模式不允许该 TCP 操作',
-          HttpStatus.CONFLICT,
-        );
+        throwVbenError('当前发布模式不允许该 TCP 操作', HttpStatus.CONFLICT);
       }
       throw error;
     }
@@ -454,6 +330,7 @@ export class NetworkManagementService {
       new Date(mapping.currentValidUntil).getTime() > Date.now();
     return {
       id: String(mapping.id),
+      groupId: String(mapping.groupId),
       name: mapping.name,
       remark: mapping.remark || null,
       protocol: mapping.protocol,
@@ -462,12 +339,14 @@ export class NetworkManagementService {
       targetIpv4: mapping.targetIpv4,
       desiredPresence: mapping.desiredPresence,
       keeperDesiredEnabled: mapping.keeperDesiredEnabled,
+      natmapDesiredEnabled: mapping.natmapDesiredEnabled,
       probeRequestId: mapping.probeRequestId || null,
       desiredRevision: String(mapping.desiredRevision),
       desiredIssuedAt: mapping.desiredIssuedAt,
       reportedRevision: String(mapping.reportedRevision),
       syncStatus: mapping.syncStatus,
       keeperStatus: mapping.keeperStatus,
+      natmapStatus: mapping.natmapStatus,
       currentPublicIpv4: leaseValid ? mapping.currentPublicIpv4 : null,
       currentPublicPort: leaseValid ? mapping.currentPublicPort : null,
       currentPublicEndpoint: leaseValid
@@ -533,17 +412,6 @@ export class NetworkManagementService {
       );
     }
     return target;
-  }
-
-  private normalizeName(value: string): string {
-    const normalized = value.trim();
-    if (!normalized || Buffer.byteLength(normalized, 'utf8') > 128) {
-      throwVbenError(
-        '规则名称超出 Agent UTF-8 长度限制',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    return normalized;
   }
 
   private isDuplicateKeyError(error: unknown): boolean {

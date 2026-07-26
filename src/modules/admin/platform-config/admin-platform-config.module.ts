@@ -18,6 +18,8 @@ import { NetworkManagementController } from '@/modules/admin/platform-config/net
 import { NetworkManagementEventStreamService } from '@/modules/admin/platform-config/network-management/network-management-event-stream.service';
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/network-management.entity';
 import { NetworkPortForwardGroup } from '@/modules/admin/platform-config/network-management/network-port-forward-group.entity';
+import { NetworkPortForwardGroupController } from '@/modules/admin/platform-config/network-management/network-port-forward-group.controller';
+import { NetworkPortForwardGroupService } from '@/modules/admin/platform-config/network-management/network-port-forward-group.service';
 import { NetworkManagementService } from '@/modules/admin/platform-config/network-management/network-management.service';
 import { NetworkStunMessageSourceAdapter } from '@/modules/admin/platform-config/network-management/network-stun-message-source.adapter';
 import { NetworkTcpReleasePolicyService } from '@/modules/admin/platform-config/network-management/network-tcp-release-policy.service';
@@ -55,6 +57,7 @@ export const ADMIN_PLATFORM_CONFIG_DIRECT_CONTROLLERS = [
   AdminTimezoneController,
   EnvironmentDashboardController,
   NetworkManagementController,
+  NetworkPortForwardGroupController,
 ];
 
 export const ADMIN_PLATFORM_CONFIG_IMPORTED_CONTROLLERS = [
@@ -88,6 +91,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   EnvironmentEventMaterializer,
   EnvironmentEventStreamService,
   NetworkManagementService,
+  NetworkPortForwardGroupService,
   NetworkManagementEventStreamService,
   NetworkDnsPodClient,
   NetworkDdnsService,

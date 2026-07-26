@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
+import { TextDecoder } from 'node:util';
 
 export const NETWORK_AGENT_V2_SCHEMA_VERSION = 2 as const;
 export const NETWORK_AGENT_V2_MAX_CHANNELS = 64;
+export const NETWORK_AGENT_V2_MAX_MESSAGE_BYTES = 256 * 1024;
 
 export type NetworkV2Protocol = 'tcp' | 'udp';
 export type NetworkV2DesiredPresence = 'absent' | 'present';
@@ -154,7 +156,8 @@ export class NetworkV2MessageValidationError extends Error {}
 const ID_PATTERN = /^\d{1,32}$/;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const ERROR_CODE_PATTERN = /^[a-z0-9_]{1,64}$/;
-const RFC3339_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+const RFC3339_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|([+-])(\d{2}):(\d{2}))$/;
+type NetworkV2WirePayload = Buffer | string;
 
 export function canonicalDesiredChannelDigestV2(
   channel: NetworkDesiredChannelV2,
@@ -174,7 +177,13 @@ export function canonicalDesiredSnapshotDigestV2(
   });
 }
 
-export function parseDesiredSnapshotV2(value: unknown): NetworkDesiredSnapshotV2 {
+export function parseDesiredSnapshotV2(
+  payload: NetworkV2WirePayload,
+): NetworkDesiredSnapshotV2 {
+  return validateDesiredSnapshotV2(parseWirePayloadV2(payload));
+}
+
+function validateDesiredSnapshotV2(value: unknown): NetworkDesiredSnapshotV2 {
   const record = exactRecord(
     value,
     ['agentId', 'channels', 'issuedAt', 'schemaVersion', 'snapshotDigest', 'snapshotRevision'],
@@ -197,7 +206,13 @@ export function parseDesiredSnapshotV2(value: unknown): NetworkDesiredSnapshotV2
   return snapshot;
 }
 
-export function parseReportedSnapshotV2(value: unknown): NetworkReportedSnapshotV2 {
+export function parseReportedSnapshotV2(
+  payload: NetworkV2WirePayload,
+): NetworkReportedSnapshotV2 {
+  return validateReportedSnapshotV2(parseWirePayloadV2(payload));
+}
+
+function validateReportedSnapshotV2(value: unknown): NetworkReportedSnapshotV2 {
   const record = exactRecord(value, ['agentId', 'channels', 'reportedAt', 'schemaVersion', 'snapshotDigest', 'snapshotRevision'], [], 'reported');
   assertSchema(record.schemaVersion);
   if (!Array.isArray(record.channels) || record.channels.length > NETWORK_AGENT_V2_MAX_CHANNELS) invalid('reported.channels');
@@ -213,7 +228,13 @@ export function parseReportedSnapshotV2(value: unknown): NetworkReportedSnapshot
   };
 }
 
-export function parseStatusSnapshotV2(value: unknown): NetworkStatusSnapshotV2 {
+export function parseStatusSnapshotV2(
+  payload: NetworkV2WirePayload,
+): NetworkStatusSnapshotV2 {
+  return validateStatusSnapshotV2(parseWirePayloadV2(payload));
+}
+
+function validateStatusSnapshotV2(value: unknown): NetworkStatusSnapshotV2 {
   const record = exactRecord(value, ['agentId', 'observedAt', 'online', 'schemaVersion', 'supportedSchemaVersions', 'tcpNatmapCapable'], ['errorCode', 'errorMessage', 'publicIpv6', 'startedAt', 'version'], 'status');
   assertSchema(record.schemaVersion);
   if (!Array.isArray(record.supportedSchemaVersions) || record.supportedSchemaVersions.length !== 2 || record.supportedSchemaVersions[0] !== 1 || record.supportedSchemaVersions[1] !== 2) invalid('supportedSchemaVersions');
@@ -232,7 +253,13 @@ export function parseStatusSnapshotV2(value: unknown): NetworkStatusSnapshotV2 {
   };
 }
 
-export function parseEndpointEventV2(value: unknown): NetworkEndpointEventV2 {
+export function parseEndpointEventV2(
+  payload: NetworkV2WirePayload,
+): NetworkEndpointEventV2 {
+  return validateEndpointEventV2(parseWirePayloadV2(payload));
+}
+
+function validateEndpointEventV2(value: unknown): NetworkEndpointEventV2 {
   const record = exactRecord(value, ['agentId', 'channelId', 'eventId', 'groupId', 'mechanism', 'occurredAt', 'protocol', 'revision', 'schemaVersion', 'type'], ['endpoint', 'reason'], 'event');
   assertSchema(record.schemaVersion);
   const protocol = enumValue(record.protocol, ['tcp', 'udp'] as const, 'protocol');
@@ -309,6 +336,7 @@ function canonicalDesiredChannelV2(channel: NetworkDesiredChannelV2): object {
 }
 
 function compareDesiredChannelsV2(left: NetworkDesiredChannelV2, right: NetworkDesiredChannelV2): number { return (left.channelId < right.channelId ? -1 : left.channelId > right.channelId ? 1 : 0) || (left.protocol < right.protocol ? -1 : left.protocol > right.protocol ? 1 : 0) || left.externalPort - right.externalPort; }
+function parseWirePayloadV2(payload: NetworkV2WirePayload): unknown { let text: string; if (typeof payload === 'string') { if (Buffer.byteLength(payload, 'utf8') > NETWORK_AGENT_V2_MAX_MESSAGE_BYTES) invalid('message size'); text = payload; } else if (Buffer.isBuffer(payload)) { if (payload.length > NETWORK_AGENT_V2_MAX_MESSAGE_BYTES) invalid('message size'); try { text = new TextDecoder('utf-8', { fatal: true }).decode(payload); } catch { invalid('message UTF-8'); } } else { invalid('message payload'); } try { return JSON.parse(text); } catch { invalid('message JSON'); } }
 function optionalEndpoint(value: unknown, mechanism: NetworkV2EndpointMechanism): NetworkEndpointLeaseV2 | undefined { return value === undefined ? undefined : parseEndpointV2(value, mechanism); }
 function optionalBounded(value: unknown, name: string, max: number): string | undefined { return value === undefined ? undefined : boundedString(value, name, max); }
 function optionalErrorCode(value: unknown, name: string): string | undefined { return value === undefined ? undefined : errorCode(value, name); }
@@ -320,14 +348,14 @@ function requestId(value: unknown, name: string): string { const result = string
 function digestValue(value: unknown, name: string): string { const result = stringValue(value, name, 64); if (!/^[0-9a-f]{64}$/.test(result)) invalid(name); return result; }
 function errorCode(value: unknown, name: string): string { const result = stringValue(value, name, 64); if (!ERROR_CODE_PATTERN.test(result)) invalid(name); return result; }
 function boundedString(value: unknown, name: string, max: number): string { const result = stringValue(value, name, max); if (result.length === 0) invalid(name); return result; }
-function stringValue(value: unknown, name: string, max: number): string { if (typeof value !== 'string' || value.length > max) invalid(name); return value; }
+function stringValue(value: unknown, name: string, max: number): string { if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > max) invalid(name); return value; }
 function positiveRevision(value: unknown, name: string): number { if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) invalid(name); return value; }
 function port(value: unknown, name: string): number { if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 65535) invalid(name); return value; }
 function booleanValue(value: unknown, name: string): boolean { if (typeof value !== 'boolean') invalid(name); return value; }
 function enumValue<T extends string>(value: unknown, allowed: readonly T[], name: string): T { if (typeof value !== 'string' || !allowed.includes(value as T)) invalid(name); return value as T; }
-function isoString(value: unknown, name: string): string { const result = stringValue(value, name, 64); if (!RFC3339_PATTERN.test(result) || Number.isNaN(Date.parse(result))) invalid(name); return result; }
-function publicIpv4(value: unknown): string { const result = stringValue(value, 'publicIpv4', 15); const [a, b, c] = result.split('.').map(Number); if (isIP(result) !== 4 || a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0 && (c === 0 || c === 2)) || (a === 192 && b === 88 && c === 99) || (a === 198 && (b === 18 || b === 19)) || (a === 198 && b === 51 && c === 100) || (a === 203 && b === 0 && c === 113)) invalid('publicIpv4'); return result; }
-function publicIpv6(value: unknown): string { const result = stringValue(value, 'publicIpv6', 45); if (isIP(result) !== 6 || /^(::1|::|fc|fd|fe[89ab]|ff)/i.test(result)) invalid('publicIpv6'); return result.toLowerCase().replace(/(^|:)0+([0-9a-f])/g, '$1$2'); }
+function isoString(value: unknown, name: string): string { const result = stringValue(value, name, 64); const match = RFC3339_PATTERN.exec(result); if (!match) invalid(name); const year = Number(match[1]); const month = Number(match[2]); const day = Number(match[3]); const hour = Number(match[4]); const minute = Number(match[5]); const second = Number(match[6]); const offsetHour = match[8] === 'Z' ? 0 : Number(match[10]); const offsetMinute = match[8] === 'Z' ? 0 : Number(match[11]); const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0); const days = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; if (month < 1 || month > 12 || day < 1 || day > days[month - 1] || hour > 23 || minute > 59 || second > 59 || offsetHour > 23 || offsetMinute > 59 || Number.isNaN(Date.parse(result))) invalid(name); return result; }
+function publicIpv4(value: unknown): string { const result = stringValue(value, 'publicIpv4', 15); const [a, b, c] = result.split('.').map(Number); if (isIP(result) !== 4 || a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 192 && b === 0) || (a === 192 && b === 88 && c === 99) || (a === 198 && (b === 18 || b === 19)) || (a === 198 && b === 51 && c === 100) || (a === 203 && b === 0 && c === 113)) invalid('publicIpv4'); return result; }
+function publicIpv6(value: unknown): string { const result = stringValue(value, 'publicIpv6', 45); if (isIP(result) !== 6) invalid('publicIpv6'); let normalized: string; try { const hostname = new URL(`http://[${result}]/`).hostname; normalized = hostname.slice(1, -1).toLowerCase(); } catch { invalid('publicIpv6'); } const firstHextet = Number.parseInt(normalized.split(':', 1)[0], 16); if (!Number.isInteger(firstHextet) || firstHextet < 0x2000 || firstHextet > 0x3fff) invalid('publicIpv6'); return normalized; }
 function digest(value: unknown): string { return createHash('sha256').update(goJsonStringify(value)).digest('hex'); }
 function goJsonStringify(value: unknown): string { return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'); }
 function invalid(name: string): never { throw new NetworkV2MessageValidationError(`invalid network v2 ${name}`); }

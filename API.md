@@ -47,7 +47,7 @@ Admin、Component、Dict、MinIO、Blog 管理、WordPress 管理和 QQBot 管�
 ### ID 与时间
 
 - 后台主键使用 Snowflake 数字 ID，接口按字符串返回，避免 JavaScript 长整型精度丢失。
-- 后端格式化时间字段统一使用 `KtDateTime extends Date`：Entity 通过 `@KtDateTimeColumn(format)`、`@KtCreateDateColumn(format)`、`@KtUpdateDateColumn(format)` 在 TypeORM hydrate 边界转换；DTO/外部数据源通过 `@KtDateTimeField(format)` + `transformKtDateTimeFields()` 转换。默认输出 `YYYY-MM-DD HH:mm:ss`，可在装饰器中传入格式字符串；响应包装不做递归遍历。
+- 后端格式化时间字段统一使用 `KtDateTime extends Date`：Entity 通过 `@KtDateTimeColumn(format)`、`@KtCreateDateColumn(format)`、`@KtUpdateDateColumn(format)` 在 TypeORM hydrate 边界转换；DTO/外部数据源通过 `@KtDateTimeField(format)` + `transformKtDateTimeFields()` 转换。默认输出 `YYYY-MM-DD HH:mm:ss`，可在装饰器中传入格式字符串；Create/Update 列显式配置 `precision` 时自动生成同精度 `CURRENT_TIMESTAMP(n)`，调用方显式 `default/onUpdate` 保持优先；响应包装不做递归遍历。
 - `POST */save` 默认会删除请求体里的 `id`，防止新增接口误用前端主键。
 
 ## Runtime Health

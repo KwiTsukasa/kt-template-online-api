@@ -27,6 +27,28 @@ class DateTimeColumnFixture {
 
   @KtUpdateDateColumn('YYYY-MM-DD')
   updateTime!: KtDateTime;
+
+  @KtCreateDateColumn({ precision: 3, type: 'datetime' })
+  preciseCreateTime!: KtDateTime;
+
+  @KtUpdateDateColumn({ precision: 3, type: 'datetime' })
+  preciseUpdateTime!: KtDateTime;
+
+  @KtCreateDateColumn({
+    default: null,
+    nullable: true,
+    precision: 3,
+    type: 'datetime',
+  })
+  customCreateTime!: KtDateTime | null;
+
+  @KtUpdateDateColumn({
+    default: () => 'CUSTOM_DEFAULT',
+    onUpdate: 'CUSTOM_ON_UPDATE',
+    precision: 3,
+    type: 'datetime',
+  })
+  customUpdateTime!: KtDateTime;
 }
 
 describe('KtDateTime decorators', () => {
@@ -75,6 +97,37 @@ describe('KtDateTime decorators', () => {
     expect(String(publishTime)).toBe('2026/10/13');
     expect(String(createTime)).toBe('2026-05-13 10:31:00');
     expect(String(updateTime)).toBe('2026-05-13');
+  });
+
+  it('matches generated current timestamp defaults to explicit column precision', () => {
+    const metadata = getMetadataArgsStorage().columns.filter(
+      (column) => column.target === DateTimeColumnFixture,
+    );
+    const createOptions = metadata.find(
+      (column) => column.propertyName === 'preciseCreateTime',
+    )?.options;
+    const updateOptions = metadata.find(
+      (column) => column.propertyName === 'preciseUpdateTime',
+    )?.options;
+    const customCreateOptions = metadata.find(
+      (column) => column.propertyName === 'customCreateTime',
+    )?.options;
+    const customUpdateOptions = metadata.find(
+      (column) => column.propertyName === 'customUpdateTime',
+    )?.options;
+
+    expect((createOptions?.default as () => string)()).toBe(
+      'CURRENT_TIMESTAMP(3)',
+    );
+    expect((updateOptions?.default as () => string)()).toBe(
+      'CURRENT_TIMESTAMP(3)',
+    );
+    expect(updateOptions?.onUpdate).toBe('CURRENT_TIMESTAMP(3)');
+    expect(customCreateOptions?.default).toBeNull();
+    expect((customUpdateOptions?.default as () => string)()).toBe(
+      'CUSTOM_DEFAULT',
+    );
+    expect(customUpdateOptions?.onUpdate).toBe('CUSTOM_ON_UPDATE');
   });
 
   it('keeps DTO transformer datetime fields usable as Date values', () => {

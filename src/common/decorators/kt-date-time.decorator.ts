@@ -201,8 +201,9 @@ export function KtCreateDateColumn(
   options?: ColumnOptions,
 ): PropertyDecorator {
   const normalized = normalizeDateTimeColumnOptions(formatOrOptions, options);
+  const columnOptions = applyCurrentTimestampPrecision(normalized.options);
   return CreateDateColumn({
-    ...normalized.options,
+    ...columnOptions,
     transformer: mergeDateTimeTransformer(
       normalized.options.transformer,
       normalized.format,
@@ -248,8 +249,12 @@ export function KtUpdateDateColumn(
   options?: ColumnOptions,
 ): PropertyDecorator {
   const normalized = normalizeDateTimeColumnOptions(formatOrOptions, options);
+  const columnOptions = applyCurrentTimestampPrecision(
+    normalized.options,
+    true,
+  );
   return UpdateDateColumn({
-    ...normalized.options,
+    ...columnOptions,
     transformer: mergeDateTimeTransformer(
       normalized.options.transformer,
       normalized.format,
@@ -308,6 +313,23 @@ function normalizeDateTimeColumnOptions(
   return {
     format: KT_DATETIME_FORMAT,
     options: formatOrOptions || {},
+  };
+}
+
+function applyCurrentTimestampPrecision(
+  options: ColumnOptions,
+  includeOnUpdate = false,
+): ColumnOptions {
+  if (options.precision === undefined) return options;
+
+  const currentTimestamp = `CURRENT_TIMESTAMP(${options.precision})`;
+  return {
+    ...options,
+    default:
+      options.default === undefined ? () => currentTimestamp : options.default,
+    ...(includeOnUpdate && options.onUpdate === undefined
+      ? { onUpdate: currentTimestamp }
+      : {}),
   };
 }
 

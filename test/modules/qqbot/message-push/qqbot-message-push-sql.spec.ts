@@ -489,7 +489,13 @@ describe('QQBot message-push SQL contract', () => {
           and name = 'STUN 映射端口变更默认模板' and is_deleted = 0
       );
     `);
-    for (const sql of [bootstrapSql, seedSql, migrationSql]) expect(sql).toContain(expectedTemplate);
+    for (const sql of [bootstrapSql, seedSql]) expect(sql).toContain(expectedTemplate);
+    expect(migrationSql).toContain(
+      expectedTemplate.replace(
+        'insert into qqbot_message_template',
+        'insert ignore into qqbot_message_template',
+      ),
+    );
   });
 
   it('adds the exact TCP NATMap template without changing the STUN template', () => {
@@ -503,13 +509,23 @@ describe('QQBot message-push SQL contract', () => {
           and name = 'TCP NATMap 端点变更默认模板' and is_deleted = 0
       );
     `);
-    for (const sql of [bootstrapSql, seedSql, migrationSql]) {
+    for (const sql of [bootstrapSql, seedSql]) {
       expect(sql).toContain(expectedTcpTemplate);
       expect(sql.match(/2041700000000200602/g)).toHaveLength(1);
       expect(sql).toContain(
         "'network.stun.mapping-port-changed', '当前STUN的端口已变更为${{endpoint}}'",
       );
     }
+    expect(migrationSql).toContain(
+      expectedTcpTemplate.replace(
+        'insert into qqbot_message_template',
+        'insert ignore into qqbot_message_template',
+      ),
+    );
+    expect(migrationSql.match(/2041700000000200602/g)).toHaveLength(1);
+    expect(migrationSql).toContain(
+      "'network.stun.mapping-port-changed', '当前STUN的端口已变更为${{endpoint}}'",
+    );
   });
 
   it('keeps the TCP template source key aligned with source version 1', () => {

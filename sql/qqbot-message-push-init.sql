@@ -1,6 +1,8 @@
 -- QQBot 系统消息推送生产增量迁移。
 -- 仅创建本功能六表、默认模板、菜单和角色授权，不执行历史 QQBot 迁移。
 
+SET NAMES utf8mb4;
+
 CREATE TABLE IF NOT EXISTS qqbot_message_subscription (
   id BIGINT NOT NULL PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
@@ -106,7 +108,7 @@ CREATE TABLE IF NOT EXISTS qqbot_message_delivery (
   KEY idx_qqbot_message_delivery_history (subscription_id, message_event_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO qqbot_message_template (id, name, source_key, content, enabled, remark, is_deleted)
+INSERT IGNORE INTO qqbot_message_template (id, name, source_key, content, enabled, remark, is_deleted)
 SELECT
   2041700000000200601,
   'STUN 映射端口变更默认模板',
@@ -123,7 +125,7 @@ WHERE NOT EXISTS (
     AND is_deleted = 0
 );
 
-INSERT INTO qqbot_message_template (id, name, source_key, content, enabled, remark, is_deleted)
+INSERT IGNORE INTO qqbot_message_template (id, name, source_key, content, enabled, remark, is_deleted)
 SELECT
   2041700000000200602,
   'TCP NATMap 端点变更默认模板',

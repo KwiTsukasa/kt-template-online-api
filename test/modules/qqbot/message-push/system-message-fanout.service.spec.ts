@@ -23,6 +23,7 @@ import {
 
 const NOW = new Date('2026-07-24T00:00:00.000Z');
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
+const TCP_SOURCE_KEY = 'network.tcp.natmap-endpoint-changed';
 const JOB_SOURCE_KEY = 'system.job.completed';
 const RESOURCE_KEY = '9007199254740993';
 
@@ -798,6 +799,52 @@ describe('SystemMessageFanoutService', () => {
     expect(fixture.deliveries()[0].expiresAt.getTime()).toBe(
       NOW.getTime() + SYSTEM_MESSAGE_RETRY_WINDOW_MS,
     );
+  });
+
+  it('fans out the independent TCP NATMap source without source-specific core logic', async () => {
+    const adapter = sourceAdapter(TCP_SOURCE_KEY);
+    adapter.eventResourceKey.mockImplementation((payload) =>
+      typeof payload.tcpChannelId === 'string' ? payload.tcpChannelId : '',
+    );
+    adapter.subscriptionResourceKey.mockImplementation((config) =>
+      typeof config.tcpChannelId === 'string' ? config.tcpChannelId : null,
+    );
+    adapter.resolveDelivery.mockResolvedValue({
+      reasonCode: null,
+      status: 'ready',
+      variables: { endpoint: 'tcp.example.com:45101' },
+    });
+    const fixture = setup(
+      {
+        events: [
+          event({
+            payload: {
+              publicIpv4: '203.0.113.10',
+              publicPort: 45_101,
+              tcpChannelId: RESOURCE_KEY,
+            },
+            sourceKey: TCP_SOURCE_KEY,
+          }),
+        ],
+        subscriptions: [
+          subscription({
+            sourceConfig: {
+              ddnsRecordId: '9007199254740995',
+              tcpChannelId: RESOURCE_KEY,
+            },
+            sourceKey: TCP_SOURCE_KEY,
+          }),
+        ],
+        templates: [template({ sourceKey: TCP_SOURCE_KEY })],
+      },
+      adapter,
+    );
+
+    await expect(fixture.service.runOnce(NOW)).resolves.toBe(1);
+    expect(fixture.deliveries()[0]).toMatchObject({
+      renderedMessage: 'endpoint=tcp.example.com:45101',
+      variableSnapshot: { endpoint: 'tcp.example.com:45101' },
+    });
   });
 
   it('schedules ready and waiting-DDNS snapshots without sending OneBot', async () => {

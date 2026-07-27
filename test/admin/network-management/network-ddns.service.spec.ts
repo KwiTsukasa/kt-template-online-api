@@ -11,10 +11,12 @@ import {
 } from '../../../src/modules/admin/platform-config/network-management/network-dnspod.client';
 import type { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/network-management-event-stream.service';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
+import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
 
 type Harness = {
   client: jest.Mocked<Pick<NetworkDnsPodClient, 'getStatus' | 'reconcile'>>;
   deliveryCoordinator: { notifyDdnsSynced: jest.Mock };
+  group: NetworkPortForwardGroup;
   mapping: NetworkPortForward;
   recordUpdate: jest.Mock;
   records: NetworkDdnsRecord[];
@@ -42,6 +44,15 @@ function matchesUpdateCriterion(actual: unknown, expected: unknown): boolean {
 
 function createHarness(): Harness {
   const records: NetworkDdnsRecord[] = [];
+  const group = Object.assign(new NetworkPortForwardGroup(), {
+    externalPort: 45_678,
+    id: '10',
+    internalPort: 45_678,
+    isDeleted: false,
+    name: '公网服务',
+    protocolMode: 'udp',
+    targetIpv4: '192.168.31.224',
+  });
   const mapping = Object.assign(new NetworkPortForward(), {
     currentObservedAt: new KtDateTime('2026-07-23T01:00:00.000Z'),
     currentPublicIpv4: '8.8.8.8',
@@ -49,6 +60,7 @@ function createHarness(): Harness {
     currentValidUntil: new KtDateTime('2026-07-23T02:00:00.000Z'),
     desiredPresence: 'present',
     externalPort: 45_678,
+    groupId: group.id,
     id: '100',
     internalPort: 45_678,
     isDeleted: false,
@@ -126,6 +138,11 @@ function createHarness(): Harness {
     findOne: async ({ where }) =>
       where.id === mapping.id && !mapping.isDeleted ? mapping : null,
   } as unknown as Repository<NetworkPortForward>;
+  const groupRepository = {
+    find: async () => [group],
+    findOne: async ({ where }) =>
+      where.id === group.id && !group.isDeleted ? group : null,
+  } as unknown as Repository<NetworkPortForwardGroup>;
   const stateRepository = {
     findOne: async () => state,
   } as unknown as Repository<NetworkAgentState>;
@@ -157,6 +174,7 @@ function createHarness(): Harness {
   const service = new NetworkDdnsService(
     recordRepository,
     mappingRepository,
+    groupRepository,
     stateRepository,
     config,
     client as unknown as NetworkDnsPodClient,
@@ -166,6 +184,7 @@ function createHarness(): Harness {
   return {
     client,
     deliveryCoordinator,
+    group,
     mapping,
     recordUpdate,
     records,
@@ -223,7 +242,11 @@ describe('NetworkDdnsService', () => {
       expect.objectContaining({
         currentAddress: '8.8.8.8',
         eligible: true,
+        groupId: '10',
         id: '100',
+        mechanism: 'udp_stun',
+        name: '公网服务 / UDP Keeper',
+        protocol: 'udp',
         sourceType: 'port_forward_ipv4',
       }),
     ]);
@@ -237,6 +260,158 @@ describe('NetworkDdnsService', () => {
         sourceType: 'agent_ipv6',
       }),
     ]);
+  });
+
+  it('accepts a managed TCP NATMap channel as an IPv4 DDNS source', async () => {
+    const harness = createHarness();
+    harness.group.protocolMode = 'tcp';
+    Object.assign(harness.mapping, {
+      keeperDesiredEnabled: false,
+      natmapDesiredEnabled: true,
+      protocol: 'tcp',
+    });
+
+    await expect(
+      harness.service.sourceOptions({ recordType: 'A' }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        currentAddress: '8.8.8.8',
+        eligible: true,
+        groupId: '10',
+        mechanism: 'tcp_natmap',
+        name: '公网服务 / TCP NATMap',
+        protocol: 'tcp',
+      }),
+    ]);
+    await expect(
+      harness.service.create({
+        domain: 'kwitsukasa.top',
+        enabled: false,
+        name: 'TCP A',
+        portForwardId: '100',
+        recordType: 'A',
+        sourceType: 'port_forward_ipv4',
+        subDomain: 'tcp',
+      }),
+    ).resolves.toMatchObject({
+      portForwardId: '100',
+      source: expect.objectContaining({ mechanism: 'tcp_natmap' }),
+    });
+  });
+
+  it('derives accessEndpoint from a synchronized A record without writing DNS for a port-only change', async () => {
+    const harness = createHarness();
+    harness.group.protocolMode = 'tcp';
+    Object.assign(harness.mapping, {
+      keeperDesiredEnabled: false,
+      natmapDesiredEnabled: true,
+      protocol: 'tcp',
+    });
+    await prepareEnabledA(harness);
+    Object.assign(harness.records[0], {
+      appliedAddress: '8.8.8.8',
+      providerRecordId: '300',
+      sourceAddress: '8.8.8.8',
+      syncStatus: 'synced',
+    });
+
+    await expect(harness.service.list()).resolves.toMatchObject({
+      items: [{ accessEndpoint: 'pal.kwitsukasa.top:45678' }],
+    });
+    harness.mapping.currentPublicPort = 45_679;
+    await harness.service.reconcileNow('200');
+
+    expect(harness.client.reconcile).not.toHaveBeenCalled();
+    await expect(harness.service.list()).resolves.toMatchObject({
+      items: [{ accessEndpoint: 'pal.kwitsukasa.top:45679' }],
+    });
+  });
+
+  it('reconciles a changed TCP public IPv4 and exposes the endpoint only after provider readback', async () => {
+    const harness = createHarness();
+    harness.group.protocolMode = 'tcp';
+    Object.assign(harness.mapping, {
+      keeperDesiredEnabled: false,
+      natmapDesiredEnabled: true,
+      protocol: 'tcp',
+    });
+    harness.client.reconcile.mockResolvedValueOnce({
+      appliedAddress: '8.8.8.8',
+      changed: true,
+      providerRecordId: '300',
+    });
+    await prepareEnabledA(harness);
+    Object.assign(harness.records[0], {
+      appliedAddress: '8.8.8.7',
+      providerRecordId: '300',
+      sourceAddress: '8.8.8.7',
+      syncStatus: 'synced',
+    });
+
+    await harness.service.reconcileNow('200');
+
+    expect(harness.client.reconcile).toHaveBeenCalledWith(
+      expect.objectContaining({ targetAddress: '8.8.8.8' }),
+    );
+    await expect(harness.service.list()).resolves.toMatchObject({
+      items: [
+        {
+          accessEndpoint: 'pal.kwitsukasa.top:45678',
+          appliedAddress: '8.8.8.8',
+        },
+      ],
+    });
+  });
+
+  it('withdraws a TCP source to waiting_source without changing NATMap state', async () => {
+    const harness = createHarness();
+    harness.group.protocolMode = 'tcp';
+    Object.assign(harness.mapping, {
+      keeperDesiredEnabled: false,
+      natmapDesiredEnabled: true,
+      natmapStatus: 'active',
+      protocol: 'tcp',
+    });
+    await prepareEnabledA(harness);
+    harness.mapping.currentPublicIpv4 = null;
+    harness.mapping.currentPublicPort = null;
+
+    await harness.service.reconcileNow('200', true);
+
+    expect(harness.records[0]).toMatchObject({
+      sourceAddress: null,
+      syncStatus: 'waiting_source',
+    });
+    expect(harness.mapping.natmapStatus).toBe('active');
+    expect(harness.client.reconcile).not.toHaveBeenCalled();
+  });
+
+  it('keeps TCP NATMap runtime state authoritative when DDNS synchronization fails', async () => {
+    const harness = createHarness();
+    harness.group.protocolMode = 'tcp';
+    Object.assign(harness.mapping, {
+      keeperDesiredEnabled: false,
+      natmapDesiredEnabled: true,
+      natmapStatus: 'active',
+      protocol: 'tcp',
+    });
+    harness.client.reconcile.mockRejectedValueOnce(
+      new NetworkDnsPodClientError('DNSPOD_RATE_LIMITED', 'rate limited', true),
+    );
+    await prepareEnabledA(harness);
+
+    await harness.service.reconcileNow('200', true);
+
+    expect(harness.records[0]).toMatchObject({
+      lastErrorCode: 'provider_rate_limited',
+      syncStatus: 'failed',
+    });
+    expect(harness.mapping).toMatchObject({
+      currentPublicIpv4: '8.8.8.8',
+      currentPublicPort: 45_678,
+      natmapDesiredEnabled: true,
+      natmapStatus: 'active',
+    });
   });
 
   it('never exposes a residual lease from an ineligible IPv4 source', async () => {

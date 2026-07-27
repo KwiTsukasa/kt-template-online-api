@@ -6,6 +6,7 @@ import { QqbotMessageEvent } from '../../../../src/modules/qqbot/core/infrastruc
 import { QqbotMessageSubscription } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-subscription.entity';
 
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
+const TCP_SOURCE_KEY = 'network.tcp.natmap-endpoint-changed';
 const NOW = new Date('2026-07-24T03:04:05.000Z');
 
 type CoordinatorStore = {
@@ -78,6 +79,13 @@ function createCoordinatorHarness(): CoordinatorHarness {
         status: 'waiting_ddns',
         subscriptionId: 'subscription-match',
       },
+      {
+        id: 'delivery-tcp-match',
+        messageEventId: 'event-tcp-match',
+        nextAttemptAt: 'future-tcp-match',
+        status: 'waiting_ddns',
+        subscriptionId: 'subscription-tcp-match',
+      },
     ],
     events: [
       {
@@ -100,6 +108,11 @@ function createCoordinatorHarness(): CoordinatorHarness {
         payload: { publicIpv4: 8_888 },
         sourceKey: SOURCE_KEY,
       },
+      {
+        id: 'event-tcp-match',
+        payload: { publicIpv4: '8.8.8.8' },
+        sourceKey: TCP_SOURCE_KEY,
+      },
     ],
     subscriptions: [
       {
@@ -108,6 +121,13 @@ function createCoordinatorHarness(): CoordinatorHarness {
         isDeleted: false,
         sourceConfig: { ddnsRecordId: '9007199254740993' },
         sourceKey: SOURCE_KEY,
+      },
+      {
+        enabled: true,
+        id: 'subscription-tcp-match',
+        isDeleted: false,
+        sourceConfig: { ddnsRecordId: '9007199254740993' },
+        sourceKey: TCP_SOURCE_KEY,
       },
       {
         enabled: false,
@@ -263,13 +283,14 @@ describe('SystemMessageDeliveryCoordinatorService DDNS integration', () => {
 
     expect(harness.store.deliveries).toEqual(
       before.deliveries.map((delivery) =>
-        delivery.id === 'delivery-match'
+        delivery.id === 'delivery-match' || delivery.id === 'delivery-tcp-match'
           ? { ...delivery, nextAttemptAt: new KtDateTime(NOW) }
           : delivery,
       ),
     );
     expect(harness.operations).toEqual([
       'transaction:start',
+      'delivery:update',
       'delivery:update',
       'transaction:commit',
       'drain',
@@ -281,6 +302,9 @@ describe('SystemMessageDeliveryCoordinatorService DDNS integration', () => {
     const harness = createCoordinatorHarness();
     harness.store.deliveries.find(
       (delivery) => delivery.id === 'delivery-match',
+    )!.status = 'processing';
+    harness.store.deliveries.find(
+      (delivery) => delivery.id === 'delivery-tcp-match',
     )!.status = 'processing';
     const before = cloneStore(harness.store);
 

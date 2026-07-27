@@ -426,16 +426,24 @@ describe('QQBot message-push management controllers', () => {
     });
   });
 
-  it('resolves options and subscription config from arbitrary source metadata', async () => {
+  it('resolves dependent TCP NATMap options through the generic source endpoints', async () => {
     const definition = {
-      description: '后台任务完成',
-      displayName: '任务完成',
-      sourceKey: 'system.job.completed',
+      description: 'TCP NATMap 端点变更',
+      displayName: 'TCP NATMap 端点变更',
+      sourceKey: 'network.tcp.natmap-endpoint-changed',
       subscriptionFields: [
         {
-          key: 'jobId',
-          label: '任务',
-          optionCollection: 'jobs',
+          key: 'tcpChannelId',
+          label: 'TCP NATMap 通道',
+          optionCollection: 'tcpChannels',
+          required: true,
+          type: 'select',
+        },
+        {
+          dependsOn: 'tcpChannelId',
+          key: 'ddnsRecordId',
+          label: 'IPv4 DDNS 记录',
+          optionCollection: 'ddnsRecords',
           required: true,
           type: 'select',
         },
@@ -446,29 +454,47 @@ describe('QQBot message-push management controllers', () => {
     registry.get.mockReturnValueOnce({
       definition,
       listSubscriptionOptions: jest.fn().mockResolvedValue({
-        jobs: [
+        ddnsRecords: [
           {
             credential: 'must-not-leak',
+            dependsOnValue: 'tcp-channel-1',
             disabled: false,
             disabledReasonCode: null,
-            label: '夜间同步',
-            value: 'job-1',
+            label: 'Pal TCP · pal.example.test',
+            value: 'ddns-1',
+          },
+        ],
+        tcpChannels: [
+          {
+            disabled: false,
+            disabledReasonCode: null,
+            label: '帕鲁新世界 / TCP NATMap',
+            value: 'tcp-channel-1',
           },
         ],
       }),
     });
     const options = await request(apiUrl)
       .get(
-        '/qqbot/message-push/sources/system.job.completed/subscription-options',
+        '/qqbot/message-push/sources/network.tcp.natmap-endpoint-changed/subscription-options',
       )
       .expect(200);
     expect(options.body.data).toEqual({
-      jobs: [
+      ddnsRecords: [
+        {
+          dependsOnValue: 'tcp-channel-1',
+          disabled: false,
+          disabledReasonCode: null,
+          label: 'Pal TCP · pal.example.test',
+          value: 'ddns-1',
+        },
+      ],
+      tcpChannels: [
         {
           disabled: false,
           disabledReasonCode: null,
-          label: '夜间同步',
-          value: 'job-1',
+          label: '帕鲁新世界 / TCP NATMap',
+          value: 'tcp-channel-1',
         },
       ],
     });
@@ -479,7 +505,8 @@ describe('QQBot message-push management controllers', () => {
           ...(subscriptionView() as unknown as Record<string, unknown>),
           sourceConfig: {
             credential: 'must-not-leak',
-            jobId: 'job-1',
+            ddnsRecordId: 'ddns-1',
+            tcpChannelId: 'tcp-channel-1',
           },
           sourceKey: definition.sourceKey,
           sourceName: definition.displayName,
@@ -492,7 +519,8 @@ describe('QQBot message-push management controllers', () => {
       .get('/qqbot/message-push/subscriptions')
       .expect(200);
     expect(subscriptionsResponse.body.data.items[0].sourceConfig).toEqual({
-      jobId: 'job-1',
+      ddnsRecordId: 'ddns-1',
+      tcpChannelId: 'tcp-channel-1',
     });
   });
 

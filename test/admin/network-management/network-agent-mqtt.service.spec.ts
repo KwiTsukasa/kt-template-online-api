@@ -2848,6 +2848,151 @@ describe('NetworkAgentMqttService', () => {
       expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
     });
 
+    it('stages a TCP endpoint-change fact only after the matching report commits', async () => {
+      const harness = createV2Harness();
+      const previousEndpoint = v2Endpoint('tcp_natmap', {
+        publicIpv4: '8.8.8.7',
+        publicPort: 45_100,
+      });
+      harness.histories.push(
+        v2EndpointHistory({
+          endpointIdentity: endpointLeaseIdentityV2(previousEndpoint),
+          endpointValidatedAt: new KtDateTime(previousEndpoint.validatedAt),
+          endpointValidUntil: new KtDateTime(previousEndpoint.validUntil),
+          eventId: 'v2-tcp-event-0',
+          mappingId: '101',
+          mechanism: 'tcp_natmap',
+          publicIpv4: previousEndpoint.publicIpv4,
+          publicPort: previousEndpoint.publicPort,
+        }),
+      );
+      const currentEndpoint = v2Endpoint('tcp_natmap');
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({
+          channelId: '101',
+          endpoint: currentEndpoint,
+          eventId: 'v2-tcp-event-1',
+          mechanism: 'tcp_natmap',
+          protocol: 'tcp',
+        }),
+      );
+
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness),
+      );
+
+      expect(harness.stagedEvents).toEqual([
+        {
+          eventId: 'v2-tcp-event-1',
+          occurredAt: '2099-07-27T00:00:16.000Z',
+          payload: {
+            previousPublicIpv4: '8.8.8.7',
+            previousPublicPort: 45_100,
+            publicIpv4: '8.8.8.8',
+            publicPort: 45_101,
+            tcpChannelId: '101',
+          },
+          resourceKey: '101',
+          sourceKey: 'network.tcp.natmap-endpoint-changed',
+        },
+      ]);
+      expect(harness.deliveryCoordinator.requestDrain).toHaveBeenCalledTimes(1);
+    });
+
+    it('stages a report-first TCP event when only the public IPv4 changes', async () => {
+      const harness = createV2Harness();
+      const previousEndpoint = v2Endpoint('tcp_natmap', {
+        publicIpv4: '8.8.8.7',
+      });
+      harness.histories.push(
+        v2EndpointHistory({
+          endpointIdentity: endpointLeaseIdentityV2(previousEndpoint),
+          endpointValidatedAt: new KtDateTime(previousEndpoint.validatedAt),
+          endpointValidUntil: new KtDateTime(previousEndpoint.validUntil),
+          eventId: 'v2-tcp-event-0',
+          mappingId: '101',
+          mechanism: 'tcp_natmap',
+          publicIpv4: previousEndpoint.publicIpv4,
+          publicPort: previousEndpoint.publicPort,
+        }),
+      );
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness),
+      );
+      harness.deliveryCoordinator.requestDrain.mockClear();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({
+          channelId: '101',
+          endpoint: v2Endpoint('tcp_natmap'),
+          eventId: 'v2-tcp-event-1',
+          mechanism: 'tcp_natmap',
+          protocol: 'tcp',
+        }),
+      );
+
+      expect(harness.stagedEvents[0]).toMatchObject({
+        payload: {
+          previousPublicIpv4: '8.8.8.7',
+          previousPublicPort: 45_101,
+          publicIpv4: '8.8.8.8',
+          publicPort: 45_101,
+          tcpChannelId: '101',
+        },
+        sourceKey: 'network.tcp.natmap-endpoint-changed',
+      });
+      expect(harness.deliveryCoordinator.requestDrain).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['published', 'restored', 'withdrawn'] as const)(
+      'does not stage a TCP %s lifecycle event',
+      async (type) => {
+        const harness = createV2Harness();
+        const previousEndpoint = v2Endpoint('tcp_natmap', {
+          publicIpv4: '8.8.8.7',
+          publicPort: 45_100,
+        });
+        harness.histories.push(
+          v2EndpointHistory({
+            endpointIdentity: endpointLeaseIdentityV2(previousEndpoint),
+            eventId: 'v2-tcp-event-0',
+            mappingId: '101',
+            mechanism: 'tcp_natmap',
+            publicIpv4: previousEndpoint.publicIpv4,
+            publicPort: previousEndpoint.publicPort,
+          }),
+        );
+        await harness.service.consumeMessage(
+          'kt/network/v2/agents/nas-main/reported',
+          v2Reported(harness),
+        );
+        harness.deliveryCoordinator.requestDrain.mockClear();
+
+        await harness.service.consumeMessage(
+          'kt/network/v2/agents/nas-main/events',
+          v2EndpointEvent({
+            channelId: '101',
+            endpoint:
+              type === 'withdrawn' ? undefined : v2Endpoint('tcp_natmap'),
+            eventId: `v2-tcp-${type}-1`,
+            mechanism: 'tcp_natmap',
+            protocol: 'tcp',
+            type,
+          }),
+        );
+
+        expect(harness.stagedEvents).toHaveLength(0);
+        expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+      },
+    );
+
     it('rolls back v2 history and Outbox together when staging fails', async () => {
       const harness = createV2Harness();
       const currentEndpoint = v2Endpoint('udp_stun', {

@@ -42,20 +42,20 @@ describe('SystemMessageSourceRegistry', () => {
 
   it('sorts definitions and unregisters only the same adapter instance', () => {
     const registry = new SystemMessageSourceRegistry();
-    const first = createAdapter('z.source');
-    const second = createAdapter('a.source');
-    const replacement = createAdapter('z.source');
+    const first = createAdapter('network.tcp.natmap-endpoint-changed');
+    const second = createAdapter('network.stun.mapping-port-changed');
+    const replacement = createAdapter('network.tcp.natmap-endpoint-changed');
     registry.register(first);
     registry.register(second);
 
-    registry.unregister('z.source', replacement);
+    registry.unregister('network.tcp.natmap-endpoint-changed', replacement);
     expect(registry.list().map((definition) => definition.sourceKey)).toEqual([
-      'a.source',
-      'z.source',
+      'network.stun.mapping-port-changed',
+      'network.tcp.natmap-endpoint-changed',
     ]);
-    registry.unregister('z.source', first);
+    registry.unregister('network.tcp.natmap-endpoint-changed', first);
     expect(registry.list().map((definition) => definition.sourceKey)).toEqual([
-      'a.source',
+      'network.stun.mapping-port-changed',
     ]);
   });
 });

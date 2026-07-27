@@ -77,10 +77,13 @@ export type NetworkDdnsListQuery = {
 
 export type NetworkDdnsSourceOption = {
   currentAddress: null | string;
+  currentPort?: number;
   disabledReasonCode: null | string;
   eligible: boolean;
   externalPort?: number;
+  groupId?: string;
   id: string;
+  mechanism?: EndpointMechanism;
   name: string;
   observedAt: null | KtDateTime;
   protocol?: PortForwardProtocol;

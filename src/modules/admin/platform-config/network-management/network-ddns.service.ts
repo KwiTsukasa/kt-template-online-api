@@ -23,7 +23,9 @@ import {
 } from './network-dnspod.client';
 import { NetworkManagementEventStreamService } from './network-management-event-stream.service';
 import { NetworkPortForward } from './network-management.entity';
+import { NetworkPortForwardGroup } from './network-port-forward-group.entity';
 import { classifyStunEndpointSource } from './network-source-eligibility';
+import { classifyTcpNatmapEndpointSource } from './network-tcp-natmap-source-eligibility';
 import type {
   NetworkDdnsListQuery,
   NetworkDdnsRecordInput,
@@ -85,6 +87,8 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     private readonly recordRepository: Repository<NetworkDdnsRecord>,
     @InjectRepository(NetworkPortForward)
     private readonly mappingRepository: Repository<NetworkPortForward>,
+    @InjectRepository(NetworkPortForwardGroup)
+    private readonly groupRepository: Repository<NetworkPortForwardGroup>,
     @InjectRepository(NetworkAgentState)
     private readonly stateRepository: Repository<NetworkAgentState>,
     private readonly configService: ConfigService,
@@ -166,11 +170,25 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     if (query.recordType !== 'A') {
       throwVbenError('DDNS 记录类型无效', HttpStatus.BAD_REQUEST);
     }
-    const mappings = await this.mappingRepository.find({
-      order: { id: 'ASC', name: 'ASC' },
-      where: { isDeleted: false },
-    });
-    return mappings.map((mapping) => this.portForwardSourceOption(mapping));
+    const [mappings, groups] = await Promise.all([
+      this.mappingRepository.find({
+        order: { id: 'ASC', name: 'ASC' },
+        where: { isDeleted: false },
+      }),
+      this.groupRepository.find({
+        order: { id: 'ASC', name: 'ASC' },
+        where: { isDeleted: false },
+      }),
+    ]);
+    const groupsById = new Map(
+      groups.map((group) => [String(group.id), group]),
+    );
+    return mappings.map((mapping) =>
+      this.portForwardSourceOption(
+        mapping,
+        groupsById.get(String(mapping.groupId)),
+      ),
+    );
   }
 
   getProviderStatus() {
@@ -638,7 +656,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       const mapping = await this.mappingRepository.findOne({
         where: { id: record.portForwardId, isDeleted: false },
       });
-      if (mapping) return this.portForwardSourceOption(mapping);
+      if (mapping) {
+        const group = await this.groupRepository.findOne({
+          where: { id: mapping.groupId, isDeleted: false },
+        });
+        return this.portForwardSourceOption(mapping, group || undefined);
+      }
       return this.missingPortForwardSourceOption(record.portForwardId);
     }
     return this.missingPortForwardSourceOption(
@@ -648,21 +671,37 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
 
   private portForwardSourceOption(
     mapping: NetworkPortForward,
+    group?: NetworkPortForwardGroup,
   ): NetworkDdnsSourceOption {
-    const { disabledReasonCode, eligible } =
-      classifyStunEndpointSource(mapping);
+    const mechanism = mapping.protocol === 'tcp' ? 'tcp_natmap' : 'udp_stun';
+    const sourceEligibility =
+      mapping.protocol === 'tcp'
+        ? classifyTcpNatmapEndpointSource(mapping)
+        : classifyStunEndpointSource(mapping);
+    const disabledReasonCode = group
+      ? sourceEligibility.disabledReasonCode
+      : 'SOURCE_NOT_FOUND';
+    const eligible = disabledReasonCode === null;
     const leaseValid =
       isIP(mapping.currentPublicIpv4 || '') === 4 &&
+      isValidPort(mapping.currentPublicPort) &&
       !!mapping.currentValidUntil &&
       new Date(mapping.currentValidUntil).getTime() > Date.now();
     const sourceUsable = eligible && leaseValid;
     return {
       currentAddress: sourceUsable ? mapping.currentPublicIpv4 || null : null,
+      ...(sourceUsable
+        ? { currentPort: mapping.currentPublicPort as number }
+        : {}),
       disabledReasonCode,
-      eligible: disabledReasonCode === null,
+      eligible,
       externalPort: mapping.externalPort,
+      groupId: String(mapping.groupId),
       id: String(mapping.id),
-      name: mapping.name,
+      mechanism,
+      name: `${group?.name || mapping.name} / ${
+        mechanism === 'tcp_natmap' ? 'TCP NATMap' : 'UDP Keeper'
+      }`,
       observedAt: sourceUsable ? mapping.currentObservedAt || null : null,
       protocol: mapping.protocol,
       sourceType: 'port_forward_ipv4',
@@ -844,9 +883,20 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     const mapping = await this.mappingRepository.findOne({
       where: { id: portForwardId as string, isDeleted: false },
     });
-    if (!mapping || !classifyStunEndpointSource(mapping).eligible) {
+    const group = mapping
+      ? await this.groupRepository.findOne({
+          where: { id: mapping.groupId, isDeleted: false },
+        })
+      : null;
+    const sourceEligible =
+      mapping?.protocol === 'tcp'
+        ? classifyTcpNatmapEndpointSource(mapping).eligible
+        : mapping
+          ? classifyStunEndpointSource(mapping).eligible
+          : false;
+    if (!mapping || !group || !sourceEligible) {
       throwVbenError(
-        'A 记录来源必须是已启用 Keeper 的同端口 UDP 转发',
+        'A 记录来源必须是已启用的 UDP Keeper 或 TCP NATMap 通道',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -890,14 +940,24 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
 
   private async serializeRecord(record: NetworkDdnsRecord) {
     const source = await this.resolveRecordSource(record);
+    const fqdn =
+      record.subDomain === '@'
+        ? record.domain
+        : `${record.subDomain}.${record.domain}`;
+    const accessEndpoint =
+      record.recordType === 'A' &&
+      record.syncStatus === 'synced' &&
+      !!record.appliedAddress &&
+      record.appliedAddress === source.currentAddress &&
+      isValidPort(source.currentPort)
+        ? `${fqdn}:${source.currentPort}`
+        : null;
     return {
+      ...(accessEndpoint ? { accessEndpoint } : {}),
       appliedAddress: record.appliedAddress || null,
       domain: record.domain,
       enabled: record.enabled,
-      fqdn:
-        record.subDomain === '@'
-          ? record.domain
-          : `${record.subDomain}.${record.domain}`,
+      fqdn,
       id: String(record.id),
       lastErrorCode: record.lastErrorCode || null,
       lastErrorMessage: record.lastErrorMessage || null,
@@ -1120,6 +1180,15 @@ function isValidDnsName(
   if (requireMultipleLabels && labels.length < 2) return false;
   return labels.every(
     (label) => label.length <= 63 && DNS_LABEL_PATTERN.test(label),
+  );
+}
+
+function isValidPort(value?: null | number): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 65_535
   );
 }
 

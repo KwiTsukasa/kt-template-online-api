@@ -27,6 +27,7 @@ import { QqbotMessageSubscription } from '../../../../src/modules/qqbot/core/inf
 
 const NOW = new Date('2026-07-24T00:00:00.000Z');
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
+const TCP_SOURCE_KEY = 'network.tcp.natmap-endpoint-changed';
 const RESOURCE_KEY = '9007199254740993';
 
 type Store = {
@@ -201,7 +202,7 @@ function matches(
   });
 }
 
-function setup(seed: Partial<Store> = {}) {
+function setup(seed: Partial<Store> = {}, sourceKey = SOURCE_KEY) {
   let state: Store = {
     accounts: seed.accounts ?? [account()],
     bindings: seed.bindings ?? [binding()],
@@ -215,7 +216,7 @@ function setup(seed: Partial<Store> = {}) {
     definition: {
       description: 'test',
       displayName: 'test',
-      sourceKey: SOURCE_KEY,
+      sourceKey,
       subscriptionFields: [],
       variables: [
         {
@@ -968,6 +969,40 @@ describe('System message delivery runner direct preflight contracts', () => {
         message: 'endpoint=pal.example.com:38213 port=38213',
       }),
     );
+    expect(harness.getState().deliveries[0].status).toBe('success');
+  });
+
+  it('11 handles a due TCP NATMap waiting row through the generic source registry', async () => {
+    const harness = setup(
+      {
+        deliveries: [delivery({ status: 'waiting_ddns' })],
+        events: [
+          event({
+            payload: {
+              publicIpv4: '203.0.113.10',
+              publicPort: 45_101,
+              tcpChannelId: RESOURCE_KEY,
+            },
+            sourceKey: TCP_SOURCE_KEY,
+          }),
+        ],
+        subscriptions: [
+          subscription({
+            sourceConfig: {
+              ddnsRecordId: '9007199254740995',
+              tcpChannelId: RESOURCE_KEY,
+            },
+            sourceKey: TCP_SOURCE_KEY,
+          }),
+        ],
+      },
+      TCP_SOURCE_KEY,
+    );
+
+    await harness.runner.runOnce(NOW);
+
+    expect(harness.adapter.resolveDelivery).toHaveBeenCalledTimes(1);
+    expect(harness.sender.sendStrictPlainText).toHaveBeenCalledTimes(1);
     expect(harness.getState().deliveries[0].status).toBe('success');
   });
 

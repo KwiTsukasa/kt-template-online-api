@@ -18,6 +18,11 @@ import { SystemMessageDeliveryRunnerService } from './system-message-delivery-ru
 import { SystemMessageFanoutService } from './system-message-fanout.service';
 
 const NETWORK_STUN_SOURCE = 'network.stun.mapping-port-changed';
+const NETWORK_TCP_NATMAP_SOURCE = 'network.tcp.natmap-endpoint-changed';
+const NETWORK_DDNS_MESSAGE_SOURCES = [
+  NETWORK_STUN_SOURCE,
+  NETWORK_TCP_NATMAP_SOURCE,
+] as const;
 
 @Injectable()
 export class SystemMessageDeliveryCoordinatorService
@@ -92,39 +97,43 @@ export class SystemMessageDeliveryCoordinatorService
     )
       return;
     const advanced = await this.dataSource.transaction(async (manager) => {
-      const subscriptions = await manager
-        .getRepository(QqbotMessageSubscription)
-        .find({
-          where: {
-            enabled: true,
-            isDeleted: false,
-            sourceKey: NETWORK_STUN_SOURCE,
+      let affected = 0;
+      for (const sourceKey of NETWORK_DDNS_MESSAGE_SOURCES) {
+        const subscriptions = await manager
+          .getRepository(QqbotMessageSubscription)
+          .find({
+            where: {
+              enabled: true,
+              isDeleted: false,
+              sourceKey,
+            },
+          });
+        const subscriptionIds = subscriptions
+          .filter(
+            (subscription) =>
+              typeof subscription.sourceConfig?.ddnsRecordId === 'string' &&
+              subscription.sourceConfig.ddnsRecordId === input.ddnsRecordId,
+          )
+          .map((subscription) => subscription.id);
+        if (!subscriptionIds.length) continue;
+        const events = await manager
+          .getRepository(QqbotMessageEvent)
+          .find({ where: { sourceKey } });
+        const eventIds = events
+          .filter((event) => event.payload.publicIpv4 === input.appliedAddress)
+          .map((event) => event.id);
+        if (!eventIds.length) continue;
+        const result = await manager.getRepository(QqbotMessageDelivery).update(
+          {
+            messageEventId: In(eventIds),
+            status: 'waiting_ddns',
+            subscriptionId: In(subscriptionIds),
           },
-        });
-      const subscriptionIds = subscriptions
-        .filter(
-          (subscription) =>
-            typeof subscription.sourceConfig?.ddnsRecordId === 'string' &&
-            subscription.sourceConfig.ddnsRecordId === input.ddnsRecordId,
-        )
-        .map((subscription) => subscription.id);
-      if (!subscriptionIds.length) return 0;
-      const events = await manager
-        .getRepository(QqbotMessageEvent)
-        .find({ where: { sourceKey: NETWORK_STUN_SOURCE } });
-      const eventIds = events
-        .filter((event) => event.payload.publicIpv4 === input.appliedAddress)
-        .map((event) => event.id);
-      if (!eventIds.length) return 0;
-      const result = await manager.getRepository(QqbotMessageDelivery).update(
-        {
-          messageEventId: In(eventIds),
-          status: 'waiting_ddns',
-          subscriptionId: In(subscriptionIds),
-        },
-        { nextAttemptAt: new KtDateTime() },
-      );
-      return result.affected || 0;
+          { nextAttemptAt: new KtDateTime() },
+        );
+        affected += result.affected || 0;
+      }
+      return affected;
     });
     if (advanced > 0) this.requestDrain();
   }

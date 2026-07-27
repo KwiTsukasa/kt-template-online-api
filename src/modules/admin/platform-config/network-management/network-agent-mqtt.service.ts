@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import {
   Inject,
   Injectable,
@@ -788,14 +789,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
               });
             }
 
-            if (
-              item.protocol === 'udp' &&
-              currentTupleBefore !== currentTupleAfter &&
-              currentTupleAfter
-            ) {
-              deliveryAccepted =
-                (await this.stageMatchingV2UdpHistory(manager, mapping)) ||
-                deliveryAccepted;
+            if (currentTupleBefore !== currentTupleAfter && currentTupleAfter) {
+              const accepted =
+                item.protocol === 'tcp'
+                  ? await this.stageMatchingV2TcpHistory(manager, mapping)
+                  : await this.stageMatchingV2UdpHistory(manager, mapping);
+              deliveryAccepted = accepted || deliveryAccepted;
             }
           }
         }
@@ -1190,6 +1189,23 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  private async stageMatchingV2TcpHistory(
+    manager: EntityManager,
+    mapping: NetworkPortForward,
+  ): Promise<boolean> {
+    const histories = await manager.getRepository(NetworkEndpointHistory).find({
+      order: { occurredAt: 'DESC', id: 'DESC' },
+      take: 2,
+      where: { mappingId: mapping.id, mechanism: 'tcp_natmap' },
+    });
+    return await this.stageV2TcpEndpointChange(
+      manager,
+      mapping,
+      histories[0],
+      histories[1],
+    );
+  }
+
   private async stageV2UdpPortChange(
     manager: EntityManager,
     mapping: NetworkPortForward,
@@ -1220,6 +1236,44 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         },
         resourceKey: mapping.id,
         sourceKey: 'network.stun.mapping-port-changed',
+      })) === 'accepted'
+    );
+  }
+
+  private async stageV2TcpEndpointChange(
+    manager: EntityManager,
+    mapping: NetworkPortForward,
+    currentHistory: NetworkEndpointHistory | undefined,
+    previousHistory: NetworkEndpointHistory | undefined,
+  ): Promise<boolean> {
+    if (
+      !currentHistory ||
+      currentHistory.eventType !== 'changed' ||
+      !previousHistory ||
+      previousHistory.eventType === 'withdrawn' ||
+      !this.isV2HistoryMatchingCurrent(mapping, currentHistory) ||
+      isIP(previousHistory.publicIpv4 || '') !== 4 ||
+      isIP(currentHistory.publicIpv4 || '') !== 4 ||
+      !this.isValidPort(previousHistory.publicPort) ||
+      !this.isValidPort(currentHistory.publicPort) ||
+      (previousHistory.publicIpv4 === currentHistory.publicIpv4 &&
+        previousHistory.publicPort === currentHistory.publicPort)
+    ) {
+      return false;
+    }
+    return (
+      (await this.eventStager.stage(manager, {
+        eventId: currentHistory.eventId,
+        occurredAt: new Date(currentHistory.occurredAt).toISOString(),
+        payload: {
+          previousPublicIpv4: previousHistory.publicIpv4 as string,
+          previousPublicPort: previousHistory.publicPort,
+          publicIpv4: currentHistory.publicIpv4 as string,
+          publicPort: currentHistory.publicPort,
+          tcpChannelId: mapping.id,
+        },
+        resourceKey: mapping.id,
+        sourceKey: 'network.tcp.natmap-endpoint-changed',
       })) === 'accepted'
     );
   }
@@ -1545,16 +1599,23 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       });
       try {
         await repository.save(history);
-        const deliveryAccepted = this.canStageV2UdpEventAgainstCurrent(
+        const deliveryAccepted = this.canStageV2EventAgainstCurrent(
           mapping,
           event,
         )
-          ? await this.stageV2UdpPortChange(
-              manager,
-              mapping,
-              history,
-              previousHistory || undefined,
-            )
+          ? event.protocol === 'tcp'
+            ? await this.stageV2TcpEndpointChange(
+                manager,
+                mapping,
+                history,
+                previousHistory || undefined,
+              )
+            : await this.stageV2UdpPortChange(
+                manager,
+                mapping,
+                history,
+                previousHistory || undefined,
+              )
           : false;
         return { changed: true, deliveryAccepted };
       } catch (error) {
@@ -1564,13 +1625,14 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private canStageV2UdpEventAgainstCurrent(
+  private canStageV2EventAgainstCurrent(
     mapping: NetworkPortForward,
     event: NetworkEndpointEventV2,
   ): boolean {
+    const expectedMechanism =
+      event.protocol === 'tcp' ? 'tcp_natmap' : 'udp_stun';
     return (
-      event.protocol === 'udp' &&
-      event.mechanism === 'udp_stun' &&
+      event.mechanism === expectedMechanism &&
       event.type === 'changed' &&
       !!event.endpoint &&
       mapping.reportedRevision === String(event.revision) &&

@@ -14,6 +14,7 @@ import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-conf
 import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
 import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/network-management.service';
+import { NetworkTcpNatmapMessageSourceAdapter } from '../../../src/modules/admin/platform-config/network-management/network-tcp-natmap-message-source.adapter';
 
 describe('network management persistence module', () => {
   it('registers the five exact database entity tables', () => {
@@ -225,6 +226,7 @@ describe('network management persistence module', () => {
         NetworkDdnsService,
         NetworkDnsPodClient,
         NetworkAgentMqttService,
+        NetworkTcpNatmapMessageSourceAdapter,
       ]),
     );
     expect(providers).toEqual(
@@ -233,6 +235,7 @@ describe('network management persistence module', () => {
         NetworkDdnsService,
         NetworkDnsPodClient,
         NetworkAgentMqttService,
+        NetworkTcpNatmapMessageSourceAdapter,
       ]),
     );
   });

@@ -23,6 +23,7 @@ type ColumnContract = {
 const varchar = (propertyName: string, length: number, nullable = false): ColumnContract => ({ default: null, length, name: propertyName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), nullable, precision: null, primary: false, propertyName, type: 'varchar', unsigned: false });
 const bigint = (propertyName: string, nullable = false, primary = false): ColumnContract => ({ default: null, length: null, name: propertyName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), nullable, precision: null, primary, propertyName, type: 'bigint', unsigned: false });
 const datetime = (propertyName: string, nullable = false): ColumnContract => ({ default: null, length: null, name: propertyName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), nullable, precision: 6, primary: false, propertyName, type: 'datetime', unsigned: false });
+const generatedDatetime = (propertyName: string): ColumnContract => ({ ...datetime(propertyName), default: 'CURRENT_TIMESTAMP(6)' });
 const boolean = (propertyName: string, defaultValue: boolean): ColumnContract => ({ default: defaultValue, length: null, name: propertyName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), nullable: false, precision: null, primary: false, propertyName, type: 'tinyint', unsigned: false });
 
 const persistenceContract: ReadonlyArray<{
@@ -39,7 +40,7 @@ const persistenceContract: ReadonlyArray<{
       { ...varchar('sourceConfig', 0), length: null, type: 'json' },
       { ...varchar('sourceConfigDigest', 64), type: 'char' }, varchar('activeKey', 255, true),
       boolean('enabled', true), varchar('remark', 500, true), boolean('isDeleted', false),
-      datetime('createTime'), datetime('updateTime'),
+      generatedDatetime('createTime'), generatedDatetime('updateTime'),
     ],
     indexes: [{ name: 'uk_qqbot_message_subscription_active_key', columns: ['activeKey'], unique: true }],
   },
@@ -49,7 +50,7 @@ const persistenceContract: ReadonlyArray<{
     columns: [
       bigint('id', false, true), varchar('name', 100), varchar('sourceKey', 128),
       { ...varchar('content', 0), length: null, type: 'text' }, boolean('enabled', true),
-      varchar('remark', 500, true), boolean('isDeleted', false), datetime('createTime'), datetime('updateTime'),
+      varchar('remark', 500, true), boolean('isDeleted', false), generatedDatetime('createTime'), generatedDatetime('updateTime'),
     ],
     indexes: [],
   },
@@ -59,7 +60,7 @@ const persistenceContract: ReadonlyArray<{
     columns: [
       bigint('id', false, true), bigint('subscriptionId'), bigint('accountId'), varchar('selfId', 64),
       bigint('templateId'), varchar('activeKey', 255, true), boolean('enabled', true),
-      boolean('isDeleted', false), datetime('createTime'), datetime('updateTime'),
+      boolean('isDeleted', false), generatedDatetime('createTime'), generatedDatetime('updateTime'),
     ],
     indexes: [{ name: 'uk_qqbot_message_publish_binding_active_key', columns: ['activeKey'], unique: true }],
   },
@@ -69,7 +70,7 @@ const persistenceContract: ReadonlyArray<{
     columns: [
       bigint('id', false, true), bigint('bindingId'), varchar('targetType', 16), varchar('targetId', 64),
       varchar('targetName', 120, true), varchar('activeKey', 300, true), boolean('enabled', true),
-      boolean('isDeleted', false), datetime('createTime'), datetime('updateTime'),
+      boolean('isDeleted', false), generatedDatetime('createTime'), generatedDatetime('updateTime'),
     ],
     indexes: [{ name: 'uk_qqbot_message_publish_target_active_key', columns: ['activeKey'], unique: true }],
   },
@@ -82,7 +83,7 @@ const persistenceContract: ReadonlyArray<{
       { ...varchar('fanoutStatus', 32), default: 'accepted' },
       { ...varchar('fanoutAttemptCount', 0), default: 0, length: null, type: 'int', unsigned: true },
       datetime('nextFanoutAt', true), datetime('fanoutLeaseUntil', true), varchar('lastErrorCode', 64, true),
-      varchar('lastErrorMessage', 500, true), datetime('createTime'), datetime('updateTime'),
+      varchar('lastErrorMessage', 500, true), generatedDatetime('createTime'), generatedDatetime('updateTime'),
     ],
     indexes: [
       { name: 'uk_qqbot_message_event_event_id', columns: ['eventId'], unique: true },
@@ -102,7 +103,7 @@ const persistenceContract: ReadonlyArray<{
       varchar('status', 32), { ...varchar('attemptCount', 0), default: 0, length: null, type: 'int', unsigned: true },
       datetime('nextAttemptAt', true), datetime('processingLeaseUntil', true), bigint('sendLogId', true),
       varchar('lastErrorCode', 64, true), varchar('lastErrorMessage', 500, true), datetime('expiresAt'),
-      datetime('createTime'), datetime('updateTime'),
+      generatedDatetime('createTime'), generatedDatetime('updateTime'),
     ],
     indexes: [
       { name: 'uk_qqbot_message_delivery_event_target', columns: ['messageEventId', 'publishTargetId'], unique: true },
@@ -125,7 +126,9 @@ const sortByPropertyName = <T extends { propertyName: string }>(values: readonly
 const getColumns = (entity: EntityClass): ColumnContract[] => getMetadataArgsStorage()
   .columns.filter((column) => column.target === entity)
   .map((column) => ({
-    default: column.options.default ?? null,
+    default: typeof column.options.default === 'function'
+      ? column.options.default()
+      : column.options.default ?? null,
     length: column.options.length === undefined ? null : Number(column.options.length),
     name: `${column.options.name || column.propertyName}`,
     nullable: column.options.nullable === true,

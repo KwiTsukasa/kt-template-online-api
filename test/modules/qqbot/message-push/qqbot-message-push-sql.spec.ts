@@ -405,6 +405,13 @@ const extractExpectedMenuIds = (statement: string) =>
   [...extractExpectedMenuCte(statement).matchAll(/select (\d+)(?: as id)?/g)].map(([, id]) => id);
 
 describe('QQBot message-push SQL contract', () => {
+  const tcpSourceAdapter = readFileSync(
+    resolve(
+      process.cwd(),
+      'src/modules/admin/platform-config/network-management/network-tcp-natmap-message-source.adapter.ts',
+    ),
+    'utf8',
+  );
   const bootstrapSql = readNormalizedSql('sql/qqbot-init.sql');
   const migrationSql = readNormalizedSql('sql/qqbot-message-push-init.sql');
   const migrationVerifySql = readNormalizedSql('sql/qqbot-message-push-verify.sql');
@@ -485,6 +492,33 @@ describe('QQBot message-push SQL contract', () => {
     for (const sql of [bootstrapSql, seedSql, migrationSql]) expect(sql).toContain(expectedTemplate);
   });
 
+  it('adds the exact TCP NATMap template without changing the STUN template', () => {
+    const expectedTcpTemplate = normalizeSql(`
+      insert into qqbot_message_template (id, name, source_key, content, enabled, remark, is_deleted)
+      select 2041700000000200602, 'TCP NATMap 端点变更默认模板',
+        'network.tcp.natmap-endpoint-changed', '当前 TCP NATMap 端点已变更为 \${{endpoint}}', 1, '系统默认模板', 0
+      where not exists (
+        select 1 from qqbot_message_template
+        where source_key = 'network.tcp.natmap-endpoint-changed'
+          and name = 'TCP NATMap 端点变更默认模板' and is_deleted = 0
+      );
+    `);
+    for (const sql of [bootstrapSql, seedSql, migrationSql]) {
+      expect(sql).toContain(expectedTcpTemplate);
+      expect(sql.match(/2041700000000200602/g)).toHaveLength(1);
+      expect(sql).toContain(
+        "'network.stun.mapping-port-changed', '当前STUN的端口已变更为${{endpoint}}'",
+      );
+    }
+  });
+
+  it('keeps the TCP template source key aligned with source version 1', () => {
+    expect(tcpSourceAdapter).toMatch(
+      /const SOURCE_KEY = 'network\.tcp\.natmap-endpoint-changed';/,
+    );
+    expect(tcpSourceAdapter).toMatch(/version:\s*1,/);
+  });
+
   it('verifies the default template stable values with case-sensitive text comparisons', () => {
     const defaultTemplateVerify = extractVerificationStatement(verifySql, 'seed_qqbot_message_template');
     expect(defaultTemplateVerify).toBe(normalizeSql(`
@@ -497,6 +531,25 @@ describe('QQBot message-push SQL contract', () => {
         and enabled = 1
         and is_deleted = 0;
     `));
+  });
+
+  it('verifies the TCP template stable values in current and migration summaries', () => {
+    for (const sql of [verifySql, migrationVerifySql]) {
+      const tcpTemplateVerify = extractVerificationStatement(
+        sql,
+        'seed_qqbot_tcp_natmap_message_template',
+      );
+      expect(tcpTemplateVerify).toBe(normalizeSql(`
+        select 'seed_qqbot_tcp_natmap_message_template' as check_name, count(*) as matched_rows
+        from qqbot_message_template
+        where id = 2041700000000200602
+          and binary name = binary 'TCP NATMap 端点变更默认模板'
+          and binary source_key = binary 'network.tcp.natmap-endpoint-changed'
+          and binary content = binary '当前 TCP NATMap 端点已变更为 \${{endpoint}}'
+          and enabled = 1
+          and is_deleted = 0;
+      `));
+    }
   });
 
   it('verifies every message-push table with its own complete row-count statement', () => {
@@ -543,6 +596,24 @@ describe('QQBot message-push SQL contract', () => {
     expect(migrationSql).toContain('insert ignore into admin_role_menu');
   });
 
+  it('does not seed real accounts, targets, provider credentials, or certificates', () => {
+    const sql = [
+      bootstrapSql,
+      migrationSql,
+      migrationVerifySql,
+      seedSql,
+      verifySql,
+      vbenSql,
+    ].join('\n');
+    expect(sql).not.toMatch(
+      /insert into qqbot_message_(?:publish_binding|publish_target)\b/,
+    );
+    expect(sql).not.toMatch(/NETWORK_DDNS_DNSPOD_SECRET_(?:ID|KEY)\s*=\s*\S+/);
+    expect(sql).not.toMatch(
+      /router_password|xiaomi_password|-----BEGIN (?:CERTIFICATE|PRIVATE KEY)-----/i,
+    );
+  });
+
   it('keeps the production verification scoped to safe summaries', () => {
     for (const table of Object.keys(messagePushTableDefinitions)) {
       expect(migrationVerifySql).toContain(`'${table}'`);
@@ -551,6 +622,10 @@ describe('QQBot message-push SQL contract', () => {
       migrationVerifySql,
       'seed_qqbot_message_template',
     )).toContain("binary content = binary '当前STUN的端口已变更为${{endpoint}}'");
+    expect(extractVerificationStatement(
+      migrationVerifySql,
+      'seed_qqbot_tcp_natmap_message_template',
+    )).toContain("binary content = binary '当前 TCP NATMap 端点已变更为 ${{endpoint}}'");
     expect(extractVerificationStatement(
       migrationVerifySql,
       'seed_qqbot_message_push_menu',

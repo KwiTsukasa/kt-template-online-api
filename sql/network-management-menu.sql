@@ -19,7 +19,8 @@ VALUES
   (2041700000000120223, 2041700000000100207, 'SystemNetworkDdnsCreate', NULL, NULL, NULL, 'System:Network:Ddns:Create', 'button', '{"title":"common.create"}', 1, 10),
   (2041700000000120224, 2041700000000100207, 'SystemNetworkDdnsUpdate', NULL, NULL, NULL, 'System:Network:Ddns:Update', 'button', '{"title":"common.edit"}', 1, 11),
   (2041700000000120225, 2041700000000100207, 'SystemNetworkDdnsDelete', NULL, NULL, NULL, 'System:Network:Ddns:Delete', 'button', '{"title":"common.delete"}', 1, 12),
-  (2041700000000120226, 2041700000000100207, 'SystemNetworkDdnsRetry', NULL, NULL, NULL, 'System:Network:Ddns:Retry', 'button', '{"title":"common.retry"}', 1, 13)
+  (2041700000000120226, 2041700000000100207, 'SystemNetworkDdnsRetry', NULL, NULL, NULL, 'System:Network:Ddns:Retry', 'button', '{"title":"common.retry"}', 1, 13),
+  (2041700000000120227, 2041700000000100207, 'SystemNetworkPortForwardNatmap', NULL, NULL, NULL, 'System:Network:PortForward:Natmap', 'button', '{"title":"system.network.natmap"}', 1, 14)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `pid` = VALUES(`pid`),
@@ -46,6 +47,7 @@ WHERE role.`role_code` <> 'super'
     'SystemNetworkPortForwardDelete',
     'SystemNetworkPortForwardRetry',
     'SystemNetworkPortForwardKeeper',
+    'SystemNetworkPortForwardNatmap',
     'SystemNetworkPortForwardProbe',
     'SystemNetworkPortForwardHistory',
     'SystemNetworkDdnsList',
@@ -66,6 +68,7 @@ JOIN `admin_menu` menu ON menu.`name` IN (
   'SystemNetworkPortForwardDelete',
   'SystemNetworkPortForwardRetry',
   'SystemNetworkPortForwardKeeper',
+  'SystemNetworkPortForwardNatmap',
   'SystemNetworkPortForwardProbe',
   'SystemNetworkPortForwardHistory',
   'SystemNetworkDdnsList',

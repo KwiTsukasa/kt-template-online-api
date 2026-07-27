@@ -473,6 +473,8 @@ QQBot 运行态包括 NapCat 容器登录、OneBot v11 反向 WebSocket、MQTT �
 
 TCP NATMap 独立消息源为 `network.tcp.natmap-endpoint-changed`、版本 `1`，订阅配置精确为 `{ tcpChannelId, ddnsRecordId }`，两个字段都必须是字符串 Snowflake ID，且 DDNS 必须是启用、未删除、绑定同一 TCP 通道的 A 记录。变量精确为 `endpoint`、`fqdn`、`publicIpv4`、`publicPort`、`previousPublicIpv4`、`previousPublicPort`、`portForwardName`；`endpoint` 使用事件端口冻结为 `FQDN:newPort`。DDNS 尚未同步到事件 IPv4 时为 `waiting_ddns`，当前 tuple 已变化或租约过期为 `superseded`，通道撤下、删除、停用 NATMap 或 DDNS 改绑为 `cancelled`。现有 STUN 来源定义与变量保持不变。
 
+初始化与增量 SQL 使用稳定 ID `2041700000000200602` 幂等创建 `TCP NATMap 端点变更默认模板`，正文固定为 `当前 TCP NATMap 端点已变更为 ${{endpoint}}`；既有 STUN 模板 ID、来源键和正文不得修改。TCP NATMap 独立操作权限为 `System:Network:PortForward:Natmap`，只授予活动 `super` 角色。
+
 #### 内部事件与投递生命周期
 
 - UDP 只有一个既有有效端口直接变化为另一个有效端口的 `changed` 事件，才写既有 STUN Outbox；TCP 则在既有有效 tuple 的公网 IPv4 或端口任一变化时写独立 NATMap endpoint Outbox。首次 `published`、同 tuple 续期、`withdrawn`、同 tuple `restored`、重复事件和回滚事务都不产生 TCP 消息事件。事件使用生产者 `eventId` 幂等，matching report/event 的 history、current/baseline 与 Outbox 保持既有事务关联门禁，事务提交后才调用 `requestDrain()`。
@@ -482,7 +484,7 @@ TCP NATMap 独立消息源为 `network.tcp.natmap-endpoint-changed`、版本 `1`
 
 #### SQL、发布与回滚
 
-既有环境使用本功能幂等增量入口 `sql/qqbot-message-push-init.sql`，随后执行只读的 `sql/qqbot-message-push-verify.sql`；包含历史迁移的 `sql/qqbot-init.sql` 不能作为本功能生产迁移。只有一次性、可丢弃的全量初始化环境才依次使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`。发布顺序是：备份六表及相关菜单/角色授权行 → 应用对应 SQL 入口 → 验证表、17 个精确索引、默认模板与权限 → 先验证 API 再发布 Admin → 创建订阅和逐账号绑定 → 使用授权非生产目标完成有界 A→B 验收。
+既有环境使用本功能幂等增量入口 `sql/qqbot-message-push-init.sql`，随后执行只读的 `sql/qqbot-message-push-verify.sql`；包含历史迁移的 `sql/qqbot-init.sql` 不能作为本功能生产迁移。只有一次性、可丢弃的全量初始化环境才依次使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`。发布顺序是：备份六表及相关菜单/角色授权行 → 应用对应 SQL 入口 → 验证表、17 个精确索引、STUN/TCP 默认模板与权限 → 先验证 API 再发布 Admin → 创建订阅和逐账号绑定 → 使用授权非生产目标完成有界 A→B 验收。
 
 回滚先停用全部发布绑定，再回滚 Admin 和 API，并保留事件、投递及发送日志；Network Agent、端口转发、STUN Keeper 和 DDNS 继续运行。Jenkins/K8s 通过只证明版本已部署，不能替代真实 CRUD、页面或事件到消息的功能验收。每次发布必须分别记录生产 SQL、真实 API、页面、Outbox/DDNS 和授权 QQ 投递证据；没有明确授权的 QQ 群或 QQ 号时不得任选目标，并应把真实投递单独标记为未验证。
 

@@ -97,6 +97,15 @@ WHERE id = 2041700000000200601
   AND enabled = 1
   AND is_deleted = 0;
 
+SELECT 'seed_qqbot_tcp_natmap_message_template' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_message_template
+WHERE id = 2041700000000200602
+  AND BINARY name = BINARY 'TCP NATMap 端点变更默认模板'
+  AND BINARY source_key = BINARY 'network.tcp.natmap-endpoint-changed'
+  AND BINARY content = BINARY '当前 TCP NATMap 端点已变更为 ${{endpoint}}'
+  AND enabled = 1
+  AND is_deleted = 0;
+
 SELECT 'seed_qqbot_message_push_menu' AS check_name, COUNT(*) AS matched_rows
 FROM admin_menu
 WHERE id IN (

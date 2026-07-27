@@ -123,6 +123,23 @@ WHERE NOT EXISTS (
     AND is_deleted = 0
 );
 
+INSERT INTO qqbot_message_template (id, name, source_key, content, enabled, remark, is_deleted)
+SELECT
+  2041700000000200602,
+  'TCP NATMap 端点变更默认模板',
+  'network.tcp.natmap-endpoint-changed',
+  '当前 TCP NATMap 端点已变更为 ${{endpoint}}',
+  1,
+  '系统默认模板',
+  0
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM qqbot_message_template
+  WHERE source_key = 'network.tcp.natmap-endpoint-changed'
+    AND name = 'TCP NATMap 端点变更默认模板'
+    AND is_deleted = 0
+);
+
 INSERT INTO admin_menu (
   id,
   pid,

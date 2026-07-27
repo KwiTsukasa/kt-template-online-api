@@ -88,7 +88,7 @@ v2 endpoint event 通常先于 matching reported 到达，因此 event-first 先
 
 同一模块提供腾讯云云解析 DNS 的双栈自动 DDNS。A 记录可从合格 UDP Keeper 或 TCP NATMap 通道的有效公网 IPv4 取值，AAAA 记录只从在线 Agent 最近上报的全局 IPv6 取值；DNS 值始终不包含端口。A 来源以 `组名 / UDP Keeper` 或 `组名 / TCP NATMap` 展示；同步地址等于当前通道 IPv4 且当前公网端口有效时，管理响应额外返回 `accessEndpoint=FQDN:port`。仅端口变化只更新该派生端点，不调用腾讯云。协调器只修改已存在、已启用、默认线路且唯一的 A/AAAA 记录，保留 RecordId、线路和 TTL，并在写入后回读确认。删除 Admin 绑定只停止本地自动更新，不删除云端 DNS 记录。凭据只从 API 私有运行环境的 `NETWORK_DDNS_DNSPOD_SECRET_ID/SECRET_KEY` 读取，不进入 Admin、数据库、MQTT、Agent、日志或 Git；`DNSPOD` 是腾讯云官方 SDK 的技术服务名。
 
-QQBot 系统消息推送由全局消息订阅和模板、账号范围发布绑定及耐久事件/投递共同管理；订阅表单字段、候选集合和资源匹配由所选系统消息源 adapter 声明，核心模块不写死 STUN 的 `portForwardId/ddnsRecordId` 或 TCP NATMap 的 `tcpChannelId/ddnsRecordId`。TCP 来源变量精确为 `endpoint/fqdn/publicIpv4/publicPort/previousPublicIpv4/previousPublicPort/portForwardName`，只有所选同通道 A 记录同步到事件 IPv4 后才能发送。账号接口严格使用路由 `selfId`，不会回退到其他机器人。群聊和私聊目标分别使用 `group` / `private`，Snowflake、QQ 账号和目标 ID 在 HTTP 与数据库边界始终保持字符串。系统事件只能通过内部 Outbox stager 暂存，不提供 publish/event/worker HTTP 路由；管理响应仅返回字段白名单，不暴露账号凭据、Provider/OneBot/MQTT 运行对象、原始事件载荷或内部持久化键。
+QQBot 系统消息推送由全局消息订阅和模板、账号范围发布绑定及耐久事件/投递共同管理；订阅表单字段、候选集合和资源匹配由所选系统消息源 adapter 声明，核心模块不写死 STUN 的 `portForwardId/ddnsRecordId` 或 TCP NATMap 的 `tcpChannelId/ddnsRecordId`。TCP 来源变量精确为 `endpoint/fqdn/publicIpv4/publicPort/previousPublicIpv4/previousPublicPort/portForwardName`，只有所选同通道 A 记录同步到事件 IPv4 后才能发送；初始化与增量 SQL 幂等提供正文为 `当前 TCP NATMap 端点已变更为 ${{endpoint}}` 的默认模板，既有 STUN 模板保持不变。账号接口严格使用路由 `selfId`，不会回退到其他机器人。群聊和私聊目标分别使用 `group` / `private`，Snowflake、QQ 账号和目标 ID 在 HTTP 与数据库边界始终保持字符串。系统事件只能通过内部 Outbox stager 暂存，不提供 publish/event/worker HTTP 路由；管理响应仅返回字段白名单，不暴露账号凭据、Provider/OneBot/MQTT 运行对象、原始事件载荷或内部持久化键。
 
 `qqbot_message_event` 同时承担事件 Outbox：扇出状态为 `accepted`、`processing`、`retry`、`completed`、`failed`；按目标冻结的 `qqbot_message_delivery` 状态为 `waiting_ddns`、`pending`、`processing`、`retry`、`success`、`failed`、`superseded`、`cancelled`。扇出和投递每次各领取最多 50 行，处理租约为 30 秒；进程启动后立即恢复，并每 5 秒扫描一次。`waiting_ddns` 每 60 秒持久化复检；临时错误从 10 秒开始指数退避，单次最长 15 分钟，并以事件发生后 24 小时为截止时间。
 
@@ -237,7 +237,7 @@ bash scripts/bangdream-render-smoke.sh --operation-key bangdream.event.stage --t
 QQBot 系统消息推送按以下顺序发布和回滚：
 
 1. 备份 `qqbot_message_subscription`、`qqbot_message_template`、`qqbot_message_publish_binding`、`qqbot_message_publish_target`、`qqbot_message_event`、`qqbot_message_delivery`，以及本功能相关的 `admin_menu` / `admin_role_menu` 行。
-2. 既有环境只应用本功能的幂等增量入口 `sql/qqbot-message-push-init.sql`，随后执行只读的 `sql/qqbot-message-push-verify.sql`；不要把包含历史迁移的 `sql/qqbot-init.sql` 作为本功能生产迁移。仅一次性、可丢弃的全量初始化环境按顺序使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`。
+2. 既有环境只应用本功能的幂等增量入口 `sql/qqbot-message-push-init.sql`，随后执行只读的 `sql/qqbot-message-push-verify.sql`；不要把包含历史迁移的 `sql/qqbot-init.sql` 作为本功能生产迁移。仅一次性、可丢弃的全量初始化环境按顺序使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`。发布前还需通过网络菜单 SQL 应用独立 `System:Network:PortForward:Natmap` 权限并确认只授予活动 `super`。
 3. 验证六表、17 个精确索引、默认模板、18 个页面/按钮菜单和活动 `super/admin` 角色授权。
 4. 先发布并验证 API 健康检查、旧 QQBot 发送能力和新只读接口，再发布并验证 Admin。
 5. 管理员显式创建订阅，并在每个发布账号中选择模板、配置群聊/私聊目标和启用绑定；随后用授权的非生产目标做一次有界 A→B 端口变化、DDNS 门禁、发送日志和幂等验收。

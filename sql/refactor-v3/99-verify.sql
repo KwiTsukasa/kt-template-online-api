@@ -2,6 +2,7 @@ SELECT 'admin_user' AS table_name, COUNT(*) AS row_count FROM admin_user;
 SELECT 'admin_role' AS table_name, COUNT(*) AS row_count FROM admin_role;
 SELECT 'admin_menu' AS table_name, COUNT(*) AS row_count FROM admin_menu;
 SELECT 'network_port_forward' AS table_name, COUNT(*) AS row_count FROM network_port_forward;
+SELECT 'network_port_forward_group' AS table_name, COUNT(*) AS row_count FROM network_port_forward_group;
 SELECT 'network_ddns_record' AS table_name, COUNT(*) AS row_count FROM network_ddns_record;
 SELECT 'network_agent_state' AS table_name, COUNT(*) AS row_count FROM network_agent_state;
 SELECT 'network_endpoint_history' AS table_name, COUNT(*) AS row_count FROM network_endpoint_history;
@@ -35,6 +36,15 @@ WHERE id = 2041700000000200601
   AND BINARY name = BINARY 'STUN 映射端口变更默认模板'
   AND BINARY source_key = BINARY 'network.stun.mapping-port-changed'
   AND BINARY content = BINARY '当前STUN的端口已变更为${{endpoint}}'
+  AND enabled = 1
+  AND is_deleted = 0;
+
+SELECT 'seed_qqbot_tcp_natmap_message_template' AS check_name, COUNT(*) AS matched_rows
+FROM qqbot_message_template
+WHERE id = 2041700000000200602
+  AND BINARY name = BINARY 'TCP NATMap 端点变更默认模板'
+  AND BINARY source_key = BINARY 'network.tcp.natmap-endpoint-changed'
+  AND BINARY content = BINARY '当前 TCP NATMap 端点已变更为 ${{endpoint}}'
   AND enabled = 1
   AND is_deleted = 0;
 
@@ -147,6 +157,26 @@ FROM information_schema.statistics
 WHERE table_schema = DATABASE()
   AND table_name = 'network_port_forward'
   AND index_name = 'uk_network_port_forward_active_key';
+
+SELECT 'index_network_port_forward_active_group_protocol_key' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'network_port_forward'
+  AND index_name = 'uk_network_port_forward_active_group_protocol_key'
+  AND non_unique = 0;
+
+SELECT 'network_port_forward_active_group_protocol_key_conflicts' AS check_name, COUNT(*) AS invalid_rows
+FROM (
+  SELECT active_group_protocol_key
+  FROM network_port_forward
+  WHERE active_group_protocol_key IS NOT NULL
+  GROUP BY active_group_protocol_key
+  HAVING COUNT(*) > 1
+) conflicts;
+
+SELECT 'network_endpoint_history_mechanism_values' AS check_name, COUNT(*) AS invalid_rows
+FROM network_endpoint_history
+WHERE mechanism NOT IN ('udp_stun', 'tcp_natmap');
 
 SELECT 'index_network_ddns_record_active_key' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics
@@ -270,6 +300,92 @@ WHERE role.role_code <> 'super'
     'System:Network:Ddns:Delete',
     'System:Network:Ddns:Retry'
   );
+
+SELECT 'seed_network_natmap_permission' AS check_name, COUNT(*) AS matched_rows
+FROM admin_menu
+WHERE id = 2041700000000120227
+  AND BINARY name = BINARY 'SystemNetworkPortForwardNatmap'
+  AND BINARY auth_code = BINARY 'System:Network:PortForward:Natmap'
+  AND status = 1
+  AND is_deleted = 0;
+
+SELECT 'seed_network_natmap_super_permission' AS check_name, COUNT(*) AS matched_rows
+FROM admin_role_menu role_menu
+JOIN admin_role role ON role.id = role_menu.role_id
+JOIN admin_menu menu ON menu.id = role_menu.menu_id
+WHERE role.role_code = 'super'
+  AND role.status = 1
+  AND role.is_deleted = 0
+  AND menu.id = 2041700000000120227
+  AND BINARY menu.name = BINARY 'SystemNetworkPortForwardNatmap'
+  AND BINARY menu.auth_code = BINARY 'System:Network:PortForward:Natmap'
+  AND menu.status = 1
+  AND menu.is_deleted = 0;
+
+SELECT 'network_natmap_non_super_permissions_should_be_zero' AS check_name, COUNT(*) AS invalid_rows
+FROM admin_role_menu role_menu
+JOIN admin_role role ON role.id = role_menu.role_id
+JOIN admin_menu menu ON menu.id = role_menu.menu_id
+WHERE role.role_code <> 'super'
+  AND role.is_deleted = 0
+  AND menu.id = 2041700000000120227
+  AND menu.is_deleted = 0;
+
+SELECT
+  'network_8213_udp_channel_state' AS check_name,
+  channel.id,
+  channel.group_id,
+  channel.name,
+  channel.external_port,
+  channel.internal_port,
+  channel.protocol,
+  channel.target_ipv4,
+  channel.desired_presence,
+  channel.keeper_desired_enabled,
+  channel.keeper_status,
+  channel.desired_revision,
+  channel.reported_revision,
+  channel.current_public_ipv4,
+  channel.current_public_port,
+  channel.last_observed_ipv4,
+  channel.last_observed_port,
+  channel.is_deleted,
+  forwarding.protocol_mode AS group_protocol_mode,
+  forwarding.external_port AS group_external_port,
+  forwarding.internal_port AS group_internal_port,
+  forwarding.target_ipv4 AS group_target_ipv4,
+  forwarding.is_deleted AS group_is_deleted
+FROM network_port_forward channel
+JOIN network_port_forward_group forwarding ON forwarding.id = channel.group_id
+WHERE channel.external_port = 8213
+  AND channel.protocol = 'udp';
+
+SELECT
+  'network_8213_udp_ddns_state' AS check_name,
+  ddns.id,
+  ddns.port_forward_id,
+  ddns.name,
+  ddns.record_type,
+  ddns.source_type,
+  ddns.domain,
+  ddns.sub_domain,
+  ddns.enabled,
+  ddns.sync_status,
+  ddns.provider_record_id,
+  ddns.source_address,
+  ddns.applied_address,
+  ddns.retry_count,
+  ddns.next_retry_at,
+  ddns.last_attempt_at,
+  ddns.last_synced_at,
+  ddns.last_error_code,
+  ddns.last_error_message,
+  ddns.is_deleted
+FROM network_ddns_record ddns
+JOIN network_port_forward channel ON ddns.port_forward_id = channel.id
+WHERE ddns.source_type = 'port_forward_ipv4'
+  AND channel.external_port = 8213
+  AND channel.protocol = 'udp';
 
 SELECT 'index_admin_user_username' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics

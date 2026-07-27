@@ -150,6 +150,7 @@ INSERT INTO admin_menu (
   (2041700000000120224, 2041700000000100207, 'SystemNetworkDdnsUpdate', NULL, NULL, NULL, 'System:Network:Ddns:Update', 'button', '{"title":"common.edit"}', 1, 11),
   (2041700000000120225, 2041700000000100207, 'SystemNetworkDdnsDelete', NULL, NULL, NULL, 'System:Network:Ddns:Delete', 'button', '{"title":"common.delete"}', 1, 12),
   (2041700000000120226, 2041700000000100207, 'SystemNetworkDdnsRetry', NULL, NULL, NULL, 'System:Network:Ddns:Retry', 'button', '{"title":"common.retry"}', 1, 13),
+  (2041700000000120227, 2041700000000100207, 'SystemNetworkPortForwardNatmap', NULL, NULL, NULL, 'System:Network:PortForward:Natmap', 'button', '{"title":"system.network.natmap"}', 1, 14),
   (
     2041700000000100400,
     0,
@@ -220,6 +221,7 @@ WHERE role.role_code <> 'super'
     'SystemNetworkPortForwardDelete',
     'SystemNetworkPortForwardRetry',
     'SystemNetworkPortForwardKeeper',
+    'SystemNetworkPortForwardNatmap',
     'SystemNetworkPortForwardProbe',
     'SystemNetworkPortForwardHistory',
     'SystemNetworkDdnsList',
@@ -637,6 +639,15 @@ WHERE NOT EXISTS (
   SELECT 1 FROM qqbot_message_template
   WHERE source_key = 'network.stun.mapping-port-changed'
     AND name = 'STUN 映射端口变更默认模板'
+    AND is_deleted = 0
+);
+
+INSERT INTO qqbot_message_template (id, name, source_key, content, enabled, remark, is_deleted)
+SELECT 2041700000000200602, 'TCP NATMap 端点变更默认模板', 'network.tcp.natmap-endpoint-changed', '当前 TCP NATMap 端点已变更为 ${{endpoint}}', 1, '系统默认模板', 0
+WHERE NOT EXISTS (
+  SELECT 1 FROM qqbot_message_template
+  WHERE source_key = 'network.tcp.natmap-endpoint-changed'
+    AND name = 'TCP NATMap 端点变更默认模板'
     AND is_deleted = 0
 );
 

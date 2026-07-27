@@ -30,6 +30,7 @@ export type EndpointEventType =
   | 'published'
   | 'restored'
   | 'withdrawn';
+export type EndpointMechanism = 'tcp_natmap' | 'udp_stun';
 export type NetworkStateChangeSource =
   | 'ddns'
   | 'events'

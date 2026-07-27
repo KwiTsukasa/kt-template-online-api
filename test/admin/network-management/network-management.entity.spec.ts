@@ -50,7 +50,10 @@ describe('network management persistence module', () => {
       (column) => column.target === NetworkEndpointHistory,
     );
     const featureProviders = (
-      Reflect.getMetadata(MODULE_METADATA.IMPORTS, AdminPlatformConfigModule) as {
+      Reflect.getMetadata(
+        MODULE_METADATA.IMPORTS,
+        AdminPlatformConfigModule,
+      ) as {
         module?: unknown;
         providers?: { provide?: unknown }[];
       }[]
@@ -67,36 +70,63 @@ describe('network management persistence module', () => {
       ]),
     );
     expect(
-      groupColumns.find((column) => column.propertyName === 'createTime')
-        ?.mode,
+      groupColumns.find((column) => column.propertyName === 'createTime')?.mode,
     ).toBe('createDate');
     expect(
-      groupColumns.find((column) => column.propertyName === 'updateTime')
-        ?.mode,
+      groupColumns.find((column) => column.propertyName === 'updateTime')?.mode,
     ).toBe('updateDate');
     expect(channelColumns.map((column) => column.options.name)).toEqual(
       expect.arrayContaining([
         'active_group_protocol_key',
         'candidate_observed_at',
         'candidate_validated_at',
+        'candidate_validated_at_wire',
+        'current_endpoint_identity',
         'current_validated_at',
+        'current_validated_at_wire',
         'group_id',
         'last_observed_validated_at',
+        'last_observed_validated_at_wire',
         'last_published_at',
+        'last_reported_at',
+        'last_reported_at_wire',
         'natmap_desired_enabled',
       ]),
     );
     expect(
-      channelColumns.find((column) => column.propertyName === 'groupId')?.options
-        .type,
+      channelColumns.find((column) => column.propertyName === 'groupId')
+        ?.options.type,
     ).toBe('bigint');
     expect(
       channelColumns.find(
         (column) => column.propertyName === 'candidateObservedAt',
       )?.options.type,
     ).toBe('datetime');
+    expect(
+      channelColumns.find((column) => column.propertyName === 'lastReportedAt')
+        ?.options,
+    ).toEqual(
+      expect.objectContaining({
+        name: 'last_reported_at',
+        nullable: true,
+        precision: 6,
+        type: 'datetime',
+      }),
+    );
+    expect(
+      channelColumns.find(
+        (column) => column.propertyName === 'lastReportedAtWire',
+      )?.options,
+    ).toEqual(
+      expect.objectContaining({
+        length: 64,
+        name: 'last_reported_at_wire',
+        nullable: true,
+      }),
+    );
     expect(agentColumns.map((column) => column.options.name)).toEqual(
       expect.arrayContaining([
+        'applied_schema_version',
         'desired_schema_version',
         'published_schema_version',
         'max_supported_schema_version',
@@ -104,9 +134,66 @@ describe('network management persistence module', () => {
       ]),
     );
     expect(
+      agentColumns.find((column) => column.propertyName === 'version')?.options
+        .length,
+    ).toBe(128);
+    for (const propertyName of [
+      'lastMqttErrorMessage',
+      'lastReconcileErrorMessage',
+    ]) {
+      expect(
+        agentColumns.find((column) => column.propertyName === propertyName)
+          ?.options.length,
+      ).toBe(512);
+    }
+    expect(
       historyColumns.find((column) => column.propertyName === 'mechanism')
         ?.options.name,
     ).toBe('mechanism');
+    expect(
+      historyColumns.find((column) => column.propertyName === 'sourceRevision')
+        ?.options,
+    ).toEqual(
+      expect.objectContaining({
+        name: 'source_revision',
+        nullable: true,
+        type: 'bigint',
+      }),
+    );
+    expect(
+      historyColumns.find(
+        (column) => column.propertyName === 'endpointIdentity',
+      )?.options,
+    ).toEqual(
+      expect.objectContaining({
+        length: 64,
+        name: 'endpoint_identity',
+        nullable: true,
+      }),
+    );
+    expect(
+      Reflect.getMetadata(
+        'design:type',
+        NetworkEndpointHistory.prototype,
+        'sourceRevision',
+      ),
+    ).toBe(String);
+    for (const [propertyName, columnName] of [
+      ['endpointValidatedAt', 'endpoint_validated_at'],
+      ['endpointValidUntil', 'endpoint_valid_until'],
+    ]) {
+      expect(
+        historyColumns.find((column) => column.propertyName === propertyName)
+          ?.options,
+      ).toEqual(
+        expect.objectContaining({
+          name: columnName,
+          nullable: true,
+          precision: 6,
+          type: 'datetime',
+        }),
+      );
+    }
     expect(featureProviders.map((provider) => provider.provide)).toContain(
       getRepositoryToken(NetworkPortForwardGroup),
     );
@@ -119,11 +206,10 @@ describe('network management persistence module', () => {
       ),
     ).toBe(true);
     expect(
-      storage.relations.filter(
-        (relation) =>
-          [NetworkPortForward, NetworkPortForwardGroup].includes(
-            relation.target as never,
-          ),
+      storage.relations.filter((relation) =>
+        [NetworkPortForward, NetworkPortForwardGroup].includes(
+          relation.target as never,
+        ),
       ),
     ).toHaveLength(0);
   });

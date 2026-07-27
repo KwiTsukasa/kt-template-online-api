@@ -5,6 +5,8 @@ import {
   buildDesiredSnapshotV2,
   canonicalDesiredChannelDigestV2,
   canonicalDesiredSnapshotDigestV2,
+  compareNetworkV2Timestamps,
+  endpointLeaseIdentityV2,
   parseDesiredSnapshotV2,
   parseEndpointEventV2,
   parseReportedSnapshotV2,
@@ -36,6 +38,39 @@ const eventValue = () => ({
 });
 
 describe('network agent MQTT v2 contract', () => {
+  it('compares RFC3339Nano instants without millisecond truncation', () => {
+    expect(
+      compareNetworkV2Timestamps(
+        '2026-07-27T00:00:00.000900Z',
+        '2026-07-27T00:00:00.000100Z',
+      ),
+    ).toBeGreaterThan(0);
+    expect(
+      compareNetworkV2Timestamps(
+        '2026-07-27T08:00:00.123456789+08:00',
+        '2026-07-27T00:00:00.123456789Z',
+      ),
+    ).toBe(0);
+  });
+
+  it('keeps nanosecond-distinct endpoint leases as distinct identities', () => {
+    const endpoint = {
+      mechanism: 'udp_stun' as const,
+      observedAt: '2026-07-27T00:00:00.000100Z',
+      publicIpv4: '8.8.8.8',
+      publicPort: 8213,
+      validatedAt: '2026-07-27T00:00:01.000100Z',
+      validUntil: '2026-07-27T00:01:00.000100Z',
+    };
+
+    expect(endpointLeaseIdentityV2(endpoint)).not.toBe(
+      endpointLeaseIdentityV2({
+        ...endpoint,
+        validatedAt: '2026-07-27T00:00:01.000900Z',
+      }),
+    );
+  });
+
   it('parses the shared desired fixture and validates both literal digests', () => {
     const desired = parseDesiredSnapshotV2(
       rawFixture('network-v2-desired.json'),
@@ -55,8 +90,14 @@ describe('network agent MQTT v2 contract', () => {
     ['unknown field', (value: any) => (value.extra = true)],
     ['schema/body mismatch', (value: any) => (value.schemaVersion = 1)],
     ['numeric ID drift', (value: any) => (value.channels[0].channelId = 2)],
-    ['UDP NATMap pair', (value: any) => (value.channels[0].natmapDesiredEnabled = true)],
-    ['TCP Keeper pair', (value: any) => (value.channels[1].keeperDesiredEnabled = true)],
+    [
+      'UDP NATMap pair',
+      (value: any) => (value.channels[0].natmapDesiredEnabled = true),
+    ],
+    [
+      'TCP Keeper pair',
+      (value: any) => (value.channels[1].keeperDesiredEnabled = true),
+    ],
   ])('rejects %s before v2 messages reach transport', (_, patch) => {
     const value = fixture('network-v2-desired.json') as any;
     patch(value);
@@ -79,31 +120,45 @@ describe('network agent MQTT v2 contract', () => {
   });
 
   it('accepts v2 status and matching endpoint events before transport routing', () => {
-    expect(
-      parseStatusSnapshotV2(JSON.stringify(statusValue())),
-    ).toMatchObject({ online: true });
-    expect(
-      parseEndpointEventV2(JSON.stringify(eventValue())),
-    ).toMatchObject({ type: 'withdrawn' });
+    expect(parseStatusSnapshotV2(JSON.stringify(statusValue()))).toMatchObject({
+      online: true,
+    });
+    expect(parseEndpointEventV2(JSON.stringify(eventValue()))).toMatchObject({
+      type: 'withdrawn',
+    });
   });
 
   it.each([
-    ['desired', parseDesiredSnapshotV2, () => rawFixture('network-v2-desired.json')],
-    ['reported', parseReportedSnapshotV2, () => rawFixture('network-v2-reported.json')],
+    [
+      'desired',
+      parseDesiredSnapshotV2,
+      () => rawFixture('network-v2-desired.json'),
+    ],
+    [
+      'reported',
+      parseReportedSnapshotV2,
+      () => rawFixture('network-v2-reported.json'),
+    ],
     ['status', parseStatusSnapshotV2, () => JSON.stringify(statusValue())],
     ['event', parseEndpointEventV2, () => JSON.stringify(eventValue())],
-  ])('enforces raw size and trailing JSON for %s', (_, parser, validPayload) => {
-    expect(parser(validPayload())).toBeDefined();
-    expect(() => parser(`${validPayload()}{}`)).toThrow();
-    expect(() =>
-      parser(Buffer.alloc(NETWORK_AGENT_V2_MAX_MESSAGE_BYTES + 1)),
-    ).toThrow();
-  });
+  ])(
+    'enforces raw size and trailing JSON for %s',
+    (_, parser, validPayload) => {
+      expect(parser(validPayload())).toBeDefined();
+      expect(() => parser(`${validPayload()}{}`)).toThrow();
+      expect(() =>
+        parser(Buffer.alloc(NETWORK_AGENT_V2_MAX_MESSAGE_BYTES + 1)),
+      ).toThrow();
+    },
+  );
 
   it('rejects invalid RFC3339 calendar dates and explicit null optionals', () => {
     expect(() =>
       parseStatusSnapshotV2(
-        JSON.stringify({ ...statusValue(), observedAt: '2026-02-29T00:00:00Z' }),
+        JSON.stringify({
+          ...statusValue(),
+          observedAt: '2026-02-29T00:00:00Z',
+        }),
       ),
     ).toThrow();
     expect(() =>
@@ -112,9 +167,7 @@ describe('network agent MQTT v2 contract', () => {
       ),
     ).toThrow();
     expect(() =>
-      parseEndpointEventV2(
-        JSON.stringify({ ...eventValue(), endpoint: null }),
-      ),
+      parseEndpointEventV2(JSON.stringify({ ...eventValue(), endpoint: null })),
     ).toThrow();
   });
 
@@ -163,12 +216,15 @@ describe('network agent MQTT v2 contract', () => {
     const desiredWithName = (name: string) => {
       const value = fixture('network-v2-desired.json');
       value.channels[0].name = name;
-      value.channels[0].channelDesiredDigest =
-        canonicalDesiredChannelDigestV2(value.channels[0]);
+      value.channels[0].channelDesiredDigest = canonicalDesiredChannelDigestV2(
+        value.channels[0],
+      );
       value.snapshotDigest = canonicalDesiredSnapshotDigestV2(value);
       return JSON.stringify(value);
     };
-    expect(parseDesiredSnapshotV2(desiredWithName('界'.repeat(42)))).toBeDefined();
+    expect(
+      parseDesiredSnapshotV2(desiredWithName('界'.repeat(42))),
+    ).toBeDefined();
     expect(() =>
       parseDesiredSnapshotV2(desiredWithName('界'.repeat(43))),
     ).toThrow();
@@ -216,9 +272,14 @@ describe('network agent MQTT v2 contract', () => {
     const desired = buildDesiredSnapshotV2(state, channels);
     expect(desired).toMatchObject({ schemaVersion: 2, snapshotRevision: 7 });
     expect(desired.channels[0].channelDesiredDigest).toMatch(/^[0-9a-f]{64}$/);
-    expect(desired.snapshotDigest).toBe(canonicalDesiredSnapshotDigestV2(desired));
+    expect(desired.snapshotDigest).toBe(
+      canonicalDesiredSnapshotDigestV2(desired),
+    );
     expect(() =>
-      buildDesiredSnapshotV2({ ...state, desiredRevision: '9007199254740992' }, channels),
+      buildDesiredSnapshotV2(
+        { ...state, desiredRevision: '9007199254740992' },
+        channels,
+      ),
     ).toThrow();
   });
 
@@ -241,8 +302,14 @@ describe('network agent MQTT v2 contract', () => {
       protocol: 'tcp' as const,
     });
 
-    const desired = buildDesiredSnapshotV2(state, [channel('20'), channel('10')]);
-    expect(desired.channels.map((item) => item.channelId)).toEqual(['10', '20']);
+    const desired = buildDesiredSnapshotV2(state, [
+      channel('20'),
+      channel('10'),
+    ]);
+    expect(desired.channels.map((item) => item.channelId)).toEqual([
+      '10',
+      '20',
+    ]);
     expect(parseDesiredSnapshotV2(JSON.stringify(desired))).toEqual(desired);
   });
 
@@ -265,7 +332,9 @@ describe('network agent MQTT v2 contract', () => {
       protocol: 'tcp' as const,
     };
 
-    expect(() => buildDesiredSnapshotV2(state, [channel, { ...channel }])).toThrow();
+    expect(() =>
+      buildDesiredSnapshotV2(state, [channel, { ...channel }]),
+    ).toThrow();
     expect(() =>
       buildDesiredSnapshotV2(state, [{ ...channel, externalPort: 0 }]),
     ).toThrow();

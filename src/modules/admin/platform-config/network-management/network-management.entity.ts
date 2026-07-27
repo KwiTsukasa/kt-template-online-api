@@ -15,9 +15,11 @@ import type {
 
 @Entity('network_port_forward')
 @Index('uk_network_port_forward_active_key', ['activeKey'], { unique: true })
-@Index('uk_network_port_forward_active_group_protocol_key', [
-  'activeGroupProtocolKey',
-], { unique: true })
+@Index(
+  'uk_network_port_forward_active_group_protocol_key',
+  ['activeGroupProtocolKey'],
+  { unique: true },
+)
 @Index('idx_network_port_forward_group', ['groupId', 'isDeleted', 'protocol'])
 export class NetworkPortForward {
   @PrimaryColumn({ type: 'bigint' })
@@ -83,6 +85,17 @@ export class NetworkPortForward {
   @Column({ default: '0', name: 'reported_revision', type: 'bigint' })
   reportedRevision: string;
 
+  @KtDateTimeColumn({
+    name: 'last_reported_at',
+    nullable: true,
+    precision: 6,
+    type: 'datetime',
+  })
+  lastReportedAt?: KtDateTime | null;
+
+  @Column({ length: 64, name: 'last_reported_at_wire', nullable: true })
+  lastReportedAtWire?: string | null;
+
   @Column({ default: 'pending', length: 16, name: 'sync_status' })
   syncStatus: PortForwardSyncStatus;
 
@@ -113,12 +126,27 @@ export class NetworkPortForward {
   })
   currentValidatedAt?: KtDateTime | null;
 
+  @Column({
+    length: 64,
+    name: 'current_validated_at_wire',
+    nullable: true,
+  })
+  currentValidatedAtWire?: string | null;
+
   @KtDateTimeColumn({
     name: 'current_valid_until',
     nullable: true,
     type: 'datetime',
   })
   currentValidUntil?: KtDateTime | null;
+
+  @Column({
+    length: 64,
+    name: 'current_endpoint_identity',
+    nullable: true,
+    type: 'char',
+  })
+  currentEndpointIdentity?: string | null;
 
   @Column({ length: 15, name: 'last_observed_ipv4', nullable: true })
   lastObservedIpv4?: string | null;
@@ -141,6 +169,13 @@ export class NetworkPortForward {
   })
   lastObservedValidatedAt?: KtDateTime | null;
 
+  @Column({
+    length: 64,
+    name: 'last_observed_validated_at_wire',
+    nullable: true,
+  })
+  lastObservedValidatedAtWire?: string | null;
+
   @Column({ length: 15, name: 'candidate_public_ipv4', nullable: true })
   candidatePublicIpv4?: string | null;
 
@@ -162,6 +197,13 @@ export class NetworkPortForward {
     type: 'datetime',
   })
   candidateValidatedAt?: KtDateTime | null;
+
+  @Column({
+    length: 64,
+    name: 'candidate_validated_at_wire',
+    nullable: true,
+  })
+  candidateValidatedAtWire?: string | null;
 
   @Column({ length: 15, name: 'last_published_public_ipv4', nullable: true })
   lastPublishedPublicIpv4?: string | null;

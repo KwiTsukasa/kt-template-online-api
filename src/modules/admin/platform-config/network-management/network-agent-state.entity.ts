@@ -53,10 +53,18 @@ export class NetworkAgentState {
   @Column({ default: '0', name: 'applied_revision', type: 'bigint' })
   appliedRevision: string;
 
+  @Column({
+    default: 1,
+    name: 'applied_schema_version',
+    type: 'int',
+    unsigned: true,
+  })
+  appliedSchemaVersion: number;
+
   @Column({ default: false, type: 'boolean' })
   online: boolean;
 
-  @Column({ length: 64, nullable: true })
+  @Column({ length: 128, nullable: true })
   version?: string | null;
 
   @KtDateTimeColumn({ name: 'started_at', nullable: true, type: 'datetime' })
@@ -83,13 +91,13 @@ export class NetworkAgentState {
   @Column({ length: 64, name: 'last_mqtt_error_code', nullable: true })
   lastMqttErrorCode?: string | null;
 
-  @Column({ length: 500, name: 'last_mqtt_error_message', nullable: true })
+  @Column({ length: 512, name: 'last_mqtt_error_message', nullable: true })
   lastMqttErrorMessage?: string | null;
 
   @Column({ length: 64, name: 'last_reconcile_error_code', nullable: true })
   lastReconcileErrorCode?: string | null;
 
-  @Column({ length: 500, name: 'last_reconcile_error_message', nullable: true })
+  @Column({ length: 512, name: 'last_reconcile_error_message', nullable: true })
   lastReconcileErrorMessage?: string | null;
 
   @KtCreateDateColumn({ name: 'create_time' })

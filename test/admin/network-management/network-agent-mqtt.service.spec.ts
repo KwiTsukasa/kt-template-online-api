@@ -12,6 +12,10 @@ import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-conf
 import type { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/network-management-event-stream.service';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
 import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
+import {
+  buildDesiredSnapshotV2,
+  endpointLeaseIdentityV2,
+} from '../../../src/modules/admin/platform-config/network-management/network-agent-v2.types';
 import type {
   SystemMessageEventInput,
   SystemMessageEventStager,
@@ -25,9 +29,11 @@ type MqttHarness = {
   client: MqttClient & EventEmitter;
   clientOptions: () => IClientOptions;
   deliveryCoordinator: { requestDrain: jest.Mock };
+  group: NetworkPortForwardGroup;
   histories: NetworkEndpointHistory[];
   historyFindOne: jest.Mock;
   historySave: jest.Mock;
+  mappingFindOne: jest.Mock;
   mappingSave: jest.Mock;
   operations: string[];
   publishCommitted: jest.Mock;
@@ -38,6 +44,7 @@ type MqttHarness = {
   stagedEvents: SystemMessageEventInput[];
   stager: jest.Mocked<SystemMessageEventStager>;
   state: NetworkAgentState;
+  stateFindOne: jest.Mock;
   stateSave: jest.Mock;
   transactionCalls: () => number;
 };
@@ -56,6 +63,24 @@ type ConcurrentEndpointHarness = {
   stagedEvents: SystemMessageEventInput[];
 };
 
+type V2MqttHarness = {
+  channels: NetworkPortForward[];
+  deliveryCoordinator: { requestDrain: jest.Mock };
+  groups: NetworkPortForwardGroup[];
+  histories: NetworkEndpointHistory[];
+  historySave: jest.Mock;
+  mappingFindOne: jest.Mock;
+  mappingSave: jest.Mock;
+  operations: string[];
+  publishCommitted: jest.Mock;
+  requestDdnsReconcile: jest.Mock;
+  service: NetworkAgentMqttService;
+  stagedEvents: SystemMessageEventInput[];
+  stager: jest.Mocked<SystemMessageEventStager>;
+  state: NetworkAgentState;
+  stateFindOne: jest.Mock;
+};
+
 function createDeferred<T>(): Deferred<T> {
   let resolve: (value: T | PromiseLike<T>) => void = () => undefined;
   const promise = new Promise<T>((nextResolve) => {
@@ -69,6 +94,7 @@ function createHarness(): MqttHarness {
   const state = Object.assign(new NetworkAgentState(), {
     agentId: 'nas-main',
     appliedRevision: '0',
+    appliedSchemaVersion: 1,
     desiredIssuedAt: new KtDateTime('2026-07-22T01:02:03.000Z'),
     desiredRevision: '7',
     online: false,
@@ -76,6 +102,7 @@ function createHarness(): MqttHarness {
     targetIpv4: '192.168.31.224',
   });
   const mapping = Object.assign(new NetworkPortForward(), {
+    activeGroupProtocolKey: '10:udp',
     activeKey: 'udp:9000',
     currentObservedAt: null,
     currentPublicIpv4: null,
@@ -85,6 +112,7 @@ function createHarness(): MqttHarness {
     desiredPresence: 'present',
     desiredRevision: '7',
     externalPort: 9000,
+    groupId: '10',
     id: '100',
     internalPort: 9000,
     isDeleted: false,
@@ -96,18 +124,39 @@ function createHarness(): MqttHarness {
     syncStatus: 'pending',
     targetIpv4: '192.168.31.224',
   });
+  const group = Object.assign(new NetworkPortForwardGroup(), {
+    externalPort: 9000,
+    id: '10',
+    internalPort: 9000,
+    isDeleted: false,
+    name: 'rule',
+    protocolMode: 'udp',
+    targetIpv4: '192.168.31.224',
+  });
   const histories: NetworkEndpointHistory[] = [];
   const stateSave = jest.fn(async (value) => Object.assign(state, value));
+  const stateFindOne = jest.fn(async () => state);
   const stateRepository = {
-    findOne: async () => state,
+    findOne: stateFindOne,
     save: stateSave,
   } as unknown as Repository<NetworkAgentState>;
   const mappingSave = jest.fn(async (value) => Object.assign(mapping, value));
+  const mappingFindOne = jest.fn(async ({ where }) =>
+    where.id === mapping.id ? mapping : null,
+  );
   const mappingRepository = {
-    find: async () => (mapping.isDeleted ? [] : [mapping]),
-    findOne: async ({ where }) => (where.id === mapping.id ? mapping : null),
+    find: async ({ where } = {} as any) => {
+      if (where?.groupId === mapping.groupId) return [mapping];
+      return mapping.isDeleted ? [] : [mapping];
+    },
+    findOne: mappingFindOne,
     save: mappingSave,
   } as unknown as Repository<NetworkPortForward>;
+  const groupRepository = {
+    find: async () => (group.isDeleted ? [] : [group]),
+    findOne: async ({ where }) => (where.id === group.id ? group : null),
+    save: jest.fn(async (value) => Object.assign(group, value)),
+  } as unknown as Repository<NetworkPortForwardGroup>;
   const historyFindOne = jest.fn(async ({ order, where }) => {
     if (where.eventId) {
       return histories.find((item) => item.eventId === where.eventId) || null;
@@ -145,6 +194,7 @@ function createHarness(): MqttHarness {
     getRepository: (entity) => {
       if (entity === NetworkAgentState) return stateRepository;
       if (entity === NetworkPortForward) return mappingRepository;
+      if (entity === NetworkPortForwardGroup) return groupRepository;
       if (entity === NetworkEndpointHistory) return historyRepository;
       throw new Error('unexpected repository');
     },
@@ -235,9 +285,11 @@ function createHarness(): MqttHarness {
     client,
     clientOptions: () => options,
     deliveryCoordinator,
+    group,
     histories,
     historyFindOne,
     historySave,
+    mappingFindOne,
     mappingSave,
     mapping,
     operations,
@@ -247,10 +299,368 @@ function createHarness(): MqttHarness {
     service,
     stagedEvents,
     state,
+    stateFindOne,
     stateSave,
     stager,
     transactionCalls: () => transactionCallCount,
   };
+}
+
+function createV2Harness(): V2MqttHarness {
+  const operations: string[] = [];
+  const issuedAt = new KtDateTime('2099-07-27T00:00:00.000Z');
+  const state = Object.assign(new NetworkAgentState(), {
+    agentId: 'nas-main',
+    appliedRevision: '0',
+    appliedSchemaVersion: 1,
+    desiredIssuedAt: issuedAt,
+    desiredRevision: '7',
+    desiredSchemaVersion: 2,
+    maxSupportedSchemaVersion: 2,
+    online: true,
+    publishedRevision: '7',
+    publishedSchemaVersion: 2,
+    targetIpv4: '192.168.31.224',
+    tcpNatmapCapable: true,
+  });
+  const group = Object.assign(new NetworkPortForwardGroup(), {
+    externalPort: 8213,
+    id: '10',
+    internalPort: 8213,
+    isDeleted: false,
+    name: '双协议规则',
+    protocolMode: 'tcp_udp',
+    targetIpv4: '192.168.31.224',
+  });
+  const channelBase = {
+    currentObservedAt: null,
+    currentPublicIpv4: null,
+    currentPublicPort: null,
+    currentValidatedAt: null,
+    currentValidUntil: null,
+    desiredIssuedAt: issuedAt,
+    desiredPresence: 'present' as const,
+    desiredRevision: '7',
+    externalPort: 8213,
+    groupId: group.id,
+    internalPort: 8213,
+    isDeleted: false,
+    lastObservedAt: null,
+    lastObservedIpv4: null,
+    lastObservedPort: null,
+    lastObservedValidatedAt: null,
+    name: group.name,
+    reportedRevision: '0',
+    syncStatus: 'pending' as const,
+    targetIpv4: '192.168.31.224',
+  };
+  const tcp = Object.assign(new NetworkPortForward(), channelBase, {
+    activeGroupProtocolKey: '10:tcp',
+    activeKey: 'tcp:8213',
+    id: '101',
+    keeperDesiredEnabled: false,
+    keeperStatus: 'disabled',
+    natmapDesiredEnabled: true,
+    natmapStatus: 'starting',
+    protocol: 'tcp',
+  });
+  const udp = Object.assign(new NetworkPortForward(), channelBase, {
+    activeGroupProtocolKey: '10:udp',
+    activeKey: 'udp:8213',
+    id: '102',
+    keeperDesiredEnabled: true,
+    keeperStatus: 'starting',
+    natmapDesiredEnabled: false,
+    natmapStatus: 'disabled',
+    protocol: 'udp',
+  });
+  const channels = [tcp, udp];
+  const groups = [group];
+  const histories: NetworkEndpointHistory[] = [];
+  const stagedEvents: SystemMessageEventInput[] = [];
+  const mappingSave = jest.fn(async (value) => value);
+  const groupSave = jest.fn(async (value) => value);
+  const historySave = jest.fn(async (value: NetworkEndpointHistory) => {
+    value.id ||= String(histories.length + 1);
+    histories.push(value);
+    return value;
+  });
+  const stateSave = jest.fn(async (value) => value);
+  const matchesWhere = (
+    value: Record<string, unknown>,
+    where: Record<string, unknown> = {},
+  ) =>
+    Object.entries(where).every(([key, expected]) => value[key] === expected);
+  const mappingFindOne = jest.fn(
+    async ({ where }) =>
+      channels.find((channel) =>
+        matchesWhere(channel as unknown as Record<string, unknown>, where),
+      ) || null,
+  );
+  const mappingRepository = {
+    find: async ({ where } = {} as any) =>
+      channels.filter((channel) =>
+        matchesWhere(channel as unknown as Record<string, unknown>, where),
+      ),
+    findOne: mappingFindOne,
+    save: mappingSave,
+  } as unknown as Repository<NetworkPortForward>;
+  const groupRepository = {
+    find: async ({ where } = {} as any) =>
+      groups.filter((item) =>
+        matchesWhere(item as unknown as Record<string, unknown>, where),
+      ),
+    findOne: async ({ where }) =>
+      groups.find((item) =>
+        matchesWhere(item as unknown as Record<string, unknown>, where),
+      ) || null,
+    save: groupSave,
+  } as unknown as Repository<NetworkPortForwardGroup>;
+  const historyRepository = {
+    create: (input) => Object.assign(new NetworkEndpointHistory(), input),
+    find: async ({ order, take, where }) => {
+      const matches = histories.filter((history) =>
+        matchesWhere(history as unknown as Record<string, unknown>, where),
+      );
+      const sorted = [...matches].sort((left, right) => {
+        for (const [key, direction] of Object.entries(order || {})) {
+          const leftValue = left[key as keyof NetworkEndpointHistory];
+          const rightValue = right[key as keyof NetworkEndpointHistory];
+          const compare =
+            leftValue instanceof Date && rightValue instanceof Date
+              ? leftValue.getTime() - rightValue.getTime()
+              : String(leftValue).localeCompare(String(rightValue));
+          if (compare !== 0) return direction === 'DESC' ? -compare : compare;
+        }
+        return 0;
+      });
+      return take ? sorted.slice(0, take) : sorted;
+    },
+    findOne: async ({ order, where }) => {
+      const matches = histories.filter((history) =>
+        matchesWhere(history as unknown as Record<string, unknown>, where),
+      );
+      if (!order) return matches[0] || null;
+      return (
+        [...matches].sort((left, right) => {
+          for (const [key, direction] of Object.entries(order)) {
+            const leftValue = left[key as keyof NetworkEndpointHistory];
+            const rightValue = right[key as keyof NetworkEndpointHistory];
+            const compare =
+              leftValue instanceof Date && rightValue instanceof Date
+                ? leftValue.getTime() - rightValue.getTime()
+                : String(leftValue).localeCompare(String(rightValue));
+            if (compare !== 0) return direction === 'DESC' ? -compare : compare;
+          }
+          return 0;
+        })[0] || null
+      );
+    },
+    save: historySave,
+  } as unknown as Repository<NetworkEndpointHistory>;
+  const stateFindOne = jest.fn(async () => state);
+  const stateRepository = {
+    findOne: stateFindOne,
+    save: stateSave,
+  } as unknown as Repository<NetworkAgentState>;
+  const manager = {
+    getRepository: (entity) => {
+      if (entity === NetworkAgentState) return stateRepository;
+      if (entity === NetworkPortForward) return mappingRepository;
+      if (entity === NetworkPortForwardGroup) return groupRepository;
+      if (entity === NetworkEndpointHistory) return historyRepository;
+      throw new Error('unexpected v2 repository');
+    },
+  } as unknown as EntityManager;
+  const stager = {
+    stage: jest.fn(async (_manager, input) => {
+      operations.push('stager:accepted');
+      stagedEvents.push(input);
+      return 'accepted' as const;
+    }),
+  } as jest.Mocked<SystemMessageEventStager>;
+  const dataSource = {
+    getRepository: manager.getRepository.bind(manager),
+    transaction: async (work) => {
+      operations.push('transaction:start');
+      const stateBefore = Object.assign(new NetworkAgentState(), state);
+      const channelsBefore = channels.map((channel) =>
+        Object.assign(new NetworkPortForward(), channel),
+      );
+      const groupsBefore = groups.map((item) =>
+        Object.assign(new NetworkPortForwardGroup(), item),
+      );
+      const historiesBefore = [...histories];
+      const stagedEventsBefore = [...stagedEvents];
+      try {
+        const result = await work(manager);
+        operations.push('transaction:commit');
+        return result;
+      } catch (error) {
+        Object.assign(state, stateBefore);
+        for (const snapshot of channelsBefore) {
+          const channel = channels.find((item) => item.id === snapshot.id);
+          if (channel) Object.assign(channel, snapshot);
+        }
+        for (const snapshot of groupsBefore) {
+          const item = groups.find((candidate) => candidate.id === snapshot.id);
+          if (item) Object.assign(item, snapshot);
+        }
+        histories.splice(0, histories.length, ...historiesBefore);
+        stagedEvents.splice(0, stagedEvents.length, ...stagedEventsBefore);
+        operations.push('transaction:rollback');
+        throw error;
+      }
+    },
+  } as unknown as DataSource;
+  const publishCommitted = jest.fn(() => operations.push('sse'));
+  const requestDdnsReconcile = jest.fn(() => operations.push('ddns:wake'));
+  const deliveryCoordinator = {
+    requestDrain: jest.fn(() => operations.push('delivery:wake')),
+  };
+  const service = new NetworkAgentMqttService(
+    {
+      get: (key: string) =>
+        ({
+          NETWORK_AGENT_ID: 'nas-main',
+          NETWORK_AGENT_MQTT_RETRY_MS: '60000',
+        })[key],
+    } as ConfigService,
+    dataSource,
+    { publishCommitted } as never,
+    stager,
+    deliveryCoordinator as never,
+    undefined,
+    { requestReconcile: requestDdnsReconcile } as never,
+  );
+  return {
+    channels,
+    deliveryCoordinator,
+    groups,
+    histories,
+    historySave,
+    mappingFindOne,
+    mappingSave,
+    operations,
+    publishCommitted,
+    requestDdnsReconcile,
+    service,
+    stagedEvents,
+    stager,
+    state,
+    stateFindOne,
+  };
+}
+
+function v2Endpoint(
+  mechanism: 'tcp_natmap' | 'udp_stun',
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    mechanism,
+    observedAt: '2099-07-27T00:00:00.000Z',
+    publicIpv4: mechanism === 'tcp_natmap' ? '8.8.8.8' : '8.8.4.4',
+    publicPort: mechanism === 'tcp_natmap' ? 45101 : 45102,
+    validatedAt: '2099-07-27T00:00:05.000Z',
+    validUntil: '2099-07-27T00:00:45.000Z',
+    ...overrides,
+  };
+}
+
+function v2Reported(
+  harness: V2MqttHarness,
+  channelOverrides: Record<string, Record<string, unknown>> = {},
+  snapshotOverrides: Record<string, unknown> = {},
+): Buffer {
+  const activeChannels = harness.channels.filter(
+    (channel) => !channel.isDeleted,
+  );
+  const desired = buildDesiredSnapshotV2(harness.state, activeChannels);
+  const desiredById = new Map(
+    desired.channels.map((channel) => [channel.channelId, channel]),
+  );
+  const channels = activeChannels.map((channel) => {
+    const desiredChannel = desiredById.get(channel.id);
+    if (!desiredChannel) throw new Error('missing desired channel');
+    const present = channel.desiredPresence === 'present';
+    if (channel.protocol === 'tcp') {
+      const endpoint = v2Endpoint('tcp_natmap');
+      return {
+        appliedDesiredDigest: desiredChannel.channelDesiredDigest,
+        appliedDesiredRevision: desiredChannel.channelDesiredRevision,
+        ...(present
+          ? {
+              candidateEndpoint: endpoint,
+              currentEndpoint: endpoint,
+              lastObservedEndpoint: endpoint,
+            }
+          : {}),
+        channelId: channel.id,
+        desiredPresence: channel.desiredPresence,
+        dnatPresent: present,
+        groupId: channel.groupId,
+        ...(present ? { instanceGeneration: 'generation-1' } : {}),
+        natmapDesiredEnabled: channel.natmapDesiredEnabled,
+        natmapStatus: present ? 'active' : 'disabled',
+        protocol: 'tcp',
+        routerPresent: present,
+        syncStatus: 'synced',
+        ...channelOverrides[channel.id],
+      };
+    }
+    const endpoint = v2Endpoint('udp_stun');
+    return {
+      appliedDesiredDigest: desiredChannel.channelDesiredDigest,
+      appliedDesiredRevision: desiredChannel.channelDesiredRevision,
+      channelId: channel.id,
+      ...(present
+        ? { currentEndpoint: endpoint, lastObservedEndpoint: endpoint }
+        : {}),
+      desiredPresence: channel.desiredPresence,
+      groupId: channel.groupId,
+      keeperDesiredEnabled: channel.keeperDesiredEnabled,
+      keeperStatus: present ? 'active' : 'disabled',
+      protocol: 'udp',
+      routePresent: present,
+      routerPresent: present,
+      syncStatus: 'synced',
+      ...channelOverrides[channel.id],
+    };
+  });
+  return Buffer.from(
+    JSON.stringify({
+      agentId: 'nas-main',
+      channels,
+      reportedAt: '2099-07-27T00:00:10.000Z',
+      schemaVersion: 2,
+      snapshotDigest: desired.snapshotDigest,
+      snapshotRevision: desired.snapshotRevision,
+      ...snapshotOverrides,
+    }),
+  );
+}
+
+function v2EndpointEvent(overrides: Record<string, unknown> = {}): Buffer {
+  return Buffer.from(
+    JSON.stringify({
+      agentId: 'nas-main',
+      channelId: '102',
+      endpoint: v2Endpoint('udp_stun', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000Z',
+        validUntil: '2099-07-27T00:00:55.000Z',
+      }),
+      eventId: 'v2-endpoint-event-2',
+      groupId: '10',
+      mechanism: 'udp_stun',
+      occurredAt: '2099-07-27T00:00:16.000Z',
+      protocol: 'udp',
+      revision: 7,
+      schemaVersion: 2,
+      type: 'changed',
+      ...overrides,
+    }),
+  );
 }
 
 function createConcurrentEndpointHarness(): ConcurrentEndpointHarness {
@@ -449,6 +859,29 @@ function endpointHistory(
   });
 }
 
+function v2EndpointHistory(
+  overrides: Partial<NetworkEndpointHistory> = {},
+): NetworkEndpointHistory {
+  const endpoint = v2Endpoint('udp_stun');
+  return Object.assign(new NetworkEndpointHistory(), {
+    endpointValidatedAt: new KtDateTime('2099-07-27T00:00:05.000Z'),
+    endpointValidUntil: new KtDateTime('2099-07-27T00:00:45.000Z'),
+    endpointIdentity: endpointLeaseIdentityV2(endpoint),
+    eventId: 'v2-endpoint-event-1',
+    eventType: 'published',
+    firstObservedAt: new KtDateTime('2099-07-27T00:00:00.000Z'),
+    id: '1',
+    lastObservedAt: new KtDateTime('2099-07-27T00:00:00.000Z'),
+    mappingId: '102',
+    mechanism: 'udp_stun',
+    occurredAt: new KtDateTime('2099-07-27T00:00:01.000Z'),
+    publicIpv4: '8.8.4.4',
+    publicPort: 45102,
+    sourceRevision: '7',
+    ...overrides,
+  });
+}
+
 async function flushPromises(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
@@ -643,6 +1076,8 @@ describe('NetworkAgentMqttService', () => {
       'kt/network/v1/agents/nas-main/events': { qos: 1 },
       'kt/network/v1/agents/nas-main/reported': { qos: 1 },
       'kt/network/v1/agents/nas-main/status': { qos: 1 },
+      'kt/network/v2/agents/nas-main/events': { qos: 1 },
+      'kt/network/v2/agents/nas-main/reported': { qos: 1 },
       'kt/network/v2/agents/nas-main/status': { qos: 1 },
     };
     harness.service.onModuleInit();
@@ -1022,6 +1457,8 @@ describe('NetworkAgentMqttService', () => {
     );
     expect(harness.mapping.isDeleted).toBe(true);
     expect(harness.mapping.activeKey).toBeNull();
+    expect(harness.mapping.activeGroupProtocolKey).toBeNull();
+    expect(harness.group.isDeleted).toBe(true);
     expect(harness.state.desiredRevision).toBe('9');
 
     await expect(
@@ -1508,6 +1945,961 @@ describe('NetworkAgentMqttService', () => {
     expect(harness.publishCommitted).toHaveBeenCalledWith('status');
   });
 
+  it('ignores late v1 reported state and events after v2 becomes the desired owner', async () => {
+    const harness = createHarness();
+    harness.state.desiredSchemaVersion = 2;
+
+    await harness.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/reported',
+      reported(harness, 7),
+    );
+    await harness.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/events',
+      endpointEvent(),
+    );
+
+    expect(harness.mapping.currentPublicIpv4).toBeNull();
+    expect(harness.histories).toHaveLength(0);
+    expect(harness.stagedEvents).toHaveLength(0);
+    expect(harness.publishCommitted).not.toHaveBeenCalled();
+    expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+    expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+  });
+
+  it('uses the durable v2 applied schema watermark to reject late v1 writes', async () => {
+    const harness = createHarness();
+    harness.state.desiredSchemaVersion = 1;
+    harness.state.appliedSchemaVersion = 2;
+
+    await harness.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/reported',
+      reported(harness, 7),
+    );
+    await harness.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/events',
+      endpointEvent(),
+    );
+
+    expect(harness.mapping.currentPublicIpv4).toBeNull();
+    expect(harness.histories).toHaveLength(0);
+    expect(harness.stagedEvents).toHaveLength(0);
+    expect(harness.publishCommitted).not.toHaveBeenCalled();
+    expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+    expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+  });
+
+  it('locks Agent ownership before the v1 event channel row', async () => {
+    const harness = createHarness();
+
+    await harness.service.consumeMessage(
+      'kt/network/v1/agents/nas-main/events',
+      endpointEvent(),
+    );
+
+    expect(harness.stateFindOne).toHaveBeenCalledWith(
+      expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
+    );
+    expect(harness.mappingFindOne).toHaveBeenCalledWith(
+      expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
+    );
+    expect(harness.stateFindOne.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.mappingFindOne.mock.invocationCallOrder[0],
+    );
+  });
+
+  describe('MQTT v2 reported endpoint lifecycle', () => {
+    it('locks Agent ownership and every v2 reported channel in a stable order', async () => {
+      const harness = createV2Harness();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness),
+      );
+
+      expect(harness.stateFindOne).toHaveBeenCalledWith(
+        expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
+      );
+      expect(harness.mappingFindOne).toHaveBeenCalledTimes(2);
+      for (const call of harness.mappingFindOne.mock.calls) {
+        expect(call[0]).toEqual(
+          expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
+        );
+      }
+      expect(harness.stateFindOne.mock.invocationCallOrder[0]).toBeLessThan(
+        harness.mappingFindOne.mock.invocationCallOrder[0],
+      );
+      expect(
+        harness.mappingFindOne.mock.calls.map(([options]) => options.where.id),
+      ).toEqual(['101', '102']);
+    });
+
+    it('persists an early TCP candidate without publishing it before the static path converges', async () => {
+      const harness = createV2Harness();
+      const tcp = harness.channels[0];
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {
+          [tcp.id]: {
+            currentEndpoint: undefined,
+            dnatPresent: false,
+            routerPresent: false,
+            syncStatus: 'syncing',
+          },
+          '102': { currentEndpoint: undefined },
+        }),
+      );
+
+      expect(tcp).toMatchObject({
+        candidatePublicIpv4: '8.8.8.8',
+        candidatePublicPort: 45101,
+        currentPublicIpv4: null,
+        currentPublicPort: null,
+        lastObservedIpv4: '8.8.8.8',
+        lastObservedPort: 45101,
+        natmapStatus: 'active',
+        syncStatus: 'syncing',
+      });
+      expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['DNAT', { dnatPresent: false }],
+      ['Router', { routerPresent: false }],
+      ['sync', { syncStatus: 'failed' }],
+      ['generation', { instanceGeneration: undefined }],
+      [
+        'tuple',
+        {
+          candidateEndpoint: v2Endpoint('tcp_natmap', {
+            publicPort: 45111,
+          }),
+        },
+      ],
+    ])(
+      'withdraws an existing TCP current endpoint when the %s publication gate fails',
+      async (_gate, gateOverride) => {
+        const harness = createV2Harness();
+        const tcp = harness.channels[0];
+        Object.assign(tcp, {
+          currentObservedAt: new KtDateTime('2099-07-27T00:00:00.000Z'),
+          currentPublicIpv4: '1.1.1.1',
+          currentPublicPort: 45000,
+          currentValidatedAt: new KtDateTime('2099-07-27T00:00:01.000Z'),
+          currentValidUntil: new KtDateTime('2099-07-27T00:00:40.000Z'),
+        });
+
+        await harness.service.consumeMessage(
+          'kt/network/v2/agents/nas-main/reported',
+          v2Reported(harness, {
+            [tcp.id]: {
+              ...gateOverride,
+            },
+          }),
+        );
+
+        expect(tcp.currentPublicIpv4).toBeNull();
+        expect(tcp.currentPublicPort).toBeNull();
+        expect(tcp.candidatePublicIpv4).toBe('8.8.8.8');
+        expect(tcp.natmapStatus).toBe('active');
+        expect(harness.requestDdnsReconcile).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('withdraws a stale lease while retaining the latest candidate observation', async () => {
+      const harness = createV2Harness();
+      const tcp = harness.channels[0];
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness),
+      );
+      harness.publishCommitted.mockClear();
+      harness.requestDdnsReconcile.mockClear();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {}, { reportedAt: '2099-07-27T00:01:00.000Z' }),
+      );
+
+      expect(tcp.currentPublicIpv4).toBeNull();
+      expect(tcp.currentPublicPort).toBeNull();
+      expect(tcp.candidatePublicIpv4).toBe('8.8.8.8');
+      expect(tcp.lastObservedIpv4).toBe('8.8.8.8');
+      expect(tcp.lastPublishedPublicIpv4).toBe('8.8.8.8');
+      expect(tcp.lastPublishedPublicPort).toBe(45101);
+      expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
+      expect(harness.requestDdnsReconcile).toHaveBeenCalledTimes(1);
+    });
+
+    it('isolates a TCP channel digest conflict and still applies a valid UDP sibling', async () => {
+      const harness = createV2Harness();
+      const [tcp, udp] = harness.channels;
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {
+          [tcp.id]: { appliedDesiredDigest: 'f'.repeat(64) },
+        }),
+      );
+
+      expect(tcp).toMatchObject({
+        currentPublicIpv4: null,
+        lastErrorCode: 'desired_digest_conflict',
+        syncStatus: 'conflict',
+      });
+      expect(udp).toMatchObject({
+        currentPublicIpv4: '8.8.4.4',
+        currentPublicPort: 45102,
+        keeperStatus: 'active',
+        syncStatus: 'synced',
+      });
+      expect(harness.state.appliedRevision).toBe('7');
+      expect(harness.state.appliedSchemaVersion).toBe(2);
+      expect(harness.publishCommitted).toHaveBeenCalledTimes(1);
+      expect(harness.operations.indexOf('transaction:commit')).toBeLessThan(
+        harness.operations.indexOf('sse'),
+      );
+      expect(harness.operations.indexOf('transaction:commit')).toBeLessThan(
+        harness.operations.indexOf('ddns:wake'),
+      );
+    });
+
+    it('persists static, Keeper, and NATMap errors in independent fields', async () => {
+      const harness = createV2Harness();
+      const [tcp, udp] = harness.channels;
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {
+          [tcp.id]: {
+            errorCode: 'tcp_static_failed',
+            errorMessage: 'TCP static path failed',
+            natmapErrorCode: 'natmap_callback_stale',
+            natmapErrorMessage: 'NATMap callback is stale',
+            natmapStatus: 'failed',
+            syncStatus: 'failed',
+          },
+          [udp.id]: {
+            errorCode: 'udp_static_failed',
+            errorMessage: 'UDP static path failed',
+            keeperErrorCode: 'stun_probe_failed',
+            keeperErrorMessage: 'STUN probe failed',
+            keeperStatus: 'failed',
+            syncStatus: 'failed',
+          },
+        }),
+      );
+
+      expect(tcp).toMatchObject({
+        lastErrorCode: 'tcp_static_failed',
+        lastErrorMessage: 'TCP static path failed',
+        natmapLastErrorCode: 'natmap_callback_stale',
+        natmapLastErrorMessage: 'NATMap callback is stale',
+      });
+      expect(udp).toMatchObject({
+        keeperLastErrorCode: 'stun_probe_failed',
+        keeperLastErrorMessage: 'STUN probe failed',
+        lastErrorCode: 'udp_static_failed',
+        lastErrorMessage: 'UDP static path failed',
+      });
+    });
+
+    it('rejects a wrong outer snapshot digest without mutating either channel', async () => {
+      const harness = createV2Harness();
+
+      await expect(
+        harness.service.consumeMessage(
+          'kt/network/v2/agents/nas-main/reported',
+          v2Reported(harness, {}, { snapshotDigest: 'f'.repeat(64) }),
+        ),
+      ).rejects.toThrow('snapshot digest');
+
+      expect(harness.channels[0].currentPublicIpv4).toBeNull();
+      expect(harness.channels[1].currentPublicIpv4).toBeNull();
+      expect(harness.state.appliedRevision).toBe('0');
+      expect(harness.publishCommitted).not.toHaveBeenCalled();
+      expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+    });
+
+    it('does not let an older validation replace a newer current tuple', async () => {
+      const harness = createV2Harness();
+      const tcp = harness.channels[0];
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness),
+      );
+      harness.publishCommitted.mockClear();
+      harness.requestDdnsReconcile.mockClear();
+      const olderEvidence = v2Endpoint('tcp_natmap', {
+        observedAt: '2099-07-26T23:59:59.000Z',
+        publicIpv4: '1.1.1.1',
+        publicPort: 45111,
+        validatedAt: '2099-07-27T00:00:04.000Z',
+        validUntil: '2099-07-27T00:01:00.000Z',
+      });
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            [tcp.id]: {
+              candidateEndpoint: olderEvidence,
+              currentEndpoint: olderEvidence,
+              lastObservedEndpoint: olderEvidence,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000Z' },
+        ),
+      );
+
+      expect(tcp.currentPublicIpv4).toBe('8.8.8.8');
+      expect(tcp.currentPublicPort).toBe(45101);
+      expect(tcp.currentValidatedAt?.toISOString()).toBe(
+        '2099-07-27T00:00:05.000Z',
+      );
+      expect(harness.publishCommitted).not.toHaveBeenCalled();
+      expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+    });
+
+    it('ignores an older same-revision report instead of regressing candidate and runtime state', async () => {
+      const harness = createV2Harness();
+      const tcp = harness.channels[0];
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {}, { reportedAt: '2099-07-27T00:00:30.000Z' }),
+      );
+      harness.publishCommitted.mockClear();
+      harness.requestDdnsReconcile.mockClear();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            [tcp.id]: {
+              candidateEndpoint: undefined,
+              currentEndpoint: undefined,
+              errorCode: 'old_failure',
+              errorMessage: 'stale report',
+              lastObservedEndpoint: undefined,
+              natmapStatus: 'failed',
+              syncStatus: 'failed',
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000Z' },
+        ),
+      );
+
+      expect(tcp).toMatchObject({
+        candidatePublicIpv4: '8.8.8.8',
+        candidatePublicPort: 45101,
+        currentPublicIpv4: '8.8.8.8',
+        currentPublicPort: 45101,
+        lastErrorCode: null,
+        natmapStatus: 'active',
+        syncStatus: 'synced',
+      });
+      expect((tcp as any).lastReportedAt?.toISOString()).toBe(
+        '2099-07-27T00:00:30.000Z',
+      );
+      expect(harness.publishCommitted).not.toHaveBeenCalled();
+      expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+    });
+
+    it('uses the raw RFC3339Nano waterline for same-millisecond reports', async () => {
+      const harness = createV2Harness();
+      const tcp = harness.channels[0];
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {}, { reportedAt: '2099-07-27T00:00:30.000900Z' }),
+      );
+      harness.publishCommitted.mockClear();
+      harness.requestDdnsReconcile.mockClear();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            [tcp.id]: {
+              candidateEndpoint: undefined,
+              currentEndpoint: undefined,
+              errorCode: 'old_failure',
+              errorMessage: 'stale report',
+              lastObservedEndpoint: undefined,
+              natmapStatus: 'failed',
+              syncStatus: 'failed',
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:30.000100Z' },
+        ),
+      );
+
+      expect(tcp).toMatchObject({
+        currentPublicIpv4: '8.8.8.8',
+        currentPublicPort: 45101,
+        lastErrorCode: null,
+        lastReportedAtWire: '2099-07-27T00:00:30.000900Z',
+        natmapStatus: 'active',
+        syncStatus: 'synced',
+      });
+      expect(harness.publishCommitted).not.toHaveBeenCalled();
+      expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+    });
+
+    it('does not apply an old revision report waterline to a newer snapshot revision', async () => {
+      const harness = createV2Harness();
+      const tcp = harness.channels[0];
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {}, { reportedAt: '2099-07-27T00:00:30.000Z' }),
+      );
+      harness.state.desiredRevision = '8';
+      harness.state.desiredIssuedAt = new KtDateTime(
+        '2099-07-27T00:00:31.000Z',
+      );
+      for (const channel of harness.channels) {
+        channel.desiredRevision = '8';
+        channel.desiredIssuedAt = harness.state.desiredIssuedAt;
+      }
+      const nextEndpoint = v2Endpoint('tcp_natmap', {
+        publicPort: 45111,
+        validatedAt: '2099-07-27T00:00:06.000Z',
+        validUntil: '2099-07-27T00:01:00.000Z',
+      });
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            [tcp.id]: {
+              candidateEndpoint: nextEndpoint,
+              currentEndpoint: nextEndpoint,
+              lastObservedEndpoint: nextEndpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:10.000Z' },
+        ),
+      );
+
+      expect(harness.state.appliedRevision).toBe('8');
+      expect(tcp).toMatchObject({
+        currentPublicPort: 45111,
+        lastReportedAtWire: '2099-07-27T00:00:10.000Z',
+        reportedRevision: '8',
+        syncStatus: 'synced',
+      });
+    });
+
+    it('soft-deletes a logical group only after every protocol channel confirms absence', async () => {
+      const harness = createV2Harness();
+      const [tcp, udp] = harness.channels;
+      Object.assign(tcp, {
+        desiredPresence: 'absent',
+        natmapDesiredEnabled: false,
+      });
+      Object.assign(udp, {
+        desiredPresence: 'absent',
+        keeperDesiredEnabled: false,
+      });
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {
+          [udp.id]: {
+            routePresent: true,
+            routerPresent: true,
+            syncStatus: 'deleting',
+          },
+        }),
+      );
+
+      expect(tcp.isDeleted).toBe(true);
+      expect(udp.isDeleted).toBe(false);
+      expect(harness.groups[0].isDeleted).toBe(false);
+      expect(harness.state.desiredRevision).toBe('8');
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness),
+      );
+
+      expect(udp.isDeleted).toBe(true);
+      expect(harness.groups[0].isDeleted).toBe(true);
+      expect(harness.state.desiredRevision).toBe('9');
+    });
+
+    it('rolls back v2 report state and emits no post-commit effects when persistence fails', async () => {
+      const harness = createV2Harness();
+      harness.mappingSave.mockRejectedValueOnce(
+        new Error('channel persistence failed'),
+      );
+
+      await expect(
+        harness.service.consumeMessage(
+          'kt/network/v2/agents/nas-main/reported',
+          v2Reported(harness),
+        ),
+      ).rejects.toThrow('channel persistence failed');
+
+      expect(harness.channels[0].currentPublicIpv4).toBeNull();
+      expect(harness.histories).toHaveLength(0);
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.publishCommitted).not.toHaveBeenCalled();
+      expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+      expect(harness.operations).toContain('transaction:rollback');
+    });
+
+    it('renews validation for the same tuple without history, DDNS, or SSE churn', async () => {
+      const harness = createV2Harness();
+      const tcp = harness.channels[0];
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness),
+      );
+      const firstObservedAt = tcp.currentObservedAt?.toISOString();
+      harness.publishCommitted.mockClear();
+      harness.requestDdnsReconcile.mockClear();
+      const renewed = v2Endpoint('tcp_natmap', {
+        observedAt: '2099-07-27T00:00:20.000Z',
+        validatedAt: '2099-07-27T00:00:20.000Z',
+        validUntil: '2099-07-27T00:01:20.000Z',
+      });
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            [tcp.id]: {
+              candidateEndpoint: renewed,
+              currentEndpoint: renewed,
+              lastObservedEndpoint: renewed,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:25.000Z' },
+        ),
+      );
+
+      expect(tcp.currentObservedAt?.toISOString()).toBe(firstObservedAt);
+      expect(tcp.currentValidatedAt?.toISOString()).toBe(
+        '2099-07-27T00:00:20.000Z',
+      );
+      expect(tcp.currentValidUntil?.toISOString()).toBe(
+        '2099-07-27T00:01:20.000Z',
+      );
+      expect(harness.histories).toHaveLength(0);
+      expect(harness.publishCommitted).not.toHaveBeenCalled();
+      expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('MQTT v2 endpoint events', () => {
+    it('locks Agent ownership before the v2 event channel row', async () => {
+      const harness = createV2Harness();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent(),
+      );
+
+      expect(harness.stateFindOne).toHaveBeenCalledWith(
+        expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
+      );
+      expect(harness.mappingFindOne).toHaveBeenCalledWith(
+        expect.objectContaining({ lock: { mode: 'pessimistic_write' } }),
+      );
+      expect(harness.stateFindOne.mock.invocationCallOrder[0]).toBeLessThan(
+        harness.mappingFindOne.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('defers a UDP port-change Outbox until the matching report commits', async () => {
+      const harness = createV2Harness();
+      harness.histories.push(v2EndpointHistory());
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent(),
+      );
+
+      expect(harness.histories).toHaveLength(2);
+      expect(harness.histories[1]).toMatchObject({
+        endpointValidatedAt: new KtDateTime('2099-07-27T00:00:15.000Z'),
+        endpointValidUntil: new KtDateTime('2099-07-27T00:00:55.000Z'),
+        sourceRevision: '7',
+      });
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+
+      const matchingEndpoint = v2Endpoint('udp_stun', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000Z',
+        validUntil: '2099-07-27T00:00:55.000Z',
+      });
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            '102': {
+              currentEndpoint: matchingEndpoint,
+              lastObservedEndpoint: matchingEndpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000Z' },
+        ),
+      );
+
+      expect(harness.stagedEvents).toHaveLength(1);
+      expect(harness.deliveryCoordinator.requestDrain).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not stage an old-revision report-first event even when the tuple matches', async () => {
+      const harness = createV2Harness();
+      harness.histories.push(v2EndpointHistory());
+      const matchingEndpoint = v2Endpoint('udp_stun', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000Z',
+        validUntil: '2099-07-27T00:00:55.000Z',
+      });
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            '102': {
+              currentEndpoint: matchingEndpoint,
+              lastObservedEndpoint: matchingEndpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000Z' },
+        ),
+      );
+      harness.state.desiredRevision = '8';
+      harness.state.desiredIssuedAt = new KtDateTime(
+        '2099-07-27T00:00:21.000Z',
+      );
+      for (const channel of harness.channels) {
+        channel.desiredRevision = '8';
+        channel.desiredIssuedAt = harness.state.desiredIssuedAt;
+      }
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            '102': {
+              currentEndpoint: matchingEndpoint,
+              lastObservedEndpoint: matchingEndpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:25.000Z' },
+        ),
+      );
+      harness.stagedEvents.splice(0);
+      harness.deliveryCoordinator.requestDrain.mockClear();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({ revision: 7 }),
+      );
+
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+    });
+
+    it('does not stage an old event-first history against a newer revision with the same tuple', async () => {
+      const harness = createV2Harness();
+      harness.histories.push(v2EndpointHistory());
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent(),
+      );
+      harness.state.desiredRevision = '8';
+      harness.state.desiredIssuedAt = new KtDateTime(
+        '2099-07-27T00:00:17.000Z',
+      );
+      for (const channel of harness.channels) {
+        channel.desiredRevision = '8';
+        channel.desiredIssuedAt = harness.state.desiredIssuedAt;
+      }
+      const matchingEndpoint = v2Endpoint('udp_stun', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000Z',
+        validUntil: '2099-07-27T00:00:55.000Z',
+      });
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            '102': {
+              currentEndpoint: matchingEndpoint,
+              lastObservedEndpoint: matchingEndpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000Z' },
+        ),
+      );
+
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+    });
+
+    it('does not stage a report-first event whose lease differs from current', async () => {
+      const harness = createV2Harness();
+      harness.histories.push(v2EndpointHistory());
+      const currentEndpoint = v2Endpoint('udp_stun', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:18.000Z',
+        validUntil: '2099-07-27T00:00:58.000Z',
+      });
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            '102': {
+              currentEndpoint,
+              lastObservedEndpoint: currentEndpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000Z' },
+        ),
+      );
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent(),
+      );
+
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+    });
+
+    it('does not correlate leases that differ only below millisecond precision', async () => {
+      const harness = createV2Harness();
+      const endpoint = v2Endpoint('udp_stun', {
+        observedAt: '2099-07-27T00:00:00.000100Z',
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000100Z',
+        validUntil: '2099-07-27T00:00:55.000100Z',
+      });
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            '102': {
+              currentEndpoint: endpoint,
+              lastObservedEndpoint: endpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000100Z' },
+        ),
+      );
+      harness.stagedEvents.splice(0);
+      harness.deliveryCoordinator.requestDrain.mockClear();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({
+          endpoint: {
+            ...endpoint,
+            validatedAt: '2099-07-27T00:00:15.000900Z',
+          },
+        }),
+      );
+
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+    });
+
+    it('rolls back matching-report current and Outbox without erasing the previously committed event history', async () => {
+      const harness = createV2Harness();
+      harness.histories.push(
+        Object.assign(new NetworkEndpointHistory(), {
+          eventId: 'v2-endpoint-event-1',
+          eventType: 'published',
+          firstObservedAt: new KtDateTime('2099-07-27T00:00:00.000Z'),
+          id: '1',
+          lastObservedAt: new KtDateTime('2099-07-27T00:00:00.000Z'),
+          mappingId: '102',
+          mechanism: 'udp_stun',
+          occurredAt: new KtDateTime('2099-07-27T00:00:01.000Z'),
+          publicIpv4: '8.8.4.4',
+          publicPort: 45102,
+        }),
+      );
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent(),
+      );
+      harness.publishCommitted.mockClear();
+      harness.requestDdnsReconcile.mockClear();
+      harness.deliveryCoordinator.requestDrain.mockClear();
+      harness.operations.splice(0);
+      harness.mappingSave
+        .mockImplementationOnce(async (value) => value)
+        .mockRejectedValueOnce(new Error('UDP channel persistence failed'));
+      const matchingEndpoint = v2Endpoint('udp_stun', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000Z',
+        validUntil: '2099-07-27T00:00:55.000Z',
+      });
+
+      await expect(
+        harness.service.consumeMessage(
+          'kt/network/v2/agents/nas-main/reported',
+          v2Reported(
+            harness,
+            {
+              '102': {
+                currentEndpoint: matchingEndpoint,
+                lastObservedEndpoint: matchingEndpoint,
+              },
+            },
+            { reportedAt: '2099-07-27T00:00:20.000Z' },
+          ),
+        ),
+      ).rejects.toThrow('UDP channel persistence failed');
+
+      expect(harness.channels[1].currentPublicIpv4).toBeNull();
+      expect(harness.histories).toHaveLength(2);
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.publishCommitted).not.toHaveBeenCalled();
+      expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+      expect(harness.operations).toContain('transaction:rollback');
+      expect(harness.operations).not.toContain('transaction:commit');
+    });
+
+    it('stages a report-first UDP event only after it matches the committed current tuple', async () => {
+      const harness = createV2Harness();
+      harness.histories.push(
+        Object.assign(new NetworkEndpointHistory(), {
+          eventId: 'v2-endpoint-event-1',
+          eventType: 'published',
+          firstObservedAt: new KtDateTime('2099-07-27T00:00:00.000Z'),
+          id: '1',
+          lastObservedAt: new KtDateTime('2099-07-27T00:00:00.000Z'),
+          mappingId: '102',
+          mechanism: 'udp_stun',
+          occurredAt: new KtDateTime('2099-07-27T00:00:01.000Z'),
+          publicIpv4: '8.8.4.4',
+          publicPort: 45102,
+        }),
+      );
+      const matchingEndpoint = v2Endpoint('udp_stun', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000Z',
+        validUntil: '2099-07-27T00:00:55.000Z',
+      });
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            '102': {
+              currentEndpoint: matchingEndpoint,
+              lastObservedEndpoint: matchingEndpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000Z' },
+        ),
+      );
+      expect(harness.stagedEvents).toHaveLength(0);
+      harness.deliveryCoordinator.requestDrain.mockClear();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent(),
+      );
+
+      expect(harness.stagedEvents).toHaveLength(1);
+      expect(harness.deliveryCoordinator.requestDrain).toHaveBeenCalledTimes(1);
+    });
+
+    it('records TCP NATMap history without using the UDP STUN message source', async () => {
+      const harness = createV2Harness();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({
+          channelId: '101',
+          endpoint: v2Endpoint('tcp_natmap'),
+          eventId: 'v2-tcp-event-1',
+          mechanism: 'tcp_natmap',
+          protocol: 'tcp',
+        }),
+      );
+
+      expect(harness.histories).toHaveLength(1);
+      expect(harness.histories[0]).toMatchObject({
+        mappingId: '101',
+        mechanism: 'tcp_natmap',
+      });
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+    });
+
+    it('rolls back v2 history and Outbox together when staging fails', async () => {
+      const harness = createV2Harness();
+      const currentEndpoint = v2Endpoint('udp_stun', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000Z',
+        validUntil: '2099-07-27T00:00:55.000Z',
+      });
+      Object.assign(harness.channels[1], {
+        currentEndpointIdentity: endpointLeaseIdentityV2(currentEndpoint),
+        currentObservedAt: new KtDateTime('2099-07-27T00:00:00.000Z'),
+        currentPublicIpv4: '8.8.4.4',
+        currentPublicPort: 45103,
+        currentValidatedAt: new KtDateTime('2099-07-27T00:00:15.000Z'),
+        currentValidatedAtWire: '2099-07-27T00:00:15.000Z',
+        currentValidUntil: new KtDateTime('2099-07-27T00:00:55.000Z'),
+        reportedRevision: '7',
+      });
+      harness.histories.push(
+        Object.assign(new NetworkEndpointHistory(), {
+          eventId: 'v2-endpoint-event-1',
+          eventType: 'published',
+          firstObservedAt: new KtDateTime('2099-07-27T00:00:00.000Z'),
+          id: '1',
+          lastObservedAt: new KtDateTime('2099-07-27T00:00:00.000Z'),
+          mappingId: '102',
+          mechanism: 'udp_stun',
+          occurredAt: new KtDateTime('2099-07-27T00:00:01.000Z'),
+          publicIpv4: '8.8.4.4',
+          publicPort: 45102,
+        }),
+      );
+      harness.stager.stage.mockImplementationOnce(async (_manager, input) => {
+        harness.stagedEvents.push(input);
+        throw new Error('v2 outbox unavailable');
+      });
+
+      await expect(
+        harness.service.consumeMessage(
+          'kt/network/v2/agents/nas-main/events',
+          v2EndpointEvent(),
+        ),
+      ).rejects.toThrow('v2 outbox unavailable');
+
+      expect(harness.histories).toHaveLength(1);
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.publishCommitted).not.toHaveBeenCalled();
+      expect(harness.requestDdnsReconcile).not.toHaveBeenCalled();
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+      expect(harness.operations).toContain('transaction:rollback');
+    });
+  });
+
   it('subscribes to v2 status, persists capability before desired schema activation, and keeps v2 status authoritative', async () => {
     const harness = createHarness();
     (harness.service as any).configService.get = (key: string) =>
@@ -1521,6 +2913,8 @@ describe('NetworkAgentMqttService', () => {
     harness.client.emit('connect');
     expect(harness.client.subscribe).toHaveBeenCalledWith(
       expect.objectContaining({
+        'kt/network/v2/agents/nas-main/events': { qos: 1 },
+        'kt/network/v2/agents/nas-main/reported': { qos: 1 },
         'kt/network/v2/agents/nas-main/status': { qos: 1 },
       }),
       expect.any(Function),
@@ -1610,43 +3004,15 @@ describe('NetworkAgentMqttService', () => {
     expect(harness.state.publishedSchemaVersion).toBe(2);
   });
 
-  it('allows explicit v2 downgrade only after every release, snapshot, group, and TCP tombstone gate passes', async () => {
+  it('never performs an API-only downgrade after the Agent may have latched v2 ownership', async () => {
     const accepted = createDowngradeHarness();
-    await expect(accepted.service.requestV2Downgrade()).resolves.toBe(true);
-    expect(accepted.state.desiredSchemaVersion).toBe(1);
-    expect(accepted.groupFind).toHaveBeenCalledWith(
-      expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
-    );
-    expect(accepted.channelFind).toHaveBeenCalledWith(
-      expect.objectContaining({ lock: { mode: 'pessimistic_read' } }),
-    );
+    accepted.state.appliedSchemaVersion = 2;
 
-    const releaseOn = createDowngradeHarness('on');
-    await expect(releaseOn.service.requestV2Downgrade()).resolves.toBe(false);
-    const unpublished = createDowngradeHarness();
-    unpublished.state.appliedRevision = '6';
-    await expect(unpublished.service.requestV2Downgrade()).resolves.toBe(false);
-    const mixedGroup = createDowngradeHarness();
-    mixedGroup.groups[0].protocolMode = 'tcp_udp';
-    await expect(mixedGroup.service.requestV2Downgrade()).resolves.toBe(false);
-    const tcpChannel = createDowngradeHarness();
-    tcpChannel.tcpChannels.push(
-      Object.assign(new NetworkPortForward(), {
-        desiredPresence: 'present',
-        isDeleted: false,
-        protocol: 'tcp',
-      }),
-    );
-    await expect(tcpChannel.service.requestV2Downgrade()).resolves.toBe(false);
-    const tcpTombstone = createDowngradeHarness();
-    tcpTombstone.tcpChannels.push(
-      Object.assign(new NetworkPortForward(), {
-        desiredPresence: 'absent',
-        isDeleted: false,
-        protocol: 'tcp',
-      }),
-    );
-    await expect(tcpTombstone.service.requestV2Downgrade()).resolves.toBe(false);
+    await expect(accepted.service.requestV2Downgrade()).resolves.toBe(false);
+
+    expect(accepted.state.desiredSchemaVersion).toBe(2);
+    expect(accepted.groupFind).not.toHaveBeenCalled();
+    expect(accepted.channelFind).not.toHaveBeenCalled();
   });
 });
 
@@ -1668,6 +3034,7 @@ function createDowngradeHarness(mode = 'off') {
   const state = Object.assign(new NetworkAgentState(), {
     agentId: 'nas-main',
     appliedRevision: '7',
+    appliedSchemaVersion: 2,
     desiredRevision: '7',
     desiredSchemaVersion: 2,
     publishedRevision: '7',
@@ -1679,9 +3046,24 @@ function createDowngradeHarness(mode = 'off') {
       protocolMode: 'udp',
     }),
   ];
-  const tcpChannels: NetworkPortForward[] = [];
+  const channels = [
+    Object.assign(new NetworkPortForward(), {
+      desiredPresence: 'present',
+      desiredRevision: '7',
+      isDeleted: false,
+      protocol: 'udp',
+      reportedRevision: '7',
+      syncStatus: 'synced',
+    }),
+  ];
   const groupFind = jest.fn(async () => groups);
-  const channelFind = jest.fn(async () => tcpChannels);
+  const channelFind = jest.fn(async ({ where } = {} as any) =>
+    channels.filter((channel) =>
+      Object.entries(where || {}).every(
+        ([key, value]) => channel[key as keyof NetworkPortForward] === value,
+      ),
+    ),
+  );
   const stateRepository = {
     findOne: async () => state,
     save: jest.fn(async (value) => Object.assign(state, value)),
@@ -1702,10 +3084,12 @@ function createDowngradeHarness(mode = 'off') {
           NETWORK_TCP_NATMAP_RELEASE_MODE: mode,
         })[key],
     } as ConfigService,
-    { transaction: async (work) => await work(manager) } as unknown as DataSource,
+    {
+      transaction: async (work) => await work(manager),
+    } as unknown as DataSource,
     { publishCommitted: jest.fn() } as never,
     { stage: jest.fn() } as never,
     { requestDrain: jest.fn() } as never,
   );
-  return { channelFind, groupFind, groups, service, state, tcpChannels };
+  return { channelFind, channels, groupFind, groups, service, state };
 }

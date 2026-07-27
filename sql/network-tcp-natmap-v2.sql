@@ -75,6 +75,34 @@ DEALLOCATE PREPARE network_port_forward_natmap_status_stmt;
 SET @network_tcp_natmap_v2_column_exists := (
   SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_port_forward'
+    AND COLUMN_NAME = 'last_reported_at'
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_exists = 0,
+  'ALTER TABLE `network_port_forward` ADD COLUMN `last_reported_at` DATETIME(6) NULL AFTER `reported_revision`',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_port_forward'
+    AND COLUMN_NAME = 'last_reported_at_wire'
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_exists = 0,
+  'ALTER TABLE `network_port_forward` ADD COLUMN `last_reported_at_wire` VARCHAR(64) NULL AFTER `last_reported_at`',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_port_forward'
     AND COLUMN_NAME = 'natmap_last_error_code'
 );
 SET @network_tcp_natmap_v2_alter_sql := IF(
@@ -215,6 +243,62 @@ DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
 SET @network_tcp_natmap_v2_column_exists := (
   SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_port_forward'
+    AND COLUMN_NAME = 'candidate_validated_at_wire'
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_exists = 0,
+  'ALTER TABLE `network_port_forward` ADD COLUMN `candidate_validated_at_wire` VARCHAR(64) NULL AFTER `candidate_validated_at`',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_port_forward'
+    AND COLUMN_NAME = 'current_validated_at_wire'
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_exists = 0,
+  'ALTER TABLE `network_port_forward` ADD COLUMN `current_validated_at_wire` VARCHAR(64) NULL AFTER `current_validated_at`',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_port_forward'
+    AND COLUMN_NAME = 'current_endpoint_identity'
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_exists = 0,
+  'ALTER TABLE `network_port_forward` ADD COLUMN `current_endpoint_identity` CHAR(64) NULL AFTER `current_valid_until`',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_port_forward'
+    AND COLUMN_NAME = 'last_observed_validated_at_wire'
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_exists = 0,
+  'ALTER TABLE `network_port_forward` ADD COLUMN `last_observed_validated_at_wire` VARCHAR(64) NULL AFTER `last_observed_validated_at`',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_port_forward'
     AND COLUMN_NAME = 'last_published_public_ipv4'
 );
 SET @network_tcp_natmap_v2_alter_sql := IF(
@@ -310,6 +394,65 @@ PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
 EXECUTE network_tcp_natmap_v2_alter_stmt;
 DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
 
+SET @network_tcp_natmap_v2_column_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_agent_state'
+    AND COLUMN_NAME = 'applied_schema_version'
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_exists = 0,
+  'ALTER TABLE `network_agent_state` ADD COLUMN `applied_schema_version` INT UNSIGNED NOT NULL DEFAULT 1 AFTER `applied_revision`',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_needs_resize := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_agent_state'
+    AND COLUMN_NAME = 'version'
+    AND (COLUMN_TYPE <> 'varchar(128)' OR IS_NULLABLE <> 'YES')
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_needs_resize = 1,
+  'ALTER TABLE `network_agent_state` MODIFY COLUMN `version` VARCHAR(128) NULL',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_needs_resize := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_agent_state'
+    AND COLUMN_NAME = 'last_mqtt_error_message'
+    AND (COLUMN_TYPE <> 'varchar(512)' OR IS_NULLABLE <> 'YES')
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_needs_resize = 1,
+  'ALTER TABLE `network_agent_state` MODIFY COLUMN `last_mqtt_error_message` VARCHAR(512) NULL',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_needs_resize := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_agent_state'
+    AND COLUMN_NAME = 'last_reconcile_error_message'
+    AND (COLUMN_TYPE <> 'varchar(512)' OR IS_NULLABLE <> 'YES')
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_needs_resize = 1,
+  'ALTER TABLE `network_agent_state` MODIFY COLUMN `last_reconcile_error_message` VARCHAR(512) NULL',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
 SET @network_endpoint_history_mechanism_exists := (
   SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_endpoint_history'
@@ -324,16 +467,73 @@ PREPARE network_endpoint_history_mechanism_stmt FROM @network_endpoint_history_m
 EXECUTE network_endpoint_history_mechanism_stmt;
 DEALLOCATE PREPARE network_endpoint_history_mechanism_stmt;
 
+SET @network_tcp_natmap_v2_column_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_endpoint_history'
+    AND COLUMN_NAME = 'source_revision'
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_exists = 0,
+  'ALTER TABLE `network_endpoint_history` ADD COLUMN `source_revision` BIGINT NULL AFTER `mechanism`',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_endpoint_history'
+    AND COLUMN_NAME = 'endpoint_identity'
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_exists = 0,
+  'ALTER TABLE `network_endpoint_history` ADD COLUMN `endpoint_identity` CHAR(64) NULL AFTER `source_revision`',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_endpoint_history'
+    AND COLUMN_NAME = 'endpoint_validated_at'
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_exists = 0,
+  'ALTER TABLE `network_endpoint_history` ADD COLUMN `endpoint_validated_at` DATETIME(6) NULL AFTER `public_port`',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
+SET @network_tcp_natmap_v2_column_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'network_endpoint_history'
+    AND COLUMN_NAME = 'endpoint_valid_until'
+);
+SET @network_tcp_natmap_v2_alter_sql := IF(
+  @network_tcp_natmap_v2_column_exists = 0,
+  'ALTER TABLE `network_endpoint_history` ADD COLUMN `endpoint_valid_until` DATETIME(6) NULL AFTER `endpoint_validated_at`',
+  'SELECT 1'
+);
+PREPARE network_tcp_natmap_v2_alter_stmt FROM @network_tcp_natmap_v2_alter_sql;
+EXECUTE network_tcp_natmap_v2_alter_stmt;
+DEALLOCATE PREPARE network_tcp_natmap_v2_alter_stmt;
+
 INSERT INTO `network_port_forward_group` (
   `id`, `name`, `remark`, `external_port`, `internal_port`, `protocol_mode`,
   `target_ipv4`, `is_deleted`, `create_time`, `update_time`
 )
 SELECT channel.id, channel.name, channel.remark, channel.external_port,
-       channel.internal_port, 'udp', channel.target_ipv4, channel.is_deleted,
+       channel.internal_port, channel.protocol, channel.target_ipv4, channel.is_deleted,
        channel.create_time, channel.update_time
 FROM `network_port_forward` channel
 LEFT JOIN `network_port_forward_group` grouped ON grouped.id = channel.id
-WHERE grouped.id IS NULL;
+WHERE channel.group_id IS NULL
+  AND grouped.id IS NULL;
 
 UPDATE `network_port_forward` channel
 SET `group_id` = channel.id

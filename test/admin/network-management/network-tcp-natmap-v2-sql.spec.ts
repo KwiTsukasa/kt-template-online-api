@@ -68,10 +68,7 @@ type FixtureRow = Record<string, null | string>;
 
 function parseFixtureRows(sql: string): Record<string, FixtureRow> {
   const rows: Record<string, FixtureRow> = {};
-  const normalized = sql
-    .replace(/--.*$/gm, '')
-    .replace(/`/g, '')
-    .trim();
+  const normalized = sql.replace(/--.*$/gm, '').replace(/`/g, '').trim();
   const inserts = normalized.matchAll(
     /insert into ([a-z0-9_]+)\s*\(([\s\S]*?)\)\s*values\s*\(([\s\S]*?)\);/gi,
   );
@@ -152,11 +149,17 @@ function expectFinalSchema(sql: string): void {
     'candidate_public_port int null',
     'candidate_observed_at datetime(6) null',
     'candidate_validated_at datetime(6) null',
+    'candidate_validated_at_wire varchar(64) null',
+    'current_endpoint_identity char(64) null',
     'current_validated_at datetime(6) null',
+    'current_validated_at_wire varchar(64) null',
     'last_observed_validated_at datetime(6) null',
+    'last_observed_validated_at_wire varchar(64) null',
     'last_published_public_ipv4 varchar(15) null',
     'last_published_public_port int null',
     'last_published_at datetime(6) null',
+    'last_reported_at datetime(6) null',
+    'last_reported_at_wire varchar(64) null',
   ]) {
     expect(channel).toContain(column);
   }
@@ -171,11 +174,25 @@ function expectFinalSchema(sql: string): void {
     'desired_schema_version int unsigned not null default 1',
     'published_schema_version int unsigned not null default 1',
     'max_supported_schema_version int unsigned not null default 1',
+    'applied_schema_version int unsigned not null default 1',
     'tcp_natmap_capable tinyint(1) not null default 0',
+    'version varchar(128) null',
+    'last_mqtt_error_message varchar(512) null',
+    'last_reconcile_error_message varchar(512) null',
   ]) {
     expect(agent).toContain(column);
   }
-  expect(history).toContain("mechanism varchar(16) not null default 'udp_stun'");
+  expect(history).toContain(
+    "mechanism varchar(16) not null default 'udp_stun'",
+  );
+  expect(history).toContain('endpoint_identity char(64) null');
+  for (const column of [
+    'source_revision bigint null',
+    'endpoint_validated_at datetime(6) null',
+    'endpoint_valid_until datetime(6) null',
+  ]) {
+    expect(history).toContain(column);
+  }
 }
 
 describe('TCP NATMap v2 schema SQL', () => {
@@ -199,13 +216,28 @@ describe('TCP NATMap v2 schema SQL', () => {
   it('uses an additive idempotent migration with ordered group backfill', () => {
     const migration = readNormalizedSql('sql/network-tcp-natmap-v2.sql');
 
-    expect(migration).toContain('create table if not exists network_port_forward_group');
+    expect(migration).toContain(
+      'create table if not exists network_port_forward_group',
+    );
     expect(migration).toContain('information_schema.columns');
     expect(migration).toContain('information_schema.statistics');
     expect(migration).toContain('insert into network_port_forward_group');
-    expect(migration).toContain('select channel.id, channel.name, channel.remark');
-    expect(migration).toContain("'udp'");
-    expect(migration).toContain('update network_port_forward channel set group_id = channel.id');
+    expect(migration).toContain(
+      'select channel.id, channel.name, channel.remark',
+    );
+    expect(migration).toContain(
+      'channel.internal_port, channel.protocol, channel.target_ipv4',
+    );
+    expect(migration).toContain(
+      'update network_port_forward channel set group_id = channel.id',
+    );
+    expect(migration).toContain('modify column version varchar(128) null');
+    expect(migration).toContain(
+      'modify column last_mqtt_error_message varchar(512) null',
+    );
+    expect(migration).toContain(
+      'modify column last_reconcile_error_message varchar(512) null',
+    );
     expect(migration).toContain(
       "active_group_protocol_key = case when channel.is_deleted = 0 then concat(channel.group_id, ':', channel.protocol) else null end",
     );
@@ -221,15 +253,26 @@ describe('TCP NATMap v2 schema SQL', () => {
       'candidate_public_port',
       'candidate_observed_at',
       'candidate_validated_at',
+      'candidate_validated_at_wire',
+      'current_endpoint_identity',
       'current_validated_at',
+      'current_validated_at_wire',
       'last_observed_validated_at',
+      'last_observed_validated_at_wire',
       'last_published_public_ipv4',
       'last_published_public_port',
       'last_published_at',
+      'last_reported_at',
+      'last_reported_at_wire',
       'desired_schema_version',
       'published_schema_version',
       'max_supported_schema_version',
+      'applied_schema_version',
       'tcp_natmap_capable',
+      'source_revision',
+      'endpoint_validated_at',
+      'endpoint_valid_until',
+      'endpoint_identity',
     ]) {
       expect(migration).toContain(`column_name = '${columnName}'`);
     }
@@ -271,9 +314,31 @@ describe('TCP NATMap v2 schema SQL', () => {
 
     expect(verify).toContain('from network_port_forward_group');
     expect(verify).toContain("column_name = 'group_id'");
-    expect(verify).toContain('uk_network_port_forward_active_group_protocol_key');
+    expect(verify).toContain(
+      'uk_network_port_forward_active_group_protocol_key',
+    );
     expect(verify).toContain('idx_network_port_forward_group');
-    expect(verify).not.toMatch(/\b(insert|update|delete|alter|drop|truncate)\b/);
+    expect(verify).toContain("column_name = 'last_reported_at'");
+    expect(verify).toContain("column_name = 'last_reported_at_wire'");
+    expect(verify).toContain("column_name = 'applied_schema_version'");
+    expect(verify).toContain("column_name = 'version'");
+    expect(verify).toContain("column_name = 'last_mqtt_error_message'");
+    expect(verify).toContain("column_name = 'last_reconcile_error_message'");
+    expect(verify).toContain("column_name = 'source_revision'");
+    expect(verify).toContain("column_name = 'endpoint_validated_at'");
+    expect(verify).toContain("column_name = 'endpoint_valid_until'");
+    expect(verify).toContain("column_name = 'endpoint_identity'");
+    expect(verify).not.toMatch(
+      /\b(insert|update|delete|alter|drop|truncate)\b/,
+    );
+  });
+
+  it('backfills legacy groups only for channels whose group ID is still null', () => {
+    const migration = readNormalizedSql('sql/network-tcp-natmap-v2.sql');
+
+    expect(migration).toMatch(
+      /from network_port_forward channel left join network_port_forward_group grouped on grouped\.id = channel\.id where channel\.group_id is null and grouped\.id is null/,
+    );
   });
 
   it('preserves the sanitized existing 8213 UDP channel, history, and DDNS binding', () => {
@@ -294,13 +359,16 @@ describe('TCP NATMap v2 schema SQL', () => {
     };
     const afterHistory: FixtureRow = {
       ...beforeHistory,
+      endpoint_validated_at: null,
+      endpoint_valid_until: null,
       mechanism: 'udp_stun',
+      source_revision: null,
     };
     const afterDdns: FixtureRow = { ...beforeDdns };
 
-    expect(mutationAssignmentTargets(migration, 'network_port_forward')).toEqual(
-      ['active_group_protocol_key', 'group_id'],
-    );
+    expect(
+      mutationAssignmentTargets(migration, 'network_port_forward'),
+    ).toEqual(['active_group_protocol_key', 'group_id']);
     expect(
       mutationAssignmentTargets(migration, 'network_endpoint_history'),
     ).toEqual(['mechanism']);
@@ -316,9 +384,17 @@ describe('TCP NATMap v2 schema SQL', () => {
         'group_id',
       ]),
     ).toEqual(beforeChannel);
-    expect(withoutProperties(afterHistory, ['mechanism'])).toEqual(
-      beforeHistory,
-    );
+    expect(
+      withoutProperties(afterHistory, [
+        'endpoint_validated_at',
+        'endpoint_valid_until',
+        'mechanism',
+        'source_revision',
+      ]),
+    ).toEqual(beforeHistory);
+    expect(afterHistory.source_revision).toBeNull();
+    expect(afterHistory.endpoint_validated_at).toBeNull();
+    expect(afterHistory.endpoint_valid_until).toBeNull();
     expect(afterDdns).toEqual(beforeDdns);
     expect(afterChannel.id).toBe('2041600000000008213');
     expect(afterChannel.active_key).toBe('udp:8213');

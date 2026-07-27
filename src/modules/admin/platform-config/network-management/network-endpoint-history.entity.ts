@@ -5,7 +5,10 @@ import {
   KtDateTime,
   KtDateTimeColumn,
 } from '@/common';
-import type { EndpointEventType } from './network-management.types';
+import type {
+  EndpointEventType,
+  EndpointMechanism,
+} from './network-management.types';
 
 @Entity('network_endpoint_history')
 @Index('uk_network_endpoint_history_event_id', ['eventId'], { unique: true })
@@ -24,13 +27,40 @@ export class NetworkEndpointHistory {
   eventType: EndpointEventType;
 
   @Column({ default: 'udp_stun', length: 16, name: 'mechanism' })
-  mechanism: string;
+  mechanism: EndpointMechanism;
+
+  @Column({ name: 'source_revision', nullable: true, type: 'bigint' })
+  sourceRevision?: string | null;
+
+  @Column({
+    length: 64,
+    name: 'endpoint_identity',
+    nullable: true,
+    type: 'char',
+  })
+  endpointIdentity?: string | null;
 
   @Column({ length: 15, name: 'public_ipv4', nullable: true })
   publicIpv4?: string | null;
 
   @Column({ name: 'public_port', nullable: true, type: 'int' })
   publicPort?: number | null;
+
+  @KtDateTimeColumn({
+    name: 'endpoint_validated_at',
+    nullable: true,
+    precision: 6,
+    type: 'datetime',
+  })
+  endpointValidatedAt?: KtDateTime | null;
+
+  @KtDateTimeColumn({
+    name: 'endpoint_valid_until',
+    nullable: true,
+    precision: 6,
+    type: 'datetime',
+  })
+  endpointValidUntil?: KtDateTime | null;
 
   @KtDateTimeColumn({ name: 'first_observed_at', type: 'datetime' })
   firstObservedAt: KtDateTime;

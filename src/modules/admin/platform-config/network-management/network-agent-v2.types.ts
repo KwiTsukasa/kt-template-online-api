@@ -118,6 +118,7 @@ export type NetworkReportedChannelV2 =
       natmapErrorMessage?: string;
       natmapStatus: NetworkV2NatmapStatus;
       protocol: 'tcp';
+      routePresent?: boolean;
     })
   | (ReportedChannelBaseV2 & {
       currentEndpoint?: NetworkEndpointLeaseV2;
@@ -583,6 +584,7 @@ function parseReportedChannelV2(value: unknown): NetworkReportedChannelV2 {
           'lastObservedEndpoint',
           'natmapErrorCode',
           'natmapErrorMessage',
+          'routePresent',
         ]
       : [
           'currentEndpoint',
@@ -678,6 +680,11 @@ function parseReportedChannelV2(value: unknown): NetworkReportedChannelV2 {
         'natmapStatus',
       ),
       protocol,
+      ...(record.routePresent === undefined
+        ? {}
+        : {
+            routePresent: booleanValue(record.routePresent, 'routePresent'),
+          }),
     };
   return {
     ...base,

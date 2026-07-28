@@ -110,12 +110,21 @@ describe('network agent MQTT v2 contract', () => {
     expect(() => parseDesiredSnapshotV2(JSON.stringify(value))).toThrow();
   });
 
-  it('parses protocol-correct reported fields and rejects cross-protocol fields', () => {
+  it('parses legacy and direct TCP route evidence while rejecting UDP-only fields', () => {
     expect(
       parseReportedSnapshotV2(rawFixture('network-v2-reported.json')),
     ).toMatchObject({ snapshotRevision: 7 });
     const value = fixture('network-v2-reported.json') as any;
     value.channels[0].routePresent = true;
+    value.channels[0].dnatPresent = false;
+    expect(
+      parseReportedSnapshotV2(JSON.stringify(value)).channels[0],
+    ).toMatchObject({
+      dnatPresent: false,
+      protocol: 'tcp',
+      routePresent: true,
+    });
+    value.channels[0].keeperStatus = 'active';
     expect(() => parseReportedSnapshotV2(JSON.stringify(value))).toThrow();
   });
 

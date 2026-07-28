@@ -1097,11 +1097,14 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       return false;
     }
     if (reported.protocol === 'tcp') {
+      const dataPlaneReady =
+        (reported.dnatPresent && reported.routePresent !== true) ||
+        (!reported.dnatPresent && reported.routePresent === true);
       return (
         desired.protocol === 'tcp' &&
         desired.natmapDesiredEnabled &&
         reported.natmapDesiredEnabled &&
-        reported.dnatPresent &&
+        dataPlaneReady &&
         reported.natmapStatus === 'active' &&
         !!reported.instanceGeneration?.trim() &&
         !!reported.candidateEndpoint &&
@@ -1160,6 +1163,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     if (reported.protocol === 'tcp') {
       return (
         !reported.dnatPresent &&
+        reported.routePresent !== true &&
         !reported.natmapDesiredEnabled &&
         reported.natmapStatus === 'disabled' &&
         !reported.candidateEndpoint

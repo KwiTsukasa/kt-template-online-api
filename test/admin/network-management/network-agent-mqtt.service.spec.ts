@@ -2008,6 +2008,28 @@ describe('NetworkAgentMqttService', () => {
   });
 
   describe('MQTT v2 reported endpoint lifecycle', () => {
+    it('publishes a direct TCP endpoint only with confirmed NAS reply routing', async () => {
+      const harness = createV2Harness();
+      const tcp = harness.channels[0];
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {
+          [tcp.id]: {
+            dnatPresent: false,
+            routePresent: true,
+          },
+        }),
+      );
+
+      expect(tcp).toMatchObject({
+        currentPublicIpv4: '8.8.8.8',
+        currentPublicPort: 45101,
+        natmapStatus: 'active',
+        syncStatus: 'synced',
+      });
+    });
+
     it('locks Agent ownership and every v2 reported channel in a stable order', async () => {
       const harness = createV2Harness();
 
@@ -2064,7 +2086,8 @@ describe('NetworkAgentMqttService', () => {
     });
 
     it.each([
-      ['DNAT', { dnatPresent: false }],
+      ['missing data plane', { dnatPresent: false, routePresent: false }],
+      ['ambiguous data plane', { dnatPresent: true, routePresent: true }],
       ['Router', { routerPresent: false }],
       ['sync', { syncStatus: 'failed' }],
       ['generation', { instanceGeneration: undefined }],
@@ -2429,6 +2452,33 @@ describe('NetworkAgentMqttService', () => {
       expect(udp.isDeleted).toBe(true);
       expect(harness.groups[0].isDeleted).toBe(true);
       expect(harness.state.desiredRevision).toBe('9');
+    });
+
+    it('keeps a TCP tombstone until the direct reply route is absent', async () => {
+      const harness = createV2Harness();
+      const tcp = harness.channels[0];
+      Object.assign(tcp, {
+        desiredPresence: 'absent',
+        natmapDesiredEnabled: false,
+      });
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {
+          [tcp.id]: { routePresent: true },
+        }),
+      );
+
+      expect(tcp.isDeleted).toBe(false);
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {
+          [tcp.id]: { routePresent: false },
+        }),
+      );
+
+      expect(tcp.isDeleted).toBe(true);
     });
 
     it('rolls back v2 report state and emits no post-commit effects when persistence fails', async () => {

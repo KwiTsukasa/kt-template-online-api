@@ -8,7 +8,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource, Not, type EntityManager } from 'typeorm';
 import * as mqtt from 'mqtt';
 import type { IClientOptions, MqttClient } from 'mqtt';
 import { KtDateTime } from '@/common';
@@ -1180,11 +1180,24 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     manager: EntityManager,
     mapping: NetworkPortForward,
   ): Promise<boolean> {
-    const histories = await manager.getRepository(NetworkEndpointHistory).find({
+    const repository = manager.getRepository(NetworkEndpointHistory);
+    let histories = await repository.find({
       order: { occurredAt: 'DESC', id: 'DESC' },
       take: 2,
       where: { mappingId: mapping.id, mechanism: 'udp_stun' },
     });
+    if (histories[0]?.eventType === 'restored') {
+      if (histories[1]?.eventType !== 'withdrawn') return false;
+      histories = await repository.find({
+        order: { occurredAt: 'DESC', id: 'DESC' },
+        take: 2,
+        where: {
+          eventType: Not('withdrawn'),
+          mappingId: mapping.id,
+          mechanism: 'udp_stun',
+        },
+      });
+    }
     return await this.stageV2UdpPortChange(
       manager,
       mapping,
@@ -1218,8 +1231,8 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   ): Promise<boolean> {
     if (
       !currentHistory ||
-      currentHistory.eventType !== 'changed' ||
-      previousHistory?.eventType === 'withdrawn' ||
+      (currentHistory.eventType !== 'changed' &&
+        currentHistory.eventType !== 'restored') ||
       !this.isV2HistoryMatchingCurrent(mapping, currentHistory) ||
       !this.isValidPort(previousHistory?.publicPort) ||
       !this.isValidPort(currentHistory.publicPort) ||
@@ -1570,7 +1583,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       if (await repository.findOne({ where: { eventId: event.eventId } })) {
         return { changed: false, deliveryAccepted: false };
       }
-      const previousHistory = await repository.findOne({
+      const immediatePreviousHistory = await repository.findOne({
         lock: { mode: 'pessimistic_read' },
         order: { occurredAt: 'DESC', id: 'DESC' },
         where: {
@@ -1578,6 +1591,20 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
           mechanism: event.mechanism,
         },
       });
+      const previousHistory =
+        event.protocol === 'udp' && event.type === 'restored'
+          ? immediatePreviousHistory?.eventType === 'withdrawn'
+            ? await repository.findOne({
+                lock: { mode: 'pessimistic_read' },
+                order: { occurredAt: 'DESC', id: 'DESC' },
+                where: {
+                  eventType: Not('withdrawn'),
+                  mappingId: event.channelId,
+                  mechanism: event.mechanism,
+                },
+              })
+            : null
+          : immediatePreviousHistory;
       const observedAt = event.endpoint?.observedAt || event.occurredAt;
       const history = repository.create({
         endpointValidatedAt: event.endpoint
@@ -1637,7 +1664,8 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       event.protocol === 'tcp' ? 'tcp_natmap' : 'udp_stun';
     return (
       event.mechanism === expectedMechanism &&
-      event.type === 'changed' &&
+      (event.type === 'changed' ||
+        (event.protocol === 'udp' && event.type === 'restored')) &&
       !!event.endpoint &&
       mapping.reportedRevision === String(event.revision) &&
       mapping.currentPublicIpv4 === event.endpoint.publicIpv4 &&

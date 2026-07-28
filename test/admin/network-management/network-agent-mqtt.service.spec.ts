@@ -390,7 +390,16 @@ function createV2Harness(): V2MqttHarness {
     value: Record<string, unknown>,
     where: Record<string, unknown> = {},
   ) =>
-    Object.entries(where).every(([key, expected]) => value[key] === expected);
+    Object.entries(where).every(([key, expected]) => {
+      if (
+        expected &&
+        typeof expected === 'object' &&
+        (expected as { _type?: unknown })._type === 'not'
+      ) {
+        return value[key] !== (expected as { _value?: unknown })._value;
+      }
+      return value[key] === expected;
+    });
   const mappingFindOne = jest.fn(
     async ({ where }) =>
       channels.find((channel) =>
@@ -2606,6 +2615,173 @@ describe('NetworkAgentMqttService', () => {
 
       expect(harness.stagedEvents).toHaveLength(1);
       expect(harness.deliveryCoordinator.requestDrain).toHaveBeenCalledTimes(1);
+    });
+
+    it('stages a restored UDP port change against the last valid endpoint after withdrawal', async () => {
+      const harness = createV2Harness();
+      harness.histories.push(
+        v2EndpointHistory(),
+        v2EndpointHistory({
+          endpointIdentity: null,
+          endpointValidatedAt: null,
+          endpointValidUntil: null,
+          eventId: 'v2-endpoint-withdrawn-1',
+          eventType: 'withdrawn',
+          id: '2',
+          occurredAt: new KtDateTime('2099-07-27T00:00:10.000Z'),
+          publicIpv4: null,
+          publicPort: null,
+        }),
+      );
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({
+          eventId: 'v2-endpoint-restored-1',
+          type: 'restored',
+        }),
+      );
+      expect(harness.stagedEvents).toHaveLength(0);
+
+      const restoredEndpoint = v2Endpoint('udp_stun', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000Z',
+        validUntil: '2099-07-27T00:00:55.000Z',
+      });
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            '102': {
+              currentEndpoint: restoredEndpoint,
+              lastObservedEndpoint: restoredEndpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000Z' },
+        ),
+      );
+
+      expect(harness.stagedEvents).toEqual([
+        {
+          eventId: 'v2-endpoint-restored-1',
+          occurredAt: '2099-07-27T00:00:16.000Z',
+          payload: {
+            changedAt: '2099-07-27T00:00:16.000Z',
+            currentPort: 45103,
+            portForwardId: '102',
+            previousPort: 45102,
+            publicIpv4: '8.8.4.4',
+          },
+          resourceKey: '102',
+          sourceKey: 'network.stun.mapping-port-changed',
+        },
+      ]);
+      expect(harness.deliveryCoordinator.requestDrain).toHaveBeenCalledTimes(1);
+    });
+
+    it('stages a report-first restored UDP port change after withdrawal', async () => {
+      const harness = createV2Harness();
+      harness.histories.push(
+        v2EndpointHistory(),
+        v2EndpointHistory({
+          endpointIdentity: null,
+          endpointValidatedAt: null,
+          endpointValidUntil: null,
+          eventId: 'v2-endpoint-withdrawn-1',
+          eventType: 'withdrawn',
+          id: '2',
+          occurredAt: new KtDateTime('2099-07-27T00:00:10.000Z'),
+          publicIpv4: null,
+          publicPort: null,
+        }),
+      );
+      const restoredEndpoint = v2Endpoint('udp_stun', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000Z',
+        validUntil: '2099-07-27T00:00:55.000Z',
+      });
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            '102': {
+              currentEndpoint: restoredEndpoint,
+              lastObservedEndpoint: restoredEndpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000Z' },
+        ),
+      );
+      expect(harness.stagedEvents).toHaveLength(0);
+      harness.deliveryCoordinator.requestDrain.mockClear();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({
+          eventId: 'v2-endpoint-restored-1',
+          type: 'restored',
+        }),
+      );
+
+      expect(harness.stagedEvents[0]).toMatchObject({
+        eventId: 'v2-endpoint-restored-1',
+        payload: {
+          currentPort: 45103,
+          previousPort: 45102,
+        },
+        sourceKey: 'network.stun.mapping-port-changed',
+      });
+      expect(harness.deliveryCoordinator.requestDrain).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a same-port UDP restoration silent after withdrawal', async () => {
+      const harness = createV2Harness();
+      harness.histories.push(
+        v2EndpointHistory({ publicPort: 45103 }),
+        v2EndpointHistory({
+          endpointIdentity: null,
+          endpointValidatedAt: null,
+          endpointValidUntil: null,
+          eventId: 'v2-endpoint-withdrawn-1',
+          eventType: 'withdrawn',
+          id: '2',
+          occurredAt: new KtDateTime('2099-07-27T00:00:10.000Z'),
+          publicIpv4: null,
+          publicPort: null,
+        }),
+      );
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({
+          eventId: 'v2-endpoint-restored-same-port',
+          type: 'restored',
+        }),
+      );
+      const restoredEndpoint = v2Endpoint('udp_stun', {
+        publicPort: 45103,
+        validatedAt: '2099-07-27T00:00:15.000Z',
+        validUntil: '2099-07-27T00:00:55.000Z',
+      });
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          harness,
+          {
+            '102': {
+              currentEndpoint: restoredEndpoint,
+              lastObservedEndpoint: restoredEndpoint,
+            },
+          },
+          { reportedAt: '2099-07-27T00:00:20.000Z' },
+        ),
+      );
+
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
     });
 
     it('does not stage an old-revision report-first event even when the tuple matches', async () => {

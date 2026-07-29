@@ -157,6 +157,17 @@ export class MinioClientService {
     };
   }
 
+  async statObject(
+    objectName: string,
+    bucketName?: string,
+  ): Promise<MinioObjectResult['stat']> {
+    if (!objectName) {
+      throw new BadRequestException('objectName不能为空');
+    }
+
+    return this.client.statObject(this.getBucketName(bucketName), objectName);
+  }
+
   getSameOriginDownloadUrl(objectName: string, bucketName?: string): string {
     if (!objectName) {
       throw new BadRequestException('objectName不能为空');

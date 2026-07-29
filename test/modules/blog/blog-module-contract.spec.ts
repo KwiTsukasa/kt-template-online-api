@@ -6,10 +6,13 @@ import { MODULE_METADATA } from '@nestjs/common/constants';
 import { AppModule } from '../../../src/app.module';
 import { CommonModule } from '../../../src/common';
 import { AdminAuthGuardModule } from '../../../src/modules/admin/identity/auth/admin-auth-guard.module';
+import { AssetModule } from '../../../src/modules/asset/asset.module';
 import { BlogArticleService } from '../../../src/modules/blog/application/blog-article.service';
+import { BlogLegacyAssetMigrationService } from '../../../src/modules/blog/application/blog-legacy-asset-migration.service';
 import { BlogTermService } from '../../../src/modules/blog/application/blog-term.service';
 import { BlogThemeConfigService } from '../../../src/modules/blog/application/blog-theme-config.service';
 import { BlogArticleController } from '../../../src/modules/blog/contract/blog-article.controller';
+import { BlogPublicAssetController } from '../../../src/modules/blog/contract/blog-public-asset.controller';
 import { BlogTermController } from '../../../src/modules/blog/contract/blog-term.controller';
 import { BlogThemeConfigController } from '../../../src/modules/blog/contract/blog-theme-config.controller';
 import {
@@ -68,6 +71,7 @@ describe('Blog content module contract', () => {
         'GET /blog/term/options',
         'GET /blog/theme/config',
         'POST /blog/theme/save',
+        'GET /blog/asset/:sha256/:basename',
       ]),
     );
     expect(routeKeys).not.toContain('POST /blog/article/import-wordpress');
@@ -94,7 +98,7 @@ describe('Blog content module contract', () => {
     expectNoModuleNamed(blogExports, 'BlogModule');
 
     expect(blogImports).toEqual(
-      expect.arrayContaining([AdminAuthGuardModule, CommonModule]),
+      expect.arrayContaining([AdminAuthGuardModule, AssetModule, CommonModule]),
     );
     expectNoModuleNamed(blogImports, 'WordpressMirrorModule');
     expect(
@@ -107,6 +111,7 @@ describe('Blog content module contract', () => {
     ).toEqual(
       expect.arrayContaining([
         BlogArticleController,
+        BlogPublicAssetController,
         BlogTermController,
         BlogThemeConfigController,
       ]),
@@ -116,6 +121,7 @@ describe('Blog content module contract', () => {
     ).toEqual(
       expect.arrayContaining([
         BlogArticleService,
+        BlogLegacyAssetMigrationService,
         BlogTermService,
         BlogThemeConfigService,
       ]),
@@ -130,6 +136,7 @@ describe('Blog content module contract', () => {
     expect(BLOG_CONTENT_CONTROLLERS).toEqual(
       expect.arrayContaining([
         BlogArticleController,
+        BlogPublicAssetController,
         BlogTermController,
         BlogThemeConfigController,
       ]),
@@ -137,6 +144,7 @@ describe('Blog content module contract', () => {
     expect(BLOG_CONTENT_PROVIDERS).toEqual(
       expect.arrayContaining([
         BlogArticleService,
+        BlogLegacyAssetMigrationService,
         BlogTermService,
         BlogThemeConfigService,
       ]),

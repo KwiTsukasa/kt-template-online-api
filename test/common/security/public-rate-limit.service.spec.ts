@@ -296,6 +296,8 @@ describe('PublicRateLimitService', () => {
     ['GET', '/blog/article/public/list', 'public-read'],
     ['GET', '/blog/theme/config', 'public-read'],
     ['GET', '/blog/live2d/pio/catalog.json', 'public-read'],
+    ['GET', `/blog/asset/${'a'.repeat(64)}/cover.png`, 'public-read'],
+    ['HEAD', `/blog/asset/${'a'.repeat(64)}/cover.png`, 'public-read'],
     ['POST', '/auth/login', 'login'],
     ['POST', '/auth/refresh', 'login'],
     ['POST', '/auth/logout', 'login'],

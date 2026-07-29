@@ -2,10 +2,22 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CommonModule } from '@/common';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
+import { AssetModule } from '@/modules/asset/asset.module';
 import { BlogArticleService } from './application/blog-article.service';
+import {
+  BLOG_LEGACY_ASSET_DNS_RESOLVER,
+  BLOG_LEGACY_ASSET_MANIFEST_STORE,
+  BLOG_LEGACY_ASSET_RAW_HTTP_REQUEST,
+  BlogLegacyAssetHttpFetcher,
+  BlogLegacyAssetManifestFileStore,
+  BlogLegacyAssetMigrationService,
+  defaultBlogLegacyAssetDnsResolver,
+  defaultBlogLegacyAssetRawHttpRequest,
+} from './application/blog-legacy-asset-migration.service';
 import { BlogTermService } from './application/blog-term.service';
 import { BlogThemeConfigService } from './application/blog-theme-config.service';
 import { BlogArticleController } from './contract/blog-article.controller';
+import { BlogPublicAssetController } from './contract/blog-public-asset.controller';
 import { BlogTermController } from './contract/blog-term.controller';
 import { BlogThemeConfigController } from './contract/blog-theme-config.controller';
 import { BlogArticle } from './infrastructure/persistence/blog-article.entity';
@@ -16,12 +28,31 @@ export const BLOG_CONTENT_CONTROLLERS = [
   BlogArticleController,
   BlogTermController,
   BlogThemeConfigController,
+  BlogPublicAssetController,
 ];
 
 export const BLOG_CONTENT_PROVIDERS = [
   BlogArticleService,
+  BlogLegacyAssetMigrationService,
   BlogTermService,
   BlogThemeConfigService,
+];
+
+const BLOG_LEGACY_ASSET_INFRASTRUCTURE_PROVIDERS = [
+  BlogLegacyAssetHttpFetcher,
+  BlogLegacyAssetManifestFileStore,
+  {
+    provide: BLOG_LEGACY_ASSET_DNS_RESOLVER,
+    useValue: defaultBlogLegacyAssetDnsResolver,
+  },
+  {
+    provide: BLOG_LEGACY_ASSET_RAW_HTTP_REQUEST,
+    useValue: defaultBlogLegacyAssetRawHttpRequest,
+  },
+  {
+    provide: BLOG_LEGACY_ASSET_MANIFEST_STORE,
+    useExisting: BlogLegacyAssetManifestFileStore,
+  },
 ];
 
 export const BLOG_CONTENT_DOMAIN_CONTRACT = {
@@ -67,11 +98,15 @@ export const BLOG_CONTENT_DOMAIN_CONTRACT = {
 @Module({
   imports: [
     AdminAuthGuardModule,
+    AssetModule,
     CommonModule,
     TypeOrmModule.forFeature([BlogArticle, BlogTerm, BlogThemeConfig]),
   ],
   controllers: BLOG_CONTENT_CONTROLLERS,
-  providers: BLOG_CONTENT_PROVIDERS,
+  providers: [
+    ...BLOG_CONTENT_PROVIDERS,
+    ...BLOG_LEGACY_ASSET_INFRASTRUCTURE_PROVIDERS,
+  ],
   exports: BLOG_CONTENT_PROVIDERS,
 })
 export class BlogContentModule {}

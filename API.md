@@ -155,7 +155,7 @@ Agent 状态响应额外包含可选的 `currentPublicIpv6/currentIpv6ObservedAt
 | 分组          | 关键变量                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MySQL         | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC`                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| MinIO         | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`                                                                                                                                                                                                                                                                                                                                                                            |
+| MinIO         | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`、`BLOG_ASSET_MIGRATION_*`                                                                                                                                                                                                                                                                                                                                                  |
 | Admin         | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_QUERY_SELECTOR`                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | QQBot         | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_REVERSE_WS_PATH`、`QQBOT_REVERSE_WS_TOKEN`、`QQBOT_EVENT_BUS`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`                                                                                                                                                                                                              |
@@ -177,13 +177,13 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 
 ### Auth / User
 
-| 方法   | 路径            | 说明                                                                                  |
-| ------ | --------------- | ------------------------------------------------------------------------------------- |
-| `POST` | `/auth/login`   | 后台登录，返回 accessToken 和用户信息，并写入 httpOnly cookie                         |
-| `POST` | `/auth/refresh` | 通过 refresh token cookie 刷新 accessToken                                            |
-| `POST` | `/auth/logout`  | 清理 Admin 登录 cookie                                                                |
-| `GET`  | `/auth/codes`   | 获取当前用户按钮权限码                                                                |
-| `GET`  | `/user/info`    | 获取当前用户信息                                                                      |
+| 方法   | 路径            | 说明                                                          |
+| ------ | --------------- | ------------------------------------------------------------- |
+| `POST` | `/auth/login`   | 后台登录，返回 accessToken 和用户信息，并写入 httpOnly cookie |
+| `POST` | `/auth/refresh` | 通过 refresh token cookie 刷新 accessToken                    |
+| `POST` | `/auth/logout`  | 清理 Admin 登录 cookie                                        |
+| `GET`  | `/auth/codes`   | 获取当前用户按钮权限码                                        |
+| `GET`  | `/user/info`    | 获取当前用户信息                                              |
 
 ### Menu / Role / Dept / User Manage
 
@@ -327,21 +327,21 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 
 ### Blog Category / Tag / Theme
 
-| 方法   | 路径                           | 说明                      |
-| ------ | ------------------------------ | ------------------------- |
-| `GET`  | `/blog/category/list`          | 本地分类分页              |
-| `GET`  | `/blog/category/detail`        | 本地分类详情              |
-| `POST` | `/blog/category/save`          | 新增分类                  |
-| `POST` | `/blog/category/update`        | 更新分类                  |
-| `POST` | `/blog/category/remove`        | 删除分类                  |
-| `GET`  | `/blog/tag/list`               | 本地标签分页              |
-| `GET`  | `/blog/tag/detail`             | 本地标签详情              |
-| `POST` | `/blog/tag/save`               | 新增标签                  |
-| `POST` | `/blog/tag/update`             | 更新标签                  |
-| `POST` | `/blog/tag/remove`             | 删除标签                  |
-| `GET`  | `/blog/term/options`           | 分类/标签选项             |
-| `GET`  | `/blog/theme/config`           | 获取 Argon 主题配置       |
-| `POST` | `/blog/theme/save`             | 保存本地主题配置          |
+| 方法   | 路径                    | 说明                |
+| ------ | ----------------------- | ------------------- |
+| `GET`  | `/blog/category/list`   | 本地分类分页        |
+| `GET`  | `/blog/category/detail` | 本地分类详情        |
+| `POST` | `/blog/category/save`   | 新增分类            |
+| `POST` | `/blog/category/update` | 更新分类            |
+| `POST` | `/blog/category/remove` | 删除分类            |
+| `GET`  | `/blog/tag/list`        | 本地标签分页        |
+| `GET`  | `/blog/tag/detail`      | 本地标签详情        |
+| `POST` | `/blog/tag/save`        | 新增标签            |
+| `POST` | `/blog/tag/update`      | 更新标签            |
+| `POST` | `/blog/tag/remove`      | 删除标签            |
+| `GET`  | `/blog/term/options`    | 分类/标签选项       |
+| `GET`  | `/blog/theme/config`    | 获取 Argon 主题配置 |
+| `POST` | `/blog/theme/save`      | 保存本地主题配置    |
 
 ## MinIO
 
@@ -357,10 +357,14 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `DELETE` | `/minio/remove`                              | 删除文件                                                                                                                         |
 | `GET`    | `/blog/live2d/:character/catalog.json`       | 公开读取 Pio/Tia Live2D 公共目录索引，按 Referer/Origin 白名单防盗链                                                             |
 | `GET`    | `/blog/live2d/:character/:family/*assetPath` | 公开读取 Pio/Tia Live2D 运行包资源，`character` 只允许 `pio`/`tia`，`family` 只允许 `moc`/`moc3`，按 Referer/Origin 白名单防盗链 |
+| `GET`    | `/blog/asset/:sha256/:basename`              | 公开读取迁移后的内容寻址 Blog 资源                                                                                               |
+| `HEAD`   | `/blog/asset/:sha256/:basename`              | 读取迁移后的 Blog 资源 MIME、长度和 immutable 缓存元数据                                                                         |
 
 `bucketName` 不传时使用 `MINIO_BUCKET`。
 
 Blog Live2D 运行包读取入口不使用 Vben 响应包装，直接返回 MinIO 文件流。根 `catalog.json` 暴露当前角色 family、目录规范和动作/贴图计数；asset 路由只读取 `moc/` 或 `moc3/` 下的 `index.json`、`manifest.json`、runtime、model、motion、shader 和 source texture 文件。允许的请求源固定为旧 Blog Origin `https://blog.kwitsukasa.top`，以及由可信代理链、归一化协议和原始 Host 推导出的当前 `https://nas4.kwitsukasa.top:{动态端口}` Origin；动态端口必须显式存在，省略端口或显式默认 `443` 均不属于 NATMap 入口，`X-Forwarded-Host` 不能改变该 authority。`BLOG_LIVE2D_BUCKET` 决定 bucket，`BLOG_LIVE2D_ROOT_PREFIX` 决定角色根目录（默认 `blog/live2d`），旧 `BLOG_LIVE2D_PREFIX=blog/live2d/pio` 会自动派生到同一根前缀以兼容现有环境。路由支持嵌套资源路径，如 `textures/default-costume.png` 和 `assets/model/motions/breath1.motion3.json`，并拒绝缺失或不匹配的 Referer/Origin、绝对 URL、反斜杠、`.`/`..`、多重编码后的路径逃逸、未知角色和 `v1/v2` 这类自定义版本 family。MinIO 上传及 `/minio/url` 返回根相对 `/api/minio/download?...`，客户端不再接收内部 MinIO 预签名地址。
+
+旧 Blog 资源迁移器扫描 `blog_article.content_html/content_markdown/cover/excerpt` 与 `blog_theme_config.config`。下载只允许 `BLOG_ASSET_MIGRATION_ALLOWED_HOSTS` 的精确 HTTP(S) Host，每次 redirect 都重新校验并使用绑定已校验 DNS 结果的直连 Agent；响应同时受 redirect、timeout、大小和安全 MIME 限制。对象键固定为 `blog/migrated/{sha256}/{basename}`，数据库写入根相对 `/api/blog/asset/{sha256}/{basename}`。命令 `pnpm blog-assets:migrate -- <参数>` 支持 `--dry-run`、`--execute`、`--resume`、`--verify` 与 `--rollback-manifest <path>`；manifest 必须由调用方指定在 `.kt-workspace` 下，破坏性模式必须声明当前数据库身份、维护确认和已有备份。公开 GET/HEAD 路由只按 64 位 SHA-256 与安全 basename 映射固定前缀，进入公开读取限流并返回一年 immutable 缓存；rollback 默认只恢复数据库旧 URL，不删除共享对象。
 
 ## QQBot 管理
 

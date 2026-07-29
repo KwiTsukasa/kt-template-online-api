@@ -72,9 +72,20 @@ ci/            Jenkins Agent/Docker 辅助文件
 
 公网安全边界只信任 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 中的精确代理地址，并只允许 `PUBLIC_SECURITY_SWAGGER_ALLOWLIST` 中的生产管理来源访问 Swagger。Admin 登录、刷新和退出在任何 token 或 Cookie 副作用前校验可信代理归一化后的公开 Origin；Admin 用户新增、编辑和密码重置也在哈希或持久化前经过同一门禁。生产只接受 HTTPS，`ADMIN_AUTH_ALLOW_INSECURE_LOCAL=true` 仅允许非生产 loopback 本地开发且默认关闭。认证 Cookie 固定 `HttpOnly`、`SameSite=Lax`、`Path=/`、无 `Domain`，生产始终 `Secure`，退出同时清理 `/`、`/api/auth`、`/auth` 三种 Path。Redis 限流键只保存客户端 IP、规范化用户名或已验证 token subject 的 SHA-256。登录按 IP（5 次/分钟）、用户名（10 次/15 分钟）和全局（100 次/分钟）原子计数；成功认证会在签发 token 前清理该用户名退避，清理失败按 503 fail closed。刷新与退出继续使用 IP/全局额度，并仅对签名校验成功的 refresh token 增加 subject 额度：刷新 30 次/分钟，退出 10 次/分钟。Blog 公开列表的 `pageSize` 最大 100。登录和已验证 token 的 Redis 故障 fail closed；普通公开读取与 Live2D 并发租约故障 fail open，并使用限频告警。
 
+Admin 密码使用
+`$pbkdf2-sha256$v=1$i=600000$<salt-base64url>$<digest-base64url>`，旧明文只
+允许在维护窗口由编译后的 `pnpm admin-passwords:migrate -- <参数>` 一次性
+迁移。必须先 `--dry-run`，再带数据库身份、维护确认、已存在备份和
+`.kt-workspace` manifest 执行 `--execute`，最后 `--verify` 并运行
+`sql/admin-password-hash-verify.sql`。哈希落库后禁止回滚到明文比较版本。
+
 Blog Live2D 运行包存放在 MinIO，公开读取入口为 `/blog/live2d/:character/catalog.json` 和 `/blog/live2d/:character/:family/*assetPath`。`character` 只允许 `pio`、`tia`，family 只允许 `moc` 和 `moc3`：`moc/` 提供旧 WordPress 同款 Cubism2 `index.json`、`model.moc`、`.mtn` 动作和贴图，`moc3/` 保留当前重建 Cubism3 包（Tia 当前只发布 `moc/`，不会在 catalog 声明不存在的 MOC3）。防盗链只接受旧 Blog Origin `https://blog.kwitsukasa.top`，或由可信代理链和原始 Host 推导出的当前 `https://nas4.kwitsukasa.top:{动态端口}` Origin；动态端口必须显式存在，省略端口或显式默认 `443` 均不作为 NATMap Origin。客户端提供的 forwarded Host 不能扩展允许范围。Live2D 每个客户端 IP 默认最多 8 条跨副本 Redis 并发租约；每条流使用唯一 token 的 ZSET 成员，定期续租，HTTP `finish`、`close` 或 `error` 时只精确释放自身 token，旧流不会递减后续代际的计数，120 秒 TTL 兜底断连和异常。`BLOG_LIVE2D_ROOT_PREFIX` 指向角色根目录（默认 `blog/live2d`），旧 `BLOG_LIVE2D_PREFIX=blog/live2d/pio` 会自动派生到同一根前缀以兼容现有环境；缺失或不匹配的 Referer/Origin 会在读取 MinIO 前被拒绝。MinIO 上传结果和 `/minio/url` 只返回根相对 `/api/minio/download?...`，不向浏览器公开内部 MinIO endpoint。
 
 旧 Blog 资源迁移使用编译后的 `pnpm blog-assets:migrate -- <参数>`。命令严格区分 `--dry-run`、`--execute`、`--resume`、`--verify` 和 `--rollback-manifest <path>`；所有模式都要求调用方提供 `.kt-workspace` 下的 manifest。`execute`、`resume` 与 rollback 还必须提供匹配当前连接的 `--database-identity`、`--maintenance-confirmed` 和已存在的 `--backup-path`。下载只接受 `BLOG_ASSET_MIGRATION_ALLOWED_HOSTS` 中的精确 HTTP(S) Host，每次重定向都会重新解析并绑定已校验公网地址；私网、环回、CGNAT、链路本地、未指定、组播和 IPv6 ULA 均拒绝。迁移对象固定写入 `blog/migrated/{sha256}/{basename}`，数据库只保存根相对 `/api/blog/asset/{sha256}/{basename}`；rollback 默认不删除可共享的内容寻址对象。
+
+上述资源迁移当前只完成聚焦测试和本地 HTTP 契约验证；真实
+MySQL+MinIO 一次性往返因本机 Docker daemon 不可用仍未执行，发布前必须
+按根运维文档补验，不能用 NAS 或生产数据代替。
 
 QQBot 插件 worker 使用 BullMQ 队列串行执行同一插件安装实例的请求。K8s 生产清单包含内部服务 `kt-qqbot-plugin-redis`，生产 env 可将 `QQBOT_PLUGIN_QUEUE_REDIS_HOST` 配为该服务名。`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS` 控制排队等待窗口，插件 `operation.timeoutMs` 仍表示单次执行预算。
 
@@ -109,7 +120,11 @@ node scripts/napcat-desktop-cn-stage-build.mjs \
   --jenkins-build-url https://jenkins.kwitsukasa.top/job/KT-NapCatQQ-Runtime-Release/1/
 ```
 
-NapCat WebUI Gateway 是独立运行的 NestJS 入口，生产镜像使用 `dockerfile.gateway` 打包 `dist/apps/napcat-webui-gateway/main.js` 并监听 `48086`。API 通过内部地址 `NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL=http://kt-napcat-webui-gateway:48086` 创建/续期/撤销 WebUI 会话，Admin 浏览器只访问公开前缀 `NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL=/napcat-webui`。Gateway 运行时需要 `NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET`、`NAPCAT_WEBUI_GATEWAY_REDIS_HOST`、`NAPCAT_WEBUI_GATEWAY_REDIS_PORT`、`NAPCAT_WEBUI_GATEWAY_SESSION_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_TICKET_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_UPSTREAM_TIMEOUT_MS`；生产 secret 由 Jenkins 从私有 `.env.production` 重建到 `kt-template-online-api-env`，不得写入 Git。验收命令：`pnpm exec jest --runTestsByPath test/modules/qqbot/napcat-webui-gateway/gateway-deployment.spec.ts --runInBand`、`pnpm run typecheck`、`pnpm run build`、`test -f dist/apps/napcat-webui-gateway/main.js`、`git diff --check`。安全边界：浏览器不得收到 WebUI token、Credential、上游 URL/端口、Docker 拓扑、Redis 地址或内部 secret。
+NapCat WebUI Gateway 是独立运行的 NestJS 入口，生产镜像使用 `dockerfile.gateway` 打包 `dist/apps/napcat-webui-gateway/main.js` 并监听 `48086`。API 通过内部地址 `NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL=http://kt-napcat-webui-gateway:48086` 创建/续期/撤销 WebUI 会话，Admin 浏览器在统一网关只访问公开前缀 `NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL=/admin/napcat-webui`；Traefik 去掉 `/admin` 后，Admin Nginx 与 Gateway 应用内部仍使用 `/napcat-webui`。Gateway 运行时需要 `NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET`、`NAPCAT_WEBUI_GATEWAY_REDIS_HOST`、`NAPCAT_WEBUI_GATEWAY_REDIS_PORT`、`NAPCAT_WEBUI_GATEWAY_SESSION_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_TICKET_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_UPSTREAM_TIMEOUT_MS`；生产 secret 由 Jenkins 从私有 `.env.production` 重建到 `kt-template-online-api-env`，不得写入 Git。验收命令：`pnpm exec jest --runTestsByPath test/modules/qqbot/napcat-webui-gateway/gateway-deployment.spec.ts --runInBand`、`pnpm run typecheck`、`pnpm run build`、`test -f dist/apps/napcat-webui-gateway/main.js`、`git diff --check`。安全边界：浏览器不得收到 WebUI token、Credential、上游 URL/端口、Docker 拓扑、Redis 地址或内部 secret。
+
+统一网关的部署布局、Canary、DNS/Caddy、密码迁移和 WordPress 两阶段回滚
+见 KT 工作区根文档 `docs/unified-natmap-tls-gateway-operations.md`。当前这些
+能力只完成本地实现与验证，尚未发布到生产。
 
 ## 启动
 

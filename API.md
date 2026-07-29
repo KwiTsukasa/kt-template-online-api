@@ -45,6 +45,13 @@ Admin、Component、Dict、MinIO、Blog 管理和 QQBot 管理接口默认需要
 
 公网入口通过精确 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 归一化客户端 IP 和公开 Origin；客户端自行提交的 XFF、X-Forwarded-Proto、Origin 或 Referer 不能扩展信任。`POST /auth/login`、`POST /auth/refresh`、`POST /auth/logout` 必须先通过公开 Origin 的 TLS 门禁，再执行 token 或 Cookie 副作用；接收明文密码的 `POST /system/user`、`PUT /system/user/:id`、`PUT /system/user/:id/password` 也在用户服务、密码哈希和持久化前经过同一门禁。生产 HTTP 固定返回 403，`ADMIN_AUTH_ALLOW_INSECURE_LOCAL=true` 只在非生产 loopback 本地开发生效。登录请求体为 `username` + `password`，不再提供 `/auth/password-public-key`。access/refresh Cookie 固定 `HttpOnly`、`SameSite=Lax`、`Path=/`、无 `Domain`，生产始终 `Secure`；退出清理当前 Cookie 在 `/`、`/api/auth`、`/auth` 三种 Path 的历史残留。登录在一次 Redis Lua 调用中计数 IP 5 次/分钟、规范化用户名 SHA-256 10 次/15 分钟和全局 100 次/分钟，任一超限统一返回 429。真实认证成功后、签发 token 前只清理用户名 bucket，不清 IP 或全局；清理或计数 Redis 失败返回 503。刷新和退出保留 IP/全局额度；签名校验成功的 refresh token 额外按 subject SHA-256 限制为刷新 30 次/分钟、退出 10 次/分钟，缺失或伪造 token 不读取未验证 payload。普通公开读取 Redis 故障时 fail open 并限频告警。
 
+密码持久化格式固定为
+`$pbkdf2-sha256$v=1$i=600000$<salt-base64url>$<digest-base64url>`。旧明文迁移
+使用编译后的 `pnpm admin-passwords:migrate -- <参数>`，依次执行
+`--dry-run`、带数据库身份/维护确认/已有备份/`.kt-workspace` manifest 的
+`--execute` 和 `--verify`，并用 `sql/admin-password-hash-verify.sql`
+复核。哈希落库后禁止回滚到明文比较版本。
+
 Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理列表的分页语义。Live2D 公开流每 IP 默认最多 8 条跨副本 Redis 并发租约；Lua acquire 先从 ZSET 清理过期成员，再以唯一 token 写入本次流，超限时精确移除该 token 并返回 429。活动流按半个 TTL 周期续租；HTTP `finish`、`close`、`error` 只幂等移除自身 token，过期旧流的 release 不会影响新一代租约，120 秒 TTL 继续兜底断连。Live2D Redis 故障遵循公开读 fail open。上述阈值、Redis 连接、可信代理和 Swagger 管理来源都出现在 required runtime config checks；生产 Jenkins 在发布前强制检查两个安全来源列表。
 
 ### ID 与时间
@@ -366,6 +373,9 @@ Blog Live2D 运行包读取入口不使用 Vben 响应包装，直接返回 MinI
 
 旧 Blog 资源迁移器扫描 `blog_article.content_html/content_markdown/cover/excerpt` 与 `blog_theme_config.config`。下载只允许 `BLOG_ASSET_MIGRATION_ALLOWED_HOSTS` 的精确 HTTP(S) Host，每次 redirect 都重新校验并使用绑定已校验 DNS 结果的直连 Agent；响应同时受 redirect、timeout、大小和安全 MIME 限制。对象键固定为 `blog/migrated/{sha256}/{basename}`，数据库写入根相对 `/api/blog/asset/{sha256}/{basename}`。命令 `pnpm blog-assets:migrate -- <参数>` 支持 `--dry-run`、`--execute`、`--resume`、`--verify` 与 `--rollback-manifest <path>`；manifest 必须由调用方指定在 `.kt-workspace` 下，破坏性模式必须声明当前数据库身份、维护确认和已有备份。公开 GET/HEAD 路由只按 64 位 SHA-256 与安全 basename 映射固定前缀，进入公开读取限流并返回一年 immutable 缓存；rollback 默认只恢复数据库旧 URL，不删除共享对象。
 
+当前本地证据不包含真实 MySQL+MinIO 往返；该项必须在 Docker daemon
+恢复后以一次性环境补验，生产发布不得用模拟依赖结果替代。
+
 ## QQBot 管理
 
 QQBot 运行态包括 NapCat 容器登录、OneBot v11 反向 WebSocket、MQTT 事件总线、账号能力绑定、在线命令、自动回复规则、权限名单、发送/接收日志和插件生态。
@@ -480,6 +490,10 @@ node scripts/napcat-desktop-cn-stage-build.mjs \
 ### NapCat WebUI Gateway
 
 NapCat WebUI Gateway 是独立部署的内部代理服务，生产镜像由 `dockerfile.gateway` 打包 `dist/apps/napcat-webui-gateway/main.js`，K8s 服务名为 `kt-napcat-webui-gateway`，端口 `48086`。API 侧只通过内部路由 `NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL` 创建、续期、撤销会话和交换一次性 ticket；浏览器只访问公开前缀 `NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL` 下的代理页面、静态资源和 WebSocket 转发，不能直连 NapCat 容器 WebUI。
+
+统一网关公开前缀为 `/admin/napcat-webui`。Traefik 去掉 `/admin` 后，
+Admin Nginx 与 Gateway 应用内部前缀仍为 `/napcat-webui`；两个层次不能
+混用或重复拼接。
 
 Gateway 只改写 NapCat HTML/JS/CSS 中需要浏览器直连的绝对根路径：`/webui/*`、`/api/*`、`/files/*` 和 `/plugin/*`。NapCat 文件管理的 `File` 路由属于 axios `baseURL="/api"` 下的 API 子路径，页面源码里的 `"/File/list"` 必须保持原样，由浏览器最终请求 `/api/File/list`；不能把 `/File/*` 当作独立静态根路径改写到 Gateway session 前缀，否则会形成 `/webui/api/napcat-webui/session/.../File/list` 并让文件管理拿到 HTML。
 

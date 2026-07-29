@@ -18,7 +18,6 @@ import {
   BLOG_CONTENT_PROVIDERS,
   BlogContentModule,
 } from '../../../src/modules/blog/blog-content.module';
-import { WordpressMirrorModule } from '../../../src/modules/wordpress/wordpress-mirror.module';
 import {
   collectControllerRoutes,
   routeKey,
@@ -43,8 +42,9 @@ describe('Blog content module contract', () => {
 
   it('keeps public and Admin-facing Blog routes compatible', () => {
     const routes = collectControllerRoutes(BLOG_CONTENT_CONTROLLERS);
+    const routeKeys = routes.map(routeKey);
 
-    expect(routes.map(routeKey)).toEqual(
+    expect(routeKeys).toEqual(
       expect.arrayContaining([
         'GET /blog/article/public/list',
         'GET /blog/article/public/detail',
@@ -55,7 +55,6 @@ describe('Blog content module contract', () => {
         'POST /blog/article/remove',
         'GET /blog/article/category-options',
         'GET /blog/article/tag-options',
-        'POST /blog/article/import-wordpress',
         'GET /blog/category/list',
         'GET /blog/category/detail',
         'POST /blog/category/save',
@@ -69,9 +68,10 @@ describe('Blog content module contract', () => {
         'GET /blog/term/options',
         'GET /blog/theme/config',
         'POST /blog/theme/save',
-        'POST /blog/theme/import-wordpress',
       ]),
     );
+    expect(routeKeys).not.toContain('POST /blog/article/import-wordpress');
+    expect(routeKeys).not.toContain('POST /blog/theme/import-wordpress');
   });
 
   it('routes Blog through the new module boundary without duplicate direct controllers', () => {
@@ -94,12 +94,9 @@ describe('Blog content module contract', () => {
     expectNoModuleNamed(blogExports, 'BlogModule');
 
     expect(blogImports).toEqual(
-      expect.arrayContaining([
-        AdminAuthGuardModule,
-        CommonModule,
-        WordpressMirrorModule,
-      ]),
+      expect.arrayContaining([AdminAuthGuardModule, CommonModule]),
     );
+    expectNoModuleNamed(blogImports, 'WordpressMirrorModule');
     expect(
       blogImports.some(
         (moduleRef: any) => moduleRef?.module?.name === 'TypeOrmModule',

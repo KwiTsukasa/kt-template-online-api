@@ -3,7 +3,6 @@ import { RuntimeHealthService } from '@/runtime/health/runtime-health.service';
 import { MinioClientService } from '@/modules/asset/application/asset-minio.service';
 import { QqbotDashboardService } from '@/modules/qqbot/core/application/dashboard/qqbot-dashboard.service';
 import { QqbotPluginTaskService } from '@/modules/qqbot/plugin-platform/application/task';
-import { WordpressService } from '@/modules/wordpress/application/wordpress.service';
 import { errorEvidence, liveEvidence, unwiredEvidence } from '../environment-dashboard-evidence.mapper';
 import { EnvironmentDashboardConfigService } from '../environment-dashboard-config.service';
 import { JenkinsReadonlyAdapter } from '../adapters/jenkins-readonly.adapter';
@@ -41,8 +40,6 @@ export class NasProdSignalCollector {
     @Optional()
     private readonly minioClientService?: MinioClientService,
     @Optional()
-    private readonly wordpressService?: WordpressService,
-    @Optional()
     private readonly jenkinsAdapter?: JenkinsReadonlyAdapter,
     @Optional()
     private readonly kubernetesAdapter?: KubernetesReadonlyAdapter,
@@ -75,7 +72,6 @@ export class NasProdSignalCollector {
         observedAt,
       ),
       await this.createMinioService(observedAt),
-      await this.createWordpressService(observedAt),
       this.createQqbotService(qqbotSummary, observedAt),
       this.createNapcatService(qqbotSummary, observedAt),
       this.createPluginPlatformService(observedAt),
@@ -245,43 +241,6 @@ export class NasProdSignalCollector {
           sourceKind: 'derived',
           status: 'down',
           summary: 'MinIO 只读连通性检查失败',
-        },
-      ]);
-    }
-  }
-
-  private async createWordpressService(observedAt: string): Promise<EnvironmentService> {
-    if (!this.wordpressService) {
-      return this.createUnknownService('wordpress', 'WordPress', 'WordpressService 未接入', observedAt);
-    }
-    try {
-      const result = await this.wordpressService.tryLoginWithConfiguredAdmin();
-      return this.createService('wordpress', 'WordPress', [
-        {
-          evidence: [
-            liveEvidence('wordpress', result.available ? 'WordPress 管理员探针可用' : 'WordPress 管理员探针不可用', observedAt, {
-              available: result.available,
-              error: result.error,
-            }),
-          ],
-          id: 'wordpress-admin-login',
-          label: 'WordPress Admin Probe',
-          observedAt,
-          sourceKind: 'live',
-          status: result.available ? 'ok' : 'degraded',
-          summary: result.available ? 'WordPress 集成可用' : 'WordPress 集成不可用',
-        },
-      ]);
-    } catch (error) {
-      return this.createService('wordpress', 'WordPress', [
-        {
-          evidence: [errorEvidence('wordpress', error, observedAt)],
-          id: 'wordpress-admin-login',
-          label: 'WordPress Admin Probe',
-          observedAt,
-          sourceKind: 'derived',
-          status: 'down',
-          summary: 'WordPress 只读探针失败',
         },
       ]);
     }

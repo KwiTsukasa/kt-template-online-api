@@ -22,14 +22,6 @@ describe('AdminMenuService', () => {
       pid: '2041700000000100300',
       type: 'menu',
     }),
-    createMenu({
-      authCode: 'Blog:Theme:Import',
-      id: '2041700000000120332',
-      meta: { title: '导入 WordPress' },
-      name: 'BlogThemeImport',
-      pid: '2041700000000100304',
-      type: 'button',
-    }),
   ];
 
   it('keeps local Blog menus visible for super users', async () => {
@@ -61,9 +53,7 @@ describe('AdminMenuService', () => {
         path: '/blog',
       }),
     ]);
-    expect(accessCodes).toEqual(
-      expect.arrayContaining(['Blog:Theme:List', 'Blog:Theme:Import']),
-    );
+    expect(accessCodes).toEqual(['Blog:Theme:List']);
   });
 
   it('returns and orders menus by the persisted sort field', async () => {

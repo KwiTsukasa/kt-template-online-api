@@ -17,7 +17,6 @@ import { AdminTokenService } from '../../../src/modules/admin/identity/auth/admi
 import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
 import { AdminUser } from '../../../src/modules/admin/identity/user/admin-user.entity';
 import { AdminUserService } from '../../../src/modules/admin/identity/user/admin-user.service';
-import { WordpressService } from '../../../src/modules/wordpress/application/wordpress.service';
 
 describe('Admin verified subject rate-limit HTTP boundary (e2e)', () => {
   let app: INestApplication;
@@ -84,10 +83,6 @@ describe('Admin verified subject rate-limit HTTP boundary (e2e)', () => {
         },
         {
           provide: AdminUserService,
-          useValue: {},
-        },
-        {
-          provide: WordpressService,
           useValue: {},
         },
       ],

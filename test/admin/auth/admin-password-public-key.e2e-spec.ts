@@ -9,7 +9,6 @@ import { AdminAuthService } from '../../../src/modules/admin/identity/auth/admin
 import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
 import { AdminMenuService } from '../../../src/modules/admin/identity/menu/admin-menu.service';
 import { AdminUserService } from '../../../src/modules/admin/identity/user/admin-user.service';
-import { WordpressService } from '../../../src/modules/wordpress/application/wordpress.service';
 
 describe('retired Admin password public key route (e2e)', () => {
   let app: INestApplication;
@@ -26,7 +25,6 @@ describe('retired Admin password public key route (e2e)', () => {
         { provide: AdminAuthService, useValue: {} },
         { provide: AdminMenuService, useValue: {} },
         { provide: AdminUserService, useValue: {} },
-        { provide: WordpressService, useValue: {} },
         { provide: ConfigService, useValue: configService },
         ClientIpService,
         TrustedCredentialTransportService,

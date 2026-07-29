@@ -27,12 +27,6 @@ import { BlogTermController } from '../src/modules/blog/contract/blog-term.contr
 import { BlogThemeConfigController } from '../src/modules/blog/contract/blog-theme-config.controller';
 import { MinioClientService } from '../src/modules/asset/application/asset-minio.service';
 import { MinioClientController } from '../src/modules/asset/contract/asset-minio.controller';
-import { WordpressService } from '../src/modules/wordpress/application/wordpress.service';
-import { WordpressArticleController } from '../src/modules/wordpress/contract/wordpress-article.controller';
-import { WordpressAuthController } from '../src/modules/wordpress/contract/wordpress-auth.controller';
-import { WordpressCategoryController } from '../src/modules/wordpress/contract/wordpress-category.controller';
-import { WordpressTagController } from '../src/modules/wordpress/contract/wordpress-tag.controller';
-import { WordpressThemeController } from '../src/modules/wordpress/contract/wordpress-theme.controller';
 import { PinoLogger } from 'nestjs-pino';
 import {
   collectControllerRoutes,
@@ -135,33 +129,6 @@ const objectStat = {
   lastModified: '2026-05-13 10:30:00',
 };
 
-const wordpressAuthContext = {
-  authorization: 'Bearer wordpress-client-token',
-};
-
-const wordpressUser = {
-  id: 1,
-  name: 'WordPress Admin',
-  slug: 'wordpress-admin',
-};
-
-const wordpressLoginResult = {
-  auth: {
-    nonce: 'wordpress-rest-nonce',
-    type: 'cookie',
-  },
-  cookie: 'wordpress_logged_in_demo=1',
-  user: wordpressUser,
-};
-
-const wordpressArticle = {
-  id: 1,
-  title: {
-    rendered: 'WordPress 文章',
-  },
-  status: 'draft',
-};
-
 const blogArticle = {
   authorName: 'KwiTsukasa',
   categories: ['技术'],
@@ -176,12 +143,6 @@ const blogArticle = {
   title: '本地文章',
 };
 
-const wordpressTerm = {
-  id: 1,
-  name: 'WordPress 分类',
-  slug: 'wordpress-category',
-};
-
 const blogTerm = {
   count: 1,
   description: '本地分类描述',
@@ -190,7 +151,7 @@ const blogTerm = {
   slug: 'tech',
 };
 
-const wordpressThemeConfig = {
+const argonThemeConfig = {
   bodyClass: ['home', 'blog', 'wp-theme-argon'],
   darkmodeAutoSwitch: 'alwayson',
   enableCustomThemeColor: true,
@@ -281,7 +242,6 @@ const blogArticleServiceMock = {
   tagOptions: jest.fn(),
   publicList: jest.fn(),
   publicDetail: jest.fn(),
-  importFromWordpress: jest.fn(),
 };
 
 const blogTermServiceMock = {
@@ -294,35 +254,8 @@ const blogTermServiceMock = {
 };
 
 const blogThemeConfigServiceMock = {
-  importFromWordpress: jest.fn(),
   publicConfig: jest.fn(),
   save: jest.fn(),
-};
-
-const wordpressServiceMock = {
-  getAuthContext: jest.fn(),
-  loginWithConfiguredAdmin: jest.fn(),
-  setAuthCookie: jest.fn(),
-  clearAuthCookie: jest.fn(),
-  checkAuth: jest.fn(),
-  articleList: jest.fn(),
-  articleDetail: jest.fn(),
-  articleSave: jest.fn(),
-  articleUpdate: jest.fn(),
-  articleRemove: jest.fn(),
-  publicArticleList: jest.fn(),
-  publicArticleDetail: jest.fn(),
-  tagList: jest.fn(),
-  tagDetail: jest.fn(),
-  tagSave: jest.fn(),
-  tagUpdate: jest.fn(),
-  tagRemove: jest.fn(),
-  categoryList: jest.fn(),
-  categoryDetail: jest.fn(),
-  categorySave: jest.fn(),
-  categoryUpdate: jest.fn(),
-  categoryRemove: jest.fn(),
-  themeConfig: jest.fn(),
 };
 
 const controllerClasses = [
@@ -334,11 +267,6 @@ const controllerClasses = [
   BlogTermController,
   BlogThemeConfigController,
   MinioClientController,
-  WordpressAuthController,
-  WordpressArticleController,
-  WordpressTagController,
-  WordpressCategoryController,
-  WordpressThemeController,
 ];
 const controllerRoutes = collectControllerRoutes(controllerClasses);
 
@@ -674,47 +602,6 @@ const routeTestCases: Record<string, RouteTestCase> = {
     });
   },
 
-  'POST /blog/article/import-wordpress': async (server) => {
-    blogArticleServiceMock.importFromWordpress.mockResolvedValue({
-      created: 1,
-      items: [
-        {
-          action: 'created',
-          id: blogArticle.id,
-          slug: blogArticle.slug,
-          title: blogArticle.title,
-        },
-      ],
-      skipped: 0,
-      total: 1,
-      updated: 0,
-    });
-
-    const response = await request(server)
-      .post('/blog/article/import-wordpress')
-      .send({
-        overwrite: false,
-        pageNo: 1,
-        pageSize: 10,
-      })
-      .expect(200);
-
-    expect(blogArticleServiceMock.importFromWordpress).toHaveBeenCalledWith({
-      overwrite: false,
-      pageNo: 1,
-      pageSize: 10,
-    });
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: {
-        created: 1,
-        skipped: 0,
-        total: 1,
-        updated: 0,
-      },
-    });
-  },
-
   'GET /blog/category/list': async (server) => {
     blogTermServiceMock.page.mockResolvedValue({
       list: [blogTerm],
@@ -943,9 +830,7 @@ const routeTestCases: Record<string, RouteTestCase> = {
   },
 
   'GET /blog/theme/config': async (server) => {
-    blogThemeConfigServiceMock.publicConfig.mockResolvedValue(
-      wordpressThemeConfig,
-    );
+    blogThemeConfigServiceMock.publicConfig.mockResolvedValue(argonThemeConfig);
 
     const response = await request(server)
       .get('/blog/theme/config')
@@ -954,46 +839,28 @@ const routeTestCases: Record<string, RouteTestCase> = {
     expect(blogThemeConfigServiceMock.publicConfig).toHaveBeenCalledWith();
     expect(response.body).toMatchObject({
       code: 200,
-      data: wordpressThemeConfig,
+      data: argonThemeConfig,
     });
   },
 
   'POST /blog/theme/save': async (server) => {
-    blogThemeConfigServiceMock.save.mockResolvedValue(wordpressThemeConfig);
+    blogThemeConfigServiceMock.save.mockResolvedValue(argonThemeConfig);
 
     const response = await request(server)
       .post('/blog/theme/save')
       .send({
-        config: wordpressThemeConfig,
+        config: argonThemeConfig,
         source: 'local-admin',
       })
       .expect(200);
 
     expect(blogThemeConfigServiceMock.save).toHaveBeenCalledWith({
-      config: wordpressThemeConfig,
+      config: argonThemeConfig,
       source: 'local-admin',
     });
     expect(response.body).toMatchObject({
       code: 200,
-      data: wordpressThemeConfig,
-    });
-  },
-
-  'POST /blog/theme/import-wordpress': async (server) => {
-    blogThemeConfigServiceMock.importFromWordpress.mockResolvedValue(
-      wordpressThemeConfig,
-    );
-
-    const response = await request(server)
-      .post('/blog/theme/import-wordpress')
-      .expect(200);
-
-    expect(
-      blogThemeConfigServiceMock.importFromWordpress,
-    ).toHaveBeenCalledWith();
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressThemeConfig,
+      data: argonThemeConfig,
     });
   },
 
@@ -1500,484 +1367,6 @@ const routeTestCases: Record<string, RouteTestCase> = {
       data: true,
     });
   },
-
-  'GET /wordpress/auth/check': async (server) => {
-    wordpressServiceMock.checkAuth.mockResolvedValue(wordpressUser);
-
-    const response = await request(server)
-      .get('/wordpress/auth/check')
-      .expect(200);
-
-    expect(wordpressServiceMock.checkAuth).toHaveBeenCalledWith(
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressUser,
-    });
-  },
-
-  'POST /wordpress/auth/login': async (server) => {
-    wordpressServiceMock.loginWithConfiguredAdmin.mockResolvedValue(
-      wordpressLoginResult,
-    );
-
-    const response = await request(server)
-      .post('/wordpress/auth/login')
-      .expect(201);
-
-    expect(
-      wordpressServiceMock.loginWithConfiguredAdmin,
-    ).toHaveBeenCalledWith();
-    expect(wordpressServiceMock.setAuthCookie).toHaveBeenCalledWith(
-      expect.anything(),
-      wordpressLoginResult.cookie,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: {
-        auth: wordpressLoginResult.auth,
-        user: wordpressUser,
-      },
-    });
-  },
-
-  'POST /wordpress/auth/logout': async (server) => {
-    const response = await request(server)
-      .post('/wordpress/auth/logout')
-      .expect(201);
-
-    expect(wordpressServiceMock.clearAuthCookie).toHaveBeenCalledWith(
-      expect.anything(),
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: true,
-    });
-  },
-
-  'GET /wordpress/article/list': async (server) => {
-    wordpressServiceMock.articleList.mockResolvedValue({
-      list: [wordpressArticle],
-      total: 1,
-    });
-
-    const response = await request(server)
-      .get('/wordpress/article/list')
-      .query({
-        pageNo: 1,
-        pageSize: 10,
-        search: '文章',
-      })
-      .expect(200);
-
-    expect(wordpressServiceMock.articleList).toHaveBeenCalledWith(
-      {
-        pageNo: '1',
-        pageSize: '10',
-        search: '文章',
-      },
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: {
-        list: [wordpressArticle],
-        total: 1,
-      },
-    });
-  },
-
-  'GET /wordpress/article/detail': async (server) => {
-    wordpressServiceMock.articleDetail.mockResolvedValue(wordpressArticle);
-
-    const response = await request(server)
-      .get('/wordpress/article/detail')
-      .query({ id: 1 })
-      .expect(200);
-
-    expect(wordpressServiceMock.articleDetail).toHaveBeenCalledWith(
-      '1',
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressArticle,
-    });
-  },
-
-  'GET /wordpress/article/public/list': async (server) => {
-    wordpressServiceMock.publicArticleList.mockResolvedValue({
-      list: [wordpressArticle],
-      total: 1,
-    });
-
-    const response = await request(server)
-      .get('/wordpress/article/public/list')
-      .query({
-        pageNo: 1,
-        pageSize: 10,
-        search: '文章',
-      })
-      .expect(200);
-
-    expect(wordpressServiceMock.publicArticleList).toHaveBeenCalledWith({
-      pageNo: '1',
-      pageSize: '10',
-      search: '文章',
-    });
-    expect(wordpressServiceMock.getAuthContext).not.toHaveBeenCalled();
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: {
-        list: [wordpressArticle],
-        total: 1,
-      },
-    });
-  },
-
-  'GET /wordpress/article/public/detail': async (server) => {
-    wordpressServiceMock.publicArticleDetail.mockResolvedValue(
-      wordpressArticle,
-    );
-
-    const response = await request(server)
-      .get('/wordpress/article/public/detail')
-      .query({ slug: 'wordpress-article' })
-      .expect(200);
-
-    expect(wordpressServiceMock.publicArticleDetail).toHaveBeenCalledWith({
-      id: undefined,
-      slug: 'wordpress-article',
-    });
-    expect(wordpressServiceMock.getAuthContext).not.toHaveBeenCalled();
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressArticle,
-    });
-  },
-
-  'POST /wordpress/article/save': async (server) => {
-    wordpressServiceMock.articleSave.mockResolvedValue(wordpressArticle);
-
-    const response = await request(server)
-      .post('/wordpress/article/save')
-      .send({
-        id: 999,
-        title: 'WordPress 文章',
-        content: '文章内容',
-      })
-      .expect(200);
-
-    expect(wordpressServiceMock.articleSave).toHaveBeenCalledWith(
-      {
-        title: 'WordPress 文章',
-        content: '文章内容',
-      },
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressArticle,
-    });
-  },
-
-  'POST /wordpress/article/update': async (server) => {
-    wordpressServiceMock.articleUpdate.mockResolvedValue(wordpressArticle);
-
-    const response = await request(server)
-      .post('/wordpress/article/update')
-      .send({
-        id: 1,
-        title: 'WordPress 文章',
-      })
-      .expect(200);
-
-    expect(wordpressServiceMock.articleUpdate).toHaveBeenCalledWith(
-      {
-        id: 1,
-        title: 'WordPress 文章',
-      },
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressArticle,
-    });
-  },
-
-  'POST /wordpress/article/remove': async (server) => {
-    wordpressServiceMock.articleRemove.mockResolvedValue(true);
-
-    const response = await request(server)
-      .post('/wordpress/article/remove')
-      .query({
-        id: 1,
-        force: 'false',
-      })
-      .expect(200);
-
-    expect(wordpressServiceMock.articleRemove).toHaveBeenCalledWith(
-      '1',
-      false,
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: true,
-    });
-  },
-
-  'GET /wordpress/tag/list': async (server) => {
-    wordpressServiceMock.tagList.mockResolvedValue({
-      list: [wordpressTerm],
-      total: 1,
-    });
-
-    const response = await request(server)
-      .get('/wordpress/tag/list')
-      .query({
-        pageNo: 1,
-        pageSize: 10,
-        search: '分类',
-      })
-      .expect(200);
-
-    expect(wordpressServiceMock.tagList).toHaveBeenCalledWith(
-      {
-        pageNo: '1',
-        pageSize: '10',
-        search: '分类',
-      },
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: {
-        list: [wordpressTerm],
-        total: 1,
-      },
-    });
-  },
-
-  'GET /wordpress/tag/detail': async (server) => {
-    wordpressServiceMock.tagDetail.mockResolvedValue(wordpressTerm);
-
-    const response = await request(server)
-      .get('/wordpress/tag/detail')
-      .query({ id: 1 })
-      .expect(200);
-
-    expect(wordpressServiceMock.tagDetail).toHaveBeenCalledWith(
-      '1',
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressTerm,
-    });
-  },
-
-  'POST /wordpress/tag/save': async (server) => {
-    wordpressServiceMock.tagSave.mockResolvedValue(wordpressTerm);
-
-    const response = await request(server)
-      .post('/wordpress/tag/save')
-      .send({
-        id: 999,
-        name: 'WordPress 标签',
-      })
-      .expect(200);
-
-    expect(wordpressServiceMock.tagSave).toHaveBeenCalledWith(
-      {
-        name: 'WordPress 标签',
-      },
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressTerm,
-    });
-  },
-
-  'POST /wordpress/tag/update': async (server) => {
-    wordpressServiceMock.tagUpdate.mockResolvedValue(wordpressTerm);
-
-    const response = await request(server)
-      .post('/wordpress/tag/update')
-      .send({
-        id: 1,
-        name: 'WordPress 标签',
-      })
-      .expect(200);
-
-    expect(wordpressServiceMock.tagUpdate).toHaveBeenCalledWith(
-      {
-        id: 1,
-        name: 'WordPress 标签',
-      },
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressTerm,
-    });
-  },
-
-  'POST /wordpress/tag/remove': async (server) => {
-    wordpressServiceMock.tagRemove.mockResolvedValue(true);
-
-    const response = await request(server)
-      .post('/wordpress/tag/remove')
-      .query({ id: 1 })
-      .expect(200);
-
-    expect(wordpressServiceMock.tagRemove).toHaveBeenCalledWith(
-      '1',
-      true,
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: true,
-    });
-  },
-
-  'GET /wordpress/category/list': async (server) => {
-    wordpressServiceMock.categoryList.mockResolvedValue({
-      list: [wordpressTerm],
-      total: 1,
-    });
-
-    const response = await request(server)
-      .get('/wordpress/category/list')
-      .query({
-        pageNo: 1,
-        pageSize: 10,
-        search: '分类',
-      })
-      .expect(200);
-
-    expect(wordpressServiceMock.categoryList).toHaveBeenCalledWith(
-      {
-        pageNo: '1',
-        pageSize: '10',
-        search: '分类',
-      },
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: {
-        list: [wordpressTerm],
-        total: 1,
-      },
-    });
-  },
-
-  'GET /wordpress/category/detail': async (server) => {
-    wordpressServiceMock.categoryDetail.mockResolvedValue(wordpressTerm);
-
-    const response = await request(server)
-      .get('/wordpress/category/detail')
-      .query({ id: 1 })
-      .expect(200);
-
-    expect(wordpressServiceMock.categoryDetail).toHaveBeenCalledWith(
-      '1',
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressTerm,
-    });
-  },
-
-  'POST /wordpress/category/save': async (server) => {
-    wordpressServiceMock.categorySave.mockResolvedValue(wordpressTerm);
-
-    const response = await request(server)
-      .post('/wordpress/category/save')
-      .send({
-        id: 999,
-        name: 'WordPress 分类',
-        parent: 0,
-      })
-      .expect(200);
-
-    expect(wordpressServiceMock.categorySave).toHaveBeenCalledWith(
-      {
-        name: 'WordPress 分类',
-        parent: 0,
-      },
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressTerm,
-    });
-  },
-
-  'POST /wordpress/category/update': async (server) => {
-    wordpressServiceMock.categoryUpdate.mockResolvedValue(wordpressTerm);
-
-    const response = await request(server)
-      .post('/wordpress/category/update')
-      .send({
-        id: 1,
-        name: 'WordPress 分类',
-        parent: 0,
-      })
-      .expect(200);
-
-    expect(wordpressServiceMock.categoryUpdate).toHaveBeenCalledWith(
-      {
-        id: 1,
-        name: 'WordPress 分类',
-        parent: 0,
-      },
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressTerm,
-    });
-  },
-
-  'POST /wordpress/category/remove': async (server) => {
-    wordpressServiceMock.categoryRemove.mockResolvedValue(true);
-
-    const response = await request(server)
-      .post('/wordpress/category/remove')
-      .query({ id: 1 })
-      .expect(200);
-
-    expect(wordpressServiceMock.categoryRemove).toHaveBeenCalledWith(
-      '1',
-      true,
-      wordpressAuthContext,
-    );
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: true,
-    });
-  },
-
-  'GET /wordpress/theme/config': async (server) => {
-    wordpressServiceMock.themeConfig.mockResolvedValue(wordpressThemeConfig);
-
-    const response = await request(server)
-      .get('/wordpress/theme/config')
-      .expect(200);
-
-    expect(wordpressServiceMock.themeConfig).toHaveBeenCalledWith();
-    expect(wordpressServiceMock.getAuthContext).not.toHaveBeenCalled();
-    expect(response.body).toMatchObject({
-      code: 200,
-      data: wordpressThemeConfig,
-    });
-  },
 };
 
 describe('KT Template Online API (e2e)', () => {
@@ -2024,10 +1413,6 @@ describe('KT Template Online API (e2e)', () => {
           useValue: minioServiceMock,
         },
         {
-          provide: WordpressService,
-          useValue: wordpressServiceMock,
-        },
-        {
           provide: PinoLogger,
           useValue: pinoLoggerMock,
         },
@@ -2052,7 +1437,6 @@ describe('KT Template Online API (e2e)', () => {
       id: '2041739550026043001',
       username: 'admin',
     });
-    wordpressServiceMock.getAuthContext.mockReturnValue(wordpressAuthContext);
   });
 
   afterAll(async () => {
@@ -2065,7 +1449,7 @@ describe('KT Template Online API (e2e)', () => {
     );
   });
 
-  it('keeps Blog Web runtime endpoints public for WordPress replacement', () => {
+  it('keeps Blog Web runtime endpoints public', () => {
     expect(
       Reflect.getMetadata(
         IS_PUBLIC_KEY,
@@ -2099,6 +1483,19 @@ describe('KT Template Online API (e2e)', () => {
     });
   });
 
+  it.each([
+    ['get', '/wordpress/auth/check'],
+    ['get', '/wordpress/article/public/list'],
+    ['get', '/wordpress/theme/config'],
+    ['post', '/blog/article/import-wordpress'],
+    ['post', '/blog/theme/import-wordpress'],
+  ] as const)(
+    'returns 404 for retired WordPress runtime path %s %s',
+    async (method, path) => {
+      await request(app.getHttpServer())[method](path).expect(404);
+    },
+  );
+
   it('returns component update failure in a unified response shape', async () => {
     componentServiceMock.update.mockResolvedValue(false);
 
@@ -2118,12 +1515,12 @@ describe('KT Template Online API (e2e)', () => {
   });
 
   it('serializes object error details as a string for frontend parsing', async () => {
-    wordpressServiceMock.checkAuth.mockRejectedValue(
+    componentServiceMock.update.mockRejectedValue(
       new HttpException(
         {
-          msg: 'WordPress 请求失败',
+          msg: '上游请求失败',
           err: {
-            code: 'WORDPRESS_NETWORK_ERROR',
+            code: 'UPSTREAM_NETWORK_ERROR',
             message: 'connect ECONNREFUSED 127.0.0.1:8080',
           },
         },
@@ -2132,17 +1529,21 @@ describe('KT Template Online API (e2e)', () => {
     );
 
     const response = await request(app.getHttpServer())
-      .get('/wordpress/auth/check')
+      .post('/component/update')
+      .send({
+        id: component.id,
+        name: component.name,
+      })
       .expect(502);
 
     expect(response.body).toEqual({
       code: 502,
-      msg: 'WordPress 请求失败',
+      msg: '上游请求失败',
       err: 'connect ECONNREFUSED 127.0.0.1:8080',
     });
   });
 
-  it('protects dict, minio and wordpress endpoints with jwt auth', async () => {
+  it('protects dict and minio endpoints with jwt auth', async () => {
     authServiceMock.currentUser.mockRejectedValue(unauthorizedException());
 
     await request(app.getHttpServer())
@@ -2165,12 +1566,5 @@ describe('KT Template Online API (e2e)', () => {
     await request(app.getHttpServer()).get('/minio/check').expect(401);
 
     expect(minioServiceMock.checkConnection).not.toHaveBeenCalled();
-
-    jest.clearAllMocks();
-    authServiceMock.currentUser.mockRejectedValue(unauthorizedException());
-
-    await request(app.getHttpServer()).get('/wordpress/auth/check').expect(401);
-
-    expect(wordpressServiceMock.checkAuth).not.toHaveBeenCalled();
   });
 });

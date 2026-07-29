@@ -8,7 +8,6 @@ export const HIGH_RISK_ENVIRONMENT_ACTION_IDS = [
   'toggle-plugin',
   'run-plugin-task-now',
   'create-minio-bucket',
-  'wordpress-import',
   'reload-caddy',
   'switch-openclash',
   'restart-tencent-cvm',
@@ -61,7 +60,6 @@ const highRiskLabels: Record<
   'switch-openclash': '切换 OpenClash 策略',
   'toggle-plugin': '启停插件',
   'trigger-jenkins-deploy': '触发 Jenkins 部署',
-  'wordpress-import': '导入 WordPress 内容',
 };
 
 export function getEnvironmentDashboardActions(): EnvironmentAction[] {

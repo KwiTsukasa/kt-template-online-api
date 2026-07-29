@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 describe('blog-menu.sql', () => {
+  const retiredImportMenuIds = ['2041700000000120304', '2041700000000120332'];
   const sqlFiles = [
     readFileSync(join(process.cwd(), 'sql/blog-menu.sql'), 'utf8'),
     readFileSync(join(process.cwd(), 'sql/vben-admin-init.sql'), 'utf8'),
@@ -42,16 +43,44 @@ describe('blog-menu.sql', () => {
       'BlogArticleCreate',
       'BlogArticleEdit',
       'BlogArticleDelete',
-      'BlogArticleImport',
       'BlogArticlePreview',
       'BlogArticlePreviewButton',
       'BlogCategory',
       'BlogTag',
       'BlogTheme',
       'BlogThemeSave',
-      'BlogThemeImport',
     ].forEach((name) => {
       expectAllSqlToContain(`'${name}'`);
+    });
+  });
+
+  it('does not expose retired WordPress import actions', () => {
+    sqlFiles.forEach((sql) => {
+      expect(sql).not.toMatch(/wordpress/i);
+      expect(sql).not.toContain("'BlogArticleImport'");
+      expect(sql).not.toContain("'Blog:Article:Import'");
+      expect(sql).not.toContain("'BlogThemeImport'");
+      expect(sql).not.toContain("'Blog:Theme:Import'");
+    });
+  });
+
+  it('retires existing import menu rows before granting active Blog menus', () => {
+    sqlFiles.forEach((sql) => {
+      const retirementStatement = sql.match(
+        /UPDATE `admin_menu`[\s\S]*?WHERE `id` IN \(([\s\S]*?)\);/,
+      )?.[0];
+      const firstRoleGrantIndex = sql.search(
+        /INSERT(?: IGNORE)? INTO `admin_role_menu`/,
+      );
+
+      expect(retirementStatement).toContain('`status` = 0');
+      expect(retirementStatement).toContain('`is_deleted` = 1');
+      retiredImportMenuIds.forEach((id) => {
+        expect(retirementStatement).toContain(id);
+      });
+      expect(sql.indexOf(retirementStatement || '')).toBeLessThan(
+        firstRoleGrantIndex,
+      );
     });
   });
 
@@ -88,7 +117,7 @@ describe('blog-menu.sql', () => {
     );
   });
 
-  it('grants blog menus to admin roles without deleting existing role menus', () => {
+  it('grants active blog menus without broadly deleting existing role menus', () => {
     const blogMenuSql = sqlFiles[0] || '';
     expect(blogMenuSql).toContain('INSERT IGNORE INTO `admin_role_menu`');
     expect(blogMenuSql).toContain("menu.`name` LIKE 'Blog%'");

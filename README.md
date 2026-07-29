@@ -19,8 +19,7 @@
 | 模块                            | 说明                                                                                                                                                |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `admin`                         | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志、环境总览面板和网络端口映射管理                                             |
-| `blog`                          | 本地博客文章、分类、标签、Argon 主题配置和 WordPress 导入                                                                                           |
-| `wordpress`                     | WordPress REST 代理、登录态透传、文章/分类/标签/主题配置                                                                                            |
+| `blog`                          | 本地博客文章、分类、标签和 Argon 主题配置                                                                                                           |
 | `qqbot`                         | QQBot 账号、NapCat 扫码登录、运行态 Profile、OneBot 反向 WS、在线命令、规则、权限、系统消息源/订阅/模板/账号绑定、耐久投递、发送/接收日志和插件平台 |
 | `modules/qqbot/plugin-platform` | QQBot 插件 manifest 校验、版本安装、运行事件、定时任务、受控 SDK 和 CLI 脚手架                                                                      |
 | `qqbot/plugins/bangdream`       | BanG Dream 查曲、查卡、查活动、试炼、玩家、卡池、抽卡模拟、档线、谱面出图                                                                           |
@@ -40,7 +39,6 @@ src/
   minio/       MinIO 文件服务
   modules/     第三期重构后的业务边界模块
   qqbot/       QQBot 运行态、管理接口和插件生态
-  wordpress/   WordPress REST 代理
   app.module.ts
   main.ts
 test/          Jest 单元测试，统一放在 test 下
@@ -62,7 +60,6 @@ ci/            Jenkins Agent/Docker 辅助文件
 | MinIO                 | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`                                                                                                                                                                                                                                                                                                   |
 | Admin                 | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                                                                                                |
 | Public Security       | `PUBLIC_SECURITY_*`、`PUBLIC_RATE_LIMIT_REDIS_*`、`PUBLIC_RATE_LIMIT_*`                                                                                                                                                                                                                                                                                                                                                                                         |
-| WordPress             | `WORDPRESS_BASE_URL`、`WORDPRESS_HOST_HEADER`、`WORDPRESS_ADMIN_USERNAME`、`WORDPRESS_ADMIN_PASSWORD`、`WORDPRESS_*_TIMEOUT_MS`                                                                                                                                                                                                                                                                                                                                 |
 | Logging/Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*`                                                                                                                                                                                                                                                                                                                                                                                            |
 | QQBot/NapCat          | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_REVERSE_WS_*`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`、`NAPCAT_*`、`QQBOT_NAPCAT_*`、`MQTT_*`                                                                                                                                             |
 | Environment Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_JENKINS_*`、`ENV_DASHBOARD_K8S_*`、`ENV_DASHBOARD_TENCENT_*`、`ENV_DASHBOARD_CADDY_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                         |
@@ -73,7 +70,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 
 `DB_SYNC=true` 只适合本地开发或明确允许自动同步表结构的环境；生产应关闭并使用 SQL/迁移脚本。
 
-公网安全边界只信任 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 中的精确代理地址，并只允许 `PUBLIC_SECURITY_SWAGGER_ALLOWLIST` 中的生产管理来源访问 Swagger。Admin 登录、刷新和退出在任何 token、Cookie 或 WordPress 副作用前校验可信代理归一化后的公开 Origin；Admin 用户新增、编辑和密码重置也在哈希或持久化前经过同一门禁。生产只接受 HTTPS，`ADMIN_AUTH_ALLOW_INSECURE_LOCAL=true` 仅允许非生产 loopback 本地开发且默认关闭。认证 Cookie 固定 `HttpOnly`、`SameSite=Lax`、`Path=/`、无 `Domain`，生产始终 `Secure`，退出同时清理 `/`、`/api/auth`、`/auth` 三种 Path。Redis 限流键只保存客户端 IP、规范化用户名或已验证 token subject 的 SHA-256。登录按 IP（5 次/分钟）、用户名（10 次/15 分钟）和全局（100 次/分钟）原子计数；成功认证会在签发 token 前清理该用户名退避，清理失败按 503 fail closed。刷新与退出继续使用 IP/全局额度，并仅对签名校验成功的 refresh token 增加 subject 额度：刷新 30 次/分钟，退出 10 次/分钟。Blog 公开列表的 `pageSize` 最大 100。登录和已验证 token 的 Redis 故障 fail closed；普通公开读取与 Live2D 并发租约故障 fail open，并使用限频告警。
+公网安全边界只信任 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 中的精确代理地址，并只允许 `PUBLIC_SECURITY_SWAGGER_ALLOWLIST` 中的生产管理来源访问 Swagger。Admin 登录、刷新和退出在任何 token 或 Cookie 副作用前校验可信代理归一化后的公开 Origin；Admin 用户新增、编辑和密码重置也在哈希或持久化前经过同一门禁。生产只接受 HTTPS，`ADMIN_AUTH_ALLOW_INSECURE_LOCAL=true` 仅允许非生产 loopback 本地开发且默认关闭。认证 Cookie 固定 `HttpOnly`、`SameSite=Lax`、`Path=/`、无 `Domain`，生产始终 `Secure`，退出同时清理 `/`、`/api/auth`、`/auth` 三种 Path。Redis 限流键只保存客户端 IP、规范化用户名或已验证 token subject 的 SHA-256。登录按 IP（5 次/分钟）、用户名（10 次/15 分钟）和全局（100 次/分钟）原子计数；成功认证会在签发 token 前清理该用户名退避，清理失败按 503 fail closed。刷新与退出继续使用 IP/全局额度，并仅对签名校验成功的 refresh token 增加 subject 额度：刷新 30 次/分钟，退出 10 次/分钟。Blog 公开列表的 `pageSize` 最大 100。登录和已验证 token 的 Redis 故障 fail closed；普通公开读取与 Live2D 并发租约故障 fail open，并使用限频告警。
 
 Blog Live2D 运行包存放在 MinIO，公开读取入口为 `/blog/live2d/:character/catalog.json` 和 `/blog/live2d/:character/:family/*assetPath`。`character` 只允许 `pio`、`tia`，family 只允许 `moc` 和 `moc3`：`moc/` 提供旧 WordPress 同款 Cubism2 `index.json`、`model.moc`、`.mtn` 动作和贴图，`moc3/` 保留当前重建 Cubism3 包（Tia 当前只发布 `moc/`，不会在 catalog 声明不存在的 MOC3）。防盗链只接受旧 Blog Origin `https://blog.kwitsukasa.top`，或由可信代理链和原始 Host 推导出的当前 `https://nas4.kwitsukasa.top:{动态端口}` Origin；动态端口必须显式存在，省略端口或显式默认 `443` 均不作为 NATMap Origin。客户端提供的 forwarded Host 不能扩展允许范围。Live2D 每个客户端 IP 默认最多 8 条跨副本 Redis 并发租约；每条流使用唯一 token 的 ZSET 成员，定期续租，HTTP `finish`、`close` 或 `error` 时只精确释放自身 token，旧流不会递减后续代际的计数，120 秒 TTL 兜底断连和异常。`BLOG_LIVE2D_ROOT_PREFIX` 指向角色根目录（默认 `blog/live2d`），旧 `BLOG_LIVE2D_PREFIX=blog/live2d/pio` 会自动派生到同一根前缀以兼容现有环境；缺失或不匹配的 Referer/Origin 会在读取 MinIO 前被拒绝。MinIO 上传结果和 `/minio/url` 只返回根相对 `/api/minio/download?...`，不向浏览器公开内部 MinIO endpoint。
 
@@ -146,7 +143,7 @@ pnpm exec jest --runInBand --runTestsByPath test/path/to/file.spec.ts
 
 - Swagger 全量：`http://localhost:48085/api`
 - OpenAPI JSON：`http://localhost:48085/api-json`
-- 分组文档：`/api/admin`、`/api/qqbot`、`/api/wordpress`、`/api/basic`
+- 分组文档：`/api/admin`、`/api/qqbot`、`/api/basic`
 - Knife4j：服务启动后同样使用上述 OpenAPI 服务列表
 - 手工接口索引：[API.md](./API.md)
 
@@ -179,7 +176,7 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 - `status`：`live`、`ready`、`degraded` 或 `blocked`。
 - `checks`：进程存活和运行时配置检查状态。
 
-该公开入口不返回数据库、WordPress、Loki、NapCat SSH 等运行拓扑配置快照；配置检查只暴露 key 级别、是否存在和缺失说明。`blocked` 表示关键配置缺失；`degraded` 表示可选运行时配置缺失，核心 API 仍可继续工作。本地未配置 Loki、WordPress、NapCat 等可选依赖时，健康状态可能保持 `degraded`。
+该公开入口不返回数据库、Loki、NapCat SSH 等运行拓扑配置快照；配置检查只暴露 key 级别、是否存在和缺失说明。`blocked` 表示关键配置缺失；`degraded` 表示可选运行时配置缺失，核心 API 仍可继续工作。本地未配置 Loki、NapCat 等可选依赖时，健康状态可能保持 `degraded`。
 
 ## 核心规则
 
@@ -187,8 +184,7 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 - 后端响应时间统一用 `KtDateTime extends Date` 承接序列化语义；Entity 使用 `@KtDateTimeColumn(format)`、`@KtCreateDateColumn(format)`、`@KtUpdateDateColumn(format)` 在 TypeORM hydrate 边界转换，DTO/外部数据源使用 `@KtDateTimeField(format)` + `transformKtDateTimeFields()` 转换，默认格式为 `YYYY-MM-DD HH:mm:ss`。Create/Update 列显式配置 `precision` 时，公共装饰器会在调用方未覆盖的前提下生成同精度 `CURRENT_TIMESTAMP(n)` 默认值与更新表达式，避免 MySQL 列精度不匹配；`vbenSuccess` / `ToolsService.res` 不做全量递归格式化。
 - 字典维护在 `admin_dict`，Admin 字典管理按 `dictCode` 分组展示；可运营映射优先走字典或静态配置，不硬编码到业务函数。
 - 全局 `SaveBodyInterceptor` 会删除 `POST */save` 请求体里的 `id`；需要保留时使用 `@SkipSaveBodyNormalize()`。
-- Admin、Component、Dict、MinIO、Blog 管理、WordPress 管理和 QQBot 管理接口默认走 `JwtAuthGuard`；公开接口用 `@Public()`。
-- WordPress 自动登录失败不会阻断 Admin 主登录，会通过菜单和权限码过滤不可用的 Blog 管理入口。
+- Admin、Component、Dict、MinIO、Blog 管理和 QQBot 管理接口默认走 `JwtAuthGuard`；公开接口用 `@Public()`。
 - 系统日志由 pino 输出，Loki 查询统一通过后端 `/system/logs/*` 代理，前端不直连 Loki。
 - 日志级站内信只承接运行期事件：接口 5xx、QQBot 下线 notice、NapCat 容器最新离线日志会自动聚合通知 `super` 角色；服务端强制 `super` 访问，Admin 不再暴露人工新增/编辑入口；长路径接口错误会压缩 `dedupeKey/title` 到表字段长度内，避免通知入库失败。
 - QQBot 扫码登录通过 SSE `/qqbot/account/scan/events` 暴露进度，耗时链路不应阻塞普通 HTTP 响应；新增账号扫码会先返回 pending `sessionId`，后台再创建 NapCat 容器并生成二维码。`CheckLoginStatus.isLogin=true` 只代表 NapCat 登录阳性，创建账号必须继续等 `GetQQLoginInfo` 返回 `uin/selfId` 后才绑定真实 QQ 号；短暂缺号时会话保持 pending 并显示正在读取 QQ 号，不能重建容器或猜号。

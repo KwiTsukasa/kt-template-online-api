@@ -3,6 +3,15 @@ import { join } from 'path';
 
 const root = join(__dirname, '..', '..');
 
+const retiredWordPressTables = [
+  'wordpress_site',
+  'wordpress_auth_session',
+  'wordpress_remote_post',
+  'wordpress_remote_term',
+  'wordpress_sync_job',
+  'wordpress_sync_mapping',
+];
+
 const extractSchemaMapTables = () => {
   const schemaMap = readFileSync(
     join(root, 'docs/refactor-v3/schema-map.md'),
@@ -90,6 +99,56 @@ describe('refactor v3 schema skeleton', () => {
     expect(blogTermColumns).toContain('name');
     expect(blogTermColumns).toContain('description');
     expect(blogTermColumns).toContain('parent_id');
+  });
+
+  it('keeps retired WordPress runtime tables out of new-install references', () => {
+    const referenceFiles = [
+      'sql/refactor-v3/00-full-schema.sql',
+      'sql/refactor-v3/01-seed-core.sql',
+      'sql/refactor-v3/99-verify.sql',
+    ];
+    const referenceSql = referenceFiles.map((file) =>
+      readFileSync(join(root, file), 'utf8'),
+    );
+    const schemaMap = readFileSync(
+      join(root, 'docs/refactor-v3/schema-map.md'),
+      'utf8',
+    );
+
+    for (const table of retiredWordPressTables) {
+      referenceSql.forEach((sql) => {
+        expect(sql).not.toMatch(
+          new RegExp(
+            `(?:CREATE\\s+TABLE\\s+IF\\s+NOT\\s+EXISTS\\s+)?\`?${table}\`?\\b`,
+            'i',
+          ),
+        );
+      });
+      expect(schemaMap).not.toContain(`\`${table}\``);
+    }
+  });
+
+  it('keeps migration history without adding destructive table retirement SQL', () => {
+    const referenceFiles = [
+      'sql/blog-menu.sql',
+      'sql/refactor-v3/00-full-schema.sql',
+      'sql/refactor-v3/01-seed-core.sql',
+      'sql/refactor-v3/99-verify.sql',
+      'sql/vben-admin-init.sql',
+    ];
+    const sqlFiles = referenceFiles.map((file) =>
+      readFileSync(join(root, file), 'utf8'),
+    );
+    const schemaMap = readFileSync(
+      join(root, 'docs/refactor-v3/schema-map.md'),
+      'utf8',
+    );
+
+    expect(sqlFiles[1]).toContain('CREATE TABLE IF NOT EXISTS blog_import_job');
+    expect(schemaMap).toContain('`blog_import_job`');
+    sqlFiles.forEach((sql) => {
+      expect(sql).not.toMatch(/\bDROP\s+TABLE\b/i);
+    });
   });
 
   it('seeds qqbot command rows with required command code and manifest-owned aliases', () => {

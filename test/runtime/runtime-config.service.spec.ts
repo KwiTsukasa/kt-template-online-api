@@ -104,22 +104,14 @@ describe('RuntimeConfigService', () => {
     expect(snapshotJson).not.toContain('napcat-webui-token');
     expect(snapshot.minio.accessKey).toBe('mi***ey');
     expect(snapshot.minio.useSSL).toBe(false);
-    expect(snapshot.wordpress.adminUsername).toBe('wordpress-user');
-    expect(snapshot.wordpress.passwordConfigured).toBe(true);
+    expect(snapshot).not.toHaveProperty('wordpress');
     expect(snapshot.loki.passwordConfigured).toBe(true);
     expect(snapshot.qqbot.reverseWsToken).toBe('qq***en');
     expect(snapshot.qqbot.napcatWebuiToken).toBe('na***en');
   });
 
-  it('reads current WordPress, Loki, and NapCat runtime keys without leaking secrets', () => {
+  it('reads current Loki and NapCat runtime keys without leaking secrets', () => {
     const service = createService({
-      WORDPRESS_BASE_URL: 'https://blog.example.test',
-      WORDPRESS_HOST_HEADER: 'blog.example.test',
-      WORDPRESS_ADMIN_USERNAME: 'wordpress-admin',
-      WORDPRESS_ADMIN_PASSWORD: 'wordpress-password',
-      WORDPRESS_TIMEOUT_MS: '16000',
-      WORDPRESS_LOGIN_TIMEOUT_MS: '4000',
-      WORDPRESS_AVAILABILITY_TTL_MS: '70000',
       LOKI_URL: 'https://loki-push.example.test',
       LOKI_QUERY_HOST: 'https://loki-query.example.test',
       LOKI_ENV: 'production',
@@ -140,15 +132,6 @@ describe('RuntimeConfigService', () => {
       NAPCAT_WEBUI_TOKEN: 'napcat-webui-token',
     });
 
-    expect(service.readWordpressProfile()).toEqual({
-      baseUrl: 'https://blog.example.test',
-      hostHeader: 'blog.example.test',
-      adminUsername: 'wordpress-admin',
-      passwordConfigured: true,
-      timeoutMs: 16000,
-      loginTimeoutMs: 4000,
-      availabilityTtlMs: 70000,
-    });
     expect(service.readLokiProfile()).toEqual({
       transportEnabled: true,
       httpRequestPushEnabled: false,
@@ -212,10 +195,35 @@ describe('RuntimeConfigService', () => {
     );
 
     const snapshotJson = JSON.stringify(service.getSafeSnapshot());
-    expect(snapshotJson).not.toContain('wordpress-password');
     expect(snapshotJson).not.toContain('loki-password');
     expect(snapshotJson).not.toContain('qq-reverse-token');
     expect(snapshotJson).not.toContain('napcat-webui-token');
+  });
+
+  it('does not read or expose retired WordPress runtime keys', () => {
+    const configGet = jest.fn((key: string) => {
+      const values: Record<string, unknown> = {
+        WORDPRESS_ADMIN_PASSWORD: 'retired-password',
+        WORDPRESS_ADMIN_USERNAME: 'retired-admin',
+        WORDPRESS_BASE_URL: 'https://retired.example.test',
+        WORDPRESS_HOST_HEADER: 'retired.example.test',
+      };
+      return values[key];
+    });
+    const service = new RuntimeConfigService(
+      { get: configGet } as unknown as ConfigService,
+      new ToolsService(),
+    );
+
+    const snapshot = service.getSafeSnapshot();
+
+    expect(snapshot).not.toHaveProperty('wordpress');
+    expect(snapshot.checks.some((check) => /^WORDPRESS_/.test(check.key))).toBe(
+      false,
+    );
+    expect(configGet).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^WORDPRESS_/),
+    );
   });
 
   it('marks missing required config as absent', () => {

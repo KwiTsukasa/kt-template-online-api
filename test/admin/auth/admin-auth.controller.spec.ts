@@ -52,26 +52,21 @@ function createHarness(input: {
       accessToken: 'next-access-token',
       refreshToken: 'next-refresh-token',
     }),
-    setAccessTokenCookie: jest.fn(),
-    setRefreshTokenCookie: jest.fn(),
+    setAccessTokenCookie: jest.fn((response: Response, token: string) => {
+      response.cookie('admin_access_token', token);
+    }),
+    setRefreshTokenCookie: jest.fn((response: Response, token: string) => {
+      response.cookie('jwt', token);
+    }),
   };
   const userService = {
     serializeUser: jest.fn((user) => user),
-  };
-  const wordpressService = {
-    clearAuthCookie: jest.fn(),
-    setAuthCookie: jest.fn(),
-    tryLoginWithConfiguredAdmin: jest.fn().mockResolvedValue({
-      available: false,
-      error: null,
-    }),
   };
   const controller = new AdminAuthController(
     authService as any,
     trustedCredentialTransportService,
     {} as any,
     userService as any,
-    wordpressService as any,
   );
   const response = {
     clearCookie: jest.fn(),
@@ -92,9 +87,6 @@ function createHarness(input: {
       authService.refresh,
       authService.setAccessTokenCookie,
       authService.setRefreshTokenCookie,
-      wordpressService.clearAuthCookie,
-      wordpressService.setAuthCookie,
-      wordpressService.tryLoginWithConfiguredAdmin,
     ],
   };
 }
@@ -118,6 +110,41 @@ async function invokeEndpoint(
 }
 
 describe('AdminAuthController TLS transport gate', () => {
+  it('returns only the Admin identity and token without WordPress side effects', async () => {
+    const harness = createHarness({ trustedProxyIps: '127.0.0.1' });
+    const request = createRequest({
+      forwardedProto: 'https',
+      remoteAddress: '127.0.0.1',
+    });
+
+    await expect(
+      harness.controller.login(
+        { password: 'plain-login-password', username: 'admin' },
+        request,
+        harness.response,
+      ),
+    ).resolves.toEqual({
+      code: 200,
+      data: {
+        accessToken: 'access-token',
+        id: 'admin-1',
+      },
+      msg: '操作成功',
+    });
+    expect(harness.authService.setAccessTokenCookie).toHaveBeenCalledWith(
+      harness.response,
+      'access-token',
+    );
+    expect(harness.authService.setRefreshTokenCookie).toHaveBeenCalledWith(
+      harness.response,
+      'refresh-token',
+    );
+    expect((harness.response.cookie as jest.Mock).mock.calls).toEqual([
+      ['admin_access_token', 'access-token'],
+      ['jwt', 'refresh-token'],
+    ]);
+  });
+
   it.each<AuthEndpoint>(['login', 'refresh', 'logout'])(
     'rejects untrusted direct HTTP before %s side effects even with forged X-Forwarded-Proto',
     async (endpoint) => {

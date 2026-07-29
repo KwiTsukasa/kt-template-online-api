@@ -48,17 +48,4 @@ export class BlogThemeConfigController {
 
     return res.send(vbenSuccess(result));
   }
-
-  /**
-   * 从 WordPress 导入主题配置到本地博客。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   */
-  @Post('import-wordpress')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '从 WordPress 导入主题配置到本地博客' })
-  async importWordpress(@Res() res) {
-    const result = await this.blogThemeConfigService.importFromWordpress();
-
-    return res.send(vbenSuccess(result));
-  }
 }

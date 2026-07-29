@@ -654,7 +654,7 @@ function getPropertyDescription(propertyName: string) {
     accountCount: '账号总数',
     available: '是否可用',
     bucketName: 'Bucket 名称',
-    categories: 'WordPress 分类 ID 列表',
+    categories: '文章分类列表',
     code: '响应状态码',
     command: '命令触发词',
     commandId: '在线命令 ID',
@@ -703,9 +703,9 @@ function getPropertyDescription(propertyName: string) {
     selfId: '机器人 QQ 号',
     sessionId: '扫码会话 ID',
     size: '文件大小',
-    slug: 'WordPress slug',
+    slug: '资源 slug',
     status: '状态',
-    tags: 'WordPress 标签 ID 列表',
+    tags: '文章标签列表',
     targetId: '目标 ID',
     targetType: '目标类型',
     timezone: '时区',
@@ -719,9 +719,6 @@ function getPropertyDescription(propertyName: string) {
     url: '访问地址',
     userId: '用户 QQ 号',
     username: '用户名',
-    wordpressAuth: 'WordPress 授权信息',
-    wordpressAvailable: 'WordPress 是否可用',
-    wordpressError: 'WordPress 登录错误',
   };
 
   return descriptionMap[propertyName] || propertyName;
@@ -775,7 +772,6 @@ function getOperationDataExample(
  * @param path - OpenAPI 路径；计算 公共基础设施布尔判断。
  */
 function isPageResponsePath(path: string) {
-  if (path.startsWith('/wordpress/')) return false;
   return (
     path.endsWith('/list') ||
     path.endsWith('/log/list') ||
@@ -790,7 +786,6 @@ function isPageResponsePath(path: string) {
  */
 function isArrayResponsePath(path: string) {
   return (
-    (path.startsWith('/wordpress/') && path.endsWith('/list')) ||
     path.includes('/alllist') ||
     path.includes('/enabled') ||
     path.includes('/options') ||
@@ -851,11 +846,6 @@ function itemExampleByPath(path: string) {
   if (path.includes('/qqbot/permission')) return qqbotPermissionExample();
   if (path.includes('/qqbot/plugin')) return qqbotPluginExample();
   if (path.includes('/qqbot/send')) return qqbotSendLogExample();
-  if (path.includes('/wordpress/article')) return wordpressArticleExample();
-  if (path.includes('/wordpress/category'))
-    return wordpressTaxonomyExample('NAS');
-  if (path.includes('/wordpress/tag'))
-    return wordpressTaxonomyExample('Docker');
   if (path.includes('/system/menu') || path.includes('/menu/'))
     return adminMenuExample();
   if (path.includes('/system/dept')) return adminDeptExample();
@@ -883,9 +873,6 @@ function adminLoginExample() {
     realName: '管理员',
     roles: ['SuperAdmin'],
     ['access' + 'Token']: '<access-token>',
-    wordpressAuth: null,
-    wordpressAvailable: true,
-    wordpressError: null,
   };
 }
 
@@ -1162,32 +1149,6 @@ function runtimeHealthExample() {
         message: 'QQBOT_NAPCAT_IMAGE is not configured',
       },
     ],
-  };
-}
-
-/**
- * 执行 当前模块流程。
- */
-function wordpressArticleExample() {
-  return {
-    id: 1,
-    title: '飞牛 NAS Docker、Jenkins 与 k3d/K8s 一体化技术方案',
-    status: 'publish',
-    categories: [1],
-    tags: [1],
-  };
-}
-
-/**
- * 执行 当前模块流程。
- * @param name - 名称文本；执行 `name.toLowerCase()` 对应的 公共基础设施步骤。
- */
-function wordpressTaxonomyExample(name: string) {
-  return {
-    id: 1,
-    name,
-    slug: name.toLowerCase(),
-    count: 1,
   };
 }
 

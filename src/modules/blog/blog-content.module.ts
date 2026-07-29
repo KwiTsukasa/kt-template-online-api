@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CommonModule } from '@/common';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
-import { WordpressMirrorModule } from '@/modules/wordpress/wordpress-mirror.module';
 import { BlogArticleService } from './application/blog-article.service';
 import { BlogTermService } from './application/blog-term.service';
 import { BlogThemeConfigService } from './application/blog-theme-config.service';
@@ -69,7 +68,6 @@ export const BLOG_CONTENT_DOMAIN_CONTRACT = {
   imports: [
     AdminAuthGuardModule,
     CommonModule,
-    WordpressMirrorModule,
     TypeOrmModule.forFeature([BlogArticle, BlogTerm, BlogThemeConfig]),
   ],
   controllers: BLOG_CONTENT_CONTROLLERS,

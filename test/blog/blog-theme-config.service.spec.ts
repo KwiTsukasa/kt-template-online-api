@@ -3,7 +3,6 @@ import { Test } from '@nestjs/testing';
 import { ToolsService } from '../../src/common';
 import { BlogThemeConfigService } from '../../src/modules/blog/application/blog-theme-config.service';
 import { BlogThemeConfig } from '../../src/modules/blog/infrastructure/persistence/blog-theme-config.entity';
-import { WordpressService } from '../../src/modules/wordpress/application/wordpress.service';
 
 describe('BlogThemeConfigService', () => {
   let service: BlogThemeConfigService;
@@ -12,10 +11,7 @@ describe('BlogThemeConfigService', () => {
     findOne: jest.Mock;
     save: jest.Mock;
   };
-  let wordpressService: {
-    themeConfig: jest.Mock;
-  };
-  const wordpressThemeConfig = {
+  const argonThemeConfig = {
     argonConfig: {
       codeHighlight: {
         breakLine: false,
@@ -81,10 +77,6 @@ describe('BlogThemeConfigService', () => {
       findOne: jest.fn(),
       save: jest.fn(async (payload) => payload),
     };
-    wordpressService = {
-      themeConfig: jest.fn(),
-    };
-
     const moduleRef = await Test.createTestingModule({
       providers: [
         BlogThemeConfigService,
@@ -92,10 +84,6 @@ describe('BlogThemeConfigService', () => {
         {
           provide: getRepositoryToken(BlogThemeConfig),
           useValue: repository,
-        },
-        {
-          provide: WordpressService,
-          useValue: wordpressService,
         },
       ],
     }).compile();
@@ -135,49 +123,28 @@ describe('BlogThemeConfigService', () => {
       backgroundImage: '/argon/theme/img-2-1200x1000.jpg',
       backgroundOpacity: 1,
     });
-    expect(wordpressService.themeConfig).not.toHaveBeenCalled();
   });
 
   it('saves local theme config', async () => {
     repository.findOne.mockResolvedValue(null);
 
     const result = await service.save({
-      config: wordpressThemeConfig,
+      config: argonThemeConfig,
       source: 'local-admin',
     });
 
     expect(repository.create).toHaveBeenCalledWith({
-      config: wordpressThemeConfig,
+      config: argonThemeConfig,
       id: 'argon',
       source: 'local-admin',
     });
     expect(repository.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        config: wordpressThemeConfig,
+        config: argonThemeConfig,
         id: 'argon',
         source: 'local-admin',
       }),
     );
-    expect(result).toBe(wordpressThemeConfig);
-  });
-
-  it('imports WordPress theme config into local storage', async () => {
-    repository.findOne.mockResolvedValue({
-      id: 'argon',
-      source: 'local',
-    });
-    wordpressService.themeConfig.mockResolvedValue(wordpressThemeConfig);
-
-    const result = await service.importFromWordpress();
-
-    expect(wordpressService.themeConfig).toHaveBeenCalledWith();
-    expect(repository.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        config: wordpressThemeConfig,
-        id: 'argon',
-        source: 'wordpress',
-      }),
-    );
-    expect(result).toBe(wordpressThemeConfig);
+    expect(result).toBe(argonThemeConfig);
   });
 });

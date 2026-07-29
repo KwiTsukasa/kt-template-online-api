@@ -3,6 +3,15 @@
 
 SET NAMES utf8mb4;
 
+UPDATE `admin_menu`
+SET
+  `status` = 0,
+  `is_deleted` = 1
+WHERE `id` IN (
+  2041700000000120304,
+  2041700000000120332
+);
+
 INSERT INTO `admin_menu` (`id`, `pid`, `name`, `path`, `component`, `redirect`, `auth_code`, `type`, `meta`, `status`, `sort`)
 VALUES
   (2041700000000100300, 0, 'Blog', '/blog', NULL, '/blog/article', NULL, 'catalog', '{"icon":"lucide:newspaper","order":100,"title":"博客管理"}', 1, 100),
@@ -10,7 +19,6 @@ VALUES
   (2041700000000120301, 2041700000000100301, 'BlogArticleCreate', NULL, NULL, NULL, 'Blog:Article:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120302, 2041700000000100301, 'BlogArticleEdit', NULL, NULL, NULL, 'Blog:Article:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120303, 2041700000000100301, 'BlogArticleDelete', NULL, NULL, NULL, 'Blog:Article:Delete', 'button', '{"title":"common.delete"}', 1, 0),
-  (2041700000000120304, 2041700000000100301, 'BlogArticleImport', NULL, NULL, NULL, 'Blog:Article:Import', 'button', '{"title":"导入 WordPress"}', 1, 1),
   (2041700000000120305, 2041700000000100301, 'BlogArticlePreviewButton', NULL, NULL, NULL, 'Blog:Article:Preview', 'button', '{"title":"预览"}', 1, 2),
   (2041700000000100305, 2041700000000100300, 'BlogArticlePreview', '/blog/article/:articleId/preview', '/blog/article/preview/index', NULL, 'Blog:Article:Preview', 'menu', '{"activePath":"/blog/article","hideInMenu":true,"title":"文章预览"}', 1, 4),
   (2041700000000100302, 2041700000000100300, 'BlogCategory', '/blog/category', '/blog/category/list', NULL, 'Blog:Category:List', 'menu', '{"icon":"lucide:folder-tree","title":"分类管理"}', 1, 1),
@@ -22,8 +30,7 @@ VALUES
   (2041700000000120322, 2041700000000100303, 'BlogTagEdit', NULL, NULL, NULL, 'Blog:Tag:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120323, 2041700000000100303, 'BlogTagDelete', NULL, NULL, NULL, 'Blog:Tag:Delete', 'button', '{"title":"common.delete"}', 1, 0),
   (2041700000000100304, 2041700000000100300, 'BlogTheme', '/blog/theme', '/blog/theme/config', NULL, 'Blog:Theme:List', 'menu', '{"icon":"lucide:palette","title":"主题配置"}', 1, 3),
-  (2041700000000120331, 2041700000000100304, 'BlogThemeSave', NULL, NULL, NULL, 'Blog:Theme:Save', 'button', '{"title":"保存配置"}', 1, 0),
-  (2041700000000120332, 2041700000000100304, 'BlogThemeImport', NULL, NULL, NULL, 'Blog:Theme:Import', 'button', '{"title":"导入 WordPress"}', 1, 1)
+  (2041700000000120331, 2041700000000100304, 'BlogThemeSave', NULL, NULL, NULL, 'Blog:Theme:Save', 'button', '{"title":"保存配置"}', 1, 0)
 ON DUPLICATE KEY UPDATE
   `pid` = VALUES(`pid`),
   `path` = VALUES(`path`),

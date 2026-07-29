@@ -77,32 +77,6 @@ export class BlogArticleUpdateBodyDto extends BlogArticleBodyDto {
   id: string;
 }
 
-export class BlogArticleImportWordpressDto {
-  @ApiPropertyOptional({
-    default: true,
-    description: '是否按 WordPress total 分页导入全部文章',
-  })
-  all?: boolean;
-
-  @ApiPropertyOptional({
-    default: 1,
-    type: Number,
-  })
-  pageNo?: number;
-
-  @ApiPropertyOptional({
-    default: 100,
-    type: Number,
-  })
-  pageSize?: number;
-
-  @ApiPropertyOptional({
-    default: false,
-    description: '已存在同 slug 文章时是否覆盖',
-  })
-  overwrite?: boolean;
-}
-
 export class BlogArticleTermOptionsQueryDto {
   @ApiPropertyOptional({
     default: 1,

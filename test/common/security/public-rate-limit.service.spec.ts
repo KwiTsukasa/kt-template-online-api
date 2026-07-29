@@ -296,8 +296,6 @@ describe('PublicRateLimitService', () => {
     ['GET', '/blog/article/public/list', 'public-read'],
     ['GET', '/blog/theme/config', 'public-read'],
     ['GET', '/blog/live2d/pio/catalog.json', 'public-read'],
-    ['GET', '/wordpress/article/public/list', 'public-read'],
-    ['GET', '/wordpress/theme/config', 'public-read'],
     ['POST', '/auth/login', 'login'],
     ['POST', '/auth/refresh', 'login'],
     ['POST', '/auth/logout', 'login'],
@@ -312,6 +310,15 @@ describe('PublicRateLimitService', () => {
 
     expect(service.classify(createRequest(method, path))).toBe(expected);
   });
+
+  it.each(['/wordpress/article/public/list', '/wordpress/theme/config'])(
+    'does not special-case retired WordPress path %s',
+    (path) => {
+      const { service } = createService();
+
+      expect(service.classify(createRequest('GET', path))).toBe('baseline');
+    },
+  );
 
   it('classifies explicit public metadata as a public read fallback', () => {
     const { service } = createService();

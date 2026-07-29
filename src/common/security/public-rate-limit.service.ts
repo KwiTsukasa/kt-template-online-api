@@ -512,9 +512,7 @@ export class PublicRateLimitService {
       path === '/blog/theme/config' ||
       path.startsWith('/blog/article/public/') ||
       path.startsWith('/blog/live2d/') ||
-      path.startsWith('/blog/asset/') ||
-      path === '/wordpress/theme/config' ||
-      path.startsWith('/wordpress/article/public/')
+      path.startsWith('/blog/asset/')
     );
   }
 

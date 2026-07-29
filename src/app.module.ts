@@ -20,7 +20,6 @@ import { BlogContentModule } from './modules/blog/blog-content.module';
 import { QqbotCoreModule } from './modules/qqbot/core/qqbot-core.module';
 import { QqbotNapcatModule } from './modules/qqbot/napcat/qqbot-napcat.module';
 import { QqbotPluginPlatformModule } from './modules/qqbot/plugin-platform/plugin-platform.module';
-import { WordpressMirrorModule } from './modules/wordpress/wordpress-mirror.module';
 import { RuntimeModule } from './runtime';
 
 export function buildTypeOrmOptions(configService: ConfigService) {
@@ -78,7 +77,6 @@ export function buildTypeOrmOptions(configService: ConfigService) {
     RuntimeModule,
     AdminModule,
     BlogContentModule,
-    WordpressMirrorModule,
     AssetModule,
     QqbotCoreModule,
     QqbotNapcatModule,

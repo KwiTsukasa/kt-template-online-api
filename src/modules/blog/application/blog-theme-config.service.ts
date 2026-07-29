@@ -2,9 +2,8 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { throwVbenError, ToolsService } from '@/common';
-import { WordpressService } from '@/modules/wordpress/application/wordpress.service';
-import type { WordpressArgonThemeConfig } from '@/modules/wordpress/domain/wordpress.types';
 import { BlogThemeConfigBodyDto } from '../contract/blog-theme-config.dto';
+import type { BlogArgonThemeConfig } from '../domain/blog-argon-theme.types';
 import { BlogThemeConfig } from '../infrastructure/persistence/blog-theme-config.entity';
 
 const DEFAULT_THEME_ID = 'argon';
@@ -14,7 +13,6 @@ export class BlogThemeConfigService {
   constructor(
     @InjectRepository(BlogThemeConfig)
     private readonly themeRepository: Repository<BlogThemeConfig>,
-    private readonly wordpressService: WordpressService,
     private readonly toolsService: ToolsService,
   ) {}
 
@@ -48,22 +46,10 @@ export class BlogThemeConfigService {
 
   /**
    * 执行 博客内容流程。
-   */
-  async importFromWordpress() {
-    const config = await this.wordpressService.themeConfig();
-
-    return this.upsertConfig(config, 'wordpress');
-  }
-
-  /**
-   * 执行 博客内容流程。
    * @param config - config 输入；影响 upsertConfig 的返回值。
    * @param source - source 输入；影响 upsertConfig 的返回值。
    */
-  private async upsertConfig(
-    config: WordpressArgonThemeConfig,
-    source: string,
-  ) {
+  private async upsertConfig(config: BlogArgonThemeConfig, source: string) {
     const existing = await this.themeRepository.findOne({
       where: {
         id: DEFAULT_THEME_ID,
@@ -86,7 +72,7 @@ export class BlogThemeConfigService {
    * 查询 博客内容数据。
    * @returns 博客内容查询结果。
    */
-  private getDefaultConfig(): WordpressArgonThemeConfig {
+  private getDefaultConfig(): BlogArgonThemeConfig {
     return {
       argonConfig: {
         codeHighlight: {

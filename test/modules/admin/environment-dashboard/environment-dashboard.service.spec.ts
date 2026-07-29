@@ -16,7 +16,8 @@ describe('EnvironmentDashboardService', () => {
       'r4se',
     ]);
     expect(dashboard.summary.totalSignals).toBeGreaterThan(0);
-    expect(dashboard.topology.nodes.map((node) => node.id)).toEqual(
+    const topologyNodeIds = dashboard.topology.nodes.map((node) => node.id);
+    expect(topologyNodeIds).toEqual(
       expect.arrayContaining([
         'local-dev',
         'nas-prod',
@@ -28,13 +29,13 @@ describe('EnvironmentDashboardService', () => {
         'redis',
         'loki',
         'minio',
-        'wordpress',
         'qqbot-core',
         'napcat-runtime',
         'plugin-platform',
         'plugin-tasks',
       ]),
     );
+    expect(topologyNodeIds).not.toContain('wordpress');
     expect(
       dashboard.sites
         .flatMap((site) => site.nodes)
@@ -63,5 +64,8 @@ describe('EnvironmentDashboardService', () => {
       id: 'trigger-jenkins-deploy',
     });
     expect(deployAction?.disabledReason).toContain('只读');
+    expect(
+      dashboard.actions.some((action) => action.id === 'wordpress-import'),
+    ).toBe(false);
   });
 });

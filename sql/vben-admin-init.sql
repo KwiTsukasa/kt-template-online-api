@@ -259,7 +259,6 @@ VALUES
   (2041700000000120301, 2041700000000100301, 'BlogArticleCreate', NULL, NULL, NULL, 'Blog:Article:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120302, 2041700000000100301, 'BlogArticleEdit', NULL, NULL, NULL, 'Blog:Article:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120303, 2041700000000100301, 'BlogArticleDelete', NULL, NULL, NULL, 'Blog:Article:Delete', 'button', '{"title":"common.delete"}', 1, 0),
-  (2041700000000120304, 2041700000000100301, 'BlogArticleImport', NULL, NULL, NULL, 'Blog:Article:Import', 'button', '{"title":"导入 WordPress"}', 1, 1),
   (2041700000000120305, 2041700000000100301, 'BlogArticlePreviewButton', NULL, NULL, NULL, 'Blog:Article:Preview', 'button', '{"title":"预览"}', 1, 2),
   (2041700000000100305, 2041700000000100300, 'BlogArticlePreview', '/blog/article/:articleId/preview', '/blog/article/preview/index', NULL, 'Blog:Article:Preview', 'menu', '{"activePath":"/blog/article","hideInMenu":true,"title":"文章预览"}', 1, 4),
   (2041700000000100302, 2041700000000100300, 'BlogCategory', '/blog/category', '/blog/category/list', NULL, 'Blog:Category:List', 'menu', '{"icon":"lucide:folder-tree","title":"分类管理"}', 1, 1),
@@ -272,7 +271,6 @@ VALUES
   (2041700000000120323, 2041700000000100303, 'BlogTagDelete', NULL, NULL, NULL, 'Blog:Tag:Delete', 'button', '{"title":"common.delete"}', 1, 0),
   (2041700000000100304, 2041700000000100300, 'BlogTheme', '/blog/theme', '/blog/theme/config', NULL, 'Blog:Theme:List', 'menu', '{"icon":"lucide:palette","title":"主题配置"}', 1, 3),
   (2041700000000120331, 2041700000000100304, 'BlogThemeSave', NULL, NULL, NULL, 'Blog:Theme:Save', 'button', '{"title":"保存配置"}', 1, 0),
-  (2041700000000120332, 2041700000000100304, 'BlogThemeImport', NULL, NULL, NULL, 'Blog:Theme:Import', 'button', '{"title":"导入 WordPress"}', 1, 1),
   (2041700000000100009, 0, 'Project', '/vben-admin', NULL, NULL, NULL, 'catalog', '{"badgeType":"dot","icon":"carbon:data-center","order":9998,"title":"demos.vben.title"}', 1, 9998),
   (2041700000000100901, 2041700000000100009, 'VbenDocument', '/vben-admin/document', 'IFrameView', NULL, NULL, 'embedded', '{"icon":"carbon:book","iframeSrc":"https://doc.vben.pro","title":"demos.vben.document"}', 1, 0),
   (2041700000000100902, 2041700000000100009, 'VbenGithub', '/vben-admin/github', 'IFrameView', NULL, NULL, 'link', '{"icon":"carbon:logo-github","link":"https://github.com/vbenjs/vue-vben-admin","title":"Github"}', 1, 0),
@@ -290,6 +288,15 @@ ON DUPLICATE KEY UPDATE
   `status` = VALUES(`status`),
   `sort` = VALUES(`sort`),
   `is_deleted` = 0;
+
+UPDATE `admin_menu`
+SET
+  `status` = 0,
+  `is_deleted` = 1
+WHERE `id` IN (
+  2041700000000120304,
+  2041700000000120332
+);
 
 INSERT INTO `admin_role` (`id`, `role_code`, `name`, `remark`, `status`)
 VALUES

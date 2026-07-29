@@ -46,11 +46,6 @@ const swaggerGroups: SwaggerDocumentGroup[] = [
     path: 'api/qqbot',
   },
   {
-    matcher: (path) => path.startsWith('/wordpress'),
-    name: 'WordPress 博客',
-    path: 'api/wordpress',
-  },
-  {
     matcher: (path) =>
       path === '/' || path.startsWith('/minio') || path.startsWith('/health'),
     name: '基础能力',

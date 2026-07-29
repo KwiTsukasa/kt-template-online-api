@@ -14,7 +14,6 @@ import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { Public, vbenSuccess } from '@/common';
 import {
   BlogArticleBodyDto,
-  BlogArticleImportWordpressDto,
   BlogArticleListQueryDto,
   BlogArticleTermOptionsQueryDto,
   BlogArticleUpdateBodyDto,
@@ -160,23 +159,6 @@ export class BlogArticleController {
   @ApiOperation({ summary: '获取本地博客文章标签选项' })
   async tagOptions(@Res() res, @Query() query: BlogArticleTermOptionsQueryDto) {
     const result = await this.blogArticleService.tagOptions(query);
-
-    return res.send(vbenSuccess(result));
-  }
-
-  /**
-   * 从 WordPress 导入文章到本地博客。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
-   */
-  @Post('import-wordpress')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: '从 WordPress 导入文章到本地博客' })
-  async importWordpress(
-    @Res() res,
-    @Body() body: BlogArticleImportWordpressDto,
-  ) {
-    const result = await this.blogArticleService.importFromWordpress(body);
 
     return res.send(vbenSuccess(result));
   }

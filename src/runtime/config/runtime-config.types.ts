@@ -42,16 +42,6 @@ export interface RuntimeMinioConfig {
   bucket: string;
 }
 
-export interface RuntimeWordpressConfig {
-  baseUrl: string;
-  hostHeader: string;
-  adminUsername: string;
-  passwordConfigured: boolean;
-  timeoutMs: number;
-  loginTimeoutMs: number;
-  availabilityTtlMs: number;
-}
-
 export interface RuntimeQqbotConfig {
   reverseWsPath: string;
   reverseWsToken: string;
@@ -97,7 +87,6 @@ export interface RuntimeSafeConfigSnapshot {
   database: RuntimeDatabaseConfig;
   loki: RuntimeLokiConfig;
   minio: RuntimeMinioConfig;
-  wordpress: RuntimeWordpressConfig;
   qqbot: RuntimeQqbotConfig;
   security: RuntimeSecurityConfig;
   checks: RuntimeConfigCheck[];

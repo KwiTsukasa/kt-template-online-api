@@ -21,7 +21,6 @@ import { AdminUserService } from '../user/admin-user.service';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginDto } from './admin-auth.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { WordpressService } from '@/modules/wordpress/application/wordpress.service';
 
 @ApiTags('Admin - 认证')
 @Controller()
@@ -32,7 +31,6 @@ export class AdminAuthController {
     private readonly trustedCredentialTransportService: TrustedCredentialTransportService,
     private readonly menuService: AdminMenuService,
     private readonly userService: AdminUserService,
-    private readonly wordpressService: WordpressService,
   ) {}
 
   /**
@@ -54,27 +52,12 @@ export class AdminAuthController {
       body.username,
       body.password,
     );
-    const wordpressLogin =
-      await this.wordpressService.tryLoginWithConfiguredAdmin();
     this.authService.setAccessTokenCookie(res, accessToken);
     this.authService.setRefreshTokenCookie(res, refreshToken);
-    if (wordpressLogin.available) {
-      this.wordpressService.setAuthCookie(res, wordpressLogin.result.cookie);
-    } else {
-      this.wordpressService.clearAuthCookie(res);
-    }
 
     return vbenSuccess({
       ...this.userService.serializeUser(user),
       accessToken,
-      wordpressAuth: wordpressLogin.available
-        ? {
-            ...wordpressLogin.result.auth,
-            user: wordpressLogin.result.user,
-          }
-        : null,
-      wordpressAvailable: wordpressLogin.available,
-      wordpressError: wordpressLogin.error,
     });
   }
 
@@ -114,7 +97,6 @@ export class AdminAuthController {
     );
     this.authService.clearAccessTokenCookie(res);
     this.authService.clearRefreshTokenCookie(res);
-    this.wordpressService.clearAuthCookie(res);
     return vbenSuccess('');
   }
 

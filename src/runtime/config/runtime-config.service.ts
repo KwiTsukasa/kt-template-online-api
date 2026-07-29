@@ -11,7 +11,6 @@ import {
   RuntimeQqbotConfig,
   RuntimeSafeConfigSnapshot,
   RuntimeSecurityConfig,
-  RuntimeWordpressConfig,
 } from './runtime-config.types';
 
 const REQUIRED_CONFIG_KEYS = [
@@ -78,13 +77,6 @@ const OPTIONAL_CONFIG_CHECKS: ReadonlyArray<string | readonly string[]> = [
   'LOKI_QUERY_TIMEOUT_MS',
   'LOKI_BATCH_INTERVAL_SECONDS',
   'LOKI_BATCH_MAX_BUFFER_SIZE',
-  'WORDPRESS_BASE_URL',
-  'WORDPRESS_HOST_HEADER',
-  'WORDPRESS_ADMIN_USERNAME',
-  'WORDPRESS_ADMIN_PASSWORD',
-  'WORDPRESS_TIMEOUT_MS',
-  'WORDPRESS_LOGIN_TIMEOUT_MS',
-  'WORDPRESS_AVAILABILITY_TTL_MS',
   'QQBOT_REVERSE_WS_PATH',
   'QQBOT_REVERSE_WS_TOKEN',
   'QQBOT_NAPCAT_ROOT',
@@ -172,30 +164,6 @@ export class RuntimeConfigService {
       useSSL: false,
       accessKey: this.maskSecret(this.configService.get('MINIO_ACCESS_KEY')),
       bucket: this.getString('MINIO_BUCKET', 'kt-template-online'),
-    };
-  }
-
-  /**
-   * 读取 运行态健康检查资源。
-   * @returns 运行态健康检查产出的 RuntimeWordpressConfig。
-   */
-  readWordpressProfile(): RuntimeWordpressConfig {
-    const timeoutMs = this.getPositiveNumber('WORDPRESS_TIMEOUT_MS', 15000);
-
-    return {
-      baseUrl: this.getString('WORDPRESS_BASE_URL'),
-      hostHeader: this.getString('WORDPRESS_HOST_HEADER'),
-      adminUsername: this.getString('WORDPRESS_ADMIN_USERNAME'),
-      passwordConfigured: !!this.getString('WORDPRESS_ADMIN_PASSWORD'),
-      timeoutMs,
-      loginTimeoutMs: this.getPositiveNumber(
-        'WORDPRESS_LOGIN_TIMEOUT_MS',
-        this.getPositiveNumber('WORDPRESS_TIMEOUT_MS', 3000),
-      ),
-      availabilityTtlMs: this.getPositiveNumber(
-        'WORDPRESS_AVAILABILITY_TTL_MS',
-        60_000,
-      ),
     };
   }
 
@@ -332,7 +300,6 @@ export class RuntimeConfigService {
       database: this.readDatabaseProfile(),
       loki: this.readLokiProfile(),
       minio: this.readMinioProfile(),
-      wordpress: this.readWordpressProfile(),
       qqbot: this.readQqbotProfile(),
       security: this.readSecurityProfile(),
       checks: this.getConfigChecks(),

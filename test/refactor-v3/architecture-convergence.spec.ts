@@ -6,7 +6,8 @@ const srcRoot = join(repoRoot, 'src');
 
 const legacyRootNames = ['admin', 'blog', 'minio', 'wordpress', 'qqbot'];
 const legacyRootPaths = legacyRootNames.map((root) => join(srcRoot, root));
-const moduleRoots = ['admin', 'asset', 'blog', 'wordpress', 'qqbot'];
+const moduleRoots = ['admin', 'asset', 'blog', 'qqbot'];
+const retiredModuleRoots = ['wordpress'];
 const qqbotRoots = ['core', 'napcat', 'plugin-platform', 'plugins'];
 
 /**
@@ -108,6 +109,14 @@ describe('architecture convergence', () => {
     );
 
     expect(missing).toEqual([]);
+  });
+
+  it('does not keep retired executable module roots', () => {
+    const existing = retiredModuleRoots.filter((root) =>
+      isDirectory(join(srcRoot, 'modules', root)),
+    );
+
+    expect(existing).toEqual([]);
   });
 
   it('keeps QQBot subdomains under src/modules/qqbot', () => {

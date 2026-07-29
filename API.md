@@ -6,7 +6,6 @@
 - OpenAPI JSON：`/api-json`
 - Admin 分组：`/api/admin`
 - QQBot 分组：`/api/qqbot`
-- WordPress 分组：`/api/wordpress`
 - 基础能力分组：`/api/basic`
 
 ## 通用约定
@@ -35,7 +34,7 @@
 
 ### 认证
 
-Admin、Component、Dict、MinIO、Blog 管理、WordPress 管理和 QQBot 管理接口默认需要后台登录态。
+Admin、Component、Dict、MinIO、Blog 管理和 QQBot 管理接口默认需要后台登录态。
 
 支持两种 access token 传递方式：
 
@@ -44,7 +43,7 @@ Admin、Component、Dict、MinIO、Blog 管理、WordPress 管理和 QQBot 管�
 
 公开接口包括 `/auth/login`、`/auth/refresh`、`/auth/logout`、部分 Blog public 接口和根路径。具体以 Controller 上的 `@Public()` 为准。
 
-公网入口通过精确 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 归一化客户端 IP 和公开 Origin；客户端自行提交的 XFF、X-Forwarded-Proto、Origin 或 Referer 不能扩展信任。`POST /auth/login`、`POST /auth/refresh`、`POST /auth/logout` 必须先通过公开 Origin 的 TLS 门禁，再执行 token、Cookie 或 WordPress 副作用；接收明文密码的 `POST /system/user`、`PUT /system/user/:id`、`PUT /system/user/:id/password` 也在用户服务、密码哈希和持久化前经过同一门禁。生产 HTTP 固定返回 403，`ADMIN_AUTH_ALLOW_INSECURE_LOCAL=true` 只在非生产 loopback 本地开发生效。登录请求体为 `username` + `password`，不再提供 `/auth/password-public-key`。access/refresh Cookie 固定 `HttpOnly`、`SameSite=Lax`、`Path=/`、无 `Domain`，生产始终 `Secure`；退出清理当前 Cookie 在 `/`、`/api/auth`、`/auth` 三种 Path 的历史残留。登录在一次 Redis Lua 调用中计数 IP 5 次/分钟、规范化用户名 SHA-256 10 次/15 分钟和全局 100 次/分钟，任一超限统一返回 429。真实认证成功后、签发 token 前只清理用户名 bucket，不清 IP 或全局；清理或计数 Redis 失败返回 503。刷新和退出保留 IP/全局额度；签名校验成功的 refresh token 额外按 subject SHA-256 限制为刷新 30 次/分钟、退出 10 次/分钟，缺失或伪造 token 不读取未验证 payload。普通公开读取 Redis 故障时 fail open 并限频告警。
+公网入口通过精确 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 归一化客户端 IP 和公开 Origin；客户端自行提交的 XFF、X-Forwarded-Proto、Origin 或 Referer 不能扩展信任。`POST /auth/login`、`POST /auth/refresh`、`POST /auth/logout` 必须先通过公开 Origin 的 TLS 门禁，再执行 token 或 Cookie 副作用；接收明文密码的 `POST /system/user`、`PUT /system/user/:id`、`PUT /system/user/:id/password` 也在用户服务、密码哈希和持久化前经过同一门禁。生产 HTTP 固定返回 403，`ADMIN_AUTH_ALLOW_INSECURE_LOCAL=true` 只在非生产 loopback 本地开发生效。登录请求体为 `username` + `password`，不再提供 `/auth/password-public-key`。access/refresh Cookie 固定 `HttpOnly`、`SameSite=Lax`、`Path=/`、无 `Domain`，生产始终 `Secure`；退出清理当前 Cookie 在 `/`、`/api/auth`、`/auth` 三种 Path 的历史残留。登录在一次 Redis Lua 调用中计数 IP 5 次/分钟、规范化用户名 SHA-256 10 次/15 分钟和全局 100 次/分钟，任一超限统一返回 429。真实认证成功后、签发 token 前只清理用户名 bucket，不清 IP 或全局；清理或计数 Redis 失败返回 503。刷新和退出保留 IP/全局额度；签名校验成功的 refresh token 额外按 subject SHA-256 限制为刷新 30 次/分钟、退出 10 次/分钟，缺失或伪造 token 不读取未验证 payload。普通公开读取 Redis 故障时 fail open 并限频告警。
 
 Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理列表的分页语义。Live2D 公开流每 IP 默认最多 8 条跨副本 Redis 并发租约；Lua acquire 先从 ZSET 清理过期成员，再以唯一 token 写入本次流，超限时精确移除该 token 并返回 429。活动流按半个 TTL 周期续租；HTTP `finish`、`close`、`error` 只幂等移除自身 token，过期旧流的 release 不会影响新一代租约，120 秒 TTL 继续兜底断连。Live2D Redis 故障遵循公开读 fail open。上述阈值、Redis 连接、可信代理和 Swagger 管理来源都出现在 required runtime config checks；生产 Jenkins 在发布前强制检查两个安全来源列表。
 
@@ -71,7 +70,7 @@ Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理�
 | `status`    | `live`、`ready`、`degraded` 或 `blocked` |
 | `checks`    | 进程和配置检查列表                       |
 
-公开响应不返回数据库、WordPress、Loki、NapCat SSH 等运行拓扑配置快照；配置检查只暴露 key 级别、是否存在和缺失说明。
+公开响应不返回数据库、Loki、NapCat SSH 等运行拓扑配置快照；配置检查只暴露 key 级别、是否存在和缺失说明。
 
 状态含义：
 
@@ -158,7 +157,6 @@ Agent 状态响应额外包含可选的 `currentPublicIpv6/currentIpv6ObservedAt
 | MySQL         | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC`                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | MinIO         | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`                                                                                                                                                                                                                                                                                                                                                                            |
 | Admin         | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                                                                                                                                                                         |
-| WordPress     | `WORDPRESS_BASE_URL`、`WORDPRESS_HOST_HEADER`、`WORDPRESS_ADMIN_USERNAME`、`WORDPRESS_ADMIN_PASSWORD`                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_QUERY_SELECTOR`                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | QQBot         | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_REVERSE_WS_PATH`、`QQBOT_REVERSE_WS_TOKEN`、`QQBOT_EVENT_BUS`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`                                                                                                                                                                                                              |
 | NapCat        | `NAPCAT_WEBUI_BASE_URL`、`NAPCAT_WEBUI_TOKEN`、`QQBOT_NAPCAT_*`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -181,13 +179,11 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 
 | 方法   | 路径            | 说明                                                                                  |
 | ------ | --------------- | ------------------------------------------------------------------------------------- |
-| `POST` | `/auth/login`   | 后台登录，返回 accessToken、用户信息和 WordPress 自动登录状态，并写入 httpOnly cookie |
+| `POST` | `/auth/login`   | 后台登录，返回 accessToken 和用户信息，并写入 httpOnly cookie                         |
 | `POST` | `/auth/refresh` | 通过 refresh token cookie 刷新 accessToken                                            |
-| `POST` | `/auth/logout`  | 清理 Admin 与 WordPress 登录 cookie                                                   |
+| `POST` | `/auth/logout`  | 清理 Admin 登录 cookie                                                                |
 | `GET`  | `/auth/codes`   | 获取当前用户按钮权限码                                                                |
 | `GET`  | `/user/info`    | 获取当前用户信息                                                                      |
-
-`/auth/login` 会尝试用 env 中的 WordPress 管理员账号建立 WordPress 登录态。WordPress 不可用时，Admin 主登录仍成功，返回 `wordpressAuth=null`、`wordpressAvailable=false`，菜单和权限码会过滤 Blog 管理入口。
 
 ### Menu / Role / Dept / User Manage
 
@@ -313,7 +309,6 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `POST` | `/blog/article/remove`           | 删除文章                   |
 | `GET`  | `/blog/article/category-options` | 文章分类选项               |
 | `GET`  | `/blog/article/tag-options`      | 文章标签选项               |
-| `POST` | `/blog/article/import-wordpress` | 从 WordPress 导入文章      |
 
 文章 body 常用字段：
 
@@ -347,42 +342,6 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `GET`  | `/blog/term/options`           | 分类/标签选项             |
 | `GET`  | `/blog/theme/config`           | 获取 Argon 主题配置       |
 | `POST` | `/blog/theme/save`             | 保存本地主题配置          |
-| `POST` | `/blog/theme/import-wordpress` | 从 WordPress 导入主题配置 |
-
-## WordPress 代理
-
-`/wordpress/*` 需要 Admin 登录态和 WordPress 登录态。后端优先使用 `kt_wordpress_auth` httpOnly cookie，也支持显式透传 WordPress 认证 header。
-
-| 方法   | 路径                      | 说明                                            |
-| ------ | ------------------------- | ----------------------------------------------- |
-| `POST` | `/wordpress/auth/login`   | 使用 env 管理员账号登录 WordPress 并写入 cookie |
-| `POST` | `/wordpress/auth/logout`  | 清理 WordPress cookie                           |
-| `GET`  | `/wordpress/auth/check`   | 校验 WordPress 登录态                           |
-| `GET`  | `/wordpress/theme/config` | 读取 WordPress Argon 主题配置                   |
-
-### WordPress Article / Tag / Category
-
-| 方法   | 路径                               | 说明                |
-| ------ | ---------------------------------- | ------------------- |
-| `GET`  | `/wordpress/article/public/list`   | 公开文章列表代理    |
-| `GET`  | `/wordpress/article/public/detail` | 公开文章详情代理    |
-| `GET`  | `/wordpress/article/list`          | WordPress 文章分页  |
-| `GET`  | `/wordpress/article/detail`        | WordPress 文章详情  |
-| `POST` | `/wordpress/article/save`          | 新增 WordPress 文章 |
-| `POST` | `/wordpress/article/update`        | 更新 WordPress 文章 |
-| `POST` | `/wordpress/article/remove`        | 删除 WordPress 文章 |
-| `GET`  | `/wordpress/tag/list`              | 标签分页            |
-| `GET`  | `/wordpress/tag/detail`            | 标签详情            |
-| `POST` | `/wordpress/tag/save`              | 新增标签            |
-| `POST` | `/wordpress/tag/update`            | 更新标签            |
-| `POST` | `/wordpress/tag/remove`            | 删除标签            |
-| `GET`  | `/wordpress/category/list`         | 分类分页            |
-| `GET`  | `/wordpress/category/detail`       | 分类详情            |
-| `POST` | `/wordpress/category/save`         | 新增分类            |
-| `POST` | `/wordpress/category/update`       | 更新分类            |
-| `POST` | `/wordpress/category/remove`       | 删除分类            |
-
-WordPress rewrite 未开启导致 `/wp-json/*` 返回 404 时，后端会回退到 `?rest_route=/...`。
 
 ## MinIO
 

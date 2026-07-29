@@ -33,7 +33,6 @@ import { AssetModule } from '@/modules/asset/asset.module';
 import { QqbotCoreModule } from '@/modules/qqbot/core/qqbot-core.module';
 import { QqbotPluginPlatformModule } from '@/modules/qqbot/plugin-platform/plugin-platform.module';
 import { RuntimeModule } from '@/runtime/runtime.module';
-import { WordpressMirrorModule } from '@/modules/wordpress/wordpress-mirror.module';
 import { EnvironmentDashboardService } from './environment-dashboard/application/environment-dashboard.service';
 import { EnvironmentDashboardSelfCheckService } from './environment-dashboard/application/environment-dashboard-self-check.service';
 import { EnvironmentEventMaterializer } from './environment-dashboard/application/environment-event.materializer';
@@ -120,7 +119,6 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
     RuntimeModule,
     QqbotCoreModule,
     QqbotPluginPlatformModule,
-    WordpressMirrorModule,
   ],
   controllers: ADMIN_PLATFORM_CONFIG_DIRECT_CONTROLLERS,
   providers: ADMIN_PLATFORM_CONFIG_PROVIDERS,

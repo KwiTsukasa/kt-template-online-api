@@ -37,15 +37,6 @@ function createSnapshot(
       accessKey: 'mi***ey',
       bucket: 'kt-template-online',
     },
-    wordpress: {
-      baseUrl: 'https://blog.example.test',
-      hostHeader: 'blog.example.test',
-      adminUsername: 'wordpress-admin',
-      passwordConfigured: true,
-      timeoutMs: 15000,
-      loginTimeoutMs: 3000,
-      availabilityTtlMs: 60000,
-    },
     qqbot: {
       reverseWsPath: '/qqbot/onebot/reverse',
       reverseWsToken: 'qq***en',

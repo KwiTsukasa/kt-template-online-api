@@ -232,12 +232,12 @@ async function main() {
       inspectBackupPath: inspectBlogLegacyAssetBackupPath,
       service: application.get(BlogLegacyAssetMigrationService),
     });
-    console.log(
-      [
+    process.stdout.write(
+      `${[
         `mode=${manifest.mode}`,
         `status=${manifest.status}`,
         `entries=${manifest.entries.length}`,
-      ].join(' '),
+      ].join(' ')}\n`,
     );
     if (manifest.status === 'failed') process.exitCode = 1;
   } finally {

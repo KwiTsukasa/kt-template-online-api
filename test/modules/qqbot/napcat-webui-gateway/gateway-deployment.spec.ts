@@ -60,6 +60,7 @@ describe('NapCat WebUI Gateway deployment configuration', () => {
     expect(manifest).toContain('NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET');
     expect(manifest).toContain('NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL');
     expect(manifest).toContain('NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL');
+    expect(manifest).toContain('value: /admin/napcat-webui');
     expect(manifest).toMatch(
       /name:\s*NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET[\s\S]*?valueFrom:[\s\S]*?secretKeyRef:/,
     );

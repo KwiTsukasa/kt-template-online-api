@@ -6,6 +6,7 @@ describe('NapcatWebuiProxyService response rewriting', () => {
       proxyModule as {
         rewriteNapcatTextResponse?: (input: {
           body: string;
+          publicSessionPrefix: string;
           sessionId: string;
         }) => string;
       }
@@ -20,25 +21,26 @@ describe('NapcatWebuiProxyService response rewriting', () => {
         '<script>const baseURL="/api"; const file="/File/list?path=%2F"; const theme="/files/theme.css";</script>',
         'url("/webui/fonts/CustomFont.woff")',
       ].join(''),
+      publicSessionPrefix: '/admin/napcat-webui/session',
       sessionId: 'sess_1',
     });
 
     expect(rewritten).toContain(
-      'src="/napcat-webui/session/sess_1/webui/webui/assets/index.js"',
+      'src="/admin/napcat-webui/session/sess_1/webui/webui/assets/index.js"',
     );
     expect(rewritten).toContain(
-      'href="/napcat-webui/session/sess_1/webui/webui/assets/index.css"',
+      'href="/admin/napcat-webui/session/sess_1/webui/webui/assets/index.css"',
     );
     expect(rewritten).toContain(
-      'baseURL="/napcat-webui/session/sess_1/webui/api"',
+      'baseURL="/admin/napcat-webui/session/sess_1/webui/api"',
     );
     expect(rewritten).toContain('file="/File/list?path=%2F"');
     expect(rewritten).not.toContain('/webui/api/napcat-webui/session');
     expect(rewritten).toContain(
-      'theme="/napcat-webui/session/sess_1/webui/files/theme.css"',
+      'theme="/admin/napcat-webui/session/sess_1/webui/files/theme.css"',
     );
     expect(rewritten).toContain(
-      'url("/napcat-webui/session/sess_1/webui/webui/fonts/CustomFont.woff")',
+      'url("/admin/napcat-webui/session/sess_1/webui/webui/fonts/CustomFont.woff")',
     );
     expect(rewritten).not.toContain('"/webui/assets');
     expect(rewritten).not.toContain('"/api"');
@@ -49,6 +51,7 @@ describe('NapcatWebuiProxyService response rewriting', () => {
       proxyModule as {
         rewriteNapcatTextResponse?: (input: {
           body: string;
+          publicSessionPrefix: string;
           sessionId: string;
         }) => string;
       }
@@ -62,6 +65,7 @@ describe('NapcatWebuiProxyService response rewriting', () => {
         '<script type="module" src="/webui/assets/index.js"></script>',
         '</head><body></body></html>',
       ].join(''),
+      publicSessionPrefix: '/admin/napcat-webui/session',
       sessionId: 'sess_1',
     });
 
@@ -77,6 +81,7 @@ describe('NapcatWebuiProxyService response rewriting', () => {
       proxyModule as {
         rewriteNapcatTextResponse?: (input: {
           body: string;
+          publicSessionPrefix: string;
           sessionId: string;
         }) => string;
       }
@@ -84,6 +89,7 @@ describe('NapcatWebuiProxyService response rewriting', () => {
 
     const rewritten = rewriteNapcatTextResponse?.({
       body: 'const baseURL="/api";',
+      publicSessionPrefix: '/admin/napcat-webui/session',
       sessionId: 'sess_1',
     });
 

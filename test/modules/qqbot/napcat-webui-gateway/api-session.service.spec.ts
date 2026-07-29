@@ -1,6 +1,10 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { HttpException, HttpStatus, type INestApplication } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  type INestApplication,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getMetadataArgsStorage } from 'typeorm';
 import * as request from 'supertest';
@@ -82,7 +86,8 @@ const createSafeSessionResponse = () => ({
     webuiStatus: 'online',
   },
   expiresAt: EXPIRES_AT_FIXTURE,
-  iframeUrl: '/napcat-webui/session/sess_1/bootstrap?ticket=bootstrap-ticket-1',
+  iframeUrl:
+    '/admin/napcat-webui/session/sess_1/bootstrap?ticket=bootstrap-ticket-1',
   sessionId: 'sess_1',
 });
 
@@ -324,7 +329,7 @@ describe('QqbotNapcatWebuiGatewayService', () => {
     const gatewayResult = {
       expiresAt: EXPIRES_AT_FIXTURE,
       iframeUrl:
-        '/napcat-webui/session/sess_1/bootstrap?ticket=bootstrap-ticket-1',
+        '/admin/napcat-webui/session/sess_1/bootstrap?ticket=bootstrap-ticket-1',
       sessionId: 'sess_1',
     };
     const accountService = {
@@ -337,9 +342,7 @@ describe('QqbotNapcatWebuiGatewayService', () => {
       createSession: jest.fn(async () => gatewayResult),
     };
     const auditRepository = createRepository<NapcatWebuiGatewayAudit>();
-    const audit = new NapcatWebuiGatewayAuditService(
-      auditRepository as never,
-    );
+    const audit = new NapcatWebuiGatewayAuditService(auditRepository as never);
     const service = new QqbotNapcatWebuiGatewayService(
       accountService as never,
       containerService as never,
@@ -368,7 +371,7 @@ describe('QqbotNapcatWebuiGatewayService', () => {
       },
       expiresAt: EXPIRES_AT_FIXTURE,
       iframeUrl:
-        '/napcat-webui/session/sess_1/bootstrap?ticket=bootstrap-ticket-1',
+        '/admin/napcat-webui/session/sess_1/bootstrap?ticket=bootstrap-ticket-1',
       sessionId: 'sess_1',
     });
     expect(client.createSession).toHaveBeenCalledWith({
@@ -557,9 +560,7 @@ describe('QqbotNapcatWebuiGatewayService', () => {
 
   it('redacts audit key variants and unsafe string values', async () => {
     const auditRepository = createRepository<NapcatWebuiGatewayAudit>();
-    const audit = new NapcatWebuiGatewayAuditService(
-      auditRepository as never,
-    );
+    const audit = new NapcatWebuiGatewayAuditService(auditRepository as never);
 
     await audit.record({
       accountId: '1001',
@@ -579,7 +580,8 @@ describe('QqbotNapcatWebuiGatewayService', () => {
           display: 'visible',
           loginMessage: 'Bearer abc',
           refreshToken: 'plain-secret',
-          redirectPath: '/napcat-webui/session/sess_1/bootstrap?ticket=abc',
+          redirectPath:
+            '/admin/napcat-webui/session/sess_1/bootstrap?ticket=abc',
         },
         refreshToken: 'plain-secret',
         safe: 'visible',
@@ -630,7 +632,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
         data: {
           expiresAt: EXPIRES_AT_FIXTURE,
           iframeUrl:
-            '/napcat-webui/session/sess_1/bootstrap?ticket=bootstrap-ticket-1',
+            '/admin/napcat-webui/session/sess_1/bootstrap?ticket=bootstrap-ticket-1',
           sessionId: 'sess_1',
         },
       },
@@ -640,6 +642,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
         return {
           NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL: 'http://127.0.0.1:48086',
           NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET: INTERNAL_SECRET_FIXTURE,
+          NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL: '/admin/napcat-webui',
           NAPCAT_WEBUI_GATEWAY_TIMEOUT_MS: '1234',
         }[key];
       }),
@@ -680,7 +683,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
     expect(result).toEqual({
       expiresAt: EXPIRES_AT_FIXTURE,
       iframeUrl:
-        '/napcat-webui/session/sess_1/bootstrap?ticket=bootstrap-ticket-1',
+        '/admin/napcat-webui/session/sess_1/bootstrap?ticket=bootstrap-ticket-1',
       sessionId: 'sess_1',
     });
   });
@@ -691,6 +694,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
         return {
           NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL: 'http://127.0.0.1:48086',
           NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET: ' ',
+          NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL: '/admin/napcat-webui',
           NAPCAT_WEBUI_GATEWAY_TIMEOUT_MS: '1234',
         }[key];
       }),
@@ -735,6 +739,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
         return {
           NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL: 'http://127.0.0.1:48086',
           NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET: INTERNAL_SECRET_FIXTURE,
+          NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL: '/admin/napcat-webui',
           NAPCAT_WEBUI_GATEWAY_TIMEOUT_MS: '1234',
         }[key];
       }),
@@ -791,7 +796,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
       'non-number expiresAt',
       {
         expiresAt: '1782268000000',
-        iframeUrl: '/napcat-webui/session/sess_1/',
+        iframeUrl: '/admin/napcat-webui/session/sess_1/',
         sessionId: 'sess_1',
       },
     ],
@@ -800,7 +805,16 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
       {
         expiresAt: EXPIRES_AT_FIXTURE,
         iframeUrl:
-          'http://172.18.0.23:6099/napcat-webui/session/sess_1/bootstrap?ticket=abc',
+          'http://172.18.0.23:6099/admin/napcat-webui/session/sess_1/bootstrap?ticket=abc',
+        sessionId: 'sess_1',
+      },
+    ],
+    [
+      'unexpected public prefix',
+      {
+        expiresAt: EXPIRES_AT_FIXTURE,
+        iframeUrl:
+          '/napcat-webui/session/sess_1/bootstrap?ticket=bootstrap-ticket-1',
         sessionId: 'sess_1',
       },
     ],
@@ -808,7 +822,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
       'ticket outside bootstrap route',
       {
         expiresAt: EXPIRES_AT_FIXTURE,
-        iframeUrl: '/napcat-webui/session/sess_1/ticket/abc',
+        iframeUrl: '/admin/napcat-webui/session/sess_1/ticket/abc',
         sessionId: 'sess_1',
       },
     ],
@@ -817,7 +831,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
       {
         expiresAt: EXPIRES_AT_FIXTURE,
         iframeUrl:
-          '/napcat-webui/session/sess_1/bootstrap?ticket=abc?token=secret',
+          '/admin/napcat-webui/session/sess_1/bootstrap?ticket=abc?token=secret',
         sessionId: 'sess_1',
       },
     ],
@@ -826,7 +840,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
       {
         expiresAt: EXPIRES_AT_FIXTURE,
         iframeUrl:
-          '/napcat-webui/session/sess_1/bootstrap?ticket=abc&ticket=def',
+          '/admin/napcat-webui/session/sess_1/bootstrap?ticket=abc&ticket=def',
         sessionId: 'sess_1',
       },
     ],
@@ -835,7 +849,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
       {
         expiresAt: EXPIRES_AT_FIXTURE,
         iframeUrl:
-          '/napcat-webui/session/sess_1/bootstrap?ticket=abc%3Ftoken%3Dsecret',
+          '/admin/napcat-webui/session/sess_1/bootstrap?ticket=abc%3Ftoken%3Dsecret',
         sessionId: 'sess_1',
       },
     ],
@@ -843,52 +857,56 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
       'non-bootstrap query',
       {
         expiresAt: EXPIRES_AT_FIXTURE,
-        iframeUrl: '/napcat-webui/session/sess_1/?ticket=abc',
+        iframeUrl: '/admin/napcat-webui/session/sess_1/?ticket=abc',
         sessionId: 'sess_1',
       },
     ],
-  ])('rejects invalid Gateway create-session result: %s', async (_case, body) => {
-    requestMock.mockResolvedValue({
-      data: {
-        data: body,
-      },
-    });
-    const configService = {
-      get: jest.fn((key: string) => {
-        return {
-          NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL: 'http://127.0.0.1:48086',
-          NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET: INTERNAL_SECRET_FIXTURE,
-          NAPCAT_WEBUI_GATEWAY_TIMEOUT_MS: '1234',
-        }[key];
-      }),
-    };
-    const client = new QqbotNapcatWebuiGatewayClient(configService as never);
-    let thrown: unknown;
-
-    try {
-      await client.createSession({
-        accountId: '1001',
-        adminUserId: '3001',
-        clientIp: '127.0.0.1',
-        containerId: '2001',
-        containerName: 'kt-qqbot-napcat-1914728559',
-        selfId: '1914728559',
-        upstreamBaseUrl: 'http://172.18.0.23:6099',
-        userAgent: 'jest-agent',
-        webuiToken: WEBUI_TOKEN_FIXTURE,
+  ])(
+    'rejects invalid Gateway create-session result: %s',
+    async (_case, body) => {
+      requestMock.mockResolvedValue({
+        data: {
+          data: body,
+        },
       });
-    } catch (error) {
-      thrown = error;
-    }
+      const configService = {
+        get: jest.fn((key: string) => {
+          return {
+            NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL: 'http://127.0.0.1:48086',
+            NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET: INTERNAL_SECRET_FIXTURE,
+            NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL: '/admin/napcat-webui',
+            NAPCAT_WEBUI_GATEWAY_TIMEOUT_MS: '1234',
+          }[key];
+        }),
+      };
+      const client = new QqbotNapcatWebuiGatewayClient(configService as never);
+      let thrown: unknown;
 
-    expect(getThrownMessage(thrown)).toBe(
-      'NapCat WebUI Gateway 返回无效会话',
-    );
-    expect(JSON.stringify(thrown)).not.toContain(WEBUI_TOKEN_FIXTURE);
-    expect(JSON.stringify(thrown)).not.toContain(INTERNAL_SECRET_FIXTURE);
-    expect(JSON.stringify(thrown)).not.toContain('172.18.0.23');
-    expect(JSON.stringify(thrown)).not.toContain('6099');
-  });
+      try {
+        await client.createSession({
+          accountId: '1001',
+          adminUserId: '3001',
+          clientIp: '127.0.0.1',
+          containerId: '2001',
+          containerName: 'kt-qqbot-napcat-1914728559',
+          selfId: '1914728559',
+          upstreamBaseUrl: 'http://172.18.0.23:6099',
+          userAgent: 'jest-agent',
+          webuiToken: WEBUI_TOKEN_FIXTURE,
+        });
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(getThrownMessage(thrown)).toBe(
+        'NapCat WebUI Gateway 返回无效会话',
+      );
+      expect(JSON.stringify(thrown)).not.toContain(WEBUI_TOKEN_FIXTURE);
+      expect(JSON.stringify(thrown)).not.toContain(INTERNAL_SECRET_FIXTURE);
+      expect(JSON.stringify(thrown)).not.toContain('172.18.0.23');
+      expect(JSON.stringify(thrown)).not.toContain('6099');
+    },
+  );
 
   it('sanitizes Gateway client errors before returning them to Admin', async () => {
     requestMock.mockRejectedValue(
@@ -901,6 +919,7 @@ describe('QqbotNapcatWebuiGatewayClient', () => {
         return {
           NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL: 'http://127.0.0.1:48086',
           NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET: INTERNAL_SECRET_FIXTURE,
+          NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL: '/admin/napcat-webui',
           NAPCAT_WEBUI_GATEWAY_TIMEOUT_MS: '1234',
         }[key];
       }),

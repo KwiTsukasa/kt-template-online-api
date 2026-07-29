@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
 import { NapcatWebuiGatewaySessionService } from '../application/napcat-webui-gateway-session.service';
+import { NapcatWebuiGatewayConfigService } from '../config/napcat-webui-gateway-config.service';
 import { NapcatWebuiProxyService } from '../infrastructure/proxy/napcat-webui-proxy.service';
 import { NapcatWebuiGatewayTicketService } from '../infrastructure/session/napcat-webui-gateway-ticket.service';
 
@@ -21,6 +22,7 @@ export class PublicWebuiController {
     private readonly sessionService: NapcatWebuiGatewaySessionService,
     private readonly ticketService: NapcatWebuiGatewayTicketService,
     private readonly proxyService: NapcatWebuiProxyService,
+    private readonly config: NapcatWebuiGatewayConfigService,
   ) {}
 
   @Get('session/:sessionId/bootstrap')
@@ -38,15 +40,15 @@ export class PublicWebuiController {
 
     await this.sessionService.requireBootstrapSession(sessionId);
     await this.sessionService.markActive(sessionId);
+    const publicSessionPath = `${this.config.publicSessionPrefix()}/${encodeURIComponent(
+      sessionId,
+    )}`;
     res.cookie('kt_napcat_webui_gateway', 'active', {
       httpOnly: true,
-      path: `/napcat-webui/session/${encodeURIComponent(sessionId)}`,
+      path: publicSessionPath,
       sameSite: 'lax',
     });
-    res.redirect(
-      HttpStatus.FOUND,
-      `/napcat-webui/session/${encodeURIComponent(sessionId)}/webui/webui`,
-    );
+    res.redirect(HttpStatus.FOUND, `${publicSessionPath}/webui/webui`);
   }
 
   @All('session/:sessionId/webui/*proxyPath')

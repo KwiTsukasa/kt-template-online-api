@@ -183,7 +183,7 @@ function createConfig(currentTime: { value: number }) {
   return {
     internalSecret: () => INTERNAL_SECRET,
     now: () => currentTime.value,
-    publicSessionPrefix: () => '/napcat-webui/session',
+    publicSessionPrefix: () => '/admin/napcat-webui/session',
     ticketTtlMs: () => 60_000,
     ttlMs: () => 60_000,
   };
@@ -756,7 +756,7 @@ describe('InternalSessionController', () => {
       },
       expiresAt: 61_000,
       iframeUrl: expect.stringMatching(
-        /^\/napcat-webui\/session\/[0-9a-f-]+\/bootstrap\?ticket=[A-Za-z0-9_-]+$/,
+        /^\/admin\/napcat-webui\/session\/[0-9a-f-]+\/bootstrap\?ticket=[A-Za-z0-9_-]+$/,
       ),
       sessionId: expect.any(String),
     });

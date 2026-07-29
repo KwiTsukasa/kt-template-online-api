@@ -1,11 +1,11 @@
 import axios, { type AxiosRequestConfig } from 'axios';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { resolveNapcatWebuiPublicBaseUrl } from '@/apps/napcat-webui-gateway/config/napcat-webui-public-prefix';
 import { throwVbenError } from '@/common';
 
 const DEFAULT_GATEWAY_BASE_URL = 'http://127.0.0.1:48086';
 const DEFAULT_GATEWAY_TIMEOUT_MS = 5000;
-const GATEWAY_PUBLIC_SESSION_PREFIX = '/napcat-webui/session/';
 const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const SAFE_BOOTSTRAP_TICKET_PATTERN = /^[A-Za-z0-9._~-]+$/;
 const UNSAFE_GATEWAY_RESULT_PATTERN =
@@ -82,10 +82,7 @@ export class QqbotNapcatWebuiGatewayClient {
       const response = await axios.request<GatewayResponseBody<T>>(config);
       return this.unwrapGatewayBody<T>(response.data);
     } catch {
-      throwVbenError(
-        'NapCat WebUI Gateway 请求失败',
-        HttpStatus.BAD_GATEWAY,
-      );
+      throwVbenError('NapCat WebUI Gateway 请求失败', HttpStatus.BAD_GATEWAY);
     }
   }
 
@@ -169,17 +166,19 @@ export class QqbotNapcatWebuiGatewayClient {
     if (typeof iframeUrl !== 'string' || iframeUrl.trim() !== iframeUrl) {
       return false;
     }
-    if (!iframeUrl.startsWith(GATEWAY_PUBLIC_SESSION_PREFIX)) return false;
+    const publicSessionPrefix = `${resolveNapcatWebuiPublicBaseUrl(
+      this.configService.get<string>('NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL'),
+    )}/session/`;
+    if (!iframeUrl.startsWith(publicSessionPrefix)) return false;
     if (iframeUrl.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(iframeUrl)) {
       return false;
     }
     if (iframeUrl.includes('\\')) return false;
 
     const queryStart = iframeUrl.indexOf('?');
-    const path =
-      queryStart >= 0 ? iframeUrl.slice(0, queryStart) : iframeUrl;
+    const path = queryStart >= 0 ? iframeUrl.slice(0, queryStart) : iframeUrl;
     const query = queryStart >= 0 ? iframeUrl.slice(queryStart + 1) : '';
-    const expectedPrefix = `${GATEWAY_PUBLIC_SESSION_PREFIX}${sessionId}/`;
+    const expectedPrefix = `${publicSessionPrefix}${sessionId}/`;
     if (!path.startsWith(expectedPrefix)) return false;
 
     const isBootstrapRoute = path === `${expectedPrefix}bootstrap`;
@@ -199,9 +198,7 @@ export class QqbotNapcatWebuiGatewayClient {
       return false;
     }
 
-    const unsafeScanValue = query
-      ? `${path}?ticket=`
-      : iframeUrl;
+    const unsafeScanValue = query ? `${path}?ticket=` : iframeUrl;
     return !this.hasUnsafeGatewayEvidence(unsafeScanValue);
   }
 

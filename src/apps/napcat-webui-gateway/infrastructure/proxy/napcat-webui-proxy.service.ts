@@ -1,4 +1,4 @@
-import type { IncomingMessage, Server } from 'node:http';
+import type { IncomingHttpHeaders, IncomingMessage, Server } from 'node:http';
 import type { Socket } from 'node:net';
 import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
@@ -9,10 +9,11 @@ import {
   type RequestHandler,
 } from 'http-proxy-middleware';
 import { NapcatWebuiGatewaySessionService } from '../../application/napcat-webui-gateway-session.service';
+import { NapcatWebuiGatewayConfigService } from '../../config/napcat-webui-gateway-config.service';
 import type { NapcatWebuiGatewaySession } from '../../domain/napcat-webui-gateway.types';
 import { NapcatWebuiCredentialClient } from '../napcat-webui-credential.client';
 
-const GATEWAY_WEBUI_PREFIX = '/napcat-webui/session';
+const INTERNAL_GATEWAY_WEBUI_PREFIX = '/napcat-webui/session';
 const GATEWAY_BROWSER_TOKEN_PREFIX = 'kt-napcat-webui-gateway:';
 const TEXT_REWRITE_EXTENSIONS = ['.css', '.html', '.js', '.mjs'] as const;
 const STRIPPED_UPSTREAM_HEADERS = [
@@ -30,16 +31,19 @@ type ProxyPathInput = string | string[] | undefined;
 
 type RewriteLocationInput = {
   location: string;
+  publicSessionPrefix: string;
   sessionId: string;
   upstreamBaseUrl: string;
 };
 
 type CookiePathRewriteInput = {
+  publicSessionPrefix: string;
   sessionId: string;
 };
 
 type RewriteTextResponseInput = {
   body: string;
+  publicSessionPrefix: string;
   sessionId: string;
 };
 
@@ -73,7 +77,7 @@ export function sanitizeGatewayProxyPath(input: ProxyPathInput) {
 }
 
 export function rewriteNapcatLocationHeader(input: RewriteLocationInput) {
-  const gatewayPrefix = `${GATEWAY_WEBUI_PREFIX}/${encodeURIComponent(
+  const gatewayPrefix = `${input.publicSessionPrefix}/${encodeURIComponent(
     input.sessionId,
   )}/webui`;
   const location = input.location.trim();
@@ -111,12 +115,31 @@ export function rewriteNapcatLocationHeader(input: RewriteLocationInput) {
 
 export function buildGatewayCookiePathRewrite(input: CookiePathRewriteInput) {
   return {
-    '*': `${GATEWAY_WEBUI_PREFIX}/${encodeURIComponent(input.sessionId)}/webui`,
+    '*': `${input.publicSessionPrefix}/${encodeURIComponent(
+      input.sessionId,
+    )}/webui`,
   };
 }
 
+export function rewriteNapcatSetCookieHeaders(
+  headers: string | string[] | undefined,
+  input: CookiePathRewriteInput,
+): string[] | undefined {
+  if (!headers) return undefined;
+
+  const cookiePath = buildGatewayCookiePathRewrite(input)['*'];
+  const values = Array.isArray(headers) ? headers : [headers];
+  return values.map((header) => {
+    const withoutDomain = header.replace(/;\s*Domain=[^;]*/gi, '');
+    if (/;\s*Path=[^;]*/i.test(withoutDomain)) {
+      return withoutDomain.replace(/;\s*Path=[^;]*/i, `; Path=${cookiePath}`);
+    }
+    return `${withoutDomain}; Path=${cookiePath}`;
+  });
+}
+
 export function rewriteNapcatTextResponse(input: RewriteTextResponseInput) {
-  const gatewayWebuiPrefix = `${GATEWAY_WEBUI_PREFIX}/${encodeURIComponent(
+  const gatewayWebuiPrefix = `${input.publicSessionPrefix}/${encodeURIComponent(
     input.sessionId,
   )}/webui`;
 
@@ -145,7 +168,9 @@ export function rewriteNapcatWebSocketSearch(
   return serialized ? `?${serialized}` : '';
 }
 
-function injectGatewayBrowserToken(input: RewriteTextResponseInput) {
+function injectGatewayBrowserToken(
+  input: Pick<RewriteTextResponseInput, 'body' | 'sessionId'>,
+) {
   if (
     input.body.includes('data-kt-napcat-webui-gateway-sso') ||
     !/<html[\s>]/i.test(input.body)
@@ -160,10 +185,7 @@ function injectGatewayBrowserToken(input: RewriteTextResponseInput) {
     });
   }
 
-  return input.body.replace(
-    /<script\b/i,
-    `${script}<script`,
-  );
+  return input.body.replace(/<script\b/i, `${script}<script`);
 }
 
 function buildGatewayBrowserTokenScript(sessionId: string) {
@@ -231,6 +253,7 @@ export class NapcatWebuiProxyService {
   constructor(
     private readonly sessionService: NapcatWebuiGatewaySessionService,
     private readonly credentialClient: NapcatWebuiCredentialClient,
+    private readonly config: NapcatWebuiGatewayConfigService,
   ) {}
 
   async handleHttpProxy(
@@ -293,6 +316,7 @@ export class NapcatWebuiProxyService {
     return createProxyMiddleware<Request, Response, NextFunction>({
       changeOrigin: true,
       cookiePathRewrite: buildGatewayCookiePathRewrite({
+        publicSessionPrefix: this.config.publicSessionPrefix(),
         sessionId: session.sessionId,
       }),
       on: {
@@ -308,10 +332,7 @@ export class NapcatWebuiProxyService {
           proxyReq.removeHeader('cookie');
           proxyReq.setHeader('Authorization', `Bearer ${credential}`);
         },
-        proxyRes: this.createProxyResponseHandler(
-          session,
-          rewriteTextResponse,
-        ),
+        proxyRes: this.createProxyResponseHandler(session, rewriteTextResponse),
       },
       secure: false,
       selfHandleResponse: rewriteTextResponse,
@@ -326,35 +347,49 @@ export class NapcatWebuiProxyService {
   ) {
     if (!rewriteTextResponse) {
       return (proxyRes: IncomingMessage) => {
-        this.rewriteLocationHeader(proxyRes.headers, session);
+        this.rewriteResponseHeaders(proxyRes.headers, session);
       };
     }
 
-    const interceptTextResponse = responseInterceptor(
-      async (responseBuffer) =>
-        rewriteNapcatTextResponse({
-          body: responseBuffer.toString('utf8'),
-          sessionId: session.sessionId,
-        }),
+    const interceptTextResponse = responseInterceptor(async (responseBuffer) =>
+      rewriteNapcatTextResponse({
+        body: responseBuffer.toString('utf8'),
+        publicSessionPrefix: this.config.publicSessionPrefix(),
+        sessionId: session.sessionId,
+      }),
     );
 
     return (proxyRes: IncomingMessage, req: Request, res: Response) => {
-      this.rewriteLocationHeader(proxyRes.headers, session);
+      this.rewriteResponseHeaders(proxyRes.headers, session);
       return interceptTextResponse(proxyRes, req, res);
     };
   }
 
-  private rewriteLocationHeader(
-    headers: Record<string, number | string | string[] | undefined>,
+  private rewriteResponseHeaders(
+    headers: IncomingHttpHeaders,
     session: NapcatWebuiGatewaySession,
   ) {
+    const publicSessionPrefix = this.config.publicSessionPrefix();
     const location = headers.location;
     if (typeof location === 'string') {
       headers.location = rewriteNapcatLocationHeader({
         location,
+        publicSessionPrefix,
         sessionId: session.sessionId,
         upstreamBaseUrl: session.upstreamBaseUrl,
       });
+    }
+    const setCookieHeaders = rewriteNapcatSetCookieHeaders(
+      headers['set-cookie'],
+      {
+        publicSessionPrefix,
+        sessionId: session.sessionId,
+      },
+    );
+    if (setCookieHeaders) {
+      headers['set-cookie'] = setCookieHeaders;
+    } else {
+      delete headers['set-cookie'];
     }
   }
 
@@ -368,7 +403,7 @@ export class NapcatWebuiProxyService {
   private matchGatewayUpgrade(rawUrl: string) {
     const url = new URL(rawUrl, 'http://gateway.local');
     const match = url.pathname.match(
-      /^\/napcat-webui\/session\/([^/]+)\/webui(?:\/(.*))?$/,
+      new RegExp(`^${INTERNAL_GATEWAY_WEBUI_PREFIX}/([^/]+)/webui(?:/(.*))?$`),
     );
     if (!match) return undefined;
 

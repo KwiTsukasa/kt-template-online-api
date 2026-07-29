@@ -45,7 +45,7 @@ spec:
             - name: NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL
               value: http://kt-napcat-webui-gateway:48086
             - name: NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL
-              value: /napcat-webui
+              value: /admin/napcat-webui
           # Jenkins 每次发布会从 Agent 私有 .env.production 重建这个 Secret。
           envFrom:
             - secretRef:
@@ -215,6 +215,8 @@ spec:
               value: Asia/Shanghai
             - name: NAPCAT_WEBUI_GATEWAY_PORT
               value: "48086"
+            - name: NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL
+              value: /admin/napcat-webui
             - name: NAPCAT_WEBUI_GATEWAY_REDIS_HOST
               value: kt-qqbot-plugin-redis
             - name: NAPCAT_WEBUI_GATEWAY_REDIS_PORT

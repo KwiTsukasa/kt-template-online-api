@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { resolveNapcatWebuiPublicBaseUrl } from './napcat-webui-public-prefix';
 
 const DEFAULT_GATEWAY_PORT = 48086;
 const DEFAULT_REDIS_HOST = '127.0.0.1';
@@ -66,7 +67,9 @@ export class NapcatWebuiGatewayConfigService {
   }
 
   publicSessionPrefix() {
-    return '/napcat-webui/session';
+    return `${resolveNapcatWebuiPublicBaseUrl(
+      this.getString('NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL'),
+    )}/session`;
   }
 
   private getString(key: string) {

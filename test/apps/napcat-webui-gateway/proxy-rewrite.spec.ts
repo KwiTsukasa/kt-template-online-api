@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import axios from 'axios';
 import * as request from 'supertest';
 import { NapcatWebuiGatewaySessionService } from '../../../src/apps/napcat-webui-gateway/application/napcat-webui-gateway-session.service';
+import { NapcatWebuiGatewayConfigService } from '../../../src/apps/napcat-webui-gateway/config/napcat-webui-gateway-config.service';
 import type { NapcatWebuiGatewaySession } from '../../../src/apps/napcat-webui-gateway/domain/napcat-webui-gateway.types';
 import { NapcatWebuiCredentialClient } from '../../../src/apps/napcat-webui-gateway/infrastructure/napcat-webui-credential.client';
 import { NapcatWebuiGatewayTicketService } from '../../../src/apps/napcat-webui-gateway/infrastructure/session/napcat-webui-gateway-ticket.service';
@@ -21,6 +22,7 @@ import { PublicWebuiController } from '../../../src/apps/napcat-webui-gateway/pr
 jest.mock('axios');
 
 const SESSION_ID = 'session-1';
+const PUBLIC_SESSION_PREFIX = '/admin/napcat-webui/session';
 const UPSTREAM_BASE_URL = 'http://127.0.0.1:6099';
 const repoRoot = resolve(__dirname, '../../..');
 const mockedAxiosPost = axios.post as jest.Mock;
@@ -56,6 +58,50 @@ function readApiSource(relativePath: string) {
 }
 
 describe('Napcat WebUI proxy rewrite helpers', () => {
+  it('derives the public session prefix from the controlled root-relative base', () => {
+    const config = new NapcatWebuiGatewayConfigService({
+      get: (key: string) =>
+        key === 'NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL'
+          ? '/admin/napcat-webui/'
+          : undefined,
+    } as never);
+
+    expect(config.publicSessionPrefix()).toBe(PUBLIC_SESSION_PREFIX);
+  });
+
+  it('rejects an absolute public base URL', () => {
+    const config = new NapcatWebuiGatewayConfigService({
+      get: (key: string) =>
+        key === 'NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL'
+          ? 'https://evil.test/napcat-webui'
+          : undefined,
+    } as never);
+
+    expect(() => config.publicSessionPrefix()).toThrow(
+      'NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL',
+    );
+  });
+
+  it.each([
+    ['space', '/admin/napcat webui'],
+    ['encoded separator', '/admin/napcat%2fwebui'],
+    ['header delimiter', '/admin/napcat\r\nwebui'],
+  ])(
+    'rejects an unsafe public base path containing %s',
+    (_case, publicBaseUrl) => {
+      const config = new NapcatWebuiGatewayConfigService({
+        get: (key: string) =>
+          key === 'NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL'
+            ? publicBaseUrl
+            : undefined,
+      } as never);
+
+      expect(() => config.publicSessionPrefix()).toThrow(
+        'NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL',
+      );
+    },
+  );
+
   it('rejects absolute URL proxy paths', () => {
     expect(() => sanitizeGatewayProxyPath('https://evil.test/api')).toThrow(
       'Gateway proxy path is invalid',
@@ -96,76 +142,89 @@ describe('Napcat WebUI proxy rewrite helpers', () => {
     expect(
       rewriteNapcatLocationHeader({
         location: '/webui/login',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
         sessionId: SESSION_ID,
         upstreamBaseUrl: UPSTREAM_BASE_URL,
       }),
-    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui/login`);
+    ).toBe(`${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui/login`);
   });
 
   it('rewrites absolute redirects under the Gateway session prefix without leaking origin', () => {
     expect(
       rewriteNapcatLocationHeader({
         location: 'http://127.0.0.1:6099/webui/login?next=/',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
         sessionId: SESSION_ID,
         upstreamBaseUrl: UPSTREAM_BASE_URL,
       }),
-    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui/login`);
+    ).toBe(`${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui/login`);
     expect(
       rewriteNapcatLocationHeader({
         location: 'http://container.internal:6099/webui/login',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
         sessionId: SESSION_ID,
         upstreamBaseUrl: UPSTREAM_BASE_URL,
       }),
-    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui/login`);
+    ).toBe(`${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui/login`);
   });
 
   it('rewrites protocol-relative redirects under the Gateway session prefix without leaking origin', () => {
     expect(
       rewriteNapcatLocationHeader({
         location: '//container.internal:6099/webui/login?next=/',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
         sessionId: SESSION_ID,
         upstreamBaseUrl: UPSTREAM_BASE_URL,
       }),
-    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui/login`);
+    ).toBe(`${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui/login`);
   });
 
   it('drops upstream redirect query and hash fragments before returning browser locations', () => {
     expect(
       rewriteNapcatLocationHeader({
         location: '/webui/login?Credential=secret#token',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
         sessionId: SESSION_ID,
         upstreamBaseUrl: UPSTREAM_BASE_URL,
       }),
-    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui/login`);
+    ).toBe(`${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui/login`);
     expect(
       rewriteNapcatLocationHeader({
         location: 'webui/login?ticket=secret#hash',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
         sessionId: SESSION_ID,
         upstreamBaseUrl: UPSTREAM_BASE_URL,
       }),
-    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui/login`);
+    ).toBe(`${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui/login`);
   });
 
   it('fails closed for malformed absolute redirects', () => {
     expect(
       rewriteNapcatLocationHeader({
         location: 'http://%',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
         sessionId: SESSION_ID,
         upstreamBaseUrl: UPSTREAM_BASE_URL,
       }),
-    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui`);
+    ).toBe(`${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui`);
     expect(
       rewriteNapcatLocationHeader({
         location: '//%',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
         sessionId: SESSION_ID,
         upstreamBaseUrl: UPSTREAM_BASE_URL,
       }),
-    ).toBe(`/napcat-webui/session/${SESSION_ID}/webui/webui`);
+    ).toBe(`${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui`);
   });
 
   it('scopes all upstream cookies to the Gateway WebUI path', () => {
-    expect(buildGatewayCookiePathRewrite({ sessionId: SESSION_ID })).toEqual({
-      '*': `/napcat-webui/session/${SESSION_ID}/webui`,
+    expect(
+      buildGatewayCookiePathRewrite({
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
+        sessionId: SESSION_ID,
+      }),
+    ).toEqual({
+      '*': `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui`,
     });
   });
 
@@ -265,6 +324,12 @@ describe('PublicWebuiController bootstrap', () => {
           useValue: ticketService,
         },
         {
+          provide: NapcatWebuiGatewayConfigService,
+          useValue: {
+            publicSessionPrefix: () => PUBLIC_SESSION_PREFIX,
+          },
+        },
+        {
           provide: NapcatWebuiProxyService,
           useValue: {
             handleHttpProxy: jest.fn(),
@@ -306,10 +371,10 @@ describe('PublicWebuiController bootstrap', () => {
     );
     expect(sessionService.markActive).toHaveBeenCalledWith(SESSION_ID);
     expect(response.headers.location).toBe(
-      `/napcat-webui/session/${SESSION_ID}/webui/webui`,
+      `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui`,
     );
     expect(response.headers['set-cookie']).toEqual([
-      expect.stringContaining(`Path=/napcat-webui/session/${SESSION_ID}`),
+      expect.stringContaining(`Path=${PUBLIC_SESSION_PREFIX}/${SESSION_ID}`),
     ]);
     expect(response.headers['set-cookie'][0]).toContain('HttpOnly');
   });
@@ -373,6 +438,10 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
 
       res.statusCode = HttpStatus.OK;
       res.setHeader('content-type', 'text/html; charset=UTF-8');
+      res.setHeader('set-cookie', [
+        'napcat_session=active; Domain=container.internal; Path=/webui; HttpOnly',
+        'napcat_theme=dark; SameSite=Lax',
+      ]);
       res.end('<script type="module" src="/webui/assets/index.js"></script>');
     });
 
@@ -424,6 +493,12 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
           },
         },
         {
+          provide: NapcatWebuiGatewayConfigService,
+          useValue: {
+            publicSessionPrefix: () => PUBLIC_SESSION_PREFIX,
+          },
+        },
+        {
           provide: NapcatWebuiCredentialClient,
           useValue: credentialClient,
         },
@@ -449,7 +524,7 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
       .expect(HttpStatus.MOVED_PERMANENTLY);
 
     expect(response.headers.location).toBe(
-      `/napcat-webui/session/${SESSION_ID}/webui/webui/`,
+      `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui/`,
     );
   });
 
@@ -473,5 +548,18 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
         item.url?.includes('/api/napcat-webui/session/'),
       ),
     ).toBe(false);
+  });
+
+  it('scopes intercepted text-response cookies to the configured public session path', async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/napcat-webui/session/${SESSION_ID}/webui/webui/assets/index.html`)
+      .expect(HttpStatus.OK);
+    const cookiePath = `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui`;
+
+    expect(response.headers['set-cookie']).toEqual([
+      expect.stringContaining(`Path=${cookiePath}`),
+      expect.stringContaining(`Path=${cookiePath}`),
+    ]);
+    expect(String(response.headers['set-cookie'])).not.toMatch(/Domain=/i);
   });
 });

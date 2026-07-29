@@ -1,14 +1,21 @@
-import { Controller, Get, Headers, Param, Res } from '@nestjs/common';
+import { Controller, Get, Headers, Param, Req, Res } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
-import { Response } from 'express';
-import { ApiFileDownloadResponse, Public } from '@/common';
+import type { Request, Response } from 'express';
+import {
+  ApiFileDownloadResponse,
+  Public,
+  PublicRateLimitService,
+} from '@/common';
 import { BlogLive2DAssetService } from '../application/blog-live2d-asset.service';
 import type { BlogLive2DRuntimeAssetPath } from '../domain/blog-live2d-asset.types';
 
 @Controller('blog/live2d')
 @ApiTags('Blog - Live2D')
 export class BlogLive2DAssetController {
-  constructor(private readonly blogLive2DAssetService: BlogLive2DAssetService) {}
+  constructor(
+    private readonly blogLive2DAssetService: BlogLive2DAssetService,
+    private readonly publicRateLimitService: PublicRateLimitService,
+  ) {}
 
   @Get(':character/catalog.json')
   @ApiOperation({ summary: '获取 Blog Live2D 角色目录规范索引' })
@@ -19,9 +26,11 @@ export class BlogLive2DAssetController {
     @Param('character') character: string,
     @Headers('referer') referer: string | undefined,
     @Headers('origin') origin: string | undefined,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    this.blogLive2DAssetService.assertAllowedRequest(referer, origin);
+    this.blogLive2DAssetService.assertAllowedRequest(req, referer, origin);
+    await this.publicRateLimitService.bindLive2DConcurrentLease(req, res);
     const { stream, stat, objectName } =
       await this.blogLive2DAssetService.getCatalogObject(character);
 
@@ -46,9 +55,11 @@ export class BlogLive2DAssetController {
     @Param('assetPath') assetPath: BlogLive2DRuntimeAssetPath,
     @Headers('referer') referer: string | undefined,
     @Headers('origin') origin: string | undefined,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    this.blogLive2DAssetService.assertAllowedRequest(referer, origin);
+    this.blogLive2DAssetService.assertAllowedRequest(req, referer, origin);
+    await this.publicRateLimitService.bindLive2DConcurrentLease(req, res);
     const { stream, stat, objectName } =
       await this.blogLive2DAssetService.getRuntimeObject(
         character,

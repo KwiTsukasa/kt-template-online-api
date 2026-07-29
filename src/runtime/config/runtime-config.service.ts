@@ -10,6 +10,7 @@ import {
   RuntimeMinioConfig,
   RuntimeQqbotConfig,
   RuntimeSafeConfigSnapshot,
+  RuntimeSecurityConfig,
   RuntimeWordpressConfig,
 } from './runtime-config.types';
 
@@ -27,6 +28,28 @@ const REQUIRED_CONFIG_KEYS = [
   'NETWORK_AGENT_MQTT_USERNAME',
   'NETWORK_AGENT_MQTT_PASSWORD',
   'NETWORK_AGENT_MQTT_RETRY_MS',
+  'PUBLIC_SECURITY_TRUSTED_PROXY_IPS',
+  'PUBLIC_SECURITY_SWAGGER_ALLOWLIST',
+  'PUBLIC_RATE_LIMIT_REDIS_HOST',
+  'PUBLIC_RATE_LIMIT_REDIS_PORT',
+  'PUBLIC_RATE_LIMIT_REDIS_DB',
+  'PUBLIC_RATE_LIMIT_REDIS_KEY_PREFIX',
+  'PUBLIC_RATE_LIMIT_WINDOW_MS',
+  'PUBLIC_RATE_LIMIT_PUBLIC_READ_LIMIT',
+  'PUBLIC_RATE_LIMIT_BASELINE_LIMIT',
+  'PUBLIC_RATE_LIMIT_WARNING_INTERVAL_MS',
+  'PUBLIC_RATE_LIMIT_LOGIN_IP_LIMIT',
+  'PUBLIC_RATE_LIMIT_LOGIN_IP_WINDOW_MS',
+  'PUBLIC_RATE_LIMIT_LOGIN_USERNAME_LIMIT',
+  'PUBLIC_RATE_LIMIT_LOGIN_USERNAME_WINDOW_MS',
+  'PUBLIC_RATE_LIMIT_LOGIN_GLOBAL_LIMIT',
+  'PUBLIC_RATE_LIMIT_LOGIN_GLOBAL_WINDOW_MS',
+  'PUBLIC_RATE_LIMIT_REFRESH_SUBJECT_LIMIT',
+  'PUBLIC_RATE_LIMIT_REFRESH_SUBJECT_WINDOW_MS',
+  'PUBLIC_RATE_LIMIT_LOGOUT_SUBJECT_LIMIT',
+  'PUBLIC_RATE_LIMIT_LOGOUT_SUBJECT_WINDOW_MS',
+  'PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LIMIT',
+  'PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LEASE_MS',
 ] as const;
 
 const OPTIONAL_CONFIG_CHECKS: ReadonlyArray<string | readonly string[]> = [
@@ -212,6 +235,89 @@ export class RuntimeConfigService {
   }
 
   /**
+   * 读取公网安全边界配置的非敏感摘要。
+   * @returns 公网可信代理与限流配置摘要。
+   */
+  readSecurityProfile(): RuntimeSecurityConfig {
+    return {
+      baselineLimit: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_BASELINE_LIMIT',
+        300,
+      ),
+      live2dConcurrentLeaseMs: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LEASE_MS',
+        120000,
+      ),
+      live2dConcurrentLimit: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LIMIT',
+        8,
+      ),
+      loginGlobalLimit: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_LOGIN_GLOBAL_LIMIT',
+        100,
+      ),
+      loginGlobalWindowMs: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_LOGIN_GLOBAL_WINDOW_MS',
+        60000,
+      ),
+      loginIpLimit: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_LOGIN_IP_LIMIT',
+        5,
+      ),
+      loginIpWindowMs: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_LOGIN_IP_WINDOW_MS',
+        60000,
+      ),
+      loginUsernameLimit: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_LOGIN_USERNAME_LIMIT',
+        10,
+      ),
+      loginUsernameWindowMs: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_LOGIN_USERNAME_WINDOW_MS',
+        900000,
+      ),
+      logoutSubjectLimit: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_LOGOUT_SUBJECT_LIMIT',
+        10,
+      ),
+      logoutSubjectWindowMs: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_LOGOUT_SUBJECT_WINDOW_MS',
+        60000,
+      ),
+      publicReadLimit: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_PUBLIC_READ_LIMIT',
+        60,
+      ),
+      redisDb: this.getNonNegativeNumber('PUBLIC_RATE_LIMIT_REDIS_DB', 0),
+      redisHost: this.getString('PUBLIC_RATE_LIMIT_REDIS_HOST', '127.0.0.1'),
+      redisKeyPrefix: this.getString(
+        'PUBLIC_RATE_LIMIT_REDIS_KEY_PREFIX',
+        'kt:public-rate-limit',
+      ),
+      redisPort: this.getPositiveNumber('PUBLIC_RATE_LIMIT_REDIS_PORT', 6379),
+      refreshSubjectLimit: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_REFRESH_SUBJECT_LIMIT',
+        30,
+      ),
+      refreshSubjectWindowMs: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_REFRESH_SUBJECT_WINDOW_MS',
+        60000,
+      ),
+      swaggerAllowlistCount: this.countCsvValues(
+        'PUBLIC_SECURITY_SWAGGER_ALLOWLIST',
+      ),
+      trustedProxyCount: this.countCsvValues(
+        'PUBLIC_SECURITY_TRUSTED_PROXY_IPS',
+      ),
+      warningIntervalMs: this.getPositiveNumber(
+        'PUBLIC_RATE_LIMIT_WARNING_INTERVAL_MS',
+        30000,
+      ),
+      windowMs: this.getPositiveNumber('PUBLIC_RATE_LIMIT_WINDOW_MS', 60000),
+    };
+  }
+
+  /**
    * 查询 运行态健康检查数据。
    * @returns 运行态健康检查查询结果。
    */
@@ -223,6 +329,7 @@ export class RuntimeConfigService {
       minio: this.readMinioProfile(),
       wordpress: this.readWordpressProfile(),
       qqbot: this.readQqbotProfile(),
+      security: this.readSecurityProfile(),
       checks: this.getConfigChecks(),
     };
   }
@@ -335,6 +442,27 @@ export class RuntimeConfigService {
       this.configService.get<string | number>(key),
       fallback,
     );
+  }
+
+  /**
+   * 查询非负整数配置。
+   * @param key - 配置键名。
+   * @param fallback - 配置缺失或非法时的兜底值。
+   */
+  private getNonNegativeNumber(key: string, fallback: number) {
+    const value = Number(this.configService.get<string | number>(key));
+    return Number.isInteger(value) && value >= 0 ? value : fallback;
+  }
+
+  /**
+   * 统计逗号分隔配置中的有效项目数。
+   * @param key - 配置键名。
+   */
+  private countCsvValues(key: string) {
+    return this.getString(key)
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean).length;
   }
 
   /**

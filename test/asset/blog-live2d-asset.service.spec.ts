@@ -2,7 +2,9 @@ import { Readable } from 'node:stream';
 import { BadRequestException, HttpStatus } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import type { Request } from 'express';
 import * as request from 'supertest';
+import { ClientIpService, PublicRateLimitService } from '../../src/common';
 import { MinioClientService } from '../../src/modules/asset/application/asset-minio.service';
 import { BlogLive2DAssetService } from '../../src/modules/asset/application/blog-live2d-asset.service';
 import { BlogLive2DAssetController } from '../../src/modules/asset/contract/blog-live2d-asset.controller';
@@ -43,63 +45,157 @@ function createMinio() {
   };
 }
 
+function createClientIp(publicOrigin = 'https://nas4.kwitsukasa.top:45678') {
+  return {
+    getPublicOrigin: jest.fn(() => publicOrigin),
+  };
+}
+
+function createHttpRequest(headers: Record<string, string> = {}) {
+  return {
+    headers,
+    protocol: 'http',
+  } as unknown as Request;
+}
+
+function createService(
+  minio = createMinio(),
+  config = createConfig(),
+  clientIp = createClientIp(),
+) {
+  return new BlogLive2DAssetService(
+    minio as never,
+    config as never,
+    clientIp as never,
+  );
+}
+
+function createClientIpProvider() {
+  return {
+    provide: ClientIpService,
+    useValue: createClientIp(),
+  };
+}
+
+function createRateLimitProvider() {
+  return {
+    provide: PublicRateLimitService,
+    useValue: {
+      bindLive2DConcurrentLease: jest.fn().mockResolvedValue(undefined),
+    },
+  };
+}
+
 describe('BlogLive2DAssetService', () => {
-  it('allows configured blog referer', () => {
-    const service = new BlogLive2DAssetService(
-      createMinio() as never,
-      createConfig() as never,
-    );
+  it('allows the trusted request-matching NATMap origin with its dynamic port', () => {
+    const clientIp = createClientIp();
+    const service = createService(createMinio(), createConfig(), clientIp);
+    const req = createHttpRequest({
+      host: 'nas4.kwitsukasa.top:45678',
+      'x-forwarded-proto': 'https',
+    });
 
     expect(() =>
       service.assertAllowedRequest(
+        req,
+        'https://nas4.kwitsukasa.top:45678/blog/post/1',
+        undefined,
+      ),
+    ).not.toThrow();
+    expect(clientIp.getPublicOrigin).toHaveBeenCalledWith(req);
+  });
+
+  it.each(['https://nas4.kwitsukasa.top', 'https://nas4.kwitsukasa.top:443'])(
+    'rejects a NATMap origin without an explicit dynamic port: %s',
+    (value) => {
+      const service = createService(
+        createMinio(),
+        createConfig(),
+        createClientIp(value),
+      );
+
+      expect(() =>
+        service.assertAllowedRequest(
+          createHttpRequest(),
+          `${value}/blog/post/1`,
+          undefined,
+        ),
+      ).toThrow(BadRequestException);
+    },
+  );
+
+  it('does not trust a forged forwarded host or a retired configured origin', () => {
+    const clientIp = createClientIp();
+    const service = createService(createMinio(), createConfig(), clientIp);
+    const req = createHttpRequest({
+      host: 'nas4.kwitsukasa.top:45678',
+      'x-forwarded-host': 'evil.example',
+      'x-forwarded-proto': 'https',
+    });
+
+    expect(() =>
+      service.assertAllowedRequest(
+        req,
+        'https://evil.example/hotlink',
+        undefined,
+      ),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      service.assertAllowedRequest(req, undefined, 'http://localhost:5999'),
+    ).toThrow(BadRequestException);
+  });
+
+  it('allows the legacy blog referer', () => {
+    const service = createService();
+
+    expect(() =>
+      service.assertAllowedRequest(
+        createHttpRequest(),
         'https://blog.kwitsukasa.top/post/1',
         undefined,
       ),
     ).not.toThrow();
   });
 
-  it('allows configured origin when referer is absent', () => {
-    const service = new BlogLive2DAssetService(
-      createMinio() as never,
-      createConfig() as never,
-    );
+  it('allows the legacy blog origin when referer is absent', () => {
+    const service = createService();
 
     expect(() =>
-      service.assertAllowedRequest(undefined, 'http://localhost:5999'),
+      service.assertAllowedRequest(
+        createHttpRequest(),
+        undefined,
+        'https://blog.kwitsukasa.top',
+      ),
     ).not.toThrow();
   });
 
   it('rejects external referer', () => {
-    const service = new BlogLive2DAssetService(
-      createMinio() as never,
-      createConfig() as never,
-    );
+    const service = createService();
 
     expect(() =>
-      service.assertAllowedRequest('https://example.com/hotlink', undefined),
+      service.assertAllowedRequest(
+        createHttpRequest(),
+        'https://example.com/hotlink',
+        undefined,
+      ),
     ).toThrow(BadRequestException);
   });
 
   it('rejects missing or malformed request source', () => {
-    const service = new BlogLive2DAssetService(
-      createMinio() as never,
-      createConfig() as never,
-    );
+    const service = createService();
+    const req = createHttpRequest();
 
-    expect(() => service.assertAllowedRequest(undefined, undefined)).toThrow(
-      BadRequestException,
-    );
-    expect(() => service.assertAllowedRequest('not-a-url', undefined)).toThrow(
-      BadRequestException,
-    );
+    expect(() =>
+      service.assertAllowedRequest(req, undefined, undefined),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      service.assertAllowedRequest(req, 'not-a-url', undefined),
+    ).toThrow(BadRequestException);
   });
 
   it('maps the root catalog below the configured MinIO prefix', async () => {
     const minio = createMinio();
-    const service = new BlogLive2DAssetService(
-      minio as never,
-      createConfig() as never,
-    );
+    const service = createService(minio);
 
     await service.getCatalogObject('pio');
 
@@ -111,10 +207,7 @@ describe('BlogLive2DAssetService', () => {
 
   it('maps nested MOC3 runtime files below the configured MinIO prefix', async () => {
     const minio = createMinio();
-    const service = new BlogLive2DAssetService(
-      minio as never,
-      createConfig() as never,
-    );
+    const service = createService(minio);
 
     await service.getRuntimeObject('pio', 'moc3', [
       'assets',
@@ -131,10 +224,7 @@ describe('BlogLive2DAssetService', () => {
 
   it('maps the fixed MOC family entry below the configured MinIO prefix', async () => {
     const minio = createMinio();
-    const service = new BlogLive2DAssetService(
-      minio as never,
-      createConfig() as never,
-    );
+    const service = createService(minio);
 
     await service.getRuntimeObject('pio', 'moc', ['index.json']);
 
@@ -146,15 +236,9 @@ describe('BlogLive2DAssetService', () => {
 
   it('maps the fixed MOC texture manifest below the configured MinIO prefix', async () => {
     const minio = createMinio();
-    const service = new BlogLive2DAssetService(
-      minio as never,
-      createConfig() as never,
-    );
+    const service = createService(minio);
 
-    await service.getRuntimeObject('pio', 'moc', [
-      'textures',
-      'manifest.json',
-    ]);
+    await service.getRuntimeObject('pio', 'moc', ['textures', 'manifest.json']);
 
     expect(minio.getObject).toHaveBeenCalledWith(
       'blog/live2d/pio/moc/textures/manifest.json',
@@ -167,10 +251,7 @@ describe('BlogLive2DAssetService', () => {
     minio.getObject.mockRejectedValueOnce(
       Object.assign(new Error('Not Found'), { code: 'NotFound' }),
     );
-    const service = new BlogLive2DAssetService(
-      minio as never,
-      createConfig() as never,
-    );
+    const service = createService(minio);
 
     await expect(
       service.getRuntimeObject('pio', 'moc', ['manifest.json']),
@@ -186,10 +267,7 @@ describe('BlogLive2DAssetService', () => {
 
   it('rejects runtime path traversal before touching MinIO', async () => {
     const minio = createMinio();
-    const service = new BlogLive2DAssetService(
-      minio as never,
-      createConfig() as never,
-    );
+    const service = createService(minio);
 
     await expect(
       service.getRuntimeObject('pio', 'moc', ['%252e%252e', 'secret.env']),
@@ -208,10 +286,7 @@ describe('BlogLive2DAssetService', () => {
     'rejects unsafe %s runtime paths before touching MinIO',
     async (_name, family, objectPath) => {
       const minio = createMinio();
-      const service = new BlogLive2DAssetService(
-        minio as never,
-        createConfig() as never,
-      );
+      const service = createService(minio);
 
       await expect(
         service.getRuntimeObject('pio', family, objectPath),
@@ -222,9 +297,9 @@ describe('BlogLive2DAssetService', () => {
 
   it('maps the Tia root catalog below the shared Blog Live2D root prefix', async () => {
     const minio = createMinio();
-    const service = new BlogLive2DAssetService(
-      minio as never,
-      createConfig({ BLOG_LIVE2D_ROOT_PREFIX: 'blog/live2d' }) as never,
+    const service = createService(
+      minio,
+      createConfig({ BLOG_LIVE2D_ROOT_PREFIX: 'blog/live2d' }),
     );
 
     await service.getCatalogObject('tia');
@@ -237,9 +312,9 @@ describe('BlogLive2DAssetService', () => {
 
   it('maps Tia MOC runtime files below the Tia public root', async () => {
     const minio = createMinio();
-    const service = new BlogLive2DAssetService(
-      minio as never,
-      createConfig({ BLOG_LIVE2D_ROOT_PREFIX: 'blog/live2d' }) as never,
+    const service = createService(
+      minio,
+      createConfig({ BLOG_LIVE2D_ROOT_PREFIX: 'blog/live2d' }),
     );
 
     await service.getRuntimeObject('tia', 'moc', [
@@ -255,9 +330,9 @@ describe('BlogLive2DAssetService', () => {
 
   it('rejects unsupported Live2D characters before touching MinIO', async () => {
     const minio = createMinio();
-    const service = new BlogLive2DAssetService(
-      minio as never,
-      createConfig({ BLOG_LIVE2D_ROOT_PREFIX: 'blog/live2d' }) as never,
+    const service = createService(
+      minio,
+      createConfig({ BLOG_LIVE2D_ROOT_PREFIX: 'blog/live2d' }),
     );
 
     await expect(
@@ -274,6 +349,8 @@ describe('BlogLive2DAssetController', () => {
       controllers: [BlogLive2DAssetController],
       providers: [
         BlogLive2DAssetService,
+        createRateLimitProvider(),
+        createClientIpProvider(),
         {
           provide: MinioClientService,
           useValue: minio,
@@ -285,6 +362,7 @@ describe('BlogLive2DAssetController', () => {
       ],
     }).compile();
     const app = moduleRef.createNestApplication();
+    const rateLimitService = moduleRef.get(PublicRateLimitService);
     await app.init();
 
     try {
@@ -300,6 +378,9 @@ describe('BlogLive2DAssetController', () => {
         'blog/live2d/pio/catalog.json',
         'kt-template-online',
       );
+      expect(rateLimitService.bindLive2DConcurrentLease).toHaveBeenCalledTimes(
+        1,
+      );
     } finally {
       await app.close();
     }
@@ -311,6 +392,8 @@ describe('BlogLive2DAssetController', () => {
       controllers: [BlogLive2DAssetController],
       providers: [
         BlogLive2DAssetService,
+        createRateLimitProvider(),
+        createClientIpProvider(),
         {
           provide: MinioClientService,
           useValue: minio,
@@ -350,6 +433,8 @@ describe('BlogLive2DAssetController', () => {
       controllers: [BlogLive2DAssetController],
       providers: [
         BlogLive2DAssetService,
+        createRateLimitProvider(),
+        createClientIpProvider(),
         {
           provide: MinioClientService,
           useValue: minio,
@@ -387,6 +472,8 @@ describe('BlogLive2DAssetController', () => {
       controllers: [BlogLive2DAssetController],
       providers: [
         BlogLive2DAssetService,
+        createRateLimitProvider(),
+        createClientIpProvider(),
         {
           provide: MinioClientService,
           useValue: minio,
@@ -424,6 +511,8 @@ describe('BlogLive2DAssetController', () => {
       controllers: [BlogLive2DAssetController],
       providers: [
         BlogLive2DAssetService,
+        createRateLimitProvider(),
+        createClientIpProvider(),
         {
           provide: MinioClientService,
           useValue: minio,
@@ -461,6 +550,8 @@ describe('BlogLive2DAssetController', () => {
       controllers: [BlogLive2DAssetController],
       providers: [
         BlogLive2DAssetService,
+        createRateLimitProvider(),
+        createClientIpProvider(),
         {
           provide: MinioClientService,
           useValue: minio,
@@ -495,6 +586,8 @@ describe('BlogLive2DAssetController', () => {
       controllers: [BlogLive2DAssetController],
       providers: [
         BlogLive2DAssetService,
+        createRateLimitProvider(),
+        createClientIpProvider(),
         {
           provide: MinioClientService,
           useValue: minio,
@@ -510,7 +603,9 @@ describe('BlogLive2DAssetController', () => {
 
     try {
       await request(app.getHttpServer())
-        .get('/blog/live2d/pio/moc3/assets/model/pio.moc-reconstructed.model3.json')
+        .get(
+          '/blog/live2d/pio/moc3/assets/model/pio.moc-reconstructed.model3.json',
+        )
         .set('Referer', 'https://example.com/post/1')
         .expect(HttpStatus.BAD_REQUEST);
       expect(minio.getObject).not.toHaveBeenCalled();

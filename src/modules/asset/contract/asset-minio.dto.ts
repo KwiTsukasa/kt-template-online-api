@@ -40,7 +40,8 @@ export class MinioUploadResultDto {
   mimeType: string;
 
   @ApiProperty({
-    example: 'http://127.0.0.1:9000/kt-template-online/uploads/demo.png',
+    example:
+      '/api/minio/download?objectName=uploads%2Fdemo.png&bucketName=kt-template-online',
   })
   url: string;
 }

@@ -115,7 +115,7 @@ export class MinioClientController {
     etag: '9b2cf535f27731c974343645a3985328',
     size: 2048,
     mimeType: 'image/png',
-    url: 'http://127.0.0.1:9000/kt-template-online/uploads/demo.png',
+    url: '/api/minio/download?objectName=uploads%2Fdemo.png&bucketName=kt-template-online',
   })
   @ApiBody({
     schema: {
@@ -190,35 +190,31 @@ export class MinioClientController {
   }
 
   /**
-   * 获取文件临时访问地址。
+   * 获取文件同源访问地址。
    * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param objectName - objectName 输入；驱动 `minioClientService.getPresignedUrl()` 的 MinIO步骤。
-   * @param bucketName - bucketName 输入；驱动 `minioClientService.getPresignedUrl()` 的 MinIO步骤。
-   * @param expiry - expiry 输入；驱动 `minioClientService.getPresignedUrl()` 的 MinIO步骤。
+   * @param objectName - MinIO 对象键。
+   * @param bucketName - 可选的 MinIO Bucket 名称。
    */
   @Get('url')
-  @ApiOperation({ summary: '获取文件临时访问地址' })
+  @ApiOperation({ summary: '获取文件同源访问地址' })
   @ApiQuery({ name: 'objectName' })
   @ApiQuery({ name: 'bucketName', required: false })
-  @ApiQuery({ name: 'expiry', required: false })
   @ApiSuccessResponse({
     schema: {
       type: 'string',
-      description: '文件临时访问地址',
+      description: '文件同源访问地址',
     },
     example:
-      'http://127.0.0.1:9000/kt-template-online/uploads/demo.png?X-Amz-Algorithm=AWS4-HMAC-SHA256',
+      '/api/minio/download?objectName=uploads%2Fdemo.png&bucketName=kt-template-online',
   })
   async getUrl(
     @Res() res,
     @Query('objectName') objectName: string,
     @Query('bucketName') bucketName?: string,
-    @Query('expiry') expiry?: string,
   ) {
-    const result = await this.minioClientService.getPresignedUrl(
+    const result = this.minioClientService.getSameOriginDownloadUrl(
       objectName,
       bucketName,
-      expiry ? Number(expiry) : undefined,
     );
 
     res.send(this.toolsService.res(HttpStatus.OK, '操作成功', result));

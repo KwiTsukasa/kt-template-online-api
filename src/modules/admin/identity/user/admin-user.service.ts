@@ -4,6 +4,7 @@ import { Not, Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
 import { AdminDept } from '../dept/admin-dept.entity';
 import { AdminRole } from '../role/admin-role.entity';
+import { AdminPasswordHashService } from '../auth/admin-password-hash.service';
 import { AdminUser } from './admin-user.entity';
 import type {
   AdminUserInput,
@@ -22,6 +23,7 @@ export class AdminUserService {
     private readonly roleRepository: Repository<AdminRole>,
     @InjectRepository(AdminDept)
     private readonly deptRepository: Repository<AdminDept>,
+    private readonly passwordHashService: AdminPasswordHashService,
   ) {}
 
   /**
@@ -91,11 +93,12 @@ export class AdminUserService {
    */
   async createUser(data: AdminUserInput) {
     await this.ensureUsernameAvailable(String(data.username || ''));
+    const password = await this.passwordHashService.hashPassword(data.password);
 
     const user = this.userRepository.create({
       deptId: data.deptId || null,
       homePath: data.homePath || DEFAULT_ADMIN_HOME_PATH,
-      password: data.password || '123456',
+      password,
       realName: data.realName,
       status: data.status ?? 1,
       timezone: data.timezone || 'Asia/Shanghai',
@@ -125,7 +128,11 @@ export class AdminUserService {
       await this.ensureUsernameAvailable(data.username, id);
       user.username = data.username;
     }
-    if (data.password) user.password = data.password;
+    if (data.password) {
+      user.password = await this.passwordHashService.hashPassword(
+        data.password,
+      );
+    }
     if (data.deptId !== undefined) user.deptId = data.deptId || null;
     if (data.realName !== undefined) user.realName = data.realName;
     if (data.homePath !== undefined) user.homePath = data.homePath;
@@ -133,6 +140,20 @@ export class AdminUserService {
     if (data.status !== undefined) user.status = data.status;
     if (data.roleIds) user.roles = await this.findRolesByIds(data.roleIds);
 
+    await this.userRepository.save(user);
+    return null;
+  }
+
+  async resetUserPassword(id: string, password?: string) {
+    const user = await this.userRepository.findOne({
+      where: {
+        id,
+        isDeleted: false,
+      },
+    });
+    if (!user) throwVbenError('用户不存在', HttpStatus.BAD_REQUEST);
+
+    user.password = await this.passwordHashService.hashPassword(password);
     await this.userRepository.save(user);
     return null;
   }

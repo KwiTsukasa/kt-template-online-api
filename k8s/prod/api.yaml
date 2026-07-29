@@ -46,6 +46,56 @@ spec:
               value: http://kt-napcat-webui-gateway:48086
             - name: NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL
               value: /admin/napcat-webui
+            - name: PUBLIC_RATE_LIMIT_REDIS_HOST
+              value: kt-qqbot-plugin-redis
+            - name: PUBLIC_RATE_LIMIT_REDIS_PORT
+              value: "6379"
+            - name: PUBLIC_RATE_LIMIT_REDIS_DB
+              value: "0"
+            - name: PUBLIC_RATE_LIMIT_REDIS_KEY_PREFIX
+              value: kt:public-rate-limit
+            - name: PUBLIC_RATE_LIMIT_WINDOW_MS
+              value: "60000"
+            - name: PUBLIC_RATE_LIMIT_PUBLIC_READ_LIMIT
+              value: "60"
+            - name: PUBLIC_RATE_LIMIT_BASELINE_LIMIT
+              value: "300"
+            - name: PUBLIC_RATE_LIMIT_WARNING_INTERVAL_MS
+              value: "30000"
+            - name: PUBLIC_RATE_LIMIT_LOGIN_IP_LIMIT
+              value: "5"
+            - name: PUBLIC_RATE_LIMIT_LOGIN_IP_WINDOW_MS
+              value: "60000"
+            - name: PUBLIC_RATE_LIMIT_LOGIN_USERNAME_LIMIT
+              value: "10"
+            - name: PUBLIC_RATE_LIMIT_LOGIN_USERNAME_WINDOW_MS
+              value: "900000"
+            - name: PUBLIC_RATE_LIMIT_LOGIN_GLOBAL_LIMIT
+              value: "100"
+            - name: PUBLIC_RATE_LIMIT_LOGIN_GLOBAL_WINDOW_MS
+              value: "60000"
+            - name: PUBLIC_RATE_LIMIT_REFRESH_SUBJECT_LIMIT
+              value: "30"
+            - name: PUBLIC_RATE_LIMIT_REFRESH_SUBJECT_WINDOW_MS
+              value: "60000"
+            - name: PUBLIC_RATE_LIMIT_LOGOUT_SUBJECT_LIMIT
+              value: "10"
+            - name: PUBLIC_RATE_LIMIT_LOGOUT_SUBJECT_WINDOW_MS
+              value: "60000"
+            - name: PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LIMIT
+              value: "8"
+            - name: PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LEASE_MS
+              value: "120000"
+            - name: PUBLIC_SECURITY_TRUSTED_PROXY_IPS
+              valueFrom:
+                secretKeyRef:
+                  name: kt-template-online-api-env
+                  key: PUBLIC_SECURITY_TRUSTED_PROXY_IPS
+            - name: PUBLIC_SECURITY_SWAGGER_ALLOWLIST
+              valueFrom:
+                secretKeyRef:
+                  name: kt-template-online-api-env
+                  key: PUBLIC_SECURITY_SWAGGER_ALLOWLIST
           # Jenkins 每次发布会从 Agent 私有 .env.production 重建这个 Secret。
           envFrom:
             - secretRef:

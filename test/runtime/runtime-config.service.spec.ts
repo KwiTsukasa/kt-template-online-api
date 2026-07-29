@@ -243,6 +243,48 @@ describe('RuntimeConfigService', () => {
     );
   });
 
+  it('exposes the complete non-secret public security profile and required checks', () => {
+    const service = createService({
+      PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LEASE_MS: '120000',
+      PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LIMIT: '8',
+      PUBLIC_RATE_LIMIT_LOGOUT_SUBJECT_LIMIT: '10',
+      PUBLIC_RATE_LIMIT_LOGOUT_SUBJECT_WINDOW_MS: '60000',
+      PUBLIC_RATE_LIMIT_REFRESH_SUBJECT_LIMIT: '30',
+      PUBLIC_RATE_LIMIT_REFRESH_SUBJECT_WINDOW_MS: '60000',
+      PUBLIC_SECURITY_SWAGGER_ALLOWLIST: '192.0.2.10',
+      PUBLIC_SECURITY_TRUSTED_PROXY_IPS: '10.66.66.1',
+    });
+
+    expect(service.readSecurityProfile()).toEqual(
+      expect.objectContaining({
+        live2dConcurrentLeaseMs: 120000,
+        live2dConcurrentLimit: 8,
+        logoutSubjectLimit: 10,
+        logoutSubjectWindowMs: 60000,
+        refreshSubjectLimit: 30,
+        refreshSubjectWindowMs: 60000,
+        swaggerAllowlistCount: 1,
+        trustedProxyCount: 1,
+      }),
+    );
+    for (const key of [
+      'PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LEASE_MS',
+      'PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LIMIT',
+      'PUBLIC_RATE_LIMIT_LOGOUT_SUBJECT_LIMIT',
+      'PUBLIC_RATE_LIMIT_LOGOUT_SUBJECT_WINDOW_MS',
+      'PUBLIC_RATE_LIMIT_REFRESH_SUBJECT_LIMIT',
+      'PUBLIC_RATE_LIMIT_REFRESH_SUBJECT_WINDOW_MS',
+    ]) {
+      expect(service.getConfigChecks()).toContainEqual(
+        expect.objectContaining({
+          key,
+          level: 'required',
+          present: true,
+        }),
+      );
+    }
+  });
+
   it('requires the complete Network Agent production connection contract', () => {
     const service = createService({
       NETWORK_AGENT_ID: 'nas-main',

@@ -66,6 +66,31 @@ export interface RuntimeQqbotConfig {
   napcatWebuiToken: string;
 }
 
+export interface RuntimeSecurityConfig {
+  baselineLimit: number;
+  live2dConcurrentLeaseMs: number;
+  live2dConcurrentLimit: number;
+  loginGlobalLimit: number;
+  loginGlobalWindowMs: number;
+  loginIpLimit: number;
+  loginIpWindowMs: number;
+  loginUsernameLimit: number;
+  loginUsernameWindowMs: number;
+  logoutSubjectLimit: number;
+  logoutSubjectWindowMs: number;
+  publicReadLimit: number;
+  redisDb: number;
+  redisHost: string;
+  redisKeyPrefix: string;
+  redisPort: number;
+  refreshSubjectLimit: number;
+  refreshSubjectWindowMs: number;
+  swaggerAllowlistCount: number;
+  trustedProxyCount: number;
+  warningIntervalMs: number;
+  windowMs: number;
+}
+
 export interface RuntimeSafeConfigSnapshot {
   app: RuntimeAppConfig;
   database: RuntimeDatabaseConfig;
@@ -73,5 +98,6 @@ export interface RuntimeSafeConfigSnapshot {
   minio: RuntimeMinioConfig;
   wordpress: RuntimeWordpressConfig;
   qqbot: RuntimeQqbotConfig;
+  security: RuntimeSecurityConfig;
   checks: RuntimeConfigCheck[];
 }

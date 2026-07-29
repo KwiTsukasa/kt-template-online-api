@@ -1,13 +1,23 @@
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { Logger } from 'nestjs-pino';
-import type { OpenAPIObject } from '@nestjs/swagger';
-import { urlencoded, json } from 'express';
 import { knife4jSetup } from '@kwitsukasa/knife4j-swagger-vue3';
 import type { Service } from '@kwitsukasa/knife4j-swagger-vue3';
-import type { SwaggerDocumentGroup, SwaggerPathMatcher } from './common';
-import { applySwaggerResponseExamples } from './common';
+import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import type { OpenAPIObject } from '@nestjs/swagger';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { json, urlencoded } from 'express';
+import type { Response } from 'express';
+import { Logger } from 'nestjs-pino';
+import { AppModule } from './app.module';
+import {
+  applySwaggerResponseExamples,
+  ClientIpService,
+  PublicRateLimitService,
+} from './common';
+import type {
+  PublicRateLimitOutcome,
+  SwaggerDocumentGroup,
+  SwaggerPathMatcher,
+} from './common';
 
 const adminSwaggerPathPrefixes = [
   '/auth',
@@ -52,10 +62,34 @@ const swaggerGroups: SwaggerDocumentGroup[] = [
  * 执行 当前模块流程。
  */
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+  });
   app.useLogger(app.get(Logger));
+  const clientIpService = app.get(ClientIpService);
+  const rateLimitService = app.get(PublicRateLimitService);
+  app.set('trust proxy', (address: string) =>
+    clientIpService.isTrustedProxy(address),
+  );
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
+  app.use((request, response, next) => {
+    if (!rateLimitService.isManagementSurface(request)) {
+      next();
+      return;
+    }
+
+    void rateLimitService
+      .consume(request)
+      .then((outcome) => {
+        if (outcome.allowed) {
+          next();
+          return;
+        }
+        sendRateLimitRejection(response, outcome);
+      })
+      .catch(next);
+  });
 
   const options = new DocumentBuilder()
     .setTitle('KT-Template API')
@@ -85,6 +119,32 @@ async function bootstrap() {
   knife4jSetup(app, services);
 
   await app.listen(48085);
+}
+
+/**
+ * 返回适配器层管理页面的安全边界拒绝响应。
+ * @param response - 当前 HTTP 响应；设置限流状态与重试提示。
+ * @param outcome - 限流判定结果；决定拒绝状态和固定文案。
+ */
+function sendRateLimitRejection(
+  response: Response,
+  outcome: PublicRateLimitOutcome,
+) {
+  if (outcome.retryAfterSeconds) {
+    response.setHeader('Retry-After', String(outcome.retryAfterSeconds));
+  }
+  const status = outcome.statusCode || 429;
+  const message =
+    status === 403
+      ? '当前来源无权访问接口文档'
+      : status === 503
+        ? '登录限流服务暂不可用'
+        : '请求过于频繁，请稍后重试';
+  response.status(status).json({
+    code: status,
+    err: message,
+    msg: message,
+  });
 }
 
 /**

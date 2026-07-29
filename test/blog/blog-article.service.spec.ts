@@ -141,7 +141,9 @@ describe('BlogArticleService', () => {
     });
 
     expect(markdownService.renderToHtml).not.toHaveBeenCalled();
-    expect(markdownService.sanitizeHtml).toHaveBeenCalledWith(rawArgonCodeblock);
+    expect(markdownService.sanitizeHtml).toHaveBeenCalledWith(
+      rawArgonCodeblock,
+    );
     expect(repository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         contentHtml:
@@ -185,6 +187,28 @@ describe('BlogArticleService', () => {
       ],
       total: 1,
     });
+  });
+
+  it('clamps only the public list page size to 100', async () => {
+    const publicBuilder = createQueryBuilderMock([]);
+    repository.createQueryBuilder.mockReturnValueOnce(publicBuilder);
+
+    await service.publicList({
+      pageNo: 1,
+      pageSize: 1_000_000,
+    });
+
+    expect(publicBuilder.take).toHaveBeenCalledWith(100);
+
+    const authenticatedBuilder = createQueryBuilderMock([]);
+    repository.createQueryBuilder.mockReturnValueOnce(authenticatedBuilder);
+
+    await service.page({
+      pageNo: 1,
+      pageSize: 1_000_000,
+    });
+
+    expect(authenticatedBuilder.take).toHaveBeenCalledWith(1_000_000);
   });
 
   it('imports WordPress public articles into local blog articles', async () => {

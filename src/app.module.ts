@@ -12,6 +12,7 @@ import {
   CommonModule,
   createPinoLoggerParams,
   SaveBodyInterceptor,
+  SecurityBoundaryModule,
 } from './common';
 import { AdminModule } from './modules/admin/admin.module';
 import { AssetModule } from './modules/asset/asset.module';
@@ -73,6 +74,7 @@ export function buildTypeOrmOptions(configService: ConfigService) {
       inject: [ConfigService],
     }),
     CommonModule,
+    SecurityBoundaryModule,
     RuntimeModule,
     AdminModule,
     BlogContentModule,

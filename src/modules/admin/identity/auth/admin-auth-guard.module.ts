@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminUser } from '../user/admin-user.entity';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminPasswordCryptoService } from './admin-password-crypto.service';
+import { AdminPasswordHashService } from './admin-password-hash.service';
 import { AdminSuperGuard } from './admin-super.guard';
 import { AdminTokenService } from './admin-token.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -13,6 +14,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
   providers: [
     AdminAuthService,
     AdminPasswordCryptoService,
+    AdminPasswordHashService,
     AdminSuperGuard,
     AdminTokenService,
     JwtAuthGuard,
@@ -20,6 +22,7 @@ import { JwtAuthGuard } from './jwt-auth.guard';
   exports: [
     AdminAuthService,
     AdminPasswordCryptoService,
+    AdminPasswordHashService,
     AdminSuperGuard,
     AdminTokenService,
     JwtAuthGuard,

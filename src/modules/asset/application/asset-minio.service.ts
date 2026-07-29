@@ -101,7 +101,7 @@ export class MinioClientService {
       etag: result.etag,
       size: file.size,
       mimeType: file.mimetype,
-      url: await this.getPresignedUrl(targetObjectName, targetBucket),
+      url: this.getSameOriginDownloadUrl(targetObjectName, targetBucket),
     };
   }
 
@@ -157,27 +157,17 @@ export class MinioClientService {
     };
   }
 
-  /**
-   * 查询 MinIO 资源数据。
-   * @param objectName - objectName 输入；驱动 `BadRequestException()`、`client.presignedGetObject()` 的 MinIO步骤。
-   * @param bucketName - bucketName 输入；驱动 `client.presignedGetObject()` 的 MinIO步骤。
-   * @param expiry - expiry 输入；驱动 `client.presignedGetObject()` 的 MinIO步骤。
-   * @returns MinIO 资源查询结果。
-   */
-  async getPresignedUrl(
-    objectName: string,
-    bucketName?: string,
-    expiry = 24 * 60 * 60,
-  ): Promise<string> {
+  getSameOriginDownloadUrl(objectName: string, bucketName?: string): string {
     if (!objectName) {
       throw new BadRequestException('objectName不能为空');
     }
 
-    return this.client.presignedGetObject(
-      this.getBucketName(bucketName),
-      objectName,
-      expiry,
-    );
+    const searchParams = new URLSearchParams({ objectName });
+    if (bucketName) {
+      searchParams.set('bucketName', bucketName);
+    }
+
+    return `/api/minio/download?${searchParams.toString()}`;
   }
 
   /**

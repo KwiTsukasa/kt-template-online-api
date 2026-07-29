@@ -27,6 +27,19 @@ describe('Network management production deployment contract', () => {
     }
   });
 
+  it('blocks Jenkins deployment when the exact public security allowlists are absent', () => {
+    const jenkinsfile = readDeploymentFile('Jenkinsfile');
+
+    for (const key of [
+      'PUBLIC_SECURITY_TRUSTED_PROXY_IPS',
+      'PUBLIC_SECURITY_SWAGGER_ALLOWLIST',
+    ]) {
+      expect(jenkinsfile).toMatch(
+        new RegExp(`requiredRuntimeEnvKeys\\(\\)[\\s\\S]*?['\"]${key}['\"]`),
+      );
+    }
+  });
+
   it('injects the private runtime Secret through the existing K8s env contract', () => {
     const manifest = readDeploymentFile('k8s/prod/api.yaml');
 

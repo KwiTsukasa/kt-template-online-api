@@ -13,11 +13,15 @@ describe('AdminUserService profile', () => {
   const deptRepository = {
     find: jest.fn(),
   };
+  const passwordHashService = {
+    hashPassword: jest.fn(async (password: string) => `hashed:${password}`),
+  };
 
   const service = new AdminUserService(
     userRepository as any,
     roleRepository as any,
     deptRepository as any,
+    passwordHashService as any,
   );
 
   beforeEach(() => {
@@ -29,6 +33,7 @@ describe('AdminUserService profile', () => {
     roleRepository.find.mockResolvedValue([]);
 
     await service.createUser({
+      password: 'new-password',
       realName: '新用户',
       roleIds: [],
       username: 'new-user',
@@ -116,13 +121,13 @@ describe('AdminUserService profile', () => {
       username: 'kwitsukasa',
     });
 
-    await expect(service.deleteUser('2041700000000000002')).rejects.toMatchObject(
-      {
-        response: expect.objectContaining({
-          msg: '不能删除内置管理员账号',
-        }),
-      },
-    );
+    await expect(
+      service.deleteUser('2041700000000000002'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        msg: '不能删除内置管理员账号',
+      }),
+    });
     expect(userRepository.update).not.toHaveBeenCalled();
   });
 

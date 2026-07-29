@@ -42,6 +42,17 @@ export class AdminUserManageController {
     return vbenSuccess(await this.userService.createUser(body));
   }
 
+  @Put(':id/password')
+  @ApiOperation({ summary: '重置用户密码' })
+  async resetPassword(
+    @Param('id') id: string,
+    @Body() body: Record<string, any>,
+  ) {
+    return vbenSuccess(
+      await this.userService.resetUserPassword(id, body.password),
+    );
+  }
+
   /**
    * 编辑用户。
    * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。

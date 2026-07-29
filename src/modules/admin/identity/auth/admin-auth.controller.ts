@@ -97,7 +97,7 @@ export class AdminAuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const refreshToken = this.authService.getRefreshTokenFromRequest(req);
-    const refreshed = await this.authService.refresh(refreshToken);
+    const refreshed = await this.authService.refresh(refreshToken, res);
     this.authService.setAccessTokenCookie(res, refreshed.accessToken);
     this.authService.setRefreshTokenCookie(res, refreshed.refreshToken);
     return refreshed.accessToken;
@@ -105,12 +105,17 @@ export class AdminAuthController {
 
   /**
    * Admin 用户退出登录。
+   * @param req - 当前 HTTP 请求；读取已签名的 refresh token。
    * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
    */
   @Post('auth/logout')
   @ApiOperation({ summary: 'Admin 用户退出登录' })
   @Public()
-  logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    await this.authService.consumeLogoutSubject(
+      this.authService.getRefreshTokenFromRequest(req),
+      res,
+    );
     this.authService.clearAccessTokenCookie(res);
     this.authService.clearRefreshTokenCookie(res);
     this.wordpressService.clearAuthCookie(res);

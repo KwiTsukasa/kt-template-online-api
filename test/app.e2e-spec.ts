@@ -125,7 +125,7 @@ const uploadResult = {
   etag: 'etag',
   size: 4,
   mimeType: 'text/plain',
-  url: 'http://127.0.0.1:9000/kt-template-online/uploads/demo.txt',
+  url: '/api/minio/download?objectName=uploads%2Fdemo.txt&bucketName=kt-template-online',
 };
 
 const objectStat = {
@@ -266,7 +266,7 @@ const minioServiceMock = {
   ensureBucket: jest.fn(),
   uploadObject: jest.fn(),
   listObjects: jest.fn(),
-  getPresignedUrl: jest.fn(),
+  getSameOriginDownloadUrl: jest.fn(),
   getObject: jest.fn(),
   removeObject: jest.fn(),
 };
@@ -1389,8 +1389,8 @@ const routeTestCases: Record<string, RouteTestCase> = {
   },
 
   'GET /minio/url': async (server) => {
-    minioServiceMock.getPresignedUrl.mockResolvedValue(
-      'http://127.0.0.1:9000/kt-template-online/uploads/demo.txt',
+    minioServiceMock.getSameOriginDownloadUrl.mockReturnValue(
+      '/api/minio/download?objectName=uploads%2Fdemo.txt&bucketName=demo-bucket',
     );
 
     const response = await request(server)
@@ -1398,19 +1398,17 @@ const routeTestCases: Record<string, RouteTestCase> = {
       .query({
         objectName: 'uploads/demo.txt',
         bucketName: 'demo-bucket',
-        expiry: 60,
       })
       .expect(200);
 
-    expect(minioServiceMock.getPresignedUrl).toHaveBeenCalledWith(
+    expect(minioServiceMock.getSameOriginDownloadUrl).toHaveBeenCalledWith(
       'uploads/demo.txt',
       'demo-bucket',
-      60,
     );
     expect(response.body).toEqual({
       code: 200,
       msg: '操作成功',
-      data: 'http://127.0.0.1:9000/kt-template-online/uploads/demo.txt',
+      data: '/api/minio/download?objectName=uploads%2Fdemo.txt&bucketName=demo-bucket',
     });
   },
 

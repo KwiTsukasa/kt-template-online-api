@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Request } from 'express';
+import { ClientIpService } from '@/common';
 import { MinioClientService } from './asset-minio.service';
 import type {
   BlogLive2DAssetResult,
@@ -11,7 +13,8 @@ import type {
   BlogLive2DRuntimeAssetPath,
 } from '../domain/blog-live2d-asset.types';
 
-const DEFAULT_ALLOWED_ORIGINS = 'https://blog.kwitsukasa.top';
+const LEGACY_BLOG_ORIGIN = 'https://blog.kwitsukasa.top';
+const NATMAP_PUBLIC_HOSTNAME = 'nas4.kwitsukasa.top';
 const DEFAULT_LIVE2D_BUCKET = 'kt-template-online';
 const DEFAULT_LIVE2D_ROOT_PREFIX = 'blog/live2d';
 const DEFAULT_LIVE2D_PREFIX = 'blog/live2d/pio';
@@ -37,17 +40,26 @@ export class BlogLive2DAssetService {
   constructor(
     private readonly minioClientService: MinioClientService,
     private readonly configService: ConfigService,
+    private readonly clientIpService: ClientIpService,
   ) {}
 
-  assertAllowedRequest(referer?: string, origin?: string): void {
+  assertAllowedRequest(
+    request: Request,
+    referer?: string,
+    origin?: string,
+  ): void {
     const candidates = [referer, origin].filter(Boolean) as string[];
     if (!candidates.length) {
       throw new BadRequestException('Live2D asset referer is required');
     }
 
-    const allowed = this.getAllowedOrigins();
+    const allowed = new Set([LEGACY_BLOG_ORIGIN]);
+    const requestOrigin = this.getAllowedRequestOrigin(request);
+    if (requestOrigin) {
+      allowed.add(requestOrigin);
+    }
     const allSourcesAllowed = candidates.every((candidate) =>
-      allowed.includes(this.toOrigin(candidate)),
+      allowed.has(this.toOrigin(candidate)),
     );
 
     if (!allSourcesAllowed) {
@@ -101,9 +113,12 @@ export class BlogLive2DAssetService {
     const familySegment = this.normalizeRuntimeFamily(family);
     const assetSegments = this.normalizeRouteSegments(objectPath, 'asset path');
 
-    return [...prefix, characterSegment, ...familySegment, ...assetSegments].join(
-      '/',
-    );
+    return [
+      ...prefix,
+      characterSegment,
+      ...familySegment,
+      ...assetSegments,
+    ].join('/');
   }
 
   private getBucketName(): string {
@@ -115,7 +130,9 @@ export class BlogLive2DAssetService {
   }
 
   private getRootPrefixSegments(): string[] {
-    const rootPrefix = this.configService.get<string>('BLOG_LIVE2D_ROOT_PREFIX');
+    const rootPrefix = this.configService.get<string>(
+      'BLOG_LIVE2D_ROOT_PREFIX',
+    );
     if (rootPrefix) {
       return this.normalizeRouteSegments(rootPrefix, 'root prefix');
     }
@@ -134,15 +151,18 @@ export class BlogLive2DAssetService {
     );
   }
 
-  private getAllowedOrigins(): string[] {
-    return (
-      this.configService.get<string>('BLOG_LIVE2D_ALLOWED_ORIGINS') ||
-      DEFAULT_ALLOWED_ORIGINS
-    )
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .map((item) => this.toOrigin(item));
+  private getAllowedRequestOrigin(request: Request): string | null {
+    const publicOrigin = this.toOrigin(
+      this.clientIpService.getPublicOrigin(request),
+    );
+    const url = new URL(publicOrigin);
+
+    if (url.protocol !== 'https:' || url.hostname !== NATMAP_PUBLIC_HOSTNAME) {
+      return null;
+    }
+    if (!url.port) return null;
+
+    return publicOrigin;
   }
 
   private toOrigin(value: string): string {
@@ -159,10 +179,7 @@ export class BlogLive2DAssetService {
 
   private normalizeCharacter(character: string): BlogLive2DCharacter {
     const segments = this.normalizeRouteSegments(character, 'character');
-    if (
-      segments.length !== 1 ||
-      !ALLOWED_LIVE2D_CHARACTERS.has(segments[0])
-    ) {
+    if (segments.length !== 1 || !ALLOWED_LIVE2D_CHARACTERS.has(segments[0])) {
       throw new BadRequestException('Invalid Live2D character');
     }
 
@@ -223,4 +240,3 @@ export class BlogLive2DAssetService {
     throw new BadRequestException(`Invalid Live2D ${label}`);
   }
 }
-

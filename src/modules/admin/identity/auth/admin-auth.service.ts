@@ -2,8 +2,9 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Request, Response } from 'express';
 import { Repository } from 'typeorm';
-import { throwVbenError, ToolsService } from '@/common';
+import { PublicRateLimitService, throwVbenError, ToolsService } from '@/common';
 import { AdminUser } from '../user/admin-user.entity';
+import { AdminPasswordHashService } from './admin-password-hash.service';
 import { AdminTokenService } from './admin-token.service';
 
 const ACCESS_TOKEN_COOKIE = 'admin_access_token';
@@ -16,11 +17,13 @@ export class AdminAuthService {
     private readonly userRepository: Repository<AdminUser>,
     private readonly tokenService: AdminTokenService,
     private readonly toolsService: ToolsService,
+    private readonly passwordHashService: AdminPasswordHashService,
+    private readonly rateLimitService: PublicRateLimitService,
   ) {}
 
   /**
    * 处理登录。
-   * @param username - username 输入；驱动 `this.findUserByUsername()` 的 Admin步骤。
+   * @param username - username 输入；驱动 Admin 登录用户查询。
    * @param password - password 输入；驱动 `throwVbenError()` 的 Admin步骤。
    */
   async login(username?: string, password?: string) {
@@ -32,14 +35,20 @@ export class AdminAuthService {
       );
     }
 
-    const user = await this.findUserByUsername(username);
-    if (!user || user.password !== password) {
+    const user = await this.findUserByUsernameForLogin(username);
+    const passwordMatches = await this.passwordHashService.verifyPassword(
+      password,
+      user?.password,
+    );
+    if (!user || user.isDeleted || user.status !== 1 || !passwordMatches) {
       throwVbenError(
         'Username or password is incorrect.',
         HttpStatus.FORBIDDEN,
       );
     }
 
+    await this.rateLimitService.clearSuccessfulLoginUsername(username);
+    delete (user as { password?: string }).password;
     return {
       accessToken: this.tokenService.signAccessToken(user),
       refreshToken: this.tokenService.signRefreshToken(user),
@@ -51,15 +60,20 @@ export class AdminAuthService {
    * 执行 Admin 身份权限流程。
    * @param refreshToken - 协议 token；驱动 `tokenService.verifyRefreshToken()`、`tokenService.signAccessToken()` 的 Admin步骤。
    */
-  async refresh(refreshToken?: string) {
+  async refresh(refreshToken?: string, response?: Response) {
     if (!refreshToken) {
       throwVbenError('Forbidden Exception', HttpStatus.FORBIDDEN);
     }
 
     const payload = this.tokenService.verifyRefreshToken(refreshToken);
     if (!payload) throwVbenError('Forbidden Exception', HttpStatus.FORBIDDEN);
+    await this.rateLimitService.consumeVerifiedTokenSubject(
+      'refresh',
+      payload.sub,
+      response,
+    );
 
-    const user = await this.findUserByUsername(payload.username);
+    const user = await this.findActiveUserByUsername(payload.username);
     if (!user) throwVbenError('Forbidden Exception', HttpStatus.FORBIDDEN);
 
     return {
@@ -106,6 +120,20 @@ export class AdminAuthService {
     return this.toolsService.readCookie(req, REFRESH_TOKEN_COOKIE);
   }
 
+  async consumeLogoutSubject(
+    refreshToken?: string,
+    response?: Response,
+  ): Promise<void> {
+    if (!refreshToken) return;
+    const payload = this.tokenService.verifyRefreshToken(refreshToken);
+    if (!payload) return;
+    await this.rateLimitService.consumeVerifiedTokenSubject(
+      'logout',
+      payload.sub,
+      response,
+    );
+  }
+
   /**
    * 设置Access Token Cookie。
    * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
@@ -150,7 +178,7 @@ export class AdminAuthService {
    * 查询 Admin 身份权限数据。
    * @param username - username 输入；限定 Admin查询范围。
    */
-  private async findUserByUsername(username: string) {
+  private async findActiveUserByUsername(username: string) {
     return this.userRepository.findOne({
       relations: ['roles', 'roles.menus'],
       where: {
@@ -159,6 +187,16 @@ export class AdminAuthService {
         username,
       },
     });
+  }
+
+  private async findUserByUsernameForLogin(username: string) {
+    return this.userRepository
+      .createQueryBuilder('user')
+      .addSelect('user.password')
+      .leftJoinAndSelect('user.roles', 'role')
+      .leftJoinAndSelect('role.menus', 'menu')
+      .where('user.username = :username', { username })
+      .getOne();
   }
 
   /**

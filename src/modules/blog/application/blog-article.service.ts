@@ -43,6 +43,10 @@ export class BlogArticleService {
   async publicList(query: BlogArticleListQueryDto) {
     return this.queryPage({
       ...query,
+      pageSize: Math.min(
+        this.toolsService.toPositiveNumber(query.pageSize, 10),
+        100,
+      ),
       status: 'publish',
     });
   }

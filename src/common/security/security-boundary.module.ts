@@ -6,6 +6,7 @@ import { ClientIpService } from './client-ip.service';
 import { PublicRateLimitGuard } from './public-rate-limit.guard';
 import { PublicRateLimitService } from './public-rate-limit.service';
 import { RedisRateLimitStore } from './redis-rate-limit.store';
+import { TrustedCredentialTransportService } from './trusted-credential-transport.service';
 
 @Global()
 @Module({
@@ -62,13 +63,19 @@ import { RedisRateLimitStore } from './redis-rate-limit.store';
     ClientIpService,
     RedisRateLimitStore,
     PublicRateLimitService,
+    TrustedCredentialTransportService,
     PublicRateLimitGuard,
     {
       provide: APP_GUARD,
       useExisting: PublicRateLimitGuard,
     },
   ],
-  exports: [ClientIpService, PublicRateLimitService, RedisRateLimitStore],
+  exports: [
+    ClientIpService,
+    PublicRateLimitService,
+    RedisRateLimitStore,
+    TrustedCredentialTransportService,
+  ],
 })
 export class SecurityBoundaryModule {}
 

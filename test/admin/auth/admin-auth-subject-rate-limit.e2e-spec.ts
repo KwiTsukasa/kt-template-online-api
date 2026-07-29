@@ -1,12 +1,17 @@
 import { HttpException, HttpStatus, INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
-import { PublicRateLimitService, ToolsService } from '../../../src/common';
+import {
+  ClientIpService,
+  PublicRateLimitService,
+  ToolsService,
+  TrustedCredentialTransportService,
+} from '../../../src/common';
 import { AdminMenuService } from '../../../src/modules/admin/identity/menu/admin-menu.service';
 import { AdminAuthController } from '../../../src/modules/admin/identity/auth/admin-auth.controller';
 import { AdminAuthService } from '../../../src/modules/admin/identity/auth/admin-auth.service';
-import { AdminPasswordCryptoService } from '../../../src/modules/admin/identity/auth/admin-password-crypto.service';
 import { AdminPasswordHashService } from '../../../src/modules/admin/identity/auth/admin-password-hash.service';
 import { AdminTokenService } from '../../../src/modules/admin/identity/auth/admin-token.service';
 import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
@@ -27,6 +32,11 @@ describe('Admin verified subject rate-limit HTTP boundary (e2e)', () => {
   );
 
   beforeAll(async () => {
+    const configService = new ConfigService({
+      ADMIN_AUTH_ALLOW_INSECURE_LOCAL: 'true',
+      NODE_ENV: 'test',
+      PUBLIC_SECURITY_TRUSTED_PROXY_IPS: '127.0.0.1,::1',
+    });
     const moduleRef = await Test.createTestingModule({
       controllers: [AdminAuthController],
       providers: [
@@ -63,9 +73,11 @@ describe('Admin verified subject rate-limit HTTP boundary (e2e)', () => {
           },
         },
         {
-          provide: AdminPasswordCryptoService,
-          useValue: {},
+          provide: ConfigService,
+          useValue: configService,
         },
+        ClientIpService,
+        TrustedCredentialTransportService,
         {
           provide: AdminMenuService,
           useValue: {},

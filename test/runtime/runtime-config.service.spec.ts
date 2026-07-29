@@ -245,6 +245,7 @@ describe('RuntimeConfigService', () => {
 
   it('exposes the complete non-secret public security profile and required checks', () => {
     const service = createService({
+      ADMIN_AUTH_ALLOW_INSECURE_LOCAL: 'false',
       PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LEASE_MS: '120000',
       PUBLIC_RATE_LIMIT_LIVE2D_CONCURRENT_LIMIT: '8',
       PUBLIC_RATE_LIMIT_LOGOUT_SUBJECT_LIMIT: '10',
@@ -257,6 +258,7 @@ describe('RuntimeConfigService', () => {
 
     expect(service.readSecurityProfile()).toEqual(
       expect.objectContaining({
+        adminAuthAllowInsecureLocal: false,
         live2dConcurrentLeaseMs: 120000,
         live2dConcurrentLimit: 8,
         logoutSubjectLimit: 10,
@@ -265,6 +267,13 @@ describe('RuntimeConfigService', () => {
         refreshSubjectWindowMs: 60000,
         swaggerAllowlistCount: 1,
         trustedProxyCount: 1,
+      }),
+    );
+    expect(service.getConfigChecks()).toContainEqual(
+      expect.objectContaining({
+        key: 'ADMIN_AUTH_ALLOW_INSECURE_LOCAL',
+        level: 'optional',
+        present: true,
       }),
     );
     for (const key of [

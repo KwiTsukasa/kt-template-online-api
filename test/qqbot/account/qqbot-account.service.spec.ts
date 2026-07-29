@@ -12,7 +12,6 @@ const createAccountService = (input: {
   accountRepository: any;
   configService?: any;
   napcatRuntime?: QqbotAccountNapcatRuntimePort;
-  passwordCryptoService?: any;
   systemNoticePublisher?: any;
   toolsService?: ToolsService;
 }) =>
@@ -23,7 +22,6 @@ const createAccountService = (input: {
     input.napcatRuntime,
     input.systemNoticePublisher,
     input.configService,
-    input.passwordCryptoService,
   );
 
 const createNapcatRuntime = (input: {
@@ -45,7 +43,6 @@ const createAccountServiceWithNapcatRuntime = (input: {
   configService?: any;
   containerRepository: any;
   containerService: any;
-  passwordCryptoService?: any;
   systemNoticePublisher?: any;
   toolsService?: ToolsService;
 }) => {
@@ -59,7 +56,6 @@ const createAccountServiceWithNapcatRuntime = (input: {
       containerService: input.containerService,
       toolsService,
     }),
-    passwordCryptoService: input.passwordCryptoService,
     systemNoticePublisher: input.systemNoticePublisher,
     toolsService,
   });
@@ -429,6 +425,10 @@ describe('QqbotAccountService', () => {
   });
   it('stores NapCat login password as encrypted secret and never persists the transport field', async () => {
     const toolsService = new ToolsService();
+    const encryptSecretText = jest.spyOn(toolsService, 'encryptSecretText');
+    const systemNoticePublisher = {
+      publish: jest.fn(),
+    };
     const accountRepository = {
       create: jest.fn((input) => input),
       findOne: jest.fn().mockResolvedValue(null),
@@ -441,23 +441,32 @@ describe('QqbotAccountService', () => {
           key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
         ),
       },
-      passwordCryptoService: {
-        decryptPassword: jest.fn().mockReturnValue('qq-login-password'),
-      },
+      systemNoticePublisher,
       toolsService,
     });
 
-    await service.save({
-      encryptedLoginPassword: 'encrypted-payload',
+    const result = await service.save({
+      loginPassword: 'qq-login-password',
       selfId: '1914728559',
     });
 
     const payload = accountRepository.create.mock.calls[0][0];
+    expect(encryptSecretText).toHaveBeenCalledTimes(1);
+    expect(encryptSecretText).toHaveBeenCalledWith(
+      'qq-login-password',
+      'unit-secret',
+    );
+    expect(payload.loginPassword).toBeUndefined();
     expect(payload.encryptedLoginPassword).toBeUndefined();
-    expect(payload.napcatLoginPasswordSecret).toBeTruthy();
+    expect(payload.napcatLoginPasswordSecret).toMatch(/^ktv1:/);
     expect(payload.napcatLoginPasswordSecret).not.toContain(
       'qq-login-password',
     );
+    expect(JSON.stringify(accountRepository.save.mock.calls)).not.toContain(
+      'qq-login-password',
+    );
+    expect(JSON.stringify(result)).not.toContain('qq-login-password');
+    expect(systemNoticePublisher.publish).not.toHaveBeenCalled();
     expect(
       toolsService.decryptSecretText(
         payload.napcatLoginPasswordSecret,
@@ -477,14 +486,11 @@ describe('QqbotAccountService', () => {
       configService: {
         get: jest.fn().mockReturnValue(''),
       },
-      passwordCryptoService: {
-        decryptPassword: jest.fn().mockReturnValue('qq-login-password'),
-      },
     });
 
     await expect(
       service.save({
-        encryptedLoginPassword: 'encrypted-payload',
+        loginPassword: 'qq-login-password',
         selfId: '1914728559',
       }),
     ).rejects.toMatchObject({
@@ -508,14 +514,11 @@ describe('QqbotAccountService', () => {
           key === 'ADMIN_TOKEN_SECRET' ? 'change-me' : '',
         ),
       },
-      passwordCryptoService: {
-        decryptPassword: jest.fn().mockReturnValue('qq-login-password'),
-      },
     });
 
     await expect(
       service.save({
-        encryptedLoginPassword: 'encrypted-payload',
+        loginPassword: 'qq-login-password',
         selfId: '1914728559',
       }),
     ).rejects.toMatchObject({
@@ -526,7 +529,7 @@ describe('QqbotAccountService', () => {
     expect(accountRepository.save).not.toHaveBeenCalled();
   });
 
-  it('preserves NapCat login password whitespace after decryption', async () => {
+  it('preserves NapCat login password whitespace during request-scoped wrapping', async () => {
     const toolsService = new ToolsService();
     const accountRepository = {
       create: jest.fn((input) => input),
@@ -540,14 +543,11 @@ describe('QqbotAccountService', () => {
           key === 'QQBOT_ACCOUNT_SECRET_KEY' ? 'unit-secret' : '',
         ),
       },
-      passwordCryptoService: {
-        decryptPassword: jest.fn().mockReturnValue(' qq-login-password '),
-      },
       toolsService,
     });
 
     await service.save({
-      encryptedLoginPassword: 'encrypted-payload',
+      loginPassword: ' qq-login-password ',
       selfId: '1914728559',
     });
 
@@ -561,6 +561,8 @@ describe('QqbotAccountService', () => {
   });
 
   it('does not update NapCat login password when edit leaves the password blank', async () => {
+    const toolsService = new ToolsService();
+    const encryptSecretText = jest.spyOn(toolsService, 'encryptSecretText');
     const accountUpdate = jest.fn().mockResolvedValue({ affected: 1 });
     const account = {
       enabled: true,
@@ -589,10 +591,12 @@ describe('QqbotAccountService', () => {
     const service = createAccountService({
       accountAbilityRepository: { update: jest.fn() },
       accountRepository,
+      toolsService,
     });
 
     await service.update({
       id: 'account-1',
+      loginPassword: '   ',
       name: 'Mirror',
       selfId: '1914728559',
     });
@@ -601,9 +605,11 @@ describe('QqbotAccountService', () => {
       { id: 'account-1' },
       expect.not.objectContaining({
         encryptedLoginPassword: expect.anything(),
+        loginPassword: expect.anything(),
         napcatLoginPasswordSecret: expect.anything(),
       }),
     );
+    expect(encryptSecretText).not.toHaveBeenCalled();
   });
 
   it('preserves previous offline reason when later disconnect has no explicit error', async () => {

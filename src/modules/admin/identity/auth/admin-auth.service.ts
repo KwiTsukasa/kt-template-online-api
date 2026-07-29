@@ -203,11 +203,13 @@ export class AdminAuthService {
    * 查询 Admin 身份权限数据。
    */
   private getTokenCookieOptions() {
-    const secure = process.env.ADMIN_COOKIE_SECURE === 'true';
+    const secure =
+      process.env.NODE_ENV === 'production' ||
+      process.env.ADMIN_COOKIE_SECURE === 'true';
     return {
       httpOnly: true,
       path: '/',
-      sameSite: secure ? ('none' as const) : ('lax' as const),
+      sameSite: 'lax' as const,
       secure,
     };
   }

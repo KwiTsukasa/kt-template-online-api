@@ -60,6 +60,7 @@ function createSnapshot(
       napcatWebuiToken: 'na***en',
     },
     security: {
+      adminAuthAllowInsecureLocal: false,
       baselineLimit: 300,
       live2dConcurrentLeaseMs: 120000,
       live2dConcurrentLimit: 8,

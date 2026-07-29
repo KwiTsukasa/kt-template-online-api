@@ -4,6 +4,7 @@ import { DictModule } from '../../../src/modules/admin/platform-config/dict/dict
 import { AdminNoticeController } from '../../../src/modules/admin/platform-config/notice/admin-notice.controller';
 import { NoticeModule } from '../../../src/modules/admin/platform-config/notice/notice.module';
 import { AdminModule } from '../../../src/modules/admin/admin.module';
+import { AdminLoginDto } from '../../../src/modules/admin/identity/auth/admin-auth.dto';
 import {
   ADMIN_IDENTITY_CONTROLLERS,
   AdminIdentityModule,
@@ -32,7 +33,6 @@ describe('Admin module route contract', () => {
 
     expect(routes.map(routeKey)).toEqual(
       expect.arrayContaining([
-        'GET /auth/password-public-key',
         'POST /auth/login',
         'POST /auth/refresh',
         'POST /auth/logout',
@@ -85,6 +85,20 @@ describe('Admin module route contract', () => {
         'GET /system/network/agent/status',
       ]),
     );
+    expect(routes.map(routeKey)).not.toContain('GET /auth/password-public-key');
+  });
+
+  it('exposes the TLS login password field without the retired RSA field', () => {
+    const properties =
+      Reflect.getMetadata(
+        'swagger/apiModelPropertiesArray',
+        AdminLoginDto.prototype,
+      ) || [];
+
+    expect(properties).toEqual(
+      expect.arrayContaining([':password', ':username']),
+    );
+    expect(properties).not.toContain(':encryptedPassword');
   });
 
   it('keeps dict and notice reachable through platform-config module imports', () => {

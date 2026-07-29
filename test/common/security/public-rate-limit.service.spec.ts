@@ -298,7 +298,6 @@ describe('PublicRateLimitService', () => {
     ['GET', '/blog/live2d/pio/catalog.json', 'public-read'],
     ['GET', '/wordpress/article/public/list', 'public-read'],
     ['GET', '/wordpress/theme/config', 'public-read'],
-    ['GET', '/auth/password-public-key', 'login'],
     ['POST', '/auth/login', 'login'],
     ['POST', '/auth/refresh', 'login'],
     ['POST', '/auth/logout', 'login'],

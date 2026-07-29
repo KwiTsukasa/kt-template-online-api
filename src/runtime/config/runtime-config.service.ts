@@ -53,6 +53,7 @@ const REQUIRED_CONFIG_KEYS = [
 ] as const;
 
 const OPTIONAL_CONFIG_CHECKS: ReadonlyArray<string | readonly string[]> = [
+  'ADMIN_AUTH_ALLOW_INSECURE_LOCAL',
   'DB_TIMEZONE',
   'NETWORK_DDNS_DNSPOD_ENABLED',
   'NETWORK_DDNS_DNSPOD_SECRET_ID',
@@ -240,6 +241,10 @@ export class RuntimeConfigService {
    */
   readSecurityProfile(): RuntimeSecurityConfig {
     return {
+      adminAuthAllowInsecureLocal: this.getBoolean(
+        'ADMIN_AUTH_ALLOW_INSECURE_LOCAL',
+        false,
+      ),
       baselineLimit: this.getPositiveNumber(
         'PUBLIC_RATE_LIMIT_BASELINE_LIMIT',
         300,

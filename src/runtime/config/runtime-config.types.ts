@@ -67,6 +67,7 @@ export interface RuntimeQqbotConfig {
 }
 
 export interface RuntimeSecurityConfig {
+  adminAuthAllowInsecureLocal: boolean;
   baselineLimit: number;
   live2dConcurrentLeaseMs: number;
   live2dConcurrentLimit: number;

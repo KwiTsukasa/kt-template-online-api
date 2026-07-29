@@ -6,11 +6,13 @@ import {
   HttpStatus,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
-import { vbenSuccess } from '@/common';
+import { TrustedCredentialTransportService, vbenSuccess } from '@/common';
 import {
   QqbotAccountBodyDto,
   QqbotAccountQueryDto,
@@ -26,6 +28,7 @@ export class QqbotAccountController {
   constructor(
     private readonly accountService: QqbotAccountService,
     private readonly reverseWsService: QqbotReverseWsService,
+    private readonly trustedCredentialTransportService: TrustedCredentialTransportService,
   ) {}
 
   /**
@@ -54,7 +57,8 @@ export class QqbotAccountController {
   @Post('save')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '新增 QQBot 账号' })
-  async save(@Body() body: QqbotAccountBodyDto) {
+  async save(@Body() body: QqbotAccountBodyDto, @Req() request: Request) {
+    this.trustedCredentialTransportService.assertTrusted(request);
     return vbenSuccess(await this.accountService.save(body));
   }
 
@@ -65,7 +69,8 @@ export class QqbotAccountController {
   @Post('update')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '编辑 QQBot 账号' })
-  async update(@Body() body: QqbotAccountUpdateDto) {
+  async update(@Body() body: QqbotAccountUpdateDto, @Req() request: Request) {
+    this.trustedCredentialTransportService.assertTrusted(request);
     return vbenSuccess(await this.accountService.update(body));
   }
 

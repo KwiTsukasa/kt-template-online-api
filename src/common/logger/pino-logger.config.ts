@@ -4,6 +4,20 @@ import type { Params } from 'nestjs-pino';
 import type { ConfigService } from '@nestjs/config';
 
 const DEFAULT_APP_NAME = 'kt-template-online-api';
+const PASSWORD_FIELDS = new Set([
+  'password',
+  'loginPassword',
+  'encryptedPassword',
+  'encryptedLoginPassword',
+]);
+const REDACTION_FAILURE_RECORD = JSON.stringify({
+  level: 50,
+  msg: '日志脱敏失败',
+  redactionError: true,
+});
+const JSON_WITH_RAW_JSON = JSON as typeof JSON & {
+  rawJSON(source: string): unknown;
+};
 const REDACT_PATHS = [
   'req.headers.authorization',
   'req.headers.cookie',
@@ -13,16 +27,10 @@ const REDACT_PATHS = [
   'body.adminToken',
   'body.authorization',
   'body.cookie',
-  'body.encryptedLoginPassword',
-  'body.loginPassword',
-  'body.password',
   'body.refreshToken',
   'body.secret',
   'body.token',
   '*.clientSecret',
-  '*.encryptedLoginPassword',
-  '*.loginPassword',
-  '*.password',
   '*.secret',
   '*.token',
 ];
@@ -68,6 +76,9 @@ export function createPinoLoggerParams(configService: ConfigService): Params {
         res.setHeader('x-request-id', requestId);
         return requestId;
       },
+      hooks: {
+        streamWrite: redactSerializedPasswordFields,
+      },
       level: logLevel,
       redact: {
         censor: '[Redacted]',
@@ -81,6 +92,58 @@ export function createPinoLoggerParams(configService: ConfigService): Params {
       }),
     },
   };
+}
+
+/**
+ * 对 Pino 已序列化记录按字段名递归脱敏密码并保留合法 JSON 行。
+ * @param serialized - Pino 输出的单条 JSON 日志。
+ * @returns 完成密码字段脱敏后的 JSON 日志。
+ */
+function redactSerializedPasswordFields(serialized: string): string {
+  const lineEnding = serialized.endsWith('\r\n')
+    ? '\r\n'
+    : serialized.endsWith('\n')
+      ? '\n'
+      : '';
+  try {
+    const record = JSON.parse(
+      serialized,
+      (_key, value, context?: { source?: string }) =>
+        typeof value === 'number' && context?.source
+          ? JSON_WITH_RAW_JSON.rawJSON(context.source)
+          : value,
+    );
+    redactPasswordFields(record);
+    return `${JSON.stringify(record)}${lineEnding}`;
+  } catch {
+    return `${REDACTION_FAILURE_RECORD}${lineEnding}`;
+  }
+}
+
+/**
+ * 递归替换对象和数组中的固定密码字段。
+ * @param value - 已从日志 JSON 解析出的对象、数组或标量。
+ */
+function redactPasswordFields(value: unknown): void {
+  const pending: unknown[] = [value];
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || typeof current !== 'object') continue;
+
+    if (Array.isArray(current)) {
+      for (const item of current) pending.push(item);
+      continue;
+    }
+
+    Object.entries(current).forEach(([key, nestedValue]) => {
+      if (PASSWORD_FIELDS.has(key)) {
+        (current as Record<string, unknown>)[key] = '[Redacted]';
+      } else if (nestedValue && typeof nestedValue === 'object') {
+        pending.push(nestedValue);
+      }
+    });
+  }
 }
 
 /**

@@ -791,6 +791,20 @@ test('staged mode reads additions, modifications, and deletions from the index',
   }
 });
 
+test('worktree mode ignores tracked source files deleted before staging', () => {
+  const { repositoryPath } = createFixtureRepository();
+
+  try {
+    rmSync(path.join(repositoryPath, 'deleted.ts'));
+
+    const result = runChecker(repositoryPath, []);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /"sourceMode": "worktree"/u);
+  } finally {
+    rmSync(repositoryPath, { force: true, recursive: true });
+  }
+});
+
 test('staged mode honors the active GIT_INDEX_FILE used by the commit', () => {
   const { repositoryPath, validSource } = createFixtureRepository();
   const alternateIndexPath = path.join(repositoryPath, '.git', 'commit-index');

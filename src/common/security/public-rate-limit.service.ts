@@ -33,12 +33,7 @@ export interface PublicRateLimitOutcome {
 
 export type VerifiedTokenOperation = 'logout' | 'refresh';
 
-const LOGIN_PATHS = new Set([
-  '/auth/login',
-  '/auth/logout',
-  '/auth/password-public-key',
-  '/auth/refresh',
-]);
+const LOGIN_PATHS = new Set(['/auth/login', '/auth/logout', '/auth/refresh']);
 const MANAGEMENT_EXACT_PATHS = new Set([
   '/',
   '/api',

@@ -14,8 +14,10 @@ export class QqbotAccountBodyDto {
   @ApiPropertyOptional({ description: 'OneBot 反向 WS token' })
   accessToken?: string;
 
-  @ApiPropertyOptional({ description: 'RSA-OAEP 加密后的 NapCat 登录密码' })
-  encryptedLoginPassword?: string;
+  @ApiPropertyOptional({
+    description: 'NapCat 登录密码，仅在当前 TLS 请求内包装为服务端密文',
+  })
+  loginPassword?: string;
 
   @ApiPropertyOptional({ default: true })
   enabled?: boolean;

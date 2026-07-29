@@ -4,6 +4,8 @@ const VERSIONED_HASH =
   '$pbkdf2-sha256$v=1$i=600000$AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE$acCR3Bjb48G7uQRjBo961QHqiLOtaEMb9u_X9DGlq3E';
 
 describe('AdminAuthService password verification', () => {
+  const originalAdminCookieSecure = process.env.ADMIN_COOKIE_SECURE;
+  const originalNodeEnv = process.env.NODE_ENV;
   const queryBuilder = {
     addSelect: jest.fn().mockReturnThis(),
     getOne: jest.fn(),
@@ -49,6 +51,19 @@ describe('AdminAuthService password verification', () => {
     rateLimitService.consumeVerifiedTokenSubject.mockResolvedValue(undefined);
     tokenService.signAccessToken.mockReturnValue('access-token');
     tokenService.signRefreshToken.mockReturnValue('refresh-token');
+  });
+
+  afterEach(() => {
+    if (originalAdminCookieSecure === undefined) {
+      delete process.env.ADMIN_COOKIE_SECURE;
+    } else {
+      process.env.ADMIN_COOKIE_SECURE = originalAdminCookieSecure;
+    }
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
   });
 
   it('explicitly selects the password hash, verifies it, and omits it from the result', async () => {
@@ -238,5 +253,74 @@ describe('AdminAuthService password verification', () => {
     rateLimitService.consumeVerifiedTokenSubject.mockClear();
     await service.consumeLogoutSubject('forged-token');
     expect(rateLimitService.consumeVerifiedTokenSubject).not.toHaveBeenCalled();
+  });
+
+  it('sets production access and refresh cookies with the locked safe attributes', () => {
+    process.env.ADMIN_COOKIE_SECURE = 'false';
+    process.env.NODE_ENV = 'production';
+    const response = {
+      cookie: jest.fn(),
+    };
+
+    service.setAccessTokenCookie(response as any, 'access-token');
+    service.setRefreshTokenCookie(response as any, 'refresh-token');
+
+    expect(response.cookie).toHaveBeenNthCalledWith(
+      1,
+      'admin_access_token',
+      'access-token',
+      {
+        httpOnly: true,
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/',
+        sameSite: 'lax',
+        secure: true,
+      },
+    );
+    expect(response.cookie).toHaveBeenNthCalledWith(2, 'jwt', 'refresh-token', {
+      httpOnly: true,
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      path: '/',
+      sameSite: 'lax',
+      secure: true,
+    });
+    response.cookie.mock.calls.forEach(([, , options]) =>
+      expect(options).not.toHaveProperty('domain'),
+    );
+  });
+
+  it('clears both token cookies on every current and historical path with matching attributes', () => {
+    process.env.ADMIN_COOKIE_SECURE = 'true';
+    process.env.NODE_ENV = 'test';
+    const response = {
+      clearCookie: jest.fn(),
+    };
+
+    service.clearAccessTokenCookie(response as any);
+    service.clearRefreshTokenCookie(response as any);
+
+    expect(response.clearCookie.mock.calls).toHaveLength(6);
+    expect(
+      response.clearCookie.mock.calls.map(([name, options]) => [
+        name,
+        options.path,
+      ]),
+    ).toEqual([
+      ['admin_access_token', '/'],
+      ['admin_access_token', '/api/auth'],
+      ['admin_access_token', '/auth'],
+      ['jwt', '/'],
+      ['jwt', '/api/auth'],
+      ['jwt', '/auth'],
+    ]);
+    response.clearCookie.mock.calls.forEach(([, options]) => {
+      expect(options).toEqual({
+        httpOnly: true,
+        path: expect.any(String),
+        sameSite: 'lax',
+        secure: true,
+      });
+      expect(options).not.toHaveProperty('domain');
+    });
   });
 });

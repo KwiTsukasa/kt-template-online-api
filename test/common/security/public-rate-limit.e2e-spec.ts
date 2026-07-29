@@ -14,6 +14,7 @@ import { ClientIpService } from '../../../src/common/security/client-ip.service'
 import { PublicRateLimitGuard } from '../../../src/common/security/public-rate-limit.guard';
 import { PublicRateLimitService } from '../../../src/common/security/public-rate-limit.service';
 import { RedisRateLimitStore } from '../../../src/common/security/redis-rate-limit.store';
+import { TrustedCredentialTransportService } from '../../../src/common/security/trusted-credential-transport.service';
 
 @Controller('blog/article/public')
 class PublicReadTestController {
@@ -112,6 +113,7 @@ class InMemoryRateLimitStore {
   controllers: [ManagementTestController, PublicReadTestController],
   providers: [
     ClientIpService,
+    TrustedCredentialTransportService,
     PublicRateLimitService,
     PublicRateLimitGuard,
     Reflector,
@@ -161,6 +163,7 @@ class RateLimitTestModule {}
   controllers: [LoginTestController],
   providers: [
     ClientIpService,
+    TrustedCredentialTransportService,
     PublicRateLimitService,
     PublicRateLimitGuard,
     Reflector,
@@ -274,12 +277,14 @@ describe('Public rate-limit HTTP boundary (e2e)', () => {
       await request(server)
         .post('/auth/login')
         .set('X-Forwarded-For', '198.51.100.21')
+        .set('X-Forwarded-Proto', 'https')
         .send({ username: `ip-user-${index}` })
         .expect(201);
     }
     const rejected = await request(server)
       .post('/auth/login')
       .set('X-Forwarded-For', '198.51.100.21')
+      .set('X-Forwarded-Proto', 'https')
       .send({ username: 'ip-user-4' })
       .expect(429);
 
@@ -296,16 +301,19 @@ describe('Public rate-limit HTTP boundary (e2e)', () => {
     await request(server)
       .post('/auth/login')
       .set('X-Forwarded-For', '198.51.100.31')
+      .set('X-Forwarded-Proto', 'https')
       .send({ username: '  Ａdmin  ' })
       .expect(201);
     await request(server)
       .post('/auth/login')
       .set('X-Forwarded-For', '198.51.100.32')
+      .set('X-Forwarded-Proto', 'https')
       .send({ username: 'admin' })
       .expect(201);
     const rejected = await request(server)
       .post('/auth/login')
       .set('X-Forwarded-For', '198.51.100.33')
+      .set('X-Forwarded-Proto', 'https')
       .send({ username: 'ADMIN' })
       .expect(429);
 
@@ -323,12 +331,14 @@ describe('Public rate-limit HTTP boundary (e2e)', () => {
       await request(server)
         .post('/auth/login')
         .set('X-Forwarded-For', `198.51.100.${40 + index}`)
+        .set('X-Forwarded-Proto', 'https')
         .send({ username: `global-user-${index}` })
         .expect(201);
     }
     const rejected = await request(server)
       .post('/auth/login')
       .set('X-Forwarded-For', '198.51.100.45')
+      .set('X-Forwarded-Proto', 'https')
       .send({ username: 'global-user-5' })
       .expect(429);
 

@@ -7,10 +7,17 @@ import {
   Post,
   Put,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { CurrentAdminUser, vbenPage, vbenSuccess } from '@/common';
+import {
+  CurrentAdminUser,
+  TrustedCredentialTransportService,
+  vbenPage,
+  vbenSuccess,
+} from '@/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminUser } from './admin-user.entity';
 import { AdminUserService } from './admin-user.service';
@@ -19,7 +26,10 @@ import { AdminUserService } from './admin-user.service';
 @Controller('system/user')
 @UseGuards(JwtAuthGuard)
 export class AdminUserManageController {
-  constructor(private readonly userService: AdminUserService) {}
+  constructor(
+    private readonly userService: AdminUserService,
+    private readonly trustedCredentialTransportService: TrustedCredentialTransportService,
+  ) {}
 
   /**
    * 获取用户分页列表。
@@ -35,10 +45,12 @@ export class AdminUserManageController {
   /**
    * 新增用户。
    * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   * @param request - 当前 HTTP 请求；用于可信代理后的公开 Origin 校验。
    */
   @Post()
   @ApiOperation({ summary: '新增用户' })
-  async create(@Body() body: Record<string, any>) {
+  async create(@Body() body: Record<string, any>, @Req() request: Request) {
+    this.trustedCredentialTransportService.assertTrusted(request);
     return vbenSuccess(await this.userService.createUser(body));
   }
 
@@ -47,7 +59,9 @@ export class AdminUserManageController {
   async resetPassword(
     @Param('id') id: string,
     @Body() body: Record<string, any>,
+    @Req() request: Request,
   ) {
+    this.trustedCredentialTransportService.assertTrusted(request);
     return vbenSuccess(
       await this.userService.resetUserPassword(id, body.password),
     );
@@ -57,10 +71,16 @@ export class AdminUserManageController {
    * 编辑用户。
    * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
    * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   * @param request - 当前 HTTP 请求；用于可信代理后的公开 Origin 校验。
    */
   @Put(':id')
   @ApiOperation({ summary: '编辑用户' })
-  async update(@Param('id') id: string, @Body() body: Record<string, any>) {
+  async update(
+    @Param('id') id: string,
+    @Body() body: Record<string, any>,
+    @Req() request: Request,
+  ) {
+    this.trustedCredentialTransportService.assertTrusted(request);
     return vbenSuccess(await this.userService.updateUser(id, body));
   }
 

@@ -8,7 +8,6 @@ import {
   throwVbenError,
   ToolsService,
 } from '@/common';
-import { AdminPasswordCryptoService } from '@/modules/admin/identity/auth/admin-password-crypto.service';
 import {
   QQBOT_ACCOUNT_NAPCAT_RUNTIME_PORT,
   type QqbotAccountNapcatRuntimePort,
@@ -56,8 +55,6 @@ export class QqbotAccountService {
     private readonly systemNoticePublisher?: SystemNoticePublisher,
     @Optional()
     private readonly configService?: ConfigService,
-    @Optional()
-    private readonly passwordCryptoService?: AdminPasswordCryptoService,
   ) {}
 
   /**
@@ -786,7 +783,7 @@ export class QqbotAccountService {
         typeof body.selfId === 'string' ? body.selfId.trim() : body.selfId,
     };
     const napcatLoginPasswordSecret = this.toNapcatLoginPasswordSecret(
-      body.encryptedLoginPassword,
+      body.loginPassword,
     );
     if (napcatLoginPasswordSecret !== undefined) {
       payload.napcatLoginPasswordSecret = napcatLoginPasswordSecret;
@@ -796,23 +793,14 @@ export class QqbotAccountService {
 
   /**
    * 执行 QQBot 核心流程。
-   * @param encryptedLoginPassword - encryptedLoginPassword 输入；驱动 `toolsService.toSecretText()` 的 QQBot步骤。
+   * @param loginPassword - 当前请求中的 NapCat 登录密码；仅用于生成持久化密文。
    */
-  private toNapcatLoginPasswordSecret(encryptedLoginPassword?: string) {
-    if (!encryptedLoginPassword) return undefined;
-    if (!this.passwordCryptoService) {
-      throwVbenError('登录密码解密服务未配置');
-    }
-
-    const password = this.toolsService.toSecretText(
-      this.passwordCryptoService.decryptPassword(encryptedLoginPassword),
+  private toNapcatLoginPasswordSecret(loginPassword?: string) {
+    if (!`${loginPassword ?? ''}`.trim()) return undefined;
+    return this.toolsService.encryptSecretText(
+      loginPassword,
+      this.getAccountSecretKey(),
     );
-    return password
-      ? this.toolsService.encryptSecretText(
-          password,
-          this.getAccountSecretKey(),
-        )
-      : null;
   }
 
   /**

@@ -12,18 +12,21 @@ import type { Request, Response } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { PublicRateLimitService } from './public-rate-limit.service';
 import type { PublicRateLimitOutcome } from './public-rate-limit.service';
+import { TrustedCredentialTransportService } from './trusted-credential-transport.service';
 
 @Injectable()
 export class PublicRateLimitGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly rateLimitService: PublicRateLimitService,
+    private readonly trustedCredentialTransportService: TrustedCredentialTransportService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (context.getType() !== 'http') return true;
 
     const request = context.switchToHttp().getRequest<Request>();
+    this.trustedCredentialTransportService.assertProtectedRequest(request);
     const response = context.switchToHttp().getResponse<Response>();
     const explicitlyPublic = this.reflector.getAllAndOverride<boolean>(
       IS_PUBLIC_KEY,

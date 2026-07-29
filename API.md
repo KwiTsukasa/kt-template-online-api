@@ -44,7 +44,7 @@ Admin、Component、Dict、MinIO、Blog 管理、WordPress 管理和 QQBot 管�
 
 公开接口包括 `/auth/login`、`/auth/refresh`、`/auth/logout`、部分 Blog public 接口和根路径。具体以 Controller 上的 `@Public()` 为准。
 
-公网入口通过精确 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 归一化客户端 IP；客户端自行提交的 XFF、Origin 或 Referer 不能改变限流身份。登录在一次 Redis Lua 调用中计数 IP 5 次/分钟、规范化用户名 SHA-256 10 次/15 分钟和全局 100 次/分钟，任一超限统一返回 429。真实认证成功后、签发 token 前只清理用户名 bucket，不清 IP 或全局；清理或计数 Redis 失败返回 503。刷新和退出保留 IP/全局额度；签名校验成功的 refresh token 额外按 subject SHA-256 限制为刷新 30 次/分钟、退出 10 次/分钟，缺失或伪造 token 不读取未验证 payload。普通公开读取 Redis 故障时 fail open 并限频告警。
+公网入口通过精确 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 归一化客户端 IP 和公开 Origin；客户端自行提交的 XFF、X-Forwarded-Proto、Origin 或 Referer 不能扩展信任。`POST /auth/login`、`POST /auth/refresh`、`POST /auth/logout` 必须先通过公开 Origin 的 TLS 门禁，再执行 token、Cookie 或 WordPress 副作用；接收明文密码的 `POST /system/user`、`PUT /system/user/:id`、`PUT /system/user/:id/password` 也在用户服务、密码哈希和持久化前经过同一门禁。生产 HTTP 固定返回 403，`ADMIN_AUTH_ALLOW_INSECURE_LOCAL=true` 只在非生产 loopback 本地开发生效。登录请求体为 `username` + `password`，不再提供 `/auth/password-public-key`。access/refresh Cookie 固定 `HttpOnly`、`SameSite=Lax`、`Path=/`、无 `Domain`，生产始终 `Secure`；退出清理当前 Cookie 在 `/`、`/api/auth`、`/auth` 三种 Path 的历史残留。登录在一次 Redis Lua 调用中计数 IP 5 次/分钟、规范化用户名 SHA-256 10 次/15 分钟和全局 100 次/分钟，任一超限统一返回 429。真实认证成功后、签发 token 前只清理用户名 bucket，不清 IP 或全局；清理或计数 Redis 失败返回 503。刷新和退出保留 IP/全局额度；签名校验成功的 refresh token 额外按 subject SHA-256 限制为刷新 30 次/分钟、退出 10 次/分钟，缺失或伪造 token 不读取未验证 payload。普通公开读取 Redis 故障时 fail open 并限频告警。
 
 Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理列表的分页语义。Live2D 公开流每 IP 默认最多 8 条跨副本 Redis 并发租约；Lua acquire 先从 ZSET 清理过期成员，再以唯一 token 写入本次流，超限时精确移除该 token 并返回 429。活动流按半个 TTL 周期续租；HTTP `finish`、`close`、`error` 只幂等移除自身 token，过期旧流的 release 不会影响新一代租约，120 秒 TTL 继续兜底断连。Live2D Redis 故障遵循公开读 fail open。上述阈值、Redis 连接、可信代理和 Swagger 管理来源都出现在 required runtime config checks；生产 Jenkins 在发布前强制检查两个安全来源列表。
 
@@ -156,8 +156,8 @@ Agent 状态响应额外包含可选的 `currentPublicIpv6/currentIpv6ObservedAt
 | 分组          | 关键变量                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MySQL         | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC`                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| MinIO         | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`                                                                                                                                                                                                                                                                                                                                                                        |
-| Admin         | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| MinIO         | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`                                                                                                                                                                                                                                                                                                                                                                            |
+| Admin         | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                                                                                                                                                                         |
 | WordPress     | `WORDPRESS_BASE_URL`、`WORDPRESS_HOST_HEADER`、`WORDPRESS_ADMIN_USERNAME`、`WORDPRESS_ADMIN_PASSWORD`                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_QUERY_SELECTOR`                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | QQBot         | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_REVERSE_WS_PATH`、`QQBOT_REVERSE_WS_TOKEN`、`QQBOT_EVENT_BUS`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`                                                                                                                                                                                                              |
@@ -191,27 +191,28 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 
 ### Menu / Role / Dept / User Manage
 
-| 方法     | 路径                       | 说明               |
-| -------- | -------------------------- | ------------------ |
-| `GET`    | `/menu/all`                | 当前用户菜单       |
-| `GET`    | `/system/menu/list`        | 系统菜单树         |
-| `GET`    | `/system/menu/name-exists` | 菜单 name 重名校验 |
-| `GET`    | `/system/menu/path-exists` | 菜单 path 重名校验 |
-| `POST`   | `/system/menu`             | 新增菜单           |
-| `PUT`    | `/system/menu/:id`         | 更新菜单           |
-| `DELETE` | `/system/menu/:id`         | 删除菜单及子菜单   |
-| `GET`    | `/system/role/list`        | 角色分页           |
-| `POST`   | `/system/role`             | 新增角色           |
-| `PUT`    | `/system/role/:id`         | 更新角色           |
-| `DELETE` | `/system/role/:id`         | 删除角色           |
-| `GET`    | `/system/dept/list`        | 部门树             |
-| `POST`   | `/system/dept`             | 新增部门           |
-| `PUT`    | `/system/dept/:id`         | 更新部门           |
-| `DELETE` | `/system/dept/:id`         | 删除部门           |
-| `GET`    | `/system/user/list`        | 用户分页           |
-| `POST`   | `/system/user`             | 新增用户           |
-| `PUT`    | `/system/user/:id`         | 更新用户           |
-| `DELETE` | `/system/user/:id`         | 删除用户           |
+| 方法     | 路径                        | 说明               |
+| -------- | --------------------------- | ------------------ |
+| `GET`    | `/menu/all`                 | 当前用户菜单       |
+| `GET`    | `/system/menu/list`         | 系统菜单树         |
+| `GET`    | `/system/menu/name-exists`  | 菜单 name 重名校验 |
+| `GET`    | `/system/menu/path-exists`  | 菜单 path 重名校验 |
+| `POST`   | `/system/menu`              | 新增菜单           |
+| `PUT`    | `/system/menu/:id`          | 更新菜单           |
+| `DELETE` | `/system/menu/:id`          | 删除菜单及子菜单   |
+| `GET`    | `/system/role/list`         | 角色分页           |
+| `POST`   | `/system/role`              | 新增角色           |
+| `PUT`    | `/system/role/:id`          | 更新角色           |
+| `DELETE` | `/system/role/:id`          | 删除角色           |
+| `GET`    | `/system/dept/list`         | 部门树             |
+| `POST`   | `/system/dept`              | 新增部门           |
+| `PUT`    | `/system/dept/:id`          | 更新部门           |
+| `DELETE` | `/system/dept/:id`          | 删除部门           |
+| `GET`    | `/system/user/list`         | 用户分页           |
+| `POST`   | `/system/user`              | 新增用户           |
+| `PUT`    | `/system/user/:id`          | 更新用户           |
+| `PUT`    | `/system/user/:id/password` | 重置用户密码       |
+| `DELETE` | `/system/user/:id`          | 删除用户           |
 
 系统菜单实体包含 `sort` 字段；菜单树输出按 `meta.order` 优先，其次按 `sort` 升序排列。Admin 菜单管理页面维护 `sort`，不要把普通菜单排序写进隐藏的 route meta。
 
@@ -429,7 +430,7 @@ QQBot 运行态包括 NapCat 容器登录、OneBot v11 反向 WebSocket、MQTT �
 | `POST` | `/qqbot/account/bind/rule`                      | 绑定账号和自动回复规则     |
 | `POST` | `/qqbot/account/unbind/rule`                    | 解绑账号和自动回复规则     |
 
-账号保存支持可选 `encryptedLoginPassword`，用于 NapCat 密码登录。前端必须先通过 `/auth/password-public-key` 获取公钥并使用 RSA-OAEP 加密，不传明文 `loginPassword`；后端必须使用显式配置的 `QQBOT_ACCOUNT_SECRET_KEY`（或非默认 `ADMIN_TOKEN_SECRET`）二次加密落库，空值和公开默认值会被拒绝，不在列表/详情中返回。账号列表里的 `connectStatus` 只表示 OneBot 反向 WS；`napcat.oneBotOnline`、`napcat.containerOnline`、`napcat.webuiOnline`、`napcat.qqLoginStatus`、`napcat.qqLoginMessage` 分别表示 OneBot、容器、WebUI 和 QQ 登录态，`webuiOnline=null` 表示本次使用缓存且未重新探测 WebUI；`qqLoginMessage` 只承载真实 QQ 登录态消息，WebUI 配置缺失或请求异常只放在 `lastError`。
+账号 save/update 支持可选 `loginPassword`，只允许经 TLS 提交。后端只在当前请求内调用现有 secret wrapper，将原值包装为 AES-GCM `ktv1` secret 后写入 `napcat_login_password_secret`；不把请求字段或明文写入数据库、事件、日志或响应，空白编辑表示不更新。必须显式配置 `QQBOT_ACCOUNT_SECRET_KEY`（或非默认 `ADMIN_TOKEN_SECRET`），公开默认值会被拒绝。账号列表里的 `connectStatus` 只表示 OneBot 反向 WS；`napcat.oneBotOnline`、`napcat.containerOnline`、`napcat.webuiOnline`、`napcat.qqLoginStatus`、`napcat.qqLoginMessage` 分别表示 OneBot、容器、WebUI 和 QQ 登录态，`webuiOnline=null` 表示本次使用缓存且未重新探测 WebUI；`qqLoginMessage` 只承载真实 QQ 登录态消息，WebUI 配置缺失或请求异常只放在 `lastError`。
 
 扫码链路返回 `sessionId`，前端应使用 SSE 查看步骤进度，而不是等待长 HTTP 请求完成；新增账号扫码会先预留容器和临时设备身份后立即返回 pending，会话后台再启动远端 Docker 和生成二维码。`CheckLoginStatus.isLogin=true` 只表示 NapCat 登录阳性，新增账号必须继续等 `GetQQLoginInfo` 返回 `uin/selfId` 后才允许创建和绑定真实 QQ 号；短暂缺号时 `/qqbot/account/scan/status` 保持同一会话 pending 并显示正在读取 QQ 号，等待 `NAPCAT_LOGIN_SELF_ID_WAIT_MS`，不得重建容器、补 env 或从容器元数据猜号。已有账号的更新登录不会通过 Docker 重建、重启或补 env 来刷新 QQ 登录态；如果目标容器仍在线，即使 QQ 账号已离线，也会保持同一容器并通过 NapCat WebUI 推进原有弹窗流程。若 WebUI 明确返回 QQ 离线，API 会先调用同容器 `/api/QQLogin/RestartNapCat` 重启 NapCat worker 以重建 QQCore login service，再继续 `SetQuickLogin`、`PasswordLogin`、`RefreshQRcode` / `GetQQLoginQrcode`；这不是 Docker 容器重建/重启，设备身份、env 和 dataDir 不变，同一个更新登录 session 只消费一次 worker restart 预算，后续轮询继续刷新二维码但不得反复重启 worker。只有 Docker 容器离线或缺失时，容器准备阶段才会创建/重建容器，并在创建时一次性注入 `ACCOUNT` 和必要登录 env；已在线的源容器不补 env。快速登录失败后，如果账号保存了登录密码，后端使用解密后的密码计算 MD5 调用 `/api/QQLogin/PasswordLogin`，不会把密码写回运行态 env，也没有成功后的 env 清理步骤；密码登录结果按 `QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS` / `QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS` 轮询。准备阶段的扫码会话会持续续期，避免后台登录未完成时前端先判过期。同一账号已有 pending 更新登录会话时，重复调用 `/qqbot/account/scan/refresh` 通常会返回原 `sessionId`，不会再次启动 quick/password/二维码准备；但当这条 pending 会话创建时账号还没有保存登录密码、且会话尚未进入密码验证码或新设备验证上下文，而账号后来通过编辑维护了登录密码时，API 必须退役旧无密码会话并新建 refresh session，重新读取最新密码后进入 `PasswordLogin`。取消扫码会话必须在接口返回前把持久化 `napcat_login_session` 落到非 pending 终态并写入完成时间，避免已取消的测试二维码从 DB 恢复成可轮询会话。若 API Pod 在准备阶段重启，持久化的 `preparingRelogin` 超过 `QQBOT_NAPCAT_RELOGIN_PREPARING_STALE_MS`（留空使用密码等待窗口加缓冲）后，`/qqbot/account/scan/status` 会自动恢复普通登录态检测，不再永久停留在“正在尝试密码登录”；`/qqbot/account/scan/events` 在进程内事件缓存丢失时会先推送当前会话快照。pending refresh 会话如果没有二维码、验证码或新设备挑战，`/qqbot/account/scan/status` 会按 `NAPCAT_LOGIN_QR_AUTO_REFRESH_COOLDOWN_MS` 冷却在同一容器自动重试 `RefreshQRcode/GetQQLoginQrcode`，避免 SSE 长时间卡在“二维码生成中”。密码登录触发 QQ 安全验证时，接口返回的 `captchaUrl` 只用于前端拉起腾讯验证码；前端必须把腾讯验证码返回的 `ticket`、`randstr`、`sid` 连同 `sessionId` 提交到 `/qqbot/account/scan/captcha/submit`，后端再代理到同一 NapCat 容器的 `/api/QQLogin/CaptchaLogin` 继续密码登录第二步。验证码和新设备验证这类真人交互态使用 `NAPCAT_LOGIN_HUMAN_VERIFY_EXPIRE_MS`（默认 15 分钟，且至少不短于普通二维码 TTL）续期；普通登录二维码仍使用 `NAPCAT_LOGIN_QR_EXPIRE_MS`。`/qqbot/account/scan/status` 遇到 NapCat 只返回“需要验证码/继续完成验证/安全验证”但不带 URL 时，会先从当前容器日志提取 `proofWaterUrl`，提取不到则保持验证码处理中而不切到二维码兜底；会话已有 `captchaUrl` 后，同类状态仍保持 `pending` 和原 `captchaUrl`。密码登录仍失败、验证码未完成、离线、账号不匹配或缺少 QQ 号时，直接通过 WebUI 二维码接口进入扫码兜底，不 reset 登录态。看门狗只做离线巡检、账号错误写入和 `super` 站内信告警，不会触发 quick/password 登录或扫码登录。
 

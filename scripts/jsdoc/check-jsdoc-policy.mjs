@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -1080,7 +1080,10 @@ function listWorkingTreeSourceFiles(repoRoot) {
     },
   );
 
-  return splitNullDelimited(output).filter(isSupportedSourceFile).sort();
+  return splitNullDelimited(output)
+    .filter(isSupportedSourceFile)
+    .filter((filePath) => existsSync(path.resolve(repoRoot, filePath)))
+    .sort();
 }
 
 function listIndexSourceFiles(repoRoot) {

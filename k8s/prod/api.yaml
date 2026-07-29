@@ -28,6 +28,8 @@ spec:
           env:
             - name: NODE_ENV
               value: production
+            - name: ADMIN_AUTH_ALLOW_INSECURE_LOCAL
+              value: "false"
             - name: TZ
               value: Asia/Shanghai
             - name: DB_TIMEZONE

@@ -30,7 +30,11 @@ jest.mock(
 import * as request from 'supertest';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { ClientIpService } from '@/common/security/client-ip.service';
+import { TrustedCredentialTransportService } from '@/common/security/trusted-credential-transport.service';
 import { QqbotAccountController } from '@/modules/qqbot/core/contract/account/qqbot-account.controller';
+import { QqbotAccountBodyDto } from '@/modules/qqbot/core/contract/account/qqbot-account.dto';
 import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
 import { QqbotNapcatLoginService } from '@/modules/qqbot/napcat/application/login/qqbot-napcat-login.service';
 import { QqbotNapcatLoginController } from '@/modules/qqbot/napcat/contract/qqbot-napcat-login.controller';
@@ -38,8 +42,22 @@ import { QqbotReverseWsService } from '@/modules/qqbot/core/infrastructure/integ
 
 describe('QqbotAccountController', () => {
   let app: INestApplication;
+  const eventPublisher = jest.fn();
+  const repositoryWrite = jest.fn();
+  const secretWrapper = jest.fn();
   const accountService = {
-    save: jest.fn().mockResolvedValue('account-1'),
+    save: jest.fn().mockImplementation(async () => {
+      secretWrapper();
+      repositoryWrite();
+      eventPublisher();
+      return 'account-1';
+    }),
+    update: jest.fn().mockImplementation(async () => {
+      secretWrapper();
+      repositoryWrite();
+      eventPublisher();
+      return true;
+    }),
   };
   const napcatLoginService = {
     submitCaptcha: jest.fn().mockResolvedValue({
@@ -55,6 +73,16 @@ describe('QqbotAccountController', () => {
         { provide: QqbotAccountService, useValue: accountService },
         { provide: QqbotNapcatLoginService, useValue: napcatLoginService },
         { provide: QqbotReverseWsService, useValue: {} },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({
+            ADMIN_AUTH_ALLOW_INSECURE_LOCAL: 'false',
+            NODE_ENV: 'test',
+            PUBLIC_SECURITY_TRUSTED_PROXY_IPS: '127.0.0.1,::1',
+          }),
+        },
+        ClientIpService,
+        TrustedCredentialTransportService,
       ],
     }).compile();
 
@@ -68,14 +96,19 @@ describe('QqbotAccountController', () => {
 
   beforeEach(() => {
     accountService.save.mockClear();
+    accountService.update.mockClear();
+    eventPublisher.mockClear();
     napcatLoginService.submitCaptcha.mockClear();
+    repositoryWrite.mockClear();
+    secretWrapper.mockClear();
   });
 
-  it('accepts encrypted NapCat login password through account save API', async () => {
+  it('accepts request-scoped NapCat login password through account save API', async () => {
     await request(app.getHttpServer())
       .post('/qqbot/account/save')
+      .set('X-Forwarded-Proto', 'https')
       .send({
-        encryptedLoginPassword: 'encrypted-login-password',
+        loginPassword: 'plain-login-password',
         name: 'Mirror',
         selfId: '1914728559',
       })
@@ -91,10 +124,72 @@ describe('QqbotAccountController', () => {
 
     expect(accountService.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        encryptedLoginPassword: 'encrypted-login-password',
+        loginPassword: 'plain-login-password',
         selfId: '1914728559',
       }),
     );
+  });
+
+  it.each([
+    [
+      '/qqbot/account/save',
+      {
+        loginPassword: 'plain-login-password',
+        name: 'Mirror',
+        selfId: '1914728559',
+      },
+    ],
+    [
+      '/qqbot/account/update/',
+      {
+        id: 'account-1',
+        loginPassword: 'plain-login-password',
+        name: 'Mirror',
+        selfId: '1914728559',
+      },
+    ],
+  ])(
+    'rejects direct HTTP %s before account and secret side effects',
+    async (path, body) => {
+      await request(app.getHttpServer()).post(path).send(body).expect(403);
+
+      expect(accountService.save).not.toHaveBeenCalled();
+      expect(accountService.update).not.toHaveBeenCalled();
+      expect(secretWrapper).not.toHaveBeenCalled();
+      expect(repositoryWrite).not.toHaveBeenCalled();
+      expect(eventPublisher).not.toHaveBeenCalled();
+    },
+  );
+
+  it('accepts trusted proxy HTTPS through account update API', async () => {
+    await request(app.getHttpServer())
+      .post('/qqbot/account/update')
+      .set('X-Forwarded-Proto', 'https')
+      .send({
+        id: 'account-1',
+        loginPassword: 'plain-login-password',
+        name: 'Mirror',
+        selfId: '1914728559',
+      })
+      .expect(200);
+
+    expect(accountService.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'account-1',
+        loginPassword: 'plain-login-password',
+      }),
+    );
+  });
+
+  it('publishes only the request-scoped login password DTO field', () => {
+    const properties =
+      Reflect.getMetadata(
+        'swagger/apiModelPropertiesArray',
+        QqbotAccountBodyDto.prototype,
+      ) || [];
+
+    expect(properties).toContain(':loginPassword');
+    expect(properties).not.toContain(':encryptedLoginPassword');
   });
 
   it('submits NapCat captcha result through scan captcha API', async () => {

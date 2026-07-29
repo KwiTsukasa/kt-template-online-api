@@ -15,6 +15,7 @@ export * from './security/public-rate-limit.guard';
 export * from './security/public-rate-limit.service';
 export * from './security/redis-rate-limit.store';
 export * from './security/security-boundary.module';
+export * from './security/trusted-credential-transport.service';
 export * from './services/markdown.service';
 export * from './services/tool.service';
 export * from './snowflake/snowflake-id';

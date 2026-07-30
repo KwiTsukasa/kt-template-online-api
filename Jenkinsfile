@@ -139,7 +139,21 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
-        checkout scm
+        script {
+          def checkoutMetadata = checkout scm
+          def checkoutCommit = checkoutMetadata.GIT_COMMIT?.trim()
+          def checkedOutCommit = sh(
+            script: 'git rev-parse HEAD',
+            returnStdout: true,
+          ).trim()
+          if (
+            !(checkedOutCommit ==~ /[0-9a-f]{40}/) ||
+            checkoutCommit != checkedOutCommit
+          ) {
+            error('Jenkins checkout metadata does not match the workspace HEAD.')
+          }
+          env.CHECKED_OUT_GIT_COMMIT = checkedOutCommit
+        }
       }
     }
 
@@ -164,7 +178,7 @@ pipeline {
           env.DOCKER_IMAGE_LATEST = registry ? "${registry}/${params.IMAGE_NAME}:latest" : "${params.IMAGE_NAME}:latest"
           env.GATEWAY_DOCKER_IMAGE = registry ? "${registry}/${params.GATEWAY_IMAGE_NAME}:${env.IMAGE_TAG_FINAL}" : "${params.GATEWAY_IMAGE_NAME}:${env.IMAGE_TAG_FINAL}"
           env.GATEWAY_DOCKER_IMAGE_LATEST = registry ? "${registry}/${params.GATEWAY_IMAGE_NAME}:latest" : "${params.GATEWAY_IMAGE_NAME}:latest"
-          env.IMAGE_BUILD_PAIR = "${env.GIT_COMMIT ?: 'unknown'}:${env.BUILD_NUMBER}"
+          env.IMAGE_BUILD_PAIR = "${env.CHECKED_OUT_GIT_COMMIT}:${env.BUILD_NUMBER}"
           env.IS_PREBUILT_RELEASE = params.PREBUILT_RELEASE ? 'true' : 'false'
           env.IS_TASK13_PREBUILD_ONLY = params.TASK13_PREBUILD_ONLY ? 'true' : 'false'
 
@@ -231,8 +245,8 @@ pipeline {
             }
 
             def checkedOutCommit = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-            if (!(checkedOutCommit ==~ /[0-9a-f]{40}/) || checkedOutCommit != env.GIT_COMMIT) {
-              error('TASK13_PREBUILD_ONLY requires GIT_COMMIT to equal the checked-out 40-character commit.')
+            if (checkedOutCommit != env.CHECKED_OUT_GIT_COMMIT) {
+              error('TASK13_PREBUILD_ONLY checkout identity drifted before the build.')
             }
             def checkoutStatus = sh(
               script: 'git status --porcelain=v1 --untracked-files=all',
@@ -514,11 +528,11 @@ pipeline {
               test -f dist/main.js
               test -f dist/apps/napcat-webui-gateway/main.js
               docker build -f dockerfile \
-                --label org.opencontainers.image.revision=${shellQuote(env.GIT_COMMIT)} \
+                --label org.opencontainers.image.revision=${shellQuote(env.CHECKED_OUT_GIT_COMMIT)} \
                 --label kt.kwitsukasa.top/build-pair=${shellQuote(env.IMAGE_BUILD_PAIR)} \
                 -t ${env.DOCKER_IMAGE} .
               docker build -f dockerfile.gateway \
-                --label org.opencontainers.image.revision=${shellQuote(env.GIT_COMMIT)} \
+                --label org.opencontainers.image.revision=${shellQuote(env.CHECKED_OUT_GIT_COMMIT)} \
                 --label kt.kwitsukasa.top/build-pair=${shellQuote(env.IMAGE_BUILD_PAIR)} \
                 -t ${env.GATEWAY_DOCKER_IMAGE} .
               if [ -n ${shellQuote(env.DOCKER_IMAGE_LATEST)} ] && [ ${shellQuote(env.DOCKER_IMAGE)} != ${shellQuote(env.DOCKER_IMAGE_LATEST)} ]; then
@@ -614,7 +628,7 @@ pipeline {
 
           def kubeConfigArg = "--kubeconfig ${shellQuote(kubeConfigFile)}"
           def namespaceArg = "-n ${shellQuote(namespace)}"
-          def changeCause = "Jenkins ${env.JOB_NAME} #${env.BUILD_NUMBER} ${env.GIT_COMMIT ?: 'unknown'}"
+          def changeCause = "Jenkins ${env.JOB_NAME} #${env.BUILD_NUMBER} ${env.CHECKED_OUT_GIT_COMMIT}"
           def napcatImageOverride = params.QQBOT_NAPCAT_IMAGE_OVERRIDE?.trim()
           def napcatProfileOverride = params.QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE?.trim()
 

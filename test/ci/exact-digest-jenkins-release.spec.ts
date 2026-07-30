@@ -262,6 +262,18 @@ function runSecretCreateFailure(releaseScript: string) {
 }
 
 describe('Jenkins exact-digest prebuilt release contract', () => {
+  it('pins release identity to the explicit checkout result and workspace HEAD', () => {
+    const checkout = extractStage('Checkout');
+
+    expect(checkout).toContain('def checkoutMetadata = checkout scm');
+    expect(checkout).toContain('checkoutMetadata.GIT_COMMIT?.trim()');
+    expect(checkout).toMatch(
+      /sh\(\s*script: 'git rev-parse HEAD',\s*returnStdout: true,\s*\)\.trim\(\)/,
+    );
+    expect(checkout).toContain('env.CHECKED_OUT_GIT_COMMIT = checkedOutCommit');
+    expect(jenkinsfile).not.toContain('env.GIT_COMMIT');
+  });
+
   it('keeps CPS-heavy release logic in bounded executable scripts', () => {
     expect(Buffer.byteLength(jenkinsfile)).toBeLessThanOrEqual(36_000);
     expect(extractStage('Docker Push')).toContain(
@@ -331,7 +343,7 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
     const dockerRun = extractStage('Docker Run');
 
     expect(dockerBuild).toContain(
-      'org.opencontainers.image.revision=${shellQuote(env.GIT_COMMIT)}',
+      'org.opencontainers.image.revision=${shellQuote(env.CHECKED_OUT_GIT_COMMIT)}',
     );
     expect(dockerBuild).toContain(
       'kt.kwitsukasa.top/build-pair=${shellQuote(env.IMAGE_BUILD_PAIR)}',

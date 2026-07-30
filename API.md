@@ -373,8 +373,10 @@ Blog Live2D 运行包读取入口不使用 Vben 响应包装，直接返回 MinI
 
 旧 Blog 资源迁移器扫描 `blog_article.content_html/content_markdown/cover/excerpt` 与 `blog_theme_config.config`。下载只允许 `BLOG_ASSET_MIGRATION_ALLOWED_HOSTS` 的精确 HTTP(S) Host，每次 redirect 都重新校验并使用绑定已校验 DNS 结果的直连 Agent；响应同时受 redirect、timeout、大小和安全 MIME 限制。对象键固定为 `blog/migrated/{sha256}/{basename}`，数据库写入根相对 `/api/blog/asset/{sha256}/{basename}`。命令 `pnpm blog-assets:migrate -- <参数>` 支持 `--dry-run`、`--execute`、`--resume`、`--verify` 与 `--rollback-manifest <path>`；manifest 必须由调用方指定在 `.kt-workspace` 下，破坏性模式必须声明当前数据库身份、维护确认和已有备份。公开 GET/HEAD 路由只按 64 位 SHA-256 与安全 basename 映射固定前缀，进入公开读取限流并返回一年 immutable 缓存；rollback 默认只恢复数据库旧 URL，不删除共享对象。
 
-当前本地证据不包含真实 MySQL+MinIO 往返；该项必须在 Docker daemon
-恢复后以一次性环境补验，生产发布不得用模拟依赖结果替代。
+当前本地证据已包含固定镜像摘要的一次性 MySQL+MinIO 真实往返：
+`dry-run -> execute -> verify -> rollback` 后五个锁定字段全部恢复，
+迁移 URL 遗留数为 0。生产发布仍必须独立完成生产备份、维护窗口、
+dry-run 审查和迁移后 verify，不能用本地结果替代生产证据。
 
 ## QQBot 管理
 

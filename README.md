@@ -83,9 +83,10 @@ Blog Live2D 运行包存放在 MinIO，公开读取入口为 `/blog/live2d/:char
 
 旧 Blog 资源迁移使用编译后的 `pnpm blog-assets:migrate -- <参数>`。命令严格区分 `--dry-run`、`--execute`、`--resume`、`--verify` 和 `--rollback-manifest <path>`；所有模式都要求调用方提供 `.kt-workspace` 下的 manifest。`execute`、`resume` 与 rollback 还必须提供匹配当前连接的 `--database-identity`、`--maintenance-confirmed` 和已存在的 `--backup-path`。下载只接受 `BLOG_ASSET_MIGRATION_ALLOWED_HOSTS` 中的精确 HTTP(S) Host，每次重定向都会重新解析并绑定已校验公网地址；私网、环回、CGNAT、链路本地、未指定、组播和 IPv6 ULA 均拒绝。迁移对象固定写入 `blog/migrated/{sha256}/{basename}`，数据库只保存根相对 `/api/blog/asset/{sha256}/{basename}`；rollback 默认不删除可共享的内容寻址对象。
 
-上述资源迁移当前只完成聚焦测试和本地 HTTP 契约验证；真实
-MySQL+MinIO 一次性往返因本机 Docker daemon 不可用仍未执行，发布前必须
-按根运维文档补验，不能用 NAS 或生产数据代替。
+上述资源迁移已在固定镜像摘要的一次性本地 MySQL+MinIO 环境完成
+`dry-run -> execute -> verify -> rollback`：五个锁定字段全部恢复，
+迁移 URL 遗留数为 0，且只生成一个内容寻址对象。该本地证据不代替生产
+备份、维护授权、生产 dry-run 审查和迁移后 verify。
 
 QQBot 插件 worker 使用 BullMQ 队列串行执行同一插件安装实例的请求。K8s 生产清单包含内部服务 `kt-qqbot-plugin-redis`，生产 env 可将 `QQBOT_PLUGIN_QUEUE_REDIS_HOST` 配为该服务名。`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS` 控制排队等待窗口，插件 `operation.timeoutMs` 仍表示单次执行预算。
 

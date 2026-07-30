@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import {
   parseBlogLegacyAssetMigrationOptions,
+  resolveBlogLegacyAssetMinioUseSsl,
   runBlogLegacyAssetMigrationCommand,
 } from '../../src/commands/migrate-blog-legacy-assets';
 
@@ -16,6 +17,15 @@ const manifestPath =
   '/home/yemu2/KT/.kt-workspace/test-artifacts/blog-assets/manifest.json';
 
 describe('migrate-blog-legacy-assets command', () => {
+  it.each([
+    { expected: true, value: 'true' },
+    { expected: true, value: ' TRUE ' },
+    { expected: false, value: 'false' },
+    { expected: false, value: undefined },
+  ])('resolves MinIO TLS from $value', ({ expected, value }) => {
+    expect(resolveBlogLegacyAssetMinioUseSsl(value)).toBe(expected);
+  });
+
   it.each(['--dry-run', '--execute', '--resume', '--verify'])(
     'parses strict %s mode with a caller-supplied manifest',
     (mode) => {

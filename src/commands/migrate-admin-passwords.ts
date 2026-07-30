@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { closeSync, constants, fstatSync, lstatSync, openSync } from 'node:fs';
+import { link, mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { dirname, join, parse, relative, resolve, sep } from 'node:path';
 
 import { DataSource } from 'typeorm';
 import { AdminPasswordHashService } from '../modules/admin/identity/auth/admin-password-hash.service';
@@ -37,6 +37,20 @@ export type AdminPasswordMigrationManifest = {
     | 'verification-failed';
 };
 
+export type AdminPasswordMigrationPathInspection = {
+  exists: boolean;
+  identity?: string;
+  isFile: boolean;
+  isSymbolicLink: boolean;
+  parentHasSymbolicLink: boolean;
+  readable: boolean;
+  release(): void;
+  size: number;
+  stable: boolean;
+};
+
+type AdminPasswordManifestPublishMode = 'create' | 'replace';
+
 type AdminPasswordMigrationQueryRunner = {
   commitTransaction(): Promise<unknown>;
   connect(): Promise<unknown>;
@@ -55,15 +69,17 @@ type AdminPasswordMigrationDataSource = {
 type AdminPasswordMigrationDependencies = {
   actualDatabaseIdentity: string;
   dataSource: AdminPasswordMigrationDataSource;
+  inspectBackupPath(path: string): AdminPasswordMigrationPathInspection;
+  inspectManifestPath(path: string): AdminPasswordMigrationPathInspection;
   logger: Pick<Console, 'error' | 'log'>;
   passwordHashService: Pick<
     AdminPasswordHashService,
     'hashPassword' | 'isPasswordHash'
   >;
-  pathExists(path: string): boolean;
   writeManifest(
     path: string,
     manifest: AdminPasswordMigrationManifest,
+    publishMode?: AdminPasswordManifestPublishMode,
   ): Promise<void>;
 };
 
@@ -72,14 +88,6 @@ type AdminPasswordMigrationRow = {
   password: string;
 };
 
-const DEFAULT_MANIFEST_PATH = resolve(
-  __dirname,
-  '../../../..',
-  '.kt-workspace',
-  'db-sync',
-  'admin-password-migration-manifest.json',
-);
-
 class AdminPasswordMigrationUsageError extends Error {}
 
 export function parseAdminPasswordMigrationOptions(
@@ -87,12 +95,12 @@ export function parseAdminPasswordMigrationOptions(
   env: NodeJS.ProcessEnv = process.env,
 ): AdminPasswordMigrationOptions {
   const modes: AdminPasswordMigrationMode[] = [];
+  const specifiedOptions = new Set<string>();
   let backupPath = env.ADMIN_PASSWORD_MIGRATION_BACKUP_PATH?.trim();
   let databaseIdentity = env.ADMIN_PASSWORD_MIGRATION_DATABASE_IDENTITY?.trim();
   let maintenanceConfirmed =
     env.ADMIN_PASSWORD_MIGRATION_MAINTENANCE_CONFIRMED === 'true';
-  let manifestPath =
-    env.ADMIN_PASSWORD_MIGRATION_MANIFEST_PATH?.trim() || DEFAULT_MANIFEST_PATH;
+  let manifestPath = env.ADMIN_PASSWORD_MIGRATION_MANIFEST_PATH?.trim();
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -109,6 +117,12 @@ export function parseAdminPasswordMigrationOptions(
       continue;
     }
     if (argument === '--maintenance-confirmed') {
+      if (specifiedOptions.has(argument)) {
+        throw new AdminPasswordMigrationUsageError(
+          `参数 ${argument} 只能指定一次`,
+        );
+      }
+      specifiedOptions.add(argument);
       maintenanceConfirmed = true;
       continue;
     }
@@ -117,14 +131,26 @@ export function parseAdminPasswordMigrationOptions(
     if (!value || value.startsWith('--')) {
       throw new AdminPasswordMigrationUsageError(`参数 ${argument} 缺少值`);
     }
+    if (
+      argument !== '--backup-path' &&
+      argument !== '--database-identity' &&
+      argument !== '--manifest-path'
+    ) {
+      throw new AdminPasswordMigrationUsageError(`未知参数 ${argument}`);
+    }
+    if (specifiedOptions.has(argument)) {
+      throw new AdminPasswordMigrationUsageError(
+        `参数 ${argument} 只能指定一次`,
+      );
+    }
+    specifiedOptions.add(argument);
+
     if (argument === '--backup-path') {
       backupPath = value;
     } else if (argument === '--database-identity') {
       databaseIdentity = value;
-    } else if (argument === '--manifest-path') {
-      manifestPath = value;
     } else {
-      throw new AdminPasswordMigrationUsageError(`未知参数 ${argument}`);
+      manifestPath = value;
     }
     index += 1;
   }
@@ -132,6 +158,12 @@ export function parseAdminPasswordMigrationOptions(
   if (modes.length !== 1) {
     throw new AdminPasswordMigrationUsageError('必须且只能指定一个迁移模式');
   }
+  if (!manifestPath) {
+    throw new AdminPasswordMigrationUsageError(
+      '必须由调用方指定 manifest 路径',
+    );
+  }
+  assertAdminPasswordMigrationManifestPath(manifestPath);
 
   return {
     backupPath,
@@ -158,7 +190,22 @@ export async function runAdminPasswordMigration(
   options: AdminPasswordMigrationOptions,
   dependencies: AdminPasswordMigrationDependencies,
 ) {
-  assertExecuteSafety(options, dependencies);
+  assertAdminPasswordMigrationManifestPath(options.manifestPath);
+  const manifestInspection = dependencies.inspectManifestPath(
+    options.manifestPath,
+  );
+  assertManifestPathSafety(manifestInspection);
+  const pathSafetyLease = assertExecuteSafety(
+    options,
+    dependencies,
+    manifestInspection,
+  );
+  try {
+    assertManifestPathIsNew(manifestInspection);
+  } catch (error) {
+    if (pathSafetyLease) releasePathInspectionSafely(pathSafetyLease);
+    throw error;
+  }
 
   const manifest = createManifest(options.mode);
   let initialized = false;
@@ -168,6 +215,15 @@ export async function runAdminPasswordMigration(
   let committed = false;
   let initiallyPendingIds: string[] = [];
   let operationError: unknown;
+  let manifestPublished = false;
+  const persistManifest = async () => {
+    await dependencies.writeManifest(
+      options.manifestPath,
+      manifest,
+      manifestPublished ? 'replace' : 'create',
+    );
+    manifestPublished = true;
+  };
 
   try {
     await dependencies.dataSource.initialize();
@@ -221,20 +277,20 @@ export async function runAdminPasswordMigration(
       manifest.ids.pending = [];
       manifest.counts.pending = 0;
       manifest.status = 'prepared';
-      await dependencies.writeManifest(options.manifestPath, manifest);
+      await persistManifest();
 
       commitAttempted = true;
       await queryRunner.commitTransaction();
       transactionStarted = false;
       committed = true;
       manifest.status = 'completed';
-      await dependencies.writeManifest(options.manifestPath, manifest);
+      await persistManifest();
     } else if (options.mode === 'verify' && manifest.counts.pending > 0) {
       manifest.status = 'verification-failed';
     }
 
     if (options.mode !== 'execute') {
-      await dependencies.writeManifest(options.manifestPath, manifest);
+      await persistManifest();
     }
     logSafely(dependencies.logger, 'log', formatManifestSummary(manifest));
     return manifest;
@@ -262,7 +318,7 @@ export async function runAdminPasswordMigration(
         manifest.counts.pending = initiallyPendingIds.length;
       }
       try {
-        await dependencies.writeManifest(options.manifestPath, manifest);
+        await persistManifest();
       } catch {
         // 迁移原始错误优先，manifest 写入失败不得覆盖回滚证据。
       }
@@ -293,6 +349,13 @@ export async function runAdminPasswordMigration(
         cleanupErrors.push(error);
       }
     }
+    if (pathSafetyLease) {
+      try {
+        pathSafetyLease.release();
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
+    }
     if (cleanupErrors.length > 0) {
       logSafely(
         dependencies.logger,
@@ -309,6 +372,7 @@ export async function runAdminPasswordMigration(
 function assertExecuteSafety(
   options: AdminPasswordMigrationOptions,
   dependencies: AdminPasswordMigrationDependencies,
+  manifestInspection: AdminPasswordMigrationPathInspection,
 ) {
   if (options.mode !== 'execute') return;
   if (!options.databaseIdentity) {
@@ -325,8 +389,82 @@ function assertExecuteSafety(
   if (!options.backupPath) {
     throw new AdminPasswordMigrationUsageError('execute 模式必须提供备份路径');
   }
-  if (!dependencies.pathExists(options.backupPath)) {
-    throw new AdminPasswordMigrationUsageError('备份路径不存在');
+  if (resolve(options.backupPath) === resolve(options.manifestPath)) {
+    throw new AdminPasswordMigrationUsageError('备份路径不能与 manifest 相同');
+  }
+  const backup = dependencies.inspectBackupPath(options.backupPath);
+  try {
+    if (backup.parentHasSymbolicLink) {
+      throw new AdminPasswordMigrationUsageError('备份父路径不能包含符号链接');
+    }
+    if (backup.isSymbolicLink) {
+      throw new AdminPasswordMigrationUsageError('备份路径不能包含符号链接');
+    }
+    if (
+      !backup.stable ||
+      !backup.exists ||
+      !backup.identity ||
+      !backup.isFile ||
+      !backup.readable ||
+      backup.size < 1
+    ) {
+      throw new AdminPasswordMigrationUsageError(
+        '备份路径必须是可读的非空普通文件',
+      );
+    }
+    if (
+      manifestInspection.exists &&
+      manifestInspection.identity === backup.identity
+    ) {
+      throw new AdminPasswordMigrationUsageError(
+        '备份路径不能与 manifest 指向同一文件',
+      );
+    }
+  } catch (error) {
+    releasePathInspectionSafely(backup);
+    throw error;
+  }
+  return backup;
+}
+
+function assertAdminPasswordMigrationManifestPath(path: string) {
+  const target = resolve(path);
+  const workspaceSegment = `${sep}.kt-workspace${sep}`;
+  if (!target.includes(workspaceSegment) || !target.endsWith('.json')) {
+    throw new AdminPasswordMigrationUsageError(
+      'manifest 必须由调用方指定为 .kt-workspace 下的 JSON 文件',
+    );
+  }
+}
+
+function assertManifestPathSafety(
+  inspection: AdminPasswordMigrationPathInspection,
+) {
+  if (inspection.parentHasSymbolicLink) {
+    throw new AdminPasswordMigrationUsageError(
+      'manifest 父路径不能包含符号链接',
+    );
+  }
+  if (inspection.isSymbolicLink) {
+    throw new AdminPasswordMigrationUsageError('manifest 不能是符号链接');
+  }
+  if (
+    !inspection.stable ||
+    (inspection.exists && (!inspection.isFile || !inspection.identity))
+  ) {
+    throw new AdminPasswordMigrationUsageError(
+      'manifest 路径必须是普通文件或可安全创建的新文件',
+    );
+  }
+}
+
+function assertManifestPathIsNew(
+  inspection: AdminPasswordMigrationPathInspection,
+) {
+  if (inspection.exists) {
+    throw new AdminPasswordMigrationUsageError(
+      'manifest 必须使用不存在的新路径',
+    );
   }
 }
 
@@ -403,19 +541,49 @@ function readAffectedRows(result: any) {
   return Number(header?.affectedRows);
 }
 
-async function writeMigrationManifest(
+export async function writeAdminPasswordMigrationManifest(
   path: string,
   manifest: AdminPasswordMigrationManifest,
+  publishMode: AdminPasswordManifestPublishMode = 'create',
 ) {
-  await mkdir(dirname(path), { recursive: true });
-  const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+  const target = resolve(path);
+  assertAdminPasswordMigrationManifestPath(target);
+  const initialInspection = inspectAdminPasswordManifestPath(target);
+  assertManifestPathSafety(initialInspection);
+  if (publishMode === 'create') {
+    assertManifestPathIsNew(initialInspection);
+  } else if (!initialInspection.exists) {
+    throw new AdminPasswordMigrationUsageError('manifest 更新要求现有普通文件');
+  }
+  await mkdir(dirname(target), { recursive: true });
+  const preparedInspection = inspectAdminPasswordManifestPath(target);
+  assertManifestPathSafety(preparedInspection);
+  if (publishMode === 'create') {
+    assertManifestPathIsNew(preparedInspection);
+  } else if (!preparedInspection.exists) {
+    throw new AdminPasswordMigrationUsageError('manifest 更新要求现有普通文件');
+  }
+  const temporaryPath = `${target}.${process.pid}.${Date.now()}.tmp`;
   let writeError: unknown;
   try {
     await writeFile(temporaryPath, `${JSON.stringify(manifest, null, 2)}\n`, {
       encoding: 'utf8',
+      flag: 'wx',
       mode: 0o600,
     });
-    await rename(temporaryPath, path);
+    const publishInspection = inspectAdminPasswordManifestPath(target);
+    assertManifestPathSafety(publishInspection);
+    if (publishMode === 'create') {
+      assertManifestPathIsNew(publishInspection);
+      await link(temporaryPath, target);
+    } else {
+      if (!publishInspection.exists) {
+        throw new AdminPasswordMigrationUsageError(
+          'manifest 更新要求现有普通文件',
+        );
+      }
+      await rename(temporaryPath, target);
+    }
   } catch (error) {
     writeError = error;
     throw error;
@@ -428,6 +596,147 @@ async function writeMigrationManifest(
   }
 }
 
+function createPathInspection(
+  overrides: Partial<AdminPasswordMigrationPathInspection> = {},
+): AdminPasswordMigrationPathInspection {
+  return {
+    exists: false,
+    isFile: false,
+    isSymbolicLink: false,
+    parentHasSymbolicLink: false,
+    readable: false,
+    release: () => {},
+    size: 0,
+    stable: true,
+    ...overrides,
+  };
+}
+
+function pathContainsSymbolicLink(path: string) {
+  const target = resolve(path);
+  const root = parse(target).root;
+  const components = relative(root, target).split(sep).filter(Boolean);
+  let current = root;
+
+  for (const component of components) {
+    current = join(current, component);
+    try {
+      if (lstatSync(current).isSymbolicLink()) return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+      return true;
+    }
+  }
+  return false;
+}
+
+export function inspectAdminPasswordManifestPath(
+  path: string,
+): AdminPasswordMigrationPathInspection {
+  const target = resolve(path);
+  const parentHasSymbolicLink = pathContainsSymbolicLink(dirname(target));
+  if (parentHasSymbolicLink) {
+    return createPathInspection({ parentHasSymbolicLink });
+  }
+  try {
+    const stat = lstatSync(target, { bigint: true });
+    return createPathInspection({
+      exists: true,
+      identity: `${stat.dev}:${stat.ino}`,
+      isFile: stat.isFile(),
+      isSymbolicLink: stat.isSymbolicLink(),
+      parentHasSymbolicLink,
+      readable: stat.isFile(),
+      size: Number(stat.size),
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return createPathInspection({ parentHasSymbolicLink });
+    }
+    return createPathInspection({
+      parentHasSymbolicLink,
+      stable: false,
+    });
+  }
+}
+
+export function inspectAdminPasswordBackupPath(
+  path: string,
+): AdminPasswordMigrationPathInspection {
+  const target = resolve(path);
+  const parentHasSymbolicLink = pathContainsSymbolicLink(dirname(target));
+  if (parentHasSymbolicLink) {
+    return createPathInspection({ parentHasSymbolicLink });
+  }
+  let pathStat;
+  try {
+    pathStat = lstatSync(target, { bigint: true });
+  } catch (error) {
+    return createPathInspection({
+      parentHasSymbolicLink,
+      stable: (error as NodeJS.ErrnoException).code === 'ENOENT',
+    });
+  }
+  if (pathStat.isSymbolicLink()) {
+    return createPathInspection({
+      exists: true,
+      identity: `${pathStat.dev}:${pathStat.ino}`,
+      isSymbolicLink: true,
+      parentHasSymbolicLink,
+    });
+  }
+  if (!pathStat.isFile()) {
+    return createPathInspection({
+      exists: true,
+      identity: `${pathStat.dev}:${pathStat.ino}`,
+      parentHasSymbolicLink,
+      size: Number(pathStat.size),
+    });
+  }
+
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const stat = fstatSync(descriptor, { bigint: true });
+    const pathIdentity = `${pathStat.dev}:${pathStat.ino}`;
+    const descriptorIdentity = `${stat.dev}:${stat.ino}`;
+    let released = false;
+    return createPathInspection({
+      exists: true,
+      identity: descriptorIdentity,
+      isFile: stat.isFile(),
+      parentHasSymbolicLink,
+      readable: true,
+      release: () => {
+        if (released) return;
+        released = true;
+        closeSync(descriptor);
+      },
+      size: Number(stat.size),
+      stable: pathIdentity === descriptorIdentity,
+    });
+  } catch {
+    if (descriptor !== undefined) closeSync(descriptor);
+    return createPathInspection({
+      exists: true,
+      isFile: pathStat.isFile(),
+      parentHasSymbolicLink,
+      size: Number(pathStat.size),
+      stable: false,
+    });
+  }
+}
+
+function releasePathInspectionSafely(
+  inspection: AdminPasswordMigrationPathInspection,
+) {
+  try {
+    inspection.release();
+  } catch {
+    // 路径门禁错误优先，关闭只读备份描述符失败不得掩盖原始拒绝原因。
+  }
+}
+
 async function main() {
   const options = parseAdminPasswordMigrationOptions(process.argv.slice(2));
   const actualDatabaseIdentity = buildAdminPasswordMigrationDatabaseIdentity(
@@ -437,10 +746,11 @@ async function main() {
   const manifest = await runAdminPasswordMigration(options, {
     actualDatabaseIdentity,
     dataSource,
+    inspectBackupPath: inspectAdminPasswordBackupPath,
+    inspectManifestPath: inspectAdminPasswordManifestPath,
     logger: console,
     passwordHashService: new AdminPasswordHashService(),
-    pathExists: existsSync,
-    writeManifest: writeMigrationManifest,
+    writeManifest: writeAdminPasswordMigrationManifest,
   });
   if (manifest.status === 'verification-failed') {
     process.exitCode = 1;

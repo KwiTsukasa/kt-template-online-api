@@ -66,7 +66,9 @@ type BlogLegacyAssetMigrationCommandDependencies = {
         endPoint: configService.get<string>('MINIO_ENDPOINT'),
         port: Number(configService.get<string>('MINIO_PORT')),
         secretKey: configService.get<string>('MINIO_SECRET_KEY'),
-        useSSL: false,
+        useSSL: resolveBlogLegacyAssetMinioUseSsl(
+          configService.get<string>('MINIO_USE_SSL'),
+        ),
       }),
     }),
   ],
@@ -90,6 +92,10 @@ type BlogLegacyAssetMigrationCommandDependencies = {
   ],
 })
 class BlogLegacyAssetMigrationCommandModule {}
+
+export function resolveBlogLegacyAssetMinioUseSsl(value?: string): boolean {
+  return value?.trim().toLowerCase() === 'true';
+}
 
 export function parseBlogLegacyAssetMigrationOptions(
   argv: string[],

@@ -57,7 +57,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 | 分组                  | 变量                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MySQL                 | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC`                                                                                                                                                                                                                                                                                                                                                                                    |
-| MinIO                 | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`、`BLOG_ASSET_MIGRATION_*`                                                                                                                                                                                                                                                                         |
+| MinIO                 | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`MINIO_USE_SSL`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`、`BLOG_ASSET_MIGRATION_*`                                                                                                                                                                                                                                                        |
 | Admin                 | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                                                                                                |
 | Public Security       | `PUBLIC_SECURITY_*`、`PUBLIC_RATE_LIMIT_REDIS_*`、`PUBLIC_RATE_LIMIT_*`                                                                                                                                                                                                                                                                                                                                                                                         |
 | Logging/Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*`                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -77,7 +77,14 @@ Admin 密码使用
 允许在维护窗口由编译后的 `pnpm admin-passwords:migrate -- <参数>` 一次性
 迁移。必须先 `--dry-run`，再带数据库身份、维护确认、已存在备份和
 `.kt-workspace` manifest 执行 `--execute`，最后 `--verify` 并运行
-`sql/admin-password-hash-verify.sql`。哈希落库后禁止回滚到明文比较版本。
+`sql/admin-password-hash-verify.sql`。所有模式都必须显式指定 manifest；
+manifest 必须是规范化后仍位于 `.kt-workspace` 路径组件下的 `.json`
+新文件，首次发布使用排他创建且不会覆盖既有 evidence；`--execute` 的备份
+必须是可读、非空普通文件，且规范化后不能与
+manifest 指向同一路径。备份和 manifest 的现存父路径、目标均拒绝符号链接，
+现存文件还会按设备号/inode 拒绝硬链接别名；备份通过 `O_NOFOLLOW` 打开并在
+迁移结束前保持只读描述符，manifest 每次原子替换前都会重新检查目标。哈希落库
+后禁止回滚到明文比较版本。
 
 Blog Live2D 运行包存放在 MinIO，公开读取入口为 `/blog/live2d/:character/catalog.json` 和 `/blog/live2d/:character/:family/*assetPath`。`character` 只允许 `pio`、`tia`，family 只允许 `moc` 和 `moc3`：`moc/` 提供旧 WordPress 同款 Cubism2 `index.json`、`model.moc`、`.mtn` 动作和贴图，`moc3/` 保留当前重建 Cubism3 包（Tia 当前只发布 `moc/`，不会在 catalog 声明不存在的 MOC3）。防盗链只接受旧 Blog Origin `https://blog.kwitsukasa.top`，或由可信代理链和原始 Host 推导出的当前 `https://nas4.kwitsukasa.top:{动态端口}` Origin；动态端口必须显式存在，省略端口或显式默认 `443` 均不作为 NATMap Origin。客户端提供的 forwarded Host 不能扩展允许范围。Live2D 每个客户端 IP 默认最多 8 条跨副本 Redis 并发租约；每条流使用唯一 token 的 ZSET 成员，定期续租，HTTP `finish`、`close` 或 `error` 时只精确释放自身 token，旧流不会递减后续代际的计数，120 秒 TTL 兜底断连和异常。`BLOG_LIVE2D_ROOT_PREFIX` 指向角色根目录（默认 `blog/live2d`），旧 `BLOG_LIVE2D_PREFIX=blog/live2d/pio` 会自动派生到同一根前缀以兼容现有环境；缺失或不匹配的 Referer/Origin 会在读取 MinIO 前被拒绝。MinIO 上传结果和 `/minio/url` 只返回根相对 `/api/minio/download?...`，不向浏览器公开内部 MinIO endpoint。
 
@@ -250,6 +257,41 @@ bash scripts/bangdream-render-smoke.sh --operation-key bangdream.event.stage --t
 ## 发布
 
 主线发布由 Jenkins 构建镜像、推送 NAS 本地 Registry，并滚动更新 K8s `kt-prod/kt-template-online-api`。推送后不能只看 Git push 成功，需要继续观察 Jenkins、K8s rollout、新 Pod 状态和至少一条真实运行态 smoke。
+
+Task 13 首次发布先以 `TASK13_PREBUILD_ONLY=true`、`DEPLOY_TARGET=docker`、
+`BUILD_DOCKER_IMAGE=true`、`PUSH_DOCKER_IMAGE=true`、
+`RUN_DOCKER_CONTAINER=false` 单独构建镜像。该模式只允许 Linux/NAS
+Agent 上远端 `main/dev` 与 checkout 完全相同的非 PR `main`，只推送本次
+API/Gateway tag，不更新 `latest`，也不会进入 K8s Deploy 或 Docker Run。
+两张镜像必须具有同一 source revision 和 build-pair；成功后 Jenkins 归档
+`.kt-workspace/task13-prebuild/task13-exact-digests.env`，后续维护流程只消费
+其中的 exact digest。Task 13 两种受限模式都拒绝 NapCat image/profile
+override，避免夹带无关 Pod template 变更。本地 Jest 只静态验证
+Jenkinsfile 状态机；正式迁移前仍必须在 Jenkins canary 中验证参数绑定、
+Registry digest 回读、归档和“零部署”结果。
+Task 13 源码门禁还会拒绝未显式选择上述 build-only 或
+`PREBUILT_RELEASE` 的普通非 PR `main` 构建，因此首次 SCM 自动构建可能在
+Prepare 阶段按设计失败且不产生部署；待 Jenkins 注册新参数后，再用固定参数
+手动触发 build-only。该临时门禁必须保留到密码迁移、exact release 和线上
+登录 smoke 全部通过，之后才可在独立提交中移除。
+
+Task 13 密码迁移后的恢复使用 Jenkins `PREBUILT_RELEASE` 受控模式，不重新
+安装、测试、构建或推送。调用方必须保证 checkout 无 tracked/untracked
+漂移，并传入远端 `main/dev` 同时指向的
+`EXPECTED_SOURCE_COMMIT`、当前目标 `PREBUILT_API_IMAGE`、迁移使用的
+`PREBUILT_MIGRATION_API_IMAGE`、预先批准且支持 PBKDF2 的
+`PREBUILT_FALLBACK_API_IMAGE`、与 migration API 同一次 build 的
+`PREBUILT_GATEWAY_IMAGE` exact digest，以及
+`TASK13_MIGRATION_BATCH_ID`。目标 API 只能是 migration 或 fallback
+digest；migration/fallback 的 digest 后缀和拉取后的 Docker image ID
+都必须不同。API Deployment 还必须保留绑定 batch、migration/fallback digest
+和生产 env SHA256 的活动维护 annotation，以及当前 batch 的 NAS 外备份、
+Blog verify、Admin verify 三项完成证明。该模式固定规范生产 env 路径，在
+第一次 Kubernetes 写前验证零 API Pod、镜像 revision/build-pair 和上述
+证明，再重建 Secret，用临时 Kustomize overlay 以 API `replicas=0` 应用
+并回读两个 digest 和维护租约，最后才扩容 API 到 `1` 并等待 rollout。
+manifest apply、本地回读、rollout 或最终回读失败时都会尝试恢复 API `0`
+副本并清空 Pod；普通 tag 发布不能替代此流程。
 
 QQBot 系统消息推送按以下顺序发布和回滚：
 

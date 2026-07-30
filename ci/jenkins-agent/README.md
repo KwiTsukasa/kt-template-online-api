@@ -22,11 +22,27 @@ Agent 镜像内置：
 Manage Jenkins -> Nodes -> New Node
 Node name: kt-node-agent
 Type: Permanent Agent
+Number of executors: 1
 Remote root directory: /home/jenkins/agent
 Labels: kt-node-agent nodejs docker
 Usage: Only build jobs with label expressions matching this node
 Launch method: Launch agent by connecting it to the controller
 ```
+
+生产 NAS 只有这一台构建节点，controller 执行器保持为 `0`。不要为了并行发布
+直接提高执行器数量；Docker socket 创建的构建容器和 BuildKit 进程不会被
+Agent 容器的 cgroup 完整约束。只有取得单任务峰值遥测并建立宿主级资源隔离后，
+才能重新评估并发。
+
+Task 13 的 `TASK13_PREBUILD_ONLY` 是单执行器上的只构建门禁：参数必须固定为
+`DEPLOY_TARGET=docker`、构建/推送开启、运行容器关闭，并清空两个 NapCat
+override。它只推送 API/Gateway 的本次 tag，将 exact digest 证据归档到
+`.kt-workspace/task13-prebuild/task13-exact-digests.env`，不会运行 K8s
+Deploy 或 Docker Run。Jenkinsfile 的本地测试只覆盖静态状态机；投入维护窗口
+前还要用隔离 canary 验证参数绑定、Registry 回读和没有任何部署副作用。
+Task 13 期间，普通非 PR `main` 构建会在 Prepare 阶段 fail closed；首次
+SCM 自动构建可按设计只注册参数后失败，再使用私有触发脚本显式运行
+build-only。密码迁移、exact release 和线上登录 smoke 完成前不得移除此门禁。
 
 保存后进入节点页面，复制 inbound agent 的 `secret`。Jenkinsfile 会通过下面的标签调度到这个节点：
 

@@ -1,12 +1,73 @@
-import type { AdminPasswordMigrationOptions } from '../../src/commands/migrate-admin-passwords';
+import {
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import type {
+  AdminPasswordMigrationOptions,
+  AdminPasswordMigrationPathInspection,
+} from '../../src/commands/migrate-admin-passwords';
 import {
   buildAdminPasswordMigrationDatabaseIdentity,
+  inspectAdminPasswordBackupPath,
+  inspectAdminPasswordManifestPath,
   parseAdminPasswordMigrationOptions,
   runAdminPasswordMigration,
+  writeAdminPasswordMigrationManifest,
 } from '../../src/commands/migrate-admin-passwords';
 
 const VERSIONED_HASH =
   '$pbkdf2-sha256$v=1$i=600000$AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE$acCR3Bjb48G7uQRjBo961QHqiLOtaEMb9u_X9DGlq3E';
+
+function createPathSafetyFixture() {
+  const root = mkdtempSync(join(tmpdir(), 'kt-admin-password-paths-'));
+  const workspace = join(root, '.kt-workspace', 'task13');
+  mkdirSync(workspace, { recursive: true });
+  const backupPath = join(root, 'database.sql.gpg');
+  const manifestPath = join(workspace, 'manifest.json');
+  writeFileSync(backupPath, 'encrypted-backup', { mode: 0o600 });
+  return {
+    backupPath,
+    cleanup: () => rmSync(root, { force: true, recursive: true }),
+    manifestPath,
+    root,
+    workspace,
+  };
+}
+
+function createPathInspection(
+  overrides: Partial<AdminPasswordMigrationPathInspection> = {},
+): AdminPasswordMigrationPathInspection {
+  return {
+    exists: true,
+    identity: '1:1',
+    isFile: true,
+    isSymbolicLink: false,
+    parentHasSymbolicLink: false,
+    readable: true,
+    release: jest.fn(),
+    size: 128,
+    stable: true,
+    ...overrides,
+  };
+}
+
+function createMissingManifestInspection() {
+  return createPathInspection({
+    exists: false,
+    identity: undefined,
+    isFile: false,
+    readable: false,
+    size: 0,
+  });
+}
 
 function createHarness(
   rows: Array<{ id: string; password: string }>,
@@ -44,7 +105,7 @@ function createHarness(
     backupPath: '/backups/admin-before.sql',
     databaseIdentity: 'db.internal:3306/kt',
     maintenanceConfirmed: true,
-    manifestPath: '/evidence/admin-passwords.json',
+    manifestPath: '/app/.kt-workspace/task13/admin-passwords.json',
     mode,
   };
 
@@ -62,7 +123,8 @@ function createHarness(
         dataSource: dataSource as any,
         logger,
         passwordHashService: passwordHashService as any,
-        pathExists: () => true,
+        inspectBackupPath: () => createPathInspection(),
+        inspectManifestPath: () => createMissingManifestInspection(),
         writeManifest,
       }),
     writeManifest,
@@ -80,18 +142,87 @@ describe('Admin password migration command', () => {
         '--backup-path',
         '/backups/admin-before.sql',
         '--manifest-path',
-        '/evidence/result.json',
+        '/app/.kt-workspace/task13/result.json',
       ]),
     ).toEqual({
       backupPath: '/backups/admin-before.sql',
       databaseIdentity: 'db.internal:3306/kt',
       maintenanceConfirmed: true,
-      manifestPath: '/evidence/result.json',
+      manifestPath: '/app/.kt-workspace/task13/result.json',
       mode: 'execute',
     });
     expect(() =>
       parseAdminPasswordMigrationOptions(['--dry-run', '--verify']),
     ).toThrow('必须且只能指定一个迁移模式');
+    expect(() => parseAdminPasswordMigrationOptions(['--dry-run'], {})).toThrow(
+      '必须由调用方指定 manifest 路径',
+    );
+  });
+
+  it.each([
+    ['/evidence/result.json'],
+    ['/app/.kt-workspace/task13/result.txt'],
+    ['/app/.kt-workspace/../result.json'],
+  ])(
+    'rejects a manifest outside the required JSON evidence boundary: %s',
+    (path) => {
+      expect(() =>
+        parseAdminPasswordMigrationOptions([
+          '--dry-run',
+          '--manifest-path',
+          path,
+        ]),
+      ).toThrow('manifest 必须由调用方指定为 .kt-workspace 下的 JSON 文件');
+    },
+  );
+
+  it.each([
+    [
+      '--backup-path',
+      '/backups/first.sql',
+      '--backup-path',
+      '/backups/second.sql',
+    ],
+    [
+      '--database-identity',
+      'db.internal:3306/first',
+      '--database-identity',
+      'db.internal:3306/second',
+    ],
+    [
+      '--manifest-path',
+      '/app/.kt-workspace/task13/first.json',
+      '--manifest-path',
+      '/app/.kt-workspace/task13/second.json',
+    ],
+  ])('rejects a repeated value option: %s', (...optionArguments) => {
+    expect(() =>
+      parseAdminPasswordMigrationOptions(['--dry-run', ...optionArguments]),
+    ).toThrow('只能指定一次');
+  });
+
+  it('rejects a repeated maintenance confirmation flag', () => {
+    expect(() =>
+      parseAdminPasswordMigrationOptions([
+        '--dry-run',
+        '--maintenance-confirmed',
+        '--maintenance-confirmed',
+        '--manifest-path',
+        '/app/.kt-workspace/task13/result.json',
+      ]),
+    ).toThrow('只能指定一次');
+  });
+
+  it('accepts the same manifest contract from the environment', () => {
+    expect(
+      parseAdminPasswordMigrationOptions(['--verify'], {
+        ADMIN_PASSWORD_MIGRATION_MANIFEST_PATH:
+          '/app/.kt-workspace/task13/verify.json',
+      }),
+    ).toMatchObject({
+      manifestPath: '/app/.kt-workspace/task13/verify.json',
+      mode: 'verify',
+    });
   });
 
   it('builds the database identity without including credentials', () => {
@@ -119,14 +250,277 @@ describe('Admin password migration command', () => {
         {
           actualDatabaseIdentity: 'db.internal:3306/kt',
           dataSource: harness.dataSource as any,
+          inspectManifestPath: () => createMissingManifestInspection(),
           logger: { error: jest.fn(), log: jest.fn() },
           passwordHashService: harness.passwordHashService as any,
-          pathExists: () => true,
+          inspectBackupPath: () => createPathInspection(),
           writeManifest: async () => {},
         },
       ),
     ).rejects.toThrow();
     expect(harness.dataSource.initialize).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing file', { isFile: false, readable: false, size: 0 }],
+    ['directory', { isFile: false, readable: true, size: 4096 }],
+    ['unreadable file', { isFile: true, readable: false, size: 128 }],
+    ['empty file', { isFile: true, readable: true, size: 0 }],
+  ])('rejects execute with an invalid backup: %s', async (_label, backup) => {
+    const harness = createHarness([], 'execute');
+
+    await expect(
+      runAdminPasswordMigration(harness.options, {
+        actualDatabaseIdentity: 'db.internal:3306/kt',
+        dataSource: harness.dataSource as any,
+        inspectBackupPath: () => createPathInspection(backup),
+        inspectManifestPath: () => createMissingManifestInspection(),
+        logger: { error: jest.fn(), log: jest.fn() },
+        passwordHashService: harness.passwordHashService as any,
+        writeManifest: async () => {},
+      }),
+    ).rejects.toThrow('备份路径必须是可读的非空普通文件');
+    expect(harness.dataSource.initialize).not.toHaveBeenCalled();
+  });
+
+  it('rejects canonical-equivalent backup and manifest paths before inspection or initialization', async () => {
+    const harness = createHarness([], 'execute');
+    const inspectBackupPath = jest.fn(() => createPathInspection());
+
+    await expect(
+      runAdminPasswordMigration(
+        {
+          ...harness.options,
+          backupPath: '/app/.kt-workspace/task13/./manifest.json',
+          manifestPath: '/app/.kt-workspace/task13/manifest.json',
+        },
+        {
+          actualDatabaseIdentity: 'db.internal:3306/kt',
+          dataSource: harness.dataSource as any,
+          inspectBackupPath,
+          inspectManifestPath: () => createMissingManifestInspection(),
+          logger: { error: jest.fn(), log: jest.fn() },
+          passwordHashService: harness.passwordHashService as any,
+          writeManifest: harness.writeManifest,
+        },
+      ),
+    ).rejects.toThrow('备份路径不能与 manifest 相同');
+    expect(inspectBackupPath).not.toHaveBeenCalled();
+    expect(harness.dataSource.initialize).not.toHaveBeenCalled();
+    expect(harness.writeManifest).not.toHaveBeenCalled();
+  });
+
+  it('rejects a backup symlink alias before database initialization', async () => {
+    const fixture = createPathSafetyFixture();
+    const backupAlias = join(fixture.root, 'backup-alias.sql.gpg');
+    writeFileSync(fixture.manifestPath, '{}\n', { mode: 0o600 });
+    symlinkSync(fixture.manifestPath, backupAlias);
+    const harness = createHarness([], 'execute');
+
+    try {
+      await expect(
+        runAdminPasswordMigration(
+          {
+            ...harness.options,
+            backupPath: backupAlias,
+            manifestPath: fixture.manifestPath,
+          },
+          {
+            actualDatabaseIdentity: 'db.internal:3306/kt',
+            dataSource: harness.dataSource as any,
+            inspectBackupPath: inspectAdminPasswordBackupPath,
+            inspectManifestPath: inspectAdminPasswordManifestPath,
+            logger: harness.logger,
+            passwordHashService: harness.passwordHashService as any,
+            writeManifest: harness.writeManifest,
+          },
+        ),
+      ).rejects.toThrow('备份路径不能包含符号链接');
+      expect(harness.dataSource.initialize).not.toHaveBeenCalled();
+      expect(harness.writeManifest).not.toHaveBeenCalled();
+      expect(readFileSync(fixture.manifestPath, 'utf8')).toBe('{}\n');
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('rejects hard-linked backup and manifest identities before database initialization', async () => {
+    const fixture = createPathSafetyFixture();
+    linkSync(fixture.backupPath, fixture.manifestPath);
+    const harness = createHarness([], 'execute');
+
+    try {
+      await expect(
+        runAdminPasswordMigration(
+          {
+            ...harness.options,
+            backupPath: fixture.backupPath,
+            manifestPath: fixture.manifestPath,
+          },
+          {
+            actualDatabaseIdentity: 'db.internal:3306/kt',
+            dataSource: harness.dataSource as any,
+            inspectBackupPath: inspectAdminPasswordBackupPath,
+            inspectManifestPath: inspectAdminPasswordManifestPath,
+            logger: harness.logger,
+            passwordHashService: harness.passwordHashService as any,
+            writeManifest: harness.writeManifest,
+          },
+        ),
+      ).rejects.toThrow('备份路径不能与 manifest 指向同一文件');
+      expect(harness.dataSource.initialize).not.toHaveBeenCalled();
+      expect(harness.writeManifest).not.toHaveBeenCalled();
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('rejects a manifest symlink or symlinked parent before database initialization', async () => {
+    const fixture = createPathSafetyFixture();
+    const manifestTarget = join(fixture.root, 'outside.json');
+    writeFileSync(manifestTarget, '{}\n', { mode: 0o600 });
+    symlinkSync(manifestTarget, fixture.manifestPath);
+    const harness = createHarness([], 'execute');
+
+    try {
+      await expect(
+        runAdminPasswordMigration(
+          {
+            ...harness.options,
+            backupPath: fixture.backupPath,
+            manifestPath: fixture.manifestPath,
+          },
+          {
+            actualDatabaseIdentity: 'db.internal:3306/kt',
+            dataSource: harness.dataSource as any,
+            inspectBackupPath: inspectAdminPasswordBackupPath,
+            inspectManifestPath: inspectAdminPasswordManifestPath,
+            logger: harness.logger,
+            passwordHashService: harness.passwordHashService as any,
+            writeManifest: harness.writeManifest,
+          },
+        ),
+      ).rejects.toThrow('manifest 不能是符号链接');
+
+      rmSync(fixture.manifestPath);
+      const realParent = join(fixture.root, 'real-parent');
+      mkdirSync(realParent);
+      rmSync(fixture.workspace, { recursive: true });
+      symlinkSync(realParent, fixture.workspace);
+
+      await expect(
+        runAdminPasswordMigration(
+          {
+            ...harness.options,
+            backupPath: fixture.backupPath,
+            manifestPath: fixture.manifestPath,
+          },
+          {
+            actualDatabaseIdentity: 'db.internal:3306/kt',
+            dataSource: harness.dataSource as any,
+            inspectBackupPath: inspectAdminPasswordBackupPath,
+            inspectManifestPath: inspectAdminPasswordManifestPath,
+            logger: harness.logger,
+            passwordHashService: harness.passwordHashService as any,
+            writeManifest: harness.writeManifest,
+          },
+        ),
+      ).rejects.toThrow('manifest 父路径不能包含符号链接');
+      expect(harness.dataSource.initialize).not.toHaveBeenCalled();
+      expect(harness.writeManifest).not.toHaveBeenCalled();
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('fails closed when the manifest writer receives an existing symlink', async () => {
+    const fixture = createPathSafetyFixture();
+    const outsidePath = join(fixture.root, 'outside.json');
+    writeFileSync(outsidePath, 'preserve-me\n', { mode: 0o600 });
+    symlinkSync(outsidePath, fixture.manifestPath);
+
+    try {
+      await expect(
+        writeAdminPasswordMigrationManifest(fixture.manifestPath, {
+          counts: { migrated: 0, pending: 0, scanned: 0, skipped: 0 },
+          ids: { migrated: [], pending: [], skipped: [] },
+          mode: 'dry-run',
+          status: 'completed',
+        }),
+      ).rejects.toThrow('manifest 不能是符号链接');
+      expect(readFileSync(outsidePath, 'utf8')).toBe('preserve-me\n');
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('does not overwrite a pre-existing regular manifest on first publish', async () => {
+    const fixture = createPathSafetyFixture();
+    writeFileSync(fixture.manifestPath, 'preserve-existing\n', { mode: 0o600 });
+
+    try {
+      await expect(
+        writeAdminPasswordMigrationManifest(fixture.manifestPath, {
+          counts: { migrated: 0, pending: 0, scanned: 0, skipped: 0 },
+          ids: { migrated: [], pending: [], skipped: [] },
+          mode: 'dry-run',
+          status: 'completed',
+        }),
+      ).rejects.toThrow('manifest 必须使用不存在的新路径');
+      expect(readFileSync(fixture.manifestPath, 'utf8')).toBe(
+        'preserve-existing\n',
+      );
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('atomically creates and updates a regular manifest in a new evidence path', async () => {
+    const fixture = createPathSafetyFixture();
+    const manifest = {
+      counts: { migrated: 0, pending: 0, scanned: 0, skipped: 0 },
+      ids: { migrated: [], pending: [], skipped: [] },
+      mode: 'execute' as const,
+      status: 'prepared' as const,
+    };
+
+    try {
+      await writeAdminPasswordMigrationManifest(fixture.manifestPath, manifest);
+      await writeAdminPasswordMigrationManifest(
+        fixture.manifestPath,
+        {
+          ...manifest,
+          status: 'completed',
+        },
+        'replace',
+      );
+      expect(
+        JSON.parse(readFileSync(fixture.manifestPath, 'utf8')),
+      ).toMatchObject({
+        mode: 'execute',
+        status: 'completed',
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('rejects an existing manifest before database initialization', async () => {
+    const harness = createHarness([], 'dry-run');
+
+    await expect(
+      runAdminPasswordMigration(harness.options, {
+        actualDatabaseIdentity: 'db.internal:3306/kt',
+        dataSource: harness.dataSource as any,
+        inspectBackupPath: () => createPathInspection(),
+        inspectManifestPath: () => createPathInspection({ identity: '1:2' }),
+        logger: harness.logger,
+        passwordHashService: harness.passwordHashService as any,
+        writeManifest: harness.writeManifest,
+      }),
+    ).rejects.toThrow('manifest 必须使用不存在的新路径');
+    expect(harness.dataSource.initialize).not.toHaveBeenCalled();
+    expect(harness.writeManifest).not.toHaveBeenCalled();
   });
 
   it('runs dry-run without hashing, transaction, or writes', async () => {
@@ -198,6 +592,31 @@ describe('Admin password migration command', () => {
       mode: 'execute',
       status: 'completed',
     });
+  });
+
+  it('holds the backup identity lease until manifest and database cleanup finish', async () => {
+    const harness = createHarness([], 'execute');
+    const release = jest.fn();
+    const writeManifest = jest.fn(async () => {
+      expect(release).not.toHaveBeenCalled();
+    });
+
+    await runAdminPasswordMigration(harness.options, {
+      actualDatabaseIdentity: 'db.internal:3306/kt',
+      dataSource: harness.dataSource as any,
+      inspectBackupPath: () => createPathInspection({ release }),
+      inspectManifestPath: () => createMissingManifestInspection(),
+      logger: harness.logger,
+      passwordHashService: harness.passwordHashService as any,
+      writeManifest,
+    });
+
+    expect(writeManifest).toHaveBeenCalledTimes(2);
+    expect(harness.dataSource.destroy).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(harness.dataSource.destroy.mock.invocationCallOrder[0]).toBeLessThan(
+      release.mock.invocationCallOrder[0],
+    );
   });
 
   it('is idempotent when every password already uses the locked format', async () => {

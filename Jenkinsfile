@@ -34,6 +34,24 @@ def extractDigestSuffix(String value) {
   return separator >= 0 ? value.substring(separator + 1) : ''
 }
 
+def readRemotePublishHeads() {
+  def remoteHeadsRaw = ''
+  sshagent(credentials: ['github-ssh-kt-template']) {
+    remoteHeadsRaw = sh(
+      script: 'git ls-remote --exit-code --heads origin refs/heads/main refs/heads/dev',
+      returnStdout: true,
+    ).trim()
+  }
+  def remoteHeads = [:]
+  remoteHeadsRaw.readLines().each { line ->
+    def fields = line.trim().split(/\s+/)
+    if (fields.size() == 2) {
+      remoteHeads[fields[1]] = fields[0]
+    }
+  }
+  return remoteHeads
+}
+
 def requiredRuntimeEnvKeys() {
   return [
     'DB_HOST',
@@ -255,17 +273,7 @@ pipeline {
             if (checkoutStatus) {
               error('TASK13_PREBUILD_ONLY requires a clean checkout.')
             }
-            def remoteHeadsRaw = sh(
-              script: 'git ls-remote --exit-code --heads origin refs/heads/main refs/heads/dev',
-              returnStdout: true,
-            ).trim()
-            def remoteHeads = [:]
-            remoteHeadsRaw.readLines().each { line ->
-              def fields = line.trim().split(/\s+/)
-              if (fields.size() == 2) {
-                remoteHeads[fields[1]] = fields[0]
-              }
-            }
+            def remoteHeads = readRemotePublishHeads()
             if (
               remoteHeads['refs/heads/main'] != checkedOutCommit ||
               remoteHeads['refs/heads/dev'] != checkedOutCommit
@@ -356,17 +364,7 @@ pipeline {
             if (checkoutStatus) {
               error('PREBUILT_RELEASE requires a clean checkout.')
             }
-            def remoteHeadsRaw = sh(
-              script: 'git ls-remote --exit-code --heads origin refs/heads/main refs/heads/dev',
-              returnStdout: true,
-            ).trim()
-            def remoteHeads = [:]
-            remoteHeadsRaw.readLines().each { line ->
-              def fields = line.trim().split(/\s+/)
-              if (fields.size() == 2) {
-                remoteHeads[fields[1]] = fields[0]
-              }
-            }
+            def remoteHeads = readRemotePublishHeads()
             if (
               remoteHeads['refs/heads/main'] != expectedSourceCommit ||
               remoteHeads['refs/heads/dev'] != expectedSourceCommit

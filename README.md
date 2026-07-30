@@ -263,6 +263,10 @@ Task 13 首次发布先以 `TASK13_PREBUILD_ONLY=true`、`DEPLOY_TARGET=docker`�
 `RUN_DOCKER_CONTAINER=false` 单独构建镜像。该模式只允许 Linux/NAS
 Agent 上远端 `main/dev` 与 checkout 完全相同的非 PR `main`，只推送本次
 API/Gateway tag，不更新 `latest`，也不会进入 K8s Deploy 或 Docker Run。
+发布身份以 `checkout scm` 返回值与 workspace `HEAD` 的一致结果为准，不依赖
+手动参数构建中可能缺失的环境变量 `GIT_COMMIT`；远端 `main/dev` 校验必须由
+Jenkins SSH Agent 使用现有 SCM 凭据 `github-ssh-kt-template`，不能假定
+Agent 容器自身持有 Gitea 私钥。
 两张镜像必须具有同一 source revision 和 build-pair；成功后 Jenkins 归档
 `.kt-workspace/task13-prebuild/task13-exact-digests.env`，后续维护流程只消费
 其中的 exact digest。Task 13 两种受限模式都拒绝 NapCat image/profile

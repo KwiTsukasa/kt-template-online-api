@@ -274,6 +274,23 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
     expect(jenkinsfile).not.toContain('env.GIT_COMMIT');
   });
 
+  it('authenticates remote main and dev verification with the SCM credential', () => {
+    const helper = extractBlockAfter(
+      jenkinsfile,
+      'def readRemotePublishHeads()',
+    );
+    const prepare = extractStage('Prepare');
+
+    expect(helper).toContain(
+      "sshagent(credentials: ['github-ssh-kt-template'])",
+    );
+    expect(helper).toContain(
+      'git ls-remote --exit-code --heads origin refs/heads/main refs/heads/dev',
+    );
+    expect(prepare.match(/readRemotePublishHeads\(\)/g)).toHaveLength(2);
+    expect(prepare).not.toContain('def remoteHeadsRaw = sh(');
+  });
+
   it('keeps CPS-heavy release logic in bounded executable scripts', () => {
     expect(Buffer.byteLength(jenkinsfile)).toBeLessThanOrEqual(36_000);
     expect(extractStage('Docker Push')).toContain(

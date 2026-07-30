@@ -269,6 +269,13 @@ API/Gateway tag，不更新 `latest`，也不会进入 K8s Deploy 或 Docker Run
 override，避免夹带无关 Pod template 变更。本地 Jest 只静态验证
 Jenkinsfile 状态机；正式迁移前仍必须在 Jenkins canary 中验证参数绑定、
 Registry digest 回读、归档和“零部署”结果。
+Task 13 的 exact-digest 推送与受控 K8s 恢复状态机分别位于
+`ci/jenkins/task13-prebuild-push.sh` 和
+`ci/jenkins/task13-prebuilt-release.sh`；Jenkinsfile 只传递已通过精确门禁的
+固定输入并编排脚本，测试同时限制 Jenkinsfile 字节数，避免 Groovy CPS
+`Method too large`。恢复脚本不会把生产 Secret YAML 写入 workspace，并用同一
+EXIT/signal 守卫覆盖 manifest apply、回读和双 rollout；任一失败都会清理
+overlay，并将 API 恢复为零副本。
 Task 13 源码门禁还会拒绝未显式选择上述 build-only 或
 `PREBUILT_RELEASE` 的普通非 PR `main` 构建，因此首次 SCM 自动构建可能在
 Prepare 阶段按设计失败且不产生部署；待 Jenkins 注册新参数后，再用固定参数

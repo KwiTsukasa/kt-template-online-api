@@ -285,6 +285,7 @@ pipeline {
               'K8S_DEPLOYMENT': 'kt-template-online-api',
               'K8S_CONTAINER': 'api',
               'K8S_ENV_SECRET': 'kt-template-online-api-env',
+              'K8S_ROLLOUT_TIMEOUT': '180s',
               'CONTAINER_ENV_FILE': '/home/jenkins/agent/env/kt-template-online-api/.env.production',
             ]
             prebuiltK8sContract.each { parameterName, expectedValue ->
@@ -553,61 +554,14 @@ pipeline {
       steps {
         script {
           if (env.IS_TASK13_PREBUILD_ONLY == 'true') {
-            runCmd("""
-              set -e
-              umask 077
-              API_IMAGE=${shellQuote(env.DOCKER_IMAGE)}
-              GATEWAY_IMAGE=${shellQuote(env.GATEWAY_DOCKER_IMAGE)}
-              API_REPOSITORY=${shellQuote("${env.DOCKER_REGISTRY_EFFECTIVE}/${params.IMAGE_NAME}")}
-              GATEWAY_REPOSITORY=${shellQuote("${env.DOCKER_REGISTRY_EFFECTIVE}/${params.GATEWAY_IMAGE_NAME}")}
-              EVIDENCE_DIR=.kt-workspace/task13-prebuild
-              EVIDENCE_FILE="\$EVIDENCE_DIR/task13-exact-digests.env"
-              EVIDENCE_TEMP="\$EVIDENCE_FILE.tmp"
-              cleanup_task13_prebuild_evidence() {
-                rm -f -- "\$EVIDENCE_TEMP"
-              }
-              trap cleanup_task13_prebuild_evidence EXIT HUP INT TERM
-
-              docker push "\$API_IMAGE"
-              docker push "\$GATEWAY_IMAGE"
-              API_EXACT_IMAGE="\$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "\$API_IMAGE" | awk -v prefix="\$API_REPOSITORY@" 'index(\$0, prefix) == 1 { print; exit }')"
-              GATEWAY_EXACT_IMAGE="\$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "\$GATEWAY_IMAGE" | awk -v prefix="\$GATEWAY_REPOSITORY@" 'index(\$0, prefix) == 1 { print; exit }')"
-              API_DIGEST="\${API_EXACT_IMAGE#"\$API_REPOSITORY@"}"
-              GATEWAY_DIGEST="\${GATEWAY_EXACT_IMAGE#"\$GATEWAY_REPOSITORY@"}"
-              if ! printf '%s' "\$API_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}\$'; then
-                echo "Task 13 API exact digest evidence is invalid."
-                exit 1
-              fi
-              if ! printf '%s' "\$GATEWAY_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}\$'; then
-                echo "Task 13 Gateway exact digest evidence is invalid."
-                exit 1
-              fi
-
-              API_REVISION="\$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "\$API_IMAGE")"
-              GATEWAY_REVISION="\$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "\$GATEWAY_IMAGE")"
-              API_BUILD_PAIR="\$(docker image inspect --format '{{ index .Config.Labels "kt.kwitsukasa.top/build-pair" }}' "\$API_IMAGE")"
-              GATEWAY_BUILD_PAIR="\$(docker image inspect --format '{{ index .Config.Labels "kt.kwitsukasa.top/build-pair" }}' "\$GATEWAY_IMAGE")"
-              if [ "\$API_REVISION" != ${shellQuote(env.EXPECTED_SOURCE_COMMIT_FINAL)} ] || [ "\$GATEWAY_REVISION" != ${shellQuote(env.EXPECTED_SOURCE_COMMIT_FINAL)} ]; then
-                echo "Task 13 prebuilt image revision drifted from the checked-out commit."
-                exit 1
-              fi
-              if [ -z "\$API_BUILD_PAIR" ] || [ "\$API_BUILD_PAIR" != "\$GATEWAY_BUILD_PAIR" ] || [ "\$API_BUILD_PAIR" != ${shellQuote(env.IMAGE_BUILD_PAIR)} ]; then
-                echo "Task 13 API and Gateway images do not share the expected build pair."
-                exit 1
-              fi
-
-              mkdir -p -- "\$EVIDENCE_DIR"
-              {
-                printf 'API_IMAGE=%s\\n' "\$API_EXACT_IMAGE"
-                printf 'GATEWAY_IMAGE=%s\\n' "\$GATEWAY_EXACT_IMAGE"
-                printf 'SOURCE_REVISION=%s\\n' "\$API_REVISION"
-                printf 'BUILD_PAIR=%s\\n' "\$API_BUILD_PAIR"
-              } > "\$EVIDENCE_TEMP"
-              chmod 600 "\$EVIDENCE_TEMP"
-              mv -f -- "\$EVIDENCE_TEMP" "\$EVIDENCE_FILE"
-              trap - EXIT HUP INT TERM
-              printf 'Task 13 exact digest evidence: %s\\n' "\$EVIDENCE_FILE"
-            """.stripIndent())
+            withEnv([
+              "TASK13_API_IMAGE=${env.DOCKER_IMAGE}",
+              "TASK13_GATEWAY_IMAGE=${env.GATEWAY_DOCKER_IMAGE}",
+              "TASK13_EXPECTED_SOURCE_COMMIT=${env.EXPECTED_SOURCE_COMMIT_FINAL}",
+              "TASK13_EXPECTED_BUILD_PAIR=${env.IMAGE_BUILD_PAIR}",
+            ]) {
+              runCmd('./ci/jenkins/task13-prebuild-push.sh')
+            }
           } else if (env.DOCKER_REGISTRY_EFFECTIVE?.trim()) {
             runCmd("""
               docker push ${env.DOCKER_IMAGE}
@@ -663,18 +617,21 @@ pipeline {
           def changeCause = "Jenkins ${env.JOB_NAME} #${env.BUILD_NUMBER} ${env.GIT_COMMIT ?: 'unknown'}"
           def napcatImageOverride = params.QQBOT_NAPCAT_IMAGE_OVERRIDE?.trim()
           def napcatProfileOverride = params.QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE?.trim()
-          def replicasJsonPath = '{.spec.replicas}'
-          def apiImageJsonPath = "{.spec.template.spec.containers[?(@.name==\"${containerName}\")].image}"
-          def gatewayImageJsonPath = '{.spec.template.spec.containers[?(@.name=="gateway")].image}'
-          def maintenanceStateJsonPath = '{.metadata.annotations.kt\\.kwitsukasa\\.top/task13-maintenance}'
-          def maintenanceBatchJsonPath = '{.metadata.annotations.kt\\.kwitsukasa\\.top/task13-maintenance-batch}'
-          def maintenanceImageJsonPath = '{.metadata.annotations.kt\\.kwitsukasa\\.top/task13-migration-image}'
-          def fallbackImageJsonPath = '{.metadata.annotations.kt\\.kwitsukasa\\.top/task13-fallback-image}'
-          def environmentShaJsonPath = '{.metadata.annotations.kt\\.kwitsukasa\\.top/task13-env-sha256}'
-          def offNasBackupJsonPath = '{.metadata.annotations.kt\\.kwitsukasa\\.top/task13-off-nas-backup-sha256}'
-          def blogVerifiedJsonPath = '{.metadata.annotations.kt\\.kwitsukasa\\.top/task13-blog-verified}'
-          def adminVerifiedJsonPath = '{.metadata.annotations.kt\\.kwitsukasa\\.top/task13-admin-verified}'
-          def task13AttestationPrefix = "${env.TASK13_MIGRATION_BATCH_ID_FINAL}:"
+
+          if (env.IS_PREBUILT_RELEASE == 'true') {
+            withEnv([
+              "TASK13_API_IMAGE=${env.DOCKER_IMAGE}",
+              "TASK13_MIGRATION_API_IMAGE=${env.MIGRATION_API_IMAGE}",
+              "TASK13_FALLBACK_API_IMAGE=${env.FALLBACK_API_IMAGE}",
+              "TASK13_GATEWAY_IMAGE=${env.GATEWAY_DOCKER_IMAGE}",
+              "TASK13_EXPECTED_SOURCE_COMMIT=${env.EXPECTED_SOURCE_COMMIT_FINAL}",
+              "TASK13_MIGRATION_BATCH_ID=${env.TASK13_MIGRATION_BATCH_ID_FINAL}",
+              "TASK13_CHANGE_CAUSE=${changeCause}",
+            ]) {
+              runCmd('./ci/jenkins/task13-prebuilt-release.sh')
+            }
+            return
+          }
 
           // 每次发布都从 Agent 私有 env 文件重建 Secret，避免真实配置进入 Git。
           runCmd("""
@@ -695,95 +652,6 @@ pipeline {
 
           runCmd(buildEnvFileValidationScript(containerEnvFile))
 
-          if (env.IS_PREBUILT_RELEASE == 'true') {
-            runCmd("""
-              set -e
-              if [ ! -f ${shellQuote(containerEnvFile)} ] || [ -L ${shellQuote(containerEnvFile)} ]; then
-                echo "Task 13 production env must be a regular non-symbolic file."
-                exit 1
-              fi
-              if [ "\$(stat -c '%a' ${shellQuote(containerEnvFile)})" != "600" ]; then
-                echo "Task 13 production env must use mode 0600."
-                exit 1
-              fi
-              if [ "\$(stat -c '%u' ${shellQuote(containerEnvFile)})" != "\$(id -u)" ]; then
-                echo "Task 13 production env must be owned by the Jenkins Agent user."
-                exit 1
-              fi
-              kubectl ${kubeConfigArg} get namespace ${shellQuote(namespace)} >/dev/null
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(replicasJsonPath)})" != "0" ]; then
-                echo "Task 13 maintenance requires zero desired API replicas."
-                exit 1
-              fi
-              if [ -n "\$(kubectl ${kubeConfigArg} ${namespaceArg} get pods -l ${shellQuote("app=${deploymentName}")} -o name)" ]; then
-                echo "Task 13 maintenance requires zero API Pods."
-                exit 1
-              fi
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(maintenanceStateJsonPath)})" != "active" ]; then
-                echo "Task 13 maintenance lease is not active."
-                exit 1
-              fi
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(maintenanceBatchJsonPath)})" != ${shellQuote(env.TASK13_MIGRATION_BATCH_ID_FINAL)} ]; then
-                echo "Task 13 maintenance batch does not match the release."
-                exit 1
-              fi
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(maintenanceImageJsonPath)})" != ${shellQuote(env.MIGRATION_API_IMAGE)} ]; then
-                echo "Task 13 maintenance image does not match the migration digest."
-                exit 1
-              fi
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(fallbackImageJsonPath)})" != ${shellQuote(env.FALLBACK_API_IMAGE)} ]; then
-                echo "Task 13 fallback image does not match the approved digest."
-                exit 1
-              fi
-              ENV_SHA256="\$(sha256sum -- ${shellQuote(containerEnvFile)} | awk '{print \$1}')"
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(environmentShaJsonPath)})" != "\$ENV_SHA256" ]; then
-                echo "Task 13 production env fingerprint does not match migration."
-                exit 1
-              fi
-              OFF_NAS_SHA256="\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(offNasBackupJsonPath)})"
-              BLOG_VERIFIED_SHA256="\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(blogVerifiedJsonPath)})"
-              ADMIN_VERIFIED_SHA256="\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(adminVerifiedJsonPath)})"
-              TASK13_ATTESTATION_PREFIX=${shellQuote(task13AttestationPrefix)}
-              require_task13_attestation() {
-                ATTESTATION_VALUE="\$1"
-                ATTESTATION_ERROR="\$2"
-                case "\$ATTESTATION_VALUE" in
-                  "\$TASK13_ATTESTATION_PREFIX"*) ;;
-                  *) echo "\$ATTESTATION_ERROR"; exit 1 ;;
-                esac
-                ATTESTATION_SHA256="\${ATTESTATION_VALUE#"\$TASK13_ATTESTATION_PREFIX"}"
-                if ! printf '%s' "\$ATTESTATION_SHA256" | grep -Eq '^[0-9a-f]{64}\$'; then
-                  echo "\$ATTESTATION_ERROR"
-                  exit 1
-                fi
-              }
-              require_task13_attestation "\$OFF_NAS_SHA256" "Task 13 off-NAS backup attestation is missing."
-              require_task13_attestation "\$BLOG_VERIFIED_SHA256" "Task 13 Blog verification attestation is missing."
-              require_task13_attestation "\$ADMIN_VERIFIED_SHA256" "Task 13 Admin verification attestation is missing."
-              docker pull ${shellQuote(env.MIGRATION_API_IMAGE)}
-              docker pull ${shellQuote(env.FALLBACK_API_IMAGE)}
-              docker pull ${shellQuote(env.GATEWAY_DOCKER_IMAGE)}
-              MIGRATION_IMAGE_ID="\$(docker image inspect --format '{{.Id}}' ${shellQuote(env.MIGRATION_API_IMAGE)})"
-              FALLBACK_IMAGE_ID="\$(docker image inspect --format '{{.Id}}' ${shellQuote(env.FALLBACK_API_IMAGE)})"
-              if [ -z "\$MIGRATION_IMAGE_ID" ] || [ -z "\$FALLBACK_IMAGE_ID" ] || [ "\$MIGRATION_IMAGE_ID" = "\$FALLBACK_IMAGE_ID" ]; then
-                echo "Migration and fallback images resolve to the same Docker image ID."
-                exit 1
-              fi
-              MIGRATION_REVISION="\$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' ${shellQuote(env.MIGRATION_API_IMAGE)})"
-              GATEWAY_REVISION="\$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' ${shellQuote(env.GATEWAY_DOCKER_IMAGE)})"
-              MIGRATION_BUILD_PAIR="\$(docker image inspect --format '{{ index .Config.Labels "kt.kwitsukasa.top/build-pair" }}' ${shellQuote(env.MIGRATION_API_IMAGE)})"
-              GATEWAY_BUILD_PAIR="\$(docker image inspect --format '{{ index .Config.Labels "kt.kwitsukasa.top/build-pair" }}' ${shellQuote(env.GATEWAY_DOCKER_IMAGE)})"
-              if [ "\$MIGRATION_REVISION" != ${shellQuote(env.EXPECTED_SOURCE_COMMIT_FINAL)} ] || [ "\$GATEWAY_REVISION" != ${shellQuote(env.EXPECTED_SOURCE_COMMIT_FINAL)} ]; then
-                echo "Target image revision does not match EXPECTED_SOURCE_COMMIT."
-                exit 1
-              fi
-              if [ -z "\$MIGRATION_BUILD_PAIR" ] || [ "\$MIGRATION_BUILD_PAIR" != "\$GATEWAY_BUILD_PAIR" ]; then
-                echo "API and Gateway images are not from the same build."
-                exit 1
-              fi
-            """.stripIndent())
-          }
-
           runCmd("""
             set -e
             kubectl ${kubeConfigArg} get namespace ${shellQuote(namespace)} >/dev/null
@@ -792,132 +660,12 @@ pipeline {
               --dry-run=client -o yaml | kubectl ${kubeConfigArg} apply -f -
           """.stripIndent())
 
-          if (env.IS_PREBUILT_RELEASE == 'true') {
-            def apiImageSeparator = env.DOCKER_IMAGE.lastIndexOf('@')
-            def gatewayImageSeparator = env.GATEWAY_DOCKER_IMAGE.lastIndexOf('@')
-            def apiImageRepository = env.DOCKER_IMAGE.substring(0, apiImageSeparator)
-            def apiImageDigest = env.DOCKER_IMAGE.substring(apiImageSeparator + 1)
-            def gatewayImageRepository = env.GATEWAY_DOCKER_IMAGE.substring(0, gatewayImageSeparator)
-            def gatewayImageDigest = env.GATEWAY_DOCKER_IMAGE.substring(gatewayImageSeparator + 1)
-
-            runCmd("""
-              set -e
-              OVERLAY_DIR="\$(mktemp -d .jenkins-kustomize.XXXXXX)"
-              RENDERED_MANIFEST="\$OVERLAY_DIR/rendered.yaml"
-              cleanup_overlay() {
-                rm -rf -- "\$OVERLAY_DIR"
-              }
-              trap cleanup_overlay EXIT
-              trap 'exit 1' HUP INT TERM
-
-              cp -- ${shellQuote(manifestFile)} "\$OVERLAY_DIR/api.yaml"
-              cat > "\$OVERLAY_DIR/kustomization.yaml" <<'KUSTOMIZATION'
-              apiVersion: kustomize.config.k8s.io/v1beta1
-              kind: Kustomization
-              resources:
-                - api.yaml
-              images:
-                - name: k3d-kt-registry.localhost:5000/kt-template-online-api
-                  newName: ${apiImageRepository}
-                  digest: ${apiImageDigest}
-                - name: k3d-kt-registry.localhost:5000/kt-napcat-webui-gateway
-                  newName: ${gatewayImageRepository}
-                  digest: ${gatewayImageDigest}
-              patches:
-                - target:
-                    group: apps
-                    version: v1
-                    kind: Deployment
-                    name: kt-template-online-api
-                  patch: |-
-                    - op: replace
-                      path: /spec/replicas
-                      value: 0
-              KUSTOMIZATION
-
-              kubectl kustomize "\$OVERLAY_DIR" > "\$RENDERED_MANIFEST"
-              awk \\
-                -v api_deployment=${shellQuote(deploymentName)} \\
-                -v gateway_deployment=${shellQuote(gatewayDeploymentName)} \\
-                -v api_image=${shellQuote(env.DOCKER_IMAGE)} \\
-                -v gateway_image=${shellQuote(env.GATEWAY_DOCKER_IMAGE)} '
-                function reset_document() {
-                  kind = ""
-                  name = ""
-                  replicas = ""
-                  api_images = 0
-                  gateway_images = 0
-                }
-                function finish_document() {
-                  if (kind != "Deployment") return
-                  if (name == api_deployment) {
-                    api_documents += 1
-                    if (replicas != "0" || api_images != 1 || gateway_images != 0) failed = 1
-                  }
-                  if (name == gateway_deployment) {
-                    gateway_documents += 1
-                    if (gateway_images != 1 || api_images != 0) failed = 1
-                  }
-                }
-                BEGIN { reset_document() }
-                \$0 == "---" {
-                  finish_document()
-                  reset_document()
-                  next
-                }
-                \$1 == "kind:" { kind = \$2 }
-                \$1 == "name:" && \$0 ~ /^  name:/ { name = \$2 }
-                \$1 == "replicas:" && \$0 ~ /^  replicas:/ { replicas = \$2 }
-                index(\$0, "image: " api_image) > 0 { api_images += 1 }
-                index(\$0, "image: " gateway_image) > 0 { gateway_images += 1 }
-                END {
-                  finish_document()
-                  if (failed || api_documents != 1 || gateway_documents != 1) {
-                    print "Rendered prebuilt manifest failed the exact image or zero-replica contract." > "/dev/stderr"
-                    exit 1
-                  }
-                }
-              ' "\$RENDERED_MANIFEST"
-              kubectl ${kubeConfigArg} apply --dry-run=client --validate=false -f "\$RENDERED_MANIFEST" >/dev/null
-              restore_prebuilt_api_zero() {
-                set +e
-                restore_failed=0
-                kubectl ${kubeConfigArg} ${namespaceArg} scale ${shellQuote("deployment/${deploymentName}")} --replicas=0 >/dev/null 2>&1 \
-                  || restore_failed=1
-                if [ -n "\$(kubectl ${kubeConfigArg} ${namespaceArg} get pods -l ${shellQuote("app=${deploymentName}")} -o name 2>/dev/null)" ]; then
-                  kubectl ${kubeConfigArg} ${namespaceArg} wait --for=delete pod \
-                    -l ${shellQuote("app=${deploymentName}")} --timeout=${shellQuote(rolloutTimeout)} >/dev/null 2>&1 \
-                    || restore_failed=1
-                fi
-                if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(replicasJsonPath)} 2>/dev/null)" != "0" ]; then
-                  restore_failed=1
-                fi
-                if [ -n "\$(kubectl ${kubeConfigArg} ${namespaceArg} get pods -l ${shellQuote("app=${deploymentName}")} -o name 2>/dev/null)" ]; then
-                  restore_failed=1
-                fi
-                if [ "\$restore_failed" -ne 0 ]; then
-                  echo "Prebuilt release recovery could not restore API to zero." >&2
-                fi
-                return "\$restore_failed"
-              }
-              finish_prebuilt_apply() {
-                APPLY_EXIT_CODE=\$?
-                restore_prebuilt_api_zero || APPLY_EXIT_CODE=1
-                cleanup_overlay
-                trap - EXIT HUP INT TERM
-                exit "\$APPLY_EXIT_CODE"
-              }
-              trap finish_prebuilt_apply EXIT
-              kubectl ${kubeConfigArg} apply -f "\$RENDERED_MANIFEST"
-            """.stripIndent())
-          } else {
-            runCmd("""
-              set -e
-              kubectl ${kubeConfigArg} apply -f ${shellQuote(manifestFile)}
-              kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote("deployment/${deploymentName}")} ${shellQuote("${containerName}=${env.DOCKER_IMAGE}")}
-              kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote('deployment/kt-napcat-webui-gateway')} ${shellQuote("gateway=${env.GATEWAY_DOCKER_IMAGE}")}
-            """.stripIndent())
-          }
+          runCmd("""
+            set -e
+            kubectl ${kubeConfigArg} apply -f ${shellQuote(manifestFile)}
+            kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote("deployment/${deploymentName}")} ${shellQuote("${containerName}=${env.DOCKER_IMAGE}")}
+            kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote('deployment/kt-napcat-webui-gateway')} ${shellQuote("gateway=${env.GATEWAY_DOCKER_IMAGE}")}
+          """.stripIndent())
 
           if (napcatImageOverride) {
             runCmd("kubectl ${kubeConfigArg} ${namespaceArg} set env ${shellQuote("deployment/${deploymentName}")} ${shellQuote("QQBOT_NAPCAT_IMAGE=${napcatImageOverride}")}")
@@ -926,112 +674,16 @@ pipeline {
             runCmd("kubectl ${kubeConfigArg} ${namespaceArg} set env ${shellQuote("deployment/${deploymentName}")} ${shellQuote("QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION=${napcatProfileOverride}")}")
           }
 
-          if (env.IS_PREBUILT_RELEASE == 'true') {
-            runCmd("""
-              set -e
-              prebuilt_release_complete=false
-              restore_prebuilt_api_zero() {
-                if [ "\$prebuilt_release_complete" = "true" ]; then
-                  return
-                fi
-                set +e
-                restore_failed=0
-                kubectl ${kubeConfigArg} ${namespaceArg} scale ${shellQuote("deployment/${deploymentName}")} --replicas=0 >/dev/null 2>&1 \
-                  || restore_failed=1
-                if [ -n "\$(kubectl ${kubeConfigArg} ${namespaceArg} get pods -l ${shellQuote("app=${deploymentName}")} -o name 2>/dev/null)" ]; then
-                  kubectl ${kubeConfigArg} ${namespaceArg} wait --for=delete pod \
-                    -l ${shellQuote("app=${deploymentName}")} --timeout=${shellQuote(rolloutTimeout)} >/dev/null 2>&1 \
-                    || restore_failed=1
-                fi
-                if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(replicasJsonPath)} 2>/dev/null)" != "0" ]; then
-                  restore_failed=1
-                fi
-                if [ -n "\$(kubectl ${kubeConfigArg} ${namespaceArg} get pods -l ${shellQuote("app=${deploymentName}")} -o name 2>/dev/null)" ]; then
-                  restore_failed=1
-                fi
-                if [ "\$restore_failed" -ne 0 ]; then
-                  echo "Prebuilt release recovery could not restore API to zero." >&2
-                fi
-              }
-              trap restore_prebuilt_api_zero EXIT
-              trap 'exit 1' HUP INT TERM
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(replicasJsonPath)})" != "0" ]; then
-                echo "Prebuilt API deployment was not applied at zero replicas."
-                exit 1
-              fi
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(apiImageJsonPath)})" != ${shellQuote(env.DOCKER_IMAGE)} ]; then
-                echo "Prebuilt API deployment image does not match the requested digest."
-                exit 1
-              fi
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote('deployment/kt-napcat-webui-gateway')} -o jsonpath=${shellQuote(gatewayImageJsonPath)})" != ${shellQuote(env.GATEWAY_DOCKER_IMAGE)} ]; then
-                echo "Prebuilt Gateway deployment image does not match the requested digest."
-                exit 1
-              fi
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(maintenanceStateJsonPath)})" != "active" ]; then
-                echo "Task 13 maintenance lease is not active."
-                exit 1
-              fi
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(maintenanceBatchJsonPath)})" != ${shellQuote(env.TASK13_MIGRATION_BATCH_ID_FINAL)} ]; then
-                echo "Task 13 maintenance batch does not match the release."
-                exit 1
-              fi
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(maintenanceImageJsonPath)})" != ${shellQuote(env.MIGRATION_API_IMAGE)} ]; then
-                echo "Task 13 maintenance image does not match the migration digest."
-                exit 1
-              fi
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(fallbackImageJsonPath)})" != ${shellQuote(env.FALLBACK_API_IMAGE)} ]; then
-                echo "Task 13 fallback image does not match the approved digest."
-                exit 1
-              fi
-              ENV_SHA256="\$(sha256sum -- ${shellQuote(containerEnvFile)} | awk '{print \$1}')"
-              if [ "\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath=${shellQuote(environmentShaJsonPath)})" != "\$ENV_SHA256" ]; then
-                echo "Task 13 production env fingerprint does not match migration."
-                exit 1
-              fi
-              for ATTESTATION_JSONPATH in \
-                ${shellQuote(offNasBackupJsonPath)} \
-                ${shellQuote(blogVerifiedJsonPath)} \
-                ${shellQuote(adminVerifiedJsonPath)}
-              do
-                ATTESTATION_VALUE="\$(kubectl ${kubeConfigArg} ${namespaceArg} get ${shellQuote("deployment/${deploymentName}")} -o jsonpath="\$ATTESTATION_JSONPATH")"
-                TASK13_ATTESTATION_PREFIX=${shellQuote(task13AttestationPrefix)}
-                case "\$ATTESTATION_VALUE" in
-                  "\$TASK13_ATTESTATION_PREFIX"*) ;;
-                  *) echo "Task 13 migration completion attestation drifted."; exit 1 ;;
-                esac
-                ATTESTATION_SHA256="\${ATTESTATION_VALUE#"\$TASK13_ATTESTATION_PREFIX"}"
-                if ! printf '%s' "\$ATTESTATION_SHA256" | grep -Eq '^[0-9a-f]{64}\$'; then
-                  echo "Task 13 migration completion attestation drifted."
-                  exit 1
-                fi
-              done
-              if [ -n "\$(kubectl ${kubeConfigArg} ${namespaceArg} get pods -l ${shellQuote("app=${deploymentName}")} -o name)" ]; then
-                echo "Task 13 API Pods reappeared before release."
-                exit 1
-              fi
-              kubectl ${kubeConfigArg} ${namespaceArg} annotate ${shellQuote("deployment/${deploymentName}")} \\
-                ${shellQuote("kubernetes.io/change-cause=${changeCause}")} --overwrite
-              kubectl ${kubeConfigArg} ${namespaceArg} annotate ${shellQuote('deployment/kt-napcat-webui-gateway')} \\
-                ${shellQuote("kubernetes.io/change-cause=${changeCause}")} --overwrite
-              kubectl ${kubeConfigArg} ${namespaceArg} scale ${shellQuote("deployment/${deploymentName}")} --replicas=1
-              kubectl ${kubeConfigArg} ${namespaceArg} rollout status ${shellQuote("deployment/${deploymentName}")} --timeout=${shellQuote(rolloutTimeout)}
-              kubectl ${kubeConfigArg} ${namespaceArg} rollout status ${shellQuote('deployment/kt-napcat-webui-gateway')} --timeout=${shellQuote(rolloutTimeout)}
-              kubectl ${kubeConfigArg} ${namespaceArg} get pod,svc -l ${shellQuote("app in (${deploymentName},${gatewayDeploymentName})")}
-              prebuilt_release_complete=true
-              trap - EXIT HUP INT TERM
-            """.stripIndent())
-          } else {
-            runCmd("""
-              set -e
-              kubectl ${kubeConfigArg} ${namespaceArg} annotate ${shellQuote("deployment/${deploymentName}")} \\
-                ${shellQuote("kubernetes.io/change-cause=${changeCause}")} --overwrite
-              kubectl ${kubeConfigArg} ${namespaceArg} annotate ${shellQuote('deployment/kt-napcat-webui-gateway')} \\
-                ${shellQuote("kubernetes.io/change-cause=${changeCause}")} --overwrite
-              kubectl ${kubeConfigArg} ${namespaceArg} rollout status ${shellQuote("deployment/${deploymentName}")} --timeout=${shellQuote(rolloutTimeout)}
-              kubectl ${kubeConfigArg} ${namespaceArg} rollout status ${shellQuote('deployment/kt-napcat-webui-gateway')} --timeout=${shellQuote(rolloutTimeout)}
-              kubectl ${kubeConfigArg} ${namespaceArg} get pod,svc -l ${shellQuote("app in (${deploymentName},${gatewayDeploymentName})")}
-            """.stripIndent())
-          }
+          runCmd("""
+            set -e
+            kubectl ${kubeConfigArg} ${namespaceArg} annotate ${shellQuote("deployment/${deploymentName}")} \\
+              ${shellQuote("kubernetes.io/change-cause=${changeCause}")} --overwrite
+            kubectl ${kubeConfigArg} ${namespaceArg} annotate ${shellQuote('deployment/kt-napcat-webui-gateway')} \\
+              ${shellQuote("kubernetes.io/change-cause=${changeCause}")} --overwrite
+            kubectl ${kubeConfigArg} ${namespaceArg} rollout status ${shellQuote("deployment/${deploymentName}")} --timeout=${shellQuote(rolloutTimeout)}
+            kubectl ${kubeConfigArg} ${namespaceArg} rollout status ${shellQuote('deployment/kt-napcat-webui-gateway')} --timeout=${shellQuote(rolloutTimeout)}
+            kubectl ${kubeConfigArg} ${namespaceArg} get pod,svc -l ${shellQuote("app in (${deploymentName},${gatewayDeploymentName})")}
+          """.stripIndent())
         }
       }
     }

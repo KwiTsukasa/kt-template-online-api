@@ -1,13 +1,37 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const REPO_ROOT = resolve(__dirname, '../..');
-const jenkinsfile = readFileSync(resolve(REPO_ROOT, 'Jenkinsfile'), 'utf8');
+const JENKINSFILE_PATH = resolve(REPO_ROOT, 'Jenkinsfile');
+const TASK13_PREBUILD_PUSH_SCRIPT_PATH = resolve(
+  REPO_ROOT,
+  'ci/jenkins/task13-prebuild-push.sh',
+);
+const TASK13_PREBUILT_RELEASE_SCRIPT_PATH = resolve(
+  REPO_ROOT,
+  'ci/jenkins/task13-prebuilt-release.sh',
+);
+const jenkinsfile = readFileSync(JENKINSFILE_PATH, 'utf8');
+const task13PrebuildPushScript = readFileSync(
+  TASK13_PREBUILD_PUSH_SCRIPT_PATH,
+  'utf8',
+);
+const task13PrebuiltReleaseScript = readFileSync(
+  TASK13_PREBUILT_RELEASE_SCRIPT_PATH,
+  'utf8',
+);
 
-// 本测试只验证 Jenkinsfile 的静态状态机；真实参数绑定、Docker Registry 与 K8s
-// 行为仍必须由主线程在隔离的 Jenkins canary 中验证。
+// 本测试验证 Jenkinsfile 静态状态机和外部脚本的隔离故障行为；真实参数绑定、
+// Docker Registry 与 K8s 行为仍必须由主线程在隔离的 Jenkins canary 中验证。
 function extractBlockAfter(
   source: string,
   marker: string,
@@ -33,60 +57,62 @@ function extractStage(name: string): string {
   return extractBlockAfter(jenkinsfile, `stage('${name}')`);
 }
 
-function renderPrebuiltApplyRecoveryScript(deploy: string): string {
-  const applyMarker =
-    'kubectl ${kubeConfigArg} apply -f "\\$RENDERED_MANIFEST"';
-  const applyIndex = deploy.indexOf(applyMarker);
+function extractFunctionDefinition(source: string, name: string): string {
+  const marker = `${name}()`;
+  const start = source.indexOf(marker);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const body = extractBlockAfter(source, marker);
+  const openingBrace = source.indexOf('{', start + marker.length);
+
+  return source.slice(start, openingBrace + body.length + 2);
+}
+
+function renderPrebuiltApplyRecoveryScript(releaseScript: string): string {
+  const applyMarker = 'kubectl_cmd apply -f "$RENDERED_MANIFEST"';
+  const applyIndex = releaseScript.indexOf(applyMarker);
   expect(applyIndex).toBeGreaterThanOrEqual(0);
-  const recoveryStart = deploy.lastIndexOf(
-    'restore_prebuilt_api_zero() {',
+  const guardStart = releaseScript.lastIndexOf(
+    'prebuilt_release_complete=false',
     applyIndex,
   );
-  expect(recoveryStart).toBeGreaterThanOrEqual(0);
-  const signalTrapStart = deploy.lastIndexOf(
-    "trap 'exit 1' HUP INT TERM",
-    recoveryStart,
-  );
-  expect(signalTrapStart).toBeGreaterThanOrEqual(0);
-  const signalTrapEnd = deploy.indexOf('\n', signalTrapStart);
-  expect(signalTrapEnd).toBeGreaterThan(signalTrapStart);
-  const applyEnd = deploy.indexOf('\n', applyIndex);
+  expect(guardStart).toBeGreaterThanOrEqual(0);
+  const applyEnd = releaseScript.indexOf('\n', applyIndex);
   expect(applyEnd).toBeGreaterThan(applyIndex);
-
-  const replacements = new Map([
-    ['${kubeConfigArg}', ''],
-    ['${namespaceArg}', ''],
-    ['${shellQuote("deployment/${deploymentName}")}', "'deployment/api'"],
-    ['${shellQuote("app=${deploymentName}")}', "'app=api'"],
-    ['${shellQuote(rolloutTimeout)}', "'5s'"],
-    ['${shellQuote(replicasJsonPath)}', "'{.spec.replicas}'"],
-  ]);
-  let recoveryScript = deploy.slice(recoveryStart, applyEnd);
-  for (const [source, replacement] of replacements) {
-    recoveryScript = recoveryScript.replaceAll(source, replacement);
-  }
 
   return [
     'set -e',
-    'cleanup_overlay() { :; }',
+    'SECRET_MANIFEST=',
+    'OVERLAY_DIR="$TEST_OVERLAY_DIR"',
     'RENDERED_MANIFEST=rendered.yaml',
-    deploy.slice(signalTrapStart, signalTrapEnd).trim(),
-    recoveryScript.replaceAll('\\$', '$'),
+    "K8S_DEPLOYMENT='api'",
+    "K8S_ROLLOUT_TIMEOUT='5s'",
+    "REPLICAS_JSONPATH='{.spec.replicas}'",
+    'kubectl_cmd() { kubectl "$@"; }',
+    'deployment_value() { kubectl_cmd get "deployment/$K8S_DEPLOYMENT" -o "jsonpath=$1"; }',
+    extractFunctionDefinition(releaseScript, 'cleanup_release_artifacts'),
+    extractFunctionDefinition(releaseScript, 'restore_prebuilt_api_zero'),
+    extractFunctionDefinition(releaseScript, 'finish_prebuilt_release'),
+    releaseScript.slice(guardStart, applyEnd),
   ].join('\n');
 }
 
-function runPrebuiltApplyFailure(deploy: string, failureMode: 'exit' | 'term') {
+function runPrebuiltApplyFailure(
+  releaseScript: string,
+  failureMode: 'exit' | 'hup' | 'int' | 'term',
+) {
   const temporaryDirectory = mkdtempSync(
     join(tmpdir(), 'kt-jenkins-apply-recovery-'),
   );
+  const overlayDirectory = join(temporaryDirectory, 'overlay');
+  mkdirSync(overlayDirectory);
   const traceFile = join(temporaryDirectory, 'kubectl.trace');
   const kubectlStub = `
     kubectl() {
       printf '%s\\n' "$*" >> "$TRACE_FILE"
       case " $* " in
         *" apply -f rendered.yaml "*)
-          if [ "$FAILURE_MODE" = "term" ]; then
-            kill -TERM "$$"
+          if [ "$FAILURE_MODE" != "exit" ]; then
+            kill "-$FAILURE_MODE" "$$"
           fi
           return 17
           ;;
@@ -101,16 +127,131 @@ function runPrebuiltApplyFailure(deploy: string, failureMode: 'exit' | 'term') {
   try {
     const result = spawnSync(
       'bash',
-      ['-c', `${kubectlStub}\n${renderPrebuiltApplyRecoveryScript(deploy)}`],
+      [
+        '-c',
+        `${kubectlStub}\n${renderPrebuiltApplyRecoveryScript(releaseScript)}`,
+      ],
       {
         encoding: 'utf8',
         env: {
           ...process.env,
-          FAILURE_MODE: failureMode,
+          FAILURE_MODE: failureMode.toUpperCase(),
+          TEST_OVERLAY_DIR: overlayDirectory,
           TRACE_FILE: traceFile,
         },
       },
     );
+    return {
+      result,
+      overlayExists: existsSync(overlayDirectory),
+      trace: readFileSync(traceFile, 'utf8').trim().split('\n'),
+    };
+  } finally {
+    rmSync(temporaryDirectory, { force: true, recursive: true });
+  }
+}
+
+function runPrebuildEvidenceSignal() {
+  const temporaryDirectory = mkdtempSync(
+    join(tmpdir(), 'kt-jenkins-prebuild-signal-'),
+  );
+  const apiRepository = 'k3d-kt-registry.localhost:5000/kt-template-online-api';
+  const gatewayRepository =
+    'k3d-kt-registry.localhost:5000/kt-napcat-webui-gateway';
+  const digest = `sha256:${'a'.repeat(64)}`;
+  const sourceCommit = 'b'.repeat(40);
+  const buildPair = `${sourceCommit}:1`;
+  const evidenceTemporaryFile = join(
+    temporaryDirectory,
+    '.kt-workspace/task13-prebuild/task13-exact-digests.env.tmp',
+  );
+  const shell = `
+    docker() {
+      case "$*" in
+        "push "*) return 0 ;;
+        *"RepoDigests"*"$TASK13_API_IMAGE"*)
+          printf '%s\\n' "${apiRepository}@${digest}"
+          ;;
+        *"RepoDigests"*"$TASK13_GATEWAY_IMAGE"*)
+          printf '%s\\n' "${gatewayRepository}@${digest}"
+          ;;
+        *"org.opencontainers.image.revision"*)
+          printf '%s\\n' "$TASK13_EXPECTED_SOURCE_COMMIT"
+          ;;
+        *"kt.kwitsukasa.top/build-pair"*)
+          printf '%s\\n' "$TASK13_EXPECTED_BUILD_PAIR"
+          ;;
+        *) return 1 ;;
+      esac
+    }
+    chmod() {
+      kill -TERM "$$"
+    }
+    . "$TASK13_SCRIPT"
+  `;
+
+  try {
+    const result = spawnSync('sh', ['-c', shell], {
+      cwd: temporaryDirectory,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        TASK13_API_IMAGE: `${apiRepository}:test`,
+        TASK13_GATEWAY_IMAGE: `${gatewayRepository}:test`,
+        TASK13_EXPECTED_BUILD_PAIR: buildPair,
+        TASK13_EXPECTED_SOURCE_COMMIT: sourceCommit,
+        TASK13_SCRIPT: TASK13_PREBUILD_PUSH_SCRIPT_PATH,
+      },
+    });
+
+    return {
+      result,
+      evidenceTemporaryFileExists: existsSync(evidenceTemporaryFile),
+    };
+  } finally {
+    rmSync(temporaryDirectory, { force: true, recursive: true });
+  }
+}
+
+function runSecretCreateFailure(releaseScript: string) {
+  const temporaryDirectory = mkdtempSync(
+    join(tmpdir(), 'kt-jenkins-secret-create-'),
+  );
+  const traceFile = join(temporaryDirectory, 'kubectl.trace');
+  const secretStart = releaseScript.indexOf('SECRET_MANIFEST="$(');
+  expect(secretStart).toBeGreaterThanOrEqual(0);
+  const unsetMarker = 'unset SECRET_MANIFEST';
+  const unsetIndex = releaseScript.indexOf(unsetMarker, secretStart);
+  expect(unsetIndex).toBeGreaterThan(secretStart);
+  const secretApply = releaseScript.slice(
+    secretStart,
+    unsetIndex + unsetMarker.length,
+  );
+  const shell = `
+    set -e
+    K8S_ENV_SECRET=secret
+    CONTAINER_ENV_FILE=production.env
+    KUBECONFIG=kubeconfig
+    kubectl_cmd() {
+      printf '%s\\n' "$*" >> "$TRACE_FILE"
+      return 17
+    }
+    kubectl() {
+      printf '%s\\n' "$*" >> "$TRACE_FILE"
+      return 0
+    }
+    ${secretApply}
+  `;
+
+  try {
+    const result = spawnSync('sh', ['-c', shell], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        TRACE_FILE: traceFile,
+      },
+    });
+
     return {
       result,
       trace: readFileSync(traceFile, 'utf8').trim().split('\n'),
@@ -121,6 +262,37 @@ function runPrebuiltApplyFailure(deploy: string, failureMode: 'exit' | 'term') {
 }
 
 describe('Jenkins exact-digest prebuilt release contract', () => {
+  it('keeps CPS-heavy release logic in bounded executable scripts', () => {
+    expect(Buffer.byteLength(jenkinsfile)).toBeLessThanOrEqual(36_000);
+    expect(extractStage('Docker Push')).toContain(
+      './ci/jenkins/task13-prebuild-push.sh',
+    );
+    expect(extractStage('K8s Deploy')).toContain(
+      './ci/jenkins/task13-prebuilt-release.sh',
+    );
+
+    for (const [path, script] of [
+      [TASK13_PREBUILD_PUSH_SCRIPT_PATH, task13PrebuildPushScript],
+      [TASK13_PREBUILT_RELEASE_SCRIPT_PATH, task13PrebuiltReleaseScript],
+    ] as const) {
+      expect(script.startsWith('#!/bin/sh\nset -eu\n')).toBe(true);
+      expect(script).not.toMatch(/\beval\b/);
+      expect(statSync(path).mode & 0o111).not.toBe(0);
+    }
+
+    for (const fixedContract of [
+      "KUBECONFIG='/home/jenkins/agent/kubeconfig/kt-nas.jenkins.yaml'",
+      "CONTAINER_ENV_FILE='/home/jenkins/agent/env/kt-template-online-api/.env.production'",
+      "K8S_MANIFEST_FILE='k8s/prod/api.yaml'",
+      "K8S_NAMESPACE='kt-prod'",
+      "K8S_DEPLOYMENT='kt-template-online-api'",
+      "K8S_ENV_SECRET='kt-template-online-api-env'",
+      "K8S_ROLLOUT_TIMEOUT='180s'",
+    ]) {
+      expect(task13PrebuiltReleaseScript).toContain(fixedContract);
+    }
+  });
+
   it('defines a fail-closed Task 13 build-only mode', () => {
     const prepare = extractStage('Prepare');
 
@@ -165,16 +337,28 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
       'kt.kwitsukasa.top/build-pair=${shellQuote(env.IMAGE_BUILD_PAIR)}',
     );
     expect(dockerPush).toContain("if (env.IS_TASK13_PREBUILD_ONLY == 'true')");
-    expect(dockerPush).toContain('task13-exact-digests.env');
-    expect(dockerPush).toContain('API_IMAGE=');
-    expect(dockerPush).toContain('GATEWAY_IMAGE=');
-    expect(dockerPush).toContain('SOURCE_REVISION=');
-    expect(dockerPush).toContain('BUILD_PAIR=');
+    expect(task13PrebuildPushScript).toContain(
+      "EVIDENCE_DIR='.kt-workspace/task13-prebuild'",
+    );
+    expect(task13PrebuildPushScript).toContain(
+      'EVIDENCE_FILE="$EVIDENCE_DIR/task13-exact-digests.env"',
+    );
+    expect(task13PrebuildPushScript).toContain('API_IMAGE=');
+    expect(task13PrebuildPushScript).toContain('GATEWAY_IMAGE=');
+    expect(task13PrebuildPushScript).toContain('SOURCE_REVISION=');
+    expect(task13PrebuildPushScript).toContain('BUILD_PAIR=');
     expect(k8sDeploy).toContain("env.IS_TASK13_PREBUILD_ONLY != 'true'");
     expect(dockerRun).toContain("env.IS_TASK13_PREBUILD_ONLY != 'true'");
     expect(jenkinsfile).toContain(
       '.kt-workspace/task13-prebuild/task13-exact-digests.env',
     );
+  });
+
+  it('exits non-zero and cleans partial digest evidence on TERM', () => {
+    const { evidenceTemporaryFileExists, result } = runPrebuildEvidenceSignal();
+
+    expect(result.status).not.toBe(0);
+    expect(evidenceTemporaryFileExists).toBe(false);
   });
 
   it('rejects both NapCat overrides in both Task 13 restricted modes', () => {
@@ -243,6 +427,7 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
     expect(prepare).toContain("'K8S_DEPLOYMENT': 'kt-template-online-api'");
     expect(prepare).toContain("'K8S_CONTAINER': 'api'");
     expect(prepare).toContain("'K8S_ENV_SECRET': 'kt-template-online-api-env'");
+    expect(prepare).toContain("'K8S_ROLLOUT_TIMEOUT': '180s'");
     expect(prepare).toContain(
       "'CONTAINER_ENV_FILE': '/home/jenkins/agent/env/kt-template-online-api/.env.production'",
     );
@@ -261,46 +446,40 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
   );
 
   it('renders and validates a temporary zero-replica digest overlay before apply', () => {
-    const deploy = extractStage('K8s Deploy');
-    const prebuiltMarker = "if (env.IS_PREBUILT_RELEASE == 'true')";
-    const readOnlyGateIndex = deploy.indexOf(prebuiltMarker);
-    const prebuiltDeploy = extractBlockAfter(
-      deploy,
-      prebuiltMarker,
-      readOnlyGateIndex + prebuiltMarker.length,
+    expect(task13PrebuiltReleaseScript).toContain(
+      'mktemp -d .jenkins-kustomize.',
     );
-
-    expect(prebuiltDeploy).toContain('mktemp -d .jenkins-kustomize.');
-    expect(prebuiltDeploy).toContain('kustomization.yaml');
-    expect(prebuiltDeploy).toContain('kubectl kustomize');
-    expect(prebuiltDeploy).toContain('path: /spec/replicas');
-    expect(prebuiltDeploy).toContain('value: 0');
-    expect(prebuiltDeploy).toContain('api_image');
-    expect(prebuiltDeploy).toContain('gateway_image');
-    expect(prebuiltDeploy).toContain(
-      'kubectl ${kubeConfigArg} apply -f "\\$RENDERED_MANIFEST"',
+    expect(task13PrebuiltReleaseScript).toContain('kustomization.yaml');
+    expect(task13PrebuiltReleaseScript).toContain('kubectl kustomize');
+    expect(task13PrebuiltReleaseScript).toContain('path: /spec/replicas');
+    expect(task13PrebuiltReleaseScript).toContain('value: 0');
+    expect(task13PrebuiltReleaseScript).toContain('api_image');
+    expect(task13PrebuiltReleaseScript).toContain('gateway_image');
+    expect(task13PrebuiltReleaseScript).toContain(
+      'kubectl_cmd apply -f "$RENDERED_MANIFEST"',
     );
-    expect(prebuiltDeploy).not.toContain('kubectl set image');
+    expect(task13PrebuiltReleaseScript).not.toContain('kubectl set image');
   });
 
   it('validates the read-only maintenance gate before the first production write', () => {
-    const deploy = extractStage('K8s Deploy');
-    const secretCreate = deploy.indexOf('create secret generic');
-    const maintenanceGate = deploy.indexOf(
+    const secretCreate = task13PrebuiltReleaseScript.indexOf(
+      'create secret generic',
+    );
+    const maintenanceGate = task13PrebuiltReleaseScript.indexOf(
       'Task 13 maintenance lease is not active.',
     );
-    const zeroPodsGate = deploy.indexOf(
+    const zeroPodsGate = task13PrebuiltReleaseScript.indexOf(
       'Task 13 maintenance requires zero API Pods.',
     );
-    const render = deploy.indexOf('kubectl kustomize');
-    const apply = deploy.indexOf(
-      'kubectl ${kubeConfigArg} apply -f "\\$RENDERED_MANIFEST"',
+    const render = task13PrebuiltReleaseScript.indexOf('kubectl kustomize');
+    const apply = task13PrebuiltReleaseScript.indexOf(
+      'kubectl_cmd apply -f "$RENDERED_MANIFEST"',
     );
-    const scale = deploy.indexOf(
-      'scale ${shellQuote("deployment/${deploymentName}")} --replicas=1',
+    const scale = task13PrebuiltReleaseScript.indexOf(
+      'scale "deployment/$K8S_DEPLOYMENT" --replicas=1',
     );
-    const apiRollout = deploy.indexOf(
-      'rollout status ${shellQuote("deployment/${deploymentName}")}',
+    const apiRollout = task13PrebuiltReleaseScript.indexOf(
+      'rollout status "deployment/$K8S_DEPLOYMENT"',
     );
 
     expect(secretCreate).toBeGreaterThanOrEqual(0);
@@ -312,92 +491,112 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
     expect(apply).toBeGreaterThan(render);
     expect(scale).toBeGreaterThan(apply);
     expect(apiRollout).toBeGreaterThan(scale);
-    expect(deploy.match(/--replicas=1/g)).toHaveLength(1);
-    expect(deploy).toContain(
+    expect(task13PrebuiltReleaseScript.match(/--replicas=1/g)).toHaveLength(1);
+    expect(task13PrebuiltReleaseScript).toContain(
       'Prebuilt API deployment was not applied at zero replicas.',
     );
-    expect(deploy).toContain(
+    expect(task13PrebuiltReleaseScript).toContain(
       'Prebuilt API deployment image does not match the requested digest.',
     );
-    expect(deploy).toContain(
+    expect(task13PrebuiltReleaseScript).toContain(
       'Prebuilt Gateway deployment image does not match the requested digest.',
     );
-    expect(deploy).toContain('Task 13 maintenance lease is not active.');
-    expect(deploy).toContain(
+    expect(task13PrebuiltReleaseScript).toContain(
+      'Task 13 maintenance lease is not active.',
+    );
+    expect(task13PrebuiltReleaseScript).toContain(
       'Task 13 maintenance batch does not match the release.',
     );
-    expect(deploy).toContain(
+    expect(task13PrebuiltReleaseScript).toContain(
       'Task 13 maintenance image does not match the migration digest.',
     );
+    expect(task13PrebuiltReleaseScript).toContain(
+      'SECRET_MANIFEST="$(\n  kubectl_cmd create secret generic',
+    );
+    expect(task13PrebuiltReleaseScript).toContain(
+      'printf \'%s\\n\' "$SECRET_MANIFEST" |',
+    );
+    expect(task13PrebuiltReleaseScript).toContain('unset SECRET_MANIFEST');
+    expect(task13PrebuiltReleaseScript).not.toContain('.jenkins-task13-secret');
+  });
+
+  it('does not apply a Secret when client-side generation fails', () => {
+    const { result, trace } = runSecretCreateFailure(
+      task13PrebuiltReleaseScript,
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(trace).toHaveLength(1);
+    expect(trace[0]).toContain('create secret generic secret');
+    expect(trace).not.toContain('apply -f -');
   });
 
   it('binds both release images to one immutable source/build pair', () => {
     const dockerBuild = extractStage('Docker Build');
-    const deploy = extractStage('K8s Deploy');
-
     expect(
       dockerBuild.match(/org\.opencontainers\.image\.revision/g),
     ).toHaveLength(2);
     expect(dockerBuild.match(/kt\.kwitsukasa\.top\/build-pair/g)).toHaveLength(
       2,
     );
-    expect(deploy).toContain(
-      'docker pull ${shellQuote(env.MIGRATION_API_IMAGE)}',
+    expect(task13PrebuiltReleaseScript).toContain(
+      'docker pull "$TASK13_MIGRATION_API_IMAGE"',
     );
-    expect(deploy).toContain(
-      'docker pull ${shellQuote(env.GATEWAY_DOCKER_IMAGE)}',
+    expect(task13PrebuiltReleaseScript).toContain(
+      'docker pull "$TASK13_GATEWAY_IMAGE"',
     );
-    expect(deploy).toContain(
+    expect(task13PrebuiltReleaseScript).toContain(
       'API and Gateway images are not from the same build.',
     );
-    expect(deploy).toContain(
+    expect(task13PrebuiltReleaseScript).toContain(
       'Target image revision does not match EXPECTED_SOURCE_COMMIT.',
     );
   });
 
   it('allows only the migration digest or its pre-approved fallback digest', () => {
     const prepare = extractStage('Prepare');
-    const deploy = extractStage('K8s Deploy');
-
     expect(prepare).toContain(
       'extractDigestSuffix(migrationApiImage) == extractDigestSuffix(fallbackApiImage)',
     );
     expect(prepare).toContain(
       'PREBUILT_API_IMAGE must equal the migration image or approved fallback image.',
     );
-    expect(deploy).toContain('task13-fallback-image');
-    expect(deploy).toContain('env.FALLBACK_API_IMAGE');
-    expect(deploy).toContain('env.MIGRATION_API_IMAGE');
-    expect(deploy).toContain(
-      'MIGRATION_IMAGE_ID="\\$(docker image inspect --format',
+    expect(task13PrebuiltReleaseScript).toContain('task13-fallback-image');
+    expect(task13PrebuiltReleaseScript).toContain('TASK13_FALLBACK_API_IMAGE');
+    expect(task13PrebuiltReleaseScript).toContain('TASK13_MIGRATION_API_IMAGE');
+    expect(task13PrebuiltReleaseScript).toContain(
+      'MIGRATION_IMAGE_ID="$(docker image inspect --format',
     );
-    expect(deploy).toContain(
-      'FALLBACK_IMAGE_ID="\\$(docker image inspect --format',
+    expect(task13PrebuiltReleaseScript).toContain(
+      'FALLBACK_IMAGE_ID="$(docker image inspect --format',
     );
-    expect(deploy).toContain(
+    expect(task13PrebuiltReleaseScript).toContain(
       'Migration and fallback images resolve to the same Docker image ID.',
     );
-    const imageIdGate = deploy.indexOf(
+    const imageIdGate = task13PrebuiltReleaseScript.indexOf(
       'Migration and fallback images resolve to the same Docker image ID.',
     );
-    const firstK8sWrite = deploy.indexOf('create secret generic');
+    const firstK8sWrite = task13PrebuiltReleaseScript.indexOf(
+      'create secret generic',
+    );
     expect(imageIdGate).toBeGreaterThanOrEqual(0);
     expect(firstK8sWrite).toBeGreaterThan(imageIdGate);
   });
 
   it('verifies env and migration completion attestations before Secret apply', () => {
-    const deploy = extractStage('K8s Deploy');
-    const secretCreate = deploy.indexOf('create secret generic');
-    const envFingerprint = deploy.indexOf(
+    const secretCreate = task13PrebuiltReleaseScript.indexOf(
+      'create secret generic',
+    );
+    const envFingerprint = task13PrebuiltReleaseScript.indexOf(
       'Task 13 production env fingerprint does not match migration.',
     );
-    const offNas = deploy.indexOf(
+    const offNas = task13PrebuiltReleaseScript.indexOf(
       'Task 13 off-NAS backup attestation is missing.',
     );
-    const blogVerified = deploy.indexOf(
+    const blogVerified = task13PrebuiltReleaseScript.indexOf(
       'Task 13 Blog verification attestation is missing.',
     );
-    const adminVerified = deploy.indexOf(
+    const adminVerified = task13PrebuiltReleaseScript.indexOf(
       'Task 13 Admin verification attestation is missing.',
     );
 
@@ -405,80 +604,69 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
       expect(gate).toBeGreaterThanOrEqual(0);
       expect(secretCreate).toBeGreaterThan(gate);
     }
-    expect(deploy).toContain("stat -c '%a'");
-    expect(deploy).toContain("stat -c '%u'");
+    expect(task13PrebuiltReleaseScript).toContain("stat -c '%a'");
+    expect(task13PrebuiltReleaseScript).toContain("stat -c '%u'");
   });
 
   it('restores API to zero when either rollout fails', () => {
-    const deploy = extractStage('K8s Deploy');
-    const finalRelease = deploy.lastIndexOf(
-      "if (env.IS_PREBUILT_RELEASE == 'true')",
+    const trap = task13PrebuiltReleaseScript.indexOf(
+      'trap finish_prebuilt_release EXIT',
     );
-    const releaseBlock = extractBlockAfter(
-      deploy,
-      "if (env.IS_PREBUILT_RELEASE == 'true')",
-      finalRelease,
+    const apiRollout = task13PrebuiltReleaseScript.indexOf(
+      'rollout status "deployment/$K8S_DEPLOYMENT"',
     );
-    const trap = releaseBlock.indexOf('trap restore_prebuilt_api_zero EXIT');
-    const apiRollout = releaseBlock.indexOf(
-      'rollout status ${shellQuote("deployment/${deploymentName}")}',
+    const gatewayRollout = task13PrebuiltReleaseScript.indexOf(
+      'rollout status "deployment/$GATEWAY_DEPLOYMENT"',
     );
-    const gatewayRollout = releaseBlock.indexOf(
-      "rollout status ${shellQuote('deployment/kt-napcat-webui-gateway')}",
+    const complete = task13PrebuiltReleaseScript.indexOf(
+      'prebuilt_release_complete=true',
     );
-    const complete = releaseBlock.indexOf('prebuilt_release_complete=true');
 
     expect(trap).toBeGreaterThanOrEqual(0);
     expect(apiRollout).toBeGreaterThan(trap);
     expect(gatewayRollout).toBeGreaterThan(apiRollout);
     expect(complete).toBeGreaterThan(gatewayRollout);
-    expect(releaseBlock).toContain(
-      'scale ${shellQuote("deployment/${deploymentName}")} --replicas=0',
+    expect(task13PrebuiltReleaseScript).toContain(
+      'scale "deployment/$K8S_DEPLOYMENT" --replicas=0',
     );
-    expect(releaseBlock).toContain(
+    expect(task13PrebuiltReleaseScript).toContain(
       'Prebuilt release recovery could not restore API to zero.',
     );
   });
 
   it('guards the manifest apply and every post-apply readback with zero-replica recovery', () => {
-    const deploy = extractStage('K8s Deploy');
-    const overlayApply = deploy.indexOf(
-      'kubectl ${kubeConfigArg} apply -f "\\$RENDERED_MANIFEST"',
+    const overlayApply = task13PrebuiltReleaseScript.indexOf(
+      'kubectl_cmd apply -f "$RENDERED_MANIFEST"',
     );
-    const overlayExitTrap = deploy.lastIndexOf(
-      'trap finish_prebuilt_apply EXIT',
+    const overlayExitTrap = task13PrebuiltReleaseScript.lastIndexOf(
+      'trap finish_prebuilt_release EXIT',
       overlayApply,
     );
-    const overlaySignalTrap = deploy.lastIndexOf(
+    const overlaySignalTrap = task13PrebuiltReleaseScript.lastIndexOf(
       "trap 'exit 1' HUP INT TERM",
       overlayApply,
     );
-    const finalRelease = deploy.lastIndexOf(
-      "if (env.IS_PREBUILT_RELEASE == 'true')",
-    );
-    const releaseBlock = extractBlockAfter(
-      deploy,
-      "if (env.IS_PREBUILT_RELEASE == 'true')",
-      finalRelease,
-    );
-    const trap = releaseBlock.indexOf('trap restore_prebuilt_api_zero EXIT');
-    const firstReadback = releaseBlock.indexOf(
+    const trap = overlayExitTrap;
+    const firstReadback = task13PrebuiltReleaseScript.indexOf(
       'Prebuilt API deployment was not applied at zero replicas.',
     );
 
     expect(overlayExitTrap).toBeGreaterThanOrEqual(0);
     expect(overlayExitTrap).toBeLessThan(overlayApply);
     expect(overlaySignalTrap).toBeGreaterThanOrEqual(0);
-    expect(overlaySignalTrap).toBeLessThan(overlayExitTrap);
+    expect(overlaySignalTrap).toBeGreaterThan(overlayExitTrap);
+    expect(overlaySignalTrap).toBeLessThan(overlayApply);
     expect(trap).toBeGreaterThanOrEqual(0);
     expect(trap).toBeLessThan(firstReadback);
   });
 
-  it.each(['exit', 'term'] as const)(
+  it.each(['exit', 'hup', 'int', 'term'] as const)(
     'executes zero-replica compensation when manifest apply fails by %s',
     (failureMode) => {
-      const deploy = extractStage('K8s Deploy');
-      const { result, trace } = runPrebuiltApplyFailure(deploy, failureMode);
+      const { result, overlayExists, trace } = runPrebuiltApplyFailure(
+        task13PrebuiltReleaseScript,
+        failureMode,
+      );
       const apply = trace.findIndex((line) =>
         line.includes('apply -f rendered.yaml'),
       );
@@ -489,6 +677,7 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
       expect(result.status).not.toBe(0);
       expect(apply).toBeGreaterThanOrEqual(0);
       expect(scaleZero).toBeGreaterThan(apply);
+      expect(overlayExists).toBe(false);
       expect(trace).toContain(
         'get deployment/api -o jsonpath={.spec.replicas}',
       );

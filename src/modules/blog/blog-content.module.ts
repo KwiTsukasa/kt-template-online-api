@@ -62,7 +62,6 @@ export const BLOG_CONTENT_DOMAIN_CONTRACT = {
     'blog_term',
     'blog_post_term',
     'blog_theme_profile',
-    'blog_import_job',
   ],
   publicArticleList: {
     route: 'GET /blog/article/public/list',
@@ -86,12 +85,6 @@ export const BLOG_CONTENT_DOMAIN_CONTRACT = {
     profileKey: 'profile_key',
     configField: 'config_json',
     enabledField: 'enabled',
-  },
-  importJob: {
-    table: 'blog_import_job',
-    sourceField: 'source_key',
-    statusField: 'status',
-    summaryField: 'summary_json',
   },
 } as const;
 

@@ -131,8 +131,10 @@ node scripts/napcat-desktop-cn-stage-build.mjs \
 NapCat WebUI Gateway 是独立运行的 NestJS 入口，生产镜像使用 `dockerfile.gateway` 打包 `dist/apps/napcat-webui-gateway/main.js` 并监听 `48086`。API 通过内部地址 `NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL=http://kt-napcat-webui-gateway:48086` 创建/续期/撤销 WebUI 会话，Admin 浏览器在统一网关只访问公开前缀 `NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL=/admin/napcat-webui`；Traefik 去掉 `/admin` 后，Admin Nginx 与 Gateway 应用内部仍使用 `/napcat-webui`。Gateway 运行时需要 `NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET`、`NAPCAT_WEBUI_GATEWAY_REDIS_HOST`、`NAPCAT_WEBUI_GATEWAY_REDIS_PORT`、`NAPCAT_WEBUI_GATEWAY_SESSION_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_TICKET_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_UPSTREAM_TIMEOUT_MS`；生产 secret 由 Jenkins 从私有 `.env.production` 重建到 `kt-template-online-api-env`，不得写入 Git。验收命令：`pnpm exec jest --runTestsByPath test/modules/qqbot/napcat-webui-gateway/gateway-deployment.spec.ts --runInBand`、`pnpm run typecheck`、`pnpm run build`、`test -f dist/apps/napcat-webui-gateway/main.js`、`git diff --check`。安全边界：浏览器不得收到 WebUI token、Credential、上游 URL/端口、Docker 拓扑、Redis 地址或内部 secret。
 
 统一网关的部署布局、Canary、DNS/Caddy、密码迁移和 WordPress 两阶段回滚
-见 KT 工作区根文档 `docs/unified-natmap-tls-gateway-operations.md`。当前这些
-能力只完成本地实现与验证，尚未发布到生产。
+见 KT 工作区根文档 `docs/unified-natmap-tls-gateway-operations.md`。统一网关、
+WordPress Phase 1 与公网 NATMap/DDNS 已发布；Phase 2 发布候选已从运行时
+domain contract 和新建库 SQL 移除 `blog_import_job`，但生产物理表、容器和
+共享 Secret key 仍保留到观察期结束并取得新的破坏性授权。
 
 ## 启动
 

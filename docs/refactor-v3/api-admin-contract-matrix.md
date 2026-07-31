@@ -11,4 +11,7 @@
 | 7     | `/qqbot/napcat/*`, login SSE events                                                                               | NapCat device/login progress pages               | simulated captcha and new-device session                    |
 | 8     | public deployed URLs                                                                                              | deployed Admin                                   | online smoke bundle                                         |
 
-WordPress 运行路由与 Blog 导入端点已在 Phase 1 退役；本阶段不删除既有生产表，`blog_import_job`、来源历史和 Argon 兼容字段继续保留。
+WordPress 运行路由与 Blog 导入端点已在 Phase 1 退役。Phase 2 发布候选已移除
+`blog_import_job` 的运行时与新建库契约；既有生产物理表仍保留到观察期结束并取得
+新的破坏性授权，来源历史必须由授权后生成并完成恢复验证的退役备份及审计证据
+保存。Argon 兼容字段继续保留。

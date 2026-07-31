@@ -38,6 +38,18 @@ describe('WordPress runtime retirement contract', () => {
     expect(contractMatrix).toContain(
       'WordPress 运行路由与 Blog 导入端点已在 Phase 1 退役',
     );
+    expect(contractMatrix).toContain(
+      'Phase 2 发布候选已移除\n`blog_import_job` 的运行时与新建库契约',
+    );
+    expect(contractMatrix).toMatch(
+      /既有生产物理表仍保留到观察期结束并取得\s+新的破坏性授权/,
+    );
+    expect(readRepoFile('src/modules/blog/blog-content.module.ts')).not.toMatch(
+      /blog_import_job|importJob/,
+    );
+    expect(readRepoFile('sql/refactor-v3/00-full-schema.sql')).not.toMatch(
+      /\bblog_import_job\b/,
+    );
   });
 
   it('removes WordPress runtime and deployment configuration', () => {

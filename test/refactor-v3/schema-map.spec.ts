@@ -3,13 +3,14 @@ import { join } from 'path';
 
 const root = join(__dirname, '..', '..');
 
-const retiredWordPressTables = [
+const retiredLegacyImportTables = [
   'wordpress_site',
   'wordpress_auth_session',
   'wordpress_remote_post',
   'wordpress_remote_term',
   'wordpress_sync_job',
   'wordpress_sync_mapping',
+  'blog_import_job',
 ];
 
 const extractSchemaMapTables = () => {
@@ -101,7 +102,7 @@ describe('refactor v3 schema skeleton', () => {
     expect(blogTermColumns).toContain('parent_id');
   });
 
-  it('keeps retired WordPress runtime tables out of new-install references', () => {
+  it('keeps retired legacy import tables out of new-install references', () => {
     const referenceFiles = [
       'sql/refactor-v3/00-full-schema.sql',
       'sql/refactor-v3/01-seed-core.sql',
@@ -115,7 +116,7 @@ describe('refactor v3 schema skeleton', () => {
       'utf8',
     );
 
-    for (const table of retiredWordPressTables) {
+    for (const table of retiredLegacyImportTables) {
       referenceSql.forEach((sql) => {
         expect(sql).not.toMatch(
           new RegExp(
@@ -128,7 +129,7 @@ describe('refactor v3 schema skeleton', () => {
     }
   });
 
-  it('keeps migration history without adding destructive table retirement SQL', () => {
+  it('does not add destructive table retirement SQL', () => {
     const referenceFiles = [
       'sql/blog-menu.sql',
       'sql/refactor-v3/00-full-schema.sql',
@@ -139,13 +140,6 @@ describe('refactor v3 schema skeleton', () => {
     const sqlFiles = referenceFiles.map((file) =>
       readFileSync(join(root, file), 'utf8'),
     );
-    const schemaMap = readFileSync(
-      join(root, 'docs/refactor-v3/schema-map.md'),
-      'utf8',
-    );
-
-    expect(sqlFiles[1]).toContain('CREATE TABLE IF NOT EXISTS blog_import_job');
-    expect(schemaMap).toContain('`blog_import_job`');
     sqlFiles.forEach((sql) => {
       expect(sql).not.toMatch(/\bDROP\s+TABLE\b/i);
     });

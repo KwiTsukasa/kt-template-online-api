@@ -158,7 +158,6 @@ describe('Blog content module contract', () => {
       'blog_term',
       'blog_post_term',
       'blog_theme_profile',
-      'blog_import_job',
     ]);
     for (const table of BLOG_CONTENT_DOMAIN_CONTRACT.tables) {
       expect(schema.hasTable(table)).toBe(true);
@@ -189,13 +188,6 @@ describe('Blog content module contract', () => {
       'config_json',
       'enabled',
     ]);
-    schema.expectTableColumns('blog_import_job', [
-      'id',
-      'source_key',
-      'status',
-      'summary_json',
-    ]);
-
     expect(BLOG_CONTENT_DOMAIN_CONTRACT.publicArticleList).toEqual({
       route: 'GET /blog/article/public/list',
       sourceTable: 'blog_post',
@@ -219,11 +211,6 @@ describe('Blog content module contract', () => {
       configField: 'config_json',
       enabledField: 'enabled',
     });
-    expect(BLOG_CONTENT_DOMAIN_CONTRACT.importJob).toEqual({
-      table: 'blog_import_job',
-      sourceField: 'source_key',
-      statusField: 'status',
-      summaryField: 'summary_json',
-    });
+    expect(BLOG_CONTENT_DOMAIN_CONTRACT).not.toHaveProperty('importJob');
   });
 });

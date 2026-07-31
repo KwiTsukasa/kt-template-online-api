@@ -335,6 +335,49 @@ describe('NetworkPortForwardGroupService', () => {
     });
   });
 
+  it('compares the expected TCP desired revision before both mutation and no-op handling', async () => {
+    const group = createGroup({ protocolMode: 'tcp' });
+    const tcp = createMapping({
+      natmapDesiredEnabled: false,
+      protocol: 'tcp',
+    });
+    const harness = createHarness([group], [tcp]);
+
+    await expect(
+      harness.service.enableNatmap('200', '2'),
+    ).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(tcp.natmapDesiredEnabled).toBe(false);
+    expect(harness.state.desiredRevision).toBe('3');
+    expect(harness.mqtt.requestDesiredPublish).not.toHaveBeenCalled();
+
+    await expect(
+      harness.service.enableNatmap('200', '3'),
+    ).resolves.toMatchObject({
+      desiredRevision: '4',
+      natmapDesiredEnabled: true,
+    });
+    expect(harness.mqtt.requestDesiredPublish).toHaveBeenCalledTimes(1);
+
+    await expect(
+      harness.service.enableNatmap('200', '3'),
+    ).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(harness.state.desiredRevision).toBe('4');
+    expect(harness.mqtt.requestDesiredPublish).toHaveBeenCalledTimes(1);
+
+    await expect(
+      harness.service.enableNatmap('200', '4'),
+    ).resolves.toMatchObject({
+      desiredRevision: '4',
+      natmapDesiredEnabled: true,
+    });
+    expect(harness.state.desiredRevision).toBe('4');
+    expect(harness.mqtt.requestDesiredPublish).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps removed protocols as tombstones and never resurrects a prior channel ID', async () => {
     const group = createGroup();
     const tcp = createMapping({ protocol: 'tcp' });

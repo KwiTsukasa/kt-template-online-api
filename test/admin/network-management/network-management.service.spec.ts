@@ -511,6 +511,19 @@ describe('NetworkManagementService', () => {
       lastErrorMessage: 'router conflict',
       lastMqttErrorCode: 'mqtt_fallback',
       lastReconcileErrorCode: 'router_conflict',
+      tcpReleaseMode: 'off',
+    });
+  });
+
+  it('exposes the effective TCP release mode for rollback preflight', async () => {
+    const off = createHarness();
+    const on = createHarness([], { mode: 'on' });
+
+    await expect(off.service.agentStatus()).resolves.toMatchObject({
+      tcpReleaseMode: 'off',
+    });
+    await expect(on.service.agentStatus()).resolves.toMatchObject({
+      tcpReleaseMode: 'on',
     });
   });
 

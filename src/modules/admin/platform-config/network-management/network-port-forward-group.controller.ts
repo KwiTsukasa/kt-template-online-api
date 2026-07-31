@@ -22,6 +22,7 @@ import { AdminSuperGuard } from '@/modules/admin/identity/auth/admin-super.guard
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
 import { NetworkEndpointHistoryQueryDto } from './network-management.dto';
 import {
+  NetworkPortForwardGroupChannelMutationDto,
   NetworkPortForwardGroupChannelParamsDto,
   NetworkPortForwardGroupCreateDto,
   NetworkPortForwardGroupListQueryDto,
@@ -127,10 +128,16 @@ export class NetworkPortForwardGroupController {
   @ApiOperation({ summary: '启用 TCP NATMap' })
   async enableNatmap(
     @Param() params: NetworkPortForwardGroupParamsDto,
+    @Body() body: NetworkPortForwardGroupChannelMutationDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     this.noStore(response);
-    return vbenSuccess(await this.service.enableNatmap(params.groupId));
+    return vbenSuccess(
+      await this.service.enableNatmap(
+        params.groupId,
+        body.expectedDesiredRevision,
+      ),
+    );
   }
 
   @Post(':groupId/channels/tcp/natmap/disable')
@@ -138,10 +145,16 @@ export class NetworkPortForwardGroupController {
   @ApiOperation({ summary: '停用 TCP NATMap' })
   async disableNatmap(
     @Param() params: NetworkPortForwardGroupParamsDto,
+    @Body() body: NetworkPortForwardGroupChannelMutationDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     this.noStore(response);
-    return vbenSuccess(await this.service.disableNatmap(params.groupId));
+    return vbenSuccess(
+      await this.service.disableNatmap(
+        params.groupId,
+        body.expectedDesiredRevision,
+      ),
+    );
   }
 
   @Post(':groupId/channels/udp/keeper/enable')

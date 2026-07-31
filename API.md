@@ -111,7 +111,7 @@ Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理�
 | `POST`   | `/system/network/port-forward/:id/keeper/disable`   | `super` | 停用 UDP Keeper 并撤下当前端点            |
 | `POST`   | `/system/network/port-forward/:id/probe`            | `super` | 为已启用 Keeper 生成新 probeRequestId     |
 | `GET`    | `/system/network/port-forward/:id/endpoint-history` | `super` | 查询端点状态变化历史                      |
-| `GET`    | `/system/network/agent/status`                      | `super` | 查询 Agent 在线与 revision 收敛状态       |
+| `GET`    | `/system/network/agent/status`                      | `super` | 查询 Agent、revision 与 TCP 发布模式      |
 | `GET`    | `/system/network/events/stream`                     | `super` | SSE 推送已提交的 MQTT 状态变化            |
 | `GET`    | `/system/network/ddns/list`                         | `super` | 分页查询双栈自动 DDNS 绑定                |
 | `GET`    | `/system/network/ddns/source-options`               | `super` | 查询 A/AAAA 的安全地址来源选项            |
@@ -123,23 +123,26 @@ Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理�
 
 逻辑组接口用于当前 Admin；同一逻辑组可包含相同端口的 TCP、UDP 或双协议通道：
 
-| 方法     | 路径                                                                              | 认证    | 说明                                |
-| -------- | --------------------------------------------------------------------------------- | ------- | ----------------------------------- |
-| `GET`    | `/system/network/port-forward-group/list`                                         | `super` | 分页查询逻辑组和两个协议通道        |
-| `POST`   | `/system/network/port-forward-group`                                              | `super` | 新增 `tcp / udp / tcp_udp` 逻辑组   |
-| `PUT`    | `/system/network/port-forward-group/:groupId`                                     | `super` | 原子修改组字段和协议模式            |
-| `DELETE` | `/system/network/port-forward-group/:groupId`                                     | `super` | 为组内全部通道写入 absent tombstone |
-| `POST`   | `/system/network/port-forward-group/:groupId/channels/:protocol/retry`            | `super` | 重试指定协议通道                    |
-| `GET`    | `/system/network/port-forward-group/:groupId/channels/:protocol/endpoint-history` | `super` | 查询指定协议和 mechanism 的端点历史 |
-| `POST`   | `/system/network/port-forward-group/:groupId/channels/tcp/natmap/enable`          | `super` | 启用 TCP NATMap                     |
-| `POST`   | `/system/network/port-forward-group/:groupId/channels/tcp/natmap/disable`         | `super` | 停用 TCP NATMap                     |
-| `POST`   | `/system/network/port-forward-group/:groupId/channels/udp/keeper/enable`          | `super` | 启用 UDP Keeper                     |
-| `POST`   | `/system/network/port-forward-group/:groupId/channels/udp/keeper/disable`         | `super` | 停用 UDP Keeper                     |
-| `POST`   | `/system/network/port-forward-group/:groupId/channels/udp/keeper/probe`           | `super` | 立即请求一次 UDP 探测               |
+| 方法     | 路径                                                                              | 认证    | 说明                                      |
+| -------- | --------------------------------------------------------------------------------- | ------- | ----------------------------------------- |
+| `GET`    | `/system/network/port-forward-group/list`                                         | `super` | 分页查询逻辑组和两个协议通道              |
+| `POST`   | `/system/network/port-forward-group`                                              | `super` | 新增 `tcp / udp / tcp_udp` 逻辑组         |
+| `PUT`    | `/system/network/port-forward-group/:groupId`                                     | `super` | 原子修改组字段和协议模式                  |
+| `DELETE` | `/system/network/port-forward-group/:groupId`                                     | `super` | 为组内全部通道写入 absent tombstone       |
+| `POST`   | `/system/network/port-forward-group/:groupId/channels/:protocol/retry`            | `super` | 重试指定协议通道                          |
+| `GET`    | `/system/network/port-forward-group/:groupId/channels/:protocol/endpoint-history` | `super` | 查询指定协议和 mechanism 的端点历史       |
+| `POST`   | `/system/network/port-forward-group/:groupId/channels/tcp/natmap/enable`          | `super` | 启用 TCP NATMap，可携带 revision 前置条件 |
+| `POST`   | `/system/network/port-forward-group/:groupId/channels/tcp/natmap/disable`         | `super` | 停用 TCP NATMap，可携带 revision 前置条件 |
+| `POST`   | `/system/network/port-forward-group/:groupId/channels/udp/keeper/enable`          | `super` | 启用 UDP Keeper                           |
+| `POST`   | `/system/network/port-forward-group/:groupId/channels/udp/keeper/disable`         | `super` | 停用 UDP Keeper                           |
+| `POST`   | `/system/network/port-forward-group/:groupId/channels/udp/keeper/probe`           | `super` | 立即请求一次 UDP 探测                     |
 
 旧 `/port-forward` 路由保留平面通道兼容语义；多通道组必须使用逻辑组接口。新增和修改请求只接受各 DTO 白名单字段，目标 NAS IPv4 固定来自 `NETWORK_AGENT_TARGET_IPV4`，未知字段返回 400。Snowflake ID 与 revision 在 HTTP JSON 中保留为字符串。所有动态响应设置 `Cache-Control: no-store`。
 
-端点历史行使用 `portForwardId` 关联端口转发，撤下原因返回为 `withdrawalReason`。Agent 状态同时返回统一的 `lastErrorCode/lastErrorMessage`（reconciliation 优先于 MQTT）和细分错误字段，便于 Admin 展示与诊断。
+端点历史行使用 `portForwardId` 关联端口转发，撤下原因返回为 `withdrawalReason`。Agent 状态同时返回统一的 `lastErrorCode/lastErrorMessage`（reconciliation 优先于 MQTT）、细分错误字段和当前生效的 `tcpReleaseMode`，便于 Admin 展示、诊断并在退役前证明 TCP NATMap 可以恢复。
+
+TCP NATMap 启停请求可选携带
+`{"expectedDesiredRevision":"<canonical decimal>"}`。服务在同一数据库事务和悲观锁内、任何状态 no-op 判断之前比较该值；通道 revision 已变化时返回 `409` 且不推进全局 revision、不发布 MQTT。普通 Admin 交互可省略该字段，受控维护执行器必须使用它绑定已审查的 preflight。
 
 API 数据库是唯一事实源。每次合法期望变更在同一事务中锁定 `network_agent_state`、全局 revision 只增加一次并保存稳定 `desiredIssuedAt`；事务提交后再向当前 owner 的 `kt/network/v1|v2/agents/{agentId}/desired` 发布 QoS 1 retained 完整快照。PUBACK 只推进 `publishedRevision`，Agent 的完整 `reported` 才推进 `appliedRevision` 和逐通道实际状态。Agent 声明 v2 capability 且 release policy 允许后，API 清除旧 retained owner、切换到 v2，并忽略此后迟到的 v1 reported/events。MQTT 或 Agent 离线不回滚已接受的期望状态。
 

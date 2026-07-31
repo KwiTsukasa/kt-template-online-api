@@ -135,6 +135,7 @@ export class NetworkManagementService {
 
   async agentStatus() {
     const agentId = this.agentId();
+    const tcpReleaseMode = this.tcpReleasePolicy.readMode();
     const state = await this.stateRepository.findOne({ where: { agentId } });
     if (!state) {
       return {
@@ -149,6 +150,7 @@ export class NetworkManagementService {
         online: false,
         publishedRevision: '0',
         targetIpv4: this.targetIpv4(),
+        tcpReleaseMode,
         version: null,
       };
     }
@@ -171,6 +173,7 @@ export class NetworkManagementService {
       publishedRevision: state.publishedRevision,
       startedAt: state.startedAt || null,
       targetIpv4: state.targetIpv4,
+      tcpReleaseMode,
       version: state.version || null,
     };
   }

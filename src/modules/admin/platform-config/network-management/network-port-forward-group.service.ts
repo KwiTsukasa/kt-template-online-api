@@ -228,7 +228,7 @@ export class NetworkPortForwardGroupService {
     });
   }
 
-  async enableNatmap(groupId: string) {
+  async enableNatmap(groupId: string, expectedDesiredRevision?: string) {
     return this.mutateChannel(
       groupId,
       'tcp',
@@ -244,10 +244,11 @@ export class NetworkPortForwardGroupService {
         return true;
       },
       true,
+      expectedDesiredRevision,
     );
   }
 
-  async disableNatmap(groupId: string) {
+  async disableNatmap(groupId: string, expectedDesiredRevision?: string) {
     return this.mutateChannel(
       groupId,
       'tcp',
@@ -265,6 +266,7 @@ export class NetworkPortForwardGroupService {
         return true;
       },
       true,
+      expectedDesiredRevision,
     );
   }
 
@@ -609,6 +611,7 @@ export class NetworkPortForwardGroupService {
       channels: NetworkPortForward[],
     ) => Promise<boolean>,
     invalidProtocolIsBadRequest = false,
+    expectedDesiredRevision?: string,
   ) {
     const v1Target = typeof target === 'string' ? null : target;
     const targetId = typeof target === 'string' ? target : target.channelId;
@@ -657,6 +660,12 @@ export class NetworkPortForwardGroupService {
             ? HttpStatus.BAD_REQUEST
             : HttpStatus.NOT_FOUND,
         );
+      }
+      if (
+        expectedDesiredRevision !== undefined &&
+        channel.desiredRevision !== expectedDesiredRevision
+      ) {
+        throwVbenError('端口转发状态已变化，请刷新后重试', HttpStatus.CONFLICT);
       }
       if (channel.desiredPresence !== 'present') {
         throwVbenError('协议通道正在删除', HttpStatus.CONFLICT);

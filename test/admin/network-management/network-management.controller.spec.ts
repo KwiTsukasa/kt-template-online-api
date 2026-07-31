@@ -205,6 +205,7 @@ describe('NetworkManagementController', () => {
       lastErrorCode: 'router_conflict',
       lastErrorMessage: 'router conflict',
       online: false,
+      tcpReleaseMode: 'on',
     });
 
     await request(apiUrl)
@@ -233,6 +234,7 @@ describe('NetworkManagementController', () => {
     expect(statusResponse.body.data).toMatchObject({
       lastErrorCode: 'router_conflict',
       lastErrorMessage: 'router conflict',
+      tcpReleaseMode: 'on',
     });
   });
 

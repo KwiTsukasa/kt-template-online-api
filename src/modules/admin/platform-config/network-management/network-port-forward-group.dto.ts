@@ -15,6 +15,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { TcpProtocolMode } from './network-tcp-release-policy.service';
 
 const DECIMAL_ID_PATTERN = /^\d{1,24}$/;
+const DECIMAL_REVISION_PATTERN = /^(?:0|[1-9]\d{0,18})$/;
 
 export class NetworkPortForwardGroupCreateDto {
   @ApiProperty({ maxLength: 100 })
@@ -113,6 +114,16 @@ export class NetworkPortForwardGroupParamsDto {
   @IsString()
   @Matches(DECIMAL_ID_PATTERN)
   groupId: string;
+}
+
+export class NetworkPortForwardGroupChannelMutationDto {
+  @ApiPropertyOptional({
+    description: '可选的通道 desiredRevision 并发前置条件',
+  })
+  @ValidateIf(isProvided)
+  @IsString()
+  @Matches(DECIMAL_REVISION_PATTERN)
+  expectedDesiredRevision?: string;
 }
 
 export class NetworkPortForwardGroupChannelParamsDto extends NetworkPortForwardGroupParamsDto {

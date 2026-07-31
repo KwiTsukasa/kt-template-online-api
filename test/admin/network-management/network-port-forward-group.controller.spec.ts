@@ -152,11 +152,13 @@ describe('NetworkPortForwardGroupController', () => {
       .post(
         `/system/network/port-forward-group/${groupId}/channels/tcp/natmap/enable`,
       )
+      .send({ expectedDesiredRevision: '3' })
       .expect(200);
     await request(apiUrl)
       .post(
         `/system/network/port-forward-group/${groupId}/channels/tcp/natmap/disable`,
       )
+      .send({ expectedDesiredRevision: '4' })
       .expect(200);
     await request(apiUrl)
       .post(
@@ -187,6 +189,8 @@ describe('NetworkPortForwardGroupController', () => {
     expect(tcpHistory.body.data.items[0].mechanism).toBe('tcp_natmap');
     expect(service.retry).toHaveBeenNthCalledWith(1, groupId, 'tcp');
     expect(service.retry).toHaveBeenNthCalledWith(2, groupId, 'udp');
+    expect(service.enableNatmap).toHaveBeenCalledWith(groupId, '3');
+    expect(service.disableNatmap).toHaveBeenCalledWith(groupId, '4');
     expect(service.endpointHistory).toHaveBeenNthCalledWith(
       1,
       groupId,
@@ -200,6 +204,28 @@ describe('NetworkPortForwardGroupController', () => {
       expect.any(Object),
     );
     expect(udpHistory.body.data.total).toBe(1);
+  });
+
+  it('keeps the TCP revision precondition optional and rejects non-canonical values', async () => {
+    const groupId = '90071992547409930';
+    await request(apiUrl)
+      .post(
+        `/system/network/port-forward-group/${groupId}/channels/tcp/natmap/enable`,
+      )
+      .expect(200);
+    expect(service.enableNatmap).toHaveBeenCalledWith(groupId, undefined);
+
+    for (const expectedDesiredRevision of ['03', null]) {
+      service.enableNatmap.mockClear();
+      const invalid = await request(apiUrl)
+        .post(
+          `/system/network/port-forward-group/${groupId}/channels/tcp/natmap/enable`,
+        )
+        .send({ expectedDesiredRevision })
+        .expect(400);
+      expectChineseVbenValidation(invalid.body);
+      expect(service.enableNatmap).not.toHaveBeenCalled();
+    }
   });
 
   it('enforces super-admin permission and maps service 400/409 errors to Chinese Vben msg', async () => {

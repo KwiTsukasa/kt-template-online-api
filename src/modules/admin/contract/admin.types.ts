@@ -53,13 +53,26 @@ export type AdminRoleInput = Partial<AdminRole> & {
 
 export type AdminRoleListQuery = Record<string, any>;
 
-export type AdminTokenPayload = {
+type AdminTokenPayloadBase = {
   exp: number;
   iat: number;
   sub: string;
-  type: 'access' | 'refresh';
   username: string;
 };
+
+export type AdminAccessTokenPayload = AdminTokenPayloadBase & {
+  type: 'access';
+};
+
+export type AdminRefreshTokenPayload = AdminTokenPayloadBase & {
+  jti: string;
+  sid: string;
+  type: 'refresh';
+};
+
+export type AdminTokenPayload =
+  | AdminAccessTokenPayload
+  | AdminRefreshTokenPayload;
 
 export type AdminUserInput = Partial<AdminUser> & {
   roleIds?: string[];

@@ -70,7 +70,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 
 `DB_SYNC=true` 只适合本地开发或明确允许自动同步表结构的环境；生产应关闭并使用 SQL/迁移脚本。
 
-公网安全边界只信任 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 中的精确代理地址，并只允许 `PUBLIC_SECURITY_SWAGGER_ALLOWLIST` 中的生产管理来源访问 Swagger。Admin 登录、刷新和退出在任何 token 或 Cookie 副作用前校验可信代理归一化后的公开 Origin；Admin 用户新增、编辑和密码重置也在哈希或持久化前经过同一门禁。生产只接受 HTTPS，`ADMIN_AUTH_ALLOW_INSECURE_LOCAL=true` 仅允许非生产 loopback 本地开发且默认关闭。认证 Cookie 固定 `HttpOnly`、`SameSite=Lax`、`Path=/`、无 `Domain`，生产始终 `Secure`，退出同时清理 `/`、`/api/auth`、`/auth` 三种 Path。Redis 限流键只保存客户端 IP、规范化用户名或已验证 token subject 的 SHA-256。登录按 IP（5 次/分钟）、用户名（10 次/15 分钟）和全局（100 次/分钟）原子计数；成功认证会在签发 token 前清理该用户名退避，清理失败按 503 fail closed。刷新与退出继续使用 IP/全局额度，并仅对签名校验成功的 refresh token 增加 subject 额度：刷新 30 次/分钟，退出 10 次/分钟。Blog 公开列表的 `pageSize` 最大 100。登录和已验证 token 的 Redis 故障 fail closed；普通公开读取与 Live2D 并发租约故障 fail open，并使用限频告警。
+公网安全边界只信任 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 中的精确代理地址，并只允许 `PUBLIC_SECURITY_SWAGGER_ALLOWLIST` 中的生产管理来源访问 Swagger。Admin 登录、刷新和退出在任何 token 或 Cookie 副作用前校验可信代理归一化后的公开 Origin；Admin 用户新增、编辑和密码重置也在哈希或持久化前经过同一门禁。生产只接受 HTTPS，`ADMIN_AUTH_ALLOW_INSECURE_LOCAL=true` 仅允许非生产 loopback 本地开发且默认关闭。认证 Cookie 固定 `HttpOnly`、`SameSite=Lax`、`Path=/`、无 `Domain`，生产始终 `Secure`，退出同时清理 `/`、`/api/auth`、`/auth` 三种 Path。每次登录建立独立的 Redis refresh-token family；刷新原子消费当前 `jti` 并在同一 `sid` 下轮换，旧 refresh token 不能重放，退出会吊销当前 family。Redis 限流键只保存客户端 IP、规范化用户名或已验证 token subject 的 SHA-256。登录按 IP（5 次/分钟）、用户名（10 次/15 分钟）和全局（100 次/分钟）原子计数；成功认证会在签发 token 前清理该用户名退避，清理失败按 503 fail closed。刷新与退出继续使用 IP/全局额度，并仅对签名校验成功的 refresh token 增加 subject 额度：刷新 30 次/分钟，退出 10 次/分钟。Blog 公开列表的 `pageSize` 最大 100。登录、refresh-token family 和已验证 token 的 Redis 故障 fail closed；普通公开读取与 Live2D 并发租约故障 fail open，并使用限频告警。
 
 Admin 密码使用
 `$pbkdf2-sha256$v=1$i=600000$<salt-base64url>$<digest-base64url>`，旧明文只

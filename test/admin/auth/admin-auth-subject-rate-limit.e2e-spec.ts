@@ -11,6 +11,7 @@ import {
 } from '../../../src/common';
 import { AdminMenuService } from '../../../src/modules/admin/identity/menu/admin-menu.service';
 import { AdminAuthController } from '../../../src/modules/admin/identity/auth/admin-auth.controller';
+import { AdminRefreshTokenStateStore } from '../../../src/modules/admin/identity/auth/admin-refresh-token-state.store';
 import { AdminAuthService } from '../../../src/modules/admin/identity/auth/admin-auth.service';
 import { AdminPasswordHashService } from '../../../src/modules/admin/identity/auth/admin-password-hash.service';
 import { AdminTokenService } from '../../../src/modules/admin/identity/auth/admin-token.service';
@@ -50,9 +51,19 @@ describe('Admin verified subject rate-limit HTTP boundary (e2e)', () => {
           provide: AdminTokenService,
           useValue: {
             verifyRefreshToken: jest.fn(() => ({
+              exp: Math.floor(Date.now() / 1000) + 3600,
+              jti: 'b'.repeat(32),
+              sid: 'a'.repeat(32),
               sub: 'user-42',
               username: 'admin',
             })),
+          },
+        },
+        {
+          provide: AdminRefreshTokenStateStore,
+          useValue: {
+            revokeSession: jest.fn(),
+            rotateSession: jest.fn(),
           },
         },
         {

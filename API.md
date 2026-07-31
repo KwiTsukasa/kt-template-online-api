@@ -43,7 +43,7 @@ Admin、Component、Dict、MinIO、Blog 管理和 QQBot 管理接口默认需要
 
 公开接口包括 `/auth/login`、`/auth/refresh`、`/auth/logout`、部分 Blog public 接口和根路径。具体以 Controller 上的 `@Public()` 为准。
 
-公网入口通过精确 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 归一化客户端 IP 和公开 Origin；客户端自行提交的 XFF、X-Forwarded-Proto、Origin 或 Referer 不能扩展信任。`POST /auth/login`、`POST /auth/refresh`、`POST /auth/logout` 必须先通过公开 Origin 的 TLS 门禁，再执行 token 或 Cookie 副作用；接收明文密码的 `POST /system/user`、`PUT /system/user/:id`、`PUT /system/user/:id/password` 也在用户服务、密码哈希和持久化前经过同一门禁。生产 HTTP 固定返回 403，`ADMIN_AUTH_ALLOW_INSECURE_LOCAL=true` 只在非生产 loopback 本地开发生效。登录请求体为 `username` + `password`，不再提供 `/auth/password-public-key`。access/refresh Cookie 固定 `HttpOnly`、`SameSite=Lax`、`Path=/`、无 `Domain`，生产始终 `Secure`；退出清理当前 Cookie 在 `/`、`/api/auth`、`/auth` 三种 Path 的历史残留。登录在一次 Redis Lua 调用中计数 IP 5 次/分钟、规范化用户名 SHA-256 10 次/15 分钟和全局 100 次/分钟，任一超限统一返回 429。真实认证成功后、签发 token 前只清理用户名 bucket，不清 IP 或全局；清理或计数 Redis 失败返回 503。刷新和退出保留 IP/全局额度；签名校验成功的 refresh token 额外按 subject SHA-256 限制为刷新 30 次/分钟、退出 10 次/分钟，缺失或伪造 token 不读取未验证 payload。普通公开读取 Redis 故障时 fail open 并限频告警。
+公网入口通过精确 `PUBLIC_SECURITY_TRUSTED_PROXY_IPS` 归一化客户端 IP 和公开 Origin；客户端自行提交的 XFF、X-Forwarded-Proto、Origin 或 Referer 不能扩展信任。`POST /auth/login`、`POST /auth/refresh`、`POST /auth/logout` 必须先通过公开 Origin 的 TLS 门禁，再执行 token 或 Cookie 副作用；接收明文密码的 `POST /system/user`、`PUT /system/user/:id`、`PUT /system/user/:id/password` 也在用户服务、密码哈希和持久化前经过同一门禁。生产 HTTP 固定返回 403，`ADMIN_AUTH_ALLOW_INSECURE_LOCAL=true` 只在非生产 loopback 本地开发生效。登录请求体为 `username` + `password`，不再提供 `/auth/password-public-key`。access/refresh Cookie 固定 `HttpOnly`、`SameSite=Lax`、`Path=/`、无 `Domain`，生产始终 `Secure`；退出清理当前 Cookie 在 `/`、`/api/auth`、`/auth` 三种 Path 的历史残留。每次登录创建独立随机 `sid` 的 Redis refresh-token family；每个 refresh token 带独立 `jti`，刷新通过原子操作消费旧 `jti` 并在相同 `sid` 下签发新 token，并发或后续重放旧 token 返回 403。退出把整个 family 标记为已吊销，因此同 family 的新旧 refresh token 均不能再刷新；不同登录设备使用不同 family，互不影响。登录在一次 Redis Lua 调用中计数 IP 5 次/分钟、规范化用户名 SHA-256 10 次/15 分钟和全局 100 次/分钟，任一超限统一返回 429。真实认证成功后、签发 token 前只清理用户名 bucket，不清 IP 或全局；限流或 family 状态 Redis 失败返回 503。刷新和退出保留 IP/全局额度；签名校验成功的 refresh token 额外按 subject SHA-256 限制为刷新 30 次/分钟、退出 10 次/分钟，缺失、伪造或不含 `sid/jti` 的旧 token 不读取未验证 payload。普通公开读取 Redis 故障时 fail open 并限频告警。
 
 密码持久化格式固定为
 `$pbkdf2-sha256$v=1$i=600000$<salt-base64url>$<digest-base64url>`。旧明文迁移
@@ -187,8 +187,8 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | 方法   | 路径            | 说明                                                          |
 | ------ | --------------- | ------------------------------------------------------------- |
 | `POST` | `/auth/login`   | 后台登录，返回 accessToken 和用户信息，并写入 httpOnly cookie |
-| `POST` | `/auth/refresh` | 通过 refresh token cookie 刷新 accessToken                    |
-| `POST` | `/auth/logout`  | 清理 Admin 登录 cookie                                        |
+| `POST` | `/auth/refresh` | 原子消费并轮换 refresh token，同时刷新 accessToken             |
+| `POST` | `/auth/logout`  | 吊销当前 refresh-token family 并清理 Admin 登录 cookie          |
 | `GET`  | `/auth/codes`   | 获取当前用户按钮权限码                                        |
 | `GET`  | `/user/info`    | 获取当前用户信息                                              |
 

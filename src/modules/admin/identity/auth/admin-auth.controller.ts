@@ -91,7 +91,7 @@ export class AdminAuthController {
   @Public()
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     this.trustedCredentialTransportService.assertTrusted(req);
-    await this.authService.consumeLogoutSubject(
+    await this.authService.logout(
       this.authService.getRefreshTokenFromRequest(req),
       res,
     );

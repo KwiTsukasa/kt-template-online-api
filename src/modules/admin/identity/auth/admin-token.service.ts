@@ -1,7 +1,14 @@
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac, timingSafeEqual } from 'crypto';
-import type { AdminTokenPayload } from '../../contract/admin.types';
+import type {
+  AdminAccessTokenPayload,
+  AdminRefreshTokenPayload,
+  AdminTokenPayload,
+} from '../../contract/admin.types';
+
+const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+const TOKEN_ID_PATTERN = /^[a-f0-9]{32}$/;
 
 @Injectable()
 export class AdminTokenService {
@@ -12,15 +19,39 @@ export class AdminTokenService {
    * @param user - user 输入；驱动 `this.sign()` 的 Admin步骤。
    */
   signAccessToken(user: { id: string; username: string }) {
-    return this.sign(user, 'access', 7 * 24 * 60 * 60);
+    return this.sign(
+      {
+        sub: user.id,
+        type: 'access',
+        username: user.username,
+      },
+      7 * 24 * 60 * 60,
+    );
   }
 
   /**
    * 执行 Admin 身份权限流程。
    * @param user - user 输入；驱动 `this.sign()` 的 Admin步骤。
    */
-  signRefreshToken(user: { id: string; username: string }) {
-    return this.sign(user, 'refresh', 30 * 24 * 60 * 60);
+  signRefreshToken(user: { id: string; username: string }, sessionId: string) {
+    return this.sign(
+      {
+        jti: randomBytes(16).toString('hex'),
+        sid: sessionId,
+        sub: user.id,
+        type: 'refresh',
+        username: user.username,
+      },
+      REFRESH_TOKEN_TTL_SECONDS,
+    );
+  }
+
+  createRefreshSessionId() {
+    return randomBytes(16).toString('hex');
+  }
+
+  getRefreshTokenTtlMs() {
+    return REFRESH_TOKEN_TTL_SECONDS * 1000;
   }
 
   /**
@@ -28,7 +59,7 @@ export class AdminTokenService {
    * @param token - 协议 token；驱动 `this.verify()` 的 Admin步骤。
    * @returns Admin 身份权限产出的 AdminTokenPayload | null。
    */
-  verifyAccessToken(token: string): AdminTokenPayload | null {
+  verifyAccessToken(token: string): AdminAccessTokenPayload | null {
     return this.verify(token, 'access');
   }
 
@@ -37,7 +68,7 @@ export class AdminTokenService {
    * @param token - 协议 token；驱动 `this.verify()` 的 Admin步骤。
    * @returns Admin 身份权限产出的 AdminTokenPayload | null。
    */
-  verifyRefreshToken(token: string): AdminTokenPayload | null {
+  verifyRefreshToken(token: string): AdminRefreshTokenPayload | null {
     return this.verify(token, 'refresh');
   }
 
@@ -48,17 +79,16 @@ export class AdminTokenService {
    * @param ttlSeconds - Admin列表；影响 sign 的返回值。
    */
   private sign(
-    user: { id: string; username: string },
-    type: AdminTokenPayload['type'],
+    claims:
+      | Omit<AdminAccessTokenPayload, 'exp' | 'iat'>
+      | Omit<AdminRefreshTokenPayload, 'exp' | 'iat'>,
     ttlSeconds: number,
   ) {
     const now = Math.floor(Date.now() / 1000);
     const payload: AdminTokenPayload = {
+      ...claims,
       exp: now + ttlSeconds,
       iat: now,
-      sub: user.id,
-      type,
-      username: user.username,
     };
     const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(
       'base64url',
@@ -73,10 +103,10 @@ export class AdminTokenService {
    * @param type - type 输入；决定 Admin条件分支。
    * @returns Admin 身份权限产出的 AdminTokenPayload | null。
    */
-  private verify(
+  private verify<T extends AdminTokenPayload['type']>(
     token: string,
-    type: AdminTokenPayload['type'],
-  ): AdminTokenPayload | null {
+    type: T,
+  ): Extract<AdminTokenPayload, { type: T }> | null {
     const [encodedPayload, signature] = token.split('.');
     if (!encodedPayload || !signature) return null;
 
@@ -88,8 +118,26 @@ export class AdminTokenService {
         Buffer.from(encodedPayload, 'base64url').toString('utf8'),
       ) as AdminTokenPayload;
       const now = Math.floor(Date.now() / 1000);
-      if (payload.type !== type || payload.exp <= now) return null;
-      return payload;
+      if (
+        payload.type !== type ||
+        !Number.isInteger(payload.exp) ||
+        payload.exp <= now ||
+        !Number.isInteger(payload.iat) ||
+        typeof payload.sub !== 'string' ||
+        !payload.sub ||
+        typeof payload.username !== 'string' ||
+        !payload.username
+      ) {
+        return null;
+      }
+      if (
+        payload.type === 'refresh' &&
+        (!TOKEN_ID_PATTERN.test(payload.sid) ||
+          !TOKEN_ID_PATTERN.test(payload.jti))
+      ) {
+        return null;
+      }
+      return payload as Extract<AdminTokenPayload, { type: T }>;
     } catch {
       return null;
     }

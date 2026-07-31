@@ -41,13 +41,13 @@ function createHarness(input: {
   const authService = {
     clearAccessTokenCookie: jest.fn(),
     clearRefreshTokenCookie: jest.fn(),
-    consumeLogoutSubject: jest.fn().mockResolvedValue(undefined),
     getRefreshTokenFromRequest: jest.fn(() => 'refresh-token'),
     login: jest.fn().mockResolvedValue({
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
       user: { id: 'admin-1' },
     }),
+    logout: jest.fn().mockResolvedValue(undefined),
     refresh: jest.fn().mockResolvedValue({
       accessToken: 'next-access-token',
       refreshToken: 'next-refresh-token',
@@ -81,9 +81,9 @@ function createHarness(input: {
     sideEffects: [
       authService.clearAccessTokenCookie,
       authService.clearRefreshTokenCookie,
-      authService.consumeLogoutSubject,
       authService.getRefreshTokenFromRequest,
       authService.login,
+      authService.logout,
       authService.refresh,
       authService.setAccessTokenCookie,
       authService.setRefreshTokenCookie,

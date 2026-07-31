@@ -17,10 +17,17 @@ describe('AdminAuthService password verification', () => {
     findOne: jest.fn(),
   };
   const tokenService = {
+    createRefreshSessionId: jest.fn(() => 'a'.repeat(32)),
+    getRefreshTokenTtlMs: jest.fn(() => 30 * 24 * 60 * 60 * 1000),
     signAccessToken: jest.fn(() => 'access-token'),
     signRefreshToken: jest.fn(() => 'refresh-token'),
     verifyAccessToken: jest.fn(),
     verifyRefreshToken: jest.fn(),
+  };
+  const refreshTokenStateStore = {
+    createSession: jest.fn().mockResolvedValue(true),
+    revokeSession: jest.fn().mockResolvedValue(true),
+    rotateSession: jest.fn().mockResolvedValue(true),
   };
   const toolsService = {
     readBearerToken: jest.fn(),
@@ -37,6 +44,7 @@ describe('AdminAuthService password verification', () => {
   const service = new AdminAuthService(
     userRepository as any,
     tokenService as any,
+    refreshTokenStateStore as any,
     toolsService as any,
     passwordHashService as any,
     rateLimitService as any,
@@ -51,6 +59,9 @@ describe('AdminAuthService password verification', () => {
     rateLimitService.consumeVerifiedTokenSubject.mockResolvedValue(undefined);
     tokenService.signAccessToken.mockReturnValue('access-token');
     tokenService.signRefreshToken.mockReturnValue('refresh-token');
+    refreshTokenStateStore.createSession.mockResolvedValue(true);
+    refreshTokenStateStore.revokeSession.mockResolvedValue(true);
+    refreshTokenStateStore.rotateSession.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -88,6 +99,14 @@ describe('AdminAuthService password verification', () => {
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
     });
+    expect(refreshTokenStateStore.createSession).toHaveBeenCalledWith(
+      'a'.repeat(32),
+      30 * 24 * 60 * 60 * 1000,
+    );
+    expect(tokenService.signRefreshToken).toHaveBeenCalledWith(
+      expect.objectContaining({ id: '1', username: 'admin' }),
+      'a'.repeat(32),
+    );
     expect(rateLimitService.clearSuccessfulLoginUsername).toHaveBeenCalledWith(
       'admin',
     );
@@ -209,6 +228,9 @@ describe('AdminAuthService password verification', () => {
     const response = { setHeader: jest.fn() };
     tokenService.verifyRefreshToken
       .mockReturnValueOnce({
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        jti: 'b'.repeat(32),
+        sid: 'a'.repeat(32),
         sub: 'user-42',
         username: 'admin',
       })
@@ -226,6 +248,16 @@ describe('AdminAuthService password verification', () => {
       'user-42',
       response,
     );
+    expect(refreshTokenStateStore.rotateSession).toHaveBeenCalledWith({
+      currentTokenTtlMs: expect.any(Number),
+      nextTokenTtlMs: 30 * 24 * 60 * 60 * 1000,
+      sessionId: 'a'.repeat(32),
+      tokenId: 'b'.repeat(32),
+    });
+    expect(tokenService.signRefreshToken).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-42', username: 'admin' }),
+      'a'.repeat(32),
+    );
 
     rateLimitService.consumeVerifiedTokenSubject.mockClear();
     await expect(service.refresh('forged-token')).rejects.toMatchObject({
@@ -234,25 +266,79 @@ describe('AdminAuthService password verification', () => {
     expect(rateLimitService.consumeVerifiedTokenSubject).not.toHaveBeenCalled();
   });
 
-  it('counts logout subject only when the refresh token signature is valid', async () => {
+  it('revokes the refresh family only when the refresh token signature is valid', async () => {
     const response = { setHeader: jest.fn() };
     tokenService.verifyRefreshToken
       .mockReturnValueOnce({
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        jti: 'b'.repeat(32),
+        sid: 'a'.repeat(32),
         sub: 'user-42',
         username: 'admin',
       })
       .mockReturnValueOnce(null);
 
-    await service.consumeLogoutSubject('valid-token', response as any);
+    await service.logout('valid-token', response as any);
     expect(rateLimitService.consumeVerifiedTokenSubject).toHaveBeenCalledWith(
       'logout',
       'user-42',
       response,
     );
+    expect(refreshTokenStateStore.revokeSession).toHaveBeenCalledWith(
+      'a'.repeat(32),
+      expect.any(Number),
+    );
 
     rateLimitService.consumeVerifiedTokenSubject.mockClear();
-    await service.consumeLogoutSubject('forged-token');
+    refreshTokenStateStore.revokeSession.mockClear();
+    await service.logout('forged-token');
     expect(rateLimitService.consumeVerifiedTokenSubject).not.toHaveBeenCalled();
+    expect(refreshTokenStateStore.revokeSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects a replayed refresh token before issuing replacement tokens', async () => {
+    tokenService.verifyRefreshToken.mockReturnValue({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      jti: 'b'.repeat(32),
+      sid: 'a'.repeat(32),
+      sub: 'user-42',
+      username: 'admin',
+    });
+    userRepository.findOne.mockResolvedValue({
+      id: 'user-42',
+      roles: [],
+      username: 'admin',
+    });
+    refreshTokenStateStore.rotateSession.mockResolvedValue(false);
+
+    await expect(service.refresh('replayed-token')).rejects.toMatchObject({
+      status: 403,
+    });
+    expect(tokenService.signAccessToken).not.toHaveBeenCalled();
+    expect(tokenService.signRefreshToken).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when refresh family state cannot be created or read', async () => {
+    queryBuilder.getOne.mockResolvedValue({
+      id: '1',
+      isDeleted: false,
+      password: VERSIONED_HASH,
+      roles: [],
+      status: 1,
+      username: 'admin',
+    });
+    passwordHashService.verifyPassword.mockResolvedValue(true);
+    refreshTokenStateStore.createSession.mockRejectedValue(
+      new Error('redis unavailable'),
+    );
+
+    await expect(
+      service.login('admin', 'correct password'),
+    ).rejects.toMatchObject({
+      status: 503,
+    });
+    expect(tokenService.signAccessToken).not.toHaveBeenCalled();
+    expect(tokenService.signRefreshToken).not.toHaveBeenCalled();
   });
 
   it('sets production access and refresh cookies with the locked safe attributes', () => {

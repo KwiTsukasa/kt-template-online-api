@@ -1,10 +1,16 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { Request, Response } from 'express';
 import { Repository } from 'typeorm';
 import { PublicRateLimitService, throwVbenError, ToolsService } from '@/common';
+import type { AdminRefreshTokenPayload } from '../../contract/admin.types';
 import { AdminUser } from '../user/admin-user.entity';
 import { AdminPasswordHashService } from './admin-password-hash.service';
+import { AdminRefreshTokenStateStore } from './admin-refresh-token-state.store';
 import { AdminTokenService } from './admin-token.service';
 
 const ACCESS_TOKEN_COOKIE = 'admin_access_token';
@@ -16,6 +22,7 @@ export class AdminAuthService {
     @InjectRepository(AdminUser)
     private readonly userRepository: Repository<AdminUser>,
     private readonly tokenService: AdminTokenService,
+    private readonly refreshTokenStateStore: AdminRefreshTokenStateStore,
     private readonly toolsService: ToolsService,
     private readonly passwordHashService: AdminPasswordHashService,
     private readonly rateLimitService: PublicRateLimitService,
@@ -48,10 +55,11 @@ export class AdminAuthService {
     }
 
     await this.rateLimitService.clearSuccessfulLoginUsername(username);
+    const refreshSessionId = await this.createRefreshSession();
     delete (user as { password?: string }).password;
     return {
       accessToken: this.tokenService.signAccessToken(user),
-      refreshToken: this.tokenService.signRefreshToken(user),
+      refreshToken: this.tokenService.signRefreshToken(user, refreshSessionId),
       user,
     };
   }
@@ -75,10 +83,24 @@ export class AdminAuthService {
 
     const user = await this.findActiveUserByUsername(payload.username);
     if (!user) throwVbenError('Forbidden Exception', HttpStatus.FORBIDDEN);
+    let rotated = false;
+    try {
+      rotated = await this.refreshTokenStateStore.rotateSession({
+        currentTokenTtlMs: this.getRemainingTokenTtlMs(payload),
+        nextTokenTtlMs: this.tokenService.getRefreshTokenTtlMs(),
+        sessionId: payload.sid,
+        tokenId: payload.jti,
+      });
+    } catch {
+      throw new ServiceUnavailableException('认证会话服务暂不可用');
+    }
+    if (!rotated) {
+      throwVbenError('Forbidden Exception', HttpStatus.FORBIDDEN);
+    }
 
     return {
       accessToken: this.tokenService.signAccessToken(user),
-      refreshToken: this.tokenService.signRefreshToken(user),
+      refreshToken: this.tokenService.signRefreshToken(user, payload.sid),
     };
   }
 
@@ -120,10 +142,7 @@ export class AdminAuthService {
     return this.toolsService.readCookie(req, REFRESH_TOKEN_COOKIE);
   }
 
-  async consumeLogoutSubject(
-    refreshToken?: string,
-    response?: Response,
-  ): Promise<void> {
+  async logout(refreshToken?: string, response?: Response): Promise<void> {
     if (!refreshToken) return;
     const payload = this.tokenService.verifyRefreshToken(refreshToken);
     if (!payload) return;
@@ -132,6 +151,14 @@ export class AdminAuthService {
       payload.sub,
       response,
     );
+    try {
+      await this.refreshTokenStateStore.revokeSession(
+        payload.sid,
+        this.getRemainingTokenTtlMs(payload),
+      );
+    } catch {
+      throw new ServiceUnavailableException('认证会话服务暂不可用');
+    }
   }
 
   /**
@@ -197,6 +224,25 @@ export class AdminAuthService {
       .leftJoinAndSelect('role.menus', 'menu')
       .where('user.username = :username', { username })
       .getOne();
+  }
+
+  private async createRefreshSession() {
+    const ttlMs = this.tokenService.getRefreshTokenTtlMs();
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const sessionId = this.tokenService.createRefreshSessionId();
+        if (await this.refreshTokenStateStore.createSession(sessionId, ttlMs)) {
+          return sessionId;
+        }
+      }
+    } catch {
+      throw new ServiceUnavailableException('认证会话服务暂不可用');
+    }
+    throw new ServiceUnavailableException('认证会话服务暂不可用');
+  }
+
+  private getRemainingTokenTtlMs(payload: AdminRefreshTokenPayload) {
+    return Math.max(1, payload.exp * 1000 - Date.now());
   }
 
   /**

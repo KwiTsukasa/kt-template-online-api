@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ConfigService } from '@nestjs/config';
 import pino from 'pino';
 import { createPinoLoggerParams } from '../../../src/common/logger/pino-logger.config';
@@ -5,11 +7,19 @@ import { createPinoLoggerParams } from '../../../src/common/logger/pino-logger.c
 const PASSWORD_FIELDS = [
   'password',
   'loginPassword',
-  'encryptedPassword',
-  'encryptedLoginPassword',
 ] as const;
+const REDACTION_FIXTURE = 'redaction-fixture';
 
 describe('Pino password redaction', () => {
+  it('does not retain retired RSA transport field names', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'src/common/logger/pino-logger.config.ts'),
+      'utf8',
+    );
+
+    expect(source).not.toMatch(/encrypted(?:Login)?Password/);
+  });
+
   it('recursively redacts password fields in arrays, requests, errors, and structured objects without mutating inputs', () => {
     const params = createPinoLoggerParams(
       new ConfigService({
@@ -35,7 +45,7 @@ describe('Pino password redaction', () => {
           deeper: { ...values },
         },
         rows: [{ ...values }, { child: { ...values } }],
-        token: 'sensitive-body-token',
+        token: REDACTION_FIXTURE,
       },
       envelope: {
         nested: {
@@ -84,7 +94,7 @@ describe('Pino password redaction', () => {
     expect(record.err.stack).toBe(originalErrorStack);
     expect(record.body.token).toBe('[Redacted]');
     expect(record.req.headers.authorization).toBe('[Redacted]');
-    expect(input.body.token).toBe('sensitive-body-token');
+    expect(input.body.token).toBe(REDACTION_FIXTURE);
     expect(input.req.headers.authorization).toBe(
       'Bearer sensitive-authorization',
     );
@@ -103,7 +113,7 @@ describe('Pino password redaction', () => {
       );
       const streamWrite = (params.pinoHttp as any).hooks.streamWrite;
 
-      const output = streamWrite(`malformed sensitive-password${lineEnding}`);
+      const output = streamWrite(`malformed ${REDACTION_FIXTURE}${lineEnding}`);
 
       expect(output.endsWith(lineEnding)).toBe(true);
       expect(JSON.parse(output)).toEqual({
@@ -111,7 +121,7 @@ describe('Pino password redaction', () => {
         msg: '日志脱敏失败',
         redactionError: true,
       });
-      expect(output).not.toContain('sensitive-password');
+      expect(output).not.toContain(REDACTION_FIXTURE);
       expect(output).not.toContain('malformed');
     },
   );
@@ -147,13 +157,13 @@ describe('Pino password redaction', () => {
     } as any);
 
     logger.info({
-      password: 'sensitive-password',
+      password: REDACTION_FIXTURE,
       snowflakeId: 9007199254740993n,
     });
 
     const serialized = output.join('');
     expect(serialized).toContain('"snowflakeId":9007199254740993');
     expect(serialized).toContain('"password":"[Redacted]"');
-    expect(serialized).not.toContain('sensitive-password');
+    expect(serialized).not.toContain(REDACTION_FIXTURE);
   });
 });

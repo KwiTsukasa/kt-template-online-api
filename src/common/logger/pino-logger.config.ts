@@ -7,8 +7,6 @@ const DEFAULT_APP_NAME = 'kt-template-online-api';
 const PASSWORD_FIELDS = new Set([
   'password',
   'loginPassword',
-  'encryptedPassword',
-  'encryptedLoginPassword',
 ]);
 const REDACTION_FAILURE_RECORD = JSON.stringify({
   level: 50,

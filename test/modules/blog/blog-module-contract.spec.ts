@@ -8,7 +8,11 @@ import { CommonModule } from '../../../src/common';
 import { AdminAuthGuardModule } from '../../../src/modules/admin/identity/auth/admin-auth-guard.module';
 import { AssetModule } from '../../../src/modules/asset/asset.module';
 import { BlogArticleService } from '../../../src/modules/blog/application/blog-article.service';
-import { BlogLegacyAssetMigrationService } from '../../../src/modules/blog/application/blog-legacy-asset-migration.service';
+import {
+  BlogLegacyAssetHttpFetcher,
+  BlogLegacyAssetManifestFileStore,
+  BlogLegacyAssetMigrationService,
+} from '../../../src/modules/blog/application/blog-legacy-asset-migration.service';
 import { BlogTermService } from '../../../src/modules/blog/application/blog-term.service';
 import { BlogThemeConfigService } from '../../../src/modules/blog/application/blog-theme-config.service';
 import { BlogArticleController } from '../../../src/modules/blog/contract/blog-article.controller';
@@ -92,6 +96,10 @@ describe('Blog content module contract', () => {
       BlogContentModule,
       MODULE_METADATA.EXPORTS,
     );
+    const blogProviders = getModuleMetadata(
+      BlogContentModule,
+      MODULE_METADATA.PROVIDERS,
+    );
 
     expectNoModuleNamed(appImports, 'BlogModule');
     expectNoModuleNamed(blogImports, 'BlogModule');
@@ -116,14 +124,18 @@ describe('Blog content module contract', () => {
         BlogThemeConfigController,
       ]),
     );
-    expect(
-      getModuleMetadata(BlogContentModule, MODULE_METADATA.PROVIDERS),
-    ).toEqual(
+    expect(blogProviders).toEqual(
       expect.arrayContaining([
         BlogArticleService,
-        BlogLegacyAssetMigrationService,
         BlogTermService,
         BlogThemeConfigService,
+      ]),
+    );
+    expect(blogProviders).not.toEqual(
+      expect.arrayContaining([
+        BlogLegacyAssetHttpFetcher,
+        BlogLegacyAssetManifestFileStore,
+        BlogLegacyAssetMigrationService,
       ]),
     );
     expect(blogExports).toEqual(
@@ -141,14 +153,11 @@ describe('Blog content module contract', () => {
         BlogThemeConfigController,
       ]),
     );
-    expect(BLOG_CONTENT_PROVIDERS).toEqual(
-      expect.arrayContaining([
-        BlogArticleService,
-        BlogLegacyAssetMigrationService,
-        BlogTermService,
-        BlogThemeConfigService,
-      ]),
-    );
+    expect(BLOG_CONTENT_PROVIDERS).toEqual([
+      BlogArticleService,
+      BlogTermService,
+      BlogThemeConfigService,
+    ]);
   });
 
   it('matches the real Batch 3 Blog content SQL schema and public surface contract', () => {

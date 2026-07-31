@@ -38,11 +38,11 @@ describe('WordPress runtime retirement contract', () => {
     expect(contractMatrix).toContain(
       'WordPress 运行路由与 Blog 导入端点已在 Phase 1 退役',
     );
-    expect(contractMatrix).toContain(
-      'Phase 2 发布候选已移除\n`blog_import_job` 的运行时与新建库契约',
+    expect(contractMatrix).toMatch(
+      /Phase 2 直接退役已于\s+2026-07-31 获得用户明确授权/,
     );
     expect(contractMatrix).toMatch(
-      /既有生产物理表仍保留到观察期结束并取得\s+新的破坏性授权/,
+      /正常 API 进程不再注册离线资源迁移器及其\s+HTTP\/DNS provider/,
     );
     expect(readRepoFile('src/modules/blog/blog-content.module.ts')).not.toMatch(
       /blog_import_job|importJob/,

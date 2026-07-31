@@ -132,9 +132,12 @@ NapCat WebUI Gateway 是独立运行的 NestJS 入口，生产镜像使用 `dock
 
 统一网关的部署布局、Canary、DNS/Caddy、密码迁移和 WordPress 两阶段回滚
 见 KT 工作区根文档 `docs/unified-natmap-tls-gateway-operations.md`。统一网关、
-WordPress Phase 1 与公网 NATMap/DDNS 已发布；Phase 2 发布候选已从运行时
-domain contract 和新建库 SQL 移除 `blog_import_job`，但生产物理表、容器和
-共享 Secret key 仍保留到观察期结束并取得新的破坏性授权。
+WordPress Phase 1 与公网 NATMap/DDNS 已发布；Phase 2 直接退役已于
+`2026-07-31` 获得用户明确授权。本版本从正常 API 进程移除离线资源迁移器及其
+HTTP/DNS provider，并从 domain contract 和新建库 SQL 移除
+`blog_import_job`。生产退役必须先完成专用密文备份和无网络恢复验证，只精确
+移除五个 `WORDPRESS_*` key 并停止原容器；原容器对象和 bind 数据继续作为
+回滚资产保留。
 
 ## 启动
 

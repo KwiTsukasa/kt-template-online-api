@@ -322,7 +322,7 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
     }
   });
 
-  it('defines a fail-closed Task 13 build-only mode', () => {
+  it('keeps the explicit Task 13 build-only mode without blocking later main releases', () => {
     const prepare = extractStage('Prepare');
 
     expect(jenkinsfile).toContain(
@@ -345,10 +345,10 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
     expect(prepare).toContain(
       'Remote main/dev must both equal the checked-out commit before TASK13_PREBUILD_ONLY.',
     );
-    expect(prepare).toContain(
+    expect(prepare).not.toContain(
       'Task 13 blocks ordinary main deployment; select TASK13_PREBUILD_ONLY or PREBUILT_RELEASE explicitly.',
     );
-    expect(prepare).toMatch(
+    expect(prepare).not.toMatch(
       /env\.BRANCH_NAME == 'main'[\s\S]*!params\.PREBUILT_RELEASE[\s\S]*!params\.TASK13_PREBUILD_ONLY[\s\S]*Task 13 blocks ordinary main deployment/,
     );
   });

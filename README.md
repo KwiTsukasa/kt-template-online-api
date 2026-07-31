@@ -280,11 +280,11 @@ Task 13 的 exact-digest 推送与受控 K8s 恢复状态机分别位于
 `Method too large`。恢复脚本不会把生产 Secret YAML 写入 workspace，并用同一
 EXIT/signal 守卫覆盖 manifest apply、回读和双 rollout；任一失败都会清理
 overlay，并将 API 恢复为零副本。
-Task 13 源码门禁还会拒绝未显式选择上述 build-only 或
-`PREBUILT_RELEASE` 的普通非 PR `main` 构建，因此首次 SCM 自动构建可能在
-Prepare 阶段按设计失败且不产生部署；待 Jenkins 注册新参数后，再用固定参数
-手动触发 build-only。该临时门禁必须保留到密码迁移、exact release 和线上
-登录 smoke 全部通过，之后才可在独立提交中移除。
+Task 13 首次迁移期间曾拒绝未显式选择上述 build-only 或
+`PREBUILT_RELEASE` 的普通非 PR `main` 构建。密码迁移、exact release、
+线上登录 smoke 和维护 annotation 清理全部完成后，该临时拒绝门禁已移除，
+后续 `main` 恢复标准 Jenkins/K8s 发布；两种 Task 13 模式仍保留为历史
+exact-digest 构建和受控恢复入口。
 
 Task 13 密码迁移后的恢复使用 Jenkins `PREBUILT_RELEASE` 受控模式，不重新
 安装、测试、构建或推送。调用方必须保证 checkout 无 tracked/untracked

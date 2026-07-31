@@ -218,15 +218,6 @@ pipeline {
               error("${parameterName} must be empty in Task 13 restricted modes.")
             }
           }
-          if (
-            env.BRANCH_NAME == 'main' &&
-            env.IS_CHANGE_REQUEST != 'true' &&
-            !params.PREBUILT_RELEASE &&
-            !params.TASK13_PREBUILD_ONLY
-          ) {
-            error('Task 13 blocks ordinary main deployment; select TASK13_PREBUILD_ONLY or PREBUILT_RELEASE explicitly.')
-          }
-
           if (params.TASK13_PREBUILD_ONLY) {
             if (!isUnix()) {
               error('TASK13_PREBUILD_ONLY requires the Linux/NAS Jenkins Agent.')

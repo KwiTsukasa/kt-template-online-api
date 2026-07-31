@@ -891,6 +891,37 @@ function v2EndpointHistory(
   });
 }
 
+function seedV2TcpWithdrawalHistory(
+  harness: V2MqttHarness,
+  previousEndpoint: ReturnType<typeof v2Endpoint>,
+): void {
+  harness.histories.push(
+    v2EndpointHistory({
+      endpointIdentity: endpointLeaseIdentityV2(previousEndpoint),
+      endpointValidatedAt: new KtDateTime(previousEndpoint.validatedAt),
+      endpointValidUntil: new KtDateTime(previousEndpoint.validUntil),
+      eventId: 'v2-tcp-event-0',
+      mappingId: '101',
+      mechanism: 'tcp_natmap',
+      publicIpv4: previousEndpoint.publicIpv4,
+      publicPort: previousEndpoint.publicPort,
+    }),
+    v2EndpointHistory({
+      endpointIdentity: null,
+      endpointValidatedAt: null,
+      endpointValidUntil: null,
+      eventId: 'v2-tcp-withdrawn-1',
+      eventType: 'withdrawn',
+      id: '2',
+      mappingId: '101',
+      mechanism: 'tcp_natmap',
+      occurredAt: new KtDateTime('2099-07-27T00:00:10.000Z'),
+      publicIpv4: null,
+      publicPort: null,
+    }),
+  );
+}
+
 async function flushPromises(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
 }
@@ -3177,7 +3208,278 @@ describe('NetworkAgentMqttService', () => {
       expect(harness.deliveryCoordinator.requestDrain).toHaveBeenCalledTimes(1);
     });
 
-    it.each(['published', 'restored', 'withdrawn'] as const)(
+    it('stages one event-first restored TCP port change against the last valid endpoint after withdrawal', async () => {
+      const harness = createV2Harness();
+      const previousEndpoint = v2Endpoint('tcp_natmap', {
+        publicPort: 45_100,
+      });
+      seedV2TcpWithdrawalHistory(harness, previousEndpoint);
+      const restoredEvent = v2EndpointEvent({
+        channelId: '101',
+        endpoint: v2Endpoint('tcp_natmap'),
+        eventId: 'v2-tcp-restored-1',
+        mechanism: 'tcp_natmap',
+        protocol: 'tcp',
+        type: 'restored',
+      });
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        restoredEvent,
+      );
+      expect(harness.stagedEvents).toHaveLength(0);
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {}, { reportedAt: '2099-07-27T00:00:20.000Z' }),
+      );
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {}, { reportedAt: '2099-07-27T00:00:20.000Z' }),
+      );
+
+      expect(harness.stagedEvents).toEqual([
+        {
+          eventId: 'v2-tcp-restored-1',
+          occurredAt: '2099-07-27T00:00:16.000Z',
+          payload: {
+            previousPublicIpv4: '8.8.8.8',
+            previousPublicPort: 45_100,
+            publicIpv4: '8.8.8.8',
+            publicPort: 45_101,
+            tcpChannelId: '101',
+          },
+          resourceKey: '101',
+          sourceKey: 'network.tcp.natmap-endpoint-changed',
+        },
+      ]);
+      expect(harness.deliveryCoordinator.requestDrain).toHaveBeenCalledTimes(1);
+    });
+
+    it('stages one report-first restored TCP IPv4 change against the last valid endpoint after withdrawal', async () => {
+      const harness = createV2Harness();
+      const previousEndpoint = v2Endpoint('tcp_natmap', {
+        publicIpv4: '8.8.8.7',
+      });
+      seedV2TcpWithdrawalHistory(harness, previousEndpoint);
+      const restoredEvent = v2EndpointEvent({
+        channelId: '101',
+        endpoint: v2Endpoint('tcp_natmap'),
+        eventId: 'v2-tcp-restored-1',
+        mechanism: 'tcp_natmap',
+        protocol: 'tcp',
+        type: 'restored',
+      });
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness),
+      );
+      expect(harness.stagedEvents).toHaveLength(0);
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        restoredEvent,
+      );
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        restoredEvent,
+      );
+
+      expect(harness.stagedEvents).toEqual([
+        {
+          eventId: 'v2-tcp-restored-1',
+          occurredAt: '2099-07-27T00:00:16.000Z',
+          payload: {
+            previousPublicIpv4: '8.8.8.7',
+            previousPublicPort: 45_101,
+            publicIpv4: '8.8.8.8',
+            publicPort: 45_101,
+            tcpChannelId: '101',
+          },
+          resourceKey: '101',
+          sourceKey: 'network.tcp.natmap-endpoint-changed',
+        },
+      ]);
+      expect(harness.deliveryCoordinator.requestDrain).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a late TCP restored event silent when a newer withdrawal owns the timeline', async () => {
+      const harness = createV2Harness();
+      const previousEndpoint = v2Endpoint('tcp_natmap', {
+        publicPort: 45_100,
+      });
+      seedV2TcpWithdrawalHistory(harness, previousEndpoint);
+      harness.histories[1].occurredAt = new KtDateTime(
+        '2099-07-27T00:00:20.000Z',
+      );
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness, {}, { reportedAt: '2099-07-27T00:00:25.000Z' }),
+      );
+      expect(harness.stagedEvents).toHaveLength(0);
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({
+          channelId: '101',
+          endpoint: v2Endpoint('tcp_natmap'),
+          eventId: 'v2-tcp-restored-late',
+          mechanism: 'tcp_natmap',
+          occurredAt: '2099-07-27T00:00:10.000Z',
+          protocol: 'tcp',
+          type: 'restored',
+        }),
+      );
+
+      expect(harness.histories).toHaveLength(3);
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+    });
+
+    it('uses history ID to stage only the latest TCP restored row at the same occurrence time', async () => {
+      const currentEndpoint = v2Endpoint('tcp_natmap');
+      const previousEndpoint = v2Endpoint('tcp_natmap', {
+        publicPort: 45_100,
+      });
+      const occurredAt = new KtDateTime('2099-07-27T00:00:20.000Z');
+      const latestRestored = createV2Harness();
+      seedV2TcpWithdrawalHistory(latestRestored, previousEndpoint);
+      latestRestored.histories[1].occurredAt = occurredAt;
+
+      await latestRestored.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          latestRestored,
+          {},
+          { reportedAt: '2099-07-27T00:00:25.000Z' },
+        ),
+      );
+      expect(latestRestored.stagedEvents).toHaveLength(0);
+
+      await latestRestored.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({
+          channelId: '101',
+          endpoint: currentEndpoint,
+          eventId: 'v2-tcp-restored-latest',
+          mechanism: 'tcp_natmap',
+          occurredAt: '2099-07-27T00:00:20.000Z',
+          protocol: 'tcp',
+          type: 'restored',
+        }),
+      );
+
+      expect(latestRestored.stagedEvents).toHaveLength(1);
+      expect(latestRestored.stagedEvents[0]?.eventId).toBe(
+        'v2-tcp-restored-latest',
+      );
+      expect(
+        latestRestored.deliveryCoordinator.requestDrain,
+      ).toHaveBeenCalledTimes(1);
+
+      const olderRestored = createV2Harness();
+      seedV2TcpWithdrawalHistory(olderRestored, previousEndpoint);
+      olderRestored.histories[1].id = '3';
+      olderRestored.histories[1].occurredAt = occurredAt;
+      olderRestored.histories.push(
+        v2EndpointHistory({
+          endpointIdentity: endpointLeaseIdentityV2(currentEndpoint),
+          endpointValidatedAt: new KtDateTime(currentEndpoint.validatedAt),
+          endpointValidUntil: new KtDateTime(currentEndpoint.validUntil),
+          eventId: 'v2-tcp-restored-older',
+          eventType: 'restored',
+          id: '2',
+          mappingId: '101',
+          mechanism: 'tcp_natmap',
+          occurredAt,
+          publicIpv4: currentEndpoint.publicIpv4,
+          publicPort: currentEndpoint.publicPort,
+        }),
+      );
+
+      await olderRestored.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(
+          olderRestored,
+          {},
+          { reportedAt: '2099-07-27T00:00:25.000Z' },
+        ),
+      );
+
+      expect(olderRestored.stagedEvents).toHaveLength(0);
+      expect(
+        olderRestored.deliveryCoordinator.requestDrain,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('keeps a same-tuple TCP restoration silent after withdrawal', async () => {
+      const harness = createV2Harness();
+      const endpoint = v2Endpoint('tcp_natmap');
+      seedV2TcpWithdrawalHistory(harness, endpoint);
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({
+          channelId: '101',
+          endpoint,
+          eventId: 'v2-tcp-restored-same-tuple',
+          mechanism: 'tcp_natmap',
+          protocol: 'tcp',
+          type: 'restored',
+        }),
+      );
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness),
+      );
+
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+    });
+
+    it('does not stage a TCP restored event without an immediately preceding withdrawal', async () => {
+      const harness = createV2Harness();
+      const previousEndpoint = v2Endpoint('tcp_natmap', {
+        publicIpv4: '8.8.8.7',
+        publicPort: 45_100,
+      });
+      harness.histories.push(
+        v2EndpointHistory({
+          endpointIdentity: endpointLeaseIdentityV2(previousEndpoint),
+          endpointValidatedAt: new KtDateTime(previousEndpoint.validatedAt),
+          endpointValidUntil: new KtDateTime(previousEndpoint.validUntil),
+          eventId: 'v2-tcp-event-0',
+          mappingId: '101',
+          mechanism: 'tcp_natmap',
+          publicIpv4: previousEndpoint.publicIpv4,
+          publicPort: previousEndpoint.publicPort,
+        }),
+      );
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/reported',
+        v2Reported(harness),
+      );
+      harness.deliveryCoordinator.requestDrain.mockClear();
+
+      await harness.service.consumeMessage(
+        'kt/network/v2/agents/nas-main/events',
+        v2EndpointEvent({
+          channelId: '101',
+          endpoint: v2Endpoint('tcp_natmap'),
+          eventId: 'v2-tcp-restored-without-withdrawal',
+          mechanism: 'tcp_natmap',
+          protocol: 'tcp',
+          type: 'restored',
+        }),
+      );
+
+      expect(harness.stagedEvents).toHaveLength(0);
+      expect(harness.deliveryCoordinator.requestDrain).not.toHaveBeenCalled();
+    });
+
+    it.each(['published', 'withdrawn'] as const)(
       'does not stage a TCP %s lifecycle event',
       async (type) => {
         const harness = createV2Harness();

@@ -1209,12 +1209,29 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   private async stageMatchingV2TcpHistory(
     manager: EntityManager,
     mapping: NetworkPortForward,
+    expectedEventId?: string,
   ): Promise<boolean> {
-    const histories = await manager.getRepository(NetworkEndpointHistory).find({
+    const repository = manager.getRepository(NetworkEndpointHistory);
+    let histories = await repository.find({
       order: { occurredAt: 'DESC', id: 'DESC' },
       take: 2,
       where: { mappingId: mapping.id, mechanism: 'tcp_natmap' },
     });
+    if (expectedEventId && histories[0]?.eventId !== expectedEventId) {
+      return false;
+    }
+    if (histories[0]?.eventType === 'restored') {
+      if (histories[1]?.eventType !== 'withdrawn') return false;
+      histories = await repository.find({
+        order: { occurredAt: 'DESC', id: 'DESC' },
+        take: 2,
+        where: {
+          eventType: Not('withdrawn'),
+          mappingId: mapping.id,
+          mechanism: 'tcp_natmap',
+        },
+      });
+    }
     return await this.stageV2TcpEndpointChange(
       manager,
       mapping,
@@ -1265,7 +1282,8 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   ): Promise<boolean> {
     if (
       !currentHistory ||
-      currentHistory.eventType !== 'changed' ||
+      (currentHistory.eventType !== 'changed' &&
+        currentHistory.eventType !== 'restored') ||
       !previousHistory ||
       previousHistory.eventType === 'withdrawn' ||
       !this.isV2HistoryMatchingCurrent(mapping, currentHistory) ||
@@ -1583,16 +1601,20 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       if (await repository.findOne({ where: { eventId: event.eventId } })) {
         return { changed: false, deliveryAccepted: false };
       }
-      const immediatePreviousHistory = await repository.findOne({
-        lock: { mode: 'pessimistic_read' },
-        order: { occurredAt: 'DESC', id: 'DESC' },
-        where: {
-          mappingId: event.channelId,
-          mechanism: event.mechanism,
-        },
-      });
+      const isTcpRestored =
+        event.protocol === 'tcp' && event.type === 'restored';
+      const immediatePreviousHistory = isTcpRestored
+        ? null
+        : await repository.findOne({
+            lock: { mode: 'pessimistic_read' },
+            order: { occurredAt: 'DESC', id: 'DESC' },
+            where: {
+              mappingId: event.channelId,
+              mechanism: event.mechanism,
+            },
+          });
       const previousHistory =
-        event.protocol === 'udp' && event.type === 'restored'
+        event.type === 'restored' && !isTcpRestored
           ? immediatePreviousHistory?.eventType === 'withdrawn'
             ? await repository.findOne({
                 lock: { mode: 'pessimistic_read' },
@@ -1635,12 +1657,18 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
           event,
         )
           ? event.protocol === 'tcp'
-            ? await this.stageV2TcpEndpointChange(
-                manager,
-                mapping,
-                history,
-                previousHistory || undefined,
-              )
+            ? event.type === 'restored'
+              ? await this.stageMatchingV2TcpHistory(
+                  manager,
+                  mapping,
+                  event.eventId,
+                )
+              : await this.stageV2TcpEndpointChange(
+                  manager,
+                  mapping,
+                  history,
+                  previousHistory || undefined,
+                )
             : await this.stageV2UdpPortChange(
                 manager,
                 mapping,
@@ -1664,8 +1692,7 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       event.protocol === 'tcp' ? 'tcp_natmap' : 'udp_stun';
     return (
       event.mechanism === expectedMechanism &&
-      (event.type === 'changed' ||
-        (event.protocol === 'udp' && event.type === 'restored')) &&
+      (event.type === 'changed' || event.type === 'restored') &&
       !!event.endpoint &&
       mapping.reportedRevision === String(event.revision) &&
       mapping.currentPublicIpv4 === event.endpoint.publicIpv4 &&

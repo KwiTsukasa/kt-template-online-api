@@ -83,6 +83,7 @@ describe('Admin module route contract', () => {
         'POST /system/network/port-forward/:id/probe',
         'GET /system/network/port-forward/:id/endpoint-history',
         'GET /system/network/agent/status',
+        'GET /network/open-redirect/:serviceKey',
       ]),
     );
     expect(routes.map(routeKey)).not.toContain('GET /auth/password-public-key');

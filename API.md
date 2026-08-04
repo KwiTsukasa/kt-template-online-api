@@ -121,6 +121,25 @@ Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理�
 | `DELETE` | `/system/network/ddns/:id`                          | `super` | 删除本地绑定，不删除云端 DNS 记录         |
 | `POST`   | `/system/network/ddns/:id/retry`                    | `super` | 手动重试一条已启用 DDNS 绑定              |
 
+同一模块提供只供腾讯云稳定入口调用的 NATMap 启动重定向：
+
+| 方法   | 内部路径                                    | 认证/来源边界                                      | 说明                         |
+| ------ | ------------------------------------------- | -------------------------------------------------- | ---------------------------- |
+| `GET`  | `/network/open-redirect/:serviceKey`       | `@Public()`；Host 必须为 `open.kwitsukasa.top`     | 返回空 body 的临时 `302`     |
+| `HEAD` | `/network/open-redirect/:serviceKey`       | 同上；Traefik 另限 `ClientIP=10.66.66.1/32`        | 返回与 GET 相同的状态和响应头 |
+
+Traefik 外部路径为 `/api/network/open-redirect/:serviceKey`，去掉 `/api` 后才
+进入 Controller。`serviceKey` 是代码内固定白名单
+`nas/admin/blog/api/portfolio/jenkins/kestra/mcsm/mcd/minio/alist/fnos/s3`；
+接口不接受 URL、scheme、Host、端口、路径后缀或 redirect query，入口查询串
+不会进入 `Location`。服务在一个 `REPEATABLE READ` 只读解析事务中同时核验
+`tcp:10443` 通道、逻辑组、`a:nas4.kwitsukasa.top` DDNS 和配置的 Agent：
+只有 desired/reported revision 已收敛、NATMap active、lease 未过期、Agent
+在线且 DDNS source/applied IPv4 与 current 完全相同时才返回 `302`。未知键
+返回 `404`；离线、过期、状态不一致或解析异常返回无 `Location` 的 `503` 与
+`Retry-After: 30`。所有响应均禁止缓存、referrer 与索引。该接口只完成首跳，
+浏览器后续页面、API、上传、SSE 与 WebSocket 均直连带动态端口的统一网关。
+
 逻辑组接口用于当前 Admin；同一逻辑组可包含相同端口的 TCP、UDP 或双协议通道：
 
 | 方法     | 路径                                                                              | 认证    | 说明                                      |

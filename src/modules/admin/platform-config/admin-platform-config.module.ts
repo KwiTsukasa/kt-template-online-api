@@ -16,6 +16,8 @@ import { NetworkDnsPodClient } from '@/modules/admin/platform-config/network-man
 import { NetworkEndpointHistory } from '@/modules/admin/platform-config/network-management/network-endpoint-history.entity';
 import { NetworkManagementController } from '@/modules/admin/platform-config/network-management/network-management.controller';
 import { NetworkManagementEventStreamService } from '@/modules/admin/platform-config/network-management/network-management-event-stream.service';
+import { NetworkOpenRedirectController } from '@/modules/admin/platform-config/network-management/network-open-redirect.controller';
+import { NetworkOpenRedirectService } from '@/modules/admin/platform-config/network-management/network-open-redirect.service';
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/network-management.entity';
 import { NetworkPortForwardGroup } from '@/modules/admin/platform-config/network-management/network-port-forward-group.entity';
 import { NetworkPortForwardGroupController } from '@/modules/admin/platform-config/network-management/network-port-forward-group.controller';
@@ -58,6 +60,7 @@ export const ADMIN_PLATFORM_CONFIG_DIRECT_CONTROLLERS = [
   EnvironmentDashboardController,
   NetworkManagementController,
   NetworkPortForwardGroupController,
+  NetworkOpenRedirectController,
 ];
 
 export const ADMIN_PLATFORM_CONFIG_IMPORTED_CONTROLLERS = [
@@ -99,6 +102,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
   NetworkTcpNatmapMessageSourceAdapter,
   NetworkTcpReleasePolicyService,
   NetworkAgentMqttService,
+  NetworkOpenRedirectService,
 ];
 
 @Module({

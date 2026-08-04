@@ -14,6 +14,7 @@ import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-conf
 import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
 import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/network-management.service';
+import { NetworkOpenRedirectService } from '../../../src/modules/admin/platform-config/network-management/network-open-redirect.service';
 import { NetworkTcpNatmapMessageSourceAdapter } from '../../../src/modules/admin/platform-config/network-management/network-tcp-natmap-message-source.adapter';
 
 describe('network management persistence module', () => {
@@ -226,6 +227,7 @@ describe('network management persistence module', () => {
         NetworkDdnsService,
         NetworkDnsPodClient,
         NetworkAgentMqttService,
+        NetworkOpenRedirectService,
         NetworkTcpNatmapMessageSourceAdapter,
       ]),
     );
@@ -235,6 +237,7 @@ describe('network management persistence module', () => {
         NetworkDdnsService,
         NetworkDnsPodClient,
         NetworkAgentMqttService,
+        NetworkOpenRedirectService,
         NetworkTcpNatmapMessageSourceAdapter,
       ]),
     );

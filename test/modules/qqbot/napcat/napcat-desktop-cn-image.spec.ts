@@ -195,6 +195,8 @@ describe('NapCat Chinese Desktop Runtime image assets', () => {
     expect(manifest).toContain('value: kt-napcat-desktop-cn:desktop-cn-v21');
     expect(manifest).toContain('name: QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION');
     expect(manifest).toContain('value: desktop-cn-v21');
+    expect(manifest).toContain('name: QQBOT_NAPCAT_MUTATION_PROTOCOL');
+    expect(manifest).toContain('value: journal-flock-v1');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v20');
     expect(manifest).not.toContain('value: desktop-cn-v20');
     expect(manifest).not.toContain('kt-napcat-desktop-cn:desktop-cn-v19');

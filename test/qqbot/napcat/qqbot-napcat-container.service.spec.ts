@@ -59,7 +59,20 @@ describe('QqbotNapcatContainerService', () => {
       expect(script).toContain(
         "NAPCAT_RUNTIME_MIGRATION_STATE='/var/lib/kt-napcat-runtime-migration'",
       );
+      expect(script).toContain(
+        'if [ -e "$NAPCAT_RUNTIME_MIGRATION_STATE" ] || [ -L "$NAPCAT_RUNTIME_MIGRATION_STATE" ]; then',
+      );
+      expect(script).toContain(
+        'NapCat runtime migration state path is unsafe',
+      );
+      expect(script).toContain(
+        'if ! NAPCAT_RUNTIME_PENDING_JOURNAL="$(',
+      );
+      expect(script).toContain(
+        'NapCat runtime migration state inspection failed',
+      );
       expect(script).toContain("-name '*.json' -print -quit");
+      expect(script).not.toContain('| grep -q');
       expect(script.indexOf('flock -w 30 9')).toBeLessThan(
         script.indexOf(mutation),
       );

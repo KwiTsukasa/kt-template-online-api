@@ -1561,7 +1561,7 @@ ${accountRunFlag}${passwordRunFlag}${deviceRunFlags}  -p "$PORT:6099" \\
 NAPCAT_RUNTIME_MIGRATION_STATE=${this.sh(
       NAPCAT_RUNTIME_MIGRATION_STATE_PATH,
     )}
-for NAPCAT_RUNTIME_REQUIRED_COMMAND in flock find grep; do
+for NAPCAT_RUNTIME_REQUIRED_COMMAND in flock find; do
   command -v "$NAPCAT_RUNTIME_REQUIRED_COMMAND" >/dev/null 2>&1 || {
     echo "NapCat runtime mutation guard requires $NAPCAT_RUNTIME_REQUIRED_COMMAND" >&2
     exit 75
@@ -1572,10 +1572,22 @@ flock -w 30 9 || {
   echo "NapCat runtime mutation is busy" >&2
   exit 75
 }
-if [ -d "$NAPCAT_RUNTIME_MIGRATION_STATE" ] && \
-  find "$NAPCAT_RUNTIME_MIGRATION_STATE" -mindepth 1 -maxdepth 1 -name '*.json' -print -quit | grep -q .; then
-  echo "NapCat runtime migration recovery is pending" >&2
-  exit 75
+if [ -e "$NAPCAT_RUNTIME_MIGRATION_STATE" ] || [ -L "$NAPCAT_RUNTIME_MIGRATION_STATE" ]; then
+  if [ -L "$NAPCAT_RUNTIME_MIGRATION_STATE" ] || [ ! -d "$NAPCAT_RUNTIME_MIGRATION_STATE" ]; then
+    echo "NapCat runtime migration state path is unsafe" >&2
+    exit 75
+  fi
+  if ! NAPCAT_RUNTIME_PENDING_JOURNAL="$(
+    find "$NAPCAT_RUNTIME_MIGRATION_STATE" \
+      -mindepth 1 -maxdepth 1 -type f -name '*.json' -print -quit
+  )"; then
+    echo "NapCat runtime migration state inspection failed" >&2
+    exit 75
+  fi
+  if [ -n "$NAPCAT_RUNTIME_PENDING_JOURNAL" ]; then
+    echo "NapCat runtime migration recovery is pending" >&2
+    exit 75
+  fi
 }`;
   }
 

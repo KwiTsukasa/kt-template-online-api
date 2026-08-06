@@ -15,7 +15,9 @@ export type NapcatProtocolProfileStatus =
 
 @Entity('napcat_protocol_profile')
 @Index('idx_napcat_protocol_profile_account', ['accountId'])
-@Index('idx_napcat_protocol_profile_container', ['containerId'])
+@Index('uk_napcat_protocol_profile_container', ['containerId'], {
+  unique: true,
+})
 export class NapcatProtocolProfile {
   @PrimaryColumn({ type: 'bigint' })
   id: string;

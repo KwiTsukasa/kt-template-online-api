@@ -1,7 +1,8 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ensureSnowflakeId } from '@/common';
+import { ObjectLiteral, Repository } from 'typeorm';
 import type { NapcatRuntimeProfileSnapshot } from '../../domain/runtime/napcat-profile.types';
 import { NapcatProtocolProfile } from '../../infrastructure/persistence/napcat-protocol-profile.entity';
 import { NapcatRuntimeProfile } from '../../infrastructure/persistence/napcat-runtime-profile.entity';
@@ -82,14 +83,16 @@ export class NapcatRuntimeProfileService {
 
   async recordPlannedProfiles(input: RecordPlannedProfilesInput) {
     const accountId = `${input.accountId || ''}`.trim();
+    const containerId = `${input.containerId || ''}`.trim();
     if (!accountId) return;
 
     if (this.runtimeProfileRepository) {
-      await this.runtimeProfileRepository.save(
+      await this.saveProfile(
+        this.runtimeProfileRepository,
         this.runtimeProfileRepository.create({
           accountId,
           baseImageDigest: null,
-          containerId: input.containerId || null,
+          containerId: containerId || null,
           desktopProfileVersion: input.runtimeProfile.desktopProfileVersion,
           deviceIdentityId:
             input.deviceIdentity?.deviceIdentityId ||
@@ -114,7 +117,8 @@ export class NapcatRuntimeProfileService {
           lastCheckedAt: null,
           locale: input.runtimeProfile.locale,
           localeAvailable: false,
-          macStrategy: input.deviceIdentity?.macStrategy || 'physical-oui-mac-v1',
+          macStrategy:
+            input.deviceIdentity?.macStrategy || 'physical-oui-mac-v1',
           migrateDeviceIdentity: !!input.deviceIdentity,
           persistCache: input.runtimeProfile.persistCache,
           persistLocalShare: input.runtimeProfile.persistLocalShare,
@@ -138,10 +142,11 @@ export class NapcatRuntimeProfileService {
     }
 
     if (this.protocolProfileRepository) {
-      await this.protocolProfileRepository.save(
+      await this.saveProfile(
+        this.protocolProfileRepository,
         this.protocolProfileRepository.create({
           accountId,
-          containerId: input.containerId || null,
+          containerId: containerId || null,
           lastCheckEvidence: {
             configSource: 'managed-create-script',
           },
@@ -203,6 +208,32 @@ export class NapcatRuntimeProfileService {
           containerId,
         }
       : { accountId: fromAccountId };
+  }
+
+  private async saveProfile<
+    T extends ObjectLiteral & { containerId: null | string; id: string },
+  >(repository: Repository<T>, profile: T) {
+    if (!profile.containerId) {
+      await repository.save(profile);
+      return;
+    }
+
+    ensureSnowflakeId(profile);
+    const overwriteColumns = repository.metadata.columns
+      .filter(
+        (column) =>
+          !column.isPrimary &&
+          !column.isCreateDate &&
+          column.propertyName !== 'containerId',
+      )
+      .map((column) => column.databaseName);
+
+    await repository
+      .createQueryBuilder()
+      .insert()
+      .values(profile)
+      .orUpdate(overwriteColumns, ['container_id'])
+      .execute();
   }
 
   private getString(key: string, defaultValue: string) {

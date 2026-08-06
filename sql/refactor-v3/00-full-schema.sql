@@ -1116,7 +1116,7 @@ CREATE TABLE IF NOT EXISTS napcat_runtime_profile (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_napcat_runtime_profile_account (account_id),
-  KEY idx_napcat_runtime_profile_container (container_id)
+  UNIQUE KEY uk_napcat_runtime_profile_container (container_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS napcat_protocol_profile (
@@ -1138,7 +1138,7 @@ CREATE TABLE IF NOT EXISTS napcat_protocol_profile (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_napcat_protocol_profile_account (account_id),
-  KEY idx_napcat_protocol_profile_container (container_id)
+  UNIQUE KEY uk_napcat_protocol_profile_container (container_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS napcat_session_behavior_profile (

@@ -15,7 +15,9 @@ export type NapcatRuntimeProfileStatus =
 
 @Entity('napcat_runtime_profile')
 @Index('idx_napcat_runtime_profile_account', ['accountId'])
-@Index('idx_napcat_runtime_profile_container', ['containerId'])
+@Index('uk_napcat_runtime_profile_container', ['containerId'], {
+  unique: true,
+})
 export class NapcatRuntimeProfile {
   @PrimaryColumn({ type: 'bigint' })
   id: string;

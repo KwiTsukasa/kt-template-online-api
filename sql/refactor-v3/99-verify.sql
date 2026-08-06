@@ -463,7 +463,8 @@ SELECT 'index_napcat_runtime_profile_container' AS check_name, COUNT(*) AS match
 FROM information_schema.statistics
 WHERE table_schema = DATABASE()
   AND table_name = 'napcat_runtime_profile'
-  AND index_name = 'idx_napcat_runtime_profile_container';
+  AND index_name = 'uk_napcat_runtime_profile_container'
+  AND non_unique = 0;
 
 SELECT 'index_napcat_protocol_profile_account' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics
@@ -475,7 +476,8 @@ SELECT 'index_napcat_protocol_profile_container' AS check_name, COUNT(*) AS matc
 FROM information_schema.statistics
 WHERE table_schema = DATABASE()
   AND table_name = 'napcat_protocol_profile'
-  AND index_name = 'idx_napcat_protocol_profile_container';
+  AND index_name = 'uk_napcat_protocol_profile_container'
+  AND non_unique = 0;
 
 SELECT 'index_napcat_session_behavior_profile_account' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics

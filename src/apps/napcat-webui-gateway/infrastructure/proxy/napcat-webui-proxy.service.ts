@@ -379,6 +379,11 @@ export class NapcatWebuiProxyService {
         upstreamBaseUrl: session.upstreamBaseUrl,
       });
     }
+    if (headers['service-worker-allowed'] !== undefined) {
+      headers['service-worker-allowed'] = `${publicSessionPrefix}/${encodeURIComponent(
+        session.sessionId,
+      )}/webui/webui/`;
+    }
     const setCookieHeaders = rewriteNapcatSetCookieHeaders(
       headers['set-cookie'],
       {

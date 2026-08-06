@@ -436,6 +436,14 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
         return;
       }
 
+      if (req.url === '/webui/sw.js') {
+        res.statusCode = HttpStatus.OK;
+        res.setHeader('content-type', 'application/javascript; charset=UTF-8');
+        res.setHeader('service-worker-allowed', '/webui/');
+        res.end('self.addEventListener("fetch", () => undefined);');
+        return;
+      }
+
       res.statusCode = HttpStatus.OK;
       res.setHeader('content-type', 'text/html; charset=UTF-8');
       res.setHeader('set-cookie', [
@@ -524,6 +532,16 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
       .expect(HttpStatus.MOVED_PERMANENTLY);
 
     expect(response.headers.location).toBe(
+      `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui/`,
+    );
+  });
+
+  it('confines the upstream Service Worker scope to the active public Gateway session', async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/napcat-webui/session/${SESSION_ID}/webui/webui/sw.js`)
+      .expect(HttpStatus.OK);
+
+    expect(response.headers['service-worker-allowed']).toBe(
       `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui/`,
     );
   });

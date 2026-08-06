@@ -521,6 +521,11 @@ Admin Nginx 与 Gateway 应用内部前缀仍为 `/napcat-webui`；两个层次�
 
 Gateway 只改写 NapCat HTML/JS/CSS 中需要浏览器直连的绝对根路径：`/webui/*`、`/api/*`、`/files/*` 和 `/plugin/*`。NapCat 文件管理的 `File` 路由属于 axios `baseURL="/api"` 下的 API 子路径，页面源码里的 `"/File/list"` 必须保持原样，由浏览器最终请求 `/api/File/list`；不能把 `/File/*` 当作独立静态根路径改写到 Gateway session 前缀，否则会形成 `/webui/api/napcat-webui/session/.../File/list` 并让文件管理拿到 HTML。
 
+NapCat `/webui/sw.js` 上游响应里的 `Service-Worker-Allowed: /webui/`
+不能原样透传。Gateway 只在上游显式返回该响应头时，把它替换为当前公开
+session 的精确 `/admin/napcat-webui/session/:id/webui/webui/` scope；不能扩大
+到 session 根、其他 session 或站点根，也不能暴露内部 `/napcat-webui` 前缀。
+
 必需环境变量：`NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL`、`NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL`、`NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET`、`NAPCAT_WEBUI_GATEWAY_REDIS_HOST`、`NAPCAT_WEBUI_GATEWAY_REDIS_PORT`、`NAPCAT_WEBUI_GATEWAY_SESSION_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_TICKET_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_UPSTREAM_TIMEOUT_MS`。生产 `NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET` 只来自 Jenkins 私有 `.env.production` 生成的 `kt-template-online-api-env` Secret，不写入 Git 或 manifest 字面量。
 
 部署验收使用：`pnpm exec jest --runTestsByPath test/modules/qqbot/napcat-webui-gateway/gateway-deployment.spec.ts --runInBand`、`pnpm run typecheck`、`pnpm run build`、`test -f dist/apps/napcat-webui-gateway/main.js`、`git diff --check`。安全验收要求浏览器永远不接收 WebUI token、Credential、上游 URL/端口、Docker 拓扑、Redis 地址或内部 secret。

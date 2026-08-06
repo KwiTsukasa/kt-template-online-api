@@ -16,6 +16,69 @@ import { ToolsService } from '@/common';
 import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
 
 describe('QqbotNapcatContainerService', () => {
+  it('serializes every remote Docker mutation with the runtime migration lock', async () => {
+    const containerRepository = {
+      update: jest.fn(),
+    };
+    const service = new QqbotNapcatContainerService(
+      { get: jest.fn().mockReturnValue('') } as unknown as ConfigService,
+      containerRepository as any,
+      {} as any,
+      new ToolsService(),
+    ) as any;
+    service.runProcess = jest
+      .fn()
+      .mockResolvedValue({ stderr: '', stdout: '' });
+    jest.spyOn(service, 'getManagedMode').mockReturnValue('ssh');
+    const runtime = {
+      dataDir:
+        '/vol1/docker/kt-qqbot/napcat-instances/kt-qqbot-napcat-container-1',
+      id: 'container-1',
+      name: 'kt-qqbot-napcat-container-1',
+    };
+
+    const createScript = service.buildRemoteCreateScript({
+      dataDir: runtime.dataDir,
+      image: 'kt-napcat-desktop-cn:desktop-cn-v21',
+      name: runtime.name,
+      port: 6100,
+      reverseWsUrl: 'ws://127.0.0.1:48085/qqbot/onebot/reverse',
+      token: 'token-test',
+    });
+    const removeScript = service.buildRemoteRemoveScript(runtime);
+    const resetScript = service.buildRemoteResetLoginStateScript(runtime);
+    for (const [script, mutation] of [
+      [createScript, 'docker rm -f "$NAME"'],
+      [removeScript, 'docker rm -f "$NAME"'],
+      [resetScript, 'docker stop "$NAME"'],
+    ]) {
+      expect(script).toContain(
+        "NAPCAT_RUNTIME_MUTATION_LOCK='/run/lock/kt-napcat-runtime-migration.lock'",
+      );
+      expect(script).toContain('flock -w 30 9');
+      expect(script.indexOf('flock -w 30 9')).toBeLessThan(
+        script.indexOf(mutation),
+      );
+    }
+    expect(createScript).toContain(
+      'CURRENT_IMAGE="$(docker container inspect --format',
+    );
+    expect(createScript.indexOf('flock -w 30 9')).toBeLessThan(
+      createScript.indexOf('CURRENT_IMAGE='),
+    );
+    expect(createScript.indexOf('CURRENT_IMAGE=')).toBeLessThan(
+      createScript.indexOf('mkdir -p "$DATA_DIR/QQ"'),
+    );
+    expect(createScript).toContain('if [ "$CURRENT_IMAGE" != "$IMAGE" ]; then');
+
+    await service.restartRuntimeContainer(runtime);
+    await service.startRuntimeContainer(runtime);
+    for (const call of service.runProcess.mock.calls.slice(-2)) {
+      expect(call[1]).toEqual(expect.arrayContaining(['sh -s']));
+      expect(call[2]).toContain('flock -w 30 9');
+    }
+  });
+
   it('removes previous account containers when binding a new primary container', async () => {
     const bindingRepository = {
       create: jest.fn((input) => input),
@@ -716,7 +779,11 @@ describe('QqbotNapcatContainerService', () => {
     );
     expect(service.runProcess).toHaveBeenCalledTimes(2);
     expect(service.runProcess.mock.calls[1][1]).toEqual(
-      expect.arrayContaining(['docker', 'start', 'kt-qqbot-napcat-x']),
+      expect.arrayContaining(['sh -s']),
+    );
+    expect(service.runProcess.mock.calls[1][2]).toContain('flock -w 30 9');
+    expect(service.runProcess.mock.calls[1][2]).toContain(
+      'docker start "$NAME"',
     );
     expect(containerRepository.update).toHaveBeenCalledWith(
       { id: 'container-stopped' },

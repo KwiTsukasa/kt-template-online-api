@@ -55,6 +55,8 @@ type NapcatWebuiCredentialCacheEntry = {
 };
 
 const NAPCAT_WEBUI_CREDENTIAL_TTL_MS = 50 * 60 * 1000;
+const NAPCAT_RUNTIME_MUTATION_LOCK_PATH =
+  '/run/lock/kt-napcat-runtime-migration.lock';
 
 @Injectable()
 export class QqbotNapcatContainerService {
@@ -667,8 +669,8 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
 
     await this.runProcess(
       'ssh',
-      [...this.getSshArgs(), 'docker', 'restart', runtime.name],
-      '',
+      [...this.getSshArgs(), 'sh -s'],
+      this.buildRemoteDockerLifecycleScript('restart', runtime.name),
     );
     await this.containerRepository.update(
       { id: runtime.id },
@@ -688,8 +690,8 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
 
     await this.runProcess(
       'ssh',
-      [...this.getSshArgs(), 'docker', 'start', runtime.name],
-      '',
+      [...this.getSshArgs(), 'sh -s'],
+      this.buildRemoteDockerLifecycleScript('start', runtime.name),
     );
     await this.containerRepository.update(
       { id: runtime.id },
@@ -1002,6 +1004,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
 
     return `
 set -eu
+${this.buildRemoteMutationLockScript()}
 NAME=${name}
 DATA_DIR=${dataDir}
 ROOT_DIR=${rootDir}
@@ -1032,6 +1035,7 @@ fi
 
     return `
 set -eu
+${this.buildRemoteMutationLockScript()}
 NAME=${name}
 DATA_DIR=${dataDir}
 ROOT_DIR=${rootDir}
@@ -1469,6 +1473,7 @@ NAPCAT_DMI_PRODUCT_UUID="$(format_uuid_from_seed "$NAPCAT_DEVICE_MACHINE_ID:dmi"
 
     return `
 set -eu
+${this.buildRemoteMutationLockScript()}
 DATA_DIR=${dataDir}
 IMAGE=${image}
 NAME=${name}
@@ -1482,6 +1487,13 @@ ${accountHeader}
 ${passwordHeader}
 ${deviceHeader}
 ${deviceProfileHeader}
+if docker container inspect "$NAME" >/dev/null 2>&1; then
+  CURRENT_IMAGE="$(docker container inspect --format '{{.Config.Image}}' "$NAME")"
+  if [ "$CURRENT_IMAGE" != "$IMAGE" ]; then
+    echo "NapCat runtime image changed while waiting for the mutation lock" >&2
+    exit 75
+  fi
+fi
 mkdir -p "$DATA_DIR/QQ" "$DATA_DIR/config" "$DATA_DIR/plugins" "$DATA_DIR/logs" "$DATA_DIR/cache" "$DATA_DIR/local-share" "$DATA_DIR/runtime"
 chmod 700 "$DATA_DIR"
 chmod 700 "$DATA_DIR/runtime"
@@ -1537,6 +1549,33 @@ ${accountRunFlag}${passwordRunFlag}${deviceRunFlags}  -p "$PORT:6099" \\
   -v "$DATA_DIR/runtime:/tmp/runtime-napcat" \\
   -v "$DATA_DIR/logs:/app/napcat/logs" \\
   "$IMAGE" >/dev/null
+`;
+  }
+
+  private buildRemoteMutationLockScript() {
+    return `NAPCAT_RUNTIME_MUTATION_LOCK=${this.sh(
+      NAPCAT_RUNTIME_MUTATION_LOCK_PATH,
+    )}
+command -v flock >/dev/null 2>&1 || {
+  echo "NapCat runtime mutation lock requires flock" >&2
+  exit 75
+}
+exec 9>"$NAPCAT_RUNTIME_MUTATION_LOCK"
+flock -w 30 9 || {
+  echo "NapCat runtime mutation is busy" >&2
+  exit 75
+}`;
+  }
+
+  private buildRemoteDockerLifecycleScript(
+    action: 'restart' | 'start',
+    name: string,
+  ) {
+    return `
+set -eu
+${this.buildRemoteMutationLockScript()}
+NAME=${this.sh(name)}
+docker ${action} "$NAME" >/dev/null
 `;
   }
 

@@ -6,6 +6,7 @@ import { HttpStatus, type INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import axios from 'axios';
 import * as request from 'supertest';
+import { WebSocket, WebSocketServer } from 'ws';
 import { NapcatWebuiGatewaySessionService } from '../../../src/apps/napcat-webui-gateway/application/napcat-webui-gateway-session.service';
 import { NapcatWebuiGatewayConfigService } from '../../../src/apps/napcat-webui-gateway/config/napcat-webui-gateway-config.service';
 import type { NapcatWebuiGatewaySession } from '../../../src/apps/napcat-webui-gateway/domain/napcat-webui-gateway.types';
@@ -15,6 +16,7 @@ import {
   buildGatewayCookiePathRewrite,
   NapcatWebuiProxyService,
   rewriteNapcatLocationHeader,
+  rewriteNapcatServiceWorkerAllowedHeader,
   sanitizeGatewayProxyPath,
 } from '../../../src/apps/napcat-webui-gateway/infrastructure/proxy/napcat-webui-proxy.service';
 import { PublicWebuiController } from '../../../src/apps/napcat-webui-gateway/presentation/public-webui.controller';
@@ -226,6 +228,87 @@ describe('Napcat WebUI proxy rewrite helpers', () => {
     ).toEqual({
       '*': `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui`,
     });
+  });
+
+  it('keeps core and plugin Service Worker scopes inside the active Gateway session', () => {
+    expect(
+      rewriteNapcatServiceWorkerAllowedHeader({
+        allowedPath: '/webui/',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
+        requestPath: '/webui/sw.js',
+        sessionId: SESSION_ID,
+      }),
+    ).toBe(`${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui/`);
+    expect(
+      rewriteNapcatServiceWorkerAllowedHeader({
+        allowedPath: '/plugin/example-plugin/files/static/',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
+        requestPath: '/plugin/example-plugin/files/static/sw.js',
+        sessionId: SESSION_ID,
+      }),
+    ).toBe(
+      `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/plugin/example-plugin/files/static/`,
+    );
+    expect(
+      rewriteNapcatServiceWorkerAllowedHeader({
+        allowedPath: '/',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
+        requestPath: '/plugin/example-plugin/files/static/sw.js',
+        sessionId: SESSION_ID,
+      }),
+    ).toBeUndefined();
+    expect(
+      rewriteNapcatServiceWorkerAllowedHeader({
+        allowedPath: '/plugin/other-plugin/',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
+        requestPath: '/plugin/example-plugin/files/static/sw.js',
+        sessionId: SESSION_ID,
+      }),
+    ).toBeUndefined();
+    expect(
+      rewriteNapcatServiceWorkerAllowedHeader({
+        allowedPath: '/webui',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
+        requestPath: '/webui/sw.js',
+        sessionId: SESSION_ID,
+      }),
+    ).toBeUndefined();
+    expect(
+      rewriteNapcatServiceWorkerAllowedHeader({
+        allowedPath: '/plugin/example-plugin',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
+        requestPath: '/plugin/example-plugin/files/static/sw.js',
+        sessionId: SESSION_ID,
+      }),
+    ).toBeUndefined();
+    expect(
+      rewriteNapcatServiceWorkerAllowedHeader({
+        allowedPath: '/plugin/example-plugin/files/%E4%B8%AD/',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
+        requestPath: '/plugin/example-plugin/files/static/sw.js',
+        sessionId: SESSION_ID,
+      }),
+    ).toBe(
+      `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/plugin/example-plugin/files/%E4%B8%AD/`,
+    );
+    expect(
+      rewriteNapcatServiceWorkerAllowedHeader({
+        allowedPath: '/plugin/example-plugin/files/@theme/',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
+        requestPath: '/plugin/example-plugin/files/static/sw.js',
+        sessionId: SESSION_ID,
+      }),
+    ).toBe(
+      `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/plugin/example-plugin/files/@theme/`,
+    );
+    expect(
+      rewriteNapcatServiceWorkerAllowedHeader({
+        allowedPath: '/plugin/example-plugin/files/%0d%0aInjected/',
+        publicSessionPrefix: PUBLIC_SESSION_PREFIX,
+        requestPath: '/plugin/example-plugin/files/static/sw.js',
+        sessionId: SESSION_ID,
+      }),
+    ).toBeUndefined();
   });
 
   it('keeps request bodies available for the public proxy route', () => {
@@ -444,6 +527,95 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
         return;
       }
 
+      if (req.url === '/plugin/example-plugin/page/dashboard') {
+        res.statusCode = HttpStatus.OK;
+        res.setHeader('content-type', 'text/html; charset=UTF-8');
+        res.end(
+          [
+            '<!doctype html><html><head>',
+            '<link rel="stylesheet" href="/plugin/example-plugin/files/static/app.css">',
+            '<link rel="manifest" href="/plugin/example-plugin/files/static/manifest.webmanifest">',
+            '<script type="module" src="/plugin/example-plugin/files/static/app.js"></script>',
+            '</head><body></body></html>',
+          ].join(''),
+        );
+        return;
+      }
+
+      if (req.url === '/plugin/example-plugin/files/static/app.js') {
+        res.statusCode = HttpStatus.OK;
+        res.setHeader('content-type', 'application/javascript; charset=UTF-8');
+        res.end(
+          [
+            'const coreApi = "/api/Base/Theme";',
+            'const pluginApi = "/plugin/example-plugin/api/settings";',
+            'const socket = "/api/Debug/ws";',
+            'const absoluteSocket = `${protocol}//${window.location.host}/api/Debug/ws`;',
+            'navigator.serviceWorker.register("/plugin/example-plugin/files/static/sw.js", { scope: "/plugin/example-plugin/files/static/" });',
+          ].join(''),
+        );
+        return;
+      }
+
+      if (
+        req.url ===
+        '/plugin/example-plugin/files/static/manifest.webmanifest'
+      ) {
+        res.statusCode = HttpStatus.OK;
+        res.setHeader('content-type', 'application/manifest+json');
+        res.end(
+          JSON.stringify({
+            icons: [
+              {
+                src: '/plugin/example-plugin/files/static/icon.png',
+              },
+            ],
+            scope: '/plugin/example-plugin/files/static/',
+            start_url: '/plugin/example-plugin/page/dashboard',
+          }),
+        );
+        return;
+      }
+
+      if (req.url === '/plugin/example-plugin/api/events.js') {
+        res.statusCode = HttpStatus.OK;
+        res.setHeader('content-type', 'application/json; charset=UTF-8');
+        res.end(
+          JSON.stringify({
+            untouched: '/plugin/example-plugin/api/events.js',
+          }),
+        );
+        return;
+      }
+
+      if (req.url === '/plugin/example-plugin/files/static/app.css') {
+        res.statusCode = HttpStatus.OK;
+        res.setHeader('content-type', 'text/css; charset=UTF-8');
+        res.end('body{background-image:url("/plugin/example-plugin/files/static/bg.png")}');
+        return;
+      }
+
+      if (req.url === '/plugin/example-plugin/files/static/sw.js') {
+        res.statusCode = HttpStatus.OK;
+        res.setHeader('content-type', 'application/javascript; charset=UTF-8');
+        res.setHeader(
+          'service-worker-allowed',
+          '/plugin/example-plugin/files/static/',
+        );
+        res.end(
+          'importScripts("/plugin/example-plugin/files/static/workbox.js");',
+        );
+        return;
+      }
+
+      if (req.url === '/plugin/example-plugin/files/static/unsafe-sw.js') {
+        res.statusCode = HttpStatus.OK;
+        res.setHeader('content-type', 'application/javascript; charset=UTF-8');
+        res.setHeader('service-worker-allowed', '/');
+        res.end('self.addEventListener("fetch", () => undefined);');
+        return;
+      }
+
       res.statusCode = HttpStatus.OK;
       res.setHeader('content-type', 'text/html; charset=UTF-8');
       res.setHeader('set-cookie', [
@@ -546,6 +718,123 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
     );
   });
 
+  it('rewrites every plugin page and its root-relative assets under the active Gateway session', async () => {
+    const pluginGatewayPrefix = `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/plugin/example-plugin`;
+    const response = await request(app.getHttpServer())
+      .get(
+        `/napcat-webui/session/${SESSION_ID}/webui/plugin/example-plugin/page/dashboard`,
+      )
+      .expect(HttpStatus.OK);
+
+    expect(response.text).toContain(
+      `href="${pluginGatewayPrefix}/files/static/app.css"`,
+    );
+    expect(response.text).toContain(
+      `src="${pluginGatewayPrefix}/files/static/app.js"`,
+    );
+    expect(response.text).toContain(
+      `href="${pluginGatewayPrefix}/files/static/manifest.webmanifest"`,
+    );
+    expect(response.text).not.toContain('href="/plugin/');
+    expect(response.text).not.toContain('src="/plugin/');
+
+    const assetResponse = await request(app.getHttpServer())
+      .get(
+        `/napcat-webui/session/${SESSION_ID}/webui/plugin/example-plugin/files/static/app.css`,
+      )
+      .expect(HttpStatus.OK);
+
+    expect(assetResponse.headers['content-type']).toContain('text/css');
+    expect(assetResponse.text).toContain(
+      `url("${pluginGatewayPrefix}/files/static/bg.png")`,
+    );
+    expect(upstreamRequests).toContainEqual({
+      authorization: 'Bearer credential-1',
+      method: 'GET',
+      url: '/plugin/example-plugin/page/dashboard',
+    });
+    expect(upstreamRequests).toContainEqual({
+      authorization: 'Bearer credential-1',
+      method: 'GET',
+      url: '/plugin/example-plugin/files/static/app.css',
+    });
+
+    const scriptResponse = await request(app.getHttpServer())
+      .get(
+        `/napcat-webui/session/${SESSION_ID}/webui/plugin/example-plugin/files/static/app.js`,
+      )
+      .expect(HttpStatus.OK);
+
+    expect(scriptResponse.headers['content-type']).toContain(
+      'application/javascript',
+    );
+    expect(scriptResponse.text).toContain(
+      `"${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/api/Base/Theme"`,
+    );
+    expect(scriptResponse.text).toContain(
+      `"${pluginGatewayPrefix}/api/settings"`,
+    );
+    expect(scriptResponse.text).toContain(
+      `"${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/api/Debug/ws"`,
+    );
+    expect(scriptResponse.text).toContain(
+      '`${protocol}//${window.location.host}' +
+        `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/api/Debug/ws\``,
+    );
+    expect(scriptResponse.text).toContain(
+      `register("${pluginGatewayPrefix}/files/static/sw.js", { scope: "${pluginGatewayPrefix}/files/static/" })`,
+    );
+
+    const manifestResponse = await request(app.getHttpServer())
+      .get(
+        `/napcat-webui/session/${SESSION_ID}/webui/plugin/example-plugin/files/static/manifest.webmanifest`,
+      )
+      .expect(HttpStatus.OK);
+
+    expect(manifestResponse.headers['content-type']).toContain(
+      'application/manifest+json',
+    );
+    expect(manifestResponse.text).toContain(
+      `${pluginGatewayPrefix}/page/dashboard`,
+    );
+    expect(manifestResponse.text).toContain(
+      `${pluginGatewayPrefix}/files/static/icon.png`,
+    );
+
+    const apiResponse = await request(app.getHttpServer())
+      .get(
+        `/napcat-webui/session/${SESSION_ID}/webui/plugin/example-plugin/api/events.js`,
+      )
+      .expect(HttpStatus.OK);
+
+    expect(apiResponse.body).toEqual({
+      untouched: '/plugin/example-plugin/api/events.js',
+    });
+  });
+
+  it('preserves plugin-owned Service Worker scopes under the active Gateway session', async () => {
+    const response = await request(app.getHttpServer())
+      .get(
+        `/napcat-webui/session/${SESSION_ID}/webui/plugin/example-plugin/files/static/sw.js`,
+      )
+      .expect(HttpStatus.OK);
+
+    expect(response.headers['service-worker-allowed']).toBe(
+      `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/plugin/example-plugin/files/static/`,
+    );
+    expect(response.text).toContain(
+      `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/plugin/example-plugin/files/static/workbox.js`,
+    );
+
+    const unsafeResponse = await request(app.getHttpServer())
+      .get(
+        `/napcat-webui/session/${SESSION_ID}/webui/plugin/example-plugin/files/static/unsafe-sw.js`,
+      )
+      .expect(HttpStatus.OK);
+
+    expect(unsafeResponse.headers['service-worker-allowed']).toBeUndefined();
+  });
+
   it('forwards NapCat File API requests under /api without duplicating the Gateway session prefix', async () => {
     const response = await request(app.getHttpServer())
       .get(`/napcat-webui/session/${SESSION_ID}/webui/api/File/list?path=%2F`)
@@ -579,5 +868,118 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
       expect.stringContaining(`Path=${cookiePath}`),
     ]);
     expect(String(response.headers['set-cookie'])).not.toMatch(/Domain=/i);
+  });
+});
+
+describe('NapcatWebuiProxyService WebSocket forwarding', () => {
+  let app: INestApplication;
+  let gatewayPort: number;
+  let upstream: Server;
+  let upstreamRequest: { authorization?: string; cookie?: string; url?: string };
+  let upstreamWebSocket: WebSocketServer;
+
+  beforeEach(async () => {
+    upstreamRequest = {};
+    upstream = createServer();
+    upstreamWebSocket = new WebSocketServer({ noServer: true });
+    upstream.on('upgrade', (req, socket, head) => {
+      upstreamRequest = {
+        authorization: req.headers.authorization,
+        cookie: req.headers.cookie,
+        url: req.url,
+      };
+      upstreamWebSocket.handleUpgrade(req, socket, head, (webSocket) => {
+        upstreamWebSocket.emit('connection', webSocket, req);
+      });
+    });
+    upstreamWebSocket.on('connection', (webSocket) => {
+      webSocket.send('upstream-ready');
+    });
+    await new Promise<void>((resolveListen) => {
+      upstream.listen(0, '127.0.0.1', resolveListen);
+    });
+    const upstreamAddress = upstream.address();
+    if (!upstreamAddress || typeof upstreamAddress === 'string') {
+      throw new Error('WebSocket upstream did not expose a port');
+    }
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        {
+          provide: NapcatWebuiGatewaySessionService,
+          useValue: {
+            requireProxySession: jest.fn().mockResolvedValue(
+              createGatewaySession({
+                status: 'active',
+                upstreamBaseUrl: `http://127.0.0.1:${upstreamAddress.port}`,
+              }),
+            ),
+          },
+        },
+        {
+          provide: NapcatWebuiGatewayConfigService,
+          useValue: {
+            publicSessionPrefix: () => PUBLIC_SESSION_PREFIX,
+          },
+        },
+        {
+          provide: NapcatWebuiCredentialClient,
+          useValue: {
+            getCredential: jest.fn().mockResolvedValue('credential-1'),
+          },
+        },
+        NapcatWebuiProxyService,
+      ],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+    app
+      .get(NapcatWebuiProxyService)
+      .bindWebSocketUpgrade(app.getHttpServer());
+    await app.listen(0, '127.0.0.1');
+    const gatewayAddress = app.getHttpServer().address();
+    if (!gatewayAddress || typeof gatewayAddress === 'string') {
+      throw new Error('WebSocket Gateway did not expose a port');
+    }
+    gatewayPort = gatewayAddress.port;
+  });
+
+  afterEach(async () => {
+    upstreamWebSocket.clients.forEach((webSocket) => webSocket.terminate());
+    await new Promise<void>((resolveClose) =>
+      upstreamWebSocket.close(() => resolveClose()),
+    );
+    await app?.close();
+    await new Promise<void>((resolveClose) =>
+      upstream.close(() => resolveClose()),
+    );
+  });
+
+  it('forwards plugin runtime WebSockets with their adapter token but without browser headers', async () => {
+    const webSocket = new WebSocket(
+      `ws://127.0.0.1:${gatewayPort}/napcat-webui/session/${SESSION_ID}/webui/api/Debug/ws?channel=plugin&access_token=plugin-adapter-token`,
+      {
+        headers: {
+          Authorization: 'Bearer browser-value',
+          Cookie: 'browser-cookie=value',
+        },
+      },
+    );
+
+    await new Promise<void>((resolveMessage, rejectMessage) => {
+      webSocket.once('message', (data) => {
+        expect(data.toString()).toBe('upstream-ready');
+        resolveMessage();
+      });
+      webSocket.once('error', rejectMessage);
+    });
+    webSocket.close();
+
+    expect(upstreamRequest).toEqual({
+      authorization: 'Bearer credential-1',
+      cookie: undefined,
+      url: '/api/Debug/ws?channel=plugin&access_token=plugin-adapter-token',
+    });
   });
 });

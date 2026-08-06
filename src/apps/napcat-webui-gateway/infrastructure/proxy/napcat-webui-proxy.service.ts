@@ -15,7 +15,13 @@ import { NapcatWebuiCredentialClient } from '../napcat-webui-credential.client';
 
 const INTERNAL_GATEWAY_WEBUI_PREFIX = '/napcat-webui/session';
 const GATEWAY_BROWSER_TOKEN_PREFIX = 'kt-napcat-webui-gateway:';
-const TEXT_REWRITE_EXTENSIONS = ['.css', '.html', '.js', '.mjs'] as const;
+const TEXT_REWRITE_EXTENSIONS = [
+  '.css',
+  '.html',
+  '.js',
+  '.mjs',
+  '.webmanifest',
+] as const;
 const STRIPPED_UPSTREAM_HEADERS = [
   'authorization',
   'cookie',
@@ -44,6 +50,13 @@ type CookiePathRewriteInput = {
 type RewriteTextResponseInput = {
   body: string;
   publicSessionPrefix: string;
+  sessionId: string;
+};
+
+type RewriteServiceWorkerAllowedInput = {
+  allowedPath: string;
+  publicSessionPrefix: string;
+  requestPath: string;
   sessionId: string;
 };
 
@@ -138,13 +151,58 @@ export function rewriteNapcatSetCookieHeaders(
   });
 }
 
+export function rewriteNapcatServiceWorkerAllowedHeader(
+  input: RewriteServiceWorkerAllowedInput,
+) {
+  const gatewayWebuiPrefix = `${input.publicSessionPrefix}/${encodeURIComponent(
+    input.sessionId,
+  )}/webui`;
+
+  try {
+    const requestPath = sanitizeGatewayProxyPath(input.requestPath);
+    const namespacePath = getServiceWorkerNamespacePath(requestPath);
+    if (!namespacePath) return undefined;
+
+    const requestUrl = new URL(requestPath, 'http://gateway.local');
+    const allowedUrl = new URL(input.allowedPath, requestUrl);
+    if (allowedUrl.origin !== requestUrl.origin) return undefined;
+
+    const allowedPath = sanitizeGatewayProxyPath(allowedUrl.pathname);
+    if (
+      /[\u0000-\u001f\u007f]/.test(allowedPath) ||
+      !allowedPath.startsWith(namespacePath)
+    ) {
+      return undefined;
+    }
+
+    return `${gatewayWebuiPrefix}${allowedUrl.pathname}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function getServiceWorkerNamespacePath(requestPath: string) {
+  const segments = requestPath.split('/').filter(Boolean);
+  if (segments[0] === 'webui') {
+    return '/webui/';
+  }
+  if (
+    segments[0] === 'plugin' &&
+    segments[1] &&
+    (segments[2] === 'files' || segments[2] === 'mem')
+  ) {
+    return `/plugin/${segments[1]}/`;
+  }
+  return undefined;
+}
+
 export function rewriteNapcatTextResponse(input: RewriteTextResponseInput) {
   const gatewayWebuiPrefix = `${input.publicSessionPrefix}/${encodeURIComponent(
     input.sessionId,
   )}/webui`;
 
   const rewritten = input.body.replace(
-    /(^|[\s"'`(=,:])\/(webui|api|files|plugin)(?=\/|[?#"'`)]|$)/g,
+    /(^|[\s"'`(=,:}])\/(webui|api|files|plugin)(?=\/|[?#"'`)]|$)/g,
     (_match, leader: string, root: string) =>
       `${leader}${gatewayWebuiPrefix}/${root}`,
   );
@@ -233,6 +291,28 @@ function toGatewayRedirectLocation(
 
 export function shouldRewriteNapcatTextResponse(upstreamPath: string) {
   const pathname = new URL(upstreamPath, 'http://gateway.local').pathname;
+  const segments = pathname.split('/').filter(Boolean);
+  const isCoreApiPath = segments[0] === 'api';
+  const isLegacyPluginPage =
+    segments[0] === 'api' &&
+    segments[1] === 'Plugin' &&
+    segments[2] === 'page' &&
+    segments.length >= 5;
+  const isPluginPath = segments[0] === 'plugin' && segments.length >= 3;
+  const pluginRoute = isPluginPath ? segments[2] : undefined;
+
+  if (isLegacyPluginPage) {
+    return true;
+  }
+
+  if (isCoreApiPath || pluginRoute === 'api') {
+    return false;
+  }
+
+  if (pluginRoute === 'page') {
+    return true;
+  }
+
   const filename = pathname.split('/').pop() || '';
   const extensionIndex = filename.lastIndexOf('.');
   const extension =
@@ -346,8 +426,8 @@ export class NapcatWebuiProxyService {
     rewriteTextResponse: boolean,
   ) {
     if (!rewriteTextResponse) {
-      return (proxyRes: IncomingMessage) => {
-        this.rewriteResponseHeaders(proxyRes.headers, session);
+      return (proxyRes: IncomingMessage, req: Request) => {
+        this.rewriteResponseHeaders(proxyRes.headers, session, req.url);
       };
     }
 
@@ -360,7 +440,7 @@ export class NapcatWebuiProxyService {
     );
 
     return (proxyRes: IncomingMessage, req: Request, res: Response) => {
-      this.rewriteResponseHeaders(proxyRes.headers, session);
+      this.rewriteResponseHeaders(proxyRes.headers, session, req.url);
       return interceptTextResponse(proxyRes, req, res);
     };
   }
@@ -368,6 +448,7 @@ export class NapcatWebuiProxyService {
   private rewriteResponseHeaders(
     headers: IncomingHttpHeaders,
     session: NapcatWebuiGatewaySession,
+    requestPath: string,
   ) {
     const publicSessionPrefix = this.config.publicSessionPrefix();
     const location = headers.location;
@@ -380,9 +461,20 @@ export class NapcatWebuiProxyService {
       });
     }
     if (headers['service-worker-allowed'] !== undefined) {
-      headers['service-worker-allowed'] = `${publicSessionPrefix}/${encodeURIComponent(
-        session.sessionId,
-      )}/webui/webui/`;
+      const allowedPath = headers['service-worker-allowed'];
+      const rewrittenAllowedPath = rewriteNapcatServiceWorkerAllowedHeader({
+        allowedPath: Array.isArray(allowedPath)
+          ? String(allowedPath[0] || '')
+          : String(allowedPath),
+        publicSessionPrefix,
+        requestPath,
+        sessionId: session.sessionId,
+      });
+      if (rewrittenAllowedPath) {
+        headers['service-worker-allowed'] = rewrittenAllowedPath;
+      } else {
+        delete headers['service-worker-allowed'];
+      }
     }
     const setCookieHeaders = rewriteNapcatSetCookieHeaders(
       headers['set-cookie'],

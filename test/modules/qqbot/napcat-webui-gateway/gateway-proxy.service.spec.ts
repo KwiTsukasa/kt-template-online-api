@@ -123,9 +123,16 @@ describe('NapcatWebuiProxyService response rewriting', () => {
         upstreamPath: '/api/ws/other',
       }),
     ).toBe('?id=other&token=browser-dummy');
+    expect(
+      rewriteNapcatWebSocketSearch?.({
+        credential: 'credential-1',
+        search: '?adapterName=debug-primary&access_token=plugin-adapter-token',
+        upstreamPath: '/api/Debug/ws',
+      }),
+    ).toBe('?adapterName=debug-primary&access_token=plugin-adapter-token');
   });
 
-  it('does not buffer NapCat API or SSE responses for text rewriting', () => {
+  it('rewrites browser text routes without buffering core or plugin APIs', () => {
     const shouldRewriteNapcatTextResponse = (
       proxyModule as {
         shouldRewriteNapcatTextResponse?: (upstreamPath: string) => boolean;
@@ -143,6 +150,44 @@ describe('NapcatWebuiProxyService response rewriting', () => {
     expect(shouldRewriteNapcatTextResponse?.('/webui/assets/index.js')).toBe(
       true,
     );
+    expect(
+      shouldRewriteNapcatTextResponse?.(
+        '/plugin/example-plugin/page/dashboard',
+      ),
+    ).toBe(true);
+    expect(
+      shouldRewriteNapcatTextResponse?.(
+        '/api/Plugin/page/example-plugin/dashboard',
+      ),
+    ).toBe(true);
+    expect(
+      shouldRewriteNapcatTextResponse?.(
+        '/plugin/example-plugin/files/static/app.js',
+      ),
+    ).toBe(true);
+    expect(
+      shouldRewriteNapcatTextResponse?.(
+        '/plugin/example-plugin/mem/runtime/theme.css',
+      ),
+    ).toBe(true);
+    expect(
+      shouldRewriteNapcatTextResponse?.(
+        '/plugin/example-plugin/files/static/manifest.webmanifest',
+      ),
+    ).toBe(true);
+    expect(
+      shouldRewriteNapcatTextResponse?.(
+        '/plugin/example-plugin/api/events.js',
+      ),
+    ).toBe(false);
+    expect(shouldRewriteNapcatTextResponse?.('/api/export/events.js')).toBe(
+      false,
+    );
+    expect(
+      shouldRewriteNapcatTextResponse?.(
+        '/plugin/example-plugin/files/static/avatar.png',
+      ),
+    ).toBe(false);
     expect(
       shouldRewriteNapcatTextResponse?.('/webui/fonts/CustomFont.woff'),
     ).toBe(false);

@@ -57,6 +57,8 @@ type NapcatWebuiCredentialCacheEntry = {
 const NAPCAT_WEBUI_CREDENTIAL_TTL_MS = 50 * 60 * 1000;
 const NAPCAT_RUNTIME_MUTATION_LOCK_PATH =
   '/run/lock/kt-napcat-runtime-migration.lock';
+const NAPCAT_RUNTIME_MIGRATION_STATE_PATH =
+  '/var/lib/kt-napcat-runtime-migration';
 
 @Injectable()
 export class QqbotNapcatContainerService {
@@ -1556,13 +1558,23 @@ ${accountRunFlag}${passwordRunFlag}${deviceRunFlags}  -p "$PORT:6099" \\
     return `NAPCAT_RUNTIME_MUTATION_LOCK=${this.sh(
       NAPCAT_RUNTIME_MUTATION_LOCK_PATH,
     )}
-command -v flock >/dev/null 2>&1 || {
-  echo "NapCat runtime mutation lock requires flock" >&2
-  exit 75
-}
+NAPCAT_RUNTIME_MIGRATION_STATE=${this.sh(
+      NAPCAT_RUNTIME_MIGRATION_STATE_PATH,
+    )}
+for NAPCAT_RUNTIME_REQUIRED_COMMAND in flock find grep; do
+  command -v "$NAPCAT_RUNTIME_REQUIRED_COMMAND" >/dev/null 2>&1 || {
+    echo "NapCat runtime mutation guard requires $NAPCAT_RUNTIME_REQUIRED_COMMAND" >&2
+    exit 75
+  }
+done
 exec 9>"$NAPCAT_RUNTIME_MUTATION_LOCK"
 flock -w 30 9 || {
   echo "NapCat runtime mutation is busy" >&2
+  exit 75
+}
+if [ -d "$NAPCAT_RUNTIME_MIGRATION_STATE" ] && \
+  find "$NAPCAT_RUNTIME_MIGRATION_STATE" -mindepth 1 -maxdepth 1 -name '*.json' -print -quit | grep -q .; then
+  echo "NapCat runtime migration recovery is pending" >&2
   exit 75
 }`;
   }

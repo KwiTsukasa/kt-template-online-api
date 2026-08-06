@@ -56,7 +56,14 @@ describe('QqbotNapcatContainerService', () => {
         "NAPCAT_RUNTIME_MUTATION_LOCK='/run/lock/kt-napcat-runtime-migration.lock'",
       );
       expect(script).toContain('flock -w 30 9');
+      expect(script).toContain(
+        "NAPCAT_RUNTIME_MIGRATION_STATE='/var/lib/kt-napcat-runtime-migration'",
+      );
+      expect(script).toContain("-name '*.json' -print -quit");
       expect(script.indexOf('flock -w 30 9')).toBeLessThan(
+        script.indexOf(mutation),
+      );
+      expect(script.indexOf("-name '*.json' -print -quit")).toBeLessThan(
         script.indexOf(mutation),
       );
     }

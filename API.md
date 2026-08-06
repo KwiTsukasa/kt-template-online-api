@@ -523,6 +523,8 @@ Admin Nginx 与 Gateway 应用内部前缀仍为 `/napcat-webui`；两个层次�
 
 Gateway 只改写 NapCat HTML/JS/CSS 中需要浏览器直连的绝对根路径：`/webui/*`、`/api/*`、`/files/*` 和 `/plugin/*`。NapCat 文件管理的 `File` 路由属于 axios `baseURL="/api"` 下的 API 子路径，页面源码里的 `"/File/list"` 必须保持原样，由浏览器最终请求 `/api/File/list`；不能把 `/File/*` 当作独立静态根路径改写到 Gateway session 前缀，否则会形成 `/webui/api/napcat-webui/session/.../File/list` 并让文件管理拿到 HTML。
 
+Gateway 使用固定的 streaming HTTP、文本 HTTP 和 WebSocket 三个代理实例。每个请求的 target、Credential 与 session 响应改写通过请求级隔离上下文传递；HTTP 代理固定 `ws=false`，唯一且幂等的 `upgrade` dispatcher 才能调用 WebSocket 代理。禁止为普通页面或资源请求创建新的 `ws=true` middleware，否则会累积 Server `upgrade/close` listener，并让未剥 session 前缀的旧 listener 抢占后续 WebSocket。不匹配或畸形的 Upgrade 必须立即返回无认证挑战的 403 并销毁 socket，不得留下悬空连接。
+
 NapCat `/webui/sw.js` 上游响应里的 `Service-Worker-Allowed: /webui/`
 不能原样透传。Gateway 只在上游显式返回该响应头时，把它替换为当前公开
 session 的精确 `/admin/napcat-webui/session/:id/webui/webui/` scope；不能扩大

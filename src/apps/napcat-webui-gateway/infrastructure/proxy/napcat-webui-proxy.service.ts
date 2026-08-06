@@ -66,6 +66,11 @@ type RewriteWebSocketSearchInput = {
   upstreamPath: string;
 };
 
+type ProxyRequestContext = {
+  credential: string;
+  session: NapcatWebuiGatewaySession;
+};
+
 export function sanitizeGatewayProxyPath(input: ProxyPathInput) {
   const raw = Array.isArray(input) ? input.join('/') : String(input || '');
   const trimmed = raw.trim();
@@ -330,11 +335,36 @@ export function shouldRewriteNapcatTextResponse(upstreamPath: string) {
 
 @Injectable()
 export class NapcatWebuiProxyService {
+  private readonly boundWebSocketServers = new WeakSet<Server>();
+  private readonly proxyRequestContexts = new WeakMap<
+    IncomingMessage,
+    ProxyRequestContext
+  >();
+  private readonly streamingHttpProxy: RequestHandler<
+    Request,
+    Response,
+    NextFunction
+  >;
+  private readonly textHttpProxy: RequestHandler<
+    Request,
+    Response,
+    NextFunction
+  >;
+  private readonly webSocketProxy: RequestHandler<
+    Request,
+    Response,
+    NextFunction
+  >;
+
   constructor(
     private readonly sessionService: NapcatWebuiGatewaySessionService,
     private readonly credentialClient: NapcatWebuiCredentialClient,
     private readonly config: NapcatWebuiGatewayConfigService,
-  ) {}
+  ) {
+    this.streamingHttpProxy = this.createProxy();
+    this.textHttpProxy = this.createProxy(true);
+    this.webSocketProxy = this.createProxy(false, true);
+  }
 
   async handleHttpProxy(
     sessionId: string,
@@ -348,16 +378,17 @@ export class NapcatWebuiProxyService {
     const credential = await this.credentialClient.getCredential(session);
     this.stripBrowserHeaders(req);
     req.url = upstreamPath;
+    this.proxyRequestContexts.set(req, { credential, session });
 
-    const proxy = this.createProxy(
-      session,
-      credential,
-      shouldRewriteNapcatTextResponse(upstreamPath),
-    );
+    const proxy = shouldRewriteNapcatTextResponse(upstreamPath)
+      ? this.textHttpProxy
+      : this.streamingHttpProxy;
     return proxy(req, res, next);
   }
 
   bindWebSocketUpgrade(server: Server) {
+    if (this.boundWebSocketServers.has(server)) return;
+    this.boundWebSocketServers.add(server);
     server.on('upgrade', (req, socket, head) => {
       void this.handleWebSocketUpgrade(req, socket as Socket, head);
     });
@@ -370,7 +401,10 @@ export class NapcatWebuiProxyService {
   ) {
     try {
       const match = this.matchGatewayUpgrade(req.url || '');
-      if (!match) return;
+      if (!match) {
+        this.rejectUpgrade(socket);
+        return;
+      }
       const session = await this.sessionService.requireProxySession(
         match.sessionId,
       );
@@ -381,68 +415,78 @@ export class NapcatWebuiProxyService {
         search: match.search,
         upstreamPath: match.proxyPath,
       })}`;
-      const proxy = this.createProxy(session, credential);
-      proxy.upgrade(req, socket, head);
+      this.proxyRequestContexts.set(req, { credential, session });
+      this.webSocketProxy.upgrade(req, socket, head);
     } catch {
       this.rejectUpgrade(socket);
     }
   }
 
   private createProxy(
-    session: NapcatWebuiGatewaySession,
-    credential: string,
     rewriteTextResponse = false,
+    webSocketOnly = false,
   ): RequestHandler<Request, Response, NextFunction> {
     return createProxyMiddleware<Request, Response, NextFunction>({
       changeOrigin: true,
-      cookiePathRewrite: buildGatewayCookiePathRewrite({
-        publicSessionPrefix: this.config.publicSessionPrefix(),
-        sessionId: session.sessionId,
-      }),
       on: {
         error: (_error, _req, res) => {
           this.writeProxyError(res);
         },
         proxyReq: (proxyReq, req) => {
+          const { credential } = this.requireProxyRequestContext(req);
           proxyReq.removeHeader('cookie');
           proxyReq.setHeader('Authorization', `Bearer ${credential}`);
           fixRequestBody(proxyReq, req);
         },
-        proxyReqWs: (proxyReq) => {
+        proxyReqWs: (proxyReq, req) => {
+          const { credential } = this.requireProxyRequestContext(req);
           proxyReq.removeHeader('cookie');
           proxyReq.setHeader('Authorization', `Bearer ${credential}`);
         },
-        proxyRes: this.createProxyResponseHandler(session, rewriteTextResponse),
+        proxyRes: this.createProxyResponseHandler(rewriteTextResponse),
       },
+      router: (req) =>
+        this.requireProxyRequestContext(req).session.upstreamBaseUrl,
       secure: false,
       selfHandleResponse: rewriteTextResponse,
-      target: session.upstreamBaseUrl,
-      ws: true,
+      target: 'http://127.0.0.1',
+      ws: webSocketOnly,
     });
   }
 
-  private createProxyResponseHandler(
-    session: NapcatWebuiGatewaySession,
-    rewriteTextResponse: boolean,
-  ) {
+  private createProxyResponseHandler(rewriteTextResponse: boolean) {
     if (!rewriteTextResponse) {
       return (proxyRes: IncomingMessage, req: Request) => {
+        const { session } = this.requireProxyRequestContext(req);
         this.rewriteResponseHeaders(proxyRes.headers, session, req.url);
       };
     }
 
-    const interceptTextResponse = responseInterceptor(async (responseBuffer) =>
-      rewriteNapcatTextResponse({
+    const interceptTextResponse = responseInterceptor<
+      IncomingMessage,
+      Response
+    >(async (responseBuffer, _proxyRes, req) => {
+      const { session } = this.requireProxyRequestContext(req);
+      return rewriteNapcatTextResponse({
         body: responseBuffer.toString('utf8'),
         publicSessionPrefix: this.config.publicSessionPrefix(),
         sessionId: session.sessionId,
-      }),
-    );
+      });
+    });
 
     return (proxyRes: IncomingMessage, req: Request, res: Response) => {
+      const { session } = this.requireProxyRequestContext(req);
       this.rewriteResponseHeaders(proxyRes.headers, session, req.url);
       return interceptTextResponse(proxyRes, req, res);
     };
+  }
+
+  private requireProxyRequestContext(req: IncomingMessage) {
+    const context = this.proxyRequestContexts.get(req);
+    if (!context) {
+      throw new Error('NapCat WebUI proxy request context is missing');
+    }
+    return context;
   }
 
   private rewriteResponseHeaders(

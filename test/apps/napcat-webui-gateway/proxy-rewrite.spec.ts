@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { HttpStatus, type INestApplication } from '@nestjs/common';
@@ -558,8 +558,7 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
       }
 
       if (
-        req.url ===
-        '/plugin/example-plugin/files/static/manifest.webmanifest'
+        req.url === '/plugin/example-plugin/files/static/manifest.webmanifest'
       ) {
         res.statusCode = HttpStatus.OK;
         res.setHeader('content-type', 'application/manifest+json');
@@ -591,7 +590,9 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
       if (req.url === '/plugin/example-plugin/files/static/app.css') {
         res.statusCode = HttpStatus.OK;
         res.setHeader('content-type', 'text/css; charset=UTF-8');
-        res.end('body{background-image:url("/plugin/example-plugin/files/static/bg.png")}');
+        res.end(
+          'body{background-image:url("/plugin/example-plugin/files/static/bg.png")}',
+        );
         return;
       }
 
@@ -613,6 +614,16 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
         res.setHeader('content-type', 'application/javascript; charset=UTF-8');
         res.setHeader('service-worker-allowed', '/');
         res.end('self.addEventListener("fetch", () => undefined);');
+        return;
+      }
+
+      if (req.url === '/webui/assets/concurrent.html') {
+        setTimeout(() => {
+          res.statusCode = HttpStatus.OK;
+          res.setHeader('content-type', 'text/html; charset=UTF-8');
+          res.setHeader('set-cookie', 'napcat_session=primary; Path=/webui');
+          res.end('<script src="/webui/assets/primary.js"></script>');
+        }, 30);
         return;
       }
 
@@ -869,20 +880,110 @@ describe('NapcatWebuiProxyService redirect rewriting', () => {
     ]);
     expect(String(response.headers['set-cookie'])).not.toMatch(/Domain=/i);
   });
+
+  it('isolates concurrent HTTP targets, Credentials, and response rewrites by request', async () => {
+    let alternateAuthorization: string | undefined;
+    const alternateUpstream = createServer((req, res) => {
+      alternateAuthorization = req.headers.authorization;
+      res.statusCode = HttpStatus.OK;
+      res.setHeader('content-type', 'text/html; charset=UTF-8');
+      res.setHeader('set-cookie', 'napcat_session=alternate; Path=/webui');
+      res.end('<script src="/webui/assets/alternate.js"></script>');
+    });
+    await new Promise<void>((resolveListen) => {
+      alternateUpstream.listen(0, '127.0.0.1', resolveListen);
+    });
+    const alternateAddress = alternateUpstream.address();
+    if (!alternateAddress || typeof alternateAddress === 'string') {
+      throw new Error('Alternate HTTP upstream did not expose a port');
+    }
+
+    sessionService.requireProxySession.mockImplementation((sessionId: string) =>
+      Promise.resolve(
+        createGatewaySession({
+          sessionId,
+          status: 'active',
+          upstreamBaseUrl:
+            sessionId === SESSION_ID
+              ? upstreamBaseUrl
+              : `http://127.0.0.1:${alternateAddress.port}`,
+        }),
+      ),
+    );
+    credentialClient.getCredential.mockImplementation(
+      (session: NapcatWebuiGatewaySession) =>
+        Promise.resolve(
+          session.sessionId === SESSION_ID ? 'credential-1' : 'credential-2',
+        ),
+    );
+
+    try {
+      const [primaryResponse, alternateResponse] = await Promise.all([
+        request(app.getHttpServer()).get(
+          `/napcat-webui/session/${SESSION_ID}/webui/webui/assets/concurrent.html`,
+        ),
+        request(app.getHttpServer()).get(
+          '/napcat-webui/session/session-2/webui/webui/assets/concurrent.html',
+        ),
+      ]);
+
+      expect(primaryResponse.text).toContain(
+        `${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui/webui/assets/primary.js`,
+      );
+      expect(alternateResponse.text).toContain(
+        `${PUBLIC_SESSION_PREFIX}/session-2/webui/webui/assets/alternate.js`,
+      );
+      expect(primaryResponse.headers['set-cookie']).toEqual([
+        expect.stringContaining(
+          `Path=${PUBLIC_SESSION_PREFIX}/${SESSION_ID}/webui`,
+        ),
+      ]);
+      expect(alternateResponse.headers['set-cookie']).toEqual([
+        expect.stringContaining(
+          `Path=${PUBLIC_SESSION_PREFIX}/session-2/webui`,
+        ),
+      ]);
+      expect(upstreamRequests).toContainEqual({
+        authorization: 'Bearer credential-1',
+        method: 'GET',
+        url: '/webui/assets/concurrent.html',
+      });
+      expect(alternateAuthorization).toBe('Bearer credential-2');
+    } finally {
+      await new Promise<void>((resolveClose) =>
+        alternateUpstream.close(() => resolveClose()),
+      );
+    }
+  });
 });
 
 describe('NapcatWebuiProxyService WebSocket forwarding', () => {
   let app: INestApplication;
   let gatewayPort: number;
   let upstream: Server;
-  let upstreamRequest: { authorization?: string; cookie?: string; url?: string };
+  let upstreamUpgradeCount: number;
+  let upstreamRequest: {
+    authorization?: string;
+    cookie?: string;
+    url?: string;
+  };
   let upstreamWebSocket: WebSocketServer;
 
   beforeEach(async () => {
+    upstreamUpgradeCount = 0;
     upstreamRequest = {};
-    upstream = createServer();
+    upstream = createServer((req, res) => {
+      if (req.url?.endsWith('.html')) {
+        res.setHeader('content-type', 'text/html; charset=utf-8');
+        res.end('<html><body>upstream-ready</body></html>');
+        return;
+      }
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      res.end('{"code":0,"message":"success"}');
+    });
     upstreamWebSocket = new WebSocketServer({ noServer: true });
     upstream.on('upgrade', (req, socket, head) => {
+      upstreamUpgradeCount += 1;
       upstreamRequest = {
         authorization: req.headers.authorization,
         cookie: req.headers.cookie,
@@ -904,6 +1005,7 @@ describe('NapcatWebuiProxyService WebSocket forwarding', () => {
     }
 
     const moduleRef = await Test.createTestingModule({
+      controllers: [PublicWebuiController],
       providers: [
         {
           provide: NapcatWebuiGatewaySessionService,
@@ -928,15 +1030,19 @@ describe('NapcatWebuiProxyService WebSocket forwarding', () => {
             getCredential: jest.fn().mockResolvedValue('credential-1'),
           },
         },
+        {
+          provide: NapcatWebuiGatewayTicketService,
+          useValue: {
+            redeem: jest.fn(),
+          },
+        },
         NapcatWebuiProxyService,
       ],
     }).compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
-    app
-      .get(NapcatWebuiProxyService)
-      .bindWebSocketUpgrade(app.getHttpServer());
+    app.get(NapcatWebuiProxyService).bindWebSocketUpgrade(app.getHttpServer());
     await app.listen(0, '127.0.0.1');
     const gatewayAddress = app.getHttpServer().address();
     if (!gatewayAddress || typeof gatewayAddress === 'string') {
@@ -956,7 +1062,46 @@ describe('NapcatWebuiProxyService WebSocket forwarding', () => {
     );
   });
 
+  it('keeps one explicit upgrade dispatcher after repeated HTTP proxy traffic', async () => {
+    const gatewayServer = app.getHttpServer() as Server;
+    const initialUpgradeListeners = gatewayServer.listenerCount('upgrade');
+    const initialCloseListeners = gatewayServer.listenerCount('close');
+
+    app.get(NapcatWebuiProxyService).bindWebSocketUpgrade(app.getHttpServer());
+    expect(gatewayServer.listenerCount('upgrade')).toBe(
+      initialUpgradeListeners,
+    );
+
+    for (let index = 0; index < 6; index += 1) {
+      await request(gatewayServer)
+        .get(
+          `/napcat-webui/session/${SESSION_ID}/webui/api/File/list?round=${index}`,
+        )
+        .expect(HttpStatus.OK);
+      await request(gatewayServer)
+        .get(
+          `/napcat-webui/session/${SESSION_ID}/webui/webui/assets/runtime-${index}.html`,
+        )
+        .expect(HttpStatus.OK);
+    }
+
+    expect(gatewayServer.listenerCount('upgrade')).toBe(
+      initialUpgradeListeners,
+    );
+    expect(gatewayServer.listenerCount('close')).toBeLessThanOrEqual(
+      initialCloseListeners + 2,
+    );
+  });
+
   it('forwards plugin runtime WebSockets with their adapter token but without browser headers', async () => {
+    for (let index = 0; index < 12; index += 1) {
+      await request(app.getHttpServer())
+        .get(
+          `/napcat-webui/session/${SESSION_ID}/webui/api/File/list?warmup=${index}`,
+        )
+        .expect(HttpStatus.OK);
+    }
+
     const webSocket = new WebSocket(
       `ws://127.0.0.1:${gatewayPort}/napcat-webui/session/${SESSION_ID}/webui/api/Debug/ws?channel=plugin&access_token=plugin-adapter-token`,
       {
@@ -976,10 +1121,200 @@ describe('NapcatWebuiProxyService WebSocket forwarding', () => {
     });
     webSocket.close();
 
+    expect(upstreamUpgradeCount).toBe(1);
     expect(upstreamRequest).toEqual({
       authorization: 'Bearer credential-1',
       cookie: undefined,
       url: '/api/Debug/ws?channel=plugin&access_token=plugin-adapter-token',
     });
+  });
+
+  it('replaces only the terminal query token with the server-side Credential', async () => {
+    const webSocket = new WebSocket(
+      `ws://127.0.0.1:${gatewayPort}/napcat-webui/session/${SESSION_ID}/webui/api/ws/terminal?id=terminal-1&token=browser-placeholder&mode=raw`,
+      {
+        headers: {
+          Authorization: 'Bearer browser-value',
+          Cookie: 'browser-cookie=value',
+        },
+      },
+    );
+
+    await new Promise<void>((resolveMessage, rejectMessage) => {
+      webSocket.once('message', (data) => {
+        expect(data.toString()).toBe('upstream-ready');
+        resolveMessage();
+      });
+      webSocket.once('error', rejectMessage);
+    });
+    webSocket.close();
+
+    expect(upstreamUpgradeCount).toBe(1);
+    expect(upstreamRequest).toEqual({
+      authorization: 'Bearer credential-1',
+      cookie: undefined,
+      url: '/api/ws/terminal?id=terminal-1&token=credential-1&mode=raw',
+    });
+  });
+
+  it('rejects an inactive Gateway session before contacting the upstream', async () => {
+    const requireProxySession = app.get(NapcatWebuiGatewaySessionService)
+      .requireProxySession as jest.Mock;
+    requireProxySession.mockRejectedValueOnce(
+      new Error('Gateway session is not active'),
+    );
+    const webSocket = new WebSocket(
+      `ws://127.0.0.1:${gatewayPort}/napcat-webui/session/${SESSION_ID}/webui/api/Debug/ws?access_token=adapter-token`,
+    );
+
+    const response = await new Promise<IncomingMessage>(
+      (resolveResponse, rejectResponse) => {
+        webSocket.once('unexpected-response', (_request, upgradeResponse) => {
+          resolveResponse(upgradeResponse);
+        });
+        webSocket.once('open', () => {
+          rejectResponse(new Error('Inactive Gateway session was upgraded'));
+        });
+        webSocket.once('error', rejectResponse);
+      },
+    );
+    response.resume();
+
+    expect(response.statusCode).toBe(HttpStatus.FORBIDDEN);
+    expect(response.headers['www-authenticate']).toBeUndefined();
+    expect(upstreamUpgradeCount).toBe(0);
+  });
+
+  it('fails closed for WebSocket upgrades outside the Gateway session path', async () => {
+    const webSocket = new WebSocket(
+      `ws://127.0.0.1:${gatewayPort}/not-a-gateway-websocket`,
+      { handshakeTimeout: 200 },
+    );
+
+    let response: IncomingMessage | undefined;
+    try {
+      response = await new Promise<IncomingMessage>(
+        (resolveResponse, rejectResponse) => {
+          webSocket.once('unexpected-response', (_request, upgradeResponse) => {
+            resolveResponse(upgradeResponse);
+          });
+          webSocket.once('open', () => {
+            rejectResponse(new Error('Unmatched WebSocket path was upgraded'));
+          });
+          webSocket.once('error', rejectResponse);
+        },
+      );
+    } finally {
+      webSocket.terminate();
+    }
+    response.resume();
+
+    expect(response.statusCode).toBe(HttpStatus.FORBIDDEN);
+    expect(response.headers['www-authenticate']).toBeUndefined();
+    expect(upstreamUpgradeCount).toBe(0);
+  });
+
+  it('isolates concurrent WebSocket targets and Credentials by request', async () => {
+    let alternateRequest: {
+      authorization?: string;
+      cookie?: string;
+      url?: string;
+    } = {};
+    let alternateUpgradeCount = 0;
+    const alternateUpstream = createServer();
+    const alternateWebSocket = new WebSocketServer({ noServer: true });
+    alternateUpstream.on('upgrade', (req, socket, head) => {
+      alternateUpgradeCount += 1;
+      alternateRequest = {
+        authorization: req.headers.authorization,
+        cookie: req.headers.cookie,
+        url: req.url,
+      };
+      alternateWebSocket.handleUpgrade(req, socket, head, (webSocket) => {
+        alternateWebSocket.emit('connection', webSocket, req);
+      });
+    });
+    alternateWebSocket.on('connection', (webSocket) => {
+      webSocket.send('alternate-ready');
+    });
+    await new Promise<void>((resolveListen) => {
+      alternateUpstream.listen(0, '127.0.0.1', resolveListen);
+    });
+
+    const alternateAddress = alternateUpstream.address();
+    if (!alternateAddress || typeof alternateAddress === 'string') {
+      throw new Error('Alternate WebSocket upstream did not expose a port');
+    }
+    const primaryAddress = upstream.address();
+    if (!primaryAddress || typeof primaryAddress === 'string') {
+      throw new Error('Primary WebSocket upstream did not expose a port');
+    }
+
+    const requireProxySession = app.get(NapcatWebuiGatewaySessionService)
+      .requireProxySession as jest.Mock;
+    requireProxySession.mockImplementation((sessionId: string) =>
+      Promise.resolve(
+        createGatewaySession({
+          sessionId,
+          status: 'active',
+          upstreamBaseUrl:
+            sessionId === SESSION_ID
+              ? `http://127.0.0.1:${primaryAddress.port}`
+              : `http://127.0.0.1:${alternateAddress.port}`,
+        }),
+      ),
+    );
+    const getCredential = app.get(NapcatWebuiCredentialClient)
+      .getCredential as jest.Mock;
+    getCredential.mockImplementation((session: NapcatWebuiGatewaySession) =>
+      Promise.resolve(
+        session.sessionId === SESSION_ID ? 'credential-1' : 'credential-2',
+      ),
+    );
+
+    const primaryWebSocket = new WebSocket(
+      `ws://127.0.0.1:${gatewayPort}/napcat-webui/session/${SESSION_ID}/webui/api/Debug/ws?access_token=adapter-1`,
+    );
+    const secondaryWebSocket = new WebSocket(
+      `ws://127.0.0.1:${gatewayPort}/napcat-webui/session/session-2/webui/api/Debug/ws?access_token=adapter-2`,
+    );
+
+    try {
+      const messages = await Promise.all(
+        [primaryWebSocket, secondaryWebSocket].map(
+          (webSocket) =>
+            new Promise<string>((resolveMessage, rejectMessage) => {
+              webSocket.once('message', (data) => {
+                resolveMessage(data.toString());
+              });
+              webSocket.once('error', rejectMessage);
+            }),
+        ),
+      );
+
+      expect(messages).toEqual(['upstream-ready', 'alternate-ready']);
+      expect(upstreamUpgradeCount).toBe(1);
+      expect(alternateUpgradeCount).toBe(1);
+      expect(upstreamRequest).toEqual({
+        authorization: 'Bearer credential-1',
+        cookie: undefined,
+        url: '/api/Debug/ws?access_token=adapter-1',
+      });
+      expect(alternateRequest).toEqual({
+        authorization: 'Bearer credential-2',
+        cookie: undefined,
+        url: '/api/Debug/ws?access_token=adapter-2',
+      });
+    } finally {
+      primaryWebSocket.terminate();
+      secondaryWebSocket.terminate();
+      alternateWebSocket.clients.forEach((webSocket) => webSocket.terminate());
+      await new Promise<void>((resolveClose) =>
+        alternateWebSocket.close(() => resolveClose()),
+      );
+      await new Promise<void>((resolveClose) =>
+        alternateUpstream.close(() => resolveClose()),
+      );
+    }
   });
 });

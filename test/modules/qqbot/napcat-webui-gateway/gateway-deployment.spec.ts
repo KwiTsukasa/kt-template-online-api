@@ -34,14 +34,13 @@ describe('NapCat WebUI Gateway deployment configuration', () => {
     expect(dockerfile).toContain('LOG_APP_NAME=kt-napcat-webui-gateway');
   });
 
-  it('uses reachable Debian mirrors with apt retries in runtime images', () => {
+  it('keeps the base image Debian sources with apt retries', () => {
     const runtimeDockerfiles = ['dockerfile', 'dockerfile.gateway'].map(
       readRepoFile,
     );
 
     for (const dockerfile of runtimeDockerfiles) {
-      expect(dockerfile).toContain('mirrors.aliyun.com/debian');
-      expect(dockerfile).toContain('mirrors.aliyun.com/debian-security');
+      expect(dockerfile).not.toContain('mirrors.aliyun.com');
       expect(dockerfile).toContain('Acquire::Retries=5');
       expect(dockerfile).toContain(
         'npm_config_index_binary_host_mirror=https://registry.npmmirror.com/-/binary/skia-canvas/',

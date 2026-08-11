@@ -53,6 +53,17 @@ describe('MinioClientService same-origin public URL', () => {
     expect(result.url).not.toContain(INTERNAL_MINIO_ENDPOINT);
     expect(client.presignedGetObject).not.toHaveBeenCalled();
   });
+
+  it('rejects the media descriptor private bucket from generic routes', () => {
+    const service = new MinioClientService(
+      { client: createMinioClient() } as unknown as MinioService,
+      { get: jest.fn(() => undefined) } as unknown as ConfigService,
+    );
+
+    expect(() =>
+      service.getBucketName('kt-media-governance-private'),
+    ).toThrow('该 Bucket 只能通过所属领域服务访问');
+  });
 });
 
 describe('GET /minio/url same-origin contract', () => {

@@ -123,10 +123,10 @@ Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理�
 
 同一模块提供只供腾讯云稳定入口调用的 NATMap 启动重定向：
 
-| 方法   | 内部路径                                    | 认证/来源边界                                      | 说明                         |
-| ------ | ------------------------------------------- | -------------------------------------------------- | ---------------------------- |
-| `GET`  | `/network/open-redirect/:serviceKey`       | `@Public()`；Host 必须为 `open.kwitsukasa.top`     | 返回空 body 的临时 `302`     |
-| `HEAD` | `/network/open-redirect/:serviceKey`       | 同上；Traefik 另限 `ClientIP=10.66.66.1/32`        | 返回与 GET 相同的状态和响应头 |
+| 方法   | 内部路径                             | 认证/来源边界                                  | 说明                          |
+| ------ | ------------------------------------ | ---------------------------------------------- | ----------------------------- |
+| `GET`  | `/network/open-redirect/:serviceKey` | `@Public()`；Host 必须为 `open.kwitsukasa.top` | 返回空 body 的临时 `302`      |
+| `HEAD` | `/network/open-redirect/:serviceKey` | 同上；Traefik 另限 `ClientIP=10.66.66.1/32`    | 返回与 GET 相同的状态和响应头 |
 
 Traefik 外部路径为 `/api/network/open-redirect/:serviceKey`，去掉 `/api` 后才
 进入 Controller。`serviceKey` 是代码内固定白名单
@@ -209,13 +209,76 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 
 ## Admin 与基础后台
 
+### 媒体治理 API/Admin 接入演示
+
+| 方法   | 路径                                                               | 说明                                   |
+| ------ | ------------------------------------------------------------------ | -------------------------------------- |
+| `POST` | `/media-governance/tasks`                                          | 创建作品身份草稿和 Task/Unit           |
+| `GET`  | `/media-governance/tasks/page`                                     | 分页和语义过滤任务                     |
+| `GET`  | `/media-governance/tasks/summary`                                  | 查询任务、下载、治理和 Agent 聚合      |
+| `GET`  | `/media-governance/tasks/:taskId`                                  | 查询权威任务详情投影                   |
+| `POST` | `/media-governance/tasks/:taskId/sources/magnet`                   | 脱敏添加磁链来源                       |
+| `POST` | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件         |
+| `PUT`  | `/media-governance/tasks/:taskId/sources/:sourceId/classification` | 修订来源角色和内容分类                 |
+| `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`        | 生成或检查规范来源清单                 |
+| `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime`  | 执行有界运行时来源探针演示             |
+| `PUT`  | `/media-governance/tasks/:taskId/units/:unitId/subtitle-contract`  | 密封逐季单一发布组字幕合同             |
+| `POST` | `/media-governance/tasks/:taskId/downloads/start`                  | 启动下载语义进度演示                   |
+| `POST` | `/media-governance/tasks/:taskId/governance/start`                 | 启动本地治理语义进度演示               |
+| `POST` | `/media-governance/tasks/:taskId/agent/start`                      | 启动五层边界 CodexAgent 演示           |
+| `GET`  | `/media-governance/tasks/:taskId/agent/session`                    | 查询 Agent 语义会话                    |
+| `POST` | `/media-governance/tasks/:taskId/agent/operator-decision`          | 提交人工候选选择并闭环                 |
+| `GET`  | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
+| `GET`  | `/media-governance/events/stream`                                  | 订阅带 replay/snapshot-required 的 SSE |
+
+全部接口要求 Admin JWT 和对应的 `Media:Governance:*` 权限，响应使用
+`Cache-Control: no-store`；增量 SQL 初始只把菜单和九个权限授予启用中的 `super`。
+所有命令请求必须携带 `expectedRevision`，陈旧版本返回 409 且不执行。TV 至少声明一个
+`Sxx` 季号，特别篇/番外篇使用 `S00`；Movie/Theatrical 不填写季号。`providerRef` 和
+`releaseYear` 是带格式校验和中文引导的可选身份消歧字段。
+
+同一 Task 只能存在一个 `primary_media` 下载 owner。无字幕媒体按季绑定完整字幕
+来源，不同季可使用不同发布组，同一季只接受与该季范围、所选来源发布组一致的
+合同；主媒体与所有补充字幕来源均完成清单检查和运行时探针后才允许启动下载。
+
+Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓持久化；API
+启动时恢复同一 Task/thread、revision 和 `lastSequence`。普通状态变更先提交数据库再
+发布 SSE，Agent 事件则与 Task/session 水位在同一事务写入。下载和治理计时器仍是
+有界演示，不连接 NAS、Kestra、云端或正式媒体。源码已提供真实 CodexAgent outbound
+adapter 与 NAS gateway 内部接口；只有同时配置
+`MEDIA_CODEX_AGENT_GATEWAY_BASE_URL` 和 `MEDIA_CODEX_AGENT_INTERNAL_SECRET` 时，
+`agent/start` 才会转入真实 gateway，否则保持失败关闭。gateway 只监听 NAS 私有
+k3d bridge 地址，
+内部提供 `GET /internal/media-codex-agent/health`、
+`POST /internal/media-codex-agent/tasks/:taskId/turns` 和
+`GET /internal/media-codex-agent/tasks/:taskId/session`，全部要求独立内部 secret；响应不
+包含登录态、凭据或原始 App Server 协议。每次 thread/start、thread/resume 和
+turn/start 都必须命中命名 `media-agent` 权限档及 `approvalPolicy=never`，不接受旧式
+sandbox 与命名权限混用。App Server Unix socket 使用标准 WebSocket HTTP Upgrade，
+wire JSON-RPC 省略 `jsonrpc` 字段，动态工具以合法下划线名传输并映射回点号内部合同。
+gateway checkpoint 持久化 `lastEventSequence`，重启后继续递增；API 查询 Agent 会话时
+会回读 gateway 的 Task/thread 权威投影。gateway 在创建任何 App Server thread/turn
+之前还会调用 `GET /internal/media-governance/agent/health`；只有响应
+`persistenceMode=database`、`status=ready` 才放行。API 在调用 gateway 前先持久化
+带精确 policy/capsule SHA 的启动预留；只允许序号 1 的 `agent-thread-mapped` 把
+`pending-<taskId>` 原子绑定到真实 thread，后续事件继续按同一 SHA/revision/thread
+校验。启动响应超时会查询 gateway 的同一 Task 会话恢复，预留持久化失败则不会调用
+gateway。旧版未包含事件序号的 v1 checkpoint 和 gateway 安全响应按序号 0 兼容读取，
+不绕过其他 SHA、身份或策略校验。
+种子上传
+会在内存中解析 bencode、重新计算 v1 info hash，并拒绝路径穿越、绝对路径、重复
+路径、符号链接、可执行项、畸形和超量描述文件。磁链只接受有界 BTIH 身份。两类
+原始描述都只能写入 `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`（默认
+`kt-media-governance-private`），普通 `/minio/*` 查询、上传、下载和删除入口会拒绝
+该 Bucket；列表、日志、SSE 和普通证据只返回脱敏投影。
+
 ### Auth / User
 
 | 方法   | 路径            | 说明                                                          |
 | ------ | --------------- | ------------------------------------------------------------- |
 | `POST` | `/auth/login`   | 后台登录，返回 accessToken 和用户信息，并写入 httpOnly cookie |
-| `POST` | `/auth/refresh` | 原子消费并轮换 refresh token，同时刷新 accessToken             |
-| `POST` | `/auth/logout`  | 吊销当前 refresh-token family 并清理 Admin 登录 cookie          |
+| `POST` | `/auth/refresh` | 原子消费并轮换 refresh token，同时刷新 accessToken            |
+| `POST` | `/auth/logout`  | 吊销当前 refresh-token family 并清理 Admin 登录 cookie        |
 | `GET`  | `/auth/codes`   | 获取当前用户按钮权限码                                        |
 | `GET`  | `/user/info`    | 获取当前用户信息                                              |
 
@@ -732,18 +795,19 @@ Admin 入口为 `/qqbot/plugin-task`，用于分页查看任务、启停、修�
 
 ## 初始化 SQL
 
-| 文件                                           | 用途                                                      |
-| ---------------------------------------------- | --------------------------------------------------------- |
-| `sql/vben-admin-init.sql`                      | 创建 Admin 基础表、用户、角色、菜单、部门、字典和空组件表 |
-| `sql/blog-init.sql`                            | 初始化本地 Blog 表                                        |
-| `sql/blog-menu.sql`                            | 初始化 Blog 管理菜单                                      |
-| `sql/qqbot-init.sql`                           | 初始化 QQBot 表、插件命令和字典                           |
-| `sql/system-log-menu.sql`                      | 初始化系统日志菜单和权限                                  |
-| `sql/system-notice-menu.sql`                   | 初始化系统站内信表与菜单权限                              |
-| `sql/migrate-dict-to-admin-dict.sql`           | 旧 `dict` 迁移到 `admin_dict`                             |
-| `sql/migrate-component-to-admin-component.sql` | 旧 `component` 迁移到 `admin_component`                   |
-| `sql/fix-admin-menu-meta.sql`                  | 修复菜单 meta 被覆盖为空                                  |
-| `sql/fix-admin-user-zero-id.sql`               | 修复旧版本 `admin_user.id=0` 脏数据                       |
+| 文件                                           | 用途                                                       |
+| ---------------------------------------------- | ---------------------------------------------------------- |
+| `sql/vben-admin-init.sql`                      | 创建 Admin 基础表、用户、角色、菜单、部门、字典和空组件表  |
+| `sql/blog-init.sql`                            | 初始化本地 Blog 表                                         |
+| `sql/blog-menu.sql`                            | 初始化 Blog 管理菜单                                       |
+| `sql/qqbot-init.sql`                           | 初始化 QQBot 表、插件命令和字典                            |
+| `sql/system-log-menu.sql`                      | 初始化系统日志菜单和权限                                   |
+| `sql/system-notice-menu.sql`                   | 初始化系统站内信表与菜单权限                               |
+| `sql/media-governance-intake-menu.sql`         | 增量注册仅 `super` 可见的媒体治理任务/Agent 菜单和九个权限 |
+| `sql/migrate-dict-to-admin-dict.sql`           | 旧 `dict` 迁移到 `admin_dict`                              |
+| `sql/migrate-component-to-admin-component.sql` | 旧 `component` 迁移到 `admin_component`                    |
+| `sql/fix-admin-menu-meta.sql`                  | 修复菜单 meta 被覆盖为空                                   |
+| `sql/fix-admin-user-zero-id.sql`               | 修复旧版本 `admin_user.id=0` 脏数据                        |
 
 ## 验证入口
 

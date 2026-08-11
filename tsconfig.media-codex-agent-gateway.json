@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "incremental": false,
+    "outDir": "../../.kt-workspace/build/media-codex-agent-gateway",
+    "rootDir": "./src"
+  },
+  "include": ["src/apps/media-codex-agent-gateway/**/*.ts"]
+}

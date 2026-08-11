@@ -6,6 +6,7 @@ import type {
   MinioObjectResult,
   MinioUploadObjectOptions,
 } from '../domain/asset-minio.types';
+import { assertGenericAssetBucket } from '../domain/asset-private-bucket';
 
 @Injectable()
 export class MinioClientService {
@@ -35,7 +36,10 @@ export class MinioClientService {
    * @returns MinIO 资源查询结果。
    */
   getBucketName(bucketName?: string): string {
-    return bucketName || this.getDefaultBucket();
+    return assertGenericAssetBucket(
+      bucketName || this.getDefaultBucket(),
+      this.configService.get('MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET'),
+    );
   }
 
   /**

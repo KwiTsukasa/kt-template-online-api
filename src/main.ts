@@ -24,6 +24,7 @@ const adminSwaggerPathPrefixes = [
   '/component',
   '/dict',
   '/menu',
+  '/media-governance',
   '/system',
   '/timezone',
   '/user',

@@ -18,7 +18,7 @@
 
 | 模块                            | 说明                                                                                                                                                |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`                         | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志、环境总览面板和网络端口映射管理                                             |
+| `admin`                         | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志、环境总览、网络管理和媒体治理合同模拟器                                     |
 | `blog`                          | 本地博客文章、分类、标签和 Argon 主题配置                                                                                                           |
 | `qqbot`                         | QQBot 账号、NapCat 扫码登录、运行态 Profile、OneBot 反向 WS、在线命令、规则、权限、系统消息源/订阅/模板/账号绑定、耐久投递、发送/接收日志和插件平台 |
 | `modules/qqbot/plugin-platform` | QQBot 插件 manifest 校验、版本安装、运行事件、定时任务、受控 SDK 和 CLI 脚手架                                                                      |
@@ -57,7 +57,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 | 分组                  | 变量                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MySQL                 | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC`                                                                                                                                                                                                                                                                                                                                                                                    |
-| MinIO                 | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`MINIO_USE_SSL`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`、`BLOG_ASSET_MIGRATION_*`                                                                                                                                                                                                                                                        |
+| MinIO                 | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MINIO_USE_SSL`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`、`BLOG_ASSET_MIGRATION_*`                                                                                                                                                                                                                  |
 | Admin                 | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                                                                                                |
 | Public Security       | `PUBLIC_SECURITY_*`、`PUBLIC_RATE_LIMIT_REDIS_*`、`PUBLIC_RATE_LIMIT_*`                                                                                                                                                                                                                                                                                                                                                                                         |
 | Logging/Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*`                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -211,6 +211,30 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 - `checks`：进程存活和运行时配置检查状态。
 
 该公开入口不返回数据库、Loki、NapCat SSH 等运行拓扑配置快照；配置检查只暴露 key 级别、是否存在和缺失说明。`blocked` 表示关键配置缺失；`degraded` 表示可选运行时配置缺失，核心 API 仍可继续工作。本地未配置 Loki、NapCat 等可选依赖时，健康状态可能保持 `degraded`。
+
+Admin 媒体治理接入演示使用 `JwtAuthGuard` 与媒体专用权限门，提供作品身份、来源、
+逐季字幕合同、运行时探针、下载/治理进度、CodexAgent 人工放行、聚合和可续接 SSE。
+Task、Unit、来源和 Agent session 由 10 张 TypeORM 领域表持久化；API 启动时恢复
+同一 Task/thread 与事件序号，状态变更和语义事件在同一数据库事务提交后才发布 SSE。
+内部回调健康只有数据库状态仓完成加载时才返回 `database/ready`。源码已接入独立
+NAS CodexAgent gateway：每个 Task 固定映射一个可恢复 thread，每回合重新密封
+policy/capsule/revision/manifest/replay 身份，只接受类型化只读工具与密封计划提交。
+App Server 请求必须激活命名
+`media-agent` 权限档，且不再混用旧式 sandbox 请求字段；错误权限档、网络、路径、
+工具或摘要一律失败关闭。App Server Unix socket 使用标准 WebSocket HTTP Upgrade，
+线上消息省略 `jsonrpc`；下划线 wire 工具名映射回点号内部合同。Task checkpoint
+同时保存事件序号，服务重启后继续递增；API 的 Agent 会话查询会从 gateway 回读同一
+Task/thread，而不是只依赖进程内投影。gateway 在创建 App Server thread/turn 前必须
+先确认内部回调为 `persistenceMode=database` 且 `status=ready`。API 会先持久化带精确
+policy/capsule SHA 的启动预留，才调用 gateway；首个 thread 映射回调可在启动响应返回
+前原子绑定，响应超时则按同一 Task/revision 从 gateway 恢复。浏览器不会接触 Codex
+登录态或原始协议。每个 Task 只允许一个主媒体下载 owner；逐季字幕来源必须
+与目标季和发布组一致，全部来源完成清单检查与运行时探针后才允许进入下载。种子描述文件会安全解析，磁链和种子原文只写入
+`MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET` 指定的私有 MinIO Bucket；通用 `/minio/*`
+服务会拒绝访问该 Bucket。领域合同覆盖 Task/Unit/Run、五种来源分类、逐季单一
+字幕发布组、`S00`、运行时来源健康、A/B/C 元数据、三层事件保留、
+revision/run/replay 幂等和五层 Agent 边界。菜单 SQL 尚未执行，NAS、Kestra、正式
+下载、云端和媒体写入适配器仍保持关闭。
 
 ## 核心规则
 

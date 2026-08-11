@@ -12,6 +12,7 @@
   },
   "scripts": {
     "build": "nest build",
+    "build:media-codex-agent": "tsc -p tsconfig.media-codex-agent-gateway.json",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/jsdoc/*.mjs\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/jsdoc/*.mjs\"",
     "prepare": "husky",
@@ -21,6 +22,8 @@
     "start:prod": "cross-env NODE_ENV=production node dist/main",
     "start:gateway:prod": "cross-env NODE_ENV=production node dist/apps/napcat-webui-gateway/main",
     "start:gateway:dev": "ts-node -r tsconfig-paths/register src/apps/napcat-webui-gateway/main.ts",
+    "start:media-codex-agent:prod": "cross-env NODE_ENV=production node dist/apps/media-codex-agent-gateway/main",
+    "start:media-codex-agent:dev": "ts-node -r tsconfig-paths/register src/apps/media-codex-agent-gateway/main.ts",
     "typecheck": "tsc --noEmit",
     "check:jsdoc": "pnpm run test:jsdoc && node scripts/jsdoc/check-jsdoc-policy.mjs",
     "admin-passwords:migrate": "node dist/commands/migrate-admin-passwords.js",

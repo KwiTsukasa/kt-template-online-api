@@ -34,6 +34,9 @@ describe('NetworkOpenRedirectController', () => {
     service.resolve.mockImplementation(async (serviceKey: string) =>
       serviceKey === 'admin'
         ? {
+            endpointGeneration: 'a'.repeat(64),
+            endpointIpv4: '112.32.125.92',
+            endpointValidUntil: '2026-08-11T12:00:00.000Z',
             location: 'https://nas4.kwitsukasa.top:52418/admin/',
             status: 'found',
           }
@@ -53,6 +56,9 @@ describe('NetworkOpenRedirectController', () => {
         .expect('Cache-Control', 'no-store, private')
         .expect('Pragma', 'no-cache')
         .expect('Referrer-Policy', 'no-referrer')
+        .expect('X-KT-Endpoint-IPv4', '112.32.125.92')
+        .expect('X-KT-Endpoint-Generation', 'a'.repeat(64))
+        .expect('X-KT-Endpoint-Valid-Until', '2026-08-11T12:00:00.000Z')
         .expect('X-Robots-Tag', 'noindex, nofollow');
 
       expect(response.text || '').toBe('');
@@ -71,6 +77,9 @@ describe('NetworkOpenRedirectController', () => {
       .expect('Cache-Control', 'no-store, private');
 
     expect(response.headers).not.toHaveProperty('location');
+    expect(response.headers).not.toHaveProperty('x-kt-endpoint-ipv4');
+    expect(response.headers).not.toHaveProperty('x-kt-endpoint-generation');
+    expect(response.headers).not.toHaveProperty('x-kt-endpoint-valid-until');
     expect(response.text).toBe('');
   });
 

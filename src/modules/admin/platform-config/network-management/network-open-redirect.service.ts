@@ -1,4 +1,4 @@
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource, EntityManager } from 'typeorm';
@@ -12,6 +12,27 @@ import { classifyTcpNatmapEndpointSource } from './network-tcp-natmap-source-eli
 const DEFAULT_AGENT_ID = 'nas-main';
 const GATEWAY_PORT = 10443;
 const GATEWAY_DDNS_ACTIVE_KEY = 'a:nas4.kwitsukasa.top';
+const ENDPOINT_GENERATION_PATTERN = /^[0-9a-f]{64}$/u;
+const NON_PUBLIC_IPV4 = new BlockList();
+
+for (const [address, prefix] of [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+] as const) {
+  NON_PUBLIC_IPV4.addSubnet(address, prefix, 'ipv4');
+}
 
 type NetworkOpenRedirectTarget = Readonly<{
   host: string;
@@ -35,8 +56,21 @@ export const NETWORK_OPEN_REDIRECT_TARGETS = Object.freeze({
 } as const satisfies Record<string, NetworkOpenRedirectTarget>);
 
 export type NetworkOpenRedirectResolution =
-  | { location: string; status: 'found' }
+  | {
+      endpointGeneration: string;
+      endpointIpv4: string;
+      endpointValidUntil: string;
+      location: string;
+      status: 'found';
+    }
   | { status: 'not_found' | 'unavailable' };
+
+type NetworkOpenRedirectEndpoint = Readonly<{
+  generation: string;
+  ipv4: string;
+  port: number;
+  validUntil: string;
+}>;
 
 @Injectable()
 export class NetworkOpenRedirectService {
@@ -49,14 +83,17 @@ export class NetworkOpenRedirectService {
     const target = this.target(serviceKey);
     if (!target) return { status: 'not_found' };
 
-    const publicPort = await this.dataSource.transaction(
+    const endpoint = await this.dataSource.transaction(
       'REPEATABLE READ',
-      (manager) => this.resolveCurrentPublicPort(manager),
+      (manager) => this.resolveCurrentEndpoint(manager),
     );
-    if (publicPort === null) return { status: 'unavailable' };
+    if (endpoint === null) return { status: 'unavailable' };
 
     return {
-      location: `https://${target.host}:${publicPort}${target.path}`,
+      endpointGeneration: endpoint.generation,
+      endpointIpv4: endpoint.ipv4,
+      endpointValidUntil: endpoint.validUntil,
+      location: `https://${target.host}:${endpoint.port}${target.path}`,
       status: 'found',
     };
   }
@@ -75,9 +112,9 @@ export class NetworkOpenRedirectService {
     ];
   }
 
-  private async resolveCurrentPublicPort(
+  private async resolveCurrentEndpoint(
     manager: EntityManager,
-  ): Promise<null | number> {
+  ): Promise<NetworkOpenRedirectEndpoint | null> {
     const mapping = await manager.getRepository(NetworkPortForward).findOne({
       where: { activeKey: portForwardActiveKey('tcp', GATEWAY_PORT) },
     });
@@ -99,7 +136,12 @@ export class NetworkOpenRedirectService {
     if (!agent || !this.agentMatches(agent, mapping)) return null;
 
     if (!this.leaseIsCurrent(mapping)) return null;
-    return mapping.currentPublicPort as number;
+    return {
+      generation: mapping.currentEndpointIdentity as string,
+      ipv4: mapping.currentPublicIpv4 as string,
+      port: mapping.currentPublicPort as number,
+      validUntil: mapping.currentValidUntil!.toISOString(),
+    };
   }
 
   private mappingIsReady(mapping: NetworkPortForward): boolean {
@@ -114,8 +156,8 @@ export class NetworkOpenRedirectService {
         mapping.reportedRevision,
         mapping.desiredRevision,
       ) &&
-      Boolean(mapping.currentEndpointIdentity?.trim()) &&
-      isIP(mapping.currentPublicIpv4 || '') === 4 &&
+      ENDPOINT_GENERATION_PATTERN.test(mapping.currentEndpointIdentity || '') &&
+      this.isPublicIpv4(mapping.currentPublicIpv4 || '') &&
       Number.isInteger(mapping.currentPublicPort) &&
       Number(mapping.currentPublicPort) >= 1 &&
       Number(mapping.currentPublicPort) <= 65_535 &&
@@ -170,6 +212,10 @@ export class NetworkOpenRedirectService {
       mapping.currentValidUntil instanceof Date &&
       mapping.currentValidUntil.getTime() > Date.now()
     );
+  }
+
+  private isPublicIpv4(address: string): boolean {
+    return isIP(address) === 4 && !NON_PUBLIC_IPV4.check(address, 'ipv4');
   }
 
   private revisionIsCurrent(reported: string, desired: string): boolean {

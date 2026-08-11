@@ -139,6 +139,11 @@ Traefik 外部路径为 `/api/network/open-redirect/:serviceKey`，去掉 `/api`
 返回 `404`；离线、过期、状态不一致或解析异常返回无 `Location` 的 `503` 与
 `Retry-After: 30`。所有响应均禁止缓存、referrer 与索引。该接口只完成首跳，
 浏览器后续页面、API、上传、SSE 与 WebSocket 均直连带动态端口的统一网关。
+成功响应还从同一事务快照发布三个单值头：`X-KT-Endpoint-IPv4` 为与 DDNS
+一致的规范公网 IPv4，`X-KT-Endpoint-Generation` 为当前 64 位小写十六进制
+端点身份，`X-KT-Endpoint-Valid-Until` 为当前租约 UTC 时间。私网、CGNAT、
+保留/文档 IPv4、非法 generation 或已过期租约统一降级为无 `Location`、无上述
+三项头的 `503`，供 Android KernelSU 客户端把同一权威 IPv4 绑定到 `/32` hook。
 
 逻辑组接口用于当前 Admin；同一逻辑组可包含相同端口的 TCP、UDP 或双协议通道：
 

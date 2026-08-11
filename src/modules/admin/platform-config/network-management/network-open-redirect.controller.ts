@@ -48,6 +48,15 @@ export class NetworkOpenRedirectController {
       .resolve(serviceKey)
       .catch(() => ({ status: 'unavailable' as const }));
     if (resolution.status === 'found') {
+      response.setHeader('X-KT-Endpoint-IPv4', resolution.endpointIpv4);
+      response.setHeader(
+        'X-KT-Endpoint-Generation',
+        resolution.endpointGeneration,
+      );
+      response.setHeader(
+        'X-KT-Endpoint-Valid-Until',
+        resolution.endpointValidUntil,
+      );
       response.setHeader('Location', resolution.location);
       response.status(HttpStatus.FOUND).end();
       return;

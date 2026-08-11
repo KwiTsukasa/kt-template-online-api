@@ -125,6 +125,9 @@ describe('NetworkOpenRedirectService', () => {
       const harness = createHarness();
 
       await expect(harness.service.resolve(serviceKey)).resolves.toEqual({
+        endpointGeneration: 'a'.repeat(64),
+        endpointIpv4: '112.32.125.92',
+        endpointValidUntil: expect.any(String),
         location: `https://${target.host}:52418${target.path}`,
         status: 'found',
       });
@@ -195,6 +198,10 @@ describe('NetworkOpenRedirectService', () => {
       (state) => (state.mapping!.currentEndpointIdentity = ''),
     ],
     [
+      'invalid endpoint identity',
+      (state) => (state.mapping!.currentEndpointIdentity = 'not-a-digest'),
+    ],
+    [
       'expired endpoint lease',
       (state) =>
         (state.mapping!.currentValidUntil = new KtDateTime(Date.now())),
@@ -202,6 +209,14 @@ describe('NetworkOpenRedirectService', () => {
     [
       'invalid endpoint IPv4',
       (state) => (state.mapping!.currentPublicIpv4 = '2001:db8::1'),
+    ],
+    [
+      'private endpoint IPv4',
+      (state) => (state.mapping!.currentPublicIpv4 = '192.168.31.224'),
+    ],
+    [
+      'carrier NAT endpoint IPv4',
+      (state) => (state.mapping!.currentPublicIpv4 = '100.64.0.1'),
     ],
     [
       'invalid endpoint port',

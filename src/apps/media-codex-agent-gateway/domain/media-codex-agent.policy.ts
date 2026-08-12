@@ -68,6 +68,7 @@ export function buildMediaCodexAgentCapsule(
     outputSchema: MEDIA_CODEX_AGENT_OUTPUT_SCHEMA_ID,
     policySha256: policy.policySha256,
     policyVersion: policy.policyVersion,
+    replayKey: request.replayKey,
     taskId: request.taskId,
     taskRevision: request.taskRevision,
   };
@@ -110,6 +111,7 @@ export function buildMediaCodexAgentTurnPrompt(
     canonicalJson(request.compactContext),
     `当前 Task staging 根：${capsule.allowedRoots[0]}。媒体已完成治理时不得重复复制视频；plan.submit.sealed 的文件目标只能位于该根的 work/ 或 plan/ 子目录。`,
     '若缺少 identity.provider 或 identity.providerId，必须先调用 provider.metadata.read；唯一 TMDB 候选时只提交 identity 密封修正且 operations 必须为 []，绝不能复制、重命名或生成媒体、字幕、NFO、海报；存在至少两个真实候选时 candidateSummaries 必须逐项使用“tmdb:<id>｜中文差异”格式。',
+    `plan.submit.sealed.replayKey 必须逐字等于可信胶囊 replayKey：${capsule.replayKey}；不得自行生成，也不得复用不可信任务数据中的 replayKey。`,
     '只有 plan.submit.sealed 明确返回 accepted=true 和 planSha256 后，才允许输出 status=plan-submitted，并且必须原样返回同一 planSha256；空结果或失败结果绝不能称为已提交。',
     '只允许输出 media-governance-agent-result-v1 Schema。',
   ].join('\n');
@@ -135,7 +137,11 @@ export function validateMediaCodexAgentToolCall(
   }
   assertPlainObject(call.arguments, 'agent-tool-arguments-invalid');
   if (call.tool === 'plan.submit.sealed') {
-    validateSealedPlanArguments(call.arguments, policy.allowedRoots);
+    validateSealedPlanArguments(
+      call.arguments,
+      policy.allowedRoots,
+      capsule.replayKey,
+    );
   } else {
     const keys = Object.keys(call.arguments);
     if (keys.some((key) => key !== 'sourceId' && key !== 'unitId')) {
@@ -176,6 +182,7 @@ function validateTurnRequest(request: MediaCodexAgentTurnRequest) {
 function validateSealedPlanArguments(
   value: Record<string, unknown>,
   allowedRoots: string[],
+  expectedReplayKey: string,
 ) {
   const keys = Object.keys(value);
   const identity = value.identity;
@@ -194,6 +201,9 @@ function validateSealedPlanArguments(
     value.summary.length > 800
   ) {
     throw new Error('agent-sealed-plan-invalid');
+  }
+  if (value.replayKey !== expectedReplayKey) {
+    throw new Error('agent-sealed-plan-replay-mismatch');
   }
   if (identity !== undefined) {
     assertPlainObject(identity, 'agent-sealed-plan-invalid');

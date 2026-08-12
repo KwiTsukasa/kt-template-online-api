@@ -72,6 +72,7 @@ export interface MediaCodexAgentBoundaryCapsule {
   outputSchema: typeof MEDIA_CODEX_AGENT_OUTPUT_SCHEMA_ID;
   policySha256: string;
   policyVersion: string;
+  replayKey: string;
   taskId: string;
   taskRevision: number;
 }

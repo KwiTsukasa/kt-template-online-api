@@ -588,7 +588,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     } else if (input.eventType === 'run-failed') {
       task.activeRunId = null;
       task.runState = 'blocked';
-      task.gateReason = input.summary;
+      task.gateReason = input.summary.slice(0, 160);
       task.nextCommandLabel = '查看失败原因后重试';
     } else if (input.eventType === 'run-succeeded') {
       if (!input.evidenceSha256) {
@@ -1484,9 +1484,19 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.activeRunId === null &&
       task.payloadSeal !== null &&
       task.gateReason?.startsWith('本地计划无法安全密封：') === true;
+    const retryingExecutionFailure =
+      task.stage === 'governance' &&
+      task.runState === 'blocked' &&
+      task.activeRunId === null &&
+      task.payloadSeal !== null &&
+      task.sealedPlan !== null &&
+      task.sealedPlanSha256 !== null;
     if (
-      task.stage !== 'download' ||
-      (task.runState !== 'succeeded' && !retryingPlanFailure)
+      !(
+        (task.stage === 'download' &&
+          (task.runState === 'succeeded' || retryingPlanFailure)) ||
+        retryingExecutionFailure
+      )
     ) {
       throwVbenError('来源载荷尚未就绪', HttpStatus.CONFLICT);
     }
@@ -1503,7 +1513,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         }
         task.workItemId = await this.stateStore.reserveWorkItemId(task.id);
       }
-      if (retryingPlanFailure) {
+      if (retryingPlanFailure || retryingExecutionFailure) {
         task.runState = 'succeeded';
         task.gateReason = null;
         task.nextCommandLabel = '开始本地治理';

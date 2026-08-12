@@ -526,8 +526,8 @@ describe('MediaGovernanceService production execution adapter', () => {
     });
   });
 
-  it('seals one Schema 1.2.0 plan before dispatching the formal local transaction', async () => {
-    const { dispatch, service } = fixture();
+  it('seals one Schema 1.2.0 plan and retries a failed execution with a fresh replay key', async () => {
+    const { dispatch, service, stateStore } = fixture();
     await service.onModuleInit();
     const task = await service.create({
       mediaType: 'movie',
@@ -581,8 +581,8 @@ describe('MediaGovernanceService production execution adapter', () => {
 
     await service.startGovernance(task.id, { expectedRevision: 2 });
 
-    const envelope = dispatch.mock.calls.at(-1)?.[0];
-    expect(envelope).toMatchObject({
+    const firstEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    expect(firstEnvelope).toMatchObject({
       action: 'governance.execute',
       plan: {
         planGrantId: expect.stringMatching(/^media-plan-grant-/),
@@ -592,9 +592,9 @@ describe('MediaGovernanceService production execution adapter', () => {
       },
       taskId: task.id,
     });
-    expect(envelope.sources).toBeUndefined();
+    expect(firstEnvelope.sources).toBeUndefined();
     expect(task).toMatchObject({
-      activeRunId: envelope.runId,
+      activeRunId: firstEnvelope.runId,
       revision: 3,
       runState: 'queued',
       stage: 'governance',
@@ -605,36 +605,85 @@ describe('MediaGovernanceService production execution adapter', () => {
       action: 'governance.execute',
       eventType: 'run-started',
       observedAt: new Date().toISOString(),
-      runId: envelope.runId,
+      runId: firstEnvelope.runId,
       sequence: 1,
       summary: '本地事务开始',
       taskId: task.id,
       taskRevision: 3,
+    });
+    const fullFailureSummary = '原始执行器失败：'.padEnd(400, '错');
+    await service.applyExecutorEvent({
+      action: 'governance.execute',
+      eventType: 'run-failed',
+      observedAt: new Date().toISOString(),
+      runId: firstEnvelope.runId,
+      sequence: 2,
+      summary: fullFailureSummary,
+      taskId: task.id,
+      taskRevision: 3,
+    });
+    expect(task).toMatchObject({
+      activeRunId: null,
+      revision: 4,
+      runState: 'blocked',
+      stage: 'governance',
+    });
+    expect(task.gateReason).toBe(fullFailureSummary.slice(0, 160));
+    expect(task.gateReason).toHaveLength(160);
+    expect(stateStore.applyExecutorEvent).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: 'run-failed',
+        summary: fullFailureSummary,
+      }),
+    );
+
+    await service.startGovernance(task.id, { expectedRevision: 4 });
+    const retryEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    expect(retryEnvelope).toMatchObject({
+      action: 'governance.execute',
+      plan: {
+        planSha256: task.sealedPlanSha256,
+      },
+      replayKey: `${task.id}:governance.execute:r5`,
+      taskRevision: 5,
+    });
+    expect(retryEnvelope.runId).not.toBe(firstEnvelope.runId);
+
+    await service.applyExecutorEvent({
+      action: 'governance.execute',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: retryEnvelope.runId,
+      sequence: 1,
+      summary: '本地事务重新开始',
+      taskId: task.id,
+      taskRevision: 5,
     });
     await service.applyExecutorEvent({
       action: 'governance.execute',
       evidenceSha256: 'b'.repeat(64),
       eventType: 'run-succeeded',
       observedAt: new Date().toISOString(),
-      runId: envelope.runId,
+      runId: retryEnvelope.runId,
       sequence: 2,
       summary: '本地事务完成',
       taskId: task.id,
-      taskRevision: 3,
+      taskRevision: 5,
     });
     expect(task).toMatchObject({
       activeRunId: null,
       metadataStatus: 'pending',
-      revision: 4,
+      revision: 6,
       runState: 'succeeded',
       stage: 'metadata',
     });
 
-    await service.startMetadataVerification(task.id, { expectedRevision: 4 });
+    await service.startMetadataVerification(task.id, { expectedRevision: 6 });
     const metadataEnvelope = dispatch.mock.calls.at(-1)?.[0];
     expect(metadataEnvelope).toMatchObject({
       action: 'metadata.verify',
-      taskRevision: 5,
+      taskRevision: 7,
     });
     await service.applyExecutorEvent({
       action: 'metadata.verify',
@@ -644,7 +693,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       sequence: 1,
       summary: '元数据核验开始',
       taskId: task.id,
-      taskRevision: 5,
+      taskRevision: 7,
     });
     await service.applyExecutorEvent({
       action: 'metadata.verify',
@@ -675,20 +724,20 @@ describe('MediaGovernanceService production execution adapter', () => {
       sequence: 2,
       summary: '元数据核验通过',
       taskId: task.id,
-      taskRevision: 5,
+      taskRevision: 7,
     });
     expect(task).toMatchObject({
       metadataStatus: 'verified',
-      revision: 6,
+      revision: 8,
       runState: 'succeeded',
       stage: 'metadata',
     });
 
-    await service.startAcceptanceVerification(task.id, { expectedRevision: 6 });
+    await service.startAcceptanceVerification(task.id, { expectedRevision: 8 });
     const acceptanceEnvelope = dispatch.mock.calls.at(-1)?.[0];
     expect(acceptanceEnvelope).toMatchObject({
       action: 'acceptance.verify',
-      taskRevision: 7,
+      taskRevision: 9,
     });
     await service.applyExecutorEvent({
       action: 'acceptance.verify',
@@ -698,7 +747,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       sequence: 1,
       summary: '独立验收开始',
       taskId: task.id,
-      taskRevision: 7,
+      taskRevision: 9,
     });
     await service.applyExecutorEvent({
       acceptance: {
@@ -721,12 +770,12 @@ describe('MediaGovernanceService production execution adapter', () => {
       sequence: 2,
       summary: '独立验收通过',
       taskId: task.id,
-      taskRevision: 7,
+      taskRevision: 9,
     });
     expect(task).toMatchObject({
       activeRunId: null,
       metadataStatus: 'verified',
-      revision: 8,
+      revision: 10,
       runState: 'succeeded',
       stage: 'closed',
     });

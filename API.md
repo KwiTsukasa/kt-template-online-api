@@ -261,6 +261,10 @@ staging/qBittorrent 状态；尚未轮到的同任务补充来源才从零开始
 状态但任务 staging 已丢失时失败关闭，不能静默重新下载。
 本地计划密封失败会生成新 revision 并保持原载荷不变；修正映射、字幕合同或内部身份
 后，可用该 revision 重试治理启动，不会重放下载。
+本地治理 Run 失败后，完整的最长 400 字符失败摘要写入事件记录，Task 的 `gateReason`
+只保留前 160 字符以符合持久化列契约。Task 处于 `governance/blocked`、无活动 Run 且
+原 payload/计划摘要仍密封时，可用当前 revision 再次调用 `governance/start`；API 复用
+原计划，但生成新的 Run、revision 和 replay key，不复用已消费事务键，也不重放下载。
 
 Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓持久化；API
 启动时恢复同一 Task/thread、revision 和事件序号。正式下载、治理、元数据核验和独立

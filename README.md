@@ -250,6 +250,9 @@ Task/Source/info-hash 复用原 staging 与 qBittorrent 状态；已完整载荷
 新任务不需要操作员填写内部 `workItemId`：首次本地治理前由数据库串行分配
 `media-063+` 并持久化复用。计划密封失败会推进 revision，修正合同后可从同一
 payload-ready 载荷重试，不会重新下载。
+治理执行失败时，完整的最长 400 字符技术摘要保留在事件记录中，Task 的用户可见
+阻塞原因只投影前 160 字符以匹配数据库契约；再次开始治理会复用同一密封计划，创建
+新的 revision、Run 和 replay key，不重放下载，也不复用已经消费的事务键。
 
 ## 核心规则
 

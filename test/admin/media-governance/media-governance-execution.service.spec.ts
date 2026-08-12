@@ -1,10 +1,14 @@
-import type { MediaGovernanceExecutionGateway } from '../../../src/modules/admin/media-governance/media-governance-execution.gateway';
+import type {
+  MediaGovernanceExecutionEnvelope,
+  MediaGovernanceExecutionGateway,
+} from '../../../src/modules/admin/media-governance/media-governance-execution.gateway';
 import type { MediaGovernanceStateStore } from '../../../src/modules/admin/media-governance/media-governance-state.store';
 import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/media-governance.service';
 
 describe('MediaGovernanceService production execution adapter', () => {
   function fixture() {
     const sequences = new Map<string, number>();
+    const envelopes = new Map<string, MediaGovernanceExecutionEnvelope>();
     const reserved: unknown[] = [];
     const acknowledged: unknown[] = [];
     const stateStore: MediaGovernanceStateStore = {
@@ -21,8 +25,10 @@ describe('MediaGovernanceService production execution adapter', () => {
       pendingRunDispatches: jest.fn(async () => []),
       recordRunDispatchFailure: jest.fn(async () => 1),
       readRunSequence: jest.fn(async (runId) => sequences.get(runId) ?? 0),
+      readRunEnvelope: jest.fn(async (runId) => envelopes.get(runId) ?? null),
       reserveRunDispatch: jest.fn(async (...args) => {
         reserved.push(args);
+        envelopes.set(args[1].runId, args[1]);
       }),
       failRunDispatch: jest.fn(async () => undefined),
       saveTask: jest.fn(async () => undefined),
@@ -45,6 +51,18 @@ describe('MediaGovernanceService production execution adapter', () => {
       })),
       dispatch,
       enabled: () => true,
+      status: jest.fn(async (input) => ({
+        activeState: 'active',
+        exitCode: 0,
+        result: 'success',
+        runId: input.runId,
+        runnerId:
+          'kt-media-governance-0123456789abcdef0123456789abcdef.service',
+        sealedInputSha256: input.sealedInputSha256,
+        status: 'running' as const,
+        subState: 'running',
+        taskId: input.taskId,
+      })),
     };
     const service = new MediaGovernanceService(
       undefined,
@@ -53,7 +71,14 @@ describe('MediaGovernanceService production execution adapter', () => {
       stateStore,
       gateway,
     );
-    return { acknowledged, dispatch, reserved, service, stateStore };
+    return {
+      acknowledged,
+      dispatch,
+      gateway,
+      reserved,
+      service,
+      stateStore,
+    };
   }
 
   it('reserves one durable run before dispatching source inspection', async () => {
@@ -335,6 +360,58 @@ describe('MediaGovernanceService production execution adapter', () => {
       runState: 'blocked',
     });
     expect(stateStore.failRunDispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconciles a vanished runner into one durable blocked terminal state', async () => {
+    const { dispatch, gateway, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '执行单元终态对账测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
+      sourceRole: 'primary_media',
+    });
+    await service.inspectSource(task.id, source.id, { expectedRevision: 2 });
+    const envelope = dispatch.mock.calls[0]![0];
+    await service.applyExecutorEvent({
+      action: envelope.action,
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: envelope.runId,
+      sequence: 1,
+      summary: '执行器开始运行',
+      taskId: task.id,
+      taskRevision: task.revision,
+    });
+    (gateway.status as jest.Mock).mockResolvedValueOnce({
+      activeState: 'inactive',
+      exitCode: 1,
+      result: 'exit-code',
+      runId: envelope.runId,
+      runnerId: 'kt-media-governance-0123456789abcdef0123456789abcdef.service',
+      sealedInputSha256: envelope.sealedInputSha256,
+      status: 'lost',
+      subState: 'dead',
+      taskId: task.id,
+    });
+
+    const reconcile = service as unknown as {
+      reconcileActiveExecutions(): Promise<void>;
+    };
+    await reconcile.reconcileActiveExecutions();
+
+    expect(task).toMatchObject({
+      activeRunId: null,
+      gateReason: 'NAS 执行单元已退出或被回收，但未返回可验证终态',
+      revision: 4,
+      runState: 'blocked',
+    });
+    await reconcile.reconcileActiveExecutions();
+    expect(task.revision).toBe(4);
   });
 
   it('seals one Schema 1.2.0 plan before dispatching the formal local transaction', async () => {

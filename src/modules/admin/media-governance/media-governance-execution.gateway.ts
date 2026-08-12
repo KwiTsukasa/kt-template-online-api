@@ -26,6 +26,18 @@ export type MediaGovernanceExecutionControl = {
   status: 'accepted';
 };
 
+export type MediaGovernanceExecutionStatus = {
+  activeState: string;
+  exitCode: number;
+  result: string;
+  runId: string;
+  runnerId: null | string;
+  sealedInputSha256: string;
+  status: 'exited' | 'lost' | 'queued' | 'running';
+  subState: string;
+  taskId: string;
+};
+
 export interface MediaGovernanceExecutionGateway {
   control(input: {
     command: 'pause' | 'resume';
@@ -38,6 +50,11 @@ export interface MediaGovernanceExecutionGateway {
     envelope: MediaGovernanceExecutionEnvelope,
   ): Promise<MediaGovernanceExecutionDispatch>;
   enabled(): boolean;
+  status(input: {
+    runId: string;
+    sealedInputSha256: string;
+    taskId: string;
+  }): Promise<MediaGovernanceExecutionStatus>;
 }
 
 const MAX_RESPONSE_BYTES = 32 * 1024;
@@ -124,6 +141,56 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
       throw new Error('media-governance-executor-identity-mismatch');
     }
     return result as MediaGovernanceExecutionControl;
+  }
+
+  async status(input: {
+    runId: string;
+    sealedInputSha256: string;
+    taskId: string;
+  }) {
+    const baseUrl = this.baseUrl();
+    if (!baseUrl) throw new Error('media-governance-executor-not-configured');
+    const response = await fetch(`${baseUrl}/v1/status`, {
+      body: JSON.stringify(input),
+      headers: {
+        'content-type': 'application/json',
+        'x-kt-media-executor-secret': this.secret(true),
+      },
+      method: 'POST',
+      signal: AbortSignal.timeout(this.timeoutMs()),
+    });
+    const text = await response.text();
+    if (!response.ok || Buffer.byteLength(text) > MAX_RESPONSE_BYTES) {
+      throw new Error('media-governance-executor-status-failed');
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      throw new Error('media-governance-executor-response-invalid');
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('media-governance-executor-response-invalid');
+    }
+    const result = value as Record<string, unknown>;
+    if (
+      result.runId !== input.runId ||
+      result.taskId !== input.taskId ||
+      result.sealedInputSha256 !== input.sealedInputSha256 ||
+      !['exited', 'lost', 'queued', 'running'].includes(
+        String(result.status),
+      ) ||
+      (result.runnerId !== null &&
+        (typeof result.runnerId !== 'string' ||
+          !SAFE_ID_PATTERN.test(result.runnerId))) ||
+      typeof result.activeState !== 'string' ||
+      typeof result.subState !== 'string' ||
+      typeof result.result !== 'string' ||
+      !Number.isSafeInteger(result.exitCode)
+    ) {
+      throw new Error('media-governance-executor-identity-mismatch');
+    }
+    return result as MediaGovernanceExecutionStatus;
   }
 
   private baseUrl() {

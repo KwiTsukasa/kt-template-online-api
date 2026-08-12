@@ -91,4 +91,41 @@ describe('MediaGovernanceExecutionGatewayClient', () => {
       'media-governance-executor-identity-mismatch',
     );
   });
+
+  it('binds runtime status to the exact run, task and sealed input', async () => {
+    const request = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          activeState: 'inactive',
+          exitCode: 1,
+          result: 'exit-code',
+          runId: envelope.runId,
+          runnerId:
+            'kt-media-governance-0123456789abcdef0123456789abcdef.service',
+          sealedInputSha256: envelope.sealedInputSha256,
+          status: 'exited',
+          subState: 'dead',
+          taskId: envelope.taskId,
+        }),
+    } as Response);
+    const gateway = new MediaGovernanceExecutionGatewayClient(
+      new ConfigService({
+        MEDIA_GOVERNANCE_EXECUTOR_BASE_URL: 'http://172.21.0.1:48088',
+        MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET: 's'.repeat(64),
+      }),
+    );
+
+    await expect(
+      gateway.status({
+        runId: envelope.runId,
+        sealedInputSha256: envelope.sealedInputSha256,
+        taskId: envelope.taskId,
+      }),
+    ).resolves.toMatchObject({ status: 'exited' });
+    expect(request).toHaveBeenCalledWith(
+      'http://172.21.0.1:48088/v1/status',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
 });

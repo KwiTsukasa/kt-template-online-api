@@ -260,7 +260,10 @@ Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓�
 `MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`
 和 `MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS` 调用 NAS 执行器；缺少数据库状态仓、私有
 地址或 secret 时失败关闭。执行器只兑换一次描述/计划授权，并按 Run 从序号 1 连续回调，
-重复序号幂等忽略，缺号和身份漂移拒绝。普通状态变更先提交数据库再发布 SSE，Agent
+重复序号幂等忽略，缺号和身份漂移拒绝。回调瞬时失败会按同一序号有界重试；API 还会
+按 Run、Task 与密封输入摘要读取执行器的精确 systemd runner 状态。runner 已退出但缺少
+终态回调时，Run 和 Task 在同一事务转为失败/阻塞，活动 Run 被清除且只发布一次语义事件。
+普通状态变更先提交数据库再发布 SSE，Agent
 事件则与 Task/session 水位在同一事务写入。源码同时提供真实 CodexAgent outbound
 adapter 与 NAS gateway 内部接口；只有同时配置
 `MEDIA_CODEX_AGENT_GATEWAY_BASE_URL` 和 `MEDIA_CODEX_AGENT_INTERNAL_SECRET` 时，

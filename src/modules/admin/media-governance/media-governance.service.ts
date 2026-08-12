@@ -256,6 +256,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   private readonly tasks: MediaGovernanceTask[] = [];
   private dispatchTimer: null | NodeJS.Timeout = null;
   private dispatchRetryActive = false;
+  private executionReconcileActive = false;
 
   constructor(
     @Optional()
@@ -283,8 +284,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
     if (this.executionGateway?.enabled()) {
       void this.retryPendingDispatches();
+      void this.reconcileActiveExecutions();
       this.dispatchTimer = setInterval(() => {
         void this.retryPendingDispatches();
+        void this.reconcileActiveExecutions();
       }, 5_000);
       this.dispatchTimer.unref?.();
     }
@@ -2463,6 +2466,61 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       }
     } finally {
       this.dispatchRetryActive = false;
+    }
+  }
+
+  private async reconcileActiveExecutions() {
+    if (
+      !this.executionGateway?.enabled() ||
+      !this.stateStore?.readRunEnvelope ||
+      !this.stateStore.readRunSequence
+    ) {
+      return;
+    }
+    if (this.executionReconcileActive) return;
+    this.executionReconcileActive = true;
+    try {
+      for (const task of [...this.tasks]) {
+        const runId = task.activeRunId;
+        if (!runId) continue;
+        try {
+          const envelope = await this.stateStore.readRunEnvelope(runId);
+          if (
+            !envelope ||
+            envelope.runId !== runId ||
+            envelope.taskId !== task.id ||
+            envelope.taskRevision !== task.revision
+          ) {
+            continue;
+          }
+          const observed = await this.executionGateway.status({
+            runId,
+            sealedInputSha256: envelope.sealedInputSha256,
+            taskId: task.id,
+          });
+          if (observed.status === 'queued' || observed.status === 'running') {
+            continue;
+          }
+          const summary =
+            observed.status === 'exited'
+              ? `NAS 执行器已退出（退出码 ${observed.exitCode}），但未返回可验证终态`
+              : 'NAS 执行单元已退出或被回收，但未返回可验证终态';
+          await this.applyExecutorEvent({
+            action: envelope.action,
+            eventType: 'run-failed',
+            observedAt: new Date().toISOString(),
+            runId,
+            sequence: (await this.stateStore.readRunSequence(runId)) + 1,
+            summary,
+            taskId: task.id,
+            taskRevision: task.revision,
+          });
+        } catch {
+          // 单个状态探针失败不得覆盖仍可能运行的任务，下一轮继续核对。
+        }
+      }
+    } finally {
+      this.executionReconcileActive = false;
     }
   }
 

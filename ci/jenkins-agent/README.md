@@ -81,6 +81,7 @@ docker network ls | grep jenkins_default
 ```bash
 docker run -d \
   --name kt-node-agent \
+  --init \
   --restart=always \
   --network jenkins_default \
   -u root \
@@ -92,6 +93,12 @@ docker run -d \
   -v kt-node-agent-workdir:/home/jenkins/agent \
   kt-jenkins-agent:node22
 ```
+
+`--init` 是运行边界而不是可选优化。Jenkins 构建工具会派生短生命周期的
+`git`、`sh`、`docker` 等进程；Agent 内的 Java 进程不会充当完整的 init，
+缺少该参数时孤儿进程会长期累积为僵尸进程。重建 Agent 时必须保留该参数，
+并通过 `docker inspect kt-node-agent --format '{{.HostConfig.Init}}'` 确认结果为
+`true`。
 
 如果 Jenkins Controller 不在同一台 NAS 上，把 `JENKINS_URL` 改成 Agent 容器可访问的 Jenkins 地址，例如：
 

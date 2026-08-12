@@ -122,6 +122,13 @@ describe('CodexAppServerClient', () => {
       cwd: policy.cleanCwd,
       permissions: 'media-agent',
     });
+    const outputSchema = turnStart.outputSchema as {
+      properties: Record<string, unknown>;
+      required: string[];
+    };
+    expect([...outputSchema.required].sort()).toEqual(
+      Object.keys(outputSchema.properties).sort(),
+    );
     expect(turnStart).not.toHaveProperty('sandboxPolicy');
   });
 

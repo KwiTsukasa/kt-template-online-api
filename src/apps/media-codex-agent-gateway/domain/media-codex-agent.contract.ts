@@ -151,7 +151,13 @@ export const MEDIA_CODEX_AGENT_RESULT_SCHEMA = {
     },
     summary: { maxLength: 800, type: 'string' },
   },
-  required: ['status', 'summary', 'nextActionLabel', 'planSha256'],
+  required: [
+    'candidateSummaries',
+    'nextActionLabel',
+    'planSha256',
+    'status',
+    'summary',
+  ],
   type: 'object',
 } as const;
 

@@ -232,7 +232,8 @@ policy/capsule SHA 的启动预留，才调用 gateway；首个 thread 映射回
 登录态或原始协议。异常 Agent 回合投影为 `failed`，与真实候选歧义的
 `needs-operator` 分离；再次调用 `agent/start` 只会请求 `restart-failed-turn`，gateway
 回读旧 turn 为 `failed/interrupted` 后才以新 revision、replay key、capsule 和 thread
-重试，事件序号继续递增，operator decision 不能绕过该门禁。每个 Task 只允许一个主媒体下载 owner；来源选择把每个显式文件
+重试，事件序号继续递增，operator decision 不能绕过该门禁。Agent 结构化输出的
+`properties` 必须全部进入 `required`，无候选时显式返回空数组。每个 Task 只允许一个主媒体下载 owner；来源选择把每个显式文件
 索引一一绑定到 Unit、文件角色、季集和字幕语言，并持久化为
 `selected_file_mappings`。下载门在完整载荷开始前核对每个 Unit 的主视频覆盖、非内嵌
 profile 的中文字幕覆盖、同季单一字幕发布组以及补充来源只含字幕/字体；Schema

@@ -302,6 +302,8 @@ Agent 异常完成会保存终态类型并投影为 `failed`；正常完成但�
 key 和 capsule，并请求 `restart-failed-turn`。gateway 必须只读恢复旧 thread 并确认
 其精确最后 turn 为 `failed` 或 `interrupted`，随后才创建新 thread；正常完成、活动中、
 无旧会话或身份不一致均失败关闭，不能用 `operator-decision` 伪造闭环。
+`turn/start` 的结构化输出 Schema 必须把 `properties` 中的每个字段同时列入
+`required`；无候选时返回空 `candidateSummaries`，不得以省略字段绕过严格 Schema。
 种子上传
 会在内存中解析 bencode、重新计算 v1 info hash，并拒绝路径穿越、绝对路径、重复
 路径、符号链接、可执行项、畸形和超量描述文件。磁链只接受有界 BTIH 身份。两类

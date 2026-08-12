@@ -42,6 +42,17 @@ export const MEDIA_GOVERNANCE_SOURCE_ROLES = [
   'primary_media',
   'supplemental_subtitle',
 ] as const;
+export const MEDIA_GOVERNANCE_SELECTED_FILE_ROLES = [
+  'font',
+  'subtitle',
+  'video',
+] as const;
+export const MEDIA_GOVERNANCE_SUBTITLE_LANGUAGES = [
+  'en',
+  'ja',
+  'zh-CN',
+  'zh-TW',
+] as const;
 
 export type MediaGovernanceMediaType =
   (typeof MEDIA_GOVERNANCE_MEDIA_TYPES)[number];
@@ -51,6 +62,10 @@ export type MediaGovernanceContentKind =
   (typeof MEDIA_GOVERNANCE_CONTENT_KINDS)[number];
 export type MediaGovernanceSourceRole =
   (typeof MEDIA_GOVERNANCE_SOURCE_ROLES)[number];
+export type MediaGovernanceSelectedFileRole =
+  (typeof MEDIA_GOVERNANCE_SELECTED_FILE_ROLES)[number];
+export type MediaGovernanceSubtitleLanguage =
+  (typeof MEDIA_GOVERNANCE_SUBTITLE_LANGUAGES)[number];
 
 const MAX_RELEASE_YEAR = new Date().getFullYear() + 2;
 const PROVIDER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
@@ -544,6 +559,34 @@ export class MediaGovernanceSourceClassificationDto extends MediaGovernanceRevis
   releaseGroup?: string;
 }
 
+export class MediaGovernanceSelectedFileMappingDto {
+  @ApiProperty({ minimum: 0 })
+  @IsInt()
+  @Min(0)
+  index: number;
+
+  @ApiProperty({ enum: MEDIA_GOVERNANCE_SELECTED_FILE_ROLES })
+  @IsIn(MEDIA_GOVERNANCE_SELECTED_FILE_ROLES)
+  fileRole: MediaGovernanceSelectedFileRole;
+
+  @ApiProperty({ maxLength: 96 })
+  @IsString()
+  @MaxLength(96)
+  @Matches(/\S/)
+  unitId: string;
+
+  @ApiPropertyOptional({ minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  episodeNumber?: number;
+
+  @ApiPropertyOptional({ enum: MEDIA_GOVERNANCE_SUBTITLE_LANGUAGES })
+  @IsOptional()
+  @IsIn(MEDIA_GOVERNANCE_SUBTITLE_LANGUAGES)
+  language?: MediaGovernanceSubtitleLanguage;
+}
+
 export class MediaGovernanceSourceSelectionDto extends MediaGovernanceRevisionCommandDto {
   @ApiProperty({ maxItems: 20000, minItems: 1, type: [Number] })
   @IsArray()
@@ -552,6 +595,18 @@ export class MediaGovernanceSourceSelectionDto extends MediaGovernanceRevisionCo
   @IsInt({ each: true })
   @Min(0, { each: true })
   selectedFileIndices: number[];
+
+  @ApiProperty({
+    maxItems: 20000,
+    minItems: 1,
+    type: [MediaGovernanceSelectedFileMappingDto],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(20000)
+  @ValidateNested({ each: true })
+  @Type(() => MediaGovernanceSelectedFileMappingDto)
+  fileMappings: MediaGovernanceSelectedFileMappingDto[];
 }
 
 export class MediaGovernanceMagnetSourceCreateDto extends MediaGovernanceSourceClassificationDto {

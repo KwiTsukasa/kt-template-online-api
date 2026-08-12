@@ -139,26 +139,48 @@ describe('MediaGovernanceService', () => {
         sourceRole: 'supplemental_subtitle',
       });
       await service.bindSubtitleContract(task.id, task.units[0].id, {
-        expectedEpisodeNumbers: [1, 2],
+        expectedEpisodeNumbers: [1],
         expectedRevision: 3,
-        mappings: [
-          { episodeNumber: 1, relativePath: 'S01/01.zh-Hans.ass' },
-          { episodeNumber: 2, relativePath: 'S01/02.zh-Hans.ass' },
-        ],
+        mappings: [{ episodeNumber: 1, relativePath: 'S01/01.zh-Hans.ass' }],
         releaseGroup: 'DBD-Raws',
         sourceId: supplemental.id,
       });
       await service.inspectSource(task.id, primary.id, { expectedRevision: 4 });
-      await service.probeRuntimeSource(task.id, primary.id, {
+      await service.updateSourceSelection(task.id, primary.id, {
         expectedRevision: 5,
+        fileMappings: [
+          {
+            episodeNumber: 1,
+            fileRole: 'video',
+            index: 0,
+            unitId: task.units[0].id,
+          },
+        ],
+        selectedFileIndices: [0],
       });
-      await service.inspectSource(task.id, supplemental.id, {
+      await service.probeRuntimeSource(task.id, primary.id, {
         expectedRevision: 6,
       });
-      await service.probeRuntimeSource(task.id, supplemental.id, {
+      await service.inspectSource(task.id, supplemental.id, {
         expectedRevision: 7,
       });
-      await service.startDownload(task.id, { expectedRevision: 8 });
+      await service.updateSourceSelection(task.id, supplemental.id, {
+        expectedRevision: 8,
+        fileMappings: [
+          {
+            episodeNumber: 1,
+            fileRole: 'subtitle',
+            index: 0,
+            language: 'zh-CN',
+            unitId: task.units[0].id,
+          },
+        ],
+        selectedFileIndices: [0],
+      });
+      await service.probeRuntimeSource(task.id, supplemental.id, {
+        expectedRevision: 9,
+      });
+      await service.startDownload(task.id, { expectedRevision: 10 });
       jest.advanceTimersByTime(1_000);
       await Promise.resolve();
 
@@ -240,14 +262,44 @@ describe('MediaGovernanceService', () => {
       sourceRole: 'supplemental_subtitle',
     });
     supplemental.manifest = [
-      { executable: false, index: 0, relativePath: 'S01E01.zh-Hans.ass', sizeBytes: 10 },
-      { executable: false, index: 1, relativePath: 'S01E01.mkv', sizeBytes: 100 },
-      { executable: false, index: 2, relativePath: '[Release][Fonts].7z', sizeBytes: 20 },
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'S01E01.zh-Hans.ass',
+        sizeBytes: 10,
+      },
+      {
+        executable: false,
+        index: 1,
+        relativePath: 'S01E01.mkv',
+        sizeBytes: 100,
+      },
+      {
+        executable: false,
+        index: 2,
+        relativePath: '[Release][Fonts].7z',
+        sizeBytes: 20,
+      },
     ];
 
     await expect(
       service.updateSourceSelection(task.id, supplemental.id, {
         expectedRevision: 3,
+        fileMappings: [
+          {
+            episodeNumber: 1,
+            fileRole: 'subtitle',
+            index: 0,
+            language: 'zh-CN',
+            unitId: task.units[0].id,
+          },
+          {
+            episodeNumber: 1,
+            fileRole: 'video',
+            index: 1,
+            unitId: task.units[0].id,
+          },
+        ],
         selectedFileIndices: [0, 1],
       }),
     ).rejects.toMatchObject({ status: 400 });
@@ -255,12 +307,30 @@ describe('MediaGovernanceService', () => {
     await expect(
       service.updateSourceSelection(task.id, supplemental.id, {
         expectedRevision: 3,
+        fileMappings: [
+          {
+            episodeNumber: 1,
+            fileRole: 'subtitle',
+            index: 0,
+            language: 'zh-CN',
+            unitId: task.units[0].id,
+          },
+          {
+            fileRole: 'font',
+            index: 2,
+            unitId: task.units[0].id,
+          },
+        ],
         selectedFileIndices: [0, 2],
       }),
     ).resolves.toMatchObject({
       selectedBytes: 30,
       selectedFileCount: 2,
       selectedFileIndices: [0, 2],
+      selectedFileMappings: [
+        expect.objectContaining({ fileRole: 'subtitle', index: 0 }),
+        expect.objectContaining({ fileRole: 'font', index: 2 }),
+      ],
     });
   });
 

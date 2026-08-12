@@ -47,3 +47,10 @@ FROM information_schema.columns
 WHERE table_schema = DATABASE()
   AND table_name = 'media_governance_source'
   AND column_name = 'selected_file_indices';
+
+SELECT
+  COUNT(*) AS source_mapping_columns
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'media_governance_source'
+  AND column_name = 'selected_file_mappings';

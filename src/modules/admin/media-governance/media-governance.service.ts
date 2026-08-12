@@ -29,7 +29,9 @@ import type {
   MediaGovernanceRevisionCommandDto,
   MediaGovernanceSourceClassificationDto,
   MediaGovernanceSourceSelectionDto,
+  MediaGovernanceSelectedFileRole,
   MediaGovernanceSourceRole,
+  MediaGovernanceSubtitleLanguage,
   MediaGovernanceContentKind,
   MediaGovernanceSubtitleContractDto,
   MediaGovernanceTaskCreateDto,
@@ -107,6 +109,13 @@ export type MediaGovernanceSource = {
   selectedBytes: number;
   selectedFileCount: number;
   selectedFileIndices: number[];
+  selectedFileMappings: Array<{
+    episodeNumber: null | number;
+    fileRole: MediaGovernanceSelectedFileRole;
+    index: number;
+    language: MediaGovernanceSubtitleLanguage | null;
+    unitId: string;
+  }>;
   sourceHealth:
     | 'degraded'
     | 'inconclusive'
@@ -513,6 +522,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       );
       source.selectedFileCount = manifest.length;
       source.selectedFileIndices = manifest.map((entry) => entry.index);
+      source.selectedFileMappings = [];
       source.sourceHealth = 'unchecked';
       source.sourceHealthLabel = '来源清单已检查';
       source.sourceHealthReasonLabel = '等待运行时死种/死链探针';
@@ -762,6 +772,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       selectedBytes: 0,
       selectedFileCount: 0,
       selectedFileIndices: [],
+      selectedFileMappings: [],
       sourceHealth: 'unchecked',
       sourceHealthLabel: '尚未检查',
       sourceHealthReasonLabel:
@@ -828,6 +839,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       ),
       selectedFileCount: parsed.manifest.length,
       selectedFileIndices: parsed.manifest.map((item) => item.index),
+      selectedFileMappings: [],
       sourceHealth: 'unchecked',
       sourceHealthLabel: '尚未检查',
       sourceHealthReasonLabel: '种子清单已安全解析，等待运行时探针',
@@ -863,6 +875,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task,
       input.seasonNumbers,
     );
+    source.selectedFileMappings = [];
     source.releaseGroup = input.releaseGroup?.trim() || source.releaseGroup;
     if (governanceProfile) task.governanceProfile = governanceProfile;
     this.bumpRevision(task);
@@ -895,11 +908,102 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       if (!entry) throwVbenError('来源文件索引不存在', HttpStatus.BAD_REQUEST);
       return entry;
     });
+    if (input.fileMappings.length !== selectedFileIndices.length) {
+      throwVbenError(
+        '每个所选文件都必须绑定一个治理身份',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const mappingIndices = input.fileMappings.map((mapping) => mapping.index);
+    if (
+      new Set(mappingIndices).size !== mappingIndices.length ||
+      mappingIndices.some((index) => !selectedFileIndices.includes(index)) ||
+      selectedFileIndices.some((index) => !mappingIndices.includes(index))
+    ) {
+      throwVbenError('文件映射必须与所选索引一一对应', HttpStatus.BAD_REQUEST);
+    }
+    const unitById = new Map(task.units.map((unit) => [unit.id, unit]));
+    const selectedFileMappings = input.fileMappings
+      .map((mapping) => {
+        const entry = manifestByIndex.get(mapping.index)!;
+        const unit = unitById.get(mapping.unitId);
+        if (!unit) {
+          throwVbenError('文件映射引用了未知治理单元', HttpStatus.BAD_REQUEST);
+        }
+        if (
+          unit.seasonNumber &&
+          !source.seasonNumbers.includes(unit.seasonNumber)
+        ) {
+          throwVbenError(
+            '文件映射季号超出来源声明范围',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        this.assertSelectedFileRole(entry.relativePath, mapping.fileRole);
+        const episodeNumber = mapping.episodeNumber ?? null;
+        const language = mapping.language ?? null;
+        if (mapping.fileRole === 'font') {
+          if (episodeNumber !== null || language !== null) {
+            throwVbenError(
+              '字体文件不能绑定集号或字幕语言',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+        } else if (task.mediaType === 'tv') {
+          if (!Number.isInteger(episodeNumber) || episodeNumber! < 0) {
+            throwVbenError(
+              'TV 视频和字幕必须绑定有效集号',
+              HttpStatus.BAD_REQUEST,
+            );
+          }
+        } else if (episodeNumber !== null) {
+          throwVbenError('电影文件不能绑定 TV 集号', HttpStatus.BAD_REQUEST);
+        }
+        if (
+          (mapping.fileRole === 'subtitle' && !language) ||
+          (mapping.fileRole !== 'subtitle' && language !== null)
+        ) {
+          throwVbenError('字幕语言只能绑定到字幕文件', HttpStatus.BAD_REQUEST);
+        }
+        return {
+          episodeNumber,
+          fileRole: mapping.fileRole,
+          index: mapping.index,
+          language,
+          unitId: mapping.unitId,
+        };
+      })
+      .sort((left, right) => left.index - right.index);
+    const videoKeys = selectedFileMappings
+      .filter((mapping) => mapping.fileRole === 'video')
+      .map(
+        (mapping) => `${mapping.unitId}:${mapping.episodeNumber ?? 'movie'}`,
+      );
+    const subtitleKeys = selectedFileMappings
+      .filter((mapping) => mapping.fileRole === 'subtitle')
+      .map(
+        (mapping) =>
+          `${mapping.unitId}:${mapping.episodeNumber ?? 'movie'}:${mapping.language}`,
+      );
+    if (
+      new Set(videoKeys).size !== videoKeys.length ||
+      new Set(subtitleKeys).size !== subtitleKeys.length
+    ) {
+      throwVbenError('视频或字幕映射存在重复治理身份', HttpStatus.BAD_REQUEST);
+    }
     if (source.sourceRole === 'supplemental_subtitle') {
       const subtitlePattern = /\.(?:ass|ssa|srt|vtt)$/iu;
-      const fontPattern = /(?:^|\/)[^/]*fonts?[^/]*\.(?:7z|otf|rar|ttf|woff2?|zip)$/iu;
-      if (!selectedEntries.some((entry) => subtitlePattern.test(entry.relativePath))) {
-        throwVbenError('补充字幕来源至少选择一个字幕文件', HttpStatus.BAD_REQUEST);
+      const fontPattern =
+        /(?:^|\/)[^/]*fonts?[^/]*\.(?:7z|otf|rar|ttf|woff2?|zip)$/iu;
+      if (
+        !selectedEntries.some((entry) =>
+          subtitlePattern.test(entry.relativePath),
+        )
+      ) {
+        throwVbenError(
+          '补充字幕来源至少选择一个字幕文件',
+          HttpStatus.BAD_REQUEST,
+        );
       }
       if (
         selectedEntries.some(
@@ -908,18 +1012,70 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
             !fontPattern.test(entry.relativePath),
         )
       ) {
-        throwVbenError('补充字幕来源只能选择字幕和必要字体', HttpStatus.BAD_REQUEST);
+        throwVbenError(
+          '补充字幕来源只能选择字幕和必要字体',
+          HttpStatus.BAD_REQUEST,
+        );
       }
+      if (
+        selectedFileMappings.some(
+          (mapping) =>
+            mapping.fileRole !== 'subtitle' && mapping.fileRole !== 'font',
+        )
+      ) {
+        throwVbenError('补充字幕来源不能映射为视频', HttpStatus.BAD_REQUEST);
+      }
+    } else if (
+      !selectedFileMappings.some((mapping) => mapping.fileRole === 'video')
+    ) {
+      throwVbenError('主媒体来源至少选择一个视频文件', HttpStatus.BAD_REQUEST);
     }
     source.selectedFileIndices = selectedFileIndices;
+    source.selectedFileMappings = selectedFileMappings;
     source.selectedFileCount = selectedEntries.length;
     source.selectedBytes = selectedEntries.reduce(
       (total, entry) => total + entry.sizeBytes,
       0,
     );
+    this.refreshExpectedEpisodeNumbers(task);
     this.bumpRevision(task);
     await this.commitTask(task, 'source-updated');
     return source;
+  }
+
+  private assertSelectedFileRole(
+    relativePath: string,
+    fileRole: MediaGovernanceSelectedFileRole,
+  ) {
+    const lower = relativePath.toLowerCase();
+    const valid =
+      fileRole === 'video'
+        ? /\.(?:avi|m2ts|m4v|mkv|mov|mp4|ts|webm)$/u.test(lower)
+        : fileRole === 'subtitle'
+          ? /\.(?:ass|ssa|srt|sup|vtt)$/u.test(lower)
+          : /\.(?:otf|ttf|woff2?)$/u.test(lower) ||
+            /(?:^|\/)[^/]*fonts?[^/]*\.(?:7z|rar|zip)$/u.test(lower);
+    if (!valid) {
+      throwVbenError('文件扩展名与治理角色不匹配', HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  private refreshExpectedEpisodeNumbers(task: MediaGovernanceTask) {
+    if (task.mediaType !== 'tv') return;
+    const primaryMappings = task.sources
+      .filter((source) => source.sourceRole === 'primary_media')
+      .flatMap((source) => source.selectedFileMappings)
+      .filter((mapping) => mapping.fileRole === 'video');
+    for (const unit of task.units) {
+      unit.expectedEpisodeNumbers = [
+        ...new Set(
+          primaryMappings
+            .filter((mapping) => mapping.unitId === unit.id)
+            .map((mapping) => mapping.episodeNumber)
+            .filter((episode): episode is number => episode !== null),
+        ),
+      ].sort((left, right) => left - right);
+    }
   }
 
   async bindSubtitleContract(
@@ -1096,12 +1252,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     ) {
       throwVbenError('仍有来源未完成清单检查或运行时探针', HttpStatus.CONFLICT);
     }
-    if (
-      primary.contentKind === 'subtitleless_media' &&
-      task.units.some((unit) => unit.seasonNumber && !unit.subtitleContract)
-    ) {
-      throwVbenError('无字幕媒体仍有季缺少完整字幕合同', HttpStatus.CONFLICT);
-    }
+    this.assertDownloadFileMappings(task);
     if (this.executionGateway?.enabled()) {
       await this.reserveExecution(task, 'source.download', task.sources);
       return task;
@@ -1132,6 +1283,111 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     await this.commitTask(task, 'state-updated');
     this.scheduleProgress(task, { selectedBytes, selectedFileCount });
     return task;
+  }
+
+  private assertDownloadFileMappings(task: MediaGovernanceTask) {
+    for (const source of task.sources) {
+      const mappedIndices = source.selectedFileMappings.map(
+        (mapping) => mapping.index,
+      );
+      if (
+        source.selectedFileCount === 0 ||
+        source.selectedFileMappings.length !== source.selectedFileCount ||
+        mappedIndices.some(
+          (index) => !source.selectedFileIndices.includes(index),
+        ) ||
+        source.selectedFileIndices.some(
+          (index) => !mappedIndices.includes(index),
+        )
+      ) {
+        throwVbenError('来源文件尚未完成一对一治理映射', HttpStatus.CONFLICT);
+      }
+    }
+    const primaryVideos = task.sources
+      .filter((source) => source.sourceRole === 'primary_media')
+      .flatMap((source) => source.selectedFileMappings)
+      .filter((mapping) => mapping.fileRole === 'video');
+    for (const unit of task.units) {
+      const videos = primaryVideos.filter(
+        (mapping) => mapping.unitId === unit.id,
+      );
+      if (videos.length === 0) {
+        throwVbenError(
+          `${unit.seasonNumber ?? '电影单元'} 缺少已映射视频`,
+          HttpStatus.CONFLICT,
+        );
+      }
+    }
+    if (task.governanceProfile === 'embedded') return;
+    const subtitleMappings = task.sources.flatMap((source) =>
+      source.selectedFileMappings
+        .filter(
+          (mapping) =>
+            mapping.fileRole === 'subtitle' &&
+            (mapping.language === 'zh-CN' || mapping.language === 'zh-TW'),
+        )
+        .map((mapping) => ({ mapping, source })),
+    );
+    for (const unit of task.units) {
+      const expectedEpisodes =
+        task.mediaType === 'tv' ? unit.expectedEpisodeNumbers : [null];
+      const missing = expectedEpisodes.filter(
+        (episodeNumber) =>
+          !subtitleMappings.some(
+            ({ mapping }) =>
+              mapping.unitId === unit.id &&
+              mapping.episodeNumber === episodeNumber,
+          ),
+      );
+      if (missing.length > 0) {
+        throwVbenError(
+          `${unit.seasonNumber ?? '电影单元'} 中文字幕映射不完整`,
+          HttpStatus.CONFLICT,
+        );
+      }
+      if (task.governanceProfile !== 'sidecar-linked') continue;
+      const contract = unit.subtitleContract;
+      if (
+        !contract ||
+        contract.expectedEpisodeNumbers.length !== expectedEpisodes.length ||
+        contract.expectedEpisodeNumbers.some(
+          (episode, index) => episode !== expectedEpisodes[index],
+        )
+      ) {
+        throwVbenError(
+          `${unit.seasonNumber ?? '电影单元'} 缺少完整字幕合同`,
+          HttpStatus.CONFLICT,
+        );
+      }
+      const contractSource = task.sources.find(
+        (source) => source.id === contract.sourceId,
+      );
+      if (
+        !contractSource ||
+        contractSource.releaseGroup !== contract.releaseGroup
+      ) {
+        throwVbenError('字幕合同来源或发布组不匹配', HttpStatus.CONFLICT);
+      }
+      for (const mapping of contract.mappings) {
+        const selectedMapping = contractSource.selectedFileMappings.find(
+          (candidate) =>
+            candidate.fileRole === 'subtitle' &&
+            candidate.unitId === unit.id &&
+            candidate.episodeNumber === mapping.episodeNumber,
+        );
+        const manifestEntry = selectedMapping
+          ? contractSource.manifest.find(
+              (entry) => entry.index === selectedMapping.index,
+            )
+          : null;
+        if (
+          !manifestEntry ||
+          manifestEntry.relativePath !== mapping.relativePath
+        ) {
+          throwVbenError('字幕合同与密封文件映射不一致', HttpStatus.CONFLICT);
+        }
+      }
+    }
   }
 
   async pauseDownload(

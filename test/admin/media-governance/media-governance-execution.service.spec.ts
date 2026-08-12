@@ -354,6 +354,25 @@ describe('MediaGovernanceService production execution adapter', () => {
       sourceRole: 'primary_media',
     });
     const sourceRoot = `/vol2/1000/.kt-media-governance-staging/${task.id}/sources/${source.id}`;
+    source.manifest = [
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'The.Matrix.1999.mkv',
+        sizeBytes: 1_024,
+      },
+    ];
+    source.selectedFileCount = 1;
+    source.selectedFileIndices = [0];
+    source.selectedFileMappings = [
+      {
+        episodeNumber: null,
+        fileRole: 'video',
+        index: 0,
+        language: null,
+        unitId: task.units[0].id,
+      },
+    ];
     task.stage = 'download';
     task.runState = 'succeeded';
     task.payloadSeal = {

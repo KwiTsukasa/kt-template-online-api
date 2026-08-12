@@ -16,18 +16,29 @@ const VIDEO_EXTENSIONS = new Set([
   '.webm',
 ]);
 const SUBTITLE_EXTENSIONS = new Set(['.ass', '.ssa', '.srt', '.sup', '.vtt']);
-const ASSET_EXTENSIONS = new Set(['.jpeg', '.jpg', '.nfo', '.png', '.webp']);
 const LOCAL_MEDIA_ROOT = '/vol2/1000/Media';
 const LOCAL_TARGET_ROOT = `${LOCAL_MEDIA_ROOT}/movie`;
 
 type FileKind = 'asset' | 'subtitle' | 'video';
 
-function fileKind(value: string): FileKind {
+function assertMappedFileKind(
+  value: string,
+  fileRole: 'font' | 'subtitle' | 'video',
+): FileKind {
   const extension = path.posix.extname(value).toLowerCase();
-  if (VIDEO_EXTENSIONS.has(extension)) return 'video';
-  if (SUBTITLE_EXTENSIONS.has(extension)) return 'subtitle';
-  if (ASSET_EXTENSIONS.has(extension)) return 'asset';
-  throw new Error(`unsupported-governance-file:${extension || 'none'}`);
+  if (fileRole === 'video' && VIDEO_EXTENSIONS.has(extension)) return 'video';
+  if (fileRole === 'subtitle' && SUBTITLE_EXTENSIONS.has(extension)) {
+    return 'subtitle';
+  }
+  if (
+    fileRole === 'font' &&
+    ['.7z', '.otf', '.rar', '.ttf', '.woff', '.woff2', '.zip'].includes(
+      extension,
+    )
+  ) {
+    return 'asset';
+  }
+  throw new Error(`governance-file-role-mismatch:${extension || 'none'}`);
 }
 
 function safeTitle(value: string) {
@@ -41,30 +52,6 @@ function safeTitle(value: string) {
     throw new Error('governance-title-invalid');
   }
   return normalized;
-}
-
-function episodeIdentity(value: string) {
-  const matches = [
-    ...value.matchAll(/(?:^|[^A-Za-z0-9])S(\d{2})E(\d{1,3})(?!\d)/giu),
-  ];
-  if (matches.length !== 1)
-    throw new Error('governance-episode-identity-ambiguous');
-  return {
-    episode: Number(matches[0]![2]),
-    season: Number(matches[0]![1]),
-  };
-}
-
-function subtitleLanguage(value: string) {
-  const lower = value.toLowerCase();
-  if (/(?:^|[._ -])(?:cht|tc|zh[-_.]?tw)(?:[._ -]|$)/u.test(lower))
-    return 'zh-TW';
-  if (/(?:^|[._ -])(?:chs|sc|zh[-_.]?(?:cn|hans))(?=[._ -]|$)/u.test(lower)) {
-    return 'zh-CN';
-  }
-  if (/(?:^|[._ -])(?:jpn?|ja)(?:[._ -]|$)/u.test(lower)) return 'ja';
-  if (/(?:^|[._ -])(?:eng?|en)(?:[._ -]|$)/u.test(lower)) return 'en';
-  return 'zh-CN';
 }
 
 function titleRoot(task: MediaGovernanceTask) {
@@ -182,11 +169,58 @@ export function buildAdminMediaGovernancePlan(
   const root = titleRoot(task);
   const title = safeTitle(task.titleHint);
   const identities = payload.files.map((file) => {
-    const kind = fileKind(file.path);
-    if (task.mediaType !== 'tv') return { episode: 1, kind, season: 0 };
-    if (kind === 'asset') return { episode: 0, kind, season: 0 };
-    return { ...episodeIdentity(file.relativePath), kind };
+    const source = task.sources.find(
+      (candidate) => candidate.id === file.sourceId,
+    );
+    const mapping = source?.selectedFileMappings.find(
+      (candidate) => candidate.index === file.index,
+    );
+    const manifestEntry = source?.manifest.find(
+      (candidate) => candidate.index === file.index,
+    );
+    const unit = mapping
+      ? task.units.find((candidate) => candidate.id === mapping.unitId)
+      : null;
+    if (
+      !source ||
+      !mapping ||
+      !manifestEntry ||
+      manifestEntry.relativePath !== file.relativePath ||
+      !unit
+    ) {
+      throw new Error('governance-selected-file-mapping-missing');
+    }
+    const kind = assertMappedFileKind(file.path, mapping.fileRole);
+    if (task.mediaType !== 'tv') {
+      return {
+        episode: 1,
+        fileRole: mapping.fileRole,
+        kind,
+        language: mapping.language,
+        season: 0,
+      };
+    }
+    if (
+      unit.seasonNumber === null ||
+      (mapping.episodeNumber === null && kind !== 'asset')
+    ) {
+      throw new Error('governance-selected-file-episode-missing');
+    }
+    return {
+      episode: mapping.episodeNumber ?? 0,
+      fileRole: mapping.fileRole,
+      kind,
+      language: mapping.language,
+      season: Number(unit.seasonNumber.slice(1)),
+    };
   });
+  const selectedMappingCount = task.sources.reduce(
+    (total, source) => total + source.selectedFileMappings.length,
+    0,
+  );
+  if (selectedMappingCount !== payload.files.length) {
+    throw new Error('governance-selected-file-coverage-incomplete');
+  }
   validateCoverage(task, identities);
 
   const forward = payload.files.map((file, index) => {
@@ -197,11 +231,13 @@ export function buildAdminMediaGovernancePlan(
       task.mediaType === 'tv'
         ? `${root}/Season ${String(identity.season).padStart(2, '0')}`
         : root;
-    const language =
-      identity.kind === 'subtitle' ? subtitleLanguage(file.relativePath) : null;
+    const language = identity.kind === 'subtitle' ? identity.language : null;
     const base =
       task.mediaType === 'tv' ? `${title} - ${seasonEpisode}` : title;
-    const targetPath = `${directory}/${base}${language ? `.${language}` : ''}${extension}`;
+    const targetPath =
+      identity.fileRole === 'font'
+        ? `${directory}/extras/Fonts/${path.posix.basename(file.relativePath)}`
+        : `${directory}/${base}${language ? `.${language}` : ''}${extension}`;
     const evidenceId = `admin-${identity.kind}-${String(index + 1).padStart(4, '0')}`;
     return {
       evidenceId,

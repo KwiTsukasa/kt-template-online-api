@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS `media_governance_source` (
   `manifest_state` varchar(32) NOT NULL,
   `selected_bytes` bigint NOT NULL,
   `selected_file_count` int NOT NULL,
+  `selected_file_indices` longtext DEFAULT NULL,
+  `selected_file_mappings` longtext DEFAULT NULL,
   `release_group` varchar(160) DEFAULT NULL,
   `season_numbers` longtext NOT NULL,
   `source_health` varchar(32) NOT NULL,

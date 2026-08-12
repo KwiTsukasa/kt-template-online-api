@@ -233,7 +233,18 @@ describe('MediaGovernanceController', () => {
       .put(
         `/media-governance/tasks/${created.body.data.id}/sources/${source.body.data.id}/selection`,
       )
-      .send({ expectedRevision: 2, selectedFileIndices: [0] })
+      .send({
+        expectedRevision: 2,
+        fileMappings: [
+          {
+            episodeNumber: 1,
+            fileRole: 'video',
+            index: 0,
+            unitId: created.body.data.units[0].id,
+          },
+        ],
+        selectedFileIndices: [0],
+      })
       .expect(200)
       .expect(({ body }) => {
         expect(body.data).toMatchObject({
@@ -272,26 +283,41 @@ describe('MediaGovernanceController', () => {
       .send({ expectedRevision: 2 })
       .expect(201);
     await request(apiUrl)
+      .put(`/media-governance/tasks/${taskId}/sources/${sourceId}/selection`)
+      .send({
+        expectedRevision: 3,
+        fileMappings: [
+          {
+            episodeNumber: 1,
+            fileRole: 'video',
+            index: 0,
+            unitId: created.body.data.units[0].id,
+          },
+        ],
+        selectedFileIndices: [0],
+      })
+      .expect(200);
+    await request(apiUrl)
       .post(
         `/media-governance/tasks/${taskId}/sources/${sourceId}/probe-runtime`,
       )
-      .send({ expectedRevision: 3 })
+      .send({ expectedRevision: 4 })
       .expect(201);
     await request(apiUrl)
       .post(`/media-governance/tasks/${taskId}/downloads/start`)
-      .send({ expectedRevision: 4 })
+      .send({ expectedRevision: 5 })
       .expect(201);
     await new Promise((resolve) => setTimeout(resolve, 650));
 
     await request(apiUrl)
       .post(`/media-governance/tasks/${taskId}/governance/start`)
-      .send({ expectedRevision: 5 })
+      .send({ expectedRevision: 6 })
       .expect(201);
     await new Promise((resolve) => setTimeout(resolve, 650));
 
     const agent = await request(apiUrl)
       .post(`/media-governance/tasks/${taskId}/agent/start`)
-      .send({ expectedRevision: 6 })
+      .send({ expectedRevision: 7 })
       .expect(201);
     expect(agent.body.data.policyBoundaryLabel).toContain('五层边界');
     await new Promise((resolve) => setTimeout(resolve, 650));
@@ -299,14 +325,14 @@ describe('MediaGovernanceController', () => {
     const closed = await request(apiUrl)
       .post(`/media-governance/tasks/${taskId}/agent/operator-decision`)
       .send({
-        expectedRevision: 7,
+        expectedRevision: 8,
         reason: '已核对作品身份、季号与 provider 候选',
         selectedCandidateId: 'candidate-confirmed',
       })
       .expect(201);
     expect(closed.body.data).toMatchObject({
       metadataStatus: 'verified',
-      revision: 8,
+      revision: 9,
       runState: 'succeeded',
       stage: 'closed',
     });

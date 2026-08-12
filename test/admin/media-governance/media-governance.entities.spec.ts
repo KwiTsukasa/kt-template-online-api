@@ -93,4 +93,14 @@ describe('media governance entity schema', () => {
       unique: true,
     });
   });
+
+  it('persists the explicit selected-file mapping projection on each source', () => {
+    expect(
+      getMetadataArgsStorage().columns.find(
+        (column) =>
+          column.target === MediaGovernanceSourceEntity &&
+          column.propertyName === 'selectedFileMappings',
+      )?.options,
+    ).toMatchObject({ name: 'selected_file_mappings', nullable: true });
+  });
 });

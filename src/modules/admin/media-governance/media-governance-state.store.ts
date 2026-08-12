@@ -664,6 +664,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
             selectedBytes: String(source.selectedBytes),
             selectedFileCount: source.selectedFileCount,
             selectedFileIndices: source.selectedFileIndices,
+            selectedFileMappings: source.selectedFileMappings,
             sourceHealth: source.sourceHealth,
             sourceHealthLabel: source.sourceHealthLabel,
             sourceHealthReason: source.sourceHealthReasonLabel,
@@ -805,6 +806,9 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         (source.manifestProjection as MediaGovernanceSource['manifest']).map(
           (entry) => entry.index,
         ),
+      selectedFileMappings:
+        (source.selectedFileMappings as MediaGovernanceSource['selectedFileMappings']) ??
+        [],
       sourceHealth:
         source.sourceHealth as MediaGovernanceSource['sourceHealth'],
       sourceHealthLabel: source.sourceHealthLabel,

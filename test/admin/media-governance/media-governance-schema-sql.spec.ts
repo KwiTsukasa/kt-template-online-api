@@ -14,6 +14,10 @@ describe('media governance production schema SQL', () => {
     resolve(process.cwd(), 'sql/media-governance-executor-v1.sql'),
     'utf8',
   );
+  const sourceMappingMigrationSql = readFileSync(
+    resolve(process.cwd(), 'sql/media-governance-source-mapping-v1.sql'),
+    'utf8',
+  );
 
   it('creates exactly the ten designed domain tables without menu writes', () => {
     expect(initSql.match(/CREATE TABLE IF NOT EXISTS/gu)).toHaveLength(10);
@@ -33,6 +37,8 @@ describe('media governance production schema SQL', () => {
     );
     expect(initSql).toContain('`progress_projection` longtext NOT NULL');
     expect(initSql).toContain('`sealed_input` longtext NOT NULL');
+    expect(initSql).toContain('`selected_file_indices` longtext DEFAULT NULL');
+    expect(initSql).toContain('`selected_file_mappings` longtext DEFAULT NULL');
   });
 
   it('provides bounded post-migration verification without modifying rows', () => {
@@ -62,5 +68,19 @@ describe('media governance production schema SQL', () => {
     );
     expect(verifySql).toContain("column_name = 'manifest_sha256'");
     expect(verifySql).toContain("is_nullable = 'YES'");
+  });
+
+  it('adds and verifies the explicit selected-file mapping projection idempotently', () => {
+    expect(sourceMappingMigrationSql).toContain(
+      "column_name = 'selected_file_mappings'",
+    );
+    expect(sourceMappingMigrationSql).toContain(
+      'ADD COLUMN `selected_file_mappings` longtext NULL',
+    );
+    expect(sourceMappingMigrationSql).not.toMatch(
+      /DROP\s+(?:TABLE|DATABASE)/iu,
+    );
+    expect(verifySql).toContain('COUNT(*) AS source_mapping_columns');
+    expect(verifySql).toContain("column_name = 'selected_file_mappings'");
   });
 });

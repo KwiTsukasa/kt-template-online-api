@@ -229,8 +229,13 @@ Task/thread，而不是只依赖进程内投影。gateway 在创建 App Server t
 先确认内部回调为 `persistenceMode=database` 且 `status=ready`。API 会先持久化带精确
 policy/capsule SHA 的启动预留，才调用 gateway；首个 thread 映射回调可在启动响应返回
 前原子绑定，响应超时则按同一 Task/revision 从 gateway 恢复。浏览器不会接触 Codex
-登录态或原始协议。每个 Task 只允许一个主媒体下载 owner；逐季字幕来源必须
-与目标季和发布组一致，全部来源完成清单检查与运行时探针后才允许进入下载。种子描述文件会安全解析，磁链和种子原文只写入
+登录态或原始协议。每个 Task 只允许一个主媒体下载 owner；来源选择把每个显式文件
+索引一一绑定到 Unit、文件角色、季集和字幕语言，并持久化为
+`selected_file_mappings`。下载门在完整载荷开始前核对每个 Unit 的主视频覆盖、非内嵌
+profile 的中文字幕覆盖、同季单一字幕发布组以及补充来源只含字幕/字体；Schema
+`1.2.0` 计划只消费该映射，字体压缩包生成本地 `asset`，不再从发布组文件名猜季集。
+逐季字幕来源必须与目标季和发布组一致，全部来源完成清单检查与运行时探针后才允许
+进入下载。种子描述文件会安全解析，磁链和种子原文只写入
 `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET` 指定的私有 MinIO Bucket；通用 `/minio/*`
 服务会拒绝访问该 Bucket。领域合同覆盖 Task/Unit/Run、五种来源分类、逐季单一
 字幕发布组、`S00`、运行时来源健康、A/B/C 元数据、三层事件保留、

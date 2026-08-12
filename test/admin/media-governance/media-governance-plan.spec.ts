@@ -13,6 +13,54 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
     providerRef: { provider: 'tmdb', providerId: '105476' },
     releaseYear: 2021,
     revision: 8,
+    sources: [
+      {
+        id: 'media-source-plan-fixture',
+        manifest: [
+          {
+            executable: false,
+            index: 0,
+            relativePath: '[Fixture] Special [01].mkv',
+            sizeBytes: 1_024,
+          },
+          {
+            executable: false,
+            index: 1,
+            relativePath: '[Fixture] Special [01].chs.ass',
+            sizeBytes: 512,
+          },
+          {
+            executable: false,
+            index: 2,
+            relativePath: '[Fixture][Fonts].7z',
+            sizeBytes: 256,
+          },
+        ],
+        selectedFileMappings: [
+          {
+            episodeNumber: 1,
+            fileRole: 'video',
+            index: 0,
+            language: null,
+            unitId: 'media-unit-plan-s00',
+          },
+          {
+            episodeNumber: 1,
+            fileRole: 'subtitle',
+            index: 1,
+            language: 'zh-CN',
+            unitId: 'media-unit-plan-s00',
+          },
+          {
+            episodeNumber: null,
+            fileRole: 'font',
+            index: 2,
+            language: null,
+            unitId: 'media-unit-plan-s00',
+          },
+        ],
+      },
+    ],
     titleHint: '异世界迷宫黑心企业',
     units: [
       {
@@ -38,7 +86,7 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
         index: 0,
         mtimeMs: 1_786_000_000_000,
         path: `${root}/Show.S00E01.mkv`,
-        relativePath: 'Show.S00E01.mkv',
+        relativePath: '[Fixture] Special [01].mkv',
         sha256: 'a'.repeat(64),
         sizeBytes: 1_024,
         sourceId: 'media-source-plan-fixture',
@@ -47,9 +95,18 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
         index: 1,
         mtimeMs: 1_786_000_000_000,
         path: `${root}/Show.S00E01.chs.ass`,
-        relativePath: 'Show.S00E01.chs.ass',
+        relativePath: '[Fixture] Special [01].chs.ass',
         sha256: 'b'.repeat(64),
         sizeBytes: 512,
+        sourceId: 'media-source-plan-fixture',
+      },
+      {
+        index: 2,
+        mtimeMs: 1_786_000_000_000,
+        path: `${root}/[Fixture][Fonts].7z`,
+        relativePath: '[Fixture][Fonts].7z',
+        sha256: 'c'.repeat(64),
+        sizeBytes: 256,
         sourceId: 'media-source-plan-fixture',
       },
     ],
@@ -77,6 +134,7 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
     ).toEqual([
       '/vol2/1000/Media/movie/TV/异世界迷宫黑心企业 (2021) [tmdbid-105476]/Season 00/异世界迷宫黑心企业 - S00E01.mkv',
       '/vol2/1000/Media/movie/TV/异世界迷宫黑心企业 (2021) [tmdbid-105476]/Season 00/异世界迷宫黑心企业 - S00E01.zh-CN.ass',
+      '/vol2/1000/Media/movie/TV/异世界迷宫黑心企业 (2021) [tmdbid-105476]/Season 00/extras/Fonts/[Fixture][Fonts].7z',
     ]);
     expect(plan.execution.manifestSha256.localForward).toBe(
       sha256Json(plan.manifests.local.forward),
@@ -91,6 +149,28 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
       id: 'media-task-movie-plan-fixture',
       mediaType: 'movie',
       providerRef: { provider: 'tmdb', providerId: '645440' },
+      sources: [
+        {
+          id: 'media-source-movie-fixture',
+          manifest: [
+            {
+              executable: false,
+              index: 0,
+              relativePath: 'Movie.mkv',
+              sizeBytes: 2_048,
+            },
+          ],
+          selectedFileMappings: [
+            {
+              episodeNumber: null,
+              fileRole: 'video',
+              index: 0,
+              language: null,
+              unitId: 'media-unit-plan-movie',
+            },
+          ],
+        },
+      ],
       titleHint: '少女☆歌剧 Revue Starlight 剧场版',
       units: [
         {
@@ -133,7 +213,7 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
         ...payload,
         files: payload.files.filter((file) => !file.path.endsWith('.mkv')),
       }),
-    ).toThrow('governance-video-coverage-incomplete:S00');
+    ).toThrow('governance-selected-file-coverage-incomplete');
     expect(() =>
       buildAdminMediaGovernancePlan(task, {
         ...payload,

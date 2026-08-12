@@ -176,6 +176,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       manifestState: 'inspected',
       selectedBytes: 1_024,
       selectedFileCount: 1,
+      selectedFileIndices: [0],
     });
     expect(task).toMatchObject({
       activeRunId: null,

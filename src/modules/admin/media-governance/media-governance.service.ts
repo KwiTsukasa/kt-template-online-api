@@ -512,6 +512,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         0,
       );
       source.selectedFileCount = manifest.length;
+      source.selectedFileIndices = manifest.map((entry) => entry.index);
       source.sourceHealth = 'unchecked';
       source.sourceHealthLabel = '来源清单已检查';
       source.sourceHealthReasonLabel = '等待运行时死种/死链探针';

@@ -415,7 +415,7 @@ describe('MediaGovernanceService production execution adapter', () => {
   });
 
   it('restarts an orphaned download as one recovery run and accepts its reused payload', async () => {
-    const { dispatch, service } = fixture();
+    const { dispatch, gateway, service } = fixture();
     await service.onModuleInit();
     const task = await service.create({
       mediaType: 'movie',
@@ -483,6 +483,16 @@ describe('MediaGovernanceService production execution adapter', () => {
       summary: '恢复运行开始',
     });
     expect(task.gateReason).toBeNull();
+    await service.pauseDownload(task.id, { expectedRevision: 3 });
+    await service.resumeDownload(task.id, { expectedRevision: 3 });
+    expect(gateway.control).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ command: 'pause', runId: envelope.runId }),
+    );
+    expect(gateway.control).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ command: 'resume', runId: envelope.runId }),
+    );
     await service.applyExecutorEvent({
       ...base,
       evidenceSha256: 'b'.repeat(64),

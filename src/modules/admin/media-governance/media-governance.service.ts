@@ -1445,7 +1445,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     const envelope = await this.stateStore.readRunEnvelope(task.activeRunId);
     if (
       !envelope ||
-      envelope.action !== 'source.download' ||
+      !['source.download', 'source.resume'].includes(envelope.action) ||
       envelope.taskId !== task.id ||
       envelope.runId !== task.activeRunId
     ) {

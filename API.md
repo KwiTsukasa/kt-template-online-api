@@ -220,11 +220,13 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `POST` | `/media-governance/tasks/:taskId/sources/magnet`                   | 脱敏添加磁链来源                       |
 | `POST` | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件         |
 | `PUT`  | `/media-governance/tasks/:taskId/sources/:sourceId/classification` | 修订来源角色和内容分类                 |
+| `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/remove`         | 精确清理并移除已取消的待更换来源       |
 | `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`        | 生成或检查规范来源清单                 |
 | `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime`  | 执行有界运行时来源探针                 |
 | `PUT`  | `/media-governance/tasks/:taskId/units/:unitId/subtitle-contract`  | 密封逐季单一发布组字幕合同             |
 | `POST` | `/media-governance/tasks/:taskId/downloads/start`                  | 启动或接管失联的 NAS 隔离目录下载      |
 | `POST` | `/media-governance/tasks/:taskId/downloads/pause`                  | 暂停同一下载 Run                       |
+| `POST` | `/media-governance/tasks/:taskId/downloads/cancel`                 | 取消下载并保留载荷直到精确来源清理     |
 | `POST` | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传同一下载 Run                       |
 | `POST` | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理       |
 | `POST` | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验              |
@@ -252,6 +254,9 @@ NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 A
 `releaseYear` 是带格式校验和中文引导的可选身份消歧字段。`workItemId` 是内部账本与
 本地事务身份：导入存量任务时可显式绑定；未来新任务省略时，API 会在首次本地治理前
 通过数据库互斥锁从 `media-063` 起分配且永久复用，不要求操作员填写。
+下载取消只终止当前密封 Run，不在失败路径直接删除载荷；Run 返回可验证终态后，来源
+移除命令才会停用精确描述版本、执行 `source.cleanup` 并删除对应来源投影。被字幕合同
+引用的来源、已生成载荷密封/治理计划或已分配本地账本身份的任务均拒绝移除来源。
 
 同一 Task 只能存在一个 `primary_media` 下载 owner。无字幕媒体按季绑定完整字幕
 来源，不同季可使用不同发布组，同一季只接受与该季范围、所选来源发布组一致的

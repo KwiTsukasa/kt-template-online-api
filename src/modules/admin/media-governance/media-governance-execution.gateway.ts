@@ -19,7 +19,7 @@ export type MediaGovernanceExecutionDispatch = {
 };
 
 export type MediaGovernanceExecutionControl = {
-  command: 'pause' | 'resume';
+  command: 'cancel' | 'pause' | 'resume';
   controlId: string;
   replayed: boolean;
   runId: string;
@@ -40,7 +40,7 @@ export type MediaGovernanceExecutionStatus = {
 
 export interface MediaGovernanceExecutionGateway {
   control(input: {
-    command: 'pause' | 'resume';
+    command: 'cancel' | 'pause' | 'resume';
     controlId: string;
     runId: string;
     sealedInputSha256: string;
@@ -100,7 +100,7 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
   }
 
   async control(input: {
-    command: 'pause' | 'resume';
+    command: 'cancel' | 'pause' | 'resume';
     controlId: string;
     runId: string;
     sealedInputSha256: string;

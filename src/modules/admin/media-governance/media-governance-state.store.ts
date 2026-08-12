@@ -431,6 +431,16 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         throw new Error('media-governance-executor-event-identity-mismatch');
       }
       await this.saveTaskWithManager(manager, task);
+      if (
+        event.action === 'source.cleanup' &&
+        event.eventType === 'run-succeeded' &&
+        event.sourceId
+      ) {
+        await manager.getRepository(MediaGovernanceSourceEntity).delete({
+          id: event.sourceId,
+          taskId: task.id,
+        });
+      }
       run.status =
         event.eventType === 'run-succeeded'
           ? 'succeeded'

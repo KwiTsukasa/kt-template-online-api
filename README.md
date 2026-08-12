@@ -214,7 +214,8 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 该公开入口不返回数据库、Loki、NapCat SSH 等运行拓扑配置快照；配置检查只暴露 key 级别、是否存在和缺失说明。`blocked` 表示关键配置缺失；`degraded` 表示可选运行时配置缺失，核心 API 仍可继续工作。本地未配置 Loki、NapCat 等可选依赖时，健康状态可能保持 `degraded`。
 
 Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，提供作品身份、来源、
-逐季字幕合同、运行时探针、下载/治理进度、CodexAgent 人工放行、聚合和可续接 SSE。
+逐季字幕合同、运行时探针、下载/治理进度、低效下载取消与精确换源、CodexAgent
+人工放行、聚合和可续接 SSE。
 元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据，先执行最多两次的确定性
 LocalNFO/海报有界修复，再将仍未闭合的真实歧义交给 CodexAgent；最终闭环模式只由
 独立验收判定。

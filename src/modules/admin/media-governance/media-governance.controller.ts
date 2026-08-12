@@ -160,6 +160,19 @@ export class MediaGovernanceController {
     );
   }
 
+  @Post(':taskId/sources/:sourceId/remove')
+  @MediaGovernancePermission('Media:Governance:SourceUpload')
+  @ApiOperation({ summary: '精确清理并移除待更换来源' })
+  async removeSource(
+    @Param('taskId') taskId: string,
+    @Param('sourceId') sourceId: string,
+    @Body() body: MediaGovernanceRevisionCommandDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.service.removeSource(taskId, sourceId, body));
+  }
+
   @Post(':taskId/sources/:sourceId/inspect')
   @MediaGovernancePermission('Media:Governance:SourceUpload')
   @ApiOperation({ summary: '检查规范来源清单' })
@@ -227,6 +240,18 @@ export class MediaGovernanceController {
   ) {
     this.noStore(response);
     return vbenSuccess(await this.service.pauseDownload(taskId, body));
+  }
+
+  @Post(':taskId/downloads/cancel')
+  @MediaGovernancePermission('Media:Governance:Download')
+  @ApiOperation({ summary: '取消当前下载并保留待精确清理载荷' })
+  async cancelDownload(
+    @Param('taskId') taskId: string,
+    @Body() body: MediaGovernanceRevisionCommandDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.service.cancelDownload(taskId, body));
   }
 
   @Post(':taskId/downloads/resume')

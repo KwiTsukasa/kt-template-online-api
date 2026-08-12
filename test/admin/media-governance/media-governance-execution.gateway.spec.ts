@@ -128,4 +128,48 @@ describe('MediaGovernanceExecutionGatewayClient', () => {
       expect.objectContaining({ method: 'POST' }),
     );
   });
+
+  it('sends an exact cancellation control for the active sealed run', async () => {
+    const controlId = 'media-control-fixture-cancel-0001';
+    const request = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          command: 'cancel',
+          controlId,
+          replayed: false,
+          runId: envelope.runId,
+          status: 'accepted',
+        }),
+    } as Response);
+    const gateway = new MediaGovernanceExecutionGatewayClient(
+      new ConfigService({
+        MEDIA_GOVERNANCE_EXECUTOR_BASE_URL: 'http://172.21.0.1:48088',
+        MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET: 's'.repeat(64),
+      }),
+    );
+
+    await expect(
+      gateway.control({
+        command: 'cancel',
+        controlId,
+        runId: envelope.runId,
+        sealedInputSha256: envelope.sealedInputSha256,
+        taskId: envelope.taskId,
+      }),
+    ).resolves.toMatchObject({ command: 'cancel', replayed: false });
+    expect(request).toHaveBeenCalledWith(
+      'http://172.21.0.1:48088/v1/control',
+      expect.objectContaining({
+        body: JSON.stringify({
+          command: 'cancel',
+          controlId,
+          runId: envelope.runId,
+          sealedInputSha256: envelope.sealedInputSha256,
+          taskId: envelope.taskId,
+        }),
+        method: 'POST',
+      }),
+    );
+  });
 });

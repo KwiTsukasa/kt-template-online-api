@@ -607,8 +607,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     } else if (input.eventType === 'run-failed') {
       task.activeRunId = null;
       task.runState = 'blocked';
-      task.gateReason = input.summary.slice(0, 160);
-      task.nextCommandLabel = '查看失败原因后重试';
+      const cancelledDownload =
+        ['source.download', 'source.resume'].includes(input.action) &&
+        input.summary.includes('download_cancelled');
+      task.gateReason = cancelledDownload
+        ? '下载已取消，现有载荷等待精确清理'
+        : input.summary.slice(0, 160);
+      task.nextCommandLabel = cancelledDownload
+        ? '移除低效来源并上传替换来源'
+        : '查看失败原因后重试';
     } else if (input.eventType === 'run-succeeded') {
       if (!input.evidenceSha256) {
         throwVbenError('执行器终态缺少密封证据', HttpStatus.BAD_REQUEST);
@@ -658,6 +665,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         task.runState = 'succeeded';
         task.gateReason = null;
         task.nextCommandLabel = '开始本地治理';
+      } else if (input.action === 'source.cleanup') {
+        if (!source || !source.descriptorTombstonedAt) {
+          throwVbenError('来源清理终态身份不完整', HttpStatus.CONFLICT);
+        }
+        this.finalizeSourceRemoval(task, source);
       } else if (input.action === 'governance.execute') {
         task.stage = 'metadata';
         task.runState = 'succeeded';
@@ -1254,6 +1266,80 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return source;
   }
 
+  async removeSource(
+    taskId: string,
+    sourceId: string,
+    input: MediaGovernanceRevisionCommandDto,
+  ): Promise<MediaGovernanceTask> {
+    const task = this.detail(taskId);
+    this.assertRevision(task, input.expectedRevision);
+    const source = this.findSource(task, sourceId);
+    if (
+      task.activeRunId ||
+      !['intake', 'download'].includes(task.stage) ||
+      task.payloadSeal ||
+      task.sealedPlan ||
+      task.workItemId
+    ) {
+      throwVbenError('当前阶段不能移除来源', HttpStatus.CONFLICT);
+    }
+    if (
+      task.units.some((unit) => unit.subtitleContract?.sourceId === source.id)
+    ) {
+      throwVbenError('来源仍被整季字幕合同引用', HttpStatus.CONFLICT);
+    }
+    if (this.executionGateway?.enabled()) {
+      const previous = {
+        descriptorTombstonedAt: source.descriptorTombstonedAt,
+        sourceHealth: source.sourceHealth,
+        sourceHealthLabel: source.sourceHealthLabel,
+        sourceHealthReasonLabel: source.sourceHealthReasonLabel,
+      };
+      source.descriptorTombstonedAt = new Date().toISOString();
+      source.sourceHealth = 'unavailable';
+      source.sourceHealthLabel = '正在精确清理';
+      source.sourceHealthReasonLabel = '描述文件已停用，正在清理来源独占运行态';
+      try {
+        await this.reserveExecution(task, 'source.cleanup', [source]);
+      } catch (error) {
+        Object.assign(source, previous);
+        throw error;
+      }
+      return task;
+    }
+    source.descriptorTombstonedAt = new Date().toISOString();
+    this.finalizeSourceRemoval(task, source);
+    this.bumpRevision(task);
+    await this.commitTask(task, 'source-updated');
+    return task;
+  }
+
+  private finalizeSourceRemoval(
+    task: MediaGovernanceTask,
+    source: MediaGovernanceSource,
+  ) {
+    task.sources.splice(task.sources.indexOf(source), 1);
+    if (source.sourceRole === 'primary_media') task.governanceProfile = null;
+    task.gateReason = null;
+    task.progress = {
+      completedBytes: 0,
+      completedItems: 0,
+      etaLabel: '尚未开始',
+      heartbeatLabel: '尚未开始',
+      percent: 0,
+      progressLabel: '等待替换来源',
+      speedLabel: '0 B/s',
+      totalBytes: 0,
+      totalItems: 0,
+    };
+    task.runState = 'draft';
+    task.stage = 'intake';
+    task.nextCommandLabel =
+      source.sourceRole === 'primary_media'
+        ? '添加新的主媒体来源'
+        : '添加新的补充字幕来源';
+  }
+
   private assertSelectedFileRole(
     relativePath: string,
     fileRole: MediaGovernanceSelectedFileRole,
@@ -1527,12 +1613,17 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     const primary = task.sources.find(
       (source) => source.sourceRole === 'primary_media',
     );
-    if (!primary || primary.sourceHealth !== 'viable') {
+    if (
+      !primary ||
+      primary.descriptorTombstonedAt !== null ||
+      primary.sourceHealth !== 'viable'
+    ) {
       throwVbenError('主媒体来源尚未通过运行时探针', HttpStatus.CONFLICT);
     }
     if (
       task.sources.some(
         (source) =>
+          source.descriptorTombstonedAt !== null ||
           source.manifestState !== 'inspected' ||
           source.sourceHealth !== 'viable',
       )
@@ -1688,6 +1779,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return this.controlDownload(taskId, input.expectedRevision, 'pause');
   }
 
+  async cancelDownload(
+    taskId: string,
+    input: MediaGovernanceRevisionCommandDto,
+  ): Promise<MediaGovernanceTask> {
+    return this.controlDownload(taskId, input.expectedRevision, 'cancel');
+  }
+
   async resumeDownload(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -1698,7 +1796,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   private async controlDownload(
     taskId: string,
     expectedRevision: number,
-    command: 'pause' | 'resume',
+    command: 'cancel' | 'pause' | 'resume',
   ) {
     const task = this.detail(taskId);
     this.assertRevision(task, expectedRevision);
@@ -1706,12 +1804,17 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.stage !== 'download' ||
       !task.activeRunId ||
       (command === 'pause' && task.runState !== 'running') ||
-      (command === 'resume' && task.runState !== 'blocked')
+      (command === 'resume' && task.runState !== 'blocked') ||
+      (command === 'cancel' &&
+        task.runState !== 'running' &&
+        task.runState !== 'blocked')
     ) {
-      throwVbenError(
-        command === 'pause' ? '当前没有可暂停的下载' : '当前没有可续传的下载',
-        HttpStatus.CONFLICT,
-      );
+      const message = {
+        cancel: '当前没有可取消的下载',
+        pause: '当前没有可暂停的下载',
+        resume: '当前没有可续传的下载',
+      }[command];
+      throwVbenError(message, HttpStatus.CONFLICT);
     }
     if (
       !this.executionGateway?.enabled() ||
@@ -1738,10 +1841,18 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       sealedInputSha256: envelope.sealedInputSha256,
       taskId: task.id,
     });
-    task.runState = command === 'pause' ? 'blocked' : 'running';
-    task.gateReason = command === 'pause' ? '下载暂停请求已送达' : null;
-    task.nextCommandLabel =
-      command === 'pause' ? '等待执行器确认安全暂停' : '正在从同一 Run 续传';
+    task.runState = command === 'resume' ? 'running' : 'blocked';
+    task.gateReason =
+      command === 'pause'
+        ? '下载暂停请求已送达'
+        : command === 'cancel'
+          ? '下载取消请求已送达'
+          : null;
+    task.nextCommandLabel = {
+      cancel: '等待执行器停止并保留待清理载荷',
+      pause: '等待执行器确认安全暂停',
+      resume: '正在从同一 Run 续传',
+    }[command];
     this.refreshSemanticProjection(task);
     await this.persistTask(task);
     this.eventStream?.publishTaskChanged({

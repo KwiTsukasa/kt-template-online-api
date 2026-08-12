@@ -274,6 +274,67 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       }),
     ).rejects.toThrow('duplicate');
 
+    source.descriptorTombstonedAt = '2026-08-11T12:20:00.000Z';
+    const cleanupEnvelope = buildMediaGovernanceExecutionEnvelope({
+      action: 'source.cleanup',
+      expiresAt: '2099-08-11T12:30:00.000Z',
+      inputSnapshotSha256: task.inputSnapshotSha256,
+      replayKey: `${task.id}:source.cleanup:r${task.revision}`,
+      runId: `media-run-${'c'.repeat(40)}`,
+      sources: [
+        {
+          descriptorGrantId: `media-grant-${'c'.repeat(32)}`,
+          descriptorRevision: source.descriptorRevision,
+          descriptorSha256: source.descriptorSha256,
+          infoHash: source.infoHash,
+          manifestSha256: source.manifestSha256,
+          selectedBytes: source.selectedBytes,
+          selectedFileCount: source.selectedFileCount,
+          selectedFileIndices: source.selectedFileIndices,
+          sourceId: source.id,
+          transportKind: source.transportKind,
+        },
+      ],
+      taskId: task.id,
+      taskRevision: task.revision,
+      unitIds: task.units.map((unit) => unit.id),
+    });
+    task.activeRunId = cleanupEnvelope.runId;
+    await store.reserveRunDispatch(task, cleanupEnvelope);
+    expect(sources.rows.has(source.id)).toBe(true);
+    expect(
+      descriptors.rows.get(
+        `${source.id}-descriptor-r${source.descriptorRevision}`,
+      )?.tombstonedAt,
+    ).toEqual(new Date(source.descriptorTombstonedAt));
+
+    task.sources.splice(task.sources.indexOf(source), 1);
+    task.activeRunId = null;
+    task.revision += 1;
+    task.runState = 'draft';
+    task.stage = 'intake';
+    await expect(
+      store.applyExecutorEvent(task, {
+        action: 'source.cleanup',
+        eventType: 'run-succeeded',
+        evidenceSha256: 'e'.repeat(64),
+        observedAt: '2026-08-11T12:21:00.000Z',
+        runId: cleanupEnvelope.runId,
+        sequence: 1,
+        sourceId: source.id,
+        summary: '来源运行时已精确清理',
+        taskId: task.id,
+        taskRevision: cleanupEnvelope.taskRevision,
+      }),
+    ).resolves.toBe(true);
+    expect(sources.rows.has(source.id)).toBe(false);
+    expect(sources.rows.has(subtitleSource.id)).toBe(true);
+    expect(
+      descriptors.rows.get(
+        `${source.id}-descriptor-r${source.descriptorRevision}`,
+      ),
+    ).toMatchObject({ active: false });
+
     task.sealedPlan = {
       schemaVersion: '1.2.0',
       sealed: true,

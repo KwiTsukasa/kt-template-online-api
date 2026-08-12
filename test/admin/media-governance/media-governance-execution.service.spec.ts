@@ -526,6 +526,118 @@ describe('MediaGovernanceService production execution adapter', () => {
     });
   });
 
+  it('cancels one slow download and removes its exact source after sealed cleanup', async () => {
+    const { dispatch, gateway, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '低速来源换源测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      sourceRole: 'primary_media',
+    });
+    source.manifest = [
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'Movie.mkv',
+        sizeBytes: 8,
+      },
+    ];
+    source.manifestSha256 = 'a'.repeat(64);
+    source.manifestState = 'inspected';
+    source.selectedBytes = 8;
+    source.selectedFileCount = 1;
+    source.selectedFileIndices = [0];
+    source.selectedFileMappings = [
+      {
+        episodeNumber: null,
+        fileRole: 'video',
+        index: 0,
+        language: null,
+        unitId: task.units[0]!.id,
+      },
+    ];
+    source.sourceHealth = 'viable';
+
+    await service.startDownload(task.id, { expectedRevision: 2 });
+    const download = dispatch.mock.calls[0]![0];
+    const observedAt = new Date().toISOString();
+    await service.applyExecutorEvent({
+      action: 'source.download',
+      eventType: 'run-started',
+      observedAt,
+      runId: download.runId,
+      sequence: 1,
+      summary: '下载开始',
+      taskId: task.id,
+      taskRevision: 3,
+    });
+    await service.cancelDownload(task.id, { expectedRevision: 3 });
+    expect(gateway.control).toHaveBeenCalledWith(
+      expect.objectContaining({ command: 'cancel', runId: download.runId }),
+    );
+    await service.applyExecutorEvent({
+      action: 'source.download',
+      eventType: 'run-failed',
+      observedAt,
+      runId: download.runId,
+      sequence: 2,
+      summary: 'NAS 执行失败：download_cancelled',
+      taskId: task.id,
+      taskRevision: 3,
+    });
+    expect(task).toMatchObject({
+      activeRunId: null,
+      gateReason: '下载已取消，现有载荷等待精确清理',
+      revision: 4,
+      runState: 'blocked',
+    });
+
+    await service.removeSource(task.id, source.id, { expectedRevision: 4 });
+    expect(source.descriptorTombstonedAt).not.toBeNull();
+    const cleanup = dispatch.mock.calls[1]![0];
+    expect(cleanup).toMatchObject({
+      action: 'source.cleanup',
+      sources: [expect.objectContaining({ sourceId: source.id })],
+      taskRevision: 5,
+    });
+    await service.applyExecutorEvent({
+      action: 'source.cleanup',
+      eventType: 'run-started',
+      observedAt,
+      runId: cleanup.runId,
+      sequence: 1,
+      summary: '清理开始',
+      taskId: task.id,
+      taskRevision: 5,
+    });
+    await service.applyExecutorEvent({
+      action: 'source.cleanup',
+      evidenceSha256: 'c'.repeat(64),
+      eventType: 'run-succeeded',
+      observedAt,
+      runId: cleanup.runId,
+      sequence: 2,
+      sourceId: source.id,
+      summary: '来源运行时已精确清理',
+      taskId: task.id,
+      taskRevision: 5,
+    });
+    expect(task).toMatchObject({
+      activeRunId: null,
+      governanceProfile: null,
+      nextCommandLabel: '添加新的主媒体来源',
+      revision: 6,
+      runState: 'draft',
+      sources: [],
+      stage: 'intake',
+    });
+  });
+
   it('seals one Schema 1.2.0 plan and retries a failed execution with a fresh replay key', async () => {
     const { dispatch, service, stateStore } = fixture();
     await service.onModuleInit();

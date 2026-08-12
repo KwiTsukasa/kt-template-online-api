@@ -27,6 +27,7 @@ import {
   MediaGovernanceOperatorDecisionDto,
   MediaGovernanceRevisionCommandDto,
   MediaGovernanceSourceClassificationDto,
+  MediaGovernanceSourceSelectionDto,
   MediaGovernanceSubtitleContractDto,
   MediaGovernanceTaskCreateDto,
   MediaGovernanceTaskPageQueryDto,
@@ -141,6 +142,21 @@ export class MediaGovernanceController {
     this.noStore(response);
     return vbenSuccess(
       await this.service.updateSourceClassification(taskId, sourceId, body),
+    );
+  }
+
+  @Put(':taskId/sources/:sourceId/selection')
+  @MediaGovernancePermission('Media:Governance:SourceUpload')
+  @ApiOperation({ summary: '密封来源文件选择' })
+  async updateSourceSelection(
+    @Param('taskId') taskId: string,
+    @Param('sourceId') sourceId: string,
+    @Body() body: MediaGovernanceSourceSelectionDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.service.updateSourceSelection(taskId, sourceId, body),
     );
   }
 

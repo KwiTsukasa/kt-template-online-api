@@ -663,6 +663,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
             seasonNumbers: source.seasonNumbers,
             selectedBytes: String(source.selectedBytes),
             selectedFileCount: source.selectedFileCount,
+            selectedFileIndices: source.selectedFileIndices,
             sourceHealth: source.sourceHealth,
             sourceHealthLabel: source.sourceHealthLabel,
             sourceHealthReason: source.sourceHealthReasonLabel,
@@ -799,6 +800,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       seasonNumbers: source.seasonNumbers,
       selectedBytes: Number(source.selectedBytes),
       selectedFileCount: source.selectedFileCount,
+      selectedFileIndices:
+        source.selectedFileIndices ??
+        (source.manifestProjection as MediaGovernanceSource['manifest']).map(
+          (entry) => entry.index,
+        ),
       sourceHealth:
         source.sourceHealth as MediaGovernanceSource['sourceHealth'],
       sourceHealthLabel: source.sourceHealthLabel,

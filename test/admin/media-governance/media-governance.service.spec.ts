@@ -219,6 +219,51 @@ describe('MediaGovernanceService', () => {
     });
   });
 
+  it('seals only subtitle and necessary font indices for a supplemental source', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '补充字幕选择测试',
+    });
+    await service.addMagnetSource(task.id, {
+      contentKind: 'subtitleless_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    const supplemental = await service.addMagnetSource(task.id, {
+      contentKind: 'sidecar_subtitle_package',
+      expectedRevision: 2,
+      magnetUri: 'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
+      seasonNumbers: ['S01'],
+      sourceRole: 'supplemental_subtitle',
+    });
+    supplemental.manifest = [
+      { executable: false, index: 0, relativePath: 'S01E01.zh-Hans.ass', sizeBytes: 10 },
+      { executable: false, index: 1, relativePath: 'S01E01.mkv', sizeBytes: 100 },
+      { executable: false, index: 2, relativePath: 'Fonts/season-fonts.7z', sizeBytes: 20 },
+    ];
+
+    await expect(
+      service.updateSourceSelection(task.id, supplemental.id, {
+        expectedRevision: 3,
+        selectedFileIndices: [0, 1],
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+
+    await expect(
+      service.updateSourceSelection(task.id, supplemental.id, {
+        expectedRevision: 3,
+        selectedFileIndices: [0, 2],
+      }),
+    ).resolves.toMatchObject({
+      selectedBytes: 30,
+      selectedFileCount: 2,
+      selectedFileIndices: [0, 2],
+    });
+  });
+
   it('allows different subtitle release groups between seasons while keeping each season consistent', async () => {
     const task = await service.create({
       mediaType: 'tv',

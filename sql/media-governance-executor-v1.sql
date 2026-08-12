@@ -57,6 +57,20 @@ SET @ddl = IF(
   EXISTS(
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = DATABASE()
+      AND table_name = 'media_governance_source'
+      AND column_name = 'selected_file_indices'
+  ),
+  'SELECT 1',
+  'ALTER TABLE `media_governance_source` ADD COLUMN `selected_file_indices` longtext NULL AFTER `selected_file_count`'
+);
+PREPARE statement FROM @ddl;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;
+
+SET @ddl = IF(
+  EXISTS(
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = DATABASE()
       AND table_name = 'media_governance_descriptor_revision'
       AND column_name = 'manifest_sha256'
       AND is_nullable = 'NO'

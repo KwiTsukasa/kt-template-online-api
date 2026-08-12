@@ -187,6 +187,9 @@ export class MediaGovernanceSourceEntity {
   @Column({ name: 'selected_file_count', type: 'int' })
   selectedFileCount: number;
 
+  @Column({ name: 'selected_file_indices', nullable: true, type: 'simple-json' })
+  selectedFileIndices: null | number[];
+
   @Column({
     length: 160,
     name: 'release_group',

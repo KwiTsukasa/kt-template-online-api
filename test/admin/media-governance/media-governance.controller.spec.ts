@@ -228,6 +228,20 @@ describe('MediaGovernanceController', () => {
       seasonNumbers: ['S01'],
       transportKind: 'torrent',
     });
+
+    await request(apiUrl)
+      .put(
+        `/media-governance/tasks/${created.body.data.id}/sources/${source.body.data.id}/selection`,
+      )
+      .send({ expectedRevision: 2, selectedFileIndices: [0] })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.data).toMatchObject({
+          selectedBytes: 4,
+          selectedFileCount: 1,
+          selectedFileIndices: [0],
+        });
+      });
   });
 
   it('runs the bounded HTTP Demo through download, governance and Agent closure', async () => {

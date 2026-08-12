@@ -28,6 +28,7 @@ import type {
   MediaGovernanceProvider,
   MediaGovernanceRevisionCommandDto,
   MediaGovernanceSourceClassificationDto,
+  MediaGovernanceSourceSelectionDto,
   MediaGovernanceSourceRole,
   MediaGovernanceContentKind,
   MediaGovernanceSubtitleContractDto,
@@ -105,6 +106,7 @@ export type MediaGovernanceSource = {
   seasonNumbers: string[];
   selectedBytes: number;
   selectedFileCount: number;
+  selectedFileIndices: number[];
   sourceHealth:
     | 'degraded'
     | 'inconclusive'
@@ -758,6 +760,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       seasonNumbers,
       selectedBytes: 0,
       selectedFileCount: 0,
+      selectedFileIndices: [],
       sourceHealth: 'unchecked',
       sourceHealthLabel: '尚未检查',
       sourceHealthReasonLabel:
@@ -823,6 +826,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         0,
       ),
       selectedFileCount: parsed.manifest.length,
+      selectedFileIndices: parsed.manifest.map((item) => item.index),
       sourceHealth: 'unchecked',
       sourceHealthLabel: '尚未检查',
       sourceHealthReasonLabel: '种子清单已安全解析，等待运行时探针',
@@ -860,6 +864,58 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
     source.releaseGroup = input.releaseGroup?.trim() || source.releaseGroup;
     if (governanceProfile) task.governanceProfile = governanceProfile;
+    this.bumpRevision(task);
+    await this.commitTask(task, 'source-updated');
+    return source;
+  }
+
+  async updateSourceSelection(
+    taskId: string,
+    sourceId: string,
+    input: MediaGovernanceSourceSelectionDto,
+  ): Promise<MediaGovernanceSource> {
+    const task = this.detail(taskId);
+    this.assertRevision(task, input.expectedRevision);
+    if (task.activeRunId) {
+      throwVbenError('来源运行期间不能修改文件选择', HttpStatus.CONFLICT);
+    }
+    const source = this.findSource(task, sourceId);
+    const selectedFileIndices = [...new Set(input.selectedFileIndices)].sort(
+      (left, right) => left - right,
+    );
+    if (selectedFileIndices.length !== input.selectedFileIndices.length) {
+      throwVbenError('来源文件索引不能重复', HttpStatus.BAD_REQUEST);
+    }
+    const manifestByIndex = new Map(
+      source.manifest.map((entry) => [entry.index, entry]),
+    );
+    const selectedEntries = selectedFileIndices.map((index) => {
+      const entry = manifestByIndex.get(index);
+      if (!entry) throwVbenError('来源文件索引不存在', HttpStatus.BAD_REQUEST);
+      return entry;
+    });
+    if (source.sourceRole === 'supplemental_subtitle') {
+      const subtitlePattern = /\.(?:ass|ssa|srt|vtt)$/iu;
+      const fontPattern = /(?:^|\/)(?:fonts?|font)[^/]*\/?.*\.(?:7z|otf|rar|ttf|woff2?|zip)$/iu;
+      if (!selectedEntries.some((entry) => subtitlePattern.test(entry.relativePath))) {
+        throwVbenError('补充字幕来源至少选择一个字幕文件', HttpStatus.BAD_REQUEST);
+      }
+      if (
+        selectedEntries.some(
+          (entry) =>
+            !subtitlePattern.test(entry.relativePath) &&
+            !fontPattern.test(entry.relativePath),
+        )
+      ) {
+        throwVbenError('补充字幕来源只能选择字幕和必要字体', HttpStatus.BAD_REQUEST);
+      }
+    }
+    source.selectedFileIndices = selectedFileIndices;
+    source.selectedFileCount = selectedEntries.length;
+    source.selectedBytes = selectedEntries.reduce(
+      (total, entry) => total + entry.sizeBytes,
+      0,
+    );
     this.bumpRevision(task);
     await this.commitTask(task, 'source-updated');
     return source;
@@ -980,6 +1036,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         0,
       );
       source.selectedFileCount = source.manifest.length;
+      source.selectedFileIndices = source.manifest.map((entry) => entry.index);
     }
     task.nextCommandLabel = '运行死种/死链探针';
     this.bumpRevision(task);
@@ -2070,7 +2127,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
               manifestSha256: source.manifestSha256,
               selectedBytes: source.selectedBytes,
               selectedFileCount: source.selectedFileCount,
-              selectedFileIndices: source.manifest.map((entry) => entry.index),
+              selectedFileIndices: source.selectedFileIndices,
               sourceId: source.id,
               transportKind: source.transportKind,
             })),

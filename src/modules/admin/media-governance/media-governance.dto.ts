@@ -544,6 +544,16 @@ export class MediaGovernanceSourceClassificationDto extends MediaGovernanceRevis
   releaseGroup?: string;
 }
 
+export class MediaGovernanceSourceSelectionDto extends MediaGovernanceRevisionCommandDto {
+  @ApiProperty({ maxItems: 20000, minItems: 1, type: [Number] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(20000)
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  selectedFileIndices: number[];
+}
+
 export class MediaGovernanceMagnetSourceCreateDto extends MediaGovernanceSourceClassificationDto {
   @ApiProperty({ maxLength: 4096 })
   @IsString()

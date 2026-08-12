@@ -40,3 +40,10 @@ WHERE table_schema = DATABASE()
   AND table_name = 'media_governance_descriptor_revision'
   AND column_name = 'manifest_sha256'
   AND is_nullable = 'YES';
+
+SELECT
+  COUNT(*) AS source_selection_columns
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'media_governance_source'
+  AND column_name = 'selected_file_indices';

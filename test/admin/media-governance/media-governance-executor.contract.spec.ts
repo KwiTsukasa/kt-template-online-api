@@ -66,6 +66,20 @@ describe('MediaGovernanceExecutionEnvelope', () => {
     );
   });
 
+  it('preserves the explicit source selection instead of expanding the manifest', () => {
+    const envelope = buildMediaGovernanceExecutionEnvelope({
+      ...base,
+      sources: [
+        {
+          ...base.sources[0],
+          selectedFileIndices: [7],
+        },
+      ],
+    });
+
+    expect(envelope.sources?.[0]?.selectedFileIndices).toEqual([7]);
+  });
+
   it('requires a task-bound descriptor grant for every source action', () => {
     expect(() =>
       buildMediaGovernanceExecutionEnvelope({

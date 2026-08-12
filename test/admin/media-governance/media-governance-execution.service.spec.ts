@@ -701,6 +701,11 @@ describe('MediaGovernanceService production execution adapter', () => {
       eventType: 'run-succeeded',
       metadata: {
         canAccept: true,
+        identity: {
+          provider: 'tmdb',
+          providerId: '202821',
+          releaseYear: 2023,
+        },
         repairAttempts: 0,
         schemaVersion: 'media-admin-metadata-verification-v1',
         units: [
@@ -779,6 +784,271 @@ describe('MediaGovernanceService production execution adapter', () => {
       runState: 'succeeded',
       stage: 'closed',
     });
+  });
+
+  it('persists exact metadata facts and reserves one bounded repair attempt before Agent', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '有界元数据修复测试',
+    });
+    task.governanceProfile = 'sidecar-bundled';
+    task.metadataStatus = 'requires-agent';
+    task.runState = 'blocked';
+    task.stage = 'metadata';
+    task.sealedPlan = { schemaVersion: '1.2.0' };
+    task.sealedPlanSha256 = 'a'.repeat(64);
+    task.units[0]!.expectedEpisodeNumbers = [1];
+    task.units[0]!.metadataProjection.missingB = [
+      'metadata.local-nfo',
+      'artwork.poster',
+    ];
+
+    await expect(
+      service.startAgent(task.id, { expectedRevision: 1 }),
+    ).rejects.toMatchObject({
+      response: { msg: '当前缺口应先执行确定性有界元数据修复' },
+      status: 409,
+    });
+
+    await service.startMetadataRepair(task.id, { expectedRevision: 1 });
+    const envelope = dispatch.mock.calls.at(-1)?.[0];
+    expect(envelope).toMatchObject({
+      action: 'metadata.repair',
+      metadataRepairAttempt: 1,
+      taskRevision: 2,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.repair',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: envelope.runId,
+      sequence: 1,
+      summary: '有界元数据修复开始',
+      taskId: task.id,
+      taskRevision: 2,
+    });
+    await expect(
+      service.applyExecutorEvent({
+        action: 'metadata.repair',
+        evidenceSha256: 'b'.repeat(64),
+        eventType: 'run-succeeded',
+        metadata: {
+          canAccept: true,
+          identity: {
+            provider: 'tmdb',
+            providerId: '202821',
+            releaseYear: 2023,
+          },
+          repairAttempts: 1,
+          schemaVersion: 'media-admin-metadata-verification-v1',
+          units: [
+            {
+              accepted: true,
+              missingA: [],
+              missingB: [],
+              missingC: [],
+              unitId: task.units[0]!.id,
+            },
+          ],
+          writeBoundaries: {
+            cloud: 1,
+            databaseDirect: 0,
+            mechanicalScan: 0,
+            ui: 0,
+          },
+        },
+        observedAt: new Date().toISOString(),
+        runId: envelope.runId,
+        sequence: 2,
+        summary: '越界元数据修复',
+        taskId: task.id,
+        taskRevision: 2,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    await service.applyExecutorEvent({
+      action: 'metadata.repair',
+      evidenceSha256: 'b'.repeat(64),
+      eventType: 'run-succeeded',
+      metadata: {
+        canAccept: true,
+        identity: {
+          provider: 'tmdb',
+          providerId: '202821',
+          releaseYear: 2023,
+        },
+        repairAttempts: 1,
+        schemaVersion: 'media-admin-metadata-verification-v1',
+        units: [
+          {
+            accepted: true,
+            missingA: [],
+            missingB: [],
+            missingC: [],
+            unitId: task.units[0]!.id,
+          },
+        ],
+        writeBoundaries: {
+          cloud: 0,
+          databaseDirect: 0,
+          mechanicalScan: 0,
+          ui: 0,
+        },
+      },
+      observedAt: new Date().toISOString(),
+      runId: envelope.runId,
+      sequence: 2,
+      summary: '有界元数据修复完成',
+      taskId: task.id,
+      taskRevision: 2,
+    });
+
+    expect(task).toMatchObject({
+      activeRunId: null,
+      closedMode: null,
+      metadataIdentity: {
+        provider: 'tmdb',
+        providerId: '202821',
+        releaseYear: 2023,
+      },
+      metadataStatus: 'pending',
+      nextCommandLabel: '重新运行 A/B/C 分档元数据核验',
+      revision: 3,
+      runState: 'succeeded',
+    });
+    expect(task.units[0]).toMatchObject({
+      evidenceSha256: 'b'.repeat(64),
+      metadataProjection: {
+        missingA: [],
+        missingB: [],
+        missingC: [],
+        repairAttempts: 1,
+        validBFallbacks: [],
+      },
+    });
+
+    await service.startMetadataVerification(task.id, { expectedRevision: 3 });
+    const verificationEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: verificationEnvelope.runId,
+      sequence: 1,
+      summary: '元数据复核开始',
+      taskId: task.id,
+      taskRevision: 4,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      evidenceSha256: 'c'.repeat(64),
+      eventType: 'run-succeeded',
+      metadata: {
+        canAccept: true,
+        identity: {
+          provider: 'tmdb',
+          providerId: '202821',
+          releaseYear: 2023,
+        },
+        repairAttempts: 0,
+        schemaVersion: 'media-admin-metadata-verification-v1',
+        units: [
+          {
+            accepted: true,
+            missingA: [],
+            missingB: [],
+            missingC: [],
+            unitId: task.units[0]!.id,
+          },
+        ],
+        writeBoundaries: {
+          cloud: 0,
+          databaseDirect: 0,
+          mechanicalScan: 0,
+          ui: 0,
+        },
+      },
+      observedAt: new Date().toISOString(),
+      runId: verificationEnvelope.runId,
+      sequence: 2,
+      summary: '元数据复核通过',
+      taskId: task.id,
+      taskRevision: 4,
+    });
+    await service.startAcceptanceVerification(task.id, { expectedRevision: 5 });
+    const acceptanceEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    await service.applyExecutorEvent({
+      action: 'acceptance.verify',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: acceptanceEnvelope.runId,
+      sequence: 1,
+      summary: '独立验收开始',
+      taskId: task.id,
+      taskRevision: 6,
+    });
+    await service.applyExecutorEvent({
+      acceptance: {
+        acceptedFiles: 2,
+        acceptedUnits: 1,
+        activeDownloadOwners: 0,
+        canClose: true,
+        cloudWrites: 0,
+        databaseDirectWrites: 0,
+        mechanicalScans: 0,
+        schemaVersion: 'media-admin-local-acceptance-v1',
+        stagingResiduals: 0,
+        uiWrites: 0,
+      },
+      action: 'acceptance.verify',
+      evidenceSha256: 'd'.repeat(64),
+      eventType: 'run-succeeded',
+      observedAt: new Date().toISOString(),
+      runId: acceptanceEnvelope.runId,
+      sequence: 2,
+      summary: '独立验收通过',
+      taskId: task.id,
+      taskRevision: 6,
+    });
+    expect(task).toMatchObject({
+      closedMode: 'bounded_repair',
+      metadataStatus: 'verified',
+      revision: 7,
+      stage: 'closed',
+    });
+  });
+
+  it('recollects legacy empty metadata facts before repair or Agent routing', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '旧元数据投影迁移测试',
+    });
+    task.governanceProfile = 'sidecar-bundled';
+    task.metadataStatus = 'requires-agent';
+    task.runState = 'blocked';
+    task.sealedPlan = { schemaVersion: '1.2.0' };
+    task.sealedPlanSha256 = 'a'.repeat(64);
+    task.stage = 'metadata';
+
+    await expect(
+      service.startAgent(task.id, { expectedRevision: 1 }),
+    ).rejects.toMatchObject({
+      response: { msg: '当前任务应先重新采集元数据事实' },
+      status: 409,
+    });
+    await service.startMetadataVerification(task.id, { expectedRevision: 1 });
+
+    expect(dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'metadata.verify',
+        taskRevision: 2,
+      }),
+    );
   });
 
   it('retries a revisioned plan-sealing failure after its contract is corrected', async () => {

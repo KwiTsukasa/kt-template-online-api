@@ -59,6 +59,7 @@ export const MEDIA_GOVERNANCE_METADATA_FIELDS = {
     'cleanup.downloadOwner',
   ],
   B: [
+    'metadata.local-nfo',
     'title.original',
     'title.episode',
     'summary.series',
@@ -70,6 +71,7 @@ export const MEDIA_GOVERNANCE_METADATA_FIELDS = {
     'artwork.season',
     'artwork.s00',
     'artwork.movie',
+    'artwork.poster',
   ],
   C: [
     'credits.cast',

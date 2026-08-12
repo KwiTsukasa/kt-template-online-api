@@ -373,9 +373,30 @@ export class MediaGovernanceExecutorMetadataUnitDto {
   unitId: string;
 }
 
+export class MediaGovernanceExecutorMetadataIdentityDto {
+  @IsIn(MEDIA_GOVERNANCE_PROVIDERS)
+  provider: MediaGovernanceProvider;
+
+  @IsString()
+  @Matches(PROVIDER_ID_PATTERN)
+  providerId: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1870)
+  @Max(MAX_RELEASE_YEAR)
+  releaseYear?: null | number;
+}
+
 export class MediaGovernanceExecutorMetadataDto {
   @IsBoolean()
   canAccept: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MediaGovernanceExecutorMetadataIdentityDto)
+  identity?: MediaGovernanceExecutorMetadataIdentityDto;
 
   @IsInt()
   @Min(0)

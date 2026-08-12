@@ -643,20 +643,15 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     await taskRepository.save(
       taskRepository.create({
         activeRunId: task.activeRunId,
-        closedAt: task.stage === 'closed' ? new Date() : null,
-        closedMode:
-          task.stage === 'closed'
-            ? task.agentSession?.status === 'succeeded'
-              ? 'agent_verified'
-              : 'automatic'
-            : null,
+        closedAt: task.closedAt ? new Date(task.closedAt) : null,
+        closedMode: task.closedMode,
         declaredUnitIds: task.units.map((unit) => unit.id),
         gateReason: task.gateReason,
         governanceProfile: task.governanceProfile,
         id: task.id,
         inputSnapshotSha256: task.inputSnapshotSha256,
         mediaType: task.mediaType,
-        metadataIdentity: null,
+        metadataIdentity: task.metadataIdentity,
         metadataStatus: task.metadataStatus,
         nextCommandLabel: task.nextCommandLabel,
         progressProjection: task.progress,
@@ -676,11 +671,13 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       await unitRepository.save(
         task.units.map((unit) =>
           unitRepository.create({
-            evidenceSha256: null,
+            evidenceSha256: unit.evidenceSha256,
             expectedEpisodeNumbers: unit.expectedEpisodeNumbers.map(String),
             id: unit.id,
-            localAcceptedAt: null,
-            metadataProjection: null,
+            localAcceptedAt: unit.localAcceptedAt
+              ? new Date(unit.localAcceptedAt)
+              : null,
+            metadataProjection: unit.metadataProjection,
             seasonNumber: unit.seasonNumber,
             subtitleContract: unit.subtitleContract,
             taskId: task.id,
@@ -789,12 +786,21 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
           }
         : null,
       activeRunId: task.activeRunId,
+      closedAt: task.closedAt?.toISOString() ?? null,
+      closedMode: (task.closedMode ??
+        (task.stage === 'closed'
+          ? session?.status === 'succeeded'
+            ? 'agent_verified'
+            : 'automatic'
+          : null)) as MediaGovernanceTask['closedMode'],
       gateReason: task.gateReason,
       governanceProfile:
         task.governanceProfile as MediaGovernanceTask['governanceProfile'],
       id: task.id,
       inputSnapshotSha256: task.inputSnapshotSha256,
       mediaType: task.mediaType as MediaGovernanceTask['mediaType'],
+      metadataIdentity:
+        task.metadataIdentity as MediaGovernanceTask['metadataIdentity'],
       metadataStatus:
         task.metadataStatus as MediaGovernanceTask['metadataStatus'],
       nextCommandLabel: task.nextCommandLabel,
@@ -864,8 +870,18 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
 
   private restoreUnit(unit: MediaGovernanceUnitEntity): MediaGovernanceUnit {
     return {
+      evidenceSha256: unit.evidenceSha256,
       expectedEpisodeNumbers: unit.expectedEpisodeNumbers.map(Number),
       id: unit.id,
+      localAcceptedAt: unit.localAcceptedAt?.toISOString() ?? null,
+      metadataProjection:
+        (unit.metadataProjection as MediaGovernanceUnit['metadataProjection']) ?? {
+          missingA: [],
+          missingB: [],
+          missingC: [],
+          repairAttempts: 0,
+          validBFallbacks: [],
+        },
       seasonNumber: unit.seasonNumber,
       subtitleContract:
         unit.subtitleContract as MediaGovernanceUnit['subtitleContract'],

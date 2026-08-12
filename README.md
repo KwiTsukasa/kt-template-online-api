@@ -215,6 +215,9 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 
 Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，提供作品身份、来源、
 逐季字幕合同、运行时探针、下载/治理进度、CodexAgent 人工放行、聚合和可续接 SSE。
+元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据，先执行最多两次的确定性
+LocalNFO/海报有界修复，再将仍未闭合的真实歧义交给 CodexAgent；最终闭环模式只由
+独立验收判定。
 Task、Unit、来源和 Agent session 由 10 张 TypeORM 领域表持久化；API 启动时恢复
 同一 Task/thread 与事件序号，状态变更和语义事件在同一数据库事务提交后才发布 SSE。
 内部回调健康只有数据库状态仓完成加载时才返回 `database/ready`。源码已接入独立

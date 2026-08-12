@@ -411,4 +411,92 @@ describe('MediaGovernanceService', () => {
       status: 400,
     });
   });
+
+  it('derives one complete-season subtitle contract from a bundled primary source', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '同包字幕合同测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'bundled_sidecar_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      releaseGroup: 'Fixture-Group',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    source.manifest = [
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'S01E01.mkv',
+        sizeBytes: 100,
+      },
+      {
+        executable: false,
+        index: 1,
+        relativePath: 'S01E01.zh-CN.ass',
+        sizeBytes: 10,
+      },
+      {
+        executable: false,
+        index: 2,
+        relativePath: 'S01E02.mkv',
+        sizeBytes: 100,
+      },
+      {
+        executable: false,
+        index: 3,
+        relativePath: 'S01E02.zh-CN.ass',
+        sizeBytes: 10,
+      },
+    ];
+
+    await service.updateSourceSelection(task.id, source.id, {
+      expectedRevision: 2,
+      fileMappings: [
+        {
+          episodeNumber: 1,
+          fileRole: 'video',
+          index: 0,
+          unitId: task.units[0].id,
+        },
+        {
+          episodeNumber: 1,
+          fileRole: 'subtitle',
+          index: 1,
+          language: 'zh-CN',
+          unitId: task.units[0].id,
+        },
+        {
+          episodeNumber: 2,
+          fileRole: 'video',
+          index: 2,
+          unitId: task.units[0].id,
+        },
+        {
+          episodeNumber: 2,
+          fileRole: 'subtitle',
+          index: 3,
+          language: 'zh-CN',
+          unitId: task.units[0].id,
+        },
+      ],
+      selectedFileIndices: [0, 1, 2, 3],
+    });
+
+    expect(task.units[0]).toMatchObject({
+      expectedEpisodeNumbers: [1, 2],
+      subtitleContract: {
+        expectedEpisodeNumbers: [1, 2],
+        mappings: [
+          { episodeNumber: 1, relativePath: 'S01E01.zh-CN.ass' },
+          { episodeNumber: 2, relativePath: 'S01E02.zh-CN.ass' },
+        ],
+        releaseGroup: 'Fixture-Group',
+        sourceId: source.id,
+      },
+    });
+  });
 });

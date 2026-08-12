@@ -267,6 +267,18 @@ export class MediaGovernanceController {
     );
   }
 
+  @Post(':taskId/metadata/repair')
+  @MediaGovernancePermission('Media:Governance:Run')
+  @ApiOperation({ summary: '运行最多两次的确定性有界元数据修复' })
+  async startMetadataRepair(
+    @Param('taskId') taskId: string,
+    @Body() body: MediaGovernanceRevisionCommandDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.service.startMetadataRepair(taskId, body));
+  }
+
   @Post(':taskId/acceptance/verify')
   @MediaGovernancePermission('Media:Governance:Run')
   @ApiOperation({ summary: '运行独立本地验收与残留核验' })

@@ -53,6 +53,7 @@ export type MediaGovernanceExecutionEnvelopeInput = {
   action: MediaGovernanceExecutorAction;
   expiresAt: string;
   inputSnapshotSha256: string;
+  metadataRepairAttempt?: number;
   plan?: MediaGovernanceExecutionPlanContract;
   replayKey: string;
   runId: string;
@@ -213,11 +214,24 @@ export function buildMediaGovernanceExecutionEnvelope(
   }
   const sources = validateSources(input.action, input.sources);
   const plan = validatePlan(input.action, input.plan);
+  if (
+    (input.action === 'metadata.repair' &&
+      (!Number.isInteger(input.metadataRepairAttempt) ||
+        input.metadataRepairAttempt! < 1 ||
+        input.metadataRepairAttempt! > 2)) ||
+    (input.action !== 'metadata.repair' &&
+      input.metadataRepairAttempt !== undefined)
+  ) {
+    throw new Error('metadata-repair-attempt-invalid');
+  }
   const sealed = {
     action: input.action,
     expiresAt: input.expiresAt,
     flowId: MEDIA_GOVERNANCE_EXECUTOR_FLOW_ID,
     inputSnapshotSha256: input.inputSnapshotSha256,
+    ...(input.metadataRepairAttempt !== undefined
+      ? { metadataRepairAttempt: input.metadataRepairAttempt }
+      : {}),
     ...(plan ? { plan } : {}),
     replayKey: input.replayKey,
     runId: input.runId,

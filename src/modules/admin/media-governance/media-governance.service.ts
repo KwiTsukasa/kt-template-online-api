@@ -75,8 +75,17 @@ type MediaGovernanceProviderRef = {
 };
 
 export type MediaGovernanceUnit = {
+  evidenceSha256: null | string;
   expectedEpisodeNumbers: number[];
   id: string;
+  localAcceptedAt: null | string;
+  metadataProjection: {
+    missingA: string[];
+    missingB: string[];
+    missingC: string[];
+    repairAttempts: number;
+    validBFallbacks: string[];
+  };
   seasonNumber: null | string;
   subtitleContract: null | {
     expectedEpisodeNumbers: number[];
@@ -182,6 +191,8 @@ export type MediaGovernanceTask = {
     statusLabel: string;
     threadId: string;
   };
+  closedAt: null | string;
+  closedMode: 'agent_verified' | 'automatic' | 'bounded_repair' | null;
   gateReason: null | string;
   governanceProfile: null | 'embedded' | 'sidecar-bundled' | 'sidecar-linked';
   id: string;
@@ -196,6 +207,11 @@ export type MediaGovernanceTask = {
   };
   inputSnapshotSha256: string;
   mediaType: MediaGovernanceMediaType;
+  metadataIdentity: null | {
+    provider: MediaGovernanceProvider;
+    providerId: string;
+    releaseYear: null | number;
+  };
   metadataStatus: 'pending' | 'requires-agent' | 'verified';
   nextCommandLabel: string;
   persistenceMode: 'database' | 'process-simulator';
@@ -324,6 +340,8 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     const task: MediaGovernanceTask = {
       activeRunId: null,
       agentSession: null,
+      closedAt: null,
+      closedMode: null,
       gateReason: null,
       governanceProfile: null,
       id: `media-task-${randomUUID()}`,
@@ -332,6 +350,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         .update(JSON.stringify(normalizedInput))
         .digest('hex'),
       mediaType: input.mediaType,
+      metadataIdentity: null,
       metadataStatus: 'pending',
       nextCommandLabel: '补充并检查来源',
       persistenceMode: this.databaseReady() ? 'database' : 'process-simulator',
@@ -645,36 +664,36 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         task.gateReason = null;
         task.metadataStatus = 'pending';
         task.nextCommandLabel = '运行 A/B/C 分档元数据核验';
-      } else if (input.action === 'metadata.verify') {
-        if (
-          !input.metadata ||
-          input.metadata.units.length !== task.units.length ||
-          new Set(input.metadata.units.map((unit) => unit.unitId)).size !==
-            task.units.length ||
-          input.metadata.units.some(
-            (unit) =>
-              !task.units.some((candidate) => candidate.id === unit.unitId),
-          )
-        ) {
-          throwVbenError('元数据分档证据不完整', HttpStatus.BAD_REQUEST);
-        }
+      } else if (input.action === 'metadata.repair') {
+        this.applyMetadataEvidence(task, input);
         task.stage = 'metadata';
-        task.metadataStatus = input.metadata.canAccept
+        task.runState = 'succeeded';
+        task.gateReason = null;
+        task.metadataStatus = 'pending';
+        task.nextCommandLabel = '重新运行 A/B/C 分档元数据核验';
+      } else if (input.action === 'metadata.verify') {
+        this.applyMetadataEvidence(task, input);
+        const metadata = input.metadata!;
+        task.stage = 'metadata';
+        task.metadataStatus = metadata.canAccept
           ? 'verified'
           : 'requires-agent';
-        task.runState = input.metadata.canAccept ? 'succeeded' : 'blocked';
-        task.gateReason = input.metadata.canAccept
+        task.runState = metadata.canAccept ? 'succeeded' : 'blocked';
+        task.gateReason = metadata.canAccept
           ? null
-          : `元数据仍缺少 A 级 ${input.metadata.units.reduce(
+          : `元数据仍缺少 A 级 ${metadata.units.reduce(
               (count, unit) => count + unit.missingA.length,
               0,
-            )} 项、B 级 ${input.metadata.units.reduce(
+            )} 项、B 级 ${metadata.units.reduce(
               (count, unit) => count + unit.missingB.length,
               0,
             )} 项`;
-        task.nextCommandLabel = input.metadata.canAccept
+        const canRepair = this.canRunBoundedMetadataRepair(task);
+        task.nextCommandLabel = metadata.canAccept
           ? '运行独立本地验收'
-          : '启动 CodexAgent 有界人工治理';
+          : canRepair
+            ? `运行第 ${this.metadataRepairAttempts(task) + 1}/2 次有界元数据修复`
+            : '启动 CodexAgent 有界人工治理';
       } else if (input.action === 'acceptance.verify') {
         const acceptance = input.acceptance;
         if (
@@ -694,6 +713,17 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         task.runState = 'succeeded';
         task.gateReason = null;
         task.metadataStatus = 'verified';
+        task.closedAt = input.observedAt;
+        task.closedMode =
+          task.agentSession?.status === 'succeeded'
+            ? 'agent_verified'
+            : this.metadataRepairAttempts(task) > 0
+              ? 'bounded_repair'
+              : 'automatic';
+        for (const unit of task.units) {
+          unit.evidenceSha256 = input.evidenceSha256;
+          unit.localAcceptedAt = input.observedAt;
+        }
         task.nextCommandLabel = '查看验收证据';
       } else {
         throwVbenError('执行器终态动作不受支持', HttpStatus.BAD_REQUEST);
@@ -701,6 +731,98 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.activeRunId = null;
     }
     this.refreshSemanticProjection(task);
+  }
+
+  private applyMetadataEvidence(
+    task: MediaGovernanceTask,
+    input: MediaGovernanceExecutorEventDto,
+  ) {
+    const metadata = input.metadata;
+    if (
+      !metadata ||
+      !input.evidenceSha256 ||
+      metadata.units.length !== task.units.length ||
+      new Set(metadata.units.map((unit) => unit.unitId)).size !==
+        task.units.length ||
+      metadata.units.some(
+        (unit) =>
+          !task.units.some((candidate) => candidate.id === unit.unitId) ||
+          unit.accepted !==
+            (unit.missingA.length === 0 && unit.missingB.length === 0),
+      ) ||
+      metadata.canAccept !== metadata.units.every((unit) => unit.accepted) ||
+      Object.values(metadata.writeBoundaries).some((count) => count !== 0)
+    ) {
+      throwVbenError('元数据分档证据不完整', HttpStatus.BAD_REQUEST);
+    }
+    const identity = metadata.identity ?? task.providerRef;
+    if (identity) {
+      const observedReleaseYear = (identity as { releaseYear?: null | number })
+        .releaseYear;
+      task.metadataIdentity = {
+        provider: identity.provider,
+        providerId: identity.providerId,
+        releaseYear:
+          typeof observedReleaseYear === 'number'
+            ? observedReleaseYear
+            : task.releaseYear,
+      };
+    } else if (metadata.canAccept) {
+      throwVbenError('元数据身份硬门禁未闭合', HttpStatus.CONFLICT);
+    }
+    for (const projection of metadata.units) {
+      const unit = task.units.find(
+        (candidate) => candidate.id === projection.unitId,
+      )!;
+      unit.evidenceSha256 = input.evidenceSha256;
+      unit.metadataProjection = {
+        missingA: [...projection.missingA],
+        missingB: [...projection.missingB],
+        missingC: [...projection.missingC],
+        repairAttempts: Math.max(
+          unit.metadataProjection.repairAttempts,
+          metadata.repairAttempts,
+        ),
+        validBFallbacks: [],
+      };
+    }
+  }
+
+  private metadataRepairAttempts(task: MediaGovernanceTask) {
+    return Math.max(
+      0,
+      ...task.units.map((unit) => unit.metadataProjection.repairAttempts),
+    );
+  }
+
+  private hasLegacyEmptyMetadataProjection(task: MediaGovernanceTask) {
+    return task.units.every(
+      (unit) =>
+        unit.metadataProjection.missingA.length === 0 &&
+        unit.metadataProjection.missingB.length === 0 &&
+        unit.metadataProjection.missingC.length === 0 &&
+        unit.metadataProjection.repairAttempts === 0 &&
+        unit.evidenceSha256 === null,
+    );
+  }
+
+  private canRefreshLegacyMetadata(task: MediaGovernanceTask) {
+    return (
+      task.stage === 'metadata' &&
+      task.runState === 'blocked' &&
+      task.metadataStatus === 'requires-agent' &&
+      Boolean(task.sealedPlan) &&
+      this.hasLegacyEmptyMetadataProjection(task)
+    );
+  }
+
+  private canRunBoundedMetadataRepair(task: MediaGovernanceTask) {
+    const projections = task.units.map((unit) => unit.metadataProjection);
+    return (
+      this.metadataRepairAttempts(task) < 2 &&
+      projections.every((projection) => projection.missingA.length === 0) &&
+      projections.some((projection) => projection.missingB.length > 0)
+    );
   }
 
   detail(taskId: string): MediaGovernanceTask {
@@ -716,9 +838,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return {
       agentPending: this.tasks.filter(
         (task) =>
-          task.agentSession?.status === 'failed' ||
-          task.agentSession?.status === 'needs-operator' ||
-          task.agentSession?.status === 'running',
+          task.stage !== 'closed' &&
+          (task.agentSession?.status === 'failed' ||
+            task.agentSession?.status === 'needs-operator' ||
+            task.agentSession?.status === 'running'),
       ).length,
       closed,
       downloading: this.tasks.filter(
@@ -1046,6 +1169,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       0,
     );
     this.refreshExpectedEpisodeNumbers(task);
+    this.deriveBundledSubtitleContracts(task, true);
     this.bumpRevision(task);
     await this.commitTask(task, 'source-updated');
     return source;
@@ -1083,6 +1207,82 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
             .filter((episode): episode is number => episode !== null),
         ),
       ].sort((left, right) => left - right);
+    }
+  }
+
+  private deriveBundledSubtitleContracts(
+    task: MediaGovernanceTask,
+    strict = false,
+  ) {
+    if (task.governanceProfile !== 'sidecar-bundled') return;
+    for (const unit of task.units) {
+      if (!unit.seasonNumber) continue;
+      const sources = task.sources.filter(
+        (source) =>
+          source.sourceRole === 'primary_media' &&
+          source.contentKind === 'bundled_sidecar_media' &&
+          source.selectedFileMappings.some(
+            (mapping) =>
+              mapping.unitId === unit.id &&
+              mapping.fileRole === 'subtitle' &&
+              mapping.language === 'zh-CN',
+          ),
+      );
+      const source = sources.length === 1 ? sources[0] : null;
+      const releaseGroup = source?.releaseGroup?.trim();
+      const mappings = source
+        ? source.selectedFileMappings
+            .filter(
+              (mapping) =>
+                mapping.unitId === unit.id &&
+                mapping.fileRole === 'subtitle' &&
+                mapping.language === 'zh-CN' &&
+                mapping.episodeNumber !== null,
+            )
+            .map((mapping) => ({
+              episodeNumber: mapping.episodeNumber!,
+              relativePath:
+                source.manifest.find((entry) => entry.index === mapping.index)
+                  ?.relativePath ?? '',
+            }))
+            .sort((left, right) => left.episodeNumber - right.episodeNumber)
+        : [];
+      const complete =
+        Boolean(source && releaseGroup) &&
+        unit.expectedEpisodeNumbers.length > 0 &&
+        mappings.length === unit.expectedEpisodeNumbers.length &&
+        mappings.every(
+          (mapping, index) =>
+            mapping.relativePath.length > 0 &&
+            mapping.episodeNumber === unit.expectedEpisodeNumbers[index],
+        );
+      if (!complete) {
+        unit.subtitleContract = null;
+        if (strict) {
+          throwVbenError(
+            '同包外挂字幕必须由一个发布组完整覆盖整季简体中文字幕',
+            HttpStatus.CONFLICT,
+          );
+        }
+        continue;
+      }
+      const [validated] = validateSubtitleContracts([
+        {
+          expectedEpisodeNumbers: unit.expectedEpisodeNumbers,
+          mappings: mappings.map((mapping) => ({
+            episodeNumber: mapping.episodeNumber,
+            releaseGroup: releaseGroup!,
+          })),
+          seasonNumber: unit.seasonNumber,
+          sourceId: source!.id,
+        },
+      ]);
+      unit.subtitleContract = {
+        expectedEpisodeNumbers: validated.expectedEpisodeNumbers,
+        mappings,
+        releaseGroup: validated.releaseGroup,
+        sourceId: validated.sourceId,
+      };
     }
   }
 
@@ -1579,15 +1779,36 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
-    if (
+    const regularVerificationInvalid =
       task.stage !== 'metadata' ||
       task.runState !== 'succeeded' ||
-      task.metadataStatus !== 'pending' ||
+      task.metadataStatus !== 'pending';
+    if (
+      (regularVerificationInvalid && !this.canRefreshLegacyMetadata(task)) ||
       !task.sealedPlan
     ) {
       throwVbenError('当前任务尚未进入元数据核验门', HttpStatus.CONFLICT);
     }
     await this.reserveExecution(task, 'metadata.verify');
+    return task;
+  }
+
+  async startMetadataRepair(
+    taskId: string,
+    input: MediaGovernanceRevisionCommandDto,
+  ): Promise<MediaGovernanceTask> {
+    const task = this.detail(taskId);
+    this.assertRevision(task, input.expectedRevision);
+    if (
+      task.stage !== 'metadata' ||
+      task.runState !== 'blocked' ||
+      task.metadataStatus !== 'requires-agent' ||
+      !task.sealedPlan ||
+      !this.canRunBoundedMetadataRepair(task)
+    ) {
+      throwVbenError('当前任务不满足有界元数据修复条件', HttpStatus.CONFLICT);
+    }
+    await this.reserveExecution(task, 'metadata.repair');
     return task;
   }
 
@@ -1617,6 +1838,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     this.assertRevision(task, input.expectedRevision);
     if (task.metadataStatus !== 'requires-agent') {
       throwVbenError('当前任务不需要启动 Agent', HttpStatus.CONFLICT);
+    }
+    if (this.canRefreshLegacyMetadata(task)) {
+      throwVbenError('当前任务应先重新采集元数据事实', HttpStatus.CONFLICT);
+    }
+    if (this.canRunBoundedMetadataRepair(task)) {
+      throwVbenError(
+        '当前缺口应先执行确定性有界元数据修复',
+        HttpStatus.CONFLICT,
+      );
     }
     const previousAgentSession = task.agentSession;
     const retryFailedTurn = Boolean(
@@ -1936,6 +2166,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         return {
           identityPreview: task.identityPreview,
           mediaType: task.mediaType,
+          metadataIdentity: task.metadataIdentity,
           providerRef: task.providerRef,
           releaseYear: task.releaseYear,
           taskId: task.id,
@@ -1963,6 +2194,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         return {
           declaredProvider: task.providerRef,
           identityPreview: task.identityPreview,
+          verifiedIdentity: task.metadataIdentity,
           networkLookupPerformed: false,
         };
       case 'subtitle.contract.read':
@@ -2191,6 +2423,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         ? {
             expectedEpisodeNumbers: currentUnit.expectedEpisodeNumbers,
             id: currentUnit.id,
+            metadataProjection: currentUnit.metadataProjection,
             seasonNumber: currentUnit.seasonNumber,
             subtitleContract: currentUnit.subtitleContract
               ? {
@@ -2205,6 +2438,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         : null,
       identity: {
         mediaType: task.mediaType,
+        metadataIdentity: task.metadataIdentity,
         providerRef: task.providerRef,
         releaseYear: task.releaseYear,
         titleHint: task.titleHint,
@@ -2291,15 +2525,20 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
     return {
       activeRunId: null,
-      closedAt: null,
-      closedMode: null,
+      closedAt: task.closedAt,
+      closedMode: task.closedMode,
       declaredUnitIds: task.units.map((unit) => unit.id),
       gateReason: task.gateReason,
       governanceProfile: task.governanceProfile,
       id: task.id,
       inputSnapshotSha256: task.inputSnapshotSha256,
       mediaType: task.mediaType,
-      metadataIdentity: null,
+      metadataIdentity: task.metadataIdentity
+        ? {
+            provider: task.metadataIdentity.provider,
+            providerId: task.metadataIdentity.providerId,
+          }
+        : null,
       providerRef: task.providerRef,
       releaseYear: task.releaseYear,
       revision: task.revision,
@@ -2315,15 +2554,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     task: MediaGovernanceTask,
   ): MediaGovernanceUnitProjection[] {
     return task.units.map((unit) => ({
-      evidenceSha256: null,
+      evidenceSha256: unit.evidenceSha256,
       expectedEpisodeNumbers: unit.expectedEpisodeNumbers,
       id: unit.id,
-      localAcceptedAt: null,
+      localAcceptedAt: unit.localAcceptedAt,
       metadataProjection: {
-        missingA: [],
-        missingB: [],
-        missingC: [],
-        validBFallbacks: [],
+        missingA: [...unit.metadataProjection.missingA],
+        missingB: [...unit.metadataProjection.missingB],
+        missingC: [...unit.metadataProjection.missingC],
+        validBFallbacks: [...unit.metadataProjection.validBFallbacks],
       },
       seasonNumber: unit.seasonNumber,
       subtitleContract:
@@ -2427,6 +2666,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       action,
       expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
       inputSnapshotSha256: task.inputSnapshotSha256,
+      ...(action === 'metadata.repair'
+        ? { metadataRepairAttempt: this.metadataRepairAttempts(task) + 1 }
+        : {}),
       replayKey: `${task.id}:${action}:r${task.revision}`,
       runId,
       ...(task.sealedPlan &&
@@ -2733,6 +2975,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         stageLabel: '',
       },
     };
+    this.deriveBundledSubtitleContracts(restored);
+    if (this.canRefreshLegacyMetadata(restored)) {
+      restored.nextCommandLabel = '重新采集 A/B/C 分档元数据事实';
+    }
     this.refreshSemanticProjection(restored);
     return restored;
   }
@@ -2934,8 +3180,17 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (mediaType !== 'tv') {
       return [
         {
+          evidenceSha256: null,
           expectedEpisodeNumbers: [],
           id: `media-unit-${randomUUID()}`,
+          localAcceptedAt: null,
+          metadataProjection: {
+            missingA: [],
+            missingB: [],
+            missingC: [],
+            repairAttempts: 0,
+            validBFallbacks: [],
+          },
           seasonNumber: null,
           subtitleContract: null,
           unitKind: 'movie',
@@ -2943,8 +3198,17 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       ];
     }
     return seasonNumbers.map((seasonNumber) => ({
+      evidenceSha256: null,
       expectedEpisodeNumbers: [],
       id: `media-unit-${randomUUID()}`,
+      localAcceptedAt: null,
+      metadataProjection: {
+        missingA: [],
+        missingB: [],
+        missingC: [],
+        repairAttempts: 0,
+        validBFallbacks: [],
+      },
       seasonNumber,
       subtitleContract: null,
       unitKind: 'season',

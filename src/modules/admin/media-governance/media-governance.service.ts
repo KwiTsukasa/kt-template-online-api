@@ -896,7 +896,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     });
     if (source.sourceRole === 'supplemental_subtitle') {
       const subtitlePattern = /\.(?:ass|ssa|srt|vtt)$/iu;
-      const fontPattern = /(?:^|\/)(?:fonts?|font)[^/]*\/?.*\.(?:7z|otf|rar|ttf|woff2?|zip)$/iu;
+      const fontPattern = /(?:^|\/)[^/]*fonts?[^/]*\.(?:7z|otf|rar|ttf|woff2?|zip)$/iu;
       if (!selectedEntries.some((entry) => subtitlePattern.test(entry.relativePath))) {
         throwVbenError('补充字幕来源至少选择一个字幕文件', HttpStatus.BAD_REQUEST);
       }

@@ -242,7 +242,7 @@ describe('MediaGovernanceService', () => {
     supplemental.manifest = [
       { executable: false, index: 0, relativePath: 'S01E01.zh-Hans.ass', sizeBytes: 10 },
       { executable: false, index: 1, relativePath: 'S01E01.mkv', sizeBytes: 100 },
-      { executable: false, index: 2, relativePath: 'Fonts/season-fonts.7z', sizeBytes: 20 },
+      { executable: false, index: 2, relativePath: '[Release][Fonts].7z', sizeBytes: 20 },
     ];
 
     await expect(

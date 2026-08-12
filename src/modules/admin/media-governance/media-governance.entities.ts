@@ -73,6 +73,12 @@ export class MediaGovernanceTaskEntity {
   })
   sealedPlanSha256: null | string;
 
+  @Column({ name: 'sealed_plan', nullable: true, type: 'simple-json' })
+  sealedPlan: null | Record<string, unknown>;
+
+  @Column({ name: 'payload_seal', nullable: true, type: 'simple-json' })
+  payloadSeal: null | Record<string, unknown>;
+
   @Column({ name: 'metadata_identity', nullable: true, type: 'simple-json' })
   metadataIdentity: null | Record<string, unknown>;
 
@@ -238,8 +244,13 @@ export class MediaGovernanceDescriptorRevisionEntity {
   @Column({ name: 'bytes', type: 'bigint' })
   bytes: string;
 
-  @Column({ length: 64, name: 'manifest_sha256', type: 'varchar' })
-  manifestSha256: string;
+  @Column({
+    length: 64,
+    name: 'manifest_sha256',
+    nullable: true,
+    type: 'varchar',
+  })
+  manifestSha256: null | string;
 
   @Column({ default: true, type: 'boolean' })
   active: boolean;
@@ -524,6 +535,9 @@ export class MediaGovernanceOutboxEntity {
 
   @Column({ length: 64, name: 'sealed_input_sha256', type: 'varchar' })
   sealedInputSha256: string;
+
+  @Column({ name: 'sealed_input', type: 'simple-json' })
+  sealedInput: Record<string, unknown>;
 
   @Column({ default: 0, type: 'int' })
   attempts: number;

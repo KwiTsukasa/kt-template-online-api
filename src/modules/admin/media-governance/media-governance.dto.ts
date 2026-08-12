@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -14,6 +15,10 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import {
+  MEDIA_GOVERNANCE_EXECUTOR_ACTIONS,
+  type MediaGovernanceExecutorAction,
+} from './media-governance-executor.contract';
 import {
   MEDIA_CODEX_AGENT_TOOLS,
   type MediaCodexAgentTool,
@@ -105,6 +110,14 @@ export class MediaGovernanceTaskCreateDto {
   @ValidateNested()
   @Type(() => MediaGovernanceProviderRefDto)
   providerRef?: MediaGovernanceProviderRefDto;
+
+  @ApiPropertyOptional({
+    description: '与现行本地权威媒体账本绑定的作品编号',
+    example: 'media-063',
+  })
+  @IsOptional()
+  @Matches(/^media-\d{3}$/)
+  workItemId?: string;
 }
 
 export class MediaGovernanceTaskPageQueryDto {
@@ -155,6 +168,355 @@ export class MediaGovernanceRevisionCommandDto {
   @IsInt()
   @Min(1)
   expectedRevision: number;
+}
+
+export class MediaGovernanceDescriptorRedeemDto {
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  descriptorGrantId: string;
+
+  @Matches(/^[a-f0-9]{64}$/)
+  descriptorSha256: string;
+
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  runId: string;
+
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  sourceId: string;
+
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  taskId: string;
+}
+
+export class MediaGovernancePlanRedeemDto {
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  planGrantId: string;
+
+  @Matches(/^[a-f0-9]{64}$/)
+  planSha256: string;
+
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  runId: string;
+
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  taskId: string;
+}
+
+export const MEDIA_GOVERNANCE_EXECUTOR_EVENT_TYPES = [
+  'run-started',
+  'source-inspected',
+  'source-probed',
+  'download-progress',
+  'governance-progress',
+  'run-paused',
+  'run-resumed',
+  'run-succeeded',
+  'run-failed',
+] as const;
+
+export class MediaGovernanceExecutorManifestEntryDto {
+  @IsBoolean()
+  executable: false;
+
+  @IsInt()
+  @Min(0)
+  index: number;
+
+  @IsString()
+  @MaxLength(1_024)
+  @Matches(/^(?![/\\])(?!.*(?:^|[/\\])\.\.(?:[/\\]|$)).+$/)
+  relativePath: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sizeBytes: number;
+}
+
+export class MediaGovernanceExecutorPayloadFileDto {
+  @IsInt()
+  @Min(0)
+  index: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  mtimeMs: number;
+
+  @IsString()
+  @MaxLength(2_048)
+  @Matches(/^\/vol2\/1000\/\.kt-media-governance-staging\//)
+  path: string;
+
+  @IsString()
+  @MaxLength(1_024)
+  @Matches(/^(?![/\\])(?!.*(?:^|[/\\])\.\.(?:[/\\]|$)).+$/)
+  relativePath: string;
+
+  @Matches(/^[a-f0-9]{64}$/)
+  sha256: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sizeBytes: number;
+
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  sourceId: string;
+}
+
+export class MediaGovernanceExecutorProgressDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  completedBytes: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  completedItems: number;
+
+  @IsString()
+  @MaxLength(160)
+  etaLabel: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  speedBytesPerSecond: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  totalBytes: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  totalItems: number;
+}
+
+export class MediaGovernanceExecutorWriteBoundariesDto {
+  @IsInt()
+  @Min(0)
+  cloud: number;
+
+  @IsInt()
+  @Min(0)
+  databaseDirect: number;
+
+  @IsInt()
+  @Min(0)
+  mechanicalScan: number;
+
+  @IsInt()
+  @Min(0)
+  ui: number;
+}
+
+export class MediaGovernanceExecutorMetadataUnitDto {
+  @IsBoolean()
+  accepted: boolean;
+
+  @IsArray()
+  @ArrayMaxSize(32)
+  @IsString({ each: true })
+  @MaxLength(160, { each: true })
+  missingA: string[];
+
+  @IsArray()
+  @ArrayMaxSize(32)
+  @IsString({ each: true })
+  @MaxLength(160, { each: true })
+  missingB: string[];
+
+  @IsArray()
+  @ArrayMaxSize(32)
+  @IsString({ each: true })
+  @MaxLength(160, { each: true })
+  missingC: string[];
+
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  unitId: string;
+}
+
+export class MediaGovernanceExecutorMetadataDto {
+  @IsBoolean()
+  canAccept: boolean;
+
+  @IsInt()
+  @Min(0)
+  @Max(2)
+  repairAttempts: number;
+
+  @IsIn(['media-admin-metadata-verification-v1'])
+  schemaVersion: 'media-admin-metadata-verification-v1';
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => MediaGovernanceExecutorMetadataUnitDto)
+  units: MediaGovernanceExecutorMetadataUnitDto[];
+
+  @ValidateNested()
+  @Type(() => MediaGovernanceExecutorWriteBoundariesDto)
+  writeBoundaries: MediaGovernanceExecutorWriteBoundariesDto;
+}
+
+export class MediaGovernanceExecutorAcceptanceDto {
+  @IsInt()
+  @Min(0)
+  acceptedFiles: number;
+
+  @IsInt()
+  @Min(1)
+  acceptedUnits: number;
+
+  @IsInt()
+  @Min(0)
+  activeDownloadOwners: number;
+
+  @IsBoolean()
+  canClose: boolean;
+
+  @IsInt()
+  @Min(0)
+  cloudWrites: number;
+
+  @IsInt()
+  @Min(0)
+  databaseDirectWrites: number;
+
+  @IsInt()
+  @Min(0)
+  mechanicalScans: number;
+
+  @IsIn(['media-admin-local-acceptance-v1'])
+  schemaVersion: 'media-admin-local-acceptance-v1';
+
+  @IsInt()
+  @Min(0)
+  stagingResiduals: number;
+
+  @IsInt()
+  @Min(0)
+  uiWrites: number;
+}
+
+export class MediaGovernanceExecutorEventDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MediaGovernanceExecutorAcceptanceDto)
+  acceptance?: MediaGovernanceExecutorAcceptanceDto;
+
+  @IsIn(MEDIA_GOVERNANCE_EXECUTOR_ACTIONS)
+  action: MediaGovernanceExecutorAction;
+
+  @IsOptional()
+  @Matches(/^[a-f0-9]{64}$/)
+  evidenceSha256?: string;
+
+  @IsIn(MEDIA_GOVERNANCE_EXECUTOR_EVENT_TYPES)
+  eventType: (typeof MEDIA_GOVERNANCE_EXECUTOR_EVENT_TYPES)[number];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20_000)
+  @ValidateNested({ each: true })
+  @Type(() => MediaGovernanceExecutorManifestEntryDto)
+  manifest?: MediaGovernanceExecutorManifestEntryDto[];
+
+  @IsOptional()
+  @Matches(/^[a-f0-9]{64}$/)
+  manifestSha256?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MediaGovernanceExecutorMetadataDto)
+  metadata?: MediaGovernanceExecutorMetadataDto;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20_000)
+  @ValidateNested({ each: true })
+  @Type(() => MediaGovernanceExecutorPayloadFileDto)
+  payloadFiles?: MediaGovernanceExecutorPayloadFileDto[];
+
+  @IsString()
+  @MaxLength(64)
+  observedAt: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MediaGovernanceExecutorProgressDto)
+  progress?: MediaGovernanceExecutorProgressDto;
+
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  runId: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  sequence: number;
+
+  @IsOptional()
+  @IsIn([
+    'download_stalled',
+    'local_connectivity_degraded',
+    'magnet_metadata_unavailable',
+    'no_complete_peer',
+    'partial_availability',
+    'source_runtime_available',
+    'source_runtime_unavailable',
+    'tracker_auth_failed',
+    'tracker_unreachable',
+  ])
+  sourceHealthReason?: string;
+
+  @IsOptional()
+  @IsIn(['degraded', 'inconclusive', 'unavailable', 'viable'])
+  sourceHealth?: 'degraded' | 'inconclusive' | 'unavailable' | 'viable';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  sourceId?: string;
+
+  @IsString()
+  @MaxLength(400)
+  @Matches(/\S/)
+  summary: string;
+
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  taskId: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  taskRevision: number;
 }
 
 export class MediaGovernanceSourceClassificationDto extends MediaGovernanceRevisionCommandDto {

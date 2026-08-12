@@ -265,6 +265,7 @@ export type MediaGovernanceSourceHealthReason =
   | 'magnet_metadata_unavailable'
   | 'no_complete_peer'
   | 'partial_availability'
+  | 'source_runtime_available'
   | 'source_runtime_unavailable'
   | 'tracker_auth_failed'
   | 'tracker_unreachable';

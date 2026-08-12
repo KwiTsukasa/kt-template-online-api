@@ -209,7 +209,7 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 
 ## Admin 与基础后台
 
-### 媒体治理 API/Admin 接入演示
+### 媒体治理 API/Admin 生产链路
 
 | 方法   | 路径                                                               | 说明                                   |
 | ------ | ------------------------------------------------------------------ | -------------------------------------- |
@@ -221,15 +221,28 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `POST` | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件         |
 | `PUT`  | `/media-governance/tasks/:taskId/sources/:sourceId/classification` | 修订来源角色和内容分类                 |
 | `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`        | 生成或检查规范来源清单                 |
-| `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime`  | 执行有界运行时来源探针演示             |
+| `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime`  | 执行有界运行时来源探针                 |
 | `PUT`  | `/media-governance/tasks/:taskId/units/:unitId/subtitle-contract`  | 密封逐季单一发布组字幕合同             |
-| `POST` | `/media-governance/tasks/:taskId/downloads/start`                  | 启动下载语义进度演示                   |
-| `POST` | `/media-governance/tasks/:taskId/governance/start`                 | 启动本地治理语义进度演示               |
-| `POST` | `/media-governance/tasks/:taskId/agent/start`                      | 启动五层边界 CodexAgent 演示           |
+| `POST` | `/media-governance/tasks/:taskId/downloads/start`                  | 密封并启动 NAS 隔离目录下载            |
+| `POST` | `/media-governance/tasks/:taskId/downloads/pause`                  | 暂停同一下载 Run                       |
+| `POST` | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传同一下载 Run                       |
+| `POST` | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理       |
+| `POST` | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验              |
+| `POST` | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理             |
+| `POST` | `/media-governance/tasks/:taskId/agent/start`                      | 启动五层边界 CodexAgent                |
 | `GET`  | `/media-governance/tasks/:taskId/agent/session`                    | 查询 Agent 语义会话                    |
 | `POST` | `/media-governance/tasks/:taskId/agent/operator-decision`          | 提交人工候选选择并闭环                 |
 | `GET`  | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
 | `GET`  | `/media-governance/events/stream`                                  | 订阅带 replay/snapshot-required 的 SSE |
+
+NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 Admin 权限不能访问：
+
+| 方法   | 路径                                                     | 说明                           |
+| ------ | -------------------------------------------------------- | ------------------------------ |
+| `GET`  | `/internal/media-governance/executor/health`             | 核对数据库回调状态仓是否 ready |
+| `POST` | `/internal/media-governance/executor/events`             | 按 Run 连续序号提交语义事件    |
+| `POST` | `/internal/media-governance/executor/descriptors/redeem` | 单次兑换密封来源描述           |
+| `POST` | `/internal/media-governance/executor/plans/redeem`       | 单次兑换 Schema 1.2.0 密封计划 |
 
 全部接口要求 Admin JWT 和对应的 `Media:Governance:*` 权限，响应使用
 `Cache-Control: no-store`；增量 SQL 初始只把菜单和九个权限授予启用中的 `super`。
@@ -242,9 +255,13 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 合同；主媒体与所有补充字幕来源均完成清单检查和运行时探针后才允许启动下载。
 
 Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓持久化；API
-启动时恢复同一 Task/thread、revision 和 `lastSequence`。普通状态变更先提交数据库再
-发布 SSE，Agent 事件则与 Task/session 水位在同一事务写入。下载和治理计时器仍是
-有界演示，不连接 NAS、Kestra、云端或正式媒体。源码已提供真实 CodexAgent outbound
+启动时恢复同一 Task/thread、revision 和事件序号。正式下载、治理、元数据核验和独立
+验收先在数据库事务中密封 Run 与 Outbox，再通过
+`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`
+和 `MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS` 调用 NAS 执行器；缺少数据库状态仓、私有
+地址或 secret 时失败关闭。执行器只兑换一次描述/计划授权，并按 Run 从序号 1 连续回调，
+重复序号幂等忽略，缺号和身份漂移拒绝。普通状态变更先提交数据库再发布 SSE，Agent
+事件则与 Task/session 水位在同一事务写入。源码同时提供真实 CodexAgent outbound
 adapter 与 NAS gateway 内部接口；只有同时配置
 `MEDIA_CODEX_AGENT_GATEWAY_BASE_URL` 和 `MEDIA_CODEX_AGENT_INTERNAL_SECRET` 时，
 `agent/start` 才会转入真实 gateway，否则保持失败关闭。gateway 只监听 NAS 私有

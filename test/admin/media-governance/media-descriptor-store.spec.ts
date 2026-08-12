@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { Readable } from 'node:stream';
 import { ConfigService } from '@nestjs/config';
 import { MinioService } from 'nestjs-minio-client';
 import {
@@ -67,5 +68,56 @@ describe('media torrent descriptor boundary', () => {
     });
     expect(result).not.toHaveProperty('bucketName');
     expect(result).not.toHaveProperty('url');
+  });
+
+  it('redeems an immutable descriptor by object identity and digest without a URL', async () => {
+    const descriptorSha256 = createHash('sha256')
+      .update(torrentFixture)
+      .digest('hex');
+    const objectId = `tasks/media-task-01/sources/media-source-01/revisions/1-${descriptorSha256}.torrent`;
+    const client = {
+      getObject: jest.fn(async () => Readable.from([torrentFixture])),
+    };
+    const store = new MediaDescriptorStore(
+      { client } as unknown as MinioService,
+      { get: jest.fn(() => undefined) } as unknown as ConfigService,
+    );
+
+    const result = await store.readDescriptor({
+      descriptorSha256,
+      objectId,
+    });
+
+    expect(result).toEqual(torrentFixture);
+    expect(client.getObject).toHaveBeenCalledWith(
+      MEDIA_DESCRIPTOR_PRIVATE_BUCKET,
+      objectId,
+    );
+  });
+
+  it('rejects path escape, oversized data and digest drift while redeeming', async () => {
+    const store = new MediaDescriptorStore(
+      {
+        client: {
+          getObject: jest.fn(async () =>
+            Readable.from([Buffer.alloc(2 * 1024 * 1024 + 1)]),
+          ),
+        },
+      } as unknown as MinioService,
+      { get: jest.fn(() => undefined) } as unknown as ConfigService,
+    );
+
+    await expect(
+      store.readDescriptor({
+        descriptorSha256: '0'.repeat(64),
+        objectId: '../private.torrent',
+      }),
+    ).rejects.toThrow('descriptor-object-id-invalid');
+    await expect(
+      store.readDescriptor({
+        descriptorSha256: '0'.repeat(64),
+        objectId: `tasks/media-task-01/sources/media-source-01/revisions/1-${'0'.repeat(64)}.torrent`,
+      }),
+    ).rejects.toThrow('descriptor-size-invalid');
   });
 });

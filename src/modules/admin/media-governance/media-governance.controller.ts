@@ -191,7 +191,7 @@ export class MediaGovernanceController {
 
   @Post(':taskId/downloads/start')
   @MediaGovernancePermission('Media:Governance:Download')
-  @ApiOperation({ summary: '启动进程内下载进度演示' })
+  @ApiOperation({ summary: '启动 NAS 任务隔离下载' })
   async startDownload(
     @Param('taskId') taskId: string,
     @Body() body: MediaGovernanceRevisionCommandDto,
@@ -201,9 +201,33 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.startDownload(taskId, body));
   }
 
+  @Post(':taskId/downloads/pause')
+  @MediaGovernancePermission('Media:Governance:Download')
+  @ApiOperation({ summary: '安全暂停当前 NAS 下载 Run' })
+  async pauseDownload(
+    @Param('taskId') taskId: string,
+    @Body() body: MediaGovernanceRevisionCommandDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.service.pauseDownload(taskId, body));
+  }
+
+  @Post(':taskId/downloads/resume')
+  @MediaGovernancePermission('Media:Governance:Download')
+  @ApiOperation({ summary: '从同一 NAS 下载 Run 续传' })
+  async resumeDownload(
+    @Param('taskId') taskId: string,
+    @Body() body: MediaGovernanceRevisionCommandDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.service.resumeDownload(taskId, body));
+  }
+
   @Post(':taskId/governance/start')
   @MediaGovernancePermission('Media:Governance:Run')
-  @ApiOperation({ summary: '启动进程内本地治理演示' })
+  @ApiOperation({ summary: '启动 Schema 1.2.0 本地治理事务' })
   async startGovernance(
     @Param('taskId') taskId: string,
     @Body() body: MediaGovernanceRevisionCommandDto,
@@ -213,9 +237,37 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.startGovernance(taskId, body));
   }
 
+  @Post(':taskId/metadata/verify')
+  @MediaGovernancePermission('Media:Governance:Run')
+  @ApiOperation({ summary: '运行 A/B/C 分档元数据核验' })
+  async startMetadataVerification(
+    @Param('taskId') taskId: string,
+    @Body() body: MediaGovernanceRevisionCommandDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.service.startMetadataVerification(taskId, body),
+    );
+  }
+
+  @Post(':taskId/acceptance/verify')
+  @MediaGovernancePermission('Media:Governance:Run')
+  @ApiOperation({ summary: '运行独立本地验收与残留核验' })
+  async startAcceptanceVerification(
+    @Param('taskId') taskId: string,
+    @Body() body: MediaGovernanceRevisionCommandDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.service.startAcceptanceVerification(taskId, body),
+    );
+  }
+
   @Post(':taskId/agent/start')
   @MediaGovernancePermission('Media:Governance:AgentStart')
-  @ApiOperation({ summary: '启动有界 CodexAgent 演示' })
+  @ApiOperation({ summary: '启动有界 CodexAgent 人工治理' })
   async startAgent(
     @Param('taskId') taskId: string,
     @Body() body: MediaGovernanceRevisionCommandDto,

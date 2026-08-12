@@ -84,4 +84,47 @@ export class MediaDescriptorStore {
     });
     return { bytes: bytes.length, descriptorSha256, objectId };
   }
+
+  async readDescriptor(input: {
+    descriptorSha256: string;
+    objectId: string;
+  }): Promise<Buffer> {
+    if (
+      !/^tasks\/[A-Za-z0-9._-]{8,96}\/sources\/[A-Za-z0-9._-]{8,96}\/revisions\/\d+-[a-f0-9]{64}\.(?:magnet|torrent)$/.test(
+        input.objectId,
+      )
+    ) {
+      throw new Error('descriptor-object-id-invalid');
+    }
+    if (!/^[a-f0-9]{64}$/.test(input.descriptorSha256)) {
+      throw new Error('descriptor-sha256-invalid');
+    }
+    const bucketName =
+      this.configService.get('MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET') ||
+      MEDIA_DESCRIPTOR_PRIVATE_BUCKET;
+    const stream = await this.minioService.client.getObject(
+      bucketName,
+      input.objectId,
+    );
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    for await (const chunk of stream) {
+      const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += value.length;
+      if (bytes > 2 * 1024 * 1024) {
+        stream.destroy();
+        throw new Error('descriptor-size-invalid');
+      }
+      chunks.push(value);
+    }
+    if (bytes === 0) throw new Error('descriptor-size-invalid');
+    const result = Buffer.concat(chunks, bytes);
+    if (
+      createHash('sha256').update(result).digest('hex') !==
+      input.descriptorSha256
+    ) {
+      throw new Error('descriptor-sha256-mismatch');
+    }
+    return result;
+  }
 }

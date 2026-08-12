@@ -3,6 +3,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  OnModuleDestroy,
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
@@ -18,6 +19,9 @@ import {
 import type {
   MediaGovernanceAgentEventDto,
   MediaGovernanceAgentToolCallDto,
+  MediaGovernanceDescriptorRedeemDto,
+  MediaGovernanceExecutorEventDto,
+  MediaGovernancePlanRedeemDto,
   MediaGovernanceMagnetSourceCreateDto,
   MediaGovernanceMediaType,
   MediaGovernanceOperatorDecisionDto,
@@ -51,6 +55,16 @@ import {
   type MediaGovernanceStateStore,
   type MediaGovernanceStoredTask,
 } from './media-governance-state.store';
+import {
+  buildMediaGovernanceExecutionEnvelope,
+  type MediaGovernanceExecutorAction,
+} from './media-governance-executor.contract';
+import {
+  MEDIA_GOVERNANCE_EXECUTION_GATEWAY,
+  type MediaGovernanceExecutionEnvelope,
+  type MediaGovernanceExecutionGateway,
+} from './media-governance-execution.gateway';
+import { buildAdminMediaGovernancePlan } from './media-governance-plan';
 
 type MediaGovernanceProviderRef = {
   provider: MediaGovernanceProvider;
@@ -71,9 +85,12 @@ export type MediaGovernanceUnit = {
 };
 
 export type MediaGovernanceSource = {
+  descriptorBytes: number;
   contentKind: MediaGovernanceContentKind;
   descriptorObjectId: string;
+  descriptorRevision: number;
   descriptorSha256: string;
+  descriptorTombstonedAt: null | string;
   id: string;
   infoHash: string;
   manifest: Array<{
@@ -88,7 +105,13 @@ export type MediaGovernanceSource = {
   seasonNumbers: string[];
   selectedBytes: number;
   selectedFileCount: number;
-  sourceHealth: 'inconclusive' | 'unchecked' | 'viable';
+  sourceHealth:
+    | 'degraded'
+    | 'inconclusive'
+    | 'probing'
+    | 'unavailable'
+    | 'unchecked'
+    | 'viable';
   sourceHealthLabel: string;
   sourceHealthReasonLabel: string;
   sourceRole: MediaGovernanceSourceRole;
@@ -117,7 +140,22 @@ type MediaGovernanceAgentSealedPlan = {
   summary: string;
 };
 
+export type MediaGovernancePayloadSeal = {
+  evidenceSha256: string;
+  files: Array<{
+    index: number;
+    mtimeMs: number;
+    path: string;
+    relativePath: string;
+    sha256: string;
+    sizeBytes: number;
+    sourceId: string;
+  }>;
+  runId: string;
+};
+
 export type MediaGovernanceTask = {
+  activeRunId: null | string;
   agentSession: null | {
     capsuleSha256: string;
     checkpointSha256: string;
@@ -150,11 +188,12 @@ export type MediaGovernanceTask = {
   metadataStatus: 'pending' | 'requires-agent' | 'verified';
   nextCommandLabel: string;
   persistenceMode: 'database' | 'process-simulator';
+  payloadSeal: MediaGovernancePayloadSeal | null;
   progress: MediaGovernanceProgress;
   providerRef: MediaGovernanceProviderRef | null;
   releaseYear: null | number;
   revision: number;
-  runState: 'blocked' | 'draft' | 'running' | 'succeeded';
+  runState: 'blocked' | 'draft' | 'queued' | 'running' | 'succeeded';
   semanticProjection: {
     currentActionLabel: string;
     gateReasonLabel: string;
@@ -164,10 +203,18 @@ export type MediaGovernanceTask = {
     stageLabel: string;
   };
   sealedPlanSha256: null | string;
+  sealedPlan: null | Record<string, unknown>;
   sources: MediaGovernanceSource[];
-  stage: 'closed' | 'download' | 'governance' | 'intake' | 'metadata';
+  stage:
+    | 'acceptance'
+    | 'closed'
+    | 'download'
+    | 'governance'
+    | 'intake'
+    | 'metadata';
   titleHint: string;
   units: MediaGovernanceUnit[];
+  workItemId: null | string;
 };
 
 const MEDIA_TYPE_LABELS: Record<MediaGovernanceMediaType, string> = {
@@ -180,10 +227,24 @@ const PROVIDER_LABELS: Record<MediaGovernanceProvider, string> = {
   tmdb: 'TMDB',
   tvdb: 'TVDB',
 };
+const SOURCE_HEALTH_REASON_LABELS: Record<string, string> = {
+  download_stalled: '已连接来源，但有效下载量连续 10 分钟没有增长',
+  local_connectivity_degraded: 'NAS 本地网络连通性异常，暂时无法判定来源状态',
+  magnet_metadata_unavailable: '磁链在限定时间内未取得文件清单',
+  no_complete_peer: '当前没有持有完整所选文件的可用节点',
+  partial_availability: '来源只能提供部分所选文件',
+  source_runtime_available: '来源已产生有效数据，可进入隔离下载',
+  source_runtime_unavailable: '限定时间内没有取得任何有效来源数据',
+  tracker_auth_failed: '来源追踪器拒绝了当前访问身份',
+  tracker_unreachable: '来源追踪器在限定时间内不可达',
+};
+const MAX_DISPATCH_ATTEMPTS = 5;
 
 @Injectable()
-export class MediaGovernanceService implements OnModuleInit {
+export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   private readonly tasks: MediaGovernanceTask[] = [];
+  private dispatchTimer: null | NodeJS.Timeout = null;
+  private dispatchRetryActive = false;
 
   constructor(
     @Optional()
@@ -196,6 +257,9 @@ export class MediaGovernanceService implements OnModuleInit {
     @Optional()
     @Inject(MEDIA_GOVERNANCE_STATE_STORE)
     private readonly stateStore?: MediaGovernanceStateStore,
+    @Optional()
+    @Inject(MEDIA_GOVERNANCE_EXECUTION_GATEWAY)
+    private readonly executionGateway?: MediaGovernanceExecutionGateway,
   ) {}
 
   async onModuleInit() {
@@ -206,6 +270,18 @@ export class MediaGovernanceService implements OnModuleInit {
       this.tasks.length,
       ...tasks.map((task) => this.restoreStoredTask(task)),
     );
+    if (this.executionGateway?.enabled()) {
+      void this.retryPendingDispatches();
+      this.dispatchTimer = setInterval(() => {
+        void this.retryPendingDispatches();
+      }, 5_000);
+      this.dispatchTimer.unref?.();
+    }
+  }
+
+  onModuleDestroy() {
+    if (this.dispatchTimer) clearInterval(this.dispatchTimer);
+    this.dispatchTimer = null;
   }
 
   async create(
@@ -229,8 +305,10 @@ export class MediaGovernanceService implements OnModuleInit {
       releaseYear: input.releaseYear ?? null,
       seasonNumbers,
       titleHint,
+      workItemId: input.workItemId ?? null,
     };
     const task: MediaGovernanceTask = {
+      activeRunId: null,
       agentSession: null,
       gateReason: null,
       governanceProfile: null,
@@ -243,6 +321,7 @@ export class MediaGovernanceService implements OnModuleInit {
       metadataStatus: 'pending',
       nextCommandLabel: '补充并检查来源',
       persistenceMode: this.databaseReady() ? 'database' : 'process-simulator',
+      payloadSeal: null,
       progress: {
         completedBytes: 0,
         completedItems: 0,
@@ -267,10 +346,12 @@ export class MediaGovernanceService implements OnModuleInit {
         stageLabel: '接收资料',
       },
       sealedPlanSha256: null,
+      sealedPlan: null,
       sources: [],
       stage: 'intake',
       titleHint,
       units: this.createUnits(input.mediaType, seasonNumbers),
+      workItemId: input.workItemId ?? null,
     };
     await this.persistTask(task);
     this.tasks.unshift(task);
@@ -280,6 +361,326 @@ export class MediaGovernanceService implements OnModuleInit {
       taskId: task.id,
     });
     return task;
+  }
+
+  async redeemDescriptor(
+    input: MediaGovernanceDescriptorRedeemDto,
+  ): Promise<Buffer> {
+    if (
+      !this.databaseReady() ||
+      !this.stateStore?.consumeDescriptorGrant ||
+      !this.descriptorStore
+    ) {
+      throwVbenError(
+        '媒体描述文件授权服务暂不可用',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    const grant = await this.stateStore.consumeDescriptorGrant(input);
+    return this.descriptorStore.readDescriptor({
+      descriptorSha256: input.descriptorSha256,
+      objectId: grant.descriptorObjectId,
+    });
+  }
+
+  async redeemPlan(input: MediaGovernancePlanRedeemDto) {
+    if (!this.databaseReady() || !this.stateStore?.consumePlanGrant) {
+      throwVbenError(
+        '媒体治理计划授权服务暂不可用',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return this.stateStore.consumePlanGrant(input);
+  }
+
+  executionCallbackHealth() {
+    return {
+      persistenceMode: this.databaseReady() ? 'database' : 'process-simulator',
+      status:
+        this.databaseReady() &&
+        this.stateStore?.applyExecutorEvent &&
+        this.stateStore.readRunSequence
+          ? 'ready'
+          : 'not-ready',
+    } as const;
+  }
+
+  async applyExecutorEvent(input: MediaGovernanceExecutorEventDto) {
+    if (
+      !this.databaseReady() ||
+      !this.stateStore?.applyExecutorEvent ||
+      !this.stateStore.readRunSequence
+    ) {
+      throwVbenError(
+        '媒体执行器回调持久化暂不可用',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    const task = this.detail(input.taskId);
+    if (
+      task.activeRunId !== input.runId ||
+      task.revision !== input.taskRevision
+    ) {
+      throwVbenError('媒体执行器回调身份已过期', HttpStatus.CONFLICT);
+    }
+    const observedAt = Date.parse(input.observedAt);
+    if (
+      !Number.isFinite(observedAt) ||
+      Math.abs(Date.now() - observedAt) > 24 * 60 * 60_000
+    ) {
+      throwVbenError('媒体执行器回调时间无效', HttpStatus.BAD_REQUEST);
+    }
+    const previousSequence = await this.stateStore.readRunSequence(input.runId);
+    if (input.sequence <= previousSequence) {
+      return { applied: false, reason: 'duplicate-sequence' };
+    }
+    if (input.sequence !== previousSequence + 1) {
+      throwVbenError('媒体执行器回调序号不连续', HttpStatus.CONFLICT);
+    }
+    this.applyExecutorProjection(task, input);
+    const terminal =
+      input.eventType === 'run-succeeded' || input.eventType === 'run-failed';
+    if (terminal) this.bumpRevision(task);
+    try {
+      const applied = await this.stateStore.applyExecutorEvent(task, input);
+      if (!applied) return { applied: false, reason: 'duplicate-sequence' };
+    } catch {
+      try {
+        const storedTasks = await this.stateStore.loadTasks();
+        this.tasks.splice(
+          0,
+          this.tasks.length,
+          ...storedTasks.map((storedTask) =>
+            this.restoreStoredTask(storedTask),
+          ),
+        );
+      } catch {
+        this.tasks.splice(0, this.tasks.length);
+      }
+      throwVbenError(
+        '媒体执行器回调持久化暂不可用',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    this.eventStream?.publishTaskChanged({
+      changeType: 'state-updated',
+      revision: task.revision,
+      taskId: task.id,
+    });
+    return { applied: true, revision: task.revision };
+  }
+
+  private applyExecutorProjection(
+    task: MediaGovernanceTask,
+    input: MediaGovernanceExecutorEventDto,
+  ) {
+    const source = input.sourceId
+      ? this.findSource(task, input.sourceId)
+      : null;
+    if (input.eventType === 'source-inspected') {
+      if (
+        !source ||
+        !input.manifest ||
+        !input.manifestSha256 ||
+        input.manifest.length === 0
+      ) {
+        throwVbenError('来源清单回调不完整', HttpStatus.BAD_REQUEST);
+      }
+      const manifest = input.manifest.map((entry) => ({
+        executable: false,
+        index: entry.index,
+        relativePath: validateDescriptorManifestEntry({
+          entryType: 'file',
+          executable: entry.executable,
+          relativePath: entry.relativePath,
+        }),
+        sizeBytes: entry.sizeBytes,
+      }));
+      const manifestSha256 = createHash('sha256')
+        .update(JSON.stringify(manifest))
+        .digest('hex');
+      if (manifestSha256 !== input.manifestSha256) {
+        throwVbenError('来源清单摘要不匹配', HttpStatus.CONFLICT);
+      }
+      source.manifest = manifest;
+      source.manifestSha256 = manifestSha256;
+      source.manifestState = 'inspected';
+      source.selectedBytes = manifest.reduce(
+        (total, entry) => total + entry.sizeBytes,
+        0,
+      );
+      source.selectedFileCount = manifest.length;
+      source.sourceHealth = 'unchecked';
+      source.sourceHealthLabel = '来源清单已检查';
+      source.sourceHealthReasonLabel = '等待运行时死种/死链探针';
+    }
+    if (input.eventType === 'source-probed') {
+      if (!source || !input.sourceHealth || !input.sourceHealthReason) {
+        throwVbenError('来源健康回调不完整', HttpStatus.BAD_REQUEST);
+      }
+      source.sourceHealth = input.sourceHealth;
+      source.sourceHealthLabel = {
+        degraded: '来源降级可用',
+        inconclusive: '来源状态无法确认',
+        unavailable: '来源不可用',
+        viable: '来源可用',
+      }[input.sourceHealth];
+      source.sourceHealthReasonLabel =
+        SOURCE_HEALTH_REASON_LABELS[input.sourceHealthReason] ??
+        '来源探针返回了未识别的原因';
+    }
+    if (input.progress) {
+      if (
+        input.progress.completedBytes > input.progress.totalBytes ||
+        input.progress.completedItems > input.progress.totalItems
+      ) {
+        throwVbenError('执行器进度超出总量', HttpStatus.BAD_REQUEST);
+      }
+      const percent =
+        input.progress.totalBytes === 0
+          ? 0
+          : Number(
+              (
+                (input.progress.completedBytes / input.progress.totalBytes) *
+                100
+              ).toFixed(1),
+            );
+      task.progress = {
+        completedBytes: input.progress.completedBytes,
+        completedItems: input.progress.completedItems,
+        etaLabel: input.progress.etaLabel,
+        heartbeatLabel: '刚刚',
+        percent,
+        progressLabel: input.summary,
+        speedLabel: this.formatSpeed(input.progress.speedBytesPerSecond),
+        totalBytes: input.progress.totalBytes,
+        totalItems: input.progress.totalItems,
+      };
+    }
+    if (input.eventType === 'run-started') {
+      task.runState = 'running';
+      task.nextCommandLabel = '执行器正在处理';
+    } else if (input.eventType === 'run-paused') {
+      task.runState = 'blocked';
+      task.gateReason = '下载已安全暂停';
+      task.nextCommandLabel = '可从同一 Run 续传';
+    } else if (input.eventType === 'run-resumed') {
+      task.runState = 'running';
+      task.gateReason = null;
+      task.nextCommandLabel = '正在从原 Run 继续下载';
+    } else if (input.eventType === 'run-failed') {
+      task.activeRunId = null;
+      task.runState = 'blocked';
+      task.gateReason = input.summary;
+      task.nextCommandLabel = '查看失败原因后重试';
+    } else if (input.eventType === 'run-succeeded') {
+      if (!input.evidenceSha256) {
+        throwVbenError('执行器终态缺少密封证据', HttpStatus.BAD_REQUEST);
+      }
+      if (input.action === 'source.inspect') {
+        task.stage = 'intake';
+        task.runState = 'draft';
+        task.gateReason = null;
+        task.nextCommandLabel = '运行死种/死链探针';
+      } else if (input.action === 'source.probe-runtime') {
+        if (!source) {
+          throwVbenError('来源探针终态缺少来源身份', HttpStatus.BAD_REQUEST);
+        }
+        task.stage = 'intake';
+        task.runState = source.sourceHealth === 'viable' ? 'draft' : 'blocked';
+        task.gateReason =
+          source.sourceHealth === 'viable'
+            ? null
+            : source.sourceHealthReasonLabel;
+        task.nextCommandLabel =
+          source.sourceHealth === 'viable'
+            ? '检查其余来源或开始下载'
+            : '更换来源后重新探针';
+      } else if (input.action === 'source.download') {
+        if (!input.payloadFiles?.length) {
+          throwVbenError('下载载荷密封证据不完整', HttpStatus.BAD_REQUEST);
+        }
+        const expectedPrefix = `/vol2/1000/.kt-media-governance-staging/${task.id}/sources/`;
+        if (
+          input.payloadFiles.some(
+            (file) =>
+              !file.path.startsWith(expectedPrefix) ||
+              !file.path.includes(`/sources/${file.sourceId}/`),
+          )
+        ) {
+          throwVbenError('下载载荷路径越过任务边界', HttpStatus.BAD_REQUEST);
+        }
+        task.payloadSeal = {
+          evidenceSha256: input.evidenceSha256,
+          files: input.payloadFiles.map((file) => ({ ...file })),
+          runId: input.runId,
+        };
+        task.stage = 'download';
+        task.runState = 'succeeded';
+        task.gateReason = null;
+        task.nextCommandLabel = '开始本地治理';
+      } else if (input.action === 'governance.execute') {
+        task.stage = 'metadata';
+        task.runState = 'succeeded';
+        task.gateReason = null;
+        task.metadataStatus = 'pending';
+        task.nextCommandLabel = '运行 A/B/C 分档元数据核验';
+      } else if (input.action === 'metadata.verify') {
+        if (
+          !input.metadata ||
+          input.metadata.units.length !== task.units.length ||
+          new Set(input.metadata.units.map((unit) => unit.unitId)).size !==
+            task.units.length ||
+          input.metadata.units.some(
+            (unit) =>
+              !task.units.some((candidate) => candidate.id === unit.unitId),
+          )
+        ) {
+          throwVbenError('元数据分档证据不完整', HttpStatus.BAD_REQUEST);
+        }
+        task.stage = 'metadata';
+        task.metadataStatus = input.metadata.canAccept
+          ? 'verified'
+          : 'requires-agent';
+        task.runState = input.metadata.canAccept ? 'succeeded' : 'blocked';
+        task.gateReason = input.metadata.canAccept
+          ? null
+          : `元数据仍缺少 A 级 ${input.metadata.units.reduce(
+              (count, unit) => count + unit.missingA.length,
+              0,
+            )} 项、B 级 ${input.metadata.units.reduce(
+              (count, unit) => count + unit.missingB.length,
+              0,
+            )} 项`;
+        task.nextCommandLabel = input.metadata.canAccept
+          ? '运行独立本地验收'
+          : '启动 CodexAgent 有界人工治理';
+      } else if (input.action === 'acceptance.verify') {
+        const acceptance = input.acceptance;
+        if (
+          !acceptance ||
+          !acceptance.canClose ||
+          acceptance.acceptedUnits !== task.units.length ||
+          acceptance.activeDownloadOwners !== 0 ||
+          acceptance.cloudWrites !== 0 ||
+          acceptance.databaseDirectWrites !== 0 ||
+          acceptance.mechanicalScans !== 0 ||
+          acceptance.stagingResiduals !== 0 ||
+          acceptance.uiWrites !== 0
+        ) {
+          throwVbenError('独立本地验收证据未闭合', HttpStatus.CONFLICT);
+        }
+        task.stage = 'closed';
+        task.runState = 'succeeded';
+        task.gateReason = null;
+        task.metadataStatus = 'verified';
+        task.nextCommandLabel = '查看验收证据';
+      } else {
+        throwVbenError('执行器终态动作不受支持', HttpStatus.BAD_REQUEST);
+      }
+      task.activeRunId = null;
+    }
+    this.refreshSemanticProjection(task);
   }
 
   detail(taskId: string): MediaGovernanceTask {
@@ -342,9 +743,12 @@ export class MediaGovernanceService implements OnModuleInit {
     });
     const source: MediaGovernanceSource = {
       contentKind: input.contentKind,
+      descriptorBytes: stored?.bytes ?? Buffer.byteLength(input.magnetUri),
       descriptorObjectId:
         stored?.objectId ?? `simulator-private/${sourceId}/${descriptorSha256}`,
       descriptorSha256,
+      descriptorRevision: 1,
+      descriptorTombstonedAt: null,
       id: sourceId,
       infoHash,
       manifest: [],
@@ -402,8 +806,11 @@ export class MediaGovernanceService implements OnModuleInit {
     };
     const source: MediaGovernanceSource = {
       contentKind: input.contentKind,
+      descriptorBytes: parsed.bytes,
       descriptorObjectId: parsed.objectId,
+      descriptorRevision: 1,
       descriptorSha256: parsed.descriptorSha256,
+      descriptorTombstonedAt: null,
       id: sourceId,
       infoHash: parsed.infoHash,
       manifest: parsed.manifest,
@@ -528,6 +935,13 @@ export class MediaGovernanceService implements OnModuleInit {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
     const source = this.findSource(task, sourceId);
+    if (this.executionGateway?.enabled()) {
+      source.sourceHealth = 'probing';
+      source.sourceHealthLabel = '等待 NAS 检查来源清单';
+      source.sourceHealthReasonLabel = '已密封描述文件授权和来源身份';
+      await this.reserveExecution(task, 'source.inspect', [source]);
+      return source;
+    }
     if (source.manifestState === 'pending-inspection') {
       let manifestIndex = 0;
       source.manifest =
@@ -584,6 +998,13 @@ export class MediaGovernanceService implements OnModuleInit {
     if (source.manifestState !== 'inspected') {
       throwVbenError('必须先检查来源清单', HttpStatus.CONFLICT);
     }
+    if (this.executionGateway?.enabled()) {
+      source.sourceHealth = 'probing';
+      source.sourceHealthLabel = '正在运行死种/死链探针';
+      source.sourceHealthReasonLabel = '最长 10 分钟给出可复核分类';
+      await this.reserveExecution(task, 'source.probe-runtime', [source]);
+      return source;
+    }
     source.sourceHealth = 'viable';
     source.sourceHealthLabel = '演示探针通过';
     source.sourceHealthReasonLabel = '进程内演示未连接 NAS，正式探针仍保持关闭';
@@ -623,6 +1044,10 @@ export class MediaGovernanceService implements OnModuleInit {
     ) {
       throwVbenError('无字幕媒体仍有季缺少完整字幕合同', HttpStatus.CONFLICT);
     }
+    if (this.executionGateway?.enabled()) {
+      await this.reserveExecution(task, 'source.download', task.sources);
+      return task;
+    }
     task.stage = 'download';
     task.runState = 'running';
     task.nextCommandLabel = '等待来源载荷就绪';
@@ -651,6 +1076,77 @@ export class MediaGovernanceService implements OnModuleInit {
     return task;
   }
 
+  async pauseDownload(
+    taskId: string,
+    input: MediaGovernanceRevisionCommandDto,
+  ): Promise<MediaGovernanceTask> {
+    return this.controlDownload(taskId, input.expectedRevision, 'pause');
+  }
+
+  async resumeDownload(
+    taskId: string,
+    input: MediaGovernanceRevisionCommandDto,
+  ): Promise<MediaGovernanceTask> {
+    return this.controlDownload(taskId, input.expectedRevision, 'resume');
+  }
+
+  private async controlDownload(
+    taskId: string,
+    expectedRevision: number,
+    command: 'pause' | 'resume',
+  ) {
+    const task = this.detail(taskId);
+    this.assertRevision(task, expectedRevision);
+    if (
+      task.stage !== 'download' ||
+      !task.activeRunId ||
+      (command === 'pause' && task.runState !== 'running') ||
+      (command === 'resume' && task.runState !== 'blocked')
+    ) {
+      throwVbenError(
+        command === 'pause' ? '当前没有可暂停的下载' : '当前没有可续传的下载',
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (
+      !this.executionGateway?.enabled() ||
+      !this.stateStore?.readRunEnvelope
+    ) {
+      throwVbenError(
+        '媒体执行器控制链路暂不可用',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    const envelope = await this.stateStore.readRunEnvelope(task.activeRunId);
+    if (
+      !envelope ||
+      envelope.action !== 'source.download' ||
+      envelope.taskId !== task.id ||
+      envelope.runId !== task.activeRunId
+    ) {
+      throwVbenError('下载 Run 身份不匹配', HttpStatus.CONFLICT);
+    }
+    await this.executionGateway.control({
+      command,
+      controlId: `media-control-${randomUUID()}`,
+      runId: envelope.runId,
+      sealedInputSha256: envelope.sealedInputSha256,
+      taskId: task.id,
+    });
+    task.runState = command === 'pause' ? 'blocked' : 'running';
+    task.gateReason = command === 'pause' ? '下载暂停请求已送达' : null;
+    task.nextCommandLabel =
+      command === 'pause' ? '等待执行器确认安全暂停' : '正在从同一 Run 续传';
+    this.refreshSemanticProjection(task);
+    await this.persistTask(task);
+    this.eventStream?.publishTaskChanged({
+      changeType: 'state-updated',
+      revision: task.revision,
+      taskId: task.id,
+    });
+    return task;
+  }
+
   async startGovernance(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -659,6 +1155,32 @@ export class MediaGovernanceService implements OnModuleInit {
     this.assertRevision(task, input.expectedRevision);
     if (task.stage !== 'download' || task.runState !== 'succeeded') {
       throwVbenError('来源载荷尚未就绪', HttpStatus.CONFLICT);
+    }
+    if (this.executionGateway?.enabled()) {
+      if (!task.payloadSeal) {
+        throwVbenError('下载载荷缺少密封证据', HttpStatus.CONFLICT);
+      }
+      if (!task.sealedPlan) {
+        try {
+          task.sealedPlan = buildAdminMediaGovernancePlan(
+            task,
+            task.payloadSeal,
+          );
+          task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+        } catch (error) {
+          task.runState = 'blocked';
+          task.gateReason =
+            error instanceof Error
+              ? `本地计划无法安全密封：${error.message}`.slice(0, 160)
+              : '本地计划无法安全密封';
+          task.nextCommandLabel = '修正作品编号、来源映射或字幕合同后重试';
+          this.refreshSemanticProjection(task);
+          await this.persistTask(task);
+          throwVbenError(task.gateReason, HttpStatus.CONFLICT);
+        }
+      }
+      await this.reserveExecution(task, 'governance.execute');
+      return task;
     }
     task.stage = 'governance';
     task.runState = 'running';
@@ -689,6 +1211,42 @@ export class MediaGovernanceService implements OnModuleInit {
       void this.commitTask(task, 'state-updated').catch(() => undefined);
     }, 500);
     timer.unref?.();
+    return task;
+  }
+
+  async startMetadataVerification(
+    taskId: string,
+    input: MediaGovernanceRevisionCommandDto,
+  ): Promise<MediaGovernanceTask> {
+    const task = this.detail(taskId);
+    this.assertRevision(task, input.expectedRevision);
+    if (
+      task.stage !== 'metadata' ||
+      task.runState !== 'succeeded' ||
+      task.metadataStatus !== 'pending' ||
+      !task.sealedPlan
+    ) {
+      throwVbenError('当前任务尚未进入元数据核验门', HttpStatus.CONFLICT);
+    }
+    await this.reserveExecution(task, 'metadata.verify');
+    return task;
+  }
+
+  async startAcceptanceVerification(
+    taskId: string,
+    input: MediaGovernanceRevisionCommandDto,
+  ): Promise<MediaGovernanceTask> {
+    const task = this.detail(taskId);
+    this.assertRevision(task, input.expectedRevision);
+    if (
+      task.stage !== 'metadata' ||
+      task.runState !== 'succeeded' ||
+      task.metadataStatus !== 'verified' ||
+      !task.sealedPlan
+    ) {
+      throwVbenError('当前任务尚未通过元数据核验门', HttpStatus.CONFLICT);
+    }
+    await this.reserveExecution(task, 'acceptance.verify');
     return task;
   }
 
@@ -1122,6 +1680,7 @@ export class MediaGovernanceService implements OnModuleInit {
     input: MediaGovernanceOperatorDecisionDto,
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
+    const productionExecution = this.executionGateway?.enabled() === true;
     this.assertRevision(task, input.expectedRevision);
     if (task.agentSession?.status !== 'needs-operator') {
       throwVbenError('当前没有待处理的 Agent 候选', HttpStatus.CONFLICT);
@@ -1130,17 +1689,21 @@ export class MediaGovernanceService implements OnModuleInit {
       ...task.agentSession,
       currentActionLabel: `已选择候选 ${input.selectedCandidateId}`,
       status: 'succeeded',
-      statusLabel: '人工治理已闭环',
+      statusLabel: productionExecution ? '人工治理已放行' : '人工治理已闭环',
     };
-    task.stage = 'closed';
+    task.stage = productionExecution ? 'metadata' : 'closed';
     task.runState = 'succeeded';
-    task.metadataStatus = 'verified';
-    task.nextCommandLabel = '查看验收证据';
+    task.metadataStatus = productionExecution ? 'pending' : 'verified';
+    task.nextCommandLabel = productionExecution
+      ? '重新运行 A/B/C 分档元数据核验'
+      : '查看验收证据';
     task.progress = {
       ...task.progress,
       etaLabel: '已完成',
       percent: 100,
-      progressLabel: '本地闭环演示已完成',
+      progressLabel: productionExecution
+        ? '人工治理已放行，等待独立复核'
+        : '本地闭环演示已完成',
     };
     this.bumpRevision(task);
     await this.commitTask(task, 'state-updated');
@@ -1357,7 +1920,7 @@ export class MediaGovernanceService implements OnModuleInit {
       sealedPlanSha256: task.sealedPlanSha256,
       stage: task.stage,
       titleHint: task.titleHint,
-      workItemId: null,
+      workItemId: task.workItemId,
     };
   }
 
@@ -1430,6 +1993,186 @@ export class MediaGovernanceService implements OnModuleInit {
         HttpStatus.CONFLICT,
       );
     }
+  }
+
+  private async reserveExecution(
+    task: MediaGovernanceTask,
+    action: MediaGovernanceExecutorAction,
+    sources?: MediaGovernanceSource[],
+  ) {
+    if (task.activeRunId) {
+      throwVbenError('任务已有运行中的操作', HttpStatus.CONFLICT);
+    }
+    if (
+      !this.databaseReady() ||
+      !this.executionGateway ||
+      !this.stateStore?.reserveRunDispatch ||
+      !this.stateStore.acknowledgeRunDispatch
+    ) {
+      throwVbenError(
+        '媒体执行器持久化链路暂不可用',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    const previous = {
+      activeRunId: task.activeRunId,
+      nextCommandLabel: task.nextCommandLabel,
+      revision: task.revision,
+      runState: task.runState,
+      semanticProjection: structuredClone(task.semanticProjection),
+      stage: task.stage,
+    };
+    const runId = `media-run-${randomUUID()}`;
+    task.activeRunId = runId;
+    task.runState = 'queued';
+    task.stage = action.startsWith('source.')
+      ? action === 'source.download'
+        ? 'download'
+        : 'intake'
+      : action.startsWith('metadata.')
+        ? 'metadata'
+        : action.startsWith('acceptance.')
+          ? 'acceptance'
+          : 'governance';
+    task.nextCommandLabel = '已入队，等待 Jenkins 调度';
+    this.bumpRevision(task);
+    const envelope = buildMediaGovernanceExecutionEnvelope({
+      action,
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      inputSnapshotSha256: task.inputSnapshotSha256,
+      replayKey: `${task.id}:${action}:r${task.revision}`,
+      runId,
+      ...(task.sealedPlan &&
+      task.sealedPlanSha256 &&
+      !action.startsWith('source.')
+        ? {
+            plan: {
+              planGrantId: `media-plan-grant-${createHash('sha256')
+                .update(`${runId}:${task.sealedPlanSha256}`)
+                .digest('hex')
+                .slice(0, 40)}`,
+              planSha256: task.sealedPlanSha256,
+              schemaVersion: '1.2.0' as const,
+              strategy: task.governanceProfile!,
+            },
+          }
+        : {}),
+      ...(sources
+        ? {
+            sources: sources.map((source) => ({
+              descriptorGrantId: `media-grant-${createHash('sha256')
+                .update(`${runId}:${source.id}`)
+                .digest('hex')
+                .slice(0, 48)}`,
+              descriptorRevision: source.descriptorRevision,
+              descriptorSha256: source.descriptorSha256,
+              infoHash: source.infoHash,
+              manifestSha256: source.manifestSha256,
+              selectedBytes: source.selectedBytes,
+              selectedFileCount: source.selectedFileCount,
+              selectedFileIndices: source.manifest.map((entry) => entry.index),
+              sourceId: source.id,
+              transportKind: source.transportKind,
+            })),
+          }
+        : {}),
+      taskId: task.id,
+      taskRevision: task.revision,
+      unitIds: task.units.map((unit) => unit.id),
+    });
+    try {
+      await this.stateStore.reserveRunDispatch(task, envelope);
+    } catch (error) {
+      Object.assign(task, previous);
+      throw error;
+    }
+    await this.dispatchEnvelope(task, envelope);
+    return envelope;
+  }
+
+  private async dispatchEnvelope(
+    task: MediaGovernanceTask,
+    envelope: MediaGovernanceExecutionEnvelope,
+  ) {
+    try {
+      const result = await this.executionGateway!.dispatch(envelope);
+      await this.stateStore!.acknowledgeRunDispatch!(
+        envelope.runId,
+        result.executionId,
+      );
+      task.nextCommandLabel = 'Jenkins 已接单，等待执行器进度';
+    } catch {
+      const attempts = this.stateStore?.recordRunDispatchFailure
+        ? await this.stateStore.recordRunDispatchFailure(envelope.runId)
+        : 1;
+      if (
+        attempts >= MAX_DISPATCH_ATTEMPTS ||
+        Date.parse(envelope.expiresAt) <= Date.now()
+      ) {
+        await this.failDispatch(task, envelope.runId, attempts);
+        return;
+      }
+      task.nextCommandLabel = `Jenkins 暂不可用，正在进行第 ${attempts + 1}/${MAX_DISPATCH_ATTEMPTS} 次调度`;
+    }
+    this.refreshSemanticProjection(task);
+    await this.persistTask(task);
+  }
+
+  private async retryPendingDispatches() {
+    if (
+      !this.executionGateway?.enabled() ||
+      !this.stateStore?.pendingRunDispatches ||
+      !this.stateStore.acknowledgeRunDispatch
+    ) {
+      return;
+    }
+    if (this.dispatchRetryActive) return;
+    this.dispatchRetryActive = true;
+    let envelopes: MediaGovernanceExecutionEnvelope[];
+    try {
+      envelopes = await this.stateStore.pendingRunDispatches();
+    } catch {
+      this.dispatchRetryActive = false;
+      return;
+    }
+    try {
+      for (const envelope of envelopes) {
+        const task = this.tasks.find(
+          (candidate) => candidate.id === envelope.taskId,
+        );
+        if (!task || task.activeRunId !== envelope.runId) continue;
+        if (Date.parse(envelope.expiresAt) <= Date.now()) {
+          await this.failDispatch(task, envelope.runId, MAX_DISPATCH_ATTEMPTS);
+          continue;
+        }
+        await this.dispatchEnvelope(task, envelope);
+      }
+    } finally {
+      this.dispatchRetryActive = false;
+    }
+  }
+
+  private async failDispatch(
+    task: MediaGovernanceTask,
+    runId: string,
+    attempts: number,
+  ) {
+    if (task.activeRunId !== runId) return;
+    task.activeRunId = null;
+    task.runState = 'blocked';
+    task.gateReason = `Jenkins 调度连续失败 ${attempts} 次，未启动任何 NAS 执行器`;
+    task.nextCommandLabel = '检查 Jenkins 后从当前任务重新发起';
+    this.bumpRevision(task);
+    if (this.stateStore?.failRunDispatch) {
+      await this.stateStore.failRunDispatch(task, runId);
+    } else {
+      await this.persistTask(task);
+    }
+    this.eventStream?.publishTaskChanged({
+      changeType: 'state-updated',
+      revision: task.revision,
+      taskId: task.id,
+    });
   }
 
   private assertSourceOwnerAvailable(
@@ -1603,6 +2346,7 @@ export class MediaGovernanceService implements OnModuleInit {
 
   private refreshSemanticProjection(task: MediaGovernanceTask) {
     const stageLabels: Record<MediaGovernanceTask['stage'], string> = {
+      acceptance: '独立验收',
       closed: '已闭环',
       download: 'NAS 下载',
       governance: '本地治理',
@@ -1612,6 +2356,7 @@ export class MediaGovernanceService implements OnModuleInit {
     const runStateLabels: Record<MediaGovernanceTask['runState'], string> = {
       blocked: '等待处理',
       draft: '草稿',
+      queued: '已排队',
       running: '执行中',
       succeeded: '已完成',
     };
@@ -1633,6 +2378,17 @@ export class MediaGovernanceService implements OnModuleInit {
           ?.sourceHealthLabel ?? '未检查',
       stageLabel: stageLabels[task.stage],
     };
+  }
+
+  private formatSpeed(bytesPerSecond: number) {
+    if (bytesPerSecond < 1_024) return `${bytesPerSecond} B/s`;
+    if (bytesPerSecond < 1_024 * 1_024) {
+      return `${(bytesPerSecond / 1_024).toFixed(1)} KiB/s`;
+    }
+    if (bytesPerSecond < 1_024 * 1_024 * 1_024) {
+      return `${(bytesPerSecond / 1_024 / 1_024).toFixed(1)} MiB/s`;
+    }
+    return `${(bytesPerSecond / 1_024 / 1_024 / 1_024).toFixed(1)} GiB/s`;
   }
 
   private scheduleProgress(

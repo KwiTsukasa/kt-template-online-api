@@ -183,6 +183,23 @@ describe('MediaGovernanceController', () => {
     expect(JSON.stringify(source.body)).not.toContain('private.invalid');
   });
 
+  it('exposes metadata and acceptance gates over real HTTP and fails closed out of order', async () => {
+    const created = await request(apiUrl)
+      .post('/media-governance/tasks')
+      .send({ mediaType: 'movie', titleHint: '分档与验收接口测试' })
+      .expect(201);
+    const taskId = created.body.data.id as string;
+
+    await request(apiUrl)
+      .post(`/media-governance/tasks/${taskId}/metadata/verify`)
+      .send({ expectedRevision: 1 })
+      .expect(409);
+    await request(apiUrl)
+      .post(`/media-governance/tasks/${taskId}/acceptance/verify`)
+      .send({ expectedRevision: 1 })
+      .expect(409);
+  });
+
   it('accepts one multipart TV season and safely parses a torrent fixture', async () => {
     const created = await request(apiUrl)
       .post('/media-governance/tasks')

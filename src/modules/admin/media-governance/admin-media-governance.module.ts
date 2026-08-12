@@ -13,6 +13,12 @@ import { MediaGovernancePermissionGuard } from './media-governance-permission.gu
 import { MediaGovernanceService } from './media-governance.service';
 import { MediaGovernanceAgentInternalController } from './media-governance-agent-internal.controller';
 import { MediaGovernanceAgentInternalGuard } from './media-governance-agent-internal.guard';
+import { MediaGovernanceExecutorInternalController } from './media-governance-executor-internal.controller';
+import { MediaGovernanceExecutorInternalGuard } from './media-governance-executor-internal.guard';
+import {
+  MEDIA_GOVERNANCE_EXECUTION_GATEWAY,
+  MediaGovernanceExecutionGatewayClient,
+} from './media-governance-execution.gateway';
 import {
   MEDIA_GOVERNANCE_CODEX_AGENT_GATEWAY,
   MediaGovernanceCodexAgentGatewayClient,
@@ -25,6 +31,7 @@ import {
 @Module({
   controllers: [
     MediaGovernanceAgentInternalController,
+    MediaGovernanceExecutorInternalController,
     MediaGovernanceController,
     MediaGovernanceEventsController,
   ],
@@ -35,6 +42,12 @@ import {
   ],
   providers: [
     MediaGovernanceAgentInternalGuard,
+    MediaGovernanceExecutorInternalGuard,
+    MediaGovernanceExecutionGatewayClient,
+    {
+      provide: MEDIA_GOVERNANCE_EXECUTION_GATEWAY,
+      useExisting: MediaGovernanceExecutionGatewayClient,
+    },
     MediaGovernanceCodexAgentGatewayClient,
     {
       provide: MEDIA_GOVERNANCE_CODEX_AGENT_GATEWAY,

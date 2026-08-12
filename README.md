@@ -18,7 +18,7 @@
 
 | 模块                            | 说明                                                                                                                                                |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`                         | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志、环境总览、网络管理和媒体治理合同模拟器                                     |
+| `admin`                         | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志、环境总览、网络管理和媒体治理生产编排                                       |
 | `blog`                          | 本地博客文章、分类、标签和 Argon 主题配置                                                                                                           |
 | `qqbot`                         | QQBot 账号、NapCat 扫码登录、运行态 Profile、OneBot 反向 WS、在线命令、规则、权限、系统消息源/订阅/模板/账号绑定、耐久投递、发送/接收日志和插件平台 |
 | `modules/qqbot/plugin-platform` | QQBot 插件 manifest 校验、版本安装、运行事件、定时任务、受控 SDK 和 CLI 脚手架                                                                      |
@@ -64,6 +64,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 | QQBot/NapCat          | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_REVERSE_WS_*`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`、`NAPCAT_*`、`QQBOT_NAPCAT_*`、`MQTT_*`                                                                                                                                             |
 | Environment Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_JENKINS_*`、`ENV_DASHBOARD_K8S_*`、`ENV_DASHBOARD_TENCENT_*`、`ENV_DASHBOARD_CADDY_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                         |
 | Network Management    | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_TCP_NATMAP_RELEASE_MODE`、`NETWORK_TCP_NATMAP_CANARY_PORTS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_*`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
+| Media Governance      | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`、`MEDIA_CODEX_AGENT_GATEWAY_BASE_URL`、`MEDIA_CODEX_AGENT_INTERNAL_SECRET`、`MEDIA_CODEX_AGENT_GATEWAY_TIMEOUT_MS`                                                                                                                                                                              |
 | BangDream             | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT`                                                                                                                                                                                                                                                                                                                                                                |
 | FF14 Market           | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_MARKET_CACHE_TTL_MS`                                                                                                                                                                                                                                                                                                                                                                                 |
 | FFLogs                | `FFLOGS_BASE_URL`、`FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET`                                                                                                                                                                                                                                                                                                                                                         |
@@ -212,7 +213,7 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 
 该公开入口不返回数据库、Loki、NapCat SSH 等运行拓扑配置快照；配置检查只暴露 key 级别、是否存在和缺失说明。`blocked` 表示关键配置缺失；`degraded` 表示可选运行时配置缺失，核心 API 仍可继续工作。本地未配置 Loki、NapCat 等可选依赖时，健康状态可能保持 `degraded`。
 
-Admin 媒体治理接入演示使用 `JwtAuthGuard` 与媒体专用权限门，提供作品身份、来源、
+Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，提供作品身份、来源、
 逐季字幕合同、运行时探针、下载/治理进度、CodexAgent 人工放行、聚合和可续接 SSE。
 Task、Unit、来源和 Agent session 由 10 张 TypeORM 领域表持久化；API 启动时恢复
 同一 Task/thread 与事件序号，状态变更和语义事件在同一数据库事务提交后才发布 SSE。
@@ -233,8 +234,9 @@ policy/capsule SHA 的启动预留，才调用 gateway；首个 thread 映射回
 `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET` 指定的私有 MinIO Bucket；通用 `/minio/*`
 服务会拒绝访问该 Bucket。领域合同覆盖 Task/Unit/Run、五种来源分类、逐季单一
 字幕发布组、`S00`、运行时来源健康、A/B/C 元数据、三层事件保留、
-revision/run/replay 幂等和五层 Agent 边界。菜单 SQL 尚未执行，NAS、Kestra、正式
-下载、云端和媒体写入适配器仍保持关闭。
+revision/run/replay 幂等和五层 Agent 边界。数据库 Outbox 会把密封 Run 发送到仅监听
+私网的 NAS 执行器，执行器按任务隔离目录完成下载、治理、元数据核验和独立验收；缺少
+数据库状态仓、私网地址或内部 secret 时失败关闭。云端治理仍保持关闭。
 
 ## 核心规则
 

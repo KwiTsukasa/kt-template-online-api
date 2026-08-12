@@ -62,6 +62,8 @@ describe('Pino password redaction', () => {
         },
         headers: {
           authorization: 'Bearer sensitive-authorization',
+          'x-kt-media-agent-secret': 'sensitive-media-agent-secret',
+          'x-kt-media-executor-secret': 'sensitive-media-executor-secret',
         },
       },
     };
@@ -94,6 +96,14 @@ describe('Pino password redaction', () => {
     expect(record.err.stack).toBe(originalErrorStack);
     expect(record.body.token).toBe('[Redacted]');
     expect(record.req.headers.authorization).toBe('[Redacted]');
+    expect(record.req.headers['x-kt-media-agent-secret']).toBe('[Redacted]');
+    expect(record.req.headers['x-kt-media-executor-secret']).toBe(
+      '[Redacted]',
+    );
+    expect(JSON.stringify(record)).not.toContain('sensitive-media-agent-secret');
+    expect(JSON.stringify(record)).not.toContain(
+      'sensitive-media-executor-secret',
+    );
     expect(input.body.token).toBe(REDACTION_FIXTURE);
     expect(input.req.headers.authorization).toBe(
       'Bearer sensitive-authorization',

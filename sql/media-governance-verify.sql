@@ -32,3 +32,11 @@ SELECT
   COUNT(*) AS agent_session_count,
   COALESCE(MAX(last_sequence), 0) AS max_agent_sequence
 FROM media_governance_agent_session;
+
+SELECT
+  COUNT(*) AS nullable_descriptor_manifest_sha256_columns
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'media_governance_descriptor_revision'
+  AND column_name = 'manifest_sha256'
+  AND is_nullable = 'YES';

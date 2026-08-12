@@ -52,3 +52,18 @@ WHERE `sealed_input` IS NULL;
 
 ALTER TABLE `media_governance_outbox`
   MODIFY COLUMN `sealed_input` longtext NOT NULL;
+
+SET @ddl = IF(
+  EXISTS(
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'media_governance_descriptor_revision'
+      AND column_name = 'manifest_sha256'
+      AND is_nullable = 'NO'
+  ),
+  'ALTER TABLE `media_governance_descriptor_revision` MODIFY COLUMN `manifest_sha256` varchar(64) NULL',
+  'SELECT 1'
+);
+PREPARE statement FROM @ddl;
+EXECUTE statement;
+DEALLOCATE PREPARE statement;

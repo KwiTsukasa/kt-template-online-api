@@ -20,6 +20,8 @@ const REDACT_PATHS = [
   'req.headers.authorization',
   'req.headers.cookie',
   'req.headers["x-admin-token"]',
+  'req.headers["x-kt-media-agent-secret"]',
+  'req.headers["x-kt-media-executor-secret"]',
   'req.headers["x-token"]',
   'body.accessToken',
   'body.adminToken',

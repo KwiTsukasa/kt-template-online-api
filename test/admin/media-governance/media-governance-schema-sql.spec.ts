@@ -46,6 +46,21 @@ describe('media governance production schema SQL', () => {
     expect(executorMigrationSql).toContain("column_name = 'payload_seal'");
     expect(executorMigrationSql).toContain("column_name = 'sealed_input'");
     expect(executorMigrationSql).toContain('WHERE `sealed_input` IS NULL');
+    expect(executorMigrationSql).toContain(
+      "table_name = 'media_governance_descriptor_revision'",
+    );
+    expect(executorMigrationSql).toContain("is_nullable = 'NO'");
+    expect(executorMigrationSql).toContain(
+      'MODIFY COLUMN `manifest_sha256` varchar(64) NULL',
+    );
     expect(executorMigrationSql).not.toMatch(/DROP\s+(?:TABLE|DATABASE)/iu);
+  });
+
+  it('verifies that pre-inspection magnet descriptors can persist a null manifest digest', () => {
+    expect(verifySql).toContain(
+      "table_name = 'media_governance_descriptor_revision'",
+    );
+    expect(verifySql).toContain("column_name = 'manifest_sha256'");
+    expect(verifySql).toContain("is_nullable = 'YES'");
   });
 });

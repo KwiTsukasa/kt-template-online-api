@@ -6,6 +6,8 @@ ARG NODE_MAJOR=22
 ARG PNPM_VERSION=9
 ARG KUBECTL_VERSION=stable
 ARG GIT_SSH_HOST=github.com
+ARG GITEA_SSH_HOST=git.kwitsukasa.top
+ARG GITEA_SSH_PORT=2222
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates curl git gnupg openssh-client \
@@ -33,6 +35,8 @@ RUN apt-get update \
   && kubectl version --client=true \
   && mkdir -p /root/.ssh /home/jenkins/.ssh /etc/ssh \
   && ssh-keyscan -t rsa,ecdsa,ed25519 ${GIT_SSH_HOST} | tee /etc/ssh/ssh_known_hosts /root/.ssh/known_hosts /home/jenkins/.ssh/known_hosts >/dev/null \
+  && ssh-keyscan -p ${GITEA_SSH_PORT} -t rsa,ecdsa,ed25519 ${GITEA_SSH_HOST} | tee -a /etc/ssh/ssh_known_hosts /root/.ssh/known_hosts /home/jenkins/.ssh/known_hosts >/dev/null \
+  && ssh-keygen -F "[${GITEA_SSH_HOST}]:${GITEA_SSH_PORT}" -f /etc/ssh/ssh_known_hosts >/dev/null \
   && chmod 700 /root/.ssh /home/jenkins/.ssh \
   && chmod 644 /root/.ssh/known_hosts /home/jenkins/.ssh/known_hosts \
   && chmod 644 /etc/ssh/ssh_known_hosts \

@@ -10,7 +10,7 @@ Agent 镜像内置：
 - pnpm 9
 - Docker CLI / Buildx / Compose plugin
 - kubectl
-- `github.com` SSH known_hosts
+- `github.com` 与 KT Gitea `git.kwitsukasa.top:2222` SSH known_hosts
 
 项目业务镜像仍然使用仓库根目录的 `dockerfile`。本目录的 Dockerfile 是给 Jenkins Agent 用的，不是后端服务运行镜像。
 
@@ -58,11 +58,13 @@ agent { label 'kt-node-agent' }
 docker build -t kt-jenkins-agent:node22 -f ci/jenkins-agent/Dockerfile ci/jenkins-agent
 ```
 
-如果 Git 仓库不是 GitHub，可以在构建时覆盖 SSH host：
+镜像默认同时写入 GitHub 和 KT Gitea 的 SSH 主机密钥。其他 Gitea 实例可以在
+构建时覆盖主机与端口：
 
 ```bash
 docker build \
-  --build-arg GIT_SSH_HOST=你的Git服务器域名 \
+  --build-arg GITEA_SSH_HOST=你的Git服务器域名 \
+  --build-arg GITEA_SSH_PORT=你的Git服务器SSH端口 \
   -t kt-jenkins-agent:node22 \
   -f ci/jenkins-agent/Dockerfile \
   ci/jenkins-agent
@@ -99,6 +101,10 @@ docker run -d \
 缺少该参数时孤儿进程会长期累积为僵尸进程。重建 Agent 时必须保留该参数，
 并通过 `docker inspect kt-node-agent --format '{{.HostConfig.Init}}'` 确认结果为
 `true`。
+
+Gitea 主机密钥必须存在于镜像自身，不得只在运行中容器的可写层手工追加；否则
+Agent 重建后 Jenkins SCM 检出会因 `Host key verification failed` 失效。可用
+`ssh-keygen -F '[git.kwitsukasa.top]:2222' -f /etc/ssh/ssh_known_hosts` 验证镜像契约。
 
 如果 Jenkins Controller 不在同一台 NAS 上，把 `JENKINS_URL` 改成 Agent 容器可访问的 Jenkins 地址，例如：
 

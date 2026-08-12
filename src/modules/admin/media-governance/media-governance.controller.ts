@@ -207,7 +207,7 @@ export class MediaGovernanceController {
 
   @Post(':taskId/downloads/start')
   @MediaGovernancePermission('Media:Governance:Download')
-  @ApiOperation({ summary: '启动 NAS 任务隔离下载' })
+  @ApiOperation({ summary: '启动或接管失联的 NAS 任务隔离下载' })
   async startDownload(
     @Param('taskId') taskId: string,
     @Body() body: MediaGovernanceRevisionCommandDto,

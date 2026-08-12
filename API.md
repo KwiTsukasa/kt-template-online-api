@@ -223,7 +223,7 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`        | 生成或检查规范来源清单                 |
 | `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime`  | 执行有界运行时来源探针                 |
 | `PUT`  | `/media-governance/tasks/:taskId/units/:unitId/subtitle-contract`  | 密封逐季单一发布组字幕合同             |
-| `POST` | `/media-governance/tasks/:taskId/downloads/start`                  | 密封并启动 NAS 隔离目录下载            |
+| `POST` | `/media-governance/tasks/:taskId/downloads/start`                  | 启动或接管失联的 NAS 隔离目录下载      |
 | `POST` | `/media-governance/tasks/:taskId/downloads/pause`                  | 暂停同一下载 Run                       |
 | `POST` | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传同一下载 Run                       |
 | `POST` | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理       |
@@ -253,6 +253,10 @@ NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 A
 同一 Task 只能存在一个 `primary_media` 下载 owner。无字幕媒体按季绑定完整字幕
 来源，不同季可使用不同发布组，同一季只接受与该季范围、所选来源发布组一致的
 合同；主媒体与所有补充字幕来源均完成清单检查和运行时探针后才允许启动下载。
+下载 Run 已失联且活动 Run 已清空时，再次调用 `downloads/start` 会密封
+`source.resume` 接管 Run：任务、来源和 info-hash 身份保持不变，执行器复用原
+staging/qBittorrent 状态；尚未轮到的同任务补充来源才从零开始。存在 qBittorrent
+状态但任务 staging 已丢失时失败关闭，不能静默重新下载。
 
 Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓持久化；API
 启动时恢复同一 Task/thread、revision 和事件序号。正式下载、治理、元数据核验和独立

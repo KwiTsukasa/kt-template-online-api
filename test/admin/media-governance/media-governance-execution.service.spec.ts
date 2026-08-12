@@ -414,6 +414,107 @@ describe('MediaGovernanceService production execution adapter', () => {
     expect(task.revision).toBe(4);
   });
 
+  it('restarts an orphaned download as one recovery run and accepts its reused payload', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '失联下载接管测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
+      sourceRole: 'primary_media',
+    });
+    source.manifest = [
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'Movie.mkv',
+        sizeBytes: 8,
+      },
+    ];
+    source.manifestSha256 = 'a'.repeat(64);
+    source.manifestState = 'inspected';
+    source.selectedBytes = 8;
+    source.selectedFileCount = 1;
+    source.selectedFileIndices = [0];
+    source.selectedFileMappings = [
+      {
+        episodeNumber: null,
+        fileRole: 'video',
+        index: 0,
+        language: null,
+        unitId: task.units[0]!.id,
+      },
+    ];
+    source.sourceHealth = 'viable';
+    task.activeRunId = null;
+    task.gateReason = 'NAS 执行单元已退出或被回收，但未返回可验证终态';
+    task.runState = 'blocked';
+    task.stage = 'download';
+
+    await service.startDownload(task.id, { expectedRevision: 2 });
+
+    const envelope = dispatch.mock.calls[0]![0];
+    expect(envelope).toMatchObject({
+      action: 'source.resume',
+      taskId: task.id,
+      taskRevision: 3,
+    });
+    expect(task).toMatchObject({
+      activeRunId: envelope.runId,
+      revision: 3,
+      runState: 'queued',
+      stage: 'download',
+    });
+    const base = {
+      action: 'source.resume' as const,
+      observedAt: new Date().toISOString(),
+      runId: envelope.runId,
+      taskId: task.id,
+      taskRevision: 3,
+    };
+    await service.applyExecutorEvent({
+      ...base,
+      eventType: 'run-started',
+      sequence: 1,
+      summary: '恢复运行开始',
+    });
+    expect(task.gateReason).toBeNull();
+    await service.applyExecutorEvent({
+      ...base,
+      evidenceSha256: 'b'.repeat(64),
+      eventType: 'run-succeeded',
+      payloadFiles: [
+        {
+          index: 0,
+          mtimeMs: 1,
+          path: `/vol2/1000/.kt-media-governance-staging/${task.id}/sources/${source.id}/Movie.mkv`,
+          relativePath: 'Movie.mkv',
+          sha256: 'c'.repeat(64),
+          sizeBytes: 8,
+          sourceId: source.id,
+        },
+      ],
+      sequence: 2,
+      summary: '复用载荷已就绪',
+    });
+    expect(task).toMatchObject({
+      activeRunId: null,
+      gateReason: null,
+      nextCommandLabel: '开始本地治理',
+      revision: 4,
+      runState: 'succeeded',
+      stage: 'download',
+    });
+    expect(task.payloadSeal).toMatchObject({
+      evidenceSha256: 'b'.repeat(64),
+      runId: envelope.runId,
+    });
+  });
+
   it('seals one Schema 1.2.0 plan before dispatching the formal local transaction', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();

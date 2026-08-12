@@ -99,7 +99,10 @@ function validateSources(
   if (!sources || sources.length === 0 || sources.length > 16) {
     throw new Error('source-contract-required');
   }
-  if (action !== 'source.download' && sources.length !== 1) {
+  if (
+    !['source.download', 'source.resume'].includes(action) &&
+    sources.length !== 1
+  ) {
     throw new Error('source-contract-count-invalid');
   }
   for (const source of sources) {

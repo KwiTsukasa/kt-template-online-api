@@ -575,6 +575,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
     if (input.eventType === 'run-started') {
       task.runState = 'running';
+      task.gateReason = null;
       task.nextCommandLabel = '执行器正在处理';
     } else if (input.eventType === 'run-paused') {
       task.runState = 'blocked';
@@ -612,7 +613,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           source.sourceHealth === 'viable'
             ? '检查其余来源或开始下载'
             : '更换来源后重新探针';
-      } else if (input.action === 'source.download') {
+      } else if (
+        input.action === 'source.download' ||
+        input.action === 'source.resume'
+      ) {
         if (!input.payloadFiles?.length) {
           throwVbenError('下载载荷密封证据不完整', HttpStatus.BAD_REQUEST);
         }
@@ -1257,7 +1261,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
     this.assertDownloadFileMappings(task);
     if (this.executionGateway?.enabled()) {
-      await this.reserveExecution(task, 'source.download', task.sources);
+      const action =
+        task.stage === 'download' && task.runState === 'blocked'
+          ? 'source.resume'
+          : 'source.download';
+      await this.reserveExecution(task, action, task.sources);
       return task;
     }
     task.stage = 'download';
@@ -2343,7 +2351,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     task.activeRunId = runId;
     task.runState = 'queued';
     task.stage = action.startsWith('source.')
-      ? action === 'source.download'
+      ? action === 'source.download' || action === 'source.resume'
         ? 'download'
         : 'intake'
       : action.startsWith('metadata.')

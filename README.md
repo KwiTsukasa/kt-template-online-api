@@ -244,7 +244,9 @@ revision/run/replay 幂等和五层 Agent 边界。数据库 Outbox 会把密封
 数据库状态仓、私网地址或内部 secret 时失败关闭。云端治理仍保持关闭。
 执行器回调会按同一事件序号有界重试；API 每 5 秒以 Run、Task 和密封输入摘要查询
 对应 systemd runner。执行单元已经退出却没有终态回调时，任务会原子转为“阻塞可重试”
-并清除活动 Run，不再持续显示为运行中。
+并清除活动 Run，不再持续显示为运行中。此后再次开始下载会密封新的接管 Run，按
+Task/Source/info-hash 复用原 staging 与 qBittorrent 状态；已完整载荷只重新校验，未完成
+载荷从原分片续传，存在 qBittorrent 状态却丢失 staging 时失败关闭。
 
 ## 核心规则
 

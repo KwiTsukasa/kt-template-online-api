@@ -80,6 +80,27 @@ describe('MediaGovernanceExecutionEnvelope', () => {
     expect(envelope.sources?.[0]?.selectedFileIndices).toEqual([7]);
   });
 
+  it('seals every task-owned source into one recovery run', () => {
+    const envelope = buildMediaGovernanceExecutionEnvelope({
+      ...base,
+      action: 'source.resume',
+      sources: [
+        base.sources[0],
+        {
+          ...base.sources[0],
+          descriptorGrantId: 'media-grant-fixture-source-r2',
+          descriptorSha256: '5'.repeat(64),
+          infoHash: '6'.repeat(40),
+          manifestSha256: '7'.repeat(64),
+          sourceId: 'media-source-fixture-subtitle',
+        },
+      ],
+    });
+
+    expect(envelope.action).toBe('source.resume');
+    expect(envelope.sources).toHaveLength(2);
+  });
+
   it('requires a task-bound descriptor grant for every source action', () => {
     expect(() =>
       buildMediaGovernanceExecutionEnvelope({

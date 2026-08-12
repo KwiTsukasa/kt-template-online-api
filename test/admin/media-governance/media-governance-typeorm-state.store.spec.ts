@@ -91,6 +91,8 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       transaction: async (work: (manager: unknown) => Promise<unknown>) =>
         work({
           getRepository: (entity: unknown) => repositories.get(entity),
+          query: async (sql: string) =>
+            sql.includes('GET_LOCK') ? [{ acquired: 1 }] : [{ released: 1 }],
         }),
     };
     const store = new MediaGovernanceTypeOrmStateStore(
@@ -139,6 +141,10 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       turnId: 'turn-typeorm-store-0001',
       type: 'agent-heartbeat',
     });
+
+    task.workItemId = await store.reserveWorkItemId(task.id);
+    expect(task.workItemId).toBe('media-063');
+    await expect(store.reserveWorkItemId(task.id)).resolves.toBe('media-063');
 
     expect(tasks.rows.get(task.id)).toMatchObject({
       metadataStatus: 'pending',

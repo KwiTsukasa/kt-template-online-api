@@ -65,6 +65,7 @@ export interface MediaGovernanceStateStore {
     runId: string,
   ): Promise<MediaGovernanceExecutionEnvelope | null>;
   readRunSequence?(runId: string): Promise<number>;
+  reserveWorkItemId?(taskId: string): Promise<string>;
   reserveRunDispatch?(
     task: MediaGovernanceTask,
     envelope: MediaGovernanceExecutionEnvelope,
@@ -83,6 +84,11 @@ export interface MediaGovernanceStateStore {
 
 @Injectable()
 export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateStore {
+  private static readonly WORK_ITEM_ALLOCATION_LOCK =
+    'kt-media-governance-work-item-allocation-v1';
+
+  private static readonly WORK_ITEM_RESERVED_MAX = 62;
+
   private ready = false;
 
   constructor(
@@ -161,6 +167,43 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
           type: event.type,
         }),
       );
+    });
+  }
+
+  async reserveWorkItemId(taskId: string) {
+    this.assertReady();
+    return this.dataSource.transaction(async (manager) => {
+      const lockRows = (await manager.query(
+        'SELECT GET_LOCK(?, 5) AS acquired',
+        [MediaGovernanceTypeOrmStateStore.WORK_ITEM_ALLOCATION_LOCK],
+      )) as Array<{ acquired: number | string }>;
+      if (Number(lockRows[0]?.acquired) !== 1) {
+        throw new Error('media-governance-work-item-allocation-lock-timeout');
+      }
+      try {
+        const repository = manager.getRepository(MediaGovernanceTaskEntity);
+        const task = await repository.findOneBy({ id: taskId });
+        if (!task) throw new Error('media-governance-task-not-found');
+        if (task.workItemId) return task.workItemId;
+
+        const highestAssigned = (await repository.find()).reduce(
+          (highest, candidate) => {
+            const match = /^media-(\d{3})$/u.exec(candidate.workItemId ?? '');
+            return match ? Math.max(highest, Number(match[1])) : highest;
+          },
+          MediaGovernanceTypeOrmStateStore.WORK_ITEM_RESERVED_MAX,
+        );
+        if (highestAssigned >= 999) {
+          throw new Error('media-governance-work-item-allocation-exhausted');
+        }
+        task.workItemId = `media-${String(highestAssigned + 1).padStart(3, '0')}`;
+        await repository.save(task);
+        return task.workItemId;
+      } finally {
+        await manager.query('SELECT RELEASE_LOCK(?) AS released', [
+          MediaGovernanceTypeOrmStateStore.WORK_ITEM_ALLOCATION_LOCK,
+        ]);
+      }
     });
   }
 

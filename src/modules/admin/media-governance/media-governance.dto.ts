@@ -127,7 +127,8 @@ export class MediaGovernanceTaskCreateDto {
   providerRef?: MediaGovernanceProviderRefDto;
 
   @ApiPropertyOptional({
-    description: '与现行本地权威媒体账本绑定的作品编号',
+    description:
+      '与现行本地权威媒体账本绑定的内部作品编号；新任务省略时会在首次本地治理前自动分配',
     example: 'media-063',
   })
   @IsOptional()

@@ -248,7 +248,9 @@ NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 A
 `Cache-Control: no-store`；增量 SQL 初始只把菜单和九个权限授予启用中的 `super`。
 所有命令请求必须携带 `expectedRevision`，陈旧版本返回 409 且不执行。TV 至少声明一个
 `Sxx` 季号，特别篇/番外篇使用 `S00`；Movie/Theatrical 不填写季号。`providerRef` 和
-`releaseYear` 是带格式校验和中文引导的可选身份消歧字段。
+`releaseYear` 是带格式校验和中文引导的可选身份消歧字段。`workItemId` 是内部账本与
+本地事务身份：导入存量任务时可显式绑定；未来新任务省略时，API 会在首次本地治理前
+通过数据库互斥锁从 `media-063` 起分配且永久复用，不要求操作员填写。
 
 同一 Task 只能存在一个 `primary_media` 下载 owner。无字幕媒体按季绑定完整字幕
 来源，不同季可使用不同发布组，同一季只接受与该季范围、所选来源发布组一致的
@@ -257,6 +259,8 @@ NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 A
 `source.resume` 接管 Run：任务、来源和 info-hash 身份保持不变，执行器复用原
 staging/qBittorrent 状态；尚未轮到的同任务补充来源才从零开始。存在 qBittorrent
 状态但任务 staging 已丢失时失败关闭，不能静默重新下载。
+本地计划密封失败会生成新 revision 并保持原载荷不变；修正映射、字幕合同或内部身份
+后，可用该 revision 重试治理启动，不会重放下载。
 
 Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓持久化；API
 启动时恢复同一 Task/thread、revision 和事件序号。正式下载、治理、元数据核验和独立

@@ -1478,12 +1478,35 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
-    if (task.stage !== 'download' || task.runState !== 'succeeded') {
+    const retryingPlanFailure =
+      task.stage === 'download' &&
+      task.runState === 'blocked' &&
+      task.activeRunId === null &&
+      task.payloadSeal !== null &&
+      task.gateReason?.startsWith('本地计划无法安全密封：') === true;
+    if (
+      task.stage !== 'download' ||
+      (task.runState !== 'succeeded' && !retryingPlanFailure)
+    ) {
       throwVbenError('来源载荷尚未就绪', HttpStatus.CONFLICT);
     }
     if (this.executionGateway?.enabled()) {
       if (!task.payloadSeal) {
         throwVbenError('下载载荷缺少密封证据', HttpStatus.CONFLICT);
+      }
+      if (!task.workItemId) {
+        if (!this.databaseReady() || !this.stateStore?.reserveWorkItemId) {
+          throwVbenError(
+            '媒体治理作品编号分配链路暂不可用',
+            HttpStatus.SERVICE_UNAVAILABLE,
+          );
+        }
+        task.workItemId = await this.stateStore.reserveWorkItemId(task.id);
+      }
+      if (retryingPlanFailure) {
+        task.runState = 'succeeded';
+        task.gateReason = null;
+        task.nextCommandLabel = '开始本地治理';
       }
       if (!task.sealedPlan) {
         try {
@@ -1499,8 +1522,8 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
               ? `本地计划无法安全密封：${error.message}`.slice(0, 160)
               : '本地计划无法安全密封';
           task.nextCommandLabel = '修正作品编号、来源映射或字幕合同后重试';
-          this.refreshSemanticProjection(task);
-          await this.persistTask(task);
+          this.bumpRevision(task);
+          await this.commitTask(task, 'state-updated');
           throwVbenError(task.gateReason, HttpStatus.CONFLICT);
         }
       }

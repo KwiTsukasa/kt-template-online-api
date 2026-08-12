@@ -26,6 +26,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       recordRunDispatchFailure: jest.fn(async () => 1),
       readRunSequence: jest.fn(async (runId) => sequences.get(runId) ?? 0),
       readRunEnvelope: jest.fn(async (runId) => envelopes.get(runId) ?? null),
+      reserveWorkItemId: jest.fn(async () => 'media-063'),
       reserveRunDispatch: jest.fn(async (...args) => {
         reserved.push(args);
         envelopes.set(args[1].runId, args[1]);
@@ -533,7 +534,6 @@ describe('MediaGovernanceService production execution adapter', () => {
       providerRef: { provider: 'tmdb', providerId: '603' },
       releaseYear: 1999,
       titleHint: '黑客帝国',
-      workItemId: 'media-063',
     });
     const source = await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
@@ -598,6 +598,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       revision: 3,
       runState: 'queued',
       stage: 'governance',
+      workItemId: 'media-063',
     });
 
     await service.applyExecutorEvent({
@@ -728,6 +729,81 @@ describe('MediaGovernanceService production execution adapter', () => {
       revision: 8,
       runState: 'succeeded',
       stage: 'closed',
+    });
+  });
+
+  it('retries a revisioned plan-sealing failure after its contract is corrected', async () => {
+    const { dispatch, service, stateStore } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '可重试计划测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      sourceRole: 'primary_media',
+    });
+    const relativePath = 'Retryable.Movie.mkv';
+    source.manifest = [
+      { executable: false, index: 0, relativePath, sizeBytes: 1_024 },
+    ];
+    source.selectedFileCount = 1;
+    source.selectedFileIndices = [0];
+    task.stage = 'download';
+    task.runState = 'succeeded';
+    task.payloadSeal = {
+      evidenceSha256: 'e'.repeat(64),
+      files: [
+        {
+          index: 0,
+          mtimeMs: 1_786_000_000_000,
+          path: `/vol2/1000/.kt-media-governance-staging/${task.id}/sources/${source.id}/${relativePath}`,
+          relativePath,
+          sha256: 'a'.repeat(64),
+          sizeBytes: 1_024,
+          sourceId: source.id,
+        },
+      ],
+      runId: 'media-run-download-retry-fixture',
+    };
+
+    await expect(
+      service.startGovernance(task.id, { expectedRevision: 2 }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(task).toMatchObject({
+      activeRunId: null,
+      revision: 3,
+      runState: 'blocked',
+      stage: 'download',
+      workItemId: 'media-063',
+    });
+    expect(task.gateReason).toContain(
+      'governance-selected-file-mapping-missing',
+    );
+
+    source.selectedFileMappings = [
+      {
+        episodeNumber: null,
+        fileRole: 'video',
+        index: 0,
+        language: null,
+        unitId: task.units[0]!.id,
+      },
+    ];
+    await service.startGovernance(task.id, { expectedRevision: 3 });
+
+    expect(stateStore.reserveWorkItemId).toHaveBeenCalledTimes(1);
+    expect(dispatch.mock.calls.at(-1)?.[0]).toMatchObject({
+      action: 'governance.execute',
+      taskRevision: 4,
+    });
+    expect(task).toMatchObject({
+      gateReason: null,
+      revision: 4,
+      runState: 'queued',
+      stage: 'governance',
     });
   });
 });

@@ -247,6 +247,9 @@ revision/run/replay 幂等和五层 Agent 边界。数据库 Outbox 会把密封
 并清除活动 Run，不再持续显示为运行中。此后再次开始下载会密封新的接管 Run，按
 Task/Source/info-hash 复用原 staging 与 qBittorrent 状态；已完整载荷只重新校验，未完成
 载荷从原分片续传，存在 qBittorrent 状态却丢失 staging 时失败关闭。
+新任务不需要操作员填写内部 `workItemId`：首次本地治理前由数据库串行分配
+`media-063+` 并持久化复用。计划密封失败会推进 revision，修正合同后可从同一
+payload-ready 载荷重试，不会重新下载。
 
 ## 核心规则
 

@@ -786,6 +786,122 @@ describe('MediaGovernanceService production execution adapter', () => {
     });
   });
 
+  it('retries failed metadata and acceptance verification with fresh run identities', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const metadataTask = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '元数据核验失败重试测试',
+    });
+    metadataTask.governanceProfile = 'sidecar-bundled';
+    metadataTask.metadataStatus = 'pending';
+    metadataTask.runState = 'succeeded';
+    metadataTask.sealedPlan = { schemaVersion: '1.2.0' };
+    metadataTask.sealedPlanSha256 = 'a'.repeat(64);
+    metadataTask.stage = 'metadata';
+
+    await service.startMetadataVerification(metadataTask.id, {
+      expectedRevision: 1,
+    });
+    const firstMetadataEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: firstMetadataEnvelope.runId,
+      sequence: 1,
+      summary: '元数据核验开始',
+      taskId: metadataTask.id,
+      taskRevision: 2,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      eventType: 'run-failed',
+      observedAt: new Date().toISOString(),
+      runId: firstMetadataEnvelope.runId,
+      sequence: 2,
+      summary: 'NAS 执行失败：元数据核验输入不完整',
+      taskId: metadataTask.id,
+      taskRevision: 2,
+    });
+    expect(metadataTask).toMatchObject({
+      activeRunId: null,
+      metadataStatus: 'pending',
+      revision: 3,
+      runState: 'blocked',
+      stage: 'metadata',
+    });
+
+    await service.startMetadataVerification(metadataTask.id, {
+      expectedRevision: 3,
+    });
+    const retryMetadataEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    expect(retryMetadataEnvelope).toMatchObject({
+      action: 'metadata.verify',
+      replayKey: `${metadataTask.id}:metadata.verify:r4`,
+      taskRevision: 4,
+    });
+    expect(retryMetadataEnvelope.runId).not.toBe(firstMetadataEnvelope.runId);
+
+    const acceptanceTask = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '独立验收失败重试测试',
+    });
+    acceptanceTask.governanceProfile = 'sidecar-bundled';
+    acceptanceTask.metadataStatus = 'verified';
+    acceptanceTask.runState = 'succeeded';
+    acceptanceTask.sealedPlan = { schemaVersion: '1.2.0' };
+    acceptanceTask.sealedPlanSha256 = 'b'.repeat(64);
+    acceptanceTask.stage = 'metadata';
+
+    await service.startAcceptanceVerification(acceptanceTask.id, {
+      expectedRevision: 1,
+    });
+    const firstAcceptanceEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    await service.applyExecutorEvent({
+      action: 'acceptance.verify',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: firstAcceptanceEnvelope.runId,
+      sequence: 1,
+      summary: '独立验收开始',
+      taskId: acceptanceTask.id,
+      taskRevision: 2,
+    });
+    await service.applyExecutorEvent({
+      action: 'acceptance.verify',
+      eventType: 'run-failed',
+      observedAt: new Date().toISOString(),
+      runId: firstAcceptanceEnvelope.runId,
+      sequence: 2,
+      summary: 'NAS 执行失败：独立验收证据暂不可用',
+      taskId: acceptanceTask.id,
+      taskRevision: 2,
+    });
+    expect(acceptanceTask).toMatchObject({
+      activeRunId: null,
+      metadataStatus: 'verified',
+      revision: 3,
+      runState: 'blocked',
+      stage: 'acceptance',
+    });
+
+    await service.startAcceptanceVerification(acceptanceTask.id, {
+      expectedRevision: 3,
+    });
+    const retryAcceptanceEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    expect(retryAcceptanceEnvelope).toMatchObject({
+      action: 'acceptance.verify',
+      replayKey: `${acceptanceTask.id}:acceptance.verify:r4`,
+      taskRevision: 4,
+    });
+    expect(retryAcceptanceEnvelope.runId).not.toBe(
+      firstAcceptanceEnvelope.runId,
+    );
+  });
+
   it('persists exact metadata facts and reserves one bounded repair attempt before Agent', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();

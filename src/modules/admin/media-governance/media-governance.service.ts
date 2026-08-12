@@ -816,6 +816,21 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
+  private canRetryFailedVerification(
+    task: MediaGovernanceTask,
+    stage: 'acceptance' | 'metadata',
+    metadataStatus: 'pending' | 'verified',
+  ) {
+    return (
+      task.stage === stage &&
+      task.runState === 'blocked' &&
+      task.activeRunId === null &&
+      task.metadataStatus === metadataStatus &&
+      Boolean(task.sealedPlan) &&
+      task.gateReason?.startsWith('NAS 执行失败：') === true
+    );
+  }
+
   private canRunBoundedMetadataRepair(task: MediaGovernanceTask) {
     const projections = task.units.map((unit) => unit.metadataProjection);
     return (
@@ -1783,8 +1798,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.stage !== 'metadata' ||
       task.runState !== 'succeeded' ||
       task.metadataStatus !== 'pending';
+    const retryingFailedVerification = this.canRetryFailedVerification(
+      task,
+      'metadata',
+      'pending',
+    );
     if (
-      (regularVerificationInvalid && !this.canRefreshLegacyMetadata(task)) ||
+      (regularVerificationInvalid &&
+        !this.canRefreshLegacyMetadata(task) &&
+        !retryingFailedVerification) ||
       !task.sealedPlan
     ) {
       throwVbenError('当前任务尚未进入元数据核验门', HttpStatus.CONFLICT);
@@ -1818,10 +1840,16 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
+    const retryingFailedVerification = this.canRetryFailedVerification(
+      task,
+      'acceptance',
+      'verified',
+    );
     if (
-      task.stage !== 'metadata' ||
-      task.runState !== 'succeeded' ||
-      task.metadataStatus !== 'verified' ||
+      ((task.stage !== 'metadata' ||
+        task.runState !== 'succeeded' ||
+        task.metadataStatus !== 'verified') &&
+        !retryingFailedVerification) ||
       !task.sealedPlan
     ) {
       throwVbenError('当前任务尚未通过元数据核验门', HttpStatus.CONFLICT);

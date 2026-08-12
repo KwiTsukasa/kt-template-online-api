@@ -902,6 +902,90 @@ describe('MediaGovernanceService production execution adapter', () => {
     );
   });
 
+  it('rechecks deferred fnOS identity before escalating metadata to Agent', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: 'fnOS 身份延迟测试',
+    });
+    task.governanceProfile = 'embedded';
+    task.metadataStatus = 'pending';
+    task.runState = 'succeeded';
+    task.sealedPlan = { schemaVersion: '1.2.0' };
+    task.sealedPlanSha256 = 'a'.repeat(64);
+    task.stage = 'metadata';
+
+    await service.startMetadataVerification(task.id, { expectedRevision: 1 });
+    const firstEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: firstEnvelope.runId,
+      sequence: 1,
+      summary: '元数据核验开始',
+      taskId: task.id,
+      taskRevision: 2,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      evidenceSha256: 'b'.repeat(64),
+      eventType: 'run-succeeded',
+      metadata: {
+        canAccept: false,
+        repairAttempts: 0,
+        schemaVersion: 'media-admin-metadata-verification-v1',
+        units: [
+          {
+            accepted: false,
+            missingA: ['identity.provider', 'identity.providerId'],
+            missingB: ['metadata.local-nfo', 'artwork.poster'],
+            missingC: [],
+            unitId: task.units[0]!.id,
+          },
+        ],
+        writeBoundaries: {
+          cloud: 0,
+          databaseDirect: 0,
+          mechanicalScan: 0,
+          ui: 0,
+        },
+      },
+      observedAt: new Date().toISOString(),
+      runId: firstEnvelope.runId,
+      sequence: 2,
+      summary: 'fnOS 身份尚未回填',
+      taskId: task.id,
+      taskRevision: 2,
+    });
+
+    expect(task).toMatchObject({
+      activeRunId: null,
+      metadataStatus: 'requires-agent',
+      nextCommandLabel: 'fnOS 身份回填尚未稳定，重新采集元数据事实',
+      revision: 3,
+      runState: 'blocked',
+      stage: 'metadata',
+    });
+    await expect(
+      service.startAgent(task.id, { expectedRevision: 3 }),
+    ).rejects.toMatchObject({
+      response: { msg: '当前任务应先重新采集元数据事实' },
+      status: 409,
+    });
+
+    await service.startMetadataVerification(task.id, { expectedRevision: 3 });
+    const retryEnvelope = dispatch.mock.calls.at(-1)?.[0];
+    expect(retryEnvelope).toMatchObject({
+      action: 'metadata.verify',
+      replayKey: `${task.id}:metadata.verify:r4`,
+      taskRevision: 4,
+    });
+    expect(retryEnvelope.runId).not.toBe(firstEnvelope.runId);
+  });
+
   it('persists exact metadata facts and reserves one bounded repair attempt before Agent', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();

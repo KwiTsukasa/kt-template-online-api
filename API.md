@@ -268,7 +268,10 @@ staging/qBittorrent 状态；尚未轮到的同任务补充来源才从零开始
 原计划，但生成新的 Run、revision 和 replay key，不复用已消费事务键，也不重放下载。
 `metadata/verify` 或 `acceptance/verify` 的 NAS 执行失败也可用失败后的当前 revision 重试；
 仅在对应阶段、无活动 Run、密封计划仍在且元数据状态未被改写时接受，并生成新的 Run、
-revision 和 replay key。普通元数据缺口或独立验收不通过仍按原门禁处理，不能借此绕过。
+revision 和 replay key。治理完成后 fnOS 尚未稳定回填身份时，若所有 Unit 的 A 级缺口
+严格只有 `identity.provider/providerId`、尚未执行元数据修复且没有 C 级缺口，可从同一
+密封计划重新采集元数据事实，不会启动 Agent、重跑下载或重做本地事务。普通元数据
+缺口或独立验收不通过仍按原门禁处理，不能借此绕过。
 
 Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓持久化；API
 启动时恢复同一 Task/thread、revision 和事件序号。正式下载、治理、元数据核验和独立

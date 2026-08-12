@@ -689,11 +689,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
               0,
             )} 项`;
         const canRepair = this.canRunBoundedMetadataRepair(task);
+        const canRefreshDeferredIdentity =
+          this.canRefreshDeferredMetadataIdentity(task);
         task.nextCommandLabel = metadata.canAccept
           ? '运行独立本地验收'
-          : canRepair
-            ? `运行第 ${this.metadataRepairAttempts(task) + 1}/2 次有界元数据修复`
-            : '启动 CodexAgent 有界人工治理';
+          : canRefreshDeferredIdentity
+            ? 'fnOS 身份回填尚未稳定，重新采集元数据事实'
+            : canRepair
+              ? `运行第 ${this.metadataRepairAttempts(task) + 1}/2 次有界元数据修复`
+              : '启动 CodexAgent 有界人工治理';
       } else if (input.action === 'acceptance.verify') {
         const acceptance = input.acceptance;
         if (
@@ -813,6 +817,31 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.metadataStatus === 'requires-agent' &&
       Boolean(task.sealedPlan) &&
       this.hasLegacyEmptyMetadataProjection(task)
+    );
+  }
+
+  private canRefreshDeferredMetadataIdentity(task: MediaGovernanceTask) {
+    const providerIdentityFields = new Set([
+      'identity.provider',
+      'identity.providerId',
+    ]);
+    return (
+      task.stage === 'metadata' &&
+      task.runState === 'blocked' &&
+      task.metadataStatus === 'requires-agent' &&
+      Boolean(task.sealedPlan) &&
+      !task.metadataIdentity &&
+      task.units.every(
+        (unit) =>
+          unit.evidenceSha256 !== null &&
+          unit.metadataProjection.repairAttempts === 0 &&
+          unit.metadataProjection.missingA.length ===
+            providerIdentityFields.size &&
+          unit.metadataProjection.missingA.every((field) =>
+            providerIdentityFields.has(field),
+          ) &&
+          unit.metadataProjection.missingC.length === 0,
+      )
     );
   }
 
@@ -1803,9 +1832,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       'metadata',
       'pending',
     );
+    const refreshingDeferredIdentity =
+      this.canRefreshDeferredMetadataIdentity(task);
     if (
       (regularVerificationInvalid &&
         !this.canRefreshLegacyMetadata(task) &&
+        !refreshingDeferredIdentity &&
         !retryingFailedVerification) ||
       !task.sealedPlan
     ) {
@@ -1867,7 +1899,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (task.metadataStatus !== 'requires-agent') {
       throwVbenError('当前任务不需要启动 Agent', HttpStatus.CONFLICT);
     }
-    if (this.canRefreshLegacyMetadata(task)) {
+    if (
+      this.canRefreshLegacyMetadata(task) ||
+      this.canRefreshDeferredMetadataIdentity(task)
+    ) {
       throwVbenError('当前任务应先重新采集元数据事实', HttpStatus.CONFLICT);
     }
     if (this.canRunBoundedMetadataRepair(task)) {

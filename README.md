@@ -262,7 +262,9 @@ payload-ready 载荷重试，不会重新下载。
 新的 revision、Run 和 replay key，不重放下载，也不复用已经消费的事务键。
 元数据核验或独立验收出现明确的 NAS 执行失败时，也可用失败后的当前 revision 从原
 阶段重试；API 保留密封计划并创建新的 Run 和 replay key，不会把业务核验不通过误当成
-执行失败重试。
+执行失败重试。元数据执行器会在治理完成后有界等待 fnOS 回填作品身份；若旧 Run 已在
+回填完成前只返回 `identity.provider/providerId` 两项缺口，API 允许从同一密封计划重新
+采集元数据事实，并在此之前拒绝误启动 CodexAgent，不重跑下载或本地治理。
 
 ## 核心规则
 

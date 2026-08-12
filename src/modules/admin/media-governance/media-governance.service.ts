@@ -665,11 +665,14 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         task.metadataStatus = 'pending';
         task.nextCommandLabel = '运行 A/B/C 分档元数据核验';
       } else if (input.action === 'metadata.repair') {
+        const automaticEnrichment =
+          this.canRunAutomaticMetadataEnrichment(task);
         this.applyMetadataEvidence(task, input);
         task.stage = 'metadata';
         task.runState = 'succeeded';
         task.gateReason = null;
         task.metadataStatus = 'pending';
+        if (automaticEnrichment) task.closedMode = 'automatic';
         task.nextCommandLabel = '重新运行 A/B/C 分档元数据核验';
       } else if (input.action === 'metadata.verify') {
         this.applyMetadataEvidence(task, input);
@@ -691,13 +694,20 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         const canRepair = this.canRunBoundedMetadataRepair(task);
         const canRefreshDeferredIdentity =
           this.canRefreshDeferredMetadataIdentity(task);
+        const canEnrichAutomatically =
+          this.canRunAutomaticMetadataEnrichment(task);
+        if (!metadata.canAccept && task.closedMode === 'automatic') {
+          task.closedMode = null;
+        }
         task.nextCommandLabel = metadata.canAccept
           ? '运行独立本地验收'
           : canRefreshDeferredIdentity
             ? 'fnOS 身份回填尚未稳定，重新采集元数据事实'
-            : canRepair
-              ? `运行第 ${this.metadataRepairAttempts(task) + 1}/2 次有界元数据修复`
-              : '启动 CodexAgent 有界人工治理';
+            : canEnrichAutomatically
+              ? '自动补齐 LocalNFO 与作品/季海报'
+              : canRepair
+                ? `运行第 ${this.metadataRepairAttempts(task) + 1}/2 次有界元数据修复`
+                : '启动 CodexAgent 有界人工治理';
       } else if (input.action === 'acceptance.verify') {
         const acceptance = input.acceptance;
         if (
@@ -721,9 +731,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         task.closedMode =
           task.agentSession?.status === 'succeeded'
             ? 'agent_verified'
-            : this.metadataRepairAttempts(task) > 0
-              ? 'bounded_repair'
-              : 'automatic';
+            : task.closedMode === 'automatic'
+              ? 'automatic'
+              : this.metadataRepairAttempts(task) > 0
+                ? 'bounded_repair'
+                : 'automatic';
         for (const unit of task.units) {
           unit.evidenceSha256 = input.evidenceSha256;
           unit.localAcceptedAt = input.observedAt;
@@ -866,6 +878,29 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       this.metadataRepairAttempts(task) < 2 &&
       projections.every((projection) => projection.missingA.length === 0) &&
       projections.some((projection) => projection.missingB.length > 0)
+    );
+  }
+
+  private canRunAutomaticMetadataEnrichment(task: MediaGovernanceTask) {
+    const generatedMetadataFields = new Set([
+      'artwork.poster',
+      'metadata.local-nfo',
+    ]);
+    return (
+      task.governanceProfile === 'embedded' &&
+      Boolean(task.metadataIdentity) &&
+      this.metadataRepairAttempts(task) === 0 &&
+      task.units.every((unit) => {
+        const projection = unit.metadataProjection;
+        return (
+          projection.missingA.length === 0 &&
+          projection.missingC.length === 0 &&
+          new Set(projection.missingB).size === generatedMetadataFields.size &&
+          projection.missingB.every((field) =>
+            generatedMetadataFields.has(field),
+          )
+        );
+      })
     );
   }
 

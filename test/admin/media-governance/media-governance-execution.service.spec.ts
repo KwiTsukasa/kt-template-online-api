@@ -986,7 +986,12 @@ describe('MediaGovernanceService production execution adapter', () => {
     expect(retryEnvelope.runId).not.toBe(firstEnvelope.runId);
   });
 
-  it('persists exact metadata facts and reserves one bounded repair attempt before Agent', async () => {
+  it.each([
+    ['sidecar-bundled', null, 'bounded_repair'],
+    ['embedded', 'automatic', 'automatic'],
+  ] as const)(
+    'persists exact metadata facts and closes %s repair with the correct mode',
+    async (governanceProfile, modeAfterRepair, expectedClosedMode) => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();
     const task = await service.create({
@@ -994,7 +999,12 @@ describe('MediaGovernanceService production execution adapter', () => {
       seasonNumbers: ['S01'],
       titleHint: '有界元数据修复测试',
     });
-    task.governanceProfile = 'sidecar-bundled';
+    task.governanceProfile = governanceProfile;
+    task.metadataIdentity = {
+      provider: 'tmdb',
+      providerId: '202821',
+      releaseYear: 2023,
+    };
     task.metadataStatus = 'requires-agent';
     task.runState = 'blocked';
     task.stage = 'metadata';
@@ -1107,7 +1117,7 @@ describe('MediaGovernanceService production execution adapter', () => {
 
     expect(task).toMatchObject({
       activeRunId: null,
-      closedMode: null,
+      closedMode: modeAfterRepair,
       metadataIdentity: {
         provider: 'tmdb',
         providerId: '202821',
@@ -1213,12 +1223,13 @@ describe('MediaGovernanceService production execution adapter', () => {
       taskRevision: 6,
     });
     expect(task).toMatchObject({
-      closedMode: 'bounded_repair',
+      closedMode: expectedClosedMode,
       metadataStatus: 'verified',
       revision: 7,
       stage: 'closed',
     });
-  });
+    },
+  );
 
   it('recollects legacy empty metadata facts before repair or Agent routing', async () => {
     const { dispatch, service } = fixture();

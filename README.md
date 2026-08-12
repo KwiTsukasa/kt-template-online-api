@@ -265,6 +265,9 @@ payload-ready 载荷重试，不会重新下载。
 执行失败重试。元数据执行器会在治理完成后有界等待 fnOS 回填作品身份；若旧 Run 已在
 回填完成前只返回 `identity.provider/providerId` 两项缺口，API 允许从同一密封计划重新
 采集元数据事实，并在此之前拒绝误启动 CodexAgent，不重跑下载或本地治理。
+内嵌字幕任务在唯一 TMDB 身份已闭合且只缺 LocalNFO、作品/季海报时，第一次确定性生成
+属于自动元数据补齐，独立验收后记为 `automatic`；第二次尝试、其他 profile 或额外缺口
+继续进入 `bounded_repair`/Agent，不改变 A/B/C 硬门禁。
 
 ## 核心规则
 

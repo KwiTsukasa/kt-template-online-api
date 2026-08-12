@@ -272,6 +272,10 @@ revision 和 replay key。治理完成后 fnOS 尚未稳定回填身份时，若
 严格只有 `identity.provider/providerId`、尚未执行元数据修复且没有 C 级缺口，可从同一
 密封计划重新采集元数据事实，不会启动 Agent、重跑下载或重做本地事务。普通元数据
 缺口或独立验收不通过仍按原门禁处理，不能借此绕过。
+内嵌字幕 profile 已获得唯一 TMDB 身份、且缺口严格只有 LocalNFO 与作品/季海报时，
+第一次确定性元数据生成记为自动补齐；其独立验收通过后保持 `closedMode=automatic`。
+其他 profile、第二次尝试或更广的缺口仍按 `bounded_repair`/Agent 分支计数，不能借自动
+补齐标签降级硬门禁。
 
 Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓持久化；API
 启动时恢复同一 Task/thread、revision 和事件序号。正式下载、治理、元数据核验和独立

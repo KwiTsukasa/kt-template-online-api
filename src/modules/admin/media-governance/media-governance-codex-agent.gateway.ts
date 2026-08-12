@@ -4,7 +4,11 @@ import type {
   MediaCodexAgentSafeSession,
   MediaCodexAgentTurnRequest,
 } from '@/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
-import { MEDIA_CODEX_AGENT_POLICY_VERSION } from '@/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
+import {
+  MEDIA_CODEX_AGENT_POLICY_VERSION,
+  canonicalJson,
+  parseMediaCodexAgentResult,
+} from '@/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
 
 export const MEDIA_GOVERNANCE_CODEX_AGENT_GATEWAY = Symbol(
   'MEDIA_GOVERNANCE_CODEX_AGENT_GATEWAY',
@@ -113,6 +117,21 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
       throw new Error('media-codex-agent-gateway-response-invalid');
     }
     const session = value as Record<string, unknown>;
+    const rawResult =
+      session.result &&
+      typeof session.result === 'object' &&
+      !Array.isArray(session.result)
+        ? (session.result as Record<string, unknown>)
+        : null;
+    const result = rawResult
+      ? parseMediaCodexAgentResult({
+          candidateSummaries: rawResult.candidateSummaries,
+          nextActionLabel: rawResult.nextActionLabel,
+          planSha256: rawResult.planSha256,
+          status: rawResult.status,
+          summary: rawResult.summary,
+        })
+      : null;
     const sha256 = /^[a-f0-9]{64}$/;
     const safeId = /^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/;
     if (
@@ -145,7 +164,10 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
         (typeof session.currentUnitId !== 'string' ||
           !safeId.test(session.currentUnitId))) ||
       (session.turnId !== null &&
-        (typeof session.turnId !== 'string' || !safeId.test(session.turnId)))
+        (typeof session.turnId !== 'string' || !safeId.test(session.turnId))) ||
+      (session.result !== undefined &&
+        session.result !== null &&
+        (!result || canonicalJson(result) !== canonicalJson(session.result)))
     ) {
       throw new Error('media-codex-agent-gateway-response-invalid');
     }
@@ -158,6 +180,7 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
       policySha256: session.policySha256,
       policyVersion: session.policyVersion,
       replayed: session.replayed,
+      result,
       status: session.status,
       taskId: session.taskId,
       taskRevision: session.taskRevision,

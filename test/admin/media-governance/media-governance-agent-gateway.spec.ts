@@ -1,5 +1,8 @@
 import { HttpException } from '@nestjs/common';
-import { MEDIA_CODEX_AGENT_POLICY_VERSION } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
+import {
+  MEDIA_CODEX_AGENT_POLICY_VERSION,
+  sha256Json,
+} from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
 import {
   buildMediaCodexAgentCapsule,
   buildMediaCodexAgentPolicy,
@@ -8,6 +11,8 @@ import type { MediaGovernanceCodexAgentGateway } from '../../../src/modules/admi
 import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/media-governance.service';
 
 describe('MediaGovernanceService CodexAgent gateway adapter', () => {
+  afterEach(() => jest.restoreAllMocks());
+
   async function fixture() {
     const startTurn = jest.fn(async (request) => {
       const policy = buildMediaCodexAgentPolicy(request.taskId);
@@ -21,6 +26,7 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
         policySha256: policy.policySha256,
         policyVersion: MEDIA_CODEX_AGENT_POLICY_VERSION,
         replayed: false,
+        result: null,
         status: 'active' as const,
         taskId: request.taskId,
         taskRevision: request.taskRevision,
@@ -118,6 +124,7 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
       capsuleSha256: session!.capsuleSha256,
       eventId: 'media-agent-event-complete-001',
       observedAt: '2026-08-11T00:00:01.000Z',
+      planSha256: (sealed as { planSha256: string }).planSha256,
       policySha256: session!.policySha256,
       sequence: 1,
       status: 'blocked' as const,
@@ -135,7 +142,7 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
     expect(task).toMatchObject({
       revision: 3,
       runState: 'blocked',
-      sealedPlanSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      sealedPlanSha256: null,
     });
     await expect(service.applyAgentEvent(completed)).resolves.toEqual({
       applied: false,
@@ -201,6 +208,26 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
       policySha256: task.agentSession!.policySha256,
       policyVersion: MEDIA_CODEX_AGENT_POLICY_VERSION,
       replayed: false,
+      result: {
+        candidateSummaries: [
+          'tmdb:105473｜2020 年 OVA，特别篇按 S00 收录',
+          'tmdb:105476｜同系列常规季度，非当前 OVA',
+        ],
+        candidates: [
+          {
+            id: 'tmdb:105473',
+            summary: 'tmdb:105473｜2020 年 OVA，特别篇按 S00 收录',
+          },
+          {
+            id: 'tmdb:105476',
+            summary: 'tmdb:105476｜同系列常规季度，非当前 OVA',
+          },
+        ],
+        nextActionLabel: '请选择正确作品',
+        planSha256: null,
+        status: 'requires-operator',
+        summary: '存在两个候选',
+      },
       status: 'blocked',
       taskId: task.id,
       taskRevision: 2,
@@ -219,7 +246,7 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
   it('seals a pending Agent plan exactly once when refresh observes a completed turn', async () => {
     const { gateway, service, task } = await fixture();
     await service.startAgent(task.id, { expectedRevision: 1 });
-    await service.agentToolCall({
+    const sealed = await service.agentToolCall({
       arguments: {
         operations: [
           {
@@ -246,6 +273,14 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
       policySha256: task.agentSession!.policySha256,
       policyVersion: MEDIA_CODEX_AGENT_POLICY_VERSION,
       replayed: false,
+      result: {
+        candidateSummaries: [],
+        candidates: [],
+        nextActionLabel: '等待密封执行器处理',
+        planSha256: (sealed as { planSha256: string }).planSha256,
+        status: 'plan-submitted',
+        summary: '提交恢复测试计划',
+      },
       status: 'blocked',
       taskId: task.id,
       taskRevision: 2,
@@ -257,10 +292,10 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
     expect(first).toMatchObject({
       pendingPlanSha256: null,
       status: 'needs-operator',
-      statusLabel: '密封计划待执行器接入',
+      statusLabel: '密封文件计划待人工复核',
     });
     expect(task.revision).toBe(3);
-    expect(task.sealedPlanSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(task.sealedPlanSha256).toBeNull();
 
     await service.agentSession(task.id);
     expect(task.revision).toBe(3);
@@ -273,6 +308,7 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
       capsuleSha256: first!.capsuleSha256,
       eventId: 'media-agent-event-failed-001',
       observedAt: '2026-08-11T00:00:01.000Z',
+      planSha256: null,
       policySha256: first!.policySha256,
       sequence: 1,
       status: 'blocked',
@@ -296,6 +332,7 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
         capsuleSha256: capsule.capsuleSha256,
         eventId: 'media-agent-event-remapped-002',
         observedAt: '2026-08-11T00:00:02.000Z',
+        planSha256: null,
         policySha256: policy.policySha256,
         sequence: 2,
         status: 'active',
@@ -315,6 +352,7 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
         policySha256: policy.policySha256,
         policyVersion: MEDIA_CODEX_AGENT_POLICY_VERSION,
         replayed: false,
+        result: null,
         status: 'active' as const,
         taskId: task.id,
         taskRevision: request.taskRevision,
@@ -336,6 +374,130 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
       replayKey: `${task.id}-agent-r3`,
       taskRevision: 3,
     });
+  });
+
+  it('applies one verified TMDB identity amendment only when the terminal hash matches', async () => {
+    const { service, task } = await fixture();
+    task.titleHint = '刀使巫女 刻印一闪的灯火 OVA';
+    task.releaseYear = 2020;
+    task.providerRef = { provider: 'bangumi', providerId: '296798' };
+    task.metadataIdentity = {
+      provider: 'bangumi',
+      providerId: '296798',
+      releaseYear: 2020,
+    };
+    task.units[0]!.seasonNumber = 'S00';
+    task.units[0]!.metadataProjection.missingA = [
+      'identity.provider',
+      'identity.providerId',
+    ];
+    task.sealedPlan = {
+      identity: {
+        mediaType: 'tv',
+        providerRef: task.providerRef,
+        releaseYear: 2020,
+        title: task.titleHint,
+      },
+      schemaVersion: '1.2.0',
+      sealed: true,
+    };
+    task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+    const html = `
+      <a href="/tv/105473?language=zh-CN">
+        <img alt="刀使巫女 刻印一闪的灯火" src="https://media.themoviedb.org/t/p/w94/test.jpg" />
+      </a>
+      <span class="release_date">2020年10月25日</span>
+    `;
+    jest.spyOn(global, 'fetch').mockImplementation(
+      async () =>
+        new Response(html, {
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+          status: 200,
+        }),
+    );
+
+    const session = await service.startAgent(task.id, { expectedRevision: 1 });
+    await expect(
+      service.agentToolCall({
+        arguments: {},
+        capsuleSha256: session!.capsuleSha256,
+        manifestSha256: task.inputSnapshotSha256,
+        policySha256: session!.policySha256,
+        taskId: task.id,
+        taskRevision: 2,
+        tool: 'provider.metadata.read',
+      }),
+    ).resolves.toMatchObject({
+      candidates: [
+        {
+          candidateId: 'tmdb:105473',
+          providerId: '105473',
+          releaseYear: 2020,
+        },
+      ],
+      networkLookupPerformed: true,
+    });
+    const sealed = (await service.agentToolCall({
+      arguments: {
+        identity: {
+          provider: 'tmdb',
+          providerId: '105473',
+          releaseYear: 2020,
+        },
+        operations: [],
+        replayKey: `${task.id}-agent-r2`,
+        summary: '唯一 TMDB 候选与当前 S00 OVA 身份一致',
+      },
+      capsuleSha256: session!.capsuleSha256,
+      manifestSha256: task.inputSnapshotSha256,
+      policySha256: session!.policySha256,
+      taskId: task.id,
+      taskRevision: 2,
+      tool: 'plan.submit.sealed',
+    })) as { planSha256: string };
+    const completed = {
+      capsuleSha256: session!.capsuleSha256,
+      eventId: 'media-agent-event-identity-001',
+      observedAt: '2026-08-11T00:00:01.000Z',
+      planSha256: sealed.planSha256,
+      policySha256: session!.policySha256,
+      sequence: 1,
+      status: 'blocked' as const,
+      summary: 'TMDB 身份修正计划已提交',
+      taskId: task.id,
+      taskRevision: 2,
+      threadId: session!.threadId,
+      turnId: 'turn-media-agent-001',
+      type: 'agent-turn-completed' as const,
+    };
+
+    await expect(
+      service.applyAgentEvent({ ...completed, planSha256: 'c'.repeat(64) }),
+    ).rejects.toThrow(HttpException);
+    await expect(service.applyAgentEvent(completed)).resolves.toEqual({
+      applied: true,
+      revision: 3,
+    });
+    expect(task).toMatchObject({
+      agentSession: {
+        pendingPlanSha256: null,
+        status: 'succeeded',
+      },
+      metadataIdentity: {
+        provider: 'tmdb',
+        providerId: '105473',
+        releaseYear: 2020,
+      },
+      metadataStatus: 'pending',
+      providerRef: { provider: 'tmdb', providerId: '105473' },
+      revision: 3,
+      runState: 'succeeded',
+    });
+    expect(task.sealedPlan).not.toHaveProperty('agentPendingAmendment');
+    expect(task.sealedPlan).toMatchObject({
+      identity: { providerTitle: '刀使巫女 刻印一闪的灯火' },
+    });
+    expect(task.sealedPlanSha256).toBe(sha256Json(task.sealedPlan));
   });
 
   it('migrates the deployed legacy blocked projection through the same fail-closed retry', async () => {

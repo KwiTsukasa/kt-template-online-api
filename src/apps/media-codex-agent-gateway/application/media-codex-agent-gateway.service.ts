@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   MEDIA_CODEX_AGENT_SCHEMA_VERSION,
+  parseMediaCodexAgentResult,
   type MediaCodexAgentSemanticEvent,
   type MediaCodexAgentToolCall,
   type MediaCodexAgentTurnRequest,
@@ -63,8 +64,52 @@ export class MediaCodexAgentGatewayService {
   }
 
   session(taskId: string) {
-    const record = this.store.load(taskId);
-    return record ? this.store.project(record, false) : null;
+    return this.withTaskLock(taskId, () => this.sessionLocked(taskId));
+  }
+
+  private async sessionLocked(taskId: string) {
+    let record = this.store.load(taskId);
+    if (!record) return null;
+    if (
+      record.status === 'blocked' &&
+      record.terminalKind === 'completed' &&
+      !record.result &&
+      record.turnId
+    ) {
+      const policy = buildMediaCodexAgentPolicy(taskId, this.policyPaths);
+      const resumed = await this.appServer.resumeThread(
+        record.threadId,
+        policy,
+      );
+      if (
+        resumed.lastTurn?.id === record.turnId &&
+        resumed.lastTurn.status === 'completed' &&
+        resumed.lastTurn.result
+      ) {
+        record = this.store.save({
+          ...withoutCheckpoint(record),
+          lastHeartbeatAt: new Date().toISOString(),
+          result: resumed.lastTurn.result,
+        });
+      }
+      if (!this.hasConsistentResult(record)) {
+        record = this.store.save({
+          ...withoutCheckpoint(record),
+          lastHeartbeatAt: new Date().toISOString(),
+          terminalKind: 'failed',
+        });
+        try {
+          record = await this.publish(
+            record,
+            'agent-blocked',
+            'Agent 结构化结果缺失或与密封计划不一致，可安全重试',
+          );
+        } catch {
+          record = this.store.load(taskId) ?? record;
+        }
+      }
+    }
+    return this.store.project(record, false);
   }
 
   private async startTurnLocked(request: MediaCodexAgentTurnRequest) {
@@ -118,7 +163,10 @@ export class MediaCodexAgentGatewayService {
         throw new Error('agent-recovery-ambiguous');
       }
       if (request.recoveryMode === 'restart-failed-turn') {
-        if (!['failed', 'interrupted'].includes(lastTurn.status)) {
+        if (
+          existing.terminalKind !== 'failed' &&
+          !['failed', 'interrupted'].includes(lastTurn.status)
+        ) {
           throw new Error('agent-retry-not-failed');
         }
         thread = await this.appServer.startThread(policy);
@@ -139,11 +187,13 @@ export class MediaCodexAgentGatewayService {
       ...(existing?.currentReplayKey ? [existing.currentReplayKey] : []),
     ].slice(-64);
     let record = this.store.save({
+      acceptedPlanSha256: null,
       capsule,
       consumedReplayKeys,
       currentReplayKey: request.replayKey,
       lastEventSequence: existing?.lastEventSequence ?? 0,
       lastHeartbeatAt: new Date().toISOString(),
+      result: null,
       schemaVersion: MEDIA_CODEX_AGENT_SCHEMA_VERSION,
       status: 'active',
       taskId: request.taskId,
@@ -188,11 +238,34 @@ export class MediaCodexAgentGatewayService {
       record.capsule,
       policy,
     );
-    return this.toolClient.call(call);
+    const result = await this.toolClient.call(call);
+    if (call.tool === 'plan.submit.sealed') {
+      if (
+        !result ||
+        typeof result !== 'object' ||
+        Array.isArray(result) ||
+        (result as Record<string, unknown>).accepted !== true ||
+        typeof (result as Record<string, unknown>).planSha256 !== 'string' ||
+        !/^[a-f0-9]{64}$/u.test(
+          String((result as Record<string, unknown>).planSha256),
+        )
+      ) {
+        throw new Error('agent-sealed-plan-not-accepted');
+      }
+      this.store.save({
+        ...withoutCheckpoint(record),
+        acceptedPlanSha256: String(
+          (result as Record<string, unknown>).planSha256,
+        ),
+        lastHeartbeatAt: new Date().toISOString(),
+      });
+    }
+    return result;
   }
 
   private async handleNotification(notification: CodexAppServerNotification) {
     if (
+      notification.method !== 'item/completed' &&
       notification.method !== 'turn/completed' &&
       notification.method !== 'turn/started'
     ) {
@@ -200,17 +273,44 @@ export class MediaCodexAgentGatewayService {
     }
     const threadId = notification.params.threadId;
     const turn = notification.params.turn;
-    if (
-      typeof threadId !== 'string' ||
-      !turn ||
-      typeof turn !== 'object' ||
-      Array.isArray(turn)
-    ) {
+    const turnId =
+      notification.method === 'item/completed'
+        ? notification.params.turnId
+        : turn && typeof turn === 'object' && !Array.isArray(turn)
+          ? (turn as Record<string, unknown>).id
+          : null;
+    if (typeof threadId !== 'string' || typeof turnId !== 'string') {
+      return;
+    }
+    const record = this.store.findByThreadId(threadId);
+    if (!record || turnId !== record.turnId) return;
+    if (notification.method === 'item/completed') {
+      const item = notification.params.item;
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return;
+      const itemValue = item as Record<string, unknown>;
+      if (
+        itemValue.type !== 'agentMessage' ||
+        itemValue.phase !== 'final_answer' ||
+        typeof itemValue.text !== 'string'
+      ) {
+        return;
+      }
+      let result = null;
+      try {
+        result = parseMediaCodexAgentResult(JSON.parse(itemValue.text));
+      } catch {
+        result = null;
+      }
+      if (result) {
+        this.store.save({
+          ...withoutCheckpoint(record),
+          lastHeartbeatAt: new Date().toISOString(),
+          result,
+        });
+      }
       return;
     }
     const turnValue = turn as Record<string, unknown>;
-    const record = this.store.findByThreadId(threadId);
-    if (!record || turnValue.id !== record.turnId) return;
     if (notification.method === 'turn/started') {
       const refreshed = this.store.save({
         ...withoutCheckpoint(record),
@@ -223,25 +323,38 @@ export class MediaCodexAgentGatewayService {
       );
       return;
     }
-    const status = turnValue.status;
+    const latest = this.store.load(record.taskId) ?? record;
+    const completed =
+      turnValue.status === 'completed' &&
+      this.hasConsistentResult(latest) &&
+      latest.result?.status !== 'blocked';
     const refreshed = this.store.save({
-      ...withoutCheckpoint(record),
+      ...withoutCheckpoint(latest),
       lastHeartbeatAt: new Date().toISOString(),
       status: 'blocked',
-      terminalKind:
-        status === 'completed'
-          ? 'completed'
-          : status === 'interrupted'
-            ? 'interrupted'
-            : 'failed',
+      terminalKind: completed
+        ? 'completed'
+        : turnValue.status === 'interrupted'
+          ? 'interrupted'
+          : 'failed',
     });
     await this.publish(
       refreshed,
-      status === 'completed' ? 'agent-turn-completed' : 'agent-blocked',
-      status === 'completed'
+      completed ? 'agent-turn-completed' : 'agent-blocked',
+      completed
         ? 'Agent 回合已完成，等待密封结果验收'
-        : 'Agent 回合异常结束，未重放动作',
+        : turnValue.status === 'completed'
+          ? 'Agent 结构化结果缺失或与密封计划不一致，可安全重试'
+          : 'Agent 回合异常结束，未重放动作',
     );
+  }
+
+  private hasConsistentResult(record: MediaCodexAgentSessionRecord) {
+    if (!record.result) return false;
+    return record.result.status === 'plan-submitted'
+      ? record.acceptedPlanSha256 !== null &&
+          record.result.planSha256 === record.acceptedPlanSha256
+      : record.acceptedPlanSha256 === null && record.result.planSha256 === null;
   }
 
   private async publish(
@@ -254,6 +367,10 @@ export class MediaCodexAgentGatewayService {
       capsuleSha256: record.capsule.capsuleSha256,
       eventId: `media-agent-${Date.now()}-${sequence}-${randomUUID()}`,
       observedAt: new Date().toISOString(),
+      planSha256:
+        type === 'agent-turn-completed'
+          ? (record.result?.planSha256 ?? null)
+          : null,
       policySha256: record.capsule.policySha256,
       sequence,
       status: record.status,

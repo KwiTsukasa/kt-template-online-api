@@ -27,6 +27,7 @@ describe('MediaCodexAgentController', () => {
       policySha256: 'b'.repeat(64),
       policyVersion: 'media-codex-agent-policy-v1',
       replayed: false,
+      result: null,
       status: 'active',
       taskId: 'media-task-001',
       taskRevision: 7,
@@ -142,6 +143,7 @@ describe('MediaCodexAgentController', () => {
       ...(service.session() as Record<string, unknown>),
     };
     delete legacySession.lastEventSequence;
+    delete legacySession.result;
     service.session.mockReturnValueOnce(legacySession);
     const client = new MediaGovernanceCodexAgentGatewayClient(
       new ConfigService({
@@ -154,6 +156,43 @@ describe('MediaCodexAgentController', () => {
     await expect(client.session('media-task-001')).resolves.toMatchObject({
       lastEventSequence: 0,
       taskId: 'media-task-001',
+    });
+  });
+
+  it('projects only a validated structured Agent result to the API client', async () => {
+    service.session.mockReturnValueOnce({
+      ...(service.session() as Record<string, unknown>),
+      result: {
+        candidateSummaries: [
+          'tmdb:105473｜当前 OVA',
+          'tmdb:105476｜同系列常规季度',
+        ],
+        candidates: [
+          { id: 'tmdb:105473', summary: 'tmdb:105473｜当前 OVA' },
+          {
+            id: 'tmdb:105476',
+            summary: 'tmdb:105476｜同系列常规季度',
+          },
+        ],
+        nextActionLabel: '请选择正确作品',
+        planSha256: null,
+        status: 'requires-operator',
+        summary: '存在两个候选',
+      },
+    });
+    const client = new MediaGovernanceCodexAgentGatewayClient(
+      new ConfigService({
+        MEDIA_CODEX_AGENT_GATEWAY_BASE_URL: apiUrl,
+        MEDIA_CODEX_AGENT_INTERNAL_SECRET: internalSecret,
+        MEDIA_CODEX_AGENT_GATEWAY_TIMEOUT_MS: '2000',
+      }),
+    );
+
+    await expect(client.session('media-task-001')).resolves.toMatchObject({
+      result: {
+        candidates: [{ id: 'tmdb:105473' }, { id: 'tmdb:105476' }],
+        status: 'requires-operator',
+      },
     });
   });
 });

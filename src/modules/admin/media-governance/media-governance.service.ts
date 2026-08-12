@@ -68,6 +68,10 @@ import {
   type MediaGovernanceExecutionGateway,
 } from './media-governance-execution.gateway';
 import { buildAdminMediaGovernancePlan } from './media-governance-plan';
+import {
+  searchTmdbMediaCandidates,
+  type MediaGovernanceTmdbCandidate,
+} from './media-governance-provider-search';
 
 type MediaGovernanceProviderRef = {
   provider: MediaGovernanceProvider;
@@ -151,6 +155,11 @@ export type MediaGovernanceProgress = {
 };
 
 type MediaGovernanceAgentSealedPlan = {
+  identity?: {
+    provider: 'tmdb';
+    providerId: string;
+    releaseYear: null | number;
+  };
   operations: Array<{
     action: string;
     sourcePath?: string;
@@ -158,6 +167,15 @@ type MediaGovernanceAgentSealedPlan = {
   }>;
   replayKey: string;
   summary: string;
+};
+
+type MediaGovernanceAgentPendingAmendment = {
+  identity: NonNullable<MediaGovernanceAgentSealedPlan['identity']>;
+  planSha256: string;
+  providerTitle: string;
+  replayKey: string;
+  summary: string;
+  taskRevision: number;
 };
 
 export type MediaGovernancePayloadSeal = {
@@ -2265,45 +2283,72 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     task.agentSession = {
       ...task.agentSession,
       checkpointSha256: remoteSession.checkpointSha256,
+      currentActionLabel:
+        remoteSession.result?.summary ?? task.agentSession.currentActionLabel,
       currentUnitId: remoteSession.currentUnitId,
       lastHeartbeatLabel: '刚刚',
       lastSequence: Math.max(
         task.agentSession.lastSequence,
         remoteSession.lastEventSequence,
       ),
-      status:
-        remoteSession.status === 'active'
-          ? 'running'
-          : remoteSession.status === 'closed'
-            ? 'succeeded'
-            : failedRemoteSession || retainedLegacyFailure
-              ? 'failed'
-              : 'needs-operator',
-      statusLabel:
-        remoteSession.status === 'active'
-          ? 'Agent 正在治理'
-          : remoteSession.status === 'closed'
-            ? 'Agent 治理已完成'
-            : failedRemoteSession || retainedLegacyFailure
-              ? 'Agent 已阻塞，可安全重试'
-              : hasPendingPlan
-                ? '密封计划待执行器接入'
-                : '等待密封结果验收',
     };
-    if (remoteSession.status === 'blocked' && hasPendingPlan) {
-      task.sealedPlanSha256 = task.agentSession.pendingPlanSha256;
+    const result = remoteSession.result;
+    if (remoteSession.status === 'active') {
+      task.agentSession.status = 'running';
+      task.agentSession.statusLabel = 'Agent 正在治理';
+      task.runState = 'running';
+    } else if (failedRemoteSession || retainedLegacyFailure) {
+      this.discardAgentPendingAmendment(task);
+      task.agentSession.pendingPlanSha256 = null;
+      task.agentSession.status = 'failed';
+      task.agentSession.statusLabel = 'Agent 已阻塞，可安全重试';
+      task.runState = 'blocked';
+    } else if (
+      result?.status === 'plan-submitted' &&
+      result.planSha256 &&
+      hasPendingPlan &&
+      result.planSha256 === task.agentSession.pendingPlanSha256
+    ) {
+      if (this.agentPendingAmendment(task)) {
+        this.finalizeAgentIdentityAmendment(task, result.planSha256);
+        task.agentSession.status = 'succeeded';
+        task.agentSession.statusLabel = 'TMDB 身份已密封应用';
+      } else {
+        task.agentSession.status = 'needs-operator';
+        task.agentSession.statusLabel = '密封文件计划待人工复核';
+        task.runState = 'blocked';
+      }
       task.agentSession.pendingPlanSha256 = null;
       task.revision += 1;
+    } else if (
+      result?.status === 'plan-submitted' &&
+      result.planSha256 &&
+      this.hasAppliedAgentPlan(task, result.planSha256)
+    ) {
+      task.agentSession.status = 'succeeded';
+      task.agentSession.statusLabel = 'TMDB 身份已密封应用';
+      task.runState = 'succeeded';
+    } else if (
+      result?.status === 'plan-submitted' &&
+      !hasPendingPlan &&
+      task.agentSession.status === 'needs-operator'
+    ) {
+      task.agentSession.statusLabel = '密封文件计划待人工复核';
+      task.runState = 'blocked';
+    } else if (result?.status === 'requires-operator') {
+      task.agentSession.status = 'needs-operator';
+      task.agentSession.statusLabel = '等待人工选择 TMDB 候选';
+      task.runState = 'blocked';
+    } else {
+      this.discardAgentPendingAmendment(task);
+      task.agentSession.pendingPlanSha256 = null;
+      task.agentSession.status = 'failed';
+      task.agentSession.statusLabel = 'Agent 结果未通过一致性校验，可安全重试';
+      task.runState = 'blocked';
     }
-    task.runState =
-      remoteSession.status === 'active'
-        ? 'running'
-        : remoteSession.status === 'closed'
-          ? 'succeeded'
-          : 'blocked';
     this.refreshSemanticProjection(task);
     await this.commitTask(task, 'state-updated');
-    return task.agentSession;
+    return { ...task.agentSession, result };
   }
 
   async agentToolCall(input: MediaGovernanceAgentToolCallDto) {
@@ -2404,12 +2449,20 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         }));
       case 'provider.metadata.read':
         this.assertAgentReadArguments(input.arguments);
-        return {
-          declaredProvider: task.providerRef,
-          identityPreview: task.identityPreview,
-          verifiedIdentity: task.metadataIdentity,
-          networkLookupPerformed: false,
-        };
+        try {
+          return {
+            candidates: await this.searchAgentIdentityCandidates(task),
+            declaredProvider: task.providerRef,
+            identityPreview: task.identityPreview,
+            networkLookupPerformed: true,
+            verifiedIdentity: task.metadataIdentity,
+          };
+        } catch {
+          throwVbenError(
+            'TMDB 资料源查询暂不可用',
+            HttpStatus.SERVICE_UNAVAILABLE,
+          );
+        }
       case 'subtitle.contract.read':
         this.assertAgentReadArguments(input.arguments);
         return task.units.map((unit) => ({
@@ -2424,6 +2477,22 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         if (!sealedPlan) {
           throwVbenError('Agent 密封计划无效', HttpStatus.BAD_REQUEST);
         }
+        if (this.agentIdentityRepairRequired(task) && !sealedPlan.identity) {
+          throwVbenError(
+            '当前元数据缺口必须提交 TMDB 身份修正',
+            HttpStatus.CONFLICT,
+          );
+        }
+        let identityCandidate: MediaGovernanceTmdbCandidate | null = null;
+        if (sealedPlan.identity) {
+          if (!task.sealedPlan) {
+            throwVbenError('当前任务缺少本地密封计划', HttpStatus.CONFLICT);
+          }
+          identityCandidate = await this.assertAgentIdentityCandidate(
+            task,
+            sealedPlan.identity,
+          );
+        }
         const planSha256 = sha256Json({
           capsuleSha256: input.capsuleSha256,
           manifestSha256: input.manifestSha256,
@@ -2433,6 +2502,16 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           taskRevision: task.revision,
         });
         session.pendingPlanSha256 = planSha256;
+        if (sealedPlan.identity) {
+          this.storeAgentPendingAmendment(task, {
+            identity: sealedPlan.identity,
+            planSha256,
+            providerTitle: identityCandidate!.title,
+            replayKey: sealedPlan.replayKey,
+            summary: sealedPlan.summary,
+            taskRevision: task.revision,
+          });
+        }
         session.currentActionLabel = '密封治理计划已提交，正在等待回合完成';
         await this.persistTask(task);
         return {
@@ -2480,23 +2559,43 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     ) {
       throwVbenError('Agent 事件状态不匹配', HttpStatus.CONFLICT);
     }
+    const eventPlanSha256 = input.planSha256 ?? null;
+    if (
+      (input.type === 'agent-turn-completed' &&
+        eventPlanSha256 !== (session.pendingPlanSha256 ?? null)) ||
+      (input.type !== 'agent-turn-completed' && eventPlanSha256 !== null)
+    ) {
+      throwVbenError('Agent 密封计划哈希不匹配', HttpStatus.CONFLICT);
+    }
     if (pendingThreadMapping) session.threadId = input.threadId;
     session.lastSequence = input.sequence;
     session.lastHeartbeatLabel = '刚刚';
     session.currentActionLabel = input.summary;
     if (input.type === 'agent-turn-completed') {
-      session.status = 'needs-operator';
-      session.statusLabel = session.pendingPlanSha256
-        ? '密封计划待执行器接入'
-        : '等待人工放行';
-      task.runState = 'blocked';
-      task.nextCommandLabel = session.statusLabel;
       if (session.pendingPlanSha256) {
-        task.sealedPlanSha256 = session.pendingPlanSha256;
+        const pendingPlanSha256 = session.pendingPlanSha256;
+        const identityAmendment = this.agentPendingAmendment(task);
+        if (identityAmendment) {
+          this.finalizeAgentIdentityAmendment(task, pendingPlanSha256);
+          session.status = 'succeeded';
+          session.statusLabel = 'TMDB 身份已密封应用';
+        } else {
+          session.status = 'needs-operator';
+          session.statusLabel = '密封文件计划待人工复核';
+          task.runState = 'blocked';
+          task.nextCommandLabel = session.statusLabel;
+        }
         session.pendingPlanSha256 = null;
         task.revision += 1;
+      } else {
+        session.status = 'needs-operator';
+        session.statusLabel = '等待人工选择 TMDB 候选';
+        task.runState = 'blocked';
+        task.nextCommandLabel = session.statusLabel;
       }
     } else if (input.type === 'agent-blocked') {
+      this.discardAgentPendingAmendment(task);
+      session.pendingPlanSha256 = null;
       session.status = 'failed';
       session.statusLabel = 'Agent 已阻塞，可安全重试';
       task.runState = 'blocked';
@@ -2513,9 +2612,69 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     const productionExecution = this.executionGateway?.enabled() === true;
+    const productionAgent = this.agentGateway?.enabled() === true;
     this.assertRevision(task, input.expectedRevision);
     if (task.agentSession?.status !== 'needs-operator') {
       throwVbenError('当前没有待处理的 Agent 候选', HttpStatus.CONFLICT);
+    }
+    if (productionAgent) {
+      const remoteSession = await this.agentGateway!.session(task.id);
+      if (
+        !remoteSession ||
+        remoteSession.threadId !== task.agentSession.threadId ||
+        remoteSession.policySha256 !== task.agentSession.policySha256 ||
+        remoteSession.result?.status !== 'requires-operator' ||
+        !remoteSession.result.candidates.some(
+          (candidate) => candidate.id === input.selectedCandidateId,
+        )
+      ) {
+        throwVbenError('所选候选不属于当前 Agent 回合', HttpStatus.CONFLICT);
+      }
+      const providerId =
+        input.selectedCandidateId.match(/^tmdb:([1-9]\d*)$/u)?.[1];
+      let candidates: MediaGovernanceTmdbCandidate[];
+      try {
+        candidates = await this.searchAgentIdentityCandidates(task);
+      } catch {
+        throwVbenError(
+          'TMDB 资料源查询暂不可用',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
+      const candidate = candidates.find(
+        (entry) => entry.providerId === providerId,
+      );
+      if (!candidate || !task.sealedPlan) {
+        throwVbenError('所选 TMDB 候选无法复核', HttpStatus.CONFLICT);
+      }
+      const planSha256 = sha256Json({
+        candidateId: input.selectedCandidateId,
+        reason: input.reason.trim(),
+        taskId: task.id,
+        taskRevision: task.revision,
+      });
+      this.storeAgentPendingAmendment(task, {
+        identity: {
+          provider: 'tmdb',
+          providerId: candidate.providerId,
+          releaseYear: candidate.releaseYear,
+        },
+        planSha256,
+        providerTitle: candidate.title,
+        replayKey: `${task.id}-operator-r${task.revision}`,
+        summary: input.reason.trim(),
+        taskRevision: task.revision,
+      });
+      this.finalizeAgentIdentityAmendment(task, planSha256);
+      task.agentSession = {
+        ...task.agentSession,
+        currentActionLabel: `已确认 TMDB 候选 ${candidate.providerId}`,
+        status: 'succeeded',
+        statusLabel: '人工候选已密封应用',
+      };
+      this.bumpRevision(task);
+      await this.commitTask(task, 'state-updated');
+      return task;
     }
     task.agentSession = {
       ...task.agentSession,
@@ -2578,6 +2737,190 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       items: filtered.slice(start, start + pageSize),
       total: filtered.length,
     };
+  }
+
+  private searchAgentIdentityCandidates(task: MediaGovernanceTask) {
+    return searchTmdbMediaCandidates({
+      mediaType: task.mediaType,
+      releaseYear: task.releaseYear,
+      title: task.titleHint,
+    });
+  }
+
+  private agentIdentityRepairRequired(task: MediaGovernanceTask) {
+    const identityFields = new Set([
+      'identity.provider',
+      'identity.providerId',
+    ]);
+    return task.units.some((unit) =>
+      unit.metadataProjection.missingA.some((field) =>
+        identityFields.has(field),
+      ),
+    );
+  }
+
+  private async assertAgentIdentityCandidate(
+    task: MediaGovernanceTask,
+    identity: NonNullable<MediaGovernanceAgentSealedPlan['identity']>,
+  ) {
+    let candidates: MediaGovernanceTmdbCandidate[];
+    try {
+      candidates = await this.searchAgentIdentityCandidates(task);
+    } catch {
+      throwVbenError('TMDB 资料源查询暂不可用', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    const candidate = candidates.find(
+      (entry) => entry.providerId === identity.providerId,
+    );
+    if (!candidate || candidate.releaseYear !== identity.releaseYear) {
+      throwVbenError('Agent 提交的 TMDB 候选无法复核', HttpStatus.CONFLICT);
+    }
+    return candidate;
+  }
+
+  private storeAgentPendingAmendment(
+    task: MediaGovernanceTask,
+    amendment: MediaGovernanceAgentPendingAmendment,
+  ) {
+    if (!task.sealedPlan) {
+      throwVbenError('当前任务缺少本地密封计划', HttpStatus.CONFLICT);
+    }
+    task.sealedPlan = {
+      ...task.sealedPlan,
+      agentPendingAmendment: amendment,
+    };
+  }
+
+  private agentPendingAmendment(
+    task: MediaGovernanceTask,
+  ): MediaGovernanceAgentPendingAmendment | null {
+    const value = task.sealedPlan?.agentPendingAmendment;
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      return null;
+    const amendment = value as Record<string, unknown>;
+    const identity = amendment.identity;
+    if (!identity || typeof identity !== 'object' || Array.isArray(identity)) {
+      return null;
+    }
+    const identityValue = identity as Record<string, unknown>;
+    if (
+      identityValue.provider !== 'tmdb' ||
+      typeof identityValue.providerId !== 'string' ||
+      !/^[1-9]\d*$/u.test(identityValue.providerId) ||
+      (identityValue.releaseYear !== null &&
+        (!Number.isInteger(identityValue.releaseYear) ||
+          Number(identityValue.releaseYear) < 1870 ||
+          Number(identityValue.releaseYear) > 2100)) ||
+      typeof amendment.planSha256 !== 'string' ||
+      !/^[a-f0-9]{64}$/u.test(amendment.planSha256) ||
+      typeof amendment.providerTitle !== 'string' ||
+      !amendment.providerTitle.trim() ||
+      amendment.providerTitle.length > 200 ||
+      typeof amendment.replayKey !== 'string' ||
+      typeof amendment.summary !== 'string' ||
+      !Number.isSafeInteger(amendment.taskRevision)
+    ) {
+      return null;
+    }
+    return amendment as unknown as MediaGovernanceAgentPendingAmendment;
+  }
+
+  private discardAgentPendingAmendment(task: MediaGovernanceTask) {
+    if (!task.sealedPlan?.agentPendingAmendment) return;
+    const { agentPendingAmendment, ...sealedPlan } = task.sealedPlan;
+    void agentPendingAmendment;
+    task.sealedPlan = sealedPlan;
+  }
+
+  private finalizeAgentIdentityAmendment(
+    task: MediaGovernanceTask,
+    planSha256: string,
+  ) {
+    const amendment = this.agentPendingAmendment(task);
+    if (
+      !amendment ||
+      amendment.planSha256 !== planSha256 ||
+      amendment.taskRevision !== task.revision ||
+      !task.sealedPlan
+    ) {
+      throwVbenError('Agent 密封计划哈希不匹配', HttpStatus.CONFLICT);
+    }
+    const { agentPendingAmendment, ...currentPlan } = task.sealedPlan;
+    void agentPendingAmendment;
+    const currentIdentity =
+      currentPlan.identity &&
+      typeof currentPlan.identity === 'object' &&
+      !Array.isArray(currentPlan.identity)
+        ? currentPlan.identity
+        : {};
+    const currentAmendments = Array.isArray(currentPlan.agentAmendments)
+      ? currentPlan.agentAmendments.slice(-15)
+      : [];
+    task.providerRef = {
+      provider: 'tmdb',
+      providerId: amendment.identity.providerId,
+    };
+    task.metadataIdentity = {
+      ...task.providerRef,
+      releaseYear: amendment.identity.releaseYear,
+    };
+    task.releaseYear = amendment.identity.releaseYear;
+    task.sealedPlan = {
+      ...currentPlan,
+      agentAmendments: [
+        ...currentAmendments,
+        {
+          appliedAt: new Date().toISOString(),
+          kind: 'identity',
+          planSha256,
+          provider: 'tmdb',
+          providerId: amendment.identity.providerId,
+          providerTitle: amendment.providerTitle,
+          releaseYear: amendment.identity.releaseYear,
+          summary: amendment.summary,
+        },
+      ],
+      identity: {
+        ...currentIdentity,
+        providerRef: task.providerRef,
+        providerTitle: amendment.providerTitle,
+        releaseYear: task.releaseYear,
+      },
+    };
+    task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+    task.identityPreview = this.buildIdentityPreview({
+      mediaType: task.mediaType,
+      providerRef: task.providerRef,
+      releaseYear: task.releaseYear,
+      seasonNumbers: task.units
+        .map((unit) => unit.seasonNumber)
+        .filter((season): season is string => Boolean(season)),
+      titleHint: task.titleHint,
+    });
+    task.metadataStatus = 'pending';
+    task.runState = 'succeeded';
+    task.stage = 'metadata';
+    task.gateReason = null;
+    task.nextCommandLabel = '重新运行 A/B/C 分档元数据核验';
+    task.progress = {
+      ...task.progress,
+      etaLabel: '等待元数据复核',
+      progressLabel: 'TMDB 身份已密封应用，等待独立元数据复核',
+    };
+  }
+
+  private hasAppliedAgentPlan(task: MediaGovernanceTask, planSha256: string) {
+    const amendments = task.sealedPlan?.agentAmendments;
+    return (
+      Array.isArray(amendments) &&
+      amendments.some(
+        (entry) =>
+          entry &&
+          typeof entry === 'object' &&
+          !Array.isArray(entry) &&
+          (entry as Record<string, unknown>).planSha256 === planSha256,
+      )
+    );
   }
 
   private agentToolPaths(
@@ -2674,13 +3017,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     expectedReplayKey: string,
   ): MediaGovernanceAgentSealedPlan {
     const operations = value.operations;
+    const identity = value.identity;
     if (
       Object.keys(value).some(
-        (key) => !['operations', 'replayKey', 'summary'].includes(key),
+        (key) =>
+          !['identity', 'operations', 'replayKey', 'summary'].includes(key),
       ) ||
       !Array.isArray(operations) ||
-      operations.length < 1 ||
       operations.length > 500 ||
+      (operations.length === 0 && identity === undefined) ||
       value.replayKey !== expectedReplayKey ||
       typeof value.summary !== 'string' ||
       !value.summary.trim() ||
@@ -2688,7 +3033,41 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     ) {
       throwVbenError('Agent 密封计划无效', HttpStatus.BAD_REQUEST);
     }
+    let normalizedIdentity:
+      | MediaGovernanceAgentSealedPlan['identity']
+      | undefined;
+    if (identity !== undefined) {
+      if (
+        !identity ||
+        typeof identity !== 'object' ||
+        Array.isArray(identity)
+      ) {
+        throwVbenError('Agent 密封计划无效', HttpStatus.BAD_REQUEST);
+      }
+      const entry = identity as Record<string, unknown>;
+      if (
+        Object.keys(entry).some(
+          (key) => !['provider', 'providerId', 'releaseYear'].includes(key),
+        ) ||
+        entry.provider !== 'tmdb' ||
+        typeof entry.providerId !== 'string' ||
+        !/^[1-9]\d*$/u.test(entry.providerId) ||
+        (entry.releaseYear !== null &&
+          (!Number.isInteger(entry.releaseYear) ||
+            Number(entry.releaseYear) < 1870 ||
+            Number(entry.releaseYear) > 2100))
+      ) {
+        throwVbenError('Agent 密封计划无效', HttpStatus.BAD_REQUEST);
+      }
+      normalizedIdentity = {
+        provider: 'tmdb',
+        providerId: entry.providerId as string,
+        releaseYear:
+          entry.releaseYear === null ? null : Number(entry.releaseYear),
+      };
+    }
     const stagingRoot = `/vol2/1000/.kt-media-governance-staging/${taskId}`;
+    const targetRoots = [`${stagingRoot}/plan`, `${stagingRoot}/work`];
     const normalizedOperations = (operations as unknown[]).map((operation) => {
       if (
         !operation ||
@@ -2707,8 +3086,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         entry.action.length > 80 ||
         typeof entry.targetPath !== 'string' ||
         entry.targetPath.length > 600 ||
-        (entry.targetPath !== stagingRoot &&
-          !entry.targetPath.startsWith(`${stagingRoot}/`)) ||
+        !targetRoots.some(
+          (root) =>
+            entry.targetPath === root ||
+            (typeof entry.targetPath === 'string' &&
+              entry.targetPath.startsWith(`${root}/`)),
+        ) ||
         (entry.sourcePath !== undefined &&
           (typeof entry.sourcePath !== 'string' ||
             entry.sourcePath.length > 600))
@@ -2724,6 +3107,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       };
     });
     return {
+      ...(normalizedIdentity ? { identity: normalizedIdentity } : {}),
       operations: normalizedOperations,
       replayKey: expectedReplayKey,
       summary: value.summary as string,

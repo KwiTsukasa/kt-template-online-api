@@ -16,7 +16,10 @@ class FakeTransport implements CodexAppServerRpcTransport {
   disconnectHandler: (() => void) | undefined;
   requestHandler: ((value: any) => Promise<void>) | undefined;
 
-  constructor(private readonly permissionProfileId = 'media-agent') {}
+  constructor(
+    private readonly permissionProfileId = 'media-agent',
+    private readonly resumeItems: unknown[] = [],
+  ) {}
 
   async connect() {}
 
@@ -52,7 +55,13 @@ class FakeTransport implements CodexAppServerRpcTransport {
           id: '019fbc48-c50e-7453-89b1-9c1b40234b3a',
           turns:
             method === 'thread/resume'
-              ? [{ id: 'media-turn-001', status: 'completed' }]
+              ? [
+                  {
+                    id: 'media-turn-001',
+                    items: this.resumeItems,
+                    status: 'completed',
+                  },
+                ]
               : [],
         },
       };
@@ -132,7 +141,7 @@ describe('CodexAppServerClient', () => {
     expect(turnStart).not.toHaveProperty('sandboxPolicy');
   });
 
-  it('resumes the same thread and exposes only the last turn status', async () => {
+  it('resumes the same thread and exposes its authoritative final result', async () => {
     const transport = new FakeTransport();
     const client = new CodexAppServerClient(transport);
     const state = await client.resumeThread(
@@ -140,7 +149,7 @@ describe('CodexAppServerClient', () => {
       policy,
     );
     expect(state).toEqual({
-      lastTurn: { id: 'media-turn-001', status: 'completed' },
+      lastTurn: { id: 'media-turn-001', result: null, status: 'completed' },
       threadId: '019fbc48-c50e-7453-89b1-9c1b40234b3a',
     });
     const resume = transport.calls.find(
@@ -148,6 +157,31 @@ describe('CodexAppServerClient', () => {
     )?.params as Record<string, unknown>;
     expect(resume).toMatchObject({ permissions: 'media-agent' });
     expect(resume).not.toHaveProperty('sandbox');
+  });
+
+  it('parses the final agentMessage from a resumed App Server turn', async () => {
+    const planSha256 = 'b'.repeat(64);
+    const transport = new FakeTransport('media-agent', [
+      {
+        id: 'media-final-001',
+        phase: 'final_answer',
+        text: JSON.stringify({
+          candidateSummaries: [],
+          nextActionLabel: '等待密封执行器处理',
+          planSha256,
+          status: 'plan-submitted',
+          summary: '计划已提交',
+        }),
+        type: 'agentMessage',
+      },
+    ]);
+    const client = new CodexAppServerClient(transport);
+
+    await expect(
+      client.resumeThread('019fbc48-c50e-7453-89b1-9c1b40234b3a', policy),
+    ).resolves.toMatchObject({
+      lastTurn: { result: { planSha256, status: 'plan-submitted' } },
+    });
   });
 
   it('repeats the initialize handshake after the transport disconnects', async () => {
@@ -211,6 +245,35 @@ describe('CodexAppServerClient', () => {
       id: 2,
       response: {
         error: { message: 'media-codex-agent-boundary-denied' },
+      },
+    });
+
+    client.onToolCall(async () => {
+      throw new Error('sealed-plan-rejected');
+    });
+    await transport.requestHandler?.({
+      id: 3,
+      method: 'item/tool/call',
+      params: {
+        arguments: {},
+        callId: 'call-003',
+        threadId: 'thread-001',
+        tool: 'plan_submit_sealed',
+        turnId: 'turn-001',
+      },
+    });
+    expect(transport.responses[2]).toMatchObject({
+      id: 3,
+      response: {
+        result: {
+          contentItems: [
+            {
+              text: '{"accepted":false,"error":"tool-call-rejected"}',
+              type: 'inputText',
+            },
+          ],
+          success: false,
+        },
       },
     });
   });

@@ -42,7 +42,11 @@ class FakeAppServer implements CodexAppServerAdapter {
   async resumeThread(threadId: string): Promise<CodexAppServerThreadState> {
     this.resumeCount += 1;
     return {
-      lastTurn: { id: 'media-turn-001', status: 'completed' as const },
+      lastTurn: {
+        id: 'media-turn-001',
+        result: null,
+        status: 'completed' as const,
+      },
       threadId,
     };
   }
@@ -82,7 +86,11 @@ describe('MediaCodexAgentSessionStore', () => {
   function createService(appServer: FakeAppServer, callbackReady = true) {
     const events: any[] = [];
     const toolClient: MediaCodexAgentToolClient = {
-      call: jest.fn(async () => ({ ok: true })),
+      call: jest.fn(async (call) =>
+        call.tool === 'plan.submit.sealed'
+          ? { accepted: true, planSha256: 'b'.repeat(64) }
+          : { ok: true },
+      ),
     };
     const eventSink: MediaCodexAgentEventSink = {
       health: jest.fn(async () => {
@@ -155,7 +163,9 @@ describe('MediaCodexAgentSessionStore', () => {
     });
 
     expect(afterRestart.events.map((event) => event.sequence)).toEqual([3]);
-    expect(afterRestart.service.session('media-task-001')).toMatchObject({
+    await expect(
+      afterRestart.service.session('media-task-001'),
+    ).resolves.toMatchObject({
       lastEventSequence: 3,
       status: 'blocked',
       threadId: started.threadId,
@@ -199,7 +209,7 @@ describe('MediaCodexAgentSessionStore', () => {
     );
     expect(appServer.startCount).toBe(0);
     expect(appServer.turnCount).toBe(0);
-    expect(service.session('media-task-001')).toBeNull();
+    await expect(service.session('media-task-001')).resolves.toBeNull();
   });
 
   it('fails closed on stale revisions and concurrent new actions', async () => {
@@ -219,6 +229,16 @@ describe('MediaCodexAgentSessionStore', () => {
     const appServer = new FakeAppServer();
     const { events, service } = createService(appServer);
     const started = await service.startTurn(request());
+    await emitFinalResult(appServer, started, {
+      candidateSummaries: [
+        'tmdb:105473｜当前 OVA',
+        'tmdb:105476｜同系列常规季度',
+      ],
+      nextActionLabel: '请选择正确作品',
+      planSha256: null,
+      status: 'requires-operator',
+      summary: '存在两个真实候选',
+    });
     await appServer.notificationHandler?.({
       method: 'turn/completed',
       params: {
@@ -227,7 +247,7 @@ describe('MediaCodexAgentSessionStore', () => {
       },
     });
 
-    const session = service.session('media-task-001');
+    const session = await service.session('media-task-001');
     expect(session).toMatchObject({ status: 'blocked' });
     expect(JSON.stringify(session)).not.toMatch(
       /login|token|conversation|message/i,
@@ -237,6 +257,111 @@ describe('MediaCodexAgentSessionStore', () => {
       'agent-turn-started',
       'agent-turn-completed',
     ]);
+  });
+
+  it('persists the authoritative final agent item and binds it to an accepted plan hash', async () => {
+    const appServer = new FakeAppServer();
+    const { service } = createService(appServer);
+    const started = await service.startTurn(request());
+    const planSha256 = 'b'.repeat(64);
+    const toolClient = appServer.toolHandler;
+    expect(toolClient).toBeDefined();
+    await toolClient?.({
+      arguments: {
+        operations: [
+          {
+            action: 'write-nfo',
+            targetPath: path.join(stagingRoot, 'work', 'tvshow.nfo'),
+          },
+        ],
+        replayKey: 'media-agent-replay-001',
+        summary: '提交测试计划',
+      },
+      callId: 'media-call-001',
+      threadId: started.threadId,
+      tool: 'plan.submit.sealed',
+      turnId: started.turnId!,
+    });
+    await appServer.notificationHandler?.({
+      method: 'item/completed',
+      params: {
+        item: {
+          id: 'media-item-001',
+          phase: 'final_answer',
+          text: JSON.stringify({
+            candidateSummaries: [],
+            nextActionLabel: '等待密封执行器处理',
+            planSha256,
+            status: 'plan-submitted',
+            summary: '密封计划已提交',
+          }),
+          type: 'agentMessage',
+        },
+        threadId: started.threadId,
+        turnId: started.turnId,
+      },
+    });
+    await appServer.notificationHandler?.({
+      method: 'turn/completed',
+      params: {
+        threadId: started.threadId,
+        turn: { id: started.turnId, status: 'completed' },
+      },
+    });
+
+    await expect(service.session('media-task-001')).resolves.toMatchObject({
+      result: {
+        planSha256,
+        status: 'plan-submitted',
+      },
+      status: 'blocked',
+      terminalKind: 'completed',
+    });
+  });
+
+  it('fails closed when the final result hash differs from the accepted plan', async () => {
+    const appServer = new FakeAppServer();
+    const { events, service } = createService(appServer);
+    const started = await service.startTurn(request());
+    await appServer.toolHandler?.({
+      arguments: {
+        identity: {
+          provider: 'tmdb',
+          providerId: '105473',
+          releaseYear: 2020,
+        },
+        operations: [],
+        replayKey: 'media-agent-replay-001',
+        summary: '提交身份修正',
+      },
+      callId: 'media-call-mismatch',
+      threadId: started.threadId,
+      tool: 'plan.submit.sealed',
+      turnId: started.turnId!,
+    });
+    await emitFinalResult(appServer, started, {
+      candidateSummaries: [],
+      nextActionLabel: '等待密封执行器处理',
+      planSha256: 'c'.repeat(64),
+      status: 'plan-submitted',
+      summary: '错误哈希结果',
+    });
+    await appServer.notificationHandler?.({
+      method: 'turn/completed',
+      params: {
+        threadId: started.threadId,
+        turn: { id: started.turnId, status: 'completed' },
+      },
+    });
+
+    await expect(service.session('media-task-001')).resolves.toMatchObject({
+      status: 'blocked',
+      terminalKind: 'failed',
+    });
+    expect(events.at(-1)).toMatchObject({
+      planSha256: null,
+      type: 'agent-blocked',
+    });
   });
 
   it('restarts only an explicitly failed turn on a fresh thread and keeps sequence monotonic', async () => {
@@ -253,7 +378,7 @@ describe('MediaCodexAgentSessionStore', () => {
     const resumeThread = jest
       .spyOn(appServer, 'resumeThread')
       .mockResolvedValueOnce({
-        lastTurn: { id: started.turnId!, status: 'failed' },
+        lastTurn: { id: started.turnId!, result: null, status: 'failed' },
         threadId: started.threadId,
       });
     jest.spyOn(appServer, 'startThread').mockResolvedValueOnce({
@@ -283,6 +408,16 @@ describe('MediaCodexAgentSessionStore', () => {
     const appServer = new FakeAppServer();
     const { service } = createService(appServer);
     const started = await service.startTurn(request());
+    await emitFinalResult(appServer, started, {
+      candidateSummaries: [
+        'tmdb:105473｜当前 OVA',
+        'tmdb:105476｜同系列常规季度',
+      ],
+      nextActionLabel: '请选择正确作品',
+      planSha256: null,
+      status: 'requires-operator',
+      summary: '存在两个真实候选',
+    });
     await appServer.notificationHandler?.({
       method: 'turn/completed',
       params: {
@@ -314,4 +449,24 @@ describe('MediaCodexAgentSessionStore', () => {
     expect(appServer.startCount).toBe(0);
     expect(appServer.turnCount).toBe(0);
   });
+
+  async function emitFinalResult(
+    appServer: FakeAppServer,
+    started: { threadId: string; turnId: null | string },
+    result: Record<string, unknown>,
+  ) {
+    await appServer.notificationHandler?.({
+      method: 'item/completed',
+      params: {
+        item: {
+          id: 'media-final-result',
+          phase: 'final_answer',
+          text: JSON.stringify(result),
+          type: 'agentMessage',
+        },
+        threadId: started.threadId,
+        turnId: started.turnId,
+      },
+    });
+  }
 });

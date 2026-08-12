@@ -5,7 +5,9 @@ import {
   MEDIA_CODEX_AGENT_RESULT_SCHEMA,
   canonicalJson,
   mediaCodexAgentToolFromWireName,
+  parseMediaCodexAgentResult,
   type MediaCodexAgentPolicy,
+  type MediaCodexAgentResult,
   type MediaCodexAgentTool,
 } from '../domain/media-codex-agent.contract';
 import { isMediaCodexAgentTool } from '../domain/media-codex-agent.policy';
@@ -16,6 +18,7 @@ type JsonRpcObject = Record<string, unknown>;
 export interface CodexAppServerThreadState {
   lastTurn: null | {
     id: string;
+    result: MediaCodexAgentResult | null;
     status: 'completed' | 'failed' | 'inProgress' | 'interrupted';
   };
   threadId: string;
@@ -79,6 +82,7 @@ export interface CodexAppServerRpcTransport {
 
 export class CodexAppServerClient implements CodexAppServerAdapter {
   private initialized = false;
+  private notificationQueue: Promise<unknown> = Promise.resolve();
   private notificationHandler:
     | ((notification: CodexAppServerNotification) => void | Promise<void>)
     | undefined;
@@ -91,9 +95,11 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
       this.initialized = false;
     });
     this.transport.onRequest((request) => this.handleServerRequest(request));
-    this.transport.onNotification((notification) =>
-      this.notificationHandler?.(notification),
-    );
+    this.transport.onNotification((notification) => {
+      this.notificationQueue = this.notificationQueue
+        .then(() => this.notificationHandler?.(notification))
+        .catch(() => undefined);
+    });
   }
 
   async initialize() {
@@ -252,7 +258,18 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
       });
     } catch {
       await this.transport.respond(request.id, {
-        result: { contentItems: [], success: false },
+        result: {
+          contentItems: [
+            {
+              text: canonicalJson({
+                accepted: false,
+                error: 'tool-call-rejected',
+              }),
+              type: 'inputText',
+            },
+          ],
+          success: false,
+        },
       });
     }
   }
@@ -297,6 +314,25 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
       'inProgress',
       'interrupted',
     ]);
+    const items = Array.isArray(latestTurn?.items) ? latestTurn.items : [];
+    const finalMessage = [...items].reverse().find((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item))
+        return false;
+      const value = item as Record<string, unknown>;
+      return (
+        value.type === 'agentMessage' &&
+        value.phase === 'final_answer' &&
+        typeof value.text === 'string'
+      );
+    }) as Record<string, unknown> | undefined;
+    let result: MediaCodexAgentResult | null = null;
+    if (typeof finalMessage?.text === 'string') {
+      try {
+        result = parseMediaCodexAgentResult(JSON.parse(finalMessage.text));
+      } catch {
+        result = null;
+      }
+    }
     return {
       lastTurn:
         latestTurn &&
@@ -305,6 +341,7 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
         allowedStatuses.has(latestTurn.status)
           ? {
               id: latestTurn.id,
+              result,
               status: latestTurn.status as
                 | 'completed'
                 | 'failed'

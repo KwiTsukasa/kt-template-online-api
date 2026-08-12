@@ -740,6 +740,10 @@ export class MediaGovernanceAgentEventDto {
   @MaxLength(64)
   observedAt: string;
 
+  @IsOptional()
+  @Matches(/^[a-f0-9]{64}$/)
+  planSha256: null | string;
+
   @Matches(/^[a-f0-9]{64}$/)
   policySha256: string;
 

@@ -131,6 +131,7 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       capsuleSha256: task.agentSession.capsuleSha256,
       eventId: 'event-typeorm-store-0001',
       observedAt: '2026-08-11T00:00:07.000Z',
+      planSha256: null,
       policySha256: task.agentSession.policySha256,
       sequence: 7,
       status: 'active',

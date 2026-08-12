@@ -97,6 +97,7 @@ export interface MediaCodexAgentSafeSession {
   policySha256: string;
   policyVersion: string;
   replayed: boolean;
+  result: MediaCodexAgentResult | null;
   status: 'active' | 'blocked' | 'closed';
   taskId: string;
   taskRevision: number;
@@ -119,6 +120,7 @@ export interface MediaCodexAgentSemanticEvent {
   capsuleSha256: string;
   eventId: string;
   observedAt: string;
+  planSha256: null | string;
   policySha256: string;
   sequence: number;
   status: 'active' | 'blocked' | 'closed';
@@ -161,6 +163,86 @@ export const MEDIA_CODEX_AGENT_RESULT_SCHEMA = {
   type: 'object',
 } as const;
 
+export interface MediaCodexAgentResult {
+  candidateSummaries: string[];
+  candidates: Array<{ id: string; summary: string }>;
+  nextActionLabel: string;
+  planSha256: null | string;
+  status: 'blocked' | 'plan-submitted' | 'requires-operator';
+  summary: string;
+}
+
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const TMDB_CANDIDATE_PATTERN = /^(tmdb:[1-9]\d*)\s*[|｜]/iu;
+
+export function parseMediaCodexAgentResult(
+  value: unknown,
+): MediaCodexAgentResult | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const result = value as Record<string, unknown>;
+  if (
+    Object.keys(result).some(
+      (key) =>
+        ![
+          'candidateSummaries',
+          'nextActionLabel',
+          'planSha256',
+          'status',
+          'summary',
+        ].includes(key),
+    ) ||
+    !Array.isArray(result.candidateSummaries) ||
+    result.candidateSummaries.length > 8 ||
+    result.candidateSummaries.some(
+      (summary) =>
+        typeof summary !== 'string' || !summary.trim() || summary.length > 800,
+    ) ||
+    typeof result.nextActionLabel !== 'string' ||
+    !result.nextActionLabel.trim() ||
+    result.nextActionLabel.length > 200 ||
+    !['blocked', 'plan-submitted', 'requires-operator'].includes(
+      String(result.status),
+    ) ||
+    typeof result.summary !== 'string' ||
+    !result.summary.trim() ||
+    result.summary.length > 800 ||
+    (result.planSha256 !== null &&
+      (typeof result.planSha256 !== 'string' ||
+        !SHA256_PATTERN.test(result.planSha256)))
+  ) {
+    return null;
+  }
+  const candidateSummaries = result.candidateSummaries.map((summary) =>
+    String(summary).trim(),
+  );
+  const candidates = candidateSummaries.map((summary) => ({
+    id:
+      summary.match(TMDB_CANDIDATE_PATTERN)?.[1]?.toLowerCase() ??
+      `candidate-${sha256Json(summary).slice(0, 16)}`,
+    summary,
+  }));
+  const candidateIds = new Set(candidates.map((candidate) => candidate.id));
+  const status = result.status as MediaCodexAgentResult['status'];
+  if (
+    candidateIds.size !== candidates.length ||
+    (status === 'plan-submitted' && result.planSha256 === null) ||
+    (status !== 'plan-submitted' && result.planSha256 !== null) ||
+    (status === 'requires-operator' &&
+      (candidates.length < 2 ||
+        candidates.some((candidate) => !candidate.id.startsWith('tmdb:'))))
+  ) {
+    return null;
+  }
+  return {
+    candidateSummaries,
+    candidates,
+    nextActionLabel: result.nextActionLabel.trim(),
+    planSha256: result.planSha256 as null | string,
+    status,
+    summary: result.summary.trim(),
+  };
+}
+
 export const MEDIA_CODEX_AGENT_DYNAMIC_TOOLS = MEDIA_CODEX_AGENT_TOOLS.map(
   (tool) => ({
     deferLoading: false,
@@ -179,14 +261,38 @@ export const MEDIA_CODEX_AGENT_DYNAMIC_TOOLS = MEDIA_CODEX_AGENT_TOOLS.map(
                   properties: {
                     action: { maxLength: 80, type: 'string' },
                     sourcePath: { maxLength: 600, type: 'string' },
-                    targetPath: { maxLength: 600, type: 'string' },
+                    targetPath: {
+                      description:
+                        '目标必须位于当前 Task staging 根的 work 或 plan 子目录，不能写入 evidence 或正式媒体目录。',
+                      maxLength: 600,
+                      type: 'string',
+                    },
                   },
                   required: ['action', 'targetPath'],
                   type: 'object',
                 },
                 maxItems: 500,
-                minItems: 1,
+                minItems: 0,
                 type: 'array',
+              },
+              identity: {
+                additionalProperties: false,
+                description:
+                  '仅用于修正当前媒体任务身份；provider 当前只允许本地元数据执行器支持的 TMDB。',
+                properties: {
+                  provider: { enum: ['tmdb'], type: 'string' },
+                  providerId: {
+                    pattern: '^[1-9]\\d*$',
+                    type: 'string',
+                  },
+                  releaseYear: {
+                    maximum: 2100,
+                    minimum: 1870,
+                    type: ['integer', 'null'],
+                  },
+                },
+                required: ['provider', 'providerId', 'releaseYear'],
+                type: 'object',
               },
               replayKey: { maxLength: 128, type: 'string' },
               summary: { maxLength: 800, type: 'string' },

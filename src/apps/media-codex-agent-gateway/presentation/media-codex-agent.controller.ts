@@ -58,8 +58,8 @@ export class MediaCodexAgentController {
   }
 
   @Get('tasks/:taskId/session')
-  session(@Param('taskId') taskId: string) {
-    const session = this.service.session(taskId);
+  async session(@Param('taskId') taskId: string) {
+    const session = await this.service.session(taskId);
     if (!session) {
       throw new NotFoundException('media-codex-agent-session-not-found');
     }

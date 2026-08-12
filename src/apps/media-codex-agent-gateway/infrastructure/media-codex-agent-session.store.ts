@@ -13,18 +13,23 @@ import {
 import * as path from 'node:path';
 import {
   MEDIA_CODEX_AGENT_SCHEMA_VERSION,
+  canonicalJson,
+  parseMediaCodexAgentResult,
   sha256Json,
   type MediaCodexAgentBoundaryCapsule,
+  type MediaCodexAgentResult,
   type MediaCodexAgentSafeSession,
 } from '../domain/media-codex-agent.contract';
 
 export interface MediaCodexAgentSessionRecord {
+  acceptedPlanSha256: null | string;
   capsule: MediaCodexAgentBoundaryCapsule;
   checkpointSha256: string;
   consumedReplayKeys: string[];
   currentReplayKey: string;
   lastEventSequence: number;
   lastHeartbeatAt: string;
+  result: MediaCodexAgentResult | null;
   schemaVersion: typeof MEDIA_CODEX_AGENT_SCHEMA_VERSION;
   status: 'active' | 'blocked' | 'closed';
   taskId: string;
@@ -119,6 +124,7 @@ export class MediaCodexAgentSessionStore {
       policySha256: record.capsule.policySha256,
       policyVersion: record.capsule.policyVersion,
       replayed,
+      result: record.result,
       status: record.status,
       taskId: record.taskId,
       taskRevision: record.taskRevision,
@@ -142,9 +148,22 @@ export class MediaCodexAgentSessionStore {
     }
     const record = value as Omit<
       MediaCodexAgentSessionRecord,
-      'lastEventSequence'
-    > & { lastEventSequence?: number };
+      'acceptedPlanSha256' | 'lastEventSequence' | 'result'
+    > & {
+      acceptedPlanSha256?: null | string;
+      lastEventSequence?: number;
+      result?: MediaCodexAgentResult | null;
+    };
     const { checkpointSha256, ...unsigned } = record;
+    const parsedResult = record.result
+      ? parseMediaCodexAgentResult({
+          candidateSummaries: record.result.candidateSummaries,
+          nextActionLabel: record.result.nextActionLabel,
+          planSha256: record.result.planSha256,
+          status: record.result.status,
+          summary: record.result.summary,
+        })
+      : null;
     if (
       record.schemaVersion !== MEDIA_CODEX_AGENT_SCHEMA_VERSION ||
       record.taskId !== expectedTaskId ||
@@ -165,6 +184,13 @@ export class MediaCodexAgentSessionStore {
         (!Number.isSafeInteger(record.lastEventSequence) ||
           record.lastEventSequence < 0)) ||
       (record.turnId !== null && !SAFE_ID_PATTERN.test(record.turnId)) ||
+      (record.acceptedPlanSha256 !== undefined &&
+        record.acceptedPlanSha256 !== null &&
+        !SHA256_PATTERN.test(record.acceptedPlanSha256)) ||
+      (record.result !== undefined &&
+        record.result !== null &&
+        (!parsedResult ||
+          canonicalJson(parsedResult) !== canonicalJson(record.result))) ||
       !SHA256_PATTERN.test(record.capsule?.capsuleSha256 ?? '') ||
       checkpointSha256 !== sha256Json(unsigned)
     ) {
@@ -172,8 +198,10 @@ export class MediaCodexAgentSessionStore {
     }
     return {
       ...record,
+      acceptedPlanSha256: record.acceptedPlanSha256 ?? null,
       lastEventSequence: record.lastEventSequence ?? 0,
+      result: record.result ?? null,
       terminalKind: record.terminalKind ?? null,
-    };
+    } as MediaCodexAgentSessionRecord;
   }
 }

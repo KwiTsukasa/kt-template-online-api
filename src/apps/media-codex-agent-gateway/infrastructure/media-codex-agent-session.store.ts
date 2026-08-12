@@ -29,6 +29,7 @@ export interface MediaCodexAgentSessionRecord {
   status: 'active' | 'blocked' | 'closed';
   taskId: string;
   taskRevision: number;
+  terminalKind: 'completed' | 'failed' | 'interrupted' | null;
   threadId: string;
   turnId: null | string;
 }
@@ -121,6 +122,7 @@ export class MediaCodexAgentSessionStore {
       status: record.status,
       taskId: record.taskId,
       taskRevision: record.taskRevision,
+      terminalKind: record.terminalKind,
       threadId: record.threadId,
       turnId: record.turnId,
     } satisfies MediaCodexAgentSafeSession;
@@ -150,6 +152,11 @@ export class MediaCodexAgentSessionStore {
       !Number.isSafeInteger(record.taskRevision) ||
       record.taskRevision < 1 ||
       !['active', 'blocked', 'closed'].includes(record.status) ||
+      (record.terminalKind !== undefined &&
+        record.terminalKind !== null &&
+        !['completed', 'failed', 'interrupted'].includes(
+          record.terminalKind,
+        )) ||
       !Array.isArray(record.consumedReplayKeys) ||
       record.consumedReplayKeys.length > 64 ||
       record.consumedReplayKeys.some((key) => !SAFE_ID_PATTERN.test(key)) ||
@@ -166,6 +173,7 @@ export class MediaCodexAgentSessionStore {
     return {
       ...record,
       lastEventSequence: record.lastEventSequence ?? 0,
+      terminalKind: record.terminalKind ?? null,
     };
   }
 }

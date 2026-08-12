@@ -136,6 +136,11 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
       !Number.isFinite(Date.parse(session.lastHeartbeatAt)) ||
       typeof session.replayed !== 'boolean' ||
       !['active', 'blocked', 'closed'].includes(String(session.status)) ||
+      (session.terminalKind !== undefined &&
+        session.terminalKind !== null &&
+        !['completed', 'failed', 'interrupted'].includes(
+          String(session.terminalKind),
+        )) ||
       (session.currentUnitId !== null &&
         (typeof session.currentUnitId !== 'string' ||
           !safeId.test(session.currentUnitId))) ||
@@ -156,6 +161,7 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
       status: session.status,
       taskId: session.taskId,
       taskRevision: session.taskRevision,
+      terminalKind: session.terminalKind ?? null,
       threadId: session.threadId,
       turnId: session.turnId,
     } as MediaCodexAgentSafeSession;

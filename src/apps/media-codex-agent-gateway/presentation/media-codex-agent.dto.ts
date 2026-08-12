@@ -42,6 +42,10 @@ export class MediaCodexAgentTurnRequestDto implements MediaCodexAgentTurnRequest
   @Matches(/\S/)
   operatorCommand: string;
 
+  @IsOptional()
+  @IsIn(['restart-failed-turn'])
+  recoveryMode?: 'restart-failed-turn';
+
   @IsString()
   @MaxLength(96)
   @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)

@@ -49,6 +49,7 @@ describe('media governance database persistence boundary', () => {
     status: 'active' as const,
     taskId: '',
     taskRevision: 2,
+    terminalKind: null,
     threadId: 'thread-durable-media-governance-0001',
     turnId: 'turn-durable-media-governance-0001',
   };
@@ -174,6 +175,7 @@ describe('media governance database persistence boundary', () => {
         status: 'active' as const,
         taskId: request.taskId,
         taskRevision: request.taskRevision,
+        terminalKind: null,
         threadId: commonEvent.threadId,
         turnId: commonEvent.turnId,
       };
@@ -277,6 +279,7 @@ describe('media governance database persistence boundary', () => {
         status: 'active' as const,
         taskId: requested.taskId,
         taskRevision: requested.taskRevision,
+        terminalKind: null,
         threadId: 'thread-recovered-after-timeout-0001',
         turnId: 'turn-recovered-after-timeout-0001',
       };

@@ -24,6 +24,7 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
         status: 'active' as const,
         taskId: request.taskId,
         taskRevision: request.taskRevision,
+        terminalKind: null,
         threadId: 'thread-media-agent-001',
         turnId: 'turn-media-agent-001',
       };
@@ -263,5 +264,95 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
 
     await service.agentSession(task.id);
     expect(task.revision).toBe(3);
+  });
+
+  it('retries an explicitly failed Agent turn with a new revision and accepts the monotonic thread mapping', async () => {
+    const { gateway, service, startTurn, task } = await fixture();
+    const first = await service.startAgent(task.id, { expectedRevision: 1 });
+    await service.applyAgentEvent({
+      capsuleSha256: first!.capsuleSha256,
+      eventId: 'media-agent-event-failed-001',
+      observedAt: '2026-08-11T00:00:01.000Z',
+      policySha256: first!.policySha256,
+      sequence: 1,
+      status: 'blocked',
+      summary: 'Agent 回合异常结束，未重放动作',
+      taskId: task.id,
+      taskRevision: 2,
+      threadId: first!.threadId,
+      turnId: 'turn-media-agent-001',
+      type: 'agent-blocked',
+    });
+    expect(task.agentSession).toMatchObject({
+      lastSequence: 1,
+      status: 'failed',
+      statusLabel: 'Agent 已阻塞，可安全重试',
+    });
+
+    (gateway.startTurn as jest.Mock).mockImplementationOnce(async (request) => {
+      const policy = buildMediaCodexAgentPolicy(request.taskId);
+      const capsule = buildMediaCodexAgentCapsule(request, policy);
+      await service.applyAgentEvent({
+        capsuleSha256: capsule.capsuleSha256,
+        eventId: 'media-agent-event-remapped-002',
+        observedAt: '2026-08-11T00:00:02.000Z',
+        policySha256: policy.policySha256,
+        sequence: 2,
+        status: 'active',
+        summary: 'Agent 会话已绑定',
+        taskId: task.id,
+        taskRevision: request.taskRevision,
+        threadId: 'thread-media-agent-002',
+        turnId: 'turn-media-agent-002',
+        type: 'agent-thread-mapped',
+      });
+      return {
+        capsuleSha256: capsule.capsuleSha256,
+        checkpointSha256: 'e'.repeat(64),
+        currentUnitId: request.currentUnitId,
+        lastEventSequence: 2,
+        lastHeartbeatAt: '2026-08-11T00:00:02.000Z',
+        policySha256: policy.policySha256,
+        policyVersion: MEDIA_CODEX_AGENT_POLICY_VERSION,
+        replayed: false,
+        status: 'active' as const,
+        taskId: task.id,
+        taskRevision: request.taskRevision,
+        terminalKind: null,
+        threadId: 'thread-media-agent-002',
+        turnId: 'turn-media-agent-002',
+      };
+    });
+
+    await expect(
+      service.startAgent(task.id, { expectedRevision: 2 }),
+    ).resolves.toMatchObject({
+      lastSequence: 2,
+      status: 'running',
+      threadId: 'thread-media-agent-002',
+    });
+    expect(startTurn.mock.calls[1]?.[0]).toMatchObject({
+      recoveryMode: 'restart-failed-turn',
+      replayKey: `${task.id}-agent-r3`,
+      taskRevision: 3,
+    });
+  });
+
+  it('migrates the deployed legacy blocked projection through the same fail-closed retry', async () => {
+    const { service, startTurn, task } = await fixture();
+    await service.startAgent(task.id, { expectedRevision: 1 });
+    task.agentSession!.status = 'needs-operator';
+    task.agentSession!.statusLabel = 'Agent 已阻塞';
+    task.agentSession!.currentActionLabel = 'Agent 回合异常结束，未重放动作';
+    task.runState = 'blocked';
+
+    await expect(
+      service.startAgent(task.id, { expectedRevision: 2 }),
+    ).resolves.toMatchObject({ status: 'running' });
+    expect(startTurn.mock.calls[1]?.[0]).toMatchObject({
+      recoveryMode: 'restart-failed-turn',
+      replayKey: `${task.id}-agent-r3`,
+      taskRevision: 3,
+    });
   });
 });

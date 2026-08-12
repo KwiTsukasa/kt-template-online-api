@@ -10,6 +10,7 @@ import {
 import type {
   CodexAppServerAdapter,
   CodexAppServerNotification,
+  CodexAppServerThreadState,
   CodexAppServerToolRequest,
 } from '../../../src/apps/media-codex-agent-gateway/infrastructure/codex-app-server.client';
 import { MediaCodexAgentSessionStore } from '../../../src/apps/media-codex-agent-gateway/infrastructure/media-codex-agent-session.store';
@@ -38,14 +39,14 @@ class FakeAppServer implements CodexAppServerAdapter {
   ) {
     this.toolHandler = handler;
   }
-  async resumeThread(threadId: string) {
+  async resumeThread(threadId: string): Promise<CodexAppServerThreadState> {
     this.resumeCount += 1;
     return {
       lastTurn: { id: 'media-turn-001', status: 'completed' as const },
       threadId,
     };
   }
-  async startThread() {
+  async startThread(): Promise<CodexAppServerThreadState> {
     this.startCount += 1;
     return {
       lastTurn: null,
@@ -173,6 +174,7 @@ describe('MediaCodexAgentSessionStore', () => {
     const legacy = { ...current };
     delete legacy.checkpointSha256;
     delete legacy.lastEventSequence;
+    delete legacy.terminalKind;
     writeFileSync(
       sessionPath,
       `${JSON.stringify({ ...legacy, checkpointSha256: sha256Json(legacy) })}\n`,
@@ -184,6 +186,7 @@ describe('MediaCodexAgentSessionStore', () => {
     ).toMatchObject({
       lastEventSequence: 0,
       taskId: 'media-task-001',
+      terminalKind: null,
     });
   });
 
@@ -234,5 +237,81 @@ describe('MediaCodexAgentSessionStore', () => {
       'agent-turn-started',
       'agent-turn-completed',
     ]);
+  });
+
+  it('restarts only an explicitly failed turn on a fresh thread and keeps sequence monotonic', async () => {
+    const appServer = new FakeAppServer();
+    const { events, service } = createService(appServer);
+    const started = await service.startTurn(request());
+    await appServer.notificationHandler?.({
+      method: 'turn/completed',
+      params: {
+        threadId: started.threadId,
+        turn: { id: started.turnId, status: 'failed' },
+      },
+    });
+    const resumeThread = jest
+      .spyOn(appServer, 'resumeThread')
+      .mockResolvedValueOnce({
+        lastTurn: { id: started.turnId!, status: 'failed' },
+        threadId: started.threadId,
+      });
+    jest.spyOn(appServer, 'startThread').mockResolvedValueOnce({
+      lastTurn: null,
+      threadId: '019ff55f-6258-7ef0-9c6b-6f3f59d9643d',
+    });
+
+    const retried = await service.startTurn({
+      ...request(8, 'media-agent-replay-002'),
+      recoveryMode: 'restart-failed-turn',
+    });
+
+    expect(retried).toMatchObject({
+      lastEventSequence: 5,
+      status: 'active',
+      taskRevision: 8,
+      terminalKind: null,
+      threadId: '019ff55f-6258-7ef0-9c6b-6f3f59d9643d',
+      turnId: 'media-turn-002',
+    });
+    expect(events.map((event) => event.sequence)).toEqual([1, 2, 3, 4, 5]);
+    expect(resumeThread).toHaveBeenCalledTimes(1);
+    expect(appServer.turnCount).toBe(2);
+  });
+
+  it('refuses to restart a normally completed turn as a failed turn', async () => {
+    const appServer = new FakeAppServer();
+    const { service } = createService(appServer);
+    const started = await service.startTurn(request());
+    await appServer.notificationHandler?.({
+      method: 'turn/completed',
+      params: {
+        threadId: started.threadId,
+        turn: { id: started.turnId, status: 'completed' },
+      },
+    });
+
+    await expect(
+      service.startTurn({
+        ...request(8, 'media-agent-replay-002'),
+        recoveryMode: 'restart-failed-turn',
+      }),
+    ).rejects.toThrow('agent-retry-not-failed');
+    expect(appServer.startCount).toBe(1);
+    expect(appServer.turnCount).toBe(1);
+  });
+
+  it('refuses a failed-turn recovery request without a blocked session', async () => {
+    const appServer = new FakeAppServer();
+    const { service } = createService(appServer);
+
+    await expect(
+      service.startTurn({
+        ...request(),
+        recoveryMode: 'restart-failed-turn',
+      }),
+    ).rejects.toThrow('agent-retry-session-not-blocked');
+    expect(appServer.startCount).toBe(0);
+    expect(appServer.turnCount).toBe(0);
   });
 });

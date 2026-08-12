@@ -229,7 +229,7 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `POST` | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理       |
 | `POST` | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验              |
 | `POST` | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理             |
-| `POST` | `/media-governance/tasks/:taskId/agent/start`                      | 启动五层边界 CodexAgent                |
+| `POST` | `/media-governance/tasks/:taskId/agent/start`                      | 启动或安全重试五层边界 CodexAgent      |
 | `GET`  | `/media-governance/tasks/:taskId/agent/session`                    | 查询 Agent 语义会话                    |
 | `POST` | `/media-governance/tasks/:taskId/agent/operator-decision`          | 提交人工候选选择并闭环                 |
 | `GET`  | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
@@ -292,11 +292,16 @@ gateway checkpoint 持久化 `lastEventSequence`，重启后继续递增；API �
 会回读 gateway 的 Task/thread 权威投影。gateway 在创建任何 App Server thread/turn
 之前还会调用 `GET /internal/media-governance/agent/health`；只有响应
 `persistenceMode=database`、`status=ready` 才放行。API 在调用 gateway 前先持久化
-带精确 policy/capsule SHA 的启动预留；只允许序号 1 的 `agent-thread-mapped` 把
-`pending-<taskId>` 原子绑定到真实 thread，后续事件继续按同一 SHA/revision/thread
+带精确 policy/capsule SHA 的启动预留；只允许预留水位的下一连续序号
+`agent-thread-mapped` 把 `pending-<taskId>` 原子绑定到真实 thread，后续事件继续按同一 SHA/revision/thread
 校验。启动响应超时会查询 gateway 的同一 Task 会话恢复，预留持久化失败则不会调用
 gateway。旧版未包含事件序号的 v1 checkpoint 和 gateway 安全响应按序号 0 兼容读取，
 不绕过其他 SHA、身份或策略校验。
+Agent 异常完成会保存终态类型并投影为 `failed`；正常完成但存在真实歧义才使用
+`needs-operator`。对 `failed` 再次调用 `agent/start` 时，API 生成新 revision、replay
+key 和 capsule，并请求 `restart-failed-turn`。gateway 必须只读恢复旧 thread 并确认
+其精确最后 turn 为 `failed` 或 `interrupted`，随后才创建新 thread；正常完成、活动中、
+无旧会话或身份不一致均失败关闭，不能用 `operator-decision` 伪造闭环。
 种子上传
 会在内存中解析 bencode、重新计算 v1 info hash，并拒绝路径穿越、绝对路径、重复
 路径、符号链接、可执行项、畸形和超量描述文件。磁链只接受有界 BTIH 身份。两类

@@ -178,7 +178,7 @@ export type MediaGovernanceTask = {
     policyBoundaryLabel: string;
     policySha256: string;
     policyVersion: string;
-    status: 'needs-operator' | 'running' | 'succeeded';
+    status: 'failed' | 'needs-operator' | 'running' | 'succeeded';
     statusLabel: string;
     threadId: string;
   };
@@ -716,6 +716,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return {
       agentPending: this.tasks.filter(
         (task) =>
+          task.agentSession?.status === 'failed' ||
           task.agentSession?.status === 'needs-operator' ||
           task.agentSession?.status === 'running',
       ).length,
@@ -1617,10 +1618,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (task.metadataStatus !== 'requires-agent') {
       throwVbenError('当前任务不需要启动 Agent', HttpStatus.CONFLICT);
     }
-    if (
-      task.agentSession?.status === 'running' ||
-      task.agentSession?.status === 'needs-operator'
-    ) {
+    const previousAgentSession = task.agentSession;
+    const retryFailedTurn = Boolean(
+      previousAgentSession &&
+      (previousAgentSession.status === 'failed' ||
+        this.isLegacyFailedAgentSession(previousAgentSession)),
+    );
+    if (previousAgentSession && !retryFailedTurn) {
       throwVbenError('任务已有运行中的 Agent 会话', HttpStatus.CONFLICT);
     }
     if (this.agentGateway) {
@@ -1645,6 +1649,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         manifestSha256,
         operatorCommand:
           '核对当前媒体身份、季集映射、元数据与字幕合同，并只提交密封治理计划。',
+        ...(retryFailedTurn
+          ? { recoveryMode: 'restart-failed-turn' as const }
+          : {}),
         replayKey,
         taskId: task.id,
         taskRevision: nextRevision,
@@ -1665,7 +1672,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         currentActionLabel: '正在创建 Agent 会话',
         currentUnitId: request.currentUnitId,
         lastHeartbeatLabel: '刚刚',
-        lastSequence: 0,
+        lastSequence: previousAgentSession?.lastSequence ?? 0,
         pendingPlanSha256: null,
         policyBoundaryLabel:
           '五层边界已启用；真实媒体、云端和数据库写入保持关闭',
@@ -1700,6 +1707,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         );
       }
       const reservedSession = task.agentSession!;
+      const failedRemoteSession = ['failed', 'interrupted'].includes(
+        String(session.terminalKind),
+      );
       task.agentSession = {
         ...reservedSession,
         capsuleSha256: session.capsuleSha256,
@@ -1713,9 +1723,18 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         ),
         policySha256: session.policySha256,
         policyVersion: session.policyVersion,
-        status: session.status === 'active' ? 'running' : 'needs-operator',
+        status:
+          session.status === 'active'
+            ? 'running'
+            : failedRemoteSession
+              ? 'failed'
+              : 'needs-operator',
         statusLabel:
-          session.status === 'active' ? 'Agent 正在治理' : '等待人工放行',
+          session.status === 'active'
+            ? 'Agent 正在治理'
+            : failedRemoteSession
+              ? 'Agent 已阻塞，可安全重试'
+              : '等待人工放行',
         threadId: session.threadId,
       };
       task.runState = session.status === 'active' ? 'running' : 'blocked';
@@ -1794,6 +1813,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       throwVbenError('NAS CodexAgent 会话身份不匹配', HttpStatus.CONFLICT);
     }
     const hasPendingPlan = Boolean(task.agentSession.pendingPlanSha256);
+    const failedRemoteSession = ['failed', 'interrupted'].includes(
+      String(remoteSession.terminalKind),
+    );
+    const retainedLegacyFailure =
+      remoteSession.terminalKind === null &&
+      task.agentSession.status === 'failed';
     task.agentSession = {
       ...task.agentSession,
       checkpointSha256: remoteSession.checkpointSha256,
@@ -1808,15 +1833,19 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           ? 'running'
           : remoteSession.status === 'closed'
             ? 'succeeded'
-            : 'needs-operator',
+            : failedRemoteSession || retainedLegacyFailure
+              ? 'failed'
+              : 'needs-operator',
       statusLabel:
         remoteSession.status === 'active'
           ? 'Agent 正在治理'
           : remoteSession.status === 'closed'
             ? 'Agent 治理已完成'
-            : hasPendingPlan
-              ? '密封计划待执行器接入'
-              : '等待密封结果验收',
+            : failedRemoteSession || retainedLegacyFailure
+              ? 'Agent 已阻塞，可安全重试'
+              : hasPendingPlan
+                ? '密封计划待执行器接入'
+                : '等待密封结果验收',
     };
     if (remoteSession.status === 'blocked' && hasPendingPlan) {
       task.sealedPlanSha256 = task.agentSession.pendingPlanSha256;
@@ -1979,7 +2008,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       session &&
       session.threadId === this.pendingAgentThreadId(task.id) &&
       input.type === 'agent-thread-mapped' &&
-      input.sequence === 1 &&
+      input.sequence === session.lastSequence + 1 &&
       input.status === 'active' &&
       input.taskRevision === task.revision,
     );
@@ -2023,8 +2052,8 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         task.revision += 1;
       }
     } else if (input.type === 'agent-blocked') {
-      session.status = 'needs-operator';
-      session.statusLabel = 'Agent 已阻塞';
+      session.status = 'failed';
+      session.statusLabel = 'Agent 已阻塞，可安全重试';
       task.runState = 'blocked';
       task.nextCommandLabel = input.summary;
     }
@@ -2631,6 +2660,17 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       session.capsuleSha256 === reserved.capsuleSha256 &&
       (reserved.threadId === this.pendingAgentThreadId(task.id) ||
         reserved.threadId === session.threadId),
+    );
+  }
+
+  private isLegacyFailedAgentSession(
+    session: NonNullable<MediaGovernanceTask['agentSession']>,
+  ) {
+    return (
+      session.status === 'needs-operator' &&
+      session.pendingPlanSha256 === null &&
+      session.statusLabel === 'Agent 已阻塞' &&
+      session.currentActionLabel === 'Agent 回合异常结束，未重放动作'
     );
   }
 

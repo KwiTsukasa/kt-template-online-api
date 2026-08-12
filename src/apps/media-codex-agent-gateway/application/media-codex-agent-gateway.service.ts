@@ -94,25 +94,39 @@ export class MediaCodexAgentGatewayService {
       }
     }
 
-    const thread = existing
+    if (
+      request.recoveryMode &&
+      (!existing || existing.status !== 'blocked' || !existing.turnId)
+    ) {
+      throw new Error('agent-retry-session-not-blocked');
+    }
+    const resumedThread = existing
       ? await this.appServer.resumeThread(existing.threadId, policy)
-      : await this.appServer.startThread(policy);
+      : null;
     if (
       existing?.turnId &&
-      thread.lastTurn &&
-      thread.lastTurn.id === existing.turnId &&
-      thread.lastTurn.status === 'inProgress'
+      resumedThread?.lastTurn &&
+      resumedThread.lastTurn.id === existing.turnId &&
+      resumedThread.lastTurn.status === 'inProgress'
     ) {
       return this.store.project(existing, true);
     }
-    if (
-      existing?.turnId &&
-      (!thread.lastTurn ||
-        (thread.lastTurn.id === existing.turnId &&
-          ['failed', 'interrupted'].includes(thread.lastTurn.status)))
-    ) {
-      throw new Error('agent-recovery-ambiguous');
+    let thread = resumedThread;
+    if (existing?.turnId) {
+      const lastTurn = resumedThread?.lastTurn;
+      if (!lastTurn || lastTurn.id !== existing.turnId) {
+        throw new Error('agent-recovery-ambiguous');
+      }
+      if (request.recoveryMode === 'restart-failed-turn') {
+        if (!['failed', 'interrupted'].includes(lastTurn.status)) {
+          throw new Error('agent-retry-not-failed');
+        }
+        thread = await this.appServer.startThread(policy);
+      } else if (['failed', 'interrupted'].includes(lastTurn.status)) {
+        throw new Error('agent-recovery-ambiguous');
+      }
     }
+    thread ??= await this.appServer.startThread(policy);
 
     const prompt = buildMediaCodexAgentTurnPrompt(request, capsule, policy);
     const turn = await this.appServer.startTurn(
@@ -134,6 +148,7 @@ export class MediaCodexAgentGatewayService {
       status: 'active',
       taskId: request.taskId,
       taskRevision: request.taskRevision,
+      terminalKind: null,
       threadId: thread.threadId,
       turnId: turn.turnId,
     });
@@ -213,6 +228,12 @@ export class MediaCodexAgentGatewayService {
       ...withoutCheckpoint(record),
       lastHeartbeatAt: new Date().toISOString(),
       status: 'blocked',
+      terminalKind:
+        status === 'completed'
+          ? 'completed'
+          : status === 'interrupted'
+            ? 'interrupted'
+            : 'failed',
     });
     await this.publish(
       refreshed,

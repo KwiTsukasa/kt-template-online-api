@@ -82,6 +82,7 @@ export interface MediaCodexAgentTurnRequest {
   currentUnitId: null | string;
   manifestSha256: string;
   operatorCommand: string;
+  recoveryMode?: 'restart-failed-turn';
   replayKey: string;
   taskId: string;
   taskRevision: number;
@@ -99,6 +100,7 @@ export interface MediaCodexAgentSafeSession {
   status: 'active' | 'blocked' | 'closed';
   taskId: string;
   taskRevision: number;
+  terminalKind: 'completed' | 'failed' | 'interrupted' | null;
   threadId: string;
   turnId: null | string;
 }

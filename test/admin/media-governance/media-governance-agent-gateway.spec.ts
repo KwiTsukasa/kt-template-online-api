@@ -377,7 +377,7 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
   });
 
   it('applies one verified TMDB identity amendment only when the terminal hash matches', async () => {
-    const { service, task } = await fixture();
+    const { service, startTurn, task } = await fixture();
     task.titleHint = '刀使巫女 刻印一闪的灯火 OVA';
     task.releaseYear = 2020;
     task.providerRef = { provider: 'bangumi', providerId: '296798' };
@@ -417,6 +417,9 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
     );
 
     const session = await service.startAgent(task.id, { expectedRevision: 1 });
+    expect(startTurn.mock.calls[0]?.[0].operatorCommand).toContain(
+      'operations 必须为 []',
+    );
     await expect(
       service.agentToolCall({
         arguments: {},
@@ -437,6 +440,31 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
       ],
       networkLookupPerformed: true,
     });
+    await expect(
+      service.agentToolCall({
+        arguments: {
+          identity: {
+            provider: 'tmdb',
+            providerId: '105473',
+            releaseYear: 2020,
+          },
+          operations: [
+            {
+              action: 'stage-media-copy',
+              targetPath: `/vol2/1000/.kt-media-governance-staging/${task.id}/work/S00E01.mkv`,
+            },
+          ],
+          replayKey: `${task.id}-agent-r2`,
+          summary: '身份修正不能混入重复媒体治理动作',
+        },
+        capsuleSha256: session!.capsuleSha256,
+        manifestSha256: task.inputSnapshotSha256,
+        policySha256: session!.policySha256,
+        taskId: task.id,
+        taskRevision: 2,
+        tool: 'plan.submit.sealed',
+      }),
+    ).rejects.toThrow(HttpException);
     const sealed = (await service.agentToolCall({
       arguments: {
         identity: {

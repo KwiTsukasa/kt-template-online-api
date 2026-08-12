@@ -2108,8 +2108,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         currentStage: task.stage,
         currentUnitId: task.units[0]?.id ?? null,
         manifestSha256,
-        operatorCommand:
-          '核对当前媒体身份、季集映射、元数据与字幕合同，并只提交密封治理计划。',
+        operatorCommand: this.agentIdentityRepairRequired(task)
+          ? '当前只修正缺失的 TMDB 身份：核对媒体身份与季集映射后提交 identity 密封修正，operations 必须为 []，不得重复复制、重命名或生成媒体、字幕、NFO、海报。'
+          : '核对当前媒体身份、季集映射、元数据与字幕合同，并只提交密封治理计划。',
         ...(retryFailedTurn
           ? { recoveryMode: 'restart-failed-turn' as const }
           : {}),
@@ -3025,7 +3026,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       ) ||
       !Array.isArray(operations) ||
       operations.length > 500 ||
-      (operations.length === 0 && identity === undefined) ||
+      (operations.length === 0) === (identity === undefined) ||
       value.replayKey !== expectedReplayKey ||
       typeof value.summary !== 'string' ||
       !value.summary.trim() ||

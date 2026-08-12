@@ -256,6 +256,8 @@ export const MEDIA_CODEX_AGENT_DYNAMIC_TOOLS = MEDIA_CODEX_AGENT_TOOLS.map(
         tool === 'plan.submit.sealed'
           ? {
               operations: {
+                description:
+                  '文件治理计划至少包含一项；identity 身份修正计划必须为空数组，二者不能混用。',
                 items: {
                   additionalProperties: false,
                   properties: {

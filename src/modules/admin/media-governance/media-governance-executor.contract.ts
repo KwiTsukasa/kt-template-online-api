@@ -93,15 +93,19 @@ function validateSources(
 ) {
   const requiresSource =
     action.startsWith('source.') || action.startsWith('canary.');
-  if (!requiresSource) {
+  const acceptsSources = requiresSource || action === 'acceptance.verify';
+  if (!acceptsSources) {
     if (sources !== undefined) throw new Error('source-contract-unexpected');
     return undefined;
   }
+  if (action === 'acceptance.verify' && sources === undefined) return undefined;
   if (!sources || sources.length === 0 || sources.length > 16) {
     throw new Error('source-contract-required');
   }
   if (
-    !['source.download', 'source.resume'].includes(action) &&
+    !['source.download', 'source.resume', 'acceptance.verify'].includes(
+      action,
+    ) &&
     sources.length !== 1
   ) {
     throw new Error('source-contract-count-invalid');

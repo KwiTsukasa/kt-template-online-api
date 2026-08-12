@@ -128,7 +128,6 @@ describe('MediaGovernanceExecutionEnvelope', () => {
         schemaVersion: '1.2.0',
         strategy: 'sidecar-bundled',
       },
-      sources: undefined,
     });
     expect(envelope.plan).toEqual({
       planGrantId: 'media-plan-grant-fixture-r7',
@@ -136,6 +135,7 @@ describe('MediaGovernanceExecutionEnvelope', () => {
       schemaVersion: '1.2.0',
       strategy: 'sidecar-bundled',
     });
+    expect(envelope.sources).toHaveLength(1);
   });
 
   it.each([

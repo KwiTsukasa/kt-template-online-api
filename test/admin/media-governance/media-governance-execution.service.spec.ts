@@ -856,6 +856,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       action: 'acceptance.verify',
       taskRevision: 9,
     });
+    expect(acceptanceEnvelope.sources).toHaveLength(task.sources.length);
     await service.applyExecutorEvent({
       action: 'acceptance.verify',
       eventType: 'run-started',

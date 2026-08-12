@@ -2032,7 +2032,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     ) {
       throwVbenError('当前任务尚未通过元数据核验门', HttpStatus.CONFLICT);
     }
-    await this.reserveExecution(task, 'acceptance.verify');
+    await this.reserveExecution(
+      task,
+      'acceptance.verify',
+      task.sources.length > 0 ? task.sources : undefined,
+    );
     return task;
   }
 

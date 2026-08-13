@@ -12,6 +12,24 @@ const torrentFixture = Buffer.from(
   'd8:announce23:https://tracker.invalid4:infod6:lengthi4e4:name8:demo.mkvee',
 );
 
+function bencode(value: unknown): Buffer {
+  if (Buffer.isBuffer(value)) {
+    return Buffer.concat([Buffer.from(`${value.length}:`), value]);
+  }
+  if (typeof value === 'number') return Buffer.from(`i${value}e`);
+  if (Array.isArray(value)) {
+    return Buffer.concat([Buffer.from('l'), ...value.map(bencode), Buffer.from('e')]);
+  }
+  const record = value as Record<string, unknown>;
+  return Buffer.concat([
+    Buffer.from('d'),
+    ...Object.keys(record)
+      .sort()
+      .flatMap((key) => [bencode(Buffer.from(key)), bencode(record[key])]),
+    Buffer.from('e'),
+  ]);
+}
+
 describe('media torrent descriptor boundary', () => {
   it('derives the info hash and a safe manifest without exposing the tracker', () => {
     const parsed = parseTorrentDescriptor(torrentFixture);
@@ -26,6 +44,40 @@ describe('media torrent descriptor boundary', () => {
       },
     ]);
     expect(JSON.stringify(parsed)).not.toContain('tracker.invalid');
+  });
+
+  it('excludes padding transport entries while preserving original file indices', () => {
+    const parsed = parseTorrentDescriptor(
+      bencode({
+        info: {
+          files: [
+            { length: 4, path: [Buffer.from('demo-01.mkv')] },
+            {
+              attr: Buffer.from('p'),
+              length: 2,
+              path: [Buffer.from('padding.bin')],
+            },
+            { length: 5, path: [Buffer.from('demo-02.mkv')] },
+          ],
+          name: Buffer.from('demo'),
+        },
+      }),
+    );
+
+    expect(parsed.manifest).toEqual([
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'demo-01.mkv',
+        sizeBytes: 4,
+      },
+      {
+        executable: false,
+        index: 2,
+        relativePath: 'demo-02.mkv',
+        sizeBytes: 5,
+      },
+    ]);
   });
 
   it('stores immutable descriptors only in the private bucket', async () => {

@@ -240,6 +240,8 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 
 `probe-runtime` 会先完成 3 分钟初始观察；来源即使产生少量数据，按观察窗平均吞吐估算
 无法在 24 小时内完成所选载荷时仍返回 `degraded/insufficient_throughput`，下载入口保持关闭。
+种子清单不会把 `attr=p` 的 padding 传输项暴露为可治理文件，但会保留其占用的原始
+file index；API 与 qBittorrent 因此对用户文件使用同一稀疏索引和 manifest 摘要。
 
 NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 Admin 权限不能访问：
 

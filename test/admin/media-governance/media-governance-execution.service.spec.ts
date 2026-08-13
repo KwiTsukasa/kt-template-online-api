@@ -2,7 +2,10 @@ import type {
   MediaGovernanceExecutionEnvelope,
   MediaGovernanceExecutionGateway,
 } from '../../../src/modules/admin/media-governance/media-governance-execution.gateway';
-import type { MediaGovernanceStateStore } from '../../../src/modules/admin/media-governance/media-governance-state.store';
+import type {
+  MediaGovernanceStateStore,
+  MediaGovernanceStoredTask,
+} from '../../../src/modules/admin/media-governance/media-governance-state.store';
 import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/media-governance.service';
 
 describe('MediaGovernanceService production execution adapter', () => {
@@ -1120,6 +1123,129 @@ describe('MediaGovernanceService production execution adapter', () => {
       taskRevision: 4,
     });
     expect(retryEnvelope.runId).not.toBe(firstEnvelope.runId);
+
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: retryEnvelope.runId,
+      sequence: 1,
+      summary: '延迟身份重新核验开始',
+      taskId: task.id,
+      taskRevision: 4,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      evidenceSha256: 'b'.repeat(64),
+      eventType: 'run-succeeded',
+      metadata: {
+        canAccept: false,
+        repairAttempts: 0,
+        schemaVersion: 'media-admin-metadata-verification-v1',
+        units: [
+          {
+            accepted: false,
+            missingA: ['identity.provider', 'identity.providerId'],
+            missingB: ['metadata.local-nfo', 'artwork.poster'],
+            missingC: [],
+            unitId: task.units[0]!.id,
+          },
+        ],
+        writeBoundaries: {
+          cloud: 0,
+          databaseDirect: 0,
+          mechanicalScan: 0,
+          ui: 0,
+        },
+      },
+      observedAt: new Date().toISOString(),
+      runId: retryEnvelope.runId,
+      sequence: 2,
+      summary: '延迟身份重新核验仍未回填',
+      taskId: task.id,
+      taskRevision: 4,
+    });
+
+    expect(task).toMatchObject({
+      activeRunId: null,
+      metadataStatus: 'requires-agent',
+      nextCommandLabel: '启动 CodexAgent 有界人工治理',
+      revision: 5,
+      runState: 'blocked',
+      units: [
+        expect.objectContaining({
+          metadataProjection: expect.objectContaining({
+            identityRefreshAttempts: 1,
+          }),
+        }),
+      ],
+    });
+    await expect(
+      service.startMetadataVerification(task.id, { expectedRevision: 5 }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      service.startAgent(task.id, { expectedRevision: 5 }),
+    ).resolves.toMatchObject({ status: 'running' });
+  });
+
+  it('migrates persisted deferred identity tasks to the bounded Agent branch', async () => {
+    const { gateway, service, stateStore } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '旧延迟身份状态迁移测试',
+    });
+    task.governanceProfile = 'sidecar-bundled';
+    task.metadataStatus = 'requires-agent';
+    task.runState = 'blocked';
+    task.sealedPlan = { schemaVersion: '1.2.0' };
+    task.sealedPlanSha256 = 'a'.repeat(64);
+    task.stage = 'metadata';
+    task.units[0]!.evidenceSha256 = 'b'.repeat(64);
+    task.units[0]!.metadataProjection.missingA = [
+      'identity.provider',
+      'identity.providerId',
+    ];
+    task.units[0]!.metadataProjection.missingB = [
+      'metadata.local-nfo',
+      'artwork.poster',
+    ];
+    delete task.units[0]!.metadataProjection.identityRefreshAttempts;
+    const storedTask = structuredClone(
+      task,
+    ) as unknown as MediaGovernanceStoredTask;
+    (
+      stateStore.loadTasks as jest.MockedFunction<
+        MediaGovernanceStateStore['loadTasks']
+      >
+    ).mockResolvedValue([storedTask]);
+
+    const restoredService = new MediaGovernanceService(
+      undefined,
+      undefined,
+      undefined,
+      stateStore,
+      gateway,
+    );
+    await restoredService.onModuleInit();
+    const restored = restoredService.detail(task.id);
+
+    expect(restored).toMatchObject({
+      nextCommandLabel: '启动 CodexAgent 有界人工治理',
+      units: [
+        expect.objectContaining({
+          metadataProjection: expect.objectContaining({
+            identityRefreshAttempts: 1,
+          }),
+        }),
+      ],
+    });
+    await expect(
+      restoredService.startAgent(restored.id, {
+        expectedRevision: restored.revision,
+      }),
+    ).resolves.toMatchObject({ status: 'running' });
   });
 
   it.each([

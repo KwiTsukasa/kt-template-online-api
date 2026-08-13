@@ -269,7 +269,10 @@ payload-ready 载荷重试，不会重新下载。
 阶段重试；API 保留密封计划并创建新的 Run 和 replay key，不会把业务核验不通过误当成
 执行失败重试。元数据执行器会在治理完成后有界等待 fnOS 回填作品身份；若旧 Run 已在
 回填完成前只返回 `identity.provider/providerId` 两项缺口，API 允许从同一密封计划重新
-采集元数据事实，并在此之前拒绝误启动 CodexAgent，不重跑下载或本地治理。
+采集元数据事实，并在此之前拒绝误启动 CodexAgent，不重跑下载或本地治理。该延迟
+身份刷新每个 Unit 最多一次，并把 `identityRefreshAttempts` 保存在元数据投影中；一次
+刷新后仍缺身份时固定转入 CodexAgent，禁止第三次相同 Run。升级前已处于这一精确缺口
+且尚无计数字段的持久化任务按刷新已用完迁移，避免 API 重启重新打开循环。
 内嵌字幕任务在唯一 TMDB 身份已闭合且只缺 LocalNFO、作品/季海报时，第一次确定性生成
 属于自动元数据补齐，独立验收后记为 `automatic`；第二次尝试、其他 profile 或额外缺口
 继续进入 `bounded_repair`/Agent，不改变 A/B/C 硬门禁。

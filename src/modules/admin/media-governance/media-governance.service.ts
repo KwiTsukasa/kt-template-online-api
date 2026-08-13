@@ -84,6 +84,7 @@ export type MediaGovernanceUnit = {
   id: string;
   localAcceptedAt: null | string;
   metadataProjection: {
+    identityRefreshAttempts?: number;
     missingA: string[];
     missingB: string[];
     missingC: string[];
@@ -706,6 +707,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         if (automaticEnrichment) task.closedMode = 'automatic';
         task.nextCommandLabel = '重新运行 A/B/C 分档元数据核验';
       } else if (input.action === 'metadata.verify') {
+        const refreshingDeferredIdentity =
+          task.metadataStatus === 'requires-agent' &&
+          this.hasDeferredMetadataIdentityGap(task);
+        if (refreshingDeferredIdentity) {
+          for (const unit of task.units) {
+            unit.metadataProjection.identityRefreshAttempts =
+              (unit.metadataProjection.identityRefreshAttempts ?? 0) + 1;
+          }
+        }
         this.applyMetadataEvidence(task, input);
         const metadata = input.metadata!;
         task.stage = 'metadata';
@@ -823,6 +833,8 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       )!;
       unit.evidenceSha256 = input.evidenceSha256;
       unit.metadataProjection = {
+        identityRefreshAttempts:
+          unit.metadataProjection.identityRefreshAttempts ?? 0,
         missingA: [...projection.missingA],
         missingB: [...projection.missingB],
         missingC: [...projection.missingC],
@@ -839,6 +851,36 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return Math.max(
       0,
       ...task.units.map((unit) => unit.metadataProjection.repairAttempts),
+    );
+  }
+
+  private metadataIdentityRefreshAttempts(task: MediaGovernanceTask) {
+    return Math.max(
+      0,
+      ...task.units.map(
+        (unit) => unit.metadataProjection.identityRefreshAttempts ?? 0,
+      ),
+    );
+  }
+
+  private hasDeferredMetadataIdentityGap(task: MediaGovernanceTask) {
+    const providerIdentityFields = new Set([
+      'identity.provider',
+      'identity.providerId',
+    ]);
+    return (
+      !task.metadataIdentity &&
+      task.units.every(
+        (unit) =>
+          unit.evidenceSha256 !== null &&
+          unit.metadataProjection.repairAttempts === 0 &&
+          unit.metadataProjection.missingA.length ===
+            providerIdentityFields.size &&
+          unit.metadataProjection.missingA.every((field) =>
+            providerIdentityFields.has(field),
+          ) &&
+          unit.metadataProjection.missingC.length === 0,
+      )
     );
   }
 
@@ -864,27 +906,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   private canRefreshDeferredMetadataIdentity(task: MediaGovernanceTask) {
-    const providerIdentityFields = new Set([
-      'identity.provider',
-      'identity.providerId',
-    ]);
     return (
       task.stage === 'metadata' &&
       task.runState === 'blocked' &&
       task.metadataStatus === 'requires-agent' &&
       Boolean(task.sealedPlan) &&
-      !task.metadataIdentity &&
-      task.units.every(
-        (unit) =>
-          unit.evidenceSha256 !== null &&
-          unit.metadataProjection.repairAttempts === 0 &&
-          unit.metadataProjection.missingA.length ===
-            providerIdentityFields.size &&
-          unit.metadataProjection.missingA.every((field) =>
-            providerIdentityFields.has(field),
-          ) &&
-          unit.metadataProjection.missingC.length === 0,
-      )
+      this.hasDeferredMetadataIdentityGap(task) &&
+      this.metadataIdentityRefreshAttempts(task) < 1
     );
   }
 
@@ -3574,6 +3602,16 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         stageLabel: '',
       },
     };
+    const legacyDeferredIdentityState =
+      restored.units.every(
+        (unit) => unit.metadataProjection.identityRefreshAttempts === undefined,
+      ) && this.hasDeferredMetadataIdentityGap(restored);
+    if (legacyDeferredIdentityState) {
+      for (const unit of restored.units) {
+        unit.metadataProjection.identityRefreshAttempts = 1;
+      }
+      restored.nextCommandLabel = '启动 CodexAgent 有界人工治理';
+    }
     this.deriveBundledSubtitleContracts(restored);
     if (this.canRefreshLegacyMetadata(restored)) {
       restored.nextCommandLabel = '重新采集 A/B/C 分档元数据事实';
@@ -3784,6 +3822,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           id: `media-unit-${randomUUID()}`,
           localAcceptedAt: null,
           metadataProjection: {
+            identityRefreshAttempts: 0,
             missingA: [],
             missingB: [],
             missingC: [],
@@ -3802,6 +3841,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       id: `media-unit-${randomUUID()}`,
       localAcceptedAt: null,
       metadataProjection: {
+        identityRefreshAttempts: 0,
         missingA: [],
         missingB: [],
         missingC: [],

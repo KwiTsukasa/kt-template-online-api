@@ -182,7 +182,8 @@ function parseManifest(info: Map<string, BencodeValue>): ManifestEntry[] {
     throw new Error('torrent-descriptor-file-count-invalid');
   }
   const paths = new Set<string>();
-  const manifest = rawEntries.flatMap((entry, index) => {
+  let visibleIndex = 0;
+  const manifest = rawEntries.flatMap((entry) => {
     const relativePath = validateDescriptorManifestEntry({
       entryType: entry.attr.includes('l') ? 'symbolic-link' : 'file',
       executable: entry.attr.includes('x'),
@@ -195,7 +196,7 @@ function parseManifest(info: Map<string, BencodeValue>): ManifestEntry[] {
     if (entry.attr.includes('p')) return [];
     return [{
       executable: false,
-      index,
+      index: visibleIndex++,
       relativePath,
       sizeBytes: entry.sizeBytes,
     }];

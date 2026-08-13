@@ -246,7 +246,7 @@ profile 的中文字幕覆盖、同季单一字幕发布组以及补充来源只
 进入下载。种子描述文件会安全解析，磁链和种子原文只写入
 `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET` 指定的私有 MinIO Bucket；通用 `/minio/*`
 服务会拒绝访问该 Bucket。种子内 `attr=p` 的 padding 传输项不会进入治理清单，
-但真实文件保留原始稀疏 file index，使 API 与 qBittorrent 的 manifest 摘要一致。
+真实文件按 qBittorrent Web API 的用户可见顺序连续编号，使两端 manifest 摘要一致。
 领域合同覆盖 Task/Unit/Run、五种来源分类、逐季单一
 字幕发布组、`S00`、运行时来源健康、A/B/C 元数据、三层事件保留。来源探针先完成
 3 分钟初始观察；即使已产生少量数据，按平均吞吐估算无法在 24 小时内完成所选载荷时

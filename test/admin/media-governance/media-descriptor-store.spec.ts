@@ -46,7 +46,7 @@ describe('media torrent descriptor boundary', () => {
     expect(JSON.stringify(parsed)).not.toContain('tracker.invalid');
   });
 
-  it('excludes padding transport entries while preserving original file indices', () => {
+  it('excludes padding transport entries and matches qBittorrent visible indices', () => {
     const parsed = parseTorrentDescriptor(
       bencode({
         info: {
@@ -73,7 +73,7 @@ describe('media torrent descriptor boundary', () => {
       },
       {
         executable: false,
-        index: 2,
+        index: 1,
         relativePath: 'demo-02.mkv',
         sizeBytes: 5,
       },

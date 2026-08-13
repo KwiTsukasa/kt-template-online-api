@@ -530,13 +530,17 @@ describe('MediaGovernanceService production execution adapter', () => {
     const { dispatch, gateway, service } = fixture();
     await service.onModuleInit();
     const task = await service.create({
-      mediaType: 'movie',
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
       titleHint: '低速来源换源测试',
+      workItemId: 'media-069',
     });
     const source = await service.addMagnetSource(task.id, {
-      contentKind: 'embedded_subtitle_media',
+      contentKind: 'bundled_sidecar_media',
       expectedRevision: 1,
       magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      releaseGroup: 'Fixture-Group',
+      seasonNumbers: ['S01'],
       sourceRole: 'primary_media',
     });
     source.manifest = [
@@ -546,24 +550,37 @@ describe('MediaGovernanceService production execution adapter', () => {
         relativePath: 'Movie.mkv',
         sizeBytes: 8,
       },
+      {
+        executable: false,
+        index: 1,
+        relativePath: 'Movie.zh-CN.ass',
+        sizeBytes: 2,
+      },
     ];
     source.manifestSha256 = 'a'.repeat(64);
     source.manifestState = 'inspected';
-    source.selectedBytes = 8;
-    source.selectedFileCount = 1;
-    source.selectedFileIndices = [0];
-    source.selectedFileMappings = [
-      {
-        episodeNumber: null,
-        fileRole: 'video',
-        index: 0,
-        language: null,
-        unitId: task.units[0]!.id,
-      },
-    ];
+    await service.updateSourceSelection(task.id, source.id, {
+      expectedRevision: 2,
+      fileMappings: [
+        {
+          episodeNumber: 1,
+          fileRole: 'video',
+          index: 0,
+          unitId: task.units[0]!.id,
+        },
+        {
+          episodeNumber: 1,
+          fileRole: 'subtitle',
+          index: 1,
+          language: 'zh-CN',
+          unitId: task.units[0]!.id,
+        },
+      ],
+      selectedFileIndices: [0, 1],
+    });
     source.sourceHealth = 'viable';
 
-    await service.startDownload(task.id, { expectedRevision: 2 });
+    await service.startDownload(task.id, { expectedRevision: 3 });
     const download = dispatch.mock.calls[0]![0];
     const observedAt = new Date().toISOString();
     await service.applyExecutorEvent({
@@ -574,9 +591,9 @@ describe('MediaGovernanceService production execution adapter', () => {
       sequence: 1,
       summary: '下载开始',
       taskId: task.id,
-      taskRevision: 3,
+      taskRevision: 4,
     });
-    await service.cancelDownload(task.id, { expectedRevision: 3 });
+    await service.cancelDownload(task.id, { expectedRevision: 4 });
     expect(gateway.control).toHaveBeenCalledWith(
       expect.objectContaining({ command: 'cancel', runId: download.runId }),
     );
@@ -588,22 +605,22 @@ describe('MediaGovernanceService production execution adapter', () => {
       sequence: 2,
       summary: 'NAS 执行失败：download_cancelled',
       taskId: task.id,
-      taskRevision: 3,
+      taskRevision: 4,
     });
     expect(task).toMatchObject({
       activeRunId: null,
       gateReason: '下载已取消，现有载荷等待精确清理',
-      revision: 4,
+      revision: 5,
       runState: 'blocked',
     });
 
-    await service.removeSource(task.id, source.id, { expectedRevision: 4 });
+    await service.removeSource(task.id, source.id, { expectedRevision: 5 });
     expect(source.descriptorTombstonedAt).not.toBeNull();
     const cleanup = dispatch.mock.calls[1]![0];
     expect(cleanup).toMatchObject({
       action: 'source.cleanup',
       sources: [expect.objectContaining({ sourceId: source.id })],
-      taskRevision: 5,
+      taskRevision: 6,
     });
     await service.applyExecutorEvent({
       action: 'source.cleanup',
@@ -613,7 +630,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       sequence: 1,
       summary: '清理开始',
       taskId: task.id,
-      taskRevision: 5,
+      taskRevision: 6,
     });
     await service.applyExecutorEvent({
       action: 'source.cleanup',
@@ -625,16 +642,22 @@ describe('MediaGovernanceService production execution adapter', () => {
       sourceId: source.id,
       summary: '来源运行时已精确清理',
       taskId: task.id,
-      taskRevision: 5,
+      taskRevision: 6,
     });
     expect(task).toMatchObject({
       activeRunId: null,
       governanceProfile: null,
       nextCommandLabel: '添加新的主媒体来源',
-      revision: 6,
+      revision: 7,
       runState: 'draft',
       sources: [],
       stage: 'intake',
+      units: [
+        expect.objectContaining({
+          expectedEpisodeNumbers: [],
+          subtitleContract: null,
+        }),
+      ],
     });
   });
 

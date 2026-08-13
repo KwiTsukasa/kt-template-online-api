@@ -1297,15 +1297,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.activeRunId ||
       !['intake', 'download'].includes(task.stage) ||
       task.payloadSeal ||
-      task.sealedPlan ||
-      task.workItemId
+      task.sealedPlan
     ) {
       throwVbenError('当前阶段不能移除来源', HttpStatus.CONFLICT);
-    }
-    if (
-      task.units.some((unit) => unit.subtitleContract?.sourceId === source.id)
-    ) {
-      throwVbenError('来源仍被整季字幕合同引用', HttpStatus.CONFLICT);
     }
     if (this.executionGateway?.enabled()) {
       const previous = {
@@ -1338,6 +1332,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     source: MediaGovernanceSource,
   ) {
     task.sources.splice(task.sources.indexOf(source), 1);
+    for (const unit of task.units) {
+      if (unit.subtitleContract?.sourceId === source.id) {
+        unit.subtitleContract = null;
+      }
+    }
+    this.refreshExpectedEpisodeNumbers(task);
     if (source.sourceRole === 'primary_media') task.governanceProfile = null;
     task.gateReason = null;
     task.progress = {

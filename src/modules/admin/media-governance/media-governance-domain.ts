@@ -263,6 +263,7 @@ export type MediaGovernanceSourceHealth =
   | 'viable';
 export type MediaGovernanceSourceHealthReason =
   | 'download_stalled'
+  | 'insufficient_throughput'
   | 'local_connectivity_degraded'
   | 'magnet_metadata_unavailable'
   | 'no_complete_peer'
@@ -656,6 +657,7 @@ export function decideSourceHealth(input: {
   localConnectivityHealthy: boolean;
   metadataAvailable: boolean;
   selectedAvailability: null | number;
+  selectedBytes: number;
   trackerFailure: 'auth' | 'unreachable' | null;
 }): {
   health: MediaGovernanceSourceHealth;
@@ -667,7 +669,18 @@ export function decideSourceHealth(input: {
       reason: 'local_connectivity_degraded',
     };
   }
-  if (input.bytesDelta > 0 || input.completePeerCount > 0) {
+  if (input.bytesDelta > 0) {
+    if (input.elapsedSeconds < 180) {
+      return { health: 'probing', reason: null };
+    }
+    const averageBytesPerSecond = input.bytesDelta / input.elapsedSeconds;
+    const remainingBytes = Math.max(
+      0,
+      input.selectedBytes - input.bytesDelta,
+    );
+    if (remainingBytes / averageBytesPerSecond > 24 * 60 * 60) {
+      return { health: 'degraded', reason: 'insufficient_throughput' };
+    }
     return { health: 'viable', reason: null };
   }
   if (input.elapsedSeconds < 180) {

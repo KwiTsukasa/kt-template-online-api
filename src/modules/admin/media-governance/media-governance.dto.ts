@@ -519,6 +519,7 @@ export class MediaGovernanceExecutorEventDto {
   @IsOptional()
   @IsIn([
     'download_stalled',
+    'insufficient_throughput',
     'local_connectivity_degraded',
     'magnet_metadata_unavailable',
     'no_complete_peer',

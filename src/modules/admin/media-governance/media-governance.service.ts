@@ -274,6 +274,7 @@ const PROVIDER_LABELS: Record<MediaGovernanceProvider, string> = {
 };
 const SOURCE_HEALTH_REASON_LABELS: Record<string, string> = {
   download_stalled: '已连接来源，但有效下载量连续 10 分钟没有增长',
+  insufficient_throughput: '来源有数据，但预计无法在 24 小时内完成所选载荷',
   local_connectivity_degraded: 'NAS 本地网络连通性异常，暂时无法判定来源状态',
   magnet_metadata_unavailable: '磁链在限定时间内未取得文件清单',
   no_complete_peer: '当前没有持有完整所选文件的可用节点',

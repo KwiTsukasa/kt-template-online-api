@@ -238,6 +238,9 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `GET`  | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
 | `GET`  | `/media-governance/events/stream`                                  | 订阅带 replay/snapshot-required 的 SSE |
 
+`probe-runtime` 会先完成 3 分钟初始观察；来源即使产生少量数据，按观察窗平均吞吐估算
+无法在 24 小时内完成所选载荷时仍返回 `degraded/insufficient_throughput`，下载入口保持关闭。
+
 NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 Admin 权限不能访问：
 
 | 方法   | 路径                                                     | 说明                           |

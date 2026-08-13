@@ -233,6 +233,7 @@ describe('media governance domain contract', () => {
         localConnectivityHealthy: true,
         metadataAvailable: true,
         selectedAvailability: 1,
+        selectedBytes: 1024,
         trackerFailure: null,
       }),
     ).toEqual({ health: 'probing', reason: null });
@@ -244,6 +245,7 @@ describe('media governance domain contract', () => {
         localConnectivityHealthy: false,
         metadataAvailable: true,
         selectedAvailability: 0,
+        selectedBytes: 1024,
         trackerFailure: null,
       }),
     ).toEqual({
@@ -258,20 +260,34 @@ describe('media governance domain contract', () => {
         localConnectivityHealthy: true,
         metadataAvailable: true,
         selectedAvailability: 0,
+        selectedBytes: 1024,
         trackerFailure: null,
       }),
     ).toEqual({ health: 'unavailable', reason: 'no_complete_peer' });
     expect(
       decideSourceHealth({
-        bytesDelta: 1024,
+        bytesDelta: 512,
         completePeerCount: 0,
-        elapsedSeconds: 45,
+        elapsedSeconds: 180,
         localConnectivityHealthy: true,
         metadataAvailable: true,
         selectedAvailability: 1,
+        selectedBytes: 1024,
         trackerFailure: null,
       }),
     ).toEqual({ health: 'viable', reason: null });
+    expect(
+      decideSourceHealth({
+        bytesDelta: 180,
+        completePeerCount: 1,
+        elapsedSeconds: 180,
+        localConnectivityHealthy: true,
+        metadataAvailable: true,
+        selectedAvailability: 1,
+        selectedBytes: 6_780_692_790,
+        trackerFailure: null,
+      }),
+    ).toEqual({ health: 'degraded', reason: 'insufficient_throughput' });
   });
 
   it('projects A/B/C metadata and only permits evidence-backed B fallbacks', () => {

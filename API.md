@@ -217,6 +217,7 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `GET`  | `/media-governance/tasks/page`                                     | 分页和语义过滤任务                     |
 | `GET`  | `/media-governance/tasks/summary`                                  | 查询任务、下载、治理和 Agent 聚合      |
 | `GET`  | `/media-governance/tasks/:taskId`                                  | 查询权威任务详情投影                   |
+| `PUT`  | `/media-governance/tasks/:taskId/identity`                          | 下载前修正资料库身份与年份             |
 | `POST` | `/media-governance/tasks/:taskId/sources/magnet`                   | 脱敏添加磁链来源                       |
 | `POST` | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件         |
 | `PUT`  | `/media-governance/tasks/:taskId/sources/:sourceId/classification` | 修订来源角色和内容分类                 |
@@ -256,7 +257,10 @@ NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 A
 `Cache-Control: no-store`；增量 SQL 初始只把菜单和九个权限授予启用中的 `super`。
 所有命令请求必须携带 `expectedRevision`，陈旧版本返回 409 且不执行。TV 至少声明一个
 `Sxx` 季号，特别篇/番外篇使用 `S00`；Movie/Theatrical 不填写季号。`providerRef` 和
-`releaseYear` 是带格式校验和中文引导的可选身份消歧字段。`workItemId` 是内部账本与
+`releaseYear` 是带格式校验和中文引导的身份消歧字段；创建时可暂缺，下载前可通过
+`PUT /identity` 绑定当前 revision 修正，其中 `providerRef` 必填、年份可选。该操作只接受
+`intake` 的 `draft/blocked` 任务，保留已有来源及健康/阻塞状态；下载、治理、Agent、载荷
+或计划任一已经开始后失败关闭。`workItemId` 是内部账本与
 本地事务身份：导入存量任务时可显式绑定；未来新任务省略时，API 会在首次本地治理前
 通过数据库互斥锁从 `media-063` 起分配且永久复用，不要求操作员填写。
 下载取消只终止当前密封 Run，不在失败路径直接删除载荷；Run 返回可验证终态后，来源

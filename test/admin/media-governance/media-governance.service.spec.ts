@@ -103,6 +103,63 @@ describe('MediaGovernanceService', () => {
     expect(task.identityPreview.seasonLabel).toBe('电影单元（不使用 S00）');
   });
 
+  it('updates a draft identity without replacing its existing source state', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      releaseYear: 2015,
+      seasonNumbers: ['S01'],
+      titleHint: '下载前身份修正',
+    });
+    await service.addMagnetSource(task.id, {
+      contentKind: 'bundled_sidecar_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      releaseGroup: 'TestGroup',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    const sourceBefore = structuredClone(task.sources[0]);
+    const snapshotBefore = task.inputSnapshotSha256;
+
+    const updated = await service.updateIdentity(task.id, {
+      expectedRevision: 2,
+      providerRef: { provider: 'tmdb', providerId: '63145' },
+    });
+
+    expect(updated).toMatchObject({
+      providerRef: { provider: 'tmdb', providerId: '63145' },
+      releaseYear: 2015,
+      revision: 3,
+      runState: 'draft',
+      stage: 'intake',
+    });
+    expect(updated.identityPreview.providerLabel).toBe('TMDB · 63145');
+    expect(updated.inputSnapshotSha256).not.toBe(snapshotBefore);
+    expect(updated.sources[0]).toEqual(sourceBefore);
+  });
+
+  it('fails closed when identity correction is stale or execution has begun', async () => {
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '身份门禁测试',
+    });
+
+    await expect(
+      service.updateIdentity(task.id, {
+        expectedRevision: 2,
+        providerRef: { provider: 'tmdb', providerId: '12345' },
+      }),
+    ).rejects.toThrow(HttpException);
+
+    task.stage = 'download';
+    await expect(
+      service.updateIdentity(task.id, {
+        expectedRevision: 1,
+        providerRef: { provider: 'tmdb', providerId: '12345' },
+      }),
+    ).rejects.toThrow(HttpException);
+  });
+
   it('rejects an unknown detail identity', () => {
     expect(() => service.detail('media-task-missing')).toThrow(HttpException);
   });

@@ -186,6 +186,28 @@ export class MediaGovernanceRevisionCommandDto {
   expectedRevision: number;
 }
 
+export class MediaGovernanceTaskIdentityUpdateDto extends MediaGovernanceRevisionCommandDto {
+  @ApiProperty({
+    description: '媒体资料库唯一作品编号，填错会关联到另一部作品',
+    type: MediaGovernanceProviderRefDto,
+  })
+  @IsObject()
+  @ValidateNested()
+  @Type(() => MediaGovernanceProviderRefDto)
+  providerRef: MediaGovernanceProviderRefDto;
+
+  @ApiPropertyOptional({
+    description: '首播或上映年份，用于缩小同名作品候选范围',
+    maximum: MAX_RELEASE_YEAR,
+    minimum: 1888,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1888)
+  @Max(MAX_RELEASE_YEAR)
+  releaseYear?: number;
+}
+
 export class MediaGovernanceDescriptorRedeemDto {
   @IsString()
   @MaxLength(96)

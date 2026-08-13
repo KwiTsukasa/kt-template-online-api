@@ -35,6 +35,7 @@ import type {
   MediaGovernanceContentKind,
   MediaGovernanceSubtitleContractDto,
   MediaGovernanceTaskCreateDto,
+  MediaGovernanceTaskIdentityUpdateDto,
   MediaGovernanceTaskPageQueryDto,
 } from './media-governance.dto';
 import {
@@ -413,6 +414,54 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       revision: task.revision,
       taskId: task.id,
     });
+    return task;
+  }
+
+  async updateIdentity(
+    taskId: string,
+    input: MediaGovernanceTaskIdentityUpdateDto,
+  ): Promise<MediaGovernanceTask> {
+    const task = this.detail(taskId);
+    this.assertRevision(task, input.expectedRevision);
+    if (
+      task.stage !== 'intake' ||
+      !['blocked', 'draft'].includes(task.runState) ||
+      task.activeRunId !== null ||
+      task.payloadSeal !== null ||
+      task.sealedPlan !== null ||
+      task.sealedPlanSha256 !== null ||
+      task.closedAt !== null ||
+      task.agentSession !== null ||
+      task.metadataIdentity !== null ||
+      task.metadataStatus !== 'pending'
+    ) {
+      throwVbenError('作品身份只能在下载和治理开始前修正', HttpStatus.CONFLICT);
+    }
+
+    const providerRef = {
+      provider: input.providerRef.provider,
+      providerId: input.providerRef.providerId.trim(),
+    };
+    const releaseYear = input.releaseYear ?? task.releaseYear;
+    const seasonNumbers = task.units
+      .map((unit) => unit.seasonNumber)
+      .filter((season): season is string => Boolean(season));
+    const normalizedInput = {
+      mediaType: task.mediaType,
+      providerRef,
+      releaseYear,
+      seasonNumbers,
+      titleHint: task.titleHint,
+      workItemId: task.workItemId,
+    };
+    task.providerRef = providerRef;
+    task.releaseYear = releaseYear;
+    task.identityPreview = this.buildIdentityPreview(normalizedInput);
+    task.inputSnapshotSha256 = createHash('sha256')
+      .update(JSON.stringify(normalizedInput))
+      .digest('hex');
+    this.bumpRevision(task);
+    await this.commitTask(task, 'state-updated');
     return task;
   }
 

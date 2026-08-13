@@ -153,6 +153,54 @@ describe('MediaGovernanceController', () => {
     },
   );
 
+  it('corrects a draft identity over real HTTP and rejects stale or invalid input', async () => {
+    const created = await request(apiUrl)
+      .post('/media-governance/tasks')
+      .send({
+        mediaType: 'tv',
+        releaseYear: 2015,
+        seasonNumbers: ['S01'],
+        titleHint: '下载前身份接口测试',
+      })
+      .expect(201);
+    const taskId = created.body.data.id as string;
+
+    const updated = await request(apiUrl)
+      .put(`/media-governance/tasks/${taskId}/identity`)
+      .send({
+        expectedRevision: 1,
+        providerRef: { provider: 'tmdb', providerId: '63145' },
+      })
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+
+    expect(updated.body.data).toMatchObject({
+      providerRef: { provider: 'tmdb', providerId: '63145' },
+      releaseYear: 2015,
+      revision: 2,
+      stage: 'intake',
+    });
+
+    await request(apiUrl)
+      .put(`/media-governance/tasks/${taskId}/identity`)
+      .send({
+        expectedRevision: 1,
+        providerRef: { provider: 'tmdb', providerId: '63145' },
+      })
+      .expect(409);
+    await request(apiUrl)
+      .put(`/media-governance/tasks/${taskId}/identity`)
+      .send({
+        expectedRevision: 2,
+        providerRef: { provider: 'unknown', providerId: '../wrong' },
+      })
+      .expect(400);
+    await request(apiUrl)
+      .put(`/media-governance/tasks/${taskId}/identity`)
+      .send({ expectedRevision: 2 })
+      .expect(400);
+  });
+
   it('accepts a magnet source and returns only a sanitized projection', async () => {
     const created = await request(apiUrl)
       .post('/media-governance/tasks')

@@ -30,6 +30,7 @@ import {
   MediaGovernanceSourceSelectionDto,
   MediaGovernanceSubtitleContractDto,
   MediaGovernanceTaskCreateDto,
+  MediaGovernanceTaskIdentityUpdateDto,
   MediaGovernanceTaskPageQueryDto,
 } from './media-governance.dto';
 import { MediaGovernanceService } from './media-governance.service';
@@ -98,6 +99,18 @@ export class MediaGovernanceController {
   ) {
     this.noStore(response);
     return vbenSuccess(await this.service.create(body));
+  }
+
+  @Put(':taskId/identity')
+  @MediaGovernancePermission('Media:Governance:Create')
+  @ApiOperation({ summary: '在下载前修正作品资料库身份' })
+  async updateIdentity(
+    @Param('taskId') taskId: string,
+    @Body() body: MediaGovernanceTaskIdentityUpdateDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.service.updateIdentity(taskId, body));
   }
 
   @Post(':taskId/sources/magnet')

@@ -208,6 +208,64 @@ describe('MediaGovernanceController', () => {
       .expect(400);
   });
 
+  it('supports keyword search, editable draft identity and revision-gated discard over real HTTP', async () => {
+    const created = await request(apiUrl)
+      .post('/media-governance/tasks')
+      .send({
+        mediaType: 'tv',
+        providerRef: { provider: 'bangumi', providerId: 'crud-fixture' },
+        releaseYear: 2025,
+        seasonNumbers: ['S00'],
+        titleHint: 'CRUD 草稿唯一标题',
+      })
+      .expect(201);
+    const taskId = created.body.data.id as string;
+
+    const page = await request(apiUrl)
+      .get('/media-governance/tasks/page')
+      .query({ keyword: 'crud 草稿', pageNo: 1, pageSize: 20 })
+      .expect(200);
+    expect(page.body.data).toMatchObject({
+      items: [expect.objectContaining({ id: taskId })],
+      total: 1,
+    });
+
+    const updated = await request(apiUrl)
+      .put(`/media-governance/tasks/${taskId}/identity`)
+      .send({
+        expectedRevision: 1,
+        providerRef: null,
+        releaseYear: null,
+        titleHint: 'CRUD 草稿已更名',
+      })
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+    expect(updated.body.data).toMatchObject({
+      providerRef: null,
+      releaseYear: null,
+      revision: 2,
+      titleHint: 'CRUD 草稿已更名',
+    });
+
+    await request(apiUrl)
+      .delete(`/media-governance/tasks/${taskId}`)
+      .query({ expectedRevision: 1 })
+      .expect(409);
+    const deleted = await request(apiUrl)
+      .delete(`/media-governance/tasks/${taskId}`)
+      .query({ expectedRevision: 2 })
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+    expect(deleted.body).toMatchObject({
+      code: 200,
+      data: { deletedTaskId: taskId },
+      msg: '操作成功',
+    });
+    expect(deleted.body).not.toHaveProperty('err');
+
+    await request(apiUrl).get(`/media-governance/tasks/${taskId}`).expect(404);
+  });
+
   it('accepts a magnet source and returns only a sanitized projection', async () => {
     const created = await request(apiUrl)
       .post('/media-governance/tasks')

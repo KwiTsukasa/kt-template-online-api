@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { buildMediaGovernanceExecutionEnvelope } from './media-governance-executor.contract';
+import {
+  MEDIA_GOVERNANCE_EXECUTOR_ACTIONS,
+  type buildMediaGovernanceExecutionEnvelope,
+} from './media-governance-executor.contract';
+import type { MediaGovernanceExecutorEventDto } from './media-governance.dto';
 
 export const MEDIA_GOVERNANCE_EXECUTION_GATEWAY = Symbol(
   'MEDIA_GOVERNANCE_EXECUTION_GATEWAY',
@@ -36,6 +40,8 @@ export type MediaGovernanceExecutionStatus = {
   status: 'exited' | 'lost' | 'queued' | 'running';
   subState: string;
   taskId: string;
+  manifestSha256?: string;
+  terminalEvent?: MediaGovernanceExecutorEventDto;
 };
 
 export interface MediaGovernanceExecutionGateway {
@@ -60,6 +66,26 @@ export interface MediaGovernanceExecutionGateway {
 const MAX_RESPONSE_BYTES = 32 * 1024;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/;
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
+const TERMINAL_EVENT_KEYS = new Set([
+  'acceptance',
+  'action',
+  'evidenceSha256',
+  'eventType',
+  'manifest',
+  'manifestSha256',
+  'metadata',
+  'observedAt',
+  'payloadFiles',
+  'progress',
+  'runId',
+  'sequence',
+  'sourceHealth',
+  'sourceHealthReason',
+  'sourceId',
+  'summary',
+  'taskId',
+  'taskRevision',
+]);
 
 @Injectable()
 export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExecutionGateway {
@@ -173,6 +199,25 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
       throw new Error('media-governance-executor-response-invalid');
     }
     const result = value as Record<string, unknown>;
+    const terminalEvent = result.terminalEvent;
+    const terminalKeys =
+      terminalEvent &&
+      typeof terminalEvent === 'object' &&
+      !Array.isArray(terminalEvent)
+        ? Object.keys(terminalEvent).sort().join('\0')
+        : '';
+    const terminal = terminalEvent as Record<string, unknown> | undefined;
+    const terminalStatus = ['exited', 'lost'].includes(String(result.status));
+    const terminalEventType = String(terminal?.eventType ?? '');
+    const terminalShapeInvalid =
+      terminalEventType === 'run-failed'
+        ? terminalKeys !==
+          'action\0eventType\0observedAt\0runId\0sequence\0summary\0taskId\0taskRevision'
+        : terminalEventType !== 'run-succeeded' ||
+          !DIGEST_PATTERN.test(String(terminal?.evidenceSha256 ?? '')) ||
+          Object.keys(terminal ?? {}).some(
+            (key) => !TERMINAL_EVENT_KEYS.has(key),
+          );
     if (
       result.runId !== input.runId ||
       result.taskId !== input.taskId ||
@@ -186,7 +231,27 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
       typeof result.activeState !== 'string' ||
       typeof result.subState !== 'string' ||
       typeof result.result !== 'string' ||
-      !Number.isSafeInteger(result.exitCode)
+      !Number.isSafeInteger(result.exitCode) ||
+      (terminalStatus &&
+        (!DIGEST_PATTERN.test(String(result.manifestSha256 ?? '')) ||
+          !terminal ||
+          terminalShapeInvalid ||
+          !MEDIA_GOVERNANCE_EXECUTOR_ACTIONS.includes(
+            terminal.action as (typeof MEDIA_GOVERNANCE_EXECUTOR_ACTIONS)[number],
+          ) ||
+          terminal.runId !== input.runId ||
+          terminal.taskId !== input.taskId ||
+          typeof terminal.observedAt !== 'string' ||
+          Number.isNaN(Date.parse(terminal.observedAt)) ||
+          !Number.isSafeInteger(terminal.sequence) ||
+          Number(terminal.sequence) < 1 ||
+          !Number.isSafeInteger(terminal.taskRevision) ||
+          Number(terminal.taskRevision) < 1 ||
+          typeof terminal.summary !== 'string' ||
+          terminal.summary.length < 1 ||
+          terminal.summary.length > 400)) ||
+      (!terminalStatus &&
+        (result.manifestSha256 !== undefined || terminalEvent !== undefined))
     ) {
       throw new Error('media-governance-executor-identity-mismatch');
     }

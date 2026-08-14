@@ -57,6 +57,7 @@ export interface MediaGovernanceStateStore {
     runId: string;
     taskId: string;
   }): Promise<Record<string, unknown>>;
+  deleteTask?(taskId: string): Promise<void>;
   isReady(): boolean;
   loadTasks(): Promise<MediaGovernanceStoredTask[]>;
   pendingRunDispatches?(): Promise<MediaGovernanceExecutionEnvelope[]>;
@@ -143,6 +144,16 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     await this.dataSource.transaction((manager) =>
       this.saveTaskWithManager(manager, task),
     );
+  }
+
+  async deleteTask(taskId: string) {
+    this.assertReady();
+    await this.dataSource.transaction(async (manager) => {
+      await manager.getRepository(MediaGovernanceUnitEntity).delete({ taskId });
+      await manager
+        .getRepository(MediaGovernanceTaskEntity)
+        .delete({ id: taskId });
+    });
   }
 
   async saveTaskWithAgentEvent(
@@ -818,7 +829,9 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         ...(task.progressProjection as MediaGovernanceTask['progress']),
         observedAt:
           (task.progressProjection as Partial<MediaGovernanceTask['progress']>)
-            .observedAt ?? task.updateTime?.toISOString?.() ?? null,
+            .observedAt ??
+          task.updateTime?.toISOString?.() ??
+          null,
       },
       providerRef: task.providerRef as MediaGovernanceTask['providerRef'],
       releaseYear: task.releaseYear,

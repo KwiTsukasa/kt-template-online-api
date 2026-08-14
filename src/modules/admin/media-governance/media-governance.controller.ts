@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   HttpException,
@@ -111,6 +112,18 @@ export class MediaGovernanceController {
   ) {
     this.noStore(response);
     return vbenSuccess(await this.service.updateIdentity(taskId, body));
+  }
+
+  @Delete(':taskId')
+  @MediaGovernancePermission('Media:Governance:Create')
+  @ApiOperation({ summary: '放弃尚未开始且没有来源的任务草稿' })
+  async discard(
+    @Param('taskId') taskId: string,
+    @Query() query: MediaGovernanceRevisionCommandDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.service.discardTask(taskId, query));
   }
 
   @Post(':taskId/sources/magnet')

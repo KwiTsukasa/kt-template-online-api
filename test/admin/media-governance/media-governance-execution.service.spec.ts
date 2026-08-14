@@ -6,25 +6,40 @@ import type {
   MediaGovernanceStateStore,
   MediaGovernanceStoredTask,
 } from '../../../src/modules/admin/media-governance/media-governance-state.store';
-import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/media-governance.service';
+import {
+  MediaGovernanceService,
+  type MediaGovernanceTask,
+} from '../../../src/modules/admin/media-governance/media-governance.service';
 
 describe('MediaGovernanceService production execution adapter', () => {
-  function fixture() {
+  function fixture({ durable = false }: { durable?: boolean } = {}) {
     const sequences = new Map<string, number>();
     const envelopes = new Map<string, MediaGovernanceExecutionEnvelope>();
+    const persistedTasks = new Map<string, MediaGovernanceStoredTask>();
     const reserved: unknown[] = [];
     const acknowledged: unknown[] = [];
+    let gatewayEnabled = true;
+    const persistTask = (task: MediaGovernanceTask) => {
+      if (!durable) return;
+      persistedTasks.set(
+        task.id,
+        structuredClone(task) as MediaGovernanceStoredTask,
+      );
+    };
     const stateStore: MediaGovernanceStateStore = {
       acknowledgeRunDispatch: jest.fn(async (...args) => {
         acknowledged.push(args);
       }),
-      applyExecutorEvent: jest.fn(async (_task, event) => {
+      applyExecutorEvent: jest.fn(async (task, event) => {
         sequences.set(event.runId, event.sequence);
+        persistTask(task);
         return true;
       }),
       consumeDescriptorGrant: jest.fn(),
       isReady: () => true,
-      loadTasks: jest.fn(async () => []),
+      loadTasks: jest.fn(async () =>
+        [...persistedTasks.values()].map((task) => structuredClone(task)),
+      ),
       pendingRunDispatches: jest.fn(async () => []),
       recordRunDispatchFailure: jest.fn(async () => 1),
       readRunSequence: jest.fn(async (runId) => sequences.get(runId) ?? 0),
@@ -33,10 +48,11 @@ describe('MediaGovernanceService production execution adapter', () => {
       reserveRunDispatch: jest.fn(async (...args) => {
         reserved.push(args);
         envelopes.set(args[1].runId, args[1]);
+        persistTask(args[0]);
       }),
-      failRunDispatch: jest.fn(async () => undefined),
-      saveTask: jest.fn(async () => undefined),
-      saveTaskWithAgentEvent: jest.fn(async () => undefined),
+      failRunDispatch: jest.fn(async (task) => persistTask(task)),
+      saveTask: jest.fn(async (task) => persistTask(task)),
+      saveTaskWithAgentEvent: jest.fn(async (task) => persistTask(task)),
     };
     const dispatch = jest.fn(async (envelope) => ({
       executionId: `jenkins-${envelope.runId}`,
@@ -54,7 +70,7 @@ describe('MediaGovernanceService production execution adapter', () => {
         status: 'accepted' as const,
       })),
       dispatch,
-      enabled: () => true,
+      enabled: () => gatewayEnabled,
       status: jest.fn(async (input) => ({
         activeState: 'active',
         exitCode: 0,
@@ -81,6 +97,9 @@ describe('MediaGovernanceService production execution adapter', () => {
       gateway,
       reserved,
       service,
+      setGatewayEnabled: (enabled: boolean) => {
+        gatewayEnabled = enabled;
+      },
       stateStore,
     };
   }
@@ -366,8 +385,9 @@ describe('MediaGovernanceService production execution adapter', () => {
     expect(stateStore.failRunDispatch).toHaveBeenCalledTimes(1);
   });
 
-  it('reconciles a vanished runner into one durable blocked terminal state', async () => {
-    const { dispatch, gateway, service } = fixture();
+  it('restores and reconciles a vanished sealed Run into one durable blocked terminal state', async () => {
+    const { dispatch, gateway, service, setGatewayEnabled, stateStore } =
+      fixture({ durable: true });
     await service.onModuleInit();
     const task = await service.create({
       mediaType: 'movie',
@@ -391,6 +411,31 @@ describe('MediaGovernanceService production execution adapter', () => {
       taskId: task.id,
       taskRevision: task.revision,
     });
+    service.onModuleDestroy();
+    setGatewayEnabled(false);
+    const restoredService = new MediaGovernanceService(
+      undefined,
+      undefined,
+      undefined,
+      stateStore,
+      gateway,
+    );
+    await restoredService.onModuleInit();
+    const restoredTask = restoredService.detail(task.id);
+    expect(restoredTask).toMatchObject({
+      activeRunId: envelope.runId,
+      revision: envelope.taskRevision,
+      runState: 'running',
+      stage: 'intake',
+    });
+
+    setGatewayEnabled(true);
+    dispatch.mockClear();
+    (gateway.control as jest.Mock).mockClear();
+    (stateStore.applyExecutorEvent as jest.Mock).mockClear();
+    const reconcile = restoredService as unknown as {
+      reconcileActiveExecutions(): Promise<void>;
+    };
     (gateway.status as jest.Mock).mockResolvedValueOnce({
       activeState: 'inactive',
       exitCode: 1,
@@ -402,20 +447,67 @@ describe('MediaGovernanceService production execution adapter', () => {
       subState: 'dead',
       taskId: task.id,
     });
+    await reconcile.reconcileActiveExecutions();
+    expect(stateStore.applyExecutorEvent).not.toHaveBeenCalled();
+    expect(restoredTask).toMatchObject({
+      activeRunId: envelope.runId,
+      revision: envelope.taskRevision,
+      runState: 'running',
+    });
 
-    const reconcile = service as unknown as {
-      reconcileActiveExecutions(): Promise<void>;
-    };
+    (gateway.status as jest.Mock).mockResolvedValueOnce({
+      activeState: 'inactive',
+      exitCode: 1,
+      manifestSha256: 'f'.repeat(64),
+      result: 'exit-code',
+      runId: envelope.runId,
+      runnerId: 'kt-media-governance-0123456789abcdef0123456789abcdef.service',
+      sealedInputSha256: envelope.sealedInputSha256,
+      status: 'lost',
+      subState: 'dead',
+      taskId: task.id,
+      terminalEvent: {
+        action: envelope.action,
+        eventType: 'run-failed',
+        observedAt: new Date().toISOString(),
+        runId: envelope.runId,
+        sequence: 2,
+        summary: 'NAS 执行单元已退出或被回收，但未返回可验证终态',
+        taskId: task.id,
+        taskRevision: envelope.taskRevision,
+      },
+    });
     await reconcile.reconcileActiveExecutions();
 
-    expect(task).toMatchObject({
+    expect(gateway.status).toHaveBeenCalledWith({
+      runId: envelope.runId,
+      sealedInputSha256: envelope.sealedInputSha256,
+      taskId: task.id,
+    });
+    expect(stateStore.applyExecutorEvent).toHaveBeenCalledTimes(1);
+    expect(stateStore.applyExecutorEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: envelope.action,
+        eventType: 'run-failed',
+        runId: envelope.runId,
+        sequence: 2,
+        taskId: task.id,
+        taskRevision: envelope.taskRevision,
+      }),
+    );
+    expect(restoredTask).toMatchObject({
       activeRunId: null,
       gateReason: 'NAS 执行单元已退出或被回收，但未返回可验证终态',
       revision: 4,
       runState: 'blocked',
     });
     await reconcile.reconcileActiveExecutions();
-    expect(task.revision).toBe(4);
+    expect(restoredTask.revision).toBe(4);
+    expect(stateStore.applyExecutorEvent).toHaveBeenCalledTimes(1);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(gateway.control).not.toHaveBeenCalled();
+    restoredService.onModuleDestroy();
   });
 
   it('restarts an orphaned download as one recovery run and accepts its reused payload', async () => {
@@ -1254,56 +1346,93 @@ describe('MediaGovernanceService production execution adapter', () => {
   ] as const)(
     'persists exact metadata facts and closes %s repair with the correct mode',
     async (governanceProfile, modeAfterRepair, expectedClosedMode) => {
-    const { dispatch, service } = fixture();
-    await service.onModuleInit();
-    const task = await service.create({
-      mediaType: 'tv',
-      seasonNumbers: ['S01'],
-      titleHint: '有界元数据修复测试',
-    });
-    task.governanceProfile = governanceProfile;
-    task.metadataIdentity = {
-      provider: 'tmdb',
-      providerId: '202821',
-      releaseYear: 2023,
-    };
-    task.metadataStatus = 'requires-agent';
-    task.runState = 'blocked';
-    task.stage = 'metadata';
-    task.sealedPlan = { schemaVersion: '1.2.0' };
-    task.sealedPlanSha256 = 'a'.repeat(64);
-    task.units[0]!.expectedEpisodeNumbers = [1];
-    task.units[0]!.metadataProjection.missingB = [
-      'metadata.local-nfo',
-      'artwork.poster',
-    ];
+      const { dispatch, service } = fixture();
+      await service.onModuleInit();
+      const task = await service.create({
+        mediaType: 'tv',
+        seasonNumbers: ['S01'],
+        titleHint: '有界元数据修复测试',
+      });
+      task.governanceProfile = governanceProfile;
+      task.metadataIdentity = {
+        provider: 'tmdb',
+        providerId: '202821',
+        releaseYear: 2023,
+      };
+      task.metadataStatus = 'requires-agent';
+      task.runState = 'blocked';
+      task.stage = 'metadata';
+      task.sealedPlan = { schemaVersion: '1.2.0' };
+      task.sealedPlanSha256 = 'a'.repeat(64);
+      task.units[0]!.expectedEpisodeNumbers = [1];
+      task.units[0]!.metadataProjection.missingB = [
+        'metadata.local-nfo',
+        'artwork.poster',
+      ];
 
-    await expect(
-      service.startAgent(task.id, { expectedRevision: 1 }),
-    ).rejects.toMatchObject({
-      response: { msg: '当前缺口应先执行确定性有界元数据修复' },
-      status: 409,
-    });
+      await expect(
+        service.startAgent(task.id, { expectedRevision: 1 }),
+      ).rejects.toMatchObject({
+        response: { msg: '当前缺口应先执行确定性有界元数据修复' },
+        status: 409,
+      });
 
-    await service.startMetadataRepair(task.id, { expectedRevision: 1 });
-    const envelope = dispatch.mock.calls.at(-1)?.[0];
-    expect(envelope).toMatchObject({
-      action: 'metadata.repair',
-      metadataRepairAttempt: 1,
-      taskRevision: 2,
-    });
-    await service.applyExecutorEvent({
-      action: 'metadata.repair',
-      eventType: 'run-started',
-      observedAt: new Date().toISOString(),
-      runId: envelope.runId,
-      sequence: 1,
-      summary: '有界元数据修复开始',
-      taskId: task.id,
-      taskRevision: 2,
-    });
-    await expect(
-      service.applyExecutorEvent({
+      await service.startMetadataRepair(task.id, { expectedRevision: 1 });
+      const envelope = dispatch.mock.calls.at(-1)?.[0];
+      expect(envelope).toMatchObject({
+        action: 'metadata.repair',
+        metadataRepairAttempt: 1,
+        taskRevision: 2,
+      });
+      await service.applyExecutorEvent({
+        action: 'metadata.repair',
+        eventType: 'run-started',
+        observedAt: new Date().toISOString(),
+        runId: envelope.runId,
+        sequence: 1,
+        summary: '有界元数据修复开始',
+        taskId: task.id,
+        taskRevision: 2,
+      });
+      await expect(
+        service.applyExecutorEvent({
+          action: 'metadata.repair',
+          evidenceSha256: 'b'.repeat(64),
+          eventType: 'run-succeeded',
+          metadata: {
+            canAccept: true,
+            identity: {
+              provider: 'tmdb',
+              providerId: '202821',
+              releaseYear: 2023,
+            },
+            repairAttempts: 1,
+            schemaVersion: 'media-admin-metadata-verification-v1',
+            units: [
+              {
+                accepted: true,
+                missingA: [],
+                missingB: [],
+                missingC: [],
+                unitId: task.units[0]!.id,
+              },
+            ],
+            writeBoundaries: {
+              cloud: 1,
+              databaseDirect: 0,
+              mechanicalScan: 0,
+              ui: 0,
+            },
+          },
+          observedAt: new Date().toISOString(),
+          runId: envelope.runId,
+          sequence: 2,
+          summary: '越界元数据修复',
+          taskId: task.id,
+          taskRevision: 2,
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      await service.applyExecutorEvent({
         action: 'metadata.repair',
         evidenceSha256: 'b'.repeat(64),
         eventType: 'run-succeeded',
@@ -1326,7 +1455,7 @@ describe('MediaGovernanceService production execution adapter', () => {
             },
           ],
           writeBoundaries: {
-            cloud: 1,
+            cloud: 0,
             databaseDirect: 0,
             mechanicalScan: 0,
             ui: 0,
@@ -1335,161 +1464,126 @@ describe('MediaGovernanceService production execution adapter', () => {
         observedAt: new Date().toISOString(),
         runId: envelope.runId,
         sequence: 2,
-        summary: '越界元数据修复',
+        summary: '有界元数据修复完成',
         taskId: task.id,
         taskRevision: 2,
-      }),
-    ).rejects.toMatchObject({ status: 400 });
-    await service.applyExecutorEvent({
-      action: 'metadata.repair',
-      evidenceSha256: 'b'.repeat(64),
-      eventType: 'run-succeeded',
-      metadata: {
-        canAccept: true,
-        identity: {
+      });
+
+      expect(task).toMatchObject({
+        activeRunId: null,
+        closedMode: modeAfterRepair,
+        metadataIdentity: {
           provider: 'tmdb',
           providerId: '202821',
           releaseYear: 2023,
         },
-        repairAttempts: 1,
-        schemaVersion: 'media-admin-metadata-verification-v1',
-        units: [
-          {
-            accepted: true,
-            missingA: [],
-            missingB: [],
-            missingC: [],
-            unitId: task.units[0]!.id,
-          },
-        ],
-        writeBoundaries: {
-          cloud: 0,
-          databaseDirect: 0,
-          mechanicalScan: 0,
-          ui: 0,
+        metadataStatus: 'pending',
+        nextCommandLabel: '重新运行 A/B/C 分档元数据核验',
+        revision: 3,
+        runState: 'succeeded',
+      });
+      expect(task.units[0]).toMatchObject({
+        evidenceSha256: 'b'.repeat(64),
+        metadataProjection: {
+          missingA: [],
+          missingB: [],
+          missingC: [],
+          repairAttempts: 1,
+          validBFallbacks: [],
         },
-      },
-      observedAt: new Date().toISOString(),
-      runId: envelope.runId,
-      sequence: 2,
-      summary: '有界元数据修复完成',
-      taskId: task.id,
-      taskRevision: 2,
-    });
+      });
 
-    expect(task).toMatchObject({
-      activeRunId: null,
-      closedMode: modeAfterRepair,
-      metadataIdentity: {
-        provider: 'tmdb',
-        providerId: '202821',
-        releaseYear: 2023,
-      },
-      metadataStatus: 'pending',
-      nextCommandLabel: '重新运行 A/B/C 分档元数据核验',
-      revision: 3,
-      runState: 'succeeded',
-    });
-    expect(task.units[0]).toMatchObject({
-      evidenceSha256: 'b'.repeat(64),
-      metadataProjection: {
-        missingA: [],
-        missingB: [],
-        missingC: [],
-        repairAttempts: 1,
-        validBFallbacks: [],
-      },
-    });
-
-    await service.startMetadataVerification(task.id, { expectedRevision: 3 });
-    const verificationEnvelope = dispatch.mock.calls.at(-1)?.[0];
-    await service.applyExecutorEvent({
-      action: 'metadata.verify',
-      eventType: 'run-started',
-      observedAt: new Date().toISOString(),
-      runId: verificationEnvelope.runId,
-      sequence: 1,
-      summary: '元数据复核开始',
-      taskId: task.id,
-      taskRevision: 4,
-    });
-    await service.applyExecutorEvent({
-      action: 'metadata.verify',
-      evidenceSha256: 'c'.repeat(64),
-      eventType: 'run-succeeded',
-      metadata: {
-        canAccept: true,
-        identity: {
-          provider: 'tmdb',
-          providerId: '202821',
-          releaseYear: 2023,
-        },
-        repairAttempts: 0,
-        schemaVersion: 'media-admin-metadata-verification-v1',
-        units: [
-          {
-            accepted: true,
-            missingA: [],
-            missingB: [],
-            missingC: [],
-            unitId: task.units[0]!.id,
+      await service.startMetadataVerification(task.id, { expectedRevision: 3 });
+      const verificationEnvelope = dispatch.mock.calls.at(-1)?.[0];
+      await service.applyExecutorEvent({
+        action: 'metadata.verify',
+        eventType: 'run-started',
+        observedAt: new Date().toISOString(),
+        runId: verificationEnvelope.runId,
+        sequence: 1,
+        summary: '元数据复核开始',
+        taskId: task.id,
+        taskRevision: 4,
+      });
+      await service.applyExecutorEvent({
+        action: 'metadata.verify',
+        evidenceSha256: 'c'.repeat(64),
+        eventType: 'run-succeeded',
+        metadata: {
+          canAccept: true,
+          identity: {
+            provider: 'tmdb',
+            providerId: '202821',
+            releaseYear: 2023,
           },
-        ],
-        writeBoundaries: {
-          cloud: 0,
-          databaseDirect: 0,
-          mechanicalScan: 0,
-          ui: 0,
+          repairAttempts: 0,
+          schemaVersion: 'media-admin-metadata-verification-v1',
+          units: [
+            {
+              accepted: true,
+              missingA: [],
+              missingB: [],
+              missingC: [],
+              unitId: task.units[0]!.id,
+            },
+          ],
+          writeBoundaries: {
+            cloud: 0,
+            databaseDirect: 0,
+            mechanicalScan: 0,
+            ui: 0,
+          },
         },
-      },
-      observedAt: new Date().toISOString(),
-      runId: verificationEnvelope.runId,
-      sequence: 2,
-      summary: '元数据复核通过',
-      taskId: task.id,
-      taskRevision: 4,
-    });
-    await service.startAcceptanceVerification(task.id, { expectedRevision: 5 });
-    const acceptanceEnvelope = dispatch.mock.calls.at(-1)?.[0];
-    await service.applyExecutorEvent({
-      action: 'acceptance.verify',
-      eventType: 'run-started',
-      observedAt: new Date().toISOString(),
-      runId: acceptanceEnvelope.runId,
-      sequence: 1,
-      summary: '独立验收开始',
-      taskId: task.id,
-      taskRevision: 6,
-    });
-    await service.applyExecutorEvent({
-      acceptance: {
-        acceptedFiles: 2,
-        acceptedUnits: 1,
-        activeDownloadOwners: 0,
-        canClose: true,
-        cloudWrites: 0,
-        databaseDirectWrites: 0,
-        mechanicalScans: 0,
-        schemaVersion: 'media-admin-local-acceptance-v1',
-        stagingResiduals: 0,
-        uiWrites: 0,
-      },
-      action: 'acceptance.verify',
-      evidenceSha256: 'd'.repeat(64),
-      eventType: 'run-succeeded',
-      observedAt: new Date().toISOString(),
-      runId: acceptanceEnvelope.runId,
-      sequence: 2,
-      summary: '独立验收通过',
-      taskId: task.id,
-      taskRevision: 6,
-    });
-    expect(task).toMatchObject({
-      closedMode: expectedClosedMode,
-      metadataStatus: 'verified',
-      revision: 7,
-      stage: 'closed',
-    });
+        observedAt: new Date().toISOString(),
+        runId: verificationEnvelope.runId,
+        sequence: 2,
+        summary: '元数据复核通过',
+        taskId: task.id,
+        taskRevision: 4,
+      });
+      await service.startAcceptanceVerification(task.id, {
+        expectedRevision: 5,
+      });
+      const acceptanceEnvelope = dispatch.mock.calls.at(-1)?.[0];
+      await service.applyExecutorEvent({
+        action: 'acceptance.verify',
+        eventType: 'run-started',
+        observedAt: new Date().toISOString(),
+        runId: acceptanceEnvelope.runId,
+        sequence: 1,
+        summary: '独立验收开始',
+        taskId: task.id,
+        taskRevision: 6,
+      });
+      await service.applyExecutorEvent({
+        acceptance: {
+          acceptedFiles: 2,
+          acceptedUnits: 1,
+          activeDownloadOwners: 0,
+          canClose: true,
+          cloudWrites: 0,
+          databaseDirectWrites: 0,
+          mechanicalScans: 0,
+          schemaVersion: 'media-admin-local-acceptance-v1',
+          stagingResiduals: 0,
+          uiWrites: 0,
+        },
+        action: 'acceptance.verify',
+        evidenceSha256: 'd'.repeat(64),
+        eventType: 'run-succeeded',
+        observedAt: new Date().toISOString(),
+        runId: acceptanceEnvelope.runId,
+        sequence: 2,
+        summary: '独立验收通过',
+        taskId: task.id,
+        taskRevision: 6,
+      });
+      expect(task).toMatchObject({
+        closedMode: expectedClosedMode,
+        metadataStatus: 'verified',
+        revision: 7,
+        stage: 'closed',
+      });
     },
   );
 

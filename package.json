@@ -24,6 +24,7 @@
     "start:gateway:dev": "ts-node -r tsconfig-paths/register src/apps/napcat-webui-gateway/main.ts",
     "start:media-codex-agent:prod": "cross-env NODE_ENV=production node dist/apps/media-codex-agent-gateway/main",
     "start:media-codex-agent:dev": "ts-node -r tsconfig-paths/register src/apps/media-codex-agent-gateway/main.ts",
+    "media-governance:backup-restore-drill": "bash scripts/media-governance/backup-restore-drill.sh",
     "typecheck": "tsc --noEmit",
     "check:jsdoc": "pnpm run test:jsdoc && node scripts/jsdoc/check-jsdoc-policy.mjs",
     "admin-passwords:migrate": "node dist/commands/migrate-admin-passwords.js",

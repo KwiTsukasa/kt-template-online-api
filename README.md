@@ -216,6 +216,9 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，提供作品身份、来源、
 逐季字幕合同、运行时探针、下载/治理进度、低效下载取消与精确换源、CodexAgent
 人工放行、聚合和可续接 SSE。
+列表 CRUD 支持真实新建、详情查询和下载前身份编辑；删除只接受当前 revision，且仅允许
+没有来源、运行、账本、密封计划、元数据身份或验收证据的 intake 空草稿，其他任务返回
+冲突并保留领域状态。
 草稿在下载前可用当前 revision 修正必填 `providerRef` 和可选 `releaseYear`；已有来源、
 来源健康与阻塞状态保持不变，下载、治理或 Agent 已开始后固定拒绝修改。
 元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据，先执行最多两次的确定性
@@ -223,6 +226,12 @@ LocalNFO/海报有界修复，再将仍未闭合的真实歧义交给 CodexAgent
 独立验收判定。
 Task、Unit、来源和 Agent session 由 10 张 TypeORM 领域表持久化；API 启动时恢复
 同一 Task/thread 与事件序号，状态变更和语义事件在同一数据库事务提交后才发布 SSE。
+运维入口 `pnpm media-governance:backup-restore-drill -- ...` 默认只输出计划；执行模式
+只备份精确 10 张媒体治理表，并且只允许恢复到新建的
+`kt_media_governance_restore_*` 隔离库。入口会在 dump 前后比较源库 10 表行数及
+Task/Run/Event 身份快照、校验 SQL SHA-256、恢复后再次比较相同快照，最后只删除本次
+创建的隔离库；快照比较复用同一 `sha256sum`，不额外依赖 `cmp`。源库变化、目标已
+存在、摘要漂移或能力缺失都会失败关闭。
 任务汇总接口从真实 Task/Unit/Run 投影阻塞任务、10 分钟无心跳的失联运行、已关闭但
 缺少 Unit 验收证据的漂移以及同季混合字幕发布组，并去重生成中文“需要关注”结论；
 执行器回调时间写入持久化进度投影，列表和详情按当前时间显示“刚刚/几分钟前/几小时前”。
@@ -261,9 +270,12 @@ profile 的中文字幕覆盖、同季单一字幕发布组以及补充来源只
 revision/run/replay 幂等和五层 Agent 边界。数据库 Outbox 会把密封 Run 发送到仅监听
 私网的 NAS 执行器，执行器按任务隔离目录完成下载、治理、元数据核验和独立验收；缺少
 数据库状态仓、私网地址或内部 secret 时失败关闭。云端治理仍保持关闭。
-执行器回调会按同一事件序号有界重试；API 每 5 秒以 Run、Task 和密封输入摘要查询
-对应 systemd runner。执行单元已经退出却没有终态回调时，任务会原子转为“阻塞可重试”
-并清除活动 Run，不再持续显示为运行中。此后再次开始下载会密封新的接管 Run，按
+执行器回调会按同一事件序号有界重试；NAS executor 先把连续事件 journal 和最终报告
+原子密封到 `/vol1/docker/kt-codex/artifacts/automation/media/<runId>`，再向 API 发送终态。
+API 每 5 秒以 Run、Task 和密封输入摘要查询对应 systemd runner；执行单元退出或失联时，
+只有状态响应同时携带匹配的 Run manifest SHA、精确成功/失败终态与下一连续序号，API
+才应用该终态并清除活动 Run。缺少密封证据、身份漂移或序号跳跃时保持 Run 活跃等待下轮
+核对，API 不自行伪造失败事件。此后再次开始下载会密封新的接管 Run，按
 Task/Source/info-hash 复用原 staging 与 qBittorrent 状态；已完整载荷只重新校验，未完成
 载荷从原分片续传，存在 qBittorrent 状态却丢失 staging 时失败关闭。
 新任务不需要操作员填写内部 `workItemId`：首次本地治理前由数据库串行分配

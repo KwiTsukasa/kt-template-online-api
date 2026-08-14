@@ -13,6 +13,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -152,6 +153,15 @@ export class MediaGovernanceTaskPageQueryDto {
   @Max(100)
   pageSize?: number;
 
+  @ApiPropertyOptional({
+    description: '按作品名或任务编号模糊查找',
+    maxLength: 200,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  keyword?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
@@ -187,25 +197,37 @@ export class MediaGovernanceRevisionCommandDto {
 }
 
 export class MediaGovernanceTaskIdentityUpdateDto extends MediaGovernanceRevisionCommandDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: '媒体资料库唯一作品编号，填错会关联到另一部作品',
+    nullable: true,
     type: MediaGovernanceProviderRefDto,
   })
-  @IsObject()
+  @IsOptional()
   @ValidateNested()
   @Type(() => MediaGovernanceProviderRefDto)
-  providerRef: MediaGovernanceProviderRefDto;
+  providerRef?: MediaGovernanceProviderRefDto | null;
 
   @ApiPropertyOptional({
     description: '首播或上映年份，用于缩小同名作品候选范围',
     maximum: MAX_RELEASE_YEAR,
     minimum: 1888,
+    nullable: true,
   })
   @IsOptional()
   @IsInt()
   @Min(1888)
   @Max(MAX_RELEASE_YEAR)
-  releaseYear?: number;
+  releaseYear?: number | null;
+
+  @ApiPropertyOptional({
+    description: '下载前可修正的作品展示名称',
+    maxLength: 200,
+  })
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(200)
+  @Matches(/\S/)
+  titleHint?: string;
 }
 
 export class MediaGovernanceDescriptorRedeemDto {

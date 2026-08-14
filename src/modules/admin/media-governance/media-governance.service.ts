@@ -441,11 +441,32 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       throwVbenError('作品身份只能在下载和治理开始前修正', HttpStatus.CONFLICT);
     }
 
-    const providerRef = {
-      provider: input.providerRef.provider,
-      providerId: input.providerRef.providerId.trim(),
-    };
-    const releaseYear = input.releaseYear ?? task.releaseYear;
+    if (
+      input.providerRef === undefined &&
+      input.releaseYear === undefined &&
+      input.titleHint === undefined
+    ) {
+      throwVbenError(
+        '至少修改作品名、媒体资料库编号或年份之一',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const providerRef =
+      input.providerRef !== undefined
+        ? input.providerRef
+          ? {
+              provider: input.providerRef.provider,
+              providerId: input.providerRef.providerId.trim(),
+            }
+          : null
+        : task.providerRef;
+    const releaseYear =
+      input.releaseYear !== undefined
+        ? (input.releaseYear ?? null)
+        : task.releaseYear;
+    const titleHint =
+      input.titleHint !== undefined ? input.titleHint.trim() : task.titleHint;
     const seasonNumbers = task.units
       .map((unit) => unit.seasonNumber)
       .filter((season): season is string => Boolean(season));
@@ -454,11 +475,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       providerRef,
       releaseYear,
       seasonNumbers,
-      titleHint: task.titleHint,
+      titleHint,
       workItemId: task.workItemId,
     };
     task.providerRef = providerRef;
     task.releaseYear = releaseYear;
+    task.titleHint = titleHint;
     task.identityPreview = this.buildIdentityPreview(normalizedInput);
     task.inputSnapshotSha256 = createHash('sha256')
       .update(JSON.stringify(normalizedInput))
@@ -466,6 +488,68 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     this.bumpRevision(task);
     await this.commitTask(task, 'state-updated');
     return task;
+  }
+
+  async discardTask(
+    taskId: string,
+    input: MediaGovernanceRevisionCommandDto,
+  ): Promise<{ deletedTaskId: string }> {
+    const task = this.detail(taskId);
+    this.assertRevision(task, input.expectedRevision);
+    const pristineUnits = task.units.every(
+      (unit) =>
+        unit.evidenceSha256 === null &&
+        unit.localAcceptedAt === null &&
+        unit.subtitleContract === null,
+    );
+    if (
+      task.stage !== 'intake' ||
+      task.runState !== 'draft' ||
+      task.activeRunId !== null ||
+      task.sources.length > 0 ||
+      task.workItemId !== null ||
+      task.payloadSeal !== null ||
+      task.sealedPlan !== null ||
+      task.sealedPlanSha256 !== null ||
+      task.closedAt !== null ||
+      task.agentSession !== null ||
+      task.metadataIdentity !== null ||
+      task.metadataStatus !== 'pending' ||
+      !pristineUnits
+    ) {
+      throwVbenError(
+        '只能删除尚未开始、没有来源且未绑定本地账本的空草稿',
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    if (this.stateStore) {
+      if (!this.databaseReady() || !this.stateStore.deleteTask) {
+        throwVbenError(
+          '媒体治理数据库删除链路暂不可用',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
+      try {
+        await this.stateStore.deleteTask(task.id);
+      } catch {
+        throwVbenError(
+          '媒体治理数据库删除链路暂不可用',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
+    }
+
+    const taskIndex = this.tasks.findIndex(
+      (candidate) => candidate.id === task.id,
+    );
+    if (taskIndex >= 0) this.tasks.splice(taskIndex, 1);
+    this.eventStream?.publishTaskChanged({
+      changeType: 'deleted',
+      revision: task.revision,
+      taskId: task.id,
+    });
+    return { deletedTaskId: task.id };
   }
 
   async redeemDescriptor(
@@ -2849,8 +2933,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     const pageNo = query.pageNo ?? 1;
     const pageSize = query.pageSize ?? 20;
     const start = (pageNo - 1) * pageSize;
+    const keyword = query.keyword?.trim().toLocaleLowerCase();
     const filtered = this.tasks.filter(
       (task) =>
+        (!keyword ||
+          task.titleHint.toLocaleLowerCase().includes(keyword) ||
+          task.id.toLocaleLowerCase().includes(keyword)) &&
         (!query.stage || task.stage === query.stage) &&
         (!query.runState || task.runState === query.runState) &&
         (!query.governanceProfile ||
@@ -3544,16 +3632,25 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
             observed.status === 'exited'
               ? `NAS 执行器已退出（退出码 ${observed.exitCode}），但未返回可验证终态`
               : 'NAS 执行单元已退出或被回收，但未返回可验证终态';
-          await this.applyExecutorEvent({
-            action: envelope.action,
-            eventType: 'run-failed',
-            observedAt: new Date().toISOString(),
-            runId,
-            sequence: (await this.stateStore.readRunSequence(runId)) + 1,
-            summary,
-            taskId: task.id,
-            taskRevision: task.revision,
-          });
+          const terminal = observed.terminalEvent;
+          const previousSequence = await this.stateStore.readRunSequence(runId);
+          if (
+            !observed.manifestSha256 ||
+            !terminal ||
+            terminal.action !== envelope.action ||
+            !['run-failed', 'run-succeeded'].includes(terminal.eventType) ||
+            terminal.runId !== runId ||
+            terminal.taskId !== task.id ||
+            terminal.taskRevision !== envelope.taskRevision ||
+            terminal.sequence !== previousSequence + 1 ||
+            (terminal.eventType === 'run-failed' &&
+              terminal.summary !== summary) ||
+            (terminal.eventType === 'run-succeeded' &&
+              !/^[a-f0-9]{64}$/u.test(terminal.evidenceSha256 ?? ''))
+          ) {
+            continue;
+          }
+          await this.applyExecutorEvent(terminal);
         } catch {
           // 单个状态探针失败不得覆盖仍可能运行的任务，下一轮继续核对。
         }

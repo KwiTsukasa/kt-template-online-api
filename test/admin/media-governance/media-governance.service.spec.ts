@@ -143,6 +143,72 @@ describe('MediaGovernanceService', () => {
     expect(updated.sources[0]).toEqual(sourceBefore);
   });
 
+  it('searches, edits and discards only a pristine draft', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      providerRef: { provider: 'tmdb', providerId: '100' },
+      releaseYear: 2024,
+      seasonNumbers: ['S00', 'S01'],
+      titleHint: '待整理的作品',
+    });
+
+    expect(service.page({ keyword: task.id.slice(-8) }).total).toBe(1);
+    expect(service.page({ keyword: '不存在的关键词' }).total).toBe(0);
+
+    const updated = await service.updateIdentity(task.id, {
+      expectedRevision: 1,
+      providerRef: null,
+      releaseYear: null,
+      titleHint: '已确认作品名',
+    });
+    expect(updated).toMatchObject({
+      providerRef: null,
+      releaseYear: null,
+      revision: 2,
+      titleHint: '已确认作品名',
+    });
+    expect(updated.identityPreview).toMatchObject({
+      providerLabel: '未填写（后续由资料源候选核验）',
+      releaseYearLabel: '未填写（后续按候选消歧）',
+      title: '已确认作品名',
+    });
+
+    await expect(
+      service.discardTask(task.id, { expectedRevision: 1 }),
+    ).rejects.toThrow(HttpException);
+    await expect(
+      service.discardTask(task.id, { expectedRevision: 2 }),
+    ).resolves.toEqual({ deletedTaskId: task.id });
+    expect(service.page({ keyword: '已确认作品名' }).total).toBe(0);
+    expect(() => service.detail(task.id)).toThrow(HttpException);
+  });
+
+  it('refuses to discard a draft after a source or durable identity is attached', async () => {
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '不可删除任务',
+    });
+    await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      sourceRole: 'primary_media',
+    });
+
+    await expect(
+      service.discardTask(task.id, { expectedRevision: 2 }),
+    ).rejects.toThrow(HttpException);
+
+    const durableTask = await service.create({
+      mediaType: 'movie',
+      titleHint: '已绑定账本任务',
+      workItemId: 'media-063',
+    });
+    await expect(
+      service.discardTask(durableTask.id, { expectedRevision: 1 }),
+    ).rejects.toThrow(HttpException);
+  });
+
   it('fails closed when identity correction is stale or execution has begun', async () => {
     const task = await service.create({
       mediaType: 'movie',

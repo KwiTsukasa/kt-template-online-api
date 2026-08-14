@@ -8,7 +8,7 @@ export interface MediaGovernanceEventStreamOptions {
 }
 
 export interface MediaGovernanceTaskChangedData {
-  changeType: 'created' | 'source-updated' | 'state-updated';
+  changeType: 'created' | 'deleted' | 'source-updated' | 'state-updated';
   observedAt: string;
   revision: number;
   taskId: string;

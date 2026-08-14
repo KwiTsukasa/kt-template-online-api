@@ -211,33 +211,34 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 
 ### 媒体治理 API/Admin 生产链路
 
-| 方法   | 路径                                                               | 说明                                   |
-| ------ | ------------------------------------------------------------------ | -------------------------------------- |
-| `POST` | `/media-governance/tasks`                                          | 创建作品身份草稿和 Task/Unit           |
-| `GET`  | `/media-governance/tasks/page`                                     | 分页和语义过滤任务                     |
-| `GET`  | `/media-governance/tasks/summary`                                  | 查询任务、下载、治理和 Agent 聚合      |
-| `GET`  | `/media-governance/tasks/:taskId`                                  | 查询权威任务详情投影                   |
-| `PUT`  | `/media-governance/tasks/:taskId/identity`                          | 下载前修正资料库身份与年份             |
-| `POST` | `/media-governance/tasks/:taskId/sources/magnet`                   | 脱敏添加磁链来源                       |
-| `POST` | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件         |
-| `PUT`  | `/media-governance/tasks/:taskId/sources/:sourceId/classification` | 修订来源角色和内容分类                 |
-| `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/remove`         | 精确清理并移除已取消的待更换来源       |
-| `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`        | 生成或检查规范来源清单                 |
-| `POST` | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime`  | 执行有界运行时来源探针                 |
-| `PUT`  | `/media-governance/tasks/:taskId/units/:unitId/subtitle-contract`  | 密封逐季单一发布组字幕合同             |
-| `POST` | `/media-governance/tasks/:taskId/downloads/start`                  | 启动或接管失联的 NAS 隔离目录下载      |
-| `POST` | `/media-governance/tasks/:taskId/downloads/pause`                  | 暂停同一下载 Run                       |
-| `POST` | `/media-governance/tasks/:taskId/downloads/cancel`                 | 取消下载并保留载荷直到精确来源清理     |
-| `POST` | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传同一下载 Run                       |
-| `POST` | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理       |
-| `POST` | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验              |
-| `POST` | `/media-governance/tasks/:taskId/metadata/repair`                  | 启动最多两次的确定性有界元数据修复     |
-| `POST` | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理             |
-| `POST` | `/media-governance/tasks/:taskId/agent/start`                      | 启动或安全重试五层边界 CodexAgent      |
-| `GET`  | `/media-governance/tasks/:taskId/agent/session`                    | 查询 Agent 语义会话                    |
-| `POST` | `/media-governance/tasks/:taskId/agent/operator-decision`          | 提交人工候选选择并闭环                 |
-| `GET`  | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
-| `GET`  | `/media-governance/events/stream`                                  | 订阅带 replay/snapshot-required 的 SSE |
+| 方法     | 路径                                                               | 说明                                   |
+| -------- | ------------------------------------------------------------------ | -------------------------------------- |
+| `POST`   | `/media-governance/tasks`                                          | 创建作品身份草稿和 Task/Unit           |
+| `GET`    | `/media-governance/tasks/page`                                     | 分页和语义过滤任务                     |
+| `GET`    | `/media-governance/tasks/summary`                                  | 查询任务、下载、治理和 Agent 聚合      |
+| `GET`    | `/media-governance/tasks/:taskId`                                  | 查询权威任务详情投影                   |
+| `PUT`    | `/media-governance/tasks/:taskId/identity`                         | 下载前修正资料库身份与年份             |
+| `DELETE` | `/media-governance/tasks/:taskId?expectedRevision=:revision`       | 按版本放弃未开始且没有来源的空草稿     |
+| `POST`   | `/media-governance/tasks/:taskId/sources/magnet`                   | 脱敏添加磁链来源                       |
+| `POST`   | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件         |
+| `PUT`    | `/media-governance/tasks/:taskId/sources/:sourceId/classification` | 修订来源角色和内容分类                 |
+| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/remove`         | 精确清理并移除已取消的待更换来源       |
+| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`        | 生成或检查规范来源清单                 |
+| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime`  | 执行有界运行时来源探针                 |
+| `PUT`    | `/media-governance/tasks/:taskId/units/:unitId/subtitle-contract`  | 密封逐季单一发布组字幕合同             |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/start`                  | 启动或接管失联的 NAS 隔离目录下载      |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/pause`                  | 暂停同一下载 Run                       |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/cancel`                 | 取消下载并保留载荷直到精确来源清理     |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传同一下载 Run                       |
+| `POST`   | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理       |
+| `POST`   | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验              |
+| `POST`   | `/media-governance/tasks/:taskId/metadata/repair`                  | 启动最多两次的确定性有界元数据修复     |
+| `POST`   | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理             |
+| `POST`   | `/media-governance/tasks/:taskId/agent/start`                      | 启动或安全重试五层边界 CodexAgent      |
+| `GET`    | `/media-governance/tasks/:taskId/agent/session`                    | 查询 Agent 语义会话                    |
+| `POST`   | `/media-governance/tasks/:taskId/agent/operator-decision`          | 提交人工候选选择并闭环                 |
+| `GET`    | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
+| `GET`    | `/media-governance/events/stream`                                  | 订阅带 replay/snapshot-required 的 SSE |
 
 `GET /media-governance/tasks/summary` 额外返回 `blocked`、`stuckRunCount`、
 `evidenceDriftCount`、`mixedSubtitleSeasonCount`、去重后的 `attentionRequired` 和中文
@@ -309,9 +310,12 @@ Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓�
 `MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`
 和 `MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS` 调用 NAS 执行器；缺少数据库状态仓、私有
 地址或 secret 时失败关闭。执行器只兑换一次描述/计划授权，并按 Run 从序号 1 连续回调，
-重复序号幂等忽略，缺号和身份漂移拒绝。回调瞬时失败会按同一序号有界重试；API 还会
-按 Run、Task 与密封输入摘要读取执行器的精确 systemd runner 状态。runner 已退出但缺少
-终态回调时，Run 和 Task 在同一事务转为失败/阻塞，活动 Run 被清除且只发布一次语义事件。
+重复序号幂等忽略，缺号和身份漂移拒绝。回调瞬时失败会按同一序号有界重试；NAS executor
+在发送终态前先把连续事件 journal 和最终报告原子密封到固定 Codex Run 证据根。API 还会
+按 Run、Task 与密封输入摘要读取执行器的精确 systemd runner 状态；runner 已退出或失联时，
+状态响应必须同时提供匹配的 Run manifest SHA、精确成功/失败终态和下一连续序号，API 才在
+同一事务应用该终态。缺少密封证据、身份漂移或序号跳跃时保持活动 Run 等待下轮核对，绝不
+由 API 伪造失败事件。
 普通状态变更先提交数据库再发布 SSE，Agent
 事件则与 Task/session 水位在同一事务写入。源码同时提供真实 CodexAgent outbound
 adapter 与 NAS gateway 内部接口；只有同时配置

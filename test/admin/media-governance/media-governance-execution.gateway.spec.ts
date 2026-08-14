@@ -100,6 +100,59 @@ describe('MediaGovernanceExecutionGatewayClient', () => {
           activeState: 'inactive',
           exitCode: 1,
           result: 'exit-code',
+          manifestSha256: 'f'.repeat(64),
+          runId: envelope.runId,
+          runnerId:
+            'kt-media-governance-0123456789abcdef0123456789abcdef.service',
+          sealedInputSha256: envelope.sealedInputSha256,
+          status: 'exited',
+          subState: 'dead',
+          taskId: envelope.taskId,
+          terminalEvent: {
+            action: envelope.action,
+            evidenceSha256: 'e'.repeat(64),
+            eventType: 'run-succeeded',
+            observedAt: '2026-08-11T12:00:01.000Z',
+            runId: envelope.runId,
+            sequence: 2,
+            summary: '已封存终态等待 API 重放',
+            taskId: envelope.taskId,
+            taskRevision: envelope.taskRevision,
+          },
+        }),
+    } as Response);
+    const gateway = new MediaGovernanceExecutionGatewayClient(
+      new ConfigService({
+        MEDIA_GOVERNANCE_EXECUTOR_BASE_URL: 'http://172.21.0.1:48088',
+        MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET: 's'.repeat(64),
+      }),
+    );
+
+    await expect(
+      gateway.status({
+        runId: envelope.runId,
+        sealedInputSha256: envelope.sealedInputSha256,
+        taskId: envelope.taskId,
+      }),
+    ).resolves.toMatchObject({
+      manifestSha256: 'f'.repeat(64),
+      status: 'exited',
+      terminalEvent: { eventType: 'run-succeeded', sequence: 2 },
+    });
+    expect(request).toHaveBeenCalledWith(
+      'http://172.21.0.1:48088/v1/status',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('rejects an exited runner without a sealed terminal event', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          activeState: 'inactive',
+          exitCode: 1,
+          result: 'exit-code',
           runId: envelope.runId,
           runnerId:
             'kt-media-governance-0123456789abcdef0123456789abcdef.service',
@@ -122,11 +175,7 @@ describe('MediaGovernanceExecutionGatewayClient', () => {
         sealedInputSha256: envelope.sealedInputSha256,
         taskId: envelope.taskId,
       }),
-    ).resolves.toMatchObject({ status: 'exited' });
-    expect(request).toHaveBeenCalledWith(
-      'http://172.21.0.1:48088/v1/status',
-      expect.objectContaining({ method: 'POST' }),
-    );
+    ).rejects.toThrow('media-governance-executor-identity-mismatch');
   });
 
   it('sends an exact cancellation control for the active sealed run', async () => {

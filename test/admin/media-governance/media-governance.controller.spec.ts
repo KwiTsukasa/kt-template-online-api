@@ -89,7 +89,14 @@ describe('MediaGovernanceController', () => {
       .expect('Cache-Control', 'no-store');
     expect(summary.body.data).toMatchObject({
       agentPending: 0,
+      attentionRequired: 0,
+      blocked: 0,
       closed: 0,
+      evidenceDriftCount: 0,
+      healthLabel: '运行核对正常',
+      mixedSubtitleSeasonCount: 0,
+      stagingResidualCount: null,
+      stuckRunCount: 0,
       total: 1,
     });
 

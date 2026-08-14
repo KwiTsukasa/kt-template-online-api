@@ -149,6 +149,7 @@ export type MediaGovernanceProgress = {
   completedItems: number;
   etaLabel: string;
   heartbeatLabel: string;
+  observedAt: null | string;
   percent: number;
   progressLabel: string;
   speedLabel: string;
@@ -287,6 +288,7 @@ const SOURCE_HEALTH_REASON_LABELS: Record<string, string> = {
   tracker_unreachable: '来源追踪器在限定时间内不可达',
 };
 const MAX_DISPATCH_ATTEMPTS = 5;
+const STALE_RUN_THRESHOLD_MS = 10 * 60_000;
 
 @Injectable()
 export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
@@ -381,6 +383,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         completedItems: 0,
         etaLabel: '尚未开始',
         heartbeatLabel: '尚未开始',
+        observedAt: null,
         percent: 0,
         progressLabel: '等待来源',
         speedLabel: '0 B/s',
@@ -633,6 +636,8 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         SOURCE_HEALTH_REASON_LABELS[input.sourceHealthReason] ??
         '来源探针返回了未识别的原因';
     }
+    task.progress.observedAt = input.observedAt;
+    task.progress.heartbeatLabel = '刚刚';
     if (input.progress) {
       if (
         input.progress.completedBytes > input.progress.totalBytes ||
@@ -654,6 +659,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         completedItems: input.progress.completedItems,
         etaLabel: input.progress.etaLabel,
         heartbeatLabel: '刚刚',
+        observedAt: input.observedAt,
         percent,
         progressLabel: input.summary,
         speedLabel: this.formatSpeed(input.progress.speedBytesPerSecond),
@@ -1017,11 +1023,41 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (!task) {
       throwVbenError('媒体治理任务不存在', HttpStatus.NOT_FOUND);
     }
-    return task;
+    return this.refreshHeartbeatLabel(task);
   }
 
   summary() {
+    const now = Date.now();
+    this.tasks.forEach((task) => this.refreshHeartbeatLabel(task, now));
     const closed = this.tasks.filter((task) => task.stage === 'closed').length;
+    const blocked = this.tasks.filter(
+      (task) => task.runState === 'blocked',
+    ).length;
+    const evidenceDriftTasks = new Set(
+      this.tasks
+        .filter(
+          (task) =>
+            task.stage === 'closed' &&
+            task.units.some(
+              (unit) => !unit.localAcceptedAt || !unit.evidenceSha256,
+            ),
+        )
+        .map((task) => task.id),
+    );
+    const stuckRunTasks = new Set(
+      this.tasks
+        .filter((task) => this.isStuckRun(task, now))
+        .map((task) => task.id),
+    );
+    const mixedSubtitles = this.mixedSubtitleSummary();
+    const attentionTaskIds = new Set([
+      ...this.tasks
+        .filter((task) => task.runState === 'blocked')
+        .map((task) => task.id),
+      ...evidenceDriftTasks,
+      ...stuckRunTasks,
+      ...mixedSubtitles.taskIds,
+    ]);
     return {
       agentPending: this.tasks.filter(
         (task) =>
@@ -1030,19 +1066,27 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
             task.agentSession?.status === 'needs-operator' ||
             task.agentSession?.status === 'running'),
       ).length,
+      attentionRequired: attentionTaskIds.size,
+      blocked,
       closed,
       downloading: this.tasks.filter(
         (task) => task.stage === 'download' && task.runState === 'running',
       ).length,
+      evidenceDriftCount: evidenceDriftTasks.size,
       governing: this.tasks.filter(
         (task) => task.stage === 'governance' && task.runState === 'running',
       ).length,
+      healthLabel:
+        attentionTaskIds.size === 0
+          ? '运行核对正常'
+          : `发现 ${attentionTaskIds.size} 个任务需要处理`,
       metadataAutoClosureRate:
         this.tasks.length === 0
           ? 0
           : Number(((closed / this.tasks.length) * 100).toFixed(1)),
-      mixedSubtitleSeasonCount: 0,
-      stagingResidualCount: 0,
+      mixedSubtitleSeasonCount: mixedSubtitles.seasonCount,
+      stagingResidualCount: null,
+      stuckRunCount: stuckRunTasks.size,
       total: this.tasks.length,
     };
   }
@@ -1422,6 +1466,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       completedItems: 0,
       etaLabel: '尚未开始',
       heartbeatLabel: '尚未开始',
+      observedAt: null,
       percent: 0,
       progressLabel: '等待替换来源',
       speedLabel: '0 B/s',
@@ -1751,6 +1796,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       completedItems: 0,
       etaLabel: '演示约 1 秒',
       heartbeatLabel: '刚刚',
+      observedAt: new Date().toISOString(),
       percent: 0,
       progressLabel: `正在连接来源（0/${selectedFileCount}）`,
       speedLabel: '演示模式',
@@ -2813,7 +2859,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         (!query.metadataStatus || task.metadataStatus === query.metadataStatus),
     );
     return {
-      items: filtered.slice(start, start + pageSize),
+      items: filtered
+        .slice(start, start + pageSize)
+        .map((task) => this.refreshHeartbeatLabel(task)),
       total: filtered.length,
     };
   }
@@ -3319,6 +3367,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     const previous = {
       activeRunId: task.activeRunId,
       nextCommandLabel: task.nextCommandLabel,
+      progress: structuredClone(task.progress),
       revision: task.revision,
       runState: task.runState,
       semanticProjection: structuredClone(task.semanticProjection),
@@ -3326,6 +3375,8 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
     const runId = `media-run-${randomUUID()}`;
     task.activeRunId = runId;
+    task.progress.observedAt = new Date().toISOString();
+    task.progress.heartbeatLabel = '刚刚';
     task.runState = 'queued';
     task.stage = action.startsWith('source.')
       ? action === 'source.download' || action === 'source.resume'
@@ -3776,6 +3827,67 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return `${(bytesPerSecond / 1_024 / 1_024 / 1_024).toFixed(1)} GiB/s`;
   }
 
+  private refreshHeartbeatLabel(
+    task: MediaGovernanceTask,
+    now = Date.now(),
+  ): MediaGovernanceTask {
+    const observedAt = task.progress.observedAt;
+    if (!observedAt) return task;
+    const elapsedMs = Math.max(0, now - Date.parse(observedAt));
+    if (!Number.isFinite(elapsedMs)) {
+      task.progress.heartbeatLabel = '时间未知';
+    } else if (elapsedMs < 60_000) {
+      task.progress.heartbeatLabel = '刚刚';
+    } else if (elapsedMs < 60 * 60_000) {
+      task.progress.heartbeatLabel = `${Math.floor(elapsedMs / 60_000)} 分钟前`;
+    } else if (elapsedMs < 24 * 60 * 60_000) {
+      task.progress.heartbeatLabel = `${Math.floor(elapsedMs / (60 * 60_000))} 小时前`;
+    } else {
+      task.progress.heartbeatLabel = `${Math.floor(elapsedMs / (24 * 60 * 60_000))} 天前`;
+    }
+    return task;
+  }
+
+  private isStuckRun(task: MediaGovernanceTask, now: number): boolean {
+    if (task.persistenceMode !== 'database') return false;
+    const activeState =
+      task.runState === 'queued' || task.runState === 'running';
+    if (activeState && !task.activeRunId) return true;
+    if (!activeState) {
+      return Boolean(task.activeRunId) && task.runState !== 'blocked';
+    }
+    if (!task.progress.observedAt) return true;
+    const observedAt = Date.parse(task.progress.observedAt);
+    return (
+      !Number.isFinite(observedAt) || now - observedAt > STALE_RUN_THRESHOLD_MS
+    );
+  }
+
+  private mixedSubtitleSummary(): {
+    seasonCount: number;
+    taskIds: Set<string>;
+  } {
+    let seasonCount = 0;
+    const taskIds = new Set<string>();
+    for (const task of this.tasks) {
+      const groupsByUnit = new Map<string, Set<string>>();
+      for (const source of task.sources) {
+        for (const mapping of source.selectedFileMappings) {
+          if (mapping.fileRole !== 'subtitle') continue;
+          const groups = groupsByUnit.get(mapping.unitId) ?? new Set<string>();
+          groups.add(source.releaseGroup?.trim() || '未声明发布组');
+          groupsByUnit.set(mapping.unitId, groups);
+        }
+      }
+      const mixedSeasonCount = [...groupsByUnit.values()].filter(
+        (groups) => groups.size > 1,
+      ).length;
+      if (mixedSeasonCount > 0) taskIds.add(task.id);
+      seasonCount += mixedSeasonCount;
+    }
+    return { seasonCount, taskIds };
+  }
+
   private scheduleProgress(
     task: MediaGovernanceTask,
     source: Pick<MediaGovernanceSource, 'selectedBytes' | 'selectedFileCount'>,
@@ -3790,6 +3902,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         ),
         etaLabel: '约 1 秒',
         heartbeatLabel: '刚刚',
+        observedAt: new Date().toISOString(),
         percent: 55,
         progressLabel: `正在下载 ${Math.max(1, Math.floor(source.selectedFileCount * 0.55))}/${source.selectedFileCount} 个文件`,
         speedLabel: '演示模式 55 MB/s',
@@ -3805,6 +3918,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         completedItems: source.selectedFileCount,
         etaLabel: '已完成',
         heartbeatLabel: '刚刚',
+        observedAt: new Date().toISOString(),
         percent: 100,
         progressLabel: '来源载荷已就绪',
         speedLabel: '0 B/s',

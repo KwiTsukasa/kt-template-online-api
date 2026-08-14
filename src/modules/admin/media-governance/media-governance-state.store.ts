@@ -814,7 +814,12 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       metadataStatus:
         task.metadataStatus as MediaGovernanceTask['metadataStatus'],
       nextCommandLabel: task.nextCommandLabel,
-      progress: task.progressProjection as MediaGovernanceTask['progress'],
+      progress: {
+        ...(task.progressProjection as MediaGovernanceTask['progress']),
+        observedAt:
+          (task.progressProjection as Partial<MediaGovernanceTask['progress']>)
+            .observedAt ?? task.updateTime?.toISOString?.() ?? null,
+      },
       providerRef: task.providerRef as MediaGovernanceTask['providerRef'],
       releaseYear: task.releaseYear,
       revision: task.revision,

@@ -223,6 +223,11 @@ LocalNFO/海报有界修复，再将仍未闭合的真实歧义交给 CodexAgent
 独立验收判定。
 Task、Unit、来源和 Agent session 由 10 张 TypeORM 领域表持久化；API 启动时恢复
 同一 Task/thread 与事件序号，状态变更和语义事件在同一数据库事务提交后才发布 SSE。
+任务汇总接口从真实 Task/Unit/Run 投影阻塞任务、10 分钟无心跳的失联运行、已关闭但
+缺少 Unit 验收证据的漂移以及同季混合字幕发布组，并去重生成中文“需要关注”结论；
+执行器回调时间写入持久化进度投影，列表和详情按当前时间显示“刚刚/几分钟前/几小时前”。
+NAS 暂存残留没有持续观测证据时返回 `null`，Admin 不再把未知状态显示成固定 `0`；
+正式独立验收仍必须提供实际 `stagingResiduals=0` 才能关闭 Task。
 内部回调健康只有数据库状态仓完成加载时才返回 `database/ready`。源码已接入独立
 NAS CodexAgent gateway：每个 Task 固定映射一个可恢复 thread，每回合重新密封
 policy/capsule/revision/manifest/replay 身份，只接受类型化只读工具与密封计划提交。

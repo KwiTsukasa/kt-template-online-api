@@ -52,11 +52,16 @@ describe('MediaGovernanceService', () => {
     expect(service.detail(task.id).id).toBe(task.id);
     expect(service.summary()).toMatchObject({
       agentPending: 0,
+      attentionRequired: 0,
+      blocked: 0,
       closed: 0,
       downloading: 0,
+      evidenceDriftCount: 0,
       governing: 0,
+      healthLabel: '运行核对正常',
       mixedSubtitleSeasonCount: 0,
-      stagingResidualCount: 0,
+      stagingResidualCount: null,
+      stuckRunCount: 0,
       total: 1,
     });
     expect(task.semanticProjection).toEqual({
@@ -162,6 +167,74 @@ describe('MediaGovernanceService', () => {
 
   it('rejects an unknown detail identity', () => {
     expect(() => service.detail('media-task-missing')).toThrow(HttpException);
+  });
+
+  it('reports blocked, stale-run and closed-evidence drift without fixed green counters', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-14T12:00:00.000Z'));
+    try {
+      const blocked = await service.create({
+        mediaType: 'tv',
+        seasonNumbers: ['S01'],
+        titleHint: '阻塞任务',
+      });
+      blocked.persistenceMode = 'database';
+      blocked.activeRunId = 'media-run-paused-fixture';
+      blocked.runState = 'blocked';
+      blocked.sources = [
+        {
+          releaseGroup: 'Group-A',
+          selectedFileMappings: [
+            {
+              fileRole: 'subtitle',
+              unitId: blocked.units[0].id,
+            },
+          ],
+        },
+        {
+          releaseGroup: 'Group-B',
+          selectedFileMappings: [
+            {
+              fileRole: 'subtitle',
+              unitId: blocked.units[0].id,
+            },
+          ],
+        },
+      ] as never;
+
+      const staleRun = await service.create({
+        mediaType: 'tv',
+        seasonNumbers: ['S01'],
+        titleHint: '失联运行',
+      });
+      staleRun.persistenceMode = 'database';
+      staleRun.activeRunId = 'media-run-stale-fixture';
+      staleRun.runState = 'running';
+      Object.assign(staleRun.progress, {
+        observedAt: '2026-08-14T11:49:59.000Z',
+      });
+
+      const evidenceDrift = await service.create({
+        mediaType: 'movie',
+        titleHint: '闭环证据漂移',
+      });
+      evidenceDrift.stage = 'closed';
+      evidenceDrift.runState = 'succeeded';
+
+      expect(service.summary()).toMatchObject({
+        attentionRequired: 3,
+        blocked: 1,
+        evidenceDriftCount: 1,
+        healthLabel: '发现 3 个任务需要处理',
+        mixedSubtitleSeasonCount: 1,
+        stagingResidualCount: null,
+        stuckRunCount: 1,
+      });
+      expect(service.detail(staleRun.id).progress.heartbeatLabel).toBe(
+        '10 分钟前',
+      );
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('runs the complete source, subtitle and progress Demo without storing raw trackers', async () => {

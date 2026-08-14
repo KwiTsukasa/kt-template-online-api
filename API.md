@@ -239,6 +239,14 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `GET`  | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
 | `GET`  | `/media-governance/events/stream`                                  | 订阅带 replay/snapshot-required 的 SSE |
 
+`GET /media-governance/tasks/summary` 额外返回 `blocked`、`stuckRunCount`、
+`evidenceDriftCount`、`mixedSubtitleSeasonCount`、去重后的 `attentionRequired` 和中文
+`healthLabel`。失联 Run 只统计数据库生产 Task 中 queued/running 状态与 `activeRunId`
+不一致，或执行器 `observedAt` 超过既有 10 分钟无增量窗口的任务；暂停并保留原 Run 的
+blocked 下载不会误报。closed Task 仍有 Unit 缺 `localAcceptedAt` 或 `evidenceSha256`
+时计入证据漂移。没有持续 NAS 观测源时 `stagingResidualCount=null`，不得解释为 0；
+正式独立验收仍要求回调中的实际 `stagingResiduals=0`。
+
 `probe-runtime` 会先完成 3 分钟初始观察；来源即使产生少量数据，按观察窗平均吞吐估算
 无法在 24 小时内完成所选载荷时仍返回 `degraded/insufficient_throughput`，下载入口保持关闭。
 种子清单不会把 `attr=p` 的 padding 传输项暴露为可治理文件，并按 qBittorrent Web API

@@ -1498,9 +1498,24 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
     const source = this.findSource(task, sourceId);
+    const resettableUnboundResidue =
+      task.stage === 'metadata' &&
+      task.runState === 'blocked' &&
+      task.workItemId === null &&
+      task.payloadSeal === null &&
+      task.sealedPlan === null &&
+      task.sealedPlanSha256 === null &&
+      task.closedAt === null &&
+      task.metadataIdentity === null &&
+      task.metadataStatus === 'requires-agent' &&
+      task.units.every(
+        (unit) =>
+          unit.evidenceSha256 === null && unit.localAcceptedAt === null,
+      );
     if (
       task.activeRunId ||
-      !['intake', 'download'].includes(task.stage) ||
+      (!['intake', 'download'].includes(task.stage) &&
+        !resettableUnboundResidue) ||
       task.payloadSeal ||
       task.sealedPlan
     ) {
@@ -1544,6 +1559,33 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
     this.refreshExpectedEpisodeNumbers(task);
     if (source.sourceRole === 'primary_media') task.governanceProfile = null;
+    if (
+      task.sources.length === 0 &&
+      task.workItemId === null &&
+      task.payloadSeal === null &&
+      task.sealedPlan === null &&
+      task.sealedPlanSha256 === null &&
+      task.closedAt === null &&
+      task.metadataIdentity === null &&
+      task.units.every(
+        (unit) =>
+          unit.evidenceSha256 === null && unit.localAcceptedAt === null,
+      )
+    ) {
+      task.agentSession = null;
+      task.closedMode = null;
+      task.metadataStatus = 'pending';
+      for (const unit of task.units) {
+        unit.metadataProjection = {
+          identityRefreshAttempts: 0,
+          missingA: [],
+          missingB: [],
+          missingC: [],
+          repairAttempts: 0,
+          validBFallbacks: [],
+        };
+      }
+    }
     task.gateReason = null;
     task.progress = {
       completedBytes: 0,

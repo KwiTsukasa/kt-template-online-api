@@ -209,6 +209,73 @@ describe('MediaGovernanceService', () => {
     ).rejects.toThrow(HttpException);
   });
 
+  it('resets an unbound legacy metadata residue after its last source is removed', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: 'KT restart canary',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri:
+        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      sourceRole: 'primary_media',
+    });
+    task.stage = 'metadata';
+    task.runState = 'blocked';
+    task.metadataStatus = 'requires-agent';
+    task.agentSession = {
+      capsuleSha256: 'a'.repeat(64),
+      checkpointSha256: 'b'.repeat(64),
+      currentActionLabel: '等待人工处理',
+      currentUnitId: task.units[0]!.id,
+      lastHeartbeatLabel: '刚刚',
+      lastSequence: 3,
+      pendingPlanSha256: null,
+      policyBoundaryLabel: '五层边界已启用',
+      policySha256: 'c'.repeat(64),
+      policyVersion: 'media-agent-policy-v1',
+      status: 'needs-operator',
+      statusLabel: '需要人工处理',
+      threadId: '019ff01b-7f9a-7301-82aa-12cd0c3ce3ed',
+    };
+    task.units[0]!.metadataProjection = {
+      identityRefreshAttempts: 1,
+      missingA: ['identity.provider'],
+      missingB: ['season.poster'],
+      missingC: [],
+      repairAttempts: 2,
+      validBFallbacks: ['season.poster'],
+    };
+
+    await expect(
+      service.removeSource(task.id, source.id, { expectedRevision: 2 }),
+    ).resolves.toMatchObject({
+      agentSession: null,
+      metadataStatus: 'pending',
+      revision: 3,
+      runState: 'draft',
+      sources: [],
+      stage: 'intake',
+      units: [
+        expect.objectContaining({
+          metadataProjection: {
+            identityRefreshAttempts: 0,
+            missingA: [],
+            missingB: [],
+            missingC: [],
+            repairAttempts: 0,
+            validBFallbacks: [],
+          },
+        }),
+      ],
+    });
+    await expect(
+      service.discardTask(task.id, { expectedRevision: 3 }),
+    ).resolves.toEqual({ deletedTaskId: task.id });
+  });
+
   it('fails closed when identity correction is stale or execution has begun', async () => {
     const task = await service.create({
       mediaType: 'movie',

@@ -756,6 +756,82 @@ describe('MediaGovernanceService production execution adapter', () => {
     });
   });
 
+  it('cleans an unbound legacy metadata residue through the production executor', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: 'KT restart canary',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri:
+        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      sourceRole: 'primary_media',
+    });
+    task.stage = 'metadata';
+    task.runState = 'blocked';
+    task.metadataStatus = 'requires-agent';
+    task.agentSession = {
+      capsuleSha256: 'a'.repeat(64),
+      checkpointSha256: 'b'.repeat(64),
+      currentActionLabel: '等待人工处理',
+      currentUnitId: task.units[0]!.id,
+      lastHeartbeatLabel: '刚刚',
+      lastSequence: 3,
+      pendingPlanSha256: null,
+      policyBoundaryLabel: '五层边界已启用',
+      policySha256: 'c'.repeat(64),
+      policyVersion: 'media-agent-policy-v1',
+      status: 'needs-operator',
+      statusLabel: '需要人工处理',
+      threadId: '019ff01b-7f9a-7301-82aa-12cd0c3ce3ed',
+    };
+
+    await service.removeSource(task.id, source.id, { expectedRevision: 2 });
+    const cleanup = dispatch.mock.calls[0]![0];
+    expect(cleanup).toMatchObject({
+      action: 'source.cleanup',
+      sources: [expect.objectContaining({ sourceId: source.id })],
+      taskRevision: 3,
+    });
+    const observedAt = new Date().toISOString();
+    await service.applyExecutorEvent({
+      action: 'source.cleanup',
+      eventType: 'run-started',
+      observedAt,
+      runId: cleanup.runId,
+      sequence: 1,
+      summary: '清理开始',
+      taskId: task.id,
+      taskRevision: 3,
+    });
+    await service.applyExecutorEvent({
+      action: 'source.cleanup',
+      evidenceSha256: 'd'.repeat(64),
+      eventType: 'run-succeeded',
+      observedAt,
+      runId: cleanup.runId,
+      sequence: 2,
+      sourceId: source.id,
+      summary: '来源运行时已精确清理',
+      taskId: task.id,
+      taskRevision: 3,
+    });
+
+    expect(task).toMatchObject({
+      activeRunId: null,
+      agentSession: null,
+      metadataStatus: 'pending',
+      revision: 4,
+      runState: 'draft',
+      sources: [],
+      stage: 'intake',
+    });
+  });
+
   it('seals one Schema 1.2.0 plan and retries a failed execution with a fresh replay key', async () => {
     const { dispatch, service, stateStore } = fixture();
     await service.onModuleInit();

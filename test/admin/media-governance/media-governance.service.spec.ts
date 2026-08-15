@@ -210,6 +210,36 @@ describe('MediaGovernanceService', () => {
     expect(() => service.detail(task.id)).toThrow(HttpException);
   });
 
+  it('discards a blocked intake task after source inspection failed', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '来源检查失败后可删除',
+    });
+    await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri:
+        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    task.runState = 'blocked';
+    task.gateReason = 'NAS 执行失败：magnet_metadata_unavailable';
+    task.nextCommandLabel = '可重新填写来源、编辑文件清单或删除任务';
+
+    expect(service.detail(task.id).semanticProjection).toMatchObject({
+      discardAllowed: true,
+      discardReasonLabel: null,
+    });
+    await expect(
+      service.discardTask(task.id, { expectedRevision: 2 }),
+    ).resolves.toEqual({
+      clearedWorkItemId: null,
+      deletedTaskId: task.id,
+    });
+  });
+
   it('refuses to discard a task after execution has started', async () => {
     const task = await service.create({
       mediaType: 'movie',

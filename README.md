@@ -216,8 +216,11 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，提供作品身份、来源、
 逐季字幕合同、运行时探针、下载/治理进度、低效下载取消与精确换源、CodexAgent
 人工放行、聚合和可续接 SSE。
-列表 CRUD 支持真实新建、详情查询和下载前身份编辑；删除只接受当前 revision，且允许
-尚未进入执行阶段的 intake 草稿连同来源配置和绑定的本地账本一起删除。API 在同一数据库
+磁链清单检查每 5 秒发布语义进度并在 120 秒内终结；失败后清除 active Run 并保留精确
+来源身份，允许重新填写来源、修正任务身份、已有清单时重编文件映射，或在无载荷/计划/
+来源清理 Run 时删除任务。列表 CRUD 支持真实新建、详情查询和下载前身份编辑；删除只
+接受当前 revision，且允许尚未进入执行阶段的 intake `draft/blocked` 任务连同来源配置
+和绑定的本地账本一起删除。API 在同一数据库
 事务中清理 Task、Unit、Source、Run、Event、Outbox、Agent 与关联决策/例外记录，并返回
 `clearedWorkItemId`；已有活动 Run、载荷/计划密封、元数据成果或验收证据的任务仍返回冲突。
 草稿在下载前可用当前 revision 修正必填 `providerRef` 和可选 `releaseYear`；已有来源、

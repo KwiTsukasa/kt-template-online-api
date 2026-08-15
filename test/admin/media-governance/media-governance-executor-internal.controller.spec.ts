@@ -105,6 +105,36 @@ describe('MediaGovernanceExecutorInternalController', () => {
     expect(applyExecutorEvent).toHaveBeenCalledWith(body);
   });
 
+  it('accepts semantic magnet manifest progress over real HTTP', async () => {
+    const body = {
+      action: 'source.inspect',
+      eventType: 'peer-progress',
+      observedAt: new Date().toISOString(),
+      progress: {
+        completedBytes: 5,
+        completedItems: 0,
+        etaLabel: '最多还需 115 秒',
+        speedBytesPerSecond: 0,
+        totalBytes: 120,
+        totalItems: 0,
+      },
+      runId: 'media-run-fixture-0001',
+      sequence: 2,
+      sourceId: 'media-source-fixture-0001',
+      summary: '正在获取磁链文件清单：已等待 5 秒，连接 0 个节点',
+      taskId: 'media-task-fixture-0001',
+      taskRevision: 7,
+    };
+
+    await request(app.getHttpServer())
+      .post('/internal/media-governance/executor/events')
+      .set('x-kt-media-executor-secret', secret)
+      .send(body)
+      .expect(201)
+      .expect({ applied: true, revision: 8 });
+    expect(applyExecutorEvent).toHaveBeenCalledWith(body);
+  });
+
   it('returns one authenticated sealed plan without caching', async () => {
     const body = {
       planGrantId: 'media-plan-grant-fixture-0001',

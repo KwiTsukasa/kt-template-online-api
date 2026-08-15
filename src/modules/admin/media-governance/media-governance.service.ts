@@ -755,15 +755,33 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     } else if (input.eventType === 'run-failed') {
       task.activeRunId = null;
       task.runState = 'blocked';
+      const sourceFailure = ['source.inspect', 'source.probe-runtime'].includes(
+        input.action,
+      );
+      if (sourceFailure && source) {
+        let sourceHealthReasonLabel = input.summary.slice(0, 160);
+        if (input.sourceHealthReason) {
+          sourceHealthReasonLabel =
+            SOURCE_HEALTH_REASON_LABELS[input.sourceHealthReason] ??
+            '来源检查未能完成';
+        }
+        source.sourceHealth = input.sourceHealth ?? 'inconclusive';
+        source.sourceHealthLabel = '来源检查失败';
+        source.sourceHealthReasonLabel = sourceHealthReasonLabel;
+      }
       const cancelledDownload =
         ['source.download', 'source.resume'].includes(input.action) &&
         input.summary.includes('download_cancelled');
       task.gateReason = cancelledDownload
         ? '下载已取消，现有载荷等待精确清理'
         : input.summary.slice(0, 160);
-      task.nextCommandLabel = cancelledDownload
-        ? '移除低效来源并上传替换来源'
-        : '查看失败原因后重试';
+      task.nextCommandLabel = '查看失败原因后重试';
+      if (sourceFailure) {
+        task.nextCommandLabel = '可重新填写来源、编辑文件清单或删除任务';
+      }
+      if (cancelledDownload) {
+        task.nextCommandLabel = '移除低效来源并上传替换来源';
+      }
     } else if (input.eventType === 'run-succeeded') {
       if (!input.evidenceSha256) {
         throwVbenError('执行器终态缺少密封证据', HttpStatus.BAD_REQUEST);
@@ -1780,7 +1798,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (this.executionGateway?.enabled()) {
       source.sourceHealth = 'probing';
       source.sourceHealthLabel = '等待 NAS 检查来源清单';
-      source.sourceHealthReasonLabel = '已密封描述文件授权和来源身份';
+      source.sourceHealthReasonLabel = '最长 2 分钟，期间每 5 秒更新等待进度';
       await this.reserveExecution(task, 'source.inspect', [source]);
       return source;
     }
@@ -3469,8 +3487,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   private getDiscardDisabledReason(task: MediaGovernanceTask) {
-    if (task.stage !== 'intake' || task.runState !== 'draft') {
-      return '仅接收资料阶段的草稿可以删除。';
+    if (
+      task.stage !== 'intake' ||
+      !['blocked', 'draft'].includes(task.runState)
+    ) {
+      return '仅接收资料阶段且尚未产生载荷的任务可以删除。';
     }
     if (
       task.activeRunId !== null ||
@@ -3479,6 +3500,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.sealedPlanSha256 !== null
     ) {
       return '任务已进入执行阶段，不能删除。';
+    }
+    if (task.sources.some((source) => source.descriptorTombstonedAt !== null)) {
+      return '来源运行态仍在精确清理，完成后才能删除任务。';
     }
     if (
       task.closedAt !== null ||

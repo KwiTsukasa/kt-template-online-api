@@ -187,6 +187,26 @@ describe('MediaGovernanceService production execution adapter', () => {
         sequence: 1,
       }),
     ).resolves.toEqual({ applied: true, revision: 3 });
+    await service.applyExecutorEvent({
+      ...base,
+      eventType: 'peer-progress',
+      progress: {
+        completedBytes: 5,
+        completedItems: 0,
+        etaLabel: '最多还需 115 秒',
+        speedBytesPerSecond: 0,
+        totalBytes: 120,
+        totalItems: 0,
+      },
+      sequence: 2,
+      sourceId: source.id,
+      summary: '正在获取磁链文件清单：已等待 5 秒，连接 0 个节点',
+    });
+    expect(task.progress).toMatchObject({
+      etaLabel: '最多还需 115 秒',
+      percent: 4.2,
+      progressLabel: '正在获取磁链文件清单：已等待 5 秒，连接 0 个节点',
+    });
     const manifest = [
       {
         executable: false as const,
@@ -204,7 +224,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       eventType: 'source-inspected',
       manifest,
       manifestSha256,
-      sequence: 2,
+      sequence: 3,
       sourceId: source.id,
       summary: '已检查 1 个来源文件',
     });
@@ -213,7 +233,7 @@ describe('MediaGovernanceService production execution adapter', () => {
         ...base,
         evidenceSha256: 'e'.repeat(64),
         eventType: 'run-succeeded',
-        sequence: 3,
+        sequence: 4,
         summary: '来源清单检查完成',
       }),
     ).resolves.toEqual({ applied: true, revision: 4 });
@@ -237,7 +257,7 @@ describe('MediaGovernanceService production execution adapter', () => {
         ...base,
         evidenceSha256: 'e'.repeat(64),
         eventType: 'run-succeeded',
-        sequence: 3,
+        sequence: 4,
         summary: '来源清单检查完成',
       }),
     ).rejects.toMatchObject({ status: 409 });
@@ -285,6 +305,64 @@ describe('MediaGovernanceService production execution adapter', () => {
       stage: 'intake',
     });
     expect(source.sourceHealth).toBe('viable');
+  });
+
+  it('returns a failed magnet inspection to an editable and discardable intake state', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '磁链元数据失败恢复测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri:
+        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    await service.inspectSource(task.id, source.id, { expectedRevision: 2 });
+    const envelope = dispatch.mock.calls[0]![0];
+    const base = {
+      action: 'source.inspect' as const,
+      observedAt: new Date().toISOString(),
+      runId: envelope.runId,
+      taskId: task.id,
+      taskRevision: 3,
+    };
+    await service.applyExecutorEvent({
+      ...base,
+      eventType: 'run-started',
+      sequence: 1,
+      summary: '来源检查开始',
+    });
+    await service.applyExecutorEvent({
+      ...base,
+      eventType: 'run-failed',
+      sequence: 2,
+      sourceHealth: 'unavailable',
+      sourceHealthReason: 'magnet_metadata_unavailable',
+      sourceId: source.id,
+      summary: 'NAS 执行失败：magnet_metadata_unavailable',
+    });
+
+    expect(task).toMatchObject({
+      activeRunId: null,
+      nextCommandLabel: '可重新填写来源、编辑文件清单或删除任务',
+      runState: 'blocked',
+      stage: 'intake',
+    });
+    expect(task.semanticProjection).toMatchObject({
+      discardAllowed: true,
+      discardReasonLabel: null,
+    });
+    expect(source).toMatchObject({
+      sourceHealth: 'unavailable',
+      sourceHealthLabel: '来源检查失败',
+      sourceHealthReasonLabel: '磁链在限定时间内未取得文件清单',
+    });
   });
 
   it('keeps a reserved outbox run queued when immediate dispatch is unavailable', async () => {

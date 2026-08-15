@@ -218,12 +218,12 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `GET`    | `/media-governance/tasks/summary`                                  | 查询任务、下载、治理和 Agent 聚合      |
 | `GET`    | `/media-governance/tasks/:taskId`                                  | 查询权威任务详情投影                   |
 | `PUT`    | `/media-governance/tasks/:taskId/identity`                         | 下载前修正资料库身份与年份             |
-| `DELETE` | `/media-governance/tasks/:taskId?expectedRevision=:revision`       | 按版本删除未执行草稿并清除绑定账本     |
+| `DELETE` | `/media-governance/tasks/:taskId?expectedRevision=:revision`       | 按版本删除未执行任务并清除绑定账本     |
 | `POST`   | `/media-governance/tasks/:taskId/sources/magnet`                   | 脱敏添加磁链来源                       |
 | `POST`   | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件         |
 | `PUT`    | `/media-governance/tasks/:taskId/sources/:sourceId/classification` | 修订来源角色和内容分类                 |
 | `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/remove`         | 精确清理并移除已取消的待更换来源       |
-| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`        | 生成或检查规范来源清单                 |
+| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`        | 生成来源清单；磁链最长 120 秒          |
 | `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime`  | 执行有界运行时来源探针                 |
 | `PUT`    | `/media-governance/tasks/:taskId/units/:unitId/subtitle-contract`  | 密封逐季单一发布组字幕合同             |
 | `POST`   | `/media-governance/tasks/:taskId/downloads/start`                  | 启动或接管失联的 NAS 隔离目录下载      |
@@ -250,6 +250,9 @@ blocked 下载不会误报。closed Task 仍有 Unit 缺 `localAcceptedAt` 或 `
 
 `probe-runtime` 会先完成 3 分钟初始观察；来源即使产生少量数据，按观察窗平均吞吐估算
 无法在 24 小时内完成所选载荷时仍返回 `degraded/insufficient_throughput`，下载入口保持关闭。
+磁链 `source.inspect` 与该运行时健康探针相互独立：清单获取每 5 秒产生一次
+`peer-progress`，120 秒仍无元数据即返回 `magnet_metadata_unavailable`，清除 active Run
+并把任务保持在可换源、可改身份、已有清单时可重编映射、无成果时可删除的 intake 阶段。
 种子清单不会把 `attr=p` 的 padding 传输项暴露为可治理文件，并按 qBittorrent Web API
 的用户可见顺序连续编号；API 与 qBittorrent 因此使用同一 file index 和 manifest 摘要。
 

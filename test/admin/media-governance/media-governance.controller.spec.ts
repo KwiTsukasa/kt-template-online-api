@@ -278,6 +278,70 @@ describe('MediaGovernanceController', () => {
     await request(apiUrl).get(`/media-governance/tasks/${taskId}`).expect(404);
   });
 
+  it('replaces, edits, and deletes a failed intake source over real HTTP', async () => {
+    const created = await request(apiUrl)
+      .post('/media-governance/tasks')
+      .send({
+        mediaType: 'tv',
+        seasonNumbers: ['S01'],
+        titleHint: '来源失败恢复接口测试',
+      })
+      .expect(201);
+    const taskId = created.body.data.id as string;
+    await request(apiUrl)
+      .post(`/media-governance/tasks/${taskId}/sources/magnet`)
+      .send({
+        contentKind: 'embedded_subtitle_media',
+        expectedRevision: 1,
+        magnetUri:
+          'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+        sourceRole: 'primary_media',
+      })
+      .expect(201);
+
+    const service = app.get(MediaGovernanceService);
+    const failedTask = service.detail(taskId);
+    const failedSourceId = failedTask.sources[0]!.id;
+    failedTask.runState = 'blocked';
+    failedTask.gateReason = 'NAS 执行失败：magnet_metadata_unavailable';
+
+    const edited = await request(apiUrl)
+      .put(`/media-governance/tasks/${taskId}/identity`)
+      .send({ expectedRevision: 2, titleHint: '来源失败后已编辑' })
+      .expect(200);
+    expect(edited.body.data).toMatchObject({
+      revision: 3,
+      runState: 'blocked',
+      titleHint: '来源失败后已编辑',
+    });
+
+    const removed = await request(apiUrl)
+      .post(`/media-governance/tasks/${taskId}/sources/${failedSourceId}/remove`)
+      .send({ expectedRevision: 3 })
+      .expect(201);
+    expect(removed.body.data).toMatchObject({
+      revision: 4,
+      runState: 'draft',
+      sources: [],
+    });
+
+    await request(apiUrl)
+      .post(`/media-governance/tasks/${taskId}/sources/magnet`)
+      .send({
+        contentKind: 'embedded_subtitle_media',
+        expectedRevision: 4,
+        magnetUri:
+          'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
+        sourceRole: 'primary_media',
+      })
+      .expect(201);
+    await request(apiUrl)
+      .delete(`/media-governance/tasks/${taskId}`)
+      .query({ expectedRevision: 5 })
+      .expect(200);
+    await request(apiUrl).get(`/media-governance/tasks/${taskId}`).expect(404);
+  });
+
   it('accepts a magnet source and returns only a sanitized projection', async () => {
     const created = await request(apiUrl)
       .post('/media-governance/tasks')

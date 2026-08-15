@@ -279,6 +279,7 @@ export const MEDIA_GOVERNANCE_EXECUTOR_EVENT_TYPES = [
   'run-started',
   'source-inspected',
   'source-probed',
+  'peer-progress',
   'download-progress',
   'governance-progress',
   'run-paused',

@@ -217,6 +217,7 @@ describe('MediaGovernanceController', () => {
         releaseYear: 2025,
         seasonNumbers: ['S00'],
         titleHint: 'CRUD 草稿唯一标题',
+        workItemId: 'media-963',
       })
       .expect(201);
     const taskId = created.body.data.id as string;
@@ -248,17 +249,28 @@ describe('MediaGovernanceController', () => {
     });
 
     await request(apiUrl)
+      .post(`/media-governance/tasks/${taskId}/sources/magnet`)
+      .send({
+        contentKind: 'embedded_subtitle_media',
+        expectedRevision: 2,
+        magnetUri:
+          'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+        sourceRole: 'primary_media',
+      })
+      .expect(201);
+
+    await request(apiUrl)
       .delete(`/media-governance/tasks/${taskId}`)
-      .query({ expectedRevision: 1 })
+      .query({ expectedRevision: 2 })
       .expect(409);
     const deleted = await request(apiUrl)
       .delete(`/media-governance/tasks/${taskId}`)
-      .query({ expectedRevision: 2 })
+      .query({ expectedRevision: 3 })
       .expect(200)
       .expect('Cache-Control', 'no-store');
     expect(deleted.body).toMatchObject({
       code: 200,
-      data: { deletedTaskId: taskId },
+      data: { clearedWorkItemId: 'media-963', deletedTaskId: taskId },
       msg: '操作成功',
     });
     expect(deleted.body).not.toHaveProperty('err');

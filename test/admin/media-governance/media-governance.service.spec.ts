@@ -66,6 +66,8 @@ describe('MediaGovernanceService', () => {
     });
     expect(task.semanticProjection).toEqual({
       currentActionLabel: '等待补充来源',
+      discardAllowed: true,
+      discardReasonLabel: null,
       gateReasonLabel: '无阻塞',
       metadataStatusLabel: '待校验',
       runStateLabel: '草稿',
@@ -178,15 +180,19 @@ describe('MediaGovernanceService', () => {
     ).rejects.toThrow(HttpException);
     await expect(
       service.discardTask(task.id, { expectedRevision: 2 }),
-    ).resolves.toEqual({ deletedTaskId: task.id });
+    ).resolves.toEqual({
+      clearedWorkItemId: null,
+      deletedTaskId: task.id,
+    });
     expect(service.page({ keyword: '已确认作品名' }).total).toBe(0);
     expect(() => service.detail(task.id)).toThrow(HttpException);
   });
 
-  it('refuses to discard a draft after a source or durable identity is attached', async () => {
+  it('discards an intake draft together with its sources and bound local ledger', async () => {
     const task = await service.create({
       mediaType: 'movie',
-      titleHint: '不可删除任务',
+      titleHint: '可删除草稿',
+      workItemId: 'media-063',
     });
     await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
@@ -197,15 +203,24 @@ describe('MediaGovernanceService', () => {
 
     await expect(
       service.discardTask(task.id, { expectedRevision: 2 }),
-    ).rejects.toThrow(HttpException);
-
-    const durableTask = await service.create({
-      mediaType: 'movie',
-      titleHint: '已绑定账本任务',
-      workItemId: 'media-063',
+    ).resolves.toEqual({
+      clearedWorkItemId: 'media-063',
+      deletedTaskId: task.id,
     });
+    expect(() => service.detail(task.id)).toThrow(HttpException);
+  });
+
+  it('refuses to discard a task after execution has started', async () => {
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '已进入执行阶段',
+    });
+    task.activeRunId = 'media-run-active';
+    task.runState = 'queued';
+    task.stage = 'download';
+
     await expect(
-      service.discardTask(durableTask.id, { expectedRevision: 1 }),
+      service.discardTask(task.id, { expectedRevision: 1 }),
     ).rejects.toThrow(HttpException);
   });
 
@@ -273,7 +288,10 @@ describe('MediaGovernanceService', () => {
     });
     await expect(
       service.discardTask(task.id, { expectedRevision: 3 }),
-    ).resolves.toEqual({ deletedTaskId: task.id });
+    ).resolves.toEqual({
+      clearedWorkItemId: null,
+      deletedTaskId: task.id,
+    });
   });
 
   it('fails closed when identity correction is stale or execution has begun', async () => {

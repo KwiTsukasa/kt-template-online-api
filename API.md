@@ -218,7 +218,7 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `GET`    | `/media-governance/tasks/summary`                                  | 查询任务、下载、治理和 Agent 聚合      |
 | `GET`    | `/media-governance/tasks/:taskId`                                  | 查询权威任务详情投影                   |
 | `PUT`    | `/media-governance/tasks/:taskId/identity`                         | 下载前修正资料库身份与年份             |
-| `DELETE` | `/media-governance/tasks/:taskId?expectedRevision=:revision`       | 按版本放弃未开始且没有来源的空草稿     |
+| `DELETE` | `/media-governance/tasks/:taskId?expectedRevision=:revision`       | 按版本删除未执行草稿并清除绑定账本     |
 | `POST`   | `/media-governance/tasks/:taskId/sources/magnet`                   | 脱敏添加磁链来源                       |
 | `POST`   | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件         |
 | `PUT`    | `/media-governance/tasks/:taskId/sources/:sourceId/classification` | 修订来源角色和内容分类                 |

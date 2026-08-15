@@ -116,7 +116,7 @@ export class MediaGovernanceController {
 
   @Delete(':taskId')
   @MediaGovernancePermission('Media:Governance:Create')
-  @ApiOperation({ summary: '放弃尚未开始且没有来源的任务草稿' })
+  @ApiOperation({ summary: '删除未进入执行阶段的草稿并清除本地账本' })
   async discard(
     @Param('taskId') taskId: string,
     @Query() query: MediaGovernanceRevisionCommandDto,

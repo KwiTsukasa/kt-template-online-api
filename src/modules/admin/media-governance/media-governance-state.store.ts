@@ -16,6 +16,8 @@ import {
   MediaGovernanceAgentSessionEntity,
   MediaGovernanceDescriptorRevisionEntity,
   MediaGovernanceEventEntity,
+  MediaGovernanceMetadataExceptionEntity,
+  MediaGovernanceOperatorDecisionEntity,
   MediaGovernanceOutboxEntity,
   MediaGovernanceRunEntity,
   MediaGovernanceSourceEntity,
@@ -57,7 +59,11 @@ export interface MediaGovernanceStateStore {
     runId: string;
     taskId: string;
   }): Promise<Record<string, unknown>>;
-  deleteTask?(taskId: string): Promise<void>;
+  deleteTask?(input: {
+    expectedRevision: number;
+    expectedWorkItemId: null | string;
+    taskId: string;
+  }): Promise<{ clearedWorkItemId: null | string }>;
   isReady(): boolean;
   loadTasks(): Promise<MediaGovernanceStoredTask[]>;
   pendingRunDispatches?(): Promise<MediaGovernanceExecutionEnvelope[]>;
@@ -146,13 +152,65 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     );
   }
 
-  async deleteTask(taskId: string) {
+  async deleteTask(input: {
+    expectedRevision: number;
+    expectedWorkItemId: null | string;
+    taskId: string;
+  }) {
     this.assertReady();
-    await this.dataSource.transaction(async (manager) => {
-      await manager.getRepository(MediaGovernanceUnitEntity).delete({ taskId });
+    return this.dataSource.transaction(async (manager) => {
+      const taskRepository = manager.getRepository(MediaGovernanceTaskEntity);
+      const unitRepository = manager.getRepository(MediaGovernanceUnitEntity);
+      const sourceRepository = manager.getRepository(
+        MediaGovernanceSourceEntity,
+      );
+      const task = await taskRepository.findOneBy({ id: input.taskId });
+      if (!task) throw new Error('media-governance-task-not-found');
+      if (
+        task.revision !== input.expectedRevision ||
+        task.workItemId !== input.expectedWorkItemId
+      ) {
+        throw new Error('media-governance-task-delete-identity-mismatch');
+      }
+
+      const units = (
+        await unitRepository.find({ where: { taskId: input.taskId } })
+      ).filter((unit) => unit.taskId === input.taskId);
+      const sources = (
+        await sourceRepository.find({ where: { taskId: input.taskId } })
+      ).filter((source) => source.taskId === input.taskId);
+      const metadataExceptionRepository = manager.getRepository(
+        MediaGovernanceMetadataExceptionEntity,
+      );
+      for (const unit of units) {
+        await metadataExceptionRepository.delete({ unitId: unit.id });
+      }
+      const descriptorRepository = manager.getRepository(
+        MediaGovernanceDescriptorRevisionEntity,
+      );
+      for (const source of sources) {
+        await descriptorRepository.delete({ sourceId: source.id });
+      }
+
       await manager
-        .getRepository(MediaGovernanceTaskEntity)
-        .delete({ id: taskId });
+        .getRepository(MediaGovernanceOperatorDecisionEntity)
+        .delete({ taskId: input.taskId });
+      await manager
+        .getRepository(MediaGovernanceAgentSessionEntity)
+        .delete({ taskId: input.taskId });
+      await manager
+        .getRepository(MediaGovernanceOutboxEntity)
+        .delete({ taskId: input.taskId });
+      await manager
+        .getRepository(MediaGovernanceEventEntity)
+        .delete({ taskId: input.taskId });
+      await manager
+        .getRepository(MediaGovernanceRunEntity)
+        .delete({ taskId: input.taskId });
+      await sourceRepository.delete({ taskId: input.taskId });
+      await unitRepository.delete({ taskId: input.taskId });
+      await taskRepository.delete({ id: input.taskId });
+      return { clearedWorkItemId: task.workItemId };
     });
   }
 

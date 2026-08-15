@@ -3,6 +3,8 @@ import {
   MediaGovernanceAgentSessionEntity,
   MediaGovernanceDescriptorRevisionEntity,
   MediaGovernanceEventEntity,
+  MediaGovernanceMetadataExceptionEntity,
+  MediaGovernanceOperatorDecisionEntity,
   MediaGovernanceOutboxEntity,
   MediaGovernanceRunEntity,
   MediaGovernanceSourceEntity,
@@ -77,6 +79,10 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     const runs = new MemoryRepository<MediaGovernanceRunEntity>();
     const descriptors =
       new MemoryRepository<MediaGovernanceDescriptorRevisionEntity>();
+    const metadataExceptions =
+      new MemoryRepository<MediaGovernanceMetadataExceptionEntity>();
+    const operatorDecisions =
+      new MemoryRepository<MediaGovernanceOperatorDecisionEntity>();
     const repositories = new Map<unknown, MemoryRepository<{ id: string }>>([
       [MediaGovernanceTaskEntity, tasks],
       [MediaGovernanceUnitEntity, units],
@@ -86,6 +92,8 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       [MediaGovernanceOutboxEntity, outbox],
       [MediaGovernanceRunEntity, runs],
       [MediaGovernanceDescriptorRevisionEntity, descriptors],
+      [MediaGovernanceMetadataExceptionEntity, metadataExceptions],
+      [MediaGovernanceOperatorDecisionEntity, operatorDecisions],
     ]);
     const dataSource = {
       transaction: async (work: (manager: unknown) => Promise<unknown>) =>
@@ -375,6 +383,72 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     );
     await expect(store.consumePlanGrant(planGrant)).rejects.toThrow(
       'duplicate',
+    );
+
+    await metadataExceptions.save({
+      id: 'metadata-exception-delete-fixture',
+      unitId: task.units[0].id,
+    } as MediaGovernanceMetadataExceptionEntity);
+    await operatorDecisions.save({
+      id: 'operator-decision-delete-fixture',
+      taskId: task.id,
+    } as MediaGovernanceOperatorDecisionEntity);
+    const persistedSourceIds = new Set(
+      [...sources.rows.values()]
+        .filter((row) => row.taskId === task.id)
+        .map((row) => row.id),
+    );
+
+    await expect(
+      store.deleteTask({
+        expectedRevision: task.revision - 1,
+        expectedWorkItemId: 'media-063',
+        taskId: task.id,
+      }),
+    ).rejects.toThrow('identity-mismatch');
+    expect(tasks.rows.has(task.id)).toBe(true);
+
+    await expect(
+      store.deleteTask({
+        expectedRevision: task.revision,
+        expectedWorkItemId: 'media-063',
+        taskId: task.id,
+      }),
+    ).resolves.toEqual({ clearedWorkItemId: 'media-063' });
+    expect(tasks.rows.has(task.id)).toBe(false);
+    expect([...units.rows.values()].some((row) => row.taskId === task.id)).toBe(
+      false,
+    );
+    expect(
+      [...sources.rows.values()].some((row) => row.taskId === task.id),
+    ).toBe(false);
+    expect(
+      [...descriptors.rows.values()].some(
+        (row) => persistedSourceIds.has(row.sourceId),
+      ),
+    ).toBe(false);
+    expect(
+      [...sessions.rows.values()].some((row) => row.taskId === task.id),
+    ).toBe(false);
+    expect([...runs.rows.values()].some((row) => row.taskId === task.id)).toBe(
+      false,
+    );
+    expect(
+      [...events.rows.values()].some((row) => row.taskId === task.id),
+    ).toBe(false);
+    expect(
+      [...outbox.rows.values()].some((row) => row.taskId === task.id),
+    ).toBe(false);
+    expect(metadataExceptions.rows.size).toBe(0);
+    expect(operatorDecisions.rows.size).toBe(0);
+
+    const replacement = await service.create({
+      mediaType: 'movie',
+      titleHint: '账本编号复用验证',
+    });
+    await store.saveTask(replacement);
+    await expect(store.reserveWorkItemId(replacement.id)).resolves.toBe(
+      'media-063',
     );
   });
 });

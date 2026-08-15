@@ -244,6 +244,8 @@ export type MediaGovernanceTask = {
   runState: 'blocked' | 'draft' | 'queued' | 'running' | 'succeeded';
   semanticProjection: {
     currentActionLabel: string;
+    discardAllowed: boolean;
+    discardReasonLabel: null | string;
     gateReasonLabel: string;
     metadataStatusLabel: string;
     runStateLabel: string;
@@ -396,6 +398,8 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       runState: 'draft',
       semanticProjection: {
         currentActionLabel: '等待补充来源',
+        discardAllowed: true,
+        discardReasonLabel: null,
         gateReasonLabel: '无阻塞',
         metadataStatusLabel: '待校验',
         runStateLabel: '草稿',
@@ -493,36 +497,16 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   async discardTask(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
-  ): Promise<{ deletedTaskId: string }> {
+  ): Promise<{
+    clearedWorkItemId: null | string;
+    deletedTaskId: string;
+  }> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
-    const pristineUnits = task.units.every(
-      (unit) =>
-        unit.evidenceSha256 === null &&
-        unit.localAcceptedAt === null &&
-        unit.subtitleContract === null,
-    );
-    if (
-      task.stage !== 'intake' ||
-      task.runState !== 'draft' ||
-      task.activeRunId !== null ||
-      task.sources.length > 0 ||
-      task.workItemId !== null ||
-      task.payloadSeal !== null ||
-      task.sealedPlan !== null ||
-      task.sealedPlanSha256 !== null ||
-      task.closedAt !== null ||
-      task.agentSession !== null ||
-      task.metadataIdentity !== null ||
-      task.metadataStatus !== 'pending' ||
-      !pristineUnits
-    ) {
-      throwVbenError(
-        '只能删除尚未开始、没有来源且未绑定本地账本的空草稿',
-        HttpStatus.CONFLICT,
-      );
-    }
+    const discardReason = this.getDiscardDisabledReason(task);
+    if (discardReason) throwVbenError(discardReason, HttpStatus.CONFLICT);
 
+    let clearedWorkItemId = task.workItemId;
     if (this.stateStore) {
       if (!this.databaseReady() || !this.stateStore.deleteTask) {
         throwVbenError(
@@ -531,7 +515,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         );
       }
       try {
-        await this.stateStore.deleteTask(task.id);
+        const receipt = await this.stateStore.deleteTask({
+          expectedRevision: task.revision,
+          expectedWorkItemId: task.workItemId,
+          taskId: task.id,
+        });
+        clearedWorkItemId = receipt.clearedWorkItemId;
       } catch {
         throwVbenError(
           '媒体治理数据库删除链路暂不可用',
@@ -549,7 +538,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       revision: task.revision,
       taskId: task.id,
     });
-    return { deletedTaskId: task.id };
+    return { clearedWorkItemId, deletedTaskId: task.id };
   }
 
   async redeemDescriptor(
@@ -3475,6 +3464,34 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
+  private getDiscardDisabledReason(task: MediaGovernanceTask) {
+    if (task.stage !== 'intake' || task.runState !== 'draft') {
+      return '仅接收资料阶段的草稿可以删除。';
+    }
+    if (
+      task.activeRunId !== null ||
+      task.payloadSeal !== null ||
+      task.sealedPlan !== null ||
+      task.sealedPlanSha256 !== null
+    ) {
+      return '任务已进入执行阶段，不能删除。';
+    }
+    if (
+      task.closedAt !== null ||
+      task.closedMode !== null ||
+      task.agentSession !== null ||
+      task.metadataIdentity !== null ||
+      task.metadataStatus !== 'pending' ||
+      task.units.some(
+        (unit) =>
+          unit.evidenceSha256 !== null || unit.localAcceptedAt !== null,
+      )
+    ) {
+      return '任务已有治理结果或验收证据，不能删除。';
+    }
+    return null;
+  }
+
   private async reserveExecution(
     task: MediaGovernanceTask,
     action: MediaGovernanceExecutorAction,
@@ -3834,6 +3851,8 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       persistenceMode: 'database',
       semanticProjection: {
         currentActionLabel: '',
+        discardAllowed: false,
+        discardReasonLabel: '正在恢复任务状态',
         gateReasonLabel: '',
         metadataStatusLabel: '',
         runStateLabel: '',
@@ -3943,8 +3962,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       'requires-agent': '需要人工治理',
       verified: '已验证',
     };
+    const discardReasonLabel = this.getDiscardDisabledReason(task);
     task.semanticProjection = {
       currentActionLabel: task.nextCommandLabel,
+      discardAllowed: discardReasonLabel === null,
+      discardReasonLabel,
       gateReasonLabel: task.gateReason ?? '无阻塞',
       metadataStatusLabel: metadataLabels[task.metadataStatus],
       runStateLabel: runStateLabels[task.runState],

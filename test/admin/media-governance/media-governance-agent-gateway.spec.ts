@@ -13,7 +13,7 @@ import { MediaGovernanceService } from '../../../src/modules/admin/media-governa
 describe('MediaGovernanceService CodexAgent gateway adapter', () => {
   afterEach(() => jest.restoreAllMocks());
 
-  async function fixture() {
+  async function fixture(options: { prepareMetadataStage?: boolean } = {}) {
     const startTurn = jest.fn(async (request) => {
       const policy = buildMediaCodexAgentPolicy(request.taskId);
       const capsule = buildMediaCodexAgentCapsule(request, policy);
@@ -47,12 +47,144 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
       seasonNumbers: ['S01'],
       titleHint: 'Agent 网关测试作品',
     });
-    task.governanceProfile = 'embedded';
-    task.metadataStatus = 'requires-agent';
-    task.runState = 'blocked';
-    task.stage = 'metadata';
+    if (options.prepareMetadataStage !== false) {
+      task.governanceProfile = 'embedded';
+      task.metadataStatus = 'requires-agent';
+      task.runState = 'blocked';
+      task.stage = 'metadata';
+    }
     return { gateway, service, startTurn, task };
   }
+
+  it('starts a read-only Agent turn from an intake draft without a governance profile', async () => {
+    const { service, startTurn, task } = await fixture({
+      prepareMetadataStage: false,
+    });
+
+    const session = await service.startAgent(task.id, { expectedRevision: 1 });
+    const request = startTurn.mock.calls[0]?.[0];
+
+    expect(request).toMatchObject({
+      currentStage: 'intake',
+      replayKey: `${task.id}-agent-r2`,
+      taskRevision: 2,
+    });
+    expect(request?.compactContext).toMatchObject({
+      workflow: {
+        activeRun: false,
+        hasGovernanceProfile: false,
+        hasSealedPlan: false,
+        runState: 'draft',
+        stage: 'intake',
+      },
+    });
+    expect(request?.operatorCommand).toContain(
+      '缺少治理类型、来源或清单时语义化列出缺口',
+    );
+    await expect(
+      service.agentToolCall({
+        arguments: {},
+        capsuleSha256: session!.capsuleSha256,
+        manifestSha256: task.inputSnapshotSha256,
+        policySha256: session!.policySha256,
+        taskId: task.id,
+        taskRevision: 2,
+        tool: 'media.identity.read',
+      }),
+    ).resolves.toMatchObject({ taskId: task.id });
+  });
+
+  it.each([
+    ['intake', '接收资料阶段只核对作品名'],
+    ['download', 'NAS 下载阶段只核对来源健康'],
+    ['governance', '本地治理阶段核对身份'],
+    ['metadata', '元数据阶段按 A/B/C 三档核对缺口'],
+    ['acceptance', '独立验收阶段只解释现有证据'],
+  ] as const)(
+    'binds the %s stage to its trusted operator pre-prompt',
+    async (stage, expectedInstruction) => {
+      const { service, startTurn, task } = await fixture({
+        prepareMetadataStage: false,
+      });
+      task.stage = stage;
+
+      await service.startAgent(task.id, { expectedRevision: 1 });
+
+      expect(startTurn.mock.calls[0]?.[0]).toMatchObject({
+        currentStage: stage,
+      });
+      expect(startTurn.mock.calls[0]?.[0].operatorCommand).toContain(
+        expectedInstruction,
+      );
+    },
+  );
+
+  it('keeps an active media run immutable while Agent works as a sidecar', async () => {
+    const { service, startTurn, task } = await fixture({
+      prepareMetadataStage: false,
+    });
+    task.activeRunId = 'media-run-active-download-001';
+    task.runState = 'running';
+    task.stage = 'download';
+    const inputSnapshotSha256 = task.inputSnapshotSha256;
+    const nextCommandLabel = task.nextCommandLabel;
+
+    const session = await service.startAgent(task.id, { expectedRevision: 1 });
+
+    expect(startTurn.mock.calls[0]?.[0]).toMatchObject({
+      currentStage: 'download',
+      manifestSha256: inputSnapshotSha256,
+      taskRevision: 1,
+    });
+    expect(startTurn.mock.calls[0]?.[0].replayKey).toMatch(
+      new RegExp(`^${task.id}-agent-a[a-f0-9]{12}$`),
+    );
+    expect(task).toMatchObject({
+      activeRunId: 'media-run-active-download-001',
+      inputSnapshotSha256,
+      nextCommandLabel,
+      revision: 1,
+      runState: 'running',
+      stage: 'download',
+    });
+
+    await service.applyAgentEvent({
+      capsuleSha256: session!.capsuleSha256,
+      eventId: 'media-agent-event-sidecar-blocked-001',
+      observedAt: '2026-08-11T00:00:01.000Z',
+      planSha256: null,
+      policySha256: session!.policySha256,
+      sequence: 1,
+      status: 'blocked',
+      summary: '旁路核对缺少下载清单事实',
+      taskId: task.id,
+      taskRevision: 1,
+      threadId: session!.threadId,
+      turnId: 'turn-media-agent-001',
+      type: 'agent-blocked',
+    });
+    expect(task).toMatchObject({
+      activeRunId: 'media-run-active-download-001',
+      nextCommandLabel,
+      revision: 1,
+      runState: 'running',
+      stage: 'download',
+    });
+    expect(task.agentSession).toMatchObject({ status: 'failed' });
+  });
+
+  it('rejects a new Agent turn after the task is closed', async () => {
+    const { service, startTurn, task } = await fixture({
+      prepareMetadataStage: false,
+    });
+    task.runState = 'succeeded';
+    task.stage = 'closed';
+
+    await expect(
+      service.startAgent(task.id, { expectedRevision: 1 }),
+    ).rejects.toThrow(HttpException);
+    expect(startTurn).not.toHaveBeenCalled();
+  });
 
   it('binds one revision to one gateway turn and seals a task-local plan', async () => {
     const { service, startTurn, task } = await fixture();

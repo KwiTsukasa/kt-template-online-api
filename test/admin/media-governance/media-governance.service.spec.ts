@@ -145,6 +145,67 @@ describe('MediaGovernanceService', () => {
     expect(updated.sources[0]).toEqual(sourceBefore);
   });
 
+  it('updates draft media units while removing only invalid source mappings', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01', 'S02'],
+      titleHint: '结构修正前',
+    });
+    await service.addMagnetSource(task.id, {
+      contentKind: 'bundled_sidecar_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:1123456789abcdef0123456789abcdef01234567',
+      releaseGroup: 'TestGroup',
+      seasonNumbers: ['S01', 'S02'],
+      sourceRole: 'primary_media',
+    });
+    const [seasonOneUnit, seasonTwoUnit] = task.units;
+    task.sources[0].selectedFileMappings = [
+      {
+        episodeNumber: 1,
+        fileRole: 'video',
+        index: 0,
+        language: null,
+        unitId: seasonOneUnit.id,
+      },
+      {
+        episodeNumber: 1,
+        fileRole: 'video',
+        index: 1,
+        language: null,
+        unitId: seasonTwoUnit.id,
+      },
+    ];
+
+    const updated = await service.updateIdentity(task.id, {
+      expectedRevision: 2,
+      mediaType: 'tv',
+      seasonNumbers: ['S00', 'S02'],
+      titleHint: '结构修正后',
+    });
+
+    expect(updated).toMatchObject({
+      mediaType: 'tv',
+      revision: 3,
+      titleHint: '结构修正后',
+    });
+    expect(updated.units.map((unit) => unit.seasonNumber)).toEqual([
+      'S00',
+      'S02',
+    ]);
+    expect(updated.units.find((unit) => unit.seasonNumber === 'S02')?.id).toBe(
+      seasonTwoUnit.id,
+    );
+    expect(updated.sources[0].seasonNumbers).toEqual(['S02']);
+    expect(updated.sources[0].selectedFileMappings).toEqual([
+      expect.objectContaining({ index: 1, unitId: seasonTwoUnit.id }),
+    ]);
+    expect(updated.identityPreview).toMatchObject({
+      seasonLabel: 'S00、S02',
+      title: '结构修正后',
+    });
+  });
+
   it('searches, edits and discards only a pristine draft', async () => {
     const task = await service.create({
       mediaType: 'tv',
@@ -219,8 +280,7 @@ describe('MediaGovernanceService', () => {
     await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
       expectedRevision: 1,
-      magnetUri:
-        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
       seasonNumbers: ['S01'],
       sourceRole: 'primary_media',
     });
@@ -263,8 +323,7 @@ describe('MediaGovernanceService', () => {
     const source = await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
       expectedRevision: 1,
-      magnetUri:
-        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
       sourceRole: 'primary_media',
     });
     task.stage = 'metadata';

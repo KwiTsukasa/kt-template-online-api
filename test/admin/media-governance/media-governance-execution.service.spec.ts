@@ -318,8 +318,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     const source = await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
       expectedRevision: 1,
-      magnetUri:
-        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
       seasonNumbers: ['S01'],
       sourceRole: 'primary_media',
     });
@@ -845,8 +844,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     const source = await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
       expectedRevision: 1,
-      magnetUri:
-        'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
       sourceRole: 'primary_media',
     });
     task.stage = 'metadata';
@@ -1287,7 +1285,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     );
   });
 
-  it('rechecks deferred fnOS identity before escalating metadata to Agent', async () => {
+  it('rechecks deferred fnOS identity through the deterministic metadata path', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();
     const task = await service.create({
@@ -1354,13 +1352,6 @@ describe('MediaGovernanceService production execution adapter', () => {
       runState: 'blocked',
       stage: 'metadata',
     });
-    await expect(
-      service.startAgent(task.id, { expectedRevision: 3 }),
-    ).rejects.toMatchObject({
-      response: { msg: '当前任务应先重新采集元数据事实' },
-      status: 409,
-    });
-
     await service.startMetadataVerification(task.id, { expectedRevision: 3 });
     const retryEnvelope = dispatch.mock.calls.at(-1)?.[0];
     expect(retryEnvelope).toMatchObject({
@@ -1523,13 +1514,6 @@ describe('MediaGovernanceService production execution adapter', () => {
         'metadata.local-nfo',
         'artwork.poster',
       ];
-
-      await expect(
-        service.startAgent(task.id, { expectedRevision: 1 }),
-      ).rejects.toMatchObject({
-        response: { msg: '当前缺口应先执行确定性有界元数据修复' },
-        status: 409,
-      });
 
       await service.startMetadataRepair(task.id, { expectedRevision: 1 });
       const envelope = dispatch.mock.calls.at(-1)?.[0];
@@ -1741,7 +1725,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     },
   );
 
-  it('recollects legacy empty metadata facts before repair or Agent routing', async () => {
+  it('recollects legacy empty metadata facts through deterministic verification', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();
     const task = await service.create({
@@ -1756,12 +1740,6 @@ describe('MediaGovernanceService production execution adapter', () => {
     task.sealedPlanSha256 = 'a'.repeat(64);
     task.stage = 'metadata';
 
-    await expect(
-      service.startAgent(task.id, { expectedRevision: 1 }),
-    ).rejects.toMatchObject({
-      response: { msg: '当前任务应先重新采集元数据事实' },
-      status: 409,
-    });
     await service.startMetadataVerification(task.id, { expectedRevision: 1 });
 
     expect(dispatch).toHaveBeenLastCalledWith(

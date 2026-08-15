@@ -197,6 +197,24 @@ export class MediaGovernanceRevisionCommandDto {
 }
 
 export class MediaGovernanceTaskIdentityUpdateDto extends MediaGovernanceRevisionCommandDto {
+  @ApiPropertyOptional({ enum: MEDIA_GOVERNANCE_MEDIA_TYPES })
+  @IsOptional()
+  @IsIn(MEDIA_GOVERNANCE_MEDIA_TYPES)
+  mediaType?: MediaGovernanceMediaType;
+
+  @ApiPropertyOptional({
+    description: '修正后的 TV 季号；电影或剧场版传空数组',
+    example: ['S00', 'S01'],
+    maxItems: 100,
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @Matches(SEASON_NUMBER_PATTERN, { each: true })
+  seasonNumbers?: string[];
+
   @ApiPropertyOptional({
     description: '媒体资料库唯一作品编号，填错会关联到另一部作品',
     nullable: true,

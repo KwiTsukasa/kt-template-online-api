@@ -113,6 +113,36 @@ describe('MediaGovernanceController', () => {
     });
   });
 
+  it('starts a CodexAgent turn from an intake draft over real HTTP', async () => {
+    const created = await request(apiUrl)
+      .post('/media-governance/tasks')
+      .send({
+        mediaType: 'tv',
+        seasonNumbers: ['S01'],
+        titleHint: '草稿 Agent 入口接口测试',
+      })
+      .expect(201);
+
+    const agent = await request(apiUrl)
+      .post(`/media-governance/tasks/${created.body.data.id}/agent/start`)
+      .send({ expectedRevision: 1 })
+      .expect(201)
+      .expect('Cache-Control', 'no-store');
+
+    expect(agent.body).toMatchObject({
+      code: 200,
+      data: {
+        currentActionLabel: '正在核对媒体身份与季级字幕合同',
+        policyBoundaryLabel: '五层边界已启用；NAS、媒体和云端写适配器保持关闭',
+        status: 'running',
+        statusLabel: 'Agent 正在治理',
+      },
+      msg: '操作成功',
+    });
+    expect(agent.body.data.threadId).toMatch(/^media-agent-/u);
+    expect(agent.body).not.toHaveProperty('err');
+  });
+
   it.each([
     [
       'TV 缺少季号',
@@ -176,7 +206,10 @@ describe('MediaGovernanceController', () => {
       .put(`/media-governance/tasks/${taskId}/identity`)
       .send({
         expectedRevision: 1,
+        mediaType: 'tv',
         providerRef: { provider: 'tmdb', providerId: '63145' },
+        seasonNumbers: ['S00', 'S02'],
+        titleHint: '下载前身份接口已修正',
       })
       .expect(200)
       .expect('Cache-Control', 'no-store');
@@ -184,9 +217,15 @@ describe('MediaGovernanceController', () => {
     expect(updated.body.data).toMatchObject({
       providerRef: { provider: 'tmdb', providerId: '63145' },
       releaseYear: 2015,
+      mediaType: 'tv',
       revision: 2,
       stage: 'intake',
+      titleHint: '下载前身份接口已修正',
     });
+    expect(updated.body.data.units).toEqual([
+      expect.objectContaining({ seasonNumber: 'S00', unitKind: 'season' }),
+      expect.objectContaining({ seasonNumber: 'S02', unitKind: 'season' }),
+    ]);
 
     await request(apiUrl)
       .put(`/media-governance/tasks/${taskId}/identity`)
@@ -316,7 +355,9 @@ describe('MediaGovernanceController', () => {
     });
 
     const removed = await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/sources/${failedSourceId}/remove`)
+      .post(
+        `/media-governance/tasks/${taskId}/sources/${failedSourceId}/remove`,
+      )
       .send({ expectedRevision: 3 })
       .expect(201);
     expect(removed.body.data).toMatchObject({

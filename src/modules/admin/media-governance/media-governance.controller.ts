@@ -346,7 +346,7 @@ export class MediaGovernanceController {
 
   @Post(':taskId/agent/start')
   @MediaGovernancePermission('Media:Governance:AgentStart')
-  @ApiOperation({ summary: '启动有界 CodexAgent 人工治理' })
+  @ApiOperation({ summary: '从任意未完成阶段启动有界 CodexAgent 治理' })
   async startAgent(
     @Param('taskId') taskId: string,
     @Body() body: MediaGovernanceRevisionCommandDto,

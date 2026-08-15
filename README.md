@@ -223,8 +223,9 @@ Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，�
 和绑定的本地账本一起删除。API 在同一数据库
 事务中清理 Task、Unit、Source、Run、Event、Outbox、Agent 与关联决策/例外记录，并返回
 `clearedWorkItemId`；已有活动 Run、载荷/计划密封、元数据成果或验收证据的任务仍返回冲突。
-草稿在下载前可用当前 revision 修正必填 `providerRef` 和可选 `releaseYear`；已有来源、
-来源健康与阻塞状态保持不变，下载、治理或 Agent 已开始后固定拒绝修改。
+草稿在下载前可用当前 revision 修正作品名、媒体类型、季号以及可选的 `providerRef`/
+`releaseYear`；已有来源、来源健康与阻塞状态保持不变，不再属于修正后 Unit 的旧映射会
+同步清除。下载、治理或 Agent 已开始后固定拒绝修改。
 元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据，先执行最多两次的确定性
 LocalNFO/海报有界修复，再将仍未闭合的真实歧义交给 CodexAgent；最终闭环模式只由
 独立验收判定。
@@ -253,7 +254,10 @@ Task/thread，而不是只依赖进程内投影。gateway 在创建 App Server t
 先确认内部回调为 `persistenceMode=database` 且 `status=ready`。API 会先持久化带精确
 policy/capsule SHA 的启动预留，才调用 gateway；首个 thread 映射回调可在启动响应返回
 前原子绑定，响应超时则按同一 Task/revision 从 gateway 恢复。浏览器不会接触 Codex
-登录态或原始协议。异常 Agent 回合投影为 `failed`，与真实候选歧义的
+登录态或原始协议。除 `closed` 外，操作员可从任意阶段启动 Agent；每个阶段绑定独立
+预提示词。接收资料、NAS 下载、独立验收及存在活动媒体 Run 时只允许旁路读取，不得
+提交写计划或覆盖主 Run 的 revision、进度和状态；只有无活动 Run 的本地治理/元数据
+阶段可提交任务边界内的密封计划。异常 Agent 回合投影为 `failed`，与真实候选歧义的
 `needs-operator` 分离；再次调用 `agent/start` 只会请求 `restart-failed-turn`，gateway
 回读旧 turn 为 `failed/interrupted` 后才以新 revision、replay key、capsule 和 thread
 重试，事件序号继续递增，operator decision 不能绕过该门禁。Agent 结构化输出的
@@ -292,9 +296,10 @@ payload-ready 载荷重试，不会重新下载。
 阶段重试；API 保留密封计划并创建新的 Run 和 replay key，不会把业务核验不通过误当成
 执行失败重试。元数据执行器会在治理完成后有界等待 fnOS 回填作品身份；若旧 Run 已在
 回填完成前只返回 `identity.provider/providerId` 两项缺口，API 允许从同一密封计划重新
-采集元数据事实，并在此之前拒绝误启动 CodexAgent，不重跑下载或本地治理。该延迟
-身份刷新每个 Unit 最多一次，并把 `identityRefreshAttempts` 保存在元数据投影中；一次
-刷新后仍缺身份时固定转入 CodexAgent，禁止第三次相同 Run。升级前已处于这一精确缺口
+采集元数据事实，不重跑下载或本地治理；该确定性入口与任意阶段的 Agent 旁路入口彼此
+独立，启动 Agent 不会消费或覆盖媒体 Run。延迟身份刷新每个 Unit 最多一次，并把
+`identityRefreshAttempts` 保存在元数据投影中；一次刷新后仍缺身份时禁止第三次相同
+Run，并由 Agent 的类型化身份修正收口。升级前已处于这一精确缺口
 且尚无计数字段的持久化任务按刷新已用完迁移，避免 API 重启重新打开循环。
 内嵌字幕任务在唯一 TMDB 身份已闭合且只缺 LocalNFO、作品/季海报时，第一次确定性生成
 属于自动元数据补齐，独立验收后记为 `automatic`；第二次尝试、其他 profile 或额外缺口

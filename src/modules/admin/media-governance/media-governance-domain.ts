@@ -279,7 +279,7 @@ export interface MediaGovernanceTaskProjection {
   closedMode: 'agent_verified' | 'automatic' | 'bounded_repair' | null;
   declaredUnitIds: string[];
   gateReason: null | string;
-  governanceProfile: MediaGovernanceProfile;
+  governanceProfile: MediaGovernanceProfile | null;
   id: string;
   inputSnapshotSha256: string;
   mediaType: 'movie' | 'theatrical' | 'tv';
@@ -674,10 +674,7 @@ export function decideSourceHealth(input: {
       return { health: 'probing', reason: null };
     }
     const averageBytesPerSecond = input.bytesDelta / input.elapsedSeconds;
-    const remainingBytes = Math.max(
-      0,
-      input.selectedBytes - input.bytesDelta,
-    );
+    const remainingBytes = Math.max(0, input.selectedBytes - input.bytesDelta);
     if (remainingBytes / averageBytesPerSecond > 24 * 60 * 60) {
       return { health: 'degraded', reason: 'insufficient_throughput' };
     }

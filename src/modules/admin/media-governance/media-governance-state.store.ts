@@ -746,6 +746,22 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         workItemId: task.workItemId,
       }),
     );
+    const declaredUnitIds = new Set(task.units.map((unit) => unit.id));
+    const persistedUnits = (
+      await unitRepository.find({ where: { taskId: task.id } })
+    ).filter((unit) => unit.taskId === task.id);
+    const staleUnits = persistedUnits.filter(
+      (unit) => !declaredUnitIds.has(unit.id),
+    );
+    for (const unit of staleUnits) {
+      await manager
+        .getRepository(MediaGovernanceMetadataExceptionEntity)
+        .delete({ unitId: unit.id });
+      await manager
+        .getRepository(MediaGovernanceOperatorDecisionEntity)
+        .delete({ taskId: task.id, unitId: unit.id });
+      await unitRepository.delete({ id: unit.id });
+    }
     if (task.units.length > 0) {
       await unitRepository.save(
         task.units.map((unit) =>

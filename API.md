@@ -217,7 +217,7 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `GET`    | `/media-governance/tasks/page`                                     | 分页和语义过滤任务                     |
 | `GET`    | `/media-governance/tasks/summary`                                  | 查询任务、下载、治理和 Agent 聚合      |
 | `GET`    | `/media-governance/tasks/:taskId`                                  | 查询权威任务详情投影                   |
-| `PUT`    | `/media-governance/tasks/:taskId/identity`                         | 下载前修正资料库身份与年份             |
+| `PUT`    | `/media-governance/tasks/:taskId/identity`                         | 下载前修正作品类型、季号与资料身份     |
 | `DELETE` | `/media-governance/tasks/:taskId?expectedRevision=:revision`       | 按版本删除未执行任务并清除绑定账本     |
 | `POST`   | `/media-governance/tasks/:taskId/sources/magnet`                   | 脱敏添加磁链来源                       |
 | `POST`   | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件         |
@@ -234,7 +234,7 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `POST`   | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验              |
 | `POST`   | `/media-governance/tasks/:taskId/metadata/repair`                  | 启动最多两次的确定性有界元数据修复     |
 | `POST`   | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理             |
-| `POST`   | `/media-governance/tasks/:taskId/agent/start`                      | 启动或安全重试五层边界 CodexAgent      |
+| `POST`   | `/media-governance/tasks/:taskId/agent/start`                      | 任意未完成阶段启动/重试 CodexAgent     |
 | `GET`    | `/media-governance/tasks/:taskId/agent/session`                    | 查询 Agent 语义会话                    |
 | `POST`   | `/media-governance/tasks/:taskId/agent/operator-decision`          | 提交人工候选选择并闭环                 |
 | `GET`    | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
@@ -270,7 +270,8 @@ NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 A
 所有命令请求必须携带 `expectedRevision`，陈旧版本返回 409 且不执行。TV 至少声明一个
 `Sxx` 季号，特别篇/番外篇使用 `S00`；Movie/Theatrical 不填写季号。`providerRef` 和
 `releaseYear` 是带格式校验和中文引导的身份消歧字段；创建时可暂缺，下载前可通过
-`PUT /identity` 绑定当前 revision 修正，其中 `providerRef` 必填、年份可选。该操作只接受
+`PUT /identity` 绑定当前 revision 修正作品名、媒体类型、季号、`providerRef` 或年份，
+且至少提供一项。该操作只接受
 `intake` 的 `draft/blocked` 任务，保留已有来源及健康/阻塞状态；下载、治理、Agent、载荷
 或计划任一已经开始后失败关闭。`workItemId` 是内部账本与
 本地事务身份：导入存量任务时可显式绑定；未来新任务省略时，API 会在首次本地治理前
@@ -299,9 +300,9 @@ revision 和 replay key。治理完成后 fnOS 尚未稳定回填身份时，若
 严格只有 `identity.provider/providerId`、尚未执行元数据修复且没有 C 级缺口，可从同一
 密封计划重新采集元数据事实，不会重跑下载或重做本地事务。延迟身份刷新每个 Unit
 最多一次，次数持久化为 `metadataProjection.identityRefreshAttempts`；刷新后仍缺身份
-时 `/metadata/verify` 拒绝第三次相同尝试，`/agent/start` 进入类型化身份修复。升级前
-已处于该精确缺口且缺少计数字段的任务按一次已消费迁移。普通元数据缺口或独立验收
-不通过仍按原门禁处理，不能借此绕过。
+时 `/metadata/verify` 拒绝第三次相同尝试，并由 Agent 的类型化身份修正收口。确定性
+刷新与任意阶段 Agent 入口互不覆盖；普通元数据缺口或独立验收仍按原门禁处理。
+升级前已处于该精确缺口且缺少计数字段的任务按一次已消费迁移。
 内嵌字幕 profile 已获得唯一 TMDB 身份、且缺口严格只有 LocalNFO 与作品/季海报时，
 第一次确定性元数据生成记为自动补齐；其独立验收通过后保持 `closedMode=automatic`。
 其他 profile、第二次尝试或更广的缺口仍按 `bounded_repair`/Agent 分支计数，不能借自动
@@ -323,7 +324,11 @@ Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓�
 事件则与 Task/session 水位在同一事务写入。源码同时提供真实 CodexAgent outbound
 adapter 与 NAS gateway 内部接口；只有同时配置
 `MEDIA_CODEX_AGENT_GATEWAY_BASE_URL` 和 `MEDIA_CODEX_AGENT_INTERNAL_SECRET` 时，
-`agent/start` 才会转入真实 gateway，否则保持失败关闭。gateway 只监听 NAS 私有
+`agent/start` 才会转入真实 gateway，否则保持失败关闭。除 `closed` 外，任意阶段均可
+启动 Agent，并由阶段专用预提示词约束能力：接收资料、NAS 下载、独立验收以及存在活动
+媒体 Run 时只能使用类型化只读工具，不能提交密封写计划，也不能改变主 Run 的 revision、
+进度或状态；只有无活动 Run 的本地治理/元数据阶段可以提交任务 staging 边界内的密封
+计划。gateway 只监听 NAS 私有
 k3d bridge 地址，
 内部提供 `GET /internal/media-codex-agent/health`、
 `POST /internal/media-codex-agent/tasks/:taskId/turns` 和

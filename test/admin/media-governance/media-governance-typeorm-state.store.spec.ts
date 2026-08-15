@@ -423,8 +423,8 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       [...sources.rows.values()].some((row) => row.taskId === task.id),
     ).toBe(false);
     expect(
-      [...descriptors.rows.values()].some(
-        (row) => persistedSourceIds.has(row.sourceId),
+      [...descriptors.rows.values()].some((row) =>
+        persistedSourceIds.has(row.sourceId),
       ),
     ).toBe(false);
     expect(
@@ -449,6 +449,18 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     await store.saveTask(replacement);
     await expect(store.reserveWorkItemId(replacement.id)).resolves.toBe(
       'media-063',
+    );
+    const replacedUnitId = replacement.units[0].id;
+    replacement.units = [
+      {
+        ...replacement.units[0],
+        id: 'media-unit-replacement-persistence-test',
+      },
+    ];
+    await store.saveTask(replacement);
+    expect(units.rows.has(replacedUnitId)).toBe(false);
+    expect(units.rows.has('media-unit-replacement-persistence-test')).toBe(
+      true,
     );
   });
 });

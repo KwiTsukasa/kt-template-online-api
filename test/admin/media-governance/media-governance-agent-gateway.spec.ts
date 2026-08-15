@@ -243,6 +243,28 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
     });
   });
 
+  it('keeps a closed task on its immutable persisted Agent projection', async () => {
+    const { gateway, service, task } = await fixture();
+    await service.startAgent(task.id, { expectedRevision: 1 });
+    task.agentSession!.status = 'needs-operator';
+    task.agentSession!.statusLabel = '历史 Agent 会话待复核';
+    task.revision = 40;
+    task.runState = 'succeeded';
+    task.stage = 'closed';
+    const persistedSession = structuredClone(task.agentSession);
+
+    await expect(service.agentSession(task.id)).resolves.toEqual(
+      persistedSession,
+    );
+    expect(gateway.session).not.toHaveBeenCalled();
+    expect(task).toMatchObject({
+      agentSession: persistedSession,
+      revision: 40,
+      runState: 'succeeded',
+      stage: 'closed',
+    });
+  });
+
   it('seals a pending Agent plan exactly once when refresh observes a completed turn', async () => {
     const { gateway, service, task } = await fixture();
     await service.startAgent(task.id, { expectedRevision: 1 });

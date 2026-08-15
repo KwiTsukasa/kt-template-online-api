@@ -2489,7 +2489,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
 
   async agentSession(taskId: string) {
     const task = this.detail(taskId);
-    if (!task.agentSession || !this.agentGateway?.enabled()) {
+    if (
+      !task.agentSession ||
+      task.stage === 'closed' ||
+      !this.agentGateway?.enabled()
+    ) {
       return task.agentSession;
     }
     let remoteSession;

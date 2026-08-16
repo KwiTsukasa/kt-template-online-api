@@ -294,6 +294,10 @@ staging/qBittorrent 状态；尚未轮到的同任务补充来源才从零开始
 只保留前 160 字符以符合持久化列契约。Task 处于 `governance/blocked`、无活动 Run 且
 原 payload/计划摘要仍密封时，可用当前 revision 再次调用 `governance/start`；API 复用
 原计划，但生成新的 Run、revision 和 replay key，不复用已消费事务键，也不重放下载。
+执行器会优先提取版本化工具返回的结构化 `error`，避免 Python traceback 挤掉
+`gateReason` 中真正的失败原因。除原 Run 续传外，每个新动作入队时都重置自己的进度，
+不得继承上一阶段的 100%；元数据证据返回唯一身份后，`identityPreview` 同步投影该
+provider/年份并标记为“元数据身份已验证”。
 `metadata/verify` 或 `acceptance/verify` 的 NAS 执行失败也可用失败后的当前 revision 重试；
 仅在对应阶段、无活动 Run、密封计划仍在且元数据状态未被改写时接受，并生成新的 Run、
 revision 和 replay key。治理完成后 fnOS 尚未稳定回填身份时，若所有 Unit 的 A 级缺口

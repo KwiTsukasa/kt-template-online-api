@@ -960,6 +960,18 @@ describe('MediaGovernanceService production execution adapter', () => {
       ],
       runId: 'media-run-download-fixture',
     };
+    task.progress = {
+      completedBytes: 5,
+      completedItems: 5,
+      etaLabel: '已完成',
+      heartbeatLabel: '刚刚',
+      observedAt: new Date().toISOString(),
+      percent: 100,
+      progressLabel: '来源载荷已就绪',
+      speedLabel: '0 B/s',
+      totalBytes: 5,
+      totalItems: 5,
+    };
 
     await service.startGovernance(task.id, { expectedRevision: 2 });
 
@@ -981,6 +993,14 @@ describe('MediaGovernanceService production execution adapter', () => {
       runState: 'queued',
       stage: 'governance',
       workItemId: 'media-063',
+    });
+    expect(task.progress).toMatchObject({
+      completedBytes: 0,
+      completedItems: 0,
+      percent: 0,
+      progressLabel: '已入队，等待 Jenkins 调度',
+      totalBytes: 0,
+      totalItems: 0,
     });
 
     await service.applyExecutorEvent({
@@ -1619,6 +1639,12 @@ describe('MediaGovernanceService production execution adapter', () => {
         nextCommandLabel: '重新运行 A/B/C 分档元数据核验',
         revision: 3,
         runState: 'succeeded',
+      });
+      expect(task.identityPreview).toMatchObject({
+        providerLabel: 'TMDB · 202821',
+        releaseYearLabel: '2023 年',
+        status: 'verified-provider-identity',
+        statusLabel: '元数据身份已验证',
       });
       expect(task.units[0]).toMatchObject({
         evidenceSha256: 'b'.repeat(64),

@@ -222,8 +222,8 @@ export type MediaGovernanceTask = {
     providerLabel: string;
     releaseYearLabel: string;
     seasonLabel: string;
-    status: 'pending-provider-verification';
-    statusLabel: '待资料源核验';
+    status: 'pending-provider-verification' | 'verified-provider-identity';
+    statusLabel: '待资料源核验' | '元数据身份已验证';
     title: string;
   };
   inputSnapshotSha256: string;
@@ -801,6 +801,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.runState = 'running';
       task.gateReason = null;
       task.nextCommandLabel = '执行器正在处理';
+      if (!input.progress) {
+        task.progress.etaLabel = '执行中';
+        task.progress.progressLabel = input.summary;
+      }
     } else if (input.eventType === 'run-paused') {
       task.runState = 'blocked';
       task.gateReason = '下载已安全暂停';
@@ -812,6 +816,8 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     } else if (input.eventType === 'run-failed') {
       task.activeRunId = null;
       task.runState = 'blocked';
+      task.progress.etaLabel = '已停止';
+      task.progress.progressLabel = input.summary.slice(0, 160);
       const sourceFailure = ['source.inspect', 'source.probe-runtime'].includes(
         input.action,
       );
@@ -1030,6 +1036,16 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     } else if (metadata.canAccept) {
       throwVbenError('元数据身份硬门禁未闭合', HttpStatus.CONFLICT);
     }
+    task.identityPreview = this.buildIdentityPreview({
+      mediaType: task.mediaType,
+      metadataIdentity: task.metadataIdentity,
+      providerRef: task.providerRef,
+      releaseYear: task.releaseYear,
+      seasonNumbers: task.units
+        .map((unit) => unit.seasonNumber)
+        .filter((season): season is string => Boolean(season)),
+      titleHint: task.titleHint,
+    });
     for (const projection of metadata.units) {
       const unit = task.units.find(
         (candidate) => candidate.id === projection.unitId,
@@ -3684,8 +3700,26 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
     const runId = `media-run-${randomUUID()}`;
     task.activeRunId = runId;
-    task.progress.observedAt = new Date().toISOString();
-    task.progress.heartbeatLabel = '刚刚';
+    const queuedAt = new Date().toISOString();
+    if (action === 'source.resume') {
+      task.progress.observedAt = queuedAt;
+      task.progress.heartbeatLabel = '刚刚';
+      task.progress.etaLabel = '等待续传执行器';
+      task.progress.progressLabel = '已入队，等待恢复下载';
+    } else {
+      task.progress = {
+        completedBytes: 0,
+        completedItems: 0,
+        etaLabel: '等待执行器',
+        heartbeatLabel: '刚刚',
+        observedAt: queuedAt,
+        percent: 0,
+        progressLabel: '已入队，等待 Jenkins 调度',
+        speedLabel: '0 B/s',
+        totalBytes: 0,
+        totalItems: 0,
+      };
+    }
     task.runState = 'queued';
     task.stage = action.startsWith('source.')
       ? action === 'source.download' || action === 'source.resume'
@@ -4012,6 +4046,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       ...storedTask,
       identityPreview: this.buildIdentityPreview({
         mediaType: storedTask.mediaType,
+        metadataIdentity: storedTask.metadataIdentity,
         providerRef: storedTask.providerRef,
         releaseYear: storedTask.releaseYear,
         seasonNumbers: storedTask.units
@@ -4282,25 +4317,33 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
 
   private buildIdentityPreview(input: {
     mediaType: MediaGovernanceMediaType;
+    metadataIdentity?: MediaGovernanceTask['metadataIdentity'];
     providerRef: MediaGovernanceProviderRef | null;
     releaseYear: null | number;
     seasonNumbers: string[];
     titleHint: string;
   }): MediaGovernanceTask['identityPreview'] {
+    const providerRef = input.metadataIdentity ?? input.providerRef;
+    const releaseYear =
+      input.metadataIdentity?.releaseYear ?? input.releaseYear;
+    const identityVerified =
+      input.metadataIdentity !== null && input.metadataIdentity !== undefined;
     return {
       mediaTypeLabel: MEDIA_TYPE_LABELS[input.mediaType],
-      providerLabel: input.providerRef
-        ? `${PROVIDER_LABELS[input.providerRef.provider]} · ${input.providerRef.providerId}`
+      providerLabel: providerRef
+        ? `${PROVIDER_LABELS[providerRef.provider]} · ${providerRef.providerId}`
         : '未填写（后续由资料源候选核验）',
-      releaseYearLabel: input.releaseYear
-        ? `${input.releaseYear} 年`
+      releaseYearLabel: releaseYear
+        ? `${releaseYear} 年`
         : '未填写（后续按候选消歧）',
       seasonLabel:
         input.mediaType === 'tv'
           ? input.seasonNumbers.join('、')
           : '电影单元（不使用 S00）',
-      status: 'pending-provider-verification',
-      statusLabel: '待资料源核验',
+      status: identityVerified
+        ? 'verified-provider-identity'
+        : 'pending-provider-verification',
+      statusLabel: identityVerified ? '元数据身份已验证' : '待资料源核验',
       title: input.titleHint,
     };
   }

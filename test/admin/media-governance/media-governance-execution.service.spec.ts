@@ -307,6 +307,56 @@ describe('MediaGovernanceService production execution adapter', () => {
     expect(source.sourceHealth).toBe('viable');
   });
 
+  it('normalizes stale succeeded progress when restoring persisted tasks', async () => {
+    const { gateway, service, setGatewayEnabled, stateStore } = fixture({
+      durable: true,
+    });
+    setGatewayEnabled(false);
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S02'],
+      titleHint: '历史终态进度恢复测试',
+    });
+    const observedAt = new Date().toISOString();
+    task.activeRunId = null;
+    task.closedAt = observedAt;
+    task.closedMode = 'automatic';
+    task.metadataStatus = 'verified';
+    task.nextCommandLabel = '查看验收证据';
+    task.progress = {
+      completedBytes: 0,
+      completedItems: 0,
+      etaLabel: '执行中',
+      heartbeatLabel: '刚刚',
+      observedAt,
+      percent: 0,
+      progressLabel: 'NAS 执行器已接收密封任务',
+      speedLabel: '0 B/s',
+      totalBytes: 0,
+      totalItems: 0,
+    };
+    task.runState = 'succeeded';
+    task.stage = 'closed';
+    await stateStore.saveTask(task);
+
+    const restoredService = new MediaGovernanceService(
+      undefined,
+      undefined,
+      undefined,
+      stateStore,
+      gateway,
+    );
+    await restoredService.onModuleInit();
+
+    expect(restoredService.detail(task.id).progress).toMatchObject({
+      etaLabel: '已完成',
+      percent: 100,
+      progressLabel: '本地治理验收已完成',
+      speedLabel: '0 B/s',
+    });
+  });
+
   it('returns a failed magnet inspection to an editable and discardable intake state', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();
@@ -1183,6 +1233,12 @@ describe('MediaGovernanceService production execution adapter', () => {
     expect(task).toMatchObject({
       activeRunId: null,
       metadataStatus: 'verified',
+      progress: {
+        etaLabel: '已完成',
+        percent: 100,
+        progressLabel: '独立验收通过',
+        speedLabel: '0 B/s',
+      },
       revision: 10,
       runState: 'succeeded',
       stage: 'closed',

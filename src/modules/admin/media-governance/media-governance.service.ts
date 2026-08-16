@@ -849,6 +849,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       if (!input.evidenceSha256) {
         throwVbenError('执行器终态缺少密封证据', HttpStatus.BAD_REQUEST);
       }
+      this.finalizeSucceededProgress(task, input.observedAt, input.summary);
       if (input.action === 'source.inspect') {
         task.stage = 'intake';
         task.runState = 'draft';
@@ -4080,6 +4081,17 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (this.canRefreshLegacyMetadata(restored)) {
       restored.nextCommandLabel = '重新采集 A/B/C 分档元数据事实';
     }
+    if (
+      restored.activeRunId === null &&
+      restored.runState === 'succeeded' &&
+      restored.progress.percent < 100
+    ) {
+      this.finalizeSucceededProgress(
+        restored,
+        restored.progress.observedAt,
+        restored.stage === 'closed' ? '本地治理验收已完成' : '当前阶段已完成',
+      );
+    }
     this.refreshSemanticProjection(restored);
     return restored;
   }
@@ -4192,6 +4204,30 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       return `${(bytesPerSecond / 1_024 / 1_024).toFixed(1)} MiB/s`;
     }
     return `${(bytesPerSecond / 1_024 / 1_024 / 1_024).toFixed(1)} GiB/s`;
+  }
+
+  private finalizeSucceededProgress(
+    task: MediaGovernanceTask,
+    observedAt: null | string,
+    summary: string,
+  ) {
+    task.progress = {
+      ...task.progress,
+      completedBytes:
+        task.progress.totalBytes > 0
+          ? task.progress.totalBytes
+          : task.progress.completedBytes,
+      completedItems:
+        task.progress.totalItems > 0
+          ? task.progress.totalItems
+          : task.progress.completedItems,
+      etaLabel: '已完成',
+      heartbeatLabel: '刚刚',
+      observedAt,
+      percent: 100,
+      progressLabel: summary.slice(0, 160),
+      speedLabel: '0 B/s',
+    };
   }
 
   private refreshHeartbeatLabel(

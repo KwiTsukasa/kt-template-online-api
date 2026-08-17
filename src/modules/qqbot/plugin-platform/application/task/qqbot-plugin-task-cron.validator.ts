@@ -4,9 +4,11 @@ import { throwVbenError } from '@/common';
 const fieldPattern = /^[\d*/,\-]+$/;
 
 /**
- * 转换 QQBot 插件平台输入。
- * @param input - input 输入；影响 normalizeQqbotPluginTaskCron 的返回值。
- * @returns QQBot 插件平台渲染后的图片、画布或文本。
+ * 将`input`规范为Qqbot插件任务Cron，使等价输入得到一致表示。
+ * @param input - 用于Qqbot插件任务Cron的结构化输入。
+ * @returns Qqbot插件任务Cron。
+ * @throws 当 `fields.length !== 5` 成立时拒绝当前输入并抛出 `Error`；当 `!fields.every((field) => fieldPattern.test(field))` 成立时拒绝当前输入并抛出 `Error`；当 `fields[0] === '*'` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `parseExpression` 或 `fields.join` 调用失败时拒绝当前输入并抛出 `Error`。
  */
 export function normalizeQqbotPluginTaskCron(input: unknown): string {
   const value = `${input || ''}`.trim().replace(/\s+/g, ' ');
@@ -29,16 +31,21 @@ export function normalizeQqbotPluginTaskCron(input: unknown): string {
 }
 
 /**
- * 执行 QQBot 插件平台流程。
- * @param input - input 输入；驱动 `normalizeQqbotPluginTaskCron()` 的 插件平台步骤。
- * @returns QQBot 插件平台渲染后的图片、画布或文本。
+ * 校验`input`是否满足Qqbot插件任务Cron约束，并拒绝不合法输入。
+ * @param input - 用于Qqbot插件任务Cron的结构化输入。
+ * @returns Qqbot插件任务Cron。
  */
 export function requireQqbotPluginTaskCron(input: unknown): string {
   try {
     return normalizeQqbotPluginTaskCron(input);
   } catch (error) {
     throwVbenError(
-      error instanceof Error ? error.message : '定时任务 cron 不合法',
+      (() => {
+        if (error instanceof Error) {
+          return error.message;
+        }
+        return '定时任务 cron 不合法';
+      })(),
     );
   }
 }

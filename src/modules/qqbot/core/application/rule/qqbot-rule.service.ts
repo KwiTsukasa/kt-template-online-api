@@ -32,8 +32,9 @@ export class QqbotRuleService {
   ) {}
 
   /**
-   * 获取分页数据。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 按自动回复规则查询条件筛选未删除记录并分页。
+   * @param query - 限定按自动回复规则查询条件筛选未删除记录并分页筛选、排序与分页范围的查询条件，包含 `keyword`、`selfId`、`targetType`、`enabled` 字段。
+   * @returns 包含 `list`、`pageNo`、`pageSize`、`total` 字段的按自动回复规则查询条件筛选未删除记录并分页。
    */
   async page(query: QqbotRuleQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
@@ -86,8 +87,9 @@ export class QqbotRuleService {
   }
 
   /**
-   * 列出Enabled For Message。
-   * @param message - message 输入；使用 `selfId`、`messageType` 字段生成结果。
+   * 按`message`读取启用状态消息；把变更持久化到当前存储（`ruleRepository.createQueryBuilder`）。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `selfId`、`messageType` 字段。
+   * @returns 启用状态消息。
    */
   async listEnabledForMessage(message: QqbotNormalizedMessage) {
     const boundIds = await this.accountService.getBoundRuleIds(message.selfId);
@@ -106,8 +108,9 @@ export class QqbotRuleService {
   }
 
   /**
-   * 保存数据。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`更新`save` 对应结果；把变更持久化到当前存储（`ruleRepository.save`）。
+   * @param body - 用于`save` 对应结果的结构化输入，包含 `matchType`、`keyword` 字段。
+   * @returns `save` 对应。
    */
   async save(body: QqbotRuleBodyDto) {
     this.assertRuleValid(body.matchType, body.keyword);
@@ -118,8 +121,9 @@ export class QqbotRuleService {
   }
 
   /**
-   * 更新数据。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`更新`update` 对应结果；把变更持久化到当前存储（`ruleRepository.update`）。
+   * @param body - 用于`update` 对应结果的结构化输入，包含 `matchType`、`keyword`、`id` 字段。
+   * @returns 满足`update` 对应约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async update(body: QqbotRuleUpdateDto) {
     if (body.matchType || body.keyword) {
@@ -132,8 +136,9 @@ export class QqbotRuleService {
   }
 
   /**
-   * 删除数据。
-   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   * 按自动回复规则标识设置软删除标记，写入完成后固定返回 `true`。
+   * @param id - 决定按自动回复规则标识设置软删除标记，写入完成后固定返回 `true`内容、边界或目标的 `id` 值。
+   * @returns 满足按自动回复规则标识设置软删除标记，写入完成后固定返回 `true`约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async remove(id: string) {
     await this.ruleRepository.update({ id }, { isDeleted: true });
@@ -141,9 +146,10 @@ export class QqbotRuleService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
-   * @param enabled - enabled 输入；影响 toggle 的返回值。
+   * 按自动回复规则标识更新启用状态，写入完成后固定返回 `true`。
+   * @param id - 决定按自动回复规则标识更新启用状态，写入完成后固定返回 `true`内容、边界或目标的 `id` 值。
+   * @param enabled - 决定按自动回复规则标识更新启用状态，写入完成后固定返回 `true`内容、边界或目标的 `enabled` 值。
+   * @returns 满足按自动回复规则标识更新启用状态，写入完成后固定返回 `true`约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async toggle(id: string, enabled: boolean) {
     await this.ruleRepository.update({ id }, { enabled });
@@ -151,8 +157,8 @@ export class QqbotRuleService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param rule - rule 输入；使用 `id` 字段生成结果。
+   * 按自动回复规则标识将最后命中时间更新为当前时间。
+   * @param rule - 用于按自动回复规则标识将最后命中时间更新为当前时间的领域对象，包含 `id` 字段。
    */
   async markHit(rule: QqbotRule) {
     await this.ruleRepository.update(
@@ -162,9 +168,10 @@ export class QqbotRuleService {
   }
 
   /**
-   * 判断 QQBot 核心条件。
-   * @param rule - rule 输入；使用 `matchType`、`keyword` 字段计算判断结果。
-   * @param message - message 输入；使用 `messageText` 字段计算判断结果。
+   * 根据`rule`、`message`与当前约束判定Matched；当 `rule.matchType === 'regex'` 成立时返回 `new RegExp(rule.keyword).test(source)`。
+   * @param rule - 用于Matched的领域对象，包含 `matchType`、`keyword` 字段。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `messageText` 字段。
+   * @returns 满足Matched约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   isMatched(rule: QqbotRule, message: QqbotNormalizedMessage) {
     const source = message.messageText || '';
@@ -182,8 +189,9 @@ export class QqbotRuleService {
   }
 
   /**
-   * 判断 QQBot 核心条件。
-   * @param rule - rule 输入；使用 `cooldownMs`、`lastHitAt` 字段计算判断结果。
+   * 通过 `isWithinCooldown` 判断输入是否满足函数约束。
+   * @param rule - 用于冷却时间的领域对象，包含 `cooldownMs`、`lastHitAt` 字段。
+   * @returns 满足冷却时间约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   isInCooldown(rule: QqbotRule) {
     return isWithinCooldown({
@@ -194,9 +202,9 @@ export class QqbotRuleService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param matchType - matchType 输入；决定 QQBot条件分支。
-   * @param keyword - keyword 输入；驱动 `RegExp()` 的 QQBot步骤。
+   * 校验`matchType`、`keyword`是否满足权限规则Valid约束，并拒绝不合法输入。
+   * @param matchType - 决定权限规则Valid内容、边界或目标的 `matchType` 值。
+   * @param keyword - 决定权限规则Valid内容、边界或目标的 `keyword` 值。
    */
   private assertRuleValid(matchType: QqbotRuleMatchType, keyword: string) {
     if (!keyword?.trim()) {
@@ -212,8 +220,9 @@ export class QqbotRuleService {
   }
 
   /**
-   * 转换 QQBot 核心输入。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 通过 `Math.max` 收敛数值边界。
+   * @param body - 用于请求内容的结构化输入，包含 `cooldownMs`、`enabled`、`keyword`、`matchType` 字段。
+   * @returns 包含 `cooldownMs`、`enabled`、`keyword`、`matchType`、`name` 字段的请求内容。
    */
   private normalizeBody(body: Partial<QqbotRuleBodyDto>) {
     return {
@@ -233,10 +242,14 @@ export class QqbotRuleService {
   }
 
   /**
-   * 查询 QQBot 核心数据。
+   * 按当前运行态读取Min冷却时间Ms；当 `Number.isInteger(value) && value > 0` 成立时返回 `value`。
+   * @returns 当前状态对应的Min冷却时间Ms，取值为 `30000`。
    */
   private getMinCooldownMs() {
     const value = Number(this.configService.get('QQBOT_RULE_MIN_COOLDOWN_MS'));
-    return Number.isInteger(value) && value > 0 ? value : 30000;
+    if (Number.isInteger(value) && value > 0) {
+      return value;
+    }
+    return 30000;
   }
 }

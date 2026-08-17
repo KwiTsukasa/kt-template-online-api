@@ -106,7 +106,6 @@ export class NetworkDdnsRecord {
   @KtUpdateDateColumn({ name: 'update_time', precision: 3, type: 'datetime' })
   updateTime: KtDateTime;
 
-  /** 创建标识。 */
   @BeforeInsert()
   createId(): string {
     return ensureSnowflakeId(this);

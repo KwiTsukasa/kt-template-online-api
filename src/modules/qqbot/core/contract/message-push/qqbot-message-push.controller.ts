@@ -70,7 +70,12 @@ const cloneSourceDefinition = (
   displayName: definition.displayName,
   sourceKey: definition.sourceKey,
   subscriptionFields: definition.subscriptionFields.map((field) => ({
-    ...(field.dependsOn === undefined ? {} : { dependsOn: field.dependsOn }),
+    ...((() => {
+      if (field.dependsOn === undefined) {
+        return {};
+      }
+      return { dependsOn: field.dependsOn };
+    })()),
     key: field.key,
     label: field.label,
     optionCollection: field.optionCollection,
@@ -99,9 +104,12 @@ const allowlistSourceOptions = (
     ].map((collection) => [
       collection,
       (value[collection] || []).map((item) => ({
-        ...(item.dependsOnValue === undefined
-          ? {}
-          : { dependsOnValue: item.dependsOnValue }),
+        ...((() => {
+          if (item.dependsOnValue === undefined) {
+            return {};
+          }
+          return { dependsOnValue: item.dependsOnValue };
+        })()),
         disabled: item.disabled,
         disabledReasonCode: item.disabledReasonCode,
         label: item.label,
@@ -110,7 +118,11 @@ const allowlistSourceOptions = (
     ]),
   );
 
-/** 为旧版 Admin 保留一个发布周期的 STUN 候选项响应。 */
+/**
+ * 为旧版 Admin 保留一个发布周期的 STUN 候选项响应。
+ * @param value - 参与为旧版 Admin 保留一个发布周期的 STUN 候选项响应比较、格式化或输出的候选值。
+ * @returns 包含 `ddnsRecords`、`portForwards` 字段的为旧版 Admin 保留一个发布周期的 STUN 候选项响应。
+ */
 function allowlistLegacyStunOptions(
   value: SystemMessageSourceOptionsResponse,
 ): StunMappingPortChangedOptionsResponse {
@@ -141,18 +153,22 @@ const allowlistSubscription = (
   definition: SystemMessageSourceDefinition,
 ): MessageSubscriptionView => {
   const input =
-    view.sourceConfig &&
+    (() => {
+      if (view.sourceConfig &&
     typeof view.sourceConfig === 'object' &&
-    !Array.isArray(view.sourceConfig)
-      ? view.sourceConfig
-      : {};
+    !Array.isArray(view.sourceConfig)) {
+        return view.sourceConfig;
+      }
+      return {};
+    })();
   const sourceConfig = Object.fromEntries(
     definition.subscriptionFields.flatMap((field) => {
       const value = input[field.key];
-      return Object.prototype.hasOwnProperty.call(input, field.key) &&
-        typeof value === 'string'
-        ? [[field.key, value]]
-        : [];
+      if (Object.prototype.hasOwnProperty.call(input, field.key) &&
+        typeof value === 'string') {
+        return [[field.key, value]];
+      }
+      return [];
     }),
   );
   return {
@@ -208,14 +224,21 @@ export class QqbotMessagePushController {
     private readonly templateService: QqbotMessageTemplateService,
   ) {}
 
-  /** 列出来源。 */
+  /**
+   * 按当前运行态读取来源；从 `sourceRegistry.list` 读取来源。
+   * @returns 来源。
+   */
   @Get('sources')
   @QqbotMessagePushPermission(...SOURCE_READ_PERMISSIONS)
   listSources() {
     return vbenSuccess(this.sourceRegistry.list().map(cloneSourceDefinition));
   }
 
-  /** 返回消息源动态订阅表单使用的标准候选项。 */
+  /**
+   * 从当前数据源读取消息源动态订阅表单使用的标准候选项。
+   * @param params - 用于消息源动态订阅表单使用的标准候选项的领域对象，包含 `sourceKey` 字段。
+   * @returns 消息源动态订阅表单使用的标准候选项。
+   */
   @Get('sources/:sourceKey/subscription-options')
   @QqbotMessagePushPermission(...SOURCE_OPTIONS_PERMISSIONS)
   async listSourceOptions(@Param() params: MessagePushSourceParamDto) {
@@ -224,7 +247,10 @@ export class QqbotMessagePushController {
     return vbenSuccess(allowlistSourceOptions(adapter.definition, result));
   }
 
-  /** 返回旧版 Admin 使用的 STUN 专用候选项。 */
+  /**
+   * 返回旧版 Admin 使用的 STUN 专用候选项。
+   * @returns 旧版 Admin 使用的 STUN 专用候选项。
+   */
   @Get('sources/network.stun.mapping-port-changed/options')
   @QqbotMessagePushPermission(...SOURCE_OPTIONS_PERMISSIONS)
   async listLegacyStunOptions() {
@@ -234,7 +260,11 @@ export class QqbotMessagePushController {
     return vbenSuccess(allowlistLegacyStunOptions(result));
   }
 
-  /** 返回来源详情。 */
+  /**
+   * 查询领域服务并组装管理端来源详情。
+   * @param params - 用于来源详情的领域对象，包含 `sourceKey` 字段。
+   * @returns 来源详情。
+   */
   @Get('sources/:sourceKey')
   @QqbotMessagePushPermission(...SOURCE_READ_PERMISSIONS)
   sourceDetail(@Param() params: MessagePushSourceParamDto) {
@@ -242,7 +272,11 @@ export class QqbotMessagePushController {
     return vbenSuccess(cloneSourceDefinition(definition));
   }
 
-  /** 返回页面订阅。 */
+  /**
+   * 查询领域服务并组装管理端页面订阅。
+   * @param query - 限定页面订阅筛选、排序与分页范围的查询条件。
+   * @returns 页面订阅。
+   */
   @Get('subscriptions')
   @QqbotMessagePushPermission(
     'QqBot:MessageSubscription:List',
@@ -263,7 +297,11 @@ export class QqbotMessagePushController {
     );
   }
 
-  /** 创建订阅。 */
+  /**
+   * 根据`body`构造订阅；从 `sourceRegistry.get` 读取订阅。
+   * @param body - 用于订阅的结构化输入。
+   * @returns 订阅。
+   */
   @Post('subscriptions')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Create')
@@ -277,7 +315,12 @@ export class QqbotMessagePushController {
     );
   }
 
-  /** 更新订阅。 */
+  /**
+   * 根据`params`、`body`更新订阅；从 `sourceRegistry.get` 读取订阅。
+   * @param params - 用于订阅的领域对象，包含 `id` 字段。
+   * @param body - 用于订阅的结构化输入。
+   * @returns 订阅。
+   */
   @Put('subscriptions/:id')
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Update')
   async updateSubscription(
@@ -293,7 +336,12 @@ export class QqbotMessagePushController {
     );
   }
 
-  /** 返回切换订阅。 */
+  /**
+   * 将输入收敛并投影为切换订阅。
+   * @param params - 用于切换订阅的领域对象，包含 `id` 字段。
+   * @param body - 用于切换订阅的结构化输入，包含 `enabled` 字段。
+   * @returns 切换订阅。
+   */
   @Put('subscriptions/:id/enabled')
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Toggle')
   async toggleSubscription(
@@ -312,14 +360,22 @@ export class QqbotMessagePushController {
     );
   }
 
-  /** 移除订阅。 */
+  /**
+   * 按订阅标识删除消息推送订阅，并封装删除后的成功响应。
+   * @param params - 用于订阅的领域对象，包含 `id` 字段。
+   * @returns 订阅。
+   */
   @Delete('subscriptions/:id')
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Delete')
   async removeSubscription(@Param() params: MessagePushIdParamDto) {
     return vbenSuccess(await this.subscriptionService.remove(params.id));
   }
 
-  /** 返回页面模板。 */
+  /**
+   * 查询领域服务并组装管理端页面模板。
+   * @param query - 限定页面模板筛选、排序与分页范围的查询条件。
+   * @returns 页面模板。
+   */
   @Get('templates')
   @QqbotMessagePushPermission(
     'QqBot:MessageTemplate:List',
@@ -332,7 +388,11 @@ export class QqbotMessagePushController {
     return vbenPage(page.items.map(allowlistTemplate), page.total);
   }
 
-  /** 创建模板。 */
+  /**
+   * 根据请求体创建消息推送模板，并返回新模板的管理视图。
+   * @param body - 用于模板的结构化输入。
+   * @returns 模板。
+   */
   @Post('templates')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Create')
@@ -342,7 +402,12 @@ export class QqbotMessagePushController {
     );
   }
 
-  /** 更新模板。 */
+  /**
+   * 按模板标识应用请求体变更，并返回更新后的消息模板视图。
+   * @param params - 用于模板的领域对象，包含 `id` 字段。
+   * @param body - 用于模板的结构化输入。
+   * @returns 模板。
+   */
   @Put('templates/:id')
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Update')
   async updateTemplate(
@@ -354,7 +419,12 @@ export class QqbotMessagePushController {
     );
   }
 
-  /** 返回切换模板。 */
+  /**
+   * 将输入收敛并投影为切换模板。
+   * @param params - 用于切换模板的领域对象，包含 `id` 字段。
+   * @param body - 用于切换模板的结构化输入，包含 `enabled` 字段。
+   * @returns 切换模板。
+   */
   @Put('templates/:id/enabled')
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Toggle')
   async toggleTemplate(
@@ -368,14 +438,22 @@ export class QqbotMessagePushController {
     );
   }
 
-  /** 移除模板。 */
+  /**
+   * 按模板标识删除消息推送模板，并封装删除后的成功响应。
+   * @param params - 用于模板的领域对象，包含 `id` 字段。
+   * @returns 模板。
+   */
   @Delete('templates/:id')
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Delete')
   async removeTemplate(@Param() params: MessagePushIdParamDto) {
     return vbenSuccess(await this.templateService.remove(params.id));
   }
 
-  /** 返回预览模板。 */
+  /**
+   * 查询领域服务并组装管理端预览模板。
+   * @param body - 用于预览模板的结构化输入。
+   * @returns 预览模板。
+   */
   @Post('templates/preview')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Preview')

@@ -12,7 +12,7 @@ let titleImage: Image;
 let titleImagePreload: Promise<void> | undefined;
 
 /**
- * 执行 BangDream 插件流程。
+ * 根据当前运行态处理BanG DreamTitleAssets；从受控资源来源加载所需数据（`loadImageFromPath`）。
  */
 export async function preloadBangDreamTitleAssets() {
   if (!titleImagePreload) {
@@ -29,11 +29,11 @@ export async function preloadBangDreamTitleAssets() {
 }
 
 /**
- * 在图片布局层中绘制标题。
- *
- * @param title1 - title1 输入；驱动 `drawText()` 的 BangDream步骤。
- * @param title2 - title2 输入；驱动 `drawText()` 的 BangDream步骤。
- * @returns 渲染或资源结果。
+ * 根据`title1`、`title2`绘制或格式化Title；把图片、文本或图形按布局规格绘制到画布。
+ * @param title1 - 决定Title内容、边界或目标的 `title1` 值。
+ * @param title2 - 决定Title内容、边界或目标的 `title2` 值。
+ * @returns 在预加载标题背景上绘制两段定位文本后的标题画布。
+ * @throws 当 `!titleImage` 成立时拒绝当前输入并抛出 `Error`。
  */
 export function drawTitle(title1: string, title2: string): Canvas {
   if (!titleImage) {

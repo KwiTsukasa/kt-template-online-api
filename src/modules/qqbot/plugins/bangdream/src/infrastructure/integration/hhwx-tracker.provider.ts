@@ -25,21 +25,24 @@ export interface BangDreamHhwxTrackerProviderOptions {
 }
 
 /**
- * 查询 BangDream 插件数据。
- * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 BangDream步骤。
- * @returns BangDream 插件查询结果。
+ * 按`fallback`读取运行态数量；当 `Number.isFinite(parsed) && parsed > 0` 成立时返回 `parsed`。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+ * @returns 运行态数量。
  */
 function getRuntimeRetryCount(fallback: number): number {
   const parsed = Number(
     readBangDreamRuntimeConfig(BANGDREAM_TSUGU_ENV_KEYS.retryCount),
   );
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  return fallback;
 }
 
 /**
- * 创建 BangDream 插件对象或配置。
- * @param options - BangDream列表；使用 `baseUrl`、`jsonClient`、`retryCount` 字段生成结果。
- * @returns 创建后的 BangDream 插件对象或配置。
+ * 根据`options`构造Hhwx档线数据源数据提供器；从 `getRuntimeRetryCount` 读取Hhwx档线数据源数据提供器。
+ * @param options - 控制Hhwx档线数据源数据提供器筛选、缓存或输出方式的可选项，包含 `baseUrl`、`jsonClient`、`retryCount` 字段；省略时默认采用 `{}`。
+ * @returns Hhwx档线数据源数据提供器。
  */
 export function createHhwxTrackerProvider(
   options: BangDreamHhwxTrackerProviderOptions = {},

@@ -13,17 +13,20 @@ export const BANGDREAM_TIME_FORMAT_SPEC = {
 
 /**
  * 格式化分钟，保持历史输出只对分钟补零。
- *
- * @param minutes - BangDream列表；生成规范化文本。
+ * @param minutes - 用于分钟，保持历史输出只对分钟补零的领域对象，包含 `toString` 字段。
+ * @returns 分钟，保持历史输出只对分钟补零。
  */
 export function formatBangDreamMinute(minutes: number) {
-  return minutes < 10 ? `0${minutes}` : minutes.toString();
+  if (minutes < 10) {
+    return `0${minutes}`;
+  }
+  return minutes.toString();
 }
 
 /**
- * 格式化完整时间。
- *
- * @param timeStamp - timeStamp 输入；构造时间对象。
+ * 将时间戳转换为日本时区的年月日时分文本，并按两位数补齐时间字段。
+ * @param timeStamp - 决定BanGDream时间内容、边界或目标的 `timeStamp` 值。
+ * @returns 按参数编码并拼接完成的BanGDream时间。
  */
 export function formatBangDreamTime(timeStamp: number | null) {
   if (timeStamp == null) {
@@ -38,8 +41,8 @@ export function formatBangDreamTime(timeStamp: number | null) {
 
 /**
  * 把输入日期转换到日本时区。
- *
- * @param dateInput - dateInput 输入；构造时间对象。
+ * @param dateInput - `dateInput` 作为 `Date` 构造参数。
+ * @returns 返回由 `Date` 构造的把输入日期转换到日本时区。
  */
 export function toBangDreamJapanTime(dateInput: number | string | Date) {
   const date = new Date(dateInput);
@@ -53,9 +56,9 @@ export function toBangDreamJapanTime(dateInput: number | string | Date) {
 }
 
 /**
- * 格式化月日。
- *
- * @param timeStamp - timeStamp 输入；驱动 `toBangDreamJapanTime()` 的 BangDream步骤。
+ * 将时间戳转换为日本时区的月日文本。
+ * @param timeStamp - 决定将时间戳转换为日本时区的月日文本内容、边界或目标的 `timeStamp` 值。
+ * @returns 按参数编码并拼接完成的将时间戳转换为日本时区的月日文本。
  */
 export function formatBangDreamMonthDay(timeStamp: number | null) {
   if (timeStamp == null) {
@@ -66,9 +69,9 @@ export function formatBangDreamMonthDay(timeStamp: number | null) {
 }
 
 /**
- * 格式化毫秒时长。
- *
- * @param period - period 输入；驱动 `Math.floor()` 的 BangDream步骤。
+ * 将`period`转换为毫秒时长；当 `period == null` 成立时返回 `BANGDREAM_TIME_FORMAT_SPEC.unknown`。
+ * @param period - 决定毫秒时长内容、边界或目标的 `period` 值。
+ * @returns 按参数编码并拼接完成的毫秒时长。
  */
 export function formatBangDreamPeriod(period: number | null) {
   if (period == null) {
@@ -117,9 +120,9 @@ export function formatBangDreamPeriod(period: number | null) {
 }
 
 /**
- * 格式化秒级时长。
- *
- * @param value - 待转换时间值；影响 formatBangDreamSeconds 的返回值。
+ * 将`value`转换为秒级时长。
+ * @param value - 待转换为秒级时长的原始值。
+ * @returns 秒级时长。
  */
 export function formatBangDreamSeconds(value: number) {
   let seconds = value;

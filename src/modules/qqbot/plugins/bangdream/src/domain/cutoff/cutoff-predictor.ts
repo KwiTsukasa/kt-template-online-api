@@ -3,9 +3,9 @@ type CutoffPoint = { ep: number; time: number };
 type RegressionInput = { ep: number; percent: number };
 
 /**
- * 在数据下载与缓存层中处理regression。
- *
- * @param data - 响应数据；承载 BangDream新增、更新、导入或执行字段。
+ * 根据`data`处理包含 `a`、`b` 字段的结果。
+ * @param data - 用于包含 `a`、`b` 字段的结果的领域对象，包含 `length` 字段。
+ * @returns 包含 `a`、`b` 字段的包含 `a`、`b` 字段的。
  */
 function regression(data: RegressionInput[]) {
   let percentTotal = 0;
@@ -29,12 +29,12 @@ function regression(data: RegressionInput[]) {
 }
 
 /**
- * 在数据下载与缓存层中处理预测。
- *
- * @param cutoff - cutoff 输入；使用 `length` 字段生成结果。
- * @param startTs - BangDream列表；决定 BangDream条件分支。
- * @param endTs - BangDream列表；决定 BangDream条件分支。
- * @param rate - rate 输入；影响 predict 的返回值。
+ * 筛选活动中段档线样本并执行线性回归，预测结束后修正倍率对应的档线；样本不足或结果非法时回退为零。
+ * @param cutoff - 用于predict的领域对象，包含 `length`、`cutoff.length - 1` 字段。
+ * @param startTs - 决定predict内容、边界或目标的 `startTs` 值。
+ * @param endTs - 决定predict内容、边界或目标的 `endTs` 值。
+ * @param rate - 决定predict内容、边界或目标的 `rate` 值。
+ * @returns 包含 `ep`、`time` 字段的predict。
  */
 export function predict(
   cutoff: CutoffPoint[],

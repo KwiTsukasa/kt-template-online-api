@@ -36,9 +36,9 @@ const REDACT_PATHS = [
 ];
 
 /**
- * 创建 日志管道对象或配置。
- * @param configService - Nest ConfigService 依赖；驱动 `getString()`、`getAppName()`、`normalizeUrl()`、`createTransport()` 的 公共基础设施步骤。
- * @returns 创建后的 日志管道对象或配置。
+ * 根据`configService`构造针对日志管道；从 `getString` 读取针对日志管道。
+ * @param configService - 读取针对日志管道所需运行配置的配置服务。
+ * @returns 包含 `pinoHttp` 字段的针对日志管道。
  */
 export function createPinoLoggerParams(configService: ConfigService): Params {
   const nodeEnv = getString(configService, 'NODE_ENV', 'development');
@@ -50,7 +50,12 @@ export function createPinoLoggerParams(configService: ConfigService): Params {
   const logLevel = getString(
     configService,
     'LOG_LEVEL',
-    nodeEnv === 'production' ? 'info' : 'debug',
+    (() => {
+      if (nodeEnv === 'production') {
+        return 'info';
+      }
+      return 'debug';
+    })(),
   );
 
   return {
@@ -100,18 +105,25 @@ export function createPinoLoggerParams(configService: ConfigService): Params {
  * @returns 完成密码字段脱敏后的 JSON 日志。
  */
 function redactSerializedPasswordFields(serialized: string): string {
-  const lineEnding = serialized.endsWith('\r\n')
-    ? '\r\n'
-    : serialized.endsWith('\n')
-      ? '\n'
-      : '';
+  const lineEnding = (() => {
+    if (serialized.endsWith('\r\n')) {
+      return '\r\n';
+    }
+    if (serialized.endsWith('\n')) {
+      return '\n';
+    }
+    return '';
+  })();
   try {
     const record = JSON.parse(
       serialized,
       (_key, value, context?: { source?: string }) =>
-        typeof value === 'number' && context?.source
-          ? JSON_WITH_RAW_JSON.rawJSON(context.source)
-          : value,
+        {
+          if (typeof value === 'number' && context?.source) {
+            return JSON_WITH_RAW_JSON.rawJSON(context.source);
+          }
+          return value;
+        },
     );
     redactPasswordFields(record);
     return `${JSON.stringify(record)}${lineEnding}`;
@@ -147,16 +159,18 @@ function redactPasswordFields(value: unknown): void {
 }
 
 /**
- * 查询 日志管道数据。
- * @param configService - Nest ConfigService 依赖；驱动 `getString()` 的 公共基础设施步骤。
+ * 按`configService`读取针对日志管道；从 `getString` 读取针对日志管道。
+ * @param configService - 读取针对日志管道所需运行配置的配置服务。
+ * @returns 针对日志管道。
  */
 export function getAppName(configService: ConfigService) {
   return getString(configService, 'LOG_APP_NAME', DEFAULT_APP_NAME);
 }
 
 /**
- * 查询 日志管道数据。
- * @param configService - Nest ConfigService 依赖；驱动 `getString()` 的 公共基础设施步骤。
+ * 按`configService`读取针对日志管道；从 `getString` 读取针对日志管道。
+ * @param configService - 读取针对日志管道所需运行配置的配置服务。
+ * @returns 针对日志管道。
  */
 export function getLokiEnvironment(configService: ConfigService) {
   return getString(
@@ -167,9 +181,10 @@ export function getLokiEnvironment(configService: ConfigService) {
 }
 
 /**
- * 创建 日志管道对象或配置。
- * @param configService - Nest ConfigService 依赖；驱动 `getNumber()`、`getBasicAuth()`、`getLokiEnvironment()`、`getBoolean()` 的 公共基础设施步骤。
- * @param options - 公共基础设施列表；使用 `lokiHost`、`logLevel`、`appName`、`nodeEnv` 字段生成结果。
+ * 根据`configService`、`options`构造针对日志管道；当 `options.lokiHost` 成立时返回 `{ targets: [ { level: options.logLevel, opt…`。
+ * @param configService - 读取针对日志管道所需运行配置的配置服务。
+ * @param options - 控制针对日志管道筛选、缓存或输出方式的可选项，包含 `lokiHost`、`logLevel`、`appName`、`nodeEnv` 字段。
+ * @returns 包含 `options`、`target` 字段的针对日志管道；没有可用结果或提前结束时为 `undefined`。
  */
 function createTransport(
   configService: ConfigService,
@@ -251,51 +266,63 @@ function createTransport(
 }
 
 /**
- * 查询 日志管道数据。
- * @param configService - Nest ConfigService 依赖；驱动 `getString()` 的 公共基础设施步骤。
+ * 按`configService`读取针对日志管道；当 `tenantId` 成立时返回 `{ 'X-Scope-OrgID': tenantId, }`。
+ * @param configService - 读取针对日志管道所需运行配置的配置服务。
+ * @returns 包含 `X-Scope-OrgID` 字段的针对日志管道；没有可用结果或提前结束时为 `undefined`。
  */
 function getLokiHeaders(configService: ConfigService) {
   const tenantId = getString(configService, 'LOKI_TENANT_ID');
-  return tenantId
-    ? {
+  if (tenantId) {
+    return {
         'X-Scope-OrgID': tenantId,
-      }
-    : undefined;
+      };
+  }
+  return undefined;
 }
 
 /**
- * 查询 日志管道数据。
- * @param configService - Nest ConfigService 依赖；驱动 `getString()` 的 公共基础设施步骤。
+ * 按`configService`读取针对日志管道；当 `username && password` 成立时返回 `{ password, username }`。
+ * @param configService - 读取针对日志管道所需运行配置的配置服务。
+ * @returns 包含 `password`、`username` 字段的针对日志管道；没有可用结果或提前结束时为 `undefined`。
  */
 function getBasicAuth(configService: ConfigService) {
   const username = getString(configService, 'LOKI_USERNAME');
   const password = getString(configService, 'LOKI_PASSWORD');
-  return username && password ? { password, username } : undefined;
+  if (username && password) {
+    return { password, username };
+  }
+  return undefined;
 }
 
 /**
- * 查询 日志管道数据。
- * @param req - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
- * @param name - 名称文本；执行 `name.toLowerCase()` 对应的 公共基础设施步骤。
+ * 按`req`、`name`读取针对日志管道；当 `Array.isArray(value)` 成立时返回 `value[0]`。
+ * @param req - 用于针对日志管道的当前 HTTP 请求，包含 `headers` 字段。
+ * @param name - 决定针对日志管道内容、边界或目标的 `name` 值。
+ * @returns 针对日志管道。
  */
 function getHeader(req: Request, name: string) {
   const value = req.headers[name.toLowerCase()];
-  return Array.isArray(value) ? value[0] : `${value || ''}`.trim();
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return `${value || ''}`.trim();
 }
 
 /**
- * 查询 日志管道数据。
- * @param req - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+ * 按`req`读取针对日志管道；从 `getHeader` 读取针对日志管道。
+ * @param req - 用于针对日志管道的当前 HTTP 请求。
+ * @returns 针对日志管道。
  */
 function getRequestId(req: Request) {
   return `${(req as any).id || getHeader(req, 'x-request-id') || ''}`.trim();
 }
 
 /**
- * 查询 日志管道数据。
- * @param configService - Nest ConfigService 依赖；使用 `get` 字段生成结果。
- * @param key - 键名；限定 公共基础设施查询范围。
- * @param fallback - 兜底值；限定 公共基础设施查询范围。
+ * 按`configService`、`key`、`fallback`读取针对日志管道；从 `configService.get` 读取针对日志管道。
+ * @param configService - 读取针对日志管道所需运行配置的配置服务。
+ * @param key - 用于读取或更新针对日志管道的稳定键。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果；省略时默认采用 `''`。
+ * @returns 规范化后的针对日志管道；主值为空时采用 `fallback` 兜底。
  */
 function getString(configService: ConfigService, key: string, fallback = '') {
   const value = configService.get<string>(key);
@@ -304,10 +331,11 @@ function getString(configService: ConfigService, key: string, fallback = '') {
 }
 
 /**
- * 查询 日志管道数据。
- * @param configService - Nest ConfigService 依赖；使用 `get` 字段生成结果。
- * @param key - 键名；驱动 `Number()` 的 公共基础设施步骤。
- * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 公共基础设施步骤。
+ * 读取正数配置；值不是有限正数时返回调用方提供的默认值。
+ * @param configService - 读取正数配置所需运行配置的配置服务。
+ * @param key - 用于读取或更新正数配置的稳定键。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+ * @returns 返回有效的正数配置；缺失或非法时返回 `defaultValue`。
  */
 function getNumber(
   configService: ConfigService,
@@ -315,14 +343,18 @@ function getNumber(
   fallback: number,
 ) {
   const value = Number(configService.get<string>(key));
-  return Number.isFinite(value) && value > 0 ? value : fallback;
+  if (Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  return fallback;
 }
 
 /**
- * 查询 日志管道数据。
- * @param configService - Nest ConfigService 依赖；使用 `get` 字段生成结果。
- * @param key - 键名；限定 公共基础设施查询范围。
- * @param fallback - 兜底值；限定 公共基础设施查询范围。
+ * 按`configService`、`key`、`fallback`读取针对日志管道；从 `configService.get` 读取针对日志管道。
+ * @param configService - 读取针对日志管道所需运行配置的配置服务。
+ * @param key - 用于读取或更新针对日志管道的稳定键。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+ * @returns 满足针对日志管道约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function getBoolean(
   configService: ConfigService,
@@ -335,8 +367,9 @@ function getBoolean(
 }
 
 /**
- * 转换 日志管道输入。
- * @param value - 待转换值；生成规范化文本。
+ * 将`value`规范为针对日志管道，使等价输入得到一致表示。
+ * @param value - 待转换为针对日志管道的原始值。
+ * @returns 针对日志管道。
  */
 function normalizeUrl(value: string) {
   return value.replace(/\/+$/g, '');

@@ -19,12 +19,11 @@ const maxWidth = 7000;
 type CardAttribute = Card['attribute'];
 
 /**
- * 在QQBot 图片视图层中绘制卡牌列表。
- *
- * @param matches - BangDream列表；驱动 `matchCardList()` 的 BangDream步骤。
- * @param displayedServerList - displayedServerList 输入；驱动 `matchCardList()` 的 BangDream步骤。
- * @param compress - BangDream列表；驱动 `outputCardListImage()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 通过 `matchCardList` 执行模式匹配。
+ * @param matches - 决定卡牌内容、边界或目标的 `matches` 值。
+ * @param displayedServerList - 决定卡牌内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @param compress - 决定卡牌内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的卡牌列表；没有匹配项时为空数组。
  */
 export async function drawCardList(
   matches: FuzzySearchResult,
@@ -73,10 +72,9 @@ export const matchCardList = createBangDreamEntityMatcher<Card>({
 });
 
 /**
- * 在QQBot 图片视图层中获取卡牌列表Axes。
- *
- * @param cardList - cardList 输入；驱动 `for()` 的 BangDream步骤。
- * @returns 计算后的数值。
+ * 按`cardList`读取卡牌布局坐标轴。
+ * @param cardList - 决定卡牌布局坐标轴内容、边界或目标的 `cardList` 值。
+ * @returns 包含 `characterIdList`、`attributeList` 字段的卡牌布局坐标轴；没有匹配项时为空数组。
  */
 function getCardListAxes(cardList: Card[]): {
   characterIdList: number[];
@@ -95,10 +93,9 @@ function getCardListAxes(cardList: Card[]): {
 }
 
 /**
- * 在QQBot 图片视图层中绘制角色图标。
- *
- * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
- * @returns 异步处理结果。
+ * 根据`characterId`绘制或格式化角色图标；当 `characterId == null` 成立时返回 `tempCanvas`。
+ * @param characterId - 用于精确定位角色的标识。
+ * @returns 角色图标。
  */
 async function drawCharacterIcon(characterId: number | null): Promise<Canvas> {
   const tempCanvas = new Canvas(100, 140);
@@ -113,12 +110,11 @@ async function drawCharacterIcon(characterId: number | null): Promise<Canvas> {
 }
 
 /**
- * 在QQBot 图片视图层中绘制Wide卡牌列表。
- *
- * @param cardList - cardList 输入；驱动 `getCardListByAttributeAndCharacterId()` 的 BangDream步骤。
- * @param characterIdList - 角色 ID 列表；限定本次批量读取、渲染或关联的角色范围。
- * @param attributeList - attributeList 输入；驱动 `for()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`cardList`、`characterIdList`、`attributeList`绘制或格式化Wide卡牌；当 `cardListImage.width <= maxWidth` 成立时返回 `cardListImage`。
+ * @param cardList - 决定Wide卡牌内容、边界或目标的 `cardList` 值。
+ * @param characterIdList - 决定Wide卡牌内容、边界或目标的 `characterIdList` 值。
+ * @param attributeList - 决定Wide卡牌内容、边界或目标的 `attributeList` 值。
+ * @returns 按输入顺序得到的Wide卡牌列表；没有匹配项时为空数组。
  */
 async function drawWideCardList(
   cardList: Card[],
@@ -162,12 +158,11 @@ async function drawWideCardList(
 }
 
 /**
- * 在QQBot 图片视图层中绘制Compact卡牌列表。
- *
- * @param cardList - cardList 输入；驱动 `getCardListByAttributeAndCharacterId()` 的 BangDream步骤。
- * @param characterIdList - 角色 ID 列表；限定本次批量读取、渲染或关联的角色范围。
- * @param attributeList - attributeList 输入；驱动 `for()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`cardList`、`characterIdList`、`attributeList`绘制或格式化Compact卡牌；从 `getCardListByAttributeAndCharacterId` 读取Compact卡牌。
+ * @param cardList - 决定Compact卡牌内容、边界或目标的 `cardList` 值。
+ * @param characterIdList - 决定Compact卡牌内容、边界或目标的 `characterIdList` 值。
+ * @param attributeList - 决定Compact卡牌内容、边界或目标的 `attributeList` 值。
+ * @returns Compact卡牌。
  */
 async function drawCompactCardList(
   cardList: Card[],
@@ -190,7 +185,12 @@ async function drawCompactCardList(
       }
       cardImageList.push(await drawCardListLine(cards));
       characterIconImageList.push(
-        await drawCharacterIcon(shouldDrawIcon ? characterId : null),
+        await drawCharacterIcon((() => {
+          if (shouldDrawIcon) {
+            return characterId;
+          }
+          return null;
+        })()),
       );
       shouldDrawIcon = false;
     }
@@ -202,11 +202,10 @@ async function drawCompactCardList(
 }
 
 /**
- * 在QQBot 图片视图层中输出卡牌列表图片。
- *
- * @param cardListImage - cardListImage 输入；驱动 `outputEasyImages()` 的 BangDream步骤。
- * @param compress - BangDream列表；影响 outputCardListImage 的返回值。
- * @returns 异步处理结果。
+ * 根据`cardListImage`、`compress`绘制或格式化output卡牌图片；把图片、文本或图形按布局规格绘制到画布。
+ * @param cardListImage - 决定output卡牌图片内容、边界或目标的 `cardListImage` 值。
+ * @param compress - 决定output卡牌图片内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的output卡牌图片列表；没有匹配项时为空数组。
  */
 async function outputCardListImage(
   cardListImage: Canvas,
@@ -219,11 +218,11 @@ async function outputCardListImage(
 }
 
 /**
- * 在QQBot 图片视图层中获取卡牌列表By属性And角色ID。
- *
- * @param cardFullList - cardFullList 输入；使用 `length` 字段生成结果。
- * @param attribute - attribute 输入；决定 BangDream条件分支。
- * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
+ * 按`cardFullList`、`attribute`、`characterId`读取卡牌属性角色标识。
+ * @param cardFullList - 用于卡牌属性角色标识的领域对象，包含 `length`、`i` 字段。
+ * @param attribute - 决定卡牌属性图标与边框资源的属性。
+ * @param characterId - 用于精确定位角色的标识。
+ * @returns 卡牌属性角色标识。
  */
 function getCardListByAttributeAndCharacterId(
   cardFullList: Card[],
@@ -245,9 +244,9 @@ function getCardListByAttributeAndCharacterId(
 
 //每个颜色和角色的一行
 /**
- * 在QQBot 图片视图层中绘制卡牌列表线条。
- *
- * @param cardList - cardList 输入；使用 `length` 字段生成结果。
+ * 根据`cardList`绘制或格式化卡牌文本行；当 `cardList.length == 0` 成立时返回 `new Canvas(1, 140)`。
+ * @param cardList - 用于卡牌文本行的领域对象，包含 `length`、`i` 字段。
+ * @returns 卡牌文本行。
  */
 async function drawCardListLine(cardList: Card[]) {
   if (cardList.length == 0) {

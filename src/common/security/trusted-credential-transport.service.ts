@@ -24,7 +24,7 @@ export class TrustedCredentialTransportService {
   ) {}
 
   /**
-   * 在全局安全边界校验受保护凭据路由的传输协议。
+   * 通过在全局安全边界校验受保护凭据路由的传输协议。
    * @param request - 当前 HTTP 请求；提供路由和可信代理后的公开 Origin。
    */
   assertProtectedRequest(request: Request): void {
@@ -45,8 +45,9 @@ export class TrustedCredentialTransportService {
   }
 
   /**
-   * 判断请求是否命中固定的凭据写入路由。
-   * @param request - 当前 HTTP 请求；提供请求方法和实际 Nest 路径。
+   * 根据参数 `request`，判断请求是否命中固定的凭据写入路由。
+   * @param request - 用于根据参数 `request`，判断请求是否命中固定的凭据写入路由的当前 HTTP 请求，包含 `method` 字段。
+   * @returns 满足根据参数 `request`，判断请求是否命中固定的凭据写入路由约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isProtectedRequest(request: Request): boolean {
     const method = `${request.method || ''}`.toUpperCase();
@@ -56,9 +57,10 @@ export class TrustedCredentialTransportService {
   }
 
   /**
-   * 判断请求是否满足非生产环回 HTTP 例外。
-   * @param request - 当前 HTTP 请求；提供真实 socket peer。
-   * @param hostname - 可信公开 Origin 中的主机名。
+   * 仅把非生产环境中的环回 HTTP 请求识别为受保护凭据路由的传输例外。
+   * @param request - 用于仅把非生产环境中的环回 HTTP 请求识别为受保护凭据路由的传输例外的当前 HTTP 请求，包含 `socket` 字段。
+   * @param hostname - 决定仅把非生产环境中的环回 HTTP 请求识别为受保护凭据路由的传输例外内容、边界或目标的 `hostname` 值。
+   * @returns 满足仅把非生产环境中的环回 HTTP 请求识别为受保护凭据路由的传输例外约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isAllowedInsecureLocal(request: Request, hostname: string): boolean {
     return (
@@ -75,11 +77,15 @@ export class TrustedCredentialTransportService {
 
   /**
    * 提取实际 HTTP 路径并统一移除查询串和尾斜杠。
-   * @param request - 当前 HTTP 请求；提供 path、originalUrl 或 url。
+   * @param request - 用于提取实际 HTTP 路径并统一移除查询串和尾斜杠的当前 HTTP 请求，包含 `path`、`originalUrl`、`url` 字段。
+   * @returns 提取实际 HTTP 路径并统一移除查询串和尾斜杠。
    */
   private getPath(request: Request): string {
     const raw = request.path || request.originalUrl || request.url || '/';
     const path = raw.split('?')[0] || '/';
-    return path.length > 1 ? path.replace(/\/+$/, '') : path;
+    if (path.length > 1) {
+      return path.replace(/\/+$/, '');
+    }
+    return path;
   }
 }

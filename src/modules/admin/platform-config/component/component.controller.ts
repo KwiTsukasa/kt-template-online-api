@@ -71,8 +71,8 @@ export class ComponentController {
   ) {}
 
   /**
-   * 获取组件列表。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * 按`res`读取组件列表；向目标通道投递结果（`res.send`）。
+   * @param res - 包含 `send` 字段的上游服务响应。
    */
   @Get('allList')
   @ApiOperation({ summary: '获取组件列表' })
@@ -83,10 +83,8 @@ export class ComponentController {
   }
 
   /**
-   * 获取组件列表分页。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param { pageNo, pageSize, ...args } - HTTP 查询参数，提供组件配置查询或解析所需字段，读取 `pageNo`、`pageSize`、`args` 字段。
-   * @returns Admin 平台配置查询结果。
+   * 根据参数 `res`，获取组件列表分页。
+   * @param res - 包含 `send` 字段的上游服务响应。
    */
   @Get('list')
   @ApiOperation({ summary: '获取组件列表分页' })
@@ -106,9 +104,9 @@ export class ComponentController {
   }
 
   /**
-   * 保存组件。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param component - component 输入；驱动 `componentService.save()` 的 Admin步骤。
+   * 根据`res`、`component`更新针对组件；当 `!save` 成立时直接结束且不产生返回值。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param component - 决定针对组件内容、边界或目标的 `component` 值。
    */
   @Post('save')
   @HttpCode(HttpStatus.OK)
@@ -133,9 +131,9 @@ export class ComponentController {
   }
 
   /**
-   * 删除组件。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按`res`、`id`移除针对删除组件；当 `!remove` 成立时直接结束且不产生返回值。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param id - 决定针对删除组件内容、边界或目标的 `id` 值。
    */
   @Post('remove')
   @HttpCode(HttpStatus.OK)
@@ -162,9 +160,9 @@ export class ComponentController {
   }
 
   /**
-   * 编辑组件。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param component - component 输入；驱动 `componentService.update()` 的 Admin步骤。
+   * 根据`res`、`component`更新针对组件；当 `!update` 成立时直接结束且不产生返回值。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param component - 决定针对组件内容、边界或目标的 `component` 值。
    */
   @Post('update')
   @HttpCode(HttpStatus.OK)
@@ -190,9 +188,9 @@ export class ComponentController {
   }
 
   /**
-   * 组件详情。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按`res`、`id`读取针对组件详情；当 `!detail` 成立时直接结束且不产生返回值。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param id - 决定针对组件详情内容、边界或目标的 `id` 值。
    */
   @Get('detail')
   @ApiOperation({ summary: '组件详情' })

@@ -9,9 +9,9 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/gacha/gacha-list.layout';
 
 /**
- * 在图片布局层中绘制Gasha支付方式MethodIn列表。
- *
- * @param gacha - gacha 输入；使用 `paymentMethods` 字段生成结果。
+ * 根据`gacha`绘制或格式化GashaPaymentMethod；从 `item.getItemImage` 读取GashaPaymentMethod。
+ * @param gacha - 用于GashaPaymentMethod的领域对象，包含 `paymentMethods` 字段。
+ * @returns 按支付方式顺序叠加物品图标、数量与行为说明后的卡池支付画布。
  */
 export async function drawGashaPaymentMethodInList(gacha: Gacha) {
   const list = [];
@@ -65,9 +65,12 @@ export async function drawGashaPaymentMethodInList(gacha: Gacha) {
     const isFirst = i == 0;
     list.push(
       drawList({
-        key: isFirst
-          ? BANGDREAM_GACHA_LIST_SPEC.label.paymentMethod
-          : undefined,
+        key: (() => {
+          if (isFirst) {
+            return BANGDREAM_GACHA_LIST_SPEC.label.paymentMethod;
+          }
+          return undefined;
+        })(),
         content: methodDescription,
       }),
     );

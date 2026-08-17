@@ -8,7 +8,10 @@ import type { RuntimeHealthReport } from './runtime-health.types';
 export class RuntimeHealthController {
   constructor(private readonly runtimeHealthService: RuntimeHealthService) {}
 
-  /** 读取运行态健康状态。 */
+  /**
+   * 按当前运行态读取运行态健康状态；从 `runtimeHealthService.getRuntimeHealth` 读取运行态健康状态。
+   * @returns 运行态健康状态。
+   */
   @Get('runtime')
   @ApiOperation({ summary: 'Get machine-readable API runtime health' })
   getRuntimeHealth(): RuntimeHealthReport {

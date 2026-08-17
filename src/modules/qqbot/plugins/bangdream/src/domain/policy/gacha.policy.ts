@@ -23,30 +23,27 @@ export type GachaCardWeightList = Record<
 >;
 
 /**
- * 判断卡池类型是否为生日卡池。
- *
- * @param type - type 输入；计算 BangDream判断结果。
- * @returns 判断结果。
+ * 根据`type`与当前约束判定卡池类型是否为生日卡池。
+ * @param type - 决定卡池类型是否为生日卡池内容、边界或目标的 `type` 值。
+ * @returns 满足卡池类型是否为生日卡池约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isBirthdayGachaType(type: string): boolean {
   return type === BangDreamGachaType.birthday;
 }
 
 /**
- * 判断卡池类型是否为免费卡池。
- *
- * @param type - type 输入；计算 BangDream判断结果。
- * @returns 判断结果。
+ * 根据`type`与当前约束判定卡池类型是否为免费卡池。
+ * @param type - 决定卡池类型是否为免费卡池内容、边界或目标的 `type` 值。
+ * @returns 满足卡池类型是否为免费卡池约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isFreeGachaType(type: string): boolean {
   return type === BangDreamGachaType.free;
 }
 
 /**
- * 判断日服卡池是否为常驻期。
- *
- * @param gachaPeriod - gachaPeriod 输入；计算 BangDream判断结果。
- * @returns 判断结果。
+ * 根据`gachaPeriod`与当前约束判定日服卡池是否为常驻期。
+ * @param gachaPeriod - 决定日服卡池是否为常驻期内容、边界或目标的 `gachaPeriod` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 满足日服卡池是否为常驻期约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isPermanentJapaneseGachaPeriod(
   gachaPeriod?: string | null,
@@ -55,21 +52,19 @@ export function isPermanentJapaneseGachaPeriod(
 }
 
 /**
- * 判断抽卡次数是否超过上限。
- *
- * @param times - BangDream列表；计算 BangDream判断结果。
- * @returns 判断结果。
+ * 根据`times`与当前约束判定抽卡次数是否超过上限。
+ * @param times - 决定抽卡次数是否超过上限内容、边界或目标的 `times` 值。
+ * @returns 满足抽卡次数是否超过上限约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isGachaSpinCountTooLarge(times: number): boolean {
   return times > BANGDREAM_GACHA_MAX_SPIN_COUNT;
 }
 
 /**
- * 应用十连保底稀有度规则。
- *
- * @param drawIndex - drawIndex 输入；决定 BangDream条件分支。
- * @param rarity - rarity 输入；驱动 `Math.max()` 的 BangDream步骤。
- * @returns 应用保底后的稀有度。
+ * 根据`drawIndex`、`rarity`更新十连保底稀有度规则；当 `drawIndex % BANGDREAM_GACHA_DEFAULT_SPIN_COUNT === 9` 成立时返回 `Math.max(rarity, BANGDREAM_GACHA_GUARANTEED…`。
+ * @param drawIndex - 决定十连保底稀有度规则内容、边界或目标的 `drawIndex` 值。
+ * @param rarity - 决定卡牌边框、星级数量与资源名称的稀有度。
+ * @returns 十连保底稀有度规则。
  */
 export function applyGachaGuaranteedRarity(
   drawIndex: number,
@@ -83,10 +78,9 @@ export function applyGachaGuaranteedRarity(
 
 /**
  * 按卡池概率抽取稀有度。
- *
- * @param rarities - BangDream列表；驱动 `Object.values()`、`for()` 的 BangDream步骤。
- * @param random - random 输入；影响 pickGachaRarityByRate 的返回值。
- * @returns 稀有度 key。
+ * @param rarities - 用于按卡池概率抽取稀有度的领域对象，包含 `key` 字段。
+ * @param random - 负责完成按卡池概率抽取稀有度外部交互的受控能力；省略时默认采用 `Math.random`。
+ * @returns 按卡池概率抽取稀有度；无法解析或未命中时为 `null`。
  */
 export function pickGachaRarityByRate(
   rarities: GachaRarityRates,
@@ -112,12 +106,11 @@ export function pickGachaRarityByRate(
 
 /**
  * 按卡牌权重抽取卡牌 ID。
- *
- * @param rarity - rarity 输入；决定 BangDream条件分支。
- * @param totalWeight - totalWeight 输入；驱动 `random()` 的 BangDream步骤。
- * @param cardWeightList - cardWeightList 输入；驱动 `for()` 的 BangDream步骤。
- * @param random - random 输入；影响 pickGachaCardIdByWeight 的返回值。
- * @returns 卡牌 ID。
+ * @param rarity - 决定卡牌边框、星级数量与资源名称的稀有度。
+ * @param totalWeight - 决定按卡牌权重抽取卡牌 ID内容、边界或目标的 `totalWeight` 值。
+ * @param cardWeightList - 用于按卡牌权重抽取卡牌 ID的领域对象，包含 `cardId` 字段。
+ * @param random - 负责完成按卡牌权重抽取卡牌 ID外部交互的受控能力；省略时默认采用 `Math.random`。
+ * @returns 按卡牌权重抽取卡牌 ID。
  */
 export function pickGachaCardIdByWeight(
   rarity: number,

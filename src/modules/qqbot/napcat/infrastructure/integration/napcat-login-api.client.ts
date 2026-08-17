@@ -84,10 +84,11 @@ export class NapcatWebuiHttpClient {
   ) {}
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param container - container 输入；驱动 `this.getCredential()` 的 NapCat步骤。
-   * @param path - 路由或文件路径；影响 post 的返回值。
-   * @param body - 请求体 DTO；承载 NapCat新增、更新、导入或执行字段。
+   * 携带内部密钥向 NapCat WebUI 网关发送有超时边界的 POST 请求，并解包响应数据。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @param body - 用于post的结构化输入；省略时默认采用 `{}`。
+   * @returns 返回网关响应解包后的业务数据。
    */
   async post<T>(
     container: NapcatWebuiRuntime,
@@ -99,24 +100,27 @@ export class NapcatWebuiHttpClient {
   }
 
   /**
-   * 清理Credential。
-   * @param container - container 输入；驱动 `this.getCredentialCacheKey()` 的 NapCat步骤。
+   * 按`container`移除登录凭据；从 `getCredentialCacheKey` 读取登录凭据。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
    */
   clearCredential(container: NapcatWebuiRuntime) {
     delete this.credentials[this.getCredentialCacheKey(container)];
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
-   * @param container - container 输入；使用 `id`、`baseUrl` 字段生成结果。
+   * 按`container`读取登录凭据缓存键。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @returns 规范化后的登录凭据缓存键；主值为空时采用 `container.baseUrl` 兜底。
    */
   private getCredentialCacheKey(container: NapcatWebuiRuntime) {
     return container.id || container.baseUrl;
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
-   * @param container - container 输入；驱动 `this.getCredentialCacheKey()`、`this.getWebuiToken()` 的 NapCat步骤。
+   * 按`container`读取登录凭据；当 `cached && Date.now() < cached.expiresAt` 成立时返回 `cached.credential`。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @returns 登录凭据。
+   * @throws 当 `!data.Credential` 成立时拒绝当前输入并抛出 `Error`。
    */
   private async getCredential(container: NapcatWebuiRuntime) {
     const cacheKey = this.getCredentialCacheKey(container);
@@ -143,12 +147,12 @@ export class NapcatWebuiHttpClient {
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param container - container 输入；使用 `baseUrl` 字段生成结果。
-   * @param path - 路由或文件路径；驱动 `URL()` 的 NapCat步骤。
-   * @param body - 请求体 DTO；承载 NapCat新增、更新、导入或执行字段。
-   * @param credential - credential 输入；影响 request 的返回值。
-   * @returns 异步完成后的 NapCat 登录运行态结果。
+   * 根据 NapCat WebUI URL 协议选择 HTTP 或 HTTPS，在配置超时内发送 JSON POST 请求，并将非 JSON、异常状态与网络失败转为稳定异常。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @param body - 用于`request` 对应结果的结构化输入；省略时默认采用 `{}`。
+   * @param credential - 决定`request` 对应结果内容、边界或目标的 `credential` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 完成初始化并携带当前边界配置的`request` 对应。
    */
   private request<T>(
     container: NapcatWebuiRuntime,
@@ -158,17 +162,25 @@ export class NapcatWebuiHttpClient {
   ): Promise<T> {
     const target = new URL(path, container.baseUrl);
     const payload = JSON.stringify(body);
-    const client = target.protocol === 'https:' ? https : http;
+    const client = (() => {
+      if (target.protocol === 'https:') {
+        return https;
+      }
+      return http;
+    })();
 
     return new Promise<T>((resolve, reject) => {
       const req = client.request(
         {
           headers: {
-            ...(credential
-              ? {
+            ...((() => {
+              if (credential) {
+                return {
                   Authorization: `Bearer ${credential}`,
-                }
-              : {}),
+                };
+              }
+              return {};
+            })()),
             'Content-Length': Buffer.byteLength(payload),
             'Content-Type': 'application/json',
           },
@@ -186,7 +198,11 @@ export class NapcatWebuiHttpClient {
             const raw = Buffer.concat(chunks).toString('utf8');
             let result: NapcatApiResponse<T>;
             try {
-              result = raw ? JSON.parse(raw) : ({ code: -1 } as any);
+              if (raw) {
+                result = JSON.parse(raw);
+              } else {
+                result = ({ code: -1 } as any);
+              }
             } catch {
               reject(new Error('NapCat 返回非 JSON 响应'));
               return;
@@ -209,8 +225,10 @@ export class NapcatWebuiHttpClient {
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
-   * @param container - container 输入；使用 `webuiToken` 字段生成结果。
+   * 从容器运行态读取并裁剪 NapCat WebUI 令牌；令牌缺失时抛出配置错误。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @returns 从容器运行态读取并裁剪 NapCat WebUI 令牌。
+   * @throws 当 `!token` 成立时拒绝当前输入并抛出 `Error`。
    */
   private getWebuiToken(container: NapcatWebuiRuntime) {
     const token = `${container.webuiToken || ''}`.trim();
@@ -225,9 +243,10 @@ export class NapcatLoginApiClient {
   constructor(private readonly transport: NapcatLoginApiTransport) {}
 
   /**
-   * 查询 NapCat 登录运行态数据。
-   * @param input - input 输入；使用 `uin`、`jumpUrl` 字段生成结果。
-   * @returns NapCat 登录运行态查询结果。
+   * 按`input`读取设备二维码；向目标通道投递结果（`transport.post`）。
+   * @param input - 用于设备二维码的结构化输入，包含 `uin`、`jumpUrl` 字段。
+   * @returns 包含 `bytesToken`、`deviceVerifyUrl`、`pullQrCodeSig`、`qrcodeUrl`、`status` 字段的设备二维码。
+   * @throws 当 `!uin || !jumpUrl` 成立时拒绝当前输入并抛出 `Error`；当 `!newDeviceQrcodeUrl` 成立时拒绝当前输入并抛出 `Error`；当 `!bytesToken` 成立时拒绝当前输入并抛出 `Error`。
    */
   async getNewDeviceQRCode(
     input: NewDeviceQrRequest,
@@ -274,9 +293,10 @@ export class NapcatLoginApiClient {
   }
 
   /**
-   * 轮询New Device QR。
-   * @param input - input 输入；使用 `uin`、`bytesToken` 字段生成结果。
-   * @returns 异步完成后的 NapCat 登录运行态结果。
+   * 调用 NapCat 新设备二维码状态接口，归一化多种状态字段并提取确认令牌与提示。
+   * @param input - 新设备验证的 QQ 号与二维码 `bytesToken`；两者均需为非空文本。
+   * @returns 返回归一化的轮询状态，以及 NapCat 可选的确认令牌和提示；后两者缺失时为 `undefined`。
+   * @throws 当 QQ 号或 `bytesToken` 为空时抛出 `Error`。
    */
   async pollNewDeviceQR(
     input: NewDeviceQrPollRequest,
@@ -308,9 +328,10 @@ export class NapcatLoginApiClient {
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param input - input 输入；使用 `uin`、`passwordMd5`、`newDevicePullQrCodeSig` 字段生成结果。
-   * @returns 异步完成后的 NapCat 登录运行态结果。
+   * 根据`input`处理设备Login；向目标通道投递结果（`transport.post`）。
+   * @param input - 用于设备Login的结构化输入，包含 `uin`、`passwordMd5`、`newDevicePullQrCodeSig` 字段。
+   * @returns 包含 `jumpUrl`、`message`、`needNewDevice`、`pullQrCodeSig`、`status` 字段的设备Login；没有可用结果或提前结束时为 `undefined`。
+   * @throws 当 `!uin || !passwordMd5 || input.newDevicePullQrCodeSig == null` 成立时拒绝当前输入并抛出 `Error`。
    */
   async newDeviceLogin(
     input: NewDeviceLoginRequest,
@@ -329,28 +350,39 @@ export class NapcatLoginApiClient {
       uin,
     });
     const data =
-      payload && typeof payload === 'object'
-        ? (payload as Record<string, unknown>)
-        : {};
+      (() => {
+        if (payload && typeof payload === 'object') {
+          return (payload as Record<string, unknown>);
+        }
+        return {};
+      })();
     const success =
-      payload === null || payload === undefined
-        ? true
-        : this.normalizeLoginSuccess(data);
+      (() => {
+        if (payload === null || payload === undefined) {
+          return true;
+        }
+        return this.normalizeLoginSuccess(data);
+      })();
 
     return {
       jumpUrl: this.pickString(data.jumpUrl, data.verifyUrl) || undefined,
       message: this.pickString(data.message, data.reason) || undefined,
       needNewDevice: data.needNewDevice === true,
       pullQrCodeSig: this.pickPayload(data.newDevicePullQrCodeSig, data.sig),
-      status: success ? 'verified' : 'failed',
+      status: (() => {
+        if (success) {
+          return 'verified';
+        }
+        return 'failed';
+      })(),
       success,
     };
   }
 
   /**
-   * 转换 NapCat 登录运行态输入。
-   * @param status - NapCat列表；执行 `status.toLowerCase()` 对应的 NapCat步骤。
-   * @returns NapCat 登录运行态转换后的值。
+   * 将`status`规范为轮询状态，使等价输入得到一致表示；当 `typeof status === 'number'` 成立时返回 `'scanned'`。
+   * @param status - 决定轮询状态内容、边界或目标的 `status` 值。
+   * @returns 当前状态对应的轮询状态，取值为 `'scanned'`、`'confirming'`、`'failed'`、`'qr-pending'`、`'expired'`。
    */
   private normalizePollStatus(
     status: unknown,
@@ -374,8 +406,9 @@ export class NapcatLoginApiClient {
   }
 
   /**
-   * 转换 NapCat 登录运行态输入。
-   * @param data - 响应数据；承载 NapCat新增、更新、导入或执行字段。
+   * 将`data`规范为LoginSuccess，使等价输入得到一致表示。
+   * @param data - 用于LoginSuccess的领域对象，包含 `needNewDevice`、`status`、`state`、`result` 字段。
+   * @returns 满足LoginSuccess约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private normalizeLoginSuccess(data: Record<string, unknown>) {
     if (data.needNewDevice === true) return false;
@@ -388,8 +421,9 @@ export class NapcatLoginApiClient {
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param values - 配置值字典；驱动 `for()` 的 NapCat步骤。
+   * 按实参顺序返回首个去除首尾空白后仍非空的字符串；没有匹配值时返回空字符串。
+   * @param values - 按原有顺序参与按实参顺序返回首个去除首尾空白后仍非空的字符串筛选、合并或汇总的集合；按调用方给定的顺序传递全部剩余实参。
+   * @returns 当前状态对应的按实参顺序返回首个去除首尾空白后仍非空的字符串，取值为 `''`。
    */
   private pickString(...values: unknown[]) {
     for (const value of values) {
@@ -401,8 +435,9 @@ export class NapcatLoginApiClient {
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param values - 配置值字典；驱动 `for()` 的 NapCat步骤。
+   * 按实参顺序返回首个有效载荷；字符串会去除首尾空白，空字符串与空值被跳过，全部无效时返回 `undefined`。
+   * @param values - 按原有顺序参与按实参顺序返回首个有效载荷筛选、合并或汇总的集合；按调用方给定的顺序传递全部剩余实参。
+   * @returns 按实参顺序返回首个有效载荷；没有可用结果或提前结束时为 `undefined`。
    */
   private pickPayload(...values: unknown[]) {
     for (const value of values) {
@@ -418,8 +453,9 @@ export class NapcatLoginApiClient {
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param strUrl - 访问地址；驱动 `URL()` 的 NapCat步骤。
+   * 根据`strUrl`处理deriveBytes令牌；从 `searchParams.get` 读取deriveBytes令牌。
+   * @param strUrl - 待规范化、请求或同源校验的strURL 地址 URL。
+   * @returns 当前状态对应的deriveBytes令牌，取值为 `''`。
    */
   private deriveBytesToken(strUrl: string) {
     if (!strUrl) return '';
@@ -433,8 +469,9 @@ export class NapcatLoginApiClient {
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param text - 待匹配文本；驱动 `this.pickString()` 的 NapCat步骤。
+   * 将`text`转换为二维码数据URL 地址。
+   * @param text - 决定二维码数据URL 地址内容、边界或目标的 `text` 值。
+   * @returns 当前状态对应的二维码数据URL 地址，取值为 `''`。
    */
   private async toQrcodeDataUrl(text: string) {
     const normalized = this.pickString(text);
@@ -444,8 +481,9 @@ export class NapcatLoginApiClient {
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param text - 待匹配文本；驱动 `QRCode.toDataURL()` 的 NapCat步骤。
+   * 将非空文本生成固定纠错级别、边距和缩放比的 PNG 二维码 Data URL；空文本返回空字符串。
+   * @param text - 决定将非空文本生成固定纠错级别、边距和缩放比的 PNG 二维码 Data URL内容、边界或目标的 `text` 值。
+   * @returns 当前状态对应的二维码，取值为 `''`。
    */
   private async createQrcode(text: string) {
     if (!text) return '';

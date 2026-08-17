@@ -63,7 +63,12 @@ export class MediaCodexAgentSessionStore {
     }
   }
 
-  /** 从受管文件读取指定任务会话，并在返回前校验完整检查点。 */
+  /**
+   * 从受管文件读取指定任务会话，并在返回前校验完整检查点。
+   * @param taskId - 用于精确定位任务的标识。
+   * @returns `load` 对应；无法解析或未命中时为 `null`。
+   * @throws 当 `lstatSync(file).isSymbolicLink()` 成立时拒绝当前输入并抛出 `Error`。
+   */
   load(taskId: string): MediaCodexAgentSessionRecord | null {
     const file = this.sessionPath(taskId);
     if (!existsSync(file)) return null;
@@ -74,7 +79,11 @@ export class MediaCodexAgentSessionStore {
     return this.validateRecord(record, taskId);
   }
 
-  /** 遍历受管会话并按 App Server 线程标识查找唯一任务记录。 */
+  /**
+   * 遍历受管会话并按 App Server 线程标识查找唯一任务记录。
+   * @param threadId - 用于精确定位线程的标识。
+   * @returns 受管会话并按 App Server 线程标识查找唯一任务记录；无法解析或未命中时为 `null`。
+   */
   findByThreadId(threadId: string): MediaCodexAgentSessionRecord | null {
     if (!SAFE_ID_PATTERN.test(threadId)) return null;
     for (const fileName of readdirSync(this.sessionsRoot)) {
@@ -86,7 +95,12 @@ export class MediaCodexAgentSessionStore {
     return null;
   }
 
-  /** 计算检查点摘要并通过临时文件、文件同步和目录同步原子保存会话。 */
+  /**
+   * 计算检查点摘要并通过临时文件、文件同步和目录同步原子保存会话。
+   * @param input - 用于检查点摘要并通过临时文件、文件同步和目录同步原子保存会话的结构化输入，包含 `taskId` 字段。
+   * @returns 检查点摘要并通过临时文件、文件同步和目录同步原子保存会话。
+   * @throws 当 `existsSync(target) && lstatSync(target).isSymbolicLink()` 成立时拒绝当前输入并抛出 `Error`。
+   */
   save(
     input: Omit<MediaCodexAgentSessionRecord, 'checkpointSha256'>,
   ): MediaCodexAgentSessionRecord {
@@ -121,7 +135,14 @@ export class MediaCodexAgentSessionStore {
     return record;
   }
 
-  /** 将内部会话投影为分页、安全且不暴露策略正文的查询结果。 */
+  /**
+   * 将内部会话投影为分页、安全且不暴露策略正文的查询结果。
+   * @param record - 用于将内部会话投影为分页、安全且不暴露策略正文的查询结果的领域对象，包含 `messages`、`capsule`、`checkpointSha256`、`conversationRevision` 字段。
+   * @param replayed - 决定将内部会话投影为分页、安全且不暴露策略正文的查询结果内容、边界或目标的 `replayed` 值。
+   * @param afterSequence - 只返回该消息序列号之后内容的排他下界；省略时从首条消息开始；省略时默认采用 `0`。
+   * @param limit - 允许返回或处理的将内部会话投影为分页、安全且不暴露策略正文的查询结果最大数量；省略时默认采用 `200`。
+   * @returns 包含 `capsuleSha256`、`checkpointSha256`、`conversationRevision`、`currentUnitId`、`hasMoreMessages` 字段的将内部会话投影为分页、安全且不暴露策略正文的查询。
+   */
   project(
     record: MediaCodexAgentSessionRecord,
     replayed: boolean,
@@ -156,13 +177,36 @@ export class MediaCodexAgentSessionStore {
     } satisfies MediaCodexAgentSafeSession;
   }
 
-  /** 将安全任务标识映射到受管会话文件路径。 */
+  /**
+   * 将安全任务标识映射到受管会话文件路径。
+   * @param taskId - 用于精确定位任务的标识。
+   * @returns 将安全任务标识映射到受管会话文件路径。
+   * @throws 当 `!SAFE_ID_PATTERN.test(taskId)` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private sessionPath(taskId: string) {
     if (!SAFE_ID_PATTERN.test(taskId)) throw new Error('task-id-invalid');
     return path.posix.join(this.sessionsRoot, `${taskId}.json`);
   }
 
-  /** 校验持久化会话的身份、序列、结果和检查点摘要，并补齐兼容默认值。 */
+  /**
+   * 校验持久化会话的身份、序列、结果和检查点摘要，并补齐兼容默认值。
+   * @param value - 参与记录比较、格式化或输出的候选值。
+   * @param expectedTaskId - 用于精确定位expected任务的标识。
+   * @returns 包含 `acceptedPlanSha256`、`conversationRevision`、`lastClientMessageId`、`lastEventSequence`、`messages` 字段的记录；无法解析或未命中时为 `null`。
+   * @throws 当 `!value || typeof value !== 'object' || Array.isArray(value)` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `record.schemaVersion !== MEDIA_CODEX_AGENT_SCHEMA_VERSION || record.tas…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!['active', 'blocked', 'closed'].includes(record.status)` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `record.terminalKind !== undefined && record.terminalKind !== null && ![…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!Array.isArray(record.consumedReplayKeys) || record.consumedReplayKeys.…` 成立时拒绝当前输入并抛出 `Error`；当 `!SAFE_ID_PATTERN.test(record.currentReplayKey)` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `record.lastClientMessageId !== undefined && record.lastClientMessageId…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `record.conversationRevision !== undefined && (!Number.isSafeInteger(rec…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `record.messages !== undefined && !this.validMessages( record.messages,…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `record.lastEventSequence !== undefined && (!Number.isSafeInteger(record…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `record.turnId !== null && !SAFE_ID_PATTERN.test(record.turnId)` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `record.acceptedPlanSha256 !== undefined && record.acceptedPlanSha256 !=…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `record.result !== undefined && record.result !== null && (!parsedResult…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!SHA256_PATTERN.test(record.capsule?.capsuleSha256 ?? '')` 成立时拒绝当前输入并抛出 `Error`；当 `checkpointSha256 !== sha256Json(unsigned)` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private validateRecord(
     value: unknown,
     expectedTaskId: string,
@@ -292,7 +336,12 @@ export class MediaCodexAgentSessionStore {
     } as MediaCodexAgentSessionRecord;
   }
 
-  /** 校验消息历史的体积、连续序列、角色状态、时间和结构化结果。 */
+  /**
+   * 按体积、连续序列、角色状态、时间和结构化结果规则校验消息历史。
+   * @param messages - 按原有顺序参与按体积、连续序列、角色状态、时间和结构化结果规则校验消息历史筛选、合并或汇总的集合。
+   * @param conversationRevision - 决定按体积、连续序列、角色状态、时间和结构化结果规则校验消息历史内容、边界或目标的 `conversationRevision` 值。
+   * @returns 满足按体积、连续序列、角色状态、时间和结构化结果规则校验消息历史约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private validMessages(
     messages: MediaCodexAgentConversationMessage[],
     conversationRevision: number,
@@ -343,7 +392,11 @@ export class MediaCodexAgentSessionStore {
     return previousSequence === conversationRevision;
   }
 
-  /** 重新解析单条结构化结果，确保派生候选和原始持久化内容完全一致。 */
+  /**
+   * 重新解析单条结构化结果，确保派生候选和原始持久化内容完全一致。
+   * @param result - 用于重新解析单条结构化结果，确保派生候选和原始持久化内容完全一致的领域对象，包含 `candidateSummaries`、`nextActionLabel`、`planSha256`、`status` 字段。
+   * @returns 满足重新解析单条结构化结果，确保派生候选和原始持久化内容完全一致约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private validResult(result: MediaCodexAgentResult) {
     const parsed = parseMediaCodexAgentResult({
       candidateSummaries: result.candidateSummaries,

@@ -73,7 +73,14 @@ const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/;
 export class MediaGovernanceRedisProgressHotStore implements MediaGovernanceProgressHotStore {
   constructor(@InjectRedis() private readonly redis: Redis) {}
 
-  /** 原子追加运行进度，校验顺序并返回是否需要权威序号或持久快照。 */
+  /**
+   * 原子追加运行进度，校验顺序并返回是否需要权威序号或持久快照。
+   * @param event - 触发原子追加运行进度，校验顺序并返回是否需要权威序号或持久快照的领域事件，包含 `runId`、`progress`、`sequence`、`eventType` 字段。
+   * @param authoritySequence - 决定原子追加运行进度，校验顺序并返回是否需要权威序号或持久快照内容、边界或目标的 `authoritySequence` 值。
+   * @returns 包含 `applied`、`authorityRequired`、`previousSequence`、`sequenceGap`、`snapshotRequired` 字段的原子追加运行进度，校验顺序并返回是否需要权威序号或持久快照。
+   * @throws 当 `!SAFE_ID.test(event.runId) || (authoritySequence !== null && (!Number.i…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!Array.isArray(result) || result.length !== 5 || result.some((value) =>…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async append(
     event: MediaGovernanceExecutorEventDto,
     authoritySequence: null | number,
@@ -127,7 +134,11 @@ export class MediaGovernanceRedisProgressHotStore implements MediaGovernanceProg
     };
   }
 
-  /** 将进度事件压缩为用于控制持久快照频率的稳定指纹。 */
+  /**
+   * 将进度事件压缩为用于控制持久快照频率的稳定指纹。
+   * @param event - 触发将进度事件压缩为用于控制持久快照频率的稳定指纹的领域事件，包含 `progress`、`eventType` 字段。
+   * @returns 将进度事件压缩为用于控制持久快照频率的稳定指纹。
+   */
   private snapshotFingerprint(event: MediaGovernanceExecutorEventDto) {
     if (!event.progress) return event.eventType;
     let percent = 0;

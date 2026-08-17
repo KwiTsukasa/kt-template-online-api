@@ -3,10 +3,10 @@ import type { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalo
 
 export class PlayerRepository {
   /**
-   * 创建玩家领域模型。
-   *
-   * @param playerId - 玩家 ID；定位本次读取、更新、删除或关联的玩家。
-   * @param server - server 输入；驱动 `Player()` 的 BangDream步骤。
+   * 根据`playerId`、`server`构造`create` 对应结果。
+   * @param playerId - 用于精确定位玩家的标识。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+   * @returns 完成初始化并携带当前边界配置的`create` 对应。
    */
   create(playerId: number, server: Server): Player {
     return new Player(playerId, server);

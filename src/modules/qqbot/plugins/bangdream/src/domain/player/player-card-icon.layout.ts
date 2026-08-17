@@ -12,18 +12,18 @@ export const BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC = {
 } as const;
 
 /**
- * 计算玩家卡牌列表文本字号。
- *
- * @param lineHeight - lineHeight 输入；限定 BangDream查询范围。
+ * 按`lineHeight`读取玩家卡牌列表文本字号。
+ * @param lineHeight - 决定玩家卡牌列表文本字号内容、边界或目标的 `lineHeight` 值。
+ * @returns 玩家卡牌列表文本字号。
  */
 export function getPlayerCardIconListTextSize(lineHeight: number) {
   return lineHeight * BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC.list.textSizeRatio;
 }
 
 /**
- * 计算玩家卡牌列表卡牌间距。
- *
- * @param lineHeight - lineHeight 输入；限定 BangDream查询范围。
+ * 按`lineHeight`读取玩家卡牌列表卡牌间距。
+ * @param lineHeight - 决定玩家卡牌列表卡牌间距内容、边界或目标的 `lineHeight` 值。
+ * @returns 玩家卡牌列表卡牌间距。
  */
 export function getPlayerCardIconListSpacing(lineHeight: number) {
   return lineHeight * BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC.list.spacingRatio;
@@ -31,8 +31,8 @@ export function getPlayerCardIconListSpacing(lineHeight: number) {
 
 /**
  * 按历史展示顺序排列玩家主卡组。
- *
- * @param entries - BangDream列表；驱动 `map()` 的 BangDream步骤。
+ * @param entries - 按原有顺序参与按历史展示顺序排列玩家主卡组筛选、合并或汇总的集合。
+ * @returns 按输入顺序得到的按历史展示顺序排列玩家主卡组列表；没有匹配项时为空数组。
  */
 export function sortPlayerMainDeckEntries<T>(entries: T[]): T[] {
   return BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC.card.defaultOrder

@@ -21,8 +21,9 @@ export class QqbotPluginPlatformTaskController {
   constructor(private readonly service: QqbotPluginTaskService) {}
 
   /**
-   * 插件定时任务分页。
-   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   * 按`query`读取针对插件定时任务分页。
+   * @param query - 限定针对插件定时任务分页筛选、排序与分页范围的查询条件。
+   * @returns 针对插件定时任务分页。
    */
   @Get('page')
   @ApiOperation({ summary: '插件定时任务分页' })
@@ -31,8 +32,9 @@ export class QqbotPluginPlatformTaskController {
   }
 
   /**
-   * 插件定时任务详情。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
+   * 按`id`读取针对插件定时任务详情；从 `service.getTaskDetail` 读取针对插件定时任务详情。
+   * @param id - 决定针对插件定时任务详情内容、边界或目标的 `id` 值。
+   * @returns 针对插件定时任务详情。
    */
   @Get(':id')
   @ApiOperation({ summary: '插件定时任务详情' })
@@ -41,8 +43,9 @@ export class QqbotPluginPlatformTaskController {
   }
 
   /**
-   * 启用插件定时任务。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
+   * 按`id`启动针对插件定时任务。
+   * @param id - 决定针对插件定时任务内容、边界或目标的 `id` 值。
+   * @returns 针对插件定时任务。
    */
   @Post(':id/enable')
   @HttpCode(HttpStatus.OK)
@@ -52,8 +55,9 @@ export class QqbotPluginPlatformTaskController {
   }
 
   /**
-   * 停用插件定时任务。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
+   * 根据参数 `id`，停用插件定时任务。
+   * @param id - 决定根据参数 `id`，停用插件定时任务内容、边界或目标的 `id` 值。
+   * @returns 根据参数 `id`，停用插件定时任务。
    */
   @Post(':id/disable')
   @HttpCode(HttpStatus.OK)
@@ -63,9 +67,10 @@ export class QqbotPluginPlatformTaskController {
   }
 
   /**
-   * 更新插件定时任务 cron。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 根据`id`、`body`更新插件定时任务 cron。
+   * @param id - 决定插件定时任务 cron内容、边界或目标的 `id` 值。
+   * @param body - 用于插件定时任务 cron的结构化输入。
+   * @returns 插件定时任务 cron。
    */
   @Post(':id/cron')
   @HttpCode(HttpStatus.OK)
@@ -78,9 +83,10 @@ export class QqbotPluginPlatformTaskController {
   }
 
   /**
-   * 手动运行插件定时任务。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 根据`id`、`body`处理针对插件定时任务。
+   * @param id - 决定针对插件定时任务内容、边界或目标的 `id` 值。
+   * @param body - 用于针对插件定时任务的结构化输入。
+   * @returns 针对插件定时任务。
    */
   @Post(':id/run')
   @HttpCode(HttpStatus.OK)
@@ -93,9 +99,10 @@ export class QqbotPluginPlatformTaskController {
   }
 
   /**
-   * 插件定时任务运行记录分页。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
-   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   * 根据当前平台状态返回插件定时任务运行记录分页。
+   * @param id - 决定根据当前平台状态返回插件定时任务运行记录分页内容、边界或目标的 `id` 值。
+   * @param query - 限定根据当前平台状态返回插件定时任务运行记录分页筛选、排序与分页范围的查询条件。
+   * @returns 根据当前平台状态返回插件定时任务运行记录分页。
    */
   @Get(':id/runs')
   @ApiOperation({ summary: '插件定时任务运行记录分页' })

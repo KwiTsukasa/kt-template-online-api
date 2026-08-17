@@ -12,10 +12,8 @@ interface AttributeInListOptions {
   text?: string;
 }
 /**
- * 在图片布局层中绘制属性In列表。
- *
- * @param options1 - options1 输入；影响 drawAttributeInList 的返回值。
- * @returns 异步处理结果。
+ * 根据当前运行态绘制或格式化卡牌属性；当 `shouldUseSingleEntityLabel(content.length, text)` 成立时返回 `canvas`。
+ * @returns 卡牌属性。
  */
 export async function drawAttributeInList({
   key,

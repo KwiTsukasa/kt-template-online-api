@@ -22,7 +22,11 @@ const MAX_DECODE_DEPTH = 6;
 const ALLOWED_LIVE2D_CHARACTERS = new Set(['pio', 'tia']);
 const ALLOWED_RUNTIME_FAMILIES = new Set(['moc', 'moc3']);
 
-/** 判断 MinIO 对象是否不存在。 */
+/**
+ * 根据`error`与当前约束判定MinIO 对象是否不存在；当 `!error || typeof error !== 'object'` 成立时返回 `false`。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+ * @returns 满足MinIO 对象是否不存在约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isMinioObjectNotFound(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
     return false;
@@ -44,7 +48,13 @@ export class BlogLive2DAssetService {
     private readonly clientIpService: ClientIpService,
   ) {}
 
-  /** 断言允许的请求。 */
+  /**
+   * 要求资源请求至少携带一个来源，并确保所有来源均属于旧博客或当前可信公开地址。
+   * @param request - 用于推导当前可信公开来源的 HTTP 请求。
+   * @param referer - 可选的页面来源请求头，与 `origin` 一并接受同源检查。
+   * @param origin - 可选的跨域来源请求头，与 `referer` 一并接受同源检查。
+   * @throws 两个来源参数均缺失，或任一来源不在允许集合中时抛出 `BadRequestException`。
+   */
   assertAllowedRequest(
     request: Request,
     referer?: string,
@@ -69,7 +79,14 @@ export class BlogLive2DAssetService {
     }
   }
 
-  /** 读取运行态对象。 */
+  /**
+   * 按`character`、`family`、`objectPath`读取运行态对象；从 `minioClientService.getObject` 读取运行态对象。
+   * @param character - 决定运行态对象内容、边界或目标的 `character` 值。
+   * @param family - 决定运行态对象内容、边界或目标的 `family` 值。
+   * @param objectPath - 必须保持在受控根目录内的对象路径。
+   * @returns 运行态对象。
+   * @throws 当 `isMinioObjectNotFound(error)` 成立时拒绝当前输入并抛出 `NotFoundException`；当 `minioClientService.getObject` 或 `resolveRuntimeObjectPath` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   async getRuntimeObject(
     character: string,
     family: string,
@@ -88,7 +105,12 @@ export class BlogLive2DAssetService {
     }
   }
 
-  /** 读取目录对象。 */
+  /**
+   * 按`character`读取目录对象；从 `minioClientService.getObject` 读取目录对象。
+   * @param character - 决定目录对象内容、边界或目标的 `character` 值。
+   * @returns 目录对象。
+   * @throws 当 `isMinioObjectNotFound(error)` 成立时拒绝当前输入并抛出 `NotFoundException`；当 `minioClientService.getObject` 或 `join` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   async getCatalogObject(character: string): Promise<BlogLive2DAssetResult> {
     try {
       return await this.minioClientService.getObject(
@@ -107,7 +129,13 @@ export class BlogLive2DAssetService {
     }
   }
 
-  /** 解析运行态对象路径。 */
+  /**
+   * 从`character`、`family`、`objectPath`解析运行态对象路径；从 `getRootPrefixSegments` 读取运行态对象路径。
+   * @param character - 决定运行态对象路径内容、边界或目标的 `character` 值。
+   * @param family - 决定运行态对象路径内容、边界或目标的 `family` 值。
+   * @param objectPath - 必须保持在受控根目录内的对象路径。
+   * @returns 运行态对象路径。
+   */
   resolveRuntimeObjectPath(
     character: string,
     family: string,
@@ -126,7 +154,10 @@ export class BlogLive2DAssetService {
     ].join('/');
   }
 
-  /** 读取存储桶名称。 */
+  /**
+   * 按当前运行态读取存储桶名称；从 `configService.get` 读取存储桶名称。
+   * @returns 规范化后的存储桶名称；主值为空时采用 `DEFAULT_LIVE2D_BUCKET` 兜底。
+   */
   private getBucketName(): string {
     return (
       this.configService.get<string>('BLOG_LIVE2D_BUCKET') ||
@@ -135,7 +166,10 @@ export class BlogLive2DAssetService {
     );
   }
 
-  /** 读取根目录前缀分段。 */
+  /**
+   * 按当前运行态读取根目录前缀分段；当 `rootPrefix` 成立时返回 `this.normalizeRouteSegments(rootPrefix, 'ro…`。
+   * @returns 按输入顺序得到的根目录前缀分段列表；没有匹配项时为空数组。
+   */
   private getRootPrefixSegments(): string[] {
     const rootPrefix = this.configService.get<string>(
       'BLOG_LIVE2D_ROOT_PREFIX',
@@ -158,7 +192,11 @@ export class BlogLive2DAssetService {
     );
   }
 
-  /** 读取允许的请求来源。 */
+  /**
+   * 按`request`读取允许的请求来源；当 `url.protocol !== 'https:' || url.hostname !== NATMAP_PUBLIC_H…` 成立时返回 `null`。
+   * @param request - 用于允许的请求来源的当前 HTTP 请求。
+   * @returns 允许的请求来源；无法解析或未命中时为 `null`。
+   */
   private getAllowedRequestOrigin(request: Request): string | null {
     const publicOrigin = this.toOrigin(
       this.clientIpService.getPublicOrigin(request),
@@ -173,7 +211,12 @@ export class BlogLive2DAssetService {
     return publicOrigin;
   }
 
-  /** 返回到来源。 */
+  /**
+   * 解析资源请求来源并只保留协议与主机部分，路径、查询和片段不会参与同源比较。
+   * @param value - 待解析的完整来源地址。
+   * @returns 由 HTTP 或 HTTPS 协议及主机组成的规范来源。
+   * @throws 地址无法解析或协议不是 HTTP 与 HTTPS 时抛出 `BadRequestException`。
+   */
   private toOrigin(value: string): string {
     try {
       const url = new URL(value);
@@ -186,7 +229,12 @@ export class BlogLive2DAssetService {
     }
   }
 
-  /** 规范化字符。 */
+  /**
+   * 把单个路径段校验为允许公开访问的 Live2D 角色名，未知角色直接拒绝。
+   * @param character - 决定把单个路径段校验为允许公开访问的 Live2D 角色名，未知角色直接拒绝内容、边界或目标的 `character` 值。
+   * @returns 把单个路径段校验为允许公开访问的 Live2D 角色名，未知角色直接拒绝。
+   * @throws 当 `segments.length !== 1 || !ALLOWED_LIVE2D_CHARACTERS.has(segments[0])` 成立时拒绝当前输入并抛出 `BadRequestException`。
+   */
   private normalizeCharacter(character: string): BlogLive2DCharacter {
     const segments = this.normalizeRouteSegments(character, 'character');
     if (segments.length !== 1 || !ALLOWED_LIVE2D_CHARACTERS.has(segments[0])) {
@@ -196,12 +244,24 @@ export class BlogLive2DAssetService {
     return segments[0] as BlogLive2DCharacter;
   }
 
-  /** 规范化路由分段。 */
+  /**
+   * 将`input`、`label`规范为路由分段，使等价输入得到一致表示。
+   * @param input - 用于路由分段的结构化输入。
+   * @param label - 决定路由分段内容、边界或目标的 `label` 值。
+   * @returns 按输入顺序得到的路由分段列表；没有匹配项时为空数组。
+   * @throws 当 `!decoded || decoded.includes('\\') || decoded.startsWith('/') || decode…` 成立时拒绝当前输入并抛出 `BadRequestException`；
+   *   当 `!segments.length || segments.some((segment) => segment === '.' || segme…` 成立时拒绝当前输入并抛出 `BadRequestException`。
+   */
   private normalizeRouteSegments(
     input: BlogLive2DRuntimeAssetPath,
     label: string,
   ): string[] {
-    const raw = Array.isArray(input) ? input.join('/') : String(input || '');
+    const raw = (() => {
+      if (Array.isArray(input)) {
+        return input.join('/');
+      }
+      return String(input || '');
+    })();
     const decoded = this.decodeRepeated(raw.trim(), label);
 
     if (
@@ -225,7 +285,12 @@ export class BlogLive2DAssetService {
     return segments;
   }
 
-  /** 规范化运行态令牌族。 */
+  /**
+   * 将`family`规范为运行态令牌族，使等价输入得到一致表示。
+   * @param family - 决定运行态令牌族内容、边界或目标的 `family` 值。
+   * @returns 按输入顺序得到的运行态令牌族列表；没有匹配项时为空数组。
+   * @throws 当 `segments.length !== 1 || !ALLOWED_RUNTIME_FAMILIES.has(segments[0])` 成立时拒绝当前输入并抛出 `BadRequestException`。
+   */
   private normalizeRuntimeFamily(family: string): string[] {
     const segments = this.normalizeRouteSegments(family, 'family');
     if (segments.length !== 1 || !ALLOWED_RUNTIME_FAMILIES.has(segments[0])) {
@@ -235,7 +300,13 @@ export class BlogLive2DAssetService {
     return segments;
   }
 
-  /** 解码重复的。 */
+  /**
+   * 最多执行固定轮次的 URI 解码，并在无变化时提前停止；非法编码统一拒绝。
+   * @param value - 待重复 URI 解码的文本；内容稳定时提前停止，非法编码会触发请求错误。
+   * @param label - 决定重复解码结果内容、边界或目标的 `label` 值。
+   * @returns 重复解码。
+   * @throws 任一轮 URI 解码失败，或达到最大轮次后内容仍未稳定时抛出 `BadRequestException`。
+   */
   private decodeRepeated(value: string, label: string): string {
     try {
       let decoded = value;

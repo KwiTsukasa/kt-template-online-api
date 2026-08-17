@@ -3,22 +3,27 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class QqbotReplyTemplateService {
   /**
-   * 渲染 QQBot 核心输出。
-   * @param template - template 输入；影响 render 的返回值。
-   * @param data - 业务数据；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`template`、`data`绘制或格式化`render` 对应结果。
+   * @param template - 决定`render` 对应结果内容、边界或目标的 `template` 值。
+   * @param data - 决定`render` 对应结果内容、边界或目标的 `data` 值。
+   * @returns 当前状态对应的`render` 对应，取值为 `''`。
    */
   render(template: string | undefined | null, data: Record<string, any>) {
     const source = `${template || ''}`.trim();
     if (!source) return '';
     return source.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path) => {
       const value = this.pickValue(data, path);
-      return value === undefined || value === null ? '' : `${value}`;
+      if (value === undefined || value === null) {
+        return '';
+      }
+      return `${value}`;
     });
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param output - output 输入；使用 `replyText` 字段生成结果。
+   * 按字符串、`replyText` 字段、结构化对象的优先级生成回复文本；空输出返回空字符串。
+   * @param output - 用于按字符串、`replyText` 字段、结构化对象的优先级生成回复文本的领域对象，包含 `replyText` 字段。
+   * @returns 当前状态对应的按字符串、`replyText` 字段、结构化对象的优先级生成回复文本，取值为 `''`；无法解析或未命中时为 `null`。
    */
   stringifyOutput(output: any) {
     if (!output) return '';
@@ -28,9 +33,10 @@ export class QqbotReplyTemplateService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param data - 业务数据；承载 QQBot新增、更新、导入或执行字段。
-   * @param path - 路由或文件路径；影响 pickValue 的返回值。
+   * 从`data`、`path`筛选值，并保持保留项的原有顺序与键名。
+   * @param data - 决定值内容、边界或目标的 `data` 值。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @returns 值。
    */
   private pickValue(data: Record<string, any>, path: string) {
     return `${path}`.split('.').reduce((current, key) => current?.[key], data);

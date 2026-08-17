@@ -99,8 +99,8 @@ export class RuntimeConfigService {
   ) {}
 
   /**
-   * 读取 运行态健康检查资源。
-   * @returns 运行态健康检查产出的 RuntimeAppConfig。
+   * 按当前运行态读取针对运行态健康检查；从 `getString` 读取针对运行态健康检查。
+   * @returns 包含 `nodeEnv`、`port` 字段的针对运行态健康检查。
    */
   readAppProfile(): RuntimeAppConfig {
     return {
@@ -110,8 +110,8 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 读取 运行态健康检查资源。
-   * @returns 运行态健康检查产出的 RuntimeDatabaseConfig。
+   * 按当前运行态读取针对运行态健康检查；从 `getString` 读取针对运行态健康检查。
+   * @returns 包含 `host`、`port`、`database`、`username`、`synchronize` 字段的针对运行态健康检查。
    */
   readDatabaseProfile(): RuntimeDatabaseConfig {
     return {
@@ -125,8 +125,8 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 读取 运行态健康检查资源。
-   * @returns 运行态健康检查产出的 RuntimeLokiConfig。
+   * 按当前运行态读取针对运行态健康检查；从 `getFirstString` 读取针对运行态健康检查。
+   * @returns 包含 `transportEnabled`、`httpRequestPushEnabled`、`queryConfigured`、`host`、`queryHost` 字段的针对运行态健康检查。
    */
   readLokiProfile(): RuntimeLokiConfig {
     const host = this.getFirstString(['LOKI_HOST', 'LOKI_URL']);
@@ -154,8 +154,8 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 读取 运行态健康检查资源。
-   * @returns 运行态健康检查产出的 RuntimeMinioConfig。
+   * 按当前运行态读取针对运行态健康检查；从 `getString` 读取针对运行态健康检查。
+   * @returns 包含 `endpoint`、`port`、`useSSL`、`accessKey`、`bucket` 字段的针对运行态健康检查。
    */
   readMinioProfile(): RuntimeMinioConfig {
     return {
@@ -168,8 +168,8 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 读取 运行态健康检查资源。
-   * @returns 运行态健康检查产出的 RuntimeQqbotConfig。
+   * 按当前运行态读取针对运行态健康检查；从 `getString` 读取针对运行态健康检查。
+   * @returns 包含 `reverseWsPath`、`reverseWsToken`、`napcatRoot`、`napcatImage`、`napcatContainerMode` 字段的针对运行态健康检查。
    */
   readQqbotProfile(): RuntimeQqbotConfig {
     return {
@@ -204,7 +204,7 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 读取公网安全边界配置的非敏感摘要。
+   * 从运行配置读取公网安全边界的非敏感开关、限额和计数摘要。
    * @returns 公网可信代理与限流配置摘要。
    */
   readSecurityProfile(): RuntimeSecurityConfig {
@@ -291,8 +291,8 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 查询 运行态健康检查数据。
-   * @returns 运行态健康检查查询结果。
+   * 按当前运行态读取针对运行态健康检查；从 `readAppProfile` 读取针对运行态健康检查。
+   * @returns 包含 `app`、`database`、`loki`、`minio`、`qqbot` 字段的针对运行态健康检查。
    */
   getSafeSnapshot(): RuntimeSafeConfigSnapshot {
     return {
@@ -307,24 +307,27 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 查询 运行态健康检查数据。
-   * @returns 运行态健康检查查询结果。
+   * 按当前运行态读取针对运行态健康检查。
+   * @returns 按输入顺序得到的针对运行态健康检查列表；没有匹配项时为空数组。
    */
   getConfigChecks(): RuntimeConfigCheck[] {
     return [
       ...REQUIRED_CONFIG_KEYS.map((key) => this.createCheck(key, 'required')),
       ...OPTIONAL_CONFIG_CHECKS.map((check) =>
-        typeof check === 'string'
-          ? this.createCheck(check, 'optional')
-          : this.createAnyCheck([...check], 'optional'),
+        {
+          if (typeof check === 'string') {
+            return this.createCheck(check, 'optional');
+          }
+          return this.createAnyCheck([...check], 'optional');
+        },
       ),
     ];
   }
 
   /**
-   * 执行 运行态健康检查流程。
-   * @param value - 待转换值；驱动 `toolsService.toSecretText()` 的 运行态步骤。
-   * @returns 运行态健康检查渲染后的图片、画布或文本。
+   * 将`value`中的针对运行态健康检查认证信息替换为掩码；无法解析时保留原值。
+   * @param value - 参与针对运行态健康检查比较、格式化或输出的候选值。
+   * @returns 认证信息已替换为掩码的针对运行态健康检查；输入为空时为 `undefined`，解析失败时保留原文本。
    */
   maskSecret(value: unknown): string {
     const text = this.toolsService.toSecretText(value);
@@ -334,10 +337,10 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 创建 运行态健康检查对象或配置。
-   * @param key - 键名；驱动 `configService.get()` 的 运行态步骤。
-   * @param level - level 输入；生成 运行态对象。
-   * @returns 创建后的 运行态健康检查对象或配置。
+   * 根据`key`、`level`构造针对运行态健康检查；从 `configService.get` 读取针对运行态健康检查。
+   * @param key - 用于读取或更新针对运行态健康检查的稳定键。
+   * @param level - 决定针对运行态健康检查内容、边界或目标的 `level` 值。
+   * @returns 包含 `key`、`level`、`present`、`maskedValue`、`message` 字段的针对运行态健康检查。
    */
   private createCheck(
     key: string,
@@ -351,16 +354,26 @@ export class RuntimeConfigService {
       key,
       level,
       present,
-      maskedValue: present ? this.maskSecret(value) : undefined,
-      message: present ? undefined : `${key} is not configured`,
+      maskedValue: (() => {
+        if (present) {
+          return this.maskSecret(value);
+        }
+        return undefined;
+      })(),
+      message: (() => {
+        if (present) {
+          return undefined;
+        }
+        return `${key} is not configured`;
+      })(),
     };
   }
 
   /**
-   * 创建 运行态健康检查对象或配置。
-   * @param keys - 运行态列表；生成规范化文本。
-   * @param level - level 输入；生成 运行态对象。
-   * @returns 创建后的 运行态健康检查对象或配置。
+   * 根据`keys`、`level`构造针对运行态健康检查；从 `getFirstString` 读取针对运行态健康检查。
+   * @param keys - 决定针对运行态健康检查内容、边界或目标的 `keys` 值。
+   * @param level - 决定针对运行态健康检查内容、边界或目标的 `level` 值。
+   * @returns 包含 `key`、`level`、`present`、`maskedValue`、`message` 字段的针对运行态健康检查。
    */
   private createAnyCheck(
     keys: string[],
@@ -374,15 +387,26 @@ export class RuntimeConfigService {
       key,
       level,
       present,
-      maskedValue: present ? this.maskSecret(value) : undefined,
-      message: present ? undefined : `${key} is not configured`,
+      maskedValue: (() => {
+        if (present) {
+          return this.maskSecret(value);
+        }
+        return undefined;
+      })(),
+      message: (() => {
+        if (present) {
+          return undefined;
+        }
+        return `${key} is not configured`;
+      })(),
     };
   }
 
   /**
-   * 查询 运行态健康检查数据。
-   * @param key - 键名；驱动 `toolsService.toTrimmedString()` 的 运行态步骤。
-   * @param fallback - 兜底值；限定 运行态查询范围。
+   * 按`key`、`fallback`读取针对运行态健康检查；从 `configService.get` 读取针对运行态健康检查。
+   * @param key - 用于读取或更新针对运行态健康检查的稳定键。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果；省略时默认采用 `''`。
+   * @returns 规范化后的针对运行态健康检查；主值为空时采用 `fallback` 兜底。
    */
   private getString(key: string, fallback = '') {
     const value = this.toolsService.toTrimmedString(
@@ -392,9 +416,10 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 查询 运行态健康检查数据。
-   * @param keys - 运行态列表；驱动 `for()` 的 运行态步骤。
-   * @param fallback - 兜底值；限定 运行态查询范围。
+   * 按`keys`、`fallback`读取针对运行态健康检查；从 `getString` 读取针对运行态健康检查。
+   * @param keys - 决定针对运行态健康检查内容、边界或目标的 `keys` 值。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果；省略时默认采用 `''`。
+   * @returns 针对运行态健康检查。
    */
   private getFirstString(keys: string[], fallback = '') {
     for (const key of keys) {
@@ -405,9 +430,10 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 查询 运行态健康检查数据。
-   * @param key - 键名；驱动 `toolsService.toPositiveNumber()` 的 运行态步骤。
-   * @param fallback - 兜底值；驱动 `toolsService.toPositiveNumber()` 的 运行态步骤。
+   * 读取正数配置；配置缺失、非有限数或不大于零时使用调用方兜底值。
+   * @param key - 用于读取或更新正数配置的稳定键。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+   * @returns 返回有效正数配置；缺失或非法时返回调用方提供的兜底值。
    */
   private getPositiveNumber(key: string, fallback: number) {
     return this.toolsService.toPositiveNumber(
@@ -417,18 +443,23 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 查询非负整数配置。
-   * @param key - 配置键名。
-   * @param fallback - 配置缺失或非法时的兜底值。
+   * 根据参数 `key`，查询非负整数配置。
+   * @param key - 用于读取或更新根据参数 `key`，查询非负整数配置的稳定键。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+   * @returns 根据参数 `key`，查询非负整数配置。
    */
   private getNonNegativeNumber(key: string, fallback: number) {
     const value = Number(this.configService.get<string | number>(key));
-    return Number.isInteger(value) && value >= 0 ? value : fallback;
+    if (Number.isInteger(value) && value >= 0) {
+      return value;
+    }
+    return fallback;
   }
 
   /**
-   * 统计逗号分隔配置中的有效项目数。
-   * @param key - 配置键名。
+   * 根据参数 `key`，统计逗号分隔配置中的有效项目数。
+   * @param key - 用于读取或更新根据参数 `key`，统计逗号分隔配置中的有效项目数的稳定键。
+   * @returns 根据参数 `key`，统计逗号分隔配置中的有效项目数。
    */
   private countCsvValues(key: string) {
     return this.getString(key)
@@ -438,9 +469,10 @@ export class RuntimeConfigService {
   }
 
   /**
-   * 查询 运行态健康检查数据。
-   * @param key - 键名；驱动 `toolsService.normalizeBoolean()` 的 运行态步骤。
-   * @param fallback - 兜底值；驱动 `toolsService.normalizeBoolean()` 的 运行态步骤。
+   * 按`key`、`fallback`读取针对运行态健康检查；从 `configService.get` 读取针对运行态健康检查。
+   * @param key - 用于读取或更新针对运行态健康检查的稳定键。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+   * @returns 针对运行态健康检查。
    */
   private getBoolean(key: string, fallback: boolean) {
     return this.toolsService.normalizeBoolean(

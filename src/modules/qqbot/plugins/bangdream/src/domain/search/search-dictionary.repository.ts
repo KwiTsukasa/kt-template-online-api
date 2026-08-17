@@ -7,7 +7,8 @@ export class SearchDictionaryRepository {
   constructor(private readonly filePath = fuzzySearchPath) {}
 
   /**
-   * 读取搜索别名配置。
+   * 从 BangDream 搜索字典 JSON 文件读取别名配置。
+   * @returns 从 BangDream 搜索字典 JSON 文件读取别名配置。
    */
   loadConfig(): FuzzySearchConfig {
     const config = readBangDreamJsonFileSync<FuzzySearchConfig>(this.filePath);

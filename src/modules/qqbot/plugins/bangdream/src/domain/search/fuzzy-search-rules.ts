@@ -28,9 +28,9 @@ export class FuzzySearchRules {
 
   /**
    * 按注册顺序匹配并执行第一条可处理规则。
-   *
-   * @param keyword - keyword 输入；驱动 `rules.find()`、`rule.match()` 的 BangDream步骤。
-   * @param push - push 输入；驱动 `rule.match()` 的 BangDream步骤。
+   * @param keyword - 决定按注册顺序匹配并执行第一条可处理规则内容、边界或目标的 `keyword` 值。
+   * @param push - 决定按注册顺序匹配并执行第一条可处理规则内容、边界或目标的 `push` 值。
+   * @returns 满足按注册顺序匹配并执行第一条可处理规则约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   match(keyword: FuzzySearchKeyword, push: FuzzySearchResultWriter): boolean {
     const rule = this.rules.find((item) => item.canHandle(keyword));
@@ -42,8 +42,8 @@ export class FuzzySearchRules {
 
 /**
  * 创建结构化关键词，供规则判断和写入使用。
- *
- * @param rawKeyword - rawKeyword 输入；执行 `rawKeyword.toLowerCase()` 对应的 BangDream步骤。
+ * @param rawKeyword - 决定结构化关键词，供规则判断和写入使用内容、边界或目标的 `rawKeyword` 值。
+ * @returns 包含 `lowerKeyword`、`normalizedKeyword`、`rawKeyword` 字段的结构化关键词，供规则判断和写入使用。
  */
 export function createFuzzySearchKeyword(
   rawKeyword: string,
@@ -57,9 +57,9 @@ export function createFuzzySearchKeyword(
 }
 
 /**
- * 创建默认模糊搜索规则注册表。
- *
- * @param config - config 输入；驱动 `FuzzySearchRules()` 的 BangDream步骤。
+ * 根据`config`构造默认模糊搜索规则注册表。
+ * @param config - 限定默认模糊搜索规则注册表边界、地址与开关的运行配置。
+ * @returns 完成初始化并携带当前边界配置的默认模糊搜索规则注册表。
  */
 export function createDefaultFuzzySearchRules(config: FuzzySearchConfig) {
   return new FuzzySearchRules([
@@ -72,7 +72,8 @@ export function createDefaultFuzzySearchRules(config: FuzzySearchConfig) {
 }
 
 /**
- * 创建数字 ID 规则。
+ * 根据当前运行态构造包含 `canHandle`、`match`、`name` 字段的结果。
+ * @returns 包含 `canHandle`、`match`、`name` 字段的包含 `canHandle`、`match`、`name` 字段的。
  */
 function createNumberRule(): FuzzySearchRule {
   return {
@@ -84,7 +85,8 @@ function createNumberRule(): FuzzySearchRule {
 }
 
 /**
- * 创建等级关键词规则。
+ * 根据当前运行态构造包含 `canHandle`、`match`、`name` 字段的结果。
+ * @returns 包含 `canHandle`、`match`、`name` 字段的包含 `canHandle`、`match`、`name` 字段的；无法解析或未命中时为 `null`。
  */
 function createLevelRule(): FuzzySearchRule {
   return {
@@ -97,7 +99,8 @@ function createLevelRule(): FuzzySearchRule {
 }
 
 /**
- * 创建关系表达式规则。
+ * 根据当前运行态构造包含 `canHandle`、`match`、`name` 字段的结果。
+ * @returns 包含 `canHandle`、`match`、`name` 字段的包含 `canHandle`、`match`、`name` 字段的。
  */
 function createRelationRule(): FuzzySearchRule {
   return {
@@ -109,9 +112,9 @@ function createRelationRule(): FuzzySearchRule {
 }
 
 /**
- * 创建配置别名规则。
- *
- * @param config - config 输入；驱动 `collectConfigMatches()`、`for()` 的 BangDream步骤。
+ * 根据`config`构造包含 `canHandle`、`match`、`name` 字段的结果。
+ * @param config - 限定包含 `canHandle`、`match`、`name` 字段的结果边界、地址与开关的运行配置。
+ * @returns 包含 `canHandle`、`match`、`name` 字段的包含 `canHandle`、`match`、`name` 字段的。
  */
 function createConfigRule(config: FuzzySearchConfig): FuzzySearchRule {
   return {
@@ -127,7 +130,8 @@ function createConfigRule(config: FuzzySearchConfig): FuzzySearchRule {
 }
 
 /**
- * 创建兜底全文规则。
+ * 根据当前运行态构造包含 `canHandle`、`match`、`name` 字段的结果。
+ * @returns 包含 `canHandle`、`match`、`name` 字段的包含 `canHandle`、`match`、`name` 字段的。
  */
 function createFallbackRule(): FuzzySearchRule {
   return {
@@ -139,18 +143,21 @@ function createFallbackRule(): FuzzySearchRule {
 
 /**
  * 从等级关键词中提取数字等级。
- *
- * @param str - str 输入；提取正则匹配结果。
+ * @param str - 用于从等级关键词中提取数字等级的领域对象，包含 `match` 字段。
+ * @returns 从等级关键词中提取数字等级；无法解析或未命中时为 `null`。
  */
 function extractLvNumber(str: string): number | null {
   const match = str.match(/^lv(\d+)$/i);
-  return match?.[1] ? parseInt(match[1], 10) : null;
+  if (match?.[1]) {
+    return parseInt(match[1], 10);
+  }
+  return null;
 }
 
 /**
- * 判断字符串是否为非负整数。
- *
- * @param value - 待转换值；驱动 `INTEGER_PATTERN.test()` 的 BangDream步骤。
+ * 根据`value`与当前约束判定字符串是否为非负整数。
+ * @param value - 待判定是否满足字符串是否为非负整数约束的候选值。
+ * @returns 满足字符串是否为非负整数约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function isInteger(value: string): boolean {
   return INTEGER_PATTERN.test(value);
@@ -161,18 +168,21 @@ const hasOwn = (source: object, key: string) =>
 
 /**
  * 把配置键转换成数字或字符串匹配值。
- *
- * @param key - 键名；驱动 `isInteger()` 的 BangDream步骤。
+ * @param key - 用于读取或更新把配置键转换成数字或字符串匹配值的稳定键。
+ * @returns 把配置键转换成数字或字符串匹配值。
  */
 function parseConfigKey(key: string): FuzzySearchMatchValue {
-  return isInteger(key) ? parseInt(key, 10) : key;
+  if (isInteger(key)) {
+    return parseInt(key, 10);
+  }
+  return key;
 }
 
 /**
- * 判断配置值是否命中关键词。
- *
- * @param value - 待转换值；计算 BangDream布尔判断。
- * @param keyword - keyword 输入；驱动 `value.includes()`、`hasOwn()` 的 BangDream步骤。
+ * 根据参数 `value`，判断配置值是否命中关键词。
+ * @param value - 参与根据参数 `value`，判断配置值是否命中关键词比较、格式化或输出的候选值。
+ * @param keyword - 决定根据参数 `value`，判断配置值是否命中关键词内容、边界或目标的 `keyword` 值。
+ * @returns 满足根据参数 `value`，判断配置值是否命中关键词约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function configValueMatches(
   value: FuzzySearchConfigValue,
@@ -191,10 +201,10 @@ function configValueMatches(
 }
 
 /**
- * 收集配置别名命中结果。
- *
- * @param config - config 输入；驱动 `for()` 的 BangDream步骤。
- * @param keyword - keyword 输入；决定 BangDream条件分支。
+ * 根据参数 `config`，收集配置别名命中结果。
+ * @param config - 限定根据参数 `config`，收集配置别名命中结果边界、地址与开关的运行配置，包含 `type` 字段。
+ * @param keyword - 决定根据参数 `config`，收集配置别名命中结果内容、边界或目标的 `keyword` 值。
+ * @returns 根据参数 `config`，收集配置别名命中。
  */
 function collectConfigMatches(config: FuzzySearchConfig, keyword: string) {
   const result: Array<{ type: string; value: FuzzySearchMatchValue }> = [];

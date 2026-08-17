@@ -63,7 +63,11 @@ export type MediaGovernanceExecutionEnvelopeInput = {
   unitIds: string[];
 };
 
-/** 将执行信封递归序列化为键顺序稳定的 JSON 文本。 */
+/**
+ * 将执行信封递归序列化为键顺序稳定的 JSON 文本。
+ * @param value - 待判定是否满足将执行信封递归序列化为键顺序稳定的 JSON 文本约束的候选值。
+ * @returns 满足将执行信封递归序列化为键顺序稳定的 JSON 文本约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map((item) => canonicalJson(item)).join(',')}]`;
@@ -78,19 +82,43 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** 校验执行契约标识符，并使用字段标签生成稳定错误码。 */
+/**
+ * 校验执行契约标识符，并使用字段标签生成稳定错误码。
+ * @param value - 参与标识比较、格式化或输出的候选值。
+ * @param label - 决定标识内容、边界或目标的 `label` 值。
+ * @throws 当 `!ID_PATTERN.test(value)` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function assertId(value: string, label: string) {
   if (!ID_PATTERN.test(value)) throw new Error(`${label}-invalid`);
 }
 
-/** 校验可空 SHA-256 摘要，并使用字段标签生成稳定错误码。 */
+/**
+ * 校验可空 SHA-256 摘要，并使用字段标签生成稳定错误码。
+ * @param value - 参与Digest比较、格式化或输出的候选值。
+ * @param label - 决定Digest内容、边界或目标的 `label` 值。
+ * @throws 当 `value !== null && !DIGEST_PATTERN.test(value)` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function assertDigest(value: string | null, label: string) {
   if (value !== null && !DIGEST_PATTERN.test(value)) {
     throw new Error(`${label}-invalid`);
   }
 }
 
-/** 校验动作所需的来源集合，并返回文件索引已排序的密封副本。 */
+/**
+ * 校验动作所需的来源集合，并返回文件索引已排序的密封副本。
+ * @param action - 决定Sources内容、边界或目标的 `action` 值。
+ * @param sources - 用于Sources的领域对象，包含 `length`、`0` 字段。
+ * @returns Sources；没有可用结果或提前结束时为 `undefined`。
+ * @throws 当 `sources !== undefined` 成立时拒绝当前输入并抛出 `Error`；当 `!sources || sources.length === 0 || sources.length > 16` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!['source.download', 'source.resume', 'acceptance.verify'].includes( ac…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!Number.isInteger(source.descriptorRevision) || source.descriptorRevisi…` 成立时拒绝当前输入并抛出 `Error`；当 `!INFO_HASH_PATTERN.test(source.infoHash)` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!Number.isSafeInteger(source.selectedBytes) || source.selectedBytes < 0` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!Number.isInteger(source.selectedFileCount) || source.selectedFileCount…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `source.selectedFileIndices.length !== source.selectedFileCount || sourc…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `new Set(source.selectedFileIndices).size !== source.selectedFileIndices…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `new Set(sources.map((source) => source.sourceId)).size !== sources.leng…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `(action === 'canary.torrent' && source.transportKind !== 'torrent') ||…` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function validateSources(
   action: MediaGovernanceExecutorAction,
   sources: MediaGovernanceExecutionSourceContract[] | undefined,
@@ -178,7 +206,14 @@ function validateSources(
   }));
 }
 
-/** 校验动作所需的治理计划，并返回与输入隔离的计划副本。 */
+/**
+ * 校验动作所需的治理计划，并返回与输入隔离的计划副本。
+ * @param action - 决定Plan内容、边界或目标的 `action` 值。
+ * @param plan - 用于Plan的领域对象，包含 `planGrantId`、`planSha256`、`schemaVersion`、`strategy` 字段。
+ * @returns Plan；没有可用结果或提前结束时为 `undefined`。
+ * @throws 当 `requiresPlan && !plan` 成立时拒绝当前输入并抛出 `Error`；当 `plan.schemaVersion !== '1.2.0'` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!['embedded', 'sidecar-bundled', 'sidecar-linked'].includes(plan.strate…` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function validatePlan(
   action: MediaGovernanceExecutorAction,
   plan: MediaGovernanceExecutionPlanContract | undefined,
@@ -204,7 +239,16 @@ function validatePlan(
   return { ...plan };
 }
 
-/** 校验执行输入并生成带稳定内容摘要的密封执行信封。 */
+/**
+ * 校验执行输入并生成带稳定内容摘要的密封执行信封。
+ * @param input - 用于执行输入并生成带稳定内容摘要的密封执行信封的结构化输入，包含 `action`、`taskId`、`runId`、`replayKey` 字段。
+ * @returns 包含 `sealedInputSha256` 字段的执行输入并生成带稳定内容摘要的密封执行信封。
+ * @throws 当 `!MEDIA_GOVERNANCE_EXECUTOR_ACTIONS.includes(input.action)` 成立时拒绝当前输入并抛出 `Error`；当 `!REPLAY_KEY_PATTERN.test(input.replayKey)` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!Number.isInteger(input.taskRevision) || input.taskRevision < 1` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(input.expiresAt)…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `input.unitIds.length === 0 || input.unitIds.length > 100 || input.unitI…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!Number.isInteger(input.metadataRepairAttempt) || input.metadataRepairA…` 成立时拒绝当前输入并抛出 `Error`；当 `input.metadataRepairAttempt !== undefined` 成立时拒绝当前输入并抛出 `Error`。
+ */
 export function buildMediaGovernanceExecutionEnvelope(
   input: MediaGovernanceExecutionEnvelopeInput,
 ) {

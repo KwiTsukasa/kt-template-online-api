@@ -47,7 +47,11 @@ export class QqbotAccountMessagePushService {
     private readonly renderer: SystemMessageTemplateRendererService,
   ) {}
 
-  /** 列出绑定。 */
+  /**
+   * 按`selfId`读取绑定；先通过 `requireAccount` 校验输入边界。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 返回账号当前消息推送绑定视图列表或对应成功响应。
+   */
   async listBindings(
     selfId: string,
   ): Promise<QqbotMessagePublishBindingView[]> {
@@ -59,7 +63,13 @@ export class QqbotAccountMessagePushService {
     return Promise.all(bindings.map((binding) => this.toView(binding)));
   }
 
-  /** 创建绑定。 */
+  /**
+   * 根据`selfId`、`input`构造绑定；先通过 `requireAccount` 校验输入边界。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param input - 用于绑定的结构化输入，包含 `targets`、`subscriptionId`、`enabled`、`templateId` 字段。
+   * @returns 返回新建的消息推送绑定视图或对应成功响应。
+   * @throws 当 `bindingRepository.manager.transaction` 或 `toView` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   async createBinding(
     selfId: string,
     input: QqbotMessagePublishBindingInput,
@@ -146,7 +156,14 @@ export class QqbotAccountMessagePushService {
     }
   }
 
-  /** 更新绑定。 */
+  /**
+   * 根据`selfId`、`id`、`input`更新绑定；先通过 `requireAccount` 校验输入边界。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param id - 决定绑定内容、边界或目标的 `id` 值。
+   * @param input - 用于绑定的结构化输入，包含 `targets`、`subscriptionId`、`enabled`、`templateId` 字段。
+   * @returns 返回更新后的消息推送绑定视图或对应成功响应。
+   * @throws 当 `bindingRepository.manager.transaction` 或 `toView` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   async updateBinding(
     selfId: string,
     id: string,
@@ -214,7 +231,13 @@ export class QqbotAccountMessagePushService {
     }
   }
 
-  /** 设置绑定启用。 */
+  /**
+   * 根据`selfId`、`id`、`enabled`更新绑定启用；先通过 `requireAccount` 校验输入边界。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param id - 决定绑定启用内容、边界或目标的 `id` 值。
+   * @param enabled - 决定绑定启用内容、边界或目标的 `enabled` 值。
+   * @returns 绑定启用。
+   */
   async setBindingEnabled(
     selfId: string,
     id: string,
@@ -259,7 +282,12 @@ export class QqbotAccountMessagePushService {
     return this.toView(binding);
   }
 
-  /** 移除绑定。 */
+  /**
+   * 按`selfId`、`id`移除绑定；先通过 `requireAccount` 校验输入边界。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param id - 决定绑定内容、边界或目标的 `id` 值。
+   * @returns 返回删除绑定后的成功响应。
+   */
   async removeBinding(selfId: string, id: string): Promise<boolean> {
     const account = await this.requireAccount(selfId);
     await this.bindingRepository.manager.transaction(async (manager) => {
@@ -285,7 +313,11 @@ export class QqbotAccountMessagePushService {
     return true;
   }
 
-  /** 规范化目标。 */
+  /**
+   * 将`inputs`规范为目标，使等价输入得到一致表示。
+   * @param inputs - 决定目标内容、边界或目标的 `inputs` 值。
+   * @returns 按输入顺序得到的目标列表；没有匹配项时为空数组。
+   */
   private normalizeTargets(
     inputs: QqbotMessagePublishTargetInput[],
   ): NormalizedTarget[] {
@@ -312,7 +344,12 @@ export class QqbotAccountMessagePushService {
     );
   }
 
-  /** 返回同步目标。 */
+  /**
+   * 按期望集合增删并同步目标。
+   * @param manager - 保证按期望集合增删并同步目标读写处于同一事务中的实体管理器。
+   * @param binding - 用于按期望集合增删并同步目标的领域对象，包含 `id` 字段。
+   * @param selected - 决定按期望集合增删并同步目标内容、边界或目标的 `selected` 值。
+   */
   private async synchronizeTargets(
     manager: EntityManager,
     binding: QqbotMessagePublishBinding,
@@ -394,7 +431,11 @@ export class QqbotAccountMessagePushService {
     }
   }
 
-  /** 返回到视图。 */
+  /**
+   * 将输入收敛并投影为视图。
+   * @param binding - 用于视图的领域对象，包含 `subscriptionId`、`templateId`、`id`、`createTime` 字段。
+   * @returns 包含 `available`、`createTime`、`enabled`、`id`、`invalidReasonCode` 字段的视图。
+   */
   private async toView(
     binding: QqbotMessagePublishBinding,
   ): Promise<QqbotMessagePublishBindingView> {
@@ -428,7 +469,12 @@ export class QqbotAccountMessagePushService {
     };
   }
 
-  /** 检查可用性。 */
+  /**
+   * 根据`subscription`、`template`处理可用性；当 `!subscription || subscription.isDeleted` 成立时返回 `{ available: false, invalidReasonCode: 'inv…`。
+   * @param subscription - 用于可用性的领域对象，包含 `isDeleted`、`sourceKey`、`sourceConfig`、`enabled` 字段。
+   * @param template - 用于可用性的领域对象，包含 `isDeleted`、`sourceKey`、`enabled`、`content` 字段。
+   * @returns 包含 `available`、`invalidReasonCode`、`sourceName` 字段的可用性；无法解析或未命中时为 `null`。
+   */
   private async inspectAvailability(
     subscription: QqbotMessageSubscription | null,
     template: QqbotMessageTemplate | null,
@@ -503,7 +549,11 @@ export class QqbotAccountMessagePushService {
     return { available: true, invalidReasonCode: null, sourceName };
   }
 
-  /** 返回到目标视图。 */
+  /**
+   * 将输入收敛并投影为目标视图。
+   * @param target - 用于目标视图的领域对象，包含 `enabled`、`id`、`targetId`、`targetName` 字段。
+   * @returns 包含 `enabled`、`id`、`targetId`、`targetName`、`targetType` 字段的目标视图。
+   */
   private toTargetView(
     target: QqbotMessagePublishTarget,
   ): QqbotMessagePublishTargetView {
@@ -516,14 +566,25 @@ export class QqbotAccountMessagePushService {
     };
   }
 
-  /** 返回必需账号。 */
+  /**
+   * 校验`selfId`是否满足前置条件并返回必需账号约束，并拒绝不合法输入；从 `accountService.findBySelfId` 读取前置条件并返回必需账号。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 前置条件并返回必需账号。
+   * @throws 当 `!account` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   private async requireAccount(selfId: string) {
     const account = await this.accountService.findBySelfId(selfId);
     if (!account) throw new SystemMessageContractError('account_unavailable');
     return account;
   }
 
-  /** 查找绑定用于写入。 */
+  /**
+   * 按`repository`、`accountId`、`id`读取绑定用于写入；从 `repository.findOne` 读取绑定用于写入。
+   * @param repository - 负责查询或持久化绑定用于写入的仓库实例。
+   * @param accountId - 用于精确定位账号的标识。
+   * @param id - 决定绑定用于写入内容、边界或目标的 `id` 值。
+   * @returns 绑定用于写入。
+   */
   private async findBindingForWrite(
     repository: Repository<QqbotMessagePublishBinding>,
     accountId: string,
@@ -537,7 +598,11 @@ export class QqbotAccountMessagePushService {
     return binding!;
   }
 
-  /** 断言稳定的账号快照。 */
+  /**
+   * 校验`binding`、`snapshot`是否满足稳定的账号快照约束，并拒绝不合法输入。
+   * @param binding - 用于稳定的账号快照的领域对象，包含 `accountId`、`selfId` 字段。
+   * @param snapshot - 用于稳定的账号快照的领域对象，包含 `accountId`、`selfId` 字段。
+   */
   private assertStableAccountSnapshot(
     binding: QqbotMessagePublishBinding,
     snapshot: QqbotMessagePublishBinding,
@@ -550,7 +615,11 @@ export class QqbotAccountMessagePushService {
     }
   }
 
-  /** 断言稳定的绑定快照。 */
+  /**
+   * 校验`binding`、`snapshot`是否满足稳定的绑定快照约束，并拒绝不合法输入；先通过 `assertStableAccountSnapshot` 校验输入边界。
+   * @param binding - 用于稳定的绑定快照的领域对象，包含 `subscriptionId`、`templateId` 字段。
+   * @param snapshot - 用于稳定的绑定快照的领域对象，包含 `subscriptionId`、`templateId` 字段。
+   */
   private assertStableBindingSnapshot(
     binding: QqbotMessagePublishBinding,
     snapshot: QqbotMessagePublishBinding,
@@ -564,12 +633,22 @@ export class QqbotAccountMessagePushService {
     }
   }
 
-  /** 生成绑定启用的键。 */
+  /**
+   * 根据`accountId`、`subscriptionId`拼接稳定的绑定启用的键，用于隔离对应资源或存储记录。
+   * @param accountId - 用于精确定位账号的标识。
+   * @param subscriptionId - 用于精确定位订阅的标识。
+   * @returns 按参数编码并拼接完成的绑定启用的键。
+   */
   private bindingActiveKey(accountId: string, subscriptionId: string): string {
     return `${String(accountId)}:${String(subscriptionId)}`;
   }
 
-  /** 生成目标启用的键。 */
+  /**
+   * 根据`bindingId`、`target`拼接稳定的目标启用的键，用于隔离对应资源或存储记录。
+   * @param bindingId - 用于精确定位绑定的标识。
+   * @param target - 用于目标启用的键的领域对象，包含 `targetType`、`targetId` 字段。
+   * @returns 按参数编码并拼接完成的目标启用的键。
+   */
   private targetActiveKey(
     bindingId: string,
     target: Pick<NormalizedTarget, 'targetId' | 'targetType'>,
@@ -577,7 +656,13 @@ export class QqbotAccountMessagePushService {
     return `${String(bindingId)}:${target.targetType}:${target.targetId}`;
   }
 
-  /** 返回到绑定字段。 */
+  /**
+   * 将输入收敛并投影为绑定字段。
+   * @param account - 用于字段的领域对象，包含 `id`、`selfId` 字段。
+   * @param input - 用于字段的结构化输入，包含 `enabled`、`subscriptionId`、`templateId` 字段。
+   * @param activeKey - 用于读取或更新字段的稳定键。
+   * @returns 包含 `accountId`、`activeKey`、`enabled`、`selfId`、`subscriptionId` 字段的字段。
+   */
   private toBindingFields(
     account: { id: string; selfId: string },
     input: QqbotMessagePublishBindingInput,
@@ -601,7 +686,10 @@ export class QqbotAccountMessagePushService {
     };
   }
 
-  /** 返回抛出自然键键冲突。 */
+  /**
+   * 把启用记录的自然键冲突统一映射为 HTTP 409 业务错误。
+   * @returns 该函数不正常返回；调用会抛出 HTTP 409 自然键冲突错误。
+   */
   private throwNaturalKeyConflict(): never {
     return throwVbenError(
       '同一账号订阅的消息发布配置已存在',
@@ -609,19 +697,30 @@ export class QqbotAccountMessagePushService {
     );
   }
 
-  /** 返回抛出绑定不可用。 */
+  /**
+   * 以 `binding_disabled` 契约错误统一拒绝不存在、禁用或并发变化的消息发布绑定。
+   * @throws 调用该拒绝辅助函数时固定抛出代码为 `binding_disabled` 的 `SystemMessageContractError`。
+   */
   private throwBindingUnavailable(): never {
     throw new SystemMessageContractError('binding_disabled');
   }
 
-  /** 判断重复键错误是否成立。 */
+  /**
+   * 仅把 MySQL `ER_DUP_ENTRY` 或错误号 1062 识别为唯一键冲突，其他错误一律返回 `false`。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+   * @returns 满足Duplicate键错误约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const value = error as { code?: unknown; errno?: unknown };
     return value.code === 'ER_DUP_ENTRY' || value.errno === 1062;
   }
 
-  /** 取消未完成的投递记录。 */
+  /**
+   * 根据`manager`、`where`与当前约束判定未完成的投递记录；从 `manager.getRepository` 读取未完成的投递记录。
+   * @param manager - 保证未完成的投递记录读写处于同一事务中的实体管理器。
+   * @param where - 决定未完成的投递记录内容、边界或目标的 `where` 值。
+   */
   private async cancelUnfinishedDeliveries(
     manager: EntityManager,
     where: Pick<QqbotMessageDelivery, 'bindingId'>,

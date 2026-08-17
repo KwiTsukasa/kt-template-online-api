@@ -34,7 +34,11 @@ export class NapcatDeviceIdentityService {
     private readonly configService: ConfigService,
   ) {}
 
-  /** 解析用于账号。 */
+  /**
+   * 按账号和容器查找或创建稳定设备身份，并在容器变化时更新绑定而不重生成硬件特征。
+   * @param input - 用于账号的结构化输入，包含 `accountId`、`selfId`、`containerId` 字段。
+   * @returns 账号。
+   */
   async resolveForAccount(input: ResolveNapcatDeviceIdentityInput) {
     const accountId = `${input.accountId}`.trim();
     const containerName = this.buildContainerName(input.selfId || accountId);
@@ -79,7 +83,11 @@ export class NapcatDeviceIdentityService {
     return this.identityRepository.save(identity);
   }
 
-  /** 接管容器身份。 */
+  /**
+   * 根据`input`处理接管容器身份；当 `!provisionalIdentity` 成立时返回 `this.resolveForAccount({ accountId, contain…`。
+   * @param input - 用于接管容器身份的结构化输入，包含 `accountId`、`containerId`、`selfId` 字段。
+   * @returns 接管容器身份。
+   */
   async adoptContainerIdentity(input: AdoptNapcatDeviceIdentityInput) {
     const accountId = `${input.accountId}`.trim();
     const containerId = `${input.containerId}`.trim();
@@ -135,7 +143,11 @@ export class NapcatDeviceIdentityService {
     return provisionalIdentity;
   }
 
-  /** 合并临时的身份到目标。 */
+  /**
+   * 根据`input`更新临时的身份到目标；把变更持久化到当前存储（`identityRepository.update`）。
+   * @param input - 用于临时的身份到目标的结构化输入，包含 `targetIdentity`、`provisionalIdentity`、`selfId`、`accountId` 字段。
+   * @returns 临时的身份到目标。
+   */
   private async mergeProvisionalIdentityIntoTarget(input: {
     accountId: string;
     containerId: string;
@@ -171,7 +183,11 @@ export class NapcatDeviceIdentityService {
     return input.targetIdentity;
   }
 
-  /** 构建接管证据。 */
+  /**
+   * 构建接管证据，并输出固定投影 `adoption` 字段。
+   * @param input - 用于AdoptionEvidence的结构化输入，包含 `existingEvidence`、`fromAccountId`、`replacedIdentityId`、`selfId` 字段。
+   * @returns 包含 `adoption` 字段的AdoptionEvidence。
+   */
   private buildAdoptionEvidence(input: {
     existingEvidence: null | Record<string, unknown>;
     fromAccountId: string;
@@ -191,7 +207,11 @@ export class NapcatDeviceIdentityService {
     };
   }
 
-  /** 构建容器名称。 */
+  /**
+   * 根据`seed`构造容器名称；从 `getConfig` 读取容器名称。
+   * @param seed - 决定容器名称内容、边界或目标的 `seed` 值。
+   * @returns 容器名称。
+   */
   private buildContainerName(seed: string) {
     const prefix = this.getConfig(
       'QQBOT_NAPCAT_CONTAINER_PREFIX',
@@ -203,13 +223,22 @@ export class NapcatDeviceIdentityService {
     return `${prefix}-${suffix}`.replace(/-+/g, '-').slice(0, 120);
   }
 
-  /** 构建QQNT可见的主机名。 */
+  /**
+   * 根据`seed`构造QQNT可见的主机名。
+   * @param seed - 决定QQNT可见的主机名内容、边界或目标的 `seed` 值。
+   * @returns 按参数编码并拼接完成的QQNT可见的主机名。
+   */
   private buildQqntVisibleHostname(seed: string) {
     const hash = createHash('sha256').update(seed).digest('hex');
     return `pc-${hash.slice(0, 8)}`;
   }
 
-  /** 构建物理的OUIMAC地址。 */
+  /**
+   * 根据`accountId`、`containerName`构造物理的OUIMAC地址。
+   * @param accountId - 用于精确定位账号的标识。
+   * @param containerName - 决定物理的OUIMAC地址内容、边界或目标的 `containerName` 值。
+   * @returns 物理的OUIMAC地址。
+   */
   private buildPhysicalOuiMacAddress(
     accountId: string,
     containerName: string,
@@ -231,7 +260,11 @@ export class NapcatDeviceIdentityService {
     return `${prefix}:${suffix.join(':')}`.toLowerCase();
   }
 
-  /** 迁移旧版身份条件分支需要的。 */
+  /**
+   * 仅当旧设备身份的主机名或 MAC 不符合当前派生规则时重算并持久化两者。
+   * @param identity - 区分仅当旧设备身份的主机名或 MAC 不符合当前派生规则时重算并持久化两者所属账号、设备或运行实例的稳定身份。
+   * @param input - 用于仅当旧设备身份的主机名或 MAC 不符合当前派生规则时重算并持久化两者的结构化输入，包含 `accountId`、`selfId`、`containerName` 字段。
+   */
   private async migrateLegacyIdentityIfNeeded(
     identity: NapcatDeviceIdentity,
     input: {
@@ -289,7 +322,8 @@ export class NapcatDeviceIdentityService {
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
+   * 按当前运行态读取根目录Dir；从 `getConfig` 读取根目录Dir。
+   * @returns 根目录Dir。
    */
   private getRootDir() {
     return this.getConfig(
@@ -299,9 +333,10 @@ export class NapcatDeviceIdentityService {
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
-   * @param key - 键名；限定 NapCat查询范围。
-   * @param defaultValue - defaultValue 输入；限定 NapCat查询范围。
+   * 按`key`、`defaultValue`读取配置；从 `configService.get` 读取配置。
+   * @param key - 用于读取或更新配置的稳定键。
+   * @param defaultValue - 主值缺失、为空或不合法时采用的兜底结果；省略时默认采用 `''`。
+   * @returns 配置。
    */
   private getConfig(key: string, defaultValue = '') {
     return `${this.configService.get<string>(key) || defaultValue}`.trim();

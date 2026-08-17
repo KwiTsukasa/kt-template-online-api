@@ -26,16 +26,18 @@ export class BlogArticleService {
   ) {}
 
   /**
-   * 获取分页数据。
-   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   * 根据参数 `query`，查询并返回分页数据。
+   * @param query - 限定根据参数 `query`，查询并返回分页数据筛选、排序与分页范围的查询条件。
+   * @returns 根据参数 `query`，查询并返回分页数据。
    */
   async page(query: BlogArticleListQueryDto) {
     return this.queryPage(query);
   }
 
   /**
-   * 执行 博客内容流程。
-   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   * 根据`query`处理针对博客内容；从 `queryPage` 读取针对博客内容。
+   * @param query - 限定针对博客内容筛选、排序与分页范围的查询条件，包含 `pageSize` 字段。
+   * @returns 针对博客内容。
    */
   async publicList(query: BlogArticleListQueryDto) {
     return this.queryPage({
@@ -49,8 +51,9 @@ export class BlogArticleService {
   }
 
   /**
-   * 获取详情数据。
-   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   * 根据参数 `id`，查询并返回详情数据。
+   * @param id - 决定根据参数 `id`，查询并返回详情数据内容、边界或目标的 `id` 值。
+   * @returns 根据参数 `id`，查询并返回详情数据。
    */
   async detail(id: string | number) {
     const article = await this.articleRepository.findOne({
@@ -68,22 +71,26 @@ export class BlogArticleService {
   }
 
   /**
-   * 执行 博客内容流程。
-   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   * 根据`query`处理针对博客内容；从 `articleRepository.findOne` 读取针对博客内容。
+   * @param query - 限定针对博客内容筛选、排序与分页范围的查询条件，包含 `id`、`slug` 字段。
+   * @returns 针对博客内容。
    */
   async publicDetail(query: { id?: string; slug?: string }) {
     const article = await this.articleRepository.findOne({
-      where: query.id
-        ? {
+      where: (() => {
+        if (query.id) {
+          return {
             id: `${query.id}`,
             isDeleted: false,
             status: 'publish',
-          }
-        : {
+          };
+        }
+        return {
             isDeleted: false,
             slug: this.normalizeSlug(query.slug || ''),
             status: 'publish',
-          },
+          };
+      })(),
     });
 
     if (!article) {
@@ -94,8 +101,9 @@ export class BlogArticleService {
   }
 
   /**
-   * 保存数据。
-   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   * 根据`body`更新`save` 对应结果；把变更持久化到当前存储（`articleRepository.create`）。
+   * @param body - 用于`save` 对应结果的结构化输入。
+   * @returns `save` 对应。
    */
   async save(body: BlogArticleBodyDto) {
     const articleEntity = await this.getArticleEntity(body);
@@ -108,8 +116,9 @@ export class BlogArticleService {
   }
 
   /**
-   * 更新数据。
-   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   * 根据`body`更新`update` 对应结果；把变更持久化到当前存储（`articleRepository.save`）。
+   * @param body - 用于`update` 对应结果的结构化输入，包含 `id` 字段。
+   * @returns `update` 对应。
    */
   async update(body: BlogArticleUpdateBodyDto) {
     const article = await this.articleRepository.findOne({
@@ -133,8 +142,9 @@ export class BlogArticleService {
   }
 
   /**
-   * 删除数据。
-   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   * 仅对尚未删除的指定博客文章设置软删除标记，并返回是否实际命中记录。
+   * @param id - 决定`remove` 对应结果内容、边界或目标的 `id` 值。
+   * @returns 满足`remove` 对应约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async remove(id: string | number) {
     const result = await this.articleRepository.update(
@@ -151,24 +161,27 @@ export class BlogArticleService {
   }
 
   /**
-   * 执行 博客内容流程。
-   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   * 按查询条件读取文章分类选项，并沿用博客术语服务的筛选与排序规则。
+   * @param query - 限定category选项筛选、排序与分页范围的查询条件；省略时默认采用 `{}`。
+   * @returns category选项。
    */
   async categoryOptions(query: BlogArticleTermOptionsQueryDto = {}) {
     return this.blogTermService.options('category', query);
   }
 
   /**
-   * 执行 博客内容流程。
-   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   * 根据`query`处理标签选项。
+   * @param query - 限定标签选项筛选、排序与分页范围的查询条件；省略时默认采用 `{}`。
+   * @returns 标签选项。
    */
   async tagOptions(query: BlogArticleTermOptionsQueryDto = {}) {
     return this.blogTermService.options('tag', query);
   }
 
   /**
-   * 查询 博客内容数据。
-   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   * 按`query`读取针对博客内容；把变更持久化到当前存储（`articleRepository.createQueryBuilder`）。
+   * @param query - 限定针对博客内容筛选、排序与分页范围的查询条件，包含 `status`、`categories`、`tags`、`search` 字段。
+   * @returns 针对博客内容。
    */
   private async queryPage(query: BlogArticleListQueryDto) {
     const { pageSize, skip } = this.toolsService.getPageParams(query);
@@ -224,10 +237,10 @@ export class BlogArticleService {
   }
 
   /**
-   * 查询 博客内容数据。
-   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
-   * @param current - current 输入；驱动 `this.normalizeSlug()` 的 博客步骤。
-   * @returns 博客内容查询结果。
+   * 按`body`、`current`读取针对博客内容。
+   * @param body - 用于针对博客内容的结构化输入，包含 `contentFormat`、`authorName`、`cover`、`excerpt` 字段。
+   * @param current - 用于针对博客内容的领域对象，包含 `slug`、`status`、`contentMarkdown`、`publishTime` 字段；为空时采用 `''` 作为兜底。
+   * @returns 针对博客内容。
    */
   private async getArticleEntity(
     body: BlogArticleBodyDto,
@@ -277,8 +290,9 @@ export class BlogArticleService {
   }
 
   /**
-   * 转换 博客内容输入。
-   * @param values - 配置值字典；影响 normalizeTerms 的返回值。
+   * 将`values`规范为针对博客内容，使等价输入得到一致表示。
+   * @param values - 按原有顺序参与针对博客内容筛选、合并或汇总的集合。
+   * @returns 针对博客内容。
    */
   private normalizeTerms(values: Array<BlogArticleTerm | string>) {
     const seen = new Set<string>();
@@ -286,16 +300,27 @@ export class BlogArticleService {
     return values
       .map((item) => {
         const name =
-          typeof item === 'string'
-            ? this.toolsService.toTrimmedString(item)
-            : this.toolsService.toTrimmedString(item.name);
+          (() => {
+            if (typeof item === 'string') {
+              return this.toolsService.toTrimmedString(item);
+            }
+            return this.toolsService.toTrimmedString(item.name);
+          })();
         const slug =
-          typeof item === 'string'
-            ? this.normalizeSlug(item)
-            : this.normalizeSlug(item.slug || item.name);
+          (() => {
+            if (typeof item === 'string') {
+              return this.normalizeSlug(item);
+            }
+            return this.normalizeSlug(item.slug || item.name);
+          })();
 
         return this.toolsService.pickDefined({
-          id: typeof item === 'string' ? undefined : item.id,
+          id: (() => {
+            if (typeof item === 'string') {
+              return undefined;
+            }
+            return item.id;
+          })(),
           name,
           slug,
         }) as BlogArticleTerm;
@@ -308,8 +333,9 @@ export class BlogArticleService {
   }
 
   /**
-   * 转换 博客内容输入。
-   * @param value - 待转换值；决定 博客条件分支。
+   * 将`value`规范为针对博客内容，使等价输入得到一致表示；当 `Array.isArray(value)` 成立时返回 `value .flatMap((item) => item.split(',')) .…`。
+   * @param value - 待转换为针对博客内容的原始值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 针对博客内容。
    */
   private normalizeQueryList(value?: string | string[]) {
     if (Array.isArray(value)) {
@@ -328,8 +354,8 @@ export class BlogArticleService {
   }
 
   /**
-   * 更新 博客内容状态。
-   * @param article - article 输入；使用 `categoryItems`、`tagItems` 字段生成结果。
+   * 分别把文章携带的分类和标签集合同步到术语表。
+   * @param article - 用于分别把文章携带的分类和标签集合同步到术语表的领域对象，包含 `categoryItems`、`tagItems` 字段。
    */
   private async syncArticleTerms(article: Partial<BlogArticle>) {
     if (article.categoryItems) {
@@ -342,8 +368,9 @@ export class BlogArticleService {
   }
 
   /**
-   * 执行 博客内容流程。
-   * @param article - article 输入；使用 `categoryItems`、`tagItems`、`excerpt`、`contentHtml` 字段生成结果。
+   * 将`article`转换为针对博客内容。
+   * @param article - 用于针对博客内容的领域对象，包含 `categoryItems`、`tagItems`、`excerpt`、`contentHtml` 字段。
+   * @returns 针对博客内容。
    */
   private toResponse(article: BlogArticle) {
     const categoriesResolved = article.categoryItems || [];
@@ -362,16 +389,18 @@ export class BlogArticleService {
   }
 
   /**
-   * 转换 博客内容输入。
-   * @param value - 待转换值；驱动 `toolsService.normalizeSlugText()` 的 博客步骤。
+   * 将`value`规范为针对博客内容，使等价输入得到一致表示。
+   * @param value - 待转换为针对博客内容的原始值。
+   * @returns 针对博客内容。
    */
   private normalizeSlug(value: string) {
     return this.toolsService.normalizeSlugText(value);
   }
 
   /**
-   * 执行 博客内容流程。
-   * @param value - 待转换值；影响 stripHtml 的返回值。
+   * 从`value`移除针对博客内容，未命中标记时保留原输入。
+   * @param value - 待转换为针对博客内容的原始值。
+   * @returns 针对博客内容清理后的文本。
    */
   private stripHtml(value: string) {
     return value

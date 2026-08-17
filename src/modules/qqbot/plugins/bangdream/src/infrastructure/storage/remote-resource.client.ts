@@ -14,22 +14,23 @@ const errorUrlCache: Record<string, number> = {};
 const DEFAULT_REQUEST_TIMEOUT_MS = 8000;
 
 /**
- * 查询 BangDream 插件数据。
- * @returns BangDream 插件查询结果。
+ * 按当前运行态读取超时Ms；当 `Number.isFinite(parsed) && parsed > 0` 成立时返回 `Math.floor(parsed)`。
+ * @returns 超时Ms。
  */
 function getRequestTimeoutMs(): number {
   const parsed = Number(
     readBangDreamRuntimeConfig(BANGDREAM_TSUGU_ENV_KEYS.requestTimeoutMs),
   );
-  return Number.isFinite(parsed) && parsed > 0
-    ? Math.floor(parsed)
-    : DEFAULT_REQUEST_TIMEOUT_MS;
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.floor(parsed);
+  }
+  return DEFAULT_REQUEST_TIMEOUT_MS;
 }
 
 /**
- * 判断 BangDream 插件条件。
- * @param url - 访问地址；计算 BangDream判断结果。
- * @returns 布尔值，表示 BangDream 插件条件是否满足。
+ * 根据 `true` 判定输入是否满足条件。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @returns 满足根据 `true` 判定输入是否满足条件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function isErrorUrlCacheActive(url: string): boolean {
   const cachedAt = errorUrlCache[url];
@@ -42,21 +43,23 @@ function isErrorUrlCacheActive(url: string): boolean {
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param url - 访问地址；影响 rememberNotFound 的返回值。
- * @param statusCode - statusCode 输入；决定 BangDream条件分支。
+ * 将本次操作写入 `errorUrlCache[url]` 状态。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @param statusCode - 决定rememberNotFound内容、边界或目标的 `statusCode` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
  */
 function rememberNotFound(url: string, statusCode?: number) {
   if (statusCode === 404) errorUrlCache[url] = Date.now();
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param url - 访问地址；驱动 `Error()`、`requestBangDreamArrayBuffer()`、`rememberNotFound()` 的 BangDream步骤。
- * @param _directory - _directory 输入；影响 fetchRemoteResourceBuffer 的返回值。
- * @param _fileName - _fileName 输入；影响 fetchRemoteResourceBuffer 的返回值。
- * @param _cacheTime - _cacheTime 输入；影响 fetchRemoteResourceBuffer 的返回值。
- * @returns BangDream 插件渲染后的图片、画布或文本。
+ * 通过 `isErrorUrlCacheActive` 判断输入是否满足函数约束。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @param _directory - 为兼容既有调用签名保留的参数，当前实现不会读取该值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param _fileName - 为兼容既有调用签名保留的参数，当前实现不会读取该值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param _cacheTime - 为兼容既有调用签名保留的参数，当前实现不会读取该值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 远端Resource缓冲区。
+ * @throws 当 `isErrorUrlCacheActive(url)` 成立时拒绝当前输入并抛出 `Error`；当 `(response.statusCode || 200) >= 400` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `requestBangDreamArrayBuffer` 或 `getRequestTimeoutMs` 调用失败时拒绝当前输入并抛出 `Error`。
  */
 export async function fetchRemoteResourceBuffer(
   url: string,
@@ -89,12 +92,13 @@ export async function fetchRemoteResourceBuffer(
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param url - 访问地址；驱动 `Error()`、`rememberNotFound()` 的 BangDream步骤。
- * @param _directory - _directory 输入；影响 fetchRemoteResourceJson 的返回值。
- * @param _fileName - _fileName 输入；影响 fetchRemoteResourceJson 的返回值。
- * @param _cacheTime - _cacheTime 输入；影响 fetchRemoteResourceJson 的返回值。
- * @returns 异步完成后的 BangDream 插件结果。
+ * 通过 `isErrorUrlCacheActive` 判断输入是否满足函数约束。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @param _directory - 为兼容既有调用签名保留的参数，当前实现不会读取该值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param _fileName - 为兼容既有调用签名保留的参数，当前实现不会读取该值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param _cacheTime - 为兼容既有调用签名保留的参数，当前实现不会读取该值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 远端ResourceJSON 数据。
+ * @throws 当 `isErrorUrlCacheActive(url)` 成立时拒绝当前输入并抛出 `Error`；当 `(response.statusCode || 200) >= 400` 成立时拒绝当前输入并抛出 `Error`。
  */
 export async function fetchRemoteResourceJson<T = object>(
   url: string,

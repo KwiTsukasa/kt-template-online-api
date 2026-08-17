@@ -24,7 +24,10 @@ export class MihomoReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
-  /** 检查Mihomo只读的记录。 */
+  /**
+   * 根据当前运行态处理Mihomo只读的记录；当 `missing.length > 0` 成立时返回 `createUnwiredAdapterSignal( 'r4se-mihomo',…`。
+   * @returns Mihomo只读的记录。
+   */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_R4SE_MIHOMO_URL',
@@ -73,7 +76,12 @@ export class MihomoReadonlyAdapter {
           version: versionText,
           versionHttpStatus: versionResponse.status,
         },
-        httpOk ? 'ok' : 'degraded',
+        (() => {
+          if (httpOk) {
+            return 'ok';
+          }
+          return 'degraded';
+        })(),
         versionResponse.observedAt,
       );
     } catch (error) {
@@ -85,7 +93,11 @@ export class MihomoReadonlyAdapter {
     }
   }
 
-  /** 返回APIURL。 */
+  /**
+   * 按运行时配置与路径参数构造APIURL。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @returns 按运行时配置与路径参数构造APIURL。
+   */
   private apiUrl(path: 'configs' | 'proxies' | 'version'): string {
     return joinReadonlyUrl(
       this.config.get('ENV_DASHBOARD_R4SE_MIHOMO_URL'),
@@ -93,7 +105,10 @@ export class MihomoReadonlyAdapter {
     );
   }
 
-  /** 返回认证请求头。 */
+  /**
+   * 把领域字段投影为认证请求头。
+   * @returns 包含 `Authorization` 字段的把领域字段投影为认证请求头。
+   */
   private authHeaders(): Record<string, string> {
     return {
       Authorization: `Bearer ${this.config.get(
@@ -102,7 +117,11 @@ export class MihomoReadonlyAdapter {
     };
   }
 
-  /** 统计代理。 */
+  /**
+   * 统计 Mihomo 响应中的代理数量；对象按键数计算，数组按元素数计算，其他输入视为空列表。
+   * @param body - 用于代理的结构化输入，包含 `proxies` 字段。
+   * @returns 代理。
+   */
   private countProxies(body: Record<string, unknown>): number {
     const proxies = body.proxies;
     const proxyRecord = asRecord(proxies);

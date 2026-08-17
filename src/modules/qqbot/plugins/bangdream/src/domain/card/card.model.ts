@@ -24,10 +24,9 @@ export interface Stat {
 const typeName: Record<string, string> = BANGDREAM_CARD_TYPE_NAME;
 
 /**
- * 在BangDream 领域模型层中追加数值。
- *
- * @param stat - stat 输入；使用 `performance`、`technique`、`visual` 字段生成结果。
- * @param add - add 输入；使用 `performance`、`technique`、`visual` 字段生成结果。
+ * 将本次操作写入 `stat.performance`、`stat.technique`、`stat.visual` 状态。
+ * @param stat - 用于统计值的领域对象，包含 `performance`、`technique`、`visual` 字段。
+ * @param add - 用于统计值的领域对象，包含 `performance`、`technique`、`visual` 字段。
  */
 export function addStat(stat: Stat, add: Stat): void {
   //综合力相加函数
@@ -37,9 +36,9 @@ export function addStat(stat: Stat, add: Stat): void {
 }
 
 /**
- * 在BangDream 领域模型层中处理limitBreakRank数值。
- *
- * @param rarity - rarity 输入；影响 limitBreakRankStat 的返回值。
+ * 根据`rarity`处理limitBreak排名统计值。
+ * @param rarity - 决定卡牌边框、星级数量与资源名称的稀有度。
+ * @returns limitBreak排名统计值。
  */
 function limitBreakRankStat(rarity: number) {
   //不同稀有度突破一级增加的属性
@@ -115,9 +114,8 @@ export class Card {
     this.scoreUpMaxValue = skill.scoreUpMaxValue;
   }
   /**
-   * 在 Card 模型中加载远端完整详情并标记初始化状态。
-   *
-   * @param useCache - useCache 输入；驱动 `this.getData()` 的 BangDream步骤。
+   * 根据`useCache`处理initFull；当 `this.isInitFull` 成立时直接结束且不产生返回值。
+   * @param useCache - 决定是否启用“use缓存”分支的布尔选项；省略时默认采用 `true`。
    */
   async initFull(useCache: boolean = true) {
     if (this.isInitFull) {
@@ -165,18 +163,17 @@ export class Card {
   }
   /**
    * 在 Card 模型中请求当前模型的远端详情数据。
-   *
-   * @param update - update 输入；驱动 `cardResourceRepository.getDetail()` 的 BangDream步骤。
+   * @param update - 决定在 Card 模型中请求当前模型的远端详情数据内容、边界或目标的 `update` 值；省略时默认采用 `true`。
+   * @returns 在 Card 模型中请求当前模型的远端详情数据。
    */
   async getData(update: boolean = true) {
     return await cardResourceRepository.getDetail(this.cardId, update);
   }
 
   /**
-   * 在 Card 模型中处理ableToTraining。
-   *
-   * @param trainingStatus - BangDream列表；影响 ableToTraining 的返回值。
-   * @returns 判断结果。
+   * 根据`trainingStatus`处理在 Card 模型中处理ableToTraining；当 `this.rarity < 3` 成立时返回 `false`。
+   * @param trainingStatus - 决定在 Card 模型中处理ableToTraining内容、边界或目标的 `trainingStatus` 值；为空时采用 `true` 作为兜底。
+   * @returns 满足在 Card 模型中处理ableToTraining约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   ableToTraining(trainingStatus?: boolean): boolean {
     //判断是否能够进行特训
@@ -194,9 +191,8 @@ export class Card {
     return trainingStatus ?? true;
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @returns 判断结果。
+   * 按当前运行态读取Training状态；当 `this.rarity < 3` 成立时返回 `trainingStatusList`。
+   * @returns 按输入顺序得到的Training状态列表；没有匹配项时为空数组。
    */
   getTrainingStatusList(): Array<boolean> {
     //判断是否能够进行特训
@@ -268,15 +264,20 @@ export class Card {
   //     return stat
   // }
   /**
-   * 在 Card 模型中计算数值。
-   *
-   * @param cardData - cardData 输入；使用 `level`、`userAppendParameter` 字段生成结果。
+   * 根据指定或最高等级取得卡牌属性；用户卡追加潜能加成，模板卡则追加特训与剧情加成。
+   * @param cardData - 用于根据指定或最高等级取得卡牌属性的领域对象，包含 `level`、`userAppendParameter` 字段；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 根据指定或最高等级取得卡牌属性。
    */
   async calcStat(cardData?) {
     if (!this.isInitFull) {
       await this.initFull();
     }
-    const level = cardData ? cardData.level : this.getMaxLevel();
+    const level = (() => {
+      if (cardData) {
+        return cardData.level;
+      }
+      return this.getMaxLevel();
+    })();
     const stat = this.stat[level.toString()];
     if (cardData) {
       if (cardData.userAppendParameter) {
@@ -312,18 +313,16 @@ export class Card {
     return stat;
   }
   /**
-   * 在 Card 模型中获取技能。
-   *
-   * @returns BangDream 插件查询结果。
+   * 按当前运行态读取Skill。
+   * @returns 完成初始化并携带当前边界配置的Skill。
    */
   getSkill(): Skill {
     return new Skill(this.skillId);
   }
   /**
-   * 判断 BangDream 插件条件。
-   *
-   * @param server - server 输入；决定 BangDream条件分支。
-   * @returns 判断结果。
+   * 根据 `true` 判定输入是否满足条件。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+   * @returns 满足根据 `true` 判定输入是否满足条件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   isReleased(server: Server): boolean {
     //确定是否在该服务器发布
@@ -333,10 +332,9 @@ export class Card {
     return true;
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
-   * @returns BangDream 插件查询结果。
+   * 按`displayedServerList`读取Released服务器；从 `getServerByPriority` 读取Released服务器。
+   * @param displayedServerList - 决定Released服务器内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+   * @returns Released服务器。
    */
   getFirstReleasedServer(
     displayedServerList: Server[] = globalDefaultServer,
@@ -346,18 +344,16 @@ export class Card {
     return getServerByPriority(this.releasedAt, displayedServerList);
   }
   /**
-   * 在 Card 模型中获取资源批次。
-   *
-   * @returns 格式化后的文本。
+   * 按当前运行态读取Rip；从 `cardResourceRepository.getRip` 读取Rip。
+   * @returns 当前卡牌标识对应的裁切资源路径或地址。
    */
   getRip(): string {
     return cardResourceRepository.getRip(this.cardId);
   }
   /**
-   * 在 Card 模型中获取卡牌图标图片。
-   *
-   * @param trainingStatus - BangDream列表；驱动 `this.ableToTraining()`、`cardResourceRepository.getImageBuffer()` 的 BangDream步骤。
-   * @returns 异步处理结果。
+   * 按`trainingStatus`读取卡牌图标图片；从受控资源来源加载所需数据（`cardResourceRepository.getImageBuffer`）。
+   * @param trainingStatus - 决定卡牌图标图片内容、边界或目标的 `trainingStatus` 值。
+   * @returns 卡牌图标图片。
    */
   async getCardIconImage(trainingStatus: boolean): Promise<Image> {
     trainingStatus = this.ableToTraining(trainingStatus);
@@ -369,10 +365,9 @@ export class Card {
     return await loadImage(cardIconImageBuffer);
   }
   /**
-   * 在 Card 模型中获取卡牌Illustration图片。
-   *
-   * @param trainingStatus - BangDream列表；驱动 `this.ableToTraining()`、`cardResourceRepository.getImageBuffer()` 的 BangDream步骤。
-   * @returns 异步处理结果。
+   * 按`trainingStatus`读取卡牌Illustration图片；从受控资源来源加载所需数据（`cardResourceRepository.getImageBuffer`）。
+   * @param trainingStatus - 决定卡牌Illustration图片内容、边界或目标的 `trainingStatus` 值。
+   * @returns 卡牌Illustration图片。
    */
   async getCardIllustrationImage(trainingStatus: boolean): Promise<Image> {
     trainingStatus = this.ableToTraining(trainingStatus);
@@ -385,10 +380,9 @@ export class Card {
     return await loadImage(cardIllustrationImageBuffer);
   }
   /**
-   * 在 Card 模型中获取卡牌Illustration图片缓冲区。
-   *
-   * @param trainingStatus - BangDream列表；驱动 `this.ableToTraining()`、`cardResourceRepository.getImageBuffer()` 的 BangDream步骤。
-   * @returns 异步处理结果。
+   * 按`trainingStatus`读取卡牌Illustration图片缓冲区；从受控资源来源加载所需数据（`cardResourceRepository.getImageBuffer`）。
+   * @param trainingStatus - 决定卡牌Illustration图片缓冲区内容、边界或目标的 `trainingStatus` 值。
+   * @returns 卡牌Illustration图片缓冲区。
    */
   async getCardIllustrationImageBuffer(
     trainingStatus: boolean,
@@ -401,10 +395,9 @@ export class Card {
     );
   }
   /**
-   * 在 Card 模型中获取卡牌Trim图片。
-   *
-   * @param trainingStatus - BangDream列表；驱动 `this.ableToTraining()`、`cardResourceRepository.getImageBuffer()` 的 BangDream步骤。
-   * @returns 异步处理结果。
+   * 按`trainingStatus`读取卡牌Trim图片；从受控资源来源加载所需数据（`cardResourceRepository.getImageBuffer`）。
+   * @param trainingStatus - 决定卡牌Trim图片内容、边界或目标的 `trainingStatus` 值。
+   * @returns 卡牌Trim图片。
    */
   async getCardTrimImage(trainingStatus: boolean): Promise<Image> {
     trainingStatus = this.ableToTraining(trainingStatus);
@@ -413,7 +406,8 @@ export class Card {
     return await loadImage(cardIllustrationImageBuffer);
   }
   /**
-   * 在 Card 模型中获取类型名称。
+   * 按当前运行态读取Type名称；当 `typeName[this.type] == undefined` 成立时返回 `this.type`。
+   * @returns Type名称。
    */
   getTypeName() {
     if (typeName[this.type] == undefined) {
@@ -422,9 +416,8 @@ export class Card {
     return typeName[this.type];
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @returns 计算后的数值。
+   * 通过 `isNaN` 判断输入是否满足函数约束。
+   * @returns 最大Level。
    */
   getMaxLevel(): number {
     let maxLevel = 0;
@@ -440,7 +433,7 @@ export class Card {
     return maxLevel;
   }
   /**
-   * 在 Card 模型中获取来源。
+   * 按当前运行态读取来源。
    */
   async getSource() {
     if (!this.isInitFull) {

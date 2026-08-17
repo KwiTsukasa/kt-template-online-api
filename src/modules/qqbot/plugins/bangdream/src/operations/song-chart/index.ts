@@ -19,7 +19,12 @@ export const songChartOperation: BangDreamOperationModule = {
 
     return context.toImageReply(
       'bangdream.song.chart',
-      `${songId}${difficulty === undefined ? '' : ` ${difficulty}`}`,
+      `${songId}${(() => {
+        if (difficulty === undefined) {
+          return '';
+        }
+        return ` ${difficulty}`;
+      })()}`,
       await drawSongChart(
         songId,
         difficulty ?? 3,

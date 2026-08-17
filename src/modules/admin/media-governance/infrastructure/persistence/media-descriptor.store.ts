@@ -16,7 +16,11 @@ export class MediaDescriptorStore {
     private readonly configService: ConfigService,
   ) {}
 
-  /** 解析并校验种子描述符，将原始内容写入私有对象存储后返回密封元数据。 */
+  /**
+   * 解析并校验种子描述符，将原始内容写入私有对象存储后返回密封元数据。
+   * @param input - 用于并校验种子描述符，将原始内容写入私有对象存储后返回密封元数据的结构化输入，包含 `bytes`、`revision`、`sourceId`、`taskId` 字段。
+   * @returns 包含 `bytes`、`descriptorSha256`、`infoHash`、`manifest`、`manifestSha256` 字段的并校验种子描述符，将原始内容写入私有对象存储后返回密封元数据。
+   */
   async putTorrentDescriptor(input: {
     bytes: Buffer;
     revision: number;
@@ -55,7 +59,12 @@ export class MediaDescriptorStore {
     };
   }
 
-  /** 校验磁力链接描述符并写入私有对象存储，返回可持久化的摘要引用。 */
+  /**
+   * 校验磁力链接描述符并写入私有对象存储，返回可持久化的摘要引用。
+   * @param input - 用于磁力链接描述符并写入私有对象存储，返回可持久化的摘要引用的结构化输入，包含 `magnetUri`、`revision`、`sourceId`、`taskId` 字段。
+   * @returns 包含 `bytes`、`descriptorSha256`、`objectId` 字段的磁力链接描述符并写入私有对象存储，返回可持久化的摘要引用。
+   * @throws 当 `bytes.length === 0 || bytes.length > 16 * 1024` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async putMagnetDescriptor(input: {
     magnetUri: string;
     revision: number;
@@ -87,7 +96,14 @@ export class MediaDescriptorStore {
     return { bytes: bytes.length, descriptorSha256, objectId };
   }
 
-  /** 从私有对象存储读取有界描述符，并校验对象键与内容摘要。 */
+  /**
+   * 从私有对象存储读取有界描述符，并校验对象键与内容摘要。
+   * @param input - 用于描述信息的结构化输入，包含 `objectId`、`descriptorSha256` 字段。
+   * @returns 描述信息。
+   * @throws 当 `!/^tasks\/[A-Za-z0-9._-]{8,96}\/sources\/[A-Za-z0-9._-]{8,96}\/revision…` 成立时拒绝当前输入并抛出 `Error`；当 `!/^[a-f0-9]{64}$/.test(input.descriptorSha256)` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `bytes > 2 * 1024 * 1024` 成立时拒绝当前输入并抛出 `Error`；当 `bytes === 0` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `createHash('sha256').update(result).digest('hex') !== input.descriptorS…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async readDescriptor(input: {
     descriptorSha256: string;
     objectId: string;

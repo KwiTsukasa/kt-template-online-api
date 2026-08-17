@@ -20,9 +20,9 @@ export class SaveBodyInterceptor implements NestInterceptor {
 
   /**
    * 拦截请求并处理横切逻辑。
-   * @param context - context 输入；执行 `context.switchToHttp()` 对应的 公共基础设施步骤。
-   * @param next - next 输入；执行 `next.handle()` 对应的 公共基础设施步骤。
-   * @returns 当前模块产出的 Observable<any>。
+   * @param context - 用于拦截请求并处理横切逻辑的领域对象，包含 `switchToHttp` 字段。
+   * @param next - 用于拦截请求并处理横切逻辑的领域对象，包含 `handle` 字段。
+   * @returns 拦截请求并处理横切逻辑。
    */
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     if (this.shouldSkip(context)) {
@@ -40,9 +40,9 @@ export class SaveBodyInterceptor implements NestInterceptor {
   }
 
   /**
-   * 判断 当前模块条件。
-   * @param context - context 输入；执行 `context.getHandler()`、`context.getClass()` 对应的 公共基础设施步骤。
-   * @returns 布尔值，表示 当前模块条件是否满足。
+   * 根据`context`与当前约束判定Skip；从 `reflector.getAllAndOverride` 读取Skip。
+   * @param context - 用于Skip的领域对象，包含 `getHandler`、`getClass` 字段。
+   * @returns 满足Skip约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private shouldSkip(context: ExecutionContext): boolean {
     return this.reflector.getAllAndOverride<boolean>(SKIP_SAVE_BODY_NORMALIZE, [
@@ -52,9 +52,9 @@ export class SaveBodyInterceptor implements NestInterceptor {
   }
 
   /**
-   * 判断 当前模块条件。
-   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
-   * @returns 布尔值，表示 当前模块条件是否满足。
+   * 通过 `request.path.endsWith` 判断输入是否满足函数约束。
+   * @param request - 用于`isSaveRequest` 对应结果的当前 HTTP 请求，包含 `method`、`path` 字段。
+   * @returns 满足`isSaveRequest` 对应约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isSaveRequest(request: Request): boolean {
     return request.method === 'POST' && request.path.endsWith('/save');

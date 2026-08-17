@@ -20,7 +20,7 @@ let limitBreakIcon: Image;
 let cardArtAssetsPreload: Promise<void> | undefined;
 
 /**
- * 执行 BangDream 插件流程。
+ * 根据当前运行态处理BanG Dream卡牌ArtAssets；从受控资源来源加载所需数据（`loadImageFromPath`）。
  */
 export async function preloadBangDreamCardArtAssets() {
   if (!cardArtAssetsPreload) {
@@ -62,11 +62,10 @@ export async function preloadBangDreamCardArtAssets() {
 
 //根据稀有度与属性，获得图标框
 /**
- * 在图片布局层中获取卡牌图标Frame。
- *
- * @param rarity - rarity 输入；驱动 `cardArtResourceRepository.getIconFrameBuffer()` 的 BangDream步骤。
- * @param attribute - attribute 输入；驱动 `cardArtResourceRepository.getIconFrameBuffer()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 按`rarity`、`attribute`读取卡牌图标边框；从受控资源来源加载所需数据（`loadImage`）。
+ * @param rarity - 决定卡牌边框、星级数量与资源名称的稀有度。
+ * @param attribute - 决定卡牌属性图标与边框资源的属性。
+ * @returns 卡牌图标边框。
  */
 async function getCardIconFrame(
   rarity: number,
@@ -81,11 +80,10 @@ async function getCardIconFrame(
 
 //根据稀有度与属性，获得插画框
 /**
- * 在图片布局层中获取卡牌IllustrationFrame。
- *
- * @param rarity - rarity 输入；驱动 `cardArtResourceRepository.getIllustrationFrameBuffer()` 的 BangDream步骤。
- * @param attribute - attribute 输入；驱动 `cardArtResourceRepository.getIllustrationFrameBuffer()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 按`rarity`、`attribute`读取卡牌Illustration边框；从受控资源来源加载所需数据（`loadImage`）。
+ * @param rarity - 决定卡牌边框、星级数量与资源名称的稀有度。
+ * @param attribute - 决定卡牌属性图标与边框资源的属性。
+ * @returns 卡牌Illustration边框。
  */
 async function getCardIllustrationFrame(
   rarity: number,
@@ -113,10 +111,8 @@ interface DrawCardIconOptions {
 
 //画卡icon
 /**
- * 在图片布局层中绘制卡牌图标。
- *
- * @param options1 - options1 输入；影响 drawCardIcon 的返回值。
- * @returns 异步处理结果。
+ * 根据当前运行态绘制或格式化卡牌图标；把图片、文本或图形按布局规格绘制到画布。
+ * @returns 卡牌图标。
  */
 export async function drawCardIcon({
   card,
@@ -132,9 +128,12 @@ export async function drawCardIcon({
   trainingStatus = card.ableToTraining(trainingStatus);
   illustrationTrainingStatus ??= trainingStatus;
   const spec = BANGDREAM_CARD_ART_SPEC.icon;
-  const canvas: Canvas = cardIdVisible
-    ? new Canvas(spec.width, spec.heightWithId)
-    : new Canvas(spec.width, spec.height);
+  const canvas: Canvas = (() => {
+    if (cardIdVisible) {
+      return new Canvas(spec.width, spec.heightWithId);
+    }
+    return new Canvas(spec.width, spec.height);
+  })();
   const ctx = canvas.getContext('2d');
   ctx.drawImage(
     await card.getCardIconImage(illustrationTrainingStatus),
@@ -233,7 +232,12 @@ export async function drawCardIcon({
       spec.limitBreak.textY,
     );
   }
-  const star = starList[trainingStatus ? 'trained' : 'normal'];
+  const star = starList[(() => {
+    if (trainingStatus) {
+      return 'trained';
+    }
+    return 'normal';
+  })()];
   for (let i = 0; i < card.rarity; i++) {
     //星星数量
     ctx.drawImage(
@@ -254,10 +258,8 @@ interface DrawCardIllustrationOptions {
 }
 //画卡插画
 /**
- * 在图片布局层中绘制卡牌Illustration。
- *
- * @param options1 - options1 输入；影响 drawCardIllustration 的返回值。
- * @returns 异步处理结果。
+ * 根据当前运行态绘制或格式化卡牌Illustration；当 `isList` 成立时返回 `tempCanvas`。
+ * @returns 卡牌Illustration。
  */
 export async function drawCardIllustration({
   card,
@@ -304,7 +306,12 @@ export async function drawCardIllustration({
     spec.band.height,
   );
 
-  const star = starList[trainingStatus ? 'trained' : 'normal'];
+  const star = starList[(() => {
+    if (trainingStatus) {
+      return 'trained';
+    }
+    return 'normal';
+  })()];
   for (let i = 0; i < card.rarity; i++) {
     //星星数量
     ctx.drawImage(

@@ -23,7 +23,11 @@ export class NapcatWebuiCredentialClient {
 
   constructor(private readonly config: NapcatWebuiGatewayConfigService) {}
 
-  /** 读取凭据。 */
+  /**
+   * 按`session`读取凭据；当 `cached && now < cached.expiresAt && cached.expiresAt <= sessi…` 成立时返回 `cached.credential`。
+   * @param session - 待读取、续期或持久化的凭据会话。
+   * @returns 凭据。
+   */
   async getCredential(session: NapcatWebuiGatewaySession) {
     const cached = this.credentials.get(session.sessionId);
     const now = this.config.now();
@@ -43,12 +47,20 @@ export class NapcatWebuiCredentialClient {
     return credential;
   }
 
-  /** 清空NapCatWebUI凭据记录。 */
+  /**
+   * 按`sessionId`移除清空NapCatWebUI凭据记录。
+   * @param sessionId - 用于精确定位会话的标识。
+   */
   clear(sessionId: string) {
     this.credentials.delete(sessionId);
   }
 
-  /** 返回交换凭据。 */
+  /**
+   * 以统一异常拒绝交换凭据。
+   * @param session - 待读取、续期或持久化的以统一异常拒绝交换凭据会话。
+   * @returns 以统一异常拒绝交换凭据。
+   * @throws 当 `!credential` 成立时拒绝当前输入并抛出 `Error`；当 `axios.post` 或 `toString` 调用失败时拒绝当前输入并抛出 `BadGatewayException`。
+   */
   private async exchangeCredential(session: NapcatWebuiGatewaySession) {
     const hash = createHash('sha256')
       .update(`${session.webuiToken}.napcat`)
@@ -72,7 +84,11 @@ export class NapcatWebuiCredentialClient {
     }
   }
 
-  /** 返回提取凭据。 */
+  /**
+   * 从输入中提取凭据。
+   * @param body - 用于从输入中提取凭据的结构化输入，包含 `data` 字段。
+   * @returns 从输入中提取凭据。
+   */
   private extractCredential(body: NapcatCredentialResponse) {
     if ('data' in body) {
       return body.data?.Credential;

@@ -11,8 +11,8 @@ export class RuntimeHealthService {
   constructor(private readonly runtimeConfigService: RuntimeConfigService) {}
 
   /**
-   * 查询 运行态健康检查数据。
-   * @returns 运行态健康检查查询结果。
+   * 按当前运行态读取针对运行态健康检查；从 `runtimeConfigService.getSafeSnapshot` 读取针对运行态健康检查。
+   * @returns 包含 `service`、`checkedAt`、`status`、`checks` 字段的针对运行态健康检查。
    */
   getRuntimeHealth(): RuntimeHealthReport {
     const config = this.runtimeConfigService.getSafeSnapshot();
@@ -27,9 +27,12 @@ export class RuntimeHealthService {
         name: `config:${check.key}`,
         status: this.getConfigCheckStatus(check.present, check.level),
         critical: check.level === 'required',
-        message: check.present
-          ? `${check.key} is configured`
-          : (check.message ?? `${check.key} is not configured`),
+        message: (() => {
+          if (check.present) {
+            return `${check.key} is configured`;
+          }
+          return (check.message ?? `${check.key} is not configured`);
+        })(),
       })),
     ];
 
@@ -42,23 +45,26 @@ export class RuntimeHealthService {
   }
 
   /**
-   * 查询 运行态健康检查数据。
-   * @param present - present 输入；决定 运行态条件分支。
-   * @param level - level 输入；限定 运行态查询范围。
-   * @returns 运行态健康检查查询结果。
+   * 按`present`、`level`读取配置状态；当 `level === 'required'` 成立时返回 `'blocked'`。
+   * @param present - 决定配置状态内容、边界或目标的 `present` 值。
+   * @param level - 决定配置状态内容、边界或目标的 `level` 值。
+   * @returns 当前状态对应的配置状态，取值为 `'ready'`、`'blocked'`、`'degraded'`。
    */
   private getConfigCheckStatus(
     present: boolean,
     level: 'required' | 'optional',
   ): RuntimeHealthStatus {
     if (present) return 'ready';
-    return level === 'required' ? 'blocked' : 'degraded';
+    if (level === 'required') {
+      return 'blocked';
+    }
+    return 'degraded';
   }
 
   /**
-   * 执行 运行态健康检查流程。
-   * @param checks - 健康检查项列表；计算 运行态布尔判断。
-   * @returns 运行态健康检查产出的 RuntimeHealthStatus。
+   * 根据`checks`处理针对运行态健康检查；当 `checks.some((check) => check.critical && check.status === 'bl…` 成立时返回 `'blocked'`。
+   * @param checks - 决定针对运行态健康检查内容、边界或目标的 `checks` 值。
+   * @returns 当前状态对应的针对运行态健康检查，取值为 `'blocked'`、`'degraded'`、`'live'`、`'ready'`。
    */
   private aggregateStatus(checks: RuntimeHealthCheck[]): RuntimeHealthStatus {
     if (checks.some((check) => check.critical && check.status === 'blocked')) {

@@ -17,8 +17,8 @@ export class QqbotConfigService {
   ) {}
 
   /**
-   * 查询 QQBot 核心数据。
-   * @returns QQBot 核心查询结果。
+   * 按当前运行态读取权限配置；从 `getBooleanConfig` 读取权限配置。
+   * @returns 包含 `allowlistEnabled`、`blocklistEnabled` 字段的权限配置。
    */
   async getPermissionConfig(): Promise<QqbotPermissionConfig> {
     const [allowlistEnabled, blocklistEnabled] = await Promise.all([
@@ -35,7 +35,11 @@ export class QqbotConfigService {
     return { allowlistEnabled, blocklistEnabled };
   }
 
-  /** 读取配置值。 */
+  /**
+   * 读取配置值；通过 `configRepository.findOne` 查询匹配的持久化记录。
+   * @param configKey - 要读取的 QQBot 持久化配置自然键。
+   * @returns 返回 `record?.configValue` 的可用值；为空时回退到 `undefined`；未提供结果时为 `undefined`，可选链未命中时为 `undefined`。
+   */
   async getConfigValue(configKey: string): Promise<string | undefined> {
     const record = await this.configRepository.findOne({
       where: { configKey },
@@ -44,9 +48,9 @@ export class QqbotConfigService {
   }
 
   /**
-   * 更新Permission Config。
-   * @param config - config 输入；使用 `allowlistEnabled`、`blocklistEnabled` 字段生成结果。
-   * @returns QQBot 核心更新后的状态。
+   * 根据`config`更新权限配置；从 `getPermissionConfig` 读取权限配置。
+   * @param config - 限定权限配置边界、地址与开关的运行配置，包含 `allowlistEnabled`、`blocklistEnabled` 字段。
+   * @returns 权限配置。
    */
   async updatePermissionConfig(
     config: Partial<QqbotPermissionConfig>,
@@ -77,9 +81,10 @@ export class QqbotConfigService {
   }
 
   /**
-   * 查询 QQBot 核心数据。
-   * @param configKey - configKey 输入；限定 QQBot查询范围。
-   * @param defaultValue - defaultValue 输入；限定 QQBot查询范围。
+   * 按`configKey`、`defaultValue`读取布尔值配置；从 `configRepository.findOne` 读取布尔值配置。
+   * @param configKey - 用于读取或更新布尔值配置的稳定键。
+   * @param defaultValue - 主值缺失、为空或不合法时采用的兜底结果。
+   * @returns 满足布尔值配置约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async getBooleanConfig(configKey: string, defaultValue: boolean) {
     const record = await this.configRepository.findOne({
@@ -90,16 +95,21 @@ export class QqbotConfigService {
   }
 
   /**
-   * 设置Boolean Config。
-   * @param configKey - configKey 输入；写入 QQBot状态。
-   * @param value - 待转换值；写入 QQBot状态。
-   * @param remark - remark 输入；写入 QQBot状态。
+   * 根据`configKey`、`value`、`remark`更新布尔值配置；当 `exists` 成立时直接结束且不产生返回值。
+   * @param configKey - 用于读取或更新布尔值配置的稳定键。
+   * @param value - 参与布尔值配置比较、格式化或输出的候选值。
+   * @param remark - 决定布尔值配置内容、边界或目标的 `remark` 值。
    */
   async setBooleanConfig(configKey: string, value: boolean, remark: string) {
     const exists = await this.configRepository.findOne({
       where: { configKey },
     });
-    const configValue = value ? 'true' : 'false';
+    const configValue = (() => {
+      if (value) {
+        return 'true';
+      }
+      return 'false';
+    })();
 
     if (exists) {
       await this.configRepository.update(

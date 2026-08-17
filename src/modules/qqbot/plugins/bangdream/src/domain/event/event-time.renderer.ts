@@ -30,11 +30,9 @@ interface TimeInListOptions {
   estimateCNTime?: boolean;
 }
 /**
- * 在图片布局层中绘制时间In列表。
- *
- * @param options1 - options1 输入；影响 drawTimeInList 的返回值。
- * @param displayedServerList - displayedServerList 输入；驱动 `drawListByServerList()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`displayedServerList`绘制或格式化时间；从 `getPresentEvent` 读取时间。
+ * @param displayedServerList - 决定时间内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @returns 时间。
  */
 export async function drawTimeInList(
   { key, content, eventId, estimateCNTime = false }: TimeInListOptions,
@@ -73,11 +71,10 @@ export async function drawTimeInList(
 //获取当前活动与查询活动的大致时间差(国服)
 //注: 返回的并非时间差，而是活动预计开始的时间戳
 /**
- * 查询 BangDream 插件数据。
- *
- * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
- * @param currentEvent - currentEvent 输入；驱动 `estimateCnEventStartAt()` 的 BangDream步骤。
- * @returns 计算后的数值。
+ * 根据国服当前活动与目标活动编号估算目标活动开始时间；无法估算时返回空值。
+ * @param eventId - 用于精确定位事件的标识。
+ * @param currentEvent - 触发预计时间Difference的领域事件。
+ * @returns 预计时间Difference。
  */
 export function getProbableTimeDifference(
   eventId: number,
@@ -87,28 +84,27 @@ export function getProbableTimeDifference(
 }
 
 /**
- * 在图片布局层中格式化时间。
- *
- * @param timeStamp - timeStamp 输入；驱动 `formatBangDreamTime()` 的 BangDream步骤。
+ * 将活动时间戳转换为 BanG Dream 统一日期时间文本，并保留空时间的既定占位语义。
+ * @param timeStamp - 决定时间内容、边界或目标的 `timeStamp` 值。
+ * @returns 时间。
  */
 export function formatTime(timeStamp: number | null) {
   return formatBangDreamTime(timeStamp);
 }
 
 /**
- * 转换 BangDream 插件输入。
- *
- * @param timeStamp - timeStamp 输入；驱动 `formatBangDreamMonthDay()` 的 BangDream步骤。
+ * 将活动时间戳转换为 BanG Dream 月日文本，并保留空时间的既定占位语义。
+ * @param timeStamp - 决定MonthDay内容、边界或目标的 `timeStamp` 值。
+ * @returns BanG Dream 统一格式的月日文本；空时间沿用格式化器的占位结果。
  */
 export function formatMonthDay(timeStamp: number | null) {
   return formatBangDreamMonthDay(timeStamp);
 }
 
 /**
- * 在图片布局层中格式化时间Period。
- *
- * @param period - period 输入；驱动 `formatBangDreamPeriod()` 的 BangDream步骤。
- * @returns 格式化后的文本。
+ * 将`period`转换为时间区间。
+ * @param period - 决定时间区间内容、边界或目标的 `period` 值。
+ * @returns 时间区间。
  */
 export function formatTimePeriod(period: number): string {
   return formatBangDreamPeriod(period);
@@ -116,40 +112,37 @@ export function formatTimePeriod(period: number): string {
 
 //时间长度转时分秒函数
 /**
- * 转换 BangDream 插件输入。
- *
- * @param value - 待转换时间值；驱动 `formatBangDreamSeconds()` 的 BangDream步骤。
+ * 将秒数转换为 BanG Dream 统一时长文本，包含小时、分钟与秒的适用部分。
+ * @param value - 待转换为秒数的原始值。
+ * @returns 秒数。
  */
 export function formatSeconds(value: number) {
   return formatBangDreamSeconds(value);
 }
 
 /**
- * 转换 BangDream 插件输入。
- *
- * @param time - time 输入；驱动 `normalizeBangDreamTimestamp()` 的 BangDream步骤。
- * @returns 计算后的数值。
+ * 将数字或文本时间交给 BanG Dream 统一时间戳规范化规则，并返回毫秒值。
+ * @param time - 决定Timestamp内容、边界或目标的 `time` 值。
+ * @returns BanG Dream 统一规范化后的毫秒时间戳。
  */
 export function normalizeTimestamp(time: number | string): number {
   return normalizeBangDreamTimestamp(time);
 }
 
 /**
- * 在图片布局层中获取服务器UtcOffset。
- *
- * @param server - server 输入；驱动 `getBangDreamServerUtcOffset()` 的 BangDream步骤。
- * @returns 计算后的数值。
+ * 按`server`读取服务器UtcOffset；从 `getBangDreamServerUtcOffset` 读取服务器UtcOffset。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 服务器UtcOffset。
  */
 export function getServerUtcOffset(server: Server): number {
   return getBangDreamServerUtcOffset(server);
 }
 
 /**
- * 查询 BangDream 插件数据。
- *
- * @param time - time 输入；驱动 `getBangDreamDateByServerTimezone()` 的 BangDream步骤。
- * @param server - server 输入；驱动 `getBangDreamDateByServerTimezone()` 的 BangDream步骤。
- * @returns BangDream 插件查询结果。
+ * 按`time`、`server`读取日期服务器时区；从 `getBangDreamDateByServerTimezone` 读取日期服务器时区。
+ * @param time - 决定日期服务器时区内容、边界或目标的 `time` 值。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 日期服务器时区。
  */
 export function getDateByServerTimezone(
   time: number | string,

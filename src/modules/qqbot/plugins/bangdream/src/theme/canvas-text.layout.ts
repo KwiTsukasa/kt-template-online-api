@@ -37,28 +37,28 @@ export type BangDreamTextFont = 'FangZhengHeiTi' | 'old' | 'default';
 export type BangDreamTextWithImageFont = 'default' | 'old';
 
 /**
- * 计算默认文本行高。
- *
- * @param textSize - textSize 输入；限定 BangDream查询范围。
+ * 按`textSize`读取默认文本行高。
+ * @param textSize - 限制默认文本行高数量、尺寸、等级或重试边界的数值。
+ * @returns 默认文本行高。
  */
 export function getTextLineHeight(textSize: number) {
   return textSize * BANGDREAM_TEXT_SPEC.line.heightRatio;
 }
 
 /**
- * 计算文本和图片混排默认间距。
- *
- * @param textSize - textSize 输入；限定 BangDream查询范围。
+ * 按`textSize`读取文本和图片混排默认间距。
+ * @param textSize - 限制文本和图片混排默认间距数量、尺寸、等级或重试边界的数值。
+ * @returns 文本和图片混排默认间距。
  */
 export function getTextInlineSpacing(textSize: number) {
   return textSize * BANGDREAM_TEXT_SPEC.line.spacingRatio;
 }
 
 /**
- * 计算文本绘制 baseline。
- *
- * @param lineHeight - lineHeight 输入；限定 BangDream查询范围。
- * @param textSize - textSize 输入；限定 BangDream查询范围。
+ * 按行高与字号的主题比例计算文本基线纵坐标，使文本在统一行框中垂直对齐。
+ * @param lineHeight - 决定文本绘制 baseline内容、边界或目标的 `lineHeight` 值。
+ * @param textSize - 限制文本绘制 baseline数量、尺寸、等级或重试边界的数值。
+ * @returns 文本绘制 baseline。
  */
 export function getTextBaselineY(lineHeight: number, textSize: number) {
   return (
@@ -68,20 +68,20 @@ export function getTextBaselineY(lineHeight: number, textSize: number) {
 }
 
 /**
- * 计算内联图片按文本字号缩放后的宽度。
- *
- * @param image - image 输入；使用 `width`、`height` 字段生成结果。
- * @param textSize - textSize 输入；限定 BangDream查询范围。
+ * 按`image`、`textSize`读取内联图片按文本字号缩放后的宽度。
+ * @param image - 用于内联图片按文本字号缩放后的宽度的领域对象，包含 `width`、`height` 字段。
+ * @param textSize - 限制内联图片按文本字号缩放后的宽度数量、尺寸、等级或重试边界的数值。
+ * @returns 内联图片按文本字号缩放后的宽度。
  */
 export function getInlineImageWidth(image: ImageLike, textSize: number) {
   return (textSize * image.width) / image.height;
 }
 
 /**
- * 计算内联图片绘制 Y 坐标。
- *
- * @param baselineY - baselineY 输入；限定 BangDream查询范围。
- * @param textSize - textSize 输入；限定 BangDream查询范围。
+ * 按`baselineY`、`textSize`读取内联图片绘制 Y 坐标。
+ * @param baselineY - 决定内联图片绘制 Y 坐标内容、边界或目标的 `baselineY` 值。
+ * @param textSize - 限制内联图片绘制 Y 坐标数量、尺寸、等级或重试边界的数值。
+ * @returns 内联图片绘制 Y 坐标。
  */
 export function getInlineImageY(baselineY: number, textSize: number) {
   return (
@@ -92,9 +92,8 @@ export function getInlineImageY(baselineY: number, textSize: number) {
 }
 
 /**
- * 计算文本画布尺寸。
- *
- * @param options - BangDream列表；生成 BangDream对象。
+ * 计算文本画布尺寸，并输出固定投影 `height`、`width` 字段。
+ * @returns 包含 `height`、`width` 字段的文本CanvasSize。
  */
 export function createTextCanvasSize({
   lineHeight,

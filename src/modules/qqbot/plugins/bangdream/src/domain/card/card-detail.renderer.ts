@@ -27,21 +27,19 @@ import {
 import { DetailBlockBuilder } from '@/modules/qqbot/plugins/bangdream/src/theme/detail-block.builder';
 
 /**
- * 在QQBot 图片视图层中判断对象是否包含指定自有属性。
- *
- * @param source - source 输入；驱动 `hasOwnProperty.call()` 的 BangDream步骤。
- * @param key - 键名；驱动 `hasOwnProperty.call()` 的 BangDream步骤。
- * @returns 判断结果。
+ * 根据`source`、`key`与当前约束判定Own。
+ * @param source - 决定Own内容、边界或目标的 `source` 值。
+ * @param key - 用于读取或更新Own的稳定键。
+ * @returns 满足Own约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function hasOwn(source: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(source, key);
 }
 
 /**
- * 在QQBot 图片视图层中追加卡牌Illustrations。
- *
- * @param builder - builder 输入；写入 BangDream集合、缓存或持久化状态。
- * @param card - card 输入；执行 `card.getTrainingStatusList()` 对应的 BangDream步骤。
+ * 根据`builder`、`card`更新卡牌Illustrations；从 `card.getTrainingStatusList` 读取卡牌Illustrations。
+ * @param builder - 用于卡牌Illustrations的领域对象，包含 `add`、`addSpacer` 字段。
+ * @param card - 用于卡牌Illustrations的领域对象，包含 `getTrainingStatusList` 字段。
  */
 async function appendCardIllustrations(
   builder: DetailBlockBuilder,
@@ -60,12 +58,11 @@ async function appendCardIllustrations(
 }
 
 /**
- * 在QQBot 图片视图层中判断是否需要Show卡池文本。
- *
- * @param card - card 输入；使用 `rarity`、`type`、`releasedAt` 字段生成结果。
- * @param source - source 输入；决定 BangDream条件分支。
- * @param displayedServerList - displayedServerList 输入；驱动 `for()` 的 BangDream步骤。
- * @returns 判断结果。
+ * 通过 `hasOwn` 判断输入是否满足函数约束。
+ * @param card - 用于Show卡池文本的领域对象，包含 `rarity`、`type`、`releasedAt` 字段。
+ * @param source - 为兼容既有调用签名保留；当前实现不会读取该参数。
+ * @param displayedServerList - 决定Show卡池文本内容、边界或目标的 `displayedServerList` 值。
+ * @returns 满足Show卡池文本约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function shouldShowGachaText(
   card: Card,
@@ -87,12 +84,11 @@ function shouldShowGachaText(
 }
 
 /**
- * 在QQBot 图片视图层中追加卡牌基础区块列表。
- *
- * @param builder - builder 输入；执行 `builder.addSection()` 对应的 BangDream步骤。
- * @param card - card 输入；使用 `cardId`、`skillId`、`prefix`、`gachaText` 字段生成结果。
- * @param source - source 输入；决定 BangDream条件分支。
- * @param displayedServerList - displayedServerList 输入；驱动 `builder.addSection()` 的 BangDream步骤。
+ * 通过 `builder.addSection` 追加渲染区块。
+ * @param builder - 用于卡牌BaseSections的领域对象，包含 `addSection` 字段。
+ * @param card - 用于卡牌BaseSections的领域对象，包含 `getTypeName`、`cardId`、`skillId`、`prefix` 字段。
+ * @param source - 为兼容既有调用签名保留；当前实现不会读取该参数。
+ * @param displayedServerList - 决定卡牌BaseSections内容、边界或目标的 `displayedServerList` 值。
  */
 async function appendCardBaseSections(
   builder: DetailBlockBuilder,
@@ -156,11 +152,10 @@ async function appendCardBaseSections(
 }
 
 /**
- * 在QQBot 图片视图层中排序卡池ID 列表For服务器。
- *
- * @param gachaIdList - 卡池 ID 列表；限定本次批量读取、渲染或关联的卡池范围。
- * @param server - server 输入；决定 BangDream条件分支。
- * @returns 计算后的数值。
+ * 根据`gachaIdList`、`server`处理sort卡池标识集合服务器。
+ * @param gachaIdList - 决定sort卡池标识集合服务器内容、边界或目标的 `gachaIdList` 值。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 按输入顺序得到的sort卡池标识集合服务器列表；没有匹配项时为空数组。
  */
 function sortGachaIdsForServer(
   gachaIdList: number[],
@@ -180,13 +175,12 @@ function sortGachaIdsForServer(
 }
 
 /**
- * 在QQBot 图片视图层中追加Related活动图片。
- *
- * @param eventImageList - eventImageList 输入；写入 BangDream集合、缓存或持久化状态。
- * @param eventIdSet - eventIdSet 输入；写入 BangDream集合、缓存或持久化状态。
- * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
- * @param displayedServerList - displayedServerList 输入；驱动 `eventImageList.push()` 的 BangDream步骤。
- * @param title - title 输入；驱动 `eventImageList.push()` 的 BangDream步骤。
+ * 根据`eventImageList`、`eventIdSet`、`eventId`更新Related事件图片；当 `eventIdSet.has(event.eventId)` 成立时直接结束且不产生返回值。
+ * @param eventImageList - 用于Related事件图片的领域对象，包含 `push` 字段。
+ * @param eventIdSet - 用于Related事件图片的领域对象，包含 `has`、`add` 字段。
+ * @param eventId - 用于精确定位事件的标识。
+ * @param displayedServerList - 决定Related事件图片内容、边界或目标的 `displayedServerList` 值。
+ * @param title - 决定Related事件图片内容、边界或目标的 `title` 值。
  */
 async function appendRelatedEventImage(
   eventImageList: Array<Canvas | Image>,
@@ -211,11 +205,10 @@ interface CardSourceSections {
 }
 
 /**
- * 在QQBot 图片视图层中收集卡牌来源区块列表。
- *
- * @param card - card 输入；使用 `releaseEvent`、`releaseGacha` 字段生成结果。
- * @param displayedServerList - displayedServerList 输入；驱动 `for()`、`appendRelatedEventImage()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 按展示服务器收集卡牌首个关联活动与卡池图片，并跨服务器去除重复活动和卡池。
+ * @param card - 提供各服务器发布活动与卡池标识的卡牌。
+ * @param displayedServerList - 决定来源检索顺序和图片标题前缀的服务器列表。
+ * @returns 已去重的关联活动图片与卡池图片集合；没有来源时对应集合为空。
  */
 async function collectCardSourceSections(
   card: Card,
@@ -268,13 +261,12 @@ async function collectCardSourceSections(
 }
 
 /**
- * 在QQBot 图片视图层中绘制卡牌详情。
- *
- * @param cardId - 卡牌 ID；定位本次读取、更新、删除或关联的卡牌。
- * @param displayedServerList - displayedServerList 输入；驱动 `add()`、`list.push()`、`collectCardSourceSections()` 的 BangDream步骤。
- * @param useEasyBG - useEasyBG 输入；影响 drawCardDetail 的返回值。
- * @param compress - BangDream列表；影响 drawCardDetail 的返回值。
- * @returns 异步处理结果。
+ * 通过 `addSpacer` 追加渲染区块。
+ * @param cardId - 用于精确定位卡牌的标识。
+ * @param displayedServerList - 决定卡牌详情内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @param useEasyBG - 决定是否启用“useEasyBG”分支的布尔选项。
+ * @param compress - 决定卡牌详情内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的卡牌详情列表；没有匹配项时为空数组。
  */
 async function drawCardDetail(
   cardId: number,
@@ -335,8 +327,12 @@ async function drawCardDetail(
   );
   all.push(...eventImageList, ...gachaImageList);
 
-  const BGimage =
-    card.rarity < 3 ? undefined : await card.getCardIllustrationImage(true);
+  const BGimage = await (async () => {
+      if (card.rarity < 3) {
+        return undefined;
+      }
+      return await card.getCardIllustrationImage(true);
+    })();
 
   return await createOutputFinalImages({
     useEasyBG,

@@ -24,7 +24,11 @@ class BencodeParser {
 
   constructor(private readonly bytes: Buffer) {}
 
-  /** 解析完整 Bencode 根字典，并拒绝尾随字节。 */
+  /**
+   * 解析完整 Bencode 根字典，并拒绝尾随字节。
+   * @returns 根目录。
+   * @throws 当 `!(root instanceof Map) || this.offset !== this.bytes.length` 成立时拒绝当前输入并抛出 `Error`。
+   */
   parseRoot(): Map<string, BencodeValue> {
     const root = this.parseValue(true, 0);
     if (!(root instanceof Map) || this.offset !== this.bytes.length) {
@@ -33,7 +37,13 @@ class BencodeParser {
     return root;
   }
 
-  /** 按当前字节类型解析值，同时限制递归深度。 */
+  /**
+   * 按当前字节类型解析值，同时限制递归深度。
+   * @param rootDictionary - 决定值内容、边界或目标的 `rootDictionary` 值；省略时默认采用 `false`。
+   * @param depth - 决定值内容、边界或目标的 `depth` 值；省略时默认采用 `0`。
+   * @returns 值。
+   * @throws 当 `depth > MAX_NESTING_DEPTH` 成立时拒绝当前输入并抛出 `Error`；当前函数此前所有接受或成功分支均未返回时拒绝当前输入并抛出 `Error`。
+   */
   private parseValue(rootDictionary = false, depth = 0): BencodeValue {
     if (depth > MAX_NESTING_DEPTH) {
       throw new Error('torrent-descriptor-nesting-invalid');
@@ -48,7 +58,13 @@ class BencodeParser {
     throw new Error('torrent-descriptor-bencode-invalid');
   }
 
-  /** 解析字典并记录根级 info 值的原始字节区间。 */
+  /**
+   * 解析字典并记录根级 info 值的原始字节区间。
+   * @param rootDictionary - 决定字典并记录根级 info 值的原始字节区间内容、边界或目标的 `rootDictionary` 值。
+   * @param depth - 决定字典并记录根级 info 值的原始字节区间内容、边界或目标的 `depth` 值。
+   * @returns 字典并记录根级 info 值的原始字节区间。
+   * @throws 当 `!key || result.has(key)` 成立时拒绝当前输入并抛出 `Error`；当 `this.offset >= this.bytes.length` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private parseDictionary(
     rootDictionary: boolean,
     depth: number,
@@ -75,7 +91,12 @@ class BencodeParser {
     return result;
   }
 
-  /** 解析有界列表并拒绝未终止或超量条目。 */
+  /**
+   * 根据参数 `depth`，解析有界列表并拒绝未终止或超量条目。
+   * @param depth - 决定根据参数 `depth`，解析有界列表并拒绝未终止或超量条目内容、边界或目标的 `depth` 值。
+   * @returns 按输入顺序得到的根据参数 `depth`，解析有界列表并拒绝未终止或超量条目列表；没有匹配项时为空数组。
+   * @throws 当 `result.length > MAX_FILES || this.offset >= this.bytes.length` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private parseList(depth: number): BencodeValue[] {
     this.offset += 1;
     const result: BencodeValue[] = [];
@@ -89,7 +110,11 @@ class BencodeParser {
     return result;
   }
 
-  /** 解析符合 Bencode 规范且可安全表示的整数。 */
+  /**
+   * 根据当前领域状态，解析符合 Bencode 规范且可安全表示的整数。
+   * @returns 根据当前领域状态，解析符合 Bencode 规范且可安全表示的整数。
+   * @throws 当 `end === -1` 成立时拒绝当前输入并抛出 `Error`；当 `!/^(0|-?[1-9]\d*)$/.test(valueText)` 成立时拒绝当前输入并抛出 `Error`；当 `!Number.isSafeInteger(value)` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private parseInteger(): number {
     this.offset += 1;
     const end = this.bytes.indexOf(0x65, this.offset);
@@ -106,7 +131,11 @@ class BencodeParser {
     return value;
   }
 
-  /** 解析长度前缀字节串并推进读取偏移。 */
+  /**
+   * 从当前 Bencode 缓冲区解析长度前缀字节串并推进偏移；长度格式、范围或剩余字节不合法时拒绝输入。
+   * @returns 返回 `bytes.subarray` 的调用结果，其业务含义为长度前缀字节串并推进读取偏移。
+   * @throws 当 `separator === -1` 成立时抛出 `Error`；当 `!/^(0|[1-9]\d*)$/.test(lengthText)` 成立时抛出 `Error`；当 `!Number.isSafeInteger(length) || end > this.bytes.length` 成立时抛出 `Error`。
+   */
   private parseBytes(): Buffer {
     const separator = this.bytes.indexOf(0x3a, this.offset);
     if (separator === -1) throw new Error('torrent-descriptor-string-invalid');
@@ -127,7 +156,13 @@ class BencodeParser {
   }
 }
 
-/** 要求 Bencode 值为字典，否则抛出调用方指定错误码。 */
+/**
+ * 要求 Bencode 值为字典，否则抛出调用方指定错误码。
+ * @param value - 参与Dictionary比较、格式化或输出的候选值。
+ * @param code - 决定Dictionary内容、边界或目标的 `code` 值。
+ * @returns 已确认是 Bencode 字典的键值映射；类型不符时函数抛出异常而不返回。
+ * @throws 当 `!(value instanceof Map)` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function requireDictionary(
   value: BencodeValue | undefined,
   code: string,
@@ -136,13 +171,24 @@ function requireDictionary(
   return value;
 }
 
-/** 要求 Bencode 值为字节串，否则抛出调用方指定错误码。 */
+/**
+ * 要求 Bencode 值为字节串，否则抛出调用方指定错误码。
+ * @param value - 参与Bytes比较、格式化或输出的候选值。
+ * @param code - 决定Bytes内容、边界或目标的 `code` 值。
+ * @returns 已确认是 Bencode 字节串的 Buffer；类型不符时函数抛出异常而不返回。
+ * @throws 当 `!Buffer.isBuffer(value)` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function requireBytes(value: BencodeValue | undefined, code: string): Buffer {
   if (!Buffer.isBuffer(value)) throw new Error(code);
   return value;
 }
 
-/** 要求文件长度为非负数值。 */
+/**
+ * 按输入约束要求文件长度为非负数值。
+ * @param value - 参与按输入约束要求文件长度为非负数值比较、格式化或输出的候选值。
+ * @returns 按输入约束要求文件长度为非负数值。
+ * @throws 当 `typeof value !== 'number' || value < 0` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function requireSize(value: BencodeValue | undefined): number {
   if (typeof value !== 'number' || value < 0) {
     throw new Error('torrent-descriptor-file-size-invalid');
@@ -150,7 +196,12 @@ function requireSize(value: BencodeValue | undefined): number {
   return value;
 }
 
-/** 将非空路径片段拼为长度受限的相对路径。 */
+/**
+ * 将非空路径片段拼为长度受限的相对路径。
+ * @param segments - 决定将非空路径片段拼为长度受限的相对路径内容、边界或目标的 `segments` 值。
+ * @returns 将非空路径片段拼为长度受限的相对路径。
+ * @throws 当 `parts.some((part) => !part) || parts.join('/').length > 1000` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function pathFromSegments(segments: BencodeValue[]): string {
   const parts = segments.map((segment) =>
     requireBytes(segment, 'torrent-descriptor-path-invalid').toString('utf8'),
@@ -161,7 +212,13 @@ function pathFromSegments(segments: BencodeValue[]): string {
   return parts.join('/');
 }
 
-/** 从种子 info 字典生成去重且过滤填充文件的安全清单。 */
+/**
+ * 从种子 info 字典生成去重且过滤填充文件的安全清单。
+ * @param info - 用于从种子 info 字典生成去重且过滤填充文件的安全清单的领域对象，包含 `get` 字段。
+ * @returns 按输入顺序得到的从种子 info 字典生成去重且过滤填充文件的安全清单列表；没有匹配项时为空数组。
+ * @throws 当 `Array.isArray(files) === (typeof length === 'number')` 成立时拒绝当前输入并抛出 `Error`；当 `rawEntries.length === 0 || rawEntries.length > MAX_FILES` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `manifest.length === 0` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function parseManifest(info: Map<string, BencodeValue>): ManifestEntry[] {
   const name = requireBytes(
     info.get('name.utf-8') ?? info.get('name'),
@@ -227,7 +284,12 @@ function parseManifest(info: Map<string, BencodeValue>): ManifestEntry[] {
   return manifest;
 }
 
-/** 解析并校验种子描述符，返回 info hash、文件清单及稳定摘要。 */
+/**
+ * 解析并校验种子描述符，返回 info hash、文件清单及稳定摘要。
+ * @param bytes - 用于并校验种子描述符，返回 info hash、文件清单及稳定摘要的领域对象，包含 `length`、`subarray` 字段。
+ * @returns 包含 `descriptorSha256`、`infoHash`、`manifest`、`manifestSha256` 字段的并校验种子描述符，返回 info hash、文件清单及稳定摘要。
+ * @throws 当 `bytes.length === 0 || bytes.length > MAX_DESCRIPTOR_BYTES` 成立时拒绝当前输入并抛出 `Error`；当 `!parser.infoRange` 成立时拒绝当前输入并抛出 `Error`。
+ */
 export function parseTorrentDescriptor(bytes: Buffer) {
   if (bytes.length === 0 || bytes.length > MAX_DESCRIPTOR_BYTES) {
     throw new Error('torrent-descriptor-size-invalid');

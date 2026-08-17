@@ -17,10 +17,10 @@ interface drawBandDetailsInListOptions {
 }
 //画角色等级
 /**
- * 在图片布局层中绘制角色In列表。
- *
- * @param CharacterDetailsInListOptions - 角色列表；驱动 `for()` 的 BangDream步骤。
- * @param key - 键名；影响 drawCharacterInList 的返回值。
+ * 根据`CharacterDetailsInListOptions`、`key`绘制或格式化角色；把图片、文本或图形按布局规格绘制到画布。
+ * @param CharacterDetailsInListOptions - 控制角色筛选、缓存或输出方式的可选项，包含 `i` 字段。
+ * @param key - 用于读取或更新角色的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 角色。
  */
 async function drawCharacterInList(
   CharacterDetailsInListOptions: drawBandDetailsInListOptions,
@@ -61,10 +61,10 @@ async function drawCharacterInList(
 }
 
 /**
- * 在图片布局层中绘制角色RankIn列表。
- *
- * @param player - player 输入；使用 `profile` 字段生成结果。
- * @param key - 键名；驱动 `drawCharacterInList()` 的 BangDream步骤。
+ * 根据`player`、`key`绘制或格式化角色排名。
+ * @param player - 用于角色排名的领域对象，包含 `profile` 字段。
+ * @param key - 用于读取或更新角色排名的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 角色排名。
  */
 export async function drawCharacterRankInList(player: Player, key?: string) {
   const characterRankMap = player.profile.userCharacterRankMap?.entries;

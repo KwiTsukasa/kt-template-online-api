@@ -17,10 +17,8 @@ interface RoundedRect {
 
 // 画圆角矩形
 /**
- * 在底层绘图工具层中绘制RoundedRect。
- *
- * @param options1 - options1 输入；影响 drawRoundedRect 的返回值。
- * @returns 渲染或资源结果。
+ * 根据当前运行态绘制或格式化RoundedRect；把图片、文本或图形按布局规格绘制到画布。
+ * @returns 按尺寸、四角半径、填充透明度与可选描边绘制完成的圆角矩形画布。
  */
 export function drawRoundedRect({
   width,
@@ -114,10 +112,8 @@ interface RoundedRectWithText {
 
 //画圆角矩形并填充文字
 /**
- * 在底层绘图工具层中绘制RoundedRectWith文本。
- *
- * @param options1 - options1 输入；影响 drawRoundedRectWithText 的返回值。
- * @returns 渲染或资源结果。
+ * 根据当前运行态绘制或格式化RoundedRect文本；把图片、文本或图形按布局规格绘制到画布。
+ * @returns RoundedRect文本。
  */
 export function drawRoundedRectWithText({
   text,

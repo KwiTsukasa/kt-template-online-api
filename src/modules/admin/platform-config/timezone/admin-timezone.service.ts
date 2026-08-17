@@ -12,18 +12,20 @@ export class AdminTimezoneService {
   ) {}
 
   /**
-   * 查询 Admin 平台配置数据。
-   * @param user - user 输入；使用 `timezone` 字段生成结果。
+   * 读取用户保存的时区，并在未设置或为空时使用 `Asia/Shanghai`。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @returns 规范化后的时区；主值为空时采用 `'Asia/Shanghai'` 兜底。
    */
   async getTimezone(user: AdminUser) {
     return user.timezone || 'Asia/Shanghai';
   }
 
   /**
-   * 设置Timezone。
-   * @param user - user 输入；使用 `id` 字段生成结果。
-   * @param timezone - timezone 输入；驱动 `throwVbenError()` 的 Admin步骤。
-   * @param allowed - allowed 输入；计算 Admin布尔判断。
+   * 根据`user`、`timezone`、`allowed`更新时区；把变更持久化到当前存储（`userRepository.update`）。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @param timezone - 决定时区内容、边界或目标的 `timezone` 值。
+   * @param allowed - 决定是否启用“许可范围”分支的布尔选项。
+   * @returns 时区。
    */
   async setTimezone(user: AdminUser, timezone: string, allowed: string[]) {
     if (!timezone || !allowed.includes(timezone)) {

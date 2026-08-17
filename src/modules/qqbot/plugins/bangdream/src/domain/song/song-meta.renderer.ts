@@ -26,11 +26,10 @@ const line = drawDottedLine({
 });
 
 /**
- * 在QQBot 图片视图层中绘制歌曲Meta列表。
- *
- * @param mainServer - mainServer 输入；驱动 `imageList.push()` 的 BangDream步骤。
- * @param compress - BangDream列表；影响 drawSongMetaList 的返回值。
- * @returns 异步处理结果。
+ * 根据`mainServer`、`compress`绘制或格式化歌曲Meta；把图片、文本或图形按布局规格绘制到画布。
+ * @param mainServer - 决定歌曲Meta内容、边界或目标的 `mainServer` 值。
+ * @param compress - 决定歌曲Meta内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的歌曲Meta列表；没有匹配项时为空数组。
  */
 export async function drawSongMetaList(
   mainServer: Server,
@@ -49,11 +48,10 @@ export async function drawSongMetaList(
 }
 
 /**
- * 在QQBot 图片视图层中绘制MetaRank列表数据块。
- *
- * @param withFever - withFever 输入；驱动 `getMetaRanking()` 的 BangDream步骤。
- * @param mainServer - mainServer 输入；驱动 `getMetaRanking()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`withFever`、`mainServer`绘制或格式化Meta排名数据Block；从 `getMetaRanking` 读取Meta排名数据Block。
+ * @param withFever - 决定Meta排名数据Block内容、边界或目标的 `withFever` 值。
+ * @param mainServer - 决定Meta排名数据Block内容、边界或目标的 `mainServer` 值。
+ * @returns Meta排名数据Block。
  */
 async function drawMetaRankListDataBlock(
   withFever: boolean,
@@ -77,6 +75,11 @@ async function drawMetaRankListDataBlock(
     list.push(line);
   }
   list.pop();
-  const topLeftText = withFever ? '有Fever' : '无Fever';
+  const topLeftText = (() => {
+    if (withFever) {
+      return '有Fever';
+    }
+    return '无Fever';
+  })();
   return drawDataBlock({ list, topLeftText });
 }

@@ -27,7 +27,8 @@ export class QqbotDashboardService {
   ) {}
 
   /**
-   * 执行 QQBot 核心流程。
+   * 通过 `accountRepository.count` 统计匹配记录。
+   * @returns 包含 `accountTotal`、`bus`、`conversationTotal`、`enabledRuleTotal`、`messageTotal` 字段的摘要。
    */
   async summary() {
     const [

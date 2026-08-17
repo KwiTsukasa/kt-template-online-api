@@ -19,8 +19,9 @@ export class AdminRoleService {
   ) {}
 
   /**
-   * 查询 Admin 身份权限数据。
-   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * 通过 `where` 筛选匹配数据。
+   * @param query - 限定角色筛选、排序与分页范围的查询条件，包含 `page`、`pageSize`、`id`、`name` 字段。
+   * @returns 包含 `items`、`total` 字段的角色。
    */
   async getRoleList(query: AdminRoleListQuery) {
     const page = Number(query.page || 1);
@@ -68,8 +69,9 @@ export class AdminRoleService {
   }
 
   /**
-   * 创建 Admin 身份权限对象或配置。
-   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   * 根据`data`构造角色；把变更持久化到当前存储（`roleRepository.create`）。
+   * @param data - 用于角色的领域对象，包含 `name`、`remark`、`status`、`permissions` 字段。
+   * @returns 固定为 `null`，表示当前入口不会产生角色。
    */
   async createRole(data: AdminRoleInput) {
     const role = this.roleRepository.create({
@@ -84,9 +86,10 @@ export class AdminRoleService {
   }
 
   /**
-   * 更新Role。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   * 根据`id`、`data`更新角色；把变更持久化到当前存储（`roleRepository.save`）。
+   * @param id - 决定角色内容、边界或目标的 `id` 值。
+   * @param data - 用于角色的领域对象，包含 `name`、`remark`、`status`、`permissions` 字段。
+   * @returns 固定为 `null`，表示当前入口不会产生角色。
    */
   async updateRole(id: string, data: AdminRoleInput) {
     const role = await this.roleRepository.findOne({
@@ -109,8 +112,9 @@ export class AdminRoleService {
   }
 
   /**
-   * 删除Role。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按角色标识写入软删除标记，保留角色及其关联数据以供历史查询。
+   * @param id - 决定按角色标识写入软删除标记，保留角色及其关联数据以供历史查询内容、边界或目标的 `id` 值。
+   * @returns 固定为 `null`，表示当前入口不会产生按角色标识写入软删除标记，保留角色及其关联数据以供历史查询。
    */
   async deleteRole(id: string) {
     await this.roleRepository.update(
@@ -123,8 +127,9 @@ export class AdminRoleService {
   }
 
   /**
-   * 序列化Role。
-   * @param role - role 输入；使用 `createTime`、`id`、`name`、`menus` 字段生成结果。
+   * 将角色实体投影为管理端角色详情，以关联菜单标识组成权限列表。
+   * @param role - 待展示的角色实体；未加载菜单关系时按空数组处理。
+   * @returns 返回角色基本字段及其菜单权限标识列表。
    */
   private serializeRole(role: AdminRole) {
     return {
@@ -138,8 +143,9 @@ export class AdminRoleService {
   }
 
   /**
-   * 查询 Admin 身份权限数据。
-   * @param ids - Admin ID 列表；限定本次批量读取、渲染或关联的Admin范围。
+   * 通过 `filter` 筛选匹配数据。
+   * @param ids - 决定Menus标识集合内容、边界或目标的 `ids` 值。
+   * @returns Menus标识集合。
    */
   private async findMenusByIds(ids: string[]) {
     const normalizedIds = ids.map((id) => String(id)).filter(Boolean);
@@ -153,8 +159,9 @@ export class AdminRoleService {
   }
 
   /**
-   * 创建 Admin 身份权限对象或配置。
-   * @param name - 名称文本；生成 Admin对象。
+   * 根据`name`构造角色代码。
+   * @param name - 决定角色代码内容、边界或目标的 `name` 值；为空时采用 `'role'` 作为兜底。
+   * @returns 按参数编码并拼接完成的角色代码。
    */
   private createRoleCode(name?: string) {
     const slug = (name || 'role')

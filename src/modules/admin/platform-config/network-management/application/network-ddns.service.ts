@@ -122,7 +122,11 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     await this.reconcileWorker;
   }
 
-  /** 列出网络DDNS记录。 */
+  /**
+   * 按`query`读取网络DDNS记录；把变更持久化到当前存储（`recordRepository.createQueryBuilder`）。
+   * @param query - 限定网络DDNS记录筛选、排序与分页范围的查询条件，包含 `pageNo`、`pageSize`、`name`、`recordType` 字段；省略时默认采用 `{}`。
+   * @returns 包含 `items`、`total` 字段的网络DDNS记录。
+   */
   async list(query: NetworkDdnsListQuery = {}) {
     const pageNo = query.pageNo || 1;
     const pageSize = query.pageSize || 20;
@@ -162,7 +166,11 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** 返回来源选项。 */
+  /**
+   * 根据`query`处理输入约束并返回来源选项；当 `query.recordType === 'AAAA'` 成立时返回 `[await this.agentIpv6SourceOption()]`。
+   * @param query - 限定输入约束并返回来源选项筛选、排序与分页范围的查询条件，包含 `recordType` 字段。
+   * @returns 按输入顺序得到的输入约束并返回来源选项列表；没有匹配项时为空数组。
+   */
   async sourceOptions(query: {
     recordType: NetworkDdnsRecordType;
   }): Promise<NetworkDdnsSourceOption[]> {
@@ -193,12 +201,20 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 读取资料源状态。 */
+  /**
+   * 读取资料源状态；通过 `dnsPodClient.getStatus` 读取对应运行状态。
+   * @returns 返回资料源状态；通过 `dnsPodClient.getStatus` 读取对应运行状态。
+   */
   getProviderStatus() {
     return this.dnsPodClient.getStatus();
   }
 
-  /** 创建网络DDNS记录。 */
+  /**
+   * 根据`input`构造网络DDNS记录；把变更持久化到当前存储（`recordRepository.create`）。
+   * @param input - 用于网络DDNS记录的结构化输入。
+   * @returns 网络DDNS记录。
+   * @throws 当 `recordRepository.save` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   async create(input: NetworkDdnsRecordInput) {
     const normalized = await this.normalizeCreateInput(input);
     await this.assertActiveKeyAvailable(normalized.activeKey);
@@ -222,7 +238,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       sourceAddress: null,
       sourceType: normalized.sourceType,
       subDomain: normalized.subDomain,
-      syncStatus: normalized.enabled ? 'pending' : 'disabled',
+      syncStatus: (() => {
+        if (normalized.enabled) {
+          return 'pending';
+        }
+        return 'disabled';
+      })(),
     });
     try {
       await this.recordRepository.save(record);
@@ -237,7 +258,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return this.serializeRecord(record);
   }
 
-  /** 更新网络DDNS记录。 */
+  /**
+   * 根据`id`、`input`更新网络DDNS记录；先通过 `assertId` 校验输入边界。
+   * @param id - 决定网络DDNS记录内容、边界或目标的 `id` 值。
+   * @param input - 用于网络DDNS记录的结构化输入。
+   * @returns 网络DDNS记录。
+   */
   async update(id: string, input: NetworkDdnsRecordUpdateInput) {
     this.assertId(id);
     return this.withRecordMutation(id, async () => {
@@ -314,7 +340,11 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 移除网络DDNS记录。 */
+  /**
+   * 按`id`移除网络DDNS记录；先通过 `assertId` 校验输入边界。
+   * @param id - 决定网络DDNS记录内容、边界或目标的 `id` 值。
+   * @returns 网络DDNS记录。
+   */
   async remove(id: string) {
     this.assertId(id);
     return this.withRecordMutation(id, async () => {
@@ -329,7 +359,11 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 重试网络DDNS记录。 */
+  /**
+   * 根据`id`处理网络DDNS记录；先通过 `assertId` 校验输入边界。
+   * @param id - 决定网络DDNS记录内容、边界或目标的 `id` 值。
+   * @returns 网络DDNS记录。
+   */
   async retry(id: string) {
     this.assertId(id);
     return this.withRecordMutation(id, async () => {
@@ -347,7 +381,10 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 请求核对。 */
+  /**
+   * 合并同一事件循环内的 DDNS 核对请求并延迟一次执行；任一请求要求强制核对时保留该要求。
+   * @param force - 决定是否启用“force”分支的布尔选项；省略时默认采用 `false`。
+   */
   requestReconcile(force = false): void {
     if (this.destroyed) return;
     this.requestedForce ||= force;
@@ -363,7 +400,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     this.reconcileRequestTimer.unref?.();
   }
 
-  /** 立即执行核对。 */
+  /**
+   * 根据`id`、`force`处理立即执行核对；先通过 `assertId` 校验输入边界。
+   * @param id - 决定立即执行核对内容、边界或目标的 `id` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @param force - 决定是否启用“force”分支的布尔选项；省略时默认采用 `false`。
+   * @returns 完成初始化并携带当前边界配置的立即执行核对；无法解析或未命中时为 `null`。
+   */
   reconcileNow(id?: string, force = false): Promise<void> {
     if (id !== undefined) this.assertId(id);
     if (this.destroyed) return Promise.resolve();
@@ -378,7 +420,9 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 确保核对工作进程。 */
+  /**
+   * 确保核对工作进程存在且保持一致；缺失时根据当前运行态补齐对应状态。
+   */
   private ensureReconcileWorker(): void {
     if (this.reconcileWorker || this.destroyed) return;
     this.reconcileWorker = this.drainReconcileRequests().finally(() => {
@@ -389,7 +433,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 在记录变更期间执行传入操作。 */
+  /**
+   * 根据`id`、`operation`处理在记录变更期间执行传入操作；从 `recordMutationTails.get` 读取在记录变更期间执行传入操作。
+   * @param id - 决定在记录变更期间执行传入操作内容、边界或目标的 `id` 值。
+   * @param operation - 在当前锁、事务或错误边界内执行的受控回调。
+   * @returns 在记录变更期间执行传入操作。
+   */
   private async withRecordMutation<T>(
     id: string,
     operation: () => Promise<T>,
@@ -412,7 +461,9 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 返回排空核对请求。 */
+  /**
+   * 根据当前运行态处理对应领域流程并产生排空核对请求。
+   */
   private async drainReconcileRequests(): Promise<void> {
     while (!this.destroyed && this.reconcileRequests.length > 0) {
       const requests = this.reconcileRequests.splice(0);
@@ -425,7 +476,10 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 核对批次。 */
+  /**
+   * 根据`requests`处理批次；从 `recordForces.get` 读取批次。
+   * @param requests - 决定批次内容、边界或目标的 `requests` 值。
+   */
   private async reconcileBatch(requests: ReconcileRequest[]): Promise<void> {
     const recordForces = new Map<string, boolean>();
     const allRequests = requests.filter((request) => request.id === null);
@@ -454,14 +508,22 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 核对记录。 */
+  /**
+   * 根据`id`、`force`处理网络管理记录。
+   * @param id - 决定网络管理记录内容、边界或目标的 `id` 值。
+   * @param force - 决定是否启用“force”分支的布尔选项。
+   */
   private async reconcileRecord(id: string, force: boolean): Promise<void> {
     await this.withRecordMutation(id, () =>
       this.reconcileRecordLocked(id, force),
     );
   }
 
-  /** 核对记录已锁定。 */
+  /**
+   * 根据`id`、`force`处理记录已锁定；当 `!targetAddress` 成立时直接结束且不产生返回值。
+   * @param id - 决定记录已锁定内容、边界或目标的 `id` 值。
+   * @param force - 决定是否启用“force”分支的布尔选项。
+   */
   private async reconcileRecordLocked(
     id: string,
     force: boolean,
@@ -559,7 +621,13 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 为资料源结果重新读取记录。 */
+  /**
+   * 根据`id`、`expectedIdentity`、`targetAddress`处理为资料源结果重新读取记录；当 `this.reconcileIdentity(current) !== expectedIdentity` 成立时返回 `null`。
+   * @param id - 决定为资料源结果重新读取记录内容、边界或目标的 `id` 值。
+   * @param expectedIdentity - 决定为资料源结果重新读取记录内容、边界或目标的 `expectedIdentity` 值。
+   * @param targetAddress - 决定为资料源结果重新读取记录内容、边界或目标的 `targetAddress` 值。
+   * @returns 为资料源结果重新读取记录；无法解析或未命中时为 `null`。
+   */
   private async reReadForProviderResult(
     id: string,
     expectedIdentity: string,
@@ -577,21 +645,34 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     if (source.currentAddress === targetAddress) return current;
 
     const beforeSemantic = this.semanticFingerprint(current);
-    current.lastErrorCode = source.currentAddress ? null : 'source_unavailable';
-    current.lastErrorMessage = source.currentAddress
-      ? null
-      : 'DDNS source is unavailable';
+    if (source.currentAddress) {
+      current.lastErrorCode = null;
+    } else {
+      current.lastErrorCode = 'source_unavailable';
+    }
+    if (source.currentAddress) {
+      current.lastErrorMessage = null;
+    } else {
+      current.lastErrorMessage = 'DDNS source is unavailable';
+    }
     current.nextRetryAt = null;
     current.retryCount = 0;
     current.sourceAddress = source.currentAddress;
-    current.syncStatus = source.currentAddress ? 'pending' : 'waiting_source';
+    if (source.currentAddress) {
+      current.syncStatus = 'pending';
+    } else {
+      current.syncStatus = 'waiting_source';
+    }
     if (await this.saveReconcileState(current, beforeSemantic)) {
       this.enqueueInternalReconcile(id);
     }
     return null;
   }
 
-  /** 将内部核对任务加入队列。 */
+  /**
+   * 将内部核对任务加入队列。
+   * @param id - 决定将内部核对任务加入队列内容、边界或目标的 `id` 值。
+   */
   private enqueueInternalReconcile(id: string): void {
     if (this.destroyed) return;
     this.reconcileRequests.push({
@@ -603,7 +684,10 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     this.ensureReconcileWorker();
   }
 
-  /** 持久化等待中的来源。 */
+  /**
+   * 根据`record`更新持久化等待中的来源。
+   * @param record - 用于持久化等待中的来源的领域对象，包含 `lastAttemptAt`、`lastErrorCode`、`lastErrorMessage`、`nextRetryAt` 字段。
+   */
   private async persistWaitingSource(record: NetworkDdnsRecord): Promise<void> {
     const beforeSemantic = this.semanticFingerprint(record);
     record.lastAttemptAt = new KtDateTime();
@@ -616,7 +700,11 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     await this.saveReconcileState(record, beforeSemantic);
   }
 
-  /** 持久化资料源失败。 */
+  /**
+   * 持久化资料源失败。
+   * @param record - 用于持久化资料源失败的领域对象，包含 `retryCount`、`lastErrorCode`、`lastErrorMessage`、`nextRetryAt` 字段。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+   */
   private async persistProviderFailure(
     record: NetworkDdnsRecord,
     error: SafeProviderError,
@@ -628,20 +716,29 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       error.retryable && previousRetryCount < RETRY_MAX_ATTEMPTS;
     record.lastErrorCode = error.code.slice(0, 64);
     record.lastErrorMessage = error.message.slice(0, 512);
-    record.nextRetryAt = shouldRetry
-      ? new KtDateTime(Date.now() + this.retryDelayMs(retryCount))
-      : null;
+    if (shouldRetry) {
+      record.nextRetryAt = new KtDateTime(Date.now() + this.retryDelayMs(retryCount));
+    } else {
+      record.nextRetryAt = null;
+    }
     record.retryCount = retryCount;
     record.syncStatus = 'failed';
     await this.saveReconcileState(record, beforeSemantic);
   }
 
-  /** 将资料源错误转换为安全错误信息。 */
+  /**
+   * 将资料源错误转换为安全错误信息。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+   * @returns 包含 `code`、`message`、`retryable` 字段的将资料源错误转换为安全错误信息。
+   */
   private safeProviderError(error: unknown): SafeProviderError {
     if (error instanceof NetworkDnsPodClientError) {
-      const passthroughCode = /^[a-z][a-z0-9_]{0,63}$/.test(error.code)
-        ? error.code
-        : null;
+      const passthroughCode = (() => {
+        if (/^[a-z][a-z0-9_]{0,63}$/.test(error.code)) {
+          return error.code;
+        }
+        return null;
+      })();
       return {
         code:
           passthroughCode ||
@@ -658,7 +755,11 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** 解析记录来源。 */
+  /**
+   * 从`record`解析记录来源；当 `record.recordType === 'AAAA' && record.sourceType === 'agent_…` 成立时返回 `this.agentIpv6SourceOption()`。
+   * @param record - 用于记录来源的领域对象，包含 `recordType`、`sourceType`、`portForwardId` 字段。
+   * @returns 记录来源；没有可用结果或提前结束时为 `undefined`。
+   */
   private async resolveRecordSource(
     record: NetworkDdnsRecord,
   ): Promise<NetworkDdnsSourceOption> {
@@ -690,19 +791,35 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 返回端口转发来源选项。 */
+  /**
+   * 按边界约束计算端口转发来源选项。
+   * @param mapping - 用于按边界约束计算端口转发来源选项的领域对象，包含 `protocol`、`currentPublicIpv4`、`currentPublicPort`、`currentValidUntil` 字段。
+   * @param group - 用于按边界约束计算端口转发来源选项的领域对象，包含 `name` 字段；为空时采用 `mapping.name` 作为兜底。
+   * @returns 包含 `currentAddress`、`disabledReasonCode`、`eligible`、`externalPort`、`groupId` 字段的按边界约束计算端口转发来源选项；无法解析或未命中时为 `null`。
+   */
   private portForwardSourceOption(
     mapping: NetworkPortForward,
     group?: NetworkPortForwardGroup,
   ): NetworkDdnsSourceOption {
-    const mechanism = mapping.protocol === 'tcp' ? 'tcp_natmap' : 'udp_stun';
+    const mechanism = (() => {
+      if (mapping.protocol === 'tcp') {
+        return 'tcp_natmap';
+      }
+      return 'udp_stun';
+    })();
     const sourceEligibility =
-      mapping.protocol === 'tcp'
-        ? classifyTcpNatmapEndpointSource(mapping)
-        : classifyStunEndpointSource(mapping);
-    const disabledReasonCode = group
-      ? sourceEligibility.disabledReasonCode
-      : 'SOURCE_NOT_FOUND';
+      (() => {
+        if (mapping.protocol === 'tcp') {
+          return classifyTcpNatmapEndpointSource(mapping);
+        }
+        return classifyStunEndpointSource(mapping);
+      })();
+    const disabledReasonCode = (() => {
+      if (group) {
+        return sourceEligibility.disabledReasonCode;
+      }
+      return 'SOURCE_NOT_FOUND';
+    })();
     const eligible = disabledReasonCode === null;
     const leaseValid =
       isIP(mapping.currentPublicIpv4 || '') === 4 &&
@@ -711,10 +828,18 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       new Date(mapping.currentValidUntil).getTime() > Date.now();
     const sourceUsable = eligible && leaseValid;
     return {
-      currentAddress: sourceUsable ? mapping.currentPublicIpv4 || null : null,
-      ...(sourceUsable
-        ? { currentPort: mapping.currentPublicPort as number }
-        : {}),
+      currentAddress: (() => {
+        if (sourceUsable) {
+          return mapping.currentPublicIpv4 || null;
+        }
+        return null;
+      })(),
+      ...((() => {
+        if (sourceUsable) {
+          return { currentPort: mapping.currentPublicPort as number };
+        }
+        return {};
+      })()),
       disabledReasonCode,
       eligible,
       externalPort: mapping.externalPort,
@@ -722,16 +847,35 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       id: String(mapping.id),
       mechanism,
       name: `${group?.name || mapping.name} / ${
-        mechanism === 'tcp_natmap' ? 'TCP NATMap' : 'UDP Keeper'
+        (() => {
+          if (mechanism === 'tcp_natmap') {
+            return 'TCP NATMap';
+          }
+          return 'UDP Keeper';
+        })()
       }`,
-      observedAt: sourceUsable ? mapping.currentObservedAt || null : null,
+      observedAt: (() => {
+        if (sourceUsable) {
+          return mapping.currentObservedAt || null;
+        }
+        return null;
+      })(),
       protocol: mapping.protocol,
       sourceType: 'port_forward_ipv4',
-      validUntil: sourceUsable ? mapping.currentValidUntil || null : null,
+      validUntil: (() => {
+        if (sourceUsable) {
+          return mapping.currentValidUntil || null;
+        }
+        return null;
+      })(),
     };
   }
 
-  /** 返回缺失的端口转发来源选项。 */
+  /**
+   * 根据`id`处理并返回缺失的配置键。
+   * @param id - 决定并返回缺失的配置键内容、边界或目标的 `id` 值。
+   * @returns 包含 `currentAddress`、`disabledReasonCode`、`eligible`、`id`、`name` 字段的并返回缺失的配置键；无法解析或未命中时为 `null`。
+   */
   private missingPortForwardSourceOption(id: string): NetworkDdnsSourceOption {
     return {
       currentAddress: null,
@@ -745,7 +889,10 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** 返回AgentIPv6来源选项。 */
+  /**
+   * 把来源状态投影为AgentIPv6来源选项。
+   * @returns 包含 `currentAddress`、`disabledReasonCode`、`eligible`、`id`、`name` 字段的把来源状态投影为AgentIPv6来源选项；无法解析或未命中时为 `null`。
+   */
   private async agentIpv6SourceOption(): Promise<NetworkDdnsSourceOption> {
     const state = await this.stateRepository.findOne({
       where: { agentId: this.agentId() },
@@ -763,23 +910,35 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       disabledReasonCode = 'IPV6_STALE';
     }
     return {
-      currentAddress: disabledReasonCode === null ? address : null,
+      currentAddress: (() => {
+        if (disabledReasonCode === null) {
+          return address;
+        }
+        return null;
+      })(),
       disabledReasonCode,
       eligible: disabledReasonCode === null,
       id: 'agent-ipv6',
       name: 'Agent 公网 IPv6',
       observedAt: state?.currentIpv6ObservedAt || null,
       sourceType: 'agent_ipv6',
-      validUntil: state?.currentIpv6ObservedAt
-        ? new KtDateTime(
+      validUntil: (() => {
+        if (state?.currentIpv6ObservedAt) {
+          return new KtDateTime(
             new Date(state.currentIpv6ObservedAt).getTime() +
               this.agentIpv6MaxAgeMs(),
-          )
-        : null,
+          );
+        }
+        return null;
+      })(),
     };
   }
 
-  /** 规范化创建输入。 */
+  /**
+   * 将`input`规范为创建输入，使等价输入得到一致表示；先通过 `assertBindingSource` 校验输入边界。
+   * @param input - 用于创建输入的结构化输入，包含 `portForwardId` 字段。
+   * @returns 创建输入。
+   */
   private async normalizeCreateInput(input: NetworkDdnsRecordInput) {
     const normalized = this.normalizeInput({
       ...input,
@@ -793,7 +952,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return normalized;
   }
 
-  /** 规范化更新输入。 */
+  /**
+   * 将`record`、`input`规范为更新输入，使等价输入得到一致表示；先通过 `assertBindingSource` 校验输入边界。
+   * @param record - 用于更新输入的领域对象，包含 `recordType`、`domain`、`enabled`、`name` 字段。
+   * @param input - 用于更新输入的结构化输入，包含 `recordType`、`domain`、`enabled`、`name` 字段。
+   * @returns 更新输入。
+   */
   private async normalizeUpdateInput(
     record: NetworkDdnsRecord,
     input: NetworkDdnsRecordUpdateInput,
@@ -804,9 +968,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       enabled: input.enabled ?? record.enabled,
       name: input.name ?? record.name,
       portForwardId:
-        recordType === 'AAAA'
-          ? input.portForwardId
-          : (input.portForwardId ?? record.portForwardId ?? undefined),
+        (() => {
+          if (recordType === 'AAAA') {
+            return input.portForwardId;
+          }
+          return (input.portForwardId ?? record.portForwardId ?? undefined);
+        })(),
       recordType,
       remark: input.remark ?? record.remark ?? undefined,
       sourceType: input.sourceType || record.sourceType,
@@ -832,7 +999,11 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return normalized;
   }
 
-  /** 规范化输入。 */
+  /**
+   * 将`input`规范为输入，使等价输入得到一致表示；先通过 `assertBindingShape` 校验输入边界。
+   * @param input - 用于输入的结构化输入，包含 `recordType`、`sourceType`、`enabled`、`name` 字段。
+   * @returns 包含 `activeKey`、`domain`、`enabled`、`fqdn`、`name` 字段的输入。
+   */
   private normalizeInput(input: NetworkDdnsRecordInput) {
     if (input.recordType !== 'A' && input.recordType !== 'AAAA') {
       throwVbenError('DDNS 记录类型无效', HttpStatus.BAD_REQUEST);
@@ -850,14 +1021,22 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     const remark = this.normalizeRemark(input.remark);
     const domain = this.normalizeDomain(input.domain);
     const subDomain = this.normalizeSubDomain(input.subDomain);
-    const fqdn = subDomain === '@' ? domain : `${subDomain}.${domain}`;
+    const fqdn = (() => {
+      if (subDomain === '@') {
+        return domain;
+      }
+      return `${subDomain}.${domain}`;
+    })();
     if (fqdn.length > 253) {
       throwVbenError('DDNS 完整域名过长', HttpStatus.BAD_REQUEST);
     }
     const portForwardId =
-      typeof input.portForwardId === 'string' && input.portForwardId.trim()
-        ? input.portForwardId.trim()
-        : null;
+      (() => {
+        if (typeof input.portForwardId === 'string' && input.portForwardId.trim()) {
+          return input.portForwardId.trim();
+        }
+        return null;
+      })();
     this.assertBindingShape(input.recordType, input.sourceType, portForwardId);
     return {
       activeKey: `${input.recordType.toLowerCase()}:${fqdn}`,
@@ -873,7 +1052,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** 断言绑定结构。 */
+  /**
+   * 校验`recordType`、`sourceType`、`portForwardId`是否满足绑定结构约束，并拒绝不合法输入。
+   * @param recordType - 决定绑定结构内容、边界或目标的 `recordType` 值。
+   * @param sourceType - 决定绑定结构内容、边界或目标的 `sourceType` 值。
+   * @param portForwardId - 用于精确定位端口Forward的标识。
+   */
   private assertBindingShape(
     recordType: NetworkDdnsRecordType,
     sourceType: string,
@@ -901,7 +1085,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 断言绑定来源。 */
+  /**
+   * 校验`recordType`、`sourceType`、`portForwardId`是否满足绑定来源约束，并拒绝不合法输入；先通过 `assertBindingShape` 校验输入边界。
+   * @param recordType - 决定绑定来源内容、边界或目标的 `recordType` 值。
+   * @param sourceType - 决定绑定来源内容、边界或目标的 `sourceType` 值。
+   * @param portForwardId - 用于精确定位端口Forward的标识。
+   */
   private async assertBindingSource(
     recordType: NetworkDdnsRecordType,
     sourceType: string,
@@ -912,17 +1101,24 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     const mapping = await this.mappingRepository.findOne({
       where: { id: portForwardId as string, isDeleted: false },
     });
-    const group = mapping
-      ? await this.groupRepository.findOne({
+    const group = await (async () => {
+      if (mapping) {
+        return await this.groupRepository.findOne({
           where: { id: mapping.groupId, isDeleted: false },
-        })
-      : null;
+        });
+      }
+      return null;
+    })();
     const sourceEligible =
-      mapping?.protocol === 'tcp'
-        ? classifyTcpNatmapEndpointSource(mapping).eligible
-        : mapping
-          ? classifyStunEndpointSource(mapping).eligible
-          : false;
+      (() => {
+        if (mapping?.protocol === 'tcp') {
+          return classifyTcpNatmapEndpointSource(mapping).eligible;
+        }
+        if (mapping) {
+          return classifyStunEndpointSource(mapping).eligible;
+        }
+        return false;
+      })();
     if (!mapping || !group || !sourceEligible) {
       throwVbenError(
         'A 记录来源必须是已启用的 UDP Keeper 或 TCP NATMap 通道',
@@ -931,38 +1127,67 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 规范化域名。 */
+  /**
+   * 将`value`规范为域名，使等价输入得到一致表示。
+   * @param value - 待转换为域名的原始值。
+   * @returns 域名。
+   */
   private normalizeDomain(value: string): string {
     const normalized =
-      typeof value === 'string'
-        ? value.trim().toLowerCase().replace(/\.$/, '')
-        : '';
+      (() => {
+        if (typeof value === 'string') {
+          return value.trim().toLowerCase().replace(/\.$/, '');
+        }
+        return '';
+      })();
     if (!isValidDnsName(normalized, true)) {
       throwVbenError('DDNS 主域名无效', HttpStatus.BAD_REQUEST);
     }
     return normalized;
   }
 
-  /** 规范化子域名。 */
+  /**
+   * 将`value`规范为子域名，使等价输入得到一致表示。
+   * @param value - 待转换为子域名的原始值。
+   * @returns 子域名。
+   */
   private normalizeSubDomain(value: string): string {
     const normalized =
-      typeof value === 'string' ? value.trim().toLowerCase() : '';
+      (() => {
+        if (typeof value === 'string') {
+          return value.trim().toLowerCase();
+        }
+        return '';
+      })();
     if (normalized !== '@' && !isValidDnsName(normalized, false)) {
       throwVbenError('DDNS 主机记录无效', HttpStatus.BAD_REQUEST);
     }
     return normalized;
   }
 
-  /** 规范化名称。 */
+  /**
+   * 将`value`规范为名称，使等价输入得到一致表示。
+   * @param value - 待转换为名称的原始值。
+   * @returns 名称。
+   */
   private normalizeName(value: string): string {
-    const normalized = typeof value === 'string' ? value.trim() : '';
+    const normalized = (() => {
+      if (typeof value === 'string') {
+        return value.trim();
+      }
+      return '';
+    })();
     if (!normalized || normalized.length > 100) {
       throwVbenError('DDNS 名称长度无效', HttpStatus.BAD_REQUEST);
     }
     return normalized;
   }
 
-  /** 规范化备注。 */
+  /**
+   * 将`value`规范为备注，使等价输入得到一致表示。
+   * @param value - 待转换为备注的原始值；为空时采用 `value === null` 作为兜底。
+   * @returns 规范化后的备注；主值为空时采用 `null` 兜底；无法解析或未命中时为 `null`。
+   */
   private normalizeRemark(value?: string): null | string {
     if (value === undefined || value === null) return null;
     if (typeof value !== 'string' || value.trim().length > 500) {
@@ -971,23 +1196,38 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return value.trim() || null;
   }
 
-  /** 序列化记录。 */
+  /**
+   * 将`record`转换为序列化记录。
+   * @param record - 用于序列化记录的领域对象，包含 `subDomain`、`domain`、`recordType`、`syncStatus` 字段。
+   * @returns 包含 `appliedAddress`、`domain`、`enabled`、`fqdn`、`id` 字段的序列化记录。
+   */
   private async serializeRecord(record: NetworkDdnsRecord) {
     const source = await this.resolveRecordSource(record);
     const fqdn =
-      record.subDomain === '@'
-        ? record.domain
-        : `${record.subDomain}.${record.domain}`;
+      (() => {
+        if (record.subDomain === '@') {
+          return record.domain;
+        }
+        return `${record.subDomain}.${record.domain}`;
+      })();
     const accessEndpoint =
-      record.recordType === 'A' &&
+      (() => {
+        if (record.recordType === 'A' &&
       record.syncStatus === 'synced' &&
       !!record.appliedAddress &&
       record.appliedAddress === source.currentAddress &&
-      isValidPort(source.currentPort)
-        ? `${fqdn}:${source.currentPort}`
-        : null;
+      isValidPort(source.currentPort)) {
+          return `${fqdn}:${source.currentPort}`;
+        }
+        return null;
+      })();
     return {
-      ...(accessEndpoint ? { accessEndpoint } : {}),
+      ...((() => {
+        if (accessEndpoint) {
+          return { accessEndpoint };
+        }
+        return {};
+      })()),
       appliedAddress: record.appliedAddress || null,
       domain: record.domain,
       enabled: record.enabled,
@@ -998,9 +1238,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       lastSyncedAt: record.lastSyncedAt || null,
       name: record.name,
       nextRetryAt: record.nextRetryAt || null,
-      ...(record.recordType === 'A'
-        ? { portForwardId: record.portForwardId || null }
-        : {}),
+      ...((() => {
+        if (record.recordType === 'A') {
+          return { portForwardId: record.portForwardId || null };
+        }
+        return {};
+      })()),
       recordType: record.recordType,
       remark: record.remark || null,
       retryCount: record.retryCount || 0,
@@ -1013,7 +1256,11 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** 查找启用的记录。 */
+  /**
+   * 按`id`读取启用的记录；从 `recordRepository.findOne` 读取启用的记录。
+   * @param id - 决定启用的记录内容、边界或目标的 `id` 值。
+   * @returns 启用的记录。
+   */
   private async findActiveRecord(id: string): Promise<NetworkDdnsRecord> {
     const record = await this.recordRepository.findOne({
       where: { id, isDeleted: false },
@@ -1024,21 +1271,32 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return record;
   }
 
-  /** 查找按启用的键。 */
+  /**
+   * 按`activeKey`读取按启用的键；从 `recordRepository.findOne` 读取按启用的键。
+   * @param activeKey - 用于读取或更新按启用的键的稳定键。
+   * @returns 按启用的键。
+   */
   private findByActiveKey(
     activeKey: string,
   ): Promise<NetworkDdnsRecord | null> {
     return this.recordRepository.findOne({ where: { activeKey } });
   }
 
-  /** 断言启用的键可用。 */
+  /**
+   * 校验`activeKey`是否满足启用的键可用约束，并拒绝不合法输入；从 `findByActiveKey` 读取启用的键可用。
+   * @param activeKey - 用于读取或更新启用的键可用的稳定键。
+   */
   private async assertActiveKeyAvailable(activeKey: string): Promise<void> {
     if (await this.findByActiveKey(activeKey)) {
       throwVbenError('同类型完整域名已存在自动更新配置', HttpStatus.CONFLICT);
     }
   }
 
-  /** 保存携带语义事件。 */
+  /**
+   * 根据`record`、`beforeSemantic`更新携带语义事件；把变更持久化到当前存储（`recordRepository.save`）。
+   * @param record - 决定携带语义事件内容、边界或目标的 `record` 值。
+   * @param beforeSemantic - 决定携带语义事件内容、边界或目标的 `beforeSemantic` 值。
+   */
   private async saveWithSemanticEvent(
     record: NetworkDdnsRecord,
     beforeSemantic: string,
@@ -1049,7 +1307,13 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 保存核对状态。 */
+  /**
+   * 根据`record`、`beforeSemantic`、`expectedProviderRecordId`更新核对状态；当 `!Number.isFinite(previousTimestamp)` 成立时返回 `false`。
+   * @param record - 用于核对状态的领域对象，包含 `updateTime`、`id`、`activeKey`、`domain` 字段。
+   * @param beforeSemantic - 决定核对状态内容、边界或目标的 `beforeSemantic` 值。
+   * @param expectedProviderRecordId - 用于精确定位expected数据提供器记录的标识；省略时默认采用 `record.providerRecordId || null`。
+   * @returns 满足核对状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private async saveReconcileState(
     record: NetworkDdnsRecord,
     beforeSemantic: string,
@@ -1103,7 +1367,9 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     return true;
   }
 
-  /** 发布语义变更。 */
+  /**
+   * 发布语义变更；通过 `eventStream.publishCommitted` 发布领域状态。
+   */
   private publishSemanticChange(): void {
     try {
       this.eventStream.publishCommitted('ddns');
@@ -1112,12 +1378,18 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 返回日志告警投递唤醒器。 */
+  /**
+   * 记录 DDNS 同步完成后系统消息投递唤醒失败的告警，不改变同步结果。
+   */
   private loggerWarnDeliveryWake(): void {
     this.logger.warn('System message delivery wake failed after DDNS sync');
   }
 
-  /** 计算语义指纹。 */
+  /**
+   * 根据`record`处理语义指纹。
+   * @param record - 用于语义指纹的领域对象，包含 `appliedAddress`、`domain`、`enabled`、`isDeleted` 字段。
+   * @returns 语义指纹；无法解析或未命中时为 `null`。
+   */
   private semanticFingerprint(record: NetworkDdnsRecord): string {
     return JSON.stringify([
       record.appliedAddress || null,
@@ -1137,7 +1409,11 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /** 核对身份。 */
+  /**
+   * 将影响 DDNS 核对身份的域名、开关、来源、记录类型与提供商记录标识序列化为稳定比较文本。
+   * @param record - 用于身份的领域对象，包含 `domain`、`enabled`、`isDeleted`、`portForwardId` 字段。
+   * @returns 身份；无法解析或未命中时为 `null`。
+   */
   private reconcileIdentity(record: NetworkDdnsRecord): string {
     return JSON.stringify([
       record.domain,
@@ -1151,7 +1427,10 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /** 标记待处理。 */
+  /**
+   * 标记待处理，并会更新 `record.lastErrorCode`、`record.lastErrorMessage`、`record.nextRetryAt`。
+   * @param record - 用于等待状态的领域对象，包含 `lastErrorCode`、`lastErrorMessage`、`nextRetryAt`、`retryCount` 字段。
+   */
   private markPending(record: NetworkDdnsRecord): void {
     record.lastErrorCode = null;
     record.lastErrorMessage = null;
@@ -1160,7 +1439,10 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     record.syncStatus = 'pending';
   }
 
-  /** 标记禁用。 */
+  /**
+   * 标记禁用，并会更新 `record.lastErrorCode`、`record.lastErrorMessage`、`record.nextRetryAt`。
+   * @param record - 用于Disabled的领域对象，包含 `lastErrorCode`、`lastErrorMessage`、`nextRetryAt`、`retryCount` 字段。
+   */
   private markDisabled(record: NetworkDdnsRecord): void {
     record.lastErrorCode = null;
     record.lastErrorMessage = null;
@@ -1169,7 +1451,11 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     record.syncStatus = 'disabled';
   }
 
-  /** 重试延迟毫秒。 */
+  /**
+   * 根据`retryCount`处理延迟毫秒。
+   * @param retryCount - 限制延迟毫秒数量、尺寸、等级或重试边界的数值。
+   * @returns 延迟毫秒。
+   */
   private retryDelayMs(retryCount: number): number {
     return Math.min(
       RETRY_BASE_DELAY_MS * 2 ** Math.max(0, retryCount - 1),
@@ -1177,14 +1463,20 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 返回Agent标识。 */
+  /**
+   * 从运行时配置读取网络 Agent 的稳定标识；缺失或非法配置按调用处约束拒绝。
+   * @returns 返回 `this.configService.get<string>('NETWORK_AGENT_ID')` 的可用值；为空时回退到 `DEFAULT_AGENT_ID`。
+   */
   private agentId(): string {
     return (
       this.configService.get<string>('NETWORK_AGENT_ID') || DEFAULT_AGENT_ID
     );
   }
 
-  /** 返回AgentIPv6最大存活时长毫秒。 */
+  /**
+   * 按边界约束计算AgentIPv6最大存活时长毫秒。
+   * @returns 按边界约束计算AgentIPv6最大存活时长毫秒。
+   */
   private agentIpv6MaxAgeMs(): number {
     return this.durationConfig(
       'NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS',
@@ -1192,7 +1484,10 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 核对间隔毫秒。 */
+  /**
+   * 根据当前运行态处理间隔毫秒。
+   * @returns 间隔毫秒。
+   */
   private reconcileIntervalMs(): number {
     return this.durationConfig(
       'NETWORK_DDNS_RECONCILE_INTERVAL_MS',
@@ -1200,22 +1495,35 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 返回时长配置。 */
+  /**
+   * 从输入或当前状态提取时长配置。
+   * @param key - 用于读取或更新duration配置的稳定键。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+   * @returns duration配置。
+   */
   private durationConfig(key: string, fallback: number): number {
     const value = Number(this.configService.get<unknown>(key));
-    return Number.isFinite(value) && value >= 1_000 && value <= 86_400_000
-      ? Math.floor(value)
-      : fallback;
+    if (Number.isFinite(value) && value >= 1_000 && value <= 86_400_000) {
+      return Math.floor(value);
+    }
+    return fallback;
   }
 
-  /** 断言标识。 */
+  /**
+   * 要求 DDNS 配置标识由 1 至 24 位十进制数字组成，避免非法 ID 进入查询与变更流程。
+   * @param id - 待校验的 DDNS 配置标识。
+   */
   private assertId(id: string): void {
     if (!/^\d{1,24}$/.test(id)) {
       throwVbenError('DDNS 配置 ID 无效', HttpStatus.BAD_REQUEST);
     }
   }
 
-  /** 判断重复键错误是否成立。 */
+  /**
+   * 仅把 MySQL `ER_DUP_ENTRY` 或错误号 1062 识别为唯一键冲突，其他错误一律返回 `false`。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+   * @returns 满足Duplicate键错误约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const record = error as { code?: unknown; errno?: unknown };
@@ -1223,7 +1531,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
   }
 }
 
-/** 判断有效DNS名称是否成立。 */
+/**
+ * 根据`value`、`requireMultipleLabels`与当前约束判定有效DNS名称。
+ * @param value - 待判定是否满足有效DNS名称约束的候选值。
+ * @param requireMultipleLabels - 决定是否启用“MultipleLabels”分支的布尔选项。
+ * @returns 满足有效DNS名称约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isValidDnsName(
   value: string,
   requireMultipleLabels: boolean,
@@ -1236,7 +1549,11 @@ function isValidDnsName(
   );
 }
 
-/** 判断有效端口是否成立。 */
+/**
+ * 根据`value`与当前约束判定有效端口。
+ * @param value - 待判定是否满足有效端口约束的候选值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 满足有效端口约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isValidPort(value?: null | number): value is number {
   return (
     typeof value === 'number' &&
@@ -1246,7 +1563,11 @@ function isValidPort(value?: null | number): value is number {
   );
 }
 
-/** 规范化全局IPv6。 */
+/**
+ * 将`value`规范为全局IPv6，使等价输入得到一致表示；当 `Number.isInteger(firstHextet) && firstHextet >= 0x2000 && fir…` 成立时返回 `normalized`。
+ * @param value - 待转换为全局IPv6的原始值；为空时采用 `isIP(value) !== 6` 作为兜底。
+ * @returns 全局IPv6；无法解析或未命中时为 `null`。
+ */
 function normalizeGlobalIpv6(value?: null | string): null | string {
   if (!value || isIP(value) !== 6) return null;
   let normalized: string;
@@ -1257,14 +1578,20 @@ function normalizeGlobalIpv6(value?: null | string): null | string {
     return null;
   }
   const firstHextet = Number.parseInt(normalized.split(':', 1)[0], 16);
-  return Number.isInteger(firstHextet) &&
+  if (Number.isInteger(firstHextet) &&
     firstHextet >= 0x2000 &&
-    firstHextet <= 0x3fff
-    ? normalized
-    : null;
+    firstHextet <= 0x3fff) {
+    return normalized;
+  }
+  return null;
 }
 
-/** 比较十进制标识列表。 */
+/**
+ * 根据`left`、`right`处理比较十进制标识列表。
+ * @param left - 用于比较十进制标识列表的领域对象，包含 `length`、`localeCompare` 字段。
+ * @param right - 用于比较十进制标识列表的领域对象，包含 `length` 字段。
+ * @returns 比较十进制标识列表。
+ */
 function compareDecimalIds(left: string, right: string): number {
   if (left.length !== right.length) return left.length - right.length;
   return left.localeCompare(right);

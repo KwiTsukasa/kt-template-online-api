@@ -46,7 +46,11 @@ const RUN_START_PROJECTIONS: Partial<
   'source.probe-runtime': { runState: 'ready', stage: 'intake' },
 };
 
-/** 深复制领域夹具，防止模拟执行污染调用方输入。 */
+/**
+ * 通过深复制领域夹具，防止模拟执行污染调用方输入。
+ * @param fixture - 决定通过深复制领域夹具，防止模拟执行污染调用方输入内容、边界或目标的 `fixture` 值。
+ * @returns 通过深复制领域夹具，防止模拟执行污染调用方输入。
+ */
 function cloneFixture(
   fixture: MediaGovernanceDomainFixture,
 ): MediaGovernanceDomainFixture {
@@ -80,7 +84,16 @@ export class MediaGovernanceSimulator {
     }
   }
 
-  /** 按任务版本、阶段和幂等键启动或复用模拟运行。 */
+  /**
+   * 按任务版本、阶段和幂等键启动或复用模拟运行。
+   * @param command - 用于按任务版本、阶段和幂等键启动或复用模拟运行的领域对象，包含 `taskId`、`action`、`inputSnapshotSha256`、`expectedRevision` 字段。
+   * @returns 包含 `reused`、`run` 字段的按任务版本、阶段和幂等键启动或复用模拟运行。
+   * @throws 当 `command.taskId !== task.id` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`；当 `task.activeRunId` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`；
+   *   当 `command.expectedRevision !== task.revision` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`；
+   *   当 `command.inputSnapshotSha256 !== task.inputSnapshotSha256` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`；
+   *   当 `this.consumedReplayKeys.has(command.replayKey)` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`；
+   *   当 `!requiredProjection || task.stage !== requiredProjection.stage || task.…` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`。
+   */
   beginRun(command: BeginRunCommand): {
     reused: boolean;
     run: MediaGovernanceRunProjection;
@@ -155,7 +168,13 @@ export class MediaGovernanceSimulator {
     return { reused: false, run: structuredClone(run) };
   }
 
-  /** 完成指定模拟运行，并按领域转换规则推进任务状态。 */
+  /**
+   * 完成指定模拟运行，并按领域转换规则推进任务状态。
+   * @param input - 用于完成状态的结构化输入，包含 `expectedRevision`、`runId`、`evidenceType`、`nextRunState` 字段。
+   * @returns 完成状态。
+   * @throws 当 `input.expectedRevision !== task.revision` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`；当 `task.activeRunId !== input.runId` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`；
+   *   当 `!run` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`。
+   */
   finishRun(input: {
     evidenceType: string;
     expectedRevision: number;
@@ -192,7 +211,14 @@ export class MediaGovernanceSimulator {
     return structuredClone(run);
   }
 
-  /** 校验单元验收证据、元数据门禁与字幕合同后标记本地验收。 */
+  /**
+   * 根据单元证据、元数据门禁与字幕合同校验结果标记本地验收。
+   * @param unitId - 用于精确定位unit的标识。
+   * @param evidenceSha256 - 决定根据单元证据、元数据门禁与字幕合同校验结果标记本地验收内容、边界或目标的 `evidenceSha256` 值。
+   * @throws 当 `!/^[a-f\d]{64}$/.test(evidenceSha256)` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`；当 `!unit` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`；
+   *   当 `projectMetadataGate(unit.metadataProjection).status === 'blocked'` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`；
+   *   当 `!unit.subtitleContract` 成立时拒绝当前输入并抛出 `MediaGovernanceContractError`。
+   */
   acceptUnit(unitId: string, evidenceSha256: string) {
     if (!/^[a-f\d]{64}$/.test(evidenceSha256)) {
       throw new MediaGovernanceContractError('unit-evidence-invalid');
@@ -212,7 +238,10 @@ export class MediaGovernanceSimulator {
     unit.evidenceSha256 = evidenceSha256;
   }
 
-  /** 投影任务可关闭状态及已验收单元数量。 */
+  /**
+   * 将当前领域状态投影为任务可关闭状态及已验收单元数量。
+   * @returns 包含 `acceptedUnits`、`canClose`、`totalUnits` 字段的将当前领域状态投影为任务可关闭状态及已验收单元数量。
+   */
   taskClosureProjection() {
     const acceptedUnits = this.fixture.units.filter(
       (unit) => unit.localAcceptedAt !== null,
@@ -226,7 +255,11 @@ export class MediaGovernanceSimulator {
     };
   }
 
-  /** 使用当前模拟夹具校验 Agent 工具边界请求。 */
+  /**
+   * 使用当前模拟夹具校验 Agent 工具边界请求。
+   * @param request - 用于使用当前模拟夹具校验 Agent 工具边界请求的当前 HTTP 请求。
+   * @returns 使用当前模拟夹具校验 Agent 工具边界请求。
+   */
   validateAgentRequest(request: SimulatorAgentRequest) {
     return validateAgentBoundaryRequest({
       capsule: this.fixture.capsule,
@@ -237,7 +270,10 @@ export class MediaGovernanceSimulator {
     });
   }
 
-  /** 返回模拟器累计的外部副作用计数快照。 */
+  /**
+   * 把领域字段投影为模拟器累计的外部副作用计数快照。
+   * @returns 把领域字段投影为模拟器累计的外部副作用计数快照。
+   */
   effects() {
     return { ...this.effectsCounter };
   }

@@ -38,7 +38,6 @@ export class NetworkPortForwardGroup {
   @KtUpdateDateColumn({ name: 'update_time', precision: 6 })
   updateTime: KtDateTime;
 
-  /** 创建标识。 */
   @BeforeInsert()
   createId(): string {
     return ensureSnowflakeId(this);

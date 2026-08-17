@@ -12,8 +12,9 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   /**
-   * 判断 Admin 身份权限条件。
-   * @param context - context 输入；执行 `context.getHandler()`、`context.getClass()`、`context.switchToHttp()` 对应的 Admin步骤。
+   * 根据`context`与当前约束判定Activate；从 `reflector.getAllAndOverride` 读取Activate。
+   * @param context - 用于Activate的领域对象，包含 `getHandler`、`getClass`、`switchToHttp` 字段。
+   * @returns 满足Activate约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async canActivate(context: ExecutionContext) {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -25,7 +26,12 @@ export class JwtAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AdminRequest>();
     const authorization = request.headers.authorization;
     request.adminUser = await this.authService.currentUser(
-      Array.isArray(authorization) ? authorization[0] : authorization,
+      (() => {
+        if (Array.isArray(authorization)) {
+          return authorization[0];
+        }
+        return authorization;
+      })(),
       request,
     );
     return true;

@@ -51,9 +51,9 @@ export class QqbotBusService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 投递 QQBot 核心消息或任务。
-   * @param topic - topic 输入；驱动 `emitter.emit()`、`client.publish()` 的 QQBot步骤。
-   * @param payload - payload 输入；驱动 `emitter.emit()`、`client.publish()` 的 QQBot步骤。
+   * 按`topic`、`payload`投递`publish` 对应结果；向目标通道投递结果（`emitter.emit`）。
+   * @param topic - 决定`publish` 对应结果内容、边界或目标的 `topic` 值。
+   * @param payload - 待按当前协议校验并路由的事件载荷。
    */
   async publish(topic: string, payload: any) {
     this.emitter.emit(topic, payload);
@@ -63,9 +63,10 @@ export class QqbotBusService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param topic - topic 输入；驱动 `emitter.on()` 的 QQBot步骤。
-   * @param handler - handler 输入；驱动 `emitter.on()` 的 QQBot步骤。
+   * 通过 `emitter.on` 注册或发布事件。
+   * @param topic - 决定subscribe内容、边界或目标的 `topic` 值。
+   * @param handler - 决定subscribe内容、边界或目标的 `handler` 值。
+   * @returns 移除本次主题监听器的退订函数；调用后该处理器不再接收后续事件。
    */
   subscribe(topic: string, handler: QqbotBusHandler) {
     this.emitter.on(topic, handler);
@@ -73,7 +74,8 @@ export class QqbotBusService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 查询 QQBot 核心数据。
+   * 按当前运行态读取状态；从 `getEventBusMode` 读取状态。
+   * @returns 包含 `connected`、`mode`、`url` 字段的状态。
    */
   getStatus() {
     return {
@@ -84,15 +86,17 @@ export class QqbotBusService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 查询 QQBot 核心数据。
+   * 按当前运行态读取事件BusMode；从 `configService.get` 读取事件BusMode。
+   * @returns 规范化后的事件BusMode；主值为空时采用 `'local'` 兜底。
    */
   private getEventBusMode() {
     return this.configService.get<string>('QQBOT_EVENT_BUS') || 'local';
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param url - 访问地址；生成规范化文本。
+   * 将`url`中的URL 地址认证信息替换为掩码；无法解析时保留原值。
+   * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+   * @returns 认证信息已替换为掩码的URL 地址；输入为空时为 `undefined`，解析失败时保留原文本。
    */
   private maskUrl(url: string) {
     if (!url) return '';

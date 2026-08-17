@@ -72,9 +72,9 @@ export class QqbotPluginPackageReaderService {
   ) {}
 
   /**
-   * 读取 QQBot 插件平台资源。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
-   * @returns QQBot 插件平台产出的 QqbotValidatedPluginPackage。
+   * 按`body`读取插件包；从 `getMaxPackageBytes` 读取插件包。
+   * @param body - 用于插件包的结构化输入，包含 `packagePath`、`packageHash` 字段。
+   * @returns 包含 `manifest`、`packageHash`、`packagePath`、`packageSizeBytes` 字段的插件包。
    */
   readPackage(body: PluginPackageBody): QqbotValidatedPluginPackage {
     const packagePath = this.resolvePackagePath(body.packagePath);
@@ -119,8 +119,9 @@ export class QqbotPluginPackageReaderService {
   }
 
   /**
-   * 解析Package Path。
-   * @param packagePath - 插件平台路径；驱动 `resolve()` 的 插件平台步骤。
+   * 从`packagePath`解析插件包路径；从 `getControlledRoots` 读取插件包路径。
+   * @param packagePath - 必须保持在受控根目录内的插件包路径；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 插件包路径。
    */
   private resolvePackagePath(packagePath?: string) {
     if (!packagePath) throwVbenError('请选择插件包路径');
@@ -150,7 +151,8 @@ export class QqbotPluginPackageReaderService {
   }
 
   /**
-   * 查询 QQBot 插件平台数据。
+   * 通过 `filter` 筛选匹配数据。
+   * @returns 受控根目录集合。
    */
   private getControlledRoots() {
     const configuredRoots = [
@@ -171,21 +173,23 @@ export class QqbotPluginPackageReaderService {
   }
 
   /**
-   * 查询 QQBot 插件平台数据。
+   * 按当前运行态读取最大插件包Bytes；当 `Number.isFinite(configured) && configured > 0` 成立时返回 `configured`。
+   * @returns 最大插件包Bytes。
    */
   private getMaxPackageBytes() {
     const configured = Number(
       this.configService?.get<string>('QQBOT_PLUGIN_PACKAGE_MAX_BYTES'),
     );
-    return Number.isFinite(configured) && configured > 0
-      ? configured
-      : DEFAULT_MAX_PACKAGE_BYTES;
+    if (Number.isFinite(configured) && configured > 0) {
+      return configured;
+    }
+    return DEFAULT_MAX_PACKAGE_BYTES;
   }
 
   /**
-   * 转换 QQBot 插件平台输入。
-   * @param files - 插件平台列表；决定 插件平台条件分支。
-   * @returns QQBot 插件平台转换后的值。
+   * 将`files`规范为插件包Files，使等价输入得到一致表示。
+   * @param files - 按原有顺序参与插件包Files筛选、合并或汇总的集合。
+   * @returns 按输入顺序得到的插件包Files列表；没有匹配项时为空数组。
    */
   private normalizePackageFiles(files: unknown): PackedPluginFile[] {
     if (!Array.isArray(files)) {
@@ -207,8 +211,9 @@ export class QqbotPluginPackageReaderService {
   }
 
   /**
-   * 转换 QQBot 插件平台输入。
-   * @param contentHash - contentHash 输入；驱动 `throwVbenError()` 的 插件平台步骤。
+   * 仅接受非空字符串作为插件包内容摘要；缺失或类型错误时以业务错误拒绝。
+   * @param contentHash - 决定仅接受非空字符串作为插件包内容摘要内容、边界或目标的 `contentHash` 值。
+   * @returns 仅接受非空字符串作为插件包内容摘要。
    */
   private normalizeContentHash(contentHash: unknown) {
     if (typeof contentHash !== 'string' || !contentHash) {

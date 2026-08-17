@@ -42,8 +42,8 @@ export class LokiLogPublisherService {
   }
 
   /**
-   * 执行 日志管道流程。
-   * @param params - 公共基础设施列表；使用 `context`、`level`、`payload`、`error` 字段生成结果。
+   * 将`params`中的非空针对日志管道截断到安全上限后追加到目标集合。
+   * @param params - 用于针对日志管道的领域对象，包含 `context`、`level`、`payload`、`error` 字段。
    */
   async pushHttpRequestLog(params: LokiPushLogParams) {
     if (!this.isEnabled()) return;
@@ -63,7 +63,12 @@ export class LokiLogPublisherService {
       env: this.environment,
       context: params.context,
       ...params.payload,
-      ...(params.error ? { err: this.serializeError(params.error) } : {}),
+      ...((() => {
+        if (params.error) {
+          return { err: this.serializeError(params.error) };
+        }
+        return {};
+      })()),
       msg: params.message,
     });
     const body = JSON.stringify({
@@ -79,7 +84,8 @@ export class LokiLogPublisherService {
   }
 
   /**
-   * 判断 日志管道条件。
+   * 根据当前运行态与当前约束判定针对日志管道；从 `configService.get` 读取针对日志管道。
+   * @returns 满足针对日志管道约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isEnabled() {
     return (
@@ -92,8 +98,9 @@ export class LokiLogPublisherService {
   }
 
   /**
-   * 执行 日志管道流程。
-   * @param body - 请求体 DTO；承载 公共基础设施新增、更新、导入或执行字段。
+   * 按`body`投递针对日志管道；从 `getConfig` 读取针对日志管道。
+   * @param body - 用于针对日志管道的结构化输入。
+   * @returns 完成初始化并携带当前边界配置的针对日志管道。
    */
   private requestPush(body: string) {
     const url = new URL(
@@ -102,7 +109,12 @@ export class LokiLogPublisherService {
     );
 
     return new Promise<void>((resolve, reject) => {
-      const client = url.protocol === 'http:' ? http : https;
+      const client = (() => {
+        if (url.protocol === 'http:') {
+          return http;
+        }
+        return https;
+      })();
       const request = client.request(
         url,
         {
@@ -136,7 +148,8 @@ export class LokiLogPublisherService {
   }
 
   /**
-   * 查询 日志管道数据。
+   * 按当前运行态读取针对日志管道；从 `getConfig` 读取针对日志管道。
+   * @returns 针对日志管道。
    */
   private getHeaders() {
     const headers: Record<string, string> = {};
@@ -155,8 +168,9 @@ export class LokiLogPublisherService {
   }
 
   /**
-   * 序列化Error。
-   * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   * 将未知异常投影为可写入 Loki 的结构，对 `Error` 保留名称与堆栈。
+   * @param error - 待记录的任意异常值；非 `Error` 值通过统一错误消息提取器转为文本。
+   * @returns 返回至少含错误消息的日志对象；`Error` 输入额外包含名称与可选堆栈。
    */
   private serializeError(error: unknown) {
     if (error instanceof Error) {
@@ -173,17 +187,19 @@ export class LokiLogPublisherService {
   }
 
   /**
-   * 执行 日志管道流程。
-   * @param timestampMs - 公共基础设施列表；驱动 `BigInt()` 的 公共基础设施步骤。
+   * 将`timestampMs`转换为针对日志管道。
+   * @param timestampMs - 用于针对日志管道超时、有效期或退避计算的毫秒数。
+   * @returns 按参数编码并拼接完成的针对日志管道。
    */
   private toNanoseconds(timestampMs: number) {
     return `${BigInt(timestampMs) * 1000000n}`;
   }
 
   /**
-   * 查询 日志管道数据。
-   * @param key - 键名；限定 公共基础设施查询范围。
-   * @param fallback - 兜底值；驱动 `toolsService.toTrimmedString()` 的 公共基础设施步骤。
+   * 按`key`、`fallback`读取针对日志管道；从 `configService.get` 读取针对日志管道。
+   * @param key - 用于读取或更新针对日志管道的稳定键。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果；省略时默认采用 `''`。
+   * @returns 针对日志管道。
    */
   private getConfig(key: string, fallback = '') {
     const value = this.configService.get<string>(key);
@@ -191,18 +207,23 @@ export class LokiLogPublisherService {
   }
 
   /**
-   * 查询 日志管道数据。
-   * @param key - 键名；驱动 `Number()` 的 公共基础设施步骤。
-   * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 公共基础设施步骤。
+   * 按`key`、`fallback`读取针对日志管道；当 `Number.isFinite(value) && value > 0` 成立时返回 `value`。
+   * @param key - 用于读取或更新针对日志管道的稳定键。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+   * @returns 针对日志管道。
    */
   private getNumberConfig(key: string, fallback: number) {
     const value = Number(this.configService.get<string>(key));
-    return Number.isFinite(value) && value > 0 ? value : fallback;
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+    return fallback;
   }
 
   /**
-   * 转换 日志管道输入。
-   * @param value - 待转换值；生成规范化文本。
+   * 将`value`规范为针对日志管道，使等价输入得到一致表示。
+   * @param value - 待转换为针对日志管道的原始值。
+   * @returns 针对日志管道。
    */
   private normalizeUrl(value: string) {
     return value.replace(/\/+$/g, '');

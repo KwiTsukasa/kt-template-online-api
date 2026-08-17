@@ -22,9 +22,8 @@ export class Attribute {
   }
 
   /**
-   * 在 Attribute 模型中获取图标。
-   *
-   * @returns 异步处理结果。
+   * 按当前运行态读取图标；从 `getAttributeIcon` 读取图标。
+   * @returns 图标。
    */
   async getIcon(): Promise<Image> {
     return getAttributeIcon(this.name);
@@ -34,10 +33,9 @@ export class Attribute {
 const attributeIconCache: { [name: string]: Image } = {};
 
 /**
- * 在BangDream 领域模型层中获取属性图标。
- *
- * @param attributeName - attributeName 输入；驱动 `attributeResourceRepository.getIconSvgBuffer()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 按`attributeName`读取卡牌属性图标；当 `attributeIconCache[attributeName]` 成立时返回 `attributeIconCache[attributeName]`。
+ * @param attributeName - 决定卡牌属性图标内容、边界或目标的 `attributeName` 值。
+ * @returns 卡牌属性图标。
  */
 async function getAttributeIcon(attributeName: string): Promise<Image> {
   if (attributeIconCache[attributeName]) {

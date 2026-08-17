@@ -11,12 +11,11 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/storage/cache-policy';
 
 /**
- * 在数据下载与缓存层中调用APIAnd缓存Response。
- *
- * @param url - 访问地址；计算 BangDream布尔判断。
- * @param cacheTime - cacheTime 输入；驱动 `fetchRemoteResourceJson()` 的 BangDream步骤。
- * @param retryCount - retryCount 输入；影响 callAPIAndCacheResponse 的返回值。
- * @returns 异步处理结果。
+ * 根据`url`、`cacheTime`、`retryCount`处理调用APIAnd缓存响应；从 `getCacheDirectory` 读取调用APIAnd缓存响应。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @param cacheTime - 决定调用APIAnd缓存响应内容、边界或目标的 `cacheTime` 值；省略时默认采用 `0`。
+ * @param retryCount - 限制调用APIAnd缓存响应数量、尺寸、等级或重试边界的数值；省略时默认采用 `3`。
+ * @returns 调用APIAnd缓存响应。
  */
 async function callAPIAndCacheResponse(
   url: string,

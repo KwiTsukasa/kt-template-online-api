@@ -32,8 +32,9 @@ export class AdminUserManageController {
   ) {}
 
   /**
-   * 获取用户分页列表。
-   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * 根据参数 `query`，获取用户分页列表。
+   * @param query - 限定根据参数 `query`，获取用户分页列表筛选、排序与分页范围的查询条件。
+   * @returns 根据参数 `query`，获取用户分页列表。
    */
   @Get('list')
   @ApiOperation({ summary: '获取用户分页列表' })
@@ -43,9 +44,10 @@ export class AdminUserManageController {
   }
 
   /**
-   * 新增用户。
-   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
-   * @param request - 当前 HTTP 请求；用于可信代理后的公开 Origin 校验。
+   * 根据`body`、`request`构造针对用户；先通过 `trustedCredentialTransportService.assertTrusted` 校验输入边界。
+   * @param body - 用于针对用户的结构化输入。
+   * @param request - 用于针对用户的当前 HTTP 请求。
+   * @returns 针对用户。
    */
   @Post()
   @ApiOperation({ summary: '新增用户' })
@@ -54,7 +56,13 @@ export class AdminUserManageController {
     return vbenSuccess(await this.userService.createUser(body));
   }
 
-  /** 重置密码。 */
+  /**
+   * 根据`id`、`body`、`request`处理重置密码；先通过 `trustedCredentialTransportService.assertTrusted` 校验输入边界。
+   * @param id - 决定重置密码内容、边界或目标的 `id` 值。
+   * @param body - 用于重置密码的结构化输入，包含 `password` 字段。
+   * @param request - 用于重置密码的当前 HTTP 请求。
+   * @returns 重置密码。
+   */
   @Put(':id/password')
   @ApiOperation({ summary: '重置用户密码' })
   async resetPassword(
@@ -69,10 +77,11 @@ export class AdminUserManageController {
   }
 
   /**
-   * 编辑用户。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
-   * @param request - 当前 HTTP 请求；用于可信代理后的公开 Origin 校验。
+   * 根据`id`、`body`、`request`更新针对用户；先通过 `trustedCredentialTransportService.assertTrusted` 校验输入边界。
+   * @param id - 决定针对用户内容、边界或目标的 `id` 值。
+   * @param body - 用于针对用户的结构化输入。
+   * @param request - 用于针对用户的当前 HTTP 请求。
+   * @returns 针对用户。
    */
   @Put(':id')
   @ApiOperation({ summary: '编辑用户' })
@@ -86,9 +95,10 @@ export class AdminUserManageController {
   }
 
   /**
-   * 删除用户。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param currentUser - currentUser 输入；驱动 `vbenSuccess()` 的 Admin步骤。
+   * 按`id`、`currentUser`移除针对删除用户。
+   * @param id - 决定针对删除用户内容、边界或目标的 `id` 值。
+   * @param currentUser - 用于针对删除用户的领域对象，包含 `id` 字段。
+   * @returns 针对删除用户。
    */
   @Delete(':id')
   @ApiOperation({ summary: '删除用户' })

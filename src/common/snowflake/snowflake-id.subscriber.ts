@@ -7,7 +7,7 @@ import { ensureSnowflakeId } from './snowflake-id';
 
 @EventSubscriber()
 export class SnowflakeIdSubscriber implements EntitySubscriberInterface {
-  /** 返回之前插入。 */
+
   beforeInsert(event: InsertEvent<any>) {
     if (!event.entity) return;
 

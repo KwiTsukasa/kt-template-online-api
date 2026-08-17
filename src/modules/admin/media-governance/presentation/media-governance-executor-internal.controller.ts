@@ -29,7 +29,10 @@ import { MediaGovernanceService } from '@/modules/admin/media-governance/applica
 export class MediaGovernanceExecutorInternalController {
   constructor(private readonly service: MediaGovernanceService) {}
 
-  /** 返回执行器回调、描述符兑换和固定零写边界的健康状态。 */
+  /**
+   * 返回执行器回调、描述符兑换和固定零写边界的健康状态。
+   * @returns 包含 `callbackReady`、`descriptorGrantReady`、`status`、`writeBoundaries` 字段的器回调、描述符兑换和固定零写边界的健康状态。
+   */
   @Get('health')
   health() {
     const callback = this.service.executionCallbackHealth();
@@ -45,13 +48,21 @@ export class MediaGovernanceExecutorInternalController {
     };
   }
 
-  /** 接收执行器状态事件并交由治理服务顺序应用。 */
+  /**
+   * 接收执行器状态事件并交由治理服务顺序应用。
+   * @param body - 用于接收执行器状态事件并交由治理服务顺序应用的结构化输入。
+   * @returns 接收执行器状态事件并交由治理服务顺序应用。
+   */
   @Post('events')
   event(@Body() body: MediaGovernanceExecutorEventDto) {
     return this.service.applyExecutorEvent(body);
   }
 
-  /** 兑换一次性描述符授权并以不可缓存二进制响应返回。 */
+  /**
+   * 兑换一次性描述符授权并以不可缓存二进制响应返回。
+   * @param body - 用于兑换一次性描述符授权并以不可缓存二进制响应返回的结构化输入。
+   * @param response - 包含 `set`、`status` 字段的上游服务响应。
+   */
   @Post('descriptors/redeem')
   async redeem(
     @Body() body: MediaGovernanceDescriptorRedeemDto,
@@ -67,7 +78,11 @@ export class MediaGovernanceExecutorInternalController {
     response.status(200).send(bytes);
   }
 
-  /** 兑换一次性治理计划授权并以不可缓存 JSON 响应返回。 */
+  /**
+   * 兑换一次性治理计划授权并以不可缓存 JSON 响应返回。
+   * @param body - 用于兑换一次性治理计划授权并以不可缓存 JSON 响应返回的结构化输入。
+   * @param response - 包含 `set`、`status` 字段的上游服务响应。
+   */
   @Post('plans/redeem')
   async redeemPlan(
     @Body() body: MediaGovernancePlanRedeemDto,

@@ -33,8 +33,9 @@ export class QqbotCommandEngineService {
   ) {}
 
   /**
-   * 处理Message。
-   * @param message - message 输入；使用 `channelId`、`rawEvent`、`selfId`、`targetId` 字段生成结果。
+   * 根据`message`处理消息；当 `!behaviorDecision.allowed` 成立时返回 `true`。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `channelId`、`rawEvent`、`selfId`、`targetId` 字段。
+   * @returns 满足消息约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async handleMessage(message: QqbotNormalizedMessage) {
     const commands = await this.commandService.listEnabledForMessage(message);
@@ -70,9 +71,12 @@ export class QqbotCommandEngineService {
         if (replyText) {
           await this.sendService.sendText({
             channelId: message.channelId,
-            guildId: message.rawEvent.guild_id
-              ? `${message.rawEvent.guild_id}`
-              : undefined,
+            guildId: (() => {
+              if (message.rawEvent.guild_id) {
+                return `${message.rawEvent.guild_id}`;
+              }
+              return undefined;
+            })(),
             message: replyText,
             selfId: message.selfId,
             targetId: message.targetId,
@@ -107,14 +111,18 @@ export class QqbotCommandEngineService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`处理预览；当 `!matched` 成立时返回 `{ matched: false, message: '未匹配到命令', }`。
+   * @param body - 用于预览的结构化输入，包含 `commandId` 字段。
+   * @returns 包含 `command`、`errorMessage`、`input`、`matched`、`output` 字段的预览。
    */
   async preview(body: QqbotCommandTestDto) {
     const message = this.buildPreviewMessage(body);
-    const command = body.commandId
-      ? await this.commandService.findById(body.commandId)
-      : await this.findMatchedCommand(message);
+    const command = await (async () => {
+      if (body.commandId) {
+        return await this.commandService.findById(body.commandId);
+      }
+      return await this.findMatchedCommand(message);
+    })();
     const matched = await this.commandParser.match(command, message);
     if (!matched) {
       return {
@@ -162,8 +170,10 @@ export class QqbotCommandEngineService {
   }
 
   /**
-   * 查询 QQBot 核心数据。
-   * @param message - message 输入；驱动 `commandService.listEnabledForMessage()` 的 QQBot步骤。
+   * 按`message`读取Matched命令；当 `await this.commandParser.match(command, message)` 成立时返回 `command`。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   * @returns Matched命令。
+   * @throws 当前函数此前所有接受或成功分支均未返回时拒绝当前输入并抛出 `Error`。
    */
   private async findMatchedCommand(message: QqbotNormalizedMessage) {
     const commands = await this.commandService.listEnabledForMessage(message);
@@ -176,10 +186,11 @@ export class QqbotCommandEngineService {
   }
 
   /**
-   * 创建 QQBot 核心对象或配置。
-   * @param command - command 输入；使用 `replyTemplate` 字段生成结果。
-   * @param input - input 输入；生成 QQBot对象。
-   * @param output - output 输入；生成 QQBot对象。
+   * 用命令回复模板渲染输入与执行输出，并在模板为空时回退为输出的稳定文本表示。
+   * @param command - 用于Reply文本的领域对象，包含 `replyTemplate` 字段。
+   * @param input - 用于Reply文本的结构化输入。
+   * @param output - 决定Reply文本内容、边界或目标的 `output` 值。
+   * @returns 规范化后的Reply文本；主值为空时采用 `this.replyTemplate.stringifyOutput(output)` 兜底。
    */
   private buildReplyText(
     command: QqbotCommand,
@@ -194,11 +205,11 @@ export class QqbotCommandEngineService {
   }
 
   /**
-   * 投递 QQBot 核心消息或任务。
-   * @param command - command 输入；驱动 `this.buildErrorReplyText()` 的 QQBot步骤。
-   * @param input - input 输入；驱动 `this.buildErrorReplyText()` 的 QQBot步骤。
-   * @param message - message 输入；使用 `channelId`、`rawEvent`、`selfId`、`targetId` 字段生成结果。
-   * @param errorMessage - errorMessage 输入；驱动 `this.buildErrorReplyText()` 的 QQBot步骤。
+   * 按`command`、`input`、`message`投递错误Reply；向目标通道投递结果（`sendService.sendText`）。
+   * @param command - 决定错误Reply内容、边界或目标的 `command` 值。
+   * @param input - 用于错误Reply的结构化输入。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `channelId`、`rawEvent`、`selfId`、`targetId` 字段。
+   * @param errorMessage - 包含正文、发送目标与账号身份的待处理消息。
    */
   private async sendErrorReply(
     command: QqbotCommand,
@@ -210,9 +221,12 @@ export class QqbotCommandEngineService {
     try {
       await this.sendService.sendText({
         channelId: message.channelId,
-        guildId: message.rawEvent.guild_id
-          ? `${message.rawEvent.guild_id}`
-          : undefined,
+        guildId: (() => {
+          if (message.rawEvent.guild_id) {
+            return `${message.rawEvent.guild_id}`;
+          }
+          return undefined;
+        })(),
         message: reply,
         selfId: message.selfId,
         targetId: message.targetId,
@@ -228,10 +242,11 @@ export class QqbotCommandEngineService {
   }
 
   /**
-   * 创建 QQBot 核心对象或配置。
-   * @param command - command 输入；使用 `errorTemplate` 字段生成结果。
-   * @param input - input 输入；生成 QQBot对象。
-   * @param errorMessage - errorMessage 输入；生成 QQBot对象。
+   * 根据`command`、`input`、`errorMessage`构造错误Reply文本。
+   * @param command - 用于错误Reply文本的领域对象，包含 `errorTemplate` 字段。
+   * @param input - 用于错误Reply文本的结构化输入。
+   * @param errorMessage - 包含正文、发送目标与账号身份的待处理消息。
+   * @returns 规范化后的错误Reply文本；主值为空时采用 ``命令执行失败：${errorMessage}`` 兜底。
    */
   private buildErrorReplyText(
     command: QqbotCommand,
@@ -247,9 +262,10 @@ export class QqbotCommandEngineService {
   }
 
   /**
-   * 合并Input。
-   * @param command - command 输入；驱动 `commandService.parseDefaultParams()` 的 QQBot步骤。
-   * @param input - input 输入；驱动 `commandService.parseDefaultParams()` 的 QQBot步骤。
+   * 将命令默认参数与本次非空输入合并，并让本次输入覆盖同名默认值。
+   * @param command - 决定输入内容、边界或目标的 `command` 值。
+   * @param input - 用于输入的结构化输入。
+   * @returns 输入。
    */
   private mergeInput(command: QqbotCommand, input: Record<string, any>) {
     return {
@@ -259,8 +275,9 @@ export class QqbotCommandEngineService {
   }
 
   /**
-   * 清理 QQBot 核心状态。
-   * @param input - input 输入；驱动 `Object.entries()` 的 QQBot步骤。
+   * 按`input`移除未定义字段。
+   * @param input - 用于未定义字段的结构化输入。
+   * @returns 未定义字段。
    */
   private removeUndefined(input: Record<string, any>) {
     return Object.entries(input).reduce<Record<string, any>>(
@@ -273,9 +290,9 @@ export class QqbotCommandEngineService {
   }
 
   /**
-   * 创建 QQBot 核心对象或配置。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
-   * @returns 创建后的 QQBot 核心对象或配置。
+   * 根据`body`构造预览消息。
+   * @param body - 用于预览消息的结构化输入，包含 `targetType`、`targetId`、`userId`、`text` 字段。
+   * @returns 包含 `eventTime`、`groupId`、`messageId`、`messageText`、`messageType` 字段的预览消息。
    */
   private buildPreviewMessage(
     body: QqbotCommandTestDto,
@@ -285,7 +302,12 @@ export class QqbotCommandEngineService {
     const userId = body.userId || targetId;
     return {
       eventTime: new Date(),
-      groupId: targetType === 'group' ? targetId : undefined,
+      groupId: (() => {
+        if (targetType === 'group') {
+          return targetId;
+        }
+        return undefined;
+      })(),
       messageId: `preview-${Date.now()}`,
       messageText: body.text,
       messageType: targetType,
@@ -297,17 +319,28 @@ export class QqbotCommandEngineService {
     };
   }
 
-  /** 读取行为阶段。 */
+  /**
+   * 按`message`读取行为阶段；当 `this.isBehaviorStage(stage)` 成立时返回 `stage`。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `rawEvent` 字段。
+   * @returns 行为阶段；没有可用结果或提前结束时为 `undefined`。
+   */
   private getBehaviorStage(
     message: QqbotNormalizedMessage,
   ): NapcatAutoCapabilityStage | undefined {
     const stage =
       message.rawEvent.napcatBehaviorStage ||
       message.rawEvent.napcat_behavior_stage;
-    return this.isBehaviorStage(stage) ? stage : undefined;
+    if (this.isBehaviorStage(stage)) {
+      return stage;
+    }
+    return undefined;
   }
 
-  /** 判断行为阶段是否成立。 */
+  /**
+   * 根据`stage`与当前约束判定行为阶段。
+   * @param stage - 决定行为阶段内容、边界或目标的 `stage` 值。
+   * @returns 满足行为阶段约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isBehaviorStage(stage: unknown): stage is NapcatAutoCapabilityStage {
     return (
       stage === 'automation' ||

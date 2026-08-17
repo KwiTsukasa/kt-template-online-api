@@ -19,7 +19,10 @@ export class WireguardReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
-  /** 检查WireGuard只读的记录。 */
+  /**
+   * 根据当前运行态处理WireGuard只读的记录；当 `missing.length > 0` 成立时返回 `createUnwiredAdapterSignal('wireguard', 'Wi…`。
+   * @returns WireGuard只读的记录。
+   */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_TENCENT_WIREGUARD_HEALTH_URL',
@@ -44,7 +47,12 @@ export class WireguardReadonlyAdapter {
         isReadonlyHttpOk(endpoint.status),
       ).length;
       const status =
-        reachableCount === endpointStatuses.length ? 'ok' : 'degraded';
+        (() => {
+          if (reachableCount === endpointStatuses.length) {
+            return 'ok';
+          }
+          return 'degraded';
+        })();
       const summary = `WireGuard health endpoints reachable ${reachableCount}/${endpointStatuses.length}`;
 
       return createLiveAdapterSignal(

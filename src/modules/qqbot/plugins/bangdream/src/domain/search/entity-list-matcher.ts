@@ -25,13 +25,21 @@ const getMatchKeyCount = (matches: FuzzySearchResult): number => {
 };
 
 const getRelationList = (matches: FuzzySearchResult): string[] | undefined =>
-  Array.isArray(matches._relationStr)
-    ? (matches._relationStr as string[])
-    : undefined;
+  {
+    if (Array.isArray(matches._relationStr)) {
+      return (matches._relationStr as string[]);
+    }
+    return undefined;
+  };
 
 const getCurrentSource = (
   source: BangDreamEntityMatcherOptions<unknown>['source'],
-) => (typeof source === 'function' ? source() : source);
+) => {
+  if (typeof source === 'function') {
+    return source();
+  }
+  return source;
+};
 
 const shouldCheckRelation =
   (relationList: string[] | undefined, relationOnly: boolean) =>
@@ -69,9 +77,12 @@ export const createBangDreamEntityMatcher =
       }
 
       const baseMatched = isMatched(matches, entity);
-      const matched = useRelation(baseMatched)
-        ? checkRelationList(relationValue(entity), relationList ?? [])
-        : baseMatched;
+      const matched = (() => {
+        if (useRelation(baseMatched)) {
+          return checkRelationList(relationValue(entity), relationList ?? []);
+        }
+        return baseMatched;
+      })();
 
       if (matched) {
         result.push(entity);

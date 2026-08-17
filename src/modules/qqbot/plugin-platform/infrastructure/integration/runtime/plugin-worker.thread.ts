@@ -124,7 +124,12 @@ const WORKER_REQUEST_HANDLERS: Record<
   },
 };
 
-/** 创建插件来自描述文件。 */
+/**
+ * 加载受控插件入口并调用其 `createPlugin` 导出，以描述信息、宿主能力和配置快照创建运行实例。
+ * @param options - 控制插件描述信息筛选、缓存或输出方式的可选项，包含 `descriptor`、`host`、`configSnapshot`、`installationId` 字段。
+ * @returns 返回插件入口创建的运行实例。
+ * @throws 当 `typeof createPlugin !== 'function'` 成立时拒绝当前输入并抛出 `Error`。
+ */
 export async function createPluginFromDescriptor(
   options: QqbotWorkerCreatePluginOptions,
 ): Promise<QqbotWorkerPluginInstance> {
@@ -158,7 +163,10 @@ if (port) {
   });
 }
 
-/** 处理父级消息。 */
+/**
+ * 根据`message`处理父级消息；当 `message.type === 'hostResponse'` 成立时直接结束且不产生返回值。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `type`、`message`、`requestId` 字段。
+ */
 async function handleParentMessage(message: ParentMessage) {
   if (message.type === 'hostResponse') {
     settleHostResponse(message);
@@ -183,12 +191,20 @@ async function handleParentMessage(message: ParentMessage) {
   }
 }
 
-/** 处理工作进程请求。 */
+/**
+ * 根据`message`处理工作进程请求。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `type` 字段。
+ * @returns 工作进程请求。
+ */
 async function handleWorkerRequest(message: QqbotPluginWorkerRequest) {
   return WORKER_REQUEST_HANDLERS[message.type](message);
 }
 
-/** 加载插件。 */
+/**
+ * 按`message`读取插件；从 `getWorkerDescriptor` 读取插件。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息。
+ * @returns 包含 `ok`、`pluginKey` 字段的插件。
+ */
 async function loadPlugin(message: QqbotPluginWorkerRequest) {
   const descriptor = getWorkerDescriptor();
   plugin = await createPluginFromDescriptor({
@@ -204,7 +220,10 @@ async function loadPlugin(message: QqbotPluginWorkerRequest) {
   };
 }
 
-/** 返回健康状态插件。 */
+/**
+ * 优先调用插件的 `health` 或兼容 `healthCheck`，均未实现时返回健康兜底状态。
+ * @returns 返回插件健康检查结果；插件未实现检查入口时返回健康兜底对象。
+ */
 async function healthPlugin() {
   const loadedPlugin = requirePlugin();
   if (loadedPlugin.health) return loadedPlugin.health();
@@ -212,7 +231,12 @@ async function healthPlugin() {
   return { ok: true, status: 'healthy' };
 }
 
-/** 执行操作。 */
+/**
+ * 根据`message`处理操作；当 `loadedPlugin.executeOperation` 成立时返回 `loadedPlugin.executeOperation(operationKey,…`。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `operationKey`、`operationId`、`input` 字段。
+ * @returns 操作。
+ * @throws 插件既未提供统一执行入口也未声明匹配能力时抛出 `Error`。
+ */
 async function executeOperation(message: QqbotPluginWorkerRequest) {
   const loadedPlugin = requirePlugin();
   const operationKey = requireRequestKey(
@@ -232,7 +256,12 @@ async function executeOperation(message: QqbotPluginWorkerRequest) {
   throw new Error(`QQBot 插件能力不存在：${operationKey}`);
 }
 
-/** 执行任务。 */
+/**
+ * 根据`message`处理任务；当 `loadedPlugin.executeTask` 成立时返回 `loadedPlugin.executeTask(taskKey, message.i…`。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `taskKey`、`taskHandlerName`、`taskId`、`triggerType` 字段。
+ * @returns 任务。
+ * @throws 插件既未提供统一任务入口也未声明匹配任务时抛出 `Error`。
+ */
 async function executeTask(message: QqbotPluginWorkerRequest) {
   const loadedPlugin = requirePlugin();
   const taskKey = requireRequestKey(
@@ -261,7 +290,11 @@ async function executeTask(message: QqbotPluginWorkerRequest) {
   throw new Error(`QQBot 插件定时任务不存在：${taskKey}`);
 }
 
-/** 处理事件。 */
+/**
+ * 根据`message`处理事件；先通过 `requirePlugin` 校验输入边界。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `eventKey`、`event` 字段。
+ * @returns 满足事件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 async function handleEvent(message: QqbotPluginWorkerRequest) {
   const loadedPlugin = requirePlugin();
   const eventKey = requireRequestKey(
@@ -273,7 +306,10 @@ async function handleEvent(message: QqbotPluginWorkerRequest) {
   return loadedPlugin.handleEvent(eventKey, message.event);
 }
 
-/** 创建主机外观层。 */
+/**
+ * 为已知宿主方法创建参数映射包装，并用 Proxy 将其他字符串方法转为动态宿主调用。
+ * @returns 返回由 `Proxy` 构造的主机外观层。
+ */
 function createHostFacade(): Record<string, unknown> {
   const host: Record<string, unknown> = {};
   for (const method of Object.keys(HOST_ARGUMENT_MAPPERS)) {
@@ -282,7 +318,12 @@ function createHostFacade(): Record<string, unknown> {
   }
 
   return new Proxy(host, {
-    /** 读取get。 */
+    /**
+     * 从宿主外观读取已注册方法；未知字符串属性动态包装为宿主调用，`then` 与符号属性保持空值。
+     * @param target - 用于从宿主外观读取已注册方法的领域对象，包含 `property` 字段。
+     * @param property - 决定从宿主外观读取已注册方法内容、边界或目标的 `property` 值。
+     * @returns 返回已注册宿主方法或动态调用包装；符号属性、`then` 与缺失分支返回 `undefined`。
+     */
     get(target, property) {
       if (typeof property !== 'string') return undefined;
       if (property in target) return target[property];
@@ -293,7 +334,12 @@ function createHostFacade(): Record<string, unknown> {
   });
 }
 
-/** 返回调用主机。 */
+/**
+ * 通过受控桥接获取主机。
+ * @param method - 决定通过受控桥接获取主机内容、边界或目标的 `method` 值。
+ * @param args - 决定通过受控桥接获取主机内容、边界或目标的 `args` 值。
+ * @returns 完成初始化并携带当前边界配置的通过受控桥接获取主机。
+ */
 function callHost<TResult = unknown>(
   method: string,
   args: Record<string, unknown>,
@@ -319,7 +365,10 @@ function callHost<TResult = unknown>(
   });
 }
 
-/** 等待完成主机响应。 */
+/**
+ * 按请求标识移除待处理宿主调用，并依据响应状态兑现或拒绝对应 Promise。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `requestId`、`ok`、`result`、`error` 字段。
+ */
 function settleHostResponse(
   message: Extract<ParentMessage, { type: 'hostResponse' }>,
 ) {
@@ -335,7 +384,11 @@ function settleHostResponse(
   pending.reject(deserializeError(message.error));
 }
 
-/** 读取工作进程描述文件。 */
+/**
+ * 按当前运行态读取工作进程描述文件。
+ * @returns 工作进程描述文件。
+ * @throws 当 `!descriptor || typeof descriptor !== 'object'` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function getWorkerDescriptor(): QqbotPluginPackageDescriptor {
   const descriptor = workerData?.descriptor;
   if (!descriptor || typeof descriptor !== 'object') {
@@ -344,21 +397,36 @@ function getWorkerDescriptor(): QqbotPluginPackageDescriptor {
   return descriptor as QqbotPluginPackageDescriptor;
 }
 
-/** 读取工作进程配置快照。 */
+/**
+ * 按当前运行态读取工作进程配置快照；当 `snapshot && typeof snapshot === 'object'` 成立时返回 `(snapshot as QqbotPluginRuntimeConfigSnapsh…`。
+ * @returns 工作进程配置快照。
+ */
 function getWorkerConfigSnapshot(): QqbotPluginRuntimeConfigSnapshot {
   const snapshot = workerData?.configSnapshot;
-  return snapshot && typeof snapshot === 'object'
-    ? (snapshot as QqbotPluginRuntimeConfigSnapshot)
-    : {};
+  if (snapshot && typeof snapshot === 'object') {
+    return (snapshot as QqbotPluginRuntimeConfigSnapshot);
+  }
+  return {};
 }
 
-/** 读取工作进程安装标识。 */
+/**
+ * 按`message`读取工作进程安装标识；当 `typeof installationId === 'string'` 成立时返回 `installationId`。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `installationId` 字段。
+ * @returns 当前状态对应的工作进程安装标识，取值为 `''`。
+ */
 function getWorkerInstallationId(message: QqbotPluginWorkerRequest) {
   const installationId = workerData?.installationId || message.installationId;
-  return typeof installationId === 'string' ? installationId : '';
+  if (typeof installationId === 'string') {
+    return installationId;
+  }
+  return '';
 }
 
-/** 返回必需插件。 */
+/**
+ * 校验当前运行态是否满足前置条件并返回必需插件约束，并拒绝不合法输入。
+ * @returns 前置条件并返回必需插件。
+ * @throws 当 `!plugin` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function requirePlugin() {
   if (!plugin) {
     throw new Error('QQBot 插件运行时未加载');
@@ -366,13 +434,25 @@ function requirePlugin() {
   return plugin;
 }
 
-/** 生成必需请求键。 */
+/**
+ * 校验`value`、`message`是否满足必需请求键约束，并拒绝不合法输入。
+ * @param value - 参与必需请求键比较、格式化或输出的候选值。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息。
+ * @returns 必需请求键。
+ * @throws 输入不是非空字符串时抛出调用方提供消息的 `Error`。
+ */
 function requireRequestKey(value: unknown, message: string) {
   if (typeof value === 'string' && value.trim()) return value.trim();
   throw new Error(message);
 }
 
-/** 查找运行态可调用对象。 */
+/**
+ * 按`items`、`key`、`handlerName`读取运行态可调用对象。
+ * @param items - 按原有顺序参与运行态可调用对象筛选、合并或汇总的集合。
+ * @param key - 用于读取或更新运行态可调用对象的稳定键。
+ * @param handlerName - 决定运行态可调用对象内容、边界或目标的 `handlerName` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 运行态可调用对象。
+ */
 function findRuntimeCallable(
   items: unknown[] | undefined,
   key: string,
@@ -388,7 +468,11 @@ function findRuntimeCallable(
     );
 }
 
-/** 判断运行态可调用对象是否成立。 */
+/**
+ * 根据`item`与当前约束判定运行态可调用对象。
+ * @param item - 决定运行态可调用对象内容、边界或目标的 `item` 值。
+ * @returns 满足运行态可调用对象约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isRuntimeCallable(item: unknown): item is {
   execute: (input: unknown, context?: unknown) => Promise<unknown> | unknown;
   handlerName?: string;
@@ -401,18 +485,32 @@ function isRuntimeCallable(item: unknown): item is {
   );
 }
 
-/** 规范化主机参数。 */
+/**
+ * 将`args`规范为主机参数，使等价输入得到一致表示。
+ * @param args - 用于主机参数的领域对象，包含 `length`、`0` 字段。
+ * @returns 包含 `args` 字段的主机参数。
+ */
 function normalizeHostArgs(args: unknown[]): Record<string, unknown> {
   if (args.length === 1 && isRecord(args[0])) return args[0];
   return { args };
 }
 
-/** 判断记录是否成立。 */
+/**
+ * 根据`value`与当前约束判定记录。
+ * @param value - 待判定是否满足记录约束的候选值。
+ * @returns 满足记录约束时为 `true`；不满足、未命中或显式失败分支为 `false`；无法解析或未命中时为 `null`。
+ */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** 返回导入插件条目模块。 */
+/**
+ * 以统一异常拒绝插件条目模块。
+ * @param moduleUrl - 待规范化、请求或同源校验的moduleURL 地址 URL。
+ * @param entryFile - 决定以统一异常拒绝插件条目模块内容、边界或目标的 `entryFile` 值。
+ * @returns 以统一异常拒绝插件条目模块。
+ * @throws 当 `!shouldFallbackToRequire(error, moduleUrl)` 成立时重新抛出该入口捕获且决定公开的原异常。
+ */
 async function importPluginEntryModule(moduleUrl: string, entryFile: string) {
   try {
     return await dynamicImportPluginEntry(moduleUrl);
@@ -427,7 +525,11 @@ async function importPluginEntryModule(moduleUrl: string, entryFile: string) {
   }
 }
 
-/** 返回动态导入插件条目。 */
+/**
+ * 通过可替换导入器加载插件条目。
+ * @param moduleUrl - 待规范化、请求或同源校验的moduleURL 地址 URL。
+ * @returns 通过可替换导入器加载插件条目。
+ */
 function dynamicImportPluginEntry(
   moduleUrl: string,
 ): Promise<PluginEntryModule> {
@@ -437,10 +539,20 @@ function dynamicImportPluginEntry(
   return importer(moduleUrl);
 }
 
-/** 判断是否应当兜底到必需。 */
+/**
+ * 仅对本地文件模块 URL 且动态导入报告不支持扩展名时启用 CommonJS `require` 兜底。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+ * @param moduleUrl - 待规范化、请求或同源校验的moduleURL 地址 URL。
+ * @returns 返回是否应从动态导入切换到 CommonJS 加载路径。
+ */
 function shouldFallbackToRequire(error: unknown, moduleUrl: string) {
   if (!moduleUrl.startsWith('file:')) return false;
-  const message = error instanceof Error ? error.message : `${error}`;
+  const message = (() => {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return `${error}`;
+  })();
   return (
     message.includes('Cannot find module') ||
     message.includes('dynamic import callback') ||
@@ -448,7 +560,11 @@ function shouldFallbackToRequire(error: unknown, moduleUrl: string) {
   );
 }
 
-/** 加载CommonJS条目模块。 */
+/**
+ * 按`entryFile`读取CommonJS条目模块；先通过 `requireEntryModule` 校验输入边界。
+ * @param entryFile - 决定CommonJS条目模块内容、边界或目标的 `entryFile` 值。
+ * @returns CommonJS条目模块。
+ */
 function loadCommonJsEntryModule(entryFile: string): PluginEntryModule {
   const nodeModule = requireEntryModule(
     'node:module',
@@ -467,23 +583,51 @@ function loadCommonJsEntryModule(entryFile: string): PluginEntryModule {
   return entryModule.exports as PluginEntryModule;
 }
 
-/** 规范化错误。 */
+/**
+ * 将`error`、`fallback`规范为错误，使等价输入得到一致表示。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果；省略时默认采用 `'插件执行失败'`。
+ * @returns 规范化后的错误；主值为空时采用 `fallback` 兜底。
+ */
 function normalizeError(error: unknown, fallback = '插件执行失败') {
   if (error instanceof Error && error.message) return error.message;
   const message = `${error || ''}`.trim();
   return message || fallback;
 }
 
-/** 序列化错误。 */
+/**
+ * 序列化错误，并输出固定投影 `message`、`name`、`stack` 字段。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+ * @returns 包含 `message`、`name`、`stack` 字段的错误。
+ */
 function serializeError(error: unknown) {
   return {
-    message: error instanceof Error ? error.message : `${error}`,
-    name: error instanceof Error ? error.name : 'Error',
-    stack: error instanceof Error ? error.stack : undefined,
+    message: (() => {
+      if (error instanceof Error) {
+        return error.message;
+      }
+      return `${error}`;
+    })(),
+    name: (() => {
+      if (error instanceof Error) {
+        return error.name;
+      }
+      return 'Error';
+    })(),
+    stack: (() => {
+      if (error instanceof Error) {
+        return error.stack;
+      }
+      return undefined;
+    })(),
   };
 }
 
-/** 反序列化错误。 */
+/**
+ * 根据`error`处理反序列化错误。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常；为空时采用 `'插件 Host 调用失败'` 作为兜底。
+ * @returns 反序列化错误。
+ */
 function deserializeError(error?: {
   message?: string;
   name?: string;

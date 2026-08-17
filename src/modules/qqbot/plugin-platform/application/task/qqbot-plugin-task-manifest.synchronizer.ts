@@ -18,8 +18,9 @@ export class QqbotPluginTaskManifestSynchronizer {
   ) {}
 
   /**
-   * 更新 QQBot 插件平台状态。
-   * @param input - input 输入；使用 `manifestTasks`、`installationId`、`pluginId` 字段生成结果。
+   * 根据`input`处理清单Tasks；把变更持久化到当前存储（`taskRepository.create`）。
+   * @param input - 用于清单Tasks的结构化输入，包含 `manifestTasks`、`installationId`、`pluginId` 字段。
+   * @returns 清单Tasks。
    */
   async syncManifestTasks(input: SyncPluginManifestTasksInput) {
     const tasks: QqbotPluginTask[] = [];
@@ -41,7 +42,12 @@ export class QqbotPluginTaskManifestSynchronizer {
         pluginId: input.pluginId,
         runtimeStatus:
           existing?.runtimeStatus ||
-          (manifestTask.enabled ? 'scheduled' : 'disabled'),
+          ((() => {
+            if (manifestTask.enabled) {
+              return 'scheduled';
+            }
+            return 'disabled';
+          })()),
         taskKey: manifestTask.key,
         taskName: manifestTask.name,
         timeoutMs: manifestTask.timeoutMs,

@@ -6,9 +6,9 @@ import type {
 } from '../../contract/qqbot.types';
 
 /**
- * 判断 QQBot 核心条件。
- * @param payload - payload 输入；使用 `message_type` 字段计算判断结果。
- * @returns 布尔值，表示 QQBot 核心条件是否满足。
+ * 仅当事件类型为消息且消息类型可规范化时，才将载荷收窄为 OneBot 消息事件。
+ * @param payload - 待按当前协议校验并路由的事件载荷，包含 `post_type`、`message_type` 字段。
+ * @returns 满足OneBot消息事件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isOneBotMessageEvent(
   payload: QqbotOneBotEvent,
@@ -20,10 +20,10 @@ export function isOneBotMessageEvent(
 }
 
 /**
- * 转换 QQBot 核心输入。
- * @param payload - payload 输入；使用 `message_type`、`channel_id`、`guild_id`、`group_id` 字段生成结果。
- * @param toolsService - ToolsService 依赖；执行 `toolsService.toStringId()` 对应的 QQBot步骤。
- * @returns QQBot 核心转换后的值。
+ * 将`payload`、`toolsService`规范为OneBot消息，使等价输入得到一致表示。
+ * @param payload - 待按当前协议校验并路由的事件载荷，包含 `message_type`、`channel_id`、`guild_id`、`group_id` 字段。
+ * @param toolsService - 用于OneBot消息的领域对象，包含 `toStringId` 字段。
+ * @returns 包含 `channelId`、`eventTime`、`groupId`、`messageId`、`messageText` 字段的OneBot消息。
  */
 export function normalizeOneBotMessage(
   payload: QqbotOneBotEvent,
@@ -37,18 +37,25 @@ export function normalizeOneBotMessage(
   const groupId = toolsService.toStringId(payload.group_id) || undefined;
   const userId = toolsService.toStringId(payload.user_id);
   const targetId =
-    messageType === 'group'
-      ? groupId || ''
-      : messageType === 'channel'
-        ? channelId || ''
-        : userId;
+    (() => {
+      if (messageType === 'group') {
+        return groupId || '';
+      }
+      if (messageType === 'channel') {
+        return channelId || '';
+      }
+      return userId;
+    })();
   const messageText = extractMessageText(payload);
 
   return {
     channelId,
-    eventTime: payload.time
-      ? new Date(Number(payload.time) * 1000)
-      : new Date(),
+    eventTime: (() => {
+      if (payload.time) {
+        return new Date(Number(payload.time) * 1000);
+      }
+      return new Date();
+    })(),
     groupId,
     messageId:
       toolsService.toStringId(payload.message_id) ||
@@ -69,8 +76,9 @@ export function normalizeOneBotMessage(
 }
 
 /**
- * 创建 QQBot 核心对象或配置。
- * @param message - message 输入；使用 `selfId`、`messageType`、`targetId`、`userId` 字段生成结果。
+ * 按账号、消息类型、目标、用户和消息标识的固定顺序拼接去重键。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `selfId`、`messageType`、`targetId`、`userId` 字段。
+ * @returns 按账号、消息类型、目标、用户和消息标识的固定顺序拼接去重键。
  */
 export function buildDedupeKey(message: QqbotNormalizedMessage) {
   return [
@@ -83,8 +91,9 @@ export function buildDedupeKey(message: QqbotNormalizedMessage) {
 }
 
 /**
- * 查询 QQBot 核心数据。
- * @param payload - payload 输入；使用 `notice_type`、`sub_type`、`message`、`reason` 字段生成结果。
+ * 按`payload`读取OneBotOfflineReason；当 `!isBotOfflineNotice` 成立时返回 `null`。
+ * @param payload - 待按当前协议校验并路由的事件载荷，包含 `post_type`、`notice_type`、`sub_type`、`message` 字段。
+ * @returns 按参数编码并拼接完成的OneBotOfflineReason；无法解析或未命中时为 `null`。
  */
 export function getOneBotOfflineReason(payload: QqbotOneBotEvent) {
   if (payload?.post_type !== 'notice') return null;
@@ -125,8 +134,9 @@ export function getOneBotOfflineReason(payload: QqbotOneBotEvent) {
 }
 
 /**
- * 执行 QQBot 核心流程。
- * @param payload - payload 输入；使用 `raw_message`、`message` 字段生成结果。
+ * 从 OneBot 事件载荷中提取消息正文，并兼容字符串与消息段数组表示。
+ * @param payload - 待按当前协议校验并路由的事件载荷，包含 `raw_message`、`message` 字段。
+ * @returns 当前状态对应的消息文本，取值为 `''`。
  */
 function extractMessageText(payload: QqbotOneBotEvent) {
   if (payload.raw_message) return payload.raw_message;
@@ -141,9 +151,9 @@ function extractMessageText(payload: QqbotOneBotEvent) {
 }
 
 /**
- * 转换 QQBot 核心输入。
- * @param messageType - messageType 输入；决定 QQBot条件分支。
- * @returns QQBot 核心转换后的值。
+ * 将`messageType`规范为消息Type，使等价输入得到一致表示；当 `messageType === 'private' || messageType === 'group'` 成立时返回 `messageType`。
+ * @param messageType - 决定消息Type内容、边界或目标的 `messageType` 值；为空时采用 `messageType === 'group'` 作为兜底。
+ * @returns 当前状态对应的消息Type，取值为 `'channel'`；无法解析或未命中时为 `null`。
  */
 function normalizeMessageType(messageType?: string): QqbotMessageType | null {
   if (messageType === 'private' || messageType === 'group') {

@@ -24,11 +24,11 @@ export class EventStageDataRepository {
   ) {}
 
   /**
-   * 获取试炼活动阶段或轮换歌曲数据。
-   *
-   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
-   * @param type - type 输入；限定 BangDream查询范围。
-   * @param update - update 输入；限定 BangDream查询范围。
+   * 根据参数 `eventId`，获取试炼活动阶段或轮换歌曲数据。
+   * @param eventId - 用于精确定位事件的标识。
+   * @param type - 决定根据参数 `eventId`，获取试炼活动阶段或轮换歌曲数据内容、边界或目标的 `type` 值。
+   * @param update - 决定根据参数 `eventId`，获取试炼活动阶段或轮换歌曲数据内容、边界或目标的 `update` 值；省略时默认采用 `true`。
+   * @returns 根据参数 `eventId`，获取试炼活动阶段或轮换歌曲数据。
    */
   async getFestivalData<T extends EventStageDataType>(
     eventId: number,
@@ -37,7 +37,12 @@ export class EventStageDataRepository {
   ): Promise<EventStageDataRows<T>> {
     return await this.provider.getJson<EventStageDataRows<T>>(
       `/api/festival/${type}/${eventId}.json`,
-      { cacheTime: update ? 0 : 1 / 0 },
+      { cacheTime: (() => {
+        if (update) {
+          return 0;
+        }
+        return 1 / 0;
+      })() },
     );
   }
 }

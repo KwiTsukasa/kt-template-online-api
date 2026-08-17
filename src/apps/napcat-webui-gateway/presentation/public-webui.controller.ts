@@ -25,7 +25,13 @@ export class PublicWebuiController {
     private readonly config: NapcatWebuiGatewayConfigService,
   ) {}
 
-  /** 返回引导流程。 */
+  /**
+   * 消费一次性引导票据并激活对应会话，随后写入会话路径 Cookie 并重定向到 NapCat WebUI。
+   * @param sessionId - 路由中声明的待激活网关会话标识。
+   * @param ticket - 仅可兑换一次的网关引导票据。
+   * @param res - 用于写入会话 Cookie 和跳转响应的 HTTP 响应对象。
+   * @throws 票据兑换出的会话与路由会话不一致时抛出 `GoneException`。
+   */
   @Get('session/:sessionId/bootstrap')
   async bootstrap(
     @Param('sessionId') sessionId: string,
@@ -52,7 +58,15 @@ export class PublicWebuiController {
     res.redirect(HttpStatus.FOUND, `${publicSessionPath}/webui/webui`);
   }
 
-  /** 返回代理。 */
+  /**
+   * 把当前 HTTP 请求委托给受控上游代理。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @param proxyPath - 必须保持在受控根目录内的代理路径。
+   * @param req - 用于把当前 HTTP 请求委托给受控上游代理的当前 HTTP 请求。
+   * @param res - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @param next - 决定把当前 HTTP 请求委托给受控上游代理内容、边界或目标的 `next` 值。
+   * @returns 把当前 HTTP 请求委托给受控上游代理。
+   */
   @All('session/:sessionId/webui/*proxyPath')
   proxy(
     @Param('sessionId') sessionId: string,
@@ -70,7 +84,12 @@ export class PublicWebuiController {
     );
   }
 
-  /** 返回必需票据。 */
+  /**
+   * 去除票据两端空白，并在兑换前拒绝缺失的引导凭据。
+   * @param ticket - 查询参数携带的一次性网关引导票据。
+   * @returns 去除两端空白后的非空票据。
+   * @throws 票据为空或仅含空白时抛出 `GoneException`。
+   */
   private requireTicket(ticket: string) {
     const value = String(ticket || '').trim();
     if (!value) {

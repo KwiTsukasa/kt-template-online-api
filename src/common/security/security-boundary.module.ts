@@ -19,7 +19,12 @@ import { TrustedCredentialTransportService } from './trusted-credential-transpor
         const host = readText(
           configService,
           'PUBLIC_RATE_LIMIT_REDIS_HOST',
-          production ? '' : '127.0.0.1',
+          (() => {
+            if (production) {
+              return '';
+            }
+            return '127.0.0.1';
+          })(),
         );
         if (!host) {
           throw new Error('PUBLIC_RATE_LIMIT_REDIS_HOST 在生产环境不能为空');
@@ -79,7 +84,13 @@ import { TrustedCredentialTransportService } from './trusted-credential-transpor
 })
 export class SecurityBoundaryModule {}
 
-/** 读取文本。 */
+/**
+ * 按`configService`、`key`、`fallback`读取文本；从 `configService.get` 读取文本。
+ * @param configService - 读取文本所需运行配置的配置服务。
+ * @param key - 用于读取或更新文本的稳定键。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果；省略时默认采用 `''`。
+ * @returns 规范化后的文本；主值为空时采用 `fallback` 兜底。
+ */
 function readText(
   configService: ConfigService,
   key: string,
@@ -89,7 +100,16 @@ function readText(
   return value || fallback;
 }
 
-/** 读取整数。 */
+/**
+ * 按`configService`、`key`、`fallback`读取整数；当 `raw === undefined || raw === null || `${raw}`.trim() === ''` 成立时返回 `fallback`。
+ * @param configService - 读取整数所需运行配置的配置服务。
+ * @param key - 用于读取或更新整数的稳定键。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+ * @param min - 决定整数内容、边界或目标的 `min` 值。
+ * @param max - 决定整数内容、边界或目标的 `max` 值。
+ * @returns 整数。
+ * @throws 当 `!Number.isInteger(value) || value < min || value > max` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function readInteger(
   configService: ConfigService,
   key: string,

@@ -21,8 +21,9 @@ export class AdminRoleController {
   constructor(private readonly roleService: AdminRoleService) {}
 
   /**
-   * 获取角色分页列表。
-   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * 根据参数 `query`，获取角色分页列表。
+   * @param query - 限定根据参数 `query`，获取角色分页列表筛选、排序与分页范围的查询条件。
+   * @returns 根据参数 `query`，获取角色分页列表。
    */
   @Get('list')
   @ApiOperation({ summary: '获取角色分页列表' })
@@ -32,8 +33,9 @@ export class AdminRoleController {
   }
 
   /**
-   * 新增角色。
-   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   * 根据`body`构造针对角色。
+   * @param body - 用于针对角色的结构化输入。
+   * @returns 针对角色。
    */
   @Post()
   @ApiOperation({ summary: '新增角色' })
@@ -42,9 +44,10 @@ export class AdminRoleController {
   }
 
   /**
-   * 编辑角色。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   * 根据`id`、`body`更新针对角色。
+   * @param id - 决定针对角色内容、边界或目标的 `id` 值。
+   * @param body - 用于针对角色的结构化输入。
+   * @returns 针对角色。
    */
   @Put(':id')
   @ApiOperation({ summary: '编辑角色' })
@@ -53,8 +56,9 @@ export class AdminRoleController {
   }
 
   /**
-   * 删除角色。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按`id`移除针对删除角色。
+   * @param id - 决定针对删除角色内容、边界或目标的 `id` 值。
+   * @returns 针对删除角色。
    */
   @Delete(':id')
   @ApiOperation({ summary: '删除角色' })

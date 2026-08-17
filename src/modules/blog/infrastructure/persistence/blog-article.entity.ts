@@ -147,7 +147,6 @@ export class BlogArticle {
   @ApiPropertyOptional()
   excerptText?: string;
 
-  /** 创建标识。 */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

@@ -11,7 +11,7 @@ let BGDefaultImage: Image;
 let outputAssetsPreload: Promise<void> | undefined;
 
 /**
- * 执行 BangDream 插件流程。
+ * 根据当前运行态处理BanG DreamOutputAssets；从受控资源来源加载所需数据（`loadImageFromPath`）。
  */
 export async function preloadBangDreamOutputAssets() {
   if (!outputAssetsPreload) {
@@ -42,7 +42,10 @@ export interface OutputFinalOptions {
 export type FinalImageRenderOptions = Omit<OutputFinalOptions, 'imageList'>;
 
 //将图片列表从上到下叠在一起输出为一张图片
-export const outputFinalCanv = /** 返回输出最终画布。 */ async function outputFinalCanv({
+export const outputFinalCanv = /**
+                                * 按输入合成最终画布。
+                                * @returns 按输入合成最终画布。
+                                */ async function outputFinalCanv({
   imageList,
   startWithSpace = true,
   useEasyBG = true,
@@ -113,7 +116,10 @@ export const outputFinalCanv = /** 返回输出最终画布。 */ async function
 };
 
 //输出为二进制流
-export const outputFinalBuffer = /** 返回输出最终缓冲区。 */ async function outputFinalBuffer({
+export const outputFinalBuffer = /**
+                                  * 按输入合成最终缓冲区。
+                                  * @returns 按输入合成最终缓冲区。
+                                  */ async function outputFinalBuffer({
   startWithSpace = true,
   imageList,
   useEasyBG = true,

@@ -162,9 +162,12 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param message - message 输入；使用 `type`、`timeoutMs`、`correlationId` 字段生成结果。
-   * @returns 异步完成后的 QQBot 插件平台结果。
+   * 通过 `queue.add` 注册或发布事件。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `type`、`timeoutMs`、`correlationId` 字段。
+   * @returns `request` 对应。
+   * @throws 当 `this.closed` 成立时拒绝当前输入并抛出 `Error`；当 `result.error.name === 'QqbotPluginWorkerStaleRequestError'` 成立时拒绝当前输入并抛出 `QqbotPluginWorkerStaleRequestError`；
+   *   当 `result.error.name === 'QqbotPluginWorkerExpiredRequestError'` 成立时拒绝当前输入并抛出 `QqbotPluginWorkerExpiredRequestError`；
+   *   当 `result?.ok === false` 成立时拒绝当前输入并抛出 `QqbotPluginWorkerResponseError`。
    */
   async request(message: QqbotPluginWorkerRequest): Promise<unknown> {
     if (this.closed) {
@@ -211,7 +214,7 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
   }
 
   /**
-   * 重置业务数据。
+   * 通过 `driver.dispose` 清理状态，同时更新 `this.generation` 状态。
    */
   async reset(): Promise<void> {
     this.generation += 1;
@@ -219,7 +222,7 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
+   * 通过 `worker.close` 停止对应能力，通过 `queueEvents.close` 停止对应能力，通过 `queue.close` 停止对应能力。
    */
   async close(): Promise<void> {
     this.closed = true;
@@ -232,9 +235,9 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param source - source 输入；影响 logBullmqError 的返回值。
-   * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   * 通过 `logger.error` 记录带上下文的运行异常或诊断信息。
+   * @param source - 决定日志Bullmq错误内容、边界或目标的 `source` 值。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
    */
   private logBullmqError(
     source: 'queue' | 'queueEvents' | 'worker',
@@ -247,9 +250,9 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param message - message 输入；使用 `timeoutMs` 字段生成结果。
-   * @returns 异步完成后的 QQBot 插件平台结果。
+   * 按`message`投递Driver超时；从受控资源来源加载所需数据（`driver.request`）。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `timeoutMs` 字段。
+   * @returns Driver超时。
    */
   private async requestDriverWithTimeout(
     message: QqbotPluginWorkerRequest,
@@ -278,11 +281,11 @@ export class QqbotBullmqPluginWorkerRequestQueue implements QqbotPluginWorkerReq
 }
 
 /**
- * 创建 QQBot 插件平台对象或配置。
- * @param configService - Nest ConfigService 依赖；驱动 `resolveQqbotPluginQueueConnection()` 的 插件平台步骤。
- * @param pluginKey - pluginKey 输入；驱动 `resolveQqbotPluginQueueConnection()` 的 插件平台步骤。
- * @param installationId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
- * @returns 创建后的 QQBot 插件平台对象或配置。
+ * 根据`configService`、`pluginKey`、`installationId`构造QqbotBullmq工作进程Queue选项；从 `readNumberConfig` 读取QqbotBullmq工作进程Queue选项。
+ * @param configService - 读取QqbotBullmq工作进程Queue选项所需运行配置的配置服务。
+ * @param pluginKey - 用于读取或更新QqbotBullmq工作进程Queue选项的稳定键。
+ * @param installationId - 用于精确定位安装记录的标识。
+ * @returns 包含 `connection`、`installationId`、`pluginKey`、`prefix`、`queueWaitTimeoutMs` 字段的QqbotBullmq工作进程Queue选项。
  */
 export function createQqbotBullmqWorkerQueueOptions(
   configService: ConfigService,
@@ -314,8 +317,9 @@ export function createQqbotBullmqWorkerQueueOptions(
 }
 
 /**
- * 解析Qqbot Plugin Queue Prefix。
- * @param configService - Nest ConfigService 依赖；驱动 `readStringConfig()` 的 插件平台步骤。
+ * 从`configService`解析Qqbot插件QueuePrefix；从 `readStringConfig` 读取Qqbot插件QueuePrefix。
+ * @param configService - 读取Qqbot插件QueuePrefix所需运行配置的配置服务。
+ * @returns Qqbot插件QueuePrefix。
  */
 export function resolveQqbotPluginQueuePrefix(configService: ConfigService) {
   return readStringConfig(
@@ -326,9 +330,10 @@ export function resolveQqbotPluginQueuePrefix(configService: ConfigService) {
 }
 
 /**
- * 解析Qqbot Plugin Queue Connection。
- * @param configService - Nest ConfigService 依赖；驱动 `readStringConfig()`、`readNumberConfig()` 的 插件平台步骤。
- * @returns QQBot 插件平台转换后的值。
+ * 从`configService`解析Qqbot插件Queue连接；从 `readStringConfig` 读取Qqbot插件Queue连接。
+ * @param configService - 读取Qqbot插件Queue连接所需运行配置的配置服务。
+ * @returns 包含 `db`、`host`、`password`、`port` 字段的Qqbot插件Queue连接。
+ * @throws 当 `!host` 成立时拒绝当前输入并抛出 `Error`。
  */
 export function resolveQqbotPluginQueueConnection(
   configService: ConfigService,
@@ -362,9 +367,10 @@ export function resolveQqbotPluginQueueConnection(
 }
 
 /**
- * 创建 QQBot 插件平台对象或配置。
- * @param pluginKey - pluginKey 输入；生成规范化文本。
- * @param installationId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
+ * 根据`pluginKey`、`installationId`构造工作进程Queue名称。
+ * @param pluginKey - 用于读取或更新工作进程Queue名称的稳定键。
+ * @param installationId - 用于精确定位安装记录的标识。
+ * @returns 按参数编码并拼接完成的工作进程Queue名称。
  */
 function buildWorkerQueueName(pluginKey: string, installationId: string) {
   const safePluginKey = pluginKey.replace(/[^a-zA-Z0-9_-]/g, '-');
@@ -373,7 +379,8 @@ function buildWorkerQueueName(pluginKey: string, installationId: string) {
 }
 
 /**
- * 创建 QQBot 插件平台对象或配置。
+ * 将主机名、进程号、当前毫秒和随机后缀组合为本次工作进程的实例标识。
+ * @returns 可区分并发工作进程启动实例的标识；主机名缺失时使用 `local`。
  */
 function createWorkerInstanceId() {
   return [
@@ -385,10 +392,11 @@ function createWorkerInstanceId() {
 }
 
 /**
- * 读取 QQBot 插件平台资源。
- * @param configService - Nest ConfigService 依赖；使用 `get` 字段生成结果。
- * @param keys - 插件平台列表；驱动 `for()` 的 插件平台步骤。
- * @param fallback - 兜底值；影响 readStringConfig 的返回值。
+ * 按`configService`、`keys`、`fallback`读取字符串配置；当 `value !== undefined && value !== null && `${value}`.trim()` 成立时返回 ``${value}`.trim()`。
+ * @param configService - 读取字符串配置所需运行配置的配置服务。
+ * @param keys - 决定字符串配置内容、边界或目标的 `keys` 值。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果；省略时默认采用 `''`。
+ * @returns 字符串配置。
  */
 function readStringConfig(
   configService: ConfigService,
@@ -405,10 +413,11 @@ function readStringConfig(
 }
 
 /**
- * 读取 QQBot 插件平台资源。
- * @param configService - Nest ConfigService 依赖；驱动 `readStringConfig()` 的 插件平台步骤。
- * @param keys - 插件平台列表；驱动 `readStringConfig()` 的 插件平台步骤。
- * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 插件平台步骤。
+ * 按`configService`、`keys`、`fallback`读取数值配置；当 `Number.isFinite(parsed)` 成立时返回 `parsed`。
+ * @param configService - 读取数值配置所需运行配置的配置服务。
+ * @param keys - 决定数值配置内容、边界或目标的 `keys` 值。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+ * @returns 数值配置。
  */
 function readNumberConfig(
   configService: ConfigService,
@@ -418,5 +427,8 @@ function readNumberConfig(
   const value = readStringConfig(configService, keys);
   if (!value) return fallback;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+  return fallback;
 }

@@ -31,8 +31,9 @@ export class QqbotCommandController {
   ) {}
 
   /**
-   * QQBot 在线命令分页。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 按查询条件读取 QQBot 在线命令分页，并封装为 Vben 成功响应。
+   * @param query - 限定`list` 对应结果筛选、排序与分页范围的查询条件。
+   * @returns `list` 对应。
    */
   @Get('list')
   @ApiOperation({ summary: 'QQBot 在线命令分页' })
@@ -41,8 +42,9 @@ export class QqbotCommandController {
   }
 
   /**
-   * 新增 QQBot 在线命令。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`更新`save` 对应结果。
+   * @param body - 用于`save` 对应结果的结构化输入。
+   * @returns `save` 对应。
    */
   @Post('save')
   @HttpCode(HttpStatus.OK)
@@ -52,8 +54,9 @@ export class QqbotCommandController {
   }
 
   /**
-   * 编辑 QQBot 在线命令。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`更新`update` 对应结果。
+   * @param body - 用于`update` 对应结果的结构化输入。
+   * @returns `update` 对应。
    */
   @Post('update')
   @HttpCode(HttpStatus.OK)
@@ -63,8 +66,9 @@ export class QqbotCommandController {
   }
 
   /**
-   * 删除 QQBot 在线命令。
-   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   * 按命令标识执行软删除，并将删除结果封装为 Vben 成功响应。
+   * @param id - 决定QQBot 在线命令内容、边界或目标的 `id` 值。
+   * @returns QQBot 在线命令。
    */
   @Post('delete')
   @HttpCode(HttpStatus.OK)
@@ -75,9 +79,10 @@ export class QqbotCommandController {
   }
 
   /**
-   * 启停 QQBot 在线命令。
-   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
-   * @param enabled - enabled 输入；驱动 `vbenSuccess()` 的 QQBot步骤。
+   * 根据`id`、`enabled`处理启停 QQBot 在线命令。
+   * @param id - 决定启停 QQBot 在线命令内容、边界或目标的 `id` 值。
+   * @param enabled - 决定启停 QQBot 在线命令内容、边界或目标的 `enabled` 值。
+   * @returns 启停 QQBot 在线命令。
    */
   @Post('toggle')
   @HttpCode(HttpStatus.OK)
@@ -94,8 +99,9 @@ export class QqbotCommandController {
   }
 
   /**
-   * 测试 QQBot 在线命令。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据测试输入预览 QQBot 命令解析与回复结果，并封装为 Vben 成功响应。
+   * @param body - 用于test的结构化输入。
+   * @returns 包含命令测试预览数据的 Vben 成功响应。
    */
   @Post('test')
   @HttpCode(HttpStatus.OK)

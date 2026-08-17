@@ -23,8 +23,9 @@ export class BlogThemeConfigController {
   ) {}
 
   /**
-   * 获取本地博客主题配置。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * 根据参数 `res`，获取本地博客主题配置。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @returns 根据参数 `res`，获取本地博客主题配置。
    */
   @Get('config')
   @Public()
@@ -36,9 +37,10 @@ export class BlogThemeConfigController {
   }
 
   /**
-   * 保存本地博客主题配置。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   * 根据`res`、`body`更新针对本地博客主题配置；向目标通道投递结果（`res.send`）。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param body - 用于针对本地博客主题配置的结构化输入。
+   * @returns 针对本地博客主题配置。
    */
   @Post('save')
   @HttpCode(HttpStatus.OK)

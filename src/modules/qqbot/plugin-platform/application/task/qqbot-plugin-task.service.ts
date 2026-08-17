@@ -35,8 +35,9 @@ export class QqbotPluginTaskService {
   ) {}
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   * 按`query`读取分页结果Tasks；从 `toolsService.getPageParams` 读取分页结果Tasks。
+   * @param query - 限定分页结果Tasks筛选、排序与分页范围的查询条件，包含 `taskKey`、`status`、`enabled` 字段。
+   * @returns 包含 `list`、`pageNo`、`pageSize`、`total` 字段的分页结果Tasks。
    */
   async pageTasks(query: QqbotPluginTaskPageQuery) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(query);
@@ -58,8 +59,9 @@ export class QqbotPluginTaskService {
   }
 
   /**
-   * 查询 QQBot 插件平台数据。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
+   * 按`id`读取任务详情；从 `taskRepository.findOne` 读取任务详情。
+   * @param id - 决定任务详情内容、边界或目标的 `id` 值。
+   * @returns 任务详情。
    */
   async getTaskDetail(id: string) {
     const task = await this.taskRepository.findOne({ where: { id } });
@@ -68,8 +70,9 @@ export class QqbotPluginTaskService {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
+   * 按`id`启动任务；把变更持久化到当前存储（`taskRepository.save`）。
+   * @param id - 决定任务内容、边界或目标的 `id` 值。
+   * @returns 任务。
    */
   async enableTask(id: string) {
     const task = await this.getTaskDetail(id);
@@ -83,8 +86,9 @@ export class QqbotPluginTaskService {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
+   * 按`id`停止任务并清理该入口拥有的运行态资源；把变更持久化到当前存储（`taskRepository.save`）。
+   * @param id - 决定任务内容、边界或目标的 `id` 值。
+   * @returns 任务。
    */
   async disableTask(id: string) {
     const task = await this.getTaskDetail(id);
@@ -97,9 +101,10 @@ export class QqbotPluginTaskService {
   }
 
   /**
-   * 更新Task Cron。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 根据`id`、`body`更新任务Cron；把变更持久化到当前存储（`taskRepository.save`）。
+   * @param id - 决定任务Cron内容、边界或目标的 `id` 值。
+   * @param body - 用于任务Cron的结构化输入，包含 `cronExpression` 字段。
+   * @returns 任务Cron。
    */
   async updateTaskCron(id: string, body: { cronExpression?: string }) {
     const task = await this.getTaskDetail(id);
@@ -112,9 +117,10 @@ export class QqbotPluginTaskService {
   }
 
   /**
-   * 执行Task Once。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 根据`id`、`body`处理任务Once；先通过 `requireScheduler` 校验输入边界。
+   * @param id - 决定任务Once内容、边界或目标的 `id` 值。
+   * @param body - 用于任务Once的结构化输入，包含 `input` 字段。
+   * @returns 包含 `jobId`、`taskId` 字段的任务Once。
    */
   async runTaskOnce(id: string, body: { input?: Record<string, unknown> }) {
     await this.getTaskDetail(id);
@@ -126,9 +132,10 @@ export class QqbotPluginTaskService {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param id - 插件平台记录 ID；定位本次读取、更新、删除或关联的插件平台记录。
-   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   * 按`id`、`query`读取分页结果任务Runs；从 `toolsService.getPageParams` 读取分页结果任务Runs。
+   * @param id - 决定分页结果任务Runs内容、边界或目标的 `id` 值。
+   * @param query - 限定分页结果任务Runs筛选、排序与分页范围的查询条件，包含 `status`、`triggerType` 字段。
+   * @returns 包含 `list`、`pageNo`、`pageSize`、`total` 字段的分页结果任务Runs。
    */
   async pageTaskRuns(id: string, query: QqbotPluginTaskRunPageQuery) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(query);
@@ -146,8 +153,9 @@ export class QqbotPluginTaskService {
   }
 
   /**
-   * 解析Plugin Id Filter。
-   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   * 从`query`解析插件标识；从 `pluginRepository.findOne` 读取插件标识。
+   * @param query - 限定插件标识筛选、排序与分页范围的查询条件，包含 `pluginId`、`pluginKey` 字段。
+   * @returns 规范化后的插件标识；主值为空时采用 `'__missing_plugin__'` 兜底；没有可用结果或提前结束时为 `undefined`。
    */
   private async resolvePluginIdFilter(query: QqbotPluginTaskPageQuery) {
     if (query.pluginId) return query.pluginId;
@@ -160,8 +168,9 @@ export class QqbotPluginTaskService {
   }
 
   /**
-   * 创建 QQBot 插件平台对象或配置。
-   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   * 根据`query`构造时间；当 `query.startTime && query.endTime` 成立时返回 `{ createTime: Between(query.startTime, quer…`。
+   * @param query - 限定时间筛选、排序与分页范围的查询条件，包含 `startTime`、`endTime` 字段。
+   * @returns 时间。
    */
   private buildRunTimeFilter(query: QqbotPluginTaskRunPageQuery) {
     if (query.startTime && query.endTime) {
@@ -183,7 +192,8 @@ export class QqbotPluginTaskService {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
+   * 返回已注入的插件定时任务调度器；调度器未初始化时以业务错误拒绝调用。
+   * @returns 已注入的插件定时任务调度器。
    */
   private requireScheduler() {
     if (!this.scheduler) {

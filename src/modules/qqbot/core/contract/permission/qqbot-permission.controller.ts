@@ -26,7 +26,8 @@ export class QqbotPermissionController {
   constructor(private readonly permissionService: QqbotPermissionService) {}
 
   /**
-   * QQBot 权限名单配置。
+   * 根据当前运行态处理配置；从 `permissionService.getConfig` 读取配置。
+   * @returns 配置。
    */
   @Get('config')
   @ApiOperation({ summary: 'QQBot 权限名单配置' })
@@ -35,8 +36,9 @@ export class QqbotPermissionController {
   }
 
   /**
-   * 保存 QQBot 权限名单配置。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 将 QQBot 权限名单配置交给服务校验并持久化，再封装为 Vben 成功响应。
+   * @param body - 待更新的 QQBot 权限名单与默认权限配置。
+   * @returns 返回持久化后的权限配置及 Vben 成功响应外壳。
    */
   @Post('config')
   @HttpCode(HttpStatus.OK)
@@ -46,8 +48,9 @@ export class QqbotPermissionController {
   }
 
   /**
-   * QQBot 白名单分页。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 按查询条件读取 QQBot 白名单分页，并封装为 Vben 成功响应。
+   * @param query - 限定白名单记录筛选、排序与分页范围的查询条件。
+   * @returns 白名单记录。
    */
   @Get('allowlist')
   @ApiOperation({ summary: 'QQBot 白名单分页' })
@@ -56,8 +59,9 @@ export class QqbotPermissionController {
   }
 
   /**
-   * 新增 QQBot 白名单。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`更新白名单记录。
+   * @param body - 用于白名单记录的结构化输入。
+   * @returns 白名单记录。
    */
   @Post('allowlist/save')
   @HttpCode(HttpStatus.OK)
@@ -67,8 +71,9 @@ export class QqbotPermissionController {
   }
 
   /**
-   * 编辑 QQBot 白名单。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`更新白名单记录。
+   * @param body - 用于白名单记录的结构化输入。
+   * @returns 白名单记录。
    */
   @Post('allowlist/update')
   @HttpCode(HttpStatus.OK)
@@ -78,8 +83,9 @@ export class QqbotPermissionController {
   }
 
   /**
-   * 删除 QQBot 白名单。
-   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   * 按记录标识删除 QQBot 白名单项，并返回统一成功响应。
+   * @param id - 决定QQBot 白名单内容、边界或目标的 `id` 值。
+   * @returns QQBot 白名单。
    */
   @Post('allowlist/delete')
   @HttpCode(HttpStatus.OK)
@@ -90,8 +96,9 @@ export class QqbotPermissionController {
   }
 
   /**
-   * QQBot 黑名单分页。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 按查询条件读取 QQBot 黑名单分页，并封装为 Vben 成功响应。
+   * @param query - 限定黑名单记录筛选、排序与分页范围的查询条件。
+   * @returns 黑名单记录。
    */
   @Get('blocklist')
   @ApiOperation({ summary: 'QQBot 黑名单分页' })
@@ -100,8 +107,9 @@ export class QqbotPermissionController {
   }
 
   /**
-   * 新增 QQBot 黑名单。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`更新黑名单记录。
+   * @param body - 用于黑名单记录的结构化输入。
+   * @returns 黑名单记录。
    */
   @Post('blocklist/save')
   @HttpCode(HttpStatus.OK)
@@ -111,8 +119,9 @@ export class QqbotPermissionController {
   }
 
   /**
-   * 编辑 QQBot 黑名单。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`更新黑名单记录。
+   * @param body - 用于黑名单记录的结构化输入。
+   * @returns 黑名单记录。
    */
   @Post('blocklist/update')
   @HttpCode(HttpStatus.OK)
@@ -122,8 +131,9 @@ export class QqbotPermissionController {
   }
 
   /**
-   * 删除 QQBot 黑名单。
-   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   * 按记录标识删除 QQBot 黑名单项，并返回统一成功响应。
+   * @param id - 决定QQBot 黑名单内容、边界或目标的 `id` 值。
+   * @returns QQBot 黑名单。
    */
   @Post('blocklist/delete')
   @HttpCode(HttpStatus.OK)

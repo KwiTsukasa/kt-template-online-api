@@ -13,12 +13,11 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/song/song-difficulty.layout';
 
 /**
- * 在图片布局层中绘制难度列表。
- *
- * @param song - song 输入；使用 `difficulty` 字段生成结果。
- * @param imageHeight - imageHeight 输入；驱动 `Canvas()`、`ctx.drawImage()` 的 BangDream步骤。
- * @param spacing - spacing 输入；驱动 `Canvas()`、`ctx.drawImage()` 的 BangDream步骤。
- * @returns 渲染或资源结果。
+ * 根据`song`、`imageHeight`、`spacing`绘制或格式化难度；把图片、文本或图形按布局规格绘制到画布。
+ * @param song - 用于难度的领域对象，包含 `difficulty` 字段。
+ * @param imageHeight - 决定难度内容、边界或目标的 `imageHeight` 值；省略时默认采用 `BANGDREAM_DIFFICULTY_LIST_SPEC.list.defaultImageH…`。
+ * @param spacing - 决定难度内容、边界或目标的 `spacing` 值；省略时默认采用 `BANGDREAM_DIFFICULTY_LIST_SPEC.list.defaultSpacing`。
+ * @returns 难度。
  */
 export function drawDifficultyList(
   song: Song,
@@ -43,11 +42,11 @@ export function drawDifficultyList(
 }
 
 /**
- * 在图片布局层中绘制难度。
- *
- * @param difficultyType - difficultyType 输入；驱动 `getDifficultyBadgeColor()` 的 BangDream步骤。
- * @param playLevel - playLevel 输入；驱动 `drawText()` 的 BangDream步骤。
- * @param imageHeight - imageHeight 输入；驱动 `Canvas()`、`createDifficultyBadgeLayout()`、`drawText()`、`getDifficultyLevelTextPosition()` 的 BangDream步骤。
+ * 根据`difficultyType`、`playLevel`、`imageHeight`绘制或格式化难度；把图片、文本或图形按布局规格绘制到画布。
+ * @param difficultyType - 决定难度内容、边界或目标的 `difficultyType` 值。
+ * @param playLevel - 限制难度数量、尺寸、等级或重试边界的数值。
+ * @param imageHeight - 决定难度内容、边界或目标的 `imageHeight` 值。
+ * @returns 难度。
  */
 export function drawDifficulty(
   difficultyType: number,

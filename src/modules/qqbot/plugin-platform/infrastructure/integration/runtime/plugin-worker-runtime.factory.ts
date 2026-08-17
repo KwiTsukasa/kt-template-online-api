@@ -63,7 +63,12 @@ export class QqbotPluginWorkerRuntimeFactoryService implements QqbotPluginRuntim
     private readonly hostBridge: QqbotPluginHostBridgeService,
   ) {}
 
-  /** 创建QQBot插件运行态记录。 */
+  /**
+   * 根据`installation`、`version`构造QQBot插件运行态记录。
+   * @param installation - 用于QQBot插件运行态记录的领域对象，包含 `installedPath`、`id` 字段。
+   * @param version - 用于QQBot插件运行态记录的领域对象，包含 `manifestJson` 字段。
+   * @returns 完成初始化并携带当前边界配置的QQBot插件运行态记录。
+   */
   create(
     installation: QqbotPluginInstallation,
     version: QqbotPluginVersion,
@@ -99,7 +104,11 @@ export class QqbotPluginWorkerRuntimeFactoryService implements QqbotPluginRuntim
     );
   }
 
-  /** 创建配置快照。 */
+  /**
+   * 根据`descriptor`构造配置快照。
+   * @param descriptor - 用于配置快照的领域对象，包含 `manifest` 字段。
+   * @returns 配置快照。
+   */
   private createConfigSnapshot(
     descriptor: QqbotPluginPackageDescriptor,
   ): QqbotPluginRuntimeConfigSnapshot {
@@ -110,7 +119,12 @@ export class QqbotPluginWorkerRuntimeFactoryService implements QqbotPluginRuntim
         );
         return [
           key,
-          value === undefined || value === null ? undefined : `${value}`,
+          (() => {
+            if (value === undefined || value === null) {
+              return undefined;
+            }
+            return `${value}`;
+          })(),
         ];
       }),
     );
@@ -126,7 +140,11 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     private readonly options: QqbotPluginWorkerThreadDriverOptions,
   ) {}
 
-  /** 请求QQBot插件线程驱动记录。 */
+  /**
+   * 按`message`投递QQBot插件线程驱动记录。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `correlationId` 字段。
+   * @returns 完成初始化并携带当前边界配置的QQBot插件线程驱动记录。
+   */
   async request(message: QqbotPluginWorkerRequest): Promise<unknown> {
     const worker = this.ensureWorker();
     return new Promise((resolve, reject) => {
@@ -139,7 +157,9 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     });
   }
 
-  /** 释放QQBot插件线程驱动记录。 */
+  /**
+   * 按当前运行态移除QQBot插件线程驱动记录。
+   */
   async dispose(): Promise<void> {
     const worker = this.worker;
     this.worker = undefined;
@@ -149,7 +169,10 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     }
   }
 
-  /** 确保工作进程。 */
+  /**
+   * 确保工作进程存在且保持一致；缺失时根据当前运行态补齐对应状态。
+   * @returns 工作进程。
+   */
   private ensureWorker() {
     if (this.worker) return this.worker;
 
@@ -179,7 +202,10 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     return worker;
   }
 
-  /** 处理工作进程消息。 */
+  /**
+   * 根据`message`处理工作进程消息；当 `message.type === 'response'` 成立时直接结束且不产生返回值。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `type`、`args`、`method`、`requestId` 字段。
+   */
   private async handleWorkerMessage(message: WorkerBridgeMessage) {
     if (message.type === 'response') {
       this.settleWorkerResponse(message);
@@ -207,7 +233,12 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
       this.worker?.postMessage({
         error: {
           message:
-            response.ok === false ? response.message : 'Host call failed',
+            (() => {
+              if (response.ok === false) {
+                return response.message;
+              }
+              return 'Host call failed';
+            })(),
           name: 'QqbotPluginHostCallError',
         },
         ok: false,
@@ -224,7 +255,10 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     }
   }
 
-  /** 等待完成工作进程响应。 */
+  /**
+   * 按请求标识移除待处理工作进程调用，并依据响应状态兑现或拒绝对应 Promise。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `requestId`、`ok`、`result`、`error` 字段。
+   */
   private settleWorkerResponse(
     message: Extract<WorkerBridgeMessage, { type: 'response' }>,
   ) {
@@ -238,7 +272,10 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     pending.reject(new QqbotPluginWorkerResponseError(message.error || {}));
   }
 
-  /** 返回拒绝待处理。 */
+  /**
+   * 以统一异常拒绝待处理。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+   */
   private rejectPending(error: Error) {
     for (const pending of this.pendingRequests.values()) {
       pending.reject(error);
@@ -247,13 +284,24 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
   }
 }
 
-/** 解析工作进程入口。 */
+/**
+ * 从当前运行态解析工作进程入口。
+ * @returns 工作进程入口。
+ */
 function resolveWorkerEntrypoint() {
-  const extension = __filename.endsWith('.ts') ? '.ts' : '.js';
+  const extension = (() => {
+    if (__filename.endsWith('.ts')) {
+      return '.ts';
+    }
+    return '.js';
+  })();
   return join(__dirname, `plugin-worker.thread${extension}`);
 }
 
-/** 解析工作进程执行参数。 */
+/**
+ * 解析工作进程执行参数；通过 `__filename.endsWith` 校验工作进程执行参数相关条件。
+ * @returns 返回按当前输入生成的工作进程执行参数列表；没有元素时为空数组。
+ */
 function resolveWorkerExecArgv() {
   if (!__filename.endsWith('.ts')) return [];
   return ['-r', 'ts-node/register', '-r', 'tsconfig-paths/register'];

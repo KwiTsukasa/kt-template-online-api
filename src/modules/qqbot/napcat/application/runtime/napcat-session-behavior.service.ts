@@ -18,7 +18,12 @@ export type NapcatAutomationDecision = {
 
 @Injectable()
 export class NapcatSessionBehaviorService {
-  /** 创建默认资料。 */
+  /**
+   * 根据`accountId`、`now`构造默认资料；从 `now.getTime` 读取默认资料。
+   * @param accountId - 用于精确定位账号的标识。
+   * @param now - 用于过期、排序或租约判定的时间基准；省略时默认采用 `new Date()`。
+   * @returns 包含 `accountId`、`autoCapabilityStage`、`coldStartUntil`、`housekeepingEnabled`、`housekeepingIntervalMs` 字段的默认资料。
+   */
   createDefaultProfile(accountId: string, now = new Date()) {
     return {
       accountId,
@@ -33,7 +38,11 @@ export class NapcatSessionBehaviorService {
     };
   }
 
-  /** 处理定期清理失败。 */
+  /**
+   * 根据`input`处理定期清理失败。
+   * @param input - 定期清理失败上下文；当前保守决策固定禁用扩展并记录证据，因此不读取具体字段。
+   * @returns 包含 `disableBehaviorExtensions`、`loginAction`、`recordEvidence` 字段的定期清理失败。
+   */
   handleHousekeepingFailure(input: {
     accountId: string;
     failureMessage: string;
@@ -46,7 +55,11 @@ export class NapcatSessionBehaviorService {
     };
   }
 
-  /** 返回下一能力阶段。 */
+  /**
+   * 按能力顺序映射下一能力阶段。
+   * @param stage - 决定按能力顺序映射下一能力阶段内容、边界或目标的 `stage` 值。
+   * @returns 当前状态对应的按能力顺序映射下一能力阶段，取值为 `'low_risk_text'`、`'image_and_large_message'`、`'automation'`。
+   */
   nextCapabilityStage(
     stage: NapcatAutoCapabilityStage,
   ): NapcatAutoCapabilityStage {
@@ -55,7 +68,11 @@ export class NapcatSessionBehaviorService {
     return 'automation';
   }
 
-  /** 决定自动化。 */
+  /**
+   * 决定自动化，并输出固定投影 `allowed` 字段。
+   * @param input - 用于decideAutomation的结构化输入，包含 `manual`、`stage`、`automationKind` 字段。
+   * @returns 包含 `allowed`、`reason` 字段的decideAutomation。
+   */
   decideAutomation(input: {
     automationKind: NapcatAutomationKind;
     manual?: boolean;

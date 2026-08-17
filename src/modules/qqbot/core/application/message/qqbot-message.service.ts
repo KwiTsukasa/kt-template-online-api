@@ -28,8 +28,9 @@ export class QqbotMessageService {
   ) {}
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 根据`query`处理会话消息分页结果；把变更持久化到当前存储（`conversationRepository.createQueryBuilder`）。
+   * @param query - 限定会话消息分页结果筛选、排序与分页范围的查询条件，包含 `selfId`、`targetType`、`targetId` 字段。
+   * @returns 包含 `list`、`pageNo`、`pageSize`、`total` 字段的会话消息分页。
    */
   async conversationPage(query: QqbotConversationQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
@@ -66,8 +67,9 @@ export class QqbotMessageService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 根据`query`处理消息分页结果；把变更持久化到当前存储（`messageRepository.createQueryBuilder`）。
+   * @param query - 限定消息分页结果筛选、排序与分页范围的查询条件，包含 `conversationId`、`selfId`、`targetType`、`targetId` 字段。
+   * @returns 包含 `list`、`pageNo`、`pageSize`、`total` 字段的消息分页。
    */
   async messagePage(query: QqbotMessageQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
@@ -112,8 +114,9 @@ export class QqbotMessageService {
   }
 
   /**
-   * 保存Incoming。
-   * @param message - message 输入；使用 `eventTime`、`groupId`、`messageId`、`messageText` 字段生成结果。
+   * 根据`message`更新入站消息；把变更持久化到当前存储（`messageRepository.create`）。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `eventTime`、`groupId`、`messageId`、`messageText` 字段。
+   * @returns 入站消息。
    */
   async saveIncoming(message: QqbotNormalizedMessage) {
     const conversation = await this.upsertConversation(message);
@@ -136,8 +139,9 @@ export class QqbotMessageService {
   }
 
   /**
-   * 保存Outgoing。
-   * @param params - QQBot列表；使用 `messageType`、`targetId`、`messageId`、`messageText` 字段生成结果。
+   * 根据`params`更新出站消息；把变更持久化到当前存储（`messageRepository.create`）。
+   * @param params - 用于出站消息的领域对象，包含 `messageType`、`targetId`、`messageId`、`messageText` 字段。
+   * @returns 出站消息。
    */
   async saveOutgoing(params: {
     messageId?: string;
@@ -150,7 +154,12 @@ export class QqbotMessageService {
     const entity = this.messageRepository.create({
       direction: 'outbound',
       eventTime: new Date(),
-      groupId: params.messageType === 'group' ? params.targetId : null,
+      groupId: (() => {
+        if (params.messageType === 'group') {
+          return params.targetId;
+        }
+        return null;
+      })(),
       messageId: params.messageId || null,
       messageText: params.messageText,
       messageType: params.messageType,
@@ -165,8 +174,9 @@ export class QqbotMessageService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param message - message 输入；使用 `selfId`、`targetId`、`messageType`、`messageId` 字段生成结果。
+   * 根据`message`处理upsert会话消息；当 `!conversation` 成立时返回 `this.conversationRepository.save(conversati…`。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `selfId`、`targetId`、`messageType`、`messageId` 字段。
+   * @returns 包含 `lastMessageId`、`messageCount` 字段的upsert会话消息。
    */
   private async upsertConversation(message: QqbotNormalizedMessage) {
     let conversation = await this.conversationRepository.findOne({

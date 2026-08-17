@@ -8,7 +8,13 @@ import type {
   EnvironmentSignal,
 } from '../../domain/environment-dashboard.types';
 
-/** 创建未接线的适配器信号。 */
+/**
+ * 根据`id`、`label`、`missingKeys`构造未接线的适配器信号。
+ * @param id - 决定未接线的适配器信号内容、边界或目标的 `id` 值。
+ * @param label - 决定未接线的适配器信号内容、边界或目标的 `label` 值。
+ * @param missingKeys - 用于批量校验或读取未接线的适配器信号的键集合。
+ * @returns 包含 `evidence`、`id`、`label`、`sourceKind`、`status` 字段的未接线的适配器信号。
+ */
 export function createUnwiredAdapterSignal(
   id: string,
   label: string,
@@ -24,7 +30,16 @@ export function createUnwiredAdapterSignal(
   };
 }
 
-/** 创建实时适配器信号。 */
+/**
+ * 根据`id`、`label`、`summary`构造实时适配器信号。
+ * @param id - 决定实时适配器信号内容、边界或目标的 `id` 值。
+ * @param label - 决定实时适配器信号内容、边界或目标的 `label` 值。
+ * @param summary - 决定实时适配器信号内容、边界或目标的 `summary` 值。
+ * @param metadata - 决定实时适配器信号内容、边界或目标的 `metadata` 值；省略时默认采用 `{}`。
+ * @param status - 决定实时适配器信号内容、边界或目标的 `status` 值；省略时默认采用 `'ok'`。
+ * @param observedAt - 用于过期、排序或租约判定的时间基准；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 包含 `evidence`、`id`、`label`、`observedAt`、`sourceKind` 字段的实时适配器信号。
+ */
 export function createLiveAdapterSignal(
   id: string,
   label: string,
@@ -45,7 +60,13 @@ export function createLiveAdapterSignal(
   };
 }
 
-/** 创建错误适配器信号。 */
+/**
+ * 根据`id`、`label`、`error`构造错误适配器信号。
+ * @param id - 决定错误适配器信号内容、边界或目标的 `id` 值。
+ * @param label - 决定错误适配器信号内容、边界或目标的 `label` 值。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+ * @returns 包含 `evidence`、`id`、`label`、`observedAt`、`sourceKind` 字段的错误适配器信号。
+ */
 export function createErrorAdapterSignal(
   id: string,
   label: string,
@@ -63,18 +84,36 @@ export function createErrorAdapterSignal(
   };
 }
 
-/** 判断只读的HTTP成功是否成立。 */
+/**
+ * 根据`status`与当前约束判定只读的HTTP成功。
+ * @param status - 决定只读的HTTP成功内容、边界或目标的 `status` 值。
+ * @returns 满足只读的HTTP成功约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 export function isReadonlyHttpOk(status: number): boolean {
   return status >= 200 && status < 400;
 }
 
-/** 返回拼接只读的URL。 */
+/**
+ * 把受控基础地址与路径拼接为只读 URL。
+ * @param baseUrl - 待规范化、请求或同源校验的baseURL 地址 URL。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @returns 把受控基础地址与路径拼接为只读 URL。
+ */
 export function joinReadonlyUrl(baseUrl: string, path: string): string {
-  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  const normalizedBase = (() => {
+    if (baseUrl.endsWith('/')) {
+      return baseUrl;
+    }
+    return `${baseUrl}/`;
+  })();
   return new URL(path.replace(/^\/+/, ''), normalizedBase).toString();
 }
 
-/** 解析JSON预览。 */
+/**
+ * 将受限响应预览解析为普通 JSON 对象；空文本、非法 JSON、数组或标量统一回退为空对象。
+ * @param bodyPreview - 决定JSON预览内容、边界或目标的 `bodyPreview` 值。
+ * @returns JSON预览。
+ */
 export function parseJsonPreview(
   bodyPreview: string,
 ): Record<string, unknown> {
@@ -87,34 +126,61 @@ export function parseJsonPreview(
   }
 }
 
-/** 返回作为记录。 */
+/**
+ * 将输入收敛并投影为记录。
+ * @param value - 参与记录比较、格式化或输出的候选值。
+ * @returns 记录；没有可用结果或提前结束时为 `undefined`。
+ */
 export function asRecord(
   value: unknown,
 ): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return (value as Record<string, unknown>);
+  }
+  return undefined;
 }
 
-/** 返回作为数组。 */
+/**
+ * 将输入收敛并投影为数组。
+ * @param value - 参与数组比较、格式化或输出的候选值。
+ * @returns 按输入顺序得到的数组列表；没有匹配项时为空数组。
+ */
 export function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
+  if (Array.isArray(value)) {
+    return value;
+  }
+  return [];
 }
 
-/** 返回作为字符串。 */
+/**
+ * 将输入收敛并投影为字符串。
+ * @param value - 参与字符串比较、格式化或输出的候选值。
+ * @returns 按参数编码并拼接完成的字符串；没有可用结果或提前结束时为 `undefined`。
+ */
 export function asString(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
   if (typeof value === 'number') return `${value}`;
   return undefined;
 }
 
-/** 返回作为数字。 */
+/**
+ * 将输入收敛并投影为数字。
+ * @param value - 参与数字比较、格式化或输出的候选值。
+ * @returns 数字；没有可用结果或提前结束时为 `undefined`。
+ */
 export function asNumber(value: unknown): number | undefined {
   const numberValue =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string'
-        ? Number(value)
-        : Number.NaN;
-  return Number.isFinite(numberValue) ? numberValue : undefined;
+    (() => {
+      if (typeof value === 'number') {
+        return value;
+      }
+      if (typeof value === 'string') {
+        return Number(value);
+      }
+      return Number.NaN;
+    })();
+  if (Number.isFinite(numberValue)) {
+    return numberValue;
+  }
+  return undefined;
 }

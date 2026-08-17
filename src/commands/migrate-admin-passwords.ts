@@ -90,7 +90,15 @@ type AdminPasswordMigrationRow = {
 
 class AdminPasswordMigrationUsageError extends Error {}
 
-/** 解析管理端密码迁移选项。 */
+/**
+ * 从`argv`、`env`解析管理端密码迁移选项；先通过 `assertAdminPasswordMigrationManifestPath` 校验输入边界。
+ * @param argv - 用于管理端密码迁移选项的领域对象，包含 `length`、`index`、`index + 1` 字段。
+ * @param env - 用于管理端密码迁移选项的领域对象，包含 `ADMIN_PASSWORD_MIGRATION_BACKUP_PATH`、`ADMIN_PASSWORD_MIGRATION_DATABASE_IDENTITY`、`ADMIN_PASSWORD_MIGRATION_MAINTENANCE_CONFIRMED`、`ADMIN_PASSWORD_MIGRATION_MANIFEST_PATH` 字段；省略时默认采用 `process.env`。
+ * @returns 包含 `backupPath`、`databaseIdentity`、`maintenanceConfirmed`、`manifestPath`、`mode` 字段的管理端密码迁移选项。
+ * @throws 当 `specifiedOptions.has(argument)` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`；当 `!value || value.startsWith('--')` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`；
+ *   当 `argument !== '--backup-path' && argument !== '--database-identity' && a…` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`；
+ *   当 `modes.length !== 1` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`；当 `!manifestPath` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`。
+ */
 export function parseAdminPasswordMigrationOptions(
   argv: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -175,7 +183,12 @@ export function parseAdminPasswordMigrationOptions(
   };
 }
 
-/** 构建管理端密码迁移数据库身份。 */
+/**
+ * 根据`env`构造管理端密码迁移数据库身份。
+ * @param env - 用于管理端密码迁移数据库身份的领域对象，包含 `DB_HOST`、`DB_PORT`、`DB_DATABASE` 字段。
+ * @returns 按参数编码并拼接完成的管理端密码迁移数据库身份。
+ * @throws 当 `!host || !database` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`。
+ */
 export function buildAdminPasswordMigrationDatabaseIdentity(
   env: NodeJS.ProcessEnv,
 ) {
@@ -188,7 +201,14 @@ export function buildAdminPasswordMigrationDatabaseIdentity(
   return `${host}:${port}/${database}`;
 }
 
-/** 执行管理端密码迁移。 */
+/**
+ * 根据`options`、`dependencies`处理管理端密码迁移；先通过 `assertAdminPasswordMigrationManifestPath` 校验输入边界。
+ * @param options - 控制管理端密码迁移筛选、缓存或输出方式的可选项，包含 `manifestPath`、`mode` 字段。
+ * @param dependencies - 用于管理端密码迁移的领域对象，包含 `inspectManifestPath`、`writeManifest`、`dataSource`、`passwordHashService` 字段。
+ * @returns 管理端密码迁移。
+ * @throws 当 `assertManifestPathIsNew` 调用失败时重新抛出该入口捕获且决定公开的原异常；当 `readAffectedRows(updateResult) !== 1` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `dependencies.dataSource.initialize` 或 `dependencies.dataSource.createQueryRunner` 调用失败时重新抛出该入口捕获且决定公开的原异常；当 `operationError === undefined` 成立时拒绝当前输入并抛出 `cleanupErrors[0]`。
+ */
 export async function runAdminPasswordMigration(
   options: AdminPasswordMigrationOptions,
   dependencies: AdminPasswordMigrationDependencies,
@@ -223,7 +243,12 @@ export async function runAdminPasswordMigration(
     await dependencies.writeManifest(
       options.manifestPath,
       manifest,
-      manifestPublished ? 'replace' : 'create',
+      (() => {
+        if (manifestPublished) {
+          return 'replace';
+        }
+        return 'create';
+      })(),
     );
     manifestPublished = true;
   };
@@ -242,7 +267,12 @@ export async function runAdminPasswordMigration(
     const rows = (await queryRunner.query(
       `SELECT CAST(id AS CHAR) AS id, password
        FROM admin_user
-       ORDER BY id${options.mode === 'execute' ? ' FOR UPDATE' : ''}`,
+       ORDER BY id${(() => {
+         if (options.mode === 'execute') {
+           return ' FOR UPDATE';
+         }
+         return '';
+       })()}`,
     )) as AdminPasswordMigrationRow[];
 
     for (const row of rows) {
@@ -314,7 +344,11 @@ export async function runAdminPasswordMigration(
       if (commitOutcomeUnknown) {
         manifest.status = 'commit-unknown';
       } else {
-        manifest.status = rollbackFailed ? 'rollback-failed' : 'failed';
+        if (rollbackFailed) {
+          manifest.status = 'rollback-failed';
+        } else {
+          manifest.status = 'failed';
+        }
         manifest.ids.migrated = [];
         manifest.counts.migrated = 0;
         manifest.ids.pending = initiallyPendingIds;
@@ -329,11 +363,15 @@ export async function runAdminPasswordMigration(
     logSafely(
       dependencies.logger,
       'error',
-      committed
-        ? 'Admin password migration committed; manifest finalization failed'
-        : commitOutcomeUnknown
-          ? 'Admin password migration commit outcome is unknown; run --verify before retrying'
-          : 'Admin password migration failed',
+      (() => {
+        if (committed) {
+          return 'Admin password migration committed; manifest finalization failed';
+        }
+        if (commitOutcomeUnknown) {
+          return 'Admin password migration commit outcome is unknown; run --verify before retrying';
+        }
+        return 'Admin password migration failed';
+      })(),
     );
     throw error;
   } finally {
@@ -372,7 +410,14 @@ export async function runAdminPasswordMigration(
   }
 }
 
-/** 断言执行安全性。 */
+/**
+ * 校验`options`、`dependencies`、`manifestInspection`是否满足执行安全性约束，并拒绝不合法输入。
+ * @param options - 控制执行安全性筛选、缓存或输出方式的可选项，包含 `mode`、`databaseIdentity`、`maintenanceConfirmed`、`backupPath` 字段。
+ * @param dependencies - 用于执行安全性的领域对象，包含 `actualDatabaseIdentity`、`inspectBackupPath` 字段。
+ * @param manifestInspection - 用于执行安全性的领域对象，包含 `exists`、`identity` 字段。
+ * @returns 执行安全性；没有可用结果或提前结束时为 `undefined`。
+ * @throws 执行模式缺少数据库身份、维护确认或备份路径，身份不匹配，或备份文件不稳定、不可读、为空、含符号链接或与清单同一文件时抛出 `AdminPasswordMigrationUsageError`。
+ */
 function assertExecuteSafety(
   options: AdminPasswordMigrationOptions,
   dependencies: AdminPasswordMigrationDependencies,
@@ -404,14 +449,12 @@ function assertExecuteSafety(
     if (backup.isSymbolicLink) {
       throw new AdminPasswordMigrationUsageError('备份路径不能包含符号链接');
     }
-    if (
-      !backup.stable ||
-      !backup.exists ||
-      !backup.identity ||
-      !backup.isFile ||
-      !backup.readable ||
-      backup.size < 1
-    ) {
+    if (!backup.stable || !backup.exists || !backup.identity) {
+      throw new AdminPasswordMigrationUsageError(
+        '备份路径必须是可读的非空普通文件',
+      );
+    }
+    if (!backup.isFile || !backup.readable || backup.size < 1) {
       throw new AdminPasswordMigrationUsageError(
         '备份路径必须是可读的非空普通文件',
       );
@@ -431,7 +474,11 @@ function assertExecuteSafety(
   return backup;
 }
 
-/** 断言管理端密码迁移清单路径。 */
+/**
+ * 校验`path`是否满足管理端密码迁移清单路径约束，并拒绝不合法输入。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @throws 当 `!target.includes(workspaceSegment) || !target.endsWith('.json')` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`。
+ */
 function assertAdminPasswordMigrationManifestPath(path: string) {
   const target = resolve(path);
   const workspaceSegment = `${sep}.kt-workspace${sep}`;
@@ -442,7 +489,12 @@ function assertAdminPasswordMigrationManifestPath(path: string) {
   }
 }
 
-/** 断言清单路径安全性。 */
+/**
+ * 校验`inspection`是否满足清单路径安全性约束，并拒绝不合法输入。
+ * @param inspection - 用于清单路径安全性的领域对象，包含 `parentHasSymbolicLink`、`isSymbolicLink`、`stable`、`exists` 字段。
+ * @throws 当 `inspection.parentHasSymbolicLink` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`；当 `inspection.isSymbolicLink` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`；
+ *   当 `!inspection.stable || (inspection.exists && (!inspection.isFile || !ins…` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`。
+ */
 function assertManifestPathSafety(
   inspection: AdminPasswordMigrationPathInspection,
 ) {
@@ -464,7 +516,11 @@ function assertManifestPathSafety(
   }
 }
 
-/** 断言清单路径是否新建。 */
+/**
+ * 校验`inspection`是否满足清单路径是否新建约束，并拒绝不合法输入。
+ * @param inspection - 用于清单路径是否新建的领域对象，包含 `exists` 字段。
+ * @throws 当 `inspection.exists` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`。
+ */
 function assertManifestPathIsNew(
   inspection: AdminPasswordMigrationPathInspection,
 ) {
@@ -475,7 +531,11 @@ function assertManifestPathIsNew(
   }
 }
 
-/** 创建清单。 */
+/**
+ * 创建清单，并输出固定投影 `counts`、`ids`、`mode`、`status` 字段。
+ * @param mode - 选择清单处理分支的模式值。
+ * @returns 包含 `counts`、`ids`、`mode`、`status` 字段的清单。
+ */
 function createManifest(
   mode: AdminPasswordMigrationMode,
 ): AdminPasswordMigrationManifest {
@@ -496,17 +556,19 @@ function createManifest(
   };
 }
 
-/** 创建数据来源。 */
+/**
+ * 根据`env`构造数据来源。
+ * @param env - 用于数据来源的领域对象，包含 `DB_PORT`、`DB_HOST`、`DB_USERNAME`、`DB_DATABASE` 字段。
+ * @returns 完成初始化并携带当前边界配置的数据来源。
+ * @throws 当 `!env.DB_HOST || !env.DB_USERNAME || !env.DB_DATABASE` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`；
+ *   当 `!Number.isInteger(port) || port < 1 || port > 65_535` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`。
+ */
 function createDataSource(env: NodeJS.ProcessEnv) {
   const port = Number(env.DB_PORT || 3306);
-  if (
-    !env.DB_HOST ||
-    !env.DB_USERNAME ||
-    !env.DB_DATABASE ||
-    !Number.isInteger(port) ||
-    port < 1 ||
-    port > 65_535
-  ) {
+  if (!env.DB_HOST || !env.DB_USERNAME || !env.DB_DATABASE) {
+    throw new AdminPasswordMigrationUsageError('数据库连接参数不完整');
+  }
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new AdminPasswordMigrationUsageError('数据库连接参数不完整');
   }
 
@@ -522,7 +584,11 @@ function createDataSource(env: NodeJS.ProcessEnv) {
   });
 }
 
-/** 格式化清单摘要。 */
+/**
+ * 将`manifest`转换为清单摘要。
+ * @param manifest - 用于清单摘要的领域对象，包含 `mode`、`status`、`counts` 字段。
+ * @returns 清单摘要。
+ */
 function formatManifestSummary(manifest: AdminPasswordMigrationManifest) {
   return [
     `mode=${manifest.mode}`,
@@ -534,7 +600,12 @@ function formatManifestSummary(manifest: AdminPasswordMigrationManifest) {
   ].join(' ');
 }
 
-/** 返回日志安全地。 */
+/**
+ * 按指定日志级别写入迁移消息；日志器缺少对应方法时跳过，不影响迁移结果。
+ * @param logger - 用于按指定日志级别写入迁移消息的领域对象，包含 `level` 字段。
+ * @param level - 决定按指定日志级别写入迁移消息内容、边界或目标的 `level` 值。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息。
+ */
 function logSafely(
   logger: Pick<Console, 'error' | 'log'>,
   level: 'error' | 'log',
@@ -547,13 +618,30 @@ function logSafely(
   }
 }
 
-/** 读取受影响的行。 */
+/**
+ * 按`result`读取受影响的行。
+ * @param result - 用于受影响的行的领域对象，包含 `0` 字段。
+ * @returns 受影响的行。
+ */
 function readAffectedRows(result: any) {
-  const header = Array.isArray(result) ? result[0] : result;
+  const header = (() => {
+    if (Array.isArray(result)) {
+      return result[0];
+    }
+    return result;
+  })();
   return Number(header?.affectedRows);
 }
 
-/** 写入管理端密码迁移清单。 */
+/**
+ * 根据`path`、`manifest`、`publishMode`更新管理端密码迁移清单；把变更持久化到当前存储（`writeFile`）。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @param manifest - 决定管理端密码迁移清单内容、边界或目标的 `manifest` 值。
+ * @param publishMode - 决定管理端密码迁移清单内容、边界或目标的 `publishMode` 值；省略时默认采用 `'create'`。
+ * @throws 当 `!initialInspection.exists` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`；当 `!preparedInspection.exists` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`；
+ *   当 `!publishInspection.exists` 成立时拒绝当前输入并抛出 `AdminPasswordMigrationUsageError`；当 `writeFile` 或 `JSON.stringify` 调用失败时重新抛出该入口捕获且决定公开的原异常；
+ *   当 `writeError === undefined` 成立时重新抛出该入口捕获且决定公开的原异常。
+ */
 export async function writeAdminPasswordMigrationManifest(
   path: string,
   manifest: AdminPasswordMigrationManifest,
@@ -609,7 +697,11 @@ export async function writeAdminPasswordMigrationManifest(
   }
 }
 
-/** 创建路径检查。 */
+/**
+ * 创建路径检查，并输出固定投影 `exists`、`isFile`、`isSymbolicLink`、`parentHasSymbolicLink`、`readable` 字段。
+ * @param overrides - 决定路径Inspection内容、边界或目标的 `overrides` 值；省略时默认采用 `{}`。
+ * @returns 包含 `exists`、`isFile`、`isSymbolicLink`、`parentHasSymbolicLink`、`readable` 字段的路径Inspection。
+ */
 function createPathInspection(
   overrides: Partial<AdminPasswordMigrationPathInspection> = {},
 ): AdminPasswordMigrationPathInspection {
@@ -626,7 +718,11 @@ function createPathInspection(
   };
 }
 
-/** 返回路径包含符号化的链接。 */
+/**
+ * 逐级检查目标路径到文件系统根之间是否含符号链接，用于阻止迁移清单越过受控路径。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @returns 满足路径ContainsSymbolicLink约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function pathContainsSymbolicLink(path: string) {
   const target = resolve(path);
   const root = parse(target).root;
@@ -645,7 +741,11 @@ function pathContainsSymbolicLink(path: string) {
   return false;
 }
 
-/** 检查管理端密码清单路径。 */
+/**
+ * 根据`path`拼接稳定的管理端密码清单路径，用于隔离对应资源或存储记录；当 `parentHasSymbolicLink` 成立时返回 `createPathInspection({ parentHasSymbolicLin…`。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @returns 管理端密码清单路径。
+ */
 export function inspectAdminPasswordManifestPath(
   path: string,
 ): AdminPasswordMigrationPathInspection {
@@ -676,7 +776,11 @@ export function inspectAdminPasswordManifestPath(
   }
 }
 
-/** 检查管理端密码备份路径。 */
+/**
+ * 根据`path`拼接稳定的管理端密码备份路径，用于隔离对应资源或存储记录；当 `parentHasSymbolicLink` 成立时返回 `createPathInspection({ parentHasSymbolicLin…`。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @returns 管理端密码备份路径。
+ */
 export function inspectAdminPasswordBackupPath(
   path: string,
 ): AdminPasswordMigrationPathInspection {
@@ -744,7 +848,10 @@ export function inspectAdminPasswordBackupPath(
   }
 }
 
-/** 释放路径检查安全地。 */
+/**
+ * 调用路径检查结果的释放函数；释放失败由调用方的清理边界处理。
+ * @param inspection - 用于调用路径检查结果的释放函数的领域对象，包含 `release` 字段。
+ */
 function releasePathInspectionSafely(
   inspection: AdminPasswordMigrationPathInspection,
 ) {
@@ -755,7 +862,9 @@ function releasePathInspectionSafely(
   }
 }
 
-/** 执行当前模块的主流程。 */
+/**
+ * 解析管理员密码迁移参数，核对目标数据库身份并执行迁移；验收失败时把进程退出码设为 `1`。
+ */
 async function main() {
   const options = parseAdminPasswordMigrationOptions(process.argv.slice(2));
   const actualDatabaseIdentity = buildAdminPasswordMigrationDatabaseIdentity(

@@ -27,9 +27,10 @@ export class BlogArticleController {
   constructor(private readonly blogArticleService: BlogArticleService) {}
 
   /**
-   * 获取公开博客文章分页列表。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   * 根据参数 `query`，获取公开博客文章分页列表。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param query - 限定根据参数 `query`，获取公开博客文章分页列表筛选、排序与分页范围的查询条件。
+   * @returns 根据参数 `query`，获取公开博客文章分页列表。
    */
   @Get('public/list')
   @Public()
@@ -41,10 +42,11 @@ export class BlogArticleController {
   }
 
   /**
-   * 获取公开博客文章详情。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param slug - slug 输入；影响 publicDetail 的返回值。
-   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   * 根据参数 `slug`，获取公开博客文章详情。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param slug - 决定根据参数 `slug`，获取公开博客文章详情内容、边界或目标的 `slug` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @param id - 决定根据参数 `slug`，获取公开博客文章详情内容、边界或目标的 `id` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 根据参数 `slug`，获取公开博客文章详情。
    */
   @Get('public/detail')
   @Public()
@@ -65,9 +67,10 @@ export class BlogArticleController {
   }
 
   /**
-   * 获取博客文章分页列表。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   * 根据参数 `query`，获取博客文章分页列表。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param query - 限定根据参数 `query`，获取博客文章分页列表筛选、排序与分页范围的查询条件。
+   * @returns 根据参数 `query`，获取博客文章分页列表。
    */
   @Get('list')
   @ApiOperation({ summary: '获取博客文章分页列表' })
@@ -78,9 +81,10 @@ export class BlogArticleController {
   }
 
   /**
-   * 获取博客文章详情。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   * 根据参数 `id`，获取博客文章详情。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param id - 决定根据参数 `id`，获取博客文章详情内容、边界或目标的 `id` 值。
+   * @returns 根据参数 `id`，获取博客文章详情。
    */
   @Get('detail')
   @ApiOperation({ summary: '获取博客文章详情' })
@@ -92,9 +96,10 @@ export class BlogArticleController {
   }
 
   /**
-   * 新增博客文章。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   * 根据`res`、`body`更新针对博客文章；向目标通道投递结果（`res.send`）。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param body - 用于针对博客文章的结构化输入。
+   * @returns 针对博客文章。
    */
   @Post('save')
   @HttpCode(HttpStatus.OK)
@@ -106,9 +111,10 @@ export class BlogArticleController {
   }
 
   /**
-   * 编辑博客文章。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   * 根据`res`、`body`更新针对博客文章；向目标通道投递结果（`res.send`）。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param body - 用于针对博客文章的结构化输入。
+   * @returns 针对博客文章。
    */
   @Post('update')
   @HttpCode(HttpStatus.OK)
@@ -120,9 +126,10 @@ export class BlogArticleController {
   }
 
   /**
-   * 删除博客文章。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param id - 博客记录 ID；定位本次读取、更新、删除或关联的博客记录。
+   * 按`res`、`id`移除针对删除博客文章；向目标通道投递结果（`res.send`）。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param id - 决定针对删除博客文章内容、边界或目标的 `id` 值。
+   * @returns 针对删除博客文章。
    */
   @Post('remove')
   @HttpCode(HttpStatus.OK)
@@ -135,9 +142,10 @@ export class BlogArticleController {
   }
 
   /**
-   * 获取本地博客文章分类选项。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   * 根据参数 `query`，获取本地博客文章分类选项。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param query - 限定根据参数 `query`，获取本地博客文章分类选项筛选、排序与分页范围的查询条件。
+   * @returns 根据参数 `query`，获取本地博客文章分类选项。
    */
   @Get('category-options')
   @ApiOperation({ summary: '获取本地博客文章分类选项' })
@@ -151,9 +159,10 @@ export class BlogArticleController {
   }
 
   /**
-   * 获取本地博客文章标签选项。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
-   * @param query - 查询参数 DTO；限定 博客分页、搜索或详情查询条件。
+   * 根据参数 `query`，获取本地博客文章标签选项。
+   * @param res - 包含 `send` 字段的上游服务响应。
+   * @param query - 限定根据参数 `query`，获取本地博客文章标签选项筛选、排序与分页范围的查询条件。
+   * @returns 根据参数 `query`，获取本地博客文章标签选项。
    */
   @Get('tag-options')
   @ApiOperation({ summary: '获取本地博客文章标签选项' })

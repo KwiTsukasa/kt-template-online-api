@@ -57,12 +57,11 @@ const constellationList = {
 };
 
 /**
- * 在QQBot 图片视图层中绘制角色详情。
- *
- * @param characterId - 角色 ID；定位本次读取、更新、删除或关联的角色。
- * @param displayedServerList - displayedServerList 输入；驱动 `listRight.push()`、`list.push()`、`drawListByServerList()` 的 BangDream步骤。
- * @param compress - BangDream列表；影响 drawCharacterDetail 的返回值。
- * @returns 异步处理结果。
+ * 根据`characterId`、`displayedServerList`、`compress`绘制或格式化角色详情；当 `!character.isExist` 成立时返回 `['错误: 角色不存在']`。
+ * @param characterId - 用于精确定位角色的标识。
+ * @param displayedServerList - 决定角色详情内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @param compress - 决定角色详情内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的角色详情列表；没有匹配项时为空数组。
  */
 export async function drawCharacterDetail(
   characterId: number,

@@ -15,18 +15,18 @@ export class DeckRankResourceRepository {
   ) {}
 
   /**
-   * 获取本地乐队编成等级图片路径。
-   *
-   * @param rankImageName - rankImageName 输入；限定 BangDream查询范围。
+   * 根据参数 `rankImageName`，获取本地乐队编成等级图片路径。
+   * @param rankImageName - 决定根据参数 `rankImageName`，获取本地乐队编成等级图片路径内容、边界或目标的 `rankImageName` 值。
+   * @returns 根据参数 `rankImageName`，获取本地乐队编成等级图片路径。
    */
   getLocalRankImagePath(rankImageName: string): string {
     return path.join(this.localRankRootPath, `${rankImageName}.png`);
   }
 
   /**
-   * 获取远端乐队编成等级图片路径。
-   *
-   * @param rankImageName - rankImageName 输入；限定 BangDream查询范围。
+   * 根据参数 `rankImageName`，获取远端乐队编成等级图片路径。
+   * @param rankImageName - 决定根据参数 `rankImageName`，获取远端乐队编成等级图片路径内容、边界或目标的 `rankImageName` 值。
+   * @returns 按参数编码并拼接完成的根据参数 `rankImageName`，获取远端乐队编成等级图片路径。
    */
   getRemoteRankImagePath(rankImageName: string): string {
     return `/res/icon/${rankImageName}.png`;
@@ -34,8 +34,8 @@ export class DeckRankResourceRepository {
 
   /**
    * 读取乐队编成等级图片，优先本地素材，缺失时回退到 Bestdori 资源。
-   *
-   * @param rankImageName - rankImageName 输入；驱动 `this.getLocalRankImagePath()`、`provider.getAsset()` 的 BangDream步骤。
+   * @param rankImageName - 决定乐队编成等级图片，优先本地素材，缺失时回退到 Bestdori 资源内容、边界或目标的 `rankImageName` 值。
+   * @returns 乐队编成等级图片，优先本地素材，缺失时回退到 Bestdori 资源。
    */
   async getRankImageBuffer(rankImageName: string): Promise<Buffer> {
     const localImagePath = this.getLocalRankImagePath(rankImageName);

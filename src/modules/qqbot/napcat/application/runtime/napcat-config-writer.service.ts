@@ -45,7 +45,11 @@ type NapcatConfig = {
 export class NapcatConfigWriterService {
   constructor(private readonly toolsService: ToolsService) {}
 
-  /** 构建配置文件。 */
+  /**
+   * 根据`input`构造配置文件。
+   * @param input - 用于配置文件的结构化输入，包含 `account`、`token`、`reverseWsUrl` 字段。
+   * @returns 包含 `files`、`napcatConfig`、`napcatConfigHash`、`onebotConfig`、`onebotConfigHash` 字段的配置文件。
+   */
   buildConfigFiles(input: {
     account?: string;
     reverseWsUrl: string;
@@ -122,7 +126,11 @@ export class NapcatConfigWriterService {
     };
   }
 
-  /** 返回序列化。 */
+  /**
+   * 按传输协议规则序列化。
+   * @param value - 参与按传输协议规则序列化比较、格式化或输出的候选值。
+   * @returns 按参数编码并拼接完成的按传输协议规则序列化；无法解析或未命中时为 `null`。
+   */
   private stringify(value: Record<string, unknown>) {
     return `${JSON.stringify(value, null, 2)}\n`;
   }

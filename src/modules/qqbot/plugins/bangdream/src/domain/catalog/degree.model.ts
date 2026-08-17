@@ -28,10 +28,9 @@ export class Degree {
     this.degreeName = degreeData['degreeName'];
   }
   /**
-   * 在 Degree 模型中获取称号图片。
-   *
-   * @param server - server 输入；驱动 `getFrameFromAnimatedDegreeAsset()`、`degreeResourceRepository.getThumbnailBuffer()` 的 BangDream步骤。
-   * @returns 异步处理结果。
+   * 通过 `temp_baseImageName.startsWith` 判断输入是否满足函数约束。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+   * @returns 称号图片。
    */
   async getDegreeImage(server: Server): Promise<Image | Canvas> {
     const temp_baseImageName = this.baseImageName[server];
@@ -52,10 +51,9 @@ export class Degree {
     return loadImage(degreeImageBuffer);
   }
   /**
-   * 在 Degree 模型中获取称号Frame。
-   *
-   * @param server - server 输入；驱动 `degreeResourceRepository.getFrameBuffer()` 的 BangDream步骤。
-   * @returns 异步处理结果。
+   * 按`server`读取称号边框；当 `frameName == 'none_none'` 成立时返回 `new Canvas(1, 1)`。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+   * @returns 称号边框。
    */
   async getDegreeFrame(server: Server): Promise<Image | Canvas> {
     const frameName = this.degreeType[server] + '_' + this.rank[server];
@@ -71,10 +69,9 @@ export class Degree {
     return loadImage(degreeFrameBuffer);
   }
   /**
-   * 在 Degree 模型中获取称号图标。
-   *
-   * @param server - server 输入；驱动 `degreeResourceRepository.getIconBuffer()` 的 BangDream步骤。
-   * @returns 异步处理结果。
+   * 按`server`读取称号图标；当 `this.iconImageName[server] == 'none'` 成立时返回 `new Canvas(1, 1)`。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+   * @returns 称号图标。
    */
   async getDegreeIcon(server: Server): Promise<Image | Canvas> {
     const iconName = this.iconImageName[server] + '_' + this.rank[server];
@@ -106,12 +103,11 @@ class Frame {
 }
 
 /**
- * 查询 BangDream 插件数据。
- *
- * @param baseImageName - baseImageName 输入；驱动 `degreeResourceRepository.getAnimatedScriptBuffer()`、`degreeResourceRepository.getAnimatedTextureBuffer()` 的 BangDream步骤。
- * @param server - server 输入；驱动 `degreeResourceRepository.getAnimatedScriptBuffer()`、`degreeResourceRepository.getAnimatedTextureBuffer()` 的 BangDream步骤。
- * @param frame - frame 输入；决定 BangDream条件分支。
- * @returns 异步处理结果。
+ * 按`baseImageName`、`server`、`frame`读取边框Animated称号资源；把图片、文本或图形按布局规格绘制到画布。
+ * @param baseImageName - 决定边框Animated称号资源内容、边界或目标的 `baseImageName` 值。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @param frame - 决定边框Animated称号资源内容、边界或目标的 `frame` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 边框Animated称号资源。
  */
 export async function getFrameFromAnimatedDegreeAsset(
   baseImageName: string,

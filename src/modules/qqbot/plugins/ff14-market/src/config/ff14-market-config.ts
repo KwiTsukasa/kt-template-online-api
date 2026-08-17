@@ -7,9 +7,9 @@ export type Ff14MarketConfig = {
 };
 
 /**
- * 解析Ff14 Market Config。
- * @param host - host 输入；使用 `getConfig` 字段生成结果。
- * @returns FF14 市场插件转换后的值。
+ * 从`host`解析Ff14市场数据配置；从 `host.getConfig` 读取Ff14市场数据配置。
+ * @param host - 可能包含认证信息或端口的外部服务地址。
+ * @returns 包含 `universalisBaseUrl`、`xivapiBaseUrl`、`xivapiChsBaseUrl` 字段的Ff14市场数据配置。
  */
 export function resolveFf14MarketConfig(
   host: Ff14MarketPluginHost,

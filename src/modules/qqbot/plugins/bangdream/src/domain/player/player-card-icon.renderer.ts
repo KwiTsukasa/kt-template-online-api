@@ -11,13 +11,12 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/player/player-card-icon.layout';
 
 /**
- * 在图片布局层中绘制玩家卡牌In列表。
- *
- * @param player - player 输入；使用 `profile` 字段生成结果。
- * @param key - 键名；影响 drawPlayerCardInList 的返回值。
- * @param cardIdVisible - cardIdVisible 输入；驱动 `Card()` 的 BangDream步骤。
- * @param lineHeight - lineHeight 输入；驱动 `getPlayerCardIconListTextSize()`、`getPlayerCardIconListSpacing()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`player`、`key`、`cardIdVisible`绘制或格式化玩家卡牌；从 `getPlayerCardIconListTextSize` 读取玩家卡牌。
+ * @param player - 用于玩家卡牌的领域对象，包含 `profile` 字段。
+ * @param key - 用于读取或更新玩家卡牌的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param cardIdVisible - 决定玩家卡牌内容、边界或目标的 `cardIdVisible` 值；省略时默认采用 `false`。
+ * @param lineHeight - 决定玩家卡牌内容、边界或目标的 `lineHeight` 值；省略时默认采用 `BANGDREAM_PLAYER_CARD_ICON_LIST_SPEC.list.default…`。
+ * @returns 玩家卡牌。
  */
 export async function drawPlayerCardInList(
   player: Player,

@@ -15,8 +15,9 @@ export class AdminTokenService {
   constructor(private readonly configService: ConfigService) {}
 
   /**
-   * 执行 Admin 身份权限流程。
-   * @param user - user 输入；驱动 `this.sign()` 的 Admin步骤。
+   * 根据`user`处理sign访问权限令牌。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @returns sign访问权限令牌。
    */
   signAccessToken(user: { id: string; username: string }) {
     return this.sign(
@@ -30,8 +31,10 @@ export class AdminTokenService {
   }
 
   /**
-   * 执行 Admin 身份权限流程。
-   * @param user - user 输入；驱动 `this.sign()` 的 Admin步骤。
+   * 通过 `toString` 收敛领域表示。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @returns sign刷新结果令牌。
    */
   signRefreshToken(user: { id: string; username: string }, sessionId: string) {
     return this.sign(
@@ -46,39 +49,45 @@ export class AdminTokenService {
     );
   }
 
-  /** 创建刷新会话标识。 */
+  /**
+   * 根据当前运行态构造刷新会话标识。
+   * @returns 刷新会话标识。
+   */
   createRefreshSessionId() {
     return randomBytes(16).toString('hex');
   }
 
-  /** 读取刷新令牌有效期（毫秒）。 */
+  /**
+   * 按当前运行态读取刷新令牌有效期（毫秒）。
+   * @returns 刷新令牌有效期（毫秒）。
+   */
   getRefreshTokenTtlMs() {
     return REFRESH_TOKEN_TTL_SECONDS * 1000;
   }
 
   /**
-   * 执行 Admin 身份权限流程。
-   * @param token - 协议 token；驱动 `this.verify()` 的 Admin步骤。
-   * @returns Admin 身份权限产出的 AdminTokenPayload | null。
+   * 按访问令牌类型验证签名与载荷，校验失败时返回 `null`。
+   * @param token - 决定按访问令牌类型验证签名与载荷，校验失败时返回 `null`内容、边界或目标的 `token` 值。
+   * @returns 按访问令牌类型验证签名与载荷，校验失败时返回 `null`。
    */
   verifyAccessToken(token: string): AdminAccessTokenPayload | null {
     return this.verify(token, 'access');
   }
 
   /**
-   * 执行 Admin 身份权限流程。
-   * @param token - 协议 token；驱动 `this.verify()` 的 Admin步骤。
-   * @returns Admin 身份权限产出的 AdminTokenPayload | null。
+   * 按刷新令牌类型验证签名与载荷，校验失败时返回 `null`。
+   * @param token - 决定按刷新令牌类型验证签名与载荷，校验失败时返回 `null`内容、边界或目标的 `token` 值。
+   * @returns 按刷新令牌类型验证签名与载荷，校验失败时返回 `null`。
    */
   verifyRefreshToken(token: string): AdminRefreshTokenPayload | null {
     return this.verify(token, 'refresh');
   }
 
   /**
-   * 执行 Admin 身份权限流程。
-   * @param user - user 输入；使用 `id`、`username` 字段生成结果。
-   * @param type - type 输入；影响 sign 的返回值。
-   * @param ttlSeconds - Admin列表；影响 sign 的返回值。
+   * 通过 `Math.floor` 收敛数值表示。
+   * @param claims - 决定sign内容、边界或目标的 `claims` 值。
+   * @param ttlSeconds - 决定sign内容、边界或目标的 `ttlSeconds` 值。
+   * @returns 按参数编码并拼接完成的sign。
    */
   private sign(
     claims:
@@ -100,10 +109,10 @@ export class AdminTokenService {
   }
 
   /**
-   * 执行 Admin 身份权限流程。
-   * @param token - 协议 token；生成规范化文本。
-   * @param type - type 输入；决定 Admin条件分支。
-   * @returns Admin 身份权限产出的 AdminTokenPayload | null。
+   * 校验`token`、`type`是否满足verify约束，并拒绝不合法输入；当 `payload.type === 'refresh' && (!TOKEN_ID_PATTERN.test(payload…` 成立时返回 `null`。
+   * @param token - 决定verify内容、边界或目标的 `token` 值。
+   * @param type - 决定verify内容、边界或目标的 `type` 值。
+   * @returns verify；无法解析或未命中时为 `null`。
    */
   private verify<T extends AdminTokenPayload['type']>(
     token: string,
@@ -120,18 +129,12 @@ export class AdminTokenService {
         Buffer.from(encodedPayload, 'base64url').toString('utf8'),
       ) as AdminTokenPayload;
       const now = Math.floor(Date.now() / 1000);
-      if (
-        payload.type !== type ||
-        !Number.isInteger(payload.exp) ||
-        payload.exp <= now ||
-        !Number.isInteger(payload.iat) ||
-        typeof payload.sub !== 'string' ||
-        !payload.sub ||
-        typeof payload.username !== 'string' ||
-        !payload.username
-      ) {
+      if (payload.type !== type) return null;
+      if (!Number.isInteger(payload.exp) || payload.exp <= now) return null;
+      if (!Number.isInteger(payload.iat)) return null;
+      if (typeof payload.sub !== 'string' || !payload.sub) return null;
+      if (typeof payload.username !== 'string' || !payload.username)
         return null;
-      }
       if (
         payload.type === 'refresh' &&
         (!TOKEN_ID_PATTERN.test(payload.sid) ||
@@ -146,8 +149,9 @@ export class AdminTokenService {
   }
 
   /**
-   * 执行 Admin 身份权限流程。
-   * @param payload - payload 输入；驱动 `createHmac()` 的 Admin步骤。
+   * 根据`payload`处理sign载荷；从 `configService.get` 读取sign载荷。
+   * @param payload - 待按当前协议校验并路由的事件载荷。
+   * @returns sign载荷。
    */
   private signPayload(payload: string) {
     const secret =
@@ -157,9 +161,10 @@ export class AdminTokenService {
   }
 
   /**
-   * 执行 Admin 身份权限流程。
-   * @param left - left 输入；驱动 `Buffer.from()` 的 Admin步骤。
-   * @param right - right 输入；驱动 `Buffer.from()` 的 Admin步骤。
+   * 根据`left`、`right`处理安全边界Equal。
+   * @param left - 决定安全边界Equal内容、边界或目标的 `left` 值。
+   * @param right - 决定安全边界Equal内容、边界或目标的 `right` 值。
+   * @returns 安全边界Equal。
    */
   private safeEqual(left: string, right: string) {
     const leftBuffer = Buffer.from(left);

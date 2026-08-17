@@ -11,12 +11,11 @@ import { drawPlayerRankingInList } from '@/modules/qqbot/plugins/bangdream/src/d
 import { drawCutoffEventTopChart } from '@/modules/qqbot/plugins/bangdream/src/domain/cutoff/cutoff-chart.renderer';
 
 /**
- * 在QQBot 图片视图层中绘制档线活动排名。
- *
- * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
- * @param mainServer - mainServer 输入；驱动 `CutoffEventTop()`、`all.push()`、`drawPlayerRankingInList()` 的 BangDream步骤。
- * @param compress - BangDream列表；影响 drawCutoffEventTop 的返回值。
- * @returns 异步处理结果。
+ * 根据`eventId`、`mainServer`、`compress`绘制或格式化档线事件Top；当 `!cutoffEventTop.isExist` 成立时返回 `[`错误: ${serverNameFullList[mainServer]} 活动不…`。
+ * @param eventId - 用于精确定位事件的标识。
+ * @param mainServer - 决定档线事件Top内容、边界或目标的 `mainServer` 值。
+ * @param compress - 决定档线事件Top内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的档线事件Top列表；没有匹配项时为空数组。
  */
 export async function drawCutoffEventTop(
   eventId: number,
@@ -37,7 +36,12 @@ export async function drawCutoffEventTop(
   //前十名片
   const userInRankings = cutoffEventTop.getLatestRanking();
   for (let i = 0; i < userInRankings.length; i++) {
-    const color = i % 2 == 0 ? 'white' : '#f1f1f1';
+    const color = (() => {
+      if (i % 2 == 0) {
+        return 'white';
+      }
+      return '#f1f1f1';
+    })();
     const user = cutoffEventTop.getUserByUid(userInRankings[i].uid);
     const playerRankingImage = await drawPlayerRankingInList(
       user,

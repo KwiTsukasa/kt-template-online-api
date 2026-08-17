@@ -59,9 +59,9 @@ const SENSITIVE_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
 @Injectable()
 export class RuntimeEvidenceService {
   /**
-   * 创建 运行态健康检查对象或配置。
-   * @param input - input 输入；使用 `startedAt`、`endedAt` 字段生成结果。
-   * @returns 创建后的 运行态健康检查对象或配置。
+   * 根据`input`构造针对运行态健康检查；从 `endedAt.getTime` 读取针对运行态健康检查。
+   * @param input - 用于针对运行态健康检查的结构化输入，包含 `startedAt`、`endedAt` 字段。
+   * @returns 针对运行态健康检查。
    */
   createRecord(input: RuntimeEvidenceInput): RuntimeEvidenceRecord {
     const startedAt = input.startedAt ?? new Date();
@@ -78,9 +78,9 @@ export class RuntimeEvidenceService {
   }
 
   /**
-   * 执行 运行态健康检查流程。
-   * @param value - 待转换值；转换 运行态列表项。
-   * @returns 运行态健康检查产出的 unknown。
+   * 将`value`规范为针对运行态健康检查，使等价输入得到一致表示；当 `Array.isArray(value)` 成立时返回 `value.map((item) => this.sanitizeValue(item…`。
+   * @param value - 参与针对运行态健康检查比较、格式化或输出的候选值。
+   * @returns 针对运行态健康检查。
    */
   private sanitizeValue(value: unknown): unknown {
     if (value instanceof Date) return value;
@@ -92,7 +92,12 @@ export class RuntimeEvidenceService {
       return Object.fromEntries(
         Object.entries(value).map(([key, entry]) => [
           key,
-          this.isSensitiveKey(key) ? REDACTED_VALUE : this.sanitizeValue(entry),
+          (() => {
+            if (this.isSensitiveKey(key)) {
+              return REDACTED_VALUE;
+            }
+            return this.sanitizeValue(entry);
+          })(),
         ]),
       );
     }
@@ -100,8 +105,9 @@ export class RuntimeEvidenceService {
   }
 
   /**
-   * 执行 运行态健康检查流程。
-   * @param value - 待转文本值；驱动 `SENSITIVE_TEXT_REPLACEMENTS.reduce()` 的 运行态步骤。
+   * 将`value`规范为针对运行态健康检查，使等价输入得到一致表示。
+   * @param value - 参与针对运行态健康检查比较、格式化或输出的候选值。
+   * @returns 针对运行态健康检查。
    */
   private sanitizeText(value: string) {
     return SENSITIVE_TEXT_REPLACEMENTS.reduce(
@@ -111,9 +117,9 @@ export class RuntimeEvidenceService {
   }
 
   /**
-   * 判断 运行态健康检查条件。
-   * @param value - 待转换值；计算 运行态判断结果。
-   * @returns 布尔值，表示 运行态健康检查条件是否满足。
+   * 针对运行态健康检查，根据 `typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanc…` 判定输入是否满足条件。
+   * @param value - 待判定是否满足Plain记录约束的候选值。
+   * @returns 满足Plain记录约束时为 `true`；不满足、未命中或显式失败分支为 `false`；无法解析或未命中时为 `null`。
    */
   private isPlainRecord(value: unknown): value is Record<string, unknown> {
     return (
@@ -125,8 +131,9 @@ export class RuntimeEvidenceService {
   }
 
   /**
-   * 判断 运行态健康检查条件。
-   * @param key - 键名；生成规范化文本。
+   * 根据`key`与当前约束判定针对运行态健康检查。
+   * @param key - 用于读取或更新针对运行态健康检查的稳定键。
+   * @returns 满足针对运行态健康检查约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isSensitiveKey(key: string) {
     const normalizedKey = key.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();

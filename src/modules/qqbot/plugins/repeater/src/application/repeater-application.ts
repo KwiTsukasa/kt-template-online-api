@@ -27,8 +27,9 @@ export class RepeaterApplication {
   ) {}
 
   /**
-   * 执行 复读插件流程。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 根据`selfId`处理针对复读插件。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 满足针对复读插件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async bind(selfId: string) {
     await this.host.bindEventPlugin(selfId, this.manifest.pluginKey);
@@ -37,15 +38,16 @@ export class RepeaterApplication {
   }
 
   /**
-   * 清理Bound Cache。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 按`selfId`移除Bound缓存；同步更新对应缓存或去重状态（`boundCache.delete`）。
+   * @param selfId - 用于精确定位QQ 账号的标识。
    */
   clearBoundCache(selfId: string) {
     this.boundCache.delete(`${selfId || ''}`.trim());
   }
 
   /**
-   * 查询 复读插件数据。
+   * 按当前运行态读取Definition。
+   * @returns 包含 `description`、`key`、`name`、`remark`、`triggerType` 字段的Definition。
    */
   getDefinition() {
     return {
@@ -59,8 +61,9 @@ export class RepeaterApplication {
   }
 
   /**
-   * 查询 复读插件数据。
-   * @param params - 模块列表；使用 `accountName`、`selfId`、`connectStatus` 字段生成结果。
+   * 按`params`读取针对复读插件；从 `getDefinition` 读取针对复读插件。
+   * @param params - 用于针对复读插件的领域对象，包含 `accountName`、`selfId`、`connectStatus` 字段。
+   * @returns 包含 `accountName`、`bound`、`connectStatus`、`description`、`key` 字段的针对复读插件。
    */
   async getSummary(params: {
     accountName?: string;
@@ -83,8 +86,9 @@ export class RepeaterApplication {
   }
 
   /**
-   * 处理Message。
-   * @param message - message 输入；使用 `selfId`、`messageText`、`channelId`、`rawEvent` 字段生成结果。
+   * 通过 `isBound` 判断输入是否满足函数约束。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `selfId`、`messageText`、`channelId`、`rawEvent` 字段。
+   * @returns 满足消息约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async handleMessage(message: RepeaterMessage) {
     if (!(await this.isBound(message.selfId))) return false;
@@ -109,9 +113,12 @@ export class RepeaterApplication {
     try {
       await this.host.sendText({
         channelId: message.channelId,
-        guildId: message.rawEvent.guild_id
-          ? `${message.rawEvent.guild_id}`
-          : undefined,
+        guildId: (() => {
+          if (message.rawEvent.guild_id) {
+            return `${message.rawEvent.guild_id}`;
+          }
+          return undefined;
+        })(),
         message: text,
         selfId: message.selfId,
         targetId: message.targetId,
@@ -121,7 +128,12 @@ export class RepeaterApplication {
     } catch (error) {
       this.host.warn?.(
         `QQBot 复读机发送失败: ${
-          error instanceof Error ? error.message : `${error}`
+          (() => {
+            if (error instanceof Error) {
+              return error.message;
+            }
+            return `${error}`;
+          })()
         }`,
       );
       return false;
@@ -129,8 +141,9 @@ export class RepeaterApplication {
   }
 
   /**
-   * 执行 复读插件流程。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 按`selfId`移除针对复读插件。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 满足针对复读插件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async unbind(selfId: string) {
     await this.host.unbindEventPlugin(selfId, this.manifest.pluginKey);
@@ -139,8 +152,9 @@ export class RepeaterApplication {
   }
 
   /**
-   * 判断 复读插件条件。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 根据`selfId`与当前约束判定针对复读插件；同步更新对应缓存或去重状态（`boundCache.set`）。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 满足针对复读插件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private async isBound(selfId: string) {
     const normalizedSelfId = `${selfId || ''}`.trim();
@@ -161,9 +175,9 @@ export class RepeaterApplication {
   }
 
   /**
-   * 执行 复读插件流程。
-   * @param current - current 输入；决定 模块条件分支。
-   * @param ttl - ttl 输入；决定 模块条件分支。
+   * 按`current`、`ttl`移除针对复读插件。
+   * @param current - 决定针对复读插件内容、边界或目标的 `current` 值。
+   * @param ttl - 决定针对复读插件内容、边界或目标的 `ttl` 值。
    */
   private pruneStates(current: number, ttl: number) {
     for (const [key, state] of this.states.entries()) {
@@ -172,8 +186,8 @@ export class RepeaterApplication {
   }
 
   /**
-   * 重置State。
-   * @param message - message 输入；驱动 `buildRepeaterStateKey()` 的 模块步骤。
+   * 通过 `buildRepeaterStateKey` 生成稳定标识。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
    */
   private resetState(message: RepeaterMessage) {
     const key = buildRepeaterStateKey(message);

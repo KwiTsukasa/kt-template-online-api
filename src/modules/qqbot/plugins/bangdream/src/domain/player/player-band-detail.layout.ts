@@ -25,7 +25,8 @@ export const BANGDREAM_BAND_DETAIL_LIST_SPEC = {
 } as const;
 
 /**
- * 计算乐队详情 Logo 缩放参数。
+ * 计算乐队详情 Logo 缩放参数，并输出固定投影 `widthMax` 字段。
+ * @returns 包含 `widthMax` 字段的Band详情Logo布局规格。
  */
 export function createBandDetailLogoSpec() {
   return {
@@ -34,7 +35,8 @@ export function createBandDetailLogoSpec() {
 }
 
 /**
- * 计算乐队详情正文绘制参数。
+ * 计算乐队详情正文绘制参数，并输出固定投影 `lineHeight`、`maxWidth` 字段。
+ * @returns 包含 `lineHeight`、`maxWidth` 字段的Band详情文本布局规格。
  */
 export function createBandDetailTextSpec() {
   const item = BANGDREAM_BAND_DETAIL_LIST_SPEC.item;
@@ -45,9 +47,9 @@ export function createBandDetailTextSpec() {
 }
 
 /**
- * 计算乐队详情项画布和内容位置。
- *
- * @param contentImage - contentImage 输入；使用 `width` 字段生成结果。
+ * 计算乐队详情项画布和内容位置，并输出固定投影 `canvasHeight`、`canvasWidth`、`logoX`、`logoY`、`textX` 字段。
+ * @param contentImage - 用于Band详情条目布局的领域对象，包含 `width` 字段。
+ * @returns 包含 `canvasHeight`、`canvasWidth`、`logoX`、`logoY`、`textX` 字段的Band详情条目布局。
  */
 export function createBandDetailItemLayout(contentImage: ImageLike) {
   const item = BANGDREAM_BAND_DETAIL_LIST_SPEC.item;
@@ -62,9 +64,9 @@ export function createBandDetailItemLayout(contentImage: ImageLike) {
 }
 
 /**
- * 计算乐队详情列表传给通用列表框架的尺寸。
- *
- * @param firstItem - firstItem 输入；生成 BangDream对象。
+ * 计算乐队详情列表传给通用列表框架的尺寸，并输出固定投影 `lineHeight`、`spacing`、`textSize` 字段。
+ * @param firstItem - 用于Band详情边框布局规格的领域对象，包含 `height` 字段；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 包含 `lineHeight`、`spacing`、`textSize` 字段的Band详情边框布局规格。
  */
 export function createBandDetailListFrameSpec(firstItem?: ImageLike) {
   return {
@@ -75,7 +77,8 @@ export function createBandDetailListFrameSpec(firstItem?: ImageLike) {
 }
 
 /**
- * 计算乐队编成等级画布尺寸。
+ * 计算乐队编成等级画布尺寸，并输出固定投影 `height`、`width` 字段。
+ * @returns 包含 `height`、`width` 字段的Deck排名Canvas布局规格。
  */
 export function createDeckRankCanvasSpec() {
   const deckRank = BANGDREAM_BAND_DETAIL_LIST_SPEC.deckRank;
@@ -86,10 +89,10 @@ export function createDeckRankCanvasSpec() {
 }
 
 /**
- * 计算乐队编成等级图片位置。
- *
- * @param rankImage - rankImage 输入；使用 `width` 字段生成结果。
- * @param levelImage - levelImage 输入；使用 `width` 字段生成结果。
+ * 计算乐队编成等级图片位置，并输出固定投影 `rankX`、`rankY` 字段。
+ * @param rankImage - 用于Deck排名图片布局的领域对象，包含 `width` 字段。
+ * @param levelImage - 用于Deck排名图片布局的领域对象，包含 `width` 字段；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 包含 `rankX`、`rankY` 字段的Deck排名图片布局。
  */
 export function createDeckRankImageLayout(
   rankImage: ImageLike,
@@ -99,20 +102,24 @@ export function createDeckRankImageLayout(
   return {
     rankX: (deckRank.width - rankImage.width) / 2,
     rankY: 0,
-    ...(levelImage
-      ? {
+    ...((() => {
+      if (levelImage) {
+        return {
           levelX:
             (deckRank.width + rankImage.width) / 2 +
             deckRank.levelOffsetX -
             levelImage.width,
           levelY: deckRank.levelY,
-        }
-      : {}),
+        };
+      }
+      return {};
+    })()),
   };
 }
 
 /**
- * 计算乐队编成等级的等级图片缩放参数。
+ * 计算乐队编成等级的等级图片缩放参数，并输出固定投影 `heightMax` 字段。
+ * @returns 包含 `heightMax` 字段的Deck排名Level图片布局规格。
  */
 export function createDeckRankLevelImageSpec() {
   return {
@@ -122,11 +129,14 @@ export function createDeckRankLevelImageSpec() {
 
 /**
  * 计算可用于等级图片文件名的 Rank ID。
- *
- * @param rankId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
+ * @param rankId - 用于精确定位排名的标识。
+ * @returns 可用于等级图片文件名的 Rank ID。
  */
 export function normalizeDeckRankLevelSpriteRankId(rankId: number) {
   const maxRankId =
     BANGDREAM_BAND_DETAIL_LIST_SPEC.deckRank.maxLevelSpriteRankId;
-  return rankId > maxRankId ? maxRankId : rankId;
+  if (rankId > maxRankId) {
+    return maxRankId;
+  }
+  return rankId;
 }

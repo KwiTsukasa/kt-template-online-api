@@ -356,7 +356,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     this.dispatchTimer = null;
   }
 
-  /** 规范化作品身份与季号后创建并持久化媒体治理任务草稿。 */
+  /**
+   * 规范化作品身份与季号后创建并持久化媒体治理任务草稿。
+   * @param input - 用于作品身份与季号后创建并持久化媒体治理任务草稿的结构化输入，包含 `titleHint`、`seasonNumbers`、`mediaType`、`providerRef` 字段。
+   * @returns 作品身份与季号后创建并持久化媒体治理任务草稿。
+   */
   async create(
     input: MediaGovernanceTaskCreateDto,
   ): Promise<MediaGovernanceTask> {
@@ -442,7 +446,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task;
   }
 
-  /** 在执行前校验任务状态，并修正作品身份及关联单元结构。 */
+  /**
+   * 在执行前校验任务状态，并修正作品身份及关联单元结构。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于身份的结构化输入，包含 `expectedRevision`、`mediaType`、`providerRef`、`releaseYear` 字段。
+   * @returns 身份。
+   */
   async updateIdentity(
     taskId: string,
     input: MediaGovernanceTaskIdentityUpdateDto,
@@ -575,7 +584,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task;
   }
 
-  /** 按期望版本删除可丢弃草稿，并同步清除持久化账本。 */
+  /**
+   * 按期望版本删除可丢弃草稿，并同步清除持久化账本。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于discard任务的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 包含 `clearedWorkItemId`、`deletedTaskId` 字段的discard任务。
+   */
   async discardTask(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -619,7 +633,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return { clearedWorkItemId, deletedTaskId: task.id };
   }
 
-  /** 消费一次性描述符授权，并返回经摘要校验的私有内容。 */
+  /**
+   * 消费一次性描述符授权，并返回经摘要校验的私有内容。
+   * @param input - 用于redeem描述信息的结构化输入，包含 `descriptorSha256` 字段。
+   * @returns redeem描述信息。
+   */
   async redeemDescriptor(
     input: MediaGovernanceDescriptorRedeemDto,
   ): Promise<Buffer> {
@@ -640,7 +658,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     });
   }
 
-  /** 消费一次性计划授权，并返回与运行绑定的密封治理计划。 */
+  /**
+   * 消费一次性计划授权，并返回与运行绑定的密封治理计划。
+   * @param input - 用于redeemPlan的结构化输入。
+   * @returns 与任务和运行身份匹配、且已完成单次授权消费的密封治理计划。
+   */
   async redeemPlan(input: MediaGovernancePlanRedeemDto) {
     if (!this.databaseReady() || !this.stateStore?.consumePlanGrant) {
       throwVbenError(
@@ -651,7 +673,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return this.stateStore.consumePlanGrant(input);
   }
 
-  /** 返回执行器回调链路的持久化模式与就绪状态。 */
+  /**
+   * 按输入分支映射执行器回调链路的持久化模式与就绪状态，并输出固定投影 `persistenceMode`、`status` 字段。
+   * @returns 包含 `persistenceMode`、`status` 字段的executionCallback健康状态。
+   */
   executionCallbackHealth() {
     let persistenceMode: 'database' | 'process-simulator' = 'process-simulator';
     if (this.databaseReady()) persistenceMode = 'database';
@@ -669,7 +694,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     } as const;
   }
 
-  /** 按运行序号应用执行器事件，并协调热层、数据库与任务投影。 */
+  /**
+   * 按运行序号应用执行器事件，并协调热层、数据库与任务投影。
+   * @param input - 用于Executor事件的结构化输入，包含 `taskId`、`runId`、`taskRevision`、`observedAt` 字段。
+   * @returns 包含 `applied`、`revision`、`runSequence` 字段的Executor事件。
+   */
   async applyExecutorEvent(input: MediaGovernanceExecutorEventDto) {
     if (
       !this.databaseReady() ||
@@ -807,7 +836,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 将已校验执行器事件投影到任务、来源和进度状态。 */
+  /**
+   * 将已校验执行器事件投影到任务、来源和进度状态。
+   * @param task - 用于将已校验执行器事件投影到任务、来源和进度状态的领域对象，包含 `progress`、`runState`、`gateReason`、`nextCommandLabel` 字段。
+   * @param input - 用于将已校验执行器事件投影到任务、来源和进度状态的结构化输入，包含 `sourceId`、`eventType`、`manifest`、`manifestSha256` 字段。
+   */
   private applyExecutorProjection(
     task: MediaGovernanceTask,
     input: MediaGovernanceExecutorEventDto,
@@ -1117,7 +1150,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     this.refreshSemanticProjection(task);
   }
 
-  /** 校验分档元数据证据，并更新任务身份与单元缺项投影。 */
+  /**
+   * 校验分档元数据证据，并更新任务身份与单元缺项投影。
+   * @param task - 用于元数据Evidence的领域对象，包含 `units`、`providerRef`、`releaseYear`、`metadataIdentity` 字段。
+   * @param input - 用于元数据Evidence的结构化输入，包含 `metadata`、`evidenceSha256` 字段。
+   */
   private applyMetadataEvidence(
     task: MediaGovernanceTask,
     input: MediaGovernanceExecutorEventDto,
@@ -1194,7 +1231,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 返回任务各单元中已记录的最大元数据修复次数。 */
+  /**
+   * 返回任务各单元中已记录的最大元数据修复次数。
+   * @param task - 用于任务各单元中已记录的最大元数据修复次数的领域对象，包含 `units` 字段。
+   * @returns 任务各单元中已记录的最大元数据修复次数。
+   */
   private metadataRepairAttempts(task: MediaGovernanceTask) {
     return Math.max(
       0,
@@ -1202,7 +1243,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 返回任务各单元中已记录的最大身份回填次数。 */
+  /**
+   * 从任务全部治理单元中取已记录身份回填次数的最大值；没有单元时返回 `0`。
+   * @param task - 用于从任务全部治理单元中取已记录身份回填次数的最大值的领域对象，包含 `units` 字段。
+   * @returns 从任务全部治理单元中取已记录身份回填次数的最大值。
+   */
   private metadataIdentityRefreshAttempts(task: MediaGovernanceTask) {
     return Math.max(
       0,
@@ -1212,7 +1257,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 判断任务是否仅剩可延后处理的元数据身份缺口。 */
+  /**
+   * 判断任务是否仅剩可延后处理的元数据身份缺口。
+   * @param task - 用于任务是否仅剩可延后处理的元数据身份缺口的领域对象，包含 `metadataIdentity`、`units` 字段。
+   * @returns 满足任务是否仅剩可延后处理的元数据身份缺口约束时为 `true`；不满足、未命中或显式失败分支为 `false`；无法解析或未命中时为 `null`。
+   */
   private hasDeferredMetadataIdentityGap(task: MediaGovernanceTask) {
     const providerIdentityFields = new Set([
       'identity.provider',
@@ -1234,7 +1283,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 判断任务是否仍使用缺少分档事实的旧版空投影。 */
+  /**
+   * 根据分档事实是否缺失判断任务是否仍使用旧版空投影。
+   * @param task - 用于根据分档事实是否缺失判断任务是否仍使用旧版空的领域对象，包含 `units` 字段。
+   * @returns 满足根据分档事实是否缺失判断任务是否仍使用旧版空约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private hasLegacyEmptyMetadataProjection(task: MediaGovernanceTask) {
     return task.units.every(
       (unit) =>
@@ -1246,7 +1299,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 判断旧版空元数据投影是否可以重新采集事实。 */
+  /**
+   * 根据参数 `task`，判断旧版空元数据投影是否可以重新采集事实。
+   * @param task - 用于根据参数 `task`，判断旧版空元数据投影是否可以重新采集事实的领域对象，包含 `stage`、`runState`、`metadataStatus`、`sealedPlan` 字段。
+   * @returns 满足根据参数 `task`，判断旧版空元数据投影是否可以重新采集事实约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private canRefreshLegacyMetadata(task: MediaGovernanceTask) {
     return (
       task.stage === 'metadata' &&
@@ -1257,7 +1314,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 判断延后身份缺口是否仍可执行一次受限回填。 */
+  /**
+   * 根据参数 `task`，判断延后身份缺口是否仍可执行一次受限回填。
+   * @param task - 用于根据参数 `task`，判断延后身份缺口是否仍可执行一次受限回填的领域对象，包含 `stage`、`runState`、`metadataStatus`、`sealedPlan` 字段。
+   * @returns 满足根据参数 `task`，判断延后身份缺口是否仍可执行一次受限回填约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private canRefreshDeferredMetadataIdentity(task: MediaGovernanceTask) {
     return (
       task.stage === 'metadata' &&
@@ -1269,7 +1330,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 判断失败的元数据或验收运行是否可从同一阶段重试。 */
+  /**
+   * 判断失败的元数据或验收运行是否可从同一阶段重试。
+   * @param task - 用于失败的元数据或验收运行是否可从同一阶段重试的领域对象，包含 `stage`、`runState`、`activeRunId`、`metadataStatus` 字段。
+   * @param stage - 决定失败的元数据或验收运行是否可从同一阶段重试内容、边界或目标的 `stage` 值。
+   * @param metadataStatus - 决定失败的元数据或验收运行是否可从同一阶段重试内容、边界或目标的 `metadataStatus` 值。
+   * @returns 满足失败的元数据或验收运行是否可从同一阶段重试约束时为 `true`；不满足、未命中或显式失败分支为 `false`；无法解析或未命中时为 `null`。
+   */
   private canRetryFailedVerification(
     task: MediaGovernanceTask,
     stage: 'acceptance' | 'metadata',
@@ -1285,7 +1352,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 判断当前 B 级缺项是否仍满足最多两次修复边界。 */
+  /**
+   * 判断当前 B 级缺项是否仍满足最多两次修复边界。
+   * @param task - 用于当前 B 级缺项是否仍满足最多两次修复边界的领域对象，包含 `units` 字段。
+   * @returns 满足当前 B 级缺项是否仍满足最多两次修复边界约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private canRunBoundedMetadataRepair(task: MediaGovernanceTask) {
     const projections = task.units.map((unit) => unit.metadataProjection);
     return (
@@ -1295,7 +1366,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 判断缺项是否仅涉及可确定生成的本地元数据资源。 */
+  /**
+   * 判断缺项是否仅涉及可确定生成的本地元数据资源。
+   * @param task - 用于缺项是否仅涉及可确定生成的本地元数据资源的领域对象，包含 `governanceProfile`、`metadataIdentity`、`units` 字段。
+   * @returns 满足缺项是否仅涉及可确定生成的本地元数据资源约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private canRunAutomaticMetadataEnrichment(task: MediaGovernanceTask) {
     const generatedMetadataFields = new Set([
       'artwork.poster',
@@ -1319,7 +1394,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 读取指定任务并刷新其心跳显示，任务不存在时返回统一错误。 */
+  /**
+   * 读取指定任务并刷新其心跳显示，任务不存在时返回统一错误。
+   * @param taskId - 用于精确定位任务的标识。
+   * @returns 指定任务并刷新其心跳显示，任务不存在时返回统一错误。
+   */
   detail(taskId: string): MediaGovernanceTask {
     const task = this.tasks.find((item) => item.id === taskId);
     if (!task) {
@@ -1328,7 +1407,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return this.refreshHeartbeatLabel(task);
   }
 
-  /** 汇总任务阻塞、运行、证据漂移和字幕发布组等语义指标。 */
+  /**
+   * 根据当前领域状态，汇总任务阻塞、运行、证据漂移和字幕发布组等语义指标。
+   * @returns 包含 `agentPending`、`attentionRequired`、`blocked`、`closed`、`downloading` 字段的根据当前领域状态，汇总任务阻塞、运行、证据漂移和字幕发布组等语义指标。
+   */
   summary() {
     const now = Date.now();
     this.tasks.forEach((task) => this.refreshHeartbeatLabel(task, now));
@@ -1396,7 +1478,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 解析并脱敏保存磁力来源，初始化其治理与健康投影。 */
+  /**
+   * 解析并脱敏保存磁力来源，初始化其治理与健康投影。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于并脱敏保存磁力来源，初始化其治理与健康的结构化输入，包含 `expectedRevision`、`sourceRole`、`seasonNumbers`、`magnetUri` 字段。
+   * @returns 并脱敏保存磁力来源，初始化其治理与健康。
+   */
   async addMagnetSource(
     taskId: string,
     input: MediaGovernanceMagnetSourceCreateDto,
@@ -1459,7 +1546,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return source;
   }
 
-  /** 安全解析并保存种子描述符，初始化来源文件清单。 */
+  /**
+   * 安全解析并保存种子描述符，初始化来源文件清单。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于安全解析并保存种子描述符，初始化来源文件清单的结构化输入，包含 `expectedRevision`、`sourceRole`、`seasonNumbers`、`contentKind` 字段。
+   * @param file - 用于安全解析并保存种子描述符，初始化来源文件清单的领域对象，包含 `buffer`、`size` 字段。
+   * @returns 安全解析并保存种子描述符，初始化来源文件清单。
+   */
   async addTorrentSource(
     taskId: string,
     input: MediaGovernanceSourceClassificationDto,
@@ -1524,7 +1617,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return source;
   }
 
-  /** 修订来源角色、内容类型及适用季范围，并清除旧映射。 */
+  /**
+   * 修订来源角色、内容类型及适用季范围，并清除旧映射。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @param input - 用于来源Classification的结构化输入，包含 `expectedRevision`、`sourceRole`、`contentKind`、`seasonNumbers` 字段。
+   * @returns 来源Classification。
+   */
   async updateSourceClassification(
     taskId: string,
     sourceId: string,
@@ -1554,7 +1653,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return source;
   }
 
-  /** 校验文件选择与治理身份一一对应后密封来源映射。 */
+  /**
+   * 按文件选择与治理身份的一一对应关系校验后密封来源映射。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @param input - 用于按文件选择与治理身份的一一对应关系校验后密封来源映射的结构化输入，包含 `expectedRevision`、`selectedFileIndices`、`fileMappings` 字段。
+   * @returns 按文件选择与治理身份的一一对应关系校验后密封来源映射。
+   */
   async updateSourceSelection(
     taskId: string,
     sourceId: string,
@@ -1716,7 +1821,14 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return source;
   }
 
-  /** 在允许阶段停用描述符，并触发来源运行态的精确清理。 */
+  /**
+   * 在允许阶段停用描述符，并触发来源运行态的精确清理。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @param input - 用于来源的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 来源。
+   * @throws 当 `reserveExecution` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   async removeSource(
     taskId: string,
     sourceId: string,
@@ -1773,7 +1885,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task;
   }
 
-  /** 移除已清理来源，并重置相关字幕合同和可恢复任务状态。 */
+  /**
+   * 移除已清理来源，并重置相关字幕合同和可恢复任务状态。
+   * @param task - 用于finalize来源Removal的领域对象，包含 `sources`、`units`、`governanceProfile`、`workItemId` 字段。
+   * @param source - 用于finalize来源Removal的领域对象，包含 `id`、`sourceRole` 字段。
+   */
   private finalizeSourceRemoval(
     task: MediaGovernanceTask,
     source: MediaGovernanceSource,
@@ -1833,7 +1949,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 校验所选文件扩展名是否符合视频、字幕或字体角色。 */
+  /**
+   * 按视频、字幕或字体角色约束校验所选文件扩展名。
+   * @param relativePath - 必须保持在受控根目录内的relative路径。
+   * @param fileRole - 决定按视频、字幕或字体角色约束校验所选文件扩展名内容、边界或目标的 `fileRole` 值。
+   */
   private assertSelectedFileRole(
     relativePath: string,
     fileRole: MediaGovernanceSelectedFileRole,
@@ -1854,7 +1974,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 从主媒体文件映射重新计算各季预期集号。 */
+  /**
+   * 从主媒体文件映射重新计算各季预期集号。
+   * @param task - 用于从主媒体文件映射重新计算各季预期集号的领域对象，包含 `mediaType`、`sources`、`units` 字段。
+   */
   private refreshExpectedEpisodeNumbers(task: MediaGovernanceTask) {
     if (task.mediaType !== 'tv') return;
     const primaryMappings = task.sources
@@ -1873,7 +1996,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 从同包简体字幕映射推导逐季单一发布组合同。 */
+  /**
+   * 从同包简体字幕映射推导逐季单一发布组合同。
+   * @param task - 用于从同包简体字幕映射推导逐季单一发布组合同的领域对象，包含 `governanceProfile`、`units`、`sources` 字段。
+   * @param strict - 决定是否启用“strict”分支的布尔选项；省略时默认采用 `false`。
+   */
   private deriveBundledSubtitleContracts(
     task: MediaGovernanceTask,
     strict = false,
@@ -1952,7 +2079,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 校验补充字幕来源后绑定完整逐季字幕合同。 */
+  /**
+   * 按参数 `taskId`，校验补充字幕来源后绑定完整逐季字幕合同。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param unitId - 用于精确定位unit的标识。
+   * @param input - 用于按参数 `taskId`，校验补充字幕来源后绑定完整逐季字幕合同的结构化输入，包含 `expectedRevision`、`sourceId`、`releaseGroup`、`mappings` 字段。
+   * @returns 按参数 `taskId`，校验补充字幕来源后绑定完整逐季字幕合同。
+   */
   async bindSubtitleContract(
     taskId: string,
     unitId: string,
@@ -2015,7 +2148,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return unit;
   }
 
-  /** 启动正式来源清单检查，或在模拟模式构造受限清单。 */
+  /**
+   * 通过启动正式来源清单检查，或在模拟模式构造受限清单。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @param input - 用于通过启动正式来源清单检查，或在模拟模式构造受限清单的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 通过启动正式来源清单检查，或在模拟模式构造受限清单。
+   */
   async inspectSource(
     taskId: string,
     sourceId: string,
@@ -2081,7 +2220,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return source;
   }
 
-  /** 启动来源运行时可用性探针，或返回模拟探针结果。 */
+  /**
+   * 启动来源运行时可用性探针，或返回模拟探针结果。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @param input - 用于来源运行时可用性探针，或返回模拟探针结果的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 来源运行时可用性探针，或返回模拟探针。
+   */
   async probeRuntimeSource(
     taskId: string,
     sourceId: string,
@@ -2109,7 +2254,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return source;
   }
 
-  /** 校验所有来源与文件映射后启动或续接隔离下载。 */
+  /**
+   * 根据来源与文件映射的完整性校验结果启动或续接隔离下载。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于下载任务的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 下载任务。
+   */
   async startDownload(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -2177,7 +2327,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task;
   }
 
-  /** 校验下载来源的文件映射、视频覆盖与字幕合同完整性。 */
+  /**
+   * 按下载来源身份核对文件映射、视频覆盖与字幕合同完整性。
+   * @param task - 用于按下载来源身份核对文件映射、视频覆盖与字幕合同完整性的领域对象，包含 `sources`、`units`、`governanceProfile`、`mediaType` 字段。
+   */
   private assertDownloadFileMappings(task: MediaGovernanceTask) {
     for (const source of task.sources) {
       const mappedIndices = source.selectedFileMappings.map(
@@ -2286,7 +2439,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 请求安全暂停当前下载运行。 */
+  /**
+   * 根据`taskId`、`input`处理安全暂停当前下载运行。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于安全暂停当前下载运行的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 安全暂停当前下载运行。
+   */
   async pauseDownload(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -2294,7 +2452,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return this.controlDownload(taskId, input.expectedRevision, 'pause');
   }
 
-  /** 请求取消当前下载并保留后续精确清理所需载荷。 */
+  /**
+   * 请求取消当前下载并保留后续精确清理所需载荷。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于取消当前下载并保留后续精确清理所需载荷的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 满足取消当前下载并保留后续精确清理所需载荷约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   async cancelDownload(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -2302,7 +2465,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return this.controlDownload(taskId, input.expectedRevision, 'cancel');
   }
 
-  /** 请求从同一运行身份继续已暂停下载。 */
+  /**
+   * 根据`taskId`、`input`处理从同一运行身份继续已暂停下载。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于从同一运行身份继续已暂停下载的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 从同一运行身份继续已暂停下载。
+   */
   async resumeDownload(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -2310,7 +2478,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return this.controlDownload(taskId, input.expectedRevision, 'resume');
   }
 
-  /** 校验下载运行身份后发送幂等暂停、取消或续传命令。 */
+  /**
+   * 根据下载运行身份校验结果发送幂等暂停、取消或续传命令。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param expectedRevision - 决定根据下载运行身份校验结果发送幂等暂停、取消或续传命令内容、边界或目标的 `expectedRevision` 值。
+   * @param command - 决定根据下载运行身份校验结果发送幂等暂停、取消或续传命令内容、边界或目标的 `command` 值。
+   * @returns 根据下载运行身份校验结果发送幂等暂停、取消或续传命令。
+   */
   private async controlDownload(
     taskId: string,
     expectedRevision: number,
@@ -2373,7 +2547,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task;
   }
 
-  /** 密封本地治理计划，并启动正式执行或受限模拟流程。 */
+  /**
+   * 密封本地治理计划，并启动正式执行或受限模拟流程。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于治理任务的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 治理任务。
+   */
   async startGovernance(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -2477,7 +2656,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task;
   }
 
-  /** 校验元数据门状态后启动分档事实核验。 */
+  /**
+   * 按参数 `taskId`，校验元数据门状态后启动分档事实核验。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于按参数 `taskId`，校验元数据门状态后启动分档事实核验的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 按参数 `taskId`，校验元数据门状态后启动分档事实核验。
+   */
   async startMetadataVerification(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -2508,7 +2692,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task;
   }
 
-  /** 在次数与缺项边界内启动确定性元数据修复。 */
+  /**
+   * 通过在次数与缺项边界内启动确定性元数据修复。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于通过在次数与缺项边界内启动确定性元数据修复的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 通过在次数与缺项边界内启动确定性元数据修复。
+   */
   async startMetadataRepair(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -2528,7 +2717,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task;
   }
 
-  /** 在元数据门闭合后启动独立本地验收。 */
+  /**
+   * 通过在元数据门闭合后启动独立本地验收。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于通过在元数据门闭合后启动独立本地验收的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 通过在元数据门闭合后启动独立本地验收。
+   */
   async startAcceptanceVerification(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -2555,7 +2749,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task;
   }
 
-  /** 保留当前运行边界并启动或安全重试 Codex Agent 会话。 */
+  /**
+   * 保留当前运行边界并启动或安全重试 Codex Agent 会话。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于保留当前运行边界并启动或安全重试 Codex Agent 会话的结构化输入，包含 `expectedRevision` 字段。
+   * @returns 保留当前运行边界并启动或安全重试 Codex Agent 会话。
+   */
   async startAgent(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
@@ -2757,7 +2956,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task.agentSession;
   }
 
-  /** 返回 Agent 回调持久化链路的就绪状态。 */
+  /**
+   * 返回 Agent 回调持久化链路的就绪状态。
+   * @returns 包含 `persistenceMode`、`status` 字段的Agent 回调持久化链路的就绪状态。
+   */
   agentCallbackHealth() {
     if (this.databaseReady()) {
       return { persistenceMode: 'database', status: 'ready' } as const;
@@ -2768,7 +2970,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     } as const;
   }
 
-  /** 同步远端 Agent 会话，并投影最新状态、结果与对话增量。 */
+  /**
+   * 同步远端 Agent 会话，并投影最新状态、结果与对话增量。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param query - 限定Agent会话筛选、排序与分页范围的查询条件；省略时默认采用 `{ afterSequence: 0, limit: 200, }`。
+   * @returns Agent会话。
+   */
   async agentSession(
     taskId: string,
     query: MediaGovernanceAgentSessionQueryDto = {
@@ -2886,7 +3093,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return this.projectAgentConversation(task, remoteSession);
   }
 
-  /** 校验线程和对话版本后，在同一 Agent 会话发送操作员消息。 */
+  /**
+   * 根据线程和对话版本校验结果，在同一 Agent 会话发送操作员消息。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于根据线程和对话版本校验结果，在同一 Agent 会话发送操作员消息的结构化输入，包含 `threadId`、`clientMessageId`、`expectedConversationRevision`、`content` 字段。
+   * @returns 根据线程和对话版本校验结果，在同一 Agent 会话发送操作员消息。
+   * @throws 当 `agentGateway.startTurn` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   async continueAgentConversation(
     taskId: string,
     input: MediaGovernanceAgentMessageDto,
@@ -2981,7 +3194,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return this.projectAgentConversation(task, session);
   }
 
-  /** 组合本地会话状态、远端消息和建议操作的安全投影。 */
+  /**
+   * 通过组合本地会话状态、远端消息和建议操作的安全投影。
+   * @param task - 用于通过组合本地会话状态、远端消息和建议操作的安全的领域对象，包含 `agentSession` 字段。
+   * @param remoteSession - 用于通过组合本地会话状态、远端消息和建议操作的安全的领域对象，包含 `conversationRevision`、`hasMoreMessages`、`historyComplete`、`messages` 字段。
+   * @returns 包含 `conversationRevision`、`hasMoreMessages`、`historyComplete`、`messages`、`recommendations` 字段的通过组合本地会话状态、远端消息和建议操作的安全。
+   */
   private projectAgentConversation(
     task: MediaGovernanceTask,
     remoteSession: Awaited<
@@ -3002,7 +3220,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 根据 Agent 结果或任务阶段生成有限的建议提问。 */
+  /**
+   * 根据 Agent 结果或任务阶段生成有限的建议提问。
+   * @param task - 用于根据 Agent 结果或任务阶段生成有限的建议提问的领域对象，包含 `stage`、`nextCommandLabel` 字段。
+   * @param result - 用于根据 Agent 结果或任务阶段生成有限的建议提问的领域对象，包含 `status`、`candidates` 字段。
+   * @returns 按输入顺序得到的根据 Agent 结果或任务阶段生成有限的建议提问列表；没有匹配项时为空数组。
+   */
   private agentConversationRecommendations(
     task: MediaGovernanceTask,
     result: Awaited<
@@ -3038,7 +3261,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     ];
   }
 
-  /** 校验 Agent 工具身份与边界后执行受支持的类型化调用。 */
+  /**
+   * 根据 Agent 工具身份与边界校验结果执行受支持的类型化调用。
+   * @param input - 用于根据 Agent 工具身份与边界校验结果执行受支持的类型化调用的结构化输入，包含 `taskId`、`taskRevision`、`manifestSha256`、`policySha256` 字段。
+   * @returns 包含 `accepted`、`planSha256`、`taskId`、`taskRevision`、`writeBoundaries` 字段的根据 Agent 工具身份与边界校验结果执行受支持的类型化调用。
+   */
   async agentToolCall(input: MediaGovernanceAgentToolCallDto) {
     const task = this.detail(input.taskId);
     const session = task.agentSession;
@@ -3226,7 +3453,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 按序应用 Agent 生命周期事件，并同步计划与任务状态。 */
+  /**
+   * 按序应用 Agent 生命周期事件，并同步计划与任务状态。
+   * @param input - 用于Agent事件的结构化输入，包含 `taskId`、`type`、`sequence`、`status` 字段。
+   * @returns 包含 `applied`、`revision` 字段的Agent事件。
+   */
   async applyAgentEvent(input: MediaGovernanceAgentEventDto) {
     const task = this.detail(input.taskId);
     const primaryRunActive = Boolean(task.activeRunId);
@@ -3320,7 +3551,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return { applied: true, revision: task.revision };
   }
 
-  /** 校验并发布 Agent 对话事件，持久化已完成回复状态。 */
+  /**
+   * 校验并发布 Agent 对话事件，持久化已完成回复状态。
+   * @param input - 用于并发布 Agent 对话事件，持久化已完成回复状态的结构化输入，包含 `taskId`、`result`、`taskRevision`、`threadId` 字段。
+   * @returns 包含 `applied`、`conversationRevision`、`eventSequence` 字段的并发布 Agent 对话事件，持久化已完成回复状态。
+   */
   async applyAgentConversationEvent(
     input: MediaGovernanceAgentConversationEventDto,
   ) {
@@ -3373,7 +3608,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 复核操作员选择的候选，并推进正式或模拟治理状态。 */
+  /**
+   * 复核操作员选择的候选，并推进正式或模拟治理状态。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param input - 用于operatorDecision的结构化输入，包含 `expectedRevision`、`selectedCandidateId`、`reason` 字段。
+   * @returns 应用操作员候选选择后得到的最新治理任务视图。
+   */
   async operatorDecision(
     taskId: string,
     input: MediaGovernanceOperatorDecisionDto,
@@ -3473,7 +3713,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task;
   }
 
-  /** 返回任务的脱敏验收摘要及固定零写边界。 */
+  /**
+   * 按规范字段顺序计算任务的脱敏验收摘要及固定零写边界，并输出固定投影 `agentStatusLabel`、`descriptorCount`、`eventProjection`、`localAcceptedUnitCount`、`metadataStatusLabel` 字段。
+   * @param taskId - 用于精确定位任务的标识。
+   * @returns 包含 `agentStatusLabel`、`descriptorCount`、`eventProjection`、`localAcceptedUnitCount`、`metadataStatusLabel` 字段的evidence。
+   */
   evidence(taskId: string) {
     const task = this.detail(taskId);
     let localAcceptedUnitCount = 0;
@@ -3497,7 +3741,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 按关键词与语义筛选条件分页返回任务列表。 */
+  /**
+   * 按关键词与语义筛选条件分页返回任务列表。
+   * @param query - 限定按关键词与语义筛选条件分页返回任务列表筛选、排序与分页范围的查询条件，包含 `pageNo`、`pageSize`、`keyword`、`stage` 字段；省略时默认采用 `{}`。
+   * @returns 包含 `items`、`total` 字段的按关键词与语义筛选条件分页返回任务列表。
+   */
   page(query: MediaGovernanceTaskPageQueryDto = {}) {
     const pageNo = query.pageNo ?? 1;
     const pageSize = query.pageSize ?? 20;
@@ -3523,7 +3771,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 按任务标题、类型和年份查询 TMDB 身份候选。 */
+  /**
+   * 按任务标题、类型和年份查询 TMDB 身份候选。
+   * @param task - 用于按任务标题、类型和年份查询 TMDB 身份候选的领域对象，包含 `mediaType`、`releaseYear`、`titleHint` 字段。
+   * @returns 按任务标题、类型和年份查询 TMDB 身份候选。
+   */
   private searchAgentIdentityCandidates(task: MediaGovernanceTask) {
     return searchTmdbMediaCandidates({
       mediaType: task.mediaType,
@@ -3532,7 +3784,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     });
   }
 
-  /** 判断 A 级缺项是否要求 Agent 修正资料源身份。 */
+  /**
+   * 根据 A 级缺项内容判断是否要求 Agent 修正资料源身份。
+   * @param task - 用于根据 A 级缺项内容判断是否要求 Agent 修正资料源身份的领域对象，包含 `units` 字段。
+   * @returns 满足根据 A 级缺项内容判断是否要求 Agent 修正资料源身份约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private agentIdentityRepairRequired(task: MediaGovernanceTask) {
     const identityFields = new Set([
       'identity.provider',
@@ -3545,7 +3801,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 重新查询 TMDB 并确认 Agent 提交候选仍与声明一致。 */
+  /**
+   * 重新查询 TMDB 并确认 Agent 提交候选仍与声明一致。
+   * @param task - 决定重新查询 TMDB 并确认 Agent 提交候选仍与声明一致内容、边界或目标的 `task` 值。
+   * @param identity - 区分重新查询 TMDB 并确认 Agent 提交候选仍与声明一致所属账号、设备或运行实例的稳定身份。
+   * @returns 重新查询 TMDB 并确认 Agent 提交候选仍与声明一致。
+   */
   private async assertAgentIdentityCandidate(
     task: MediaGovernanceTask,
     identity: NonNullable<MediaGovernanceAgentSealedPlan['identity']>,
@@ -3565,7 +3826,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return candidate;
   }
 
-  /** 将待确认身份修正写入当前密封计划的临时区。 */
+  /**
+   * 将待确认身份修正写入当前密封计划的临时区。
+   * @param task - 用于将待确认身份修正写入当前密封计划的临时区的领域对象，包含 `sealedPlan` 字段。
+   * @param amendment - 决定将待确认身份修正写入当前密封计划的临时区内容、边界或目标的 `amendment` 值。
+   */
   private storeAgentPendingAmendment(
     task: MediaGovernanceTask,
     amendment: MediaGovernanceAgentPendingAmendment,
@@ -3579,7 +3844,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 读取并严格校验密封计划中的待确认身份修正。 */
+  /**
+   * 从密封计划读取待确认的 Agent 身份修正；字段缺失或不符合身份格式时返回 `undefined`。
+   * @param task - 用于从密封计划读取待确认的 Agent 身份修正的领域对象，包含 `sealedPlan` 字段。
+   * @returns 从密封计划读取待确认的 Agent 身份修正；无法解析或未命中时为 `null`。
+   */
   private agentPendingAmendment(
     task: MediaGovernanceTask,
   ): MediaGovernanceAgentPendingAmendment | null {
@@ -3627,7 +3896,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return amendment as unknown as MediaGovernanceAgentPendingAmendment;
   }
 
-  /** 移除密封计划中未应用的 Agent 身份修正。 */
+  /**
+   * 通过移除密封计划中未应用的 Agent 身份修正。
+   * @param task - 用于通过移除密封计划中未应用的 Agent 身份修正的领域对象，包含 `sealedPlan` 字段。
+   */
   private discardAgentPendingAmendment(task: MediaGovernanceTask) {
     if (!task.sealedPlan?.agentPendingAmendment) return;
     const { agentPendingAmendment, ...sealedPlan } = task.sealedPlan;
@@ -3635,7 +3907,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     task.sealedPlan = sealedPlan;
   }
 
-  /** 核对计划摘要后原子应用 TMDB 身份修正并重封计划。 */
+  /**
+   * 核对计划摘要后原子应用 TMDB 身份修正并重封计划。
+   * @param task - 用于计划摘要后原子应用 TMDB 身份修正并重封计划的领域对象，包含 `revision`、`sealedPlan`、`providerRef`、`metadataIdentity` 字段。
+   * @param planSha256 - 决定计划摘要后原子应用 TMDB 身份修正并重封计划内容、边界或目标的 `planSha256` 值。
+   */
   private finalizeAgentIdentityAmendment(
     task: MediaGovernanceTask,
     planSha256: string,
@@ -3716,7 +3992,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 判断指定 Agent 计划摘要是否已记录在修正历史中。 */
+  /**
+   * 根据修正历史判断指定 Agent 计划摘要是否已经应用。
+   * @param task - 用于根据修正历史判断指定 Agent 计划摘要是否已经应用的领域对象，包含 `sealedPlan` 字段。
+   * @param planSha256 - 决定根据修正历史判断指定 Agent 计划摘要是否已经应用内容、边界或目标的 `planSha256` 值。
+   * @returns 满足根据修正历史判断指定 Agent 计划摘要是否已经应用约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private hasAppliedAgentPlan(task: MediaGovernanceTask, planSha256: string) {
     const amendments = task.sealedPlan?.agentAmendments;
     return (
@@ -3731,7 +4012,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 提取密封计划操作涉及的来源与目标路径。 */
+  /**
+   * 根据参数 `tool`，提取密封计划操作涉及的来源与目标路径。
+   * @param tool - 决定根据参数 `tool`，提取密封计划操作涉及的来源与目标路径内容、边界或目标的 `tool` 值。
+   * @param plan - 用于根据参数 `tool`，提取密封计划操作涉及的来源与目标路径的领域对象，包含 `operations` 字段。
+   * @returns 根据参数 `tool`，提取密封计划操作涉及的来源与目标路径。
+   */
   private agentToolPaths(
     tool: MediaGovernanceAgentToolCallDto['tool'],
     plan: MediaGovernanceAgentSealedPlan | null,
@@ -3745,7 +4031,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     });
   }
 
-  /** 校验 Agent 只读工具仅携带允许的来源或单元标识。 */
+  /**
+   * 校验 Agent 只读工具仅携带允许的来源或单元标识。
+   * @param value - 参与Agent 只读工具仅携带允许的来源或单元标识比较、格式化或输出的候选值。
+   * @returns 包含 `sourceId`、`unitId` 字段的Agent 只读工具仅携带允许的来源或单元标识。
+   */
   private assertAgentReadArguments(value: Record<string, unknown>) {
     const keys = Object.keys(value);
     const sourceId = value.sourceId;
@@ -3774,7 +4064,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 构建有界任务、来源、单元和写边界上下文供 Agent 使用。 */
+  /**
+   * 构建有界任务、来源、单元和写边界上下文供 Agent 使用。
+   * @param task - 用于有界任务、来源、单元和写边界上下文供 Agent 使用的领域对象，包含 `units`、`sources`、`mediaType`、`metadataIdentity` 字段。
+   * @param taskRevision - 决定有界任务、来源、单元和写边界上下文供 Agent 使用内容、边界或目标的 `taskRevision` 值。
+   * @returns 包含 `boundaries`、`currentUnit`、`identity`、`schemaVersion`、`sources` 字段的有界任务、来源、单元和写边界上下文供 Agent 使用。
+   */
   private buildAgentCompactContext(
     task: MediaGovernanceTask,
     taskRevision: number,
@@ -3842,7 +4137,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 按任务阶段生成限制明确的 Agent 操作指令。 */
+  /**
+   * 按任务阶段生成限制明确的 Agent 操作指令。
+   * @param task - 用于按任务阶段生成限制明确的 Agent 操作指令的领域对象，包含 `stage` 字段。
+   * @returns 按任务阶段生成限制明确的 Agent 操作指令。
+   */
   private buildAgentOperatorCommand(task: MediaGovernanceTask) {
     const instructions = [
       '只处理当前媒体治理任务；仅使用胶囊允许的类型化工具读取事实，不得调用 shell、浏览器、UI、云端或数据库写入，不得改动正式媒体目录。',
@@ -3887,7 +4186,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return instructions.join('\n');
   }
 
-  /** 严格解析 Agent 密封计划，并限制身份、操作和路径范围。 */
+  /**
+   * 严格解析 Agent 密封计划，并限制身份、操作和路径范围。
+   * @param value - 待转换为Agent密封Plan的原始值。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param expectedReplayKey - 用于读取或更新Agent密封Plan的稳定键。
+   * @returns Agent密封Plan。
+   */
   private parseAgentSealedPlan(
     value: Record<string, unknown>,
     taskId: string,
@@ -4018,7 +4323,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return normalizedPlan;
   }
 
-  /** 将完整任务裁剪为 Agent 边界校验所需领域投影。 */
+  /**
+   * 将完整任务裁剪为 Agent 边界校验所需领域投影。
+   * @param task - 用于将完整任务裁剪为 Agent 边界校验所需领域的领域对象，包含 `metadataIdentity`、`activeRunId`、`closedAt`、`closedMode` 字段。
+   * @returns 包含 `activeRunId`、`closedAt`、`closedMode`、`declaredUnitIds`、`gateReason` 字段的将完整任务裁剪为 Agent 边界校验所需领域。
+   */
   private projectAgentTask(
     task: MediaGovernanceTask,
   ): MediaGovernanceTaskProjection {
@@ -4051,7 +4360,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 将治理单元裁剪为 Agent 可见的元数据与字幕合同投影。 */
+  /**
+   * 将治理单元裁剪为 Agent 可见的元数据与字幕合同投影。
+   * @param task - 用于将治理单元裁剪为 Agent 可见的元数据与字幕合同的领域对象，包含 `units`、`id` 字段。
+   * @returns 按输入顺序得到的将治理单元裁剪为 Agent 可见的元数据与字幕合同列表；无法解析或未命中时为 `null`，没有匹配项时为空数组。
+   */
   private projectAgentUnits(
     task: MediaGovernanceTask,
   ): MediaGovernanceUnitProjection[] {
@@ -4088,7 +4401,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     });
   }
 
-  /** 结合现有主来源校验新来源角色与内容类型。 */
+  /**
+   * 通过结合现有主来源校验新来源角色与内容类型。
+   * @param task - 用于通过结合现有主来源校验新来源角色与内容类型的领域对象，包含 `sources`、`runState`、`stage` 字段。
+   * @param input - 用于通过结合现有主来源校验新来源角色与内容类型的结构化输入，包含 `sourceRole`、`contentKind` 字段。
+   * @returns 通过结合现有主来源校验新来源角色与内容类型。
+   */
   private assertClassification(
     task: MediaGovernanceTask,
     input: Pick<
@@ -4118,7 +4436,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 校验调用方期望版本与当前任务版本一致。 */
+  /**
+   * 校验`task`、`expectedRevision`是否满足调用方期望版本与当前任务版本一致约束，并拒绝不合法输入。
+   * @param task - 用于调用方期望版本与当前任务版本一致的领域对象，包含 `revision` 字段。
+   * @param expectedRevision - 决定调用方期望版本与当前任务版本一致内容、边界或目标的 `expectedRevision` 值。
+   */
   private assertRevision(task: MediaGovernanceTask, expectedRevision: number) {
     if (task.revision !== expectedRevision) {
       throwVbenError(
@@ -4128,7 +4450,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 返回任务不能删除的首个确定性原因，允许删除时返回空值。 */
+  /**
+   * 返回任务不能删除的首个确定性原因，允许删除时返回空值。
+   * @param task - 用于任务不能删除的首个确定性原因，允许删除时返回空值的领域对象，包含 `stage`、`runState`、`activeRunId`、`payloadSeal` 字段。
+   * @returns 当前状态对应的任务不能删除的首个确定性原因，允许删除时返回空值，取值为 `'仅接收资料阶段且尚未产生载荷的任务可以删除。'`、`'任务已进入执行阶段，不能删除。'`、`'来源运行态仍在精确清理，完成后才能删除任务。'`、`'任务已有治理结果或验收证据，不能删除。'`；无法解析或未命中时为 `null`。
+   */
   private getDiscardDisabledReason(task: MediaGovernanceTask) {
     if (
       task.stage !== 'intake' ||
@@ -4166,7 +4492,14 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return null;
   }
 
-  /** 预留运行身份、密封执行信封并通过发件箱派发。 */
+  /**
+   * 预留运行身份、密封执行信封并通过发件箱派发。
+   * @param task - 用于预留运行身份、密封执行信封并通过发件箱派发的领域对象，包含 `activeRunId`、`nextCommandLabel`、`progress`、`revision` 字段。
+   * @param action - 决定预留运行身份、密封执行信封并通过发件箱派发内容、边界或目标的 `action` 值。
+   * @param sources - 决定预留运行身份、密封执行信封并通过发件箱派发内容、边界或目标的 `sources` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 预留运行身份、密封执行信封并通过发件箱派发。
+   * @throws 当 `stateStore.reserveRunDispatch` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   private async reserveExecution(
     task: MediaGovernanceTask,
     action: MediaGovernanceExecutorAction,
@@ -4288,7 +4621,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return envelope;
   }
 
-  /** 向执行器派发密封信封，并记录确认或有界重试状态。 */
+  /**
+   * 向执行器派发密封信封，并记录确认或有界重试状态。
+   * @param task - 用于Envelope的领域对象，包含 `nextCommandLabel` 字段。
+   * @param envelope - 用于Envelope的领域对象，包含 `runId`、`expiresAt` 字段。
+   */
   private async dispatchEnvelope(
     task: MediaGovernanceTask,
     envelope: MediaGovernanceExecutionEnvelope,
@@ -4320,7 +4657,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     await this.persistTask(task);
   }
 
-  /** 串行重试未确认且尚未过期的发件箱运行。 */
+  /** 通过串行重试未确认且尚未过期的发件箱运行。 */
   private async retryPendingDispatches() {
     if (
       !this.executionGateway?.enabled() ||
@@ -4432,7 +4769,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 在派发耗尽后关闭活动运行并持久化稳定阻塞原因。 */
+  /**
+   * 在派发耗尽后关闭活动运行并持久化稳定阻塞原因。
+   * @param task - 用于在派发耗尽后关闭活动运行并持久化稳定阻塞原因的领域对象，包含 `activeRunId`、`runState`、`gateReason`、`nextCommandLabel` 字段。
+   * @param runId - 用于精确定位`run` 对应结果的标识。
+   * @param attempts - 决定在派发耗尽后关闭活动运行并持久化稳定阻塞原因内容、边界或目标的 `attempts` 值。
+   */
   private async failDispatch(
     task: MediaGovernanceTask,
     runId: string,
@@ -4452,7 +4794,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     this.publishTaskPatch(task, 'state-updated');
   }
 
-  /** 确保单个任务最多存在一个主媒体下载所有者。 */
+  /**
+   * 校验`task`、`sourceRole`是否满足单个任务最多存在一个主媒体下载所有者约束，并拒绝不合法输入。
+   * @param task - 用于单个任务最多存在一个主媒体下载所有者的领域对象，包含 `sources` 字段。
+   * @param sourceRole - 决定单个任务最多存在一个主媒体下载所有者内容、边界或目标的 `sourceRole` 值。
+   */
   private assertSourceOwnerAvailable(
     task: MediaGovernanceTask,
     sourceRole: MediaGovernanceSourceRole,
@@ -4465,7 +4811,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 持久化任务及可选 Agent 事件后发布任务变更。 */
+  /**
+   * 根据参数 `task`，持久化任务及可选 Agent 事件后发布任务变更。
+   * @param task - 决定根据参数 `task`，持久化任务及可选 Agent 事件后发布任务变更内容、边界或目标的 `task` 值。
+   * @param changeType - 决定根据参数 `task`，持久化任务及可选 Agent 事件后发布任务变更内容、边界或目标的 `changeType` 值。
+   * @param event - 触发根据参数 `task`，持久化任务及可选 Agent 事件后发布任务变更的领域事件；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   */
   private async commitTask(
     task: MediaGovernanceTask,
     changeType: 'source-updated' | 'state-updated',
@@ -4475,7 +4826,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     this.publishTaskPatch(task, changeType);
   }
 
-  /** 发布完整或进度任务补丁，并附带当前全局摘要。 */
+  /**
+   * 发布完整或进度任务补丁，并附带当前全局摘要。
+   * @param task - 用于任务Patch的领域对象，包含 `revision`、`id` 字段。
+   * @param changeType - 决定任务Patch内容、边界或目标的 `changeType` 值。
+   * @param runId - 用于精确定位`run` 对应结果的标识；省略时默认采用 `null`。
+   * @param runSequence - 决定任务Patch内容、边界或目标的 `runSequence` 值；省略时默认采用 `null`。
+   * @param deleted - 决定任务Patch内容、边界或目标的 `deleted` 值；省略时默认采用 `false`。
+   * @param compact - 决定任务Patch内容、边界或目标的 `compact` 值；省略时默认采用 `false`。
+   */
   private publishTaskPatch(
     task: MediaGovernanceTask,
     changeType: 'created' | 'deleted' | 'source-updated' | 'state-updated',
@@ -4501,7 +4860,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     });
   }
 
-  /** 按事件频率裁剪任务补丁并移除敏感密封载荷。 */
+  /**
+   * 按事件频率裁剪任务补丁并移除敏感密封载荷。
+   * @param task - 用于按事件频率裁剪任务补丁并移除敏感密封载荷的领域对象，包含 `activeRunId`、`agentSession`、`gateReason`、`governanceProfile` 字段。
+   * @param compact - 决定按事件频率裁剪任务补丁并移除敏感密封载荷内容、边界或目标的 `compact` 值。
+   * @returns 按事件频率裁剪任务补丁并移除敏感密封载荷。
+   */
   private projectTaskEventPatch(task: MediaGovernanceTask, compact: boolean) {
     if (compact) {
       return structuredClone({
@@ -4527,12 +4891,20 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return taskPatch as Omit<MediaGovernanceTask, 'payloadSeal' | 'sealedPlan'>;
   }
 
-  /** 判断可选状态存储是否已完成数据库初始化。 */
+  /**
+   * 仅当可选状态存储已注入且完成数据库初始化时返回 `true`。
+   * @returns 返回 `this.stateStore?.isReady() === true` 的判定结果；条件成立为 `true`，否则为 `false`。
+   */
   private databaseReady() {
     return this.stateStore?.isReady() === true;
   }
 
-  /** 校验远端 Agent 会话是否匹配本地预留身份。 */
+  /**
+   * 根据线程、任务与版本身份判断远端 Agent 会话是否匹配本地预留。
+   * @param task - 用于根据线程、任务与版本身份判断远端 Agent 会话是否匹配本地预留的领域对象，包含 `agentSession`、`id`、`revision` 字段。
+   * @param session - 待读取、续期或持久化的根据线程、任务与版本身份判断远端 Agent 会话是否匹配本地预留会话。
+   * @returns 满足根据线程、任务与版本身份判断远端 Agent 会话是否匹配本地预留约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private agentSessionMatchesReservation(
     task: MediaGovernanceTask,
     session: Awaited<ReturnType<MediaGovernanceCodexAgentGateway['startTurn']>>,
@@ -4550,7 +4922,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 识别旧版以人工等待状态表达的 Agent 失败会话。 */
+  /**
+   * 识别旧版以人工等待状态表达的 Agent 失败会话。
+   * @param session - 待读取、续期或持久化的识别旧版以人工等待状态表达的 Agent 失败会话。
+   * @returns 满足识别旧版以人工等待状态表达的 Agent 失败会话约束时为 `true`；不满足、未命中或显式失败分支为 `false`；无法解析或未命中时为 `null`。
+   */
   private isLegacyFailedAgentSession(
     session: NonNullable<MediaGovernanceTask['agentSession']>,
   ) {
@@ -4562,12 +4938,21 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 生成 Agent 会话创建期间使用的临时线程标识。 */
+  /**
+   * 根据参数 `taskId`，生成 Agent 会话创建期间使用的临时线程标识。
+   * @param taskId - 用于精确定位任务的标识。
+   * @returns 按参数编码并拼接完成的等待状态Agent线程标识。
+   */
   private pendingAgentThreadId(taskId: string) {
     return `pending-${taskId}`;
   }
 
-  /** 根据任务版本或活动运行身份生成 Agent 重放键。 */
+  /**
+   * 根据任务版本或活动运行身份生成 Agent 重放键。
+   * @param task - 用于根据任务版本或活动运行身份生成 Agent 重放键的领域对象，包含 `activeRunId`、`id` 字段。
+   * @param taskRevision - 决定根据任务版本或活动运行身份生成 Agent 重放键内容、边界或目标的 `taskRevision` 值。
+   * @returns 按参数编码并拼接完成的根据任务版本或活动运行身份生成 Agent 重放键。
+   */
   private agentReplayKey(task: MediaGovernanceTask, taskRevision: number) {
     if (!task.activeRunId) return `${task.id}-agent-r${taskRevision}`;
     const runDigest = createHash('sha256')
@@ -4577,7 +4962,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return `${task.id}-agent-a${runDigest}`;
   }
 
-  /** 保存任务并在失败时从数据库恢复权威内存状态。 */
+  /**
+   * 保存任务并在失败时从数据库恢复权威内存状态。
+   * @param task - 决定任务并在失败时从数据库恢复权威内存状态内容、边界或目标的 `task` 值。
+   * @param event - 触发任务并在失败时从数据库恢复权威内存状态的领域事件；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   */
   private async persistTask(
     task: MediaGovernanceTask,
     event?: MediaGovernanceAgentEventDto,
@@ -4609,7 +4998,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 补齐派生字段并恢复数据库任务的当前语义投影。 */
+  /**
+   * 补齐派生字段并恢复数据库任务的当前语义投影。
+   * @param storedTask - 用于补齐派生字段并恢复数据库任务的当前语义的领域对象，包含 `mediaType`、`metadataIdentity`、`providerRef`、`releaseYear` 字段。
+   * @returns 补齐派生字段并恢复数据库任务的当前语义。
+   */
   private restoreStoredTask(
     storedTask: MediaGovernanceStoredTask,
   ): MediaGovernanceTask {
@@ -4668,13 +5061,21 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return restored;
   }
 
-  /** 递增任务版本并同步刷新语义投影。 */
+  /**
+   * 递增任务版本并同步刷新语义投影。
+   * @param task - 用于递增任务版本并同步刷新语义的领域对象，包含 `revision` 字段。
+   */
   private bumpRevision(task: MediaGovernanceTask) {
     task.revision += 1;
     this.refreshSemanticProjection(task);
   }
 
-  /** 按来源标识查找任务内来源，不存在时返回统一错误。 */
+  /**
+   * 按来源标识查找任务内来源，不存在时返回统一错误。
+   * @param task - 用于按来源标识查找任务内来源，不存在时返回统一错误的领域对象，包含 `sources` 字段。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @returns 按来源标识查找任务内来源，不存在时返回统一错误。
+   */
   private findSource(task: MediaGovernanceTask, sourceId: string) {
     const source = task.sources.find((item) => item.id === sourceId);
     if (!source) {
@@ -4683,7 +5084,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return source;
   }
 
-  /** 规范化来源季号并限制在任务声明范围内。 */
+  /**
+   * 根据参数 `task`，规范化来源季号并限制在任务声明范围内。
+   * @param task - 用于根据参数 `task`，规范化来源季号并限制在任务声明范围内的领域对象，包含 `units`、`mediaType` 字段。
+   * @param values - 按原有顺序参与根据参数 `task`，规范化来源季号并限制在任务声明范围内筛选、合并或汇总的集合。
+   * @returns 根据参数 `task`，规范化来源季号并限制在任务声明范围内。
+   */
   private normalizeSourceSeasons(
     task: MediaGovernanceTask,
     values: string[] | undefined,
@@ -4706,7 +5112,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return seasons;
   }
 
-  /** 解析磁力链接的 BTIH、显示名和脱敏追踪器数量。 */
+  /**
+   * 根据参数 `magnetUri`，解析磁力链接的 BTIH、显示名和脱敏追踪器数量。
+   * @param magnetUri - 决定根据参数 `magnetUri`，解析磁力链接的 BTIH、显示名和脱敏追踪器数量内容、边界或目标的 `magnetUri` 值。
+   * @returns 包含 `displayName`、`infoHash`、`trackerCount` 字段的MagnetUri。
+   */
   private parseMagnetUri(magnetUri: string) {
     let url: URL;
     try {
@@ -4732,7 +5142,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 根据任务原始状态刷新面向管理端的语义标签。 */
+  /**
+   * 根据任务原始状态刷新面向管理端的语义标签。
+   * @param task - 用于根据任务原始状态刷新面向管理端的语义标签的领域对象，包含 `semanticProjection`、`nextCommandLabel`、`gateReason`、`metadataStatus` 字段。
+   */
   private refreshSemanticProjection(task: MediaGovernanceTask) {
     const stageLabels: Record<MediaGovernanceTask['stage'], string> = {
       acceptance: '独立验收',
@@ -4772,7 +5185,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 将每秒字节数格式化为合适量级的可读速率。 */
+  /**
+   * 将每秒字节数格式化为合适量级的可读速率。
+   * @param bytesPerSecond - 决定将每秒字节数格式化为合适量级的可读速率内容、边界或目标的 `bytesPerSecond` 值。
+   * @returns 按参数编码并拼接完成的将每秒字节数格式化为合适量级的可读速率。
+   */
   private formatSpeed(bytesPerSecond: number) {
     if (bytesPerSecond < 1_024) return `${bytesPerSecond} B/s`;
     if (bytesPerSecond < 1_024 * 1_024) {
@@ -4784,7 +5201,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return `${(bytesPerSecond / 1_024 / 1_024 / 1_024).toFixed(1)} GiB/s`;
   }
 
-  /** 将成功运行的进度补齐至终态并记录完成摘要。 */
+  /**
+   * 将成功运行的进度补齐至终态并记录完成摘要。
+   * @param task - 用于将成功运行的进度补齐至终态并记录完成摘要的领域对象，包含 `progress` 字段。
+   * @param observedAt - 用于过期、排序或租约判定的时间基准。
+   * @param summary - 决定将成功运行的进度补齐至终态并记录完成摘要内容、边界或目标的 `summary` 值。
+   */
   private finalizeSucceededProgress(
     task: MediaGovernanceTask,
     observedAt: null | string,
@@ -4811,7 +5233,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 根据最近观测时间更新任务心跳相对时间。 */
+  /**
+   * 根据最近观测时间更新任务心跳相对时间。
+   * @param task - 用于刷新结果心跳Label的领域对象，包含 `progress` 字段。
+   * @param now - 用于过期、排序或租约判定的时间基准；省略时默认采用 `Date.now()`。
+   * @returns 刷新结果心跳Label。
+   */
   private refreshHeartbeatLabel(
     task: MediaGovernanceTask,
     now = Date.now(),
@@ -4833,7 +5260,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return task;
   }
 
-  /** 根据运行身份与心跳时效判断数据库任务是否卡住。 */
+  /**
+   * 根据运行身份与心跳时效判断数据库任务是否卡住。
+   * @param task - 用于根据运行身份与心跳时效判断数据库任务是否卡住的领域对象，包含 `persistenceMode`、`runState`、`activeRunId`、`progress` 字段。
+   * @param now - 用于过期、排序或租约判定的时间基准。
+   * @returns 满足根据运行身份与心跳时效判断数据库任务是否卡住约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isStuckRun(task: MediaGovernanceTask, now: number): boolean {
     if (task.persistenceMode !== 'database') return false;
     const activeState =
@@ -4849,7 +5281,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
   }
 
-  /** 统计同一治理单元使用多个字幕发布组的任务与季数。 */
+  /**
+   * 根据当前领域状态，统计同一治理单元使用多个字幕发布组的任务与季数。
+   * @returns 包含 `seasonCount`、`taskIds` 字段的根据当前领域状态，统计同一治理单元使用多个字幕发布组的任务与季数。
+   */
   private mixedSubtitleSummary(): {
     seasonCount: number;
     taskIds: Set<string>;
@@ -4875,7 +5310,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     return { seasonCount, taskIds };
   }
 
-  /** 在模拟模式调度中间与完成进度更新。 */
+  /**
+   * 通过在模拟模式调度中间与完成进度更新。
+   * @param task - 用于通过在模拟模式调度中间与完成进度更新的领域对象，包含 `progress`、`runState`、`nextCommandLabel` 字段。
+   * @param source - 用于通过在模拟模式调度中间与完成进度更新的领域对象，包含 `selectedBytes`、`selectedFileCount` 字段。
+   */
   private scheduleProgress(
     task: MediaGovernanceTask,
     source: Pick<MediaGovernanceSource, 'selectedBytes' | 'selectedFileCount'>,
@@ -4918,7 +5357,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     complete.unref?.();
   }
 
-  /** 校验媒体类型与季号声明的结构合同。 */
+  /**
+   * 校验`mediaType`、`seasonNumbers`是否满足媒体类型与季号声明的结构合同约束，并拒绝不合法输入。
+   * @param mediaType - 决定媒体类型与季号声明的结构合同内容、边界或目标的 `mediaType` 值。
+   * @param seasonNumbers - 用于媒体类型与季号声明的结构合同的领域对象，包含 `length` 字段。
+   */
   private assertUnitContract(
     mediaType: MediaGovernanceMediaType,
     seasonNumbers: string[],
@@ -4937,7 +5380,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 将作品身份字段转换为管理端可读的验证状态预览。 */
+  /**
+   * 将作品身份字段转换为管理端可读的验证状态预览。
+   * @param input - 用于将作品身份字段转换为管理端可读的验证状态预览的结构化输入，包含 `metadataIdentity`、`providerRef`、`releaseYear`、`mediaType` 字段。
+   * @returns 包含 `mediaTypeLabel`、`providerLabel`、`releaseYearLabel`、`seasonLabel`、`status` 字段的将作品身份字段转换为管理端可读的验证状态预览。
+   */
   private buildIdentityPreview(input: {
     mediaType: MediaGovernanceMediaType;
     metadataIdentity?: MediaGovernanceTask['metadataIdentity'];
@@ -4980,7 +5427,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
   }
 
-  /** 根据媒体类型创建电影单元或逐季治理单元。 */
+  /**
+   * 根据媒体类型创建电影单元或逐季治理单元。
+   * @param mediaType - 决定根据媒体类型创建电影单元或逐季治理单元内容、边界或目标的 `mediaType` 值。
+   * @param seasonNumbers - 决定根据媒体类型创建电影单元或逐季治理单元内容、边界或目标的 `seasonNumbers` 值。
+   * @returns 按输入顺序得到的根据媒体类型创建电影单元或逐季治理单元列表；无法解析或未命中时为 `null`，没有匹配项时为空数组。
+   */
   private createUnits(
     mediaType: MediaGovernanceMediaType,
     seasonNumbers: string[],

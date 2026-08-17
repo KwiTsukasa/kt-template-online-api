@@ -28,10 +28,9 @@ FontLibrary.use('old', [`${assetsRootPath}/Fonts/old.ttf`]);
 export const stageTypeTopImageList: { [type: string]: Image } = {};
 
 /**
- * 在图片布局层中加载试炼类型排名图片。
- *
- * @param type - type 输入；决定 BangDream条件分支。
- * @returns 异步处理结果。
+ * 通过 `loadImageFromPath` 加载绘制所需图片资源。
+ * @param type - 决定阶段TypeTop图片内容、边界或目标的 `type` 值。
+ * @returns 阶段TypeTop图片。
  */
 async function loadStageTypeTopImage(type: string): Promise<Image> {
   //加载活动类型顶部图片
@@ -46,10 +45,9 @@ async function loadStageTypeTopImage(type: string): Promise<Image> {
 }
 
 /**
- * 在图片布局层中绘制活动试炼类型排名。
- *
- * @param stage - stage 输入；使用 `type`、`startAt`、`endAt` 字段生成结果。
- * @returns 异步处理结果。
+ * 通过 `stageTypeList.indexOf` 遍历或定位集合元素。
+ * @param stage - 用于事件阶段TypeTop的领域对象，包含 `type`、`startAt`、`endAt` 字段。
+ * @returns 事件阶段TypeTop。
  */
 export async function drawEventStageTypeTop(stage: Stage): Promise<Canvas> {
   //绘制活动类型顶部(时间+类型)
@@ -97,11 +95,10 @@ export async function drawEventStageTypeTop(stage: Stage): Promise<Canvas> {
 }
 
 /**
- * 在图片布局层中绘制歌曲In活动试炼歌曲Horizontal。
- *
- * @param song - song 输入；使用 `songId`、`difficulty` 字段生成结果。
- * @param meta - meta 输入；驱动 `ctx.fillRect()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`song`、`meta`绘制或格式化歌曲事件阶段歌曲Horizontal；把图片、文本或图形按布局规格绘制到画布。
+ * @param song - 用于歌曲事件阶段歌曲Horizontal的领域对象，包含 `getSongJacketImage`、`songId`、`calcMeta`、`difficulty` 字段。
+ * @param meta - 决定歌曲事件阶段歌曲Horizontal内容、边界或目标的 `meta` 值。
+ * @returns 歌曲事件阶段歌曲Horizontal。
  */
 async function drawSongInEventStageSongHorizontal(
   song: Song,
@@ -131,10 +128,9 @@ async function drawSongInEventStageSongHorizontal(
 
   //难度，高度为meta*10像素
   /**
-   * 在图片布局层中绘制难度线条Graph。
-   *
-   * @param difficultyId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
-   * @returns 渲染或资源结果。
+   * 根据`difficultyId`绘制或格式化难度文本行Graph；把图片、文本或图形按布局规格绘制到画布。
+   * @param difficultyId - 用于精确定位难度的标识。
+   * @returns 难度文本行Graph。
    */
   function drawDifficultyLineGraph(difficultyId: number): Canvas {
     const meta = song.calcMeta(true, difficultyId);
@@ -170,11 +166,10 @@ async function drawSongInEventStageSongHorizontal(
 }
 
 /**
- * 在图片布局层中绘制活动试炼歌曲Horizontal。
- *
- * @param stage - stage 输入；使用 `songIdList` 字段生成结果。
- * @param meta - meta 输入；驱动 `ctx.drawImage()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`stage`、`meta`绘制或格式化事件阶段歌曲Horizontal；把图片、文本或图形按布局规格绘制到画布。
+ * @param stage - 用于事件阶段歌曲Horizontal的领域对象，包含 `songIdList` 字段。
+ * @param meta - 决定事件阶段歌曲Horizontal内容、边界或目标的 `meta` 值；省略时默认采用 `false`。
+ * @returns 事件阶段歌曲Horizontal。
  */
 export async function drawEventStageSongHorizontal(
   stage: Stage,

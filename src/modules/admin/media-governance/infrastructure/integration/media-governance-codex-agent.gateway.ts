@@ -31,7 +31,10 @@ const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCodexAgentGateway {
   constructor(private readonly config: ConfigService) {}
 
-  /** 检查网关地址和内部密钥是否形成可用配置。 */
+  /**
+   * 按当前运行态启动网关地址和内部密钥是否形成可用配置。
+   * @returns 满足网关地址和内部密钥是否形成可用配置约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   enabled() {
     try {
       return Boolean(this.baseUrl() && this.secret(false));
@@ -40,7 +43,13 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
     }
   }
 
-  /** 向 Codex Agent 网关提交一轮请求并校验返回会话身份。 */
+  /**
+   * 向 Codex Agent 网关提交一轮请求并校验返回会话身份。
+   * @param request - 用于向 Codex Agent 网关提交一轮请求并校验返回会话身份的当前 HTTP 请求，包含 `taskId`、`taskRevision` 字段。
+   * @returns 向 Codex Agent 网关提交一轮请求并校验返回会话身份。
+   * @throws 当 `!baseUrl` 成立时拒绝当前输入并抛出 `Error`；当 `!response.ok || Buffer.byteLength(text) > MAX_RESPONSE_BYTES` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `value.taskId !== request.taskId || value.taskRevision !== request.taskR…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async startTurn(request: MediaCodexAgentTurnRequest) {
     const baseUrl = this.baseUrl();
     if (!baseUrl) throw new Error('media-codex-agent-gateway-not-configured');
@@ -70,7 +79,13 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
     return value;
   }
 
-  /** 拉取指定任务的安全会话投影及有界对话增量。 */
+  /**
+   * 通过拉取指定任务的安全会话投影及有界对话增量。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param query - 限定通过拉取指定任务的安全会话投影及有界对话增量筛选、排序与分页范围的查询条件，包含 `afterSequence`、`limit` 字段；省略时默认采用 `{}`。
+   * @returns 通过拉取指定任务的安全会话投影及有界对话增量；无法解析或未命中时为 `null`。
+   * @throws 当 `!baseUrl` 成立时拒绝当前输入并抛出 `Error`；当 `!response.ok || Buffer.byteLength(text) > MAX_RESPONSE_BYTES` 成立时拒绝当前输入并抛出 `Error`；当 `value.taskId !== taskId` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async session(
     taskId: string,
     query: { afterSequence?: number; limit?: number } = {},
@@ -99,7 +114,11 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
     return value;
   }
 
-  /** 规范化并校验 Codex Agent 网关基础地址。 */
+  /**
+   * 规范化并校验 Codex Agent 网关基础地址。
+   * @returns 当前状态对应的并校验 Codex Agent 网关基础地址，取值为 `''`。
+   * @throws 当 `!['http:', 'https:'].includes(url.protocol) || url.username || url.pass…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private baseUrl() {
     const value = String(
       this.config.get<string>('MEDIA_CODEX_AGENT_GATEWAY_BASE_URL') ?? '',
@@ -116,7 +135,25 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
     return url.toString().replace(/\/$/, '');
   }
 
-  /** 解析网关会话响应，并对所有身份、状态和摘要字段执行失败关闭校验。 */
+  /**
+   * 解析网关会话响应，并对所有身份、状态和摘要字段执行失败关闭校验。
+   * @param text - 决定安全边界会话内容、边界或目标的 `text` 值。
+   * @returns 包含 `capsuleSha256`、`checkpointSha256`、`conversationRevision`、`currentUnitId`、`hasMoreMessages` 字段的安全边界会话。
+   * @throws 当 `JSON.parse` 调用失败时拒绝当前输入并抛出 `Error`；当 `!value || typeof value !== 'object' || Array.isArray(value)` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof session.taskId !== 'string' || !safeId.test(session.taskId) || t…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof session.policySha256 !== 'string' || !sha256.test(session.policy…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof session.checkpointSha256 !== 'string' || !sha256.test(session.ch…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!Number.isSafeInteger(session.lastEventSequence) || Number(session.last…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!Number.isSafeInteger(session.conversationRevision) || Number(session.c…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `(session.hasMoreMessages !== undefined && typeof session.hasMoreMessage…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof session.lastClientMessageId !== 'string' || !safeId.test(session…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!Number.isSafeInteger(session.taskRevision) || Number(session.taskRevis…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof session.lastHeartbeatAt !== 'string' || !Number.isFinite(Date.pa…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!['completed', 'failed', 'interrupted'].includes( String(session.termin…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof session.currentUnitId !== 'string' || !safeId.test(session.curre…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof session.turnId !== 'string' || !safeId.test(session.turnId)` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!result || canonicalJson(result) !== canonicalJson(session.result)` 成立时拒绝当前输入并抛出 `Error`；当 `!result && rawResult` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private parseSafeSession(text: string): MediaCodexAgentSafeSession {
     let value: unknown;
     try {
@@ -275,7 +312,13 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
     } as MediaCodexAgentSafeSession;
   }
 
-  /** 解析并验证按序返回的对话消息，拒绝越界内容和非法结果投影。 */
+  /**
+   * 解析并验证按序返回的对话消息，拒绝越界内容和非法结果投影。
+   * @param value - 待转换为并验证按序返回的对话消息，拒绝越界内容和非法结果的原始值。
+   * @param safeId - 用于精确定位安全边界的标识。
+   * @returns 并验证按序返回的对话消息，拒绝越界内容和非法。
+   * @throws 当 `!Array.isArray(value) || value.length > 200` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private parseMessages(value: unknown, safeId: RegExp) {
     if (value === undefined) return [];
     if (!Array.isArray(value) || value.length > 200) {
@@ -363,7 +406,12 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
     });
   }
 
-  /** 读取并校验内部共享密钥，可选模式下以空值表示未配置。 */
+  /**
+   * 读取并校验内部共享密钥，可选模式下以空值表示未配置。
+   * @param required - 决定是否启用“required”分支的布尔选项。
+   * @returns 当前状态对应的并校验内部共享密钥，可选模式下以空值表示未配置，取值为 `''`。
+   * @throws 当 `value.length < 32 || value.length > 512` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private secret(required: boolean) {
     const value = String(
       this.config.get<string>('MEDIA_CODEX_AGENT_INTERNAL_SECRET') ?? '',
@@ -375,7 +423,10 @@ export class MediaGovernanceCodexAgentGatewayClient implements MediaGovernanceCo
     return value;
   }
 
-  /** 将网关超时配置限制在允许区间，非法配置回退为二十秒。 */
+  /**
+   * 将网关超时配置限制在允许区间，非法配置回退为二十秒。
+   * @returns 当前状态对应的将网关超时配置限制在允许区间，非法配置回退为二十秒，取值为 `20_000`。
+   */
   private timeoutMs() {
     const value = Number(
       this.config.get<string>('MEDIA_CODEX_AGENT_GATEWAY_TIMEOUT_MS') ?? 20_000,

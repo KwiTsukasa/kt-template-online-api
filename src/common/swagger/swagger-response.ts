@@ -226,11 +226,11 @@ export const applySwaggerResponseExamples = (document: OpenAPIObject) => {
 };
 
 /**
- * 执行 当前模块流程。
- * @param document - document 输入；驱动 `createOperationSuccessSchema()` 的 公共基础设施步骤。
- * @param path - OpenAPI 路径；驱动 `getOperationDataExample()`、`createOperationSuccessSchema()` 的 公共基础设施步骤。
- * @param method - HTTP 方法名；驱动 `getOperationDataExample()`、`createOperationSuccessSchema()` 的 公共基础设施步骤。
- * @param operation - operation 输入；使用 `responses` 字段生成结果。
+ * 通过 `isBinaryResponsePath` 判断输入是否满足函数约束。
+ * @param document - 决定操作响应Examples内容、边界或目标的 `document` 值。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @param method - 决定操作响应Examples内容、边界或目标的 `method` 值。
+ * @param operation - 在当前锁、事务或错误边界内执行的受控回调。
  */
 function applyOperationResponseExamples(
   document: OpenAPIObject,
@@ -296,8 +296,8 @@ function applyOperationResponseExamples(
 }
 
 /**
- * 执行 当前模块流程。
- * @param operation - operation 输入；使用 `responses` 字段生成结果。
+ * 根据`operation`更新错误响应定义。
+ * @param operation - 在当前锁、事务或错误边界内执行的受控回调。
  */
 function applyErrorResponses(operation: SwaggerOperation) {
   operation.responses['400'] ||= buildErrorResponse(
@@ -318,9 +318,10 @@ function applyErrorResponses(operation: SwaggerOperation) {
 }
 
 /**
- * 创建 当前模块对象或配置。
- * @param dataExample - dataExample 输入；驱动 `getResponseExample()` 的 公共基础设施步骤。
- * @param schema - schema 输入；生成 公共基础设施对象。
+ * 根据`dataExample`、`schema`构造Success响应；从 `getResponseExample` 读取Success响应。
+ * @param dataExample - 决定Success响应内容、边界或目标的 `dataExample` 值。
+ * @param schema - 决定Success响应内容、边界或目标的 `schema` 值。
+ * @returns 包含 `description`、`content` 字段的Success响应。
  */
 function buildSuccessResponse(dataExample: any, schema: SwaggerSchema) {
   const example = getResponseExample(dataExample);
@@ -343,9 +344,10 @@ function buildSuccessResponse(dataExample: any, schema: SwaggerSchema) {
 }
 
 /**
- * 创建 当前模块对象或配置。
- * @param example - example 输入；驱动 `schemaFromExample()` 的 公共基础设施步骤。
- * @param description - description 输入；生成 公共基础设施对象。
+ * 根据`example`、`description`构造包含 `description`、`content` 字段的结果。
+ * @param example - 决定包含 `description`、`content` 字段的结果内容、边界或目标的 `example` 值。
+ * @param description - 决定包含 `description`、`content` 字段的结果内容、边界或目标的 `description` 值。
+ * @returns 包含 `description`、`content` 字段的包含 `description`、`content` 字段的。
  */
 function buildPlainJsonResponse(example: any, description: string) {
   return {
@@ -366,10 +368,11 @@ function buildPlainJsonResponse(example: any, description: string) {
 }
 
 /**
- * 创建 当前模块对象或配置。
- * @param status - 公共基础设施列表；生成 公共基础设施对象。
- * @param summary - summary 输入；生成 公共基础设施对象。
- * @param message - message 输入；生成 公共基础设施对象。
+ * 根据`status`、`summary`、`message`构造包含 `description`、`content` 字段的结果。
+ * @param status - 决定包含 `description`、`content` 字段的结果内容、边界或目标的 `status` 值。
+ * @param summary - 决定包含 `description`、`content` 字段的结果内容、边界或目标的 `summary` 值。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息。
+ * @returns 包含 `description`、`content` 字段的包含 `description`、`content` 字段的。
  */
 function buildErrorResponse(status: number, summary: string, message: string) {
   return {
@@ -400,11 +403,12 @@ function buildErrorResponse(status: number, summary: string, message: string) {
 }
 
 /**
- * 创建 当前模块对象或配置。
- * @param document - document 输入；驱动 `ensureDocumentComponents()` 的 公共基础设施步骤。
- * @param path - OpenAPI 路径；驱动 `toPascalCase()` 的 公共基础设施步骤。
- * @param method - HTTP 方法名；驱动 `toPascalCase()` 的 公共基础设施步骤。
- * @param dataExample - dataExample 输入；驱动 `schemaFromExample()`、`buildSuccessSchema()` 的 公共基础设施步骤。
+ * 通过 `ensureDocumentComponents` 强制满足前置条件。
+ * @param document - 决定操作SuccessHTML 清理规则内容、边界或目标的 `document` 值。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @param method - 决定操作SuccessHTML 清理规则内容、边界或目标的 `method` 值。
+ * @param dataExample - 决定操作SuccessHTML 清理规则内容、边界或目标的 `dataExample` 值。
+ * @returns 包含 `$ref` 字段的操作SuccessHTML 清理规则。
  */
 function createOperationSuccessSchema(
   document: OpenAPIObject,
@@ -431,10 +435,10 @@ function createOperationSuccessSchema(
 }
 
 /**
- * 创建 当前模块对象或配置。
- * @param dataExample - dataExample 输入；驱动 `getResponseExample()` 的 公共基础设施步骤。
- * @param dataSchemaName - dataSchemaName 输入；生成 公共基础设施对象。
- * @returns 创建后的 当前模块对象或配置。
+ * 根据`dataExample`、`dataSchemaName`构造SuccessHTML 清理规则；从 `getResponseExample` 读取SuccessHTML 清理规则。
+ * @param dataExample - 决定SuccessHTML 清理规则内容、边界或目标的 `dataExample` 值。
+ * @param dataSchemaName - 决定SuccessHTML 清理规则内容、边界或目标的 `dataSchemaName` 值。
+ * @returns 包含 `type`、`required`、`description`、`example`、`properties` 字段的SuccessHTML 清理规则。
  */
 function buildSuccessSchema(
   dataExample: any,
@@ -472,9 +476,10 @@ function buildSuccessSchema(
 }
 
 /**
- * 合并Json Response。
- * @param currentResponse - currentResponse 输入；使用 `content`、`description` 字段生成结果。
- * @param standardResponse - standardResponse 输入；使用 `description`、`content` 字段生成结果。
+ * 根据`currentResponse`、`standardResponse`更新包含 `description`、`content` 字段的结果；当 `!currentResponse?.content?.['application/json']` 成立时返回 `{ ...standardResponse, description: current…`。
+ * @param currentResponse - 用于包含 `description`、`content` 字段的结果的领域对象，包含 `content`、`description` 字段。
+ * @param standardResponse - 用于包含 `description`、`content` 字段的结果的领域对象，包含 `description`、`content` 字段。
+ * @returns 包含 `description`、`content` 字段的包含 `description`、`content` 字段的。
  */
 function mergeJsonResponse(currentResponse: any, standardResponse: any) {
   if (!currentResponse?.content?.['application/json']) {
@@ -507,12 +512,12 @@ function mergeJsonResponse(currentResponse: any, standardResponse: any) {
 }
 
 /**
- * 执行 当前模块流程。
- * @param example - example 输入；使用 `length` 字段生成结果。
- * @param propertyName - propertyName 输入；驱动 `toPascalCase()`、`schemaFromExample()`、`getPropertyDescription()`、`Number.isInteger()` 的 公共基础设施步骤。
- * @param components - 公共基础设施列表；使用 `schemas` 字段生成结果。
- * @param schemaName - schemaName 输入；驱动 `schemaFromExample()` 的 公共基础设施步骤。
- * @returns 当前模块产出的 SwaggerSchema。
+ * 根据`example`、`propertyName`、`components`处理HTML 清理规则示例；当 `Array.isArray(example)` 成立时返回 `{ type: 'array', description: getPropertyDe…`。
+ * @param example - 用于HTML 清理规则示例的领域对象，包含 `length`、`0` 字段。
+ * @param propertyName - 决定HTML 清理规则示例内容、边界或目标的 `propertyName` 值；省略时默认采用 `'data'`。
+ * @param components - 用于HTML 清理规则示例的领域对象，包含 `schemas` 字段；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param schemaName - 决定HTML 清理规则示例内容、边界或目标的 `schemaName` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 包含 `type`、`description` 字段的HTML 清理规则示例；无法解析或未命中时为 `null`。
  */
 function schemaFromExample(
   example: any,
@@ -521,18 +526,24 @@ function schemaFromExample(
   schemaName?: string,
 ): SwaggerSchema {
   if (Array.isArray(example)) {
-    const itemSchemaName = schemaName
-      ? `${schemaName}${toPascalCase(getArrayItemName(propertyName))}`
-      : undefined;
+    const itemSchemaName = (() => {
+      if (schemaName) {
+        return `${schemaName}${toPascalCase(getArrayItemName(propertyName))}`;
+      }
+      return undefined;
+    })();
     const itemSchema =
-      example.length > 0
-        ? schemaFromExample(
+      (() => {
+        if (example.length > 0) {
+          return schemaFromExample(
             example[0],
             getArrayItemName(propertyName),
             components,
             itemSchemaName,
-          )
-        : { type: 'object' };
+          );
+        }
+        return { type: 'object' };
+      })();
 
     if (components && itemSchemaName && itemSchema.type === 'object') {
       components.schemas[itemSchemaName] = itemSchema;
@@ -543,11 +554,14 @@ function schemaFromExample(
       description: getPropertyDescription(propertyName),
       example,
       items:
-        components && itemSchemaName && itemSchema.type === 'object'
-          ? {
+        (() => {
+          if (components && itemSchemaName && itemSchema.type === 'object') {
+            return {
               $ref: `#/components/schemas/${itemSchemaName}`,
-            }
-          : itemSchema,
+            };
+          }
+          return itemSchema;
+        })(),
     };
   }
 
@@ -568,7 +582,12 @@ function schemaFromExample(
   }
   if (typeof example === 'number') {
     return {
-      type: Number.isInteger(example) ? 'integer' : 'number',
+      type: (() => {
+        if (Number.isInteger(example)) {
+          return 'integer';
+        }
+        return 'number';
+      })(),
       description: getPropertyDescription(propertyName),
       example,
     };
@@ -589,7 +608,12 @@ function schemaFromExample(
         value,
         key,
         components,
-        schemaName ? `${schemaName}${toPascalCase(key)}` : undefined,
+        (() => {
+          if (schemaName) {
+            return `${schemaName}${toPascalCase(key)}`;
+          }
+          return undefined;
+        })(),
       );
       return acc;
     }, {});
@@ -610,9 +634,9 @@ function schemaFromExample(
 }
 
 /**
- * 确保Document Components。
- * @param document - document 输入；使用 `components` 字段生成结果。
- * @returns 当前模块产出的 SwaggerComponents。
+ * 确保Document组件定义存在且保持一致；缺失时根据`document`补齐对应状态。
+ * @param document - 用于Document组件定义的领域对象，包含 `components` 字段。
+ * @returns Document组件定义。
  */
 function ensureDocumentComponents(document: OpenAPIObject): SwaggerComponents {
   document.components ||= {};
@@ -622,8 +646,9 @@ function ensureDocumentComponents(document: OpenAPIObject): SwaggerComponents {
 }
 
 /**
- * 执行 当前模块流程。
- * @param value - 待转换值；影响 toPascalCase 的返回值。
+ * 将非字母数字分隔的各文本段首字母大写后连接为 PascalCase 名称。
+ * @param value - 可能含空格、连字符或其他分隔符的原始名称。
+ * @returns 仅由有效文本段组成的 PascalCase 名称；没有有效片段时为空字符串。
  */
 function toPascalCase(value: string) {
   return value
@@ -634,8 +659,9 @@ function toPascalCase(value: string) {
 }
 
 /**
- * 查询 当前模块数据。
- * @param propertyName - propertyName 输入；计算 公共基础设施布尔判断。
+ * 通过 `propertyName.endsWith` 判断输入是否满足函数约束。
+ * @param propertyName - 决定数组内容条目名称内容、边界或目标的 `propertyName` 值。
+ * @returns 当前状态对应的数组内容条目名称，取值为 `'item'`。
  */
 function getArrayItemName(propertyName: string) {
   if (propertyName === 'items') return 'item';
@@ -645,8 +671,9 @@ function getArrayItemName(propertyName: string) {
 }
 
 /**
- * 查询 当前模块数据。
- * @param propertyName - propertyName 输入；限定 公共基础设施查询范围。
+ * 按`propertyName`读取属性说明文本。
+ * @param propertyName - 决定属性说明文本内容、边界或目标的 `propertyName` 值。
+ * @returns 规范化后的属性说明文本；主值为空时采用 `propertyName` 兜底。
  */
 function getPropertyDescription(propertyName: string) {
   const descriptionMap: Record<string, string> = {
@@ -725,10 +752,11 @@ function getPropertyDescription(propertyName: string) {
 }
 
 /**
- * 查询 当前模块数据。
- * @param path - OpenAPI 路径；执行 `path.toLowerCase()` 对应的 公共基础设施步骤。
- * @param method - HTTP 方法名；决定 公共基础设施条件分支。
- * @param operation - operation 输入；使用 `summary`、`description` 字段生成结果。
+ * 按`path`、`method`、`operation`读取操作数据示例；当 `normalizedPath.includes('/auth/codes')` 成立时返回 `['QqBotAccountCreateButton', 'QqBotPermissi…`。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @param method - 决定操作数据示例内容、边界或目标的 `method` 值。
+ * @param operation - 在当前锁、事务或错误边界内执行的受控回调。
+ * @returns 满足操作数据示例约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function getOperationDataExample(
   path: string,
@@ -768,8 +796,9 @@ function getOperationDataExample(
 }
 
 /**
- * 判断 当前模块条件。
- * @param path - OpenAPI 路径；计算 公共基础设施布尔判断。
+ * 通过 `path.endsWith` 判断输入是否满足函数约束。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @returns 满足分页结果响应路径约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function isPageResponsePath(path: string) {
   return (
@@ -781,8 +810,9 @@ function isPageResponsePath(path: string) {
 }
 
 /**
- * 判断 当前模块条件。
- * @param path - OpenAPI 路径；计算 公共基础设施布尔判断。
+ * 根据路径中的全量列表、可用项、选项或字典标记，判断 OpenAPI 响应是否应使用数组结构。
+ * @param path - `path` 通过 `includes` 筛选或判定其中的内容。
+ * @returns 返回 `path.includes('/alllist') || path.includes('/enabled') || path.includes…` 的判定结果；条件成立为 `true`，否则为 `false`。
  */
 function isArrayResponsePath(path: string) {
   return (
@@ -798,10 +828,11 @@ function isArrayResponsePath(path: string) {
 }
 
 /**
- * 判断 当前模块条件。
- * @param path - OpenAPI 路径；计算 公共基础设施布尔判断。
- * @param method - HTTP 方法名；计算 公共基础设施判断结果。
- * @param summary - summary 输入；计算 公共基础设施布尔判断。
+ * 根据`path`、`method`、`summary`与当前约束判定布尔值响应路径。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @param method - 决定布尔值响应路径内容、边界或目标的 `method` 值。
+ * @param summary - 决定布尔值响应路径内容、边界或目标的 `summary` 值。
+ * @returns 满足布尔值响应路径约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function isBooleanResponsePath(path: string, method: string, summary: string) {
   return (
@@ -818,24 +849,27 @@ function isBooleanResponsePath(path: string, method: string, summary: string) {
 }
 
 /**
- * 判断 当前模块条件。
- * @param path - OpenAPI 路径；计算 公共基础设施布尔判断。
+ * 仅将下载与资源代理路径识别为 OpenAPI 二进制响应。
+ * @param path - `path` 通过 `includes` 筛选或判定其中的内容。
+ * @returns 返回 `path.includes('/download') || path.includes('/resource-proxy')` 的判定结果；条件成立为 `true`，否则为 `false`。
  */
 function isBinaryResponsePath(path: string) {
   return path.includes('/download') || path.includes('/resource-proxy');
 }
 
 /**
- * 判断 当前模块条件。
- * @param path - OpenAPI 路径；执行 `path.toLowerCase()` 对应的 公共基础设施步骤。
+ * 根据`path`与当前约束判定运行态健康状态路径。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @returns 满足运行态健康状态路径约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function isRuntimeHealthPath(path: string) {
   return path.toLowerCase() === '/health/runtime';
 }
 
 /**
- * 执行 当前模块流程。
- * @param path - OpenAPI 路径；计算 公共基础设施布尔判断。
+ * 根据`path`拼接稳定的条目示例路径，用于隔离对应资源或存储记录。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @returns 包含 `id`、`name`、`status` 字段的条目示例路径。
  */
 function itemExampleByPath(path: string) {
   if (path.includes('/qqbot/account')) return qqbotAccountExample();
@@ -864,7 +898,8 @@ function itemExampleByPath(path: string) {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理adminLogin示例。
+ * @returns 包含 `id`、`username`、`realName`、`roles`、`['access' + 'Token']` 字段的adminLogin示例。
  */
 function adminLoginExample() {
   return {
@@ -877,7 +912,8 @@ function adminLoginExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理admin字典示例。
+ * @returns 包含 `id`、`dictCode`、`label`、`value`、`childrenCode` 字段的admin字典示例。
  */
 function adminDictExample() {
   return {
@@ -894,7 +930,8 @@ function adminDictExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理admin用户示例。
+ * @returns 包含 `id`、`username`、`realName`、`avatar`、`status` 字段的admin用户示例。
  */
 function adminUserExample() {
   return {
@@ -907,7 +944,8 @@ function adminUserExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理admin菜单示例。
+ * @returns 包含 `id`、`name`、`path`、`component`、`meta` 字段的admin菜单示例。
  */
 function adminMenuExample() {
   return {
@@ -924,7 +962,8 @@ function adminMenuExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理包含 `id`、`name`、`parentId`、`status` 字段的结果。
+ * @returns 包含 `id`、`name`、`parentId`、`status` 字段的admin部门示例。
  */
 function adminDeptExample() {
   return {
@@ -936,7 +975,8 @@ function adminDeptExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理admin角色示例。
+ * @returns 包含 `id`、`roleName`、`roleCode`、`status` 字段的admin角色示例。
  */
 function adminRoleExample() {
   return {
@@ -948,7 +988,8 @@ function adminRoleExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理包含 `id`、`name`、`type`、`image` 字段的结果。
+ * @returns 包含 `id`、`name`、`type`、`image` 字段的包含 `id`、`name`、`type`、`image` 字段的。
  */
 function componentExample() {
   return {
@@ -960,7 +1001,8 @@ function componentExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理qqbot账号示例。
+ * @returns 包含 `connectStatus`、`connectionMode`、`enabled`、`id`、`lastHeartbeatAt` 字段的qqbot账号示例。
  */
 function qqbotAccountExample() {
   return {
@@ -987,7 +1029,8 @@ function qqbotAccountExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理qqbot命令示例。
+ * @returns 包含 `id`、`name`、`command`、`pluginKey`、`enabled` 字段的qqbot命令示例。
  */
 function qqbotCommandExample() {
   return {
@@ -1000,7 +1043,8 @@ function qqbotCommandExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理qqbot权限规则示例。
+ * @returns 包含 `id`、`name`、`matchType`、`keyword`、`replyContent` 字段的qqbot权限规则示例。
  */
 function qqbotRuleExample() {
   return {
@@ -1014,7 +1058,8 @@ function qqbotRuleExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理qqbot会话消息示例。
+ * @returns 包含 `id`、`selfId`、`targetType`、`targetId`、`lastMessage` 字段的qqbot会话消息示例。
  */
 function qqbotConversationExample() {
   return {
@@ -1027,7 +1072,8 @@ function qqbotConversationExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理qqbot消息示例。
+ * @returns 包含 `id`、`selfId`、`messageType`、`direction`、`userId` 字段的qqbot消息示例。
  */
 function qqbotMessageExample() {
   return {
@@ -1041,7 +1087,8 @@ function qqbotMessageExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理qqbot权限示例。
+ * @returns 包含 `id`、`selfId`、`targetType`、`targetId`、`userId` 字段的qqbot权限示例。
  */
 function qqbotPermissionExample() {
   return {
@@ -1056,7 +1103,8 @@ function qqbotPermissionExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理qqbot插件示例。
+ * @returns 包含 `key`、`name`、`triggerMode`、`description` 字段的qqbot插件示例。
  */
 function qqbotPluginExample() {
   return {
@@ -1068,7 +1116,8 @@ function qqbotPluginExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理qqbot日志示例。
+ * @returns 包含 `id`、`selfId`、`targetType`、`targetId`、`message` 字段的qqbot日志示例。
  */
 function qqbotSendLogExample() {
   return {
@@ -1082,7 +1131,8 @@ function qqbotSendLogExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理qqbot扫码会话示例。
+ * @returns 包含 `sessionId`、`qrcode`、`status`、`expireAt` 字段的qqbot扫码会话示例。
  */
 function qqbotScanExample() {
   return {
@@ -1094,7 +1144,8 @@ function qqbotScanExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理dashboard示例。
+ * @returns 包含 `accountCount`、`onlineAccountCount`、`todayMessageCount`、`todaySendCount` 字段的dashboard示例。
  */
 function dashboardExample() {
   return {
@@ -1106,7 +1157,8 @@ function dashboardExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理包含 `mode`、`enabled` 字段的结果。
+ * @returns 包含 `mode`、`enabled` 字段的包含 `mode`、`enabled` 字段的。
  */
 function permissionConfigExample() {
   return {
@@ -1116,7 +1168,8 @@ function permissionConfigExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理插件健康状态示例。
+ * @returns 包含 `key`、`name`、`available`、`message` 字段的插件健康状态示例。
  */
 function pluginHealthExample() {
   return {
@@ -1128,7 +1181,8 @@ function pluginHealthExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理运行态健康状态示例。
+ * @returns 包含 `service`、`checkedAt`、`status`、`checks` 字段的运行态健康状态示例。
  */
 function runtimeHealthExample() {
   return {
@@ -1153,7 +1207,8 @@ function runtimeHealthExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理minio对象示例。
+ * @returns 包含 `name`、`size`、`etag`、`lastModified` 字段的minio对象示例。
  */
 function minioObjectExample() {
   return {
@@ -1165,7 +1220,8 @@ function minioObjectExample() {
 }
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理minioUpload示例。
+ * @returns 包含 `bucketName`、`objectName`、`etag`、`size`、`mimeType` 字段的minioUpload示例。
  */
 function minioUploadExample() {
   return {

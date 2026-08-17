@@ -27,8 +27,9 @@ export class AdminUserService {
   ) {}
 
   /**
-   * 查询 Admin 身份权限数据。
-   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * 通过 `where` 筛选匹配数据。
+   * @param query - 限定用户筛选、排序与分页范围的查询条件，包含 `page`、`pageSize`、`id`、`username` 字段。
+   * @returns 包含 `items`、`total` 字段的用户。
    */
   async getUserList(query: AdminUserListQuery) {
     const page = Number(query.page || 1);
@@ -88,8 +89,9 @@ export class AdminUserService {
   }
 
   /**
-   * 创建 Admin 身份权限对象或配置。
-   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   * 通过 `ensureUsernameAvailable` 强制满足前置条件。
+   * @param data - 用于用户的领域对象，包含 `username`、`password`、`deptId`、`homePath` 字段。
+   * @returns 固定为 `null`，表示当前入口不会产生用户。
    */
   async createUser(data: AdminUserInput) {
     await this.ensureUsernameAvailable(String(data.username || ''));
@@ -110,9 +112,10 @@ export class AdminUserService {
   }
 
   /**
-   * 更新User。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   * 根据`id`、`data`更新用户；把变更持久化到当前存储（`userRepository.save`）。
+   * @param id - 决定用户内容、边界或目标的 `id` 值。
+   * @param data - 用于用户的领域对象，包含 `username`、`password`、`deptId`、`realName` 字段。
+   * @returns 固定为 `null`，表示当前入口不会产生用户。
    */
   async updateUser(id: string, data: AdminUserInput) {
     const user = await this.userRepository.findOne({
@@ -144,7 +147,12 @@ export class AdminUserService {
     return null;
   }
 
-  /** 重置用户密码。 */
+  /**
+   * 根据`id`、`password`处理重置用户密码；把变更持久化到当前存储（`userRepository.save`）。
+   * @param id - 决定重置用户密码内容、边界或目标的 `id` 值。
+   * @param password - 决定重置用户密码内容、边界或目标的 `password` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 固定为 `null`，表示当前入口不会产生重置用户密码。
+   */
   async resetUserPassword(id: string, password?: string) {
     const user = await this.userRepository.findOne({
       where: {
@@ -160,9 +168,10 @@ export class AdminUserService {
   }
 
   /**
-   * 删除User。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param currentUserId - 用户 ID；定位本次读取、更新、删除或关联的用户。
+   * 按`id`、`currentUserId`移除用户；把变更持久化到当前存储（`userRepository.update`）。
+   * @param id - 决定用户内容、边界或目标的 `id` 值。
+   * @param currentUserId - 用于精确定位用户的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 固定为 `null`，表示当前入口不会产生用户。
    */
   async deleteUser(id: string, currentUserId?: string) {
     const user = await this.userRepository.findOne({
@@ -193,9 +202,10 @@ export class AdminUserService {
   }
 
   /**
-   * 更新Current Profile。
-   * @param userId - 用户 ID；定位本次读取、更新、删除或关联的用户。
-   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   * 根据`userId`、`data`更新资料；把变更持久化到当前存储（`userRepository.save`）。
+   * @param userId - 用于精确定位用户的标识。
+   * @param data - 用于资料的领域对象，包含 `realName`、`homePath`、`avatar` 字段。
+   * @returns 资料。
    */
   async updateCurrentProfile(userId: string, data: AdminUserInput) {
     const user = await this.findActiveUser(userId);
@@ -218,8 +228,9 @@ export class AdminUserService {
   }
 
   /**
-   * 序列化User。
-   * @param user - user 输入；使用 `avatar`、`homePath`、`id`、`realName` 字段生成结果。
+   * 将管理员实体投影为当前登录用户资料，仅保留未删除且已启用角色的角色编码。
+   * @param user - 当前管理员实体；应已加载角色关系，缺少头像或角色时分别按空字符串和空数组处理。
+   * @returns 返回登录态需要的用户资料与有效角色编码列表。
    */
   serializeUser(user: AdminUser) {
     return {
@@ -237,19 +248,23 @@ export class AdminUserService {
   }
 
   /**
-   * 序列化User For List。
-   * @param user - user 输入；使用 `roles`、`createTime`、`dept`、`deptId` 字段生成结果。
+   * 将管理员实体投影为列表行，过滤已软删除角色并展开部门与角色展示字段。
+   * @param user - 待展示的管理员实体；未加载部门或角色时分别按 `null` 和空数组处理。
+   * @returns 返回包含部门摘要、有效角色列表及用户基本字段的管理端列表行。
    */
   private serializeUserForList(user: AdminUser) {
     const activeRoles = (user.roles || []).filter((role) => !role.isDeleted);
     return {
       createTime: user.createTime,
-      dept: user.dept
-        ? {
+      dept: (() => {
+        if (user.dept) {
+          return {
             id: user.dept.id,
             name: user.dept.name,
-          }
-        : null,
+          };
+        }
+        return null;
+      })(),
       deptId: user.deptId,
       deptName: user.dept?.name || '',
       homePath: user.homePath,
@@ -272,8 +287,9 @@ export class AdminUserService {
   }
 
   /**
-   * 查询 Admin 身份权限数据。
-   * @param ids - Admin ID 列表；限定本次批量读取、渲染或关联的Admin范围。
+   * 通过 `filter` 筛选匹配数据。
+   * @param ids - 决定Roles标识集合内容、边界或目标的 `ids` 值。
+   * @returns Roles标识集合。
    */
   private async findRolesByIds(ids: string[]) {
     const normalizedIds = ids.map((id) => String(id)).filter(Boolean);
@@ -287,8 +303,9 @@ export class AdminUserService {
   }
 
   /**
-   * 执行 Admin 身份权限流程。
-   * @param deptId - Admin ID；定位本次读取、更新、删除或关联的Admin。
+   * 根据`deptId`处理部门标识集合。
+   * @param deptId - 用于精确定位部门的标识。
+   * @returns 部门标识集合。
    */
   private async collectDeptIds(deptId: string) {
     if (deptId === '0') return ['0'];
@@ -315,8 +332,9 @@ export class AdminUserService {
   }
 
   /**
-   * 查询 Admin 身份权限数据。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按`id`读取启用状态用户；从 `userRepository.findOne` 读取启用状态用户。
+   * @param id - 决定启用状态用户内容、边界或目标的 `id` 值。
+   * @returns 启用状态用户。
    */
   private async findActiveUser(id: string) {
     const user = await this.userRepository.findOne({
@@ -332,23 +350,26 @@ export class AdminUserService {
   }
 
   /**
-   * 确保Username Available。
-   * @param username - username 输入；生成规范化文本。
-   * @param ignoreId - Admin ID；定位本次读取、更新、删除或关联的Admin。
+   * 确保UsernameAvailable存在且保持一致；缺失时根据`username`、`ignoreId`补齐对应状态；从 `userRepository.findOne` 读取UsernameAvailable。
+   * @param username - 决定是否启用“username”分支的布尔选项。
+   * @param ignoreId - 用于精确定位ignore的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
    */
   private async ensureUsernameAvailable(username: string, ignoreId?: string) {
     if (!username.trim()) {
       throwVbenError('用户名不能为空', HttpStatus.BAD_REQUEST);
     }
 
-    const where = ignoreId
-      ? {
+    const where = (() => {
+      if (ignoreId) {
+        return {
           id: Not(ignoreId),
           username,
-        }
-      : {
+        };
+      }
+      return {
           username,
         };
+    })();
     const existing = await this.userRepository.findOne({ where });
     if (existing) {
       throwVbenError('用户名已存在', HttpStatus.BAD_REQUEST);

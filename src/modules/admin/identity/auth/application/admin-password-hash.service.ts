@@ -50,7 +50,11 @@ export class AdminPasswordHashService {
     this.cryptoDependencies = cryptoDependencies || DEFAULT_CRYPTO_DEPENDENCIES;
   }
 
-  /** 生成密码摘要。 */
+  /**
+   * 校验明文密码边界后生成随机盐并执行 PBKDF2，最终编码算法、迭代次数、盐值与摘要。
+   * @param password - 决定明文密码边界后生成随机盐并执行 PBKDF2，最终编码算法、迭代次数、盐值与摘要内容、边界或目标的 `password` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 满足hash密码约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   async hashPassword(password?: string) {
     this.assertHashablePassword(password);
     const salt = this.cryptoDependencies.randomBytes(
@@ -67,12 +71,22 @@ export class AdminPasswordHashService {
     ].join('$');
   }
 
-  /** 判断密码摘要是否成立。 */
+  /**
+   * 根据`value`与当前约束判定密码摘要。
+   * @param value - 待判定是否满足密码摘要约束的候选值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 满足密码摘要约束时为 `true`；不满足、未命中或显式失败分支为 `false`；无法解析或未命中时为 `null`。
+   */
   isPasswordHash(value?: string) {
     return this.parsePasswordHash(value) !== null;
   }
 
-  /** 验证密码。 */
+  /**
+   * 解析已编码密码摘要并以固定上限校验明文；无效摘要或超限输入走虚假摘要比较以维持时序一致。
+   * @param password - 决定已编码密码摘要并以固定上限校验明文内容、边界或目标的 `password` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @param encodedHash - 决定已编码密码摘要并以固定上限校验明文内容、边界或目标的 `encodedHash` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 满足已编码密码摘要并以固定上限校验明文约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   * @throws 当 `!comparisonHash` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async verifyPassword(password?: string, encodedHash?: string) {
     const parsedHash = this.parsePasswordHash(encodedHash);
     const comparisonHash =
@@ -83,7 +97,12 @@ export class AdminPasswordHashService {
 
     const passwordIsValid = this.isPasswordWithinLimit(password);
     const derived = await this.derivePassword(
-      passwordIsValid ? password : ADMIN_PASSWORD_DUMMY_VALUE,
+      (() => {
+        if (passwordIsValid) {
+          return password;
+        }
+        return ADMIN_PASSWORD_DUMMY_VALUE;
+      })(),
       comparisonHash.salt,
     );
     const matches = this.cryptoDependencies.timingSafeEqual(
@@ -93,7 +112,10 @@ export class AdminPasswordHashService {
     return Boolean(parsedHash && passwordIsValid && matches);
   }
 
-  /** 校验密码是否满足摘要生成要求。 */
+  /**
+   * 校验`password`是否满足密码是否满足摘要生成要求约束，并拒绝不合法输入。
+   * @param password - 用于密码是否满足摘要生成要求的领域对象，包含 `length` 字段；为空时采用 `password.length === 0` 作为兜底。
+   */
   private assertHashablePassword(
     password?: string,
   ): asserts password is string {
@@ -113,7 +135,12 @@ export class AdminPasswordHashService {
     }
   }
 
-  /** 推导密码。 */
+  /**
+   * 使用固定摘要算法、迭代次数和长度异步派生密码材料，并把底层失败作为 Promise 拒绝。
+   * @param password - 决定derive密码内容、边界或目标的 `password` 值。
+   * @param salt - 决定derive密码内容、边界或目标的 `salt` 值。
+   * @returns 完成初始化并携带当前边界配置的derive密码。
+   */
   private derivePassword(password: string, salt: Buffer) {
     return new Promise<Buffer>((resolve, reject) => {
       this.cryptoDependencies.pbkdf2(
@@ -133,7 +160,11 @@ export class AdminPasswordHashService {
     });
   }
 
-  /** 判断密码是否在限制范围内。 */
+  /**
+   * 根据`password`与当前约束判定密码是否在限制范围内。
+   * @param password - 用于密码是否在限制范围内的领域对象，包含 `length` 字段；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 满足密码是否在限制范围内约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isPasswordWithinLimit(password?: string): password is string {
     return (
       typeof password === 'string' &&
@@ -142,7 +173,11 @@ export class AdminPasswordHashService {
     );
   }
 
-  /** 解析密码摘要。 */
+  /**
+   * 从`value`解析密码摘要；当 `salt.length !== ADMIN_PASSWORD_HASH_SALT_BYTES || digest.leng…` 成立时返回 `null`。
+   * @param value - 待转换为密码摘要的原始值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 包含 `digest`、`salt` 字段的密码摘要；无法解析或未命中时为 `null`。
+   */
   private parsePasswordHash(value?: string): ParsedAdminPasswordHash | null {
     if (typeof value !== 'string') return null;
     const match = ADMIN_PASSWORD_HASH_PATTERN.exec(value);

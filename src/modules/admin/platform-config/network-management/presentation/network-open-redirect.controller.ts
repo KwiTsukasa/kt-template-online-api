@@ -22,7 +22,11 @@ import { NetworkOpenRedirectService } from '@/modules/admin/platform-config/netw
 export class NetworkOpenRedirectController {
   constructor(private readonly service: NetworkOpenRedirectService) {}
 
-  /** 返回头部。 */
+  /**
+   * 根据`serviceKey`、`response`处理只读 HEAD 查询并写回头部；向目标通道投递结果（`respond`）。
+   * @param serviceKey - 用于读取或更新只读 HEAD 查询并写回头部的稳定键。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   */
   @Head(':serviceKey')
   @ApiOperation({ summary: '解析 NATMap 直连入口元数据' })
   @Public()
@@ -33,7 +37,11 @@ export class NetworkOpenRedirectController {
     await this.respond(serviceKey, response);
   }
 
-  /** 读取网络打开重定向记录。 */
+  /**
+   * 按`serviceKey`、`response`读取网络打开重定向记录；向目标通道投递结果（`respond`）。
+   * @param serviceKey - 用于读取或更新网络打开重定向记录的稳定键。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   */
   @Get(':serviceKey')
   @ApiOperation({ summary: '跳转到当前 NATMap 直连入口' })
   @Public()
@@ -44,7 +52,11 @@ export class NetworkOpenRedirectController {
     await this.respond(serviceKey, response);
   }
 
-  /** 返回响应网络打开重定向记录。 */
+  /**
+   * 根据`serviceKey`、`response`处理目标状态并写入响应网络打开重定向记录；当 `resolution.status === 'found'` 成立时直接结束且不产生返回值。
+   * @param serviceKey - 用于读取或更新目标状态并写入响应网络打开重定向记录的稳定键。
+   * @param response - 用于写入状态码、Cookie 或缓存策略的当前 HTTP 响应。
+   */
   private async respond(serviceKey: string, response: Response) {
     this.setHeaders(response);
     const resolution = await this.service
@@ -72,7 +84,10 @@ export class NetworkOpenRedirectController {
     response.status(HttpStatus.NOT_FOUND).end();
   }
 
-  /** 设置请求头。 */
+  /**
+   * 为公网跳转响应写入安全响应头，并禁止缓存、引用来源泄漏与搜索索引。
+   * @param response - 用于写入状态码、Cookie 或缓存策略的当前 HTTP 响应。
+   */
   private setHeaders(response: Response) {
     response.setHeader('Cache-Control', 'no-store, private');
     response.setHeader('Pragma', 'no-cache');

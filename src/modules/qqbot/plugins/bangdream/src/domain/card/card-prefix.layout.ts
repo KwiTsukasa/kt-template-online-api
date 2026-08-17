@@ -40,9 +40,9 @@ export const BANGDREAM_CARD_PREFIX_SPEC = {
 } as const;
 
 /**
- * 计算卡牌标题块乐队 Logo 的等比缩放布局。
- *
- * @param source - source 输入；使用 `height`、`width` 字段生成结果。
+ * 根据参数 `source`，计算卡牌标题块乐队 Logo 的等比缩放布局。
+ * @param source - 用于根据参数 `source`，计算卡牌标题块乐队 Logo 的等比缩放布局的领域对象，包含 `height`、`width` 字段。
+ * @returns 包含 `height`、`width`、`x`、`y` 字段的根据参数 `source`，计算卡牌标题块乐队 Logo 的等比缩放布局。
  */
 export function getCardPrefixBandLogoLayout(source: CardPrefixBandLogoSource) {
   const { width, x, y } = BANGDREAM_CARD_PREFIX_SPEC.bandLogo;

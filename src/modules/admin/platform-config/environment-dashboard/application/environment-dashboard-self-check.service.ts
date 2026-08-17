@@ -10,7 +10,10 @@ export class EnvironmentDashboardSelfCheckService {
     private readonly eventBus: EnvironmentEventBusService,
   ) {}
 
-  /** 执行自身检查。 */
+  /**
+   * 根据当前运行态处理自身检查；向目标通道投递结果（`eventBus.publish`）。
+   * @returns 自身检查。
+   */
   async runSelfCheck(): Promise<EnvironmentDashboardResponse> {
     const observedAt = new Date().toISOString();
     await this.eventBus.publish({

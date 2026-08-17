@@ -25,10 +25,9 @@ export const serverList: Array<Server> = BANGDREAM_SERVER_CODES.map(
 );
 
 /**
- * 在BangDream 领域模型层中获取服务器By服务器ID。
- *
- * @param serverId - 服务器 ID；定位本次读取、更新、删除或关联的服务器。
- * @returns BangDream 插件查询结果。
+ * 按`serverId`读取服务器标识；从 `getServerByName` 读取服务器标识。
+ * @param serverId - 用于精确定位服务器的标识。
+ * @returns 服务器标识。
  */
 export function getServerByServerId(serverId: number): Server {
   //如果是string，则按服务器名查服务器
@@ -40,10 +39,9 @@ export function getServerByServerId(serverId: number): Server {
 }
 
 /**
- * 在BangDream 领域模型层中获取服务器By名称。
- *
- * @param name - 名称文本；决定 BangDream条件分支。
- * @returns BangDream 插件查询结果。
+ * 按`name`读取服务器名称。
+ * @param name - 决定服务器名称内容、边界或目标的 `name` 值。
+ * @returns 服务器名称。
  */
 export function getServerByName(name: string): Server {
   // 根据服务器名获取对应服务器
@@ -63,10 +61,9 @@ export function getServerByName(name: string): Server {
 const serverIconCache: { [server: number]: Image } = {};
 
 /**
- * 在BangDream 领域模型层中获取图标。
- *
- * @param server - server 输入；驱动 `serverResourceRepository.getIconSvgBuffer()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 通过 `loadImageFromPath` 加载绘制所需图片资源。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 图标。
  */
 export async function getIcon(server: Server): Promise<Image> {
   if (serverIconCache[server]) {
@@ -87,10 +84,10 @@ export async function getIcon(server: Server): Promise<Image> {
 }
 
 /**
- * 在BangDream 领域模型层中获取服务器ByPriority。
- *
- * @param content - 待处理内容；决定 BangDream条件分支。
- * @param displayedServerList - displayedServerList 输入；去重列表值。
+ * 按`content`、`displayedServerList`读取服务器Priority；当 `content[tempServer] != null` 成立时返回 `tempServer`。
+ * @param content - 用于服务器Priority的领域对象，包含 `tempServer` 字段。
+ * @param displayedServerList - 决定服务器Priority内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @returns 服务器Priority；没有可用结果或提前结束时为 `undefined`。
  */
 export function getServerByPriority(
   content: Array<unknown>,
@@ -109,20 +106,18 @@ export function getServerByPriority(
 }
 
 /**
- * 在BangDream 领域模型层中判断服务器。
- *
- * @param server - server 输入；驱动 `serverList.includes()` 的 BangDream步骤。
- * @returns 判断结果。
+ * 仅当输入是数字且属于 BanG Dream 已知服务器列表时返回 `true`。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 满足服务器约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isServer(server: unknown): boolean {
   return typeof server === 'number' && serverList.includes(server);
 }
 
 /**
- * 在BangDream 领域模型层中判断服务器列表。
- *
- * @param serverList - serverList 输入；使用 `length` 字段计算判断结果。
- * @returns 判断结果。
+ * 通过 `isServer` 判断输入是否满足函数约束。
+ * @param serverList - 用于服务器的领域对象，包含 `length`、`i` 字段。
+ * @returns 满足服务器约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isServerList(serverList: Array<unknown>): boolean {
   let result = true;

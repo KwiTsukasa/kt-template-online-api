@@ -77,7 +77,6 @@ export class NetworkEndpointHistory {
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
 
-  /** 创建标识。 */
   @BeforeInsert()
   createId(): string {
     return ensureSnowflakeId(this);

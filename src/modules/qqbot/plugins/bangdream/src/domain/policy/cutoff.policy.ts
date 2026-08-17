@@ -40,21 +40,19 @@ export interface CutoffRecentEventSelectionOptions {
 }
 
 /**
- * 获取指定服务器支持的档位列表。
- *
- * @param server - server 输入；限定 BangDream查询范围。
- * @returns 档位列表。
+ * 根据参数 `server`，获取指定服务器支持的档位列表。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 按输入顺序得到的根据参数 `server`，获取指定服务器支持的档位列表；没有匹配项时为空数组。
  */
 export function getCutoffTierList(server: number): readonly number[] {
   return BANGDREAM_TIER_LIST_BY_SERVER[Server[server]] ?? [];
 }
 
 /**
- * 判断服务器是否支持指定档位。
- *
- * @param server - server 输入；驱动 `getCutoffTierList()` 的 BangDream步骤。
- * @param tier - tier 输入；驱动 `getCutoffTierList()` 的 BangDream步骤。
- * @returns 是否支持。
+ * 根据参数 `server`，判断服务器是否支持指定档位。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @param tier - 决定根据参数 `server`，判断服务器是否支持指定档位内容、边界或目标的 `tier` 值。
+ * @returns 满足根据参数 `server`，判断服务器是否支持指定档位约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isCutoffTierSupported(server: number, tier: number): boolean {
   return getCutoffTierList(server).includes(tier);
@@ -62,9 +60,7 @@ export function isCutoffTierSupported(server: number, tier: number): boolean {
 
 /**
  * 解析档线活动时间，国服缺失时使用预估开始时间。
- *
- * @param input - input 输入；影响 resolveCutoffEventSchedule 的返回值。
- * @returns 档线可用的开始与结束时间。
+ * @returns 包含 `endAt`、`startAt` 字段的档线活动时间，国服缺失时使用预估开始时间。
  */
 export function resolveCutoffEventSchedule({
   currentEvent,
@@ -92,12 +88,11 @@ export function resolveCutoffEventSchedule({
 }
 
 /**
- * 计算活动档线状态。
- *
- * @param startAt - startAt 输入；决定 BangDream条件分支。
- * @param endAt - endAt 输入；决定 BangDream条件分支。
- * @param now - now 输入；决定 BangDream条件分支。
- * @returns 活动状态。
+ * 按`startAt`、`endAt`、`now`读取活动档线状态。
+ * @param startAt - 用于过期、排序或租约判定的时间基准。
+ * @param endAt - 用于过期、排序或租约判定的时间基准。
+ * @param now - 用于过期、排序或租约判定的时间基准；省略时默认采用 `Date.now()`。
+ * @returns 活动档线状态。
  */
 export function getCutoffEventStatus(
   startAt: number | null,
@@ -111,11 +106,10 @@ export function getCutoffEventStatus(
 }
 
 /**
- * 获取预测窗口，统一使用档线对象已解析的时间。
- *
- * @param startAt - startAt 输入；驱动 `Math.floor()` 的 BangDream步骤。
- * @param endAt - endAt 输入；驱动 `Math.floor()` 的 BangDream步骤。
- * @returns 秒级预测窗口。
+ * 根据参数 `startAt`，获取预测窗口，统一使用档线对象已解析的时间。
+ * @param startAt - 用于过期、排序或租约判定的时间基准。
+ * @param endAt - 用于过期、排序或租约判定的时间基准。
+ * @returns 包含 `endTs`、`startTs` 字段的根据参数 `startAt`，获取预测窗口，统一使用档线对象已解析的时间。
  */
 export function getCutoffPredictionWindow(startAt: number, endAt: number) {
   return {
@@ -125,12 +119,11 @@ export function getCutoffPredictionWindow(startAt: number, endAt: number) {
 }
 
 /**
- * 计算时间点位于活动第几天。
- *
- * @param server - server 输入；驱动 `getBangDreamServerUtcOffset()` 的 BangDream步骤。
- * @param eventStartAt - eventStartAt 输入；驱动 `normalizeBangDreamTimestamp()` 的 BangDream步骤。
- * @param time - time 输入；驱动 `normalizeBangDreamTimestamp()` 的 BangDream步骤。
- * @returns 活动天数索引。
+ * 根据参数 `server`，计算时间点位于活动第几天。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @param eventStartAt - 用于过期、排序或租约判定的时间基准。
+ * @param time - 决定根据参数 `server`，计算时间点位于活动第几天内容、边界或目标的 `time` 值。
+ * @returns 当前状态对应的根据参数 `server`，计算时间点位于活动第几天，取值为 `0`。
  */
 export function getCutoffDayIndex(
   server: number,
@@ -157,11 +150,10 @@ export function getCutoffDayIndex(
 }
 
 /**
- * 判断 Date 是否是档线日增 checkpoint。
- *
- * @param server - server 输入；驱动 `isBangDreamDailyCheckpoint()` 的 BangDream步骤。
- * @param date - date 输入；驱动 `isBangDreamDailyCheckpoint()` 的 BangDream步骤。
- * @returns 是否为 checkpoint。
+ * 根据时间是否命中每日档线检查点判断当前日期是否需要日增采样。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @param date - 决定根据时间是否命中每日档线检查点判断当前日期是否需要日增采样内容、边界或目标的 `date` 值。
+ * @returns 满足根据时间是否命中每日档线检查点判断当前日期是否需要日增采样约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isCutoffDailyCheckpoint(server: number, date: Date): boolean {
   return isBangDreamDailyCheckpoint(server, date);
@@ -169,10 +161,9 @@ export function isCutoffDailyCheckpoint(server: number, date: Date): boolean {
 
 /**
  * 将时间戳转换为服务器时区 Date。
- *
- * @param time - time 输入；驱动 `getBangDreamDateByServerTimezone()` 的 BangDream步骤。
- * @param server - server 输入；驱动 `getBangDreamDateByServerTimezone()` 的 BangDream步骤。
- * @returns 服务器时区 Date。
+ * @param time - 决定将时间戳转换为服务器时区 Date内容、边界或目标的 `time` 值。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 将时间戳转换为服务器时区 Date。
  */
 export function getCutoffDateByServerTimezone(
   time: number | string,
@@ -182,10 +173,8 @@ export function getCutoffDateByServerTimezone(
 }
 
 /**
- * 选择用于档线对比的最近活动 ID。
- *
- * @param options - BangDream列表；影响 selectRecentCutoffEventIds 的返回值。
- * @returns 最近活动 ID 列表。
+ * 按活动开始时间倒序筛选指定结束点之前的档线活动，并返回最近的有界 ID 集合。
+ * @returns 按输入顺序得到的select最近日志档线事件标识集合列表；没有匹配项时为空数组。
  */
 export function selectRecentCutoffEventIds({
   candidates,

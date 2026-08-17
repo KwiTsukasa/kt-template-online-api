@@ -18,31 +18,44 @@ export const cutoffDetailOperation: BangDreamOperationModule = {
   execute: async (input, context) => {
     const tokens = context.getTokens(input);
     const hasCommandAlias = CUTOFF_DETAIL_COMMAND_ALIASES.has(tokens[0]);
-    const argumentTokens = hasCommandAlias ? tokens.slice(1) : tokens;
+    const argumentTokens = (() => {
+      if (hasCommandAlias) {
+        return tokens.slice(1);
+      }
+      return tokens;
+    })();
     const explicitTier = context.optionalNumber(input.tier);
     const tierFromText = context.optionalNumber(argumentTokens[0]);
     const tier =
       explicitTier ??
       tierFromText ??
-      (hasCommandAlias || argumentTokens.length === 0
-        ? DEFAULT_CUTOFF_DETAIL_TIER
-        : undefined);
+      ((() => {
+        if (hasCommandAlias || argumentTokens.length === 0) {
+          return DEFAULT_CUTOFF_DETAIL_TIER;
+        }
+        return undefined;
+      })());
     if (tier === undefined) throw new Error('请提供档位');
 
     const remainingTokens =
-      explicitTier === undefined && tierFromText !== undefined
-        ? argumentTokens.slice(1)
-        : argumentTokens;
+      (() => {
+        if (explicitTier === undefined && tierFromText !== undefined) {
+          return argumentTokens.slice(1);
+        }
+        return argumentTokens;
+      })();
     const mainServer = context.pickMainServer(input, remainingTokens);
     const eventId =
       context.optionalNumber(input.eventId) ??
       context.firstNumber(remainingTokens) ??
       getPresentEvent(mainServer).eventId;
     const options = context.getRenderOptions({ ...input, mainServer });
-    const images =
-      tier === 10
-        ? await drawCutoffEventTop(eventId, mainServer, options.compress)
-        : await drawCutoffDetail(eventId, tier, mainServer, options.compress);
+    const images = await (async () => {
+        if (tier === 10) {
+          return await drawCutoffEventTop(eventId, mainServer, options.compress);
+        }
+        return await drawCutoffDetail(eventId, tier, mainServer, options.compress);
+      })();
 
     return context.toImageReply(
       'bangdream.cutoff.detail',

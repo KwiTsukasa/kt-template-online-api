@@ -14,8 +14,9 @@ export class QqbotPluginArgumentParserService {
   ) {}
 
   /**
-   * 转换 QQBot 插件平台输入。
-   * @param input - input 输入；使用 `input` 字段生成结果。
+   * 优先使用插件自定义规范化器处理执行输入；未注册规范化器时返回原始 `input`。
+   * @param input - 用于优先使用插件自定义规范化器处理执行输入的结构化输入，包含 `input` 字段。
+   * @returns 规范化后的优先使用插件自定义规范化器处理执行输入；主值为空时采用 `input.input` 兜底。
    */
   async normalizeInput(input: QqbotPluginExecutionInput) {
     return this.normalizer?.normalizeInput(input) || input.input;

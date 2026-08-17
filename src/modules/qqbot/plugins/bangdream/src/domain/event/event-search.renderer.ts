@@ -49,12 +49,11 @@ export const line2: Canvas = drawDottedLine(
 );
 
 /**
- * 在QQBot 图片视图层中绘制活动列表。
- *
- * @param matches - BangDream列表；驱动 `matchEventList()` 的 BangDream步骤。
- * @param displayedServerList - displayedServerList 输入；驱动 `matchEventList()`、`sortEventList()`、`eventPromises.push()` 的 BangDream步骤。
- * @param compress - BangDream列表；影响 drawEventList 的返回值。
- * @returns 异步处理结果。
+ * 根据`matches`、`displayedServerList`、`compress`绘制或格式化事件；当 `tempEventList.length == 0` 成立时返回 `['没有搜索到符合条件的活动']`。
+ * @param matches - 决定事件内容、边界或目标的 `matches` 值。
+ * @param displayedServerList - 决定事件内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @param compress - 决定事件内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的事件列表；没有匹配项时为空数组。
  */
 export async function drawEventList(
   matches: FuzzySearchResult,
@@ -146,11 +145,10 @@ const matchEventList = createBangDreamEntityMatcher<Event>({
 });
 
 /**
- * 在QQBot 图片视图层中绘制活动In列表。
- *
- * @param event - event 输入；使用 `eventId`、`startAt`、`endAt`、`eventCharacterParameterBonus` 字段生成结果。
- * @param displayedServerList - displayedServerList 输入；使用 `length` 字段生成结果。
- * @returns 异步处理结果。
+ * 根据`event`、`displayedServerList`绘制或格式化事件；从 `event.getTypeName` 读取事件。
+ * @param event - 触发事件的领域事件，包含 `initFull`、`eventId`、`getTypeName`、`startAt` 字段。
+ * @param displayedServerList - 用于事件的领域对象，包含 `length`、`i` 字段；省略时默认采用 `globalDefaultServer`。
+ * @returns 事件。
  */
 async function drawEventInList(
   event: Event,

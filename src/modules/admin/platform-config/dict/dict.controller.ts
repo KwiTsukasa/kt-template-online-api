@@ -59,8 +59,9 @@ export class DictController {
   constructor(private readonly dictService: DictService) {}
 
   /**
-   * 获取字典分页列表。
-   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * 根据参数 `query`，获取字典分页列表。
+   * @param query - 限定根据参数 `query`，获取字典分页列表筛选、排序与分页范围的查询条件。
+   * @returns 根据参数 `query`，获取字典分页列表。
    */
   @ApiOperation({ summary: '获取字典分页列表' })
   @ApiPageResponse(AdminDictDto, [
@@ -81,8 +82,9 @@ export class DictController {
   }
 
   /**
-   * 获取字典树列表。
-   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * 根据`query`处理字典树列表。
+   * @param query - 限定字典树列表筛选、排序与分页范围的查询条件。
+   * @returns 字典树列表。
    */
   @ApiOperation({ summary: '获取字典树列表' })
   @ApiArrayResponse(AdminDictTreeDto, [
@@ -114,8 +116,9 @@ export class DictController {
   }
 
   /**
-   * 获取字典编码分组列表。
-   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * 根据参数 `query`，获取字典编码分组列表。
+   * @param query - 限定根据参数 `query`，获取字典编码分组列表筛选、排序与分页范围的查询条件。
+   * @returns 根据参数 `query`，获取字典编码分组列表。
    */
   @ApiOperation({ summary: '获取字典编码分组列表' })
   @ApiPageResponse(AdminDictGroupDto, [
@@ -134,7 +137,8 @@ export class DictController {
   }
 
   /**
-   * 获取字典编码选项。
+   * 根据当前领域状态，获取字典编码选项。
+   * @returns 根据当前领域状态，获取字典编码选项。
    */
   @ApiOperation({ summary: '获取字典编码选项' })
   @Get('codes')
@@ -143,8 +147,9 @@ export class DictController {
   }
 
   /**
-   * 根据key获取字典。
-   * @param dictKey - dictKey 输入；驱动 `dictService.getDictByKey()` 的 Admin步骤。
+   * 按字典键读取启用项，将可转数值的字典值标准化后封装为成功响应。
+   * @param dictKey - 用于筛选字典项的字典键。
+   * @returns 返回包含字典选项的 Vben 成功响应；未命中时选项为空数组。
    */
   @ApiOperation({ summary: '根据key获取字典' })
   @ApiQuery({ name: 'dictKey', type: String })
@@ -158,7 +163,8 @@ export class DictController {
 
   /**
    * 根据组件类型获取组件字典。
-   * @param type - type 输入；驱动 `dictService.getComponentDictByType()` 的 Admin步骤。
+   * @param type - 决定根据组件类型获取组件字典内容、边界或目标的 `type` 值。
+   * @returns 根据组件类型获取组件字典。
    */
   @ApiOperation({ summary: '根据组件类型获取组件字典' })
   @ApiQuery({ name: 'type', type: Number })
@@ -171,8 +177,9 @@ export class DictController {
   }
 
   /**
-   * 新增字典项。
-   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   * 根据`body`更新针对字典项。
+   * @param body - 用于针对字典项的结构化输入。
+   * @returns 针对字典项。
    */
   @ApiOperation({ summary: '新增字典项' })
   @Post('save')
@@ -182,8 +189,9 @@ export class DictController {
   }
 
   /**
-   * 编辑字典项。
-   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   * 根据`body`更新针对字典项。
+   * @param body - 用于针对字典项的结构化输入。
+   * @returns 针对字典项。
    */
   @ApiOperation({ summary: '编辑字典项' })
   @Post('update')
@@ -193,8 +201,9 @@ export class DictController {
   }
 
   /**
-   * 删除字典项。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按`id`移除针对删除字典项。
+   * @param id - 决定针对删除字典项内容、边界或目标的 `id` 值。
+   * @returns 针对删除字典项。
    */
   @ApiOperation({ summary: '删除字典项' })
   @Delete(':id')
@@ -203,9 +212,10 @@ export class DictController {
   }
 
   /**
-   * 启停字典项。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param status - Admin列表；驱动 `vbenSuccess()` 的 Admin步骤。
+   * 根据`id`、`status`处理启停字典项。
+   * @param id - 决定启停字典项内容、边界或目标的 `id` 值。
+   * @param status - 决定启停字典项内容、边界或目标的 `status` 值。
+   * @returns 启停字典项。
    */
   @ApiOperation({ summary: '启停字典项' })
   @Post('toggle')

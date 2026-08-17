@@ -13,7 +13,8 @@ export class AdminUserController {
 
   /**
    * 获取当前用户信息。
-   * @param user - user 输入；驱动 `vbenSuccess()` 的 Admin步骤。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @returns 当前用户信息。
    */
   @Get('info')
   @ApiOperation({ summary: '获取当前用户信息' })
@@ -22,9 +23,10 @@ export class AdminUserController {
   }
 
   /**
-   * 更新当前用户基础资料。
-   * @param user - user 输入；使用 `id` 字段生成结果。
-   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   * 针对当前用户基础资料。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @param body - 用于针对当前用户基础资料的结构化输入。
+   * @returns 针对当前用户基础资料。
    */
   @Put('profile')
   @ApiOperation({ summary: '更新当前用户基础资料' })

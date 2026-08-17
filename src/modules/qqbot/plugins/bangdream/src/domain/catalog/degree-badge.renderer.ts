@@ -12,12 +12,11 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/degree-list.layout';
 
 /**
- * 在图片布局层中绘制称号。
- *
- * @param degree - degree 输入；使用 `degreeName`、`degreeType`、`degreeId`、`rank` 字段生成结果。
- * @param server - server 输入；驱动 `degree.getDegreeImage()`、`degree.getDegreeFrame()`、`degree.getDegreeIcon()` 的 BangDream步骤。
- * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`degree`、`server`、`displayedServerList`绘制或格式化称号；把图片、文本或图形按布局规格绘制到画布。
+ * @param degree - 用于称号的领域对象，包含 `degreeName`、`getDegreeImage`、`degreeType`、`degreeId` 字段。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @param displayedServerList - 决定称号内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @returns 称号。
  */
 export async function drawDegree(
   degree: Degree,

@@ -32,8 +32,9 @@ export class QqbotAccountController {
   ) {}
 
   /**
-   * QQBot 账号分页。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 按查询条件读取 QQBot 账号分页，并封装为 Vben 成功响应。
+   * @param query - 限定`list` 对应结果筛选、排序与分页范围的查询条件。
+   * @returns `list` 对应。
    */
   @Get('list')
   @ApiOperation({ summary: 'QQBot 账号分页' })
@@ -42,7 +43,8 @@ export class QqbotAccountController {
   }
 
   /**
-   * QQBot 可用账号。
+   * 按当前运行态启动QQBot 可用账号。
+   * @returns QQBot 可用账号。
    */
   @Get('enabled')
   @ApiOperation({ summary: 'QQBot 可用账号' })
@@ -51,8 +53,10 @@ export class QqbotAccountController {
   }
 
   /**
-   * 新增 QQBot 账号。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`、`request`更新`save` 对应结果；先通过 `trustedCredentialTransportService.assertTrusted` 校验输入边界。
+   * @param body - 用于`save` 对应结果的结构化输入。
+   * @param request - 用于`save` 对应结果的当前 HTTP 请求。
+   * @returns `save` 对应。
    */
   @Post('save')
   @HttpCode(HttpStatus.OK)
@@ -63,8 +67,10 @@ export class QqbotAccountController {
   }
 
   /**
-   * 编辑 QQBot 账号。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`、`request`更新`update` 对应结果；先通过 `trustedCredentialTransportService.assertTrusted` 校验输入边界。
+   * @param body - 用于`update` 对应结果的结构化输入。
+   * @param request - 用于`update` 对应结果的当前 HTTP 请求。
+   * @returns `update` 对应。
    */
   @Post('update')
   @HttpCode(HttpStatus.OK)
@@ -75,8 +81,9 @@ export class QqbotAccountController {
   }
 
   /**
-   * 删除 QQBot 账号。
-   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   * 按账号标识确认记录存在后断开对应反向 WebSocket，再删除 QQBot 账号并封装为 Vben 成功响应。
+   * @param id - 决定`delete` 对应结果内容、边界或目标的 `id` 值。
+   * @returns `delete` 对应。
    */
   @Post('delete')
   @HttpCode(HttpStatus.OK)
@@ -89,9 +96,10 @@ export class QqbotAccountController {
   }
 
   /**
-   * 绑定账号在线命令。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param commandId - 命令 ID；定位本次读取、更新、删除或关联的命令。
+   * 根据参数 `selfId`，绑定账号在线命令。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param commandId - 用于精确定位命令的标识。
+   * @returns 根据参数 `selfId`，绑定账号在线命令。
    */
   @Post('bind/command')
   @HttpCode(HttpStatus.OK)
@@ -108,9 +116,10 @@ export class QqbotAccountController {
   }
 
   /**
-   * 解绑账号在线命令。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param commandId - 命令 ID；定位本次读取、更新、删除或关联的命令。
+   * 按`selfId`、`commandId`移除针对账号在线命令。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param commandId - 用于精确定位命令的标识。
+   * @returns 针对账号在线命令。
    */
   @Post('unbind/command')
   @HttpCode(HttpStatus.OK)
@@ -127,9 +136,10 @@ export class QqbotAccountController {
   }
 
   /**
-   * 绑定账号自动回复规则。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param ruleId - QQBot ID；定位本次读取、更新、删除或关联的QQBot。
+   * 根据参数 `selfId`，绑定账号自动回复规则。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param ruleId - 用于精确定位权限规则的标识。
+   * @returns 根据参数 `selfId`，绑定账号自动回复规则。
    */
   @Post('bind/rule')
   @HttpCode(HttpStatus.OK)
@@ -144,9 +154,10 @@ export class QqbotAccountController {
   }
 
   /**
-   * 解绑账号自动回复规则。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param ruleId - QQBot ID；定位本次读取、更新、删除或关联的QQBot。
+   * 按`selfId`、`ruleId`移除针对账号自动回复规则。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param ruleId - 用于精确定位权限规则的标识。
+   * @returns 针对账号自动回复规则。
    */
   @Post('unbind/rule')
   @HttpCode(HttpStatus.OK)
@@ -161,8 +172,9 @@ export class QqbotAccountController {
   }
 
   /**
-   * 断开 QQBot 反向 WS 会话。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 根据`selfId`处理断开 QQBot 反向 WS 会话。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 断开 QQBot 反向 WS 会话。
    */
   @Post('kick')
   @HttpCode(HttpStatus.OK)

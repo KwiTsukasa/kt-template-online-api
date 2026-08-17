@@ -27,7 +27,11 @@ export const NAPCAT_REJECTED_VIRTUAL_OUI_PREFIXES = [
   '00:03:FF',
 ] as const;
 
-/** 判断被拒绝的虚拟的MAC前缀是否成立。 */
+/**
+ * 根据`macAddress`与当前约束判定被拒绝的虚拟的MAC前缀。
+ * @param macAddress - 决定被拒绝的虚拟的MAC前缀内容、边界或目标的 `macAddress` 值。
+ * @returns 满足被拒绝的虚拟的MAC前缀约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 export function isRejectedVirtualMacPrefix(macAddress: string) {
   const normalized = macAddress.toUpperCase();
   return NAPCAT_REJECTED_VIRTUAL_OUI_PREFIXES.some((prefix) =>
@@ -35,7 +39,11 @@ export function isRejectedVirtualMacPrefix(macAddress: string) {
   );
 }
 
-/** 判断物理的OUIMAC前缀是否存在。 */
+/**
+ * 根据`macAddress`与当前约束判定物理的OUIMAC前缀是否存在。
+ * @param macAddress - 决定物理的OUIMAC前缀是否存在内容、边界或目标的 `macAddress` 值。
+ * @returns 满足物理的OUIMAC前缀是否存在约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 export function hasPhysicalOuiMacPrefix(macAddress: string) {
   const normalized = macAddress.toUpperCase();
   return NAPCAT_PHYSICAL_OUI_PREFIXES.some((prefix) =>

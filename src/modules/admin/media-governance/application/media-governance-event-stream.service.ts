@@ -65,7 +65,11 @@ export class MediaGovernanceEventStreamService {
     this.replayLimit = options.replayLimit ?? 100;
   }
 
-  /** 合并断线重放、实时任务事件与定时心跳，形成单一事件流。 */
+  /**
+   * 合并断线重放、实时任务事件与定时心跳，形成单一事件流。
+   * @param lastEventId - 用于精确定位last事件的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 返回合并历史重放、实时事件与定时心跳的只读 Observable。
+   */
   stream(lastEventId?: string): Observable<MediaGovernanceStreamEvent> {
     const replayEvents = this.getReplayEvents(lastEventId);
     const heartbeat$ = timer(this.heartbeatMs, this.heartbeatMs).pipe(
@@ -78,7 +82,11 @@ export class MediaGovernanceEventStreamService {
     );
   }
 
-  /** 发布任务变更事件，并优先使用运行序号生成可续接事件标识。 */
+  /**
+   * 发布任务变更事件，并优先使用运行序号生成可续接事件标识。
+   * @param input - 用于任务Changed的结构化输入，包含 `runId`、`runSequence` 字段。
+   * @returns 任务Changed。
+   */
   publishTaskChanged(
     input: Omit<MediaGovernanceTaskChangedData, 'observedAt'>,
   ): MediaGovernanceStreamEvent {
@@ -96,7 +104,11 @@ export class MediaGovernanceEventStreamService {
     return event;
   }
 
-  /** 发布经隔离复制的 Agent 对话事件。 */
+  /**
+   * 按`input`投递经隔离复制的 Agent 对话事件。
+   * @param input - 用于经隔离复制的 Agent 对话事件的结构化输入。
+   * @returns 经隔离复制的 Agent 对话事件。
+   */
   publishAgentConversation(
     input: MediaCodexAgentConversationEvent,
   ): MediaGovernanceStreamEvent {
@@ -109,7 +121,10 @@ export class MediaGovernanceEventStreamService {
     return event;
   }
 
-  /** 将事件加入有界重放缓存，并广播给当前订阅者。 */
+  /**
+   * 将事件加入有界重放缓存，并广播给当前订阅者。
+   * @param event - 触发`append` 对应结果的领域事件。
+   */
   private append(event: MediaGovernanceStreamEvent) {
     this.replay.push(event);
     if (this.replay.length > this.replayLimit) {
@@ -118,7 +133,11 @@ export class MediaGovernanceEventStreamService {
     this.streamSubject.next(event);
   }
 
-  /** 根据客户端游标返回增量事件，游标失效时要求重新拉取快照。 */
+  /**
+   * 根据客户端游标返回增量事件，游标失效时要求重新拉取快照。
+   * @param lastEventId - 用于精确定位last事件的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 按输入顺序得到的根据客户端游标返回增量事件，游标失效时要求重新拉取快照列表；没有匹配项时为空数组。
+   */
   private getReplayEvents(lastEventId?: string): MediaGovernanceStreamEvent[] {
     if (!lastEventId) return [];
     const index = this.replay.findIndex((event) => event.id === lastEventId);
@@ -126,7 +145,10 @@ export class MediaGovernanceEventStreamService {
     return this.replay.slice(index + 1);
   }
 
-  /** 创建携带当前重放游标的心跳事件。 */
+  /**
+   * 根据当前运行态构造携带当前重放游标的心跳事件。
+   * @returns 包含 `data`、`id`、`type` 字段的携带当前重放游标的心跳事件。
+   */
   private createHeartbeatEvent(): MediaGovernanceStreamEvent {
     return {
       data: { message: 'alive', observedAt: new Date().toISOString() },
@@ -135,7 +157,10 @@ export class MediaGovernanceEventStreamService {
     };
   }
 
-  /** 创建提示客户端重新拉取完整快照的事件。 */
+  /**
+   * 根据当前运行态构造提示客户端重新拉取完整快照的事件。
+   * @returns 包含 `data`、`id`、`type` 字段的提示客户端重新拉取完整快照的事件。
+   */
   private createSnapshotRequiredEvent(): MediaGovernanceStreamEvent {
     return {
       data: {
@@ -147,7 +172,10 @@ export class MediaGovernanceEventStreamService {
     };
   }
 
-  /** 返回最近事件标识，空缓存时返回空游标。 */
+  /**
+   * 返回最近事件标识，空缓存时返回空游标。
+   * @returns 返回 `this.replay.at(-1)?.id` 的可用值；为空时回退到 `''`；可选链未命中时为 `undefined`。
+   */
   private currentReplayCursor(): string {
     return this.replay.at(-1)?.id ?? '';
   }

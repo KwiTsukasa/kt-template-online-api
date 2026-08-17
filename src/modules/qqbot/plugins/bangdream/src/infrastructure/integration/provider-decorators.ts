@@ -24,8 +24,8 @@ export interface BangDreamProviderCacheOptions {
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param ms - 等待毫秒数；驱动 `sleepBangDreamRuntime()` 的 BangDream步骤。
+ * 根据`ms`处理对正毫秒数调用 BanG Dream 运行时休眠；当 `ms <= 0` 成立时直接结束且不产生返回值。
+ * @param ms - 决定对正毫秒数调用 BanG Dream 运行时休眠内容、边界或目标的 `ms` 值。
  */
 async function delay(ms: number): Promise<void> {
   if (ms <= 0) {
@@ -35,10 +35,10 @@ async function delay(ms: number): Promise<void> {
 }
 
 /**
- * 查询 BangDream 插件数据。
- * @param defaultRetryCount - defaultRetryCount 输入；限定 BangDream查询范围。
- * @param requestRetryCount - requestRetryCount 输入；限定 BangDream查询范围。
- * @returns BangDream 插件查询结果。
+ * 优先使用请求级重试次数，未提供时使用默认次数，并将最终值下限限制为 `1`。
+ * @param defaultRetryCount - 限制数量、尺寸、等级或重试边界的数值。
+ * @param requestRetryCount - 限制数量、尺寸、等级或重试边界的数值；为空时采用 `defaultRetryCount` 作为兜底。
+ * @returns 数量。
  */
 function getRetryCount(
   defaultRetryCount: number,
@@ -49,13 +49,14 @@ function getRetryCount(
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param providerName - providerName 输入；影响 retryProviderCall 的返回值。
- * @param methodName - methodName 输入；影响 retryProviderCall 的返回值。
- * @param retryCount - retryCount 输入；决定 BangDream条件分支。
- * @param delayMs - BangDream列表；驱动 `delay()` 的 BangDream步骤。
- * @param action - action 输入；影响 retryProviderCall 的返回值。
- * @returns 异步完成后的 BangDream 插件结果。
+ * 根据`providerName`、`methodName`、`retryCount`处理数据提供器调用。
+ * @param providerName - 决定数据提供器调用内容、边界或目标的 `providerName` 值。
+ * @param methodName - 决定数据提供器调用内容、边界或目标的 `methodName` 值。
+ * @param retryCount - 限制数据提供器调用数量、尺寸、等级或重试边界的数值。
+ * @param delayMs - 用于数据提供器调用超时、有效期或退避计算的毫秒数。
+ * @param action - 负责完成数据提供器调用外部交互的受控能力。
+ * @returns 数据提供器调用。
+ * @throws 当前函数此前所有接受或成功分支均未返回时拒绝当前输入并抛出 `lastError`。
  */
 async function retryProviderCall<T>(
   providerName: string,
@@ -84,10 +85,10 @@ async function retryProviderCall<T>(
 }
 
 /**
- * 判断 BangDream 插件条件。
- * @param methodName - methodName 输入；计算 BangDream判断结果。
- * @param options - BangDream列表；计算 BangDream判断结果。
- * @returns 布尔值，表示 BangDream 插件条件是否满足。
+ * 根据配置的方法白名单判断是否记录 Provider 耗时；未配置时仅包含 `getJson` 和 `getTracker`。
+ * @param methodName - 决定根据配置的方法白名单判断是否记录 Provider 耗时内容、边界或目标的 `methodName` 值。
+ * @param options - 控制根据配置的方法白名单判断是否记录 Provider 耗时筛选、缓存或输出方式的可选项，包含 `methods` 字段；为空时采用 `['getJson', 'getTracker']` 作为兜底。
+ * @returns 满足根据配置的方法白名单判断是否记录 Provider 耗时约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function shouldTimeMethod(
   methodName: ProviderMethodName,
@@ -97,9 +98,9 @@ function shouldTimeMethod(
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param options - BangDream列表；影响 withRequestRetryCount 的返回值。
- * @returns BangDream 插件产出的 T。
+ * 根据`options`处理包含 `retryCount` 字段的结果。
+ * @param options - 控制包含 `retryCount` 字段的结果筛选、缓存或输出方式的可选项。
+ * @returns 包含 `retryCount` 字段的包含 `retryCount` 字段的。
  */
 function withRequestRetryCount<T extends BangDreamJsonRequestOptions>(
   options: T | undefined,
@@ -108,10 +109,10 @@ function withRequestRetryCount<T extends BangDreamJsonRequestOptions>(
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param provider - provider 输入；使用 `name`、`getJson`、`getTracker` 字段生成结果。
- * @param options - BangDream列表；使用 `retryCount`、`delayMs` 字段生成结果。
- * @returns BangDream 插件产出的 BangDreamDataProvider。
+ * 根据`provider`、`options`处理包含 `getJson`、`getAsset`、`getTracker` 字段的结果。
+ * @param provider - 用于包含 `getJson`、`getAsset`、`getTracker` 字段的结果的领域对象，包含 `name`、`getJson`、`getAsset`、`getTracker` 字段。
+ * @param options - 控制包含 `getJson`、`getAsset`、`getTracker` 字段的结果筛选、缓存或输出方式的可选项，包含 `retryCount`、`delayMs` 字段；省略时默认采用 `{}`。
+ * @returns 包含 `getJson`、`getAsset`、`getTracker` 字段的`withRetry` 对应结果。
  */
 export function withRetry(
   provider: BangDreamDataProvider,
@@ -160,10 +161,10 @@ export function withRetry(
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param provider - provider 输入；使用 `name`、`getJson`、`getTracker` 字段生成结果。
- * @param options - BangDream列表；决定 BangDream条件分支。
- * @returns BangDream 插件产出的 BangDreamDataProvider。
+ * 根据`provider`、`options`处理包含 `getJson`、`getAsset`、`getTracker` 字段的结果。
+ * @param provider - 用于包含 `getJson`、`getAsset`、`getTracker` 字段的结果的领域对象，包含 `name`、`getJson`、`getAsset`、`getTracker` 字段。
+ * @param options - 控制包含 `getJson`、`getAsset`、`getTracker` 字段的结果筛选、缓存或输出方式的可选项；省略时默认采用 `{}`。
+ * @returns 包含 `getJson`、`getAsset`、`getTracker` 字段的Timing。
  */
 export function withTiming(
   provider: BangDreamDataProvider,
@@ -219,10 +220,10 @@ export function withTiming(
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param provider - provider 输入；使用 `getJson`、`getTracker` 字段生成结果。
- * @param options - BangDream列表；使用 `jsonCacheTime`、`trackerCacheTime` 字段生成结果。
- * @returns BangDream 插件产出的 BangDreamDataProvider。
+ * 根据`provider`、`options`处理包含 `getJson`、`getTracker` 字段的结果。
+ * @param provider - 用于包含 `getJson`、`getTracker` 字段的结果的领域对象，包含 `getJson`、`getTracker` 字段。
+ * @param options - 控制包含 `getJson`、`getTracker` 字段的结果筛选、缓存或输出方式的可选项，包含 `jsonCacheTime`、`trackerCacheTime` 字段；省略时默认采用 `{}`。
+ * @returns 包含 `getJson`、`getTracker` 字段的包含 `getJson`、`getTracker` 字段的。
  */
 export function withCache(
   provider: BangDreamDataProvider,

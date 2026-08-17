@@ -10,10 +10,9 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/card/card-sd-character.layout';
 
 /**
- * 在图片布局层中绘制SD角色In列表。
- *
- * @param card - card 输入；使用 `costumeId` 字段生成结果。
- * @returns 异步处理结果。
+ * 根据`card`绘制或格式化Sd角色；把图片、文本或图形按布局规格绘制到画布。
+ * @param card - 用于Sd角色的领域对象，包含 `costumeId` 字段。
+ * @returns Sd角色。
  */
 export async function drawSdCharacterInList(card: Card): Promise<Canvas> {
   const costumeId = card.costumeId;

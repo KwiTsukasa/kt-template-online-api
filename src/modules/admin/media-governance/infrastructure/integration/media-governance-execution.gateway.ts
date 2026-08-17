@@ -91,7 +91,10 @@ const TERMINAL_EVENT_KEYS = new Set([
 export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExecutionGateway {
   constructor(private readonly config: ConfigService) {}
 
-  /** 检查执行器地址和共享密钥是否形成可用配置。 */
+  /**
+   * 按当前运行态启动执行器地址和共享密钥是否形成可用配置。
+   * @returns 满足执行器地址和共享密钥是否形成可用配置约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   enabled() {
     try {
       return Boolean(this.baseUrl() && this.secret(false));
@@ -100,7 +103,13 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
     }
   }
 
-  /** 提交密封执行信封，并校验执行器返回的运行身份。 */
+  /**
+   * 提交密封执行信封，并校验执行器返回的运行身份。
+   * @param envelope - 用于`dispatch` 对应结果的领域对象，包含 `runId`、`sealedInputSha256` 字段。
+   * @returns `dispatch` 对应。
+   * @throws 当 `!baseUrl` 成立时拒绝当前输入并抛出 `Error`；当 `!response.ok || Buffer.byteLength(text) > MAX_RESPONSE_BYTES` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `result.runId !== envelope.runId || result.sealedInputSha256 !== envelop…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async dispatch(envelope: MediaGovernanceExecutionEnvelope) {
     const baseUrl = this.baseUrl();
     if (!baseUrl) throw new Error('media-governance-executor-not-configured');
@@ -127,7 +136,14 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
     return result;
   }
 
-  /** 向指定运行发送幂等控制命令并校验回执身份。 */
+  /**
+   * 向指定运行发送幂等控制命令并校验回执身份。
+   * @param input - 用于向指定运行发送幂等控制命令并校验回执身份的结构化输入，包含 `command`、`controlId`、`runId` 字段。
+   * @returns 向指定运行发送幂等控制命令并校验回执身份。
+   * @throws 当 `!baseUrl` 成立时拒绝当前输入并抛出 `Error`；当 `!response.ok || Buffer.byteLength(text) > MAX_RESPONSE_BYTES` 成立时拒绝当前输入并抛出 `Error`；当 `JSON.parse` 调用失败时拒绝当前输入并抛出 `Error`；
+   *   当 `!value || typeof value !== 'object' || Array.isArray(value)` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `result.command !== input.command || result.controlId !== input.controlI…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async control(input: {
     command: 'cancel' | 'pause' | 'resume';
     controlId: string;
@@ -172,7 +188,22 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
     return result as MediaGovernanceExecutionControl;
   }
 
-  /** 查询运行状态，并校验终态事件与清单摘要的完整性。 */
+  /**
+   * 查询运行状态，并校验终态事件与清单摘要的完整性。
+   * @param input - 用于状态的结构化输入，包含 `runId`、`taskId`、`sealedInputSha256` 字段。
+   * @returns 状态。
+   * @throws 当 `!baseUrl` 成立时拒绝当前输入并抛出 `Error`；当 `!response.ok || Buffer.byteLength(text) > MAX_RESPONSE_BYTES` 成立时拒绝当前输入并抛出 `Error`；当 `JSON.parse` 调用失败时拒绝当前输入并抛出 `Error`；
+   *   当 `!value || typeof value !== 'object' || Array.isArray(value)` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `result.runId !== input.runId || result.taskId !== input.taskId || resul…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof result.runnerId !== 'string' || !SAFE_ID_PATTERN.test(result.run…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof result.activeState !== 'string' || typeof result.subState !== 's…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!DIGEST_PATTERN.test(String(result.manifestSha256 ?? '')) || !terminal…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!MEDIA_GOVERNANCE_EXECUTOR_ACTIONS.includes( terminal.action as (typeof…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof terminal.observedAt !== 'string' || Number.isNaN(Date.parse(term…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!Number.isSafeInteger(terminal.sequence) || Number(terminal.sequence) <…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof terminal.summary !== 'string' || terminal.summary.length < 1 ||…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `result.manifestSha256 !== undefined || terminalEvent !== undefined` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async status(input: {
     runId: string;
     sealedInputSha256: string;
@@ -299,7 +330,12 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
     return result as MediaGovernanceExecutionStatus;
   }
 
-  /** 规范化仅允许私网固定端口的执行器基础地址。 */
+  /**
+   * 从配置读取并规范化执行器基础地址，仅接受私网主机与固定端口。
+   * @returns 当前状态对应的从配置读取并规范化执行器基础地址，仅接受私网主机与固定端口，取值为 `''`。
+   * @throws 当 `url.protocol !== 'http:' || !allowedHost || url.port !== '48088' || url…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `url.password || (url.pathname !== '/' && url.pathname !== '') || url.se…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private baseUrl() {
     const value = String(
       this.config.get<string>('MEDIA_GOVERNANCE_EXECUTOR_BASE_URL') ?? '',
@@ -329,7 +365,14 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
     return url.origin;
   }
 
-  /** 解析执行排队响应并验证运行标识、摘要和状态。 */
+  /**
+   * 解析执行排队响应并验证运行标识、摘要和状态。
+   * @param text - 决定执行排队响应并验证运行标识、摘要和状态内容、边界或目标的 `text` 值。
+   * @returns 执行排队响应并验证运行标识、摘要和状态。
+   * @throws 当 `JSON.parse` 调用失败时拒绝当前输入并抛出 `Error`；当 `!value || typeof value !== 'object' || Array.isArray(value)` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof result.executionId !== 'string' || !SAFE_ID_PATTERN.test(result.…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `typeof result.sealedInputSha256 !== 'string' || !DIGEST_PATTERN.test(re…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private parseDispatch(text: string): MediaGovernanceExecutionDispatch {
     let value: unknown;
     try {
@@ -360,7 +403,12 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
     return result as MediaGovernanceExecutionDispatch;
   }
 
-  /** 读取并校验执行器内部密钥，可选模式下以空值表示未配置。 */
+  /**
+   * 读取并校验执行器内部密钥，可选模式下以空值表示未配置。
+   * @param required - 决定是否启用“required”分支的布尔选项。
+   * @returns 当前状态对应的并校验执行器内部密钥，可选模式下以空值表示未配置，取值为 `''`。
+   * @throws 当 `value.length < 32 || value.length > 512` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private secret(required: boolean) {
     const value = String(
       this.config.get<string>('MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET') ??
@@ -373,7 +421,10 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
     return value;
   }
 
-  /** 将执行器请求超时限制在允许区间，非法配置回退为二十秒。 */
+  /**
+   * 将执行器请求超时限制在允许区间，非法配置回退为二十秒。
+   * @returns 当前状态对应的将执行器请求超时限制在允许区间，非法配置回退为二十秒，取值为 `20_000`。
+   */
   private timeoutMs() {
     const value = Number(
       this.config.get<string>('MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS') ?? 20_000,

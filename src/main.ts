@@ -55,7 +55,7 @@ const swaggerGroups: SwaggerDocumentGroup[] = [
 ];
 
 /**
- * 执行 当前模块流程。
+ * 根据当前运行态处理bootstrap；从 `app.get` 读取bootstrap。
  */
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -118,7 +118,7 @@ async function bootstrap() {
 }
 
 /**
- * 返回适配器层管理页面的安全边界拒绝响应。
+ * 根据限流结果设置 `Retry-After` 与 HTTP 状态，并发送不泄露内部细节的固定拒绝文案。
  * @param response - 当前 HTTP 响应；设置限流状态与重试提示。
  * @param outcome - 限流判定结果；决定拒绝状态和固定文案。
  */
@@ -131,11 +131,15 @@ function sendRateLimitRejection(
   }
   const status = outcome.statusCode || 429;
   const message =
-    status === 403
-      ? '当前来源无权访问接口文档'
-      : status === 503
-        ? '登录限流服务暂不可用'
-        : '请求过于频繁，请稍后重试';
+    (() => {
+      if (status === 403) {
+        return '当前来源无权访问接口文档';
+      }
+      if (status === 503) {
+        return '登录限流服务暂不可用';
+      }
+      return '请求过于频繁，请稍后重试';
+    })();
   response.status(status).json({
     code: status,
     err: message,
@@ -144,10 +148,10 @@ function sendRateLimitRejection(
 }
 
 /**
- * 执行 当前模块流程。
- * @param document - document 输入；使用 `paths`、`tags` 字段生成结果。
- * @param matcher - matcher 输入；驱动 `Object.fromEntries()` 的 模块步骤。
- * @returns 当前模块产出的 OpenAPIObject。
+ * 从`document`、`matcher`筛选SwaggerDocument，并保持保留项的原有顺序与键名。
+ * @param document - 用于SwaggerDocument的领域对象，包含 `paths`、`tags` 字段。
+ * @param matcher - 决定SwaggerDocument内容、边界或目标的 `matcher` 值。
+ * @returns 包含 `paths`、`tags` 字段的SwaggerDocument。
  */
 function filterSwaggerDocument(
   document: OpenAPIObject,
@@ -175,9 +179,10 @@ function filterSwaggerDocument(
 }
 
 /**
- * 执行 当前模块流程。
- * @param path - 路由或文件路径；计算 模块布尔判断。
- * @param prefixes - 模块列表；计算 模块布尔判断。
+ * 仅当路径等于某个前缀，或以该前缀加层级分隔符开头时返回 `true`。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @param prefixes - 决定仅当路径等于某个前缀，或以该前缀加层级分隔符开头时返回 `true`内容、边界或目标的 `prefixes` 值。
+ * @returns 满足仅当路径等于某个前缀，或以该前缀加层级分隔符开头时返回 `true`约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function matchPathPrefixes(path: string, prefixes: string[]) {
   return prefixes.some(

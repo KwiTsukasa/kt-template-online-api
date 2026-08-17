@@ -83,14 +83,12 @@ export class Component {
   })
   is_deleted: boolean;
 
-  /** 解码字典键。 */
   @AfterLoad()
   decodeDictKeys() {
     // 查询结果初始化完成后再翻译，避免构造/赋值阶段覆盖派生字段。
     decodeDictKeys(this);
   }
 
-  /** 创建标识。 */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

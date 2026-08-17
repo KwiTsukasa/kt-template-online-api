@@ -16,10 +16,11 @@ export const buildRepeaterStateKey = (message: RepeaterMessage) =>
   [message.selfId, message.messageType, message.targetId].join(':');
 
 /**
- * 判断 复读插件条件。
- * @param message - message 输入；使用 `userId`、`selfId` 字段生成结果。
- * @param text - 待匹配文本；使用 `length` 字段生成结果。
- * @param maxTextLength - maxTextLength 输入；计算 模块判断结果。
+ * 根据`message`、`text`、`maxTextLength`与当前约束判定针对复读插件。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `userId`、`selfId` 字段。
+ * @param text - 用于针对复读插件的领域对象，包含 `length` 字段。
+ * @param maxTextLength - 限制针对复读插件数量、尺寸、等级或重试边界的数值。
+ * @returns 满足针对复读插件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function canRepeaterEcho(
   message: RepeaterMessage,
@@ -34,20 +35,21 @@ export function canRepeaterEcho(
 }
 
 /**
- * 创建 复读插件对象或配置。
- * @param currentState - currentState 输入；使用 `count` 字段生成结果。
- * @param text - 待匹配文本；生成 模块对象。
- * @param current - current 输入；生成 模块对象。
- * @returns 创建后的 复读插件对象或配置。
+ * 根据`currentState`、`text`、`current`构造下次运行时间Repeater状态；当 `currentState?.lastText === text` 成立时返回 `{ ...currentState, count: currentState.coun…`。
+ * @param currentState - 用于下次运行时间Repeater状态的领域对象，包含 `lastText`、`count`、`lastRepeatedAt` 字段。
+ * @param text - 决定下次运行时间Repeater状态内容、边界或目标的 `text` 值。
+ * @param current - 决定下次运行时间Repeater状态内容、边界或目标的 `current` 值。
+ * @returns 包含 `count`、`lastText`、`lastRepeatedAt`、`repeatedText`、`updatedAt` 字段的下次运行时间Repeater状态。
  */
 export function createNextRepeaterState(
   currentState: RepeaterConversationState | undefined,
   text: string,
   current: number,
 ): RepeaterConversationState {
-  return currentState?.lastText === text
-    ? { ...currentState, count: currentState.count + 1, updatedAt: current }
-    : {
+  if (currentState?.lastText === text) {
+    return { ...currentState, count: currentState.count + 1, updatedAt: current };
+  }
+  return {
         count: 1,
         lastText: text,
         lastRepeatedAt: currentState?.lastRepeatedAt || 0,
@@ -57,11 +59,12 @@ export function createNextRepeaterState(
 }
 
 /**
- * 判断 复读插件条件。
- * @param state - state 输入；使用 `count`、`repeatedText`、`lastRepeatedAt` 字段生成结果。
- * @param text - 待匹配文本；计算 模块判断结果。
- * @param current - current 输入；计算 模块判断结果。
- * @param config - config 输入；使用 `threshold`、`minIntervalMs` 字段生成结果。
+ * 针对复读插件，根据 `state.count >= config.threshold && state.repeatedText !== text && current - (state.last…` 判定输入是否满足条件。
+ * @param state - 用于RepeaterEcho的领域对象，包含 `count`、`repeatedText`、`lastRepeatedAt` 字段。
+ * @param text - 决定RepeaterEcho内容、边界或目标的 `text` 值。
+ * @param current - 决定RepeaterEcho内容、边界或目标的 `current` 值。
+ * @param config - 限定RepeaterEcho边界、地址与开关的运行配置，包含 `threshold`、`minIntervalMs` 字段。
+ * @returns 满足RepeaterEcho约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function shouldRepeaterEcho(
   state: RepeaterConversationState,

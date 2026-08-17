@@ -11,9 +11,9 @@ export interface CacheClientRetryOptions<T> {
 }
 
 /**
- * 获取缓存客户端错误文本。
- *
- * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+ * 根据参数 `error`，获取缓存客户端错误文本。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+ * @returns 根据参数 `error`，获取缓存客户端错误文本。
  */
 export function getCacheClientErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -21,9 +21,9 @@ export function getCacheClientErrorMessage(error: unknown): string {
 }
 
 /**
- * 获取缓存客户端 HTTP 错误状态码。
- *
- * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+ * 根据参数 `error`，获取缓存客户端 HTTP 错误状态码。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+ * @returns 根据参数 `error`，获取缓存客户端 HTTP 错误状态码；没有可用结果或提前结束时为 `undefined`。
  */
 export function getCacheClientResponseStatus(
   error: unknown,
@@ -36,27 +36,26 @@ export function getCacheClientResponseStatus(
 }
 
 /**
- * 判断缓存客户端错误是否为 HTTP 404。
- *
- * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+ * 仅把状态码为 HTTP 404 的缓存客户端错误识别为资源未命中。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+ * @returns 满足仅把状态码为 HTTP 404 的缓存客户端错误识别为资源未命中约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isCacheClientNotFound(error: unknown): boolean {
   return getCacheClientResponseStatus(error) === 404;
 }
 
 /**
- * 规范化缓存客户端重试次数。
- *
- * @param retryCount - retryCount 输入；驱动 `Math.max()` 的 BangDream步骤。
+ * 将`retryCount`规范为缓存客户端重试次数，使等价输入得到一致表示。
+ * @param retryCount - 限制缓存客户端重试次数数量、尺寸、等级或重试边界的数值；省略时默认采用 `1`。
+ * @returns 缓存客户端重试次数。
  */
 export function normalizeCacheClientRetryCount(retryCount = 1): number {
   return Math.max(1, retryCount);
 }
 
 /**
- * 等待缓存客户端下一次重试。
- *
- * @param delayMs - BangDream列表；驱动 `sleepBangDreamRuntime()` 的 BangDream步骤。
+ * 通过等待缓存客户端下一次重试。
+ * @param delayMs - 用于通过等待缓存客户端下一次重试超时、有效期或退避计算的毫秒数。
  */
 export async function waitCacheClientRetryDelay(
   delayMs: number,
@@ -67,8 +66,9 @@ export async function waitCacheClientRetryDelay(
 
 /**
  * 按缓存客户端策略执行可重试任务。
- *
- * @param options - BangDream列表；使用 `retryCount`、`delayMs`、`onFailure`、`shouldRetry` 字段生成结果。
+ * @param options - 控制按缓存客户端策略执行可重试任务筛选、缓存或输出方式的可选项，包含 `retryCount`、`delayMs`、`action`、`onFailure` 字段。
+ * @returns 按缓存客户端策略执行可重试任务。
+ * @throws 当 `attempt >= retryCount || !canRetry` 成立时重新抛出该入口捕获且决定公开的原异常；当前函数此前所有接受或成功分支均未返回时拒绝当前输入并抛出 `lastError`。
  */
 export async function runWithCacheClientRetry<T>(
   options: CacheClientRetryOptions<T>,

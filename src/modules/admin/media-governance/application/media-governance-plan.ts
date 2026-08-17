@@ -21,7 +21,13 @@ const LOCAL_TARGET_ROOT = `${LOCAL_MEDIA_ROOT}/movie`;
 
 type FileKind = 'asset' | 'subtitle' | 'video';
 
-/** 按声明的文件角色校验扩展名，并投影为治理计划文件类型。 */
+/**
+ * 按声明的文件角色校验扩展名，并投影为治理计划文件类型。
+ * @param value - 参与Mapped文件Kind比较、格式化或输出的候选值。
+ * @param fileRole - 决定Mapped文件Kind内容、边界或目标的 `fileRole` 值。
+ * @returns 当前状态对应的Mapped文件Kind，取值为 `'video'`、`'subtitle'`、`'asset'`。
+ * @throws 当前函数此前所有接受或成功分支均未返回时拒绝当前输入并抛出 `Error`。
+ */
 function assertMappedFileKind(
   value: string,
   fileRole: 'font' | 'subtitle' | 'video',
@@ -42,7 +48,12 @@ function assertMappedFileKind(
   throw new Error(`governance-file-role-mismatch:${extension || 'none'}`);
 }
 
-/** 清理媒体标题中的路径字符和冗余空白，并限制目录名长度。 */
+/**
+ * 清理媒体标题中的路径字符和冗余空白，并限制目录名长度。
+ * @param value - 参与安全边界Title比较、格式化或输出的候选值。
+ * @returns 安全边界Title。
+ * @throws 当 `!normalized || normalized.length > 160` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function safeTitle(value: string) {
   const normalized = value
     .normalize('NFC')
@@ -56,7 +67,11 @@ function safeTitle(value: string) {
   return normalized;
 }
 
-/** 根据媒体类型、年份和资料源身份生成正式媒体根目录。 */
+/**
+ * 根据媒体类型、年份和资料源身份生成正式媒体根目录。
+ * @param task - 用于根据媒体类型、年份和资料源身份生成正式媒体根目录的领域对象，包含 `titleHint`、`releaseYear`、`providerRef`、`mediaType` 字段。
+ * @returns 按参数编码并拼接完成的根据媒体类型、年份和资料源身份生成正式媒体根目录。
+ */
 function titleRoot(task: MediaGovernanceTask) {
   const title = safeTitle(task.titleHint);
   let year = '';
@@ -70,7 +85,15 @@ function titleRoot(task: MediaGovernanceTask) {
   return `${LOCAL_TARGET_ROOT}/${category}/${title}${year}${provider}`;
 }
 
-/** 校验执行器回传的暂存区文件清单，并返回任务暂存根目录。 */
+/**
+ * 校验执行器回传的暂存区文件清单，并返回任务暂存根目录。
+ * @param task - 用于载荷的领域对象，包含 `id` 字段。
+ * @param payload - 待按当前协议校验并路由的事件载荷，包含 `files`、`evidenceSha256` 字段。
+ * @returns 载荷。
+ * @throws 当 `payload.files.length === 0 || payload.files.length > 20_000 || !/^[a-f0…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!file.path.startsWith(`${taskRoot}/sources/${file.sourceId}/`) || norma…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!Number.isSafeInteger(file.sizeBytes) || file.sizeBytes < 0 || !Number.…` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function assertPayload(
   task: MediaGovernanceTask,
   payload: MediaGovernancePayloadSeal,
@@ -105,7 +128,15 @@ function assertPayload(
   return taskRoot;
 }
 
-/** 校验电影或剧集的视频、字幕覆盖范围是否满足治理单元声明。 */
+/**
+ * 按治理单元声明核对电影或剧集的视频与字幕覆盖范围。
+ * @param task - 用于按治理单元声明核对电影或剧集的视频与字幕覆盖范围的领域对象，包含 `mediaType`、`units`、`governanceProfile` 字段。
+ * @param identities - 决定按治理单元声明核对电影或剧集的视频与字幕覆盖范围内容、边界或目标的 `identities` 值。
+ * @throws 当 `identities.filter((entry) => entry.kind === 'video').length !== 1` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `identities.some( (entry) => entry.kind !== 'asset' && !declaredSeasons.…` 成立时拒绝当前输入并抛出 `Error`；当 `unit.seasonNumber === null` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `videos.size === 0` 成立时拒绝当前输入并抛出 `Error`；当 `videos.size !== unit.expectedEpisodeNumbers.length || unit.expectedEpis…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `unit.expectedEpisodeNumbers.some((episode) => !subtitles.has(episode))` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function validateCoverage(
   task: MediaGovernanceTask,
   identities: Array<{ episode: number; kind: FileKind; season: number }>,
@@ -168,7 +199,15 @@ function validateCoverage(
   }
 }
 
-/** 从密封载荷生成可逆、本地限定且摘要稳定的媒体治理计划。 */
+/**
+ * 从密封载荷生成可逆、本地限定且摘要稳定的媒体治理计划。
+ * @param task - 用于从密封载荷生成可逆、本地限定且摘要稳定的媒体治理计划的领域对象，包含 `workItemId`、`governanceProfile`、`titleHint`、`sources` 字段。
+ * @param payload - 待按当前协议校验并路由的事件载荷，包含 `files` 字段。
+ * @param now - 用于过期、排序或租约判定的时间基准；省略时默认采用 `new Date()`。
+ * @returns 包含 `execution`、`identity`、`manifests`、`schemaVersion`、`sealed` 字段的从密封载荷生成可逆、本地限定且摘要稳定的媒体治理计划。
+ * @throws 当 `!task.workItemId || !/^media-\d{3}$/u.test(task.workItemId)` 成立时拒绝当前输入并抛出 `Error`；当 `!task.governanceProfile` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `selectedMappingCount !== payload.files.length` 成立时拒绝当前输入并抛出 `Error`；当 `new Set(forward.map((item) => item.targetPath.toLowerCase())).size !==…` 成立时拒绝当前输入并抛出 `Error`。
+ */
 export function buildAdminMediaGovernancePlan(
   task: MediaGovernanceTask,
   payload: MediaGovernancePayloadSeal,

@@ -25,8 +25,9 @@ export class QqbotSendController {
   constructor(private readonly sendService: QqbotSendService) {}
 
   /**
-   * QQBot 发送日志分页。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 根据`query`处理QQBot 发送日志分页。
+   * @param query - 限定QQBot 发送日志分页筛选、排序与分页范围的查询条件。
+   * @returns QQBot 发送日志分页。
    */
   @Get('log/list')
   @ApiOperation({ summary: 'QQBot 发送日志分页' })
@@ -35,8 +36,9 @@ export class QqbotSendController {
   }
 
   /**
-   * QQBot 发送私聊消息。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`处理QQBot 发送私聊消息。
+   * @param body - 用于QQBot 发送私聊消息的结构化输入。
+   * @returns QQBot 发送私聊消息。
    */
   @Post('private')
   @HttpCode(HttpStatus.OK)
@@ -46,8 +48,9 @@ export class QqbotSendController {
   }
 
   /**
-   * QQBot 发送群聊消息。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`处理QQBot 发送群聊消息。
+   * @param body - 用于QQBot 发送群聊消息的结构化输入。
+   * @returns QQBot 发送群聊消息。
    */
   @Post('group')
   @HttpCode(HttpStatus.OK)

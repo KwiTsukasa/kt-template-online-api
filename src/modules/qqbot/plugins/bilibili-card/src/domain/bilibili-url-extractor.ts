@@ -20,7 +20,11 @@ type ExtractionState = {
   strings: number;
 };
 
-/** 返回提取BilibiliURL。 */
+/**
+ * 从`input`解析从输入中提取BilibiliURL。
+ * @param input - 用于从输入中提取BilibiliURL的结构化输入。
+ * @returns 从输入中提取BilibiliURL。
+ */
 export function extractBilibiliUrls(input: BilibiliUrlExtractionInput) {
   const candidates = collectStringCandidates(input);
   const seen = new Set<string>();
@@ -41,7 +45,11 @@ export function extractBilibiliUrls(input: BilibiliUrlExtractionInput) {
   return output;
 }
 
-/** 裁剪非实体分号尾部。 */
+/**
+ * 将`rawUrl`规范为裁剪非实体分号尾部，使等价输入得到一致表示。
+ * @param rawUrl - 待规范化、请求或同源校验的rawURL 地址 URL。
+ * @returns 裁剪非实体分号尾部。
+ */
 function trimNonEntitySemicolonTail(rawUrl: string) {
   for (let index = 0; index < rawUrl.length; index += 1) {
     if (rawUrl[index] !== ';') continue;
@@ -51,7 +59,11 @@ function trimNonEntitySemicolonTail(rawUrl: string) {
   return rawUrl;
 }
 
-/** 收集字符串候选项。 */
+/**
+ * 根据`input`处理字符串候选项。
+ * @param input - 用于字符串候选项的结构化输入，包含 `messageText`、`rawMessage`、`rawEvent` 字段。
+ * @returns 字符串候选项。
+ */
 function collectStringCandidates(input: BilibiliUrlExtractionInput) {
   const state = createExtractionState();
   pushText(state, input.messageText);
@@ -60,7 +72,10 @@ function collectStringCandidates(input: BilibiliUrlExtractionInput) {
   return state.candidates;
 }
 
-/** 创建提取状态。 */
+/**
+ * 创建提取状态，并输出固定投影 `candidates`、`nodes`、`strings` 字段。
+ * @returns 包含 `candidates`、`nodes`、`strings` 字段的Extraction状态。
+ */
 function createExtractionState(): ExtractionState {
   return {
     candidates: [],
@@ -69,7 +84,11 @@ function createExtractionState(): ExtractionState {
   };
 }
 
-/** 收集原始的事件候选项。 */
+/**
+ * 根据`rawEvent`、`state`处理原始的事件候选项。
+ * @param rawEvent - 触发原始的事件候选项的领域事件，包含 `message` 字段。
+ * @param state - 决定原始的事件候选项内容、边界或目标的 `state` 值。
+ */
 function collectRawEventCandidates(
   rawEvent: BilibiliUrlExtractionInput['rawEvent'],
   state: ExtractionState,
@@ -78,7 +97,11 @@ function collectRawEventCandidates(
   collectMessageSegments(rawEvent.message, state);
 }
 
-/** 收集消息分段。 */
+/**
+ * 根据`value`、`state`处理消息分段；当 `Array.isArray(value)` 成立时直接结束且不产生返回值。
+ * @param value - 参与消息分段比较、格式化或输出的候选值。
+ * @param state - 决定消息分段内容、边界或目标的 `state` 值。
+ */
 function collectMessageSegments(value: unknown, state: ExtractionState) {
   if (Array.isArray(value)) {
     for (const segment of value) {
@@ -89,11 +112,25 @@ function collectMessageSegments(value: unknown, state: ExtractionState) {
   collectMessageSegment(value, state);
 }
 
-/** 收集消息分段。 */
+/**
+ * 根据`value`、`state`处理消息分段；当 `type === 'json' || type === 'lightapp'` 成立时直接结束且不产生返回值。
+ * @param value - 参与消息分段比较、格式化或输出的候选值。
+ * @param state - 决定消息分段内容、边界或目标的 `state` 值。
+ */
 function collectMessageSegment(value: unknown, state: ExtractionState) {
   if (!isRecord(value)) return;
-  const type = typeof value.type === 'string' ? value.type.toLowerCase() : '';
-  const data = isRecord(value.data) ? value.data : undefined;
+  const type = (() => {
+    if (typeof value.type === 'string') {
+      return value.type.toLowerCase();
+    }
+    return '';
+  })();
+  const data = (() => {
+    if (isRecord(value.data)) {
+      return value.data;
+    }
+    return undefined;
+  })();
 
   collectUrlLikeFields(value, state, new WeakSet<object>(), 0);
 
@@ -108,7 +145,13 @@ function collectMessageSegment(value: unknown, state: ExtractionState) {
   }
 }
 
-/** 收集URL类似的字段。 */
+/**
+ * 根据`value`、`state`、`seen`处理URL类似的字段；当 `Array.isArray(value)` 成立时直接结束且不产生返回值。
+ * @param value - 参与URL类似的字段比较、格式化或输出的候选值。
+ * @param state - 决定URL类似的字段内容、边界或目标的 `state` 值。
+ * @param seen - 决定URL类似的字段内容、边界或目标的 `seen` 值。
+ * @param depth - 决定URL类似的字段内容、边界或目标的 `depth` 值。
+ */
 function collectUrlLikeFields(
   value: unknown,
   state: ExtractionState,
@@ -133,7 +176,11 @@ function collectUrlLikeFields(
   }
 }
 
-/** 收集JSON卡片载荷。 */
+/**
+ * 根据`value`、`state`处理JSON卡片载荷。
+ * @param value - 参与JSON卡片载荷比较、格式化或输出的候选值。
+ * @param state - 决定JSON卡片载荷内容、边界或目标的 `state` 值。
+ */
 function collectJsonCardPayload(value: unknown, state: ExtractionState) {
   if (typeof value !== 'string' || value.length > MAX_JSON_BYTES) return;
   const trimmed = value.trim();
@@ -150,7 +197,11 @@ function collectJsonCardPayload(value: unknown, state: ExtractionState) {
   }
 }
 
-/** 追加文本。 */
+/**
+ * 将`state`、`value`中的非空文本截断到安全上限后追加到目标集合。
+ * @param state - 用于文本的领域对象，包含 `strings`、`candidates` 字段。
+ * @param value - 参与文本比较、格式化或输出的候选值。
+ */
 function pushText(state: ExtractionState, value: unknown) {
   if (state.strings >= MAX_STRINGS) return;
   if (typeof value === 'string' && value.trim()) {
@@ -159,12 +210,23 @@ function pushText(state: ExtractionState, value: unknown) {
   }
 }
 
-/** 判断记录是否成立。 */
+/**
+ * 根据`value`与当前约束判定记录。
+ * @param value - 待判定是否满足记录约束的候选值。
+ * @returns 满足记录约束时为 `true`；不满足、未命中或显式失败分支为 `false`；无法解析或未命中时为 `null`。
+ */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-/** 进入对象节点。 */
+/**
+ * 根据`value`、`state`、`seen`处理进入对象节点；当 `depth > MAX_DEPTH || !isRecord(value) || state.nodes >= MAX_N…` 成立时返回 `false`。
+ * @param value - 参与进入对象节点比较、格式化或输出的候选值。
+ * @param state - 用于进入对象节点的领域对象，包含 `nodes` 字段。
+ * @param seen - 用于进入对象节点的领域对象，包含 `has`、`add` 字段。
+ * @param depth - 决定进入对象节点内容、边界或目标的 `depth` 值。
+ * @returns 满足进入对象节点约束时为 `true`；不满足、未命中或显式失败分支为 `false`；没有匹配项时为空数组。
+ */
 function enterObjectNode(
   value: unknown,
   state: ExtractionState,
@@ -180,7 +242,11 @@ function enterObjectNode(
   return true;
 }
 
-/** 判断URL类似的键是否成立。 */
+/**
+ * 根据`key`与当前约束判定URL类似的键。
+ * @param key - 用于读取或更新URL类似的键的稳定键。
+ * @returns 满足URL类似的键约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isUrlLikeKey(key: string) {
   return URL_LIKE_KEY_PATTERN.test(key);
 }

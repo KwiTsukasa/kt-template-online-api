@@ -40,9 +40,9 @@ export const BANGDREAM_LOCAL_ASSETS = {
 export type BangDreamLocalAssetKey = keyof typeof BANGDREAM_LOCAL_ASSETS;
 
 /**
- * 解析 BangDream 本地资源路径。
- *
- * @param key - 键名；定位文件系统路径。
+ * 按`key`读取BangDream 本地资源路径。
+ * @param key - 用于读取或更新BangDream 本地资源路径的稳定键。
+ * @returns BangDream 本地资源路径。
  */
 export function getBangDreamAssetPath(key: BangDreamLocalAssetKey): string {
   return path.join(assetsRootPath, BANGDREAM_LOCAL_ASSETS[key]);

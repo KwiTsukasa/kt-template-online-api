@@ -246,7 +246,6 @@ export class NetworkPortForward {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
-  /** 创建标识。 */
   @BeforeInsert()
   createId(): string {
     return ensureSnowflakeId(this);

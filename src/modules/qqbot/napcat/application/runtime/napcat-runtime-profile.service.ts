@@ -51,7 +51,11 @@ export class NapcatRuntimeProfileService {
     private readonly protocolProfileRepository?: Repository<NapcatProtocolProfile>,
   ) {}
 
-  /** 解析运行态资料。 */
+  /**
+   * 从`input`解析运行态资料；从 `getString` 读取运行态资料。
+   * @param input - 用于运行态资料的结构化输入，包含 `accountId`、`containerId`、`dataDir`、`deviceIdentityId` 字段。
+   * @returns 包含 `accountId`、`containerId`、`dataDir`、`desktopProfileVersion`、`deviceIdentityId` 字段的运行态资料。
+   */
   resolveRuntimeProfile(input: {
     accountId: string;
     containerId?: string;
@@ -82,7 +86,10 @@ export class NapcatRuntimeProfileService {
     };
   }
 
-  /** 记录已规划的配置档案。 */
+  /**
+   * 根据`input`处理记录已规划的配置档案；把变更持久化到当前存储（`runtimeProfileRepository.create`）。
+   * @param input - 用于记录已规划的配置档案的结构化输入，包含 `accountId`、`containerId`、`runtimeProfile`、`deviceIdentity` 字段。
+   */
   async recordPlannedProfiles(input: RecordPlannedProfilesInput) {
     const accountId = `${input.accountId || ''}`.trim();
     const containerId = `${input.containerId || ''}`.trim();
@@ -171,7 +178,10 @@ export class NapcatRuntimeProfileService {
     }
   }
 
-  /** 接管已规划的配置档案。 */
+  /**
+   * 根据`input`处理接管已规划的配置档案；把变更持久化到当前存储（`runtimeProfileRepository.update`）。
+   * @param input - 用于接管已规划的配置档案的结构化输入，包含 `toAccountId`、`fromAccountId`、`containerId`、`deviceIdentityId` 字段。
+   */
   async adoptPlannedProfiles(input: AdoptPlannedProfilesInput) {
     const toAccountId = `${input.toAccountId || ''}`.trim();
     const fromAccountId =
@@ -201,20 +211,30 @@ export class NapcatRuntimeProfileService {
     }
   }
 
-  /** 构建资料接管位置。 */
+  /**
+   * 构建资料接管位置，并输出固定投影 `accountId`、`containerId` 字段。
+   * @param fromAccountId - 用于精确定位账号的标识。
+   * @param containerId - 用于精确定位容器的标识。
+   * @returns 包含 `accountId` 字段的资料AdoptionWhere。
+   */
   private buildProfileAdoptionWhere(
     fromAccountId: string,
     containerId: string,
   ) {
-    return containerId
-      ? {
+    if (containerId) {
+      return {
           accountId: fromAccountId,
           containerId,
-        }
-      : { accountId: fromAccountId };
+        };
+    }
+    return { accountId: fromAccountId };
   }
 
-  /** 保存资料。 */
+  /**
+   * 根据`repository`、`profile`更新资料；当 `!profile.containerId` 成立时直接结束且不产生返回值。
+   * @param repository - 负责查询或持久化资料的仓库实例。
+   * @param profile - 用于资料的领域对象，包含 `containerId` 字段。
+   */
   private async saveProfile<
     T extends ObjectLiteral & { containerId: null | string; id: string },
   >(repository: Repository<T>, profile: T) {
@@ -241,14 +261,27 @@ export class NapcatRuntimeProfileService {
       .execute();
   }
 
-  /** 读取字符串。 */
+  /**
+   * 读取 NapCat 运行档案的文本配置，缺失或空值使用默认值并统一去除两端空白。
+   * @param key - 要从配置服务读取的运行档案配置键。
+   * @param defaultValue - 配置缺失或为空时采用的默认文本。
+   * @returns 去除两端空白后的配置值或默认值。
+   */
   private getString(key: string, defaultValue: string) {
     return `${this.configService.get<string>(key) || defaultValue}`.trim();
   }
 
-  /** 读取数字。 */
+  /**
+   * 读取正数配置；值不是有限正数时返回调用方提供的默认值。
+   * @param key - 用于读取或更新正数配置的稳定键。
+   * @param defaultValue - 主值缺失、为空或不合法时采用的兜底结果。
+   * @returns 返回有效的正数配置；缺失或非法时返回 `defaultValue`。
+   */
   private getNumber(key: string, defaultValue: number) {
     const value = Number(this.configService.get<string>(key) || defaultValue);
-    return Number.isFinite(value) && value > 0 ? value : defaultValue;
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+    return defaultValue;
   }
 }

@@ -17,7 +17,14 @@ export class BlogLive2DAssetController {
     private readonly publicRateLimitService: PublicRateLimitService,
   ) {}
 
-  /** 读取字符目录。 */
+  /**
+   * 校验请求来源后读取 Live2D 角色目录对象，并写入缓存、长度与内容类型响应头。
+   * @param character - 决定角色目录内容、边界或目标的 `character` 值。
+   * @param referer - 决定角色目录内容、边界或目标的 `referer` 值。
+   * @param origin - 决定角色目录内容、边界或目标的 `origin` 值。
+   * @param req - 用于角色目录的当前 HTTP 请求。
+   * @param res - 用于写入状态码、Cookie 或缓存策略的当前 HTTP 响应。
+   */
   @Get(':character/catalog.json')
   @ApiOperation({ summary: '获取 Blog Live2D 角色目录规范索引' })
   @ApiParam({ name: 'character', enum: ['pio', 'tia'], example: 'pio' })
@@ -43,7 +50,16 @@ export class BlogLive2DAssetController {
     stream.pipe(res);
   }
 
-  /** 读取字符资源。 */
+  /**
+   * 校验请求来源后读取指定 Live2D 角色资源，并按对象元数据写入下载响应头。
+   * @param character - 决定角色资源内容、边界或目标的 `character` 值。
+   * @param family - 决定角色资源内容、边界或目标的 `family` 值。
+   * @param assetPath - 必须保持在受控根目录内的资源路径。
+   * @param referer - 决定角色资源内容、边界或目标的 `referer` 值。
+   * @param origin - 决定角色资源内容、边界或目标的 `origin` 值。
+   * @param req - 用于角色资源的当前 HTTP 请求。
+   * @param res - 用于写入状态码、Cookie 或缓存策略的当前 HTTP 响应。
+   */
   @Get(':character/:family/*assetPath')
   @ApiOperation({ summary: '获取 Blog Live2D 角色运行时资源' })
   @ApiParam({ name: 'character', enum: ['pio', 'tia'], example: 'tia' })
@@ -77,10 +93,15 @@ export class BlogLive2DAssetController {
     stream.pipe(res);
   }
 
-  /** 读取缓存控制。 */
+  /**
+   * 按`objectName`读取缓存控制；当 `objectName.endsWith('.json')` 成立时返回 `'public, max-age=60'`。
+   * @param objectName - 决定缓存控制内容、边界或目标的 `objectName` 值。
+   * @returns 当前状态对应的缓存控制，取值为 `'public, max-age=60'`、`'public, max-age=31536000, immutable'`。
+   */
   private getCacheControl(objectName: string): string {
-    return objectName.endsWith('.json')
-      ? 'public, max-age=60'
-      : 'public, max-age=31536000, immutable';
+    if (objectName.endsWith('.json')) {
+      return 'public, max-age=60';
+    }
+    return 'public, max-age=31536000, immutable';
   }
 }

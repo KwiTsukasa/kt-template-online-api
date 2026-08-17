@@ -112,28 +112,27 @@ const PREVIEW_NOTE_TYPE_SORT: Record<string, number> = {
 };
 
 /**
- * 判断谱面音符是否参与谱面长度计算。
- *
- * @param type - type 输入；驱动 `BANGDREAM_SONG_CHART_DISPLAY_NOTE_TYPES.includes()` 的 BangDream步骤。
+ * 根据`type`与当前约束判定谱面音符是否参与谱面长度计算。
+ * @param type - 决定谱面音符是否参与谱面长度计算内容、边界或目标的 `type` 值。
+ * @returns 满足谱面音符是否参与谱面长度计算约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isSongChartDisplayNoteType(type: string): boolean {
   return BANGDREAM_SONG_CHART_DISPLAY_NOTE_TYPES.includes(type as never);
 }
 
 /**
- * 判断谱面音符是否参与计数线绘制。
- *
- * @param type - type 输入；驱动 `BANGDREAM_SONG_CHART_COUNT_LINE_NOTE_TYPES.includes()` 的 BangDream步骤。
+ * 根据`type`与当前约束判定谱面音符是否参与计数线绘制。
+ * @param type - 决定谱面音符是否参与计数线绘制内容、边界或目标的 `type` 值。
+ * @returns 满足谱面音符是否参与计数线绘制约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isSongChartCountLineNoteType(type: string): boolean {
   return BANGDREAM_SONG_CHART_COUNT_LINE_NOTE_TYPES.includes(type as never);
 }
 
 /**
- * 在图片布局层中按节拍排序 BPM 时间点并写入累计时间。
- *
- * @param timepoints - BangDream列表；使用 `length` 字段生成结果。
- * @returns 处理后的列表。
+ * 根据`timepoints`处理sort变速点集合。
+ * @param timepoints - 用于sort变速点集合的领域对象，包含 `length`、`i`、`i - 1` 字段。
+ * @returns 按输入顺序得到的sort变速点集合列表；没有匹配项时为空数组。
  */
 function sortTimepoints(timepoints: BestdoriNote[]): BestdoriNote[] {
   timepoints.sort((a, b) => a.beat - b.beat);
@@ -153,11 +152,10 @@ function sortTimepoints(timepoints: BestdoriNote[]): BestdoriNote[] {
 }
 
 /**
- * 在图片布局层中用二分查找定位节拍所在的 BPM 时间点。
- *
- * @param timepoints - BangDream列表；使用 `length` 字段生成结果。
- * @param beat - beat 输入；决定 BangDream条件分支。
- * @returns BangDream 插件查询结果。
+ * 通过二分查找返回拍点不晚于目标拍点的最后一个变速点；目标早于全部节点时回退到首节点。
+ * @param timepoints - 用于通过二分查找返回拍点不晚于目标拍点的最后一个变速点的领域对象，包含 `length`、`0`、`mid` 字段。
+ * @param beat - 决定通过二分查找返回拍点不晚于目标拍点的最后一个变速点内容、边界或目标的 `beat` 值。
+ * @returns 通过二分查找返回拍点不晚于目标拍点的最后一个变速点。
  */
 function findTimepointAtBeat(
   timepoints: BestdoriNote[],
@@ -181,11 +179,10 @@ function findTimepointAtBeat(
 }
 
 /**
- * 在图片布局层中根据 BPM 时间点计算谱面音符时间。
- *
- * @param timepoints - BangDream列表；驱动 `findTimepointAtBeat()` 的 BangDream步骤。
- * @param beat - beat 输入；驱动 `findTimepointAtBeat()` 的 BangDream步骤。
- * @returns 计算后的数值。
+ * 按`timepoints`、`beat`读取音符时间；从 `findTimepointAtBeat` 读取音符时间。
+ * @param timepoints - 决定音符时间内容、边界或目标的 `timepoints` 值。
+ * @param beat - 决定音符时间内容、边界或目标的 `beat` 值。
+ * @returns 音符时间。
  */
 function getNoteTime(timepoints: BestdoriNote[], beat: number): number {
   const timepoint = findTimepointAtBeat(timepoints, beat);
@@ -195,10 +192,9 @@ function getNoteTime(timepoints: BestdoriNote[], beat: number): number {
 }
 
 /**
- * 在图片布局层中为谱面音符写入实际时间。
- *
- * @param chart - chart 输入；筛选 BangDream列表项。
- * @returns 处理后的 BPM 时间点列表。
+ * 通过 `chart.filter` 筛选匹配数据。
+ * @param chart - 决定assign歌曲ChartTimes内容、边界或目标的 `chart` 值。
+ * @returns 按输入顺序得到的assign歌曲ChartTimes列表；没有匹配项时为空数组。
  */
 export function assignSongChartTimes(chart: BestdoriNote[]): BestdoriNote[] {
   const timepoints = sortTimepoints(
@@ -221,12 +217,11 @@ export function assignSongChartTimes(chart: BestdoriNote[]): BestdoriNote[] {
 }
 
 /**
- * 在图片布局层中为同拍音符补充双押标记。
- *
- * @param notes - BangDream列表；写入 BangDream集合、缓存或持久化状态。
- * @param beat - beat 输入；决定 BangDream条件分支。
- * @param time - time 输入；驱动 `sort()` 的 BangDream步骤。
- * @param lane - lane 输入；决定 BangDream条件分支。
+ * 根据`notes`、`beat`、`time`更新同步音符。
+ * @param notes - 用于同步音符的领域对象，包含 `push` 字段。
+ * @param beat - 决定同步音符内容、边界或目标的 `beat` 值。
+ * @param time - 决定同步音符内容、边界或目标的 `time` 值。
+ * @param lane - 决定同步音符内容、边界或目标的 `lane` 值。
  */
 function addSimNote(
   notes: PreviewNote[],
@@ -253,10 +248,9 @@ function addSimNote(
 }
 
 /**
- * 在图片布局层中识别单点音符的展示类型。
- *
- * @param note - note 输入；使用 `flick`、`skill`、`beat` 字段生成结果。
- * @returns 预览音符类型。
+ * 按`note`读取Single音符Type；当 `note.flick` 成立时返回 `'Flick'`。
+ * @param note - 用于Single音符Type的领域对象，包含 `flick`、`skill`、`beat` 字段。
+ * @returns 当前状态对应的Single音符Type，取值为 `'Flick'`、`'Skill'`、`'SingleOff'`、`'Single'`。
  */
 function getSingleNoteType(note: BestdoriNote): string {
   if (note.flick) {
@@ -272,10 +266,9 @@ function getSingleNoteType(note: BestdoriNote): string {
 }
 
 /**
- * 在图片布局层中把滑条连接点拆成可绘制音符。
- *
- * @param notes - BangDream列表；写入 BangDream集合、缓存或持久化状态。
- * @param note - note 输入；使用 `connections` 字段生成结果。
+ * 将`notes`、`note`中的非空Slide音符集合截断到安全上限后追加到目标集合。
+ * @param notes - 用于Slide音符集合的领域对象，包含 `push` 字段。
+ * @param note - 用于Slide音符集合的领域对象，包含 `connections` 字段。
  */
 function pushSlideNotes(notes: PreviewNote[], note: BestdoriNote): void {
   const barTime: number[] = [];
@@ -305,15 +298,21 @@ function pushSlideNotes(notes: PreviewNote[], note: BestdoriNote): void {
         ...tick,
         lane: tick.lane,
         time,
-        type: firstTick
-          ? tick.skill
-            ? 'Skill'
-            : 'Long'
-          : tick.flick
-            ? 'Flick'
-            : tick.skill
-              ? 'Skill'
-              : 'Long',
+        type: (() => {
+          if (firstTick) {
+            if (tick.skill) {
+              return 'Skill';
+            }
+            return 'Long';
+          }
+          if (tick.flick) {
+            return 'Flick';
+          }
+          if (tick.skill) {
+            return 'Skill';
+          }
+          return 'Long';
+        })(),
       });
       addSimNote(notes, tick.beat, time, tick.lane);
       continue;
@@ -328,10 +327,9 @@ function pushSlideNotes(notes: PreviewNote[], note: BestdoriNote): void {
 }
 
 /**
- * 在图片布局层中把可游玩音符转换为预览音符。
- *
- * @param notes - BangDream列表；写入 BangDream集合、缓存或持久化状态。
- * @param note - note 输入；使用 `type`、`lane`、`time`、`beat` 字段生成结果。
+ * 将`notes`、`note`中的非空Playable音符截断到安全上限后追加到目标集合；当 `note.type === 'Single'` 成立时直接结束且不产生返回值。
+ * @param notes - 用于Playable音符的领域对象，包含 `push` 字段。
+ * @param note - 用于Playable音符的领域对象，包含 `type`、`lane`、`time`、`beat` 字段。
  */
 function pushPlayableNote(notes: PreviewNote[], note: BestdoriNote): void {
   if (note.type === 'Single') {
@@ -357,20 +355,21 @@ function pushPlayableNote(notes: PreviewNote[], note: BestdoriNote): void {
 }
 
 /**
- * 在图片布局层中获取排序轨道。
- *
- * @param note - note 输入；使用 `lane` 字段生成结果。
- * @returns 计算后的数值。
+ * 按`note`读取SortLane；当 `Array.isArray(note.lane)` 成立时返回 `note.lane[0]`。
+ * @param note - 用于SortLane的领域对象，包含 `lane` 字段。
+ * @returns 用于谱面排序的轨道号；多轨音符取轨道数组第一项，单轨音符返回原值。
  */
 function getSortLane(note: PreviewNote): number {
-  return Array.isArray(note.lane) ? note.lane[0] : note.lane;
+  if (Array.isArray(note.lane)) {
+    return note.lane[0];
+  }
+  return note.lane;
 }
 
 /**
- * 在图片布局层中按时间和轨道排序预览音符。
- *
- * @param notes - BangDream列表；执行 `notes.sort()` 对应的 BangDream步骤。
- * @returns 处理后的列表。
+ * 根据`notes`处理sort预览音符集合。
+ * @param notes - 决定sort预览音符集合内容、边界或目标的 `notes` 值。
+ * @returns 按输入顺序得到的sort预览音符集合列表；没有匹配项时为空数组。
  */
 function sortPreviewNotes(notes: PreviewNote[]): PreviewNote[] {
   notes.sort((a, b) => {
@@ -389,10 +388,9 @@ function sortPreviewNotes(notes: PreviewNote[]): PreviewNote[] {
 }
 
 /**
- * 在图片布局层中把 Bestdori 谱面转换为预览音符列表。
- *
- * @param chart - chart 输入；驱动 `for()` 的 BangDream步骤。
- * @returns 处理后的列表。
+ * 根据`chart`构造歌曲Chart预览音符集合。
+ * @param chart - 决定歌曲Chart预览音符集合内容、边界或目标的 `chart` 值。
+ * @returns 按输入顺序得到的歌曲Chart预览音符集合列表；没有匹配项时为空数组。
  */
 export function createSongChartPreviewNotes(
   chart: BestdoriNote[],
@@ -415,10 +413,9 @@ export function createSongChartPreviewNotes(
 }
 
 /**
- * 在图片布局层中根据谱面长度创建预览布局参数。
- *
- * @param notes - BangDream列表；筛选 BangDream列表项。
- * @returns 创建后的 BangDream 插件对象或配置。
+ * 通过 `notes.filter` 筛选匹配数据。
+ * @param notes - 决定歌曲Chart预览布局内容、边界或目标的 `notes` 值。
+ * @returns 包含 `blockDistance`、`chartLength`、`colCount`、`height`、`heightPerSecond` 字段的歌曲Chart预览布局。
  */
 export function createSongChartPreviewLayout(
   notes: PreviewNote[],
@@ -482,10 +479,9 @@ export function createSongChartPreviewLayout(
 }
 
 /**
- * 创建谱面预览渲染模型。
- *
- * @param chart - chart 输入；驱动 `assignSongChartTimes()`、`createSongChartPreviewNotes()` 的 BangDream步骤。
- * @returns 预览音符和布局。
+ * 根据`chart`构造针对谱面预览渲染模型。
+ * @param chart - 决定针对谱面预览渲染模型内容、边界或目标的 `chart` 值。
+ * @returns 包含 `layout`、`notes` 字段的针对谱面预览渲染模型。
  */
 export function createSongChartPreviewModel(chart: BestdoriNote[]) {
   assignSongChartTimes(chart);

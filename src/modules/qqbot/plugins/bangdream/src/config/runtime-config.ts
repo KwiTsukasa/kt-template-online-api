@@ -15,15 +15,16 @@ import { logger } from '@/modules/qqbot/plugins/bangdream/src/application/bangdr
 import { readBangDreamRuntimeConfig } from '@/modules/qqbot/plugins/bangdream/src/infrastructure/integration/runtime-io';
 
 /**
- * 解析Bang Dream Project Root。
- * @param moduleDir - moduleDir 输入；定位文件系统路径。
- * @returns BangDream 插件渲染后的图片、画布或文本。
+ * 从`moduleDir`解析BanG Dream根目录；当 `path.basename(currentDir) === 'config'` 成立时返回 `path.resolve(currentDir, '..')`。
+ * @param moduleDir - 决定BanGDream根目录内容、边界或目标的 `moduleDir` 值；省略时默认采用 `__dirname`。
+ * @returns BanGDream根目录。
  */
 export function resolveBangDreamProjectRoot(moduleDir = __dirname): string {
   const currentDir = path.resolve(moduleDir);
-  return path.basename(currentDir) === 'config'
-    ? path.resolve(currentDir, '..')
-    : currentDir;
+  if (path.basename(currentDir) === 'config') {
+    return path.resolve(currentDir, '..');
+  }
+  return currentDir;
 }
 
 export const projectRoot: string = resolveBangDreamProjectRoot();
@@ -51,7 +52,7 @@ const enableAutoTrackerDataSourceSwitch = true; // 是否开启数据源优先�
 const trackerAutoSwitchThreshold: number = 5; // 设定数据源自动切换门限，当存在5次数据源更新不及时的情况，自动切换数据源，加快访问速度
 let trackerAutoSwitchFlags: number = 0;
 /**
- * 在运行时配置层中记录数据来源Problem。
+ * 将本次操作写入 `trackerAutoSwitchFlags`、`preferHhwxSource` 状态。
  */
 export function reportDataSourceProblem() {
   if (enableAutoTrackerDataSourceSwitch) {
@@ -59,14 +60,19 @@ export function reportDataSourceProblem() {
       preferHhwxSource = !preferHhwxSource;
       logger(
         'config.ts/reportDataSourceProblem',
-        `Tracker数据源多次出现问题，将数据源优先切换至${preferHhwxSource ? 'HHWX' : 'Bestdori'}`,
+        `Tracker数据源多次出现问题，将数据源优先切换至${(() => {
+          if (preferHhwxSource) {
+            return 'HHWX';
+          }
+          return 'Bestdori';
+        })()}`,
       );
       trackerAutoSwitchFlags = 0;
     }
   }
 }
 /**
- * 在运行时配置层中清理数据来源Problem。
+ * 将本次操作写入 `trackerAutoSwitchFlags` 状态。
  */
 export function clearDataSourceProblem() {
   trackerAutoSwitchFlags = 0;

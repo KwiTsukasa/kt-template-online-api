@@ -79,7 +79,11 @@ export class EnvironmentEventBusService
     });
   }
 
-  /** 订阅环境事件事件总线记录。 */
+  /**
+   * 按`subscriber`启动环境事件总线记录。
+   * @param subscriber - 决定环境事件总线记录内容、边界或目标的 `subscriber` 值。
+   * @returns 环境事件总线记录。
+   */
   subscribe(subscriber: EnvironmentEventSubscriber): () => void {
     this.subscribers.add(subscriber);
     return () => {
@@ -87,14 +91,22 @@ export class EnvironmentEventBusService
     };
   }
 
-  /** 发布环境事件事件总线记录。 */
+  /**
+   * 按`event`投递环境事件总线记录；向目标通道投递结果（`client.publish`）。
+   * @param event - 触发环境事件总线记录的领域事件，包含 `topic` 字段。
+   */
   async publish(event: EnvironmentEventEnvelope) {
     this.emitLocal(event);
     if (!this.client?.connected) return;
     this.client.publish(event.topic, JSON.stringify(event));
   }
 
-  /** 处理MQTT消息。 */
+  /**
+   * 解析 MQTT 环境事件并补齐观测时间、保留标记、来源与主题；缺少必要身份或 JSON 非法时忽略消息。
+   * @param topic - 决定MQTT消息内容、边界或目标的 `topic` 值。
+   * @param payload - 待按当前协议校验并路由的事件载荷，包含 `toString` 字段。
+   * @param packet - 用于MQTT消息的领域对象，包含 `retain` 字段；省略时默认采用 `{}`。
+   */
   private handleMqttMessage(
     topic: string,
     payload: Buffer,
@@ -116,30 +128,47 @@ export class EnvironmentEventBusService
     } catch (err) {
       this.logger.warn(
         `Environment MQTT payload ignored: ${
-          err instanceof Error ? err.message : 'invalid json'
+          (() => {
+            if (err instanceof Error) {
+              return err.message;
+            }
+            return 'invalid json';
+          })()
         }`,
       );
     }
   }
 
-  /** 处理MQTT关闭。 */
+  /**
+   * 根据当前运行态处理MQTT关闭。
+   */
   private handleMqttClose() {
     this.emitLocal(this.createBrokerStatusEvent('MQTT broker disconnected'));
   }
 
-  /** 处理MQTT错误。 */
+  /**
+   * 将 MQTT 客户端错误转换为本地代理状态事件并通知环境事件订阅者。
+   * @param err - 待转换为稳定业务错误或日志文本的未知异常。
+   */
   private handleMqttError(err: Error) {
     this.emitLocal(
       this.createBrokerStatusEvent(`MQTT broker error: ${err.message}`),
     );
   }
 
-  /** 发布本地。 */
+  /**
+   * 按注册顺序把环境事件同步投递给当前全部本地订阅者。
+   * @param event - 触发本地的领域事件。
+   */
   private emitLocal(event: EnvironmentEventEnvelope) {
     this.subscribers.forEach((subscriber) => subscriber(event));
   }
 
-  /** 创建消息代理状态事件。 */
+  /**
+   * 根据`summary`构造消息代理状态事件。
+   * @param summary - 决定消息代理状态事件内容、边界或目标的 `summary` 值。
+   * @returns 包含 `eventId`、`observedAt`、`severity`、`siteId`、`sourceKind` 字段的消息代理状态事件。
+   */
   private createBrokerStatusEvent(summary: string): EnvironmentEventEnvelope {
     return {
       eventId: `env-bus-${Date.now()}`,

@@ -19,10 +19,10 @@ interface drawDifficultyDetailInListOptions {
 }
 //画难度详情
 /**
- * 在图片布局层中处理难度详情In列表。
- *
- * @param DifficultyDetailInListOptions - BangDream列表；驱动 `for()` 的 BangDream步骤。
- * @param key - 键名；影响 DifficultyDetailInList 的返回值。
+ * 根据`DifficultyDetailInListOptions`、`key`处理难度详情；把图片、文本或图形按布局规格绘制到画布。
+ * @param DifficultyDetailInListOptions - 控制难度详情筛选、缓存或输出方式的可选项，包含 `i` 字段。
+ * @param key - 用于读取或更新难度详情的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 难度详情。
  */
 function DifficultyDetailInList(
   DifficultyDetailInListOptions: drawDifficultyDetailInListOptions,
@@ -65,11 +65,11 @@ function DifficultyDetailInList(
 }
 //画玩家信息内不同类型的玩家详情
 /**
- * 在图片布局层中绘制玩家难度详情In列表。
- *
- * @param player - player 输入；使用 `profile` 字段生成结果。
- * @param type - type 输入；影响 drawPlayerDifficultyDetailInList 的返回值。
- * @param key - 键名；驱动 `DifficultyDetailInList()` 的 BangDream步骤。
+ * 通过 `difficultyNameList.indexOf` 遍历或定位集合元素。
+ * @param player - 用于玩家难度详情的领域对象，包含 `profile` 字段。
+ * @param type - 决定玩家难度详情内容、边界或目标的 `type` 值。
+ * @param key - 用于读取或更新玩家难度详情的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 玩家难度详情。
  */
 export function drawPlayerDifficultyDetailInList(
   player: Player,

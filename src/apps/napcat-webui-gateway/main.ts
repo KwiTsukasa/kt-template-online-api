@@ -5,7 +5,9 @@ import { NapcatWebuiGatewayConfigService } from './config/napcat-webui-gateway-c
 import { NapcatWebuiProxyService } from './infrastructure/proxy/napcat-webui-proxy.service';
 import { NapcatWebuiGatewayModule } from './napcat-webui-gateway.module';
 
-/** 返回引导流程。 */
+/**
+ * 根据当前运行态处理网关应用、接入日志与中间件后开始监听；从 `app.get` 读取网关应用、接入日志与中间件后开始监听。
+ */
 async function bootstrap() {
   const app = await NestFactory.create(NapcatWebuiGatewayModule, {
     bodyParser: false,

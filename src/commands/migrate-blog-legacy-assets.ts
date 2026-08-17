@@ -93,12 +93,23 @@ type BlogLegacyAssetMigrationCommandDependencies = {
 })
 class BlogLegacyAssetMigrationCommandModule {}
 
-/** 解析博客旧版资源MinIO使用SSL。 */
+/**
+ * 从`value`解析博客旧版资源MinIO使用SSL。
+ * @param value - 参与博客旧版资源MinIO使用SSL比较、格式化或输出的候选值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 满足博客旧版资源MinIO使用SSL约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 export function resolveBlogLegacyAssetMinioUseSsl(value?: string): boolean {
   return value?.trim().toLowerCase() === 'true';
 }
 
-/** 解析博客旧版资源迁移选项。 */
+/**
+ * 从`argv`解析博客旧版资源迁移选项；先通过 `assertPath` 校验输入边界。
+ * @param argv - 用于博客旧版资源迁移选项的领域对象，包含 `length`、`index`、`index + 1` 字段。
+ * @returns 包含 `backupPath`、`databaseIdentity`、`maintenanceConfirmed`、`manifestPath`、`mode` 字段的博客旧版资源迁移选项。
+ * @throws 当 `!value || value.startsWith('--')` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；当 `manifestPath` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `argument === '--rollback-manifest'` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；当 `modes.length !== 1` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `!manifestPath` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+ */
 export function parseBlogLegacyAssetMigrationOptions(
   argv: string[],
 ): BlogLegacyAssetMigrationOptions {
@@ -172,7 +183,17 @@ export function parseBlogLegacyAssetMigrationOptions(
   };
 }
 
-/** 执行博客旧版资源迁移命令。 */
+/**
+ * 根据`options`、`dependencies`处理博客旧版资源迁移命令。
+ * @param options - 控制博客旧版资源迁移命令筛选、缓存或输出方式的可选项，包含 `mode`、`databaseIdentity`、`maintenanceConfirmed`、`backupPath` 字段。
+ * @param dependencies - 用于博客旧版资源迁移命令的领域对象，包含 `actualDatabaseIdentity`、`inspectBackupPath`、`service` 字段。
+ * @returns 博客旧版资源迁移命令。
+ * @throws 当 `!options.databaseIdentity` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `options.databaseIdentity !== dependencies.actualDatabaseIdentity` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `!options.maintenanceConfirmed` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；当 `!options.backupPath` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `resolve(options.backupPath) === resolve(options.manifestPath)` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `!backup.isFile || !backup.readable || backup.size < 1` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+ */
 export async function runBlogLegacyAssetMigrationCommand(
   options: BlogLegacyAssetMigrationOptions,
   dependencies: BlogLegacyAssetMigrationCommandDependencies,
@@ -213,7 +234,12 @@ export async function runBlogLegacyAssetMigrationCommand(
   return dependencies.service.run(options);
 }
 
-/** 构建博客旧版资源迁移数据库身份。 */
+/**
+ * 根据`env`构造博客旧版资源迁移数据库身份。
+ * @param env - 用于博客旧版资源迁移数据库身份的领域对象，包含 `DB_HOST`、`DB_PORT`、`DB_DATABASE` 字段。
+ * @returns 按参数编码并拼接完成的博客旧版资源迁移数据库身份。
+ * @throws 当 `!host || !database` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+ */
 export function buildBlogLegacyAssetMigrationDatabaseIdentity(
   env: NodeJS.ProcessEnv,
 ): string {
@@ -226,7 +252,9 @@ export function buildBlogLegacyAssetMigrationDatabaseIdentity(
   return `${host}:${port}/${database}`;
 }
 
-/** 执行当前模块的主流程。 */
+/**
+ * 创建无日志 Nest 上下文执行博客旧资源迁移，输出清单摘要，并在失败时设置非零退出码后关闭应用。
+ */
 async function main() {
   const options = parseBlogLegacyAssetMigrationOptions(process.argv.slice(2));
   const application = await NestFactory.createApplicationContext(
@@ -256,7 +284,11 @@ async function main() {
   }
 }
 
-/** 检查博客旧版资源备份路径。 */
+/**
+ * 根据`path`拼接稳定的博客旧版资源备份路径，用于隔离对应资源或存储记录。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @returns 包含 `isFile`、`readable`、`size` 字段的博客旧版资源备份路径。
+ */
 function inspectBlogLegacyAssetBackupPath(path: string) {
   try {
     accessSync(path, constants.R_OK);

@@ -145,7 +145,12 @@ export class NetworkStunMessageSourceAdapter
     this.registered = false;
   }
 
-  /** 从已校验事件中提取 STUN 映射的稳定资源键。 */
+  /**
+   * 从已校验事件中提取 STUN 映射的稳定资源键。
+   * @param payload - 待按当前协议校验并路由的事件载荷，包含 `portForwardId` 字段。
+   * @returns 从已校验事件中提取 STUN 映射的稳定资源键。
+   * @throws 当 `!Object.prototype.hasOwnProperty.call(payload, 'portForwardId') || type…` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   eventResourceKey(payload: Record<string, SystemMessageScalar>): string {
     if (
       !Object.prototype.hasOwnProperty.call(payload, 'portForwardId') ||
@@ -156,7 +161,11 @@ export class NetworkStunMessageSourceAdapter
     return payload.portForwardId;
   }
 
-  /** 规范化订阅配置。 */
+  /**
+   * 校验 STUN 映射与 DDNS 绑定，并生成可持久化配置、资源键和来源摘要。
+   * @param input - 待解析的 STUN 系统消息订阅配置。
+   * @returns 已规范化的订阅配置、端口转发资源键与可读来源摘要。
+   */
   async normalizeSubscriptionConfig(input: unknown): Promise<{
     canonicalConfig: Record<string, string>;
     resourceKey: string;
@@ -170,7 +179,12 @@ export class NetworkStunMessageSourceAdapter
     };
   }
 
-  /** 检查订阅。 */
+  /**
+   * 探测 STUN 订阅配置是否仍可解析，把契约错误转换为禁用原因而不打断管理端读取。
+   * @param config - 待检查的已持久化 STUN 订阅配置。
+   * @returns 有效时包含来源摘要；无效时包含 `valid=false` 和契约错误码。
+   * @throws 捕获到非 `SystemMessageContractError` 的意外错误时原样重新抛出。
+   */
   async inspectSubscription(config: Record<string, unknown>): Promise<{
     invalidReasonCode: null | string;
     sourceSummary: string;
@@ -193,7 +207,10 @@ export class NetworkStunMessageSourceAdapter
     }
   }
 
-  /** 将网络实体转换成供动态订阅表单使用的标准选项。 */
+  /**
+   * 将网络实体转换成供动态订阅表单使用的标准选项。
+   * @returns 包含 `ddnsRecords`、`portForwards` 字段的将网络实体转换成供动态订阅表单使用的标准选项。
+   */
   async listSubscriptionOptions(): Promise<SystemMessageSourceOptionsResponse> {
     const [mappings, records] = await Promise.all([
       this.mappingRepository.find({ order: { id: 'ASC', name: 'ASC' } }),
@@ -204,14 +221,20 @@ export class NetworkStunMessageSourceAdapter
     );
     return {
       ddnsRecords: records.map((record) => {
-        const mapping = record.portForwardId
-          ? mappingsById.get(String(record.portForwardId))
-          : undefined;
+        const mapping = (() => {
+          if (record.portForwardId) {
+            return mappingsById.get(String(record.portForwardId));
+          }
+          return undefined;
+        })();
         const disabledReasonCode = ddnsOptionReason(record, mapping);
         return {
-          ...(record.portForwardId
-            ? { dependsOnValue: String(record.portForwardId) }
-            : {}),
+          ...((() => {
+            if (record.portForwardId) {
+              return { dependsOnValue: String(record.portForwardId) };
+            }
+            return {};
+          })()),
           disabled: disabledReasonCode !== null,
           disabledReasonCode,
           eligible: disabledReasonCode === null,
@@ -221,9 +244,12 @@ export class NetworkStunMessageSourceAdapter
             .filter((value) => value !== null)
             .join(' · '),
           name: record.name,
-          portForwardId: record.portForwardId
-            ? String(record.portForwardId)
-            : '',
+          portForwardId: (() => {
+            if (record.portForwardId) {
+              return String(record.portForwardId);
+            }
+            return '';
+          })(),
           value: String(record.id),
         };
       }),
@@ -252,7 +278,11 @@ export class NetworkStunMessageSourceAdapter
     };
   }
 
-  /** 从订阅配置中提取自有的字符串资源键，无效配置不参与匹配。 */
+  /**
+   * 从订阅配置中提取自有的字符串资源键，无效配置不参与匹配。
+   * @param config - 限定从订阅配置中提取自有的字符串资源键，无效配置不参与匹配边界、地址与开关的运行配置，包含 `portForwardId` 字段。
+   * @returns 从订阅配置中提取自有的字符串资源键，无效配置不参与匹配；无法解析或未命中时为 `null`。
+   */
   subscriptionResourceKey(config: Record<string, unknown>): null | string {
     if (
       !isPlainRecord(config) ||
@@ -264,7 +294,13 @@ export class NetworkStunMessageSourceAdapter
     return config.portForwardId;
   }
 
-  /** 校验事件载荷。 */
+  /**
+   * 校验`payload`是否满足事件载荷约束，并拒绝不合法输入。
+   * @param payload - 待按当前协议校验并路由的事件载荷，包含 `changedAt`、`currentPort`、`previousPort`、`portForwardId` 字段。
+   * @returns 包含 `changedAt`、`currentPort`、`portForwardId`、`previousPort`、`publicIpv4` 字段的事件载荷。
+   * @throws 当 `!isPlainRecord(payload)` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；
+   *   当 `typeof payload.publicIpv4 !== 'string' || isIP(payload.publicIpv4) !==…` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   validateEventPayload(
     payload: Record<string, unknown>,
   ): Record<string, SystemMessageScalar> {
@@ -291,7 +327,12 @@ export class NetworkStunMessageSourceAdapter
     };
   }
 
-  /** 解析投递。 */
+  /**
+   * 从`input`解析投递；当 `event.portForwardId !== resolved.config.portForwardId` 成立时返回 `{ reasonCode: 'invalid_source_config', stat…`。
+   * @param input - 用于投递的结构化输入，包含 `subscriptionConfig`、`eventPayload` 字段。
+   * @returns 包含 `reasonCode`、`status`、`variables` 字段的投递；无法解析或未命中时为 `null`。
+   * @throws 当 `!(error instanceof SystemMessageContractError)` 成立时重新抛出该入口捕获且决定公开的原异常。
+   */
   async resolveDelivery(input: {
     eventPayload: Record<string, SystemMessageScalar>;
     subscriptionConfig: Record<string, unknown>;
@@ -336,7 +377,14 @@ export class NetworkStunMessageSourceAdapter
     return { reasonCode: null, status: 'ready', variables };
   }
 
-  /** 解析订阅。 */
+  /**
+   * 从`input`解析订阅；从 `mappingRepository.findOne` 读取订阅。
+   * @param input - 用于订阅的结构化输入，包含 `ddnsRecordId`、`portForwardId` 字段。
+   * @returns 包含 `config`、`ddnsRecord`、`mapping`、`sourceSummary` 字段的订阅。
+   * @throws 当 `!isPlainRecord(input)` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；当 `normalizeSnowflakeId` 调用失败时拒绝当前输入并抛出 `SystemMessageContractError`；
+   *   当 `!mapping` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；当 `!sourceEligibility.eligible` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；
+   *   当 `ddnsReason` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   private async resolveSubscription(
     input: unknown,
   ): Promise<ResolvedSubscription> {
@@ -384,12 +432,21 @@ export class NetworkStunMessageSourceAdapter
   }
 }
 
-/** 判断纯文本记录是否成立。 */
+/**
+ * 根据`value`与当前约束判定纯文本记录。
+ * @param value - 待判定是否满足纯文本记录约束的候选值。
+ * @returns 满足纯文本记录约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** 规范化雪花标识。 */
+/**
+ * 按输入约束要求系统消息资源标识为 1 至 24 位、首位非零的十进制雪花 ID。
+ * @param value - 待验证的资源标识值。
+ * @returns 保持文本不变的有效雪花 ID。
+ * @throws 值不是字符串或不符合雪花 ID 十进制格式时抛出 `SystemMessageContractError`。
+ */
 function normalizeSnowflakeId(value: unknown): string {
   if (typeof value !== 'string' || !SNOWFLAKE_ID_PATTERN.test(value)) {
     throw new SystemMessageContractError('invalid_source_config');
@@ -397,7 +454,12 @@ function normalizeSnowflakeId(value: unknown): string {
   return value;
 }
 
-/** 规范化端口。 */
+/**
+ * 按输入约束要求系统消息来源端口为 1 至 65535 范围内的整数。
+ * @param value - 待验证的来源端口值。
+ * @returns 保持数值不变的有效 TCP 或 UDP 端口。
+ * @throws 值不是整数或超出有效端口范围时抛出 `SystemMessageContractError`。
+ */
 function normalizePort(value: unknown): number {
   if (
     typeof value !== 'number' ||
@@ -410,7 +472,13 @@ function normalizePort(value: unknown): number {
   return value;
 }
 
-/** 规范化RFC3339。 */
+/**
+ * 将`value`规范为RFC3339 时间字符串，使等价输入得到一致表示；从 `date.getTime` 读取RFC3339 时间字符串。
+ * @param value - 待转换为RFC3339 时间字符串的原始值。
+ * @returns RFC3339 时间字符串。
+ * @throws 当 `typeof value !== 'string'` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；当 `!match || !isValidRfc3339Calendar(match)` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；
+ *   当 `Number.isNaN(date.getTime())` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+ */
 function normalizeRfc3339(value: unknown): string {
   if (typeof value !== 'string') {
     throw new SystemMessageContractError('invalid_source_config');
@@ -426,7 +494,11 @@ function normalizeRfc3339(value: unknown): string {
   return date.toISOString();
 }
 
-/** 判断有效RFC3339日历是否成立。 */
+/**
+ * 根据`match`与当前约束判定有效RFC3339日历。
+ * @param match - 决定有效RFC3339日历内容、边界或目标的 `match` 值。
+ * @returns 满足有效RFC3339日历约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isValidRfc3339Calendar(match: RegExpExecArray): boolean {
   const [
     ,
@@ -447,11 +519,26 @@ function isValidRfc3339Calendar(match: RegExpExecArray): boolean {
   const hour = Number(hourText);
   const minute = Number(minuteText);
   const second = Number(secondText);
-  const offsetHour = offsetHourText ? Number(offsetHourText) : 0;
-  const offsetMinute = offsetMinuteText ? Number(offsetMinuteText) : 0;
+  const offsetHour = (() => {
+    if (offsetHourText) {
+      return Number(offsetHourText);
+    }
+    return 0;
+  })();
+  const offsetMinute = (() => {
+    if (offsetMinuteText) {
+      return Number(offsetMinuteText);
+    }
+    return 0;
+  })();
   const daysInMonth = [
     31,
-    year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28,
+    (() => {
+      if (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)) {
+        return 29;
+      }
+      return 28;
+    })(),
     31,
     30,
     31,
@@ -476,7 +563,12 @@ function isValidRfc3339Calendar(match: RegExpExecArray): boolean {
   );
 }
 
-/** 返回DDNS选项原因。 */
+/**
+ * 按输入分支映射DDNS选项原因。
+ * @param record - 用于按输入分支映射DDNS选项原因的领域对象，包含 `isDeleted`、`enabled`、`recordType`、`sourceType` 字段。
+ * @param mapping - 用于按输入分支映射DDNS选项原因的领域对象，包含 `id` 字段。
+ * @returns 按输入分支映射DDNS选项原因。
+ */
 function ddnsOptionReason(
   record: NetworkDdnsRecord | null | undefined,
   mapping: NetworkPortForward | undefined,
@@ -494,7 +586,11 @@ function ddnsOptionReason(
   return source.disabledReasonCode;
 }
 
-/** 返回消息来源可用资格原因。 */
+/**
+ * 按输入分支映射消息来源可用资格原因。
+ * @param reason - 决定按输入分支映射消息来源可用资格原因内容、边界或目标的 `reason` 值。
+ * @returns 当前状态对应的按输入分支映射消息来源可用资格原因，取值为 `'keeper_disabled'`、`'mapping_port_mismatch'`、`'mapping_not_managed'`、`'mapping_not_udp'`。
+ */
 function messageSourceEligibilityReason(
   reason: NonNullable<
     ReturnType<typeof classifyStunEndpointSource>['disabledReasonCode']
@@ -516,7 +612,12 @@ function messageSourceEligibilityReason(
   }
 }
 
-/** 返回DDNS消息来源原因。 */
+/**
+ * 按输入分支映射DDNS消息来源原因。
+ * @param record - 用于按输入分支映射DDNS消息来源原因的领域对象，包含 `isDeleted`、`enabled`、`recordType`、`sourceType` 字段。
+ * @param mapping - 用于按输入分支映射DDNS消息来源原因的领域对象，包含 `id` 字段。
+ * @returns 当前状态对应的按输入分支映射DDNS消息来源原因，取值为 `'ddns_not_found'`、`'ddns_disabled'`、`'ddns_not_ipv4'`、`'ddns_mapping_mismatch'`；无法解析或未命中时为 `null`。
+ */
 function ddnsMessageSourceReason(
   record: NetworkDdnsRecord | null | undefined,
   mapping: NetworkPortForward,
@@ -539,19 +640,31 @@ function ddnsMessageSourceReason(
     return 'ddns_mapping_mismatch';
   }
   const source = classifyStunEndpointSource(mapping);
-  return source.disabledReasonCode
-    ? messageSourceEligibilityReason(source.disabledReasonCode)
-    : null;
+  if (source.disabledReasonCode) {
+    return messageSourceEligibilityReason(source.disabledReasonCode);
+  }
+  return null;
 }
 
-/** 返回DDNS完全限定域名。 */
+/**
+ * 根据`record`处理域名标签并规范化DDNS完全限定域名；当 `subDomain === '@'` 成立时返回 `domain`。
+ * @param record - 用于域名标签并规范化DDNS完全限定域名的领域对象，包含 `domain`、`subDomain` 字段。
+ * @returns 按参数编码并拼接完成的域名标签并规范化DDNS完全限定域名。
+ */
 function ddnsFqdn(record: NetworkDdnsRecord): string {
   const domain = record.domain.trim().toLowerCase().replace(/\.$/, '');
   const subDomain = record.subDomain.trim().toLowerCase().replace(/\.$/, '');
-  return subDomain === '@' ? domain : `${subDomain}.${domain}`;
+  if (subDomain === '@') {
+    return domain;
+  }
+  return `${subDomain}.${domain}`;
 }
 
-/** 判断当前端点是否存在。 */
+/**
+ * 根据`mapping`与当前约束判定当前端点是否存在；从 `getTime` 读取当前端点是否存在。
+ * @param mapping - 用于当前端点是否存在的领域对象，包含 `currentPublicIpv4`、`currentPublicPort`、`currentValidUntil` 字段。
+ * @returns 满足当前端点是否存在约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function hasCurrentEndpoint(mapping: NetworkPortForward): boolean {
   return (
     isIP(mapping.currentPublicIpv4 || '') === 4 &&
@@ -564,7 +677,12 @@ function hasCurrentEndpoint(mapping: NetworkPortForward): boolean {
   );
 }
 
-/** 返回投递变量。 */
+/**
+ * 把领域字段投影为投递变量。
+ * @param resolved - 用于把领域字段投影为投递变量的领域对象，包含 `ddnsRecord`、`mapping` 字段。
+ * @param event - 触发把领域字段投影为投递变量的领域事件，包含 `changedAt`、`currentPort`、`previousPort`、`publicIpv4` 字段。
+ * @returns 包含 `changedAt`、`domain`、`endpoint`、`mappingName`、`port` 字段的把领域字段投影为投递变量。
+ */
 function deliveryVariables(
   resolved: ResolvedSubscription,
   event: StunEventPayload,
@@ -581,7 +699,11 @@ function deliveryVariables(
   };
 }
 
-/** 按上海时区格式化日期时间。 */
+/**
+ * 按上海时区格式化日期时间。
+ * @param value - 待转换为按上海时区格式化日期时间的原始值。
+ * @returns 按参数编码并拼接完成的按上海时区格式化日期时间。
+ */
 function formatShanghaiDateTime(value: string): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     day: '2-digit',

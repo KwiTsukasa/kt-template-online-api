@@ -81,22 +81,30 @@ export const NAPCAT_LOGIN_PROGRESS_MESSAGES = {
 } as const;
 
 /**
- * 创建 NapCat 登录运行态对象或配置。
- * @param input - input 输入；使用 `hasHistoricalSession`、`accountId`、`hasSavedPassword`、`sessionId` 字段生成结果。
- * @returns 创建后的 NapCat 登录运行态对象或配置。
+ * 根据历史会话是否存在选择快速或密码登录阶段，并创建初始待处理登录状态。
+ * @param input - 用于NapCatLogin会话的结构化输入，包含 `hasHistoricalSession`、`accountId`、`hasSavedPassword`、`sessionId` 字段。
+ * @returns 包含 `accountId`、`hasHistoricalSession`、`hasSavedPassword`、`progressMessage`、`sessionId` 字段的NapCatLogin会话。
  */
 export function createNapcatLoginSession(
   input: CreateNapcatLoginSessionInput,
 ): NapcatLoginSessionState {
-  const stage = input.hasHistoricalSession ? 'quick-login' : 'password-login';
+  const stage = (() => {
+    if (input.hasHistoricalSession) {
+      return 'quick-login';
+    }
+    return 'password-login';
+  })();
 
   return {
     accountId: input.accountId,
     hasHistoricalSession: input.hasHistoricalSession,
     hasSavedPassword: input.hasSavedPassword,
-    progressMessage: input.hasHistoricalSession
-      ? NAPCAT_LOGIN_PROGRESS_MESSAGES.quickLogin
-      : NAPCAT_LOGIN_PROGRESS_MESSAGES.passwordLogin,
+    progressMessage: (() => {
+      if (input.hasHistoricalSession) {
+        return NAPCAT_LOGIN_PROGRESS_MESSAGES.quickLogin;
+      }
+      return NAPCAT_LOGIN_PROGRESS_MESSAGES.passwordLogin;
+    })(),
     sessionId: input.sessionId,
     stage,
     status: 'pending',
@@ -105,10 +113,10 @@ export function createNapcatLoginSession(
 
 export class NapcatLoginStateMachine {
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param session - session 输入；使用 `status`、`hasSavedPassword`、`challenge` 字段生成结果。
-   * @param event - event 输入；使用 `type`、`captchaUrl`、`newDevicePullQrCodeSig`、`qrcodeUrl` 字段生成结果。
-   * @returns NapCat 登录运行态产出的 NapcatLoginSessionState。
+   * 根据`session`、`event`处理advance；当 `session.challenge?.type === 'captcha'` 成立时返回 `{ ...session, challenge: { ...session.chall…`。
+   * @param session - 待读取、续期或持久化的advance会话。
+   * @param event - 触发advance的领域事件，包含 `type`、`captchaUrl`、`newDevicePullQrCodeSig`、`qrcodeUrl` 字段。
+   * @returns 包含 `progressMessage`、`stage`、`status` 字段的advance；没有可用结果或提前结束时为 `undefined`。
    */
   advance(
     session: NapcatLoginSessionState,
@@ -120,10 +128,18 @@ export class NapcatLoginStateMachine {
       case 'quick-login-failed':
         return {
           ...session,
-          progressMessage: session.hasSavedPassword
-            ? NAPCAT_LOGIN_PROGRESS_MESSAGES.quickToPassword
-            : NAPCAT_LOGIN_PROGRESS_MESSAGES.manualQr,
-          stage: session.hasSavedPassword ? 'password-login' : 'manual-qr',
+          progressMessage: (() => {
+            if (session.hasSavedPassword) {
+              return NAPCAT_LOGIN_PROGRESS_MESSAGES.quickToPassword;
+            }
+            return NAPCAT_LOGIN_PROGRESS_MESSAGES.manualQr;
+          })(),
+          stage: (() => {
+            if (session.hasSavedPassword) {
+              return 'password-login';
+            }
+            return 'manual-qr';
+          })(),
         };
 
       case 'password-login-failed':
@@ -147,27 +163,34 @@ export class NapcatLoginStateMachine {
         };
 
       case 'captcha-still-required':
-        return session.challenge?.type === 'captcha'
-          ? {
+        if (session.challenge?.type === 'captcha') {
+          return {
               ...session,
               challenge: {
                 ...session.challenge,
                 status:
-                  session.challenge.status === 'submitted'
-                    ? 'submitted'
-                    : 'pending',
+                  (() => {
+                    if (session.challenge.status === 'submitted') {
+                      return 'submitted';
+                    }
+                    return 'pending';
+                  })(),
               },
               progressMessage:
-                session.challenge.status === 'submitted'
-                  ? NAPCAT_LOGIN_PROGRESS_MESSAGES.captchaSubmitted
-                  : NAPCAT_LOGIN_PROGRESS_MESSAGES.captchaNeeded,
+                (() => {
+                  if (session.challenge.status === 'submitted') {
+                    return NAPCAT_LOGIN_PROGRESS_MESSAGES.captchaSubmitted;
+                  }
+                  return NAPCAT_LOGIN_PROGRESS_MESSAGES.captchaNeeded;
+                })(),
               stage: 'captcha',
-            }
-          : session;
+            };
+        }
+        return session;
 
       case 'captcha-submitted':
-        return session.challenge?.type === 'captcha'
-          ? {
+        if (session.challenge?.type === 'captcha') {
+          return {
               ...session,
               challenge: {
                 ...session.challenge,
@@ -175,8 +198,9 @@ export class NapcatLoginStateMachine {
               },
               progressMessage: NAPCAT_LOGIN_PROGRESS_MESSAGES.captchaSubmitted,
               stage: 'captcha',
-            }
-          : session;
+            };
+        }
+        return session;
 
       case 'captcha-new-device-required':
         return {
@@ -194,7 +218,12 @@ export class NapcatLoginStateMachine {
       case 'new-device-poll-pending':
         return this.updateNewDeviceChallenge(session, {
           qrcodeUrl:
-            event.type === 'new-device-qr-ready' ? event.qrcodeUrl : undefined,
+            (() => {
+              if (event.type === 'new-device-qr-ready') {
+                return event.qrcodeUrl;
+              }
+              return undefined;
+            })(),
           status: 'qr-pending',
           progressMessage: NAPCAT_LOGIN_PROGRESS_MESSAGES.newDeviceQrPending,
         });
@@ -262,10 +291,10 @@ export class NapcatLoginStateMachine {
   }
 
   /**
-   * 更新New Device Challenge。
-   * @param session - session 输入；使用 `challenge` 字段生成结果。
-   * @param patch - patch 输入；使用 `qrcodeUrl`、`reason`、`status`、`progressMessage` 字段生成结果。
-   * @returns NapCat 登录运行态更新后的状态。
+   * 根据`session`、`patch`更新设备验证挑战。
+   * @param session - 待读取、续期或持久化的设备验证挑战会话。
+   * @param patch - 用于设备验证挑战的领域对象，包含 `qrcodeUrl`、`reason`、`status`、`progressMessage` 字段。
+   * @returns 包含 `challenge`、`progressMessage`、`stage` 字段的设备验证挑战。
    */
   private updateNewDeviceChallenge(
     session: NapcatLoginSessionState,

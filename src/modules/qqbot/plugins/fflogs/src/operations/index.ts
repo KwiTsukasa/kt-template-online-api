@@ -6,9 +6,10 @@ import {
 import type { FflogsManifestOperation } from './operation-manifest';
 
 /**
- * 创建 FFLogs 插件对象或配置。
- * @param application - application 输入；驱动 `createFflogsCharacterSummaryOperation()` 的 FFLogs步骤。
- * @param operations - FFLogs列表；转换 FFLogs列表项。
+ * 根据`application`、`operations`构造Fflogs操作集合。
+ * @param application - 决定Fflogs操作集合内容、边界或目标的 `application` 值。
+ * @param operations - 按原有顺序参与Fflogs操作集合筛选、合并或汇总的集合。
+ * @returns Fflogs操作集合。
  */
 export function buildFflogsOperations(
   application: FflogsApplication,

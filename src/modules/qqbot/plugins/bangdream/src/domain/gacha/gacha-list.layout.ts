@@ -24,8 +24,8 @@ export const BANGDREAM_GACHA_LIST_SPEC = {
 
 /**
  * 获取卡池支付行为展示名，未知行为保持原文。
- *
- * @param behavior - behavior 输入；限定 BangDream查询范围。
+ * @param behavior - 决定卡池支付行为展示名，未知行为保持原文内容、边界或目标的 `behavior` 值。
+ * @returns 规范化后的卡池支付行为展示名，未知行为保持原文；主值为空时采用 `behavior` 兜底。
  */
 export function getGachaPaymentBehaviorLabel(behavior: string) {
   return (

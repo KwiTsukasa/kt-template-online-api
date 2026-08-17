@@ -23,12 +23,20 @@ export class EnvironmentEventMaterializer {
     private readonly maxRecentEvents = 200,
   ) {}
 
-  /** 返回事件。 */
+  /**
+   * 根据当前运行态建立可重放的以只读 Observable 暴露内部事件主题；先推送缓存或当前快照，退订时移除监听器。
+   * @returns 按订阅顺序推送缓存与实时数据的以只读 Observable 暴露内部事件主题；调用退订函数后不再接收后续事件。
+   */
   events$() {
     return this.eventSubject.asObservable();
   }
 
-  /** 返回实体化。 */
+  /**
+   * 从输入或当前状态提取实体化。
+   * @param envelope - 用于materialize的领域对象，包含 `evidence`、`expiresAt`、`eventId`、`nodeId` 字段。
+   * @param now - 用于过期、排序或租约判定的时间基准；省略时默认采用 `new Date()`。
+   * @returns 可展示的环境事件；过期 retained 事件会改为缓存来源、未知级别并在摘要中标明过期。
+   */
   materialize(
     envelope: EnvironmentEventEnvelope,
     now = new Date(),
@@ -42,15 +50,33 @@ export class EnvironmentEventMaterializer {
       observedAt: envelope.observedAt,
       retained: envelope.retained,
       serviceId: envelope.serviceId,
-      severity: staleRetained ? 'unknown' : envelope.severity,
+      severity: (() => {
+        if (staleRetained) {
+          return 'unknown';
+        }
+        return envelope.severity;
+      })(),
       signalId: envelope.signalId,
       siteId: envelope.siteId,
-      sourceKind: staleRetained ? 'cached' : envelope.sourceKind,
-      summary: staleRetained
-        ? `${envelope.summary}（ retained 已过期）`
-        : envelope.summary,
+      sourceKind: (() => {
+        if (staleRetained) {
+          return 'cached';
+        }
+        return envelope.sourceKind;
+      })(),
+      summary: (() => {
+        if (staleRetained) {
+          return `${envelope.summary}（ retained 已过期）`;
+        }
+        return envelope.summary;
+      })(),
       topic: envelope.topic,
-      type: envelope.signalId ? 'environment-signal' : 'environment-event',
+      type: (() => {
+        if (envelope.signalId) {
+          return 'environment-signal';
+        }
+        return 'environment-event';
+      })(),
     };
 
     this.appendRecentEvent(event);
@@ -61,12 +87,20 @@ export class EnvironmentEventMaterializer {
     return event;
   }
 
-  /** 读取最近事件。 */
+  /**
+   * 按当前运行态读取最近事件。
+   * @returns 按输入顺序得到的最近事件列表；没有匹配项时为空数组。
+   */
   getRecentEvents() {
     return [...this.events];
   }
 
-  /** 判断过期的已保留的是否成立。 */
+  /**
+   * 根据`envelope`、`now`与当前约束判定过期的已保留的；从 `getTime` 读取过期的已保留的。
+   * @param envelope - 用于过期的已保留的的领域对象，包含 `retained`、`observedAt`、`expiresAt` 字段。
+   * @param now - 用于过期、排序或租约判定的时间基准。
+   * @returns 满足过期的已保留的约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isStaleRetained(
     envelope: EnvironmentEventEnvelope,
     now: Date,
@@ -76,7 +110,10 @@ export class EnvironmentEventMaterializer {
     return new Date(envelope.expiresAt).getTime() <= now.getTime();
   }
 
-  /** 追加最近事件。 */
+  /**
+   * 根据`event`更新最近事件。
+   * @param event - 触发最近事件的领域事件。
+   */
   private appendRecentEvent(event: EnvironmentEvent) {
     this.events.push(event);
     if (this.events.length > this.maxRecentEvents) {

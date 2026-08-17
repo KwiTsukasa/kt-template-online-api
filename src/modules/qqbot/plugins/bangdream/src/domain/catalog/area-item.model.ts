@@ -36,13 +36,12 @@ export class AreaItem {
     this.targetBandIds = areaItemData['targetBandIds'];
   }
   /**
-   * 在 AreaItem 模型中计算数值。
-   *
-   * @param card - card 输入；使用 `attribute`、`bandId` 字段生成结果。
-   * @param areaItemLevel - areaItemLevel 输入；生成规范化文本。
-   * @param cardSTat - cardSTat 输入；使用 `performance`、`technique`、`visual` 字段生成结果。
-   * @param server - server 输入；驱动 `areaItemLevel.toString()` 的 BangDream步骤。
-   * @returns BangDream 插件产出的 Stat。
+   * 根据`card`、`areaItemLevel`、`cardSTat`处理calc统计值；当 `!this.isExist` 成立时返回 `emptyStat`。
+   * @param card - 用于calc统计值的领域对象，包含 `attribute`、`bandId` 字段。
+   * @param areaItemLevel - 限制calc统计值数量、尺寸、等级或重试边界的数值。
+   * @param cardSTat - 用于calc统计值的领域对象，包含 `performance`、`technique`、`visual` 字段。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+   * @returns calc统计值。
    */
   calcStat(
     card: Card,

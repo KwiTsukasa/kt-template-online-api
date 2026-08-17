@@ -31,10 +31,10 @@ export interface BangDreamDataProvider {
 }
 
 /**
- * 解析Bang Dream Provider Url。
- * @param baseUrl - 访问地址；生成规范化文本。
- * @param pathOrUrl - BangDream路径；计算 BangDream布尔判断。
- * @returns BangDream 插件渲染后的图片、画布或文本。
+ * 从`baseUrl`、`pathOrUrl`解析BanG Dream数据提供器URL 地址；当 `/^https?:\/\//i.test(pathOrUrl)` 成立时返回 `pathOrUrl`。
+ * @param baseUrl - 待规范化、请求或同源校验的baseURL 地址 URL。
+ * @param pathOrUrl - 待规范化、请求或同源校验的路径URL 地址 URL。
+ * @returns 按参数编码并拼接完成的BanGDream数据提供器URL 地址。
  */
 export function resolveBangDreamProviderUrl(
   baseUrl: string,
@@ -44,8 +44,11 @@ export function resolveBangDreamProviderUrl(
     return pathOrUrl;
   }
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
-  const normalizedPath = pathOrUrl.startsWith('/')
-    ? pathOrUrl
-    : `/${pathOrUrl}`;
+  const normalizedPath = (() => {
+    if (pathOrUrl.startsWith('/')) {
+      return pathOrUrl;
+    }
+    return `/${pathOrUrl}`;
+  })();
   return `${normalizedBaseUrl}${normalizedPath}`;
 }

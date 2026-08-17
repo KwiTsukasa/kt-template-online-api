@@ -20,9 +20,9 @@ export const BANGDREAM_CARD_SD_CHARACTER_SPEC = {
 } as const;
 
 /**
- * 计算卡牌 SD 角色 sprite 裁切区域。
- *
- * @param index - index 输入；驱动 `Math.floor()` 的 BangDream步骤。
+ * 根据参数 `index`，计算卡牌 SD 角色 sprite 裁切区域。
+ * @param index - 指定根据参数 `index`，计算卡牌 SD 角色 sprite 裁切区域在集合或布局中的零基位置。
+ * @returns 包含 `sourceX`、`sourceY`、`width`、`height` 字段的根据参数 `index`，计算卡牌 SD 角色 sprite 裁切区域。
  */
 export function getCardSdCharacterCropRect(
   index: number,
@@ -39,7 +39,8 @@ export function getCardSdCharacterCropRect(
 }
 
 /**
- * 生成卡牌 SD 角色列表需要展示的全部裁切区域。
+ * 根据当前领域状态，生成卡牌 SD 角色列表需要展示的全部裁切区域。
+ * @returns 按输入顺序得到的根据当前领域状态，生成卡牌 SD 角色列表需要展示的全部裁切区域列表；没有匹配项时为空数组。
  */
 export function getCardSdCharacterCropRects(): CardSdCharacterCropRect[] {
   const { columns, rows } = BANGDREAM_CARD_SD_CHARACTER_SPEC.sprite;
@@ -50,7 +51,8 @@ export function getCardSdCharacterCropRects(): CardSdCharacterCropRect[] {
 }
 
 /**
- * 计算卡牌 SD 角色列表展示行高。
+ * 按当前运行态读取卡牌 SD 角色列表展示行高。
+ * @returns 卡牌 SD 角色列表展示行高。
  */
 export function getCardSdCharacterListLineHeight() {
   const { cropHeight, cropWidth } = BANGDREAM_CARD_SD_CHARACTER_SPEC.sprite;
@@ -60,7 +62,8 @@ export function getCardSdCharacterListLineHeight() {
 }
 
 /**
- * 计算卡牌 SD 角色列表展示字号。
+ * 将卡牌 SD 角色列表行高直接用作展示字号，使文字与单元格保持同一尺寸基准。
+ * @returns 卡牌Sd角色文本Size。
  */
 export function getCardSdCharacterListTextSize() {
   return getCardSdCharacterListLineHeight();

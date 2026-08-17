@@ -3,8 +3,9 @@ import type { FflogsApplication } from '../application/fflogs-application';
 export const fflogsCharacterSummaryHandlerName = 'getCharacterSummary';
 
 /**
- * 创建 FFLogs 插件对象或配置。
- * @param application - application 输入；执行 `application.parseCharacterInput()`、`application.getCharacterSummary()` 对应的 FFLogs步骤。
+ * 根据`application`构造Fflogs角色摘要操作。
+ * @param application - 用于Fflogs角色摘要操作的领域对象，包含 `parseCharacterInput`、`getCharacterSummary` 字段。
+ * @returns 包含 `cacheTtlMs`、`execute`、`inputSchema`、`outputSchema` 字段的Fflogs角色摘要操作。
  */
 export function createFflogsCharacterSummaryOperation(
   application: FflogsApplication,
@@ -13,7 +14,12 @@ export function createFflogsCharacterSummaryOperation(
     cacheTtlMs: 60_000,
     execute: async (input: Record<string, any>) => {
       const raw = `${input.raw ?? input.text ?? ''}`.trim();
-      const parsed = raw ? await application.parseCharacterInput(raw) : {};
+      const parsed = await (async () => {
+        if (raw) {
+          return await application.parseCharacterInput(raw);
+        }
+        return {};
+      })();
       return application.getCharacterSummary(
         removeEmpty({ ...input, ...parsed }),
       );
@@ -65,8 +71,9 @@ export function createFflogsCharacterSummaryOperation(
 }
 
 /**
- * 清理 FFLogs 插件状态。
- * @param input - input 输入；驱动 `Object.entries()` 的 FFLogs步骤。
+ * 浅拷贝输入并剔除值为 `undefined` 或空字符串的字段，同时保留其他空值与字段顺序。
+ * @param input - 用于Empty的结构化输入。
+ * @returns 仅剔除 `undefined` 与空字符串字段的浅拷贝对象；没有保留字段时为空对象。
  */
 function removeEmpty(input: Record<string, any>) {
   return Object.entries(input).reduce<Record<string, any>>(

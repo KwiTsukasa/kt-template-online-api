@@ -58,9 +58,8 @@ const NOTE_IMAGE_ASSET_KEYS: Record<
   Tick: 'songChartNoteTick',
 };
 /**
- * 在图片布局层中加载谱面预览所需音符贴图。
- *
- * @returns 异步处理结果。
+ * 按当前运行态读取音符Images。
+ * @returns 音符Images。
  */
 async function loadNoteImages(): Promise<Record<string, Image>> {
   const entries = await Promise.all(
@@ -75,10 +74,9 @@ async function loadNoteImages(): Promise<Record<string, Image>> {
 }
 
 /**
- * 在图片布局层中加载谱面预览封面图。
- *
- * @param cover - cover 输入；驱动 `loadImage()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 通过 `loadImage` 加载绘制所需图片资源。
+ * @param cover - 决定Cover图片内容、边界或目标的 `cover` 值。
+ * @returns Cover图片。
  */
 async function loadCoverImage(cover: string | Buffer): Promise<Image> {
   try {
@@ -89,12 +87,11 @@ async function loadCoverImage(cover: string | Buffer): Promise<Image> {
 }
 
 /**
- * 在图片布局层中设置Adaptive文本Baseline。
- *
- * @param ctx - ctx 输入；使用 `textBaseline` 字段生成结果。
- * @param layout - layout 输入；使用 `height` 字段生成结果。
- * @param fontSize - fontSize 输入；决定 BangDream条件分支。
- * @param y - y 输入；决定 BangDream条件分支。
+ * 将本次操作写入 `ctx.textBaseline` 状态。
+ * @param ctx - 用于将本次操作写入 `ctx.textBaseline` 状态的领域对象，包含 `textBaseline` 字段。
+ * @param layout - 用于将本次操作写入 `ctx.textBaseline` 状态的领域对象，包含 `height` 字段。
+ * @param fontSize - 限制将本次操作写入 `ctx.textBaseline` 状态数量、尺寸、等级或重试边界的数值。
+ * @param y - 决定将本次操作写入 `ctx.textBaseline` 状态内容、边界或目标的 `y` 值。
  */
 function setAdaptiveTextBaseline(
   ctx: CanvasRenderingContext2D,
@@ -112,10 +109,10 @@ function setAdaptiveTextBaseline(
 }
 
 /**
- * 在图片布局层中获取时间Position。
- *
- * @param layout - layout 输入；使用 `secondsPerCol`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
- * @param time - time 输入；驱动 `Math.floor()` 的 BangDream步骤。
+ * 根据时间与每列秒数计算谱面所在列，并投影为预览画布中的 `x`、`y` 坐标。
+ * @param layout - 用于时间Position的领域对象，包含 `secondsPerCol`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段。
+ * @param time - 决定时间Position内容、边界或目标的 `time` 值。
+ * @returns 包含 `drawCol`、`x`、`y` 字段的时间Position。
  */
 function getTimePosition(layout: PreviewLayout, time: number) {
   const drawCol = Math.floor(time / layout.secondsPerCol);
@@ -128,12 +125,11 @@ function getTimePosition(layout: PreviewLayout, time: number) {
 }
 
 /**
- * 在图片布局层中绘制基础Info。
- *
- * @param ctx - ctx 输入；使用 `fillStyle`、`font`、`textAlign`、`textBaseline` 字段生成结果。
- * @param layout - layout 输入；使用 `width`、`height`、`infoAreaWidth` 字段生成结果。
- * @param payload - payload 输入；影响 drawBaseInfo 的返回值。
- * @param coverImg - coverImg 输入；驱动 `ctx.drawImage()` 的 BangDream步骤。
+ * 根据`ctx`、`layout`、`payload`绘制或格式化BaseInfo；把图片、文本或图形按布局规格绘制到画布。
+ * @param ctx - 用于BaseInfo的领域对象，包含 `save`、`fillStyle`、`fillRect`、`restore` 字段。
+ * @param layout - 用于BaseInfo的领域对象，包含 `width`、`height`、`infoAreaWidth` 字段。
+ * @param payload - 待按当前协议校验并路由的事件载荷。
+ * @param coverImg - 决定BaseInfo内容、边界或目标的 `coverImg` 值。
  */
 function drawBaseInfo(
   ctx: CanvasRenderingContext2D,
@@ -214,10 +210,9 @@ function drawBaseInfo(
 }
 
 /**
- * 在图片布局层中绘制Tracks。
- *
- * @param ctx - ctx 输入；使用 `fillStyle` 字段生成结果。
- * @param layout - layout 输入；使用 `colCount`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
+ * 根据`ctx`、`layout`绘制或格式化Tracks；把图片、文本或图形按布局规格绘制到画布。
+ * @param ctx - 用于Tracks的领域对象，包含 `save`、`createLinearGradient`、`fillStyle`、`fillRect` 字段。
+ * @param layout - 用于Tracks的领域对象，包含 `colCount`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段。
  */
 function drawTracks(
   ctx: CanvasRenderingContext2D,
@@ -256,11 +251,10 @@ function drawTracks(
 }
 
 /**
- * 在图片布局层中绘制Beat线条列表。
- *
- * @param ctx - ctx 输入；使用 `strokeStyle`、`lineWidth` 字段生成结果。
- * @param layout - layout 输入；使用 `chartLength`、`laneWidth` 字段生成结果。
- * @param notes - BangDream列表；影响 drawBeatLines 的返回值。
+ * 根据`ctx`、`layout`、`notes`绘制或格式化BeatLines；把图片、文本或图形按布局规格绘制到画布。
+ * @param ctx - 用于BeatLines的领域对象，包含 `save`、`strokeStyle`、`setLineDash`、`lineWidth` 字段。
+ * @param layout - 用于BeatLines的领域对象，包含 `chartLength`、`laneWidth` 字段。
+ * @param notes - 决定BeatLines内容、边界或目标的 `notes` 值。
  */
 function drawBeatLines(
   ctx: CanvasRenderingContext2D,
@@ -275,17 +269,26 @@ function drawBeatLines(
   for (let index = 0; index < bpmList.length; index++) {
     const bpmNote = bpmList[index];
     let beat = 0;
-    const previousTime = bpmList[index - 1]
-      ? (bpmList[index - 1].time as number)
-      : 0;
-    const nextTime = bpmList[index + 1]
-      ? (bpmList[index + 1].time as number)
-      : layout.chartLength;
+    const previousTime = (() => {
+      if (bpmList[index - 1]) {
+        return (bpmList[index - 1].time as number);
+      }
+      return 0;
+    })();
+    const nextTime = (() => {
+      if (bpmList[index + 1]) {
+        return (bpmList[index + 1].time as number);
+      }
+      return layout.chartLength;
+    })();
 
     do {
       ctx.save();
-      ctx.strokeStyle =
-        beat % 1 === 0 ? 'rgba(17, 72, 74, 0.75)' : 'rgba(17, 72, 74, 0.4)';
+      if (beat % 1 === 0) {
+        ctx.strokeStyle = 'rgba(17, 72, 74, 0.75)';
+      } else {
+        ctx.strokeStyle = 'rgba(17, 72, 74, 0.4)';
+      }
       if (beat % 1 !== 0) {
         ctx.setLineDash([5, 5]);
       }
@@ -308,10 +311,9 @@ function drawBeatLines(
 }
 
 /**
- * 在图片布局层中绘制时间轴。
- *
- * @param ctx - ctx 输入；使用 `font`、`fillStyle`、`textAlign` 字段生成结果。
- * @param layout - layout 输入；使用 `chartLength` 字段生成结果。
+ * 根据`ctx`、`layout`绘制或格式化Timeline；把图片、文本或图形按布局规格绘制到画布。
+ * @param ctx - 用于Timeline的领域对象，包含 `save`、`font`、`fillStyle`、`textAlign` 字段。
+ * @param layout - 用于Timeline的领域对象，包含 `chartLength` 字段。
  */
 function drawTimeline(
   ctx: CanvasRenderingContext2D,
@@ -330,11 +332,10 @@ function drawTimeline(
 }
 
 /**
- * 在图片布局层中绘制CountAndBPM线条列表。
- *
- * @param ctx - ctx 输入；使用 `font`、`fillStyle`、`textAlign` 字段生成结果。
- * @param layout - layout 输入；使用 `laneWidth` 字段生成结果。
- * @param notes - BangDream列表；驱动 `for()` 的 BangDream步骤。
+ * 根据`ctx`、`layout`、`notes`绘制或格式化数量BpmLines；把图片、文本或图形按布局规格绘制到画布。
+ * @param ctx - 用于数量BpmLines的领域对象，包含 `font`、`fillStyle`、`textAlign`、`fillRect` 字段。
+ * @param layout - 用于数量BpmLines的领域对象，包含 `laneWidth` 字段。
+ * @param notes - 决定数量BpmLines内容、边界或目标的 `notes` 值。
  */
 function drawCountAndBpmLines(
   ctx: CanvasRenderingContext2D,
@@ -375,12 +376,11 @@ function drawCountAndBpmLines(
 }
 
 /**
- * 在图片布局层中绘制Tap音符。
- *
- * @param ctx - ctx 输入；执行 `ctx.drawImage()` 对应的 BangDream步骤。
- * @param layout - layout 输入；使用 `laneWidth`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
- * @param noteImages - BangDream列表；使用 `FlickTop` 字段生成结果。
- * @param note - note 输入；使用 `time`、`type`、`lane` 字段生成结果。
+ * 根据`ctx`、`layout`、`noteImages`绘制或格式化Tap音符；把图片、文本或图形按布局规格绘制到画布。
+ * @param ctx - 用于Tap音符的领域对象，包含 `drawImage` 字段。
+ * @param layout - 用于Tap音符的领域对象，包含 `laneWidth`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段。
+ * @param noteImages - 用于Tap音符的领域对象，包含 `note.type`、`FlickTop` 字段。
+ * @param note - 用于Tap音符的领域对象，包含 `time`、`type`、`lane` 字段。
  */
 function drawTapNote(
   ctx: CanvasRenderingContext2D,
@@ -416,12 +416,11 @@ function drawTapNote(
 }
 
 /**
- * 在图片布局层中绘制Directional音符。
- *
- * @param ctx - ctx 输入；执行 `ctx.drawImage()` 对应的 BangDream步骤。
- * @param layout - layout 输入；使用 `laneWidth`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
- * @param noteImages - BangDream列表；影响 drawDirectionalNote 的返回值。
- * @param note - note 输入；使用 `time`、`direction`、`width`、`lane` 字段生成结果。
+ * 根据`ctx`、`layout`、`noteImages`绘制或格式化Directional音符；把图片、文本或图形按布局规格绘制到画布。
+ * @param ctx - 用于Directional音符的领域对象，包含 `drawImage` 字段。
+ * @param layout - 用于Directional音符的领域对象，包含 `laneWidth`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段。
+ * @param noteImages - 用于Directional音符的领域对象，包含 `(() => { if (note.direction ===…` 字段。
+ * @param note - 用于Directional音符的领域对象，包含 `time`、`direction`、`width`、`lane` 字段。
  */
 function drawDirectionalNote(
   ctx: CanvasRenderingContext2D,
@@ -431,8 +430,18 @@ function drawDirectionalNote(
 ): void {
   const { drawCol } = getTimePosition(layout, note.time as number);
   const arrowImg =
-    noteImages[note.direction === 'Left' ? 'LeftArrow' : 'RightArrow'];
-  const direction = note.direction === 'Left' ? -1 : 1;
+    noteImages[(() => {
+      if (note.direction === 'Left') {
+        return 'LeftArrow';
+      }
+      return 'RightArrow';
+    })()];
+  const direction = (() => {
+    if (note.direction === 'Left') {
+      return -1;
+    }
+    return 1;
+  })();
   const noteWidth = note.width ?? 0;
 
   for (let i = 0; i < noteWidth; i++) {
@@ -452,10 +461,20 @@ function drawDirectionalNote(
     if (i + 1 === noteWidth) {
       const endImg =
         noteImages[
-          note.direction === 'Left' ? 'LeftArrowEnd' : 'RightArrowEnd'
+          (() => {
+            if (note.direction === 'Left') {
+              return 'LeftArrowEnd';
+            }
+            return 'RightArrowEnd';
+          })()
         ];
       const arrowEndX =
-        direction === 1 ? x + layout.laneWidth : x - layout.laneWidth * 0.4;
+        (() => {
+          if (direction === 1) {
+            return x + layout.laneWidth;
+          }
+          return x - layout.laneWidth * 0.4;
+        })();
       ctx.drawImage(
         endImg,
         arrowEndX,
@@ -468,12 +487,11 @@ function drawDirectionalNote(
 }
 
 /**
- * 在图片布局层中绘制Sim音符。
- *
- * @param ctx - ctx 输入；执行 `ctx.drawImage()` 对应的 BangDream步骤。
- * @param layout - layout 输入；使用 `laneWidth`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
- * @param noteImages - BangDream列表；使用 `Sim` 字段生成结果。
- * @param note - note 输入；使用 `time`、`lane` 字段生成结果。
+ * 根据`ctx`、`layout`、`noteImages`绘制或格式化同步音符；把图片、文本或图形按布局规格绘制到画布。
+ * @param ctx - 用于同步音符的领域对象，包含 `drawImage` 字段。
+ * @param layout - 用于同步音符的领域对象，包含 `laneWidth`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段。
+ * @param noteImages - 用于同步音符的领域对象，包含 `Sim` 字段。
+ * @param note - 用于同步音符的领域对象，包含 `time`、`lane` 字段。
  */
 function drawSimNote(
   ctx: CanvasRenderingContext2D,
@@ -499,11 +517,10 @@ function drawSimNote(
 }
 
 /**
- * 在图片布局层中绘制Bar音符。
- *
- * @param ctx - ctx 输入；使用 `fillStyle` 字段生成结果。
- * @param layout - layout 输入；使用 `secondsPerCol`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段生成结果。
- * @param note - note 输入；使用 `time`、`lane` 字段生成结果。
+ * 根据`ctx`、`layout`、`note`绘制或格式化Bar音符。
+ * @param ctx - 用于Bar音符的领域对象，包含 `beginPath`、`moveTo`、`lineTo`、`closePath` 字段。
+ * @param layout - 用于Bar音符的领域对象，包含 `secondsPerCol`、`infoAreaWidth`、`originalWidth`、`blockDistance` 字段。
+ * @param note - 用于Bar音符的领域对象，包含 `time`、`lane` 字段。
  */
 function drawBarNote(
   ctx: CanvasRenderingContext2D,
@@ -546,12 +563,11 @@ function drawBarNote(
 }
 
 /**
- * 在图片布局层中绘制音符列表。
- *
- * @param ctx - ctx 输入；驱动 `drawTapNote()`、`drawDirectionalNote()`、`drawSimNote()`、`drawBarNote()` 的 BangDream步骤。
- * @param layout - layout 输入；驱动 `drawTapNote()`、`drawDirectionalNote()`、`drawSimNote()`、`drawBarNote()` 的 BangDream步骤。
- * @param noteImages - BangDream列表；驱动 `drawTapNote()`、`drawDirectionalNote()`、`drawSimNote()` 的 BangDream步骤。
- * @param notes - BangDream列表；驱动 `for()` 的 BangDream步骤。
+ * 根据`ctx`、`layout`、`noteImages`绘制或格式化音符集合。
+ * @param ctx - 决定音符集合内容、边界或目标的 `ctx` 值。
+ * @param layout - 决定音符集合内容、边界或目标的 `layout` 值。
+ * @param noteImages - 决定音符集合内容、边界或目标的 `noteImages` 值。
+ * @param notes - 决定音符集合内容、边界或目标的 `notes` 值。
  */
 function drawNotes(
   ctx: CanvasRenderingContext2D,
@@ -585,11 +601,10 @@ function drawNotes(
 }
 
 /**
- * 在图片布局层中绘制 Bestdori 谱面预览图。
- *
- * @param payload - payload 输入；使用 `cover` 字段生成结果。
- * @param chart - chart 输入；驱动 `createSongChartPreviewModel()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`payload`、`chart`绘制或格式化Bestdori预览；从 `canvas.getContext` 读取Bestdori预览。
+ * @param payload - 待按当前协议校验并路由的事件载荷，包含 `cover` 字段。
+ * @param chart - 决定Bestdori预览内容、边界或目标的 `chart` 值。
+ * @returns Bestdori预览。
  */
 export async function drawBestdoriPreview(
   payload: BestdoriPreviewPayload,

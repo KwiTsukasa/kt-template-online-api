@@ -99,7 +99,6 @@ export class AdminMenu {
   @ManyToMany(() => AdminRole, (role) => role.menus)
   roles: AdminRole[];
 
-  /** 创建标识。 */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

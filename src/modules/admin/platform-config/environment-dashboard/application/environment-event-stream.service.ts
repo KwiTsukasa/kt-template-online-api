@@ -39,7 +39,11 @@ export class EnvironmentEventStreamService {
     });
   }
 
-  /** 返回流。 */
+  /**
+   * 通过建立包含可重放事件、实时提交事件与定时心跳的服务端事件流。
+   * @param lastEventId - 用于精确定位last事件的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 返回合并历史重放、实时事件与定时心跳的只读 Observable。
+   */
   stream(lastEventId?: string): Observable<EnvironmentStreamEvent> {
     const replayEvents = this.getReplayEvents(lastEventId);
     const heartbeat$ = timer(this.heartbeatMs, this.heartbeatMs).pipe(
@@ -52,7 +56,10 @@ export class EnvironmentEventStreamService {
     );
   }
 
-  /** 追加事件。 */
+  /**
+   * 将`event`中的非空事件截断到安全上限后追加到目标集合。
+   * @param event - 触发事件的领域事件，包含 `id`、`type` 字段。
+   */
   private pushEvent(event: EnvironmentEvent) {
     const streamEvent: EnvironmentStreamEvent = {
       data: event,
@@ -66,7 +73,11 @@ export class EnvironmentEventStreamService {
     this.streamSubject.next(streamEvent);
   }
 
-  /** 读取重放事件。 */
+  /**
+   * 从内存重放缓冲区定位客户端游标；游标缺失时不重放，游标已淘汰时要求客户端重新获取快照。
+   * @param lastEventId - 客户端最后确认的环境事件标识；为空时不返回历史事件。
+   * @returns 游标后的环境事件；游标不在缓冲区时仅返回快照刷新事件。
+   */
   private getReplayEvents(lastEventId?: string): EnvironmentStreamEvent[] {
     if (!lastEventId) return [];
     const index = this.replay.findIndex((event) => event.id === lastEventId);
@@ -74,7 +85,10 @@ export class EnvironmentEventStreamService {
     return this.replay.slice(index + 1);
   }
 
-  /** 创建心跳事件。 */
+  /**
+   * 根据当前运行态构造心跳事件。
+   * @returns 包含 `data`、`id`、`type` 字段的心跳事件。
+   */
   private createHeartbeatEvent(): EnvironmentStreamEvent {
     const observedAt = new Date().toISOString();
     return {
@@ -84,7 +98,10 @@ export class EnvironmentEventStreamService {
     };
   }
 
-  /** 创建快照必需的事件。 */
+  /**
+   * 根据当前运行态构造快照必需的事件。
+   * @returns 包含 `data`、`id`、`type` 字段的快照必需的事件。
+   */
   private createSnapshotRequiredEvent(): EnvironmentStreamEvent {
     return {
       data: {

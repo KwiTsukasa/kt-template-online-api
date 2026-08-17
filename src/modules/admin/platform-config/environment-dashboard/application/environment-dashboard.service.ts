@@ -54,14 +54,21 @@ export class EnvironmentDashboardService {
     private readonly config: EnvironmentDashboardConfigService = new EnvironmentDashboardConfigService(),
   ) {}
 
-  /** 读取仪表盘。 */
+  /**
+   * 按`options`读取仪表盘；从 `cache.getOrCreate` 读取仪表盘。
+   * @param options - 控制仪表盘筛选、缓存或输出方式的可选项；省略时默认采用 `{}`。
+   * @returns 仪表盘。
+   */
   async getDashboard(
     options: EnvironmentDashboardSnapshotOptions = {},
   ): Promise<EnvironmentDashboardResponse> {
     return this.cache.getOrCreate(() => this.buildDashboard(), options);
   }
 
-  /** 构建仪表盘。 */
+  /**
+   * 根据当前运行态构造仪表盘；从 `getEnvironmentDashboardActions` 读取仪表盘。
+   * @returns 包含 `actions`、`events`、`generatedAt`、`refreshedAt`、`sites` 字段的仪表盘。
+   */
   private async buildDashboard(): Promise<EnvironmentDashboardResponse> {
     const generatedAt = new Date().toISOString();
     const sites = await this.createSites(generatedAt);
@@ -76,7 +83,11 @@ export class EnvironmentDashboardService {
     };
   }
 
-  /** 创建站点。 */
+  /**
+   * 并行采集本机、NAS、腾讯云与 R4SE 环境，将四个来源组装为固定顺序的站点列表。
+   * @param observedAt - 用于过期、排序或租约判定的时间基准。
+   * @returns 按输入顺序得到的站点列表；没有匹配项时为空数组。
+   */
   private async createSites(observedAt: string): Promise<EnvironmentSite[]> {
     return [
       await this.localDevCollector.collect({ observedAt }),
@@ -86,7 +97,10 @@ export class EnvironmentDashboardService {
     ];
   }
 
-  /** 创建腾讯云云端站点。 */
+  /**
+   * 根据当前领域状态，汇总腾讯云 CVM、WireGuard 与代理等远程服务信号，构建腾讯云站点健康视图。
+   * @returns 返回包含腾讯云远程服务信号与汇总状态的站点视图。
+   */
   private async createTencentCloudSite(): Promise<EnvironmentSite> {
     const services = [
       await this.createRemoteAdapterService(
@@ -127,7 +141,10 @@ export class EnvironmentDashboardService {
     );
   }
 
-  /** 创建R4SE站点。 */
+  /**
+   * 根据当前运行态构造R4SE站点。
+   * @returns R4SE站点。
+   */
   private async createR4seSite(): Promise<EnvironmentSite> {
     const services = [
       await this.createRemoteAdapterService(
@@ -150,7 +167,16 @@ export class EnvironmentDashboardService {
     return this.createSiteFromServices('r4se', 'r4se', 'r4se Node', services);
   }
 
-  /** 创建远程适配器服务。 */
+  /**
+   * 根据`serviceId`、`serviceLabel`、`signalId`构造远程适配器服务；当 `missing.length > 0 || !adapter` 成立时返回 `this.createService(serviceId, serviceLabel,…`。
+   * @param serviceId - 用于精确定位服务的标识。
+   * @param serviceLabel - 决定远程适配器服务内容、边界或目标的 `serviceLabel` 值。
+   * @param signalId - 用于精确定位signal的标识。
+   * @param signalLabel - 决定远程适配器服务内容、边界或目标的 `signalLabel` 值。
+   * @param requiredKeys - 决定是否启用“requiredKeys”分支的布尔选项。
+   * @param adapter - 用于远程适配器服务的领域对象，包含 `inspect` 字段；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 远程适配器服务。
+   */
   private async createRemoteAdapterService(
     serviceId: string,
     serviceLabel: string,
@@ -200,7 +226,14 @@ export class EnvironmentDashboardService {
     }
   }
 
-  /** 创建站点来自服务。 */
+  /**
+   * 把一组环境服务包装为单节点站点，并计算站点最差健康状态与信号汇总。
+   * @param siteId - 用于精确定位site的标识。
+   * @param siteLabel - 决定SiteServices内容、边界或目标的 `siteLabel` 值。
+   * @param nodeLabel - 决定SiteServices内容、边界或目标的 `nodeLabel` 值。
+   * @param services - 按原有顺序参与SiteServices筛选、合并或汇总的集合。
+   * @returns 返回包含单个节点、服务列表、健康状态与信号计数的站点视图。
+   */
   private createSiteFromServices(
     siteId: string,
     siteLabel: string,
@@ -217,7 +250,13 @@ export class EnvironmentDashboardService {
     };
   }
 
-  /** 创建节点。 */
+  /**
+   * 汇总节点下所有服务的最差健康状态，并保留节点标识、展示标签与服务明细。
+   * @param id - 环境仪表盘节点的稳定标识。
+   * @param label - 环境仪表盘展示的节点名称。
+   * @param services - 用于计算节点总体健康状态的服务列表。
+   * @returns 包含原服务列表及汇总健康状态的环境节点。
+   */
   private createNode(
     id: string,
     label: string,
@@ -231,7 +270,13 @@ export class EnvironmentDashboardService {
     };
   }
 
-  /** 创建服务。 */
+  /**
+   * 以观测信号中的最差状态作为服务状态，并按顺序拼接信号摘要供仪表盘展示。
+   * @param id - 环境仪表盘服务的稳定标识。
+   * @param label - 环境仪表盘展示的服务名称。
+   * @param signals - 用于计算服务状态和摘要的观测信号列表。
+   * @returns 包含信号明细、汇总状态与合并摘要的环境服务。
+   */
   private createService(
     id: string,
     label: string,
@@ -246,7 +291,11 @@ export class EnvironmentDashboardService {
     };
   }
 
-  /** 创建摘要。 */
+  /**
+   * 按健康状态汇总站点内全部信号，并计算跨状态的信号总数。
+   * @param sites - 决定摘要内容、边界或目标的 `sites` 值。
+   * @returns 包含 `byStatus`、`totalSignals` 字段的摘要。
+   */
   private createSummary(sites: EnvironmentSite[]) {
     const byStatus = countSignals(sites);
     return {
@@ -259,7 +308,11 @@ export class EnvironmentDashboardService {
     };
   }
 
-  /** 创建拓扑。 */
+  /**
+   * 把站点、节点与服务展开为拓扑节点，并按父子关系生成站点到节点、节点到服务的边。
+   * @param sites - 决定拓扑内容、边界或目标的 `sites` 值。
+   * @returns 包含 `edges`、`nodes` 字段的拓扑。
+   */
   private createTopology(sites: EnvironmentSite[]): EnvironmentTopology {
     const nodes = sites.flatMap((site) => [
       {

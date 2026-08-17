@@ -33,10 +33,9 @@ interface DrawTimeLineChartOptions {
 
 // 6. 主函数：生成时间轴图表
 /**
- * 在图片布局层中绘制时间线条谱面。
- *
- * @param options1 - options1 输入；影响 drawTimeLineChart 的返回值。
- * @param displayLabel - displayLabel 输入；影响 drawTimeLineChart 的返回值。
+ * 根据`displayLabel`绘制或格式化时间文本行Chart；从受控资源来源加载所需数据（`loadImage`）。
+ * @param displayLabel - 决定时间文本行Chart内容、边界或目标的 `displayLabel` 值；省略时默认采用 `false`。
+ * @returns 时间文本行Chart。
  */
 export async function drawTimeLineChart(
   { start, end, setStartToZero = false, data }: DrawTimeLineChartOptions,

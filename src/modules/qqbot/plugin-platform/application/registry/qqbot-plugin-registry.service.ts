@@ -35,8 +35,8 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param plugin - 由运行时或测试显式注册的命令插件；提供平台 key、能力清单和 legacy key 映射。
+   * 校验插件键与操作列表后注册插件及旧键别名，并拒绝重复别名。
+   * @param plugin - 用于register的领域对象，包含 `key`、`operations`、`legacyKeys` 字段。
    */
   register(plugin: QqbotIntegrationPlugin) {
     if (!plugin.key || !plugin.operations.length) {
@@ -53,9 +53,9 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 设置Plugin Active。
-   * @param pluginKey - pluginKey 输入；驱动 `this.resolveCanonicalPluginKey()` 的 插件平台步骤。
-   * @param active - active 输入；决定 插件平台条件分支。
+   * 通过 `resolveCanonicalPluginKey` 生成稳定标识。
+   * @param pluginKey - 用于读取或更新插件启用状态的稳定键。
+   * @param active - 决定插件启用状态内容、边界或目标的 `active` 值。
    */
   setPluginActive(pluginKey: string, active: boolean) {
     const canonicalKey = this.resolveCanonicalPluginKey(pluginKey);
@@ -67,8 +67,8 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 列出Plugins。
-   * @returns QQBot 插件平台查询结果。
+   * 按当前运行态读取Plugins。
+   * @returns 按输入顺序得到的Plugins列表；没有匹配项时为空数组。
    */
   listPlugins(): QqbotPluginSummary[] {
     return [...this.plugins.values()]
@@ -84,9 +84,9 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 列出Operations。
-   * @param pluginKey - pluginKey 输入；驱动 `this.getPlugins()` 的 插件平台步骤。
-   * @returns QQBot 插件平台查询结果。
+   * 通过 `flatMap` 遍历或定位集合元素。
+   * @param pluginKey - 用于读取或更新操作集合的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 按输入顺序得到的操作集合列表；没有匹配项时为空数组。
    */
   listOperations(pluginKey?: string): QqbotPluginOperationSummary[] {
     return this.getPlugins(pluginKey).flatMap((plugin) =>
@@ -106,9 +106,9 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param pluginKey - pluginKey 输入；驱动 `this.getPlugins()`、`formatKtDateTime()`、`plugin.healthCheck()` 的 插件平台步骤。
-   * @returns 异步完成后的 QQBot 插件平台结果。
+   * 根据`pluginKey`处理健康状态；从 `getPlugins` 读取健康状态。
+   * @param pluginKey - 用于读取或更新健康状态的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 按输入顺序得到的健康状态列表；没有匹配项时为空数组。
    */
   async health(pluginKey?: string): Promise<QqbotPluginHealth[]> {
     const plugins = this.getPlugins(pluginKey);
@@ -135,11 +135,12 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 执行业务数据。
-   * @param pluginKey - pluginKey 输入；驱动 `this.getOperation()` 的 插件平台步骤。
-   * @param operationKey - operationKey 输入；驱动 `this.getOperation()` 的 插件平台步骤。
-   * @param input - input 输入；驱动 `this.executeWithTimeout()` 的 插件平台步骤。
-   * @param context - context 输入；驱动 `this.executeWithTimeout()` 的 插件平台步骤。
+   * 根据`pluginKey`、`operationKey`、`input`处理`execute` 对应结果；从 `getOperation` 读取`execute` 对应结果。
+   * @param pluginKey - 用于读取或更新`execute` 对应结果的稳定键。
+   * @param operationKey - 用于读取或更新`execute` 对应结果的稳定键。
+   * @param input - 用于`execute` 对应结果的结构化输入。
+   * @param context - 决定`execute` 对应结果内容、边界或目标的 `context` 值；省略时默认采用 `{}`。
+   * @returns `execute` 对应。
    */
   async execute(
     pluginKey: string,
@@ -152,9 +153,9 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param pluginKey - pluginKey 输入；驱动 `this.getOperation()` 的 插件平台步骤。
-   * @param operationKey - operationKey 输入；驱动 `this.getOperation()` 的 插件平台步骤。
+   * 校验`pluginKey`、`operationKey`是否满足操作约束，并拒绝不合法输入；从 `getOperation` 读取操作。
+   * @param pluginKey - 用于读取或更新操作的稳定键；为空时采用 `!operationKey` 作为兜底。
+   * @param operationKey - 用于读取或更新操作的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
    */
   assertOperation(pluginKey?: string, operationKey?: string) {
     if (!pluginKey || !operationKey) {
@@ -164,9 +165,10 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 查询 QQBot 插件平台数据。
-   * @param pluginKey - pluginKey 输入；驱动 `this.getPluginByKey()` 的 插件平台步骤。
-   * @param operationKey - operationKey 输入；驱动 `operations.find()` 的 插件平台步骤。
+   * 按`pluginKey`、`operationKey`读取操作；从 `getPluginByKey` 读取操作。
+   * @param pluginKey - 用于读取或更新操作的稳定键。
+   * @param operationKey - 用于读取或更新操作的稳定键。
+   * @returns 操作。
    */
   private getOperation(pluginKey: string, operationKey: string) {
     const plugin = this.getPluginByKey(pluginKey);
@@ -185,10 +187,11 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 执行With Timeout。
-   * @param operation - operation 输入；使用 `timeoutMs`、`key` 字段生成结果。
-   * @param input - input 输入；驱动 `Promise.resolve()` 的 插件平台步骤。
-   * @param context - context 输入；驱动 `Promise.resolve()` 的 插件平台步骤。
+   * 执行插件操作；配置有效正超时时与定时拒绝竞速，并在结束后清理计时器。
+   * @param operation - 在当前锁、事务或错误边界内执行的受控回调。
+   * @param input - 用于超时的结构化输入。
+   * @param context - 决定超时内容、边界或目标的 `context` 值。
+   * @returns 超时。
    */
   private async executeWithTimeout(
     operation: QqbotIntegrationPlugin['operations'][number],
@@ -221,8 +224,9 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 查询 QQBot 插件平台数据。
-   * @param pluginKey - pluginKey 输入；驱动 `this.getPluginByKey()` 的 插件平台步骤。
+   * 通过 `filter` 筛选匹配数据。
+   * @param pluginKey - 用于读取或更新Plugins的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 按输入顺序得到的Plugins列表；没有匹配项时为空数组。
    */
   private getPlugins(pluginKey?: string) {
     if (!pluginKey) {
@@ -231,12 +235,16 @@ export class QqbotPluginRegistryService implements OnModuleInit {
       );
     }
     const plugin = this.getPluginByKey(pluginKey);
-    return plugin && this.isPluginActive(plugin.key) ? [plugin] : [];
+    if (plugin && this.isPluginActive(plugin.key)) {
+      return [plugin];
+    }
+    return [];
   }
 
   /**
-   * 查询 QQBot 插件平台数据。
-   * @param pluginKey - pluginKey 输入；限定 插件平台查询范围。
+   * 按`pluginKey`读取插件键；从 `plugins.get` 读取插件键。
+   * @param pluginKey - 用于读取或更新插件键的稳定键。
+   * @returns 规范化后的插件键；主值为空时采用 `this.plugins.get(this.pluginAliases.get(pluginKey)…` 兜底。
    */
   private getPluginByKey(pluginKey: string) {
     return (
@@ -246,8 +254,9 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 判断 QQBot 插件平台条件。
-   * @param pluginKey - pluginKey 输入；驱动 `inactivePluginKeys.has()` 的 插件平台步骤。
+   * 通过 `inactivePluginKeys.has` 判断输入是否满足函数约束。
+   * @param pluginKey - 用于读取或更新插件启用状态的稳定键。
+   * @returns 满足插件启用状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isPluginActive(pluginKey: string) {
     return !this.inactivePluginKeys.has(
@@ -256,15 +265,16 @@ export class QqbotPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 解析Canonical Plugin Key。
-   * @param pluginKey - pluginKey 输入；驱动 `pluginAliases.get()` 的 插件平台步骤。
+   * 从`pluginKey`解析Canonical插件键；从 `pluginAliases.get` 读取Canonical插件键。
+   * @param pluginKey - 用于读取或更新Canonical插件键的稳定键。
+   * @returns 规范化后的Canonical插件键；主值为空时采用 `pluginKey` 兜底。
    */
   private resolveCanonicalPluginKey(pluginKey: string) {
     return this.pluginAliases.get(pluginKey) || pluginKey;
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
+   * 根据当前运行态处理hydrateInactive插件Keys。
    */
   private async hydrateInactivePluginKeys() {
     if (!this.pluginRepository || !this.installationRepository) return;

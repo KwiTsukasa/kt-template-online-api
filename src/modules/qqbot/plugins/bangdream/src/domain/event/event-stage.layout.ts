@@ -32,7 +32,8 @@ export const BANGDREAM_EVENT_STAGE_SPEC = {
 } as const;
 
 /**
- * 获取试炼歌曲单元格宽度。
+ * 根据当前领域状态，获取试炼歌曲单元格宽度。
+ * @returns 根据当前领域状态，获取试炼歌曲单元格宽度。
  */
 export function getEventStageSongCellWidth(): number {
   return (
@@ -42,21 +43,24 @@ export function getEventStageSongCellWidth(): number {
 }
 
 /**
- * 获取试炼歌曲封面绘制高度。
+ * 根据当前领域状态，获取试炼歌曲封面绘制高度。
+ * @returns 根据当前领域状态，获取试炼歌曲封面绘制高度。
  */
 export function getEventStageSongJacketHeight(): number {
   return getEventStageSongCellWidth() - 6;
 }
 
 /**
- * 获取试炼歌曲单元格高度。
+ * 根据当前领域状态，获取试炼歌曲单元格高度。
+ * @returns 根据当前领域状态，获取试炼歌曲单元格高度。
  */
 export function getEventStageSongCellHeight(): number {
   return (getEventStageSongCellWidth() / 180) * 210;
 }
 
 /**
- * 获取试炼歌曲横向行尺寸。
+ * 根据当前领域状态，获取试炼歌曲横向行尺寸。
+ * @returns 包含 `height`、`width` 字段的根据当前领域状态，获取试炼歌曲横向行尺寸。
  */
 export function getEventStageSongRowSize(): { height: number; width: number } {
   return {
@@ -68,19 +72,20 @@ export function getEventStageSongRowSize(): { height: number; width: number } {
 }
 
 /**
- * 获取试炼 stage 绘制批大小。
+ * 根据当前领域状态，获取试炼 stage 绘制批大小。
+ * @returns 根据当前领域状态，获取试炼 stage 绘制批大小。
  */
 export function getEventStageStageBatchSize(): number {
   return BANGDREAM_EVENT_STAGE_SPEC.list.stageBatchSize;
 }
 
 /**
- * 判断下一张试炼 stage 图是否应该换到新列。
- *
- * @param currentHeight - currentHeight 输入；计算 BangDream判断结果。
- * @param nextImageHeight - nextImageHeight 输入；计算 BangDream判断结果。
- * @param currentColumnLength - currentColumnLength 输入；计算 BangDream判断结果。
- * @param maxHeight - maxHeight 输入；计算 BangDream判断结果。
+ * 根据当前列占用与下一张试炼图尺寸判断是否切换到新列。
+ * @param currentHeight - 决定根据当前列占用与下一张试炼图尺寸判断是否切换到新列内容、边界或目标的 `currentHeight` 值。
+ * @param nextImageHeight - 决定根据当前列占用与下一张试炼图尺寸判断是否切换到新列内容、边界或目标的 `nextImageHeight` 值。
+ * @param currentColumnLength - 限制根据当前列占用与下一张试炼图尺寸判断是否切换到新列数量、尺寸、等级或重试边界的数值。
+ * @param maxHeight - 决定根据当前列占用与下一张试炼图尺寸判断是否切换到新列内容、边界或目标的 `maxHeight` 值；省略时默认采用 `BANGDREAM_EVENT_STAGE_SPEC.list.maxColumnHeight`。
+ * @returns 满足根据当前列占用与下一张试炼图尺寸判断是否切换到新列约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function shouldStartNewEventStageColumn(
   currentHeight: number,
@@ -93,9 +98,9 @@ export function shouldStartNewEventStageColumn(
 
 /**
  * 将试炼 stage 图片按最大列高拆成多列。
- *
- * @param images - BangDream列表；驱动 `for()` 的 BangDream步骤。
- * @param maxHeight - maxHeight 输入；决定 BangDream条件分支。
+ * @param images - 决定将试炼 stage 图片按最大列高拆成多列内容、边界或目标的 `images` 值。
+ * @param maxHeight - 决定将试炼 stage 图片按最大列高拆成多列内容、边界或目标的 `maxHeight` 值；省略时默认采用 `BANGDREAM_EVENT_STAGE_SPEC.list.maxColumnHeight`。
+ * @returns 按输入顺序得到的将试炼 stage 图片按最大列高拆成多列列表；没有匹配项时为空数组。
  */
 export function splitEventStageImagesByColumnHeight<
   T extends EventStageCanvasLike,

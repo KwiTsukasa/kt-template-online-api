@@ -12,12 +12,15 @@ export interface CostumeSdResourceSource {
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param server - server 输入；影响 toServerCode 的返回值。
- * @returns BangDream 插件渲染后的图片、画布或文本。
+ * 将`server`转换为服务器代码；当 `server == null` 成立时返回 `'undefined'`。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 当前状态对应的服务器代码，取值为 `'undefined'`；没有可用结果或提前结束时为 `undefined`。
  */
 function toServerCode(server: Server | undefined): string {
-  return server == null ? 'undefined' : Server[server];
+  if (server == null) {
+    return 'undefined';
+  }
+  return Server[server];
 }
 
 export class CostumeResourceRepository {
@@ -26,9 +29,9 @@ export class CostumeResourceRepository {
   ) {}
 
   /**
-   * 获取服装详情。
-   *
-   * @param costumeId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
+   * 根据参数 `costumeId`，查询并返回服装详情。
+   * @param costumeId - 用于精确定位costume的标识。
+   * @returns 根据参数 `costumeId`，查询并返回服装详情。
    */
   async getDetail(costumeId: number): Promise<Record<string, any>> {
     return await this.provider.getJson<Record<string, any>>(
@@ -37,10 +40,10 @@ export class CostumeResourceRepository {
   }
 
   /**
-   * 获取 Live2D 缩略图资源路径。
-   *
-   * @param source - source 输入；使用 `publishedAt`、`sdResourceName` 字段生成结果。
-   * @param displayedServerList - displayedServerList 输入；驱动 `toServerCode()` 的 BangDream步骤。
+   * 根据参数 `source`，获取 Live2D 缩略图资源路径。
+   * @param source - 用于根据参数 `source`，获取 Live2D 缩略图资源路径的领域对象，包含 `publishedAt`、`sdResourceName` 字段。
+   * @param displayedServerList - 决定根据参数 `source`，获取 Live2D 缩略图资源路径内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+   * @returns 按参数编码并拼接完成的根据参数 `source`，获取 Live2D 缩略图资源路径。
    */
   getSdCharacterPath(
     source: CostumeSdResourceSource,
@@ -53,10 +56,10 @@ export class CostumeResourceRepository {
   }
 
   /**
-   * 下载 Live2D 缩略图资源。
-   *
-   * @param source - source 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
-   * @param displayedServerList - displayedServerList 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * 根据服装资源来源解析 Live2D 缩略图路径，并从资源提供器下载二进制内容。
+   * @param source - 决定Sd角色缓冲区内容、边界或目标的 `source` 值。
+   * @param displayedServerList - 决定Sd角色缓冲区内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+   * @returns Sd角色缓冲区。
    */
   async getSdCharacterBuffer(
     source: CostumeSdResourceSource,

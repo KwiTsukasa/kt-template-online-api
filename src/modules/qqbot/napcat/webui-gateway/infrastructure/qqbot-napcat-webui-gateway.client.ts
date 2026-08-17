@@ -44,7 +44,11 @@ type GatewayResponseBody<T> = T | { data: T };
 export class QqbotNapcatWebuiGatewayClient {
   constructor(private readonly configService: ConfigService) {}
 
-  /** 创建会话。 */
+  /**
+   * 根据`input`构造NapCat WebUI 网关会话；向目标通道投递结果（`post`）。
+   * @param input - 用于NapCat WebUI 网关会话的结构化输入。
+   * @returns NapCat WebUI 网关会话。
+   */
   async createSession(input: QqbotNapcatWebuiGatewayCreateSessionRequest) {
     return this.validateSessionResult(
       await this.post<QqbotNapcatWebuiGatewaySessionResult>(
@@ -54,7 +58,11 @@ export class QqbotNapcatWebuiGatewayClient {
     );
   }
 
-  /** 返回心跳。 */
+  /**
+   * 使用会话标识提交心跳续期请求，并返回续期后的会话状态。
+   * @param input - 提供 `{ sessionId, ...data }` 的结构化领域输入。
+   * @returns 返回续期后的网关会话状态或对应的成功响应。
+   */
   heartbeat(input: QqbotNapcatWebuiGatewayLifecycleRequest) {
     const { sessionId, ...data } = input;
     return this.post<QqbotNapcatWebuiGatewayLifecycleResult>(
@@ -63,7 +71,11 @@ export class QqbotNapcatWebuiGatewayClient {
     );
   }
 
-  /** 吊销QQBotNapCatWebUI记录。 */
+  /**
+   * 按`input`移除QQBotNapCatWebUI记录；向目标通道投递结果（`post`）。
+   * @param input - 用于QQBotNapCatWebUI记录的结构化输入。
+   * @returns QQBotNapCatWebUI记录。
+   */
   revoke(input: QqbotNapcatWebuiGatewayLifecycleRequest) {
     const { sessionId, ...data } = input;
     return this.post<QqbotNapcatWebuiGatewayLifecycleResult>(
@@ -72,7 +84,12 @@ export class QqbotNapcatWebuiGatewayClient {
     );
   }
 
-  /** 返回后置。 */
+  /**
+   * 携带内部密钥向 NapCat WebUI 网关发送有超时边界的 POST 请求，并解包响应数据。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @param data - 决定post内容、边界或目标的 `data` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 返回网关响应解包后的业务数据。
+   */
   private async post<T>(path: string, data?: unknown): Promise<T> {
     const config: AxiosRequestConfig = {
       data,
@@ -90,12 +107,24 @@ export class QqbotNapcatWebuiGatewayClient {
     }
   }
 
-  /** 构建URL。 */
+  /**
+   * 将网关基础地址与请求路径拼接，并确保路径边界只有一个起始斜杠。
+   * @param path - 相对于 NapCat WebUI 网关基础地址的请求路径。
+   * @returns 可直接交给 HTTP 客户端的完整网关 URL。
+   */
   private buildUrl(path: string) {
-    return `${this.getBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
+    return `${this.getBaseUrl()}${(() => {
+      if (path.startsWith('/')) {
+        return path;
+      }
+      return `/${path}`;
+    })()}`;
   }
 
-  /** 读取BaseURL。 */
+  /**
+   * 按当前运行态读取BaseURL 地址；从 `configService.get` 读取BaseURL 地址。
+   * @returns BaseURL 地址。
+   */
   private getBaseUrl() {
     const configured = this.configService.get<string>(
       'NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL',
@@ -103,14 +132,20 @@ export class QqbotNapcatWebuiGatewayClient {
     return (configured || DEFAULT_GATEWAY_BASE_URL).replace(/\/+$/, '');
   }
 
-  /** 读取请求头。 */
+  /**
+   * 按当前运行态读取请求头；从 `getInternalSecret` 读取请求头。
+   * @returns 包含 `x-kt-gateway-secret` 字段的请求头。
+   */
   private getHeaders() {
     const secret = this.getInternalSecret();
 
     return { 'x-kt-gateway-secret': secret };
   }
 
-  /** 读取内部密钥。 */
+  /**
+   * 按当前运行态读取内部密钥；从 `configService.get` 读取内部密钥。
+   * @returns 内部密钥。
+   */
   private getInternalSecret() {
     const secret = String(
       this.configService.get<string>('NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET') ||
@@ -127,18 +162,26 @@ export class QqbotNapcatWebuiGatewayClient {
     return secret;
   }
 
-  /** 读取超时毫秒。 */
+  /**
+   * 按当前运行态读取超时毫秒；当 `Number.isFinite(configured) && configured > 0` 成立时返回 `configured`。
+   * @returns 超时毫秒。
+   */
   private getTimeoutMs() {
     const configured = Number(
       this.configService.get<string>('NAPCAT_WEBUI_GATEWAY_TIMEOUT_MS') || '',
     );
 
-    return Number.isFinite(configured) && configured > 0
-      ? configured
-      : DEFAULT_GATEWAY_TIMEOUT_MS;
+    if (Number.isFinite(configured) && configured > 0) {
+      return configured;
+    }
+    return DEFAULT_GATEWAY_TIMEOUT_MS;
   }
 
-  /** 返回解包网关请求体。 */
+  /**
+   * 将输入收敛并投影为网关请求体。
+   * @param body - 用于网关请求体的结构化输入。
+   * @returns 网关请求体。
+   */
   private unwrapGatewayBody<T>(body: GatewayResponseBody<T>): T {
     if (body && typeof body === 'object' && 'data' in body) {
       return (body as { data: T }).data;
@@ -147,7 +190,11 @@ export class QqbotNapcatWebuiGatewayClient {
     return body as T;
   }
 
-  /** 校验会话结果。 */
+  /**
+   * 校验`result`是否满足会话结果约束，并拒绝不合法输入。
+   * @param result - 用于会话结果的领域对象，包含 `sessionId`、`expiresAt`、`iframeUrl` 字段。
+   * @returns 包含 `expiresAt`、`iframeUrl`、`sessionId` 字段的会话。
+   */
   private validateSessionResult(
     result: QqbotNapcatWebuiGatewaySessionResult,
   ): QqbotNapcatWebuiGatewaySessionResult {
@@ -173,7 +220,12 @@ export class QqbotNapcatWebuiGatewayClient {
     };
   }
 
-  /** 判断安全内联框架URL是否成立。 */
+  /**
+   * 根据`iframeUrl`、`sessionId`与当前约束判定安全内联框架URL；当 `typeof iframeUrl !== 'string' || iframeUrl.trim() !== iframeU…` 成立时返回 `false`。
+   * @param iframeUrl - 待规范化、请求或同源校验的iframeURL 地址 URL。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @returns 满足安全内联框架URL约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isSafeIframeUrl(iframeUrl: unknown, sessionId: string) {
     if (typeof iframeUrl !== 'string' || iframeUrl.trim() !== iframeUrl) {
       return false;
@@ -188,8 +240,18 @@ export class QqbotNapcatWebuiGatewayClient {
     if (iframeUrl.includes('\\')) return false;
 
     const queryStart = iframeUrl.indexOf('?');
-    const path = queryStart >= 0 ? iframeUrl.slice(0, queryStart) : iframeUrl;
-    const query = queryStart >= 0 ? iframeUrl.slice(queryStart + 1) : '';
+    const path = (() => {
+      if (queryStart >= 0) {
+        return iframeUrl.slice(0, queryStart);
+      }
+      return iframeUrl;
+    })();
+    const query = (() => {
+      if (queryStart >= 0) {
+        return iframeUrl.slice(queryStart + 1);
+      }
+      return '';
+    })();
     const expectedPrefix = `${publicSessionPrefix}${sessionId}/`;
     if (!path.startsWith(expectedPrefix)) return false;
 
@@ -210,17 +272,30 @@ export class QqbotNapcatWebuiGatewayClient {
       return false;
     }
 
-    const unsafeScanValue = query ? `${path}?ticket=` : iframeUrl;
+    const unsafeScanValue = (() => {
+      if (query) {
+        return `${path}?ticket=`;
+      }
+      return iframeUrl;
+    })();
     return !this.hasUnsafeGatewayEvidence(unsafeScanValue);
   }
 
-  /** 判断不安全的网关证据是否存在。 */
+  /**
+   * 根据`value`与当前约束判定不安全的网关证据是否存在。
+   * @param value - 待判定是否满足不安全的网关证据是否存在约束的候选值。
+   * @returns 满足不安全的网关证据是否存在约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private hasUnsafeGatewayEvidence(value: string) {
     const decoded = this.tryDecodeURIComponent(value);
     return UNSAFE_GATEWAY_RESULT_PATTERN.test(decoded);
   }
 
-  /** 尝试解码URI组件。 */
+  /**
+   * 根据`value`处理尝试解码URI组件。
+   * @param value - 参与尝试解码URI组件比较、格式化或输出的候选值。
+   * @returns 尝试解码URI组件。
+   */
   private tryDecodeURIComponent(value: string) {
     try {
       return decodeURIComponent(value);
@@ -229,7 +304,10 @@ export class QqbotNapcatWebuiGatewayClient {
     }
   }
 
-  /** 返回抛出无效的会话结果。 */
+  /**
+   * 以统一异常拒绝无效的会话结果。
+   * @returns 以统一异常拒绝无效的会话。
+   */
   private throwInvalidSessionResult(): never {
     return throwVbenError(
       'NapCat WebUI Gateway 返回无效会话',

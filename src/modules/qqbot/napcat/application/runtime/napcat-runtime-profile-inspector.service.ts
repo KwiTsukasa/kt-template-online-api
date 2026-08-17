@@ -37,12 +37,20 @@ export class NapcatRuntimeProfileInspectorService {
       new NapcatRuntimeProfileInspectionScriptService();
   }
 
-  /** 构建检查脚本。 */
+  /**
+   * 根据`containerName`构造检查脚本。
+   * @param containerName - 决定检查脚本内容、边界或目标的 `containerName` 值。
+   * @returns 检查脚本。
+   */
   buildInspectScript(containerName: string) {
     return this.inspectionScriptService.buildInspectScript(containerName);
   }
 
-  /** 清理证据。 */
+  /**
+   * 将`value`规范为证据，使等价输入得到一致表示；当 `Array.isArray(value)` 成立时返回 `value.map((item) => this.sanitizeEvidence(i…`。
+   * @param value - 参与证据比较、格式化或输出的候选值。
+   * @returns 证据。
+   */
   sanitizeEvidence(value: unknown): unknown {
     if (Array.isArray(value)) {
       return value.map((item) => this.sanitizeEvidence(item));
@@ -64,7 +72,11 @@ export class NapcatRuntimeProfileInspectorService {
     );
   }
 
-  /** 读取账号运行态详情。 */
+  /**
+   * 按`accountId`读取账号运行态详情；从 `runtimeProfileRepository.findOne` 读取账号运行态详情。
+   * @param accountId - 用于精确定位账号的标识。
+   * @returns 包含 `accountId`、`inspectionTimeoutMs`、`protocolProfile`、`runtimeProfile` 字段的账号运行态详情。
+   */
   async getAccountRuntimeDetail(accountId: string) {
     const normalizedAccountId = this.toolsService.toTrimmedString(accountId);
     const [runtimeProfile, protocolProfile] = await Promise.all([
@@ -86,7 +98,11 @@ export class NapcatRuntimeProfileInspectorService {
     };
   }
 
-  /** 读取账号运行态摘要映射。 */
+  /**
+   * 按`accountIds`读取账号运行态摘要映射；同步更新对应缓存或去重状态（`summaryMap.set`）。
+   * @param accountIds - 要批量读取、校验或更新的账号标识集合。
+   * @returns 账号运行态摘要映射。
+   */
   async getAccountRuntimeSummaryMap(accountIds: string[]) {
     const normalizedIds = accountIds
       .map((accountId) => this.toolsService.toTrimmedString(accountId))
@@ -117,17 +133,27 @@ export class NapcatRuntimeProfileInspectorService {
     return summaryMap;
   }
 
-  /** 读取检查超时毫秒。 */
+  /**
+   * 按当前运行态读取检查超时毫秒；当 `Number.isFinite(value) && value > 0` 成立时返回 `value`。
+   * @returns 当前状态对应的检查超时毫秒，取值为 `15_000`。
+   */
   private getInspectionTimeoutMs() {
     const value = Number(
       this.configService.get<string>(
         'QQBOT_NAPCAT_PROFILE_INSPECT_TIMEOUT_MS',
       ) || 15_000,
     );
-    return Number.isFinite(value) && value > 0 ? value : 15_000;
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+    return 15_000;
   }
 
-  /** 返回到资料状态。 */
+  /**
+   * 把配置档案同步状态映射为健康状态，未知输入回退为 `unknown`。
+   * @param status - 决定把配置档案同步状态映射为健康状态，未知输入回退为 `unknown`内容、边界或目标的 `status` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 返回 `ok`、`drift`、`failed` 或 `unknown`；未知状态回退为 `unknown`。
+   */
   private toProfileStatus(
     status?: string,
   ): NapcatRuntimeProfileSummary['profileStatus'] {
@@ -137,7 +163,11 @@ export class NapcatRuntimeProfileInspectorService {
     return 'unknown';
   }
 
-  /** 返回脱敏字符串。 */
+  /**
+   * 按边界规则转换脱敏字符串。
+   * @param value - 参与按边界规则转换脱敏字符串比较、格式化或输出的候选值。
+   * @returns 按边界规则转换脱敏字符串。
+   */
   private redactString(value: string) {
     return value.replace(/token=[^&\s]+/gi, 'token=[REDACTED]');
   }

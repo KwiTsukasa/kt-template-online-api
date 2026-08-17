@@ -67,7 +67,9 @@ export class SystemMessageDeliveryCoordinatorService
     await this.drainPromise;
   }
 
-  /** 请求排空。 */
+  /**
+   * 按当前运行态投递排空。
+   */
   requestDrain(): void {
     if (this.destroyed) return;
     this.drainRequested = true;
@@ -76,7 +78,12 @@ export class SystemMessageDeliveryCoordinatorService
       .catch((error: unknown) =>
         this.logger.warn(
           'System message drain failed',
-          error instanceof Error ? error.message : undefined,
+          (() => {
+            if (error instanceof Error) {
+              return error.message;
+            }
+            return undefined;
+          })(),
         ),
       )
       .finally(() => {
@@ -85,7 +92,10 @@ export class SystemMessageDeliveryCoordinatorService
       });
   }
 
-  /** 通知DDNS已同步的。 */
+  /**
+   * 按`input`投递通知DDNS已同步的。
+   * @param input - 用于通知DDNS已同步的的结构化输入，包含 `appliedAddress`、`ddnsRecordId` 字段。
+   */
   async notifyDdnsSynced(input: {
     appliedAddress: string;
     ddnsRecordId: string;
@@ -140,7 +150,9 @@ export class SystemMessageDeliveryCoordinatorService
     if (advanced > 0) this.requestDrain();
   }
 
-  /** 返回排空循环。 */
+  /**
+   * 根据当前运行态处理对应领域流程并产生排空循环。
+   */
   private async drainLoop(): Promise<void> {
     while (!this.destroyed && this.drainRequested) {
       this.drainRequested = false;
@@ -158,7 +170,12 @@ export class SystemMessageDeliveryCoordinatorService
     }
   }
 
-  /** 执行有界的。 */
+  /**
+   * 在单轮上限内重复领取并执行投递，直到队列暂空或达到最大处理数量。
+   * @param name - 决定在单轮上限内重复领取并执行投递，直到队列暂空或达到最大处理数量内容、边界或目标的 `name` 值。
+   * @param runner - 负责完成在单轮上限内重复领取并执行投递，直到队列暂空或达到最大处理数量外部交互的受控能力。
+   * @returns 返回本轮实际领取并处理的投递数量，队列为空时可为 `0`。
+   */
   private async runBounded(
     name: string,
     runner: () => Promise<number>,
@@ -168,7 +185,12 @@ export class SystemMessageDeliveryCoordinatorService
     } catch (error) {
       this.logger.warn(
         `System message ${name} scan failed`,
-        error instanceof Error ? error.message : undefined,
+        (() => {
+          if (error instanceof Error) {
+            return error.message;
+          }
+          return undefined;
+        })(),
       );
       return 0;
     }

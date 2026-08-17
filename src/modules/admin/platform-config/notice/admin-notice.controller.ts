@@ -21,8 +21,9 @@ export class AdminNoticeController {
   constructor(private readonly noticeService: AdminNoticeService) {}
 
   /**
-   * 获取列表数据。
-   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * 按分页、级别、类型与文本条件查询管理通知，并返回 Vben 分页结构。
+   * @param query - 限定列表数据筛选、排序与分页范围的查询条件。
+   * @returns 列表数据。
    */
   @Get('list')
   @ApiOperation({
@@ -38,8 +39,9 @@ export class AdminNoticeController {
   }
 
   /**
-   * 查询站内信详情。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按站内信标识查询详情，并封装为 Vben 成功响应。
+   * @param id - 决定详情内容、边界或目标的 `id` 值。
+   * @returns 详情。
    */
   @Get('detail/:id')
   @ApiOperation({ summary: '查询站内信详情' })
@@ -48,8 +50,9 @@ export class AdminNoticeController {
   }
 
   /**
-   * 删除站内信。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按`id`移除针对删除站内信。
+   * @param id - 决定针对删除站内信内容、边界或目标的 `id` 值。
+   * @returns 针对删除站内信。
    */
   @Delete(':id')
   @ApiOperation({ summary: '删除站内信' })
@@ -58,9 +61,10 @@ export class AdminNoticeController {
   }
 
   /**
-   * 启停站内信。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param status - Admin列表；驱动 `vbenSuccess()` 的 Admin步骤。
+   * 根据`id`、`status`处理启停站内信。
+   * @param id - 决定启停站内信内容、边界或目标的 `id` 值。
+   * @param status - 决定启停站内信内容、边界或目标的 `status` 值。
+   * @returns 启停站内信。
    */
   @Post('toggle')
   @ApiOperation({ summary: '启停站内信' })
@@ -71,9 +75,10 @@ export class AdminNoticeController {
   }
 
   /**
-   * 置顶/取消站内信。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param isTop - isTop 输入；驱动 `vbenSuccess()` 的 Admin步骤。
+   * 根据`id`、`isTop`处理置顶/取消站内信。
+   * @param id - 决定置顶/取消站内信内容、边界或目标的 `id` 值。
+   * @param isTop - 决定是否启用“Top”分支的布尔选项。
+   * @returns 置顶/取消站内信。
    */
   @Post('top')
   @ApiOperation({ summary: '置顶/取消站内信' })

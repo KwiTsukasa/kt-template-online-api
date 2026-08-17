@@ -27,12 +27,11 @@ const line = drawDottedLine(createHorizontalSeparatorSpec({ height: 10 }));
 const line2: Canvas = drawDottedLine(createVerticalSeparatorSpec(6000));
 
 /**
- * 在QQBot 图片视图层中绘制歌曲列表。
- *
- * @param matches - BangDream列表；驱动 `matchSongList()` 的 BangDream步骤。
- * @param displayedServerList - displayedServerList 输入；驱动 `matchSongList()`、`drawSongDetail()`、`renderSongListItemsSequentially()` 的 BangDream步骤。
- * @param compress - BangDream列表；驱动 `drawSongDetail()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 通过 `matchSongList` 执行模式匹配。
+ * @param matches - 决定歌曲内容、边界或目标的 `matches` 值。
+ * @param displayedServerList - 决定歌曲内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @param compress - 决定歌曲内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的歌曲列表；没有匹配项时为空数组。
  */
 export async function drawSongList(
   matches: FuzzySearchResult,
@@ -109,10 +108,10 @@ export type SongListItemRenderer = (
 
 /**
  * 在歌曲列表中顺序渲染单项，避免并发 Skia 图片解码导致 native 内存峰值过高。
- *
- * @param songs - 歌曲列表；驱动 `for()` 的 BangDream步骤。
- * @param displayedServerList - displayedServerList 输入；驱动 `songImages.push()` 的 BangDream步骤。
- * @param renderItem - renderItem 输入；驱动 `songImages.push()` 的 BangDream步骤。
+ * @param songs - 决定歌曲条目集合Sequentially内容、边界或目标的 `songs` 值。
+ * @param displayedServerList - 决定歌曲条目集合Sequentially内容、边界或目标的 `displayedServerList` 值。
+ * @param renderItem - 负责完成歌曲条目集合Sequentially外部交互的受控能力；省略时默认采用 `drawSongInList`。
+ * @returns 按输入顺序得到的歌曲条目集合Sequentially列表；没有匹配项时为空数组。
  */
 export async function renderSongListItemsSequentially(
   songs: Song[],

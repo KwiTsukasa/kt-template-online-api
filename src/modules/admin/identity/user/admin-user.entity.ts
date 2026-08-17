@@ -109,7 +109,6 @@ export class AdminUser {
   })
   dept?: AdminDept | null;
 
-  /** 创建标识。 */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

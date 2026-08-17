@@ -14,8 +14,9 @@ export class AdminMenuService {
   ) {}
 
   /**
-   * 查询 Admin 身份权限数据。
-   * @param user - user 输入；驱动 `this.getAllowedMenus()` 的 Admin步骤。
+   * 按`user`读取访问权限码集合；从 `getAllowedMenus` 读取访问权限码集合。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @returns 访问权限码集合。
    */
   async getAccessCodes(user: AdminUser) {
     const menus = await this.getAllowedMenus(user);
@@ -23,8 +24,9 @@ export class AdminMenuService {
   }
 
   /**
-   * 查询 Admin 身份权限数据。
-   * @param user - user 输入；驱动 `this.getAllowedMenus()` 的 Admin步骤。
+   * 按`user`读取路由Menus；从 `getAllowedMenus` 读取路由Menus。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @returns 路由Menus。
    */
   async getRouteMenus(user: AdminUser) {
     const menus = await this.getAllowedMenus(user);
@@ -32,7 +34,8 @@ export class AdminMenuService {
   }
 
   /**
-   * 查询 Admin 身份权限数据。
+   * 按当前运行态读取菜单。
+   * @returns 菜单。
    */
   async getMenuList() {
     const menus = await this.menuRepository.find({
@@ -44,9 +47,10 @@ export class AdminMenuService {
   }
 
   /**
-   * 判断 Admin 身份权限条件。
-   * @param name - 名称文本；计算 Admin判断结果。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 根据`name`、`id`与当前约束判定菜单名称Exists；从 `menuRepository.findOne` 读取菜单名称Exists。
+   * @param name - 决定菜单名称Exists内容、边界或目标的 `name` 值。
+   * @param id - 决定菜单名称Exists内容、边界或目标的 `id` 值；为空时采用 `menu.id !== id` 作为兜底。
+   * @returns 满足菜单名称Exists约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async isMenuNameExists(name: string, id?: string) {
     const menu = await this.menuRepository.findOne({
@@ -59,9 +63,10 @@ export class AdminMenuService {
   }
 
   /**
-   * 判断 Admin 身份权限条件。
-   * @param path - 路由或文件路径；决定 Admin条件分支。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 根据`path`、`id`与当前约束判定菜单路径Exists；从 `menuRepository.findOne` 读取菜单路径Exists。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @param id - 决定菜单路径Exists内容、边界或目标的 `id` 值；为空时采用 `menu.id !== id` 作为兜底。
+   * @returns 满足菜单路径Exists约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async isMenuPathExists(path: string, id?: string) {
     if (path === '/') return !id;
@@ -76,8 +81,9 @@ export class AdminMenuService {
   }
 
   /**
-   * 创建 Admin 身份权限对象或配置。
-   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   * 根据`data`构造菜单；把变更持久化到当前存储（`menuRepository.create`）。
+   * @param data - 决定菜单内容、边界或目标的 `data` 值。
+   * @returns 固定为 `null`，表示当前入口不会产生菜单。
    */
   async createMenu(data: AdminMenuInput) {
     const entity = this.menuRepository.create({
@@ -88,9 +94,10 @@ export class AdminMenuService {
   }
 
   /**
-   * 更新Menu。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   * 根据`id`、`data`更新菜单；把变更持久化到当前存储（`menuRepository.update`）。
+   * @param id - 决定菜单内容、边界或目标的 `id` 值。
+   * @param data - 决定菜单内容、边界或目标的 `data` 值。
+   * @returns 固定为 `null`，表示当前入口不会产生菜单。
    */
   async updateMenu(id: string, data: AdminMenuInput) {
     await this.menuRepository.update(
@@ -103,8 +110,9 @@ export class AdminMenuService {
   }
 
   /**
-   * 删除Menu。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 通过 `collectChildMenuIds` 收集候选数据。
+   * @param id - 决定菜单内容、边界或目标的 `id` 值。
+   * @returns 固定为 `null`，表示当前入口不会产生菜单。
    */
   async deleteMenu(id: string) {
     const ids = await this.collectChildMenuIds(id);
@@ -120,8 +128,9 @@ export class AdminMenuService {
   }
 
   /**
-   * 查询 Admin 身份权限数据。
-   * @param user - user 输入；使用 `roles` 字段生成结果。
+   * 通过 `filter` 筛选匹配数据。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @returns 许可范围Menus。
    */
   private async getAllowedMenus(user: AdminUser) {
     const activeRoles = (user.roles || []).filter(
@@ -147,8 +156,9 @@ export class AdminMenuService {
   }
 
   /**
-   * 执行 Admin 身份权限流程。
-   * @param menus - 菜单列表；遍历并累积 Admin结果。
+   * 根据`menus`处理include祖先节点Menus。
+   * @param menus - 决定include祖先节点Menus内容、边界或目标的 `menus` 值。
+   * @returns 按输入顺序得到的include祖先节点Menus列表；没有匹配项时为空数组。
    */
   private async includeAncestorMenus(menus: AdminMenu[]) {
     const menuMap = new Map<string, AdminMenu>();
@@ -184,10 +194,10 @@ export class AdminMenuService {
   }
 
   /**
-   * 转换 Admin 身份权限输入。
-   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
-   * @param includeEmptyMeta - includeEmptyMeta 输入；决定 Admin条件分支。
-   * @returns Admin 身份权限转换后的值。
+   * 将菜单输入投影为持久化字段并规范化元数据；调用方要求或元数据非空时才写入 `meta`。
+   * @param data - 用于将菜单输入投影为持久化字段并规范化元数据的领域对象，包含 `authCode`、`component`、`name`、`path` 字段。
+   * @param includeEmptyMeta - 决定是否启用“includeEmptyMeta”分支的布尔选项。
+   * @returns 将菜单输入投影为持久化字段并规范化元数据。
    */
   private normalizeMenuInput(
     data: AdminMenuInput,
@@ -212,9 +222,9 @@ export class AdminMenuService {
   }
 
   /**
-   * 转换 Admin 身份权限输入。
-   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
-   * @returns Admin 身份权限转换后的值。
+   * 将`data`规范为Meta输入，使等价输入得到一致表示。
+   * @param data - 用于Meta输入的领域对象，包含 `meta`、`activePath`、`linkSrc`、`type` 字段。
+   * @returns Meta输入。
    */
   private normalizeMetaInput(data: AdminMenuInput): AdminMenuMeta {
     const meta = this.normalizeMetaValue(data.meta);
@@ -239,9 +249,9 @@ export class AdminMenuService {
   }
 
   /**
-   * 转换 Admin 身份权限输入。
-   * @param meta - meta 输入；转换 JSON 文本。
-   * @returns Admin 身份权限转换后的值。
+   * 将菜单元数据收敛为独立对象；空值、非对象 JSON 或解析失败时返回空对象。
+   * @param meta - 决定将菜单元数据收敛为独立对象内容、边界或目标的 `meta` 值。
+   * @returns 将菜单元数据收敛为独立对象。
    */
   private normalizeMetaValue(
     meta: AdminMenuMeta | null | string | undefined,
@@ -251,15 +261,19 @@ export class AdminMenuService {
 
     try {
       const parsed = JSON.parse(meta);
-      return parsed && typeof parsed === 'object' ? parsed : {};
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+      return {};
     } catch {
       return {};
     }
   }
 
   /**
-   * 执行 Admin 身份权限流程。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 根据`id`处理子级菜单标识集合。
+   * @param id - 决定子级菜单标识集合内容、边界或目标的 `id` 值。
+   * @returns 按输入顺序得到的子级菜单标识集合列表；没有匹配项时为空数组。
    */
   private async collectChildMenuIds(id: string) {
     const menus = await this.menuRepository.find({
@@ -282,8 +296,9 @@ export class AdminMenuService {
   }
 
   /**
-   * 创建 Admin 身份权限对象或配置。
-   * @param menus - 菜单列表；生成 Admin对象。
+   * 根据`menus`构造菜单树形层级。
+   * @param menus - 决定菜单树形层级内容、边界或目标的 `menus` 值。
+   * @returns 菜单树形层级。
    */
   private buildMenuTree(menus: AdminMenu[]) {
     const nodes = menus
@@ -297,8 +312,9 @@ export class AdminMenuService {
   }
 
   /**
-   * 序列化Menu。
-   * @param menu - menu 输入；使用 `meta`、`name`、`authCode`、`component` 字段生成结果。
+   * 将菜单实体投影为路由树节点，补全缺失的标题并剔除空字段。
+   * @param menu - 待转换的菜单实体；`meta` 会被标准化，其标题缺失时回退为菜单名。
+   * @returns 返回仅保留有效值的路由菜单节点。
    */
   private serializeMenu(menu: AdminMenu) {
     const meta = this.normalizeMetaValue(menu.meta);

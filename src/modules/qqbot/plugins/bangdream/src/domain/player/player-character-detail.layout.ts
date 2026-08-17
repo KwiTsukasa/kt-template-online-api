@@ -17,7 +17,8 @@ export const BANGDREAM_CHARACTER_DETAIL_LIST_SPEC = {
 } as const;
 
 /**
- * 计算角色详情头像缩放参数。
+ * 计算角色详情头像缩放参数，并输出固定投影 `widthMax` 字段。
+ * @returns 包含 `widthMax` 字段的角色详情图标布局规格。
  */
 export function createCharacterDetailIconSpec() {
   return {
@@ -26,7 +27,8 @@ export function createCharacterDetailIconSpec() {
 }
 
 /**
- * 计算角色详情正文绘制参数。
+ * 计算角色详情正文绘制参数，并输出固定投影 `lineHeight`、`maxWidth` 字段。
+ * @returns 包含 `lineHeight`、`maxWidth` 字段的角色详情文本布局规格。
  */
 export function createCharacterDetailTextSpec() {
   const item = BANGDREAM_CHARACTER_DETAIL_LIST_SPEC.item;
@@ -37,9 +39,9 @@ export function createCharacterDetailTextSpec() {
 }
 
 /**
- * 计算角色详情项画布和内容位置。
- *
- * @param contentImage - contentImage 输入；使用 `width` 字段生成结果。
+ * 计算角色详情项画布和内容位置，并输出固定投影 `canvasHeight`、`canvasWidth`、`iconX`、`iconY`、`textX` 字段。
+ * @param contentImage - 用于角色详情条目布局的领域对象，包含 `width` 字段。
+ * @returns 包含 `canvasHeight`、`canvasWidth`、`iconX`、`iconY`、`textX` 字段的角色详情条目布局。
  */
 export function createCharacterDetailItemLayout(contentImage: ImageLike) {
   const item = BANGDREAM_CHARACTER_DETAIL_LIST_SPEC.item;
@@ -54,9 +56,9 @@ export function createCharacterDetailItemLayout(contentImage: ImageLike) {
 }
 
 /**
- * 计算角色详情列表传给通用列表框架的尺寸。
- *
- * @param firstItem - firstItem 输入；生成 BangDream对象。
+ * 计算角色详情列表传给通用列表框架的尺寸，并输出固定投影 `lineHeight`、`spacing`、`textSize` 字段。
+ * @param firstItem - 用于角色详情边框布局规格的领域对象，包含 `height` 字段；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 包含 `lineHeight`、`spacing`、`textSize` 字段的角色详情边框布局规格。
  */
 export function createCharacterDetailListFrameSpec(firstItem?: ImageLike) {
   return {

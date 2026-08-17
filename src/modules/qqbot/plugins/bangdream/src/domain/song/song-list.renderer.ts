@@ -24,13 +24,12 @@ import {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/song/song-list.layout';
 
 /**
- * 在图片布局层中绘制歌曲In列表。
- *
- * @param song - song 输入；使用 `publishedAt`、`difficulty`、`songId`、`musicTitle` 字段生成结果。
- * @param difficulty - difficulty 输入；驱动 `drawDifficultyList()` 的 BangDream步骤。
- * @param text - 待匹配文本；决定 BangDream条件分支。
- * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()`、`song.getSongJacketImage()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`song`、`difficulty`、`text`绘制或格式化歌曲；把图片、文本或图形按布局规格绘制到画布。
+ * @param song - 用于歌曲的领域对象，包含 `publishedAt`、`getSongJacketImage`、`difficulty`、`songId` 字段。
+ * @param difficulty - 决定歌曲内容、边界或目标的 `difficulty` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param text - 决定歌曲内容、边界或目标的 `text` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param displayedServerList - 决定歌曲内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @returns 歌曲。
  */
 export async function drawSongInList(
   song: Song,
@@ -46,17 +45,20 @@ export async function drawSongInList(
   });
 
   const difficultyImage =
-    difficulty == undefined
-      ? drawDifficultyList(
+    (() => {
+      if (difficulty == undefined) {
+        return drawDifficultyList(
           song,
           BANGDREAM_SONG_LIST_SPEC.item.difficultyHeight,
           BANGDREAM_SONG_LIST_SPEC.item.difficultySpacing,
-        )
-      : drawDifficulty(
+        );
+      }
+      return drawDifficulty(
           difficulty,
           song.difficulty[difficulty].playLevel,
           BANGDREAM_SONG_LIST_SPEC.item.difficultyHeight,
         );
+    })();
   const layout = createSongInListLayout(difficultyImage);
   const canvas = new Canvas(layout.canvasWidth, layout.canvasHeight);
   const ctx = canvas.getContext('2d');
@@ -97,13 +99,12 @@ export async function drawSongInList(
 }
 
 /**
- * 在图片布局层中绘制歌曲列表In列表。
- *
- * @param songs - 歌曲列表；使用 `length` 字段生成结果。
- * @param difficulty - difficulty 输入；驱动 `drawSongInList()` 的 BangDream步骤。
- * @param text - 待匹配文本；驱动 `drawSongInList()` 的 BangDream步骤。
- * @param displayedServerList - displayedServerList 输入；驱动 `drawSongInList()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`songs`、`difficulty`、`text`绘制或格式化歌曲；把图片、文本或图形按布局规格绘制到画布。
+ * @param songs - 用于歌曲的领域对象，包含 `length`、`i` 字段。
+ * @param difficulty - 决定歌曲内容、边界或目标的 `difficulty` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param text - 决定歌曲内容、边界或目标的 `text` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param displayedServerList - 决定歌曲内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @returns 歌曲。
  */
 export async function drawSongListInList(
   songs: Song[],

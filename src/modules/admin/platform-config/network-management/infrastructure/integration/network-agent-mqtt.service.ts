@@ -141,13 +141,19 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     this.recoveryInProgress = false;
   }
 
-  /** 请求发布期望状态。 */
+  /**
+   * 按当前运行态投递发布期望状态。
+   */
   requestDesiredPublish(): void {
     this.publishRequested = true;
     this.startPublishDrain();
   }
 
-  /** 发布最新的期望的。 */
+  /**
+   * 按`force`投递最新的期望的。
+   * @param force - 决定是否启用“force”分支的布尔选项；省略时默认采用 `false`。
+   * @returns 满足最新的期望的约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   async publishLatestDesired(force = false): Promise<boolean> {
     if (!this.client?.connected) return false;
     const publication = await this.dataSource.transaction(async (manager) => {
@@ -155,10 +161,18 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         where: { agentId: this.agentId() },
       });
       if (!state || BigInt(state.desiredRevision) === 0n) return null;
-      const desiredSchemaVersion: 1 | 2 =
-        state.desiredSchemaVersion === 2 ? 2 : 1;
-      const publishedSchemaVersion: 1 | 2 =
-        state.publishedSchemaVersion === 2 ? 2 : 1;
+      const desiredSchemaVersion: 1 | 2 = (() => {
+        if (state.desiredSchemaVersion === 2) {
+          return 2;
+        }
+        return 1;
+      })();
+      const publishedSchemaVersion: 1 | 2 = (() => {
+        if (state.publishedSchemaVersion === 2) {
+          return 2;
+        }
+        return 1;
+      })();
       if (
         !force &&
         BigInt(state.publishedRevision) >= BigInt(state.desiredRevision) &&
@@ -204,7 +218,13 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     return true;
   }
 
-  /** 消费消息。 */
+  /**
+   * 根据`topic`、`payload`处理消费消息。
+   * @param topic - 负责完成消费消息外部交互的受控能力。
+   * @param payload - 待按当前协议校验并路由的事件载荷，包含 `byteLength`、`toString` 字段。
+   * @throws 当 `payload.byteLength > MAX_MESSAGE_BYTES` 成立时拒绝当前输入并抛出 `NetworkMessageValidationError`；当 `JSON.parse` 或 `payload.toString` 调用失败时拒绝当前输入并抛出 `NetworkMessageValidationError`；
+   *   当 `topic === this.topic(2, 'events')` 成立时拒绝当前输入并抛出 `NetworkMessageValidationError`。
+   */
   async consumeMessage(topic: string, payload: Buffer): Promise<void> {
     if (payload.byteLength > MAX_MESSAGE_BYTES) {
       throw new NetworkMessageValidationError('Network MQTT message too large');
@@ -271,7 +291,9 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     if (ddnsSourceChanged) this.ddnsService?.requestReconcile();
   }
 
-  /** 处理连接事件。 */
+  /**
+   * 根据当前运行态处理连接事件。
+   */
   private handleConnect(): void {
     const client = this.client;
     if (this.shuttingDown || !client) return;
@@ -298,7 +320,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 返回确认入站的。 */
+  /**
+   * 根据`topic`、`payload`、`callback`处理入站消息后执行确认回调；当 `error instanceof NetworkMessageValidationError || error insta…` 成立时直接结束且不产生返回值。
+   * @param topic - 决定入站消息后执行确认回调内容、边界或目标的 `topic` 值。
+   * @param payload - 待按当前协议校验并路由的事件载荷。
+   * @param callback - 在当前锁、事务或错误边界内执行的受控回调。
+   */
   private async acknowledgeIncoming(
     topic: string,
     payload: Buffer,
@@ -317,14 +344,19 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       callback(
-        error instanceof Error
-          ? error
-          : new Error('Network MQTT database transaction failed'),
+        (() => {
+          if (error instanceof Error) {
+            return error;
+          }
+          return new Error('Network MQTT database transaction failed');
+        })(),
       );
     }
   }
 
-  /** 启动发布请求排空流程。 */
+  /**
+   * 按当前运行态启动发布请求排空流程。
+   */
   private startPublishDrain(): void {
     if (this.publishPromise) return;
     this.publishPromise = this.drainPublishRequests().finally(() => {
@@ -333,7 +365,9 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 排空待发布请求。 */
+  /**
+   * 根据当前运行态处理排空待发布请求。
+   */
   private async drainPublishRequests(): Promise<void> {
     while (this.publishRequested) {
       const force = this.forcePublishRequested;
@@ -350,7 +384,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 发布消息并等待发布确认。 */
+  /**
+   * 按`topic`、`payload`投递消息并等待发布确认。
+   * @param topic - 决定消息并等待发布确认内容、边界或目标的 `topic` 值。
+   * @param payload - 待按当前协议校验并路由的事件载荷。
+   * @throws 当 `!client?.connected` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private async publishWithPuback(
     topic: string,
     payload: Buffer,
@@ -365,7 +404,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 标记版本已发布的。 */
+  /**
+   * 根据`revision`、`schemaVersion`处理标记版本已发布的。
+   * @param revision - 决定标记版本已发布的内容、边界或目标的 `revision` 值。
+   * @param schemaVersion - 决定标记版本已发布的内容、边界或目标的 `schemaVersion` 值。
+   */
   private async markRevisionPublished(
     revision: string,
     schemaVersion: 1 | 2,
@@ -378,7 +421,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       });
       if (!state) return;
       const confirmed = BigInt(revision);
-      const desiredSchemaVersion = state.desiredSchemaVersion === 2 ? 2 : 1;
+      const desiredSchemaVersion = (() => {
+        if (state.desiredSchemaVersion === 2) {
+          return 2;
+        }
+        return 1;
+      })();
       if (
         confirmed <= BigInt(state.desiredRevision) &&
         desiredSchemaVersion === schemaVersion &&
@@ -392,7 +440,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 应用已报告的。 */
+  /**
+   * 根据`report`更新已报告的；先通过 `assertAgentId` 校验输入边界。
+   * @param report - 用于已报告的的领域对象，包含 `agentId`、`appliedRevision`、`desiredDigest`、`mappings` 字段。
+   * @returns 包含 `ddnsSourceChanged`、`visibleStateChanged` 字段的已报告的。
+   */
   private async applyReported(report: NetworkReportedSnapshot): Promise<{
     ddnsSourceChanged: boolean;
     visibleStateChanged: boolean;
@@ -513,17 +565,24 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
           ddnsSourceChanged = true;
         }
 
-        if (
+        const deletionStateMatches =
           mapping.desiredPresence === 'absent' &&
           item.desiredState === 'absent' &&
-          item.syncStatus === 'synced' &&
-          item.routerPresent === false &&
-          item.routePresent === false &&
+          item.syncStatus === 'synced';
+        const routeRemovalConfirmed =
+          item.routerPresent === false && item.routePresent === false;
+        const helperRevisionConfirmed =
           report.helperStatus === 'confirmed' &&
-          report.helperAppliedRevision === report.appliedRevision &&
+          report.helperAppliedRevision === report.appliedRevision;
+        const keeperRemovalConfirmed =
           item.keeperDesiredEnabled === false &&
           item.keeperStatus === 'disabled' &&
-          !item.currentEndpoint
+          !item.currentEndpoint;
+        if (
+          deletionStateMatches &&
+          routeRemovalConfirmed &&
+          helperRevisionConfirmed &&
+          keeperRemovalConfirmed
         ) {
           mapping.activeKey = null;
           mapping.activeGroupProtocolKey = null;
@@ -575,11 +634,16 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         (item) =>
           item.syncStatus === 'conflict' || item.syncStatus === 'failed',
       );
-      state.lastReconcileErrorCode = failedMapping
-        ? failedMapping.errorCode || `sync_${failedMapping.syncStatus}`
-        : report.helperStatus === 'failed'
-          ? 'route_helper_failed'
-          : null;
+      if (failedMapping) {
+        state.lastReconcileErrorCode =
+          failedMapping.errorCode || `sync_${failedMapping.syncStatus}`;
+      } else {
+        if (report.helperStatus === 'failed') {
+          state.lastReconcileErrorCode = 'route_helper_failed';
+        } else {
+          state.lastReconcileErrorCode = null;
+        }
+      }
       state.lastReconcileErrorMessage = failedMapping?.errorMessage || null;
       if (finalizedDeletion) {
         state.desiredRevision = (BigInt(state.desiredRevision) + 1n).toString();
@@ -602,7 +666,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** 应用已报告的v2。 */
+  /**
+   * 根据`report`更新已报告的v2；先通过 `assertAgentId` 校验输入边界。
+   * @param report - 用于已报告的v2的领域对象，包含 `agentId`、`snapshotRevision`、`snapshotDigest`、`channels` 字段。
+   * @returns 包含 `ddnsSourceChanged`、`deliveryAccepted`、`visibleStateChanged` 字段的已报告的v2。
+   */
   private async applyReportedV2(report: NetworkReportedSnapshotV2): Promise<{
     ddnsSourceChanged: boolean;
     deliveryAccepted: boolean;
@@ -706,9 +774,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         const publicIpv4Before = mapping.currentPublicIpv4 || null;
         const lastReportedAtWire =
           mapping.lastReportedAtWire ||
-          (mapping.lastReportedAt
-            ? new Date(mapping.lastReportedAt).toISOString()
-            : null);
+          (() => {
+            if (mapping.lastReportedAt) {
+              return new Date(mapping.lastReportedAt).toISOString();
+            }
+            return null;
+          })();
         if (
           isSameAppliedSnapshot &&
           lastReportedAtWire &&
@@ -769,13 +840,18 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
               item.lastObservedEndpoint,
             );
             const currentTupleBefore = this.currentEndpointTuple(mapping);
-            const currentEndpoint = this.isV2CurrentPublishable(
-              desiredChannel,
-              item,
-              report.reportedAt,
-            )
-              ? item.currentEndpoint
-              : undefined;
+            const currentEndpoint = (() => {
+              if (
+                this.isV2CurrentPublishable(
+                  desiredChannel,
+                  item,
+                  report.reportedAt,
+                )
+              ) {
+                return item.currentEndpoint;
+              }
+              return undefined;
+            })();
             this.applyV2CurrentEndpoint(
               mapping,
               currentEndpoint,
@@ -801,10 +877,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
             }
 
             if (currentTupleBefore !== currentTupleAfter && currentTupleAfter) {
-              const accepted =
-                item.protocol === 'tcp'
-                  ? await this.stageMatchingV2TcpHistory(manager, mapping)
-                  : await this.stageMatchingV2UdpHistory(manager, mapping);
+              const accepted = await (async () => {
+                if (item.protocol === 'tcp') {
+                  return await this.stageMatchingV2TcpHistory(manager, mapping);
+                }
+                return await this.stageMatchingV2UdpHistory(manager, mapping);
+              })();
               deliveryAccepted = accepted || deliveryAccepted;
             }
           }
@@ -857,14 +935,17 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       );
       const firstFailure =
         failures[0] ||
-        (persistedFailure
-          ? {
+        (() => {
+          if (persistedFailure) {
+            return {
               code:
                 persistedFailure.lastErrorCode ||
                 `sync_${persistedFailure.syncStatus}`,
               message: persistedFailure.lastErrorMessage || null,
-            }
-          : undefined);
+            };
+          }
+          return undefined;
+        })();
       state.lastReconcileErrorCode = firstFailure?.code || null;
       state.lastReconcileErrorMessage = firstFailure?.message || null;
       if (finalizedDeletion) {
@@ -890,7 +971,13 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** 返回v2已报告的通道冲突。 */
+  /**
+   * 按字段约束判定v2已报告的通道冲突。
+   * @param mapping - 用于按字段约束判定v2已报告的通道冲突的领域对象，包含 `groupId`、`protocol`、`desiredPresence` 字段。
+   * @param desired - 用于按字段约束判定v2已报告的通道冲突的领域对象，包含 `channelDesiredDigest`、`channelDesiredRevision`、`protocol`、`natmapDesiredEnabled` 字段。
+   * @param reported - 用于按字段约束判定v2已报告的通道冲突的领域对象，包含 `appliedDesiredDigest`、`appliedDesiredRevision`、`groupId`、`protocol` 字段。
+   * @returns 包含 `code`、`message` 字段的按字段约束判定v2已报告的通道冲突；无法解析或未命中时为 `null`。
+   */
   private v2ReportedChannelConflict(
     mapping: NetworkPortForward,
     desired: NetworkDesiredChannelV2,
@@ -914,12 +1001,19 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       };
     }
     if (
-      (reported.protocol === 'tcp' &&
-        (desired.protocol !== 'tcp' ||
-          reported.natmapDesiredEnabled !== desired.natmapDesiredEnabled)) ||
-      (reported.protocol === 'udp' &&
-        (desired.protocol !== 'udp' ||
-          reported.keeperDesiredEnabled !== desired.keeperDesiredEnabled))
+      reported.protocol === 'tcp' &&
+      (desired.protocol !== 'tcp' ||
+        reported.natmapDesiredEnabled !== desired.natmapDesiredEnabled)
+    ) {
+      return {
+        code: 'reported_channel_intent_conflict',
+        message: 'V2 reported channel intent does not match desired state',
+      };
+    }
+    if (
+      reported.protocol === 'udp' &&
+      (desired.protocol !== 'udp' ||
+        reported.keeperDesiredEnabled !== desired.keeperDesiredEnabled)
     ) {
       return {
         code: 'reported_channel_intent_conflict',
@@ -929,7 +1023,14 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     return null;
   }
 
-  /** 应用v2已报告的冲突。 */
+  /**
+   * 根据`mapping`、`reported`、`reportedAt`更新v2已报告的冲突。
+   * @param mapping - 用于v2已报告的冲突的领域对象，包含 `reportedRevision`、`syncStatus`、`lastErrorCode`、`lastErrorMessage` 字段。
+   * @param reported - 用于v2已报告的冲突的领域对象，包含 `appliedDesiredRevision` 字段。
+   * @param reportedAt - 用于过期、排序或租约判定的时间基准。
+   * @param code - 决定v2已报告的冲突内容、边界或目标的 `code` 值。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   */
   private applyV2ReportedConflict(
     mapping: NetworkPortForward,
     reported: NetworkReportedChannelV2 | undefined,
@@ -946,7 +1047,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     this.applyV2CurrentEndpoint(mapping, undefined, reportedAt);
   }
 
-  /** 应用v2候选项端点。 */
+  /**
+   * 根据`mapping`、`endpoint`、`reportedAt`更新v2候选项端点；当 `!endpoint` 成立时直接结束且不产生返回值。
+   * @param mapping - 用于v2候选项端点的领域对象，包含 `candidateValidatedAtWire`、`candidateValidatedAt`、`candidatePublicIpv4`、`candidatePublicPort` 字段。
+   * @param endpoint - 用于v2候选项端点的领域对象，包含 `validatedAt`、`publicIpv4`、`publicPort`、`observedAt` 字段。
+   * @param reportedAt - 用于过期、排序或租约判定的时间基准。
+   */
   private applyV2CandidateEndpoint(
     mapping: NetworkPortForward,
     endpoint: NetworkEndpointLeaseV2 | undefined,
@@ -955,9 +1061,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     if (!endpoint) {
       const candidateEvidenceTime =
         mapping.candidateValidatedAtWire ||
-        (mapping.candidateValidatedAt
-          ? new Date(mapping.candidateValidatedAt).toISOString()
-          : null);
+        (() => {
+          if (mapping.candidateValidatedAt) {
+            return new Date(mapping.candidateValidatedAt).toISOString();
+          }
+          return null;
+        })();
       if (
         candidateEvidenceTime &&
         compareNetworkV2Timestamps(reportedAt, candidateEvidenceTime) < 0
@@ -993,7 +1102,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     mapping.candidateValidatedAtWire = endpoint.validatedAt;
   }
 
-  /** 应用v2上次已观测的端点。 */
+  /**
+   * 根据`mapping`、`endpoint`更新v2上次已观测的端点；当 `(mapping.lastObservedValidatedAtWire || mapping.lastObservedV…` 成立时直接结束且不产生返回值。
+   * @param mapping - 用于v2上次已观测的端点的领域对象，包含 `lastObservedValidatedAtWire`、`lastObservedValidatedAt`、`lastObservedIpv4`、`lastObservedPort` 字段。
+   * @param endpoint - 用于v2上次已观测的端点的领域对象，包含 `validatedAt`、`publicIpv4`、`publicPort`、`observedAt` 字段。
+   */
   private applyV2LastObservedEndpoint(
     mapping: NetworkPortForward,
     endpoint: NetworkEndpointLeaseV2 | undefined,
@@ -1022,7 +1135,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     mapping.lastObservedValidatedAtWire = endpoint.validatedAt;
   }
 
-  /** 应用v2当前端点。 */
+  /**
+   * 根据`mapping`、`endpoint`、`reportedAt`更新v2当前端点；当 `!endpoint` 成立时直接结束且不产生返回值。
+   * @param mapping - 用于v2当前端点的领域对象，包含 `currentValidatedAtWire`、`currentValidatedAt`、`currentPublicIpv4`、`currentPublicPort` 字段。
+   * @param endpoint - 用于v2当前端点的领域对象，包含 `validatedAt`、`publicIpv4`、`publicPort`、`observedAt` 字段。
+   * @param reportedAt - 用于过期、排序或租约判定的时间基准。
+   */
   private applyV2CurrentEndpoint(
     mapping: NetworkPortForward,
     endpoint: NetworkEndpointLeaseV2 | undefined,
@@ -1031,9 +1149,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     if (!endpoint) {
       const currentEvidenceAt =
         mapping.currentValidatedAtWire ||
-        (mapping.currentValidatedAt
-          ? new Date(mapping.currentValidatedAt).toISOString()
-          : null);
+        (() => {
+          if (mapping.currentValidatedAt) {
+            return new Date(mapping.currentValidatedAt).toISOString();
+          }
+          return null;
+        })();
       if (
         !currentEvidenceAt ||
         compareNetworkV2Timestamps(reportedAt, currentEvidenceAt) >= 0
@@ -1066,7 +1187,10 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     mapping.currentEndpointIdentity = endpointLeaseIdentityV2(endpoint);
   }
 
-  /** 撤回v2当前端点。 */
+  /**
+   * 根据`mapping`处理撤回v2当前端点。
+   * @param mapping - 用于撤回v2当前端点的领域对象，包含 `currentPublicIpv4`、`currentPublicPort`、`currentObservedAt`、`currentValidatedAt` 字段。
+   */
   private withdrawV2CurrentEndpoint(mapping: NetworkPortForward): void {
     mapping.currentPublicIpv4 = null;
     mapping.currentPublicPort = null;
@@ -1077,7 +1201,10 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     mapping.currentEndpointIdentity = null;
   }
 
-  /** 更新上次已发布的基线。 */
+  /**
+   * 更新上次已发布的基线，并会更新 `mapping.lastPublishedPublicIpv4`、`mapping.lastPublishedPublicPort`、`mapping.lastPublishedAt`，在 `mapping.lastPublishedPublicIpv4 === mapping.currentPublicIpv4 && mapping.lastPubl…` 成立时直接结束。
+   * @param mapping - 用于LastPublishedBaseline的领域对象，包含 `currentPublicIpv4`、`currentPublicPort`、`lastPublishedPublicIpv4`、`lastPublishedPublicPort` 字段。
+   */
   private updateLastPublishedBaseline(mapping: NetworkPortForward): void {
     if (!mapping.currentPublicIpv4 || !mapping.currentPublicPort) return;
     if (
@@ -1088,12 +1215,20 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     }
     mapping.lastPublishedPublicIpv4 = mapping.currentPublicIpv4;
     mapping.lastPublishedPublicPort = mapping.currentPublicPort;
-    mapping.lastPublishedAt = mapping.currentValidatedAt
-      ? new KtDateTime(mapping.currentValidatedAt)
-      : new KtDateTime();
+    if (mapping.currentValidatedAt) {
+      mapping.lastPublishedAt = new KtDateTime(mapping.currentValidatedAt);
+    } else {
+      mapping.lastPublishedAt = new KtDateTime();
+    }
   }
 
-  /** 判断v2当前可发布的是否成立。 */
+  /**
+   * 根据`desired`、`reported`、`reportedAt`与当前约束判定v2当前可发布的；当 `reported.syncStatus !== 'synced' || !reported.routerPresent` 成立时返回 `false`。
+   * @param desired - 用于v2当前可发布的的领域对象，包含 `desiredPresence`、`protocol`、`natmapDesiredEnabled`、`keeperDesiredEnabled` 字段。
+   * @param reported - 用于v2当前可发布的的领域对象，包含 `currentEndpoint`、`lastObservedEndpoint`、`syncStatus`、`routerPresent` 字段。
+   * @param reportedAt - 用于过期、排序或租约判定的时间基准。
+   * @returns 满足v2当前可发布的约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isV2CurrentPublishable(
     desired: NetworkDesiredChannelV2,
     reported: NetworkReportedChannelV2,
@@ -1103,18 +1238,14 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
   } {
     const current = reported.currentEndpoint;
     const lastObserved = reported.lastObservedEndpoint;
-    if (
-      desired.desiredPresence !== 'present' ||
-      reported.syncStatus !== 'synced' ||
-      !reported.routerPresent ||
-      !current ||
-      !lastObserved ||
-      !this.sameV2EndpointTuple(current, lastObserved) ||
-      !this.isV2EndpointLeaseFresh(current, reportedAt) ||
-      !this.isV2EndpointLeaseFresh(lastObserved, reportedAt)
-    ) {
+    if (desired.desiredPresence !== 'present') return false;
+    if (reported.syncStatus !== 'synced' || !reported.routerPresent) {
       return false;
     }
+    if (!current || !lastObserved) return false;
+    if (!this.sameV2EndpointTuple(current, lastObserved)) return false;
+    if (!this.isV2EndpointLeaseFresh(current, reportedAt)) return false;
+    if (!this.isV2EndpointLeaseFresh(lastObserved, reportedAt)) return false;
     if (reported.protocol === 'tcp') {
       const dataPlaneReady =
         (reported.dnatPresent && reported.routePresent !== true) ||
@@ -1140,7 +1271,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 判断v2端点租约新鲜的是否成立。 */
+  /**
+   * 根据`endpoint`、`reportedAt`与当前约束判定v2端点租约新鲜的；从 `getTime` 读取v2端点租约新鲜的。
+   * @param endpoint - 用于v2端点租约新鲜的的领域对象，包含 `validatedAt`、`validUntil` 字段。
+   * @param reportedAt - 用于过期、排序或租约判定的时间基准。
+   * @returns 满足v2端点租约新鲜的约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isV2EndpointLeaseFresh(
     endpoint: NetworkEndpointLeaseV2,
     reportedAt: string,
@@ -1154,7 +1290,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 返回相同的v2端点元组。 */
+  /**
+   * 逐字段判定相同的v2端点元组。
+   * @param left - 用于逐字段判定相同的v2端点元组的领域对象，包含 `mechanism`、`publicIpv4`、`publicPort` 字段。
+   * @param right - 用于逐字段判定相同的v2端点元组的领域对象，包含 `mechanism`、`publicIpv4`、`publicPort` 字段。
+   * @returns 逐字段判定相同的v2端点元组。
+   */
   private sameV2EndpointTuple(
     left: NetworkEndpointLeaseV2,
     right: NetworkEndpointLeaseV2,
@@ -1166,14 +1307,23 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 读取当前端点元组。 */
+  /**
+   * 根据`mapping`处理当前端点元组；当 `mapping.currentPublicIpv4 && mapping.currentPublicPort` 成立时返回 ``${mapping.currentPublicIpv4}:${mapping.cur…`。
+   * @param mapping - 用于当前端点元组的领域对象，包含 `currentPublicIpv4`、`currentPublicPort` 字段。
+   * @returns 当前状态对应的当前端点元组，取值为 `''`。
+   */
   private currentEndpointTuple(mapping: NetworkPortForward): string {
-    return mapping.currentPublicIpv4 && mapping.currentPublicPort
-      ? `${mapping.currentPublicIpv4}:${mapping.currentPublicPort}`
-      : '';
+    if (mapping.currentPublicIpv4 && mapping.currentPublicPort) {
+      return `${mapping.currentPublicIpv4}:${mapping.currentPublicPort}`;
+    }
+    return '';
   }
 
-  /** 判断v2缺失已确认的是否成立。 */
+  /**
+   * 根据`reported`与当前约束判定v2缺失已确认的；当 `reported.desiredPresence !== 'absent' || reported.syncStatus…` 成立时返回 `false`。
+   * @param reported - 用于v2缺失已确认的的领域对象，包含 `desiredPresence`、`syncStatus`、`routerPresent`、`currentEndpoint` 字段。
+   * @returns 满足v2缺失已确认的约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isV2AbsenceConfirmed(reported: NetworkReportedChannelV2): boolean {
     if (
       reported.desiredPresence !== 'absent' ||
@@ -1199,7 +1349,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 返回阶段匹配的v2UDP历史。 */
+  /**
+   * 把匹配的v2UDP历史写入对应领域状态。
+   * @param manager - 保证把匹配的v2UDP历史写入对应领域状态读写处于同一事务中的实体管理器。
+   * @param mapping - 用于把匹配的v2UDP历史写入对应领域状态的领域对象，包含 `id` 字段。
+   * @returns 满足把匹配的v2UDP历史写入对应领域状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private async stageMatchingV2UdpHistory(
     manager: EntityManager,
     mapping: NetworkPortForward,
@@ -1230,7 +1385,13 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 返回阶段匹配的v2TCP历史。 */
+  /**
+   * 把匹配的v2TCP历史写入对应领域状态。
+   * @param manager - 保证把匹配的v2TCP历史写入对应领域状态读写处于同一事务中的实体管理器。
+   * @param mapping - 用于把匹配的v2TCP历史写入对应领域状态的领域对象，包含 `id` 字段。
+   * @param expectedEventId - 用于精确定位expected事件的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 满足把匹配的v2TCP历史写入对应领域状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private async stageMatchingV2TcpHistory(
     manager: EntityManager,
     mapping: NetworkPortForward,
@@ -1265,24 +1426,32 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 返回阶段v2UDP端口变更。 */
+  /**
+   * 把v2UDP端口变更写入对应领域状态。
+   * @param manager - 保证把v2UDP端口变更写入对应领域状态读写处于同一事务中的实体管理器。
+   * @param mapping - 用于把v2UDP端口变更写入对应领域状态的领域对象，包含 `id` 字段。
+   * @param currentHistory - 用于把v2UDP端口变更写入对应领域状态的领域对象，包含 `eventType`、`publicPort`、`eventId`、`occurredAt` 字段。
+   * @param previousHistory - 用于把v2UDP端口变更写入对应领域状态的领域对象，包含 `publicPort` 字段。
+   * @returns 满足把v2UDP端口变更写入对应领域状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private async stageV2UdpPortChange(
     manager: EntityManager,
     mapping: NetworkPortForward,
     currentHistory: NetworkEndpointHistory | undefined,
     previousHistory: NetworkEndpointHistory | undefined,
   ): Promise<boolean> {
+    if (!currentHistory) return false;
     if (
-      !currentHistory ||
-      (currentHistory.eventType !== 'changed' &&
-        currentHistory.eventType !== 'restored') ||
-      !this.isV2HistoryMatchingCurrent(mapping, currentHistory) ||
-      !this.isValidPort(previousHistory?.publicPort) ||
-      !this.isValidPort(currentHistory.publicPort) ||
-      previousHistory.publicPort === currentHistory.publicPort
+      currentHistory.eventType !== 'changed' &&
+      currentHistory.eventType !== 'restored'
     ) {
       return false;
     }
+    if (!this.isV2HistoryMatchingCurrent(mapping, currentHistory)) return false;
+    if (!previousHistory) return false;
+    if (!this.isValidPort(previousHistory.publicPort)) return false;
+    if (!this.isValidPort(currentHistory.publicPort)) return false;
+    if (previousHistory.publicPort === currentHistory.publicPort) return false;
     return (
       (await this.eventStager.stage(manager, {
         eventId: currentHistory.eventId,
@@ -1300,26 +1469,36 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 返回阶段v2TCP端点变更。 */
+  /**
+   * 把v2TCP端点变更写入对应领域状态。
+   * @param manager - 保证把v2TCP端点变更写入对应领域状态读写处于同一事务中的实体管理器。
+   * @param mapping - 用于把v2TCP端点变更写入对应领域状态的领域对象，包含 `id` 字段。
+   * @param currentHistory - 用于把v2TCP端点变更写入对应领域状态的领域对象，包含 `eventType`、`publicIpv4`、`publicPort`、`eventId` 字段。
+   * @param previousHistory - 用于把v2TCP端点变更写入对应领域状态的领域对象，包含 `eventType`、`publicIpv4`、`publicPort` 字段。
+   * @returns 满足把v2TCP端点变更写入对应领域状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private async stageV2TcpEndpointChange(
     manager: EntityManager,
     mapping: NetworkPortForward,
     currentHistory: NetworkEndpointHistory | undefined,
     previousHistory: NetworkEndpointHistory | undefined,
   ): Promise<boolean> {
+    if (!currentHistory || !previousHistory) return false;
     if (
-      !currentHistory ||
-      (currentHistory.eventType !== 'changed' &&
-        currentHistory.eventType !== 'restored') ||
-      !previousHistory ||
-      previousHistory.eventType === 'withdrawn' ||
-      !this.isV2HistoryMatchingCurrent(mapping, currentHistory) ||
-      isIP(previousHistory.publicIpv4 || '') !== 4 ||
-      isIP(currentHistory.publicIpv4 || '') !== 4 ||
-      !this.isValidPort(previousHistory.publicPort) ||
-      !this.isValidPort(currentHistory.publicPort) ||
-      (previousHistory.publicIpv4 === currentHistory.publicIpv4 &&
-        previousHistory.publicPort === currentHistory.publicPort)
+      currentHistory.eventType !== 'changed' &&
+      currentHistory.eventType !== 'restored'
+    ) {
+      return false;
+    }
+    if (previousHistory.eventType === 'withdrawn') return false;
+    if (!this.isV2HistoryMatchingCurrent(mapping, currentHistory)) return false;
+    if (isIP(previousHistory.publicIpv4 || '') !== 4) return false;
+    if (isIP(currentHistory.publicIpv4 || '') !== 4) return false;
+    if (!this.isValidPort(previousHistory.publicPort)) return false;
+    if (!this.isValidPort(currentHistory.publicPort)) return false;
+    if (
+      previousHistory.publicIpv4 === currentHistory.publicIpv4 &&
+      previousHistory.publicPort === currentHistory.publicPort
     ) {
       return false;
     }
@@ -1340,7 +1519,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 判断v2历史匹配的当前是否成立。 */
+  /**
+   * 根据`mapping`、`history`与当前约束判定v2历史匹配的当前。
+   * @param mapping - 用于v2历史匹配的当前的领域对象，包含 `reportedRevision`、`currentPublicIpv4`、`currentPublicPort`、`currentEndpointIdentity` 字段。
+   * @param history - 用于v2历史匹配的当前的领域对象，包含 `sourceRevision`、`publicIpv4`、`publicPort`、`endpointIdentity` 字段。
+   * @returns 满足v2历史匹配的当前约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isV2HistoryMatchingCurrent(
     mapping: NetworkPortForward,
     history: NetworkEndpointHistory,
@@ -1354,7 +1538,13 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 应用已报告的端点。 */
+  /**
+   * 根据`mapping`、`endpoint`、`lastObserved`更新已报告的端点；从 `getTime` 读取已报告的端点。
+   * @param mapping - 用于已报告的端点的领域对象，包含 `currentObservedAt`、`currentPublicIpv4`、`currentPublicPort`、`currentValidUntil` 字段。
+   * @param endpoint - 用于已报告的端点的领域对象，包含 `observedAt`、`publicIpv4`、`publicPort`、`validUntil` 字段。
+   * @param lastObserved - 用于已报告的端点的领域对象，包含 `observedAt`、`publicIpv4`、`publicPort` 字段。
+   * @param reportedAt - 用于过期、排序或租约判定的时间基准。
+   */
   private applyReportedEndpoints(
     mapping: NetworkPortForward,
     endpoint: NetworkReportedSnapshot['mappings'][number]['currentEndpoint'],
@@ -1397,7 +1587,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 应用状态。 */
+  /**
+   * 根据`status`更新状态；先通过 `assertAgentId` 校验输入边界。
+   * @param status - 用于状态的领域对象，包含 `agentId` 字段。
+   * @returns 状态。
+   */
   private async applyStatus(status: NetworkStatusSnapshot): Promise<{
     ddnsSourceChanged: boolean;
     visibleStateChanged: boolean;
@@ -1406,7 +1600,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     return await this.applyStatusSnapshot(status, true);
   }
 
-  /** 应用v2状态。 */
+  /**
+   * 根据`status`更新v2状态；先通过 `assertAgentId` 校验输入边界。
+   * @param status - 用于v2状态的领域对象，包含 `agentId`、`tcpNatmapCapable` 字段。
+   * @returns v2状态。
+   */
   private async applyV2Status(status: NetworkStatusSnapshotV2): Promise<{
     ddnsSourceChanged: boolean;
     visibleStateChanged: boolean;
@@ -1435,7 +1633,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
-  /** 应用状态快照。 */
+  /**
+   * 根据`status`、`ignoreAfterV2Capability`更新状态快照。
+   * @param status - 用于状态快照的领域对象，包含 `agentId`、`observedAt`、`startedAt`、`online` 字段。
+   * @param ignoreAfterV2Capability - 决定是否启用“ignoreAfterV2Capability”分支的布尔选项。
+   * @returns 状态快照。
+   */
   private async applyStatusSnapshot(
     status: Pick<
       NetworkStatusSnapshot,
@@ -1466,12 +1669,18 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
         return { ddnsSourceChanged: false, visibleStateChanged: false };
       }
       const observedAt = new Date(status.observedAt);
-      const incomingStartedAt = status.startedAt
-        ? new Date(status.startedAt)
-        : null;
-      const currentStartedAt = state.startedAt
-        ? new Date(state.startedAt)
-        : null;
+      const incomingStartedAt = (() => {
+        if (status.startedAt) {
+          return new Date(status.startedAt);
+        }
+        return null;
+      })();
+      const currentStartedAt = (() => {
+        if (state.startedAt) {
+          return new Date(state.startedAt);
+        }
+        return null;
+      })();
       if (
         incomingStartedAt &&
         currentStartedAt &&
@@ -1496,18 +1705,26 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       const publicIpv6Before = state.currentPublicIpv6 || null;
       state.online = status.online;
       state.version = status.version || null;
-      state.startedAt = incomingStartedAt
-        ? new KtDateTime(incomingStartedAt)
-        : null;
+      if (incomingStartedAt) {
+        state.startedAt = new KtDateTime(incomingStartedAt);
+      } else {
+        state.startedAt = null;
+      }
       if (!isSameSessionWill) {
         state.lastHeartbeatAt = new KtDateTime(observedAt);
       }
       state.lastMqttErrorCode = status.errorCode || null;
       state.lastMqttErrorMessage = status.errorMessage || null;
-      state.currentPublicIpv6 =
-        status.online && status.publicIpv6 ? status.publicIpv6 : null;
-      state.currentIpv6ObservedAt =
-        status.online && status.publicIpv6 ? new KtDateTime(observedAt) : null;
+      if (status.online && status.publicIpv6) {
+        state.currentPublicIpv6 = status.publicIpv6;
+      } else {
+        state.currentPublicIpv6 = null;
+      }
+      if (status.online && status.publicIpv6) {
+        state.currentIpv6ObservedAt = new KtDateTime(observedAt);
+      } else {
+        state.currentIpv6ObservedAt = null;
+      }
       if (
         this.statusPersistedStateFingerprint(state) !== persistedStateBefore
       ) {
@@ -1522,12 +1739,19 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 请求v2降级。 */
+  /**
+   * 请求v2降级；等待 `Promise.resolve` 返回后继续处理v2降级。
+   * @returns 返回v2降级；等待 `Promise.resolve` 返回后继续处理v2降级。
+   */
   requestV2Downgrade(): Promise<boolean> {
     return Promise.resolve(false);
   }
 
-  /** 追加端点事件。 */
+  /**
+   * 根据`event`更新端点事件；先通过 `assertAgentId` 校验输入边界。
+   * @param event - 触发端点事件的领域事件，包含 `agentId`、`revision`、`mappingId`、`eventId` 字段。
+   * @returns 端点事件。
+   */
   private async appendEndpointEvent(
     event: NetworkEndpointEvent,
   ): Promise<{ changed: boolean; deliveryAccepted: boolean }> {
@@ -1598,7 +1822,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 追加端点事件v2。 */
+  /**
+   * 根据`event`更新端点事件v2；先通过 `assertAgentId` 校验输入边界。
+   * @param event - 触发端点事件v2的领域事件，包含 `agentId`、`channelId`、`groupId`、`protocol` 字段。
+   * @returns 端点事件v2。
+   */
   private async appendEndpointEventV2(
     event: NetworkEndpointEventV2,
   ): Promise<{ changed: boolean; deliveryAccepted: boolean }> {
@@ -1638,41 +1866,56 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       }
       const isTcpRestored =
         event.protocol === 'tcp' && event.type === 'restored';
-      const immediatePreviousHistory = isTcpRestored
-        ? null
-        : await repository.findOne({
-            lock: { mode: 'pessimistic_read' },
-            order: { occurredAt: 'DESC', id: 'DESC' },
-            where: {
-              mappingId: event.channelId,
-              mechanism: event.mechanism,
-            },
-          });
-      const previousHistory =
-        event.type === 'restored' && !isTcpRestored
-          ? immediatePreviousHistory?.eventType === 'withdrawn'
-            ? await repository.findOne({
-                lock: { mode: 'pessimistic_read' },
-                order: { occurredAt: 'DESC', id: 'DESC' },
-                where: {
-                  eventType: Not('withdrawn'),
-                  mappingId: event.channelId,
-                  mechanism: event.mechanism,
-                },
-              })
-            : null
-          : immediatePreviousHistory;
+      const immediatePreviousHistory = await (async () => {
+        if (isTcpRestored) {
+          return null;
+        }
+        return await repository.findOne({
+          lock: { mode: 'pessimistic_read' },
+          order: { occurredAt: 'DESC', id: 'DESC' },
+          where: {
+            mappingId: event.channelId,
+            mechanism: event.mechanism,
+          },
+        });
+      })();
+      const previousHistory = await (async () => {
+        if (event.type === 'restored' && !isTcpRestored) {
+          if (immediatePreviousHistory?.eventType === 'withdrawn') {
+            return await repository.findOne({
+              lock: { mode: 'pessimistic_read' },
+              order: { occurredAt: 'DESC', id: 'DESC' },
+              where: {
+                eventType: Not('withdrawn'),
+                mappingId: event.channelId,
+                mechanism: event.mechanism,
+              },
+            });
+          }
+          return null;
+        }
+        return immediatePreviousHistory;
+      })();
       const observedAt = event.endpoint?.observedAt || event.occurredAt;
       const history = repository.create({
-        endpointValidatedAt: event.endpoint
-          ? new KtDateTime(event.endpoint.validatedAt)
-          : null,
-        endpointValidUntil: event.endpoint
-          ? new KtDateTime(event.endpoint.validUntil)
-          : null,
-        endpointIdentity: event.endpoint
-          ? endpointLeaseIdentityV2(event.endpoint)
-          : null,
+        endpointValidatedAt: (() => {
+          if (event.endpoint) {
+            return new KtDateTime(event.endpoint.validatedAt);
+          }
+          return null;
+        })(),
+        endpointValidUntil: (() => {
+          if (event.endpoint) {
+            return new KtDateTime(event.endpoint.validUntil);
+          }
+          return null;
+        })(),
+        endpointIdentity: (() => {
+          if (event.endpoint) {
+            return endpointLeaseIdentityV2(event.endpoint);
+          }
+          return null;
+        })(),
         eventId: event.eventId,
         eventType: event.type,
         firstObservedAt: new KtDateTime(observedAt),
@@ -1687,30 +1930,32 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
       });
       try {
         await repository.save(history);
-        const deliveryAccepted = this.canStageV2EventAgainstCurrent(
-          mapping,
-          event,
-        )
-          ? event.protocol === 'tcp'
-            ? event.type === 'restored'
-              ? await this.stageMatchingV2TcpHistory(
+        const deliveryAccepted = await (async () => {
+          if (this.canStageV2EventAgainstCurrent(mapping, event)) {
+            if (event.protocol === 'tcp') {
+              if (event.type === 'restored') {
+                return await this.stageMatchingV2TcpHistory(
                   manager,
                   mapping,
                   event.eventId,
-                )
-              : await this.stageV2TcpEndpointChange(
-                  manager,
-                  mapping,
-                  history,
-                  previousHistory || undefined,
-                )
-            : await this.stageV2UdpPortChange(
+                );
+              }
+              return await this.stageV2TcpEndpointChange(
                 manager,
                 mapping,
                 history,
                 previousHistory || undefined,
-              )
-          : false;
+              );
+            }
+            return await this.stageV2UdpPortChange(
+              manager,
+              mapping,
+              history,
+              previousHistory || undefined,
+            );
+          }
+          return false;
+        })();
         return { changed: true, deliveryAccepted };
       } catch (error) {
         if (!this.isDuplicateKeyError(error)) throw error;
@@ -1719,13 +1964,22 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 判断是否允许阶段v2事件相对于当前。 */
+  /**
+   * 仅允许机制、版本、当前端点和租约均与映射一致的 V2 端点事件进入历史暂存。
+   * @param mapping - 用于仅允许机制、版本、当前端点和租约均与映射一致的 V2 端点事件进入历史暂存的领域对象，包含 `reportedRevision`、`currentPublicIpv4`、`currentPublicPort`、`currentEndpointIdentity` 字段。
+   * @param event - 触发仅允许机制、版本、当前端点和租约均与映射一致的 V2 端点事件进入历史暂存的领域事件，包含 `protocol`、`mechanism`、`type`、`endpoint` 字段。
+   * @returns 满足阶段V2事件Against约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private canStageV2EventAgainstCurrent(
     mapping: NetworkPortForward,
     event: NetworkEndpointEventV2,
   ): boolean {
-    const expectedMechanism =
-      event.protocol === 'tcp' ? 'tcp_natmap' : 'udp_stun';
+    const expectedMechanism = (() => {
+      if (event.protocol === 'tcp') {
+        return 'tcp_natmap';
+      }
+      return 'udp_stun';
+    })();
     return (
       event.mechanism === expectedMechanism &&
       (event.type === 'changed' || event.type === 'restored') &&
@@ -1740,7 +1994,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 判断是否应当阶段端口变更。 */
+  /**
+   * 仅在端点变更事件携带合法端口，且上一条历史不是同端口有效记录时暂存端口变化。
+   * @param event - 触发仅在端点变更事件携带合法端口，且上一条历史不是同端口有效记录时暂存端口变化的领域事件，包含 `endpoint`、`type` 字段。
+   * @param previousHistory - 用于仅在端点变更事件携带合法端口，且上一条历史不是同端口有效记录时暂存端口变化的领域对象，包含 `publicPort`、`eventType` 字段。
+   * @returns 满足阶段端口Change约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private shouldStagePortChange(
     event: NetworkEndpointEvent,
     previousHistory: NetworkEndpointHistory | null,
@@ -1756,7 +2015,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 判断有效端口是否成立。 */
+  /**
+   * 根据`value`与当前约束判定有效端口。
+   * @param value - 待判定是否满足有效端口约束的候选值。
+   * @returns 满足有效端口约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isValidPort(value: unknown): value is number {
     return (
       typeof value === 'number' &&
@@ -1766,7 +2029,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 计算v2已报告的已持久化的映射指纹。 */
+  /**
+   * 根据`mapping`处理v2已报告的已持久化的映射指纹。
+   * @param mapping - 用于v2已报告的已持久化的映射指纹的领域对象，包含 `activeGroupProtocolKey`、`activeKey`、`candidateObservedAt`、`candidatePublicIpv4` 字段。
+   * @returns v2已报告的已持久化的映射指纹。
+   */
   private v2ReportedPersistedMappingFingerprint(
     mapping: NetworkPortForward,
   ): string {
@@ -1809,7 +2076,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /** 计算v2已报告的刷新映射指纹。 */
+  /**
+   * 根据`mapping`处理v2已报告的刷新映射指纹。
+   * @param mapping - 用于v2已报告的刷新映射指纹的领域对象，包含 `activeGroupProtocolKey`、`activeKey`、`candidatePublicIpv4`、`candidatePublicPort` 字段。
+   * @returns v2已报告的刷新映射指纹。
+   */
   private v2ReportedRefreshMappingFingerprint(
     mapping: NetworkPortForward,
   ): string {
@@ -1836,7 +2107,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /** 计算已报告的已持久化的映射状态指纹。 */
+  /**
+   * 根据`mapping`处理已报告的已持久化的映射状态指纹。
+   * @param mapping - 用于已报告的已持久化的映射状态指纹的领域对象，包含 `activeKey`、`currentObservedAt`、`currentPublicIpv4`、`currentPublicPort` 字段。
+   * @returns 已报告的已持久化的映射状态指纹。
+   */
   private reportedPersistedMappingStateFingerprint(
     mapping: NetworkPortForward,
   ): string {
@@ -1858,7 +2133,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /** 计算已报告的刷新映射状态指纹。 */
+  /**
+   * 根据`mapping`处理已报告的刷新映射状态指纹。
+   * @param mapping - 用于已报告的刷新映射状态指纹的领域对象，包含 `activeKey`、`currentPublicIpv4`、`currentPublicPort`、`isDeleted` 字段。
+   * @returns 已报告的刷新映射状态指纹。
+   */
   private reportedRefreshMappingStateFingerprint(
     mapping: NetworkPortForward,
   ): string {
@@ -1877,7 +2156,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /** 计算已报告的Agent状态指纹。 */
+  /**
+   * 根据`state`处理已报告的Agent状态指纹。
+   * @param state - 用于已报告的Agent状态指纹的领域对象，包含 `appliedRevision`、`appliedSchemaVersion`、`desiredIssuedAt`、`desiredRevision` 字段。
+   * @returns 已报告的Agent状态指纹。
+   */
   private reportedAgentStateFingerprint(state: NetworkAgentState): string {
     return JSON.stringify([
       state.appliedRevision,
@@ -1889,7 +2172,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /** 计算状态已持久化的状态指纹。 */
+  /**
+   * 根据`state`处理状态已持久化的状态指纹。
+   * @param state - 用于状态已持久化的状态指纹的领域对象，包含 `lastHeartbeatAt`、`currentIpv6ObservedAt`、`currentPublicIpv6`、`lastMqttErrorCode` 字段。
+   * @returns 状态已持久化的状态指纹。
+   */
   private statusPersistedStateFingerprint(state: NetworkAgentState): string {
     return JSON.stringify([
       state.lastHeartbeatAt,
@@ -1903,7 +2190,11 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /** 计算状态刷新状态指纹。 */
+  /**
+   * 根据`state`处理状态刷新状态指纹。
+   * @param state - 用于状态刷新状态指纹的领域对象，包含 `lastMqttErrorCode`、`lastMqttErrorMessage`、`currentPublicIpv6`、`online` 字段。
+   * @returns 状态刷新状态指纹。
+   */
   private statusRefreshStateFingerprint(state: NetworkAgentState): string {
     return JSON.stringify([
       state.lastMqttErrorCode,
@@ -1915,21 +2206,31 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     ]);
   }
 
-  /** 断言Agent标识。 */
+  /**
+   * 校验`agentId`是否满足Agent标识约束，并拒绝不合法输入。
+   * @param agentId - 用于精确定位Agent的标识。
+   * @throws 当 `agentId !== this.agentId()` 成立时拒绝当前输入并抛出 `NetworkMessageValidationError`。
+   */
   private assertAgentId(agentId: string): void {
     if (agentId !== this.agentId()) {
       throw new NetworkMessageValidationError('Unexpected network Agent ID');
     }
   }
 
-  /** 返回Agent标识。 */
+  /**
+   * 从运行时配置读取网络 Agent 的稳定标识；缺失或非法配置按调用处约束拒绝。
+   * @returns 返回 `this.configService.get<string>('NETWORK_AGENT_ID')` 的可用值；为空时回退到 `DEFAULT_AGENT_ID`。
+   */
   private agentId(): string {
     return (
       this.configService.get<string>('NETWORK_AGENT_ID') || DEFAULT_AGENT_ID
     );
   }
 
-  /** 激活v2期望的Schema。 */
+  /**
+   * 按当前运行态启动激活v2期望的Schema。
+   * @returns 满足激活v2期望的Schema约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private async activateV2DesiredSchema(): Promise<boolean> {
     if (!this.tcpReleasePolicy().mayAutomaticallyActivateV2()) return false;
     return await this.dataSource.transaction(async (manager) => {
@@ -1952,7 +2253,10 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 返回TCP发布策略。 */
+  /**
+   * 惰性创建并复用TCP发布策略。
+   * @returns 规范化后的惰性创建并复用TCP发布策略；主值为空时采用 `new NetworkTcpReleasePolicyService(this.configServi…` 兜底。
+   */
   private tcpReleasePolicy(): NetworkTcpReleasePolicyService {
     return (
       this.releasePolicy ||
@@ -1960,7 +2264,12 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** 返回主题。 */
+  /**
+   * 把协议版本、当前 Agent 标识和消息类别编码为统一的网络管理 MQTT 主题。
+   * @param schemaVersion - 写入主题版本段的协议版本，仅允许版本 1 或 2。
+   * @param kind - 写入主题末段的消息类别，用于区分期望态、事件、上报态与状态。
+   * @returns 当前 Agent 在指定协议版本和消息类别下的完整 MQTT 主题。
+   */
   private topic(
     schemaVersion: 1 | 2,
     kind: 'desired' | 'events' | 'reported' | 'status',
@@ -1968,17 +2277,23 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     return `kt/network/v${schemaVersion}/agents/${this.agentId()}/${kind}`;
   }
 
-  /** 重试毫秒。 */
+  /**
+   * 根据当前运行态处理毫秒；当 `Number.isFinite(configured) && configured >= 1000` 成立时返回 `Math.min(configured, 60_000)`。
+   * @returns 毫秒。
+   */
   private retryMs(): number {
     const configured = Number(
       this.configService.get<string>('NETWORK_AGENT_MQTT_RETRY_MS'),
     );
-    return Number.isFinite(configured) && configured >= 1000
-      ? Math.min(configured, 60_000)
-      : DEFAULT_RETRY_MS;
+    if (Number.isFinite(configured) && configured >= 1000) {
+      return Math.min(configured, 60_000);
+    }
+    return DEFAULT_RETRY_MS;
   }
 
-  /** 恢复客户端。 */
+  /**
+   * 根据当前运行态处理客户端。
+   */
   private recoverClient(): void {
     const client = this.client;
     if (this.shuttingDown || this.recoveryInProgress || !client) return;
@@ -1992,14 +2307,21 @@ export class NetworkAgentMqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 处理客户端错误。 */
+  /**
+   * 根据`error`处理客户端错误。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+   */
   private handleClientError(error: Error): void {
     if (this.shuttingDown) return;
     this.logger.warn(`Network Agent MQTT client error (${error.name})`);
     this.recoverClient();
   }
 
-  /** 判断重复键错误是否成立。 */
+  /**
+   * 仅把 MySQL `ER_DUP_ENTRY` 或错误号 1062 识别为唯一键冲突，其他错误一律返回 `false`。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+   * @returns 满足Duplicate键错误约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const record = error as { code?: unknown; errno?: unknown };

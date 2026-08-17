@@ -9,7 +9,8 @@ import {
 @Controller()
 export class AppController {
   /**
-   * 重定向到Swagger文档。
+   * 将应用根路径请求重定向到 Swagger 文档地址。
+   * @returns 包含 `url` 字段的将应用根路径请求重定向到 Swagger 文档地址。
    */
   @Get()
   @Redirect('/api#/', 301)

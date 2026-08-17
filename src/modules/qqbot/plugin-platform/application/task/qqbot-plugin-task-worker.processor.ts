@@ -61,8 +61,9 @@ export class QqbotPluginTaskWorkerProcessor
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param job - job 输入；使用 `name`、`data`、`id` 字段生成结果。
+   * 根据`job`处理子进程Job；当 `job.name && job.name !== QQBOT_PLUGIN_TASK_JOB_NAME` 成立时返回 `{ ok: false, reason: 'unknown-job', skipped…`。
+   * @param job - 用于子进程Job的领域对象，包含 `name`、`data`、`id` 字段。
+   * @returns 子进程Job。
    */
   private async processJob(job: Job<QqbotPluginTaskJobData>) {
     if (job.name && job.name !== QQBOT_PLUGIN_TASK_JOB_NAME) {
@@ -117,11 +118,13 @@ export class QqbotPluginTaskWorkerProcessor
   }
 
   /**
-   * 执行Task Run。
-   * @param task - task 输入；使用 `installationId`、`pluginId`、`id`、`taskKey` 字段生成结果。
-   * @param jobId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
-   * @param triggerType - triggerType 输入；影响 executeTaskRun 的返回值。
-   * @param input - input 输入；驱动 `Object.keys()` 的 插件平台步骤。
+   * 根据`task`、`jobId`、`triggerType`处理任务；把变更持久化到当前存储（`runRepository.save`）。
+   * @param task - 用于任务的领域对象，包含 `installationId`、`pluginId`、`id`、`taskKey` 字段。
+   * @param jobId - 用于精确定位job的标识。
+   * @param triggerType - 决定任务内容、边界或目标的 `triggerType` 值。
+   * @param input - 用于任务的结构化输入。
+   * @returns 包含 `ok`、`runId`、`status` 字段的任务。
+   * @throws 当 `platformService.executeTask` 或 `startedAt.getTime` 调用失败时重新抛出该入口捕获且决定公开的原异常。
    */
   private async executeTaskRun(
     task: QqbotPluginTask,
@@ -187,7 +190,12 @@ export class QqbotPluginTaskWorkerProcessor
       const durationMs = Date.now() - startedAt.getTime();
       const finishedAt = new Date();
       const errorMessage =
-        error instanceof Error ? error.message : `${error || ''}`;
+        (() => {
+          if (error instanceof Error) {
+            return error.message;
+          }
+          return `${error || ''}`;
+        })();
       const saved = await this.finishRun(run, {
         durationMs,
         errorMessage,
@@ -205,11 +213,12 @@ export class QqbotPluginTaskWorkerProcessor
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param task - task 输入；使用 `installationId`、`pluginId`、`id`、`taskKey` 字段生成结果。
-   * @param jobId - 插件平台 ID；定位本次读取、更新、删除或关联的插件平台。
-   * @param triggerType - triggerType 输入；影响 writeSkippedRun 的返回值。
-   * @param reason - reason 输入；影响 writeSkippedRun 的返回值。
+   * 根据`task`、`jobId`、`triggerType`更新Skipped；把变更持久化到当前存储（`runRepository.save`）。
+   * @param task - 用于Skipped的领域对象，包含 `installationId`、`pluginId`、`id`、`taskKey` 字段。
+   * @param jobId - 用于精确定位job的标识。
+   * @param triggerType - 决定Skipped内容、边界或目标的 `triggerType` 值。
+   * @param reason - 决定Skipped内容、边界或目标的 `reason` 值。
+   * @returns 包含 `ok`、`reason`、`runId`、`status` 字段的Skipped。
    */
   private async writeSkippedRun(
     task: QqbotPluginTask,
@@ -246,9 +255,10 @@ export class QqbotPluginTaskWorkerProcessor
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param run - run 输入；影响 finishRun 的返回值。
-   * @param patch - patch 输入；影响 finishRun 的返回值。
+   * 将任务运行记录与终态补丁合并后持久化，并返回更新后的运行记录。
+   * @param run - 决定完成状态内容、边界或目标的 `run` 值。
+   * @param patch - 决定完成状态内容、边界或目标的 `patch` 值。
+   * @returns 完成状态。
    */
   private async finishRun(
     run: QqbotPluginTaskRun,
@@ -261,10 +271,10 @@ export class QqbotPluginTaskWorkerProcessor
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param task - task 输入；使用 `id`、`enabled` 字段生成结果。
-   * @param run - run 输入；使用 `id` 字段生成结果。
-   * @param result - result 输入；使用 `durationMs`、`errorMessage`、`finishedAt`、`status` 字段生成结果。
+   * 根据`task`、`run`、`result`处理完成状态任务；把变更持久化到当前存储（`taskRepository.update`）。
+   * @param task - 用于完成状态任务的领域对象，包含 `id`、`enabled` 字段。
+   * @param run - 用于完成状态任务的领域对象，包含 `id` 字段。
+   * @param result - 用于完成状态任务的领域对象，包含 `durationMs`、`errorMessage`、`finishedAt`、`status` 字段。
    */
   private async finishTask(
     task: QqbotPluginTask,
@@ -286,18 +296,23 @@ export class QqbotPluginTaskWorkerProcessor
         lastStatus: result.status,
         nextRunAt: this.resolveNextRunAt(task),
         runtimeStatus:
-          result.status === 'failed'
-            ? 'failed'
-            : task.enabled
-              ? 'scheduled'
-              : 'idle',
+          (() => {
+            if (result.status === 'failed') {
+              return 'failed';
+            }
+            if (task.enabled) {
+              return 'scheduled';
+            }
+            return 'idle';
+          })(),
       },
     );
   }
 
   /**
-   * 解析Next Run At。
-   * @param task - task 输入；使用 `enabled`、`cronExpression` 字段生成结果。
+   * 从`task`解析下次运行时间。
+   * @param task - 用于下次运行时间的领域对象，包含 `enabled`、`cronExpression` 字段。
+   * @returns 下次运行时间；无法解析或未命中时为 `null`。
    */
   private resolveNextRunAt(task: QqbotPluginTask) {
     if (!task.enabled || !task.cronExpression) return null;
@@ -305,8 +320,9 @@ export class QqbotPluginTaskWorkerProcessor
   }
 
   /**
-   * 判断 QQBot 插件平台条件。
-   * @param taskId - 插件任务 ID；定位本次读取、更新、删除或关联的插件任务。
+   * 根据`taskId`与当前约束判定安装记录启用状态；把变更持久化到当前存储（`taskRepository.createQueryBuilder`）。
+   * @param taskId - 用于精确定位任务的标识。
+   * @returns 满足安装记录启用状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private async isInstallationEnabled(taskId: string) {
     const count = await this.taskRepository
@@ -323,12 +339,14 @@ export class QqbotPluginTaskWorkerProcessor
   }
 
   /**
-   * 查询 QQBot 插件平台数据。
-   * @param output - output 输入；驱动 `Object.keys()` 的 插件平台步骤。
+   * 按`output`读取OutputKeys；当 `output && typeof output === 'object'` 成立时返回 `Object.keys(output as Record<string, unknow…`。
+   * @param output - 决定OutputKeys内容、边界或目标的 `output` 值。
+   * @returns 按输入顺序得到的OutputKeys列表；没有匹配项时为空数组。
    */
   private getOutputKeys(output: unknown) {
-    return output && typeof output === 'object'
-      ? Object.keys(output as Record<string, unknown>).sort()
-      : [];
+    if (output && typeof output === 'object') {
+      return Object.keys(output as Record<string, unknown>).sort();
+    }
+    return [];
   }
 }

@@ -32,8 +32,8 @@ export class QqbotRuleEngineService {
   ) {}
 
   /**
-   * 处理Message。
-   * @param message - message 输入；使用 `channelId`、`rawEvent`、`selfId`、`targetId` 字段生成结果。
+   * 通过 `permissionService.isBlocked` 判断输入是否满足函数约束。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `channelId`、`rawEvent`、`selfId`、`targetId` 字段。
    */
   async handleMessage(message: QqbotNormalizedMessage) {
     if (await this.permissionService.isBlocked(message)) return;
@@ -57,9 +57,12 @@ export class QqbotRuleEngineService {
       try {
         await this.sendService.sendText({
           channelId: message.channelId,
-          guildId: message.rawEvent.guild_id
-            ? `${message.rawEvent.guild_id}`
-            : undefined,
+          guildId: (() => {
+            if (message.rawEvent.guild_id) {
+              return `${message.rawEvent.guild_id}`;
+            }
+            return undefined;
+          })(),
           message: rule.replyContent,
           selfId: message.selfId,
           targetId: message.targetId,
@@ -86,7 +89,12 @@ export class QqbotRuleEngineService {
     });
   }
 
-  /** 决定自动化。 */
+  /**
+   * 根据`automationKind`、`message`处理决定自动化；从 `getBehaviorStage` 读取决定自动化。
+   * @param automationKind - 决定自动化内容、边界或目标的 `automationKind` 值。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   * @returns 规范化后的决定自动化；主值为空时采用 `{ allowed: true }` 兜底。
+   */
   private decideAutomation(
     automationKind: NapcatAutomationKind,
     message: QqbotNormalizedMessage,
@@ -99,17 +107,28 @@ export class QqbotRuleEngineService {
     );
   }
 
-  /** 读取行为阶段。 */
+  /**
+   * 按`message`读取行为阶段；当 `this.isBehaviorStage(stage)` 成立时返回 `stage`。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `rawEvent` 字段。
+   * @returns 行为阶段；没有可用结果或提前结束时为 `undefined`。
+   */
   private getBehaviorStage(
     message: QqbotNormalizedMessage,
   ): NapcatAutoCapabilityStage | undefined {
     const stage =
       message.rawEvent.napcatBehaviorStage ||
       message.rawEvent.napcat_behavior_stage;
-    return this.isBehaviorStage(stage) ? stage : undefined;
+    if (this.isBehaviorStage(stage)) {
+      return stage;
+    }
+    return undefined;
   }
 
-  /** 判断行为阶段是否成立。 */
+  /**
+   * 根据`stage`与当前约束判定行为阶段。
+   * @param stage - 决定行为阶段内容、边界或目标的 `stage` 值。
+   * @returns 满足行为阶段约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isBehaviorStage(stage: unknown): stage is NapcatAutoCapabilityStage {
     return (
       stage === 'automation' ||

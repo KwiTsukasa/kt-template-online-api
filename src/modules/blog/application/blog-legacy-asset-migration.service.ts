@@ -138,7 +138,11 @@ export class BlogLegacyAssetMigrationUsageError extends Error {}
 
 @Injectable()
 export class BlogLegacyAssetManifestFileStore implements BlogLegacyAssetMigrationManifestStore {
-  /** 断言路径。 */
+  /**
+   * 校验`path`是否满足路径约束，并拒绝不合法输入。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @throws 当 `!target.includes(workspaceSegment) || !target.endsWith('.json') || base…` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+   */
   assertPath(path: string): void {
     const target = resolve(path);
     const workspaceSegment = `${sep}.kt-workspace${sep}`;
@@ -153,13 +157,22 @@ export class BlogLegacyAssetManifestFileStore implements BlogLegacyAssetMigratio
     }
   }
 
-  /** 返回存在。 */
+  /**
+   * 根据`path`处理在路径安全校验后检查存在；先通过 `assertPath` 校验输入边界。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @returns 在路径安全校验后检查存在。
+   */
   exists(path: string): boolean {
     this.assertPath(path);
     return existsSync(resolve(path));
   }
 
-  /** 读取博客旧版资源清单文件记录。 */
+  /**
+   * 按`path`读取博客旧版资源清单文件记录；先通过 `assertPath` 校验输入边界。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @returns 博客旧版资源清单文件记录。
+   * @throws 当 `JSON.parse` 或 `readFile` 调用失败时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+   */
   async read(path: string): Promise<BlogLegacyAssetMigrationManifest> {
     this.assertPath(path);
     let manifest: unknown;
@@ -172,7 +185,12 @@ export class BlogLegacyAssetManifestFileStore implements BlogLegacyAssetMigratio
     return manifest;
   }
 
-  /** 写入博客旧版资源清单文件记录。 */
+  /**
+   * 根据`path`、`manifest`更新博客旧版资源清单文件记录；把变更持久化到当前存储（`writeFile`）。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @param manifest - 决定博客旧版资源清单文件记录内容、边界或目标的 `manifest` 值。
+   * @throws 当 `writeFile` 或 `JSON.stringify` 调用失败时重新抛出该入口捕获且决定公开的原异常；当 `writeError === undefined` 成立时重新抛出该入口捕获且决定公开的原异常。
+   */
   async write(
     path: string,
     manifest: BlogLegacyAssetMigrationManifest,
@@ -212,7 +230,11 @@ export class BlogLegacyAssetHttpFetcher {
     private readonly request: BlogLegacyAssetRawHttpRequest,
   ) {}
 
-  /** 判断允许的来源URL是否成立。 */
+  /**
+   * 根据`value`与当前约束判定允许的来源URL。
+   * @param value - 待判定是否满足允许的来源URL约束的候选值。
+   * @returns 满足允许的来源URL约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   isAllowedSourceUrl(value: string): boolean {
     try {
       const url = new URL(value);
@@ -222,7 +244,16 @@ export class BlogLegacyAssetHttpFetcher {
     }
   }
 
-  /** 获取博客旧版资源HTTP获取器记录。 */
+  /**
+   * 按`value`读取博客旧版资源HTTP获取器记录；从受控资源来源加载所需数据（`request`）。
+   * @param value - 参与博客旧版资源HTTP获取器记录比较、格式化或输出的候选值。
+   * @returns 包含 `buffer`、`finalUrl`、`mimeType` 字段的博客旧版资源HTTP获取器记录。
+   * @throws 当 `dnsBudget <= 0` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；当 `requestBudget <= 0` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+   *   当 `redirects >= maxRedirects` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；当 `!location` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+   *   当 `response.status < 200 || response.status >= 300` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+   *   当 `(!Number.isFinite(contentLength) && contentLength !== 0) || contentLeng…` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+   *   当 `!SAFE_MIME_TYPES.has(mimeType)` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+   */
   async fetch(value: string): Promise<BlogLegacyAssetFetchedObject> {
     const maxRedirects = this.readPositiveInteger(
       'BLOG_ASSET_MIGRATION_MAX_REDIRECTS',
@@ -311,7 +342,12 @@ export class BlogLegacyAssetHttpFetcher {
     }
   }
 
-  /** 解析允许的URL。 */
+  /**
+   * 解析旧资源 URL 并校验精确协议、主机与端口白名单；格式或范围不合法时拒绝迁移。
+   * @param value - 待转换为允许的URL的原始值。
+   * @returns 允许的URL。
+   * @throws 输入无法构造为 URL 时抛出格式错误；URL 不满足精确协议、主机与端口白名单时抛出范围错误。
+   */
   private parseAllowedUrl(value: string): URL {
     let url: URL;
     try {
@@ -327,7 +363,11 @@ export class BlogLegacyAssetHttpFetcher {
     return url;
   }
 
-  /** 判断允许的URL是否成立。 */
+  /**
+   * 根据`url`与当前约束判定允许的URL；从 `readAllowedHosts` 读取允许的URL。
+   * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+   * @returns 满足允许的URL约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isAllowedUrl(url: URL): boolean {
     if (!['http:', 'https:'].includes(url.protocol)) return false;
     if (url.username || url.password || url.hash) return false;
@@ -335,7 +375,11 @@ export class BlogLegacyAssetHttpFetcher {
     return allowedHosts.has(url.host.toLowerCase());
   }
 
-  /** 读取允许的主机。 */
+  /**
+   * 按当前运行态读取允许的主机；从 `configService.get` 读取允许的主机。
+   * @returns 去重后的允许的主机集合；没有输入项时为空集合。
+   * @throws 当 `!values.length` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+   */
   private readAllowedHosts(): ReadonlySet<string> {
     const raw = `${
       this.configService.get('BLOG_ASSET_MIGRATION_ALLOWED_HOSTS') || ''
@@ -350,14 +394,17 @@ export class BlogLegacyAssetHttpFetcher {
       );
     }
     const normalized = values.map((value) => {
-      if (
-        value.includes('://') ||
-        value.includes('/') ||
-        value.includes('?') ||
-        value.includes('#') ||
-        value.includes('@') ||
-        value.includes('*')
-      ) {
+      if (value.includes('://') || value.includes('/')) {
+        throw new BlogLegacyAssetMigrationUsageError(
+          'BLOG_ASSET_MIGRATION_ALLOWED_HOSTS 只能包含精确 host',
+        );
+      }
+      if (value.includes('?') || value.includes('#')) {
+        throw new BlogLegacyAssetMigrationUsageError(
+          'BLOG_ASSET_MIGRATION_ALLOWED_HOSTS 只能包含精确 host',
+        );
+      }
+      if (value.includes('@') || value.includes('*')) {
         throw new BlogLegacyAssetMigrationUsageError(
           'BLOG_ASSET_MIGRATION_ALLOWED_HOSTS 只能包含精确 host',
         );
@@ -375,7 +422,13 @@ export class BlogLegacyAssetHttpFetcher {
     return new Set(normalized);
   }
 
-  /** 解析与校验地址。 */
+  /**
+   * 从`url`解析与校验地址。
+   * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+   * @returns 与校验地址。
+   * @throws 当 `!addresses.length` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+   *   当 `normalized.some( (entry) => (entry.family !== 4 && entry.family !== 6)…` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+   */
   private async resolveAndValidateAddress(
     url: URL,
   ): Promise<{ address: string; family: 4 | 6 }> {
@@ -402,7 +455,15 @@ export class BlogLegacyAssetHttpFetcher {
     return normalized[0] as { address: string; family: 4 | 6 };
   }
 
-  /** 读取正数整数。 */
+  /**
+   * 按`key`、`fallback`、`min`读取正数整数；当 `raw === undefined || raw === null || `${raw}`.trim() === ''` 成立时返回 `fallback`。
+   * @param key - 用于读取或更新正数整数的稳定键。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+   * @param min - 决定正数整数内容、边界或目标的 `min` 值。
+   * @param max - 决定正数整数内容、边界或目标的 `max` 值。
+   * @returns 正数整数。
+   * @throws 当 `!Number.isInteger(value) || value < min || value > max` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+   */
   private readPositiveInteger(
     key: string,
     fallback: number,
@@ -438,7 +499,13 @@ export class BlogLegacyAssetMigrationService {
     private readonly manifestStore: BlogLegacyAssetMigrationManifestStore,
   ) {}
 
-  /** 执行博客旧版资源迁移记录。 */
+  /**
+   * 根据`options`处理博客旧版资源迁移记录；先通过 `manifestStore.assertPath` 校验输入边界。
+   * @param options - 控制博客旧版资源迁移记录筛选、缓存或输出方式的可选项，包含 `manifestPath`、`mode` 字段。
+   * @returns 博客旧版资源迁移记录。
+   * @throws 当 `options.mode === 'dry-run' && this.manifestStore.exists(options.manifes…` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+   *   当 `existing.status !== 'planned'` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+   */
   async run(
     options: BlogLegacyAssetMigrationOptions,
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -480,7 +547,11 @@ export class BlogLegacyAssetMigrationService {
     return this.execute(options, manifest);
   }
 
-  /** 构建清单。 */
+  /**
+   * 根据`mode`构造清单；从受控资源来源加载所需数据（`fetcher.fetch`）。
+   * @param mode - 选择清单处理分支的模式值。
+   * @returns 包含 `createdAt`、`entries`、`mode`、`status`、`updatedAt` 字段的清单。
+   */
   private async buildManifest(
     mode: 'dry-run' | 'execute',
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -533,7 +604,10 @@ export class BlogLegacyAssetMigrationService {
     };
   }
 
-  /** 返回扫描来源字段。 */
+  /**
+   * 从输入或当前状态提取扫描来源字段。
+   * @returns 按输入顺序得到的扫码会话来源Fields列表；没有匹配项时为空数组。
+   */
   private async scanSourceFields(): Promise<SourceField[]> {
     const [articles, themes] = await Promise.all([
       this.articleRepository.find(),
@@ -561,7 +635,11 @@ export class BlogLegacyAssetMigrationService {
     return fields;
   }
 
-  /** 返回恢复。 */
+  /**
+   * 从已持久化状态恢复。
+   * @param options - 控制从已持久化状态恢复筛选、缓存或输出方式的可选项，包含 `manifestPath` 字段。
+   * @returns 从已持久化状态恢复。
+   */
   private async resume(
     options: BlogLegacyAssetMigrationOptions,
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -589,7 +667,14 @@ export class BlogLegacyAssetMigrationService {
     );
   }
 
-  /** 执行博客旧版资源迁移记录。 */
+  /**
+   * 根据`options`、`manifest`、`targetEntries`处理博客旧版资源迁移记录；从受控资源来源加载所需数据（`fetcher.fetch`）。
+   * @param options - 控制博客旧版资源迁移记录筛选、缓存或输出方式的可选项，包含 `manifestPath` 字段。
+   * @param manifest - 决定博客旧版资源迁移记录内容、边界或目标的 `manifest` 值。
+   * @param targetEntries - 决定博客旧版资源迁移记录内容、边界或目标的 `targetEntries` 值；省略时默认采用 `manifest.entries`。
+   * @returns 博客旧版资源迁移记录。
+   * @throws 当 `contentSha256 !== entry.contentSha256 || fetched.buffer.length !== entr…` 成立时拒绝当前输入并抛出 `Error`；当 `fetcher.fetch` 或 `digest` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   private async execute(
     options: BlogLegacyAssetMigrationOptions,
     manifest: BlogLegacyAssetMigrationManifest,
@@ -625,14 +710,15 @@ export class BlogLegacyAssetMigrationService {
       const targetSet = new Set(targetEntries);
       const completed: BlogLegacyAssetMigrationManifest = {
         ...manifest,
-        entries: manifest.entries.map((entry) =>
-          targetSet.has(entry)
-            ? {
-                ...entry,
-                status: 'completed',
-              }
-            : entry,
-        ),
+        entries: manifest.entries.map((entry) => {
+          if (targetSet.has(entry)) {
+            return {
+              ...entry,
+              status: 'completed',
+            };
+          }
+          return entry;
+        }),
         status: 'completed',
         updatedAt: new Date().toISOString(),
       };
@@ -642,14 +728,15 @@ export class BlogLegacyAssetMigrationService {
       const targetSet = new Set(targetEntries);
       const failed: BlogLegacyAssetMigrationManifest = {
         ...manifest,
-        entries: manifest.entries.map((entry) =>
-          targetSet.has(entry)
-            ? {
-                ...entry,
-                status: 'failed',
-              }
-            : entry,
-        ),
+        entries: manifest.entries.map((entry) => {
+          if (targetSet.has(entry)) {
+            return {
+              ...entry,
+              status: 'failed',
+            };
+          }
+          return entry;
+        }),
         status: 'failed',
         updatedAt: new Date().toISOString(),
       };
@@ -658,7 +745,13 @@ export class BlogLegacyAssetMigrationService {
     }
   }
 
-  /** 验证博客旧版资源迁移记录。 */
+  /**
+   * 校验`options`是否满足博客旧版资源迁移记录约束，并拒绝不合法输入；从 `readManifest` 读取博客旧版资源迁移记录。
+   * @param options - 控制博客旧版资源迁移记录筛选、缓存或输出方式的可选项，包含 `manifestPath` 字段。
+   * @returns 博客旧版资源迁移记录。
+   * @throws 当 `!containsValue(value, entry.publicUrl)` 成立时拒绝当前输入并抛出 `Error`；当 `object.stat.size !== entry.size || hash !== entry.contentSha256 || mime…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `failed` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private async verify(
     options: BlogLegacyAssetMigrationOptions,
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -699,7 +792,12 @@ export class BlogLegacyAssetMigrationService {
       ...manifest,
       entries,
       mode: 'verify',
-      status: failed ? 'failed' : 'verified',
+      status: (() => {
+        if (failed) {
+          return 'failed';
+        }
+        return 'verified';
+      })(),
       updatedAt: new Date().toISOString(),
     };
     await this.manifestStore.write(options.manifestPath, verified);
@@ -707,7 +805,12 @@ export class BlogLegacyAssetMigrationService {
     return verified;
   }
 
-  /** 返回回滚。 */
+  /**
+   * 以统一异常拒绝回滚。
+   * @param options - 控制以统一异常拒绝回滚筛选、缓存或输出方式的可选项，包含 `manifestPath` 字段。
+   * @returns 以统一异常拒绝回滚。
+   * @throws 当 `dataSource.transaction` 或 `manifest.entries.map` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   private async rollback(
     options: BlogLegacyAssetMigrationOptions,
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -744,7 +847,12 @@ export class BlogLegacyAssetMigrationService {
     }
   }
 
-  /** 读取清单。 */
+  /**
+   * 按`path`读取清单；先通过 `assertBlogLegacyAssetMigrationManifest` 校验输入边界。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @returns 清单。
+   * @throws 当 `manifest.entries.some( (entry) => !this.fetcher.isAllowedSourceUrl(entr…` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+   */
   private async readManifest(
     path: string,
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -763,7 +871,13 @@ export class BlogLegacyAssetMigrationService {
     return manifest;
   }
 
-  /** 应用条目。 */
+  /**
+   * 根据`manager`、`entries`、`rollback`更新条目；把变更持久化到当前存储（`repository.update`）。
+   * @param manager - 保证条目读写处于同一事务中的实体管理器。
+   * @param entries - 按原有顺序参与条目筛选、合并或汇总的集合。
+   * @param rollback - 决定是否启用“rollback”分支的布尔选项。
+   * @throws 当 `!article` 成立时拒绝当前输入并抛出 `Error`；当 `!theme` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private async applyEntries(
     manager: EntityManager,
     entries: BlogLegacyAssetMigrationEntry[],
@@ -819,7 +933,12 @@ export class BlogLegacyAssetMigrationService {
     }
   }
 
-  /** 读取条目值。 */
+  /**
+   * 按`entry`读取条目值；当 `entry.table === 'blog_article'` 成立时返回 `article[toArticleEntityField(entry.field)]`。
+   * @param entry - 用于条目值的领域对象，包含 `table`、`rowId`、`field` 字段。
+   * @returns 条目值。
+   * @throws 当 `!article` 成立时拒绝当前输入并抛出 `Error`；当 `!theme` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private async readEntryValue(
     entry: BlogLegacyAssetMigrationEntry,
   ): Promise<unknown> {
@@ -841,7 +960,13 @@ export class BlogLegacyAssetMigrationService {
     return theme.config;
   }
 
-  /** 断言破坏性的安全性。 */
+  /**
+   * 校验`options`是否满足破坏性的安全性约束，并拒绝不合法输入；从 `configService.get` 读取破坏性的安全性。
+   * @param options - 控制破坏性的安全性筛选、缓存或输出方式的可选项，包含 `mode`、`databaseIdentity`、`maintenanceConfirmed`、`backupPath` 字段。
+   * @throws 当 `!options.databaseIdentity` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；当 `!host || !database` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+   *   当 `options.databaseIdentity !== `${host}:${port}/${database}`` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+   *   当 `!options.maintenanceConfirmed` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；当 `!options.backupPath` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+   */
   private assertDestructiveSafety(
     options: BlogLegacyAssetMigrationOptions,
   ): void {
@@ -892,10 +1017,12 @@ export const defaultBlogLegacyAssetRawHttpRequest: BlogLegacyAssetRawHttpRequest
       }
       callback(null, address, family);
     };
-    const agent =
-      url.protocol === 'https:'
-        ? new HttpsAgent({ keepAlive: false, lookup })
-        : new HttpAgent({ keepAlive: false, lookup });
+    const agent = (() => {
+      if (url.protocol === 'https:') {
+        return new HttpsAgent({ keepAlive: false, lookup });
+      }
+      return new HttpAgent({ keepAlive: false, lookup });
+    })();
     try {
       const response = await axios.request<ArrayBuffer>({
         decompress: true,
@@ -931,7 +1058,11 @@ export const defaultBlogLegacyAssetRawHttpRequest: BlogLegacyAssetRawHttpRequest
     }
   };
 
-/** 返回提取URL。 */
+/**
+ * 从`value`解析从输入中提取URL；当 `typeof value === 'string'` 成立时返回 `[...value.matchAll(URL_PATTERN)] .map((matc…`。
+ * @param value - 参与从输入中提取URL比较、格式化或输出的候选值。
+ * @returns 按输入顺序得到的从输入中提取URL列表；没有匹配项时为空数组。
+ */
 function extractUrls(value: unknown): string[] {
   if (typeof value === 'string') {
     return [...value.matchAll(URL_PATTERN)]
@@ -947,19 +1078,40 @@ function extractUrls(value: unknown): string[] {
   return [];
 }
 
-/** 断言博客旧版资源迁移清单。 */
+/**
+ * 校验`value`是否满足博客旧版资源迁移清单约束，并拒绝不合法输入；先通过 `assertManifestEntrySetSafety` 校验输入边界。
+ * @param value - 参与博客旧版资源迁移清单比较、格式化或输出的候选值。
+ * @throws 当 `!isRecord(value)` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `value.version !== 1 || !isIsoTimestamp(value.createdAt) || !isIsoTimest…` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `!MANIFEST_MODES.has(value.mode) || !MANIFEST_STATUSES.has(value.status)` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `!Array.isArray(value.entries)` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；当 `!isRecord(entry)` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `typeof entryBasename !== 'string' || !SAFE_BASENAME_PATTERN.test(entryB…` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `typeof mimeType !== 'string' || !SAFE_MIME_TYPES.has(mimeType)` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `typeof rowId !== 'string'` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `rowId.length < 1 || rowId.length > 128 || /[\u0000-\u001f\u007f]/u.test…` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `!Number.isInteger(size) || (size as number) < 0 || (size as number) > 1…` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `!MANIFEST_ENTRY_STATUSES.has(status)` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `!ARTICLE_MANIFEST_FIELDS.has(field)` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；当 `field !== 'config'` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `table === 'blog_theme_config'` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `objectKey !== `blog/migrated/${contentSha256}/${entryBasename}` || publ…` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+ */
 function assertBlogLegacyAssetMigrationManifest(
   value: unknown,
 ): asserts value is BlogLegacyAssetMigrationManifest {
+  if (!isRecord(value)) {
+    throw new BlogLegacyAssetMigrationUsageError('manifest 格式无效');
+  }
   if (
-    !isRecord(value) ||
     value.version !== 1 ||
     !isIsoTimestamp(value.createdAt) ||
-    !isIsoTimestamp(value.updatedAt) ||
-    !MANIFEST_MODES.has(value.mode) ||
-    !MANIFEST_STATUSES.has(value.status) ||
-    !Array.isArray(value.entries)
+    !isIsoTimestamp(value.updatedAt)
   ) {
+    throw new BlogLegacyAssetMigrationUsageError('manifest 格式无效');
+  }
+  if (!MANIFEST_MODES.has(value.mode) || !MANIFEST_STATUSES.has(value.status)) {
+    throw new BlogLegacyAssetMigrationUsageError('manifest 格式无效');
+  }
+  if (!Array.isArray(value.entries)) {
     throw new BlogLegacyAssetMigrationUsageError('manifest 格式无效');
   }
 
@@ -984,25 +1136,46 @@ function assertBlogLegacyAssetMigrationManifest(
       typeof entryBasename !== 'string' ||
       !SAFE_BASENAME_PATTERN.test(entryBasename) ||
       typeof contentSha256 !== 'string' ||
-      !SHA256_PATTERN.test(contentSha256) ||
-      typeof mimeType !== 'string' ||
-      !SAFE_MIME_TYPES.has(mimeType) ||
-      typeof rowId !== 'string' ||
+      !SHA256_PATTERN.test(contentSha256)
+    ) {
+      throw new BlogLegacyAssetMigrationUsageError('manifest entry 格式无效');
+    }
+    if (typeof mimeType !== 'string' || !SAFE_MIME_TYPES.has(mimeType)) {
+      throw new BlogLegacyAssetMigrationUsageError('manifest entry 格式无效');
+    }
+    if (typeof rowId !== 'string') {
+      throw new BlogLegacyAssetMigrationUsageError('manifest entry 格式无效');
+    }
+    if (
       rowId.length < 1 ||
       rowId.length > 128 ||
-      /[\u0000-\u001f\u007f]/u.test(rowId) ||
-      !Number.isInteger(size) ||
-      (size as number) < 0 ||
-      (size as number) > 100 * 1024 * 1024 ||
-      !MANIFEST_ENTRY_STATUSES.has(status)
+      /[\u0000-\u001f\u007f]/u.test(rowId)
     ) {
       throw new BlogLegacyAssetMigrationUsageError('manifest entry 格式无效');
     }
     if (
-      (table === 'blog_article' && !ARTICLE_MANIFEST_FIELDS.has(field)) ||
-      (table === 'blog_theme_config' && field !== 'config') ||
-      (table !== 'blog_article' && table !== 'blog_theme_config')
+      !Number.isInteger(size) ||
+      (size as number) < 0 ||
+      (size as number) > 100 * 1024 * 1024
     ) {
+      throw new BlogLegacyAssetMigrationUsageError('manifest entry 格式无效');
+    }
+    if (!MANIFEST_ENTRY_STATUSES.has(status)) {
+      throw new BlogLegacyAssetMigrationUsageError('manifest entry 格式无效');
+    }
+    if (table === 'blog_article') {
+      if (!ARTICLE_MANIFEST_FIELDS.has(field)) {
+        throw new BlogLegacyAssetMigrationUsageError(
+          'manifest entry 表字段身份无效',
+        );
+      }
+    } else if (table === 'blog_theme_config') {
+      if (field !== 'config') {
+        throw new BlogLegacyAssetMigrationUsageError(
+          'manifest entry 表字段身份无效',
+        );
+      }
+    } else {
       throw new BlogLegacyAssetMigrationUsageError(
         'manifest entry 表字段身份无效',
       );
@@ -1022,7 +1195,13 @@ function assertBlogLegacyAssetMigrationManifest(
   );
 }
 
-/** 断言清单条目集合安全性。 */
+/**
+ * 校验`entries`是否满足清单条目集合安全性约束，并拒绝不合法输入；从 `objectMetadata.get` 读取清单条目集合安全性。
+ * @param entries - 按原有顺序参与清单条目集合安全性筛选、合并或汇总的集合。
+ * @throws 当 `existingObject && (existingObject.contentSha256 !== entry.contentSha256…` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `existingOldUrl && existingOldUrl !== entry.oldUrl` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`；
+ *   当 `existingPublicUrl && existingPublicUrl !== entry.publicUrl` 成立时拒绝当前输入并抛出 `BlogLegacyAssetMigrationUsageError`。
+ */
 function assertManifestEntrySetSafety(
   entries: BlogLegacyAssetMigrationEntry[],
 ): void {
@@ -1076,12 +1255,20 @@ function assertManifestEntrySetSafety(
   }
 }
 
-/** 判断记录是否成立。 */
+/**
+ * 根据`value`与当前约束判定记录。
+ * @param value - 待判定是否满足记录约束的候选值。
+ * @returns 满足记录约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** 判断ISO时间戳是否成立。 */
+/**
+ * 根据`value`与当前约束判定ISO时间戳。
+ * @param value - 待判定是否满足ISO时间戳约束的候选值。
+ * @returns 满足ISO时间戳约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isIsoTimestamp(value: unknown): value is string {
   return (
     typeof value === 'string' &&
@@ -1090,7 +1277,11 @@ function isIsoTimestamp(value: unknown): value is string {
   );
 }
 
-/** 判断安全清单旧的URL是否成立。 */
+/**
+ * 根据`value`与当前约束判定安全清单旧的URL。
+ * @param value - 待判定是否满足安全清单旧的URL约束的候选值。
+ * @returns 满足安全清单旧的URL约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isSafeManifestOldUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   try {
@@ -1106,21 +1297,34 @@ function isSafeManifestOldUrl(value: unknown): value is string {
   }
 }
 
-/** 读取MinIOMIME类型。 */
+/**
+ * 按`metaData`读取MinIOMIME类型；当 `typeof value === 'string'` 成立时返回 `value.split(';')[0].trim().toLowerCase()`。
+ * @param metaData - 用于MinIOMIME类型的领域对象，包含 `'content-type'`、`'Content-Type'` 字段。
+ * @returns 当前状态对应的MinIOMIME类型，取值为 `''`。
+ */
 function readMinioMimeType(metaData: unknown): string {
   if (!isRecord(metaData)) return '';
   const value = metaData['content-type'] ?? metaData['Content-Type'];
-  return typeof value === 'string'
-    ? value.split(';')[0].trim().toLowerCase()
-    : '';
+  if (typeof value === 'string') {
+    return value.split(';')[0].trim().toLowerCase();
+  }
+  return '';
 }
 
-/** 裁剪URL标点符号。 */
+/**
+ * 将`value`规范为裁剪URL标点符号，使等价输入得到一致表示。
+ * @param value - 参与裁剪URL标点符号比较、格式化或输出的候选值。
+ * @returns 裁剪URL标点符号。
+ */
 function trimUrlPunctuation(value: string): string {
   return value.replace(/[),.;}\]]+$/u, '');
 }
 
-/** 创建安全基础文件名。 */
+/**
+ * 根据`value`构造安全基础文件名；当 `SAFE_BASENAME_PATTERN.test(normalized)` 成立时返回 `normalized`。
+ * @param value - 参与安全基础文件名比较、格式化或输出的候选值。
+ * @returns 当前状态对应的安全基础文件名，取值为 `'asset'`。
+ */
 function createSafeBasename(value: string): string {
   let source = 'asset';
   try {
@@ -1133,19 +1337,34 @@ function createSafeBasename(value: string): string {
     .replace(/[^A-Za-z0-9._-]+/gu, '-')
     .replace(/^[^A-Za-z0-9]+/u, '')
     .slice(0, 200);
-  return SAFE_BASENAME_PATTERN.test(normalized) ? normalized : 'asset';
+  if (SAFE_BASENAME_PATTERN.test(normalized)) {
+    return normalized;
+  }
+  return 'asset';
 }
 
-/** 读取请求头。 */
+/**
+ * 按请求头名读取首个字符串值；数组仅取第一项，缺失或非字符串输入保留空值。
+ * @param headers - 用于按请求头名读取首个字符串值的领域对象，包含 `name`、`name.toLowerCase()` 字段。
+ * @param name - 决定按请求头名读取首个字符串值内容、边界或目标的 `name` 值。
+ * @returns 按请求头名读取首个字符串值。
+ */
 function readHeader(
   headers: Record<string, string | string[] | undefined>,
   name: string,
 ): string | undefined {
   const value = headers[name] ?? headers[name.toLowerCase()];
-  return Array.isArray(value) ? value[0] : value;
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
 }
 
-/** 判断禁止的地址是否成立。 */
+/**
+ * 根据`address`与当前约束判定禁止的地址；当 `bytes.slice(0, 10).every((value) => value === 0) && bytes[10]…` 成立时返回 `isForbiddenIpv4(bytes.slice(12).join('.'))`。
+ * @param address - 决定禁止的地址内容、边界或目标的 `address` 值。
+ * @returns 满足禁止的地址约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isForbiddenAddress(address: string): boolean {
   const family = isIP(address);
   if (family === 4) return isForbiddenIpv4(address);
@@ -1171,7 +1390,11 @@ function isForbiddenAddress(address: string): boolean {
   return bytes[0] === 0xff;
 }
 
-/** 判断禁止的IPv4是否成立。 */
+/**
+ * 根据`address`与当前约束判定禁止的IPv4；当 `parts.length !== 4 || parts.some((value) => !Number.isInteger…` 成立时返回 `true`。
+ * @param address - 决定禁止的IPv4内容、边界或目标的 `address` 值。
+ * @returns 满足禁止的IPv4约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isForbiddenIpv4(address: string): boolean {
   const parts = address.split('.').map(Number);
   if (
@@ -1193,22 +1416,33 @@ function isForbiddenIpv4(address: string): boolean {
   );
 }
 
-/** 解析IPv6。 */
+/**
+ * 从`address`解析Ipv6；当 `missing < 0 || (separatorIndex < 0 && head.length !== 8) || (…` 成立时返回 `undefined`。
+ * @param address - 决定Ipv6内容、边界或目标的 `address` 值。
+ * @returns 按输入顺序得到的Ipv6列表；没有可用结果或提前结束时为 `undefined`，没有匹配项时为空数组。
+ */
 function parseIpv6(address: string): number[] | undefined {
   const normalized = address.toLowerCase().split('%')[0];
   const separatorIndex = normalized.indexOf('::');
   if (separatorIndex !== normalized.lastIndexOf('::')) return undefined;
-  const [headValue, tailValue] =
-    separatorIndex >= 0
-      ? [
-          normalized.slice(0, separatorIndex),
-          normalized.slice(separatorIndex + 2),
-        ]
-      : [normalized, ''];
+  const [headValue, tailValue] = (() => {
+    if (separatorIndex >= 0) {
+      return [
+        normalized.slice(0, separatorIndex),
+        normalized.slice(separatorIndex + 2),
+      ];
+    }
+    return [normalized, ''];
+  })();
   const head = expandIpv6Parts(headValue);
   const tail = expandIpv6Parts(tailValue);
   if (!head || !tail) return undefined;
-  const missing = separatorIndex >= 0 ? 8 - head.length - tail.length : 0;
+  const missing = (() => {
+    if (separatorIndex >= 0) {
+      return 8 - head.length - tail.length;
+    }
+    return 0;
+  })();
   if (
     missing < 0 ||
     (separatorIndex < 0 && head.length !== 8) ||
@@ -1221,7 +1455,11 @@ function parseIpv6(address: string): number[] | undefined {
   return groups.flatMap((value) => [(value >> 8) & 0xff, value & 0xff]);
 }
 
-/** 展开IPv6部分。 */
+/**
+ * 根据`value`处理展开IPv6部分；当 `last?.includes('.')` 成立时返回 `undefined`。
+ * @param value - 参与展开IPv6部分比较、格式化或输出的候选值。
+ * @returns 按输入顺序得到的展开IPv6部分列表；没有可用结果或提前结束时为 `undefined`，没有匹配项时为空数组。
+ */
 function expandIpv6Parts(value: string): number[] | undefined {
   if (!value) return [];
   const parts = value.split(':');
@@ -1251,7 +1489,11 @@ function expandIpv6Parts(value: string): number[] | undefined {
   return groups;
 }
 
-/** 返回分组条目。 */
+/**
+ * 把匹配项汇总为分组条目。
+ * @param entries - 按原有顺序参与把匹配项汇总为分组条目筛选、合并或汇总的集合。
+ * @returns 按输入顺序得到的把匹配项汇总为分组条目列表；没有匹配项时为空数组。
+ */
 function groupEntries(entries: BlogLegacyAssetMigrationEntry[]) {
   const groups = new Map<
     string,
@@ -1276,7 +1518,12 @@ function groupEntries(entries: BlogLegacyAssetMigrationEntry[]) {
   return [...groups.values()];
 }
 
-/** 返回到文章实体字段。 */
+/**
+ * 将输入收敛并投影为文章实体字段。
+ * @param field - 决定文章实体字段内容、边界或目标的 `field` 值。
+ * @returns 文章实体字段。
+ * @throws 当 `!mapping` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function toArticleEntityField(
   field: BlogLegacyAssetMigrationField,
 ): ArticleField {
@@ -1287,7 +1534,14 @@ function toArticleEntityField(
   return mapping.entityField;
 }
 
-/** 替换条目URL。 */
+/**
+ * 根据`value`、`entries`、`rollback`处理替换条目URL。
+ * @param value - 包含旧地址或公开地址的当前字段值；替换过程从该值开始并保留非目标内容。
+ * @param entries - 按原有顺序参与替换条目URL筛选、合并或汇总的集合。
+ * @param rollback - 决定是否启用“rollback”分支的布尔选项。
+ * @returns 替换条目URL。
+ * @throws 当 `!result.foundFrom && !result.foundTo` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function replaceEntryUrls(
   value: unknown,
   entries: BlogLegacyAssetMigrationEntry[],
@@ -1295,13 +1549,33 @@ function replaceEntryUrls(
 ): any {
   let next = value;
   const orderedEntries = [...entries].sort((left, right) => {
-    const leftFrom = rollback ? left.publicUrl : left.oldUrl;
-    const rightFrom = rollback ? right.publicUrl : right.oldUrl;
+    const leftFrom = (() => {
+      if (rollback) {
+        return left.publicUrl;
+      }
+      return left.oldUrl;
+    })();
+    const rightFrom = (() => {
+      if (rollback) {
+        return right.publicUrl;
+      }
+      return right.oldUrl;
+    })();
     return rightFrom.length - leftFrom.length;
   });
   for (const entry of orderedEntries) {
-    const from = rollback ? entry.publicUrl : entry.oldUrl;
-    const to = rollback ? entry.oldUrl : entry.publicUrl;
+    const from = (() => {
+      if (rollback) {
+        return entry.publicUrl;
+      }
+      return entry.oldUrl;
+    })();
+    const to = (() => {
+      if (rollback) {
+        return entry.oldUrl;
+      }
+      return entry.publicUrl;
+    })();
     const result = replaceSingleEntryUrl(next, from, to);
     if (!result.foundFrom && !result.foundTo) {
       throw new Error('Blog 迁移字段已发生并发变化');
@@ -1311,7 +1585,13 @@ function replaceEntryUrls(
   return next;
 }
 
-/** 替换单一的条目URL。 */
+/**
+ * 根据`value`、`from`、`to`拼接稳定的替换单一的条目URL，用于隔离对应资源或存储记录；当 `typeof value === 'string'` 成立时返回 `{ foundFrom, foundTo: value.includes(to), v…`。
+ * @param value - 参与替换单一的条目URL比较、格式化或输出的候选值。
+ * @param from - 决定替换单一的条目URL内容、边界或目标的 `from` 值。
+ * @param to - 决定替换单一的条目URL内容、边界或目标的 `to` 值。
+ * @returns 包含 `foundFrom`、`foundTo`、`value` 字段的替换单一的条目URL。
+ */
 function replaceSingleEntryUrl(
   value: unknown,
   from: string,
@@ -1326,7 +1606,12 @@ function replaceSingleEntryUrl(
     return {
       foundFrom,
       foundTo: value.includes(to),
-      value: foundFrom ? value.split(from).join(to) : value,
+      value: (() => {
+        if (foundFrom) {
+          return value.split(from).join(to);
+        }
+        return value;
+      })(),
     };
   }
   if (Array.isArray(value)) {
@@ -1366,7 +1651,12 @@ function replaceSingleEntryUrl(
   };
 }
 
-/** 返回包含值。 */
+/**
+ * 按当前约束判定包含值。
+ * @param value - 参与包含值比较、格式化或输出的候选值。
+ * @param expected - 决定包含值内容、边界或目标的 `expected` 值。
+ * @returns 满足包含值约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function containsValue(value: unknown, expected: string): boolean {
   if (typeof value === 'string') return value.includes(expected);
   if (Array.isArray(value)) {
@@ -1378,12 +1668,23 @@ function containsValue(value: unknown, expected: string): boolean {
   return false;
 }
 
-/** 生成流摘要。 */
+/**
+ * 根据`stream`、`expectedSize`与当前约束判定流摘要。
+ * @param stream - 用于流摘要的领域对象，包含 `destroy` 字段。
+ * @param expectedSize - 限制流摘要数量、尺寸、等级或重试边界的数值。
+ * @returns 满足流摘要约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ * @throws 当 `size > expectedSize` 成立时拒绝当前输入并抛出 `Error`；当 `size !== expectedSize` 成立时拒绝当前输入并抛出 `Error`。
+ */
 async function hashStream(stream: Readable, expectedSize: number) {
   const hash = createHash('sha256');
   let size = 0;
   for await (const chunk of stream) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    const buffer = (() => {
+      if (Buffer.isBuffer(chunk)) {
+        return chunk;
+      }
+      return Buffer.from(chunk);
+    })();
     size += buffer.length;
     if (size > expectedSize) {
       stream.destroy();
@@ -1396,7 +1697,12 @@ async function hashStream(stream: Readable, expectedSize: number) {
   return hash.digest('hex');
 }
 
-/** 在超时期间执行传入操作。 */
+/**
+ * 根据`promise`、`timeoutMs`处理在超时期间执行传入操作。
+ * @param promise - 决定在超时期间执行传入操作内容、边界或目标的 `promise` 值。
+ * @param timeoutMs - 用于在超时期间执行传入操作超时、有效期或退避计算的毫秒数。
+ * @returns 在超时期间执行传入操作。
+ */
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

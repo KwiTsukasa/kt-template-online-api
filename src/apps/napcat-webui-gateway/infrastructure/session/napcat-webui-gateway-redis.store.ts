@@ -81,22 +81,36 @@ export class NapcatWebuiGatewayRedisStore
     private readonly config: NapcatWebuiGatewayConfigService,
   ) {}
 
-  /** 创建NapCatWebUIRedis记录。 */
+  /**
+   * 根据`session`构造NapCat WebUI Redis 会话记录。
+   * @param session - 待读取、续期或持久化的NapCat WebUI Redis 会话记录会话。
+   * @returns NapCat WebUI Redis 会话记录。
+   */
   async create(session: NapcatWebuiGatewaySession) {
     await this.writeSession(session);
     await this.writeUserAccountIndex(session);
     return session;
   }
 
-  /** 查找NapCatWebUIRedis记录。 */
+  /**
+   * 按`sessionId`读取NapCat WebUI Redis 会话记录；当 `value` 成立时返回 `(JSON.parse(value) as NapcatWebuiGatewaySes…`。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @returns NapCat WebUI Redis 会话记录；没有可用结果或提前结束时为 `undefined`。
+   */
   async find(sessionId: string) {
     const value = await this.redis.get(this.sessionKey(sessionId));
-    return value
-      ? (JSON.parse(value) as NapcatWebuiGatewaySession)
-      : undefined;
+    if (value) {
+      return (JSON.parse(value) as NapcatWebuiGatewaySession);
+    }
+    return undefined;
   }
 
-  /** 查找启用的（按用户与账号匹配）。 */
+  /**
+   * 按`adminUserId`、`accountId`读取启用的（按用户与账号匹配）；从 `redis.get` 读取启用的（按用户与账号匹配）。
+   * @param adminUserId - 用于精确定位admin用户的标识。
+   * @param accountId - 用于精确定位账号的标识。
+   * @returns 启用的（按用户与账号匹配）；没有可用结果或提前结束时为 `undefined`。
+   */
   async findActiveByUserAndAccount(adminUserId: string, accountId: string) {
     const sessionId = await this.redis.get(
       this.userAccountKey(adminUserId, accountId),
@@ -109,7 +123,12 @@ export class NapcatWebuiGatewayRedisStore
     return session;
   }
 
-  /** 更新NapCatWebUIRedis记录。 */
+  /**
+   * 根据`sessionId`、`patch`更新NapCat WebUI Redis 会话记录。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @param patch - 决定NapCat WebUI Redis 会话记录内容、边界或目标的 `patch` 值。
+   * @returns 返回 Redis 原子合并补丁后的完整会话快照。
+   */
   async update(
     sessionId: string,
     patch: Partial<NapcatWebuiGatewaySession>,
@@ -117,7 +136,10 @@ export class NapcatWebuiGatewayRedisStore
     return this.mergeSessionPatchAtomically(sessionId, patch);
   }
 
-  /** 写入会话。 */
+  /**
+   * 根据`session`更新NapCat WebUI 网关会话。
+   * @param session - 待读取、续期或持久化的NapCat WebUI 网关会话。
+   */
   private async writeSession(session: NapcatWebuiGatewaySession) {
     await this.redis.psetex(
       this.sessionKey(session.sessionId),
@@ -126,7 +148,10 @@ export class NapcatWebuiGatewayRedisStore
     );
   }
 
-  /** 写入用户账号索引。 */
+  /**
+   * 根据`session`更新用户账号索引。
+   * @param session - 待读取、续期或持久化的用户账号索引会话。
+   */
   private async writeUserAccountIndex(session: NapcatWebuiGatewaySession) {
     await this.redis.set(
       this.userAccountKey(session.adminUserId, session.accountId),
@@ -136,22 +161,41 @@ export class NapcatWebuiGatewayRedisStore
     );
   }
 
-  /** 生成会话键。 */
+  /**
+   * 根据`sessionId`拼接稳定的Redis 会话键，用于隔离对应资源或存储记录。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @returns 按参数编码并拼接完成的Redis 会话键。
+   */
   private sessionKey(sessionId: string) {
     return `${SESSION_KEY_PREFIX}${sessionId}`;
   }
 
-  /** 生成用户账号键。 */
+  /**
+   * 根据`adminUserId`、`accountId`拼接稳定的Redis 用户账号键，用于隔离对应资源或存储记录。
+   * @param adminUserId - 用于精确定位admin用户的标识。
+   * @param accountId - 用于精确定位账号的标识。
+   * @returns 按参数编码并拼接完成的Redis 用户账号键。
+   */
   private userAccountKey(adminUserId: string, accountId: string) {
     return `${USER_ACCOUNT_KEY_PREFIX}${adminUserId}:${accountId}`;
   }
 
-  /** 返回剩余有效期毫秒。 */
+  /**
+   * 按边界约束计算剩余有效期毫秒。
+   * @param session - 待读取、续期或持久化的按边界约束计算剩余有效期毫秒会话。
+   * @returns 按边界约束计算剩余有效期毫秒。
+   */
   private remainingTtlMs(session: NapcatWebuiGatewaySession) {
     return Math.max(1, session.expiresAt - this.config.now());
   }
 
-  /** 合并会话补丁原子地。 */
+  /**
+   * 通过 Redis 脚本校验会话仍有效后原子合并补丁，并返回合并后的会话快照。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @param patch - 决定会话PatchAtomically内容、边界或目标的 `patch` 值。
+   * @returns 返回 Redis 原子合并后的完整会话快照。
+   * @throws 当 `!Array.isArray(result) || Number(result[0]) !== 1` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private async mergeSessionPatchAtomically(
     sessionId: string,
     patch: Partial<NapcatWebuiGatewaySession>,
@@ -172,7 +216,11 @@ export class NapcatWebuiGatewayRedisStore
     return JSON.parse(result[1]) as NapcatWebuiGatewaySession;
   }
 
-  /** 判断终端是否成立。 */
+  /**
+   * 根据`session`与当前约束判定终端。
+   * @param session - 待读取、续期或持久化的终端会话。
+   * @returns 满足终端约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isTerminal(session: NapcatWebuiGatewaySession) {
     return TERMINAL_SESSION_STATUSES.includes(session.status);
   }

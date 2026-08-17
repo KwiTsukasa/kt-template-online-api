@@ -58,41 +58,41 @@ export class BangDreamOperationLifecycle {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param context - context 输入；驱动 `this.emit()` 的 BangDream步骤。
+   * 在 BanG Dream 输入解析前发布生命周期事件，并等待全部监听器完成。
+   * @param context - 决定before内容、边界或目标的 `context` 值。
    */
   async beforeParse(context: BangDreamOperationLifecycleContext) {
     await this.emit('beforeParse', context);
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param context - context 输入；驱动 `this.emit()` 的 BangDream步骤。
+   * 在 BanG Dream 领域数据解析后发布生命周期事件，并等待全部监听器完成。
+   * @param context - 决定after内容、边界或目标的 `context` 值。
    */
   async afterResolve(context: BangDreamOperationLifecycleContext) {
     await this.emit('afterResolve', context);
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param context - context 输入；驱动 `this.emit()` 的 BangDream步骤。
+   * 在 BanG Dream 结果渲染前发布生命周期事件，并等待全部监听器完成。
+   * @param context - 决定before内容、边界或目标的 `context` 值。
    */
   async beforeRender(context: BangDreamOperationLifecycleContext) {
     await this.emit('beforeRender', context);
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param context - context 输入；驱动 `this.emit()` 的 BangDream步骤。
+   * 在 BanG Dream 结果输出后发布生命周期事件，并等待全部监听器完成。
+   * @param context - 决定afterOutput内容、边界或目标的 `context` 值。
    */
   async afterOutput(context: BangDreamOperationLifecycleContext) {
     await this.emit('afterOutput', context);
   }
 
   /**
-   * 处理Error。
-   * @param context - context 输入；影响 onError 的返回值。
-   * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   * 根据`context`、`error`处理错误；把当前结果通知给生命周期观察者（`observer.onError`）。
+   * @param context - 决定错误内容、边界或目标的 `context` 值。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
    */
   async onError(context: BangDreamOperationLifecycleContext, error: unknown) {
     for (const observer of this.observers) {
@@ -101,9 +101,9 @@ export class BangDreamOperationLifecycle {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param method - HTTP 方法名；影响 emit 的返回值。
-   * @param context - context 输入；驱动 `handler()` 的 BangDream步骤。
+   * 通过 `handler` 交给领域处理器。
+   * @param method - 决定emit内容、边界或目标的 `method` 值。
+   * @param context - 决定emit内容、边界或目标的 `context` 值。
    */
   private async emit(
     method: BangDreamLifecycleObserverMethod,
@@ -119,10 +119,10 @@ export class BangDreamOperationLifecycle {
 }
 
 /**
- * 创建 BangDream 插件对象或配置。
- * @param operationKey - operationKey 输入；生成 BangDream对象。
- * @param input - input 输入；驱动 `extractBangDreamInputText()` 的 BangDream步骤。
- * @returns 创建后的 BangDream 插件对象或配置。
+ * 将操作键与命令输入投影为起始生命周期上下文，并记录规范化查询文本和当前时间。
+ * @param operationKey - 用于读取或更新BanGDream操作LifecycleContext的稳定键。
+ * @param input - 用于BanGDream操作LifecycleContext的结构化输入。
+ * @returns 包含 `input`、`operationKey`、`query`、`stage`、`startedAt` 字段的BanGDream操作LifecycleContext。
  */
 export function createBangDreamOperationLifecycleContext(
   operationKey: BangDreamOperationKey,
@@ -138,8 +138,8 @@ export function createBangDreamOperationLifecycleContext(
 }
 
 /**
- * 创建 BangDream 插件对象或配置。
- * @returns 创建后的 BangDream 插件对象或配置。
+ * 根据当前运行态构造BanG Dream操作日志Observer。
+ * @returns 包含 `afterOutput`、`beforeParse`、`name`、`onError` 字段的BanGDream操作日志Observer。
  */
 export function createBangDreamOperationLogObserver(): BangDreamOperationLifecycleObserver {
   return {
@@ -166,9 +166,10 @@ export function createBangDreamOperationLogObserver(): BangDreamOperationLifecyc
 }
 
 /**
- * 转换 BangDream 插件输入。
- * @param status - BangDream列表；影响 formatBangDreamOperationLifecycleObserverMessage 的返回值。
- * @param context - context 输入；使用 `startedAt`、`operationKey`、`stage`、`handlerName` 字段生成结果。
+ * 将操作状态、阶段、可选处理器与查询信息以及执行耗时编码为单行生命周期日志。
+ * @param status - 当前操作处于开始、成功或失败阶段的状态标识。
+ * @param context - 操作上下文；提供操作键、阶段、开始时间及可选处理器、查询和图片数量。
+ * @returns 以空格分隔且省略未提供可选字段的结构化日志文本。
  */
 function formatBangDreamOperationLifecycleObserverMessage(
   status: 'error' | 'start' | 'success',
@@ -179,9 +180,24 @@ function formatBangDreamOperationLifecycleObserverMessage(
     `status=${status}`,
     `operation=${context.operationKey}`,
     `stage=${context.stage}`,
-    context.handlerName ? `handler=${context.handlerName}` : '',
-    context.query ? `query=${context.query}` : '',
-    context.imageCount === undefined ? '' : `imageCount=${context.imageCount}`,
+    (() => {
+      if (context.handlerName) {
+        return `handler=${context.handlerName}`;
+      }
+      return '';
+    })(),
+    (() => {
+      if (context.query) {
+        return `query=${context.query}`;
+      }
+      return '';
+    })(),
+    (() => {
+      if (context.imageCount === undefined) {
+        return '';
+      }
+      return `imageCount=${context.imageCount}`;
+    })(),
     `durationMs=${durationMs}`,
   ]
     .filter(Boolean)
@@ -189,18 +205,23 @@ function formatBangDreamOperationLifecycleObserverMessage(
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param input - input 输入；使用 `query`、`text`、`raw`、`args` 字段生成结果。
+ * 从`input`解析BanG Dream输入文本；当 `Array.isArray(input.args)` 成立时返回 `input.args.join(' ').trim()`。
+ * @param input - 用于BanGDream输入文本的结构化输入，包含 `query`、`text`、`raw`、`args` 字段。
+ * @returns 当前状态对应的BanGDream输入文本，取值为 `''`。
  */
 function extractBangDreamInputText(input: BangDreamCommandInput) {
   const direct = `${input.query || input.text || input.raw || ''}`.trim();
   if (direct) return direct;
-  return Array.isArray(input.args) ? input.args.join(' ').trim() : '';
+  if (Array.isArray(input.args)) {
+    return input.args.join(' ').trim();
+  }
+  return '';
 }
 
 /**
- * 查询 BangDream 插件数据。
- * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+ * 按 ``${error}`` 计算并返回结果。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+ * @returns 当前状态对应的操作Lifecycle错误消息，取值为 `''`。
  */
 function getOperationLifecycleErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;

@@ -99,22 +99,27 @@ export const BANGDREAM_CN_BLOCKED_EVENT_IDS: readonly number[] = [];
 export const BANGDREAM_DEFAULT_NO_BANG_DAYS = 1;
 
 /**
- * 转换 BangDream 插件输入。
- * @param value - 待转换值；驱动 `Number()` 的 BangDream步骤。
- * @param fallback - 兜底值；驱动 `Number.isFinite()` 的 BangDream步骤。
+ * 将有限正数向下取整为 BanG Dream 运行参数；非法或非正数输入使用调用方回退值。
+ * @param value - 待转换为将有限正数向下取整为 BanG Dream 运行参数的原始值。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+ * @returns 将有限正数向下取整为 BanG Dream 运行参数。
  */
 export function normalizeBangDreamPositiveInteger(
   value: unknown,
   fallback: number,
 ) {
   const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return Math.floor(parsed);
+  }
+  return fallback;
 }
 
 /**
- * 转换 BangDream 插件输入。
- * @param value - 待转换值；决定 BangDream条件分支。
- * @param fallback - 兜底值；影响 normalizeBangDreamBoolean 的返回值。
+ * 将`value`、`fallback`规范为BanG Dream布尔值，使等价输入得到一致表示。
+ * @param value - 待转换为BanGDream布尔值的原始值。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+ * @returns 满足BanGDream布尔值约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function normalizeBangDreamBoolean(value: unknown, fallback: boolean) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -125,8 +130,9 @@ export function normalizeBangDreamBoolean(value: unknown, fallback: boolean) {
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param source - source 输入；转换 BangDream列表项。
+ * 通过 `filter` 筛选匹配数据。
+ * @param source - 决定splitBanGDreamOption内容、边界或目标的 `source` 值。
+ * @returns 去除空白与空项后的 BanG Dream 配置值列表；输入为空时为空数组。
  */
 export function splitBangDreamOptionList(source: unknown) {
   if (Array.isArray(source)) {

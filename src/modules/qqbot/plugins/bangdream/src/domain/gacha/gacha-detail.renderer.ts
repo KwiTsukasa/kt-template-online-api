@@ -26,13 +26,12 @@ import { drawGachaPickupInList } from '@/modules/qqbot/plugins/bangdream/src/dom
 import { gachaRepository } from '@/modules/qqbot/plugins/bangdream/src/domain/gacha/gacha.repository';
 
 /**
- * 在QQBot 图片视图层中绘制卡池详情。
- *
- * @param gachaId - 卡池 ID；定位本次读取、更新、删除或关联的卡池。
- * @param displayedServerList - displayedServerList 输入；使用 `length` 字段生成结果。
- * @param useEasyBG - useEasyBG 输入；影响 drawGachaDetail 的返回值。
- * @param compress - BangDream列表；影响 drawGachaDetail 的返回值。
- * @returns 异步处理结果。
+ * 根据`gachaId`、`displayedServerList`、`useEasyBG`绘制或格式化卡池详情；当 `!gacha.isExist` 成立时返回 `['错误: 卡池不存在']`。
+ * @param gachaId - 用于精确定位卡池的标识。
+ * @param displayedServerList - 用于卡池详情的领域对象，包含 `length`、`k` 字段；省略时默认采用 `globalDefaultServer`。
+ * @param useEasyBG - 决定是否启用“useEasyBG”分支的布尔选项。
+ * @param compress - 决定卡池详情内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的卡池详情列表；没有匹配项时为空数组。
  */
 export async function drawGachaDetail(
   gachaId: number,

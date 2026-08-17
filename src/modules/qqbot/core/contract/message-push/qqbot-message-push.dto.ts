@@ -23,7 +23,11 @@ export const SNOWFLAKE_ID_PATTERN = /^[1-9]\d{0,23}$/;
 export const QQ_TARGET_ID_PATTERN = /^[1-9]\d{4,19}$/;
 const SOURCE_KEY_MAX_LENGTH = 128;
 
-/** 判断消息源配置是否为仅含字符串值的普通键值对象。 */
+/**
+ * 判断消息源配置是否为仅含字符串值的普通键值对象。
+ * @param value - 待判定是否满足消息源配置是否为仅含字符串值的普通键值对象约束的候选值。
+ * @returns 满足消息源配置是否为仅含字符串值的普通键值对象约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isStringRecord(value: unknown): value is Record<string, string> {
   return (
     !!value &&

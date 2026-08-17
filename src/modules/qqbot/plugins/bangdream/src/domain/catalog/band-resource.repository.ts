@@ -8,36 +8,36 @@ export class BandResourceRepository {
   ) {}
 
   /**
-   * 获取乐队 Logo 资源路径。
-   *
-   * @param bandId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
+   * 根据参数 `bandId`，获取乐队 Logo 资源路径。
+   * @param bandId - 用于精确定位band的标识。
+   * @returns 按参数编码并拼接完成的根据参数 `bandId`，获取乐队 Logo 资源路径。
    */
   getLogoPath(bandId: number): string {
     return `/assets/jp/band/logo/${formatNumber(bandId, 3)}_rip/logoL.png`;
   }
 
   /**
-   * 获取乐队图标 SVG 资源路径。
-   *
-   * @param bandId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
+   * 根据参数 `bandId`，获取乐队图标 SVG 资源路径。
+   * @param bandId - 用于精确定位band的标识。
+   * @returns 按参数编码并拼接完成的根据参数 `bandId`，获取乐队图标 SVG 资源路径。
    */
   getIconSvgPath(bandId: number): string {
     return `/res/icon/band_${bandId}.svg`;
   }
 
   /**
-   * 下载乐队 Logo 资源。
-   *
-   * @param bandId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
+   * 根据乐队标识解析 Logo 路径，并从资源提供器下载二进制内容。
+   * @param bandId - 用于精确定位band的标识。
+   * @returns Logo缓冲区。
    */
   async getLogoBuffer(bandId: number): Promise<Buffer> {
     return await this.provider.getAsset(this.getLogoPath(bandId));
   }
 
   /**
-   * 下载乐队图标 SVG 资源。
-   *
-   * @param bandId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
+   * 根据参数 `bandId`，下载乐队图标 SVG 资源。
+   * @param bandId - 用于精确定位band的标识。
+   * @returns 根据参数 `bandId`，下载乐队图标 SVG 资源。
    */
   async getIconSvgBuffer(bandId: number): Promise<Buffer> {
     return await this.provider.getAsset(this.getIconSvgPath(bandId));

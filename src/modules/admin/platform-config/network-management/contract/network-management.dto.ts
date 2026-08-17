@@ -34,7 +34,12 @@ const DECIMAL_ID_PATTERN = /^\d{1,24}$/;
 
 @ValidatorConstraint({ async: false, name: 'networkDdnsPortForwardId' })
 class NetworkDdnsPortForwardIdConstraint implements ValidatorConstraintInterface {
-  /** 校验网络DDNS端口转发标识约束记录。 */
+  /**
+   * 校验`value`、`args`是否满足网络DDNS端口转发标识约束记录约束，并拒绝不合法输入；当 `input.recordType === 'A'` 成立时返回 `typeof value === 'string' && DECIMAL_ID_PAT…`。
+   * @param value - 参与网络DDNS端口转发标识约束记录比较、格式化或输出的候选值。
+   * @param args - 用于网络DDNS端口转发标识约束记录的领域对象，包含 `object` 字段。
+   * @returns 满足网络DDNS端口转发标识约束记录约束时为 `true`；不满足、未命中或显式失败分支为 `false`；没有可用结果或提前结束时为 `undefined`。
+   */
   validate(value: unknown, args: ValidationArguments): boolean {
     const input = args.object as { recordType?: unknown };
     if (input.recordType === 'A') {
@@ -44,7 +49,10 @@ class NetworkDdnsPortForwardIdConstraint implements ValidatorConstraintInterface
     return true;
   }
 
-  /** 返回默认消息。 */
+  /**
+   * 返回端口转发标识约束的固定校验消息，明确 A 记录必填而 AAAA 记录禁填。
+   * @returns 当前状态对应的端口转发标识约束的固定校验消息，明确 A 记录必填而 AAAA 记录禁填，取值为 `'portForwardId is required for A and forbidden for AAAA'`。
+   */
   defaultMessage(): string {
     return 'portForwardId is required for A and forbidden for AAAA';
   }
@@ -312,12 +320,20 @@ export class NetworkPortForwardResponseDto {
   currentPublicEndpoint?: string | null;
 }
 
-/** 判断值是否已提供。 */
+/**
+ * 根据`_object`、`value`与当前约束判定值是否已提供。
+ * @param _object - 为兼容既有调用签名保留；当前实现不会读取该参数。
+ * @param value - 待判定是否满足值是否已提供约束的候选值。
+ * @returns 满足值是否已提供约束时为 `true`；不满足、未命中或显式失败分支为 `false`；没有可用结果或提前结束时为 `undefined`。
+ */
 function isProvided(_object: object, value: unknown): boolean {
   return value !== undefined;
 }
 
-/** 解析布尔查询。 */
+/**
+ * 从当前运行态解析布尔查询。
+ * @returns 满足布尔查询约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function parseBooleanQuery({ value }: TransformFnParams): unknown {
   if (value === 'true' || value === true) return true;
   if (value === 'false' || value === false) return false;

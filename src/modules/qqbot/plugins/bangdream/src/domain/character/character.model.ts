@@ -51,9 +51,8 @@ export class Character {
     this.isExist = true;
   }
   /**
-   * 在 Character 模型中加载远端完整详情并标记初始化状态。
-   *
-   * @param useCache - useCache 输入；驱动 `this.getData()` 的 BangDream步骤。
+   * 根据`useCache`处理initFull；当 `this.isInitFull` 成立时直接结束且不产生返回值。
+   * @param useCache - 决定是否启用“use缓存”分支的布尔选项；省略时默认采用 `true`。
    */
   async initFull(useCache: boolean = true) {
     if (this.isInitFull) {
@@ -87,8 +86,8 @@ export class Character {
   }
   /**
    * 在 Character 模型中请求当前模型的远端详情数据。
-   *
-   * @param update - update 输入；驱动 `characterResourceRepository.getDetail()` 的 BangDream步骤。
+   * @param update - 决定在 Character 模型中请求当前模型的远端详情数据内容、边界或目标的 `update` 值；省略时默认采用 `true`。
+   * @returns 在 Character 模型中请求当前模型的远端详情数据。
    */
   async getData(update: boolean = true) {
     return await characterResourceRepository.getDetail(
@@ -97,9 +96,8 @@ export class Character {
     );
   }
   /**
-   * 在 Character 模型中获取图标。
-   *
-   * @returns 异步处理结果。
+   * 按当前运行态读取图标；从受控资源来源加载所需数据（`loadImage`）。
+   * @returns 图标。
    */
   async getIcon(): Promise<Image> {
     const iconBuffer = await characterResourceRepository.getIconBuffer(
@@ -108,9 +106,8 @@ export class Character {
     return await loadImage(iconBuffer);
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @returns 异步处理结果。
+   * 按当前运行态读取Illustration；从受控资源来源加载所需数据（`loadImage`）。
+   * @returns 从角色资源 Buffer 解码得到的角色立绘图片。
    */
   async getIllustration(): Promise<Image> {
     const illustrationBuffer =
@@ -118,9 +115,8 @@ export class Character {
     return await loadImage(illustrationBuffer);
   }
   /**
-   * 在 Character 模型中获取名称横幅。
-   *
-   * @returns 异步处理结果。
+   * 按当前运行态读取名称横幅；从受控资源来源加载所需数据（`loadImage`）。
+   * @returns 名称横幅。
    */
   async getNameBanner(): Promise<Image> {
     const nameBannerBuffer =
@@ -128,9 +124,8 @@ export class Character {
     return await loadImage(nameBannerBuffer);
   }
   /**
-   * 在 Character 模型中获取角色名称。
-   *
-   * @returns 格式化后的文本。
+   * 按当前运行态读取角色名称。
+   * @returns 按输入顺序得到的角色名称列表；没有匹配项时为空数组。
    */
   getCharacterName(): Array<string | null> {
     const characterNameList = [];

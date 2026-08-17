@@ -27,12 +27,11 @@ interface User {
 }
 
 /**
- * 在图片布局层中绘制玩家RankingIn列表。
- *
- * @param user - user 输入；使用 `ranking`、`sid`、`strained`、`name` 字段生成结果。
- * @param backgroudColor - backgroudColor 输入；影响 drawPlayerRankingInList 的返回值。
- * @param server - server 输入；驱动 `playerRankingResourceRepository.getRankImageBuffer()`、`drawDegree()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`user`、`backgroudColor`、`server`绘制或格式化玩家排名数据；当 `user.ranking == undefined` 成立时直接结束且不产生返回值。
+ * @param user - 决定是否启用“用户”分支的布尔选项。
+ * @param backgroudColor - 决定玩家排名数据内容、边界或目标的 `backgroudColor` 值；省略时默认采用 `BANGDREAM_PLAYER_RANKING_SPEC.backgroundColor`。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 玩家排名数据；没有可用结果或提前结束时为 `undefined`。
  */
 export async function drawPlayerRankingInList(
   user: User,
@@ -86,7 +85,12 @@ export async function drawPlayerRankingInList(
   //头像
   const headShotImage = await drawCardIcon({
     card: new Card(user.sid),
-    trainingStatus: user.strained == 0 ? false : true,
+    trainingStatus: (() => {
+      if (user.strained == 0) {
+        return false;
+      }
+      return true;
+    })(),
     cardIdVisible: false,
     skillTypeVisible: false,
     cardTypeVisible: false,

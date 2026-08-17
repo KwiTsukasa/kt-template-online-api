@@ -31,20 +31,20 @@ export class CutoffEventTopRepository {
   ) {}
 
   /**
-   * 获取活动前十榜数据路径。
-   *
-   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
-   * @param server - server 输入；限定 BangDream查询范围。
+   * 根据参数 `eventId`，获取活动前十榜数据路径。
+   * @param eventId - 用于精确定位事件的标识。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+   * @returns 按参数编码并拼接完成的根据参数 `eventId`，获取活动前十榜数据路径。
    */
   getTopDataPath(eventId: number, server: Server): string {
     return `/api/eventtop/data?server=${server}&event=${eventId}&mid=0&interval=3600000`;
   }
 
   /**
-   * 获取活动前十榜数据。
-   *
-   * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
-   * @param server - server 输入；驱动 `this.getTopDataPath()` 的 BangDream步骤。
+   * 根据参数 `eventId`，获取活动前十榜数据。
+   * @param eventId - 用于精确定位事件的标识。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+   * @returns 根据参数 `eventId`，获取活动前十榜数据。
    */
   async getTopData(
     eventId: number,

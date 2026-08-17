@@ -19,9 +19,9 @@ export const statConfig: Record<string, { color: string; name: string }> =
   BANGDREAM_STAT_CONFIG;
 
 /**
- * 在图片布局层中绘制卡牌数值In列表。
- *
- * @param card - card 输入；使用 `rarity` 字段生成结果。
+ * 根据`card`绘制或格式化卡牌统计值。
+ * @param card - 用于卡牌统计值的领域对象，包含 `calcStat`、`rarity` 字段。
+ * @returns 卡牌统计值。
  */
 export async function drawCardStatInList(card: Card) {
   const stat = await card.calcStat();
@@ -50,9 +50,9 @@ export async function drawCardStatInList(card: Card) {
 }
 
 /**
- * 在图片布局层中绘制数值In列表。
- *
- * @param stat - stat 输入；使用 `performance`、`technique`、`visual` 字段生成结果。
+ * 根据`stat`绘制或格式化统计值。
+ * @param stat - 用于统计值的领域对象，包含 `performance`、`technique`、`visual` 字段。
+ * @returns 统计值。
  */
 export async function drawStatInList(stat: Stat) {
   const statTotal = Math.floor(stat.performance + stat.technique + stat.visual);
@@ -75,12 +75,11 @@ export async function drawStatInList(stat: Stat) {
 }
 
 /**
- * 在图片布局层中绘制卡牌数值Divided。
- *
- * @param stat - stat 输入；驱动 `for()` 的 BangDream步骤。
- * @param statTotal - statTotal 输入；驱动 `list.push()` 的 BangDream步骤。
- * @param limitBreakstat - limitBreakstat 输入；影响 drawCardStatDivided 的返回值。
- * @returns 异步处理结果。
+ * 根据`stat`、`statTotal`、`limitBreakstat`绘制或格式化卡牌统计值Divided。
+ * @param stat - 用于卡牌统计值Divided的领域对象，包含 `key` 字段。
+ * @param statTotal - 决定卡牌统计值Divided内容、边界或目标的 `statTotal` 值。
+ * @param limitBreakstat - 用于卡牌统计值Divided的领域对象，包含 `key` 字段；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 卡牌统计值Divided。
  */
 async function drawCardStatDivided(
   stat: Stat,
@@ -88,12 +87,11 @@ async function drawCardStatDivided(
   limitBreakstat?: Stat,
 ): Promise<Canvas> {
   /**
-   * 在图片布局层中绘制数值线条。
-   *
-   * @param key - 键名；影响 drawStatLine 的返回值。
-   * @param value - 待转换值；驱动 `getStatLineBarLayout()` 的 BangDream步骤。
-   * @param total - 总记录数；驱动 `getStatLineBarLayout()` 的 BangDream步骤。
-   * @returns 渲染或资源结果。
+   * 根据`key`、`value`、`total`绘制或格式化统计值文本行；把图片、文本或图形按布局规格绘制到画布。
+   * @param key - 用于读取或更新统计值文本行的稳定键。
+   * @param value - 参与统计值文本行比较、格式化或输出的候选值。
+   * @param total - 决定统计值文本行内容、边界或目标的 `total` 值。
+   * @returns 统计值文本行。
    */
   function drawStatLine(key: string, value: number, total: number): Canvas {
     const canvas = new Canvas(

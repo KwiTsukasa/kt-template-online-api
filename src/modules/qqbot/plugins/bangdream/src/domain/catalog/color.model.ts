@@ -10,21 +10,19 @@ export class Color {
     this.b = b;
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @param alpha - alpha 输入；限定 BangDream查询范围。
-   * @returns 格式化后的文本。
+   * 将当前 RGB 分量与透明度拼接为 CSS `rgba(...)` 颜色字符串。
+   * @param alpha - 颜色透明度；省略时使用完全不透明的 `1`。
+   * @returns 包含当前红、绿、蓝分量和指定透明度的 CSS RGBA 字符串。
    */
   getRGBA(alpha = 1): string {
     return `rgba(${this.r},${this.g},${this.b}, ${alpha})`;
   }
 
   /**
-   * 在 Color 模型中设置RGB。
-   *
-   * @param r - r 输入；写入 BangDream状态。
-   * @param g - g 输入；写入 BangDream状态。
-   * @param b - b 输入；写入 BangDream状态。
+   * 在 Color 模型中设置RGB，并会更新 `this.r`、`this.g`、`this.b`。
+   * @param r - `r` 写入 `this.r` 状态。
+   * @param g - `g` 写入 `this.g` 状态。
+   * @param b - `b` 写入 `this.b` 状态。
    */
   setRGB(r: number, g: number, b: number) {
     this.r = r;
@@ -33,10 +31,9 @@ export class Color {
   }
 
   /**
-   * 在 Color 模型中生成颜色块。
-   *
-   * @param alpha - alpha 输入；驱动 `this.getRGBA()` 的 BangDream步骤。
-   * @returns 渲染或资源结果。
+   * 通过在 Color 模型中生成颜色块。
+   * @param alpha - 决定通过在 Color 模型中生成颜色块内容、边界或目标的 `alpha` 值；省略时默认采用 `1`。
+   * @returns 通过在 Color 模型中生成颜色块。
    */
   generateColorBlock(alpha = 1): Canvas {
     const colorCanvas = new Canvas(50, 50);
@@ -49,10 +46,9 @@ export class Color {
 
 //getcolorfrom #xxxxxx
 /**
- * 在BangDream 领域模型层中获取颜色FromHex。
- *
- * @param hex - hex 输入；执行 `hex.substring()` 对应的 BangDream步骤。
- * @returns BangDream 插件查询结果。
+ * 按`hex`读取颜色十六进制颜色。
+ * @param hex - 决定颜色十六进制颜色内容、边界或目标的 `hex` 值。
+ * @returns 颜色十六进制颜色。
  */
 export function getColorFromHex(hex: string): Color {
   const color = new Color(
@@ -78,13 +74,13 @@ const presetColorList = [
 ];
 
 /**
- * 在BangDream 领域模型层中处理randomRGB。
- *
- * @returns 计算后的数值。
+ * 根据当前运行态处理包含 `r`、`g`、`b` 字段的结果。
+ * @returns 包含 `r`、`g`、`b` 字段的包含 `r`、`g`、`b` 字段的。
  */
 function randomRGB(): { r: number; g: number; b: number } {
   /**
-   * 在BangDream 领域模型层中生成Number255。
+   * 返回从 `0` 到 `254` 的随机整数，用于生成 RGB 颜色分量。
+   * @returns 从 `0` 到 `254` 的随机整数，用于生成 RGB 颜色分量。
    */
   function generateNumber255() {
     return Math.floor(Math.random() * 255);
@@ -97,10 +93,9 @@ function randomRGB(): { r: number; g: number; b: number } {
 }
 
 /**
- * 查询 BangDream 插件数据。
- *
- * @param index - index 输入；决定 BangDream条件分支。
- * @returns BangDream 插件查询结果。
+ * 按索引选择图表预设色，未提供索引或超过预设列表上界时改用随机 RGB 颜色。
+ * @param index - 预设颜色列表的非负零基索引；省略或不小于列表长度时生成随机颜色。
+ * @returns 由选中预设值或随机 RGB 分量初始化的颜色对象。
  */
 export function getPresetColor(index?: number): Color {
   let tempColor: { r: number; g: number; b: number };

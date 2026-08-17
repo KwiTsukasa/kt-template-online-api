@@ -6,10 +6,9 @@ import { resolveBangDreamProviderUrl } from '@/modules/qqbot/plugins/bangdream/s
 import * as path from 'path';
 
 /**
- * 在数据下载与缓存层中获取缓存Directory。
- *
- * @param url - 访问地址；驱动 `URL()` 的 BangDream步骤。
- * @returns 格式化后的文本。
+ * 将资源 URL 的主机、目录与查询串清理为安全目录名，并拼接到 BanG Dream 缓存根目录。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @returns 缓存目录。
  */
 export function getCacheDirectory(url: string): string {
   const urlObj = new URL(resolveCacheUrl(url));
@@ -26,10 +25,9 @@ export function getCacheDirectory(url: string): string {
 }
 
 /**
- * 查询 BangDream 插件数据。
- *
- * @param url - 访问地址；驱动 `URL()` 的 BangDream步骤。
- * @returns 格式化后的文本。
+ * 按`url`读取文件名称URL 地址。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @returns 文件名称URL 地址。
  */
 export function getFileNameFromUrl(url: string): string {
   const urlObj = new URL(resolveCacheUrl(url));
@@ -51,10 +49,9 @@ export function getFileNameFromUrl(url: string): string {
 }
 
 /**
- * 在数据下载与缓存层中处理sanitizeDirectory名称。
- *
- * @param dirName - dirName 输入；生成规范化文本。
- * @returns 格式化后的文本。
+ * 将`dirName`规范为目录名称，使等价输入得到一致表示。
+ * @param dirName - 决定目录名称内容、边界或目标的 `dirName` 值。
+ * @returns 目录名称。
  */
 function sanitizeDirectoryName(dirName: string): string {
   const illegalChars = /[/?<>:*|"]/g; // 定义非法字符的正则表达式
@@ -64,9 +61,10 @@ function sanitizeDirectoryName(dirName: string): string {
 }
 
 /**
- * 解析Cache Url。
- * @param url - 访问地址；驱动 `Error()` 的 BangDream步骤。
- * @returns BangDream 插件渲染后的图片、画布或文本。
+ * 去除资源地址两端空白并解析为 Bestdori 提供方 URL；空地址时抛出错误。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @returns 缓存URL 地址。
+ * @throws 当 `!source` 成立时拒绝当前输入并抛出 `Error`。
  */
 function resolveCacheUrl(url: string): string {
   const source = `${url || ''}`.trim();

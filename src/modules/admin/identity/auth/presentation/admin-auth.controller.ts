@@ -34,10 +34,11 @@ export class AdminAuthController {
   ) {}
 
   /**
-   * Admin 用户登录。
-   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
-   * @param req - 当前 HTTP 请求；用于可信代理后的公开 Origin 校验。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * 根据`body`、`req`、`res`处理Admin 用户登录；先通过 `trustedCredentialTransportService.assertTrusted` 校验输入边界。
+   * @param body - 用于Admin 用户登录的结构化输入，包含 `username`、`password` 字段。
+   * @param req - 用于Admin 用户登录的当前 HTTP 请求。
+   * @param res - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns Admin 用户登录。
    */
   @Post('auth/login')
   @ApiOperation({ summary: 'Admin 用户登录' })
@@ -62,9 +63,10 @@ export class AdminAuthController {
   }
 
   /**
-   * 刷新 Admin 访问令牌。
-   * @param req - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * 校验凭据传输边界后用请求中的刷新令牌轮换会话，并把新访问令牌与刷新令牌写回 Cookie。
+   * @param req - 用于刷新结果的当前 HTTP 请求。
+   * @param res - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 刷新。
    */
   @Post('auth/refresh')
   @ApiOperation({ summary: '刷新 Admin 访问令牌' })
@@ -82,9 +84,10 @@ export class AdminAuthController {
   }
 
   /**
-   * Admin 用户退出登录。
-   * @param req - 当前 HTTP 请求；读取已签名的 refresh token。
-   * @param res - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * 校验刷新令牌后消费账号级退出限流并撤销对应服务端会话；令牌缺失或无效时直接结束。
+   * @param req - 用于刷新令牌后消费账号级退出限流并撤销对应服务端会话的当前 HTTP 请求。
+   * @param res - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 刷新令牌后消费账号级退出限流并撤销对应服务端会话。
    */
   @Post('auth/logout')
   @ApiOperation({ summary: 'Admin 用户退出登录' })
@@ -102,7 +105,8 @@ export class AdminAuthController {
 
   /**
    * 获取当前用户按钮权限码。
-   * @param user - user 输入；驱动 `vbenSuccess()` 的 Admin步骤。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @returns 当前用户按钮权限码。
    */
   @Get('auth/codes')
   @ApiOperation({ summary: '获取当前用户按钮权限码' })

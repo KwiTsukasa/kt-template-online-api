@@ -65,7 +65,12 @@ import {
 export class MediaGovernanceController {
   constructor(private readonly service: MediaGovernanceService) {}
 
-  /** 分页返回媒体治理任务，并禁止客户端缓存动态状态。 */
+  /**
+   * 分页返回媒体治理任务，并禁止客户端缓存动态状态。
+   * @param query - 限定分页结果筛选、排序与分页范围的查询条件。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 分页。
+   */
   @Get('page')
   @ApiOperation({ summary: '分页查询媒体治理任务草稿' })
   page(
@@ -77,7 +82,11 @@ export class MediaGovernanceController {
     return vbenPage(page.items, page.total);
   }
 
-  /** 返回媒体治理全局语义统计，并禁止客户端缓存。 */
+  /**
+   * 返回媒体治理全局语义统计，并禁止客户端缓存。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 摘要。
+   */
   @Get('summary')
   @ApiOperation({ summary: '查询媒体治理任务语义统计' })
   summary(@Res({ passthrough: true }) response: Response) {
@@ -85,7 +94,12 @@ export class MediaGovernanceController {
     return vbenSuccess(this.service.summary());
   }
 
-  /** 返回指定治理任务详情，并禁止客户端缓存。 */
+  /**
+   * 返回指定治理任务详情，并禁止客户端缓存。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 详情。
+   */
   @Get(':taskId')
   @ApiOperation({ summary: '查询媒体治理任务详情' })
   detail(
@@ -96,7 +110,12 @@ export class MediaGovernanceController {
     return vbenSuccess(this.service.detail(taskId));
   }
 
-  /** 创建媒体治理任务草稿并返回统一成功响应。 */
+  /**
+   * 根据`body`、`response`构造媒体治理任务草稿并返回统一成功响应。
+   * @param body - 用于媒体治理任务草稿并返回统一成功响应的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 媒体治理任务草稿并返回统一成功响应。
+   */
   @Post()
   @MediaGovernancePermission('Media:Governance:Create')
   @ApiOperation({ summary: '创建媒体治理任务草稿' })
@@ -108,7 +127,13 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.create(body));
   }
 
-  /** 在执行前修正任务的媒体身份和资料源引用。 */
+  /**
+   * 通过在执行前修正任务的媒体身份和资料源引用。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于通过在执行前修正任务的媒体身份和资料源引用的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 通过在执行前修正任务的媒体身份和资料源引用。
+   */
   @Put(':taskId/identity')
   @MediaGovernancePermission('Media:Governance:Create')
   @ApiOperation({ summary: '在下载前修正作品资料库身份' })
@@ -121,7 +146,13 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.updateIdentity(taskId, body));
   }
 
-  /** 按期望版本删除未执行草稿及其本地账本。 */
+  /**
+   * 按期望版本删除未执行草稿及其本地账本。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param query - 限定按期望版本删除未执行草稿及其本地账本筛选、排序与分页范围的查询条件。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 按期望版本删除未执行草稿及其本地账本。
+   */
   @Delete(':taskId')
   @MediaGovernancePermission('Media:Governance:Create')
   @ApiOperation({ summary: '删除未进入执行阶段的草稿并清除本地账本' })
@@ -134,7 +165,13 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.discardTask(taskId, query));
   }
 
-  /** 添加磁力来源，并由服务层完成脱敏和描述符持久化。 */
+  /**
+   * 添加磁力来源，并由服务层完成脱敏和描述符持久化。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于Magnet来源的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns Magnet来源。
+   */
   @Post(':taskId/sources/magnet')
   @MediaGovernancePermission('Media:Governance:SourceUpload')
   @ApiOperation({ summary: '添加并脱敏保存磁链来源' })
@@ -147,7 +184,14 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.addMagnetSource(taskId, body));
   }
 
-  /** 接收有界种子文件并创建经安全解析的来源。 */
+  /**
+   * 接收有界种子文件并创建经安全解析的来源。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于接收有界种子文件并创建经安全解析的来源的结构化输入。
+   * @param file - 决定接收有界种子文件并创建经安全解析的来源内容、边界或目标的 `file` 值。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 接收有界种子文件并创建经安全解析的来源。
+   */
   @Post(':taskId/sources/torrent')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -166,7 +210,14 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.addTorrentSource(taskId, body, file));
   }
 
-  /** 修订指定来源的内容角色和治理策略分类。 */
+  /**
+   * 根据参数 `taskId`，修订指定来源的内容角色和治理策略分类。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @param body - 用于根据参数 `taskId`，修订指定来源的内容角色和治理策略分类的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 根据参数 `taskId`，修订指定来源的内容角色和治理策略分类。
+   */
   @Put(':taskId/sources/:sourceId/classification')
   @MediaGovernancePermission('Media:Governance:SourceUpload')
   @ApiOperation({ summary: '修订来源治理分类' })
@@ -182,7 +233,14 @@ export class MediaGovernanceController {
     );
   }
 
-  /** 按任务版本密封指定来源的文件选择与单元映射。 */
+  /**
+   * 按任务版本密封指定来源的文件选择与单元映射。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @param body - 用于按任务版本密封指定来源的文件选择与单元映射的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 按任务版本密封指定来源的文件选择与单元映射。
+   */
   @Put(':taskId/sources/:sourceId/selection')
   @MediaGovernancePermission('Media:Governance:SourceUpload')
   @ApiOperation({ summary: '密封来源文件选择' })
@@ -198,7 +256,14 @@ export class MediaGovernanceController {
     );
   }
 
-  /** 请求精确清理指定来源后将其从任务移除。 */
+  /**
+   * 按`taskId`、`sourceId`、`body`移除精确清理指定来源后将其从任务移除。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @param body - 用于精确清理指定来源后将其从任务移除的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 精确清理指定来源后将其从任务移除。
+   */
   @Post(':taskId/sources/:sourceId/remove')
   @MediaGovernancePermission('Media:Governance:SourceUpload')
   @ApiOperation({ summary: '精确清理并移除待更换来源' })
@@ -212,7 +277,14 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.removeSource(taskId, sourceId, body));
   }
 
-  /** 启动指定来源清单的受限检查。 */
+  /**
+   * 根据`taskId`、`sourceId`、`body`处理指定来源清单的受限检查。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @param body - 用于指定来源清单的受限检查的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 指定来源清单的受限检查。
+   */
   @Post(':taskId/sources/:sourceId/inspect')
   @MediaGovernancePermission('Media:Governance:SourceUpload')
   @ApiOperation({ summary: '检查规范来源清单' })
@@ -228,7 +300,14 @@ export class MediaGovernanceController {
     );
   }
 
-  /** 启动指定来源的有界运行时可用性探针。 */
+  /**
+   * 根据`taskId`、`sourceId`、`body`处理指定来源的有界运行时可用性探针。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @param body - 用于指定来源的有界运行时可用性探针的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 指定来源的有界运行时可用性探针。
+   */
   @Post(':taskId/sources/:sourceId/probe-runtime')
   @MediaGovernancePermission('Media:Governance:Download')
   @ApiOperation({ summary: '执行有界运行时死种死链探针' })
@@ -244,7 +323,14 @@ export class MediaGovernanceController {
     );
   }
 
-  /** 为治理单元绑定逐季单一发布组字幕合同。 */
+  /**
+   * 为治理单元绑定逐季单一发布组字幕合同。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param unitId - 用于精确定位unit的标识。
+   * @param body - 用于为治理单元绑定逐季单一发布组字幕合同的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 为治理单元绑定逐季单一发布组字幕合同。
+   */
   @Put(':taskId/units/:unitId/subtitle-contract')
   @MediaGovernancePermission('Media:Governance:SourceUpload')
   @ApiOperation({ summary: '绑定逐季单一发布组字幕合同' })
@@ -260,7 +346,13 @@ export class MediaGovernanceController {
     );
   }
 
-  /** 启动或接管当前任务的隔离下载运行。 */
+  /**
+   * 禁止响应缓存后提交隔离下载启动或接管请求，并封装服务返回的运行状态。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于下载任务的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 下载任务。
+   */
   @Post(':taskId/downloads/start')
   @MediaGovernancePermission('Media:Governance:Download')
   @ApiOperation({ summary: '启动或接管失联的 NAS 任务隔离下载' })
@@ -273,7 +365,13 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.startDownload(taskId, body));
   }
 
-  /** 暂停当前任务对应的下载运行。 */
+  /**
+   * 暂停当前任务对应的下载运行。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于暂停当前任务对应的下载运行的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 暂停当前任务对应的下载运行。
+   */
   @Post(':taskId/downloads/pause')
   @MediaGovernancePermission('Media:Governance:Download')
   @ApiOperation({ summary: '安全暂停当前 NAS 下载 Run' })
@@ -286,7 +384,13 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.pauseDownload(taskId, body));
   }
 
-  /** 取消当前下载运行并保留后续精确清理所需载荷。 */
+  /**
+   * 取消当前下载运行并保留后续精确清理所需载荷。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于当前下载运行并保留后续精确清理所需载荷的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 满足当前下载运行并保留后续精确清理所需载荷约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   @Post(':taskId/downloads/cancel')
   @MediaGovernancePermission('Media:Governance:Download')
   @ApiOperation({ summary: '取消当前下载并保留待精确清理载荷' })
@@ -299,7 +403,13 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.cancelDownload(taskId, body));
   }
 
-  /** 从同一运行身份恢复已暂停的下载。 */
+  /**
+   * 从同一运行身份恢复已暂停的下载。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于从同一运行身份恢复已暂停的下载的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 从同一运行身份恢复已暂停的下载。
+   */
   @Post(':taskId/downloads/resume')
   @MediaGovernancePermission('Media:Governance:Download')
   @ApiOperation({ summary: '从同一 NAS 下载 Run 续传' })
@@ -312,7 +422,13 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.resumeDownload(taskId, body));
   }
 
-  /** 启动密封计划约束下的本地治理事务。 */
+  /**
+   * 禁止响应缓存后提交密封计划约束下的本地治理事务，并封装运行状态。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于治理任务的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 治理任务。
+   */
   @Post(':taskId/governance/start')
   @MediaGovernancePermission('Media:Governance:Run')
   @ApiOperation({ summary: '启动 Schema 1.2.0 本地治理事务' })
@@ -325,7 +441,13 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.startGovernance(taskId, body));
   }
 
-  /** 启动分档元数据核验运行。 */
+  /**
+   * 禁止响应缓存后提交分档元数据核验运行，并封装服务返回的运行状态。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于元数据验证状态的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 元数据验证状态。
+   */
   @Post(':taskId/metadata/verify')
   @MediaGovernancePermission('Media:Governance:Run')
   @ApiOperation({ summary: '运行 A/B/C 分档元数据核验' })
@@ -340,7 +462,13 @@ export class MediaGovernanceController {
     );
   }
 
-  /** 启动次数受限的确定性元数据修复运行。 */
+  /**
+   * 禁止响应缓存后提交次数受限的确定性元数据修复，并封装运行状态。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于元数据Repair的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 元数据Repair。
+   */
   @Post(':taskId/metadata/repair')
   @MediaGovernancePermission('Media:Governance:Run')
   @ApiOperation({ summary: '运行最多两次的确定性有界元数据修复' })
@@ -353,7 +481,13 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.startMetadataRepair(taskId, body));
   }
 
-  /** 启动独立本地验收及残留检查运行。 */
+  /**
+   * 禁止响应缓存后提交独立本地验收与残留检查，并封装运行状态。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于验收验证状态的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 验收验证状态。
+   */
   @Post(':taskId/acceptance/verify')
   @MediaGovernancePermission('Media:Governance:Run')
   @ApiOperation({ summary: '运行独立本地验收与残留核验' })
@@ -368,7 +502,13 @@ export class MediaGovernanceController {
     );
   }
 
-  /** 从当前未完成阶段启动受策略限制的 Codex Agent。 */
+  /**
+   * 从当前未完成阶段启动受策略限制的 Codex Agent。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于从当前未完成阶段启动受策略限制的 Codex Agent的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 从当前未完成阶段启动受策略限制的 Codex Agent。
+   */
   @Post(':taskId/agent/start')
   @MediaGovernancePermission('Media:Governance:AgentStart')
   @ApiOperation({ summary: '从任意未完成阶段启动有界 CodexAgent 治理' })
@@ -381,7 +521,13 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.startAgent(taskId, body));
   }
 
-  /** 拉取指定任务的 Agent 会话及对话增量投影。 */
+  /**
+   * 通过拉取指定任务的 Agent 会话及对话增量投影。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param query - 限定通过拉取指定任务的 Agent 会话及对话增量筛选、排序与分页范围的查询条件。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 通过拉取指定任务的 Agent 会话及对话增量。
+   */
   @Get(':taskId/agent/session')
   @ApiOperation({ summary: '查询 CodexAgent 语义会话投影' })
   async agentSession(
@@ -393,7 +539,13 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.agentSession(taskId, query));
   }
 
-  /** 在同一 Agent 线程中提交具备幂等标识的操作员消息。 */
+  /**
+   * 通过在同一 Agent 线程中提交具备幂等标识的操作员消息。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于通过在同一 Agent 线程中提交具备幂等标识的操作员消息的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 通过在同一 Agent 线程中提交具备幂等标识的操作员消息。
+   */
   @Post(':taskId/agent/messages')
   @MediaGovernancePermission('Media:Governance:AgentOperate')
   @ApiOperation({ summary: '在同一 CodexAgent thread 继续发送操作员消息' })
@@ -408,7 +560,13 @@ export class MediaGovernanceController {
     );
   }
 
-  /** 提交操作员对 Agent 候选方案的明确决策。 */
+  /**
+   * 根据参数 `taskId`，提交操作员对 Agent 候选方案的明确决策。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param body - 用于根据参数 `taskId`，提交操作员对 Agent 候选方案的明确决策的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 根据参数 `taskId`，提交操作员对 Agent 候选方案的明确决策。
+   */
   @Post(':taskId/agent/operator-decision')
   @MediaGovernancePermission('Media:Governance:OperatorDecision')
   @ApiOperation({ summary: '提交 Agent 候选人工放行' })
@@ -421,7 +579,12 @@ export class MediaGovernanceController {
     return vbenSuccess(await this.service.operatorDecision(taskId, body));
   }
 
-  /** 返回指定任务的脱敏验收证据摘要。 */
+  /**
+   * 按规范字段顺序计算指定任务的脱敏验收证据摘要。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 按规范字段顺序计算指定任务的脱敏验收证据摘要。
+   */
   @Get(':taskId/evidence')
   @MediaGovernancePermission('Media:Governance:Evidence')
   @ApiOperation({ summary: '查询脱敏验收证据摘要' })
@@ -433,7 +596,10 @@ export class MediaGovernanceController {
     return vbenSuccess(this.service.evidence(taskId));
   }
 
-  /** 为动态治理响应设置禁止缓存头。 */
+  /**
+   * 向动态治理响应写入禁止缓存头，确保浏览器或中间代理不复用状态。
+   * @param response - 用于写入状态码、Cookie 或缓存策略的当前 HTTP 响应。
+   */
   private noStore(response: Response) {
     response.setHeader('Cache-Control', 'no-store');
   }
@@ -448,7 +614,12 @@ export class MediaGovernanceEventsController {
     private readonly eventStream: MediaGovernanceEventStreamService,
   ) {}
 
-  /** 依据请求头或查询游标订阅可重放的治理事件流。 */
+  /**
+   * 根据请求头或查询游标订阅可重放的治理事件流。
+   * @param lastEventIdHeader - 决定根据请求头或查询游标订阅可重放的治理事件流内容、边界或目标的 `lastEventIdHeader` 值；为空时采用 `lastEventIdQuery` 作为兜底。
+   * @param lastEventIdQuery - 决定根据请求头或查询游标订阅可重放的治理事件流内容、边界或目标的 `lastEventIdQuery` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 返回合并历史重放、实时事件与定时心跳的只读 Observable。
+   */
   @Sse('stream')
   @ApiOperation({ summary: '订阅媒体治理任务语义进度' })
   stream(

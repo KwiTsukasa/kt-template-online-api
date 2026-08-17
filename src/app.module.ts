@@ -22,7 +22,11 @@ import { QqbotNapcatModule } from './modules/qqbot/napcat/qqbot-napcat.module';
 import { QqbotPluginPlatformModule } from './modules/qqbot/plugin-platform/plugin-platform.module';
 import { RuntimeModule } from './runtime';
 
-/** 构建类型ORM选项。 */
+/**
+ * 根据`configService`构造TypeORM选项；从 `configService.get` 读取TypeORM选项。
+ * @param configService - 读取类型ORM选项所需运行配置的配置服务。
+ * @returns 包含 `type`、`host`、`port`、`username`、`password` 字段的类型ORM选项。
+ */
 export function buildTypeOrmOptions(configService: ConfigService) {
   return {
     type: 'mysql' as const,

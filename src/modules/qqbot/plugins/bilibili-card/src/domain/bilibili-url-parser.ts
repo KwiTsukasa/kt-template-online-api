@@ -7,7 +7,11 @@ const LEADING_WRAPPERS = /^[\s"'<>（([{【]+/u;
 const BVID_PATTERN = /^BV[0-9A-Za-z]{10}$/;
 const AID_PATTERN = /^(?:av|AV)(\d+)$/;
 
-/** 返回清理BilibiliURL候选项。 */
+/**
+ * 清理输入并返回BilibiliURL候选项。
+ * @param candidate - 决定是否启用“candidate”分支的布尔选项。
+ * @returns 输入并返回BilibiliURL候选项。
+ */
 export function cleanBilibiliUrlCandidate(candidate: string) {
   return candidate
     .replaceAll('&amp;', '&')
@@ -22,7 +26,11 @@ export function cleanBilibiliUrlCandidate(candidate: string) {
     .trim();
 }
 
-/** 判断允许的BilibiliURL是否成立。 */
+/**
+ * 根据`candidate`与当前约束判定允许的BilibiliURL。
+ * @param candidate - 决定是否启用“candidate”分支的布尔选项。
+ * @returns 满足允许的BilibiliURL约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 export function isAllowedBilibiliUrl(candidate: string) {
   try {
     const url = new URL(cleanBilibiliUrlCandidate(candidate));
@@ -38,7 +46,11 @@ export function isAllowedBilibiliUrl(candidate: string) {
   }
 }
 
-/** 解析Bilibili视频引用。 */
+/**
+ * 从`candidate`解析Bilibili视频引用；当 `videoIdSegment && BVID_PATTERN.test(videoIdSegment)` 成立时返回 `{ canonicalVideoId: videoIdSegment, kind: '…`。
+ * @param candidate - 决定是否启用“candidate”分支的布尔选项。
+ * @returns 包含 `canonicalVideoId`、`kind`、`sourceUrl`、`value` 字段的Bilibili视频引用；无法解析或未命中时为 `null`。
+ */
 export function parseBilibiliVideoReference(
   candidate: string,
 ): BilibiliVideoReference | null {

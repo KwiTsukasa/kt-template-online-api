@@ -38,7 +38,11 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     await this.hydrateInactivePluginKeys();
   }
 
-  /** 注册运行态事件。 */
+  /**
+   * 根据`pluginKey`、`events`处理运行态事件；当 `events.length <= 0` 成立时直接结束且不产生返回值。
+   * @param pluginKey - 用于读取或更新运行态事件的稳定键。
+   * @param events - 按原有顺序参与运行态事件筛选、合并或汇总的集合。
+   */
   registerRuntimeEvents(
     pluginKey: string,
     events: QqbotEventPluginDefinition[],
@@ -50,24 +54,27 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     this.runtimeEventsByPluginKey.set(pluginKey, events);
   }
 
-  /** 返回取消注册运行态事件。 */
+  /**
+   * 根据参数 `pluginKey`，删除指定插件的运行时事件定义，使后续消息不再路由到该插件。
+   * @param pluginKey - 用于读取或更新unregister运行态事件流的稳定键。
+   */
   unregisterRuntimeEvents(pluginKey: string): void {
     this.runtimeEventsByPluginKey.delete(pluginKey);
   }
 
   /**
-   * 列出Definitions。
-   * @param pluginKey - 可选插件包 key；限定 Admin 事件插件元数据的返回范围。
-   * @returns QQBot 插件平台查询结果。
+   * 按`pluginKey`读取定义列表；从 `getDefinitions` 读取定义列表。
+   * @param pluginKey - 用于读取或更新定义列表的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 按输入顺序得到的定义列表；没有匹配项时为空数组。
    */
   listDefinitions(pluginKey?: string): QqbotEventPluginDefinition[] {
     return this.getDefinitions(pluginKey);
   }
 
   /**
-   * 设置Plugin Active。
-   * @param pluginKey - 插件包 key；对应持久化安装状态中的 active/inactive 语义。
-   * @param active - 是否启用该插件的事件元数据和绑定入口。
+   * 根据`pluginKey`、`active`更新插件启用状态；当 `active` 成立时直接结束且不产生返回值。
+   * @param pluginKey - 用于读取或更新插件启用状态的稳定键。
+   * @param active - 决定插件启用状态内容、边界或目标的 `active` 值。
    */
   setPluginActive(pluginKey: string, active: boolean) {
     if (active) {
@@ -78,14 +85,18 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 列出Plugins。
-   * @param selfId - 可选 QQ 账号 selfId；为空时为所有启用账号生成事件插件绑定摘要。
+   * 读取账号可用的事件插件定义，并结合绑定状态生成插件列表。
+   * @param selfId - 用于精确定位QQ 账号的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 按输入顺序得到的Plugins列表；没有匹配项时为空数组。
    */
   async listPlugins(selfId?: string): Promise<QqbotEventPluginSummary[]> {
     const definitions = this.getDefinitions();
-    const accounts = selfId
-      ? [await this.accountService.findBySelfId(selfId)]
-      : await this.accountService.allEnabled();
+    const accounts = await (async () => {
+      if (selfId) {
+        return [await this.accountService.findBySelfId(selfId)];
+      }
+      return await this.accountService.allEnabled();
+    })();
     const accountSummaries = await Promise.all(
       accounts
         .filter((account): account is NonNullable<typeof account> => !!account)
@@ -111,9 +122,9 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 列出Operations。
-   * @param pluginKey - 可选插件包 key；用于筛选 Admin 展示的事件触发能力。
-   * @returns QQBot 插件平台查询结果。
+   * 按`pluginKey`读取操作集合；从 `getDefinitions` 读取操作集合。
+   * @param pluginKey - 用于读取或更新操作集合的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 按输入顺序得到的操作集合列表；没有匹配项时为空数组。
    */
   listOperations(pluginKey?: string): QqbotPluginOperationSummary[] {
     return this.getDefinitions(pluginKey).map((definition) => ({
@@ -122,7 +133,12 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
         triggerType: definition.triggerType,
       },
       key: definition.triggerType,
-      name: definition.triggerType === 'message' ? '消息事件' : definition.name,
+      name: (() => {
+        if (definition.triggerType === 'message') {
+          return '消息事件';
+        }
+        return definition.name;
+      })(),
       outputSchema: undefined,
       pluginKey: definition.key,
       triggerMode: 'event',
@@ -130,9 +146,9 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param pluginKey - 可选插件包 key；用于筛选需要返回健康状态的事件插件元数据。
-   * @returns 异步完成后的 QQBot 插件平台结果。
+   * 根据`pluginKey`处理健康状态；从 `getDefinitions` 读取健康状态。
+   * @param pluginKey - 用于读取或更新健康状态的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 按输入顺序得到的健康状态列表；没有匹配项时为空数组。
    */
   async health(pluginKey?: string): Promise<QqbotPluginHealth[]> {
     return this.getDefinitions(pluginKey).map((definition) => ({
@@ -145,16 +161,21 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     }));
   }
 
-  /** 分发消息。 */
+  /**
+   * 保留旧消息分发入口但不在此触发运行时插件，当前实现固定返回 `false`。
+   * @param message - 旧入口传入的规范化消息；当前兼容实现不消费该消息，也不会触发插件。
+   * @returns 满足消息约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   async dispatchMessage(message: QqbotNormalizedMessage): Promise<boolean> {
     void message;
     return false;
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param pluginKey - 插件包 key；必须存在于当前 runtime event metadata 后才能绑定。
-   * @param selfId - QQ 账号 selfId；作为账号能力绑定表的目标账号。
+   * 通过 `requireDefinition` 强制满足前置条件。
+   * @param pluginKey - 用于读取或更新`bind` 对应结果的稳定键。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns `bind` 对应。
    */
   async bind(pluginKey: string, selfId: string) {
     this.requireDefinition(pluginKey);
@@ -162,50 +183,62 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param pluginKey - 插件包 key；必须存在于当前 runtime event metadata 后才能解绑。
-   * @param selfId - QQ 账号 selfId；作为账号能力绑定表的目标账号。
+   * 通过 `requireDefinition` 强制满足前置条件。
+   * @param pluginKey - 用于读取或更新`unbind` 对应结果的稳定键。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns `unbind` 对应。
    */
   async unbind(pluginKey: string, selfId: string) {
     this.requireDefinition(pluginKey);
     return this.accountService.unbindEventPlugin(selfId, pluginKey);
   }
 
-  /** 返回必需定义。 */
+  /**
+   * 校验`pluginKey`是否满足前置条件并返回必需定义约束，并拒绝不合法输入；从 `getDefinitions` 读取前置条件并返回必需定义。
+   * @param pluginKey - 用于读取或更新前置条件并返回必需定义的稳定键。
+   * @returns 前置条件并返回必需定义。
+   */
   private requireDefinition(pluginKey: string) {
     const definition = this.getDefinitions(pluginKey)[0];
     if (!definition) {
-      const suffix = this.inactivePluginKeys.has(pluginKey)
-        ? '未启用'
-        : '不存在';
+      const suffix = (() => {
+        if (this.inactivePluginKeys.has(pluginKey)) {
+          return '未启用';
+        }
+        return '不存在';
+      })();
       throwVbenError(`QQBot 事件插件${suffix}：${pluginKey}`);
     }
     return definition;
   }
 
   /**
-   * 查询 QQBot 插件平台数据。
-   * @param pluginKey - 可选插件包 key；为空时返回所有 active runtime event definitions。
-   * @returns QQBot 插件平台查询结果。
+   * 通过 `flatMap` 遍历或定位集合元素。
+   * @param pluginKey - 用于读取或更新定义列表的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 按输入顺序得到的定义列表；没有匹配项时为空数组。
    */
   private getDefinitions(pluginKey?: string): QqbotEventPluginDefinition[] {
     const definitions = [...this.runtimeEventsByPluginKey.entries()]
       .filter(([key]) => this.isPluginActive(key))
       .flatMap(([, events]) => events);
-    return pluginKey
-      ? definitions.filter((definition) => definition.key === pluginKey)
-      : definitions;
+    if (pluginKey) {
+      return definitions.filter((definition) => definition.key === pluginKey);
+    }
+    return definitions;
   }
 
   /**
-   * 判断 QQBot 插件平台条件。
-   * @param pluginKey - 插件包 key；用于读取启动时或安装状态切换时维护的 inactive 集合。
+   * 通过 `inactivePluginKeys.has` 判断输入是否满足函数约束。
+   * @param pluginKey - 用于读取或更新插件启用状态的稳定键。
+   * @returns 满足插件启用状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isPluginActive(pluginKey: string) {
     return !this.inactivePluginKeys.has(pluginKey);
   }
 
-  /** 恢复未激活的插件键。 */
+  /**
+   * 恢复未激活的插件键；通过 `pluginRepository.find` 查询匹配的持久化记录，通过 `installationRepository.find` 查询匹配的持久化记录，等待 `resolveInactivePluginKeys` 返回后继续处理未激活的插件键，按输入顺序逐项处理。
+   */
   private async hydrateInactivePluginKeys() {
     if (!this.pluginRepository || !this.installationRepository) return;
 

@@ -9,13 +9,12 @@ import { Server } from '@/modules/qqbot/plugins/bangdream/src/domain/catalog/ser
 import { globalDefaultServer } from '@/modules/qqbot/plugins/bangdream/src/config/runtime-config';
 
 /**
- * 在QQBot 图片视图层中绘制歌曲谱面。
- *
- * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
- * @param difficultyId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
- * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()`、`song.getSongJacketImageURL()` 的 BangDream步骤。
- * @param compress - BangDream列表；决定 BangDream条件分支。
- * @returns 异步处理结果。
+ * 根据`songId`、`difficultyId`、`displayedServerList`绘制或格式化歌曲Chart；当 `!song.isExist` 成立时返回 `['歌曲不存在']`。
+ * @param songId - 用于精确定位歌曲的标识。
+ * @param difficultyId - 用于精确定位难度的标识。
+ * @param displayedServerList - 决定歌曲Chart内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @param compress - 决定歌曲Chart内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的歌曲Chart列表；没有匹配项时为空数组。
  */
 export async function drawSongChart(
   songId: number,

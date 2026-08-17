@@ -79,7 +79,11 @@ export class NetworkOpenRedirectService {
     private readonly configService: ConfigService,
   ) {}
 
-  /** 解析网络打开重定向记录。 */
+  /**
+   * 从`serviceKey`解析网络打开重定向记录。
+   * @param serviceKey - 用于读取或更新网络打开重定向记录的稳定键。
+   * @returns 包含 `endpointGeneration`、`endpointIpv4`、`endpointValidUntil`、`location`、`status` 字段的网络打开重定向记录。
+   */
   async resolve(serviceKey: string): Promise<NetworkOpenRedirectResolution> {
     const target = this.target(serviceKey);
     if (!target) return { status: 'not_found' };
@@ -99,7 +103,11 @@ export class NetworkOpenRedirectService {
     };
   }
 
-  /** 返回目标。 */
+  /**
+   * 按服务键读取预定义的公网跳转目标，未知服务保留 `undefined`。
+   * @param serviceKey - 用于读取或更新按服务键读取预定义的公网跳转目标，未知服务保留 `undefined`的稳定键。
+   * @returns 按服务键读取预定义的公网跳转目标，未知服务保留 `undefined`；没有可用结果或提前结束时为 `undefined`。
+   */
   private target(serviceKey: string): NetworkOpenRedirectTarget | undefined {
     if (
       !Object.prototype.hasOwnProperty.call(
@@ -114,7 +122,11 @@ export class NetworkOpenRedirectService {
     ];
   }
 
-  /** 解析当前端点。 */
+  /**
+   * 从`manager`解析当前端点；从 `findOne` 读取当前端点。
+   * @param manager - 保证当前端点读写处于同一事务中的实体管理器。
+   * @returns 包含 `generation`、`ipv4`、`port`、`validUntil` 字段的当前端点；无法解析或未命中时为 `null`。
+   */
   private async resolveCurrentEndpoint(
     manager: EntityManager,
   ): Promise<NetworkOpenRedirectEndpoint | null> {
@@ -147,7 +159,11 @@ export class NetworkOpenRedirectService {
     };
   }
 
-  /** 返回映射是否就绪的。 */
+  /**
+   * 仅当映射、分组、DDNS、Agent、版本、租约及公网 IPv4 均一致可用时判定跳转目标就绪。
+   * @param mapping - 用于映射Ready的领域对象，包含 `activeKey`、`externalPort`、`internalPort`、`syncStatus` 字段。
+   * @returns 映射Ready。
+   */
   private mappingIsReady(mapping: NetworkPortForward): boolean {
     return (
       mapping.activeKey === portForwardActiveKey('tcp', GATEWAY_PORT) &&
@@ -169,7 +185,12 @@ export class NetworkOpenRedirectService {
     );
   }
 
-  /** 返回分组匹配结果。 */
+  /**
+   * 按字段约束判定分组匹配结果。
+   * @param group - 用于按字段约束判定分组匹配结果的领域对象，包含 `isDeleted`、`id`、`externalPort`、`internalPort` 字段。
+   * @param mapping - 用于按字段约束判定分组匹配结果的领域对象，包含 `groupId`、`targetIpv4` 字段。
+   * @returns 按字段约束判定分组匹配。
+   */
   private groupMatches(
     group: NetworkPortForwardGroup,
     mapping: NetworkPortForward,
@@ -184,7 +205,12 @@ export class NetworkOpenRedirectService {
     );
   }
 
-  /** 返回DDNS匹配结果。 */
+  /**
+   * 按字段约束判定DDNS匹配结果。
+   * @param ddns - 用于按字段约束判定DDNS匹配结果的领域对象，包含 `isDeleted`、`activeKey`、`enabled`、`recordType` 字段。
+   * @param mapping - 用于按字段约束判定DDNS匹配结果的领域对象，包含 `id`、`currentPublicIpv4` 字段。
+   * @returns 按字段约束判定DDNS匹配。
+   */
   private ddnsMatches(
     ddns: NetworkDdnsRecord,
     mapping: NetworkPortForward,
@@ -202,7 +228,12 @@ export class NetworkOpenRedirectService {
     );
   }
 
-  /** 返回Agent匹配结果。 */
+  /**
+   * 按字段约束判定Agent匹配结果。
+   * @param agent - 用于按字段约束判定Agent匹配结果的领域对象，包含 `agentId`、`online`、`targetIpv4` 字段。
+   * @param mapping - 用于按字段约束判定Agent匹配结果的领域对象，包含 `targetIpv4` 字段。
+   * @returns 按字段约束判定Agent匹配。
+   */
   private agentMatches(
     agent: NetworkAgentState,
     mapping: NetworkPortForward,
@@ -214,7 +245,11 @@ export class NetworkOpenRedirectService {
     );
   }
 
-  /** 返回租约是否当前。 */
+  /**
+   * 按字段约束判定租约是否当前。
+   * @param mapping - 用于按字段约束判定租约是否当前的领域对象，包含 `currentValidUntil` 字段。
+   * @returns 按字段约束判定租约是否当前。
+   */
   private leaseIsCurrent(mapping: NetworkPortForward): boolean {
     return (
       mapping.currentValidUntil instanceof Date &&
@@ -222,12 +257,21 @@ export class NetworkOpenRedirectService {
     );
   }
 
-  /** 判断公开的IPv4是否成立。 */
+  /**
+   * 根据`address`与当前约束判定公开的IPv4。
+   * @param address - 决定公开的IPv4内容、边界或目标的 `address` 值。
+   * @returns 满足公开的IPv4约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isPublicIpv4(address: string): boolean {
     return isIP(address) === 4 && !NON_PUBLIC_IPV4.check(address, 'ipv4');
   }
 
-  /** 返回版本是否当前。 */
+  /**
+   * 按字段约束判定版本是否当前。
+   * @param reported - 决定按字段约束判定版本是否当前内容、边界或目标的 `reported` 值。
+   * @param desired - 决定按字段约束判定版本是否当前内容、边界或目标的 `desired` 值。
+   * @returns 满足按字段约束判定版本是否当前约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private revisionIsCurrent(reported: string, desired: string): boolean {
     if (!/^(?:0|[1-9]\d*)$/u.test(reported)) return false;
     if (!/^[1-9]\d*$/u.test(desired)) return false;
@@ -238,7 +282,10 @@ export class NetworkOpenRedirectService {
     }
   }
 
-  /** 返回Agent标识。 */
+  /**
+   * 从运行时配置读取网络 Agent 的稳定标识；缺失或非法配置按调用处约束拒绝。
+   * @returns 返回 `this.configService.get<string>('NETWORK_AGENT_ID')` 的可用值；为空时回退到 `DEFAULT_AGENT_ID`。
+   */
   private agentId(): string {
     return (
       this.configService.get<string>('NETWORK_AGENT_ID') || DEFAULT_AGENT_ID

@@ -132,7 +132,12 @@ export class NetworkPortForwardGroupChannelParamsDto extends NetworkPortForwardG
   protocol: 'tcp' | 'udp';
 }
 
-/** 判断值是否已提供。 */
+/**
+ * 根据`_object`、`value`与当前约束判定值是否已提供。
+ * @param _object - 为兼容既有调用签名保留；当前实现不会读取该参数。
+ * @param value - 待判定是否满足值是否已提供约束的候选值。
+ * @returns 满足值是否已提供约束时为 `true`；不满足、未命中或显式失败分支为 `false`；没有可用结果或提前结束时为 `undefined`。
+ */
 function isProvided(_object: object, value: unknown): boolean {
   return value !== undefined;
 }

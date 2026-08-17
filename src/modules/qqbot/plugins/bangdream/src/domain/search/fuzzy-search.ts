@@ -27,9 +27,10 @@ let cachedRules: ReturnType<typeof createDefaultFuzzySearchRules> | undefined;
 
 export const config = new Proxy({} as FuzzySearchConfig, {
   /**
-   * 获取业务数据。
-   * @param _target - _target 输入；限定 BangDream查询范围。
-   * @param key - 键名；驱动 `getFuzzySearchConfig()` 的 BangDream步骤。
+   * 从延迟加载的模糊搜索配置读取指定键值，并保持 Proxy 对最新缓存可见。
+   * @param _target - 为兼容既有调用签名保留；当前实现不会读取该参数。
+   * @param key - 用于读取或更新`get` 对应结果的稳定键。
+   * @returns `get` 对应。
    */
   get(_target, key: string) {
     return getFuzzySearchConfig()[key];
@@ -37,7 +38,8 @@ export const config = new Proxy({} as FuzzySearchConfig, {
 }) as FuzzySearchConfig;
 
 /**
- * 查询 BangDream 插件数据。
+ * 按当前运行态读取模糊搜索Search配置。
+ * @returns 模糊搜索Search配置。
  */
 function getFuzzySearchConfig() {
   cachedConfig ??= searchDictionaryRepository.loadConfig();
@@ -45,7 +47,8 @@ function getFuzzySearchConfig() {
 }
 
 /**
- * 查询 BangDream 插件数据。
+ * 按当前运行态读取模糊搜索SearchRules；从 `getFuzzySearchConfig` 读取模糊搜索SearchRules。
+ * @returns 模糊搜索SearchRules。
  */
 function getFuzzySearchRules() {
   cachedRules ??= createDefaultFuzzySearchRules(getFuzzySearchConfig());
@@ -57,8 +60,8 @@ const hasOwn = (source: object, key: string) =>
 
 /**
  * 按空白和引号拆分搜索关键词。
- *
- * @param keyword - keyword 输入；提取正则匹配结果。
+ * @param keyword - 用于按空白和引号拆分搜索关键词的领域对象，包含 `match` 字段。
+ * @returns 按输入顺序得到的按空白和引号拆分搜索关键词列表；没有匹配项时为空数组。
  */
 function extractKeywords(keyword: string): string[] {
   return (keyword.match(KEYWORD_PATTERN) || []).map((item) =>
@@ -74,9 +77,9 @@ const appendTo =
   };
 
 /**
- * 校验模糊搜索结果结构。
- *
- * @param value - 待转换值；驱动 `Object.values()` 的 BangDream步骤。
+ * 根据`value`与当前约束判定模糊搜索结果结构；当 `typeof value !== 'object' || value === null` 成立时返回 `false`。
+ * @param value - 待判定是否满足模糊搜索结果结构约束的候选值。
+ * @returns 满足模糊搜索结果结构约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isFuzzySearchResult(
   value: unknown,
@@ -93,8 +96,8 @@ export function isFuzzySearchResult(
 
 /**
  * 把用户关键词解析成结构化匹配条件。
- *
- * @param keyword - keyword 输入；驱动 `for()` 的 BangDream步骤。
+ * @param keyword - 决定把用户关键词解析成结构化匹配条件内容、边界或目标的 `keyword` 值。
+ * @returns 把用户关键词解析成结构化匹配条件。
  */
 export function fuzzySearch(keyword: string): FuzzySearchResult {
   const matches: FuzzySearchResult = {};
@@ -108,19 +111,19 @@ export function fuzzySearch(keyword: string): FuzzySearchResult {
 }
 
 /**
- * 判断字段是否为模糊搜索保留键。
- *
- * @param key - 键名；驱动 `RESERVED_MATCH_KEYS.has()` 的 BangDream步骤。
+ * 根据参数 `key`，判断字段是否为模糊搜索保留键。
+ * @param key - 用于读取或更新根据参数 `key`，判断字段是否为模糊搜索保留键的稳定键。
+ * @returns 满足根据参数 `key`，判断字段是否为模糊搜索保留键约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function isReservedMatchKey(key: string): boolean {
   return RESERVED_MATCH_KEYS.has(key);
 }
 
 /**
- * 判断候选值是否命中目标字段值。
- *
- * @param candidates - BangDream列表；计算 BangDream布尔判断。
- * @param targetValue - targetValue 输入；计算 BangDream布尔判断。
+ * 根据`candidates`、`targetValue`与当前约束判定候选值是否命中目标字段值；当 `Array.isArray(targetValue)` 成立时返回 `targetValue.some((item) => candidateMatches…`。
+ * @param candidates - 决定是否启用“candidates”分支的布尔选项。
+ * @param targetValue - 决定候选值是否命中目标字段值内容、边界或目标的 `targetValue` 值。
+ * @returns 满足候选值是否命中目标字段值约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function candidateMatches(
   candidates: FuzzySearchMatchValue[],
@@ -145,12 +148,12 @@ function candidateMatches(
 }
 
 /**
- * 判断数字别名是否命中目标字段。
- *
- * @param matches - BangDream列表；使用 `_number` 字段生成结果。
- * @param target - target 输入；影响 numberAliasMatches 的返回值。
- * @param key - 键名；影响 numberAliasMatches 的返回值。
- * @param numberTypeKey - numberTypeKey 输入；计算 BangDream布尔判断。
+ * 根据`matches`、`target`、`key`处理数字别名是否命中目标字段。
+ * @param matches - 用于数字别名是否命中目标字段的领域对象，包含 `_number` 字段。
+ * @param target - 用于数字别名是否命中目标字段的领域对象，包含 `key` 字段。
+ * @param key - 用于读取或更新数字别名是否命中目标字段的稳定键。
+ * @param numberTypeKey - 用于读取或更新数字别名是否命中目标字段的稳定键。
+ * @returns 数字别名是否命中目标字段。
  */
 function numberAliasMatches(
   matches: FuzzySearchResult,
@@ -166,12 +169,12 @@ function numberAliasMatches(
 }
 
 /**
- * 判断目标对象指定字段是否命中搜索条件。
- *
- * @param matches - BangDream列表；驱动 `candidateMatches()`、`numberAliasMatches()` 的 BangDream步骤。
- * @param target - target 输入；驱动 `candidateMatches()`、`numberAliasMatches()` 的 BangDream步骤。
- * @param key - 键名；驱动 `candidateMatches()`、`numberAliasMatches()` 的 BangDream步骤。
- * @param numberTypeKey - numberTypeKey 输入；驱动 `numberAliasMatches()` 的 BangDream步骤。
+ * 根据参数 `matches`，判断目标对象指定字段是否命中搜索条件。
+ * @param matches - 用于根据参数 `matches`，判断目标对象指定字段是否命中搜索条件的领域对象，包含 `key` 字段。
+ * @param target - 用于根据参数 `matches`，判断目标对象指定字段是否命中搜索条件的领域对象，包含 `key` 字段。
+ * @param key - 用于读取或更新根据参数 `matches`，判断目标对象指定字段是否命中搜索条件的稳定键。
+ * @param numberTypeKey - 用于读取或更新根据参数 `matches`，判断目标对象指定字段是否命中搜索条件的稳定键。
+ * @returns 根据参数 `matches`，判断目标对象指定字段是否命中搜索条件。
  */
 function targetMatchesKey(
   matches: FuzzySearchResult,
@@ -186,10 +189,10 @@ function targetMatchesKey(
 }
 
 /**
- * 判断兜底关键词是否命中任意目标值。
- *
- * @param targetValue - targetValue 输入；计算 BangDream布尔判断。
- * @param searchValue - searchValue 输入；驱动 `targetValue.toLowerCase()`、`targetValue.some()` 的 BangDream步骤。
+ * 根据`targetValue`、`searchValue`处理兜底关键词是否命中任意目标值；当 `typeof targetValue === 'string'` 成立时返回 `targetValue.toLowerCase().includes(searchVa…`。
+ * @param targetValue - 决定兜底关键词是否命中任意目标值内容、边界或目标的 `targetValue` 值。
+ * @param searchValue - 决定兜底关键词是否命中任意目标值内容、边界或目标的 `searchValue` 值。
+ * @returns 满足兜底关键词是否命中任意目标值约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function allKeywordMatches(targetValue: unknown, searchValue: string): boolean {
   if (typeof targetValue === 'string') {
@@ -205,10 +208,10 @@ function allKeywordMatches(targetValue: unknown, searchValue: string): boolean {
 }
 
 /**
- * 判断目标对象是否包含兜底关键词。
- *
- * @param target - target 输入；驱动 `for()` 的 BangDream步骤。
- * @param rawSearchValue - rawSearchValue 输入；执行 `rawSearchValue.toLowerCase()` 对应的 BangDream步骤。
+ * 根据参数 `target`，判断目标对象是否包含兜底关键词。
+ * @param target - 用于根据参数 `target`，判断目标对象是否包含兜底关键词的领域对象，包含 `key` 字段。
+ * @param rawSearchValue - 决定根据参数 `target`，判断目标对象是否包含兜底关键词内容、边界或目标的 `rawSearchValue` 值。
+ * @returns 满足根据参数 `target`，判断目标对象是否包含兜底关键词约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function targetIncludesAllKeyword(
   target: any,
@@ -228,9 +231,9 @@ function targetIncludesAllKeyword(
 }
 
 /**
- * 获取匹配条件 key 数量。
- *
- * @param matches - BangDream列表；驱动 `for()` 的 BangDream步骤。
+ * 根据参数 `matches`，获取匹配条件 key 数量。
+ * @param matches - 决定根据参数 `matches`，获取匹配条件 key 数量内容、边界或目标的 `matches` 值。
+ * @returns 根据参数 `matches`，获取匹配条件 key 数量。
  */
 function getMatchKeyCount(matches: FuzzySearchResult): number {
   let count = 0;
@@ -243,21 +246,21 @@ function getMatchKeyCount(matches: FuzzySearchResult): number {
 }
 
 /**
- * 判断匹配结果是否只包含兜底关键词。
- *
- * @param matches - BangDream列表；使用 `_all` 字段生成结果。
- * @param keyCount - keyCount 输入；影响 matchesOnlyAll 的返回值。
+ * 根据`matches`、`keyCount`与当前约束判定匹配结果是否只包含兜底关键词。
+ * @param matches - 用于匹配结果是否只包含兜底关键词的领域对象，包含 `_all` 字段。
+ * @param keyCount - 限制匹配结果是否只包含兜底关键词数量、尺寸、等级或重试边界的数值。
+ * @returns 满足匹配结果是否只包含兜底关键词约束时为 `true`；不满足、未命中或显式失败分支为 `false`；没有可用结果或提前结束时为 `undefined`。
  */
 function matchesOnlyAll(matches: FuzzySearchResult, keyCount: number): boolean {
   return matches._all !== undefined && keyCount === 1;
 }
 
 /**
- * 执行结构化模糊搜索条件匹配。
- *
- * @param matches - BangDream列表；使用 `_all` 字段生成结果。
- * @param target - target 输入；驱动 `_all.every()` 的 BangDream步骤。
- * @param numberTypeKey - numberTypeKey 输入；决定 BangDream条件分支。
+ * 根据参数 `matches`，执行结构化模糊搜索条件匹配。
+ * @param matches - 用于根据参数 `matches`，执行结构化模糊搜索条件匹配的领域对象，包含 `_all` 字段。
+ * @param target - 决定根据参数 `matches`，执行结构化模糊搜索条件匹配内容、边界或目标的 `target` 值。
+ * @param numberTypeKey - 用于读取或更新根据参数 `matches`，执行结构化模糊搜索条件匹配的稳定键。
+ * @returns 满足根据参数 `matches`，执行结构化模糊搜索条件匹配约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function match(
   matches: FuzzySearchResult,

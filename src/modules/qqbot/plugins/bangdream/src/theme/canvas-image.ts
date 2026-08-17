@@ -13,10 +13,9 @@ const convertSvg = svg2img as unknown as (
 export const assetErrorImageBuffer = bangdreamFallbackImageBuffer;
 
 /**
- * 在底层绘图工具层中加载图片FromPath。
- *
- * @param path - 路由或文件路径；驱动 `readBangDreamAsset()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 按`path`读取图片路径；从受控资源来源加载所需数据（`loadImage`）。
+ * @param path - 必须保持在受控根目录内的路径。
+ * @returns 图片路径。
  */
 export async function loadImageFromPath(path: string): Promise<Image> {
   const buffer = await readBangDreamAsset(path);
@@ -25,11 +24,12 @@ export async function loadImageFromPath(path: string): Promise<Image> {
 
 //指定字体，字号，文本，获取文本宽度
 /**
- * 在底层绘图工具层中获取文本宽度。
- *
- * @param text - 待匹配文本；驱动 `context.measureText()` 的 BangDream步骤。
- * @param textSize - textSize 输入；限定 BangDream查询范围。
- * @param font - font 输入；限定 BangDream查询范围。
+ * 按`text`、`textSize`、`font`读取文本Width；从 `canvas.getContext` 读取文本Width。
+ * @param text - 决定文本Width内容、边界或目标的 `text` 值。
+ * @param textSize - 限制文本Width数量、尺寸、等级或重试边界的数值。
+ * @param font - 决定文本Width内容、边界或目标的 `font` 值。
+ * @returns 文本Width。
+ * @throws 当 `!context` 成立时拒绝当前输入并抛出 `Error`。
  */
 export function getTextWidth(text: string, textSize: number, font: string) {
   const canvas = new Canvas(1, 1);
@@ -45,10 +45,9 @@ export function getTextWidth(text: string, textSize: number, font: string) {
 }
 
 /**
- * 执行 BangDream 插件流程。
- *
- * @param svgBuffer - svgBuffer 输入；生成规范化文本。
- * @returns 异步处理结果。
+ * 将 SVG Buffer 解码后异步转换为 PNG Buffer，并把转换器错误包装为明确失败。
+ * @param svgBuffer - 用于SvgPng缓冲区的领域对象，包含 `toString` 字段。
+ * @returns 完成初始化并携带当前边界配置的SvgPng缓冲区。
  */
 export function convertSvgToPngBuffer(svgBuffer: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {

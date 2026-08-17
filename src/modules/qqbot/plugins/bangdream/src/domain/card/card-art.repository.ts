@@ -12,10 +12,10 @@ export class CardArtResourceRepository {
   ) {}
 
   /**
-   * 下载卡牌小图边框资源。
-   *
-   * @param rarity - rarity 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
-   * @param attribute - attribute 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * 根据参数 `rarity`，下载卡牌小图边框资源。
+   * @param rarity - 决定卡牌边框、星级数量与资源名称的稀有度。
+   * @param attribute - 决定卡牌属性图标与边框资源的属性。
+   * @returns 根据参数 `rarity`，下载卡牌小图边框资源。
    */
   async getIconFrameBuffer(
     rarity: number,
@@ -27,10 +27,10 @@ export class CardArtResourceRepository {
   }
 
   /**
-   * 下载卡牌插画边框资源。
-   *
-   * @param rarity - rarity 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
-   * @param attribute - attribute 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * 根据参数 `rarity`，下载卡牌插画边框资源。
+   * @param rarity - 决定卡牌边框、星级数量与资源名称的稀有度。
+   * @param attribute - 决定卡牌属性图标与边框资源的属性。
+   * @returns 根据参数 `rarity`，下载卡牌插画边框资源。
    */
   async getIllustrationFrameBuffer(
     rarity: number,

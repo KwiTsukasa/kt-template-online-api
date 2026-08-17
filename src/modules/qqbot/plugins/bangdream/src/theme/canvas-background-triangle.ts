@@ -10,10 +10,8 @@ interface createBlurredTrianglePatternOptions {
 
 //输入图片，输出带有三角形效果的模糊图片
 /**
- * 创建 BangDream 插件对象或配置。
- *
- * @param options1 - options1 输入；生成 BangDream对象。
- * @returns 异步处理结果。
+ * 根据当前运行态构造模糊处理三角形Pattern；把图片、文本或图形按布局规格绘制到画布。
+ * @returns 模糊处理三角形Pattern。
  */
 export async function createBlurredTrianglePattern({
   image,
@@ -43,7 +41,12 @@ export async function createBlurredTrianglePattern({
 
     for (let col = 0; col < numCols; col++) {
       const colOffset = col * triangleSize;
-      const triangleX = isOffsetRow ? colOffset + triangleSize / 2 : colOffset;
+      const triangleX = (() => {
+        if (isOffsetRow) {
+          return colOffset + triangleSize / 2;
+        }
+        return colOffset;
+      })();
       const triangleY = rowOffset;
 
       if (isFirstColOffset && col === 0) {
@@ -67,9 +70,12 @@ export async function createBlurredTrianglePattern({
               pixelY,
               triangleSize,
             );
-            const brightnessFactor = isInTriangle
-              ? 1 + brightnessDifference
-              : 1;
+            const brightnessFactor = (() => {
+              if (isInTriangle) {
+                return 1 + brightnessDifference;
+              }
+              return 1;
+            })();
             imageData.data[idx] = Math.min(
               Math.max(imageData.data[idx] * brightnessFactor, 0),
               255,
@@ -98,7 +104,12 @@ export async function createBlurredTrianglePattern({
             y,
             triangleSize,
           );
-          const brightnessFactor = isInTriangle ? 1 + brightnessDifference : 1;
+          const brightnessFactor = (() => {
+            if (isInTriangle) {
+              return 1 + brightnessDifference;
+            }
+            return 1;
+          })();
           imageData.data[idx] = Math.min(
             Math.max(imageData.data[idx] * brightnessFactor, 0),
             255,
@@ -134,9 +145,12 @@ export async function createBlurredTrianglePattern({
               pixelY,
               triangleSize,
             );
-            const brightnessFactor = isInTriangle
-              ? 1 + brightnessDifference
-              : 1;
+            const brightnessFactor = (() => {
+              if (isInTriangle) {
+                return 1 + brightnessDifference;
+              }
+              return 1;
+            })();
             imageData.data[idx] = Math.min(
               Math.max(imageData.data[idx] * brightnessFactor, 0),
               255,
@@ -164,14 +178,13 @@ export async function createBlurredTrianglePattern({
 }
 
 /**
- * 判断 BangDream 插件条件。
- *
- * @param _x - _x 输入；计算 BangDream判断结果。
- * @param _y - _y 输入；计算 BangDream判断结果。
- * @param px - px 输入；决定 BangDream条件分支。
- * @param py - py 输入；计算 BangDream判断结果。
- * @param size - 数量限制；计算 BangDream判断结果。
- * @returns 判断结果。
+ * 根据 `py > (px - halfSize) * Math.sqrt(3) && py < triangleHeight + (px - halfSize) * Math.sqr…` 判定输入是否满足条件。
+ * @param _x - 为兼容既有调用签名保留；当前实现不会读取该参数。
+ * @param _y - 为兼容既有调用签名保留；当前实现不会读取该参数。
+ * @param px - 决定InsideEquilateral三角形内容、边界或目标的 `px` 值。
+ * @param py - 决定InsideEquilateral三角形内容、边界或目标的 `py` 值。
+ * @param size - 决定InsideEquilateral三角形内容、边界或目标的 `size` 值。
+ * @returns 满足InsideEquilateral三角形约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function isInsideEquilateralTriangle(
   _x: number,

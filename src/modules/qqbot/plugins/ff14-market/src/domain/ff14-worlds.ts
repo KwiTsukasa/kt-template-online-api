@@ -23,9 +23,9 @@ export const QQBOT_FF14_MARKET_DICT_CODES = {
 };
 
 /**
- * 创建 FF14 市场插件对象或配置。
- * @param input - input 输入；使用 `regions`、`dataCenters`、`worlds` 字段生成结果。
- * @returns 创建后的 FF14 市场插件对象或配置。
+ * 根据`input`构造针对FF14 市场插件。
+ * @param input - 用于针对FF14 市场插件的结构化输入，包含 `regions`、`dataCenters`、`worlds` 字段。
+ * @returns 包含 `dataCenters`、`defaultRegion`、`regions` 字段的针对FF14 市场插件。
  */
 export function buildFf14MarketCatalog(input: {
   dataCenters: Ff14DictItem[];
@@ -57,9 +57,9 @@ export function buildFf14MarketCatalog(input: {
 }
 
 /**
- * 创建 FF14 市场插件对象或配置。
- * @param roots - FF14 市场列表；筛选 FF14 市场列表项。
- * @returns 创建后的 FF14 市场插件对象或配置。
+ * 根据`roots`构造针对FF14 市场插件。
+ * @param roots - 决定针对FF14 市场插件内容、边界或目标的 `roots` 值。
+ * @returns 包含 `dataCenters`、`defaultRegion`、`regions` 字段的针对FF14 市场插件。
  */
 export function buildFf14MarketCatalogFromTree(
   roots: Ff14DictItem[],
@@ -96,9 +96,10 @@ export function buildFf14MarketCatalogFromTree(
 }
 
 /**
- * 判断 FF14 市场插件条件。
- * @param catalog - catalog 输入；使用 `dataCenters` 字段计算判断结果。
- * @param value - 待转换值；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ * 根据`catalog`、`value`与当前约束判定针对FF14 市场插件。
+ * @param catalog - 用于针对FF14 市场插件的领域对象，包含 `dataCenters` 字段。
+ * @param value - 待判定是否满足针对FF14 市场插件约束的候选值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 满足针对FF14 市场插件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isFf14DataCenterName(
   catalog: Ff14MarketCatalog,
@@ -109,9 +110,10 @@ export function isFf14DataCenterName(
 }
 
 /**
- * 判断 FF14 市场插件条件。
- * @param catalog - catalog 输入；使用 `regions` 字段计算判断结果。
- * @param value - 待转换值；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ * 根据`catalog`、`value`与当前约束判定针对FF14 市场插件。
+ * @param catalog - 用于针对FF14 市场插件的领域对象，包含 `regions` 字段。
+ * @param value - 待判定是否满足针对FF14 市场插件约束的候选值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 满足针对FF14 市场插件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isFf14RegionName(catalog: Ff14MarketCatalog, value?: string) {
   const name = normalizeFf14WorldValue(value);
@@ -119,9 +121,10 @@ export function isFf14RegionName(catalog: Ff14MarketCatalog, value?: string) {
 }
 
 /**
- * 判断 FF14 市场插件条件。
- * @param catalog - catalog 输入；使用 `dataCenters` 字段计算判断结果。
- * @param value - 待转换值；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ * 根据`catalog`、`value`与当前约束判定针对FF14 市场插件。
+ * @param catalog - 用于针对FF14 市场插件的领域对象，包含 `dataCenters` 字段。
+ * @param value - 待判定是否满足针对FF14 市场插件约束的候选值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 满足针对FF14 市场插件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isFf14WorldName(catalog: Ff14MarketCatalog, value?: string) {
   const name = normalizeFf14WorldValue(value);
@@ -129,9 +132,10 @@ export function isFf14WorldName(catalog: Ff14MarketCatalog, value?: string) {
 }
 
 /**
- * 判断 FF14 市场插件条件。
- * @param catalog - catalog 输入；计算 FF14 市场判断结果。
- * @param value - 待转换值；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ * 根据`catalog`、`value`与当前约束判定针对FF14 市场插件。
+ * @param catalog - 决定针对FF14 市场插件内容、边界或目标的 `catalog` 值。
+ * @param value - 待判定是否满足针对FF14 市场插件约束的候选值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 满足针对FF14 市场插件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isFf14LocationName(catalog: Ff14MarketCatalog, value?: string) {
   const name = normalizeFf14WorldValue(value);
@@ -145,8 +149,9 @@ export function isFf14LocationName(catalog: Ff14MarketCatalog, value?: string) {
 }
 
 /**
- * 执行 FF14 市场插件流程。
- * @param value - 待转换值；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ * 根据`value`拼接稳定的针对FF14 市场插件，用于隔离对应资源或存储记录；当 `parts.length === 2` 成立时返回 `{ dataCenter: parts[0], world: parts[1], }`。
+ * @param value - 参与针对FF14 市场插件比较、格式化或输出的候选值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 包含 `dataCenter`、`region`、`world` 字段的针对FF14 市场插件。
  */
 export function splitFf14WorldPath(value?: string) {
   const raw = normalizeFf14WorldValue(value);
@@ -173,9 +178,10 @@ export function splitFf14WorldPath(value?: string) {
 }
 
 /**
- * 查询 FF14 市场插件数据。
- * @param catalog - catalog 输入；使用 `dataCenters` 字段生成结果。
- * @param world - world 输入；驱动 `normalizeFf14WorldValue()` 的 FF14 市场步骤。
+ * 按`catalog`、`world`读取针对FF14 市场插件。
+ * @param catalog - 用于针对FF14 市场插件的领域对象，包含 `dataCenters` 字段。
+ * @param world - 决定针对FF14 市场插件内容、边界或目标的 `world` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 针对FF14 市场插件。
  */
 export function findFf14DataCenterByWorld(
   catalog: Ff14MarketCatalog,
@@ -186,10 +192,11 @@ export function findFf14DataCenterByWorld(
 }
 
 /**
- * 解析Ff14 Market Target。
- * @param catalog - catalog 输入；使用 `defaultRegion`、`dataCenters` 字段生成结果。
- * @param params - FF14 市场列表；使用 `fallback`、`world`、`region`、`dataCenter` 字段生成结果。
- * @returns FF14 市场插件转换后的值。
+ * 从`catalog`、`params`解析Ff14市场数据Target；当 `region && dataCenter && (!world || world === region)` 成立时返回 `{ dataCenter, label: `${region} / ${dataCen…`。
+ * @param catalog - 用于Ff14市场数据Target的领域对象，包含 `defaultRegion`、`dataCenters` 字段。
+ * @param params - 用于Ff14市场数据Target的领域对象，包含 `fallback`、`world`、`region`、`dataCenter` 字段。
+ * @returns 包含 `label`、`target` 字段的Ff14市场数据Target。
+ * @throws 当 `matchedDataCenter && !matchedDataCenter.worlds.includes(world)` 成立时拒绝当前输入并抛出 `Error`。
  */
 export function resolveFf14MarketTarget(
   catalog: Ff14MarketCatalog,
@@ -208,7 +215,12 @@ export function resolveFf14MarketTarget(
     params.dataCenter || path.dataCenter,
   );
   const rawWorld = normalizeFf14WorldValue(path.world || params.world);
-  const world = dataCenter && rawWorld === defaultRegion ? '' : rawWorld;
+  const world = (() => {
+    if (dataCenter && rawWorld === defaultRegion) {
+      return '';
+    }
+    return rawWorld;
+  })();
   const raw = world || dataCenter || region || fallback || defaultRegion;
 
   if (region && dataCenter && (!world || world === region)) {
@@ -237,9 +249,12 @@ export function resolveFf14MarketTarget(
     }
     return {
       dataCenter,
-      label: region
-        ? `${region} / ${dataCenter} / ${world}`
-        : `${dataCenter} / ${world}`,
+      label: (() => {
+        if (region) {
+          return `${region} / ${dataCenter} / ${world}`;
+        }
+        return `${dataCenter} / ${world}`;
+      })(),
       region,
       target: world,
       world,
@@ -260,7 +275,12 @@ export function resolveFf14MarketTarget(
   if (isFf14DataCenterName(catalog, raw)) {
     return {
       dataCenter: raw,
-      label: defaultRegion ? `${defaultRegion} / ${raw}` : raw,
+      label: (() => {
+        if (defaultRegion) {
+          return `${defaultRegion} / ${raw}`;
+        }
+        return raw;
+      })(),
       region: defaultRegion,
       target: raw,
     };
@@ -273,24 +293,27 @@ export function resolveFf14MarketTarget(
 }
 
 /**
- * 查询 FF14 市场插件数据。
- * @param item - item 输入；使用 `label`、`value` 字段生成结果。
+ * 按`item`读取针对FF14 市场插件。
+ * @param item - 用于针对FF14 市场插件的领域对象，包含 `label`、`value` 字段。
+ * @returns 针对FF14 市场插件。
  */
 function getDictDisplayValue(item: Ff14DictItem) {
   return normalizeFf14WorldValue(item.label || item.value);
 }
 
 /**
- * 查询 FF14 市场插件数据。
- * @param item - item 输入；使用 `value`、`label` 字段生成结果。
+ * 按`item`读取针对FF14 市场插件。
+ * @param item - 用于针对FF14 市场插件的领域对象，包含 `value`、`label` 字段。
+ * @returns 针对FF14 市场插件。
  */
 function getDictRawValue(item: Ff14DictItem) {
   return normalizeFf14WorldValue(item.value || item.label);
 }
 
 /**
- * 转换 FF14 市场插件输入。
- * @param value - 待转换值；影响 normalizeFf14WorldValue 的返回值。
+ * 将`value`规范为针对FF14 市场插件，使等价输入得到一致表示。
+ * @param value - 待转换为针对FF14 市场插件的原始值；为空时采用 `''` 作为兜底。
+ * @returns 针对FF14 市场插件。
  */
 function normalizeFf14WorldValue(value?: string | null) {
   return `${value || ''}`.trim();

@@ -28,7 +28,7 @@ let BGDefaultImage: Image;
 let playerAssetsPreload: Promise<void> | undefined;
 
 /**
- * 执行 BangDream 插件流程。
+ * 根据当前运行态处理BanG Dream玩家Assets；从受控资源来源加载所需数据（`loadImageFromPath`）。
  */
 export async function preloadBangDreamPlayerAssets() {
   if (!playerAssetsPreload) {
@@ -47,13 +47,12 @@ export async function preloadBangDreamPlayerAssets() {
 }
 
 /**
- * 在QQBot 图片视图层中绘制玩家详情。
- *
- * @param playerId - 玩家 ID；定位本次读取、更新、删除或关联的玩家。
- * @param mainServer - mainServer 输入；驱动 `playerRepository.create()` 的 BangDream步骤。
- * @param useEasyBG - useEasyBG 输入；影响 drawPlayerDetail 的返回值。
- * @param compress - BangDream列表；影响 drawPlayerDetail 的返回值。
- * @returns 异步处理结果。
+ * 根据`playerId`、`mainServer`、`useEasyBG`绘制或格式化玩家详情；当 `player.initError` 成立时返回 `[`错误: 查询玩家时发生错误: ${playerId}`]`。
+ * @param playerId - 用于精确定位玩家的标识。
+ * @param mainServer - 决定玩家详情内容、边界或目标的 `mainServer` 值。
+ * @param useEasyBG - 决定是否启用“useEasyBG”分支的布尔选项。
+ * @param compress - 决定玩家详情内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的玩家详情列表；没有匹配项时为空数组。
  */
 export async function drawPlayerDetail(
   playerId: number,

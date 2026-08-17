@@ -38,7 +38,7 @@ export class CutoffEventTop {
     }
   }
   /**
-   * 在 CutoffEventTop 模型中加载远端完整详情并标记初始化状态。
+   * 根据当前运行态处理initFull；当 `!this.isExist` 成立时直接结束且不产生返回值。
    */
   async initFull() {
     if (!this.isExist) {
@@ -75,10 +75,9 @@ export class CutoffEventTop {
     }
   }
   /**
-   * 在 CutoffEventTop 模型中获取谱面数据。
-   *
-   * @param setStartToZero - setStartToZero 输入；决定 BangDream条件分支。
-   * @returns 计算后的数值。
+   * 按`setStartToZero`读取Chart数据；当 `this.isExist == false` 成立时直接结束且不产生返回值。
+   * @param setStartToZero - 决定Chart数据内容、边界或目标的 `setStartToZero` 值；省略时默认采用 `false`。
+   * @returns 按输入顺序得到的Chart数据列表；没有可用结果或提前结束时为 `undefined`，没有匹配项时为空数组。
    */
   getChartData(setStartToZero = false): {
     [key: number]: { x: number; y: number }[];
@@ -121,9 +120,8 @@ export class CutoffEventTop {
     return chartDate;
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @returns 计算后的数值。
+   * 按当前运行态读取Latest排名数据。
+   * @returns 按输入顺序得到的Latest排名数据列表；没有匹配项时为空数组。
    */
   getLatestRanking(): { uid: number; point: number }[] {
     const result: { uid: number; point: number }[] = [];
@@ -137,10 +135,9 @@ export class CutoffEventTop {
     return result;
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @param id - BangDream记录 ID；定位本次读取、更新、删除或关联的BangDream记录。
-   * @returns 格式化后的文本。
+   * 按`id`读取用户Uid；当 `this.users[i].uid == id` 成立时返回 `this.users[i]`。
+   * @param id - 决定用户Uid内容、边界或目标的 `id` 值。
+   * @returns 按输入顺序得到的用户Uid列表；没有可用结果或提前结束时为 `undefined`，没有匹配项时为空数组。
    */
   getUserByUid(id: number): {
     uid: number;
@@ -161,10 +158,9 @@ export class CutoffEventTop {
     return;
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @param id - BangDream记录 ID；定位本次读取、更新、删除或关联的BangDream记录。
-   * @returns 格式化后的文本。
+   * 按`id`读取用户名称标识；当 `this.users[i].uid == id` 成立时返回 `this.users[i].name`。
+   * @param id - 决定用户名称标识内容、边界或目标的 `id` 值。
+   * @returns 用户名称标识；没有可用结果或提前结束时为 `undefined`。
    */
   getUserNameById(id: number): string {
     for (let i = 0; i < this.users.length; i++) {

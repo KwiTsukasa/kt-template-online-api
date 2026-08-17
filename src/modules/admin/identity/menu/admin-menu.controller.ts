@@ -24,7 +24,8 @@ export class AdminMenuController {
 
   /**
    * 获取当前用户路由菜单。
-   * @param user - user 输入；驱动 `vbenSuccess()` 的 Admin步骤。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @returns 当前用户路由菜单。
    */
   @Get('menu/all')
   @ApiOperation({ summary: '获取当前用户路由菜单' })
@@ -33,7 +34,8 @@ export class AdminMenuController {
   }
 
   /**
-   * 获取系统菜单列表。
+   * 根据当前领域状态，获取系统菜单列表。
+   * @returns 根据当前领域状态，获取系统菜单列表。
    */
   @Get('system/menu/list')
   @ApiOperation({ summary: '获取系统菜单列表' })
@@ -42,9 +44,10 @@ export class AdminMenuController {
   }
 
   /**
-   * 校验菜单名称是否存在。
-   * @param name - 名称文本；驱动 `vbenSuccess()` 的 Admin步骤。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按参数 `name`，校验菜单名称是否存在。
+   * @param name - 决定按参数 `name`，校验菜单名称是否存在内容、边界或目标的 `name` 值。
+   * @param id - 决定按参数 `name`，校验菜单名称是否存在内容、边界或目标的 `id` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 按参数 `name`，校验菜单名称是否存在。
    */
   @Get('system/menu/name-exists')
   @ApiOperation({ summary: '校验菜单名称是否存在' })
@@ -53,9 +56,10 @@ export class AdminMenuController {
   }
 
   /**
-   * 校验菜单路径是否存在。
-   * @param path - 路由或文件路径；驱动 `vbenSuccess()` 的 Admin步骤。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按参数 `path`，校验菜单路径是否存在。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @param id - 决定按参数 `path`，校验菜单路径是否存在内容、边界或目标的 `id` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 按参数 `path`，校验菜单路径是否存在。
    */
   @Get('system/menu/path-exists')
   @ApiOperation({ summary: '校验菜单路径是否存在' })
@@ -64,8 +68,9 @@ export class AdminMenuController {
   }
 
   /**
-   * 新增系统菜单。
-   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   * 根据`body`构造针对系统菜单。
+   * @param body - 用于针对系统菜单的结构化输入。
+   * @returns 针对系统菜单。
    */
   @Post('system/menu')
   @ApiOperation({ summary: '新增系统菜单' })
@@ -74,9 +79,10 @@ export class AdminMenuController {
   }
 
   /**
-   * 编辑系统菜单。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param body - 请求体 DTO；承载 Admin新增、更新、导入或执行字段。
+   * 根据`id`、`body`更新针对系统菜单。
+   * @param id - 决定针对系统菜单内容、边界或目标的 `id` 值。
+   * @param body - 用于针对系统菜单的结构化输入。
+   * @returns 针对系统菜单。
    */
   @Put('system/menu/:id')
   @ApiOperation({ summary: '编辑系统菜单' })
@@ -85,8 +91,9 @@ export class AdminMenuController {
   }
 
   /**
-   * 删除系统菜单。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按`id`移除针对删除系统菜单。
+   * @param id - 决定针对删除系统菜单内容、边界或目标的 `id` 值。
+   * @returns 针对删除系统菜单。
    */
   @Delete('system/menu/:id')
   @ApiOperation({ summary: '删除系统菜单' })

@@ -20,7 +20,8 @@ export class QqbotPluginPlatformController {
   constructor(private readonly service: QqbotPluginPlatformService) {}
 
   /**
-   * 插件安装列表。
+   * 读取插件安装记录列表，并封装为 Vben 成功响应。
+   * @returns 安装记录列表。
    */
   @Get('installations')
   @ApiOperation({ summary: '插件安装列表' })
@@ -29,8 +30,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 插件平台能力汇总。
-   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   * 根据当前平台状态返回插件平台能力汇总。
+   * @param pluginId - 用于精确定位插件的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 根据当前平台状态返回插件平台能力汇总。
    */
   @Get('capabilities')
   @ApiOperation({ summary: '插件平台能力汇总' })
@@ -40,8 +42,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 插件平台能力列表。
-   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   * 根据`pluginId`处理针对插件平台能力列表；从 `service.listOperations` 读取针对插件平台能力列表。
+   * @param pluginId - 用于精确定位插件的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 针对插件平台能力列表。
    */
   @Get('operations/list')
   @ApiOperation({ summary: '插件平台能力列表' })
@@ -51,8 +54,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 插件平台能力分页。
-   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   * 根据`query`处理针对插件平台能力分页。
+   * @param query - 限定针对插件平台能力分页筛选、排序与分页范围的查询条件。
+   * @returns 针对插件平台能力分页。
    */
   @Get('operations/page')
   @ApiOperation({ summary: '插件平台能力分页' })
@@ -71,8 +75,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 插件平台事件处理器列表。
-   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   * 根据当前平台状态返回插件平台事件处理器列表。
+   * @param pluginId - 用于精确定位插件的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 事件处理器列表。
    */
   @Get('event-handlers')
   @ApiOperation({ summary: '插件平台事件处理器列表' })
@@ -82,8 +87,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 校验插件 manifest。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 校验`body`是否满足插件 manifest约束，并拒绝不合法输入；先通过 `service.validateManifest` 校验输入边界。
+   * @param body - 用于插件 manifest的结构化输入。
+   * @returns 插件 manifest。
    */
   @Post('validate')
   @HttpCode(HttpStatus.OK)
@@ -93,8 +99,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 上传插件包。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 根据`body`处理上传插件包。
+   * @param body - 用于上传插件包的结构化输入。
+   * @returns 上传插件包。
    */
   @Post('upload')
   @HttpCode(HttpStatus.OK)
@@ -111,8 +118,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 安装插件包。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 根据`body`处理针对插件包。
+   * @param body - 用于针对插件包的结构化输入。
+   * @returns 针对插件包。
    */
   @Post('install')
   @HttpCode(HttpStatus.OK)
@@ -129,8 +137,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 本地安装插件包。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 根据`body`处理本地安装插件包。
+   * @param body - 用于本地安装插件包的结构化输入。
+   * @returns 本地安装插件包。
    */
   @Post('install-local')
   @HttpCode(HttpStatus.OK)
@@ -147,8 +156,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 启用插件。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 按安装标识启用插件安装，并返回更新后的安装状态。
+   * @param body - 用于针对插件的结构化输入。
+   * @returns 针对插件。
    */
   @Post('enable')
   @HttpCode(HttpStatus.OK)
@@ -158,8 +168,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 禁用插件。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 按`body`停止针对插件并清理该入口拥有的运行态资源。
+   * @param body - 用于针对插件的结构化输入。
+   * @returns 针对插件。
    */
   @Post('disable')
   @HttpCode(HttpStatus.OK)
@@ -169,8 +180,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 升级插件。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 根据`body`处理升级插件。
+   * @param body - 用于升级插件的结构化输入。
+   * @returns 升级插件。
    */
   @Post('upgrade')
   @HttpCode(HttpStatus.OK)
@@ -180,8 +192,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 卸载插件。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 根据`body`处理卸载插件。
+   * @param body - 用于卸载插件的结构化输入。
+   * @returns 卸载插件。
    */
   @Post('uninstall')
   @HttpCode(HttpStatus.OK)
@@ -191,8 +204,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 更新插件配置。
-   * @param body - 请求体 DTO；承载 插件平台新增、更新、导入或执行字段。
+   * 根据`body`处理针对插件配置。
+   * @param body - 用于针对插件配置的结构化输入。
+   * @returns 针对插件配置。
    */
   @Post('config')
   @HttpCode(HttpStatus.OK)
@@ -204,8 +218,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 插件运行事件列表。
-   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   * 根据当前平台状态返回插件运行事件列表。
+   * @param query - 限定根据当前平台状态返回插件运行事件列表筛选、排序与分页范围的查询条件。
+   * @returns 根据当前平台状态返回插件运行事件列表。
    */
   @Get('runtime-events')
   @ApiOperation({ summary: '插件运行事件列表' })
@@ -230,8 +245,9 @@ export class QqbotPluginPlatformController {
   }
 
   /**
-   * 插件账号绑定列表。
-   * @param pluginId - 插件 ID；定位本次读取、更新、删除或关联的插件。
+   * 根据当前平台状态返回插件账号绑定列表。
+   * @param pluginId - 用于精确定位插件的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 根据当前平台状态返回插件账号绑定列表。
    */
   @Get('account-bindings')
   @ApiOperation({ summary: '插件账号绑定列表' })

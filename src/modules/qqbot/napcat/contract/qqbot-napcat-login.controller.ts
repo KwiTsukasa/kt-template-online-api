@@ -25,7 +25,8 @@ export class QqbotNapcatLoginController {
   constructor(private readonly napcatLoginService: QqbotNapcatLoginService) {}
 
   /**
-   * 扫码新增 QQBot 账号。
+   * 根据当前运行态处理扫码会话。
+   * @returns 扫码会话。
    */
   @Post('scan/create')
   @HttpCode(HttpStatus.OK)
@@ -35,8 +36,9 @@ export class QqbotNapcatLoginController {
   }
 
   /**
-   * 扫码刷新 QQBot 账号登录态。
-   * @param id - NapCat记录 ID；定位本次读取、更新、删除或关联的NapCat记录。
+   * 根据参数 `id`，扫码刷新 QQBot 账号登录态。
+   * @param id - 决定根据参数 `id`，扫码刷新 QQBot 账号登录态内容、边界或目标的 `id` 值。
+   * @returns 根据参数 `id`，扫码刷新 QQBot 账号登录态。
    */
   @Post('scan/refresh')
   @HttpCode(HttpStatus.OK)
@@ -47,8 +49,9 @@ export class QqbotNapcatLoginController {
   }
 
   /**
-   * 查询 QQBot 扫码登录状态。
-   * @param query - 查询参数 DTO；限定 NapCat分页、搜索或详情查询条件。
+   * 根据参数 `query`，查询 QQBot 扫码登录状态。
+   * @param query - 限定根据参数 `query`，查询 QQBot 扫码登录状态筛选、排序与分页范围的查询条件，包含 `sessionId` 字段。
+   * @returns 根据参数 `query`，查询 QQBot 扫码登录状态。
    */
   @Get('scan/status')
   @ApiOperation({ summary: '查询 QQBot 扫码登录状态' })
@@ -57,8 +60,9 @@ export class QqbotNapcatLoginController {
   }
 
   /**
-   * 订阅 QQBot 扫码登录进度。
-   * @param query - 查询参数 DTO；限定 NapCat分页、搜索或详情查询条件。
+   * 根据`query`处理QQBot 扫码登录进度。
+   * @param query - 限定QQBot 扫码登录进度筛选、排序与分页范围的查询条件，包含 `sessionId` 字段。
+   * @returns QQBot 扫码登录进度。
    */
   @Sse('scan/events')
   @ApiOperation({ summary: '订阅 QQBot 扫码登录进度' })
@@ -67,8 +71,9 @@ export class QqbotNapcatLoginController {
   }
 
   /**
-   * 刷新 QQBot 扫码二维码。
-   * @param query - 查询参数 DTO；限定 NapCat分页、搜索或详情查询条件。
+   * 根据`query`处理QQBot 扫码二维码。
+   * @param query - 限定QQBot 扫码二维码筛选、排序与分页范围的查询条件，包含 `sessionId` 字段。
+   * @returns QQBot 扫码二维码。
    */
   @Post('scan/qrcode/refresh')
   @HttpCode(HttpStatus.OK)
@@ -80,8 +85,9 @@ export class QqbotNapcatLoginController {
   }
 
   /**
-   * 提交 QQBot 登录安全验证码。
-   * @param body - 请求体 DTO；承载 NapCat新增、更新、导入或执行字段。
+   * 根据`body`处理QQBot 登录安全验证码。
+   * @param body - 用于QQBot 登录安全验证码的结构化输入，包含 `sessionId` 字段。
+   * @returns QQBot 登录安全验证码。
    */
   @Post('scan/captcha/submit')
   @HttpCode(HttpStatus.OK)
@@ -93,8 +99,9 @@ export class QqbotNapcatLoginController {
   }
 
   /**
-   * 取消 QQBot 扫码登录会话。
-   * @param query - 查询参数 DTO；限定 NapCat分页、搜索或详情查询条件。
+   * 根据参数 `query`，取消 QQBot 扫码登录会话。
+   * @param query - 限定根据参数 `query`，取消 QQBot 扫码登录会话筛选、排序与分页范围的查询条件，包含 `sessionId` 字段。
+   * @returns 满足根据参数 `query`，取消 QQBot 扫码登录会话约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   @Post('scan/cancel')
   @HttpCode(HttpStatus.OK)

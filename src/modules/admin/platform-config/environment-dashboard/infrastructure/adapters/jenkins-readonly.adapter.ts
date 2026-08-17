@@ -22,7 +22,10 @@ export class JenkinsReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
-  /** 检查Jenkins只读的记录。 */
+  /**
+   * 根据当前运行态处理Jenkins只读的记录；当 `missing.length > 0` 成立时返回 `createUnwiredAdapterSignal( 'jenkins-build'…`。
+   * @returns Jenkins只读的记录。
+   */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_JENKINS_URL',
@@ -44,9 +47,24 @@ export class JenkinsReadonlyAdapter {
       const buildNumber = asNumber(body.number);
       const durationMs = asNumber(body.duration);
       const building = body.building === true;
-      const result = building ? 'BUILDING' : asString(body.result) || 'UNKNOWN';
-      const status = !building && result === 'SUCCESS' ? 'ok' : 'degraded';
-      const summary = `Jenkins last build ${buildNumber ? `#${buildNumber} ` : ''}${result}`;
+      const result = (() => {
+        if (building) {
+          return 'BUILDING';
+        }
+        return asString(body.result) || 'UNKNOWN';
+      })();
+      const status = (() => {
+        if (!building && result === 'SUCCESS') {
+          return 'ok';
+        }
+        return 'degraded';
+      })();
+      const summary = `Jenkins last build ${(() => {
+        if (buildNumber) {
+          return `#${buildNumber} `;
+        }
+        return '';
+      })()}${result}`;
 
       return createLiveAdapterSignal(
         'jenkins-build',
@@ -71,7 +89,10 @@ export class JenkinsReadonlyAdapter {
     }
   }
 
-  /** 构建上次构建URL。 */
+  /**
+   * 根据当前运行态构造上次构建URL；从 `config.get` 读取上次构建URL。
+   * @returns 上次构建URL。
+   */
   private buildLastBuildUrl(): string {
     const jobPath = this.config
       .get('ENV_DASHBOARD_JENKINS_JOB')
@@ -85,7 +106,10 @@ export class JenkinsReadonlyAdapter {
     );
   }
 
-  /** 创建认证请求头。 */
+  /**
+   * 根据当前运行态构造认证请求头；从 `config.get` 读取认证请求头。
+   * @returns 包含 `Authorization` 字段的认证请求头；没有可用结果或提前结束时为 `undefined`。
+   */
   private createAuthHeaders(): Record<string, string> | undefined {
     const username = this.config.get('ENV_DASHBOARD_JENKINS_USERNAME');
     const token = this.config.get('ENV_DASHBOARD_JENKINS_TOKEN');

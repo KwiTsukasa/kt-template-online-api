@@ -22,11 +22,14 @@ const difficultyNameById: Record<number, string> =
 
 /**
  * 将服务器枚举值转换为 Bestdori 资源路径中的服务器编码。
- *
- * @param server - server 输入；限定 BangDream查询范围。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 当前状态对应的将服务器枚举值转换为 Bestdori 资源路径中的服务器编码，取值为 `'undefined'`；没有可用结果或提前结束时为 `undefined`。
  */
 function getServerCode(server: Server | undefined): string {
-  return server == null ? 'undefined' : Server[server];
+  if (server == null) {
+    return 'undefined';
+  }
+  return Server[server];
 }
 
 export class SongResourceRepository {
@@ -35,9 +38,9 @@ export class SongResourceRepository {
   ) {}
 
   /**
-   * 获取歌曲远端详情。
-   *
-   * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
+   * 根据参数 `songId`，获取歌曲远端详情。
+   * @param songId - 用于精确定位歌曲的标识。
+   * @returns 根据参数 `songId`，获取歌曲远端详情。
    */
   async getDetail(songId: number): Promise<Record<string, any>> {
     return await this.provider.getJson<Record<string, any>>(
@@ -46,10 +49,10 @@ export class SongResourceRepository {
   }
 
   /**
-   * 获取歌曲谱面数据。
-   *
-   * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
-   * @param difficultyId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
+   * 根据参数 `songId`，获取歌曲谱面数据。
+   * @param songId - 用于精确定位歌曲的标识。
+   * @param difficultyId - 用于精确定位难度的标识。
+   * @returns 按输入顺序得到的根据参数 `songId`，获取歌曲谱面数据列表；没有匹配项时为空数组。
    */
   async getChart(
     songId: number,
@@ -61,19 +64,19 @@ export class SongResourceRepository {
   }
 
   /**
-   * 获取歌曲封面资源批次。
-   *
-   * @param songId - 歌曲 ID；定位本次读取、更新、删除或关联的歌曲。
+   * 根据参数 `songId`，获取歌曲封面资源批次。
+   * @param songId - 用于精确定位歌曲的标识。
+   * @returns 根据参数 `songId`，获取歌曲封面资源批次。
    */
   getSongRip(songId: number): number {
     return Math.ceil(songId / 10) * 10;
   }
 
   /**
-   * 获取歌曲封面资源路径。
-   *
-   * @param source - source 输入；驱动 `this.getJacketServerAndRip()`、`this.getJacketImageName()` 的 BangDream步骤。
-   * @param displayedServerList - displayedServerList 输入；驱动 `this.getJacketServerAndRip()` 的 BangDream步骤。
+   * 根据参数 `source`，获取歌曲封面资源路径。
+   * @param source - 决定根据参数 `source`，获取歌曲封面资源路径内容、边界或目标的 `source` 值。
+   * @param displayedServerList - 决定根据参数 `source`，获取歌曲封面资源路径内容、边界或目标的 `displayedServerList` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 根据参数 `source`，获取歌曲封面资源路径。
    */
   getJacketImagePath(
     source: SongJacketSource,
@@ -92,10 +95,10 @@ export class SongResourceRepository {
   }
 
   /**
-   * 获取歌曲封面完整 URL。
-   *
-   * @param source - source 输入；驱动 `provider.resolveUrl()` 的 BangDream步骤。
-   * @param displayedServerList - displayedServerList 输入；驱动 `provider.resolveUrl()` 的 BangDream步骤。
+   * 根据参数 `source`，获取歌曲封面完整 URL。
+   * @param source - 决定根据参数 `source`，获取歌曲封面完整 URL内容、边界或目标的 `source` 值。
+   * @param displayedServerList - 决定根据参数 `source`，获取歌曲封面完整 URL内容、边界或目标的 `displayedServerList` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 根据参数 `source`，获取歌曲封面完整 URL。
    */
   resolveJacketImageUrl(
     source: SongJacketSource,
@@ -108,9 +111,9 @@ export class SongResourceRepository {
 
   /**
    * 下载歌曲封面 Buffer，并在缺失时按服务器顺序回退。
-   *
-   * @param source - source 输入；驱动 `provider.getAsset()`、`for()` 的 BangDream步骤。
-   * @param displayedServerList - displayedServerList 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * @param source - 决定Jacket图片缓冲区内容、边界或目标的 `source` 值。
+   * @param displayedServerList - 决定Jacket图片缓冲区内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `[Server.jp, Server.cn]`。
+   * @returns Jacket图片缓冲区。
    */
   async getJacketImageBuffer(
     source: SongJacketSource,
@@ -136,10 +139,10 @@ export class SongResourceRepository {
   }
 
   /**
-   * 计算歌曲封面优先服务器和资源批次。
-   *
-   * @param source - source 输入；使用 `publishedAt`、`songId` 字段生成结果。
-   * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
+   * 根据参数 `source`，计算歌曲封面优先服务器和资源批次。
+   * @param source - 用于根据参数 `source`，计算歌曲封面优先服务器和资源批次的领域对象，包含 `publishedAt`、`songId` 字段。
+   * @param displayedServerList - 决定根据参数 `source`，计算歌曲封面优先服务器和资源批次内容、边界或目标的 `displayedServerList` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 包含 `server`、`songRip` 字段的根据参数 `source`，计算歌曲封面优先服务器和资源批次。
    */
   private getJacketServerAndRip(
     source: SongJacketSource,
@@ -157,8 +160,8 @@ export class SongResourceRepository {
 
   /**
    * 获取歌曲封面缺失时的服务器回退路径列表。
-   *
-   * @param source - source 输入；使用 `songId` 字段生成结果。
+   * @param source - 用于歌曲封面缺失时的服务器回退路径列表的领域对象，包含 `songId` 字段。
+   * @returns 按输入顺序得到的歌曲封面缺失时的服务器回退路径列表；没有匹配项时为空数组。
    */
   private getFallbackJacketImagePaths(source: SongJacketSource): string[] {
     const jacketImageName = this.getJacketImageName(source);
@@ -169,11 +172,11 @@ export class SongResourceRepository {
   }
 
   /**
-   * 拼接歌曲封面资源路径。
-   *
-   * @param serverCode - serverCode 输入；生成 BangDream对象。
-   * @param songRip - songRip 输入；生成 BangDream对象。
-   * @param jacketImageName - jacketImageName 输入；生成 BangDream对象。
+   * 根据参数 `serverCode`，拼接歌曲封面资源路径。
+   * @param serverCode - 决定根据参数 `serverCode`，拼接歌曲封面资源路径内容、边界或目标的 `serverCode` 值。
+   * @param songRip - 决定根据参数 `serverCode`，拼接歌曲封面资源路径内容、边界或目标的 `songRip` 值。
+   * @param jacketImageName - 决定根据参数 `serverCode`，拼接歌曲封面资源路径内容、边界或目标的 `jacketImageName` 值。
+   * @returns 按参数编码并拼接完成的根据参数 `serverCode`，拼接歌曲封面资源路径。
    */
   private buildJacketImagePath(
     serverCode: string,
@@ -184,9 +187,9 @@ export class SongResourceRepository {
   }
 
   /**
-   * 获取歌曲封面资源名称。
-   *
-   * @param source - source 输入；使用 `jacketImage` 字段生成结果。
+   * 根据参数 `source`，获取歌曲封面资源名称。
+   * @param source - 用于根据参数 `source`，获取歌曲封面资源名称的领域对象，包含 `jacketImage` 字段。
+   * @returns 根据参数 `source`，获取歌曲封面资源名称。
    */
   private getJacketImageName(source: SongJacketSource): string {
     return source.jacketImage[source.jacketImage.length - 1];

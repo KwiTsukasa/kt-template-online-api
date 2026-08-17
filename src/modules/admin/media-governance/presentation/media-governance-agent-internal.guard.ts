@@ -11,7 +11,13 @@ import { ConfigService } from '@nestjs/config';
 export class MediaGovernanceAgentInternalGuard implements CanActivate {
   constructor(private readonly config: ConfigService) {}
 
-  /** 使用定长安全比较校验媒体 Agent 内部回调密钥。 */
+  /**
+   * 通过使用定长安全比较校验媒体 Agent 内部回调密钥。
+   * @param context - 用于通过使用定长安全比较校验媒体 Agent 内部回调密钥的领域对象，包含 `switchToHttp` 字段。
+   * @returns 满足通过使用定长安全比较校验媒体 Agent 内部回调密钥约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   * @throws 当 `expectedValue.length < 32 || expectedValue.length > 512` 成立时拒绝当前输入并抛出 `ForbiddenException`；
+   *   当 `actual.length !== expected.length || !timingSafeEqual(actual, expected)` 成立时拒绝当前输入并抛出 `ForbiddenException`。
+   */
   canActivate(context: ExecutionContext) {
     const expectedValue = String(
       this.config.get<string>('MEDIA_CODEX_AGENT_INTERNAL_SECRET') ?? '',

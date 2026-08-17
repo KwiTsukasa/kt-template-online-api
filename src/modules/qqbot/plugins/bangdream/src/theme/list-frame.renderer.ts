@@ -46,10 +46,8 @@ interface ListOptions {
 
 //画表格中的一行
 /**
- * 在图片布局层中绘制列表。
- *
- * @param options1 - options1 输入；影响 drawList 的返回值。
- * @returns 渲染或资源结果。
+ * 根据当前运行态绘制或格式化`drawList` 对应结果；当 `key == undefined` 成立时返回 `stackImageHorizontal([ new Canvas( BANGDREA…`。
+ * @returns `drawList` 对应。
  */
 export function drawList({
   key,
@@ -116,9 +114,8 @@ interface tipsOptions {
   spacing?: number;
 }
 /**
- * 在图片布局层中绘制TipsIn列表。
- *
- * @param options1 - options1 输入；影响 drawTipsInList 的返回值。
+ * 根据当前运行态绘制或格式化Tips；把图片、文本或图形按布局规格绘制到画布。
+ * @returns 按文本或图文内容计算提示区布局并绘制完成的提示画布；无内容时使用空提示尺寸。
  */
 export function drawTipsInList({
   text,
@@ -161,12 +158,12 @@ export function drawTipsInList({
 }
 
 /**
- * 在图片布局层中绘制列表By服务器列表。
- *
- * @param content - 待处理内容；驱动 `getServerByPriority()`、`tempcontent.push()` 的 BangDream步骤。
- * @param key - 键名；影响 drawListByServerList 的返回值。
- * @param serverList - serverList 输入；使用 `length` 字段生成结果。
- * @param maxWidth - maxWidth 输入；影响 drawListByServerList 的返回值。
+ * 根据`content`、`key`、`serverList`绘制或格式化服务器；同步更新对应缓存或去重状态（`contentMap.set`）。
+ * @param content - 用于服务器的领域对象，包含 `tempServer` 字段。
+ * @param key - 用于读取或更新服务器的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param serverList - 用于服务器的领域对象，包含 `length`、`i` 字段；省略时默认采用 `globalDefaultServer`。
+ * @param maxWidth - 决定服务器内容、边界或目标的 `maxWidth` 值；省略时默认采用 `BANGDREAM_RENDER_THEME.layout.contentWidth`。
+ * @returns 服务器。
  */
 export async function drawListByServerList(
   content: Array<string | null>,
@@ -228,10 +225,9 @@ export async function drawListByServerList(
 
 //横向组合较短list，高度为最高的list，宽度平分
 /**
- * 在图片布局层中绘制列表Merge。
- *
- * @param imageList - imageList 输入；使用 `length` 字段生成结果。
- * @returns 渲染或资源结果。
+ * 根据`imageList`绘制或格式化`drawListMerge` 对应结果；把图片、文本或图形按布局规格绘制到画布。
+ * @param imageList - 用于`drawListMerge` 对应结果的领域对象，包含 `length`、`i` 字段。
+ * @returns `drawListMerge` 对应。
  */
 export function drawListMerge(imageList: Array<Canvas | Image>): Canvas {
   let maxHeight = 0;
@@ -258,11 +254,10 @@ export function drawListMerge(imageList: Array<Canvas | Image>): Canvas {
 
 //横向组合image/canvas array，居中，超过宽度则换行
 /**
- * 在图片布局层中绘制图片列表Center。
- *
- * @param imageList - imageList 输入；使用 `length`、`emptyWidth`、`emptyHeight` 字段生成结果。
- * @param maxWidth - maxWidth 输入；驱动 `createCenteredImageRows()`、`Canvas()` 的 BangDream步骤。
- * @returns 渲染或资源结果。
+ * 根据`imageList`、`maxWidth`绘制或格式化图片Center；当 `imageList.length == 0` 成立时返回 `new Canvas( BANGDREAM_LIST_FRAME_SPEC.image…`。
+ * @param imageList - 用于图片Center的领域对象，包含 `length` 字段。
+ * @param maxWidth - 决定图片Center内容、边界或目标的 `maxWidth` 值；省略时默认采用 `BANGDREAM_RENDER_THEME.layout.contentWidth`。
+ * @returns 图片Center。
  */
 export function drawImageListCenter(
   imageList: Array<Canvas | Image>,
@@ -296,10 +291,9 @@ export function drawImageListCenter(
 
 //画左侧有竖线的排版，用于画block时展示数据
 /**
- * 在图片布局层中绘制列表With线条。
- *
- * @param textImageList - textImageList 输入；使用 `length` 字段生成结果。
- * @returns 渲染或资源结果。
+ * 根据`textImageList`绘制或格式化文本行；把图片、文本或图形按布局规格绘制到画布。
+ * @param textImageList - 用于文本行的领域对象，包含 `length`、`i` 字段。
+ * @returns 文本行。
  */
 export function drawListWithLine(textImageList: Array<Canvas | Image>): Canvas {
   let height = 0;

@@ -58,11 +58,10 @@ export class Item {
     }
   }
   /**
-   * 在 Item 模型中获取道具图片。
-   *
-   * @param server - server 输入；驱动 `itemResourceRepository.getImageBuffer()` 的 BangDream步骤。
-   * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
-   * @returns 异步处理结果。
+   * 按`server`、`displayedServerList`读取条目图片；从受控资源来源加载所需数据（`itemResourceRepository.getImageBuffer`）。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @param displayedServerList - 决定条目图片内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+   * @returns 条目图片。
    */
   async getItemImage(
     server?: Server,

@@ -34,7 +34,8 @@ export const BANGDREAM_OPERATION_MODULES: BangDreamOperationModule[] = [
 ];
 
 /**
- * 查询 BangDream 插件数据。
+ * 按当前运行态读取BanG Dream操作集合Handler名称。
+ * @returns 按稳定键索引的BanGDream操作集合Handler名称映射；没有输入项时为空映射。
  */
 export function getBangDreamOperationsByHandlerName() {
   return new Map(

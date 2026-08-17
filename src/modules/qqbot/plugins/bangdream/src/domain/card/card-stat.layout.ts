@@ -33,9 +33,9 @@ export const BANGDREAM_STAT_LIST_SPEC = {
 } as const;
 
 /**
- * 创建综合力数值行展示文本。
- *
- * @param params - BangDream列表；使用 `label`、`value`、`limitBreakValue` 字段生成结果。
+ * 根据`params`构造综合力数值行展示文本；当 `params.limitBreakValue == null` 成立时返回 `baseText`。
+ * @param params - 用于综合力数值行展示文本的领域对象，包含 `label`、`value`、`limitBreakValue` 字段。
+ * @returns 按参数编码并拼接完成的综合力数值行展示文本。
  */
 export function createStatLineText(params: StatLineTextParams): string {
   const baseText = `${params.label}: ${Math.floor(params.value)}`;
@@ -48,10 +48,10 @@ export function createStatLineText(params: StatLineTextParams): string {
 }
 
 /**
- * 计算综合力数值条宽度。
- *
- * @param value - 待转换值；限定 BangDream查询范围。
- * @param total - 总记录数；限定 BangDream查询范围。
+ * 按`value`、`total`读取综合力数值条宽度。
+ * @param value - 参与综合力数值条宽度比较、格式化或输出的候选值。
+ * @param total - 决定综合力数值条宽度内容、边界或目标的 `total` 值。
+ * @returns 综合力数值条宽度。
  */
 export function getStatLineBarWidth(value: number, total: number): number {
   return (
@@ -61,10 +61,10 @@ export function getStatLineBarWidth(value: number, total: number): number {
 }
 
 /**
- * 生成综合力数值条绘制布局。
- *
- * @param value - 待转换值；驱动 `getStatLineBarWidth()` 的 BangDream步骤。
- * @param total - 总记录数；驱动 `getStatLineBarWidth()` 的 BangDream步骤。
+ * 根据参数 `value`，生成综合力数值条绘制布局。
+ * @param value - 参与根据参数 `value`，生成综合力数值条绘制布局比较、格式化或输出的候选值。
+ * @param total - 决定根据参数 `value`，生成综合力数值条绘制布局内容、边界或目标的 `total` 值。
+ * @returns 包含 `height`、`radius`、`strokeWidth`、`width`、`x` 字段的根据参数 `value`，生成综合力数值条绘制布局。
  */
 export function getStatLineBarLayout(value: number, total: number) {
   const barSpec = BANGDREAM_STAT_LIST_SPEC.line.bar;

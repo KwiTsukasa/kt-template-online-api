@@ -19,13 +19,12 @@ import { bangdreamCatalogRepository } from '@/modules/qqbot/plugins/bangdream/sr
 import { BangDreamEventStatus } from '@/modules/qqbot/plugins/bangdream/src/domain/common/bangdream-protocol';
 
 /**
- * 在QQBot 图片视图层中绘制档线详情。
- *
- * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
- * @param tier - tier 输入；驱动 `Cutoff()` 的 BangDream步骤。
- * @param mainServer - mainServer 输入；驱动 `Cutoff()`、`all.push()`、`Math.round()` 的 BangDream步骤。
- * @param compress - BangDream列表；影响 drawCutoffDetail 的返回值。
- * @returns 异步处理结果。
+ * 根据`eventId`、`tier`、`mainServer`绘制或格式化档线详情；当 `cutoff.isExist == false` 成立时返回 `[`错误: ${serverNameFullList[mainServer]} 活动或…`。
+ * @param eventId - 用于精确定位事件的标识。
+ * @param tier - 决定档线详情内容、边界或目标的 `tier` 值。
+ * @param mainServer - 决定档线详情内容、边界或目标的 `mainServer` 值。
+ * @param compress - 决定档线详情内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的档线详情列表；没有匹配项时为空数组。
  */
 export async function drawCutoffDetail(
   eventId: number,
@@ -67,17 +66,28 @@ export async function drawCutoffDetail(
   if (cutoff.status == BangDreamEventStatus.inProgress) {
     cutoff.predict();
     const predictText =
-      cutoff.predictEP == null || cutoff.predictEP == 0
-        ? '?'
-        : cutoff.predictEP.toString();
+      (() => {
+        if (cutoff.predictEP == null || cutoff.predictEP == 0) {
+          return '?';
+        }
+        return cutoff.predictEP.toString();
+      })();
 
     //预测线和时速
     const cutoffs = cutoff.cutoffs;
-    const lastEp = cutoffs.length > 1 ? cutoffs[cutoffs.length - 2].ep : 0;
+    const lastEp = (() => {
+      if (cutoffs.length > 1) {
+        return cutoffs[cutoffs.length - 2].ep;
+      }
+      return 0;
+    })();
     const timeSpan =
-      (cutoffs.length > 1
-        ? cutoff.latestCutoff.time - cutoffs[cutoffs.length - 2].time
-        : cutoff.latestCutoff.time - cutoff.startAt) /
+      ((() => {
+        if (cutoffs.length > 1) {
+          return cutoff.latestCutoff.time - cutoffs[cutoffs.length - 2].time;
+        }
+        return cutoff.latestCutoff.time - cutoff.startAt;
+      })()) /
       (1000 * 3600);
     list.push(
       drawListMerge([
@@ -104,7 +114,12 @@ export async function drawCutoffDetail(
 
     //更新时间
     const finalTimeImage = drawList({
-      key: `更新时间 / ${cutoff.useHHWX ? 'HHWX' : 'Bestdori'}`,
+      key: `更新时间 / ${(() => {
+        if (cutoff.useHHWX) {
+          return 'HHWX';
+        }
+        return 'Bestdori';
+      })()}`,
       text: `${formatTimePeriod(new Date().getTime() - cutoff.latestCutoff.time)}前`,
     });
     tempImageList.push(finalTimeImage);
@@ -123,14 +138,17 @@ export async function drawCutoffDetail(
     tempList.push(
       drawList({
         key: '线性外推',
-        text: cutoffs[cutoffs.length - 1]
-          ? Math.round(
+        text: (() => {
+          if (cutoffs[cutoffs.length - 1]) {
+            return Math.round(
               ((cutoff.latestCutoff.ep - lastEp) / timeSpan) *
                 ((event.endAt[mainServer] - cutoffs[cutoffs.length - 1].time) /
                   3600000) +
                 cutoffs[cutoffs.length - 1].ep,
-            ).toString()
-          : '无数据',
+            ).toString();
+          }
+          return '无数据';
+        })(),
       }),
     );
     list.push(drawListMerge(tempList));

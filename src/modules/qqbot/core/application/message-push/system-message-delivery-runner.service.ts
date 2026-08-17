@@ -54,7 +54,11 @@ type PreparedDelivery =
       status: 'cancelled' | 'failed' | 'superseded' | 'waiting_ddns';
     };
 
-/** 返回投递重试延迟毫秒。 */
+/**
+ * 按边界约束计算投递重试延迟毫秒。
+ * @param attemptCount - 限制按边界约束计算投递重试延迟毫秒数量、尺寸、等级或重试边界的数值。
+ * @returns 按边界约束计算投递重试延迟毫秒。
+ */
 export function deliveryRetryDelayMs(attemptCount: number): number {
   return Math.min(
     SYSTEM_MESSAGE_RETRY_BASE_MS * 2 ** Math.max(0, attemptCount - 1),
@@ -71,7 +75,11 @@ export class SystemMessageDeliveryRunnerService {
     private readonly sendService: QqbotSendService,
   ) {}
 
-  /** 执行一次。 */
+  /**
+   * 在单批上限内依次领取并处理到期记录，队列暂空时提前停止并返回实际领取数量。
+   * @param now - 用于过期、排序或租约判定的时间基准；为空时采用 `new Date()` 作为兜底。
+   * @returns 返回本轮实际领取的记录数量；队列暂空时可为 `0`。
+   */
   async runOnce(now?: Date): Promise<number> {
     let claimed = 0;
     for (let index = 0; index < SYSTEM_MESSAGE_BATCH_SIZE; index += 1) {
@@ -87,7 +95,11 @@ export class SystemMessageDeliveryRunnerService {
     return claimed;
   }
 
-  /** 返回声明单个。 */
+  /**
+   * 在悲观锁事务中跳过已锁记录，领取最早到期的事件或投递并写入新的处理租约。
+   * @param now - 用于过期、排序或租约判定的时间基准。
+   * @returns 返回带新租约的事件或投递令牌；没有到期记录时为 `null`。
+   */
   private async claimOne(now: Date): Promise<ClaimToken | null> {
     return this.dataSource.transaction(async (manager) => {
       const deliveries = manager.getRepository(QqbotMessageDelivery);
@@ -125,7 +137,11 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
-  /** 处理声明。 */
+  /**
+   * 处理当前租约领取的消息记录，在过期、失去所有权或业务失败时结束、重试或标记失败。
+   * @param token - 用于当前租约领取的消息记录，在过期、失去所有权或业务失败时结束、重试或标记失败的领域对象，包含 `delivery`、`attempt` 字段。
+   * @param fixedNow - 用于过期、排序或租约判定的时间基准；为空时采用 `new Date()` 作为兜底。
+   */
   private async processClaim(
     token: ClaimToken,
     fixedNow?: Date,
@@ -232,7 +248,11 @@ export class SystemMessageDeliveryRunnerService {
     }
   }
 
-  /** 准备系统消息投递执行器记录。 */
+  /**
+   * 根据`token`构造准备系统消息投递执行器记录。
+   * @param token - 用于准备系统消息投递执行器记录的领域对象，包含 `delivery` 字段。
+   * @returns 准备系统消息投递执行器记录。
+   */
   private async prepare(token: ClaimToken): Promise<PreparedDelivery> {
     return this.dataSource.transaction(async (manager) => {
       const event = await manager.getRepository(QqbotMessageEvent).findOne({
@@ -257,12 +277,15 @@ export class SystemMessageDeliveryRunnerService {
           where: { id: token.delivery.publishTargetId },
           lock: { mode: 'pessimistic_read' },
         });
-      const account = binding
-        ? await manager.getRepository(QqbotAccount).findOne({
+      const account = await (async () => {
+        if (binding) {
+          return await manager.getRepository(QqbotAccount).findOne({
             where: { id: binding.accountId },
             lock: { mode: 'pessimistic_read' },
-          })
-        : null;
+          });
+        }
+        return null;
+      })();
       const delivery = await manager
         .getRepository(QqbotMessageDelivery)
         .findOne({
@@ -278,32 +301,48 @@ export class SystemMessageDeliveryRunnerService {
           kind: 'finish',
           status: 'failed',
         };
+      const cancelledConfiguration = {
+        code: 'delivery_configuration_cancelled',
+        kind: 'finish',
+        status: 'cancelled',
+      } as const;
+      if (!subscription || !binding || !target || !account) {
+        return cancelledConfiguration;
+      }
       if (
-        !subscription ||
-        !binding ||
-        !target ||
-        !account ||
         subscription.isDeleted ||
         binding.isDeleted ||
         target.isDeleted ||
-        account.isDeleted ||
+        account.isDeleted
+      ) {
+        return cancelledConfiguration;
+      }
+      if (
         !subscription.enabled ||
         !binding.enabled ||
         !target.enabled ||
-        !account.enabled ||
+        !account.enabled
+      ) {
+        return cancelledConfiguration;
+      }
+      if (
         subscription.sourceKey !== event.sourceKey ||
         binding.subscriptionId !== delivery.subscriptionId ||
-        target.bindingId !== delivery.bindingId ||
+        target.bindingId !== delivery.bindingId
+      ) {
+        return cancelledConfiguration;
+      }
+      if (
         target.targetId !== delivery.targetId ||
-        target.targetType !== delivery.targetType ||
+        target.targetType !== delivery.targetType
+      ) {
+        return cancelledConfiguration;
+      }
+      if (
         binding.selfId !== delivery.selfId ||
         account.selfId !== delivery.selfId
       ) {
-        return {
-          code: 'delivery_configuration_cancelled',
-          kind: 'finish',
-          status: 'cancelled',
-        };
+        return cancelledConfiguration;
       }
       const adapter = this.sourceRegistry.get(event.sourceKey);
       let eventPayload: Record<string, boolean | null | number | string>;
@@ -340,7 +379,12 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
-  /** 校验已冻结的。 */
+  /**
+   * 核对冻结投递的变量快照与来源定义完全一致，并验证保存的渲染文本可由模板和快照重现。
+   * @param delivery - 保存变量快照、模板内容和冻结渲染结果的投递记录。
+   * @param sourceKey - 用于取得变量名称及类型定义的系统消息来源键。
+   * @throws 快照缺失或字段名称、数量、类型不符合来源定义时抛出 `SystemMessageContractError`；重渲染结果与冻结文本不一致时也抛出该异常。
+   */
   private validateFrozen(
     delivery: QqbotMessageDelivery,
     sourceKey: string,
@@ -348,11 +392,13 @@ export class SystemMessageDeliveryRunnerService {
     const definitions = this.sourceRegistry.get(sourceKey).definition.variables;
     const allowed = definitions.map((item) => item.key);
     const snapshot = delivery.variableSnapshot;
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+      throw new SystemMessageContractError('template_invalid');
+    }
+    if (Object.keys(snapshot).length !== definitions.length) {
+      throw new SystemMessageContractError('template_invalid');
+    }
     if (
-      !snapshot ||
-      typeof snapshot !== 'object' ||
-      Array.isArray(snapshot) ||
-      Object.keys(snapshot).length !== definitions.length ||
       definitions.some(({ key, type }) => {
         if (!Object.prototype.hasOwnProperty.call(snapshot, key)) return true;
         const value = snapshot[key];
@@ -362,9 +408,11 @@ export class SystemMessageDeliveryRunnerService {
           (type === 'number' &&
             (typeof value !== 'number' || !Number.isFinite(value)))
         );
-      }) ||
-      Object.keys(snapshot).some((key) => !allowed.includes(key))
-    )
+      })
+    ) {
+      throw new SystemMessageContractError('template_invalid');
+    }
+    if (Object.keys(snapshot).some((key) => !allowed.includes(key)))
       throw new SystemMessageContractError('template_invalid');
     this.templateRenderer.validate(delivery.templateContent, allowed);
     if (
@@ -376,7 +424,11 @@ export class SystemMessageDeliveryRunnerService {
       throw new SystemMessageContractError('rendered_message_mismatch');
   }
 
-  /** 处理意外的声明失败。 */
+  /**
+   * 根据`token`、`now`处理意外的声明失败。
+   * @param token - 决定意外的声明失败内容、边界或目标的 `token` 值。
+   * @param now - 用于过期、排序或租约判定的时间基准。
+   */
   private async handleUnexpectedClaimFailure(
     token: ClaimToken,
     now: Date,
@@ -394,7 +446,15 @@ export class SystemMessageDeliveryRunnerService {
     }
   }
 
-  /** 完成系统消息投递执行器记录。 */
+  /**
+   * 仅在当前租约条件仍匹配时把消息事件或投递更新为指定终态，避免旧执行者覆盖新租约。
+   * @param token - 用于仅在当前租约条件仍匹配时把消息事件或投递更新为指定终态，避免旧执行者覆盖新租约的领域对象，包含 `delivery` 字段。
+   * @param status - 决定仅在当前租约条件仍匹配时把消息事件或投递更新为指定终态，避免旧执行者覆盖新租约内容、边界或目标的 `status` 值。
+   * @param code - 决定仅在当前租约条件仍匹配时把消息事件或投递更新为指定终态，避免旧执行者覆盖新租约内容、边界或目标的 `code` 值。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   * @param sendLogId - 用于精确定位日志的标识。
+   * @param nextAttemptAt - 用于过期、排序或租约判定的时间基准；省略时默认采用 `null`。
+   */
   private async finish(
     token: ClaimToken,
     status: 'cancelled' | 'failed' | 'success' | 'superseded' | 'waiting_ddns',
@@ -413,7 +473,14 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
-  /** 重试或失败。 */
+  /**
+   * 按尝试次数计算下一次执行时间；超过事件或投递期限时直接标记失败，否则安排重试。
+   * @param token - 用于按尝试次数计算下一次执行时间的领域对象，包含 `attempt`、`delivery` 字段。
+   * @param now - 用于过期、排序或租约判定的时间基准。
+   * @param code - 决定按尝试次数计算下一次执行时间内容、边界或目标的 `code` 值。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   * @param sendLogId - 用于精确定位日志的标识。
+   */
   private async retryOrFail(
     token: ClaimToken,
     now: Date,
@@ -438,7 +505,11 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
-  /** 持久化所有者转换。 */
+  /**
+   * 根据`token`、`values`更新持久化所有者转换；从 `dataSource.getRepository` 读取持久化所有者转换。
+   * @param token - 决定持久化所有者转换内容、边界或目标的 `token` 值。
+   * @param values - 按原有顺序参与持久化所有者转换筛选、合并或汇总的集合。
+   */
   private async persistOwnerTransition(
     token: ClaimToken,
     values: OwnerTransition,
@@ -456,7 +527,11 @@ export class SystemMessageDeliveryRunnerService {
     }
   }
 
-  /** 返回所有者位置。 */
+  /**
+   * 把投递标识、尝试次数、状态和租约截止时间组成仅命中当前处理所有者的更新条件。
+   * @param token - 用于把投递标识、尝试次数、状态和租约截止时间组成仅命中当前处理所有者的更新条件的领域对象，包含 `attempt`、`delivery`、`leaseUntil` 字段。
+   * @returns 返回仅匹配当前投递租约所有者的 TypeORM 更新条件。
+   */
   private ownerWhere(token: ClaimToken) {
     return {
       attemptCount: token.attempt,
@@ -466,7 +541,12 @@ export class SystemMessageDeliveryRunnerService {
     };
   }
 
-  /** 返回拥有。 */
+  /**
+   * 按租约标识和到期时间判定当前执行权。
+   * @param delivery - 用于按租约标识和到期时间判定当前执行权的领域对象，包含 `status`、`attemptCount`、`processingLeaseUntil` 字段。
+   * @param token - 用于按租约标识和到期时间判定当前执行权的领域对象，包含 `attempt`、`leaseUntil` 字段。
+   * @returns 满足按租约标识和到期时间判定当前执行权约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private owns(delivery: QqbotMessageDelivery, token: ClaimToken): boolean {
     return (
       delivery.status === 'processing' &&

@@ -22,7 +22,11 @@ export class BilibiliCardApplication {
     this.videoClient = new BilibiliVideoClient(host);
   }
 
-  /** 处理消息。 */
+  /**
+   * 根据`message`处理消息；向目标通道投递结果（`host.sendText`）。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `userId`、`selfId`、`messageText`、`rawEvent` 字段。
+   * @returns 满足消息约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   async handleMessage(message: BilibiliCardMessage) {
     if (message.userId === message.selfId) return false;
     if (!(await this.isBound(message.selfId))) return false;
@@ -46,9 +50,12 @@ export class BilibiliCardApplication {
         const video = await this.videoClient.fetchVideo(reference, config);
         await this.host.sendText({
           channelId: message.channelId,
-          guildId: message.rawEvent.guild_id
-            ? `${message.rawEvent.guild_id}`
-            : undefined,
+          guildId: (() => {
+            if (message.rawEvent.guild_id) {
+              return `${message.rawEvent.guild_id}`;
+            }
+            return undefined;
+          })(),
           message: formatBilibiliVideoReply(video, config),
           selfId: message.selfId,
           targetId: message.targetId,
@@ -67,7 +74,12 @@ export class BilibiliCardApplication {
     return false;
   }
 
-  /** 解析引用。 */
+  /**
+   * 优先直接解析 Bilibili 视频引用；仅对 b23 短链跟随受限重定向，并在仍无法解析时返回空值。
+   * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+   * @param config - 限定引用边界、地址与开关的运行配置，包含 `maxRedirects`、`httpTimeoutMs` 字段。
+   * @returns 引用；无法解析或未命中时为 `null`。
+   */
   private async resolveReference(
     url: string,
     config: { httpTimeoutMs: number; maxRedirects: number },
@@ -89,7 +101,11 @@ export class BilibiliCardApplication {
     }
   }
 
-  /** 判断已绑定的是否成立。 */
+  /**
+   * 根据`selfId`与当前约束判定已绑定的；从 `host.getBoundEventPluginKeys` 读取已绑定的。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 满足已绑定的约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private async isBound(selfId: string) {
     const normalizedSelfId = `${selfId || ''}`.trim();
     if (!normalizedSelfId) return false;
@@ -104,7 +120,9 @@ export class BilibiliCardApplication {
     }
   }
 
-  /** 清理去重。 */
+  /**
+   * 按当前运行态移除去重；同步更新对应缓存或去重状态（`dedupe.delete`）。
+   */
   private pruneDedupe() {
     const current = this.now();
     for (const [key, state] of this.dedupe.entries()) {
@@ -112,7 +130,10 @@ export class BilibiliCardApplication {
     }
   }
 
-  /** 返回告警。 */
+  /**
+   * 根据`message`处理安全记录告警。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   */
   private warn(message: string) {
     try {
       const result = this.host.warn?.(message) as unknown;
@@ -125,7 +146,12 @@ export class BilibiliCardApplication {
   }
 }
 
-/** 构建Bilibili卡片去重键。 */
+/**
+ * 根据`message`、`reference`构造Bilibili卡片去重键。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `selfId`、`messageType`、`targetId` 字段。
+ * @param reference - 用于Bilibili卡片去重键的领域对象，包含 `canonicalVideoId` 字段。
+ * @returns Bilibili卡片去重键。
+ */
 function buildBilibiliCardDedupeKey(
   message: BilibiliCardMessage,
   reference: BilibiliVideoReference,
@@ -138,7 +164,11 @@ function buildBilibiliCardDedupeKey(
   ].join(':');
 }
 
-/** 判断B23短的链接是否成立。 */
+/**
+ * 仅把主机名为 `b23.tv` 或其子域名的 URL 识别为 Bilibili 短链。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @returns 满足B23ShortLink约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isB23ShortLink(url: string) {
   try {
     return new URL(url).hostname.toLowerCase() === 'b23.tv';
@@ -147,7 +177,11 @@ function isB23ShortLink(url: string) {
   }
 }
 
-/** 判断Promise 兼容对象是否成立。 */
+/**
+ * 根据`value`与当前约束判定Promise 兼容对象。
+ * @param value - 待判定是否满足Promise 兼容对象约束的候选值。
+ * @returns 满足Promise 兼容对象约束时为 `true`；不满足、未命中或显式失败分支为 `false`；无法解析或未命中时为 `null`。
+ */
 function isThenable(
   value: unknown,
 ): value is { catch: (handler: () => void) => unknown } {
@@ -159,7 +193,14 @@ function isThenable(
   );
 }
 
-/** 规范化错误。 */
+/**
+ * 将`error`规范为错误，使等价输入得到一致表示；当 `error instanceof Error && error.message` 成立时返回 `error.message`。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+ * @returns 按参数编码并拼接完成的错误。
+ */
 function normalizeError(error: unknown) {
-  return error instanceof Error && error.message ? error.message : `${error}`;
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return `${error}`;
 }

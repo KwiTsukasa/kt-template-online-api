@@ -20,13 +20,12 @@ import {
 import { Canvas } from 'skia-canvas';
 
 /**
- * 在QQBot 图片视图层中绘制活动试炼。
- *
- * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
- * @param mainServer - mainServer 输入；决定 BangDream条件分支。
- * @param meta - meta 输入；驱动 `stackImage()` 的 BangDream步骤。
- * @param compress - BangDream列表；影响 drawEventStage 的返回值。
- * @returns 异步处理结果。
+ * 根据`eventId`、`mainServer`、`meta`绘制或格式化事件阶段；当 `!event.isExist` 成立时返回 `[`错误: 活动不存在`]`。
+ * @param eventId - 用于精确定位事件的标识。
+ * @param mainServer - 决定事件阶段内容、边界或目标的 `mainServer` 值。
+ * @param meta - 决定事件阶段内容、边界或目标的 `meta` 值；省略时默认采用 `false`。
+ * @param compress - 决定事件阶段内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的事件阶段列表；没有匹配项时为空数组。
  */
 export async function drawEventStage(
   eventId: number,
@@ -65,9 +64,9 @@ export async function drawEventStage(
 
   //绘制活动stage，每个stage一个图片
   /**
-   * 在QQBot 图片视图层中绘制试炼歌曲。
-   *
-   * @param stage - stage 输入；驱动 `stackImage()` 的 BangDream步骤。
+   * 根据`stage`绘制或格式化阶段歌曲。
+   * @param stage - 决定阶段歌曲内容、边界或目标的 `stage` 值。
+   * @returns 阶段歌曲。
    */
   async function drawStageSong(stage: Stage) {
     return stackImage([
@@ -77,13 +76,18 @@ export async function drawEventStage(
   }
 
   /**
-   * 执行 BangDream 插件流程。
+   * 根据当前运行态处理flush数据库列；把图片、文本或图形按布局规格绘制到画布。
    */
   async function flushColumn() {
     if (currentColumn.length === 0) return;
     const columnBlock = drawDataBlock({ list: currentColumn });
     const pageImages =
-      pageIndex === 0 ? [titleImage, columnBlock] : [columnBlock];
+      (() => {
+        if (pageIndex === 0) {
+          return [titleImage, columnBlock];
+        }
+        return [columnBlock];
+      })();
     outputImages.push(...(await outputEasyImages(pageImages, { compress })));
     currentColumn = [];
     currentHeight = 0;

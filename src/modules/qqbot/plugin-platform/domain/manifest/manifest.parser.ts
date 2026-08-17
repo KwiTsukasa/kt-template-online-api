@@ -45,7 +45,10 @@ const getString = (
   key: string,
 ): string | undefined => {
   const value = source[key];
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim();
+  }
+  return undefined;
 };
 
 const getStringArray = (
@@ -61,7 +64,11 @@ const getStringArray = (
     .filter(Boolean);
 };
 
-/** 解析配置键。 */
+/**
+ * 从`rawKeys`解析配置键；当 `!Array.isArray(rawKeys)` 成立时返回 `[]`。
+ * @param rawKeys - 用于批量校验或读取配置键的键集合。
+ * @returns 按输入顺序得到的配置键列表；没有匹配项时为空数组。
+ */
 function parseConfigKeys(rawKeys: unknown): string[] {
   if (!Array.isArray(rawKeys)) {
     return [];
@@ -82,9 +89,10 @@ const getNumber = (
   key: string,
 ): number | undefined => {
   const value = source[key];
-  return typeof value === 'number' && Number.isFinite(value)
-    ? value
-    : undefined;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  return undefined;
 };
 
 const pushIssue = (
@@ -202,7 +210,12 @@ const parseRuntime = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
 ): QqbotPluginRuntimeManifest => {
-  const runtime = isPlainObject(source.runtime) ? source.runtime : {};
+  const runtime = (() => {
+    if (isPlainObject(source.runtime)) {
+      return source.runtime;
+    }
+    return {};
+  })();
   const timeoutMs = getNumber(runtime, 'timeoutMs');
   const memoryMb = getNumber(runtime, 'memoryMb');
   const maxConcurrency = getNumber(runtime, 'maxConcurrency');
@@ -238,7 +251,12 @@ const parseOperations = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
 ): QqbotPluginOperationManifest[] => {
-  const operations = Array.isArray(source.operations) ? source.operations : [];
+  const operations = (() => {
+    if (Array.isArray(source.operations)) {
+      return source.operations;
+    }
+    return [];
+  })();
   const seenKeys = new Set<string>();
 
   return operations.filter(isPlainObject).map((operation, index) => {
@@ -278,14 +296,20 @@ const parseOperations = (
       aliases: getStringArray(operation, 'aliases'),
       description: getString(operation, 'description'),
       handlerName: getString(operation, 'handlerName') || '',
-      inputSchema: isPlainObject(operation.inputSchema)
-        ? operation.inputSchema
-        : undefined,
+      inputSchema: (() => {
+        if (isPlainObject(operation.inputSchema)) {
+          return operation.inputSchema;
+        }
+        return undefined;
+      })(),
       key,
       name: getString(operation, 'name') || key,
-      outputSchema: isPlainObject(operation.outputSchema)
-        ? operation.outputSchema
-        : undefined,
+      outputSchema: (() => {
+        if (isPlainObject(operation.outputSchema)) {
+          return operation.outputSchema;
+        }
+        return undefined;
+      })(),
       permissions: normalizePermissions(
         operation.permissions,
         `${pathPrefix}.permissions`,
@@ -300,7 +324,12 @@ const parseEvents = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
 ): QqbotPluginEventManifest[] => {
-  const events = Array.isArray(source.events) ? source.events : [];
+  const events = (() => {
+    if (Array.isArray(source.events)) {
+      return source.events;
+    }
+    return [];
+  })();
   const seenKeys = new Set<string>();
 
   return events.filter(isPlainObject).map((event, index) => {
@@ -340,7 +369,12 @@ const parseTasks = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
 ): QqbotPluginTaskManifest[] => {
-  const tasks = Array.isArray(source.tasks) ? source.tasks : [];
+  const tasks = (() => {
+    if (Array.isArray(source.tasks)) {
+      return source.tasks;
+    }
+    return [];
+  })();
   const seenKeys = new Set<string>();
 
   return tasks.filter(isPlainObject).map((task, index) => {
@@ -383,7 +417,12 @@ const parseTasks = (
         issues,
         'INVALID_TASK_CRON',
         `${pathPrefix}.defaultCron`,
-        error instanceof Error ? error.message : 'Task cron is invalid.',
+        (() => {
+          if (error instanceof Error) {
+            return error.message;
+          }
+          return 'Task cron is invalid.';
+        })(),
       );
     }
 
@@ -408,7 +447,12 @@ const parseAssets = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
 ): QqbotPluginAssetManifest[] => {
-  const assets = Array.isArray(source.assets) ? source.assets : [];
+  const assets = (() => {
+    if (Array.isArray(source.assets)) {
+      return source.assets;
+    }
+    return [];
+  })();
 
   return assets.filter(isPlainObject).map((asset, index) => {
     const key = getString(asset, 'key') || '';
@@ -432,7 +476,12 @@ const parseMigrations = (
   source: Record<string, unknown>,
   issues: QqbotPluginManifestValidationIssue[],
 ): QqbotPluginMigrationManifest[] => {
-  const migrations = Array.isArray(source.migrations) ? source.migrations : [];
+  const migrations = (() => {
+    if (Array.isArray(source.migrations)) {
+      return source.migrations;
+    }
+    return [];
+  })();
 
   return migrations.filter(isPlainObject).map((migration, index) => {
     const version = getString(migration, 'version') || '';
@@ -486,7 +535,12 @@ export const parseQqbotPluginManifest = (
 
   const pluginKey =
     getString(manifestLike, 'key') || getString(manifestLike, 'pluginKey') || '';
-  const pluginKeyPath = getString(manifestLike, 'key') ? 'key' : 'pluginKey';
+  const pluginKeyPath = (() => {
+    if (getString(manifestLike, 'key')) {
+      return 'key';
+    }
+    return 'pluginKey';
+  })();
   if (!pluginKeyPattern.test(pluginKey)) {
     pushIssue(
       issues,
@@ -505,9 +559,12 @@ export const parseQqbotPluginManifest = (
   const parsedManifest: QqbotPluginManifest = {
     assets: parseAssets(manifestLike, issues),
     author: getString(manifestLike, 'author'),
-    configSchema: isPlainObject(manifestLike.configSchema)
-      ? manifestLike.configSchema
-      : {},
+    configSchema: (() => {
+      if (isPlainObject(manifestLike.configSchema)) {
+        return manifestLike.configSchema;
+      }
+      return {};
+    })(),
     description: getString(manifestLike, 'description'),
     entry: normalizePackagePath(manifestLike.entry, 'entry', issues),
     events: parseEvents(manifestLike, issues),

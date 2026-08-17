@@ -46,7 +46,8 @@ export const BANGDREAM_GACHA_SIMULATE_SPEC = {
 } as const;
 
 /**
- * 获取抽卡结果网格最大宽度。
+ * 根据当前领域状态，获取抽卡结果网格最大宽度。
+ * @returns 根据当前领域状态，获取抽卡结果网格最大宽度。
  */
 export function getGachaSimulateGridMaxWidth(): number {
   return (
@@ -56,9 +57,9 @@ export function getGachaSimulateGridMaxWidth(): number {
 }
 
 /**
- * 创建抽卡结果图片混排参数。
- *
- * @param mode - mode 输入；生成 BangDream对象。
+ * 根据参数 `mode`，创建抽卡结果图片混排参数。
+ * @param mode - 选择根据参数 `mode`，创建抽卡结果图片混排参数处理分支的模式值。
+ * @returns 包含 `lineHeight`、`maxWidth`、`spacing`、`textSize` 字段的根据参数 `mode`，创建抽卡结果图片混排参数。
  */
 export function createGachaSimulateWrapOptions(mode: 'single' | 'summary'): {
   lineHeight: number;
@@ -76,9 +77,9 @@ export function createGachaSimulateWrapOptions(mode: 'single' | 'summary'): {
 }
 
 /**
- * 计算重复卡牌阴影层数。
- *
- * @param numberOfCard - numberOfCard 输入；驱动 `Math.min()` 的 BangDream步骤。
+ * 按`numberOfCard`读取重复卡牌阴影层数。
+ * @param numberOfCard - 决定重复卡牌阴影层数内容、边界或目标的 `numberOfCard` 值。
+ * @returns 重复卡牌阴影层数。
  */
 export function getGachaDuplicateLayerCount(numberOfCard: number): number {
   return Math.min(
@@ -88,10 +89,10 @@ export function getGachaDuplicateLayerCount(numberOfCard: number): number {
 }
 
 /**
- * 计算重复卡牌阴影层绘制区域。
- *
- * @param layerIndex - layerIndex 输入；限定 BangDream查询范围。
- * @param layerCount - layerCount 输入；限定 BangDream查询范围。
+ * 计算重复卡牌阴影层绘制区域，并输出固定投影 `height`、`width`、`x`、`y` 字段。
+ * @param layerIndex - 决定卡池Duplicate图标Rect内容、边界或目标的 `layerIndex` 值。
+ * @param layerCount - 限制卡池Duplicate图标Rect数量、尺寸、等级或重试边界的数值。
+ * @returns 包含 `height`、`width`、`x`、`y` 字段的卡池Duplicate图标Rect。
  */
 export function getGachaDuplicateIconRect(
   layerIndex: number,
@@ -109,8 +110,8 @@ export function getGachaDuplicateIconRect(
 
 /**
  * 根据计数字样宽度计算右对齐绘制位置。
- *
- * @param textWidth - textWidth 输入；限定 BangDream查询范围。
+ * @param textWidth - 决定根据计数字样宽度计算右对齐绘制位置内容、边界或目标的 `textWidth` 值。
+ * @returns 包含 `x`、`y` 字段的根据计数字样宽度计算右对齐绘制位置。
  */
 export function getGachaCountTextPosition(
   textWidth: number,
@@ -122,7 +123,8 @@ export function getGachaCountTextPosition(
 }
 
 /**
- * 获取抽卡横幅最大内容宽度。
+ * 根据当前领域状态，获取抽卡横幅最大内容宽度。
+ * @returns 根据当前领域状态，获取抽卡横幅最大内容宽度。
  */
 export function getGachaBannerImageMaxWidth(): number {
   return (
@@ -133,8 +135,8 @@ export function getGachaBannerImageMaxWidth(): number {
 
 /**
  * 根据横幅内容高度计算外层画布尺寸。
- *
- * @param imageHeight - imageHeight 输入；生成 BangDream对象。
+ * @param imageHeight - 决定根据横幅内容高度计算外层画布尺寸内容、边界或目标的 `imageHeight` 值。
+ * @returns 包含 `height`、`width` 字段的根据横幅内容高度计算外层画布尺寸。
  */
 export function createGachaBannerCanvasSize(imageHeight: number): {
   height: number;

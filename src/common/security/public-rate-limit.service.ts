@@ -200,7 +200,12 @@ export class PublicRateLimitService {
     this.websocketPath = this.readWebsocketPath();
   }
 
-  /** 分类公开的速率限制记录。 */
+  /**
+   * 根据`request`、`context`处理分类公开的速率限制记录；从 `getPath` 读取分类公开的速率限制记录。
+   * @param request - 用于分类公开的速率限制记录的当前 HTTP 请求，包含 `method` 字段。
+   * @param context - 用于分类公开的速率限制记录的领域对象，包含 `explicitlyPublic` 字段；省略时默认采用 `{}`。
+   * @returns 表示分类公开的速率限制记录的固定文本 `'baseline'`。
+   */
   classify(
     request: Request,
     context: PublicRateLimitContext = {},
@@ -215,7 +220,12 @@ export class PublicRateLimitService {
     return 'baseline';
   }
 
-  /** 消费公开的速率限制记录。 */
+  /**
+   * 根据`request`、`context`处理消费公开的速率限制记录；从 `consumedRequests.get` 读取消费公开的速率限制记录。
+   * @param request - 用于消费公开的速率限制记录的当前 HTTP 请求。
+   * @param context - 决定消费公开的速率限制记录内容、边界或目标的 `context` 值；省略时默认采用 `{}`。
+   * @returns 消费公开的速率限制记录。
+   */
   consume(
     request: Request,
     context: PublicRateLimitContext = {},
@@ -228,7 +238,11 @@ export class PublicRateLimitService {
     return outcome;
   }
 
-  /** 清空成功的登录用户名。 */
+  /**
+   * 清空成功的登录用户名。
+   * @param username - 决定是否启用“username”分支的布尔选项。
+   * @throws 当 `store.deleteCounter` 或 `hashIdentity` 调用失败时拒绝当前输入并抛出 `ServiceUnavailableException`。
+   */
   async clearSuccessfulLoginUsername(username: string): Promise<void> {
     try {
       await this.store.deleteCounter(
@@ -241,7 +255,13 @@ export class PublicRateLimitService {
     }
   }
 
-  /** 消费已验证的令牌主体。 */
+  /**
+   * 根据`operation`、`subject`、`response`处理消费已验证的令牌主体；从 `error.getStatus` 读取消费已验证的令牌主体。
+   * @param operation - 在当前锁、事务或错误边界内执行的受控回调。
+   * @param subject - 决定消费已验证的令牌主体内容、边界或目标的 `subject` 值。
+   * @param response - 用于写入状态码、Cookie 或缓存策略的当前 HTTP 响应；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @throws 主体限流额度耗尽时抛出 429；限流存储失败时抛出 `ServiceUnavailableException`，已有 429 会原样透传。
+   */
   async consumeVerifiedTokenSubject(
     operation: VerifiedTokenOperation,
     subject: string,
@@ -275,7 +295,12 @@ export class PublicRateLimitService {
     }
   }
 
-  /** 绑定Live2D并发的租约。 */
+  /**
+   * 根据`request`、`response`处理Live2D并发的租约；当 `terminal || response.destroyed || response.writableEnded` 成立时直接结束且不产生返回值。
+   * @param request - 用于Live2D并发的租约的当前 HTTP 请求。
+   * @param response - 包含 `destroyed`、`writableEnded`、`off`、`once` 字段的上游服务响应。
+   * @throws 当 `!lease.acquired` 成立时拒绝当前输入并抛出 `HttpException`；当 `error instanceof HttpException && error.getStatus() === HttpStatus.TOO_…` 成立时重新抛出该入口捕获且决定公开的原异常。
+   */
   async bindLive2DConcurrentLease(
     request: Request,
     response: Response,
@@ -373,7 +398,12 @@ export class PublicRateLimitService {
     renewalTimer.unref();
   }
 
-  /** 消费一次。 */
+  /**
+   * 根据`request`、`context`处理消费一次；当 `policy === 'exception'` 成立时返回 `{ allowed: true, policy, redisAvailable: tr…`。
+   * @param request - 用于消费一次的当前 HTTP 请求，包含 `method` 字段。
+   * @param context - 决定消费一次内容、边界或目标的 `context` 值。
+   * @returns 包含 `allowed`、`policy`、`redisAvailable` 字段的消费一次。
+   */
   private async consumeOnce(
     request: Request,
     context: PublicRateLimitContext,
@@ -438,12 +468,21 @@ export class PublicRateLimitService {
     }
   }
 
-  /** 判断管理表层是否成立。 */
+  /**
+   * 根据`request`与当前约束判定管理表层；从 `getPath` 读取管理表层。
+   * @param request - 用于管理表层的当前 HTTP 请求。
+   * @returns 满足管理表层约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   isManagementSurface(request: Request): boolean {
     return this.isManagementPath(this.getPath(request));
   }
 
-  /** 消费登录。 */
+  /**
+   * 根据`request`、`clientIp`处理消费登录；当 `!exceeded.length` 成立时返回 `{ allowed: true, policy: 'login', redisAvai…`。
+   * @param request - 用于消费登录的当前 HTTP 请求，包含 `method`、`body` 字段。
+   * @param clientIp - 决定消费登录内容、边界或目标的 `clientIp` 值。
+   * @returns 包含 `allowed`、`policy`、`redisAvailable`、`statusCode` 字段的消费登录。
+   */
   private async consumeLogin(
     request: Request,
     clientIp: string,
@@ -513,7 +552,12 @@ export class PublicRateLimitService {
     }
   }
 
-  /** 判断已锁定公开的读取是否成立。 */
+  /**
+   * 根据`method`、`path`与当前约束判定已锁定公开的读取。
+   * @param method - 决定已锁定公开的读取内容、边界或目标的 `method` 值。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @returns 满足已锁定公开的读取约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isLockedPublicRead(method: string, path: string): boolean {
     if (!['GET', 'HEAD'].includes(method.toUpperCase())) return false;
 
@@ -525,7 +569,11 @@ export class PublicRateLimitService {
     );
   }
 
-  /** 判断管理路径是否成立。 */
+  /**
+   * 根据`path`与当前约束判定管理路径。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @returns 满足管理路径约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isManagementPath(path: string): boolean {
     return (
       MANAGEMENT_EXACT_PATHS.has(path) ||
@@ -534,7 +582,12 @@ export class PublicRateLimitService {
     );
   }
 
-  /** 判断短的响应异常是否成立。 */
+  /**
+   * 根据`request`、`path`与当前约束判定短的响应异常；当 `path === this.websocketPath && upgrade === 'websocket' && con…` 成立时返回 `true`。
+   * @param request - 用于短的响应异常的当前 HTTP 请求。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @returns 满足短的响应异常约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isShortResponseException(request: Request, path: string): boolean {
     if (UPLOAD_PATHS.has(path)) return true;
 
@@ -555,33 +608,57 @@ export class PublicRateLimitService {
     return !!acceptsEventStream && SSE_PATHS.has(path);
   }
 
-  /** 读取路径。 */
+  /**
+   * 按`request`读取路径；当 `path.length > 1 && path.endsWith('/')` 成立时返回 `path.slice(0, -1)`。
+   * @param request - 用于路径的当前 HTTP 请求，包含 `path`、`originalUrl`、`url` 字段。
+   * @returns 路径。
+   */
   private getPath(request: Request): string {
     const raw = request.path || request.originalUrl || request.url || '/';
     const path = raw.split('?')[0] || '/';
-    return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+    if (path.length > 1 && path.endsWith('/')) {
+      return path.slice(0, -1);
+    }
+    return path;
   }
 
-  /** 读取方法存储桶。 */
+  /**
+   * 按`method`读取方法存储桶；当 `normalized === 'GET' || normalized === 'HEAD'` 成立时返回 `'read'`。
+   * @param method - 决定方法存储桶内容、边界或目标的 `method` 值。
+   * @returns 当前状态对应的方法存储桶，取值为 `'read'`。
+   */
   private getMethodBucket(method: string): string {
     const normalized = method.toUpperCase();
-    return normalized === 'GET' || normalized === 'HEAD'
-      ? 'read'
-      : normalized.toLowerCase();
+    if (normalized === 'GET' || normalized === 'HEAD') {
+      return 'read';
+    }
+    return normalized.toLowerCase();
   }
 
-  /** 规范化用户名。 */
+  /**
+   * 将`value`规范为用户名，使等价输入得到一致表示。
+   * @param value - 待转换为用户名的原始值。
+   * @returns 规范化后的用户名；主值为空时采用 `'<missing>'` 兜底。
+   */
   private normalizeUsername(value: unknown): string {
     if (typeof value !== 'string') return '<missing>';
     return value.normalize('NFKC').trim().toLowerCase() || '<missing>';
   }
 
-  /** 生成身份摘要。 */
+  /**
+   * 根据`value`与当前约束判定身份摘要。
+   * @param value - 待判定是否满足身份摘要约束的候选值。
+   * @returns 满足身份摘要约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private hashIdentity(value: string): string {
     return createHash('sha256').update(value).digest('hex');
   }
 
-  /** 读取Swagger白名单。 */
+  /**
+   * 按当前运行态读取Swagger白名单；从 `configService.get` 读取Swagger白名单。
+   * @returns 按输入顺序得到的Swagger白名单列表；没有匹配项时为空数组。
+   * @throws 当 `normalized.some((value) => !value)` 成立时拒绝当前输入并抛出 `Error`；当 `this.production && normalized.length === 0` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private readSwaggerAllowlist(): string[] {
     const values =
       `${this.configService.get(CONFIG_KEYS.swaggerAllowlist) || ''}`
@@ -603,7 +680,11 @@ export class PublicRateLimitService {
     return normalized as string[];
   }
 
-  /** 读取WebSocket路径。 */
+  /**
+   * 按当前运行态读取WebSocket路径；从 `configService.get` 读取WebSocket路径。
+   * @returns WebSocket路径。
+   * @throws 当 `!path.startsWith('/') || /[?#\s]/.test(path)` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private readWebsocketPath(): string {
     const value = `${this.configService.get('QQBOT_REVERSE_WS_PATH') || ''}`
       .trim()
@@ -615,7 +696,10 @@ export class PublicRateLimitService {
     return path;
   }
 
-  /** 断言Redis前缀。 */
+  /**
+   * 校验当前运行态是否满足Redis前缀约束，并拒绝不合法输入；从 `configService.get` 读取Redis前缀。
+   * @throws 当 `!value || !SAFE_REDIS_PREFIX.test(value)` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private assertRedisPrefix() {
     const value = `${this.configService.get(CONFIG_KEYS.redisKeyPrefix) || ''}`;
     if (!value || !SAFE_REDIS_PREFIX.test(value)) {
@@ -625,7 +709,14 @@ export class PublicRateLimitService {
     }
   }
 
-  /** 读取正数整数。 */
+  /**
+   * 按`key`、`fallback`、`bounds`读取正数整数；当 `raw === undefined || raw === null || `${raw}`.trim() === ''` 成立时返回 `fallback`。
+   * @param key - 用于读取或更新正数整数的稳定键。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+   * @param bounds - 用于正数整数的领域对象，包含 `min`、`max` 字段；省略时默认采用 `{}`。
+   * @returns 正数整数。
+   * @throws 当 `this.production` 成立时拒绝当前输入并抛出 `Error`；当 `!Number.isInteger(value) || value < min || value > max` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private readPositiveInteger(
     key: string,
     fallback: number,
@@ -649,7 +740,10 @@ export class PublicRateLimitService {
     return value;
   }
 
-  /** 返回告警Redis不可用。 */
+  /**
+   * 安全记录告警Redis不可用，并会更新 `this.lastRedisWarningAt`。
+   * @param policy - 决定warnRedisUnavailable内容、边界或目标的 `policy` 值。
+   */
   private warnRedisUnavailable(policy: PublicRateLimitPolicy) {
     const now = Date.now();
     if (now - this.lastRedisWarningAt < this.warningIntervalMs) return;
@@ -661,9 +755,17 @@ export class PublicRateLimitService {
     );
   }
 
-  /** 读取请求头。 */
+  /**
+   * 按请求头名读取首个字符串值；数组仅取第一项，缺失或非字符串输入保留空值。
+   * @param request - 用于按请求头名读取首个字符串值的当前 HTTP 请求，包含 `headers` 字段。
+   * @param name - 决定按请求头名读取首个字符串值内容、边界或目标的 `name` 值。
+   * @returns 按请求头名读取首个字符串值。
+   */
   private readHeader(request: Request, name: string): string | undefined {
     const value = request.headers?.[name];
-    return Array.isArray(value) ? value[0] : value;
+    if (Array.isArray(value)) {
+      return value[0];
+    }
+    return value;
   }
 }

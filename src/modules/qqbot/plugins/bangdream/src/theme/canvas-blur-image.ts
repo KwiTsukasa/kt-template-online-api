@@ -1,11 +1,10 @@
 import { Canvas, Image, loadImage } from 'skia-canvas';
 
 /**
- * 查询 BangDream 插件数据。
- *
- * @param image - image 输入；使用 `width`、`height` 字段生成结果。
- * @param blurRadius - BangDream列表；限定 BangDream查询范围。
- * @returns 异步处理结果。
+ * 按`image`、`blurRadius`读取模糊处理图片；把图片、文本或图形按布局规格绘制到画布。
+ * @param image - 用于模糊处理图片的领域对象，包含 `width`、`height` 字段。
+ * @param blurRadius - 决定模糊处理图片内容、边界或目标的 `blurRadius` 值。
+ * @returns 模糊处理图片。
  */
 export async function getBlurredImage(
   image: Image,

@@ -12,9 +12,8 @@ interface ScatterProps {
 
 //随机在canvas中散布星星(arisa)
 /**
- * 在底层绘图工具层中处理scatter图片列表。
- *
- * @param options1 - options1 输入；影响 scatterImages 的返回值。
+ * 根据当前运行态处理scatterImages；把图片、文本或图形按布局规格绘制到画布。
+ * @returns 在画布随机散布指定图片后编码得到的 PNG Data URL。
  */
 export async function scatterImages({
   canvas,

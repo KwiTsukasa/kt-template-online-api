@@ -24,10 +24,20 @@ export class EnvironmentDashboardCacheService {
     const envTtlMs = Number(process.env.ENV_DASHBOARD_CACHE_TTL_MS);
     this.ttlMs =
       options.ttlMs ??
-      (Number.isFinite(envTtlMs) && envTtlMs > 0 ? envTtlMs : 15_000);
+      ((() => {
+        if (Number.isFinite(envTtlMs) && envTtlMs > 0) {
+          return envTtlMs;
+        }
+        return 15_000;
+      })());
   }
 
-  /** 读取或创建。 */
+  /**
+   * 按`factory`、`options`读取或创建；当 `!options.forceRefresh && this.cached && this.cached.expiresAt…` 成立时返回 `this.toCachedSnapshot(this.cached.snapshot,…`。
+   * @param factory - 负责完成或创建外部交互的受控能力。
+   * @param options - 控制或创建筛选、缓存或输出方式的可选项，包含 `forceRefresh` 字段；省略时默认采用 `{}`。
+   * @returns 或创建。
+   */
   async getOrCreate(
     factory: () => Promise<EnvironmentDashboardResponse>,
     options: { forceRefresh?: boolean } = {},
@@ -49,19 +59,30 @@ export class EnvironmentDashboardCacheService {
     return snapshot;
   }
 
-  /** 使失效环境仪表盘缓存记录。 */
+  /**
+   * 使失效环境仪表盘缓存记录，并会更新 `this.cached`。
+   */
   invalidate(): void {
     this.cached = undefined;
   }
 
-  /** 克隆快照。 */
+  /**
+   * 根据`snapshot`处理克隆快照。
+   * @param snapshot - 决定克隆快照内容、边界或目标的 `snapshot` 值。
+   * @returns 克隆快照。
+   */
   private cloneSnapshot(
     snapshot: EnvironmentDashboardResponse,
   ): EnvironmentDashboardResponse {
     return JSON.parse(JSON.stringify(snapshot)) as EnvironmentDashboardResponse;
   }
 
-  /** 返回到已缓存的快照。 */
+  /**
+   * 将输入收敛并投影为已缓存的快照。
+   * @param snapshot - 决定已缓存的快照内容、边界或目标的 `snapshot` 值。
+   * @param expiresAtMs - 用于已缓存的快照超时、有效期或退避计算的毫秒数。
+   * @returns 已缓存的快照。
+   */
   private toCachedSnapshot(
     snapshot: EnvironmentDashboardResponse,
     expiresAtMs: number,
@@ -84,7 +105,13 @@ export class EnvironmentDashboardCacheService {
     return cloned;
   }
 
-  /** 返回到已缓存的信号。 */
+  /**
+   * 将输入收敛并投影为已缓存的信号。
+   * @param signal - 用于已缓存的信号的领域对象，包含 `sourceKind`、`evidence`、`label`、`summary` 字段。
+   * @param observedAt - 用于过期、排序或租约判定的时间基准。
+   * @param expiresAt - 用于过期、排序或租约判定的时间基准。
+   * @returns 包含 `evidence`、`observedAt`、`sourceKind` 字段的已缓存的信号。
+   */
   private toCachedSignal(
     signal: EnvironmentSignal,
     observedAt: string,

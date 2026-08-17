@@ -18,7 +18,11 @@ export const MediaGovernancePermission = (...authCodes: string[]) =>
 export class MediaGovernancePermissionGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
-  /** 校验当前管理员是否具有任一媒体治理权限或超级角色。 */
+  /**
+   * 校验当前管理员是否具有任一媒体治理权限或超级角色。
+   * @param context - 用于当前管理员是否具有任一媒体治理权限或超级角色的领域对象，包含 `getHandler`、`getClass`、`switchToHttp` 字段。
+   * @returns 满足当前管理员是否具有任一媒体治理权限或超级角色约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   canActivate(context: ExecutionContext): boolean {
     const required = this.reflector.getAllAndOverride<string[]>(
       MEDIA_GOVERNANCE_PERMISSION,
@@ -49,7 +53,10 @@ export class MediaGovernancePermissionGuard implements CanActivate {
     this.forbidden();
   }
 
-  /** 以统一 Vben 错误格式拒绝未授权请求。 */
+  /**
+   * 以统一 Vben 错误格式拒绝未授权请求。
+   * @returns 以统一 Vben 错误格式拒绝未授权请求。
+   */
   private forbidden(): never {
     return throwVbenError('Forbidden Exception', HttpStatus.FORBIDDEN);
   }

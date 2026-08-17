@@ -20,7 +20,10 @@ export class CaddyReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
-  /** 检查Caddy只读的记录。 */
+  /**
+   * 根据当前运行态处理Caddy只读的记录；当 `missing.length > 0` 成立时返回 `createUnwiredAdapterSignal( 'caddy-public',…`。
+   * @returns Caddy只读的记录。
+   */
   async inspect() {
     const missing = this.config.missing(['ENV_DASHBOARD_CADDY_PUBLIC_URL']);
     if (missing.length > 0) {
@@ -36,15 +39,28 @@ export class CaddyReadonlyAdapter {
         this.config.get('ENV_DASHBOARD_CADDY_PUBLIC_URL'),
       );
       const adminUrl = this.config.get('ENV_DASHBOARD_CADDY_ADMIN_URL');
-      const adminResponse = adminUrl
-        ? await this.http.get(joinReadonlyUrl(adminUrl, 'config/'))
-        : undefined;
+      const adminResponse = await (async () => {
+        if (adminUrl) {
+          return await this.http.get(joinReadonlyUrl(adminUrl, 'config/'));
+        }
+        return undefined;
+      })();
       const publicOk = isReadonlyHttpOk(publicResponse.status);
       const adminOk =
         !adminResponse || isReadonlyHttpOk(adminResponse.status);
-      const status = publicOk && adminOk ? 'ok' : 'degraded';
+      const status = (() => {
+        if (publicOk && adminOk) {
+          return 'ok';
+        }
+        return 'degraded';
+      })();
       const summary = `Caddy public ${publicResponse.status}${
-        adminResponse ? `, admin ${adminResponse.status}` : ''
+        (() => {
+          if (adminResponse) {
+            return `, admin ${adminResponse.status}`;
+          }
+          return '';
+        })()
       }`;
 
       return createLiveAdapterSignal(

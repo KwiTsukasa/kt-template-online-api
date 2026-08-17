@@ -29,10 +29,10 @@ const getTargetDictMaps = (dictKeys: string[]) => {
 
 // 只登记翻译关系，不在 setter 中翻译，避免实体继承字段和 TypeORM 赋值顺序带来的覆盖问题。
 /**
- * 转换 字典翻译输入。
- * @param dictKeys - 公共基础设施列表；驱动 `Array.isArray()` 的 公共基础设施步骤。
- * @param options - 公共基础设施列表；使用 `sourceKey`、`targetKey` 字段生成结果。
- * @returns 字典翻译转换后的值。
+ * 根据`dictKeys`、`options`拼接稳定的字典键，用于隔离对应资源或存储记录。
+ * @param dictKeys - 用于批量校验或读取字典键的键集合；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param options - 控制字典键筛选、缓存或输出方式的可选项，包含 `sourceKey`、`targetKey` 字段；省略时默认采用 `{}`。
+ * @returns 字典键。
  */
 export function DecodeDictKey(
   dictKeys?: string | string[],
@@ -42,11 +42,15 @@ export function DecodeDictKey(
     const currentKey = key.toString();
     const sourceKey = options.sourceKey || currentKey;
     const targetKey = options.targetKey || currentKey;
-    const sourceDictKeys = Array.isArray(dictKeys)
-      ? dictKeys
-      : dictKeys
-        ? [dictKeys]
-        : [];
+    const sourceDictKeys = (() => {
+      if (Array.isArray(dictKeys)) {
+        return dictKeys;
+      }
+      if (dictKeys) {
+        return [dictKeys];
+      }
+      return [];
+    })();
     const rules = target[DICT_DECODE_RULES] || [];
 
     target[DICT_DECODE_RULES] = [
@@ -63,9 +67,9 @@ export function DecodeDictKey(
 
 // 在 TypeORM AfterLoad 等实体初始化完成后调用，将源字段值翻译到 targetKey。
 /**
- * 转换 字典翻译输入。
- * @param target - target 输入；驱动 `getDecodeRules()`、`getDictValueKey()` 的 公共基础设施步骤。
- * @returns 字典翻译转换后的值。
+ * 从`target`解析针对字典翻译；从 `getDecodeRules` 读取针对字典翻译。
+ * @param target - 用于针对字典翻译的领域对象，包含 `sourceKey`、`targetKey` 字段。
+ * @returns 针对字典翻译。
  */
 export function decodeDictKeys<T extends object>(target: T): T {
   getDecodeRules(target).forEach(
@@ -84,8 +88,8 @@ export function decodeDictKeys<T extends object>(target: T): T {
 
 // DictService 从数据库刷新缓存后，实体 AfterLoad 可以同步完成字典映射。
 /**
- * 设置Dict Decode Cache。
- * @param dicts - 公共基础设施列表；遍历并累积 公共基础设施结果。
+ * 根据`dicts`更新字典缓存；同步更新对应缓存或去重状态（`DICT_DECODE_CACHE.clear`）。
+ * @param dicts - 决定字典缓存内容、边界或目标的 `dicts` 值。
  */
 export function setDictDecodeCache(
   dicts: Array<KtDictOption<{ dictKey: string }>>,

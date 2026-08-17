@@ -17,10 +17,8 @@ interface DataBlockOptions {
 }
 //组合表格子程序，使用block当做底，通过最大高度换行，默认高度无上限
 /**
- * 在图片布局层中绘制数据块。
- *
- * @param options1 - options1 输入；影响 drawDataBlock 的返回值。
- * @returns 渲染或资源结果。
+ * 根据当前运行态绘制或格式化数据Block；把图片、文本或图形按布局规格绘制到画布。
+ * @returns 数据Block。
  */
 export function drawDataBlock({
   list,
@@ -39,7 +37,12 @@ export function drawDataBlock({
   }
   const allH =
     contentHeight +
-    (BG ? BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraHeight : 0);
+    ((() => {
+      if (BG) {
+        return BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraHeight;
+      }
+      return 0;
+    })());
   const canvasSize = calculateVerticalDataBlockSize({
     contentHeight,
     maxContentWidth: maxW,
@@ -128,7 +131,12 @@ export function drawDataBlock({
     }
   }
 
-  const xStart = BG ? BANGDREAM_DATA_BLOCK_SPEC.vertical.contentOffsetX : 0;
+  const xStart = (() => {
+    if (BG) {
+      return BANGDREAM_DATA_BLOCK_SPEC.vertical.contentOffsetX;
+    }
+    return 0;
+  })();
 
   for (let i = 0; i < list.length; i++) {
     ctx.drawImage(list[i], xStart, allH2);
@@ -139,10 +147,8 @@ export function drawDataBlock({
 }
 
 /**
- * 在图片布局层中绘制数据块Horizontal。
- *
- * @param options1 - options1 输入；影响 drawDataBlockHorizontal 的返回值。
- * @returns 渲染或资源结果。
+ * 根据当前运行态绘制或格式化数据BlockHorizontal；把图片、文本或图形按布局规格绘制到画布。
+ * @returns 数据BlockHorizontal。
  */
 export function drawDataBlockHorizontal({
   list,
@@ -160,7 +166,12 @@ export function drawDataBlockHorizontal({
   }
   const allW =
     contentWidth +
-    (BG ? BANGDREAM_DATA_BLOCK_SPEC.background.outerExtraWidth : 0);
+    ((() => {
+      if (BG) {
+        return BANGDREAM_DATA_BLOCK_SPEC.background.outerExtraWidth;
+      }
+      return 0;
+    })());
   const canvasSize = calculateHorizontalDataBlockSize({
     contentWidth,
     maxContentHeight: maxH,
@@ -260,10 +271,9 @@ export function drawDataBlockHorizontal({
 }
 
 /**
- * 在图片布局层中绘制横幅图片画布。
- *
- * @param eventBannerImage - eventBannerImage 输入；影响 drawBannerImageCanvas 的返回值。
- * @returns 渲染或资源结果。
+ * 根据`eventBannerImage`绘制或格式化横幅图片Canvas。
+ * @param eventBannerImage - 决定横幅图片Canvas内容、边界或目标的 `eventBannerImage` 值。
+ * @returns 横幅图片Canvas。
  */
 export function drawBannerImageCanvas(eventBannerImage: Image): Canvas {
   return resizeImage({

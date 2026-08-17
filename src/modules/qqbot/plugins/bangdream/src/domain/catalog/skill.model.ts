@@ -28,14 +28,14 @@ export class Skill {
   }
   /**
    * 在 Skill 模型中请求当前模型的远端详情数据。
+   * @returns 在 Skill 模型中请求当前模型的远端详情数据。
    */
   getData() {
     return this.data;
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @returns 格式化后的文本。
+   * 按当前运行态读取EffectTypes；当 `this.isExist == false` 成立时返回 `['score']`。
+   * @returns 按输入顺序得到的EffectTypes列表；没有匹配项时为空数组。
    */
   getEffectTypes(): Array<string> {
     //返回技能类型，如果存在多个效果，优先级为skillTypeList中排列的顺序
@@ -85,9 +85,8 @@ export class Skill {
     return tempTypeList;
   }
   /**
-   * 在 Skill 模型中获取技能Description。
-   *
-   * @returns 格式化后的文本。
+   * 按当前运行态读取Skill说明文本；当 `this.isExist == false` 成立时返回 `[null, null, null, null, null]`。
+   * @returns 按输入顺序得到的Skill说明文本列表；无法解析或未命中时为 `null`，没有匹配项时为空数组。
    */
   getSkillDescription(): Array<string> {
     //返回完整技能描述，不同等级效果用'/'分割
@@ -148,9 +147,8 @@ export class Skill {
     return tempDescription;
   }
   /**
-   * 在 Skill 模型中获取分数UpMax值。
-   *
-   * @returns 计算后的数值。
+   * 按当前运行态读取ScoreUp最大值；当 `this.isExist == false` 成立时返回 `0`。
+   * @returns 当前状态对应的ScoreUp最大值，取值为 `0`。
    */
   getScoreUpMaxValue(): number {
     //返回最高加分数值

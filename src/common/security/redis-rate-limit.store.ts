@@ -101,7 +101,13 @@ export class RedisRateLimitStore {
     }
   }
 
-  /** 增加当前计数。 */
+  /**
+   * 根据`namespace`、`identity`、`ttlMs`处理增加当前计数。
+   * @param namespace - 隔离增加当前计数缓存或持久化键的命名空间。
+   * @param identity - 区分增加当前计数所属账号、设备或运行实例的稳定身份。
+   * @param ttlMs - 用于增加当前计数超时、有效期或退避计算的毫秒数。
+   * @returns 增加当前计数。
+   */
   async increment(
     namespace: string,
     identity: string,
@@ -117,7 +123,12 @@ export class RedisRateLimitStore {
     return counter;
   }
 
-  /** 增加多个。 */
+  /**
+   * 根据`buckets`处理增加多个。
+   * @param buckets - 用于增加多个的领域对象，包含 `length` 字段。
+   * @returns 按输入顺序得到的增加多个列表；没有匹配项时为空数组。
+   * @throws 当 `!Array.isArray(result) || result.length !== buckets.length * 2` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async incrementMany(
     buckets: RedisRateLimitBucket[],
   ): Promise<RedisRateLimitCounter[]> {
@@ -157,7 +168,13 @@ export class RedisRateLimitStore {
     });
   }
 
-  /** 删除计数器。 */
+  /**
+   * 按`namespace`、`identity`移除计数器并返回实际删除数量。
+   * @param namespace - 隔离计数器缓存或持久化键的命名空间。
+   * @param identity - 区分计数器所属账号、设备或运行实例的稳定身份。
+   * @returns 实际删除的计数器数量；目标不存在时为 `0`。
+   * @throws 当 `!Number.isInteger(deleted) || deleted < 0` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async deleteCounter(namespace: string, identity: string): Promise<number> {
     const deleted = Number(
       await this.redis.del(this.buildKey(namespace, identity)),
@@ -168,7 +185,18 @@ export class RedisRateLimitStore {
     return deleted;
   }
 
-  /** 获取租约。 */
+  /**
+   * 根据命名空间、身份、租约令牌、并发上限与 TTL 在 Redis 中原子领取限流租约，并返回占用状态与剩余有效期。
+   * @param namespace - 隔离租约缓存或持久化键的命名空间。
+   * @param identity - 区分租约所属账号、设备或运行实例的稳定身份。
+   * @param leaseToken - 证明当前调用持有并释放同一限流租约的随机令牌。
+   * @param limit - 允许返回或处理的租约最大数量。
+   * @param ttlMs - 用于租约超时、有效期或退避计算的毫秒数。
+   * @returns 包含 `acquired`、`count`、`ttlMs` 字段的租约。
+   * @throws 当 `!Number.isInteger(limit) || limit < 1` 成立时拒绝当前输入并抛出 `Error`；当 `!Number.isInteger(ttlMs) || ttlMs < 1` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!SAFE_KEY_SEGMENT.test(leaseToken)` 成立时拒绝当前输入并抛出 `Error`；当 `!Array.isArray(result) || result.length !== 3` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `![0, 1].includes(acquired) || !Number.isInteger(count) || count < 0 ||…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async acquireLease(
     namespace: string,
     identity: string,
@@ -215,7 +243,16 @@ export class RedisRateLimitStore {
     };
   }
 
-  /** 续期租约。 */
+  /**
+   * 根据`namespace`、`identity`、`leaseToken`处理续期租约。
+   * @param namespace - 隔离续期租约缓存或持久化键的命名空间。
+   * @param identity - 区分续期租约所属账号、设备或运行实例的稳定身份。
+   * @param leaseToken - 证明当前调用持有并释放同一限流租约的随机令牌。
+   * @param ttlMs - 用于续期租约超时、有效期或退避计算的毫秒数。
+   * @returns 满足续期租约约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   * @throws 当 `!SAFE_KEY_SEGMENT.test(leaseToken)` 成立时拒绝当前输入并抛出 `Error`；当 `!Number.isInteger(ttlMs) || ttlMs < 1` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `![0, 1].includes(renewed)` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async renewLease(
     namespace: string,
     identity: string,
@@ -243,7 +280,14 @@ export class RedisRateLimitStore {
     return renewed === 1;
   }
 
-  /** 释放租约。 */
+  /**
+   * 根据命名空间、身份与租约令牌在 Redis 中原子释放当前调用拥有的限流租约；租约不存在或所有者不匹配时不删除记录。
+   * @param namespace - 隔离租约缓存或持久化键的命名空间。
+   * @param identity - 区分租约所属账号、设备或运行实例的稳定身份。
+   * @param leaseToken - 证明当前调用持有并释放同一限流租约的随机令牌。
+   * @returns 满足租约约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   * @throws 当 `![0, 1].includes(count)` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async releaseLease(
     namespace: string,
     identity: string,
@@ -263,7 +307,13 @@ export class RedisRateLimitStore {
     return count === 1;
   }
 
-  /** 构建键。 */
+  /**
+   * 校验限流键的两个动态段，并与固定前缀拼成不会引入 Redis 分隔歧义的键。
+   * @param namespace - 隔离不同限流用途的安全命名空间段。
+   * @param identity - 标识当前限流主体的安全身份段。
+   * @returns 依次包含固定前缀、命名空间和主体身份的 Redis 键。
+   * @throws 当 `!SAFE_KEY_SEGMENT.test(namespace) || !SAFE_KEY_SEGMENT.test(identity)` 成立时抛出 `Error`，消息为“Redis 限流 key 段无效”。
+   */
   buildKey(namespace: string, identity: string): string {
     if (!SAFE_KEY_SEGMENT.test(namespace) || !SAFE_KEY_SEGMENT.test(identity)) {
       throw new Error('Redis 限流 key 段无效');

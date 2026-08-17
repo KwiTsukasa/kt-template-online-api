@@ -491,22 +491,38 @@ export class MediaGovernanceContractError extends Error {
   }
 }
 
-/** 使用稳定领域错误码中止当前合同校验。 */
+/**
+ * 使用稳定领域错误码中止当前合同校验。
+ * @param code - `code` 作为 `MediaGovernanceContractError` 构造参数。
+ * @throws 调用该拒绝函数时抛出 `MediaGovernanceContractError`。
+ */
 function fail(code: string): never {
   throw new MediaGovernanceContractError(code);
 }
 
-/** 校验小写十六进制 SHA-256 摘要。 */
+/**
+ * 校验`value`、`code`是否满足小写十六进制 SHA-256 摘要约束，并拒绝不合法输入。
+ * @param value - 参与小写十六进制 SHA-256 摘要比较、格式化或输出的候选值。
+ * @param code - 决定小写十六进制 SHA-256 摘要内容、边界或目标的 `code` 值。
+ */
 function assertSha256(value: string, code: string) {
   if (!/^[a-f\d]{64}$/.test(value)) fail(code);
 }
 
-/** 校验领域对象可接受的有界标识符。 */
+/**
+ * 校验`value`、`code`是否满足领域对象可接受的有界标识符约束，并拒绝不合法输入。
+ * @param value - 参与领域对象可接受的有界标识符比较、格式化或输出的候选值。
+ * @param code - 决定领域对象可接受的有界标识符内容、边界或目标的 `code` 值。
+ */
 function assertIdentifier(value: string, code: string) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value)) fail(code);
 }
 
-/** 校验来源内容、角色与治理策略的一致性及补充字幕任务边界。 */
+/**
+ * 按来源内容、文件角色、治理策略与补充字幕边界校验来源分类。
+ * @param input - 用于按来源内容、文件角色、治理策略与补充字幕边界校验来源分类的结构化输入，包含 `contentKind`、`sourceRole`、`governanceProfile`、`linkedTask` 字段。
+ * @returns 按来源内容、文件角色、治理策略与补充字幕边界校验来源分类。
+ */
 export function assertSourceClassification(input: {
   contentKind: string;
   governanceProfile?: MediaGovernanceProfile | null;
@@ -546,7 +562,11 @@ export function assertSourceClassification(input: {
   return classification.governanceProfile;
 }
 
-/** 校验逐季字幕覆盖与发布组单一性，并返回标准排序后的合同。 */
+/**
+ * 校验逐季字幕覆盖与发布组单一性，并返回标准排序后的合同。
+ * @param inputs - 决定SubtitleContracts内容、边界或目标的 `inputs` 值。
+ * @returns 按输入顺序得到的SubtitleContracts列表；没有匹配项时为空数组。
+ */
 export function validateSubtitleContracts(
   inputs: MediaGovernanceSubtitleContractInput[],
 ): MediaGovernanceSubtitleContract[] {
@@ -589,7 +609,11 @@ export function validateSubtitleContracts(
   });
 }
 
-/** 校验描述符身份后生成私有对象存储键。 */
+/**
+ * 按参数 `input`，校验描述符身份后生成私有对象存储键。
+ * @param input - 用于按参数 `input`，校验描述符身份后生成私有对象存储键的结构化输入，包含 `taskId`、`sourceId`、`descriptorSha256`、`descriptorRevision` 字段。
+ * @returns 按参数编码并拼接完成的按参数 `input`，校验描述符身份后生成私有对象存储键。
+ */
 export function buildDescriptorObjectKey(input: {
   descriptorRevision: number;
   descriptorSha256: string;
@@ -611,7 +635,11 @@ export function buildDescriptorObjectKey(input: {
   return `tasks/${input.taskId}/sources/${input.sourceId}/revisions/${input.descriptorRevision}-${input.descriptorSha256}.${extension}`;
 }
 
-/** 规范化描述符清单路径，并拒绝越界、符号链接和可执行项。 */
+/**
+ * 规范化描述符清单路径，并拒绝越界、符号链接和可执行项。
+ * @param input - 用于描述信息清单表格条目的结构化输入，包含 `relativePath`、`entryType`、`executable` 字段。
+ * @returns 描述信息清单表格条目。
+ */
 export function validateDescriptorManifestEntry(input: {
   entryType: 'file' | 'symbolic-link';
   executable: boolean;
@@ -639,7 +667,11 @@ export function validateDescriptorManifestEntry(input: {
   return normalized;
 }
 
-/** 规范化媒体路径，并确保其位于声明的允许根目录内。 */
+/**
+ * 规范化媒体路径，并确保其位于声明的允许根目录内。
+ * @param input - 用于许可范围媒体任务路径的结构化输入，包含 `symbolicLink`、`candidate`、`allowedRoots` 字段。
+ * @returns 许可范围媒体任务路径。
+ */
 export function assertAllowedMediaPath(input: {
   allowedRoots: string[];
   candidate: string;
@@ -663,7 +695,11 @@ export function assertAllowedMediaPath(input: {
   return candidate;
 }
 
-/** 根据连通性、吞吐、可用度和 Tracker 状态判定来源健康度。 */
+/**
+ * 根据连通性、吞吐、可用度和 Tracker 状态判定来源健康度。
+ * @param input - 用于根据连通性、吞吐、可用度和 Tracker 状态判定来源健康度的结构化输入，包含 `localConnectivityHealthy`、`bytesDelta`、`elapsedSeconds`、`selectedBytes` 字段。
+ * @returns 包含 `health`、`reason` 字段的根据连通性、吞吐、可用度和 Tracker 状态判定来源健康度；无法解析或未命中时为 `null`。
+ */
 export function decideSourceHealth(input: {
   bytesDelta: number;
   completePeerCount: number;
@@ -728,7 +764,11 @@ export function decideSourceHealth(input: {
   return { health: 'probing', reason: null };
 }
 
-/** 校验 B 级元数据例外的理由、证据和回退上下文是否完整。 */
+/**
+ * 按 B 级元数据例外协议核对理由、证据和回退上下文。
+ * @param input - 用于按 B 级元数据例外协议核对理由、证据和回退上下文的结构化输入，包含 `tier`、`fieldPath`、`reasonCode`、`evidenceSha256` 字段。
+ * @returns 按 B 级元数据例外协议核对理由、证据和回退上下文。
+ */
 export function validateMetadataException(
   input: MediaGovernanceMetadataExceptionInput,
 ) {
@@ -768,7 +808,11 @@ export function validateMetadataException(
   return input;
 }
 
-/** 将 A/B/C 级缺项与有效回退投影为元数据门禁状态。 */
+/**
+ * 将 A/B/C 级缺项与有效回退投影为元数据门禁状态。
+ * @param input - 用于将 A/B/C 级缺项与有效回退投影为元数据门禁状态的结构化输入，包含 `missingA`、`missingB`、`missingC`、`validBFallbacks` 字段。
+ * @returns 包含 `optionalMissing`、`status` 字段的将 A/B/C 级缺项与有效回退投影为元数据门禁状态。
+ */
 export function projectMetadataGate(input: {
   missingA: string[];
   missingB: string[];
@@ -826,7 +870,11 @@ export function projectMetadataGate(input: {
   };
 }
 
-/** 将受支持事件类型映射到 Redis、MySQL 和 NAS 证据保留策略。 */
+/**
+ * 将受支持事件类型映射到 Redis、MySQL 和 NAS 证据保留策略。
+ * @param type - 决定将受支持事件类型映射到 Redis、MySQL 和 NAS 证据保留策略内容、边界或目标的 `type` 值。
+ * @returns 将受支持事件类型映射到 Redis、MySQL 和 NAS 证据保留策略。
+ */
 export function projectEventRetention(type: string) {
   const redisTypes = new Set([
     'agent-token-delta',
@@ -859,7 +907,11 @@ export function projectEventRetention(type: string) {
   return fail('event-type-unsupported');
 }
 
-/** 根据任务年龄与证据状态投影运行热数据保留策略。 */
+/**
+ * 根据任务年龄与证据状态投影运行热数据保留策略。
+ * @param input - 用于根据任务年龄与证据状态投影运行热数据保留策略的结构化输入，包含 `closed`、`ageDays`、`evidenceSealed`、`evidenceShaVerified` 字段。
+ * @returns 包含 `evidenceMayBeDeleted`、`hotMode`、`hotProgressMayBeDeleted` 字段的根据任务年龄与证据状态投影运行热数据保留策略。
+ */
 export function projectRunRetention(input: {
   ageDays: number;
   closed: boolean;
@@ -884,7 +936,11 @@ export function projectRunRetention(input: {
   };
 }
 
-/** 从任务身份、动作、版本和输入摘要生成稳定幂等键。 */
+/**
+ * 从任务身份、动作、版本和输入摘要生成稳定幂等键。
+ * @param input - 用于从任务身份、动作、版本和输入摘要生成稳定幂等键的结构化输入，包含 `inputSnapshotSha256`、`taskId`、`action`、`taskRevision` 字段。
+ * @returns 从任务身份、动作、版本和输入摘要生成稳定幂等键。
+ */
 export function buildCommandIdempotencyKey(input: {
   action: MediaGovernanceRunnerAction;
   inputSnapshotSha256: string;
@@ -899,7 +955,11 @@ export function buildCommandIdempotencyKey(input: {
     .digest('hex');
 }
 
-/** 校验带证据类型的任务状态转换是否属于允许集合。 */
+/**
+ * 按证据类型与当前任务状态校验目标转换是否属于允许集合。
+ * @param input - 用于按证据类型与当前任务状态校验目标转换是否属于允许集合的结构化输入，包含 `previous`、`next`、`evidenceType` 字段。
+ * @returns 按证据类型与当前任务状态校验目标转换是否属于允许集合。
+ */
 export function assertWorkflowTransition(input: {
   evidenceType: string;
   next: {
@@ -927,7 +987,11 @@ export function assertWorkflowTransition(input: {
   return input.next;
 }
 
-/** 校验 Agent 策略、胶囊身份、工具及媒体路径边界。 */
+/**
+ * 按 Agent 策略核对胶囊身份、工具及媒体路径边界。
+ * @param input - 用于按 Agent 策略核对胶囊身份、工具及媒体路径边界的结构化输入，包含 `units` 字段。
+ * @returns 包含 `allowed` 字段的按 Agent 策略核对胶囊身份、工具及媒体路径边界。
+ */
 export function validateAgentBoundaryRequest(input: {
   capsule: MediaGovernanceAgentCapsule;
   policy: MediaGovernanceAgentPolicy;
@@ -1017,7 +1081,10 @@ export function validateAgentBoundaryRequest(input: {
   return { allowed: true as const };
 }
 
-/** 构造覆盖治理合同主要状态与边界的确定性领域夹具。 */
+/**
+ * 根据当前领域状态，构造覆盖治理合同主要状态与边界的确定性领域夹具。
+ * @returns 包含 `agentSession`、`capsule`、`descriptorRevision`、`event`、`metadataException` 字段的媒体任务治理任务DomainFixture。
+ */
 export function buildMediaGovernanceDomainFixture(): MediaGovernanceDomainFixture {
   const inputSnapshotSha256 = 'a'.repeat(64);
   const policySha256 = 'b'.repeat(64);

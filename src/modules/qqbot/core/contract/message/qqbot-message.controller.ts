@@ -15,8 +15,9 @@ export class QqbotMessageController {
   constructor(private readonly messageService: QqbotMessageService) {}
 
   /**
-   * QQBot 会话分页。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 按查询条件读取 QQBot 会话分页，并封装为 Vben 成功响应。
+   * @param query - 限定会话消息筛选、排序与分页范围的查询条件。
+   * @returns 会话消息。
    */
   @Get('conversation/list')
   @ApiOperation({ summary: 'QQBot 会话分页' })
@@ -25,8 +26,9 @@ export class QqbotMessageController {
   }
 
   /**
-   * QQBot 消息分页。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 按查询条件读取 QQBot 消息分页，并封装为 Vben 成功响应。
+   * @param query - 限定消息筛选、排序与分页范围的查询条件。
+   * @returns 消息。
    */
   @Get('message/list')
   @ApiOperation({ summary: 'QQBot 消息分页' })

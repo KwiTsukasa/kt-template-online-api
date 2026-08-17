@@ -15,21 +15,22 @@ const DAILY_CHECKPOINT_SERVERS = new Set<number>([
 ]);
 
 /**
- * 规范化上游时间戳为毫秒。
- *
- * @param time - time 输入；驱动 `Number()` 的 BangDream步骤。
- * @returns 毫秒级时间戳。
+ * 将`time`规范为上游时间戳为毫秒，使等价输入得到一致表示；当 `timestamp < 1e12` 成立时返回 `timestamp * 1000`。
+ * @param time - 决定上游时间戳为毫秒内容、边界或目标的 `time` 值。
+ * @returns 上游时间戳为毫秒。
  */
 export function normalizeBangDreamTimestamp(time: number | string): number {
   const timestamp = Number(time);
-  return timestamp < 1e12 ? timestamp * 1000 : timestamp;
+  if (timestamp < 1e12) {
+    return timestamp * 1000;
+  }
+  return timestamp;
 }
 
 /**
- * 获取服务器对应的 UTC 偏移小时数。
- *
- * @param server - server 输入；限定 BangDream查询范围。
- * @returns UTC 偏移小时数。
+ * 根据参数 `server`，获取服务器对应的 UTC 偏移小时数。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 规范化后的根据参数 `server`，获取服务器对应的 UTC 偏移小时数；主值为空时采用 `0` 兜底。
  */
 export function getBangDreamServerUtcOffset(server: number): number {
   return SERVER_UTC_OFFSET_BY_SERVER[server] ?? 0;
@@ -37,10 +38,9 @@ export function getBangDreamServerUtcOffset(server: number): number {
 
 /**
  * 将时间戳转换为目标服务器时区下的 Date。
- *
- * @param time - time 输入；驱动 `normalizeBangDreamTimestamp()` 的 BangDream步骤。
- * @param server - server 输入；驱动 `getBangDreamServerUtcOffset()` 的 BangDream步骤。
- * @returns 服务器时区 Date。
+ * @param time - 决定将时间戳转换为目标服务器时区下的 Date内容、边界或目标的 `time` 值。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 完成初始化并携带当前边界配置的将时间戳转换为目标服务器时区下的 Date。
  */
 export function getBangDreamDateByServerTimezone(
   time: number | string,
@@ -52,21 +52,19 @@ export function getBangDreamDateByServerTimezone(
 }
 
 /**
- * 判断服务器是否存在每日档线 checkpoint。
- *
- * @param server - server 输入；驱动 `DAILY_CHECKPOINT_SERVERS.has()` 的 BangDream步骤。
- * @returns 是否启用每日 checkpoint。
+ * 根据服务器配置判断是否存在每日档线检查点。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @returns 满足根据服务器配置判断是否存在每日档线检查点约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function hasBangDreamDailyCheckpoint(server: number): boolean {
   return DAILY_CHECKPOINT_SERVERS.has(server);
 }
 
 /**
- * 判断时间是否命中档线日增 checkpoint。
- *
- * @param server - server 输入；计算 BangDream判断结果。
- * @param date - date 输入；执行 `date.getUTCHours()`、`date.getUTCMinutes()` 对应的 BangDream步骤。
- * @returns 是否命中 checkpoint。
+ * 根据服务器时区与检查点规则判断时间是否命中档线日增点。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @param date - 用于根据服务器时区与检查点规则判断时间是否命中档线日增点的领域对象，包含 `getUTCHours`、`getUTCMinutes` 字段。
+ * @returns 满足根据服务器时区与检查点规则判断时间是否命中档线日增点约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isBangDreamDailyCheckpoint(
   server: number,

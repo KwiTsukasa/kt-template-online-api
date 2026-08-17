@@ -8,9 +8,8 @@ interface SeparatorSpecOptions {
 }
 
 /**
- * 创建横向虚线分割规格。
- *
- * @param options - BangDream列表；生成 BangDream对象。
+ * 根据当前运行态构造Horizontal分隔线布局规格。
+ * @returns 包含 `width`、`height`、`startX`、`startY`、`endX` 字段的Horizontal分隔线布局规格。
  */
 export function createHorizontalSeparatorSpec({
   width = BANGDREAM_RENDER_THEME.layout.contentWidth,
@@ -33,10 +32,10 @@ export function createHorizontalSeparatorSpec({
 }
 
 /**
- * 创建纵向虚线分割规格。
- *
- * @param height - height 输入；生成 BangDream对象。
- * @param options - BangDream列表；生成 BangDream对象。
+ * 根据`height`、`options`构造垂直分隔线布局规格。
+ * @param height - 决定垂直分隔线布局规格内容、边界或目标的 `height` 值。
+ * @param options - 控制垂直分隔线布局规格筛选、缓存或输出方式的可选项；省略时默认采用 `{}`。
+ * @returns 包含 `width`、`height`、`startX`、`startY`、`endX` 字段的垂直分隔线布局规格。
  */
 export function createVerticalSeparatorSpec(
   height: number,

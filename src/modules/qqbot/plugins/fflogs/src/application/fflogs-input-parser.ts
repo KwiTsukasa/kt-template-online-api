@@ -7,9 +7,10 @@ export type FflogsCharacterInputParseOptions = {
 };
 
 /**
- * 解析Fflogs Character Input。
- * @param rawArgs - FFLogs列表；生成规范化文本。
- * @param options - FFLogs列表；使用 `resolveKnownWorld` 字段生成结果。
+ * 通过 `filter` 筛选匹配数据。
+ * @param rawArgs - 决定Fflogs角色输入内容、边界或目标的 `rawArgs` 值。
+ * @param options - 控制Fflogs角色输入筛选、缓存或输出方式的可选项，包含 `resolveKnownWorld` 字段；省略时默认采用 `{}`。
+ * @returns 包含 `characterName`、`className`、`difficulty`、`encounter`、`encounterName` 字段的Fflogs角色输入。
  */
 export function parseFflogsCharacterInput(
   rawArgs: string,
@@ -134,9 +135,10 @@ export function parseFflogsCharacterInput(
 }
 
 /**
- * 执行 FFLogs 插件流程。
- * @param positional - positional 输入；使用 `length` 字段生成结果。
- * @param resolveKnownWorld - resolveKnownWorld 输入；决定 FFLogs条件分支。
+ * 从`positional`、`resolveKnownWorld`筛选PositionalsKnown世界服，并保持保留项的原有顺序与键名。
+ * @param positional - 用于PositionalsKnown世界服的领域对象，包含 `length`、`index` 字段。
+ * @param resolveKnownWorld - 负责完成PositionalsKnown世界服外部交互的受控能力；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 包含 `characterName`、`encounterName`、`serverSlug` 字段的PositionalsKnown世界服；无法解析或未命中时为 `null`。
  */
 function pickPositionalsByKnownWorld(
   positional: string[],
@@ -164,8 +166,9 @@ function pickPositionalsByKnownWorld(
 }
 
 /**
- * 转换 FFLogs 插件输入。
- * @param value - 待转换值；决定 FFLogs条件分支。
+ * 将布尔 `true` 规范为空字符串，其余缺失值同样回退为空串并去除首尾空白。
+ * @param value - 待转换为将布尔 `true` 规范为空字符串，其余缺失值同样回退为空串并去除首尾空白的原始值；为空时采用 `''` 作为兜底。
+ * @returns 当前状态对应的字符串，取值为 `''`。
  */
 function normalizeString(value?: string | true) {
   if (value === true) return '';

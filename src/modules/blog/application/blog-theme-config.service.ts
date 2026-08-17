@@ -17,7 +17,8 @@ export class BlogThemeConfigService {
   ) {}
 
   /**
-   * 执行 博客内容流程。
+   * 根据当前运行态处理针对博客内容；从 `themeRepository.findOne` 读取针对博客内容。
+   * @returns 规范化后的针对博客内容；主值为空时采用 `this.getDefaultConfig()` 兜底。
    */
   async publicConfig() {
     const localConfig = await this.themeRepository.findOne({
@@ -30,8 +31,9 @@ export class BlogThemeConfigService {
   }
 
   /**
-   * 保存数据。
-   * @param body - 请求体 DTO；承载 博客新增、更新、导入或执行字段。
+   * 根据`body`更新`save` 对应结果。
+   * @param body - 用于`save` 对应结果的结构化输入，包含 `config`、`source` 字段。
+   * @returns `save` 对应。
    */
   async save(body: BlogThemeConfigBodyDto) {
     if (!body.config) {
@@ -45,9 +47,10 @@ export class BlogThemeConfigService {
   }
 
   /**
-   * 执行 博客内容流程。
-   * @param config - config 输入；影响 upsertConfig 的返回值。
-   * @param source - source 输入；影响 upsertConfig 的返回值。
+   * 根据`config`、`source`处理针对博客内容；把变更持久化到当前存储（`themeRepository.save`）。
+   * @param config - 限定针对博客内容边界、地址与开关的运行配置。
+   * @param source - 决定针对博客内容、边界或目标的 `source` 值。
+   * @returns 针对博客内容。
    */
   private async upsertConfig(config: BlogArgonThemeConfig, source: string) {
     const existing = await this.themeRepository.findOne({
@@ -56,21 +59,24 @@ export class BlogThemeConfigService {
       },
     });
     const saved = await this.themeRepository.save(
-      existing
-        ? Object.assign(existing, { config, source })
-        : this.themeRepository.create({
+      (() => {
+        if (existing) {
+          return Object.assign(existing, { config, source });
+        }
+        return this.themeRepository.create({
             config,
             id: DEFAULT_THEME_ID,
             source,
-          }),
+          });
+      })(),
     );
 
     return saved.config;
   }
 
   /**
-   * 查询 博客内容数据。
-   * @returns 博客内容查询结果。
+   * 按当前运行态读取配置。
+   * @returns 包含 `argonConfig`、`backgroundDarkBrightness`、`backgroundDarkImage`、`backgroundDarkOpacity`、`backgroundImage` 字段的配置。
    */
   private getDefaultConfig(): BlogArgonThemeConfig {
     return {

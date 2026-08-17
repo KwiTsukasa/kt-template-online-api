@@ -41,9 +41,8 @@ export const BANGDREAM_DATA_BLOCK_SPEC = {
 } as const;
 
 /**
- * 计算纵向数据块画布尺寸。
- *
- * @param options - BangDream列表；影响 calculateVerticalDataBlockSize 的返回值。
+ * 计算纵向数据块画布尺寸，并输出固定投影 `height`、`width` 字段。
+ * @returns 包含 `height`、`width` 字段的calculate垂直数据BlockSize。
  */
 export function calculateVerticalDataBlockSize({
   contentHeight,
@@ -58,25 +57,35 @@ export function calculateVerticalDataBlockSize({
 }) {
   const bodyHeight =
     contentHeight +
-    (withBackground ? BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraHeight : 0);
+    ((() => {
+      if (withBackground) {
+        return BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraHeight;
+      }
+      return 0;
+    })());
   return {
     height:
       bodyHeight +
-      (withBackground && withTitle
-        ? BANGDREAM_DATA_BLOCK_SPEC.title.height
-        : 0),
+      ((() => {
+        if (withBackground && withTitle) {
+          return BANGDREAM_DATA_BLOCK_SPEC.title.height;
+        }
+        return 0;
+      })()),
     width:
       maxContentWidth +
-      (withBackground
-        ? BANGDREAM_DATA_BLOCK_SPEC.background.outerExtraWidth
-        : BANGDREAM_DATA_BLOCK_SPEC.background.outerExtraWidth),
+      ((() => {
+        if (withBackground) {
+          return BANGDREAM_DATA_BLOCK_SPEC.background.outerExtraWidth;
+        }
+        return BANGDREAM_DATA_BLOCK_SPEC.background.outerExtraWidth;
+      })()),
   };
 }
 
 /**
- * 计算横向数据块画布尺寸。
- *
- * @param options - BangDream列表；影响 calculateHorizontalDataBlockSize 的返回值。
+ * 计算横向数据块画布尺寸，并输出固定投影 `height`、`width` 字段。
+ * @returns 包含 `height`、`width` 字段的calculateHorizontal数据BlockSize。
  */
 export function calculateHorizontalDataBlockSize({
   contentWidth,
@@ -91,20 +100,29 @@ export function calculateHorizontalDataBlockSize({
 }) {
   const bodyWidth =
     contentWidth +
-    (withBackground ? BANGDREAM_DATA_BLOCK_SPEC.background.outerExtraWidth : 0);
+    ((() => {
+      if (withBackground) {
+        return BANGDREAM_DATA_BLOCK_SPEC.background.outerExtraWidth;
+      }
+      return 0;
+    })());
   return {
     height:
       maxContentHeight + BANGDREAM_DATA_BLOCK_SPEC.background.fillExtraHeight,
     width:
       bodyWidth +
-      (withBackground && withTitle
-        ? BANGDREAM_DATA_BLOCK_SPEC.title.height
-        : 0),
+      ((() => {
+        if (withBackground && withTitle) {
+          return BANGDREAM_DATA_BLOCK_SPEC.title.height;
+        }
+        return 0;
+      })()),
   };
 }
 
 /**
- * 获取数据块标题文字行高。
+ * 根据当前领域状态，获取数据块标题文字行高。
+ * @returns 根据当前领域状态，获取数据块标题文字行高。
  */
 export function getDataBlockTitleLineHeight() {
   return (

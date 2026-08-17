@@ -31,13 +31,12 @@ interface TextureTileOptions {
 
 // 将图片等比例缩放并重复铺满整个画布,并且增加亮度
 /**
- * 在底层绘图工具层中处理spreadBackground图片。
- *
- * @param image - image 输入；驱动 `adjustBrightness()` 的 BangDream步骤。
- * @param width - width 输入；驱动 `Canvas()`、`getScaledDimensions()` 的 BangDream步骤。
- * @param height - height 输入；驱动 `Canvas()`、`getScaledDimensions()` 的 BangDream步骤。
- * @param brightness - BangDream列表；驱动 `adjustBrightness()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`image`、`width`、`height`处理spread背景图片；把图片、文本或图形按布局规格绘制到画布。
+ * @param image - 决定spread背景图片内容、边界或目标的 `image` 值。
+ * @param width - 决定spread背景图片内容、边界或目标的 `width` 值。
+ * @param height - 决定spread背景图片内容、边界或目标的 `height` 值。
+ * @param brightness - 决定spread背景图片内容、边界或目标的 `brightness` 值。
+ * @returns spread背景图片。
  */
 async function spreadBackgroundImage(
   image: Image,
@@ -69,11 +68,10 @@ async function spreadBackgroundImage(
 }
 
 /**
- * 在底层绘图工具层中处理adjustBrightness。
- *
- * @param image - image 输入；使用 `width`、`height` 字段生成结果。
- * @param brightness - BangDream列表；影响 adjustBrightness 的返回值。
- * @returns 异步处理结果。
+ * 根据`image`、`brightness`处理adjustBrightness；把图片、文本或图形按布局规格绘制到画布。
+ * @param image - 用于adjustBrightness的领域对象，包含 `width`、`height` 字段。
+ * @param brightness - 决定adjustBrightness内容、边界或目标的 `brightness` 值。
+ * @returns 逐像素增加 RGB 亮度且保持 Alpha 不变后解码得到的新图片。
  */
 async function adjustBrightness(
   image: Image,
@@ -100,12 +98,11 @@ async function adjustBrightness(
 }
 
 /**
- * 查询 BangDream 插件数据。
- *
- * @param image - image 输入；使用 `width`、`height` 字段生成结果。
- * @param targetWidth - targetWidth 输入；限定 BangDream查询范围。
- * @param targetHeight - targetHeight 输入；限定 BangDream查询范围。
- * @returns 计算后的数值。
+ * 按`image`、`targetWidth`、`targetHeight`读取包含 `scaledWidth`、`scaledHeight` 字段的结果。
+ * @param image - 用于包含 `scaledWidth`、`scaledHeight` 字段的结果的领域对象，包含 `width`、`height` 字段。
+ * @param targetWidth - 决定包含 `scaledWidth`、`scaledHeight` 字段的结果内容、边界或目标的 `targetWidth` 值。
+ * @param targetHeight - 决定包含 `scaledWidth`、`scaledHeight` 字段的结果内容、边界或目标的 `targetHeight` 值。
+ * @returns 包含 `scaledWidth`、`scaledHeight` 字段的包含 `scaledWidth`、`scaledHeight` 字段的。
  */
 function getScaledDimensions(
   image: Image,
@@ -133,7 +130,7 @@ let defaultBGTexture: Image;
 let backgroundAssetsPreload: Promise<void> | undefined;
 
 /**
- * 执行 BangDream 插件流程。
+ * 根据当前运行态处理BanG Dream背景Assets；从受控资源来源加载所需数据（`loadImageFromPath`）。
  */
 export async function preloadBangDreamBackgroundAssets() {
   if (!backgroundAssetsPreload) {
@@ -156,9 +153,8 @@ export async function preloadBangDreamBackgroundAssets() {
 }
 
 /**
- * 在底层绘图工具层中创建简易Background。
- *
- * @param options1 - options1 输入；生成 BangDream对象。
+ * 根据当前运行态构造Easy背景；把图片、文本或图形按布局规格绘制到画布。
+ * @returns Easy背景。
  */
 export async function createEasyBackground({ width, height }) {
   await preloadBangDreamBackgroundAssets();
@@ -167,7 +163,12 @@ export async function createEasyBackground({ width, height }) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, width, height);
-  const ratio = width < 2000 ? defaultBGTexture.width / width : 1;
+  const ratio = (() => {
+    if (width < 2000) {
+      return defaultBGTexture.width / width;
+    }
+    return 1;
+  })();
   //将图片等比例缩放并重复铺满整个画布
   let x = 0,
     y = 0;
@@ -187,8 +188,9 @@ export async function createEasyBackground({ width, height }) {
 }
 
 /**
- * 使用坐标变换绘制缩放纹理，保持 Tsugu 的比例与偏移，同时避开 skia-canvas
- * scaled drawImage 重载在完整 Nest 进程里的 native 内存峰值。
+ * 使用坐标变换绘制缩放纹理，保持 Tsugu 的比例与偏移，同时避开 skia-canvas scaled drawImage 重载在完整 Nest 进程里的 native 内存峰值。
+ * @param ctx - 用于ScaledTextureTile的领域对象，包含 `save`、`translate`、`scale`、`drawImage` 字段。
+ * @param texture - 决定ScaledTextureTile内容、边界或目标的 `texture` 值。
  */
 export function drawScaledTextureTile(
   ctx: CanvasRenderingContext2D,
@@ -203,9 +205,8 @@ export function drawScaledTextureTile(
 }
 
 /**
- * 使用业务图片生成轻量背景。
- *
- * @param options1 - options1 输入；生成 BangDream对象。
+ * 通过使用业务图片生成轻量背景。
+ * @returns 通过使用业务图片生成轻量背景。
  */
 export async function createImageBackground({
   image,
@@ -230,10 +231,8 @@ export async function createImageBackground({
 }
 
 /**
- * 创建 BangDream 插件对象或配置。
- *
- * @param options1 - options1 输入；生成 BangDream对象。
- * @returns 异步处理结果。
+ * 根据当前运行态构造背景；从受控资源来源加载所需数据（`loadImage`）。
+ * @returns 背景。
  */
 export async function createBackground({
   image,

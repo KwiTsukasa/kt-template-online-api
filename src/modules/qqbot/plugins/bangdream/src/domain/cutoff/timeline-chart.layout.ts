@@ -28,9 +28,9 @@ export interface TimelineChartPoint {
 export type TimelineChartDataset = ChartDataset<'line', TimelineChartPoint[]>;
 
 /**
- * 计算时间线图表的原始 Y 轴最大值。
- *
- * @param datasets - BangDream列表；转换 BangDream列表项。
+ * 根据参数 `datasets`，计算时间线图表的原始 Y 轴最大值。
+ * @param datasets - 决定根据参数 `datasets`，计算时间线图表的原始 Y 轴最大值内容、边界或目标的 `datasets` 值。
+ * @returns 根据参数 `datasets`，计算时间线图表的原始 Y 轴最大值。
  */
 export function getTimelineRawYMax(datasets: TimelineChartDataset[]) {
   return Math.max(
@@ -39,9 +39,9 @@ export function getTimelineRawYMax(datasets: TimelineChartDataset[]) {
 }
 
 /**
- * 计算时间线图表 Y 轴显示上限。
- *
- * @param rawYMax - rawYMax 输入；限定 BangDream查询范围。
+ * 按`rawYMax`读取时间线图表 Y 轴显示上限。
+ * @param rawYMax - 决定时间线图表 Y 轴显示上限内容、边界或目标的 `rawYMax` 值。
+ * @returns 时间线图表 Y 轴显示上限。
  */
 export function getTimelineDisplayYMax(rawYMax: number) {
   return (

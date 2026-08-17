@@ -102,7 +102,11 @@ export function createPlugin(
 export function createPlugin(
   options: QqbotGenericPluginCreateOptions,
 ): Promise<BangDreamCommandPlugin>;
-/** 创建插件。 */
+/**
+ * 根据`options`构造BanG Dream 运行时插件；当 `isBangDreamGenericPluginCreateOptions(options)` 成立时返回 `buildBangDreamGenericPlugin(options)`。
+ * @param options - 控制BanG Dream 运行时插件筛选、缓存或输出方式的可选项。
+ * @returns 返回按运行时选项构建的插件实例。
+ */
 export function createPlugin(
   options: BangDreamPluginCreateOptions,
 ): BangDreamCommandPlugin | Promise<BangDreamCommandPlugin> {
@@ -112,7 +116,11 @@ export function createPlugin(
   return buildBangDreamRuntimePlugin(options);
 }
 
-/** 构建BanGDream运行态插件。 */
+/**
+ * 根据`options`构造BanG Dream运行态插件。
+ * @param options - 控制BanGDream运行态插件筛选、缓存或输出方式的可选项，包含 `io`、`operations`、`normalizeError`、`description` 字段。
+ * @returns 包含 `activate`、`description`、`dispose`、`executeOperation`、`health` 字段的BanGDream运行态插件。
+ */
 function buildBangDreamRuntimePlugin(
   options: BangDreamPluginRuntimeOptions,
 ) {
@@ -126,7 +134,12 @@ function buildBangDreamRuntimePlugin(
   const normalizeError =
     options.normalizeError ||
     ((error: unknown) =>
-      (error instanceof Error ? error.message : `${error}`) ||
+      ((() => {
+        if (error instanceof Error) {
+          return error.message;
+        }
+        return `${error}`;
+      })()) ||
       'BangDream 命令执行失败');
 
   const checkBangDreamHealth = async () => {
@@ -192,7 +205,11 @@ function buildBangDreamRuntimePlugin(
   };
 }
 
-/** 构建BanGDream通用插件。 */
+/**
+ * 根据`options`构造BanG Dream通用插件。
+ * @param options - 控制BanGDream通用插件筛选、缓存或输出方式的可选项，包含 `manifest`、`runtime`、`host`、`normalizeError` 字段。
+ * @returns BanGDream通用插件。
+ */
 async function buildBangDreamGenericPlugin(
   options: QqbotGenericPluginCreateOptions,
 ): Promise<BangDreamCommandPlugin> {
@@ -221,7 +238,11 @@ async function buildBangDreamGenericPlugin(
   });
 }
 
-/** 判断BanGDream通用插件创建选项是否成立。 */
+/**
+ * 根据`options`与当前约束判定BanG Dream通用插件创建选项。
+ * @param options - 控制BanGDream通用插件创建选项筛选、缓存或输出方式的可选项。
+ * @returns 满足BanGDream通用插件创建选项约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isBangDreamGenericPluginCreateOptions(
   options: BangDreamPluginCreateOptions,
 ): options is QqbotGenericPluginCreateOptions {
@@ -231,7 +252,11 @@ function isBangDreamGenericPluginCreateOptions(
   );
 }
 
-/** 创建BanGDream通用配置读取器。 */
+/**
+ * 创建BanGDream通用配置读取器，并输出固定投影 `get` 字段。
+ * @param snapshot - 用于BanGDream配置Reader的领域对象，包含 `key` 字段。
+ * @returns 包含 `get` 字段的BanGDream配置Reader；没有可用结果或提前结束时为 `undefined`。
+ */
 function createBangDreamGenericConfigReader(
   snapshot: Record<string, string | undefined>,
 ): BangDreamConfigReader {
@@ -240,7 +265,11 @@ function createBangDreamGenericConfigReader(
   };
 }
 
-/** 创建BanGDream通用字典读取器。 */
+/**
+ * 创建BanGDream通用字典读取器，并输出固定投影 `getDictItemsByKey` 字段。
+ * @param host - 可能包含认证信息或端口的外部服务地址。
+ * @returns 包含 `getDictItemsByKey` 字段的BanGDreamDictionaryReader。
+ */
 function createBangDreamGenericDictionaryReader(
   host: Record<string, unknown>,
 ): BangDreamDictionaryReader {
@@ -250,7 +279,13 @@ function createBangDreamGenericDictionaryReader(
   };
 }
 
-/** 创建BanGDream通用运行态I/O。 */
+/**
+ * 创建BanGDream通用运行态I/O，并输出固定投影 `getConfig`、`readAssetFile`、`readExcelRows`、`readJsonFile`、`readJsonFileSync` 字段。
+ * @param options - 控制BanGDream运行态Io筛选、缓存或输出方式的可选项。
+ * @param pathMapper - 决定BanGDream运行态Io内容、边界或目标的 `pathMapper` 值。
+ * @param syncJsonCache - 用于BanGDream运行态Io的领域对象，包含 `has`、`get` 字段。
+ * @returns 包含 `getConfig`、`readAssetFile`、`readExcelRows`、`readJsonFile`、`readJsonFileSync` 字段的BanGDream运行态Io。
+ */
 function createBangDreamGenericRuntimeIo(
   options: QqbotGenericPluginCreateOptions,
   pathMapper: BangDreamGenericPathMapper,
@@ -339,7 +374,11 @@ function createBangDreamGenericRuntimeIo(
   };
 }
 
-/** 创建BanGDream通用路径映射器。 */
+/**
+ * 根据`installationId`构造BanG Dream通用路径映射器。
+ * @param installationId - 用于精确定位安装记录的标识。
+ * @returns BanGDream通用路径映射器。
+ */
 function createBangDreamGenericPathMapper(
   installationId: string,
 ): BangDreamGenericPathMapper {
@@ -368,7 +407,12 @@ function createBangDreamGenericPathMapper(
   };
 }
 
-/** 预加载BanGDream通用同步JSON。 */
+/**
+ * 根据`host`、`pathMapper`处理BanG Dream通用同步JSON；同步更新对应缓存或去重状态（`cache.set`）。
+ * @param host - 可能包含认证信息或端口的外部服务地址。
+ * @param pathMapper - 负责完成BanGDream通用同步JSON外部交互的受控能力。
+ * @returns BanGDream通用同步JSON。
+ */
 async function preloadBangDreamGenericSyncJson(
   host: Record<string, unknown>,
   pathMapper: BangDreamGenericPathMapper,
@@ -384,7 +428,11 @@ async function preloadBangDreamGenericSyncJson(
   return cache;
 }
 
-/** 解析BanGDreamExcel行。 */
+/**
+ * 从`buffer`解析BanG DreamExcel行；从 `XLSX.read` 读取BanG DreamExcel行。
+ * @param buffer - 决定BanGDreamExcel行内容、边界或目标的 `buffer` 值。
+ * @returns 按输入顺序得到的BanGDreamExcel行列表；没有匹配项时为空数组。
+ */
 function parseBangDreamExcelRows<T extends Record<string, unknown>>(
   buffer: Buffer,
 ): T[] {
@@ -394,7 +442,11 @@ function parseBangDreamExcelRows<T extends Record<string, unknown>>(
   return XLSX.utils.sheet_to_json<T>(workbook.Sheets[sheetName]);
 }
 
-/** 规范化BanGDream主机路径。 */
+/**
+ * 将`filePath`规范为BanG Dream主机路径，使等价输入得到一致表示。
+ * @param filePath - 必须保持在受控根目录内的文件路径。
+ * @returns BanGDream主机路径。
+ */
 function normalizeBangDreamHostPath(filePath: string) {
   return filePath
     .replace(/\\/g, '/')
@@ -404,21 +456,36 @@ function normalizeBangDreamHostPath(filePath: string) {
     .join('/');
 }
 
-/** 规范化BanGDream外部路径。 */
+/**
+ * 将`filePath`规范为BanG Dream外部路径，使等价输入得到一致表示。
+ * @param filePath - 必须保持在受控根目录内的文件路径。
+ * @returns BanGDream外部路径。
+ */
 function normalizeBangDreamExternalPath(filePath: string) {
   return normalizeBangDreamHostPath(
     filePath.replace(/^[A-Za-z]:/, (drive) => drive.slice(0, 1)),
   );
 }
 
-/** 规范化BanGDream路径分段。 */
+/**
+ * 将`value`规范为BanG Dream路径分段，使等价输入得到一致表示。
+ * @param value - 待转换为BanGDream路径分段的原始值。
+ * @returns 规范化后的BanGDream路径分段；主值为空时采用 `'default'` 兜底。
+ */
 function normalizeBangDreamPathSegment(value: string) {
   return (
     value.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'default'
   );
 }
 
-/** 返回调用BanGDream通用主机。 */
+/**
+ * 执行 BanG Dream 宿主回调，并把非 `Error` 拒绝值规范为带稳定消息的异常。
+ * @param host - 可能包含认证信息或端口的外部服务地址。
+ * @param method - 决定调用BanGDream宿主内容、边界或目标的 `method` 值。
+ * @param args - 决定调用BanGDream宿主内容、边界或目标的 `args` 值；按调用方给定的顺序传递全部剩余实参。
+ * @returns 调用BanGDream宿主。
+ * @throws 当 `typeof fn !== 'function'` 成立时拒绝当前输入并抛出 `Error`。
+ */
 async function callBangDreamGenericHost<TResult = any>(
   host: Record<string, unknown>,
   method: string,
@@ -431,30 +498,46 @@ async function callBangDreamGenericHost<TResult = any>(
   return (await fn(...args)) as TResult;
 }
 
-/** 规范化BanGDream主机缓冲区。 */
+/**
+ * 将`value`规范为BanG Dream主机缓冲区，使等价输入得到一致表示。
+ * @param value - 待转换为BanGDream主机缓冲区的原始值。
+ * @returns BanGDream主机缓冲区。
+ */
 function normalizeBangDreamHostBuffer(value: unknown): Buffer {
   const body =
-    value && typeof value === 'object' && 'body' in value
-      ? (value as { body?: unknown }).body
-      : value;
+    (() => {
+      if (value && typeof value === 'object' && 'body' in value) {
+        return (value as { body?: unknown }).body;
+      }
+      return value;
+    })();
   if (Buffer.isBuffer(body)) return body;
   if (body instanceof Uint8Array) return Buffer.from(body);
   if (Array.isArray(body)) return Buffer.from(body);
   return Buffer.from([]);
 }
 
-/** 规范化BanGDream通用错误。 */
+/**
+ * 将`normalizeError`、`error`规范为BanG Dream通用错误，使等价输入得到一致表示；当 `normalized instanceof Error` 成立时返回 `normalized.message`。
+ * @param normalizeError - 负责完成BanGDream通用错误外部交互的受控能力。
+ * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+ * @returns 按参数编码并拼接完成的BanGDream通用错误。
+ */
 function normalizeBangDreamGenericError(
   normalizeError: QqbotGenericPluginCreateOptions['normalizeError'],
   error: unknown,
 ) {
   const normalized = normalizeError(error, 'BangDream 命令执行失败');
-  return normalized instanceof Error ? normalized.message : `${normalized}`;
+  if (normalized instanceof Error) {
+    return normalized.message;
+  }
+  return `${normalized}`;
 }
 
 /**
- * 解析Bang Dream Operations。
- * @param operations - BangDream列表；转换 BangDream列表项。
+ * 从`operations`解析BanG Dream操作集合；从 `getBangDreamOperationsByHandlerName` 读取BanG Dream操作集合。
+ * @param operations - 按原有顺序参与BanGDream操作集合筛选、合并或汇总的集合。
+ * @returns 按稳定键索引的BanGDream操作集合映射；没有输入项时为空映射。
  */
 function resolveBangDreamOperations(operations: BangDreamManifestOperation[]) {
   const operationModules = getBangDreamOperationsByHandlerName();
@@ -477,9 +560,10 @@ function resolveBangDreamOperations(operations: BangDreamManifestOperation[]) {
 }
 
 /**
- * 执行Bang Dream Operation。
- * @param options - BangDream列表；使用 `operationKey`、`input`、`lifecycle`、`operationsByKey` 字段生成结果。
- * @returns 异步完成后的 BangDream 插件结果。
+ * 根据`options`处理BanG Dream操作；把当前结果通知给生命周期观察者（`options.lifecycle.onError`）。
+ * @param options - 控制BanGDream操作筛选、缓存或输出方式的可选项，包含 `operationKey`、`input`、`lifecycle`、`operationsByKey` 字段。
+ * @returns BanGDream操作。
+ * @throws 当 `!operation` 成立时拒绝当前输入并抛出 `Error`；当 `options.operationsByKey.get` 或 `options.lifecycle.afterResolve` 调用失败时拒绝当前输入并抛出 `Error`。
  */
 async function executeBangDreamOperation(options: {
   context: BangDreamCommandContext;
@@ -524,7 +608,8 @@ async function executeBangDreamOperation(options: {
 }
 
 /**
- * 查询 BangDream 插件数据。
+ * 按当前运行态读取包含 `properties`、`type` 字段的结果。
+ * @returns 包含 `properties`、`type` 字段的包含 `properties`、`type` 字段的。
  */
 function getBangDreamInputSchema() {
   return {
@@ -539,7 +624,8 @@ function getBangDreamInputSchema() {
 }
 
 /**
- * 查询 BangDream 插件数据。
+ * 按当前运行态读取包含 `properties`、`type` 字段的结果。
+ * @returns 包含 `properties`、`type` 字段的包含 `properties`、`type` 字段的。
  */
 function getBangDreamOutputSchema() {
   return {
@@ -555,8 +641,9 @@ function getBangDreamOutputSchema() {
 }
 
 /**
- * 转换 BangDream 插件输入。
- * @param date - date 输入；执行 `date.getFullYear()`、`date.getMonth()`、`date.getDate()`、`date.getHours()` 对应的 BangDream步骤。
+ * 将日期按本地时区格式化为补零的秒级检查时间，供插件状态摘要展示。
+ * @param date - 要显示的检查时间，按其本地年月日与时分秒读取。
+ * @returns `YYYY-MM-DD HH:mm:ss` 格式的本地时间文本。
  */
 function formatBangDreamCheckedAt(date: Date) {
   const pad = (input: number) => `${input}`.padStart(2, '0');

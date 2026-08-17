@@ -18,11 +18,9 @@ interface SkillInListOptions {
   content: Skill;
 }
 /**
- * 在图片布局层中绘制技能In列表。
- *
- * @param options1 - options1 输入；影响 drawSkillInList 的返回值。
- * @param displayedServerList - displayedServerList 输入；驱动 `drawListByServerList()`、`getServerByPriority()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`displayedServerList`绘制或格式化Skill；从 `getServerByPriority` 读取Skill。
+ * @param displayedServerList - 决定Skill内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @returns 叠加卡牌技能名称与优先服务器技能说明后的列表画布。
  */
 export async function drawSkillInList(
   { key, card, content }: SkillInListOptions,

@@ -27,10 +27,10 @@ interface drawBandDetailsInListOptions {
 }
 //画乐队详情
 /**
- * 在图片布局层中绘制乐队详情列表In列表。
- *
- * @param BandDetailsInListOptions - BangDream列表；驱动 `for()` 的 BangDream步骤。
- * @param key - 键名；影响 drawBandDetailsInList 的返回值。
+ * 根据`BandDetailsInListOptions`、`key`绘制或格式化Band详情；把图片、文本或图形按布局规格绘制到画布。
+ * @param BandDetailsInListOptions - 控制Band详情筛选、缓存或输出方式的可选项，包含 `i` 字段。
+ * @param key - 用于读取或更新Band详情的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns Band详情。
  */
 async function drawBandDetailsInList(
   BandDetailsInListOptions: drawBandDetailsInListOptions,
@@ -69,11 +69,10 @@ async function drawBandDetailsInList(
 }
 //画玩家信息内乐队等级
 /**
- * 在图片布局层中绘制玩家乐队RankIn列表。
- *
- * @param player - player 输入；使用 `profile` 字段生成结果。
- * @param key - 键名；驱动 `drawBandDetailsInList()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 按目录乐队顺序将玩家乐队等级绘制为列表画布，缺失等级显示为问号。
+ * @param player - 用于按目录乐队顺序将玩家乐队等级绘制为列表画布，缺失等级显示为问号的领域对象，包含 `profile` 字段。
+ * @param key - 用于读取或更新按目录乐队顺序将玩家乐队等级绘制为列表画布，缺失等级显示为问号的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 按目录乐队顺序将玩家乐队等级绘制为列表画布，缺失等级显示为问号。
  */
 export async function drawPlayerBandRankInList(
   player: Player,
@@ -93,11 +92,10 @@ export async function drawPlayerBandRankInList(
 
 //画玩家信息内stage challenge等级
 /**
- * 在图片布局层中绘制玩家试炼ChallengeRankIn列表。
- *
- * @param player - player 输入；使用 `profile` 字段生成结果。
- * @param key - 键名；驱动 `drawBandDetailsInList()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 按目录乐队顺序将玩家试炼等级与星标绘制为列表画布，缺失等级按 `0` 处理。
+ * @param player - 用于按目录乐队顺序将玩家试炼等级与星标绘制为列表画布，缺失等级按 `0` 处理的领域对象，包含 `profile` 字段。
+ * @param key - 用于读取或更新按目录乐队顺序将玩家试炼等级与星标绘制为列表画布，缺失等级按 `0` 处理的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 玩家阶段验证挑战排名。
  */
 export async function drawPlayerStageChallengeRankInList(
   player: Player,
@@ -120,10 +118,9 @@ export async function drawPlayerStageChallengeRankInList(
 //画玩家信息内乐队卡组最高等级
 const rankImageCache: { [rankImageName: string]: Image } = {};
 /**
- * 在图片布局层中加载Rank图片。
- *
- * @param rankImageName - rankImageName 输入；驱动 `deckRankResourceRepository.getRankImageBuffer()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 按`rankImageName`读取排名图片；从受控资源来源加载所需数据（`loadImage`）。
+ * @param rankImageName - 决定排名图片内容、边界或目标的 `rankImageName` 值。
+ * @returns 排名图片。
  */
 async function loadRankImage(rankImageName: string): Promise<Image> {
   if (rankImageCache[rankImageName] == undefined) {
@@ -135,10 +132,10 @@ async function loadRankImage(rankImageName: string): Promise<Image> {
 }
 
 /**
- * 在图片布局层中绘制玩家DeckTotalRatingIn列表。
- *
- * @param player - player 输入；使用 `profile` 字段生成结果。
- * @param key - 键名；驱动 `drawBandDetailsInList()` 的 BangDream步骤。
+ * 根据`player`、`key`绘制或格式化玩家DeckTotalRating；把图片、文本或图形按布局规格绘制到画布。
+ * @param player - 用于玩家DeckTotalRating的领域对象，包含 `profile` 字段。
+ * @param key - 用于读取或更新玩家DeckTotalRating的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 玩家DeckTotalRating。
  */
 export async function drawPlayerDeckTotalRatingInList(
   player: Player,

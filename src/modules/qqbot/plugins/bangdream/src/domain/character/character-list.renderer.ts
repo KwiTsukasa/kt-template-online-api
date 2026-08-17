@@ -17,11 +17,9 @@ interface CharacterInListOptions {
   text?: string;
 }
 /**
- * 在图片布局层中绘制角色In列表。
- *
- * @param options1 - options1 输入；影响 drawCharacterInList 的返回值。
- * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`displayedServerList`绘制或格式化角色；当 `shouldUseSingleEntityLabel(content.length, text)` 成立时返回 `canvas`。
+ * @param displayedServerList - 决定角色内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @returns 角色。
  */
 export async function drawCharacterInList(
   { key, content, text }: CharacterInListOptions,

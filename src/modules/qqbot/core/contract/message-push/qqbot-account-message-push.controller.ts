@@ -83,7 +83,11 @@ export class QqbotAccountMessagePushController {
     private readonly targetOptionsService: QqbotMessageTargetOptionsService,
   ) {}
 
-  /** 列出绑定。 */
+  /**
+   * 按`params`读取绑定；从 `bindingService.listBindings` 读取绑定。
+   * @param params - 用于绑定的领域对象，包含 `selfId` 字段。
+   * @returns 返回账号当前消息推送绑定视图列表或对应成功响应。
+   */
   @Get('bindings')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:List')
   async listBindings(@Param() params: AccountMessagePushParamDto) {
@@ -91,7 +95,12 @@ export class QqbotAccountMessagePushController {
     return vbenSuccess(views.map(allowlistBinding));
   }
 
-  /** 创建绑定。 */
+  /**
+   * 为指定账号创建消息推送绑定，并返回包含来源与模板信息的绑定视图。
+   * @param params - 用于绑定的领域对象，包含 `selfId` 字段。
+   * @param body - 用于绑定的结构化输入。
+   * @returns 返回新建的消息推送绑定视图或对应成功响应。
+   */
   @Post('bindings')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Create')
@@ -106,7 +115,12 @@ export class QqbotAccountMessagePushController {
     );
   }
 
-  /** 更新绑定。 */
+  /**
+   * 按账号和绑定标识更新消息推送配置，并返回更新后的绑定视图。
+   * @param params - 用于绑定的领域对象，包含 `selfId`、`id` 字段。
+   * @param body - 用于绑定的结构化输入。
+   * @returns 返回更新后的消息推送绑定视图或对应成功响应。
+   */
   @Put('bindings/:id')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Update')
   async updateBinding(
@@ -120,7 +134,12 @@ export class QqbotAccountMessagePushController {
     );
   }
 
-  /** 返回切换绑定。 */
+  /**
+   * 将输入收敛并投影为切换绑定。
+   * @param params - 用于切换绑定的领域对象，包含 `selfId`、`id` 字段。
+   * @param body - 用于切换绑定的结构化输入，包含 `enabled` 字段。
+   * @returns 切换绑定。
+   */
   @Put('bindings/:id/enabled')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Toggle')
   async toggleBinding(
@@ -138,7 +157,11 @@ export class QqbotAccountMessagePushController {
     );
   }
 
-  /** 移除绑定。 */
+  /**
+   * 按账号和绑定标识删除消息推送绑定，并封装删除后的成功响应。
+   * @param params - 用于绑定的领域对象，包含 `selfId`、`id` 字段。
+   * @returns 返回删除绑定后的成功响应。
+   */
   @Delete('bindings/:id')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Delete')
   async removeBinding(@Param() params: AccountMessagePushBindingParamDto) {
@@ -147,7 +170,11 @@ export class QqbotAccountMessagePushController {
     );
   }
 
-  /** 列出目标。 */
+  /**
+   * 按`params`读取目标；从 `targetOptionsService.listTargetOptions` 读取目标。
+   * @param params - 用于目标的领域对象，包含 `selfId` 字段。
+   * @returns 目标。
+   */
   @Get('targets')
   @QqbotMessagePushPermission(
     'QqBot:Account:MessagePush:Create',

@@ -40,7 +40,7 @@ export class QqbotNapcatWatchdogService
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
+   * 将本次操作写入 `this.running` 状态。
    */
   private async tick() {
     if (this.running) return;
@@ -50,7 +50,12 @@ export class QqbotNapcatWatchdogService
     } catch (err) {
       this.logger.warn(
         `NapCat 离线看门狗巡检失败：${
-          err instanceof Error ? err.message : `${err}`
+          (() => {
+            if (err instanceof Error) {
+              return err.message;
+            }
+            return `${err}`;
+          })()
         }`,
       );
     } finally {
@@ -59,7 +64,8 @@ export class QqbotNapcatWatchdogService
   }
 
   /**
-   * 判断 NapCat 登录运行态条件。
+   * 根据当前运行态与当前约束判定启用状态；从 `configService.get` 读取启用状态。
+   * @returns 满足启用状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isEnabled() {
     const value = `${
@@ -71,7 +77,8 @@ export class QqbotNapcatWatchdogService
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
+   * 按当前运行态读取间隔Ms；当 `!Number.isFinite(value) || value < MIN_INTERVAL_MS` 成立时返回 `DEFAULT_INTERVAL_MS`。
+   * @returns 间隔Ms。
    */
   private getIntervalMs() {
     const value = Number(

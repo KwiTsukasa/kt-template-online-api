@@ -55,10 +55,9 @@ export function getBangDreamEventSchedule(
 
 /**
  * 获取某服务器当前或最近结束的活动 ID。
- *
- * @param server - server 输入；限定 BangDream查询范围。
- * @param time - time 输入；决定 BangDream条件分支。
- * @returns 活动 ID。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @param time - 决定某服务器当前或最近结束的活动 ID内容、边界或目标的 `time` 值；省略时默认采用 `Date.now()`。
+ * @returns 某服务器当前或最近结束的活动 ID。
  */
 export function getPresentBangDreamEventId(
   server: number,
@@ -92,7 +91,7 @@ export function getPresentBangDreamEventId(
 }
 
 /**
- * 计算活动跨越的自然日数量，首尾日都计入。
+ * 根据参数 `startTs`，计算活动跨越的自然日数量，首尾日都计入。
  *
  * @param startTs - BangDream列表；构造时间对象。
  * @param endTs - BangDream列表；构造时间对象。
@@ -114,10 +113,8 @@ export function getBangDreamOccupiedDays(
 }
 
 /**
- * 纯函数计算国服预估开放时间。
- *
- * @param context - context 输入；影响 calculateCnEventEstimateStartAt 的返回值。
- * @returns 预估开始时间。
+ * 通过纯函数计算国服预估开放时间。
+ * @returns 通过纯函数计算国服预估开放时间；无法解析或未命中时为 `null`。
  */
 export function calculateCnEventEstimateStartAt({
   currentEvent,
@@ -196,10 +193,9 @@ export function calculateCnEventEstimateStartAt({
 
 /**
  * 按当前主数据计算国服预估开放时间。
- *
- * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
- * @param currentEvent - currentEvent 输入；决定 BangDream条件分支。
- * @returns 预估开始时间。
+ * @param eventId - 用于精确定位事件的标识。
+ * @param currentEvent - 触发按当前主数据计算国服预估开放时间的领域事件。
+ * @returns 按当前主数据计算国服预估开放时间；无法解析或未命中时为 `null`。
  */
 export function estimateCnEventStartAt(
   eventId: number,
@@ -217,9 +213,8 @@ export function estimateCnEventStartAt(
 }
 
 /**
- * 执行 BangDream 插件流程。
- *
- * @param context - context 输入；影响 calculateCurrentEventOffset 的返回值。
+ * 根据当前运行态处理calculate事件Offset；当 `currentEventId < presentJpEventId` 成立时返回 `null`。
+ * @returns calculate事件Offset；无法解析或未命中时为 `null`。
  */
 function calculateCurrentEventOffset({
   currentEvent,

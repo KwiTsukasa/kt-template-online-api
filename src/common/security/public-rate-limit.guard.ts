@@ -22,7 +22,11 @@ export class PublicRateLimitGuard implements CanActivate {
     private readonly trustedCredentialTransportService: TrustedCredentialTransportService,
   ) {}
 
-  /** 判断是否允许激活。 */
+  /**
+   * 根据`context`与当前约束判定是否允许激活；先通过 `trustedCredentialTransportService.assertProtectedRequest` 校验输入边界。
+   * @param context - 用于是否允许激活的领域对象，包含 `getType`、`switchToHttp`、`getHandler`、`getClass` 字段。
+   * @returns 满足是否允许激活约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (context.getType() !== 'http') return true;
 
@@ -40,7 +44,12 @@ export class PublicRateLimitGuard implements CanActivate {
     return true;
   }
 
-  /** 断言允许的。 */
+  /**
+   * 校验`response`、`outcome`是否满足允许的约束，并拒绝不合法输入。
+   * @param response - 用于写入状态码、Cookie 或缓存策略的当前 HTTP 响应。
+   * @param outcome - 用于允许的的领域对象，包含 `allowed`、`retryAfterSeconds`、`statusCode` 字段。
+   * @throws 限流结果为禁止、存储不可用或请求过多时分别抛出对应的 HTTP 异常。
+   */
   assertAllowed(response: Response, outcome: PublicRateLimitOutcome): void {
     if (outcome.allowed) return;
 

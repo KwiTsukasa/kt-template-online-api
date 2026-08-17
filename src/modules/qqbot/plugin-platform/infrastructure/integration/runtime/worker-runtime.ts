@@ -41,9 +41,24 @@ export class QqbotPluginWorkerResponseError extends Error {
 export const serializePluginWorkerResponseError = (
   error: unknown,
 ): QqbotPluginWorkerResponseErrorInput => ({
-  message: error instanceof Error ? error.message : `${error}`,
-  name: error instanceof Error ? error.name : 'Error',
-  stack: error instanceof Error ? error.stack : undefined,
+  message: (() => {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    return `${error}`;
+  })(),
+  name: (() => {
+    if (error instanceof Error) {
+      return error.name;
+    }
+    return 'Error';
+  })(),
+  stack: (() => {
+    if (error instanceof Error) {
+      return error.stack;
+    }
+    return undefined;
+  })(),
 });
 
 export class QqbotPluginWorkerStaleRequestError extends Error {
@@ -91,8 +106,9 @@ export class QqbotPluginWorkerRuntime {
   ) {}
 
   /**
-   * 加载业务数据。
-   * @param manifest - manifest 输入；影响 load 的返回值。
+   * 按`manifest`读取`load` 对应结果；从受控资源来源加载所需数据（`request`）。
+   * @param manifest - 决定`load` 对应结果内容、边界或目标的 `manifest` 值。
+   * @returns `load` 对应。
    */
   async load(manifest: unknown) {
     this.manifestForRecovery = manifest;
@@ -109,7 +125,8 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
+   * 按当前运行态启动activate；从受控资源来源加载所需数据（`request`）。
+   * @returns 工作进程确认激活请求后的结果；成功时运行时状态同步变为 `active`。
    */
   async activate() {
     const result = await this.request('activate');
@@ -119,8 +136,9 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 执行Operation。
-   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * 将插件能力标识、输入安全摘要与超时上限编码为工作进程请求，并返回执行结果。
+   * @param request - 用于操作的当前 HTTP 请求，包含 `input`、`operationId`、`operationKey`、`timeoutMs` 字段。
+   * @returns 操作。
    */
   async executeOperation(request: QqbotPluginOperationRequest) {
     return this.request(
@@ -136,8 +154,9 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 处理Event。
-   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * 将插件事件键、载荷安全摘要与超时上限编码为工作进程请求，并返回分发结果。
+   * @param request - 用于事件的当前 HTTP 请求，包含 `event`、`eventKey`、`timeoutMs` 字段。
+   * @returns 事件。
    */
   async handleEvent(request: QqbotPluginEventRequest) {
     return this.request(
@@ -152,8 +171,9 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 执行Task。
-   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * 将插件任务标识、触发方式、输入安全摘要与超时上限编码为工作进程请求，并返回执行结果。
+   * @param request - 用于任务的当前 HTTP 请求，包含 `input`、`taskHandlerName`、`taskId`、`taskKey` 字段。
+   * @returns 任务。
    */
   async executeTask(request: QqbotPluginTaskRequest) {
     return this.request(
@@ -171,14 +191,16 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
+   * 向插件工作进程发送健康检查请求，并返回运行时健康结果。
+   * @returns 健康状态。
    */
   async health() {
     return this.request('health');
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
+   * 按当前运行态停止deactivate并清理该入口拥有的运行态资源；从受控资源来源加载所需数据（`request`）。
+   * @returns 工作进程确认停用请求后的结果；成功时运行时状态同步变为 `stopped`。
    */
   async deactivate() {
     const result = await this.request('deactivate');
@@ -188,7 +210,7 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
+   * 按当前运行态移除dispose；从受控资源来源加载所需数据（`request`）。
    */
   async dispose() {
     try {
@@ -201,25 +223,30 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 列出Runtime Events。
+   * 按当前运行态读取运行态事件流。
+   * @returns 按输入顺序得到的运行态事件流列表；没有匹配项时为空数组。
    */
   listRuntimeEvents() {
     return [...this.runtimeEvents];
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
+   * 从内存队列一次取出全部插件运行时事件，并在返回时清空原队列。
+   * @returns drain运行态事件流。
    */
   drainRuntimeEvents() {
     return this.runtimeEvents.splice(0);
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param type - type 输入；驱动 `this.recoverIfNeeded()`、`createCorrelationId()`、`this.createTimeoutPromise()`、`this.request()` 的 插件平台步骤。
-   * @param payload - payload 输入；驱动 `createCorrelationId()`、`this.request()` 的 插件平台步骤。
-   * @param timeoutMs - 插件平台列表；驱动 `createCorrelationId()`、`this.createTimeoutPromise()`、`this.request()` 的 插件平台步骤。
-   * @param control - control 输入；使用 `skipRecovery`、`retryStale` 字段生成结果。
+   * 通过 `recoverIfNeeded` 准备或恢复运行态。
+   * @param type - 决定`request` 对应结果内容、边界或目标的 `type` 值。
+   * @param payload - 待按当前协议校验并路由的事件载荷；省略时默认采用 `{}`。
+   * @param timeoutMs - 用于`request` 对应结果超时、有效期或退避计算的毫秒数；省略时默认采用 `this.options.defaultTimeoutMs`。
+   * @param control - 用于`request` 对应结果的领域对象，包含 `skipRecovery`、`retryStale` 字段；省略时默认采用 `{}`。
+   * @returns `request` 对应。
+   * @throws 当 `error instanceof QqbotPluginRuntimeError` 成立时重新抛出该入口捕获且决定公开的原异常；当 `error instanceof QqbotPluginWorkerExpiredRequestError || isNamedError(e…` 成立时拒绝当前输入并抛出 `runtimeError`；
+   *   当 `error instanceof QqbotPluginWorkerResponseError` 成立时重新抛出该入口捕获且决定公开的原异常；当 `Promise.race` 调用失败时拒绝当前输入并抛出 `runtimeError`。
    */
   private async request(
     type: QqbotPluginWorkerRequestType,
@@ -302,7 +329,12 @@ export class QqbotPluginWorkerRuntime {
         'QQBot plugin worker crashed.',
         {
           correlationId: message.correlationId,
-          message: error instanceof Error ? error.message : `${error}`,
+          message: (() => {
+            if (error instanceof Error) {
+              return error.message;
+            }
+            return `${error}`;
+          })(),
           operationId: message.operationId,
           type,
         },
@@ -315,10 +347,11 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 创建 QQBot 插件平台对象或配置。
-   * @param type - type 输入；生成 插件平台对象。
-   * @param message - message 输入；使用 `correlationId`、`operationId` 字段生成结果。
-   * @param timeoutMs - 插件平台列表；生成 插件平台对象。
+   * 根据`type`、`message`、`timeoutMs`构造包含 `clear`、`promise` 字段的结果。
+   * @param type - 决定包含 `clear`、`promise` 字段的结果内容、边界或目标的 `type` 值。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `correlationId`、`operationId` 字段。
+   * @param timeoutMs - 用于包含 `clear`、`promise` 字段的结果超时、有效期或退避计算的毫秒数。
+   * @returns 包含 `clear`、`promise` 字段的包含 `clear`、`promise` 字段的。
    */
   private createTimeoutPromise(
     type: QqbotPluginWorkerRequestType,
@@ -353,8 +386,9 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 查询 QQBot 插件平台数据。
-   * @param timeoutMs - 插件平台列表；限定 插件平台查询范围。
+   * 在请求队列自行管理超时时，将非负的排队等待时间加到执行超时；否则保留原值。
+   * @param timeoutMs - 用于在请求队列自行管理超时时，将非负的排队等待时间加到执行超时、有效期或退避计算的毫秒数。
+   * @returns 在请求队列自行管理超时时，将非负的排队等待时间加到执行超时。
    */
   private getRequestTimeoutMs(timeoutMs: number) {
     if (!this.requestQueue.handlesRequestTimeout) return timeoutMs;
@@ -366,8 +400,8 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param triggerType - triggerType 输入；驱动 `this.recoverWorker()` 的 插件平台步骤。
+   * 根据`triggerType`处理恢复If必要状态。
+   * @param triggerType - 决定恢复If必要状态内容、边界或目标的 `triggerType` 值。
    */
   private async recoverIfNeeded(triggerType: QqbotPluginWorkerRequestType) {
     if (this.status !== 'failed' || !this.manifestForRecovery) return;
@@ -382,8 +416,8 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param triggerType - triggerType 输入；影响 recoverWorker 的返回值。
+   * 根据`triggerType`处理恢复工作进程；从受控资源来源加载所需数据（`request`）。
+   * @param triggerType - 决定恢复工作进程内容、边界或目标的 `triggerType` 值。
    */
   private async recoverWorker(triggerType: QqbotPluginWorkerRequestType) {
     this.recordRuntimeEvent(
@@ -422,9 +456,9 @@ export class QqbotPluginWorkerRuntime {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param eventType - eventType 输入；驱动 `this.recordRuntimeEvent()` 的 插件平台步骤。
-   * @param safeSummary - safeSummary 输入；影响 markWorkerFailed 的返回值。
+   * 将本次操作写入 `this.shouldRecoverActive`、`this.status`、`resetError` 状态。
+   * @param eventType - 决定工作进程Failed内容、边界或目标的 `eventType` 值。
+   * @param safeSummary - 决定工作进程Failed内容、边界或目标的 `safeSummary` 值。
    */
   private async markWorkerFailed(
     eventType: string,
@@ -439,20 +473,29 @@ export class QqbotPluginWorkerRuntime {
     try {
       await this.requestQueue.reset();
     } catch (error) {
-      resetError = error instanceof Error ? error.message : `${error}`;
+      if (error instanceof Error) {
+        resetError = error.message;
+      } else {
+        resetError = `${error}`;
+      }
     }
 
     this.recordRuntimeEvent(eventType, {
       ...safeSummary,
-      ...(resetError ? { resetError } : {}),
+      ...((() => {
+        if (resetError) {
+          return { resetError };
+        }
+        return {};
+      })()),
     });
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param eventType - eventType 输入；影响 recordRuntimeEvent 的返回值。
-   * @param safeSummary - safeSummary 输入；影响 recordRuntimeEvent 的返回值。
-   * @param level - level 输入；影响 recordRuntimeEvent 的返回值。
+   * 根据`eventType`、`safeSummary`、`level`处理记录运行态事件。
+   * @param eventType - 决定记录运行态事件内容、边界或目标的 `eventType` 值。
+   * @param safeSummary - 决定记录运行态事件内容、边界或目标的 `safeSummary` 值。
+   * @param level - 决定记录运行态事件内容、边界或目标的 `level` 值；省略时默认采用 `'error'`。
    */
   private recordRuntimeEvent(
     eventType: string,

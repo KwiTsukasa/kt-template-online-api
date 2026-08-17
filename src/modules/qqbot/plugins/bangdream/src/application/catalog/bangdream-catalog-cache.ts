@@ -25,8 +25,8 @@ const DEFAULT_CATALOG_READY_TIMEOUT_MS = 15000;
 const catalogLoadPromises = new Map<BangDreamCatalogKey, Promise<void>>();
 
 /**
- * 查询 BangDream 插件数据。
- * @returns BangDream 插件查询结果。
+ * 按当前运行态读取目录Ready超时Ms；从 `readBangDreamRuntimeConfig` 读取目录Ready超时Ms。
+ * @returns 目录Ready超时Ms。
  */
 function getCatalogReadyTimeoutMs(): number {
   return normalizeBangDreamPositiveInteger(
@@ -36,9 +36,9 @@ function getCatalogReadyTimeoutMs(): number {
 }
 
 /**
- * 转换 BangDream 插件输入。
- * @param keys - BangDream列表；去重列表值。
- * @returns BangDream 插件转换后的值。
+ * 按首次出现顺序去除 BanG Dream 目录键重复项，并过滤没有 Bestdori API 路径的未知键。
+ * @param keys - 决定目录Keys内容、边界或目标的 `keys` 值；省略时默认采用 `REQUIRED_CATALOG_KEYS`。
+ * @returns 按输入顺序得到的目录Keys列表；没有匹配项时为空数组。
  */
 function normalizeCatalogKeys(
   keys: readonly BangDreamCatalogKey[] = REQUIRED_CATALOG_KEYS,
@@ -47,22 +47,23 @@ function normalizeCatalogKeys(
 }
 
 /**
- * 判断 BangDream 插件条件。
- * @param key - 键名；计算 BangDream判断结果。
- * @returns 布尔值，表示 BangDream 插件条件是否满足。
+ * 根据 `true` 判定输入是否满足条件。
+ * @param key - 用于读取或更新根据 `true` 判定输入是否满足条件的稳定键。
+ * @returns 满足根据 `true` 判定输入是否满足条件约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function isCatalogKeyReady(key: BangDreamCatalogKey): boolean {
   const collection = bangdreamCatalogCache[key];
   if (!collection) return false;
-  return typeof collection === 'object'
-    ? Object.keys(collection).length > 0
-    : true;
+  if (typeof collection === 'object') {
+    return Object.keys(collection).length > 0;
+  }
+  return true;
 }
 
 /**
- * 判断 BangDream 插件条件。
- * @param keys - BangDream列表；驱动 `normalizeCatalogKeys()` 的 BangDream步骤。
- * @returns 布尔值，表示 BangDream 插件条件是否满足。
+ * 根据`keys`与当前约束判定目录Ready。
+ * @param keys - 决定目录Ready内容、边界或目标的 `keys` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 满足目录Ready约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function isCatalogReady(keys?: readonly BangDreamCatalogKey[]): boolean {
   return normalizeCatalogKeys(keys).every((key) => {
@@ -72,8 +73,9 @@ function isCatalogReady(keys?: readonly BangDreamCatalogKey[]): boolean {
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param ms - 等待毫秒数；驱动 `sleepBangDreamRuntime()` 的 BangDream步骤。
+ * 在前函数此前所有接受或成功分支均未返回时抛出 `Error`，不接受无效输入。
+ * @param ms - 决定在前函数此前所有接受或成功分支均未返回时抛出 `Error`，不接受无效输入内容、边界或目标的 `ms` 值。
+ * @throws 当前函数此前所有接受或成功分支均未返回时拒绝当前输入并抛出 `Error`。
  */
 async function rejectAfter(ms: number): Promise<never> {
   await sleepBangDreamRuntime(ms);
@@ -81,9 +83,9 @@ async function rejectAfter(ms: number): Promise<never> {
 }
 
 /**
- * 加载 BangDream 领域目录数据。
- *
- * @param useCache - useCache 输入；驱动 `loadCatalogKey()` 的 BangDream步骤。
+ * 按规范化目录键加载 BangDream 主数据，并在全部目录就绪后应用静态补丁。
+ * @param keys - 决定目录数据内容、边界或目标的 `keys` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param useCache - 决定是否启用“use缓存”分支的布尔选项；省略时默认采用 `false`。
  */
 async function loadCatalogData(
   keys?: readonly BangDreamCatalogKey[],
@@ -101,9 +103,10 @@ async function loadCatalogData(
 }
 
 /**
- * 加载Catalog Key。
- * @param key - 键名；驱动 `catalogLoadPromises.get()`、`readBangDreamCatalogDataFromCache()`、`bangdreamBestdoriProvider.getJson()`、`catalogLoadPromises.set()` 的 BangDream步骤。
- * @param useCache - useCache 输入；决定 BangDream条件分支。
+ * 通过 `isCatalogKeyReady` 判断输入是否满足函数约束。
+ * @param key - 用于读取或更新Redis 目录键的稳定键。
+ * @param useCache - 决定是否启用“use缓存”分支的布尔选项。
+ * @returns Redis 目录键；没有可用结果或提前结束时为 `undefined`。
  */
 async function loadCatalogKey(key: BangDreamCatalogKey, useCache: boolean) {
   if (isCatalogKeyReady(key)) return;
@@ -143,8 +146,8 @@ async function loadCatalogKey(key: BangDreamCatalogKey, useCache: boolean) {
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param keys - BangDream列表；去重列表值。
+ * 通过 `keySet.has` 判断输入是否满足函数约束。
+ * @param keys - 决定StaticPatches内容、边界或目标的 `keys` 值。
  */
 async function applyStaticPatches(keys: readonly BangDreamCatalogKey[]) {
   const keySet = new Set(keys);
@@ -197,8 +200,8 @@ async function applyStaticPatches(keys: readonly BangDreamCatalogKey[]) {
 }
 
 /**
- * 确保Catalog Initial Load。
- * @param keys - BangDream列表；驱动 `normalizeCatalogKeys()` 的 BangDream步骤。
+ * 确保目录Initial存在且保持一致；缺失时根据`keys`补齐对应状态。
+ * @param keys - 决定目录Initial内容、边界或目标的 `keys` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
  */
 async function ensureCatalogInitialLoad(keys?: readonly BangDreamCatalogKey[]) {
   const catalogKeys = normalizeCatalogKeys(keys);
@@ -209,7 +212,9 @@ async function ensureCatalogInitialLoad(keys?: readonly BangDreamCatalogKey[]) {
 }
 
 /**
- * 等待 BangDream 目录数据完成首次加载。
+ * 通过等待 BangDream 目录数据完成首次加载。
+ * @param keys - 决定通过等待 BangDream 目录数据完成首次加载内容、边界或目标的 `keys` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @throws 当 `!isCatalogReady(catalogKeys)` 成立时拒绝当前输入并抛出 `Error`。
  */
 export async function waitForBangDreamCatalogReady(
   keys?: readonly BangDreamCatalogKey[],
@@ -228,8 +233,8 @@ export async function waitForBangDreamCatalogReady(
 }
 
 /**
- * 执行 BangDream 插件流程。
- * @param keys - BangDream列表；驱动 `normalizeCatalogKeys()` 的 BangDream步骤。
+ * 根据`keys`处理刷新结果BanG Dream目录缓存。
+ * @param keys - 决定刷新结果BanGDream目录缓存内容、边界或目标的 `keys` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
  */
 export async function refreshBangDreamCatalogFromCache(
   keys?: readonly BangDreamCatalogKey[],
@@ -242,9 +247,10 @@ export async function refreshBangDreamCatalogFromCache(
 }
 
 /**
- * 解析Bang Dream Main Data Cache Path。
- * @param cacheRoot - cacheRoot 输入；驱动 `join()` 的 BangDream步骤。
- * @param key - 键名；影响 resolveBangDreamMainDataCachePath 的返回值。
+ * 按缓存根目录、`bestdori` 子目录和目录键拼接主数据 JSON 缓存路径。
+ * @param cacheRoot - 必须保持在受控根目录内的缓存根目录路径。
+ * @param key - 用于读取或更新按缓存根目录、`bestdori` 子目录和目录键拼接主数据 JSON 缓存路径的稳定键。
+ * @returns BanGDreamMain数据缓存路径。
  */
 export function resolveBangDreamMainDataCachePath(
   cacheRoot: string,
@@ -254,7 +260,8 @@ export function resolveBangDreamMainDataCachePath(
 }
 
 /**
- * 解析Bang Dream Catalog Cache Root。
+ * 从当前运行态解析BanG Dream目录缓存根目录；从 `readBangDreamRuntimeConfig` 读取BanG Dream目录缓存根目录。
+ * @returns 规范化后的BanGDream目录缓存根目录；主值为空时采用 `join(process.cwd(), '.kt-workspace', 'cache', 'bang…` 兜底。
  */
 function resolveBangDreamCatalogCacheRoot() {
   return (
@@ -264,8 +271,9 @@ function resolveBangDreamCatalogCacheRoot() {
 }
 
 /**
- * 读取 BangDream 插件资源。
- * @param key - 键名；驱动 `readBangDreamJsonFile()` 的 BangDream步骤。
+ * 按`key`读取BanG Dream目录数据缓存；从 `readBangDreamJsonFile` 读取BanG Dream目录数据缓存。
+ * @param key - 用于读取或更新BanGDream目录数据缓存的稳定键。
+ * @returns BanGDream目录数据缓存。
  */
 async function readBangDreamCatalogDataFromCache(key: BangDreamCatalogKey) {
   return readBangDreamJsonFile(

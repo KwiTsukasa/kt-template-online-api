@@ -13,7 +13,11 @@ export class QqbotNapcatRuntimeController {
     private readonly inspector: NapcatRuntimeProfileInspectorService,
   ) {}
 
-  /** 返回详情。 */
+  /**
+   * 查询领域服务并组装管理端详情。
+   * @param query - 限定详情筛选、排序与分页范围的查询条件，包含 `accountId` 字段。
+   * @returns 详情。
+   */
   @Get('detail')
   @ApiOperation({ summary: '查询 NapCat 运行态与协议 Profile 证据' })
   async detail(@Query() query: QqbotNapcatRuntimeDetailQueryDto) {

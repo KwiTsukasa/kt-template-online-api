@@ -18,10 +18,10 @@ export type Ff14MarketPriceInput = {
 };
 
 /**
- * 解析Ff14 Market Price Input。
- * @param rawArgs - FF14 市场列表；生成规范化文本。
- * @param catalog - catalog 输入；驱动 `pickTrailingFf14Location()` 的 FF14 市场步骤。
- * @returns FF14 市场插件转换后的值。
+ * 通过 `filter` 筛选匹配数据。
+ * @param rawArgs - 决定Ff14市场数据Price输入内容、边界或目标的 `rawArgs` 值。
+ * @param catalog - 决定Ff14市场数据Price输入内容、边界或目标的 `catalog` 值。
+ * @returns 包含 `dataCenter`、`hq`、`item`、`language`、`raw` 字段的Ff14市场数据Price输入。
  */
 export function parseFf14MarketPriceInput(
   rawArgs: string,
@@ -96,9 +96,10 @@ export function parseFf14MarketPriceInput(
 }
 
 /**
- * 执行 FF14 市场插件流程。
- * @param catalog - catalog 输入；驱动 `isFf14RegionName()` 的 FF14 市场步骤。
- * @param positional - positional 输入；使用 `length` 字段生成结果。
+ * 从`catalog`、`positional`筛选针对FF14 市场插件，并保持保留项的原有顺序与键名；当 `path.dataCenter && path.world` 成立时返回 `{ dataCenter: path.dataCenter, item: positi…`。
+ * @param catalog - 决定针对FF14 市场插件内容、边界或目标的 `catalog` 值。
+ * @param positional - 用于针对FF14 市场插件的领域对象，包含 `positional.length - 1`、`length`、`positional.length - 2` 字段。
+ * @returns 包含 `item`、`world` 字段的针对FF14 市场插件；无法解析或未命中时为 `null`。
  */
 function pickTrailingFf14Location(
   catalog: Ff14MarketCatalog,
@@ -128,8 +129,18 @@ function pickTrailingFf14Location(
       beforePrevious && isFf14RegionName(catalog, beforePrevious);
     return {
       dataCenter: previous,
-      item: positional.slice(0, hasRegion ? -3 : -2).join(' '),
-      region: hasRegion ? beforePrevious : undefined,
+      item: positional.slice(0, (() => {
+        if (hasRegion) {
+          return -3;
+        }
+        return -2;
+      })()).join(' '),
+      region: (() => {
+        if (hasRegion) {
+          return beforePrevious;
+        }
+        return undefined;
+      })(),
       world: last,
     };
   }
@@ -153,8 +164,9 @@ function pickTrailingFf14Location(
 }
 
 /**
- * 转换 FF14 市场插件输入。
- * @param value - 待转换值；决定 FF14 市场条件分支。
+ * 将`value`规范为针对FF14 市场插件，使等价输入得到一致表示。
+ * @param value - 待转换为针对FF14 市场插件的原始值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 满足针对FF14 市场插件约束时为 `true`；不满足、未命中或显式失败分支为 `false`；没有可用结果或提前结束时为 `undefined`。
  */
 function normalizeHq(value?: string | true) {
   if (value === undefined) return undefined;
@@ -164,8 +176,9 @@ function normalizeHq(value?: string | true) {
 }
 
 /**
- * 转换 FF14 市场插件输入。
- * @param value - 待转换值；决定 FF14 市场条件分支。
+ * 将`value`规范为针对FF14 市场插件，使等价输入得到一致表示。
+ * @param value - 待转换为针对FF14 市场插件的原始值；为空时采用 `''` 作为兜底。
+ * @returns 当前状态对应的针对FF14 市场插件，取值为 `''`。
  */
 function normalizeString(value?: string | true) {
   if (value === true) return '';

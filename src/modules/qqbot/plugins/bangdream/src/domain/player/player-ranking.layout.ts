@@ -51,18 +51,18 @@ export const BANGDREAM_PLAYER_RANKING_SPEC = {
 } as const;
 
 /**
- * 去掉玩家昵称和简介里的方括号标签。
- *
- * @param text - 待匹配文本；生成规范化文本。
+ * 从玩家昵称和简介中移除方括号标签。
+ * @param text - 决定从玩家昵称和简介中移除方括号标签内容、边界或目标的 `text` 值。
+ * @returns 从玩家昵称和简介中移除方括号标签清理后的文本。
  */
 export function stripPlayerRankingTextTags(text: string) {
   return text.replace(/\[[^\]]*\]/g, '');
 }
 
 /**
- * 判断排名是否需要使用前三名徽章素材。
- *
- * @param ranking - ranking 输入；计算 BangDream判断结果。
+ * 根据`ranking`与当前约束判定排名是否需要使用前三名徽章素材。
+ * @param ranking - 决定排名是否需要使用前三名徽章素材内容、边界或目标的 `ranking` 值。
+ * @returns 满足排名是否需要使用前三名徽章素材约束时为 `true`；不满足、未命中或显式失败分支为 `false`；无法解析或未命中时为 `null`。
  */
 export function isMedalRanking(ranking: number | undefined) {
   return (
@@ -73,11 +73,8 @@ export function isMedalRanking(ranking: number | undefined) {
 }
 
 /**
- * 计算玩家排名行里称号的位置和缩放尺寸。
- *
- * @param index - index 输入；生成 BangDream对象。
- * @param width - width 输入；生成 BangDream对象。
- * @param height - height 输入；生成 BangDream对象。
+ * 计算玩家排名行里称号的位置和缩放尺寸，并输出固定投影 `height`、`width`、`x`、`y` 字段。
+ * @returns 包含 `height`、`width`、`x`、`y` 字段的排名数据称号布局。
  */
 export function createRankingDegreeLayout({
   height,

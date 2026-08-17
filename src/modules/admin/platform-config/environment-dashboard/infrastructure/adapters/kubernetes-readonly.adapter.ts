@@ -24,7 +24,10 @@ export class KubernetesReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
-  /** 检查Kubernetes只读的记录。 */
+  /**
+   * 根据当前运行态处理Kubernetes只读的记录；当 `missing.length > 0` 成立时返回 `createUnwiredAdapterSignal( 'k8s-deployment…`。
+   * @returns Kubernetes只读的记录。
+   */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_K8S_API_SERVER',
@@ -62,7 +65,12 @@ export class KubernetesReadonlyAdapter {
         (deployment.readyReplicas >= deployment.desiredReplicas &&
           deployment.updatedReplicas >= deployment.desiredReplicas &&
           deployment.availableReplicas >= deployment.desiredReplicas);
-      const status = httpOk && replicasReady ? 'ok' : 'degraded';
+      const status = (() => {
+        if (httpOk && replicasReady) {
+          return 'ok';
+        }
+        return 'degraded';
+      })();
       const summary = `K8s deployment ready ${deployment.readyReplicas}/${deployment.desiredReplicas}, pods ${pods.podReadyCount}/${pods.podCount}`;
 
       return createLiveAdapterSignal(
@@ -93,7 +101,10 @@ export class KubernetesReadonlyAdapter {
     }
   }
 
-  /** 返回部署URL。 */
+  /**
+   * 按运行时配置与路径参数构造部署URL。
+   * @returns 按运行时配置与路径参数构造部署URL。
+   */
   private deploymentUrl(): string {
     const namespace = encodeURIComponent(
       this.config.get('ENV_DASHBOARD_K8S_NAMESPACE'),
@@ -107,7 +118,10 @@ export class KubernetesReadonlyAdapter {
     );
   }
 
-  /** 返回PodURL。 */
+  /**
+   * 按运行时配置与路径参数构造PodURL。
+   * @returns 按运行时配置与路径参数构造PodURL。
+   */
   private podsUrl(): string {
     const namespace = encodeURIComponent(
       this.config.get('ENV_DASHBOARD_K8S_NAMESPACE'),
@@ -118,20 +132,33 @@ export class KubernetesReadonlyAdapter {
     );
   }
 
-  /** 创建认证请求头。 */
+  /**
+   * 根据当前运行态构造认证请求头；从 `config.get` 读取认证请求头。
+   * @returns 包含 `Authorization` 字段的认证请求头；没有可用结果或提前结束时为 `undefined`。
+   */
   private createAuthHeaders(): Record<string, string> | undefined {
     const token = this.config.get('ENV_DASHBOARD_K8S_BEARER_TOKEN');
     if (!token) return undefined;
     return { Authorization: `Bearer ${token}` };
   }
 
-  /** 返回Pod参数。 */
+  /**
+   * 把领域字段投影为Pod参数。
+   * @returns 包含 `labelSelector` 字段的把领域字段投影为Pod参数；没有可用结果或提前结束时为 `undefined`。
+   */
   private podsParams(): Record<string, string> | undefined {
     const labelSelector = this.config.get('ENV_DASHBOARD_K8S_LABEL_SELECTOR');
-    return labelSelector ? { labelSelector } : undefined;
+    if (labelSelector) {
+      return { labelSelector };
+    }
+    return undefined;
   }
 
-  /** 返回提取部署就绪状态。 */
+  /**
+   * 从输入中提取部署就绪状态。
+   * @param body - 用于从输入中提取部署就绪状态的结构化输入，包含 `spec`、`status` 字段。
+   * @returns 包含 `availableReplicas`、`desiredReplicas`、`readyReplicas`、`updatedReplicas` 字段的从输入中提取部署就绪状态。
+   */
   private extractDeploymentReadiness(body: Record<string, unknown>) {
     const spec = asRecord(body.spec) || {};
     const status = asRecord(body.status) || {};
@@ -145,7 +172,11 @@ export class KubernetesReadonlyAdapter {
     };
   }
 
-  /** 返回提取Pod就绪状态。 */
+  /**
+   * 从输入中提取Pod就绪状态。
+   * @param body - 用于从输入中提取Pod就绪状态的结构化输入，包含 `items` 字段。
+   * @returns 包含 `podCount`、`podReadyCount`、`podRunningCount` 字段的从输入中提取Pod就绪状态。
+   */
   private extractPodReadiness(body: Record<string, unknown>) {
     const pods = asArray(body.items);
     const podRunningCount = pods.filter((pod) => {

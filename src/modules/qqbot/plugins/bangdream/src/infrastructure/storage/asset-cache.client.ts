@@ -18,13 +18,14 @@ const errUrl: { [key: string]: number } = {};
 const memoryCache: { [url: string]: Buffer } = {};
 
 /**
- * 在数据下载与缓存层中下载File。
- *
- * @param url - 访问地址；计算 BangDream布尔判断。
- * @param ignoreError - ignoreError 输入；影响 downloadFile 的返回值。
- * @param overwrite - overwrite 输入；影响 downloadFile 的返回值。
- * @param retryCount - retryCount 输入；影响 downloadFile 的返回值。
- * @returns 异步处理结果。
+ * 根据`url`、`ignoreError`、`overwrite`处理下载任务文件；当 `(url.includes('.png') || url.includes('.svg')) && ignoreError` 成立时返回 `assetErrorImageBuffer`。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @param ignoreError - 决定是否启用“ignore错误”分支的布尔选项；省略时默认采用 `true`。
+ * @param overwrite - 决定下载任务文件内容、边界或目标的 `overwrite` 值；省略时默认采用 `false`。
+ * @param retryCount - 限制下载任务文件数量、尺寸、等级或重试边界的数值；省略时默认采用 `3`。
+ * @returns 下载任务文件。
+ * @throws 当 `url.includes('undefined')` 成立时拒绝当前输入并抛出 `Error`；当 `errUrl[url] && currentTime - errUrl[url] < BANGDREAM_MISSING_URL_CACHE_…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `url.includes` 或 `() => { if (overwrite) { return 0; } return 1 / 0; }` 调用失败时拒绝当前输入并抛出 `e`。
  */
 async function downloadFile(
   url: string,
@@ -45,7 +46,12 @@ async function downloadFile(
       throw new Error('downloadFile: errUrl includes url and not expired');
     }
 
-    const cacheTime = overwrite ? 0 : 1 / 0;
+    const cacheTime = (() => {
+      if (overwrite) {
+        return 0;
+      }
+      return 1 / 0;
+    })();
     const cacheDir = getCacheDirectory(url);
     const fileName = getFileNameFromUrl(url);
 
@@ -96,11 +102,10 @@ async function downloadFile(
 }
 
 /**
- * 在数据下载与缓存层中下载File缓存。
- *
- * @param url - 访问地址；驱动 `downloadFile()` 的 BangDream步骤。
- * @param ignoreError - ignoreError 输入；驱动 `downloadFile()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`url`、`ignoreError`处理下载任务文件缓存；当 `memoryCache[url]` 成立时返回 `memoryCache[url]`。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @param ignoreError - 决定是否启用“ignore错误”分支的布尔选项；省略时默认采用 `true`。
+ * @returns 下载任务文件缓存。
  */
 async function downloadFileCache(
   url: string,

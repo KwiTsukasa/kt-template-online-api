@@ -12,31 +12,35 @@ export class QqbotPluginExecutionAdapter implements QqbotPluginExecutionPort {
   constructor(private readonly platformService: QqbotPluginPlatformService) {}
 
   /**
-   * 执行Operation。
-   * @param input - input 输入；驱动 `platformService.executeOperation()` 的 插件平台步骤。
+   * 将插件能力执行请求交给平台服务，并采用其异步执行结果。
+   * @param input - 用于操作的结构化输入。
+   * @returns 操作。
    */
   async executeOperation(input: QqbotPluginExecutionInput) {
     return this.platformService.executeOperation(input);
   }
 
   /**
-   * 投递 QQBot 插件平台消息或任务。
-   * @param input - input 输入；驱动 `platformService.dispatchEvent()` 的 插件平台步骤。
+   * 将插件事件分发请求交给平台服务，并采用其异步分发结果。
+   * @param input - 用于事件的结构化输入。
+   * @returns 事件。
    */
   async dispatchEvent(input: QqbotPluginEventDispatchInput) {
     return this.platformService.dispatchEvent(input);
   }
 
   /**
-   * 列出Active Operations。
+   * 按当前运行态读取启用状态操作集合；从 `platformService.listActiveOperations` 读取启用状态操作集合。
+   * @returns 启用状态操作集合。
    */
   async listActiveOperations() {
     return this.platformService.listActiveOperations();
   }
 
   /**
-   * 查询 QQBot 插件平台数据。
-   * @param command - command 输入；驱动 `platformService.getOperationByCommand()` 的 插件平台步骤。
+   * 按`command`读取操作命令；从 `platformService.getOperationByCommand` 读取操作命令。
+   * @param command - 决定操作命令内容、边界或目标的 `command` 值。
+   * @returns 操作命令。
    */
   async getOperationByCommand(command: QqbotPluginOperationLookup) {
     return this.platformService.getOperationByCommand(command);

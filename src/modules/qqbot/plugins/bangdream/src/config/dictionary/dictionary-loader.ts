@@ -26,8 +26,8 @@ export class BangDreamDictionaryLoader {
   private serverAliasMap = this.buildServerAliasMap([]);
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param fetcher - fetcher 输入；驱动 `Promise.all()` 的 BangDream步骤。
+   * 根据`fetcher`处理刷新结果；当 `!fetcher` 成立时直接结束且不产生返回值。
+   * @param fetcher - 负责完成刷新结果外部交互的受控能力；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
    */
   async refresh(fetcher?: BangDreamDictionaryFetcher) {
     if (!fetcher) {
@@ -49,9 +49,9 @@ export class BangDreamDictionaryLoader {
   }
 
   /**
-   * 解析Server。
-   * @param value - 待转换值；驱动 `this.resolveServerValue()`、`serverAliasMap.get()` 的 BangDream步骤。
-   * @returns BangDream 插件转换后的值。
+   * 从`value`解析服务器；从 `serverAliasMap.get` 读取服务器。
+   * @param value - 参与服务器比较、格式化或输出的候选值。
+   * @returns 服务器。
    */
   resolveServer(value: unknown): BangDreamResolvedServer | undefined {
     const direct = this.resolveServerValue(value);
@@ -60,9 +60,9 @@ export class BangDreamDictionaryLoader {
   }
 
   /**
-   * 解析Difficulty。
-   * @param value - 待转换值；驱动 `this.resolveDifficultyValue()`、`difficultyAliasMap.get()` 的 BangDream步骤。
-   * @returns BangDream 插件转换后的值。
+   * 从`value`解析难度；从 `difficultyAliasMap.get` 读取难度。
+   * @param value - 参与难度比较、格式化或输出的候选值。
+   * @returns 难度。
    */
   resolveDifficulty(value: unknown): number | undefined {
     const direct = this.resolveDifficultyValue(value);
@@ -71,8 +71,8 @@ export class BangDreamDictionaryLoader {
   }
 
   /**
-   * 查询 BangDream 插件数据。
-   * @returns BangDream 插件查询结果。
+   * 按当前运行态读取DisplayedServers。
+   * @returns 按输入顺序得到的DisplayedServers列表；没有匹配项时为空数组。
    */
   getDefaultDisplayedServers(): BangDreamResolvedServer[] {
     return BANGDREAM_DEFAULT_SERVER_IDS.map(
@@ -81,7 +81,7 @@ export class BangDreamDictionaryLoader {
   }
 
   /**
-   * 重置业务数据。
+   * 根据当前运行态处理reset。
    */
   private reset() {
     this.serverAliasMap = this.buildServerAliasMap([]);
@@ -89,8 +89,9 @@ export class BangDreamDictionaryLoader {
   }
 
   /**
-   * 创建 BangDream 插件对象或配置。
-   * @param items - BangDream列表；驱动 `for()` 的 BangDream步骤。
+   * 根据`items`构造服务器别名映射。
+   * @param items - 按原有顺序参与服务器别名映射筛选、合并或汇总的集合。
+   * @returns 服务器别名映射。
    */
   private buildServerAliasMap(items: BangDreamDictionaryItem[]) {
     const map = new Map<string, BangDreamResolvedServer>();
@@ -106,8 +107,9 @@ export class BangDreamDictionaryLoader {
   }
 
   /**
-   * 创建 BangDream 插件对象或配置。
-   * @param items - BangDream列表；驱动 `for()` 的 BangDream步骤。
+   * 根据`items`构造难度别名映射。
+   * @param items - 按原有顺序参与难度别名映射筛选、合并或汇总的集合。
+   * @returns 难度别名映射。
    */
   private buildDifficultyAliasMap(items: BangDreamDictionaryItem[]) {
     const map = new Map<string, number>();
@@ -123,9 +125,9 @@ export class BangDreamDictionaryLoader {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param map - map 输入；驱动 `this.addServerAlias()` 的 BangDream步骤。
-   * @param item - item 输入；使用 `value`、`label` 字段生成结果。
+   * 根据`map`、`item`更新服务器Dictionary条目。
+   * @param map - 决定服务器Dictionary条目内容、边界或目标的 `map` 值。
+   * @param item - 用于服务器Dictionary条目的领域对象，包含 `value`、`label` 字段。
    */
   private addServerDictionaryItem(
     map: Map<string, BangDreamResolvedServer>,
@@ -140,9 +142,9 @@ export class BangDreamDictionaryLoader {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param map - map 输入；驱动 `this.addDifficultyAlias()` 的 BangDream步骤。
-   * @param item - item 输入；使用 `value`、`label` 字段生成结果。
+   * 根据`map`、`item`更新难度Dictionary条目。
+   * @param map - 决定难度Dictionary条目内容、边界或目标的 `map` 值。
+   * @param item - 用于难度Dictionary条目的领域对象，包含 `value`、`label` 字段。
    */
   private addDifficultyDictionaryItem(
     map: Map<string, number>,
@@ -157,10 +159,10 @@ export class BangDreamDictionaryLoader {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param map - map 输入；写入 BangDream集合、缓存或持久化状态。
-   * @param alias - SQL 表别名；驱动 `normalizeDictionaryLookupKey()` 的 BangDream步骤。
-   * @param server - server 输入；影响 addServerAlias 的返回值。
+   * 通过 `normalizeDictionaryLookupKey` 生成稳定标识。
+   * @param map - 用于服务器别名映射的领域对象，包含 `set` 字段。
+   * @param alias - 决定服务器别名映射内容、边界或目标的 `alias` 值。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
    */
   private addServerAlias(
     map: Map<string, BangDreamResolvedServer>,
@@ -170,17 +172,20 @@ export class BangDreamDictionaryLoader {
     const normalized = normalizeDictionaryLookupKey(alias);
     if (!normalized) return;
     const value =
-      typeof server === 'number'
-        ? server
-        : BANGDREAM_SERVER_ID_BY_CODE[server as BangDreamServerCode];
+      (() => {
+        if (typeof server === 'number') {
+          return server;
+        }
+        return BANGDREAM_SERVER_ID_BY_CODE[server as BangDreamServerCode];
+      })();
     map.set(normalized, value as BangDreamResolvedServer);
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param map - map 输入；写入 BangDream集合、缓存或持久化状态。
-   * @param alias - SQL 表别名；驱动 `normalizeDictionaryLookupKey()` 的 BangDream步骤。
-   * @param difficulty - difficulty 输入；驱动 `map.set()` 的 BangDream步骤。
+   * 通过 `normalizeDictionaryLookupKey` 生成稳定标识。
+   * @param map - 用于难度别名映射的领域对象，包含 `set` 字段。
+   * @param alias - 决定难度别名映射内容、边界或目标的 `alias` 值。
+   * @param difficulty - 决定难度别名映射内容、边界或目标的 `difficulty` 值。
    */
   private addDifficultyAlias(
     map: Map<string, number>,
@@ -193,9 +198,9 @@ export class BangDreamDictionaryLoader {
   }
 
   /**
-   * 解析Server Value。
-   * @param value - 待转换值；决定 BangDream条件分支。
-   * @returns BangDream 插件转换后的值。
+   * 从`value`解析服务器值；当 `Number.isInteger(numeric) && numeric >= 0 && numeric <= 4` 成立时返回 `numeric as BangDreamResolvedServer`。
+   * @param value - 参与服务器值比较、格式化或输出的候选值。
+   * @returns 服务器值；没有可用结果或提前结束时为 `undefined`。
    */
   private resolveServerValue(
     value: unknown,
@@ -208,15 +213,16 @@ export class BangDreamDictionaryLoader {
     }
     const serverCode = raw.toLowerCase() as BangDreamServerCode;
     const serverId = BANGDREAM_SERVER_ID_BY_CODE[serverCode];
-    return serverId === undefined
-      ? undefined
-      : (serverId as BangDreamResolvedServer);
+    if (serverId === undefined) {
+      return undefined;
+    }
+    return (serverId as BangDreamResolvedServer);
   }
 
   /**
-   * 解析Difficulty Value。
-   * @param value - 待转换值；决定 BangDream条件分支。
-   * @returns BangDream 插件转换后的值。
+   * 从`value`解析难度值；当 `Number.isInteger(numeric) && numeric >= 0 && numeric <= 4` 成立时返回 `numeric`。
+   * @param value - 参与难度值比较、格式化或输出的候选值。
+   * @returns 难度值；没有可用结果或提前结束时为 `undefined`。
    */
   private resolveDifficultyValue(value: unknown): number | undefined {
     if (value === undefined || value === null || value === '') return undefined;
@@ -229,13 +235,17 @@ export class BangDreamDictionaryLoader {
     const entry = Object.entries(BANGDREAM_DIFFICULTY_NAME_BY_ID).find(
       ([, name]) => name === normalized,
     );
-    return entry === undefined ? undefined : Number(entry[0]);
+    if (entry === undefined) {
+      return undefined;
+    }
+    return Number(entry[0]);
   }
 }
 
 /**
- * 转换 BangDream 插件输入。
- * @param value - 待转换值；影响 normalizeDictionaryLookupKey 的返回值。
+ * 将`value`规范为DictionaryLookup键，使等价输入得到一致表示。
+ * @param value - 待转换为DictionaryLookup键的原始值。
+ * @returns DictionaryLookup键。
  */
 export function normalizeDictionaryLookupKey(value: unknown) {
   return `${value || ''}`.trim().toLowerCase();

@@ -33,24 +33,27 @@ export class QqbotPermissionService {
   ) {}
 
   /**
-   * 查询 QQBot 核心数据。
+   * 按当前运行态读取配置；从 `configService.getPermissionConfig` 读取配置。
+   * @returns 配置。
    */
   async getConfig() {
     return this.configService.getPermissionConfig();
   }
 
   /**
-   * 更新Config。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 将 QQBot 权限请求交给配置服务持久化，并返回更新后的权限配置。
+   * @param body - 用于配置的结构化输入。
+   * @returns 配置。
    */
   async updateConfig(body: QqbotPermissionConfigDto) {
     return this.configService.updatePermissionConfig(body);
   }
 
   /**
-   * 获取分页数据。
-   * @param kind - kind 输入；驱动 `this.getRepository()` 的 QQBot步骤。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 根据白名单或黑名单类型选择仓库，按查询条件筛选未删除记录并分页。
+   * @param kind - 决定根据白名单或黑名单类型选择仓库，按查询条件筛选未删除记录并分页内容、边界或目标的 `kind` 值。
+   * @param query - 限定根据白名单或黑名单类型选择仓库，按查询条件筛选未删除记录并分页筛选、排序与分页范围的查询条件，包含 `selfId`、`targetType`、`targetId`、`userId` 字段。
+   * @returns 包含 `list`、`pageNo`、`pageSize`、`total` 字段的根据白名单或黑名单类型选择仓库，按查询条件筛选未删除记录并分页。
    */
   async page(kind: QqbotPermissionKind, query: QqbotPermissionQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
@@ -98,9 +101,10 @@ export class QqbotPermissionService {
   }
 
   /**
-   * 保存数据。
-   * @param kind - kind 输入；驱动 `this.getRepository()` 的 QQBot步骤。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`kind`、`body`更新`save` 对应结果；把变更持久化到当前存储（`repository.save`）。
+   * @param kind - 决定`save` 对应结果内容、边界或目标的 `kind` 值。
+   * @param body - 用于`save` 对应结果的结构化输入。
+   * @returns `save` 对应。
    */
   async save(kind: QqbotPermissionKind, body: QqbotPermissionBodyDto) {
     const repository = this.getRepository(kind);
@@ -114,9 +118,10 @@ export class QqbotPermissionService {
   }
 
   /**
-   * 更新数据。
-   * @param kind - kind 输入；驱动 `this.getRepository()` 的 QQBot步骤。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`kind`、`body`更新`update` 对应结果；把变更持久化到当前存储（`repository.update`）。
+   * @param kind - 决定`update` 对应结果内容、边界或目标的 `kind` 值。
+   * @param body - 用于`update` 对应结果的结构化输入，包含 `id` 字段。
+   * @returns 满足`update` 对应约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async update(kind: QqbotPermissionKind, body: QqbotPermissionUpdateDto) {
     const repository = this.getRepository(kind);
@@ -131,9 +136,10 @@ export class QqbotPermissionService {
   }
 
   /**
-   * 删除数据。
-   * @param kind - kind 输入；驱动 `this.getRepository()` 的 QQBot步骤。
-   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   * 按`kind`、`id`移除`remove` 对应结果；把变更持久化到当前存储（`repository.update`）。
+   * @param kind - 决定`remove` 对应结果内容、边界或目标的 `kind` 值。
+   * @param id - 决定`remove` 对应结果内容、边界或目标的 `id` 值。
+   * @returns 满足`remove` 对应约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async remove(kind: QqbotPermissionKind, id: string) {
     const repository = this.getRepository(kind);
@@ -142,8 +148,9 @@ export class QqbotPermissionService {
   }
 
   /**
-   * 判断 QQBot 核心条件。
-   * @param message - message 输入；驱动 `this.existsMatched()` 的 QQBot步骤。
+   * 根据`message`与当前约束判定Blocked；从 `configService.getPermissionConfig` 读取Blocked。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   * @returns 满足Blocked约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async isBlocked(message: QqbotNormalizedMessage) {
     const config = await this.configService.getPermissionConfig();
@@ -152,8 +159,9 @@ export class QqbotPermissionService {
   }
 
   /**
-   * 判断 QQBot 核心条件。
-   * @param message - message 输入；驱动 `this.existsMatched()` 的 QQBot步骤。
+   * 根据`message`与当前约束判定许可范围；从 `configService.getPermissionConfig` 读取许可范围。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   * @returns 满足许可范围约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async isAllowed(message: QqbotNormalizedMessage) {
     const config = await this.configService.getPermissionConfig();
@@ -162,9 +170,10 @@ export class QqbotPermissionService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param repository - repository 输入；影响 existsMatched 的返回值。
-   * @param message - message 输入；使用 `selfId`、`userId`、`messageType`、`targetId` 字段生成结果。
+   * 根据`repository`、`message`处理existsMatched；把变更持久化到当前存储（`repository.createQueryBuilder`）。
+   * @param repository - 负责查询或持久化existsMatched的仓库实例。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `selfId`、`userId`、`messageType`、`targetId` 字段。
+   * @returns 满足existsMatched约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private async existsMatched(
     repository: Repository<QqbotPermissionEntity>,
@@ -230,29 +239,41 @@ export class QqbotPermissionService {
   }
 
   /**
-   * 转换 QQBot 核心输入。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
-   * @returns QQBot 核心转换后的值。
+   * 将`body`规范为请求内容，使等价输入得到一致表示。
+   * @param body - 用于请求内容的结构化输入，包含 `targetType`、`targetId`、`userId`、`preciseUser` 字段。
+   * @returns 包含 `enabled`、`preciseUser`、`remark`、`selfId`、`targetId` 字段的请求内容。
    */
   private normalizeBody(
     body: Partial<QqbotPermissionBodyDto>,
   ): Partial<QqbotPermissionEntity> {
-    const targetType = body.targetType === 'private' ? 'qq' : body.targetType;
+    const targetType = (() => {
+      if (body.targetType === 'private') {
+        return 'qq';
+      }
+      return body.targetType;
+    })();
     const normalizedTargetType = targetType || 'qq';
     const targetId = `${body.targetId || ''}`.trim();
     const userId = `${body.userId || ''}`.trim();
     const preciseUser =
-      normalizedTargetType === 'group' || normalizedTargetType === 'channel'
-        ? !!body.preciseUser
-        : false;
+      (() => {
+        if (normalizedTargetType === 'group' || normalizedTargetType === 'channel') {
+          return !!body.preciseUser;
+        }
+        return false;
+      })();
 
     if (!targetId) {
       throwVbenError(
-        normalizedTargetType === 'qq'
-          ? '请填写 QQ 号'
-          : normalizedTargetType === 'group'
-            ? '请填写群号'
-            : '请填写频道 ID',
+        (() => {
+          if (normalizedTargetType === 'qq') {
+            return '请填写 QQ 号';
+          }
+          if (normalizedTargetType === 'group') {
+            return '请填写群号';
+          }
+          return '请填写频道 ID';
+        })(),
       );
     }
     if (preciseUser && !userId) {
@@ -266,17 +287,24 @@ export class QqbotPermissionService {
       selfId: body.selfId || '',
       targetId,
       targetType: normalizedTargetType,
-      userId: preciseUser ? userId : '',
+      userId: (() => {
+        if (preciseUser) {
+          return userId;
+        }
+        return '';
+      })(),
     } as Partial<QqbotPermissionEntity>;
   }
 
   /**
-   * 查询 QQBot 核心数据。
-   * @param kind - kind 输入；限定 QQBot查询范围。
+   * 按`kind`读取数据仓库；当 `kind === 'allowlist'` 成立时返回 `this.allowlistRepository`。
+   * @param kind - 决定数据仓库内容、边界或目标的 `kind` 值。
+   * @returns 数据仓库。
    */
   private getRepository(kind: QqbotPermissionKind) {
-    return kind === 'allowlist'
-      ? this.allowlistRepository
-      : this.blocklistRepository;
+    if (kind === 'allowlist') {
+      return this.allowlistRepository;
+    }
+    return this.blocklistRepository;
   }
 }

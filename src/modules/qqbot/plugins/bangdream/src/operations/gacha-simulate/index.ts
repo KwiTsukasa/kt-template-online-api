@@ -23,21 +23,31 @@ export const gachaSimulateOperation: BangDreamOperationModule = {
     const gachaId =
       context.optionalNumber(input.gachaId) ?? context.secondNumber(tokens);
     const options = context.getRenderOptions({ ...input, mainServer });
-    const gacha = gachaId
-      ? new Gacha(gachaId)
-      : await pickPresentGacha(mainServer);
+    const gacha = await (async () => {
+      if (gachaId) {
+        return new Gacha(gachaId);
+      }
+      return await pickPresentGacha(mainServer);
+    })();
 
     return context.toImageReply(
       'bangdream.gacha.simulate',
-      `${times}${gachaId ? ` ${gachaId}` : ''}`,
+      `${times}${(() => {
+        if (gachaId) {
+          return ` ${gachaId}`;
+        }
+        return '';
+      })()}`,
       await drawRandomGacha(gacha, times, options.compress),
     );
   },
 };
 
 /**
- * 执行 BangDream 插件流程。
- * @param mainServer - mainServer 输入；驱动 `getPresentGachaList()` 的 BangDream步骤。
+ * 从`mainServer`筛选Present卡池，并保持保留项的原有顺序与键名；从 `getPresentGachaList` 读取Present卡池。
+ * @param mainServer - 决定Present卡池内容、边界或目标的 `mainServer` 值。
+ * @returns Present卡池。
+ * @throws 当 `!gacha` 成立时拒绝当前输入并抛出 `Error`。
  */
 async function pickPresentGacha(mainServer: number) {
   const gachaList = await getPresentGachaList(mainServer);

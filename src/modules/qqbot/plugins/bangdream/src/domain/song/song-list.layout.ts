@@ -33,10 +33,10 @@ export const BANGDREAM_SONG_LIST_SPEC = {
 } as const;
 
 /**
- * 计算歌曲列表单行布局。
- *
- * @param difficultyImage - difficultyImage 输入；使用 `width`、`height` 字段生成结果。
- * @param contentWidth - contentWidth 输入；生成 BangDream对象。
+ * 计算歌曲列表单行布局，并输出固定投影 `canvasHeight`、`canvasWidth`、`difficultyX`、`difficultyY`、`idTextX` 字段。
+ * @param difficultyImage - 用于歌曲布局的领域对象，包含 `width`、`height` 字段。
+ * @param contentWidth - 决定歌曲布局内容、边界或目标的 `contentWidth` 值；省略时默认采用 `BANGDREAM_RENDER_THEME.layout.contentWidth`。
+ * @returns 包含 `canvasHeight`、`canvasWidth`、`difficultyX`、`difficultyY`、`idTextX` 字段的歌曲布局。
  */
 export function createSongInListLayout(
   difficultyImage: ImageLike,
@@ -65,16 +65,17 @@ export function createSongInListLayout(
 }
 
 /**
- * 获取歌曲列表内容宽度。
+ * 根据当前领域状态，获取歌曲列表内容宽度。
+ * @returns 根据当前领域状态，获取歌曲列表内容宽度。
  */
 export function getSongListContentWidth() {
   return getListFrameTextMaxWidth(BANGDREAM_RENDER_THEME.layout.contentWidth);
 }
 
 /**
- * 计算歌曲列表组画布高度。
- *
- * @param songCount - songCount 输入；限定 BangDream查询范围。
+ * 按`songCount`读取歌曲列表组画布高度。
+ * @param songCount - 限制歌曲列表组画布高度数量、尺寸、等级或重试边界的数值。
+ * @returns 歌曲列表组画布高度。
  */
 export function getSongListCanvasHeight(songCount: number) {
   const { item, list } = BANGDREAM_SONG_LIST_SPEC;
@@ -82,9 +83,9 @@ export function getSongListCanvasHeight(songCount: number) {
 }
 
 /**
- * 计算歌曲列表外层行高。
- *
- * @param canvasHeight - canvasHeight 输入；限定 BangDream查询范围。
+ * 按`canvasHeight`读取歌曲列表外层行高。
+ * @param canvasHeight - 决定是否启用“canvasHeight”分支的布尔选项。
+ * @returns 歌曲列表外层行高。
  */
 export function getSongListFrameLineHeight(canvasHeight: number) {
   return canvasHeight + BANGDREAM_SONG_LIST_SPEC.list.lineHeightPadding;

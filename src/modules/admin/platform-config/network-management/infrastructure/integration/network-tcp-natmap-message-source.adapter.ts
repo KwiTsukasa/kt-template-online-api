@@ -158,7 +158,12 @@ export class NetworkTcpNatmapMessageSourceAdapter
     this.registered = false;
   }
 
-  /** 生成事件资源键。 */
+  /**
+   * 根据`payload`拼接稳定的事件资源键，用于隔离对应资源或存储记录。
+   * @param payload - 待按当前协议校验并路由的事件载荷，包含 `tcpChannelId` 字段。
+   * @returns 事件资源键。
+   * @throws 当 `typeof payload.tcpChannelId !== 'string'` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   eventResourceKey(payload: Record<string, SystemMessageScalar>): string {
     if (typeof payload.tcpChannelId !== 'string') {
       throw new SystemMessageContractError('invalid_source_config');
@@ -166,7 +171,11 @@ export class NetworkTcpNatmapMessageSourceAdapter
     return payload.tcpChannelId;
   }
 
-  /** 规范化订阅配置。 */
+  /**
+   * 校验 TCP NATMap 通道与 DDNS 绑定，并生成可持久化配置、资源键和来源摘要。
+   * @param input - 待解析的 TCP NATMap 系统消息订阅配置。
+   * @returns 已规范化的订阅配置、TCP 通道资源键与可读来源摘要。
+   */
   async normalizeSubscriptionConfig(input: unknown): Promise<{
     canonicalConfig: Record<string, string>;
     resourceKey: string;
@@ -180,7 +189,12 @@ export class NetworkTcpNatmapMessageSourceAdapter
     };
   }
 
-  /** 检查订阅。 */
+  /**
+   * 探测 TCP NATMap 订阅配置是否仍可解析，把契约错误转换为禁用原因而不打断管理端读取。
+   * @param config - 待检查的已持久化 TCP NATMap 订阅配置。
+   * @returns 有效时包含来源摘要；无效时包含 `valid=false` 和契约错误码。
+   * @throws 捕获到非 `SystemMessageContractError` 的意外错误时原样重新抛出。
+   */
   async inspectSubscription(config: Record<string, unknown>): Promise<{
     invalidReasonCode: null | string;
     sourceSummary: string;
@@ -203,7 +217,10 @@ export class NetworkTcpNatmapMessageSourceAdapter
     }
   }
 
-  /** 列出订阅选项。 */
+  /**
+   * 按当前运行态读取订阅选项。
+   * @returns 包含 `ddnsRecords`、`tcpChannels` 字段的订阅选项。
+   */
   async listSubscriptionOptions(): Promise<SystemMessageSourceOptionsResponse> {
     const [mappings, groups, records] = await Promise.all([
       this.mappingRepository.find({ order: { id: 'ASC', name: 'ASC' } }),
@@ -218,17 +235,26 @@ export class NetworkTcpNatmapMessageSourceAdapter
     );
     return {
       ddnsRecords: records.map((record) => {
-        const mapping = record.portForwardId
-          ? mappingsById.get(String(record.portForwardId))
-          : undefined;
-        const group = mapping
-          ? groupsById.get(String(mapping.groupId))
-          : undefined;
+        const mapping = (() => {
+          if (record.portForwardId) {
+            return mappingsById.get(String(record.portForwardId));
+          }
+          return undefined;
+        })();
+        const group = (() => {
+          if (mapping) {
+            return groupsById.get(String(mapping.groupId));
+          }
+          return undefined;
+        })();
         const disabledReasonCode = ddnsOptionReason(record, mapping, group);
         return {
-          ...(record.portForwardId
-            ? { dependsOnValue: String(record.portForwardId) }
-            : {}),
+          ...((() => {
+            if (record.portForwardId) {
+              return { dependsOnValue: String(record.portForwardId) };
+            }
+            return {};
+          })()),
           disabled: disabledReasonCode !== null,
           disabledReasonCode,
           label: [record.name, ddnsFqdn(record), disabledReasonCode]
@@ -241,20 +267,32 @@ export class NetworkTcpNatmapMessageSourceAdapter
         const group = groupsById.get(String(mapping.groupId));
         const source = classifyTcpNatmapEndpointSource(mapping);
         const groupMissing = !group || group.isDeleted;
-        const disabledReasonCode = groupMissing
-          ? 'SOURCE_DELETING'
-          : source.disabledReasonCode;
+        const disabledReasonCode = (() => {
+          if (groupMissing) {
+            return 'SOURCE_DELETING';
+          }
+          return source.disabledReasonCode;
+        })();
         return {
           disabled: disabledReasonCode !== null,
           disabledReasonCode,
-          label: `${group?.name || mapping.name} / ${mapping.protocol === 'tcp' ? 'TCP NATMap' : 'UDP Keeper'}`,
+          label: `${group?.name || mapping.name} / ${(() => {
+            if (mapping.protocol === 'tcp') {
+              return 'TCP NATMap';
+            }
+            return 'UDP Keeper';
+          })()}`,
           value: String(mapping.id),
         };
       }),
     };
   }
 
-  /** 生成订阅资源键。 */
+  /**
+   * 根据`config`拼接稳定的订阅资源键，用于隔离对应资源或存储记录；当 `!isPlainRecord(config) || typeof config.tcpChannelId !== 'str…` 成立时返回 `null`。
+   * @param config - 限定订阅资源键边界、地址与开关的运行配置，包含 `tcpChannelId` 字段。
+   * @returns 订阅资源键；无法解析或未命中时为 `null`。
+   */
   subscriptionResourceKey(config: Record<string, unknown>): null | string {
     if (!isPlainRecord(config) || typeof config.tcpChannelId !== 'string') {
       return null;
@@ -262,7 +300,12 @@ export class NetworkTcpNatmapMessageSourceAdapter
     return config.tcpChannelId;
   }
 
-  /** 校验事件载荷。 */
+  /**
+   * 校验`payload`是否满足事件载荷约束，并拒绝不合法输入；先通过 `assertExactKeys` 校验输入边界。
+   * @param payload - 待按当前协议校验并路由的事件载荷，包含 `tcpChannelId`、`publicIpv4`、`publicPort`、`previousPublicIpv4` 字段。
+   * @returns 包含 `previousPublicIpv4`、`previousPublicPort`、`publicIpv4`、`publicPort`、`tcpChannelId` 字段的事件载荷。
+   * @throws 当 `publicIpv4 === previousPublicIpv4 && publicPort === previousPublicPort` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   validateEventPayload(
     payload: Record<string, unknown>,
   ): Record<string, SystemMessageScalar> {
@@ -287,7 +330,12 @@ export class NetworkTcpNatmapMessageSourceAdapter
     };
   }
 
-  /** 解析投递。 */
+  /**
+   * 从`input`解析投递；当 `event.tcpChannelId !== resolved.config.tcpChannelId` 成立时返回 `{ reasonCode: 'invalid_source_config', stat…`。
+   * @param input - 用于投递的结构化输入，包含 `subscriptionConfig`、`eventPayload` 字段。
+   * @returns 包含 `reasonCode`、`status`、`variables` 字段的投递；无法解析或未命中时为 `null`。
+   * @throws 当 `!(error instanceof SystemMessageContractError)` 成立时重新抛出该入口捕获且决定公开的原异常。
+   */
   async resolveDelivery(input: {
     eventPayload: Record<string, SystemMessageScalar>;
     subscriptionConfig: Record<string, unknown>;
@@ -335,7 +383,13 @@ export class NetworkTcpNatmapMessageSourceAdapter
     return { reasonCode: null, status: 'ready', variables };
   }
 
-  /** 解析订阅。 */
+  /**
+   * 从`input`解析订阅；先通过 `assertExactKeys` 校验输入边界。
+   * @param input - 用于订阅的结构化输入，包含 `ddnsRecordId`、`tcpChannelId` 字段。
+   * @returns 包含 `config`、`ddnsRecord`、`group`、`mapping`、`sourceSummary` 字段的订阅。
+   * @throws 当 `!mapping` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；当 `source.disabledReasonCode` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；
+   *   当 `!group || group.isDeleted` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；当 `ddnsReason` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   private async resolveSubscription(
     input: unknown,
   ): Promise<ResolvedSubscription> {
@@ -380,7 +434,12 @@ export class NetworkTcpNatmapMessageSourceAdapter
   }
 }
 
-/** 断言精确键。 */
+/**
+ * 校验`value`、`expectedKeys`是否满足精确键约束，并拒绝不合法输入。
+ * @param value - 参与精确键比较、格式化或输出的候选值。
+ * @param expectedKeys - 用于批量校验或读取精确键的键集合。
+ * @throws 当 `!isPlainRecord(value) || value === null || Object.keys(value).sort().jo…` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+ */
 function assertExactKeys(
   value: unknown,
   expectedKeys: readonly string[],
@@ -394,12 +453,21 @@ function assertExactKeys(
   }
 }
 
-/** 判断纯文本记录是否成立。 */
+/**
+ * 根据`value`与当前约束判定纯文本记录。
+ * @param value - 待判定是否满足纯文本记录约束的候选值。
+ * @returns 满足纯文本记录约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** 规范化雪花标识。 */
+/**
+ * 按输入约束要求系统消息资源标识为 1 至 24 位、首位非零的十进制雪花 ID。
+ * @param value - 待验证的资源标识值。
+ * @returns 保持文本不变的有效雪花 ID。
+ * @throws 值不是字符串或不符合雪花 ID 十进制格式时抛出 `SystemMessageContractError`。
+ */
 function normalizeSnowflakeId(value: unknown): string {
   if (typeof value !== 'string' || !SNOWFLAKE_ID_PATTERN.test(value)) {
     throw new SystemMessageContractError('invalid_source_config');
@@ -407,7 +475,12 @@ function normalizeSnowflakeId(value: unknown): string {
   return value;
 }
 
-/** 规范化IPv4。 */
+/**
+ * 将`value`规范为Ipv4，使等价输入得到一致表示。
+ * @param value - 待转换为Ipv4的原始值。
+ * @returns 通过格式校验的 IPv4 地址原文；输入不是 IPv4 字符串时不返回而是抛出合同错误。
+ * @throws 当 `typeof value !== 'string' || isIP(value) !== 4` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+ */
 function normalizeIpv4(value: unknown): string {
   if (typeof value !== 'string' || isIP(value) !== 4) {
     throw new SystemMessageContractError('invalid_source_config');
@@ -415,7 +488,12 @@ function normalizeIpv4(value: unknown): string {
   return value;
 }
 
-/** 规范化端口。 */
+/**
+ * 按输入约束要求系统消息来源端口为 1 至 65535 范围内的整数。
+ * @param value - 待验证的来源端口值。
+ * @returns 保持数值不变的有效 TCP 或 UDP 端口。
+ * @throws 值不是整数或超出有效端口范围时抛出 `SystemMessageContractError`。
+ */
 function normalizePort(value: unknown): number {
   if (
     typeof value !== 'number' ||
@@ -428,7 +506,11 @@ function normalizePort(value: unknown): number {
   return value;
 }
 
-/** 返回消息来源可用资格原因。 */
+/**
+ * 按输入分支映射消息来源可用资格原因。
+ * @param reason - 决定按输入分支映射消息来源可用资格原因内容、边界或目标的 `reason` 值。
+ * @returns 当前状态对应的按输入分支映射消息来源可用资格原因，取值为 `'natmap_disabled'`、`'mapping_not_managed'`、`'mapping_not_tcp'`。
+ */
 function messageSourceEligibilityReason(
   reason: TcpNatmapEndpointSourceDisabledReason,
 ): 'mapping_not_managed' | 'mapping_not_tcp' | 'natmap_disabled' {
@@ -442,7 +524,13 @@ function messageSourceEligibilityReason(
   }
 }
 
-/** 返回DDNS选项原因。 */
+/**
+ * 按输入分支映射DDNS选项原因。
+ * @param record - 用于按输入分支映射DDNS选项原因的领域对象，包含 `isDeleted`、`enabled`、`recordType`、`sourceType` 字段。
+ * @param mapping - 用于按输入分支映射DDNS选项原因的领域对象，包含 `id` 字段。
+ * @param group - 用于按输入分支映射DDNS选项原因的领域对象，包含 `isDeleted` 字段。
+ * @returns 当前状态对应的按输入分支映射DDNS选项原因，取值为 `'ddns_deleted'`、`'ddns_disabled'`、`'ddns_a_required'`、`'ddns_source_type_invalid'`、`'ddns_mapping_mismatch'`。
+ */
 function ddnsOptionReason(
   record: NetworkDdnsRecord,
   mapping: NetworkPortForward | undefined,
@@ -465,7 +553,12 @@ function ddnsOptionReason(
   return classifyTcpNatmapEndpointSource(mapping).disabledReasonCode;
 }
 
-/** 返回DDNS消息来源原因。 */
+/**
+ * 按输入分支映射DDNS消息来源原因。
+ * @param record - 用于按输入分支映射DDNS消息来源原因的领域对象，包含 `isDeleted`、`enabled`、`recordType`、`sourceType` 字段。
+ * @param mapping - 用于按输入分支映射DDNS消息来源原因的领域对象，包含 `id` 字段。
+ * @returns 当前状态对应的按输入分支映射DDNS消息来源原因，取值为 `'ddns_not_found'`、`'ddns_disabled'`、`'ddns_not_ipv4'`、`'ddns_mapping_mismatch'`；无法解析或未命中时为 `null`。
+ */
 function ddnsMessageSourceReason(
   record: NetworkDdnsRecord | null,
   mapping: NetworkPortForward,
@@ -486,14 +579,25 @@ function ddnsMessageSourceReason(
   return null;
 }
 
-/** 返回DDNS完全限定域名。 */
+/**
+ * 根据`record`处理域名标签并规范化DDNS完全限定域名；当 `subDomain === '@'` 成立时返回 `domain`。
+ * @param record - 用于域名标签并规范化DDNS完全限定域名的领域对象，包含 `domain`、`subDomain` 字段。
+ * @returns 按参数编码并拼接完成的域名标签并规范化DDNS完全限定域名。
+ */
 function ddnsFqdn(record: NetworkDdnsRecord): string {
   const domain = record.domain.trim().toLowerCase().replace(/\.$/, '');
   const subDomain = record.subDomain.trim().toLowerCase().replace(/\.$/, '');
-  return subDomain === '@' ? domain : `${subDomain}.${domain}`;
+  if (subDomain === '@') {
+    return domain;
+  }
+  return `${subDomain}.${domain}`;
 }
 
-/** 判断当前端点元组是否存在。 */
+/**
+ * 根据`mapping`与当前约束判定当前端点元组是否存在。
+ * @param mapping - 用于当前端点元组是否存在的领域对象，包含 `currentPublicIpv4`、`currentPublicPort` 字段。
+ * @returns 满足当前端点元组是否存在约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function hasCurrentEndpointTuple(mapping: NetworkPortForward): boolean {
   return (
     isIP(mapping.currentPublicIpv4 || '') === 4 &&
@@ -504,7 +608,11 @@ function hasCurrentEndpointTuple(mapping: NetworkPortForward): boolean {
   );
 }
 
-/** 判断新鲜的当前端点是否存在。 */
+/**
+ * 根据`mapping`与当前约束判定新鲜的当前端点是否存在；从 `getTime` 读取新鲜的当前端点是否存在。
+ * @param mapping - 用于新鲜的当前端点是否存在的领域对象，包含 `currentValidUntil` 字段。
+ * @returns 满足新鲜的当前端点是否存在约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 function hasFreshCurrentEndpoint(mapping: NetworkPortForward): boolean {
   return (
     hasCurrentEndpointTuple(mapping) &&
@@ -513,7 +621,12 @@ function hasFreshCurrentEndpoint(mapping: NetworkPortForward): boolean {
   );
 }
 
-/** 返回投递变量。 */
+/**
+ * 把领域字段投影为投递变量。
+ * @param resolved - 用于把领域字段投影为投递变量的领域对象，包含 `ddnsRecord`、`group` 字段。
+ * @param event - 触发把领域字段投影为投递变量的领域事件，包含 `publicPort`、`previousPublicIpv4`、`previousPublicPort`、`publicIpv4` 字段。
+ * @returns 包含 `endpoint`、`fqdn`、`portForwardName`、`previousPublicIpv4`、`previousPublicPort` 字段的把领域字段投影为投递变量。
+ */
 function deliveryVariables(
   resolved: ResolvedSubscription,
   event: TcpNatmapEventPayload,

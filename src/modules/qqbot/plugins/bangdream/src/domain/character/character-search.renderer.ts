@@ -17,12 +17,11 @@ import { drawCharacterDetail } from '@/modules/qqbot/plugins/bangdream/src/domai
 const maxWidth = 1370;
 
 /**
- * 在QQBot 图片视图层中绘制角色列表。
- *
- * @param matches - BangDream列表；驱动 `match()` 的 BangDream步骤。
- * @param displayedServerList - displayedServerList 输入；使用 `length` 字段生成结果。
- * @param compress - BangDream列表；驱动 `drawCharacterDetail()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`matches`、`displayedServerList`、`compress`绘制或格式化角色；当 `tempCharacterList.length == 0` 成立时返回 `['没有搜索到符合条件的角色']`。
+ * @param matches - 决定角色内容、边界或目标的 `matches` 值。
+ * @param displayedServerList - 用于角色的领域对象，包含 `length`、`j` 字段；省略时默认采用 `globalDefaultServer`。
+ * @param compress - 决定角色内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的角色列表；没有匹配项时为空数组。
  */
 export async function drawCharacterList(
   matches: FuzzySearchResult,

@@ -3,20 +3,22 @@ export class FflogsOAuthTokenCache {
   private accessTokenExpireAt = 0;
 
   /**
-   * 查询 FFLogs 插件数据。
-   * @param now - now 输入；限定 FFLogs查询范围。
+   * 按`now`读取Valid令牌；当 `this.accessToken && this.accessTokenExpireAt > now` 成立时返回 `this.accessToken`。
+   * @param now - 用于过期、排序或租约判定的时间基准；省略时默认采用 `Date.now()`。
+   * @returns 当前状态对应的Valid令牌，取值为 `''`。
    */
   getValidToken(now = Date.now()) {
-    return this.accessToken && this.accessTokenExpireAt > now
-      ? this.accessToken
-      : '';
+    if (this.accessToken && this.accessTokenExpireAt > now) {
+      return this.accessToken;
+    }
+    return '';
   }
 
   /**
-   * 设置Token。
-   * @param token - 协议 token；写入 FFLogs状态。
-   * @param expiresInSeconds - FFLogs列表；驱动 `Math.max()` 的 FFLogs步骤。
-   * @param now - now 输入；写入 FFLogs状态。
+   * 通过 `Math.max` 收敛数值边界，同时更新 `this.accessToken`、`this.accessTokenExpireAt` 状态。
+   * @param token - 决定令牌内容、边界或目标的 `token` 值。
+   * @param expiresInSeconds - 决定令牌内容、边界或目标的 `expiresInSeconds` 值。
+   * @param now - 用于过期、排序或租约判定的时间基准；省略时默认采用 `Date.now()`。
    */
   setToken(token: string, expiresInSeconds: number, now = Date.now()) {
     this.accessToken = token;

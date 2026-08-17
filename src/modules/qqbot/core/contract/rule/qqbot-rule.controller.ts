@@ -28,8 +28,9 @@ export class QqbotRuleController {
   ) {}
 
   /**
-   * QQBot 自动回复规则分页。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 按查询条件读取 QQBot 自动回复规则分页，并封装为 Vben 成功响应。
+   * @param query - 限定`list` 对应结果筛选、排序与分页范围的查询条件。
+   * @returns `list` 对应。
    */
   @Get('list')
   @ApiOperation({ summary: 'QQBot 自动回复规则分页' })
@@ -38,8 +39,9 @@ export class QqbotRuleController {
   }
 
   /**
-   * 新增 QQBot 自动回复规则。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`更新`save` 对应结果。
+   * @param body - 用于`save` 对应结果的结构化输入。
+   * @returns `save` 对应。
    */
   @Post('save')
   @HttpCode(HttpStatus.OK)
@@ -49,8 +51,9 @@ export class QqbotRuleController {
   }
 
   /**
-   * 编辑 QQBot 自动回复规则。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 根据`body`更新`update` 对应结果。
+   * @param body - 用于`update` 对应结果的结构化输入。
+   * @returns `update` 对应。
    */
   @Post('update')
   @HttpCode(HttpStatus.OK)
@@ -60,8 +63,9 @@ export class QqbotRuleController {
   }
 
   /**
-   * 删除 QQBot 自动回复规则。
-   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
+   * 按`id`移除QQBot 自动回复规则。
+   * @param id - 决定QQBot 自动回复规则内容、边界或目标的 `id` 值。
+   * @returns QQBot 自动回复规则。
    */
   @Post('delete')
   @HttpCode(HttpStatus.OK)
@@ -72,9 +76,10 @@ export class QqbotRuleController {
   }
 
   /**
-   * 启停 QQBot 自动回复规则。
-   * @param id - QQBot记录 ID；定位本次读取、更新、删除或关联的QQBot记录。
-   * @param enabled - enabled 输入；驱动 `vbenSuccess()` 的 QQBot步骤。
+   * 根据参数 `id`，启停 QQBot 自动回复规则。
+   * @param id - 决定根据参数 `id`，启停 QQBot 自动回复规则内容、边界或目标的 `id` 值。
+   * @param enabled - 决定根据参数 `id`，启停 QQBot 自动回复规则内容、边界或目标的 `enabled` 值。
+   * @returns 根据参数 `id`，启停 QQBot 自动回复规则。
    */
   @Post('toggle')
   @HttpCode(HttpStatus.OK)

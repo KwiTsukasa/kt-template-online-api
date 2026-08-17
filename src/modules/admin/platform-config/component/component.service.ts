@@ -16,8 +16,8 @@ export class ComponentService {
   ) {}
 
   /**
-   * 执行 Admin 平台配置流程。
-   * @returns 异步完成后的 Admin 平台配置结果。
+   * 根据当前运行态处理`all` 对应结果；把变更持久化到当前存储（`userRepository.createQueryBuilder`）。
+   * @returns 按输入顺序得到的`all` 对应列表；没有匹配项时为空数组。
    */
   async all(): Promise<Component[]> {
     await this.dictService.refreshDecodeCache();
@@ -29,9 +29,8 @@ export class ComponentService {
   }
 
   /**
-   * 获取分页数据。
-   * @param { pageNo, pageSize, ...args } - 解构的组件分页查询参数，用于拆出页码和页大小并把剩余筛选项传入查询条件。
-   * @returns 异步完成后的 Admin 平台配置结果。
+   * 按名称和未删除状态筛选组件，刷新字典解码缓存后返回指定页的数据。
+   * @returns 返回组件列表及匹配记录总数；页码或页大小缺失时沿用分页工具默认值。
    */
   async page({
     pageNo,
@@ -72,7 +71,12 @@ export class ComponentService {
             Object.keys(args).filter(
               (key) =>
                 Object.hasOwn(hasOwnEntity, key) &&
-                (isNumber(args[key]) ? true : !!args[key]),
+                ((() => {
+                  if (isNumber(args[key])) {
+                    return true;
+                  }
+                  return !!args[key];
+                })()),
             ),
           ),
           ...wheres,
@@ -87,9 +91,9 @@ export class ComponentService {
   }
 
   /**
-   * 保存数据。
-   * @param component - component 输入；驱动 `userRepository.create()` 的 Admin步骤。
-   * @returns 异步完成后的 Admin 平台配置结果。
+   * 根据`component`更新`save` 对应结果；把变更持久化到当前存储（`userRepository.create`）。
+   * @param component - 决定`save` 对应结果内容、边界或目标的 `component` 值。
+   * @returns `save` 对应。
    */
   async save(component: Component): Promise<Component> {
     const link = this.userRepository.create(component);
@@ -98,9 +102,9 @@ export class ComponentService {
   }
 
   /**
-   * 删除数据。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @returns Admin 平台配置清理后的状态。
+   * 按`id`移除`remove` 对应结果；把变更持久化到当前存储（`userRepository.createQueryBuilder`）。
+   * @param id - 决定`remove` 对应结果内容、边界或目标的 `id` 值。
+   * @returns 满足`remove` 对应约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async remove(id: string): Promise<boolean> {
     const link = await this.userRepository
@@ -114,9 +118,9 @@ export class ComponentService {
   }
 
   /**
-   * 更新数据。
-   * @param component - component 输入；使用 `id` 字段生成结果。
-   * @returns Admin 平台配置更新后的状态。
+   * 根据`component`更新`update` 对应结果；把变更持久化到当前存储（`userRepository.createQueryBuilder`）。
+   * @param component - 用于`update` 对应结果的领域对象，包含 `id` 字段。
+   * @returns 满足`update` 对应约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async update(component: Component): Promise<boolean> {
     const link = await this.userRepository
@@ -130,9 +134,9 @@ export class ComponentService {
   }
 
   /**
-   * 查找业务数据。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @returns Admin 平台配置查询结果。
+   * 按`id`读取`find` 对应结果；把变更持久化到当前存储（`userRepository.createQueryBuilder`）。
+   * @param id - 决定`find` 对应结果内容、边界或目标的 `id` 值。
+   * @returns `find` 对应。
    */
   async find(id: string): Promise<Component> {
     await this.dictService.refreshDecodeCache();

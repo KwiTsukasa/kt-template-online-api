@@ -20,7 +20,12 @@ const CONFLICT_CODE_PATTERN =
 
 @Injectable()
 export class QqbotMessagePushContractErrorInterceptor implements NestInterceptor {
-  /** 返回拦截。 */
+  /**
+   * 把消息推送契约错误映射为统一 HTTP 响应。
+   * @param _context - 为兼容既有调用签名保留；当前实现不会读取该参数。
+   * @param next - 用于把消息推送契约错误映射为统一 HTTP 响应的领域对象，包含 `handle` 字段。
+   * @returns 把消息推送契约错误映射为统一 HTTP 响应。
+   */
   intercept(
     _context: ExecutionContext,
     next: CallHandler,
@@ -37,7 +42,11 @@ export class QqbotMessagePushContractErrorInterceptor implements NestInterceptor
     );
   }
 
-  /** 解析状态。 */
+  /**
+   * 将消息推送合同错误码映射为对应 HTTP 状态，未知错误码回退为客户端请求错误。
+   * @param code - 决定状态内容、边界或目标的 `code` 值。
+   * @returns 状态。
+   */
   private resolveStatus(code: string): HttpStatus {
     if (NOT_FOUND_CODES.has(code)) return HttpStatus.NOT_FOUND;
     if (CONFLICT_CODE_PATTERN.test(code)) return HttpStatus.CONFLICT;

@@ -62,7 +62,11 @@ export class NetworkPortForwardGroupService {
     private readonly tcpReleasePolicy: NetworkTcpReleasePolicyService,
   ) {}
 
-  /** 列出网络端口转发分组记录。 */
+  /**
+   * 按`query`读取网络端口转发分组记录；把变更持久化到当前存储（`groupRepository.createQueryBuilder`）。
+   * @param query - 限定网络端口转发分组记录筛选、排序与分页范围的查询条件，包含 `pageNo`、`pageSize`、`name`、`protocolMode` 字段；省略时默认采用 `{}`。
+   * @returns 包含 `items`、`total` 字段的网络端口转发分组记录。
+   */
   async list(query: NetworkPortForwardGroupListQueryDto = {}) {
     const pageNo = query.pageNo || 1;
     const pageSize = query.pageSize || 20;
@@ -98,13 +102,21 @@ export class NetworkPortForwardGroupService {
     return { items, total };
   }
 
-  /** 创建网络端口转发分组记录。 */
+  /**
+   * 根据`input`构造网络端口转发分组记录。
+   * @param input - 用于网络端口转发分组记录的结构化输入。
+   * @returns 网络端口转发分组记录。
+   */
   async create(input: NetworkPortForwardGroupCreateDto) {
     const result = await this.createInternal(input);
     return this.serializeGroup(result.group, result.channels);
   }
 
-  /** 创建v1。 */
+  /**
+   * 把旧版单通道创建请求转换为分组写入，并返回对应协议通道的兼容视图。
+   * @param input - 包含 `externalPort`、`internalPort`、`name`、`protocol` 字段的结构化领域输入。
+   * @returns 返回新建分组中目标协议通道的旧版兼容视图。
+   */
   async createV1(input: NetworkPortForwardCreateDto) {
     const result = await this.createInternal({
       externalPort: input.externalPort,
@@ -122,7 +134,12 @@ export class NetworkPortForwardGroupService {
     return this.serializeChannel(channel);
   }
 
-  /** 更新网络端口转发分组记录。 */
+  /**
+   * 根据`groupId`、`input`更新网络端口转发分组记录；先通过 `assertId` 校验输入边界。
+   * @param groupId - 用于精确定位group的标识。
+   * @param input - 用于网络端口转发分组记录的结构化输入。
+   * @returns 网络端口转发分组记录。
+   */
   async update(groupId: string, input: NetworkPortForwardGroupUpdateDto) {
     this.assertId(groupId, '逻辑组');
     this.assertUpdateInput(input);
@@ -136,7 +153,12 @@ export class NetworkPortForwardGroupService {
     return this.serializeGroup(result.group, result.channels);
   }
 
-  /** 更新v1。 */
+  /**
+   * 在事务中按旧版单通道契约更新分组和目标通道，并返回兼容视图。
+   * @param channelId - 用于精确定位通道的标识。
+   * @param input - 用于V1的结构化输入，包含 `externalPort`、`internalPort`、`name`、`protocol` 字段。
+   * @returns 返回事务更新后的目标通道旧版兼容视图。
+   */
   async updateV1(channelId: string, input: NetworkPortForwardUpdateDto) {
     this.assertId(channelId, '端口转发');
     this.assertUpdateInput(input);
@@ -175,7 +197,11 @@ export class NetworkPortForwardGroupService {
     return this.serializeChannel(channel);
   }
 
-  /** 移除网络端口转发分组记录。 */
+  /**
+   * 按`groupId`移除网络端口转发分组记录；先通过 `assertId` 校验输入边界。
+   * @param groupId - 用于精确定位group的标识。
+   * @returns 网络端口转发分组记录。
+   */
   async remove(groupId: string) {
     this.assertId(groupId, '逻辑组');
     const result = await this.dataSource.transaction(async (manager) => {
@@ -188,7 +214,11 @@ export class NetworkPortForwardGroupService {
     return this.serializeGroup(result.group, result.channels);
   }
 
-  /** 移除v1。 */
+  /**
+   * 按旧版单通道契约撤销目标通道或整个分组，并通知 Agent 重新发布期望状态。
+   * @param channelId - 用于精确定位通道的标识。
+   * @returns 返回撤销操作后目标通道或替代通道的旧版兼容视图。
+   */
   async removeV1(channelId: string) {
     this.assertId(channelId, '端口转发');
     const result = await this.dataSource.transaction(async (manager) => {
@@ -210,7 +240,12 @@ export class NetworkPortForwardGroupService {
     return this.serializeChannel(result.channels[0]);
   }
 
-  /** 重试网络端口转发分组记录。 */
+  /**
+   * 根据`groupId`、`protocol`处理网络端口转发分组记录。
+   * @param groupId - 用于精确定位group的标识。
+   * @param protocol - 决定网络端口转发分组记录内容、边界或目标的 `protocol` 值。
+   * @returns 网络端口转发分组记录。
+   */
   async retry(groupId: string, protocol: PortForwardProtocol) {
     return this.mutateChannel(groupId, protocol, async (group, channel) => {
       if (channel.desiredPresence !== 'present') {
@@ -236,7 +271,12 @@ export class NetworkPortForwardGroupService {
     });
   }
 
-  /** 启用NATMap。 */
+  /**
+   * 校验期望修订号、机制切换与 TCP 发布策略后启用 NATMap，并把通道标记为等待发布。
+   * @param groupId - 用于精确定位group的标识。
+   * @param expectedDesiredRevision - 决定NATMap 转发内容、边界或目标的 `expectedDesiredRevision` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns NATMap 转发。
+   */
   async enableNatmap(groupId: string, expectedDesiredRevision?: string) {
     return this.mutateChannel(
       groupId,
@@ -257,7 +297,12 @@ export class NetworkPortForwardGroupService {
     );
   }
 
-  /** 禁用NATMap。 */
+  /**
+   * 按`groupId`、`expectedDesiredRevision`停止NATMap 转发并清理该入口拥有的运行态资源。
+   * @param groupId - 用于精确定位group的标识。
+   * @param expectedDesiredRevision - 决定NATMap 转发内容、边界或目标的 `expectedDesiredRevision` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns NATMap 转发。
+   */
   async disableNatmap(groupId: string, expectedDesiredRevision?: string) {
     return this.mutateChannel(
       groupId,
@@ -280,37 +325,65 @@ export class NetworkPortForwardGroupService {
     );
   }
 
-  /** 启用保活器。 */
+  /**
+   * 按分组标识启用 UDP STUN 保活，并返回更新后的目标通道视图。
+   * @param groupId - 用于精确定位group的标识。
+   * @returns 返回启用保活后的目标网络通道视图或对应成功响应。
+   */
   async enableKeeper(groupId: string) {
     return this.enableKeeperTarget(groupId);
   }
 
-  /** 禁用保活器。 */
+  /**
+   * 按`groupId`停止保活器并清理该入口拥有的运行态资源。
+   * @param groupId - 用于精确定位group的标识。
+   * @returns 返回禁用保活后的目标网络通道视图或对应成功响应。
+   */
   async disableKeeper(groupId: string) {
     return this.disableKeeperTarget(groupId);
   }
 
-  /** 启用保活器v1。 */
+  /**
+   * 按旧版通道标识启用 UDP STUN 保活，并返回单通道兼容视图。
+   * @param channelId - 用于精确定位通道的标识。
+   * @returns 返回启用保活后的目标通道旧版兼容视图。
+   */
   async enableKeeperV1(channelId: string) {
     return this.enableKeeperTarget({ action: 'UDP Keeper', channelId });
   }
 
-  /** 禁用保活器v1。 */
+  /**
+   * 按`channelId`停止保活器v1并清理该入口拥有的运行态资源。
+   * @param channelId - 用于精确定位通道的标识。
+   * @returns 返回禁用保活后的目标通道旧版兼容视图。
+   */
   async disableKeeperV1(channelId: string) {
     return this.disableKeeperTarget({ action: 'UDP Keeper', channelId });
   }
 
-  /** 返回探针v1。 */
+  /**
+   * 对旧版单通道端口转发执行即时探测，并返回探测后的兼容通道视图。
+   * @param channelId - 用于精确定位通道的标识。
+   * @returns 返回即时探测后的目标通道旧版兼容视图。
+   */
   async probeV1(channelId: string) {
     return this.probeTarget({ action: 'UDP Keeper', channelId });
   }
 
-  /** 返回探针。 */
+  /**
+   * 触发目标网络通道的即时连通性探测，并返回提交后的通道状态。
+   * @param groupId - 用于精确定位group的标识。
+   * @returns 返回即时探测后的目标网络通道视图或对应成功响应。
+   */
   async probe(groupId: string) {
     return this.probeTarget(groupId);
   }
 
-  /** 启用保活器目标。 */
+  /**
+   * 按`target`启动保活器目标。
+   * @param target - 决定保活器目标内容、边界或目标的 `target` 值。
+   * @returns 保活器目标。
+   */
   private enableKeeperTarget(target: string | V1ChannelMutationTarget) {
     return this.mutateChannel(
       target,
@@ -328,7 +401,11 @@ export class NetworkPortForwardGroupService {
     );
   }
 
-  /** 禁用保活器目标。 */
+  /**
+   * 按`target`停止保活器目标并清理该入口拥有的运行态资源。
+   * @param target - 决定保活器目标内容、边界或目标的 `target` 值。
+   * @returns 保活器目标。
+   */
   private disableKeeperTarget(target: string | V1ChannelMutationTarget) {
     return this.mutateChannel(
       target,
@@ -347,7 +424,11 @@ export class NetworkPortForwardGroupService {
     );
   }
 
-  /** 返回探针目标。 */
+  /**
+   * 根据`target`处理对应领域流程并产生探针目标。
+   * @param target - 决定对应领域流程并产生探针目标内容、边界或目标的 `target` 值。
+   * @returns 对应领域流程并产生探针目标。
+   */
   private probeTarget(target: string | V1ChannelMutationTarget) {
     return this.mutateChannel(
       target,
@@ -366,7 +447,13 @@ export class NetworkPortForwardGroupService {
     );
   }
 
-  /** 返回端点历史。 */
+  /**
+   * 按目标 ID、协议与分页条件查询端点变更历史，并投影为管理端视图。
+   * @param groupId - 用于精确定位group的标识。
+   * @param protocol - 决定端点历史内容、边界或目标的 `protocol` 值。
+   * @param query - 限定端点历史筛选、排序与分页范围的查询条件，包含 `pageNo`、`pageSize` 字段；省略时默认采用 `{}`。
+   * @returns 包含 `items`、`total` 字段的端点历史。
+   */
   async endpointHistory(
     groupId: string,
     protocol: PortForwardProtocol,
@@ -383,7 +470,12 @@ export class NetworkPortForwardGroupService {
     if (!channel) throwVbenError('协议通道不存在', HttpStatus.NOT_FOUND);
     const pageNo = query.pageNo || 1;
     const pageSize = query.pageSize || 20;
-    const mechanism = protocol === 'tcp' ? 'tcp_natmap' : 'udp_stun';
+    const mechanism = (() => {
+      if (protocol === 'tcp') {
+        return 'tcp_natmap';
+      }
+      return 'udp_stun';
+    })();
     const [items, total] = await this.historyRepository.findAndCount({
       order: { occurredAt: 'DESC' },
       skip: (pageNo - 1) * pageSize,
@@ -393,7 +485,11 @@ export class NetworkPortForwardGroupService {
     return { items: items.map((item) => this.serializeHistory(item)), total };
   }
 
-  /** 创建内部。 */
+  /**
+   * 通过在事务中创建端口转发分组及协议通道，校验 TCP 发布策略后分配全局版本。
+   * @param input - 用于通过在事务中创建端口转发分组及协议通道，校验 TCP 发布策略后分配全局版本的结构化输入，包含 `name`、`externalPort`、`internalPort`、`protocolMode` 字段。
+   * @returns 内部创建记录。
+   */
   private async createInternal(
     input: NetworkPortForwardGroupCreateDto,
   ): Promise<GroupTransactionResult> {
@@ -452,7 +548,15 @@ export class NetworkPortForwardGroupService {
     return result;
   }
 
-  /** 在事务中更新记录。 */
+  /**
+   * 根据`manager`、`state`、`group`更新在事务中更新记录；把变更持久化到当前存储（`mappingRepository.save`）。
+   * @param manager - 保证在事务中更新记录读写处于同一事务中的实体管理器。
+   * @param state - 用于在事务中更新记录的领域对象，包含 `desiredIssuedAt` 字段。
+   * @param group - 用于在事务中更新记录的领域对象，包含 `protocolMode`、`externalPort`、`internalPort`、`name` 字段。
+   * @param channels - 用于在事务中更新记录的领域对象，包含 `push` 字段。
+   * @param input - 用于在事务中更新记录的结构化输入，包含 `protocolMode`、`externalPort`、`internalPort`、`name` 字段。
+   * @returns 包含 `changed`、`channels`、`group` 字段的在事务中更新记录。
+   */
   private async updateInTransaction(
     manager: EntityManager,
     state: NetworkAgentState,
@@ -473,37 +577,35 @@ export class NetworkPortForwardGroupService {
       throwVbenError('逻辑组正在删除', HttpStatus.CONFLICT);
     }
     const tcp = channels.find((channel) => channel.protocol === 'tcp');
-    const mutation: TcpReleaseMutation =
-      group.protocolMode === 'tcp_udp' && protocolMode === 'udp'
-        ? {
-            after: {
-              externalPort,
-              internalPort,
-              natmapDesiredEnabled: false,
-              protocolMode,
-            },
-            before: this.releaseState(
-              group,
-              tcp?.natmapDesiredEnabled || false,
-            ),
-            kind: 'protocol-shrink',
-          }
-        : {
-            after: {
-              externalPort,
-              internalPort,
-              natmapDesiredEnabled:
-                protocolMode === 'udp'
-                  ? false
-                  : tcp?.natmapDesiredEnabled || false,
-              protocolMode,
-            },
-            before: this.releaseState(
-              group,
-              tcp?.natmapDesiredEnabled || false,
-            ),
-            kind: 'update',
-          };
+    const mutation: TcpReleaseMutation = (() => {
+      if (group.protocolMode === 'tcp_udp' && protocolMode === 'udp') {
+        return {
+          after: {
+            externalPort,
+            internalPort,
+            natmapDesiredEnabled: false,
+            protocolMode,
+          },
+          before: this.releaseState(group, tcp?.natmapDesiredEnabled || false),
+          kind: 'protocol-shrink',
+        };
+      }
+      return {
+        after: {
+          externalPort,
+          internalPort,
+          natmapDesiredEnabled: (() => {
+            if (protocolMode === 'udp') {
+              return false;
+            }
+            return tcp?.natmapDesiredEnabled || false;
+          })(),
+          protocolMode,
+        },
+        before: this.releaseState(group, tcp?.natmapDesiredEnabled || false),
+        kind: 'update',
+      };
+    })();
     this.assertReleaseMutation(mutation);
 
     const oldProtocols = new Set(
@@ -554,15 +656,22 @@ export class NetworkPortForwardGroupService {
       }
     }
 
-    const name =
-      input.name === undefined ? group.name : this.normalizeName(input.name);
+    const name = (() => {
+      if (input.name === undefined) {
+        return group.name;
+      }
+      return this.normalizeName(input.name);
+    })();
     const authorityPayloadChanged =
       name !== group.name ||
       externalPort !== group.externalPort ||
       internalPort !== group.internalPort;
     group.name = name;
-    group.remark =
-      input.remark === undefined ? group.remark : input.remark.trim() || null;
+    if (input.remark === undefined) {
+      group.remark = group.remark;
+    } else {
+      group.remark = input.remark.trim() || null;
+    }
     group.externalPort = externalPort;
     group.internalPort = internalPort;
     group.protocolMode = protocolMode;
@@ -592,7 +701,14 @@ export class NetworkPortForwardGroupService {
     return { changed: true, channels, group };
   }
 
-  /** 在事务中移除记录。 */
+  /**
+   * 按`manager`、`state`、`group`移除在事务中移除记录；先通过 `assertReleaseMutation` 校验输入边界。
+   * @param manager - 保证在事务中移除记录读写处于同一事务中的实体管理器。
+   * @param state - 用于在事务中移除记录的领域对象，包含 `desiredIssuedAt` 字段。
+   * @param group - 决定在事务中移除记录内容、边界或目标的 `group` 值。
+   * @param channels - 用于在事务中移除记录的领域对象，包含 `length` 字段。
+   * @returns 包含 `changed`、`channels`、`group` 字段的在事务中移除记录。
+   */
   private async removeInTransaction(
     manager: EntityManager,
     state: NetworkAgentState,
@@ -625,7 +741,15 @@ export class NetworkPortForwardGroupService {
     return { changed: true, channels, group };
   }
 
-  /** 修改通道。 */
+  /**
+   * 根据`target`、`protocol`、`change`处理通道；先通过 `assertId` 校验输入边界。
+   * @param target - 用于通道的领域对象，包含 `channelId` 字段。
+   * @param protocol - 决定通道内容、边界或目标的 `protocol` 值。
+   * @param change - 决定通道内容、边界或目标的 `change` 值。
+   * @param invalidProtocolIsBadRequest - 决定通道内容、边界或目标的 `invalidProtocolIsBadRequest` 值；省略时默认采用 `false`。
+   * @param expectedDesiredRevision - 决定通道内容、边界或目标的 `expectedDesiredRevision` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 通道。
+   */
   private async mutateChannel(
     target: string | V1ChannelMutationTarget,
     protocol: PortForwardProtocol,
@@ -637,18 +761,39 @@ export class NetworkPortForwardGroupService {
     invalidProtocolIsBadRequest = false,
     expectedDesiredRevision?: string,
   ) {
-    const v1Target = typeof target === 'string' ? null : target;
-    const targetId = typeof target === 'string' ? target : target.channelId;
-    this.assertId(targetId, v1Target ? '端口转发' : '逻辑组');
+    const v1Target = (() => {
+      if (typeof target === 'string') {
+        return null;
+      }
+      return target;
+    })();
+    const targetId = (() => {
+      if (typeof target === 'string') {
+        return target;
+      }
+      return target.channelId;
+    })();
+    this.assertId(
+      targetId,
+      (() => {
+        if (v1Target) {
+          return '端口转发';
+        }
+        return '逻辑组';
+      })(),
+    );
     const result = await this.dataSource.transaction(async (manager) => {
       const state = await this.lockAgentState(manager);
       const mappingRepository = manager.getRepository(NetworkPortForward);
-      const requested = v1Target
-        ? await mappingRepository.findOne({
+      const requested = await (async () => {
+        if (v1Target) {
+          return await mappingRepository.findOne({
             lock: { mode: 'pessimistic_write' },
             where: { id: v1Target.channelId, isDeleted: false },
-          })
-        : null;
+          });
+        }
+        return null;
+      })();
       if (v1Target && !requested) {
         throwVbenError('端口转发不存在', HttpStatus.NOT_FOUND);
       }
@@ -658,21 +803,35 @@ export class NetworkPortForwardGroupService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const groupId = requested ? String(requested.groupId) : targetId;
+      const groupId = (() => {
+        if (requested) {
+          return String(requested.groupId);
+        }
+        return targetId;
+      })();
       const group = await this.findLockedGroup(manager, groupId);
       const channels = await this.findChannels(manager, groupId);
-      const requestedIndex = requested
-        ? channels.findIndex((item) => item.id === requested.id)
-        : -1;
-      if (
-        requested &&
-        (requested.isDeleted ||
+      const requestedIndex = (() => {
+        if (requested) {
+          return channels.findIndex((item) => item.id === requested.id);
+        }
+        return -1;
+      })();
+      if (requested) {
+        if (
+          requested.isDeleted ||
           requested.groupId !== group.id ||
-          requestedIndex < 0 ||
-          channels[requestedIndex].groupId !== group.id ||
-          channels[requestedIndex].protocol !== protocol)
-      ) {
-        throwVbenError('端口转发通道已失效或被替换', HttpStatus.CONFLICT);
+          requestedIndex < 0
+        ) {
+          throwVbenError('端口转发通道已失效或被替换', HttpStatus.CONFLICT);
+        }
+        const persistedChannel = channels[requestedIndex];
+        if (
+          persistedChannel.groupId !== group.id ||
+          persistedChannel.protocol !== protocol
+        ) {
+          throwVbenError('端口转发通道已失效或被替换', HttpStatus.CONFLICT);
+        }
       }
       if (requested) channels[requestedIndex] = requested;
       const channel =
@@ -680,9 +839,12 @@ export class NetworkPortForwardGroupService {
       if (!channel) {
         throwVbenError(
           `逻辑组不包含 ${protocol.toUpperCase()} 协议通道`,
-          invalidProtocolIsBadRequest
-            ? HttpStatus.BAD_REQUEST
-            : HttpStatus.NOT_FOUND,
+          (() => {
+            if (invalidProtocolIsBadRequest) {
+              return HttpStatus.BAD_REQUEST;
+            }
+            return HttpStatus.NOT_FOUND;
+          })(),
         );
       }
       if (
@@ -706,7 +868,12 @@ export class NetworkPortForwardGroupService {
     return this.serializeChannel(result.channel);
   }
 
-  /** 查找已锁定分组。 */
+  /**
+   * 按`manager`、`groupId`读取已锁定分组；从 `findOne` 读取已锁定分组。
+   * @param manager - 保证已锁定分组读写处于同一事务中的实体管理器。
+   * @param groupId - 用于精确定位group的标识。
+   * @returns 已锁定分组。
+   */
   private async findLockedGroup(
     manager: EntityManager,
     groupId: string,
@@ -719,7 +886,12 @@ export class NetworkPortForwardGroupService {
     return group;
   }
 
-  /** 查找匹配的通道。 */
+  /**
+   * 按`manager`、`groupId`读取匹配的通道；从 `manager.getRepository` 读取匹配的通道。
+   * @param manager - 保证匹配的通道读写处于同一事务中的实体管理器。
+   * @param groupId - 用于精确定位group的标识。
+   * @returns 按输入顺序得到的匹配的通道列表；没有匹配项时为空数组。
+   */
   private async findChannels(
     manager: EntityManager,
     groupId: string,
@@ -730,7 +902,13 @@ export class NetworkPortForwardGroupService {
     });
   }
 
-  /** 创建通道。 */
+  /**
+   * 根据`repository`、`group`、`protocol`构造通道；把变更持久化到当前存储（`repository.create`）。
+   * @param repository - 负责查询或持久化通道的仓库实例。
+   * @param group - 用于通道的领域对象，包含 `id`、`externalPort`、`internalPort`、`name` 字段。
+   * @param protocol - 决定通道内容、边界或目标的 `protocol` 值。
+   * @returns 通道。
+   */
   private createChannel(
     repository: Repository<NetworkPortForward>,
     group: NetworkPortForwardGroup,
@@ -764,7 +942,10 @@ export class NetworkPortForwardGroupService {
     });
   }
 
-  /** 断言结构性编辑允许的。 */
+  /**
+   * 校验`channels`是否满足结构性编辑允许的约束，并拒绝不合法输入。
+   * @param channels - 决定结构性编辑允许的内容、边界或目标的 `channels` 值。
+   */
   private assertStructuralEditAllowed(channels: NetworkPortForward[]): void {
     if (
       channels.some(
@@ -791,7 +972,10 @@ export class NetworkPortForwardGroupService {
     }
   }
 
-  /** 校验机制转换是否允许。 */
+  /**
+   * 校验`channels`是否满足机制转换是否允许约束，并拒绝不合法输入。
+   * @param channels - 决定机制转换是否允许内容、边界或目标的 `channels` 值。
+   */
   private assertMechanismTransitionAllowed(
     channels: NetworkPortForward[],
   ): void {
@@ -806,7 +990,10 @@ export class NetworkPortForwardGroupService {
     }
   }
 
-  /** 断言v1单一的通道。 */
+  /**
+   * 校验`channels`是否满足v1单一的通道约束，并拒绝不合法输入。
+   * @param channels - 用于v1单一的通道的领域对象，包含 `length`、`0` 字段。
+   */
   private assertV1SingleChannel(channels: NetworkPortForward[]): void {
     if (
       channels.length !== 1 ||
@@ -822,7 +1009,10 @@ export class NetworkPortForwardGroupService {
     }
   }
 
-  /** 断言保活器端口。 */
+  /**
+   * 校验`channel`是否满足保活器端口约束，并拒绝不合法输入。
+   * @param channel - 用于保活器端口的领域对象，包含 `externalPort`、`internalPort` 字段。
+   */
   private assertKeeperPorts(channel: NetworkPortForward): void {
     if (channel.externalPort !== channel.internalPort) {
       throwVbenError(
@@ -832,7 +1022,13 @@ export class NetworkPortForwardGroupService {
     }
   }
 
-  /** 断言启用的键可用。 */
+  /**
+   * 校验`repository`、`protocol`、`externalPort`是否满足启用的键可用约束，并拒绝不合法输入；从 `repository.findOne` 读取启用的键可用。
+   * @param repository - 负责查询或持久化启用的键可用的仓库实例。
+   * @param protocol - 决定启用的键可用内容、边界或目标的 `protocol` 值。
+   * @param externalPort - 决定启用的键可用内容、边界或目标的 `externalPort` 值。
+   * @param currentId - 用于精确定位`current` 对应结果的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   */
   private async assertActiveKeyAvailable(
     repository: Repository<NetworkPortForward>,
     protocol: PortForwardProtocol,
@@ -847,7 +1043,11 @@ export class NetworkPortForwardGroupService {
     }
   }
 
-  /** 返回推进全局版本。 */
+  /**
+   * 按边界约束计算推进全局版本。
+   * @param state - 用于按边界约束计算推进全局版本的领域对象，包含 `desiredRevision`、`desiredIssuedAt` 字段。
+   * @returns 按边界约束计算推进全局版本。
+   */
   private advanceGlobalRevision(state: NetworkAgentState): string {
     const revision = (BigInt(state.desiredRevision) + 1n).toString();
     state.desiredRevision = revision;
@@ -855,7 +1055,12 @@ export class NetworkPortForwardGroupService {
     return revision;
   }
 
-  /** 分配版本。 */
+  /**
+   * 根据`channels`、`revision`、`issuedAt`处理分配版本。
+   * @param channels - 决定分配版本内容、边界或目标的 `channels` 值。
+   * @param revision - 决定分配版本内容、边界或目标的 `revision` 值。
+   * @param issuedAt - 用于过期、排序或租约判定的时间基准。
+   */
   private assignRevision(
     channels: NetworkPortForward[],
     revision: string,
@@ -867,7 +1072,11 @@ export class NetworkPortForwardGroupService {
     }
   }
 
-  /** 返回锁Agent状态。 */
+  /**
+   * 在事务中确保当前 Agent 状态行存在，并以悲观写锁读取且核对固定目标 IPv4。
+   * @param manager - 提供 Agent 状态仓库和当前事务写锁边界的实体管理器。
+   * @returns 已取得写锁且目标 IPv4 与服务端配置一致的 Agent 状态行。
+   */
   private async lockAgentState(
     manager: EntityManager,
   ): Promise<NetworkAgentState> {
@@ -907,7 +1116,12 @@ export class NetworkPortForwardGroupService {
     return state;
   }
 
-  /** 释放状态。 */
+  /**
+   * 从协议通道投影 TCP 发布策略所需的端口、协议与 NATMap 期望状态。
+   * @param group - 用于从协议通道投影 TCP 发布策略所需的端口、协议与 NATMap 期望状态的领域对象，包含 `externalPort`、`internalPort`、`protocolMode` 字段。
+   * @param natmapDesiredEnabled - 决定从协议通道投影 TCP 发布策略所需的端口、协议与 NATMap 期望状态内容、边界或目标的 `natmapDesiredEnabled` 值。
+   * @returns 包含 `externalPort`、`internalPort`、`natmapDesiredEnabled`、`protocolMode` 字段的状态。
+   */
   private releaseState(
     group: Pick<
       NetworkPortForwardGroup,
@@ -923,7 +1137,11 @@ export class NetworkPortForwardGroupService {
     };
   }
 
-  /** 断言发布变更。 */
+  /**
+   * 按当前 TCP 发布模式校验状态变更，把策略拒绝统一映射为 HTTP 409 业务错误。
+   * @param mutation - 包含变更前后 TCP 发布状态的策略校验输入。
+   * @throws 策略拒绝时抛出 HTTP 409 业务异常；其他校验错误原样重新抛出。
+   */
   private assertReleaseMutation(mutation: TcpReleaseMutation): void {
     try {
       this.tcpReleasePolicy.assertMutationAllowed(mutation);
@@ -935,13 +1153,21 @@ export class NetworkPortForwardGroupService {
     }
   }
 
-  /** 列出当前协议。 */
+  /**
+   * 根据`mode`处理当前协议。
+   * @param mode - 选择当前协议处理分支的模式值。
+   * @returns 按输入顺序得到的当前协议列表；没有匹配项时为空数组。
+   */
   private protocols(mode: TcpProtocolMode): PortForwardProtocol[] {
     if (mode === 'tcp_udp') return ['tcp', 'udp'];
     return [mode];
   }
 
-  /** 读取已应用的协议模式。 */
+  /**
+   * 根据`channels`处理已应用的协议模式。
+   * @param channels - 决定已应用的协议模式内容、边界或目标的 `channels` 值。
+   * @returns 当前状态对应的已应用的协议模式，取值为 `'tcp_udp'`、`'tcp'`、`'udp'`；无法解析或未命中时为 `null`。
+   */
   private appliedProtocolMode(
     channels: NetworkPortForward[],
   ): TcpProtocolMode | null {
@@ -964,7 +1190,12 @@ export class NetworkPortForwardGroupService {
     return null;
   }
 
-  /** 判断版本是否已追平。 */
+  /**
+   * 根据`reported`、`desired`处理版本是否已追平。
+   * @param reported - 决定版本是否已追平内容、边界或目标的 `reported` 值。
+   * @param desired - 决定版本是否已追平内容、边界或目标的 `desired` 值。
+   * @returns 满足版本是否已追平约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private revisionCaughtUp(reported: string, desired: string): boolean {
     try {
       return BigInt(reported) >= BigInt(desired);
@@ -973,7 +1204,12 @@ export class NetworkPortForwardGroupService {
     }
   }
 
-  /** 序列化分组。 */
+  /**
+   * 将`group`、`channels`转换为序列化分组。
+   * @param group - 用于序列化分组的领域对象，包含 `id`、`name`、`remark`、`externalPort` 字段。
+   * @param channels - 决定序列化分组内容、边界或目标的 `channels` 值。
+   * @returns 包含 `id`、`name`、`remark`、`externalPort`、`internalPort` 字段的序列化分组；无法解析或未命中时为 `null`。
+   */
   private serializeGroup(
     group: NetworkPortForwardGroup,
     channels: NetworkPortForward[],
@@ -994,8 +1230,18 @@ export class NetworkPortForwardGroupService {
       appliedProtocolMode: this.appliedProtocolMode(channels),
       targetIpv4: group.targetIpv4,
       channels: {
-        tcp: tcp ? this.serializeChannel(tcp) : null,
-        udp: udp ? this.serializeChannel(udp) : null,
+        tcp: (() => {
+          if (tcp) {
+            return this.serializeChannel(tcp);
+          }
+          return null;
+        })(),
+        udp: (() => {
+          if (udp) {
+            return this.serializeChannel(udp);
+          }
+          return null;
+        })(),
       },
       isDeleted: group.isDeleted,
       createTime: group.createTime,
@@ -1003,7 +1249,11 @@ export class NetworkPortForwardGroupService {
     };
   }
 
-  /** 序列化通道。 */
+  /**
+   * 将`channel`转换为序列化通道；从 `getTime` 读取序列化通道。
+   * @param channel - 用于序列化通道的领域对象，包含 `currentPublicIpv4`、`currentPublicPort`、`currentValidUntil`、`id` 字段。
+   * @returns 包含 `id`、`groupId`、`name`、`remark`、`protocol` 字段的序列化通道。
+   */
   private serializeChannel(channel: NetworkPortForward) {
     const leaseValid =
       !!channel.currentPublicIpv4 &&
@@ -1029,14 +1279,42 @@ export class NetworkPortForwardGroupService {
       syncStatus: channel.syncStatus,
       keeperStatus: channel.keeperStatus,
       natmapStatus: channel.natmapStatus,
-      currentPublicIpv4: leaseValid ? channel.currentPublicIpv4 : null,
-      currentPublicPort: leaseValid ? channel.currentPublicPort : null,
-      currentPublicEndpoint: leaseValid
-        ? `${channel.currentPublicIpv4}:${channel.currentPublicPort}`
-        : null,
-      currentObservedAt: leaseValid ? channel.currentObservedAt : null,
-      currentValidatedAt: leaseValid ? channel.currentValidatedAt : null,
-      currentValidUntil: leaseValid ? channel.currentValidUntil : null,
+      currentPublicIpv4: (() => {
+        if (leaseValid) {
+          return channel.currentPublicIpv4;
+        }
+        return null;
+      })(),
+      currentPublicPort: (() => {
+        if (leaseValid) {
+          return channel.currentPublicPort;
+        }
+        return null;
+      })(),
+      currentPublicEndpoint: (() => {
+        if (leaseValid) {
+          return `${channel.currentPublicIpv4}:${channel.currentPublicPort}`;
+        }
+        return null;
+      })(),
+      currentObservedAt: (() => {
+        if (leaseValid) {
+          return channel.currentObservedAt;
+        }
+        return null;
+      })(),
+      currentValidatedAt: (() => {
+        if (leaseValid) {
+          return channel.currentValidatedAt;
+        }
+        return null;
+      })(),
+      currentValidUntil: (() => {
+        if (leaseValid) {
+          return channel.currentValidUntil;
+        }
+        return null;
+      })(),
       lastObservedIpv4: channel.lastObservedIpv4 || null,
       lastObservedPort: channel.lastObservedPort || null,
       lastObservedAt: channel.lastObservedAt || null,
@@ -1052,7 +1330,11 @@ export class NetworkPortForwardGroupService {
     };
   }
 
-  /** 序列化历史。 */
+  /**
+   * 序列化历史，并输出固定投影 `id`、`eventId`、`eventType`、`mechanism`、`firstObservedAt` 字段。
+   * @param history - 用于历史的领域对象，包含 `id`、`eventId`、`eventType`、`mechanism` 字段。
+   * @returns 包含 `id`、`eventId`、`eventType`、`mechanism`、`firstObservedAt` 字段的历史。
+   */
   private serializeHistory(history: NetworkEndpointHistory) {
     return {
       id: String(history.id),
@@ -1070,7 +1352,10 @@ export class NetworkPortForwardGroupService {
     };
   }
 
-  /** 撤回当前端点。 */
+  /**
+   * 根据`channel`处理撤回当前端点。
+   * @param channel - 用于撤回当前端点的领域对象，包含 `currentPublicIpv4`、`currentPublicPort`、`currentObservedAt`、`currentValidatedAt` 字段。
+   */
   private withdrawCurrentEndpoint(channel: NetworkPortForward): void {
     channel.currentPublicIpv4 = null;
     channel.currentPublicPort = null;
@@ -1079,21 +1364,32 @@ export class NetworkPortForwardGroupService {
     channel.currentValidUntil = null;
   }
 
-  /** 断言更新输入。 */
+  /**
+   * 校验`input`是否满足更新输入约束，并拒绝不合法输入。
+   * @param input - 用于更新输入的结构化输入。
+   */
   private assertUpdateInput(input: object): void {
     if (Object.keys(input).length === 0) {
       throwVbenError('至少提供一个修改字段', HttpStatus.BAD_REQUEST);
     }
   }
 
-  /** 断言标识。 */
+  /**
+   * 要求端口转发分组或通道标识由 1 至 24 位十进制数字组成，并以调用方标签生成错误消息。
+   * @param id - 待校验的端口转发分组或协议通道标识。
+   * @param label - 标明无效标识所属对象的中文标签。
+   */
   private assertId(id: string, label: string): void {
     if (!/^\d{1,24}$/.test(id)) {
       throwVbenError(`${label} ID 无效`, HttpStatus.BAD_REQUEST);
     }
   }
 
-  /** 规范化名称。 */
+  /**
+   * 将`value`规范为名称，使等价输入得到一致表示。
+   * @param value - 待转换为名称的原始值。
+   * @returns 名称。
+   */
   private normalizeName(value: string): string {
     const normalized = value.trim();
     if (!normalized || Buffer.byteLength(normalized, 'utf8') > 128) {
@@ -1105,14 +1401,20 @@ export class NetworkPortForwardGroupService {
     return normalized;
   }
 
-  /** 返回Agent标识。 */
+  /**
+   * 从运行时配置读取网络 Agent 的稳定标识；缺失或非法配置按调用处约束拒绝。
+   * @returns 返回 `this.configService.get<string>('NETWORK_AGENT_ID')` 的可用值；为空时回退到 `DEFAULT_AGENT_ID`。
+   */
   private agentId(): string {
     return (
       this.configService.get<string>('NETWORK_AGENT_ID') || DEFAULT_AGENT_ID
     );
   }
 
-  /** 返回目标IPv4。 */
+  /**
+   * 读取网络 Agent 固定目标 IPv4，配置缺失时使用默认地址，并拒绝格式非法的服务端配置。
+   * @returns 已通过 IPv4 格式校验的配置值或默认目标地址。
+   */
   private targetIpv4(): string {
     const target =
       this.configService.get<string>('NETWORK_AGENT_TARGET_IPV4') ||
@@ -1126,7 +1428,11 @@ export class NetworkPortForwardGroupService {
     return target;
   }
 
-  /** 重新抛出重复项错误。 */
+  /**
+   * 根据`error`处理重新抛出重复项错误。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+   * @throws 错误为 MySQL 唯一键冲突时抛出 HTTP 409 业务错误；否则原样重新抛出传入错误。
+   */
   private rethrowDuplicate(error: unknown): never {
     if (this.isDuplicateKeyError(error)) {
       throwVbenError('同协议外部端口或组内协议已存在', HttpStatus.CONFLICT);
@@ -1134,14 +1440,20 @@ export class NetworkPortForwardGroupService {
     throw error;
   }
 
-  /** 判断重复键错误是否成立。 */
+  /**
+   * 仅把 MySQL `ER_DUP_ENTRY` 或错误号 1062 识别为唯一键冲突，其他错误一律返回 `false`。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+   * @returns 满足Duplicate键错误约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const record = error as { code?: unknown; errno?: unknown };
     return record.code === 'ER_DUP_ENTRY' || record.errno === 1062;
   }
 
-  /** 通知期望的已变更。 */
+  /**
+   * 请求 MQTT 发布最新网络期望态；同步唤醒失败时保留持久状态，交由周期发布器重试。
+   */
   private notifyDesiredChanged(): void {
     try {
       this.mqttService.requestDesiredPublish();

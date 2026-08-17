@@ -1,7 +1,8 @@
 /**
- * 查询 QQBot 核心数据。
- * @param cooldownMs - QQBot列表；驱动 `Number()` 的 QQBot步骤。
- * @param minCooldownMs - QQBot列表；驱动 `Number()` 的 QQBot步骤。
+ * 将配置冷却和最小冷却收敛为非负有限数，并返回两者中较大的毫秒值。
+ * @param cooldownMs - 用于Effective冷却时间Ms超时、有效期或退避计算的毫秒数。
+ * @param minCooldownMs - 用于Effective冷却时间Ms超时、有效期或退避计算的毫秒数。
+ * @returns Effective冷却时间Ms。
  */
 export function getEffectiveCooldownMs(
   cooldownMs: number | null | undefined,
@@ -10,14 +11,25 @@ export function getEffectiveCooldownMs(
   const cooldown = Number(cooldownMs || 0);
   const minimum = Number(minCooldownMs || 0);
   return Math.max(
-    Number.isFinite(cooldown) && cooldown > 0 ? cooldown : 0,
-    Number.isFinite(minimum) && minimum > 0 ? minimum : 0,
+    (() => {
+      if (Number.isFinite(cooldown) && cooldown > 0) {
+        return cooldown;
+      }
+      return 0;
+    })(),
+    (() => {
+      if (Number.isFinite(minimum) && minimum > 0) {
+        return minimum;
+      }
+      return 0;
+    })(),
   );
 }
 
 /**
- * 判断 QQBot 核心条件。
- * @param params - QQBot列表；使用 `lastHitAt`、`cooldownMs`、`minCooldownMs` 字段计算判断结果。
+ * 根据`params`与当前约束判定Within冷却时间；从 `getEffectiveCooldownMs` 读取Within冷却时间。
+ * @param params - 用于Within冷却时间的领域对象，包含 `lastHitAt`、`cooldownMs`、`minCooldownMs` 字段。
+ * @returns 满足Within冷却时间约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 export function isWithinCooldown(params: {
   cooldownMs: number | null | undefined;

@@ -18,8 +18,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
   /**
    * 捕获并转换异常响应。
-   * @param exception - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
-   * @param host - host 输入；执行 `host.switchToHttp()` 对应的 公共基础设施步骤。
+   * @param exception - 决定捕获并转换异常响应内容、边界或目标的 `exception` 值。
+   * @param host - 可能包含认证信息或端口的外部服务地址。
    */
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -46,8 +46,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * 执行 异常响应流程。
-   * @param params - 公共基础设施列表；使用 `exception`、`err`、`request`、`status` 字段生成结果。
+   * 根据`params`处理针对异常响应；当 `params.status >= 500` 成立时直接结束且不产生返回值。
+   * @param params - 用于针对异常响应的领域对象，包含 `exception`、`err`、`request`、`status` 字段。
    */
   private logException(params: {
     err: string;
@@ -73,8 +73,9 @@ export class ApiExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * 查询 异常响应数据。
-   * @param exception - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   * 按`exception`读取针对异常响应；当 `exception instanceof HttpException` 成立时返回 `exception.getStatus()`。
+   * @param exception - 用于针对异常响应的领域对象，包含 `getStatus` 字段。
+   * @returns 针对异常响应。
    */
   private getStatus(exception: unknown) {
     if (exception instanceof HttpException) {
@@ -85,9 +86,9 @@ export class ApiExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * 查询 异常响应数据。
-   * @param exception - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
-   * @returns 异常响应查询结果。
+   * 按`exception`读取针对异常响应；当 `!(exception instanceof HttpException)` 成立时返回 `null`。
+   * @param exception - 用于针对异常响应的领域对象，包含 `getResponse` 字段。
+   * @returns 针对异常响应；无法解析或未命中时为 `null`。
    */
   private getBody(exception: unknown): ExceptionBody | string | null {
     if (!(exception instanceof HttpException)) {
@@ -96,14 +97,18 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
     const body = exception.getResponse();
 
-    return typeof body === 'string' ? body : (body as ExceptionBody);
+    if (typeof body === 'string') {
+      return body;
+    }
+    return (body as ExceptionBody);
   }
 
   /**
-   * 查询 异常响应数据。
-   * @param status - 公共基础设施列表；决定 公共基础设施条件分支。
-   * @param body - 请求体 DTO；承载 公共基础设施新增、更新、导入或执行字段。
-   * @param exception - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
+   * 按`status`、`body`、`exception`读取针对异常响应；当 `status >= 500` 成立时返回 `'Internal server error'`。
+   * @param status - 决定针对异常响应内容、边界或目标的 `status` 值。
+   * @param body - 用于针对异常响应的结构化输入，包含 `msg`、`message` 字段。
+   * @param exception - 用于针对异常响应的领域对象，包含 `message` 字段。
+   * @returns 当前状态对应的针对异常响应，取值为 `'Internal server error'`、`'操作失败'`。
    */
   private getMessage(
     status: number,
@@ -115,15 +120,19 @@ export class ApiExceptionFilter implements ExceptionFilter {
     if (body?.message) return this.stringifyMessage(body.message);
     if (exception instanceof Error && status < 500) return exception.message;
 
-    return status >= 500 ? 'Internal server error' : '操作失败';
+    if (status >= 500) {
+      return 'Internal server error';
+    }
+    return '操作失败';
   }
 
   /**
-   * 查询 异常响应数据。
-   * @param status - 公共基础设施列表；限定 公共基础设施查询范围。
-   * @param body - 请求体 DTO；承载 公共基础设施新增、更新、导入或执行字段。
-   * @param exception - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
-   * @param fallback - 兜底值；限定 公共基础设施查询范围。
+   * 按`status`、`body`、`exception`读取针对异常响应；当 `status >= HttpStatus.INTERNAL_SERVER_ERROR && !(exception ins…` 成立时返回 `'Internal server error'`。
+   * @param status - 决定针对异常响应内容、边界或目标的 `status` 值。
+   * @param body - 用于针对异常响应的结构化输入，包含 `err`、`error`、`message` 字段。
+   * @param exception - 用于针对异常响应的领域对象，包含 `message` 字段。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+   * @returns 当前状态对应的针对异常响应，取值为 `'Internal server error'`、`'操作失败'`。
    */
   private getErr(
     status: number,
@@ -147,21 +156,26 @@ export class ApiExceptionFilter implements ExceptionFilter {
     if (exception instanceof Error)
       return normalizeVbenErrorText(exception.message, fallback);
 
-    return status >= 500 ? 'Internal server error' : '操作失败';
+    if (status >= 500) {
+      return 'Internal server error';
+    }
+    return '操作失败';
   }
 
   /**
-   * 执行 异常响应流程。
-   * @param message - message 输入；生成统一错误文案。
+   * 将`message`转换为针对异常响应。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   * @returns 针对异常响应。
    */
   private stringifyMessage(message: unknown) {
     return normalizeVbenErrorText(message);
   }
 
   /**
-   * 查询 异常响应数据。
-   * @param exception - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
-   * @param fallback - 默认日志错误文本；在异常体缺少可读消息时作为日志输出兜底。
+   * 按`exception`、`fallback`读取针对异常响应。
+   * @param exception - 决定针对异常响应内容、边界或目标的 `exception` 值。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+   * @returns 包含 `message`、`raw` 字段的针对异常响应。
    */
   private getLogError(exception: unknown, fallback: string) {
     if (exception instanceof Error) return exception;

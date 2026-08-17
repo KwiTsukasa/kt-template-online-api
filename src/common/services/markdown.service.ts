@@ -98,8 +98,9 @@ export class MarkdownService {
   private sanitizeHtmlProcessorPromise?: Promise<MarkdownProcessor>;
 
   /**
-   * 渲染 当前模块输出。
-   * @param markdown - markdown 输入；驱动 `processor.process()` 的 公共基础设施步骤。
+   * 根据`markdown`绘制或格式化HTML；从 `getProcessor` 读取HTML。
+   * @param markdown - 决定HTML内容、边界或目标的 `markdown` 值；为空时采用 `''` 作为兜底。
+   * @returns 按参数编码并拼接完成的HTML。
    */
   async renderToHtml(markdown?: string | null) {
     const processor = await this.getProcessor();
@@ -109,8 +110,9 @@ export class MarkdownService {
   }
 
   /**
-   * 渲染 当前模块输出。
-   * @param html - html 输入；驱动 `processor.process()` 的 公共基础设施步骤。
+   * 将 HTML 正文转换为 Markdown，并复用统一的转换处理器；输入为空时返回空字符串；从 `getHtmlToMarkdownProcessor` 读取HTMLMarkdown。
+   * @param html - 待转换为 Markdown 的 HTML 正文；空值按空字符串处理；为空时采用 `''` 作为兜底。
+   * @returns 由 HTML 语义转换得到的 Markdown 文本；输入为空时为空字符串。
    */
   async renderHtmlToMarkdown(html?: string | null) {
     const processor = await this.getHtmlToMarkdownProcessor();
@@ -120,8 +122,9 @@ export class MarkdownService {
   }
 
   /**
-   * 执行 当前模块流程。
-   * @param html - html 输入；驱动 `processor.process()` 的 公共基础设施步骤。
+   * 将 HTML 正文交给统一清理策略，移除不允许的标签、属性与协议；输入为空时返回空字符串；从 `getSanitizeHtmlProcessor` 读取HTML。
+   * @param html - 待移除危险标签、属性与 URL 协议的 HTML 正文；空值按空字符串处理；为空时采用 `''` 作为兜底。
+   * @returns 符合允许标签、属性与 URL 协议白名单的 HTML 文本；输入为空时为空字符串。
    */
   async sanitizeHtml(html?: string | null) {
     const processor = await this.getSanitizeHtmlProcessor();
@@ -131,9 +134,10 @@ export class MarkdownService {
   }
 
   /**
-   * 执行 当前模块流程。
-   * @param html - html 输入；驱动 `this.stripSourceMarker()` 的 公共基础设施步骤。
-   * @param markdown - markdown 输入；影响 embedSourceHtml 的返回值。
+   * 通过 `toString` 收敛领域表示。
+   * @param html - 决定embed来源HTML内容、边界或目标的 `html` 值。
+   * @param markdown - 决定embed来源HTML内容、边界或目标的 `markdown` 值；为空时采用 `''` 作为兜底。
+   * @returns 按参数编码并拼接完成的embed来源HTML。
    */
   embedSourceHtml(html: string, markdown?: string | null) {
     const source = markdown || '';
@@ -146,8 +150,9 @@ export class MarkdownService {
   }
 
   /**
-   * 执行 当前模块流程。
-   * @param value - 待转换值；影响 extractSource 的返回值。
+   * 通过 `MARKDOWN_SOURCE_PATTERN.exec` 执行模式匹配。
+   * @param value - 参与来源比较、格式化或输出的候选值；为空时采用 `''` 作为兜底。
+   * @returns 当前状态对应的来源，取值为 `''`。
    */
   extractSource(value?: unknown) {
     const text = `${value ?? ''}`;
@@ -162,15 +167,17 @@ export class MarkdownService {
   }
 
   /**
-   * 执行 当前模块流程。
-   * @param value - 待转换值；影响 stripSourceMarker 的返回值。
+   * 从`value`移除来源标记，未命中标记时保留原输入。
+   * @param value - 待转换为来源标记的原始值；为空时采用 `''` 作为兜底。
+   * @returns 来源标记清理后的文本。
    */
   stripSourceMarker(value?: unknown) {
     return `${value ?? ''}`.replace(MARKDOWN_SOURCE_PATTERN, '').trim();
   }
 
   /**
-   * 查询 当前模块数据。
+   * 首次调用时异步创建 Markdown 转 HTML 处理器，并在后续调用中复用同一个初始化 Promise。
+   * @returns Markdown 转 HTML 处理函数。
    */
   private getProcessor() {
     if (!this.processorPromise) {
@@ -181,7 +188,8 @@ export class MarkdownService {
   }
 
   /**
-   * 查询 当前模块数据。
+   * 首次调用时异步创建 HTML 转 Markdown 处理器，并在后续调用中复用同一个初始化 Promise。
+   * @returns HTMLMarkdown处理函数。
    */
   private getHtmlToMarkdownProcessor() {
     if (!this.htmlToMarkdownProcessorPromise) {
@@ -193,7 +201,8 @@ export class MarkdownService {
   }
 
   /**
-   * 查询 当前模块数据。
+   * 首次调用时异步创建 HTML 清洗处理器，并在后续调用中复用同一个初始化 Promise。
+   * @returns HTML处理函数。
    */
   private getSanitizeHtmlProcessor() {
     if (!this.sanitizeHtmlProcessorPromise) {
@@ -204,8 +213,8 @@ export class MarkdownService {
   }
 
   /**
-   * 创建 当前模块对象或配置。
-   * @returns 创建后的 当前模块对象或配置。
+   * 根据当前运行态构造Markdown 转 HTML 处理器。
+   * @returns Markdown 转 HTML 处理函数。
    */
   private async createProcessor(): Promise<MarkdownProcessor> {
     const [
@@ -244,8 +253,8 @@ export class MarkdownService {
   }
 
   /**
-   * 创建 当前模块对象或配置。
-   * @returns 创建后的 当前模块对象或配置。
+   * 根据当前运行态构造HTMLMarkdown处理器。
+   * @returns HTMLMarkdown处理函数。
    */
   private async createHtmlToMarkdownProcessor(): Promise<MarkdownProcessor> {
     const [
@@ -274,8 +283,8 @@ export class MarkdownService {
   }
 
   /**
-   * 创建 当前模块对象或配置。
-   * @returns 创建后的 当前模块对象或配置。
+   * 根据当前运行态构造HTML处理器。
+   * @returns HTML处理函数。
    */
   private async createSanitizeHtmlProcessor(): Promise<MarkdownProcessor> {
     const [
@@ -297,8 +306,9 @@ export class MarkdownService {
   }
 
   /**
-   * 创建 当前模块对象或配置。
-   * @param defaultSchema - defaultSchema 输入；生成 公共基础设施对象。
+   * 在默认清理规则上限定 Markdown 输出允许的标签与属性，并设置防止 DOM 名称冲突的前缀。
+   * @param defaultSchema - 用于复制并收紧标签、属性与协议白名单的默认清理规则。
+   * @returns 包含 `clobberPrefix`、`tagNames`、`attributes` 字段的HTML 清理规则。
    */
   private createSanitizeSchema(defaultSchema: unknown) {
     const schema = defaultSchema as Record<string, any>;
@@ -348,7 +358,7 @@ export class MarkdownService {
   }
 
   /**
-   * 创建 Markdown code fence 到 Argon 代码块 DOM 的 rehype 转换插件。
+   * 通过创建 Markdown code fence 到 Argon 代码块 DOM 的 rehype 转换插件。
    * @returns rehype transformer；会原地补齐 pre/code class，最终仍由 sanitizer 过滤。
    */
   private createArgonCodeblockPlugin() {

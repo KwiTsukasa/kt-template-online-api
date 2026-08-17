@@ -18,11 +18,11 @@ export const BANGDREAM_DIFFICULTY_LIST_SPEC = {
 } as const;
 
 /**
- * 计算难度列表画布宽度。
- *
- * @param difficultyCount - difficultyCount 输入；限定 BangDream查询范围。
- * @param imageHeight - imageHeight 输入；限定 BangDream查询范围。
- * @param spacing - spacing 输入；限定 BangDream查询范围。
+ * 按`difficultyCount`、`imageHeight`、`spacing`读取难度列表画布宽度。
+ * @param difficultyCount - 限制难度列表画布宽度数量、尺寸、等级或重试边界的数值。
+ * @param imageHeight - 决定难度列表画布宽度内容、边界或目标的 `imageHeight` 值。
+ * @param spacing - 决定难度列表画布宽度内容、边界或目标的 `spacing` 值。
+ * @returns 难度列表画布宽度。
  */
 export function getDifficultyListCanvasWidth(
   difficultyCount: number,
@@ -33,11 +33,11 @@ export function getDifficultyListCanvasWidth(
 }
 
 /**
- * 计算难度徽章在列表中的横向位置。
- *
- * @param index - index 输入；限定 BangDream查询范围。
- * @param imageHeight - imageHeight 输入；限定 BangDream查询范围。
- * @param spacing - spacing 输入；限定 BangDream查询范围。
+ * 按`index`、`imageHeight`、`spacing`读取难度徽章在列表中的横向位置。
+ * @param index - 指定难度徽章在列表中的横向位置在集合或布局中的零基位置。
+ * @param imageHeight - 决定难度徽章在列表中的横向位置内容、边界或目标的 `imageHeight` 值。
+ * @param spacing - 决定难度徽章在列表中的横向位置内容、边界或目标的 `spacing` 值。
+ * @returns 难度徽章在列表中的横向位置。
  */
 export function getDifficultyListItemX(
   index: number,
@@ -48,10 +48,10 @@ export function getDifficultyListItemX(
 }
 
 /**
- * 获取难度徽章颜色。
- *
- * @param difficultyType - difficultyType 输入；限定 BangDream查询范围。
- * @param colors - BangDream列表；限定 BangDream查询范围。
+ * 根据参数 `difficultyType`，获取难度徽章颜色。
+ * @param difficultyType - 决定根据参数 `difficultyType`，获取难度徽章颜色内容、边界或目标的 `difficultyType` 值。
+ * @param colors - 用于根据参数 `difficultyType`，获取难度徽章颜色的领域对象，包含 `difficultyType` 字段。
+ * @returns 规范化后的根据参数 `difficultyType`，获取难度徽章颜色；主值为空时采用 `BANGDREAM_DIFFICULTY_LIST_SPEC.badge.fallbackColor` 兜底。
  */
 export function getDifficultyBadgeColor(
   difficultyType: number,
@@ -63,9 +63,9 @@ export function getDifficultyBadgeColor(
 }
 
 /**
- * 计算难度徽章圆形布局。
- *
- * @param imageHeight - imageHeight 输入；生成 BangDream对象。
+ * 计算难度徽章圆形布局，并输出固定投影 `arcEnd`、`arcRadius`、`arcStart`、`arcX`、`arcY` 字段。
+ * @param imageHeight - 决定难度Badge布局内容、边界或目标的 `imageHeight` 值。
+ * @returns 包含 `arcEnd`、`arcRadius`、`arcStart`、`arcX`、`arcY` 字段的难度Badge布局。
  */
 export function createDifficultyBadgeLayout(imageHeight: number) {
   return {
@@ -80,10 +80,10 @@ export function createDifficultyBadgeLayout(imageHeight: number) {
 }
 
 /**
- * 计算难度等级文字绘制参数。
- *
- * @param imageHeight - imageHeight 输入；驱动 `playLevel.toString()` 的 BangDream步骤。
- * @param playLevel - playLevel 输入；生成规范化文本。
+ * 根据`imageHeight`、`playLevel`构造难度等级文字绘制参数。
+ * @param imageHeight - 决定难度等级文字绘制参数内容、边界或目标的 `imageHeight` 值。
+ * @param playLevel - 限制难度等级文字绘制参数数量、尺寸、等级或重试边界的数值。
+ * @returns 包含 `maxWidth`、`text`、`textSize` 字段的难度等级文字绘制参数。
  */
 export function createDifficultyLevelTextSpec(
   imageHeight: number,
@@ -98,10 +98,10 @@ export function createDifficultyLevelTextSpec(
 }
 
 /**
- * 计算难度等级文字居中位置。
- *
- * @param imageHeight - imageHeight 输入；限定 BangDream查询范围。
- * @param levelText - levelText 输入；使用 `width`、`height` 字段生成结果。
+ * 计算难度等级文字居中位置，并输出固定投影 `x`、`y` 字段。
+ * @param imageHeight - 决定难度Level文本Position内容、边界或目标的 `imageHeight` 值。
+ * @param levelText - 用于难度Level文本Position的领域对象，包含 `width`、`height` 字段。
+ * @returns 包含 `x`、`y` 字段的难度Level文本Position。
  */
 export function getDifficultyLevelTextPosition(
   imageHeight: number,

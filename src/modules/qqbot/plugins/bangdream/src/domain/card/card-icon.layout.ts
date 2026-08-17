@@ -21,18 +21,18 @@ export const BANGDREAM_CARD_ICON_LIST_SPEC = {
 } as const;
 
 /**
- * 计算卡牌图标列表文本字号。
- *
- * @param lineHeight - lineHeight 输入；限定 BangDream查询范围。
+ * 按`lineHeight`读取卡牌图标列表文本字号。
+ * @param lineHeight - 决定卡牌图标列表文本字号内容、边界或目标的 `lineHeight` 值。
+ * @returns 卡牌图标列表文本字号。
  */
 export function getCardIconListTextSize(lineHeight: number) {
   return lineHeight * BANGDREAM_CARD_ICON_LIST_SPEC.list.textSizeRatio;
 }
 
 /**
- * 计算卡牌图标列表卡牌间距。
- *
- * @param lineHeight - lineHeight 输入；限定 BangDream查询范围。
+ * 按`lineHeight`读取卡牌图标列表卡牌间距。
+ * @param lineHeight - 决定卡牌图标列表卡牌间距内容、边界或目标的 `lineHeight` 值。
+ * @returns 卡牌图标列表卡牌间距。
  */
 export function getCardIconListSpacing(lineHeight: number) {
   return lineHeight * BANGDREAM_CARD_ICON_LIST_SPEC.list.spacingRatio;
@@ -40,9 +40,9 @@ export function getCardIconListSpacing(lineHeight: number) {
 
 /**
  * 按历史列表规则比较卡牌图标展示顺序。
- *
- * @param left - left 输入；使用 `rarity`、`type`、`cardId` 字段生成结果。
- * @param right - right 输入；使用 `rarity`、`type`、`cardId` 字段生成结果。
+ * @param left - 用于按历史列表规则比较卡牌图标展示顺序的领域对象，包含 `rarity`、`type`、`cardId` 字段。
+ * @param right - 用于按历史列表规则比较卡牌图标展示顺序的领域对象，包含 `rarity`、`type`、`cardId` 字段。
+ * @returns 当前状态对应的按历史列表规则比较卡牌图标展示顺序，取值为 `1`。
  */
 export function compareCardIconListCards(
   left: CardIconListSortTarget,
@@ -74,8 +74,8 @@ export function compareCardIconListCards(
 
 /**
  * 按卡牌图标列表展示规则原地排序。
- *
- * @param cards - 卡牌列表；执行 `cards.sort()` 对应的 BangDream步骤。
+ * @param cards - 决定按卡牌图标列表展示规则原地排序内容、边界或目标的 `cards` 值。
+ * @returns 按输入顺序得到的按卡牌图标列表展示规则原地排序列表；没有匹配项时为空数组。
  */
 export function sortCardIconListCards<T extends CardIconListSortTarget>(
   cards: T[],

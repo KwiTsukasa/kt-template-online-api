@@ -120,12 +120,19 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     private readonly outboxRepository: Repository<MediaGovernanceOutboxEntity>,
   ) {}
 
-  /** 返回状态存储是否已成功完成初始化读取。 */
+  /**
+   * 按当前约束判定状态存储是否已成功完成初始化读取。
+   * @returns 满足状态存储是否已成功完成初始化读取约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   isReady() {
     return this.ready;
   }
 
-  /** 并行读取任务关联实体并恢复为内存治理任务。 */
+  /**
+   * 并行读取任务关联实体并恢复为内存治理任务。
+   * @returns 按输入顺序得到的并行读取任务关联实体并恢复为内存治理任务列表；没有匹配项时为空数组。
+   * @throws 当 `taskRepository.find` 或 `unitRepository.find` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   async loadTasks(): Promise<MediaGovernanceStoredTask[]> {
     try {
       const [tasks, units, sources, sessions, descriptors] = await Promise.all([
@@ -151,7 +158,10 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     }
   }
 
-  /** 在单个数据库事务中保存任务及全部关联投影。 */
+  /**
+   * 通过在单个数据库事务中保存任务及全部关联投影。
+   * @param task - 决定通过在单个数据库事务中保存任务及全部关联内容、边界或目标的 `task` 值。
+   */
   async saveTask(task: MediaGovernanceTask) {
     this.assertReady();
     await this.dataSource.transaction((manager) =>
@@ -159,7 +169,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     );
   }
 
-  /** 校验任务版本和工作项身份后事务性删除完整任务账本。 */
+  /**
+   * 根据任务版本和工作项身份校验结果，事务性删除完整任务账本。
+   * @param input - 用于根据任务版本和工作项身份校验结果，事务性删除完整任务账本的结构化输入，包含 `taskId`、`expectedRevision`、`expectedWorkItemId` 字段。
+   * @returns 根据任务版本和工作项身份校验结果，事务性删除完整任务账本。
+   */
   async deleteTask(input: {
     expectedRevision: number;
     expectedWorkItemId: null | string;
@@ -222,7 +236,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 在保存任务的同一事务中追加 Agent 语义事件。 */
+  /**
+   * 通过在保存任务的同一事务中追加 Agent 语义事件。
+   * @param task - 用于通过在保存任务的同一事务中追加 Agent 语义事件的领域对象，包含 `runState`、`stage`、`id` 字段。
+   * @param event - 触发通过在保存任务的同一事务中追加 Agent 语义事件的领域事件，包含 `eventId`、`observedAt`、`turnId`、`threadId` 字段。
+   */
   async saveTaskWithAgentEvent(
     task: MediaGovernanceTask,
     event: MediaGovernanceAgentEventDto,
@@ -248,7 +266,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 在数据库互斥锁内为任务分配全局唯一工作项编号。 */
+  /**
+   * 通过在数据库互斥锁内为任务分配全局唯一工作项编号。
+   * @param taskId - 用于精确定位任务的标识。
+   * @returns 通过在数据库互斥锁内为任务分配全局唯一工作项编号。
+   */
   async reserveWorkItemId(taskId: string) {
     this.assertReady();
     return this.dataSource.transaction(async (manager) => {
@@ -287,7 +309,12 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 校验运行信封身份，并原子保存任务、运行与发件箱预留。 */
+  /**
+   * 校验运行信封身份，并原子保存任务、运行与发件箱预留。
+   * @param task - 用于reserve的领域对象，包含 `activeRunId`、`id`、`revision`、`inputSnapshotSha256` 字段。
+   * @param envelope - 用于reserve的领域对象，包含 `runId`、`taskId`、`taskRevision`、`inputSnapshotSha256` 字段。
+   * @throws 当 `task.activeRunId !== envelope.runId || task.id !== envelope.taskId || t…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async reserveRunDispatch(
     task: MediaGovernanceTask,
     envelope: MediaGovernanceExecutionEnvelope,
@@ -350,7 +377,10 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 读取尚未确认且未耗尽重试次数的密封运行信封。 */
+  /**
+   * 从目标数据源读取尚未确认且未耗尽重试次数的密封运行信封。
+   * @returns 从目标数据源读取尚未确认且未耗尽重试次数的密封运行信封。
+   */
   async pendingRunDispatches() {
     this.assertReady();
     const rows = await this.outboxRepository.find({
@@ -373,7 +403,12 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 按运行标识读取并验证密封执行信封。 */
+  /**
+   * 按运行标识读取并验证密封执行信封。
+   * @param runId - 用于精确定位`run` 对应结果的标识。
+   * @returns 按运行标识读取并验证密封执行信封；无法解析或未命中时为 `null`。
+   * @throws 当 `row.id !== row.sealedInput.runId || row.taskId !== row.sealedInput.task…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async readRunEnvelope(runId: string) {
     this.assertReady();
     const row = await this.outboxRepository.findOneBy({ id: runId });
@@ -390,7 +425,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     );
   }
 
-  /** 记录一次派发失败并释放发件箱租约。 */
+  /**
+   * 记录一次派发失败并释放发件箱租约。
+   * @param runId - 用于精确定位`run` 对应结果的标识。
+   * @returns 记录一次派发失败并释放发件箱租约。
+   */
   async recordRunDispatchFailure(runId: string) {
     this.assertReady();
     return this.dataSource.transaction(async (manager) => {
@@ -408,7 +447,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 在重试耗尽后原子标记派发和运行失败。 */
+  /**
+   * 在重试耗尽后原子标记派发和运行失败。
+   * @param task - 用于在重试耗尽后原子标记派发和运行失败的领域对象，包含 `id` 字段。
+   * @param runId - 用于精确定位`run` 对应结果的标识。
+   */
   async failRunDispatch(task: MediaGovernanceTask, runId: string) {
     this.assertReady();
     await this.dataSource.transaction(async (manager) => {
@@ -447,7 +490,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 确认执行器已接管运行，并原子更新发件箱与运行状态。 */
+  /**
+   * 确认执行器已接管运行，并原子更新发件箱与运行状态。
+   * @param runId - 用于精确定位`run` 对应结果的标识。
+   * @param executionId - 用于精确定位execution的标识。
+   */
   async acknowledgeRunDispatch(runId: string, executionId: string) {
     this.assertReady();
     await this.dataSource.transaction(async (manager) => {
@@ -474,7 +521,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 合并事件账本与进度快照，返回已持久化的最大运行序号。 */
+  /**
+   * 合并事件账本与进度快照，返回已持久化的最大运行序号。
+   * @param runId - 用于精确定位`run` 对应结果的标识。
+   * @returns 事件账本与进度快照，返回已持久化的最大运行序号。
+   */
   async readRunSequence(runId: string) {
     this.assertReady();
     const [event, run] = await Promise.all([
@@ -494,7 +545,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     return Math.max(event?.sequence ?? 0, safeSnapshotSequence);
   }
 
-  /** 在运行锁内持久化高频进度快照，并忽略陈旧序号。 */
+  /**
+   * 在运行锁内持久化高频进度快照，并忽略陈旧序号。
+   * @param task - 决定ExecutorProgress快照内容、边界或目标的 `task` 值。
+   * @param event - 触发ExecutorProgress快照的领域事件，包含 `runId`、`taskId`、`taskRevision`、`action` 字段。
+   */
   async saveExecutorProgressSnapshot(
     task: MediaGovernanceTask,
     event: MediaGovernanceExecutorEventDto,
@@ -532,7 +587,12 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 幂等应用执行器事件，并在同一事务中更新任务、运行和事件账本。 */
+  /**
+   * 幂等应用执行器事件，并在同一事务中更新任务、运行和事件账本。
+   * @param task - 用于Executor事件的领域对象，包含 `id`、`runState`、`stage` 字段。
+   * @param event - 触发Executor事件的领域事件，包含 `runId`、`sequence`、`taskId`、`taskRevision` 字段。
+   * @returns Executor事件。
+   */
   async applyExecutorEvent(
     task: MediaGovernanceTask,
     event: MediaGovernanceExecutorEventDto,
@@ -613,7 +673,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 单次消费与运行绑定的描述符授权，并返回私有对象引用。 */
+  /**
+   * 单次消费与运行绑定的描述符授权，并返回私有对象引用。
+   * @param input - 用于consume描述信息Grant的结构化输入，包含 `runId`、`sourceId`、`taskId`、`descriptorGrantId` 字段。
+   * @returns consume描述信息Grant。
+   */
   async consumeDescriptorGrant(input: {
     descriptorGrantId: string;
     descriptorSha256: string;
@@ -682,7 +746,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 单次消费与运行绑定的治理计划授权，并返回密封计划副本。 */
+  /**
+   * 单次消费与运行绑定的治理计划授权，并返回密封计划副本。
+   * @param input - 用于consumePlanGrant的结构化输入，包含 `runId`、`taskId`、`planGrantId`、`planSha256` 字段。
+   * @returns 完成任务、运行、授权与摘要核对后复制出的密封治理计划。
+   */
   async consumePlanGrant(input: {
     planGrantId: string;
     planSha256: string;
@@ -752,7 +820,12 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 将描述符修订标记为墓碑，并幂等返回墓碑时间。 */
+  /**
+   * 将描述符修订标记为墓碑，并幂等返回墓碑时间。
+   * @param sourceId - 用于精确定位来源的标识。
+   * @param descriptorRevision - 决定tombstone描述信息内容、边界或目标的 `descriptorRevision` 值。
+   * @returns tombstone描述信息。
+   */
   async tombstoneDescriptor(sourceId: string, descriptorRevision: number) {
     this.assertReady();
     return this.dataSource.transaction(async (manager) => {
@@ -772,14 +845,21 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     });
   }
 
-  /** 在任何数据库操作前确保状态存储已完成初始化。 */
+  /**
+   * 在任何数据库操作前确保状态存储已完成初始化。
+   * @throws 当 `!this.ready` 成立时抛出 `Error`。
+   */
   private assertReady() {
     if (!this.ready) {
       throw new Error('media-governance-state-store-not-ready');
     }
   }
 
-  /** 使用给定事务管理器同步任务及全部关联实体。 */
+  /**
+   * 通过使用给定事务管理器同步任务及全部关联实体。
+   * @param manager - 保证通过使用给定事务管理器同步任务及全部关联实体读写处于同一事务中的实体管理器。
+   * @param task - 用于通过使用给定事务管理器同步任务及全部关联实体的领域对象，包含 `closedAt`、`activeRunId`、`closedMode`、`units` 字段。
+   */
   private async saveTaskWithManager(
     manager: EntityManager,
     task: MediaGovernanceTask,
@@ -933,7 +1013,15 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     }
   }
 
-  /** 将任务实体及关联实体恢复为内存治理任务投影。 */
+  /**
+   * 将任务实体及关联实体恢复为内存治理任务投影。
+   * @param task - 用于将任务实体及关联实体恢复为内存治理任务的领域对象，包含 `closedMode`、`stage`、`activeRunId`、`closedAt` 字段。
+   * @param units - 决定将任务实体及关联实体恢复为内存治理任务内容、边界或目标的 `units` 值。
+   * @param sources - 决定将任务实体及关联实体恢复为内存治理任务内容、边界或目标的 `sources` 值。
+   * @param session - 待读取、续期或持久化的将任务实体及关联实体恢复为内存治理任务会话。
+   * @param descriptors - 决定将任务实体及关联实体恢复为内存治理任务内容、边界或目标的 `descriptors` 值。
+   * @returns 包含 `agentSession`、`activeRunId`、`closedAt`、`closedMode`、`gateReason` 字段的将任务实体及关联实体恢复为内存治理任务；无法解析或未命中时为 `null`。
+   */
   private restoreTask(
     task: MediaGovernanceTaskEntity,
     units: MediaGovernanceUnitEntity[],
@@ -1015,7 +1103,12 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     };
   }
 
-  /** 将来源实体与描述符修订恢复为领域来源。 */
+  /**
+   * 将来源实体与描述符修订恢复为领域来源。
+   * @param source - 用于将来源实体与描述符修订恢复为领域来源的领域对象，包含 `contentKind`、`descriptorObjectId`、`descriptorRevision`、`descriptorSha256` 字段。
+   * @param descriptor - 用于将来源实体与描述符修订恢复为领域来源的领域对象，包含 `bytes`、`tombstonedAt` 字段。
+   * @returns 包含 `contentKind`、`descriptorBytes`、`descriptorObjectId`、`descriptorRevision`、`descriptorSha256` 字段的将来源实体与描述符修订恢复为领域来源。
+   */
   private restoreSource(
     source: MediaGovernanceSourceEntity,
     descriptor: MediaGovernanceDescriptorRevisionEntity | null,
@@ -1055,7 +1148,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     };
   }
 
-  /** 将治理单元实体恢复为领域单元，并补齐旧数据默认投影。 */
+  /**
+   * 将治理单元实体恢复为领域单元，并补齐旧数据默认投影。
+   * @param unit - 用于restoreUnit的领域对象，包含 `evidenceSha256`、`expectedEpisodeNumbers`、`id`、`localAcceptedAt` 字段。
+   * @returns 包含 `evidenceSha256`、`expectedEpisodeNumbers`、`id`、`localAcceptedAt`、`metadataProjection` 字段的restoreUnit。
+   */
   private restoreUnit(unit: MediaGovernanceUnitEntity): MediaGovernanceUnit {
     return {
       evidenceSha256: unit.evidenceSha256,

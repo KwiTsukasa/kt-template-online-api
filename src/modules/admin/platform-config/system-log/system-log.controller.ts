@@ -23,8 +23,9 @@ export class SystemLogController {
   constructor(private readonly systemLogService: SystemLogService) {}
 
   /**
-   * 查询系统日志。
-   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * 按`query`读取查询系统日志。
+   * @param query - 限定查询系统日志筛选、排序与分页范围的查询条件。
+   * @returns 查询系统日志。
    */
   @Get()
   @ApiOperation({ summary: '查询系统日志' })
@@ -51,8 +52,9 @@ export class SystemLogController {
   }
 
   /**
-   * 查询系统日志级别统计。
-   * @param query - 查询参数 DTO；限定 Admin分页、搜索或详情查询条件。
+   * 根据参数 `query`，查询系统日志级别统计。
+   * @param query - 限定根据参数 `query`，查询系统日志级别统计筛选、排序与分页范围的查询条件。
+   * @returns 根据参数 `query`，查询系统日志级别统计。
    */
   @Get('summary')
   @ApiOperation({ summary: '查询系统日志级别统计' })
@@ -62,7 +64,8 @@ export class SystemLogController {
   }
 
   /**
-   * 查询系统日志级别选项。
+   * 根据当前领域状态，查询系统日志级别选项。
+   * @returns 根据当前领域状态，查询系统日志级别选项。
    */
   @Get('levels')
   @ApiOperation({ summary: '查询系统日志级别选项' })
@@ -71,7 +74,8 @@ export class SystemLogController {
   }
 
   /**
-   * 查询系统日志配置状态。
+   * 根据当前领域状态，查询系统日志配置状态。
+   * @returns 根据当前领域状态，查询系统日志配置状态。
    */
   @Get('status')
   @ApiOperation({ summary: '查询系统日志配置状态' })

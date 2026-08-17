@@ -15,7 +15,11 @@ export type NapcatDockerDeviceOptions = {
   runFlags: string[];
 };
 
-/** 返回到NapCatDocker设备选项。 */
+/**
+ * 将输入收敛并投影为NapCatDocker设备选项。
+ * @param identity - 区分NapCatDocker设备选项所属账号、设备或运行实例的稳定身份。
+ * @returns 包含 `accountId`、`dataDir`、`deviceEnvPath`、`deviceIdentityId`、`hostname` 字段的NapCatDocker设备选项。
+ */
 export function toNapcatDockerDeviceOptions(
   identity: Pick<
     NapcatDeviceIdentity,

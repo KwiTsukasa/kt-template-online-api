@@ -26,7 +26,8 @@ class SnowflakeIdGenerator {
   private sequence = 0n;
 
   /**
-   * 执行 当前模块流程。
+   * 根据毫秒时间戳、数据中心、工作节点和同毫秒序列生成十进制 Snowflake ID；时钟回拨或序列溢出时等待下一可用毫秒。
+   * @returns 下次运行时间标识。
    */
   nextId() {
     let timestamp = this.currentTime();
@@ -55,15 +56,17 @@ class SnowflakeIdGenerator {
   }
 
   /**
-   * 执行 当前模块流程。
+   * 读取当前 Unix 毫秒时间，并转换为 Snowflake 计算使用的 `bigint`。
+   * @returns 时间。
    */
   private currentTime() {
     return BigInt(Date.now());
   }
 
   /**
-   * 执行 当前模块流程。
-   * @param lastTimestamp - lastTimestamp 输入；影响 waitUntil 的返回值。
+   * 根据`lastTimestamp`处理下一毫秒时间戳。
+   * @param lastTimestamp - 决定下一毫秒时间戳内容、边界或目标的 `lastTimestamp` 值。
+   * @returns 下一毫秒时间戳。
    */
   private waitUntil(lastTimestamp: bigint) {
     // Snowflake requires monotonic timestamps; waiting avoids duplicate IDs
@@ -76,9 +79,10 @@ class SnowflakeIdGenerator {
   }
 
   /**
-   * 读取 当前模块资源。
-   * @param envName - envName 输入；驱动 `Number()` 的 公共基础设施步骤。
-   * @param max - max 输入；影响 readNodeId 的返回值。
+   * 从指定环境变量读取 Snowflake 节点编号；非法或超出给定上限时回退为 `1n`。
+   * @param envName - 决定从指定环境变量读取 Snowflake 节点编号内容、边界或目标的 `envName` 值。
+   * @param max - 决定从指定环境变量读取 Snowflake 节点编号内容、边界或目标的 `max` 值。
+   * @returns 从指定环境变量读取 Snowflake 节点编号。
    */
   private readNodeId(envName: string, max: bigint) {
     const value = Number(process.env[envName] || 1);

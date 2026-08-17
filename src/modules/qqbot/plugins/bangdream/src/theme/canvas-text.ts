@@ -34,10 +34,8 @@ interface WrapTextOptions {
 
 //画文字,自动换行
 /**
- * 在底层绘图工具层中绘制文本。
- *
- * @param options1 - options1 输入；影响 drawText 的返回值。
- * @returns 渲染或资源结果。
+ * 根据当前运行态绘制或格式化文本；把图片、文本或图形按布局规格绘制到画布。
+ * @returns 文本。
  */
 export function drawText({
   text,
@@ -75,9 +73,8 @@ export function drawText({
 }
 
 /**
- * 在底层绘图工具层中包装文本。
- *
- * @param options1 - options1 输入；影响 wrapText 的返回值。
+ * 根据当前运行态处理wrap文本。
+ * @returns 包含 `numberOfLines`、`wrappedText` 字段的wrap文本。
  */
 export function wrapText({
   text,
@@ -132,9 +129,8 @@ interface TextWithImagesOptions {
 
 // 画文字包含图片
 /**
- * 在底层绘图工具层中绘制文本With图片列表。
- *
- * @param options1 - options1 输入；影响 drawTextWithImages 的返回值。
+ * 根据当前运行态绘制或格式化文本Images；把图片、文本或图形按布局规格绘制到画布。
+ * @returns 文本Images。
  */
 export function drawTextWithImages({
   textSize = BANGDREAM_TEXT_SPEC.font.defaultSize,
@@ -212,9 +208,8 @@ export function drawTextWithImages({
 
 // 画文字包含图片 的计算换行
 /**
- * 在底层绘图工具层中包装文本With图片列表。
- *
- * @param options1 - options1 输入；影响 wrapTextWithImages 的返回值。
+ * 根据当前运行态处理wrap文本Images；从 `getInlineImageWidth` 读取wrap文本Images。
+ * @returns 包含 `numberOfLines`、`wrappedText` 字段的wrap文本Images。
  */
 function wrapTextWithImages({
   textSize = BANGDREAM_TEXT_SPEC.font.defaultSize,
@@ -231,7 +226,7 @@ function wrapTextWithImages({
   let tempX = 0;
 
   /**
-   * 在底层绘图工具层中处理new线条。
+   * 根据当前运行态处理文本行。
    */
   function newLine() {
     lineNumber++;
@@ -309,7 +304,8 @@ export const setFontStyle = function (
 };
 
 /**
- * 创建文本测量上下文。
+ * 根据当前运行态构造针对文本测量上下文；从 `canvas.getContext` 读取针对文本测量上下文。
+ * @returns 针对文本测量上下文。
  */
 function createMeasureContext() {
   const canvas = new Canvas(

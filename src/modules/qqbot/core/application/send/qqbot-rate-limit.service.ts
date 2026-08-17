@@ -10,9 +10,10 @@ export class QqbotRateLimitService {
   constructor(private readonly configService: ConfigService) {}
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param targetId - QQBot ID；定位本次读取、更新、删除或关联的QQBot。
+   * 根据`selfId`、`targetId`计算并预留发送时隙；等待超过配置上限时拒绝，否则延迟到可用时间；从 `getMaxQueueWaitMs` 读取发送时隙。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param targetId - 用于精确定位target的标识。
+   * @returns 包含 `waitMs` 字段的发送时隙。
    */
   async waitForSendSlot(selfId: string, targetId: string) {
     const now = Date.now();
@@ -29,9 +30,9 @@ export class QqbotRateLimitService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param targetId - QQBot ID；定位本次读取、更新、删除或关联的QQBot。
+   * 校验`selfId`、`targetId`是否满足`assertCanSend` 对应结果约束，并拒绝不合法输入；从 `getGlobalIntervalMs` 读取`assertCanSend` 对应结果。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param targetId - 用于精确定位target的标识。
    */
   assertCanSend(selfId: string, targetId: string) {
     const now = Date.now();
@@ -57,10 +58,11 @@ export class QqbotRateLimitService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param targetId - QQBot ID；定位本次读取、更新、删除或关联的QQBot。
-   * @param now - now 输入；驱动 `this.getNextTargetAvailableAt()`、`Math.max()`、`this.getNextGlobalAvailableAt()` 的 QQBot步骤。
+   * 根据`selfId`、`targetId`、`now`处理plan发送时隙；从 `getNextTargetAvailableAt` 读取plan发送时隙。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param targetId - 用于精确定位target的标识。
+   * @param now - 用于过期、排序或租约判定的时间基准。
+   * @returns 包含 `globalKey`、`nextAt`、`targetKey` 字段的plan发送时隙。
    */
   private planSendSlot(selfId: string, targetId: string, now: number) {
     const globalKey = `${selfId}:global`;
@@ -71,7 +73,12 @@ export class QqbotRateLimitService {
       now,
     );
     const baseAt = Math.max(now, targetAvailableAt);
-    const jitterMs = baseAt > now ? this.getJitterMs() : 0;
+    const jitterMs = (() => {
+      if (baseAt > now) {
+        return this.getJitterMs();
+      }
+      return 0;
+    })();
     const nextAt = this.getNextGlobalAvailableAt(
       globalKey,
       baseAt + jitterMs,
@@ -82,8 +89,8 @@ export class QqbotRateLimitService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param slot - slot 输入；使用 `globalKey`、`nextAt`、`targetKey` 字段生成结果。
+   * 根据`slot`处理commit发送时隙；从 `getGlobalIntervalMs` 读取commit发送时隙。
+   * @param slot - 用于commit发送时隙的领域对象，包含 `globalKey`、`nextAt`、`targetKey` 字段。
    */
   private commitSendSlot(slot: {
     globalKey: string;
@@ -103,10 +110,11 @@ export class QqbotRateLimitService {
   }
 
   /**
-   * 查询 QQBot 核心数据。
-   * @param key - 键名；限定 QQBot查询范围。
-   * @param intervalMs - QQBot列表；限定 QQBot查询范围。
-   * @param now - now 输入；限定 QQBot查询范围。
+   * 通过 `filter` 筛选匹配数据。
+   * @param key - 用于读取或更新有效Global预留集合的稳定键。
+   * @param intervalMs - 用于有效Global预留集合超时、有效期或退避计算的毫秒数。
+   * @param now - 用于过期、排序或租约判定的时间基准。
+   * @returns 有效Global预留集合。
    */
   private getFreshGlobalReservations(
     key: string,
@@ -119,11 +127,12 @@ export class QqbotRateLimitService {
   }
 
   /**
-   * 查询 QQBot 核心数据。
-   * @param key - 键名；驱动 `this.getFreshGlobalReservations()` 的 QQBot步骤。
-   * @param earliestAt - earliestAt 输入；限定 QQBot查询范围。
-   * @param intervalMs - QQBot列表；驱动 `this.getFreshGlobalReservations()` 的 QQBot步骤。
-   * @param now - now 输入；驱动 `this.getFreshGlobalReservations()` 的 QQBot步骤。
+   * 按`key`、`earliestAt`、`intervalMs`读取下次运行时间GlobalAvailable；从 `getFreshGlobalReservations` 读取下次运行时间GlobalAvailable。
+   * @param key - 用于读取或更新下次运行时间GlobalAvailable的稳定键。
+   * @param earliestAt - 用于过期、排序或租约判定的时间基准。
+   * @param intervalMs - 用于下次运行时间GlobalAvailable超时、有效期或退避计算的毫秒数。
+   * @param now - 用于过期、排序或租约判定的时间基准。
+   * @returns 下次运行时间GlobalAvailable。
    */
   private getNextGlobalAvailableAt(
     key: string,
@@ -146,10 +155,11 @@ export class QqbotRateLimitService {
   }
 
   /**
-   * 查询 QQBot 核心数据。
-   * @param key - 键名；驱动 `targetReservedAt.get()` 的 QQBot步骤。
-   * @param intervalMs - QQBot列表；限定 QQBot查询范围。
-   * @param now - now 输入；限定 QQBot查询范围。
+   * 按`key`、`intervalMs`、`now`读取下次运行时间TargetAvailable；当 `last === undefined` 成立时返回 `now`。
+   * @param key - 用于读取或更新下次运行时间TargetAvailable的稳定键。
+   * @param intervalMs - 用于下次运行时间TargetAvailable超时、有效期或退避计算的毫秒数。
+   * @param now - 用于过期、排序或租约判定的时间基准。
+   * @returns 下次运行时间TargetAvailable。
    */
   private getNextTargetAvailableAt(
     key: string,
@@ -157,11 +167,15 @@ export class QqbotRateLimitService {
     now: number,
   ) {
     const last = this.targetReservedAt.get(key);
-    return last === undefined ? now : last + intervalMs;
+    if (last === undefined) {
+      return now;
+    }
+    return last + intervalMs;
   }
 
   /**
-   * 查询 QQBot 核心数据。
+   * 按当前运行态读取Global间隔Ms；从 `getPositiveInteger` 读取Global间隔Ms。
+   * @returns Global间隔Ms。
    */
   private getGlobalIntervalMs() {
     const configured = this.getPositiveInteger('QQBOT_SEND_GLOBAL_INTERVAL_MS');
@@ -170,43 +184,57 @@ export class QqbotRateLimitService {
   }
 
   /**
-   * 查询 QQBot 核心数据。
+   * 按当前运行态读取Target间隔Ms；从 `getPositiveInteger` 读取Target间隔Ms。
+   * @returns 规范化后的Target间隔Ms；主值为空时采用 `8000` 兜底。
    */
   private getTargetIntervalMs() {
     return this.getPositiveInteger('QQBOT_SEND_TARGET_INTERVAL_MS') || 8000;
   }
 
   /**
-   * 查询 QQBot 核心数据。
+   * 按当前运行态读取JitterMs；当 `max > 0` 成立时返回 `Math.floor(Math.random() * (max + 1))`。
+   * @returns 当前状态对应的JitterMs，取值为 `0`。
    */
   private getJitterMs() {
     const max = this.getPositiveInteger('QQBOT_SEND_JITTER_MS') ?? 800;
-    return max > 0 ? Math.floor(Math.random() * (max + 1)) : 0;
+    if (max > 0) {
+      return Math.floor(Math.random() * (max + 1));
+    }
+    return 0;
   }
 
   /**
-   * 查询 QQBot 核心数据。
+   * 按当前运行态读取最大QueueMs；从 `getPositiveInteger` 读取最大QueueMs。
+   * @returns 规范化后的最大QueueMs；主值为空时采用 `30000` 兜底。
    */
   private getMaxQueueWaitMs() {
     return this.getPositiveInteger('QQBOT_SEND_MAX_QUEUE_WAIT_MS') || 30000;
   }
 
   /**
-   * 查询 QQBot 核心数据。
+   * 按当前运行态读取Rate每秒值Second；当 `Number.isFinite(value) && value > 0` 成立时返回 `value`。
+   * @returns 当前状态对应的Rate每秒值Second，取值为 `1`。
    */
   private getRatePerSecond() {
     const value = Number(
       this.configService.get('QQBOT_SEND_RATE_PER_SECOND') || 1,
     );
-    return Number.isFinite(value) && value > 0 ? value : 1;
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+    return 1;
   }
 
   /**
-   * 查询 QQBot 核心数据。
-   * @param key - 键名；驱动 `Number()` 的 QQBot步骤。
+   * 按`key`读取Positive整数；当 `Number.isInteger(value) && value >= 0` 成立时返回 `value`。
+   * @param key - 用于读取或更新Positive整数的稳定键。
+   * @returns Positive整数；没有可用结果或提前结束时为 `undefined`。
    */
   private getPositiveInteger(key: string) {
     const value = Number(this.configService.get(key));
-    return Number.isInteger(value) && value >= 0 ? value : undefined;
+    if (Number.isInteger(value) && value >= 0) {
+      return value;
+    }
+    return undefined;
   }
 }

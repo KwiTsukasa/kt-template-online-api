@@ -52,7 +52,7 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 执行 BangDream 插件流程。
+   * 通过宿主字典查询器刷新 BanG Dream 字典缓存，使后续命令读取最新字典项。
    */
   async refreshDictionaryCache() {
     await this.dictionaryLoader.refresh((dictCode) =>
@@ -61,7 +61,9 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 执行 BangDream 插件流程。
+   * 通过 `waitForBangDreamCatalogReady` 限定异步执行边界。
+   * @returns 满足健康状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   * @throws 当 `!data.songs` 成立时拒绝当前输入并抛出 `Error`。
    */
   async checkHealth() {
     await waitForBangDreamCatalogReady(['songs']);
@@ -74,9 +76,10 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 渲染 BangDream 插件输出。
-   * @param query - 查询参数 DTO；限定 BangDream分页、搜索或详情查询条件。
-   * @param render - render 输入；影响 drawFuzzyResult 的返回值。
+   * 根据`query`、`render`绘制或格式化模糊搜索结果；当 `Object.keys(matches).length === 0` 成立时返回 `['错误: 没有有效的关键词']`。
+   * @param query - 限定模糊搜索结果筛选、排序与分页范围的查询条件。
+   * @param render - 负责完成模糊搜索结果外部交互的受控能力。
+   * @returns 模糊搜索。
    */
   async drawFuzzyResult(
     query: string,
@@ -90,11 +93,12 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param operationKey - operationKey 输入；影响 toImageReply 的返回值。
-   * @param query - 查询参数 DTO；限定 BangDream分页、搜索或详情查询条件。
-   * @param list - BangDream列表；筛选 BangDream列表项。
-   * @returns BangDream 插件产出的 BangDreamCommandOutput。
+   * 通过 `list.filter` 筛选匹配数据。
+   * @param operationKey - 用于读取或更新图片Reply的稳定键。
+   * @param query - 限定图片Reply筛选、排序与分页范围的查询条件。
+   * @param list - 决定图片Reply内容、边界或目标的 `list` 值。
+   * @returns 包含 `imageCount`、`operationKey`、`query`、`replyText`、`source` 字段的图片Reply。
+   * @throws 当 `images.length === 0` 成立时拒绝当前输入并抛出 `Error`。
    */
   toImageReply(
     operationKey: BangDreamOperationKey,
@@ -120,9 +124,10 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 查询 BangDream 插件数据。
-   * @param input - input 输入；使用 `compress`、`useEasyBG` 字段生成结果。
-   * @param defaults - BangDream列表；使用 `useEasyBG` 字段生成结果。
+   * 按`input`、`defaults`读取选项；从 `readConfig` 读取选项。
+   * @param input - 用于选项的结构化输入，包含 `compress`、`useEasyBG` 字段。
+   * @param defaults - 用于选项的领域对象，包含 `useEasyBG` 字段；省略时默认采用 `{}`。
+   * @returns 包含 `compress`、`displayedServerList`、`mainServer`、`useEasyBG` 字段的选项。
    */
   getRenderOptions(
     input: BangDreamCommandInput,
@@ -149,8 +154,9 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param input - input 输入；使用 `displayedServerList` 字段生成结果。
+   * 从`input`筛选Displayed服务器，并保持保留项的原有顺序与键名；当 `servers.length > 0` 成立时返回 `[...new Set(servers)]`。
+   * @param input - 用于Displayed服务器的结构化输入，包含 `displayedServerList` 字段。
+   * @returns Displayed服务器。
    */
   pickDisplayedServerList(input: BangDreamCommandInput) {
     const source =
@@ -162,14 +168,17 @@ export class BangDreamCommandContext {
     const servers = values
       .map((item) => this.normalizeServer(item))
       .filter((item) => item !== undefined) as Server[];
-    return servers.length > 0 ? [...new Set(servers)] : defaultServers;
+    if (servers.length > 0) {
+      return [...new Set(servers)];
+    }
+    return defaultServers;
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param input - input 输入；使用 `mainServer`、`serverName`、`server` 字段生成结果。
-   * @param tokens - 协议 token；执行 `tokens.find()` 对应的 BangDream步骤。
-   * @returns BangDream 插件产出的 Server。
+   * 从`input`、`tokens`筛选Main服务器，并保持保留项的原有顺序与键名；从 `readConfig` 读取Main服务器。
+   * @param input - 用于Main服务器的结构化输入，包含 `mainServer`、`serverName`、`server` 字段。
+   * @param tokens - 按原有顺序参与Main服务器筛选、合并或汇总的集合。
+   * @returns 规范化后的Main服务器；主值为空时采用 `Server.cn` 兜底。
    */
   pickMainServer(input: BangDreamCommandInput, tokens: string[]): Server {
     const explicit = this.firstDefined(
@@ -183,8 +192,9 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param value - 待转换值；影响 pickDifficulty 的返回值。
+   * 从`value`筛选难度，并保持保留项的原有顺序与键名；当 `typeof matched === 'number'` 成立时返回 `matched`。
+   * @param value - 参与难度比较、格式化或输出的候选值。
+   * @returns 难度；没有可用结果或提前结束时为 `undefined`。
    */
   pickDifficulty(value: unknown) {
     const source = `${value || ''}`.trim();
@@ -194,13 +204,16 @@ export class BangDreamCommandContext {
     const alias = this.dictionaryLoader.resolveDifficulty(source);
     if (alias !== undefined) return alias;
     const matched = fuzzySearch(source)?.difficulty?.[0];
-    return typeof matched === 'number' ? matched : undefined;
+    if (typeof matched === 'number') {
+      return matched;
+    }
+    return undefined;
   }
 
   /**
-   * 转换 BangDream 插件输入。
-   * @param value - 待转换值；决定 BangDream条件分支。
-   * @returns BangDream 插件转换后的值。
+   * 将`value`规范为服务器，使等价输入得到一致表示；当 `Number.isInteger(numeric) && numeric >= 0 && numeric <= 4` 成立时返回 `numeric as Server`。
+   * @param value - 待转换为服务器的原始值。
+   * @returns 服务器；没有可用结果或提前结束时为 `undefined`。
    */
   normalizeServer(value: unknown): Server | undefined {
     if (value === undefined || value === null || value === '') return undefined;
@@ -210,13 +223,18 @@ export class BangDreamCommandContext {
       return numeric as Server;
     }
     const server = this.dictionaryLoader.resolveServer(raw);
-    return server === undefined ? undefined : (server as Server);
+    if (server === undefined) {
+      return undefined;
+    }
+    return (server as Server);
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param input - input 输入；驱动 `this.pickText()` 的 BangDream步骤。
-   * @param message - message 输入；影响 requireText 的返回值。
+   * 校验`input`、`message`是否满足文本约束，并拒绝不合法输入。
+   * @param input - 用于文本的结构化输入。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   * @returns 文本。
+   * @throws 当 `!text` 成立时拒绝当前输入并抛出 `Error`。
    */
   requireText(input: BangDreamCommandInput, message: string) {
     const text = this.pickText(input);
@@ -225,16 +243,18 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param input - input 输入；使用 `query`、`text`、`raw` 字段生成结果。
+   * 按 `query`、`text`、`raw` 的优先级选择 BanG Dream 命令文本，并去除首尾空白。
+   * @param input - 用于文本的结构化输入，包含 `query`、`text`、`raw` 字段。
+   * @returns 文本。
    */
   pickText(input: BangDreamCommandInput) {
     return `${input.query || input.text || input.raw || ''}`.trim();
   }
 
   /**
-   * 查询 BangDream 插件数据。
-   * @param input - input 输入；使用 `args` 字段生成结果。
+   * 通过 `filter` 筛选匹配数据。
+   * @param input - 用于分词列表的结构化输入，包含 `args` 字段。
+   * @returns 分词列表。
    */
   getTokens(input: BangDreamCommandInput) {
     if (Array.isArray(input.args)) {
@@ -244,18 +264,21 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param input - input 输入；驱动 `this.getTokens()` 的 BangDream步骤。
+   * 按`input`的原有顺序解析首个有效令牌；没有可用项时返回空值；从 `getTokens` 读取令牌。
+   * @param input - 用于令牌的结构化输入。
+   * @returns 令牌。
    */
   firstToken(input: BangDreamCommandInput) {
     return this.getTokens(input)[0];
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param explicit - explicit 输入；驱动 `this.optionalNumber()` 的 BangDream步骤。
-   * @param fallback - 兜底值；驱动 `this.optionalNumber()` 的 BangDream步骤。
-   * @param message - message 输入；影响 requireNumber 的返回值。
+   * 校验`explicit`、`fallback`、`message`是否满足数值约束，并拒绝不合法输入。
+   * @param explicit - 决定数值内容、边界或目标的 `explicit` 值。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   * @returns 数值。
+   * @throws 当 `value === undefined` 成立时拒绝当前输入并抛出 `Error`。
    */
   requireNumber(explicit: unknown, fallback: unknown, message: string) {
     const value =
@@ -265,18 +288,23 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param value - 待转换值；驱动 `Number()` 的 BangDream步骤。
+   * 根据`value`处理可选值数值；当 `Number.isInteger(parsed)` 成立时返回 `parsed`。
+   * @param value - 参与可选值数值比较、格式化或输出的候选值。
+   * @returns 可选值数值；没有可用结果或提前结束时为 `undefined`。
    */
   optionalNumber(value: unknown) {
     if (value === undefined || value === null || value === '') return undefined;
     const parsed = Number(value);
-    return Number.isInteger(parsed) ? parsed : undefined;
+    if (Number.isInteger(parsed)) {
+      return parsed;
+    }
+    return undefined;
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param tokens - 协议 token；影响 firstNumber 的返回值。
+   * 按`tokens`的原有顺序解析首个有效数值；没有可用项时返回空值。
+   * @param tokens - 按原有顺序参与数值筛选、合并或汇总的集合。
+   * @returns 数值；没有可用结果或提前结束时为 `undefined`。
    */
   firstNumber(tokens: string[]) {
     return tokens
@@ -285,8 +313,9 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param tokens - 协议 token；影响 secondNumber 的返回值。
+   * 通过 `filter` 筛选匹配数据。
+   * @param tokens - 按原有顺序参与second数值筛选、合并或汇总的集合。
+   * @returns second数值；没有可用结果或提前结束时为 `undefined`。
    */
   secondNumber(tokens: string[]) {
     return tokens
@@ -295,25 +324,28 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 转换 BangDream 插件输入。
-   * @param value - 待转换值；驱动 `normalizeBangDreamBoolean()` 的 BangDream步骤。
-   * @param fallback - 兜底值；驱动 `normalizeBangDreamBoolean()` 的 BangDream步骤。
+   * 将 BanG Dream 命令值交给统一布尔规范化器，非法值按调用方给定的回退值处理。
+   * @param value - 待转换为将 BanG Dream 命令值交给统一布尔规范化器，非法值按调用方给定的回退值处理的原始值。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+   * @returns 布尔值。
    */
   normalizeBoolean(value: unknown, fallback: boolean) {
     return normalizeBangDreamBoolean(value, fallback);
   }
 
   /**
-   * 判断 BangDream 插件条件。
-   * @param value - 待转换值；驱动 `test()` 的 BangDream步骤。
+   * 仅将 `0` 或不含前导零的正十进制数字文本识别为整数输入。
+   * @param value - 待判定是否满足仅将 `0` 或不含前导零的正十进制数字文本识别为整数输入约束的候选值。
+   * @returns 满足仅将 `0` 或不含前导零的正十进制数字文本识别为整数输入约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   isInteger(value: string) {
     return /^(0|[1-9]\d*)$/.test(value);
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param values - 配置值字典；执行 `values.find()` 对应的 BangDream步骤。
+   * 按`values`的原有顺序解析首个有效已提供字段；没有可用项时返回空值。
+   * @param values - 按原有顺序参与已提供字段筛选、合并或汇总的集合；按调用方给定的顺序传递全部剩余实参。
+   * @returns 已提供字段；无法解析或未命中时为 `null`，没有可用结果或提前结束时为 `undefined`。
    */
   private firstDefined(...values: unknown[]) {
     return values.find(
@@ -322,9 +354,9 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 执行 BangDream 插件流程。
-   * @param dictCode - dictCode 输入；驱动 `dictionaryReader.getDictItemsByKey()` 的 BangDream步骤。
-   * @returns 异步完成后的 BangDream 插件结果。
+   * 按`dictCode`读取Dictionary条目集合；从 `dictionaryReader.getDictItemsByKey` 读取Dictionary条目集合。
+   * @param dictCode - 决定Dictionary条目集合内容、边界或目标的 `dictCode` 值。
+   * @returns 按输入顺序得到的Dictionary条目集合列表；没有匹配项时为空数组。
    */
   private async fetchDictionaryItems(
     dictCode: string,
@@ -338,8 +370,9 @@ export class BangDreamCommandContext {
   }
 
   /**
-   * 读取 BangDream 插件资源。
-   * @param key - 键名；影响 readConfig 的返回值。
+   * 按`key`读取配置；从 `configReader.get` 读取配置。
+   * @param key - 用于读取或更新配置的稳定键。
+   * @returns 配置。
    */
   private readConfig(key: string) {
     return this.configReader?.get<string>(key);

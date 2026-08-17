@@ -52,7 +52,12 @@ import { NetworkPortForwardGroupService } from '@/modules/admin/platform-config/
 export class NetworkPortForwardGroupController {
   constructor(private readonly service: NetworkPortForwardGroupService) {}
 
-  /** 列出网络端口转发分组记录。 */
+  /**
+   * 按`query`、`response`读取网络端口转发分组记录；从 `service.list` 读取网络端口转发分组记录。
+   * @param query - 限定网络端口转发分组记录筛选、排序与分页范围的查询条件。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 网络端口转发分组记录。
+   */
   @Get('list')
   @ApiOperation({ summary: '分页查询逻辑端口转发组' })
   async list(
@@ -64,7 +69,12 @@ export class NetworkPortForwardGroupController {
     return vbenPage(page.items, page.total);
   }
 
-  /** 创建网络端口转发分组记录。 */
+  /**
+   * 根据`body`、`response`构造网络端口转发分组记录。
+   * @param body - 用于网络端口转发分组记录的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 网络端口转发分组记录。
+   */
   @Post()
   @ApiOperation({ summary: '新增逻辑端口转发组' })
   async create(
@@ -75,7 +85,13 @@ export class NetworkPortForwardGroupController {
     return vbenSuccess(await this.service.create(body));
   }
 
-  /** 更新网络端口转发分组记录。 */
+  /**
+   * 根据`params`、`body`、`response`更新网络端口转发分组记录。
+   * @param params - 用于网络端口转发分组记录的领域对象，包含 `groupId` 字段。
+   * @param body - 用于网络端口转发分组记录的结构化输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 网络端口转发分组记录。
+   */
   @Put(':groupId')
   @ApiOperation({ summary: '修改逻辑端口转发组' })
   async update(
@@ -87,7 +103,12 @@ export class NetworkPortForwardGroupController {
     return vbenSuccess(await this.service.update(params.groupId, body));
   }
 
-  /** 移除网络端口转发分组记录。 */
+  /**
+   * 按`params`、`response`移除网络端口转发分组记录。
+   * @param params - 用于网络端口转发分组记录的领域对象，包含 `groupId` 字段。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 网络端口转发分组记录。
+   */
   @Delete(':groupId')
   @ApiOperation({ summary: '删除逻辑端口转发组' })
   async remove(
@@ -98,7 +119,12 @@ export class NetworkPortForwardGroupController {
     return vbenSuccess(await this.service.remove(params.groupId));
   }
 
-  /** 重试网络端口转发分组记录。 */
+  /**
+   * 根据`params`、`response`处理网络端口转发分组记录。
+   * @param params - 用于网络端口转发分组记录的领域对象，包含 `groupId`、`protocol` 字段。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 网络端口转发分组记录。
+   */
   @Post(':groupId/channels/:protocol/retry')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '重试协议通道同步' })
@@ -112,7 +138,13 @@ export class NetworkPortForwardGroupController {
     );
   }
 
-  /** 返回端点历史。 */
+  /**
+   * 按目标 ID、协议与分页条件查询端点变更历史，并投影为管理端视图。
+   * @param params - 用于端点历史的领域对象，包含 `groupId`、`protocol` 字段。
+   * @param query - 限定端点历史筛选、排序与分页范围的查询条件。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 端点历史。
+   */
   @Get(':groupId/channels/:protocol/endpoint-history')
   @ApiOperation({ summary: '查询协议通道公网端点历史' })
   async endpointHistory(
@@ -129,7 +161,13 @@ export class NetworkPortForwardGroupController {
     return vbenPage(page.items, page.total);
   }
 
-  /** 启用NATMap。 */
+  /**
+   * 禁止响应缓存后校验期望修订号并启用分组的 TCP NATMap，随后封装更新后的通道状态。
+   * @param params - 用于NATMap 转发的领域对象，包含 `groupId` 字段。
+   * @param body - 用于NATMap 转发的结构化输入，包含 `expectedDesiredRevision` 字段。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns NATMap 转发。
+   */
   @Post(':groupId/channels/tcp/natmap/enable')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '启用 TCP NATMap' })
@@ -147,7 +185,13 @@ export class NetworkPortForwardGroupController {
     );
   }
 
-  /** 禁用NATMap。 */
+  /**
+   * 按`params`、`body`、`response`停止NATMap 转发并清理该入口拥有的运行态资源。
+   * @param params - 用于NATMap 转发的领域对象，包含 `groupId` 字段。
+   * @param body - 用于NATMap 转发的结构化输入，包含 `expectedDesiredRevision` 字段。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns NATMap 转发。
+   */
   @Post(':groupId/channels/tcp/natmap/disable')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '停用 TCP NATMap' })
@@ -165,7 +209,12 @@ export class NetworkPortForwardGroupController {
     );
   }
 
-  /** 启用保活器。 */
+  /**
+   * 禁止响应缓存后启用分组的 UDP STUN 保活，并封装更新后的通道状态。
+   * @param params - 用于保活器的领域对象，包含 `groupId` 字段。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 返回启用保活后的目标网络通道视图或对应成功响应。
+   */
   @Post(':groupId/channels/udp/keeper/enable')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '启用 UDP STUN Keeper' })
@@ -177,7 +226,12 @@ export class NetworkPortForwardGroupController {
     return vbenSuccess(await this.service.enableKeeper(params.groupId));
   }
 
-  /** 禁用保活器。 */
+  /**
+   * 按`params`、`response`停止保活器并清理该入口拥有的运行态资源。
+   * @param params - 用于保活器的领域对象，包含 `groupId` 字段。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 返回禁用保活后的目标网络通道视图或对应成功响应。
+   */
   @Post(':groupId/channels/udp/keeper/disable')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '停用 UDP STUN Keeper' })
@@ -189,7 +243,12 @@ export class NetworkPortForwardGroupController {
     return vbenSuccess(await this.service.disableKeeper(params.groupId));
   }
 
-  /** 返回探针。 */
+  /**
+   * 触发目标网络通道的即时连通性探测，并返回提交后的通道状态。
+   * @param params - 用于probe的领域对象，包含 `groupId` 字段。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 返回即时探测后的目标网络通道视图或对应成功响应。
+   */
   @Post(':groupId/channels/udp/keeper/probe')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '立即刷新 UDP 公网端点' })
@@ -201,7 +260,10 @@ export class NetworkPortForwardGroupController {
     return vbenSuccess(await this.service.probe(params.groupId));
   }
 
-  /** 返回无存储。 */
+  /**
+   * 写入禁止缓存响应头，确保网络状态与端点操作不会被浏览器或中间代理复用。
+   * @param response - 用于写入状态码、Cookie 或缓存策略的当前 HTTP 响应。
+   */
   private noStore(response: Response): void {
     response.setHeader('Cache-Control', 'no-store');
   }

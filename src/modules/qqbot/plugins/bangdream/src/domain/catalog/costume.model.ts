@@ -30,7 +30,7 @@ export class Costume {
     this.publishedAt = stringToNumberArray(costumeData['publishedAt']);
   }
   /**
-   * 在 Costume 模型中加载远端完整详情并标记初始化状态。
+   * 根据当前运行态处理initFull；当 `this.isInitfull` 成立时直接结束且不产生返回值。
    */
   async initFull() {
     if (this.isInitfull) {
@@ -50,10 +50,9 @@ export class Costume {
     this.isInitfull = true;
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @param displayedServerList - displayedServerList 输入；驱动 `costumeResourceRepository.getSdCharacterBuffer()` 的 BangDream步骤。
-   * @returns 异步处理结果。
+   * 按`displayedServerList`读取Sd角色；从受控资源来源加载所需数据（`loadImage`）。
+   * @param displayedServerList - 决定Sd角色内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+   * @returns Sd角色。
    */
   async getSdCharacter(
     displayedServerList: Server[] = globalDefaultServer,

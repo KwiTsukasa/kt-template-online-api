@@ -10,9 +10,10 @@ import {
 } from './resolve-item';
 
 /**
- * 创建 FF14 市场插件对象或配置。
- * @param application - application 输入；驱动 `createFf14MarketPriceOperation()` 的 FF14 市场步骤。
- * @param operations - FF14 市场列表；转换 FF14 市场列表项。
+ * 根据`application`、`operations`构造针对FF14 市场插件。
+ * @param application - 决定针对FF14 市场插件内容、边界或目标的 `application` 值。
+ * @param operations - 按原有顺序参与针对FF14 市场插件筛选、合并或汇总的集合。
+ * @returns 针对FF14 市场插件。
  */
 export function buildFf14MarketOperations(
   application: Ff14MarketApplication,

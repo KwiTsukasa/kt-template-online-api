@@ -33,7 +33,11 @@ export class QqbotMessageTemplateService {
     private readonly renderer: SystemMessageTemplateRendererService,
   ) {}
 
-  /** 返回页面。 */
+  /**
+   * 查询领域服务并组装管理端页面。
+   * @param query - 限定QQBot 管理分页结果筛选、排序与分页范围的查询条件，包含 `pageNo`、`pageSize`、`name`、`sourceKey` 字段。
+   * @returns 包含 `items`、`total` 字段的QQBot 管理分页；没有匹配项时为空数组。
+   */
   async page(query: MessageTemplateListQuery): Promise<{
     items: MessageTemplateView[];
     total: number;
@@ -63,7 +67,11 @@ export class QqbotMessageTemplateService {
     };
   }
 
-  /** 创建QQBot消息模板记录。 */
+  /**
+   * 根据`input`构造QQBot消息模板记录；把变更持久化到当前存储（`templateRepository.save`）。
+   * @param input - 用于QQBot消息模板记录的结构化输入。
+   * @returns QQBot消息模板记录。
+   */
   async create(input: MessageTemplateInput): Promise<MessageTemplateView> {
     this.validateInput(input);
     const saved = await this.templateRepository.save(
@@ -72,7 +80,12 @@ export class QqbotMessageTemplateService {
     return this.toView(saved);
   }
 
-  /** 更新QQBot消息模板记录。 */
+  /**
+   * 根据`id`、`input`更新QQBot消息模板记录；先通过 `validateInput` 校验输入边界。
+   * @param id - 决定QQBot消息模板记录内容、边界或目标的 `id` 值。
+   * @param input - 用于QQBot消息模板记录的结构化输入，包含 `sourceKey` 字段。
+   * @returns QQBot消息模板记录。
+   */
   async update(
     id: string,
     input: MessageTemplateInput,
@@ -104,7 +117,12 @@ export class QqbotMessageTemplateService {
     return this.toView(saved);
   }
 
-  /** 设置启用。 */
+  /**
+   * 根据`id`、`enabled`更新启用；把变更持久化到当前存储（`templateRepository.save`）。
+   * @param id - 决定启用内容、边界或目标的 `id` 值。
+   * @param enabled - 决定启用内容、边界或目标的 `enabled` 值。
+   * @returns 启用。
+   */
   async setEnabled(id: string, enabled: boolean): Promise<MessageTemplateView> {
     const current = await this.findActive(id);
     if (enabled) this.validateContent(current.content, current.sourceKey);
@@ -112,7 +130,11 @@ export class QqbotMessageTemplateService {
     return this.toView(await this.templateRepository.save(current));
   }
 
-  /** 移除QQBot消息模板记录。 */
+  /**
+   * 按`id`移除QQBot消息模板记录。
+   * @param id - 决定QQBot消息模板记录内容、边界或目标的 `id` 值。
+   * @returns QQBot消息模板记录。
+   */
   async remove(id: string): Promise<boolean> {
     return this.templateRepository.manager.transaction(
       // 保持模板行锁，直至引用检查与软删除在同一事务提交。
@@ -141,7 +163,11 @@ export class QqbotMessageTemplateService {
     );
   }
 
-  /** 返回预览。 */
+  /**
+   * 查询领域服务并组装管理端预览。
+   * @param input - 用于预览的结构化输入，包含 `sourceKey`、`content` 字段。
+   * @returns 包含 `renderedMessage`、`variables` 字段的预览。
+   */
   preview(input: {
     content: string;
     sourceKey: string;
@@ -154,7 +180,15 @@ export class QqbotMessageTemplateService {
     };
   }
 
-  /** 返回必需可用用于绑定。 */
+  /**
+   * 加载指定订阅或模板，校验其存在、启用且与消息来源配置一致后供绑定流程使用。
+   * @param manager - 保证指定订阅或模板，校验其存在、启用且与消息来源配置一致后供绑定流程使用读写处于同一事务中的实体管理器。
+   * @param templateId - 用于精确定位template的标识。
+   * @param sourceKey - 用于读取或更新指定订阅或模板，校验其存在、启用且与消息来源配置一致后供绑定流程使用的稳定键。
+   * @param bindingEnabled - 决定指定订阅或模板，校验其存在、启用且与消息来源配置一致后供绑定流程使用内容、边界或目标的 `bindingEnabled` 值。
+   * @returns 返回已验证可绑定的订阅或模板记录。
+   * @throws 当 `!template || template.sourceKey !== sourceKey` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；当 `!template.enabled` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   async requireAvailableForBinding(
     manager: EntityManager,
     templateId: string,
@@ -176,7 +210,10 @@ export class QqbotMessageTemplateService {
     return template;
   }
 
-  /** 校验输入。 */
+  /**
+   * 校验`input`是否满足输入约束，并拒绝不合法输入；先通过 `renderer.validate` 校验输入边界。
+   * @param input - 用于输入的结构化输入，包含 `sourceKey`、`content` 字段。
+   */
   private validateInput(input: MessageTemplateInput): void {
     const definition = this.sourceRegistry.get(input.sourceKey).definition;
     this.renderer.validate(
@@ -185,7 +222,11 @@ export class QqbotMessageTemplateService {
     );
   }
 
-  /** 校验内容。 */
+  /**
+   * 校验`content`、`sourceKey`是否满足内容约束，并拒绝不合法输入；先通过 `renderer.validate` 校验输入边界。
+   * @param content - 决定内容、边界或目标的 `content` 值。
+   * @param sourceKey - 用于读取或更新内容的稳定键。
+   */
   private validateContent(content: string, sourceKey: string): void {
     const definition = this.sourceRegistry.get(sourceKey).definition;
     this.renderer.validate(
@@ -194,7 +235,12 @@ export class QqbotMessageTemplateService {
     );
   }
 
-  /** 校验内容用于绑定。 */
+  /**
+   * 校验`content`、`sourceKey`是否满足内容用于绑定约束，并拒绝不合法输入；先通过 `validateContent` 校验输入边界。
+   * @param content - 决定内容用于绑定内容、边界或目标的 `content` 值。
+   * @param sourceKey - 用于读取或更新内容用于绑定的稳定键。
+   * @throws 当 `error instanceof SystemMessageContractError && error.code === 'unknown_…` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；当 `validateContent` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   private validateContentForBinding(content: string, sourceKey: string): void {
     try {
       this.validateContent(content, sourceKey);
@@ -209,7 +255,11 @@ export class QqbotMessageTemplateService {
     }
   }
 
-  /** 返回到持久化输入。 */
+  /**
+   * 将输入收敛并投影为持久化输入。
+   * @param input - 用于持久化输入的结构化输入，包含 `content`、`enabled`、`name`、`remark` 字段。
+   * @returns 包含 `content`、`enabled`、`name`、`remark`、`sourceKey` 字段的持久化输入。
+   */
   private toPersistenceInput(
     input: MessageTemplateInput,
   ): Pick<
@@ -225,7 +275,12 @@ export class QqbotMessageTemplateService {
     };
   }
 
-  /** 查找启用的。 */
+  /**
+   * 按`id`读取启用的；从 `templateRepository.findOne` 读取启用的。
+   * @param id - 决定启用的内容、边界或目标的 `id` 值。
+   * @returns 启用的。
+   * @throws 当 `!template` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   private async findActive(id: string): Promise<QqbotMessageTemplate> {
     const template = await this.templateRepository.findOne({
       where: { id, isDeleted: false },
@@ -234,7 +289,11 @@ export class QqbotMessageTemplateService {
     return template;
   }
 
-  /** 返回示例变量。 */
+  /**
+   * 按变量定义构造模板预览示例值。
+   * @param definition - 用于按变量定义构造模板预览示例值的领域对象，包含 `variables` 字段。
+   * @returns 按变量定义构造模板预览示例值。
+   */
   private exampleVariables(
     definition: SystemMessageSourceDefinition,
   ): Record<string, boolean | number | string> {
@@ -255,7 +314,11 @@ export class QqbotMessageTemplateService {
     );
   }
 
-  /** 返回到视图。 */
+  /**
+   * 将输入收敛并投影为视图。
+   * @param template - 用于视图的领域对象，包含 `id`、`sourceKey`、`content`、`createTime` 字段。
+   * @returns 包含 `content`、`createTime`、`enabled`、`id`、`name` 字段的视图。
+   */
   private async toView(
     template: QqbotMessageTemplate,
   ): Promise<MessageTemplateView> {
@@ -279,7 +342,11 @@ export class QqbotMessageTemplateService {
     };
   }
 
-  /** 序列化时间。 */
+  /**
+   * 将`value`转换为序列化时间。
+   * @param value - 待转换为序列化时间的原始值。
+   * @returns 序列化时间。
+   */
   private serializeTime(value: QqbotMessageTemplate['createTime']): string {
     return String(value);
   }

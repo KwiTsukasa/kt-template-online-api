@@ -69,7 +69,6 @@ export class BlogTerm {
   @ApiPropertyOptional()
   parent?: string;
 
-  /** 创建标识。 */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

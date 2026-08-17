@@ -94,7 +94,8 @@ export class QqbotNapcatContainerService {
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
+   * 通过 `isManagedMode` 判断输入是否满足函数约束。
+   * @returns 容器。
    */
   async prepareCreateContainer() {
     if (!this.isManagedMode()) {
@@ -106,7 +107,10 @@ export class QqbotNapcatContainerService {
     return runtime;
   }
 
-  /** 预留创建容器。 */
+  /**
+   * 根据当前运行态处理预留创建容器；当 `!this.isManagedMode()` 成立时返回 `this.getLegacyRuntime()`。
+   * @returns 预留创建容器；没有可用结果或提前结束时为 `undefined`。
+   */
   async reserveCreateContainer() {
     if (!this.isManagedMode()) {
       return this.getLegacyRuntime();
@@ -117,7 +121,12 @@ export class QqbotNapcatContainerService {
     });
   }
 
-  /** 启动创建容器。 */
+  /**
+   * 按`runtime`启动创建容器；把变更持久化到当前存储（`containerRepository.update`）。
+   * @param runtime - 用于创建容器的领域对象，包含 `id` 字段。
+   * @returns 满足创建容器约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   * @throws 当 `resolveCreateContainerDeviceIdentity` 或 `createRemoteDockerContainer` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   async startCreateContainer(runtime: QqbotNapcatRuntime) {
     if (this.getManagedMode() !== 'ssh' || !runtime.id) return true;
 
@@ -178,7 +187,7 @@ export class QqbotNapcatContainerService {
   }
 
   /**
-   * 为账号更新登录准备 NapCat 容器。
+   * 根据账号更新登录上下文准备 NapCat 容器，并返回可用于后续登录的运行态。
    * @param account - QQBot 账号；提供主绑定容器查询条件和创建期 ACCOUNT env。
    * @param loginPassword - 已保存的 QQ 登录密码明文；仅在新建或 Docker 离线重建容器时注入创建期 env。
    * @returns 可用于登录流程的 NapCat 运行态，携带源 Docker 容器是否在线的门禁证据。
@@ -191,12 +200,15 @@ export class QqbotNapcatContainerService {
     const existing = await this.getPrimaryRuntime(account.id);
     if (existing) {
       const sourceContainerOnline = existing.sourceContainerOnline !== false;
-      const quickLoginEnv = sourceContainerOnline
-        ? { changed: false, ok: true }
-        : await this.ensureRuntimeLoginEnv(existing, {
+      const quickLoginEnv = await (async () => {
+        if (sourceContainerOnline) {
+          return { changed: false, ok: true };
+        }
+        return await this.ensureRuntimeLoginEnv(existing, {
             loginPassword,
             selfId: account.selfId,
           });
+      })();
       if (
         !sourceContainerOnline &&
         quickLoginEnv.ok &&
@@ -209,7 +221,12 @@ export class QqbotNapcatContainerService {
         ...existing,
         hasExistingPrimaryBinding: true,
         sourceContainerOnline,
-        runtimeRebuildCount: quickLoginEnv.changed ? 1 : 0,
+        runtimeRebuildCount: (() => {
+          if (quickLoginEnv.changed) {
+            return 1;
+          }
+          return 0;
+        })(),
       };
     }
 
@@ -226,19 +243,20 @@ export class QqbotNapcatContainerService {
   }
 
   /**
-   * 让已绑定账号的容器带上 ACCOUNT 环境变量（NapCat 的 -q 快速登录）。
-   * 仅在 ssh 托管模式下原地重建容器：保留 QQ 数据卷，因此随后的容器重启
-   * 能从持久化会话免扫码自动重登。硬踢（登录已失效）时会话作废，仍需扫码。
+   * 让已绑定账号的容器带上 ACCOUNT 环境变量（NapCat 的 -q 快速登录）。 仅在 ssh 托管模式下原地重建容器：保留 QQ 数据卷，因此随后的容器重启 能从持久化会话免扫码自动重登。硬踢（登录已失效）时会话作废，仍需扫码。
+   * @param runtime - 决定运行态快速登录Login内容、边界或目标的 `runtime` 值。
+   * @param selfId - 用于精确定位QQ 账号的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 运行态快速登录Login。
    */
   async ensureRuntimeQuickLogin(runtime: QqbotNapcatRuntime, selfId?: string) {
     return this.ensureRuntimeLoginEnv(runtime, { selfId });
   }
 
   /**
-   * 确保Runtime Login Env。
-   * @param runtime - runtime 输入；使用 `id` 字段生成结果。
-   * @param options - NapCat列表；使用 `selfId`、`clearLoginPassword`、`loginPassword` 字段生成结果。
-   * @returns 异步完成后的 NapCat 登录运行态结果。
+   * 确保运行态Login环境变量存在且保持一致；缺失时根据`runtime`、`options`补齐对应状态；当 `this.getManagedMode() !== 'ssh' || !runtime.id` 成立时返回 `{ changed: false, ok: true }`。
+   * @param runtime - 用于运行态Login环境变量的领域对象，包含 `id` 字段。
+   * @param options - 控制运行态Login环境变量筛选、缓存或输出方式的可选项，包含 `selfId`、`clearLoginPassword`、`loginPassword` 字段。
+   * @returns 包含 `changed`、`ok` 字段的运行态Login环境变量。
    */
   async ensureRuntimeLoginEnv(
     runtime: QqbotNapcatRuntime,
@@ -287,9 +305,12 @@ export class QqbotNapcatContainerService {
           `${this.getRootDir()}/${container.name}`,
         deviceIdentity,
         image: container.image,
-        loginPassword: options.clearLoginPassword
-          ? undefined
-          : this.toolsService.toSecretText(options.loginPassword),
+        loginPassword: (() => {
+          if (options.clearLoginPassword) {
+            return undefined;
+          }
+          return this.toolsService.toSecretText(options.loginPassword);
+        })(),
         name: container.name,
         port: container.webuiPort,
         reverseWsUrl: container.reverseWsUrl || this.buildReverseWsUrl(),
@@ -303,7 +324,12 @@ export class QqbotNapcatContainerService {
       await this.containerRepository.update(
         { id: container.id },
         {
-          lastError: verified ? null : 'NapCat 运行态登录环境校验失败',
+          lastError: (() => {
+            if (verified) {
+              return null;
+            }
+            return 'NapCat 运行态登录环境校验失败';
+          })(),
           lastStartedAt: new Date(),
           status: 'running',
         },
@@ -339,10 +365,10 @@ export class QqbotNapcatContainerService {
   }
 
   /**
-   * 解析Runtime Device Identity。
-   * @param container - container 输入；使用 `id` 字段生成结果。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @returns NapCat 登录运行态转换后的值。
+   * 从`container`、`selfId`解析运行态设备身份；当 `!this.deviceIdentityService || !container.id || typeof this.b…` 成立时返回 `undefined`。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 运行态设备身份；没有可用结果或提前结束时为 `undefined`。
    */
   private async resolveRuntimeDeviceIdentity(
     container: NapcatContainer,
@@ -374,7 +400,11 @@ export class QqbotNapcatContainerService {
     return toNapcatDockerDeviceOptions(identity);
   }
 
-  /** 解析创建容器设备身份。 */
+  /**
+   * 从`container`解析创建容器设备身份。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @returns 创建容器设备身份；没有可用结果或提前结束时为 `undefined`。
+   */
   private async resolveCreateContainerDeviceIdentity(
     container: NapcatContainer,
   ): Promise<NapcatDockerDeviceOptions | undefined> {
@@ -388,32 +418,41 @@ export class QqbotNapcatContainerService {
     return toNapcatDockerDeviceOptions(identity);
   }
 
-  /** 解析绑定设备身份标识。 */
+  /**
+   * 从`accountId`、`containerId`、`selfId`解析绑定设备身份标识。
+   * @param accountId - 用于精确定位账号的标识。
+   * @param containerId - 用于精确定位容器的标识。
+   * @param selfId - 用于精确定位QQ 账号的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 绑定设备身份标识；没有可用结果或提前结束时为 `undefined`。
+   */
   private async resolveBindingDeviceIdentityId(
     accountId: string,
     containerId: string,
     selfId?: string,
   ) {
     if (!this.deviceIdentityService) return undefined;
-    const identity =
-      typeof this.deviceIdentityService.adoptContainerIdentity === 'function'
-        ? await this.deviceIdentityService.adoptContainerIdentity({
-            accountId,
-            containerId,
-            selfId,
-          })
-        : await this.deviceIdentityService.resolveForAccount({
+    const identity = await (async () => {
+        if (typeof this.deviceIdentityService.adoptContainerIdentity === 'function') {
+          return await this.deviceIdentityService.adoptContainerIdentity({
             accountId,
             containerId,
             selfId,
           });
+        }
+        return await this.deviceIdentityService.resolveForAccount({
+            accountId,
+            containerId,
+            selfId,
+          });
+      })();
     return identity.id;
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param name - 名称文本；驱动 `this.runProcess()` 的 NapCat步骤。
-   * @param options - NapCat列表；使用 `selfId`、`clearLoginPassword`、`loginPassword` 字段生成结果。
+   * 根据`name`、`options`处理运行态MatchesLogin环境变量；当 `env.get('ACCOUNT') !== this.toolsService.toTrimmedString(opti…` 成立时返回 `false`。
+   * @param name - 决定运行态MatchesLogin环境变量内容、边界或目标的 `name` 值。
+   * @param options - 控制运行态MatchesLogin环境变量筛选、缓存或输出方式的可选项，包含 `selfId`、`clearLoginPassword`、`loginPassword` 字段。
+   * @returns 满足运行态MatchesLogin环境变量约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private async runtimeMatchesLoginEnv(
     name: string,
@@ -451,8 +490,9 @@ export class QqbotNapcatContainerService {
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param name - 名称文本；驱动 `this.sh()` 的 NapCat步骤。
+   * 生成按容器名读取 Docker 配置环境变量的远端 Shell 脚本。
+   * @param name - 要读取 `.Config.Env` 的 Docker 容器名。
+   * @returns 已安全转义容器名、可交给远端 `sh` 执行的环境变量检查脚本。
    */
   private buildRemoteInspectEnvScript(name: string) {
     return `
@@ -463,8 +503,9 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 解析Docker Env。
-   * @param stdout - stdout 输入；影响 parseDockerEnv 的返回值。
+   * 逐行解析 Docker 环境变量输出，并将首个等号后的完整内容保留为变量值。
+   * @param stdout - 决定Docker环境变量内容、边界或目标的 `stdout` 值。
+   * @returns Docker环境变量。
    */
   private parseDockerEnv(stdout: string) {
     const env = new Map<string, string>();
@@ -481,8 +522,9 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
-   * @param containerId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   * 按`containerId`读取运行态标识；把变更持久化到当前存储（`containerRepository.createQueryBuilder`）。
+   * @param containerId - 用于精确定位容器的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 运行态标识。
    */
   async findRuntimeById(containerId?: string) {
     if (!containerId) return this.getLegacyRuntime();
@@ -500,10 +542,10 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param accountId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param containerId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
-   * @param selfId - QQ 号；用于把创建期临时设备身份归属到真实账号时留下登录证据。
+   * 根据`accountId`、`containerId`、`selfId`处理账号；当 `existing` 成立时直接结束且不产生返回值。
+   * @param accountId - 用于精确定位账号的标识。
+   * @param containerId - 用于精确定位容器的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @param selfId - 用于精确定位QQ 账号的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
    */
   async bindAccount(accountId: string, containerId?: string, selfId?: string) {
     if (!containerId) return;
@@ -543,7 +585,12 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
           isDeleted: false,
           lastLoginAt: new Date(),
           remark: '',
-          ...(deviceIdentityId ? { deviceIdentityId } : {}),
+          ...((() => {
+            if (deviceIdentityId) {
+              return { deviceIdentityId };
+            }
+            return {};
+          })()),
         },
       );
       await this.removeOtherAccountContainers(accountId, containerId);
@@ -555,7 +602,12 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
         accountId,
         bindStatus: 'bound',
         containerId,
-        ...(deviceIdentityId ? { deviceIdentityId } : {}),
+        ...((() => {
+          if (deviceIdentityId) {
+            return { deviceIdentityId };
+          }
+          return {};
+        })()),
         isPrimary: true,
         lastLoginAt: new Date(),
         remark: '',
@@ -565,8 +617,9 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 清理 NapCat 登录运行态状态。
-   * @param accountId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 按`accountId`移除账号Containers；把变更持久化到当前存储（`bindingRepository.createQueryBuilder`）。
+   * @param accountId - 用于精确定位账号的标识。
+   * @returns 包含 `deletedContainers` 字段的账号Containers。
    */
   async removeAccountContainers(accountId: string) {
     const bindings = await this.bindingRepository.find({
@@ -606,8 +659,9 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 清理 NapCat 登录运行态状态。
-   * @param containerId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   * 通过 `bindingRepository.count` 统计匹配记录。
+   * @param containerId - 用于精确定位容器的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 满足Unbound容器约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async removeUnboundContainer(containerId?: string) {
     if (!containerId) return false;
@@ -631,7 +685,11 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     return this.removeContainer(containerId);
   }
 
-  /** 移除未绑定的创建容器。 */
+  /**
+   * 按`containerId`移除未绑定的创建容器；把变更持久化到当前存储（`containerRepository.update`）。
+   * @param containerId - 用于精确定位容器的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 满足未绑定的创建容器约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   async removeUnboundCreateContainer(containerId?: string) {
     if (!containerId) return false;
 
@@ -666,8 +724,9 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param runtime - runtime 输入；使用 `id`、`name` 字段生成结果。
+   * 按`runtime`重启运行态容器；可选择仅重启工作进程，并按配置等待服务恢复就绪；当 `this.getManagedMode() !== 'ssh' || !runtime.id || !runtime.na…` 成立时返回 `false`。
+   * @param runtime - 用于运行态容器的领域对象，包含 `id`、`name` 字段。
+   * @returns 满足运行态容器约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async restartRuntimeContainer(runtime: QqbotNapcatRuntime) {
     if (this.getManagedMode() !== 'ssh' || !runtime.id || !runtime.name) {
@@ -690,7 +749,11 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     return true;
   }
 
-  /** 启动运行态容器。 */
+  /**
+   * 按`runtime`启动运行态容器；当 `this.getManagedMode() !== 'ssh' || !runtime.id || !runtime.na…` 成立时返回 `false`。
+   * @param runtime - 用于运行态容器的领域对象，包含 `id`、`name` 字段。
+   * @returns 满足运行态容器约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private async startRuntimeContainer(runtime: QqbotNapcatRuntime) {
     if (this.getManagedMode() !== 'ssh' || !runtime.id || !runtime.name) {
       return false;
@@ -713,9 +776,10 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 重置Runtime Login State。
-   * @param runtime - runtime 输入；使用 `id`、`name` 字段生成结果。
-   * @param onProgress - NapCat列表；影响 resetRuntimeLoginState 的返回值。
+   * 根据`runtime`、`onProgress`处理reset运行态Login状态；当 `this.getManagedMode() !== 'ssh' || !runtime.id || !runtime.na…` 成立时返回 `false`。
+   * @param runtime - 用于reset运行态Login状态的领域对象，包含 `id`、`name` 字段。
+   * @param onProgress - 决定reset运行态Login状态内容、边界或目标的 `onProgress` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 满足reset运行态Login状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async resetRuntimeLoginState(
     runtime: QqbotNapcatRuntime,
@@ -757,8 +821,9 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param container - container 输入；使用 `name`、`id` 字段生成结果。
+   * 根据`container`处理detect运行态Offline；把变更持久化到当前存储（`containerRepository.update`）。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @returns detect运行态Offline；无法解析或未命中时为 `null`。
    */
   async detectRuntimeOffline(container: NapcatContainer) {
     if (this.getManagedMode() !== 'ssh' || !container.name) return null;
@@ -776,17 +841,28 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
         { id: container.id },
         {
           lastCheckedAt: new Date(),
-          ...(loginState.state === 'offline'
-            ? {
-                lastError: loginState.offlineReason
-                  ? this.toolsService.toColumnText(
+          ...((() => {
+            if (loginState.state === 'offline') {
+              return {
+                lastError: (() => {
+                  if (loginState.offlineReason) {
+                    return this.toolsService.toColumnText(
                       loginState.offlineReason,
                       500,
-                    )
-                  : null,
-              }
-            : {}),
-          ...(loginState.state === 'online' ? { lastError: null } : {}),
+                    );
+                  }
+                  return null;
+                })(),
+              };
+            }
+            return {};
+          })()),
+          ...((() => {
+            if (loginState.state === 'online') {
+              return { lastError: null };
+            }
+            return {};
+          })()),
         },
       );
       return loginState.offlineReason;
@@ -806,9 +882,10 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param runtime - runtime 输入；使用 `name` 字段生成结果。
-   * @param sinceMs - NapCat列表；驱动 `Number.isFinite()` 的 NapCat步骤。
+   * 根据`runtime`、`sinceMs`拼接稳定的detect运行态验证码URL 地址，用于隔离对应资源或存储记录；从 `getManagedMode` 读取detect运行态验证码URL 地址。
+   * @param runtime - 用于detect运行态验证码URL 地址的领域对象，包含 `name` 字段。
+   * @param sinceMs - 用于detect运行态验证码URL 地址超时、有效期或退避计算的毫秒数；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 规范化后的detect运行态验证码URL 地址；主值为空时采用 `null` 兜底；无法解析或未命中时为 `null`。
    */
   async detectRuntimeCaptchaUrl(
     runtime: Pick<QqbotNapcatRuntime, 'name'>,
@@ -817,12 +894,18 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     if (this.getManagedMode() !== 'ssh' || !runtime.name) return null;
 
     const since =
-      typeof sinceMs === 'number' && Number.isFinite(sinceMs)
-        ? new Date(Math.max(0, sinceMs - 1000)).toISOString()
-        : '';
-    const script = since
-      ? this.buildRemoteRecentLogsSinceScript(runtime.name, since)
-      : this.buildRemoteRecentLogsByNameScript(runtime.name);
+      (() => {
+        if (typeof sinceMs === 'number' && Number.isFinite(sinceMs)) {
+          return new Date(Math.max(0, sinceMs - 1000)).toISOString();
+        }
+        return '';
+      })();
+    const script = (() => {
+      if (since) {
+        return this.buildRemoteRecentLogsSinceScript(runtime.name, since);
+      }
+      return this.buildRemoteRecentLogsByNameScript(runtime.name);
+    })();
 
     try {
       const result = await this.runProcess(
@@ -839,9 +922,9 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param container - container 输入；使用 `status`、`lastError`、`baseUrl`、`webuiToken` 字段生成结果。
-   * @returns 异步完成后的 NapCat 登录运行态结果。
+   * 根据`container`处理运行态状态；当 `!containerOnline` 成立时返回 `{ checkedAt, containerOnline, lastError: co…`。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @returns 包含 `checkedAt`、`containerOnline`、`lastError`、`qqLoginMessage`、`qqLoginStatus` 字段的运行态状态；无法解析或未命中时为 `null`。
    */
   async inspectRuntimeStatus(
     container: NapcatContainer,
@@ -891,12 +974,15 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
         {
           lastCheckedAt: checkedAt,
           lastError:
-            snapshot.qqLoginStatus === 'online'
-              ? null
-              : this.toolsService.toColumnText(
+            (() => {
+              if (snapshot.qqLoginStatus === 'online') {
+                return null;
+              }
+              return this.toolsService.toColumnText(
                   snapshot.qqLoginMessage || snapshot.lastError || '',
                   500,
-                ) || null,
+                ) || null;
+            })(),
         },
       );
       return snapshot;
@@ -924,8 +1010,9 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 清理 NapCat 登录运行态状态。
-   * @param containerId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   * 按`containerId`移除容器；把变更持久化到当前存储（`containerRepository.update`）。
+   * @param containerId - 用于精确定位容器的标识。
+   * @returns 满足容器约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private async removeContainer(containerId: string) {
     const container = await this.containerRepository.findOne({
@@ -952,9 +1039,9 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 清理 NapCat 登录运行态状态。
-   * @param accountId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param keepContainerId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   * 按`accountId`、`keepContainerId`移除Other账号Containers；把变更持久化到当前存储（`bindingRepository.createQueryBuilder`）。
+   * @param accountId - 用于精确定位账号的标识。
+   * @param keepContainerId - 用于精确定位keep容器的标识。
    */
   private async removeOtherAccountContainers(
     accountId: string,
@@ -993,8 +1080,8 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 清理 NapCat 登录运行态状态。
-   * @param container - container 输入；驱动 `this.buildRemoteRemoveScript()` 的 NapCat步骤。
+   * 按`container`移除远端Docker容器；从 `getSshArgs` 读取远端Docker容器。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
    */
   private async removeRemoteDockerContainer(container: NapcatContainer) {
     const script = this.buildRemoteRemoveScript(container);
@@ -1002,8 +1089,9 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param container - container 输入；使用 `dataDir`、`name` 字段生成结果。
+   * 根据`container`构造远端脚本；从 `getRootDir` 读取远端脚本。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @returns 按参数编码并拼接完成的远端脚本。
    */
   private buildRemoteRemoveScript(container: NapcatContainer) {
     const dataDir = this.sh(container.dataDir || '');
@@ -1033,8 +1121,9 @@ fi
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param container - container 输入；使用 `dataDir`、`name` 字段生成结果。
+   * 根据`container`构造远端ResetLogin状态脚本；从 `getRootDir` 读取远端ResetLogin状态脚本。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @returns 按参数编码并拼接完成的远端ResetLogin状态脚本。
    */
   private buildRemoteResetLoginStateScript(container: NapcatContainer) {
     const dataDir = this.sh(container.dataDir || '');
@@ -1075,16 +1164,18 @@ echo "__KT_PROGRESS__:container-started:NapCat 容器已启动"
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param container - container 输入；使用 `name` 字段生成结果。
+   * 根据`container`构造远端最近日志集合脚本。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @returns 远端最近日志集合脚本。
    */
   private buildRemoteRecentLogsScript(container: NapcatContainer) {
     return this.buildRemoteRecentLogsByNameScript(container.name);
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param name - 名称文本；驱动 `this.sh()` 的 NapCat步骤。
+   * 生成读取指定容器最近三百行 Docker 日志且忽略读取失败的远端 Shell 脚本。
+   * @param name - 要读取日志的 Docker 容器名。
+   * @returns 已安全转义容器名的日志采集脚本；`docker logs` 失败不会令脚本报错退出。
    */
   private buildRemoteRecentLogsByNameScript(name: string) {
     return `
@@ -1095,9 +1186,10 @@ docker logs --tail 300 "$NAME" 2>&1 || true
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param name - 名称文本；驱动 `this.sh()` 的 NapCat步骤。
-   * @param since - since 输入；驱动 `this.sh()` 的 NapCat步骤。
+   * 生成从指定时间点起读取容器最近三百行 Docker 日志且忽略读取失败的远端 Shell 脚本。
+   * @param name - 要读取日志的 Docker 容器名。
+   * @param since - 传给 `docker logs --since` 的起始时间或相对时长。
+   * @returns 已安全转义容器名与起始时间的日志采集脚本；日志读取失败不会令脚本报错退出。
    */
   private buildRemoteRecentLogsSinceScript(name: string, since: string) {
     return `
@@ -1109,9 +1201,9 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param logs - NapCat列表；影响 extractLoginState 的返回值。
-   * @returns NapCat 登录运行态产出的 NapcatLoginLogResult。
+   * 通过 `filter` 筛选匹配数据。
+   * @param logs - 决定Login状态内容、边界或目标的 `logs` 值。
+   * @returns 包含 `offlineReason`、`state` 字段的Login状态；无法解析或未命中时为 `null`。
    */
   private extractLoginState(logs: string): NapcatLoginLogResult {
     const lines = logs
@@ -1145,11 +1237,14 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
       .replace(/\[KickedOffLine]/gi, '')
       .replace(/\[下线通知]/g, '')
       .trim();
-    const offlineReason = this.toolsService.isNapcatOfflineFlagMessage(
+    const offlineReason = (() => {
+      if (this.toolsService.isNapcatOfflineFlagMessage(
       matchedLine,
-    )
-      ? 'NapCat 账号状态变更为离线'
-      : message || 'NapCat 账号状态变更为离线';
+    )) {
+        return 'NapCat 账号状态变更为离线';
+      }
+      return message || 'NapCat 账号状态变更为离线';
+    })();
 
     return {
       offlineReason,
@@ -1158,8 +1253,9 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
-   * @param accountId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 按`accountId`读取Primary运行态；当 `container` 成立时返回 `this.toRuntime(container)`。
+   * @param accountId - 用于精确定位账号的标识。
+   * @returns Primary运行态；无法解析或未命中时为 `null`。
    */
   private async getPrimaryRuntime(accountId: string) {
     const binding = await this.bindingRepository.findOne({
@@ -1184,17 +1280,25 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
       .andWhere('container.isDeleted = :isDeleted', { isDeleted: false })
       .andWhere('container.status != :status', { status: 'error' })
       .getOne();
-    return container ? this.toRuntime(container) : null;
+    if (container) {
+      return this.toRuntime(container);
+    }
+    return null;
   }
 
-  /** 查找主要的容器（按账号标识匹配）。 */
+  /**
+   * 按`accountId`读取主要的容器（按账号标识匹配）；从 `getPrimaryRuntime` 读取主要的容器（按账号标识匹配）。
+   * @param accountId - 用于精确定位账号的标识。
+   * @returns 主要的容器（按账号标识匹配）。
+   */
   async findPrimaryContainerByAccountId(accountId: string) {
     return this.getPrimaryRuntime(accountId);
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
-   * @param containerId - NapCat ID；定位本次读取、更新、删除或关联的NapCat。
+   * 按`containerId`读取容器令牌；把变更持久化到当前存储（`containerRepository.createQueryBuilder`）。
+   * @param containerId - 用于精确定位容器的标识。
+   * @returns 容器令牌。
    */
   private async findContainerWithToken(containerId: string) {
     return this.containerRepository
@@ -1206,10 +1310,12 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param loginPassword - loginPassword 输入；生成 NapCat对象。
-   * @param accountId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 根据`selfId`、`loginPassword`、`accountId`构造托管模式容器；把变更持久化到当前存储（`containerRepository.create`）。
+   * @param selfId - 用于精确定位QQ 账号的标识；为空时采用 `identityAccountId` 作为兜底。
+   * @param loginPassword - 决定托管模式容器内容、边界或目标的 `loginPassword` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @param accountId - 用于精确定位账号的标识；为空时采用 `null` 作为兜底。
+   * @param options - 控制托管模式容器筛选、缓存或输出方式的可选项，包含 `startRemote` 字段；省略时默认采用 `{}`。
+   * @returns 包含 `baseUrl`、`dataDir`、`id`、`name`、`webuiPort` 字段的托管模式容器。
    */
   private async createManagedContainer(
     selfId?: string,
@@ -1322,8 +1428,8 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param input - input 输入；驱动 `this.buildRemoteCreateScript()` 的 NapCat步骤。
+   * 根据`input`构造远端Docker容器；从 `getSshArgs` 读取远端Docker容器。
+   * @param input - 用于远端Docker容器的结构化输入。
    */
   private async createRemoteDockerContainer(input: {
     account?: string;
@@ -1344,7 +1450,11 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     await this.recordPlannedProfiles(input);
   }
 
-  /** 构建远程创建脚本。 */
+  /**
+   * 根据账号、镜像和运行档案生成受变更锁保护的远程脚本，准备目录与配置后创建 NapCat 容器。
+   * @param input - 容器名称、镜像、端口、数据目录、登录凭据及设备身份等创建参数。
+   * @returns 已转义敏感参数并包含配置写入、目录校验和 Docker 创建步骤的 Shell 脚本。
+   */
   private buildRemoteCreateScript(input: {
     account?: string;
     accountId?: string;
@@ -1378,30 +1488,52 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
       token: '$WEBUI_TOKEN',
     });
     const configWriteScript = this.renderConfigFiles(configBundle.files);
-    const accountHeader = account ? `ACCOUNT=${this.sh(account)}\n` : '';
-    const accountRunFlag = account ? '  -e ACCOUNT="$ACCOUNT" \\\n' : '';
-    const passwordHeader = loginPassword
-      ? `NAPCAT_QUICK_PASSWORD=${this.sh(loginPassword)}\n`
-      : '';
-    const passwordRunFlag = loginPassword
-      ? '  -e NAPCAT_QUICK_PASSWORD="$NAPCAT_QUICK_PASSWORD" \\\n'
-      : '';
-    const pullCmd = input.skipPull
-      ? ''
-      : `if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+    const accountHeader = (() => {
+      if (account) {
+        return `ACCOUNT=${this.sh(account)}\n`;
+      }
+      return '';
+    })();
+    const accountRunFlag = (() => {
+      if (account) {
+        return '  -e ACCOUNT="$ACCOUNT" \\\n';
+      }
+      return '';
+    })();
+    const passwordHeader = (() => {
+      if (loginPassword) {
+        return `NAPCAT_QUICK_PASSWORD=${this.sh(loginPassword)}\n`;
+      }
+      return '';
+    })();
+    const passwordRunFlag = (() => {
+      if (loginPassword) {
+        return '  -e NAPCAT_QUICK_PASSWORD="$NAPCAT_QUICK_PASSWORD" \\\n';
+      }
+      return '';
+    })();
+    const pullCmd = (() => {
+      if (input.skipPull) {
+        return '';
+      }
+      return `if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   docker pull "$IMAGE" >/dev/null
 fi
 `;
-    const deviceHeader = input.deviceIdentity
-      ? [
+    })();
+    const deviceHeader = (() => {
+      if (input.deviceIdentity) {
+        return [
           `NAPCAT_HOSTNAME=${this.sh(input.deviceIdentity.hostname)}`,
           `NAPCAT_MAC_ADDRESS=${this.sh(input.deviceIdentity.macAddress)}`,
           `NAPCAT_MAC_HYPHEN=${this.sh(input.deviceIdentity.macAddressHyphen)}`,
           `MACHINE_ID_PATH=${this.sh(input.deviceIdentity.machineIdPath)}`,
           `MACHINE_INFO_PATH=${this.sh(input.deviceIdentity.machineInfoPath)}`,
           `DEVICE_ENV_PATH=${this.sh(input.deviceIdentity.deviceEnvPath)}`,
-        ].join('\n') + '\n'
-      : '';
+        ].join('\n') + '\n';
+      }
+      return '';
+    })();
     const deviceProfileHeader = [
       `NAPCAT_DMI_PRODUCT_NAME=${this.sh('imini Pro')}`,
       `NAPCAT_DMI_SYS_VENDOR=${this.sh('MECHREVO')}`,
@@ -1427,8 +1559,9 @@ fi
       `NAPCAT_DEVICE_UPTIME=${this.sh('7200.00 14400.00')}`,
       `NAPCAT_DEVICE_TTY_ACTIVE=${this.sh('tty1')}`,
     ].join('\n');
-    const devicePrepareScript = input.deviceIdentity
-      ? `
+    const devicePrepareScript = (() => {
+      if (input.deviceIdentity) {
+        return `
 mkdir -p "$(dirname "$DEVICE_ENV_PATH")" "$(dirname "$MACHINE_INFO_PATH")"
 cat > "$DEVICE_ENV_PATH" <<EOF
 NAPCAT_HOSTNAME=$NAPCAT_HOSTNAME
@@ -1451,8 +1584,10 @@ printf '\\000\\000\\000\\021' > "$MACHINE_INFO_TMP"
 printf '%s' "$NAPCAT_MAC_HYPHEN" | tr 'A-Za-z' 'N-ZA-Mn-za-m' >> "$MACHINE_INFO_TMP"
 mv "$MACHINE_INFO_TMP" "$MACHINE_INFO_PATH"
 chmod 644 "$MACHINE_INFO_PATH"
-`
-      : '';
+`;
+      }
+      return '';
+    })();
     const deviceProfilePrepareScript = `
 if [ -z "\${MACHINE_ID_PATH:-}" ]; then
   MACHINE_ID_PATH="$DATA_DIR/machine-id"
@@ -1477,9 +1612,12 @@ fi
 NAPCAT_DEVICE_BOOT_ID="$(tr -d '\\r\\n' < "$DATA_DIR/device-boot-id" | cut -c 1-36)"
 NAPCAT_DMI_PRODUCT_UUID="$(format_uuid_from_seed "$NAPCAT_DEVICE_MACHINE_ID:dmi")"
 `;
-    const deviceRunFlags = input.deviceIdentity
-      ? '  --hostname "$NAPCAT_HOSTNAME" \\\n  --mac-address "$NAPCAT_MAC_ADDRESS" \\\n  -v "$MACHINE_ID_PATH:/etc/machine-id:ro" \\\n'
-      : '  -v "$MACHINE_ID_PATH:/etc/machine-id:ro" \\\n';
+    const deviceRunFlags = (() => {
+      if (input.deviceIdentity) {
+        return '  --hostname "$NAPCAT_HOSTNAME" \\\n  --mac-address "$NAPCAT_MAC_ADDRESS" \\\n  -v "$MACHINE_ID_PATH:/etc/machine-id:ro" \\\n';
+      }
+      return '  -v "$MACHINE_ID_PATH:/etc/machine-id:ro" \\\n';
+    })();
 
     return `
 set -eu
@@ -1562,7 +1700,10 @@ ${accountRunFlag}${passwordRunFlag}${deviceRunFlags}  -p "$PORT:6099" \\
 `;
   }
 
-  /** 构建远程变更锁脚本。 */
+  /**
+   * 生成远程运行态变更保护段：验证依赖、限时取得文件锁，并在迁移恢复尚未完成时拒绝变更。
+   * @returns 可嵌入容器变更脚本开头的互斥锁与迁移状态检查脚本。
+   */
   private buildRemoteMutationLockScript() {
     return `NAPCAT_RUNTIME_MUTATION_LOCK=${this.sh(
       NAPCAT_RUNTIME_MUTATION_LOCK_PATH,
@@ -1601,7 +1742,12 @@ fi
 `;
   }
 
-  /** 构建远程Docker生命周期脚本。 */
+  /**
+   * 根据参数 `action`，生成先取得运行态变更锁、再启动或重启指定 NapCat 容器的远程脚本。
+   * @param action - 要执行的 Docker 生命周期动作，仅允许 `start` 或 `restart`。
+   * @param name - 目标 NapCat Docker 容器名称，将按 Shell 单词安全转义。
+   * @returns 受互斥锁和迁移状态保护的容器生命周期 Shell 脚本。
+   */
   private buildRemoteDockerLifecycleScript(
     action: 'restart' | 'start',
     name: string,
@@ -1614,7 +1760,10 @@ docker ${action} "$NAME" >/dev/null
 `;
   }
 
-  /** 记录已规划的配置档案。 */
+  /**
+   * 根据`input`处理记录已规划的配置档案。
+   * @param input - 用于记录已规划的配置档案的结构化输入，包含 `accountId`、`deviceIdentity`、`account`、`containerId` 字段。
+   */
   private async recordPlannedProfiles(input: {
     account?: string;
     accountId?: string;
@@ -1673,7 +1822,11 @@ docker ${action} "$NAME" >/dev/null
     });
   }
 
-  /** 渲染配置文件。 */
+  /**
+   * 根据`files`绘制或格式化配置文件。
+   * @param files - 按原有顺序参与配置文件筛选、合并或汇总的集合。
+   * @returns 配置文件。
+   */
   private renderConfigFiles(files: NapcatConfigFile[]) {
     return files
       .map((file) => {
@@ -1684,7 +1837,8 @@ ${file.content}EOF`;
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
+   * 根据当前运行态处理allocate端口；从 `getConfig` 读取allocate端口。
+   * @returns allocate端口。
    */
   private async allocatePort() {
     const start = Number(this.getConfig('QQBOT_NAPCAT_PORT_START', '6100'));
@@ -1711,8 +1865,9 @@ ${file.content}EOF`;
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 根据`selfId`构造容器名称；从 `getConfig` 读取容器名称。
+   * @param selfId - 用于精确定位QQ 账号的标识；为空时采用 `randomUUID().slice(0, 8)` 作为兜底。
+   * @returns 容器名称。
    */
   private buildContainerName(selfId?: string) {
     const prefix = this.getConfig(
@@ -1726,8 +1881,9 @@ ${file.content}EOF`;
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
-   * @param port - port 输入；生成 NapCat对象。
+   * 根据`port`构造BaseURL 地址；当 `template` 成立时返回 `template.replace('{port}', `${port}`)`。
+   * @param port - 决定BaseURL 地址内容、边界或目标的 `port` 值。
+   * @returns 按参数编码并拼接完成的BaseURL 地址。
    */
   private buildBaseUrl(port: number) {
     const template = this.getConfig('QQBOT_NAPCAT_BASE_URL_TEMPLATE', '');
@@ -1740,7 +1896,8 @@ ${file.content}EOF`;
   }
 
   /**
-   * 创建 NapCat 登录运行态对象或配置。
+   * 根据当前运行态构造ReverseWsURL 地址；从 `getConfig` 读取ReverseWsURL 地址。
+   * @returns 按参数编码并拼接完成的ReverseWsURL 地址。
    */
   private buildReverseWsUrl() {
     const configured =
@@ -1753,13 +1910,18 @@ ${file.content}EOF`;
     const base = configured || `ws://127.0.0.1:48085${path}`;
     const token = this.getConfig('QQBOT_REVERSE_WS_TOKEN', '');
     if (!token || base.includes('token=')) return base;
-    const joiner = base.includes('?') ? '&' : '?';
+    const joiner = (() => {
+      if (base.includes('?')) {
+        return '&';
+      }
+      return '?';
+    })();
     return `${base}${joiner}token=${encodeURIComponent(token)}`;
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
-   * @returns NapCat 登录运行态查询结果。
+   * 按当前运行态读取Legacy运行态；从 `getConfig` 读取Legacy运行态。
+   * @returns 包含 `baseUrl`、`name`、`webuiToken` 字段的Legacy运行态。
    */
   private getLegacyRuntime(): QqbotNapcatRuntime {
     return {
@@ -1775,9 +1937,9 @@ ${file.content}EOF`;
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param container - container 输入；使用 `baseUrl`、`id`、`name`、`webuiPort` 字段生成结果。
-   * @returns NapCat 登录运行态产出的 QqbotNapcatRuntime。
+   * 将 NapCat 容器实体投影为登录运行态，规范基础 URL 并由容器状态推导源容器在线标志。
+   * @param container - 要检查、重启或更新登录状态的 NapCat 容器。
+   * @returns 包含 `baseUrl`、`id`、`name`、`sourceContainerOnline`、`webuiPort` 字段的运行态。
    */
   private toRuntime(container: NapcatContainer): QqbotNapcatRuntime {
     return {
@@ -1791,9 +1953,9 @@ ${file.content}EOF`;
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
-   * @param runtime - NapCat runtime；使用容器身份、WebUI 地址和 token 边界复用短期 Credential。
-   * @returns 可用于 NapCat WebUI Bearer 鉴权的 Credential。
+   * 按`runtime`读取NapCat登录凭据；当 `cached && Date.now() < cached.expiresAt` 成立时返回 `cached.credential`。
+   * @param runtime - 决定NapCat登录凭据内容、边界或目标的 `runtime` 值。
+   * @returns NapCat登录凭据。
    */
   private async getNapcatCredential(runtime: QqbotNapcatRuntime) {
     const cacheKey = this.getNapcatCredentialCacheKey(runtime);
@@ -1845,8 +2007,9 @@ ${file.content}EOF`;
 
   /**
    * 请求 NapCat QQ 登录状态，并在 WebUI Credential 失效时刷新一次。
-   * @param runtime - NapCat runtime；提供 WebUI 地址、token 和容器身份以完成鉴权与状态读取。
-   * @returns NapCat WebUI 返回的 QQ 登录状态。
+   * @param runtime - 决定NapCatLogin状态内容、边界或目标的 `runtime` 值。
+   * @returns NapCatLogin状态。
+   * @throws 当 `!this.isNapcatCredentialRejected(err)` 成立时重新抛出该入口捕获且决定公开的原异常。
    */
   private async requestNapcatLoginStatus(runtime: QqbotNapcatRuntime) {
     const credential = await this.getNapcatCredential(runtime);
@@ -1900,20 +2063,20 @@ ${file.content}EOF`;
   }
 
   /**
-   * 生成 NapCat WebUI Credential 缓存键。
-   * @param runtime - NapCat runtime；`id/baseUrl` 定位容器实例，`webuiToken` 区分重建或换密钥后的鉴权边界。
-   * @returns 当前 API 进程内 credential 缓存使用的稳定键。
+   * 将容器身份与 WebUI token 组合为凭据缓存键，避免换密钥后的运行实例复用旧凭据。
+   * @param runtime - NapCat 运行实例；优先用 `id` 标识容器，缺失时使用 `baseUrl`，并以 `webuiToken` 区分鉴权边界。
+   * @returns 由容器身份和 token 组成的进程内凭据缓存键；缺失 token 时使用空段。
    */
   private getNapcatCredentialCacheKey(runtime: QqbotNapcatRuntime) {
     return [runtime.id || runtime.baseUrl, runtime.webuiToken || ''].join('\n');
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param status - NapCat列表；使用 `loginError` 字段生成结果。
-   * @param containerOnline - containerOnline 输入；影响 toRuntimeStatusSnapshot 的返回值。
-   * @param checkedAt - checkedAt 输入；影响 toRuntimeStatusSnapshot 的返回值。
-   * @returns NapCat 登录运行态产出的 QqbotNapcatRuntimeStatusSnapshot。
+   * 将`status`、`containerOnline`、`checkedAt`转换为运行态状态快照。
+   * @param status - 用于运行态状态快照的领域对象，包含 `loginError` 字段。
+   * @param containerOnline - 决定运行态状态快照内容、边界或目标的 `containerOnline` 值。
+   * @param checkedAt - 用于过期、排序或租约判定的时间基准。
+   * @returns 包含 `checkedAt`、`containerOnline`、`lastError`、`qqLoginMessage`、`qqLoginStatus` 字段的运行态状态快照；无法解析或未命中时为 `null`。
    */
   private toRuntimeStatusSnapshot(
     status: NapcatLoginStatus,
@@ -1925,18 +2088,28 @@ ${file.content}EOF`;
     return {
       checkedAt,
       containerOnline,
-      lastError: qqLoginStatus === 'online' ? null : message || null,
-      qqLoginMessage: qqLoginStatus === 'online' ? null : message || null,
+      lastError: (() => {
+        if (qqLoginStatus === 'online') {
+          return null;
+        }
+        return message || null;
+      })(),
+      qqLoginMessage: (() => {
+        if (qqLoginStatus === 'online') {
+          return null;
+        }
+        return message || null;
+      })(),
       qqLoginStatus,
       webuiOnline: true,
     };
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param status - NapCat列表；使用 `isLogin`、`qrcodeurl`、`isOffline` 字段生成结果。
-   * @param message - message 输入；计算 NapCat布尔判断。
-   * @returns NapCat 登录运行态产出的 QqbotNapcatRuntimeLoginStatus。
+   * 通过 `toolsService.isNapcatExpiredQrcodeStatus` 判断输入是否满足函数约束。
+   * @param status - 用于QqLogin状态的领域对象，包含 `isLogin`、`qrcodeurl`、`isOffline` 字段。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   * @returns 当前状态对应的QqLogin状态，取值为 `'online'`、`'qrcode_expired'`、`'qrcode_pending'`、`'offline'`、`'unknown'`。
    */
   private toQqLoginStatus(
     status: NapcatLoginStatus,
@@ -1960,12 +2133,12 @@ ${file.content}EOF`;
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param runtime - runtime 输入；使用 `baseUrl` 字段生成结果。
-   * @param path - 路由或文件路径；驱动 `URL()` 的 NapCat步骤。
-   * @param body - 请求体 DTO；承载 NapCat新增、更新、导入或执行字段。
-   * @param credential - credential 输入；影响 requestNapcat 的返回值。
-   * @returns 异步完成后的 NapCat 登录运行态结果。
+   * 根据 NapCat URL 协议选择 HTTP 或 HTTPS，在有界超时内发送 JSON POST 请求，并将非 JSON、异常状态与网络失败转为稳定异常。
+   * @param runtime - 用于NapCat的领域对象，包含 `baseUrl` 字段。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @param body - 用于NapCat的结构化输入；省略时默认采用 `{}`。
+   * @param credential - 决定NapCat内容、边界或目标的 `credential` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 完成初始化并携带当前边界配置的NapCat。
    */
   private requestNapcat<T>(
     runtime: QqbotNapcatRuntime,
@@ -1975,17 +2148,25 @@ ${file.content}EOF`;
   ): Promise<T> {
     const target = new URL(path, runtime.baseUrl);
     const payload = JSON.stringify(body);
-    const client = target.protocol === 'https:' ? https : http;
+    const client = (() => {
+      if (target.protocol === 'https:') {
+        return https;
+      }
+      return http;
+    })();
 
     return new Promise<T>((resolve, reject) => {
       const req = client.request(
         {
           headers: {
-            ...(credential
-              ? {
+            ...((() => {
+              if (credential) {
+                return {
                   Authorization: `Bearer ${credential}`,
-                }
-              : {}),
+                };
+              }
+              return {};
+            })()),
             'Content-Length': Buffer.byteLength(payload),
             'Content-Type': 'application/json',
           },
@@ -2003,7 +2184,11 @@ ${file.content}EOF`;
             const raw = Buffer.concat(chunks).toString('utf8');
             let result: NapcatApiResponse<T>;
             try {
-              result = raw ? JSON.parse(raw) : ({ code: -1 } as any);
+              if (raw) {
+                result = JSON.parse(raw);
+              } else {
+                result = ({ code: -1 } as any);
+              }
             } catch {
               reject(new Error('NapCat 返回非 JSON 响应'));
               return;
@@ -2026,19 +2211,24 @@ ${file.content}EOF`;
   }
 
   /**
-   * 转换 NapCat 登录运行态输入。
-   * @param value - 待转换值；影响 normalizeBaseUrl 的返回值。
+   * 将`value`规范为BaseURL 地址，使等价输入得到一致表示；当 `baseUrl.endsWith('/')` 成立时返回 `baseUrl`。
+   * @param value - 待转换为BaseURL 地址的原始值。
+   * @returns 按参数编码并拼接完成的BaseURL 地址。
    */
   private normalizeBaseUrl(value: string) {
     const baseUrl = `${value || ''}`.trim();
     if (!baseUrl) {
       throwVbenError('NapCat WebUI 地址未配置');
     }
-    return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+    if (baseUrl.endsWith('/')) {
+      return baseUrl;
+    }
+    return `${baseUrl}/`;
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
+   * 按当前运行态读取根目录Dir；从 `getConfig` 读取根目录Dir。
+   * @returns 根目录Dir。
    */
   private getRootDir() {
     return this.getConfig(
@@ -2048,21 +2238,24 @@ ${file.content}EOF`;
   }
 
   /**
-   * 判断 NapCat 登录运行态条件。
+   * 根据当前运行态与当前约束判定托管模式Mode；从 `getManagedMode` 读取托管模式Mode。
+   * @returns 满足托管模式Mode约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isManagedMode() {
     return !!this.getManagedMode();
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
+   * 按当前运行态读取托管模式Mode；从 `getConfig` 读取托管模式Mode。
+   * @returns 托管模式Mode。
    */
   private getManagedMode() {
     return this.getConfig('QQBOT_NAPCAT_CONTAINER_MODE', '').toLowerCase();
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
+   * 按当前运行态读取SSH启动参数；从 `getConfig` 读取SSH启动参数。
+   * @returns SSH启动参数。
    */
   private getSshArgs() {
     const target = this.getConfig('QQBOT_NAPCAT_SSH_TARGET', 'nas');
@@ -2085,56 +2278,68 @@ ${file.content}EOF`;
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
-   * @param key - 键名；限定 NapCat查询范围。
-   * @param defaultValue - defaultValue 输入；限定 NapCat查询范围。
+   * 按`key`、`defaultValue`读取配置；从 `configService.get` 读取配置。
+   * @param key - 用于读取或更新配置的稳定键。
+   * @param defaultValue - 主值缺失、为空或不合法时采用的兜底结果；省略时默认采用 `''`。
+   * @returns 配置。
    */
   private getConfig(key: string, defaultValue = '') {
     return `${this.configService.get<string>(key) || defaultValue}`.trim();
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
+   * 按当前运行态读取子进程超时Ms；当 `Number.isFinite(timeoutMs) && timeoutMs > 0` 成立时返回 `timeoutMs`。
+   * @returns 当前状态对应的子进程超时Ms，取值为 `120000`。
    */
   private getProcessTimeoutMs() {
     const timeoutMs = Number(
       this.getConfig('QQBOT_NAPCAT_SSH_TIMEOUT_MS', '120000'),
     );
-    return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 120000;
+    if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+      return timeoutMs;
+    }
+    return 120000;
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
+   * 按当前运行态读取运行态超时Ms；当 `Number.isFinite(timeoutMs) && timeoutMs > 0` 成立时返回 `timeoutMs`。
+   * @returns 当前状态对应的运行态超时Ms，取值为 `5000`。
    */
   private getRuntimeCheckTimeoutMs() {
     const timeoutMs = Number(
       this.getConfig('QQBOT_NAPCAT_RUNTIME_CHECK_TIMEOUT_MS', '5000'),
     );
-    return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 5000;
+    if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+      return timeoutMs;
+    }
+    return 5000;
   }
 
   /**
-   * 查询 NapCat 登录运行态数据。
+   * 通过 `Math.max` 收敛数值边界。
+   * @returns 验证码日志超时Ms。
    */
   private getCaptchaLogReadTimeoutMs() {
     return Math.max(this.getRuntimeCheckTimeoutMs(), 15000);
   }
 
   /**
-   * 执行 NapCat 登录运行态流程。
-   * @param value - 待转换值；影响 sh 的返回值。
+   * 把脚本参数中的单引号转义并包裹为安全的 Shell 单词，避免内容改变命令结构。
+   * @param value - 参与把脚本参数中的单引号转义并包裹为安全的 Shell 单词，避免内容改变命令结构比较、格式化或输出的候选值。
+   * @returns 按参数编码并拼接完成的sh。
    */
   private sh(value: string) {
     return `'${`${value}`.replace(/'/g, `'\\''`)}'`;
   }
 
   /**
-   * 执行Process。
-   * @param command - command 输入；驱动 `spawn()` 的 NapCat步骤。
-   * @param args - NapCat列表；驱动 `spawn()` 的 NapCat步骤。
-   * @param input - input 输入；驱动 `stdin.write()` 的 NapCat步骤。
-   * @param onStdoutLine - onStdoutLine 输入；驱动 `map()` 的 NapCat步骤。
-   * @param timeoutMs - NapCat列表；影响 runProcess 的返回值。
+   * 在可选标准输入与超时边界内执行子进程，并收集退出码、标准输出和标准错误。
+   * @param command - 决定子进程内容、边界或目标的 `command` 值。
+   * @param args - 决定子进程内容、边界或目标的 `args` 值。
+   * @param input - 用于子进程的结构化输入。
+   * @param onStdoutLine - 决定子进程内容、边界或目标的 `onStdoutLine` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @param timeoutMs - 用于子进程超时、有效期或退避计算的毫秒数；省略时默认采用 `this.getProcessTimeoutMs()`。
+   * @returns 完成初始化并携带当前边界配置的子进程。
    */
   private runProcess(
     command: string,

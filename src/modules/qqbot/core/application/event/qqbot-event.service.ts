@@ -35,8 +35,8 @@ export class QqbotEventService {
   ) {}
 
   /**
-   * 处理Incoming。
-   * @param payload - payload 输入；使用 `self_id` 字段生成结果。
+   * 通过 `busService.publish` 发布领域状态。
+   * @param payload - 待按当前协议校验并路由的事件载荷，包含 `self_id` 字段。
    */
   async handleIncoming(payload: QqbotOneBotEvent) {
     const selfId = `${payload.self_id || ''}`;
@@ -69,9 +69,9 @@ export class QqbotEventService {
   }
 
   /**
-   * 处理Runtime Notice。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param payload - payload 输入；驱动 `getOneBotOfflineReason()`、`this.publishOfflineNotice()` 的 QQBot步骤。
+   * 根据`selfId`、`payload`处理运行态通知；从 `getOneBotOfflineReason` 读取运行态通知。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param payload - 待按当前协议校验并路由的事件载荷。
    */
   private async handleRuntimeNotice(selfId: string, payload: QqbotOneBotEvent) {
     if (!selfId) return;
@@ -82,10 +82,10 @@ export class QqbotEventService {
   }
 
   /**
-   * 投递 QQBot 核心消息或任务。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param offlineReason - offlineReason 输入；影响 publishOfflineNotice 的返回值。
-   * @param payload - payload 输入；影响 publishOfflineNotice 的返回值。
+   * 按账号发布可去重的离线系统通知，并保留原始 OneBot 事件作为通知元数据。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param offlineReason - 决定Offline通知内容、边界或目标的 `offlineReason` 值。
+   * @param payload - 待按当前协议校验并路由的事件载荷。
    */
   private publishOfflineNotice(
     selfId: string,

@@ -86,10 +86,11 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 投递 QQBot 核心消息或任务。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param action - action 输入；驱动 `reject()` 的 QQBot步骤。
-   * @param params - QQBot列表；影响 sendAction 的返回值。
+   * 按`selfId`、`action`、`params`投递网关动作；从 `getWritableConnection` 读取网关动作。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param action - 决定网关动作内容、边界或目标的 `action` 值。
+   * @param params - 决定网关动作内容、边界或目标的 `params` 值。
+   * @returns 完成初始化并携带当前边界配置的网关动作。
    */
   async sendAction(
     selfId: string,
@@ -140,8 +141,9 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 根据`selfId`处理连接踢除。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 包含 `count` 字段的连接踢除。
    */
   async kick(selfId: string) {
     let count = 0;
@@ -156,7 +158,8 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 查询 QQBot 核心数据。
+   * 通过 `isEnabled` 判断输入是否满足函数约束。
+   * @returns 包含 `enabled`、`path`、`sessions` 字段的运行态状态。
    */
   getRuntimeStatus() {
     return {
@@ -166,7 +169,6 @@ export class QqbotReverseWsService
     };
   }
 
-  /** 处理连接。 */
   private async handleConnection(ws: WebSocket, request: IncomingMessage) {
     let activeSelfId = '';
     const queuedMessages: string[] = [];
@@ -221,9 +223,9 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param raw - raw 输入；驱动 `this.handleMessage()` 的 QQBot步骤。
+   * 通过 `handleMessage` 交给领域处理器。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param raw - 决定consume消息内容、边界或目标的 `raw` 值。
    */
   private async consumeMessage(selfId: string, raw: string) {
     try {
@@ -235,9 +237,9 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 处理Message。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param raw - raw 输入；转换 JSON 文本。
+   * 根据`selfId`、`raw`处理消息；当 `payload.echo && this.pendingActions.has(`${payload.echo}`)` 成立时直接结束且不产生返回值。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param raw - 决定消息内容、边界或目标的 `raw` 值。
    */
   private async handleMessage(selfId: string, raw: string) {
     let payload: QqbotOneBotEvent;
@@ -272,9 +274,9 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 解析Pending Action。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param payload - payload 输入；使用 `echo` 字段生成结果。
+   * 从`selfId`、`payload`解析等待状态网关动作；向目标通道投递结果（`busService.publish`）。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param payload - 待按当前协议校验并路由的事件载荷，包含 `echo` 字段。
    */
   private async resolvePendingAction(
     selfId: string,
@@ -293,12 +295,21 @@ export class QqbotReverseWsService
     pending.resolve(payload);
   }
 
-  /** 关闭定时的输出连接。 */
+  /**
+   * 仅关闭仍对应给定连接标识的反向 WebSocket，避免超时回调误关后续新连接。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param ws - 决定仅关闭仍对应给定连接标识的反向 WebSocket，避免超时回调误关后续新连接内容、边界或目标的 `ws` 值。
+   */
   private closeTimedOutConnection(selfId: string, ws: WebSocket) {
     this.closeCurrentConnection(selfId, ws, 'OneBot action timeout');
   }
 
-  /** 关闭当前连接。 */
+  /**
+   * 按`selfId`、`ws`、`reason`停止当前连接并清理该入口拥有的运行态资源；向目标通道投递结果（`busService.publish`）。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param ws - 决定当前连接内容、边界或目标的 `ws` 值。
+   * @param reason - 决定当前连接内容、边界或目标的 `reason` 值。
+   */
   private closeCurrentConnection(
     selfId: string,
     ws: WebSocket,
@@ -326,17 +337,19 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 判断 QQBot 核心条件。
-   * @param key - 键名；驱动 `connections.get()` 的 QQBot步骤。
-   * @param ws - QQBot列表；驱动 `connections.get()` 的 QQBot步骤。
+   * 根据`key`、`ws`与当前约束判定连接；从 `connections.get` 读取连接。
+   * @param key - 用于读取或更新连接的稳定键。
+   * @param ws - 决定连接内容、边界或目标的 `ws` 值。
+   * @returns 满足连接约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isCurrentConnection(key: string, ws: WebSocket) {
     return this.connections.get(key) === ws;
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * 根据`request`处理authorize；当 `!selfId` 成立时返回 `{ ok: false as const, message: 'missing sel…`。
+   * @param request - 用于authorize的当前 HTTP 请求，包含 `url`、`headers` 字段。
+   * @returns 包含 `ok`、`role`、`selfId` 字段的authorize。
    */
   private async authorize(request: IncomingMessage) {
     const url = new URL(request.url || '', `http://${request.headers.host}`);
@@ -380,8 +393,10 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 查询 QQBot 核心数据。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 按`selfId`读取Writable连接；从 `connections.get` 读取Writable连接。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns Writable连接。
+   * @throws 当 `!ws || ws.readyState !== WebSocket.OPEN` 成立时拒绝当前输入并抛出 `QqbotReverseWsActionError`。
    */
   private getWritableConnection(selfId: string) {
     const universal = this.connections.get(
@@ -399,16 +414,18 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 查询 QQBot 核心数据。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
-   * @param role - role 输入；限定 QQBot查询范围。
+   * 按 ``${selfId}:${role}`` 计算并返回结果。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @param role - 决定连接键内容、边界或目标的 `role` 值。
+   * @returns 按参数编码并拼接完成的连接键。
    */
   private getConnectionKey(selfId: string, role: QqbotConnectionRole) {
     return `${selfId}:${role}`;
   }
 
   /**
-   * 查询 QQBot 核心数据。
+   * 按当前运行态读取Reverse路径；从 `configService.get` 读取Reverse路径。
+   * @returns 规范化后的Reverse路径；主值为空时采用 `QQBOT_REVERSE_WS_PATH` 兜底。
    */
   private getReversePath() {
     return (
@@ -418,21 +435,24 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 查询 QQBot 核心数据。
+   * 按当前运行态读取网关动作超时；从 `configService.get` 读取网关动作超时。
+   * @returns 网关动作超时。
    */
   private getActionTimeout() {
     return Number(this.configService.get('QQBOT_API_TIMEOUT_MS') || 10_000);
   }
 
   /**
-   * 判断 QQBot 核心条件。
+   * 根据当前运行态与当前约束判定启用状态；从 `configService.get` 读取启用状态。
+   * @returns 满足启用状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isEnabled() {
     return `${this.configService.get('QQBOT_ENABLED') || 'false'}` === 'true';
   }
 
   /**
-   * 判断 QQBot 核心条件。
+   * 根据当前运行态与当前约束判定AutoRegister启用状态；从 `configService.get` 读取AutoRegister启用状态。
+   * @returns 满足AutoRegister启用状态约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isAutoRegisterEnabled() {
     return (
@@ -442,8 +462,9 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 判断 QQBot 核心条件。
-   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
+   * 根据`request`与当前约束判定Reverse路径；从 `getReversePath` 读取Reverse路径。
+   * @param request - 用于Reverse路径的当前 HTTP 请求，包含 `url`、`headers` 字段。
+   * @returns 满足Reverse路径约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private isReversePath(request: IncomingMessage) {
     const url = new URL(request.url || '', `http://${request.headers.host}`);
@@ -451,9 +472,9 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 转换 QQBot 核心输入。
-   * @param role - role 输入；决定 QQBot条件分支。
-   * @returns QQBot 核心转换后的值。
+   * 将`role`规范为角色，使等价输入得到一致表示。
+   * @param role - 决定角色内容、边界或目标的 `role` 值。
+   * @returns 当前状态对应的角色，取值为 `'Universal'`。
    */
   private normalizeRole(role: string): QqbotConnectionRole {
     if (role === 'API' || role === 'Event') return role;
@@ -461,9 +482,10 @@ export class QqbotReverseWsService
   }
 
   /**
-   * 读取 QQBot 核心资源。
-   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
-   * @param url - 访问地址；使用 `searchParams` 字段生成结果。
+   * 通过 `authorization.startsWith` 判断输入是否满足函数约束。
+   * @param request - 用于令牌的当前 HTTP 请求，包含 `headers` 字段。
+   * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+   * @returns 规范化后的令牌；主值为空时采用 ``${request.headers['x-onebot-token'] || ''}`` 兜底。
    */
   private readToken(request: IncomingMessage, url: URL) {
     const authorization = `${request.headers.authorization || ''}`;

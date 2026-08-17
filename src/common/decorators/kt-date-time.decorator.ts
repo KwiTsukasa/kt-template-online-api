@@ -30,7 +30,12 @@ const padDateUnit = (value: number) => `${value}`.padStart(2, '0');
 
 export class KtDateTime extends Date {
   constructor(value?: Date | number | string, format = KT_DATETIME_FORMAT) {
-    super(value instanceof Date ? value.getTime() : (value ?? Date.now()));
+    super((() => {
+      if (value instanceof Date) {
+        return value.getTime();
+      }
+      return (value ?? Date.now());
+    })());
     KT_DATETIME_INSTANCE_FORMATS.set(this, format);
   }
 
@@ -43,7 +48,7 @@ export class KtDateTime extends Date {
   }
 
   /**
-   * 转换当前对象为字符串输出。
+   * 按实例关联的格式将 KT 日期时间渲染为字符串。
    * @returns KT 日期时间渲染后的图片、画布或文本。
    */
   toString(): string {
@@ -63,12 +68,15 @@ export class KtDateTime extends Date {
    */
   [Symbol.toPrimitive](hint: 'default' | 'string'): string;
   /**
-   * 处理对象的原始值转换。
-   * @param hint - hint 输入；影响 当前函数 的返回值。
-   * @returns KT 日期时间渲染后的图片、画布或文本。
+   * 根据`hint`处理针对处理对象的原始值转换；当 `hint === 'number'` 成立时返回 `this.getTime()`。
+   * @param hint - 决定针对处理对象的原始值转换内容、边界或目标的 `hint` 值。
+   * @returns 针对处理对象的原始值转换。
    */
   [Symbol.toPrimitive](hint: string): string | number {
-    return hint === 'number' ? this.getTime() : this.toString();
+    if (hint === 'number') {
+      return this.getTime();
+    }
+    return this.toString();
   }
 }
 
@@ -76,7 +84,12 @@ export const formatKtDateTime = (
   value: Date | number | string,
   format = KT_DATETIME_FORMAT,
 ): string => {
-  const date = value instanceof Date ? value : new Date(value);
+  const date = (() => {
+    if (value instanceof Date) {
+      return value;
+    }
+    return new Date(value);
+  })();
   if (Number.isNaN(date.getTime())) return '';
 
   const tokens: Record<string, string> = {
@@ -96,7 +109,10 @@ export const toKtDateTime = (
   format = KT_DATETIME_FORMAT,
 ) => {
   const date = new KtDateTime(value, format);
-  return Number.isNaN(date.getTime()) ? null : date;
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date;
 };
 
 export const createKtDateTimeTransformer = (
@@ -143,10 +159,10 @@ export function KtDateTimeColumn(
   options: ColumnOptions,
 ): PropertyDecorator;
 /**
- * 执行 KT 日期时间流程。
- * @param formatOrOptions - 公共基础设施列表；驱动 `normalizeDateTimeColumnOptions()` 的 公共基础设施步骤。
- * @param options - 公共基础设施列表；使用 `transformer` 字段生成结果。
- * @returns KT 日期时间产出的 PropertyDecorator。
+ * 根据`formatOrOptions`、`options`处理针对KT 日期时间。
+ * @param formatOrOptions - 控制针对KT 日期时间筛选、缓存或输出方式的可选项；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param options - 控制针对KT 日期时间筛选、缓存或输出方式的可选项；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 针对KT 日期时间。
  */
 export function KtDateTimeColumn(
   formatOrOptions?: KtDateTimeDecoratorOptions,
@@ -191,10 +207,10 @@ export function KtCreateDateColumn(
   options: ColumnOptions,
 ): PropertyDecorator;
 /**
- * 执行 KT 日期时间流程。
- * @param formatOrOptions - 公共基础设施列表；驱动 `normalizeDateTimeColumnOptions()` 的 公共基础设施步骤。
- * @param options - 公共基础设施列表；使用 `transformer` 字段生成结果。
- * @returns KT 日期时间产出的 PropertyDecorator。
+ * 根据`formatOrOptions`、`options`处理针对KT 日期时间。
+ * @param formatOrOptions - 控制针对KT 日期时间筛选、缓存或输出方式的可选项；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param options - 控制针对KT 日期时间筛选、缓存或输出方式的可选项；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 针对KT 日期时间。
  */
 export function KtCreateDateColumn(
   formatOrOptions?: KtDateTimeDecoratorOptions,
@@ -239,10 +255,10 @@ export function KtUpdateDateColumn(
   options: ColumnOptions,
 ): PropertyDecorator;
 /**
- * 执行 KT 日期时间流程。
- * @param formatOrOptions - 公共基础设施列表；驱动 `normalizeDateTimeColumnOptions()` 的 公共基础设施步骤。
- * @param options - 公共基础设施列表；使用 `transformer` 字段生成结果。
- * @returns KT 日期时间产出的 PropertyDecorator。
+ * 根据`formatOrOptions`、`options`处理针对KT 日期时间。
+ * @param formatOrOptions - 控制针对KT 日期时间筛选、缓存或输出方式的可选项；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param options - 控制针对KT 日期时间筛选、缓存或输出方式的可选项；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 针对KT 日期时间。
  */
 export function KtUpdateDateColumn(
   formatOrOptions?: KtDateTimeDecoratorOptions,
@@ -282,9 +298,9 @@ export const KtDateTimeField = (
 };
 
 /**
- * 转换 KT 日期时间输入。
- * @param target - target 输入；驱动 `copyEnumerableFields()`、`applyKtDateTimeFields()` 的 公共基础设施步骤。
- * @returns KT 日期时间转换后的值。
+ * 根据`target`处理针对KT 日期时间。
+ * @param target - 决定针对KT 日期时间内容、边界或目标的 `target` 值。
+ * @returns 针对KT 日期时间。
  */
 export function transformKtDateTimeFields<T extends object>(target: T): T {
   const result = copyEnumerableFields(target) as Record<string, unknown>;
@@ -295,9 +311,10 @@ export function transformKtDateTimeFields<T extends object>(target: T): T {
 }
 
 /**
- * 转换 KT 日期时间输入。
- * @param formatOrOptions - 公共基础设施列表；决定 公共基础设施条件分支。
- * @param options - 公共基础设施列表；影响 normalizeDateTimeColumnOptions 的返回值。
+ * 将`formatOrOptions`、`options`规范为包含 `format`、`options` 字段的结果，使等价输入得到一致表示；当 `typeof formatOrOptions === 'string'` 成立时返回 `{ format: formatOrOptions || KT_DATETIME_FO…`。
+ * @param formatOrOptions - 控制包含 `format`、`options` 字段的结果筛选、缓存或输出方式的可选项；为空时采用 `KT_DATETIME_FORMAT` 作为兜底。
+ * @param options - 控制包含 `format`、`options` 字段的结果筛选、缓存或输出方式的可选项；省略时默认采用 `{}`。
+ * @returns 包含 `format`、`options` 字段的包含 `format`、`options` 字段的。
  */
 function normalizeDateTimeColumnOptions(
   formatOrOptions?: KtDateTimeDecoratorOptions,
@@ -316,7 +333,12 @@ function normalizeDateTimeColumnOptions(
   };
 }
 
-/** 应用当前时间戳精度。 */
+/**
+ * 根据`options`、`includeOnUpdate`更新当前时间戳精度。
+ * @param options - 控制当前时间戳精度筛选、缓存或输出方式的可选项，包含 `precision`、`default`、`onUpdate` 字段。
+ * @param includeOnUpdate - 决定是否启用“include”分支的布尔选项；省略时默认采用 `false`。
+ * @returns 包含 `default` 字段的当前时间戳精度；没有可用结果或提前结束时为 `undefined`。
+ */
 function applyCurrentTimestampPrecision(
   options: ColumnOptions,
   includeOnUpdate = false,
@@ -327,17 +349,26 @@ function applyCurrentTimestampPrecision(
   return {
     ...options,
     default:
-      options.default === undefined ? () => currentTimestamp : options.default,
-    ...(includeOnUpdate && options.onUpdate === undefined
-      ? { onUpdate: currentTimestamp }
-      : {}),
+      (() => {
+        if (options.default === undefined) {
+          return () => currentTimestamp;
+        }
+        return options.default;
+      })(),
+    ...((() => {
+      if (includeOnUpdate && options.onUpdate === undefined) {
+        return { onUpdate: currentTimestamp };
+      }
+      return {};
+    })()),
   };
 }
 
 /**
- * 合并Date Time Transformer。
- * @param existing - existing 输入；驱动 `Array.isArray()` 的 公共基础设施步骤。
- * @param format - format 输入；驱动 `createKtDateTimeTransformer()` 的 公共基础设施步骤。
+ * 创建指定格式的 KT 日期时间转换器；没有既有转换器时直接返回，已有单项或数组时将新转换器追加到链尾。
+ * @param existing - 决定指定格式的 KT 日期时间转换器内容、边界或目标的 `existing` 值。
+ * @param format - 决定指定格式的 KT 日期时间转换器内容、边界或目标的 `format` 值。
+ * @returns 按输入顺序得到的指定格式的 KT 日期时间转换器列表；没有匹配项时为空数组。
  */
 function mergeDateTimeTransformer(
   existing: ColumnOptions['transformer'],
@@ -346,15 +377,17 @@ function mergeDateTimeTransformer(
   const ktTransformer = createKtDateTimeTransformer(format);
   if (!existing) return ktTransformer;
 
-  return Array.isArray(existing)
-    ? [...existing, ktTransformer]
-    : [existing, ktTransformer];
+  if (Array.isArray(existing)) {
+    return [...existing, ktTransformer];
+  }
+  return [existing, ktTransformer];
 }
 
 /**
- * 转换 KT 日期时间输入。
- * @param value - 待转换时间值；驱动 `toKtDateTime()` 的 公共基础设施步骤。
- * @param format - format 输入；驱动 `toKtDateTime()` 的 公共基础设施步骤。
+ * 根据`value`、`format`处理针对KT 日期时间；当 `value instanceof Date` 成立时返回 `toKtDateTime(value, format) || value`。
+ * @param value - 参与针对KT 日期时间比较、格式化或输出的候选值。
+ * @param format - 决定针对KT 日期时间内容、边界或目标的 `format` 值；省略时默认采用 `KT_DATETIME_FORMAT`。
+ * @returns 针对KT 日期时间。
  */
 function transformKtDateTimeValue(value: unknown, format = KT_DATETIME_FORMAT) {
   if (value == null) return value;
@@ -375,16 +408,18 @@ function transformKtDateTimeValue(value: unknown, format = KT_DATETIME_FORMAT) {
 }
 
 /**
- * 查询 KT 日期时间数据。
- * @param value - 待转换时间值；驱动 `KT_DATETIME_INSTANCE_FORMATS.get()` 的 公共基础设施步骤。
+ * 按`value`读取针对KT 日期时间；从 `KT_DATETIME_INSTANCE_FORMATS.get` 读取针对KT 日期时间。
+ * @param value - 参与针对KT 日期时间比较、格式化或输出的候选值。
+ * @returns 规范化后的针对KT 日期时间；主值为空时采用 `KT_DATETIME_FORMAT` 兜底。
  */
 function getKtDateTimeFormat(value: KtDateTime) {
   return KT_DATETIME_INSTANCE_FORMATS.get(value) || KT_DATETIME_FORMAT;
 }
 
 /**
- * 判断 KT 日期时间条件。
- * @param value - 待转文本值；计算 公共基础设施判断结果。
+ * 根据`value`与当前约束判定针对KT 日期时间。
+ * @param value - 待判定是否满足针对KT 日期时间约束的候选值。
+ * @returns 满足针对KT 日期时间约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
  */
 function isDateTimeText(value: string) {
   return (
@@ -393,9 +428,9 @@ function isDateTimeText(value: string) {
 }
 
 /**
- * 查询 KT 日期时间数据。
- * @param target - target 输入；驱动 `Object.getPrototypeOf()` 的 公共基础设施步骤。
- * @returns KT 日期时间查询结果。
+ * 按`target`读取针对KT 日期时间。
+ * @param target - 决定针对KT 日期时间内容、边界或目标的 `target` 值。
+ * @returns 按输入顺序得到的针对KT 日期时间列表；没有匹配项时为空数组。
  */
 function getKtDateTimeRules(target: object): KtDateTimeRule[] {
   const prototype = Object.getPrototypeOf(target);
@@ -404,9 +439,9 @@ function getKtDateTimeRules(target: object): KtDateTimeRule[] {
 }
 
 /**
- * 执行 KT 日期时间流程。
- * @param source - source 输入；驱动 `getKtDateTimeRules()` 的 公共基础设施步骤。
- * @param target - target 输入；影响 applyKtDateTimeFields 的返回值。
+ * 根据`source`、`target`更新针对KT 日期时间；从 `getKtDateTimeRules` 读取针对KT 日期时间。
+ * @param source - 决定针对KT 日期时间内容、边界或目标的 `source` 值。
+ * @param target - 用于针对KT 日期时间的领域对象，包含 `targetKey` 字段；省略时默认采用 `source as Record<string, unknown>`。
  */
 function applyKtDateTimeFields(
   source: object,
@@ -423,8 +458,9 @@ function applyKtDateTimeFields(
 }
 
 /**
- * 执行 KT 日期时间流程。
- * @param target - target 输入；驱动 `Object.entries()` 的 公共基础设施步骤。
+ * 根据`target`处理针对KT 日期时间。
+ * @param target - 决定针对KT 日期时间内容、边界或目标的 `target` 值。
+ * @returns 针对KT 日期时间。
  */
 function copyEnumerableFields(target: object) {
   return Object.entries(target).reduce<Record<string, unknown>>(

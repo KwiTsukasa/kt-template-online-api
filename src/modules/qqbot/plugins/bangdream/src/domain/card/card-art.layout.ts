@@ -45,10 +45,10 @@ export const BANGDREAM_CARD_ART_SPEC = {
 } as const;
 
 /**
- * 创建卡牌小图边框资源路径。
- *
- * @param rarity - rarity 输入；驱动 `createCardFramePath()` 的 BangDream步骤。
- * @param attribute - attribute 输入；驱动 `createCardFramePath()` 的 BangDream步骤。
+ * 根据`rarity`、`attribute`构造卡牌小图边框资源路径。
+ * @param rarity - 决定卡牌边框、星级数量与资源名称的稀有度。
+ * @param attribute - 决定卡牌属性图标与边框资源的属性。
+ * @returns 卡牌小图边框资源路径。
  */
 export function createCardIconFramePath(
   rarity: number,
@@ -58,10 +58,10 @@ export function createCardIconFramePath(
 }
 
 /**
- * 创建卡牌插画边框资源路径。
- *
- * @param rarity - rarity 输入；驱动 `createCardFramePath()` 的 BangDream步骤。
- * @param attribute - attribute 输入；驱动 `createCardFramePath()` 的 BangDream步骤。
+ * 根据`rarity`、`attribute`构造卡牌插画边框资源路径。
+ * @param rarity - 决定卡牌边框、星级数量与资源名称的稀有度。
+ * @param attribute - 决定卡牌属性图标与边框资源的属性。
+ * @returns 卡牌插画边框资源路径。
  */
 export function createCardIllustrationFramePath(
   rarity: number,
@@ -72,16 +72,21 @@ export function createCardIllustrationFramePath(
 
 /**
  * 根据 Bestdori 边框命名规则创建远程资源路径。
- *
- * @param prefix - prefix 输入；生成 BangDream对象。
- * @param rarity - rarity 输入；生成 BangDream对象。
- * @param attribute - attribute 输入；生成 BangDream对象。
+ * @param prefix - 决定根据 Bestdori 边框命名规则创建远程资源路径内容、边界或目标的 `prefix` 值。
+ * @param rarity - 决定卡牌边框、星级数量与资源名称的稀有度。
+ * @param attribute - 决定卡牌属性图标与边框资源的属性。
+ * @returns 按参数编码并拼接完成的根据 Bestdori 边框命名规则创建远程资源路径。
  */
 function createCardFramePath(
   prefix: 'card' | 'frame',
   rarity: number,
   attribute: BangDreamCardArtAttribute,
 ): string {
-  const frameName = rarity === 1 ? `${rarity}-${attribute}` : `${rarity}`;
+  const frameName = (() => {
+    if (rarity === 1) {
+      return `${rarity}-${attribute}`;
+    }
+    return `${rarity}`;
+  })();
   return `/res/image/${prefix}-${frameName}.png`;
 }

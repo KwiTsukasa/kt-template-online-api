@@ -9,19 +9,22 @@ export const characterSearchOperation: BangDreamOperationModule = {
   execute: async (input, context) => {
     const query = context.requireText(input, '请提供角色关键词或角色 ID');
     const options = context.getRenderOptions(input);
-    const images = context.isInteger(query)
-      ? await drawCharacterDetail(
+    const images = await (async () => {
+      if (context.isInteger(query)) {
+        return await drawCharacterDetail(
           Number(query),
           options.displayedServerList,
           options.compress,
-        )
-      : await context.drawFuzzyResult(query, (matches) =>
+        );
+      }
+      return await context.drawFuzzyResult(query, (matches) =>
           drawCharacterList(
             matches,
             options.displayedServerList,
             options.compress,
           ),
         );
+    })();
 
     return context.toImageReply('bangdream.character.search', query, images);
   },

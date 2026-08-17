@@ -57,9 +57,9 @@ const BANGDREAM_SKILL_SCORE_SUFFIX_RULES = [
 ] as const;
 
 /**
- * 生成技能角标里分数值后面展示的规则后缀。
- *
- * @param effectTypes - BangDream列表；驱动 `matches()` 的 BangDream步骤。
+ * 根据参数 `effectTypes`，生成技能角标里分数值后面展示的规则后缀。
+ * @param effectTypes - 决定根据参数 `effectTypes`，生成技能角标里分数值后面展示的规则后缀内容、边界或目标的 `effectTypes` 值。
+ * @returns 规范化后的SkillScoreSuffix；主值为空时采用 `''` 兜底。
  */
 export function getSkillScoreSuffix(effectTypes: readonly string[]) {
   return (
@@ -70,9 +70,8 @@ export function getSkillScoreSuffix(effectTypes: readonly string[]) {
 }
 
 /**
- * 生成技能角标的文本和图标片段。
- *
- * @param options - BangDream列表；生成 BangDream对象。
+ * 根据技能得分、效果类型与图标规则生成按展示顺序排列的文本和图标片段。
+ * @returns 按输入顺序得到的根据技能得分、效果类型与图标规则生成按展示顺序排列的文本和图标片段列表；没有匹配项时为空数组。
  */
 export function createSkillTextFragments({
   effectTypes,

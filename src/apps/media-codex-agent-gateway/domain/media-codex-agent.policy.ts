@@ -24,7 +24,12 @@ export interface MediaCodexAgentPolicyPaths {
   stagingRoot?: string;
 }
 
-/** 为指定媒体任务构造只读、无网络且路径受限的固定执行策略。 */
+/**
+ * 根据指定媒体任务构造只读、无网络且路径受限的固定执行策略。
+ * @param taskId - 用于精确定位任务的标识。
+ * @param paths - 用于媒体任务CodexAgentPolicy的领域对象，包含 `cleanCwd`、`stagingRoot`、`evidenceRoot` 字段；省略时默认采用 `{}`。
+ * @returns 包含 `policySha256` 字段的媒体任务CodexAgentPolicy。
+ */
 export function buildMediaCodexAgentPolicy(
   taskId: string,
   paths: MediaCodexAgentPolicyPaths = {},
@@ -54,7 +59,12 @@ export function buildMediaCodexAgentPolicy(
   return { ...unsigned, policySha256: sha256Json(unsigned) };
 }
 
-/** 将任务请求与策略身份密封为当前回合唯一可信的边界胶囊。 */
+/**
+ * 将任务请求与策略身份密封为当前回合唯一可信的边界胶囊。
+ * @param request - 用于将任务请求与策略身份密封为当前回合唯一可信的边界胶囊的当前 HTTP 请求，包含 `currentStage`、`currentUnitId`、`manifestSha256`、`replayKey` 字段。
+ * @param policy - 用于将任务请求与策略身份密封为当前回合唯一可信的边界胶囊的领域对象，包含 `allowedRoots`、`allowedTools`、`policySha256`、`policyVersion` 字段。
+ * @returns 包含 `capsuleSha256` 字段的将任务请求与策略身份密封为当前回合唯一可信的边界胶囊。
+ */
 export function buildMediaCodexAgentCapsule(
   request: MediaCodexAgentTurnRequest,
   policy: MediaCodexAgentPolicy,
@@ -77,7 +87,16 @@ export function buildMediaCodexAgentCapsule(
   return { ...unsigned, capsuleSha256: sha256Json(unsigned) };
 }
 
-/** 校验边界胶囊摘要、策略版本、工具和目录均与当前策略一致。 */
+/**
+ * 校验边界胶囊摘要、策略版本、工具和目录均与当前策略一致。
+ * @param capsule - 用于边界胶囊摘要、策略版本、工具和目录均与当前策略一致的领域对象，包含 `policySha256`、`policyVersion`、`outputSchema`、`cloudGate` 字段。
+ * @param policy - 用于边界胶囊摘要、策略版本、工具和目录均与当前策略一致的领域对象，包含 `policySha256`、`policyVersion`、`allowedRoots`、`allowedTools` 字段。
+ * @returns 边界胶囊摘要、策略版本、工具和目录均与当前策略一致。
+ * @throws 当 `capsuleSha256 !== sha256Json(unsigned)` 成立时拒绝当前输入并抛出 `Error`；当 `capsule.policySha256 !== policy.policySha256 || capsule.policyVersion !…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `capsule.outputSchema !== MEDIA_CODEX_AGENT_OUTPUT_SCHEMA_ID || capsule.…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `canonicalJson(capsule.allowedRoots) !== canonicalJson(policy.allowedRoo…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `canonicalJson(capsule.allowedTools) !== canonicalJson(policy.allowedToo…` 成立时拒绝当前输入并抛出 `Error`。
+ */
 export function validateMediaCodexAgentCapsule(
   capsule: MediaCodexAgentBoundaryCapsule,
   policy: MediaCodexAgentPolicy,
@@ -111,7 +130,13 @@ export function validateMediaCodexAgentCapsule(
   return capsule;
 }
 
-/** 组合可信胶囊、操作员命令和不可信事实，生成受边界约束的回合提示词。 */
+/**
+ * 通过组合可信胶囊、操作员命令和不可信事实，生成受边界约束的回合提示词。
+ * @param request - 用于通过组合可信胶囊、操作员命令和不可信事实，生成受边界约束的回合提示词的当前 HTTP 请求，包含 `operatorCommand`、`compactContext` 字段。
+ * @param capsule - 用于通过组合可信胶囊、操作员命令和不可信事实，生成受边界约束的回合提示词的领域对象，包含 `allowedRoots`、`replayKey` 字段。
+ * @param policy - 决定通过组合可信胶囊、操作员命令和不可信事实，生成受边界约束的回合提示词内容、边界或目标的 `policy` 值。
+ * @returns 通过组合可信胶囊、操作员命令和不可信事实，生成受边界约束的回合提示词。
+ */
 export function buildMediaCodexAgentTurnPrompt(
   request: MediaCodexAgentTurnRequest,
   capsule: MediaCodexAgentBoundaryCapsule,
@@ -134,7 +159,15 @@ export function buildMediaCodexAgentTurnPrompt(
   ].join('\n');
 }
 
-/** 校验工具调用与当前胶囊身份一致，并限制工具参数和密封计划路径。 */
+/**
+ * 校验工具调用与当前胶囊身份一致，并限制工具参数和密封计划路径。
+ * @param call - 用于媒体任务CodexAgent工具调用的领域对象，包含 `taskId`、`taskRevision`、`manifestSha256`、`policySha256` 字段。
+ * @param capsule - 用于媒体任务CodexAgent工具调用的领域对象，包含 `taskId`、`taskRevision`、`manifestSha256`、`policySha256` 字段。
+ * @param policy - 用于媒体任务CodexAgent工具调用的领域对象，包含 `allowedTools`、`allowedRoots` 字段。
+ * @returns 媒体任务CodexAgent工具调用。
+ * @throws 当 `call.taskId !== capsule.taskId || call.taskRevision !== capsule.taskRev…` 成立时拒绝当前输入并抛出 `Error`；当 `!policy.allowedTools.includes(call.tool)` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `keys.some((key) => key !== 'sourceId' && key !== 'unitId')` 成立时拒绝当前输入并抛出 `Error`。
+ */
 export function validateMediaCodexAgentToolCall(
   call: MediaCodexAgentToolCall,
   capsule: MediaCodexAgentBoundaryCapsule,
@@ -169,7 +202,11 @@ export function validateMediaCodexAgentToolCall(
   return call;
 }
 
-/** 创建策略声明的工作与证据目录，并拒绝符号链接边界。 */
+/**
+ * 创建策略声明的工作与证据目录，并拒绝符号链接边界。
+ * @param policy - 用于媒体任务CodexAgentDirectories的领域对象，包含 `cleanCwd`、`allowedRoots` 字段。
+ * @throws 当 `!evidenceRoot` 成立时拒绝当前输入并抛出 `Error`。
+ */
 export function prepareMediaCodexAgentDirectories(
   policy: MediaCodexAgentPolicy,
 ) {
@@ -181,7 +218,14 @@ export function prepareMediaCodexAgentDirectories(
   assertNoSymbolicLink(evidenceRoot, 'agent-evidence-root-symlink');
 }
 
-/** 校验回合请求的任务身份、摘要、指令长度和上下文体积。 */
+/**
+ * 按回合协议核对任务身份、摘要、指令长度和上下文体积。
+ * @param request - 用于按回合协议核对任务身份、摘要、指令长度和上下文体积的当前 HTTP 请求，包含 `taskId`、`replayKey`、`taskRevision`、`manifestSha256` 字段。
+ * @throws 当 `!Number.isSafeInteger(request.taskRevision) || request.taskRevision < 1` 成立时拒绝当前输入并抛出 `Error`；当 `!SHA256_PATTERN.test(request.manifestSha256)` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!request.operatorCommand.trim() || request.operatorCommand.length > 2_0…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `request.currentUnitId !== null && !SAFE_ID_PATTERN.test(request.current…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `Buffer.byteLength(canonicalJson(request.compactContext)) > MAX_CONTEXT_…` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function validateTurnRequest(request: MediaCodexAgentTurnRequest) {
   assertSafeId(request.taskId, 'task-id-invalid');
   assertSafeId(request.replayKey, 'replay-key-invalid');
@@ -210,7 +254,20 @@ function validateTurnRequest(request: MediaCodexAgentTurnRequest) {
   }
 }
 
-/** 校验密封计划字段互斥、身份修正和每个文件操作的允许路径。 */
+/**
+ * 按密封计划协议核对字段互斥、身份修正和每个文件操作的允许路径。
+ * @param value - 参与按密封计划协议核对字段互斥、身份修正和每个文件操作的允许路径比较、格式化或输出的候选值。
+ * @param allowedRoots - 决定是否启用“许可范围根目录集合”分支的布尔选项。
+ * @param expectedReplayKey - 用于读取或更新按密封计划协议核对字段互斥、身份修正和每个文件操作的允许路径的稳定键。
+ * @throws 当 `keys.some( (key) => !['identity', 'operations', 'replayKey', 'summary']…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `!Array.isArray(value.operations) || value.operations.length > 500` 成立时拒绝当前输入并抛出 `Error`；当 `(value.operations.length === 0) === (identity === undefined)` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `typeof value.replayKey !== 'string' || !SAFE_ID_PATTERN.test(value.repl…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `typeof value.summary !== 'string' || !value.summary.trim() || value.sum…` 成立时拒绝当前输入并抛出 `Error`；当 `value.replayKey !== expectedReplayKey` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `Object.keys(entry).some( (key) => !['provider', 'providerId', 'releaseY…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `entry.releaseYear !== null && (!Number.isInteger(entry.releaseYear) ||…` 成立时拒绝当前输入并抛出 `Error`；当 `!stagingRoot` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `Object.keys(entry).some( (key) => !['action', 'sourcePath', 'targetPath…` 成立时拒绝当前输入并抛出 `Error`；
+ *   当 `typeof entry.action !== 'string' || !entry.action.trim() || typeof entr…` 成立时拒绝当前输入并抛出 `Error`；当 `typeof entry.sourcePath !== 'string'` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function validateSealedPlanArguments(
   value: Record<string, unknown>,
   allowedRoots: string[],
@@ -303,7 +360,12 @@ function validateSealedPlanArguments(
   }
 }
 
-/** 证明候选路径位于允许根目录内，且既有路径没有越过符号链接。 */
+/**
+ * 确保候选路径位于允许根目录内，且既有路径没有越过符号链接。
+ * @param candidate - 决定是否启用“candidate”分支的布尔选项。
+ * @param allowedRoots - 决定是否启用“许可范围根目录集合”分支的布尔选项。
+ * @throws 当 `!root` 成立时拒绝当前输入并抛出 `Error`；当 `existingReal !== rootReal && !existingReal.startsWith(`${rootReal}${pat…` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function assertAllowedPath(candidate: string, allowedRoots: string[]) {
   assertAbsoluteNormalizedPath(candidate, 'agent-path-not-allowed');
   const root = allowedRoots.find(
@@ -327,7 +389,12 @@ function assertAllowedPath(candidate: string, allowedRoots: string[]) {
   }
 }
 
-/** 沿父目录回溯并返回离目标最近的既有路径。 */
+/**
+ * 沿父目录回溯并返回离目标最近的既有路径。
+ * @param value - 参与沿父目录回溯并返回离目标最近的既有路径比较、格式化或输出的候选值。
+ * @returns 沿父目录回溯并返回离目标最近的既有路径。
+ * @throws 当 `parent === current` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function nearestExistingPath(value: string): string {
   let current = value;
   while (!existsSync(current)) {
@@ -338,12 +405,22 @@ function nearestExistingPath(value: string): string {
   return current;
 }
 
-/** 拒绝会改变真实路径边界的符号链接。 */
+/**
+ * 拒绝会改变真实路径边界的符号链接。
+ * @param value - 参与拒绝会改变真实路径边界的符号链接比较、格式化或输出的候选值。
+ * @param code - 决定拒绝会改变真实路径边界的符号链接内容、边界或目标的 `code` 值。
+ * @throws 当 `lstatSync(value).isSymbolicLink()` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function assertNoSymbolicLink(value: string, code: string) {
   if (lstatSync(value).isSymbolicLink()) throw new Error(code);
 }
 
-/** 要求路径为规范化绝对路径，并排除根目录和穿越形式。 */
+/**
+ * 要求路径为规范化绝对路径，并排除根目录和穿越形式。
+ * @param value - 参与AbsoluteNormalized路径比较、格式化或输出的候选值。
+ * @param code - 决定AbsoluteNormalized路径内容、边界或目标的 `code` 值。
+ * @throws 当 `!value.startsWith('/') || value.includes('\\') || value.includes('\0')…` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function assertAbsoluteNormalizedPath(value: string, code: string) {
   if (
     !value.startsWith('/') ||
@@ -356,12 +433,22 @@ function assertAbsoluteNormalizedPath(value: string, code: string) {
   }
 }
 
-/** 校验任务、回放或会话标识符合固定安全字符集。 */
+/**
+ * 按固定安全字符集校验任务、回放或会话标识。
+ * @param value - 参与按固定安全字符集校验任务、回放或会话标识比较、格式化或输出的候选值。
+ * @param code - 决定按固定安全字符集校验任务、回放或会话标识内容、边界或目标的 `code` 值。
+ * @throws 当 `!SAFE_ID_PATTERN.test(value)` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function assertSafeId(value: string, code: string) {
   if (!SAFE_ID_PATTERN.test(value)) throw new Error(code);
 }
 
-/** 要求输入是非空的普通对象，并收窄其 TypeScript 类型。 */
+/**
+ * 要求输入是非空的普通对象，并收窄其 TypeScript 类型。
+ * @param value - 参与Plain对象比较、格式化或输出的候选值。
+ * @param code - 决定Plain对象内容、边界或目标的 `code` 值。
+ * @throws 当 `!value || typeof value !== 'object' || Array.isArray(value)` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function assertPlainObject(
   value: unknown,
   code: string,
@@ -371,7 +458,11 @@ function assertPlainObject(
   }
 }
 
-/** 判断字符串是否是边界策略明确允许的媒体工具名。 */
+/**
+ * 根据边界策略判断字符串是否是明确允许的媒体工具名。
+ * @param value - 待判定是否满足根据边界策略判断字符串是否是明确允许的媒体工具名约束的候选值。
+ * @returns 满足根据边界策略判断字符串是否是明确允许的媒体工具名约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 export function isMediaCodexAgentTool(
   value: string,
 ): value is MediaCodexAgentTool {

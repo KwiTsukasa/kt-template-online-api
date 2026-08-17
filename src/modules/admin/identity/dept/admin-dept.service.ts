@@ -12,7 +12,8 @@ export class AdminDeptService {
   ) {}
 
   /**
-   * 查询 Admin 身份权限数据。
+   * 按当前运行态读取部门。
+   * @returns 部门。
    */
   async getDeptList() {
     const depts = await this.deptRepository.find({
@@ -27,8 +28,9 @@ export class AdminDeptService {
   }
 
   /**
-   * 创建 Admin 身份权限对象或配置。
-   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   * 根据`data`构造部门；把变更持久化到当前存储（`deptRepository.create`）。
+   * @param data - 用于部门的领域对象，包含 `name`、`pid`、`remark`、`status` 字段。
+   * @returns 固定为 `null`，表示当前入口不会产生部门。
    */
   async createDept(data: Partial<AdminDept>) {
     const entity = this.deptRepository.create({
@@ -42,9 +44,10 @@ export class AdminDeptService {
   }
 
   /**
-   * 更新Dept。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
-   * @param data - 业务数据；承载 Admin新增、更新、导入或执行字段。
+   * 按部门标识更新名称、父级、备注和状态；缺失的父级、备注或状态分别使用根部门、空文本和启用值。
+   * @param id - 决定按部门标识更新名称、父级、备注和状态内容、边界或目标的 `id` 值。
+   * @param data - 用于按部门标识更新名称、父级、备注和状态的领域对象，包含 `name`、`pid`、`remark`、`status` 字段。
+   * @returns 固定为 `null`，表示当前入口不会产生按部门标识更新名称、父级、备注和状态。
    */
   async updateDept(id: string, data: Partial<AdminDept>) {
     await this.deptRepository.update(
@@ -60,8 +63,9 @@ export class AdminDeptService {
   }
 
   /**
-   * 删除Dept。
-   * @param id - Admin记录 ID；定位本次读取、更新、删除或关联的Admin记录。
+   * 按`id`移除部门；把变更持久化到当前存储（`deptRepository.update`）。
+   * @param id - 决定部门内容、边界或目标的 `id` 值。
+   * @returns 固定为 `null`，表示当前入口不会产生部门。
    */
   async deleteDept(id: string) {
     const hasChildren = await this.deptRepository.exist({
@@ -84,8 +88,9 @@ export class AdminDeptService {
   }
 
   /**
-   * 创建 Admin 身份权限对象或配置。
-   * @param depts - Admin列表；转换 Admin列表项。
+   * 根据`depts`构造部门树形层级。
+   * @param depts - 决定部门树形层级内容、边界或目标的 `depts` 值。
+   * @returns 部门树形层级。
    */
   private buildDeptTree(depts: AdminDept[]) {
     const nodes = depts.map((dept) => ({

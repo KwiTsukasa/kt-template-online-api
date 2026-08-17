@@ -50,8 +50,9 @@ export class QqbotSendService {
   ) {}
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param query - 查询参数 DTO；限定 QQBot分页、搜索或详情查询条件。
+   * 根据`query`处理日志分页结果；把变更持久化到当前存储（`sendLogRepository.createQueryBuilder`）。
+   * @param query - 限定日志分页结果筛选、排序与分页范围的查询条件，包含 `selfId`、`targetType`、`targetId`、`status` 字段。
+   * @returns 包含 `list`、`pageNo`、`pageSize`、`total` 字段的日志分页。
    */
   async logPage(query: QqbotSendLogQueryDto) {
     const { pageNo, pageSize, skip } = this.toolsService.getPageParams(
@@ -87,8 +88,9 @@ export class QqbotSendService {
   }
 
   /**
-   * 投递 QQBot 核心消息或任务。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 将私聊请求投影为文本发送参数，并以用户号作为私聊目标。
+   * @param body - 用于私聊消息的结构化输入，包含 `message`、`selfId`、`userId` 字段。
+   * @returns 私聊消息。
    */
   async sendPrivate(body: QqbotSendPrivateDto) {
     return this.sendText({
@@ -100,8 +102,9 @@ export class QqbotSendService {
   }
 
   /**
-   * 投递 QQBot 核心消息或任务。
-   * @param body - 请求体 DTO；承载 QQBot新增、更新、导入或执行字段。
+   * 将群聊请求投影为文本发送参数，并以群号作为群聊目标。
+   * @param body - 用于Group的结构化输入，包含 `message`、`selfId`、`groupId` 字段。
+   * @returns 以群号为目标完成文本投递后得到的发送结果。
    */
   async sendGroup(body: QqbotSendGroupDto) {
     return this.sendText({
@@ -113,8 +116,9 @@ export class QqbotSendService {
   }
 
   /**
-   * 投递 QQBot 核心消息或任务。
-   * @param params - QQBot列表；使用 `selfId`、`targetId`、`message`、`targetType` 字段生成结果。
+   * 按`params`投递文本；从 `accountService.getDefaultAccount` 读取文本。
+   * @param params - 用于文本的领域对象，包含 `selfId`、`message`、`targetId`、`targetType` 字段。
+   * @returns 文本。
    */
   async sendText(params: {
     channelId?: string;
@@ -140,7 +144,13 @@ export class QqbotSendService {
     });
   }
 
-  /** 发送严格的纯文本文本。 */
+  /**
+   * 按`input`投递严格的纯文本；从 `accountService.findBySelfId` 读取严格的纯文本。
+   * @param input - 用于严格的纯文本的结构化输入，包含 `selfId`、`targetType`、`targetId`、`message` 字段。
+   * @returns 严格的纯文本。
+   * @throws 当 `!account || account.isDeleted || !account.enabled` 成立时拒绝当前输入并抛出 `QqbotSendAttemptError`；
+   *   当 `input.targetType !== 'group' && input.targetType !== 'private'` 成立时拒绝当前输入并抛出 `QqbotSendAttemptError`。
+   */
   async sendStrictPlainText(input: StrictPlainTextSendInput) {
     const account = await this.accountService.findBySelfId(input.selfId);
     if (!account || account.isDeleted || !account.enabled) {
@@ -161,17 +171,25 @@ export class QqbotSendService {
     }
 
     const action =
-      input.targetType === 'group' ? 'send_group_msg' : 'send_private_msg';
+      (() => {
+        if (input.targetType === 'group') {
+          return 'send_group_msg';
+        }
+        return 'send_private_msg';
+      })();
     const actionParams =
-      input.targetType === 'group'
-        ? {
+      (() => {
+        if (input.targetType === 'group') {
+          return {
             group_id: input.targetId,
             message: this.toTextSegment(input.message),
-          }
-        : {
+          };
+        }
+        return {
             message: this.toTextSegment(input.message),
             user_id: input.targetId,
           };
+      })();
     return this.sendWithAccount(account, {
       action,
       actionParams,
@@ -187,8 +205,8 @@ export class QqbotSendService {
   }
 
   /**
-   * 查询 QQBot 核心数据。
-   * @returns QQBot 核心查询结果。
+   * 按当前运行态读取ReverseWs服务；从 `moduleRef.get` 读取ReverseWs服务。
+   * @returns ReverseWs服务。
    */
   private async getReverseWsService(): Promise<QqbotReverseActionSender> {
     const { QqbotReverseWsService } =
@@ -198,7 +216,13 @@ export class QqbotSendService {
     });
   }
 
-  /** 发送携带账号。 */
+  /**
+   * 按`account`、`input`投递携带账号；把变更持久化到当前存储（`sendLogRepository.save`）。
+   * @param account - 用于携带账号的领域对象，包含 `selfId` 字段。
+   * @param input - 用于携带账号的结构化输入，包含 `targetId`、`strict`、`message`、`actionParams` 字段。
+   * @returns 包含 `logId` 字段的携带账号。
+   * @throws 当 `input.strict` 成立时重新抛出该入口捕获且决定公开的原异常；当 `input.strict && err instanceof QqbotSendAttemptError` 成立时重新抛出该入口捕获且决定公开的原异常。
+   */
   private async sendWithAccount(
     account: QqbotAccount,
     input: SendPipelineInput,
@@ -217,7 +241,12 @@ export class QqbotSendService {
     );
     const storedActionParams = {
       ...this.toStoredActionParams(input.actionParams, storedMessageText),
-      ...(input.audit ? { messagePush: input.audit } : {}),
+      ...((() => {
+        if (input.audit) {
+          return { messagePush: input.audit };
+        }
+        return {};
+      })()),
     };
     let log: QqbotSendLog;
     try {
@@ -252,12 +281,18 @@ export class QqbotSendService {
         input.action,
         input.actionParams,
       );
-      const success = input.strict
-        ? response.status === 'ok' && response.retcode === 0
-        : response.status === 'ok' || response.retcode === 0;
-      const messageId = response.data?.message_id
-        ? `${response.data.message_id}`
-        : null;
+      const success = (() => {
+        if (input.strict) {
+          return response.status === 'ok' && response.retcode === 0;
+        }
+        return response.status === 'ok' || response.retcode === 0;
+      })();
+      const messageId = (() => {
+        if (response.data?.message_id) {
+          return `${response.data.message_id}`;
+        }
+        return null;
+      })();
       if (!success) {
         const message = response.message || 'OneBot rejected the send action';
         if (input.strict) {
@@ -300,7 +335,12 @@ export class QqbotSendService {
         selfId: account.selfId,
         targetId: input.targetId,
         userId:
-          input.targetType === 'private' ? input.targetId : account.selfId,
+          (() => {
+            if (input.targetType === 'private') {
+              return input.targetId;
+            }
+            return account.selfId;
+          })(),
       });
       return { ...response, logId: log!.id };
     } catch (err) {
@@ -322,12 +362,20 @@ export class QqbotSendService {
     }
   }
 
-  /** 返回到文本分段。 */
+  /**
+   * 将输入收敛并投影为文本分段。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   * @returns 按输入顺序得到的文本分段列表；没有匹配项时为空数组。
+   */
   private toTextSegment(message: string) {
     return [{ data: { text: message }, type: 'text' }];
   }
 
-  /** 标记失败日志。 */
+  /**
+   * 根据`logId`、`message`处理标记失败日志；把变更持久化到当前存储（`sendLogRepository.update`）。
+   * @param logId - 用于精确定位日志的标识。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   */
   private async markFailedLog(logId: string, message: string) {
     try {
       await this.sendLogRepository.update(
@@ -339,7 +387,12 @@ export class QqbotSendService {
     }
   }
 
-  /** 返回到严格的发送错误。 */
+  /**
+   * 将输入收敛并投影为严格的发送错误。
+   * @param err - 待转换为稳定业务错误或日志文本的未知异常。
+   * @param sendLogId - 用于精确定位日志的标识。
+   * @returns 完成初始化并携带当前边界配置的严格的发送错误。
+   */
   private toStrictSendError(err: unknown, sendLogId: null | string) {
     if (this.isReverseWsActionError(err)) {
       return new QqbotSendAttemptError({
@@ -374,7 +427,13 @@ export class QqbotSendService {
     return code === 'onebot_disconnected' || code === 'onebot_timeout';
   }
 
-  /** 返回抛出发送失败。 */
+  /**
+   * 以统一异常拒绝发送失败。
+   * @param strict - 决定是否启用“strict”分支的布尔选项。
+   * @param err - 待转换为稳定业务错误或日志文本的未知异常。
+   * @param sendLogId - 用于精确定位日志的标识。
+   * @throws 严格发送模式下抛出结构化发送异常；非严格模式把未知错误消息映射为普通业务错误。
+   */
   private throwSendFailure(
     strict: boolean,
     err: unknown,
@@ -390,8 +449,9 @@ export class QqbotSendService {
   }
 
   /**
-   * 创建 QQBot 核心对象或配置。
-   * @param params - QQBot列表；使用 `targetType`、`targetId`、`message`、`channelId` 字段生成结果。
+   * 根据`params`构造包含 `action`、`actionParams` 字段的结果；当 `params.targetType === 'group'` 成立时返回 `{ action: 'send_group_msg', actionParams: {…`。
+   * @param params - 用于包含 `action`、`actionParams` 字段的结果的领域对象，包含 `targetType`、`targetId`、`message`、`channelId` 字段。
+   * @returns 包含 `action`、`actionParams` 字段的包含 `action`、`actionParams` 字段的。
    */
   private buildAction(params: {
     channelId?: string;
@@ -424,9 +484,10 @@ export class QqbotSendService {
   }
 
   /**
-   * 执行 QQBot 核心流程。
-   * @param actionParams - QQBot列表；使用 `message` 字段生成结果。
-   * @param storedMessageText - storedMessageText 输入；影响 toStoredActionParams 的返回值。
+   * 将`actionParams`、`storedMessageText`转换为持久化网关动作参数。
+   * @param actionParams - 用于持久化网关动作参数的领域对象，包含 `message` 字段。
+   * @param storedMessageText - 决定持久化网关动作参数内容、边界或目标的 `storedMessageText` 值。
+   * @returns 持久化网关动作参数；没有可用结果或提前结束时为 `undefined`。
    */
   private toStoredActionParams(
     actionParams: Record<string, any>,
@@ -435,13 +496,19 @@ export class QqbotSendService {
     const message = actionParams.message;
     return {
       ...actionParams,
-      ...(message === undefined
-        ? {}
-        : {
-            message: Array.isArray(message)
-              ? this.toTextSegment(storedMessageText)
-              : storedMessageText,
-          }),
+      ...((() => {
+        if (message === undefined) {
+          return {};
+        }
+        return {
+            message: (() => {
+              if (Array.isArray(message)) {
+                return this.toTextSegment(storedMessageText);
+              }
+              return storedMessageText;
+            })(),
+          };
+      })()),
     };
   }
 }

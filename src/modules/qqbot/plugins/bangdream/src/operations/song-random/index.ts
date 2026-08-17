@@ -10,7 +10,12 @@ export const songRandomOperation: BangDreamOperationModule = {
   execute: async (input, context) => {
     const query = context.pickText(input);
     const options = context.getRenderOptions(input);
-    const matches = query ? fuzzySearch(query) : {};
+    const matches = (() => {
+      if (query) {
+        return fuzzySearch(query);
+      }
+      return {};
+    })();
 
     return context.toImageReply(
       'bangdream.song.random',

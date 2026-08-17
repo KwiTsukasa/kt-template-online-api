@@ -42,7 +42,11 @@ export class QqbotMessageSubscriptionService {
     private readonly sourceRegistry: SystemMessageSourceRegistry,
   ) {}
 
-  /** 返回页面。 */
+  /**
+   * 查询领域服务并组装管理端页面。
+   * @param query - 限定QQBot 管理分页结果筛选、排序与分页范围的查询条件，包含 `pageNo`、`pageSize`、`name`、`sourceKey` 字段。
+   * @returns 包含 `items`、`total` 字段的QQBot 管理分页；没有匹配项时为空数组。
+   */
   async page(query: MessageSubscriptionListQuery): Promise<{
     items: MessageSubscriptionView[];
     total: number;
@@ -75,7 +79,12 @@ export class QqbotMessageSubscriptionService {
     };
   }
 
-  /** 创建QQBot消息订阅记录。 */
+  /**
+   * 根据`input`构造QQBot消息订阅记录。
+   * @param input - 用于QQBot消息订阅记录的结构化输入。
+   * @returns QQBot消息订阅记录。
+   * @throws 当 `subscriptionRepository.manager.transaction` 或 `toView` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   async create(
     input: MessageSubscriptionInput,
   ): Promise<MessageSubscriptionView> {
@@ -119,7 +128,13 @@ export class QqbotMessageSubscriptionService {
     }
   }
 
-  /** 更新QQBot消息订阅记录。 */
+  /**
+   * 根据`id`、`input`更新QQBot消息订阅记录。
+   * @param id - 决定QQBot消息订阅记录内容、边界或目标的 `id` 值。
+   * @param input - 用于QQBot消息订阅记录的结构化输入。
+   * @returns QQBot消息订阅记录。
+   * @throws 当 `subscriptionRepository.manager.transaction` 或 `toView` 调用失败时重新抛出该入口捕获且决定公开的原异常。
+   */
   async update(
     id: string,
     input: MessageSubscriptionInput,
@@ -163,7 +178,12 @@ export class QqbotMessageSubscriptionService {
     }
   }
 
-  /** 设置启用。 */
+  /**
+   * 在事务中切换消息订阅启用状态；启用前重新校验来源配置，并返回更新后的订阅视图。
+   * @param id - 决定启用内容、边界或目标的 `id` 值。
+   * @param enabled - 决定启用内容、边界或目标的 `enabled` 值。
+   * @returns 启用。
+   */
   async setEnabled(
     id: string,
     enabled: boolean,
@@ -195,7 +215,11 @@ export class QqbotMessageSubscriptionService {
     return this.toView(saved);
   }
 
-  /** 移除QQBot消息订阅记录。 */
+  /**
+   * 按`id`移除QQBot消息订阅记录。
+   * @param id - 决定QQBot消息订阅记录内容、边界或目标的 `id` 值。
+   * @returns QQBot消息订阅记录。
+   */
   async remove(id: string): Promise<boolean> {
     return this.subscriptionRepository.manager.transaction(
       // 保持活跃订阅行锁，直至删除安全字段一并持久化。
@@ -215,7 +239,15 @@ export class QqbotMessageSubscriptionService {
     );
   }
 
-  /** 返回必需可用用于绑定。 */
+  /**
+   * 加载指定订阅或模板，校验其存在、启用且与消息来源配置一致后供绑定流程使用。
+   * @param manager - 保证指定订阅或模板，校验其存在、启用且与消息来源配置一致后供绑定流程使用读写处于同一事务中的实体管理器。
+   * @param subscriptionId - 用于精确定位订阅的标识。
+   * @param bindingEnabled - 决定指定订阅或模板，校验其存在、启用且与消息来源配置一致后供绑定流程使用内容、边界或目标的 `bindingEnabled` 值。
+   * @returns 返回已验证可绑定的订阅或模板记录。
+   * @throws 当 `!subscription` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；当 `!subscription.enabled` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；
+   *   当 `!inspection.valid` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   async requireAvailableForBinding(
     manager: EntityManager,
     subscriptionId: string,
@@ -245,7 +277,11 @@ export class QqbotMessageSubscriptionService {
     return subscription;
   }
 
-  /** 校验来源配置后生成稳定摘要和持久化字段。 */
+  /**
+   * 按参数 `input`，校验来源配置后生成稳定摘要和持久化字段。
+   * @param input - 用于按参数 `input`，校验来源配置后生成稳定摘要和持久化字段的结构化输入，包含 `sourceKey`、`sourceConfig`、`enabled`、`name` 字段。
+   * @returns 包含 `activeKey`、`enabled`、`name`、`remark`、`sourceConfig` 字段的按参数 `input`，校验来源配置后生成稳定摘要和持久化字段。
+   */
   private async normalizeInput(
     input: MessageSubscriptionInput,
   ): Promise<NormalizedSubscriptionInput> {
@@ -272,7 +308,15 @@ export class QqbotMessageSubscriptionService {
     };
   }
 
-  /** 按来源元数据精确接收自有字符串字段，并拒绝缺失或额外字段。 */
+  /**
+   * 按来源元数据精确接收自有字符串字段，并拒绝缺失或额外字段。
+   * @param input - 用于来源配置的结构化输入。
+   * @param definition - 用于来源配置的领域对象，包含 `subscriptionFields` 字段。
+   * @returns 来源配置。
+   * @throws 当 `!input || typeof input !== 'object' || Array.isArray(input)` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；
+   *   当 `!fields.has(key) || typeof value !== 'string'` 成立时拒绝当前输入并抛出 `SystemMessageContractError`；
+   *   当 `field.required && !Object.prototype.hasOwnProperty.call(sourceConfig, f…` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   private validateSourceConfig(
     input: Record<string, unknown>,
     definition: SystemMessageSourceDefinition,
@@ -301,7 +345,11 @@ export class QqbotMessageSubscriptionService {
     return sourceConfig;
   }
 
-  /** 排序配置。 */
+  /**
+   * 按字段名升序重建消息来源配置，使等价配置得到稳定的键顺序。
+   * @param config - 限定配置边界、地址与开关的运行配置。
+   * @returns 配置。
+   */
   private sortConfig(config: Record<string, string>): Record<string, string> {
     return Object.fromEntries(
       Object.entries(config).sort(([left], [right]) =>
@@ -310,7 +358,13 @@ export class QqbotMessageSubscriptionService {
     );
   }
 
-  /** 查找启用的用于写入。 */
+  /**
+   * 按`repository`、`id`读取启用的用于写入；从 `repository.findOne` 读取启用的用于写入。
+   * @param repository - 负责查询或持久化启用的用于写入的仓库实例。
+   * @param id - 决定启用的用于写入内容、边界或目标的 `id` 值。
+   * @returns 启用的用于写入。
+   * @throws 当 `!current` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   private async findActiveForWrite(
     repository: Repository<QqbotMessageSubscription>,
     id: string,
@@ -323,7 +377,12 @@ export class QqbotMessageSubscriptionService {
     return current;
   }
 
-  /** 断言无实时绑定。 */
+  /**
+   * 校验`manager`、`subscriptionId`是否满足无实时绑定约束，并拒绝不合法输入；从 `manager.getRepository` 读取无实时绑定。
+   * @param manager - 保证无实时绑定读写处于同一事务中的实体管理器。
+   * @param subscriptionId - 用于精确定位订阅的标识。
+   * @throws 当 `count > 0` 成立时拒绝当前输入并抛出 `SystemMessageContractError`。
+   */
   private async assertNoLiveBindings(
     manager: EntityManager,
     subscriptionId: string,
@@ -338,7 +397,12 @@ export class QqbotMessageSubscriptionService {
     }
   }
 
-  /** 取消未完成的投递记录。 */
+  /**
+   * 根据`manager`、`where`、`includeProcessing`与当前约束判定未完成的投递记录；从 `manager.getRepository` 读取未完成的投递记录。
+   * @param manager - 保证未完成的投递记录读写处于同一事务中的实体管理器。
+   * @param where - 决定未完成的投递记录内容、边界或目标的 `where` 值。
+   * @param includeProcessing - 决定是否启用“includeProcessing”分支的布尔选项；省略时默认采用 `false`。
+   */
   private async cancelUnfinishedDeliveries(
     manager: EntityManager,
     where: Pick<QqbotMessageDelivery, 'subscriptionId'>,
@@ -351,7 +415,12 @@ export class QqbotMessageSubscriptionService {
           'waiting_ddns',
           'pending',
           'retry',
-          ...(includeProcessing ? (['processing'] as const) : []),
+          ...((() => {
+            if (includeProcessing) {
+              return (['processing'] as const);
+            }
+            return [];
+          })()),
         ]),
       },
       {
@@ -362,19 +431,30 @@ export class QqbotMessageSubscriptionService {
     );
   }
 
-  /** 返回抛出自然键键冲突。 */
+  /**
+   * 把启用记录的自然键冲突统一映射为 HTTP 409 业务错误。
+   * @returns 该函数不正常返回；调用会抛出 HTTP 409 自然键冲突错误。
+   */
   private throwNaturalKeyConflict(): never {
     return throwVbenError('相同消息源配置的订阅已存在', HttpStatus.CONFLICT);
   }
 
-  /** 判断重复键错误是否成立。 */
+  /**
+   * 仅把 MySQL `ER_DUP_ENTRY` 或错误号 1062 识别为唯一键冲突，其他错误一律返回 `false`。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+   * @returns 满足Duplicate键错误约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const value = error as { code?: unknown; errno?: unknown };
     return value.code === 'ER_DUP_ENTRY' || value.errno === 1062;
   }
 
-  /** 返回到视图。 */
+  /**
+   * 将输入收敛并投影为视图。
+   * @param subscription - 用于视图的领域对象，包含 `sourceKey`、`sourceConfig`、`createTime`、`enabled` 字段。
+   * @returns 包含 `createTime`、`enabled`、`id`、`invalidReasonCode`、`name` 字段的视图。
+   */
   private async toView(
     subscription: QqbotMessageSubscription,
   ): Promise<MessageSubscriptionView> {
@@ -400,7 +480,11 @@ export class QqbotMessageSubscriptionService {
     };
   }
 
-  /** 序列化时间。 */
+  /**
+   * 将`value`转换为序列化时间。
+   * @param value - 待转换为序列化时间的原始值。
+   * @returns 序列化时间。
+   */
   private serializeTime(value: QqbotMessageSubscription['createTime']): string {
     return String(value);
   }

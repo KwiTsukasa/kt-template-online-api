@@ -30,7 +30,11 @@ const CONFIG_RULES = {
   },
 } as const;
 
-/** 读取Bilibili卡片运行态配置。 */
+/**
+ * 按`host`读取Bilibili卡片运行态配置；从 `readClampedInteger` 读取Bilibili卡片运行态配置。
+ * @param host - 可能包含认证信息或端口的外部服务地址。
+ * @returns 包含 `dedupeTtlMs`、`descMaxLength`、`httpTimeoutMs`、`maxRedirects` 字段的Bilibili卡片运行态配置。
+ */
 export function readBilibiliCardRuntimeConfig(
   host: BilibiliCardPluginHost,
 ): BilibiliCardRuntimeConfig {
@@ -42,7 +46,12 @@ export function readBilibiliCardRuntimeConfig(
   };
 }
 
-/** 读取已限定范围的整数。 */
+/**
+ * 按`host`、`rule`读取已限定范围的整数；从 `host.getConfig` 读取已限定范围的整数。
+ * @param host - 可能包含认证信息或端口的外部服务地址。
+ * @param rule - 用于已限定范围的整数的领域对象，包含 `key`、`defaultValue`、`max`、`min` 字段。
+ * @returns 已限定范围的整数。
+ */
 function readClampedInteger(
   host: BilibiliCardPluginHost,
   rule: {
@@ -53,8 +62,11 @@ function readClampedInteger(
   },
 ) {
   const value = Number(host.getConfig(rule.key));
-  const normalized = Number.isFinite(value)
-    ? Math.trunc(value)
-    : rule.defaultValue;
+  const normalized = (() => {
+    if (Number.isFinite(value)) {
+      return Math.trunc(value);
+    }
+    return rule.defaultValue;
+  })();
   return Math.min(rule.max, Math.max(rule.min, normalized));
 }

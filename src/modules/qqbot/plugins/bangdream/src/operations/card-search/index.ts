@@ -9,16 +9,19 @@ export const cardSearchOperation: BangDreamOperationModule = {
   execute: async (input, context) => {
     const query = context.requireText(input, '请提供卡牌关键词或卡牌 ID');
     const options = context.getRenderOptions(input);
-    const images = context.isInteger(query)
-      ? await drawCardDetail(
+    const images = await (async () => {
+      if (context.isInteger(query)) {
+        return await drawCardDetail(
           Number(query),
           options.displayedServerList,
           options.useEasyBG,
           options.compress,
-        )
-      : await context.drawFuzzyResult(query, (matches) =>
+        );
+      }
+      return await context.drawFuzzyResult(query, (matches) =>
           drawCardList(matches, options.displayedServerList, options.compress),
         );
+    })();
 
     return context.toImageReply('bangdream.card.search', query, images);
   },

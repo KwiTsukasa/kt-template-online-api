@@ -75,9 +75,9 @@ export class Cutoff {
     this.status = getCutoffEventStatus(this.startAt, this.endAt);
   }
   /**
-   * 在 Cutoff 模型中获取最终 Tracker 数据源。
-   *
-   * @param reverse - reverse 输入；决定 BangDream条件分支。
+   * 按`reverse`读取Final档线数据源数据提供器；当 `this.server != Server.cn` 成立时返回 `bangdreamBestdoriProvider`。
+   * @param reverse - 决定Final档线数据源数据提供器内容、边界或目标的 `reverse` 值。
+   * @returns Final档线数据源数据提供器。
    */
   getFinalTrackerProvider(reverse: boolean): BangDreamDataProvider {
     // reverse:是否反向获取。假如useHHWX为False，当反向开启后就使用HHWX
@@ -86,21 +86,26 @@ export class Cutoff {
       this.useHHWX = false;
       return bangdreamBestdoriProvider;
     }
-    const provider = !reverse
-      ? this.useHHWX
-        ? bangdreamHhwxTrackerProvider
-        : bangdreamBestdoriProvider
-      : this.useHHWX
-        ? bangdreamBestdoriProvider
-        : bangdreamHhwxTrackerProvider;
+    const provider = (() => {
+      if (!reverse) {
+        if (this.useHHWX) {
+          return bangdreamHhwxTrackerProvider;
+        }
+        return bangdreamBestdoriProvider;
+      }
+      if (this.useHHWX) {
+        return bangdreamBestdoriProvider;
+      }
+      return bangdreamHhwxTrackerProvider;
+    })();
     if (reverse && this.server == Server.cn) this.useHHWX = !this.useHHWX;
     return provider;
   }
   /**
-   * 在 Cutoff 模型中拉取最终档线列表数据。
-   *
-   * @param reverse - reverse 输入；驱动 `this.getFinalTrackerProvider()` 的 BangDream步骤。
-   * @param cacheTime - cacheTime 输入；影响 fetchFinalCutoffsData 的返回值。
+   * 通过在 Cutoff 模型中拉取最终档线列表数据。
+   * @param reverse - 决定通过在 Cutoff 模型中拉取最终档线列表数据内容、边界或目标的 `reverse` 值。
+   * @param cacheTime - 决定通过在 Cutoff 模型中拉取最终档线列表数据内容、边界或目标的 `cacheTime` 值。
+   * @returns 通过在 Cutoff 模型中拉取最终档线列表数据。
    */
   async fetchFinalCutoffsData(reverse: boolean, cacheTime: number) {
     const provider = this.getFinalTrackerProvider(reverse);
@@ -112,9 +117,8 @@ export class Cutoff {
     });
   }
   /**
-   * 在 Cutoff 模型中记录最终档线列表来源Problem。
-   *
-   * @param e - e 输入；决定 BangDream条件分支。
+   * 通过在 Cutoff 模型中记录最终档线列表来源Problem。
+   * @param e - 为兼容既有调用签名保留；当前实现不会读取该参数。
    */
   reportFinalCutoffsSourceProblem(e) {
     if (e?.response?.status != 404 && this.server == Server.cn) {
@@ -122,12 +126,17 @@ export class Cutoff {
     }
   }
   /**
-   * 在 Cutoff 模型中获取最终档线列表数据。
-   *
-   * @param forceReadCache - forceReadCache 输入；限定 BangDream查询范围。
+   * 优先从主档线来源读取最终档线，失败时记录来源问题并切换备用来源；强制缓存时允许任意缓存年龄。
+   * @param forceReadCache - 决定是否启用“force缓存”分支的布尔选项；省略时默认采用 `false`。
+   * @returns FinalCutoffs数据；无法解析或未命中时为 `null`。
    */
   async getFinalCutoffsData(forceReadCache: boolean = false) {
-    const cacheTime = forceReadCache ? 1 / 0 : 0;
+    const cacheTime = (() => {
+      if (forceReadCache) {
+        return 1 / 0;
+      }
+      return 0;
+    })();
     try {
       // 当数据源获取出现网络问题时切换到另一数据源获取数据
       return await this.fetchFinalCutoffsData(false, cacheTime);
@@ -135,7 +144,12 @@ export class Cutoff {
       this.reportFinalCutoffsSourceProblem(e);
       logger(
         'Cutoff.ts/getFinalCutoffsData',
-        `数据源 ${this.useHHWX ? 'HHWX' : 'Bestdori'} 获取失败，尝试切换备用源`,
+        `数据源 ${(() => {
+          if (this.useHHWX) {
+            return 'HHWX';
+          }
+          return 'Bestdori';
+        })()} 获取失败，尝试切换备用源`,
       );
       try {
         return await this.fetchFinalCutoffsData(true, cacheTime);
@@ -145,7 +159,7 @@ export class Cutoff {
     }
   }
   /**
-   * 在 Cutoff 模型中加载远端完整详情并标记初始化状态。
+   * 根据当前运行态处理initFull；当 `this.isInitfull` 成立时直接结束且不产生返回值。
    */
   async initFull() {
     if (this.isInitfull) {
@@ -176,7 +190,12 @@ export class Cutoff {
         this.useHHWX = !this.useHHWX;
         logger(
           'Cutoff.ts/initFull',
-          `数据实时性校验不通过，切换数据源至${this.useHHWX ? 'HHWX' : 'Bestdori'} `,
+          `数据实时性校验不通过，切换数据源至${(() => {
+            if (this.useHHWX) {
+              return 'HHWX';
+            }
+            return 'Bestdori';
+          })()} `,
         );
         reportDataSourceProblem();
         const cutoffData2 = await this.getFinalCutoffsData();
@@ -253,7 +272,7 @@ export class Cutoff {
     this.isInitfull = true;
   }
   /**
-   * 在 Cutoff 模型中处理预测。
+   * 通过在 Cutoff 模型中处理预测。
    *
    * @returns 计算后的数值。
    */
@@ -273,17 +292,15 @@ export class Cutoff {
     return this.predictEP;
   }
   /**
-   * 在 Cutoff 模型中获取预测Window。
-   *
-   * @returns 计算后的数值。
+   * 按当前运行态读取预测Window；从 `getCutoffPredictionWindow` 读取预测Window。
+   * @returns 预测Window。
    */
   getPredictionWindow(): { startTs: number; endTs: number } {
     return getCutoffPredictionWindow(this.startAt, this.endAt);
   }
   /**
-   * 在 Cutoff 模型中获取档线列表InSeconds。
-   *
-   * @returns 计算后的数值。
+   * 按当前运行态读取Cutoffs秒数。
+   * @returns 按输入顺序得到的Cutoffs秒数列表；没有匹配项时为空数组。
    */
   getCutoffsInSeconds(): { time: number; ep: number }[] {
     return this.cutoffs.map((element) => ({
@@ -292,9 +309,8 @@ export class Cutoff {
     }));
   }
   /**
-   * 在 Cutoff 模型中获取预测History。
-   *
-   * @returns 计算后的数值。
+   * 按当前运行态读取预测历史；当 `this.isExist == false || !this.cutoffs` 成立时返回 `[]`。
+   * @returns 按输入顺序得到的预测历史列表；没有匹配项时为空数组。
    */
   getPredictionHistory(): { time: number; ep: number }[] {
     if (this.isExist == false || !this.cutoffs) {
@@ -317,26 +333,24 @@ export class Cutoff {
     return history;
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @param ts - BangDream列表；驱动 `getCutoffDayIndex()` 的 BangDream步骤。
+   * 按`ts`读取Days事件；从 `getCutoffDayIndex` 读取Days事件。
+   * @param ts - 决定Days事件内容、边界或目标的 `ts` 值。
+   * @returns Days事件。
    */
   getDaysOfEvent(ts: number) {
     return getCutoffDayIndex(this.server, this.startAt, ts);
   }
   /**
-   * 在 Cutoff 模型中判断日增Checkpoint。
-   *
-   * @param date - date 输入；驱动 `isCutoffDailyCheckpoint()` 的 BangDream步骤。
-   * @returns 判断结果。
+   * 通过 `isCutoffDailyCheckpoint` 判断输入是否满足函数约束。
+   * @param date - 决定每日Checkpoint内容、边界或目标的 `date` 值。
+   * @returns 满足每日Checkpoint约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   isDailyCheckpoint(date: Date): boolean {
     return isCutoffDailyCheckpoint(this.server, date);
   }
   /**
-   * 在 Cutoff 模型中获取日增CheckpointSeries。
-   *
-   * @returns 计算后的数值。
+   * 按当前运行态读取每日CheckpointSeries；从 `getCutoffDateByServerTimezone` 读取每日CheckpointSeries。
+   * @returns 包含 `score`、`time` 字段的每日CheckpointSeries；没有匹配项时为空数组。
    */
   getDailyCheckpointSeries(): { score: number[]; time: number[] } {
     const score: number[] = [];
@@ -352,12 +366,11 @@ export class Cutoff {
     return { score, time };
   }
   /**
-   * 在 Cutoff 模型中追加MissingHead分数列表。
-   *
-   * @param scoreFinal - scoreFinal 输入；使用 `length` 字段生成结果。
-   * @param invalidDays - BangDream列表；写入 BangDream集合、缓存或持久化状态。
-   * @param cutoffLastDataDays - BangDream列表；驱动 `Math.round()` 的 BangDream步骤。
-   * @returns 计算后的数值。
+   * 通过在 Cutoff 模型中追加MissingHead分数列表。
+   * @param scoreFinal - 用于通过在 Cutoff 模型中追加MissingHead分数列表的领域对象，包含 `push`、`length` 字段。
+   * @param invalidDays - 用于通过在 Cutoff 模型中追加MissingHead分数列表的领域对象，包含 `add` 字段。
+   * @param cutoffLastDataDays - 决定通过在 Cutoff 模型中追加MissingHead分数列表内容、边界或目标的 `cutoffLastDataDays` 值。
+   * @returns 通过在 Cutoff 模型中追加MissingHead分数列表。
    */
   appendMissingHeadScores(
     scoreFinal: number[],
@@ -379,13 +392,12 @@ export class Cutoff {
     return j;
   }
   /**
-   * 在 Cutoff 模型中追加Interpolated分数列表。
-   *
-   * @param scoreFinal - scoreFinal 输入；使用 `length` 字段生成结果。
-   * @param invalidDays - BangDream列表；写入 BangDream集合、缓存或持久化状态。
-   * @param startScore - startScore 输入；驱动 `Math.round()`、`scoreFinal.push()` 的 BangDream步骤。
-   * @param endScore - endScore 输入；驱动 `Math.round()` 的 BangDream步骤。
-   * @param lostDays - BangDream列表；驱动 `Math.round()` 的 BangDream步骤。
+   * 通过在 Cutoff 模型中追加Interpolated分数列表。
+   * @param scoreFinal - 用于通过在 Cutoff 模型中追加Interpolated分数列表的领域对象，包含 `push`、`length` 字段。
+   * @param invalidDays - 用于通过在 Cutoff 模型中追加Interpolated分数列表的领域对象，包含 `add` 字段。
+   * @param startScore - 决定通过在 Cutoff 模型中追加Interpolated分数列表内容、边界或目标的 `startScore` 值。
+   * @param endScore - 决定通过在 Cutoff 模型中追加Interpolated分数列表内容、边界或目标的 `endScore` 值。
+   * @param lostDays - 决定通过在 Cutoff 模型中追加Interpolated分数列表内容、边界或目标的 `lostDays` 值。
    */
   appendInterpolatedScores(
     scoreFinal: number[],
@@ -401,14 +413,13 @@ export class Cutoff {
     }
   }
   /**
-   * 在 Cutoff 模型中追加Checkpoint分数列表。
-   *
-   * @param scoreFinal - scoreFinal 输入；写入 BangDream集合、缓存或持久化状态。
-   * @param invalidDays - BangDream列表；驱动 `this.appendInterpolatedScores()` 的 BangDream步骤。
-   * @param score - score 输入；使用 `length` 字段生成结果。
-   * @param time - time 输入；驱动 `this.getDaysOfEvent()` 的 BangDream步骤。
-   * @param startDayIndex - startDayIndex 输入；影响 appendCheckpointScores 的返回值。
-   * @returns 计算后的数值。
+   * 通过在 Cutoff 模型中追加Checkpoint分数列表。
+   * @param scoreFinal - 用于通过在 Cutoff 模型中追加Checkpoint分数列表的领域对象，包含 `push` 字段。
+   * @param invalidDays - 决定通过在 Cutoff 模型中追加Checkpoint分数列表内容、边界或目标的 `invalidDays` 值。
+   * @param score - 用于通过在 Cutoff 模型中追加Checkpoint分数列表的领域对象，包含 `length`、`i`、`i - 1` 字段。
+   * @param time - 用于通过在 Cutoff 模型中追加Checkpoint分数列表的领域对象，包含 `i` 字段。
+   * @param startDayIndex - 决定通过在 Cutoff 模型中追加Checkpoint分数列表内容、边界或目标的 `startDayIndex` 值。
+   * @returns 通过在 Cutoff 模型中追加Checkpoint分数列表。
    */
   appendCheckpointScores(
     scoreFinal: number[],
@@ -434,7 +445,12 @@ export class Cutoff {
       this.appendInterpolatedScores(
         scoreFinal,
         invalidDays,
-        i == 0 ? 0 : score[i - 1],
+        (() => {
+          if (i == 0) {
+            return 0;
+          }
+          return score[i - 1];
+        })(),
         score[i],
         lostDays,
       );
@@ -443,13 +459,12 @@ export class Cutoff {
     return j;
   }
   /**
-   * 在 Cutoff 模型中追加MissingTail分数列表。
-   *
-   * @param scoreFinal - scoreFinal 输入；使用 `length` 字段生成结果。
-   * @param invalidDays - BangDream列表；写入 BangDream集合、缓存或持久化状态。
-   * @param score - score 输入；使用 `length` 字段生成结果。
-   * @param time - time 输入；使用 `length` 字段生成结果。
-   * @param cutoffLastDataDays - BangDream列表；驱动 `this.getDaysOfEvent()` 的 BangDream步骤。
+   * 通过在 Cutoff 模型中追加MissingTail分数列表。
+   * @param scoreFinal - 用于通过在 Cutoff 模型中追加MissingTail分数列表的领域对象，包含 `push`、`length` 字段。
+   * @param invalidDays - 用于通过在 Cutoff 模型中追加MissingTail分数列表的领域对象，包含 `add` 字段。
+   * @param score - 用于通过在 Cutoff 模型中追加MissingTail分数列表的领域对象，包含 `score.length - 1`、`length` 字段。
+   * @param time - 用于通过在 Cutoff 模型中追加MissingTail分数列表的领域对象，包含 `time.length - 1`、`length` 字段。
+   * @param cutoffLastDataDays - 决定通过在 Cutoff 模型中追加MissingTail分数列表内容、边界或目标的 `cutoffLastDataDays` 值。
    */
   appendMissingTailScores(
     scoreFinal: number[],
@@ -478,11 +493,10 @@ export class Cutoff {
     }
   }
   /**
-   * 在 Cutoff 模型中转换为日增增量列表。
-   *
-   * @param scoreFinal - scoreFinal 输入；使用 `length` 字段生成结果。
-   * @param invalidDays - BangDream列表；执行 `invalidDays.has()` 对应的 BangDream步骤。
-   * @returns 格式化后的文本。
+   * 将`scoreFinal`、`invalidDays`转换为每日增量。
+   * @param scoreFinal - 用于每日增量的领域对象，包含 `length`、`i`、`i - 1` 字段。
+   * @param invalidDays - 用于每日增量的领域对象，包含 `has` 字段。
+   * @returns 按输入顺序得到的每日增量列表；没有匹配项时为空数组。
    */
   toDailyIncrementList(
     scoreFinal: number[],
@@ -493,18 +507,28 @@ export class Cutoff {
       // 计算增量
       if (i == 0) {
         dailyIncrement.push(
-          `${Math.round(scoreFinal[i] / 10000)}${invalidDays.has(i) ? '!' : ''}`,
+          `${Math.round(scoreFinal[i] / 10000)}${(() => {
+            if (invalidDays.has(i)) {
+              return '!';
+            }
+            return '';
+          })()}`,
         );
       } else {
         dailyIncrement.push(
-          `${Math.round((scoreFinal[i] - scoreFinal[i - 1]) / 10000)}${invalidDays.has(i) ? '!' : ''}`,
+          `${Math.round((scoreFinal[i] - scoreFinal[i - 1]) / 10000)}${(() => {
+            if (invalidDays.has(i)) {
+              return '!';
+            }
+            return '';
+          })()}`,
         );
       }
     }
     return dailyIncrement;
   }
   /**
-   * 在 Cutoff 模型中获取日增增量。
+   * 按当前运行态读取每日增量；当 `!this.cutoffs || this.cutoffs.length === 0` 成立时直接结束且不产生返回值。
    */
   getDailyIncrement() {
     if (!this.cutoffs || this.cutoffs.length === 0) {
@@ -517,14 +541,16 @@ export class Cutoff {
     const cutoffLastDataDays = this.getDaysOfEvent(
       this.cutoffs[this.cutoffs.length - 1].time,
     ); // 最后一个数据的天数
-    const startDayIndex =
-      score.length == 0
-        ? this.appendMissingHeadScores(
-            scoreFinal,
-            invalidDays,
-            cutoffLastDataDays,
-          )
-        : 0;
+    const startDayIndex = (() => {
+      if (score.length == 0) {
+        return this.appendMissingHeadScores(
+          scoreFinal,
+          invalidDays,
+          cutoffLastDataDays,
+        );
+      }
+      return 0;
+    })();
 
     this.appendCheckpointScores(
       scoreFinal,
@@ -545,7 +571,8 @@ export class Cutoff {
     this.dailyIncrement = this.toDailyIncrementList(scoreFinal, invalidDays);
   }
   /**
-   * 查询 BangDream 插件数据。
+   * 按当前运行态读取Yesterday增量Rate；当 `!this.cutoffs || this.cutoffs.length === 0` 成立时返回 `'无数据'`。
+   * @returns 当前状态对应的Yesterday增量Rate，取值为 `'无数据'`、`'数据缺失'`。
    */
   getYesterdayIncrementRate() {
     if (!this.cutoffs || this.cutoffs.length === 0) {
@@ -570,7 +597,15 @@ export class Cutoff {
     if (UTCMin == 45 && UTCHour == 3) lengthLimit++;
     const curEventDays = this.getDaysOfEvent(lastCutoffTime);
     const lastCutoffEp =
-      this.cutoffs[this.cutoffs.length - (usePrevPoint ? 2 : 1)].ep;
+      this.cutoffs[
+        this.cutoffs.length -
+          (() => {
+            if (usePrevPoint) {
+              return 2;
+            }
+            return 1;
+          })()
+      ].ep;
     const score: number[] = [];
     const time: number[] = [];
     const scoreCur: number[] = [];
@@ -590,10 +625,12 @@ export class Cutoff {
         allowPushFlag = true;
       }
       const date = getCutoffDateByServerTimezone(timestamp, this.server);
+      const supportsFixedCutoffTime =
+        this.server == Server.cn ||
+        this.server == Server.tw ||
+        this.server == Server.jp;
       if (
-        (this.server == Server.cn ||
-          this.server == Server.tw ||
-          this.server == Server.jp) &&
+        supportsFixedCutoffTime &&
         date.getUTCHours() === 3 &&
         date.getUTCMinutes() === 45
       ) {
@@ -602,9 +639,7 @@ export class Cutoff {
       }
       if (
         allowPushFlag &&
-        (this.server == Server.cn ||
-          this.server == Server.tw ||
-          this.server == Server.jp) &&
+        supportsFixedCutoffTime &&
         date.getUTCHours() === lastestUtcHour &&
         date.getUTCMinutes() === lastestUtcMinutes
       ) {
@@ -616,16 +651,24 @@ export class Cutoff {
     // 此时score里边应该会有两个数据，一个是昨日3:45，一个是今日3:45的数据
     const TodaysIncrement = lastCutoffEp - score[1];
     const YesterdaysIncrement = scoreCur[0] - score[0];
-    const rate: number =
-      YesterdaysIncrement != 0 ? TodaysIncrement / YesterdaysIncrement : 1;
-    const result = `昨天同时刻日增${Math.round(YesterdaysIncrement / 10000)} 现在是昨天的${Math.round(rate * 100)}%${rate * 100 >= 100 ? '↑' : '↓'}`;
+    const rate: number = (() => {
+      if (YesterdaysIncrement != 0) {
+        return TodaysIncrement / YesterdaysIncrement;
+      }
+      return 1;
+    })();
+    const result = `昨天同时刻日增${Math.round(YesterdaysIncrement / 10000)} 现在是昨天的${Math.round(rate * 100)}%${(() => {
+      if (rate * 100 >= 100) {
+        return '↑';
+      }
+      return '↓';
+    })()}`;
     return result;
   }
   /**
-   * 在 Cutoff 模型中获取谱面数据。
-   *
-   * @param setStartToZero - setStartToZero 输入；决定 BangDream条件分支。
-   * @returns 计算后的数值。
+   * 按`setStartToZero`读取Chart数据；当 `this.isExist == false` 成立时返回 `[]`。
+   * @param setStartToZero - 决定Chart数据内容、边界或目标的 `setStartToZero` 值；省略时默认采用 `false`。
+   * @returns 按输入顺序得到的Chart数据列表；没有匹配项时为空数组。
    */
   getChartData(setStartToZero = false): { x: number; y: number }[] {
     if (this.isExist == false) {
@@ -639,8 +682,12 @@ export class Cutoff {
     }
 
     // 在访问 this.cutoffs[0].time 之前检查 this.cutoffs 是否存在且长度大于0
-    let tempTime =
-      this.cutoffs && this.cutoffs.length > 0 ? this.cutoffs[0].time : null;
+    let tempTime = (() => {
+      if (this.cutoffs && this.cutoffs.length > 0) {
+        return this.cutoffs[0].time;
+      }
+      return null;
+    })();
     // 如果 tempTime 为 null，则后续逻辑应当考虑这种情况以避免错误
 
     for (let i = 0; i < this.cutoffs.length; i++) {
@@ -648,7 +695,12 @@ export class Cutoff {
       if (setStartToZero) {
         // 确保 tempTime 不为 null 才执行减法操作
         chartData.push({
-          x: tempTime ? element.time - this.startAt : 0,
+          x: (() => {
+            if (tempTime) {
+              return element.time - this.startAt;
+            }
+            return 0;
+          })(),
           y: element.ep,
         });
       } else {

@@ -34,8 +34,9 @@ export class QqbotPluginController {
   ) {}
 
   /**
-   * QQBot 插件列表。
-   * @param triggerMode - 可选触发模式；决定返回 command worker 插件、event 插件或二者合并列表。
+   * 按`triggerMode`读取`list` 对应结果；从 `service.listPluginSummaries` 读取`list` 对应结果。
+   * @param triggerMode - 决定`list` 对应结果内容、边界或目标的 `triggerMode` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns `list` 对应。
    */
   @Get('list')
   @ApiOperation({ summary: 'QQBot 插件列表' })
@@ -65,9 +66,10 @@ export class QqbotPluginController {
   }
 
   /**
-   * QQBot 插件能力列表。
-   * @param pluginKey - pluginKey 输入；影响 operationList 的返回值。
-   * @param triggerMode - triggerMode 输入；影响 operationList 的返回值。
+   * 根据`pluginKey`、`triggerMode`处理操作；从 `service.listOperationSummaries` 读取操作。
+   * @param pluginKey - 用于读取或更新操作的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @param triggerMode - 决定操作内容、边界或目标的 `triggerMode` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 操作。
    */
   @Get('operation/list')
   @ApiOperation({ summary: 'QQBot 插件能力列表' })
@@ -87,8 +89,9 @@ export class QqbotPluginController {
   }
 
   /**
-   * QQBot 插件能力分页列表。
-   * @param query - 查询参数 DTO；限定 插件平台分页、搜索或详情查询条件。
+   * 按插件键、触发模式与分页条件读取插件能力摘要，并封装为 Vben 成功响应。
+   * @param query - 限定操作分页结果筛选、排序与分页范围的查询条件。
+   * @returns 操作分页。
    */
   @Get('operation/page')
   @ApiOperation({ summary: 'QQBot 插件能力分页列表' })
@@ -105,9 +108,10 @@ export class QqbotPluginController {
   }
 
   /**
-   * QQBot 插件健康检查。
-   * @param pluginKey - pluginKey 输入；驱动 `Promise.all()` 的 插件平台步骤。
-   * @param triggerMode - triggerMode 输入；驱动 `Promise.all()` 的 插件平台步骤。
+   * 根据`pluginKey`、`triggerMode`处理QQBot 插件健康检查。
+   * @param pluginKey - 用于读取或更新QQBot 插件健康检查的稳定键；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @param triggerMode - 决定QQBot 插件健康检查内容、边界或目标的 `triggerMode` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns QQBot 插件健康检查。
    */
   @Get('health')
   @ApiOperation({ summary: 'QQBot 插件健康检查' })
@@ -122,19 +126,26 @@ export class QqbotPluginController {
     @Query('triggerMode') triggerMode?: QqbotPluginTriggerMode,
   ) {
     const [commandHealth, eventHealth] = await Promise.all([
-      this.includesTriggerMode('command', triggerMode)
-        ? this.service.listPluginHealth(pluginKey)
-        : Promise.resolve([]),
-      this.includesTriggerMode('event', triggerMode)
-        ? this.eventPluginRegistry.health(pluginKey)
-        : Promise.resolve([]),
+      (() => {
+        if (this.includesTriggerMode('command', triggerMode)) {
+          return this.service.listPluginHealth(pluginKey);
+        }
+        return Promise.resolve([]);
+      })(),
+      (() => {
+        if (this.includesTriggerMode('event', triggerMode)) {
+          return this.eventPluginRegistry.health(pluginKey);
+        }
+        return Promise.resolve([]);
+      })(),
     ]);
     return vbenSuccess([...commandHealth, ...eventHealth]);
   }
 
   /**
-   * QQBot 事件触发插件列表。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 根据`selfId`处理事件；从 `eventPluginRegistry.listPlugins` 读取事件。
+   * @param selfId - 用于精确定位QQ 账号的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 事件。
    */
   @Get('event/list')
   @ApiOperation({ summary: 'QQBot 事件触发插件列表' })
@@ -144,9 +155,10 @@ export class QqbotPluginController {
   }
 
   /**
-   * 绑定 QQBot 事件触发插件。
-   * @param pluginKey - pluginKey 输入；驱动 `vbenSuccess()` 的 插件平台步骤。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 根据参数 `pluginKey`，绑定 QQBot 事件触发插件。
+   * @param pluginKey - 用于读取或更新根据参数 `pluginKey`，绑定 QQBot 事件触发插件的稳定键。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 根据参数 `pluginKey`，绑定 QQBot 事件触发插件。
    */
   @Post('event/bind')
   @HttpCode(HttpStatus.OK)
@@ -161,9 +173,10 @@ export class QqbotPluginController {
   }
 
   /**
-   * 解绑 QQBot 事件触发插件。
-   * @param pluginKey - pluginKey 输入；驱动 `vbenSuccess()` 的 插件平台步骤。
-   * @param selfId - 账号 ID；定位本次读取、更新、删除或关联的账号。
+   * 按插件键和 QQ 号解除事件插件绑定，并将注册表结果封装为 Vben 成功响应。
+   * @param pluginKey - 用于读取或更新事件的稳定键。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 事件。
    */
   @Post('event/unbind')
   @HttpCode(HttpStatus.OK)
@@ -180,9 +193,10 @@ export class QqbotPluginController {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param target - target 输入；影响 includesTriggerMode 的返回值。
-   * @param triggerMode - triggerMode 输入；影响 includesTriggerMode 的返回值。
+   * 根据`target`、`triggerMode`处理触发模式Mode。
+   * @param target - 决定触发模式Mode内容、边界或目标的 `target` 值。
+   * @param triggerMode - 决定触发模式Mode内容、边界或目标的 `triggerMode` 值；为空时采用 `triggerMode === target` 作为兜底。
+   * @returns 规范化后的触发模式Mode；主值为空时采用 `triggerMode === target` 兜底。
    */
   private includesTriggerMode(
     target: QqbotPluginTriggerMode,

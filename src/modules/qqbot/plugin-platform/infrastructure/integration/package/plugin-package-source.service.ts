@@ -13,7 +13,10 @@ export class QqbotPluginPackageSourceService {
     private readonly pathPolicy: QqbotPluginPackagePathPolicyService,
   ) {}
 
-  /** 发现包。 */
+  /**
+   * 根据当前运行态处理发现包；从 `pathPolicy.listExistingRoots` 读取发现包。
+   * @returns 按输入顺序得到的发现包列表；没有匹配项时为空数组。
+   */
   async discoverPackages(): Promise<QqbotPluginPackageDescriptor[]> {
     const descriptors: QqbotPluginPackageDescriptor[] = [];
 
@@ -31,7 +34,11 @@ export class QqbotPluginPackageSourceService {
     );
   }
 
-  /** 读取描述文件。 */
+  /**
+   * 按`packageRoot`读取描述文件；当 `!existsSync(manifestFile)` 成立时返回 `null`。
+   * @param packageRoot - 必须保持在受控根目录内的插件包根目录路径。
+   * @returns 描述文件；无法解析或未命中时为 `null`。
+   */
   readDescriptor(packageRoot: string): QqbotPluginPackageDescriptor | null {
     const controlledPackageRoot =
       this.pathPolicy.assertControlledPackageRoot(packageRoot);
@@ -45,7 +52,12 @@ export class QqbotPluginPackageSourceService {
     return this.resolveDescriptor(controlledPackageRoot, manifestLike);
   }
 
-  /** 解析描述文件。 */
+  /**
+   * 从`packageRoot`、`manifestLike`解析描述文件；先通过 `pathPolicy.assertControlledPackageRoot` 校验输入边界。
+   * @param packageRoot - 必须保持在受控根目录内的插件包根目录路径。
+   * @param manifestLike - 决定描述文件内容、边界或目标的 `manifestLike` 值。
+   * @returns 包含 `entry`、`entryFile`、`manifest`、`packageRoot`、`pluginKey` 字段的描述文件。
+   */
   resolveDescriptor(
     packageRoot: string,
     manifestLike: unknown,
@@ -69,7 +81,11 @@ export class QqbotPluginPackageSourceService {
     };
   }
 
-  /** 列出包根目录。 */
+  /**
+   * 按`root`读取包根目录；从 `readdirSync` 读取包根目录。
+   * @param root - 决定包根目录内容、边界或目标的 `root` 值。
+   * @returns 按输入顺序得到的包根目录列表；没有匹配项时为空数组。
+   */
   private listPackageRoots(root: string): string[] {
     return readdirSync(root, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())

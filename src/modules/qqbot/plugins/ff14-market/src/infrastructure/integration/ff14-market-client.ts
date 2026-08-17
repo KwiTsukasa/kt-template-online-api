@@ -53,9 +53,10 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 解析Item。
-   * @param params - FF14 市场列表；使用 `language`、`itemId`、`item` 字段生成结果。
-   * @returns FF14 市场插件转换后的值。
+   * 从`params`解析条目；当 `Number.isInteger(itemId) && itemId > 0` 成立时返回 `this.getItemById(itemId, language)`。
+   * @param params - 用于条目的领域对象，包含 `language`、`itemId`、`item` 字段。
+   * @returns 包含 `icon`、`isUntradable`、`itemId`、`itemLevel`、`name` 字段的条目。
+   * @throws 当 `!keyword` 成立时拒绝当前输入并抛出 `Error`；当 `!item` 成立时拒绝当前输入并抛出 `Error`。
    */
   async resolveItem(params: {
     item?: string;
@@ -84,9 +85,9 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 查询 FF14 市场插件数据。
-   * @param params - FF14 市场列表；使用 `hq` 字段生成结果。
-   * @returns FF14 市场插件查询结果。
+   * 按`params`读取针对FF14 市场插件；当 `item.isUntradable` 成立时返回 `{ hq: params.hq, item, listings: [], replyT…`。
+   * @param params - 用于针对FF14 市场插件的领域对象，包含 `hq` 字段。
+   * @returns 包含 `averagePrice`、`hq`、`item`、`listings`、`minPrice` 字段的针对FF14 市场插件。
    */
   async getPrice(params: {
     dataCenter?: string;
@@ -132,9 +133,12 @@ export class Ff14MarketClient {
       this.pickPrice(data, params.hq, 'average'),
       listings,
     );
-    const updatedAt = data.lastUploadTime
-      ? formatFf14DateTime(data.lastUploadTime)
-      : undefined;
+    const updatedAt = (() => {
+      if (data.lastUploadTime) {
+        return formatFf14DateTime(data.lastUploadTime);
+      }
+      return undefined;
+    })();
 
     return {
       averagePrice,
@@ -157,11 +161,11 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 查询 FF14 市场插件数据。
-   * @param itemId - FF14 市场 ID；定位本次读取、更新、删除或关联的FF14 市场。
-   * @param language - language 输入；驱动 `this.normalizeXivapiLanguage()`、`searchParams.set()` 的 FF14 市场步骤。
-   * @param displayName - displayName 输入；驱动 `this.normalizeItemIcon()` 的 FF14 市场步骤。
-   * @returns FF14 市场插件查询结果。
+   * 按`itemId`、`language`、`displayName`读取针对FF14 市场插件。
+   * @param itemId - 用于精确定位条目的标识。
+   * @param language - 决定针对FF14 市场插件内容、边界或目标的 `language` 值；省略时默认采用 `'chs'`。
+   * @param displayName - 决定针对FF14 市场插件内容、边界或目标的 `displayName` 值；为空时采用 ``${itemId}`` 作为兜底。
+   * @returns 包含 `icon`、`isUntradable`、`itemId`、`itemLevel`、`name` 字段的针对FF14 市场插件。
    */
   private async getItemById(
     itemId: number,
@@ -191,15 +195,22 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 创建 FF14 市场插件对象或配置。
-   * @param result - result 输入；使用 `listings`、`world`、`item` 字段生成结果。
+   * 根据`result`构造针对FF14 市场插件。
+   * @param result - 用于针对FF14 市场插件的领域对象，包含 `listings`、`world`、`item` 字段。
+   * @returns 针对FF14 市场插件。
    */
   private buildReplyText(result: Omit<Ff14PriceResult, 'replyText'>) {
-    const listingText = result.listings.length
-      ? result.listings
+    const listingText = (() => {
+      if (result.listings.length) {
+        return result.listings
           .slice(0, 10)
           .map((item) => {
-            const hq = item.hq ? 'HQ' : 'NQ';
+            const hq = (() => {
+              if (item.hq) {
+                return 'HQ';
+              }
+              return 'NQ';
+            })();
             const price = item.pricePerUnit || 0;
             const quantity = item.quantity || 1;
             const total = item.total || price * quantity;
@@ -211,8 +222,10 @@ export class Ff14MarketClient {
               total,
             )} ${retainerName} (${worldName})`;
           })
-          .join('\n')
-      : '暂无在售记录';
+          .join('\n');
+      }
+      return '暂无在售记录';
+    })();
 
     return [
       `服务器 ${result.world} 上的物品 ${result.item.name} (ID: ${result.item.itemId}) 市场价格如下:`,
@@ -221,10 +234,11 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 执行 FF14 市场插件流程。
-   * @param data - 业务数据；承载 FF14 市场新增、更新、导入或执行字段。
-   * @param hq - hq 输入；决定 FF14 市场条件分支。
-   * @param type - type 输入；决定 FF14 市场条件分支。
+   * 从`data`、`hq`、`type`筛选Price，并保持保留项的原有顺序与键名；当 `type === 'min'` 成立时返回 `data.minPriceHQ`。
+   * @param data - 用于Price的领域对象，包含 `minPriceHQ`、`minPriceNQ`、`minPrice`、`currentAveragePriceHQ` 字段。
+   * @param hq - 决定Price内容、边界或目标的 `hq` 值。
+   * @param type - 决定Price内容、边界或目标的 `type` 值。
+   * @returns 规范化后的Price；主值为空时采用 `data.currentAveragePriceHQ` 兜底。
    */
   private pickPrice(
     data: UniversalisMarketResponse,
@@ -246,9 +260,10 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 转换 FF14 市场插件输入。
-   * @param price - price 输入；决定 FF14 市场条件分支。
-   * @param listings - FF14 市场列表；使用 `length` 字段生成结果。
+   * 将`price`、`listings`规范为市场数据Price，使等价输入得到一致表示。
+   * @param price - 决定市场数据Price内容、边界或目标的 `price` 值。
+   * @param listings - 用于市场数据Price的领域对象，包含 `length` 字段。
+   * @returns 市场数据Price；没有可用结果或提前结束时为 `undefined`。
    */
   private normalizeMarketPrice(
     price: number | undefined,
@@ -259,17 +274,19 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 转换 FF14 市场插件输入。
-   * @param value - 待转换时间值；驱动 `Math.round()` 的 FF14 市场步骤。
+   * 将`value`转换为针对FF14 市场插件。
+   * @param value - 待转换为针对FF14 市场插件的原始值。
+   * @returns 针对FF14 市场插件。
    */
   private formatPrice(value: number) {
     return Math.round(value).toLocaleString('en-US');
   }
 
   /**
-   * 转换 FF14 市场插件输入。
-   * @param world - world 输入；影响 normalizeWorld 的返回值。
-   * @param fallback - 兜底值；影响 normalizeWorld 的返回值。
+   * 将`world`、`fallback`规范为针对FF14 市场插件，使等价输入得到一致表示；从 `host.getConfig` 读取针对FF14 市场插件。
+   * @param world - 决定针对FF14 市场插件内容、边界或目标的 `world` 值；为空时采用 `''` 作为兜底。
+   * @param fallback - 主值缺失、为空或不合法时采用的兜底结果；为空时采用 `''` 作为兜底。
+   * @returns 针对FF14 市场插件。
    */
   private normalizeWorld(world?: string, fallback?: string) {
     const raw = `${
@@ -282,8 +299,9 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 解析Market Target。
-   * @param params - FF14 市场列表；使用 `dataCenter`、`world`、`region` 字段生成结果。
+   * 从`params`解析市场数据Target；从 `getMarketCatalog` 读取市场数据Target。
+   * @param params - 用于市场数据Target的领域对象，包含 `dataCenter`、`world`、`region` 字段。
+   * @returns 市场数据Target。
    */
   private async resolveMarketTarget(params: {
     dataCenter?: string;
@@ -300,7 +318,8 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 查询 FF14 市场插件数据。
+   * 按当前运行态读取针对FF14 市场插件；从 `host.getDictItemsByKey` 读取针对FF14 市场插件。
+   * @returns 针对FF14 市场插件。
    */
   async getMarketCatalog() {
     const treeCatalog = buildFf14MarketCatalogFromTree(
@@ -323,30 +342,41 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 转换 FF14 市场插件输入。
-   * @param language - language 输入；影响 normalizeXivapiLanguage 的返回值。
+   * 将`language`规范为针对FF14 市场插件，使等价输入得到一致表示；当 `['en', 'ja', 'de', 'fr'].includes(value)` 成立时返回 `value`。
+   * @param language - 决定针对FF14 市场插件内容、边界或目标的 `language` 值；为空时采用 `'chs'` 作为兜底。
+   * @returns 当前状态对应的针对FF14 市场插件，取值为 `'chs'`、`'en'`。
    */
   private normalizeXivapiLanguage(language?: string) {
     const value = `${language || 'chs'}`.trim().toLowerCase();
     if (['zh', 'zh-cn', 'zh_hans', 'cn', 'chs'].includes(value)) return 'chs';
-    return ['en', 'ja', 'de', 'fr'].includes(value) ? value : 'en';
+    if (['en', 'ja', 'de', 'fr'].includes(value)) {
+      return value;
+    }
+    return 'en';
   }
 
   /**
-   * 创建 FF14 市场插件对象或配置。
-   * @param path - 路由或文件路径；生成 FF14 市场对象。
-   * @param language - language 输入；生成 FF14 市场对象。
+   * 根据`path`、`language`构造针对FF14 市场插件。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @param language - 决定针对FF14 市场插件内容、边界或目标的 `language` 值。
+   * @returns 完成初始化并携带当前边界配置的针对FF14 市场插件。
    */
   private buildXivapiUrl(path: string, language: string) {
     const baseUrl =
-      language === 'chs' ? this.xivapiChsBaseUrl : this.xivapiBaseUrl;
+      (() => {
+        if (language === 'chs') {
+          return this.xivapiChsBaseUrl;
+        }
+        return this.xivapiBaseUrl;
+      })();
     return new URL(`${baseUrl.replace(/\/+$/, '')}${path}`);
   }
 
   /**
-   * 执行 FF14 市场插件流程。
-   * @param keyword - keyword 输入；驱动 `this.pickFirstSearchItem()`、`this.searchItemsByLanguage()` 的 FF14 市场步骤。
-   * @param language - language 输入；驱动 `this.pickFirstSearchItem()`、`this.searchItemsByLanguage()` 的 FF14 市场步骤。
+   * 根据`keyword`、`language`处理针对FF14 市场插件；当 `language !== 'en'` 成立时返回 `enItem`。
+   * @param keyword - 决定针对FF14 市场插件内容、边界或目标的 `keyword` 值。
+   * @param language - 决定针对FF14 市场插件内容、边界或目标的 `language` 值。
+   * @returns 针对FF14 市场插件。
    */
   private async searchItem(keyword: string, language: string) {
     const item = this.pickFirstSearchItem(
@@ -370,10 +400,11 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 执行 FF14 市场插件流程。
-   * @param keyword - keyword 输入；驱动 `this.escapeXivapiValue()` 的 FF14 市场步骤。
-   * @param language - language 输入；驱动 `this.buildXivapiUrl()`、`searchParams.set()` 的 FF14 市场步骤。
-   * @param operator - SQL 条件连接符；限定 FF14 市场查询范围。
+   * 根据`keyword`、`language`、`operator`处理针对FF14 市场插件。
+   * @param keyword - 决定针对FF14 市场插件内容、边界或目标的 `keyword` 值。
+   * @param language - 决定针对FF14 市场插件内容、边界或目标的 `language` 值。
+   * @param operator - 决定针对FF14 市场插件内容、边界或目标的 `operator` 值。
+   * @returns 针对FF14 市场插件。
    */
   private async searchItemsByLanguage(
     keyword: string,
@@ -401,16 +432,19 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 执行 FF14 市场插件流程。
-   * @param items - FF14 市场列表；影响 pickFirstSearchItem 的返回值。
+   * 从`items`筛选Search条目，并保持保留项的原有顺序与键名。
+   * @param items - 按原有顺序参与Search条目筛选、合并或汇总的集合。
+   * @returns Search条目。
    */
   private pickFirstSearchItem(items: XivapiSearchItem[]) {
     return items[0];
   }
 
   /**
-   * 执行 FF14 市场插件流程。
-   * @param items - FF14 市场列表；使用 `length` 字段生成结果。
+   * 从`items`筛选针对FF14 市场插件，并保持保留项的原有顺序与键名。
+   * @param items - 按原有顺序参与针对FF14 市场插件筛选、合并或汇总的集合。
+   * @returns 针对FF14 市场插件。
+   * @throws 当前函数此前所有接受或成功分支均未返回时拒绝当前输入并抛出 `Error`。
    */
   private pickSingleFuzzySearchItem(items: XivapiSearchItem[]) {
     if (items.length <= 1) return items[0];
@@ -422,8 +456,9 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 转换 FF14 市场插件输入。
-   * @param items - FF14 市场列表；影响 formatSearchCandidates 的返回值。
+   * 将`items`转换为针对FF14 市场插件。
+   * @param items - 按原有顺序参与针对FF14 市场插件筛选、合并或汇总的集合。
+   * @returns 针对FF14 市场插件。
    */
   private formatSearchCandidates(items: XivapiSearchItem[]) {
     return items
@@ -431,14 +466,18 @@ export class Ff14MarketClient {
       .map((item) => {
         const name = item.fields?.Name || item.name || '未知物品';
         const id = item.row_id || item.id;
-        return id ? `${name}(ID:${id})` : name;
+        if (id) {
+          return `${name}(ID:${id})`;
+        }
+        return name;
       })
       .join('、');
   }
 
   /**
-   * 转换 FF14 市场插件输入。
-   * @param icon - icon 输入；决定 FF14 市场条件分支。
+   * 将`icon`规范为条目图标，使等价输入得到一致表示；当 `icon && typeof icon === 'object'` 成立时返回 `item.path_hr1 || item.path`。
+   * @param icon - 决定条目图标内容、边界或目标的 `icon` 值。
+   * @returns 规范化后的条目图标；主值为空时采用 `item.path` 兜底；没有可用结果或提前结束时为 `undefined`。
    */
   private normalizeItemIcon(icon: unknown) {
     if (typeof icon === 'string') return icon;
@@ -450,8 +489,9 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 转换 FF14 市场插件输入。
-   * @param level - level 输入；决定 FF14 市场条件分支。
+   * 将`level`规范为条目Level，使等价输入得到一致表示；当 `level && typeof level === 'object'` 成立时返回 `item.row_id ?? item.value`。
+   * @param level - 决定条目Level内容、边界或目标的 `level` 值。
+   * @returns 规范化后的条目Level；主值为空时采用 `item.value` 兜底；没有可用结果或提前结束时为 `undefined`。
    */
   private normalizeItemLevel(level: unknown) {
     if (typeof level === 'number') return level;
@@ -463,18 +503,20 @@ export class Ff14MarketClient {
   }
 
   /**
-   * 执行 FF14 市场插件流程。
-   * @param value - 待转换值；生成规范化文本。
+   * 将`value`中的针对FF14 市场插件特殊字符转义，使结果可安全嵌入查询或脚本文本。
+   * @param value - 待转换为针对FF14 市场插件的原始值。
+   * @returns 完成特殊字符转义的针对FF14 市场插件。
    */
   private escapeXivapiValue(value: string) {
     return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   }
 
   /**
-   * 执行 FF14 市场插件流程。
-   * @param url - 访问地址；影响 requestJson 的返回值。
-   * @param method - HTTP 方法名；影响 requestJson 的返回值。
-   * @param context - context 输入；影响 requestJson 的返回值。
+   * 针对FF14 市场插件，按 `this.host.requestJson<T>({ context, failureMessage: (statusCode) => `${context}失败：${statusC…` 计算并返回结果。
+   * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+   * @param method - 决定JSON 数据内容、边界或目标的 `method` 值。
+   * @param context - 决定JSON 数据内容、边界或目标的 `context` 值。
+   * @returns JSON 数据。
    */
   private requestJson<T>(url: URL, method: Ff14HttpMethod, context: string) {
     return this.host.requestJson<T>({
@@ -490,8 +532,9 @@ export class Ff14MarketClient {
 }
 
 /**
- * 转换 FF14 市场插件输入。
- * @param value - 待转换时间值；构造时间对象。
+ * 将`value`转换为针对FF14 市场插件；从 `date.getFullYear` 读取针对FF14 市场插件。
+ * @param value - 待转换为针对FF14 市场插件的原始值。
+ * @returns 针对FF14 市场插件。
  */
 function formatFf14DateTime(value: number) {
   const date = new Date(value);

@@ -9,9 +9,9 @@ export type RepeaterRuntimeConfig = {
 };
 
 /**
- * 读取 复读插件资源。
- * @param host - host 输入；驱动 `getNumberConfig()` 的 模块步骤。
- * @returns 复读插件产出的 RepeaterRuntimeConfig。
+ * 按`host`读取针对复读插件；从 `getNumberConfig` 读取针对复读插件。
+ * @param host - 可能包含认证信息或端口的外部服务地址。
+ * @returns 包含 `configCacheTtlMs`、`maxTextLength`、`minIntervalMs`、`stateTtlMs`、`threshold` 字段的针对复读插件。
  */
 export function readRepeaterRuntimeConfig(
   host: RepeaterPluginHost,
@@ -51,11 +51,12 @@ export function readRepeaterRuntimeConfig(
 }
 
 /**
- * 查询 复读插件数据。
- * @param host - host 输入；执行 `host.getConfig()` 对应的 模块步骤。
- * @param key - 键名；驱动 `Number()` 的 模块步骤。
- * @param fallback - 兜底值；驱动 `Number.isInteger()` 的 模块步骤。
- * @param valid - 模块 ID；定位本次读取、更新、删除或关联的模块。
+ * 按`host`、`key`、`fallback`读取针对复读插件；当 `Number.isInteger(value) && valid(value)` 成立时返回 `value`。
+ * @param host - 可能包含认证信息或端口的外部服务地址。
+ * @param key - 用于读取或更新针对复读插件的稳定键。
+ * @param fallback - 主值缺失、为空或不合法时采用的兜底结果。
+ * @param valid - 负责完成针对复读插件外部交互的受控能力。
+ * @returns 针对复读插件。
  */
 function getNumberConfig(
   host: RepeaterPluginHost,
@@ -64,5 +65,8 @@ function getNumberConfig(
   valid: (value: number) => boolean,
 ) {
   const value = Number(host.getConfig(key));
-  return Number.isInteger(value) && valid(value) ? value : fallback;
+  if (Number.isInteger(value) && valid(value)) {
+    return value;
+  }
+  return fallback;
 }

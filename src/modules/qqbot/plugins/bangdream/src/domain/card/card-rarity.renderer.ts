@@ -18,7 +18,7 @@ export const starList: { [type: string]: Image } = {};
 let rarityAssetsPreload: Promise<void> | undefined;
 
 /**
- * 执行 BangDream 插件流程。
+ * 根据当前运行态处理BanG Dream卡牌RarityAssets；从受控资源来源加载所需数据（`loadImageFromPath`）。
  */
 export async function preloadBangDreamCardRarityAssets() {
   if (!rarityAssetsPreload) {
@@ -39,10 +39,8 @@ export async function preloadBangDreamCardRarityAssets() {
 }
 
 /**
- * 在图片布局层中绘制RarityIn列表。
- *
- * @param options1 - options1 输入；影响 drawRarityInList 的返回值。
- * @returns 异步处理结果。
+ * 根据当前运行态绘制或格式化Rarity。
+ * @returns 按稀有度、训练状态与可选文本绘制完成的卡牌星级列表画布。
  */
 export async function drawRarityInList({
   key,

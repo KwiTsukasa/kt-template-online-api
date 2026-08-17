@@ -36,22 +36,42 @@ export class EnvironmentReadonlyHttpClient {
       options.bodyPreviewLimit ?? DEFAULT_BODY_PREVIEW_LIMIT;
     this.timeoutMs =
       options.timeoutMs ||
-      (Number.isFinite(configuredTimeout) && configuredTimeout > 0
-        ? configuredTimeout
-        : DEFAULT_TIMEOUT_MS);
+      ((() => {
+        if (Number.isFinite(configuredTimeout) && configuredTimeout > 0) {
+          return configuredTimeout;
+        }
+        return DEFAULT_TIMEOUT_MS;
+      })());
   }
 
-  /** 读取环境只读的HTTP记录。 */
+  /**
+   * 按`url`、`options`读取环境只读的HTTP记录；从受控资源来源加载所需数据（`request`）。
+   * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+   * @param options - 控制环境只读的HTTP记录筛选、缓存或输出方式的可选项；省略时默认采用 `{}`。
+   * @returns 环境只读的HTTP记录。
+   */
   get(url: string, options: EnvironmentReadonlyHttpRequestOptions = {}) {
     return this.request('GET', url, options);
   }
 
-  /** 返回头部。 */
+  /**
+   * 根据`url`、`options`处理只读 HEAD 查询并写回头部；从受控资源来源加载所需数据（`request`）。
+   * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+   * @param options - 控制只读 HEAD 查询并写回头部筛选、缓存或输出方式的可选项；省略时默认采用 `{}`。
+   * @returns 只读 HEAD 查询并写回头部。
+   */
   head(url: string, options: EnvironmentReadonlyHttpRequestOptions = {}) {
     return this.request('HEAD', url, options);
   }
 
-  /** 请求环境只读的HTTP记录。 */
+  /**
+   * 按`method`、`url`、`options`投递环境只读的HTTP记录；从受控资源来源加载所需数据（`axios.request`）。
+   * @param method - 决定环境只读的HTTP记录内容、边界或目标的 `method` 值。
+   * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+   * @param options - 控制环境只读的HTTP记录筛选、缓存或输出方式的可选项，包含 `headers`、`params` 字段；省略时默认采用 `{}`。
+   * @returns 包含 `bodyPreview`、`headers`、`observedAt`、`status`、`statusText` 字段的环境只读的HTTP记录。
+   * @throws 当 `normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD'` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async request(
     method: string,
     url: string,
@@ -73,7 +93,12 @@ export class EnvironmentReadonlyHttpClient {
 
     return {
       bodyPreview:
-        normalizedMethod === 'HEAD' ? '' : this.toBodyPreview(response.data),
+        (() => {
+          if (normalizedMethod === 'HEAD') {
+            return '';
+          }
+          return this.toBodyPreview(response.data);
+        })(),
       headers: this.sanitizeHeaders(
         response.headers as Record<string, unknown>,
       ),
@@ -83,21 +108,39 @@ export class EnvironmentReadonlyHttpClient {
     };
   }
 
-  /** 返回到请求体预览。 */
+  /**
+   * 把响应体转换为文本预览，并以配置上限截断过长内容，避免仪表盘承载完整大响应。
+   * @param body - 待转换为预览的响应体；非字符串值按 JSON 序列化。
+   * @returns 未超限时返回完整文本，超限时返回截断内容并追加省略号。
+   */
   private toBodyPreview(body: unknown): string {
-    const text = typeof body === 'string' ? body : JSON.stringify(body ?? '');
+    const text = (() => {
+      if (typeof body === 'string') {
+        return body;
+      }
+      return JSON.stringify(body ?? '');
+    })();
     if (text.length <= this.bodyPreviewLimit) return text;
     return `${text.slice(0, this.bodyPreviewLimit)}...`;
   }
 
-  /** 清理请求头。 */
+  /**
+   * 将`headers`规范为请求头，使等价输入得到一致表示。
+   * @param headers - 决定请求头内容、边界或目标的 `headers` 值；省略时默认采用 `{}`。
+   * @returns 请求头。
+   */
   private sanitizeHeaders(
     headers: Record<string, unknown> = {},
   ): Record<string, unknown> {
     return Object.fromEntries(
       Object.entries(headers).map(([key, value]) => [
         key,
-        SECRET_HEADER_PATTERN.test(key) ? '[redacted]' : value,
+        (() => {
+          if (SECRET_HEADER_PATTERN.test(key)) {
+            return '[redacted]';
+          }
+          return value;
+        })(),
       ]),
     );
   }

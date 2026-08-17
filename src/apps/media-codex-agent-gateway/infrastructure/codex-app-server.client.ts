@@ -124,21 +124,31 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     this.initialized = true;
   }
 
-  /** 注册按接收顺序串行执行的 App Server 通知处理器。 */
+  /**
+   * 注册按接收顺序串行执行的 App Server 通知处理器。
+   * @param handler - `handler` 写入 `this.notificationHandler` 状态。
+   */
   onNotification(
     handler: (notification: CodexAppServerNotification) => void | Promise<void>,
   ) {
     this.notificationHandler = handler;
   }
 
-  /** 注册处理动态媒体工具调用的唯一边界处理器。 */
+  /**
+   * 注册处理动态媒体工具调用的唯一边界处理器，并会更新 `this.toolHandler`。
+   * @param handler - `handler` 写入 `this.toolHandler` 状态。
+   */
   onToolCall(
     handler: (request: CodexAppServerToolRequest) => Promise<unknown>,
   ) {
     this.toolHandler = handler;
   }
 
-  /** 使用固定权限、只读沙箱和媒体动态工具创建持久线程。 */
+  /**
+   * 通过使用固定权限、只读沙箱和媒体动态工具创建持久线程。
+   * @param policy - 用于通过使用固定权限、只读沙箱和媒体动态工具创建持久线程的领域对象，包含 `staticPrompt`、`cleanCwd`、`permissionProfile` 字段。
+   * @returns 通过使用固定权限、只读沙箱和媒体动态工具创建持久线程。
+   */
   async startThread(
     policy: MediaCodexAgentPolicy,
   ): Promise<CodexAppServerThreadState> {
@@ -165,7 +175,13 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     return this.projectThread(response);
   }
 
-  /** 恢复指定持久线程，补齐分页历史并验证线程及沙箱边界。 */
+  /**
+   * 恢复指定持久线程，补齐分页历史并验证线程及沙箱边界。
+   * @param threadId - 用于精确定位线程的标识。
+   * @param policy - 用于指定持久线程，补齐分页历史并验证线程及沙箱边界的领域对象，包含 `staticPrompt`、`cleanCwd`、`permissionProfile` 字段。
+   * @returns 指定持久线程，补齐分页历史并验证线程及沙箱边界。
+   * @throws 当 `projected.threadId !== threadId` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async resumeThread(
     threadId: string,
     policy: MediaCodexAgentPolicy,
@@ -199,7 +215,15 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     return projected;
   }
 
-  /** 在指定线程启动受策略约束的回合，并返回 App Server 回合标识。 */
+  /**
+   * 在指定线程启动受策略约束的回合，并返回 App Server 回合标识。
+   * @param threadId - 用于精确定位线程的标识。
+   * @param prompt - 决定回合内容、边界或目标的 `prompt` 值。
+   * @param policy - 用于回合的领域对象，包含 `cleanCwd`、`permissionProfile` 字段。
+   * @param clientMessageId - 用于精确定位客户端消息的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 包含 `turnId` 字段的回合。
+   * @throws 当 `typeof turn.id !== 'string' || !turn.id` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async startTurn(
     threadId: string,
     prompt: string,
@@ -229,7 +253,10 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     return { turnId: turn.id };
   }
 
-  /** 仅接受声明的媒体工具请求，校验调用身份后返回统一 JSON-RPC 结果。 */
+  /**
+   * 仅接受声明的媒体工具请求，校验调用身份后返回统一 JSON-RPC 结果。
+   * @param request - 用于仅接受声明的媒体工具请求，校验调用身份后返回统一 JSON-RPC 结果的当前 HTTP 请求，包含 `method`、`id`、`params` 字段。
+   */
   private async handleServerRequest(request: {
     id: JsonRpcId;
     method: string;
@@ -302,7 +329,12 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     }
   }
 
-  /** 校验 App Server 返回的权限、工作目录、沙箱和网络状态均与策略一致。 */
+  /**
+   * 校验 App Server 返回的权限、工作目录、沙箱和网络状态均与策略一致。
+   * @param response - 包含 `sandbox`、`activePermissionProfile`、`approvalPolicy`、`cwd` 字段的上游服务响应。
+   * @param policy - 用于App Server 返回的权限、工作目录、沙箱和网络状态均与策略一致的领域对象，包含 `cleanCwd`、`permissionProfile` 字段。
+   * @throws 当 `response.approvalPolicy !== 'never' || response.cwd !== policy.cleanCwd…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private assertThreadBoundary(
     response: Record<string, unknown>,
     policy: MediaCodexAgentPolicy,
@@ -326,7 +358,13 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     }
   }
 
-  /** 将 App Server 线程响应投影为稳定线程状态和结构化最后回合。 */
+  /**
+   * 将 App Server 线程响应投影为稳定线程状态和结构化最后回合。
+   * @param response - 包含 `thread`、`initialTurnsPage` 字段的上游服务响应。
+   * @param completeTurns - 决定将 App Server 线程响应投影为稳定线程状态和结构化最后回合内容、边界或目标的 `completeTurns` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 包含 `lastTurn`、`messages`、`threadId` 字段的将 App Server 线程响应投影为稳定线程状态和结构化最后回合。
+   * @throws 当 `typeof thread.id !== 'string' || !thread.id` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private projectThread(
     response: Record<string, unknown>,
     completeTurns?: unknown[],
@@ -407,7 +445,11 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     };
   }
 
-  /** 将完整回合历史转换为去重前可持久化的用户与 Agent 对话消息。 */
+  /**
+   * 将完整回合历史转换为去重前可持久化的用户与 Agent 对话消息。
+   * @param turns - 决定将完整回合历史转换为去重前可持久化的用户与 Agent 对话消息内容、边界或目标的 `turns` 值。
+   * @returns 按输入顺序得到的将完整回合历史转换为去重前可持久化的用户与 Agent 对话消息列表；没有匹配项时为空数组。
+   */
   private projectMessages(
     turns: unknown[],
   ): Array<Omit<MediaCodexAgentConversationMessage, 'sequence'>> {
@@ -483,7 +525,13 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     return messages;
   }
 
-  /** 分页读取线程全部回合，并拒绝游标停滞或异常超量。 */
+  /**
+   * 分页读取线程全部回合，并拒绝游标停滞或异常超量。
+   * @param threadId - 用于精确定位线程的标识。
+   * @param response - 包含 `initialTurnsPage`、`thread` 字段的上游服务响应。
+   * @returns 回合集合。
+   * @throws 当 `pageCount >= 100` 成立时拒绝当前输入并抛出 `Error`；当 `!Array.isArray(page.data)` 成立时拒绝当前输入并抛出 `Error`；当 `nextCursor === cursor` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private async readAllTurns(
     threadId: string,
     response: Record<string, unknown>,
@@ -535,7 +583,11 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     return turns;
   }
 
-  /** 从可信提示词分区中提取操作员原始命令，忽略其余上下文。 */
+  /**
+   * 从可信提示词分区中提取操作员原始命令，忽略其余上下文。
+   * @param value - 参与从可信提示词分区中提取操作员原始命令，忽略其余上下文比较、格式化或输出的候选值。
+   * @returns 规范化后的从可信提示词分区中提取操作员原始命令，忽略其余上下文；主值为空时采用 `''` 兜底。
+   */
   private projectUserMessage(value: unknown) {
     if (!Array.isArray(value)) return '';
     const text = value
@@ -556,7 +608,12 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     return match?.[1]?.trim() ?? '';
   }
 
-  /** 将 App Server 秒级时间戳投影为 ISO 时间，缺失时返回纪元时间。 */
+  /**
+   * 将 App Server 秒级时间戳投影为 ISO 时间，缺失时返回纪元时间。
+   * @param turn - 用于将 App Server 秒级时间戳投影为 ISO 时间，缺失时返回纪元时间的领域对象，包含 `startedAt`、`completedAt` 字段。
+   * @param completed - 决定将 App Server 秒级时间戳投影为 ISO 时间，缺失时返回纪元时间内容、边界或目标的 `completed` 值。
+   * @returns 回合Observed。
+   */
   private turnObservedAt(turn: Record<string, unknown>, completed: boolean) {
     let value = turn.startedAt;
     if (completed) value = turn.completedAt;
@@ -600,7 +657,10 @@ export class UnixWebSocketRpcTransport implements CodexAppServerRpcTransport {
     }
   }
 
-  /** 建立并复用 Unix Socket WebSocket 连接，同时绑定断线清理逻辑。 */
+  /**
+   * 建立并复用 Unix Socket WebSocket 连接，同时绑定断线清理逻辑。
+   * @returns 连接打开后兑现的 Promise；已连接时立即完成，正在连接时复用同一 Promise，握手失败时拒绝。
+   */
   connect() {
     if (this.socket?.readyState === WebSocket.OPEN) return Promise.resolve();
     if (this.connectPromise) return this.connectPromise;
@@ -636,7 +696,12 @@ export class UnixWebSocketRpcTransport implements CodexAppServerRpcTransport {
     return this.connectPromise;
   }
 
-  /** 发送带递增标识的 JSON-RPC 请求，并在有界时间内等待响应。 */
+  /**
+   * 发送带递增标识的 JSON-RPC 请求，并在有界时间内等待响应。
+   * @param method - 决定`request` 对应结果内容、边界或目标的 `method` 值。
+   * @param params - 决定`request` 对应结果内容、边界或目标的 `params` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns 完成初始化并携带当前边界配置的`request` 对应。
+   */
   async request(method: string, params?: unknown) {
     await this.connect();
     const id = ++this.sequence;
@@ -651,13 +716,21 @@ export class UnixWebSocketRpcTransport implements CodexAppServerRpcTransport {
     });
   }
 
-  /** 发送无需响应的 JSON-RPC 通知。 */
+  /**
+   * 通过建立或复用 App Server 连接，写入无需响应的 JSON-RPC 通知。
+   * @param method - 决定通过建立或复用 App Server 连接，写入无需响应的 JSON-RPC 通知内容、边界或目标的 `method` 值。
+   * @param params - 决定通过建立或复用 App Server 连接，写入无需响应的 JSON-RPC 通知内容、边界或目标的 `params` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   */
   async notify(method: string, params?: unknown) {
     await this.connect();
     this.write({ method, params });
   }
 
-  /** 回复 App Server 发来的 JSON-RPC 请求。 */
+  /**
+   * 通过建立或复用 App Server 连接，写入与请求标识对应的 JSON-RPC 响应。
+   * @param id - 决定respond内容、边界或目标的 `id` 值。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   */
   async respond(
     id: JsonRpcId,
     response: { error?: JsonRpcObject; result?: unknown },
@@ -666,7 +739,10 @@ export class UnixWebSocketRpcTransport implements CodexAppServerRpcTransport {
     this.write({ id, ...response });
   }
 
-  /** 注册 App Server 主动请求的处理器。 */
+  /**
+   * 将 App Server 主动请求的处理器注册到当前客户端。
+   * @param handler - `handler` 写入 `this.requestHandler` 状态。
+   */
   onRequest(
     handler: (request: {
       id: JsonRpcId;
@@ -677,19 +753,29 @@ export class UnixWebSocketRpcTransport implements CodexAppServerRpcTransport {
     this.requestHandler = handler;
   }
 
-  /** 注册连接断开后的状态复位处理器。 */
+  /**
+   * 注册连接断开后的状态复位处理器，并会更新 `this.disconnectHandler`。
+   * @param handler - `handler` 写入 `this.disconnectHandler` 状态。
+   */
   onDisconnect(handler: () => void) {
     this.disconnectHandler = handler;
   }
 
-  /** 注册 App Server 通知处理器。 */
+  /**
+   * 注册 App Server 通知处理器，并会更新 `this.notificationHandler`。
+   * @param handler - `handler` 写入 `this.notificationHandler` 状态。
+   */
   onNotification(
     handler: (notification: CodexAppServerNotification) => void | Promise<void>,
   ) {
     this.notificationHandler = handler;
   }
 
-  /** 解码单条文本帧并将合法 JSON 对象交给路由器。 */
+  /**
+   * 解码单条文本帧并将合法 JSON 对象交给路由器。
+   * @param data - 用于单条文本帧并将合法 JSON 对象交给路由器的领域对象，包含 `toString` 字段。
+   * @param isBinary - 决定是否启用“Binary”分支的布尔选项。
+   */
   private readMessage(data: RawData, isBinary: boolean) {
     if (isBinary) return;
     let value: Record<string, unknown>;
@@ -704,7 +790,10 @@ export class UnixWebSocketRpcTransport implements CodexAppServerRpcTransport {
     void this.routeMessage(value);
   }
 
-  /** 按请求、响应和通知三类 JSON-RPC 消息分派处理。 */
+  /**
+   * 按请求、响应和通知三类 JSON-RPC 消息分派处理。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `id`、`method`、`params`、`error` 字段。
+   */
   private async routeMessage(message: Record<string, unknown>) {
     if (
       (typeof message.id === 'number' || typeof message.id === 'string') &&
@@ -740,7 +829,11 @@ export class UnixWebSocketRpcTransport implements CodexAppServerRpcTransport {
     }
   }
 
-  /** 在连接已打开时发送序列化 JSON-RPC 消息。 */
+  /**
+   * 通过在连接已打开时发送序列化 JSON-RPC 消息。
+   * @param value - 参与通过在连接已打开时发送序列化 JSON-RPC 消息比较、格式化或输出的候选值。
+   * @throws 当 `!this.socket || this.socket.readyState !== WebSocket.OPEN` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private write(value: Record<string, unknown>) {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       throw new Error('app-server-disconnected');
@@ -748,7 +841,10 @@ export class UnixWebSocketRpcTransport implements CodexAppServerRpcTransport {
     this.socket.send(JSON.stringify(value));
   }
 
-  /** 拒绝并清空所有等待中的请求，避免断线后悬挂。 */
+  /**
+   * 拒绝并清空所有等待中的请求，避免断线后悬挂。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息。
+   */
   private rejectPending(message: string) {
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
@@ -758,7 +854,13 @@ export class UnixWebSocketRpcTransport implements CodexAppServerRpcTransport {
   }
 }
 
-/** 要求协议值为普通对象，并以指定错误码拒绝其他形态。 */
+/**
+ * 要求协议值为普通对象，并以指定错误码拒绝其他形态。
+ * @param value - 参与对象比较、格式化或输出的候选值。
+ * @param code - 决定对象内容、边界或目标的 `code` 值。
+ * @returns 对象。
+ * @throws 当 `!value || typeof value !== 'object' || Array.isArray(value)` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function asObject(value: unknown, code: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(code);

@@ -27,7 +27,7 @@ export class Band {
     this.getMembers();
   }
   /**
-   * 查询 BangDream 插件数据。
+   * 按当前运行态读取Members。
    */
   getMembers() {
     const members = [];
@@ -41,17 +41,15 @@ export class Band {
     this.members = members;
   }
   /**
-   * 在 Band 模型中获取图标。
-   *
-   * @returns 异步处理结果。
+   * 按当前运行态读取图标；从 `getBandIcon` 读取图标。
+   * @returns 图标。
    */
   async getIcon(): Promise<Image> {
     return await getBandIcon(this.bandId);
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @returns 异步处理结果。
+   * 按当前运行态读取Logo；从受控资源来源加载所需数据（`loadImage`）。
+   * @returns 从乐队资源 Buffer 解码得到的 Logo 图片。
    */
   async getLogo(): Promise<Image> {
     const logoBuffer = await bandResourceRepository.getLogoBuffer(this.bandId);
@@ -62,10 +60,9 @@ export class Band {
 const bandIconCache: { [bandId: number]: Image } = {};
 
 /**
- * 在BangDream 领域模型层中获取乐队图标。
- *
- * @param bandId - BangDream ID；定位本次读取、更新、删除或关联的BangDream。
- * @returns 异步处理结果。
+ * 按`bandId`读取Band图标；当 `bandIconCache[bandId]` 成立时返回 `bandIconCache[bandId]`。
+ * @param bandId - 用于精确定位band的标识。
+ * @returns Band图标。
  */
 export async function getBandIcon(bandId: number): Promise<Image> {
   if (bandIconCache[bandId]) {

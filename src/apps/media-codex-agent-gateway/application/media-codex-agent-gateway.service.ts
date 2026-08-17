@@ -69,14 +69,21 @@ export class MediaCodexAgentGatewayService {
     );
   }
 
-  /** 在任务级串行锁内启动或安全重放一个媒体治理回合。 */
+  /**
+   * 通过在任务级串行锁内启动或安全重放一个媒体治理回合。
+   * @param request - 用于通过在任务级串行锁内启动或安全重放一个媒体治理回合的当前 HTTP 请求，包含 `taskId` 字段。
+   * @returns 通过在任务级串行锁内启动或安全重放一个媒体治理回合。
+   */
   startTurn(request: MediaCodexAgentTurnRequest) {
     return this.withTaskLock(request.taskId, () =>
       this.startTurnLocked(request),
     );
   }
 
-  /** 同时确认 App Server 与内部事件接收端处于就绪状态。 */
+  /**
+   * 同时确认 App Server 与内部事件接收端处于就绪状态。
+   * @returns 包含 `apiCallbackReady`、`appServerReady` 字段的同时确认 App Server 与内部事件接收端处于就绪状态。
+   */
   async health() {
     await Promise.all([this.appServer.initialize(), this.eventSink.health()]);
     return {
@@ -85,14 +92,26 @@ export class MediaCodexAgentGatewayService {
     };
   }
 
-  /** 在任务级串行锁内查询指定消息序列之后的安全会话投影。 */
+  /**
+   * 通过在任务级串行锁内查询指定消息序列之后的安全会话投影。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param afterSequence - 只返回该消息序列号之后内容的排他下界；省略时从首条消息开始；省略时默认采用 `0`。
+   * @param limit - 允许返回或处理的通过在任务级串行锁内查询指定消息序列之后的安全会话最大数量；省略时默认采用 `200`。
+   * @returns 通过在任务级串行锁内查询指定消息序列之后的安全会话。
+   */
   session(taskId: string, afterSequence = 0, limit = 200) {
     return this.withTaskLock(taskId, () =>
       this.sessionLocked(taskId, afterSequence, limit),
     );
   }
 
-  /** 恢复官方线程消息并修复已完成但结果尚未落盘的会话状态。 */
+  /**
+   * 恢复官方线程消息并修复已完成但结果尚未落盘的会话状态。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param afterSequence - 只返回该消息序列号之后内容的排他下界；省略时从首条消息开始。
+   * @param limit - 允许返回或处理的官方线程消息并修复已完成但结果尚未落盘的会话状态最大数量。
+   * @returns 官方线程消息并修复已完成但结果尚未落盘的会话状态；无法解析或未命中时为 `null`。
+   */
   private async sessionLocked(
     taskId: string,
     afterSequence: number,
@@ -155,7 +174,13 @@ export class MediaCodexAgentGatewayService {
     return this.projectSession(record, afterSequence, limit);
   }
 
-  /** 合并尚未落盘的热消息，并返回调用方请求的分页会话视图。 */
+  /**
+   * 合并尚未落盘的热消息，并返回调用方请求的分页会话视图。
+   * @param record - 用于媒体 Codex Agent 回合会话的领域对象，包含 `turnId` 字段。
+   * @param afterSequence - 只返回该消息序列号之后内容的排他下界；省略时从首条消息开始。
+   * @param limit - 允许返回或处理的媒体 Codex Agent 回合会话最大数量。
+   * @returns 包含 `messages` 字段的媒体 Codex Agent 回合会话。
+   */
   private projectSession(
     record: MediaCodexAgentSessionRecord,
     afterSequence: number,
@@ -173,7 +198,15 @@ export class MediaCodexAgentGatewayService {
     };
   }
 
-  /** 执行回放、恢复和策略边界检查后创建新回合并发布起始事件。 */
+  /**
+   * 执行回放、恢复和策略边界检查后创建新回合并发布起始事件。
+   * @param request - 用于回放、恢复和策略边界检查后创建新回合并发布起始事件的当前 HTTP 请求，包含 `taskId`、`taskRevision`、`replayKey`、`recoveryMode` 字段。
+   * @returns 回放、恢复和策略边界检查后创建新回合并发布起始事件。
+   * @throws 当 `existing.capsule.policySha256 !== policy.policySha256 || existing.capsu…` 成立时拒绝当前输入并抛出 `Error`；当 `request.taskRevision < existing.taskRevision` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `existing.status === 'active'` 成立时拒绝当前输入并抛出 `Error`；当 `request.recoveryMode && (!existing || existing.status !== 'blocked' ||…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!lastTurn || lastTurn.id !== existing.turnId` 成立时拒绝当前输入并抛出 `Error`；当 `existing.terminalKind !== 'failed' && !['failed', 'interrupted'].includ…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `['failed', 'interrupted'].includes(lastTurn.status)` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private async startTurnLocked(request: MediaCodexAgentTurnRequest) {
     await this.eventSink.health();
     const policy = buildMediaCodexAgentPolicy(request.taskId, this.policyPaths);
@@ -322,7 +355,14 @@ export class MediaCodexAgentGatewayService {
     return this.store.project(record, false);
   }
 
-  /** 校验 App Server 工具调用的会话身份，并转发后持久化已接受计划摘要。 */
+  /**
+   * 校验 App Server 工具调用的会话身份，并转发后持久化已接受计划摘要。
+   * @param request - 用于App Server 工具调用的执行结果的当前 HTTP 请求，包含 `threadId`、`turnId`、`arguments`、`tool` 字段。
+   * @returns App Server 工具调用的执行。
+   * @throws 当 `!record || record.status !== 'active' || record.turnId !== request.turn…` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `!result || typeof result !== 'object' || Array.isArray(result)` 成立时拒绝当前输入并抛出 `Error`；
+   *   当 `resultValue.accepted !== true || typeof resultValue.planSha256 !== 'str…` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private async handleToolCall(request: CodexAppServerToolRequest) {
     const record = this.store.findByThreadId(request.threadId);
     if (
@@ -368,7 +408,10 @@ export class MediaCodexAgentGatewayService {
     return result;
   }
 
-  /** 筛选受支持的 App Server 通知，绑定任务会话后进入任务级串行处理。 */
+  /**
+   * 通过筛选受支持的 App Server 通知，绑定任务会话后进入任务级串行处理。
+   * @param notification - 用于通过筛选受支持的 App Server 通知，绑定任务会话后进入任务级串行处理的领域对象，包含 `method`、`params` 字段。
+   */
   private async handleNotification(notification: CodexAppServerNotification) {
     if (
       notification.method !== 'item/agentMessage/delta' &&
@@ -401,7 +444,12 @@ export class MediaCodexAgentGatewayService {
     );
   }
 
-  /** 将消息增量、消息完成和回合终态归并到同一持久化会话。 */
+  /**
+   * 将消息增量、消息完成和回合终态归并到同一持久化会话。
+   * @param notification - 用于将消息增量、消息完成和回合终态归并到同一持久化会话的领域对象，包含 `method`、`params` 字段。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param turnId - 用于精确定位回合的标识。
+   */
   private async handleNotificationLocked(
     notification: CodexAppServerNotification,
     taskId: string,
@@ -581,7 +629,12 @@ export class MediaCodexAgentGatewayService {
     await this.publish(refreshed, eventType, summary);
   }
 
-  /** 将 App Server 官方消息归并到当前会话，并仅在内容变化时保存。 */
+  /**
+   * 将 App Server 官方消息归并到当前会话，并仅在内容变化时保存。
+   * @param record - 用于官方消息集合的领域对象，包含 `messages`、`conversationRevision` 字段。
+   * @param messages - 按原有顺序参与官方消息集合筛选、合并或汇总的集合。
+   * @returns 官方消息集合。
+   */
   private mergeOfficialMessages(
     record: MediaCodexAgentSessionRecord,
     messages: Array<Omit<MediaCodexAgentConversationMessage, 'sequence'>>,
@@ -604,7 +657,13 @@ export class MediaCodexAgentGatewayService {
     });
   }
 
-  /** 按消息标识合并官方历史，保留既有序列并为新消息连续编号。 */
+  /**
+   * 按消息标识合并官方历史，保留既有序列并为新消息连续编号。
+   * @param existing - 决定按消息标识合并官方历史，保留既有序列并为新消息连续编号内容、边界或目标的 `existing` 值。
+   * @param official - 决定按消息标识合并官方历史，保留既有序列并为新消息连续编号内容、边界或目标的 `official` 值。
+   * @param initialRevision - 决定按消息标识合并官方历史，保留既有序列并为新消息连续编号内容、边界或目标的 `initialRevision` 值。
+   * @returns 包含 `conversationRevision`、`messages` 字段的按消息标识合并官方历史，保留既有序列并为新消息连续编号。
+   */
   private mergeMessageLists(
     existing: MediaCodexAgentConversationMessage[],
     official: Array<Omit<MediaCodexAgentConversationMessage, 'sequence'>>,
@@ -630,7 +689,12 @@ export class MediaCodexAgentGatewayService {
     return { conversationRevision, messages };
   }
 
-  /** 按消息标识替换现有消息，未命中时将新消息追加到列表。 */
+  /**
+   * 按消息标识替换现有消息，未命中时将新消息追加到列表。
+   * @param messages - 按原有顺序参与replace消息筛选、合并或汇总的集合。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `messageId` 字段。
+   * @returns replace消息。
+   */
   private replaceMessage(
     messages: MediaCodexAgentConversationMessage[],
     message: MediaCodexAgentConversationMessage,
@@ -644,7 +708,13 @@ export class MediaCodexAgentGatewayService {
     return next;
   }
 
-  /** 按线程串行发布对话事件，确保事件序列单调递增且队列可回收。 */
+  /**
+   * 按线程串行发布对话事件，确保事件序列单调递增且队列可回收。
+   * @param record - 用于按线程串行发布对话事件，确保事件序列单调递增且队列可回收的领域对象，包含 `threadId`、`capsule`、`conversationRevision`、`taskId` 字段。
+   * @param changeType - 决定按线程串行发布对话事件，确保事件序列单调递增且队列可回收内容、边界或目标的 `changeType` 值。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `messageId`、`observedAt`、`phase`、`result` 字段。
+   * @param content - 决定按线程串行发布对话事件，确保事件序列单调递增且队列可回收内容、边界或目标的 `content` 值；省略时默认采用 `message.content`。
+   */
   private async publishConversation(
     record: MediaCodexAgentSessionRecord,
     changeType: MediaCodexAgentConversationEvent['changeType'],
@@ -689,7 +759,12 @@ export class MediaCodexAgentGatewayService {
     }
   }
 
-  /** 在短窗口内合并同一消息的增量，降低事件发布频率。 */
+  /**
+   * 在短窗口内合并同一消息的增量，降低事件发布频率。
+   * @param record - 用于在短窗口内合并同一消息的增量，降低事件发布频率的领域对象，包含 `threadId` 字段。
+   * @param message - 包含正文、发送目标与账号身份的待处理消息，包含 `messageId`、`phase` 字段。
+   * @param content - 决定在短窗口内合并同一消息的增量，降低事件发布频率内容、边界或目标的 `content` 值。
+   */
   private enqueueConversationDelta(
     record: MediaCodexAgentSessionRecord,
     message: MediaCodexAgentConversationMessage,
@@ -721,7 +796,12 @@ export class MediaCodexAgentGatewayService {
     });
   }
 
-  /** 立即发布并移除指定线程消息的待发送增量。 */
+  /**
+   * 立即发布并移除指定线程消息的待发送增量。
+   * @param threadId - 用于精确定位线程的标识。
+   * @param messageId - 用于精确定位消息的标识。
+   * @returns 立即发布并移除指定线程消息的待发送增量。
+   */
   private flushConversationDelta(threadId: string, messageId: string) {
     const key = `${threadId}:${messageId}`;
     const pending = this.conversationDeltas.get(key);
@@ -736,7 +816,11 @@ export class MediaCodexAgentGatewayService {
     );
   }
 
-  /** 在回合终态处理前依次排空该回合的所有对话增量。 */
+  /**
+   * 通过在回合终态处理前依次排空该回合的所有对话增量。
+   * @param threadId - 用于精确定位线程的标识。
+   * @param turnId - 用于精确定位回合的标识。
+   */
   private async flushTurnConversationDeltas(threadId: string, turnId: string) {
     const pending = [...this.conversationDeltas.entries()].filter(
       ([key, value]) =>
@@ -747,7 +831,11 @@ export class MediaCodexAgentGatewayService {
     }
   }
 
-  /** 判断结构化结果与已接受密封计划的摘要关系是否一致。 */
+  /**
+   * 根据已接受密封计划的摘要关系，判断结构化结果是否与计划一致。
+   * @param record - 用于根据已接受密封计划的摘要关系，判断结构化结果是否与计划一致的领域对象，包含 `result`、`acceptedPlanSha256` 字段。
+   * @returns 满足根据已接受密封计划的摘要关系，判断结构化结果是否与计划一致约束时为 `true`；不满足、未命中或显式失败分支为 `false`；无法解析或未命中时为 `null`。
+   */
   private hasConsistentResult(record: MediaCodexAgentSessionRecord) {
     if (!record.result) return false;
     if (record.result.status === 'plan-submitted') {
@@ -761,7 +849,13 @@ export class MediaCodexAgentGatewayService {
     );
   }
 
-  /** 发布语义事件并将成功使用的事件序列持久化到会话检查点。 */
+  /**
+   * 发布语义事件并将成功使用的事件序列持久化到会话检查点。
+   * @param record - 用于语义事件并将成功使用的事件序列持久化到会话检查点的领域对象，包含 `lastEventSequence`、`result`、`capsule`、`status` 字段。
+   * @param type - 决定语义事件并将成功使用的事件序列持久化到会话检查点内容、边界或目标的 `type` 值。
+   * @param summary - 决定语义事件并将成功使用的事件序列持久化到会话检查点内容、边界或目标的 `summary` 值。
+   * @returns 语义事件并将成功使用的事件序列持久化到会话检查点。
+   */
   private async publish(
     record: MediaCodexAgentSessionRecord,
     type: MediaCodexAgentSemanticEvent['type'],
@@ -793,7 +887,12 @@ export class MediaCodexAgentGatewayService {
     });
   }
 
-  /** 将同一任务的异步工作串行化，并在当前工作结束后回收锁条目。 */
+  /**
+   * 将同一任务的异步工作串行化，并在当前工作结束后回收锁条目。
+   * @param taskId - 用于精确定位任务的标识。
+   * @param work - 在当前锁、事务或错误边界内执行的受控回调。
+   * @returns 任务Lock。
+   */
   private withTaskLock<T>(taskId: string, work: () => Promise<T>): Promise<T> {
     const previous = this.locks.get(taskId) ?? Promise.resolve();
     const current = previous.catch(() => undefined).then(work);
@@ -804,7 +903,11 @@ export class MediaCodexAgentGatewayService {
   }
 }
 
-/** 移除会话的派生检查点摘要，供下一次持久化重新计算。 */
+/**
+ * 移除会话的派生检查点摘要，供下一次持久化重新计算。
+ * @param record - 决定会话的派生检查点摘要，供下一次持久化重新计算内容、边界或目标的 `record` 值。
+ * @returns 会话的派生检查点摘要，供下一次持久化重新计算。
+ */
 function withoutCheckpoint(record: MediaCodexAgentSessionRecord) {
   const { checkpointSha256, ...unsigned } = record;
   void checkpointSha256;

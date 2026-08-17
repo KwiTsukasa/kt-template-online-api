@@ -20,11 +20,11 @@ export class PlayerDataRepository {
   ) {}
 
   /**
-   * 构建玩家资料 API 路径。
-   *
-   * @param playerId - 玩家 ID；定位本次读取、更新、删除或关联的玩家。
-   * @param server - server 输入；限定 BangDream查询范围。
-   * @param mode - mode 输入；限定 BangDream查询范围。
+   * 按`playerId`、`server`、`mode`读取玩家资料 API 路径。
+   * @param playerId - 用于精确定位玩家的标识。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+   * @param mode - 选择玩家资料 API 路径处理分支的模式值。
+   * @returns 按参数编码并拼接完成的玩家资料 API 路径。
    */
   getDetailPath(playerId: number, server: Server, mode: PlayerDetailMode) {
     return `/api/player/${Server[server]}/${playerId}?mode=${mode}`;
@@ -32,11 +32,11 @@ export class PlayerDataRepository {
 
   /**
    * 读取玩家详情，并在缓存模式 1 下保留后台刷新行为。
-   *
-   * @param playerId - 玩家 ID；定位本次读取、更新、删除或关联的玩家。
-   * @param server - server 输入；驱动 `this.getDetailPath()`、`this.refreshCache()` 的 BangDream步骤。
-   * @param useCache - useCache 输入；限定 BangDream查询范围。
-   * @param mode - mode 输入；驱动 `this.getDetailPath()`、`this.refreshCache()` 的 BangDream步骤。
+   * @param playerId - 用于精确定位玩家的标识。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+   * @param useCache - 决定是否启用“use缓存”分支的布尔选项。
+   * @param mode - 选择详情处理分支的模式值。
+   * @returns 详情。
    */
   async getDetail(
     playerId: number,
@@ -44,7 +44,12 @@ export class PlayerDataRepository {
     useCache: boolean,
     mode: PlayerDetailMode,
   ): Promise<PlayerDetailResponse> {
-    const cacheTime = useCache ? Infinity : 0;
+    const cacheTime = (() => {
+      if (useCache) {
+        return Infinity;
+      }
+      return 0;
+    })();
     const path = this.getDetailPath(playerId, server, mode);
     const playerData = await this.provider.getJson<PlayerDetailResponse>(path, {
       cacheTime,
@@ -58,10 +63,9 @@ export class PlayerDataRepository {
 
   /**
    * 后台刷新玩家缓存，失败只记日志，不影响当前查询结果。
-   *
-   * @param playerId - 玩家 ID；定位本次读取、更新、删除或关联的玩家。
-   * @param server - server 输入；驱动 `getJson()` 的 BangDream步骤。
-   * @param mode - mode 输入；驱动 `getJson()` 的 BangDream步骤。
+   * @param playerId - 用于精确定位玩家的标识。
+   * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+   * @param mode - 选择后台刷新玩家缓存，失败只记日志，不影响当前查询结果处理分支的模式值。
    */
   refreshCache(playerId: number, server: Server, mode: PlayerDetailMode): void {
     this.provider

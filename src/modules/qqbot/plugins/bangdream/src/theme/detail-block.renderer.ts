@@ -70,9 +70,8 @@ const songMetaSeparator = drawDottedLine(
 );
 
 /**
- * 在图片布局层中绘制横幅Info块。
- *
- * @param options1 - options1 输入；影响 drawBannerInfoBlock 的返回值。
+ * 根据当前运行态绘制或格式化横幅InfoBlock。
+ * @returns 横幅InfoBlock。
  */
 async function drawBannerInfoBlock({
   banner,
@@ -90,11 +89,11 @@ async function drawBannerInfoBlock({
 }
 
 /**
- * 在图片布局层中绘制活动数据块。
- *
- * @param event - event 输入；使用 `eventId`、`startAt` 字段生成结果。
- * @param displayedServerList - displayedServerList 输入；影响 drawEventDataBlock 的返回值。
- * @param topLeftText - topLeftText 输入；驱动 `event.getBannerImage()` 的 BangDream步骤。
+ * 根据`event`、`displayedServerList`、`topLeftText`绘制或格式化事件数据Block；从 `event.getTypeName` 读取事件数据Block。
+ * @param event - 触发事件数据Block的领域事件，包含 `getTypeName`、`eventId`、`getAttributeList`、`getCharacterList` 字段。
+ * @param displayedServerList - 决定事件数据Block内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @param topLeftText - 决定事件数据Block内容、边界或目标的 `topLeftText` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 事件数据Block。
  */
 export async function drawEventDataBlock(
   event: Event,
@@ -150,10 +149,10 @@ export async function drawEventDataBlock(
 }
 
 /**
- * 在图片布局层中绘制卡池数据块。
- *
- * @param gacha - gacha 输入；使用 `gachaId` 字段生成结果。
- * @param topLeftText - topLeftText 输入；影响 drawGachaDataBlock 的返回值。
+ * 根据`gacha`、`topLeftText`绘制或格式化卡池数据Block；从 `gacha.getBannerImage` 读取卡池数据Block。
+ * @param gacha - 用于卡池数据Block的领域对象，包含 `getBannerImage`、`getTypeName`、`gachaId` 字段。
+ * @param topLeftText - 决定卡池数据Block内容、边界或目标的 `topLeftText` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns 卡池数据Block。
  */
 export async function drawGachaDataBlock(gacha: Gacha, topLeftText?: string) {
   return drawBannerInfoBlock({
@@ -168,11 +167,11 @@ export async function drawGachaDataBlock(gacha: Gacha, topLeftText?: string) {
 }
 
 /**
- * 在图片布局层中绘制歌曲数据块。
- *
- * @param song - song 输入；使用 `publishedAt`、`musicTitle`、`bandId`、`songId` 字段生成结果。
- * @param text - 待匹配文本；决定 BangDream条件分支。
- * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
+ * 根据`song`、`text`、`displayedServerList`绘制或格式化歌曲数据Block；把图片、文本或图形按布局规格绘制到画布。
+ * @param song - 用于歌曲数据Block的领域对象，包含 `publishedAt`、`getSongJacketImage`、`musicTitle`、`bandId` 字段。
+ * @param text - 决定歌曲数据Block内容、边界或目标的 `text` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param displayedServerList - 决定歌曲数据Block内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @returns 歌曲数据Block。
  */
 export async function drawSongDataBlock(
   song: Song,
@@ -228,12 +227,12 @@ export async function drawSongDataBlock(
 }
 
 /**
- * 在图片布局层中绘制歌曲Meta列表数据块。
- *
- * @param withFever - withFever 输入；驱动 `getSongMetaRankSummary()` 的 BangDream步骤。
- * @param song - song 输入；使用 `difficulty` 字段生成结果。
- * @param topLeftText - topLeftText 输入；影响 drawSongMetaListDataBlock 的返回值。
- * @param displayedServerList - displayedServerList 输入；驱动 `for()` 的 BangDream步骤。
+ * 根据`withFever`、`song`、`topLeftText`绘制或格式化歌曲Meta数据Block；从 `getSongMetaRankSummary` 读取歌曲Meta数据Block。
+ * @param withFever - 决定歌曲Meta数据Block内容、边界或目标的 `withFever` 值。
+ * @param song - 用于歌曲Meta数据Block的领域对象，包含 `difficulty` 字段。
+ * @param topLeftText - 决定歌曲Meta数据Block内容、边界或目标的 `topLeftText` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @param displayedServerList - 决定歌曲Meta数据Block内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @returns 歌曲Meta数据Block。
  */
 export async function drawSongMetaListDataBlock(
   withFever: boolean,
@@ -274,11 +273,11 @@ export async function drawSongMetaListDataBlock(
 }
 
 /**
- * 在图片布局层中绘制Meta列表数据块。
- *
- * @param withFever - withFever 输入；驱动 `getMetaRanking()` 的 BangDream步骤。
- * @param server - server 输入；驱动 `getMetaRanking()` 的 BangDream步骤。
- * @param topLeftText - topLeftText 输入；影响 drawMetaListDataBlock 的返回值。
+ * 根据`withFever`、`server`、`topLeftText`绘制或格式化Meta数据Block；从 `getMetaRanking` 读取Meta数据Block。
+ * @param withFever - 决定Meta数据Block内容、边界或目标的 `withFever` 值。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @param topLeftText - 决定Meta数据Block内容、边界或目标的 `topLeftText` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+ * @returns Meta数据Block。
  */
 export async function drawMetaListDataBlock(
   withFever: boolean,
@@ -310,11 +309,10 @@ export async function drawMetaListDataBlock(
 }
 
 /**
- * 在图片布局层中绘制角色Half块。
- *
- * @param character - character 输入；使用 `colorCode`、`characterName`、`characterId` 字段生成结果。
- * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
- * @returns 异步处理结果。
+ * 根据`character`、`displayedServerList`绘制或格式化角色HalfBlock；把图片、文本或图形按布局规格绘制到画布。
+ * @param character - 用于角色HalfBlock的领域对象，包含 `initFull`、`colorCode`、`getIllustration`、`characterName` 字段。
+ * @param displayedServerList - 决定角色HalfBlock内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @returns 角色HalfBlock。
  */
 export async function drawCharacterHalfBlock(
   character: Character,
@@ -326,9 +324,12 @@ export async function drawCharacterHalfBlock(
   const canvas = new Canvas(width, height);
   const ctx = canvas.getContext('2d');
   await character.initFull(false);
-  const color = character.colorCode
-    ? character.colorCode.toLowerCase()
-    : BANGDREAM_RENDER_THEME.color.surface;
+  const color = (() => {
+    if (character.colorCode) {
+      return character.colorCode.toLowerCase();
+    }
+    return BANGDREAM_RENDER_THEME.color.surface;
+  })();
   ctx.drawImage(
     drawRoundedRect({
       width,
@@ -399,10 +400,9 @@ export async function drawCharacterHalfBlock(
 }
 
 /**
- * 在图片布局层中绘制玩家详情块WithIllustration。
- *
- * @param player - player 输入；使用 `profile`、`server` 字段生成结果。
- * @returns 异步处理结果。
+ * 根据`player`绘制或格式化玩家详情BlockIllustration；把图片、文本或图形按布局规格绘制到画布。
+ * @param player - 用于玩家详情BlockIllustration的领域对象，包含 `profile`、`server` 字段。
+ * @returns 玩家详情BlockIllustration。
  */
 export async function drawPlayerDetailBlockWithIllustration(
   player: Player,
@@ -444,9 +444,12 @@ export async function drawPlayerDetailBlockWithIllustration(
   list.push(drawImageListCenter([introductionText]));
   list.push(new Canvas(1, spec.spacerHeight));
 
-  const userId = player.profile.publishUserIdFlg
-    ? player.profile.userId.toString()
-    : 'ID未公开';
+  const userId = (() => {
+    if (player.profile.publishUserIdFlg) {
+      return player.profile.userId.toString();
+    }
+    return 'ID未公开';
+  })();
   const idText = drawTextWithImages({
     content: [await getIcon(player.server), userId],
     maxWidth: BANGDREAM_RENDER_THEME.layout.contentWidth,

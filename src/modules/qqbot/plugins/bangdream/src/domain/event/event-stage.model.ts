@@ -47,7 +47,7 @@ export class EventStage {
     this.isExist = true;
   }
   /**
-   * 在 EventStage 模型中加载远端完整详情并标记初始化状态。
+   * 根据当前运行态处理initFull；当 `!this.isExist` 成立时直接结束且不产生返回值。
    */
   async initFull() {
     if (!this.isExist) {
@@ -70,9 +70,9 @@ export class EventStage {
   }
   /**
    * 在 EventStage 模型中请求当前模型的远端详情数据。
-   *
-   * @param update - update 输入；驱动 `eventStageDataRepository.getFestivalData()` 的 BangDream步骤。
-   * @param type - type 输入；驱动 `eventStageDataRepository.getFestivalData()` 的 BangDream步骤。
+   * @param update - 决定在 EventStage 模型中请求当前模型的远端详情数据内容、边界或目标的 `update` 值；省略时默认采用 `true`。
+   * @param type - 决定在 EventStage 模型中请求当前模型的远端详情数据内容、边界或目标的 `type` 值。
+   * @returns 在 EventStage 模型中请求当前模型的远端详情数据。
    */
   async getData<T extends EventStageDataType>(
     update: boolean = true,
@@ -86,9 +86,8 @@ export class EventStage {
   }
 
   /**
-   * 在 EventStage 模型中获取试炼列表。
-   *
-   * @returns 处理后的列表。
+   * 按当前运行态读取阶段；当 `!this.isInitFull` 成立时返回 `[]`。
+   * @returns 按输入顺序得到的阶段列表；没有匹配项时为空数组。
    */
   getStageList(): Stage[] {
     if (!this.isInitFull) {
@@ -129,11 +128,10 @@ export class EventStage {
   }
 
   /**
-   * 在 EventStage 模型中获取试炼类型By时间。
-   *
-   * @param startAt - startAt 输入；驱动 `parseInt()` 的 BangDream步骤。
-   * @param endAt - endAt 输入；驱动 `parseInt()` 的 BangDream步骤。
-   * @returns 格式化后的文本。
+   * 按`startAt`、`endAt`读取阶段Type时间；当 `!this.isInitFull` 成立时返回 `BangDreamEventStageType.unknown`。
+   * @param startAt - 用于过期、排序或租约判定的时间基准。
+   * @param endAt - 用于过期、排序或租约判定的时间基准。
+   * @returns 规范化后的阶段Type时间；主值为空时采用 `BangDreamEventStageType.unknown` 兜底。
    */
   getStageTypeByTime(startAt: number, endAt: number): string {
     if (!this.isInitFull) {

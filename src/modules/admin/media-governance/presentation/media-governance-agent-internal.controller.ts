@@ -27,7 +27,10 @@ import { MediaGovernanceService } from '@/modules/admin/media-governance/applica
 export class MediaGovernanceAgentInternalController {
   constructor(private readonly service: MediaGovernanceService) {}
 
-  /** 返回 Agent 回调入口的健康状态及固定零写边界。 */
+  /**
+   * 返回 Agent 回调入口的健康状态及固定零写边界。
+   * @returns 包含 `writeBoundaries` 字段的Agent 回调入口的健康状态及固定零写边界。
+   */
   @Get('health')
   health() {
     return {
@@ -41,19 +44,31 @@ export class MediaGovernanceAgentInternalController {
     };
   }
 
-  /** 接收并执行通过内部鉴权的 Agent 工具调用。 */
+  /**
+   * 接收并执行通过内部鉴权的 Agent 工具调用。
+   * @param body - 用于接收并执行通过内部鉴权的 Agent 工具调用的结构化输入。
+   * @returns 接收并执行通过内部鉴权的 Agent 工具调用。
+   */
   @Post('tool-calls')
   async toolCall(@Body() body: MediaGovernanceAgentToolCallDto) {
     return this.service.agentToolCall(body);
   }
 
-  /** 接收 Agent 生命周期事件并交由治理服务校验落库。 */
+  /**
+   * 接收 Agent 生命周期事件并交由治理服务校验落库。
+   * @param body - 用于接收 Agent 生命周期事件并交由治理服务校验落库的结构化输入。
+   * @returns 接收 Agent 生命周期事件并交由治理服务校验落库。
+   */
   @Post('events')
   async event(@Body() body: MediaGovernanceAgentEventDto) {
     return this.service.applyAgentEvent(body);
   }
 
-  /** 接收 Agent 对话增量事件并更新实时投影。 */
+  /**
+   * 接收 Agent 对话增量事件并更新实时投影。
+   * @param body - 用于接收 Agent 对话增量事件并更新实时的结构化输入。
+   * @returns 接收 Agent 对话增量事件并更新实时。
+   */
   @Post('conversation-events')
   async conversationEvent(
     @Body() body: MediaGovernanceAgentConversationEventDto,

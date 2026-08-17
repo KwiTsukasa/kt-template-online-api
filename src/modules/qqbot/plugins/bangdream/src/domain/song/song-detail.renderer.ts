@@ -23,12 +23,11 @@ import {
 import { formatSeconds } from '@/modules/qqbot/plugins/bangdream/src/domain/event/event-time.renderer';
 
 /**
- * 在QQBot 图片视图层中绘制歌曲详情。
- *
- * @param song - song 输入；使用 `isExist`、`musicTitle`、`songId`、`bandId` 字段生成结果。
- * @param displayedServerList - displayedServerList 输入；使用 `length` 字段生成结果。
- * @param compress - BangDream列表；影响 drawSongDetail 的返回值。
- * @returns 异步处理结果。
+ * 根据`song`、`displayedServerList`、`compress`绘制或格式化歌曲详情；当 `song.isExist == false` 成立时返回 `['错误: 歌曲不存在']`。
+ * @param song - 用于歌曲详情的领域对象，包含 `isExist`、`initFull`、`musicTitle`、`getTagName` 字段。
+ * @param displayedServerList - 用于歌曲详情的领域对象，包含 `length`、`i` 字段；省略时默认采用 `globalDefaultServer`。
+ * @param compress - 决定歌曲详情内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的歌曲详情列表；没有匹配项时为空数组。
  */
 export async function drawSongDetail(
   song: Song,
@@ -175,7 +174,12 @@ export async function drawSongDetail(
     const songMetaListDataBlockImage = await drawSongMetaListDataBlock(
       feverStatus,
       song,
-      `${feverStatus ? 'Fever' : '无Fever'}`,
+      `${(() => {
+        if (feverStatus) {
+          return 'Fever';
+        }
+        return '无Fever';
+      })()}`,
       displayedServerList,
     );
     all.push(songMetaListDataBlockImage);

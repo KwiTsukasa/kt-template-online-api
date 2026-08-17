@@ -11,7 +11,11 @@ export type StunEndpointSourceEligibility = {
   eligible: boolean;
 };
 
-/** 分类STUN端点来源。 */
+/**
+ * 分类STUN端点来源，并输出固定投影 `disabledReasonCode`、`eligible` 字段。
+ * @param mapping - 用于classifyStun端点来源的领域对象，包含 `isDeleted`、`desiredPresence`、`protocol`、`externalPort` 字段。
+ * @returns 包含 `disabledReasonCode`、`eligible` 字段的classifyStun端点来源；无法解析或未命中时为 `null`。
+ */
 export function classifyStunEndpointSource(
   mapping: Pick<
     NetworkPortForward,

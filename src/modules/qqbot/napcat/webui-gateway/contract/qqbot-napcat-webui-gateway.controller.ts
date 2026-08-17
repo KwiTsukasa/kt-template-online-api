@@ -31,7 +31,13 @@ export class QqbotNapcatWebuiGatewayController {
     private readonly gatewayService: QqbotNapcatWebuiGatewayService,
   ) {}
 
-  /** 创建会话。 */
+  /**
+   * 根据`body`、`user`、`req`构造NapCat WebUI 网关会话；先通过 `assertWebuiPermission` 校验输入边界。
+   * @param body - 用于NapCat WebUI 网关会话的结构化输入，包含 `accountId` 字段。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @param req - 用于NapCat WebUI 网关会话的当前 HTTP 请求。
+   * @returns NapCat WebUI 网关会话。
+   */
   @Post('session')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '创建 NapCat WebUI Gateway 会话' })
@@ -51,7 +57,13 @@ export class QqbotNapcatWebuiGatewayController {
     );
   }
 
-  /** 返回心跳。 */
+  /**
+   * 使用会话标识提交心跳续期请求，并返回续期后的会话状态。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @param req - 用于心跳的当前 HTTP 请求。
+   * @returns 返回续期后的网关会话状态或对应的成功响应。
+   */
   @Post('session/:sessionId/heartbeat')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '刷新 NapCat WebUI Gateway 会话心跳' })
@@ -70,7 +82,13 @@ export class QqbotNapcatWebuiGatewayController {
     );
   }
 
-  /** 吊销QQBotNapCatWebUI记录。 */
+  /**
+   * 按`sessionId`、`user`、`req`移除QQBotNapCatWebUI记录；先通过 `assertWebuiPermission` 校验输入边界。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @param req - 用于QQBotNapCatWebUI记录的当前 HTTP 请求。
+   * @returns QQBotNapCatWebUI记录。
+   */
   @Post('session/:sessionId/revoke')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '撤销 NapCat WebUI Gateway 会话' })
@@ -89,21 +107,38 @@ export class QqbotNapcatWebuiGatewayController {
     );
   }
 
-  /** 断言WebUI权限。 */
+  /**
+   * 校验`user`是否满足WebUI权限约束，并拒绝不合法输入。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   */
   private assertWebuiPermission(user: AdminUser) {
     if (!this.hasWebuiPermission(user)) {
       throwVbenError('无权访问 NapCat WebUI', HttpStatus.FORBIDDEN);
     }
   }
 
-  /** 判断WebUI权限是否存在。 */
+  /**
+   * 根据`user`与当前约束判定WebUI权限是否存在。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @returns 满足WebUI权限是否存在约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private hasWebuiPermission(user: AdminUser) {
-    const roles = Array.isArray(user?.roles) ? user.roles : [];
+    const roles = (() => {
+      if (Array.isArray(user?.roles)) {
+        return user.roles;
+      }
+      return [];
+    })();
     return roles.some((role) => {
       if (!role || role.isDeleted || role.status !== 1) return false;
       if (role.roleCode === 'super') return true;
 
-      const menus = Array.isArray(role.menus) ? role.menus : [];
+      const menus = (() => {
+        if (Array.isArray(role.menus)) {
+          return role.menus;
+        }
+        return [];
+      })();
       return menus.some((menu) => {
         return (
           !!menu &&
@@ -115,7 +150,11 @@ export class QqbotNapcatWebuiGatewayController {
     });
   }
 
-  /** 返回必需账号标识。 */
+  /**
+   * 校验`accountId`是否满足前置条件并返回必需账号标识约束，并拒绝不合法输入。
+   * @param accountId - 用于精确定位账号的标识。
+   * @returns 前置条件并返回必需账号标识。
+   */
   private requireAccountId(accountId: string) {
     const normalized = String(accountId || '').trim();
     if (!ACCOUNT_ID_PATTERN.test(normalized)) {
@@ -124,7 +163,11 @@ export class QqbotNapcatWebuiGatewayController {
     return normalized;
   }
 
-  /** 返回必需会话标识。 */
+  /**
+   * 校验`sessionId`是否满足前置条件并返回必需会话标识约束，并拒绝不合法输入。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @returns 前置条件并返回必需会话标识。
+   */
   private requireSessionId(sessionId: string) {
     const normalized = String(sessionId || '').trim();
     if (!SESSION_ID_PATTERN.test(normalized)) {
@@ -133,14 +176,24 @@ export class QqbotNapcatWebuiGatewayController {
     return normalized;
   }
 
-  /** 返回到客户端证据。 */
+  /**
+   * 将输入收敛并投影为客户端证据。
+   * @param user - 决定是否启用“用户”分支的布尔选项。
+   * @param req - 用于客户端证据的当前 HTTP 请求，包含 `headers`、`ip` 字段。
+   * @returns 包含 `adminUserId`、`clientIp`、`userAgent` 字段的客户端证据。
+   */
   private toClientEvidence(user: AdminUser, req: AdminRequest) {
     const userAgent = req.headers['user-agent'];
 
     return {
       adminUserId: user.id,
       clientIp: req.ip,
-      userAgent: Array.isArray(userAgent) ? userAgent.join(', ') : userAgent,
+      userAgent: (() => {
+        if (Array.isArray(userAgent)) {
+          return userAgent.join(', ');
+        }
+        return userAgent;
+      })(),
     };
   }
 }

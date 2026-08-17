@@ -37,9 +37,9 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
 
   /**
    * 拦截请求并处理横切逻辑。
-   * @param context - context 输入；执行 `context.getType()`、`context.switchToHttp()` 对应的 公共基础设施步骤。
-   * @param next - next 输入；执行 `next.handle()` 对应的 公共基础设施步骤。
-   * @returns 当前模块产出的 Observable<any>。
+   * @param context - 用于拦截请求并处理横切逻辑的领域对象，包含 `getType`、`switchToHttp` 字段。
+   * @param next - 用于拦截请求并处理横切逻辑的领域对象，包含 `handle` 字段。
+   * @returns 拦截请求并处理横切逻辑。
    */
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     if (context.getType() !== 'http') {
@@ -75,9 +75,10 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
   }
 
   /**
-   * 确保Request Id。
-   * @param request - 当前 HTTP 请求；提供路由、用户、请求体或查询参数。
-   * @param response - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * 确保标识存在且保持一致；缺失时根据`request`、`response`补齐对应状态；从 `toolsService.getRequestId` 读取标识。
+   * @param request - 用于标识的当前 HTTP 请求，包含 `id` 字段。
+   * @param response - 用于写入状态码、Cookie 或缓存策略的当前 HTTP 响应。
+   * @returns 标识。
    */
   private ensureRequestId(request: RequestWithId, response: Response) {
     const requestId = this.toolsService.getRequestId(request) || randomUUID();
@@ -91,8 +92,8 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
   }
 
   /**
-   * 执行 当前模块流程。
-   * @param params - 公共基础设施列表；使用 `error`、`response`、`startedAt`、`request` 字段生成结果。
+   * 根据`params`处理日志；当 `statusCode >= 500` 成立时直接结束且不产生返回值。
+   * @param params - 用于日志的领域对象，包含 `error`、`response`、`startedAt`、`request` 字段。
    */
   private logRequest(params: {
     error?: unknown;
@@ -150,8 +151,8 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
   }
 
   /**
-   * 投递 当前模块消息或任务。
-   * @param params - 公共基础设施列表；使用 `payload`、`error`、`level`、`message` 字段生成结果。
+   * 通过 `shouldSkipLokiPublish` 判断输入是否满足函数约束。
+   * @param params - 用于日志的领域对象，包含 `payload`、`error`、`level`、`message` 字段。
    */
   private publishRequestLog(params: {
     error?: unknown;
@@ -173,8 +174,8 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
   }
 
   /**
-   * 投递 当前模块消息或任务。
-   * @param params - 公共基础设施列表；使用 `payload`、`error` 字段生成结果。
+   * 按`params`投递System通知；当 `!this.systemNoticePublisher || this.shouldSkipSystemNotice(pa…` 成立时直接结束且不产生返回值。
+   * @param params - 用于System通知的领域对象，包含 `payload`、`error` 字段。
    */
   private publishSystemNotice(params: {
     error?: unknown;
@@ -214,8 +215,9 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
   }
 
   /**
-   * 判断 当前模块条件。
-   * @param path - 路由或文件路径；驱动 `toolsService.normalizeRequestPathValue()` 的 公共基础设施步骤。
+   * 根据`path`与当前约束判定SkipLoki。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @returns 满足SkipLoki约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private shouldSkipLokiPublish(path: unknown) {
     const normalizedPath = this.toolsService.normalizeRequestPathValue(path);
@@ -226,8 +228,9 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
   }
 
   /**
-   * 判断 当前模块条件。
-   * @param path - 路由或文件路径；驱动 `toolsService.normalizeRequestPathValue()` 的 公共基础设施步骤。
+   * 根据`path`与当前约束判定SkipSystem通知。
+   * @param path - 必须保持在受控根目录内的路径。
+   * @returns 满足SkipSystem通知约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   private shouldSkipSystemNotice(path: unknown) {
     const normalizedPath = this.toolsService.normalizeRequestPathValue(path);
@@ -240,9 +243,10 @@ export class ApiRequestLogInterceptor implements NestInterceptor {
   }
 
   /**
-   * 查询 当前模块数据。
-   * @param error - 异常或失败对象；提取状态码、错误体、堆栈或失败原因。
-   * @param response - 当前 HTTP 响应；设置 HTTP 状态、响应头或响应体。
+   * 按`error`、`response`读取状态代码；当 `error instanceof HttpException` 成立时返回 `error.getStatus()`。
+   * @param error - 待转换为稳定业务错误或日志文本的未知异常。
+   * @param response - 包含 `statusCode` 字段的上游服务响应。
+   * @returns 规范化后的状态代码；主值为空时采用 `200` 兜底。
    */
   private getStatusCode(error: unknown, response: Response) {
     if (error instanceof HttpException) {

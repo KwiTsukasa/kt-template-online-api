@@ -7,7 +7,7 @@ import { preloadBangDreamOutputAssets } from '@/modules/qqbot/plugins/bangdream/
 import { preloadBangDreamTitleAssets } from '@/modules/qqbot/plugins/bangdream/src/theme/title.renderer';
 
 /**
- * 执行 BangDream 插件流程。
+ * 并发预加载背景、卡面、稀有度、技能文字、输出、玩家和标题素材，全部完成后才兑现。
  */
 export async function preloadBangDreamRenderAssets() {
   await Promise.all([

@@ -13,10 +13,8 @@ interface BandInListOptions {
   text?: string;
 }
 /**
- * 在图片布局层中绘制乐队In列表。
- *
- * @param options1 - options1 输入；影响 drawBandInList 的返回值。
- * @returns 异步处理结果。
+ * 根据当前运行态绘制或格式化Band；当 `shouldUseSingleEntityLabel(content.length, text)` 成立时返回 `canvas`。
+ * @returns 按乐队数量选择单项或多项布局后绘制完成的乐队列表画布。
  */
 export async function drawBandInList({
   key,

@@ -13,10 +13,9 @@ interface DrawDottedLineOptions {
 }
 
 /**
- * 在底层绘图工具层中绘制Dotted线条。
- *
- * @param options - BangDream列表；影响 drawDottedLine 的返回值。
- * @returns 渲染或资源结果。
+ * 根据`options`绘制或格式化Dotted文本行；从 `canvas.getContext` 读取Dotted文本行。
+ * @param options - 控制Dotted文本行筛选、缓存或输出方式的可选项。
+ * @returns Dotted文本行。
  */
 export function drawDottedLine(options: DrawDottedLineOptions): Canvas {
   const { width, height, startX, startY, endX, endY, radius, gap, color } =

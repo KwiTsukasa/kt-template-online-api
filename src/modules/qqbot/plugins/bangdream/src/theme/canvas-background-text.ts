@@ -18,10 +18,8 @@ interface DrawTextOptions {
 }
 
 /**
- * 在底层绘图工具层中绘制文本On画布。
- *
- * @param canvas - BangDream列表；使用 `width`、`height` 字段生成结果。
- * @param options2 - options2 输入；影响 drawTextOnCanvas 的返回值。
+ * 根据`canvas`绘制或格式化文本Canvas；从 `canvas.getContext` 读取文本Canvas。
+ * @param canvas - 决定是否启用“canvas”分支的布尔选项。
  */
 export function drawTextOnCanvas(
   canvas: Canvas,

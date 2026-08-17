@@ -28,7 +28,11 @@ type TencentCloudCvmClientFactory = (
   clientConfig: ClientConfig,
 ) => TencentCloudCvmClient;
 
-/** 创建腾讯云云端云服务器客户端。 */
+/**
+ * 通过使用受控凭据、区域与端点配置创建腾讯云 CVM SDK 客户端。
+ * @param clientConfig - 限定通过使用受控凭据、区域与端点配置创建腾讯云 CVM SDK 客户端边界、地址与开关的运行配置。
+ * @returns 返回配置完成的腾讯云 CVM SDK 客户端。
+ */
 function createTencentCloudCvmClient(
   clientConfig: ClientConfig,
 ): TencentCloudCvmClient {
@@ -48,7 +52,10 @@ export class TencentCloudReadonlyAdapter {
     this.createClient = createClient || createTencentCloudCvmClient;
   }
 
-  /** 检查腾讯云云端只读的记录。 */
+  /**
+   * 按配置启用状态读取腾讯云 CVM 实例；缺少接线、禁用或请求失败时分别返回对应健康证据。
+   * @returns 返回腾讯云 CVM 的实时、未接线、禁用或错误健康信号。
+   */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_TENCENT_CLOUD_ENABLED',
@@ -77,11 +84,15 @@ export class TencentCloudReadonlyAdapter {
       const instance = asRecord(response.InstanceSet?.[0]) || {};
       const instanceState = asString(instance.InstanceState) || 'UNKNOWN';
       const status =
-        instanceState === 'RUNNING'
-          ? 'ok'
-          : response.TotalCount === 0
-            ? 'unknown'
-            : 'degraded';
+        (() => {
+          if (instanceState === 'RUNNING') {
+            return 'ok';
+          }
+          if (response.TotalCount === 0) {
+            return 'unknown';
+          }
+          return 'degraded';
+        })();
       const summary = `Tencent Cloud CVM ${instanceState}`;
 
       return createLiveAdapterSignal(
@@ -107,7 +118,10 @@ export class TencentCloudReadonlyAdapter {
     }
   }
 
-  /** 判断启用是否成立。 */
+  /**
+   * 根据当前运行态与当前约束判定启用；从 `config.get` 读取启用。
+   * @returns 满足启用约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   private isEnabled(): boolean {
     return (
       this.config
@@ -116,7 +130,10 @@ export class TencentCloudReadonlyAdapter {
     );
   }
 
-  /** 返回客户端配置。 */
+  /**
+   * 将腾讯云访问密钥和地域配置组装为固定指向 CVM 服务端点的 SDK 客户端配置。
+   * @returns 包含访问凭据、CVM 服务端点和目标地域的腾讯云客户端配置。
+   */
   private clientConfig(): ClientConfig {
     return {
       credential: {

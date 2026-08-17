@@ -11,7 +11,8 @@ export class QqbotDashboardController {
   constructor(private readonly dashboardService: QqbotDashboardService) {}
 
   /**
-   * QQBot 工作台汇总。
+   * 根据当前运行态处理QQBot 工作台汇总。
+   * @returns QQBot 工作台汇总。
    */
   @Get('summary')
   @ApiOperation({ summary: 'QQBot 工作台汇总' })

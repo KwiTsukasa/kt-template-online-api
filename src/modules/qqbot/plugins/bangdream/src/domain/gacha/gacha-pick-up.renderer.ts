@@ -8,12 +8,11 @@ import { Canvas } from 'skia-canvas';
 import { BANGDREAM_GACHA_LIST_SPEC } from '@/modules/qqbot/plugins/bangdream/src/domain/gacha/gacha-list.layout';
 
 /**
- * 在图片布局层中绘制卡池PickUpIn列表。
- *
- * @param gacha - gacha 输入；使用 `details`、`rates` 字段生成结果。
- * @param server - server 输入；驱动 `parseInt()` 的 BangDream步骤。
- * @param key - 键名；影响 drawGachaPickupInList 的返回值。
- * @returns 异步处理结果。
+ * 根据`gacha`、`server`、`key`绘制或格式化卡池Pickup；当 `Object.keys(pickUpCardList).length != 0` 成立时返回 `stackImage(list)`。
+ * @param gacha - 用于卡池Pickup的领域对象，包含 `details`、`rates` 字段。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @param key - 用于读取或更新卡池Pickup的稳定键；为空时采用 `BANGDREAM_GACHA_LIST_SPEC.label.pickup` 作为兜底。
+ * @returns 卡池Pickup。
  */
 export async function drawGachaPickupInList(
   gacha: Gacha,

@@ -8,13 +8,12 @@ import { matchSongList } from '@/modules/qqbot/plugins/bangdream/src/domain/song
 import { FuzzySearchResult } from '@/modules/qqbot/plugins/bangdream/src/domain/search/fuzzy-search';
 
 /**
- * 在QQBot 图片视图层中绘制歌曲Random。
- *
- * @param matches - BangDream列表；驱动 `matchSongList()` 的 BangDream步骤。
- * @param displayedServerList - displayedServerList 输入；驱动 `matchSongList()` 的 BangDream步骤。
- * @param useEasyBG - useEasyBG 输入；影响 drawSongRandom 的返回值。
- * @param compress - BangDream列表；影响 drawSongRandom 的返回值。
- * @returns 异步处理结果。
+ * 根据`matches`、`displayedServerList`、`useEasyBG`绘制或格式化歌曲Random；当 `tempSongList.length == 0` 成立时返回 `['没有搜索到符合条件的歌曲']`。
+ * @param matches - 决定歌曲Random内容、边界或目标的 `matches` 值。
+ * @param displayedServerList - 决定歌曲Random内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @param useEasyBG - 决定是否启用“useEasyBG”分支的布尔选项。
+ * @param compress - 决定歌曲Random内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的歌曲Random列表；没有匹配项时为空数组。
  */
 export async function drawSongRandom(
   matches: FuzzySearchResult,
@@ -52,10 +51,9 @@ export async function drawSongRandom(
 
 //输入max数字，返回一个0-max的随机整数
 /**
- * 查询 BangDream 插件数据。
- *
- * @param max - max 输入；驱动 `Math.floor()` 的 BangDream步骤。
- * @returns 计算后的数值。
+ * 返回从 `0` 到小于向下取整上限的随机整数。
+ * @param max - 决定从 `0` 到小于向下取整上限的随机整数内容、边界或目标的 `max` 值。
+ * @returns 从 `0` 到小于向下取整上限的随机整数。
  */
 function getRandomInt(max: number): number {
   return Math.floor(Math.random() * Math.floor(max));

@@ -9,16 +9,19 @@ export const eventSearchOperation: BangDreamOperationModule = {
   execute: async (input, context) => {
     const query = context.requireText(input, '请提供活动关键词或活动 ID');
     const options = context.getRenderOptions(input);
-    const images = context.isInteger(query)
-      ? await drawEventDetail(
+    const images = await (async () => {
+      if (context.isInteger(query)) {
+        return await drawEventDetail(
           Number(query),
           options.displayedServerList,
           options.useEasyBG,
           options.compress,
-        )
-      : await context.drawFuzzyResult(query, (matches) =>
+        );
+      }
+      return await context.drawFuzzyResult(query, (matches) =>
           drawEventList(matches, options.displayedServerList, options.compress),
         );
+    })();
 
     return context.toImageReply('bangdream.event.search', query, images);
   },

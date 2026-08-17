@@ -10,9 +10,10 @@ type InstallationStateRow = Pick<
 >;
 
 /**
- * 解析Inactive Plugin Keys。
- * @param plugins - 插件列表；转换 插件平台列表项。
- * @param installations - 插件平台列表；驱动 `for()` 的 插件平台步骤。
+ * 从`plugins`、`installations`解析Inactive插件Keys；从 `pluginKeysById.get` 读取Inactive插件Keys。
+ * @param plugins - 决定Inactive插件Keys内容、边界或目标的 `plugins` 值。
+ * @param installations - 决定Inactive插件Keys内容、边界或目标的 `installations` 值。
+ * @returns Inactive插件Keys。
  */
 export function resolveInactivePluginKeys(
   plugins: PluginStateRow[],

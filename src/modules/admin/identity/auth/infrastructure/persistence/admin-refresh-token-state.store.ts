@@ -60,7 +60,12 @@ export class AdminRefreshTokenStateStore {
     }
   }
 
-  /** 创建会话。 */
+  /**
+   * 根据`sessionId`、`ttlMs`构造认证刷新令牌会话；先通过 `assertTokenId` 校验输入边界。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @param ttlMs - 用于认证刷新令牌会话超时、有效期或退避计算的毫秒数。
+   * @returns 满足认证刷新令牌会话约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   */
   async createSession(sessionId: string, ttlMs: number): Promise<boolean> {
     this.assertTokenId(sessionId);
     this.assertTtl(ttlMs);
@@ -74,7 +79,12 @@ export class AdminRefreshTokenStateStore {
     return result === 'OK';
   }
 
-  /** 轮换会话。 */
+  /**
+   * 轮换会话；通过 `assertTokenId` 生成稳定标识，通过 `assertTtl` 校验约束，通过 `redis.eval` 原子执行存储脚本。
+   * @param input - 包含 `sessionId`、`tokenId`、`currentTokenTtlMs`、`nextTokenTtlMs` 字段的结构化领域输入。
+   * @returns 返回 `result === 1` 的判定结果；条件成立为 `true`，否则为 `false`。
+   * @throws 当 `![0, 1].includes(result)` 成立时抛出 `Error`，消息为“Refresh token 旋转结果无效”。
+   */
   async rotateSession(input: RotateRefreshTokenSessionInput): Promise<boolean> {
     this.assertTokenId(input.sessionId);
     this.assertTokenId(input.tokenId);
@@ -96,7 +106,13 @@ export class AdminRefreshTokenStateStore {
     return result === 1;
   }
 
-  /** 吊销会话。 */
+  /**
+   * 按`sessionId`、`ttlMs`移除认证刷新令牌会话；先通过 `assertTokenId` 校验输入边界。
+   * @param sessionId - 用于精确定位会话的标识。
+   * @param ttlMs - 用于认证刷新令牌会话超时、有效期或退避计算的毫秒数。
+   * @returns 满足认证刷新令牌会话约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+   * @throws 当 `![0, 1].includes(result)` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async revokeSession(sessionId: string, ttlMs: number): Promise<boolean> {
     this.assertTokenId(sessionId);
     this.assertTtl(ttlMs);
@@ -114,26 +130,43 @@ export class AdminRefreshTokenStateStore {
     return result === 1;
   }
 
-  /** 断言令牌标识。 */
+  /**
+   * 校验`value`是否满足令牌标识约束，并拒绝不合法输入。
+   * @param value - 参与令牌标识比较、格式化或输出的候选值。
+   * @throws 当 `!TOKEN_ID_PATTERN.test(value)` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private assertTokenId(value: string) {
     if (!TOKEN_ID_PATTERN.test(value)) {
       throw new Error('Refresh token 标识无效');
     }
   }
 
-  /** 断言有效期。 */
+  /**
+   * 校验`value`是否满足有效期约束，并拒绝不合法输入。
+   * @param value - 参与有效期比较、格式化或输出的候选值。
+   * @throws 当 `!Number.isInteger(value) || value < 1` 成立时拒绝当前输入并抛出 `Error`。
+   */
   private assertTtl(value: number) {
     if (!Number.isInteger(value) || value < 1) {
       throw new Error('Refresh token TTL 无效');
     }
   }
 
-  /** 生成令牌族键。 */
+  /**
+   * 以会话标识构造存放刷新令牌族状态的 Redis 键，并保持认证键空间隔离。
+   * @param sessionId - 刷新令牌族所属的服务端会话标识。
+   * @returns 指向该会话刷新令牌族状态的 Redis 键。
+   */
   private familyKey(sessionId: string) {
     return `${this.keyPrefix}:auth:refresh:family:${sessionId}`;
   }
 
-  /** 生成已使用令牌键。 */
+  /**
+   * 组合会话与令牌标识，构造用于检测刷新令牌重放的 Redis 消费记录键。
+   * @param sessionId - 已消费令牌所属的服务端会话标识。
+   * @param tokenId - 需要记录为已消费的刷新令牌实例标识。
+   * @returns 唯一指向该会话中该令牌消费记录的 Redis 键。
+   */
   private usedTokenKey(sessionId: string, tokenId: string) {
     return `${this.keyPrefix}:auth:refresh:used:${sessionId}:${tokenId}`;
   }

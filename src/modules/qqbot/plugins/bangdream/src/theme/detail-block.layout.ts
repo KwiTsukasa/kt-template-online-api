@@ -48,9 +48,9 @@ export const BANGDREAM_DETAIL_BLOCK_SPEC = {
 
 /**
  * 计算歌曲 meta 相对百分比，保持历史两位小数舍入策略。
- *
- * @param meta - meta 输入；限定 BangDream查询范围。
- * @param maxMeta - maxMeta 输入；限定 BangDream查询范围。
+ * @param meta - 决定歌曲 meta 相对百分比，保持历史两位小数舍入策略内容、边界或目标的 `meta` 值。
+ * @param maxMeta - 决定歌曲 meta 相对百分比，保持历史两位小数舍入策略内容、边界或目标的 `maxMeta` 值。
+ * @returns 歌曲 meta 相对百分比，保持历史两位小数舍入策略。
  */
 export function getRelativeMetaPercent(meta: number, maxMeta: number): number {
   const { percentRoundScale, percentScale } =

@@ -27,7 +27,11 @@ export const MEDIA_CODEX_AGENT_TOOL_WIRE_NAMES = {
   'subtitle.contract.read': 'subtitle_contract_read',
 } as const satisfies Record<MediaCodexAgentTool, string>;
 
-/** 将 App Server 线缆工具名还原为边界策略使用的媒体工具名。 */
+/**
+ * 将 App Server 线缆工具名还原为边界策略使用的媒体工具名。
+ * @param value - 参与将 App Server 线缆工具名还原为边界策略使用的媒体工具名比较、格式化或输出的候选值。
+ * @returns 将 App Server 线缆工具名还原为边界策略使用的媒体工具名。
+ */
 export function mediaCodexAgentToolFromWireName(value: string) {
   return MEDIA_CODEX_AGENT_TOOLS.find(
     (tool) => MEDIA_CODEX_AGENT_TOOL_WIRE_NAMES[tool] === value,
@@ -228,7 +232,11 @@ export interface MediaCodexAgentResult {
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const TMDB_CANDIDATE_PATTERN = /^(tmdb:[1-9]\d*)\s*[|｜]/iu;
 
-/** 严格解析 Agent 结构化结果，并投影稳定的候选身份。 */
+/**
+ * 严格解析 Agent 结构化结果，并投影稳定的候选身份。
+ * @param value - 待转换为媒体任务CodexAgent结果的原始值。
+ * @returns 包含 `candidateSummaries`、`candidates`、`nextActionLabel`、`planSha256`、`status` 字段的媒体任务CodexAgent；无法解析或未命中时为 `null`。
+ */
 export function parseMediaCodexAgentResult(
   value: unknown,
 ): MediaCodexAgentResult | null {
@@ -404,7 +412,11 @@ export const MEDIA_CODEX_AGENT_DYNAMIC_TOOLS = MEDIA_CODEX_AGENT_TOOLS.map(
   },
 );
 
-/** 以键名排序的稳定规则序列化任意 JSON 值。 */
+/**
+ * 通过以键名排序的稳定规则序列化任意 JSON 值。
+ * @param value - 待判定是否满足通过以键名排序的稳定规则序列化任意 JSON 值约束的候选值。
+ * @returns 满足通过以键名排序的稳定规则序列化任意 JSON 值约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
+ */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map((item) => canonicalJson(item)).join(',')}]`;
@@ -419,7 +431,11 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** 对稳定 JSON 表示计算小写十六进制 SHA-256 摘要。 */
+/**
+ * 通过对稳定 JSON 表示计算小写十六进制 SHA-256 摘要。
+ * @param value - 参与通过对稳定 JSON 表示计算小写十六进制 SHA-256 摘要比较、格式化或输出的候选值。
+ * @returns 通过对稳定 JSON 表示计算小写十六进制 SHA-256 摘要。
+ */
 export function sha256Json(value: unknown): string {
   return createHash('sha256').update(canonicalJson(value)).digest('hex');
 }

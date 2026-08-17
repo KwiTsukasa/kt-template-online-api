@@ -93,9 +93,8 @@ export class Gacha {
     this.newCards = gachaData['newCards'];
   }
   /**
-   * 在 Gacha 模型中加载远端完整详情并标记初始化状态。
-   *
-   * @param useCache - useCache 输入；驱动 `this.getData()` 的 BangDream步骤。
+   * 通过 `gachaId.toString` 收敛领域表示。
+   * @param useCache - 决定是否启用“use缓存”分支的布尔选项；省略时默认采用 `true`。
    */
   async initFull(useCache: boolean = true) {
     if (this.isInitFull) {
@@ -136,16 +135,15 @@ export class Gacha {
   }
   /**
    * 在 Gacha 模型中请求当前模型的远端详情数据。
-   *
-   * @param update - update 输入；驱动 `gachaResourceRepository.getDetail()` 的 BangDream步骤。
+   * @param update - 决定在 Gacha 模型中请求当前模型的远端详情数据内容、边界或目标的 `update` 值；省略时默认采用 `true`。
+   * @returns 在 Gacha 模型中请求当前模型的远端详情数据。
    */
   async getData(update: boolean = true) {
     return await gachaResourceRepository.getDetail(this.gachaId, update);
   }
   /**
-   * 在 Gacha 模型中获取横幅图片。
-   *
-   * @returns 异步处理结果。
+   * 按当前运行态读取横幅图片；从受控资源来源加载所需数据（`loadImage`）。
+   * @returns 横幅图片。
    */
   async getBannerImage(): Promise<Image> {
     const bannerImageBuffer =
@@ -153,10 +151,9 @@ export class Gacha {
     return await loadImage(bannerImageBuffer);
   }
   /**
-   * 在 Gacha 模型中获取卡池背景图片。
-   *
-   * @param displayedServerList - displayedServerList 输入；驱动 `gachaResourceRepository.getBackgroundImageBuffer()` 的 BangDream步骤。
-   * @returns 异步处理结果。
+   * 按`displayedServerList`读取卡池BGImage；从受控资源来源加载所需数据（`loadImage`）。
+   * @param displayedServerList - 决定卡池BGImage内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+   * @returns 卡池BGImage。
    */
   async getGachaBGImage(
     displayedServerList: Server[] = globalDefaultServer,
@@ -170,10 +167,9 @@ export class Gacha {
     return await loadImage(backgroundImageBuffer);
   }
   /**
-   * 在 Gacha 模型中获取卡池Logo。
-   *
-   * @param displayedServerList - displayedServerList 输入；驱动 `gachaResourceRepository.getLogoImageBuffer()` 的 BangDream步骤。
-   * @returns 异步处理结果。
+   * 按`displayedServerList`读取卡池Logo；从受控资源来源加载所需数据（`loadImage`）。
+   * @param displayedServerList - 决定卡池Logo内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+   * @returns 卡池Logo。
    */
   async getGachaLogo(
     displayedServerList: Server[] = globalDefaultServer,
@@ -186,7 +182,8 @@ export class Gacha {
     return await loadImage(logoImageBuffer);
   }
   /**
-   * 在 Gacha 模型中获取活动ID。
+   * 按当前运行态读取事件标识；从 `getPresentEvent` 读取事件标识。
+   * @returns 事件标识。
    */
   getEventId() {
     const eventList: Array<number> = [];
@@ -202,7 +199,8 @@ export class Gacha {
     return eventList;
   }
   /**
-   * 在 Gacha 模型中获取类型名称。
+   * 按当前运行态读取Type名称；当 `typeName[this.type] == undefined` 成立时返回 `this.type`。
+   * @returns Type名称。
    */
   getTypeName() {
     if (typeName[this.type] == undefined) {
@@ -211,7 +209,7 @@ export class Gacha {
     return typeName[this.type];
   }
   /**
-   * 在 Gacha 模型中获取卡池PickUp卡牌ID。
+   * 按当前运行态读取卡池Up卡牌标识；从 `getServerByPriority` 读取卡池Up卡牌标识。
    */
   getGachaPickUpCardId() {
     this.pickUpCardId = [];
@@ -230,12 +228,11 @@ export class Gacha {
 
 //获取当前进行中的卡池
 /**
- * 查询 BangDream 插件数据。
- *
- * @param server - server 输入；决定 BangDream条件分支。
- * @param start - start 输入；决定 BangDream条件分支。
- * @param end - end 输入；决定 BangDream条件分支。
- * @returns 异步处理结果。
+ * 按`server`、`start`、`end`读取Present卡池；从 `bangdreamCatalogRepository.getCollection` 读取Present卡池。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器。
+ * @param start - 决定Present卡池内容、边界或目标的 `start` 值；省略时默认采用 `Date.now()`。
+ * @param end - 决定Present卡池内容、边界或目标的 `end` 值；省略时默认采用 `Date.now()`。
+ * @returns 按输入顺序得到的Present卡池列表；没有匹配项时为空数组。
  */
 export async function getPresentGachaList(
   server: Server,

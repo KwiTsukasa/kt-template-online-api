@@ -12,7 +12,12 @@ export interface MediaGovernanceTmdbCandidate {
   title: string;
 }
 
-/** 查询 TMDB 中文搜索页，并按发行年份优先返回有界候选。 */
+/**
+ * 查询 TMDB 中文搜索页，并按发行年份优先返回有界候选。
+ * @param input - 用于searchTmdb媒体任务Candidates的结构化输入，包含 `mediaType`、`title`、`releaseYear` 字段。
+ * @returns 按输入顺序得到的searchTmdb媒体任务Candidates列表；没有匹配项时为空数组。
+ * @throws 当 `!response.ok || !String(response.headers.get('content-type') ?? '') .to…` 成立时拒绝当前输入并抛出 `Error`。
+ */
 export async function searchTmdbMediaCandidates(input: {
   mediaType: MediaGovernanceMediaType;
   releaseYear: null | number;
@@ -52,7 +57,12 @@ export async function searchTmdbMediaCandidates(input: {
     .slice(0, MAX_CANDIDATES);
 }
 
-/** 从 TMDB 搜索页提取去重后的标题、年份、海报与资料源标识。 */
+/**
+ * 从 TMDB 搜索页提取去重后的标题、年份、海报与资料源标识。
+ * @param html - 用于从 TMDB 搜索页提取去重后的标题、年份、海报与资料源标识的领域对象，包含 `matchAll` 字段。
+ * @param mediaType - 决定从 TMDB 搜索页提取去重后的标题、年份、海报与资料源标识内容、边界或目标的 `mediaType` 值。
+ * @returns 按输入顺序得到的从 TMDB 搜索页提取去重后的标题、年份、海报与资料源标识列表；没有匹配项时为空数组。
+ */
 export function parseTmdbSearchHtml(
   html: string,
   mediaType: 'movie' | 'tv',
@@ -99,7 +109,12 @@ export function parseTmdbSearchHtml(
   return candidates;
 }
 
-/** 读取响应流并在超过允许体积时主动取消请求。 */
+/**
+ * 逐块读取 HTTP 响应正文并累计文本；超过允许字节数时取消流并拒绝响应。
+ * @param response - 包含 `body` 字段的上游服务响应。
+ * @returns 当前状态对应的逐块读取 HTTP 响应正文并累计文本，取值为 `''`。
+ * @throws 当 `total > MAX_RESPONSE_BYTES` 成立时拒绝当前输入并抛出 `Error`。
+ */
 async function readBoundedText(response: Response) {
   if (!response.body) return '';
   const reader = response.body.getReader();
@@ -118,7 +133,11 @@ async function readBoundedText(response: Response) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-/** 解码搜索页属性中允许出现的 HTML 实体。 */
+/**
+ * 根据参数 `value`，解码搜索页属性中允许出现的 HTML 实体。
+ * @param value - 待转换为根据参数 `value`，解码搜索页属性中允许出现的 HTML 实体的原始值。
+ * @returns 根据参数 `value`，解码搜索页属性中允许出现的 HTML 实体。
+ */
 function decodeHtmlAttribute(value: string) {
   return value
     .replaceAll('&amp;', '&')

@@ -1,9 +1,9 @@
 import { Canvas, Image } from 'skia-canvas';
 
 /**
- * 在图片布局层中处理stack图片。
- *
- * @param list - BangDream列表；使用 `length` 字段生成结果。
+ * 根据`list`处理stack图片；把图片、文本或图形按布局规格绘制到画布。
+ * @param list - 用于stack图片的领域对象，包含 `length`、`i` 字段。
+ * @returns stack图片。
  */
 export function stackImage(list: Array<Image | Canvas>) {
   let maxW = 0;
@@ -25,9 +25,9 @@ export function stackImage(list: Array<Image | Canvas>) {
 }
 
 /**
- * 在图片布局层中处理stack图片Horizontal。
- *
- * @param list - BangDream列表；使用 `length` 字段生成结果。
+ * 根据`list`处理stack图片Horizontal；把图片、文本或图形按布局规格绘制到画布。
+ * @param list - 用于stack图片Horizontal的领域对象，包含 `length`、`i` 字段。
+ * @returns stack图片Horizontal。
  */
 export function stackImageHorizontal(list: Array<Image | Canvas>) {
   let maxH = 0;
@@ -55,9 +55,8 @@ interface ResizeImageOptions {
 }
 //输入canvas或Image，高度，宽度，返回等比例缩放到限制高度的canvas
 /**
- * 在图片布局层中调整图片。
- *
- * @param options1 - options1 输入；影响 resizeImage 的返回值。
+ * 根据当前运行态处理resize图片；把图片、文本或图形按布局规格绘制到画布。
+ * @returns resize图片。
  */
 export function resizeImage({
   image,

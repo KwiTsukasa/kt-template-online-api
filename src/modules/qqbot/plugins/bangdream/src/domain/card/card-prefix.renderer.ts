@@ -22,10 +22,10 @@ const prefixBG: Canvas = drawRoundedRect({
 });
 
 /**
- * 在图片布局层中绘制卡牌PrefixIn列表。
- *
- * @param card - card 输入；使用 `bandId`、`releasedAt`、`prefix`、`characterId` 字段生成结果。
- * @param displayedServerList - displayedServerList 输入；驱动 `getServerByPriority()` 的 BangDream步骤。
+ * 根据`card`、`displayedServerList`绘制或格式化卡牌Prefix；把图片、文本或图形按布局规格绘制到画布。
+ * @param card - 用于卡牌Prefix的领域对象，包含 `bandId`、`releasedAt`、`prefix`、`characterId` 字段。
+ * @param displayedServerList - 决定卡牌Prefix内容、边界或目标的 `displayedServerList` 值；省略时默认采用 `globalDefaultServer`。
+ * @returns 卡牌Prefix。
  */
 export async function drawCardPrefixInList(
   card: Card,

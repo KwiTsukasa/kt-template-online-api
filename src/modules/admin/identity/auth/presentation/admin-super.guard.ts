@@ -10,8 +10,9 @@ import type { AdminRequest } from '@/modules/admin/contract/admin.types';
 @Injectable()
 export class AdminSuperGuard implements CanActivate {
   /**
-   * 判断 Admin 身份权限条件。
-   * @param context - context 输入；执行 `context.switchToHttp()` 对应的 Admin步骤。
+   * 根据`context`与当前约束判定Activate；从 `getRequest` 读取Activate。
+   * @param context - 用于Activate的领域对象，包含 `switchToHttp` 字段。
+   * @returns 满足Activate约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<AdminRequest>();

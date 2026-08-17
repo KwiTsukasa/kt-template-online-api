@@ -18,11 +18,11 @@ import type {
 } from '@/modules/qqbot/plugins/bangdream/src/domain/cutoff/timeline-chart.layout';
 
 /**
- * 在图片布局层中绘制档线谱面。
- *
- * @param cutoffList - cutoffList 输入；使用 `length` 字段生成结果。
- * @param setStartToZero - setStartToZero 输入；构造时间对象。
- * @param server - server 输入；影响 drawCutoffChart 的返回值。
+ * 根据`cutoffList`、`setStartToZero`、`server`绘制或格式化档线Chart；当 `cutoffList.length == 0` 成立时返回 `new Canvas( BANGDREAM_CUTOFF_CHART_SPEC.emp…`。
+ * @param cutoffList - 用于档线Chart的领域对象，包含 `length`、`i`、`0` 字段。
+ * @param setStartToZero - 决定档线Chart内容、边界或目标的 `setStartToZero` 值；省略时默认采用 `false`。
+ * @param server - 用于选择数据分区、资源路径与展示语言的目标服务器；省略时默认采用 `Server['jp']`。
+ * @returns 档线Chart。
  */
 export async function drawCutoffChart(
   cutoffList: Cutoff[],
@@ -208,10 +208,10 @@ export async function drawCutoffChart(
   }
 }
 /**
- * 在图片布局层中绘制档线活动排名谱面。
- *
- * @param cutoffEventTop - cutoffEventTop 输入；使用 `startAt`、`endAt` 字段生成结果。
- * @param setStartToZero - setStartToZero 输入；构造时间对象。
+ * 根据`cutoffEventTop`、`setStartToZero`绘制或格式化档线事件TopChart；当 `cutoffEventTop == undefined` 成立时返回 `new Canvas( BANGDREAM_CUTOFF_CHART_SPEC.emp…`。
+ * @param cutoffEventTop - 用于档线事件TopChart的领域对象，包含 `getChartData`、`getUserNameById`、`startAt`、`endAt` 字段。
+ * @param setStartToZero - 决定档线事件TopChart内容、边界或目标的 `setStartToZero` 值；省略时默认采用 `false`。
+ * @returns 档线事件TopChart。
  */
 export async function drawCutoffEventTopChart(
   cutoffEventTop: CutoffEventTop,

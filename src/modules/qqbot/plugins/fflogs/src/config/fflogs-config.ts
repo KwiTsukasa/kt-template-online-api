@@ -10,9 +10,9 @@ export type FflogsConfig = {
 };
 
 /**
- * 解析Fflogs Config。
- * @param host - host 输入；使用 `getConfig` 字段生成结果。
- * @returns FFLogs 插件转换后的值。
+ * 从`host`解析Fflogs配置；从 `host.getConfig` 读取Fflogs配置。
+ * @param host - 可能包含认证信息或端口的外部服务地址。
+ * @returns 包含 `baseUrl`、`clientId`、`clientSecret`、`graphqlUrl`、`tokenUrl` 字段的Fflogs配置。
  */
 export function resolveFflogsConfig(host: FflogsPluginHost): FflogsConfig {
   const webBaseUrl = normalizeBaseUrl(
@@ -42,8 +42,9 @@ export function resolveFflogsConfig(host: FflogsPluginHost): FflogsConfig {
 }
 
 /**
- * 转换 FFLogs 插件输入。
- * @param value - 待转换值；影响 normalizeBaseUrl 的返回值。
+ * 将`value`规范为BaseURL 地址，使等价输入得到一致表示。
+ * @param value - 待转换为BaseURL 地址的原始值。
+ * @returns BaseURL 地址。
  */
 function normalizeBaseUrl(value: string) {
   return `${value || ''}`.trim().replace(/\/+$/, '');

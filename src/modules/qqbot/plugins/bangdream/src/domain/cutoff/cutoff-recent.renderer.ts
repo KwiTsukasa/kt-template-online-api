@@ -21,13 +21,12 @@ import { drawCharacterInList } from '@/modules/qqbot/plugins/bangdream/src/domai
 import { BangDreamEventStatus } from '@/modules/qqbot/plugins/bangdream/src/domain/common/bangdream-protocol';
 
 /**
- * 在QQBot 图片视图层中绘制档线列表Of最近活动。
- *
- * @param eventId - 活动 ID；定位本次读取、更新、删除或关联的活动。
- * @param tier - tier 输入；驱动 `Cutoff()` 的 BangDream步骤。
- * @param mainServer - mainServer 输入；驱动 `Cutoff()`、`all.push()`、`getRecentEventListByEventAndServer()`、`list.push()` 的 BangDream步骤。
- * @param compress - BangDream列表；影响 drawCutoffListOfRecentEvent 的返回值。
- * @returns 异步处理结果。
+ * 根据`eventId`、`tier`、`mainServer`绘制或格式化档线最近日志事件；当 `!event.isExist` 成立时返回 `['活动不存在']`。
+ * @param eventId - 用于精确定位事件的标识。
+ * @param tier - 决定档线最近日志事件内容、边界或目标的 `tier` 值。
+ * @param mainServer - 决定档线最近日志事件内容、边界或目标的 `mainServer` 值。
+ * @param compress - 决定档线最近日志事件内容、边界或目标的 `compress` 值。
+ * @returns 按输入顺序得到的档线最近日志事件列表；没有匹配项时为空数组。
  */
 export async function drawCutoffListOfRecentEvent(
   eventId: number,

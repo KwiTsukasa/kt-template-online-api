@@ -7,18 +7,18 @@ export class AttributeResourceRepository {
   ) {}
 
   /**
-   * 获取属性图标 SVG 资源路径。
-   *
-   * @param attributeName - attributeName 输入；限定 BangDream查询范围。
+   * 根据参数 `attributeName`，获取属性图标 SVG 资源路径。
+   * @param attributeName - 决定根据参数 `attributeName`，获取属性图标 SVG 资源路径内容、边界或目标的 `attributeName` 值。
+   * @returns 按参数编码并拼接完成的根据参数 `attributeName`，获取属性图标 SVG 资源路径。
    */
   getIconSvgPath(attributeName: string): string {
     return `/res/icon/${attributeName}.svg`;
   }
 
   /**
-   * 下载属性图标 SVG 资源。
-   *
-   * @param attributeName - attributeName 输入；驱动 `provider.getAsset()` 的 BangDream步骤。
+   * 根据参数 `attributeName`，下载属性图标 SVG 资源。
+   * @param attributeName - 决定根据参数 `attributeName`，下载属性图标 SVG 资源内容、边界或目标的 `attributeName` 值。
+   * @returns 根据参数 `attributeName`，下载属性图标 SVG 资源。
    */
   async getIconSvgBuffer(attributeName: string): Promise<Buffer> {
     return await this.provider.getAsset(this.getIconSvgPath(attributeName));

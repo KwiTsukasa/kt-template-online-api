@@ -191,10 +191,9 @@ export class Player {
     this.server = server;
   }
   /**
-   * 在 Player 模型中加载远端完整详情并标记初始化状态。
-   *
-   * @param useCache - useCache 输入；驱动 `dataRepository.getDetail()` 的 BangDream步骤。
-   * @param mode - mode 输入；驱动 `dataRepository.getDetail()` 的 BangDream步骤。
+   * 根据`useCache`、`mode`处理initFull；当 `this.isInitfull` 成立时直接结束且不产生返回值。
+   * @param useCache - 决定是否启用“use缓存”分支的布尔选项；省略时默认采用 `false`。
+   * @param mode - 选择initFull处理分支的模式值；省略时默认采用 `2`。
    */
   async initFull(useCache: boolean = false, mode: PlayerDetailMode = 2) {
     if (this.isInitfull) {
@@ -287,10 +286,9 @@ export class Player {
     this.isInitfull = true;
   }
   /**
-   * 在 Player 模型中计算数值。
-   *
-   * @param event - event 输入；使用 `characters`、`attributes`、`eventAttributeAndCharacterBonus` 字段生成结果。
-   * @returns 异步处理结果。
+   * 根据`event`处理calc统计值；当 `this.profile.publishTotalDeckPowerFlg == false` 成立时返回 `{ performance: 0, technique: 0, visual: 0, }`。
+   * @param event - 触发calc统计值的领域事件，包含 `characters`、`attributes`、`eventAttributeAndCharacterBonus` 字段；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @returns calc统计值。
    */
   async calcStat(event?: Event): Promise<Stat> {
     if (this.profile.publishTotalDeckPowerFlg == false) {
@@ -414,9 +412,8 @@ export class Player {
     return cardStat;
   }
   /**
-   * 在 Player 模型中计算HSR。
-   *
-   * @returns 计算后的数值。
+   * 根据当前运行态处理calcHSR。
+   * @returns 玩家全部乐队高分记录 rating 的累加值；没有记录时为 `0`。
    */
   calcHSR(): number {
     let hsr = 0;
@@ -433,9 +430,8 @@ export class Player {
     return hsr;
   }
   /**
-   * 查询 BangDream 插件数据。
-   *
-   * @returns 判断结果。
+   * 按当前运行态读取包含 `cardId`、`trainingStatus` 字段的结果。
+   * @returns 包含 `cardId`、`trainingStatus` 字段的包含 `cardId`、`trainingStatus` 字段的。
    */
   getUserIllustration(): { cardId: number; trainingStatus: boolean } {
     let illustrationCardId: number;
@@ -450,17 +446,19 @@ export class Player {
     if (viewProfileSituationStatus == 'deck_leader') {
       illustrationCardId =
         this.profile.mainDeckUserSituations.entries[0].situationId;
-      trainingStatus =
-        this.profile.mainDeckUserSituations.entries[0].illust ===
-        'after_training'
-          ? true
-          : false;
+      if (this.profile.mainDeckUserSituations.entries[0].illust ===
+        'after_training') {
+        trainingStatus = true;
+      } else {
+        trainingStatus = false;
+      }
     } else {
       illustrationCardId = this.profile.userProfileSituation.situationId;
-      trainingStatus =
-        this.profile.userProfileSituation.illust === 'after_training'
-          ? true
-          : false;
+      if (this.profile.userProfileSituation.illust === 'after_training') {
+        trainingStatus = true;
+      } else {
+        trainingStatus = false;
+      }
     }
     return { cardId: illustrationCardId, trainingStatus: trainingStatus };
   }

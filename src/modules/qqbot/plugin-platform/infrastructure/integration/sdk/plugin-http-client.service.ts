@@ -31,7 +31,12 @@ export type QqbotPluginRedirectResult = {
 
 @Injectable()
 export class QqbotPluginHttpClientService {
-  /** 解析重定向。 */
+  /**
+   * 从`input`解析重定向；当 `!location` 成立时返回 `{ finalUrl: currentUrl.toString(), redirect…`。
+   * @param input - 用于重定向的结构化输入，包含 `url`、`maxRedirects` 字段。
+   * @returns 包含 `finalUrl`、`redirects` 字段的重定向。
+   * @throws 当 `redirects.length >= maxRedirects` 成立时拒绝当前输入并抛出 `Error`。
+   */
   async resolveRedirect(
     input: QqbotPluginResolveRedirectRequest,
   ): Promise<QqbotPluginRedirectResult> {
@@ -58,9 +63,10 @@ export class QqbotPluginHttpClientService {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param input - input 输入；使用 `invalidJsonMessage`、`context` 字段生成结果。
-   * @returns 异步完成后的 QQBot 插件平台结果。
+   * 复用文本请求读取插件接口并解析 JSON；响应文本非法时使用调用方错误文案拒绝。
+   * @param input - 用于JSON 数据的结构化输入，包含 `invalidJsonMessage`、`context` 字段。
+   * @returns JSON 数据。
+   * @throws 当 `JSON.parse` 调用失败时拒绝当前输入并抛出 `Error`。
    */
   async requestJson<T>(input: QqbotPluginHttpClientRequest): Promise<T> {
     const body = await this.requestText(input);
@@ -75,18 +81,28 @@ export class QqbotPluginHttpClientService {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param input - input 输入；使用 `url`、`method`、`timeoutMs`、`context` 字段生成结果。
-   * @returns QQBot 插件平台渲染后的图片、画布或文本。
+   * 按 URL 协议、方法、请求头与超时发起插件 HTTP 请求，并将成功响应合并为 Buffer。
+   * @param input - 用于缓冲区的结构化输入，包含 `url`、`method`、`timeoutMs`、`context` 字段。
+   * @returns 完成初始化并携带当前边界配置的缓冲区。
    */
   requestBuffer(input: QqbotPluginHttpClientRequest): Promise<Buffer> {
-    const url = input.url instanceof URL ? input.url : new URL(input.url);
+    const url = (() => {
+      if (input.url instanceof URL) {
+        return input.url;
+      }
+      return new URL(input.url);
+    })();
     const method = input.method || 'GET';
     const timeoutMs = input.timeoutMs || 8000;
     const context = input.context || '插件 HTTP 接口';
 
     return new Promise<Buffer>((resolve, reject) => {
-      const client = url.protocol === 'http:' ? http : https;
+      const client = (() => {
+        if (url.protocol === 'http:') {
+          return http;
+        }
+        return https;
+      })();
       const request = client.request(
         url,
         {
@@ -101,7 +117,12 @@ export class QqbotPluginHttpClientService {
         (response) => {
           const chunks: Buffer[] = [];
           response.on('data', (chunk) => {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            chunks.push((() => {
+              if (Buffer.isBuffer(chunk)) {
+                return chunk;
+              }
+              return Buffer.from(chunk);
+            })());
           });
           response.on('end', () => {
             const statusCode = response.statusCode || 500;
@@ -131,18 +152,28 @@ export class QqbotPluginHttpClientService {
   }
 
   /**
-   * 执行 QQBot 插件平台流程。
-   * @param input - input 输入；使用 `url`、`method`、`timeoutMs`、`context` 字段生成结果。
-   * @returns QQBot 插件平台渲染后的图片、画布或文本。
+   * 按 URL 协议、方法、请求头与超时发起插件 HTTP 请求，并将成功响应解码为文本。
+   * @param input - 用于文本的结构化输入，包含 `url`、`method`、`timeoutMs`、`context` 字段。
+   * @returns 完成初始化并携带当前边界配置的文本。
    */
   requestText(input: QqbotPluginHttpClientRequest): Promise<string> {
-    const url = input.url instanceof URL ? input.url : new URL(input.url);
+    const url = (() => {
+      if (input.url instanceof URL) {
+        return input.url;
+      }
+      return new URL(input.url);
+    })();
     const method = input.method || 'GET';
     const timeoutMs = input.timeoutMs || 8000;
     const context = input.context || '插件 HTTP 接口';
 
     return new Promise<string>((resolve, reject) => {
-      const client = url.protocol === 'http:' ? http : https;
+      const client = (() => {
+        if (url.protocol === 'http:') {
+          return http;
+        }
+        return https;
+      })();
       const request = client.request(
         url,
         {
@@ -187,7 +218,12 @@ export class QqbotPluginHttpClientService {
     });
   }
 
-  /** 请求重定向位置。 */
+  /**
+   * 按`url`、`input`投递重定向位置。
+   * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+   * @param input - 用于重定向位置的结构化输入，包含 `timeoutMs`、`context`、`headers`、`failureMessage` 字段。
+   * @returns 完成初始化并携带当前边界配置的重定向位置；没有可用结果或提前结束时为 `undefined`。
+   */
   private requestRedirectLocation(
     url: URL,
     input: QqbotPluginResolveRedirectRequest,
@@ -250,9 +286,10 @@ export class QqbotPluginHttpClientService {
 }
 
 /**
- * 创建 QQBot 插件平台对象或配置。
- * @param message - message 输入；驱动 `Object.assign()` 的 插件平台步骤。
- * @param statusCode - statusCode 输入；生成 插件平台对象。
+ * 将错误消息与 HTTP 状态码附加到 `Error` 对象，并同时暴露 Axios 风格的 `response.status`。
+ * @param message - 包含正文、发送目标与账号身份的待处理消息。
+ * @param statusCode - 决定插件Http错误内容、边界或目标的 `statusCode` 值。
+ * @returns 插件Http错误。
  */
 function createPluginHttpError(message: string, statusCode: number) {
   return Object.assign(new Error(message), {
@@ -263,24 +300,46 @@ function createPluginHttpError(message: string, statusCode: number) {
   });
 }
 
-/** 规范化插件HTTPURL。 */
+/**
+ * 将`value`规范为插件HTTPURL，使等价输入得到一致表示。
+ * @param value - 待转换为插件HTTPURL的原始值。
+ * @returns 插件HTTPURL。
+ * @throws 当 `url.protocol !== 'http:' && url.protocol !== 'https:'` 成立时拒绝当前输入并抛出 `Error`。
+ */
 function normalizePluginHttpUrl(value: string | URL) {
-  const url = value instanceof URL ? value : new URL(value);
+  const url = (() => {
+    if (value instanceof URL) {
+      return value;
+    }
+    return new URL(value);
+  })();
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('插件 HTTP 重定向仅支持 http/https');
   }
   return url;
 }
 
-/** 规范化最大重定向。 */
+/**
+ * 将`value`规范为最大重定向，使等价输入得到一致表示；当 `Number.isFinite(maxRedirects) && maxRedirects >= 0` 成立时返回 `Math.floor(maxRedirects)`。
+ * @param value - 待转换为最大重定向的原始值。
+ * @returns 当前状态对应的最大重定向，取值为 `5`。
+ */
 function normalizeMaxRedirects(value: number | undefined) {
   const maxRedirects = value ?? 5;
-  return Number.isFinite(maxRedirects) && maxRedirects >= 0
-    ? Math.floor(maxRedirects)
-    : 5;
+  if (Number.isFinite(maxRedirects) && maxRedirects >= 0) {
+    return Math.floor(maxRedirects);
+  }
+  return 5;
 }
 
-/** 读取插件HTTP模块。 */
+/**
+ * 按`url`读取插件HTTP模块；当 `url.protocol === 'http:'` 成立时返回 `http`。
+ * @param url - 待规范化、请求或同源校验的URL 地址 URL。
+ * @returns 插件HTTP模块。
+ */
 function getPluginHttpModule(url: URL) {
-  return url.protocol === 'http:' ? http : https;
+  if (url.protocol === 'http:') {
+    return http;
+  }
+  return https;
 }

@@ -1,9 +1,9 @@
 import type { Repository } from 'typeorm';
 import { KtDateTime } from '../../../src/common';
-import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/network-ddns.entity';
-import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
-import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
-import { NetworkTcpNatmapMessageSourceAdapter } from '../../../src/modules/admin/platform-config/network-management/network-tcp-natmap-message-source.adapter';
+import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
+import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
+import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
+import { NetworkTcpNatmapMessageSourceAdapter } from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-tcp-natmap-message-source.adapter';
 import { SystemMessageSourceRegistry } from '../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
 
 type Harness = {

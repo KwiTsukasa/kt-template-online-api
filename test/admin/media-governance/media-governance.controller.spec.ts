@@ -5,16 +5,20 @@ import type {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
-import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/admin-super.guard';
-import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
-import { MediaGovernanceController } from '../../../src/modules/admin/media-governance/media-governance.controller';
-import { MediaGovernanceEventStreamService } from '../../../src/modules/admin/media-governance/media-governance-event-stream.service';
-import { MediaGovernancePermissionGuard } from '../../../src/modules/admin/media-governance/media-governance-permission.guard';
-import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/media-governance.service';
+import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/presentation/admin-super.guard';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
+import { MediaGovernanceController } from '../../../src/modules/admin/media-governance/presentation/media-governance.controller';
+import { MediaGovernanceEventStreamService } from '../../../src/modules/admin/media-governance/application/media-governance-event-stream.service';
+import {
+  MEDIA_GOVERNANCE_PERMISSION,
+  MediaGovernancePermissionGuard,
+} from '../../../src/modules/admin/media-governance/presentation/media-governance-permission.guard';
+import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
 
 describe('MediaGovernanceController', () => {
   let app: INestApplication;
   let apiUrl: string;
+  let service: MediaGovernanceService;
   const authGuard: CanActivate = {
     canActivate(context: ExecutionContext) {
       context.switchToHttp().getRequest().adminUser = {
@@ -43,10 +47,83 @@ describe('MediaGovernanceController', () => {
     app = moduleRef.createNestApplication();
     await app.listen(0, '127.0.0.1');
     apiUrl = await app.getUrl();
+    service = app.get(MediaGovernanceService);
   });
 
   afterAll(async () => {
     await app?.close();
+  });
+
+  it('uses AgentOperate for continuing an existing Agent conversation', () => {
+    expect(
+      Reflect.getMetadata(
+        MEDIA_GOVERNANCE_PERMISSION,
+        MediaGovernanceController.prototype.agentMessage,
+      ),
+    ).toEqual(['Media:Governance:AgentOperate']);
+  });
+
+  it('passes Agent session pagination and follow-up messages through real HTTP DTO validation', async () => {
+    const taskId = 'media-task-http-agent-001';
+    const threadId = 'thread-media-http-agent-001';
+    const session = {
+      conversationRevision: 4,
+      currentActionLabel: '等待操作员消息',
+      currentUnitId: null,
+      hasMoreMessages: false,
+      historyComplete: true,
+      lastHeartbeatLabel: '刚刚',
+      messages: [],
+      policyBoundaryLabel: '五层边界已启用',
+      result: null,
+      status: 'needs-operator',
+      statusLabel: 'Agent 已回复，可继续对话',
+      threadId,
+    };
+    const sessionSpy = jest
+      .spyOn(service, 'agentSession')
+      .mockResolvedValueOnce(session as never);
+    const messageSpy = jest
+      .spyOn(service, 'continueAgentConversation')
+      .mockResolvedValueOnce(session as never);
+
+    const history = await request(apiUrl)
+      .get(
+        `/media-governance/tasks/${taskId}/agent/session?afterSequence=2&limit=50`,
+      )
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+    expect(history.body.data).toMatchObject({
+      conversationRevision: 4,
+      threadId,
+    });
+    expect(sessionSpy).toHaveBeenCalledWith(taskId, {
+      afterSequence: 2,
+      limit: 50,
+    });
+
+    const followUp = await request(apiUrl)
+      .post(`/media-governance/tasks/${taskId}/agent/messages`)
+      .send({
+        clientMessageId: 'media-user-http-agent-001',
+        content: '继续核对当前任务',
+        expectedConversationRevision: 4,
+        threadId,
+      })
+      .expect(201)
+      .expect('Cache-Control', 'no-store');
+    expect(followUp.body.data).toMatchObject({
+      conversationRevision: 4,
+      threadId,
+    });
+    expect(messageSpy).toHaveBeenCalledWith(taskId, {
+      clientMessageId: 'media-user-http-agent-001',
+      content: '继续核对当前任务',
+      expectedConversationRevision: 4,
+      threadId,
+    });
+    sessionSpy.mockRestore();
+    messageSpy.mockRestore();
   });
 
   it('creates and lists a normalized draft over real HTTP', async () => {

@@ -2,14 +2,14 @@ import { HttpException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { DataSource, EntityManager, Repository } from 'typeorm';
 import { KtDateTime } from '../../../src/common';
-import type { NetworkAgentMqttService } from '../../../src/modules/admin/platform-config/network-management/network-agent-mqtt.service';
-import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/network-agent-state.entity';
-import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/network-endpoint-history.entity';
-import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
-import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/network-management.service';
-import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
-import { NetworkPortForwardGroupService } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.service';
-import { NetworkTcpReleasePolicyService } from '../../../src/modules/admin/platform-config/network-management/network-tcp-release-policy.service';
+import type { NetworkAgentMqttService } from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-agent-mqtt.service';
+import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-agent-state.entity';
+import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-endpoint-history.entity';
+import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
+import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/application/network-management.service';
+import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
+import { NetworkPortForwardGroupService } from '../../../src/modules/admin/platform-config/network-management/application/network-port-forward-group.service';
+import { NetworkTcpReleasePolicyService } from '../../../src/modules/admin/platform-config/network-management/application/network-tcp-release-policy.service';
 
 type Harness = {
   bootstrapOrder: string[];

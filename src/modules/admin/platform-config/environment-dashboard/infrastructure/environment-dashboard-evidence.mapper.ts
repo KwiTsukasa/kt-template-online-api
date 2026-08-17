@@ -1,6 +1,7 @@
 import type { EnvironmentEvidence } from '../domain/environment-dashboard.types';
 import { normalizeObservedAt } from '../application/environment-dashboard-status.mapper';
 
+/** 返回实时证据。 */
 export function liveEvidence(
   source: string,
   summary: string,
@@ -16,6 +17,7 @@ export function liveEvidence(
   };
 }
 
+/** 返回未接线的证据。 */
 export function unwiredEvidence(
   source: string,
   missingConfigKeys: string[],
@@ -36,6 +38,7 @@ export function unwiredEvidence(
   };
 }
 
+/** 返回错误证据。 */
 export function errorEvidence(
   source: string,
   error: unknown,
@@ -56,6 +59,7 @@ export function errorEvidence(
   };
 }
 
+/** 返回已缓存的证据。 */
 export function cachedEvidence(
   source: string,
   summary: string,

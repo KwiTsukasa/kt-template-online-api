@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { vbenSuccess } from '@/common';
 import type { BlogTermKind } from '../infrastructure/persistence/blog-term.entity';
 import {

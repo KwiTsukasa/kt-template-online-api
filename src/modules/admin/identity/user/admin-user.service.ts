@@ -4,7 +4,7 @@ import { Not, Repository } from 'typeorm';
 import { throwVbenError } from '@/common';
 import { AdminDept } from '../dept/admin-dept.entity';
 import { AdminRole } from '../role/admin-role.entity';
-import { AdminPasswordHashService } from '../auth/admin-password-hash.service';
+import { AdminPasswordHashService } from '@/modules/admin/identity/auth/application/admin-password-hash.service';
 import { AdminUser } from './admin-user.entity';
 import type {
   AdminUserInput,
@@ -144,6 +144,7 @@ export class AdminUserService {
     return null;
   }
 
+  /** 重置用户密码。 */
   async resetUserPassword(id: string, password?: string) {
     const user = await this.userRepository.findOne({
       where: {

@@ -22,6 +22,7 @@ import { QqbotNapcatModule } from './modules/qqbot/napcat/qqbot-napcat.module';
 import { QqbotPluginPlatformModule } from './modules/qqbot/plugin-platform/plugin-platform.module';
 import { RuntimeModule } from './runtime';
 
+/** 构建类型ORM选项。 */
 export function buildTypeOrmOptions(configService: ConfigService) {
   return {
     type: 'mysql' as const,

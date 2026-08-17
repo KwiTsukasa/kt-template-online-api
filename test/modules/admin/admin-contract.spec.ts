@@ -4,7 +4,7 @@ import { DictModule } from '../../../src/modules/admin/platform-config/dict/dict
 import { AdminNoticeController } from '../../../src/modules/admin/platform-config/notice/admin-notice.controller';
 import { NoticeModule } from '../../../src/modules/admin/platform-config/notice/notice.module';
 import { AdminModule } from '../../../src/modules/admin/admin.module';
-import { AdminLoginDto } from '../../../src/modules/admin/identity/auth/admin-auth.dto';
+import { AdminLoginDto } from '../../../src/modules/admin/identity/auth/contract/admin-auth.dto';
 import {
   ADMIN_IDENTITY_CONTROLLERS,
   AdminIdentityModule,

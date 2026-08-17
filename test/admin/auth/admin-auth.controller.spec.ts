@@ -2,7 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { ClientIpService } from '../../../src/common/security/client-ip.service';
 import { TrustedCredentialTransportService } from '../../../src/common/security/trusted-credential-transport.service';
-import { AdminAuthController } from '../../../src/modules/admin/identity/auth/admin-auth.controller';
+import { AdminAuthController } from '../../../src/modules/admin/identity/auth/presentation/admin-auth.controller';
 
 type AuthEndpoint = 'login' | 'logout' | 'refresh';
 

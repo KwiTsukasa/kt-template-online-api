@@ -231,10 +231,6 @@ VALUES
   (2041700000000120201, 2041700000000100202, 'SystemDeptCreate', NULL, NULL, NULL, 'System:Dept:Create', 'button', '{"title":"common.create"}', 1, 0),
   (2041700000000120202, 2041700000000100202, 'SystemDeptEdit', NULL, NULL, NULL, 'System:Dept:Edit', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120203, 2041700000000100202, 'SystemDeptDelete', NULL, NULL, NULL, 'System:Dept:Delete', 'button', '{"title":"common.delete"}', 1, 0),
-  (2041700000000100203, 2041700000000100002, 'SystemKtTableDemo', '/system/ktTableDemo', '/system/ktTableDemo/list', NULL, 'System:KtTableDemo:List', 'menu', '{"icon":"lucide:table-2","title":"system.ktTableDemo.title"}', 1, 5),
-  (2041700000000120204, 2041700000000100203, 'SystemKtTableDemoCreate', NULL, NULL, NULL, 'System:KtTableDemo:Create', 'button', '{"title":"common.create"}', 1, 0),
-  (2041700000000120205, 2041700000000100203, 'SystemKtTableDemoEdit', NULL, NULL, NULL, 'System:KtTableDemo:Edit', 'button', '{"title":"common.edit"}', 1, 0),
-  (2041700000000120206, 2041700000000100203, 'SystemKtTableDemoDelete', NULL, NULL, NULL, 'System:KtTableDemo:Delete', 'button', '{"title":"common.delete"}', 1, 0),
   (2041700000000100205, 2041700000000100002, 'SystemLog', '/system/logs', '/system/log/list', NULL, 'System:Log:List', 'menu', '{"icon":"lucide:scroll-text","title":"system.log.title"}', 1, 6),
   (2041700000000100206, 2041700000000100002, 'SystemNotice', '/system/notice', '/system/notice/list', NULL, 'System:Notice:List', 'menu', '{"icon":"mdi:bell-outline","title":"system.notice.title"}', 1, 7),
   (2041700000000120212, 2041700000000100206, 'SystemNoticeEdit', NULL, NULL, NULL, 'System:Notice:Edit', 'button', '{"title":"system.notice.markHandled"}', 1, 1),
@@ -271,10 +267,6 @@ VALUES
   (2041700000000120323, 2041700000000100303, 'BlogTagDelete', NULL, NULL, NULL, 'Blog:Tag:Delete', 'button', '{"title":"common.delete"}', 1, 0),
   (2041700000000100304, 2041700000000100300, 'BlogTheme', '/blog/theme', '/blog/theme/config', NULL, 'Blog:Theme:List', 'menu', '{"icon":"lucide:palette","title":"主题配置"}', 1, 3),
   (2041700000000120331, 2041700000000100304, 'BlogThemeSave', NULL, NULL, NULL, 'Blog:Theme:Save', 'button', '{"title":"保存配置"}', 1, 0),
-  (2041700000000100009, 0, 'Project', '/vben-admin', NULL, NULL, NULL, 'catalog', '{"badgeType":"dot","icon":"carbon:data-center","order":9998,"title":"demos.vben.title"}', 1, 9998),
-  (2041700000000100901, 2041700000000100009, 'VbenDocument', '/vben-admin/document', 'IFrameView', NULL, NULL, 'embedded', '{"icon":"carbon:book","iframeSrc":"https://doc.vben.pro","title":"demos.vben.document"}', 1, 0),
-  (2041700000000100902, 2041700000000100009, 'VbenGithub', '/vben-admin/github', 'IFrameView', NULL, NULL, 'link', '{"icon":"carbon:logo-github","link":"https://github.com/vbenjs/vue-vben-admin","title":"Github"}', 1, 0),
-  (2041700000000100010, 0, 'About', '/about', '_core/about/index', NULL, NULL, 'menu', '{"icon":"lucide:copyright","order":9999,"title":"demos.vben.about"}', 1, 9999),
   (2041700000000100011, 0, 'Profile', '/profile', '_core/profile/index', NULL, NULL, 'menu', '{"hideInMenu":true,"icon":"lucide:user","title":"page.auth.profile"}', 1, 10000)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
@@ -288,6 +280,30 @@ ON DUPLICATE KEY UPDATE
   `status` = VALUES(`status`),
   `sort` = VALUES(`sort`),
   `is_deleted` = 0;
+
+DELETE FROM `admin_role_menu`
+WHERE `menu_id` IN (
+  2041700000000100009,
+  2041700000000100010,
+  2041700000000100203,
+  2041700000000100901,
+  2041700000000100902,
+  2041700000000120204,
+  2041700000000120205,
+  2041700000000120206
+);
+
+DELETE FROM `admin_menu`
+WHERE `id` IN (
+  2041700000000100009,
+  2041700000000100010,
+  2041700000000100203,
+  2041700000000100901,
+  2041700000000100902,
+  2041700000000120204,
+  2041700000000120205,
+  2041700000000120206
+);
 
 UPDATE `admin_menu`
 SET

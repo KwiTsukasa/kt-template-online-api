@@ -14,7 +14,7 @@ import {
   validateDescriptorManifestEntry,
   validateMetadataException,
   validateSubtitleContracts,
-} from '../../../src/modules/admin/media-governance/media-governance-domain';
+} from '../../../src/modules/admin/media-governance/domain/media-governance-domain';
 
 function expectContractError(callback: () => unknown, code: string) {
   try {

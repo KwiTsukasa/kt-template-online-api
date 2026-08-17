@@ -27,6 +27,7 @@ type FflogsPluginCreateOptions =
   | FflogsPluginOptions
   | QqbotGenericPluginCreateOptions;
 
+/** 创建插件。 */
 export function createPlugin(options: FflogsPluginCreateOptions) {
   if (isFflogsGenericPluginCreateOptions(options)) {
     return buildFflogsPlugin({
@@ -40,6 +41,7 @@ export function createPlugin(options: FflogsPluginCreateOptions) {
   return buildFflogsPlugin(options);
 }
 
+/** 构建FFLogs插件。 */
 function buildFflogsPlugin(options: FflogsPluginOptions) {
   const application = new FflogsApplication(new FflogsClient(options.host));
   return {
@@ -70,6 +72,7 @@ function buildFflogsPlugin(options: FflogsPluginOptions) {
   };
 }
 
+/** 判断FFLogs通用插件创建选项是否成立。 */
 function isFflogsGenericPluginCreateOptions(
   options: FflogsPluginCreateOptions,
 ): options is QqbotGenericPluginCreateOptions {
@@ -79,6 +82,7 @@ function isFflogsGenericPluginCreateOptions(
   );
 }
 
+/** 规范化FFLogs清单。 */
 function normalizeFflogsManifest(
   manifest: QqbotGenericPluginCreateOptions['manifest'],
 ): FflogsManifest {
@@ -88,6 +92,7 @@ function normalizeFflogsManifest(
   };
 }
 
+/** 创建FFLogs通用主机适配器。 */
 function createFflogsGenericHostAdapter(
   options: QqbotGenericPluginCreateOptions,
 ): FflogsPluginHost {
@@ -110,6 +115,7 @@ function createFflogsGenericHostAdapter(
   };
 }
 
+/** 返回调用FFLogs通用字典主机。 */
 async function callFflogsGenericDictHost(
   host: Record<string, unknown>,
   dictCode: string,
@@ -121,6 +127,7 @@ async function callFflogsGenericDictHost(
   return await callFflogsGenericHost(host, method, dictCode);
 }
 
+/** 返回调用FFLogs通用主机。 */
 async function callFflogsGenericHost<TResult = any>(
   host: Record<string, unknown>,
   method: string,
@@ -133,6 +140,7 @@ async function callFflogsGenericHost<TResult = any>(
   return (await fn(...args)) as TResult;
 }
 
+/** 序列化FFLogs通用HTTP请求。 */
 function serializeFflogsGenericHttpRequest(
   request: Parameters<FflogsPluginHost['requestJson']>[0],
 ) {
@@ -152,6 +160,7 @@ function serializeFflogsGenericHttpRequest(
   };
 }
 
+/** 规范化FFLogs通用错误。 */
 function normalizeFflogsGenericError(
   normalizeError: QqbotGenericPluginCreateOptions['normalizeError'],
   error: unknown,

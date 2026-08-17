@@ -8,7 +8,7 @@ import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { PinoLogger } from 'nestjs-pino';
 import { ApiExceptionFilter } from '../../../../src/common/filters/api-exception.filter';
-import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { QqbotAccountMessagePushService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-account-message-push.service';
 import { QqbotMessageSubscriptionService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-message-subscription.service';
 import { QqbotMessageTargetOptionsService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-message-target-options.service';

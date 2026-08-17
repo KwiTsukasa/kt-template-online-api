@@ -9,8 +9,8 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { vbenPage, vbenSuccess } from '@/common';
-import { AdminSuperGuard } from '../../identity/auth/admin-super.guard';
-import { JwtAuthGuard } from '../../identity/auth/jwt-auth.guard';
+import { AdminSuperGuard } from '@/modules/admin/identity/auth/presentation/admin-super.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { AdminNoticeQueryDto } from './admin-notice.dto';
 import { AdminNoticeService } from './admin-notice.service';
 

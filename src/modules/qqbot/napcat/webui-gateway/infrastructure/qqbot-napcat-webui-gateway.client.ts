@@ -44,6 +44,7 @@ type GatewayResponseBody<T> = T | { data: T };
 export class QqbotNapcatWebuiGatewayClient {
   constructor(private readonly configService: ConfigService) {}
 
+  /** 创建会话。 */
   async createSession(input: QqbotNapcatWebuiGatewayCreateSessionRequest) {
     return this.validateSessionResult(
       await this.post<QqbotNapcatWebuiGatewaySessionResult>(
@@ -53,6 +54,7 @@ export class QqbotNapcatWebuiGatewayClient {
     );
   }
 
+  /** 返回心跳。 */
   heartbeat(input: QqbotNapcatWebuiGatewayLifecycleRequest) {
     const { sessionId, ...data } = input;
     return this.post<QqbotNapcatWebuiGatewayLifecycleResult>(
@@ -61,6 +63,7 @@ export class QqbotNapcatWebuiGatewayClient {
     );
   }
 
+  /** 吊销QQBotNapCatWebUI记录。 */
   revoke(input: QqbotNapcatWebuiGatewayLifecycleRequest) {
     const { sessionId, ...data } = input;
     return this.post<QqbotNapcatWebuiGatewayLifecycleResult>(
@@ -69,6 +72,7 @@ export class QqbotNapcatWebuiGatewayClient {
     );
   }
 
+  /** 返回后置。 */
   private async post<T>(path: string, data?: unknown): Promise<T> {
     const config: AxiosRequestConfig = {
       data,
@@ -86,10 +90,12 @@ export class QqbotNapcatWebuiGatewayClient {
     }
   }
 
+  /** 构建URL。 */
   private buildUrl(path: string) {
     return `${this.getBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
   }
 
+  /** 读取BaseURL。 */
   private getBaseUrl() {
     const configured = this.configService.get<string>(
       'NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL',
@@ -97,12 +103,14 @@ export class QqbotNapcatWebuiGatewayClient {
     return (configured || DEFAULT_GATEWAY_BASE_URL).replace(/\/+$/, '');
   }
 
+  /** 读取请求头。 */
   private getHeaders() {
     const secret = this.getInternalSecret();
 
     return { 'x-kt-gateway-secret': secret };
   }
 
+  /** 读取内部密钥。 */
   private getInternalSecret() {
     const secret = String(
       this.configService.get<string>('NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET') ||
@@ -119,6 +127,7 @@ export class QqbotNapcatWebuiGatewayClient {
     return secret;
   }
 
+  /** 读取超时毫秒。 */
   private getTimeoutMs() {
     const configured = Number(
       this.configService.get<string>('NAPCAT_WEBUI_GATEWAY_TIMEOUT_MS') || '',
@@ -129,6 +138,7 @@ export class QqbotNapcatWebuiGatewayClient {
       : DEFAULT_GATEWAY_TIMEOUT_MS;
   }
 
+  /** 返回解包网关请求体。 */
   private unwrapGatewayBody<T>(body: GatewayResponseBody<T>): T {
     if (body && typeof body === 'object' && 'data' in body) {
       return (body as { data: T }).data;
@@ -137,6 +147,7 @@ export class QqbotNapcatWebuiGatewayClient {
     return body as T;
   }
 
+  /** 校验会话结果。 */
   private validateSessionResult(
     result: QqbotNapcatWebuiGatewaySessionResult,
   ): QqbotNapcatWebuiGatewaySessionResult {
@@ -162,6 +173,7 @@ export class QqbotNapcatWebuiGatewayClient {
     };
   }
 
+  /** 判断安全内联框架URL是否成立。 */
   private isSafeIframeUrl(iframeUrl: unknown, sessionId: string) {
     if (typeof iframeUrl !== 'string' || iframeUrl.trim() !== iframeUrl) {
       return false;
@@ -202,11 +214,13 @@ export class QqbotNapcatWebuiGatewayClient {
     return !this.hasUnsafeGatewayEvidence(unsafeScanValue);
   }
 
+  /** 判断不安全的网关证据是否存在。 */
   private hasUnsafeGatewayEvidence(value: string) {
     const decoded = this.tryDecodeURIComponent(value);
     return UNSAFE_GATEWAY_RESULT_PATTERN.test(decoded);
   }
 
+  /** 尝试解码URI组件。 */
   private tryDecodeURIComponent(value: string) {
     try {
       return decodeURIComponent(value);
@@ -215,6 +229,7 @@ export class QqbotNapcatWebuiGatewayClient {
     }
   }
 
+  /** 返回抛出无效的会话结果。 */
   private throwInvalidSessionResult(): never {
     return throwVbenError(
       'NapCat WebUI Gateway 返回无效会话',

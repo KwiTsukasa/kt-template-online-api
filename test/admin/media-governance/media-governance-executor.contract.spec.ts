@@ -1,7 +1,7 @@
 import {
   MEDIA_GOVERNANCE_EXECUTOR_ACTIONS,
   buildMediaGovernanceExecutionEnvelope,
-} from '../../../src/modules/admin/media-governance/media-governance-executor.contract';
+} from '../../../src/modules/admin/media-governance/contract/media-governance-executor.contract';
 
 describe('MediaGovernanceExecutionEnvelope', () => {
   const base = {

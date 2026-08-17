@@ -39,6 +39,7 @@ export class EnvironmentEventStreamService {
     });
   }
 
+  /** 返回流。 */
   stream(lastEventId?: string): Observable<EnvironmentStreamEvent> {
     const replayEvents = this.getReplayEvents(lastEventId);
     const heartbeat$ = timer(this.heartbeatMs, this.heartbeatMs).pipe(
@@ -51,6 +52,7 @@ export class EnvironmentEventStreamService {
     );
   }
 
+  /** 追加事件。 */
   private pushEvent(event: EnvironmentEvent) {
     const streamEvent: EnvironmentStreamEvent = {
       data: event,
@@ -64,6 +66,7 @@ export class EnvironmentEventStreamService {
     this.streamSubject.next(streamEvent);
   }
 
+  /** 读取重放事件。 */
   private getReplayEvents(lastEventId?: string): EnvironmentStreamEvent[] {
     if (!lastEventId) return [];
     const index = this.replay.findIndex((event) => event.id === lastEventId);
@@ -71,6 +74,7 @@ export class EnvironmentEventStreamService {
     return this.replay.slice(index + 1);
   }
 
+  /** 创建心跳事件。 */
   private createHeartbeatEvent(): EnvironmentStreamEvent {
     const observedAt = new Date().toISOString();
     return {
@@ -80,6 +84,7 @@ export class EnvironmentEventStreamService {
     };
   }
 
+  /** 创建快照必需的事件。 */
   private createSnapshotRequiredEvent(): EnvironmentStreamEvent {
     return {
       data: {

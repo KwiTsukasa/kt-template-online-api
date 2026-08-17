@@ -16,6 +16,7 @@ export class QqbotMessagePublishTarget {
   @KtCreateDateColumn({ name: 'create_time', precision: 6 }) createTime: KtDateTime;
   @KtUpdateDateColumn({ name: 'update_time', precision: 6 }) updateTime: KtDateTime;
 
+  /** 创建标识。 */
   @BeforeInsert()
   createId() { ensureSnowflakeId(this); }
 }

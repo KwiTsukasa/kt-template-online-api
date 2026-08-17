@@ -161,6 +161,7 @@ export class MinioClientService {
     };
   }
 
+  /** 返回统计对象。 */
   async statObject(
     objectName: string,
     bucketName?: string,
@@ -172,6 +173,7 @@ export class MinioClientService {
     return this.client.statObject(this.getBucketName(bucketName), objectName);
   }
 
+  /** 读取相同的来源下载URL。 */
   getSameOriginDownloadUrl(objectName: string, bucketName?: string): string {
     if (!objectName) {
       throw new BadRequestException('objectName不能为空');

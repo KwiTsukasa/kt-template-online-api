@@ -79,6 +79,7 @@ import { TrustedCredentialTransportService } from './trusted-credential-transpor
 })
 export class SecurityBoundaryModule {}
 
+/** 读取文本。 */
 function readText(
   configService: ConfigService,
   key: string,
@@ -88,6 +89,7 @@ function readText(
   return value || fallback;
 }
 
+/** 读取整数。 */
 function readInteger(
   configService: ConfigService,
   key: string,

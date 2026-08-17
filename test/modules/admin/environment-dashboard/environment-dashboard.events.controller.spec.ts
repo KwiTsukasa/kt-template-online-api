@@ -2,7 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { of } from 'rxjs';
 import * as request from 'supertest';
-import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { EnvironmentDashboardService } from '../../../../src/modules/admin/platform-config/environment-dashboard/application/environment-dashboard.service';
 import { EnvironmentDashboardSelfCheckService } from '../../../../src/modules/admin/platform-config/environment-dashboard/application/environment-dashboard-self-check.service';
 import { EnvironmentEventStreamService } from '../../../../src/modules/admin/platform-config/environment-dashboard/application/environment-event-stream.service';

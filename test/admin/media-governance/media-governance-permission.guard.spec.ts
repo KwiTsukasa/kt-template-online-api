@@ -4,7 +4,7 @@ import { Reflector } from '@nestjs/core';
 import {
   MEDIA_GOVERNANCE_PERMISSION,
   MediaGovernancePermissionGuard,
-} from '../../../src/modules/admin/media-governance/media-governance-permission.guard';
+} from '../../../src/modules/admin/media-governance/presentation/media-governance-permission.guard';
 
 function createContext(roles: unknown[]): ExecutionContext {
   const handler = () => undefined;

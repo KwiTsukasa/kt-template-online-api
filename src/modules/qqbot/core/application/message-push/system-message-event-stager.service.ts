@@ -12,6 +12,7 @@ import { SystemMessageSourceRegistry } from './system-message-source.registry';
 export class SystemMessageEventStagerService implements SystemMessageEventStager {
   constructor(private readonly sourceRegistry: SystemMessageSourceRegistry) {}
 
+  /** 返回阶段。 */
   async stage(
     manager: EntityManager,
     input: SystemMessageEventInput,
@@ -46,6 +47,7 @@ export class SystemMessageEventStagerService implements SystemMessageEventStager
     }
   }
 
+  /** 判断重复键错误是否成立。 */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const record = error as { code?: unknown; errno?: unknown };

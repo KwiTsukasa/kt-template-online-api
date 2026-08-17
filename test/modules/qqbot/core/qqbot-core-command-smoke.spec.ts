@@ -1,4 +1,4 @@
-jest.mock('@/modules/admin/identity/auth/jwt-auth.guard', () => ({
+jest.mock('@/modules/admin/identity/auth/presentation/jwt-auth.guard', () => ({
   JwtAuthGuard: class {
     /**
      * 判断 QQBot 核心条件。

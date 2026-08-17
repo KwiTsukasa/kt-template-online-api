@@ -24,6 +24,7 @@ export class MihomoReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
+  /** 检查Mihomo只读的记录。 */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_R4SE_MIHOMO_URL',
@@ -84,6 +85,7 @@ export class MihomoReadonlyAdapter {
     }
   }
 
+  /** 返回APIURL。 */
   private apiUrl(path: 'configs' | 'proxies' | 'version'): string {
     return joinReadonlyUrl(
       this.config.get('ENV_DASHBOARD_R4SE_MIHOMO_URL'),
@@ -91,6 +93,7 @@ export class MihomoReadonlyAdapter {
     );
   }
 
+  /** 返回认证请求头。 */
   private authHeaders(): Record<string, string> {
     return {
       Authorization: `Bearer ${this.config.get(
@@ -99,6 +102,7 @@ export class MihomoReadonlyAdapter {
     };
   }
 
+  /** 统计代理。 */
   private countProxies(body: Record<string, unknown>): number {
     const proxies = body.proxies;
     const proxyRecord = asRecord(proxies);

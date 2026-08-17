@@ -28,6 +28,7 @@ type BilibiliCardPluginCreateOptions =
   | BilibiliCardPluginOptions
   | QqbotGenericPluginCreateOptions;
 
+/** 创建插件。 */
 export function createPlugin(options: BilibiliCardPluginCreateOptions) {
   if (isGenericPluginOptions(options)) {
     return buildBilibiliCardPlugin({
@@ -42,6 +43,7 @@ export function createPlugin(options: BilibiliCardPluginCreateOptions) {
   return buildBilibiliCardPlugin(options);
 }
 
+/** 构建Bilibili卡片插件。 */
 function buildBilibiliCardPlugin(options: BilibiliCardPluginOptions) {
   const application = new BilibiliCardApplication(
     options.host,
@@ -65,6 +67,7 @@ function buildBilibiliCardPlugin(options: BilibiliCardPluginOptions) {
   };
 }
 
+/** 判断通用插件选项是否成立。 */
 function isGenericPluginOptions(
   options: BilibiliCardPluginCreateOptions,
 ): options is QqbotGenericPluginCreateOptions {
@@ -74,6 +77,7 @@ function isGenericPluginOptions(
   );
 }
 
+/** 规范化清单。 */
 function normalizeManifest(
   manifest: QqbotGenericPluginCreateOptions['manifest'],
 ): BilibiliCardManifest {
@@ -84,6 +88,7 @@ function normalizeManifest(
   };
 }
 
+/** 处理通用事件。 */
 async function handleGenericEvent(
   eventKey: string,
   event: unknown,

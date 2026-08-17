@@ -13,6 +13,7 @@ export class QqbotPluginPackageSourceService {
     private readonly pathPolicy: QqbotPluginPackagePathPolicyService,
   ) {}
 
+  /** 发现包。 */
   async discoverPackages(): Promise<QqbotPluginPackageDescriptor[]> {
     const descriptors: QqbotPluginPackageDescriptor[] = [];
 
@@ -30,6 +31,7 @@ export class QqbotPluginPackageSourceService {
     );
   }
 
+  /** 读取描述文件。 */
   readDescriptor(packageRoot: string): QqbotPluginPackageDescriptor | null {
     const controlledPackageRoot =
       this.pathPolicy.assertControlledPackageRoot(packageRoot);
@@ -43,6 +45,7 @@ export class QqbotPluginPackageSourceService {
     return this.resolveDescriptor(controlledPackageRoot, manifestLike);
   }
 
+  /** 解析描述文件。 */
   resolveDescriptor(
     packageRoot: string,
     manifestLike: unknown,
@@ -66,6 +69,7 @@ export class QqbotPluginPackageSourceService {
     };
   }
 
+  /** 列出包根目录。 */
   private listPackageRoots(root: string): string[] {
     return readdirSync(root, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())

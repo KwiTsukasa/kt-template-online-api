@@ -2,15 +2,15 @@ import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { type Observable, of } from 'rxjs';
 import * as request from 'supertest';
-import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/admin-super.guard';
-import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
-import { NetworkManagementController } from '../../../src/modules/admin/platform-config/network-management/network-management.controller';
-import { NetworkDdnsService } from '../../../src/modules/admin/platform-config/network-management/network-ddns.service';
+import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/presentation/admin-super.guard';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
+import { NetworkManagementController } from '../../../src/modules/admin/platform-config/network-management/presentation/network-management.controller';
+import { NetworkDdnsService } from '../../../src/modules/admin/platform-config/network-management/application/network-ddns.service';
 import {
   NetworkManagementEventStreamService,
   type NetworkManagementStreamEvent,
-} from '../../../src/modules/admin/platform-config/network-management/network-management-event-stream.service';
-import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/network-management.service';
+} from '../../../src/modules/admin/platform-config/network-management/application/network-management-event-stream.service';
+import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/application/network-management.service';
 
 describe('NetworkManagementController', () => {
   let app: INestApplication;

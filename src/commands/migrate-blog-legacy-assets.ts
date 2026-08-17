@@ -93,10 +93,12 @@ type BlogLegacyAssetMigrationCommandDependencies = {
 })
 class BlogLegacyAssetMigrationCommandModule {}
 
+/** 解析博客旧版资源MinIO使用SSL。 */
 export function resolveBlogLegacyAssetMinioUseSsl(value?: string): boolean {
   return value?.trim().toLowerCase() === 'true';
 }
 
+/** 解析博客旧版资源迁移选项。 */
 export function parseBlogLegacyAssetMigrationOptions(
   argv: string[],
 ): BlogLegacyAssetMigrationOptions {
@@ -170,6 +172,7 @@ export function parseBlogLegacyAssetMigrationOptions(
   };
 }
 
+/** 执行博客旧版资源迁移命令。 */
 export async function runBlogLegacyAssetMigrationCommand(
   options: BlogLegacyAssetMigrationOptions,
   dependencies: BlogLegacyAssetMigrationCommandDependencies,
@@ -210,6 +213,7 @@ export async function runBlogLegacyAssetMigrationCommand(
   return dependencies.service.run(options);
 }
 
+/** 构建博客旧版资源迁移数据库身份。 */
 export function buildBlogLegacyAssetMigrationDatabaseIdentity(
   env: NodeJS.ProcessEnv,
 ): string {
@@ -222,6 +226,7 @@ export function buildBlogLegacyAssetMigrationDatabaseIdentity(
   return `${host}:${port}/${database}`;
 }
 
+/** 执行当前模块的主流程。 */
 async function main() {
   const options = parseBlogLegacyAssetMigrationOptions(process.argv.slice(2));
   const application = await NestFactory.createApplicationContext(
@@ -251,6 +256,7 @@ async function main() {
   }
 }
 
+/** 检查博客旧版资源备份路径。 */
 function inspectBlogLegacyAssetBackupPath(path: string) {
   try {
     accessSync(path, constants.R_OK);

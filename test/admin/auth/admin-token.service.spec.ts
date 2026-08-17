@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
-import { AdminTokenService } from '../../../src/modules/admin/identity/auth/admin-token.service';
+import { AdminTokenService } from '../../../src/modules/admin/identity/auth/application/admin-token.service';
 
 describe('AdminTokenService refresh token identity', () => {
   const secret = 'unit-test-admin-token-secret';

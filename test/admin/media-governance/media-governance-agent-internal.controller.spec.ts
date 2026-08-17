@@ -4,9 +4,9 @@ import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { MediaCodexAgentGatewayConfigService } from '../../../src/apps/media-codex-agent-gateway/config/media-codex-agent-gateway-config.service';
 import { MediaCodexAgentApiClient } from '../../../src/apps/media-codex-agent-gateway/infrastructure/media-codex-agent-api.client';
-import { MediaGovernanceAgentInternalController } from '../../../src/modules/admin/media-governance/media-governance-agent-internal.controller';
-import { MediaGovernanceAgentInternalGuard } from '../../../src/modules/admin/media-governance/media-governance-agent-internal.guard';
-import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/media-governance.service';
+import { MediaGovernanceAgentInternalController } from '../../../src/modules/admin/media-governance/presentation/media-governance-agent-internal.controller';
+import { MediaGovernanceAgentInternalGuard } from '../../../src/modules/admin/media-governance/presentation/media-governance-agent-internal.guard';
+import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
 
 describe('MediaGovernanceAgentInternalController', () => {
   let app: INestApplication;

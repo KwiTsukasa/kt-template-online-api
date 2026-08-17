@@ -10,10 +10,10 @@ import {
   MediaGovernanceSourceEntity,
   MediaGovernanceTaskEntity,
   MediaGovernanceUnitEntity,
-} from '../../../src/modules/admin/media-governance/media-governance.entities';
-import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/media-governance.service';
-import { MediaGovernanceTypeOrmStateStore } from '../../../src/modules/admin/media-governance/media-governance-state.store';
-import { buildMediaGovernanceExecutionEnvelope } from '../../../src/modules/admin/media-governance/media-governance-executor.contract';
+} from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance.entities';
+import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
+import { MediaGovernanceTypeOrmStateStore } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-state.store';
+import { buildMediaGovernanceExecutionEnvelope } from '../../../src/modules/admin/media-governance/contract/media-governance-executor.contract';
 import { sha256Json } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
 
 class MemoryRepository<T extends { id: string }> {

@@ -15,7 +15,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { vbenPage, vbenSuccess } from '@/common';
-import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { QqbotMessageSubscriptionService } from '../../application/message-push/qqbot-message-subscription.service';
 import { QqbotMessageTemplateService } from '../../application/message-push/qqbot-message-template.service';
 import { SystemMessageSourceRegistry } from '../../application/message-push/system-message-source.registry';
@@ -208,6 +208,7 @@ export class QqbotMessagePushController {
     private readonly templateService: QqbotMessageTemplateService,
   ) {}
 
+  /** 列出来源。 */
   @Get('sources')
   @QqbotMessagePushPermission(...SOURCE_READ_PERMISSIONS)
   listSources() {
@@ -233,6 +234,7 @@ export class QqbotMessagePushController {
     return vbenSuccess(allowlistLegacyStunOptions(result));
   }
 
+  /** 返回来源详情。 */
   @Get('sources/:sourceKey')
   @QqbotMessagePushPermission(...SOURCE_READ_PERMISSIONS)
   sourceDetail(@Param() params: MessagePushSourceParamDto) {
@@ -240,6 +242,7 @@ export class QqbotMessagePushController {
     return vbenSuccess(cloneSourceDefinition(definition));
   }
 
+  /** 返回页面订阅。 */
   @Get('subscriptions')
   @QqbotMessagePushPermission(
     'QqBot:MessageSubscription:List',
@@ -260,6 +263,7 @@ export class QqbotMessagePushController {
     );
   }
 
+  /** 创建订阅。 */
   @Post('subscriptions')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Create')
@@ -273,6 +277,7 @@ export class QqbotMessagePushController {
     );
   }
 
+  /** 更新订阅。 */
   @Put('subscriptions/:id')
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Update')
   async updateSubscription(
@@ -288,6 +293,7 @@ export class QqbotMessagePushController {
     );
   }
 
+  /** 返回切换订阅。 */
   @Put('subscriptions/:id/enabled')
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Toggle')
   async toggleSubscription(
@@ -306,12 +312,14 @@ export class QqbotMessagePushController {
     );
   }
 
+  /** 移除订阅。 */
   @Delete('subscriptions/:id')
   @QqbotMessagePushPermission('QqBot:MessageSubscription:Delete')
   async removeSubscription(@Param() params: MessagePushIdParamDto) {
     return vbenSuccess(await this.subscriptionService.remove(params.id));
   }
 
+  /** 返回页面模板。 */
   @Get('templates')
   @QqbotMessagePushPermission(
     'QqBot:MessageTemplate:List',
@@ -324,6 +332,7 @@ export class QqbotMessagePushController {
     return vbenPage(page.items.map(allowlistTemplate), page.total);
   }
 
+  /** 创建模板。 */
   @Post('templates')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Create')
@@ -333,6 +342,7 @@ export class QqbotMessagePushController {
     );
   }
 
+  /** 更新模板。 */
   @Put('templates/:id')
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Update')
   async updateTemplate(
@@ -344,6 +354,7 @@ export class QqbotMessagePushController {
     );
   }
 
+  /** 返回切换模板。 */
   @Put('templates/:id/enabled')
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Toggle')
   async toggleTemplate(
@@ -357,12 +368,14 @@ export class QqbotMessagePushController {
     );
   }
 
+  /** 移除模板。 */
   @Delete('templates/:id')
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Delete')
   async removeTemplate(@Param() params: MessagePushIdParamDto) {
     return vbenSuccess(await this.templateService.remove(params.id));
   }
 
+  /** 返回预览模板。 */
   @Post('templates/preview')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:MessageTemplate:Preview')

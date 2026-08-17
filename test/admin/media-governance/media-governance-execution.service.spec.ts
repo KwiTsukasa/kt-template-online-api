@@ -1,18 +1,28 @@
 import type {
   MediaGovernanceExecutionEnvelope,
   MediaGovernanceExecutionGateway,
-} from '../../../src/modules/admin/media-governance/media-governance-execution.gateway';
+} from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-execution.gateway';
 import type {
   MediaGovernanceStateStore,
   MediaGovernanceStoredTask,
-} from '../../../src/modules/admin/media-governance/media-governance-state.store';
+} from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-state.store';
+import type { MediaGovernanceProgressHotStore } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-progress-hot.store';
+import { MediaGovernanceEventStreamService } from '../../../src/modules/admin/media-governance/application/media-governance-event-stream.service';
 import {
   MediaGovernanceService,
   type MediaGovernanceTask,
-} from '../../../src/modules/admin/media-governance/media-governance.service';
+} from '../../../src/modules/admin/media-governance/application/media-governance.service';
 
 describe('MediaGovernanceService production execution adapter', () => {
-  function fixture({ durable = false }: { durable?: boolean } = {}) {
+  function fixture({
+    durable = false,
+    eventStream,
+    progressHotStore,
+  }: {
+    durable?: boolean;
+    eventStream?: MediaGovernanceEventStreamService;
+    progressHotStore?: MediaGovernanceProgressHotStore;
+  } = {}) {
     const sequences = new Map<string, number>();
     const envelopes = new Map<string, MediaGovernanceExecutionEnvelope>();
     const persistedTasks = new Map<string, MediaGovernanceStoredTask>();
@@ -53,6 +63,10 @@ describe('MediaGovernanceService production execution adapter', () => {
       failRunDispatch: jest.fn(async (task) => persistTask(task)),
       saveTask: jest.fn(async (task) => persistTask(task)),
       saveTaskWithAgentEvent: jest.fn(async (task) => persistTask(task)),
+      saveExecutorProgressSnapshot: jest.fn(async (task, event) => {
+        sequences.set(event.runId, event.sequence);
+        persistTask(task);
+      }),
     };
     const dispatch = jest.fn(async (envelope) => ({
       executionId: `jenkins-${envelope.runId}`,
@@ -85,11 +99,12 @@ describe('MediaGovernanceService production execution adapter', () => {
       })),
     };
     const service = new MediaGovernanceService(
-      undefined,
+      eventStream,
       undefined,
       undefined,
       stateStore,
       gateway,
+      progressHotStore,
     );
     return {
       acknowledged,
@@ -186,7 +201,7 @@ describe('MediaGovernanceService production execution adapter', () => {
         eventType: 'run-started',
         sequence: 1,
       }),
-    ).resolves.toEqual({ applied: true, revision: 3 });
+    ).resolves.toEqual({ applied: true, revision: 3, runSequence: 1 });
     await service.applyExecutorEvent({
       ...base,
       eventType: 'peer-progress',
@@ -236,7 +251,7 @@ describe('MediaGovernanceService production execution adapter', () => {
         sequence: 4,
         summary: '来源清单检查完成',
       }),
-    ).resolves.toEqual({ applied: true, revision: 4 });
+    ).resolves.toEqual({ applied: true, revision: 4, runSequence: 4 });
 
     expect(source).toMatchObject({
       manifest,
@@ -305,6 +320,203 @@ describe('MediaGovernanceService production execution adapter', () => {
       stage: 'intake',
     });
     expect(source.sourceHealth).toBe('viable');
+  });
+
+  it('publishes every hot progress callback before the queued MySQL snapshot', async () => {
+    let hotSequence: number | undefined;
+    const progressHotStore: MediaGovernanceProgressHotStore = {
+      append: jest.fn(async (event, authoritySequence) => {
+        if (hotSequence === undefined && authoritySequence === null) {
+          return {
+            applied: false,
+            authorityRequired: true,
+            previousSequence: 0,
+            sequenceGap: false,
+            snapshotRequired: false,
+          };
+        }
+        const previousSequence = hotSequence ?? authoritySequence ?? 0;
+        if (event.sequence <= previousSequence) {
+          return {
+            applied: false,
+            authorityRequired: false,
+            previousSequence,
+            sequenceGap: false,
+            snapshotRequired: false,
+          };
+        }
+        if (event.sequence !== previousSequence + 1) {
+          return {
+            applied: false,
+            authorityRequired: false,
+            previousSequence,
+            sequenceGap: true,
+            snapshotRequired: false,
+          };
+        }
+        hotSequence = event.sequence;
+        return {
+          applied: true,
+          authorityRequired: false,
+          previousSequence,
+          sequenceGap: false,
+          snapshotRequired: event.sequence === 2,
+        };
+      }),
+    };
+    const eventStream = new MediaGovernanceEventStreamService({
+      heartbeatMs: 60_000,
+    });
+    const { dispatch, service, stateStore } = fixture({
+      eventStream,
+      progressHotStore,
+    });
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '实时进度测试',
+    });
+    expect(service.evidence(task.id).eventProjection).toBe(
+      'Redis Stream 实时进度热层',
+    );
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    await service.inspectSource(task.id, source.id, { expectedRevision: 2 });
+    const envelope = dispatch.mock.calls[0]![0];
+    const base = {
+      action: 'source.inspect' as const,
+      observedAt: new Date().toISOString(),
+      runId: envelope.runId,
+      sourceId: source.id,
+      taskId: task.id,
+      taskRevision: 3,
+    };
+    await service.applyExecutorEvent({
+      ...base,
+      eventType: 'run-started',
+      sequence: 1,
+      summary: '来源检查开始',
+    });
+    const readRunSequence = jest.mocked(stateStore.readRunSequence!);
+    const applyExecutorEvent = jest.mocked(stateStore.applyExecutorEvent!);
+    readRunSequence.mockClear();
+    applyExecutorEvent.mockClear();
+    let releaseSnapshot: () => void = () => undefined;
+    const snapshotPending = new Promise<void>((resolve) => {
+      releaseSnapshot = resolve;
+    });
+    jest
+      .mocked(stateStore.saveExecutorProgressSnapshot!)
+      .mockImplementation(async () => snapshotPending);
+    const events: Array<Record<string, unknown>> = [];
+    const subscription = eventStream.stream().subscribe((event) => {
+      if (event.type === 'task-changed') {
+        events.push(event.data as unknown as Record<string, unknown>);
+      }
+    });
+    const progress = (sequence: number, completedBytes: number) => ({
+      ...base,
+      eventType: 'peer-progress' as const,
+      progress: {
+        completedBytes,
+        completedItems: 0,
+        etaLabel: '正在获取文件清单',
+        speedBytesPerSecond: completedBytes,
+        totalBytes: 100,
+        totalItems: 0,
+      },
+      sequence,
+      summary: `已取得 ${completedBytes} 字节`,
+    });
+
+    await expect(service.applyExecutorEvent(progress(2, 10))).resolves.toEqual(
+      expect.objectContaining({ applied: true, runSequence: 2 }),
+    );
+    await expect(service.applyExecutorEvent(progress(3, 20))).resolves.toEqual(
+      expect.objectContaining({ applied: true, runSequence: 3 }),
+    );
+
+    expect(events).toHaveLength(2);
+    expect(events).toEqual([
+      expect.objectContaining({
+        runId: envelope.runId,
+        runSequence: 2,
+        task: expect.objectContaining({
+          progress: expect.objectContaining({
+            completedBytes: 10,
+            percent: 10,
+          }),
+        }),
+      }),
+      expect.objectContaining({
+        runId: envelope.runId,
+        runSequence: 3,
+        task: expect.objectContaining({
+          progress: expect.objectContaining({
+            completedBytes: 20,
+            percent: 20,
+          }),
+        }),
+      }),
+    ]);
+    expect(applyExecutorEvent).not.toHaveBeenCalled();
+    expect(readRunSequence).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(stateStore.saveExecutorProgressSnapshot).toHaveBeenCalledTimes(1);
+    releaseSnapshot();
+    subscription.unsubscribe();
+  });
+
+  it('validates an executor projection before consuming its Redis sequence', async () => {
+    const append = jest.fn();
+    const { dispatch, service } = fixture({
+      progressHotStore: { append },
+    });
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '无效进度游标保护测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    await service.inspectSource(task.id, source.id, { expectedRevision: 2 });
+    const envelope = dispatch.mock.calls[0]![0];
+
+    await expect(
+      service.applyExecutorEvent({
+        action: 'source.inspect',
+        eventType: 'peer-progress',
+        observedAt: new Date().toISOString(),
+        progress: {
+          completedBytes: 101,
+          completedItems: 0,
+          etaLabel: '异常进度',
+          speedBytesPerSecond: 1,
+          totalBytes: 100,
+          totalItems: 0,
+        },
+        runId: envelope.runId,
+        sequence: 1,
+        sourceId: source.id,
+        summary: '无效进度',
+        taskId: task.id,
+        taskRevision: 3,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(append).not.toHaveBeenCalled();
+    expect(task.progress.completedBytes).toBe(0);
   });
 
   it('normalizes stale succeeded progress when restoring persisted tasks', async () => {

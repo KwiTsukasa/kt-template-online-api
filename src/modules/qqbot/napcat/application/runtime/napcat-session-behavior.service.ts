@@ -18,6 +18,7 @@ export type NapcatAutomationDecision = {
 
 @Injectable()
 export class NapcatSessionBehaviorService {
+  /** 创建默认资料。 */
   createDefaultProfile(accountId: string, now = new Date()) {
     return {
       accountId,
@@ -32,6 +33,7 @@ export class NapcatSessionBehaviorService {
     };
   }
 
+  /** 处理定期清理失败。 */
   handleHousekeepingFailure(input: {
     accountId: string;
     failureMessage: string;
@@ -44,6 +46,7 @@ export class NapcatSessionBehaviorService {
     };
   }
 
+  /** 返回下一能力阶段。 */
   nextCapabilityStage(
     stage: NapcatAutoCapabilityStage,
   ): NapcatAutoCapabilityStage {
@@ -52,6 +55,7 @@ export class NapcatSessionBehaviorService {
     return 'automation';
   }
 
+  /** 决定自动化。 */
   decideAutomation(input: {
     automationKind: NapcatAutomationKind;
     manual?: boolean;

@@ -27,6 +27,7 @@ export class EnvironmentDashboardCacheService {
       (Number.isFinite(envTtlMs) && envTtlMs > 0 ? envTtlMs : 15_000);
   }
 
+  /** 读取或创建。 */
   async getOrCreate(
     factory: () => Promise<EnvironmentDashboardResponse>,
     options: { forceRefresh?: boolean } = {},
@@ -48,16 +49,19 @@ export class EnvironmentDashboardCacheService {
     return snapshot;
   }
 
+  /** 使失效环境仪表盘缓存记录。 */
   invalidate(): void {
     this.cached = undefined;
   }
 
+  /** 克隆快照。 */
   private cloneSnapshot(
     snapshot: EnvironmentDashboardResponse,
   ): EnvironmentDashboardResponse {
     return JSON.parse(JSON.stringify(snapshot)) as EnvironmentDashboardResponse;
   }
 
+  /** 返回到已缓存的快照。 */
   private toCachedSnapshot(
     snapshot: EnvironmentDashboardResponse,
     expiresAtMs: number,
@@ -80,6 +84,7 @@ export class EnvironmentDashboardCacheService {
     return cloned;
   }
 
+  /** 返回到已缓存的信号。 */
   private toCachedSignal(
     signal: EnvironmentSignal,
     observedAt: string,

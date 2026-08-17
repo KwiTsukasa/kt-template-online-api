@@ -47,6 +47,7 @@ export class NasProdSignalCollector {
     private readonly config: EnvironmentDashboardConfigService = new EnvironmentDashboardConfigService(),
   ) {}
 
+  /** 收集NAS生产环境信号采集器记录。 */
   async collect(context: NasProdSignalCollectContext = {}): Promise<EnvironmentSite> {
     const observedAt = context.observedAt || new Date().toISOString();
     const qqbotSummary = await this.readQqbotSummary();
@@ -107,6 +108,7 @@ export class NasProdSignalCollector {
     };
   }
 
+  /** 读取QQBot摘要。 */
   private async readQqbotSummary(): Promise<QqbotSummaryProbe> {
     if (!this.qqbotDashboardService) return { error: new Error('QQBot dashboard service is not wired') };
     try {
@@ -116,6 +118,7 @@ export class NasProdSignalCollector {
     }
   }
 
+  /** 创建NASAPI服务。 */
   private createNasApiService(observedAt: string): EnvironmentService {
     const report = this.runtimeHealthService?.getRuntimeHealth();
     const status = this.mapRuntimeStatus(report?.status);
@@ -144,6 +147,7 @@ export class NasProdSignalCollector {
     ]);
   }
 
+  /** 创建NAS管理端服务。 */
   private createNasAdminService(observedAt: string): EnvironmentService {
     const publicUrl =
       this.config.get('ENV_DASHBOARD_ADMIN_PUBLIC_URL') ||
@@ -182,6 +186,7 @@ export class NasProdSignalCollector {
     return this.createService('nas-admin', 'Admin Frontend', [signal]);
   }
 
+  /** 创建已配置的依赖服务。 */
   private createConfiguredDependencyService(
     id: string,
     label: string,
@@ -208,6 +213,7 @@ export class NasProdSignalCollector {
     ]);
   }
 
+  /** 创建MinIO服务。 */
   private async createMinioService(observedAt: string): Promise<EnvironmentService> {
     if (!this.minioClientService) {
       return this.createUnknownService('minio', 'MinIO', 'MinioClientService 未接入', observedAt);
@@ -246,6 +252,7 @@ export class NasProdSignalCollector {
     }
   }
 
+  /** 创建QQBot服务。 */
   private createQqbotService(
     probe: QqbotSummaryProbe,
     observedAt: string,
@@ -286,6 +293,7 @@ export class NasProdSignalCollector {
     ]);
   }
 
+  /** 创建NapCat服务。 */
   private createNapcatService(
     probe: QqbotSummaryProbe,
     observedAt: string,
@@ -320,6 +328,7 @@ export class NasProdSignalCollector {
     ]);
   }
 
+  /** 创建插件平台服务。 */
   private createPluginPlatformService(observedAt: string): EnvironmentService {
     return this.createService('plugin-platform', 'Plugin Platform', [
       {
@@ -345,6 +354,7 @@ export class NasProdSignalCollector {
     ]);
   }
 
+  /** 创建插件任务服务。 */
   private async createPluginTaskService(observedAt: string): Promise<EnvironmentService> {
     if (!this.pluginTaskService) {
       return this.createUnknownService('plugin-tasks', 'Plugin Tasks', 'QqbotPluginTaskService 未接入', observedAt);
@@ -391,6 +401,7 @@ export class NasProdSignalCollector {
     }
   }
 
+  /** 创建适配器服务。 */
   private async createAdapterService(
     serviceId: string,
     serviceLabel: string,
@@ -439,6 +450,7 @@ export class NasProdSignalCollector {
     }
   }
 
+  /** 创建未知的服务。 */
   private createUnknownService(
     id: string,
     label: string,
@@ -465,6 +477,7 @@ export class NasProdSignalCollector {
     ]);
   }
 
+  /** 映射运行态状态。 */
   private mapRuntimeStatus(status?: RuntimeHealthStatus): EnvironmentHealthStatus {
     if (status === 'live' || status === 'ready') return 'ok';
     if (status === 'blocked') return 'blocked';
@@ -472,6 +485,7 @@ export class NasProdSignalCollector {
     return 'unknown';
   }
 
+  /** 创建服务。 */
   private createService(
     id: string,
     label: string,
@@ -486,6 +500,7 @@ export class NasProdSignalCollector {
     };
   }
 
+  /** 创建节点。 */
   private createNode(
     id: string,
     label: string,

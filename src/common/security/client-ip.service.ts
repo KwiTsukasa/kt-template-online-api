@@ -13,6 +13,7 @@ export class ClientIpService {
     this.trustedProxyIps = new Set(this.readTrustedProxyIps());
   }
 
+  /** 规范化IP。 */
   normalizeIp(value: string | undefined | null): string | null {
     const candidate = `${value || ''}`.trim();
     if (!candidate) return null;
@@ -22,11 +23,13 @@ export class ClientIpService {
     return isIP(normalized) ? normalized.toLowerCase() : null;
   }
 
+  /** 判断可信的代理是否成立。 */
   isTrustedProxy(value: string | undefined | null): boolean {
     const normalized = this.normalizeIp(value);
     return normalized ? this.trustedProxyIps.has(normalized) : false;
   }
 
+  /** 读取客户端IP。 */
   getClientIp(request: Request): string {
     const immediatePeer = this.normalizeIp(request.socket?.remoteAddress);
     if (!immediatePeer) return 'unknown';
@@ -44,6 +47,7 @@ export class ClientIpService {
     return currentHop;
   }
 
+  /** 读取公开的来源。 */
   getPublicOrigin(request: Request): string {
     const trustedPeer = this.isTrustedProxy(request.socket?.remoteAddress);
     const scheme = trustedPeer
@@ -59,6 +63,7 @@ export class ClientIpService {
     return `${scheme}://${authority.host}`;
   }
 
+  /** 读取可信的代理IP 地址。 */
   private readTrustedProxyIps(): string[] {
     const raw = `${this.configService.get(TRUSTED_PROXY_CONFIG_KEY) || ''}`;
     const values = raw
@@ -82,6 +87,7 @@ export class ClientIpService {
     return normalized as string[];
   }
 
+  /** 读取转发的用于。 */
   private readForwardedFor(request: Request): string[] | null {
     const raw = this.readHeader(request, 'x-forwarded-for');
     if (!raw) return null;
@@ -92,6 +98,7 @@ export class ClientIpService {
     return values as string[];
   }
 
+  /** 读取可信的转发的协议。 */
   private readTrustedForwardedProto(request: Request): 'http' | 'https' | null {
     const value = this.readHeader(request, 'x-forwarded-proto')
       ?.split(',')[0]
@@ -100,6 +107,7 @@ export class ClientIpService {
     return value === 'http' || value === 'https' ? value : null;
   }
 
+  /** 读取套接字方案。 */
   private readSocketScheme(request: Request): 'http' | 'https' {
     return (request.socket as Request['socket'] & { encrypted?: boolean })
       ?.encrypted
@@ -107,6 +115,7 @@ export class ClientIpService {
       : 'http';
   }
 
+  /** 读取原始的权威状态。 */
   private readOriginalAuthority(
     request: Request,
     scheme: 'http' | 'https',
@@ -132,6 +141,7 @@ export class ClientIpService {
     }
   }
 
+  /** 断言转发的端口一致性。 */
   private assertForwardedPortConsistency(
     request: Request,
     authorityPort: string,
@@ -156,6 +166,7 @@ export class ClientIpService {
     }
   }
 
+  /** 读取请求头。 */
   private readHeader(request: Request, name: string): string | undefined {
     const value = request.headers?.[name];
     return Array.isArray(value) ? value[0] : value;

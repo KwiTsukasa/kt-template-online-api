@@ -124,6 +124,7 @@ const WORKER_REQUEST_HANDLERS: Record<
   },
 };
 
+/** 创建插件来自描述文件。 */
 export async function createPluginFromDescriptor(
   options: QqbotWorkerCreatePluginOptions,
 ): Promise<QqbotWorkerPluginInstance> {
@@ -157,6 +158,7 @@ if (port) {
   });
 }
 
+/** 处理父级消息。 */
 async function handleParentMessage(message: ParentMessage) {
   if (message.type === 'hostResponse') {
     settleHostResponse(message);
@@ -181,10 +183,12 @@ async function handleParentMessage(message: ParentMessage) {
   }
 }
 
+/** 处理工作进程请求。 */
 async function handleWorkerRequest(message: QqbotPluginWorkerRequest) {
   return WORKER_REQUEST_HANDLERS[message.type](message);
 }
 
+/** 加载插件。 */
 async function loadPlugin(message: QqbotPluginWorkerRequest) {
   const descriptor = getWorkerDescriptor();
   plugin = await createPluginFromDescriptor({
@@ -200,6 +204,7 @@ async function loadPlugin(message: QqbotPluginWorkerRequest) {
   };
 }
 
+/** 返回健康状态插件。 */
 async function healthPlugin() {
   const loadedPlugin = requirePlugin();
   if (loadedPlugin.health) return loadedPlugin.health();
@@ -207,6 +212,7 @@ async function healthPlugin() {
   return { ok: true, status: 'healthy' };
 }
 
+/** 执行操作。 */
 async function executeOperation(message: QqbotPluginWorkerRequest) {
   const loadedPlugin = requirePlugin();
   const operationKey = requireRequestKey(
@@ -226,6 +232,7 @@ async function executeOperation(message: QqbotPluginWorkerRequest) {
   throw new Error(`QQBot 插件能力不存在：${operationKey}`);
 }
 
+/** 执行任务。 */
 async function executeTask(message: QqbotPluginWorkerRequest) {
   const loadedPlugin = requirePlugin();
   const taskKey = requireRequestKey(
@@ -254,6 +261,7 @@ async function executeTask(message: QqbotPluginWorkerRequest) {
   throw new Error(`QQBot 插件定时任务不存在：${taskKey}`);
 }
 
+/** 处理事件。 */
 async function handleEvent(message: QqbotPluginWorkerRequest) {
   const loadedPlugin = requirePlugin();
   const eventKey = requireRequestKey(
@@ -265,6 +273,7 @@ async function handleEvent(message: QqbotPluginWorkerRequest) {
   return loadedPlugin.handleEvent(eventKey, message.event);
 }
 
+/** 创建主机外观层。 */
 function createHostFacade(): Record<string, unknown> {
   const host: Record<string, unknown> = {};
   for (const method of Object.keys(HOST_ARGUMENT_MAPPERS)) {
@@ -273,6 +282,7 @@ function createHostFacade(): Record<string, unknown> {
   }
 
   return new Proxy(host, {
+    /** 读取get。 */
     get(target, property) {
       if (typeof property !== 'string') return undefined;
       if (property in target) return target[property];
@@ -283,6 +293,7 @@ function createHostFacade(): Record<string, unknown> {
   });
 }
 
+/** 返回调用主机。 */
 function callHost<TResult = unknown>(
   method: string,
   args: Record<string, unknown>,
@@ -308,6 +319,7 @@ function callHost<TResult = unknown>(
   });
 }
 
+/** 等待完成主机响应。 */
 function settleHostResponse(
   message: Extract<ParentMessage, { type: 'hostResponse' }>,
 ) {
@@ -323,6 +335,7 @@ function settleHostResponse(
   pending.reject(deserializeError(message.error));
 }
 
+/** 读取工作进程描述文件。 */
 function getWorkerDescriptor(): QqbotPluginPackageDescriptor {
   const descriptor = workerData?.descriptor;
   if (!descriptor || typeof descriptor !== 'object') {
@@ -331,6 +344,7 @@ function getWorkerDescriptor(): QqbotPluginPackageDescriptor {
   return descriptor as QqbotPluginPackageDescriptor;
 }
 
+/** 读取工作进程配置快照。 */
 function getWorkerConfigSnapshot(): QqbotPluginRuntimeConfigSnapshot {
   const snapshot = workerData?.configSnapshot;
   return snapshot && typeof snapshot === 'object'
@@ -338,11 +352,13 @@ function getWorkerConfigSnapshot(): QqbotPluginRuntimeConfigSnapshot {
     : {};
 }
 
+/** 读取工作进程安装标识。 */
 function getWorkerInstallationId(message: QqbotPluginWorkerRequest) {
   const installationId = workerData?.installationId || message.installationId;
   return typeof installationId === 'string' ? installationId : '';
 }
 
+/** 返回必需插件。 */
 function requirePlugin() {
   if (!plugin) {
     throw new Error('QQBot 插件运行时未加载');
@@ -350,11 +366,13 @@ function requirePlugin() {
   return plugin;
 }
 
+/** 生成必需请求键。 */
 function requireRequestKey(value: unknown, message: string) {
   if (typeof value === 'string' && value.trim()) return value.trim();
   throw new Error(message);
 }
 
+/** 查找运行态可调用对象。 */
 function findRuntimeCallable(
   items: unknown[] | undefined,
   key: string,
@@ -370,6 +388,7 @@ function findRuntimeCallable(
     );
 }
 
+/** 判断运行态可调用对象是否成立。 */
 function isRuntimeCallable(item: unknown): item is {
   execute: (input: unknown, context?: unknown) => Promise<unknown> | unknown;
   handlerName?: string;
@@ -382,15 +401,18 @@ function isRuntimeCallable(item: unknown): item is {
   );
 }
 
+/** 规范化主机参数。 */
 function normalizeHostArgs(args: unknown[]): Record<string, unknown> {
   if (args.length === 1 && isRecord(args[0])) return args[0];
   return { args };
 }
 
+/** 判断记录是否成立。 */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** 返回导入插件条目模块。 */
 async function importPluginEntryModule(moduleUrl: string, entryFile: string) {
   try {
     return await dynamicImportPluginEntry(moduleUrl);
@@ -405,6 +427,7 @@ async function importPluginEntryModule(moduleUrl: string, entryFile: string) {
   }
 }
 
+/** 返回动态导入插件条目。 */
 function dynamicImportPluginEntry(
   moduleUrl: string,
 ): Promise<PluginEntryModule> {
@@ -414,6 +437,7 @@ function dynamicImportPluginEntry(
   return importer(moduleUrl);
 }
 
+/** 判断是否应当兜底到必需。 */
 function shouldFallbackToRequire(error: unknown, moduleUrl: string) {
   if (!moduleUrl.startsWith('file:')) return false;
   const message = error instanceof Error ? error.message : `${error}`;
@@ -424,6 +448,7 @@ function shouldFallbackToRequire(error: unknown, moduleUrl: string) {
   );
 }
 
+/** 加载CommonJS条目模块。 */
 function loadCommonJsEntryModule(entryFile: string): PluginEntryModule {
   const nodeModule = requireEntryModule(
     'node:module',
@@ -442,12 +467,14 @@ function loadCommonJsEntryModule(entryFile: string): PluginEntryModule {
   return entryModule.exports as PluginEntryModule;
 }
 
+/** 规范化错误。 */
 function normalizeError(error: unknown, fallback = '插件执行失败') {
   if (error instanceof Error && error.message) return error.message;
   const message = `${error || ''}`.trim();
   return message || fallback;
 }
 
+/** 序列化错误。 */
 function serializeError(error: unknown) {
   return {
     message: error instanceof Error ? error.message : `${error}`,
@@ -456,6 +483,7 @@ function serializeError(error: unknown) {
   };
 }
 
+/** 反序列化错误。 */
 function deserializeError(error?: {
   message?: string;
   name?: string;

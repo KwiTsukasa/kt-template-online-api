@@ -5,17 +5,17 @@ import {
   ADMIN_PLATFORM_CONFIG_PROVIDERS,
   AdminPlatformConfigModule,
 } from '../../../src/modules/admin/platform-config/admin-platform-config.module';
-import { NetworkAgentMqttService } from '../../../src/modules/admin/platform-config/network-management/network-agent-mqtt.service';
-import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/network-agent-state.entity';
-import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/network-ddns.entity';
-import { NetworkDdnsService } from '../../../src/modules/admin/platform-config/network-management/network-ddns.service';
-import { NetworkDnsPodClient } from '../../../src/modules/admin/platform-config/network-management/network-dnspod.client';
-import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/network-endpoint-history.entity';
-import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
-import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
-import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/network-management.service';
-import { NetworkOpenRedirectService } from '../../../src/modules/admin/platform-config/network-management/network-open-redirect.service';
-import { NetworkTcpNatmapMessageSourceAdapter } from '../../../src/modules/admin/platform-config/network-management/network-tcp-natmap-message-source.adapter';
+import { NetworkAgentMqttService } from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-agent-mqtt.service';
+import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-agent-state.entity';
+import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
+import { NetworkDdnsService } from '../../../src/modules/admin/platform-config/network-management/application/network-ddns.service';
+import { NetworkDnsPodClient } from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-dnspod.client';
+import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-endpoint-history.entity';
+import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
+import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
+import { NetworkManagementService } from '../../../src/modules/admin/platform-config/network-management/application/network-management.service';
+import { NetworkOpenRedirectService } from '../../../src/modules/admin/platform-config/network-management/application/network-open-redirect.service';
+import { NetworkTcpNatmapMessageSourceAdapter } from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-tcp-natmap-message-source.adapter';
 
 describe('network management persistence module', () => {
   it('registers the five exact database entity tables', () => {

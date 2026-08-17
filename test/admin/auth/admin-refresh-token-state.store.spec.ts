@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { AdminRefreshTokenStateStore } from '../../../src/modules/admin/identity/auth/admin-refresh-token-state.store';
+import { AdminRefreshTokenStateStore } from '../../../src/modules/admin/identity/auth/infrastructure/persistence/admin-refresh-token-state.store';
 
 describe('AdminRefreshTokenStateStore', () => {
   const config = new ConfigService({

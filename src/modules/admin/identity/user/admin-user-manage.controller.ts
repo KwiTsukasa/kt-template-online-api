@@ -18,7 +18,7 @@ import {
   vbenPage,
   vbenSuccess,
 } from '@/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { AdminUser } from './admin-user.entity';
 import { AdminUserService } from './admin-user.service';
 
@@ -54,6 +54,7 @@ export class AdminUserManageController {
     return vbenSuccess(await this.userService.createUser(body));
   }
 
+  /** 重置密码。 */
   @Put(':id/password')
   @ApiOperation({ summary: '重置用户密码' })
   async resetPassword(

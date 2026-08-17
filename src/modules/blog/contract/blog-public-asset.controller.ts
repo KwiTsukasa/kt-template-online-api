@@ -22,6 +22,7 @@ const IMMUTABLE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 export class BlogPublicAssetController {
   constructor(private readonly minioClientService: MinioClientService) {}
 
+  /** 返回头部资源。 */
   @Head(':sha256/:basename')
   @ApiOperation({ summary: '读取迁移后的 Blog 公开资源元数据' })
   @ApiParam({ name: 'sha256', example: 'a'.repeat(64) })
@@ -39,6 +40,7 @@ export class BlogPublicAssetController {
     response.end();
   }
 
+  /** 读取资源。 */
   @Get(':sha256/:basename')
   @ApiOperation({ summary: '读取迁移后的 Blog 公开资源' })
   @ApiParam({ name: 'sha256', example: 'a'.repeat(64) })
@@ -55,6 +57,7 @@ export class BlogPublicAssetController {
     await pipeline(object.stream, response);
   }
 
+  /** 读取对象名称。 */
   private getObjectName(sha256: string, assetBasename: string) {
     if (
       !SHA256_PATTERN.test(sha256) ||
@@ -67,12 +70,14 @@ export class BlogPublicAssetController {
     return `blog/migrated/${sha256}/${assetBasename}`;
   }
 
+  /** 读取对象。 */
   private async getObject(sha256: string, assetBasename: string) {
     return this.minioClientService.getObject(
       this.getObjectName(sha256, assetBasename),
     );
   }
 
+  /** 设置请求头。 */
   private setHeaders(
     response: Response,
     stat: {

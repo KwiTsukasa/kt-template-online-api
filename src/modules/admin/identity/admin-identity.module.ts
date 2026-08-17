@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
-import { AdminAuthController } from '@/modules/admin/identity/auth/admin-auth.controller';
+import { AdminAuthController } from '@/modules/admin/identity/auth/presentation/admin-auth.controller';
 import { AdminDeptController } from '@/modules/admin/identity/dept/admin-dept.controller';
 import { AdminDept } from '@/modules/admin/identity/dept/admin-dept.entity';
 import { AdminDeptService } from '@/modules/admin/identity/dept/admin-dept.service';

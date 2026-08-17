@@ -5,8 +5,8 @@ import { MinioService } from 'nestjs-minio-client';
 import {
   MEDIA_DESCRIPTOR_PRIVATE_BUCKET,
   MediaDescriptorStore,
-} from '../../../src/modules/admin/media-governance/media-descriptor.store';
-import { parseTorrentDescriptor } from '../../../src/modules/admin/media-governance/media-torrent-descriptor';
+} from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-descriptor.store';
+import { parseTorrentDescriptor } from '../../../src/modules/admin/media-governance/domain/media-torrent-descriptor';
 
 const torrentFixture = Buffer.from(
   'd8:announce23:https://tracker.invalid4:infod6:lengthi4e4:name8:demo.mkvee',

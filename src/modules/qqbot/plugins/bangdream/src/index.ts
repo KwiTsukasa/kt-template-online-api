@@ -102,6 +102,7 @@ export function createPlugin(
 export function createPlugin(
   options: QqbotGenericPluginCreateOptions,
 ): Promise<BangDreamCommandPlugin>;
+/** 创建插件。 */
 export function createPlugin(
   options: BangDreamPluginCreateOptions,
 ): BangDreamCommandPlugin | Promise<BangDreamCommandPlugin> {
@@ -111,6 +112,7 @@ export function createPlugin(
   return buildBangDreamRuntimePlugin(options);
 }
 
+/** 构建BanGDream运行态插件。 */
 function buildBangDreamRuntimePlugin(
   options: BangDreamPluginRuntimeOptions,
 ) {
@@ -190,6 +192,7 @@ function buildBangDreamRuntimePlugin(
   };
 }
 
+/** 构建BanGDream通用插件。 */
 async function buildBangDreamGenericPlugin(
   options: QqbotGenericPluginCreateOptions,
 ): Promise<BangDreamCommandPlugin> {
@@ -218,6 +221,7 @@ async function buildBangDreamGenericPlugin(
   });
 }
 
+/** 判断BanGDream通用插件创建选项是否成立。 */
 function isBangDreamGenericPluginCreateOptions(
   options: BangDreamPluginCreateOptions,
 ): options is QqbotGenericPluginCreateOptions {
@@ -227,6 +231,7 @@ function isBangDreamGenericPluginCreateOptions(
   );
 }
 
+/** 创建BanGDream通用配置读取器。 */
 function createBangDreamGenericConfigReader(
   snapshot: Record<string, string | undefined>,
 ): BangDreamConfigReader {
@@ -235,6 +240,7 @@ function createBangDreamGenericConfigReader(
   };
 }
 
+/** 创建BanGDream通用字典读取器。 */
 function createBangDreamGenericDictionaryReader(
   host: Record<string, unknown>,
 ): BangDreamDictionaryReader {
@@ -244,6 +250,7 @@ function createBangDreamGenericDictionaryReader(
   };
 }
 
+/** 创建BanGDream通用运行态I/O。 */
 function createBangDreamGenericRuntimeIo(
   options: QqbotGenericPluginCreateOptions,
   pathMapper: BangDreamGenericPathMapper,
@@ -332,6 +339,7 @@ function createBangDreamGenericRuntimeIo(
   };
 }
 
+/** 创建BanGDream通用路径映射器。 */
 function createBangDreamGenericPathMapper(
   installationId: string,
 ): BangDreamGenericPathMapper {
@@ -360,6 +368,7 @@ function createBangDreamGenericPathMapper(
   };
 }
 
+/** 预加载BanGDream通用同步JSON。 */
 async function preloadBangDreamGenericSyncJson(
   host: Record<string, unknown>,
   pathMapper: BangDreamGenericPathMapper,
@@ -375,6 +384,7 @@ async function preloadBangDreamGenericSyncJson(
   return cache;
 }
 
+/** 解析BanGDreamExcel行。 */
 function parseBangDreamExcelRows<T extends Record<string, unknown>>(
   buffer: Buffer,
 ): T[] {
@@ -384,6 +394,7 @@ function parseBangDreamExcelRows<T extends Record<string, unknown>>(
   return XLSX.utils.sheet_to_json<T>(workbook.Sheets[sheetName]);
 }
 
+/** 规范化BanGDream主机路径。 */
 function normalizeBangDreamHostPath(filePath: string) {
   return filePath
     .replace(/\\/g, '/')
@@ -393,18 +404,21 @@ function normalizeBangDreamHostPath(filePath: string) {
     .join('/');
 }
 
+/** 规范化BanGDream外部路径。 */
 function normalizeBangDreamExternalPath(filePath: string) {
   return normalizeBangDreamHostPath(
     filePath.replace(/^[A-Za-z]:/, (drive) => drive.slice(0, 1)),
   );
 }
 
+/** 规范化BanGDream路径分段。 */
 function normalizeBangDreamPathSegment(value: string) {
   return (
     value.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'default'
   );
 }
 
+/** 返回调用BanGDream通用主机。 */
 async function callBangDreamGenericHost<TResult = any>(
   host: Record<string, unknown>,
   method: string,
@@ -417,6 +431,7 @@ async function callBangDreamGenericHost<TResult = any>(
   return (await fn(...args)) as TResult;
 }
 
+/** 规范化BanGDream主机缓冲区。 */
 function normalizeBangDreamHostBuffer(value: unknown): Buffer {
   const body =
     value && typeof value === 'object' && 'body' in value
@@ -428,6 +443,7 @@ function normalizeBangDreamHostBuffer(value: unknown): Buffer {
   return Buffer.from([]);
 }
 
+/** 规范化BanGDream通用错误。 */
 function normalizeBangDreamGenericError(
   normalizeError: QqbotGenericPluginCreateOptions['normalizeError'],
   error: unknown,

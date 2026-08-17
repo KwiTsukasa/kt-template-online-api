@@ -248,6 +248,7 @@ export class FflogsClient {
     return (value: string) => resolved.get(value) || null;
   }
 
+  /** 解析已知的大区。 */
   async resolveKnownWorld(value: string) {
     if (this.host.resolveKnownWorld) {
       return this.host.resolveKnownWorld(value);
@@ -1717,6 +1718,7 @@ export class FflogsClient {
     return map;
   }
 
+  /** 加载FF14市场目录。 */
   private async loadFf14MarketCatalog() {
     if (this.host.relationTree) {
       const treeCatalog = buildFf14MarketCatalogFromTree(
@@ -1739,6 +1741,7 @@ export class FflogsClient {
     });
   }
 
+  /** 读取字典项目。 */
   private async getDictItems(dictCode: string): Promise<Ff14DictItem[]> {
     if (this.host.getDictItemsByKey) {
       return this.host.getDictItemsByKey(dictCode);

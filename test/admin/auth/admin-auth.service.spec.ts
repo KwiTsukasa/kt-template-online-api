@@ -1,4 +1,4 @@
-import { AdminAuthService } from '../../../src/modules/admin/identity/auth/admin-auth.service';
+import { AdminAuthService } from '../../../src/modules/admin/identity/auth/application/admin-auth.service';
 
 const VERSIONED_HASH =
   '$pbkdf2-sha256$v=1$i=600000$AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE$acCR3Bjb48G7uQRjBo961QHqiLOtaEMb9u_X9DGlq3E';

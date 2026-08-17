@@ -6,19 +6,24 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
 import { MediaCodexAgentGatewayService } from '../application/media-codex-agent-gateway.service';
 import { MEDIA_CODEX_AGENT_POLICY_VERSION } from '../domain/media-codex-agent.contract';
 import { MediaCodexAgentInternalGuard } from './media-codex-agent-internal.guard';
-import { MediaCodexAgentTurnRequestDto } from './media-codex-agent.dto';
+import {
+  MediaCodexAgentSessionQueryDto,
+  MediaCodexAgentTurnRequestDto,
+} from './media-codex-agent.dto';
 
 @Controller('internal/media-codex-agent')
 @UseGuards(MediaCodexAgentInternalGuard)
 export class MediaCodexAgentController {
   constructor(private readonly service: MediaCodexAgentGatewayService) {}
 
+  /** 汇总网关及依赖就绪状态，并公开固定的安全边界声明。 */
   @Get('health')
   async health() {
     let readiness;
@@ -46,6 +51,7 @@ export class MediaCodexAgentController {
     };
   }
 
+  /** 校验路径与请求体任务身份一致后启动一个受管 Agent 回合。 */
   @Post('tasks/:taskId/turns')
   async startTurn(
     @Param('taskId') taskId: string,
@@ -57,9 +63,17 @@ export class MediaCodexAgentController {
     return this.service.startTurn(body);
   }
 
+  /** 查询指定任务的安全会话投影，并在不存在时返回明确错误。 */
   @Get('tasks/:taskId/session')
-  async session(@Param('taskId') taskId: string) {
-    const session = await this.service.session(taskId);
+  async session(
+    @Param('taskId') taskId: string,
+    @Query() query: MediaCodexAgentSessionQueryDto,
+  ) {
+    const session = await this.service.session(
+      taskId,
+      query.afterSequence,
+      query.limit,
+    );
     if (!session) {
       throw new NotFoundException('media-codex-agent-session-not-found');
     }

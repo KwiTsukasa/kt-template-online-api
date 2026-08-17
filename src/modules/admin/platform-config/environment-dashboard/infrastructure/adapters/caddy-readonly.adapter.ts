@@ -20,6 +20,7 @@ export class CaddyReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
+  /** 检查Caddy只读的记录。 */
   async inspect() {
     const missing = this.config.missing(['ENV_DASHBOARD_CADDY_PUBLIC_URL']);
     if (missing.length > 0) {

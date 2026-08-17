@@ -23,6 +23,7 @@ export class NapcatWebuiCredentialClient {
 
   constructor(private readonly config: NapcatWebuiGatewayConfigService) {}
 
+  /** 读取凭据。 */
   async getCredential(session: NapcatWebuiGatewaySession) {
     const cached = this.credentials.get(session.sessionId);
     const now = this.config.now();
@@ -42,10 +43,12 @@ export class NapcatWebuiCredentialClient {
     return credential;
   }
 
+  /** 清空NapCatWebUI凭据记录。 */
   clear(sessionId: string) {
     this.credentials.delete(sessionId);
   }
 
+  /** 返回交换凭据。 */
   private async exchangeCredential(session: NapcatWebuiGatewaySession) {
     const hash = createHash('sha256')
       .update(`${session.webuiToken}.napcat`)
@@ -69,6 +72,7 @@ export class NapcatWebuiCredentialClient {
     }
   }
 
+  /** 返回提取凭据。 */
   private extractCredential(body: NapcatCredentialResponse) {
     if ('data' in body) {
       return body.data?.Credential;

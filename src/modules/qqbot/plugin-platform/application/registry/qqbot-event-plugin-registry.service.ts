@@ -38,6 +38,7 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     await this.hydrateInactivePluginKeys();
   }
 
+  /** 注册运行态事件。 */
   registerRuntimeEvents(
     pluginKey: string,
     events: QqbotEventPluginDefinition[],
@@ -49,6 +50,7 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     this.runtimeEventsByPluginKey.set(pluginKey, events);
   }
 
+  /** 返回取消注册运行态事件。 */
   unregisterRuntimeEvents(pluginKey: string): void {
     this.runtimeEventsByPluginKey.delete(pluginKey);
   }
@@ -143,6 +145,7 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     }));
   }
 
+  /** 分发消息。 */
   async dispatchMessage(message: QqbotNormalizedMessage): Promise<boolean> {
     void message;
     return false;
@@ -168,6 +171,7 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     return this.accountService.unbindEventPlugin(selfId, pluginKey);
   }
 
+  /** 返回必需定义。 */
   private requireDefinition(pluginKey: string) {
     const definition = this.getDefinitions(pluginKey)[0];
     if (!definition) {
@@ -201,6 +205,7 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
     return !this.inactivePluginKeys.has(pluginKey);
   }
 
+  /** 恢复未激活的插件键。 */
   private async hydrateInactivePluginKeys() {
     if (!this.pluginRepository || !this.installationRepository) return;
 

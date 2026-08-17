@@ -475,7 +475,7 @@ Create `src/modules/qqbot/napcat/webui-gateway/contract/qqbot-napcat-webui-gatew
 ```ts
 import { Body, Controller, HttpCode, HttpStatus, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { vbenSuccess } from '@/common';
 import { QqbotNapcatWebuiGatewayService } from '../application/qqbot-napcat-webui-gateway.service';
 import { QqbotNapcatWebuiSessionCreateDto } from './qqbot-napcat-webui-gateway.dto';

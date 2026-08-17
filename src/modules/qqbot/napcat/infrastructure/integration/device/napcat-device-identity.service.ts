@@ -34,6 +34,7 @@ export class NapcatDeviceIdentityService {
     private readonly configService: ConfigService,
   ) {}
 
+  /** 解析用于账号。 */
   async resolveForAccount(input: ResolveNapcatDeviceIdentityInput) {
     const accountId = `${input.accountId}`.trim();
     const containerName = this.buildContainerName(input.selfId || accountId);
@@ -78,6 +79,7 @@ export class NapcatDeviceIdentityService {
     return this.identityRepository.save(identity);
   }
 
+  /** 接管容器身份。 */
   async adoptContainerIdentity(input: AdoptNapcatDeviceIdentityInput) {
     const accountId = `${input.accountId}`.trim();
     const containerId = `${input.containerId}`.trim();
@@ -133,6 +135,7 @@ export class NapcatDeviceIdentityService {
     return provisionalIdentity;
   }
 
+  /** 合并临时的身份到目标。 */
   private async mergeProvisionalIdentityIntoTarget(input: {
     accountId: string;
     containerId: string;
@@ -168,6 +171,7 @@ export class NapcatDeviceIdentityService {
     return input.targetIdentity;
   }
 
+  /** 构建接管证据。 */
   private buildAdoptionEvidence(input: {
     existingEvidence: null | Record<string, unknown>;
     fromAccountId: string;
@@ -187,6 +191,7 @@ export class NapcatDeviceIdentityService {
     };
   }
 
+  /** 构建容器名称。 */
   private buildContainerName(seed: string) {
     const prefix = this.getConfig(
       'QQBOT_NAPCAT_CONTAINER_PREFIX',
@@ -198,11 +203,13 @@ export class NapcatDeviceIdentityService {
     return `${prefix}-${suffix}`.replace(/-+/g, '-').slice(0, 120);
   }
 
+  /** 构建QQNT可见的主机名。 */
   private buildQqntVisibleHostname(seed: string) {
     const hash = createHash('sha256').update(seed).digest('hex');
     return `pc-${hash.slice(0, 8)}`;
   }
 
+  /** 构建物理的OUIMAC地址。 */
   private buildPhysicalOuiMacAddress(
     accountId: string,
     containerName: string,
@@ -224,6 +231,7 @@ export class NapcatDeviceIdentityService {
     return `${prefix}:${suffix.join(':')}`.toLowerCase();
   }
 
+  /** 迁移旧版身份条件分支需要的。 */
   private async migrateLegacyIdentityIfNeeded(
     identity: NapcatDeviceIdentity,
     input: {

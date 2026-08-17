@@ -5,7 +5,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as request from 'supertest';
-import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { QqbotPluginPlatformController } from '../../../../src/modules/qqbot/plugin-platform/contract/plugin-platform.controller';
 import { QqbotPluginPlatformModule } from '../../../../src/modules/qqbot/plugin-platform/plugin-platform.module';
 import { QqbotPluginPlatformService } from '../../../../src/modules/qqbot/plugin-platform/application/plugin-platform.service';

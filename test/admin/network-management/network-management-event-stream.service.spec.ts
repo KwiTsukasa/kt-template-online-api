@@ -1,5 +1,5 @@
 import { filter, firstValueFrom, take } from 'rxjs';
-import { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/network-management-event-stream.service';
+import { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/application/network-management-event-stream.service';
 
 describe('NetworkManagementEventStreamService', () => {
   it('fans out committed MQTT changes and replays only events after the cursor', async () => {

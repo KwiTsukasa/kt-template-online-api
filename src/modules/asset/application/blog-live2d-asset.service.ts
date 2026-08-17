@@ -22,6 +22,7 @@ const MAX_DECODE_DEPTH = 6;
 const ALLOWED_LIVE2D_CHARACTERS = new Set(['pio', 'tia']);
 const ALLOWED_RUNTIME_FAMILIES = new Set(['moc', 'moc3']);
 
+/** 判断 MinIO 对象是否不存在。 */
 function isMinioObjectNotFound(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
     return false;
@@ -43,6 +44,7 @@ export class BlogLive2DAssetService {
     private readonly clientIpService: ClientIpService,
   ) {}
 
+  /** 断言允许的请求。 */
   assertAllowedRequest(
     request: Request,
     referer?: string,
@@ -67,6 +69,7 @@ export class BlogLive2DAssetService {
     }
   }
 
+  /** 读取运行态对象。 */
   async getRuntimeObject(
     character: string,
     family: string,
@@ -85,6 +88,7 @@ export class BlogLive2DAssetService {
     }
   }
 
+  /** 读取目录对象。 */
   async getCatalogObject(character: string): Promise<BlogLive2DAssetResult> {
     try {
       return await this.minioClientService.getObject(
@@ -103,6 +107,7 @@ export class BlogLive2DAssetService {
     }
   }
 
+  /** 解析运行态对象路径。 */
   resolveRuntimeObjectPath(
     character: string,
     family: string,
@@ -121,6 +126,7 @@ export class BlogLive2DAssetService {
     ].join('/');
   }
 
+  /** 读取存储桶名称。 */
   private getBucketName(): string {
     return (
       this.configService.get<string>('BLOG_LIVE2D_BUCKET') ||
@@ -129,6 +135,7 @@ export class BlogLive2DAssetService {
     );
   }
 
+  /** 读取根目录前缀分段。 */
   private getRootPrefixSegments(): string[] {
     const rootPrefix = this.configService.get<string>(
       'BLOG_LIVE2D_ROOT_PREFIX',
@@ -151,6 +158,7 @@ export class BlogLive2DAssetService {
     );
   }
 
+  /** 读取允许的请求来源。 */
   private getAllowedRequestOrigin(request: Request): string | null {
     const publicOrigin = this.toOrigin(
       this.clientIpService.getPublicOrigin(request),
@@ -165,6 +173,7 @@ export class BlogLive2DAssetService {
     return publicOrigin;
   }
 
+  /** 返回到来源。 */
   private toOrigin(value: string): string {
     try {
       const url = new URL(value);
@@ -177,6 +186,7 @@ export class BlogLive2DAssetService {
     }
   }
 
+  /** 规范化字符。 */
   private normalizeCharacter(character: string): BlogLive2DCharacter {
     const segments = this.normalizeRouteSegments(character, 'character');
     if (segments.length !== 1 || !ALLOWED_LIVE2D_CHARACTERS.has(segments[0])) {
@@ -186,6 +196,7 @@ export class BlogLive2DAssetService {
     return segments[0] as BlogLive2DCharacter;
   }
 
+  /** 规范化路由分段。 */
   private normalizeRouteSegments(
     input: BlogLive2DRuntimeAssetPath,
     label: string,
@@ -214,6 +225,7 @@ export class BlogLive2DAssetService {
     return segments;
   }
 
+  /** 规范化运行态令牌族。 */
   private normalizeRuntimeFamily(family: string): string[] {
     const segments = this.normalizeRouteSegments(family, 'family');
     if (segments.length !== 1 || !ALLOWED_RUNTIME_FAMILIES.has(segments[0])) {
@@ -223,6 +235,7 @@ export class BlogLive2DAssetService {
     return segments;
   }
 
+  /** 解码重复的。 */
   private decodeRepeated(value: string, label: string): string {
     try {
       let decoded = value;

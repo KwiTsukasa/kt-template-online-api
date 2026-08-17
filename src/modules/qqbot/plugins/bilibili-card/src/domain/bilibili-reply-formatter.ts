@@ -3,6 +3,7 @@ import type {
   BilibiliVideoInfo,
 } from './bilibili-card.types';
 
+/** 格式化Bilibili视频回复。 */
 export function formatBilibiliVideoReply(
   video: BilibiliVideoInfo,
   config: BilibiliCardRuntimeConfig,
@@ -24,12 +25,14 @@ export function formatBilibiliVideoReply(
   return lines.join('\n');
 }
 
+/** 构建Bilibili封面图片分段。 */
 function buildBilibiliCoverImageSegment(pic: string) {
   const normalizedPic = `${pic || ''}`.trim();
   if (!normalizedPic) return '';
   return `[CQ:image,file=${escapeCqParam(normalizedPic)}]`;
 }
 
+/** 转义CQ 码参数。 */
 function escapeCqParam(value: string) {
   return value
     .replace(/&/gu, '&amp;')
@@ -38,11 +41,13 @@ function escapeCqParam(value: string) {
     .replace(/,/gu, '&#44;');
 }
 
+/** 构建规范的Bilibili视频URL。 */
 function buildCanonicalBilibiliVideoUrl(video: BilibiliVideoInfo) {
   const videoId = video.bvid || `av${video.aid}`;
   return `https://www.bilibili.com/video/${videoId}`;
 }
 
+/** 格式化Bilibili统计。 */
 function formatBilibiliStat(value: number) {
   const normalized = Math.max(0, Math.floor(value || 0));
   if (normalized < 10000) return `${normalized}`;
@@ -51,6 +56,7 @@ function formatBilibiliStat(value: number) {
   return `${formatted.replace(/\.0$/, '')}万`;
 }
 
+/** 格式化Bilibili时长。 */
 function formatBilibiliDuration(seconds: number) {
   const normalized = Math.max(0, Math.floor(seconds || 0));
   const hours = Math.floor(normalized / 3600);
@@ -66,6 +72,7 @@ function formatBilibiliDuration(seconds: number) {
     .join(':');
 }
 
+/** 截断Bilibili描述。 */
 function truncateBilibiliDescription(desc: string, maxLength: number) {
   const normalized = desc.replace(/\s+/gu, ' ').trim();
   if (!normalized || maxLength <= 0) return '';

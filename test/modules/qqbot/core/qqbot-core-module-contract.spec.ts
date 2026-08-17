@@ -5,7 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { getMetadataArgsStorage } from 'typeorm';
 import { AdminAuthGuardModule } from '../../../../src/modules/admin/identity/auth/admin-auth-guard.module';
-import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { DictModule } from '../../../../src/modules/admin/platform-config/dict/dict.module';
 import { AppModule } from '../../../../src/app.module';
 import { QqbotAccountController } from '../../../../src/modules/qqbot/core/contract/account/qqbot-account.controller';

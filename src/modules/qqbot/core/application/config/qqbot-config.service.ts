@@ -35,6 +35,7 @@ export class QqbotConfigService {
     return { allowlistEnabled, blocklistEnabled };
   }
 
+  /** 读取配置值。 */
   async getConfigValue(configKey: string): Promise<string | undefined> {
     const record = await this.configRepository.findOne({
       where: { configKey },

@@ -14,7 +14,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { vbenSuccess } from '@/common';
-import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { QqbotAccountMessagePushService } from '../../application/message-push/qqbot-account-message-push.service';
 import { QqbotMessageTargetOptionsService } from '../../application/message-push/qqbot-message-target-options.service';
 import {
@@ -83,6 +83,7 @@ export class QqbotAccountMessagePushController {
     private readonly targetOptionsService: QqbotMessageTargetOptionsService,
   ) {}
 
+  /** 列出绑定。 */
   @Get('bindings')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:List')
   async listBindings(@Param() params: AccountMessagePushParamDto) {
@@ -90,6 +91,7 @@ export class QqbotAccountMessagePushController {
     return vbenSuccess(views.map(allowlistBinding));
   }
 
+  /** 创建绑定。 */
   @Post('bindings')
   @HttpCode(HttpStatus.OK)
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Create')
@@ -104,6 +106,7 @@ export class QqbotAccountMessagePushController {
     );
   }
 
+  /** 更新绑定。 */
   @Put('bindings/:id')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Update')
   async updateBinding(
@@ -117,6 +120,7 @@ export class QqbotAccountMessagePushController {
     );
   }
 
+  /** 返回切换绑定。 */
   @Put('bindings/:id/enabled')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Toggle')
   async toggleBinding(
@@ -134,6 +138,7 @@ export class QqbotAccountMessagePushController {
     );
   }
 
+  /** 移除绑定。 */
   @Delete('bindings/:id')
   @QqbotMessagePushPermission('QqBot:Account:MessagePush:Delete')
   async removeBinding(@Param() params: AccountMessagePushBindingParamDto) {
@@ -142,6 +147,7 @@ export class QqbotAccountMessagePushController {
     );
   }
 
+  /** 列出目标。 */
   @Get('targets')
   @QqbotMessagePushPermission(
     'QqBot:Account:MessagePush:Create',

@@ -26,12 +26,14 @@ export class QqbotPluginPackagePathPolicyService {
     ).map((root) => resolve(root));
   }
 
+  /** 列出现有的根目录。 */
   listExistingRoots(): string[] {
     return this.controlledRoots.filter(
       (root) => existsSync(root) && statSync(root).isDirectory(),
     );
   }
 
+  /** 解析条目文件。 */
   resolveEntryFile(packageRoot: string, entry: string): string {
     const normalizedPackageRoot = resolve(packageRoot);
     const entryFile = resolve(normalizedPackageRoot, entry);
@@ -43,6 +45,7 @@ export class QqbotPluginPackagePathPolicyService {
     return this.resolveCompiledEntryFile(entryFile);
   }
 
+  /** 断言受控的包根目录。 */
   assertControlledPackageRoot(packageRoot: string): string {
     const normalizedPackageRoot =
       this.resolvePersistedBuiltinPackageRoot(packageRoot) ||
@@ -60,6 +63,7 @@ export class QqbotPluginPackagePathPolicyService {
     return normalizedPackageRoot;
   }
 
+  /** 解析已持久化的内置的包根目录。 */
   private resolvePersistedBuiltinPackageRoot(
     packageRoot: string,
   ): string | null {
@@ -84,6 +88,7 @@ export class QqbotPluginPackagePathPolicyService {
     return controlledRoot ? resolve(controlledRoot, packageName) : null;
   }
 
+  /** 判断外部是否成立。 */
   private isOutside(root: string, candidate: string): boolean {
     const relation = relative(root, candidate);
     return (
@@ -93,6 +98,7 @@ export class QqbotPluginPackagePathPolicyService {
     );
   }
 
+  /** 返回到路径分段。 */
   private toPathSegments(pathValue: string): string[] {
     return pathValue
       .replace(/\\/g, '/')
@@ -100,10 +106,12 @@ export class QqbotPluginPackagePathPolicyService {
       .filter((segment) => segment && segment !== '.');
   }
 
+  /** 返回开始携带分段。 */
   private startsWithSegments(candidate: string[], expected: string[]): boolean {
     return expected.every((segment, index) => candidate[index] === segment);
   }
 
+  /** 返回结束位置携带分段。 */
   private endsWithSegments(candidate: string[], expected: string[]): boolean {
     const offset = candidate.length - expected.length;
     if (offset < 0) return false;
@@ -112,6 +120,7 @@ export class QqbotPluginPackagePathPolicyService {
     );
   }
 
+  /** 解析已编译的条目文件。 */
   private resolveCompiledEntryFile(entryFile: string): string {
     if (existsSync(entryFile)) return entryFile;
 
@@ -126,6 +135,7 @@ export class QqbotPluginPackagePathPolicyService {
   }
 }
 
+/** 解析默认内置的包根目录。 */
 function resolveDefaultBuiltinPackageRoots(): string[] {
   const candidates = DEFAULT_BUILTIN_PACKAGE_ROOT_SEGMENTS.map((segments) =>
     resolve(process.cwd(), ...segments),

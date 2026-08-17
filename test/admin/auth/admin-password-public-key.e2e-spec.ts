@@ -4,9 +4,9 @@ import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { ClientIpService } from '../../../src/common/security/client-ip.service';
 import { TrustedCredentialTransportService } from '../../../src/common/security/trusted-credential-transport.service';
-import { AdminAuthController } from '../../../src/modules/admin/identity/auth/admin-auth.controller';
-import { AdminAuthService } from '../../../src/modules/admin/identity/auth/admin-auth.service';
-import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { AdminAuthController } from '../../../src/modules/admin/identity/auth/presentation/admin-auth.controller';
+import { AdminAuthService } from '../../../src/modules/admin/identity/auth/application/admin-auth.service';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { AdminMenuService } from '../../../src/modules/admin/identity/menu/admin-menu.service';
 import { AdminUserService } from '../../../src/modules/admin/identity/user/admin-user.service';
 

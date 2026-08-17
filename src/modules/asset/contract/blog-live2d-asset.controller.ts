@@ -17,6 +17,7 @@ export class BlogLive2DAssetController {
     private readonly publicRateLimitService: PublicRateLimitService,
   ) {}
 
+  /** 读取字符目录。 */
   @Get(':character/catalog.json')
   @ApiOperation({ summary: '获取 Blog Live2D 角色目录规范索引' })
   @ApiParam({ name: 'character', enum: ['pio', 'tia'], example: 'pio' })
@@ -42,6 +43,7 @@ export class BlogLive2DAssetController {
     stream.pipe(res);
   }
 
+  /** 读取字符资源。 */
   @Get(':character/:family/*assetPath')
   @ApiOperation({ summary: '获取 Blog Live2D 角色运行时资源' })
   @ApiParam({ name: 'character', enum: ['pio', 'tia'], example: 'tia' })
@@ -75,6 +77,7 @@ export class BlogLive2DAssetController {
     stream.pipe(res);
   }
 
+  /** 读取缓存控制。 */
   private getCacheControl(objectName: string): string {
     return objectName.endsWith('.json')
       ? 'public, max-age=60'

@@ -28,6 +28,7 @@ type TencentCloudCvmClientFactory = (
   clientConfig: ClientConfig,
 ) => TencentCloudCvmClient;
 
+/** 创建腾讯云云端云服务器客户端。 */
 function createTencentCloudCvmClient(
   clientConfig: ClientConfig,
 ): TencentCloudCvmClient {
@@ -47,6 +48,7 @@ export class TencentCloudReadonlyAdapter {
     this.createClient = createClient || createTencentCloudCvmClient;
   }
 
+  /** 检查腾讯云云端只读的记录。 */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_TENCENT_CLOUD_ENABLED',
@@ -105,6 +107,7 @@ export class TencentCloudReadonlyAdapter {
     }
   }
 
+  /** 判断启用是否成立。 */
   private isEnabled(): boolean {
     return (
       this.config
@@ -113,6 +116,7 @@ export class TencentCloudReadonlyAdapter {
     );
   }
 
+  /** 返回客户端配置。 */
   private clientConfig(): ClientConfig {
     return {
       credential: {

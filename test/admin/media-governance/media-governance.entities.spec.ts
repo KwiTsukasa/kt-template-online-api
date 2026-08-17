@@ -11,7 +11,7 @@ import {
   MediaGovernanceSourceEntity,
   MediaGovernanceTaskEntity,
   MediaGovernanceUnitEntity,
-} from '../../../src/modules/admin/media-governance/media-governance.entities';
+} from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance.entities';
 
 describe('media governance entity schema', () => {
   const entities = [

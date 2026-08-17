@@ -8,6 +8,7 @@ const STRICT_SEND_ERROR_SUMMARIES: Readonly<Record<string, string>> = {
   onebot_timeout: 'OneBot send timed out',
 };
 
+/** 返回严格的发送错误摘要。 */
 export function strictSendErrorSummary(code: string): string {
   return STRICT_SEND_ERROR_SUMMARIES[code] ?? 'QQBot delivery failed';
 }

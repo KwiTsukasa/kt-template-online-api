@@ -11,7 +11,7 @@ import {
   parseEndpointEventV2,
   parseReportedSnapshotV2,
   parseStatusSnapshotV2,
-} from '../../../src/modules/admin/platform-config/network-management/network-agent-v2.types';
+} from '../../../src/modules/admin/platform-config/network-management/contract/network-agent-v2.types';
 
 const rawFixture = (name: string) =>
   readFileSync(join(__dirname, 'fixtures', name), 'utf8');

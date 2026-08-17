@@ -378,6 +378,7 @@ export class QqbotAccountService {
     return saved.id;
   }
 
+  /** 更新QQBot账号记录。 */
   async update(body: QqbotAccountUpdateDto) {
     if (body.selfId) {
       await this.assertSelfIdAvailable(body.selfId, body.id);
@@ -411,6 +412,7 @@ export class QqbotAccountService {
     return true;
   }
 
+  /** 移除QQBot账号记录。 */
   async remove(id: string) {
     const account = await this.accountRepository.findOne({
       where: {
@@ -483,6 +485,7 @@ export class QqbotAccountService {
     await this.accountRepository.update({ selfId }, payload);
   }
 
+  /** 取消账号投递记录。 */
   private async cancelAccountDeliveries(
     manager: EntityManager,
     accountId: string,
@@ -572,6 +575,7 @@ export class QqbotAccountService {
     );
   }
 
+  /** 标记QQ登录状态。 */
   async markQqLoginStatus(
     selfId: string,
     qqLoginStatus: QqbotNapcatRuntimeLoginStatus,
@@ -634,6 +638,7 @@ export class QqbotAccountService {
     return list;
   }
 
+  /** 同步已持久化的NapCat拆分状态。 */
   private async syncPersistedNapcatSplitStatus(account: QqbotAccountListItem) {
     if (!this.hasPersistedNapcatSplitStatus(account)) return;
 
@@ -648,6 +653,7 @@ export class QqbotAccountService {
     Object.assign(account, payload);
   }
 
+  /** 判断已持久化的NapCat拆分状态是否存在。 */
   private hasPersistedNapcatSplitStatus(account: QqbotAccountListItem) {
     return [
       'oneBotStatus',
@@ -657,6 +663,7 @@ export class QqbotAccountService {
     ].some((key) => Object.prototype.hasOwnProperty.call(account, key));
   }
 
+  /** 构建NapCat拆分状态载荷。 */
   private buildNapcatSplitStatusPayload(
     account: QqbotAccountListItem,
   ): Pick<
@@ -672,6 +679,7 @@ export class QqbotAccountService {
     };
   }
 
+  /** 返回到已持久化的容器状态。 */
   private toPersistedContainerStatus(
     napcat?: null | QqbotAccountListItem['napcat'],
   ): QqbotRuntimeContainerStatus {
@@ -680,6 +688,7 @@ export class QqbotAccountService {
     return 'unknown';
   }
 
+  /** 返回到已持久化的WebUI状态。 */
   private toPersistedWebuiStatus(
     webuiOnline?: boolean | null,
   ): QqbotNapcatWebuiStatus {

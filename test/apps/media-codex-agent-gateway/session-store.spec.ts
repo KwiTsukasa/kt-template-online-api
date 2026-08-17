@@ -84,6 +84,7 @@ describe('MediaCodexAgentSessionStore', () => {
   });
 
   function createService(appServer: FakeAppServer, callbackReady = true) {
+    const conversationEvents: any[] = [];
     const events: any[] = [];
     const toolClient: MediaCodexAgentToolClient = {
       call: jest.fn(async (call) =>
@@ -99,8 +100,12 @@ describe('MediaCodexAgentSessionStore', () => {
       publish: jest.fn(async (event) => {
         events.push(event);
       }),
+      publishConversation: jest.fn(async (event) => {
+        conversationEvents.push(event);
+      }),
     };
     return {
+      conversationEvents,
       events,
       service: new MediaCodexAgentGatewayService(
         new MediaCodexAgentSessionStore(root),
@@ -225,7 +230,7 @@ describe('MediaCodexAgentSessionStore', () => {
     ).rejects.toThrow('agent-session-active');
   });
 
-  it('marks a completed turn without exposing conversation or login state', async () => {
+  it('returns safe conversation history without login, reasoning, or tool output', async () => {
     const appServer = new FakeAppServer();
     const { events, service } = createService(appServer);
     const started = await service.startTurn(request());
@@ -248,15 +253,124 @@ describe('MediaCodexAgentSessionStore', () => {
     });
 
     const session = await service.session('media-task-001');
-    expect(session).toMatchObject({ status: 'blocked' });
+    expect(session).toMatchObject({
+      conversationRevision: 2,
+      messages: [
+        { content: '核对当前单元', role: 'user', sequence: 1 },
+        { content: '存在两个真实候选', role: 'assistant', sequence: 2 },
+      ],
+      status: 'blocked',
+    });
     expect(JSON.stringify(session)).not.toMatch(
-      /login|token|conversation|message/i,
+      /login|reasoning|token|tool-call|tool-output/i,
     );
     expect(events.map((event) => event.type)).toEqual([
       'agent-thread-mapped',
       'agent-turn-started',
       'agent-turn-completed',
     ]);
+  });
+
+  it('syncs official history once and serves later pages from the local session store', async () => {
+    const appServer = new FakeAppServer();
+    const { service } = createService(appServer);
+    await service.startTurn(request());
+
+    await service.session('media-task-001', 0, 1);
+    await service.session('media-task-001', 1, 1);
+
+    expect(appServer.resumeCount).toBe(1);
+  });
+
+  it('coalesces rapid commentary deltas and flushes them before item completion', async () => {
+    const appServer = new FakeAppServer();
+    const { conversationEvents, service } = createService(appServer);
+    const started = await service.startTurn(request());
+    conversationEvents.splice(0);
+    await appServer.notificationHandler?.({
+      method: 'item/started',
+      params: {
+        item: {
+          id: 'media-commentary-item',
+          phase: 'commentary',
+          type: 'agentMessage',
+        },
+        threadId: started.threadId,
+        turnId: started.turnId,
+      },
+    });
+    await Promise.all(
+      ['第', '一', '步'].map((delta) =>
+        appServer.notificationHandler?.({
+          method: 'item/agentMessage/delta',
+          params: {
+            delta,
+            itemId: 'media-commentary-item',
+            threadId: started.threadId,
+            turnId: started.turnId,
+          },
+        }),
+      ),
+    );
+    expect(conversationEvents).toHaveLength(0);
+
+    await appServer.notificationHandler?.({
+      method: 'item/completed',
+      params: {
+        item: {
+          id: 'media-commentary-item',
+          phase: 'commentary',
+          text: '第一步',
+          type: 'agentMessage',
+        },
+        threadId: started.threadId,
+        turnId: started.turnId,
+      },
+    });
+
+    expect(conversationEvents).toEqual([
+      expect.objectContaining({
+        changeType: 'assistant-delta',
+        content: '第一步',
+      }),
+      expect.objectContaining({
+        changeType: 'message-completed',
+        content: '第一步',
+      }),
+    ]);
+    expect(conversationEvents[1].eventSequence).toBeGreaterThan(
+      conversationEvents[0].eventSequence,
+    );
+  });
+
+  it('drops an unfinished streaming placeholder when its turn terminates', async () => {
+    const appServer = new FakeAppServer();
+    const { service } = createService(appServer);
+    const started = await service.startTurn(request());
+    await appServer.notificationHandler?.({
+      method: 'item/started',
+      params: {
+        item: {
+          id: 'media-unfinished-commentary',
+          phase: 'commentary',
+          type: 'agentMessage',
+        },
+        threadId: started.threadId,
+        turnId: started.turnId,
+      },
+    });
+    await appServer.notificationHandler?.({
+      method: 'turn/completed',
+      params: {
+        threadId: started.threadId,
+        turn: { id: started.turnId, status: 'failed' },
+      },
+    });
+
+    await expect(service.session('media-task-001')).resolves.toMatchObject({
+      messages: [{ role: 'user' }],
+      status: 'blocked',
+    });
   });
 
   it('persists the authoritative final agent item and binds it to an accepted plan hash', async () => {

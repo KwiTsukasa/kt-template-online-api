@@ -242,6 +242,7 @@ export class NapcatLoginStateStoreService {
     }
   }
 
+  /** 返回到会话持久化快照。 */
   private toSessionPersistenceSnapshot(
     session: QqbotLoginScanSession,
   ): Partial<NapcatLoginSession> {
@@ -260,6 +261,7 @@ export class NapcatLoginStateStoreService {
     };
   }
 
+  /** 判断重复会话键错误是否成立。 */
   private isDuplicateSessionKeyError(err: unknown) {
     const detail =
       err && typeof err === 'object'

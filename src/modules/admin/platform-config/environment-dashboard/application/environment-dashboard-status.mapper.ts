@@ -24,6 +24,7 @@ const severityWeight: Record<EnvironmentHealthStatus, number> = {
   blocked: 5,
 };
 
+/** 返回选择最差的健康状态状态。 */
 export function pickWorstHealthStatus(
   statuses: EnvironmentHealthStatus[],
 ): EnvironmentHealthStatus {
@@ -37,6 +38,7 @@ export function pickWorstHealthStatus(
     );
 }
 
+/** 映射站点状态。 */
 export function mapSiteStatus(
   statuses: EnvironmentHealthStatus[],
 ): EnvironmentSiteStatus {
@@ -49,6 +51,7 @@ export function mapSiteStatus(
   return 'unknown';
 }
 
+/** 统计信号。 */
 export function countSignals(
   sites: EnvironmentSite[],
 ): Record<EnvironmentHealthStatus, number> {
@@ -69,6 +72,7 @@ export function countSignals(
   return counts;
 }
 
+/** 规范化已观测的位于。 */
 export function normalizeObservedAt(dateLike?: Date | number | string): string {
   if (dateLike === undefined || dateLike === null || dateLike === '') {
     return new Date().toISOString();

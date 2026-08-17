@@ -33,6 +33,7 @@ export class QqbotMessageTemplateService {
     private readonly renderer: SystemMessageTemplateRendererService,
   ) {}
 
+  /** 返回页面。 */
   async page(query: MessageTemplateListQuery): Promise<{
     items: MessageTemplateView[];
     total: number;
@@ -62,6 +63,7 @@ export class QqbotMessageTemplateService {
     };
   }
 
+  /** 创建QQBot消息模板记录。 */
   async create(input: MessageTemplateInput): Promise<MessageTemplateView> {
     this.validateInput(input);
     const saved = await this.templateRepository.save(
@@ -70,6 +72,7 @@ export class QqbotMessageTemplateService {
     return this.toView(saved);
   }
 
+  /** 更新QQBot消息模板记录。 */
   async update(
     id: string,
     input: MessageTemplateInput,
@@ -101,6 +104,7 @@ export class QqbotMessageTemplateService {
     return this.toView(saved);
   }
 
+  /** 设置启用。 */
   async setEnabled(id: string, enabled: boolean): Promise<MessageTemplateView> {
     const current = await this.findActive(id);
     if (enabled) this.validateContent(current.content, current.sourceKey);
@@ -108,6 +112,7 @@ export class QqbotMessageTemplateService {
     return this.toView(await this.templateRepository.save(current));
   }
 
+  /** 移除QQBot消息模板记录。 */
   async remove(id: string): Promise<boolean> {
     return this.templateRepository.manager.transaction(
       // 保持模板行锁，直至引用检查与软删除在同一事务提交。
@@ -136,6 +141,7 @@ export class QqbotMessageTemplateService {
     );
   }
 
+  /** 返回预览。 */
   preview(input: {
     content: string;
     sourceKey: string;
@@ -148,6 +154,7 @@ export class QqbotMessageTemplateService {
     };
   }
 
+  /** 返回必需可用用于绑定。 */
   async requireAvailableForBinding(
     manager: EntityManager,
     templateId: string,
@@ -169,6 +176,7 @@ export class QqbotMessageTemplateService {
     return template;
   }
 
+  /** 校验输入。 */
   private validateInput(input: MessageTemplateInput): void {
     const definition = this.sourceRegistry.get(input.sourceKey).definition;
     this.renderer.validate(
@@ -177,6 +185,7 @@ export class QqbotMessageTemplateService {
     );
   }
 
+  /** 校验内容。 */
   private validateContent(content: string, sourceKey: string): void {
     const definition = this.sourceRegistry.get(sourceKey).definition;
     this.renderer.validate(
@@ -185,6 +194,7 @@ export class QqbotMessageTemplateService {
     );
   }
 
+  /** 校验内容用于绑定。 */
   private validateContentForBinding(content: string, sourceKey: string): void {
     try {
       this.validateContent(content, sourceKey);
@@ -199,6 +209,7 @@ export class QqbotMessageTemplateService {
     }
   }
 
+  /** 返回到持久化输入。 */
   private toPersistenceInput(
     input: MessageTemplateInput,
   ): Pick<
@@ -214,6 +225,7 @@ export class QqbotMessageTemplateService {
     };
   }
 
+  /** 查找启用的。 */
   private async findActive(id: string): Promise<QqbotMessageTemplate> {
     const template = await this.templateRepository.findOne({
       where: { id, isDeleted: false },
@@ -222,6 +234,7 @@ export class QqbotMessageTemplateService {
     return template;
   }
 
+  /** 返回示例变量。 */
   private exampleVariables(
     definition: SystemMessageSourceDefinition,
   ): Record<string, boolean | number | string> {
@@ -242,6 +255,7 @@ export class QqbotMessageTemplateService {
     );
   }
 
+  /** 返回到视图。 */
   private async toView(
     template: QqbotMessageTemplate,
   ): Promise<MessageTemplateView> {
@@ -265,6 +279,7 @@ export class QqbotMessageTemplateService {
     };
   }
 
+  /** 序列化时间。 */
   private serializeTime(value: QqbotMessageTemplate['createTime']): string {
     return String(value);
   }

@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAdminUser, vbenSuccess } from '@/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { AdminUser } from '../user/admin-user.entity';
 import { AdminMenu } from './admin-menu.entity';
 import { AdminMenuService } from './admin-menu.service';

@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { Public, vbenSuccess } from '@/common';
 import { BlogThemeConfigBodyDto } from './blog-theme-config.dto';
 import { BlogThemeConfigService } from '../application/blog-theme-config.service';

@@ -37,10 +37,12 @@ export class NapcatRuntimeProfileInspectorService {
       new NapcatRuntimeProfileInspectionScriptService();
   }
 
+  /** 构建检查脚本。 */
   buildInspectScript(containerName: string) {
     return this.inspectionScriptService.buildInspectScript(containerName);
   }
 
+  /** 清理证据。 */
   sanitizeEvidence(value: unknown): unknown {
     if (Array.isArray(value)) {
       return value.map((item) => this.sanitizeEvidence(item));
@@ -62,6 +64,7 @@ export class NapcatRuntimeProfileInspectorService {
     );
   }
 
+  /** 读取账号运行态详情。 */
   async getAccountRuntimeDetail(accountId: string) {
     const normalizedAccountId = this.toolsService.toTrimmedString(accountId);
     const [runtimeProfile, protocolProfile] = await Promise.all([
@@ -83,6 +86,7 @@ export class NapcatRuntimeProfileInspectorService {
     };
   }
 
+  /** 读取账号运行态摘要映射。 */
   async getAccountRuntimeSummaryMap(accountIds: string[]) {
     const normalizedIds = accountIds
       .map((accountId) => this.toolsService.toTrimmedString(accountId))
@@ -113,6 +117,7 @@ export class NapcatRuntimeProfileInspectorService {
     return summaryMap;
   }
 
+  /** 读取检查超时毫秒。 */
   private getInspectionTimeoutMs() {
     const value = Number(
       this.configService.get<string>(
@@ -122,6 +127,7 @@ export class NapcatRuntimeProfileInspectorService {
     return Number.isFinite(value) && value > 0 ? value : 15_000;
   }
 
+  /** 返回到资料状态。 */
   private toProfileStatus(
     status?: string,
   ): NapcatRuntimeProfileSummary['profileStatus'] {
@@ -131,6 +137,7 @@ export class NapcatRuntimeProfileInspectorService {
     return 'unknown';
   }
 
+  /** 返回脱敏字符串。 */
   private redactString(value: string) {
     return value.replace(/token=[^&\s]+/gi, 'token=[REDACTED]');
   }

@@ -316,6 +316,7 @@ function normalizeDateTimeColumnOptions(
   };
 }
 
+/** 应用当前时间戳精度。 */
 function applyCurrentTimestampPrecision(
   options: ColumnOptions,
   includeOnUpdate = false,

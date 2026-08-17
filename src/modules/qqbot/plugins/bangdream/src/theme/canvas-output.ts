@@ -42,7 +42,7 @@ export interface OutputFinalOptions {
 export type FinalImageRenderOptions = Omit<OutputFinalOptions, 'imageList'>;
 
 //将图片列表从上到下叠在一起输出为一张图片
-export const outputFinalCanv = async function outputFinalCanv({
+export const outputFinalCanv = /** 返回输出最终画布。 */ async function outputFinalCanv({
   imageList,
   startWithSpace = true,
   useEasyBG = true,
@@ -113,7 +113,7 @@ export const outputFinalCanv = async function outputFinalCanv({
 };
 
 //输出为二进制流
-export const outputFinalBuffer = async function outputFinalBuffer({
+export const outputFinalBuffer = /** 返回输出最终缓冲区。 */ async function outputFinalBuffer({
   startWithSpace = true,
   imageList,
   useEasyBG = true,

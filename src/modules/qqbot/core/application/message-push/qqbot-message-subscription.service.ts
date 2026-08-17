@@ -42,6 +42,7 @@ export class QqbotMessageSubscriptionService {
     private readonly sourceRegistry: SystemMessageSourceRegistry,
   ) {}
 
+  /** 返回页面。 */
   async page(query: MessageSubscriptionListQuery): Promise<{
     items: MessageSubscriptionView[];
     total: number;
@@ -74,6 +75,7 @@ export class QqbotMessageSubscriptionService {
     };
   }
 
+  /** 创建QQBot消息订阅记录。 */
   async create(
     input: MessageSubscriptionInput,
   ): Promise<MessageSubscriptionView> {
@@ -117,6 +119,7 @@ export class QqbotMessageSubscriptionService {
     }
   }
 
+  /** 更新QQBot消息订阅记录。 */
   async update(
     id: string,
     input: MessageSubscriptionInput,
@@ -160,6 +163,7 @@ export class QqbotMessageSubscriptionService {
     }
   }
 
+  /** 设置启用。 */
   async setEnabled(
     id: string,
     enabled: boolean,
@@ -191,6 +195,7 @@ export class QqbotMessageSubscriptionService {
     return this.toView(saved);
   }
 
+  /** 移除QQBot消息订阅记录。 */
   async remove(id: string): Promise<boolean> {
     return this.subscriptionRepository.manager.transaction(
       // 保持活跃订阅行锁，直至删除安全字段一并持久化。
@@ -210,6 +215,7 @@ export class QqbotMessageSubscriptionService {
     );
   }
 
+  /** 返回必需可用用于绑定。 */
   async requireAvailableForBinding(
     manager: EntityManager,
     subscriptionId: string,
@@ -295,6 +301,7 @@ export class QqbotMessageSubscriptionService {
     return sourceConfig;
   }
 
+  /** 排序配置。 */
   private sortConfig(config: Record<string, string>): Record<string, string> {
     return Object.fromEntries(
       Object.entries(config).sort(([left], [right]) =>
@@ -303,6 +310,7 @@ export class QqbotMessageSubscriptionService {
     );
   }
 
+  /** 查找启用的用于写入。 */
   private async findActiveForWrite(
     repository: Repository<QqbotMessageSubscription>,
     id: string,
@@ -315,6 +323,7 @@ export class QqbotMessageSubscriptionService {
     return current;
   }
 
+  /** 断言无实时绑定。 */
   private async assertNoLiveBindings(
     manager: EntityManager,
     subscriptionId: string,
@@ -329,6 +338,7 @@ export class QqbotMessageSubscriptionService {
     }
   }
 
+  /** 取消未完成的投递记录。 */
   private async cancelUnfinishedDeliveries(
     manager: EntityManager,
     where: Pick<QqbotMessageDelivery, 'subscriptionId'>,
@@ -352,16 +362,19 @@ export class QqbotMessageSubscriptionService {
     );
   }
 
+  /** 返回抛出自然键键冲突。 */
   private throwNaturalKeyConflict(): never {
     return throwVbenError('相同消息源配置的订阅已存在', HttpStatus.CONFLICT);
   }
 
+  /** 判断重复键错误是否成立。 */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const value = error as { code?: unknown; errno?: unknown };
     return value.code === 'ER_DUP_ENTRY' || value.errno === 1062;
   }
 
+  /** 返回到视图。 */
   private async toView(
     subscription: QqbotMessageSubscription,
   ): Promise<MessageSubscriptionView> {
@@ -387,6 +400,7 @@ export class QqbotMessageSubscriptionService {
     };
   }
 
+  /** 序列化时间。 */
   private serializeTime(value: QqbotMessageSubscription['createTime']): string {
     return String(value);
   }

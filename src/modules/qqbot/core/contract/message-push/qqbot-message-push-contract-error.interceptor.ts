@@ -20,6 +20,7 @@ const CONFLICT_CODE_PATTERN =
 
 @Injectable()
 export class QqbotMessagePushContractErrorInterceptor implements NestInterceptor {
+  /** 返回拦截。 */
   intercept(
     _context: ExecutionContext,
     next: CallHandler,
@@ -36,6 +37,7 @@ export class QqbotMessagePushContractErrorInterceptor implements NestInterceptor
     );
   }
 
+  /** 解析状态。 */
   private resolveStatus(code: string): HttpStatus {
     if (NOT_FOUND_CODES.has(code)) return HttpStatus.NOT_FOUND;
     if (CONFLICT_CODE_PATTERN.test(code)) return HttpStatus.CONFLICT;

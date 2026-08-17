@@ -20,6 +20,7 @@ type ExtractionState = {
   strings: number;
 };
 
+/** 返回提取BilibiliURL。 */
 export function extractBilibiliUrls(input: BilibiliUrlExtractionInput) {
   const candidates = collectStringCandidates(input);
   const seen = new Set<string>();
@@ -40,6 +41,7 @@ export function extractBilibiliUrls(input: BilibiliUrlExtractionInput) {
   return output;
 }
 
+/** 裁剪非实体分号尾部。 */
 function trimNonEntitySemicolonTail(rawUrl: string) {
   for (let index = 0; index < rawUrl.length; index += 1) {
     if (rawUrl[index] !== ';') continue;
@@ -49,6 +51,7 @@ function trimNonEntitySemicolonTail(rawUrl: string) {
   return rawUrl;
 }
 
+/** 收集字符串候选项。 */
 function collectStringCandidates(input: BilibiliUrlExtractionInput) {
   const state = createExtractionState();
   pushText(state, input.messageText);
@@ -57,6 +60,7 @@ function collectStringCandidates(input: BilibiliUrlExtractionInput) {
   return state.candidates;
 }
 
+/** 创建提取状态。 */
 function createExtractionState(): ExtractionState {
   return {
     candidates: [],
@@ -65,6 +69,7 @@ function createExtractionState(): ExtractionState {
   };
 }
 
+/** 收集原始的事件候选项。 */
 function collectRawEventCandidates(
   rawEvent: BilibiliUrlExtractionInput['rawEvent'],
   state: ExtractionState,
@@ -73,6 +78,7 @@ function collectRawEventCandidates(
   collectMessageSegments(rawEvent.message, state);
 }
 
+/** 收集消息分段。 */
 function collectMessageSegments(value: unknown, state: ExtractionState) {
   if (Array.isArray(value)) {
     for (const segment of value) {
@@ -83,6 +89,7 @@ function collectMessageSegments(value: unknown, state: ExtractionState) {
   collectMessageSegment(value, state);
 }
 
+/** 收集消息分段。 */
 function collectMessageSegment(value: unknown, state: ExtractionState) {
   if (!isRecord(value)) return;
   const type = typeof value.type === 'string' ? value.type.toLowerCase() : '';
@@ -101,6 +108,7 @@ function collectMessageSegment(value: unknown, state: ExtractionState) {
   }
 }
 
+/** 收集URL类似的字段。 */
 function collectUrlLikeFields(
   value: unknown,
   state: ExtractionState,
@@ -125,6 +133,7 @@ function collectUrlLikeFields(
   }
 }
 
+/** 收集JSON卡片载荷。 */
 function collectJsonCardPayload(value: unknown, state: ExtractionState) {
   if (typeof value !== 'string' || value.length > MAX_JSON_BYTES) return;
   const trimmed = value.trim();
@@ -141,6 +150,7 @@ function collectJsonCardPayload(value: unknown, state: ExtractionState) {
   }
 }
 
+/** 追加文本。 */
 function pushText(state: ExtractionState, value: unknown) {
   if (state.strings >= MAX_STRINGS) return;
   if (typeof value === 'string' && value.trim()) {
@@ -149,10 +159,12 @@ function pushText(state: ExtractionState, value: unknown) {
   }
 }
 
+/** 判断记录是否成立。 */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+/** 进入对象节点。 */
 function enterObjectNode(
   value: unknown,
   state: ExtractionState,
@@ -168,6 +180,7 @@ function enterObjectNode(
   return true;
 }
 
+/** 判断URL类似的键是否成立。 */
 function isUrlLikeKey(key: string) {
   return URL_LIKE_KEY_PATTERN.test(key);
 }

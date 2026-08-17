@@ -7,13 +7,19 @@ import {
   buildMediaCodexAgentCapsule,
   buildMediaCodexAgentPolicy,
 } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.policy';
-import type { MediaGovernanceCodexAgentGateway } from '../../../src/modules/admin/media-governance/media-governance-codex-agent.gateway';
-import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/media-governance.service';
+import type { MediaGovernanceCodexAgentGateway } from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-codex-agent.gateway';
+import { MediaGovernanceEventStreamService } from '../../../src/modules/admin/media-governance/application/media-governance-event-stream.service';
+import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
 
 describe('MediaGovernanceService CodexAgent gateway adapter', () => {
   afterEach(() => jest.restoreAllMocks());
 
-  async function fixture(options: { prepareMetadataStage?: boolean } = {}) {
+  async function fixture(
+    options: {
+      eventStream?: MediaGovernanceEventStreamService;
+      prepareMetadataStage?: boolean;
+    } = {},
+  ) {
     const startTurn = jest.fn(async (request) => {
       const policy = buildMediaCodexAgentPolicy(request.taskId);
       const capsule = buildMediaCodexAgentCapsule(request, policy);
@@ -40,7 +46,11 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
       session: jest.fn(async () => null),
       startTurn,
     };
-    const service = new MediaGovernanceService(undefined, undefined, gateway);
+    const service = new MediaGovernanceService(
+      options.eventStream,
+      undefined,
+      gateway,
+    );
     const task = await service.create({
       mediaType: 'tv',
       providerRef: { provider: 'tmdb', providerId: '105476' },
@@ -171,6 +181,117 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
       stage: 'download',
     });
     expect(task.agentSession).toMatchObject({ status: 'failed' });
+  });
+
+  it('publishes the same-revision Task patch after a conversation-only reply', async () => {
+    const eventStream = new MediaGovernanceEventStreamService({
+      heartbeatMs: 60_000,
+    });
+    const { service, task } = await fixture({ eventStream });
+    const session = await service.startAgent(task.id, { expectedRevision: 1 });
+    const events: any[] = [];
+    const subscription = eventStream
+      .stream()
+      .subscribe((event) => events.push(event));
+
+    await service.applyAgentConversationEvent({
+      capsuleSha256: session!.capsuleSha256,
+      changeType: 'turn-completed',
+      content: '当前任务可以继续治理',
+      conversationRevision: 2,
+      eventSequence: 100,
+      messageId: 'media-agent-message-001',
+      observedAt: '2026-08-17T10:00:00.000Z',
+      phase: 'final_answer',
+      policySha256: session!.policySha256,
+      result: {
+        candidateSummaries: [],
+        candidates: [],
+        nextActionLabel: '等待下一条消息',
+        planSha256: null,
+        status: 'conversation-response',
+        summary: '当前任务可以继续治理',
+      },
+      role: 'assistant',
+      status: 'completed',
+      taskId: task.id,
+      taskRevision: task.revision,
+      threadId: session!.threadId,
+      turnId: 'turn-media-agent-001',
+    });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'agent-conversation-changed',
+      'task-changed',
+    ]);
+    expect(events[1]).toMatchObject({
+      data: {
+        patchMode: 'full',
+        revision: task.revision,
+        task: {
+          agentSession: {
+            currentActionLabel: '当前任务可以继续治理',
+            statusLabel: 'Agent 已回复，可继续对话',
+          },
+        },
+        taskId: task.id,
+      },
+    });
+    subscription.unsubscribe();
+  });
+
+  it('refreshes authority once before continuing the same Agent thread', async () => {
+    const { gateway, service, startTurn, task } = await fixture();
+    const started = await service.startAgent(task.id, { expectedRevision: 1 });
+    const remoteSession = {
+      capsuleSha256: started!.capsuleSha256,
+      checkpointSha256: 'e'.repeat(64),
+      conversationRevision: 2,
+      currentUnitId: task.units[0]?.id ?? null,
+      hasMoreMessages: false,
+      historyComplete: true,
+      lastClientMessageId: 'media-user-previous-001',
+      lastEventSequence: 3,
+      lastHeartbeatAt: '2026-08-17T10:00:00.000Z',
+      messages: [],
+      policySha256: started!.policySha256,
+      policyVersion: MEDIA_CODEX_AGENT_POLICY_VERSION,
+      replayed: false,
+      result: {
+        candidateSummaries: [],
+        candidates: [],
+        nextActionLabel: '等待下一条消息',
+        planSha256: null,
+        status: 'conversation-response' as const,
+        summary: '上一轮已回复',
+      },
+      status: 'blocked' as const,
+      taskId: task.id,
+      taskRevision: task.revision,
+      terminalKind: 'completed' as const,
+      threadId: started!.threadId,
+      turnId: 'turn-media-agent-001',
+    };
+    (gateway.session as jest.Mock).mockResolvedValue(remoteSession);
+    startTurn.mockClear();
+
+    await service.continueAgentConversation(task.id, {
+      clientMessageId: 'media-user-follow-up-001',
+      content: '继续核对当前元数据缺口',
+      expectedConversationRevision: 2,
+      threadId: started!.threadId,
+    });
+
+    expect(gateway.session).toHaveBeenCalledWith(task.id, {
+      afterSequence: 0,
+      limit: 1,
+    });
+    expect(startTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientMessageId: 'media-user-follow-up-001',
+        operatorCommand: '继续核对当前元数据缺口',
+      }),
+    );
   });
 
   it('rejects a new Agent turn after the task is closed', async () => {
@@ -375,7 +496,84 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
     });
   });
 
-  it('keeps a closed task on its immutable persisted Agent projection', async () => {
+  it('returns an immutable historical Agent session after later task revisions', async () => {
+    const { gateway, service, task } = await fixture();
+    await service.startAgent(task.id, { expectedRevision: 1 });
+    task.agentSession!.status = 'succeeded';
+    task.agentSession!.statusLabel = 'TMDB 身份已密封应用';
+    task.nextCommandLabel = '继续当前元数据核验';
+    task.revision = 7;
+    task.runState = 'blocked';
+    const persistedSession = structuredClone(task.agentSession);
+    const historicalResult = {
+      candidateSummaries: ['tmdb:105476｜已核对唯一候选'],
+      candidates: [
+        { id: 'tmdb:105476', summary: 'tmdb:105476｜已核对唯一候选' },
+      ],
+      nextActionLabel: '继续当前元数据核验',
+      planSha256: 'f'.repeat(64),
+      status: 'plan-submitted' as const,
+      summary: '已完成历史 Agent 回合的作品身份核对',
+    };
+    (gateway.session as jest.Mock).mockResolvedValue({
+      capsuleSha256: task.agentSession!.capsuleSha256,
+      checkpointSha256: 'e'.repeat(64),
+      currentUnitId: task.units[0]?.id ?? null,
+      lastEventSequence: 3,
+      lastHeartbeatAt: '2026-08-11T00:00:03.000Z',
+      policySha256: task.agentSession!.policySha256,
+      policyVersion: MEDIA_CODEX_AGENT_POLICY_VERSION,
+      replayed: false,
+      result: historicalResult,
+      status: 'blocked',
+      taskId: task.id,
+      taskRevision: 2,
+      terminalKind: 'completed',
+      threadId: task.agentSession!.threadId,
+      turnId: 'turn-media-agent-001',
+    });
+
+    await expect(service.agentSession(task.id)).resolves.toMatchObject({
+      ...persistedSession,
+      conversationRevision: 0,
+      hasMoreMessages: false,
+      historyComplete: true,
+      messages: [],
+      result: historicalResult,
+    });
+    expect(task).toMatchObject({
+      agentSession: persistedSession,
+      nextCommandLabel: '继续当前元数据核验',
+      revision: 7,
+      runState: 'blocked',
+    });
+  });
+
+  it('rejects an Agent session from a future task revision', async () => {
+    const { gateway, service, task } = await fixture();
+    await service.startAgent(task.id, { expectedRevision: 1 });
+    (gateway.session as jest.Mock).mockResolvedValue({
+      capsuleSha256: task.agentSession!.capsuleSha256,
+      checkpointSha256: 'e'.repeat(64),
+      currentUnitId: task.units[0]?.id ?? null,
+      lastEventSequence: 0,
+      lastHeartbeatAt: '2026-08-11T00:00:03.000Z',
+      policySha256: task.agentSession!.policySha256,
+      policyVersion: MEDIA_CODEX_AGENT_POLICY_VERSION,
+      replayed: false,
+      result: null,
+      status: 'active',
+      taskId: task.id,
+      taskRevision: 3,
+      terminalKind: null,
+      threadId: task.agentSession!.threadId,
+      turnId: 'turn-media-agent-001',
+    });
+
+    await expect(service.agentSession(task.id)).rejects.toThrow(HttpException);
+  });
+
+  it('shows a closed task historical conversation without mutating the task', async () => {
     const { gateway, service, task } = await fixture();
     await service.startAgent(task.id, { expectedRevision: 1 });
     task.agentSession!.status = 'needs-operator';
@@ -384,11 +582,50 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
     task.runState = 'succeeded';
     task.stage = 'closed';
     const persistedSession = structuredClone(task.agentSession);
+    (gateway.session as jest.Mock).mockResolvedValue({
+      capsuleSha256: task.agentSession!.capsuleSha256,
+      checkpointSha256: 'e'.repeat(64),
+      conversationRevision: 1,
+      currentUnitId: task.units[0]?.id ?? null,
+      hasMoreMessages: false,
+      historyComplete: true,
+      lastClientMessageId: 'media-user-closed-001',
+      lastEventSequence: 3,
+      lastHeartbeatAt: '2026-08-11T00:00:03.000Z',
+      messages: [
+        {
+          content: '总结本任务治理结果',
+          messageId: 'media-user-closed-001',
+          observedAt: '2026-08-11T00:00:00.000Z',
+          phase: 'user',
+          result: null,
+          role: 'user',
+          sequence: 1,
+          status: 'completed',
+          turnId: 'turn-media-agent-001',
+        },
+      ],
+      policySha256: task.agentSession!.policySha256,
+      policyVersion: MEDIA_CODEX_AGENT_POLICY_VERSION,
+      replayed: false,
+      result: null,
+      status: 'blocked',
+      taskId: task.id,
+      taskRevision: 2,
+      terminalKind: 'completed',
+      threadId: task.agentSession!.threadId,
+      turnId: 'turn-media-agent-001',
+    });
 
-    await expect(service.agentSession(task.id)).resolves.toEqual(
-      persistedSession,
-    );
-    expect(gateway.session).not.toHaveBeenCalled();
+    await expect(service.agentSession(task.id)).resolves.toMatchObject({
+      ...persistedSession,
+      conversationRevision: 1,
+      messages: [{ content: '总结本任务治理结果', role: 'user' }],
+    });
+    expect(gateway.session).toHaveBeenCalledWith(task.id, {
+      afterSequence: 0,
+      limit: 200,
+    });
     expect(task).toMatchObject({
       agentSession: persistedSession,
       revision: 40,

@@ -6,8 +6,10 @@ import {
   IsString,
   Matches,
   MaxLength,
+  Max,
   Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import type {
   MediaCodexAgentStage,
   MediaCodexAgentTurnRequest,
@@ -23,6 +25,12 @@ const STAGES: MediaCodexAgentStage[] = [
 ];
 
 export class MediaCodexAgentTurnRequestDto implements MediaCodexAgentTurnRequest {
+  @IsOptional()
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
+  clientMessageId?: string;
+
   @IsObject()
   compactContext: Record<string, unknown>;
 
@@ -38,7 +46,7 @@ export class MediaCodexAgentTurnRequestDto implements MediaCodexAgentTurnRequest
   manifestSha256: string;
 
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(4_000)
   @Matches(/\S/)
   operatorCommand: string;
 
@@ -59,4 +67,17 @@ export class MediaCodexAgentTurnRequestDto implements MediaCodexAgentTurnRequest
   @IsInt()
   @Min(1)
   taskRevision: number;
+}
+
+export class MediaCodexAgentSessionQueryDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  afterSequence = 0;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit = 200;
 }

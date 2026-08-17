@@ -30,6 +30,7 @@ const CONFIG_RULES = {
   },
 } as const;
 
+/** 读取Bilibili卡片运行态配置。 */
 export function readBilibiliCardRuntimeConfig(
   host: BilibiliCardPluginHost,
 ): BilibiliCardRuntimeConfig {
@@ -41,6 +42,7 @@ export function readBilibiliCardRuntimeConfig(
   };
 }
 
+/** 读取已限定范围的整数。 */
 function readClampedInteger(
   host: BilibiliCardPluginHost,
   rule: {

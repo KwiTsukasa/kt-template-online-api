@@ -16,7 +16,7 @@ import {
 import { QqbotNapcatWebuiGatewayController } from '../../../../src/modules/qqbot/napcat/webui-gateway/contract/qqbot-napcat-webui-gateway.controller';
 import { QqbotNapcatWebuiGatewayClient } from '../../../../src/modules/qqbot/napcat/webui-gateway/infrastructure/qqbot-napcat-webui-gateway.client';
 import { NapcatWebuiGatewayAudit } from '../../../../src/modules/qqbot/napcat/webui-gateway/infrastructure/persistence/napcat-webui-gateway-audit.entity';
-import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import {
   NAPCAT_RUNTIME_DOMAIN_CONTRACT,
   NAPCAT_RUNTIME_ENTITIES,

@@ -45,6 +45,7 @@ type NapcatConfig = {
 export class NapcatConfigWriterService {
   constructor(private readonly toolsService: ToolsService) {}
 
+  /** 构建配置文件。 */
   buildConfigFiles(input: {
     account?: string;
     reverseWsUrl: string;
@@ -121,6 +122,7 @@ export class NapcatConfigWriterService {
     };
   }
 
+  /** 返回序列化。 */
   private stringify(value: Record<string, unknown>) {
     return `${JSON.stringify(value, null, 2)}\n`;
   }

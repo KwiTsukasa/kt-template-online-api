@@ -106,6 +106,7 @@ export class QqbotNapcatLoginService {
     return this.loginStateStore || this.fallbackLoginSessionStore;
   }
 
+  /** 启动创建。 */
   async startCreate() {
     await this.cleanupSessions();
     const container = await this.containerService.reserveCreateContainer();
@@ -813,6 +814,7 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /** 准备创建容器二维码。 */
   private async prepareCreateContainerQrcode(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -850,6 +852,7 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /** 准备创建二维码之后容器就绪的。 */
   private async prepareCreateQrcodeAfterContainerReady(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -1024,6 +1027,7 @@ export class QqbotNapcatLoginService {
     };
   }
 
+  /** 同步会话QQ登录状态。 */
   private async syncSessionQqLoginStatus(
     session: QqbotLoginScanSession,
     status: NapcatLoginStatus,
@@ -1047,6 +1051,7 @@ export class QqbotNapcatLoginService {
     await marker.call(this.accountService, selfId, qqLoginStatus, lastError);
   }
 
+  /** 恢复已过期的二维码会话。 */
   private async recoverExpiredQrcodeSession(
     session: QqbotLoginScanSession,
   ): Promise<QqbotLoginScanResult | undefined> {
@@ -1093,6 +1098,7 @@ export class QqbotNapcatLoginService {
     return undefined;
   }
 
+  /** 返回到会话QQ登录状态。 */
   private toSessionQqLoginStatus(
     status: NapcatLoginStatus,
   ): QqbotNapcatRuntimeLoginStatus {
@@ -1114,6 +1120,7 @@ export class QqbotNapcatLoginService {
     return 'unknown';
   }
 
+  /** 返回到会话QQ登录错误。 */
   private toSessionQqLoginError(
     status: NapcatLoginStatus,
     qqLoginStatus: QqbotNapcatRuntimeLoginStatus,
@@ -1671,6 +1678,7 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
+  /** 恢复过期的创建容器准备。 */
   private recoverStaleCreateContainerPreparation(
     session: QqbotLoginScanSession,
   ) {
@@ -1687,6 +1695,7 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
+  /** 返回恢复创建容器准备。 */
   private async resumeCreateContainerPreparation(
     session: QqbotLoginScanSession,
   ) {
@@ -1705,6 +1714,7 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /** 判断过期的创建容器准备是否成立。 */
   private isStaleCreateContainerPreparation(session: QqbotLoginScanSession) {
     if (!session.preparingContainer) return false;
     const startedAt = session.lastRestartedAt || session.createdAt;
@@ -1724,6 +1734,7 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /** 读取创建容器准备过期的毫秒。 */
   private getCreateContainerPreparationStaleMs() {
     return this.getPositiveConfigNumber(
       'QQBOT_NAPCAT_CREATE_PREPARING_STALE_MS',
@@ -1744,6 +1755,7 @@ export class QqbotNapcatLoginService {
     delete this.sessionEventListenerCache[sessionId];
   }
 
+  /** 判断是否应当监控扫描状态。 */
   private shouldMonitorScanStatus(session: QqbotLoginScanSession) {
     return (
       session.status === 'pending' &&
@@ -1753,6 +1765,7 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /** 启动扫描状态监控。 */
   private startScanStatusMonitor(session: QqbotLoginScanSession) {
     this.ensureScanStatusMonitorDeadline(session);
     if (this.hasScanStatusMonitorDeadlinePassed(session)) {
@@ -1768,6 +1781,7 @@ export class QqbotNapcatLoginService {
     this.scanStatusMonitorTimers[session.id] = timer;
   }
 
+  /** 停止扫描状态监控。 */
   private stopScanStatusMonitor(sessionId: string) {
     const timer = this.scanStatusMonitorTimers[sessionId];
     if (timer) clearTimeout(timer);
@@ -1775,12 +1789,14 @@ export class QqbotNapcatLoginService {
     delete this.scanStatusMonitorDeadlines[sessionId];
   }
 
+  /** 停止全部扫描状态监控器。 */
   private stopAllScanStatusMonitors() {
     Object.keys(this.scanStatusMonitorTimers).forEach((sessionId) => {
       this.stopScanStatusMonitor(sessionId);
     });
   }
 
+  /** 确保扫描状态监控截止时间。 */
   private ensureScanStatusMonitorDeadline(session: QqbotLoginScanSession) {
     if (!session.qrcode) return;
     const current = this.scanStatusMonitorDeadlines[session.id];
@@ -1791,6 +1807,7 @@ export class QqbotNapcatLoginService {
     };
   }
 
+  /** 判断扫描状态监控截止时间已到是否存在。 */
   private hasScanStatusMonitorDeadlinePassed(
     session: QqbotLoginScanSession,
   ) {
@@ -1802,6 +1819,7 @@ export class QqbotNapcatLoginService {
     return !!deadline && Date.now() > deadline.expiresAt;
   }
 
+  /** 执行扫描状态监控。 */
   private async runScanStatusMonitor(sessionId: string) {
     try {
       const session = await this.loginSessionStore.get(sessionId);
@@ -2057,6 +2075,7 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
+  /** 返回保留登录自身标识待处理。 */
   private async keepLoginSelfIdPending(session: QqbotLoginScanSession) {
     const now = Date.now();
     session.loginSelfIdMissingSince ??= now;
@@ -2085,6 +2104,7 @@ export class QqbotNapcatLoginService {
     return this.toResult(session);
   }
 
+  /** 解析过期的待处理会话。 */
   private async resolveStalePendingSession(session: QqbotLoginScanSession) {
     if (session.status !== 'pending') return undefined;
     if (Date.now() > session.expiresAt) return this.expireSession(session);
@@ -2195,6 +2215,7 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /** 清理运行态容器。 */
   private async cleanupRuntimeContainer(
     container: QqbotNapcatRuntime,
     options: { includeDeletedCreateContainer?: boolean } = {},
@@ -2297,6 +2318,7 @@ export class QqbotNapcatLoginService {
     };
   }
 
+  /** 刷新接近已过期的二维码。 */
   private async refreshNearlyExpiredQrcode(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -2326,6 +2348,7 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /** 判断是否应当刷新接近已过期的二维码。 */
   private shouldRefreshNearlyExpiredQrcode(status: NapcatLoginStatus) {
     if (
       !status.qrcodeurl ||
@@ -2339,6 +2362,7 @@ export class QqbotNapcatLoginService {
     return ageMs >= this.getNativeQrcodeTtlMs() - this.getQrcodeSafeScanMs();
   }
 
+  /** 判断是否应当自动刷新待处理二维码。 */
   private shouldAutoRefreshPendingQrcode(
     session: QqbotLoginScanSession,
     status: NapcatLoginStatus,
@@ -2353,6 +2377,7 @@ export class QqbotNapcatLoginService {
     return Date.now() - lastRefreshAt >= this.getQrcodeAutoRefreshCooldownMs();
   }
 
+  /** 刷新待处理二维码来自状态。 */
   private async refreshPendingQrcodeFromStatus(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,
@@ -2402,6 +2427,7 @@ export class QqbotNapcatLoginService {
     }
   }
 
+  /** 读取原生的二维码有效期毫秒。 */
   private getNativeQrcodeTtlMs() {
     return this.getPositiveConfigNumber(
       'NAPCAT_LOGIN_NATIVE_QR_EXPIRE_MS',
@@ -2409,6 +2435,7 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /** 读取二维码安全扫描毫秒。 */
   private getQrcodeSafeScanMs() {
     return this.getPositiveConfigNumber(
       'NAPCAT_LOGIN_QR_SAFE_SCAN_MS',
@@ -2416,6 +2443,7 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /** 读取二维码自动刷新冷却时间毫秒。 */
   private getQrcodeAutoRefreshCooldownMs() {
     return this.getPositiveConfigNumber(
       'NAPCAT_LOGIN_QR_AUTO_REFRESH_COOLDOWN_MS',
@@ -2423,6 +2451,7 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /** 读取登录自身标识等待毫秒。 */
   private getLoginSelfIdWaitMs() {
     return this.getPositiveConfigNumber(
       'NAPCAT_LOGIN_SELF_ID_WAIT_MS',
@@ -2821,6 +2850,7 @@ export class QqbotNapcatLoginService {
     return true;
   }
 
+  /** 判断是否应当重启次数NapCat工作进程用于在线刷新。 */
   private shouldRestartNapcatWorkerForOnlineRefresh(
     session: QqbotLoginScanSession,
   ) {
@@ -2831,6 +2861,7 @@ export class QqbotNapcatLoginService {
     );
   }
 
+  /** 返回重启次数NapCat工作进程用于在线刷新。 */
   private async restartNapcatWorkerForOnlineRefresh(
     session: QqbotLoginScanSession,
     container: QqbotNapcatRuntime,

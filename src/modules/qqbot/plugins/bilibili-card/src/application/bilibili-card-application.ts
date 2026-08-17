@@ -22,6 +22,7 @@ export class BilibiliCardApplication {
     this.videoClient = new BilibiliVideoClient(host);
   }
 
+  /** 处理消息。 */
   async handleMessage(message: BilibiliCardMessage) {
     if (message.userId === message.selfId) return false;
     if (!(await this.isBound(message.selfId))) return false;
@@ -66,6 +67,7 @@ export class BilibiliCardApplication {
     return false;
   }
 
+  /** 解析引用。 */
   private async resolveReference(
     url: string,
     config: { httpTimeoutMs: number; maxRedirects: number },
@@ -87,6 +89,7 @@ export class BilibiliCardApplication {
     }
   }
 
+  /** 判断已绑定的是否成立。 */
   private async isBound(selfId: string) {
     const normalizedSelfId = `${selfId || ''}`.trim();
     if (!normalizedSelfId) return false;
@@ -101,6 +104,7 @@ export class BilibiliCardApplication {
     }
   }
 
+  /** 清理去重。 */
   private pruneDedupe() {
     const current = this.now();
     for (const [key, state] of this.dedupe.entries()) {
@@ -108,6 +112,7 @@ export class BilibiliCardApplication {
     }
   }
 
+  /** 返回告警。 */
   private warn(message: string) {
     try {
       const result = this.host.warn?.(message) as unknown;
@@ -120,6 +125,7 @@ export class BilibiliCardApplication {
   }
 }
 
+/** 构建Bilibili卡片去重键。 */
 function buildBilibiliCardDedupeKey(
   message: BilibiliCardMessage,
   reference: BilibiliVideoReference,
@@ -132,6 +138,7 @@ function buildBilibiliCardDedupeKey(
   ].join(':');
 }
 
+/** 判断B23短的链接是否成立。 */
 function isB23ShortLink(url: string) {
   try {
     return new URL(url).hostname.toLowerCase() === 'b23.tv';
@@ -140,6 +147,7 @@ function isB23ShortLink(url: string) {
   }
 }
 
+/** 判断Promise 兼容对象是否成立。 */
 function isThenable(
   value: unknown,
 ): value is { catch: (handler: () => void) => unknown } {
@@ -151,6 +159,7 @@ function isThenable(
   );
 }
 
+/** 规范化错误。 */
 function normalizeError(error: unknown) {
   return error instanceof Error && error.message ? error.message : `${error}`;
 }

@@ -101,6 +101,7 @@ export class RedisRateLimitStore {
     }
   }
 
+  /** 增加当前计数。 */
   async increment(
     namespace: string,
     identity: string,
@@ -116,6 +117,7 @@ export class RedisRateLimitStore {
     return counter;
   }
 
+  /** 增加多个。 */
   async incrementMany(
     buckets: RedisRateLimitBucket[],
   ): Promise<RedisRateLimitCounter[]> {
@@ -155,6 +157,7 @@ export class RedisRateLimitStore {
     });
   }
 
+  /** 删除计数器。 */
   async deleteCounter(namespace: string, identity: string): Promise<number> {
     const deleted = Number(
       await this.redis.del(this.buildKey(namespace, identity)),
@@ -165,6 +168,7 @@ export class RedisRateLimitStore {
     return deleted;
   }
 
+  /** 获取租约。 */
   async acquireLease(
     namespace: string,
     identity: string,
@@ -211,6 +215,7 @@ export class RedisRateLimitStore {
     };
   }
 
+  /** 续期租约。 */
   async renewLease(
     namespace: string,
     identity: string,
@@ -238,6 +243,7 @@ export class RedisRateLimitStore {
     return renewed === 1;
   }
 
+  /** 释放租约。 */
   async releaseLease(
     namespace: string,
     identity: string,
@@ -257,6 +263,7 @@ export class RedisRateLimitStore {
     return count === 1;
   }
 
+  /** 构建键。 */
   buildKey(namespace: string, identity: string): string {
     if (!SAFE_KEY_SEGMENT.test(namespace) || !SAFE_KEY_SEGMENT.test(identity)) {
       throw new Error('Redis 限流 key 段无效');

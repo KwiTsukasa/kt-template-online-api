@@ -54,12 +54,14 @@ export class EnvironmentDashboardService {
     private readonly config: EnvironmentDashboardConfigService = new EnvironmentDashboardConfigService(),
   ) {}
 
+  /** 读取仪表盘。 */
   async getDashboard(
     options: EnvironmentDashboardSnapshotOptions = {},
   ): Promise<EnvironmentDashboardResponse> {
     return this.cache.getOrCreate(() => this.buildDashboard(), options);
   }
 
+  /** 构建仪表盘。 */
   private async buildDashboard(): Promise<EnvironmentDashboardResponse> {
     const generatedAt = new Date().toISOString();
     const sites = await this.createSites(generatedAt);
@@ -74,6 +76,7 @@ export class EnvironmentDashboardService {
     };
   }
 
+  /** 创建站点。 */
   private async createSites(observedAt: string): Promise<EnvironmentSite[]> {
     return [
       await this.localDevCollector.collect({ observedAt }),
@@ -83,6 +86,7 @@ export class EnvironmentDashboardService {
     ];
   }
 
+  /** 创建腾讯云云端站点。 */
   private async createTencentCloudSite(): Promise<EnvironmentSite> {
     const services = [
       await this.createRemoteAdapterService(
@@ -123,6 +127,7 @@ export class EnvironmentDashboardService {
     );
   }
 
+  /** 创建R4SE站点。 */
   private async createR4seSite(): Promise<EnvironmentSite> {
     const services = [
       await this.createRemoteAdapterService(
@@ -145,6 +150,7 @@ export class EnvironmentDashboardService {
     return this.createSiteFromServices('r4se', 'r4se', 'r4se Node', services);
   }
 
+  /** 创建远程适配器服务。 */
   private async createRemoteAdapterService(
     serviceId: string,
     serviceLabel: string,
@@ -194,6 +200,7 @@ export class EnvironmentDashboardService {
     }
   }
 
+  /** 创建站点来自服务。 */
   private createSiteFromServices(
     siteId: string,
     siteLabel: string,
@@ -210,6 +217,7 @@ export class EnvironmentDashboardService {
     };
   }
 
+  /** 创建节点。 */
   private createNode(
     id: string,
     label: string,
@@ -223,6 +231,7 @@ export class EnvironmentDashboardService {
     };
   }
 
+  /** 创建服务。 */
   private createService(
     id: string,
     label: string,
@@ -237,6 +246,7 @@ export class EnvironmentDashboardService {
     };
   }
 
+  /** 创建摘要。 */
   private createSummary(sites: EnvironmentSite[]) {
     const byStatus = countSignals(sites);
     return {
@@ -249,6 +259,7 @@ export class EnvironmentDashboardService {
     };
   }
 
+  /** 创建拓扑。 */
   private createTopology(sites: EnvironmentSite[]): EnvironmentTopology {
     const nodes = sites.flatMap((site) => [
       {

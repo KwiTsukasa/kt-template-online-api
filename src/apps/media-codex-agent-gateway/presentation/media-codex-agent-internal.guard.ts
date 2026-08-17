@@ -11,14 +11,19 @@ import { MediaCodexAgentGatewayConfigService } from '../config/media-codex-agent
 export class MediaCodexAgentInternalGuard implements CanActivate {
   constructor(private readonly config: MediaCodexAgentGatewayConfigService) {}
 
+  /** 以常量时间比较校验内部密钥，并拒绝未授权的网关请求。 */
   canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<{
       headers: Record<string, string | string[] | undefined>;
     }>();
     const value = request.headers['x-kt-media-agent-secret'];
-    const actual = Buffer.from(
-      Array.isArray(value) ? (value[0] ?? '') : (value ?? ''),
-    );
+    let headerValue: string | undefined;
+    if (Array.isArray(value)) {
+      headerValue = value[0];
+    } else {
+      headerValue = value;
+    }
+    const actual = Buffer.from(headerValue ?? '');
     const expected = Buffer.from(this.config.internalSecret());
     if (
       actual.length !== expected.length ||

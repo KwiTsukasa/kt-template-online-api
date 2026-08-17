@@ -2,9 +2,9 @@ import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
-import { MediaGovernanceExecutorInternalController } from '../../../src/modules/admin/media-governance/media-governance-executor-internal.controller';
-import { MediaGovernanceExecutorInternalGuard } from '../../../src/modules/admin/media-governance/media-governance-executor-internal.guard';
-import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/media-governance.service';
+import { MediaGovernanceExecutorInternalController } from '../../../src/modules/admin/media-governance/presentation/media-governance-executor-internal.controller';
+import { MediaGovernanceExecutorInternalGuard } from '../../../src/modules/admin/media-governance/presentation/media-governance-executor-internal.guard';
+import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
 
 describe('MediaGovernanceExecutorInternalController', () => {
   let app: INestApplication;

@@ -10,12 +10,12 @@ import {
   TrustedCredentialTransportService,
 } from '../../../src/common';
 import { AdminMenuService } from '../../../src/modules/admin/identity/menu/admin-menu.service';
-import { AdminAuthController } from '../../../src/modules/admin/identity/auth/admin-auth.controller';
-import { AdminRefreshTokenStateStore } from '../../../src/modules/admin/identity/auth/admin-refresh-token-state.store';
-import { AdminAuthService } from '../../../src/modules/admin/identity/auth/admin-auth.service';
-import { AdminPasswordHashService } from '../../../src/modules/admin/identity/auth/admin-password-hash.service';
-import { AdminTokenService } from '../../../src/modules/admin/identity/auth/admin-token.service';
-import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { AdminAuthController } from '../../../src/modules/admin/identity/auth/presentation/admin-auth.controller';
+import { AdminRefreshTokenStateStore } from '../../../src/modules/admin/identity/auth/infrastructure/persistence/admin-refresh-token-state.store';
+import { AdminAuthService } from '../../../src/modules/admin/identity/auth/application/admin-auth.service';
+import { AdminPasswordHashService } from '../../../src/modules/admin/identity/auth/application/admin-password-hash.service';
+import { AdminTokenService } from '../../../src/modules/admin/identity/auth/application/admin-token.service';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { AdminUser } from '../../../src/modules/admin/identity/user/admin-user.entity';
 import { AdminUserService } from '../../../src/modules/admin/identity/user/admin-user.service';
 

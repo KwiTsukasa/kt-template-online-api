@@ -8,11 +8,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { vbenSuccess } from '@/common';
 import { QqbotPluginPlatformService } from '../application/plugin-platform.service';
 import { QqbotEventPluginRegistryService } from '../application/registry/qqbot-event-plugin-registry.service';
-import type { QqbotPluginTriggerMode } from '@/modules/qqbot/core/contract/qqbot.types';
+import type {
+  QqbotPluginSummary,
+  QqbotPluginTriggerMode,
+} from '@/modules/qqbot/core/contract/qqbot.types';
 
 type QqbotPluginOperationPageQuery = {
   pageNo?: number | string;
@@ -42,21 +45,23 @@ export class QqbotPluginController {
     required: false,
   })
   async list(@Query('triggerMode') triggerMode?: QqbotPluginTriggerMode) {
-    return vbenSuccess([
-      ...(this.includesTriggerMode('command', triggerMode)
-        ? await this.service.listPluginSummaries()
-        : []),
-      ...(this.includesTriggerMode('event', triggerMode)
-        ? this.eventPluginRegistry.listDefinitions().map((definition) => ({
-            description: definition.description,
-            key: definition.key,
-            name: definition.name,
-            operationCount: 1,
-            triggerMode: 'event' as const,
-            version: definition.version,
-          }))
-        : []),
-    ]);
+    const pluginSummaries: QqbotPluginSummary[] = [];
+    if (this.includesTriggerMode('command', triggerMode)) {
+      pluginSummaries.push(...(await this.service.listPluginSummaries()));
+    }
+    if (this.includesTriggerMode('event', triggerMode)) {
+      pluginSummaries.push(
+        ...this.eventPluginRegistry.listDefinitions().map((definition) => ({
+          description: definition.description,
+          key: definition.key,
+          name: definition.name,
+          operationCount: 1,
+          triggerMode: 'event' as const,
+          version: definition.version,
+        })),
+      );
+    }
+    return vbenSuccess(pluginSummaries);
   }
 
   /**

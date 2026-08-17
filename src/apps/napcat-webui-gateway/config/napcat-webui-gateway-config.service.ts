@@ -13,10 +13,12 @@ const MAX_TICKET_TTL_MS = 60_000;
 export class NapcatWebuiGatewayConfigService {
   constructor(private readonly configService: ConfigService) {}
 
+  /** 返回当前。 */
   now() {
     return Date.now();
   }
 
+  /** 返回有效期毫秒。 */
   ttlMs() {
     return this.getPositiveNumber(
       'NAPCAT_WEBUI_GATEWAY_SESSION_TTL_MS',
@@ -24,6 +26,7 @@ export class NapcatWebuiGatewayConfigService {
     );
   }
 
+  /** 返回票据有效期毫秒。 */
   ticketTtlMs() {
     return Math.min(
       this.getPositiveNumber(
@@ -34,6 +37,7 @@ export class NapcatWebuiGatewayConfigService {
     );
   }
 
+  /** 返回端口。 */
   port() {
     return this.getPositiveNumber(
       'NAPCAT_WEBUI_GATEWAY_PORT',
@@ -41,6 +45,7 @@ export class NapcatWebuiGatewayConfigService {
     );
   }
 
+  /** 返回上游超时毫秒。 */
   upstreamTimeoutMs() {
     return this.getPositiveNumber(
       'NAPCAT_WEBUI_GATEWAY_UPSTREAM_TIMEOUT_MS',
@@ -48,10 +53,12 @@ export class NapcatWebuiGatewayConfigService {
     );
   }
 
+  /** 返回内部密钥。 */
   internalSecret() {
     return this.getString('NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET');
   }
 
+  /** 返回RedisURL。 */
   redisUrl() {
     const explicitUrl = this.getString('NAPCAT_WEBUI_GATEWAY_REDIS_URL');
     if (explicitUrl) return explicitUrl;
@@ -66,16 +73,19 @@ export class NapcatWebuiGatewayConfigService {
     return `redis://${host}:${port}`;
   }
 
+  /** 返回公开的会话前缀。 */
   publicSessionPrefix() {
     return `${resolveNapcatWebuiPublicBaseUrl(
       this.getString('NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL'),
     )}/session`;
   }
 
+  /** 读取字符串。 */
   private getString(key: string) {
     return String(this.configService.get<string>(key) || '').trim();
   }
 
+  /** 读取正数数字。 */
   private getPositiveNumber(key: string, fallback: number) {
     const value = Number(this.configService.get<string>(key));
     return Number.isFinite(value) && value > 0 ? value : fallback;

@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
-import { MediaGovernanceExecutionGatewayClient } from '../../../src/modules/admin/media-governance/media-governance-execution.gateway';
-import { buildMediaGovernanceExecutionEnvelope } from '../../../src/modules/admin/media-governance/media-governance-executor.contract';
+import { MediaGovernanceExecutionGatewayClient } from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-execution.gateway';
+import { buildMediaGovernanceExecutionEnvelope } from '../../../src/modules/admin/media-governance/contract/media-governance-executor.contract';
 
 describe('MediaGovernanceExecutionGatewayClient', () => {
   const envelope = buildMediaGovernanceExecutionEnvelope({

@@ -29,6 +29,7 @@ type BilibiliViewResponse = {
 export class BilibiliVideoClient {
   constructor(private readonly host: BilibiliCardPluginHost) {}
 
+  /** 获取视频。 */
   async fetchVideo(
     reference: BilibiliVideoReference,
     config: Pick<BilibiliCardRuntimeConfig, 'httpTimeoutMs'>,
@@ -56,12 +57,14 @@ export class BilibiliVideoClient {
   }
 }
 
+/** 构建Bilibili视图URL。 */
 function buildBilibiliViewUrl(reference: BilibiliVideoReference) {
   const url = new URL('https://api.bilibili.com/x/web-interface/view');
   url.searchParams.set(reference.kind === 'bvid' ? 'bvid' : 'aid', reference.value);
   return url;
 }
 
+/** 规范化Bilibili视频信息。 */
 function normalizeBilibiliVideoInfo(
   data: BilibiliViewResponse['data'],
   reference: BilibiliVideoReference,
@@ -82,11 +85,13 @@ function normalizeBilibiliVideoInfo(
   };
 }
 
+/** 读取文本。 */
 function readText(value: unknown, fallback = '') {
   const text = typeof value === 'string' ? value.trim() : '';
   return text || fallback;
 }
 
+/** 读取数字。 */
 function readNumber(value: unknown, fallback = 0) {
   const numberValue = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(numberValue) && numberValue > 0
@@ -94,6 +99,7 @@ function readNumber(value: unknown, fallback = 0) {
     : fallback;
 }
 
+/** 规范化Bilibili消息。 */
 function normalizeBilibiliMessage(message: unknown) {
   return readText(message, '未知错误');
 }

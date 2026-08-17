@@ -41,14 +41,17 @@ export class EnvironmentReadonlyHttpClient {
         : DEFAULT_TIMEOUT_MS);
   }
 
+  /** 读取环境只读的HTTP记录。 */
   get(url: string, options: EnvironmentReadonlyHttpRequestOptions = {}) {
     return this.request('GET', url, options);
   }
 
+  /** 返回头部。 */
   head(url: string, options: EnvironmentReadonlyHttpRequestOptions = {}) {
     return this.request('HEAD', url, options);
   }
 
+  /** 请求环境只读的HTTP记录。 */
   async request(
     method: string,
     url: string,
@@ -80,12 +83,14 @@ export class EnvironmentReadonlyHttpClient {
     };
   }
 
+  /** 返回到请求体预览。 */
   private toBodyPreview(body: unknown): string {
     const text = typeof body === 'string' ? body : JSON.stringify(body ?? '');
     if (text.length <= this.bodyPreviewLimit) return text;
     return `${text.slice(0, this.bodyPreviewLimit)}...`;
   }
 
+  /** 清理请求头。 */
   private sanitizeHeaders(
     headers: Record<string, unknown> = {},
   ): Record<string, unknown> {

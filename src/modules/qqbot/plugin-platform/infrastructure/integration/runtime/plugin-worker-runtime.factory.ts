@@ -63,6 +63,7 @@ export class QqbotPluginWorkerRuntimeFactoryService implements QqbotPluginRuntim
     private readonly hostBridge: QqbotPluginHostBridgeService,
   ) {}
 
+  /** 创建QQBot插件运行态记录。 */
   create(
     installation: QqbotPluginInstallation,
     version: QqbotPluginVersion,
@@ -98,6 +99,7 @@ export class QqbotPluginWorkerRuntimeFactoryService implements QqbotPluginRuntim
     );
   }
 
+  /** 创建配置快照。 */
   private createConfigSnapshot(
     descriptor: QqbotPluginPackageDescriptor,
   ): QqbotPluginRuntimeConfigSnapshot {
@@ -124,6 +126,7 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     private readonly options: QqbotPluginWorkerThreadDriverOptions,
   ) {}
 
+  /** 请求QQBot插件线程驱动记录。 */
   async request(message: QqbotPluginWorkerRequest): Promise<unknown> {
     const worker = this.ensureWorker();
     return new Promise((resolve, reject) => {
@@ -136,6 +139,7 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     });
   }
 
+  /** 释放QQBot插件线程驱动记录。 */
   async dispose(): Promise<void> {
     const worker = this.worker;
     this.worker = undefined;
@@ -145,6 +149,7 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     }
   }
 
+  /** 确保工作进程。 */
   private ensureWorker() {
     if (this.worker) return this.worker;
 
@@ -174,6 +179,7 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     return worker;
   }
 
+  /** 处理工作进程消息。 */
   private async handleWorkerMessage(message: WorkerBridgeMessage) {
     if (message.type === 'response') {
       this.settleWorkerResponse(message);
@@ -218,6 +224,7 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     }
   }
 
+  /** 等待完成工作进程响应。 */
   private settleWorkerResponse(
     message: Extract<WorkerBridgeMessage, { type: 'response' }>,
   ) {
@@ -231,6 +238,7 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
     pending.reject(new QqbotPluginWorkerResponseError(message.error || {}));
   }
 
+  /** 返回拒绝待处理。 */
   private rejectPending(error: Error) {
     for (const pending of this.pendingRequests.values()) {
       pending.reject(error);
@@ -239,11 +247,13 @@ export class QqbotPluginWorkerThreadDriver implements QqbotPluginWorkerDriver {
   }
 }
 
+/** 解析工作进程入口。 */
 function resolveWorkerEntrypoint() {
   const extension = __filename.endsWith('.ts') ? '.ts' : '.js';
   return join(__dirname, `plugin-worker.thread${extension}`);
 }
 
+/** 解析工作进程执行参数。 */
 function resolveWorkerExecArgv() {
   if (!__filename.endsWith('.ts')) return [];
   return ['-r', 'ts-node/register', '-r', 'tsconfig-paths/register'];

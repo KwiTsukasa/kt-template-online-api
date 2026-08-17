@@ -45,6 +45,7 @@ export class SystemMessageFanoutService {
     private readonly templateRenderer: SystemMessageTemplateRendererService,
   ) {}
 
+  /** 执行一次。 */
   async runOnce(now: Date = new Date()): Promise<number> {
     let claimed = 0;
     for (let index = 0; index < SYSTEM_MESSAGE_BATCH_SIZE; index += 1) {
@@ -56,6 +57,7 @@ export class SystemMessageFanoutService {
     return claimed;
   }
 
+  /** 返回声明单个。 */
   private async claimOne(now: Date): Promise<ClaimToken | null> {
     return this.dataSource.transaction(async (manager) => {
       const events = manager.getRepository(QqbotMessageEvent);
@@ -98,6 +100,7 @@ export class SystemMessageFanoutService {
     });
   }
 
+  /** 处理声明。 */
   private async processClaim(token: ClaimToken, now: Date): Promise<void> {
     if (this.isExpired(token.event, now)) {
       await this.finish(
@@ -172,6 +175,7 @@ export class SystemMessageFanoutService {
     }
   }
 
+  /** 查找匹配的订阅。 */
   private async findMatchingSubscriptions(
     event: QqbotMessageEvent,
     adapter: SystemMessageSourceAdapter,
@@ -187,6 +191,7 @@ export class SystemMessageFanoutService {
     );
   }
 
+  /** 返回扇出输出订阅。 */
   private async fanOutSubscription(
     manager: EntityManager,
     token: ClaimToken,
@@ -235,6 +240,7 @@ export class SystemMessageFanoutService {
     return 'handled';
   }
 
+  /** 判断严格地更新的事件是否存在。 */
   private async hasStrictlyNewerEvent(
     manager: EntityManager,
     event: QqbotMessageEvent,
@@ -266,6 +272,7 @@ export class SystemMessageFanoutService {
     return !!newerEvent;
   }
 
+  /** 取代当前事件投递记录。 */
   private async supersedeCurrentEventDeliveries(
     manager: EntityManager,
     event: QqbotMessageEvent,
@@ -282,6 +289,7 @@ export class SystemMessageFanoutService {
     );
   }
 
+  /** 取代更早投递记录。 */
   private async supersedeEarlierDeliveries(
     manager: EntityManager,
     event: QqbotMessageEvent,
@@ -307,6 +315,7 @@ export class SystemMessageFanoutService {
     );
   }
 
+  /** 创建投递记录。 */
   private async createDeliveries(
     manager: EntityManager,
     event: QqbotMessageEvent,
@@ -382,6 +391,7 @@ export class SystemMessageFanoutService {
     }
   }
 
+  /** 创建投递条件分支不存在的。 */
   private async createDeliveryIfAbsent(
     manager: EntityManager,
     event: QqbotMessageEvent,
@@ -437,6 +447,7 @@ export class SystemMessageFanoutService {
     }
   }
 
+  /** 完成系统消息扇出记录。 */
   private async finish(
     token: ClaimToken,
     status: 'completed' | 'failed' | 'retry',
@@ -460,6 +471,7 @@ export class SystemMessageFanoutService {
     );
   }
 
+  /** 重试或失败。 */
   private async retryOrFail(
     token: ClaimToken,
     now: Date,
@@ -524,6 +536,7 @@ export class SystemMessageFanoutService {
     );
   }
 
+  /** 判断严格地更早是否成立。 */
   private isStrictlyEarlier(
     candidate: QqbotMessageEvent,
     current: QqbotMessageEvent,
@@ -536,6 +549,7 @@ export class SystemMessageFanoutService {
     );
   }
 
+  /** 判断已过期的是否成立。 */
   private isExpired(event: QqbotMessageEvent, now: Date): boolean {
     return (
       now.getTime() >=
@@ -543,6 +557,7 @@ export class SystemMessageFanoutService {
     );
   }
 
+  /** 返回拥有声明。 */
   private ownsClaim(event: QqbotMessageEvent, token: ClaimToken): boolean {
     return (
       event.id === token.event.id &&
@@ -553,6 +568,7 @@ export class SystemMessageFanoutService {
     );
   }
 
+  /** 判断可渲染的变量是否存在。 */
   private hasRenderableVariables(
     readiness: SystemMessageDeliveryReadiness,
   ): readiness is Extract<
@@ -562,12 +578,14 @@ export class SystemMessageFanoutService {
     return readiness.status === 'ready' || readiness.status === 'waiting_ddns';
   }
 
+  /** 判断重复键错误是否成立。 */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const record = error as { code?: unknown; errno?: unknown };
     return record.code === 'ER_DUP_ENTRY' || record.errno === 1062;
   }
 
+  /** 返回安全消息。 */
   private safeMessage(error: SystemMessageContractError): string {
     return error.message.slice(0, 500);
   }

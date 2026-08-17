@@ -16,6 +16,7 @@ export class QqbotMessageTargetOptionsService {
     private readonly reverseWsService: QqbotReverseWsService,
   ) {}
 
+  /** 列出目标选项。 */
   async listTargetOptions(
     selfId: string,
   ): Promise<QqbotMessagePushTargetOptionsResponse> {
@@ -49,6 +50,7 @@ export class QqbotMessageTargetOptionsService {
     }
   }
 
+  /** 规范化响应。 */
   private normalizeResponse(
     response: { data?: unknown; retcode?: number; status?: string },
     targetType: QqbotMessagePushTargetType,
@@ -65,6 +67,7 @@ export class QqbotMessageTargetOptionsService {
     );
   }
 
+  /** 规范化候选项。 */
   private normalizeCandidate(
     candidate: unknown,
     targetType: QqbotMessagePushTargetType,
@@ -89,10 +92,12 @@ export class QqbotMessageTargetOptionsService {
     };
   }
 
+  /** 返回已知的名称。 */
   private knownName(value: unknown): null | string {
     return typeof value === 'string' && value.trim() ? value.trim() : null;
   }
 
+  /** 返回优先选择候选项。 */
   private preferCandidate(
     current: QqbotMessagePushTargetOption | undefined,
     candidate: QqbotMessagePushTargetOption,
@@ -108,6 +113,7 @@ export class QqbotMessageTargetOptionsService {
       : current;
   }
 
+  /** 返回不可用。 */
   private unavailable(
     reasonCode: string,
   ): QqbotMessagePushTargetOptionsResponse {

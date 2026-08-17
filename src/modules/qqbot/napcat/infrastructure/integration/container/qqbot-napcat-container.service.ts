@@ -106,6 +106,7 @@ export class QqbotNapcatContainerService {
     return runtime;
   }
 
+  /** 预留创建容器。 */
   async reserveCreateContainer() {
     if (!this.isManagedMode()) {
       return this.getLegacyRuntime();
@@ -116,6 +117,7 @@ export class QqbotNapcatContainerService {
     });
   }
 
+  /** 启动创建容器。 */
   async startCreateContainer(runtime: QqbotNapcatRuntime) {
     if (this.getManagedMode() !== 'ssh' || !runtime.id) return true;
 
@@ -372,6 +374,7 @@ export class QqbotNapcatContainerService {
     return toNapcatDockerDeviceOptions(identity);
   }
 
+  /** 解析创建容器设备身份。 */
   private async resolveCreateContainerDeviceIdentity(
     container: NapcatContainer,
   ): Promise<NapcatDockerDeviceOptions | undefined> {
@@ -385,6 +388,7 @@ export class QqbotNapcatContainerService {
     return toNapcatDockerDeviceOptions(identity);
   }
 
+  /** 解析绑定设备身份标识。 */
   private async resolveBindingDeviceIdentityId(
     accountId: string,
     containerId: string,
@@ -627,6 +631,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     return this.removeContainer(containerId);
   }
 
+  /** 移除未绑定的创建容器。 */
   async removeUnboundCreateContainer(containerId?: string) {
     if (!containerId) return false;
 
@@ -685,6 +690,7 @@ docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME"
     return true;
   }
 
+  /** 启动运行态容器。 */
   private async startRuntimeContainer(runtime: QqbotNapcatRuntime) {
     if (this.getManagedMode() !== 'ssh' || !runtime.id || !runtime.name) {
       return false;
@@ -1181,6 +1187,7 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     return container ? this.toRuntime(container) : null;
   }
 
+  /** 查找主要的容器（按账号标识匹配）。 */
   async findPrimaryContainerByAccountId(accountId: string) {
     return this.getPrimaryRuntime(accountId);
   }
@@ -1337,6 +1344,7 @@ docker logs --since "$SINCE" --tail 300 "$NAME" 2>&1 || true
     await this.recordPlannedProfiles(input);
   }
 
+  /** 构建远程创建脚本。 */
   private buildRemoteCreateScript(input: {
     account?: string;
     accountId?: string;
@@ -1554,6 +1562,7 @@ ${accountRunFlag}${passwordRunFlag}${deviceRunFlags}  -p "$PORT:6099" \\
 `;
   }
 
+  /** 构建远程变更锁脚本。 */
   private buildRemoteMutationLockScript() {
     return `NAPCAT_RUNTIME_MUTATION_LOCK=${this.sh(
       NAPCAT_RUNTIME_MUTATION_LOCK_PATH,
@@ -1591,6 +1600,7 @@ if [ -e "$NAPCAT_RUNTIME_MIGRATION_STATE" ] || [ -L "$NAPCAT_RUNTIME_MIGRATION_S
 }`;
   }
 
+  /** 构建远程Docker生命周期脚本。 */
   private buildRemoteDockerLifecycleScript(
     action: 'restart' | 'start',
     name: string,
@@ -1603,6 +1613,7 @@ docker ${action} "$NAME" >/dev/null
 `;
   }
 
+  /** 记录已规划的配置档案。 */
   private async recordPlannedProfiles(input: {
     account?: string;
     accountId?: string;
@@ -1661,6 +1672,7 @@ docker ${action} "$NAME" >/dev/null
     });
   }
 
+  /** 渲染配置文件。 */
   private renderConfigFiles(files: NapcatConfigFile[]) {
     return files
       .map((file) => {

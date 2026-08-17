@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { getMetadataArgsStorage } from 'typeorm';
 import * as request from 'supertest';
 import { ToolsService } from '@/common';
-import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { NapcatConfigWriterService } from '../../../../src/modules/qqbot/napcat/application/runtime/napcat-config-writer.service';
 import { NapcatRuntimeProfileService } from '../../../../src/modules/qqbot/napcat/application/runtime/napcat-runtime-profile.service';
 import { NapcatRuntimeProfileInspectorService } from '../../../../src/modules/qqbot/napcat/application/runtime/napcat-runtime-profile-inspector.service';

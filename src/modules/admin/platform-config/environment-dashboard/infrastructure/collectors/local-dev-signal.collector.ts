@@ -28,6 +28,7 @@ export class LocalDevSignalCollector {
     private readonly config: EnvironmentDashboardConfigService = new EnvironmentDashboardConfigService(),
   ) {}
 
+  /** 收集本地开发环境信号采集器记录。 */
   async collect(context: LocalDevSignalCollectContext = {}): Promise<EnvironmentSite> {
     const observedAt = context.observedAt || new Date().toISOString();
     const services = [
@@ -44,6 +45,7 @@ export class LocalDevSignalCollector {
     };
   }
 
+  /** 创建API服务。 */
   private createApiService(observedAt: string): EnvironmentService {
     const report = this.runtimeHealthService?.getRuntimeHealth();
     const status = this.mapRuntimeStatus(report?.status);
@@ -76,6 +78,7 @@ export class LocalDevSignalCollector {
     return this.createService('local-api', 'API Runtime', [signal]);
   }
 
+  /** 创建管理端服务。 */
   private createAdminService(observedAt: string): EnvironmentService {
     const adminUrl = this.config.get('ENV_DASHBOARD_ADMIN_LOCAL_URL');
     const signal: EnvironmentSignal = adminUrl
@@ -109,6 +112,7 @@ export class LocalDevSignalCollector {
     return this.createService('local-admin', 'Admin Frontend', [signal]);
   }
 
+  /** 映射运行态状态。 */
   private mapRuntimeStatus(status?: RuntimeHealthStatus): EnvironmentHealthStatus {
     if (status === 'live' || status === 'ready') return 'ok';
     if (status === 'blocked') return 'blocked';
@@ -116,6 +120,7 @@ export class LocalDevSignalCollector {
     return 'unknown';
   }
 
+  /** 创建服务。 */
   private createService(
     id: string,
     label: string,
@@ -130,6 +135,7 @@ export class LocalDevSignalCollector {
     };
   }
 
+  /** 创建节点。 */
   private createNode(
     id: string,
     label: string,

@@ -24,6 +24,7 @@ type RepeaterPluginCreateOptions =
   | RepeaterPluginOptions
   | QqbotGenericPluginCreateOptions;
 
+/** 创建插件。 */
 export function createPlugin(options: RepeaterPluginCreateOptions) {
   if (isRepeaterGenericPluginCreateOptions(options)) {
     return buildRepeaterPlugin({
@@ -35,6 +36,7 @@ export function createPlugin(options: RepeaterPluginCreateOptions) {
   return buildRepeaterPlugin(options);
 }
 
+/** 构建复读器插件。 */
 function buildRepeaterPlugin(options: RepeaterPluginOptions) {
   const application = new RepeaterApplication(
     options.host,
@@ -64,6 +66,7 @@ function buildRepeaterPlugin(options: RepeaterPluginOptions) {
   };
 }
 
+/** 判断复读器通用插件创建选项是否成立。 */
 function isRepeaterGenericPluginCreateOptions(
   options: RepeaterPluginCreateOptions,
 ): options is QqbotGenericPluginCreateOptions {
@@ -73,6 +76,7 @@ function isRepeaterGenericPluginCreateOptions(
   );
 }
 
+/** 规范化复读器清单。 */
 function normalizeRepeaterManifest(
   manifest: QqbotGenericPluginCreateOptions['manifest'],
 ): RepeaterManifest {
@@ -83,6 +87,7 @@ function normalizeRepeaterManifest(
   };
 }
 
+/** 创建复读器通用主机适配器。 */
 function createRepeaterGenericHostAdapter(
   options: QqbotGenericPluginCreateOptions,
 ): RepeaterPluginHost {
@@ -113,6 +118,7 @@ function createRepeaterGenericHostAdapter(
   };
 }
 
+/** 处理复读器通用事件。 */
 async function handleRepeaterGenericEvent(
   eventKey: string,
   event: unknown,
@@ -126,6 +132,7 @@ async function handleRepeaterGenericEvent(
   return handleMessage(event as any);
 }
 
+/** 返回调用复读器通用主机。 */
 async function callRepeaterGenericHost<TResult = any>(
   host: Record<string, unknown>,
   method: string,

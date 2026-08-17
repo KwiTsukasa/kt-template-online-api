@@ -2,7 +2,7 @@ import type { ConfigService } from '@nestjs/config';
 import {
   NetworkTcpReleasePolicyError,
   NetworkTcpReleasePolicyService,
-} from '../../../src/modules/admin/platform-config/network-management/network-tcp-release-policy.service';
+} from '../../../src/modules/admin/platform-config/network-management/application/network-tcp-release-policy.service';
 
 function policy(values: Record<string, string | undefined>) {
   return new NetworkTcpReleasePolicyService({

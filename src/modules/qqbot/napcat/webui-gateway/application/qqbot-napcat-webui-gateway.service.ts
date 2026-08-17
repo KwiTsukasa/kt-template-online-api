@@ -77,6 +77,7 @@ export class NapcatWebuiGatewayAuditService {
     private readonly auditRepository: Repository<NapcatWebuiGatewayAudit>,
   ) {}
 
+  /** 记录NapCatWebUI审计记录。 */
   async record(input: NapcatWebuiGatewayAuditRecordInput) {
     const entity = this.auditRepository.create({
       accountId: input.accountId,
@@ -93,11 +94,13 @@ export class NapcatWebuiGatewayAuditService {
     return this.auditRepository.save(entity);
   }
 
+  /** 清理详情。 */
   private sanitizeDetail(detail?: null | Record<string, unknown>) {
     if (!detail) return null;
     return this.sanitizeValue(detail) as Record<string, unknown>;
   }
 
+  /** 清理值。 */
   private sanitizeValue(value: unknown): unknown {
     if (Array.isArray(value)) {
       return value.map((item) => this.sanitizeValue(item));
@@ -114,6 +117,7 @@ export class NapcatWebuiGatewayAuditService {
     );
   }
 
+  /** 判断敏感的详情键是否成立。 */
   private isSensitiveDetailKey(key: string) {
     const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
     return (
@@ -127,10 +131,12 @@ export class NapcatWebuiGatewayAuditService {
     );
   }
 
+  /** 判断不安全的详情字符串是否成立。 */
   private isUnsafeDetailString(value: string) {
     return UNSAFE_DETAIL_STRING_PATTERN.test(value);
   }
 
+  /** 返回到可空的文本。 */
   private toNullableText(value: null | string | undefined, limit: number) {
     const text = String(value || '').trim();
     return text ? text.slice(0, limit) : null;
@@ -146,6 +152,7 @@ export class QqbotNapcatWebuiGatewayService {
     private readonly auditService: NapcatWebuiGatewayAuditService,
   ) {}
 
+  /** 创建会话。 */
   async createSession(
     input: QqbotNapcatWebuiGatewaySessionCreateInput,
   ): Promise<QqbotNapcatWebuiSessionResponseDto> {
@@ -209,6 +216,7 @@ export class QqbotNapcatWebuiGatewayService {
     };
   }
 
+  /** 返回心跳。 */
   heartbeat(
     input: QqbotNapcatWebuiGatewaySessionLifecycleInput,
   ): Promise<QqbotNapcatWebuiGatewayLifecycleResult> {
@@ -220,6 +228,7 @@ export class QqbotNapcatWebuiGatewayService {
     });
   }
 
+  /** 吊销QQBotNapCatWebUI记录。 */
   revoke(
     input: QqbotNapcatWebuiGatewaySessionLifecycleInput,
   ): Promise<QqbotNapcatWebuiGatewayLifecycleResult> {
@@ -231,6 +240,7 @@ export class QqbotNapcatWebuiGatewayService {
     });
   }
 
+  /** 返回必需账号标识。 */
   private requireAccountId(accountId: string) {
     const normalized = String(accountId || '').trim();
     if (!ACCOUNT_ID_PATTERN.test(normalized)) {
@@ -239,6 +249,7 @@ export class QqbotNapcatWebuiGatewayService {
     return normalized;
   }
 
+  /** 返回必需会话标识。 */
   private requireSessionId(sessionId: string) {
     const normalized = String(sessionId || '').trim();
     if (!SESSION_ID_PATTERN.test(normalized)) {
@@ -247,6 +258,7 @@ export class QqbotNapcatWebuiGatewayService {
     return normalized;
   }
 
+  /** 返回到网关目标。 */
   private toGatewayTarget(runtime: QqbotNapcatRuntime) {
     const upstreamBaseUrl = String(runtime.baseUrl || '').trim();
     const webuiToken = String(runtime.webuiToken || '').trim();
@@ -265,6 +277,7 @@ export class QqbotNapcatWebuiGatewayService {
     };
   }
 
+  /** 返回到WebUI状态。 */
   private toWebuiStatus(
     runtime: QqbotNapcatRuntime,
   ): QqbotNapcatWebuiStatus {

@@ -11,7 +11,7 @@ import {
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentAdminUser, throwVbenError, vbenSuccess } from '@/common';
 import type { AdminRequest } from '@/modules/admin/contract/admin.types';
-import { JwtAuthGuard } from '@/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import { AdminUser } from '@/modules/admin/identity/user/admin-user.entity';
 import { QqbotNapcatWebuiGatewayService } from '../application/qqbot-napcat-webui-gateway.service';
 import {
@@ -31,6 +31,7 @@ export class QqbotNapcatWebuiGatewayController {
     private readonly gatewayService: QqbotNapcatWebuiGatewayService,
   ) {}
 
+  /** 创建会话。 */
   @Post('session')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '创建 NapCat WebUI Gateway 会话' })
@@ -50,6 +51,7 @@ export class QqbotNapcatWebuiGatewayController {
     );
   }
 
+  /** 返回心跳。 */
   @Post('session/:sessionId/heartbeat')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '刷新 NapCat WebUI Gateway 会话心跳' })
@@ -68,6 +70,7 @@ export class QqbotNapcatWebuiGatewayController {
     );
   }
 
+  /** 吊销QQBotNapCatWebUI记录。 */
   @Post('session/:sessionId/revoke')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '撤销 NapCat WebUI Gateway 会话' })
@@ -86,12 +89,14 @@ export class QqbotNapcatWebuiGatewayController {
     );
   }
 
+  /** 断言WebUI权限。 */
   private assertWebuiPermission(user: AdminUser) {
     if (!this.hasWebuiPermission(user)) {
       throwVbenError('无权访问 NapCat WebUI', HttpStatus.FORBIDDEN);
     }
   }
 
+  /** 判断WebUI权限是否存在。 */
   private hasWebuiPermission(user: AdminUser) {
     const roles = Array.isArray(user?.roles) ? user.roles : [];
     return roles.some((role) => {
@@ -110,6 +115,7 @@ export class QqbotNapcatWebuiGatewayController {
     });
   }
 
+  /** 返回必需账号标识。 */
   private requireAccountId(accountId: string) {
     const normalized = String(accountId || '').trim();
     if (!ACCOUNT_ID_PATTERN.test(normalized)) {
@@ -118,6 +124,7 @@ export class QqbotNapcatWebuiGatewayController {
     return normalized;
   }
 
+  /** 返回必需会话标识。 */
   private requireSessionId(sessionId: string) {
     const normalized = String(sessionId || '').trim();
     if (!SESSION_ID_PATTERN.test(normalized)) {
@@ -126,6 +133,7 @@ export class QqbotNapcatWebuiGatewayController {
     return normalized;
   }
 
+  /** 返回到客户端证据。 */
   private toClientEvidence(user: AdminUser, req: AdminRequest) {
     const userAgent = req.headers['user-agent'];
 

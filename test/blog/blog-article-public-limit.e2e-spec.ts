@@ -7,7 +7,7 @@ import { BlogArticleService } from '../../src/modules/blog/application/blog-arti
 import { BlogArticleController } from '../../src/modules/blog/contract/blog-article.controller';
 import { BlogArticle } from '../../src/modules/blog/infrastructure/persistence/blog-article.entity';
 import { BlogTermService } from '../../src/modules/blog/application/blog-term.service';
-import { JwtAuthGuard } from '../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
 
 describe('Blog article public pagination HTTP contract (e2e)', () => {
   let app: INestApplication;

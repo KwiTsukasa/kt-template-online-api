@@ -1,4 +1,4 @@
-jest.mock('../../src/modules/admin/identity/auth/jwt-auth.guard', () => ({
+jest.mock('../../src/modules/admin/identity/auth/presentation/jwt-auth.guard', () => ({
   JwtAuthGuard: class {
     /**
      * 判断测试请求是否允许进入控制器。

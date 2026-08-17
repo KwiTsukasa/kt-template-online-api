@@ -23,10 +23,12 @@ export class EnvironmentEventMaterializer {
     private readonly maxRecentEvents = 200,
   ) {}
 
+  /** 返回事件。 */
   events$() {
     return this.eventSubject.asObservable();
   }
 
+  /** 返回实体化。 */
   materialize(
     envelope: EnvironmentEventEnvelope,
     now = new Date(),
@@ -59,10 +61,12 @@ export class EnvironmentEventMaterializer {
     return event;
   }
 
+  /** 读取最近事件。 */
   getRecentEvents() {
     return [...this.events];
   }
 
+  /** 判断过期的已保留的是否成立。 */
   private isStaleRetained(
     envelope: EnvironmentEventEnvelope,
     now: Date,
@@ -72,6 +76,7 @@ export class EnvironmentEventMaterializer {
     return new Date(envelope.expiresAt).getTime() <= now.getTime();
   }
 
+  /** 追加最近事件。 */
   private appendRecentEvent(event: EnvironmentEvent) {
     this.events.push(event);
     if (this.events.length > this.maxRecentEvents) {

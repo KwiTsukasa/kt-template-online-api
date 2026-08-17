@@ -19,6 +19,7 @@ export class WireguardReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
+  /** 检查WireGuard只读的记录。 */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_TENCENT_WIREGUARD_HEALTH_URL',

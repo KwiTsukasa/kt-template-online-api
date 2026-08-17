@@ -71,6 +71,7 @@ type ProxyRequestContext = {
   session: NapcatWebuiGatewaySession;
 };
 
+/** 清理网关代理路径。 */
 export function sanitizeGatewayProxyPath(input: ProxyPathInput) {
   const raw = Array.isArray(input) ? input.join('/') : String(input || '');
   const trimmed = raw.trim();
@@ -94,6 +95,7 @@ export function sanitizeGatewayProxyPath(input: ProxyPathInput) {
   return path;
 }
 
+/** 返回重写NapCat位置请求头。 */
 export function rewriteNapcatLocationHeader(input: RewriteLocationInput) {
   const gatewayPrefix = `${input.publicSessionPrefix}/${encodeURIComponent(
     input.sessionId,
@@ -131,6 +133,7 @@ export function rewriteNapcatLocationHeader(input: RewriteLocationInput) {
   }
 }
 
+/** 构建网关Cookie路径重写。 */
 export function buildGatewayCookiePathRewrite(input: CookiePathRewriteInput) {
   return {
     '*': `${input.publicSessionPrefix}/${encodeURIComponent(
@@ -139,6 +142,7 @@ export function buildGatewayCookiePathRewrite(input: CookiePathRewriteInput) {
   };
 }
 
+/** 返回重写NapCat集合Cookie请求头。 */
 export function rewriteNapcatSetCookieHeaders(
   headers: string | string[] | undefined,
   input: CookiePathRewriteInput,
@@ -156,6 +160,7 @@ export function rewriteNapcatSetCookieHeaders(
   });
 }
 
+/** 返回重写NapCat服务工作进程允许的请求头。 */
 export function rewriteNapcatServiceWorkerAllowedHeader(
   input: RewriteServiceWorkerAllowedInput,
 ) {
@@ -186,6 +191,7 @@ export function rewriteNapcatServiceWorkerAllowedHeader(
   }
 }
 
+/** 读取服务工作进程命名空间路径。 */
 function getServiceWorkerNamespacePath(requestPath: string) {
   const segments = requestPath.split('/').filter(Boolean);
   if (segments[0] === 'webui') {
@@ -201,6 +207,7 @@ function getServiceWorkerNamespacePath(requestPath: string) {
   return undefined;
 }
 
+/** 返回重写NapCat文本响应。 */
 export function rewriteNapcatTextResponse(input: RewriteTextResponseInput) {
   const gatewayWebuiPrefix = `${input.publicSessionPrefix}/${encodeURIComponent(
     input.sessionId,
@@ -218,6 +225,7 @@ export function rewriteNapcatTextResponse(input: RewriteTextResponseInput) {
   });
 }
 
+/** 返回重写NapCatWeb套接字搜索。 */
 export function rewriteNapcatWebSocketSearch(
   input: RewriteWebSocketSearchInput,
 ) {
@@ -231,6 +239,7 @@ export function rewriteNapcatWebSocketSearch(
   return serialized ? `?${serialized}` : '';
 }
 
+/** 注入网关浏览器令牌。 */
 function injectGatewayBrowserToken(
   input: Pick<RewriteTextResponseInput, 'body' | 'sessionId'>,
 ) {
@@ -251,6 +260,7 @@ function injectGatewayBrowserToken(
   return input.body.replace(/<script\b/i, `${script}<script`);
 }
 
+/** 构建网关浏览器令牌脚本。 */
 function buildGatewayBrowserTokenScript(sessionId: string) {
   const browserToken = `${GATEWAY_BROWSER_TOKEN_PREFIX}${sessionId}`;
   const storedTokenLiteral = JSON.stringify(JSON.stringify(browserToken));
@@ -264,6 +274,7 @@ function buildGatewayBrowserTokenScript(sessionId: string) {
   ].join('');
 }
 
+/** 解码代理路径。 */
 function decodeProxyPath(value: string) {
   try {
     let decoded = value;
@@ -281,6 +292,7 @@ function decodeProxyPath(value: string) {
   throw new BadRequestException('Gateway proxy path is invalid');
 }
 
+/** 返回到网关重定向位置。 */
 function toGatewayRedirectLocation(
   gatewayPrefix: string,
   upstreamPathname: string,
@@ -294,6 +306,7 @@ function toGatewayRedirectLocation(
   }
 }
 
+/** 判断是否应当重写NapCat文本响应。 */
 export function shouldRewriteNapcatTextResponse(upstreamPath: string) {
   const pathname = new URL(upstreamPath, 'http://gateway.local').pathname;
   const segments = pathname.split('/').filter(Boolean);
@@ -366,6 +379,7 @@ export class NapcatWebuiProxyService {
     this.webSocketProxy = this.createProxy(false, true);
   }
 
+  /** 处理HTTP代理。 */
   async handleHttpProxy(
     sessionId: string,
     proxyPath: ProxyPathInput,
@@ -386,6 +400,7 @@ export class NapcatWebuiProxyService {
     return proxy(req, res, next);
   }
 
+  /** 绑定Web套接字升级。 */
   bindWebSocketUpgrade(server: Server) {
     if (this.boundWebSocketServers.has(server)) return;
     this.boundWebSocketServers.add(server);
@@ -394,6 +409,7 @@ export class NapcatWebuiProxyService {
     });
   }
 
+  /** 处理Web套接字升级。 */
   private async handleWebSocketUpgrade(
     req: IncomingMessage,
     socket: Socket,
@@ -422,6 +438,7 @@ export class NapcatWebuiProxyService {
     }
   }
 
+  /** 创建代理。 */
   private createProxy(
     rewriteTextResponse = false,
     webSocketOnly = false,
@@ -454,6 +471,7 @@ export class NapcatWebuiProxyService {
     });
   }
 
+  /** 创建代理响应处理器。 */
   private createProxyResponseHandler(rewriteTextResponse: boolean) {
     if (!rewriteTextResponse) {
       return (proxyRes: IncomingMessage, req: Request) => {
@@ -481,6 +499,7 @@ export class NapcatWebuiProxyService {
     };
   }
 
+  /** 返回必需代理请求上下文。 */
   private requireProxyRequestContext(req: IncomingMessage) {
     const context = this.proxyRequestContexts.get(req);
     if (!context) {
@@ -489,6 +508,7 @@ export class NapcatWebuiProxyService {
     return context;
   }
 
+  /** 返回重写响应请求头。 */
   private rewriteResponseHeaders(
     headers: IncomingHttpHeaders,
     session: NapcatWebuiGatewaySession,
@@ -534,6 +554,7 @@ export class NapcatWebuiProxyService {
     }
   }
 
+  /** 构建上游路径。 */
   private buildUpstreamPath(proxyPath: ProxyPathInput, originalUrl?: string) {
     const pathname = sanitizeGatewayProxyPath(proxyPath);
     const queryIndex = String(originalUrl || '').indexOf('?');
@@ -541,6 +562,7 @@ export class NapcatWebuiProxyService {
     return `${pathname}${query}`;
   }
 
+  /** 匹配网关升级。 */
   private matchGatewayUpgrade(rawUrl: string) {
     const url = new URL(rawUrl, 'http://gateway.local');
     const match = url.pathname.match(
@@ -555,12 +577,14 @@ export class NapcatWebuiProxyService {
     };
   }
 
+  /** 移除浏览器请求头。 */
   private stripBrowserHeaders(req: IncomingMessage) {
     STRIPPED_UPSTREAM_HEADERS.forEach((header) => {
       delete req.headers[header];
     });
   }
 
+  /** 写入代理错误。 */
   private writeProxyError(res: Response | Socket) {
     if ('headersSent' in res) {
       if (res.headersSent) return;
@@ -573,6 +597,7 @@ export class NapcatWebuiProxyService {
     this.rejectUpgrade(res);
   }
 
+  /** 返回拒绝升级。 */
   private rejectUpgrade(socket: Socket) {
     if (socket.writable) {
       socket.write(

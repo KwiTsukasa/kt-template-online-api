@@ -6,7 +6,7 @@ import * as request from 'supertest';
 import { ToolsService } from '../../src/common';
 import { MinioClientService } from '../../src/modules/asset/application/asset-minio.service';
 import { MinioClientController } from '../../src/modules/asset/contract/asset-minio.controller';
-import { JwtAuthGuard } from '../../src/modules/admin/identity/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
 
 const INTERNAL_MINIO_ENDPOINT = 'http://10.22.52.201:9000';
 

@@ -13,6 +13,7 @@ import { QQBOT_MESSAGE_PUSH_PERMISSION } from './qqbot-message-push-permission.d
 export class QqbotMessagePushPermissionGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
+  /** 判断是否允许激活。 */
   canActivate(context: ExecutionContext): boolean {
     const required = this.reflector.getAllAndOverride<string[]>(
       QQBOT_MESSAGE_PUSH_PERMISSION,
@@ -43,6 +44,7 @@ export class QqbotMessagePushPermissionGuard implements CanActivate {
     this.forbidden();
   }
 
+  /** 返回禁止的。 */
   private forbidden(): never {
     return throwVbenError('Forbidden Exception', HttpStatus.FORBIDDEN);
   }

@@ -1,4 +1,4 @@
-import { classifyTcpNatmapEndpointSource } from '../../../src/modules/admin/platform-config/network-management/network-tcp-natmap-source-eligibility';
+import { classifyTcpNatmapEndpointSource } from '../../../src/modules/admin/platform-config/network-management/domain/network-tcp-natmap-source-eligibility';
 
 function source(overrides: Record<string, unknown> = {}) {
   return {

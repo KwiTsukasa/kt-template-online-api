@@ -8,9 +8,9 @@ import {
 } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import { SystemMessageSourceRegistry } from '../../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
 import { QqbotMessageSubscriptionService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-message-subscription.service';
-import { NetworkStunMessageSourceAdapter } from '../../../../src/modules/admin/platform-config/network-management/network-stun-message-source.adapter';
-import { NetworkDdnsRecord } from '../../../../src/modules/admin/platform-config/network-management/network-ddns.entity';
-import { NetworkPortForward } from '../../../../src/modules/admin/platform-config/network-management/network-management.entity';
+import { NetworkStunMessageSourceAdapter } from '../../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-stun-message-source.adapter';
+import { NetworkDdnsRecord } from '../../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
+import { NetworkPortForward } from '../../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 import { QqbotMessageSubscription } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-subscription.entity';
 import { QqbotMessagePublishBinding } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
 import { QqbotMessageDelivery } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-delivery.entity';

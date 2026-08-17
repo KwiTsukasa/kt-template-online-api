@@ -28,6 +28,7 @@ export class InternalSessionController {
     private readonly config: NapcatWebuiGatewayConfigService,
   ) {}
 
+  /** 创建会话。 */
   @Post('sessions')
   async createSession(
     @Headers('x-kt-gateway-secret') secret: string,
@@ -53,6 +54,7 @@ export class InternalSessionController {
     };
   }
 
+  /** 返回心跳。 */
   @Post('sessions/:sessionId/heartbeat')
   heartbeat(
     @Param('sessionId') sessionId: string,
@@ -66,6 +68,7 @@ export class InternalSessionController {
     });
   }
 
+  /** 吊销内部会话记录。 */
   @Post('sessions/:sessionId/revoke')
   async revoke(
     @Param('sessionId') sessionId: string,
@@ -81,6 +84,7 @@ export class InternalSessionController {
     return result;
   }
 
+  /** 返回健康状态。 */
   @Get('health')
   health() {
     return {
@@ -89,6 +93,7 @@ export class InternalSessionController {
     };
   }
 
+  /** 返回必需内部密钥。 */
   private requireInternalSecret(secret: string) {
     const configured = this.config.internalSecret();
     if (!configured || secret !== configured) {

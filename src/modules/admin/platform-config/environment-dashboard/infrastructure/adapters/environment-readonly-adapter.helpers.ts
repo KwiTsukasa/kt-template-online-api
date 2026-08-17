@@ -8,6 +8,7 @@ import type {
   EnvironmentSignal,
 } from '../../domain/environment-dashboard.types';
 
+/** 创建未接线的适配器信号。 */
 export function createUnwiredAdapterSignal(
   id: string,
   label: string,
@@ -23,6 +24,7 @@ export function createUnwiredAdapterSignal(
   };
 }
 
+/** 创建实时适配器信号。 */
 export function createLiveAdapterSignal(
   id: string,
   label: string,
@@ -43,6 +45,7 @@ export function createLiveAdapterSignal(
   };
 }
 
+/** 创建错误适配器信号。 */
 export function createErrorAdapterSignal(
   id: string,
   label: string,
@@ -60,15 +63,18 @@ export function createErrorAdapterSignal(
   };
 }
 
+/** 判断只读的HTTP成功是否成立。 */
 export function isReadonlyHttpOk(status: number): boolean {
   return status >= 200 && status < 400;
 }
 
+/** 返回拼接只读的URL。 */
 export function joinReadonlyUrl(baseUrl: string, path: string): string {
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   return new URL(path.replace(/^\/+/, ''), normalizedBase).toString();
 }
 
+/** 解析JSON预览。 */
 export function parseJsonPreview(
   bodyPreview: string,
 ): Record<string, unknown> {
@@ -81,6 +87,7 @@ export function parseJsonPreview(
   }
 }
 
+/** 返回作为记录。 */
 export function asRecord(
   value: unknown,
 ): Record<string, unknown> | undefined {
@@ -89,16 +96,19 @@ export function asRecord(
     : undefined;
 }
 
+/** 返回作为数组。 */
 export function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+/** 返回作为字符串。 */
 export function asString(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
   if (typeof value === 'number') return `${value}`;
   return undefined;
 }
 
+/** 返回作为数字。 */
 export function asNumber(value: unknown): number | undefined {
   const numberValue =
     typeof value === 'number'

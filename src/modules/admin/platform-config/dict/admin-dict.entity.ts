@@ -72,6 +72,7 @@ export class AdminDict {
   })
   updateTime: KtDateTime;
 
+  /** 创建标识。 */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

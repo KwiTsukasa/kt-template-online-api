@@ -22,6 +22,7 @@ export class JenkinsReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
+  /** 检查Jenkins只读的记录。 */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_JENKINS_URL',
@@ -70,6 +71,7 @@ export class JenkinsReadonlyAdapter {
     }
   }
 
+  /** 构建上次构建URL。 */
   private buildLastBuildUrl(): string {
     const jobPath = this.config
       .get('ENV_DASHBOARD_JENKINS_JOB')
@@ -83,6 +85,7 @@ export class JenkinsReadonlyAdapter {
     );
   }
 
+  /** 创建认证请求头。 */
   private createAuthHeaders(): Record<string, string> | undefined {
     const username = this.config.get('ENV_DASHBOARD_JENKINS_USERNAME');
     const token = this.config.get('ENV_DASHBOARD_JENKINS_TOKEN');

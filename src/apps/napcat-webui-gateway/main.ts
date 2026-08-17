@@ -5,6 +5,7 @@ import { NapcatWebuiGatewayConfigService } from './config/napcat-webui-gateway-c
 import { NapcatWebuiProxyService } from './infrastructure/proxy/napcat-webui-proxy.service';
 import { NapcatWebuiGatewayModule } from './napcat-webui-gateway.module';
 
+/** 返回引导流程。 */
 async function bootstrap() {
   const app = await NestFactory.create(NapcatWebuiGatewayModule, {
     bodyParser: false,

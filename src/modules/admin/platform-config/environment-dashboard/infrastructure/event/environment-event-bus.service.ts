@@ -79,6 +79,7 @@ export class EnvironmentEventBusService
     });
   }
 
+  /** 订阅环境事件事件总线记录。 */
   subscribe(subscriber: EnvironmentEventSubscriber): () => void {
     this.subscribers.add(subscriber);
     return () => {
@@ -86,12 +87,14 @@ export class EnvironmentEventBusService
     };
   }
 
+  /** 发布环境事件事件总线记录。 */
   async publish(event: EnvironmentEventEnvelope) {
     this.emitLocal(event);
     if (!this.client?.connected) return;
     this.client.publish(event.topic, JSON.stringify(event));
   }
 
+  /** 处理MQTT消息。 */
   private handleMqttMessage(
     topic: string,
     payload: Buffer,
@@ -119,20 +122,24 @@ export class EnvironmentEventBusService
     }
   }
 
+  /** 处理MQTT关闭。 */
   private handleMqttClose() {
     this.emitLocal(this.createBrokerStatusEvent('MQTT broker disconnected'));
   }
 
+  /** 处理MQTT错误。 */
   private handleMqttError(err: Error) {
     this.emitLocal(
       this.createBrokerStatusEvent(`MQTT broker error: ${err.message}`),
     );
   }
 
+  /** 发布本地。 */
   private emitLocal(event: EnvironmentEventEnvelope) {
     this.subscribers.forEach((subscriber) => subscriber(event));
   }
 
+  /** 创建消息代理状态事件。 */
   private createBrokerStatusEvent(summary: string): EnvironmentEventEnvelope {
     return {
       eventId: `env-bus-${Date.now()}`,

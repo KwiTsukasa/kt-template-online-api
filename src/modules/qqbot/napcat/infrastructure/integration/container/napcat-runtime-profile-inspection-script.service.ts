@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class NapcatRuntimeProfileInspectionScriptService {
+  /** 构建检查脚本。 */
   buildInspectScript(containerName: string) {
     return `
 set -eu
@@ -11,6 +12,7 @@ docker exec "$NAME" sh -lc 'locale -a; locale; date +%Z; fc-match "Noto Sans CJK
 `;
   }
 
+  /** 返回Shell。 */
   private sh(value: string) {
     return `'${`${value}`.replace(/'/g, `'\\''`)}'`;
   }

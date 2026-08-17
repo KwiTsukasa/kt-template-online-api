@@ -12,10 +12,12 @@ export class EnvironmentDashboardConfigService {
     private readonly source: EnvironmentDashboardConfigSource = process.env,
   ) {}
 
+  /** 读取环境仪表盘配置记录。 */
   get(key: string): string {
     return `${this.source[key] || ''}`.trim();
   }
 
+  /** 返回缺失的。 */
   missing(keys: string[]): string[] {
     return keys.filter((key) => !this.get(key));
   }

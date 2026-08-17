@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 export const MEDIA_GOVERNANCE_PRIVATE_BUCKET_DEFAULT =
   'kt-media-governance-private';
 
+/** 断言通用资源存储桶。 */
 export function assertGenericAssetBucket(
   bucketName: string,
   configuredMediaDescriptorBucket?: string,

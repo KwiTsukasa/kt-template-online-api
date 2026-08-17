@@ -2,9 +2,9 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { IS_PUBLIC_KEY } from '../../../src/common';
-import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
-import { NetworkOpenRedirectController } from '../../../src/modules/admin/platform-config/network-management/network-open-redirect.controller';
-import { NetworkOpenRedirectService } from '../../../src/modules/admin/platform-config/network-management/network-open-redirect.service';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
+import { NetworkOpenRedirectController } from '../../../src/modules/admin/platform-config/network-management/presentation/network-open-redirect.controller';
+import { NetworkOpenRedirectService } from '../../../src/modules/admin/platform-config/network-management/application/network-open-redirect.service';
 
 describe('NetworkOpenRedirectController', () => {
   let app: INestApplication;

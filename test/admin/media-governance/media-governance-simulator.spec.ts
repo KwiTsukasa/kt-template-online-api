@@ -1,8 +1,8 @@
 import {
   MediaGovernanceContractError,
   buildMediaGovernanceDomainFixture,
-} from '../../../src/modules/admin/media-governance/media-governance-domain';
-import { MediaGovernanceSimulator } from '../../../src/modules/admin/media-governance/media-governance-simulator';
+} from '../../../src/modules/admin/media-governance/domain/media-governance-domain';
+import { MediaGovernanceSimulator } from '../../../src/modules/admin/media-governance/application/media-governance-simulator';
 
 function expectContractError(callback: () => unknown, code: string) {
   try {

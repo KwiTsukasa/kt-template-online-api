@@ -4,7 +4,7 @@ import {
   ADMIN_PASSWORD_HASH_ITERATIONS,
   ADMIN_PASSWORD_MAX_BYTES,
   AdminPasswordHashService,
-} from '../../../src/modules/admin/identity/auth/admin-password-hash.service';
+} from '../../../src/modules/admin/identity/auth/application/admin-password-hash.service';
 
 const FIXED_PASSWORD = 'Correct horse 电池';
 const FIXED_HASH =

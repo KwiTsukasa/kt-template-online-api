@@ -1,14 +1,14 @@
 import { ConfigService } from '@nestjs/config';
 import type { DataSource, EntityManager } from 'typeorm';
 import { KtDateTime } from '../../../src/common';
-import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/network-agent-state.entity';
-import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/network-ddns.entity';
+import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-agent-state.entity';
+import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
 import {
   NETWORK_OPEN_REDIRECT_TARGETS,
   NetworkOpenRedirectService,
-} from '../../../src/modules/admin/platform-config/network-management/network-open-redirect.service';
-import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
-import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
+} from '../../../src/modules/admin/platform-config/network-management/application/network-open-redirect.service';
+import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
+import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 
 type ReadyState = {
   agent: NetworkAgentState | null;

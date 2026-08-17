@@ -81,12 +81,14 @@ export class NapcatWebuiGatewayRedisStore
     private readonly config: NapcatWebuiGatewayConfigService,
   ) {}
 
+  /** 创建NapCatWebUIRedis记录。 */
   async create(session: NapcatWebuiGatewaySession) {
     await this.writeSession(session);
     await this.writeUserAccountIndex(session);
     return session;
   }
 
+  /** 查找NapCatWebUIRedis记录。 */
   async find(sessionId: string) {
     const value = await this.redis.get(this.sessionKey(sessionId));
     return value
@@ -94,6 +96,7 @@ export class NapcatWebuiGatewayRedisStore
       : undefined;
   }
 
+  /** 查找启用的（按用户与账号匹配）。 */
   async findActiveByUserAndAccount(adminUserId: string, accountId: string) {
     const sessionId = await this.redis.get(
       this.userAccountKey(adminUserId, accountId),
@@ -106,6 +109,7 @@ export class NapcatWebuiGatewayRedisStore
     return session;
   }
 
+  /** 更新NapCatWebUIRedis记录。 */
   async update(
     sessionId: string,
     patch: Partial<NapcatWebuiGatewaySession>,
@@ -113,6 +117,7 @@ export class NapcatWebuiGatewayRedisStore
     return this.mergeSessionPatchAtomically(sessionId, patch);
   }
 
+  /** 写入会话。 */
   private async writeSession(session: NapcatWebuiGatewaySession) {
     await this.redis.psetex(
       this.sessionKey(session.sessionId),
@@ -121,6 +126,7 @@ export class NapcatWebuiGatewayRedisStore
     );
   }
 
+  /** 写入用户账号索引。 */
   private async writeUserAccountIndex(session: NapcatWebuiGatewaySession) {
     await this.redis.set(
       this.userAccountKey(session.adminUserId, session.accountId),
@@ -130,18 +136,22 @@ export class NapcatWebuiGatewayRedisStore
     );
   }
 
+  /** 生成会话键。 */
   private sessionKey(sessionId: string) {
     return `${SESSION_KEY_PREFIX}${sessionId}`;
   }
 
+  /** 生成用户账号键。 */
   private userAccountKey(adminUserId: string, accountId: string) {
     return `${USER_ACCOUNT_KEY_PREFIX}${adminUserId}:${accountId}`;
   }
 
+  /** 返回剩余有效期毫秒。 */
   private remainingTtlMs(session: NapcatWebuiGatewaySession) {
     return Math.max(1, session.expiresAt - this.config.now());
   }
 
+  /** 合并会话补丁原子地。 */
   private async mergeSessionPatchAtomically(
     sessionId: string,
     patch: Partial<NapcatWebuiGatewaySession>,
@@ -162,6 +172,7 @@ export class NapcatWebuiGatewayRedisStore
     return JSON.parse(result[1]) as NapcatWebuiGatewaySession;
   }
 
+  /** 判断终端是否成立。 */
   private isTerminal(session: NapcatWebuiGatewaySession) {
     return TERMINAL_SESSION_STATUSES.includes(session.status);
   }

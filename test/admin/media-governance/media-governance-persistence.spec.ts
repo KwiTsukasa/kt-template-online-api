@@ -1,14 +1,14 @@
-import type { MediaGovernanceAgentEventDto } from '../../../src/modules/admin/media-governance/media-governance.dto';
+import type { MediaGovernanceAgentEventDto } from '../../../src/modules/admin/media-governance/contract/media-governance.dto';
 import {
   buildMediaCodexAgentCapsule,
   buildMediaCodexAgentPolicy,
 } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.policy';
-import type { MediaGovernanceCodexAgentGateway } from '../../../src/modules/admin/media-governance/media-governance-codex-agent.gateway';
+import type { MediaGovernanceCodexAgentGateway } from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-codex-agent.gateway';
 import {
   MediaGovernanceService,
   type MediaGovernanceTask,
-} from '../../../src/modules/admin/media-governance/media-governance.service';
-import type { MediaGovernanceStateStore } from '../../../src/modules/admin/media-governance/media-governance-state.store';
+} from '../../../src/modules/admin/media-governance/application/media-governance.service';
+import type { MediaGovernanceStateStore } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-state.store';
 
 class DurableMemoryStateStore implements MediaGovernanceStateStore {
   private initialized = false;

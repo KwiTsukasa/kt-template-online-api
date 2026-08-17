@@ -5,9 +5,9 @@ import {
   parseEndpointEvent,
   parseReportedSnapshot,
   parseStatusSnapshot,
-} from '../../../src/modules/admin/platform-config/network-management/network-management.types';
-import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/network-agent-state.entity';
-import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
+} from '../../../src/modules/admin/platform-config/network-management/contract/network-management.types';
+import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-agent-state.entity';
+import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 
 function createAgentState(): NetworkAgentState {
   return Object.assign(new NetworkAgentState(), {

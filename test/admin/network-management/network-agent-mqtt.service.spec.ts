@@ -6,16 +6,16 @@ import { KtDateTime } from '../../../src/common';
 import {
   NetworkAgentMqttService,
   type NetworkMqttClientFactory,
-} from '../../../src/modules/admin/platform-config/network-management/network-agent-mqtt.service';
-import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/network-agent-state.entity';
-import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/network-endpoint-history.entity';
-import type { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/network-management-event-stream.service';
-import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
-import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
+} from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-agent-mqtt.service';
+import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-agent-state.entity';
+import { NetworkEndpointHistory } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-endpoint-history.entity';
+import type { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/application/network-management-event-stream.service';
+import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
+import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
 import {
   buildDesiredSnapshotV2,
   endpointLeaseIdentityV2,
-} from '../../../src/modules/admin/platform-config/network-management/network-agent-v2.types';
+} from '../../../src/modules/admin/platform-config/network-management/contract/network-agent-v2.types';
 import type {
   SystemMessageEventInput,
   SystemMessageEventStager,
@@ -23,7 +23,7 @@ import type {
 import {
   buildDesiredSnapshot,
   desiredSnapshotDigest,
-} from '../../../src/modules/admin/platform-config/network-management/network-management.types';
+} from '../../../src/modules/admin/platform-config/network-management/contract/network-management.types';
 
 type MqttHarness = {
   client: MqttClient & EventEmitter;

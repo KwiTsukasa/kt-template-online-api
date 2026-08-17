@@ -45,6 +45,7 @@ export class NapcatWebuiGatewayAudit {
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
 
+  /** 创建标识。 */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

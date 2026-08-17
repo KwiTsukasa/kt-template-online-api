@@ -1,5 +1,33 @@
 import { filter, firstValueFrom, take } from 'rxjs';
-import { MediaGovernanceEventStreamService } from '../../../src/modules/admin/media-governance/media-governance-event-stream.service';
+import { MediaGovernanceEventStreamService } from '../../../src/modules/admin/media-governance/application/media-governance-event-stream.service';
+
+function taskEvent(changeType: 'created' | 'source-updated', revision: number) {
+  return {
+    changeType,
+    patchMode: 'full' as const,
+    revision,
+    runId: null,
+    runSequence: null,
+    summary: {
+      agentPending: 0,
+      attentionRequired: 0,
+      blocked: 0,
+      closed: 0,
+      downloading: 0,
+      evidenceDriftCount: 0,
+      governing: 0,
+      healthLabel: '正常',
+      metadataAutoClosureRate: 0,
+      mixedSubtitleSeasonCount: 0,
+      stagingResidualCount: 0,
+      stuckRunCount: 0,
+      total: 1,
+    },
+    task: null,
+    taskId: 'media-task-01',
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 describe('MediaGovernanceEventStreamService', () => {
   it('publishes semantic task events and resumes after the exact cursor', async () => {
@@ -13,17 +41,9 @@ describe('MediaGovernanceEventStreamService', () => {
         take(1),
       ),
     );
-    const first = service.publishTaskChanged({
-      changeType: 'created',
-      revision: 1,
-      taskId: 'media-task-01',
-    });
+    const first = service.publishTaskChanged(taskEvent('created', 1));
     await expect(live).resolves.toEqual(first);
-    const second = service.publishTaskChanged({
-      changeType: 'source-updated',
-      revision: 2,
-      taskId: 'media-task-01',
-    });
+    const second = service.publishTaskChanged(taskEvent('source-updated', 2));
 
     await expect(
       firstValueFrom(service.stream(first.id).pipe(take(1))),
@@ -35,11 +55,7 @@ describe('MediaGovernanceEventStreamService', () => {
       heartbeatMs: 60_000,
       replayLimit: 1,
     });
-    const latest = service.publishTaskChanged({
-      changeType: 'created',
-      revision: 1,
-      taskId: 'media-task-01',
-    });
+    const latest = service.publishTaskChanged(taskEvent('created', 1));
     const event = await firstValueFrom(
       service.stream('missing-cursor').pipe(take(1)),
     );
@@ -58,11 +74,7 @@ describe('MediaGovernanceEventStreamService', () => {
         heartbeatMs: 1_000,
         replayLimit: 1,
       });
-      const latest = service.publishTaskChanged({
-        changeType: 'created',
-        revision: 1,
-        taskId: 'media-task-01',
-      });
+      const latest = service.publishTaskChanged(taskEvent('created', 1));
       const heartbeat = firstValueFrom(
         service.stream(latest.id).pipe(
           filter((event) => event.type === 'heartbeat'),

@@ -24,6 +24,7 @@ export class KubernetesReadonlyAdapter {
     this.http = http || new EnvironmentReadonlyHttpClient();
   }
 
+  /** 检查Kubernetes只读的记录。 */
   async inspect() {
     const missing = this.config.missing([
       'ENV_DASHBOARD_K8S_API_SERVER',
@@ -92,6 +93,7 @@ export class KubernetesReadonlyAdapter {
     }
   }
 
+  /** 返回部署URL。 */
   private deploymentUrl(): string {
     const namespace = encodeURIComponent(
       this.config.get('ENV_DASHBOARD_K8S_NAMESPACE'),
@@ -105,6 +107,7 @@ export class KubernetesReadonlyAdapter {
     );
   }
 
+  /** 返回PodURL。 */
   private podsUrl(): string {
     const namespace = encodeURIComponent(
       this.config.get('ENV_DASHBOARD_K8S_NAMESPACE'),
@@ -115,17 +118,20 @@ export class KubernetesReadonlyAdapter {
     );
   }
 
+  /** 创建认证请求头。 */
   private createAuthHeaders(): Record<string, string> | undefined {
     const token = this.config.get('ENV_DASHBOARD_K8S_BEARER_TOKEN');
     if (!token) return undefined;
     return { Authorization: `Bearer ${token}` };
   }
 
+  /** 返回Pod参数。 */
   private podsParams(): Record<string, string> | undefined {
     const labelSelector = this.config.get('ENV_DASHBOARD_K8S_LABEL_SELECTOR');
     return labelSelector ? { labelSelector } : undefined;
   }
 
+  /** 返回提取部署就绪状态。 */
   private extractDeploymentReadiness(body: Record<string, unknown>) {
     const spec = asRecord(body.spec) || {};
     const status = asRecord(body.status) || {};
@@ -139,6 +145,7 @@ export class KubernetesReadonlyAdapter {
     };
   }
 
+  /** 返回提取Pod就绪状态。 */
   private extractPodReadiness(body: Record<string, unknown>) {
     const pods = asArray(body.items);
     const podRunningCount = pods.filter((pod) => {

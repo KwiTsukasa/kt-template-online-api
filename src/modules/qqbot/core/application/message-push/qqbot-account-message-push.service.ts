@@ -47,6 +47,7 @@ export class QqbotAccountMessagePushService {
     private readonly renderer: SystemMessageTemplateRendererService,
   ) {}
 
+  /** 列出绑定。 */
   async listBindings(
     selfId: string,
   ): Promise<QqbotMessagePublishBindingView[]> {
@@ -58,6 +59,7 @@ export class QqbotAccountMessagePushService {
     return Promise.all(bindings.map((binding) => this.toView(binding)));
   }
 
+  /** 创建绑定。 */
   async createBinding(
     selfId: string,
     input: QqbotMessagePublishBindingInput,
@@ -144,6 +146,7 @@ export class QqbotAccountMessagePushService {
     }
   }
 
+  /** 更新绑定。 */
   async updateBinding(
     selfId: string,
     id: string,
@@ -211,6 +214,7 @@ export class QqbotAccountMessagePushService {
     }
   }
 
+  /** 设置绑定启用。 */
   async setBindingEnabled(
     selfId: string,
     id: string,
@@ -255,6 +259,7 @@ export class QqbotAccountMessagePushService {
     return this.toView(binding);
   }
 
+  /** 移除绑定。 */
   async removeBinding(selfId: string, id: string): Promise<boolean> {
     const account = await this.requireAccount(selfId);
     await this.bindingRepository.manager.transaction(async (manager) => {
@@ -280,6 +285,7 @@ export class QqbotAccountMessagePushService {
     return true;
   }
 
+  /** 规范化目标。 */
   private normalizeTargets(
     inputs: QqbotMessagePublishTargetInput[],
   ): NormalizedTarget[] {
@@ -306,6 +312,7 @@ export class QqbotAccountMessagePushService {
     );
   }
 
+  /** 返回同步目标。 */
   private async synchronizeTargets(
     manager: EntityManager,
     binding: QqbotMessagePublishBinding,
@@ -387,6 +394,7 @@ export class QqbotAccountMessagePushService {
     }
   }
 
+  /** 返回到视图。 */
   private async toView(
     binding: QqbotMessagePublishBinding,
   ): Promise<QqbotMessagePublishBindingView> {
@@ -420,6 +428,7 @@ export class QqbotAccountMessagePushService {
     };
   }
 
+  /** 检查可用性。 */
   private async inspectAvailability(
     subscription: QqbotMessageSubscription | null,
     template: QqbotMessageTemplate | null,
@@ -494,6 +503,7 @@ export class QqbotAccountMessagePushService {
     return { available: true, invalidReasonCode: null, sourceName };
   }
 
+  /** 返回到目标视图。 */
   private toTargetView(
     target: QqbotMessagePublishTarget,
   ): QqbotMessagePublishTargetView {
@@ -506,12 +516,14 @@ export class QqbotAccountMessagePushService {
     };
   }
 
+  /** 返回必需账号。 */
   private async requireAccount(selfId: string) {
     const account = await this.accountService.findBySelfId(selfId);
     if (!account) throw new SystemMessageContractError('account_unavailable');
     return account;
   }
 
+  /** 查找绑定用于写入。 */
   private async findBindingForWrite(
     repository: Repository<QqbotMessagePublishBinding>,
     accountId: string,
@@ -525,6 +537,7 @@ export class QqbotAccountMessagePushService {
     return binding!;
   }
 
+  /** 断言稳定的账号快照。 */
   private assertStableAccountSnapshot(
     binding: QqbotMessagePublishBinding,
     snapshot: QqbotMessagePublishBinding,
@@ -537,6 +550,7 @@ export class QqbotAccountMessagePushService {
     }
   }
 
+  /** 断言稳定的绑定快照。 */
   private assertStableBindingSnapshot(
     binding: QqbotMessagePublishBinding,
     snapshot: QqbotMessagePublishBinding,
@@ -550,10 +564,12 @@ export class QqbotAccountMessagePushService {
     }
   }
 
+  /** 生成绑定启用的键。 */
   private bindingActiveKey(accountId: string, subscriptionId: string): string {
     return `${String(accountId)}:${String(subscriptionId)}`;
   }
 
+  /** 生成目标启用的键。 */
   private targetActiveKey(
     bindingId: string,
     target: Pick<NormalizedTarget, 'targetId' | 'targetType'>,
@@ -561,6 +577,7 @@ export class QqbotAccountMessagePushService {
     return `${String(bindingId)}:${target.targetType}:${target.targetId}`;
   }
 
+  /** 返回到绑定字段。 */
   private toBindingFields(
     account: { id: string; selfId: string },
     input: QqbotMessagePublishBindingInput,
@@ -584,6 +601,7 @@ export class QqbotAccountMessagePushService {
     };
   }
 
+  /** 返回抛出自然键键冲突。 */
   private throwNaturalKeyConflict(): never {
     return throwVbenError(
       '同一账号订阅的消息发布配置已存在',
@@ -591,16 +609,19 @@ export class QqbotAccountMessagePushService {
     );
   }
 
+  /** 返回抛出绑定不可用。 */
   private throwBindingUnavailable(): never {
     throw new SystemMessageContractError('binding_disabled');
   }
 
+  /** 判断重复键错误是否成立。 */
   private isDuplicateKeyError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const value = error as { code?: unknown; errno?: unknown };
     return value.code === 'ER_DUP_ENTRY' || value.errno === 1062;
   }
 
+  /** 取消未完成的投递记录。 */
   private async cancelUnfinishedDeliveries(
     manager: EntityManager,
     where: Pick<QqbotMessageDelivery, 'bindingId'>,

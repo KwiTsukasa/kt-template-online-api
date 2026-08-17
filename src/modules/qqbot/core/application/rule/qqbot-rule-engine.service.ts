@@ -86,6 +86,7 @@ export class QqbotRuleEngineService {
     });
   }
 
+  /** 决定自动化。 */
   private decideAutomation(
     automationKind: NapcatAutomationKind,
     message: QqbotNormalizedMessage,
@@ -98,6 +99,7 @@ export class QqbotRuleEngineService {
     );
   }
 
+  /** 读取行为阶段。 */
   private getBehaviorStage(
     message: QqbotNormalizedMessage,
   ): NapcatAutoCapabilityStage | undefined {
@@ -107,6 +109,7 @@ export class QqbotRuleEngineService {
     return this.isBehaviorStage(stage) ? stage : undefined;
   }
 
+  /** 判断行为阶段是否成立。 */
   private isBehaviorStage(stage: unknown): stage is NapcatAutoCapabilityStage {
     return (
       stage === 'automation' ||

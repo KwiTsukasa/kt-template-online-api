@@ -62,6 +62,7 @@ const highRiskLabels: Record<
   'trigger-jenkins-deploy': '触发 Jenkins 部署',
 };
 
+/** 读取环境仪表盘操作。 */
 export function getEnvironmentDashboardActions(): EnvironmentAction[] {
   const highRiskActions = HIGH_RISK_ENVIRONMENT_ACTION_IDS.map((id) => ({
     disabledReason: '第一版环境总览只读展示，高风险写操作需走专项流程。',

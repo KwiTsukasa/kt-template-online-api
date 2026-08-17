@@ -2,16 +2,16 @@ import { HttpException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { Repository } from 'typeorm';
 import { KtDateTime } from '../../../src/common';
-import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/network-agent-state.entity';
-import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/network-ddns.entity';
-import { NetworkDdnsService } from '../../../src/modules/admin/platform-config/network-management/network-ddns.service';
+import { NetworkAgentState } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-agent-state.entity';
+import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
+import { NetworkDdnsService } from '../../../src/modules/admin/platform-config/network-management/application/network-ddns.service';
 import {
   NetworkDnsPodClient,
   NetworkDnsPodClientError,
-} from '../../../src/modules/admin/platform-config/network-management/network-dnspod.client';
-import type { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/network-management-event-stream.service';
-import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/network-management.entity';
-import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.entity';
+} from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-dnspod.client';
+import type { NetworkManagementEventStreamService } from '../../../src/modules/admin/platform-config/network-management/application/network-management-event-stream.service';
+import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
+import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
 
 type Harness = {
   client: jest.Mocked<Pick<NetworkDnsPodClient, 'getStatus' | 'reconcile'>>;

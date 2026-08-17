@@ -235,7 +235,8 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `POST`   | `/media-governance/tasks/:taskId/metadata/repair`                  | 启动最多两次的确定性有界元数据修复     |
 | `POST`   | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理             |
 | `POST`   | `/media-governance/tasks/:taskId/agent/start`                      | 任意未完成阶段启动/重试 CodexAgent     |
-| `GET`    | `/media-governance/tasks/:taskId/agent/session`                    | 查询 Agent 语义会话                    |
+| `GET`    | `/media-governance/tasks/:taskId/agent/session?afterSequence=N`    | 查询 Agent 会话身份和可见消息增量      |
+| `POST`   | `/media-governance/tasks/:taskId/agent/messages`                   | 在同一 Agent thread 幂等续发用户消息   |
 | `POST`   | `/media-governance/tasks/:taskId/agent/operator-decision`          | 提交人工候选选择并闭环                 |
 | `GET`    | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
 | `GET`    | `/media-governance/events/stream`                                  | 订阅带 replay/snapshot-required 的 SSE |
@@ -325,6 +326,12 @@ Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓�
 状态响应必须同时提供匹配的 Run manifest SHA、精确成功/失败终态和下一连续序号，API 才在
 同一事务应用该终态。缺少密封证据、身份漂移或序号跳跃时保持活动 Run 等待下轮核对，绝不
 由 API 伪造失败事件。
+高频执行器回调先校验 Run、manifest 与连续序号，再原子追加 Redis 热层并立即发布包含
+`runId`、`runSequence` 与紧凑 Task patch 的 `task-changed`。普通 tick 不等待 MySQL；
+MySQL 最多每 10 秒、出现语义变化或进入终态时保存权威快照，终态会等待本实例已排队
+快照。下载 runner 每 1 秒采集 qBittorrent 进度，磁链清单检查仍按 5 秒/120 秒合同。
+SSE 仅在 API 有界内存窗内重放；游标超窗返回 `snapshot-required`，由 Admin 静默读取
+权威快照。Redis Stream 目前不是跨进程 SSE 历史重放接口。
 普通状态变更先提交数据库再发布 SSE，Agent
 事件则与 Task/session 水位在同一事务写入。源码同时提供真实 CodexAgent outbound
 adapter 与 NAS gateway 内部接口；只有同时配置
@@ -343,7 +350,12 @@ turn/start 都必须命中命名 `media-agent` 权限档及 `approvalPolicy=neve
 sandbox 与命名权限混用。App Server Unix socket 使用标准 WebSocket HTTP Upgrade，
 wire JSON-RPC 省略 `jsonrpc` 字段，动态工具以合法下划线名传输并映射回点号内部合同。
 gateway checkpoint 持久化 `lastEventSequence`，重启后继续递增；API 查询 Agent 会话时
-会回读 gateway 的 Task/thread 权威投影。gateway 在创建任何 App Server thread/turn
+会回读 gateway 的 Task/thread 权威投影和官方 App Server 可见历史，并按
+`afterSequence` 返回 user/assistant 消息增量。gateway 只保存有界脱敏 checkpoint，
+不投影 reasoning、原始工具输出或登录凭据。`POST .../agent/messages` 要求同一
+`threadId`、`expectedConversationRevision` 与 `clientMessageId`；幂等重放返回原结果，
+身份或 revision 漂移返回 409。可见文本 delta 按 75ms 合并后走独立 conversation SSE，
+不会改变 Task 的业务 stage、runState 或 revision。gateway 在创建任何 App Server thread/turn
 之前还会调用 `GET /internal/media-governance/agent/health`；只有响应
 `persistenceMode=database`、`status=ready` 才放行。API 在调用 gateway 前先持久化
 带精确 policy/capsule SHA 的启动预留；只允许预留水位的下一连续序号

@@ -1,5 +1,5 @@
 import { HttpException } from '@nestjs/common';
-import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/media-governance.service';
+import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
 
 describe('MediaGovernanceService', () => {
   let service: MediaGovernanceService;

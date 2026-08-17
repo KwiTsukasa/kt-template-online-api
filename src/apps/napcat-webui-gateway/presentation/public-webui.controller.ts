@@ -25,6 +25,7 @@ export class PublicWebuiController {
     private readonly config: NapcatWebuiGatewayConfigService,
   ) {}
 
+  /** 返回引导流程。 */
   @Get('session/:sessionId/bootstrap')
   async bootstrap(
     @Param('sessionId') sessionId: string,
@@ -51,6 +52,7 @@ export class PublicWebuiController {
     res.redirect(HttpStatus.FOUND, `${publicSessionPath}/webui/webui`);
   }
 
+  /** 返回代理。 */
   @All('session/:sessionId/webui/*proxyPath')
   proxy(
     @Param('sessionId') sessionId: string,
@@ -68,6 +70,7 @@ export class PublicWebuiController {
     );
   }
 
+  /** 返回必需票据。 */
   private requireTicket(ticket: string) {
     const value = String(ticket || '').trim();
     if (!value) {

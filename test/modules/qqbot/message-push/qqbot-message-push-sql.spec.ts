@@ -408,7 +408,7 @@ describe('QQBot message-push SQL contract', () => {
   const tcpSourceAdapter = readFileSync(
     resolve(
       process.cwd(),
-      'src/modules/admin/platform-config/network-management/network-tcp-natmap-message-source.adapter.ts',
+      'src/modules/admin/platform-config/network-management/infrastructure/integration/network-tcp-natmap-message-source.adapter.ts',
     ),
     'utf8',
   );

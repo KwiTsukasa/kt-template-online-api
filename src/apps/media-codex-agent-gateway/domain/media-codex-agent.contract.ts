@@ -27,6 +27,7 @@ export const MEDIA_CODEX_AGENT_TOOL_WIRE_NAMES = {
   'subtitle.contract.read': 'subtitle_contract_read',
 } as const satisfies Record<MediaCodexAgentTool, string>;
 
+/** 将 App Server 线缆工具名还原为边界策略使用的媒体工具名。 */
 export function mediaCodexAgentToolFromWireName(value: string) {
   return MEDIA_CODEX_AGENT_TOOLS.find(
     (tool) => MEDIA_CODEX_AGENT_TOOL_WIRE_NAMES[tool] === value,
@@ -46,6 +47,7 @@ export const MEDIA_CODEX_AGENT_STATIC_POLICY = `
 你只能调用声明的类型化工具；不得调用 shell、文件写入、通用网络、登录、权限申请、子代理或未声明工具。
 真实媒体、qBittorrent、飞牛资料库和云端变更只能由密封执行器完成；你只能提交结构化密封计划。
 approvalPolicy 固定为 never。任何路径、revision、摘要、policy、cloudGate 或范围不一致都必须停止并返回结构化阻塞原因。
+仅回答操作员问题且没有提交治理状态时，status 必须返回 conversation-response，planSha256 必须为 null。
 `.trim();
 
 export interface MediaCodexAgentPolicy {
@@ -78,6 +80,7 @@ export interface MediaCodexAgentBoundaryCapsule {
 }
 
 export interface MediaCodexAgentTurnRequest {
+  clientMessageId?: string;
   compactContext: Record<string, unknown>;
   currentStage: MediaCodexAgentStage;
   currentUnitId: null | string;
@@ -89,12 +92,52 @@ export interface MediaCodexAgentTurnRequest {
   taskRevision: number;
 }
 
+export interface MediaCodexAgentConversationMessage {
+  content: string;
+  messageId: string;
+  observedAt: string;
+  phase: 'commentary' | 'final_answer' | 'user';
+  result: MediaCodexAgentResult | null;
+  role: 'assistant' | 'user';
+  sequence: number;
+  status: 'completed' | 'streaming';
+  turnId: string;
+}
+
+export interface MediaCodexAgentConversationEvent {
+  capsuleSha256: string;
+  changeType:
+    | 'assistant-delta'
+    | 'message-completed'
+    | 'turn-completed'
+    | 'turn-started';
+  content: string;
+  conversationRevision: number;
+  eventSequence: number;
+  messageId: string;
+  observedAt: string;
+  phase: 'commentary' | 'final_answer' | 'user';
+  policySha256: string;
+  result: MediaCodexAgentResult | null;
+  role: 'assistant' | 'user';
+  status: 'completed' | 'streaming';
+  taskId: string;
+  taskRevision: number;
+  threadId: string;
+  turnId: string;
+}
+
 export interface MediaCodexAgentSafeSession {
   capsuleSha256: string;
   checkpointSha256: string;
+  conversationRevision?: number;
   currentUnitId: null | string;
+  hasMoreMessages?: boolean;
+  historyComplete?: boolean;
+  lastClientMessageId?: null | string;
   lastEventSequence: number;
   lastHeartbeatAt: string;
+  messages?: MediaCodexAgentConversationMessage[];
   policySha256: string;
   policyVersion: string;
   replayed: boolean;
@@ -149,7 +192,12 @@ export const MEDIA_CODEX_AGENT_RESULT_SCHEMA = {
     nextActionLabel: { maxLength: 200, type: 'string' },
     planSha256: { pattern: '^[a-f0-9]{64}$', type: ['string', 'null'] },
     status: {
-      enum: ['blocked', 'plan-submitted', 'requires-operator'],
+      enum: [
+        'blocked',
+        'conversation-response',
+        'plan-submitted',
+        'requires-operator',
+      ],
       type: 'string',
     },
     summary: { maxLength: 800, type: 'string' },
@@ -169,13 +217,18 @@ export interface MediaCodexAgentResult {
   candidates: Array<{ id: string; summary: string }>;
   nextActionLabel: string;
   planSha256: null | string;
-  status: 'blocked' | 'plan-submitted' | 'requires-operator';
+  status:
+    | 'blocked'
+    | 'conversation-response'
+    | 'plan-submitted'
+    | 'requires-operator';
   summary: string;
 }
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const TMDB_CANDIDATE_PATTERN = /^(tmdb:[1-9]\d*)\s*[|｜]/iu;
 
+/** 严格解析 Agent 结构化结果，并投影稳定的候选身份。 */
 export function parseMediaCodexAgentResult(
   value: unknown,
 ): MediaCodexAgentResult | null {
@@ -191,46 +244,80 @@ export function parseMediaCodexAgentResult(
           'status',
           'summary',
         ].includes(key),
-    ) ||
+    )
+  ) {
+    return null;
+  }
+  if (
     !Array.isArray(result.candidateSummaries) ||
-    result.candidateSummaries.length > 8 ||
+    result.candidateSummaries.length > 8
+  ) {
+    return null;
+  }
+  if (
     result.candidateSummaries.some(
       (summary) =>
         typeof summary !== 'string' || !summary.trim() || summary.length > 800,
-    ) ||
-    typeof result.nextActionLabel !== 'string' ||
-    !result.nextActionLabel.trim() ||
-    result.nextActionLabel.length > 200 ||
-    !['blocked', 'plan-submitted', 'requires-operator'].includes(
-      String(result.status),
-    ) ||
-    typeof result.summary !== 'string' ||
-    !result.summary.trim() ||
-    result.summary.length > 800 ||
-    (result.planSha256 !== null &&
-      (typeof result.planSha256 !== 'string' ||
-        !SHA256_PATTERN.test(result.planSha256)))
+    )
   ) {
     return null;
+  }
+  if (
+    typeof result.nextActionLabel !== 'string' ||
+    !result.nextActionLabel.trim() ||
+    result.nextActionLabel.length > 200
+  ) {
+    return null;
+  }
+  if (
+    ![
+      'blocked',
+      'conversation-response',
+      'plan-submitted',
+      'requires-operator',
+    ].includes(String(result.status))
+  ) {
+    return null;
+  }
+  if (
+    typeof result.summary !== 'string' ||
+    !result.summary.trim() ||
+    result.summary.length > 800
+  ) {
+    return null;
+  }
+  if (result.planSha256 !== null) {
+    if (
+      typeof result.planSha256 !== 'string' ||
+      !SHA256_PATTERN.test(result.planSha256)
+    ) {
+      return null;
+    }
   }
   const candidateSummaries = result.candidateSummaries.map((summary) =>
     String(summary).trim(),
   );
-  const candidates = candidateSummaries.map((summary) => ({
-    id:
-      summary.match(TMDB_CANDIDATE_PATTERN)?.[1]?.toLowerCase() ??
-      `candidate-${sha256Json(summary).slice(0, 16)}`,
-    summary,
-  }));
+  const candidates = candidateSummaries.map((summary) => {
+    const matchedId = summary.match(TMDB_CANDIDATE_PATTERN)?.[1];
+    let id = `candidate-${sha256Json(summary).slice(0, 16)}`;
+    if (matchedId) id = matchedId.toLowerCase();
+    return { id, summary };
+  });
   const candidateIds = new Set(candidates.map((candidate) => candidate.id));
   const status = result.status as MediaCodexAgentResult['status'];
+  if (candidateIds.size !== candidates.length) {
+    return null;
+  }
+  if (status === 'plan-submitted' && result.planSha256 === null) {
+    return null;
+  }
+  if (status !== 'plan-submitted' && result.planSha256 !== null) {
+    return null;
+  }
   if (
-    candidateIds.size !== candidates.length ||
-    (status === 'plan-submitted' && result.planSha256 === null) ||
-    (status !== 'plan-submitted' && result.planSha256 !== null) ||
-    (status === 'requires-operator' &&
-      (candidates.length < 2 ||
-        candidates.some((candidate) => !candidate.id.startsWith('tmdb:'))))
+    status === 'requires-operator' &&
+    (candidates.length < 2 ||
+      candidates.some((candidate) => !candidate.id.startsWith('tmdb:')))
   ) {
     return null;
   }
@@ -245,76 +332,79 @@ export function parseMediaCodexAgentResult(
 }
 
 export const MEDIA_CODEX_AGENT_DYNAMIC_TOOLS = MEDIA_CODEX_AGENT_TOOLS.map(
-  (tool) => ({
-    deferLoading: false,
-    description:
-      tool === 'plan.submit.sealed'
-        ? '提交绑定当前 Task revision、manifest 和 replay key 的密封治理计划。'
-        : '读取当前 Task 内经过脱敏和边界校验的媒体治理事实。',
-    inputSchema: {
-      additionalProperties: false,
-      properties:
-        tool === 'plan.submit.sealed'
-          ? {
-              operations: {
+  (tool) => {
+    let description = '读取当前 Task 内经过脱敏和边界校验的媒体治理事实。';
+    let properties: Record<string, unknown> = {
+      sourceId: { maxLength: 96, type: 'string' },
+      unitId: { maxLength: 96, type: 'string' },
+    };
+    let required: string[] = [];
+    if (tool === 'plan.submit.sealed') {
+      description =
+        '提交绑定当前 Task revision、manifest 和 replay key 的密封治理计划。';
+      properties = {
+        operations: {
+          description:
+            '文件治理计划至少包含一项；identity 身份修正计划必须为空数组，二者不能混用。',
+          items: {
+            additionalProperties: false,
+            properties: {
+              action: { maxLength: 80, type: 'string' },
+              sourcePath: { maxLength: 600, type: 'string' },
+              targetPath: {
                 description:
-                  '文件治理计划至少包含一项；identity 身份修正计划必须为空数组，二者不能混用。',
-                items: {
-                  additionalProperties: false,
-                  properties: {
-                    action: { maxLength: 80, type: 'string' },
-                    sourcePath: { maxLength: 600, type: 'string' },
-                    targetPath: {
-                      description:
-                        '目标必须位于当前 Task staging 根的 work 或 plan 子目录，不能写入 evidence 或正式媒体目录。',
-                      maxLength: 600,
-                      type: 'string',
-                    },
-                  },
-                  required: ['action', 'targetPath'],
-                  type: 'object',
-                },
-                maxItems: 500,
-                minItems: 0,
-                type: 'array',
+                  '目标必须位于当前 Task staging 根的 work 或 plan 子目录，不能写入 evidence 或正式媒体目录。',
+                maxLength: 600,
+                type: 'string',
               },
-              identity: {
-                additionalProperties: false,
-                description:
-                  '仅用于修正当前媒体任务身份；provider 当前只允许本地元数据执行器支持的 TMDB。',
-                properties: {
-                  provider: { enum: ['tmdb'], type: 'string' },
-                  providerId: {
-                    pattern: '^[1-9]\\d*$',
-                    type: 'string',
-                  },
-                  releaseYear: {
-                    maximum: 2100,
-                    minimum: 1870,
-                    type: ['integer', 'null'],
-                  },
-                },
-                required: ['provider', 'providerId', 'releaseYear'],
-                type: 'object',
-              },
-              replayKey: { maxLength: 128, type: 'string' },
-              summary: { maxLength: 800, type: 'string' },
-            }
-          : {
-              sourceId: { maxLength: 96, type: 'string' },
-              unitId: { maxLength: 96, type: 'string' },
             },
-      required:
-        tool === 'plan.submit.sealed'
-          ? ['operations', 'replayKey', 'summary']
-          : [],
-      type: 'object',
-    },
-    name: MEDIA_CODEX_AGENT_TOOL_WIRE_NAMES[tool],
-    type: 'function' as const,
-  }),
+            required: ['action', 'targetPath'],
+            type: 'object',
+          },
+          maxItems: 500,
+          minItems: 0,
+          type: 'array',
+        },
+        identity: {
+          additionalProperties: false,
+          description:
+            '仅用于修正当前媒体任务身份；provider 当前只允许本地元数据执行器支持的 TMDB。',
+          properties: {
+            provider: { enum: ['tmdb'], type: 'string' },
+            providerId: {
+              pattern: '^[1-9]\\d*$',
+              type: 'string',
+            },
+            releaseYear: {
+              maximum: 2100,
+              minimum: 1870,
+              type: ['integer', 'null'],
+            },
+          },
+          required: ['provider', 'providerId', 'releaseYear'],
+          type: 'object',
+        },
+        replayKey: { maxLength: 128, type: 'string' },
+        summary: { maxLength: 800, type: 'string' },
+      };
+      required = ['operations', 'replayKey', 'summary'];
+    }
+    return {
+      deferLoading: false,
+      description,
+      inputSchema: {
+        additionalProperties: false,
+        properties,
+        required,
+        type: 'object',
+      },
+      name: MEDIA_CODEX_AGENT_TOOL_WIRE_NAMES[tool],
+      type: 'function' as const,
+    };
+  },
 );
 
+/** 以键名排序的稳定规则序列化任意 JSON 值。 */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map((item) => canonicalJson(item)).join(',')}]`;
@@ -329,6 +419,7 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/** 对稳定 JSON 表示计算小写十六进制 SHA-256 摘要。 */
 export function sha256Json(value: unknown): string {
   return createHash('sha256').update(canonicalJson(value)).digest('hex');
 }

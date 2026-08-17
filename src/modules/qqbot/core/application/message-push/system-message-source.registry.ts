@@ -9,6 +9,7 @@ import {
 export class SystemMessageSourceRegistry {
   private readonly adapters = new Map<string, SystemMessageSourceAdapter>();
 
+  /** 注册系统消息来源注册表记录。 */
   register(adapter: SystemMessageSourceAdapter): void {
     const key = adapter.definition.sourceKey;
     if (this.adapters.has(key)) {
@@ -17,12 +18,14 @@ export class SystemMessageSourceRegistry {
     this.adapters.set(key, adapter);
   }
 
+  /** 返回取消注册。 */
   unregister(sourceKey: string, adapter: SystemMessageSourceAdapter): void {
     if (this.adapters.get(sourceKey) === adapter) {
       this.adapters.delete(sourceKey);
     }
   }
 
+  /** 读取系统消息来源注册表记录。 */
   get(sourceKey: string): SystemMessageSourceAdapter {
     const adapter = this.adapters.get(sourceKey);
     if (!adapter) {
@@ -31,6 +34,7 @@ export class SystemMessageSourceRegistry {
     return adapter;
   }
 
+  /** 列出系统消息来源注册表记录。 */
   list(): SystemMessageSourceDefinition[] {
     return [...this.adapters.values()]
       .map(({ definition }) => structuredClone(definition))

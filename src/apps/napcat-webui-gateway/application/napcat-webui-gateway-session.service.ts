@@ -25,6 +25,7 @@ export class NapcatWebuiGatewaySessionService {
     private readonly config: NapcatWebuiGatewayConfigService,
   ) {}
 
+  /** 创建NapCatWebUI会话记录。 */
   async create(input: NapcatWebuiGatewayCreateSessionInput) {
     const normalizedInput = this.validateCreateInput(input);
     const existing = await this.store.findActiveByUserAndAccount(
@@ -58,6 +59,7 @@ export class NapcatWebuiGatewaySessionService {
     return this.store.create(session);
   }
 
+  /** 标记启用的。 */
   async markActive(sessionId: string) {
     const session = await this.requireBootstrapSession(sessionId);
     const now = this.config.now();
@@ -70,6 +72,7 @@ export class NapcatWebuiGatewaySessionService {
     });
   }
 
+  /** 返回心跳。 */
   async heartbeat(input: NapcatWebuiGatewayLifecycleInput) {
     const adminUserId = this.requireLifecycleAdminUserId(input.adminUserId);
     const session = await this.requireProxySession(input.sessionId);
@@ -92,6 +95,7 @@ export class NapcatWebuiGatewaySessionService {
     };
   }
 
+  /** 吊销NapCatWebUI会话记录。 */
   async revoke(input: NapcatWebuiGatewayLifecycleInput) {
     const adminUserId = this.requireLifecycleAdminUserId(input.adminUserId);
     const session = await this.requireUsableSession(input.sessionId);
@@ -111,10 +115,12 @@ export class NapcatWebuiGatewaySessionService {
     };
   }
 
+  /** 返回必需引导流程会话。 */
   async requireBootstrapSession(sessionId: string) {
     return this.requireUsableSession(sessionId);
   }
 
+  /** 返回必需代理会话。 */
   async requireProxySession(sessionId: string) {
     const session = await this.requireUsableSession(sessionId);
     if (session.status !== 'active') {
@@ -124,6 +130,7 @@ export class NapcatWebuiGatewaySessionService {
     return session;
   }
 
+  /** 返回必需可用的会话。 */
   private async requireUsableSession(sessionId: string) {
     const session = await this.store.find(sessionId);
     if (!session || TERMINAL_SESSION_STATUSES.includes(session.status)) {
@@ -145,6 +152,7 @@ export class NapcatWebuiGatewaySessionService {
     return session;
   }
 
+  /** 断言所有者。 */
   private assertOwner(
     session: NapcatWebuiGatewaySession,
     adminUserId: string,
@@ -154,6 +162,7 @@ export class NapcatWebuiGatewaySessionService {
     }
   }
 
+  /** 更新会话。 */
   private async updateSession(
     sessionId: string,
     patch: Partial<NapcatWebuiGatewaySession>,
@@ -168,6 +177,7 @@ export class NapcatWebuiGatewaySessionService {
     }
   }
 
+  /** 判断未激活的存储错误是否成立。 */
   private isInactiveStoreError(error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return (
@@ -176,10 +186,12 @@ export class NapcatWebuiGatewaySessionService {
     );
   }
 
+  /** 返回必需生命周期管理端用户标识。 */
   private requireLifecycleAdminUserId(adminUserId: string) {
     return this.requireText(adminUserId, 'adminUserId');
   }
 
+  /** 校验创建输入。 */
   private validateCreateInput(input: NapcatWebuiGatewayCreateSessionInput) {
     const normalized = {
       ...input,
@@ -195,6 +207,7 @@ export class NapcatWebuiGatewaySessionService {
     return normalized;
   }
 
+  /** 返回必需文本。 */
   private requireText(value: string, fieldName: string) {
     const text = this.toOptionalText(value);
     if (!text) {
@@ -206,6 +219,7 @@ export class NapcatWebuiGatewaySessionService {
     return text;
   }
 
+  /** 返回必需上游BaseURL。 */
   private requireUpstreamBaseUrl(value: string) {
     const text = this.requireText(value, 'upstreamBaseUrl');
     try {
@@ -219,6 +233,7 @@ export class NapcatWebuiGatewaySessionService {
     }
   }
 
+  /** 返回到可选的文本。 */
   private toOptionalText(value?: string) {
     const text = String(value || '').trim();
     return text || undefined;

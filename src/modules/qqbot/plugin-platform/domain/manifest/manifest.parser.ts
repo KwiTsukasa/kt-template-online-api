@@ -61,6 +61,7 @@ const getStringArray = (
     .filter(Boolean);
 };
 
+/** 解析配置键。 */
 function parseConfigKeys(rawKeys: unknown): string[] {
   if (!Array.isArray(rawKeys)) {
     return [];

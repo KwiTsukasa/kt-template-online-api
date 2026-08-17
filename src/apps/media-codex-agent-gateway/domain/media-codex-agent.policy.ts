@@ -24,6 +24,7 @@ export interface MediaCodexAgentPolicyPaths {
   stagingRoot?: string;
 }
 
+/** 为指定媒体任务构造只读、无网络且路径受限的固定执行策略。 */
 export function buildMediaCodexAgentPolicy(
   taskId: string,
   paths: MediaCodexAgentPolicyPaths = {},
@@ -53,6 +54,7 @@ export function buildMediaCodexAgentPolicy(
   return { ...unsigned, policySha256: sha256Json(unsigned) };
 }
 
+/** 将任务请求与策略身份密封为当前回合唯一可信的边界胶囊。 */
 export function buildMediaCodexAgentCapsule(
   request: MediaCodexAgentTurnRequest,
   policy: MediaCodexAgentPolicy,
@@ -75,19 +77,33 @@ export function buildMediaCodexAgentCapsule(
   return { ...unsigned, capsuleSha256: sha256Json(unsigned) };
 }
 
+/** 校验边界胶囊摘要、策略版本、工具和目录均与当前策略一致。 */
 export function validateMediaCodexAgentCapsule(
   capsule: MediaCodexAgentBoundaryCapsule,
   policy: MediaCodexAgentPolicy,
 ) {
   const { capsuleSha256, ...unsigned } = capsule;
+  if (capsuleSha256 !== sha256Json(unsigned)) {
+    throw new Error('agent-capsule-identity-mismatch');
+  }
   if (
-    capsuleSha256 !== sha256Json(unsigned) ||
     capsule.policySha256 !== policy.policySha256 ||
-    capsule.policyVersion !== policy.policyVersion ||
+    capsule.policyVersion !== policy.policyVersion
+  ) {
+    throw new Error('agent-capsule-identity-mismatch');
+  }
+  if (
     capsule.outputSchema !== MEDIA_CODEX_AGENT_OUTPUT_SCHEMA_ID ||
-    capsule.cloudGate !== false ||
-    canonicalJson(capsule.allowedRoots) !==
-      canonicalJson(policy.allowedRoots) ||
+    capsule.cloudGate !== false
+  ) {
+    throw new Error('agent-capsule-identity-mismatch');
+  }
+  if (
+    canonicalJson(capsule.allowedRoots) !== canonicalJson(policy.allowedRoots)
+  ) {
+    throw new Error('agent-capsule-identity-mismatch');
+  }
+  if (
     canonicalJson(capsule.allowedTools) !== canonicalJson(policy.allowedTools)
   ) {
     throw new Error('agent-capsule-identity-mismatch');
@@ -95,6 +111,7 @@ export function validateMediaCodexAgentCapsule(
   return capsule;
 }
 
+/** 组合可信胶囊、操作员命令和不可信事实，生成受边界约束的回合提示词。 */
 export function buildMediaCodexAgentTurnPrompt(
   request: MediaCodexAgentTurnRequest,
   capsule: MediaCodexAgentBoundaryCapsule,
@@ -117,6 +134,7 @@ export function buildMediaCodexAgentTurnPrompt(
   ].join('\n');
 }
 
+/** 校验工具调用与当前胶囊身份一致，并限制工具参数和密封计划路径。 */
 export function validateMediaCodexAgentToolCall(
   call: MediaCodexAgentToolCall,
   capsule: MediaCodexAgentBoundaryCapsule,
@@ -151,6 +169,7 @@ export function validateMediaCodexAgentToolCall(
   return call;
 }
 
+/** 创建策略声明的工作与证据目录，并拒绝符号链接边界。 */
 export function prepareMediaCodexAgentDirectories(
   policy: MediaCodexAgentPolicy,
 ) {
@@ -162,23 +181,36 @@ export function prepareMediaCodexAgentDirectories(
   assertNoSymbolicLink(evidenceRoot, 'agent-evidence-root-symlink');
 }
 
+/** 校验回合请求的任务身份、摘要、指令长度和上下文体积。 */
 function validateTurnRequest(request: MediaCodexAgentTurnRequest) {
   assertSafeId(request.taskId, 'task-id-invalid');
   assertSafeId(request.replayKey, 'replay-key-invalid');
+  if (!Number.isSafeInteger(request.taskRevision) || request.taskRevision < 1) {
+    throw new Error('agent-turn-input-invalid');
+  }
+  if (!SHA256_PATTERN.test(request.manifestSha256)) {
+    throw new Error('agent-turn-input-invalid');
+  }
   if (
-    !Number.isSafeInteger(request.taskRevision) ||
-    request.taskRevision < 1 ||
-    !SHA256_PATTERN.test(request.manifestSha256) ||
     !request.operatorCommand.trim() ||
-    request.operatorCommand.length > 2_000 ||
-    (request.currentUnitId !== null &&
-      !SAFE_ID_PATTERN.test(request.currentUnitId)) ||
+    request.operatorCommand.length > 2_000
+  ) {
+    throw new Error('agent-turn-input-invalid');
+  }
+  if (
+    request.currentUnitId !== null &&
+    !SAFE_ID_PATTERN.test(request.currentUnitId)
+  ) {
+    throw new Error('agent-turn-input-invalid');
+  }
+  if (
     Buffer.byteLength(canonicalJson(request.compactContext)) > MAX_CONTEXT_BYTES
   ) {
     throw new Error('agent-turn-input-invalid');
   }
 }
 
+/** 校验密封计划字段互斥、身份修正和每个文件操作的允许路径。 */
 function validateSealedPlanArguments(
   value: Record<string, unknown>,
   allowedRoots: string[],
@@ -190,12 +222,23 @@ function validateSealedPlanArguments(
     keys.some(
       (key) =>
         !['identity', 'operations', 'replayKey', 'summary'].includes(key),
-    ) ||
-    !Array.isArray(value.operations) ||
-    value.operations.length > 500 ||
-    (value.operations.length === 0) === (identity === undefined) ||
+    )
+  ) {
+    throw new Error('agent-sealed-plan-invalid');
+  }
+  if (!Array.isArray(value.operations) || value.operations.length > 500) {
+    throw new Error('agent-sealed-plan-invalid');
+  }
+  if ((value.operations.length === 0) === (identity === undefined)) {
+    throw new Error('agent-sealed-plan-invalid');
+  }
+  if (
     typeof value.replayKey !== 'string' ||
-    !SAFE_ID_PATTERN.test(value.replayKey) ||
+    !SAFE_ID_PATTERN.test(value.replayKey)
+  ) {
+    throw new Error('agent-sealed-plan-invalid');
+  }
+  if (
     typeof value.summary !== 'string' ||
     !value.summary.trim() ||
     value.summary.length > 800
@@ -214,11 +257,15 @@ function validateSealedPlanArguments(
       ) ||
       entry.provider !== 'tmdb' ||
       typeof entry.providerId !== 'string' ||
-      !/^[1-9]\d*$/u.test(entry.providerId) ||
-      (entry.releaseYear !== null &&
-        (!Number.isInteger(entry.releaseYear) ||
-          Number(entry.releaseYear) < 1870 ||
-          Number(entry.releaseYear) > 2100))
+      !/^[1-9]\d*$/u.test(entry.providerId)
+    ) {
+      throw new Error('agent-sealed-plan-invalid');
+    }
+    if (
+      entry.releaseYear !== null &&
+      (!Number.isInteger(entry.releaseYear) ||
+        Number(entry.releaseYear) < 1870 ||
+        Number(entry.releaseYear) > 2100)
     ) {
       throw new Error('agent-sealed-plan-invalid');
     }
@@ -231,7 +278,11 @@ function validateSealedPlanArguments(
     if (
       Object.keys(entry).some(
         (key) => !['action', 'sourcePath', 'targetPath'].includes(key),
-      ) ||
+      )
+    ) {
+      throw new Error('agent-sealed-plan-invalid');
+    }
+    if (
       typeof entry.action !== 'string' ||
       !entry.action.trim() ||
       typeof entry.targetPath !== 'string'
@@ -252,6 +303,7 @@ function validateSealedPlanArguments(
   }
 }
 
+/** 证明候选路径位于允许根目录内，且既有路径没有越过符号链接。 */
 function assertAllowedPath(candidate: string, allowedRoots: string[]) {
   assertAbsoluteNormalizedPath(candidate, 'agent-path-not-allowed');
   const root = allowedRoots.find(
@@ -275,6 +327,7 @@ function assertAllowedPath(candidate: string, allowedRoots: string[]) {
   }
 }
 
+/** 沿父目录回溯并返回离目标最近的既有路径。 */
 function nearestExistingPath(value: string): string {
   let current = value;
   while (!existsSync(current)) {
@@ -285,10 +338,12 @@ function nearestExistingPath(value: string): string {
   return current;
 }
 
+/** 拒绝会改变真实路径边界的符号链接。 */
 function assertNoSymbolicLink(value: string, code: string) {
   if (lstatSync(value).isSymbolicLink()) throw new Error(code);
 }
 
+/** 要求路径为规范化绝对路径，并排除根目录和穿越形式。 */
 function assertAbsoluteNormalizedPath(value: string, code: string) {
   if (
     !value.startsWith('/') ||
@@ -301,10 +356,12 @@ function assertAbsoluteNormalizedPath(value: string, code: string) {
   }
 }
 
+/** 校验任务、回放或会话标识符合固定安全字符集。 */
 function assertSafeId(value: string, code: string) {
   if (!SAFE_ID_PATTERN.test(value)) throw new Error(code);
 }
 
+/** 要求输入是非空的普通对象，并收窄其 TypeScript 类型。 */
 function assertPlainObject(
   value: unknown,
   code: string,
@@ -314,6 +371,7 @@ function assertPlainObject(
   }
 }
 
+/** 判断字符串是否是边界策略明确允许的媒体工具名。 */
 export function isMediaCodexAgentTool(
   value: string,
 ): value is MediaCodexAgentTool {

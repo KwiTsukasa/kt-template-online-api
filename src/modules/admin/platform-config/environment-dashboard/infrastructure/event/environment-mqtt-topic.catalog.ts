@@ -7,6 +7,7 @@ export interface EnvironmentMqttTopics {
   pluginTaskRun(pluginKey: string, taskKey: string): string;
 }
 
+/** 规范化环境主题分段。 */
 export function normalizeEnvironmentTopicSegment(value: string): string {
   const normalized = value
     .trim()
@@ -17,6 +18,7 @@ export function normalizeEnvironmentTopicSegment(value: string): string {
   return normalized || 'unknown';
 }
 
+/** 构建环境MQTT主题。 */
 export function buildEnvironmentMqttTopics(
   topicPrefix = process.env.ENV_DASHBOARD_MQTT_TOPIC_PREFIX || 'kt/env',
 ): EnvironmentMqttTopics {

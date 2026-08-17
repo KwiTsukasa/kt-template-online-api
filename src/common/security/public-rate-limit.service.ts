@@ -200,6 +200,7 @@ export class PublicRateLimitService {
     this.websocketPath = this.readWebsocketPath();
   }
 
+  /** 分类公开的速率限制记录。 */
   classify(
     request: Request,
     context: PublicRateLimitContext = {},
@@ -214,6 +215,7 @@ export class PublicRateLimitService {
     return 'baseline';
   }
 
+  /** 消费公开的速率限制记录。 */
   consume(
     request: Request,
     context: PublicRateLimitContext = {},
@@ -226,6 +228,7 @@ export class PublicRateLimitService {
     return outcome;
   }
 
+  /** 清空成功的登录用户名。 */
   async clearSuccessfulLoginUsername(username: string): Promise<void> {
     try {
       await this.store.deleteCounter(
@@ -238,6 +241,7 @@ export class PublicRateLimitService {
     }
   }
 
+  /** 消费已验证的令牌主体。 */
   async consumeVerifiedTokenSubject(
     operation: VerifiedTokenOperation,
     subject: string,
@@ -271,6 +275,7 @@ export class PublicRateLimitService {
     }
   }
 
+  /** 绑定Live2D并发的租约。 */
   async bindLive2DConcurrentLease(
     request: Request,
     response: Response,
@@ -368,6 +373,7 @@ export class PublicRateLimitService {
     renewalTimer.unref();
   }
 
+  /** 消费一次。 */
   private async consumeOnce(
     request: Request,
     context: PublicRateLimitContext,
@@ -432,10 +438,12 @@ export class PublicRateLimitService {
     }
   }
 
+  /** 判断管理表层是否成立。 */
   isManagementSurface(request: Request): boolean {
     return this.isManagementPath(this.getPath(request));
   }
 
+  /** 消费登录。 */
   private async consumeLogin(
     request: Request,
     clientIp: string,
@@ -505,6 +513,7 @@ export class PublicRateLimitService {
     }
   }
 
+  /** 判断已锁定公开的读取是否成立。 */
   private isLockedPublicRead(method: string, path: string): boolean {
     if (!['GET', 'HEAD'].includes(method.toUpperCase())) return false;
 
@@ -516,6 +525,7 @@ export class PublicRateLimitService {
     );
   }
 
+  /** 判断管理路径是否成立。 */
   private isManagementPath(path: string): boolean {
     return (
       MANAGEMENT_EXACT_PATHS.has(path) ||
@@ -524,6 +534,7 @@ export class PublicRateLimitService {
     );
   }
 
+  /** 判断短的响应异常是否成立。 */
   private isShortResponseException(request: Request, path: string): boolean {
     if (UPLOAD_PATHS.has(path)) return true;
 
@@ -544,12 +555,14 @@ export class PublicRateLimitService {
     return !!acceptsEventStream && SSE_PATHS.has(path);
   }
 
+  /** 读取路径。 */
   private getPath(request: Request): string {
     const raw = request.path || request.originalUrl || request.url || '/';
     const path = raw.split('?')[0] || '/';
     return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
   }
 
+  /** 读取方法存储桶。 */
   private getMethodBucket(method: string): string {
     const normalized = method.toUpperCase();
     return normalized === 'GET' || normalized === 'HEAD'
@@ -557,15 +570,18 @@ export class PublicRateLimitService {
       : normalized.toLowerCase();
   }
 
+  /** 规范化用户名。 */
   private normalizeUsername(value: unknown): string {
     if (typeof value !== 'string') return '<missing>';
     return value.normalize('NFKC').trim().toLowerCase() || '<missing>';
   }
 
+  /** 生成身份摘要。 */
   private hashIdentity(value: string): string {
     return createHash('sha256').update(value).digest('hex');
   }
 
+  /** 读取Swagger白名单。 */
   private readSwaggerAllowlist(): string[] {
     const values =
       `${this.configService.get(CONFIG_KEYS.swaggerAllowlist) || ''}`
@@ -587,6 +603,7 @@ export class PublicRateLimitService {
     return normalized as string[];
   }
 
+  /** 读取WebSocket路径。 */
   private readWebsocketPath(): string {
     const value = `${this.configService.get('QQBOT_REVERSE_WS_PATH') || ''}`
       .trim()
@@ -598,6 +615,7 @@ export class PublicRateLimitService {
     return path;
   }
 
+  /** 断言Redis前缀。 */
   private assertRedisPrefix() {
     const value = `${this.configService.get(CONFIG_KEYS.redisKeyPrefix) || ''}`;
     if (!value || !SAFE_REDIS_PREFIX.test(value)) {
@@ -607,6 +625,7 @@ export class PublicRateLimitService {
     }
   }
 
+  /** 读取正数整数。 */
   private readPositiveInteger(
     key: string,
     fallback: number,
@@ -630,6 +649,7 @@ export class PublicRateLimitService {
     return value;
   }
 
+  /** 返回告警Redis不可用。 */
   private warnRedisUnavailable(policy: PublicRateLimitPolicy) {
     const now = Date.now();
     if (now - this.lastRedisWarningAt < this.warningIntervalMs) return;
@@ -641,6 +661,7 @@ export class PublicRateLimitService {
     );
   }
 
+  /** 读取请求头。 */
   private readHeader(request: Request, name: string): string | undefined {
     const value = request.headers?.[name];
     return Array.isArray(value) ? value[0] : value;

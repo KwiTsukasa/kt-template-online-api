@@ -33,12 +33,14 @@
 
 ```text
 src/
-  admin/       Admin 后台接口和实体
-  blog/        本地博客内容与主题配置
-  common/      全局装饰器、过滤器、拦截器、logger、工具和类型
-  minio/       MinIO 文件服务
-  modules/     第三期重构后的业务边界模块
-  qqbot/       QQBot 运行态、管理接口和插件生态
+  apps/        独立进程入口（CodexAgent Gateway、NapCat WebUI Gateway）
+  commands/    有界命令行入口
+  common/      跨业务装饰器、过滤器、拦截器、日志、安全和基础服务
+  modules/     admin、asset、blog、qqbot 等业务边界
+    admin/identity/auth/                       application/contract/infrastructure/persistence/presentation 分层
+    admin/media-governance/                    application/contract/domain/infrastructure/presentation 分层
+    admin/platform-config/network-management/ application/contract/domain/infrastructure/presentation 分层
+  runtime/     运行时客户端、配置、错误、证据和健康检查
   app.module.ts
   main.ts
 test/          Jest 单元测试，统一放在 test 下
@@ -231,6 +233,12 @@ LocalNFO/海报有界修复，再将仍未闭合的真实歧义交给 CodexAgent
 独立验收判定。
 Task、Unit、来源和 Agent session 由 10 张 TypeORM 领域表持久化；API 启动时恢复
 同一 Task/thread 与事件序号，状态变更和语义事件在同一数据库事务提交后才发布 SSE。
+执行器高频进度先校验 Run、manifest 与连续序号，再原子追加到 Redis 热层并立即发布
+携带紧凑 Task patch 的 `task-changed`；普通 tick 不等待 MySQL。MySQL 最多每 10 秒、
+出现语义变化或进入终态时保存权威快照，终态必须等本实例已排队快照落库。Admin 对正常
+tick 原位合并补丁，不重载列表/详情，也不显示整页 Spin；SSE 游标超出 API 有界内存
+回放窗时发送 `snapshot-required`，由 Admin 静默重取权威快照。Redis Stream 当前承担
+执行器序号与进度热层，不声明为跨进程 SSE 历史回放层。
 运维入口 `pnpm media-governance:backup-restore-drill -- ...` 默认只输出计划；执行模式
 只备份精确 10 张媒体治理表，并且只允许恢复到新建的
 `kt_media_governance_restore_*` 隔离库。入口会在 dump 前后比较源库 10 表行数及
@@ -263,7 +271,12 @@ policy/capsule SHA 的启动预留，才调用 gateway；首个 thread 映射回
 `needs-operator` 分离；再次调用 `agent/start` 只会请求 `restart-failed-turn`，gateway
 回读旧 turn 为 `failed/interrupted` 后才以新 revision、replay key、capsule 和 thread
 重试，事件序号继续递增，operator decision 不能绕过该门禁。Agent 结构化输出的
-`properties` 必须全部进入 `required`，无候选时显式返回空数组。每个 Task 只允许一个主媒体下载 owner；来源选择把每个显式文件
+`properties` 必须全部进入 `required`，无候选时显式返回空数组。专用 Agent 会话接口
+通过官方 App Server thread 历史与 gateway 有界安全存储返回可见的 user/assistant 消息，
+不保存 reasoning、原始工具输出或登录凭据；`afterSequence` 支持增量读取。操作员可用
+`clientMessageId` 与 `expectedConversationRevision` 在同一 thread 发送任意文本，幂等重放
+返回原结果，身份或 revision 漂移返回 409。可见文本增量以 75ms 窗口合并后走独立
+conversation SSE，不能修改业务 Task 的 stage、runState 或 revision。每个 Task 只允许一个主媒体下载 owner；来源选择把每个显式文件
 索引一一绑定到 Unit、文件角色、季集和字幕语言，并持久化为
 `selected_file_mappings`。下载门在完整载荷开始前核对每个 Unit 的主视频覆盖、非内嵌
 profile 的中文字幕覆盖、同季单一字幕发布组以及补充来源只含字幕/字体；Schema
@@ -282,7 +295,9 @@ revision/run/replay 幂等和五层 Agent 边界。数据库 Outbox 会把密封
 数据库状态仓、私网地址或内部 secret 时失败关闭。云端治理仍保持关闭。
 执行器回调会按同一事件序号有界重试；NAS executor 先把连续事件 journal 和最终报告
 原子密封到 `/vol1/docker/kt-codex/artifacts/automation/media/<runId>`，再向 API 发送终态。
-API 每 5 秒以 Run、Task 和密封输入摘要查询对应 systemd runner；执行单元退出或失联时，
+下载 runner 每 1 秒采集 qBittorrent 字节、速度、ETA、peer 与逐文件进度；磁链清单检查
+仍按每 5 秒、最长 120 秒的独立合同执行。API 每 5 秒以 Run、Task 和密封输入摘要查询
+对应 systemd runner；执行单元退出或失联时，
 只有状态响应同时携带匹配的 Run manifest SHA、精确成功/失败终态与下一连续序号，API
 才应用该终态并清除活动 Run。缺少密封证据、身份漂移或序号跳跃时保持 Run 活跃等待下轮
 核对，API 不自行伪造失败事件。此后再次开始下载会密封新的接管 Run，按
@@ -310,6 +325,7 @@ Run，并由 Agent 的类型化身份修正收口。升级前已处于这一精�
 ## 核心规则
 
 - 后台主键使用 Snowflake 数字 ID，数据库字段为 `BIGINT`，接口按字符串返回。
+- 媒体治理生产源码由递归 AST 门禁覆盖：禁止条件三元表达式和六叶及以上的复合 `if`，符合规则的具名函数必须具备有意义的中文 JSDoc。
 - 后端响应时间统一用 `KtDateTime extends Date` 承接序列化语义；Entity 使用 `@KtDateTimeColumn(format)`、`@KtCreateDateColumn(format)`、`@KtUpdateDateColumn(format)` 在 TypeORM hydrate 边界转换，DTO/外部数据源使用 `@KtDateTimeField(format)` + `transformKtDateTimeFields()` 转换，默认格式为 `YYYY-MM-DD HH:mm:ss`。Create/Update 列显式配置 `precision` 时，公共装饰器会在调用方未覆盖的前提下生成同精度 `CURRENT_TIMESTAMP(n)` 默认值与更新表达式，避免 MySQL 列精度不匹配；`vbenSuccess` / `ToolsService.res` 不做全量递归格式化。
 - 字典维护在 `admin_dict`，Admin 字典管理按 `dictCode` 分组展示；可运营映射优先走字典或静态配置，不硬编码到业务函数。
 - 全局 `SaveBodyInterceptor` 会删除 `POST */save` 请求体里的 `id`；需要保留时使用 `@SkipSaveBodyNormalize()`。

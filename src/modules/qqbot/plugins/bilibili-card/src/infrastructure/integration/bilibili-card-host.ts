@@ -5,6 +5,7 @@ import type {
 
 export type BilibiliCardGenericHost = Record<string, unknown>;
 
+/** 创建Bilibili卡片通用主机适配器。 */
 export function createBilibiliCardGenericHostAdapter(
   host: BilibiliCardGenericHost,
   configSnapshot: Record<string, string | undefined>,
@@ -32,6 +33,7 @@ export function createBilibiliCardGenericHostAdapter(
   };
 }
 
+/** 返回调用Bilibili卡片通用主机。 */
 export async function callBilibiliCardGenericHost<TResult = unknown>(
   host: BilibiliCardGenericHost,
   method: string,
@@ -44,6 +46,7 @@ export async function callBilibiliCardGenericHost<TResult = unknown>(
   return (await fn(...args)) as TResult;
 }
 
+/** 序列化Bilibili卡片JSON请求。 */
 export function serializeBilibiliCardJsonRequest(
   request: BilibiliCardHostJsonRequest,
 ) {

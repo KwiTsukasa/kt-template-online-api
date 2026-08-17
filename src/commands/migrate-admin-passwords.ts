@@ -3,7 +3,7 @@ import { link, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, parse, relative, resolve, sep } from 'node:path';
 
 import { DataSource } from 'typeorm';
-import { AdminPasswordHashService } from '../modules/admin/identity/auth/admin-password-hash.service';
+import { AdminPasswordHashService } from '@/modules/admin/identity/auth/application/admin-password-hash.service';
 
 export type AdminPasswordMigrationMode = 'dry-run' | 'execute' | 'verify';
 
@@ -90,6 +90,7 @@ type AdminPasswordMigrationRow = {
 
 class AdminPasswordMigrationUsageError extends Error {}
 
+/** 解析管理端密码迁移选项。 */
 export function parseAdminPasswordMigrationOptions(
   argv: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -174,6 +175,7 @@ export function parseAdminPasswordMigrationOptions(
   };
 }
 
+/** 构建管理端密码迁移数据库身份。 */
 export function buildAdminPasswordMigrationDatabaseIdentity(
   env: NodeJS.ProcessEnv,
 ) {
@@ -186,6 +188,7 @@ export function buildAdminPasswordMigrationDatabaseIdentity(
   return `${host}:${port}/${database}`;
 }
 
+/** 执行管理端密码迁移。 */
 export async function runAdminPasswordMigration(
   options: AdminPasswordMigrationOptions,
   dependencies: AdminPasswordMigrationDependencies,
@@ -369,6 +372,7 @@ export async function runAdminPasswordMigration(
   }
 }
 
+/** 断言执行安全性。 */
 function assertExecuteSafety(
   options: AdminPasswordMigrationOptions,
   dependencies: AdminPasswordMigrationDependencies,
@@ -427,6 +431,7 @@ function assertExecuteSafety(
   return backup;
 }
 
+/** 断言管理端密码迁移清单路径。 */
 function assertAdminPasswordMigrationManifestPath(path: string) {
   const target = resolve(path);
   const workspaceSegment = `${sep}.kt-workspace${sep}`;
@@ -437,6 +442,7 @@ function assertAdminPasswordMigrationManifestPath(path: string) {
   }
 }
 
+/** 断言清单路径安全性。 */
 function assertManifestPathSafety(
   inspection: AdminPasswordMigrationPathInspection,
 ) {
@@ -458,6 +464,7 @@ function assertManifestPathSafety(
   }
 }
 
+/** 断言清单路径是否新建。 */
 function assertManifestPathIsNew(
   inspection: AdminPasswordMigrationPathInspection,
 ) {
@@ -468,6 +475,7 @@ function assertManifestPathIsNew(
   }
 }
 
+/** 创建清单。 */
 function createManifest(
   mode: AdminPasswordMigrationMode,
 ): AdminPasswordMigrationManifest {
@@ -488,6 +496,7 @@ function createManifest(
   };
 }
 
+/** 创建数据来源。 */
 function createDataSource(env: NodeJS.ProcessEnv) {
   const port = Number(env.DB_PORT || 3306);
   if (
@@ -513,6 +522,7 @@ function createDataSource(env: NodeJS.ProcessEnv) {
   });
 }
 
+/** 格式化清单摘要。 */
 function formatManifestSummary(manifest: AdminPasswordMigrationManifest) {
   return [
     `mode=${manifest.mode}`,
@@ -524,6 +534,7 @@ function formatManifestSummary(manifest: AdminPasswordMigrationManifest) {
   ].join(' ');
 }
 
+/** 返回日志安全地。 */
 function logSafely(
   logger: Pick<Console, 'error' | 'log'>,
   level: 'error' | 'log',
@@ -536,11 +547,13 @@ function logSafely(
   }
 }
 
+/** 读取受影响的行。 */
 function readAffectedRows(result: any) {
   const header = Array.isArray(result) ? result[0] : result;
   return Number(header?.affectedRows);
 }
 
+/** 写入管理端密码迁移清单。 */
 export async function writeAdminPasswordMigrationManifest(
   path: string,
   manifest: AdminPasswordMigrationManifest,
@@ -596,6 +609,7 @@ export async function writeAdminPasswordMigrationManifest(
   }
 }
 
+/** 创建路径检查。 */
 function createPathInspection(
   overrides: Partial<AdminPasswordMigrationPathInspection> = {},
 ): AdminPasswordMigrationPathInspection {
@@ -612,6 +626,7 @@ function createPathInspection(
   };
 }
 
+/** 返回路径包含符号化的链接。 */
 function pathContainsSymbolicLink(path: string) {
   const target = resolve(path);
   const root = parse(target).root;
@@ -630,6 +645,7 @@ function pathContainsSymbolicLink(path: string) {
   return false;
 }
 
+/** 检查管理端密码清单路径。 */
 export function inspectAdminPasswordManifestPath(
   path: string,
 ): AdminPasswordMigrationPathInspection {
@@ -660,6 +676,7 @@ export function inspectAdminPasswordManifestPath(
   }
 }
 
+/** 检查管理端密码备份路径。 */
 export function inspectAdminPasswordBackupPath(
   path: string,
 ): AdminPasswordMigrationPathInspection {
@@ -727,6 +744,7 @@ export function inspectAdminPasswordBackupPath(
   }
 }
 
+/** 释放路径检查安全地。 */
 function releasePathInspectionSafely(
   inspection: AdminPasswordMigrationPathInspection,
 ) {
@@ -737,6 +755,7 @@ function releasePathInspectionSafely(
   }
 }
 
+/** 执行当前模块的主流程。 */
 async function main() {
   const options = parseAdminPasswordMigrationOptions(process.argv.slice(2));
   const actualDatabaseIdentity = buildAdminPasswordMigrationDatabaseIdentity(

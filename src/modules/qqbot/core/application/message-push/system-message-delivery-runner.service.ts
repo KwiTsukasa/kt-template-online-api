@@ -54,6 +54,7 @@ type PreparedDelivery =
       status: 'cancelled' | 'failed' | 'superseded' | 'waiting_ddns';
     };
 
+/** 返回投递重试延迟毫秒。 */
 export function deliveryRetryDelayMs(attemptCount: number): number {
   return Math.min(
     SYSTEM_MESSAGE_RETRY_BASE_MS * 2 ** Math.max(0, attemptCount - 1),
@@ -70,6 +71,7 @@ export class SystemMessageDeliveryRunnerService {
     private readonly sendService: QqbotSendService,
   ) {}
 
+  /** 执行一次。 */
   async runOnce(now?: Date): Promise<number> {
     let claimed = 0;
     for (let index = 0; index < SYSTEM_MESSAGE_BATCH_SIZE; index += 1) {
@@ -85,6 +87,7 @@ export class SystemMessageDeliveryRunnerService {
     return claimed;
   }
 
+  /** 返回声明单个。 */
   private async claimOne(now: Date): Promise<ClaimToken | null> {
     return this.dataSource.transaction(async (manager) => {
       const deliveries = manager.getRepository(QqbotMessageDelivery);
@@ -122,6 +125,7 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
+  /** 处理声明。 */
   private async processClaim(
     token: ClaimToken,
     fixedNow?: Date,
@@ -228,6 +232,7 @@ export class SystemMessageDeliveryRunnerService {
     }
   }
 
+  /** 准备系统消息投递执行器记录。 */
   private async prepare(token: ClaimToken): Promise<PreparedDelivery> {
     return this.dataSource.transaction(async (manager) => {
       const event = await manager.getRepository(QqbotMessageEvent).findOne({
@@ -335,6 +340,7 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
+  /** 校验已冻结的。 */
   private validateFrozen(
     delivery: QqbotMessageDelivery,
     sourceKey: string,
@@ -370,6 +376,7 @@ export class SystemMessageDeliveryRunnerService {
       throw new SystemMessageContractError('rendered_message_mismatch');
   }
 
+  /** 处理意外的声明失败。 */
   private async handleUnexpectedClaimFailure(
     token: ClaimToken,
     now: Date,
@@ -387,6 +394,7 @@ export class SystemMessageDeliveryRunnerService {
     }
   }
 
+  /** 完成系统消息投递执行器记录。 */
   private async finish(
     token: ClaimToken,
     status: 'cancelled' | 'failed' | 'success' | 'superseded' | 'waiting_ddns',
@@ -405,6 +413,7 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
+  /** 重试或失败。 */
   private async retryOrFail(
     token: ClaimToken,
     now: Date,
@@ -429,6 +438,7 @@ export class SystemMessageDeliveryRunnerService {
     });
   }
 
+  /** 持久化所有者转换。 */
   private async persistOwnerTransition(
     token: ClaimToken,
     values: OwnerTransition,
@@ -446,6 +456,7 @@ export class SystemMessageDeliveryRunnerService {
     }
   }
 
+  /** 返回所有者位置。 */
   private ownerWhere(token: ClaimToken) {
     return {
       attemptCount: token.attempt,
@@ -455,6 +466,7 @@ export class SystemMessageDeliveryRunnerService {
     };
   }
 
+  /** 返回拥有。 */
   private owns(delivery: QqbotMessageDelivery, token: ClaimToken): boolean {
     return (
       delivery.status === 'processing' &&

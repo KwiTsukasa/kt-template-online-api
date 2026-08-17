@@ -1,9 +1,9 @@
 import { sha256Json } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
-import { buildAdminMediaGovernancePlan } from '../../../src/modules/admin/media-governance/media-governance-plan';
+import { buildAdminMediaGovernancePlan } from '../../../src/modules/admin/media-governance/application/media-governance-plan';
 import type {
   MediaGovernancePayloadSeal,
   MediaGovernanceTask,
-} from '../../../src/modules/admin/media-governance/media-governance.service';
+} from '../../../src/modules/admin/media-governance/application/media-governance.service';
 
 describe('Admin media Schema 1.2.0 plan builder', () => {
   const task = {

@@ -22,6 +22,7 @@ export class PublicRateLimitGuard implements CanActivate {
     private readonly trustedCredentialTransportService: TrustedCredentialTransportService,
   ) {}
 
+  /** 判断是否允许激活。 */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (context.getType() !== 'http') return true;
 
@@ -39,6 +40,7 @@ export class PublicRateLimitGuard implements CanActivate {
     return true;
   }
 
+  /** 断言允许的。 */
   assertAllowed(response: Response, outcome: PublicRateLimitOutcome): void {
     if (outcome.allowed) return;
 

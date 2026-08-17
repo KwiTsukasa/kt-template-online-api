@@ -32,6 +32,7 @@ export class QqbotPluginHostBridgeService {
     private readonly sendService: QqbotSendService,
   ) {}
 
+  /** 处理主机调用。 */
   async handleHostCall(
     descriptor: QqbotPluginPackageDescriptor,
     request: QqbotPluginHostCallRequest,
@@ -47,6 +48,7 @@ export class QqbotPluginHostBridgeService {
     }
   }
 
+  /** 分发主机调用。 */
   private async dispatchHostCall(
     descriptor: QqbotPluginPackageDescriptor,
     request: QqbotPluginHostCallRequest,
@@ -115,6 +117,7 @@ export class QqbotPluginHostBridgeService {
     }
   }
 
+  /** 读取配置多个。 */
   private async getConfigMany(keys: string[]) {
     const entries = await Promise.all(
       keys.map(async (key) => [
@@ -125,6 +128,7 @@ export class QqbotPluginHostBridgeService {
     return Object.fromEntries(entries);
   }
 
+  /** 读取包文件。 */
   private async readPackageFile(
     descriptor: QqbotPluginPackageDescriptor,
     filePath: string,
@@ -132,6 +136,7 @@ export class QqbotPluginHostBridgeService {
     return readFile(resolvePackagePath(descriptor, filePath));
   }
 
+  /** 读取JSON文件。 */
   private async readJsonFile(
     descriptor: QqbotPluginPackageDescriptor,
     filePath: string,
@@ -141,6 +146,7 @@ export class QqbotPluginHostBridgeService {
     );
   }
 
+  /** 写入JSON文件。 */
   private async writeJsonFile(
     descriptor: QqbotPluginPackageDescriptor,
     filePath: string,
@@ -152,6 +158,7 @@ export class QqbotPluginHostBridgeService {
     return undefined;
   }
 
+  /** 重命名包文件。 */
   private async renamePackageFile(
     descriptor: QqbotPluginPackageDescriptor,
     from: string,
@@ -164,6 +171,7 @@ export class QqbotPluginHostBridgeService {
     return undefined;
   }
 
+  /** 返回休眠。 */
   private sleep(ms: number) {
     if (!Number.isFinite(ms) || ms < 0) {
       throw new Error(
@@ -178,6 +186,7 @@ export class QqbotPluginHostBridgeService {
   }
 }
 
+/** 解析包路径。 */
 function resolvePackagePath(
   descriptor: QqbotPluginPackageDescriptor,
   filePath: string,
@@ -198,6 +207,7 @@ function resolvePackagePath(
   return targetPath;
 }
 
+/** 读取必需的文本。 */
 function getRequiredText(args: Record<string, unknown>, key: string) {
   const value = args[key];
   if (typeof value !== 'string' || !value.trim()) {
@@ -206,6 +216,7 @@ function getRequiredText(args: Record<string, unknown>, key: string) {
   return value.trim();
 }
 
+/** 读取路径参数。 */
 function getPathArgument(args: Record<string, unknown>) {
   const value = args.path ?? args.filePath;
   if (typeof value !== 'string' || !value.trim()) {
@@ -214,6 +225,7 @@ function getPathArgument(args: Record<string, unknown>) {
   return value.trim();
 }
 
+/** 读取字典代码。 */
 function getDictCode(args: Record<string, unknown>) {
   const value = args.dictCode ?? args.key;
   if (typeof value !== 'string' || !value.trim()) {
@@ -222,6 +234,7 @@ function getDictCode(args: Record<string, unknown>) {
   return value.trim();
 }
 
+/** 读取文本数组。 */
 function getTextArray(args: Record<string, unknown>, key: string) {
   const value = args[key];
   if (
@@ -233,6 +246,7 @@ function getTextArray(args: Record<string, unknown>, key: string) {
   return value as string[];
 }
 
+/** 读取必需的数字。 */
 function getRequiredNumber(args: Record<string, unknown>, key: string) {
   const value = Number(args[key]);
   if (!Number.isFinite(value)) {
@@ -241,6 +255,7 @@ function getRequiredNumber(args: Record<string, unknown>, key: string) {
   return value;
 }
 
+/** 读取HTTP请求选项。 */
 function getHttpRequestOptions(
   args: Record<string, unknown>,
 ): QqbotPluginHttpClientRequest {
@@ -261,6 +276,7 @@ function getHttpRequestOptions(
   return request;
 }
 
+/** 读取重定向请求选项。 */
 function getRedirectRequestOptions(
   args: Record<string, unknown>,
 ): QqbotPluginResolveRedirectRequest {
@@ -271,6 +287,7 @@ function getRedirectRequestOptions(
   return candidate as QqbotPluginResolveRedirectRequest;
 }
 
+/** 判断记录是否成立。 */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

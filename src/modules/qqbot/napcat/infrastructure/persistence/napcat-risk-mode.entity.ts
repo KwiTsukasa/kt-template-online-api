@@ -50,6 +50,7 @@ export class NapcatRiskMode {
   @KtUpdateDateColumn({ name: 'update_time' })
   updateTime: KtDateTime;
 
+  /** 创建标识。 */
   @BeforeInsert()
   createId() {
     ensureSnowflakeId(this);

@@ -15,6 +15,7 @@ export type NapcatDockerDeviceOptions = {
   runFlags: string[];
 };
 
+/** 返回到NapCatDocker设备选项。 */
 export function toNapcatDockerDeviceOptions(
   identity: Pick<
     NapcatDeviceIdentity,

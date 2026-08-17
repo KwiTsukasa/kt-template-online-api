@@ -29,6 +29,7 @@ export class QqbotEnvironmentEventBridge {
 
   constructor(private readonly publisher: EnvironmentEventPublisher) {}
 
+  /** 发布NapCat运行态事件。 */
   async publishNapcatRuntimeEvent(input: QqbotNapcatRuntimeEventInput) {
     await this.publisher.publish({
       eventId: this.createEventId(
@@ -48,6 +49,7 @@ export class QqbotEnvironmentEventBridge {
     });
   }
 
+  /** 发布插件任务运行。 */
   async publishPluginTaskRun(input: QqbotPluginTaskRunEventInput) {
     await this.publisher.publish({
       eventId: this.createEventId(
@@ -67,6 +69,7 @@ export class QqbotEnvironmentEventBridge {
     });
   }
 
+  /** 创建事件标识。 */
   private createEventId(kind: string, sourceId: string, observedAt?: string) {
     const time = observedAt ? new Date(observedAt).getTime() : Date.now();
     return `${kind}-${sourceId}-${time}`;

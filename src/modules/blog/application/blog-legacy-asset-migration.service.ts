@@ -138,6 +138,7 @@ export class BlogLegacyAssetMigrationUsageError extends Error {}
 
 @Injectable()
 export class BlogLegacyAssetManifestFileStore implements BlogLegacyAssetMigrationManifestStore {
+  /** 断言路径。 */
   assertPath(path: string): void {
     const target = resolve(path);
     const workspaceSegment = `${sep}.kt-workspace${sep}`;
@@ -152,11 +153,13 @@ export class BlogLegacyAssetManifestFileStore implements BlogLegacyAssetMigratio
     }
   }
 
+  /** 返回存在。 */
   exists(path: string): boolean {
     this.assertPath(path);
     return existsSync(resolve(path));
   }
 
+  /** 读取博客旧版资源清单文件记录。 */
   async read(path: string): Promise<BlogLegacyAssetMigrationManifest> {
     this.assertPath(path);
     let manifest: unknown;
@@ -169,6 +172,7 @@ export class BlogLegacyAssetManifestFileStore implements BlogLegacyAssetMigratio
     return manifest;
   }
 
+  /** 写入博客旧版资源清单文件记录。 */
   async write(
     path: string,
     manifest: BlogLegacyAssetMigrationManifest,
@@ -208,6 +212,7 @@ export class BlogLegacyAssetHttpFetcher {
     private readonly request: BlogLegacyAssetRawHttpRequest,
   ) {}
 
+  /** 判断允许的来源URL是否成立。 */
   isAllowedSourceUrl(value: string): boolean {
     try {
       const url = new URL(value);
@@ -217,6 +222,7 @@ export class BlogLegacyAssetHttpFetcher {
     }
   }
 
+  /** 获取博客旧版资源HTTP获取器记录。 */
   async fetch(value: string): Promise<BlogLegacyAssetFetchedObject> {
     const maxRedirects = this.readPositiveInteger(
       'BLOG_ASSET_MIGRATION_MAX_REDIRECTS',
@@ -305,6 +311,7 @@ export class BlogLegacyAssetHttpFetcher {
     }
   }
 
+  /** 解析允许的URL。 */
   private parseAllowedUrl(value: string): URL {
     let url: URL;
     try {
@@ -320,6 +327,7 @@ export class BlogLegacyAssetHttpFetcher {
     return url;
   }
 
+  /** 判断允许的URL是否成立。 */
   private isAllowedUrl(url: URL): boolean {
     if (!['http:', 'https:'].includes(url.protocol)) return false;
     if (url.username || url.password || url.hash) return false;
@@ -327,6 +335,7 @@ export class BlogLegacyAssetHttpFetcher {
     return allowedHosts.has(url.host.toLowerCase());
   }
 
+  /** 读取允许的主机。 */
   private readAllowedHosts(): ReadonlySet<string> {
     const raw = `${
       this.configService.get('BLOG_ASSET_MIGRATION_ALLOWED_HOSTS') || ''
@@ -366,6 +375,7 @@ export class BlogLegacyAssetHttpFetcher {
     return new Set(normalized);
   }
 
+  /** 解析与校验地址。 */
   private async resolveAndValidateAddress(
     url: URL,
   ): Promise<{ address: string; family: 4 | 6 }> {
@@ -392,6 +402,7 @@ export class BlogLegacyAssetHttpFetcher {
     return normalized[0] as { address: string; family: 4 | 6 };
   }
 
+  /** 读取正数整数。 */
   private readPositiveInteger(
     key: string,
     fallback: number,
@@ -427,6 +438,7 @@ export class BlogLegacyAssetMigrationService {
     private readonly manifestStore: BlogLegacyAssetMigrationManifestStore,
   ) {}
 
+  /** 执行博客旧版资源迁移记录。 */
   async run(
     options: BlogLegacyAssetMigrationOptions,
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -468,6 +480,7 @@ export class BlogLegacyAssetMigrationService {
     return this.execute(options, manifest);
   }
 
+  /** 构建清单。 */
   private async buildManifest(
     mode: 'dry-run' | 'execute',
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -520,6 +533,7 @@ export class BlogLegacyAssetMigrationService {
     };
   }
 
+  /** 返回扫描来源字段。 */
   private async scanSourceFields(): Promise<SourceField[]> {
     const [articles, themes] = await Promise.all([
       this.articleRepository.find(),
@@ -547,6 +561,7 @@ export class BlogLegacyAssetMigrationService {
     return fields;
   }
 
+  /** 返回恢复。 */
   private async resume(
     options: BlogLegacyAssetMigrationOptions,
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -574,6 +589,7 @@ export class BlogLegacyAssetMigrationService {
     );
   }
 
+  /** 执行博客旧版资源迁移记录。 */
   private async execute(
     options: BlogLegacyAssetMigrationOptions,
     manifest: BlogLegacyAssetMigrationManifest,
@@ -642,6 +658,7 @@ export class BlogLegacyAssetMigrationService {
     }
   }
 
+  /** 验证博客旧版资源迁移记录。 */
   private async verify(
     options: BlogLegacyAssetMigrationOptions,
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -690,6 +707,7 @@ export class BlogLegacyAssetMigrationService {
     return verified;
   }
 
+  /** 返回回滚。 */
   private async rollback(
     options: BlogLegacyAssetMigrationOptions,
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -726,6 +744,7 @@ export class BlogLegacyAssetMigrationService {
     }
   }
 
+  /** 读取清单。 */
   private async readManifest(
     path: string,
   ): Promise<BlogLegacyAssetMigrationManifest> {
@@ -744,6 +763,7 @@ export class BlogLegacyAssetMigrationService {
     return manifest;
   }
 
+  /** 应用条目。 */
   private async applyEntries(
     manager: EntityManager,
     entries: BlogLegacyAssetMigrationEntry[],
@@ -799,6 +819,7 @@ export class BlogLegacyAssetMigrationService {
     }
   }
 
+  /** 读取条目值。 */
   private async readEntryValue(
     entry: BlogLegacyAssetMigrationEntry,
   ): Promise<unknown> {
@@ -820,6 +841,7 @@ export class BlogLegacyAssetMigrationService {
     return theme.config;
   }
 
+  /** 断言破坏性的安全性。 */
   private assertDestructiveSafety(
     options: BlogLegacyAssetMigrationOptions,
   ): void {
@@ -909,6 +931,7 @@ export const defaultBlogLegacyAssetRawHttpRequest: BlogLegacyAssetRawHttpRequest
     }
   };
 
+/** 返回提取URL。 */
 function extractUrls(value: unknown): string[] {
   if (typeof value === 'string') {
     return [...value.matchAll(URL_PATTERN)]
@@ -924,6 +947,7 @@ function extractUrls(value: unknown): string[] {
   return [];
 }
 
+/** 断言博客旧版资源迁移清单。 */
 function assertBlogLegacyAssetMigrationManifest(
   value: unknown,
 ): asserts value is BlogLegacyAssetMigrationManifest {
@@ -998,6 +1022,7 @@ function assertBlogLegacyAssetMigrationManifest(
   );
 }
 
+/** 断言清单条目集合安全性。 */
 function assertManifestEntrySetSafety(
   entries: BlogLegacyAssetMigrationEntry[],
 ): void {
@@ -1051,10 +1076,12 @@ function assertManifestEntrySetSafety(
   }
 }
 
+/** 判断记录是否成立。 */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+/** 判断ISO时间戳是否成立。 */
 function isIsoTimestamp(value: unknown): value is string {
   return (
     typeof value === 'string' &&
@@ -1063,6 +1090,7 @@ function isIsoTimestamp(value: unknown): value is string {
   );
 }
 
+/** 判断安全清单旧的URL是否成立。 */
 function isSafeManifestOldUrl(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   try {
@@ -1078,6 +1106,7 @@ function isSafeManifestOldUrl(value: unknown): value is string {
   }
 }
 
+/** 读取MinIOMIME类型。 */
 function readMinioMimeType(metaData: unknown): string {
   if (!isRecord(metaData)) return '';
   const value = metaData['content-type'] ?? metaData['Content-Type'];
@@ -1086,10 +1115,12 @@ function readMinioMimeType(metaData: unknown): string {
     : '';
 }
 
+/** 裁剪URL标点符号。 */
 function trimUrlPunctuation(value: string): string {
   return value.replace(/[),.;}\]]+$/u, '');
 }
 
+/** 创建安全基础文件名。 */
 function createSafeBasename(value: string): string {
   let source = 'asset';
   try {
@@ -1105,6 +1136,7 @@ function createSafeBasename(value: string): string {
   return SAFE_BASENAME_PATTERN.test(normalized) ? normalized : 'asset';
 }
 
+/** 读取请求头。 */
 function readHeader(
   headers: Record<string, string | string[] | undefined>,
   name: string,
@@ -1113,6 +1145,7 @@ function readHeader(
   return Array.isArray(value) ? value[0] : value;
 }
 
+/** 判断禁止的地址是否成立。 */
 function isForbiddenAddress(address: string): boolean {
   const family = isIP(address);
   if (family === 4) return isForbiddenIpv4(address);
@@ -1138,6 +1171,7 @@ function isForbiddenAddress(address: string): boolean {
   return bytes[0] === 0xff;
 }
 
+/** 判断禁止的IPv4是否成立。 */
 function isForbiddenIpv4(address: string): boolean {
   const parts = address.split('.').map(Number);
   if (
@@ -1159,6 +1193,7 @@ function isForbiddenIpv4(address: string): boolean {
   );
 }
 
+/** 解析IPv6。 */
 function parseIpv6(address: string): number[] | undefined {
   const normalized = address.toLowerCase().split('%')[0];
   const separatorIndex = normalized.indexOf('::');
@@ -1186,6 +1221,7 @@ function parseIpv6(address: string): number[] | undefined {
   return groups.flatMap((value) => [(value >> 8) & 0xff, value & 0xff]);
 }
 
+/** 展开IPv6部分。 */
 function expandIpv6Parts(value: string): number[] | undefined {
   if (!value) return [];
   const parts = value.split(':');
@@ -1215,6 +1251,7 @@ function expandIpv6Parts(value: string): number[] | undefined {
   return groups;
 }
 
+/** 返回分组条目。 */
 function groupEntries(entries: BlogLegacyAssetMigrationEntry[]) {
   const groups = new Map<
     string,
@@ -1239,6 +1276,7 @@ function groupEntries(entries: BlogLegacyAssetMigrationEntry[]) {
   return [...groups.values()];
 }
 
+/** 返回到文章实体字段。 */
 function toArticleEntityField(
   field: BlogLegacyAssetMigrationField,
 ): ArticleField {
@@ -1249,6 +1287,7 @@ function toArticleEntityField(
   return mapping.entityField;
 }
 
+/** 替换条目URL。 */
 function replaceEntryUrls(
   value: unknown,
   entries: BlogLegacyAssetMigrationEntry[],
@@ -1272,6 +1311,7 @@ function replaceEntryUrls(
   return next;
 }
 
+/** 替换单一的条目URL。 */
 function replaceSingleEntryUrl(
   value: unknown,
   from: string,
@@ -1326,6 +1366,7 @@ function replaceSingleEntryUrl(
   };
 }
 
+/** 返回包含值。 */
 function containsValue(value: unknown, expected: string): boolean {
   if (typeof value === 'string') return value.includes(expected);
   if (Array.isArray(value)) {
@@ -1337,6 +1378,7 @@ function containsValue(value: unknown, expected: string): boolean {
   return false;
 }
 
+/** 生成流摘要。 */
 async function hashStream(stream: Readable, expectedSize: number) {
   const hash = createHash('sha256');
   let size = 0;
@@ -1354,6 +1396,7 @@ async function hashStream(stream: Readable, expectedSize: number) {
   return hash.digest('hex');
 }
 
+/** 在超时期间执行传入操作。 */
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

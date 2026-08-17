@@ -30,6 +30,7 @@ type Ff14MarketPluginCreateOptions =
   | Ff14MarketPluginOptions
   | QqbotGenericPluginCreateOptions;
 
+/** 创建插件。 */
 export function createPlugin(options: Ff14MarketPluginCreateOptions) {
   if (isFf14GenericPluginCreateOptions(options)) {
     return buildFf14MarketPlugin({
@@ -47,6 +48,7 @@ export function createPlugin(options: Ff14MarketPluginCreateOptions) {
   return buildFf14MarketPlugin(options);
 }
 
+/** 构建FF14市场插件。 */
 function buildFf14MarketPlugin(options: Ff14MarketPluginOptions) {
   const application = new Ff14MarketApplication(
     new Ff14MarketClient(options.host),
@@ -83,6 +85,7 @@ function buildFf14MarketPlugin(options: Ff14MarketPluginOptions) {
   };
 }
 
+/** 判断FF14通用插件创建选项是否成立。 */
 function isFf14GenericPluginCreateOptions(
   options: Ff14MarketPluginCreateOptions,
 ): options is QqbotGenericPluginCreateOptions {
@@ -92,6 +95,7 @@ function isFf14GenericPluginCreateOptions(
   );
 }
 
+/** 规范化FF14市场清单。 */
 function normalizeFf14MarketManifest(
   manifest: QqbotGenericPluginCreateOptions['manifest'],
 ): Ff14MarketManifest {
@@ -101,6 +105,7 @@ function normalizeFf14MarketManifest(
   };
 }
 
+/** 创建FF14市场通用主机适配器。 */
 function createFf14MarketGenericHostAdapter(
   options: QqbotGenericPluginCreateOptions,
 ): Ff14MarketPluginHost {
@@ -121,6 +126,7 @@ function createFf14MarketGenericHostAdapter(
   };
 }
 
+/** 返回调用FF14通用主机。 */
 async function callFf14GenericHost<TResult = any>(
   host: Record<string, unknown>,
   method: string,
@@ -133,6 +139,7 @@ async function callFf14GenericHost<TResult = any>(
   return (await fn(...args)) as TResult;
 }
 
+/** 序列化FF14通用HTTP请求。 */
 function serializeFf14GenericHttpRequest(
   request: Parameters<Ff14MarketPluginHost['requestJson']>[0],
 ) {
@@ -152,6 +159,7 @@ function serializeFf14GenericHttpRequest(
   };
 }
 
+/** 规范化FF14市场通用错误。 */
 function normalizeFf14MarketGenericError(
   normalizeError: QqbotGenericPluginCreateOptions['normalizeError'],
   error: unknown,

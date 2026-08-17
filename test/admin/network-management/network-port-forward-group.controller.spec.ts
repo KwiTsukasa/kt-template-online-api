@@ -6,10 +6,10 @@ import type {
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
-import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/admin-super.guard';
-import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/jwt-auth.guard';
-import { NetworkPortForwardGroupController } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.controller';
-import { NetworkPortForwardGroupService } from '../../../src/modules/admin/platform-config/network-management/network-port-forward-group.service';
+import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/presentation/admin-super.guard';
+import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
+import { NetworkPortForwardGroupController } from '../../../src/modules/admin/platform-config/network-management/presentation/network-port-forward-group.controller';
+import { NetworkPortForwardGroupService } from '../../../src/modules/admin/platform-config/network-management/application/network-port-forward-group.service';
 
 describe('NetworkPortForwardGroupController', () => {
   let app: INestApplication;

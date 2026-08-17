@@ -4,7 +4,7 @@ import {
   NetworkDnsPodClient,
   NetworkDnsPodClientError,
   type NetworkDnsPodReconcileInput,
-} from '../../../src/modules/admin/platform-config/network-management/network-dnspod.client';
+} from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-dnspod.client';
 
 type DescribeRecordFilterListRequest = {
   Domain: string;

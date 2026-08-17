@@ -1,7 +1,7 @@
 import {
   parseTmdbSearchHtml,
   searchTmdbMediaCandidates,
-} from '../../../src/modules/admin/media-governance/media-governance-provider-search';
+} from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-provider-search';
 
 describe('TMDB provider search', () => {
   const html = `

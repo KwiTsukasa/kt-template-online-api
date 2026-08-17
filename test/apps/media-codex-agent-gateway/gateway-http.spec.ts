@@ -5,7 +5,7 @@ import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { MediaCodexAgentGatewayService } from '../../../src/apps/media-codex-agent-gateway/application/media-codex-agent-gateway.service';
 import { MediaCodexAgentGatewayConfigService } from '../../../src/apps/media-codex-agent-gateway/config/media-codex-agent-gateway-config.service';
-import { MediaGovernanceCodexAgentGatewayClient } from '../../../src/modules/admin/media-governance/media-governance-codex-agent.gateway';
+import { MediaGovernanceCodexAgentGatewayClient } from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-codex-agent.gateway';
 import { MediaCodexAgentController } from '../../../src/apps/media-codex-agent-gateway/presentation/media-codex-agent.controller';
 import { MediaCodexAgentInternalGuard } from '../../../src/apps/media-codex-agent-gateway/presentation/media-codex-agent-internal.guard';
 

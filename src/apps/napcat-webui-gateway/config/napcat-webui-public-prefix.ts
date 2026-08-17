@@ -1,6 +1,7 @@
 const DEFAULT_NAPCAT_WEBUI_PUBLIC_BASE_URL = '/admin/napcat-webui';
 const ROOT_RELATIVE_PUBLIC_PATH_PATTERN = /^\/[A-Za-z0-9._~/-]+$/;
 
+/** 解析NapCatWebUI公开的BaseURL。 */
 export function resolveNapcatWebuiPublicBaseUrl(value?: string) {
   const rawValue = String(value || DEFAULT_NAPCAT_WEBUI_PUBLIC_BASE_URL).trim();
 

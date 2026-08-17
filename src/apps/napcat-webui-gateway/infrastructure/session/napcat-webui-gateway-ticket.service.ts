@@ -13,6 +13,7 @@ export class NapcatWebuiGatewayTicketService {
     private readonly config: NapcatWebuiGatewayConfigService,
   ) {}
 
+  /** 返回问题。 */
   async issue(sessionId: string) {
     const ticket = this.createTicket();
     await this.redis.set(
@@ -24,16 +25,19 @@ export class NapcatWebuiGatewayTicketService {
     return ticket;
   }
 
+  /** 返回兑换。 */
   async redeem(ticket: string) {
     const key = this.ticketKey(ticket);
     const sessionId = await this.redis.getdel(key);
     return sessionId || undefined;
   }
 
+  /** 创建票据。 */
   private createTicket() {
     return randomBytes(32).toString('base64url');
   }
 
+  /** 生成票据键。 */
   private ticketKey(ticket: string) {
     return `${TICKET_KEY_PREFIX}${ticket}`;
   }

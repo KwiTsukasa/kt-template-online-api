@@ -14,16 +14,19 @@ const MAX_TEMPLATE_CONTENT_CODE_POINTS = 2_000;
 const MAX_VARIABLE_STRING_CODE_POINTS = 500;
 const MAX_RENDERED_MESSAGE_CODE_POINTS = 4_000;
 
+/** 返回代码点长度。 */
 function codePointLength(value: string): number {
   return Array.from(value).length;
 }
 
+/** 返回抛出模板无效的。 */
 function throwTemplateInvalid(): never {
   throw new SystemMessageContractError('template_invalid');
 }
 
 @Injectable()
 export class SystemMessageTemplateRendererService {
+  /** 解析系统消息模板渲染器记录。 */
   parse(
     content: string,
     allowedVariables: readonly string[],
@@ -77,10 +80,12 @@ export class SystemMessageTemplateRendererService {
     return tokens;
   }
 
+  /** 校验系统消息模板渲染器记录。 */
   validate(content: string, allowedVariables: readonly string[]): void {
     this.parse(content, allowedVariables);
   }
 
+  /** 渲染系统消息模板渲染器记录。 */
   render(
     content: string,
     variables: Record<string, boolean | number | string>,
@@ -124,6 +129,7 @@ export class SystemMessageTemplateRendererService {
     return rendered;
   }
 
+  /** 追加文本。 */
   private appendText(
     tokens: SystemMessageTemplateToken[],
     value: string,

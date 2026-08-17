@@ -7,6 +7,7 @@ const LEADING_WRAPPERS = /^[\s"'<>（([{【]+/u;
 const BVID_PATTERN = /^BV[0-9A-Za-z]{10}$/;
 const AID_PATTERN = /^(?:av|AV)(\d+)$/;
 
+/** 返回清理BilibiliURL候选项。 */
 export function cleanBilibiliUrlCandidate(candidate: string) {
   return candidate
     .replaceAll('&amp;', '&')
@@ -21,6 +22,7 @@ export function cleanBilibiliUrlCandidate(candidate: string) {
     .trim();
 }
 
+/** 判断允许的BilibiliURL是否成立。 */
 export function isAllowedBilibiliUrl(candidate: string) {
   try {
     const url = new URL(cleanBilibiliUrlCandidate(candidate));
@@ -36,6 +38,7 @@ export function isAllowedBilibiliUrl(candidate: string) {
   }
 }
 
+/** 解析Bilibili视频引用。 */
 export function parseBilibiliVideoReference(
   candidate: string,
 ): BilibiliVideoReference | null {

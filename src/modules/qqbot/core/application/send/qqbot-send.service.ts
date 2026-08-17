@@ -140,6 +140,7 @@ export class QqbotSendService {
     });
   }
 
+  /** 发送严格的纯文本文本。 */
   async sendStrictPlainText(input: StrictPlainTextSendInput) {
     const account = await this.accountService.findBySelfId(input.selfId);
     if (!account || account.isDeleted || !account.enabled) {
@@ -197,6 +198,7 @@ export class QqbotSendService {
     });
   }
 
+  /** 发送携带账号。 */
   private async sendWithAccount(
     account: QqbotAccount,
     input: SendPipelineInput,
@@ -320,10 +322,12 @@ export class QqbotSendService {
     }
   }
 
+  /** 返回到文本分段。 */
   private toTextSegment(message: string) {
     return [{ data: { text: message }, type: 'text' }];
   }
 
+  /** 标记失败日志。 */
   private async markFailedLog(logId: string, message: string) {
     try {
       await this.sendLogRepository.update(
@@ -335,6 +339,7 @@ export class QqbotSendService {
     }
   }
 
+  /** 返回到严格的发送错误。 */
   private toStrictSendError(err: unknown, sendLogId: null | string) {
     if (this.isReverseWsActionError(err)) {
       return new QqbotSendAttemptError({
@@ -369,6 +374,7 @@ export class QqbotSendService {
     return code === 'onebot_disconnected' || code === 'onebot_timeout';
   }
 
+  /** 返回抛出发送失败。 */
   private throwSendFailure(
     strict: boolean,
     err: unknown,

@@ -208,6 +208,7 @@ export class QqbotPluginPlatformService
     return this.listOperationSummaries({ pluginId });
   }
 
+  /** 列出插件摘要。 */
   async listPluginSummaries(pluginKey?: string): Promise<QqbotPluginSummary[]> {
     const workerSummaries = this.listActiveWorkerPluginSummaries(pluginKey);
     if (workerSummaries.length > 0 || this.activeWorkerContexts.size > 0) {
@@ -219,6 +220,7 @@ export class QqbotPluginPlatformService
     );
   }
 
+  /** 列出插件健康状态。 */
   async listPluginHealth(pluginKey?: string): Promise<QqbotPluginHealth[]> {
     const workerContexts = this.listActiveWorkerCommandContexts(pluginKey);
     if (workerContexts.length <= 0 && this.activeWorkerContexts.size <= 0) {
@@ -781,6 +783,7 @@ export class QqbotPluginPlatformService
     this.eventPluginRegistry?.setPluginActive(pluginKey, enabled);
   }
 
+  /** 启动内置的工作进程。 */
   async startBuiltinWorkers(): Promise<number> {
     if (!this.runtimeFactory || !this.packageSource) return 0;
 
@@ -817,6 +820,7 @@ export class QqbotPluginPlatformService
     return startedCount;
   }
 
+  /** 记录内置的工作进程启动失败。 */
   private async recordBuiltinWorkerStartFailure(
     installation: QqbotPluginInstallation,
     error: unknown,
@@ -837,6 +841,7 @@ export class QqbotPluginPlatformService
     );
   }
 
+  /** 确保内置的运行态持久化。 */
   private async ensureBuiltinRuntimePersistence(
     descriptor: QqbotPluginPackageDescriptor,
     persistedInstallation?: QqbotPluginInstallation,
@@ -863,6 +868,7 @@ export class QqbotPluginPlatformService
     return { installation, version };
   }
 
+  /** 确保内置的插件。 */
   private async ensureBuiltinPlugin(
     descriptor: QqbotPluginPackageDescriptor,
   ) {
@@ -879,6 +885,7 @@ export class QqbotPluginPlatformService
     });
   }
 
+  /** 确保内置的插件版本。 */
   private async ensureBuiltinPluginVersion(
     pluginId: string,
     descriptor: QqbotPluginPackageDescriptor,
@@ -918,6 +925,7 @@ export class QqbotPluginPlatformService
     });
   }
 
+  /** 返回对齐内置的安装。 */
   private async alignBuiltinInstallation(
     installation: QqbotPluginInstallation,
     version: QqbotPluginVersion,
@@ -991,6 +999,7 @@ export class QqbotPluginPlatformService
     return this.activeWorkerPluginAliases.get(pluginKey) || pluginKey;
   }
 
+  /** 列出启用的工作进程命令上下文。 */
   private listActiveWorkerCommandContexts(
     pluginKey?: string,
   ): ActiveWorkerContext[] {
@@ -1004,6 +1013,7 @@ export class QqbotPluginPlatformService
     );
   }
 
+  /** 列出启用的工作进程插件摘要。 */
   private listActiveWorkerPluginSummaries(
     pluginKey?: string,
   ): QqbotPluginSummary[] {
@@ -1019,6 +1029,7 @@ export class QqbotPluginPlatformService
     );
   }
 
+  /** 返回到工作进程插件健康状态。 */
   private toWorkerPluginHealth(
     workerContext: ActiveWorkerContext,
     healthPayload: unknown,
@@ -1043,6 +1054,7 @@ export class QqbotPluginPlatformService
     };
   }
 
+  /** 规范化插件健康状态状态。 */
   private normalizePluginHealthStatus(
     status: unknown,
   ): QqbotPluginHealth['status'] {
@@ -1115,6 +1127,7 @@ export class QqbotPluginPlatformService
     await this.syncManifestTasksForInstallation(installation, manifest, true);
   }
 
+  /** 构建运行态事件定义。 */
   private buildRuntimeEventDefinitions(
     manifest: QqbotPluginManifest,
   ): QqbotEventPluginDefinition[] {

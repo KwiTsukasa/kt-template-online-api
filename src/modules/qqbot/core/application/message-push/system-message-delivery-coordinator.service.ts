@@ -67,6 +67,7 @@ export class SystemMessageDeliveryCoordinatorService
     await this.drainPromise;
   }
 
+  /** 请求排空。 */
   requestDrain(): void {
     if (this.destroyed) return;
     this.drainRequested = true;
@@ -84,6 +85,7 @@ export class SystemMessageDeliveryCoordinatorService
       });
   }
 
+  /** 通知DDNS已同步的。 */
   async notifyDdnsSynced(input: {
     appliedAddress: string;
     ddnsRecordId: string;
@@ -138,6 +140,7 @@ export class SystemMessageDeliveryCoordinatorService
     if (advanced > 0) this.requestDrain();
   }
 
+  /** 返回排空循环。 */
   private async drainLoop(): Promise<void> {
     while (!this.destroyed && this.drainRequested) {
       this.drainRequested = false;
@@ -155,6 +158,7 @@ export class SystemMessageDeliveryCoordinatorService
     }
   }
 
+  /** 执行有界的。 */
   private async runBounded(
     name: string,
     runner: () => Promise<number>,

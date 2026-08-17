@@ -31,6 +31,7 @@ export type QqbotPluginRedirectResult = {
 
 @Injectable()
 export class QqbotPluginHttpClientService {
+  /** 解析重定向。 */
   async resolveRedirect(
     input: QqbotPluginResolveRedirectRequest,
   ): Promise<QqbotPluginRedirectResult> {
@@ -186,6 +187,7 @@ export class QqbotPluginHttpClientService {
     });
   }
 
+  /** 请求重定向位置。 */
   private requestRedirectLocation(
     url: URL,
     input: QqbotPluginResolveRedirectRequest,
@@ -261,6 +263,7 @@ function createPluginHttpError(message: string, statusCode: number) {
   });
 }
 
+/** 规范化插件HTTPURL。 */
 function normalizePluginHttpUrl(value: string | URL) {
   const url = value instanceof URL ? value : new URL(value);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
@@ -269,6 +272,7 @@ function normalizePluginHttpUrl(value: string | URL) {
   return url;
 }
 
+/** 规范化最大重定向。 */
 function normalizeMaxRedirects(value: number | undefined) {
   const maxRedirects = value ?? 5;
   return Number.isFinite(maxRedirects) && maxRedirects >= 0
@@ -276,6 +280,7 @@ function normalizeMaxRedirects(value: number | undefined) {
     : 5;
 }
 
+/** 读取插件HTTP模块。 */
 function getPluginHttpModule(url: URL) {
   return url.protocol === 'http:' ? http : https;
 }

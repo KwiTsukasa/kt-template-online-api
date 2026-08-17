@@ -51,6 +51,7 @@ export class NapcatRuntimeProfileService {
     private readonly protocolProfileRepository?: Repository<NapcatProtocolProfile>,
   ) {}
 
+  /** 解析运行态资料。 */
   resolveRuntimeProfile(input: {
     accountId: string;
     containerId?: string;
@@ -81,6 +82,7 @@ export class NapcatRuntimeProfileService {
     };
   }
 
+  /** 记录已规划的配置档案。 */
   async recordPlannedProfiles(input: RecordPlannedProfilesInput) {
     const accountId = `${input.accountId || ''}`.trim();
     const containerId = `${input.containerId || ''}`.trim();
@@ -169,6 +171,7 @@ export class NapcatRuntimeProfileService {
     }
   }
 
+  /** 接管已规划的配置档案。 */
   async adoptPlannedProfiles(input: AdoptPlannedProfilesInput) {
     const toAccountId = `${input.toAccountId || ''}`.trim();
     const fromAccountId =
@@ -198,6 +201,7 @@ export class NapcatRuntimeProfileService {
     }
   }
 
+  /** 构建资料接管位置。 */
   private buildProfileAdoptionWhere(
     fromAccountId: string,
     containerId: string,
@@ -210,6 +214,7 @@ export class NapcatRuntimeProfileService {
       : { accountId: fromAccountId };
   }
 
+  /** 保存资料。 */
   private async saveProfile<
     T extends ObjectLiteral & { containerId: null | string; id: string },
   >(repository: Repository<T>, profile: T) {
@@ -236,10 +241,12 @@ export class NapcatRuntimeProfileService {
       .execute();
   }
 
+  /** 读取字符串。 */
   private getString(key: string, defaultValue: string) {
     return `${this.configService.get<string>(key) || defaultValue}`.trim();
   }
 
+  /** 读取数字。 */
   private getNumber(key: string, defaultValue: number) {
     const value = Number(this.configService.get<string>(key) || defaultValue);
     return Number.isFinite(value) && value > 0 ? value : defaultValue;

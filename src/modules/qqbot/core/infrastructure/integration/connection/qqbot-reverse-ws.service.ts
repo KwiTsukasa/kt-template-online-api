@@ -166,6 +166,7 @@ export class QqbotReverseWsService
     };
   }
 
+  /** 处理连接。 */
   private async handleConnection(ws: WebSocket, request: IncomingMessage) {
     let activeSelfId = '';
     const queuedMessages: string[] = [];
@@ -292,10 +293,12 @@ export class QqbotReverseWsService
     pending.resolve(payload);
   }
 
+  /** 关闭定时的输出连接。 */
   private closeTimedOutConnection(selfId: string, ws: WebSocket) {
     this.closeCurrentConnection(selfId, ws, 'OneBot action timeout');
   }
 
+  /** 关闭当前连接。 */
   private closeCurrentConnection(
     selfId: string,
     ws: WebSocket,

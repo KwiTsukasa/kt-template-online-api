@@ -11,6 +11,8 @@ jest.mock('@/common', () => {
   };
 });
 
+import { spawnSync } from 'node:child_process';
+
 import { ConfigService } from '@nestjs/config';
 import { ToolsService } from '@/common';
 import { QqbotNapcatContainerService } from '@/modules/qqbot/napcat/infrastructure/integration/container/qqbot-napcat-container.service';
@@ -52,6 +54,12 @@ describe('QqbotNapcatContainerService', () => {
       [removeScript, 'docker rm -f "$NAME"'],
       [resetScript, 'docker stop "$NAME"'],
     ]) {
+      const syntaxCheck = spawnSync('sh', ['-n'], {
+        encoding: 'utf8',
+        input: script,
+      });
+      expect(syntaxCheck.stderr).toBe('');
+      expect(syntaxCheck.status).toBe(0);
       expect(script).toContain(
         "NAPCAT_RUNTIME_MUTATION_LOCK='/run/lock/kt-napcat-runtime-migration.lock'",
       );

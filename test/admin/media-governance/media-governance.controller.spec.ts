@@ -1,3 +1,4 @@
+import { get as httpGet } from 'node:http';
 import type {
   CanActivate,
   ExecutionContext,
@@ -7,7 +8,10 @@ import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { AdminSuperGuard } from '../../../src/modules/admin/identity/auth/presentation/admin-super.guard';
 import { JwtAuthGuard } from '../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
-import { MediaGovernanceController } from '../../../src/modules/admin/media-governance/presentation/media-governance.controller';
+import {
+  MediaGovernanceController,
+  MediaGovernanceEventsController,
+} from '../../../src/modules/admin/media-governance/presentation/media-governance.controller';
 import { MediaGovernanceEventStreamService } from '../../../src/modules/admin/media-governance/application/media-governance-event-stream.service';
 import {
   MEDIA_GOVERNANCE_PERMISSION,
@@ -30,7 +34,7 @@ describe('MediaGovernanceController', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      controllers: [MediaGovernanceController],
+      controllers: [MediaGovernanceController, MediaGovernanceEventsController],
       providers: [
         AdminSuperGuard,
         MediaGovernanceEventStreamService,
@@ -52,6 +56,39 @@ describe('MediaGovernanceController', () => {
 
   afterAll(async () => {
     await app?.close();
+  });
+
+  it('streams through real HTTP with intermediary buffering disabled', async () => {
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const requestHandle = httpGet(
+        `${apiUrl}/media-governance/events/stream`,
+        { headers: { Accept: 'text/event-stream' } },
+        (response) => {
+          try {
+            expect(response.statusCode).toBe(200);
+            expect(response.headers['content-type']).toContain(
+              'text/event-stream',
+            );
+            expect(response.headers['cache-control']).toContain('no-store');
+            expect(response.headers['x-accel-buffering']).toBe('no');
+            settled = true;
+            response.destroy();
+            resolve();
+          } catch (error) {
+            settled = true;
+            response.destroy();
+            reject(error);
+          }
+        },
+      );
+      requestHandle.setTimeout(3_000, () => {
+        requestHandle.destroy(new Error('媒体治理 SSE 响应头读取超时'));
+      });
+      requestHandle.once('error', (error) => {
+        if (!settled) reject(error);
+      });
+    });
   });
 
   it('uses AgentOperate for continuing an existing Agent conversation', () => {

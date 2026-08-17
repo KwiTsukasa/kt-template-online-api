@@ -332,6 +332,8 @@ MySQL 最多每 10 秒、出现语义变化或进入终态时保存权威快照�
 快照。下载 runner 每 1 秒采集 qBittorrent 进度，磁链清单检查仍按 5 秒/120 秒合同。
 SSE 仅在 API 有界内存窗内重放；游标超窗返回 `snapshot-required`，由 Admin 静默读取
 权威快照。Redis Stream 目前不是跨进程 SSE 历史重放接口。
+该 SSE 响应固定返回 `Cache-Control: no-store` 与 `X-Accel-Buffering: no`，让浏览器前的
+Nginx 立即转发每条业务或 Agent 增量，不能等缓冲区积满后批量送达。
 普通状态变更先提交数据库再发布 SSE，Agent
 事件则与 Task/session 水位在同一事务写入。源码同时提供真实 CodexAgent outbound
 adapter 与 NAS gateway 内部接口；只有同时配置

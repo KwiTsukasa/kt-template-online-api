@@ -238,7 +238,8 @@ Task、Unit、来源和 Agent session 由 10 张 TypeORM 领域表持久化；AP
 出现语义变化或进入终态时保存权威快照，终态必须等本实例已排队快照落库。Admin 对正常
 tick 原位合并补丁，不重载列表/详情，也不显示整页 Spin；SSE 游标超出 API 有界内存
 回放窗时发送 `snapshot-required`，由 Admin 静默重取权威快照。Redis Stream 当前承担
-执行器序号与进度热层，不声明为跨进程 SSE 历史回放层。
+执行器序号与进度热层，不声明为跨进程 SSE 历史回放层。媒体 SSE 响应同时返回
+`Cache-Control: no-store` 和 `X-Accel-Buffering: no`，防止反向代理积攒进度事件。
 运维入口 `pnpm media-governance:backup-restore-drill -- ...` 默认只输出计划；执行模式
 只备份精确 10 张媒体治理表，并且只允许恢复到新建的
 `kt_media_governance_restore_*` 隔离库。入口会在 dump 前后比较源库 10 表行数及

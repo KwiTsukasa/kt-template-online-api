@@ -615,17 +615,22 @@ export class MediaGovernanceEventsController {
   ) {}
 
   /**
-   * 根据请求头或查询游标订阅可重放的治理事件流。
-   * @param lastEventIdHeader - 决定根据请求头或查询游标订阅可重放的治理事件流内容、边界或目标的 `lastEventIdHeader` 值；为空时采用 `lastEventIdQuery` 作为兜底。
-   * @param lastEventIdQuery - 决定根据请求头或查询游标订阅可重放的治理事件流内容、边界或目标的 `lastEventIdQuery` 值；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
-   * @returns 返回合并历史重放、实时事件与定时心跳的只读 Observable。
+   * 建立媒体治理 SSE 订阅，并禁止浏览器和 Nginx 缓冲实时事件。
+   *
+   * @param response - 当前 SSE 响应，用于写入禁止缓存与代理缓冲头。
+   * @param lastEventIdHeader - 浏览器重连时通过 `Last-Event-ID` 发送的续传游标。
+   * @param lastEventIdQuery - 无法设置请求头时通过查询参数发送的续传游标。
+   * @returns 合并历史重放、实时任务或 Agent 增量与定时心跳的事件流。
    */
   @Sse('stream')
   @ApiOperation({ summary: '订阅媒体治理任务语义进度' })
   stream(
+    @Res({ passthrough: true }) response: Response,
     @Headers('last-event-id') lastEventIdHeader?: string,
     @Query('lastEventId') lastEventIdQuery?: string,
   ) {
+    response.setHeader('Cache-Control', 'no-store');
+    response.setHeader('X-Accel-Buffering', 'no');
     return this.eventStream.stream(lastEventIdHeader || lastEventIdQuery);
   }
 }

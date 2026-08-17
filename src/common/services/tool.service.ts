@@ -600,6 +600,7 @@ export class ToolsService {
       'NapCat 二维码仍未刷新',
       'NapCat WebUI 登录态仍阻止生成新二维码',
       'QRCode Get Error',
+      'QR refresh request was rejected by login service',
       'socket hang up',
     ]);
   }

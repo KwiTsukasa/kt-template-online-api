@@ -18,4 +18,12 @@ describe('ToolsService', () => {
     expect(stored).toContain('<truncated 4000 chars>');
     expect(stored.length).toBeLessThan(140);
   });
+
+  it('treats an unready NapCat QR refresh callback as temporary', () => {
+    expect(
+      service.isNapcatTemporaryError(
+        new Error('QR refresh request was rejected by login service'),
+      ),
+    ).toBe(true);
+  });
 });

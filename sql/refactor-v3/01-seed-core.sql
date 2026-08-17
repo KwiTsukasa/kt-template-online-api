@@ -189,7 +189,7 @@ INSERT INTO admin_menu (
   (2041700000000100409, 2041700000000100400, 'QqBotPlugin', '/qqbot/plugin', '/qqbot/plugin/list', NULL, 'QqBot:Plugin:List', 'menu', '{"icon":"lucide:plug","title":"插件能力"}', 1, 4),
   (2041700000000100404, 2041700000000100400, 'QqBotConversation', '/qqbot/conversation', '/qqbot/conversation/list', NULL, 'QqBot:Conversation:List', 'menu', '{"icon":"lucide:messages-square","title":"会话管理"}', 1, 5),
   (2041700000000100405, 2041700000000100400, 'QqBotMessage', '/qqbot/message', '/qqbot/message/list', NULL, 'QqBot:Message:List', 'menu', '{"icon":"lucide:message-square-text","title":"消息日志"}', 1, 6),
-  (2041700000000100406, 2041700000000100400, 'QqBotSendLog', '/qqbot/sendLog', '/qqbot/sendLog/list', NULL, 'QqBot:SendLog:List', 'menu', '{"icon":"lucide:send","title":"发送日志"}', 1, 7),
+  (2041700000000100406, 2041700000000100400, 'QqBotSendLog', '/qqbot/send-log', '/qqbot/send-log/list', NULL, 'QqBot:SendLog:List', 'menu', '{"icon":"lucide:send","title":"发送日志"}', 1, 7),
   (2041700000000120421, 2041700000000100406, 'QqBotSendPrivate', NULL, NULL, NULL, 'QqBot:Send:Private', 'button', '{"title":"发送私聊"}', 1, 0),
   (2041700000000120422, 2041700000000100406, 'QqBotSendGroup', NULL, NULL, NULL, 'QqBot:Send:Group', 'button', '{"title":"发送群聊"}', 1, 0),
   (2041700000000100407, 2041700000000100400, 'QqBotPermission', '/qqbot/permission', '/qqbot/permission/list', NULL, 'QqBot:Permission:List', 'menu', '{"icon":"lucide:shield-check","title":"权限名单"}', 1, 8),

@@ -102,6 +102,8 @@ QQBot 插件 worker 使用 BullMQ 队列串行执行同一插件安装实例的�
 
 QQBot 插件定时任务由 manifest 的 `tasks` 声明，平台持久化到 `qqbot_plugin_task` / `qqbot_plugin_task_run`，通过 BullMQ Job Scheduler 调度并经插件 worker 的 `executeTask` 边界执行。`sql/qqbot-init.sql` 可为既有环境增量创建任务表和 Admin 菜单。Admin 页面路径为 `/qqbot/plugin-task`。定时任务队列可用 `QQBOT_PLUGIN_TASK_QUEUE_REDIS_*` 单独配置；留空时复用插件 worker 队列的 Redis 连接。BangDream Bestdori 主数据缓存使用 `BANGDREAM_TSUGU_CACHE_ROOT`，生产清单挂载到容器内 `/data/qqbot/plugins/bangdream/cache`，对应 k3d 节点可写 hostPath `/var/lib/rancher/k3s/kt-template-online-api/qqbot-plugins`。
 
+既有环境的 QQBot 发送日志菜单若仍使用旧路由 `/qqbot/sendLog` 或旧组件 `/qqbot/sendLog/list`，只执行幂等增量入口 `sql/qqbot-send-log-menu-route-v1.sql`，将两者统一迁移为 `/qqbot/send-log` 与 `/qqbot/send-log/list`，随后执行只读的 `sql/qqbot-send-log-menu-route-v1-verify.sql`。该迁移只匹配固定菜单 ID、名称和权限码；不要为这一个路径修复重跑完整 `sql/qqbot-init.sql`。
+
 Admin 环境总览面板使用 `ENV_DASHBOARD_*` 只读配置聚合 local-dev、NAS 线上、腾讯云和 r4se 状态。`ENV_DASHBOARD_ADMIN_LOCAL_URL` / `ENV_DASHBOARD_ADMIN_PUBLIC_URL` 只用于展示 Admin 本机与线上入口证据。HTTP 快照提供当前拓扑，后端 local/MQTT 事件总线通过 SSE 推送增量事件给 Admin；前端不直连 MQTT，也不轮询刷新。Jenkins、K8s、Tencent Cloud、Caddy、WireGuard、Mihomo/OpenClash 未配置时会显示 `unwired` 证据，不能渲染成健康假象；第一版不暴露重启、部署、迁移、容器重建、插件启停或代理切换等写操作。
 
 System 网络管理以 MySQL 中的逻辑端口转发组和 TCP/UDP 协议通道为唯一事实源。`super` 可在同一外部端口配置 `TCP`、`UDP` 或 `TCP+UDP`，并分别启停 TCP NATMap 与 UDP Keeper；TCP 发布范围由 `NETWORK_TCP_NATMAP_RELEASE_MODE` 和 canary 端口控制。Agent 状态接口返回当前生效的 `tcpReleaseMode`；TCP NATMap 启停接口可选携带 `expectedDesiredRevision`，并在事务锁内、no-op 判断前执行 CAS，供受控退役流程绑定已审查状态，普通 Admin 请求保持兼容。API 在事务内单调提升 revision，提交后按当前 schema owner 使用 `kt/network/v1|v2/agents/{agentId}`、QoS 1 retained 完整快照通知 NAS `kt-network-agent`，自身不登录路由器、不接收路由器密码，也不执行 raw socket。Agent 声明 v2 capability 且发布门禁允许后，v2 成为唯一 desired/reported/events 写入者，迟到的 v1 reported/events 不再覆盖状态。

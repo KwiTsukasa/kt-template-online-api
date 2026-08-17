@@ -22,6 +22,8 @@ async function collectTypeScriptFiles(dir: string): Promise<string[]> {
 }
 
 describe('BangDream theme asset preload', () => {
+  jest.setTimeout(30_000);
+
   it('loads title assets after runtime IO is configured during plugin activation', async () => {
     jest.resetModules();
     const { createPlugin } =

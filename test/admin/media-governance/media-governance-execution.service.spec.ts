@@ -8,6 +8,7 @@ import type {
 } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-state.store';
 import type { MediaGovernanceProgressHotStore } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-progress-hot.store';
 import { MediaGovernanceEventStreamService } from '../../../src/modules/admin/media-governance/application/media-governance-event-stream.service';
+import { sha256Json } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
 import {
   MediaGovernanceService,
   type MediaGovernanceTask,
@@ -119,6 +120,34 @@ describe('MediaGovernanceService production execution adapter', () => {
     };
   }
 
+  const sealCanonicalPlan = (task: MediaGovernanceTask) => {
+    let category = 'Movies';
+    if (task.mediaType === 'tv') category = 'TV';
+    let year = '';
+    if (task.releaseYear) year = ` (${task.releaseYear})`;
+    let provider = '';
+    if (task.providerRef) {
+      provider = ` [${task.providerRef.provider}id-${task.providerRef.providerId}]`;
+    }
+    const targetRoot = `/vol2/1000/Media/movie/${category}/${task.titleHint}${year}${provider}`;
+    task.sealedPlan = {
+      identity: {
+        mediaType: task.mediaType,
+        providerRef: task.providerRef,
+        releaseYear: task.releaseYear,
+        title: task.titleHint,
+      },
+      manifests: {
+        local: {
+          forward: [{ targetPath: `${targetRoot}/sample.mkv` }],
+        },
+      },
+      schemaVersion: '1.2.0',
+      sealed: true,
+    };
+    task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+  };
+
   it('reserves one durable run before dispatching source inspection', async () => {
     const { acknowledged, dispatch, reserved, service } = fixture();
     await service.onModuleInit();
@@ -166,6 +195,154 @@ describe('MediaGovernanceService production execution adapter', () => {
     await expect(
       service.inspectSource(task.id, source.id, { expectedRevision: 3 }),
     ).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('dispatches a typed canonical identity rebase for an already inconsistent metadata task', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'movie',
+      providerRef: { provider: 'tmdb', providerId: '810693' },
+      releaseYear: 2022,
+      titleHint: '咒术回战0',
+    });
+    task.governanceProfile = 'embedded';
+    task.metadataIdentity = {
+      provider: 'tmdb',
+      providerId: '810693',
+      releaseYear: 2022,
+    };
+    task.metadataStatus = 'pending';
+    task.runState = 'succeeded';
+    task.stage = 'metadata';
+    task.workItemId = 'media-073';
+    const sourcePath =
+      '/vol2/1000/.kt-media-governance-staging/media-task-jjk-zero/sources/media-source-jjk-zero/咒术回战0.mkv';
+    const oldTarget = '/vol2/1000/Media/movie/Movies/咒术回战0/咒术回战0.mkv';
+    const forward = [
+      {
+        evidenceId: 'admin-video-0001',
+        fileKind: 'video',
+        operation: 'move',
+        sourcePath,
+        targetPath: oldTarget,
+      },
+    ];
+    const inverse = [
+      {
+        ...forward[0],
+        sourcePath: oldTarget,
+        targetPath: sourcePath,
+      },
+    ];
+    const cloudSidecarQuarantine = { forward: [], inverse: [] };
+    const cloudVideo = { forward: [], inverse: [] };
+    task.sealedPlan = {
+      agentAmendments: [
+        {
+          appliedAt: '2026-08-17T10:00:00.000Z',
+          kind: 'identity',
+          planSha256: 'e'.repeat(64),
+          provider: 'tmdb',
+          providerId: '810693',
+          providerTitle: '剧场版 咒术回战 0',
+          releaseYear: 2022,
+          summary: '修正为 TMDB 电影身份',
+        },
+      ],
+      execution: {
+        allowlists: {
+          localSourceRoot: '/vol2/1000/Media/incoming',
+          localStagingRoot:
+            '/vol2/1000/.kt-media-governance-staging/media-task-jjk-zero',
+          localTargetRoot: '/vol2/1000/Media/movie',
+        },
+        manifestSha256: {
+          cloudSidecarForward: sha256Json(cloudSidecarQuarantine.forward),
+          cloudSidecarInverse: sha256Json(cloudSidecarQuarantine.inverse),
+          cloudVideoForward: sha256Json(cloudVideo.forward),
+          cloudVideoInverse: sha256Json(cloudVideo.inverse),
+          localForward: sha256Json(forward),
+          localInverse: sha256Json(inverse),
+        },
+        phase: 'local-only',
+        replayKey: `${task.id}:governance:r8`,
+      },
+      identity: {
+        mediaType: 'movie',
+        providerRef: { provider: 'tmdb', providerId: '810693' },
+        providerTitle: '剧场版 咒术回战 0',
+        releaseYear: 2022,
+        title: '咒术回战0',
+      },
+      manifests: {
+        cloudSidecarQuarantine,
+        cloudVideo,
+        local: { forward, inverse },
+      },
+      schemaVersion: '1.2.0',
+      sealed: true,
+      sealedAt: '2026-08-17T10:00:00.000Z',
+      sourceEvidence: [
+        {
+          digest: 'd'.repeat(64),
+          evidenceId: 'admin-video-0001',
+          evidenceMethod: 'sha256-full-v1',
+          fileKind: 'video',
+          mtimeMs: 1_786_000_000_000,
+          path: sourcePath,
+          scope: 'local',
+          size: 2_048,
+        },
+      ],
+      strategy: 'embedded',
+      targetAbsenceEvidence: [],
+      workItemId: 'media-073',
+    };
+    task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+
+    await expect(
+      service.startMetadataVerification(task.id, { expectedRevision: 1 }),
+    ).rejects.toMatchObject({ status: 409 });
+    task.metadataStatus = 'verified';
+    await expect(
+      service.startAcceptanceVerification(task.id, { expectedRevision: 1 }),
+    ).rejects.toMatchObject({ status: 409 });
+    task.metadataStatus = 'pending';
+    task.runState = 'blocked';
+
+    await service.startCanonicalIdentityRebase(task.id, {
+      expectedRevision: 1,
+    });
+
+    const envelope = dispatch.mock.calls.at(-1)?.[0];
+    expect(envelope).toMatchObject({
+      action: 'governance.execute',
+      taskId: task.id,
+      taskRevision: 2,
+    });
+    expect(task).toMatchObject({
+      activeRunId: envelope.runId,
+      metadataStatus: 'pending',
+      revision: 2,
+      runState: 'queued',
+      stage: 'governance',
+    });
+    expect(task.sealedPlan).toMatchObject({
+      execution: {
+        allowlists: {
+          localSourceRoot: '/vol2/1000/Media/movie/Movies/咒术回战0',
+          localTargetRoot: '/vol2/1000/Media/movie',
+        },
+      },
+      transition: {
+        amendmentPlanSha256: 'e'.repeat(64),
+        kind: 'canonical-identity-rebase-v1',
+        targetTitleRoot:
+          '/vol2/1000/Media/movie/Movies/咒术回战0 (2022) [tmdbid-810693]',
+      },
+    });
+    expect(task.sealedPlanSha256).toBe(sha256Json(task.sealedPlan));
   });
 
   it('projects ordered executor events into semantic source and task progress', async () => {
@@ -1468,8 +1645,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     metadataTask.governanceProfile = 'sidecar-bundled';
     metadataTask.metadataStatus = 'pending';
     metadataTask.runState = 'succeeded';
-    metadataTask.sealedPlan = { schemaVersion: '1.2.0' };
-    metadataTask.sealedPlanSha256 = 'a'.repeat(64);
+    sealCanonicalPlan(metadataTask);
     metadataTask.stage = 'metadata';
 
     await service.startMetadataVerification(metadataTask.id, {
@@ -1523,8 +1699,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     acceptanceTask.governanceProfile = 'sidecar-bundled';
     acceptanceTask.metadataStatus = 'verified';
     acceptanceTask.runState = 'succeeded';
-    acceptanceTask.sealedPlan = { schemaVersion: '1.2.0' };
-    acceptanceTask.sealedPlanSha256 = 'b'.repeat(64);
+    sealCanonicalPlan(acceptanceTask);
     acceptanceTask.stage = 'metadata';
 
     await service.startAcceptanceVerification(acceptanceTask.id, {
@@ -1584,8 +1759,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     task.governanceProfile = 'embedded';
     task.metadataStatus = 'pending';
     task.runState = 'succeeded';
-    task.sealedPlan = { schemaVersion: '1.2.0' };
-    task.sealedPlanSha256 = 'a'.repeat(64);
+    sealCanonicalPlan(task);
     task.stage = 'metadata';
 
     await service.startMetadataVerification(task.id, { expectedRevision: 1 });
@@ -1724,8 +1898,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     task.governanceProfile = 'sidecar-bundled';
     task.metadataStatus = 'requires-agent';
     task.runState = 'blocked';
-    task.sealedPlan = { schemaVersion: '1.2.0' };
-    task.sealedPlanSha256 = 'a'.repeat(64);
+    sealCanonicalPlan(task);
     task.stage = 'metadata';
     task.units[0]!.evidenceSha256 = 'b'.repeat(64);
     task.units[0]!.metadataProjection.missingA = [
@@ -1795,8 +1968,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       task.metadataStatus = 'requires-agent';
       task.runState = 'blocked';
       task.stage = 'metadata';
-      task.sealedPlan = { schemaVersion: '1.2.0' };
-      task.sealedPlanSha256 = 'a'.repeat(64);
+      sealCanonicalPlan(task);
       task.units[0]!.expectedEpisodeNumbers = [1];
       task.units[0]!.metadataProjection.missingB = [
         'metadata.local-nfo',
@@ -2030,8 +2202,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     task.governanceProfile = 'sidecar-bundled';
     task.metadataStatus = 'requires-agent';
     task.runState = 'blocked';
-    task.sealedPlan = { schemaVersion: '1.2.0' };
-    task.sealedPlanSha256 = 'a'.repeat(64);
+    sealCanonicalPlan(task);
     task.stage = 'metadata';
 
     await service.startMetadataVerification(task.id, { expectedRevision: 1 });

@@ -423,6 +423,27 @@ export class MediaGovernanceController {
   }
 
   /**
+   * 把客户端读取的任务版本交给服务层，原子派发旧目录到当前 TMDB 规范根的事务。
+   * @param taskId - 用于精确定位待恢复任务的标识。
+   * @param body - 携带调用方已读取任务版本的并发控制输入。
+   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
+   * @returns 已派发规范身份重排运行的最新任务状态。
+   */
+  @Post(':taskId/governance/identity-rebase')
+  @MediaGovernancePermission('Media:Governance:Run')
+  @ApiOperation({ summary: '重排已提交文件到当前规范身份目录' })
+  async startCanonicalIdentityRebase(
+    @Param('taskId') taskId: string,
+    @Body() body: MediaGovernanceRevisionCommandDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.service.startCanonicalIdentityRebase(taskId, body),
+    );
+  }
+
+  /**
    * 禁止响应缓存后提交密封计划约束下的本地治理事务，并封装运行状态。
    * @param taskId - 用于精确定位任务的标识。
    * @param body - 用于治理任务的结构化输入。

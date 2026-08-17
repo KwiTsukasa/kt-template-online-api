@@ -163,6 +163,35 @@ describe('MediaGovernanceController', () => {
     messageSpy.mockRestore();
   });
 
+  it('routes canonical identity rebase through real HTTP revision validation', async () => {
+    const taskId = 'media-task-http-identity-rebase';
+    const rebaseSpy = jest
+      .spyOn(service, 'startCanonicalIdentityRebase')
+      .mockResolvedValueOnce({
+        activeRunId: 'media-run-http-identity-rebase',
+        id: taskId,
+        revision: 22,
+        runState: 'queued',
+        stage: 'governance',
+      } as never);
+
+    const response = await request(apiUrl)
+      .post(`/media-governance/tasks/${taskId}/governance/identity-rebase`)
+      .send({ expectedRevision: 21 })
+      .expect(201)
+      .expect('Cache-Control', 'no-store');
+
+    expect(response.body.data).toMatchObject({
+      activeRunId: 'media-run-http-identity-rebase',
+      id: taskId,
+      revision: 22,
+      runState: 'queued',
+      stage: 'governance',
+    });
+    expect(rebaseSpy).toHaveBeenCalledWith(taskId, { expectedRevision: 21 });
+    rebaseSpy.mockRestore();
+  });
+
   it('creates and lists a normalized draft over real HTTP', async () => {
     const created = await request(apiUrl)
       .post('/media-governance/tasks')

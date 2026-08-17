@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+  HttpException,
   HttpStatus,
   Inject,
   Injectable,
@@ -72,7 +73,12 @@ import {
   type MediaGovernanceExecutionEnvelope,
   type MediaGovernanceExecutionGateway,
 } from '@/modules/admin/media-governance/infrastructure/integration/media-governance-execution.gateway';
-import { buildAdminMediaGovernancePlan } from './media-governance-plan';
+import {
+  assertAdminMediaGovernancePlanCanonicalIdentity,
+  buildAdminMediaGovernancePlan,
+  buildCanonicalIdentityRebasePlan,
+  isCanonicalIdentityRebasePlan,
+} from './media-governance-plan';
 import {
   MEDIA_GOVERNANCE_PROGRESS_HOT_STORE,
   type MediaGovernanceProgressHotStore,
@@ -1036,12 +1042,14 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         }
         this.finalizeSourceRemoval(task, source);
       } else if (input.action === 'governance.execute') {
+        this.assertCanonicalSealedPlan(task);
         task.stage = 'metadata';
         task.runState = 'succeeded';
         task.gateReason = null;
         task.metadataStatus = 'pending';
         task.nextCommandLabel = '运行 A/B/C 分档元数据核验';
       } else if (input.action === 'metadata.repair') {
+        this.assertCanonicalSealedPlan(task);
         const automaticEnrichment =
           this.canRunAutomaticMetadataEnrichment(task);
         this.applyMetadataEvidence(task, input);
@@ -1052,6 +1060,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         if (automaticEnrichment) task.closedMode = 'automatic';
         task.nextCommandLabel = '重新运行 A/B/C 分档元数据核验';
       } else if (input.action === 'metadata.verify') {
+        this.assertCanonicalSealedPlan(task);
         const refreshingDeferredIdentity =
           task.metadataStatus === 'requires-agent' &&
           this.hasDeferredMetadataIdentityGap(task);
@@ -1100,6 +1109,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           task.nextCommandLabel = '运行独立本地验收';
         }
       } else if (input.action === 'acceptance.verify') {
+        this.assertCanonicalSealedPlan(task);
         const acceptance = input.acceptance;
         if (
           !acceptance ||
@@ -2657,6 +2667,72 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
+   * 在期望版本门内把既有错误身份目录重封为规范身份重排计划并立即派发本地事务。
+   * @param taskId - 用于精确定位待恢复任务的标识。
+   * @param input - 携带调用方已读取任务版本的并发控制输入。
+   * @returns 已进入规范身份重排运行的最新任务状态。
+   * @throws 当任务已有运行、身份或计划证据不完整、目录已一致或执行链路不可用时抛出。
+   */
+  async startCanonicalIdentityRebase(
+    taskId: string,
+    input: MediaGovernanceRevisionCommandDto,
+  ): Promise<MediaGovernanceTask> {
+    const task = this.detail(taskId);
+    this.assertRevision(task, input.expectedRevision);
+    if (task.activeRunId || task.stage === 'closed') {
+      throwVbenError('当前任务不满足规范身份重排条件', HttpStatus.CONFLICT);
+    }
+    if (
+      !task.sealedPlan ||
+      !task.sealedPlanSha256 ||
+      !task.governanceProfile ||
+      !task.workItemId
+    ) {
+      throwVbenError('当前任务不满足规范身份重排条件', HttpStatus.CONFLICT);
+    }
+    if (!task.providerRef || task.providerRef.provider !== 'tmdb') {
+      throwVbenError('当前任务不满足规范身份重排条件', HttpStatus.CONFLICT);
+    }
+    const previous = structuredClone(task);
+    try {
+      if (!isCanonicalIdentityRebasePlan(task.sealedPlan)) {
+        const amendment = this.latestAppliedIdentityAmendment(task);
+        task.sealedPlan = buildCanonicalIdentityRebasePlan(
+          task,
+          task.sealedPlan,
+          {
+            amendmentPlanSha256: amendment.planSha256,
+            previousPlanSha256: task.sealedPlanSha256,
+            providerTitle: amendment.providerTitle,
+            summary: amendment.summary,
+          },
+        );
+        task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+      }
+      this.assertCanonicalSealedPlan(task);
+      task.metadataStatus = 'pending';
+      task.runState = 'succeeded';
+      task.stage = 'governance';
+      task.gateReason = null;
+      task.nextCommandLabel = '正在执行规范身份目录重排';
+      task.progress = {
+        ...task.progress,
+        etaLabel: '等待本地事务',
+        progressLabel: '规范身份重排计划已密封',
+      };
+      await this.reserveExecution(task, 'governance.execute');
+    } catch (error) {
+      Object.assign(task, previous);
+      if (error instanceof HttpException) throw error;
+      throwVbenError(
+        `规范身份重排计划无法安全密封：${String(error)}`.slice(0, 200),
+        HttpStatus.CONFLICT,
+      );
+    }
+    return task;
+  }
+
+  /**
    * 按参数 `taskId`，校验元数据门状态后启动分档事实核验。
    * @param taskId - 用于精确定位任务的标识。
    * @param input - 用于按参数 `taskId`，校验元数据门状态后启动分档事实核验的结构化输入，包含 `expectedRevision` 字段。
@@ -2688,6 +2764,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     ) {
       throwVbenError('当前任务尚未进入元数据核验门', HttpStatus.CONFLICT);
     }
+    this.assertCanonicalSealedPlan(task);
     await this.reserveExecution(task, 'metadata.verify');
     return task;
   }
@@ -2713,6 +2790,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     ) {
       throwVbenError('当前任务不满足有界元数据修复条件', HttpStatus.CONFLICT);
     }
+    this.assertCanonicalSealedPlan(task);
     await this.reserveExecution(task, 'metadata.repair');
     return task;
   }
@@ -2743,6 +2821,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     ) {
       throwVbenError('当前任务尚未通过元数据核验门', HttpStatus.CONFLICT);
     }
+    this.assertCanonicalSealedPlan(task);
     let sources: MediaGovernanceSource[] | undefined;
     if (task.sources.length > 0) sources = task.sources;
     await this.reserveExecution(task, 'acceptance.verify', sources);
@@ -3908,6 +3987,65 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
+   * 读取与任务当前 TMDB 身份一致的最后一条已应用修正，作为恢复重排的可审计来源。
+   * @param task - 已写入资料源身份且保留 Agent 修正历史的媒体任务。
+   * @returns 与当前任务身份、年份一致的最新修正摘要和密封计划摘要。
+   * @throws 当修正历史缺失、格式非法或与当前任务身份不一致时抛出。
+   */
+  private latestAppliedIdentityAmendment(task: MediaGovernanceTask) {
+    const amendments = task.sealedPlan?.agentAmendments;
+    if (!Array.isArray(amendments) || !task.providerRef) {
+      throw new Error('governance-identity-amendment-history-missing');
+    }
+    for (const value of [...amendments].reverse()) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        continue;
+      }
+      const amendment = value as Record<string, unknown>;
+      if (
+        amendment.kind !== 'identity' ||
+        amendment.provider !== task.providerRef.provider ||
+        amendment.providerId !== task.providerRef.providerId ||
+        amendment.releaseYear !== task.releaseYear
+      ) {
+        continue;
+      }
+      if (
+        typeof amendment.planSha256 !== 'string' ||
+        !/^[a-f0-9]{64}$/u.test(amendment.planSha256)
+      ) {
+        continue;
+      }
+      if (
+        typeof amendment.providerTitle !== 'string' ||
+        !amendment.providerTitle.trim() ||
+        typeof amendment.summary !== 'string'
+      ) {
+        continue;
+      }
+      return {
+        planSha256: amendment.planSha256,
+        providerTitle: amendment.providerTitle,
+        summary: amendment.summary,
+      };
+    }
+    throw new Error('governance-identity-amendment-history-mismatch');
+  }
+
+  /**
+   * 把计划身份或规范目标根漂移统一转换为前端可识别的冲突错误。
+   * @param task - 准备执行治理后续阶段的任务。
+   * @throws 当计划摘要、身份或全部目标根与任务当前身份不一致时抛出。
+   */
+  private assertCanonicalSealedPlan(task: MediaGovernanceTask) {
+    try {
+      assertAdminMediaGovernancePlanCanonicalIdentity(task);
+    } catch {
+      throwVbenError('密封计划身份与规范目录不一致', HttpStatus.CONFLICT);
+    }
+  }
+
+  /**
    * 核对计划摘要后原子应用 TMDB 身份修正并重封计划。
    * @param task - 用于计划摘要后原子应用 TMDB 身份修正并重封计划的领域对象，包含 `revision`、`sealedPlan`、`providerRef`、`metadataIdentity` 字段。
    * @param planSha256 - 决定计划摘要后原子应用 TMDB 身份修正并重封计划内容、边界或目标的 `planSha256` 值。
@@ -3939,16 +4077,16 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (Array.isArray(currentPlan.agentAmendments)) {
       currentAmendments = currentPlan.agentAmendments.slice(-15);
     }
-    task.providerRef = {
+    const nextProviderRef: MediaGovernanceProviderRef = {
       provider: 'tmdb',
       providerId: amendment.identity.providerId,
     };
-    task.metadataIdentity = {
-      ...task.providerRef,
+    const nextTask = {
+      ...task,
+      providerRef: nextProviderRef,
       releaseYear: amendment.identity.releaseYear,
     };
-    task.releaseYear = amendment.identity.releaseYear;
-    task.sealedPlan = {
+    const amendedPlan = {
       ...currentPlan,
       agentAmendments: [
         ...currentAmendments,
@@ -3965,11 +4103,27 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       ],
       identity: {
         ...currentIdentity,
-        providerRef: task.providerRef,
+        providerRef: nextProviderRef,
         providerTitle: amendment.providerTitle,
-        releaseYear: task.releaseYear,
+        releaseYear: amendment.identity.releaseYear,
       },
     };
+    task.sealedPlan = buildCanonicalIdentityRebasePlan(nextTask, currentPlan, {
+      amendmentPlanSha256: planSha256,
+      previousPlanSha256: task.sealedPlanSha256!,
+      providerTitle: amendment.providerTitle,
+      summary: amendment.summary,
+    });
+    task.sealedPlan = {
+      ...task.sealedPlan,
+      agentAmendments: amendedPlan.agentAmendments,
+    };
+    task.providerRef = nextProviderRef;
+    task.metadataIdentity = {
+      ...nextProviderRef,
+      releaseYear: amendment.identity.releaseYear,
+    };
+    task.releaseYear = amendment.identity.releaseYear;
     task.sealedPlanSha256 = sha256Json(task.sealedPlan);
     task.identityPreview = this.buildIdentityPreview({
       mediaType: task.mediaType,
@@ -3981,14 +4135,14 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       titleHint: task.titleHint,
     });
     task.metadataStatus = 'pending';
-    task.runState = 'succeeded';
-    task.stage = 'metadata';
-    task.gateReason = null;
-    task.nextCommandLabel = '重新运行 A/B/C 分档元数据核验';
+    task.runState = 'blocked';
+    task.stage = 'governance';
+    task.gateReason = '身份修正已生成规范目录重排计划';
+    task.nextCommandLabel = '执行规范身份目录重排';
     task.progress = {
       ...task.progress,
-      etaLabel: '等待元数据复核',
-      progressLabel: 'TMDB 身份已密封应用，等待独立元数据复核',
+      etaLabel: '等待本地事务',
+      progressLabel: 'TMDB 身份已密封，等待规范目录重排',
     };
   }
 

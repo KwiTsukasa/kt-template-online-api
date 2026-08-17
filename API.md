@@ -231,6 +231,7 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `POST`   | `/media-governance/tasks/:taskId/downloads/cancel`                 | 取消下载并保留载荷直到精确来源清理     |
 | `POST`   | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传同一下载 Run                       |
 | `POST`   | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理       |
+| `POST`   | `/media-governance/tasks/:taskId/governance/identity-rebase`       | 按版本把已提交旧目录重排到当前规范身份 |
 | `POST`   | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验              |
 | `POST`   | `/media-governance/tasks/:taskId/metadata/repair`                  | 启动最多两次的确定性有界元数据修复     |
 | `POST`   | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理             |

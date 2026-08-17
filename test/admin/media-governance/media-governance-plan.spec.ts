@@ -1,5 +1,8 @@
 import { sha256Json } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
-import { buildAdminMediaGovernancePlan } from '../../../src/modules/admin/media-governance/application/media-governance-plan';
+import {
+  buildAdminMediaGovernancePlan,
+  buildCanonicalIdentityRebasePlan,
+} from '../../../src/modules/admin/media-governance/application/media-governance-plan';
 import type {
   MediaGovernancePayloadSeal,
   MediaGovernanceTask,
@@ -204,6 +207,134 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
 
     expect(plan.manifests.local.forward[0]?.targetPath).toBe(
       '/vol2/1000/Media/movie/Movies/少女☆歌剧 Revue Starlight 剧场版 (2021) [tmdbid-645440]/少女☆歌剧 Revue Starlight 剧场版.mkv',
+    );
+  });
+
+  it('rebases an already committed movie target after a late identity amendment', () => {
+    const oldTask = {
+      ...task,
+      governanceProfile: 'embedded',
+      id: 'media-task-jjk-zero-rebase',
+      mediaType: 'movie',
+      providerRef: null,
+      releaseYear: null,
+      sources: [
+        {
+          id: 'media-source-jjk-zero',
+          manifest: [
+            {
+              executable: false,
+              index: 0,
+              relativePath: 'Jujutsu.Kaisen.0.mkv',
+              sizeBytes: 2_048,
+            },
+          ],
+          selectedFileMappings: [
+            {
+              episodeNumber: null,
+              fileRole: 'video',
+              index: 0,
+              language: null,
+              unitId: 'media-unit-jjk-zero',
+            },
+          ],
+        },
+      ],
+      titleHint: '咒术回战0',
+      units: [
+        {
+          expectedEpisodeNumbers: [],
+          id: 'media-unit-jjk-zero',
+          seasonNumber: null,
+          subtitleContract: null,
+          unitKind: 'movie',
+        },
+      ],
+      workItemId: 'media-073',
+    } as MediaGovernanceTask;
+    const oldStagingRoot = `/vol2/1000/.kt-media-governance-staging/${oldTask.id}/sources/media-source-jjk-zero`;
+    const oldPlan = buildAdminMediaGovernancePlan(oldTask, {
+      evidenceSha256: 'f'.repeat(64),
+      files: [
+        {
+          index: 0,
+          mtimeMs: 1_786_000_000_000,
+          path: `${oldStagingRoot}/Jujutsu.Kaisen.0.mkv`,
+          relativePath: 'Jujutsu.Kaisen.0.mkv',
+          sha256: 'd'.repeat(64),
+          sizeBytes: 2_048,
+          sourceId: 'media-source-jjk-zero',
+        },
+      ],
+      runId: 'media-run-jjk-zero',
+    });
+    const amendedTask = {
+      ...oldTask,
+      providerRef: { provider: 'tmdb', providerId: '810693' },
+      releaseYear: 2022,
+    } as MediaGovernanceTask;
+    const previousPlanSha256 = sha256Json(oldPlan);
+
+    const rebased = buildCanonicalIdentityRebasePlan(
+      amendedTask,
+      oldPlan,
+      {
+        amendmentPlanSha256: 'e'.repeat(64),
+        previousPlanSha256,
+        providerTitle: '剧场版 咒术回战 0',
+        summary: '将已提交的旧身份目录重排到 TMDB 规范根',
+      },
+      new Date('2026-08-17T12:00:00.000Z'),
+    );
+
+    const oldTarget = '/vol2/1000/Media/movie/Movies/咒术回战0/咒术回战0.mkv';
+    const newTarget =
+      '/vol2/1000/Media/movie/Movies/咒术回战0 (2022) [tmdbid-810693]/咒术回战0.mkv';
+    expect(rebased).toMatchObject({
+      execution: {
+        allowlists: {
+          localSourceRoot: '/vol2/1000/Media/movie/Movies/咒术回战0',
+          localTargetRoot: '/vol2/1000/Media/movie',
+        },
+        phase: 'local-only',
+        replayKey: `${oldTask.id}:canonical-identity-rebase:r9`,
+      },
+      identity: {
+        mediaType: 'movie',
+        providerRef: { provider: 'tmdb', providerId: '810693' },
+        providerTitle: '剧场版 咒术回战 0',
+        releaseYear: 2022,
+        title: '咒术回战0',
+      },
+      transition: {
+        amendmentPlanSha256: 'e'.repeat(64),
+        kind: 'canonical-identity-rebase-v1',
+        previousPlanSha256,
+        previousTitleRoot: '/vol2/1000/Media/movie/Movies/咒术回战0',
+        targetTitleRoot:
+          '/vol2/1000/Media/movie/Movies/咒术回战0 (2022) [tmdbid-810693]',
+      },
+    });
+    expect(rebased.execution.allowlists).not.toHaveProperty('localStagingRoot');
+    expect(rebased.manifests.local.forward).toEqual([
+      expect.objectContaining({ sourcePath: oldTarget, targetPath: newTarget }),
+    ]);
+    expect(rebased.manifests.local.inverse).toEqual([
+      expect.objectContaining({ sourcePath: newTarget, targetPath: oldTarget }),
+    ]);
+    expect(rebased.sourceEvidence).toEqual([
+      expect.objectContaining({
+        digest: 'd'.repeat(64),
+        mtimeMs: 1_786_000_000_000,
+        path: oldTarget,
+        size: 2_048,
+      }),
+    ]);
+    expect(rebased.execution.manifestSha256.localForward).toBe(
+      sha256Json(rebased.manifests.local.forward),
+    );
+    expect(rebased.execution.manifestSha256.localInverse).toBe(
+      sha256Json(rebased.manifests.local.inverse),
     );
   });
 

@@ -782,15 +782,75 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
       'identity.provider',
       'identity.providerId',
     ];
+    task.workItemId = 'media-074';
+    const sourcePath = `/vol2/1000/.kt-media-governance-staging/${task.id}/sources/media-source-agent-identity/Agent.S00E01.mkv`;
+    const oldTarget =
+      '/vol2/1000/Media/movie/TV/刀使巫女 刻印一闪的灯火 OVA (2020) [bangumiid-296798]/Season 00/刀使巫女 刻印一闪的灯火 OVA - S00E01.mkv';
+    const forward = [
+      {
+        evidenceId: 'admin-video-0001',
+        fileKind: 'video',
+        operation: 'move',
+        sourcePath,
+        targetPath: oldTarget,
+      },
+    ];
+    const inverse = [
+      {
+        ...forward[0],
+        sourcePath: oldTarget,
+        targetPath: sourcePath,
+      },
+    ];
+    const cloudSidecarQuarantine = { forward: [], inverse: [] };
+    const cloudVideo = { forward: [], inverse: [] };
     task.sealedPlan = {
+      execution: {
+        allowlists: {
+          localSourceRoot: '/vol2/1000/Media/incoming',
+          localStagingRoot: `/vol2/1000/.kt-media-governance-staging/${task.id}`,
+          localTargetRoot: '/vol2/1000/Media/movie',
+        },
+        manifestSha256: {
+          cloudSidecarForward: sha256Json(cloudSidecarQuarantine.forward),
+          cloudSidecarInverse: sha256Json(cloudSidecarQuarantine.inverse),
+          cloudVideoForward: sha256Json(cloudVideo.forward),
+          cloudVideoInverse: sha256Json(cloudVideo.inverse),
+          localForward: sha256Json(forward),
+          localInverse: sha256Json(inverse),
+        },
+        phase: 'local-only',
+        replayKey: `${task.id}:governance:r1`,
+      },
       identity: {
         mediaType: 'tv',
         providerRef: task.providerRef,
         releaseYear: 2020,
         title: task.titleHint,
       },
+      manifests: {
+        cloudSidecarQuarantine,
+        cloudVideo,
+        local: { forward, inverse },
+      },
       schemaVersion: '1.2.0',
       sealed: true,
+      sealedAt: '2026-08-11T00:00:00.000Z',
+      sourceEvidence: [
+        {
+          digest: 'f'.repeat(64),
+          evidenceId: 'admin-video-0001',
+          evidenceMethod: 'sha256-full-v1',
+          fileKind: 'video',
+          mtimeMs: 1_786_000_000_000,
+          path: sourcePath,
+          scope: 'local',
+          size: 2_048,
+        },
+      ],
+      strategy: 'embedded',
+      targetAbsenceEvidence: [],
+      workItemId: 'media-074',
     };
     task.sealedPlanSha256 = sha256Json(task.sealedPlan);
     const html = `
@@ -910,11 +970,19 @@ describe('MediaGovernanceService CodexAgent gateway adapter', () => {
       metadataStatus: 'pending',
       providerRef: { provider: 'tmdb', providerId: '105473' },
       revision: 3,
-      runState: 'succeeded',
+      runState: 'blocked',
+      stage: 'governance',
     });
     expect(task.sealedPlan).not.toHaveProperty('agentPendingAmendment');
     expect(task.sealedPlan).toMatchObject({
       identity: { providerTitle: '刀使巫女 刻印一闪的灯火' },
+      transition: {
+        kind: 'canonical-identity-rebase-v1',
+        previousTitleRoot:
+          '/vol2/1000/Media/movie/TV/刀使巫女 刻印一闪的灯火 OVA (2020) [bangumiid-296798]',
+        targetTitleRoot:
+          '/vol2/1000/Media/movie/TV/刀使巫女 刻印一闪的灯火 OVA (2020) [tmdbid-105473]',
+      },
     });
     expect(task.sealedPlanSha256).toBe(sha256Json(task.sealedPlan));
   });

@@ -1597,7 +1597,8 @@ if [ -e "$NAPCAT_RUNTIME_MIGRATION_STATE" ] || [ -L "$NAPCAT_RUNTIME_MIGRATION_S
     echo "NapCat runtime migration recovery is pending" >&2
     exit 75
   fi
-}`;
+fi
+`;
   }
 
   /** 构建远程Docker生命周期脚本。 */

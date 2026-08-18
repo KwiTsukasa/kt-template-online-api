@@ -19,7 +19,7 @@ import {
 import type {
   SystemMessageEventInput,
   SystemMessageEventStager,
-} from '../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
+} from '../../../src/modules/message-management/contract/message-management.types';
 import {
   buildDesiredSnapshot,
   desiredSnapshotDigest,
@@ -267,7 +267,7 @@ function createHarness(): MqttHarness {
   } as unknown as NetworkManagementEventStreamService;
   const requestDdnsReconcile = jest.fn();
   const deliveryCoordinator = {
-    notifyDdnsSynced: jest.fn().mockResolvedValue(undefined),
+    notifyDependencyChanged: jest.fn().mockResolvedValue(undefined),
     requestDrain: jest.fn(() => {
       operations.push('delivery:wake');
     }),
@@ -818,7 +818,7 @@ function createConcurrentEndpointHarness(): ConcurrentEndpointHarness {
     { publishCommitted: jest.fn() } as never,
     stager,
     {
-      notifyDdnsSynced: jest.fn().mockResolvedValue(undefined),
+      notifyDependencyChanged: jest.fn().mockResolvedValue(undefined),
       requestDrain: jest.fn(),
     },
   );

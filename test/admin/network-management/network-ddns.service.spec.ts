@@ -15,7 +15,7 @@ import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-con
 
 type Harness = {
   client: jest.Mocked<Pick<NetworkDnsPodClient, 'getStatus' | 'reconcile'>>;
-  deliveryCoordinator: { notifyDdnsSynced: jest.Mock };
+  deliveryCoordinator: { notifyDependencyChanged: jest.Mock };
   group: NetworkPortForwardGroup;
   mapping: NetworkPortForward;
   recordUpdate: jest.Mock;
@@ -168,7 +168,7 @@ function createHarness(): Harness {
     publishCommitted: jest.fn(),
   } as unknown as NetworkManagementEventStreamService;
   const deliveryCoordinator = {
-    notifyDdnsSynced: jest.fn().mockResolvedValue(undefined),
+    notifyDependencyChanged: jest.fn().mockResolvedValue(undefined),
     requestDrain: jest.fn(),
   };
   const service = new NetworkDdnsService(
@@ -536,13 +536,18 @@ describe('NetworkDdnsService', () => {
       'synced',
       'synced',
     ]);
-    expect(harness.deliveryCoordinator.notifyDdnsSynced).toHaveBeenCalledTimes(
-      2,
-    );
-    expect(harness.deliveryCoordinator.notifyDdnsSynced).toHaveBeenCalledWith(
+    expect(
+      harness.deliveryCoordinator.notifyDependencyChanged,
+    ).toHaveBeenCalledTimes(2);
+    expect(
+      harness.deliveryCoordinator.notifyDependencyChanged,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
-        appliedAddress: '8.8.8.8',
-        ddnsRecordId: '200',
+        dependencyKey: 'network.ddns.synced',
+        payload: {
+          appliedAddress: '8.8.8.8',
+          ddnsRecordId: '200',
+        },
       }),
     );
   });
@@ -573,7 +578,9 @@ describe('NetworkDdnsService', () => {
 
     const reconcile = harness.service.reconcileNow('200', true);
     await started;
-    expect(harness.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
+    expect(
+      harness.deliveryCoordinator.notifyDependencyChanged,
+    ).not.toHaveBeenCalled();
     resolveProvider({
       appliedAddress: '8.8.8.8',
       changed: true,
@@ -587,15 +594,21 @@ describe('NetworkDdnsService', () => {
       appliedAddress: '8.8.8.8',
       syncStatus: 'synced',
     });
-    expect(harness.deliveryCoordinator.notifyDdnsSynced).toHaveBeenCalledTimes(
-      1,
-    );
-    expect(harness.deliveryCoordinator.notifyDdnsSynced).toHaveBeenCalledWith({
-      appliedAddress: '8.8.8.8',
-      ddnsRecordId: '200',
+    expect(
+      harness.deliveryCoordinator.notifyDependencyChanged,
+    ).toHaveBeenCalledTimes(1);
+    expect(
+      harness.deliveryCoordinator.notifyDependencyChanged,
+    ).toHaveBeenCalledWith({
+      dependencyKey: 'network.ddns.synced',
+      payload: {
+        appliedAddress: '8.8.8.8',
+        ddnsRecordId: '200',
+      },
     });
     expect(harness.recordUpdate.mock.invocationCallOrder[1]).toBeLessThan(
-      harness.deliveryCoordinator.notifyDdnsSynced.mock.invocationCallOrder[0],
+      harness.deliveryCoordinator.notifyDependencyChanged.mock
+        .invocationCallOrder[0],
     );
   });
 
@@ -616,7 +629,9 @@ describe('NetworkDdnsService', () => {
     await Promise.resolve();
 
     expect(harness.recordUpdate).toHaveBeenCalledTimes(2);
-    expect(harness.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
+    expect(
+      harness.deliveryCoordinator.notifyDependencyChanged,
+    ).not.toHaveBeenCalled();
     expect(harness.records[0].syncStatus).toBe('syncing');
   });
 
@@ -630,7 +645,9 @@ describe('NetworkDdnsService', () => {
     await prepareEnabledA(stale);
     await stale.service.reconcileNow('200', true);
     expect(stale.client.reconcile).not.toHaveBeenCalled();
-    expect(stale.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
+    expect(
+      stale.deliveryCoordinator.notifyDependencyChanged,
+    ).not.toHaveBeenCalled();
 
     const failed = createHarness();
     failed.client.reconcile.mockRejectedValueOnce(
@@ -638,7 +655,9 @@ describe('NetworkDdnsService', () => {
     );
     await prepareEnabledA(failed);
     await failed.service.reconcileNow('200', true);
-    expect(failed.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
+    expect(
+      failed.deliveryCoordinator.notifyDependencyChanged,
+    ).not.toHaveBeenCalled();
 
     const disabled = createHarness();
     let providerStarted!: () => void;
@@ -668,7 +687,7 @@ describe('NetworkDdnsService', () => {
     });
     await disabledRun;
     expect(
-      disabled.deliveryCoordinator.notifyDdnsSynced,
+      disabled.deliveryCoordinator.notifyDependencyChanged,
     ).not.toHaveBeenCalled();
 
     const synced = createHarness();
@@ -679,13 +698,15 @@ describe('NetworkDdnsService', () => {
     synced.records[0].syncStatus = 'synced';
     await synced.service.reconcileNow('200');
     expect(synced.client.reconcile).not.toHaveBeenCalled();
-    expect(synced.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
+    expect(
+      synced.deliveryCoordinator.notifyDependencyChanged,
+    ).not.toHaveBeenCalled();
   });
 
   it('logs notification rejection without changing authoritative DDNS success', async () => {
     const harness = createHarness();
     const wakeFailure = new Error('wake unavailable');
-    harness.deliveryCoordinator.notifyDdnsSynced.mockRejectedValueOnce(
+    harness.deliveryCoordinator.notifyDependencyChanged.mockRejectedValueOnce(
       wakeFailure,
     );
     const loggerWarn = jest
@@ -737,7 +758,9 @@ describe('NetworkDdnsService', () => {
       syncStatus: 'waiting_source',
     });
     expect(harness.client.reconcile).not.toHaveBeenCalled();
-    expect(harness.deliveryCoordinator.notifyDdnsSynced).not.toHaveBeenCalled();
+    expect(
+      harness.deliveryCoordinator.notifyDependencyChanged,
+    ).not.toHaveBeenCalled();
   });
 
   it('waits without calling the provider when an IPv4 source keeps an ineligible residual lease', async () => {

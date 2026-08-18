@@ -1,7 +1,7 @@
 import type { EntityManager, Repository } from 'typeorm';
-import { SystemMessageEventStagerService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-event-stager.service';
-import { SystemMessageSourceRegistry } from '../../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
-import { QqbotMessageEvent } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-event.entity';
+import { SystemMessageEventStagerService } from '../../../../src/modules/message-management/application/system-message-event-stager.service';
+import { SystemMessageSourceRegistry } from '../../../../src/modules/message-management/application/system-message-source.registry';
+import { MessageEvent } from '../../../../src/modules/message-management/infrastructure/persistence/message-event.entity';
 
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
 
@@ -42,9 +42,9 @@ function input(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function createManager(events: QqbotMessageEvent[] = [], saveError?: unknown) {
+function createManager(events: MessageEvent[] = [], saveError?: unknown) {
   const repository = {
-    create: jest.fn((value) => Object.assign(new QqbotMessageEvent(), value)),
+    create: jest.fn((value) => Object.assign(new MessageEvent(), value)),
     findOne: jest.fn(
       async ({ where: { eventId } }) =>
         events.find((event) => event.eventId === eventId) ?? null,
@@ -54,10 +54,10 @@ function createManager(events: QqbotMessageEvent[] = [], saveError?: unknown) {
       events.push(event);
       return event;
     }),
-  } as unknown as jest.Mocked<Repository<QqbotMessageEvent>>;
+  } as unknown as jest.Mocked<Repository<MessageEvent>>;
   const manager = {
     getRepository: jest.fn((entity) => {
-      if (entity === QqbotMessageEvent) return repository;
+      if (entity === MessageEvent) return repository;
       throw new Error('unexpected repository');
     }),
   } as unknown as jest.Mocked<EntityManager>;
@@ -73,7 +73,7 @@ describe('SystemMessageEventStagerService', () => {
     await expect(service.stage(manager, input())).resolves.toBe('accepted');
 
     expect(validateEventPayload).toHaveBeenCalledWith({ currentPort: 38213 });
-    expect(manager.getRepository).toHaveBeenCalledWith(QqbotMessageEvent);
+    expect(manager.getRepository).toHaveBeenCalledWith(MessageEvent);
     expect(repository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         eventId: 'endpoint-event-1',
@@ -95,7 +95,7 @@ describe('SystemMessageEventStagerService', () => {
   it('returns duplicate without saving when the event already exists', async () => {
     const { registry } = createRegistry();
     const { manager, repository } = createManager([
-      Object.assign(new QqbotMessageEvent(), { eventId: 'endpoint-event-1' }),
+      Object.assign(new MessageEvent(), { eventId: 'endpoint-event-1' }),
     ]);
     const service = new SystemMessageEventStagerService(registry);
 

@@ -60,7 +60,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MySQL                 | `DB_HOST`、`DB_PORT`、`DB_USERNAME`、`DB_PASSWORD`、`DB_DATABASE`、`DB_SYNC`                                                                                                                                                                                                                                                                                                                                                                                    |
 | MinIO                 | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MINIO_USE_SSL`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`、`BLOG_ASSET_MIGRATION_*`                                                                                                                                                                                                                  |
-| Admin                 | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                                                                                                |
+| Admin                 | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`ADMIN_NOTICE_SSE_REPLAY_LIMIT`、`ADMIN_NOTICE_SSE_HEARTBEAT_MS`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                              |
 | Public Security       | `PUBLIC_SECURITY_*`、`PUBLIC_RATE_LIMIT_REDIS_*`、`PUBLIC_RATE_LIMIT_*`                                                                                                                                                                                                                                                                                                                                                                                         |
 | Logging/Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*`                                                                                                                                                                                                                                                                                                                                                                                            |
 | QQBot/NapCat          | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_REVERSE_WS_*`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`、`NAPCAT_*`、`QQBOT_NAPCAT_*`、`MQTT_*`                                                                                                                                             |
@@ -116,11 +116,11 @@ v2 endpoint event 通常先于 matching reported 到达，因此 event-first 先
 
 公开 `open.kwitsukasa.top/<service>/` 仅通过腾讯云 Caddy 与 WireGuard 调用 Host 限定的 `/network/open-redirect/:serviceKey`。API 不接收任意重定向目标，而是从固定服务白名单选取 Host/路径，并在同一个 `REPEATABLE READ` 事务中确认 `10443/TCP` NATMap 通道、逻辑组、`nas4` A 记录和 Agent 都处于当前且已同步状态后返回临时 `302`。成功响应同时发布单值 `X-KT-Endpoint-IPv4`、`X-KT-Endpoint-Generation`、`X-KT-Endpoint-Valid-Until`，分别绑定规范公网 IPv4、64 位小写十六进制端点身份和当前 UTC 租约；私网/CGNAT/保留 IPv4 或非法身份不会发布。未知服务为 `404`，离线、lease 过期、revision 落后、DDNS 不一致或数据库异常为无 `Location` 和端点头的 `503`。首跳后浏览器直接访问 `https://*.nas4.kwitsukasa.top:{动态端口}/...`，业务数据不经过腾讯云；Android KernelSU 客户端用同一权威 IPv4 建立精确 `/32` hook。
 
-QQBot 系统消息推送由全局消息订阅和模板、账号范围发布绑定及耐久事件/投递共同管理；订阅表单字段、候选集合和资源匹配由所选系统消息源 adapter 声明，核心模块不写死 STUN 的 `portForwardId/ddnsRecordId` 或 TCP NATMap 的 `tcpChannelId/ddnsRecordId`。TCP 来源变量精确为 `endpoint/fqdn/publicIpv4/publicPort/previousPublicIpv4/previousPublicPort/portForwardName`，只有所选同通道 A 记录同步到事件 IPv4 后才能发送；初始化与增量 SQL 幂等提供正文为 `当前 TCP NATMap 端点已变更为 ${{endpoint}}` 的默认模板，既有 STUN 模板保持不变。账号接口严格使用路由 `selfId`，不会回退到其他机器人。群聊和私聊目标分别使用 `group` / `private`，Snowflake、QQ 账号和目标 ID 在 HTTP 与数据库边界始终保持字符串。系统事件只能通过内部 Outbox stager 暂存，不提供 publish/event/worker HTTP 路由；管理响应仅返回字段白名单，不暴露账号凭据、Provider/OneBot/MQTT 运行对象、原始事件载荷或内部持久化键。
+系统消息现由独立 Message Management 管理，链路固定为“消息源 → 来源适配器 → 绑定来源的模板 → 绑定多个同来源模板及一个订阅者的订阅 → 统一消息协议 → 订阅者私有投递”。来源 adapter 只注册在 Message Management；QQBot 和站内信只作为统一协议订阅者，不直接依赖 STUN、TCP NATMap 等消息源。每个匹配订阅会把全部模板按绑定顺序渲染为一个 `templates[]`，只调用所选订阅者一次，由订阅者决定一条、多条、聚合或跳过投递。系统事件只通过内部 Outbox stager 暂存，不提供 publish/event/worker HTTP 路由；管理响应仅返回字段白名单，不暴露凭据、Provider/OneBot/MQTT 运行对象、原始事件载荷或内部持久化键。
 
-`qqbot_message_event` 同时承担事件 Outbox：扇出状态为 `accepted`、`processing`、`retry`、`completed`、`failed`；按目标冻结的 `qqbot_message_delivery` 状态为 `waiting_ddns`、`pending`、`processing`、`retry`、`success`、`failed`、`superseded`、`cancelled`。扇出和投递每次各领取最多 50 行，处理租约为 30 秒；进程启动后立即恢复，并每 5 秒扫描一次。`waiting_ddns` 每 60 秒持久化复检；临时错误从 10 秒开始指数退避，单次最长 15 分钟，并以事件发生后 24 小时为截止时间。
+通用协议数据位于 `message_template`、`message_subscription`、`message_subscription_template` 和 `message_event`。QQBot 适配器只拥有账号订阅绑定、群聊/私聊目标和耐久投递，当前策略是对每个模板 × 每个启用目标各创建一条投递；站内信适配器只拥有订阅、标题与接收角色绑定，当前策略是每个模板物化一条 `admin_notice`。QQBot 账号接口严格使用路由 `selfId`，不会回退到其他机器人；Snowflake、QQ 账号和目标 ID 在 HTTP 与数据库边界始终保持字符串。
 
-Network 端点历史事务提交后才调用 `requestDrain()`；DDNS 只有在 optimistic `synced` / `appliedAddress` 状态成功持久化后才调用 `notifyDdnsSynced()` 提前唤醒相关等待任务，周期扫描仍负责恢复漏唤醒。每次正式发送都重新检查来源和配置，只使用投递冻结的准确 `selfId`，正文作为一个 OneBot `text` segment 下发。数据库唯一键避免重复事件和重复事件-目标任务，但 OneBot 超时后的重试具有至少一次语义：超时结果不明确时，收件端仍可能收到重复消息。
+`message_event` 扇出状态为 `accepted`、`processing`、`deferred`、`retry`、`completed`、`failed`。DDNS 等来源前置条件未满足时由通用事件进入 `deferred` 并每 60 秒复检，不会预先生成订阅者私有投递；条件成功持久化后 `notifyDdnsSynced()` 可提前唤醒。QQBot 投递状态为 `pending`、`processing`、`retry`、`success`、`failed`、`superseded`、`cancelled`，唯一键为事件、目标和模板三元组。事件和投递每次最多领取 50 行，处理租约为 30 秒；临时错误从 10 秒开始指数退避，单次最长 15 分钟。OneBot 超时后的重试仍具至少一次语义，收件端可能收到重复消息。
 
 NapCat Runtime/Protocol Profile 已完成本地 API/Admin 实施，线上发布和账号闭环按 `docs/plans/2026-06-18-qqbot-napcat-runtime-protocol-profile-implementation-plan.md` 的 Task 10 执行。当前实现覆盖运行态/协议/会话行为/历史登录事件兼容表/风险模式表，真实物理设备风格 hostname/MAC，NapCat/OneBot 配置 hash，KT `zh_CN.UTF-8` 中国桌面派生镜像资产，只读 `/qqbot/napcat/runtime/detail` 证据接口，watchdog 离线巡检告警，以及 Admin 账号页“运行态”抽屉；不绕过 QQ/Tencent 验证码、不修改 QQ/NTQQ 签名协议、不启用 privileged/host network，也不做账号级每小时/每日累计发送预算。NapCat Chinese Desktop Runtime v20 使用 KT `NapCatQQ` fork 源码构建出的 `NapCat.Shell` artifact，并在 QQ `KickedOffLine` 后标记 native login service stale；API 在源 Docker 容器在线但 WebUI 明确 QQ 离线时会同容器调用 `RestartNapCat` 重启 NapCat worker，重建 QQCore login service 后再推进 quick/password/qrcode，不做 Docker 重建、补 env 或设备身份迁移，且同一个更新登录 session 只消费一次 worker restart 预算；v14 起还会对 QQ/NapCat/Xvfb 长期进程的 `/proc/<pid>/mountinfo` 做 PID 级遮蔽，防止 `overlay`、`/vol1/docker`、`docker-init`、`/docker/containers`、`napcat-instances` 等宿主路径泄露；v15 修复扫码成功时 `QQLoginInfo` 晚于登录态写入造成的 QQ 号回读空窗；v16 在 native reset 缺少 `offline()` 时改用 `destroy()` 硬重置半登录服务，并让镜像 verify 等待 mountinfo guard 收敛；v17/v18 增加 WebUI 鉴权的 `/api/Debug/RuntimeViewProbe` 同进程诊断并修正 native maps 截断导致的 hook 证据假阴性；v19 保留 WebUI `RestartNapCat` 重启 worker 时的 `-q <uin>` 快速登录参数，避免重启后退回无账号扫码；v20 保护 API 预写的 `/app/napcat/config`，避免上游首次解包 `NapCat.Shell/*` 覆盖 `bypass.*=true` 与 `o3HookMode=0`。镜像必须先用 `scripts/napcat-desktop-cn-stage-build.mjs` staged build context，生产 `QQBOT_NAPCAT_IMAGE` 应指向验证过的 `kt-napcat-desktop-cn:desktop-cn-v20` digest。`k8s/prod/api.yaml` 保留 `desktop-cn-v20` 稳定默认值；Jenkins `QQBOT_NAPCAT_IMAGE_OVERRIDE` 和 `QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE` 仅在填写时通过 `kubectl set env` 推广已验证运行时镜像/profile，空值会继续使用 manifest/default env。回滚时重新运行 Jenkins 并填入上一版 digest/profile，或清空两个 override 后重新部署 manifest 默认值。
 
@@ -156,6 +156,25 @@ pnpm start:dev
 ```
 
 服务固定监听 `48085`。
+
+### 本地直接启动与真实验证
+
+WSL 本地开发不再要求反复修改 `.env.development` 的端口或补 Redis 变量。保留该私有文件中的 MySQL 用户、密码和应用 Secret，随后直接运行：
+
+```bash
+# 自动复用 Windows MySQL:3306、按需启动 Windows Redis，并前台启动 API
+pnpm start:local
+
+# 同一依赖准备流程，使用 Nest watch 模式
+pnpm start:local:dev
+
+# 自动启动 API，执行真实登录、未读数、批量已读与 SSE 烟测，然后清理本轮进程
+pnpm verify:local
+```
+
+三个入口都只会重建名称匹配 `kt_template_local` 或 `kt_template_local_*` 的专用可丢弃数据库，依次加载 `sql/refactor-v3/00-full-schema.sql`、`sql/media-governance-init.sql`、`sql/refactor-v3/01-seed-core.sql` 和 `sql/system-notice-menu.sql`；不会读写现有 `kt_template` 业务库。WSL 会先探测 `127.0.0.1:3306`，必要时尝试启动已安装的 Windows MySQL 服务；Redis 未监听时通过 Windows PATH 定位 `redis-server.exe` 及同目录 `redis.conf`，只在本轮启动了 Redis 时才在退出阶段结束对应 PID。所有非 Secret 的本地安全默认值由脚本以进程环境覆盖，既不改私有 env，也不连接 MQTT、NapCat 或 DDNS。
+
+`pnpm verify:local` 会加载 refactor-v3、媒体治理、消息中心增量菜单与权限 SQL，并在专用库写入后清理一条固定 fixture；真实烟测覆盖 `/health/runtime`、Admin 登录、两条站内信路由的未读数一致性、批量已读更新数量，以及 SSE 的首次快照和 `notice-changed/read` 实时事件。日志只写入忽略目录 `.kt-workspace/test-artifacts/local-runtime/`。Admin 侧继续直接运行 `pnpm dev`，其 `/api` 代理固定指向本入口的 `48085`。
 
 常用命令：
 
@@ -334,7 +353,7 @@ Run，并由 Agent 的类型化身份修正收口。升级前已处于这一精�
 - 全局 `SaveBodyInterceptor` 会删除 `POST */save` 请求体里的 `id`；需要保留时使用 `@SkipSaveBodyNormalize()`。
 - Admin、Component、Dict、MinIO、Blog 管理和 QQBot 管理接口默认走 `JwtAuthGuard`；公开接口用 `@Public()`。
 - 系统日志由 pino 输出，Loki 查询统一通过后端 `/system/logs/*` 代理，前端不直连 Loki。
-- 日志级站内信只承接运行期事件：接口 5xx、QQBot 下线 notice、NapCat 容器最新离线日志会自动聚合通知 `super` 角色；服务端强制 `super` 访问，Admin 不再暴露人工新增/编辑入口；长路径接口错误会压缩 `dedupeKey/title` 到表字段长度内，避免通知入库失败。
+- 日志级站内信只承接运行期事件：接口 5xx、QQBot 下线 notice、NapCat 容器最新离线日志及 Message Management 的站内信订阅者会自动写入或聚合通知；服务端强制 `super` 访问，Admin 不暴露人工新增/编辑入口。消息变更只在数据库事务提交后通过带重放游标与心跳的 SSE 广播，Admin 右上角铃铛显示 `99+` 封顶的未读 Badge，消息中心支持所选未读项一次批量标记已读；长路径接口错误仍会压缩 `dedupeKey/title` 到表字段长度内。
 - QQBot 扫码登录通过 SSE `/qqbot/account/scan/events` 暴露进度，耗时链路不应阻塞普通 HTTP 响应；新增账号扫码会先返回 pending `sessionId`，后台再创建 NapCat 容器并生成二维码。`CheckLoginStatus.isLogin=true` 只代表 NapCat 登录阳性，创建账号必须继续等 `GetQQLoginInfo` 返回 `uin/selfId` 后才绑定真实 QQ 号；短暂缺号时会话保持 pending 并显示正在读取 QQ 号，不能重建容器或猜号。
 - QQBot 外发统一走发送排队：默认全局间隔 `2500ms`、同会话间隔 `8000ms`、排队抖动 `0-800ms`，超过 `QQBOT_SEND_MAX_QUEUE_WAIT_MS` 时拒绝本次发送，避免高频自动回复形成突发流量。
 - QQBot 在线命令和自动回复规则都有运行时保底冷却：默认命令 `5000ms`、规则 `30000ms`；即使数据库里旧数据冷却值更低，也按保底值判定，降低频繁触发风控的概率。
@@ -427,14 +446,14 @@ Blog verify、Admin verify 三项完成证明。该模式固定规范生产 env 
 manifest apply、本地回读、rollout 或最终回读失败时都会尝试恢复 API `0`
 副本并清空 Pod；普通 tag 发布不能替代此流程。
 
-QQBot 系统消息推送按以下顺序发布和回滚：
+Message Management 与订阅者适配器按以下顺序发布和回滚：
 
-1. 备份 `qqbot_message_subscription`、`qqbot_message_template`、`qqbot_message_publish_binding`、`qqbot_message_publish_target`、`qqbot_message_event`、`qqbot_message_delivery`，以及本功能相关的 `admin_menu` / `admin_role_menu` 行。
+1. 备份现存的旧 `qqbot_message_subscription` / `qqbot_message_template` / `qqbot_message_event`、现行四张 `message_*` 协议表、QQBot 三张订阅者表、`station_notice_message_binding`，以及相关 `admin_menu` / `admin_role_menu` 行；不存在的表只记录为未创建。
 2. 既有环境只应用本功能的幂等增量入口 `sql/qqbot-message-push-init.sql`，随后执行只读的 `sql/qqbot-message-push-verify.sql`；不要把包含历史迁移的 `sql/qqbot-init.sql` 作为本功能生产迁移。仅一次性、可丢弃的全量初始化环境按顺序使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`。发布前还需通过网络菜单 SQL 应用独立 `System:Network:PortForward:Natmap` 权限并确认只授予活动 `super`。
-3. 验证六表、17 个精确索引、默认模板、18 个页面/按钮菜单和活动 `super/admin` 角色授权。
-4. 先发布并验证 API 健康检查、旧 QQBot 发送能力和新只读接口，再发布并验证 Admin。
-5. 管理员显式创建订阅，并在每个发布账号中选择模板、配置群聊/私聊目标和启用绑定；随后用授权的非生产目标做一次有界 A→B 端口变化、DDNS 门禁、发送日志和幂等验收。
-6. 回滚时先停用全部消息推送绑定，再回滚 Admin 和 API；保留事件、投递和 `qqbot_send_log` 历史供审计，不停止 Network Agent、端口转发、STUN Keeper 或 DDNS。
+3. 增量迁移会把旧协议表复制到通用表，并把不同账号所选的旧模板按“旧订阅 + 模板”拆成单模板订阅；验证 8 张现行表、精确索引、订阅非空模板集合、同来源约束、QQBot 私有绑定无 `template_id`、默认模板、菜单和活动角色授权。
+4. 先发布并验证 API 健康检查、Message Management CRUD、旧 QQBot 发送能力和两个订阅者接口，再发布并验证 Admin。
+5. 管理员先创建绑定来源的模板，再创建绑定一个或多个同来源模板及一个订阅者的订阅；随后仅在具体订阅者页面配置 QQ 账号/目标或站内信标题/接收角色，并分别完成授权的有界来源事件验收。
+6. 回滚时先停用 QQBot 与站内信订阅者绑定，再回滚 Admin 和 API；保留通用事件、QQBot 投递、站内信和 `qqbot_send_log` 历史供审计，不停止 Network Agent、端口转发、STUN Keeper 或 DDNS。
 7. Jenkins/K8s 成功只属于部署证据，不能代替真实 CRUD、页面、Outbox/DDNS 或 QQ 投递功能验收。
 
 每次发布记录必须分别写明代码部署、生产 SQL、真实 CRUD、Admin 页面、Outbox/DDNS 和授权 QQ 投递的证据；没有明确授权的 QQ 群或 QQ 号时不得任选目标，且必须把真实投递标记为未验证，不能用 Jenkins/K8s 成功替代。

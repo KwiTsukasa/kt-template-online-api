@@ -1,7 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository, type EntityManager } from 'typeorm';
+import { Repository, type EntityManager } from 'typeorm';
 import {
   SYSTEM_NOTICE_PUBLISHER,
   SystemNoticePublisher,
@@ -14,8 +14,7 @@ import {
 } from './qqbot-account-napcat-runtime.port';
 import { QqbotAccountAbility } from '../../infrastructure/persistence/account/qqbot-account-ability.entity';
 import { QqbotAccount } from '../../infrastructure/persistence/account/qqbot-account.entity';
-import { QqbotMessageDelivery } from '../../infrastructure/persistence/message-push/qqbot-message-delivery.entity';
-import { QqbotMessagePublishBinding } from '../../infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
+import { QqbotAccountExtensionRegistry } from './qqbot-account-extension.registry';
 import type {
   QqbotAccountBodyDto,
   QqbotAccountQueryDto,
@@ -55,6 +54,8 @@ export class QqbotAccountService {
     private readonly systemNoticePublisher?: SystemNoticePublisher,
     @Optional()
     private readonly configService?: ConfigService,
+    @Optional()
+    private readonly accountExtensionRegistry?: QqbotAccountExtensionRegistry,
   ) {}
 
   /**
@@ -296,7 +297,9 @@ export class QqbotAccountService {
 
     const existing = await (async () => {
       if (input.accountId) {
-        return await this.accountRepository.findOne({ where: { id: input.accountId } });
+        return await this.accountRepository.findOne({
+          where: { id: input.accountId },
+        });
       }
       return await this.accountRepository.findOne({ where: { selfId } });
     })();
@@ -525,19 +528,10 @@ export class QqbotAccountService {
     manager: EntityManager,
     accountId: string,
   ): Promise<void> {
-    const bindings = await manager
-      .getRepository(QqbotMessagePublishBinding)
-      .find({
-        select: { id: true },
-        where: { accountId: String(accountId) },
-      });
-    if (!bindings.length) return;
-    await manager.getRepository(QqbotMessageDelivery).update(
-      {
-        bindingId: In(bindings.map((binding) => binding.id)),
-        status: In(['waiting_ddns', 'pending', 'retry']),
-      },
-      { nextAttemptAt: null, processingLeaseUntil: null, status: 'cancelled' },
+    if (!this.accountExtensionRegistry) return;
+    await this.accountExtensionRegistry.cancelAccountResources(
+      manager,
+      accountId,
     );
   }
 
@@ -861,13 +855,12 @@ export class QqbotAccountService {
       enabled: body.enabled ?? true,
       name: body.name || '',
       remark: body.remark || '',
-      selfId:
-        (() => {
-          if (typeof body.selfId === 'string') {
-            return body.selfId.trim();
-          }
-          return body.selfId;
-        })(),
+      selfId: (() => {
+        if (typeof body.selfId === 'string') {
+          return body.selfId.trim();
+        }
+        return body.selfId;
+      })(),
     };
     const napcatLoginPasswordSecret = this.toNapcatLoginPasswordSecret(
       body.loginPassword,

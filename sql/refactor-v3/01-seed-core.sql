@@ -633,29 +633,32 @@ ON DUPLICATE KEY UPDATE
   cooldown_seconds = VALUES(cooldown_seconds),
   is_deleted = 0;
 
-INSERT INTO qqbot_message_template (id, name, source_key, content, enabled, remark, is_deleted)
+INSERT INTO message_template (id, name, source_key, content, enabled, remark, is_deleted)
 SELECT 2041700000000200601, 'STUN 映射端口变更默认模板', 'network.stun.mapping-port-changed', '当前STUN的端口已变更为${{endpoint}}', 1, '系统默认模板', 0
 WHERE NOT EXISTS (
-  SELECT 1 FROM qqbot_message_template
+  SELECT 1 FROM message_template
   WHERE source_key = 'network.stun.mapping-port-changed'
     AND name = 'STUN 映射端口变更默认模板'
     AND is_deleted = 0
 );
 
-INSERT INTO qqbot_message_template (id, name, source_key, content, enabled, remark, is_deleted)
+INSERT INTO message_template (id, name, source_key, content, enabled, remark, is_deleted)
 SELECT 2041700000000200602, 'TCP NATMap 端点变更默认模板', 'network.tcp.natmap-endpoint-changed', '当前 TCP NATMap 端点已变更为 ${{endpoint}}', 1, '系统默认模板', 0
 WHERE NOT EXISTS (
-  SELECT 1 FROM qqbot_message_template
+  SELECT 1 FROM message_template
   WHERE source_key = 'network.tcp.natmap-endpoint-changed'
     AND name = 'TCP NATMap 端点变更默认模板'
     AND is_deleted = 0
 );
 
 INSERT INTO admin_menu (id, pid, name, path, component, redirect, auth_code, type, meta, status, sort) VALUES
-  (2041700000000100413,2041700000000100400,'QqBotMessageSubscription','/qqbot/message-subscription','/qqbot/message-subscription/list',NULL,'QqBot:MessageSubscription:List','menu','{"icon":"lucide:bell-ring","title":"消息订阅"}',1,10),
-  (2041700000000100414,2041700000000100400,'QqBotMessageTemplate','/qqbot/message-template','/qqbot/message-template/list',NULL,'QqBot:MessageTemplate:List','menu','{"icon":"lucide:message-square-plus","title":"消息模板"}',1,11),
-  (2041700000000120461,2041700000000100413,'QqBotMessageSubscriptionList',NULL,NULL,NULL,'QqBot:MessageSubscription:List','button','{"title":"common.list"}',1,0),(2041700000000120462,2041700000000100413,'QqBotMessageSubscriptionCreate',NULL,NULL,NULL,'QqBot:MessageSubscription:Create','button','{"title":"common.create"}',1,0),(2041700000000120463,2041700000000100413,'QqBotMessageSubscriptionUpdate',NULL,NULL,NULL,'QqBot:MessageSubscription:Update','button','{"title":"common.edit"}',1,0),(2041700000000120464,2041700000000100413,'QqBotMessageSubscriptionDelete',NULL,NULL,NULL,'QqBot:MessageSubscription:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120465,2041700000000100413,'QqBotMessageSubscriptionToggle',NULL,NULL,NULL,'QqBot:MessageSubscription:Toggle','button','{"title":"启停"}',1,0),
-  (2041700000000120471,2041700000000100414,'QqBotMessageTemplateList',NULL,NULL,NULL,'QqBot:MessageTemplate:List','button','{"title":"common.list"}',1,0),(2041700000000120472,2041700000000100414,'QqBotMessageTemplateCreate',NULL,NULL,NULL,'QqBot:MessageTemplate:Create','button','{"title":"common.create"}',1,0),(2041700000000120473,2041700000000100414,'QqBotMessageTemplateUpdate',NULL,NULL,NULL,'QqBot:MessageTemplate:Update','button','{"title":"common.edit"}',1,0),(2041700000000120474,2041700000000100414,'QqBotMessageTemplateDelete',NULL,NULL,NULL,'QqBot:MessageTemplate:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120475,2041700000000100414,'QqBotMessageTemplateToggle',NULL,NULL,NULL,'QqBot:MessageTemplate:Toggle','button','{"title":"启停"}',1,0),(2041700000000120476,2041700000000100414,'QqBotMessageTemplatePreview',NULL,NULL,NULL,'QqBot:MessageTemplate:Preview','button','{"title":"预览"}',1,0),
+  (2041700000000100420,0,'MessageManagement','/message-management',NULL,'/message-management/subscription',NULL,'catalog','{"icon":"lucide:messages-square","order":109,"title":"消息管理"}',1,109),
+  (2041700000000100414,2041700000000100420,'MessageManagementTemplate','/message-management/template','/message-management/template/list',NULL,'MessageManagement:Template:List','menu','{"icon":"lucide:message-square-plus","title":"消息模板"}',1,0),
+  (2041700000000100413,2041700000000100420,'MessageManagementSubscription','/message-management/subscription','/message-management/subscription/list',NULL,'MessageManagement:Subscription:List','menu','{"icon":"lucide:bell-ring","title":"消息订阅"}',1,1),
+  (2041700000000100423,2041700000000100420,'MessageManagementStationNoticeSubscriber','/message-management/subscribers/station-notice','/message-management/subscribers/station-notice/list',NULL,'MessageManagement:Push:List','menu','{"icon":"lucide:inbox","title":"站内信投递"}',1,2),
+  (2041700000000120461,2041700000000100413,'MessageManagementSubscriptionList',NULL,NULL,NULL,'MessageManagement:Subscription:List','button','{"title":"common.list"}',1,0),(2041700000000120462,2041700000000100413,'MessageManagementSubscriptionCreate',NULL,NULL,NULL,'MessageManagement:Subscription:Create','button','{"title":"common.create"}',1,0),(2041700000000120463,2041700000000100413,'MessageManagementSubscriptionUpdate',NULL,NULL,NULL,'MessageManagement:Subscription:Update','button','{"title":"common.edit"}',1,0),(2041700000000120464,2041700000000100413,'MessageManagementSubscriptionDelete',NULL,NULL,NULL,'MessageManagement:Subscription:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120465,2041700000000100413,'MessageManagementSubscriptionToggle',NULL,NULL,NULL,'MessageManagement:Subscription:Toggle','button','{"title":"启停"}',1,0),
+  (2041700000000120471,2041700000000100414,'MessageManagementTemplateList',NULL,NULL,NULL,'MessageManagement:Template:List','button','{"title":"common.list"}',1,0),(2041700000000120472,2041700000000100414,'MessageManagementTemplateCreate',NULL,NULL,NULL,'MessageManagement:Template:Create','button','{"title":"common.create"}',1,0),(2041700000000120473,2041700000000100414,'MessageManagementTemplateUpdate',NULL,NULL,NULL,'MessageManagement:Template:Update','button','{"title":"common.edit"}',1,0),(2041700000000120474,2041700000000100414,'MessageManagementTemplateDelete',NULL,NULL,NULL,'MessageManagement:Template:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120475,2041700000000100414,'MessageManagementTemplateToggle',NULL,NULL,NULL,'MessageManagement:Template:Toggle','button','{"title":"启停"}',1,0),(2041700000000120476,2041700000000100414,'MessageManagementTemplatePreview',NULL,NULL,NULL,'MessageManagement:Template:Preview','button','{"title":"预览"}',1,0),
+  (2041700000000120491,2041700000000100423,'MessageManagementPushList',NULL,NULL,NULL,'MessageManagement:Push:List','button','{"title":"common.list"}',1,0),(2041700000000120492,2041700000000100423,'MessageManagementPushCreate',NULL,NULL,NULL,'MessageManagement:Push:Create','button','{"title":"common.create"}',1,0),(2041700000000120493,2041700000000100423,'MessageManagementPushUpdate',NULL,NULL,NULL,'MessageManagement:Push:Update','button','{"title":"common.edit"}',1,0),(2041700000000120494,2041700000000100423,'MessageManagementPushDelete',NULL,NULL,NULL,'MessageManagement:Push:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120495,2041700000000100423,'MessageManagementPushToggle',NULL,NULL,NULL,'MessageManagement:Push:Toggle','button','{"title":"启停"}',1,0),
   (2041700000000120481,2041700000000100410,'QqBotAccountMessagePushList',NULL,NULL,NULL,'QqBot:Account:MessagePush:List','button','{"title":"common.list"}',1,0),(2041700000000120482,2041700000000100410,'QqBotAccountMessagePushCreate',NULL,NULL,NULL,'QqBot:Account:MessagePush:Create','button','{"title":"common.create"}',1,0),(2041700000000120483,2041700000000100410,'QqBotAccountMessagePushUpdate',NULL,NULL,NULL,'QqBot:Account:MessagePush:Update','button','{"title":"common.edit"}',1,0),(2041700000000120484,2041700000000100410,'QqBotAccountMessagePushDelete',NULL,NULL,NULL,'QqBot:Account:MessagePush:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120485,2041700000000100410,'QqBotAccountMessagePushToggle',NULL,NULL,NULL,'QqBot:Account:MessagePush:Toggle','button','{"title":"启停"}',1,0)
 ON DUPLICATE KEY UPDATE pid = VALUES(pid), name = VALUES(name), path = VALUES(path), component = VALUES(component), redirect = VALUES(redirect), auth_code = VALUES(auth_code), type = VALUES(type), meta = VALUES(meta), status = VALUES(status), sort = VALUES(sort), is_deleted = 0;
 
@@ -667,11 +670,14 @@ WHERE role.role_code IN ('super', 'admin')
   AND role.status = 1
   AND role.is_deleted = 0
   AND menu.id IN (
-    2041700000000100413, 2041700000000100414,
+    2041700000000100420, 2041700000000100413, 2041700000000100414,
+    2041700000000100423,
     2041700000000120461, 2041700000000120462, 2041700000000120463,
     2041700000000120464, 2041700000000120465, 2041700000000120471,
     2041700000000120472, 2041700000000120473, 2041700000000120474,
-    2041700000000120475, 2041700000000120476, 2041700000000120481,
+    2041700000000120475, 2041700000000120476,
+    2041700000000120491, 2041700000000120492, 2041700000000120493,
+    2041700000000120494, 2041700000000120495, 2041700000000120481,
     2041700000000120482, 2041700000000120483, 2041700000000120484,
     2041700000000120485
   )

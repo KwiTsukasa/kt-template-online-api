@@ -23,15 +23,17 @@ SELECT 'napcat_login_event' AS table_name, COUNT(*) AS row_count FROM napcat_log
 SELECT 'napcat_risk_mode' AS table_name, COUNT(*) AS row_count FROM napcat_risk_mode;
 SELECT 'qqbot_plugin_task' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task;
 SELECT 'qqbot_plugin_task_run' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task_run;
-SELECT 'qqbot_message_subscription' AS table_name, COUNT(*) AS row_count FROM qqbot_message_subscription;
-SELECT 'qqbot_message_template' AS table_name, COUNT(*) AS row_count FROM qqbot_message_template;
+SELECT 'message_subscription' AS table_name, COUNT(*) AS row_count FROM message_subscription;
+SELECT 'message_template' AS table_name, COUNT(*) AS row_count FROM message_template;
+SELECT 'message_subscription_template' AS table_name, COUNT(*) AS row_count FROM message_subscription_template;
 SELECT 'qqbot_message_publish_binding' AS table_name, COUNT(*) AS row_count FROM qqbot_message_publish_binding;
 SELECT 'qqbot_message_publish_target' AS table_name, COUNT(*) AS row_count FROM qqbot_message_publish_target;
-SELECT 'qqbot_message_event' AS table_name, COUNT(*) AS row_count FROM qqbot_message_event;
+SELECT 'message_event' AS table_name, COUNT(*) AS row_count FROM message_event;
 SELECT 'qqbot_message_delivery' AS table_name, COUNT(*) AS row_count FROM qqbot_message_delivery;
+SELECT 'station_notice_message_binding' AS table_name, COUNT(*) AS row_count FROM station_notice_message_binding;
 
-SELECT 'seed_qqbot_message_template' AS check_name, COUNT(*) AS matched_rows
-FROM qqbot_message_template
+SELECT 'seed_message_template' AS check_name, COUNT(*) AS matched_rows
+FROM message_template
 WHERE id = 2041700000000200601
   AND BINARY name = BINARY 'STUN 映射端口变更默认模板'
   AND BINARY source_key = BINARY 'network.stun.mapping-port-changed'
@@ -40,7 +42,7 @@ WHERE id = 2041700000000200601
   AND is_deleted = 0;
 
 SELECT 'seed_qqbot_tcp_natmap_message_template' AS check_name, COUNT(*) AS matched_rows
-FROM qqbot_message_template
+FROM message_template
 WHERE id = 2041700000000200602
   AND BINARY name = BINARY 'TCP NATMap 端点变更默认模板'
   AND BINARY source_key = BINARY 'network.tcp.natmap-endpoint-changed'
@@ -49,49 +51,58 @@ WHERE id = 2041700000000200602
   AND is_deleted = 0;
 
 WITH expected_menu AS (
-  SELECT 2041700000000100413 AS id, 2041700000000100400 AS pid, 'QqBotMessageSubscription' AS name, 'QqBot:MessageSubscription:List' AS auth_code, 10 AS sort
-  UNION ALL SELECT 2041700000000100414, 2041700000000100400, 'QqBotMessageTemplate', 'QqBot:MessageTemplate:List', 11
-  UNION ALL SELECT 2041700000000120461, 2041700000000100413, 'QqBotMessageSubscriptionList', 'QqBot:MessageSubscription:List', 0
-  UNION ALL SELECT 2041700000000120462, 2041700000000100413, 'QqBotMessageSubscriptionCreate', 'QqBot:MessageSubscription:Create', 0
-  UNION ALL SELECT 2041700000000120463, 2041700000000100413, 'QqBotMessageSubscriptionUpdate', 'QqBot:MessageSubscription:Update', 0
-  UNION ALL SELECT 2041700000000120464, 2041700000000100413, 'QqBotMessageSubscriptionDelete', 'QqBot:MessageSubscription:Delete', 0
-  UNION ALL SELECT 2041700000000120465, 2041700000000100413, 'QqBotMessageSubscriptionToggle', 'QqBot:MessageSubscription:Toggle', 0
-  UNION ALL SELECT 2041700000000120471, 2041700000000100414, 'QqBotMessageTemplateList', 'QqBot:MessageTemplate:List', 0
-  UNION ALL SELECT 2041700000000120472, 2041700000000100414, 'QqBotMessageTemplateCreate', 'QqBot:MessageTemplate:Create', 0
-  UNION ALL SELECT 2041700000000120473, 2041700000000100414, 'QqBotMessageTemplateUpdate', 'QqBot:MessageTemplate:Update', 0
-  UNION ALL SELECT 2041700000000120474, 2041700000000100414, 'QqBotMessageTemplateDelete', 'QqBot:MessageTemplate:Delete', 0
-  UNION ALL SELECT 2041700000000120475, 2041700000000100414, 'QqBotMessageTemplateToggle', 'QqBot:MessageTemplate:Toggle', 0
-  UNION ALL SELECT 2041700000000120476, 2041700000000100414, 'QqBotMessageTemplatePreview', 'QqBot:MessageTemplate:Preview', 0
-  UNION ALL SELECT 2041700000000120481, 2041700000000100410, 'QqBotAccountMessagePushList', 'QqBot:Account:MessagePush:List', 0
-  UNION ALL SELECT 2041700000000120482, 2041700000000100410, 'QqBotAccountMessagePushCreate', 'QqBot:Account:MessagePush:Create', 0
-  UNION ALL SELECT 2041700000000120483, 2041700000000100410, 'QqBotAccountMessagePushUpdate', 'QqBot:Account:MessagePush:Update', 0
-  UNION ALL SELECT 2041700000000120484, 2041700000000100410, 'QqBotAccountMessagePushDelete', 'QqBot:Account:MessagePush:Delete', 0
-  UNION ALL SELECT 2041700000000120485, 2041700000000100410, 'QqBotAccountMessagePushToggle', 'QqBot:Account:MessagePush:Toggle', 0
+  SELECT 2041700000000100420 AS id, 0 AS pid, 'MessageManagement' AS name, NULL AS auth_code
+  UNION ALL SELECT 2041700000000100414, 2041700000000100420, 'MessageManagementTemplate', 'MessageManagement:Template:List'
+  UNION ALL SELECT 2041700000000100413, 2041700000000100420, 'MessageManagementSubscription', 'MessageManagement:Subscription:List'
+  UNION ALL SELECT 2041700000000100423, 2041700000000100420, 'MessageManagementStationNoticeSubscriber', 'MessageManagement:Push:List'
+  UNION ALL SELECT 2041700000000120461, 2041700000000100413, 'MessageManagementSubscriptionList', 'MessageManagement:Subscription:List'
+  UNION ALL SELECT 2041700000000120462, 2041700000000100413, 'MessageManagementSubscriptionCreate', 'MessageManagement:Subscription:Create'
+  UNION ALL SELECT 2041700000000120463, 2041700000000100413, 'MessageManagementSubscriptionUpdate', 'MessageManagement:Subscription:Update'
+  UNION ALL SELECT 2041700000000120464, 2041700000000100413, 'MessageManagementSubscriptionDelete', 'MessageManagement:Subscription:Delete'
+  UNION ALL SELECT 2041700000000120465, 2041700000000100413, 'MessageManagementSubscriptionToggle', 'MessageManagement:Subscription:Toggle'
+  UNION ALL SELECT 2041700000000120471, 2041700000000100414, 'MessageManagementTemplateList', 'MessageManagement:Template:List'
+  UNION ALL SELECT 2041700000000120472, 2041700000000100414, 'MessageManagementTemplateCreate', 'MessageManagement:Template:Create'
+  UNION ALL SELECT 2041700000000120473, 2041700000000100414, 'MessageManagementTemplateUpdate', 'MessageManagement:Template:Update'
+  UNION ALL SELECT 2041700000000120474, 2041700000000100414, 'MessageManagementTemplateDelete', 'MessageManagement:Template:Delete'
+  UNION ALL SELECT 2041700000000120475, 2041700000000100414, 'MessageManagementTemplateToggle', 'MessageManagement:Template:Toggle'
+  UNION ALL SELECT 2041700000000120476, 2041700000000100414, 'MessageManagementTemplatePreview', 'MessageManagement:Template:Preview'
+  UNION ALL SELECT 2041700000000120491, 2041700000000100423, 'MessageManagementPushList', 'MessageManagement:Push:List'
+  UNION ALL SELECT 2041700000000120492, 2041700000000100423, 'MessageManagementPushCreate', 'MessageManagement:Push:Create'
+  UNION ALL SELECT 2041700000000120493, 2041700000000100423, 'MessageManagementPushUpdate', 'MessageManagement:Push:Update'
+  UNION ALL SELECT 2041700000000120494, 2041700000000100423, 'MessageManagementPushDelete', 'MessageManagement:Push:Delete'
+  UNION ALL SELECT 2041700000000120495, 2041700000000100423, 'MessageManagementPushToggle', 'MessageManagement:Push:Toggle'
+  UNION ALL SELECT 2041700000000120481, 2041700000000100410, 'QqBotAccountMessagePushList', 'QqBot:Account:MessagePush:List'
+  UNION ALL SELECT 2041700000000120482, 2041700000000100410, 'QqBotAccountMessagePushCreate', 'QqBot:Account:MessagePush:Create'
+  UNION ALL SELECT 2041700000000120483, 2041700000000100410, 'QqBotAccountMessagePushUpdate', 'QqBot:Account:MessagePush:Update'
+  UNION ALL SELECT 2041700000000120484, 2041700000000100410, 'QqBotAccountMessagePushDelete', 'QqBot:Account:MessagePush:Delete'
+  UNION ALL SELECT 2041700000000120485, 2041700000000100410, 'QqBotAccountMessagePushToggle', 'QqBot:Account:MessagePush:Toggle'
 )
-SELECT 'seed_qqbot_message_push_menu_mismatch' AS check_name,
-       expected.id, expected.pid, expected.name, expected.auth_code, expected.sort,
+SELECT 'seed_message_management_menu_mismatch' AS check_name,
+       expected.id, expected.pid, expected.name, expected.auth_code,
        actual.id AS actual_id, actual.pid AS actual_pid, actual.name AS actual_name,
-       actual.auth_code AS actual_auth_code, actual.sort AS actual_sort,
-       actual.status AS actual_status, actual.is_deleted AS actual_is_deleted
+       actual.auth_code AS actual_auth_code, actual.status AS actual_status,
+       actual.is_deleted AS actual_is_deleted
 FROM expected_menu expected
 LEFT JOIN admin_menu actual ON actual.id = expected.id
 WHERE actual.id IS NULL
    OR NOT (BINARY actual.name <=> BINARY expected.name)
    OR NOT (BINARY actual.auth_code <=> BINARY expected.auth_code)
    OR actual.pid <> expected.pid
-   OR actual.sort <> expected.sort
    OR actual.status <> 1
    OR actual.is_deleted <> 0;
 
 WITH expected_menu AS (
-  SELECT 2041700000000100413 AS id UNION ALL SELECT 2041700000000100414 UNION ALL SELECT 2041700000000120461
-  UNION ALL SELECT 2041700000000120462 UNION ALL SELECT 2041700000000120463 UNION ALL SELECT 2041700000000120464
-  UNION ALL SELECT 2041700000000120465 UNION ALL SELECT 2041700000000120471 UNION ALL SELECT 2041700000000120472
-  UNION ALL SELECT 2041700000000120473 UNION ALL SELECT 2041700000000120474 UNION ALL SELECT 2041700000000120475
-  UNION ALL SELECT 2041700000000120476 UNION ALL SELECT 2041700000000120481 UNION ALL SELECT 2041700000000120482
-  UNION ALL SELECT 2041700000000120483 UNION ALL SELECT 2041700000000120484 UNION ALL SELECT 2041700000000120485
+  SELECT 2041700000000100420 AS id UNION ALL SELECT 2041700000000100414 UNION ALL SELECT 2041700000000100413
+  UNION ALL SELECT 2041700000000100423 UNION ALL SELECT 2041700000000120461 UNION ALL SELECT 2041700000000120462
+  UNION ALL SELECT 2041700000000120463 UNION ALL SELECT 2041700000000120464 UNION ALL SELECT 2041700000000120465
+  UNION ALL SELECT 2041700000000120471 UNION ALL SELECT 2041700000000120472 UNION ALL SELECT 2041700000000120473
+  UNION ALL SELECT 2041700000000120474 UNION ALL SELECT 2041700000000120475 UNION ALL SELECT 2041700000000120476
+  UNION ALL SELECT 2041700000000120491 UNION ALL SELECT 2041700000000120492 UNION ALL SELECT 2041700000000120493
+  UNION ALL SELECT 2041700000000120494 UNION ALL SELECT 2041700000000120495 UNION ALL SELECT 2041700000000120481
+  UNION ALL SELECT 2041700000000120482 UNION ALL SELECT 2041700000000120483 UNION ALL SELECT 2041700000000120484
+  UNION ALL SELECT 2041700000000120485
 )
-SELECT 'seed_qqbot_message_push_menu_cardinality' AS check_name,
+SELECT 'seed_message_management_menu_cardinality' AS check_name,
        COUNT(*) AS expected_count, COUNT(actual.id) AS actual_count,
        COUNT(*) - COUNT(actual.id) AS missing_count
 FROM expected_menu expected
@@ -100,14 +111,17 @@ LEFT JOIN admin_menu actual ON actual.id = expected.id
   AND actual.is_deleted = 0;
 
 WITH expected_menu AS (
-  SELECT 2041700000000100413 AS id UNION ALL SELECT 2041700000000100414 UNION ALL SELECT 2041700000000120461
-  UNION ALL SELECT 2041700000000120462 UNION ALL SELECT 2041700000000120463 UNION ALL SELECT 2041700000000120464
-  UNION ALL SELECT 2041700000000120465 UNION ALL SELECT 2041700000000120471 UNION ALL SELECT 2041700000000120472
-  UNION ALL SELECT 2041700000000120473 UNION ALL SELECT 2041700000000120474 UNION ALL SELECT 2041700000000120475
-  UNION ALL SELECT 2041700000000120476 UNION ALL SELECT 2041700000000120481 UNION ALL SELECT 2041700000000120482
-  UNION ALL SELECT 2041700000000120483 UNION ALL SELECT 2041700000000120484 UNION ALL SELECT 2041700000000120485
+  SELECT 2041700000000100420 AS id UNION ALL SELECT 2041700000000100414 UNION ALL SELECT 2041700000000100413
+  UNION ALL SELECT 2041700000000100423 UNION ALL SELECT 2041700000000120461 UNION ALL SELECT 2041700000000120462
+  UNION ALL SELECT 2041700000000120463 UNION ALL SELECT 2041700000000120464 UNION ALL SELECT 2041700000000120465
+  UNION ALL SELECT 2041700000000120471 UNION ALL SELECT 2041700000000120472 UNION ALL SELECT 2041700000000120473
+  UNION ALL SELECT 2041700000000120474 UNION ALL SELECT 2041700000000120475 UNION ALL SELECT 2041700000000120476
+  UNION ALL SELECT 2041700000000120491 UNION ALL SELECT 2041700000000120492 UNION ALL SELECT 2041700000000120493
+  UNION ALL SELECT 2041700000000120494 UNION ALL SELECT 2041700000000120495 UNION ALL SELECT 2041700000000120481
+  UNION ALL SELECT 2041700000000120482 UNION ALL SELECT 2041700000000120483 UNION ALL SELECT 2041700000000120484
+  UNION ALL SELECT 2041700000000120485
 )
-SELECT 'seed_qqbot_message_push_menu_role_grant_missing' AS check_name,
+SELECT 'seed_message_management_menu_role_grant_missing' AS check_name,
        role.role_code, expected.id AS menu_id
 FROM admin_role role CROSS JOIN expected_menu expected
 LEFT JOIN admin_role_menu role_menu ON role_menu.role_id = role.id AND role_menu.menu_id = expected.id

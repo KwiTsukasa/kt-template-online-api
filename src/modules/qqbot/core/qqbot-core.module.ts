@@ -9,6 +9,7 @@ import { QqbotAccountAbility } from '@/modules/qqbot/core/infrastructure/persist
 import { QqbotAccountController } from '@/modules/qqbot/core/contract/account/qqbot-account.controller';
 import { QqbotAccount } from '@/modules/qqbot/core/infrastructure/persistence/account/qqbot-account.entity';
 import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
+import { QqbotAccountExtensionRegistry } from '@/modules/qqbot/core/application/account/qqbot-account-extension.registry';
 import { QqbotCommandController } from '@/modules/qqbot/core/contract/command/qqbot-command.controller';
 import { QqbotCommand } from '@/modules/qqbot/core/infrastructure/persistence/command/qqbot-command.entity';
 import { QqbotCommandEngineService } from '@/modules/qqbot/core/application/command/qqbot-command-engine.service';
@@ -41,29 +42,6 @@ import { QqbotRateLimitService } from '@/modules/qqbot/core/application/send/qqb
 import { QqbotSendController } from '@/modules/qqbot/core/contract/send/qqbot-send.controller';
 import { QqbotSendLog } from '@/modules/qqbot/core/infrastructure/persistence/send/qqbot-send-log.entity';
 import { QqbotSendService } from '@/modules/qqbot/core/application/send/qqbot-send.service';
-import { QqbotMessageDelivery } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-delivery.entity';
-import { QqbotMessageEvent } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-event.entity';
-import { QqbotMessagePublishBinding } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
-import { QqbotMessagePublishTarget } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-target.entity';
-import { QqbotMessageSubscription } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-subscription.entity';
-import { QqbotMessageTemplate } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-template.entity';
-import { SystemMessageSourceRegistry } from './application/message-push/system-message-source.registry';
-import { SystemMessageEventStagerService } from './application/message-push/system-message-event-stager.service';
-import { SystemMessageFanoutService } from './application/message-push/system-message-fanout.service';
-import { SystemMessageDeliveryRunnerService } from './application/message-push/system-message-delivery-runner.service';
-import { SystemMessageDeliveryCoordinatorService } from './application/message-push/system-message-delivery-coordinator.service';
-import { SystemMessageTemplateRendererService } from './application/message-push/system-message-template-renderer.service';
-import { QqbotMessageSubscriptionService } from './application/message-push/qqbot-message-subscription.service';
-import { QqbotMessageTemplateService } from './application/message-push/qqbot-message-template.service';
-import { QqbotAccountMessagePushService } from './application/message-push/qqbot-account-message-push.service';
-import { QqbotMessageTargetOptionsService } from './application/message-push/qqbot-message-target-options.service';
-import {
-  SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
-  SYSTEM_MESSAGE_EVENT_STAGER,
-} from './contract/message-push/qqbot-message-push.types';
-import { QqbotMessagePushController } from './contract/message-push/qqbot-message-push.controller';
-import { QqbotAccountMessagePushController } from './contract/message-push/qqbot-account-message-push.controller';
-import { QqbotMessagePushPermissionGuard } from './contract/message-push/qqbot-message-push-permission.guard';
 
 export { QQBOT_CORE_DOMAIN_CONTRACT } from './contract/qqbot-core.contract';
 
@@ -78,48 +56,22 @@ export const QQBOT_CORE_ENTITIES = [
   QqbotConversation,
   QqbotDedupe,
   QqbotMessage,
-  QqbotMessageDelivery,
-  QqbotMessageEvent,
-  QqbotMessagePublishBinding,
-  QqbotMessagePublishTarget,
-  QqbotMessageSubscription,
-  QqbotMessageTemplate,
   QqbotRule,
   QqbotSendLog,
 ];
 
 export const QQBOT_CORE_CONTROLLERS = [
   QqbotAccountController,
-  QqbotAccountMessagePushController,
   QqbotCommandController,
   QqbotDashboardController,
   QqbotMessageController,
-  QqbotMessagePushController,
   QqbotPermissionController,
   QqbotRuleController,
   QqbotSendController,
 ];
 
 export const QQBOT_CORE_PROVIDERS = [
-  SystemMessageSourceRegistry,
-  SystemMessageEventStagerService,
-  SystemMessageFanoutService,
-  SystemMessageDeliveryRunnerService,
-  SystemMessageDeliveryCoordinatorService,
-  {
-    provide: SYSTEM_MESSAGE_EVENT_STAGER,
-    useExisting: SystemMessageEventStagerService,
-  },
-  {
-    provide: SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
-    useExisting: SystemMessageDeliveryCoordinatorService,
-  },
-  SystemMessageTemplateRendererService,
-  QqbotMessageSubscriptionService,
-  QqbotMessageTemplateService,
-  QqbotAccountMessagePushService,
-  QqbotMessageTargetOptionsService,
-  QqbotMessagePushPermissionGuard,
+  QqbotAccountExtensionRegistry,
   QqbotAccountService,
   QqbotBusService,
   QqbotCommandEngineService,
@@ -140,14 +92,7 @@ export const QQBOT_CORE_PROVIDERS = [
 ];
 
 export const QQBOT_CORE_EXPORTS = [
-  SYSTEM_MESSAGE_EVENT_STAGER,
-  SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
-  SystemMessageSourceRegistry,
-  SystemMessageTemplateRendererService,
-  QqbotMessageSubscriptionService,
-  QqbotMessageTemplateService,
-  QqbotAccountMessagePushService,
-  QqbotMessageTargetOptionsService,
+  QqbotAccountExtensionRegistry,
   QqbotAccountService,
   QqbotConfigService,
   QqbotDashboardService,

@@ -13,8 +13,8 @@ import {
   type SystemMessageSourceAdapter,
   type SystemMessageSourceDefinition,
   type SystemMessageSourceOptionsResponse,
-} from '@/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
-import { SystemMessageSourceRegistry } from '@/modules/qqbot/core/application/message-push/system-message-source.registry';
+} from '@/modules/message-management/contract/message-management.types';
+import { SystemMessageSourceRegistry } from '@/modules/message-management/application/system-message-source.registry';
 import { NetworkDdnsRecord } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 import { classifyStunEndpointSource } from '../../domain/network-source-eligibility';
@@ -229,12 +229,12 @@ export class NetworkStunMessageSourceAdapter
         })();
         const disabledReasonCode = ddnsOptionReason(record, mapping);
         return {
-          ...((() => {
+          ...(() => {
             if (record.portForwardId) {
               return { dependsOnValue: String(record.portForwardId) };
             }
             return {};
-          })()),
+          })(),
           disabled: disabledReasonCode !== null,
           disabledReasonCode,
           eligible: disabledReasonCode === null,
@@ -370,7 +370,7 @@ export class NetworkStunMessageSourceAdapter
     ) {
       return {
         reasonCode: 'ddns_not_synced',
-        status: 'waiting_ddns',
+        status: 'deferred',
         variables,
       };
     }

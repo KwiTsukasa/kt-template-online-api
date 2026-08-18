@@ -1,0 +1,170 @@
+import { Injectable } from '@nestjs/common';
+import type {
+  QqbotMessagePushTargetOption,
+  QqbotMessagePushTargetOptionsResponse,
+  QqbotMessagePushTargetType,
+} from './qqbot-message-subscriber.types';
+import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
+import { QqbotReverseWsService } from '@/modules/qqbot/core/infrastructure/integration/connection/qqbot-reverse-ws.service';
+
+const TARGET_ID_PATTERN = /^[1-9]\d{4,19}$/;
+
+@Injectable()
+export class QqbotMessageTargetOptionsService {
+  constructor(
+    private readonly accountService: QqbotAccountService,
+    private readonly reverseWsService: QqbotReverseWsService,
+  ) {}
+
+  /**
+   * 按`selfId`读取目标选项；从 `accountService.findBySelfId` 读取目标选项。
+   * @param selfId - 用于精确定位QQ 账号的标识。
+   * @returns 目标选项。
+   */
+  async listTargetOptions(
+    selfId: string,
+  ): Promise<QqbotMessagePushTargetOptionsResponse> {
+    const account = await this.accountService.findBySelfId(selfId);
+    if (!account) return this.unavailable('account_unavailable');
+    try {
+      const [groups, friends] = await Promise.all([
+        this.reverseWsService.sendAction(selfId, 'get_group_list', {}),
+        this.reverseWsService.sendAction(selfId, 'get_friend_list', {}),
+      ]);
+      const options = [
+        ...this.normalizeResponse(groups, 'group'),
+        ...this.normalizeResponse(friends, 'private'),
+      ];
+      const unique = new Map<string, QqbotMessagePushTargetOption>();
+      options.forEach((option) => {
+        const key = `${option.targetType}:${option.targetId}`;
+        unique.set(key, this.preferCandidate(unique.get(key), option));
+      });
+      return {
+        available: true,
+        options: [...unique.values()].sort((left, right) =>
+          `${left.targetType}:${left.label}:${left.targetId}`.localeCompare(
+            `${right.targetType}:${right.label}:${right.targetId}`,
+          ),
+        ),
+        reasonCode: null,
+      };
+    } catch {
+      return this.unavailable('onebot_unavailable');
+    }
+  }
+
+  /**
+   * 校验 OneBot 候选响应成功且数据为数组，再把每项投影为指定类型的消息目标。
+   * @param response - OneBot 返回的状态、返回码和候选数据。
+   * @param targetType - 应赋给每个候选项的群聊或私聊目标类型。
+   * @returns 已逐项校验并规范化的消息目标列表。
+   * @throws 状态不是成功、返回码非零或候选数据不是数组时抛出 `Error`。
+   */
+  private normalizeResponse(
+    response: { data?: unknown; retcode?: number; status?: string },
+    targetType: QqbotMessagePushTargetType,
+  ): QqbotMessagePushTargetOption[] {
+    if (
+      response.status !== 'ok' ||
+      (response.retcode !== undefined && response.retcode !== 0) ||
+      !Array.isArray(response.data)
+    ) {
+      throw new Error('OneBot candidate response is unavailable');
+    }
+    return response.data.map((item) =>
+      this.normalizeCandidate(item, targetType),
+    );
+  }
+
+  /**
+   * 从 OneBot 好友或群记录中读取对应标识和显示名称，形成统一的消息投递目标。
+   * @param candidate - 待规范化的 OneBot 好友或群候选记录。
+   * @param targetType - 决定读取群标识还是用户标识的目标类型。
+   * @returns 包含规范目标标识、显示标签和目标类型的候选项。
+   * @throws 候选值不是对象或提取出的目标标识格式非法时抛出 `Error`。
+   */
+  private normalizeCandidate(
+    candidate: unknown,
+    targetType: QqbotMessagePushTargetType,
+  ): QqbotMessagePushTargetOption {
+    if (!candidate || typeof candidate !== 'object') {
+      throw new Error('OneBot candidate is malformed');
+    }
+    const record = candidate as Record<string, unknown>;
+    const rawId = (() => {
+      if (targetType === 'group') {
+        return record.group_id;
+      }
+      return record.user_id;
+    })();
+    const targetId = String(rawId).trim();
+    if (!TARGET_ID_PATTERN.test(targetId)) {
+      throw new Error('OneBot candidate ID is invalid');
+    }
+    const name = (() => {
+      if (targetType === 'group') {
+        return this.knownName(record.group_name);
+      }
+      return this.knownName(record.remark) ?? this.knownName(record.nickname);
+    })();
+    return {
+      label: (() => {
+        if (name) {
+          return `${name} (${targetId})`;
+        }
+        return targetId;
+      })(),
+      targetId,
+      targetType,
+    };
+  }
+
+  /**
+   * 裁剪候选名称并保留已知的非空值。
+   * @param value - 参与裁剪候选名称并保留已知的非空值比较、格式化或输出的候选值。
+   * @returns 裁剪候选名称并保留已知的非空值；无法解析或未命中时为 `null`。
+   */
+  private knownName(value: unknown): null | string {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+    return null;
+  }
+
+  /**
+   * 把来源状态投影为优先选择候选项。
+   * @param current - 用于把来源状态投影为优先选择候选项的领域对象，包含 `label`、`targetId` 字段。
+   * @param candidate - 决定是否启用“candidate”分支的布尔选项。
+   * @returns 把来源状态投影为优先选择候选项。
+   */
+  private preferCandidate(
+    current: QqbotMessagePushTargetOption | undefined,
+    candidate: QqbotMessagePushTargetOption,
+  ): QqbotMessagePushTargetOption {
+    if (!current) return candidate;
+    const currentKnown = current.label !== current.targetId;
+    const candidateKnown = candidate.label !== candidate.targetId;
+    if (currentKnown !== candidateKnown) {
+      if (candidateKnown) {
+        return candidate;
+      }
+      return current;
+    }
+    if (candidate.label.localeCompare(current.label) < 0) {
+      return candidate;
+    }
+    return current;
+  }
+
+  /**
+   * 以统一异常拒绝不可用。
+   * @param reasonCode - 决定以统一异常拒绝不可用内容、边界或目标的 `reasonCode` 值。
+   * @returns 包含 `available`、`options`、`reasonCode` 字段的以统一异常拒绝不可用。
+   */
+  private unavailable(
+    reasonCode: string,
+  ): QqbotMessagePushTargetOptionsResponse {
+    return { available: false, options: [], reasonCode };
+  }
+}

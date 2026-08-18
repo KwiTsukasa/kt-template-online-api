@@ -17,7 +17,9 @@ import {
 import { AdminModule } from './modules/admin/admin.module';
 import { AssetModule } from './modules/asset/asset.module';
 import { BlogContentModule } from './modules/blog/blog-content.module';
+import { MessageManagementModule } from './modules/message-management/message-management.module';
 import { QqbotCoreModule } from './modules/qqbot/core/qqbot-core.module';
+import { QqbotMessageSubscriberModule } from './modules/qqbot/message-management-adapter/qqbot-message-subscriber.module';
 import { QqbotNapcatModule } from './modules/qqbot/napcat/qqbot-napcat.module';
 import { QqbotPluginPlatformModule } from './modules/qqbot/plugin-platform/plugin-platform.module';
 import { RuntimeModule } from './runtime';
@@ -83,7 +85,9 @@ export function buildTypeOrmOptions(configService: ConfigService) {
     AdminModule,
     BlogContentModule,
     AssetModule,
+    MessageManagementModule,
     QqbotCoreModule,
+    QqbotMessageSubscriberModule,
     QqbotNapcatModule,
     QqbotPluginPlatformModule,
   ],

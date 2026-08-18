@@ -1,4 +1,4 @@
-import { SystemMessageTemplateRendererService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-template-renderer.service';
+import { SystemMessageTemplateRendererService } from '../../../../src/modules/message-management/application/system-message-template-renderer.service';
 
 describe('SystemMessageTemplateRendererService', () => {
   const renderer = new SystemMessageTemplateRendererService();

@@ -14,7 +14,7 @@ import { KtDateTime, throwVbenError } from '@/common';
 import {
   SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
   type SystemMessageDeliveryCoordinator,
-} from '@/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
+} from '@/modules/message-management/contract/message-management.types';
 import { NetworkAgentState } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-agent-state.entity';
 import { NetworkDdnsRecord } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
 import {
@@ -613,9 +613,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     );
     if (saved && current.syncStatus === 'synced' && current.appliedAddress) {
       void this.deliveryCoordinator
-        .notifyDdnsSynced({
-          appliedAddress: current.appliedAddress,
-          ddnsRecordId: String(current.id),
+        .notifyDependencyChanged({
+          dependencyKey: 'network.ddns.synced',
+          payload: {
+            appliedAddress: current.appliedAddress,
+            ddnsRecordId: String(current.id),
+          },
         })
         .catch(() => this.loggerWarnDeliveryWake());
     }
@@ -717,7 +720,9 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     record.lastErrorCode = error.code.slice(0, 64);
     record.lastErrorMessage = error.message.slice(0, 512);
     if (shouldRetry) {
-      record.nextRetryAt = new KtDateTime(Date.now() + this.retryDelayMs(retryCount));
+      record.nextRetryAt = new KtDateTime(
+        Date.now() + this.retryDelayMs(retryCount),
+      );
     } else {
       record.nextRetryAt = null;
     }
@@ -807,13 +812,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       }
       return 'udp_stun';
     })();
-    const sourceEligibility =
-      (() => {
-        if (mapping.protocol === 'tcp') {
-          return classifyTcpNatmapEndpointSource(mapping);
-        }
-        return classifyStunEndpointSource(mapping);
-      })();
+    const sourceEligibility = (() => {
+      if (mapping.protocol === 'tcp') {
+        return classifyTcpNatmapEndpointSource(mapping);
+      }
+      return classifyStunEndpointSource(mapping);
+    })();
     const disabledReasonCode = (() => {
       if (group) {
         return sourceEligibility.disabledReasonCode;
@@ -834,26 +838,24 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
         }
         return null;
       })(),
-      ...((() => {
+      ...(() => {
         if (sourceUsable) {
           return { currentPort: mapping.currentPublicPort as number };
         }
         return {};
-      })()),
+      })(),
       disabledReasonCode,
       eligible,
       externalPort: mapping.externalPort,
       groupId: String(mapping.groupId),
       id: String(mapping.id),
       mechanism,
-      name: `${group?.name || mapping.name} / ${
-        (() => {
-          if (mechanism === 'tcp_natmap') {
-            return 'TCP NATMap';
-          }
-          return 'UDP Keeper';
-        })()
-      }`,
+      name: `${group?.name || mapping.name} / ${(() => {
+        if (mechanism === 'tcp_natmap') {
+          return 'TCP NATMap';
+        }
+        return 'UDP Keeper';
+      })()}`,
       observedAt: (() => {
         if (sourceUsable) {
           return mapping.currentObservedAt || null;
@@ -967,13 +969,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       domain: input.domain ?? record.domain,
       enabled: input.enabled ?? record.enabled,
       name: input.name ?? record.name,
-      portForwardId:
-        (() => {
-          if (recordType === 'AAAA') {
-            return input.portForwardId;
-          }
-          return (input.portForwardId ?? record.portForwardId ?? undefined);
-        })(),
+      portForwardId: (() => {
+        if (recordType === 'AAAA') {
+          return input.portForwardId;
+        }
+        return input.portForwardId ?? record.portForwardId ?? undefined;
+      })(),
       recordType,
       remark: input.remark ?? record.remark ?? undefined,
       sourceType: input.sourceType || record.sourceType,
@@ -1030,13 +1031,15 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     if (fqdn.length > 253) {
       throwVbenError('DDNS 完整域名过长', HttpStatus.BAD_REQUEST);
     }
-    const portForwardId =
-      (() => {
-        if (typeof input.portForwardId === 'string' && input.portForwardId.trim()) {
-          return input.portForwardId.trim();
-        }
-        return null;
-      })();
+    const portForwardId = (() => {
+      if (
+        typeof input.portForwardId === 'string' &&
+        input.portForwardId.trim()
+      ) {
+        return input.portForwardId.trim();
+      }
+      return null;
+    })();
     this.assertBindingShape(input.recordType, input.sourceType, portForwardId);
     return {
       activeKey: `${input.recordType.toLowerCase()}:${fqdn}`,
@@ -1109,16 +1112,15 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       }
       return null;
     })();
-    const sourceEligible =
-      (() => {
-        if (mapping?.protocol === 'tcp') {
-          return classifyTcpNatmapEndpointSource(mapping).eligible;
-        }
-        if (mapping) {
-          return classifyStunEndpointSource(mapping).eligible;
-        }
-        return false;
-      })();
+    const sourceEligible = (() => {
+      if (mapping?.protocol === 'tcp') {
+        return classifyTcpNatmapEndpointSource(mapping).eligible;
+      }
+      if (mapping) {
+        return classifyStunEndpointSource(mapping).eligible;
+      }
+      return false;
+    })();
     if (!mapping || !group || !sourceEligible) {
       throwVbenError(
         'A 记录来源必须是已启用的 UDP Keeper 或 TCP NATMap 通道',
@@ -1133,13 +1135,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
    * @returns 域名。
    */
   private normalizeDomain(value: string): string {
-    const normalized =
-      (() => {
-        if (typeof value === 'string') {
-          return value.trim().toLowerCase().replace(/\.$/, '');
-        }
-        return '';
-      })();
+    const normalized = (() => {
+      if (typeof value === 'string') {
+        return value.trim().toLowerCase().replace(/\.$/, '');
+      }
+      return '';
+    })();
     if (!isValidDnsName(normalized, true)) {
       throwVbenError('DDNS 主域名无效', HttpStatus.BAD_REQUEST);
     }
@@ -1152,13 +1153,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
    * @returns 子域名。
    */
   private normalizeSubDomain(value: string): string {
-    const normalized =
-      (() => {
-        if (typeof value === 'string') {
-          return value.trim().toLowerCase();
-        }
-        return '';
-      })();
+    const normalized = (() => {
+      if (typeof value === 'string') {
+        return value.trim().toLowerCase();
+      }
+      return '';
+    })();
     if (normalized !== '@' && !isValidDnsName(normalized, false)) {
       throwVbenError('DDNS 主机记录无效', HttpStatus.BAD_REQUEST);
     }
@@ -1203,31 +1203,31 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
    */
   private async serializeRecord(record: NetworkDdnsRecord) {
     const source = await this.resolveRecordSource(record);
-    const fqdn =
-      (() => {
-        if (record.subDomain === '@') {
-          return record.domain;
-        }
-        return `${record.subDomain}.${record.domain}`;
-      })();
-    const accessEndpoint =
-      (() => {
-        if (record.recordType === 'A' &&
-      record.syncStatus === 'synced' &&
-      !!record.appliedAddress &&
-      record.appliedAddress === source.currentAddress &&
-      isValidPort(source.currentPort)) {
-          return `${fqdn}:${source.currentPort}`;
-        }
-        return null;
-      })();
+    const fqdn = (() => {
+      if (record.subDomain === '@') {
+        return record.domain;
+      }
+      return `${record.subDomain}.${record.domain}`;
+    })();
+    const accessEndpoint = (() => {
+      if (
+        record.recordType === 'A' &&
+        record.syncStatus === 'synced' &&
+        !!record.appliedAddress &&
+        record.appliedAddress === source.currentAddress &&
+        isValidPort(source.currentPort)
+      ) {
+        return `${fqdn}:${source.currentPort}`;
+      }
+      return null;
+    })();
     return {
-      ...((() => {
+      ...(() => {
         if (accessEndpoint) {
           return { accessEndpoint };
         }
         return {};
-      })()),
+      })(),
       appliedAddress: record.appliedAddress || null,
       domain: record.domain,
       enabled: record.enabled,
@@ -1238,12 +1238,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       lastSyncedAt: record.lastSyncedAt || null,
       name: record.name,
       nextRetryAt: record.nextRetryAt || null,
-      ...((() => {
+      ...(() => {
         if (record.recordType === 'A') {
           return { portForwardId: record.portForwardId || null };
         }
         return {};
-      })()),
+      })(),
       recordType: record.recordType,
       remark: record.remark || null,
       retryCount: record.retryCount || 0,
@@ -1578,9 +1578,11 @@ function normalizeGlobalIpv6(value?: null | string): null | string {
     return null;
   }
   const firstHextet = Number.parseInt(normalized.split(':', 1)[0], 16);
-  if (Number.isInteger(firstHextet) &&
+  if (
+    Number.isInteger(firstHextet) &&
     firstHextet >= 0x2000 &&
-    firstHextet <= 0x3fff) {
+    firstHextet <= 0x3fff
+  ) {
     return normalized;
   }
   return null;

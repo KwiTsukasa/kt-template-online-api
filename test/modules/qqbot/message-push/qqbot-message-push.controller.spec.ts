@@ -9,101 +9,117 @@ import * as request from 'supertest';
 import { PinoLogger } from 'nestjs-pino';
 import { ApiExceptionFilter } from '../../../../src/common/filters/api-exception.filter';
 import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
-import { QqbotAccountMessagePushService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-account-message-push.service';
-import { QqbotMessageSubscriptionService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-message-subscription.service';
-import { QqbotMessageTargetOptionsService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-message-target-options.service';
-import { QqbotMessageTemplateService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-message-template.service';
-import { SystemMessageSourceRegistry } from '../../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
-import { QqbotAccountMessagePushController } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-account-message-push.controller';
-import { QqbotMessagePushController } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.controller';
-import { QqbotMessagePushPermissionGuard } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push-permission.guard';
-import { QqbotMessagePushContractErrorInterceptor } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push-contract-error.interceptor';
-import { QQBOT_MESSAGE_PUSH_PERMISSION } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push-permission.decorator';
-import { SystemMessageContractError } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
+import { QqbotAccountMessagePushService } from '../../../../src/modules/qqbot/message-management-adapter/qqbot-account-message-push.service';
+import { MessageSubscriptionService } from '../../../../src/modules/message-management/application/message-subscription.service';
+import { QqbotMessageTargetOptionsService } from '../../../../src/modules/qqbot/message-management-adapter/qqbot-message-target-options.service';
+import { MessageTemplateService } from '../../../../src/modules/message-management/application/message-template.service';
+import { MessageSubscriberRegistry } from '../../../../src/modules/message-management/application/subscriber/message-subscriber.registry';
+import { SystemMessageSourceRegistry } from '../../../../src/modules/message-management/application/system-message-source.registry';
+import { QqbotAccountMessagePushController } from '../../../../src/modules/qqbot/message-management-adapter/qqbot-account-message-push.controller';
+import { MessageManagementController } from '../../../../src/modules/message-management/contract/message-management.controller';
+import { MessageManagementPermissionGuard } from '../../../../src/modules/message-management/contract/message-management-permission.guard';
+import { MessageManagementContractErrorInterceptor } from '../../../../src/modules/message-management/contract/message-management-contract-error.interceptor';
+import { MESSAGE_MANAGEMENT_PERMISSION } from '../../../../src/modules/message-management/contract/message-management-permission.decorator';
+import { SystemMessageContractError } from '../../../../src/modules/message-management/contract/message-management.types';
 import {
   collectControllerRoutes,
   routeKey,
 } from '../../../helpers/controller-route.helper';
 
 const SOURCE_READ_PERMISSIONS = [
-  'QqBot:MessageSubscription:List',
-  'QqBot:MessageSubscription:Create',
-  'QqBot:MessageSubscription:Update',
-  'QqBot:MessageTemplate:List',
-  'QqBot:MessageTemplate:Create',
-  'QqBot:MessageTemplate:Update',
-  'QqBot:MessageTemplate:Preview',
-  'QqBot:Account:MessagePush:List',
-  'QqBot:Account:MessagePush:Create',
-  'QqBot:Account:MessagePush:Update',
+  'MessageManagement:Subscription:List',
+  'MessageManagement:Subscription:Create',
+  'MessageManagement:Subscription:Update',
+  'MessageManagement:Template:List',
+  'MessageManagement:Template:Create',
+  'MessageManagement:Template:Update',
+  'MessageManagement:Template:Preview',
 ];
 
 const EXPECTED_ROUTE_PERMISSIONS: Record<string, string[]> = {
+  'DELETE /message-management/subscribers/qqbot/accounts/:selfId/bindings/:id':
+    ['MessageManagement:Push:Delete', 'QqBot:Account:MessagePush:Delete'],
+  'DELETE /message-management/subscriptions/:id': [
+    'MessageManagement:Subscription:Delete',
+  ],
+  'DELETE /message-management/templates/:id': [
+    'MessageManagement:Template:Delete',
+  ],
   'DELETE /qqbot/accounts/:selfId/message-push/bindings/:id': [
+    'MessageManagement:Push:Delete',
     'QqBot:Account:MessagePush:Delete',
   ],
-  'DELETE /qqbot/message-push/subscriptions/:id': [
-    'QqBot:MessageSubscription:Delete',
+  'GET /message-management/sources': SOURCE_READ_PERMISSIONS,
+  'GET /message-management/sources/:sourceKey': SOURCE_READ_PERMISSIONS,
+  'GET /message-management/sources/:sourceKey/subscription-options': [
+    'MessageManagement:Subscription:Create',
+    'MessageManagement:Subscription:Update',
   ],
-  'DELETE /qqbot/message-push/templates/:id': ['QqBot:MessageTemplate:Delete'],
+  'GET /message-management/subscribers': SOURCE_READ_PERMISSIONS,
+  'GET /message-management/subscribers/qqbot/accounts/:selfId/bindings': [
+    'MessageManagement:Push:List',
+    'QqBot:Account:MessagePush:List',
+  ],
+  'GET /message-management/subscribers/qqbot/accounts/:selfId/targets': [
+    'MessageManagement:Push:Create',
+    'MessageManagement:Push:Update',
+    'QqBot:Account:MessagePush:Create',
+    'QqBot:Account:MessagePush:Update',
+  ],
+  'GET /message-management/subscriptions': [
+    'MessageManagement:Subscription:List',
+  ],
+  'GET /message-management/templates': ['MessageManagement:Template:List'],
   'GET /qqbot/accounts/:selfId/message-push/bindings': [
+    'MessageManagement:Push:List',
     'QqBot:Account:MessagePush:List',
   ],
   'GET /qqbot/accounts/:selfId/message-push/targets': [
+    'MessageManagement:Push:Create',
+    'MessageManagement:Push:Update',
     'QqBot:Account:MessagePush:Create',
     'QqBot:Account:MessagePush:Update',
   ],
-  'GET /qqbot/message-push/sources': SOURCE_READ_PERMISSIONS,
-  'GET /qqbot/message-push/sources/:sourceKey': SOURCE_READ_PERMISSIONS,
-  'GET /qqbot/message-push/sources/:sourceKey/subscription-options': [
-    'QqBot:MessageSubscription:Create',
-    'QqBot:MessageSubscription:Update',
+  'POST /message-management/subscribers/qqbot/accounts/:selfId/bindings': [
+    'MessageManagement:Push:Create',
     'QqBot:Account:MessagePush:Create',
-    'QqBot:Account:MessagePush:Update',
   ],
-  'GET /qqbot/message-push/sources/network.stun.mapping-port-changed/options': [
-    'QqBot:MessageSubscription:Create',
-    'QqBot:MessageSubscription:Update',
-    'QqBot:Account:MessagePush:Create',
-    'QqBot:Account:MessagePush:Update',
+  'POST /message-management/subscriptions': [
+    'MessageManagement:Subscription:Create',
   ],
-  'GET /qqbot/message-push/subscriptions': [
-    'QqBot:MessageSubscription:List',
-    'QqBot:Account:MessagePush:List',
-    'QqBot:Account:MessagePush:Create',
-    'QqBot:Account:MessagePush:Update',
-  ],
-  'GET /qqbot/message-push/templates': [
-    'QqBot:MessageTemplate:List',
-    'QqBot:Account:MessagePush:List',
-    'QqBot:Account:MessagePush:Create',
-    'QqBot:Account:MessagePush:Update',
+  'POST /message-management/templates': ['MessageManagement:Template:Create'],
+  'POST /message-management/templates/preview': [
+    'MessageManagement:Template:Preview',
   ],
   'POST /qqbot/accounts/:selfId/message-push/bindings': [
+    'MessageManagement:Push:Create',
     'QqBot:Account:MessagePush:Create',
   ],
-  'POST /qqbot/message-push/subscriptions': [
-    'QqBot:MessageSubscription:Create',
+  'PUT /message-management/subscribers/qqbot/accounts/:selfId/bindings/:id': [
+    'MessageManagement:Push:Update',
+    'QqBot:Account:MessagePush:Update',
   ],
-  'POST /qqbot/message-push/templates': ['QqBot:MessageTemplate:Create'],
-  'POST /qqbot/message-push/templates/preview': [
-    'QqBot:MessageTemplate:Preview',
+  'PUT /message-management/subscribers/qqbot/accounts/:selfId/bindings/:id/enabled':
+    ['MessageManagement:Push:Toggle', 'QqBot:Account:MessagePush:Toggle'],
+  'PUT /message-management/subscriptions/:id': [
+    'MessageManagement:Subscription:Update',
+  ],
+  'PUT /message-management/subscriptions/:id/enabled': [
+    'MessageManagement:Subscription:Toggle',
+  ],
+  'PUT /message-management/templates/:id': [
+    'MessageManagement:Template:Update',
+  ],
+  'PUT /message-management/templates/:id/enabled': [
+    'MessageManagement:Template:Toggle',
   ],
   'PUT /qqbot/accounts/:selfId/message-push/bindings/:id': [
+    'MessageManagement:Push:Update',
     'QqBot:Account:MessagePush:Update',
   ],
   'PUT /qqbot/accounts/:selfId/message-push/bindings/:id/enabled': [
+    'MessageManagement:Push:Toggle',
     'QqBot:Account:MessagePush:Toggle',
-  ],
-  'PUT /qqbot/message-push/subscriptions/:id': [
-    'QqBot:MessageSubscription:Update',
-  ],
-  'PUT /qqbot/message-push/subscriptions/:id/enabled': [
-    'QqBot:MessageSubscription:Toggle',
-  ],
-  'PUT /qqbot/message-push/templates/:id': ['QqBot:MessageTemplate:Update'],
-  'PUT /qqbot/message-push/templates/:id/enabled': [
-    'QqBot:MessageTemplate:Toggle',
   ],
 };
 
@@ -125,7 +141,8 @@ const subscriptionBody = () => ({
     ddnsRecordId: STRING_ID,
     portForwardId: '1234567890123456789',
   },
-  sourceKey: 'network.stun.mapping-port-changed',
+  subscriberKey: 'qqbot',
+  templateIds: ['1234567890123456789', '1234567890123456790'],
 });
 
 const templateBody = () => ({
@@ -144,7 +161,6 @@ const bindingBody = (targetCount = 1) => ({
     targetName: `Target ${index}`,
     targetType: index % 2 === 0 ? 'group' : 'private',
   })),
-  templateId: '1234567890123456789',
 });
 
 const sourceDefinition = () =>
@@ -203,6 +219,12 @@ const subscriptionView = () =>
     sourceKey: 'network.stun.mapping-port-changed',
     sourceName: 'STUN port changed',
     sourceSummary: 'summary',
+    subscriberKey: 'qqbot',
+    subscriberName: 'QQBot',
+    templates: [
+      { id: '1234567890123456789', name: 'Template A', sortOrder: 0 },
+      { id: '1234567890123456790', name: 'Template B', sortOrder: 1 },
+    ],
     updateTime: '2026-07-24T00:00:00.000Z',
     valid: true,
   }) as never;
@@ -248,8 +270,10 @@ const bindingView = () =>
         targetType: 'group',
       },
     ],
-    templateId: '1234567890123456789',
-    templateName: 'STUN template',
+    templates: [
+      { id: '1234567890123456789', name: 'Template A', sortOrder: 0 },
+      { id: '1234567890123456790', name: 'Template B', sortOrder: 1 },
+    ],
     updateTime: '2026-07-24T00:00:00.000Z',
   }) as never;
 
@@ -269,6 +293,9 @@ describe('QQBot message-push management controllers', () => {
   const registry = {
     get: jest.fn(),
     list: jest.fn(),
+  };
+  const subscriberRegistry = {
+    listDefinitions: jest.fn().mockReturnValue([]),
   };
   const subscriptions = {
     create: jest.fn(),
@@ -299,21 +326,22 @@ describe('QQBot message-push management controllers', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [
-        QqbotMessagePushController,
+        MessageManagementController,
         QqbotAccountMessagePushController,
       ],
       providers: [
-        QqbotMessagePushPermissionGuard,
+        MessageManagementPermissionGuard,
         { provide: SystemMessageSourceRegistry, useValue: registry },
-        { provide: QqbotMessageSubscriptionService, useValue: subscriptions },
-        { provide: QqbotMessageTemplateService, useValue: templates },
+        { provide: MessageSubscriberRegistry, useValue: subscriberRegistry },
+        { provide: MessageSubscriptionService, useValue: subscriptions },
+        { provide: MessageTemplateService, useValue: templates },
         { provide: QqbotAccountMessagePushService, useValue: bindings },
         { provide: QqbotMessageTargetOptionsService, useValue: targets },
       ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
-      .overrideGuard(QqbotMessagePushPermissionGuard)
+      .overrideGuard(MessageManagementPermissionGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -327,6 +355,21 @@ describe('QQBot message-push management controllers', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    subscriberRegistry.listDefinitions.mockReturnValue([
+      {
+        credential: 'must-not-leak',
+        description: 'QQ delivery',
+        displayName: 'QQBot',
+        subscriberKey: 'qqbot',
+        version: 1,
+      },
+      {
+        description: 'Station notice delivery',
+        displayName: '站内信',
+        subscriberKey: 'station-notice',
+        version: 1,
+      },
+    ]);
     const definition = sourceDefinition();
     registry.list.mockReturnValue([definition]);
     registry.get.mockReturnValue({
@@ -400,9 +443,9 @@ describe('QQBot message-push management controllers', () => {
     await app?.close();
   });
 
-  it('exposes exactly the approved 21 routes with exact permission metadata', () => {
+  it('exposes exactly the approved protocol and QQBot adapter routes', () => {
     const routes = collectControllerRoutes([
-      QqbotMessagePushController,
+      MessageManagementController,
       QqbotAccountMessagePushController,
     ]);
     const routeKeys = routes.map(routeKey);
@@ -416,12 +459,12 @@ describe('QQBot message-push management controllers', () => {
 
     routes.forEach((route) => {
       const ControllerClass =
-        route.controllerName === QqbotMessagePushController.name
-          ? QqbotMessagePushController
+        route.controllerName === MessageManagementController.name
+          ? MessageManagementController
           : QqbotAccountMessagePushController;
       const handler = ControllerClass.prototype[route.handlerName];
       expect(
-        Reflect.getMetadata(QQBOT_MESSAGE_PUSH_PERMISSION, handler),
+        Reflect.getMetadata(MESSAGE_MANAGEMENT_PERMISSION, handler),
       ).toEqual(EXPECTED_ROUTE_PERMISSIONS[routeKey(route)]);
     });
   });
@@ -476,7 +519,7 @@ describe('QQBot message-push management controllers', () => {
     });
     const options = await request(apiUrl)
       .get(
-        '/qqbot/message-push/sources/network.tcp.natmap-endpoint-changed/subscription-options',
+        '/message-management/sources/network.tcp.natmap-endpoint-changed/subscription-options',
       )
       .expect(200);
     expect(options.body.data).toEqual({
@@ -516,7 +559,7 @@ describe('QQBot message-push management controllers', () => {
     });
     registry.get.mockReturnValueOnce({ definition });
     const subscriptionsResponse = await request(apiUrl)
-      .get('/qqbot/message-push/subscriptions')
+      .get('/message-management/subscriptions')
       .expect(200);
     expect(subscriptionsResponse.body.data.items[0].sourceConfig).toEqual({
       ddnsRecordId: 'ddns-1',
@@ -525,19 +568,23 @@ describe('QQBot message-push management controllers', () => {
   });
 
   it('uses page wrappers only for subscription and template pages', async () => {
+    const subscriberResponse = await request(apiUrl)
+      .get('/message-management/subscribers')
+      .expect(200);
     const sourceResponse = await request(apiUrl)
-      .get('/qqbot/message-push/sources')
+      .get('/message-management/sources')
       .expect(200);
     const subscriptionResponse = await request(apiUrl)
-      .get('/qqbot/message-push/subscriptions')
+      .get('/message-management/subscriptions')
       .expect(200);
     const templateResponse = await request(apiUrl)
-      .get('/qqbot/message-push/templates')
+      .get('/message-management/templates')
       .expect(200);
     const bindingResponse = await request(apiUrl)
       .get('/qqbot/accounts/12345/message-push/bindings')
       .expect(200);
 
+    expect(Array.isArray(subscriberResponse.body.data)).toBe(true);
     expect(Array.isArray(sourceResponse.body.data)).toBe(true);
     expect(subscriptionResponse.body.data).toMatchObject({ total: 1 });
     expect(Array.isArray(subscriptionResponse.body.data.items)).toBe(true);
@@ -560,12 +607,12 @@ describe('QQBot message-push management controllers', () => {
 
   it('attaches both guards and a strict controller-local ValidationPipe', () => {
     for (const ControllerClass of [
-      QqbotMessagePushController,
+      MessageManagementController,
       QqbotAccountMessagePushController,
     ]) {
       expect(Reflect.getMetadata(GUARDS_METADATA, ControllerClass)).toEqual([
         JwtAuthGuard,
-        QqbotMessagePushPermissionGuard,
+        MessageManagementPermissionGuard,
       ]);
       const pipes = Reflect.getMetadata(PIPES_METADATA, ControllerClass);
       expect(pipes).toHaveLength(1);
@@ -580,12 +627,12 @@ describe('QQBot message-push management controllers', () => {
 
   it('shares one contract-error boundary across both message-push controllers', () => {
     for (const ControllerClass of [
-      QqbotMessagePushController,
+      MessageManagementController,
       QqbotAccountMessagePushController,
     ]) {
       expect(
         Reflect.getMetadata(INTERCEPTORS_METADATA, ControllerClass),
-      ).toEqual([QqbotMessagePushContractErrorInterceptor]);
+      ).toEqual([MessageManagementContractErrorInterceptor]);
     }
   });
 
@@ -595,7 +642,7 @@ describe('QQBot message-push management controllers', () => {
     });
 
     const response = await request(apiUrl)
-      .get('/qqbot/message-push/sources/missing-source')
+      .get('/message-management/sources/missing-source')
       .expect(404);
 
     expect(response.body).toEqual({
@@ -611,7 +658,7 @@ describe('QQBot message-push management controllers', () => {
     });
 
     const response = await request(apiUrl)
-      .post('/qqbot/message-push/templates/preview')
+      .post('/message-management/templates/preview')
       .send({
         content: 'Endpoint: ${{endpoint}}',
         sourceKey: 'network.stun.mapping-port-changed',
@@ -651,7 +698,7 @@ describe('QQBot message-push management controllers', () => {
     });
 
     const response = await request(apiUrl)
-      .post('/qqbot/message-push/templates/preview')
+      .post('/message-management/templates/preview')
       .send({
         content: 'Endpoint: ${{endpoint}}',
         sourceKey: 'network.stun.mapping-port-changed',
@@ -669,15 +716,15 @@ describe('QQBot message-push management controllers', () => {
   it('returns HTTP 200 and a Vben wrapper for every POST route', async () => {
     const responses = await Promise.all([
       request(apiUrl)
-        .post('/qqbot/message-push/subscriptions')
+        .post('/message-management/subscriptions')
         .send(subscriptionBody())
         .expect(200),
       request(apiUrl)
-        .post('/qqbot/message-push/templates')
+        .post('/message-management/templates')
         .send(templateBody())
         .expect(200),
       request(apiUrl)
-        .post('/qqbot/message-push/templates/preview')
+        .post('/message-management/templates/preview')
         .send({
           content: 'Endpoint: ${{endpoint}}',
           sourceKey: 'network.stun.mapping-port-changed',
@@ -696,10 +743,10 @@ describe('QQBot message-push management controllers', () => {
   });
 
   it.each([
-    ['/qqbot/message-push/subscriptions', subscriptionBody()],
-    ['/qqbot/message-push/templates', templateBody()],
+    ['/message-management/subscriptions', subscriptionBody()],
+    ['/message-management/templates', templateBody()],
     [
-      '/qqbot/message-push/templates/preview',
+      '/message-management/templates/preview',
       {
         content: 'Endpoint: ${{endpoint}}',
         sourceKey: 'network.stun.mapping-port-changed',
@@ -715,11 +762,11 @@ describe('QQBot message-push management controllers', () => {
 
   it('rejects unknown enabled and target fields plus non-string source config', async () => {
     await request(apiUrl)
-      .put(`/qqbot/message-push/subscriptions/${STRING_ID}/enabled`)
+      .put(`/message-management/subscriptions/${STRING_ID}/enabled`)
       .send({ enabled: false, secret: FORBIDDEN_FIELD_FIXTURE })
       .expect(400);
     await request(apiUrl)
-      .post('/qqbot/message-push/subscriptions')
+      .post('/message-management/subscriptions')
       .send({
         ...subscriptionBody(),
         sourceConfig: {
@@ -753,7 +800,7 @@ describe('QQBot message-push management controllers', () => {
         body.sourceConfig = sourceConfig;
       }
       await request(apiUrl)
-        .post('/qqbot/message-push/subscriptions')
+        .post('/message-management/subscriptions')
         .send(body)
         .expect(400);
     },
@@ -761,7 +808,7 @@ describe('QQBot message-push management controllers', () => {
 
   it('rejects numeric foreign IDs and preserves long decimal strings', async () => {
     await request(apiUrl)
-      .post('/qqbot/message-push/subscriptions')
+      .post('/message-management/subscriptions')
       .send({
         ...subscriptionBody(),
         sourceConfig: {
@@ -776,7 +823,7 @@ describe('QQBot message-push management controllers', () => {
       .expect(400);
 
     await request(apiUrl)
-      .post('/qqbot/message-push/subscriptions')
+      .post('/message-management/subscriptions')
       .send(subscriptionBody())
       .expect(200);
     expect(subscriptions.create).toHaveBeenCalledWith(
@@ -793,7 +840,7 @@ describe('QQBot message-push management controllers', () => {
     'rejects invalid Snowflake path id %s',
     async (id) => {
       await request(apiUrl)
-        .delete(`/qqbot/message-push/subscriptions/${id}`)
+        .delete(`/message-management/subscriptions/${id}`)
         .expect(400);
     },
   );
@@ -809,7 +856,7 @@ describe('QQBot message-push management controllers', () => {
 
   it('transforms only literal query booleans', async () => {
     await request(apiUrl)
-      .get('/qqbot/message-push/subscriptions?enabled=false')
+      .get('/message-management/subscriptions?enabled=false')
       .expect(200);
     expect(subscriptions.page).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false }),
@@ -817,7 +864,7 @@ describe('QQBot message-push management controllers', () => {
 
     for (const value of ['0', 'yes', '']) {
       await request(apiUrl)
-        .get(`/qqbot/message-push/subscriptions?enabled=${value}`)
+        .get(`/message-management/subscriptions?enabled=${value}`)
         .expect(400);
     }
   });
@@ -865,12 +912,12 @@ describe('QQBot message-push management controllers', () => {
       { ...subscriptionBody(), remark: 'x'.repeat(501) },
     ]) {
       await request(apiUrl)
-        .post('/qqbot/message-push/subscriptions')
+        .post('/message-management/subscriptions')
         .send(body)
         .expect(400);
     }
     await request(apiUrl)
-      .post('/qqbot/message-push/templates')
+      .post('/message-management/templates')
       .send({ ...templateBody(), content: '😀'.repeat(2001) })
       .expect(400);
     const binding = bindingBody();
@@ -896,24 +943,20 @@ describe('QQBot message-push management controllers', () => {
       reasonCode: null,
     });
     const responses = await Promise.all([
-      request(apiUrl).get('/qqbot/message-push/sources').expect(200),
+      request(apiUrl).get('/message-management/subscribers').expect(200),
+      request(apiUrl).get('/message-management/sources').expect(200),
       request(apiUrl)
-        .get('/qqbot/message-push/sources/network.stun.mapping-port-changed')
+        .get('/message-management/sources/network.stun.mapping-port-changed')
         .expect(200),
       request(apiUrl)
         .get(
-          '/qqbot/message-push/sources/network.stun.mapping-port-changed/subscription-options',
+          '/message-management/sources/network.stun.mapping-port-changed/subscription-options',
         )
         .expect(200),
+      request(apiUrl).get('/message-management/subscriptions').expect(200),
+      request(apiUrl).get('/message-management/templates').expect(200),
       request(apiUrl)
-        .get(
-          '/qqbot/message-push/sources/network.stun.mapping-port-changed/options',
-        )
-        .expect(200),
-      request(apiUrl).get('/qqbot/message-push/subscriptions').expect(200),
-      request(apiUrl).get('/qqbot/message-push/templates').expect(200),
-      request(apiUrl)
-        .post('/qqbot/message-push/templates/preview')
+        .post('/message-management/templates/preview')
         .send({
           content: 'Endpoint: ${{endpoint}}',
           sourceKey: 'network.stun.mapping-port-changed',
@@ -927,10 +970,10 @@ describe('QQBot message-push management controllers', () => {
         .expect(200),
     ]);
     const [
+      subscriberList,
       sourceList,
       sourceDetail,
       options,
-      legacyStunOptions,
       subscriptionPage,
       templatePage,
       preview,
@@ -938,6 +981,9 @@ describe('QQBot message-push management controllers', () => {
       targetOptions,
     ] = responses.map((response) => response.body.data);
 
+    expect(Object.keys(subscriberList[0]).sort()).toEqual(
+      ['description', 'displayName', 'subscriberKey', 'version'].sort(),
+    );
     expect(Object.keys(sourceList[0]).sort()).toEqual(
       [
         'description',
@@ -983,27 +1029,6 @@ describe('QQBot message-push management controllers', () => {
     expect(Object.keys(options.portForwards[0]).sort()).toEqual(
       ['disabled', 'disabledReasonCode', 'label', 'value'].sort(),
     );
-    expect(Object.keys(legacyStunOptions.ddnsRecords[0]).sort()).toEqual(
-      [
-        'disabledReasonCode',
-        'eligible',
-        'fqdn',
-        'id',
-        'name',
-        'portForwardId',
-      ].sort(),
-    );
-    expect(Object.keys(legacyStunOptions.portForwards[0]).sort()).toEqual(
-      [
-        'disabledReasonCode',
-        'eligible',
-        'externalPort',
-        'id',
-        'internalPort',
-        'name',
-        'protocol',
-      ].sort(),
-    );
     expect(Object.keys(subscriptionPage.items[0]).sort()).toEqual(
       [
         'createTime',
@@ -1016,6 +1041,9 @@ describe('QQBot message-push management controllers', () => {
         'sourceKey',
         'sourceName',
         'sourceSummary',
+        'subscriberKey',
+        'subscriberName',
+        'templates',
         'updateTime',
         'valid',
       ].sort(),
@@ -1024,6 +1052,9 @@ describe('QQBot message-push management controllers', () => {
       'ddnsRecordId',
       'portForwardId',
     ]);
+    expect(Object.keys(subscriptionPage.items[0].templates[0]).sort()).toEqual(
+      ['id', 'name', 'sortOrder'].sort(),
+    );
     expect(Object.keys(templatePage.items[0]).sort()).toEqual(
       [
         'content',
@@ -1054,10 +1085,12 @@ describe('QQBot message-push management controllers', () => {
         'subscriptionId',
         'subscriptionName',
         'targets',
-        'templateId',
-        'templateName',
+        'templates',
         'updateTime',
       ].sort(),
+    );
+    expect(Object.keys(bindingList[0].templates[0]).sort()).toEqual(
+      ['id', 'name', 'sortOrder'].sort(),
     );
     expect(Object.keys(bindingList[0].targets[0]).sort()).toEqual(
       ['enabled', 'id', 'targetId', 'targetName', 'targetType'].sort(),

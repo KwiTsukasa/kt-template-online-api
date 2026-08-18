@@ -4,7 +4,7 @@ import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/ne
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 import { NetworkPortForwardGroup } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
 import { NetworkTcpNatmapMessageSourceAdapter } from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-tcp-natmap-message-source.adapter';
-import { SystemMessageSourceRegistry } from '../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
+import { SystemMessageSourceRegistry } from '../../../src/modules/message-management/application/system-message-source.registry';
 
 type Harness = {
   adapter: NetworkTcpNatmapMessageSourceAdapter;
@@ -201,7 +201,7 @@ describe('NetworkTcpNatmapMessageSourceAdapter', () => {
       }),
     ).resolves.toMatchObject({
       reasonCode: 'ddns_not_synced',
-      status: 'waiting_ddns',
+      status: 'deferred',
     });
 
     const expired = createHarness();

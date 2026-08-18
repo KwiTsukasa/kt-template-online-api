@@ -391,7 +391,7 @@ CREATE TABLE IF NOT EXISTS `qqbot_message` (
   PRIMARY KEY (`id`),
   KEY `idx_qqbot_message_self_message` (`self_id`, `message_id`),
   KEY `idx_qqbot_message_target` (`self_id`, `message_type`, `target_id`),
-  KEY `idx_qqbot_message_event_time` (`event_time`)
+  KEY `idx_message_event_time` (`event_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `qqbot_send_log` (
@@ -1110,22 +1110,27 @@ WHERE role.`role_code` IN ('super', 'admin')
   AND role.`is_deleted` = 0
   AND menu.`is_deleted` = 0;
 
-CREATE TABLE IF NOT EXISTS `qqbot_message_subscription` (
-  `id` bigint NOT NULL, `name` varchar(100) NOT NULL, `source_key` varchar(128) NOT NULL,
-  `source_config` json NOT NULL, `source_config_digest` char(64) NOT NULL, `active_key` varchar(255) DEFAULT NULL,
+CREATE TABLE IF NOT EXISTS `message_subscription` (
+  `id` bigint NOT NULL, `name` varchar(100) NOT NULL, `subscriber_key` varchar(64) NOT NULL,
+  `template_binding_digest` char(64) NOT NULL, `source_config` json NOT NULL, `source_config_digest` char(64) NOT NULL, `active_key` varchar(255) DEFAULT NULL,
   `enabled` tinyint(1) NOT NULL DEFAULT 1, `remark` varchar(500) DEFAULT NULL, `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
   `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-  PRIMARY KEY (`id`), UNIQUE KEY `uk_qqbot_message_subscription_active_key` (`active_key`)
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_message_subscription_active_key` (`active_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `qqbot_message_template` (
+CREATE TABLE IF NOT EXISTS `message_template` (
   `id` bigint NOT NULL, `name` varchar(100) NOT NULL, `source_key` varchar(128) NOT NULL, `content` text NOT NULL,
   `enabled` tinyint(1) NOT NULL DEFAULT 1, `remark` varchar(500) DEFAULT NULL, `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
   `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6), PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `message_subscription_template` (
+  `subscription_id` bigint NOT NULL, `template_id` bigint NOT NULL, `sort_order` int unsigned NOT NULL,
+  PRIMARY KEY (`subscription_id`, `template_id`), UNIQUE KEY `uk_message_subscription_template_order` (`subscription_id`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS `qqbot_message_publish_binding` (
-  `id` bigint NOT NULL, `subscription_id` bigint NOT NULL, `account_id` bigint NOT NULL, `self_id` varchar(64) NOT NULL, `template_id` bigint NOT NULL,
+  `id` bigint NOT NULL, `subscription_id` bigint NOT NULL, `account_id` bigint NOT NULL, `self_id` varchar(64) NOT NULL,
   `active_key` varchar(255) DEFAULT NULL, `enabled` tinyint(1) NOT NULL DEFAULT 1, `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
   `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`), UNIQUE KEY `uk_qqbot_message_publish_binding_active_key` (`active_key`)
@@ -1138,12 +1143,12 @@ CREATE TABLE IF NOT EXISTS `qqbot_message_publish_target` (
   PRIMARY KEY (`id`), UNIQUE KEY `uk_qqbot_message_publish_target_active_key` (`active_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS `qqbot_message_event` (
+CREATE TABLE IF NOT EXISTS `message_event` (
   `id` bigint NOT NULL, `event_id` varchar(128) NOT NULL, `source_key` varchar(128) NOT NULL, `resource_key` varchar(128) NOT NULL, `occurred_at` datetime(6) NOT NULL,
   `payload` json NOT NULL, `fanout_status` varchar(32) NOT NULL DEFAULT 'accepted', `fanout_attempt_count` int unsigned NOT NULL DEFAULT 0,
   `next_fanout_at` datetime(6) DEFAULT NULL, `fanout_lease_until` datetime(6) DEFAULT NULL, `last_error_code` varchar(64) DEFAULT NULL, `last_error_message` varchar(500) DEFAULT NULL,
   `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-  PRIMARY KEY (`id`), UNIQUE KEY `uk_qqbot_message_event_event_id` (`event_id`), KEY `idx_qqbot_message_event_dispatch` (`fanout_status`, `next_fanout_at`), KEY `idx_qqbot_message_event_lease` (`fanout_lease_until`), KEY `idx_qqbot_message_event_source_resource_order` (`source_key`, `resource_key`, `occurred_at`, `id`)
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_message_event_event_id` (`event_id`), KEY `idx_message_event_dispatch` (`fanout_status`, `next_fanout_at`), KEY `idx_message_event_lease` (`fanout_lease_until`), KEY `idx_message_event_source_resource_order` (`source_key`, `resource_key`, `occurred_at`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `qqbot_message_delivery` (
@@ -1152,28 +1157,38 @@ CREATE TABLE IF NOT EXISTS `qqbot_message_delivery` (
   `template_content` text NOT NULL, `variable_snapshot` json NOT NULL, `rendered_message` text NOT NULL, `status` varchar(32) NOT NULL, `attempt_count` int unsigned NOT NULL DEFAULT 0,
   `next_attempt_at` datetime(6) DEFAULT NULL, `processing_lease_until` datetime(6) DEFAULT NULL, `send_log_id` bigint DEFAULT NULL, `last_error_code` varchar(64) DEFAULT NULL, `last_error_message` varchar(500) DEFAULT NULL, `expires_at` datetime(6) NOT NULL,
   `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-  PRIMARY KEY (`id`), UNIQUE KEY `uk_qqbot_message_delivery_event_target` (`message_event_id`, `publish_target_id`), KEY `idx_qqbot_message_delivery_dispatch` (`status`, `next_attempt_at`), KEY `idx_qqbot_message_delivery_lease` (`processing_lease_until`), KEY `idx_qqbot_message_delivery_history` (`subscription_id`, `message_event_id`)
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_qqbot_message_delivery_event_target_template` (`message_event_id`, `publish_target_id`, `template_id`), KEY `idx_qqbot_message_delivery_dispatch` (`status`, `next_attempt_at`), KEY `idx_qqbot_message_delivery_lease` (`processing_lease_until`), KEY `idx_qqbot_message_delivery_history` (`subscription_id`, `message_event_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO `qqbot_message_template` (`id`, `name`, `source_key`, `content`, `enabled`, `remark`, `is_deleted`)
+CREATE TABLE IF NOT EXISTS `station_notice_message_binding` (
+  `id` bigint NOT NULL, `subscription_id` bigint NOT NULL, `title` varchar(255) NOT NULL, `notify_role_code` varchar(64) NOT NULL,
+  `enabled` tinyint(1) NOT NULL DEFAULT 1, `active_key` varchar(255) DEFAULT NULL, `is_deleted` tinyint(1) NOT NULL DEFAULT 0,
+  `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`), UNIQUE KEY `uk_station_notice_message_binding_active_key` (`active_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `message_template` (`id`, `name`, `source_key`, `content`, `enabled`, `remark`, `is_deleted`)
 SELECT 2041700000000200601, 'STUN 映射端口变更默认模板', 'network.stun.mapping-port-changed', '当前STUN的端口已变更为${{endpoint}}', 1, '系统默认模板', 0
 WHERE NOT EXISTS (
-  SELECT 1 FROM `qqbot_message_template`
+  SELECT 1 FROM `message_template`
   WHERE `source_key` = 'network.stun.mapping-port-changed' AND `name` = 'STUN 映射端口变更默认模板' AND `is_deleted` = 0
 );
 
-INSERT INTO `qqbot_message_template` (`id`, `name`, `source_key`, `content`, `enabled`, `remark`, `is_deleted`)
+INSERT INTO `message_template` (`id`, `name`, `source_key`, `content`, `enabled`, `remark`, `is_deleted`)
 SELECT 2041700000000200602, 'TCP NATMap 端点变更默认模板', 'network.tcp.natmap-endpoint-changed', '当前 TCP NATMap 端点已变更为 ${{endpoint}}', 1, '系统默认模板', 0
 WHERE NOT EXISTS (
-  SELECT 1 FROM `qqbot_message_template`
+  SELECT 1 FROM `message_template`
   WHERE `source_key` = 'network.tcp.natmap-endpoint-changed' AND `name` = 'TCP NATMap 端点变更默认模板' AND `is_deleted` = 0
 );
 
 INSERT INTO `admin_menu` (`id`, `pid`, `name`, `path`, `component`, `redirect`, `auth_code`, `type`, `meta`, `status`, `sort`) VALUES
-  (2041700000000100413,2041700000000100400,'QqBotMessageSubscription','/qqbot/message-subscription','/qqbot/message-subscription/list',NULL,'QqBot:MessageSubscription:List','menu','{"icon":"lucide:bell-ring","title":"消息订阅"}',1,10),
-  (2041700000000100414,2041700000000100400,'QqBotMessageTemplate','/qqbot/message-template','/qqbot/message-template/list',NULL,'QqBot:MessageTemplate:List','menu','{"icon":"lucide:message-square-plus","title":"消息模板"}',1,11),
-  (2041700000000120461,2041700000000100413,'QqBotMessageSubscriptionList',NULL,NULL,NULL,'QqBot:MessageSubscription:List','button','{"title":"common.list"}',1,0),(2041700000000120462,2041700000000100413,'QqBotMessageSubscriptionCreate',NULL,NULL,NULL,'QqBot:MessageSubscription:Create','button','{"title":"common.create"}',1,0),(2041700000000120463,2041700000000100413,'QqBotMessageSubscriptionUpdate',NULL,NULL,NULL,'QqBot:MessageSubscription:Update','button','{"title":"common.edit"}',1,0),(2041700000000120464,2041700000000100413,'QqBotMessageSubscriptionDelete',NULL,NULL,NULL,'QqBot:MessageSubscription:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120465,2041700000000100413,'QqBotMessageSubscriptionToggle',NULL,NULL,NULL,'QqBot:MessageSubscription:Toggle','button','{"title":"启停"}',1,0),
-  (2041700000000120471,2041700000000100414,'QqBotMessageTemplateList',NULL,NULL,NULL,'QqBot:MessageTemplate:List','button','{"title":"common.list"}',1,0),(2041700000000120472,2041700000000100414,'QqBotMessageTemplateCreate',NULL,NULL,NULL,'QqBot:MessageTemplate:Create','button','{"title":"common.create"}',1,0),(2041700000000120473,2041700000000100414,'QqBotMessageTemplateUpdate',NULL,NULL,NULL,'QqBot:MessageTemplate:Update','button','{"title":"common.edit"}',1,0),(2041700000000120474,2041700000000100414,'QqBotMessageTemplateDelete',NULL,NULL,NULL,'QqBot:MessageTemplate:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120475,2041700000000100414,'QqBotMessageTemplateToggle',NULL,NULL,NULL,'QqBot:MessageTemplate:Toggle','button','{"title":"启停"}',1,0),(2041700000000120476,2041700000000100414,'QqBotMessageTemplatePreview',NULL,NULL,NULL,'QqBot:MessageTemplate:Preview','button','{"title":"预览"}',1,0),
+  (2041700000000100420,0,'MessageManagement','/message-management',NULL,'/message-management/subscription',NULL,'catalog','{"icon":"lucide:messages-square","order":109,"title":"消息管理"}',1,109),
+  (2041700000000100414,2041700000000100420,'MessageManagementTemplate','/message-management/template','/message-management/template/list',NULL,'MessageManagement:Template:List','menu','{"icon":"lucide:message-square-plus","title":"消息模板"}',1,0),
+  (2041700000000100413,2041700000000100420,'MessageManagementSubscription','/message-management/subscription','/message-management/subscription/list',NULL,'MessageManagement:Subscription:List','menu','{"icon":"lucide:bell-ring","title":"消息订阅"}',1,1),
+  (2041700000000100423,2041700000000100420,'MessageManagementStationNoticeSubscriber','/message-management/subscribers/station-notice','/message-management/subscribers/station-notice/list',NULL,'MessageManagement:Push:List','menu','{"icon":"lucide:inbox","title":"站内信投递"}',1,2),
+  (2041700000000120461,2041700000000100413,'MessageManagementSubscriptionList',NULL,NULL,NULL,'MessageManagement:Subscription:List','button','{"title":"common.list"}',1,0),(2041700000000120462,2041700000000100413,'MessageManagementSubscriptionCreate',NULL,NULL,NULL,'MessageManagement:Subscription:Create','button','{"title":"common.create"}',1,0),(2041700000000120463,2041700000000100413,'MessageManagementSubscriptionUpdate',NULL,NULL,NULL,'MessageManagement:Subscription:Update','button','{"title":"common.edit"}',1,0),(2041700000000120464,2041700000000100413,'MessageManagementSubscriptionDelete',NULL,NULL,NULL,'MessageManagement:Subscription:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120465,2041700000000100413,'MessageManagementSubscriptionToggle',NULL,NULL,NULL,'MessageManagement:Subscription:Toggle','button','{"title":"启停"}',1,0),
+  (2041700000000120471,2041700000000100414,'MessageManagementTemplateList',NULL,NULL,NULL,'MessageManagement:Template:List','button','{"title":"common.list"}',1,0),(2041700000000120472,2041700000000100414,'MessageManagementTemplateCreate',NULL,NULL,NULL,'MessageManagement:Template:Create','button','{"title":"common.create"}',1,0),(2041700000000120473,2041700000000100414,'MessageManagementTemplateUpdate',NULL,NULL,NULL,'MessageManagement:Template:Update','button','{"title":"common.edit"}',1,0),(2041700000000120474,2041700000000100414,'MessageManagementTemplateDelete',NULL,NULL,NULL,'MessageManagement:Template:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120475,2041700000000100414,'MessageManagementTemplateToggle',NULL,NULL,NULL,'MessageManagement:Template:Toggle','button','{"title":"启停"}',1,0),(2041700000000120476,2041700000000100414,'MessageManagementTemplatePreview',NULL,NULL,NULL,'MessageManagement:Template:Preview','button','{"title":"预览"}',1,0),
+  (2041700000000120491,2041700000000100423,'MessageManagementPushList',NULL,NULL,NULL,'MessageManagement:Push:List','button','{"title":"common.list"}',1,0),(2041700000000120492,2041700000000100423,'MessageManagementPushCreate',NULL,NULL,NULL,'MessageManagement:Push:Create','button','{"title":"common.create"}',1,0),(2041700000000120493,2041700000000100423,'MessageManagementPushUpdate',NULL,NULL,NULL,'MessageManagement:Push:Update','button','{"title":"common.edit"}',1,0),(2041700000000120494,2041700000000100423,'MessageManagementPushDelete',NULL,NULL,NULL,'MessageManagement:Push:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120495,2041700000000100423,'MessageManagementPushToggle',NULL,NULL,NULL,'MessageManagement:Push:Toggle','button','{"title":"启停"}',1,0),
   (2041700000000120481,2041700000000100410,'QqBotAccountMessagePushList',NULL,NULL,NULL,'QqBot:Account:MessagePush:List','button','{"title":"common.list"}',1,0),(2041700000000120482,2041700000000100410,'QqBotAccountMessagePushCreate',NULL,NULL,NULL,'QqBot:Account:MessagePush:Create','button','{"title":"common.create"}',1,0),(2041700000000120483,2041700000000100410,'QqBotAccountMessagePushUpdate',NULL,NULL,NULL,'QqBot:Account:MessagePush:Update','button','{"title":"common.edit"}',1,0),(2041700000000120484,2041700000000100410,'QqBotAccountMessagePushDelete',NULL,NULL,NULL,'QqBot:Account:MessagePush:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120485,2041700000000100410,'QqBotAccountMessagePushToggle',NULL,NULL,NULL,'QqBot:Account:MessagePush:Toggle','button','{"title":"启停"}',1,0)
 ON DUPLICATE KEY UPDATE `pid`=VALUES(`pid`),`name`=VALUES(`name`),`path`=VALUES(`path`),`component`=VALUES(`component`),`redirect`=VALUES(`redirect`),`auth_code`=VALUES(`auth_code`),`type`=VALUES(`type`),`meta`=VALUES(`meta`),`status`=VALUES(`status`),`sort`=VALUES(`sort`),`is_deleted`=0;
 
@@ -1185,11 +1200,14 @@ WHERE role.`role_code` IN ('super', 'admin')
   AND role.`status` = 1
   AND role.`is_deleted` = 0
   AND menu.`id` IN (
-    2041700000000100413, 2041700000000100414,
+    2041700000000100420, 2041700000000100413, 2041700000000100414,
+    2041700000000100423,
     2041700000000120461, 2041700000000120462, 2041700000000120463,
     2041700000000120464, 2041700000000120465, 2041700000000120471,
     2041700000000120472, 2041700000000120473, 2041700000000120474,
-    2041700000000120475, 2041700000000120476, 2041700000000120481,
+    2041700000000120475, 2041700000000120476,
+    2041700000000120491, 2041700000000120492, 2041700000000120493,
+    2041700000000120494, 2041700000000120495, 2041700000000120481,
     2041700000000120482, 2041700000000120483, 2041700000000120484,
     2041700000000120485
   )

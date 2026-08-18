@@ -32,6 +32,7 @@ import { AdminTimezoneController } from '@/modules/admin/platform-config/timezon
 import { AdminTimezoneService } from '@/modules/admin/platform-config/timezone/admin-timezone.service';
 import { AdminUser } from '@/modules/admin/identity/user/admin-user.entity';
 import { AssetModule } from '@/modules/asset/asset.module';
+import { MessageManagementModule } from '@/modules/message-management/message-management.module';
 import { QqbotCoreModule } from '@/modules/qqbot/core/qqbot-core.module';
 import { QqbotPluginPlatformModule } from '@/modules/qqbot/plugin-platform/plugin-platform.module';
 import { RuntimeModule } from '@/runtime/runtime.module';
@@ -120,6 +121,7 @@ export const ADMIN_PLATFORM_CONFIG_PROVIDERS = [
     DictModule,
     NoticeModule,
     AssetModule,
+    MessageManagementModule,
     RuntimeModule,
     QqbotCoreModule,
     QqbotPluginPlatformModule,

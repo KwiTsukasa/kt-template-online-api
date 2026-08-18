@@ -42,7 +42,18 @@ describe('system notice SQL', () => {
 
     for (const sql of [noticeSql, initSql, fixMenuSql]) {
       expect(sql).not.toContain('system.notice.handle');
-      expect(sql).toContain('system.notice.markHandled');
+      expect(sql).toContain('system.notice.markRead');
+    }
+  });
+
+  it('keeps the message center route available while hiding it from menus', () => {
+    const noticeSql = readSql('sql/system-notice-menu.sql');
+    const initSql = readSql('sql/vben-admin-init.sql');
+    const fixMenuSql = readSql('sql/fix-admin-menu-meta.sql');
+
+    for (const sql of [noticeSql, initSql, fixMenuSql]) {
+      expect(sql).toContain('"hideInMenu":true');
+      expect(sql).toContain("'SystemNotice'");
     }
   });
 

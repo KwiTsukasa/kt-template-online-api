@@ -12,12 +12,6 @@ export const QQBOT_CORE_DOMAIN_CONTRACT = {
     'qqbot_send_task',
     'qqbot_send_log',
     'qqbot_dedupe_event',
-    'qqbot_message_subscription',
-    'qqbot_message_template',
-    'qqbot_message_publish_binding',
-    'qqbot_message_publish_target',
-    'qqbot_message_event',
-    'qqbot_message_delivery',
   ],
   status: {
     accountTable: 'qqbot_account',

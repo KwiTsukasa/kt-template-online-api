@@ -17,7 +17,7 @@ import {
   SYSTEM_MESSAGE_EVENT_STAGER,
   type SystemMessageDeliveryCoordinator,
   type SystemMessageEventStager,
-} from '@/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
+} from '@/modules/message-management/contract/message-management.types';
 import { NetworkAgentState } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-agent-state.entity';
 import { NetworkEndpointHistory } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-endpoint-history.entity';
 import { NetworkDdnsService } from '@/modules/admin/platform-config/network-management/application/network-ddns.service';

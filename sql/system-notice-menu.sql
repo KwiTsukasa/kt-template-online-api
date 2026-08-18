@@ -301,7 +301,7 @@ VALUES (
   NULL,
   'System:Notice:List',
   'menu',
-  '{"icon":"mdi:bell-outline","title":"system.notice.title"}',
+  '{"hideInMenu":true,"icon":"mdi:bell-outline","title":"system.notice.title"}',
   1,
   7
 )
@@ -339,7 +339,7 @@ INSERT INTO `admin_menu` (
   `sort`
 )
 VALUES
-  (2041700000000120212, 2041700000000100206, 'SystemNoticeEdit', NULL, NULL, NULL, 'System:Notice:Edit', 'button', '{"title":"system.notice.markHandled"}', 1, 1),
+  (2041700000000120212, 2041700000000100206, 'SystemNoticeEdit', NULL, NULL, NULL, 'System:Notice:Edit', 'button', '{"title":"system.notice.markRead"}', 1, 1),
   (2041700000000120213, 2041700000000100206, 'SystemNoticeDelete', NULL, NULL, NULL, 'System:Notice:Delete', 'button', '{"title":"common.delete"}', 1, 2)
 ON DUPLICATE KEY UPDATE
   `pid` = VALUES(`pid`),

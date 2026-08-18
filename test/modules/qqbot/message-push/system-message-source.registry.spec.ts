@@ -1,5 +1,5 @@
-import type { SystemMessageSourceAdapter } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
-import { SystemMessageSourceRegistry } from '../../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
+import type { SystemMessageSourceAdapter } from '../../../../src/modules/message-management/contract/message-management.types';
+import { SystemMessageSourceRegistry } from '../../../../src/modules/message-management/application/system-message-source.registry';
 
 function createAdapter(sourceKey: string): SystemMessageSourceAdapter {
   return {

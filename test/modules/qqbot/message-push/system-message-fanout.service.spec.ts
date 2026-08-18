@@ -2,24 +2,27 @@ import { KtDateTime } from '../../../../src/common';
 import {
   SystemMessageContractError,
   type SystemMessageSourceAdapter,
-} from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
-import { SystemMessageFanoutService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-fanout.service';
-import { SystemMessageSourceRegistry } from '../../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
-import { SystemMessageTemplateRendererService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-template-renderer.service';
+} from '../../../../src/modules/message-management/contract/message-management.types';
+import { SystemMessageFanoutService } from '../../../../src/modules/message-management/application/system-message-fanout.service';
+import { SystemMessageSourceRegistry } from '../../../../src/modules/message-management/application/system-message-source.registry';
+import { SystemMessageTemplateRendererService } from '../../../../src/modules/message-management/application/system-message-template-renderer.service';
+import { MessageSubscriberRegistry } from '../../../../src/modules/message-management/application/subscriber/message-subscriber.registry';
+import { QqbotMessageSubscriberAdapter } from '../../../../src/modules/qqbot/message-management-adapter/qqbot-message-subscriber.adapter';
 import { QqbotAccount } from '../../../../src/modules/qqbot/core/infrastructure/persistence/account/qqbot-account.entity';
-import { QqbotMessageDelivery } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-delivery.entity';
-import { QqbotMessageEvent } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-event.entity';
-import { QqbotMessagePublishBinding } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
-import { QqbotMessagePublishTarget } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-target.entity';
-import { QqbotMessageSubscription } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-subscription.entity';
-import { QqbotMessageTemplate } from '../../../../src/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-template.entity';
+import { QqbotMessageDelivery } from '../../../../src/modules/qqbot/message-management-adapter/qqbot-message-delivery.entity';
+import { MessageEvent } from '../../../../src/modules/message-management/infrastructure/persistence/message-event.entity';
+import { QqbotMessagePublishBinding } from '../../../../src/modules/qqbot/message-management-adapter/qqbot-message-publish-binding.entity';
+import { QqbotMessagePublishTarget } from '../../../../src/modules/qqbot/message-management-adapter/qqbot-message-publish-target.entity';
+import { MessageSubscription } from '../../../../src/modules/message-management/infrastructure/persistence/message-subscription.entity';
+import { MessageSubscriptionTemplate } from '../../../../src/modules/message-management/infrastructure/persistence/message-subscription-template.entity';
+import { MessageTemplate } from '../../../../src/modules/message-management/infrastructure/persistence/message-template.entity';
 import {
   SYSTEM_MESSAGE_BATCH_SIZE,
-  SYSTEM_MESSAGE_DDNS_RECHECK_MS,
+  SYSTEM_MESSAGE_DEFERRED_RECHECK_MS,
   SYSTEM_MESSAGE_LEASE_MS,
   SYSTEM_MESSAGE_RETRY_BASE_MS,
   SYSTEM_MESSAGE_RETRY_WINDOW_MS,
-} from '../../../../src/modules/qqbot/core/application/message-push/system-message-runner.constants';
+} from '../../../../src/modules/message-management/application/system-message-runner.constants';
 
 const NOW = new Date('2026-07-24T00:00:00.000Z');
 const SOURCE_KEY = 'network.stun.mapping-port-changed';
@@ -31,18 +34,19 @@ type Store = {
   accounts: QqbotAccount[];
   bindings: QqbotMessagePublishBinding[];
   deliveries: QqbotMessageDelivery[];
-  events: QqbotMessageEvent[];
-  subscriptions: QqbotMessageSubscription[];
+  events: MessageEvent[];
+  subscriptions: MessageSubscription[];
+  subscriptionTemplates: MessageSubscriptionTemplate[];
   targets: QqbotMessagePublishTarget[];
-  templates: QqbotMessageTemplate[];
+  templates: MessageTemplate[];
 };
 
 type RecordedPredicate =
   | { brackets: RecordedPredicate[] }
   | { expression: string; parameters: object };
 
-function event(overrides: Partial<QqbotMessageEvent> = {}): QqbotMessageEvent {
-  return Object.assign(new QqbotMessageEvent(), {
+function event(overrides: Partial<MessageEvent> = {}): MessageEvent {
+  return Object.assign(new MessageEvent(), {
     fanoutAttemptCount: 0,
     fanoutLeaseUntil: null,
     fanoutStatus: 'accepted',
@@ -59,14 +63,15 @@ function event(overrides: Partial<QqbotMessageEvent> = {}): QqbotMessageEvent {
 }
 
 function subscription(
-  overrides: Partial<QqbotMessageSubscription> = {},
-): QqbotMessageSubscription {
-  return Object.assign(new QqbotMessageSubscription(), {
+  overrides: Partial<MessageSubscription> = {},
+): MessageSubscription {
+  return Object.assign(new MessageSubscription(), {
     enabled: true,
     id: '300',
     isDeleted: false,
     sourceConfig: { portForwardId: RESOURCE_KEY },
-    sourceKey: SOURCE_KEY,
+    subscriberKey: 'qqbot',
+    templateBindingDigest: 'template-digest',
     ...overrides,
   });
 }
@@ -91,15 +96,23 @@ function binding(
     isDeleted: false,
     selfId: 'bot-a',
     subscriptionId: '300',
+    ...overrides,
+  });
+}
+
+function subscriptionTemplate(
+  overrides: Partial<MessageSubscriptionTemplate> = {},
+): MessageSubscriptionTemplate {
+  return Object.assign(new MessageSubscriptionTemplate(), {
+    sortOrder: 0,
+    subscriptionId: '300',
     templateId: '600',
     ...overrides,
   });
 }
 
-function template(
-  overrides: Partial<QqbotMessageTemplate> = {},
-): QqbotMessageTemplate {
-  return Object.assign(new QqbotMessageTemplate(), {
+function template(overrides: Partial<MessageTemplate> = {}): MessageTemplate {
+  return Object.assign(new MessageTemplate(), {
     content: 'endpoint=${{endpoint}}',
     enabled: true,
     id: '600',
@@ -175,6 +188,7 @@ function cloneStore(value: Store): Store {
     deliveries: clone(value.deliveries),
     events: clone(value.events),
     subscriptions: clone(value.subscriptions),
+    subscriptionTemplates: clone(value.subscriptionTemplates),
     targets: clone(value.targets),
     templates: clone(value.templates),
   };
@@ -239,6 +253,9 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
     deliveries: seed.deliveries ?? [],
     events: seed.events ?? [event()],
     subscriptions: seed.subscriptions ?? [subscription()],
+    subscriptionTemplates: seed.subscriptionTemplates ?? [
+      subscriptionTemplate(),
+    ],
     targets: seed.targets ?? [target()],
     templates: seed.templates ?? [template()],
   };
@@ -318,6 +335,7 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
       draft.subscriptions,
       baseline.subscriptions,
     ),
+    subscriptionTemplates: state.subscriptionTemplates,
     targets: mergeRows(state.targets, draft.targets, baseline.targets),
     templates: mergeRows(state.templates, draft.templates, baseline.templates),
   });
@@ -327,19 +345,21 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
     store: Store,
     transactionLocks?: Set<string>,
   ) => {
-    const rows = (entity === QqbotMessageEvent
+    const rows = (entity === MessageEvent
       ? store.events
-      : entity === QqbotMessageSubscription
+      : entity === MessageSubscription
         ? store.subscriptions
-        : entity === QqbotMessagePublishBinding
-          ? store.bindings
-          : entity === QqbotAccount
-            ? store.accounts
-            : entity === QqbotMessageTemplate
-              ? store.templates
-              : entity === QqbotMessagePublishTarget
-                ? store.targets
-                : store.deliveries) as unknown as Array<
+        : entity === MessageSubscriptionTemplate
+          ? store.subscriptionTemplates
+          : entity === QqbotMessagePublishBinding
+            ? store.bindings
+            : entity === QqbotAccount
+              ? store.accounts
+              : entity === MessageTemplate
+                ? store.templates
+                : entity === QqbotMessagePublishTarget
+                  ? store.targets
+                  : store.deliveries) as unknown as Array<
       Record<string, unknown>
     >;
     return {
@@ -448,9 +468,10 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
             const claimed =
               rows
                 .filter((row) => {
-                  const item = row as unknown as QqbotMessageEvent;
+                  const item = row as unknown as MessageEvent;
                   return (
                     ((item.fanoutStatus === 'accepted' ||
+                      item.fanoutStatus === 'deferred' ||
                       item.fanoutStatus === 'retry') &&
                       (item.nextFanoutAt === null ||
                         item.nextFanoutAt.getTime() <=
@@ -463,14 +484,12 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
                 })
                 .filter(
                   (row) =>
-                    !locked.has((row as unknown as QqbotMessageEvent).id) &&
-                    !activeClaimLocks.has(
-                      (row as unknown as QqbotMessageEvent).id,
-                    ),
+                    !locked.has((row as unknown as MessageEvent).id) &&
+                    !activeClaimLocks.has((row as unknown as MessageEvent).id),
                 )
                 .sort((left, right) => {
-                  const a = left as unknown as QqbotMessageEvent;
-                  const b = right as unknown as QqbotMessageEvent;
+                  const a = left as unknown as MessageEvent;
+                  const b = right as unknown as MessageEvent;
                   return (
                     a.occurredAt.getTime() - b.occurredAt.getTime() ||
                     (BigInt(a.id) < BigInt(b.id)
@@ -487,7 +506,7 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
             ) {
               return claimed;
             }
-            const id = (claimed as unknown as QqbotMessageEvent).id;
+            const id = (claimed as unknown as MessageEvent).id;
             activeClaimLocks.add(id);
             pauseClaim.entered();
             await pauseClaim.resume;
@@ -553,6 +572,11 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
         where,
       }: { order?: { id?: 'ASC' }; where?: Record<string, unknown> } = {}) => {
         const result = rows.filter((row) => matches(row, where));
+        if ((order as { sortOrder?: 'ASC' } | undefined)?.sortOrder) {
+          return result.sort(
+            (left, right) => Number(left.sortOrder) - Number(right.sortOrder),
+          );
+        }
         return order?.id
           ? result.sort((left, right) =>
               `${(left as { id: string }).id}`.localeCompare(
@@ -568,13 +592,10 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
         lock?: { mode: string };
         where: Record<string, unknown>;
       }) => {
-        if (
-          entity === QqbotMessageEvent &&
-          lock?.mode === 'pessimistic_write'
-        ) {
+        if (entity === MessageEvent && lock?.mode === 'pessimistic_write') {
           const event = rows.find((row) => matches(row, where));
           if (!event) return null;
-          const id = (event as unknown as QqbotMessageEvent).id;
+          const id = (event as unknown as MessageEvent).id;
           activeClaimLocks.add(id);
           transactionLocks?.add(id);
           if (pauseEventLock) {
@@ -607,6 +628,7 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
             matches(row, {
               messageEventId: item.messageEventId,
               publishTargetId: item.publishTargetId,
+              templateId: item.templateId,
             }),
           );
           if (!item.id && duplicateRace) {
@@ -699,9 +721,17 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
       }
     },
   };
+  const subscriberRegistry = new MessageSubscriberRegistry();
+  const messageSubscriber = new QqbotMessageSubscriberAdapter(
+    subscriberRegistry,
+    {} as never,
+    { runOnce: jest.fn().mockResolvedValue(0) } as never,
+  );
+  subscriberRegistry.register(messageSubscriber);
   const service = new SystemMessageFanoutService(
     dataSource as never,
     registry,
+    subscriberRegistry,
     new SystemMessageTemplateRendererService(),
   );
   return {
@@ -751,7 +781,7 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
     ) => {
       beforeDeliveryConditionalUpdate = mutate;
     },
-    commitEvent: (committed: QqbotMessageEvent) => {
+    commitEvent: (committed: MessageEvent) => {
       state.events.push(committed);
     },
     activeEventLocks: () => [...activeClaimLocks],
@@ -759,6 +789,7 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
       duplicateRace = value;
     },
     service,
+    messageSubscriber,
     targets: () => state.targets,
     templates: () => state.templates,
     transactions,
@@ -766,6 +797,44 @@ function setup(seed: Partial<Store> = {}, adapter = sourceAdapter()) {
 }
 
 describe('SystemMessageFanoutService', () => {
+  it('runs subscriber side effects only after its delivery transaction commits', async () => {
+    const fixture = setup();
+    const afterCommit = jest.fn(() => {
+      expect(fixture.transactions.at(-1)).toBe('commit');
+    });
+    jest
+      .spyOn(fixture.messageSubscriber, 'receive')
+      .mockResolvedValue({ afterCommit });
+
+    await fixture.service.runOnce(NOW);
+
+    expect(afterCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders every bound template before the subscriber decides delivery', async () => {
+    const fixture = setup({
+      subscriptionTemplates: [
+        subscriptionTemplate(),
+        subscriptionTemplate({ sortOrder: 1, templateId: '601' }),
+      ],
+      templates: [
+        template(),
+        template({ content: 'secondary=${{endpoint}}', id: '601' }),
+      ],
+    });
+
+    await expect(fixture.service.runOnce(NOW)).resolves.toBe(1);
+    expect(fixture.deliveries()).toHaveLength(2);
+    expect(fixture.deliveries().map((item) => item.templateId)).toEqual([
+      '600',
+      '601',
+    ]);
+    expect(fixture.deliveries().map((item) => item.renderedMessage)).toEqual([
+      'endpoint=pal.example.com:38213',
+      'secondary=pal.example.com:38213',
+    ]);
+  });
+
   it('creates exact multi-account target cardinality and freezes strict snapshots', async () => {
     const fixture = setup({
       accounts: [account(), account({ id: '401', selfId: 'bot-b' })],
@@ -832,7 +901,6 @@ describe('SystemMessageFanoutService', () => {
               ddnsRecordId: '9007199254740995',
               tcpChannelId: RESOURCE_KEY,
             },
-            sourceKey: TCP_SOURCE_KEY,
           }),
         ],
         templates: [template({ sourceKey: TCP_SOURCE_KEY })],
@@ -847,23 +915,20 @@ describe('SystemMessageFanoutService', () => {
     });
   });
 
-  it('schedules ready and waiting-DDNS snapshots without sending OneBot', async () => {
+  it('keeps deferred source work inside message management without invoking QQBot', async () => {
     const fixture = setup();
     fixture.adapter.resolveDelivery.mockResolvedValueOnce({
       reasonCode: 'ddns_not_synced',
-      status: 'waiting_ddns',
+      status: 'deferred',
       variables: { endpoint: 'wait.example:1' },
     });
 
     await fixture.service.runOnce(NOW);
-    expect(fixture.deliveries()[0]).toMatchObject({
-      renderedMessage: 'endpoint=wait.example:1',
-      status: 'waiting_ddns',
-    });
-    expect(fixture.deliveries()[0].nextAttemptAt.getTime()).toBe(
-      NOW.getTime() + SYSTEM_MESSAGE_DDNS_RECHECK_MS,
+    expect(fixture.deliveries()).toHaveLength(0);
+    expect(fixture.events()[0].nextFanoutAt?.getTime()).toBe(
+      NOW.getTime() + SYSTEM_MESSAGE_DEFERRED_RECHECK_MS,
     );
-    expect(fixture.events()[0].fanoutStatus).toBe('completed');
+    expect(fixture.events()[0].fanoutStatus).toBe('deferred');
   });
 
   it('requires an active own string JSON resource match before resolving a subscription', async () => {
@@ -910,7 +975,6 @@ describe('SystemMessageFanoutService', () => {
         subscriptions: [
           subscription({
             sourceConfig: { jobId: RESOURCE_KEY },
-            sourceKey: JOB_SOURCE_KEY,
           }),
         ],
         templates: [template({ sourceKey: JOB_SOURCE_KEY })],
@@ -1037,7 +1101,7 @@ describe('SystemMessageFanoutService', () => {
       renderedMessage: 'normal',
       selfId: 'bot-a',
       sendLogId: 'send-normal',
-      status: 'waiting_ddns' as const,
+      status: 'pending' as const,
       subscriptionId: '300',
       targetId: 'target-normal',
       targetType: 'group' as const,
@@ -1096,7 +1160,7 @@ describe('SystemMessageFanoutService', () => {
         values: { status: 'superseded' },
         where: {
           messageEventId: [older.id],
-          status: ['waiting_ddns', 'pending', 'retry'],
+          status: ['pending', 'retry'],
           subscriptionId: '300',
         },
       },
@@ -1144,7 +1208,7 @@ describe('SystemMessageFanoutService', () => {
       sourceKey: 'other.source',
     });
     const oldRows = [
-      'waiting_ddns',
+      'pending',
       'pending',
       'retry',
       'processing',
@@ -1311,7 +1375,7 @@ describe('SystemMessageFanoutService', () => {
       ...structuredClone(normal),
       id: 'raced-processing',
       publishTargetId: 'processing-target',
-      status: 'waiting_ddns' as const,
+      status: 'pending' as const,
     });
     const racedCancelled = Object.assign(new QqbotMessageDelivery(), {
       ...structuredClone(normal),
@@ -1358,7 +1422,7 @@ describe('SystemMessageFanoutService', () => {
         values: { status: 'superseded' },
         where: {
           messageEventId: older.id,
-          status: ['waiting_ddns', 'pending', 'retry'],
+          status: ['pending', 'retry'],
           subscriptionId: '300',
         },
       },
@@ -1487,6 +1551,7 @@ describe('SystemMessageFanoutService', () => {
       messageEventId: '200',
       publishTargetId: '700',
       status: 'pending',
+      templateId: '600',
     });
     const replay = setup({ deliveries: [existing] });
     await replay.service.runOnce(NOW);
@@ -1525,7 +1590,10 @@ describe('SystemMessageFanoutService', () => {
               {
                 expression:
                   'event.fanoutStatus IN (:...due) AND (event.nextFanoutAt IS NULL OR event.nextFanoutAt <= :now)',
-                parameters: { due: ['accepted', 'retry'], now: NOW },
+                parameters: {
+                  due: ['accepted', 'deferred', 'retry'],
+                  now: NOW,
+                },
               },
             ],
           },
@@ -1639,7 +1707,7 @@ describe('SystemMessageFanoutService', () => {
         ) => Promise<void>;
       }
     ).finish;
-    (fixture as unknown as { events: () => QqbotMessageEvent[] })
+    (fixture as unknown as { events: () => MessageEvent[] })
       .events()
       .push(attemptMismatch);
 
@@ -1727,6 +1795,10 @@ describe('SystemMessageFanoutService', () => {
   it('rolls back one failing subscription, retains valid work, then retries and recovers idempotently', async () => {
     const fixture = setup({
       subscriptions: [subscription(), subscription({ id: '301' })],
+      subscriptionTemplates: [
+        subscriptionTemplate(),
+        subscriptionTemplate({ subscriptionId: '301' }),
+      ],
       bindings: [binding(), binding({ id: '501', subscriptionId: '301' })],
       targets: [target(), target({ bindingId: '501', id: '701' })],
     });
@@ -1768,6 +1840,10 @@ describe('SystemMessageFanoutService', () => {
       deliveries: [priorFailed],
       events: [older, event()],
       subscriptions: [subscription(), subscription({ id: '301' })],
+      subscriptionTemplates: [
+        subscriptionTemplate(),
+        subscriptionTemplate({ subscriptionId: '301' }),
+      ],
       bindings: [binding(), binding({ id: '501', subscriptionId: '301' })],
       targets: [
         target(),
@@ -1900,19 +1976,20 @@ describe('SystemMessageFanoutService', () => {
     expect(fixture.deliveries()).toHaveLength(1);
   });
 
-  it('isolates an invalid template render while allowing another legal binding', async () => {
+  it('keeps all-or-nothing conversion when one bound template is invalid', async () => {
     const fixture = setup({
-      bindings: [binding(), binding({ id: '501', templateId: '601' })],
+      subscriptionTemplates: [
+        subscriptionTemplate(),
+        subscriptionTemplate({ sortOrder: 1, templateId: '601' }),
+      ],
       templates: [
         template({ content: '${{unknown}}' }),
         template({ id: '601' }),
       ],
-      targets: [target(), target({ bindingId: '501', id: '701' })],
     });
     await fixture.service.runOnce(NOW);
-    expect(fixture.deliveries().map((item) => item.publishTargetId)).toEqual([
-      '701',
-    ]);
+    expect(fixture.deliveries()).toHaveLength(0);
+    expect(fixture.events()[0].fanoutStatus).toBe('retry');
   });
 
   it('does not supersede current-event rows during an idempotent replay', async () => {

@@ -1,4 +1,4 @@
-import type { QqbotSendAttemptErrorOptions } from '../../contract/message-push/qqbot-message-push.types';
+import type { QqbotSendAttemptErrorOptions } from '../../contract/send/qqbot-send.types';
 
 const STRICT_SEND_ERROR_SUMMARIES: Readonly<Record<string, string>> = {
   account_unavailable: 'Configured QQBot account is unavailable',

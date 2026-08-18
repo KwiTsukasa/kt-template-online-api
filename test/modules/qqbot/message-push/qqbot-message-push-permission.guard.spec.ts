@@ -1,8 +1,8 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { HttpException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { QqbotMessagePushPermissionGuard } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push-permission.guard';
-import { QqbotMessagePushPermission } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push-permission.decorator';
+import { MessageManagementPermissionGuard } from '../../../../src/modules/message-management/contract/message-management-permission.guard';
+import { MessageManagementPermission } from '../../../../src/modules/message-management/contract/message-management-permission.decorator';
 
 type RoleInput = {
   isDeleted?: boolean;
@@ -29,14 +29,14 @@ const contextFor = (
 
 const handlerWithPermission = (...authCodes: string[]): (() => void) => {
   class PermissionFixture {
-    @QqbotMessagePushPermission(...authCodes)
+    @MessageManagementPermission(...authCodes)
     run(): void {}
   }
   return PermissionFixture.prototype.run;
 };
 
-describe('QqbotMessagePushPermissionGuard', () => {
-  const guard = new QqbotMessagePushPermissionGuard(new Reflector());
+describe('MessageManagementPermissionGuard', () => {
+  const guard = new MessageManagementPermissionGuard(new Reflector());
   const handler = handlerWithPermission('QqBot:MessageTemplate:Preview');
 
   it('allows only an active non-deleted super assignment to bypass', () => {
@@ -158,7 +158,7 @@ describe('QqbotMessagePushPermissionGuard', () => {
     expect(() => guard.canActivate(contextFor([]))).toThrow(HttpException);
 
     class EmptyPermissionFixture {
-      @QqbotMessagePushPermission()
+      @MessageManagementPermission()
       run(): void {}
     }
     expect(() =>

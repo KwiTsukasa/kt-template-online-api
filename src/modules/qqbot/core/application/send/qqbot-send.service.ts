@@ -24,7 +24,7 @@ import type {
   QqbotSendLogQueryDto,
   QqbotSendPrivateDto,
 } from '../../contract/send/qqbot-send.dto';
-import type { StrictPlainTextSendInput } from '../../contract/message-push/qqbot-message-push.types';
+import type { StrictPlainTextSendInput } from '../../contract/send/qqbot-send.types';
 
 type SendPipelineInput = {
   action: string;
@@ -170,26 +170,24 @@ export class QqbotSendService {
       });
     }
 
-    const action =
-      (() => {
-        if (input.targetType === 'group') {
-          return 'send_group_msg';
-        }
-        return 'send_private_msg';
-      })();
-    const actionParams =
-      (() => {
-        if (input.targetType === 'group') {
-          return {
-            group_id: input.targetId,
-            message: this.toTextSegment(input.message),
-          };
-        }
+    const action = (() => {
+      if (input.targetType === 'group') {
+        return 'send_group_msg';
+      }
+      return 'send_private_msg';
+    })();
+    const actionParams = (() => {
+      if (input.targetType === 'group') {
         return {
-            message: this.toTextSegment(input.message),
-            user_id: input.targetId,
-          };
-      })();
+          group_id: input.targetId,
+          message: this.toTextSegment(input.message),
+        };
+      }
+      return {
+        message: this.toTextSegment(input.message),
+        user_id: input.targetId,
+      };
+    })();
     return this.sendWithAccount(account, {
       action,
       actionParams,
@@ -241,12 +239,12 @@ export class QqbotSendService {
     );
     const storedActionParams = {
       ...this.toStoredActionParams(input.actionParams, storedMessageText),
-      ...((() => {
+      ...(() => {
         if (input.audit) {
           return { messagePush: input.audit };
         }
         return {};
-      })()),
+      })(),
     };
     let log: QqbotSendLog;
     try {
@@ -334,13 +332,12 @@ export class QqbotSendService {
         messageType: input.targetType,
         selfId: account.selfId,
         targetId: input.targetId,
-        userId:
-          (() => {
-            if (input.targetType === 'private') {
-              return input.targetId;
-            }
-            return account.selfId;
-          })(),
+        userId: (() => {
+          if (input.targetType === 'private') {
+            return input.targetId;
+          }
+          return account.selfId;
+        })(),
       });
       return { ...response, logId: log!.id };
     } catch (err) {
@@ -415,9 +412,7 @@ export class QqbotSendService {
    * @param err - 待识别的异常。
    * @returns 是否为受支持的反向 WebSocket 动作异常。
    */
-  private isReverseWsActionError(
-    err: unknown,
-  ): err is Error & {
+  private isReverseWsActionError(err: unknown): err is Error & {
     code: 'onebot_disconnected' | 'onebot_timeout';
   } {
     if (!(err instanceof Error) || err.name !== 'QqbotReverseWsActionError') {
@@ -496,19 +491,19 @@ export class QqbotSendService {
     const message = actionParams.message;
     return {
       ...actionParams,
-      ...((() => {
+      ...(() => {
         if (message === undefined) {
           return {};
         }
         return {
-            message: (() => {
-              if (Array.isArray(message)) {
-                return this.toTextSegment(storedMessageText);
-              }
-              return storedMessageText;
-            })(),
-          };
-      })()),
+          message: (() => {
+            if (Array.isArray(message)) {
+              return this.toTextSegment(storedMessageText);
+            }
+            return storedMessageText;
+          })(),
+        };
+      })(),
     };
   }
 }

@@ -1,9 +1,14 @@
-# QQBot Core Schema
+# QQBot Core and Message Subscriber Schema
 
-Core owns account, command, rule, permission, message, conversation, config,
-dedupe, and send-log persistence.
+QQBot Core owns only QQ account, command, rule, permission, conversation,
+configuration, deduplication, inbound message, and send-log persistence. Generic
+message sources, templates, subscriptions, events, rendering, and fan-out belong
+to the independent Message Management module. QQBot and station notices are
+subscriber adapters of that protocol; neither is part of the protocol core.
 
-Primary tables:
+## Ownership
+
+QQBot Core tables:
 
 - `qqbot_account`
 - `qqbot_account_ability`
@@ -17,81 +22,91 @@ Primary tables:
 - `qqbot_blocklist`
 - `qqbot_rule`
 - `qqbot_send_log`
-- `qqbot_message_subscription`
-- `qqbot_message_template`
-- `qqbot_message_publish_binding`
-- `qqbot_message_publish_target`
-- `qqbot_message_event`
-- `qqbot_message_delivery`
 
-Seed linkage:
+Message Management tables:
 
-- Online command rows bind to accounts through `qqbot_account_ability`.
-- Core command rows refer to plugin capabilities by `plugin_key` and
-  `operation_key`; execution is delegated through `QQBOT_PLUGIN_EXECUTION_PORT`.
-- A subscription owns one canonical active source/config key; soft deletion
-  clears that unique key so historical rows remain available.
-- A live publish binding links one account and subscription to one compatible
-  template. Any live binding prevents its template from being deleted.
-- Binding `active_key` uniquely identifies account/subscription ownership;
-  target `active_key` uniquely identifies binding/type/target ownership.
-- Event `event_id` is globally unique. Delivery uniqueness on
-  `(message_event_id, publish_target_id)` makes fan-out idempotent.
-- Event and delivery dispatch/lease indexes support durable worker claims,
-  retries, lease recovery, and source-resource supersession ordering.
+- `message_template`
+- `message_subscription`
+- `message_subscription_template`
+- `message_event`
 
-Worker status relationships:
+Subscriber-owned tables:
 
-- Events in `accepted` or due `retry` are claimable; an expired
-  `processing` lease is recoverable. `completed` and `failed` are terminal.
-- Deliveries in due `pending`, `retry`, or `waiting_ddns` are claimable; an
-  expired `processing` lease is recoverable. `success`, `failed`,
-  `superseded`, and `cancelled` are terminal.
-- A selected DDNS record advances relevant `waiting_ddns` work only after its
-  `synced` state and `applied_address` commit. The immediate wake is backed by
-  the persistent 60-second recheck.
-- Terminal events, deliveries, and their send-log links remain history; normal
-  rollback does not physically delete them.
+- QQBot: `qqbot_message_publish_binding`, `qqbot_message_publish_target`,
+  `qqbot_message_delivery`
+- Station notice: `station_notice_message_binding`; materialized notices remain
+  in the existing `admin_notice` table
 
-Verification SQL:
+## Protocol direction
+
+1. Message Management registers source adapters and normalizes each source event.
+2. Every template binds exactly one `source_key`.
+3. Every subscription binds one subscriber and a non-empty ordered set of
+   templates. All templates in the set must belong to the same source.
+4. A matching event is resolved and rendered once by Message Management. The
+   unified subscriber envelope contains every rendered template in `templates[]`
+   in subscription order.
+5. Message Management invokes only the selected subscriber adapter once. The
+   subscriber decides how those rendered templates become concrete deliveries.
+
+The current QQBot adapter creates one durable delivery per rendered template and
+target. The station-notice adapter materializes one station notice per rendered
+template. Concrete adapters can change that delivery policy without importing
+their concepts into Message Management.
+
+Source adapters must be registered only by Message Management. QQBot and station
+notice code must depend on the unified subscriber contract and must not call a
+message source adapter directly. Compatibility HTTP routes, target discovery,
+recipient configuration, and delivery state remain owned by the concrete
+subscriber adapter.
+
+## Integrity and lifecycle
+
+- `message_subscription.template_binding_digest` identifies the ordered template
+  set; `source_config_digest` identifies normalized source configuration.
+- A live subscription active key combines subscriber, template set, and source
+  configuration. Soft deletion clears that key while retaining history.
+- QQBot binding `active_key` identifies account/subscription ownership; target
+  `active_key` identifies binding/type/target ownership.
+- `message_event.event_id` is globally unique. Event readiness, including DDNS
+  deferral, is handled before the subscriber is invoked.
+- QQBot delivery uniqueness is
+  `(message_event_id, publish_target_id, template_id)`, so every template in one
+  unified envelope can be delivered exactly once per database target claim.
+- Event states are `accepted`, `processing`, `deferred`, `retry`, `completed`, and
+  `failed`. QQBot delivery states are `pending`, `processing`, `retry`, `success`,
+  `failed`, `superseded`, and `cancelled`.
+- Terminal events, subscriber deliveries, and send-log links remain audit
+  history. Application rollback does not physically delete them.
+
+## Migration and verification
+
+Existing environments apply only `sql/qqbot-message-push-init.sql`, then run the
+read-only `sql/qqbot-message-push-verify.sql`. The incremental migration copies
+legacy QQBot templates/events into Message Management. To preserve old account
+behavior, a legacy subscription used with different templates is split by
+`(legacy subscription, template)` before the private binding `template_id` column
+is removed; it is never migrated as a template union delivered to every account.
+
+Before migration, take a transaction-consistent backup of the three legacy
+protocol tables, every already-present `message_*` protocol table, the three
+QQBot subscriber tables, the station binding table when present, and relevant
+`admin_menu` / `admin_role_menu` rows. Do not use the broad historical
+`sql/qqbot-init.sql` as the production migration entry.
+
+Useful count-only checks:
 
 ```sql
-SELECT COUNT(*) FROM qqbot_account WHERE is_deleted = 0;
-SELECT COUNT(*) FROM qqbot_command WHERE is_deleted = 0;
-SELECT COUNT(*) FROM qqbot_account_ability WHERE is_deleted = 0;
-SELECT COUNT(*) FROM qqbot_message_subscription WHERE is_deleted = 0;
-SELECT COUNT(*) FROM qqbot_message_template WHERE is_deleted = 0;
+SELECT COUNT(*) FROM message_template WHERE is_deleted = 0;
+SELECT COUNT(*) FROM message_subscription WHERE is_deleted = 0;
+SELECT COUNT(*) FROM message_subscription_template;
+SELECT COUNT(*) FROM message_event;
 SELECT COUNT(*) FROM qqbot_message_publish_binding WHERE is_deleted = 0;
 SELECT COUNT(*) FROM qqbot_message_publish_target WHERE is_deleted = 0;
-
-SELECT table_name
-FROM information_schema.tables
-WHERE table_schema = DATABASE()
-  AND table_name IN (
-    'qqbot_message_subscription',
-    'qqbot_message_template',
-    'qqbot_message_publish_binding',
-    'qqbot_message_publish_target',
-    'qqbot_message_event',
-    'qqbot_message_delivery'
-  )
-ORDER BY table_name;
-
-SELECT table_name, index_name
-FROM information_schema.statistics
-WHERE table_schema = DATABASE()
-  AND table_name IN (
-    'qqbot_message_subscription',
-    'qqbot_message_template',
-    'qqbot_message_publish_binding',
-    'qqbot_message_publish_target',
-    'qqbot_message_event',
-    'qqbot_message_delivery'
-  )
-ORDER BY table_name, index_name;
+SELECT COUNT(*) FROM station_notice_message_binding WHERE is_deleted = 0;
 
 SELECT fanout_status, COUNT(*) AS event_count
-FROM qqbot_message_event
+FROM message_event
 GROUP BY fanout_status
 ORDER BY fanout_status;
 
@@ -100,83 +115,17 @@ FROM qqbot_message_delivery
 GROUP BY status
 ORDER BY status;
 
-SELECT COUNT(*) AS duplicate_event_id_groups
+SELECT COUNT(*) AS duplicate_event_target_template_groups
 FROM (
-  SELECT event_id
-  FROM qqbot_message_event
-  GROUP BY event_id
-  HAVING COUNT(*) > 1
-) AS duplicate_events;
-
-SELECT COUNT(*) AS duplicate_event_target_groups
-FROM (
-  SELECT message_event_id, publish_target_id
+  SELECT message_event_id, publish_target_id, template_id
   FROM qqbot_message_delivery
-  GROUP BY message_event_id, publish_target_id
+  GROUP BY message_event_id, publish_target_id, template_id
   HAVING COUNT(*) > 1
 ) AS duplicate_deliveries;
-
-SELECT COUNT(*) AS invalid_success_send_log_links
-FROM qqbot_message_delivery AS delivery
-LEFT JOIN qqbot_send_log AS send_log
-  ON send_log.id = delivery.send_log_id
-WHERE delivery.status = 'success'
-  AND (
-    delivery.send_log_id IS NULL
-    OR send_log.id IS NULL
-    OR send_log.status <> 'success'
-    OR send_log.self_id <> delivery.self_id
-    OR send_log.target_type <> delivery.target_type
-    OR send_log.target_id <> delivery.target_id
-  );
-
-SELECT 'event_due' AS summary, COUNT(*) AS item_count
-FROM qqbot_message_event
-WHERE fanout_status IN ('accepted', 'retry')
-  AND (next_fanout_at IS NULL OR next_fanout_at <= NOW(6))
-UNION ALL
-SELECT 'event_expired_lease', COUNT(*)
-FROM qqbot_message_event
-WHERE fanout_status = 'processing'
-  AND fanout_lease_until <= NOW(6)
-UNION ALL
-SELECT 'delivery_due', COUNT(*)
-FROM qqbot_message_delivery
-WHERE status IN ('pending', 'retry', 'waiting_ddns')
-  AND next_attempt_at <= NOW(6)
-UNION ALL
-SELECT 'delivery_expired_lease', COUNT(*)
-FROM qqbot_message_delivery
-WHERE status = 'processing'
-  AND processing_lease_until <= NOW(6);
-
-SELECT 'active_bindings' AS summary, COUNT(*) AS item_count
-FROM qqbot_message_publish_binding
-WHERE enabled = 1
-  AND is_deleted = 0
-UNION ALL
-SELECT 'unfinished_events', COUNT(*)
-FROM qqbot_message_event
-WHERE fanout_status IN ('accepted', 'processing', 'retry')
-UNION ALL
-SELECT 'unfinished_deliveries', COUNT(*)
-FROM qqbot_message_delivery
-WHERE status IN ('waiting_ddns', 'pending', 'processing', 'retry');
 ```
 
-Before applying SQL, take a transaction-consistent backup of all six
-`qqbot_message_*` push tables plus the relevant `admin_menu` and
-`admin_role_menu` rows. Existing environments must apply only
-`sql/qqbot-message-push-init.sql`, followed by the read-only
-`sql/qqbot-message-push-verify.sql`; the broader `sql/qqbot-init.sql` contains
-historical migrations and is not the production entry for this feature. Roll
-back by disabling publish bindings first, then rolling back Admin and API while
-retaining events, deliveries, and send logs; do not use `DROP TABLE` or history
-deletion as an application rollback.
-
-Verification output must contain only counts or ID/index summaries. Never
-select/project or print raw `payload`, `rendered_message`, `target_id`,
-credentials, provider objects, or production values. Release evidence must
-record database, HTTP, browser, Outbox/DDNS, and authorized QQ delivery gates
-separately. Never choose a QQ target without explicit authorization, and never
-use deployment success as a substitute for an unverified delivery gate.
+Verification output must contain only counts or ID/index summaries. Never print
+raw event payloads, rendered messages, target IDs, credentials, provider objects,
+or production values. Release evidence records database, HTTP, Admin page,
+source-event, and explicitly authorized subscriber-delivery gates separately;
+deployment success alone is not functional delivery evidence.

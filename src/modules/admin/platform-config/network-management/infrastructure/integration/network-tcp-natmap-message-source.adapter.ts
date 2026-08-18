@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { SystemMessageSourceRegistry } from '@/modules/qqbot/core/application/message-push/system-message-source.registry';
+import { SystemMessageSourceRegistry } from '@/modules/message-management/application/system-message-source.registry';
 import {
   SystemMessageContractError,
   type SystemMessageDeliveryReadiness,
@@ -14,7 +14,7 @@ import {
   type SystemMessageSourceAdapter,
   type SystemMessageSourceDefinition,
   type SystemMessageSourceOptionsResponse,
-} from '@/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
+} from '@/modules/message-management/contract/message-management.types';
 import { NetworkDdnsRecord } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
 import { NetworkPortForward } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 import { NetworkPortForwardGroup } from '@/modules/admin/platform-config/network-management/infrastructure/persistence/network-port-forward-group.entity';
@@ -249,12 +249,12 @@ export class NetworkTcpNatmapMessageSourceAdapter
         })();
         const disabledReasonCode = ddnsOptionReason(record, mapping, group);
         return {
-          ...((() => {
+          ...(() => {
             if (record.portForwardId) {
               return { dependsOnValue: String(record.portForwardId) };
             }
             return {};
-          })()),
+          })(),
           disabled: disabledReasonCode !== null,
           disabledReasonCode,
           label: [record.name, ddnsFqdn(record), disabledReasonCode]
@@ -376,7 +376,7 @@ export class NetworkTcpNatmapMessageSourceAdapter
     ) {
       return {
         reasonCode: 'ddns_not_synced',
-        status: 'waiting_ddns',
+        status: 'deferred',
         variables,
       };
     }

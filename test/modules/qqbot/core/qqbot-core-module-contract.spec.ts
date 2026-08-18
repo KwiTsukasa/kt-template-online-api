@@ -1,13 +1,29 @@
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { MODULE_METADATA } from '@nestjs/common/constants';
-import { ConfigModule } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { getMetadataArgsStorage } from 'typeorm';
-import { AdminAuthGuardModule } from '../../../../src/modules/admin/identity/auth/admin-auth-guard.module';
-import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/presentation/jwt-auth.guard';
-import { DictModule } from '../../../../src/modules/admin/platform-config/dict/dict.module';
 import { AppModule } from '../../../../src/app.module';
+import { AdminAuthGuardModule } from '../../../../src/modules/admin/identity/auth/admin-auth-guard.module';
+import { NoticeModule } from '../../../../src/modules/admin/platform-config/notice/notice.module';
+import { StationNoticeMessageBindingController } from '../../../../src/modules/admin/platform-config/notice/station-notice-message-binding.controller';
+import { StationNoticeMessageBinding } from '../../../../src/modules/admin/platform-config/notice/station-notice-message-binding.entity';
+import { StationNoticeMessageSubscriberAdapter } from '../../../../src/modules/admin/platform-config/notice/station-notice-message-subscriber.adapter';
+import { MessageSubscriberRegistry } from '../../../../src/modules/message-management/application/subscriber/message-subscriber.registry';
+import { SystemMessageDeliveryCoordinatorService } from '../../../../src/modules/message-management/application/system-message-delivery-coordinator.service';
+import { SystemMessageEventStagerService } from '../../../../src/modules/message-management/application/system-message-event-stager.service';
+import { SystemMessageFanoutService } from '../../../../src/modules/message-management/application/system-message-fanout.service';
+import { MessageManagementController } from '../../../../src/modules/message-management/contract/message-management.controller';
+import {
+  SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
+  SYSTEM_MESSAGE_EVENT_STAGER,
+} from '../../../../src/modules/message-management/contract/message-management.types';
+import {
+  MESSAGE_MANAGEMENT_CONTROLLERS,
+  MESSAGE_MANAGEMENT_ENTITIES,
+  MESSAGE_MANAGEMENT_EXPORTS,
+  MESSAGE_MANAGEMENT_PROVIDERS,
+  MessageManagementModule,
+} from '../../../../src/modules/message-management/message-management.module';
 import { QqbotAccountController } from '../../../../src/modules/qqbot/core/contract/account/qqbot-account.controller';
 import { QqbotCommandController } from '../../../../src/modules/qqbot/core/contract/command/qqbot-command.controller';
 import { QqbotDashboardController } from '../../../../src/modules/qqbot/core/contract/dashboard/qqbot-dashboard.controller';
@@ -15,17 +31,6 @@ import { QqbotMessageController } from '../../../../src/modules/qqbot/core/contr
 import { QqbotPermissionController } from '../../../../src/modules/qqbot/core/contract/permission/qqbot-permission.controller';
 import { QqbotRuleController } from '../../../../src/modules/qqbot/core/contract/rule/qqbot-rule.controller';
 import { QqbotSendController } from '../../../../src/modules/qqbot/core/contract/send/qqbot-send.controller';
-import { QqbotAccountMessagePushController } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-account-message-push.controller';
-import { QqbotMessagePushController } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.controller';
-import { QqbotMessagePushPermissionGuard } from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push-permission.guard';
-import { SystemMessageEventStagerService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-event-stager.service';
-import { SystemMessageFanoutService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-fanout.service';
-import { SystemMessageDeliveryCoordinatorService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-delivery-coordinator.service';
-import { SystemMessageDeliveryRunnerService } from '../../../../src/modules/qqbot/core/application/message-push/system-message-delivery-runner.service';
-import {
-  SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
-  SYSTEM_MESSAGE_EVENT_STAGER,
-} from '../../../../src/modules/qqbot/core/contract/message-push/qqbot-message-push.types';
 import {
   QQBOT_CORE_CONTROLLERS,
   QQBOT_CORE_ENTITIES,
@@ -33,166 +38,130 @@ import {
   QQBOT_CORE_PROVIDERS,
   QqbotCoreModule,
 } from '../../../../src/modules/qqbot/core/qqbot-core.module';
+import { QqbotAccountMessagePushController } from '../../../../src/modules/qqbot/message-management-adapter/qqbot-account-message-push.controller';
+import { QqbotMessageSubscriberAdapter } from '../../../../src/modules/qqbot/message-management-adapter/qqbot-message-subscriber.adapter';
+import {
+  QQBOT_MESSAGE_SUBSCRIBER_ENTITIES,
+  QqbotMessageSubscriberModule,
+} from '../../../../src/modules/qqbot/message-management-adapter/qqbot-message-subscriber.module';
+import { SystemMessageDeliveryRunnerService } from '../../../../src/modules/qqbot/message-management-adapter/qqbot-message-delivery-runner.service';
 import {
   collectControllerRoutes,
   routeKey,
 } from '../../../helpers/controller-route.helper';
 import { readRefactorV3SqlSchema } from '../../../helpers/sql-schema.helper';
 
-const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] => {
-  return Reflect.getMetadata(key, moduleClass) || [];
-};
+const getModuleMetadata = <T>(moduleClass: unknown, key: string): T[] =>
+  Reflect.getMetadata(key, moduleClass) || [];
 
 const getNames = (items: unknown[]) =>
   items.map((item) => (item as { name?: string }).name || `${item}`);
 
 type EntityClass = new (...args: never[]) => unknown;
 
-const getEntityTableName = (entity: EntityClass) => {
-  return getMetadataArgsStorage().tables.find(
-    (table) => table.target === entity,
-  )?.name;
-};
+const getEntityTableName = (entity: EntityClass) =>
+  getMetadataArgsStorage().tables.find((table) => table.target === entity)
+    ?.name;
 
-const getEntityColumnNames = (entity: EntityClass) => {
-  return getMetadataArgsStorage()
+const getEntityColumnNames = (entity: EntityClass) =>
+  getMetadataArgsStorage()
     .columns.filter((column) => column.target === entity)
     .map((column) => `${column.options.name || column.propertyName}`);
-};
 
-const getEntityNullableColumnNames = (entity: EntityClass) => {
-  return getMetadataArgsStorage()
+const getEntityNullableColumnNames = (entity: EntityClass) =>
+  getMetadataArgsStorage()
     .columns.filter((column) => column.target === entity)
     .filter((column) => column.options.nullable === true)
     .map((column) => `${column.options.name || column.propertyName}`);
-};
 
-const isOptionalSqlColumnForEntityInsert = (definition: string) => {
-  return (
-    !/\bNOT\s+NULL\b/i.test(definition) ||
-    /\bDEFAULT\b/i.test(definition) ||
-    /\bAUTO_INCREMENT\b/i.test(definition)
-  );
-};
+const isOptionalSqlColumnForEntityInsert = (definition: string) =>
+  !/\bNOT\s+NULL\b/i.test(definition) ||
+  /\bDEFAULT\b/i.test(definition) ||
+  /\bAUTO_INCREMENT\b/i.test(definition);
 
-describe('QQBot core module contract', () => {
+describe('QQBot and message-management module contracts', () => {
   const schema = readRefactorV3SqlSchema();
 
-  it('keeps QQBot Admin and runtime routes compatible through the core boundary', () => {
-    const routes = collectControllerRoutes(QQBOT_CORE_CONTROLLERS);
+  it('keeps ordinary QQBot routes in QQBot core without message-management routes', () => {
+    const routes = collectControllerRoutes(QQBOT_CORE_CONTROLLERS).map(
+      routeKey,
+    );
 
-    expect(routes.map(routeKey)).toEqual(
+    expect(routes).toEqual(
       expect.arrayContaining([
         'GET /qqbot/account/list',
-        'GET /qqbot/account/enabled',
-        'POST /qqbot/account/bind/command',
-        'POST /qqbot/account/unbind/command',
-        'POST /qqbot/account/kick',
         'GET /qqbot/command/list',
         'POST /qqbot/command/test',
-        'GET /qqbot/conversation/list',
         'GET /qqbot/message/list',
         'GET /qqbot/permission/config',
-        'GET /qqbot/permission/allowlist',
-        'GET /qqbot/permission/blocklist',
         'GET /qqbot/rule/list',
-        'GET /qqbot/send/log/list',
         'POST /qqbot/send/private',
         'POST /qqbot/send/group',
         'GET /qqbot/dashboard/summary',
       ]),
     );
-    expect(routes.map(routeKey)).not.toEqual(
+    expect(routes.join('\n')).not.toMatch(/message-(?:management|push)/);
+    expect(QQBOT_CORE_CONTROLLERS).toEqual(
       expect.arrayContaining([
-        'POST /qqbot/account/scan/create',
-        'POST /qqbot/account/scan/refresh',
-        'GET /qqbot/account/scan/status',
-        'GET /qqbot/account/scan/events',
-        'POST /qqbot/account/scan/qrcode/refresh',
-        'POST /qqbot/account/scan/captcha/submit',
-        'POST /qqbot/account/scan/cancel',
+        QqbotAccountController,
+        QqbotCommandController,
+        QqbotDashboardController,
+        QqbotMessageController,
+        QqbotPermissionController,
+        QqbotRuleController,
+        QqbotSendController,
       ]),
     );
   });
 
-  it('registers the strict message-push HTTP boundary without internal worker routes', () => {
-    const messagePushRoutes = collectControllerRoutes([
-      QqbotMessagePushController,
+  it('publishes generic management routes separately from concrete subscriber routes', () => {
+    const routes = collectControllerRoutes([
+      MessageManagementController,
       QqbotAccountMessagePushController,
+      StationNoticeMessageBindingController,
     ]).map(routeKey);
 
-    expect(messagePushRoutes).toEqual(
-      [
-        'DELETE /qqbot/accounts/:selfId/message-push/bindings/:id',
-        'DELETE /qqbot/message-push/subscriptions/:id',
-        'DELETE /qqbot/message-push/templates/:id',
-        'GET /qqbot/accounts/:selfId/message-push/bindings',
-        'GET /qqbot/accounts/:selfId/message-push/targets',
-        'GET /qqbot/message-push/sources',
-        'GET /qqbot/message-push/sources/:sourceKey',
-        'GET /qqbot/message-push/sources/:sourceKey/subscription-options',
-        'GET /qqbot/message-push/sources/network.stun.mapping-port-changed/options',
-        'GET /qqbot/message-push/subscriptions',
-        'GET /qqbot/message-push/templates',
-        'POST /qqbot/accounts/:selfId/message-push/bindings',
-        'POST /qqbot/message-push/subscriptions',
-        'POST /qqbot/message-push/templates',
-        'POST /qqbot/message-push/templates/preview',
-        'PUT /qqbot/accounts/:selfId/message-push/bindings/:id',
-        'PUT /qqbot/accounts/:selfId/message-push/bindings/:id/enabled',
-        'PUT /qqbot/message-push/subscriptions/:id',
-        'PUT /qqbot/message-push/subscriptions/:id/enabled',
-        'PUT /qqbot/message-push/templates/:id',
-        'PUT /qqbot/message-push/templates/:id/enabled',
-      ].sort(),
+    expect(routes).toEqual(
+      expect.arrayContaining([
+        'GET /message-management/subscribers',
+        'GET /message-management/sources',
+        'GET /message-management/subscriptions',
+        'POST /message-management/subscriptions',
+        'GET /message-management/templates',
+        'POST /message-management/templates',
+        'POST /message-management/templates/preview',
+        'GET /message-management/subscribers/qqbot/accounts/:selfId/bindings',
+        'POST /message-management/subscribers/qqbot/accounts/:selfId/bindings',
+        'GET /message-management/subscribers/station-notice/bindings',
+        'POST /message-management/subscribers/station-notice/bindings',
+      ]),
     );
-    expect(messagePushRoutes.join('\n')).not.toMatch(
+    expect(routes.join('\n')).not.toMatch(
       /\/(?:publish|events|deliveries|fanout|retry)(?:\/|$)/,
     );
   });
 
-  it('routes QQBot through the core module as the owning Nest boundary', () => {
-    const legacyWrapperName = ['Qqbot', 'Module'].join('');
-    const legacyWrapperPath = join(
-      process.cwd(),
-      'src',
-      'qqbot',
-      ['qqbot', 'module.ts'].join('.'),
-    );
-    const appImports = getModuleMetadata(AppModule, MODULE_METADATA.IMPORTS);
-
-    expect(appImports).toEqual(expect.arrayContaining([QqbotCoreModule]));
-    expect(getNames(appImports)).not.toContain(legacyWrapperName);
-    expect(existsSync(legacyWrapperPath)).toBe(false);
-
-    const coreImports = getModuleMetadata(
-      QqbotCoreModule,
+  it('places the protocol kernel, QQBot subscriber, and station subscriber in their owning modules', () => {
+    const appImports = getModuleMetadata<unknown>(
+      AppModule,
       MODULE_METADATA.IMPORTS,
     );
-    expect(coreImports).toEqual(
-      expect.arrayContaining([ConfigModule, AdminAuthGuardModule, DictModule]),
-    );
-    expect(
-      coreImports.some(
-        (item) => (item as { module?: unknown }).module === TypeOrmModule,
-      ),
-    ).toBe(true);
-    expect(getNames(coreImports)).not.toContain(legacyWrapperName);
-
-    expect(
-      getModuleMetadata(QqbotCoreModule, MODULE_METADATA.CONTROLLERS),
-    ).toEqual(expect.arrayContaining(QQBOT_CORE_CONTROLLERS));
-    expect(
-      getModuleMetadata(QqbotCoreModule, MODULE_METADATA.PROVIDERS),
-    ).toEqual(expect.arrayContaining(QQBOT_CORE_PROVIDERS));
-    expect(getModuleMetadata(QqbotCoreModule, MODULE_METADATA.EXPORTS)).toEqual(
-      expect.arrayContaining(QQBOT_CORE_EXPORTS),
-    );
-    expect(QQBOT_CORE_PROVIDERS).toEqual(
+    expect(appImports).toEqual(
       expect.arrayContaining([
+        MessageManagementModule,
+        QqbotCoreModule,
+        QqbotMessageSubscriberModule,
+      ]),
+    );
+
+    expect(MESSAGE_MANAGEMENT_CONTROLLERS).toEqual([
+      MessageManagementController,
+    ]);
+    expect(MESSAGE_MANAGEMENT_PROVIDERS as unknown[]).toEqual(
+      expect.arrayContaining([
+        MessageSubscriberRegistry,
         SystemMessageEventStagerService,
         SystemMessageFanoutService,
-        SystemMessageDeliveryRunnerService,
         SystemMessageDeliveryCoordinatorService,
         {
           provide: SYSTEM_MESSAGE_EVENT_STAGER,
@@ -204,165 +173,101 @@ describe('QQBot core module contract', () => {
         },
       ]),
     );
-    expect(
-      QQBOT_CORE_PROVIDERS.filter(
-        (provider) => provider === SystemMessageFanoutService,
-      ),
-    ).toHaveLength(1);
-    expect(
-      QQBOT_CORE_PROVIDERS.filter(
-        (provider) =>
-          typeof provider === 'object' &&
-          provider !== null &&
-          'provide' in provider &&
-          provider.provide === SYSTEM_MESSAGE_EVENT_STAGER,
-      ),
-    ).toEqual([
-      {
-        provide: SYSTEM_MESSAGE_EVENT_STAGER,
-        useExisting: SystemMessageEventStagerService,
-      },
-    ]);
-    expect(
-      QQBOT_CORE_PROVIDERS.filter(
-        (provider) => provider === QqbotMessagePushPermissionGuard,
-      ),
-    ).toHaveLength(1);
-    expect(new Set(QQBOT_CORE_CONTROLLERS).size).toBe(
-      QQBOT_CORE_CONTROLLERS.length,
-    );
-    expect(new Set(QQBOT_CORE_PROVIDERS).size).toBe(
-      QQBOT_CORE_PROVIDERS.length,
-    );
-    expect(QQBOT_CORE_PROVIDERS).not.toContain(JwtAuthGuard);
-    expect(
-      QQBOT_CORE_PROVIDERS.filter(
-        (provider) => provider === SystemMessageDeliveryRunnerService,
-      ),
-    ).toHaveLength(1);
-    expect(
-      QQBOT_CORE_PROVIDERS.filter(
-        (provider) => provider === SystemMessageDeliveryCoordinatorService,
-      ),
-    ).toHaveLength(1);
-    expect(QQBOT_CORE_EXPORTS).toEqual(
+    expect(MESSAGE_MANAGEMENT_EXPORTS as unknown[]).toEqual(
       expect.arrayContaining([
+        MessageSubscriberRegistry,
         SYSTEM_MESSAGE_EVENT_STAGER,
         SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
       ]),
     );
-    expect(QQBOT_CORE_EXPORTS).not.toContain(
-      SystemMessageDeliveryCoordinatorService,
-    );
-    expect(
-      QQBOT_CORE_PROVIDERS.filter(
-        (provider) =>
-          typeof provider === 'object' &&
-          provider !== null &&
-          'provide' in provider &&
-          provider.provide === SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
-      ),
-    ).toEqual([
-      {
-        provide: SYSTEM_MESSAGE_DELIVERY_COORDINATOR,
-        useExisting: SystemMessageDeliveryCoordinatorService,
-      },
-    ]);
-    const coreModuleSource = readFileSync(
-      join(process.cwd(), 'src/modules/qqbot/core/qqbot-core.module.ts'),
-      'utf8',
-    );
-    expect(coreModuleSource).not.toMatch(
-      /network-(?:agent-mqtt|ddns|stun-message-source)/,
-    );
-  });
 
-  it('makes the legacy QQBot controllers, providers and entities explicit', () => {
-    expect(QQBOT_CORE_CONTROLLERS).toEqual(
+    const qqbotSubscriberProviders = getModuleMetadata<unknown>(
+      QqbotMessageSubscriberModule,
+      MODULE_METADATA.PROVIDERS,
+    );
+    const qqbotSubscriberImports = getModuleMetadata<unknown>(
+      QqbotMessageSubscriberModule,
+      MODULE_METADATA.IMPORTS,
+    );
+    expect(qqbotSubscriberImports).toContain(AdminAuthGuardModule);
+    expect(qqbotSubscriberProviders).toEqual(
       expect.arrayContaining([
-        QqbotAccountController,
-        QqbotAccountMessagePushController,
-        QqbotCommandController,
-        QqbotDashboardController,
-        QqbotMessageController,
-        QqbotMessagePushController,
-        QqbotPermissionController,
-        QqbotRuleController,
-        QqbotSendController,
+        QqbotMessageSubscriberAdapter,
+        SystemMessageDeliveryRunnerService,
       ]),
     );
-    expect(getNames(QQBOT_CORE_PROVIDERS)).toEqual(
+    expect(qqbotSubscriberProviders).not.toContain(SystemMessageFanoutService);
+
+    const noticeProviders = getModuleMetadata<unknown>(
+      NoticeModule,
+      MODULE_METADATA.PROVIDERS,
+    );
+    expect(noticeProviders).toContain(StationNoticeMessageSubscriberAdapter);
+  });
+
+  it('keeps message source adaptation out of both concrete subscriber directories', () => {
+    const qqbotSource = readFileSync(
+      join(
+        process.cwd(),
+        'src/modules/qqbot/message-management-adapter/qqbot-message-subscriber.adapter.ts',
+      ),
+      'utf8',
+    );
+    const stationSource = readFileSync(
+      join(
+        process.cwd(),
+        'src/modules/admin/platform-config/notice/station-notice-message-subscriber.adapter.ts',
+      ),
+      'utf8',
+    );
+
+    expect(`${qqbotSource}\n${stationSource}`).not.toMatch(
+      /SystemMessageSourceRegistry|SystemMessageSourceAdapter|resolveDelivery|inspectSubscription|waiting_ddns/,
+    );
+    expect(qqbotSource).toMatch(/input\.message\.templates/);
+    expect(stationSource).toMatch(/input\.message\.templates/);
+  });
+
+  it('keeps QQBot core free of generic and subscriber-specific message entities/providers', () => {
+    expect(getNames(QQBOT_CORE_ENTITIES)).not.toEqual(
       expect.arrayContaining([
-        'QqbotAccountService',
-        'QqbotBusService',
-        'QqbotCommandEngineService',
-        'QqbotCommandParserService',
-        'QqbotCommandService',
-        'QqbotConfigService',
-        'QqbotDashboardService',
-        'QqbotDedupeService',
-        'QqbotEventService',
-        'QqbotMessageService',
-        'QqbotPermissionService',
-        'QqbotRateLimitService',
-        'QqbotReplyTemplateService',
-        'QqbotReverseWsService',
-        'QqbotRuleEngineService',
-        'QqbotRuleService',
-        'QqbotSendService',
+        'MessageEvent',
+        'MessageSubscription',
+        'MessageSubscriptionTemplate',
+        'MessageTemplate',
+        'QqbotMessageDelivery',
+        'QqbotMessagePublishBinding',
+        'QqbotMessagePublishTarget',
       ]),
     );
     expect(getNames(QQBOT_CORE_PROVIDERS)).not.toEqual(
       expect.arrayContaining([
-        'NapcatDeviceIdentityService',
-        'NapcatLoginStateStoreService',
-        'QqbotNapcatContainerService',
-        'QqbotNapcatLoginService',
-        'QqbotNapcatWatchdogService',
+        'MessageSubscriberRegistry',
+        'SystemMessageFanoutService',
+        'SystemMessageDeliveryCoordinatorService',
+        'SystemMessageDeliveryRunnerService',
       ]),
     );
-    expect(getNames(QQBOT_CORE_ENTITIES)).toEqual(
+    expect(getNames(QQBOT_CORE_EXPORTS)).not.toEqual(
       expect.arrayContaining([
-        'QqbotAccount',
-        'QqbotAccountAbility',
-        'QqbotAllowlist',
-        'QqbotBlocklist',
-        'QqbotCommand',
-        'QqbotCommandLog',
-        'QqbotConfig',
-        'QqbotConversation',
-        'QqbotDedupe',
-        'QqbotMessage',
-        'QqbotMessageSubscription',
-        'QqbotMessageTemplate',
-        'QqbotMessagePublishBinding',
-        'QqbotMessagePublishTarget',
-        'QqbotMessageEvent',
-        'QqbotMessageDelivery',
-        'QqbotRule',
-        'QqbotSendLog',
-      ]),
-    );
-    expect(getNames(QQBOT_CORE_ENTITIES)).not.toEqual(
-      expect.arrayContaining([
-        'NapcatAccountBinding',
-        'NapcatContainer',
-        'NapcatDeviceIdentity',
-        'NapcatLoginChallengeEntity',
-        'NapcatLoginSession',
-        'NapcatRuntimeCleanup',
-        'QqbotAccountNapcat',
-        'QqbotNapcatContainer',
+        'SystemMessageEventStagerService',
+        'SystemMessageDeliveryCoordinatorService',
       ]),
     );
   });
 
-  it('keeps every registered QQBot core entity mapped to the refactor-v3 schema', () => {
-    for (const entity of QQBOT_CORE_ENTITIES) {
+  it('maps core, generic-message, and subscriber-private entities to the SQL schema', () => {
+    const entities = [
+      ...QQBOT_CORE_ENTITIES,
+      ...MESSAGE_MANAGEMENT_ENTITIES,
+      ...QQBOT_MESSAGE_SUBSCRIBER_ENTITIES,
+      StationNoticeMessageBinding,
+    ] as EntityClass[];
+
+    for (const entity of entities) {
       const tableName = getEntityTableName(entity);
       const columns = getEntityColumnNames(entity);
       const nullableColumns = getEntityNullableColumnNames(entity);
-
       expect(tableName).toBeTruthy();
       expect(schema.hasTable(tableName || '')).toBe(true);
       schema.expectTableColumns(tableName || '', columns);
@@ -375,7 +280,6 @@ describe('QQBot core module contract', () => {
           (column) => !isOptionalSqlColumnForEntityInsert(column.definition),
         )
         .map((column) => `${tableName}.${column.name}`);
-
       expect(requiredSqlOnlyColumns).toEqual([]);
 
       for (const nullableColumn of nullableColumns) {

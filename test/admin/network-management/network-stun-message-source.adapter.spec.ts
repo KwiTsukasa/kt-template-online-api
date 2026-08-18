@@ -2,7 +2,7 @@ import type { Repository } from 'typeorm';
 import { NetworkDdnsRecord } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-ddns.entity';
 import { NetworkPortForward } from '../../../src/modules/admin/platform-config/network-management/infrastructure/persistence/network-management.entity';
 import { NetworkStunMessageSourceAdapter } from '../../../src/modules/admin/platform-config/network-management/infrastructure/integration/network-stun-message-source.adapter';
-import { SystemMessageSourceRegistry } from '../../../src/modules/qqbot/core/application/message-push/system-message-source.registry';
+import { SystemMessageSourceRegistry } from '../../../src/modules/message-management/application/system-message-source.registry';
 
 type Harness = {
   adapter: NetworkStunMessageSourceAdapter;
@@ -381,7 +381,7 @@ describe('NetworkStunMessageSourceAdapter', () => {
       }),
     ).resolves.toMatchObject({
       reasonCode: 'ddns_not_synced',
-      status: 'waiting_ddns',
+      status: 'deferred',
     });
 
     const superseded = createHarness();

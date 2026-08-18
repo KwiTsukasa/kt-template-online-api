@@ -1,6 +1,6 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository } from 'typeorm';
+import { Brackets, In, Repository, type EntityManager } from 'typeorm';
 import {
   SystemNoticePublishInput,
   SystemNoticePublisher,
@@ -8,6 +8,10 @@ import {
   ToolsService,
 } from '@/common';
 import { AdminNotice } from './admin-notice.entity';
+import {
+  type AdminNoticeChangeReason,
+  AdminNoticeEventStreamService,
+} from './admin-notice-event-stream.service';
 import type { AdminNoticeQueryDto } from './admin-notice.dto';
 
 const SYSTEM_NOTICE_DEFAULT_ROLE_CODE = 'super';
@@ -36,6 +40,8 @@ export class AdminNoticeService implements SystemNoticePublisher {
     @InjectRepository(AdminNotice)
     private readonly noticeRepository: Repository<AdminNotice>,
     private readonly toolsService: ToolsService,
+    @Optional()
+    private readonly eventStream?: AdminNoticeEventStreamService,
   ) {}
 
   /**
@@ -120,11 +126,13 @@ export class AdminNoticeService implements SystemNoticePublisher {
       );
 
       if (existingNotice) {
-        return this.aggregateSystemNotice(
+        const id = await this.aggregateSystemNotice(
           existingNotice.id,
           normalizedInput,
           now,
         );
+        this.publishCommitted('created');
+        return id;
       }
     }
 
@@ -138,6 +146,7 @@ export class AdminNoticeService implements SystemNoticePublisher {
     });
     try {
       const saved = await this.noticeRepository.save(notice);
+      this.publishCommitted('created');
       return saved.id;
     } catch (err) {
       if (!normalizedInput.dedupeKey || !this.isDuplicateKeyError(err)) {
@@ -148,11 +157,62 @@ export class AdminNoticeService implements SystemNoticePublisher {
         normalizedInput.dedupeKey,
       );
       if (!existingNotice) throw err;
-      return this.aggregateSystemNotice(
+      const id = await this.aggregateSystemNotice(
         existingNotice.id,
         normalizedInput,
         now,
       );
+      this.publishCommitted('created');
+      return id;
+    }
+  }
+
+  /**
+   * 在消息扇出事务内按稳定去重键恰好创建一次站内信，不把事件重放聚合成新的发生次数。
+   * @param manager - 与消息事件扇出共享事务的实体管理器。
+   * @param input - 带必填去重键的站内信订阅者投递快照。
+   * @returns 新建或并发重放命中的站内信标识。
+   * @throws 去重键为空、持久化失败且不能确认同键记录时抛出对应输入或数据库异常。
+   */
+  async publishMessageSubscriberNotice(
+    manager: EntityManager,
+    input: SystemNoticePublishInput & { dedupeKey: string },
+  ): Promise<string> {
+    const normalizedInput = this.normalizeSystemNoticeInput(input);
+    if (!normalizedInput.dedupeKey) {
+      throwVbenError('站内信消息去重键不能为空', HttpStatus.BAD_REQUEST);
+    }
+    const repository = manager.getRepository(AdminNotice);
+    const existing = await repository.findOne({
+      where: {
+        dedupeKey: normalizedInput.dedupeKey,
+        isDeleted: false,
+      },
+    });
+    if (existing) return existing.id;
+
+    const now = new Date();
+    const notice = repository.create({
+      ...normalizedInput,
+      firstSeenAt: now,
+      isTop: false,
+      lastSeenAt: now,
+      occurrenceCount: 1,
+      status: 1,
+    });
+    try {
+      const saved = await repository.save(notice);
+      return saved.id;
+    } catch (error) {
+      if (!this.isDuplicateKeyError(error)) throw error;
+      const duplicate = await repository.findOne({
+        where: {
+          dedupeKey: normalizedInput.dedupeKey,
+          isDeleted: false,
+        },
+      });
+      if (!duplicate) throw error;
+      return duplicate.id;
     }
   }
 
@@ -201,6 +261,7 @@ export class AdminNoticeService implements SystemNoticePublisher {
         isDeleted: true,
       },
     );
+    this.publishCommitted('deleted');
     return null;
   }
 
@@ -232,7 +293,54 @@ export class AdminNoticeService implements SystemNoticePublisher {
       }),
     );
 
+    let reason: AdminNoticeChangeReason = 'read';
+    if (normalizedStatus === 1) {
+      reason = 'reopened';
+    }
+    this.publishCommitted(reason);
+
     return null;
+  }
+
+  /**
+   * 校验一组唯一站内信标识，并用单条更新语句把其中仍未读的记录标记为已读。
+   * @param ids - 需要标记已读的 1–100 个唯一 Snowflake 站内信标识。
+   * @returns 实际从未读状态更新为已读状态的记录数量。
+   */
+  async markReadBatch(ids: string[]) {
+    const normalizedIds = ids.map((id) =>
+      this.toolsService.toTrimmedString(id),
+    );
+    const containsInvalidId = normalizedIds.some(
+      (id) => !/^[1-9]\d{0,19}$/.test(id),
+    );
+    const containsDuplicateId =
+      new Set(normalizedIds).size !== normalizedIds.length;
+    if (
+      normalizedIds.length === 0 ||
+      normalizedIds.length > 100 ||
+      containsInvalidId ||
+      containsDuplicateId
+    ) {
+      throwVbenError('批量已读站内信ID列表不合法', HttpStatus.BAD_REQUEST);
+    }
+
+    const result = await this.noticeRepository.update(
+      {
+        id: In(normalizedIds),
+        isDeleted: false,
+        status: 1,
+      },
+      {
+        status: 0,
+      },
+    );
+
+    const updated = result.affected ?? 0;
+    if (updated > 0) {
+      this.publishCommitted('read');
+    }
+    return { updated };
   }
 
   /**
@@ -264,7 +372,30 @@ export class AdminNoticeService implements SystemNoticePublisher {
       }),
     );
 
+    this.publishCommitted('updated');
+
     return null;
+  }
+
+  /**
+   * 仅统计 `is_deleted=0` 且 `status=1` 的通知记录，作为顶部 Badge 校准值。
+   * @returns 当前用户可见范围内的权威未读站内信数量。
+   */
+  async getUnreadCount(): Promise<number> {
+    return this.noticeRepository.count({
+      where: {
+        isDeleted: false,
+        status: 1,
+      },
+    });
+  }
+
+  /**
+   * 把已提交的站内信变化广播给在线管理端；测试或非 HTTP 上下文未提供事件流时安全跳过。
+   * @param reason - 已完成数据库提交的创建、已读、重开、更新或删除原因。
+   */
+  private publishCommitted(reason: AdminNoticeChangeReason): void {
+    this.eventStream?.publishCommitted(reason);
   }
 
   /**

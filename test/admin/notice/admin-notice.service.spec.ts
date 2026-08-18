@@ -9,13 +9,14 @@ function createRepositoryMock(overrides: Record<string, jest.Mock> = {}) {
   const repository = {
     createQueryBuilder: jest.fn(),
     create: jest.fn((entity) => entity),
+    count: jest.fn().mockResolvedValue(0),
     findOne: jest.fn().mockResolvedValue(null),
     merge: jest.fn((target, input) => ({ ...target, ...input })),
     save: jest.fn(async (entity) => ({
       id: entity.id || 'notice-1',
       ...entity,
     })),
-    update: jest.fn(),
+    update: jest.fn().mockResolvedValue({ affected: 0 }),
     ...overrides,
   };
 
@@ -227,5 +228,62 @@ describe('AdminNoticeService system event notices', () => {
       'notice.createTime',
       'DESC',
     );
+  });
+
+  it('marks selected unread notices as read with one repository update', async () => {
+    const ids = ['2041700000000300001', '2041700000000300002'];
+    const repository = createRepositoryMock({
+      update: jest.fn().mockResolvedValue({ affected: 2 }),
+    });
+    const eventStream = { publishCommitted: jest.fn() };
+    const service = new AdminNoticeService(
+      repository as any,
+      new ToolsService(),
+      eventStream as never,
+    );
+
+    await expect(service.markReadBatch(ids)).resolves.toEqual({ updated: 2 });
+
+    expect(repository.update).toHaveBeenCalledTimes(1);
+    const [criteria, patch] = repository.update.mock.calls[0];
+    expect(criteria).toEqual(
+      expect.objectContaining({
+        isDeleted: false,
+        status: 1,
+      }),
+    );
+    expect(criteria.id._value).toEqual(ids);
+    expect(patch).toEqual({ status: 0 });
+    expect(eventStream.publishCommitted).toHaveBeenCalledWith('read');
+  });
+
+  it('counts only unread and non-deleted notices for the header badge', async () => {
+    const repository = createRepositoryMock({
+      count: jest.fn().mockResolvedValue(7),
+    });
+    const service = new AdminNoticeService(
+      repository as any,
+      new ToolsService(),
+    );
+
+    await expect(service.getUnreadCount()).resolves.toBe(7);
+    expect(repository.count).toHaveBeenCalledWith({
+      where: { isDeleted: false, status: 1 },
+    });
+  });
+
+  it('rejects duplicate batch-read ids before touching the repository', async () => {
+    const repository = createRepositoryMock();
+    const service = new AdminNoticeService(
+      repository as any,
+      new ToolsService(),
+    );
+
+    await expect(
+      service.markReadBatch(['2041700000000300001', '2041700000000300001']),
+    ).rejects.toMatchObject({
+      response: { msg: '批量已读站内信ID列表不合法' },
+    });
+    expect(repository.update).not.toHaveBeenCalled();
   });
 });

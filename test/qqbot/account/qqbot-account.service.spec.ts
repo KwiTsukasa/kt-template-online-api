@@ -1,14 +1,14 @@
 import { ToolsService } from '@/common';
 import type { QqbotAccountNapcatRuntimePort } from '@/modules/qqbot/core/application/account/qqbot-account-napcat-runtime.port';
+import type { QqbotAccountExtensionRegistry } from '@/modules/qqbot/core/application/account/qqbot-account-extension.registry';
 import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
 import { QqbotAccountAbility } from '@/modules/qqbot/core/infrastructure/persistence/account/qqbot-account-ability.entity';
 import { QqbotAccount } from '@/modules/qqbot/core/infrastructure/persistence/account/qqbot-account.entity';
-import { QqbotMessageDelivery } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-delivery.entity';
-import { QqbotMessagePublishBinding } from '@/modules/qqbot/core/infrastructure/persistence/message-push/qqbot-message-publish-binding.entity';
 import { QqbotNapcatAccountRuntimeService } from '@/modules/qqbot/napcat/application/account-runtime/qqbot-napcat-account-runtime.service';
 
 const createAccountService = (input: {
   accountAbilityRepository?: any;
+  accountExtensionRegistry?: QqbotAccountExtensionRegistry;
   accountRepository: any;
   configService?: any;
   napcatRuntime?: QqbotAccountNapcatRuntimePort;
@@ -22,6 +22,7 @@ const createAccountService = (input: {
     input.napcatRuntime,
     input.systemNoticePublisher,
     input.configService,
+    input.accountExtensionRegistry,
   );
 
 const createNapcatRuntime = (input: {
@@ -62,30 +63,17 @@ const createAccountServiceWithNapcatRuntime = (input: {
 };
 
 describe('QqbotAccountService', () => {
-  it('fences administrative account cancellation to unfinished delivery statuses', async () => {
-    const deliveryUpdate = jest.fn().mockResolvedValue({ affected: 2 });
-    const manager = {
-      getRepository: (entity: unknown) => {
-        if (entity === QqbotMessagePublishBinding) {
-          return { find: jest.fn().mockResolvedValue([{ id: 'binding-1' }]) };
-        }
-        if (entity === QqbotMessageDelivery) return { update: deliveryUpdate };
-        throw new Error('unexpected repository');
-      },
-    };
-    const service = createAccountService({ accountRepository: {} });
+  it('delegates account cleanup to registered extensions without knowing message tables', async () => {
+    const cancelAccountResources = jest.fn().mockResolvedValue(undefined);
+    const manager = {};
+    const service = createAccountService({
+      accountExtensionRegistry: { cancelAccountResources } as never,
+      accountRepository: {},
+    });
 
     await (service as any).cancelAccountDeliveries(manager, 'account-1');
 
-    expect(deliveryUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        bindingId: expect.anything(),
-        status: expect.anything(),
-      }),
-      expect.objectContaining({ status: 'cancelled' }),
-    );
-    const [where] = deliveryUpdate.mock.calls[0];
-    expect(where.status.value).toEqual(['waiting_ddns', 'pending', 'retry']);
+    expect(cancelAccountResources).toHaveBeenCalledWith(manager, 'account-1');
   });
 
   describe('administrative delivery cancellation transaction', () => {
@@ -187,6 +175,7 @@ describe('QqbotAccountService', () => {
             ),
           };
           const manager = {
+            deliveryDraft: draftDeliveries,
             getRepository: (entity: unknown) => {
               if (entity === QqbotAccount) return accountStore;
               if (entity === QqbotAccountAbility) {
@@ -204,46 +193,6 @@ describe('QqbotAccountService', () => {
                       )
                       .forEach((row) => Object.assign(row, patch));
                     return { affected: 1 };
-                  },
-                };
-              }
-              if (entity === QqbotMessagePublishBinding) {
-                return {
-                  find: async ({
-                    where,
-                  }: {
-                    where: Record<string, unknown>;
-                  }) => {
-                    operations.push('bindings:read');
-                    return bindings.filter((row) =>
-                      Object.entries(where).every(
-                        ([key, value]) => row[key] === value,
-                      ),
-                    );
-                  },
-                };
-              }
-              if (entity === QqbotMessageDelivery) {
-                return {
-                  update: async (
-                    where: Record<string, any>,
-                    patch: Record<string, unknown>,
-                  ) => {
-                    operations.push('delivery:update');
-                    const bindingIds = where.bindingId._value as string[];
-                    const statuses = where.status._value as string[];
-                    draftDeliveries.forEach((row) => {
-                      if (
-                        bindingIds.includes(row.bindingId) &&
-                        statuses.includes(row.status)
-                      ) {
-                        Object.assign(row, patch);
-                      }
-                    });
-                    if (failCancellation) {
-                      throw new Error('account cancellation failed');
-                    }
-                    return { affected: 4 };
                   },
                 };
               }
@@ -276,14 +225,42 @@ describe('QqbotAccountService', () => {
         operations.push('external:remove');
         return { deletedContainers: 1 };
       });
+      const cancelAccountResources = jest.fn(
+        async (
+          manager: { deliveryDraft: typeof deliveries },
+          accountId: string,
+        ) => {
+          operations.push('extension:cancel');
+          const bindingIds = bindings
+            .filter((binding) => binding.accountId === accountId)
+            .map((binding) => binding.id);
+          manager.deliveryDraft.forEach((delivery) => {
+            if (
+              bindingIds.includes(delivery.bindingId) &&
+              ['waiting_ddns', 'pending', 'retry'].includes(delivery.status)
+            ) {
+              Object.assign(delivery, {
+                nextAttemptAt: null,
+                processingLeaseUntil: null,
+                status: 'cancelled',
+              });
+            }
+          });
+          if (failCancellation) {
+            throw new Error('account cancellation failed');
+          }
+        },
+      );
       const service = createAccountService({
         accountAbilityRepository: { update: jest.fn() },
+        accountExtensionRegistry: { cancelAccountResources } as never,
         accountRepository,
         napcatRuntime: { removeAccountContainers } as never,
       });
       return {
         abilities,
         accounts,
+        cancelAccountResources,
         deliveries,
         failCancellation: () => {
           failCancellation = true;
@@ -342,10 +319,11 @@ describe('QqbotAccountService', () => {
 
         expectAccountDeliveriesCancelled(before, harness.deliveries);
         expect(harness.operations.indexOf('account:lock')).toBeLessThan(
-          harness.operations.indexOf('bindings:read'),
+          harness.operations.indexOf('extension:cancel'),
         );
-        expect(harness.operations.indexOf('bindings:read')).toBeLessThan(
-          harness.operations.indexOf('delivery:update'),
+        expect(harness.cancelAccountResources).toHaveBeenCalledWith(
+          expect.any(Object),
+          'account-1',
         );
         expect(harness.operations.at(-1)).toBe('transaction:commit');
       },
@@ -360,13 +338,13 @@ describe('QqbotAccountService', () => {
         selfId: '1914728559',
       });
       expect(sameSelfId.deliveries).toEqual(sameBefore);
-      expect(sameSelfId.operations).not.toContain('delivery:update');
+      expect(sameSelfId.operations).not.toContain('extension:cancel');
 
       const metadata = cancellationHarness();
       const metadataBefore = structuredClone(metadata.deliveries);
       await metadata.service.update({ id: 'account-1', remark: 'metadata' });
       expect(metadata.deliveries).toEqual(metadataBefore);
-      expect(metadata.operations).not.toContain('delivery:update');
+      expect(metadata.operations).not.toContain('extension:cancel');
     });
 
     it('runtime online/offline changes stay outside administrative cancellation', async () => {

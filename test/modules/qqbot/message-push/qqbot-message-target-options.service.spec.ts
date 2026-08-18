@@ -1,4 +1,4 @@
-import { QqbotMessageTargetOptionsService } from '../../../../src/modules/qqbot/core/application/message-push/qqbot-message-target-options.service';
+import { QqbotMessageTargetOptionsService } from '../../../../src/modules/qqbot/message-management-adapter/qqbot-message-target-options.service';
 
 describe('QqbotMessageTargetOptionsService', () => {
   it('preserves large IDs, normalizes searchable labels, and keeps group/private IDs independent', async () => {

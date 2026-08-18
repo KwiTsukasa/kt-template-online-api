@@ -410,6 +410,11 @@ WHERE NOT EXISTS (
     AND is_deleted = 0
 );
 
+UPDATE admin_menu
+SET meta = '{"hideInMenu":true,"icon":"mdi:bell-outline","title":"system.notice.title"}'
+WHERE name = 'SystemNotice'
+  AND is_deleted = 0;
+
 INSERT INTO admin_menu (
   id,
   pid,

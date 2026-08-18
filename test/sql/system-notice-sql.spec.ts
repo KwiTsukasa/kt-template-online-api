@@ -50,11 +50,23 @@ describe('system notice SQL', () => {
     const noticeSql = readSql('sql/system-notice-menu.sql');
     const initSql = readSql('sql/vben-admin-init.sql');
     const fixMenuSql = readSql('sql/fix-admin-menu-meta.sql');
+    const messageManagementSql = readSql('sql/qqbot-message-push-init.sql');
+    const messageManagementVerifySql = readSql(
+      'sql/qqbot-message-push-verify.sql',
+    );
 
-    for (const sql of [noticeSql, initSql, fixMenuSql]) {
+    for (const sql of [
+      noticeSql,
+      initSql,
+      fixMenuSql,
+      messageManagementSql,
+    ]) {
       expect(sql).toContain('"hideInMenu":true');
       expect(sql).toContain("'SystemNotice'");
     }
+    expect(messageManagementVerifySql).toContain(
+      'system_notice_menu_visibility_mismatch',
+    );
   });
 
   it('adds active dedupe uniqueness and runtime indexes for existing notice tables', () => {

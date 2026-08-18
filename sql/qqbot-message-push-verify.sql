@@ -123,6 +123,14 @@ WHERE id IN (2041700000000200601, 2041700000000200602)
   AND enabled = 1
   AND is_deleted = 0;
 
+SELECT 'system_notice_menu_visibility_mismatch' AS check_name, COUNT(*) AS invalid_rows
+FROM (SELECT 'SystemNotice' AS name) expected
+LEFT JOIN admin_menu actual ON actual.name = expected.name
+WHERE actual.id IS NULL
+   OR actual.status <> 1
+   OR actual.is_deleted <> 0
+   OR JSON_UNQUOTE(JSON_EXTRACT(actual.meta, '$.hideInMenu')) <> 'true';
+
 WITH expected_menu AS (
   SELECT 2041700000000100420 AS id, 0 AS pid, 'MessageManagement' AS name, NULL AS auth_code
   UNION ALL SELECT 2041700000000100414, 2041700000000100420, 'MessageManagementTemplate', 'MessageManagement:Template:List'

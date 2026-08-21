@@ -1,6 +1,7 @@
 import {
   parseTmdbSearchHtml,
   searchTmdbMediaCandidates,
+  verifyTmdbMediaCandidate,
 } from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-provider-search';
 
 describe('TMDB provider search', () => {
@@ -28,12 +29,14 @@ describe('TMDB provider search', () => {
   });
 
   it('uses only the fixed TMDB origin and returns a bounded candidate list', async () => {
-    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValueOnce(
-      new Response(html, {
-        headers: { 'content-type': 'text/html; charset=utf-8' },
-        status: 200,
-      }),
-    );
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        tmdbResponse(
+          html,
+          'https://www.themoviedb.org/search/tv?language=zh-CN&query=test',
+        ),
+      );
 
     await expect(
       searchTmdbMediaCandidates({
@@ -47,4 +50,48 @@ describe('TMDB provider search', () => {
     );
     fetchMock.mockRestore();
   });
+
+  it('reopens a failed pooled connection and verifies an explicit official detail page', async () => {
+    const detailHtml = `
+      <html>
+        <head><meta property="og:title" content="随风而逝 (1999)" /></head>
+        <body><span class="release">1999年9月6日</span></body>
+      </html>
+    `;
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(
+        tmdbResponse(detailHtml, 'https://www.themoviedb.org/movie/12345'),
+      );
+
+    await expect(
+      verifyTmdbMediaCandidate({
+        mediaType: 'movie',
+        providerId: '12345',
+        releaseYear: 1999,
+      }),
+    ).resolves.toMatchObject({
+      providerId: '12345',
+      releaseYear: 1999,
+      title: '随风而逝 (1999)',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockRestore();
+  });
 });
+
+/**
+ * 创建带最终 TMDB URL 的 HTML Response，模拟 follow 重定向后的浏览器响应。
+ * @param body - 响应 HTML。
+ * @param url - TMDB 最终地址。
+ * @returns 可供 provider 集成测试消费的响应。
+ */
+function tmdbResponse(body: string, url: string) {
+  const response = new Response(body, {
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+    status: 200,
+  });
+  Object.defineProperty(response, 'url', { value: url });
+  return response;
+}

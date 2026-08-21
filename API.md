@@ -200,8 +200,8 @@ Agent 状态响应额外包含可选的 `currentPublicIpv6/currentIpv6ObservedAt
 | MQTT          | `MQTT_URL`、`MQTT_USERNAME`、`MQTT_PASSWORD`、`MQTT_CLIENT_ID`                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Env Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_JENKINS_*`、`ENV_DASHBOARD_K8S_*`、`ENV_DASHBOARD_TENCENT_*`、`ENV_DASHBOARD_CADDY_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                                                                                                  |
 | Network       | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_TCP_NATMAP_RELEASE_MODE`、`NETWORK_TCP_NATMAP_CANARY_PORTS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_ENABLED`、`NETWORK_DDNS_DNSPOD_SECRET_ID`、`NETWORK_DDNS_DNSPOD_SECRET_KEY`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
-| Media         | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`                                                                                                                                                                                                                                                                                                                                                                           |
-| LLM           | `LLM_CONFIG_SECRET_KEY`、`LLM_CODEX_GATEWAY_BASE_URL`、`LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`LLM_CODEX_GATEWAY_TIMEOUT_MS`、`LLM_CODEX_CHAT_CWD`                                                                                                                                                                                                                                                                                                                                                                                           |
+| Media         | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`                                                                                                                                                                                                                                                                                                                                                                          |
+| LLM           | `LLM_CONFIG_SECRET_KEY`、`LLM_CODEX_GATEWAY_BASE_URL`、`LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`LLM_CODEX_GATEWAY_TIMEOUT_MS`、`LLM_CODEX_CHAT_CWD`                                                                                                                                                                                                                                                                                                                                                                                         |
 | BangDream     | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT`                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FF14 Market   | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_DEFAULT_WORLD`                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FFLogs        | `FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET`                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -214,24 +214,24 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 
 ## 大模型配置与流式对话
 
-| 方法     | 路径                                               | 说明                                      |
-| -------- | -------------------------------------------------- | ----------------------------------------- |
-| `GET`    | `/llm/providers`                                   | 查询六类供应商、默认端点和协议            |
-| `GET`    | `/llm/configs`                                     | 分页查询脱敏连接卡片                      |
-| `GET`    | `/llm/configs/summary`                             | 汇总连接状态                              |
-| `GET`    | `/llm/configs/:id`                                 | 查询不含凭据和静态模型数组的脱敏连接详情  |
-| `GET`    | `/llm/configs/:id/models`                          | 按供应商协议实时发现当前凭据可用模型      |
-| `POST`   | `/llm/configs`                                     | 加密创建连接                              |
-| `PUT`    | `/llm/configs/:id`                                 | 更新连接；空 API Key 保留旧密钥           |
-| `DELETE` | `/llm/configs/:id`                                 | 软删除已停用连接                          |
-| `POST`   | `/llm/configs/:id/enabled`                         | 启用或停用连接                            |
-| `POST`   | `/llm/configs/:id/default`                         | 设为默认连接                              |
-| `POST`   | `/llm/configs/:id/test`                            | 通过真实流式首包验证连接                  |
-| `GET`    | `/llm/conversations`                               | 按连接查询持久化对话                      |
-| `POST`   | `/llm/conversations`                               | 创建对话                                  |
-| `GET`    | `/llm/conversations/:id`                           | 查询对话和完整可见消息                    |
-| `DELETE` | `/llm/conversations/:id`                           | 软删除没有活动回合的对话                  |
-| `POST`   | `/llm/conversations/:id/messages/stream`           | POST SSE 发送消息并流式返回统一事件       |
+| 方法     | 路径                                     | 说明                                     |
+| -------- | ---------------------------------------- | ---------------------------------------- |
+| `GET`    | `/llm/providers`                         | 查询六类供应商、默认端点和协议           |
+| `GET`    | `/llm/configs`                           | 分页查询脱敏连接卡片                     |
+| `GET`    | `/llm/configs/summary`                   | 汇总连接状态                             |
+| `GET`    | `/llm/configs/:id`                       | 查询不含凭据和静态模型数组的脱敏连接详情 |
+| `GET`    | `/llm/configs/:id/models`                | 按供应商协议实时发现当前凭据可用模型     |
+| `POST`   | `/llm/configs`                           | 加密创建连接                             |
+| `PUT`    | `/llm/configs/:id`                       | 更新连接；空 API Key 保留旧密钥          |
+| `DELETE` | `/llm/configs/:id`                       | 软删除已停用连接                         |
+| `POST`   | `/llm/configs/:id/enabled`               | 启用或停用连接                           |
+| `POST`   | `/llm/configs/:id/default`               | 设为默认连接                             |
+| `POST`   | `/llm/configs/:id/test`                  | 通过真实流式首包验证连接                 |
+| `GET`    | `/llm/conversations`                     | 按连接查询持久化对话                     |
+| `POST`   | `/llm/conversations`                     | 创建对话                                 |
+| `GET`    | `/llm/conversations/:id`                 | 查询对话和完整可见消息                   |
+| `DELETE` | `/llm/conversations/:id`                 | 软删除没有活动回合的对话                 |
+| `POST`   | `/llm/conversations/:id/messages/stream` | POST SSE 发送消息并流式返回统一事件      |
 
 流事件固定为 `start`、`reasoning-delta`、`text-delta`、`done` 或 `error`；每个事件
 携带递增 `sequence`，助手终态保存上游实际模型。浏览器中止请求会传播到供应商或 Codex
@@ -260,6 +260,8 @@ Task 只持久化唯一 `llmConversationId`；模型选择、消息、流式终�
 Search 的 `llm-codex` 权限档。
 
 媒体场景的结构化结果包含完整 `answer` 与短 `summary`：`answer` 作为标准 Assistant 消息流式展示，`summary/status/planSha256` 只用于 Task 投影。Gateway 每轮从 API 当前 Task 取得 `availableActions`，并只允许阶段门声明的工具；4xx/409/超时必须向模型返回非空、脱敏的稳定失败码。策略 v3 新增受 revision、胶囊、scene/provider-thread CAS 与既有业务服务共同约束的身份确认、磁链来源、分页清单、自动映射、探针、下载、治理、元数据和验收工具。任一写工具成功后必须结束本轮，由下一轮读取新 revision；浏览器、模型和 Gateway 都不能直接写数据库、qBittorrent 或正式媒体目录。
+
+`provider.metadata.read` 的 TMDB 搜索最多使用两条独立、禁用连接复用的有界请求；不可用时返回 `lookupAvailable=false`。模型通过 live Web Search 提供显式 TMDB ID 后，`media.identity.confirm` 仍会独立请求固定官方详情页并核对媒体类型与发行年份，不能把搜索结果或自由文本直接当作可写身份。
 
 ## Admin 与基础后台
 

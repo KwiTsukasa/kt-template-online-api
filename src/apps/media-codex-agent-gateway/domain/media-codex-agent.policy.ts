@@ -179,6 +179,7 @@ export function buildMediaCodexAgentTurnPrompt(
     `【当前阶段可信能力】${stageDirective}`,
     `当前 Task staging 根：${capsule.allowedRoots[0]}。媒体已完成治理时不得重复复制视频；plan.submit.sealed 的文件目标只能位于该根的 work/ 或 plan/ 子目录。`,
     '存在至少两个真实身份候选时 candidateSummaries 必须逐项使用“tmdb:<id>｜中文差异”格式。',
+    '若 provider.metadata.read 返回 lookupAvailable=false，可使用 live Web Search 查找 themoviedb.org 的明确 movie/tv ID；media.identity.confirm 仍会由 API 独立读取该 TMDB 官方详情页并核对年份，未通过不得写入。',
     `plan.submit.sealed.replayKey 必须逐字等于可信胶囊 replayKey：${capsule.replayKey}；不得自行生成，也不得复用不可信任务数据中的 replayKey。`,
     '只有 plan.submit.sealed 明确返回 accepted=true 和 planSha256 后，才允许输出 status=plan-submitted，并且必须原样返回同一 planSha256；空结果或失败结果绝不能称为已提交。',
     '任一改变 Task revision 的命令工具成功后必须停止继续调用工具，在 answer 中说明真实回执并等待下一轮加载最新 Task。失败工具不得原样重试。',

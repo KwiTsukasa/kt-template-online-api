@@ -28,23 +28,7 @@ export async function searchTmdbMediaCandidates(input: {
   const url = new URL(`https://www.themoviedb.org/search/${mediaType}`);
   url.searchParams.set('language', 'zh-CN');
   url.searchParams.set('query', input.title.trim());
-  const response = await fetch(url, {
-    headers: {
-      accept: 'text/html,application/xhtml+xml',
-      'user-agent': 'KT-Media-Governance/1.0',
-    },
-    redirect: 'error',
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (
-    !response.ok ||
-    !String(response.headers.get('content-type') ?? '')
-      .toLowerCase()
-      .includes('text/html')
-  ) {
-    throw new Error('tmdb-provider-search-unavailable');
-  }
-  const html = await readBoundedText(response);
+  const html = await fetchTmdbHtml(url, `/search/${mediaType}`);
   const candidates = parseTmdbSearchHtml(html, mediaType);
   return candidates
     .sort((left, right) => {
@@ -55,6 +39,91 @@ export async function searchTmdbMediaCandidates(input: {
       return rightMatches - leftMatches;
     })
     .slice(0, MAX_CANDIDATES);
+}
+
+/**
+ * 按显式 TMDB ID 读取官方详情页并核对媒体类型与年份，作为搜索页不可用时的独立身份验证路径。
+ * @param input - 媒体类型、TMDB ID 与任务声明年份。
+ * @returns 通过官方页面验证的唯一 TMDB 候选。
+ * @throws 页面不可用、路径漂移、标题缺失或年份不一致时拒绝候选。
+ */
+export async function verifyTmdbMediaCandidate(input: {
+  mediaType: MediaGovernanceMediaType;
+  providerId: string;
+  releaseYear: null | number;
+}): Promise<MediaGovernanceTmdbCandidate> {
+  let mediaType: 'movie' | 'tv' = 'movie';
+  if (input.mediaType === 'tv') mediaType = 'tv';
+  if (!/^[1-9]\d*$/u.test(input.providerId)) {
+    throw new Error('tmdb-provider-id-invalid');
+  }
+  const pathname = `/${mediaType}/${input.providerId}`;
+  const url = new URL(`https://www.themoviedb.org${pathname}`);
+  url.searchParams.set('language', 'zh-CN');
+  const html = await fetchTmdbHtml(url, pathname);
+  const openGraphTitle = html.match(
+    /<meta\b[^>]*\bproperty="og:title"[^>]*\bcontent="([^"]+)"/iu,
+  )?.[1];
+  const documentTitle = html.match(/<title>([^<]+)<\/title>/iu)?.[1];
+  let title = decodeHtmlAttribute(openGraphTitle ?? '').trim();
+  if (!title) title = decodeHtmlAttribute(documentTitle ?? '').trim();
+  title = title.replace(/\s*[—|-]\s*The Movie Database.*$/iu, '').trim();
+  const releaseText = decodeHtmlAttribute(
+    html.match(/class="[^"]*\brelease\b[^"]*"[^>]*>([^<]*)</iu)?.[1] ?? '',
+  );
+  const yearMatch = `${title} ${releaseText}`.match(
+    /(?:18|19|20|21)\d{2}/u,
+  )?.[0];
+  let releaseYear: null | number = null;
+  if (yearMatch) releaseYear = Number(yearMatch);
+  const yearMatches =
+    input.releaseYear === null || releaseYear === input.releaseYear;
+  if (!title || !yearMatches) {
+    throw new Error('tmdb-provider-candidate-mismatch');
+  }
+  return {
+    candidateId: `tmdb:${input.providerId}`,
+    posterUrl: null,
+    provider: 'tmdb',
+    providerId: input.providerId,
+    releaseYear,
+    title,
+  };
+}
+
+/**
+ * 以禁用连接复用的两次有界请求读取 TMDB HTML，并限制重定向仍停留在预期官方路径。
+ * @param url - TMDB 搜索或详情页 URL。
+ * @param expectedPathPrefix - 跟随重定向后仍必须命中的官方路径前缀。
+ * @returns 不超过 512 KiB 的 HTML 正文。
+ * @throws 两次请求均失败、响应类型错误或最终地址漂移时抛出稳定不可用错误。
+ */
+async function fetchTmdbHtml(url: URL, expectedPathPrefix: string) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          accept: 'text/html,application/xhtml+xml',
+          connection: 'close',
+          'user-agent': 'KT-Media-Governance/1.0',
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(10_000),
+      });
+      const finalUrl = new URL(response.url);
+      const officialHost = finalUrl.hostname === 'www.themoviedb.org';
+      const expectedPath = finalUrl.pathname.startsWith(expectedPathPrefix);
+      const htmlResponse = String(response.headers.get('content-type') ?? '')
+        .toLowerCase()
+        .includes('text/html');
+      if (response.ok && officialHost && expectedPath && htmlResponse) {
+        return await readBoundedText(response);
+      }
+    } catch {
+      if (attempt === 2) break;
+    }
+  }
+  throw new Error('tmdb-provider-search-unavailable');
 }
 
 /**

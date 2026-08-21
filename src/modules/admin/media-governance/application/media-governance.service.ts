@@ -83,6 +83,7 @@ import {
 import {
   searchTmdbMediaCandidates,
   type MediaGovernanceTmdbCandidate,
+  verifyTmdbMediaCandidate,
 } from '../infrastructure/integration/media-governance-provider-search';
 
 type MediaGovernanceProviderRef = {
@@ -3502,20 +3503,21 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         return this.agentActionReceipt(task, input.tool);
       case 'provider.metadata.read':
         this.assertAgentReadArguments(input.arguments);
+        let candidates: MediaGovernanceTmdbCandidate[] = [];
+        let lookupAvailable = true;
         try {
-          return {
-            candidates: await this.searchAgentIdentityCandidates(task),
-            declaredProvider: task.providerRef,
-            identityPreview: task.identityPreview,
-            networkLookupPerformed: true,
-            verifiedIdentity: task.metadataIdentity,
-          };
+          candidates = await this.searchAgentIdentityCandidates(task);
         } catch {
-          throwVbenError(
-            'TMDB 资料源查询暂不可用',
-            HttpStatus.SERVICE_UNAVAILABLE,
-          );
+          lookupAvailable = false;
         }
+        return {
+          candidates,
+          declaredProvider: task.providerRef,
+          identityPreview: task.identityPreview,
+          lookupAvailable,
+          networkLookupPerformed: true,
+          verifiedIdentity: task.metadataIdentity,
+        };
       case 'subtitle.contract.read':
         this.assertAgentReadArguments(input.arguments);
         return task.units.map((unit) => ({
@@ -3777,15 +3779,24 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     task: MediaGovernanceTask,
     identity: NonNullable<MediaGovernanceAgentSealedPlan['identity']>,
   ) {
-    let candidates: MediaGovernanceTmdbCandidate[];
+    let candidates: MediaGovernanceTmdbCandidate[] = [];
     try {
       candidates = await this.searchAgentIdentityCandidates(task);
-    } catch {
-      throwVbenError('TMDB 资料源查询暂不可用', HttpStatus.SERVICE_UNAVAILABLE);
-    }
-    const candidate = candidates.find(
+    } catch {}
+    let candidate = candidates.find(
       (entry) => entry.providerId === identity.providerId,
     );
+    if (!candidate) {
+      try {
+        candidate = await verifyTmdbMediaCandidate({
+          mediaType: task.mediaType,
+          providerId: identity.providerId,
+          releaseYear: identity.releaseYear,
+        });
+      } catch {
+        throwVbenError('TMDB 身份候选无法从官方页面核验', HttpStatus.CONFLICT);
+      }
+    }
     if (!candidate || candidate.releaseYear !== identity.releaseYear) {
       throwVbenError('Agent 提交的 TMDB 候选无法复核', HttpStatus.CONFLICT);
     }

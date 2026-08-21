@@ -306,7 +306,8 @@ blocked 下载不会误报。closed Task 仍有 Unit 缺 `localAcceptedAt` 或 `
 正式独立验收仍要求回调中的实际 `stagingResiduals=0`。
 
 `probe-runtime` 会先完成 3 分钟初始观察；来源即使产生少量数据，按观察窗平均吞吐估算
-无法在 24 小时内完成所选载荷时仍返回 `degraded/insufficient_throughput`，下载入口保持关闭。
+无法在 24 小时内完成所选载荷时仍返回 `degraded/insufficient_throughput`；该唯一降级原因
+保留为速度警告并允许 `downloads/start` 继续，其他降级、证据不足和不可用原因仍失败关闭。
 磁链 `source.inspect` 与该运行时健康探针相互独立：清单获取每 5 秒产生一次
 `peer-progress`，120 秒仍无元数据即返回 `magnet_metadata_unavailable`，清除 active Run
 并把任务保持在可换源、可改身份、已有清单时可重编映射、无成果时可删除的 intake 阶段。
@@ -388,7 +389,8 @@ Task 的 Agent 绑定只保存 `llm_conversation_id`，消息和 Codex thread �
 按 Run、Task 与密封输入摘要读取执行器的精确 systemd runner 状态；runner 已退出或失联时，
 状态响应必须同时提供匹配的 Run manifest SHA、精确成功/失败终态和下一连续序号，API 才在
 同一事务应用该终态。缺少密封证据、身份漂移或序号跳跃时保持活动 Run 等待下轮核对，绝不
-由 API 伪造失败事件。
+由 API 伪造失败事件。状态响应采用 8 MiB 有界读取，可恢复包含 732 项 `payloadFiles` 的
+大批量终态，同时继续拒绝超限或未密封响应。
 高频执行器回调先校验 Run、manifest 与连续序号，再原子追加 Redis 热层并立即发布包含
 `runId`、`runSequence` 与紧凑 Task patch 的 `task-changed`。普通 tick 不等待 MySQL；
 MySQL 最多每 10 秒、出现语义变化或进入终态时保存权威快照，终态会等待本实例已排队

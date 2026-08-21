@@ -515,6 +515,62 @@ describe('MediaGovernanceService production execution adapter', () => {
     expect(source.sourceHealth).toBe('viable');
   });
 
+  it('allows an explicitly degraded source when real data only misses the throughput target', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '低速可用来源测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: 1,
+      magnetUri:
+        'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
+      sourceRole: 'primary_media',
+    });
+    source.manifest = [
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'Movie.mkv',
+        sizeBytes: 8,
+      },
+    ];
+    source.manifestSha256 = 'a'.repeat(64);
+    source.manifestState = 'inspected';
+    source.selectedBytes = 8;
+    source.selectedFileCount = 1;
+    source.selectedFileIndices = [0];
+    source.selectedFileMappings = [
+      {
+        episodeNumber: null,
+        fileRole: 'video',
+        index: 0,
+        language: null,
+        unitId: task.units[0]!.id,
+      },
+    ];
+    source.sourceHealth = 'degraded';
+    source.sourceHealthLabel = '来源降级可用';
+    source.sourceHealthReasonLabel =
+      '来源有数据，但预计无法在 24 小时内完成所选载荷';
+
+    await service.startDownload(task.id, { expectedRevision: 2 });
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch.mock.calls[0]![0]).toMatchObject({
+      action: 'source.download',
+      taskId: task.id,
+      taskRevision: 3,
+    });
+    expect(task).toMatchObject({
+      revision: 3,
+      runState: 'queued',
+      stage: 'download',
+    });
+  });
+
   it('publishes every hot progress callback before the queued MySQL snapshot', async () => {
     let hotSequence: number | undefined;
     const progressHotStore: MediaGovernanceProgressHotStore = {

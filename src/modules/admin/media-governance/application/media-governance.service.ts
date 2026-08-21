@@ -1013,10 +1013,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         task.runState = 'blocked';
         task.gateReason = source.sourceHealthReasonLabel;
         task.nextCommandLabel = '更换来源后重新探针';
-        if (source.sourceHealth === 'viable') {
+        if (this.isSourceDownloadable(source)) {
           task.runState = 'draft';
           task.gateReason = null;
           task.nextCommandLabel = '检查其余来源或开始下载';
+          if (source.sourceHealth === 'degraded') {
+            task.nextCommandLabel = '来源速度较慢，可继续开始下载';
+          }
         }
       } else if (
         input.action === 'source.download' ||
@@ -2320,6 +2323,20 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
+   * 把已取得真实数据但预计超过二十四小时的来源视为可下载降级态，其他探针失败仍保持阻断。
+   * @param source - 已完成运行时探针的来源。
+   * @returns 来源已正常可用，或仅因吞吐预估不足而降级时返回 `true`。
+   */
+  private isSourceDownloadable(source: MediaGovernanceSource): boolean {
+    if (source.sourceHealth === 'viable') return true;
+    if (source.sourceHealth !== 'degraded') return false;
+    return (
+      source.sourceHealthReasonLabel ===
+      SOURCE_HEALTH_REASON_LABELS.insufficient_throughput
+    );
+  }
+
+  /**
    * 根据来源与文件映射的完整性校验结果启动或续接隔离下载。
    * @param taskId - 用于精确定位任务的标识。
    * @param input - 用于下载任务的结构化输入，包含 `expectedRevision` 字段。
@@ -2340,7 +2357,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (
       !primary ||
       primary.descriptorTombstonedAt !== null ||
-      primary.sourceHealth !== 'viable'
+      !this.isSourceDownloadable(primary)
     ) {
       throwVbenError('主媒体来源尚未通过运行时探针', HttpStatus.CONFLICT);
     }
@@ -2349,7 +2366,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         (source) =>
           source.descriptorTombstonedAt !== null ||
           source.manifestState !== 'inspected' ||
-          source.sourceHealth !== 'viable',
+          !this.isSourceDownloadable(source),
       )
     ) {
       throwVbenError('仍有来源未完成清单检查或运行时探针', HttpStatus.CONFLICT);

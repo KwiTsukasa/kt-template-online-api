@@ -4344,7 +4344,23 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       const videoEntries = source.manifest
         .filter((entry) => this.agentFileRole(entry.relativePath) === 'video')
         .toSorted((left, right) => right.sizeBytes - left.sizeBytes);
-      if (videoEntries.length !== 1) {
+      let selectedVideo = videoEntries[0];
+      if (videoEntries.length > 1) {
+        const runnerUp = videoEntries[1];
+        const minimumFeatureBytes = 512 * 1024 * 1024;
+        const maximumIncidentalBytes = 64 * 1024 * 1024;
+        const minimumDominanceRatio = 8;
+        if (
+          !selectedVideo ||
+          !runnerUp ||
+          selectedVideo.sizeBytes < minimumFeatureBytes ||
+          runnerUp.sizeBytes > maximumIncidentalBytes ||
+          selectedVideo.sizeBytes < runnerUp.sizeBytes * minimumDominanceRatio
+        ) {
+          selectedVideo = undefined;
+        }
+      }
+      if (!selectedVideo) {
         throwVbenError(
           '电影来源无法唯一自动判断正片，请手动选择',
           HttpStatus.CONFLICT,
@@ -4354,7 +4370,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       if (!unit) throwVbenError('任务缺少治理单元', HttpStatus.CONFLICT);
       mappings.push({
         fileRole: 'video',
-        index: videoEntries[0].index,
+        index: selectedVideo.index,
         unitId: unit.id,
       });
     }
@@ -4492,6 +4508,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       const brackets = [...relativePath.matchAll(/\[(\d{1,3})\]/gu)];
       const matched = brackets.at(-1);
       if (matched) episodeNumber = Number(matched[1]);
+      if (episodeNumber === null) {
+        const delimited = [
+          ...relativePath.matchAll(/(?:^|[._ -])(\d{1,3})(?=$|[._ \[\]()-])/gu),
+        ]
+          .map((candidate) => Number(candidate[1]))
+          .filter((candidate) => candidate > 0);
+        const unique = [...new Set(delimited)];
+        if (unique.length === 1) episodeNumber = unique[0];
+      }
     }
     if (!Number.isInteger(episodeNumber) || Number(episodeNumber) < 1) {
       return null;

@@ -259,7 +259,7 @@ Task 只持久化唯一 `llmConversationId`；模型选择、消息、流式终�
 `LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`x-kt-llm-gateway-secret` 与启用网络和 live Web
 Search 的 `llm-codex` 权限档。
 
-媒体场景的结构化结果包含完整 `answer` 与短 `summary`：`answer` 作为标准 Assistant 消息流式展示，`summary/status/planSha256` 只用于 Task 投影。Gateway 每轮从 API 当前 Task 取得 `availableActions`，并只允许阶段门声明的工具；4xx/409/超时必须向模型返回非空、脱敏的稳定失败码。策略 v3 新增受 revision、胶囊、scene/provider-thread CAS 与既有业务服务共同约束的身份确认、磁链来源、分页清单、自动映射、探针、下载、治理、元数据和验收工具。任一写工具成功后必须结束本轮，由下一轮读取新 revision；浏览器、模型和 Gateway 都不能直接写数据库、qBittorrent 或正式媒体目录。
+媒体场景的结构化结果包含完整 `answer` 与短 `summary`：`answer` 作为标准 Assistant 消息流式展示，`summary/status/planSha256` 只用于 Task 投影。Gateway 每轮从 API 当前 Task 取得 `availableActions`，并只允许阶段门声明的工具；4xx/409/超时必须向模型返回非空、脱敏的稳定失败码。策略 v3 新增受 revision、胶囊、scene/provider-thread CAS 与既有业务服务共同约束的身份确认、磁链来源、分页清单、自动映射、探针、下载、治理、元数据和验收工具。TV 自动映射接受 `SxxExx`、根目录纯数字方括号，或根目录中唯一的发布标点分隔 1–3 位集号；电影多视频清单只有在最大文件不少于 512 MiB、其余均不超过 64 MiB，且最大文件至少为第二大文件 8 倍时才自动判为正片。任何集号歧义或电影主次不满足门槛都返回 409，不猜测选择。任一写工具成功后必须结束本轮，由下一轮读取新 revision；浏览器、模型和 Gateway 都不能直接写数据库、qBittorrent 或正式媒体目录。
 
 `provider.metadata.read` 的 TMDB 搜索最多使用两条独立、禁用连接复用的有界请求；不可用时返回 `lookupAvailable=false`。模型通过 live Web Search 提供显式 TMDB ID 后，`media.identity.confirm` 仍会独立请求固定官方详情页并核对媒体类型与发行年份，不能把搜索结果或自由文本直接当作可写身份。
 

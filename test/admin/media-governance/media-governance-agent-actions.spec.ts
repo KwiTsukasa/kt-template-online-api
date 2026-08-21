@@ -88,6 +88,101 @@ describe('MediaGovernanceService Agent typed actions', () => {
     );
     expect(available(task)).not.toContain('plan.submit.sealed');
   });
+
+  it('auto-selects root episode numbers delimited by release punctuation', async () => {
+    const service = new MediaGovernanceService();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '标点集号测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: task.revision,
+      magnetUri: `magnet:?xt=urn:btih:${'c'.repeat(40)}&dn=agent-selection`,
+      releaseGroup: 'Erai-raws',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    source.manifestState = 'inspected';
+    source.manifest = [
+      manifest(
+        0,
+        '[Erai-raws] Bleach - 001 [720p DSNP WEB-DL AVC AAC][MultiSub].mkv',
+        1000,
+      ),
+      manifest(
+        1,
+        '[Erai-raws] Bleach - 002 [720p DSNP WEB-DL AVC AAC][MultiSub].mkv',
+        1100,
+      ),
+      manifest(2, '[Erai-raws] Bleach - 003 - 004 [720p].mkv', 1200),
+    ];
+    source.manifestSha256 = 'd'.repeat(64);
+    const apply = Reflect.get(service, 'applyAgentAutomaticSelection').bind(
+      service,
+    ) as (
+      currentTask: typeof task,
+      value: Record<string, unknown>,
+    ) => Promise<Record<string, unknown>>;
+
+    await expect(
+      apply(task, { sourceId: source.id, subtitleLanguage: 'zh-CN' }),
+    ).resolves.toMatchObject({
+      selectedFileCount: 2,
+      subtitleCount: 0,
+      videoCount: 2,
+    });
+    expect(source.selectedFileMappings).toEqual([
+      expect.objectContaining({ episodeNumber: 1, index: 0 }),
+      expect.objectContaining({ episodeNumber: 2, index: 1 }),
+    ]);
+  });
+
+  it('auto-selects one dominant movie feature while excluding tiny promo videos', async () => {
+    const service = new MediaGovernanceService();
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '电影正片测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: task.revision,
+      magnetUri: `magnet:?xt=urn:btih:${'e'.repeat(40)}&dn=movie-selection`,
+      releaseGroup: 'BATWEB',
+      seasonNumbers: [],
+      sourceRole: 'primary_media',
+    });
+    source.manifestState = 'inspected';
+    source.manifest = [
+      manifest(0, 'The.Wind.Will.Carry.Us.1999.mkv', 4 * 1024 ** 3),
+      manifest(1, '更多影视.mp4', 300 * 1024),
+      manifest(2, '更多影视.mkv', 700 * 1024),
+    ];
+    source.manifestSha256 = 'f'.repeat(64);
+    const apply = Reflect.get(service, 'applyAgentAutomaticSelection').bind(
+      service,
+    ) as (
+      currentTask: typeof task,
+      value: Record<string, unknown>,
+    ) => Promise<Record<string, unknown>>;
+
+    await expect(
+      apply(task, { sourceId: source.id, subtitleLanguage: 'zh-CN' }),
+    ).resolves.toMatchObject({
+      selectedFileCount: 1,
+      videoCount: 1,
+    });
+    expect(source.selectedFileIndices).toEqual([0]);
+
+    source.manifest = [
+      manifest(0, 'The.Wind.Will.Carry.Us.1999.mkv', 4 * 1024 ** 3),
+      manifest(1, 'The.Wind.Will.Carry.Us.1999.alt.mkv', 2 * 1024 ** 3),
+    ];
+    await expect(
+      apply(task, { sourceId: source.id, subtitleLanguage: 'zh-CN' }),
+    ).rejects.toMatchObject({ status: 409 });
+  });
 });
 
 /**

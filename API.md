@@ -409,6 +409,9 @@ Codex turn，不存在非流式回退。
 发送 `turn/start`。上一回合的迟到请求、错误 Task/scene/ref 或不同 thread 均返回 409，不能
 覆盖当前身份。旧 `media_governance_agent_session` 与 NAS 宿主 `task-sessions` 文件不会被恢复
 为标准 conversation；旧文件只可在新链路验收后按备份清单隔离清理。
+Gateway 可在内存中为 `candidateSummaries` 派生候选 ID，但 result 回调与助手消息 metadata
+只能传输 `candidateSummaries/nextActionLabel/planSha256/status/summary` 五个输出 Schema 字段；
+`candidates` 等内部投影不得越过该边界。
 
 gateway 只监听 NAS 私有 k3d bridge 地址，统一根为 `/internal/llm-codex`；健康接口是
 `GET /internal/llm-codex/health`，实时模型接口是

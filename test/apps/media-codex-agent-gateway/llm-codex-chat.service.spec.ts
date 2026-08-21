@@ -614,6 +614,33 @@ describe('LlmCodexChatService unified runtime boundary', () => {
     });
   });
 
+  it('removes derived candidates from the media API and metadata payload', () => {
+    const service = new LlmCodexChatService(config as never, {} as never);
+    const project = Reflect.get(service, 'mediaResultPayload').bind(service) as (
+      result: Record<string, unknown>,
+    ) => Record<string, unknown>;
+
+    expect(
+      project({
+        candidateSummaries: ['tmdb:123｜候选 A', 'tmdb:456｜候选 B'],
+        candidates: [
+          { id: 'tmdb:123', summary: 'tmdb:123｜候选 A' },
+          { id: 'tmdb:456', summary: 'tmdb:456｜候选 B' },
+        ],
+        nextActionLabel: '等待操作员选择',
+        planSha256: null,
+        status: 'requires-operator',
+        summary: '存在两个以上真实候选',
+      }),
+    ).toEqual({
+      candidateSummaries: ['tmdb:123｜候选 A', 'tmdb:456｜候选 B'],
+      nextActionLabel: '等待操作员选择',
+      planSha256: null,
+      status: 'requires-operator',
+      summary: '存在两个以上真实候选',
+    });
+  });
+
   it('does not parse a generic final answer as a media result', () => {
     const service = new LlmCodexChatService(config as never, {} as never);
     const extract = Reflect.get(service, 'mediaResult').bind(service) as (

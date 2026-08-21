@@ -310,8 +310,9 @@ OpenAI-compatible 供应商只在响应真实提供扩展能力字段时公开�
 App Server `turn/start` 前携同一 `activeTurnId` 调内部绑定接口，由对话行锁以 CAS 完成
 `providerThreadId` 首次空值绑定或同值幂等确认。迟到回合、错误 Task/scene/ref 或不同 thread
 全部失败关闭。NAS 宿主遗留 `task-sessions` 文件不会恢复、迁移或覆盖标准 conversation，
-因此 API/Gateway 重启后仍只有一个会话事实源。Agent 结构化输出的 `properties` 必须全部进入
-`required`，无候选时显式返回空数组；
+因此 API/Gateway 重启后仍只有一个会话事实源。Gateway 内部派生的候选 ID 不进入回调或
+消息 metadata；两个出口都只发送输出 Schema 的五个原始字段，避免严格解析器拒绝内部字段。
+Agent 结构化输出的 `properties` 必须全部进入 `required`，无候选时显式返回空数组；
 真实候选歧义保持 `needs-operator`，operator decision 仍必须通过候选和密封计划复核。
 每个 Task 只允许一个主媒体下载 owner；来源选择把每个显式文件
 索引一一绑定到 Unit、文件角色、季集和字幕语言，并持久化为

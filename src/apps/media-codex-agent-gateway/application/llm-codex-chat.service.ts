@@ -12,6 +12,7 @@ import {
   type MediaCodexAgentPolicy,
   type MediaCodexAgentResult,
   type MediaCodexAgentTurnRequest,
+  type MediaCodexAgentWireResult,
   type MediaGovernanceLlmConversationIdentity,
 } from '../domain/media-codex-agent.contract';
 import {
@@ -205,7 +206,7 @@ export class LlmCodexChatService {
    * 通过独立 Unix-WebSocket App Server 连接启动或恢复线程，并归一化可见增量。
    * @param body - 模型、用户正文、客户端消息标识和可选持久线程。
    * @param signal - 浏览器停止或断连信号。
-   * @returns start、思考摘要、回答增量和 done 的异步流。
+   * @returns 逐帧产出 start、reasoning-delta、text-delta 与 done 事件的异步生成器。
    * @throws App Server 握手、线程、回合或通知合同无效时抛出错误。
    */
   async *stream(
@@ -282,15 +283,16 @@ export class LlmCodexChatService {
         if (!projected) continue;
         if (projected.type === 'done' && mediaRuntime) {
           if (!mediaResult) throw new Error('media-agent-result-missing');
+          const resultPayload = this.mediaResultPayload(mediaResult);
           await this.mediaApiClient.publishConversationResult({
             conversationId: body.conversationId!,
             conversationTurnId: mediaRuntime.identity.activeTurnId,
             providerThreadId: threadId,
-            result: mediaResult,
+            result: resultPayload,
             taskId: body.sceneRefId!,
           });
           yield { content: mediaResult.summary, type: 'text-delta' };
-          projected.metadata = { mediaGovernanceResult: mediaResult };
+          projected.metadata = { mediaGovernanceResult: resultPayload };
         }
         yield projected;
         if (projected.type === 'done') break;
@@ -876,6 +878,23 @@ export class LlmCodexChatService {
     } catch {
       throw new Error('media-agent-result-invalid');
     }
+  }
+
+  /**
+   * 把含内部候选投影的媒体结果收敛为 App Server 输出 Schema 的五字段载荷，供 API 回调和消息 metadata 复用。
+   * @param result - 已通过严格解析并附加派生候选标识的媒体结果。
+   * @returns 不含内部 `candidates` 派生字段的稳定传输载荷。
+   */
+  private mediaResultPayload(
+    result: MediaCodexAgentResult,
+  ): MediaCodexAgentWireResult {
+    return {
+      candidateSummaries: result.candidateSummaries,
+      nextActionLabel: result.nextActionLabel,
+      planSha256: result.planSha256,
+      status: result.status,
+      summary: result.summary,
+    };
   }
 
   /**

@@ -137,7 +137,7 @@ export interface MediaGovernanceLlmConversationResultEvent {
   conversationId: string;
   conversationTurnId: string;
   providerThreadId: string;
-  result: MediaCodexAgentResult;
+  result: MediaCodexAgentWireResult;
   taskId: string;
 }
 
@@ -250,6 +250,11 @@ export interface MediaCodexAgentResult {
     | 'requires-operator';
   summary: string;
 }
+
+export type MediaCodexAgentWireResult = Omit<
+  MediaCodexAgentResult,
+  'candidates'
+>;
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const TMDB_CANDIDATE_PATTERN = /^(tmdb:[1-9]\d*)\s*[|｜]/iu;

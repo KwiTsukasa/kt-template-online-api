@@ -53,6 +53,11 @@ export const NETWORK_OPEN_REDIRECT_TARGETS = Object.freeze({
   nas: { host: 'nas4.kwitsukasa.top', path: '/' },
   portfolio: { host: 'nas4.kwitsukasa.top', path: '/portfolio/' },
   s3: { host: 's3.nas4.kwitsukasa.top', path: '/' },
+  voice: { host: 'voice.nas4.kwitsukasa.top', path: '/' },
+  voiceios: {
+    host: 'voice.nas4.kwitsukasa.top',
+    path: '/auth/ios-login',
+  },
 } as const satisfies Record<string, NetworkOpenRedirectTarget>);
 
 export type NetworkOpenRedirectResolution =

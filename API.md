@@ -130,7 +130,7 @@ Blog 公开列表将 `pageSize` 限制为最大 100，不改变已认证管理�
 
 Traefik 外部路径为 `/api/network/open-redirect/:serviceKey`，去掉 `/api` 后才
 进入 Controller。`serviceKey` 是代码内固定白名单
-`nas/admin/blog/api/portfolio/jenkins/kestra/mcsm/mcd/minio/alist/fnos/s3`；
+`nas/admin/blog/api/portfolio/jenkins/kestra/mcsm/mcd/minio/alist/fnos/s3/voice/voiceios`；
 接口不接受 URL、scheme、Host、端口、路径后缀或 redirect query，入口查询串
 不会进入 `Location`。服务在一个 `REPEATABLE READ` 只读解析事务中同时核验
 `tcp:10443` 通道、逻辑组、`a:nas4.kwitsukasa.top` DDNS 和配置的 Agent：
@@ -139,6 +139,9 @@ Traefik 外部路径为 `/api/network/open-redirect/:serviceKey`，去掉 `/api`
 返回 `404`；离线、过期、状态不一致或解析异常返回无 `Location` 的 `503` 与
 `Retry-After: 30`。所有响应均禁止缓存、referrer 与索引。该接口只完成首跳，
 浏览器后续页面、API、上传、SSE 与 WebSocket 均直连带动态端口的统一网关。
+`voice` 固定跳到 `https://voice.nas4.kwitsukasa.top:{动态端口}/`，`voiceios`
+固定跳到同一 Host 的 `/auth/ios-login`；两者只承担 Voice Archive 的 Web 与
+iOS Admin SSO bootstrap，不在腾讯云 Caddy 新建独立 Voice 站点。
 成功响应还从同一事务快照发布三个单值头：`X-KT-Endpoint-IPv4` 为与 DDNS
 一致的规范公网 IPv4，`X-KT-Endpoint-Generation` 为当前 64 位小写十六进制
 端点身份，`X-KT-Endpoint-Valid-Until` 为当前租约 UTC 时间。私网、CGNAT、

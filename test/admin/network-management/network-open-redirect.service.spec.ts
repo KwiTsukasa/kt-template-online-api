@@ -119,6 +119,20 @@ function createHarness(state = readyState()): Harness {
 }
 
 describe('NetworkOpenRedirectService', () => {
+  it('keeps web and iOS Voice bootstraps on the wildcard gateway host', async () => {
+    const harness = createHarness();
+
+    await expect(harness.service.resolve('voice')).resolves.toMatchObject({
+      location: 'https://voice.nas4.kwitsukasa.top:52418/',
+      status: 'found',
+    });
+    await expect(harness.service.resolve('voiceios')).resolves.toMatchObject({
+      location:
+        'https://voice.nas4.kwitsukasa.top:52418/auth/ios-login',
+      status: 'found',
+    });
+  });
+
   it.each(Object.entries(NETWORK_OPEN_REDIRECT_TARGETS))(
     'resolves fixed service %s without accepting any target input',
     async (serviceKey, target) => {

@@ -156,7 +156,7 @@ INSERT INTO `admin_menu` (
 ) VALUES
   (2041700000000100500, 0, 'Llm', '/llm', NULL, '/llm/config', NULL, 'catalog', '{"icon":"lucide:brain-circuit","order":115,"title":"大模型"}', 1, 115),
   (2041700000000100501, 2041700000000100500, 'LlmConfig', '/llm/config', '/llm/config/index', NULL, 'Llm:Config:List', 'menu', '{"icon":"lucide:blocks","title":"大模型配置"}', 1, 0),
-  (2041700000000100502, 2041700000000100500, 'LlmChat', '/llm/config/:configId/chat', '/llm/chat/index', NULL, 'Llm:Chat:Use', 'menu', '{"activePath":"/llm/config","hideInMenu":true,"title":"流式对话"}', 1, 1),
+  (2041700000000100502, 2041700000000100500, 'LlmChat', '/llm/config/:configId/chat', '/llm/chat/index', NULL, 'Llm:Chat:Use', 'menu', '{"activePath":"/llm/config","fullPathKey":false,"hideInMenu":true,"keepAlive":true,"title":"流式对话"}', 1, 1),
   (2041700000000120501, 2041700000000100501, 'LlmConfigCreate', NULL, NULL, NULL, 'Llm:Config:Create', 'button', '{"title":"common.create"}', 1, 1),
   (2041700000000120502, 2041700000000100501, 'LlmConfigUpdate', NULL, NULL, NULL, 'Llm:Config:Update', 'button', '{"title":"common.edit"}', 1, 2),
   (2041700000000120503, 2041700000000100501, 'LlmConfigDelete', NULL, NULL, NULL, 'Llm:Config:Delete', 'button', '{"title":"common.delete"}', 1, 3),

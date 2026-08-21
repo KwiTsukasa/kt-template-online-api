@@ -95,6 +95,10 @@ describe('LLM persistence and menu contract', () => {
     expect(init).toContain('selected_reasoning_effort');
     expect(init).toContain('selected_service_tier');
     expect(verify).toContain('uk_admin_llm_conversation_scene_ref');
+    expect(init).toContain('"fullPathKey":false');
+    expect(init).toContain('"keepAlive":true');
+    expect(verify).toContain("'llm_chat_keep_alive'");
+    expect(verify).toContain("JSON_EXTRACT(meta, '$.keepAlive')");
     expect(init).not.toMatch(/sk-[A-Za-z0-9]|apiKey\s*=/u);
   });
 });

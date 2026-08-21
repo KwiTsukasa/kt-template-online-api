@@ -593,6 +593,14 @@ WHERE name IN (
   AND status = 1
   AND is_deleted = 0;
 
+SELECT 'llm_chat_keep_alive' AS check_name, COUNT(*) AS matched_rows
+FROM admin_menu
+WHERE name = 'LlmChat'
+  AND JSON_UNQUOTE(JSON_EXTRACT(meta, '$.fullPathKey')) = 'false'
+  AND JSON_UNQUOTE(JSON_EXTRACT(meta, '$.keepAlive')) = 'true'
+  AND status = 1
+  AND is_deleted = 0;
+
 SELECT 'llm_super_grant_missing' AS check_name, COUNT(*) AS missing_rows
 FROM admin_role role
 CROSS JOIN admin_menu menu

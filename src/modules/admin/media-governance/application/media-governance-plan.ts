@@ -472,16 +472,38 @@ function assertPayload(
   ) {
     throw new Error('governance-payload-seal-invalid');
   }
+  const payloadIdentities = new Set<string>();
   for (const file of payload.files) {
     const normalized = path.posix.normalize(file.path);
+    const identity = `${file.sourceId}:${file.index}`;
+    const source = task.sources.find(
+      (candidate) => candidate.id === file.sourceId,
+    );
+    const manifestEntry = source?.manifest.find(
+      (candidate) => candidate.index === file.index,
+    );
     if (
       !file.path.startsWith(`${taskRoot}/sources/${file.sourceId}/`) ||
+      file.path.includes('/.kt-shards/') ||
       normalized !== file.path ||
-      file.path.includes('\0') ||
-      !/^[a-f0-9]{64}$/u.test(file.sha256)
+      file.path.includes('\0')
     ) {
       throw new Error('governance-payload-file-invalid');
     }
+    if (
+      !/^[a-f0-9]{64}$/u.test(file.sha256) ||
+      payloadIdentities.has(identity)
+    ) {
+      throw new Error('governance-payload-file-invalid');
+    }
+    if (
+      !manifestEntry ||
+      manifestEntry.relativePath !== file.relativePath ||
+      manifestEntry.sizeBytes !== file.sizeBytes
+    ) {
+      throw new Error('governance-payload-file-invalid');
+    }
+    payloadIdentities.add(identity);
     if (
       !Number.isSafeInteger(file.sizeBytes) ||
       file.sizeBytes < 0 ||

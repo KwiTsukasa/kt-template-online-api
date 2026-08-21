@@ -353,5 +353,34 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
         ],
       }),
     ).toThrow('governance-payload-file-invalid');
+    expect(() =>
+      buildAdminMediaGovernancePlan(task, {
+        ...payload,
+        files: [payload.files[0]!, payload.files[0]!, payload.files[2]!],
+      }),
+    ).toThrow('governance-payload-file-invalid');
+    expect(() =>
+      buildAdminMediaGovernancePlan(task, {
+        ...payload,
+        files: [
+          { ...payload.files[0]!, sizeBytes: 2_048 },
+          payload.files[1]!,
+          payload.files[2]!,
+        ],
+      }),
+    ).toThrow('governance-payload-file-invalid');
+    expect(() =>
+      buildAdminMediaGovernancePlan(task, {
+        ...payload,
+        files: [
+          {
+            ...payload.files[0]!,
+            path: `${root}/.kt-shards/shard-00/Show.S00E01.mkv`,
+          },
+          payload.files[1]!,
+          payload.files[2]!,
+        ],
+      }),
+    ).toThrow('governance-payload-file-invalid');
   });
 });

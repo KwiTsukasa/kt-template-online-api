@@ -63,7 +63,7 @@ export interface MediaGovernanceExecutionGateway {
   }): Promise<MediaGovernanceExecutionStatus>;
 }
 
-const MAX_RESPONSE_BYTES = 32 * 1024;
+const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/;
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
 const TERMINAL_EVENT_KEYS = new Set([

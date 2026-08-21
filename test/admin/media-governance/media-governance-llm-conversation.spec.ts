@@ -38,6 +38,7 @@ describe('MediaGovernanceService LLM conversation binding', () => {
         scene: input.scene,
         sceneRefId: input.sceneRefId,
       })),
+      updateSceneTitle: jest.fn(async () => undefined),
     };
     const service = new MediaGovernanceService(
       undefined,

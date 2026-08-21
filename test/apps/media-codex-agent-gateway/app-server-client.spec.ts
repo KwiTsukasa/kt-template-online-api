@@ -131,6 +131,10 @@ describe('CodexAppServerClient', () => {
       approvalPolicy: 'never',
       cwd: policy.cleanCwd,
       dynamicTools: expect.arrayContaining([
+        expect.objectContaining({ name: 'media_source_add_magnet' }),
+        expect.objectContaining({ name: 'media_selection_auto' }),
+        expect.objectContaining({ name: 'media_download_start' }),
+        expect.objectContaining({ name: 'media_acceptance_verify' }),
         expect.objectContaining({ name: 'plan_submit_sealed' }),
       ]),
       environments: [],
@@ -190,6 +194,7 @@ describe('CodexAppServerClient', () => {
         id: 'media-final-001',
         phase: 'final_answer',
         text: JSON.stringify({
+          answer: '计划已提交，等待密封执行器处理。',
           candidateSummaries: [],
           nextActionLabel: '等待密封执行器处理',
           planSha256,

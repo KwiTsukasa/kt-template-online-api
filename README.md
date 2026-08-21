@@ -287,6 +287,8 @@ Web Search 的 `llm-codex` 权限档。媒体治理调用 `agent/start` 时只�
 全部归 LLM 模块管理。媒体入口直接进入标准 LLM 对话页，续聊只走
 `POST /llm/conversations/:id/messages/stream`，没有媒体专用消息接口，也没有非流式降级。
 
+媒体 CodexAgent 每轮从当前 Task 重新生成 `availableActions`，提示词与 API 共用同一阶段门；工具拒绝必须返回非空、脱敏稳定码，禁止把 409 吞成空结果后诱导模型原样重试。结构化结果以最长 8000 字的 `answer` 进入标准 LLM 消息，以短 `summary` 更新 Task 投影。策略 v3 的类型化工具覆盖 TMDB 身份确认、磁链添加/检查/移除、分页清单、保守自动文件映射、来源探针、下载、治理、元数据核验/修复与独立验收；所有写动作仍由 Task revision、当前阶段、胶囊、provider thread CAS 和既有应用服务门保护，成功改变 revision 后当前回合必须停止，下一轮重新读取线上 Task。旧 App Server thread 在策略升级时通过显式 CAS 旋转一次，标准 conversationId 保持不变。
+
 OpenAI、智谱、DeepSeek 与 Moonshot 通过各自 OpenAI-compatible `GET /models` 读取当前
 凭据可用模型；Anthropic 通过带 `x-api-key`、`anthropic-version` 和 `after_id` 有界分页的
 Models API；本地 Codex 由 gateway 调用 App Server `model/list`。实时模型项同时归一
@@ -311,7 +313,7 @@ App Server `turn/start` 前携同一 `activeTurnId` 调内部绑定接口，由�
 `providerThreadId` 首次空值绑定或同值幂等确认。迟到回合、错误 Task/scene/ref 或不同 thread
 全部失败关闭。NAS 宿主遗留 `task-sessions` 文件不会恢复、迁移或覆盖标准 conversation，
 因此 API/Gateway 重启后仍只有一个会话事实源。Gateway 内部派生的候选 ID 不进入回调或
-消息 metadata；两个出口都只发送输出 Schema 的五个原始字段，避免严格解析器拒绝内部字段。
+消息 metadata；两个出口都只发送输出 Schema 的六个原始字段（含完整 `answer`），避免严格解析器拒绝内部字段。
 Agent 结构化输出的 `properties` 必须全部进入 `required`，无候选时显式返回空数组；
 真实候选歧义保持 `needs-operator`，operator decision 仍必须通过候选和密封计划复核。
 每个 Task 只允许一个主媒体下载 owner；来源选择把每个显式文件

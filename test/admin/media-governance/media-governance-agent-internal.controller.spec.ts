@@ -179,6 +179,7 @@ describe('MediaGovernanceAgentInternalController', () => {
         conversationTurnId: 'conversation-turn-media-context',
         providerThreadId: 'thread-media-codex-001',
         result: {
+          answer: '分析完成，可以继续核对下一步。',
           candidateSummaries: [],
           nextActionLabel: '继续核对',
           planSha256: null,

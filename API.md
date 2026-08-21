@@ -259,6 +259,8 @@ Task 只持久化唯一 `llmConversationId`；模型选择、消息、流式终�
 `LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`x-kt-llm-gateway-secret` 与启用网络和 live Web
 Search 的 `llm-codex` 权限档。
 
+媒体场景的结构化结果包含完整 `answer` 与短 `summary`：`answer` 作为标准 Assistant 消息流式展示，`summary/status/planSha256` 只用于 Task 投影。Gateway 每轮从 API 当前 Task 取得 `availableActions`，并只允许阶段门声明的工具；4xx/409/超时必须向模型返回非空、脱敏的稳定失败码。策略 v3 新增受 revision、胶囊、scene/provider-thread CAS 与既有业务服务共同约束的身份确认、磁链来源、分页清单、自动映射、探针、下载、治理、元数据和验收工具。任一写工具成功后必须结束本轮，由下一轮读取新 revision；浏览器、模型和 Gateway 都不能直接写数据库、qBittorrent 或正式媒体目录。
+
 ## Admin 与基础后台
 
 ### 媒体治理 API/Admin 生产链路
@@ -405,12 +407,12 @@ Codex turn，不存在非流式回退。
 `llmConversationId`，其余字段只以 `admin_llm_conversation` 为权威；context、provider thread
 绑定和 result 回调必须携带同一个 `activeTurnId`。gateway 取得 App Server thread 后必须先调用
 `POST /internal/media-governance/agent/llm-conversations/provider-thread`，API 在对话行锁内以
-`expectedProviderThreadId` 执行 CAS：仅允许 `null -> actual` 或 `same -> same`，绑定成功后才
+`expectedProviderThreadId` 执行 CAS：常规只允许 `null -> actual` 或 `same -> same`；仅策略版本升级可显式执行一次 `old -> new`，绑定成功后才
 发送 `turn/start`。上一回合的迟到请求、错误 Task/scene/ref 或不同 thread 均返回 409，不能
 覆盖当前身份。旧 `media_governance_agent_session` 与 NAS 宿主 `task-sessions` 文件不会被恢复
 为标准 conversation；旧文件只可在新链路验收后按备份清单隔离清理。
 Gateway 可在内存中为 `candidateSummaries` 派生候选 ID，但 result 回调与助手消息 metadata
-只能传输 `candidateSummaries/nextActionLabel/planSha256/status/summary` 五个输出 Schema 字段；
+只能传输 `answer/candidateSummaries/nextActionLabel/planSha256/status/summary` 六个输出 Schema 字段；
 `candidates` 等内部投影不得越过该边界。
 
 gateway 只监听 NAS 私有 k3d bridge 地址，统一根为 `/internal/llm-codex`；健康接口是

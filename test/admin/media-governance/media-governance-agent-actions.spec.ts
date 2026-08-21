@@ -1,0 +1,102 @@
+import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
+
+describe('MediaGovernanceService Agent typed actions', () => {
+  it('auto-selects only unambiguous root episodes and the requested subtitle language', async () => {
+    const service = new MediaGovernanceService();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '自动选择测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'bundled_sidecar_media',
+      expectedRevision: task.revision,
+      magnetUri: `magnet:?xt=urn:btih:${'a'.repeat(40)}&dn=agent-selection`,
+      releaseGroup: 'DBD-Raws',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    source.manifestState = 'inspected';
+    source.manifest = [
+      manifest(0, '[DBD-Raws][作品][001][1080P].mkv', 1000),
+      manifest(1, '[DBD-Raws][作品][001][1080P].sc.ass', 10),
+      manifest(2, '[DBD-Raws][作品][001][1080P].tc.ass', 10),
+      manifest(3, 'PV/[DBD-Raws][作品][PV][01][1080P].mkv', 100),
+      manifest(4, '[DBD-Raws][作品][002][1080P].mkv', 1100),
+      manifest(5, '[DBD-Raws][作品][002][1080P].sc.ass', 11),
+      manifest(6, 'menu/[DBD-Raws][作品][01][1080P].mkv', 20),
+    ];
+    source.manifestSha256 = 'b'.repeat(64);
+    const apply = Reflect.get(service, 'applyAgentAutomaticSelection').bind(
+      service,
+    ) as (
+      currentTask: typeof task,
+      value: Record<string, unknown>,
+    ) => Promise<Record<string, unknown>>;
+
+    await expect(
+      apply(task, { sourceId: source.id, subtitleLanguage: 'zh-CN' }),
+    ).resolves.toMatchObject({
+      accepted: true,
+      action: 'media.selection.auto',
+      selectedFileCount: 4,
+      subtitleCount: 2,
+      videoCount: 2,
+    });
+    expect(source.selectedFileIndices).toEqual([0, 1, 4, 5]);
+    expect(source.selectedFileMappings).toEqual([
+      expect.objectContaining({
+        episodeNumber: 1,
+        fileRole: 'video',
+        index: 0,
+      }),
+      expect.objectContaining({
+        episodeNumber: 1,
+        fileRole: 'subtitle',
+        index: 1,
+        language: 'zh-CN',
+      }),
+      expect.objectContaining({
+        episodeNumber: 2,
+        fileRole: 'video',
+        index: 4,
+      }),
+      expect.objectContaining({
+        episodeNumber: 2,
+        fileRole: 'subtitle',
+        index: 5,
+        language: 'zh-CN',
+      }),
+    ]);
+  });
+
+  it('projects stage actions instead of advertising impossible plan submission', async () => {
+    const service = new MediaGovernanceService();
+    const task = await service.create({
+      mediaType: 'movie',
+      titleHint: '能力投影测试',
+    });
+    const available = Reflect.get(service, 'agentAvailableActions').bind(
+      service,
+    ) as (currentTask: typeof task) => string[];
+
+    expect(available(task)).toEqual(
+      expect.arrayContaining([
+        'media.identity.confirm',
+        'media.source.add-magnet',
+      ]),
+    );
+    expect(available(task)).not.toContain('plan.submit.sealed');
+  });
+});
+
+/**
+ * 创建用于 Agent 自动选择测试的安全来源文件条目。
+ * @param index - 来源清单索引。
+ * @param relativePath - 来源根内相对路径。
+ * @param sizeBytes - 文件字节数。
+ * @returns 可直接写入模拟 manifest 的条目。
+ */
+function manifest(index: number, relativePath: string, sizeBytes: number) {
+  return { executable: false, index, relativePath, sizeBytes };
+}

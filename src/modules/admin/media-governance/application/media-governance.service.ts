@@ -15,6 +15,7 @@ import {
   MEDIA_CODEX_AGENT_TOOLS,
   parseMediaCodexAgentResult,
   sha256Json,
+  type MediaCodexAgentTool,
 } from '@/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
 import { LLM_CODEX_PERMISSION_PROFILE } from '@/apps/media-codex-agent-gateway/domain/llm-codex-runtime.contract';
 import {
@@ -2954,6 +2955,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       scene: 'media-governance',
       sceneRefId: task.id,
     });
+    await this.llmConversations.updateSceneTitle({
+      conversationId: input.conversationId,
+      scene: 'media-governance',
+      sceneRefId: task.id,
+      title: `${task.titleHint} · 媒体治理`,
+    });
     const request = this.buildLlmAgentTurnRequest(
       task,
       input.model,
@@ -2961,6 +2968,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       input.clientMessageId,
     );
     const policy = buildMediaCodexAgentPolicy(task.id);
+    const providerThreadResetRequired = Boolean(
+      identity.providerThreadId &&
+      task.agentSession?.policyVersion !== policy.policyVersion,
+    );
     const capsule = buildMediaCodexAgentCapsule(request, policy);
     task.agentSession = {
       capsuleSha256: capsule.capsuleSha256,
@@ -2982,7 +2993,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     };
     this.refreshSemanticProjection(task);
     this.publishTaskPatch(task, 'state-updated');
-    return { identity, request };
+    return {
+      identity: { ...identity, providerThreadResetRequired },
+      request,
+    };
   }
 
   /**
@@ -2995,6 +3009,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     conversationTurnId: string;
     expectedProviderThreadId: null | string;
     providerThreadId: string;
+    replaceProviderThread?: boolean;
     taskId: string;
   }) {
     const task = this.detail(input.taskId);
@@ -3008,6 +3023,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       );
     }
     return this.llmConversations.bindProviderThread({
+      allowReplace: input.replaceProviderThread,
       conversationId: input.conversationId,
       conversationTurnId: input.conversationTurnId,
       expectedProviderThreadId: input.expectedProviderThreadId,
@@ -3128,10 +3144,16 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   private async hydrateLlmAgentProjection(task: MediaGovernanceTask) {
     if (!task.llmConversationId || !this.llmConversations) return;
     try {
-      await this.llmConversations.resolveIdentity({
+      const conversationIdentity = await this.llmConversations.resolveIdentity({
         conversationId: task.llmConversationId,
         scene: 'media-governance',
         sceneRefId: task.id,
+      });
+      await this.llmConversations.updateSceneTitle({
+        conversationId: task.llmConversationId,
+        scene: 'media-governance',
+        sceneRefId: task.id,
+        title: `${task.titleHint} · 媒体治理`,
       });
       const detail = await this.llmConversations.detail(task.llmConversationId);
       let model = detail.conversation.selectedModel || '';
@@ -3165,6 +3187,16 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         statusLabel = '上轮对话未完成，可继续发送消息';
       }
       const rawResult = lastAssistant?.metadata?.mediaGovernanceResult;
+      let restoredPolicyVersion = policy.policyVersion;
+      if (
+        conversationIdentity.providerThreadId &&
+        (!rawResult ||
+          typeof rawResult !== 'object' ||
+          Array.isArray(rawResult) ||
+          typeof (rawResult as Record<string, unknown>).answer !== 'string')
+      ) {
+        restoredPolicyVersion = 'media-codex-agent-policy-v2';
+      }
       const result = parseMediaCodexAgentResult(rawResult);
       if (result) {
         this.llmAgentResults.set(task.id, result);
@@ -3182,7 +3214,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         pendingPlanSha256: result?.planSha256 ?? null,
         policyBoundaryLabel: '媒体任务仅绑定 LLM conversationId',
         policySha256: policy.policySha256,
-        policyVersion: policy.policyVersion,
+        policyVersion: restoredPolicyVersion,
         status,
         statusLabel,
         threadId: task.llmConversationId,
@@ -3316,14 +3348,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     ) {
       throwVbenError('Agent 工具调用身份不匹配', HttpStatus.CONFLICT);
     }
-    if (
-      input.tool === 'plan.submit.sealed' &&
-      (task.activeRunId || !['governance', 'metadata'].includes(task.stage))
-    ) {
-      throwVbenError(
-        '当前阶段只允许 Agent 只读核对，不能提交密封写计划',
-        HttpStatus.CONFLICT,
-      );
+    const availableActions = this.agentAvailableActions(task);
+    if (!availableActions.includes(input.tool)) {
+      throwVbenError('当前阶段不允许执行该 Agent 动作', HttpStatus.CONFLICT);
     }
     let sealedPlan = null;
     if (input.tool === 'plan.submit.sealed') {
@@ -3379,6 +3406,8 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
 
     switch (input.tool) {
+      case 'media.identity.confirm':
+        return this.confirmAgentIdentity(task, input.arguments);
       case 'media.identity.read':
         this.assertAgentReadArguments(input.arguments);
         return {
@@ -3391,14 +3420,48 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           titleHint: task.titleHint,
         };
       case 'media.manifest.read':
-        this.assertAgentReadArguments(input.arguments);
-        return task.sources.map((source) => ({
-          id: source.id,
-          infoHash: source.infoHash,
-          manifest: source.manifest,
-          manifestSha256: source.manifestSha256,
-          sourceRole: source.sourceRole,
-        }));
+        return this.agentManifestPage(task, input.arguments);
+      case 'media.source.add-magnet': {
+        const contentKind = input.arguments.contentKind;
+        const magnetUri = input.arguments.magnetUri;
+        const releaseGroup = input.arguments.releaseGroup;
+        if (
+          typeof contentKind !== 'string' ||
+          typeof magnetUri !== 'string' ||
+          typeof releaseGroup !== 'string'
+        ) {
+          throwVbenError('Agent 磁链来源参数无效', HttpStatus.BAD_REQUEST);
+        }
+        const normalizedMagnetUri = String(magnetUri);
+        const normalizedReleaseGroup = String(releaseGroup);
+        await this.addMagnetSource(task.id, {
+          contentKind: contentKind as MediaGovernanceContentKind,
+          expectedRevision: task.revision,
+          magnetUri: normalizedMagnetUri,
+          releaseGroup: normalizedReleaseGroup,
+          seasonNumbers: task.units
+            .map((unit) => unit.seasonNumber)
+            .filter((season): season is string => Boolean(season)),
+          sourceRole: 'primary_media',
+        });
+        return this.agentActionReceipt(task, input.tool);
+      }
+      case 'media.source.inspect': {
+        const sourceId = this.agentSourceId(input.arguments);
+        await this.inspectSource(task.id, sourceId, {
+          expectedRevision: task.revision,
+        });
+        return this.agentActionReceipt(task, input.tool);
+      }
+      case 'media.source.remove': {
+        const sourceId = this.agentSourceId(input.arguments);
+        await this.removeSource(task.id, sourceId, {
+          expectedRevision: task.revision,
+        });
+        return this.agentActionReceipt(task, input.tool);
+      }
+      case 'media.selection.auto':
+        return this.applyAgentAutomaticSelection(task, input.arguments);
       case 'media.probe.read':
         this.assertAgentReadArguments(input.arguments);
         return task.sources.map((source) => ({
@@ -3407,6 +3470,36 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           sourceHealthLabel: source.sourceHealthLabel,
           sourceHealthReasonLabel: source.sourceHealthReasonLabel,
         }));
+      case 'media.probe.start': {
+        const sourceId = this.agentSourceId(input.arguments);
+        await this.probeRuntimeSource(task.id, sourceId, {
+          expectedRevision: task.revision,
+        });
+        return this.agentActionReceipt(task, input.tool);
+      }
+      case 'media.download.start':
+        await this.startDownload(task.id, { expectedRevision: task.revision });
+        return this.agentActionReceipt(task, input.tool);
+      case 'media.governance.start':
+        await this.startGovernance(task.id, {
+          expectedRevision: task.revision,
+        });
+        return this.agentActionReceipt(task, input.tool);
+      case 'media.metadata.verify':
+        await this.startMetadataVerification(task.id, {
+          expectedRevision: task.revision,
+        });
+        return this.agentActionReceipt(task, input.tool);
+      case 'media.metadata.repair':
+        await this.startMetadataRepair(task.id, {
+          expectedRevision: task.revision,
+        });
+        return this.agentActionReceipt(task, input.tool);
+      case 'media.acceptance.verify':
+        await this.startAcceptanceVerification(task.id, {
+          expectedRevision: task.revision,
+        });
+        return this.agentActionReceipt(task, input.tool);
       case 'provider.metadata.read':
         this.assertAgentReadArguments(input.arguments);
         try {
@@ -3982,6 +4075,433 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
+   * 按来源、偏移和上限分页投影文件清单，避免大来源超过 Gateway 响应体边界。
+   * @param task - 当前媒体任务。
+   * @param value - 含 sourceId、offset 和 limit 的动态工具参数。
+   * @returns 包含总数、当前页、下一偏移和 manifest SHA 的有界清单页。
+   */
+  private agentManifestPage(
+    task: MediaGovernanceTask,
+    value: Record<string, unknown>,
+  ) {
+    const sourceId = this.agentSourceId(value);
+    const offset = value.offset;
+    const limit = value.limit;
+    const offsetNumber = Number(offset);
+    const offsetValid =
+      Number.isInteger(offset) && offsetNumber >= 0 && offsetNumber <= 20000;
+    const limitNumber = Number(limit);
+    const limitValid =
+      Number.isInteger(limit) && limitNumber >= 1 && limitNumber <= 200;
+    if (!offsetValid || !limitValid) {
+      throwVbenError('Agent 清单分页参数无效', HttpStatus.BAD_REQUEST);
+    }
+    const source = this.findSource(task, sourceId);
+    const start = offsetNumber;
+    const end = Math.min(source.manifest.length, start + limitNumber);
+    let nextOffset: null | number = null;
+    if (end < source.manifest.length) nextOffset = end;
+    return {
+      items: source.manifest.slice(start, end),
+      limit: limitNumber,
+      manifestSha256: source.manifestSha256,
+      nextOffset,
+      offset: start,
+      sourceId: source.id,
+      total: source.manifest.length,
+    };
+  }
+
+  /**
+   * 从当前 Task 的真实阶段、来源和运行门推导 Agent 本轮可调用动作，供提示词与服务端共用。
+   * @param task - 当前媒体任务权威快照。
+   * @returns 始终包含只读工具，并只加入当前阶段能够通过既有应用服务门禁的写动作。
+   */
+  private agentAvailableActions(task: MediaGovernanceTask) {
+    const actions: MediaCodexAgentTool[] = [
+      'media.identity.read',
+      'media.manifest.read',
+      'media.probe.read',
+      'provider.metadata.read',
+      'subtitle.contract.read',
+      'evidence.read',
+    ];
+    if (task.stage === 'closed' || task.activeRunId) return actions;
+    if (task.stage === 'intake') {
+      if (!task.providerRef) actions.push('media.identity.confirm');
+      if (
+        !task.sources.some(
+          (source) =>
+            source.sourceRole === 'primary_media' &&
+            source.descriptorTombstonedAt === null,
+        )
+      ) {
+        actions.push('media.source.add-magnet');
+      }
+      if (
+        task.sources.some(
+          (source) => source.manifestState === 'pending-inspection',
+        )
+      ) {
+        actions.push('media.source.inspect');
+      }
+      if (task.sources.length > 0) actions.push('media.source.remove');
+      if (task.sources.some((source) => source.manifestState === 'inspected')) {
+        actions.push('media.selection.auto');
+      }
+      if (
+        task.sources.some(
+          (source) =>
+            source.manifestState === 'inspected' &&
+            source.selectedFileCount > 0 &&
+            source.selectedFileMappings.length === source.selectedFileCount &&
+            source.sourceHealth !== 'probing',
+        )
+      ) {
+        actions.push('media.probe.start');
+      }
+      if (
+        task.sources.length > 0 &&
+        task.sources.every(
+          (source) =>
+            source.sourceHealth === 'viable' &&
+            source.selectedFileCount > 0 &&
+            source.selectedFileMappings.length === source.selectedFileCount,
+        )
+      ) {
+        actions.push('media.download.start');
+      }
+    }
+    if (task.stage === 'download') {
+      if (task.runState === 'blocked') actions.push('media.download.start');
+      if (task.runState === 'succeeded') actions.push('media.governance.start');
+    }
+    if (task.stage === 'governance') {
+      if (task.runState === 'blocked') actions.push('media.governance.start');
+      actions.push('plan.submit.sealed');
+    }
+    if (task.stage === 'metadata') {
+      actions.push('plan.submit.sealed');
+      if (task.metadataStatus === 'pending') {
+        actions.push('media.metadata.verify');
+      }
+      if (task.metadataStatus === 'requires-agent') {
+        actions.push('media.metadata.repair');
+      }
+      if (task.metadataStatus === 'verified' && task.runState === 'succeeded') {
+        actions.push('media.acceptance.verify');
+      }
+    }
+    if (task.stage === 'acceptance' && task.runState === 'blocked') {
+      actions.push('media.acceptance.verify');
+    }
+    return [...new Set(actions)];
+  }
+
+  /**
+   * 在接收阶段应用经过实时资料源唯一核验的 TMDB 身份，并更新下一轮胶囊所需版本与快照。
+   * @param task - 当前接收阶段媒体任务。
+   * @param value - Agent 提交的 provider、providerId 与发行年份。
+   * @returns 含新 revision 和下一动作的类型化成功回执。
+   */
+  private async confirmAgentIdentity(
+    task: MediaGovernanceTask,
+    value: Record<string, unknown>,
+  ) {
+    const identity = {
+      provider: value.provider,
+      providerId: value.providerId,
+      releaseYear: value.releaseYear,
+    };
+    const providerValid =
+      identity.provider === 'tmdb' &&
+      typeof identity.providerId === 'string' &&
+      /^[1-9]\d*$/u.test(identity.providerId);
+    const releaseYear = Number(identity.releaseYear);
+    const releaseYearValid =
+      identity.releaseYear === null ||
+      (Number.isInteger(identity.releaseYear) &&
+        releaseYear >= 1870 &&
+        releaseYear <= 2100);
+    if (!providerValid || !releaseYearValid) {
+      throwVbenError('Agent 身份确认参数无效', HttpStatus.BAD_REQUEST);
+    }
+    const providerId = String(identity.providerId);
+    const candidate = await this.assertAgentIdentityCandidate(task, {
+      provider: 'tmdb',
+      providerId,
+      releaseYear: identity.releaseYear as null | number,
+    });
+    const normalizedReleaseYear = identity.releaseYear as null | number;
+    task.providerRef = {
+      provider: 'tmdb',
+      providerId,
+    };
+    task.metadataIdentity = {
+      provider: 'tmdb',
+      providerId,
+      releaseYear: normalizedReleaseYear,
+    };
+    task.releaseYear = normalizedReleaseYear;
+    task.identityPreview = this.buildIdentityPreview({
+      mediaType: task.mediaType,
+      providerRef: task.providerRef,
+      releaseYear: normalizedReleaseYear,
+      seasonNumbers: task.units
+        .map((unit) => unit.seasonNumber)
+        .filter((season): season is string => Boolean(season)),
+      titleHint: task.titleHint,
+    });
+    task.inputSnapshotSha256 = createHash('sha256')
+      .update(
+        JSON.stringify({
+          mediaType: task.mediaType,
+          providerRef: task.providerRef,
+          releaseYear: normalizedReleaseYear,
+          seasonNumbers: task.units
+            .map((unit) => unit.seasonNumber)
+            .filter((season): season is string => Boolean(season)),
+          titleHint: task.titleHint,
+          workItemId: task.workItemId,
+        }),
+      )
+      .digest('hex');
+    task.gateReason = 'TMDB 身份已确认，等待密封文件选择';
+    task.nextCommandLabel = '自动选择主媒体与中文字幕文件';
+    this.bumpRevision(task);
+    await this.commitTask(task, 'state-updated');
+    return {
+      ...this.agentActionReceipt(task, 'media.identity.confirm'),
+      providerTitle: candidate.title,
+    };
+  }
+
+  /**
+   * 以保守命名规则推断唯一视频、目标语言字幕和字体映射，任何重复或不明归属都会失败关闭。
+   * @param task - 当前接收阶段媒体任务。
+   * @param value - 指定来源与首选中文字幕语言的 Agent 参数。
+   * @returns 文件选择写入后的数量、字节数和新 revision 回执。
+   */
+  private async applyAgentAutomaticSelection(
+    task: MediaGovernanceTask,
+    value: Record<string, unknown>,
+  ) {
+    const sourceId = this.agentSourceId(value);
+    const subtitleLanguage = value.subtitleLanguage;
+    if (!['zh-CN', 'zh-TW'].includes(String(subtitleLanguage))) {
+      throwVbenError('Agent 自动选择字幕语言无效', HttpStatus.BAD_REQUEST);
+    }
+    const normalizedSubtitleLanguage = String(
+      subtitleLanguage,
+    ) as MediaGovernanceSubtitleLanguage;
+    const source = this.findSource(task, sourceId);
+    if (source.manifestState !== 'inspected') {
+      throwVbenError('来源清单尚未完成检查', HttpStatus.CONFLICT);
+    }
+    const mappings: MediaGovernanceSourceSelectionDto['fileMappings'] = [];
+    if (task.mediaType === 'tv') {
+      for (const entry of source.manifest) {
+        const role = this.agentFileRole(entry.relativePath);
+        const episode = this.agentEpisodeIdentity(
+          entry.relativePath,
+          source,
+          task,
+        );
+        if (!role || !episode) continue;
+        if (role === 'subtitle') {
+          const language = this.agentSubtitleLanguage(entry.relativePath);
+          if (language !== normalizedSubtitleLanguage) continue;
+          mappings.push({
+            episodeNumber: episode.episodeNumber,
+            fileRole: 'subtitle',
+            index: entry.index,
+            language,
+            unitId: episode.unitId,
+          });
+          continue;
+        }
+        if (role === 'video') {
+          mappings.push({
+            episodeNumber: episode.episodeNumber,
+            fileRole: 'video',
+            index: entry.index,
+            unitId: episode.unitId,
+          });
+        }
+      }
+    } else {
+      const videoEntries = source.manifest
+        .filter((entry) => this.agentFileRole(entry.relativePath) === 'video')
+        .toSorted((left, right) => right.sizeBytes - left.sizeBytes);
+      if (videoEntries.length !== 1) {
+        throwVbenError(
+          '电影来源无法唯一自动判断正片，请手动选择',
+          HttpStatus.CONFLICT,
+        );
+      }
+      const unit = task.units[0];
+      if (!unit) throwVbenError('任务缺少治理单元', HttpStatus.CONFLICT);
+      mappings.push({
+        fileRole: 'video',
+        index: videoEntries[0].index,
+        unitId: unit.id,
+      });
+    }
+    const videoKeys = mappings
+      .filter((mapping) => mapping.fileRole === 'video')
+      .map((mapping) => `${mapping.unitId}:${mapping.episodeNumber}`);
+    const subtitleKeys = mappings
+      .filter((mapping) => mapping.fileRole === 'subtitle')
+      .map(
+        (mapping) =>
+          `${mapping.unitId}:${mapping.episodeNumber}:${mapping.language}`,
+      );
+    if (
+      mappings.length === 0 ||
+      !mappings.some((mapping) => mapping.fileRole === 'video') ||
+      new Set(videoKeys).size !== videoKeys.length ||
+      new Set(subtitleKeys).size !== subtitleKeys.length
+    ) {
+      throwVbenError(
+        '来源自动选择存在重复或不完整映射，请手动复核',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const selectedFileIndices = mappings
+      .map((mapping) => mapping.index)
+      .toSorted((left, right) => left - right);
+    const selected = await this.updateSourceSelection(task.id, source.id, {
+      expectedRevision: task.revision,
+      fileMappings: mappings,
+      selectedFileIndices,
+    });
+    return {
+      ...this.agentActionReceipt(task, 'media.selection.auto'),
+      selectedBytes: selected.selectedBytes,
+      selectedFileCount: selected.selectedFileCount,
+      subtitleCount: selected.selectedFileMappings.filter(
+        (mapping) => mapping.fileRole === 'subtitle',
+      ).length,
+      videoCount: selected.selectedFileMappings.filter(
+        (mapping) => mapping.fileRole === 'video',
+      ).length,
+    };
+  }
+
+  /**
+   * 从需要来源参数的 Agent 命令中读取并校验精确来源标识。
+   * @param value - 动态工具参数对象。
+   * @returns 通过安全格式校验的来源 ID。
+   */
+  private agentSourceId(value: Record<string, unknown>): string {
+    const sourceId = value.sourceId;
+    if (
+      typeof sourceId !== 'string' ||
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/u.test(sourceId)
+    ) {
+      throwVbenError('Agent 来源标识无效', HttpStatus.BAD_REQUEST);
+    }
+    return String(sourceId);
+  }
+
+  /**
+   * 将成功进入既有应用服务的 Agent 写动作投影为可读且可核对的新 Task 状态。
+   * @param task - 动作执行后已原位更新的任务。
+   * @param action - 本次通过门禁的类型化工具名。
+   * @returns 带 accepted、revision、阶段和下一动作的稳定回执。
+   */
+  private agentActionReceipt(
+    task: MediaGovernanceTask,
+    action: MediaCodexAgentTool,
+  ) {
+    return {
+      accepted: true,
+      action,
+      nextActionLabel: task.nextCommandLabel,
+      runState: task.runState,
+      stage: task.stage,
+      taskId: task.id,
+      taskRevision: task.revision,
+    };
+  }
+
+  /**
+   * 根据扩展名识别 Agent 自动选择可处理的视频或字幕角色，其他文件保持未选。
+   * @param relativePath - 来源清单相对路径。
+   * @returns 视频、字幕或空角色。
+   */
+  private agentFileRole(relativePath: string) {
+    const lower = relativePath.toLowerCase();
+    if (/\.(?:avi|m2ts|m4v|mkv|mov|mp4|ts|webm)$/u.test(lower)) {
+      return 'video' as const;
+    }
+    if (/\.(?:ass|ssa|srt|sup|vtt)$/u.test(lower)) {
+      return 'subtitle' as const;
+    }
+    return null;
+  }
+
+  /**
+   * 从字幕文件名的明确边界标记推断简体或繁体中文，无法识别时拒绝自动选入。
+   * @param relativePath - 字幕相对路径。
+   * @returns 中文语言代码或 null。
+   */
+  private agentSubtitleLanguage(relativePath: string) {
+    const lower = relativePath.toLowerCase();
+    if (/(?:^|[._ -])(?:chs|sc|zh[-_.]?(?:cn|hans))(?=[._ -]|$)/u.test(lower)) {
+      return 'zh-CN' as const;
+    }
+    if (/(?:^|[._ -])(?:cht|tc|zh[-_.]?tw)(?=[._ -]|$)/u.test(lower)) {
+      return 'zh-TW' as const;
+    }
+    return null;
+  }
+
+  /**
+   * 只接受 SxxExx 或根目录纯数字集号，并将其映射到来源声明范围内的唯一治理单元。
+   * @param relativePath - 来源文件相对路径。
+   * @param source - 声明季范围的来源。
+   * @param task - 提供媒体类型和 Unit 的当前任务。
+   * @returns 唯一单元与正整数集号；任何歧义返回 null。
+   */
+  private agentEpisodeIdentity(
+    relativePath: string,
+    source: MediaGovernanceSource,
+    task: MediaGovernanceTask,
+  ) {
+    let episodeNumber: null | number = null;
+    let seasonNumber: null | string = null;
+    const explicit = relativePath.match(
+      /(?:^|[^a-z0-9])S(\d{2})E(\d{1,3})(?!\d)/iu,
+    );
+    if (explicit) {
+      seasonNumber = `S${explicit[1]}`;
+      episodeNumber = Number(explicit[2]);
+    } else if (!relativePath.includes('/')) {
+      const brackets = [...relativePath.matchAll(/\[(\d{1,3})\]/gu)];
+      const matched = brackets.at(-1);
+      if (matched) episodeNumber = Number(matched[1]);
+    }
+    if (!Number.isInteger(episodeNumber) || Number(episodeNumber) < 1) {
+      return null;
+    }
+    let unit: MediaGovernanceUnit | undefined;
+    if (seasonNumber) {
+      unit = task.units.find(
+        (candidate) => candidate.seasonNumber === seasonNumber,
+      );
+    }
+    if (!unit && source.seasonNumbers.length === 1) {
+      unit = task.units.find(
+        (candidate) => candidate.seasonNumber === source.seasonNumbers[0],
+      );
+    }
+    if (!unit && task.units.length === 1) unit = task.units[0];
+    if (!unit) return null;
+    return { episodeNumber: Number(episodeNumber), unitId: unit.id };
+  }
+
+  /**
    * 构建有界任务、来源、单元和写边界上下文供 Agent 使用。
    * @param task - 用于有界任务、来源、单元和写边界上下文供 Agent 使用的领域对象，包含 `units`、`sources`、`mediaType`、`metadataIdentity` 字段。
    * @param taskRevision - 决定有界任务、来源、单元和写边界上下文供 Agent 使用内容、边界或目标的 `taskRevision` 值。
@@ -3991,43 +4511,46 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     task: MediaGovernanceTask,
     taskRevision: number,
   ) {
-    const currentUnit = task.units[0] ?? null;
+    const availableActions = this.agentAvailableActions(task);
     const sourceItems = task.sources.slice(0, 32).map((source) => ({
       contentKind: source.contentKind,
       id: source.id,
+      manifestState: source.manifestState,
       manifestSha256: source.manifestSha256,
       seasonNumbers: source.seasonNumbers,
+      selectedFileCount: source.selectedFileCount,
+      selectedMappingCount: source.selectedFileMappings.length,
       sourceHealth: source.sourceHealth,
       sourceRole: source.sourceRole,
     }));
-    let currentUnitProjection = null;
-    if (currentUnit) {
+    const units = task.units.map((unit) => {
       let subtitleContract = null;
-      if (currentUnit.subtitleContract) {
+      if (unit.subtitleContract) {
         subtitleContract = {
-          expectedEpisodeNumbers:
-            currentUnit.subtitleContract.expectedEpisodeNumbers,
-          releaseGroup: currentUnit.subtitleContract.releaseGroup,
-          sourceId: currentUnit.subtitleContract.sourceId,
+          expectedEpisodeNumbers: unit.subtitleContract.expectedEpisodeNumbers,
+          releaseGroup: unit.subtitleContract.releaseGroup,
+          sourceId: unit.subtitleContract.sourceId,
         };
       }
-      currentUnitProjection = {
-        expectedEpisodeNumbers: currentUnit.expectedEpisodeNumbers,
-        id: currentUnit.id,
-        metadataProjection: currentUnit.metadataProjection,
-        seasonNumber: currentUnit.seasonNumber,
+      return {
+        expectedEpisodeNumbers: unit.expectedEpisodeNumbers,
+        id: unit.id,
+        metadataProjection: unit.metadataProjection,
+        seasonNumber: unit.seasonNumber,
         subtitleContract,
-        unitKind: currentUnit.unitKind,
+        unitKind: unit.unitKind,
       };
-    }
+    });
     return {
       boundaries: {
         cloudGate: false,
-        databaseWrite: false,
+        databaseDirectWrite: false,
         formalMediaWrite: false,
+        typedExecutionOnly: true,
         uiWrite: false,
       },
-      currentUnit: currentUnitProjection,
+      gateReason: task.gateReason,
+      governanceProfile: task.governanceProfile,
       identity: {
         mediaType: task.mediaType,
         metadataIdentity: task.metadataIdentity,
@@ -4035,7 +4558,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         releaseYear: task.releaseYear,
         titleHint: task.titleHint,
       },
-      schemaVersion: 'media-agent-compact-context-v1',
+      metadataStatus: task.metadataStatus,
+      nextCommandLabel: task.nextCommandLabel,
+      progress: task.progress,
+      schemaVersion: 'media-agent-compact-context-v2',
       sources: {
         count: task.sources.length,
         items: sourceItems,
@@ -4044,10 +4570,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       taskId: task.id,
       taskRevision,
       unitCount: task.units.length,
+      units,
       workflow: {
         activeRun: Boolean(task.activeRunId),
+        availableActions,
         hasGovernanceProfile: Boolean(task.governanceProfile),
         hasSealedPlan: Boolean(task.sealedPlan && task.sealedPlanSha256),
+        planSubmitAllowed: availableActions.includes('plan.submit.sealed'),
         runState: task.runState,
         stage: task.stage,
       },

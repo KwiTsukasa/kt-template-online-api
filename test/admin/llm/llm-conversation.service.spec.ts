@@ -256,6 +256,37 @@ describe('LlmConversationService provider stream completion', () => {
     });
   });
 
+  it('keeps a media scene title bound to the Task instead of the first user prompt', async () => {
+    const conversation = {
+      id: '2041700000000190001',
+      isDeleted: false,
+      scene: 'media-governance',
+      sceneRefId: 'media-task-001',
+      title: '首条临时提示',
+    };
+    const save = jest.fn(async () => conversation);
+    const service = new LlmConversationService(
+      {
+        findOne: jest.fn(async () => conversation),
+        save,
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.updateSceneTitle({
+        conversationId: conversation.id,
+        scene: 'media-governance',
+        sceneRefId: conversation.sceneRefId,
+        title: '死神BLEACH · 媒体治理',
+      }),
+    ).resolves.toMatchObject({ title: '死神BLEACH · 媒体治理' });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(conversation.title).toBe('死神BLEACH · 媒体治理');
+  });
+
   it('hydrates the persisted provider thread into the first stream request after API restart', async () => {
     let observedProviderThreadId: null | string = null;
     const adapter = {
@@ -348,6 +379,48 @@ describe('LlmConversationService provider stream completion', () => {
       ),
     ).rejects.toThrow('llm-provider-thread-identity-mismatch');
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it('rotates a provider thread only through the explicit policy-upgrade CAS path', async () => {
+    const conversation = {
+      activeTurnId: 'turn-policy-upgrade',
+      id: '2041700000000190001',
+      isDeleted: false,
+      providerThreadId: 'thread-policy-v2',
+      scene: 'media-governance',
+      sceneRefId: 'media-task-001',
+    };
+    const save = jest.fn(async () => conversation);
+    const service = new LlmConversationService(
+      {
+        manager: {
+          transaction: async (work: (manager: unknown) => Promise<unknown>) =>
+            work({
+              getRepository: () => ({
+                findOne: jest.fn(async () => conversation),
+                save,
+              }),
+            }),
+        },
+      } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.bindProviderThread({
+        allowReplace: true,
+        conversationId: conversation.id,
+        conversationTurnId: conversation.activeTurnId,
+        expectedProviderThreadId: 'thread-policy-v2',
+        providerThreadId: 'thread-policy-v3',
+        scene: 'media-governance',
+        sceneRefId: conversation.sceneRefId,
+      }),
+    ).resolves.toMatchObject({ providerThreadId: 'thread-policy-v3' });
+    expect(conversation.providerThreadId).toBe('thread-policy-v3');
+    expect(save).toHaveBeenCalledTimes(1);
   });
 
   it('CAS-binds the first provider thread before any SSE start consumer or result callback', async () => {

@@ -254,6 +254,8 @@ export class LlmCodexChatService {
           conversationTurnId: mediaRuntime.identity.activeTurnId,
           expectedProviderThreadId: mediaRuntime.identity.providerThreadId,
           providerThreadId: threadId,
+          replaceProviderThread:
+            mediaRuntime.identity.providerThreadResetRequired === true,
           taskId: mediaRuntime.identity.sceneRefId,
         });
         mediaRuntime.identity = this.mediaConversationIdentity(
@@ -291,7 +293,7 @@ export class LlmCodexChatService {
             result: resultPayload,
             taskId: body.sceneRefId!,
           });
-          yield { content: mediaResult.summary, type: 'text-delta' };
+          yield { content: mediaResult.answer, type: 'text-delta' };
           projected.metadata = { mediaGovernanceResult: resultPayload };
         }
         yield projected;
@@ -516,7 +518,10 @@ export class LlmCodexChatService {
     let providerThreadId = body.threadId;
     if (mediaRuntime) {
       providerThreadId = undefined;
-      if (mediaRuntime.identity.providerThreadId) {
+      if (
+        mediaRuntime.identity.providerThreadId &&
+        mediaRuntime.identity.providerThreadResetRequired !== true
+      ) {
         providerThreadId = mediaRuntime.identity.providerThreadId;
       }
     }
@@ -780,10 +785,17 @@ export class LlmCodexChatService {
     const threadValid =
       identity.providerThreadId === null ||
       typeof identity.providerThreadId === 'string';
+    const resetValid =
+      identity.providerThreadResetRequired === undefined ||
+      typeof identity.providerThreadResetRequired === 'boolean';
     if (!conversationMatches || !sceneMatches) {
       throw new Error('media-agent-conversation-identity-mismatch');
     }
-    if (!threadValid || identity.providerThreadId !== providerThreadId) {
+    if (
+      !threadValid ||
+      !resetValid ||
+      identity.providerThreadId !== providerThreadId
+    ) {
       throw new Error('media-agent-conversation-identity-mismatch');
     }
     return identity as unknown as MediaGovernanceLlmConversationIdentity;
@@ -842,9 +854,22 @@ export class LlmCodexChatService {
           success: true,
         },
       });
-    } catch {
+    } catch (error) {
       await transport.respond(request.id, {
-        result: { contentItems: [], success: false },
+        result: {
+          contentItems: [
+            {
+              text: canonicalJson({
+                accepted: false,
+                code: this.mediaToolErrorCode(error),
+                currentStage: runtime.capsule.currentStage,
+                tool: request.params.tool,
+              }),
+              type: 'inputText',
+            },
+          ],
+          success: false,
+        },
       });
     }
   }
@@ -889,12 +914,35 @@ export class LlmCodexChatService {
     result: MediaCodexAgentResult,
   ): MediaCodexAgentWireResult {
     return {
+      answer: result.answer,
       candidateSummaries: result.candidateSummaries,
       nextActionLabel: result.nextActionLabel,
       planSha256: result.planSha256,
       status: result.status,
       summary: result.summary,
     };
+  }
+
+  /**
+   * 将动态工具异常收敛为不含上游正文、内部地址、凭据或堆栈的稳定失败码。
+   * @param error - Gateway 校验或内部媒体 API 调用抛出的未知异常。
+   * @returns 可安全交给模型用于停止重试和解释当前阻塞的错误码。
+   */
+  private mediaToolErrorCode(error: unknown) {
+    if (!(error instanceof Error)) return 'media-tool-call-rejected';
+    if (error.message === 'media-codex-agent-api-request-failed') {
+      return 'media-tool-api-rejected';
+    }
+    if (error.message.includes('identity-mismatch')) {
+      return 'media-tool-identity-mismatch';
+    }
+    if (
+      error.message.includes('arguments-invalid') ||
+      error.message.includes('tool-invalid')
+    ) {
+      return 'media-tool-arguments-invalid';
+    }
+    return 'media-tool-call-rejected';
   }
 
   /**

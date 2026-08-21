@@ -1,4 +1,8 @@
 import { LlmCodexChatService } from '../../../src/apps/media-codex-agent-gateway/application/llm-codex-chat.service';
+import {
+  buildMediaCodexAgentCapsule,
+  buildMediaCodexAgentPolicy,
+} from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.policy';
 import { UnixWebSocketRpcTransport } from '../../../src/apps/media-codex-agent-gateway/infrastructure/codex-app-server.client';
 
 describe('LlmCodexChatService unified runtime boundary', () => {
@@ -596,6 +600,7 @@ describe('LlmCodexChatService unified runtime boundary', () => {
             item: {
               phase: 'final_answer',
               text: JSON.stringify({
+                answer: '当前任务已分析，可以继续核对下一步。',
                 candidateSummaries: [],
                 nextActionLabel: '继续核对',
                 planSha256: null,
@@ -614,14 +619,76 @@ describe('LlmCodexChatService unified runtime boundary', () => {
     });
   });
 
+  it('returns a non-empty safe tool error instead of erasing an API rejection', async () => {
+    const mediaApiClient = {
+      call: jest
+        .fn()
+        .mockRejectedValue(new Error('media-codex-agent-api-request-failed')),
+    };
+    const service = new LlmCodexChatService(
+      config as never,
+      mediaApiClient as never,
+    );
+    const request = {
+      compactContext: { workflow: { availableActions: [] } },
+      currentStage: 'intake' as const,
+      currentUnitId: 'media-unit-001',
+      manifestSha256: 'a'.repeat(64),
+      model: 'gpt-test',
+      operatorCommand: '读取身份',
+      replayKey: 'media-agent-replay-001',
+      taskId: 'media-task-001',
+      taskRevision: 8,
+    };
+    const policy = buildMediaCodexAgentPolicy(request.taskId);
+    const capsule = buildMediaCodexAgentCapsule(request, policy);
+    const respond = jest.fn(async () => undefined);
+    const handle = Reflect.get(service, 'handleMediaToolCall').bind(
+      service,
+    ) as (
+      transport: unknown,
+      toolRequest: unknown,
+      runtime: unknown,
+    ) => Promise<void>;
+
+    await handle(
+      { respond },
+      {
+        id: 7,
+        method: 'item/tool/call',
+        params: { arguments: {}, tool: 'media_identity_read' },
+      },
+      {
+        capsule,
+        identity: {},
+        policy,
+        prompt: '测试',
+        request,
+      },
+    );
+
+    expect(respond).toHaveBeenCalledWith(7, {
+      result: {
+        contentItems: [
+          {
+            text: expect.stringContaining('media-tool-api-rejected'),
+            type: 'inputText',
+          },
+        ],
+        success: false,
+      },
+    });
+  });
+
   it('removes derived candidates from the media API and metadata payload', () => {
     const service = new LlmCodexChatService(config as never, {} as never);
-    const project = Reflect.get(service, 'mediaResultPayload').bind(service) as (
-      result: Record<string, unknown>,
-    ) => Record<string, unknown>;
+    const project = Reflect.get(service, 'mediaResultPayload').bind(
+      service,
+    ) as (result: Record<string, unknown>) => Record<string, unknown>;
 
     expect(
       project({
+        answer: '存在两个以上真实候选，请选择后继续。',
         candidateSummaries: ['tmdb:123｜候选 A', 'tmdb:456｜候选 B'],
         candidates: [
           { id: 'tmdb:123', summary: 'tmdb:123｜候选 A' },
@@ -633,6 +700,7 @@ describe('LlmCodexChatService unified runtime boundary', () => {
         summary: '存在两个以上真实候选',
       }),
     ).toEqual({
+      answer: '存在两个以上真实候选，请选择后继续。',
       candidateSummaries: ['tmdb:123｜候选 A', 'tmdb:456｜候选 B'],
       nextActionLabel: '等待操作员选择',
       planSha256: null,

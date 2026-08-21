@@ -209,12 +209,41 @@ export class LlmConversationService {
   }
 
   /**
+   * 按业务场景身份更新唯一对话标题，避免首条自由文本覆盖 Task 的长期身份标签。
+   * @param input - 对话、业务场景、业务引用与目标标题。
+   * @returns 更新后的规范对话视图。
+   */
+  async updateSceneTitle(input: {
+    conversationId: string;
+    scene: Exclude<LlmConversationScene, 'general'>;
+    sceneRefId: string;
+    title: string;
+  }) {
+    const conversation = await this.requireConversation(input.conversationId);
+    if (
+      conversation.scene !== input.scene ||
+      conversation.sceneRefId !== input.sceneRefId
+    ) {
+      throwVbenError('大模型对话身份不匹配', HttpStatus.CONFLICT);
+    }
+    const title = input.title.trim().slice(0, 160);
+    if (!title)
+      throwVbenError('大模型对话标题不能为空', HttpStatus.BAD_REQUEST);
+    if (conversation.title !== title) {
+      conversation.title = title;
+      await this.conversationRepository.save(conversation);
+    }
+    return this.toConversationView(conversation);
+  }
+
+  /**
    * 在活动回合开始供应商 turn 前以 CAS 方式绑定 provider thread，首次为空时写入，已有绑定只允许同值确认。
    * @param input - 对话场景、业务引用、调用方读取的旧线程值及 App Server 实际线程。
    * @returns 完成 CAS 后的规范对话身份元组。
    * @throws 对话、活动回合、场景引用或 provider thread 比较值漂移时抛出错误。
    */
   async bindProviderThread(input: {
+    allowReplace?: boolean;
     conversationTurnId: string;
     conversationId: string;
     expectedProviderThreadId: null | string;
@@ -239,10 +268,17 @@ export class LlmConversationService {
       ) {
         throwVbenError('大模型对话身份不匹配', HttpStatus.CONFLICT);
       }
-      conversation.providerThreadId = this.resolveProviderThreadId(
-        conversation,
-        input.providerThreadId,
-      );
+      if (
+        input.allowReplace === true &&
+        conversation.providerThreadId !== input.providerThreadId
+      ) {
+        conversation.providerThreadId = input.providerThreadId;
+      } else {
+        conversation.providerThreadId = this.resolveProviderThreadId(
+          conversation,
+          input.providerThreadId,
+        );
+      }
       await conversationRepository.save(conversation);
       return {
         activeTurnId: conversation.activeTurnId,
@@ -397,7 +433,10 @@ export class LlmConversationService {
         conversation.selectedReasoningEffort =
           selection.reasoningEffort || null;
         conversation.selectedServiceTier = selection.serviceTier || null;
-        if (conversation.messageCount === 2) {
+        if (
+          conversation.messageCount === 2 &&
+          conversation.scene === 'general'
+        ) {
           conversation.title = this.titleFromMessage(body.content);
         }
         await conversationRepository.save(conversation);

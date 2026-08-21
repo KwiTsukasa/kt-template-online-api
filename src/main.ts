@@ -23,6 +23,7 @@ const adminSwaggerPathPrefixes = [
   '/auth',
   '/component',
   '/dict',
+  '/llm',
   '/menu',
   '/media-governance',
   '/system',
@@ -130,16 +131,15 @@ function sendRateLimitRejection(
     response.setHeader('Retry-After', String(outcome.retryAfterSeconds));
   }
   const status = outcome.statusCode || 429;
-  const message =
-    (() => {
-      if (status === 403) {
-        return '当前来源无权访问接口文档';
-      }
-      if (status === 503) {
-        return '登录限流服务暂不可用';
-      }
-      return '请求过于频繁，请稍后重试';
-    })();
+  const message = (() => {
+    if (status === 403) {
+      return '当前来源无权访问接口文档';
+    }
+    if (status === 503) {
+      return '登录限流服务暂不可用';
+    }
+    return '请求过于频繁，请稍后重试';
+  })();
   response.status(status).json({
     code: status,
     err: message,

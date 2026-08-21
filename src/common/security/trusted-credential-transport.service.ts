@@ -10,9 +10,11 @@ const PROTECTED_POST_CREDENTIAL_PATHS = new Set([
   '/auth/refresh',
   '/qqbot/account/save',
   '/qqbot/account/update',
+  '/llm/configs',
   '/system/user',
 ]);
 const PROTECTED_ADMIN_USER_PUT_PATH = /^\/system\/user\/[^/]+(?:\/password)?$/;
+const PROTECTED_LLM_CONFIG_PUT_PATH = /^\/llm\/configs\/[^/]+$/;
 const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '[::1]', 'localhost']);
 const LOOPBACK_PEERS = new Set(['127.0.0.1', '::1']);
 
@@ -53,7 +55,11 @@ export class TrustedCredentialTransportService {
     const method = `${request.method || ''}`.toUpperCase();
     const path = this.getPath(request);
     if (method === 'POST') return PROTECTED_POST_CREDENTIAL_PATHS.has(path);
-    return method === 'PUT' && PROTECTED_ADMIN_USER_PUT_PATH.test(path);
+    if (method !== 'PUT') return false;
+    return (
+      PROTECTED_ADMIN_USER_PUT_PATH.test(path) ||
+      PROTECTED_LLM_CONFIG_PUT_PATH.test(path)
+    );
   }
 
   /**

@@ -200,6 +200,8 @@ Agent 状态响应额外包含可选的 `currentPublicIpv6/currentIpv6ObservedAt
 | MQTT          | `MQTT_URL`、`MQTT_USERNAME`、`MQTT_PASSWORD`、`MQTT_CLIENT_ID`                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Env Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_JENKINS_*`、`ENV_DASHBOARD_K8S_*`、`ENV_DASHBOARD_TENCENT_*`、`ENV_DASHBOARD_CADDY_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                                                                                                  |
 | Network       | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_TCP_NATMAP_RELEASE_MODE`、`NETWORK_TCP_NATMAP_CANARY_PORTS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_ENABLED`、`NETWORK_DDNS_DNSPOD_SECRET_ID`、`NETWORK_DDNS_DNSPOD_SECRET_KEY`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
+| Media         | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`                                                                                                                                                                                                                                                                                                                                                                           |
+| LLM           | `LLM_CONFIG_SECRET_KEY`、`LLM_CODEX_GATEWAY_BASE_URL`、`LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`LLM_CODEX_GATEWAY_TIMEOUT_MS`、`LLM_CODEX_CHAT_CWD`                                                                                                                                                                                                                                                                                                                                                                                           |
 | BangDream     | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT`                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FF14 Market   | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_DEFAULT_WORLD`                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FFLogs        | `FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET`                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -209,6 +211,53 @@ Agent 状态响应额外包含可选的 `currentPublicIpv6/currentIpv6ObservedAt
 Env Dashboard 的 `ENV_DASHBOARD_ADMIN_LOCAL_URL` / `ENV_DASHBOARD_ADMIN_PUBLIC_URL` 只作为 Admin 入口展示证据；Jenkins、K8s、Tencent Cloud、Caddy、WireGuard、Mihomo/OpenClash 仍通过对应 `ENV_DASHBOARD_*` 只读配置接入，缺失配置必须返回 `unwired` 证据。
 
 QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Service `kt-qqbot-plugin-redis:6379`，用于 `QQBOT_PLUGIN_QUEUE_REDIS_HOST` / `QQBOT_PLUGIN_QUEUE_REDIS_PORT`。`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS` 控制串行队列的排队等待窗口，避免排队时间挤占插件操作本身的 `timeoutMs` 执行预算。插件定时任务可通过 `QQBOT_PLUGIN_TASK_QUEUE_REDIS_*` 使用独立 BullMQ prefix；未配置 host 时复用插件 worker Redis 连接。
+
+## 大模型配置与流式对话
+
+| 方法     | 路径                                               | 说明                                      |
+| -------- | -------------------------------------------------- | ----------------------------------------- |
+| `GET`    | `/llm/providers`                                   | 查询六类供应商、默认端点和协议            |
+| `GET`    | `/llm/configs`                                     | 分页查询脱敏连接卡片                      |
+| `GET`    | `/llm/configs/summary`                             | 汇总连接状态                              |
+| `GET`    | `/llm/configs/:id`                                 | 查询不含凭据和静态模型数组的脱敏连接详情  |
+| `GET`    | `/llm/configs/:id/models`                          | 按供应商协议实时发现当前凭据可用模型      |
+| `POST`   | `/llm/configs`                                     | 加密创建连接                              |
+| `PUT`    | `/llm/configs/:id`                                 | 更新连接；空 API Key 保留旧密钥           |
+| `DELETE` | `/llm/configs/:id`                                 | 软删除已停用连接                          |
+| `POST`   | `/llm/configs/:id/enabled`                         | 启用或停用连接                            |
+| `POST`   | `/llm/configs/:id/default`                         | 设为默认连接                              |
+| `POST`   | `/llm/configs/:id/test`                            | 通过真实流式首包验证连接                  |
+| `GET`    | `/llm/conversations`                               | 按连接查询持久化对话                      |
+| `POST`   | `/llm/conversations`                               | 创建对话                                  |
+| `GET`    | `/llm/conversations/:id`                           | 查询对话和完整可见消息                    |
+| `DELETE` | `/llm/conversations/:id`                           | 软删除没有活动回合的对话                  |
+| `POST`   | `/llm/conversations/:id/messages/stream`           | POST SSE 发送消息并流式返回统一事件       |
+
+流事件固定为 `start`、`reasoning-delta`、`text-delta`、`done` 或 `error`；每个事件
+携带递增 `sequence`，助手终态保存上游实际模型。浏览器中止请求会传播到供应商或 Codex
+turn，并把已经收到的部分正文保存为 `interrupted`，不存在非流式降级路径。OpenAI、智谱、
+DeepSeek 和 Moonshot 使用 OpenAI-compatible SSE；Anthropic 使用 Messages SSE；本地
+Codex 使用同一 `/internal/llm-codex` App Server gateway。
+
+连接新增与编辑请求不接受 `modelIds`。模型目录只通过
+`GET /llm/configs/:id/models` 获取：OpenAI、智谱、DeepSeek、Moonshot 调用各自
+OpenAI-compatible Models API，Anthropic 使用官方 Models API 的 `after_id` 有界分页，
+本地 Codex 经 gateway `GET /internal/llm-codex/models` 调用 App Server `model/list`。
+每个模型项可返回 `reasoningEfforts/defaultReasoningEffort` 与
+`serviceTiers/defaultServiceTier`；Codex 完整映射 App Server 能力，Anthropic 映射实际
+`capabilities.effort`，OpenAI-compatible 供应商只归一响应中真实声明的扩展能力。空能力数组
+表示不支持或未声明，调用方必须隐藏对应控件。对话页进入时实时刷新目录，每次 POST SSE
+发送前 API 再次校验模型及所选推理强度/速度档位；非法组合在建立流前返回 400，模型发现
+失败或返回空目录时失败关闭，不回退配置表中的静态列表。
+
+媒体治理不再配置第二套 Codex 地址、密钥、模型或消息接口。调用 `agent/start` 时，API
+从当前启用的 Admin Codex 连接创建一条 `scene=media-governance` 的标准 LLM conversation，
+Task 只持久化唯一 `llmConversationId`；模型选择、消息、流式终态、实际模型和底层
+`providerThreadId` 均由 LLM conversation 统一管理。媒体入口跳转到同一个标准 LLM 对话页，
+续聊只使用 `/llm/conversations/:id/messages/stream`，不存在媒体专用非流式或第二消息路由。
+类型化治理工具、Task revision、密封计划和人工候选仍由媒体领域校验。Codex 网关统一使用
+`LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`x-kt-llm-gateway-secret` 与启用网络和 live Web
+Search 的 `llm-codex` 权限档。
 
 ## Admin 与基础后台
 
@@ -238,9 +287,8 @@ QQBot 插件 worker 队列依赖 Redis。K8s 生产清单提供内部 Redis Serv
 | `POST`   | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验              |
 | `POST`   | `/media-governance/tasks/:taskId/metadata/repair`                  | 启动最多两次的确定性有界元数据修复     |
 | `POST`   | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理             |
-| `POST`   | `/media-governance/tasks/:taskId/agent/start`                      | 任意未完成阶段启动/重试 CodexAgent     |
-| `GET`    | `/media-governance/tasks/:taskId/agent/session?afterSequence=N`    | 查询 Agent 会话身份和可见消息增量      |
-| `POST`   | `/media-governance/tasks/:taskId/agent/messages`                   | 在同一 Agent thread 幂等续发用户消息   |
+| `POST`   | `/media-governance/tasks/:taskId/agent/start`                      | 创建并绑定唯一的本地 Codex LLM 对话    |
+| `GET`    | `/media-governance/tasks/:taskId/agent/session?afterSequence=N`    | 查询由 LLM 对话派生的只读治理投影      |
 | `POST`   | `/media-governance/tasks/:taskId/agent/operator-decision`          | 提交人工候选选择并闭环                 |
 | `GET`    | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
 | `GET`    | `/media-governance/events/stream`                                  | 订阅带 replay/snapshot-required 的 SSE |
@@ -318,8 +366,11 @@ revision 和 replay key。治理完成后 fnOS 尚未稳定回填身份时，若
 其他 profile、第二次尝试或更广的缺口仍按 `bounded_repair`/Agent 分支计数，不能借自动
 补齐标签降级硬门禁。
 
-Task、Unit、来源和 Agent 会话由 `media_governance_*` TypeORM 状态仓持久化；API
-启动时恢复同一 Task/thread、revision 和事件序号。正式下载、治理、元数据核验和独立
+Task、Unit、来源、Run 和治理证据由 `media_governance_*` TypeORM 状态仓持久化；新媒体
+Task 的 Agent 绑定只保存 `llm_conversation_id`，消息和 Codex thread 分别由
+`admin_llm_message` 与 `admin_llm_conversation.provider_thread_id` 管理。旧的
+`media_governance_agent_session` 只用于读取历史任务；Task 获得 LLM 绑定后会删除对应
+旧 session 行。API 启动时按 `llmConversationId` 恢复派生的治理状态。正式下载、治理、元数据核验和独立
 验收先在数据库事务中密封 Run 与 Outbox，再通过
 `MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`
 和 `MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS` 调用 NAS 执行器；缺少数据库状态仓、私有
@@ -337,43 +388,42 @@ MySQL 最多每 10 秒、出现语义变化或进入终态时保存权威快照�
 SSE 仅在 API 有界内存窗内重放；游标超窗返回 `snapshot-required`，由 Admin 静默读取
 权威快照。Redis Stream 目前不是跨进程 SSE 历史重放接口。
 该 SSE 响应固定返回 `Cache-Control: no-store` 与 `X-Accel-Buffering: no`，让浏览器前的
-Nginx 立即转发每条业务或 Agent 增量，不能等缓冲区积满后批量送达。
-普通状态变更先提交数据库再发布 SSE，Agent
-事件则与 Task/session 水位在同一事务写入。源码同时提供真实 CodexAgent outbound
-adapter 与 NAS gateway 内部接口；只有同时配置
-`MEDIA_CODEX_AGENT_GATEWAY_BASE_URL` 和 `MEDIA_CODEX_AGENT_INTERNAL_SECRET` 时，
-`agent/start` 才会转入真实 gateway，否则保持失败关闭。除 `closed` 外，任意阶段均可
-启动 Agent，并由阶段专用预提示词约束能力：接收资料、NAS 下载、独立验收以及存在活动
-媒体 Run 时只能使用类型化只读工具，不能提交密封写计划，也不能改变主 Run 的 revision、
-进度或状态；只有无活动 Run 的本地治理/元数据阶段可以提交任务 staging 边界内的密封
-计划。gateway 只监听 NAS 私有
-k3d bridge 地址，
-内部提供 `GET /internal/media-codex-agent/health`、
-`POST /internal/media-codex-agent/tasks/:taskId/turns` 和
-`GET /internal/media-codex-agent/tasks/:taskId/session`，全部要求独立内部 secret；响应不
-包含登录态、凭据或原始 App Server 协议。每次 thread/start、thread/resume 和
-turn/start 都必须命中命名 `media-agent` 权限档及 `approvalPolicy=never`，不接受旧式
-sandbox 与命名权限混用。App Server Unix socket 使用标准 WebSocket HTTP Upgrade，
-wire JSON-RPC 省略 `jsonrpc` 字段，动态工具以合法下划线名传输并映射回点号内部合同。
-gateway checkpoint 持久化 `lastEventSequence`，重启后继续递增；API 查询 Agent 会话时
-会回读 gateway 的 Task/thread 权威投影和官方 App Server 可见历史，并按
-`afterSequence` 返回 user/assistant 消息增量。gateway 只保存有界脱敏 checkpoint，
-不投影 reasoning、原始工具输出或登录凭据。`POST .../agent/messages` 要求同一
-`threadId`、`expectedConversationRevision` 与 `clientMessageId`；幂等重放返回原结果，
-身份或 revision 漂移返回 409。可见文本 delta 按 75ms 合并后走独立 conversation SSE，
-不会改变 Task 的业务 stage、runState 或 revision。gateway 在创建任何 App Server thread/turn
-之前还会调用 `GET /internal/media-governance/agent/health`；只有响应
-`persistenceMode=database`、`status=ready` 才放行。API 在调用 gateway 前先持久化
-带精确 policy/capsule SHA 的启动预留；只允许预留水位的下一连续序号
-`agent-thread-mapped` 把 `pending-<taskId>` 原子绑定到真实 thread，后续事件继续按同一 SHA/revision/thread
-校验。启动响应超时会查询 gateway 的同一 Task 会话恢复，预留持久化失败则不会调用
-gateway。旧版未包含事件序号的 v1 checkpoint 和 gateway 安全响应按序号 0 兼容读取，
-不绕过其他 SHA、身份或策略校验。
-Agent 异常完成会保存终态类型并投影为 `failed`；正常完成但存在真实歧义才使用
-`needs-operator`。对 `failed` 再次调用 `agent/start` 时，API 生成新 revision、replay
-key 和 capsule，并请求 `restart-failed-turn`。gateway 必须只读恢复旧 thread 并确认
-其精确最后 turn 为 `failed` 或 `interrupted`，随后才创建新 thread；正常完成、活动中、
-无旧会话或身份不一致均失败关闭，不能用 `operator-decision` 伪造闭环。
+Nginx 立即转发每条业务事件，不能等缓冲区积满后批量送达。普通状态变更先提交数据库
+再发布 SSE。`agent/start` 只创建或返回该 Task 唯一的媒体场景 LLM conversation，并从
+Admin 当前启用的 Codex 连接取端点与初始模型；重复请求不会创建第二条业务对话。
+旧的 `MEDIA_CODEX_AGENT_GATEWAY_*` 与 `MEDIA_CODEX_AGENT_INTERNAL_SECRET` 不再参与运行
+决策。标准 LLM POST SSE 在每一轮把 conversation scene、Task ID、当前模型和用户消息交给
+统一 gateway；gateway 通过
+`POST /internal/media-governance/agent/llm-conversations/context` 读取当前 revision、
+manifest、policy 与 capsule，通过类型化工具回调读取事实，并在严格结构化结果完成后调用
+`POST /internal/media-governance/agent/llm-conversations/result` 更新治理投影。浏览器只消费
+标准 `start/reasoning-delta/text-delta/done/error` 事件，停止生成沿同一 Abort 链路中断
+Codex turn，不存在非流式回退。
+
+媒体 conversation 的规范身份固定为
+`conversationId + scene + sceneRefId + activeTurnId + providerThreadId`。Task 只保存
+`llmConversationId`，其余字段只以 `admin_llm_conversation` 为权威；context、provider thread
+绑定和 result 回调必须携带同一个 `activeTurnId`。gateway 取得 App Server thread 后必须先调用
+`POST /internal/media-governance/agent/llm-conversations/provider-thread`，API 在对话行锁内以
+`expectedProviderThreadId` 执行 CAS：仅允许 `null -> actual` 或 `same -> same`，绑定成功后才
+发送 `turn/start`。上一回合的迟到请求、错误 Task/scene/ref 或不同 thread 均返回 409，不能
+覆盖当前身份。旧 `media_governance_agent_session` 与 NAS 宿主 `task-sessions` 文件不会被恢复
+为标准 conversation；旧文件只可在新链路验收后按备份清单隔离清理。
+
+gateway 只监听 NAS 私有 k3d bridge 地址，统一根为 `/internal/llm-codex`；健康接口是
+`GET /internal/llm-codex/health`，实时模型接口是
+`GET /internal/llm-codex/models`，流接口是
+`POST /internal/llm-codex/chat/stream`，三者均使用 `x-kt-llm-gateway-secret`。模型接口
+通过独立 Unix-WebSocket 连接有界分页调用 App Server `model/list`，排除隐藏项并按发送
+模型 ID 去重。每次
+thread/start、thread/resume 和 turn/start 都必须命中 `llm-codex` 权限档、
+`networkAccess=true` 与 `approvalPolicy=never`，同时启用 live Web Search；媒体写边界
+继续由动态类型化工具、Task revision 和密封计划约束。App Server Unix socket 使用标准
+WebSocket HTTP Upgrade，wire JSON-RPC 省略 `jsonrpc` 字段，动态工具以下划线 wire 名映射
+回点号内部合同。可见消息、reasoning、终态 metadata、实际模型和底层 Codex thread 都写入
+同一 LLM conversation；媒体治理页面仅按 Task 的 `llmConversationId` 进入这条标准对话。
+结构化结果异常投影为失败；真实候选歧义保持 `needs-operator`，不能用
+`operator-decision` 绕过候选和密封计划校验。
 `turn/start` 的结构化输出 Schema 必须把 `properties` 中的每个字段同时列入
 `required`；无候选时返回空 `candidateSummaries`，不得以省略字段绕过严格 Schema。
 种子上传

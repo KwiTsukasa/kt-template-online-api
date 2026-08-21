@@ -6,6 +6,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { LLM_CODEX_INTERNAL_HEADER } from '@/apps/media-codex-agent-gateway/domain/llm-codex-runtime.contract';
 
 @Injectable()
 export class MediaGovernanceAgentInternalGuard implements CanActivate {
@@ -20,7 +21,7 @@ export class MediaGovernanceAgentInternalGuard implements CanActivate {
    */
   canActivate(context: ExecutionContext) {
     const expectedValue = String(
-      this.config.get<string>('MEDIA_CODEX_AGENT_INTERNAL_SECRET') ?? '',
+      this.config.get<string>('LLM_CODEX_GATEWAY_INTERNAL_SECRET') ?? '',
     ).trim();
     if (expectedValue.length < 32 || expectedValue.length > 512) {
       throw new ForbiddenException('media-codex-agent-internal-auth-failed');
@@ -28,7 +29,7 @@ export class MediaGovernanceAgentInternalGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<{
       headers: Record<string, string | string[] | undefined>;
     }>();
-    const header = request.headers['x-kt-media-agent-secret'];
+    const header = request.headers[LLM_CODEX_INTERNAL_HEADER];
     let headerValue = '';
     if (typeof header === 'string') headerValue = header;
     if (Array.isArray(header)) headerValue = header[0] ?? '';

@@ -8,6 +8,7 @@ import {
   UnixWebSocketRpcTransport,
 } from '../../../src/apps/media-codex-agent-gateway/infrastructure/codex-app-server.client';
 import { buildMediaCodexAgentPolicy } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.policy';
+import { LLM_CODEX_PERMISSION_PROFILE } from '../../../src/apps/media-codex-agent-gateway/domain/llm-codex-runtime.contract';
 
 class FakeTransport implements CodexAppServerRpcTransport {
   readonly calls: Array<{ method: string; params: unknown }> = [];
@@ -17,7 +18,7 @@ class FakeTransport implements CodexAppServerRpcTransport {
   requestHandler: ((value: any) => Promise<void>) | undefined;
 
   constructor(
-    private readonly permissionProfileId = 'media-agent',
+    private readonly permissionProfileId = LLM_CODEX_PERMISSION_PROFILE,
     private readonly resumeItems: unknown[] = [],
     private readonly pagedTurns: unknown[][] = [],
   ) {}
@@ -51,7 +52,7 @@ class FakeTransport implements CodexAppServerRpcTransport {
         },
         approvalPolicy: 'never',
         cwd: '/tmp/kt-media-agent-clean',
-        sandbox: { networkAccess: false, type: 'readOnly' },
+        sandbox: { networkAccess: true, type: 'readOnly' },
         thread: {
           id: '019fbc48-c50e-7453-89b1-9c1b40234b3a',
           turns:
@@ -108,11 +109,13 @@ describe('CodexAppServerClient', () => {
     const transport = new FakeTransport();
     const client = new CodexAppServerClient(transport);
 
-    const thread = await client.startThread(policy);
+    const thread = await client.startThread(policy, 'gpt-test');
     const turn = await client.startTurn(
       thread.threadId,
       'bounded prompt',
       policy,
+      undefined,
+      'gpt-test',
     );
 
     expect(turn.turnId).toBe('media-turn-001');
@@ -131,7 +134,8 @@ describe('CodexAppServerClient', () => {
         expect.objectContaining({ name: 'plan_submit_sealed' }),
       ]),
       environments: [],
-      permissions: 'media-agent',
+      model: 'gpt-test',
+      permissions: LLM_CODEX_PERMISSION_PROFILE,
       runtimeWorkspaceRoots: [],
       selectedCapabilityRoots: [],
     });
@@ -145,7 +149,8 @@ describe('CodexAppServerClient', () => {
     expect(turnStart).toMatchObject({
       approvalPolicy: 'never',
       cwd: policy.cleanCwd,
-      permissions: 'media-agent',
+      model: 'gpt-test',
+      permissions: LLM_CODEX_PERMISSION_PROFILE,
     });
     const outputSchema = turnStart.outputSchema as {
       properties: Record<string, unknown>;
@@ -172,13 +177,15 @@ describe('CodexAppServerClient', () => {
     const resume = transport.calls.find(
       (call) => call.method === 'thread/resume',
     )?.params as Record<string, unknown>;
-    expect(resume).toMatchObject({ permissions: 'media-agent' });
+    expect(resume).toMatchObject({
+      permissions: LLM_CODEX_PERMISSION_PROFILE,
+    });
     expect(resume).not.toHaveProperty('sandbox');
   });
 
   it('parses the final agentMessage from a resumed App Server turn', async () => {
     const planSha256 = 'b'.repeat(64);
-    const transport = new FakeTransport('media-agent', [
+    const transport = new FakeTransport(LLM_CODEX_PERMISSION_PROFILE, [
       {
         id: 'media-final-001',
         phase: 'final_answer',
@@ -203,7 +210,7 @@ describe('CodexAppServerClient', () => {
 
   it('reads every requested App Server history page in ascending order', async () => {
     const transport = new FakeTransport(
-      'media-agent',
+      LLM_CODEX_PERMISSION_PROFILE,
       [],
       [
         [

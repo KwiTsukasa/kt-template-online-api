@@ -1333,3 +1333,66 @@ CREATE TABLE IF NOT EXISTS station_notice_message_binding (
   update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   UNIQUE KEY uk_station_notice_message_binding_active_key (active_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_llm_config (
+  id BIGINT NOT NULL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  base_url VARCHAR(1000) NOT NULL,
+  api_key_secret TEXT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  is_default TINYINT(1) NOT NULL DEFAULT 0,
+  connection_status VARCHAR(16) NOT NULL DEFAULT 'untested',
+  first_token_latency_ms INT NULL,
+  last_tested_at DATETIME(6) NULL,
+  last_error_message VARCHAR(500) NULL,
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  KEY idx_admin_llm_config_list (is_deleted, enabled, provider),
+  KEY idx_admin_llm_config_status (is_deleted, connection_status),
+  KEY idx_admin_llm_config_default (is_deleted, is_default)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_llm_conversation (
+  id BIGINT NOT NULL PRIMARY KEY,
+  config_id BIGINT NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  selected_model VARCHAR(200) NULL,
+  selected_reasoning_effort VARCHAR(64) NULL,
+  selected_service_tier VARCHAR(64) NULL,
+  scene VARCHAR(32) NOT NULL DEFAULT 'general',
+  scene_ref_id VARCHAR(96) NULL,
+  provider_thread_id VARCHAR(128) NULL,
+  active_turn_id VARCHAR(96) NULL,
+  active_turn_started_at DATETIME(6) NULL,
+  message_count INT NOT NULL DEFAULT 0,
+  last_message_at DATETIME(6) NULL,
+  is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_admin_llm_conversation_scene_ref (scene, scene_ref_id),
+  KEY idx_admin_llm_conversation_list (config_id, is_deleted, last_message_at),
+  CONSTRAINT fk_admin_llm_conversation_config FOREIGN KEY (config_id) REFERENCES admin_llm_config (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS admin_llm_message (
+  id BIGINT NOT NULL PRIMARY KEY,
+  conversation_id BIGINT NOT NULL,
+  client_message_id VARCHAR(96) NULL,
+  role VARCHAR(16) NOT NULL,
+  model VARCHAR(200) NULL,
+  content LONGTEXT NOT NULL,
+  reasoning_content LONGTEXT NULL,
+  status VARCHAR(16) NOT NULL,
+  finish_reason VARCHAR(64) NULL,
+  `usage` JSON NULL,
+  metadata JSON NULL,
+  sequence INT NOT NULL,
+  error_message VARCHAR(500) NULL,
+  create_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  update_time DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  UNIQUE KEY uk_admin_llm_message_sequence (conversation_id, sequence),
+  UNIQUE KEY uk_admin_llm_message_client_id (conversation_id, client_message_id),
+  CONSTRAINT fk_admin_llm_message_conversation FOREIGN KEY (conversation_id) REFERENCES admin_llm_conversation (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

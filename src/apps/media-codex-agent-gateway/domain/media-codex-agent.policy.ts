@@ -13,6 +13,10 @@ import {
   type MediaCodexAgentToolCall,
   type MediaCodexAgentTurnRequest,
 } from './media-codex-agent.contract';
+import {
+  LLM_CODEX_NETWORK_ACCESS,
+  LLM_CODEX_PERMISSION_PROFILE,
+} from './llm-codex-runtime.contract';
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/;
@@ -25,7 +29,7 @@ export interface MediaCodexAgentPolicyPaths {
 }
 
 /**
- * 根据指定媒体任务构造只读、无网络且路径受限的固定执行策略。
+ * 根据指定媒体任务构造复用统一联网权限档且路径受限的固定执行策略。
  * @param taskId - 用于精确定位任务的标识。
  * @param paths - 用于媒体任务CodexAgentPolicy的领域对象，包含 `cleanCwd`、`stagingRoot`、`evidenceRoot` 字段；省略时默认采用 `{}`。
  * @returns 包含 `policySha256` 字段的媒体任务CodexAgentPolicy。
@@ -47,8 +51,8 @@ export function buildMediaCodexAgentPolicy(
     allowedTools: [...MEDIA_CODEX_AGENT_TOOLS],
     approvalPolicy: 'never' as const,
     cleanCwd,
-    networkAccess: false as const,
-    permissionProfile: 'media-agent' as const,
+    networkAccess: LLM_CODEX_NETWORK_ACCESS,
+    permissionProfile: LLM_CODEX_PERMISSION_PROFILE,
     policyVersion: MEDIA_CODEX_AGENT_POLICY_VERSION,
     sandbox: 'read-only' as const,
     staticPrompt: MEDIA_CODEX_AGENT_STATIC_POLICY,
@@ -238,6 +242,12 @@ function validateTurnRequest(request: MediaCodexAgentTurnRequest) {
   if (
     !request.operatorCommand.trim() ||
     request.operatorCommand.length > 2_000
+  ) {
+    throw new Error('agent-turn-input-invalid');
+  }
+  if (
+    request.model !== undefined &&
+    (!request.model.trim() || request.model.length > 200)
   ) {
     throw new Error('agent-turn-input-invalid');
   }

@@ -9,19 +9,19 @@ import {
   Optional,
 } from '@nestjs/common';
 import { throwVbenError } from '@/common';
+import { LlmConfigService } from '@/modules/admin/llm/application/llm-config.service';
+import { LlmConversationService } from '@/modules/admin/llm/application/llm-conversation.service';
 import {
   MEDIA_CODEX_AGENT_TOOLS,
   parseMediaCodexAgentResult,
   sha256Json,
 } from '@/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
+import { LLM_CODEX_PERMISSION_PROFILE } from '@/apps/media-codex-agent-gateway/domain/llm-codex-runtime.contract';
 import {
   buildMediaCodexAgentCapsule,
   buildMediaCodexAgentPolicy,
 } from '@/apps/media-codex-agent-gateway/domain/media-codex-agent.policy';
 import type {
-  MediaGovernanceAgentConversationEventDto,
-  MediaGovernanceAgentEventDto,
-  MediaGovernanceAgentMessageDto,
   MediaGovernanceAgentSessionQueryDto,
   MediaGovernanceAgentToolCallDto,
   MediaGovernanceDescriptorRedeemDto,
@@ -55,10 +55,6 @@ import {
 import { MediaDescriptorStore } from '@/modules/admin/media-governance/infrastructure/persistence/media-descriptor.store';
 import { MediaGovernanceEventStreamService } from './media-governance-event-stream.service';
 import { parseTorrentDescriptor } from '../domain/media-torrent-descriptor';
-import {
-  MEDIA_GOVERNANCE_CODEX_AGENT_GATEWAY,
-  type MediaGovernanceCodexAgentGateway,
-} from '@/modules/admin/media-governance/infrastructure/integration/media-governance-codex-agent.gateway';
 import {
   MEDIA_GOVERNANCE_STATE_STORE,
   type MediaGovernanceStateStore,
@@ -241,6 +237,7 @@ export type MediaGovernanceTask = {
     title: string;
   };
   inputSnapshotSha256: string;
+  llmConversationId: null | string;
   mediaType: MediaGovernanceMediaType;
   metadataIdentity: null | {
     provider: MediaGovernanceProvider;
@@ -317,6 +314,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   private dispatchTimer: null | NodeJS.Timeout = null;
   private dispatchRetryActive = false;
   private executionReconcileActive = false;
+  private readonly llmAgentResults = new Map<
+    string,
+    NonNullable<ReturnType<typeof parseMediaCodexAgentResult>>
+  >();
   private progressSnapshotQueue: Promise<unknown> = Promise.resolve();
 
   constructor(
@@ -324,9 +325,6 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     private readonly eventStream?: MediaGovernanceEventStreamService,
     @Optional()
     private readonly descriptorStore?: MediaDescriptorStore,
-    @Optional()
-    @Inject(MEDIA_GOVERNANCE_CODEX_AGENT_GATEWAY)
-    private readonly agentGateway?: MediaGovernanceCodexAgentGateway,
     @Optional()
     @Inject(MEDIA_GOVERNANCE_STATE_STORE)
     private readonly stateStore?: MediaGovernanceStateStore,
@@ -336,6 +334,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     @Optional()
     @Inject(MEDIA_GOVERNANCE_PROGRESS_HOT_STORE)
     private readonly progressHotStore?: MediaGovernanceProgressHotStore,
+    @Optional()
+    private readonly llmConfigs?: LlmConfigService,
+    @Optional()
+    private readonly llmConversations?: LlmConversationService,
   ) {}
 
   async onModuleInit() {
@@ -346,6 +348,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       this.tasks.length,
       ...tasks.map((task) => this.restoreStoredTask(task)),
     );
+    for (const task of this.tasks) {
+      if (task.llmConversationId) await this.hydrateLlmAgentProjection(task);
+    }
     if (this.executionGateway?.enabled()) {
       void this.retryPendingDispatches();
       void this.reconcileActiveExecutions();
@@ -406,6 +411,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       inputSnapshotSha256: createHash('sha256')
         .update(JSON.stringify(normalizedInput))
         .digest('hex'),
+      llmConversationId: null,
       mediaType: input.mediaType,
       metadataIdentity: null,
       metadataStatus: 'pending',
@@ -476,7 +482,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (
       task.sealedPlanSha256 !== null ||
       task.closedAt !== null ||
-      task.agentSession !== null ||
+      this.hasAgentConversation(task) ||
       task.metadataIdentity !== null ||
       task.metadataStatus !== 'pending'
     ) {
@@ -2829,10 +2835,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
-   * 保留当前运行边界并启动或安全重试 Codex Agent 会话。
+   * 为当前任务创建或返回唯一绑定的本地 Codex LLM 对话。
    * @param taskId - 用于精确定位任务的标识。
    * @param input - 用于保留当前运行边界并启动或安全重试 Codex Agent 会话的结构化输入，包含 `expectedRevision` 字段。
-   * @returns 保留当前运行边界并启动或安全重试 Codex Agent 会话。
+   * @returns 从唯一 LLM conversation 派生的初始治理投影。
    */
   async startAgent(
     taskId: string,
@@ -2843,196 +2849,347 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (task.stage === 'closed') {
       throwVbenError('已完成任务不能启动 Agent', HttpStatus.CONFLICT);
     }
-    let previousAgentSession = null;
-    if (task.agentSession) {
-      previousAgentSession = structuredClone(task.agentSession);
+    if (task.llmConversationId) {
+      await this.hydrateLlmAgentProjection(task);
+      if (!task.agentSession) {
+        throwVbenError('任务绑定的本地 Codex 对话不可用', HttpStatus.CONFLICT);
+      }
+      return task.agentSession;
     }
-    const retryFailedTurn = Boolean(
-      previousAgentSession &&
-      (previousAgentSession.status === 'failed' ||
-        this.isLegacyFailedAgentSession(previousAgentSession)),
+    if (!this.llmConfigs || !this.llmConversations) {
+      throwVbenError(
+        '本地 Codex LLM 对话服务尚未就绪',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return this.startLlmAgentConversation(task);
+  }
+
+  /**
+   * 从默认 Codex 连接建立或复用唯一媒体场景对话，并在同一次任务保存中清除旧 session 投影。
+   * @param task - 当前媒体治理任务。
+   * @returns 从 LLM conversation 派生的 Agent 投影。
+   */
+  private async startLlmAgentConversation(task: MediaGovernanceTask) {
+    const runtime = await this.llmConfigs!.runtimeForProvider('codex');
+    const model = await this.llmConfigs!.resolveModel(runtime);
+    const conversation = await this.llmConversations!.createScene(
+      runtime.entity.id,
+      `${task.titleHint} · 媒体治理`,
+      'media-governance',
+      task.id,
     );
-    if (previousAgentSession && !retryFailedTurn) {
-      throwVbenError('任务已有运行中的 Agent 会话', HttpStatus.CONFLICT);
+    const identity = await this.llmConversations!.resolveIdentity({
+      conversationId: conversation.id,
+      scene: 'media-governance',
+      sceneRefId: task.id,
+    });
+    task.llmConversationId = identity.conversationId;
+    this.llmAgentResults.delete(task.id);
+    if (!task.activeRunId) {
+      task.revision += 1;
+      task.runState = 'blocked';
+      task.nextCommandLabel = '进入本地 Codex 对话继续治理';
     }
-    if (this.agentGateway) {
-      if (!this.agentGateway.enabled()) {
-        throwVbenError(
-          'NAS CodexAgent gateway 尚未配置',
-          HttpStatus.SERVICE_UNAVAILABLE,
-        );
-      }
-      const primaryRunActive = Boolean(task.activeRunId);
-      const previousInputSnapshotSha256 = task.inputSnapshotSha256;
-      const previousNextCommandLabel = task.nextCommandLabel;
-      const previousRevision = task.revision;
-      const previousRunState = task.runState;
-      let nextRevision = task.revision + 1;
-      if (primaryRunActive) nextRevision = task.revision;
-      const replayKey = this.agentReplayKey(task, nextRevision);
-      const compactContext = this.buildAgentCompactContext(task, nextRevision);
-      let manifestSha256 = task.inputSnapshotSha256;
-      if (!primaryRunActive) {
-        manifestSha256 = sha256Json({
-          compactContext,
-          taskId: task.id,
-          taskRevision: nextRevision,
-        });
-      }
-      const request: Parameters<
-        MediaGovernanceCodexAgentGateway['startTurn']
-      >[0] = {
-        compactContext,
-        currentStage: task.stage,
-        currentUnitId: task.units[0]?.id ?? null,
-        manifestSha256,
-        operatorCommand: this.buildAgentOperatorCommand(task),
-        replayKey,
+    const request = this.buildLlmAgentTurnRequest(
+      task,
+      model,
+      '请分析当前媒体治理任务并给出下一步。',
+      `media-user-${randomUUID()}`,
+    );
+    const policy = buildMediaCodexAgentPolicy(task.id);
+    const capsule = buildMediaCodexAgentCapsule(request, policy);
+    task.agentSession = {
+      capsuleSha256: capsule.capsuleSha256,
+      checkpointSha256: sha256Json({
+        conversationId: identity.conversationId,
         taskId: task.id,
-        taskRevision: nextRevision,
-      };
-      if (retryFailedTurn) request.recoveryMode = 'restart-failed-turn';
+      }),
+      currentActionLabel: '等待在统一 LLM 对话页发送消息',
+      currentUnitId: request.currentUnitId,
+      lastHeartbeatLabel: '刚刚',
+      lastSequence: 0,
+      pendingPlanSha256: null,
+      policyBoundaryLabel:
+        '会话、模型、流式状态与 Codex thread 由 LLM 模块统一管理',
+      policySha256: policy.policySha256,
+      policyVersion: policy.policyVersion,
+      status: 'needs-operator',
+      statusLabel: '等待进入本地 Codex 对话',
+      threadId: identity.conversationId,
+    };
+    this.refreshSemanticProjection(task);
+    await this.commitTask(task, 'state-updated');
+    return task.agentSession;
+  }
+
+  /**
+   * 为绑定的 LLM 对话生成当前媒体任务动态工具边界。
+   * @param input - 对话、任务、模型和本轮用户消息。
+   * @returns 可交给 App Server 的媒体治理回合请求。
+   */
+  async llmConversationContext(input: {
+    clientMessageId: string;
+    content: string;
+    conversationId: string;
+    conversationTurnId: string;
+    model: string;
+    providerThreadId: null | string;
+    taskId: string;
+  }) {
+    const task = this.detail(input.taskId);
+    if (task.llmConversationId !== input.conversationId) {
+      throwVbenError('LLM 对话未绑定当前媒体任务', HttpStatus.CONFLICT);
+    }
+    if (!this.llmConversations) {
+      throwVbenError(
+        '本地 Codex LLM 对话服务尚未就绪',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    const identity = await this.llmConversations.resolveIdentity({
+      activeTurnId: input.conversationTurnId,
+      conversationId: input.conversationId,
+      providerThreadId: input.providerThreadId,
+      scene: 'media-governance',
+      sceneRefId: task.id,
+    });
+    const request = this.buildLlmAgentTurnRequest(
+      task,
+      input.model,
+      input.content,
+      input.clientMessageId,
+    );
+    const policy = buildMediaCodexAgentPolicy(task.id);
+    const capsule = buildMediaCodexAgentCapsule(request, policy);
+    task.agentSession = {
+      capsuleSha256: capsule.capsuleSha256,
+      checkpointSha256: sha256Json({
+        clientMessageId: input.clientMessageId,
+        conversationId: input.conversationId,
+      }),
+      currentActionLabel: '本地 Codex 正在处理当前消息',
+      currentUnitId: request.currentUnitId,
+      lastHeartbeatLabel: '刚刚',
+      lastSequence: task.agentSession?.lastSequence ?? 0,
+      pendingPlanSha256: task.agentSession?.pendingPlanSha256 ?? null,
+      policyBoundaryLabel: '媒体任务仅绑定 LLM conversationId',
+      policySha256: policy.policySha256,
+      policyVersion: policy.policyVersion,
+      status: 'running',
+      statusLabel: '本地 Codex 正在生成',
+      threadId: input.conversationId,
+    };
+    this.refreshSemanticProjection(task);
+    this.publishTaskPatch(task, 'state-updated');
+    return { identity, request };
+  }
+
+  /**
+   * 在 App Server turn 启动前按 Task 绑定执行 provider thread CAS，消除首轮结果快于 SSE start 的竞态。
+   * @param input - 对话、任务、旧线程比较值与 App Server 实际线程。
+   * @returns 绑定完成后的权威媒体对话身份。
+   */
+  async bindLlmConversationProviderThread(input: {
+    conversationId: string;
+    conversationTurnId: string;
+    expectedProviderThreadId: null | string;
+    providerThreadId: string;
+    taskId: string;
+  }) {
+    const task = this.detail(input.taskId);
+    if (task.llmConversationId !== input.conversationId) {
+      throwVbenError('LLM 对话未绑定当前媒体任务', HttpStatus.CONFLICT);
+    }
+    if (!this.llmConversations) {
+      throwVbenError(
+        '本地 Codex LLM 对话服务尚未就绪',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return this.llmConversations.bindProviderThread({
+      conversationId: input.conversationId,
+      conversationTurnId: input.conversationTurnId,
+      expectedProviderThreadId: input.expectedProviderThreadId,
+      providerThreadId: input.providerThreadId,
+      scene: 'media-governance',
+      sceneRefId: task.id,
+    });
+  }
+
+  /**
+   * 先核对任务与对话身份，再把严格结构化结果同步到计划、Agent 状态和任务版本。
+   * @param input - 对话、任务和最终结构化结果。
+   * @returns 结果应用状态与当前任务版本。
+   */
+  async applyLlmConversationResult(input: {
+    conversationId: string;
+    conversationTurnId: string;
+    providerThreadId: string;
+    result: Record<string, unknown>;
+    taskId: string;
+  }) {
+    const task = this.detail(input.taskId);
+    if (task.llmConversationId !== input.conversationId) {
+      throwVbenError('LLM 对话未绑定当前媒体任务', HttpStatus.CONFLICT);
+    }
+    if (!this.llmConversations) {
+      throwVbenError(
+        '本地 Codex LLM 对话服务尚未就绪',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    await this.llmConversations.resolveIdentity({
+      activeTurnId: input.conversationTurnId,
+      conversationId: input.conversationId,
+      providerThreadId: input.providerThreadId,
+      scene: 'media-governance',
+      sceneRefId: task.id,
+    });
+    const result = parseMediaCodexAgentResult(input.result);
+    if (!result) {
+      throwVbenError('媒体治理结构化结果无效', HttpStatus.BAD_REQUEST);
+    }
+    this.llmAgentResults.set(task.id, result);
+    const session = task.agentSession;
+    if (session) {
+      session.currentActionLabel = result.summary;
+      session.lastHeartbeatLabel = '刚刚';
+      session.status = 'needs-operator';
+      session.statusLabel = '本地 Codex 已回复';
+      if (result.status === 'blocked') {
+        session.status = 'failed';
+        session.statusLabel = '本地 Codex 本轮受阻';
+      }
+      if (result.status === 'plan-submitted') {
+        session.statusLabel = '密封计划已提交，等待人工复核';
+        if (
+          !result.planSha256 ||
+          result.planSha256 !== session.pendingPlanSha256
+        ) {
+          throwVbenError(
+            'LLM 对话结果与已提交密封计划不一致',
+            HttpStatus.CONFLICT,
+          );
+        }
+        if (this.agentPendingAmendment(task)) {
+          this.finalizeAgentIdentityAmendment(task, result.planSha256);
+          session.status = 'succeeded';
+          session.statusLabel = 'TMDB 身份已密封应用';
+          task.revision += 1;
+        }
+        session.pendingPlanSha256 = null;
+      }
+      if (result.status === 'requires-operator') {
+        session.statusLabel = '等待人工选择候选';
+      }
+    }
+    if (!task.activeRunId) {
+      task.runState = 'blocked';
+      task.nextCommandLabel = session?.statusLabel ?? result.nextActionLabel;
+    }
+    this.refreshSemanticProjection(task);
+    await this.commitTask(task, 'state-updated');
+    return { applied: true, revision: task.revision };
+  }
+
+  /**
+   * 生成当前媒体任务在 LLM 对话中的回合请求。
+   * @param task - 当前媒体治理任务。
+   * @param model - 当前 Codex 模型。
+   * @param content - 本轮用户消息。
+   * @param clientMessageId - 客户端幂等消息标识。
+   * @returns 含当前 revision、manifest 和任务事实的回合请求。
+   */
+  private buildLlmAgentTurnRequest(
+    task: MediaGovernanceTask,
+    model: string,
+    content: string,
+    clientMessageId: string,
+  ) {
+    return {
+      clientMessageId,
+      compactContext: this.buildAgentCompactContext(task, task.revision),
+      currentStage: task.stage,
+      currentUnitId: task.units[0]?.id ?? null,
+      manifestSha256: task.inputSnapshotSha256,
+      model,
+      operatorCommand: content,
+      replayKey: this.agentReplayKey(task, task.revision),
+      taskId: task.id,
+      taskRevision: task.revision,
+    };
+  }
+
+  /**
+   * 从 LLM 对话消息恢复媒体任务的瞬时 Agent 展示与结果缓存。
+   * @param task - 已绑定 conversationId 的媒体任务。
+   */
+  private async hydrateLlmAgentProjection(task: MediaGovernanceTask) {
+    if (!task.llmConversationId || !this.llmConversations) return;
+    try {
+      await this.llmConversations.resolveIdentity({
+        conversationId: task.llmConversationId,
+        scene: 'media-governance',
+        sceneRefId: task.id,
+      });
+      const detail = await this.llmConversations.detail(task.llmConversationId);
+      let model = detail.conversation.selectedModel || '';
+      if (!model) {
+        const runtime = await this.llmConfigs!.runtime(detail.config.id);
+        model = await this.llmConfigs!.resolveModel(runtime);
+      }
+      const request = this.buildLlmAgentTurnRequest(
+        task,
+        model,
+        '恢复媒体治理对话',
+        `media-user-${randomUUID()}`,
+      );
       const policy = buildMediaCodexAgentPolicy(task.id);
       const capsule = buildMediaCodexAgentCapsule(request, policy);
-      if (!primaryRunActive) {
-        task.inputSnapshotSha256 = manifestSha256;
-        task.revision = nextRevision;
+      let status: NonNullable<MediaGovernanceTask['agentSession']>['status'] =
+        'needs-operator';
+      let statusLabel = '等待继续本地 Codex 对话';
+      if (detail.conversation.active) {
+        status = 'running';
+        statusLabel = '本地 Codex 正在生成';
+      }
+      const lastAssistant = [...detail.messages]
+        .reverse()
+        .find((message) => message.role === 'assistant');
+      if (
+        lastAssistant?.status === 'failed' ||
+        lastAssistant?.status === 'interrupted'
+      ) {
+        status = 'failed';
+        statusLabel = '上轮对话未完成，可继续发送消息';
+      }
+      const rawResult = lastAssistant?.metadata?.mediaGovernanceResult;
+      const result = parseMediaCodexAgentResult(rawResult);
+      if (result) {
+        this.llmAgentResults.set(task.id, result);
+        statusLabel = result.nextActionLabel;
       }
       task.agentSession = {
         capsuleSha256: capsule.capsuleSha256,
         checkpointSha256: sha256Json({
-          capsuleSha256: capsule.capsuleSha256,
-          phase: 'starting',
-          taskId: task.id,
-          taskRevision: nextRevision,
+          conversationId: task.llmConversationId,
         }),
-        currentActionLabel: '正在创建 Agent 会话',
+        currentActionLabel: result?.summary ?? statusLabel,
         currentUnitId: request.currentUnitId,
-        lastHeartbeatLabel: '刚刚',
-        lastSequence: previousAgentSession?.lastSequence ?? 0,
-        pendingPlanSha256: null,
-        policyBoundaryLabel:
-          '五层边界已启用；真实媒体、云端和数据库写入保持关闭',
+        lastHeartbeatLabel: '已从 LLM 对话恢复',
+        lastSequence: detail.messages.length,
+        pendingPlanSha256: result?.planSha256 ?? null,
+        policyBoundaryLabel: '媒体任务仅绑定 LLM conversationId',
         policySha256: policy.policySha256,
         policyVersion: policy.policyVersion,
-        status: 'running',
-        statusLabel: '正在创建 Agent 会话',
-        threadId: this.pendingAgentThreadId(task.id),
+        status,
+        statusLabel,
+        threadId: task.llmConversationId,
       };
-      if (!primaryRunActive) {
-        task.runState = 'running';
-        task.nextCommandLabel = '等待 Agent 会话绑定';
-      }
-      this.refreshSemanticProjection(task);
-      await this.commitTask(task, 'state-updated');
-      let session;
-      try {
-        session = await this.agentGateway.startTurn(request);
-      } catch {
-        try {
-          session = await this.agentGateway.session(task.id);
-        } catch {
-          session = null;
-        }
-      }
-      if (!session || !this.agentSessionMatchesReservation(task, session)) {
-        if (task.agentSession?.capsuleSha256 === capsule.capsuleSha256) {
-          task.agentSession = previousAgentSession;
-        }
-        if (!primaryRunActive && task.revision === nextRevision) {
-          task.inputSnapshotSha256 = previousInputSnapshotSha256;
-          task.nextCommandLabel = previousNextCommandLabel;
-          task.revision = previousRevision;
-          task.runState = previousRunState;
-        }
-        this.refreshSemanticProjection(task);
-        await this.commitTask(task, 'state-updated');
-        let message = 'NAS CodexAgent gateway 当前不可用';
-        let status = HttpStatus.SERVICE_UNAVAILABLE;
-        if (session) {
-          message = 'NAS CodexAgent 会话身份不匹配';
-          status = HttpStatus.CONFLICT;
-        }
-        throwVbenError(message, status);
-      }
-      const reservedSession = task.agentSession!;
-      const failedRemoteSession = ['failed', 'interrupted'].includes(
-        String(session.terminalKind),
-      );
-      let agentStatus: NonNullable<
-        MediaGovernanceTask['agentSession']
-      >['status'] = 'needs-operator';
-      let agentStatusLabel = '等待人工放行';
-      if (session.status === 'active') {
-        agentStatus = 'running';
-        agentStatusLabel = 'Agent 正在治理';
-      } else if (failedRemoteSession) {
-        agentStatus = 'failed';
-        agentStatusLabel = 'Agent 已阻塞，可安全重试';
-      }
-      task.agentSession = {
-        ...reservedSession,
-        capsuleSha256: session.capsuleSha256,
-        checkpointSha256: session.checkpointSha256,
-        currentActionLabel: '正在核对媒体身份与季级字幕合同',
-        currentUnitId: session.currentUnitId,
-        lastHeartbeatLabel: '刚刚',
-        lastSequence: Math.max(
-          reservedSession.lastSequence,
-          session.lastEventSequence,
-        ),
-        policySha256: session.policySha256,
-        policyVersion: session.policyVersion,
-        status: agentStatus,
-        statusLabel: agentStatusLabel,
-        threadId: session.threadId,
-      };
-      if (!primaryRunActive) {
-        task.runState = 'blocked';
-        if (session.status === 'active') task.runState = 'running';
-        task.nextCommandLabel = '观察 Agent 语义进度';
-      }
-      this.refreshSemanticProjection(task);
-      await this.commitTask(task, 'state-updated');
-      return task.agentSession;
+    } catch {
+      task.agentSession = null;
     }
-    task.agentSession = {
-      capsuleSha256: '0'.repeat(64),
-      checkpointSha256: '0'.repeat(64),
-      currentActionLabel: '正在核对媒体身份与季级字幕合同',
-      currentUnitId: task.units[0]?.id ?? null,
-      lastHeartbeatLabel: '刚刚',
-      lastSequence: 0,
-      pendingPlanSha256: null,
-      policyBoundaryLabel: '五层边界已启用；NAS、媒体和云端写适配器保持关闭',
-      policySha256: '0'.repeat(64),
-      policyVersion: 'process-simulator-v1',
-      status: 'running',
-      statusLabel: 'Agent 正在治理',
-      threadId: `media-agent-${randomUUID()}`,
-    };
-    const primaryRunActive = Boolean(task.activeRunId);
-    if (!primaryRunActive) {
-      task.runState = 'running';
-      task.nextCommandLabel = '观察 Agent 语义进度';
-      this.bumpRevision(task);
-    }
-    await this.commitTask(task, 'state-updated');
-    const timer = setTimeout(() => {
-      if (!task.agentSession) return;
-      task.agentSession.currentActionLabel = '等待操作员确认候选身份';
-      task.agentSession.lastHeartbeatLabel = '刚刚';
-      task.agentSession.status = 'needs-operator';
-      task.agentSession.statusLabel = '等待人工放行';
-      if (!primaryRunActive) {
-        task.runState = 'blocked';
-        task.nextCommandLabel = '选择候选并填写放行理由';
-      }
-      this.refreshSemanticProjection(task);
-      void this.commitTask(task, 'state-updated').catch(() => undefined);
-    }, 500);
-    timer.unref?.();
-    return task.agentSession;
   }
 
   /**
@@ -3063,239 +3220,37 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     },
   ) {
     const task = this.detail(taskId);
-    const primaryRunActive = Boolean(task.activeRunId);
-    if (!task.agentSession || !this.agentGateway?.enabled()) {
-      return task.agentSession;
-    }
-    const previousTaskSha256 = sha256Json(task);
-    let remoteSession;
-    try {
-      remoteSession = await this.agentGateway.session(taskId, query);
-    } catch {
-      throwVbenError(
-        'NAS CodexAgent gateway 当前不可用',
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-    if (!remoteSession) {
-      throwVbenError('NAS CodexAgent 会话不存在', HttpStatus.NOT_FOUND);
-    }
-    if (
-      remoteSession.taskId !== task.id ||
-      remoteSession.threadId !== task.agentSession.threadId ||
-      remoteSession.policySha256 !== task.agentSession.policySha256 ||
-      remoteSession.capsuleSha256 !== task.agentSession.capsuleSha256 ||
-      remoteSession.taskRevision > task.revision
-    ) {
-      throwVbenError('NAS CodexAgent 会话身份不匹配', HttpStatus.CONFLICT);
-    }
-    if (remoteSession.taskRevision < task.revision - 1) {
-      return this.projectAgentConversation(task, remoteSession);
-    }
-    const hasPendingPlan = Boolean(task.agentSession.pendingPlanSha256);
-    const failedRemoteSession = ['failed', 'interrupted'].includes(
-      String(remoteSession.terminalKind),
-    );
-    const retainedLegacyFailure =
-      remoteSession.terminalKind === null &&
-      task.agentSession.status === 'failed';
-    task.agentSession = {
-      ...task.agentSession,
-      checkpointSha256: remoteSession.checkpointSha256,
-      currentActionLabel:
-        remoteSession.result?.summary ?? task.agentSession.currentActionLabel,
-      currentUnitId: remoteSession.currentUnitId,
-      lastHeartbeatLabel: '刚刚',
-      lastSequence: Math.max(
-        task.agentSession.lastSequence,
-        remoteSession.lastEventSequence,
-      ),
-    };
-    const result = remoteSession.result;
-    if (remoteSession.status === 'active') {
-      task.agentSession.status = 'running';
-      task.agentSession.statusLabel = 'Agent 正在治理';
-      if (!primaryRunActive) task.runState = 'running';
-    } else if (failedRemoteSession || retainedLegacyFailure) {
-      this.discardAgentPendingAmendment(task);
-      task.agentSession.pendingPlanSha256 = null;
-      task.agentSession.status = 'failed';
-      task.agentSession.statusLabel = 'Agent 已阻塞，可安全重试';
-      if (!primaryRunActive) task.runState = 'blocked';
-    } else if (
-      result?.status === 'plan-submitted' &&
-      result.planSha256 &&
-      hasPendingPlan &&
-      result.planSha256 === task.agentSession.pendingPlanSha256
-    ) {
-      if (this.agentPendingAmendment(task)) {
-        this.finalizeAgentIdentityAmendment(task, result.planSha256);
-        task.agentSession.status = 'succeeded';
-        task.agentSession.statusLabel = 'TMDB 身份已密封应用';
-      } else {
-        task.agentSession.status = 'needs-operator';
-        task.agentSession.statusLabel = '密封文件计划待人工复核';
-        if (!primaryRunActive) task.runState = 'blocked';
-      }
-      task.agentSession.pendingPlanSha256 = null;
-      task.revision += 1;
-    } else if (
-      result?.status === 'plan-submitted' &&
-      result.planSha256 &&
-      this.hasAppliedAgentPlan(task, result.planSha256)
-    ) {
-      task.agentSession.status = 'succeeded';
-      task.agentSession.statusLabel = 'TMDB 身份已密封应用';
-      if (!primaryRunActive) task.runState = 'succeeded';
-    } else if (
-      result?.status === 'plan-submitted' &&
-      !hasPendingPlan &&
-      task.agentSession.status === 'needs-operator'
-    ) {
-      task.agentSession.statusLabel = '密封文件计划待人工复核';
-      if (!primaryRunActive) task.runState = 'blocked';
-    } else if (result?.status === 'requires-operator') {
-      task.agentSession.status = 'needs-operator';
-      task.agentSession.statusLabel = '等待人工选择 TMDB 候选';
-      if (!primaryRunActive) task.runState = 'blocked';
-    } else if (result?.status !== 'conversation-response') {
-      this.discardAgentPendingAmendment(task);
-      task.agentSession.pendingPlanSha256 = null;
-      task.agentSession.status = 'failed';
-      task.agentSession.statusLabel = 'Agent 结果未通过一致性校验，可安全重试';
-      if (!primaryRunActive) task.runState = 'blocked';
-    }
-    this.refreshSemanticProjection(task);
-    if (sha256Json(task) !== previousTaskSha256) {
-      await this.commitTask(task, 'state-updated');
-    }
-    return this.projectAgentConversation(task, remoteSession);
-  }
-
-  /**
-   * 根据线程和对话版本校验结果，在同一 Agent 会话发送操作员消息。
-   * @param taskId - 用于精确定位任务的标识。
-   * @param input - 用于根据线程和对话版本校验结果，在同一 Agent 会话发送操作员消息的结构化输入，包含 `threadId`、`clientMessageId`、`expectedConversationRevision`、`content` 字段。
-   * @returns 根据线程和对话版本校验结果，在同一 Agent 会话发送操作员消息。
-   * @throws 当 `agentGateway.startTurn` 调用失败时重新抛出该入口捕获且决定公开的原异常。
-   */
-  async continueAgentConversation(
-    taskId: string,
-    input: MediaGovernanceAgentMessageDto,
-  ) {
-    const task = this.detail(taskId);
-    if (
-      task.stage === 'closed' ||
-      !task.agentSession ||
-      !this.agentGateway?.enabled()
-    ) {
-      let message = 'NAS CodexAgent 会话不可用';
-      if (task.stage === 'closed') message = '已完成任务不能继续 Agent 对话';
-      throwVbenError(message, HttpStatus.CONFLICT);
-    }
-    const remote = await this.agentGateway.session(taskId, {
-      afterSequence: 0,
-      limit: 1,
-    });
-    if (
-      !remote ||
-      remote.threadId !== input.threadId ||
-      remote.threadId !== task.agentSession.threadId ||
-      remote.policySha256 !== task.agentSession.policySha256
-    ) {
-      throwVbenError('NAS CodexAgent 会话身份不匹配', HttpStatus.CONFLICT);
-    }
-    if (remote.lastClientMessageId === input.clientMessageId) {
-      return this.projectAgentConversation(task, remote);
-    }
-    if (
-      remote.status === 'active' ||
-      remote.conversationRevision !== input.expectedConversationRevision
-    ) {
-      let message = 'Agent 会话已有新消息，请刷新后重试';
-      if (remote.status === 'active') message = 'Agent 正在处理上一条消息';
-      throwVbenError(message, HttpStatus.CONFLICT);
-    }
-    const request = {
-      clientMessageId: input.clientMessageId,
-      compactContext: this.buildAgentCompactContext(task, task.revision),
-      currentStage: task.stage,
-      currentUnitId: task.units[0]?.id ?? null,
-      manifestSha256: task.inputSnapshotSha256,
-      operatorCommand: input.content.trim(),
-      replayKey: `media-chat-${sha256Json({
-        clientMessageId: input.clientMessageId,
-        taskId,
-        threadId: input.threadId,
-      }).slice(0, 64)}`,
-      taskId,
-      taskRevision: task.revision,
-    };
-    const policy = buildMediaCodexAgentPolicy(task.id);
-    const capsule = buildMediaCodexAgentCapsule(request, policy);
-    const previousSession = structuredClone(task.agentSession);
-    task.agentSession = {
-      ...task.agentSession,
-      capsuleSha256: capsule.capsuleSha256,
-      checkpointSha256: sha256Json({
-        capsuleSha256: capsule.capsuleSha256,
-        clientMessageId: input.clientMessageId,
-        phase: 'conversation-starting',
-        taskId,
-        taskRevision: task.revision,
-      }),
-      currentActionLabel: 'Agent 正在处理本回合消息',
-      lastHeartbeatLabel: '刚刚',
-      policySha256: policy.policySha256,
-      policyVersion: policy.policyVersion,
-      status: 'running',
-      statusLabel: 'Agent 正在回复',
-    };
-    await this.persistTask(task);
-    let session;
-    try {
-      session = await this.agentGateway.startTurn(request);
-    } catch (error) {
-      task.agentSession = previousSession;
-      await this.persistTask(task);
-      throw error;
-    }
-    if (
-      session.threadId !== input.threadId ||
-      session.capsuleSha256 !== capsule.capsuleSha256
-    ) {
-      task.agentSession = previousSession;
-      await this.persistTask(task);
-      throwVbenError('NAS CodexAgent 会话身份不匹配', HttpStatus.CONFLICT);
-    }
-    task.agentSession.checkpointSha256 = session.checkpointSha256;
-    await this.persistTask(task);
-    return this.projectAgentConversation(task, session);
-  }
-
-  /**
-   * 通过组合本地会话状态、远端消息和建议操作的安全投影。
-   * @param task - 用于通过组合本地会话状态、远端消息和建议操作的安全的领域对象，包含 `agentSession` 字段。
-   * @param remoteSession - 用于通过组合本地会话状态、远端消息和建议操作的安全的领域对象，包含 `conversationRevision`、`hasMoreMessages`、`historyComplete`、`messages` 字段。
-   * @returns 包含 `conversationRevision`、`hasMoreMessages`、`historyComplete`、`messages`、`recommendations` 字段的通过组合本地会话状态、远端消息和建议操作的安全。
-   */
-  private projectAgentConversation(
-    task: MediaGovernanceTask,
-    remoteSession: Awaited<
-      ReturnType<MediaGovernanceCodexAgentGateway['startTurn']>
-    >,
-  ) {
+    void query;
+    if (!task.llmConversationId || !this.llmConversations) return null;
+    await this.hydrateLlmAgentProjection(task);
+    const detail = await this.llmConversations.detail(task.llmConversationId);
+    const result = this.llmAgentResults.get(task.id) ?? null;
     return {
       ...structuredClone(task.agentSession),
-      conversationRevision: remoteSession.conversationRevision ?? 0,
-      hasMoreMessages: remoteSession.hasMoreMessages ?? false,
-      historyComplete: remoteSession.historyComplete ?? true,
-      messages: structuredClone(remoteSession.messages ?? []),
-      recommendations: this.agentConversationRecommendations(
-        task,
-        remoteSession.result,
-      ),
-      result: structuredClone(remoteSession.result),
+      conversationRevision: detail.messages.length,
+      hasMoreMessages: false,
+      historyComplete: true,
+      messages: detail.messages.map((message) => {
+        let phase: 'commentary' | 'final_answer' | 'user' = 'user';
+        if (message.role === 'assistant') phase = 'final_answer';
+        let status: 'completed' | 'streaming' = 'completed';
+        if (message.status === 'streaming') status = 'streaming';
+        return {
+          content: message.content,
+          messageId: message.id,
+          observedAt: String(message.createTime),
+          phase,
+          result: parseMediaCodexAgentResult(
+            message.metadata?.mediaGovernanceResult,
+          ),
+          role: message.role,
+          sequence: message.sequence,
+          status,
+          turnId: message.id,
+        };
+      }),
+      recommendations: this.agentConversationRecommendations(task, result),
+      result,
     };
   }
 
@@ -3307,9 +3262,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
    */
   private agentConversationRecommendations(
     task: MediaGovernanceTask,
-    result: Awaited<
-      ReturnType<MediaGovernanceCodexAgentGateway['startTurn']>
-    >['result'],
+    result: ReturnType<typeof parseMediaCodexAgentResult>,
   ) {
     if (result?.status === 'requires-operator') {
       return result.candidates.map((candidate) => ({
@@ -3407,7 +3360,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           allowedTools: [...MEDIA_GOVERNANCE_TYPED_AGENT_TOOLS],
           approvalPolicy: 'never',
           cleanCwd: '/vol1/docker/kt-codex-agent/runtime',
-          permissionProfile: 'media-agent',
+          permissionProfile: LLM_CODEX_PERMISSION_PROFILE,
           policySha256: session.policySha256,
           policyVersion: session.policyVersion,
         },
@@ -3533,161 +3486,6 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
-   * 按序应用 Agent 生命周期事件，并同步计划与任务状态。
-   * @param input - 用于Agent事件的结构化输入，包含 `taskId`、`type`、`sequence`、`status` 字段。
-   * @returns 包含 `applied`、`revision` 字段的Agent事件。
-   */
-  async applyAgentEvent(input: MediaGovernanceAgentEventDto) {
-    const task = this.detail(input.taskId);
-    const primaryRunActive = Boolean(task.activeRunId);
-    const session = task.agentSession;
-    const pendingThreadMapping = Boolean(
-      session &&
-      session.threadId === this.pendingAgentThreadId(task.id) &&
-      input.type === 'agent-thread-mapped' &&
-      input.sequence === session.lastSequence + 1 &&
-      input.status === 'active' &&
-      input.taskRevision === task.revision,
-    );
-    if (!session) {
-      throwVbenError('Agent 事件身份不匹配', HttpStatus.CONFLICT);
-    }
-    let threadMatches = input.threadId === session.threadId;
-    if (session.threadId === this.pendingAgentThreadId(task.id)) {
-      threadMatches = pendingThreadMapping;
-    }
-    if (
-      !threadMatches ||
-      input.policySha256 !== session.policySha256 ||
-      input.capsuleSha256 !== session.capsuleSha256
-    ) {
-      throwVbenError('Agent 事件身份不匹配', HttpStatus.CONFLICT);
-    }
-    if (input.sequence <= session.lastSequence) {
-      return { applied: false, reason: 'duplicate-sequence' };
-    }
-    const terminalEvent =
-      input.type === 'agent-turn-completed' || input.type === 'agent-blocked';
-    let eventStatusValid = input.status === 'active';
-    if (terminalEvent) eventStatusValid = input.status === 'blocked';
-    if (
-      input.taskRevision !== task.revision ||
-      session.status !== 'running' ||
-      !eventStatusValid
-    ) {
-      throwVbenError('Agent 事件状态不匹配', HttpStatus.CONFLICT);
-    }
-    const eventPlanSha256 = input.planSha256 ?? null;
-    if (
-      (input.type === 'agent-turn-completed' &&
-        eventPlanSha256 !== (session.pendingPlanSha256 ?? null)) ||
-      (input.type !== 'agent-turn-completed' && eventPlanSha256 !== null)
-    ) {
-      throwVbenError('Agent 密封计划哈希不匹配', HttpStatus.CONFLICT);
-    }
-    if (pendingThreadMapping) session.threadId = input.threadId;
-    session.lastSequence = input.sequence;
-    session.lastHeartbeatLabel = '刚刚';
-    session.currentActionLabel = input.summary;
-    if (input.type === 'agent-turn-completed') {
-      if (session.pendingPlanSha256) {
-        const pendingPlanSha256 = session.pendingPlanSha256;
-        const identityAmendment = this.agentPendingAmendment(task);
-        if (identityAmendment) {
-          this.finalizeAgentIdentityAmendment(task, pendingPlanSha256);
-          session.status = 'succeeded';
-          session.statusLabel = 'TMDB 身份已密封应用';
-        } else {
-          session.status = 'needs-operator';
-          session.statusLabel = '密封文件计划待人工复核';
-          if (!primaryRunActive) {
-            task.runState = 'blocked';
-            task.nextCommandLabel = session.statusLabel;
-          }
-        }
-        session.pendingPlanSha256 = null;
-        task.revision += 1;
-      } else {
-        session.status = 'needs-operator';
-        session.statusLabel = '等待人工选择 TMDB 候选';
-        if (!primaryRunActive) {
-          task.runState = 'blocked';
-          task.nextCommandLabel = session.statusLabel;
-        }
-      }
-    } else if (input.type === 'agent-blocked') {
-      this.discardAgentPendingAmendment(task);
-      session.pendingPlanSha256 = null;
-      session.status = 'failed';
-      session.statusLabel = 'Agent 已阻塞，可安全重试';
-      if (!primaryRunActive) {
-        task.runState = 'blocked';
-        task.nextCommandLabel = input.summary;
-      }
-    }
-    this.refreshSemanticProjection(task);
-    await this.commitTask(task, 'state-updated', input);
-    return { applied: true, revision: task.revision };
-  }
-
-  /**
-   * 校验并发布 Agent 对话事件，持久化已完成回复状态。
-   * @param input - 用于并发布 Agent 对话事件，持久化已完成回复状态的结构化输入，包含 `taskId`、`result`、`taskRevision`、`threadId` 字段。
-   * @returns 包含 `applied`、`conversationRevision`、`eventSequence` 字段的并发布 Agent 对话事件，持久化已完成回复状态。
-   */
-  async applyAgentConversationEvent(
-    input: MediaGovernanceAgentConversationEventDto,
-  ) {
-    const task = this.detail(input.taskId);
-    const session = task.agentSession;
-    let result: ReturnType<typeof parseMediaCodexAgentResult> = null;
-    if (input.result) {
-      result = parseMediaCodexAgentResult({
-        candidateSummaries: input.result.candidateSummaries,
-        nextActionLabel: input.result.nextActionLabel,
-        planSha256: input.result.planSha256,
-        status: input.result.status,
-        summary: input.result.summary,
-      });
-    }
-    if (
-      !session ||
-      input.taskRevision > task.revision ||
-      input.threadId !== session.threadId ||
-      input.policySha256 !== session.policySha256
-    ) {
-      throwVbenError('Agent 会话事件身份不匹配', HttpStatus.CONFLICT);
-    }
-    if (
-      input.capsuleSha256 !== session.capsuleSha256 ||
-      (input.result !== null && !result)
-    ) {
-      throwVbenError('Agent 会话事件身份不匹配', HttpStatus.CONFLICT);
-    }
-    this.eventStream?.publishAgentConversation({
-      ...input,
-      result,
-    });
-    if (
-      input.changeType === 'turn-completed' &&
-      result?.status === 'conversation-response'
-    ) {
-      session.currentActionLabel = result.summary;
-      session.lastHeartbeatLabel = '刚刚';
-      session.status = 'needs-operator';
-      session.statusLabel = 'Agent 已回复，可继续对话';
-      this.refreshSemanticProjection(task);
-      await this.persistTask(task);
-      this.publishTaskPatch(task, 'state-updated');
-    }
-    return {
-      applied: true,
-      conversationRevision: input.conversationRevision,
-      eventSequence: input.eventSequence,
-    };
-  }
-
-  /**
    * 复核操作员选择的候选，并推进正式或模拟治理状态。
    * @param taskId - 用于精确定位任务的标识。
    * @param input - 用于operatorDecision的结构化输入，包含 `expectedRevision`、`selectedCandidateId`、`reason` 字段。
@@ -3699,19 +3497,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     const productionExecution = this.executionGateway?.enabled() === true;
-    const productionAgent = this.agentGateway?.enabled() === true;
     this.assertRevision(task, input.expectedRevision);
     if (task.agentSession?.status !== 'needs-operator') {
       throwVbenError('当前没有待处理的 Agent 候选', HttpStatus.CONFLICT);
     }
-    if (productionAgent) {
-      const remoteSession = await this.agentGateway!.session(task.id);
+    if (task.llmConversationId) {
+      const remoteResult = this.llmAgentResults.get(task.id) ?? null;
       if (
-        !remoteSession ||
-        remoteSession.threadId !== task.agentSession.threadId ||
-        remoteSession.policySha256 !== task.agentSession.policySha256 ||
-        remoteSession.result?.status !== 'requires-operator' ||
-        !remoteSession.result.candidates.some(
+        remoteResult?.status !== 'requires-operator' ||
+        !remoteResult.candidates.some(
           (candidate) => candidate.id === input.selectedCandidateId,
         )
       ) {
@@ -3976,17 +3770,6 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
-   * 通过移除密封计划中未应用的 Agent 身份修正。
-   * @param task - 用于通过移除密封计划中未应用的 Agent 身份修正的领域对象，包含 `sealedPlan` 字段。
-   */
-  private discardAgentPendingAmendment(task: MediaGovernanceTask) {
-    if (!task.sealedPlan?.agentPendingAmendment) return;
-    const { agentPendingAmendment, ...sealedPlan } = task.sealedPlan;
-    void agentPendingAmendment;
-    task.sealedPlan = sealedPlan;
-  }
-
-  /**
    * 读取与任务当前 TMDB 身份一致的最后一条已应用修正，作为恢复重排的可审计来源。
    * @param task - 已写入资料源身份且保留 Agent 修正历史的媒体任务。
    * @returns 与当前任务身份、年份一致的最新修正摘要和密封计划摘要。
@@ -4147,26 +3930,6 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
-   * 根据修正历史判断指定 Agent 计划摘要是否已经应用。
-   * @param task - 用于根据修正历史判断指定 Agent 计划摘要是否已经应用的领域对象，包含 `sealedPlan` 字段。
-   * @param planSha256 - 决定根据修正历史判断指定 Agent 计划摘要是否已经应用内容、边界或目标的 `planSha256` 值。
-   * @returns 满足根据修正历史判断指定 Agent 计划摘要是否已经应用约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
-   */
-  private hasAppliedAgentPlan(task: MediaGovernanceTask, planSha256: string) {
-    const amendments = task.sealedPlan?.agentAmendments;
-    return (
-      Array.isArray(amendments) &&
-      amendments.some(
-        (entry) =>
-          entry &&
-          typeof entry === 'object' &&
-          !Array.isArray(entry) &&
-          (entry as Record<string, unknown>).planSha256 === planSha256,
-      )
-    );
-  }
-
-  /**
    * 根据参数 `tool`，提取密封计划操作涉及的来源与目标路径。
    * @param tool - 决定根据参数 `tool`，提取密封计划操作涉及的来源与目标路径内容、边界或目标的 `tool` 值。
    * @param plan - 用于根据参数 `tool`，提取密封计划操作涉及的来源与目标路径的领域对象，包含 `operations` 字段。
@@ -4289,55 +4052,6 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         stage: task.stage,
       },
     };
-  }
-
-  /**
-   * 按任务阶段生成限制明确的 Agent 操作指令。
-   * @param task - 用于按任务阶段生成限制明确的 Agent 操作指令的领域对象，包含 `stage` 字段。
-   * @returns 按任务阶段生成限制明确的 Agent 操作指令。
-   */
-  private buildAgentOperatorCommand(task: MediaGovernanceTask) {
-    const instructions = [
-      '只处理当前媒体治理任务；仅使用胶囊允许的类型化工具读取事实，不得调用 shell、浏览器、UI、云端或数据库写入，不得改动正式媒体目录。',
-      '若当前有媒体执行器运行，只做旁路核对，不得暂停、取消、重启或覆盖其 revision、进度和运行状态。',
-    ];
-    if (this.agentIdentityRepairRequired(task)) {
-      instructions.push(
-        '当前只修正缺失的 TMDB 身份：核对媒体身份与季集映射后提交 identity 密封修正，operations 必须为 []，不得重复复制、重命名或生成媒体、字幕、NFO、海报。',
-      );
-      return instructions.join('\n');
-    }
-    switch (task.stage) {
-      case 'intake':
-        instructions.push(
-          '接收资料阶段只核对作品名、媒体类型、季号（特别篇使用 S00）、可选年份/资料库编号和现有来源；缺少治理类型、来源或清单时语义化列出缺口，不得虚构文件计划。',
-        );
-        break;
-      case 'download':
-        instructions.push(
-          'NAS 下载阶段只核对来源健康、文件清单、下载进度和季集覆盖；不得新增、替换、暂停、取消或重启下载，不得提交密封写计划。',
-        );
-        break;
-      case 'governance':
-        instructions.push(
-          '本地治理阶段核对身份、季集映射、目录命名和同季字幕发布组一致性；只有无活动执行器且事实完整时，才可提交任务 staging 根内的密封治理计划。',
-        );
-        break;
-      case 'metadata':
-        instructions.push(
-          '元数据阶段按 A/B/C 三档核对缺口、已有尝试和候选歧义；只提交与已验证事实一致的密封修正，无法唯一确认时返回需要操作员选择。',
-        );
-        break;
-      case 'acceptance':
-        instructions.push(
-          '独立验收阶段只解释现有证据、未通过项和可复核入口，不得绕过验收门或提交新的文件写计划。',
-        );
-        break;
-      case 'closed':
-        instructions.push('任务已完成，不得开始新的治理动作。');
-        break;
-    }
-    return instructions.join('\n');
   }
 
   /**
@@ -4630,7 +4344,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (
       task.closedAt !== null ||
       task.closedMode !== null ||
-      task.agentSession !== null ||
+      this.hasAgentConversation(task) ||
       task.metadataIdentity !== null ||
       task.metadataStatus !== 'pending'
     ) {
@@ -4966,17 +4680,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
-   * 根据参数 `task`，持久化任务及可选 Agent 事件后发布任务变更。
-   * @param task - 决定根据参数 `task`，持久化任务及可选 Agent 事件后发布任务变更内容、边界或目标的 `task` 值。
-   * @param changeType - 决定根据参数 `task`，持久化任务及可选 Agent 事件后发布任务变更内容、边界或目标的 `changeType` 值。
-   * @param event - 触发根据参数 `task`，持久化任务及可选 Agent 事件后发布任务变更的领域事件；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * 在任务成功写入权威状态仓后发布对应类型的 SSE 补丁，避免客户端观察到未落库状态。
+   * @param task - 本次需要持久化并广播的媒体任务。
+   * @param changeType - 区分来源更新与普通状态更新的事件类型。
    */
   private async commitTask(
     task: MediaGovernanceTask,
     changeType: 'source-updated' | 'state-updated',
-    event?: MediaGovernanceAgentEventDto,
   ) {
-    await this.persistTask(task, event);
+    await this.persistTask(task);
     this.publishTaskPatch(task, changeType);
   }
 
@@ -5028,6 +4740,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         gateReason: task.gateReason,
         governanceProfile: task.governanceProfile,
         id: task.id,
+        llmConversationId: task.llmConversationId,
         metadataStatus: task.metadataStatus,
         nextCommandLabel: task.nextCommandLabel,
         progress: task.progress,
@@ -5054,54 +4767,6 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
-   * 根据线程、任务与版本身份判断远端 Agent 会话是否匹配本地预留。
-   * @param task - 用于根据线程、任务与版本身份判断远端 Agent 会话是否匹配本地预留的领域对象，包含 `agentSession`、`id`、`revision` 字段。
-   * @param session - 待读取、续期或持久化的根据线程、任务与版本身份判断远端 Agent 会话是否匹配本地预留会话。
-   * @returns 满足根据线程、任务与版本身份判断远端 Agent 会话是否匹配本地预留约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
-   */
-  private agentSessionMatchesReservation(
-    task: MediaGovernanceTask,
-    session: Awaited<ReturnType<MediaGovernanceCodexAgentGateway['startTurn']>>,
-  ) {
-    const reserved = task.agentSession;
-    return Boolean(
-      reserved &&
-      session.taskId === task.id &&
-      session.taskRevision === task.revision &&
-      session.policySha256 === reserved.policySha256 &&
-      session.policyVersion === reserved.policyVersion &&
-      session.capsuleSha256 === reserved.capsuleSha256 &&
-      (reserved.threadId === this.pendingAgentThreadId(task.id) ||
-        reserved.threadId === session.threadId),
-    );
-  }
-
-  /**
-   * 识别旧版以人工等待状态表达的 Agent 失败会话。
-   * @param session - 待读取、续期或持久化的识别旧版以人工等待状态表达的 Agent 失败会话。
-   * @returns 满足识别旧版以人工等待状态表达的 Agent 失败会话约束时为 `true`；不满足、未命中或显式失败分支为 `false`；无法解析或未命中时为 `null`。
-   */
-  private isLegacyFailedAgentSession(
-    session: NonNullable<MediaGovernanceTask['agentSession']>,
-  ) {
-    return (
-      session.status === 'needs-operator' &&
-      session.pendingPlanSha256 === null &&
-      session.statusLabel === 'Agent 已阻塞' &&
-      session.currentActionLabel === 'Agent 回合异常结束，未重放动作'
-    );
-  }
-
-  /**
-   * 根据参数 `taskId`，生成 Agent 会话创建期间使用的临时线程标识。
-   * @param taskId - 用于精确定位任务的标识。
-   * @returns 按参数编码并拼接完成的等待状态Agent线程标识。
-   */
-  private pendingAgentThreadId(taskId: string) {
-    return `pending-${taskId}`;
-  }
-
-  /**
    * 根据任务版本或活动运行身份生成 Agent 重放键。
    * @param task - 用于根据任务版本或活动运行身份生成 Agent 重放键的领域对象，包含 `activeRunId`、`id` 字段。
    * @param taskRevision - 决定根据任务版本或活动运行身份生成 Agent 重放键内容、边界或目标的 `taskRevision` 值。
@@ -5117,21 +4782,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
-   * 保存任务并在失败时从数据库恢复权威内存状态。
-   * @param task - 决定任务并在失败时从数据库恢复权威内存状态内容、边界或目标的 `task` 值。
-   * @param event - 触发任务并在失败时从数据库恢复权威内存状态的领域事件；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * 把任务写入可选数据库状态仓；写入失败时回读全部权威任务替换内存投影并返回服务不可用。
+   * @param task - 需要保存的当前媒体任务快照。
    */
-  private async persistTask(
-    task: MediaGovernanceTask,
-    event?: MediaGovernanceAgentEventDto,
-  ) {
+  private async persistTask(task: MediaGovernanceTask) {
     if (!this.stateStore) return;
     try {
-      if (event) {
-        await this.stateStore.saveTaskWithAgentEvent(task, event);
-      } else {
-        await this.stateStore.saveTask(task);
-      }
+      await this.stateStore.saveTask(task);
     } catch {
       try {
         const storedTasks = await this.stateStore.loadTasks();
@@ -5213,6 +4870,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
     this.refreshSemanticProjection(restored);
     return restored;
+  }
+
+  /**
+   * 把旧 Agent 投影与标准 conversationId 归并为同一个“已有治理对话”门禁。
+   * @param task - 当前媒体治理任务。
+   * @returns 任一 Agent 会话绑定存在时返回 true。
+   */
+  private hasAgentConversation(task: MediaGovernanceTask) {
+    return task.agentSession !== null || task.llmConversationId !== null;
   }
 
   /**

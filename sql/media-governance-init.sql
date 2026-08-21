@@ -23,14 +23,44 @@ CREATE TABLE IF NOT EXISTS `media_governance_task` (
   `sealed_plan` longtext,
   `payload_seal` longtext,
   `metadata_identity` longtext,
+  `llm_conversation_id` bigint DEFAULT NULL,
   `closed_mode` varchar(32) DEFAULT NULL,
   `closed_at` datetime(3) DEFAULT NULL,
   `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_media_governance_task_work_item` (`work_item_id`),
+  UNIQUE KEY `uk_media_governance_task_llm_conversation` (`llm_conversation_id`),
   KEY `idx_media_governance_task_stage_state` (`stage`, `run_state`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET @media_task_llm_conversation_sql := IF(
+  EXISTS(
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'media_governance_task'
+      AND column_name = 'llm_conversation_id'
+  ),
+  'SELECT 1',
+  'ALTER TABLE `media_governance_task` ADD COLUMN `llm_conversation_id` bigint NULL AFTER `metadata_identity`'
+);
+PREPARE media_task_llm_conversation_stmt FROM @media_task_llm_conversation_sql;
+EXECUTE media_task_llm_conversation_stmt;
+DEALLOCATE PREPARE media_task_llm_conversation_stmt;
+
+SET @media_task_llm_conversation_index_sql := IF(
+  EXISTS(
+    SELECT 1 FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'media_governance_task'
+      AND index_name = 'uk_media_governance_task_llm_conversation'
+  ),
+  'SELECT 1',
+  'ALTER TABLE `media_governance_task` ADD UNIQUE KEY `uk_media_governance_task_llm_conversation` (`llm_conversation_id`)'
+);
+PREPARE media_task_llm_conversation_index_stmt FROM @media_task_llm_conversation_index_sql;
+EXECUTE media_task_llm_conversation_index_stmt;
+DEALLOCATE PREPARE media_task_llm_conversation_index_stmt;
 
 CREATE TABLE IF NOT EXISTS `media_governance_unit` (
   `id` varchar(96) NOT NULL,

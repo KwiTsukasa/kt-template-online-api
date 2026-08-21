@@ -13,16 +13,16 @@ import {
   MediaGovernanceEventsController,
 } from '../../../src/modules/admin/media-governance/presentation/media-governance.controller';
 import { MediaGovernanceEventStreamService } from '../../../src/modules/admin/media-governance/application/media-governance-event-stream.service';
-import {
-  MEDIA_GOVERNANCE_PERMISSION,
-  MediaGovernancePermissionGuard,
-} from '../../../src/modules/admin/media-governance/presentation/media-governance-permission.guard';
+import { MediaGovernancePermissionGuard } from '../../../src/modules/admin/media-governance/presentation/media-governance-permission.guard';
 import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
+import { LlmConfigService } from '../../../src/modules/admin/llm/application/llm-config.service';
+import { LlmConversationService } from '../../../src/modules/admin/llm/application/llm-conversation.service';
 
 describe('MediaGovernanceController', () => {
   let app: INestApplication;
   let apiUrl: string;
   let service: MediaGovernanceService;
+  let conversationSequence = 0n;
   const authGuard: CanActivate = {
     canActivate(context: ExecutionContext) {
       context.switchToHttp().getRequest().adminUser = {
@@ -40,6 +40,35 @@ describe('MediaGovernanceController', () => {
         MediaGovernanceEventStreamService,
         MediaGovernancePermissionGuard,
         MediaGovernanceService,
+        {
+          provide: LlmConfigService,
+          useValue: {
+            resolveModel: jest.fn(async () => 'gpt-test'),
+            runtimeForProvider: jest.fn(async () => ({
+              entity: {
+                id: '2041700000000100002',
+              },
+            })),
+          },
+        },
+        {
+          provide: LlmConversationService,
+          useValue: {
+            createScene: jest.fn(async () => {
+              conversationSequence += 1n;
+              return {
+                id: String(2_041_700_000_000_190_000n + conversationSequence),
+              };
+            }),
+            resolveIdentity: jest.fn(async (input) => ({
+              activeTurnId: null,
+              conversationId: input.conversationId,
+              providerThreadId: null,
+              scene: input.scene,
+              sceneRefId: input.sceneRefId,
+            })),
+          },
+        },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -91,16 +120,13 @@ describe('MediaGovernanceController', () => {
     });
   });
 
-  it('uses AgentOperate for continuing an existing Agent conversation', () => {
+  it('does not expose a second media-specific conversation message action', () => {
     expect(
-      Reflect.getMetadata(
-        MEDIA_GOVERNANCE_PERMISSION,
-        MediaGovernanceController.prototype.agentMessage,
-      ),
-    ).toEqual(['Media:Governance:AgentOperate']);
+      Reflect.get(MediaGovernanceController.prototype, 'agentMessage'),
+    ).toBeUndefined();
   });
 
-  it('passes Agent session pagination and follow-up messages through real HTTP DTO validation', async () => {
+  it('keeps read-only Agent projection while retiring the duplicate message route', async () => {
     const taskId = 'media-task-http-agent-001';
     const threadId = 'thread-media-http-agent-001';
     const session = {
@@ -120,9 +146,6 @@ describe('MediaGovernanceController', () => {
     const sessionSpy = jest
       .spyOn(service, 'agentSession')
       .mockResolvedValueOnce(session as never);
-    const messageSpy = jest
-      .spyOn(service, 'continueAgentConversation')
-      .mockResolvedValueOnce(session as never);
 
     const history = await request(apiUrl)
       .get(
@@ -139,7 +162,7 @@ describe('MediaGovernanceController', () => {
       limit: 50,
     });
 
-    const followUp = await request(apiUrl)
+    await request(apiUrl)
       .post(`/media-governance/tasks/${taskId}/agent/messages`)
       .send({
         clientMessageId: 'media-user-http-agent-001',
@@ -147,20 +170,8 @@ describe('MediaGovernanceController', () => {
         expectedConversationRevision: 4,
         threadId,
       })
-      .expect(201)
-      .expect('Cache-Control', 'no-store');
-    expect(followUp.body.data).toMatchObject({
-      conversationRevision: 4,
-      threadId,
-    });
-    expect(messageSpy).toHaveBeenCalledWith(taskId, {
-      clientMessageId: 'media-user-http-agent-001',
-      content: '继续核对当前任务',
-      expectedConversationRevision: 4,
-      threadId,
-    });
+      .expect(404);
     sessionSpy.mockRestore();
-    messageSpy.mockRestore();
   });
 
   it('routes canonical identity rebase through real HTTP revision validation', async () => {
@@ -256,7 +267,7 @@ describe('MediaGovernanceController', () => {
     });
   });
 
-  it('starts a CodexAgent turn from an intake draft over real HTTP', async () => {
+  it('creates and binds one local Codex LLM conversation over real HTTP', async () => {
     const created = await request(apiUrl)
       .post('/media-governance/tasks')
       .send({
@@ -275,14 +286,17 @@ describe('MediaGovernanceController', () => {
     expect(agent.body).toMatchObject({
       code: 200,
       data: {
-        currentActionLabel: '正在核对媒体身份与季级字幕合同',
-        policyBoundaryLabel: '五层边界已启用；NAS、媒体和云端写适配器保持关闭',
-        status: 'running',
-        statusLabel: 'Agent 正在治理',
+        currentActionLabel: '等待在统一 LLM 对话页发送消息',
+        policyBoundaryLabel:
+          '会话、模型、流式状态与 Codex thread 由 LLM 模块统一管理',
+        status: 'needs-operator',
+        statusLabel: '等待进入本地 Codex 对话',
       },
       msg: '操作成功',
     });
-    expect(agent.body.data.threadId).toMatch(/^media-agent-/u);
+    expect(agent.body.data.threadId).toMatch(/^204170000000019/u);
+    const task = service.detail(created.body.data.id);
+    expect(task.llmConversationId).toBe(agent.body.data.threadId);
     expect(agent.body).not.toHaveProperty('err');
   });
 
@@ -628,7 +642,7 @@ describe('MediaGovernanceController', () => {
       });
   });
 
-  it('runs the bounded HTTP Demo through download, governance and Agent closure', async () => {
+  it('runs the HTTP Demo through download, governance and one LLM conversation binding', async () => {
     const created = await request(apiUrl)
       .post('/media-governance/tasks')
       .send({
@@ -692,23 +706,13 @@ describe('MediaGovernanceController', () => {
       .post(`/media-governance/tasks/${taskId}/agent/start`)
       .send({ expectedRevision: 7 })
       .expect(201);
-    expect(agent.body.data.policyBoundaryLabel).toContain('五层边界');
-    await new Promise((resolve) => setTimeout(resolve, 650));
-
-    const closed = await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/agent/operator-decision`)
-      .send({
-        expectedRevision: 8,
-        reason: '已核对作品身份、季号与 provider 候选',
-        selectedCandidateId: 'candidate-confirmed',
-      })
-      .expect(201);
-    expect(closed.body.data).toMatchObject({
-      metadataStatus: 'verified',
-      revision: 9,
-      runState: 'succeeded',
-      stage: 'closed',
+    expect(agent.body.data.policyBoundaryLabel).toContain('LLM 模块统一管理');
+    const boundTask = service.detail(taskId);
+    expect(boundTask).toMatchObject({
+      llmConversationId: agent.body.data.threadId,
+      revision: 8,
+      runState: 'blocked',
+      stage: 'metadata',
     });
-    expect(closed.body.data.progress.progressLabel).toBe('本地闭环演示已完成');
   });
 });

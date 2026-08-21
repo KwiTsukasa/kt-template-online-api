@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AdminAuthGuardModule } from '@/modules/admin/identity/auth/admin-auth-guard.module';
+import { AdminLlmModule } from '@/modules/admin/llm/admin-llm.module';
 import {
   MediaGovernanceController,
   MediaGovernanceEventsController,
@@ -20,10 +21,6 @@ import {
   MediaGovernanceExecutionGatewayClient,
 } from '@/modules/admin/media-governance/infrastructure/integration/media-governance-execution.gateway';
 import {
-  MEDIA_GOVERNANCE_CODEX_AGENT_GATEWAY,
-  MediaGovernanceCodexAgentGatewayClient,
-} from '@/modules/admin/media-governance/infrastructure/integration/media-governance-codex-agent.gateway';
-import {
   MEDIA_GOVERNANCE_STATE_STORE,
   MediaGovernanceTypeOrmStateStore,
 } from '@/modules/admin/media-governance/infrastructure/persistence/media-governance-state.store';
@@ -41,6 +38,7 @@ import {
   ],
   imports: [
     AdminAuthGuardModule,
+    AdminLlmModule,
     ConfigModule,
     TypeOrmModule.forFeature(MEDIA_GOVERNANCE_ENTITIES),
   ],
@@ -51,11 +49,6 @@ import {
     {
       provide: MEDIA_GOVERNANCE_EXECUTION_GATEWAY,
       useExisting: MediaGovernanceExecutionGatewayClient,
-    },
-    MediaGovernanceCodexAgentGatewayClient,
-    {
-      provide: MEDIA_GOVERNANCE_CODEX_AGENT_GATEWAY,
-      useExisting: MediaGovernanceCodexAgentGatewayClient,
     },
     MediaDescriptorStore,
     MediaGovernanceEventStreamService,

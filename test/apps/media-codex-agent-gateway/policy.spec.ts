@@ -64,8 +64,8 @@ describe('MediaCodexAgentPolicy', () => {
     expect(policy).toMatchObject({
       allowedTools: [...MEDIA_CODEX_AGENT_TOOLS],
       approvalPolicy: 'never',
-      networkAccess: false,
-      permissionProfile: 'media-agent',
+      networkAccess: true,
+      permissionProfile: 'llm-codex',
       sandbox: 'read-only',
       staticPrompt: MEDIA_CODEX_AGENT_STATIC_POLICY,
     });

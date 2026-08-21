@@ -16,6 +16,37 @@ describe('MediaGovernanceAgentInternalController', () => {
     persistenceMode: 'database',
     status: 'ready',
   }));
+  const llmConversationContext = jest.fn(async (body) => ({
+    identity: {
+      activeTurnId: body.conversationTurnId,
+      conversationId: body.conversationId,
+      providerThreadId: body.providerThreadId,
+      scene: 'media-governance',
+      sceneRefId: body.taskId,
+    },
+    request: {
+      clientMessageId: body.clientMessageId,
+      compactContext: { title: '测试作品' },
+      currentStage: 'metadata',
+      currentUnitId: 'media-unit-001',
+      manifestSha256: 'a'.repeat(64),
+      model: body.model,
+      operatorCommand: body.content,
+      replayKey: 'media-replay-001',
+      taskId: body.taskId,
+      taskRevision: 7,
+    },
+  }));
+  const applyLlmConversationResult = jest.fn(async () => ({
+    applied: true,
+    revision: 7,
+  }));
+  const bindLlmConversationProviderThread = jest.fn(async (body) => ({
+    conversationId: body.conversationId,
+    providerThreadId: body.providerThreadId,
+    scene: 'media-governance',
+    sceneRefId: body.taskId,
+  }));
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -26,7 +57,7 @@ describe('MediaGovernanceAgentInternalController', () => {
           provide: ConfigService,
           useValue: {
             get: (key: string) =>
-              key === 'MEDIA_CODEX_AGENT_INTERNAL_SECRET'
+              key === 'LLM_CODEX_GATEWAY_INTERNAL_SECRET'
                 ? internalSecret
                 : undefined,
           },
@@ -35,6 +66,9 @@ describe('MediaGovernanceAgentInternalController', () => {
           provide: MediaGovernanceService,
           useValue: {
             agentCallbackHealth: callbackHealth,
+            applyLlmConversationResult,
+            bindLlmConversationProviderThread,
+            llmConversationContext,
           },
         },
       ],
@@ -57,7 +91,7 @@ describe('MediaGovernanceAgentInternalController', () => {
   it('returns only bounded callback readiness with internal authentication', async () => {
     const response = await request(app.getHttpServer())
       .get('/internal/media-governance/agent/health')
-      .set('x-kt-media-agent-secret', internalSecret)
+      .set('x-kt-llm-gateway-secret', internalSecret)
       .expect(200);
 
     expect(response.body).toEqual({
@@ -86,6 +120,75 @@ describe('MediaGovernanceAgentInternalController', () => {
       persistenceMode: 'database',
       status: 'ready',
     });
+  });
+
+  it('serves media context and result callbacks for one bound LLM conversation', async () => {
+    const contextBody = {
+      clientMessageId: 'client-message-media-context',
+      content: '分析当前任务',
+      conversationId: '2041700000000190001',
+      conversationTurnId: 'conversation-turn-media-context',
+      model: 'gpt-test',
+      providerThreadId: null,
+      taskId: 'media-task-001',
+    };
+    const context = await request(app.getHttpServer())
+      .post('/internal/media-governance/agent/llm-conversations/context')
+      .set('x-kt-llm-gateway-secret', internalSecret)
+      .send(contextBody)
+      .expect(201);
+    expect(context.body).toMatchObject({
+      identity: {
+        conversationId: '2041700000000190001',
+        providerThreadId: null,
+        sceneRefId: 'media-task-001',
+      },
+      request: { model: 'gpt-test', taskId: 'media-task-001' },
+    });
+    expect(llmConversationContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: '2041700000000190001',
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .post(
+        '/internal/media-governance/agent/llm-conversations/provider-thread',
+      )
+      .set('x-kt-llm-gateway-secret', internalSecret)
+      .send({
+        conversationId: '2041700000000190001',
+        conversationTurnId: 'conversation-turn-media-context',
+        expectedProviderThreadId: null,
+        providerThreadId: 'thread-media-codex-001',
+        taskId: 'media-task-001',
+      })
+      .expect(201);
+    expect(bindLlmConversationProviderThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedProviderThreadId: null,
+        providerThreadId: 'thread-media-codex-001',
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .post('/internal/media-governance/agent/llm-conversations/result')
+      .set('x-kt-llm-gateway-secret', internalSecret)
+      .send({
+        conversationId: '2041700000000190001',
+        conversationTurnId: 'conversation-turn-media-context',
+        providerThreadId: 'thread-media-codex-001',
+        result: {
+          candidateSummaries: [],
+          nextActionLabel: '继续核对',
+          planSha256: null,
+          status: 'conversation-response',
+          summary: '分析完成',
+        },
+        taskId: 'media-task-001',
+      })
+      .expect(201);
+    expect(applyLlmConversationResult).toHaveBeenCalled();
   });
 
   it('is rejected by the gateway client while the API still uses process-only state', async () => {

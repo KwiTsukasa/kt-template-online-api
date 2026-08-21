@@ -50,15 +50,18 @@ export interface CodexAppServerAdapter {
   resumeThread(
     threadId: string,
     policy: MediaCodexAgentPolicy,
+    model?: string,
   ): Promise<CodexAppServerThreadState>;
   startThread(
     policy: MediaCodexAgentPolicy,
+    model?: string,
   ): Promise<CodexAppServerThreadState>;
   startTurn(
     threadId: string,
     prompt: string,
     policy: MediaCodexAgentPolicy,
     clientMessageId?: string,
+    model?: string,
   ): Promise<{ turnId: string }>;
 }
 
@@ -147,28 +150,32 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
   /**
    * 通过使用固定权限、只读沙箱和媒体动态工具创建持久线程。
    * @param policy - 用于通过使用固定权限、只读沙箱和媒体动态工具创建持久线程的领域对象，包含 `staticPrompt`、`cleanCwd`、`permissionProfile` 字段。
+   * @param model - 当前 LLM Codex 连接选定的模型；省略时沿用 App Server 默认模型。
    * @returns 通过使用固定权限、只读沙箱和媒体动态工具创建持久线程。
    */
   async startThread(
     policy: MediaCodexAgentPolicy,
+    model?: string,
   ): Promise<CodexAppServerThreadState> {
     await this.initialize();
+    const params: Record<string, unknown> = {
+      approvalPolicy: 'never',
+      baseInstructions: policy.staticPrompt,
+      cwd: policy.cleanCwd,
+      dynamicTools: MEDIA_CODEX_AGENT_DYNAMIC_TOOLS,
+      environments: [],
+      ephemeral: false,
+      historyMode: 'paginated',
+      permissions: policy.permissionProfile,
+      runtimeWorkspaceRoots: [],
+      selectedCapabilityRoots: [],
+      serviceName: 'kt-media-governance',
+      sessionStartSource: 'startup',
+      threadSource: 'kt-media-governance',
+    };
+    if (model) params.model = model;
     const response = asObject(
-      await this.transport.request('thread/start', {
-        approvalPolicy: 'never',
-        baseInstructions: policy.staticPrompt,
-        cwd: policy.cleanCwd,
-        dynamicTools: MEDIA_CODEX_AGENT_DYNAMIC_TOOLS,
-        environments: [],
-        ephemeral: false,
-        historyMode: 'paginated',
-        permissions: policy.permissionProfile,
-        runtimeWorkspaceRoots: [],
-        selectedCapabilityRoots: [],
-        serviceName: 'kt-media-governance',
-        sessionStartSource: 'startup',
-        threadSource: 'kt-media-governance',
-      }),
+      await this.transport.request('thread/start', params),
       'app-server-thread-start-invalid',
     );
     this.assertThreadBoundary(response, policy);
@@ -179,29 +186,33 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
    * 恢复指定持久线程，补齐分页历史并验证线程及沙箱边界。
    * @param threadId - 用于精确定位线程的标识。
    * @param policy - 用于指定持久线程，补齐分页历史并验证线程及沙箱边界的领域对象，包含 `staticPrompt`、`cleanCwd`、`permissionProfile` 字段。
+   * @param model - 当前 LLM Codex 连接选定的模型；省略时保留线程已有模型。
    * @returns 指定持久线程，补齐分页历史并验证线程及沙箱边界。
    * @throws 当 `projected.threadId !== threadId` 成立时拒绝当前输入并抛出 `Error`。
    */
   async resumeThread(
     threadId: string,
     policy: MediaCodexAgentPolicy,
+    model?: string,
   ): Promise<CodexAppServerThreadState> {
     await this.initialize();
+    const params: Record<string, unknown> = {
+      approvalPolicy: 'never',
+      baseInstructions: policy.staticPrompt,
+      cwd: policy.cleanCwd,
+      excludeTurns: false,
+      initialTurnsPage: {
+        itemsView: 'full',
+        limit: 200,
+        sortDirection: 'asc',
+      },
+      permissions: policy.permissionProfile,
+      runtimeWorkspaceRoots: [],
+      threadId,
+    };
+    if (model) params.model = model;
     const response = asObject(
-      await this.transport.request('thread/resume', {
-        approvalPolicy: 'never',
-        baseInstructions: policy.staticPrompt,
-        cwd: policy.cleanCwd,
-        excludeTurns: false,
-        initialTurnsPage: {
-          itemsView: 'full',
-          limit: 200,
-          sortDirection: 'asc',
-        },
-        permissions: policy.permissionProfile,
-        runtimeWorkspaceRoots: [],
-        threadId,
-      }),
+      await this.transport.request('thread/resume', params),
       'app-server-thread-resume-invalid',
     );
     this.assertThreadBoundary(response, policy);
@@ -221,6 +232,7 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
    * @param prompt - 决定回合内容、边界或目标的 `prompt` 值。
    * @param policy - 用于回合的领域对象，包含 `cleanCwd`、`permissionProfile` 字段。
    * @param clientMessageId - 用于精确定位客户端消息的标识；省略时不启用与该参数关联的可选筛选、覆盖或副作用。
+   * @param model - 当前 LLM Codex 连接选定的模型；省略时保留线程已有模型。
    * @returns 包含 `turnId` 字段的回合。
    * @throws 当 `typeof turn.id !== 'string' || !turn.id` 成立时拒绝当前输入并抛出 `Error`。
    */
@@ -229,6 +241,7 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     prompt: string,
     policy: MediaCodexAgentPolicy,
     clientMessageId?: string,
+    model?: string,
   ) {
     await this.initialize();
     const params: Record<string, unknown> = {
@@ -242,6 +255,7 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
     if (clientMessageId) {
       params.clientUserMessageId = clientMessageId;
     }
+    if (model) params.model = model;
     const response = asObject(
       await this.transport.request('turn/start', params),
       'app-server-turn-start-invalid',
@@ -352,7 +366,7 @@ export class CodexAppServerClient implements CodexAppServerAdapter {
       response.cwd !== policy.cleanCwd ||
       activePermissionProfile.id !== policy.permissionProfile ||
       sandbox.type !== 'readOnly' ||
-      sandbox.networkAccess !== false
+      sandbox.networkAccess !== policy.networkAccess
     ) {
       throw new Error('app-server-thread-boundary-mismatch');
     }
@@ -694,6 +708,16 @@ export class UnixWebSocketRpcTransport implements CodexAppServerRpcTransport {
       this.connectPromise = undefined;
     });
     return this.connectPromise;
+  }
+
+  /**
+   * 主动关闭当前 App Server WebSocket，并拒绝所有尚未完成的请求。
+   */
+  close() {
+    const socket = this.socket;
+    this.socket = undefined;
+    this.rejectPending('app-server-disconnected');
+    if (socket && socket.readyState < WebSocket.CLOSING) socket.close();
   }
 
   /**

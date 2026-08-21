@@ -4,10 +4,7 @@ import type { Params } from 'nestjs-pino';
 import type { ConfigService } from '@nestjs/config';
 
 const DEFAULT_APP_NAME = 'kt-template-online-api';
-const PASSWORD_FIELDS = new Set([
-  'password',
-  'loginPassword',
-]);
+const PASSWORD_FIELDS = new Set(['apiKey', 'password', 'loginPassword']);
 const REDACTION_FAILURE_RECORD = JSON.stringify({
   level: 50,
   msg: '日志脱敏失败',
@@ -20,10 +17,12 @@ const REDACT_PATHS = [
   'req.headers.authorization',
   'req.headers.cookie',
   'req.headers["x-admin-token"]',
+  'req.headers["x-kt-llm-gateway-secret"]',
   'req.headers["x-kt-media-agent-secret"]',
   'req.headers["x-kt-media-executor-secret"]',
   'req.headers["x-token"]',
   'body.accessToken',
+  'body.apiKey',
   'body.adminToken',
   'body.authorization',
   'body.cookie',
@@ -117,13 +116,12 @@ function redactSerializedPasswordFields(serialized: string): string {
   try {
     const record = JSON.parse(
       serialized,
-      (_key, value, context?: { source?: string }) =>
-        {
-          if (typeof value === 'number' && context?.source) {
-            return JSON_WITH_RAW_JSON.rawJSON(context.source);
-          }
-          return value;
-        },
+      (_key, value, context?: { source?: string }) => {
+        if (typeof value === 'number' && context?.source) {
+          return JSON_WITH_RAW_JSON.rawJSON(context.source);
+        }
+        return value;
+      },
     );
     redactPasswordFields(record);
     return `${JSON.stringify(record)}${lineEnding}`;
@@ -274,8 +272,8 @@ function getLokiHeaders(configService: ConfigService) {
   const tenantId = getString(configService, 'LOKI_TENANT_ID');
   if (tenantId) {
     return {
-        'X-Scope-OrgID': tenantId,
-      };
+      'X-Scope-OrgID': tenantId,
+    };
   }
   return undefined;
 }

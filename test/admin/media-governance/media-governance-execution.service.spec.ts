@@ -63,7 +63,6 @@ describe('MediaGovernanceService production execution adapter', () => {
       }),
       failRunDispatch: jest.fn(async (task) => persistTask(task)),
       saveTask: jest.fn(async (task) => persistTask(task)),
-      saveTaskWithAgentEvent: jest.fn(async (task) => persistTask(task)),
       saveExecutorProgressSnapshot: jest.fn(async (task, event) => {
         sequences.set(event.runId, event.sequence);
         persistTask(task);
@@ -102,10 +101,27 @@ describe('MediaGovernanceService production execution adapter', () => {
     const service = new MediaGovernanceService(
       eventStream,
       undefined,
-      undefined,
       stateStore,
       gateway,
       progressHotStore,
+      {
+        resolveModel: jest.fn(async () => 'gpt-test'),
+        runtimeForProvider: jest.fn(async () => ({
+          entity: { id: '2041700000000100002' },
+        })),
+      } as never,
+      {
+        createScene: jest.fn(async (_configId, _title, _scene, taskId) => ({
+          id: `204170000000019${String(taskId).replace(/\D/gu, '').slice(-6).padStart(6, '0')}`,
+        })),
+        resolveIdentity: jest.fn(async (input) => ({
+          activeTurnId: null,
+          conversationId: input.conversationId,
+          providerThreadId: null,
+          scene: input.scene,
+          sceneRefId: input.sceneRefId,
+        })),
+      } as never,
     );
     return {
       acknowledged,
@@ -732,7 +748,6 @@ describe('MediaGovernanceService production execution adapter', () => {
     const restoredService = new MediaGovernanceService(
       undefined,
       undefined,
-      undefined,
       stateStore,
       gateway,
     );
@@ -930,7 +945,6 @@ describe('MediaGovernanceService production execution adapter', () => {
     service.onModuleDestroy();
     setGatewayEnabled(false);
     const restoredService = new MediaGovernanceService(
-      undefined,
       undefined,
       undefined,
       stateStore,
@@ -1884,7 +1898,8 @@ describe('MediaGovernanceService production execution adapter', () => {
     ).rejects.toMatchObject({ status: 409 });
     await expect(
       service.startAgent(task.id, { expectedRevision: 5 }),
-    ).resolves.toMatchObject({ status: 'running' });
+    ).resolves.toMatchObject({ status: 'needs-operator' });
+    expect(task.llmConversationId).toMatch(/^204170000000019/u);
   });
 
   it('migrates persisted deferred identity tasks to the bounded Agent branch', async () => {
@@ -1922,9 +1937,27 @@ describe('MediaGovernanceService production execution adapter', () => {
     const restoredService = new MediaGovernanceService(
       undefined,
       undefined,
-      undefined,
       stateStore,
       gateway,
+      undefined,
+      {
+        resolveModel: jest.fn(async () => 'gpt-test'),
+        runtimeForProvider: jest.fn(async () => ({
+          entity: { id: '2041700000000100002' },
+        })),
+      } as never,
+      {
+        createScene: jest.fn(async () => ({
+          id: '2041700000000199001',
+        })),
+        resolveIdentity: jest.fn(async (input) => ({
+          activeTurnId: null,
+          conversationId: input.conversationId,
+          providerThreadId: null,
+          scene: input.scene,
+          sceneRefId: input.sceneRefId,
+        })),
+      } as never,
     );
     await restoredService.onModuleInit();
     const restored = restoredService.detail(task.id);
@@ -1943,7 +1976,8 @@ describe('MediaGovernanceService production execution adapter', () => {
       restoredService.startAgent(restored.id, {
         expectedRevision: restored.revision,
       }),
-    ).resolves.toMatchObject({ status: 'running' });
+    ).resolves.toMatchObject({ status: 'needs-operator' });
+    expect(restored.llmConversationId).toBe('2041700000000199001');
   });
 
   it.each([

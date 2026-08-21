@@ -25,7 +25,6 @@ import { vbenPage, vbenSuccess } from '@/common';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import {
   MediaGovernanceMagnetSourceCreateDto,
-  MediaGovernanceAgentMessageDto,
   MediaGovernanceAgentSessionQueryDto,
   MediaGovernanceOperatorDecisionDto,
   MediaGovernanceRevisionCommandDto,
@@ -524,15 +523,15 @@ export class MediaGovernanceController {
   }
 
   /**
-   * 从当前未完成阶段启动受策略限制的 Codex Agent。
+   * 为当前未完成媒体任务创建唯一的本地 Codex LLM 对话。
    * @param taskId - 用于精确定位任务的标识。
    * @param body - 用于从当前未完成阶段启动受策略限制的 Codex Agent的结构化输入。
    * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
-   * @returns 从当前未完成阶段启动受策略限制的 Codex Agent。
+   * @returns 由标准 LLM conversation 派生的初始治理投影。
    */
   @Post(':taskId/agent/start')
   @MediaGovernancePermission('Media:Governance:AgentStart')
-  @ApiOperation({ summary: '从任意未完成阶段启动有界 CodexAgent 治理' })
+  @ApiOperation({ summary: '创建并绑定唯一的本地 Codex LLM 对话' })
   async startAgent(
     @Param('taskId') taskId: string,
     @Body() body: MediaGovernanceRevisionCommandDto,
@@ -543,14 +542,14 @@ export class MediaGovernanceController {
   }
 
   /**
-   * 通过拉取指定任务的 Agent 会话及对话增量投影。
+   * 从任务绑定的标准 LLM 对话派生只读治理投影。
    * @param taskId - 用于精确定位任务的标识。
    * @param query - 限定通过拉取指定任务的 Agent 会话及对话增量筛选、排序与分页范围的查询条件。
    * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
-   * @returns 通过拉取指定任务的 Agent 会话及对话增量。
+   * @returns 包含可见消息和候选结果的兼容治理投影。
    */
   @Get(':taskId/agent/session')
-  @ApiOperation({ summary: '查询 CodexAgent 语义会话投影' })
+  @ApiOperation({ summary: '查询绑定 LLM 对话的只读治理投影' })
   async agentSession(
     @Param('taskId') taskId: string,
     @Query() query: MediaGovernanceAgentSessionQueryDto,
@@ -558,27 +557,6 @@ export class MediaGovernanceController {
   ) {
     this.noStore(response);
     return vbenSuccess(await this.service.agentSession(taskId, query));
-  }
-
-  /**
-   * 通过在同一 Agent 线程中提交具备幂等标识的操作员消息。
-   * @param taskId - 用于精确定位任务的标识。
-   * @param body - 用于通过在同一 Agent 线程中提交具备幂等标识的操作员消息的结构化输入。
-   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
-   * @returns 通过在同一 Agent 线程中提交具备幂等标识的操作员消息。
-   */
-  @Post(':taskId/agent/messages')
-  @MediaGovernancePermission('Media:Governance:AgentOperate')
-  @ApiOperation({ summary: '在同一 CodexAgent thread 继续发送操作员消息' })
-  async agentMessage(
-    @Param('taskId') taskId: string,
-    @Body() body: MediaGovernanceAgentMessageDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    this.noStore(response);
-    return vbenSuccess(
-      await this.service.continueAgentConversation(taskId, body),
-    );
   }
 
   /**

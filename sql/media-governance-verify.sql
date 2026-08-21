@@ -34,6 +34,21 @@ SELECT
 FROM media_governance_agent_session;
 
 SELECT
+  COUNT(*) AS llm_conversation_column_count
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'media_governance_task'
+  AND column_name = 'llm_conversation_id';
+
+SELECT
+  COUNT(*) AS llm_conversation_unique_index_count
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'media_governance_task'
+  AND index_name = 'uk_media_governance_task_llm_conversation'
+  AND non_unique = 0;
+
+SELECT
   COUNT(*) AS nullable_descriptor_manifest_sha256_columns
 FROM information_schema.columns
 WHERE table_schema = DATABASE()

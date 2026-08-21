@@ -22,7 +22,6 @@ import {
 } from './media-governance-executor.contract';
 import {
   MEDIA_CODEX_AGENT_TOOLS,
-  type MediaCodexAgentConversationEvent,
   type MediaCodexAgentTool,
 } from '@/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -762,28 +761,6 @@ export class MediaGovernanceOperatorDecisionDto extends MediaGovernanceRevisionC
   reason: string;
 }
 
-export class MediaGovernanceAgentMessageDto {
-  @IsString()
-  @MaxLength(96)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
-  clientMessageId: string;
-
-  @IsString()
-  @MaxLength(4_000)
-  @Matches(/\S/)
-  content: string;
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  expectedConversationRevision: number;
-
-  @IsString()
-  @MaxLength(96)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
-  threadId: string;
-}
-
 export class MediaGovernanceAgentSessionQueryDto {
   @Type(() => Number)
   @IsInt()
@@ -823,134 +800,90 @@ export class MediaGovernanceAgentToolCallDto {
   tool: MediaCodexAgentTool;
 }
 
-const MEDIA_GOVERNANCE_AGENT_EVENT_TYPES = [
-  'agent-blocked',
-  'agent-heartbeat',
-  'agent-thread-mapped',
-  'agent-turn-completed',
-  'agent-turn-started',
-] as const;
-
-export class MediaGovernanceAgentEventDto {
-  @Matches(/^[a-f0-9]{64}$/)
-  capsuleSha256: string;
+export class MediaGovernanceLlmConversationContextDto {
+  @IsString()
+  @MaxLength(96)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,95}$/)
+  clientMessageId: string;
 
   @IsString()
-  @MaxLength(160)
-  eventId: string;
-
-  @IsString()
-  @MaxLength(64)
-  observedAt: string;
-
-  @IsOptional()
-  @Matches(/^[a-f0-9]{64}$/)
-  planSha256: null | string;
-
-  @Matches(/^[a-f0-9]{64}$/)
-  policySha256: string;
-
-  @IsInt()
-  @Min(1)
-  sequence: number;
-
-  @IsIn(['active', 'blocked', 'closed'])
-  status: 'active' | 'blocked' | 'closed';
-
-  @IsString()
-  @MaxLength(400)
+  @MaxLength(20_000)
   @Matches(/\S/)
-  summary: string;
-
-  @IsString()
-  @MaxLength(96)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
-  taskId: string;
-
-  @IsInt()
-  @Min(1)
-  taskRevision: number;
-
-  @IsString()
-  @MaxLength(96)
-  threadId: string;
-
-  @IsIn(MEDIA_GOVERNANCE_AGENT_EVENT_TYPES)
-  type: (typeof MEDIA_GOVERNANCE_AGENT_EVENT_TYPES)[number];
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(96)
-  turnId: null | string;
-}
-
-const MEDIA_GOVERNANCE_AGENT_CONVERSATION_CHANGE_TYPES = [
-  'assistant-delta',
-  'message-completed',
-  'turn-completed',
-  'turn-started',
-] as const;
-
-export class MediaGovernanceAgentConversationEventDto implements MediaCodexAgentConversationEvent {
-  @Matches(/^[a-f0-9]{64}$/)
-  capsuleSha256: string;
-
-  @IsIn(MEDIA_GOVERNANCE_AGENT_CONVERSATION_CHANGE_TYPES)
-  changeType: MediaCodexAgentConversationEvent['changeType'];
-
-  @IsString()
-  @MaxLength(8_000)
   content: string;
 
-  @IsInt()
-  @Min(0)
-  conversationRevision: number;
-
-  @IsInt()
-  @Min(1)
-  eventSequence: number;
+  @IsString()
+  @Matches(/^[1-9]\d{0,23}$/)
+  conversationId: string;
 
   @IsString()
-  @MaxLength(96)
-  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
-  messageId: string;
+  @MaxLength(128)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
+  conversationTurnId: string;
 
   @IsString()
-  @MaxLength(64)
-  observedAt: string;
-
-  @IsIn(['commentary', 'final_answer', 'user'])
-  phase: MediaCodexAgentConversationEvent['phase'];
-
-  @Matches(/^[a-f0-9]{64}$/)
-  policySha256: string;
+  @MaxLength(200)
+  @Matches(/\S/)
+  model: string;
 
   @IsOptional()
-  @IsObject()
-  result: MediaCodexAgentConversationEvent['result'];
-
-  @IsIn(['assistant', 'user'])
-  role: MediaCodexAgentConversationEvent['role'];
-
-  @IsIn(['completed', 'streaming'])
-  status: MediaCodexAgentConversationEvent['status'];
+  @IsString()
+  @MaxLength(128)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
+  providerThreadId: null | string;
 
   @IsString()
   @MaxLength(96)
   @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
   taskId: string;
+}
 
-  @IsInt()
-  @Min(1)
-  taskRevision: number;
+export class MediaGovernanceLlmConversationResultDto {
+  @IsString()
+  @Matches(/^[1-9]\d{0,23}$/)
+  conversationId: string;
+
+  @IsString()
+  @MaxLength(128)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
+  conversationTurnId: string;
+
+  @IsString()
+  @MaxLength(128)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
+  providerThreadId: string;
+
+  @IsObject()
+  result: Record<string, unknown>;
 
   @IsString()
   @MaxLength(96)
   @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
-  threadId: string;
+  taskId: string;
+}
+
+export class MediaGovernanceLlmProviderThreadBindDto {
+  @IsString()
+  @Matches(/^[1-9]\d{0,23}$/)
+  conversationId: string;
+
+  @IsString()
+  @MaxLength(128)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
+  conversationTurnId: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
+  expectedProviderThreadId: null | string;
+
+  @IsString()
+  @MaxLength(128)
+  @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/)
+  providerThreadId: string;
 
   @IsString()
   @MaxLength(96)
   @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$/)
-  turnId: string;
+  taskId: string;
 }

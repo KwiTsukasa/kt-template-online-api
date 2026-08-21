@@ -18,7 +18,11 @@ function bencode(value: unknown): Buffer {
   }
   if (typeof value === 'number') return Buffer.from(`i${value}e`);
   if (Array.isArray(value)) {
-    return Buffer.concat([Buffer.from('l'), ...value.map(bencode), Buffer.from('e')]);
+    return Buffer.concat([
+      Buffer.from('l'),
+      ...value.map(bencode),
+      Buffer.from('e'),
+    ]);
   }
   const record = value as Record<string, unknown>;
   return Buffer.concat([

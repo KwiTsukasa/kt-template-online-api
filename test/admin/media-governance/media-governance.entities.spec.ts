@@ -103,4 +103,22 @@ describe('media governance entity schema', () => {
       )?.options,
     ).toMatchObject({ name: 'selected_file_mappings', nullable: true });
   });
+
+  it('binds a media Task to at most one LLM conversation id', () => {
+    expect(
+      getMetadataArgsStorage().columns.find(
+        (column) =>
+          column.target === MediaGovernanceTaskEntity &&
+          column.propertyName === 'llmConversationId',
+      )?.options,
+    ).toMatchObject({ name: 'llm_conversation_id', nullable: true });
+    expect(
+      getMetadataArgsStorage().indices.find(
+        (index) =>
+          index.target === MediaGovernanceTaskEntity &&
+          Array.isArray(index.columns) &&
+          index.columns.includes('llmConversationId'),
+      )?.unique,
+    ).toBe(true);
+  });
 });

@@ -1,7 +1,6 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { merge, Observable, of, Subject, timer } from 'rxjs';
 import { map } from 'rxjs/operators';
-import type { MediaCodexAgentConversationEvent } from '@/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
 import type { MediaGovernanceTask } from './media-governance.service';
 
 export interface MediaGovernanceEventStreamOptions {
@@ -41,15 +40,10 @@ export interface MediaGovernanceTaskChangedData {
 
 export interface MediaGovernanceStreamEvent {
   data:
-    | MediaCodexAgentConversationEvent
     | MediaGovernanceTaskChangedData
     | { message: string; observedAt: string };
   id: string;
-  type:
-    | 'agent-conversation-changed'
-    | 'heartbeat'
-    | 'snapshot-required'
-    | 'task-changed';
+  type: 'heartbeat' | 'snapshot-required' | 'task-changed';
 }
 
 @Injectable()
@@ -99,23 +93,6 @@ export class MediaGovernanceEventStreamService {
       data: { ...input, observedAt },
       id: eventId,
       type: 'task-changed',
-    };
-    this.append(event);
-    return event;
-  }
-
-  /**
-   * 按`input`投递经隔离复制的 Agent 对话事件。
-   * @param input - 用于经隔离复制的 Agent 对话事件的结构化输入。
-   * @returns 经隔离复制的 Agent 对话事件。
-   */
-  publishAgentConversation(
-    input: MediaCodexAgentConversationEvent,
-  ): MediaGovernanceStreamEvent {
-    const event: MediaGovernanceStreamEvent = {
-      data: structuredClone(input),
-      id: `media-${Date.now()}-${++this.eventSequence}`,
-      type: 'agent-conversation-changed',
     };
     this.append(event);
     return event;

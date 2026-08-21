@@ -84,6 +84,19 @@ class AdminUserCredentialRouteTestController {
   }
 }
 
+@Controller('llm/configs')
+class LlmCredentialRouteTestController {
+  @Post()
+  create() {
+    return { ok: true };
+  }
+
+  @Put(':id')
+  update() {
+    return { ok: true };
+  }
+}
+
 const consume = jest.fn().mockResolvedValue({
   allowed: true,
   policy: 'login',
@@ -95,6 +108,7 @@ const consume = jest.fn().mockResolvedValue({
     CredentialRouteTestController,
     QqbotCredentialRouteTestController,
     AdminUserCredentialRouteTestController,
+    LlmCredentialRouteTestController,
   ],
   providers: [
     {
@@ -149,6 +163,7 @@ describe('PublicRateLimitGuard credential transport boundary', () => {
     '/auth/logout',
     '/qqbot/account/save',
     '/qqbot/account/update/',
+    '/llm/configs',
     '/system/user',
   ])('rejects direct HTTP %s before rate-limit consumption', async (path) => {
     await request(app.getHttpServer()).post(path).expect(403);
@@ -156,7 +171,11 @@ describe('PublicRateLimitGuard credential transport boundary', () => {
     expect(consume).not.toHaveBeenCalled();
   });
 
-  it.each(['/system/user/admin-1', '/system/user/admin-1/password/'])(
+  it.each([
+    '/llm/configs/2041700000000100001',
+    '/system/user/admin-1',
+    '/system/user/admin-1/password/',
+  ])(
     'rejects direct HTTP PUT %s before rate-limit consumption',
     async (path) => {
       await request(app.getHttpServer()).put(path).expect(403);

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
+import { LLM_CODEX_PERMISSION_PROFILE } from '@/apps/media-codex-agent-gateway/domain/llm-codex-runtime.contract';
 
 export const MEDIA_GOVERNANCE_SOURCE_CLASSIFICATIONS = [
   {
@@ -445,7 +446,7 @@ export interface MediaGovernanceAgentPolicy {
   allowedTools: string[];
   approvalPolicy: 'never';
   cleanCwd: string;
-  permissionProfile: 'media-agent';
+  permissionProfile: typeof LLM_CODEX_PERMISSION_PROFILE;
   policySha256: string;
   policyVersion: string;
 }
@@ -1009,7 +1010,7 @@ export function validateAgentBoundaryRequest(input: {
   const { capsule, policy, request, task } = input;
   const stagingRoot = `/vol2/1000/.kt-media-governance-staging/${task.id}`;
   const evidenceRoot = '/vol1/docker/kt-codex/artifacts/automation/media/';
-  if (policy.permissionProfile !== 'media-agent') {
+  if (policy.permissionProfile !== LLM_CODEX_PERMISSION_PROFILE) {
     fail('agent-policy-runtime-invalid');
   }
   if (
@@ -1167,9 +1168,9 @@ export function buildMediaGovernanceDomainFixture(): MediaGovernanceDomainFixtur
     allowedTools: [...MEDIA_GOVERNANCE_TYPED_AGENT_TOOLS],
     approvalPolicy: 'never',
     cleanCwd: '/vol1/docker/kt-codex-agent/runtime',
-    permissionProfile: 'media-agent',
+    permissionProfile: LLM_CODEX_PERMISSION_PROFILE,
     policySha256,
-    policyVersion: 'media-agent-policy-v1',
+    policyVersion: 'media-agent-policy-v2',
   };
   return {
     agentSession: {

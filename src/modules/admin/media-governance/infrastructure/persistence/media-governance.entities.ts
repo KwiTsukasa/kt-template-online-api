@@ -82,6 +82,10 @@ export class MediaGovernanceTaskEntity {
   @Column({ name: 'metadata_identity', nullable: true, type: 'simple-json' })
   metadataIdentity: null | Record<string, unknown>;
 
+  @Index({ unique: true })
+  @Column({ name: 'llm_conversation_id', nullable: true, type: 'bigint' })
+  llmConversationId: null | string;
+
   @Column({ length: 32, name: 'closed_mode', nullable: true, type: 'varchar' })
   closedMode: null | string;
 

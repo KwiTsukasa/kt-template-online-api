@@ -683,3 +683,32 @@ WHERE role.role_code IN ('super', 'admin')
   )
   AND menu.status = 1
   AND menu.is_deleted = 0;
+
+INSERT INTO admin_menu (id, pid, name, path, component, redirect, auth_code, type, meta, status, sort) VALUES
+  (2041700000000100500,0,'Llm','/llm',NULL,'/llm/config',NULL,'catalog','{"icon":"lucide:brain-circuit","order":115,"title":"大模型"}',1,115),
+  (2041700000000100501,2041700000000100500,'LlmConfig','/llm/config','/llm/config/index',NULL,'Llm:Config:List','menu','{"icon":"lucide:blocks","title":"大模型配置"}',1,0),
+  (2041700000000100502,2041700000000100500,'LlmChat','/llm/config/:configId/chat','/llm/chat/index',NULL,'Llm:Chat:Use','menu','{"activePath":"/llm/config","hideInMenu":true,"title":"流式对话"}',1,1),
+  (2041700000000120501,2041700000000100501,'LlmConfigCreate',NULL,NULL,NULL,'Llm:Config:Create','button','{"title":"common.create"}',1,1),
+  (2041700000000120502,2041700000000100501,'LlmConfigUpdate',NULL,NULL,NULL,'Llm:Config:Update','button','{"title":"common.edit"}',1,2),
+  (2041700000000120503,2041700000000100501,'LlmConfigDelete',NULL,NULL,NULL,'Llm:Config:Delete','button','{"title":"common.delete"}',1,3),
+  (2041700000000120504,2041700000000100501,'LlmConfigTest',NULL,NULL,NULL,'Llm:Config:Test','button','{"title":"测试连接"}',1,4),
+  (2041700000000120505,2041700000000100501,'LlmConfigDefault',NULL,NULL,NULL,'Llm:Config:Default','button','{"title":"设为默认"}',1,5),
+  (2041700000000120506,2041700000000100501,'LlmConfigToggle',NULL,NULL,NULL,'Llm:Config:Toggle','button','{"title":"启停"}',1,6),
+  (2041700000000120507,2041700000000100502,'LlmChatUse',NULL,NULL,NULL,'Llm:Chat:Use','button','{"title":"流式对话"}',1,1)
+ON DUPLICATE KEY UPDATE pid = VALUES(pid), name = VALUES(name), path = VALUES(path), component = VALUES(component), redirect = VALUES(redirect), auth_code = VALUES(auth_code), type = VALUES(type), meta = VALUES(meta), status = VALUES(status), sort = VALUES(sort), is_deleted = 0;
+
+INSERT IGNORE INTO admin_role_menu (role_id, menu_id)
+SELECT role.id, menu.id
+FROM admin_role role
+CROSS JOIN admin_menu menu
+WHERE role.role_code = 'super'
+  AND role.status = 1
+  AND role.is_deleted = 0
+  AND menu.id IN (
+    2041700000000100500, 2041700000000100501, 2041700000000100502,
+    2041700000000120501, 2041700000000120502, 2041700000000120503,
+    2041700000000120504, 2041700000000120505, 2041700000000120506,
+    2041700000000120507
+  )
+  AND menu.status = 1
+  AND menu.is_deleted = 0;

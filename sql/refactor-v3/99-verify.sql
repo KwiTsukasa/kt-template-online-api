@@ -557,3 +557,55 @@ WHERE table_schema = DATABASE()
   AND table_name = 'napcat_account_binding'
   AND column_name = 'device_identity_id'
   AND column_type = 'bigint';
+
+SELECT 'llm_table_cardinality' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.tables
+WHERE table_schema = DATABASE()
+  AND table_name IN ('admin_llm_config', 'admin_llm_conversation', 'admin_llm_message');
+
+SELECT 'llm_conversation_scene_columns' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'admin_llm_conversation'
+  AND column_name IN ('scene', 'scene_ref_id');
+
+SELECT 'llm_conversation_scene_ref_index' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND table_name = 'admin_llm_conversation'
+  AND index_name = 'uk_admin_llm_conversation_scene_ref'
+  AND non_unique = 0;
+
+SELECT 'llm_message_metadata_column' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'admin_llm_message'
+  AND column_name = 'metadata'
+  AND data_type = 'json';
+
+SELECT 'llm_menu_cardinality' AS check_name, COUNT(*) AS matched_rows
+FROM admin_menu
+WHERE name IN (
+  'Llm', 'LlmConfig', 'LlmChat', 'LlmConfigCreate', 'LlmConfigUpdate',
+  'LlmConfigDelete', 'LlmConfigTest', 'LlmConfigDefault', 'LlmConfigToggle',
+  'LlmChatUse'
+)
+  AND status = 1
+  AND is_deleted = 0;
+
+SELECT 'llm_super_grant_missing' AS check_name, COUNT(*) AS missing_rows
+FROM admin_role role
+CROSS JOIN admin_menu menu
+LEFT JOIN admin_role_menu role_menu
+  ON role_menu.role_id = role.id
+ AND role_menu.menu_id = menu.id
+WHERE role.role_code = 'super'
+  AND role.status = 1
+  AND role.is_deleted = 0
+  AND menu.name IN (
+    'Llm', 'LlmConfig', 'LlmChat', 'LlmConfigCreate', 'LlmConfigUpdate',
+    'LlmConfigDelete', 'LlmConfigTest', 'LlmConfigDefault', 'LlmConfigToggle',
+    'LlmChatUse'
+  )
+  AND menu.is_deleted = 0
+  AND role_menu.role_id IS NULL;

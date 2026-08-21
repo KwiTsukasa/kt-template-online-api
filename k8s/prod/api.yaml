@@ -50,9 +50,9 @@ spec:
               value: http://kt-napcat-webui-gateway:48086
             - name: NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL
               value: /admin/napcat-webui
-            - name: MEDIA_CODEX_AGENT_GATEWAY_BASE_URL
-              value: http://172.21.0.1:48087
-            - name: MEDIA_CODEX_AGENT_GATEWAY_TIMEOUT_MS
+            - name: LLM_CODEX_GATEWAY_BASE_URL
+              value: http://172.21.0.1:48087/internal/llm-codex
+            - name: LLM_CODEX_GATEWAY_TIMEOUT_MS
               value: "20000"
             - name: MEDIA_GOVERNANCE_EXECUTOR_BASE_URL
               value: http://172.21.0.1:48088

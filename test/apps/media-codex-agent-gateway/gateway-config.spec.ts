@@ -18,4 +18,26 @@ describe('MediaCodexAgentGatewayConfigService', () => {
       expect(() => config.host()).toThrow('media-codex-agent-host-invalid');
     },
   );
+
+  it('uses one LLM secret for generic chat and media governance', () => {
+    const config = new MediaCodexAgentGatewayConfigService(
+      new ConfigService({
+        LLM_CODEX_GATEWAY_INTERNAL_SECRET: 'l'.repeat(32),
+        MEDIA_CODEX_AGENT_INTERNAL_SECRET: 'm'.repeat(32),
+      }),
+    );
+    expect(config.llmInternalSecret()).toBe('l'.repeat(32));
+    expect(config.internalSecret()).toBe('l'.repeat(32));
+  });
+
+  it('does not revive the retired media-only secret', () => {
+    const config = new MediaCodexAgentGatewayConfigService(
+      new ConfigService({
+        MEDIA_CODEX_AGENT_INTERNAL_SECRET: 'm'.repeat(32),
+      }),
+    );
+    expect(() => config.llmInternalSecret()).toThrow(
+      'llm-codex-gateway-internal-secret-invalid',
+    );
+  });
 });

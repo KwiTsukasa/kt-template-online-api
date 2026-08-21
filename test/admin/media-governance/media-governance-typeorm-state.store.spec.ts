@@ -135,21 +135,7 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       statusLabel: 'Agent 正在治理',
       threadId: 'thread-typeorm-store-0001',
     };
-    await store.saveTaskWithAgentEvent(task, {
-      capsuleSha256: task.agentSession.capsuleSha256,
-      eventId: 'event-typeorm-store-0001',
-      observedAt: '2026-08-11T00:00:07.000Z',
-      planSha256: null,
-      policySha256: task.agentSession.policySha256,
-      sequence: 7,
-      status: 'active',
-      summary: '正在验证持久化',
-      taskId: task.id,
-      taskRevision: 1,
-      threadId: task.agentSession.threadId,
-      turnId: 'turn-typeorm-store-0001',
-      type: 'agent-heartbeat',
-    });
+    await store.saveTask(task);
 
     task.workItemId = await store.reserveWorkItemId(task.id);
     expect(task.workItemId).toBe('media-063');
@@ -166,24 +152,27 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       taskId: task.id,
       threadId: 'thread-typeorm-store-0001',
     });
-    expect([...events.rows.values()][0]).toMatchObject({
-      eventId: 'event-typeorm-store-0001',
-      sequence: 7,
-      taskId: task.id,
-    });
+    expect(events.rows.size).toBe(0);
     await expect(store.loadTasks()).resolves.toEqual([
       expect.objectContaining({
-        agentSession: expect.objectContaining({
-          lastSequence: 7,
-          threadId: 'thread-typeorm-store-0001',
-        }),
+        agentSession: null,
         id: task.id,
       }),
     ]);
 
-    task.agentSession = null;
+    task.llmConversationId = '2041700000000190001';
     await store.saveTask(task);
     expect(sessions.rows.size).toBe(0);
+    expect(tasks.rows.get(task.id)).toMatchObject({
+      llmConversationId: '2041700000000190001',
+    });
+    await expect(store.loadTasks()).resolves.toEqual([
+      expect.objectContaining({
+        agentSession: null,
+        llmConversationId: '2041700000000190001',
+      }),
+    ]);
+    task.agentSession = null;
 
     const source = await service.addMagnetSource(task.id, {
       contentKind: 'subtitleless_media',

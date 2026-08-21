@@ -36,6 +36,10 @@ describe('media governance production schema SQL', () => {
       'UNIQUE KEY `uk_media_governance_event_task_run_sequence` (`task_id`, `run_id`, `sequence`)',
     );
     expect(initSql).toContain('`progress_projection` longtext NOT NULL');
+    expect(initSql).toContain('`llm_conversation_id` bigint DEFAULT NULL');
+    expect(initSql).toContain(
+      'UNIQUE KEY `uk_media_governance_task_llm_conversation` (`llm_conversation_id`)',
+    );
     expect(initSql).toContain('`sealed_input` longtext NOT NULL');
     expect(initSql).toContain('`selected_file_indices` longtext DEFAULT NULL');
     expect(initSql).toContain('`selected_file_mappings` longtext DEFAULT NULL');
@@ -44,6 +48,7 @@ describe('media governance production schema SQL', () => {
   it('provides bounded post-migration verification without modifying rows', () => {
     expect(verifySql).toContain('COUNT(*) AS table_count');
     expect(verifySql).toContain('MAX(last_sequence)');
+    expect(verifySql).toContain('llm_conversation_unique_index_count');
     expect(verifySql).not.toMatch(/INSERT|UPDATE|DELETE|ALTER|DROP/iu);
   });
 

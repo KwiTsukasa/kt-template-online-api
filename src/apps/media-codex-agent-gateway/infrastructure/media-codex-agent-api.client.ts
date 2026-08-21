@@ -1,19 +1,16 @@
 import type {
-  MediaCodexAgentEventSink,
-  MediaCodexAgentToolClient,
-} from '../application/media-codex-agent-gateway.service';
-import type {
-  MediaCodexAgentConversationEvent,
-  MediaCodexAgentSemanticEvent,
   MediaCodexAgentToolCall,
+  MediaGovernanceLlmConversationContextRequest,
+  MediaGovernanceLlmConversationContextResponse,
+  MediaGovernanceLlmConversationResultEvent,
+  MediaGovernanceLlmProviderThreadBindRequest,
 } from '../domain/media-codex-agent.contract';
 import { MediaCodexAgentGatewayConfigService } from '../config/media-codex-agent-gateway-config.service';
+import { LLM_CODEX_INTERNAL_HEADER } from '../domain/llm-codex-runtime.contract';
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
-export class MediaCodexAgentApiClient
-  implements MediaCodexAgentToolClient, MediaCodexAgentEventSink
-{
+export class MediaCodexAgentApiClient {
   constructor(private readonly config: MediaCodexAgentGatewayConfigService) {}
 
   /**
@@ -55,26 +52,44 @@ export class MediaCodexAgentApiClient
   }
 
   /**
-   * 按`event`投递媒体 Agent 语义状态事件；从受控资源来源加载所需数据（`request`）。
-   * @param event - 触发媒体 Agent 语义状态事件的领域事件。
+   * 从 API 读取已绑定 LLM 对话的当前媒体任务边界。
+   * @param input - 对话、任务、模型和本轮用户消息。
+   * @returns App Server 媒体治理回合请求。
    */
-  async publish(event: MediaCodexAgentSemanticEvent) {
+  async conversationContext(
+    input: MediaGovernanceLlmConversationContextRequest,
+  ): Promise<MediaGovernanceLlmConversationContextResponse> {
+    return (await this.request(
+      '/internal/media-governance/agent/llm-conversations/context',
+      'POST',
+      input,
+    )) as MediaGovernanceLlmConversationContextResponse;
+  }
+
+  /**
+   * 把 LLM 对话最终结构化结果回写到绑定的媒体任务。
+   * @param event - 对话、任务和严格结果。
+   */
+  async publishConversationResult(
+    event: MediaGovernanceLlmConversationResultEvent,
+  ) {
     await this.request(
-      '/internal/media-governance/agent/events',
+      '/internal/media-governance/agent/llm-conversations/result',
       'POST',
       event,
     );
   }
 
   /**
-   * 按`event`投递媒体 Agent 对话增量或完成事件；从受控资源来源加载所需数据（`request`）。
-   * @param event - 触发媒体 Agent 对话增量或完成事件的领域事件。
+   * 在 App Server turn 启动前通过 API 原子确认 provider thread，避免依赖 SSE start 消费时序。
+   * @param input - 对话、任务、旧线程比较值与实际 App Server 线程。
+   * @returns API 返回的权威对话身份。
    */
-  async publishConversation(event: MediaCodexAgentConversationEvent) {
-    await this.request(
-      '/internal/media-governance/agent/conversation-events',
+  bindProviderThread(input: MediaGovernanceLlmProviderThreadBindRequest) {
+    return this.request(
+      '/internal/media-governance/agent/llm-conversations/provider-thread',
       'POST',
-      event,
+      input,
     );
   }
 
@@ -88,7 +103,7 @@ export class MediaCodexAgentApiClient
    */
   private async request(path: string, method: 'GET' | 'POST', body?: unknown) {
     const headers: Record<string, string> = {
-      'x-kt-media-agent-secret': this.config.internalSecret(),
+      [LLM_CODEX_INTERNAL_HEADER]: this.config.internalSecret(),
     };
     const request: RequestInit = {
       headers,

@@ -153,6 +153,9 @@ async function prepareLocalDatabase() {
     );
     const requiredTables = [
       'admin_notice',
+      'admin_llm_config',
+      'admin_llm_conversation',
+      'admin_llm_message',
       'admin_user',
       'admin_user_role',
       'message_event',
@@ -193,9 +196,28 @@ async function prepareLocalDatabase() {
         `本地消息中心权限不完整：${messageCenterPermissionCount}/3`,
       );
     }
+    const [llmPermissionRows] = await databaseConnection.query(
+      `SELECT COUNT(*) AS permission_count
+       FROM admin_menu menu
+       JOIN admin_role_menu role_menu ON role_menu.menu_id = menu.id
+       JOIN admin_role role ON role.id = role_menu.role_id
+       WHERE role.role_code = 'super'
+         AND role.is_deleted = 0
+         AND menu.is_deleted = 0
+         AND menu.name IN (
+           'Llm', 'LlmConfig', 'LlmChat', 'LlmConfigCreate', 'LlmConfigUpdate',
+           'LlmConfigDelete', 'LlmConfigTest', 'LlmConfigDefault',
+           'LlmConfigToggle', 'LlmChatUse'
+         )`,
+    );
+    const llmPermissionCount = Number(llmPermissionRows[0]?.permission_count);
+    if (llmPermissionCount !== 10) {
+      throw new Error(`本地大模型权限不完整：${llmPermissionCount}/10`);
+    }
     process.stdout.write(
       `${JSON.stringify({
         database,
+        llmPermissionCount,
         messageCenterPermissionCount,
         reset: true,
         tableCount,

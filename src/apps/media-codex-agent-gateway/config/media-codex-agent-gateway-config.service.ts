@@ -52,6 +52,29 @@ export class MediaCodexAgentGatewayConfigService {
   }
 
   /**
+   * 返回通用大模型对话使用的只读 Codex 工作目录，并限制在 KT 或受管 Agent 根内。
+   * @returns 已规范化的绝对工作目录。
+   * @throws 路径不是绝对路径、包含回退段或越出允许前缀时抛出错误。
+   */
+  chatCwd() {
+    const value = this.text('LLM_CODEX_CHAT_CWD') || this.cleanCwd();
+    if (
+      !value.startsWith('/') ||
+      value.includes('\\') ||
+      value.includes('\0') ||
+      value.includes('/../') ||
+      value.endsWith('/..')
+    ) {
+      throw new Error('llm-codex-chat-cwd-invalid');
+    }
+    const allowed =
+      value.startsWith('/home/yemu2/KT') ||
+      value.startsWith('/vol1/docker/kt-codex-agent/');
+    if (!allowed) throw new Error('llm-codex-chat-cwd-invalid');
+    return value.replace(/\/$/, '');
+  }
+
+  /**
    * 从受管配置读取媒体任务证据根目录；配置缺失时使用固定 NAS 路径，并拒绝越出证据目录的值。
    * @returns 返回 `absolutePath` 的调用结果，其业务含义为当前媒体任务证据的受管根目录。
    */
@@ -82,9 +105,18 @@ export class MediaCodexAgentGatewayConfigService {
    * @throws 当 `value.length < 32 || value.length > 512` 成立时拒绝当前输入并抛出 `Error`。
    */
   internalSecret() {
-    const value = this.text('MEDIA_CODEX_AGENT_INTERNAL_SECRET');
+    return this.llmInternalSecret();
+  }
+
+  /**
+   * 读取当前 LLM Codex 网关统一内部密钥。
+   * @returns 长度符合内部认证边界的 Codex 对话密钥。
+   * @throws 密钥长度小于 32 或大于 512 时抛出错误。
+   */
+  llmInternalSecret() {
+    const value = this.text('LLM_CODEX_GATEWAY_INTERNAL_SECRET');
     if (value.length < 32 || value.length > 512) {
-      throw new Error('media-codex-agent-internal-secret-invalid');
+      throw new Error('llm-codex-gateway-internal-secret-invalid');
     }
     return value;
   }

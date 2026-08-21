@@ -4,10 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import pino from 'pino';
 import { createPinoLoggerParams } from '../../../src/common/logger/pino-logger.config';
 
-const PASSWORD_FIELDS = [
-  'password',
-  'loginPassword',
-] as const;
+const PASSWORD_FIELDS = ['apiKey', 'password', 'loginPassword'] as const;
 const REDACTION_FIXTURE = 'redaction-fixture';
 
 describe('Pino password redaction', () => {
@@ -62,6 +59,7 @@ describe('Pino password redaction', () => {
         },
         headers: {
           authorization: 'Bearer sensitive-authorization',
+          'x-kt-llm-gateway-secret': 'sensitive-llm-gateway-secret',
           'x-kt-media-agent-secret': 'sensitive-media-agent-secret',
           'x-kt-media-executor-secret': 'sensitive-media-executor-secret',
         },
@@ -96,11 +94,15 @@ describe('Pino password redaction', () => {
     expect(record.err.stack).toBe(originalErrorStack);
     expect(record.body.token).toBe('[Redacted]');
     expect(record.req.headers.authorization).toBe('[Redacted]');
+    expect(record.req.headers['x-kt-llm-gateway-secret']).toBe('[Redacted]');
     expect(record.req.headers['x-kt-media-agent-secret']).toBe('[Redacted]');
-    expect(record.req.headers['x-kt-media-executor-secret']).toBe(
-      '[Redacted]',
+    expect(record.req.headers['x-kt-media-executor-secret']).toBe('[Redacted]');
+    expect(JSON.stringify(record)).not.toContain(
+      'sensitive-llm-gateway-secret',
     );
-    expect(JSON.stringify(record)).not.toContain('sensitive-media-agent-secret');
+    expect(JSON.stringify(record)).not.toContain(
+      'sensitive-media-agent-secret',
+    );
     expect(JSON.stringify(record)).not.toContain(
       'sensitive-media-executor-secret',
     );

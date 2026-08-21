@@ -66,7 +66,8 @@ ci/            Jenkins Agent/Docker 辅助文件
 | QQBot/NapCat          | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_REVERSE_WS_*`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`、`NAPCAT_*`、`QQBOT_NAPCAT_*`、`MQTT_*`                                                                                                                                             |
 | Environment Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_JENKINS_*`、`ENV_DASHBOARD_K8S_*`、`ENV_DASHBOARD_TENCENT_*`、`ENV_DASHBOARD_CADDY_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                         |
 | Network Management    | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_TCP_NATMAP_RELEASE_MODE`、`NETWORK_TCP_NATMAP_CANARY_PORTS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_*`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
-| Media Governance      | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`、`MEDIA_CODEX_AGENT_GATEWAY_BASE_URL`、`MEDIA_CODEX_AGENT_INTERNAL_SECRET`、`MEDIA_CODEX_AGENT_GATEWAY_TIMEOUT_MS`                                                                                                                                                                              |
+| Media Governance      | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`；Codex 端点、模型与内部认证统一复用下方 LLM 配置                                                                                                                                                                                                             |
+| LLM                    | `LLM_CONFIG_SECRET_KEY`、`LLM_CODEX_GATEWAY_BASE_URL`、`LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`LLM_CODEX_GATEWAY_TIMEOUT_MS`、`LLM_CODEX_CHAT_CWD`                                                                                                                                                                                                                                                                             |
 | BangDream             | `BANGDREAM_TSUGU_MAIN_SERVER`、`BANGDREAM_TSUGU_DISPLAYED_SERVERS`、`BANGDREAM_TSUGU_CACHE_ROOT`                                                                                                                                                                                                                                                                                                                                                                |
 | FF14 Market           | `FF14_XIVAPI_BASE_URL`、`FF14_UNIVERSALIS_BASE_URL`、`FF14_MARKET_CACHE_TTL_MS`                                                                                                                                                                                                                                                                                                                                                                                 |
 | FFLogs                | `FFLOGS_BASE_URL`、`FFLOGS_GRAPHQL_URL`、`FFLOGS_TOKEN_URL`、`FFLOGS_CLIENT_ID`、`FFLOGS_CLIENT_SECRET`                                                                                                                                                                                                                                                                                                                                                         |
@@ -252,8 +253,9 @@ Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，�
 元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据，先执行最多两次的确定性
 LocalNFO/海报有界修复，再将仍未闭合的真实歧义交给 CodexAgent；最终闭环模式只由
 独立验收判定。
-Task、Unit、来源和 Agent session 由 10 张 TypeORM 领域表持久化；API 启动时恢复
-同一 Task/thread 与事件序号，状态变更和语义事件在同一数据库事务提交后才发布 SSE。
+Task、Unit、来源、Run 和治理证据由 10 张 TypeORM 领域表持久化；其中旧 Agent session
+表只作历史兼容。新任务只保存 `llmConversationId`，API 启动时从标准 LLM conversation
+恢复派生状态；状态变更和语义事件在数据库事务提交后才发布 SSE。
 执行器高频进度先校验 Run、manifest 与连续序号，再原子追加到 Redis 热层并立即发布
 携带紧凑 Task patch 的 `task-changed`；普通 tick 不等待 MySQL。MySQL 最多每 10 秒、
 出现语义变化或进入终态时保存权威快照，终态必须等本实例已排队快照落库。Admin 对正常
@@ -274,31 +276,44 @@ Task/Run/Event 身份快照、校验 SQL SHA-256、恢复后再次比较相同�
 仍停留在 `0% / 执行中` 的陈旧进度投影，不需要直接修改数据库。
 NAS 暂存残留没有持续观测证据时返回 `null`，Admin 不再把未知状态显示成固定 `0`；
 正式独立验收仍必须提供实际 `stagingResiduals=0` 才能关闭 Task。
-内部回调健康只有数据库状态仓完成加载时才返回 `database/ready`。源码已接入独立
-NAS CodexAgent gateway：每个 Task 固定映射一个可恢复 thread，每回合重新密封
-policy/capsule/revision/manifest/replay 身份，只接受类型化只读工具与密封计划提交。
-App Server 请求必须激活命名
-`media-agent` 权限档，且不再混用旧式 sandbox 请求字段；错误权限档、网络、路径、
-工具或摘要一律失败关闭。App Server Unix socket 使用标准 WebSocket HTTP Upgrade，
-线上消息省略 `jsonrpc`；下划线 wire 工具名映射回点号内部合同。Task checkpoint
-同时保存事件序号，服务重启后继续递增；API 的 Agent 会话查询会从 gateway 回读同一
-Task/thread，而不是只依赖进程内投影。gateway 在创建 App Server thread/turn 前必须
-先确认内部回调为 `persistenceMode=database` 且 `status=ready`。API 会先持久化带精确
-policy/capsule SHA 的启动预留，才调用 gateway；首个 thread 映射回调可在启动响应返回
-前原子绑定，响应超时则按同一 Task/revision 从 gateway 恢复。浏览器不会接触 Codex
-登录态或原始协议。除 `closed` 外，操作员可从任意阶段启动 Agent；每个阶段绑定独立
-预提示词。接收资料、NAS 下载、独立验收及存在活动媒体 Run 时只允许旁路读取，不得
-提交写计划或覆盖主 Run 的 revision、进度和状态；只有无活动 Run 的本地治理/元数据
-阶段可提交任务边界内的密封计划。异常 Agent 回合投影为 `failed`，与真实候选歧义的
-`needs-operator` 分离；再次调用 `agent/start` 只会请求 `restart-failed-turn`，gateway
-回读旧 turn 为 `failed/interrupted` 后才以新 revision、replay key、capsule 和 thread
-重试，事件序号继续递增，operator decision 不能绕过该门禁。Agent 结构化输出的
-`properties` 必须全部进入 `required`，无候选时显式返回空数组。专用 Agent 会话接口
-通过官方 App Server thread 历史与 gateway 有界安全存储返回可见的 user/assistant 消息，
-不保存 reasoning、原始工具输出或登录凭据；`afterSequence` 支持增量读取。操作员可用
-`clientMessageId` 与 `expectedConversationRevision` 在同一 thread 发送任意文本，幂等重放
-返回原结果，身份或 revision 漂移返回 409。可见文本增量以 75ms 窗口合并后走独立
-conversation SSE，不能修改业务 Task 的 stage、runState 或 revision。每个 Task 只允许一个主媒体下载 owner；来源选择把每个显式文件
+内部回调健康只有数据库状态仓完成加载时才返回 `database/ready`。源码已接入统一
+本地 Codex gateway：Admin 大模型配置中的启用 Codex 连接是端点和内部认证的唯一来源；
+可用模型不进入新增或编辑合同，而是在连接创建后由 LLM 模块经
+`GET /llm/configs/:id/models` 实时发现。普通对话与媒体治理共用 `/internal/llm-codex`、
+`LLM_CODEX_GATEWAY_INTERNAL_SECRET`、`x-kt-llm-gateway-secret` 和启用网络及 live
+Web Search 的 `llm-codex` 权限档。媒体治理调用 `agent/start` 时只创建一条
+`scene=media-governance` 的标准 LLM conversation，Task 只持久化唯一
+`llmConversationId`；消息、模型切换、流式状态、实际模型和 Codex `providerThreadId`
+全部归 LLM 模块管理。媒体入口直接进入标准 LLM 对话页，续聊只走
+`POST /llm/conversations/:id/messages/stream`，没有媒体专用消息接口，也没有非流式降级。
+
+OpenAI、智谱、DeepSeek 与 Moonshot 通过各自 OpenAI-compatible `GET /models` 读取当前
+凭据可用模型；Anthropic 通过带 `x-api-key`、`anthropic-version` 和 `after_id` 有界分页的
+Models API；本地 Codex 由 gateway 调用 App Server `model/list`。实时模型项同时归一
+`reasoningEfforts/defaultReasoningEffort` 与 `serviceTiers/defaultServiceTier`：Codex 完整投影
+App Server 声明的推理强度和 Fast 档位，Anthropic 消费 Models API 实际声明的 effort 能力，
+OpenAI-compatible 供应商只在响应真实提供扩展能力字段时公开选项。未声明或不支持的能力保持
+空数组，Admin 隐藏对应控件；每次发送前 API 再次校验模型、推理强度与速度档位，并把选择
+传入供应商 SSE 或 Codex turn，不读取数据库静态模型数组。
+
+媒体场景的每一轮仍按当前 Task revision 生成 policy/capsule/manifest，通过动态类型化工具
+读取事实，并以严格输出 Schema 返回结果；接收资料、NAS 下载、独立验收及存在活动 Run
+时只能旁路读取，密封写计划仍受媒体领域门禁。gateway 在流开始时调用内部 context
+接口校验 Task 与 conversation 身份，在 done 前调用 result 接口更新治理投影。App Server
+请求必须命中 `llm-codex` 权限档、`networkAccess=true` 和 `approvalPolicy=never`，错误
+权限档、网络、路径、工具或摘要均失败关闭；浏览器不会接触 Codex 登录态或原始协议。
+旧 `media_governance_agent_session` 只保留历史兼容读取，新 Task 获得 LLM 绑定后不再保存
+第二套 session/thread/message。旧的 `MEDIA_CODEX_AGENT_GATEWAY_BASE_URL`、
+`MEDIA_CODEX_AGENT_GATEWAY_TIMEOUT_MS` 与 `MEDIA_CODEX_AGENT_INTERNAL_SECRET` 已退出运行
+合同。媒体会话身份只认数据库中的
+`conversationId + scene + sceneRefId + activeTurnId + providerThreadId` 五元组；gateway 在
+App Server `turn/start` 前携同一 `activeTurnId` 调内部绑定接口，由对话行锁以 CAS 完成
+`providerThreadId` 首次空值绑定或同值幂等确认。迟到回合、错误 Task/scene/ref 或不同 thread
+全部失败关闭。NAS 宿主遗留 `task-sessions` 文件不会恢复、迁移或覆盖标准 conversation，
+因此 API/Gateway 重启后仍只有一个会话事实源。Agent 结构化输出的 `properties` 必须全部进入
+`required`，无候选时显式返回空数组；
+真实候选歧义保持 `needs-operator`，operator decision 仍必须通过候选和密封计划复核。
+每个 Task 只允许一个主媒体下载 owner；来源选择把每个显式文件
 索引一一绑定到 Unit、文件角色、季集和字幕语言，并持久化为
 `selected_file_mappings`。下载门在完整载荷开始前核对每个 Unit 的主视频覆盖、非内嵌
 profile 的中文字幕覆盖、同季单一字幕发布组以及补充来源只含字幕/字体；Schema

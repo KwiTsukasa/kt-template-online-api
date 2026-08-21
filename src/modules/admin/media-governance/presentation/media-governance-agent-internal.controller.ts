@@ -8,9 +8,10 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import {
-  MediaGovernanceAgentConversationEventDto,
-  MediaGovernanceAgentEventDto,
   MediaGovernanceAgentToolCallDto,
+  MediaGovernanceLlmConversationContextDto,
+  MediaGovernanceLlmConversationResultDto,
+  MediaGovernanceLlmProviderThreadBindDto,
 } from '@/modules/admin/media-governance/contract/media-governance.dto';
 import { MediaGovernanceAgentInternalGuard } from './media-governance-agent-internal.guard';
 import { MediaGovernanceService } from '@/modules/admin/media-governance/application/media-governance.service';
@@ -55,24 +56,38 @@ export class MediaGovernanceAgentInternalController {
   }
 
   /**
-   * 接收 Agent 生命周期事件并交由治理服务校验落库。
-   * @param body - 用于接收 Agent 生命周期事件并交由治理服务校验落库的结构化输入。
-   * @returns 接收 Agent 生命周期事件并交由治理服务校验落库。
+   * 为已绑定的 LLM 对话生成当前媒体任务回合上下文。
+   * @param body - 对话、任务、模型和本轮用户消息。
+   * @returns 可交给 App Server 的任务边界请求。
    */
-  @Post('events')
-  async event(@Body() body: MediaGovernanceAgentEventDto) {
-    return this.service.applyAgentEvent(body);
+  @Post('llm-conversations/context')
+  async llmConversationContext(
+    @Body() body: MediaGovernanceLlmConversationContextDto,
+  ) {
+    return this.service.llmConversationContext(body);
   }
 
   /**
-   * 接收 Agent 对话增量事件并更新实时投影。
-   * @param body - 用于接收 Agent 对话增量事件并更新实时的结构化输入。
-   * @returns 接收 Agent 对话增量事件并更新实时。
+   * 在活动 LLM 回合启动前把 App Server thread 通过数据库 CAS 绑定到唯一标准对话。
+   * @param body - 对话、任务、旧线程比较值与 App Server 实际线程。
+   * @returns 绑定完成后的权威对话身份。
    */
-  @Post('conversation-events')
-  async conversationEvent(
-    @Body() body: MediaGovernanceAgentConversationEventDto,
+  @Post('llm-conversations/provider-thread')
+  async bindLlmProviderThread(
+    @Body() body: MediaGovernanceLlmProviderThreadBindDto,
   ) {
-    return this.service.applyAgentConversationEvent(body);
+    return this.service.bindLlmConversationProviderThread(body);
+  }
+
+  /**
+   * 接收 LLM 对话最终结构化治理结果并更新媒体任务投影。
+   * @param body - 对话、任务及严格结构化结果。
+   * @returns 结果应用状态。
+   */
+  @Post('llm-conversations/result')
+  async llmConversationResult(
+    @Body() body: MediaGovernanceLlmConversationResultDto,
+  ) {
+    return this.service.applyLlmConversationResult(body);
   }
 }

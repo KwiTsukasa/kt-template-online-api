@@ -6,22 +6,23 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { MediaCodexAgentGatewayConfigService } from '../config/media-codex-agent-gateway-config.service';
+import { LLM_CODEX_INTERNAL_HEADER } from '../domain/llm-codex-runtime.contract';
 
 @Injectable()
-export class MediaCodexAgentInternalGuard implements CanActivate {
+export class LlmCodexInternalGuard implements CanActivate {
   constructor(private readonly config: MediaCodexAgentGatewayConfigService) {}
 
   /**
-   * 以常量时间比较校验内部密钥，并拒绝未授权的网关请求。
-   * @param context - 用于Activate的领域对象，包含 `switchToHttp` 字段。
-   * @returns 满足Activate约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
-   * @throws 当 `actual.length !== expected.length || !timingSafeEqual(actual, expected)` 成立时拒绝当前输入并抛出 `ForbiddenException`。
+   * 以常量时间比较校验通用 Codex 对话专用密钥。
+   * @param context - 当前私有网关 HTTP 执行上下文。
+   * @returns 密钥精确匹配时返回 true。
+   * @throws 密钥缺失、长度不同或内容不同时抛出 403。
    */
   canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<{
       headers: Record<string, string | string[] | undefined>;
     }>();
-    const value = request.headers['x-kt-media-agent-secret'];
+    const value = request.headers[LLM_CODEX_INTERNAL_HEADER];
     let headerValue: string | undefined;
     if (Array.isArray(value)) {
       headerValue = value[0];
@@ -29,12 +30,12 @@ export class MediaCodexAgentInternalGuard implements CanActivate {
       headerValue = value;
     }
     const actual = Buffer.from(headerValue ?? '');
-    const expected = Buffer.from(this.config.internalSecret());
+    const expected = Buffer.from(this.config.llmInternalSecret());
     if (
       actual.length !== expected.length ||
       !timingSafeEqual(actual, expected)
     ) {
-      throw new ForbiddenException('media-codex-agent-internal-auth-failed');
+      throw new ForbiddenException('llm-codex-internal-auth-failed');
     }
     return true;
   }

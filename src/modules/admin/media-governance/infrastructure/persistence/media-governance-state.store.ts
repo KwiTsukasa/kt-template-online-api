@@ -8,10 +8,7 @@ import {
   Repository,
 } from 'typeorm';
 import { Injectable } from '@nestjs/common';
-import type {
-  MediaGovernanceAgentEventDto,
-  MediaGovernanceExecutorEventDto,
-} from '@/modules/admin/media-governance/contract/media-governance.dto';
+import type { MediaGovernanceExecutorEventDto } from '@/modules/admin/media-governance/contract/media-governance.dto';
 import {
   MediaGovernanceAgentSessionEntity,
   MediaGovernanceDescriptorRevisionEntity,
@@ -87,10 +84,6 @@ export interface MediaGovernanceStateStore {
     descriptorRevision: number,
   ): Promise<string>;
   saveTask(task: MediaGovernanceTask): Promise<void>;
-  saveTaskWithAgentEvent(
-    task: MediaGovernanceTask,
-    event: MediaGovernanceAgentEventDto,
-  ): Promise<void>;
 }
 
 @Injectable()
@@ -233,36 +226,6 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       await unitRepository.delete({ taskId: input.taskId });
       await taskRepository.delete({ id: input.taskId });
       return { clearedWorkItemId: task.workItemId };
-    });
-  }
-
-  /**
-   * 通过在保存任务的同一事务中追加 Agent 语义事件。
-   * @param task - 用于通过在保存任务的同一事务中追加 Agent 语义事件的领域对象，包含 `runState`、`stage`、`id` 字段。
-   * @param event - 触发通过在保存任务的同一事务中追加 Agent 语义事件的领域事件，包含 `eventId`、`observedAt`、`turnId`、`threadId` 字段。
-   */
-  async saveTaskWithAgentEvent(
-    task: MediaGovernanceTask,
-    event: MediaGovernanceAgentEventDto,
-  ) {
-    this.assertReady();
-    await this.dataSource.transaction(async (manager) => {
-      await this.saveTaskWithManager(manager, task);
-      const eventRepository = manager.getRepository(MediaGovernanceEventEntity);
-      await eventRepository.insert(
-        eventRepository.create({
-          eventId: event.eventId,
-          id: `media-event-${createHash('sha256').update(event.eventId).digest('hex').slice(0, 48)}`,
-          observedAt: new Date(event.observedAt),
-          runId: event.turnId ?? event.threadId,
-          runState: task.runState,
-          sequence: event.sequence,
-          stage: task.stage,
-          summary: event.summary,
-          taskId: task.id,
-          type: event.type,
-        }),
-      );
     });
   }
 
@@ -885,6 +848,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         governanceProfile: task.governanceProfile,
         id: task.id,
         inputSnapshotSha256: task.inputSnapshotSha256,
+        llmConversationId: task.llmConversationId,
         mediaType: task.mediaType,
         metadataIdentity: task.metadataIdentity,
         metadataStatus: task.metadataStatus,
@@ -988,7 +952,9 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         }),
       );
     }
-    if (task.agentSession) {
+    if (task.llmConversationId) {
+      await sessionRepository.delete({ taskId: task.id });
+    } else if (task.agentSession) {
       await sessionRepository.save(
         sessionRepository.create({
           capsuleSha256: task.agentSession.capsuleSha256,
@@ -1020,7 +986,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
    * @param sources - 决定将任务实体及关联实体恢复为内存治理任务内容、边界或目标的 `sources` 值。
    * @param session - 待读取、续期或持久化的将任务实体及关联实体恢复为内存治理任务会话。
    * @param descriptors - 决定将任务实体及关联实体恢复为内存治理任务内容、边界或目标的 `descriptors` 值。
-   * @returns 包含 `agentSession`、`activeRunId`、`closedAt`、`closedMode`、`gateReason` 字段的将任务实体及关联实体恢复为内存治理任务；无法解析或未命中时为 `null`。
+   * @returns 包含标准 conversation 绑定且不恢复旧 Agent session 身份的治理任务。
    */
   private restoreTask(
     task: MediaGovernanceTaskEntity,
@@ -1029,26 +995,6 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
     session: MediaGovernanceAgentSessionEntity | null,
     descriptors: MediaGovernanceDescriptorRevisionEntity[],
   ): MediaGovernanceStoredTask {
-    let agentSession: MediaGovernanceTask['agentSession'] = null;
-    if (session) {
-      agentSession = {
-        capsuleSha256: session.capsuleSha256,
-        checkpointSha256: session.checkpointSha256,
-        currentActionLabel: session.currentActionLabel,
-        currentUnitId: session.currentUnitId,
-        lastHeartbeatLabel: '已从数据库恢复',
-        lastSequence: session.lastSequence,
-        pendingPlanSha256: session.pendingPlanSha256,
-        policyBoundaryLabel: session.policyBoundaryLabel,
-        policySha256: session.policySha256,
-        policyVersion: session.policyVersion,
-        status: session.status as NonNullable<
-          MediaGovernanceTask['agentSession']
-        >['status'],
-        statusLabel: session.statusLabel,
-        threadId: session.threadId,
-      };
-    }
     let closedMode = task.closedMode as MediaGovernanceTask['closedMode'];
     const closedModeMissing = closedMode === null || closedMode === undefined;
     if (closedModeMissing && task.stage === 'closed') {
@@ -1056,7 +1002,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       if (session?.status === 'succeeded') closedMode = 'agent_verified';
     }
     return {
-      agentSession,
+      agentSession: null,
       activeRunId: task.activeRunId,
       closedAt: task.closedAt?.toISOString() ?? null,
       closedMode,
@@ -1065,6 +1011,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         task.governanceProfile as MediaGovernanceTask['governanceProfile'],
       id: task.id,
       inputSnapshotSha256: task.inputSnapshotSha256,
+      llmConversationId: task.llmConversationId ?? null,
       mediaType: task.mediaType as MediaGovernanceTask['mediaType'],
       metadataIdentity:
         task.metadataIdentity as MediaGovernanceTask['metadataIdentity'],

@@ -1868,12 +1868,40 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.units.every(
         (unit) => unit.evidenceSha256 === null && unit.localAcceptedAt === null,
       );
+    const stoppedPreGovernanceFailure =
+      task.stage === 'governance' &&
+      task.runState === 'blocked' &&
+      task.activeRunId === null &&
+      task.closedAt === null &&
+      task.metadataStatus === 'pending';
+    const sealedPreGovernanceArtifacts =
+      task.workItemId !== null &&
+      task.payloadSeal !== null &&
+      task.sealedPlan !== null &&
+      task.sealedPlanSha256 !== null;
+    const dryRunOnlyGovernanceProgress =
+      task.progress.totalItems === 5 &&
+      task.progress.completedItems >= 0 &&
+      task.progress.completedItems <= 1;
+    const preGovernanceUnitsUntouched = task.units.every(
+      (unit) => unit.evidenceSha256 === null && unit.localAcceptedAt === null,
+    );
+    const resettablePreGovernanceFailure =
+      stoppedPreGovernanceFailure &&
+      sealedPreGovernanceArtifacts &&
+      dryRunOnlyGovernanceProgress &&
+      preGovernanceUnitsUntouched;
+    const stageBlocksSourceRemoval =
+      !['intake', 'download'].includes(task.stage) &&
+      !resettableUnboundResidue &&
+      !resettablePreGovernanceFailure;
+    const sealedArtifactsBlockSourceRemoval =
+      Boolean(task.payloadSeal || task.sealedPlan) &&
+      !resettablePreGovernanceFailure;
     if (
       task.activeRunId ||
-      (!['intake', 'download'].includes(task.stage) &&
-        !resettableUnboundResidue) ||
-      task.payloadSeal ||
-      task.sealedPlan
+      stageBlocksSourceRemoval ||
+      sealedArtifactsBlockSourceRemoval
     ) {
       throwVbenError('当前阶段不能移除来源', HttpStatus.CONFLICT);
     }
@@ -1912,6 +1940,20 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     task: MediaGovernanceTask,
     source: MediaGovernanceSource,
   ) {
+    const sealedPreGovernanceArtifacts =
+      task.workItemId !== null &&
+      task.payloadSeal !== null &&
+      task.sealedPlan !== null &&
+      task.sealedPlanSha256 !== null;
+    const preGovernanceUnitsUntouched = task.units.every(
+      (unit) => unit.evidenceSha256 === null && unit.localAcceptedAt === null,
+    );
+    const resetSealedPreGovernanceFailure =
+      task.stage === 'governance' &&
+      task.closedAt === null &&
+      task.metadataStatus === 'pending' &&
+      sealedPreGovernanceArtifacts &&
+      preGovernanceUnitsUntouched;
     task.sources.splice(task.sources.indexOf(source), 1);
     for (const unit of task.units) {
       if (unit.subtitleContract?.sourceId === source.id) {
@@ -1920,6 +1962,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
     this.refreshExpectedEpisodeNumbers(task);
     if (source.sourceRole === 'primary_media') task.governanceProfile = null;
+    if (resetSealedPreGovernanceFailure) {
+      task.payloadSeal = null;
+      task.sealedPlan = null;
+      task.sealedPlanSha256 = null;
+    }
     const hasNoPersistentArtifacts =
       task.sources.length === 0 &&
       task.workItemId === null &&
@@ -4989,6 +5036,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (action.startsWith('metadata.')) task.stage = 'metadata';
     if (action.startsWith('source.')) {
       task.stage = 'intake';
+      if (action === 'source.cleanup' && previous.stage === 'governance') {
+        task.stage = 'governance';
+      }
       if (action === 'source.download' || action === 'source.resume') {
         task.stage = 'download';
       }

@@ -250,6 +250,10 @@ Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，�
 草稿在下载前可用当前 revision 修正作品名、媒体类型、季号以及可选的 `providerRef`/
 `releaseYear`；已有来源、来源健康与阻塞状态保持不变，不再属于修正后 Unit 的旧映射会
 同步清除。下载、治理或 Agent 已开始后固定拒绝修改。
+治理执行若只完成 5 阶段中的第 1 阶段 dry-run、随后阻塞，且尚无 Unit 验收或元数据成果，
+允许按当前 revision 精确移除错误来源。执行器先清除该来源独占 staging/profile；终态回调
+再清空旧载荷和计划密封、保留已分配的 `workItemId`，把同一 Task 退回 intake 以接入正确来源。
+一旦 completedItems 大于 1，说明备份或正式事务已经开始，来源回退继续失败关闭。
 元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据，先执行最多两次的确定性
 LocalNFO/海报有界修复，再将仍未闭合的真实歧义交给 CodexAgent；最终闭环模式只由
 独立验收判定。

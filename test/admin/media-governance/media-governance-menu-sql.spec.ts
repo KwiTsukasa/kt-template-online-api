@@ -14,6 +14,10 @@ describe('media governance intake menu seed', () => {
     expect(sql).toContain("'Media:Governance:List'");
     expect(sql).toContain("'Media:Governance:Create'");
     expect(sql).toContain("'/media/governance/agent-queue'");
+    expect(sql).toContain("'MediaGovernanceAgentSession'");
+    expect(sql).toContain("'/media/governance/tasks/:taskId/agent'");
+    expect(sql).toContain("'/media/governance/agent-session/index'");
+    expect(sql).toContain('"hideInMenu":true');
     for (const permission of [
       'Media:Governance:SourceUpload',
       'Media:Governance:Download',

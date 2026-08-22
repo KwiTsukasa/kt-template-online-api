@@ -32,6 +32,15 @@ jest.mock(
     QqbotReverseWsService: class {},
   }),
 );
+jest.mock(
+  '@/modules/qqbot/core/application/command/qqbot-command.service',
+  () => ({
+    QqbotCommandService: class {},
+  }),
+);
+const MockQqbotCommandService = jest.requireMock(
+  '@/modules/qqbot/core/application/command/qqbot-command.service',
+).QqbotCommandService;
 
 import * as request from 'supertest';
 import { Test } from '@nestjs/testing';
@@ -89,6 +98,7 @@ describe('QqbotAccountController', () => {
         { provide: QqbotNapcatLoginService, useValue: napcatLoginService },
         { provide: QqbotOfficialService, useValue: officialService },
         { provide: QqbotReverseWsService, useValue: {} },
+        { provide: MockQqbotCommandService, useValue: {} },
         {
           provide: ConfigService,
           useValue: new ConfigService({

@@ -113,7 +113,13 @@ export class RepeaterApplication {
     try {
       await this.host.sendText({
         channelId: message.channelId,
-        guildId: message.guildId,
+        guildId: (() => {
+          if (message.guildId) return message.guildId;
+          if (message.rawEvent.guild_id) {
+            return `${message.rawEvent.guild_id}`;
+          }
+          return undefined;
+        })(),
         message: text,
         replyMessageId: message.replyMessageId,
         selfId: message.selfId,

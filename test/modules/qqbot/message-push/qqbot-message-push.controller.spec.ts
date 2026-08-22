@@ -883,6 +883,30 @@ describe('QQBot message-push management controllers', () => {
       .expect(400);
   });
 
+  it('accepts opaque OpenID targets only for namespaced official accounts', async () => {
+    const body = bindingBody();
+    body.targets[0] = {
+      targetId: 'user_openid_abc-123',
+      targetName: 'Official user',
+      targetType: 'private',
+    };
+    await request(apiUrl)
+      .post('/qqbot/accounts/qq-official:1020000000/message-push/bindings')
+      .send(body)
+      .expect(200);
+    expect(bindings.createBinding).toHaveBeenCalledWith(
+      'qq-official:1020000000',
+      expect.objectContaining({
+        targets: [
+          expect.objectContaining({
+            targetId: 'user_openid_abc-123',
+            targetType: 'private',
+          }),
+        ],
+      }),
+    );
+  });
+
   it('enforces target count 1..100 with nested transformation', async () => {
     await request(apiUrl)
       .post(`/qqbot/accounts/${SELF_ID}/message-push/bindings`)

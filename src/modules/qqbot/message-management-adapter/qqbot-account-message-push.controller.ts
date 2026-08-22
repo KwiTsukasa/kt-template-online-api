@@ -26,6 +26,7 @@ import { MessageEnabledDto } from '@/modules/message-management/contract/message
 import { MessageManagementPermission } from '@/modules/message-management/contract/message-management-permission.decorator';
 import { MessageManagementContractErrorInterceptor } from '@/modules/message-management/contract/message-management-contract-error.interceptor';
 import { MessageManagementPermissionGuard } from '@/modules/message-management/contract/message-management-permission.guard';
+import { SystemMessageContractError } from '@/modules/message-management/contract/message-management.types';
 import type {
   QqbotMessagePublishBindingView,
   QqbotMessagePushTargetOptionsResponse,
@@ -118,6 +119,7 @@ export class QqbotAccountMessagePushController {
     @Param() params: AccountMessagePushParamDto,
     @Body() body: MessagePublishBindingInputDto,
   ) {
+    this.assertTargetIds(params.selfId, body);
     return vbenSuccess(
       allowlistBinding(
         await this.bindingService.createBinding(params.selfId, body),
@@ -140,6 +142,7 @@ export class QqbotAccountMessagePushController {
     @Param() params: AccountMessagePushBindingParamDto,
     @Body() body: MessagePublishBindingInputDto,
   ) {
+    this.assertTargetIds(params.selfId, body);
     return vbenSuccess(
       allowlistBinding(
         await this.bindingService.updateBinding(params.selfId, params.id, body),
@@ -207,5 +210,25 @@ export class QqbotAccountMessagePushController {
         await this.targetOptionsService.listTargetOptions(params.selfId),
       ),
     );
+  }
+
+  /**
+   * 按路由账号类型校验嵌套目标，NapCat 拒绝短数字，官方账号保留 OpenID 字符串合同。
+   * @param selfId - 已通过参数 DTO 校验的 NapCat 或官方稳定账号键。
+   * @param body - 包含待保存群聊和私聊目标的绑定请求。
+   * @throws 任一目标不符合当前 transport 的 ID 格式时抛出稳定契约错误。
+   */
+  private assertTargetIds(
+    selfId: string,
+    body: MessagePublishBindingInputDto,
+  ): void {
+    let pattern = /^[1-9]\d{4,19}$/u;
+    if (selfId.startsWith('qq-official:')) {
+      pattern = /^[A-Za-z0-9_-]{1,64}$/u;
+    }
+    const invalid = body.targets.some(
+      (target) => !pattern.test(target.targetId),
+    );
+    if (invalid) throw new SystemMessageContractError('invalid_target_id');
   }
 }

@@ -919,6 +919,13 @@ BEGIN
   )
   WHERE `reverse_ws_url` LIKE '%/qqbot/onebot/reverse%';
 
+  ALTER TABLE `bot_conversation`
+    MODIFY COLUMN `last_message_id` VARCHAR(255) NULL;
+  ALTER TABLE `bot_message`
+    MODIFY COLUMN `message_id` VARCHAR(255) NULL;
+  ALTER TABLE `bot_send_log`
+    MODIFY COLUMN `message_id` VARCHAR(255) NULL;
+
   SET FOREIGN_KEY_CHECKS = previous_foreign_key_checks;
   SET SESSION group_concat_max_len = previous_group_concat_max_len;
 END$$

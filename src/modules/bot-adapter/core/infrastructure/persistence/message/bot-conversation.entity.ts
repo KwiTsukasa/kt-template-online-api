@@ -28,7 +28,7 @@ export class BotConversation {
 
   @Column({
     default: null,
-    length: 64,
+    length: 255,
     name: 'last_message_id',
     nullable: true,
   })

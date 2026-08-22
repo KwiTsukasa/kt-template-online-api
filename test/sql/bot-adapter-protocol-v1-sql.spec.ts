@@ -137,6 +137,12 @@ describe('Bot Adapter protocol v1 SQL', () => {
     expect(migration).toContain("'/bot-adapter/napcat/onebot/reverse'");
     expect(migrationVerify).toContain('legacy_napcat_reverse_ws_path_count');
     expect(refactorVerify).toContain('legacy_napcat_reverse_ws_path_count');
+    expect(migration).toContain(
+      'MODIFY COLUMN `last_message_id` VARCHAR(255) NULL',
+    );
+    expect(migration).toContain('MODIFY COLUMN `message_id` VARCHAR(255) NULL');
+    expect(migrationVerify).toContain('bot_message_id_width_mismatch_count');
+    expect(refactorVerify).toContain('bot_message_id_width_mismatch_count');
     expect(migration).toContain('kt_retire_legacy_message_tables');
     expect(migration).toContain(
       'Legacy message template retirement is incomplete',

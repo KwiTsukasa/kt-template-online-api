@@ -20,7 +20,7 @@ export class BotMessage {
   @Column({ length: 64, name: 'self_id' })
   selfId: string;
 
-  @Column({ default: null, length: 64, name: 'message_id', nullable: true })
+  @Column({ default: null, length: 255, name: 'message_id', nullable: true })
   messageId: null | string;
 
   @Column({

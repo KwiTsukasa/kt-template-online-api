@@ -24,6 +24,7 @@ const VERIFICATION_EXPECTATIONS = new Map<string, number>([
   ['legacy_plugin_trigger_mode_count', 0],
   ['legacy_bot_subscription_key_count', 0],
   ['legacy_napcat_reverse_ws_path_count', 0],
+  ['bot_message_id_width_mismatch_count', 0],
 ]);
 
 export type BotAdapterMigrationVerification = Record<string, number>;
@@ -152,6 +153,14 @@ async function readLegacyContractCount(
          WHERE subscriber_key = 'qqbot' OR active_key LIKE 'qqbot:%')
       + (SELECT COUNT(*) FROM napcat_container
          WHERE reverse_ws_url LIKE '%/qqbot/onebot/reverse%')
+      + (SELECT COUNT(*) FROM information_schema.columns
+         WHERE table_schema = DATABASE()
+           AND character_maximum_length < 255
+           AND (
+             (table_name = 'bot_conversation' AND column_name = 'last_message_id')
+             OR (table_name = 'bot_message' AND column_name = 'message_id')
+             OR (table_name = 'bot_send_log' AND column_name = 'message_id')
+           ))
       AS legacy_count
   `);
   return Number(rows[0]?.legacy_count || 0);

@@ -227,6 +227,16 @@ SELECT 'legacy_napcat_reverse_ws_path_count' AS check_name, COUNT(*) AS matched_
 FROM napcat_container
 WHERE reverse_ws_url LIKE '%/qqbot/onebot/reverse%';
 
+SELECT 'bot_message_id_width_mismatch_count' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND character_maximum_length < 255
+  AND (
+    (table_name = 'bot_conversation' AND column_name = 'last_message_id')
+    OR (table_name = 'bot_message' AND column_name = 'message_id')
+    OR (table_name = 'bot_send_log' AND column_name = 'message_id')
+  );
+
 SELECT 'legacy_bot_table_count' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.tables
 WHERE table_schema = DATABASE()

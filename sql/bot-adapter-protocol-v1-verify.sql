@@ -205,3 +205,13 @@ WHERE `subscriber_key` = 'qqbot'
 SELECT COUNT(*) AS `legacy_napcat_reverse_ws_path_count`
 FROM `napcat_container`
 WHERE `reverse_ws_url` LIKE '%/qqbot/onebot/reverse%';
+
+SELECT COUNT(*) AS `bot_message_id_width_mismatch_count`
+FROM `information_schema`.`columns`
+WHERE `table_schema` = DATABASE()
+  AND `character_maximum_length` < 255
+  AND (
+    (`table_name` = 'bot_conversation' AND `column_name` = 'last_message_id')
+    OR (`table_name` = 'bot_message' AND `column_name` = 'message_id')
+    OR (`table_name` = 'bot_send_log' AND `column_name` = 'message_id')
+  );

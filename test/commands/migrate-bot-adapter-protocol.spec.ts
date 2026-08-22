@@ -31,6 +31,7 @@ describe('Bot Adapter protocol migration command', () => {
       canonical_table_count: 33,
       legacy_bot_subscription_key_count: 0,
       legacy_napcat_reverse_ws_path_count: 0,
+      bot_message_id_width_mismatch_count: 0,
       legacy_index_name_count: 0,
       legacy_menu_contract_count: 0,
       legacy_plugin_trigger_mode_count: 0,

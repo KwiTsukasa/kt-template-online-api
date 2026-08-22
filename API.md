@@ -695,7 +695,7 @@ NapCat 请求只接受 `connectionMode=reverse-ws` 与 `selfId/accessToken/login
 
 插件回调只使用平台无关的 conversation/sender/event key 与 reply intent。NapCat 事件绑定保存在 `bot_account_ability(event_plugin)`；Tencent 绑定保存在 `tencent_bot_plugin_binding`。Plugin Platform 不保存 Bot 身份，真实命令仍由 adapter core 的账号能力精确绑定。
 
-Tencent 插件菜单同步遵循 QQ 官方 `/v2/menu` 和 `/v2/panels`：先 GET 当前菜单并保留非 `KT·` 项，再 PUT 完整菜单；四个 scope 分别分页 GET，只管理 remark 为 `kt-plugin-menu:v1:<scope>` 的面板。数量和字符限制在写入前失败关闭；比较时忽略 GET 自动补入的菜单 icon、把缺失的 `only_admin` 归一为 `false`，面板指令名称不携带 `/`，因此重复同步无差异时不调用写接口。NapCat 外发则保留核心构造的受控 OneBot 字符串或消息段，使 CQ 图片和 @ 提及继续按协议解释，严格纯文本链仍使用文本段。
+Tencent 插件菜单同步遵循 QQ 官方 `/v2/menu` 和 `/v2/panels`：先 GET 当前菜单并保留非 `KT·` 项，再 PUT 完整菜单；四个 scope 分别分页 GET，只管理 remark 为 `kt-plugin-menu:v1:<scope>` 的面板。数量和字符限制在写入前失败关闭；比较时忽略 GET 自动补入的菜单 icon、把缺失的 `only_admin` 归一为 `false`，面板指令名称不携带 `/`，因此重复同步无差异时不调用写接口。NapCat 外发则保留核心构造的受控 OneBot 字符串或消息段，使 CQ 图片和 @ 提及继续按协议解释，严格纯文本链仍使用文本段。统一会话、消息和发送日志的消息 ID 列宽为 255，确保 QQ 官方长 `msg_id` 能完整进入入站记录并作为五分钟窗口内的被动回复依据。
 
 账号列表的 `connectStatus` 对 NapCat 表示 OneBot 连接，对官方 WebSocket 表示 Gateway，对官方 Webhook 表示已通过 challenge 或收到合法事件。`napcat.oneBotOnline`、`napcat.containerOnline`、`napcat.webuiOnline`、`napcat.qqLoginStatus`、`napcat.qqLoginMessage` 只适用于 NapCat；官方账号调用扫码、NapCat 运行态或 WebUI 接口会被拒绝。
 

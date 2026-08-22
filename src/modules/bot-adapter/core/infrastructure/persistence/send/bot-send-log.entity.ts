@@ -40,7 +40,7 @@ export class BotSendLog {
   @Column({ default: null, length: 80, nullable: true })
   echo: null | string;
 
-  @Column({ default: null, length: 64, name: 'message_id', nullable: true })
+  @Column({ default: null, length: 255, name: 'message_id', nullable: true })
   messageId: null | string;
 
   @Column({ default: null, length: 500, name: 'error_message', nullable: true })

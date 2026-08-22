@@ -25,7 +25,19 @@ export class QqbotMessageTargetOptionsService {
     selfId: string,
   ): Promise<QqbotMessagePushTargetOptionsResponse> {
     const account = await this.accountService.findBySelfId(selfId);
-    if (!account) return this.unavailable('account_unavailable');
+    if (!account || account.enabled === false || account.isDeleted === true) {
+      return this.unavailable('account_unavailable');
+    }
+    const connectionMode = account.connectionMode || 'reverse-ws';
+    if (connectionMode !== 'reverse-ws') {
+      return {
+        available: true,
+        connectionMode,
+        manualEntry: true,
+        options: [],
+        reasonCode: null,
+      };
+    }
     try {
       const [groups, friends] = await Promise.all([
         this.reverseWsService.sendAction(selfId, 'get_group_list', {}),
@@ -42,6 +54,8 @@ export class QqbotMessageTargetOptionsService {
       });
       return {
         available: true,
+        connectionMode,
+        manualEntry: false,
         options: [...unique.values()].sort((left, right) =>
           `${left.targetType}:${left.label}:${left.targetId}`.localeCompare(
             `${right.targetType}:${right.label}:${right.targetId}`,
@@ -50,7 +64,7 @@ export class QqbotMessageTargetOptionsService {
         reasonCode: null,
       };
     } catch {
-      return this.unavailable('onebot_unavailable');
+      return this.unavailable('onebot_unavailable', connectionMode);
     }
   }
 
@@ -158,13 +172,21 @@ export class QqbotMessageTargetOptionsService {
   }
 
   /**
-   * 以统一异常拒绝不可用。
-   * @param reasonCode - 决定以统一异常拒绝不可用内容、边界或目标的 `reasonCode` 值。
-   * @returns 包含 `available`、`options`、`reasonCode` 字段的以统一异常拒绝不可用。
+   * 把账号或 OneBot 候选读取失败投影为不允许手工绕过的空目标响应。
+   * @param reasonCode - 提供给 Admin 展示的稳定不可用原因码。
+   * @param connectionMode - 已识别的账号接入方式；账号不存在时保持 null。
+   * @returns 禁用目标编辑、候选为空且保留失败原因的响应。
    */
   private unavailable(
     reasonCode: string,
+    connectionMode: QqbotMessagePushTargetOptionsResponse['connectionMode'] = null,
   ): QqbotMessagePushTargetOptionsResponse {
-    return { available: false, options: [], reasonCode };
+    return {
+      available: false,
+      connectionMode,
+      manualEntry: false,
+      options: [],
+      reasonCode,
+    };
   }
 }

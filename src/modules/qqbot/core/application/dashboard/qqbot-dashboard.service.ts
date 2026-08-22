@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { QqbotBusService } from '../../infrastructure/integration/bus/qqbot-bus.service';
 import { QqbotReverseWsService } from '../../infrastructure/integration/connection/qqbot-reverse-ws.service';
+import { QqbotOfficialService } from '../../infrastructure/integration/connection/qqbot-official.service';
 import { QqbotAccount } from '../../infrastructure/persistence/account/qqbot-account.entity';
 import { QqbotConversation } from '../../infrastructure/persistence/message/qqbot-conversation.entity';
 import { QqbotMessage } from '../../infrastructure/persistence/message/qqbot-message.entity';
@@ -23,6 +24,7 @@ export class QqbotDashboardService {
     @InjectRepository(QqbotSendLog)
     private readonly sendLogRepository: Repository<QqbotSendLog>,
     private readonly busService: QqbotBusService,
+    private readonly officialService: QqbotOfficialService,
     private readonly reverseWsService: QqbotReverseWsService,
   ) {}
 
@@ -60,6 +62,7 @@ export class QqbotDashboardService {
       enabledRuleTotal,
       messageTotal,
       onlineTotal,
+      officialRuntime: this.officialService.getRuntimeStatus(),
       runtime: this.reverseWsService.getRuntimeStatus(),
       sendFailedTotal,
       sendSuccessTotal,

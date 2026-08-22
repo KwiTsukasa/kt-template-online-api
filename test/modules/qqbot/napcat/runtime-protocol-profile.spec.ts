@@ -13,6 +13,7 @@ import { NapcatRuntimeProfileService } from '../../../../src/modules/qqbot/napca
 import { NapcatRuntimeProfileInspectorService } from '../../../../src/modules/qqbot/napcat/application/runtime/napcat-runtime-profile-inspector.service';
 import { NapcatRuntimeProfileInspectionScriptService } from '../../../../src/modules/qqbot/napcat/infrastructure/integration/container/napcat-runtime-profile-inspection-script.service';
 import { QqbotNapcatRuntimeController } from '../../../../src/modules/qqbot/napcat/contract/qqbot-napcat-runtime.controller';
+import { QqbotAccountService } from '../../../../src/modules/qqbot/core/application/account/qqbot-account.service';
 import {
   NapcatLoginEvent,
   NapcatProtocolProfile,
@@ -167,9 +168,7 @@ describe('NapCat runtime and protocol profile persistence', () => {
 
   it('ships a fail-closed idempotent migration for existing databases', () => {
     expect(existingDatabaseMigration).toContain("SIGNAL SQLSTATE '45000'");
-    expect(existingDatabaseMigration).toContain(
-      'HAVING COUNT(*) > 1',
-    );
+    expect(existingDatabaseMigration).toContain('HAVING COUNT(*) > 1');
     expect(existingDatabaseMigration).toContain(
       'DROP INDEX idx_napcat_runtime_profile_container',
     );
@@ -531,6 +530,15 @@ describe('NapCat runtime profile HTTP API', () => {
       providers: [
         NapcatRuntimeProfileInspectorService,
         ToolsService,
+        {
+          provide: QqbotAccountService,
+          useValue: {
+            findById: jest.fn().mockResolvedValue({
+              connectionMode: 'reverse-ws',
+              id: 'account-1',
+            }),
+          },
+        },
         {
           provide: ConfigService,
           useValue: {

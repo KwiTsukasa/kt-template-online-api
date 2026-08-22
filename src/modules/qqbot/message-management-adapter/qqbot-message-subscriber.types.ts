@@ -1,3 +1,5 @@
+import type { QqbotConnectionMode } from '@/modules/qqbot/core/contract/qqbot.types';
+
 export type QqbotMessageDeliveryStatus =
   | 'cancelled'
   | 'failed'
@@ -56,6 +58,8 @@ export interface QqbotMessagePushTargetOption {
 
 export interface QqbotMessagePushTargetOptionsResponse {
   available: boolean;
+  connectionMode: null | QqbotConnectionMode;
+  manualEntry: boolean;
   options: QqbotMessagePushTargetOption[];
   reasonCode: null | string;
 }

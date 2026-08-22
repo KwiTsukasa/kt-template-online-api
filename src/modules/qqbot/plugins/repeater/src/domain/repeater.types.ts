@@ -1,8 +1,10 @@
 export type RepeaterMessage = {
   channelId?: string;
+  guildId?: string;
   messageText: string;
   messageType: string;
   rawEvent: Record<string, any>;
+  replyMessageId?: string;
   selfId: string;
   targetId: string;
   userId: string;

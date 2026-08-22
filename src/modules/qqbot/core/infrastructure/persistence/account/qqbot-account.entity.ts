@@ -1,4 +1,4 @@
-import { BeforeInsert, Column, Entity, PrimaryColumn } from 'typeorm';
+import { BeforeInsert, Column, Entity, Index, PrimaryColumn } from 'typeorm';
 import {
   ensureSnowflakeId,
   KtCreateDateColumn,
@@ -16,6 +16,7 @@ import type {
 } from '../../../contract/qqbot.types';
 
 @Entity('qqbot_account')
+@Index('uk_qqbot_account_official_app_id', ['officialAppId'], { unique: true })
 export class QqbotAccount {
   @PrimaryColumn({ type: 'bigint' })
   id: string;
@@ -25,6 +26,14 @@ export class QqbotAccount {
 
   @Column({ length: 64, name: 'self_id', unique: true })
   selfId: string;
+
+  @Column({
+    default: null,
+    length: 64,
+    name: 'official_app_id',
+    nullable: true,
+  })
+  officialAppId: null | string;
 
   @Column({ default: '', length: 120 })
   name: string;
@@ -86,6 +95,15 @@ export class QqbotAccount {
     select: false,
   })
   napcatLoginPasswordSecret: null | string;
+
+  @Column({
+    default: null,
+    length: 1024,
+    name: 'official_app_secret_ciphertext',
+    nullable: true,
+    select: false,
+  })
+  officialAppSecretCiphertext: null | string;
 
   @Column({ default: '', length: 255 })
   remark: string;

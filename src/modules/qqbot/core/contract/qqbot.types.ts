@@ -53,7 +53,10 @@ export type NapcatRestartOptions = {
   waitForReady?: boolean;
 };
 
-export type QqbotConnectionMode = 'reverse-ws';
+export type QqbotConnectionMode =
+  | 'official-webhook'
+  | 'official-websocket'
+  | 'reverse-ws';
 
 export type QqbotConnectionRole = 'API' | 'Event' | 'Universal';
 
@@ -271,13 +274,16 @@ export type QqbotOneBotEvent = Record<string, any> & {
 
 export type QqbotNormalizedMessage = {
   channelId?: string;
+  connectionMode?: QqbotConnectionMode;
   eventTime: Date;
+  guildId?: string;
   groupId?: string;
   messageId: string;
   messageText: string;
   messageType: QqbotMessageType;
   rawEvent: QqbotOneBotEvent;
   rawMessage: string;
+  replyMessageId?: string;
   selfId: string;
   senderNickname?: string;
   targetId: string;

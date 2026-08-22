@@ -1,7 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, type EntityManager } from 'typeorm';
+import { In, Repository, type EntityManager } from 'typeorm';
 import {
   SYSTEM_NOTICE_PUBLISHER,
   SystemNoticePublisher,
@@ -27,6 +27,7 @@ import {
 import type {
   QqbotAccountAbilityType,
   QqbotAccountListItem,
+  QqbotConnectionMode,
   QqbotConnectionRole,
   QqbotNapcatRuntimeLoginStatus,
   QqbotNapcatWebuiStatus,
@@ -37,6 +38,16 @@ const INSECURE_ACCOUNT_SECRET_VALUES = new Set([
   'change-me',
   'kt-template-online-admin-token-secret',
 ]);
+const QQBOT_OFFICIAL_APP_ID_PATTERN = /^\d{5,20}$/;
+const QQBOT_OFFICIAL_CONNECTION_MODES: QqbotConnectionMode[] = [
+  'official-webhook',
+  'official-websocket',
+];
+const QQBOT_CONNECTION_MODES: QqbotConnectionMode[] = [
+  'reverse-ws',
+  ...QQBOT_OFFICIAL_CONNECTION_MODES,
+];
+const QQBOT_OFFICIAL_SELF_ID_PREFIX = 'qq-official:';
 
 @Injectable()
 export class QqbotAccountService {
@@ -110,6 +121,23 @@ export class QqbotAccountService {
         isDeleted: false,
       },
     });
+  }
+
+  /**
+   * 读取全部已启用的 QQ 官方 Bot 账号并显式加载密文，供官方运行时逐账号建立连接。
+   * @returns 按创建时间排序且携带 AppSecret 密文的官方账号；没有匹配项时为空数组。
+   */
+  async allEnabledOfficialWithSecret() {
+    return this.accountRepository
+      .createQueryBuilder('account')
+      .addSelect('account.officialAppSecretCiphertext')
+      .where('account.connectionMode IN (:...connectionModes)', {
+        connectionModes: QQBOT_OFFICIAL_CONNECTION_MODES,
+      })
+      .andWhere('account.enabled = :enabled', { enabled: true })
+      .andWhere('account.isDeleted = :isDeleted', { isDeleted: false })
+      .orderBy('account.createTime', 'ASC')
+      .getMany();
   }
 
   /**
@@ -212,15 +240,15 @@ export class QqbotAccountService {
       if (account) return account;
     }
 
-    return this.accountRepository.findOne({
-      order: {
-        createTime: 'ASC',
-      },
-      where: {
-        enabled: true,
-        isDeleted: false,
-      },
+    const accounts = await this.accountRepository.find({
+      order: { createTime: 'ASC' },
+      take: 2,
+      where: { enabled: true, isDeleted: false },
     });
+    if (accounts.length > 1) {
+      throwVbenError('存在多个可用 QQBot 账号，请明确选择发送账号');
+    }
+    return accounts[0] || null;
   }
 
   /**
@@ -233,6 +261,9 @@ export class QqbotAccountService {
       .createQueryBuilder('account')
       .addSelect('account.accessToken')
       .where('account.selfId = :selfId', { selfId })
+      .andWhere('account.connectionMode = :connectionMode', {
+        connectionMode: 'reverse-ws',
+      })
       .andWhere('account.enabled = :enabled', { enabled: true })
       .andWhere('account.isDeleted = :isDeleted', { isDeleted: false })
       .getOne();
@@ -253,6 +284,56 @@ export class QqbotAccountService {
   }
 
   /**
+   * 按账号主键读取 QQ 官方 Bot 账号并显式加载 AppSecret 密文，其他账号仍可返回但不携带密文。
+   * @param id - QQBot 账号数据库主键。
+   * @returns 未删除账号及其可选官方密文；账号不存在时返回 null。
+   */
+  async findByIdWithOfficialSecret(id: string) {
+    return this.accountRepository
+      .createQueryBuilder('account')
+      .addSelect('account.officialAppSecretCiphertext')
+      .where('account.id = :id', { id })
+      .andWhere('account.isDeleted = :isDeleted', { isDeleted: false })
+      .getOne();
+  }
+
+  /**
+   * 按稳定账号键读取已启用的 QQ 官方 Bot 账号并加载密文，供发送与重连使用。
+   * @param selfId - 官方 Bot AppID，同时也是现有 QQBot 账号稳定键。
+   * @returns 已启用官方账号及密文；模式、状态或账号不匹配时返回 null。
+   */
+  async findEnabledOfficialBySelfIdWithSecret(selfId: string) {
+    return this.accountRepository
+      .createQueryBuilder('account')
+      .addSelect('account.officialAppSecretCiphertext')
+      .where('account.selfId = :selfId', { selfId })
+      .andWhere('account.connectionMode IN (:...connectionModes)', {
+        connectionModes: QQBOT_OFFICIAL_CONNECTION_MODES,
+      })
+      .andWhere('account.enabled = :enabled', { enabled: true })
+      .andWhere('account.isDeleted = :isDeleted', { isDeleted: false })
+      .getOne();
+  }
+
+  /**
+   * 按公开 AppID 读取已启用官方账号和 AppSecret 密文，供 Webhook 路由在验签前绑定唯一账号。
+   * @param appId - QQ 开放平台官方 Bot AppID。
+   * @returns 已启用官方账号及密文；不存在、停用或已删除时返回 null。
+   */
+  async findEnabledOfficialByAppIdWithSecret(appId: string) {
+    return this.accountRepository
+      .createQueryBuilder('account')
+      .addSelect('account.officialAppSecretCiphertext')
+      .where('account.officialAppId = :appId', { appId })
+      .andWhere('account.connectionMode IN (:...connectionModes)', {
+        connectionModes: QQBOT_OFFICIAL_CONNECTION_MODES,
+      })
+      .andWhere('account.enabled = :enabled', { enabled: true })
+      .andWhere('account.isDeleted = :isDeleted', { isDeleted: false })
+      .getOne();
+  }
+
+  /**
    * 按`id`读取标识NapCatLogin密钥；把变更持久化到当前存储（`accountRepository.createQueryBuilder`）。
    * @param id - 决定标识NapCatLogin密钥内容、边界或目标的 `id` 值。
    * @returns 标识NapCatLogin密钥。
@@ -262,6 +343,9 @@ export class QqbotAccountService {
       .createQueryBuilder('account')
       .addSelect('account.napcatLoginPasswordSecret')
       .where('account.id = :id', { id })
+      .andWhere('account.connectionMode = :connectionMode', {
+        connectionMode: 'reverse-ws',
+      })
       .andWhere('account.isDeleted = :isDeleted', { isDeleted: false })
       .getOne();
   }
@@ -392,11 +476,15 @@ export class QqbotAccountService {
    * @returns `save` 对应。
    */
   async save(body: QqbotAccountBodyDto) {
-    const payload = this.normalizeBody(body);
+    const payload = this.normalizeBody(body, true);
+    this.assertCreateCredentials(payload);
     const restored = await this.restoreDeletedAccount(payload);
     if (restored) return restored.id;
 
     await this.assertSelfIdAvailable(payload.selfId || '');
+    if (payload.officialAppId) {
+      await this.assertOfficialAppIdAvailable(payload.officialAppId);
+    }
     const account = this.accountRepository.create(payload);
     const saved = await this.accountRepository.save(account);
     return saved.id;
@@ -408,25 +496,48 @@ export class QqbotAccountService {
    * @returns 满足QQBot账号记录约束时为 `true`；不满足、未命中或显式失败分支为 `false`。
    */
   async update(body: QqbotAccountUpdateDto) {
-    if (body.selfId) {
-      await this.assertSelfIdAvailable(body.selfId, body.id);
+    const payload = this.normalizeBody(body, false);
+    if (payload.selfId) {
+      await this.assertSelfIdAvailable(payload.selfId, body.id);
     }
-    const payload = this.normalizeBody(body);
+    if (payload.officialAppId) {
+      await this.assertOfficialAppIdAvailable(payload.officialAppId, body.id);
+    }
     delete (payload as any).id;
     if (!body.accessToken) {
       delete payload.accessToken;
     }
     await this.accountRepository.manager.transaction(async (manager) => {
       const accounts = manager.getRepository(QqbotAccount);
-      const current = await accounts.findOne({
-        lock: { mode: 'pessimistic_write' },
-        where: { id: body.id, isDeleted: false },
-      });
+      const current = await accounts
+        .createQueryBuilder('account')
+        .addSelect('account.officialAppSecretCiphertext')
+        .where('account.id = :id', { id: body.id })
+        .andWhere('account.isDeleted = :isDeleted', { isDeleted: false })
+        .setLock('pessimistic_write')
+        .getOne();
       if (!current) {
         throwVbenError('QQBot 账号不存在或已删除');
       }
+      if (
+        payload.connectionMode &&
+        this.isOfficialConnectionMode(payload.connectionMode) !==
+          this.isOfficialConnectionMode(current.connectionMode)
+      ) {
+        throwVbenError(
+          'NapCat 与 QQ 官方账号不可互相切换；官方 WebSocket/Webhook 可直接切换',
+        );
+      }
+      this.applyCredentialBoundary(payload, current, body);
       const selfIdChanged =
         typeof payload.selfId === 'string' && payload.selfId !== current.selfId;
+      if (
+        this.isOfficialConnectionMode(current.connectionMode) &&
+        selfIdChanged &&
+        !payload.officialAppSecretCiphertext
+      ) {
+        throwVbenError('修改官方 Bot AppID 时必须同时填写新的 AppSecret');
+      }
       await accounts.update({ id: body.id }, payload);
       if (selfIdChanged) {
         await manager
@@ -456,11 +567,12 @@ export class QqbotAccountService {
       throwVbenError('QQBot 账号不存在或已删除');
     }
 
-    const containerResult = (await this.napcatRuntime?.removeAccountContainers(
-      id,
-    )) || {
-      deletedContainers: 0,
-    };
+    let containerResult = { deletedContainers: 0 };
+    if (account.connectionMode === 'reverse-ws') {
+      containerResult = (await this.napcatRuntime?.removeAccountContainers(
+        id,
+      )) || { deletedContainers: 0 };
+    }
     await this.accountRepository.manager.transaction(async (manager) => {
       const accounts = manager.getRepository(QqbotAccount);
       const current = await accounts.findOne({
@@ -516,7 +628,10 @@ export class QqbotAccountService {
         payload.lastError = null;
       }
     }
-    await this.accountRepository.update({ selfId }, payload);
+    await this.accountRepository.update(
+      { connectionMode: 'reverse-ws', selfId },
+      payload,
+    );
   }
 
   /**
@@ -541,7 +656,7 @@ export class QqbotAccountService {
    */
   async markHeartbeat(selfId: string) {
     await this.accountRepository.update(
-      { selfId },
+      { connectionMode: 'reverse-ws', selfId },
       {
         connectStatus: 'online',
         lastHeartbeatAt: new Date(),
@@ -563,6 +678,9 @@ export class QqbotAccountService {
       })
       .andWhere('account.enabled = :enabled', { enabled: true })
       .andWhere('account.isDeleted = :isDeleted', { isDeleted: false })
+      .andWhere('account.connectionMode = :connectionMode', {
+        connectionMode: 'reverse-ws',
+      })
       .getMany();
     if (accounts.length <= 0) return { checked: 0 };
 
@@ -587,7 +705,59 @@ export class QqbotAccountService {
         payload.lastError = null;
       }
     }
-    await this.accountRepository.update({ selfId }, payload);
+    await this.accountRepository.update(
+      { connectionMode: 'reverse-ws', selfId },
+      payload,
+    );
+  }
+
+  /**
+   * 将 QQ 官方 Bot 的通用连接状态标记为在线，不伪造 OneBot、容器或扫码登录状态。
+   * @param selfId - 官方 Bot AppID 对应的稳定账号键。
+   */
+  async markOfficialOnline(selfId: string) {
+    await this.accountRepository.update(
+      { connectionMode: In(QQBOT_OFFICIAL_CONNECTION_MODES), selfId },
+      {
+        clientRole: null,
+        connectStatus: 'online',
+        lastConnectedAt: new Date(),
+        lastError: null,
+        lastHeartbeatAt: new Date(),
+        oneBotStatus: 'offline',
+      },
+    );
+  }
+
+  /**
+   * 记录 QQ 官方 Bot 最近收到事件或恢复连接的时间，供 Admin 展示真实活动状态。
+   * @param selfId - 官方 Bot AppID 对应的稳定账号键。
+   */
+  async markOfficialActivity(selfId: string) {
+    await this.accountRepository.update(
+      { connectionMode: In(QQBOT_OFFICIAL_CONNECTION_MODES), selfId },
+      { connectStatus: 'online', lastHeartbeatAt: new Date() },
+    );
+  }
+
+  /**
+   * 将 QQ 官方 Bot 标记为离线并保存脱敏错误，不改变 NapCat 专属状态字段。
+   * @param selfId - 官方 Bot AppID 对应的稳定账号键。
+   * @param lastError - 已脱敏的官方 SDK 或网络错误；省略时只更新连接状态。
+   */
+  async markOfficialOffline(selfId: string, lastError?: string) {
+    const payload: Partial<QqbotAccount> = { connectStatus: 'offline' };
+    if (lastError !== undefined) {
+      if (lastError) {
+        payload.lastError = this.toolsService.toColumnText(lastError, 500);
+      } else {
+        payload.lastError = null;
+      }
+    }
+    await this.accountRepository.update(
+      { connectionMode: In(QQBOT_OFFICIAL_CONNECTION_MODES), selfId },
+      payload,
+    );
   }
 
   /**
@@ -648,6 +818,24 @@ export class QqbotAccountService {
   }
 
   /**
+   * 解密已选出的 QQ 官方 Bot AppSecret，密文缺失时返回空字符串且不输出任何凭据。
+   * @param account - 显式加载了官方 AppSecret 密文的账号。
+   * @returns 解密后的 AppSecret；账号或密文缺失时为空字符串。
+   */
+  getOfficialAppSecret(
+    account?: Pick<QqbotAccount, 'officialAppSecretCiphertext'> | null,
+  ) {
+    const ciphertext = this.toolsService.toTrimmedString(
+      account?.officialAppSecretCiphertext,
+    );
+    if (!ciphertext) return '';
+    return this.toolsService.decryptSecretText(
+      ciphertext,
+      this.getAccountSecretKey(),
+    );
+  }
+
+  /**
    * 根据`accounts`更新NapCat运行态；当 `!this.napcatRuntime` 成立时返回 `accounts.map((account) => Object.assign(acc…`。
    * @param accounts - 决定NapCat运行态内容、边界或目标的 `accounts` 值。
    * @returns 按输入顺序得到的NapCat运行态列表；无法解析或未命中时为 `null`，没有匹配项时为空数组。
@@ -655,13 +843,16 @@ export class QqbotAccountService {
   private async appendNapcatRuntime(
     accounts: QqbotAccount[],
   ): Promise<QqbotAccountListItem[]> {
+    const napcatAccounts = accounts.filter(
+      (account) => (account.connectionMode || 'reverse-ws') === 'reverse-ws',
+    );
     if (!this.napcatRuntime) {
       return accounts.map((account) =>
         Object.assign(account, { napcat: null }),
       );
     }
 
-    const list = await this.napcatRuntime.appendRuntime(accounts, {
+    const list = await this.napcatRuntime.appendRuntime(napcatAccounts, {
       clearQqLoginError: async (selfId) => {
         await this.accountRepository.update({ selfId }, { lastError: null });
       },
@@ -673,7 +864,12 @@ export class QqbotAccountService {
     await Promise.all(
       list.map((account) => this.syncPersistedNapcatSplitStatus(account)),
     );
-    return list;
+    const napcatById = new Map(list.map((account) => [account.id, account]));
+    return accounts.map((account) => {
+      const napcatAccount = napcatById.get(account.id);
+      if (napcatAccount) return napcatAccount;
+      return Object.assign(account, { napcat: null });
+    });
   }
 
   /**
@@ -815,6 +1011,26 @@ export class QqbotAccountService {
   }
 
   /**
+   * 校验 QQ 官方 Bot AppID 在未删除与历史账号中都只归属当前账号，避免两个内部键共享同一应用。
+   * @param appId - QQ 开放平台官方 Bot AppID。
+   * @param id - 编辑时允许继续占用该 AppID 的账号主键。
+   */
+  private async assertOfficialAppIdAvailable(appId: string, id?: string) {
+    const exists = await this.accountRepository.findOne({
+      where: { officialAppId: appId },
+    });
+    if (!exists || exists.id === id) return;
+    throwVbenError(
+      (() => {
+        if (exists.isDeleted) {
+          return 'QQ 官方 Bot AppID 已存在于已删除账号，请通过新增恢复该账号';
+        }
+        return 'QQ 官方 Bot AppID 已存在';
+      })(),
+    );
+  }
+
+  /**
    * 根据`payload`处理restoreDeleted账号；把变更持久化到当前存储（`accountRepository.update`）。
    * @param payload - 待按当前协议校验并路由的事件载荷，包含 `selfId` 字段。
    * @returns restoreDeleted账号；无法解析或未命中时为 `null`。
@@ -844,31 +1060,164 @@ export class QqbotAccountService {
   }
 
   /**
-   * 将`body`规范为请求内容，使等价输入得到一致表示。
-   * @param body - 用于请求内容的结构化输入，包含 `accessToken`、`connectionMode`、`enabled`、`name` 字段。
-   * @returns 请求内容。
+   * 将创建或编辑请求投影为账号字段；编辑时仅保留显式字段，避免重置接入方式和启用状态。
+   * @param body - QQBot 账号创建或局部编辑请求。
+   * @param create - 是否应用新账号的反向 WS、启用、名称和备注默认值。
+   * @returns 仅包含当前请求允许更新字段的账号载荷。
    */
-  private normalizeBody(body: Partial<QqbotAccountBodyDto>) {
-    const payload: Partial<QqbotAccount> = {
-      accessToken: this.toolsService.normalizeNullableString(body.accessToken),
-      connectionMode: body.connectionMode || 'reverse-ws',
-      enabled: body.enabled ?? true,
-      name: body.name || '',
-      remark: body.remark || '',
-      selfId: (() => {
-        if (typeof body.selfId === 'string') {
-          return body.selfId.trim();
+  private normalizeBody(body: Partial<QqbotAccountBodyDto>, create: boolean) {
+    const payload: Partial<QqbotAccount> = {};
+    if (
+      body.connectionMode &&
+      !QQBOT_CONNECTION_MODES.includes(body.connectionMode)
+    ) {
+      throwVbenError('QQBot 接入方式无效');
+    }
+    if (body.connectionMode) {
+      payload.connectionMode = body.connectionMode;
+    } else if (create) {
+      payload.connectionMode = 'reverse-ws';
+    }
+    if (body.enabled !== undefined) {
+      payload.enabled = body.enabled;
+    } else if (create) {
+      payload.enabled = true;
+    }
+    if (body.name !== undefined) {
+      payload.name = body.name;
+    } else if (create) {
+      payload.name = '';
+    }
+    if (body.remark !== undefined) {
+      payload.remark = body.remark;
+    } else if (create) {
+      payload.remark = '';
+    }
+    if (body.accessToken !== undefined) {
+      payload.accessToken = this.toolsService.normalizeNullableString(
+        body.accessToken,
+      );
+    }
+
+    const effectiveMode = payload.connectionMode;
+    if (
+      this.isOfficialConnectionMode(effectiveMode) ||
+      body.appId !== undefined
+    ) {
+      const appId = `${body.appId || ''}`.trim();
+      if (appId) {
+        if (!QQBOT_OFFICIAL_APP_ID_PATTERN.test(appId)) {
+          throwVbenError('QQ 官方 Bot AppID 格式无效');
         }
-        return body.selfId;
-      })(),
-    };
+        payload.officialAppId = appId;
+        payload.selfId = this.officialSelfId(appId);
+      }
+    } else if (typeof body.selfId === 'string') {
+      payload.selfId = body.selfId.trim();
+    }
+
     const napcatLoginPasswordSecret = this.toNapcatLoginPasswordSecret(
       body.loginPassword,
     );
     if (napcatLoginPasswordSecret !== undefined) {
       payload.napcatLoginPasswordSecret = napcatLoginPasswordSecret;
     }
+    const officialAppSecretCiphertext = this.toOfficialAppSecretCiphertext(
+      body.appSecret,
+    );
+    if (officialAppSecretCiphertext !== undefined) {
+      payload.officialAppSecretCiphertext = officialAppSecretCiphertext;
+    }
     return payload;
+  }
+
+  /**
+   * 校验新账号的接入身份与凭据，并清除另一通道不应持久化的敏感字段。
+   * @param payload - 已应用创建默认值的账号载荷。
+   * @throws 官方账号缺 AppID/AppSecret、反向 WS 缺 selfId 或跨通道混入凭据时抛出业务错误。
+   */
+  private assertCreateCredentials(payload: Partial<QqbotAccount>) {
+    if (this.isOfficialConnectionMode(payload.connectionMode)) {
+      if (!payload.officialAppId || !payload.selfId) {
+        throwVbenError('请填写 QQ 官方 Bot AppID');
+      }
+      if (!payload.officialAppSecretCiphertext) {
+        throwVbenError('请填写 QQ 官方 Bot AppSecret');
+      }
+      if (payload.accessToken || payload.napcatLoginPasswordSecret) {
+        throwVbenError('QQ 官方 Bot 不能提交 OneBot 或 NapCat 凭据');
+      }
+      payload.accessToken = null;
+      payload.napcatLoginPasswordSecret = null;
+      return;
+    }
+    if (!payload.selfId) throwVbenError('请填写 NapCat QQ 号');
+    if (payload.officialAppId || payload.officialAppSecretCiphertext) {
+      throwVbenError('NapCat 账号不能提交 QQ 官方 Bot 凭据');
+    }
+    payload.officialAppId = null;
+    payload.officialAppSecretCiphertext = null;
+  }
+
+  /**
+   * 按既有账号接入方式限制局部编辑凭据，官方 Secret 留空保留旧密文且禁止跨通道混发。
+   * @param payload - 当前局部更新载荷。
+   * @param current - 已加行锁并显式加载官方密文的现有账号。
+   * @param body - 原始编辑请求，用于识别跨通道敏感字段。
+   * @throws 请求携带另一通道凭据，或官方账号仍没有可用 AppSecret 时抛出业务错误。
+   */
+  private applyCredentialBoundary(
+    payload: Partial<QqbotAccount>,
+    current: QqbotAccount,
+    body: Partial<QqbotAccountBodyDto>,
+  ) {
+    if (this.isOfficialConnectionMode(current.connectionMode)) {
+      if (
+        `${body.accessToken || ''}`.trim() ||
+        `${body.loginPassword || ''}`.trim()
+      ) {
+        throwVbenError('QQ 官方 Bot 不能提交 OneBot 或 NapCat 凭据');
+      }
+      delete payload.accessToken;
+      delete payload.napcatLoginPasswordSecret;
+      if (!payload.officialAppSecretCiphertext) {
+        delete payload.officialAppSecretCiphertext;
+      }
+      if (
+        !payload.officialAppSecretCiphertext &&
+        !current.officialAppSecretCiphertext
+      ) {
+        throwVbenError('QQ 官方 Bot AppSecret 未配置');
+      }
+      return;
+    }
+    if (`${body.appSecret || ''}`.trim() || `${body.appId || ''}`.trim()) {
+      throwVbenError('NapCat 账号不能提交 QQ 官方 Bot 凭据');
+    }
+    delete payload.officialAppId;
+    delete payload.officialAppSecretCiphertext;
+  }
+
+  /**
+   * 将 QQ 官方 Bot AppID 编码进独立命名空间，避免与真实 QQ UIN 共用 selfId 时碰撞。
+   * @param appId - 已通过数字格式校验的 QQ 开放平台 AppID。
+   * @returns 可供现有能力、权限、日志和消息订阅复用的稳定账号键。
+   */
+  private officialSelfId(appId: string) {
+    return `${QQBOT_OFFICIAL_SELF_ID_PREFIX}${appId}`;
+  }
+
+  /**
+   * 判断账号接入方式是否属于 QQ 官方 WebSocket 或 Webhook，供凭据和生命周期边界共用。
+   * @param connectionMode - 待判断的账号接入方式。
+   * @returns 官方 WebSocket 或 Webhook 模式返回 true，其他值返回 false。
+   */
+  private isOfficialConnectionMode(
+    connectionMode?: QqbotConnectionMode,
+  ): boolean {
+    return QQBOT_OFFICIAL_CONNECTION_MODES.includes(
+      connectionMode as QqbotConnectionMode,
+    );
   }
 
   /**
@@ -880,6 +1229,19 @@ export class QqbotAccountService {
     if (!`${loginPassword ?? ''}`.trim()) return undefined;
     return this.toolsService.encryptSecretText(
       loginPassword,
+      this.getAccountSecretKey(),
+    );
+  }
+
+  /**
+   * 将请求中的 QQ 官方 Bot AppSecret 加密为服务端密文，空值表示编辑时保持原值。
+   * @param appSecret - 仅存在于当前受信任 HTTPS 请求中的 AppSecret。
+   * @returns 加密密文；输入为空时返回 undefined。
+   */
+  private toOfficialAppSecretCiphertext(appSecret?: string) {
+    if (!`${appSecret ?? ''}`.trim()) return undefined;
+    return this.toolsService.encryptSecretText(
+      appSecret,
       this.getAccountSecretKey(),
     );
   }

@@ -4,7 +4,6 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import type { OpenAPIObject } from '@nestjs/swagger';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { json, urlencoded } from 'express';
 import type { Response } from 'express';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
@@ -61,6 +60,7 @@ const swaggerGroups: SwaggerDocumentGroup[] = [
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
+    rawBody: true,
   });
   app.useLogger(app.get(Logger));
   const clientIpService = app.get(ClientIpService);
@@ -68,8 +68,8 @@ async function bootstrap() {
   app.set('trust proxy', (address: string) =>
     clientIpService.isTrustedProxy(address),
   );
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ extended: true, limit: '50mb' }));
+  app.useBodyParser('json', { limit: '50mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '50mb' });
   app.use((request, response, next) => {
     if (!rateLimitService.isManagementSurface(request)) {
       next();

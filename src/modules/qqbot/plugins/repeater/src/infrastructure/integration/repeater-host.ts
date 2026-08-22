@@ -6,6 +6,7 @@ export type RepeaterPluginHost = {
     channelId?: string;
     guildId?: string;
     message: string;
+    replyMessageId?: string;
     selfId: string;
     targetId: string;
     targetType: string;

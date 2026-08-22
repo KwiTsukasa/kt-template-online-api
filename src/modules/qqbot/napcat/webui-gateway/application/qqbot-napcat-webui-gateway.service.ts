@@ -196,6 +196,9 @@ export class QqbotNapcatWebuiGatewayService {
     if (!account) {
       throwVbenError('QQBot 账号不存在');
     }
+    if ((account.connectionMode || 'reverse-ws') !== 'reverse-ws') {
+      throwVbenError('QQ 官方 Bot 不提供 NapCat WebUI');
+    }
 
     const runtime = await this.containerService.findPrimaryContainerByAccountId(
       account.id,
@@ -337,9 +340,7 @@ export class QqbotNapcatWebuiGatewayService {
    * @param runtime - 用于WebUI状态的领域对象，包含 `sourceContainerOnline` 字段。
    * @returns 当前状态对应的WebUI状态，取值为 `'online'`、`'offline'`。
    */
-  private toWebuiStatus(
-    runtime: QqbotNapcatRuntime,
-  ): QqbotNapcatWebuiStatus {
+  private toWebuiStatus(runtime: QqbotNapcatRuntime): QqbotNapcatWebuiStatus {
     if (runtime.sourceContainerOnline) {
       return 'online';
     }

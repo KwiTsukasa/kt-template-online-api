@@ -7,6 +7,7 @@ import { QqbotNapcatModule } from '@/modules/qqbot/napcat/qqbot-napcat.module';
 import { QqbotPluginPlatformModule } from '@/modules/qqbot/plugin-platform/plugin-platform.module';
 import { QqbotAccountAbility } from '@/modules/qqbot/core/infrastructure/persistence/account/qqbot-account-ability.entity';
 import { QqbotAccountController } from '@/modules/qqbot/core/contract/account/qqbot-account.controller';
+import { QqbotOfficialWebhookController } from '@/modules/qqbot/core/contract/account/qqbot-official-webhook.controller';
 import { QqbotAccount } from '@/modules/qqbot/core/infrastructure/persistence/account/qqbot-account.entity';
 import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
 import { QqbotAccountExtensionRegistry } from '@/modules/qqbot/core/application/account/qqbot-account-extension.registry';
@@ -18,6 +19,11 @@ import { QqbotCommandParserService } from '@/modules/qqbot/core/application/comm
 import { QqbotCommandService } from '@/modules/qqbot/core/application/command/qqbot-command.service';
 import { QqbotReplyTemplateService } from '@/modules/qqbot/core/application/command/qqbot-reply-template.service';
 import { QqbotReverseWsService } from '@/modules/qqbot/core/infrastructure/integration/connection/qqbot-reverse-ws.service';
+import {
+  loadQqbotOfficialSdk,
+  QQBOT_OFFICIAL_SDK_LOADER,
+  QqbotOfficialService,
+} from '@/modules/qqbot/core/infrastructure/integration/connection/qqbot-official.service';
 import { QqbotConfig } from '@/modules/qqbot/core/infrastructure/persistence/config/qqbot-config.entity';
 import { QqbotConfigService } from '@/modules/qqbot/core/application/config/qqbot-config.service';
 import { QqbotDashboardController } from '@/modules/qqbot/core/contract/dashboard/qqbot-dashboard.controller';
@@ -62,6 +68,7 @@ export const QQBOT_CORE_ENTITIES = [
 
 export const QQBOT_CORE_CONTROLLERS = [
   QqbotAccountController,
+  QqbotOfficialWebhookController,
   QqbotCommandController,
   QqbotDashboardController,
   QqbotMessageController,
@@ -81,6 +88,7 @@ export const QQBOT_CORE_PROVIDERS = [
   QqbotDashboardService,
   QqbotDedupeService,
   QqbotEventService,
+  QqbotOfficialService,
   QqbotMessageService,
   QqbotPermissionService,
   QqbotRateLimitService,
@@ -89,6 +97,10 @@ export const QQBOT_CORE_PROVIDERS = [
   QqbotRuleEngineService,
   QqbotRuleService,
   QqbotSendService,
+  {
+    provide: QQBOT_OFFICIAL_SDK_LOADER,
+    useValue: loadQqbotOfficialSdk,
+  },
 ];
 
 export const QQBOT_CORE_EXPORTS = [
@@ -96,6 +108,8 @@ export const QQBOT_CORE_EXPORTS = [
   QqbotAccountService,
   QqbotConfigService,
   QqbotDashboardService,
+  QqbotEventService,
+  QqbotOfficialService,
   QqbotSendService,
   QqbotReverseWsService,
 ];

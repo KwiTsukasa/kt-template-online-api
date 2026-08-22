@@ -36,20 +36,20 @@ export function normalizeOneBotMessage(
     undefined;
   const groupId = toolsService.toStringId(payload.group_id) || undefined;
   const userId = toolsService.toStringId(payload.user_id);
-  const targetId =
-    (() => {
-      if (messageType === 'group') {
-        return groupId || '';
-      }
-      if (messageType === 'channel') {
-        return channelId || '';
-      }
-      return userId;
-    })();
+  const targetId = (() => {
+    if (messageType === 'group') {
+      return groupId || '';
+    }
+    if (messageType === 'channel') {
+      return channelId || '';
+    }
+    return userId;
+  })();
   const messageText = extractMessageText(payload);
 
   return {
     channelId,
+    connectionMode: 'reverse-ws',
     eventTime: (() => {
       if (payload.time) {
         return new Date(Number(payload.time) * 1000);
@@ -57,6 +57,7 @@ export function normalizeOneBotMessage(
       return new Date();
     })(),
     groupId,
+    guildId: toolsService.toStringId(payload.guild_id) || undefined,
     messageId:
       toolsService.toStringId(payload.message_id) ||
       `${payload.time || Date.now()}-${targetId}-${userId}`,
@@ -64,6 +65,7 @@ export function normalizeOneBotMessage(
     messageType,
     rawEvent: payload,
     rawMessage: payload.raw_message || messageText,
+    replyMessageId: toolsService.toStringId(payload.message_id) || undefined,
     selfId: toolsService.toStringId(payload.self_id),
     senderNickname:
       payload.sender?.card ||

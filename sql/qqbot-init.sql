@@ -9,9 +9,11 @@ CREATE TABLE IF NOT EXISTS `qqbot_account` (
   `id` bigint NOT NULL,
   `connection_mode` varchar(32) NOT NULL DEFAULT 'reverse-ws',
   `self_id` varchar(64) NOT NULL,
+  `official_app_id` varchar(64) DEFAULT NULL,
   `name` varchar(120) NOT NULL DEFAULT '',
   `access_token` varchar(255) DEFAULT NULL,
   `napcat_login_password_secret` varchar(1024) DEFAULT NULL,
+  `official_app_secret_ciphertext` varchar(1024) DEFAULT NULL,
   `enabled` tinyint(1) NOT NULL DEFAULT 1,
   `connect_status` varchar(32) NOT NULL DEFAULT 'offline',
   `client_role` varchar(32) DEFAULT NULL,
@@ -23,7 +25,8 @@ CREATE TABLE IF NOT EXISTS `qqbot_account` (
   `create_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `update_time` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_qqbot_account_self_id` (`self_id`)
+  UNIQUE KEY `uk_qqbot_account_self_id` (`self_id`),
+  UNIQUE KEY `uk_qqbot_account_official_app_id` (`official_app_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `qqbot_account_ability` (
@@ -523,6 +526,21 @@ DEALLOCATE PREPARE qqbot_stmt;
 SET @qqbot_sql = (
   SELECT IF(
     COUNT(*) = 0,
+    'ALTER TABLE `qqbot_account` ADD COLUMN `official_app_id` varchar(64) DEFAULT NULL AFTER `self_id`',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'official_app_id'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
     'ALTER TABLE `qqbot_account` ADD COLUMN `access_token` varchar(255) DEFAULT NULL',
     'SELECT 1'
   )
@@ -538,6 +556,21 @@ DEALLOCATE PREPARE qqbot_stmt;
 SET @qqbot_sql = (
   SELECT IF(
     COUNT(*) = 0,
+    'ALTER TABLE `qqbot_account` ADD UNIQUE KEY `uk_qqbot_account_official_app_id` (`official_app_id`)',
+    'SELECT 1'
+  )
+  FROM information_schema.statistics
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND index_name = 'uk_qqbot_account_official_app_id'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
     'ALTER TABLE `qqbot_account` ADD COLUMN `napcat_login_password_secret` varchar(1024) DEFAULT NULL',
     'SELECT 1'
   )
@@ -545,6 +578,21 @@ SET @qqbot_sql = (
   WHERE table_schema = DATABASE()
     AND table_name = 'qqbot_account'
     AND column_name = 'napcat_login_password_secret'
+);
+PREPARE qqbot_stmt FROM @qqbot_sql;
+EXECUTE qqbot_stmt;
+DEALLOCATE PREPARE qqbot_stmt;
+
+SET @qqbot_sql = (
+  SELECT IF(
+    COUNT(*) = 0,
+    'ALTER TABLE `qqbot_account` ADD COLUMN `official_app_secret_ciphertext` varchar(1024) DEFAULT NULL',
+    'SELECT 1'
+  )
+  FROM information_schema.columns
+  WHERE table_schema = DATABASE()
+    AND table_name = 'qqbot_account'
+    AND column_name = 'official_app_secret_ciphertext'
 );
 PREPARE qqbot_stmt FROM @qqbot_sql;
 EXECUTE qqbot_stmt;

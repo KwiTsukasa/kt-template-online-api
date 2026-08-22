@@ -9,6 +9,7 @@ import { QqbotBusService } from '../../infrastructure/integration/bus/qqbot-bus.
 import { QqbotMessageService } from '../message/qqbot-message.service';
 import type {
   QqbotMessageType,
+  QqbotOneBotActionResponse,
   QqbotReverseActionSender,
 } from '../../contract/qqbot.types';
 import {
@@ -30,7 +31,10 @@ type SendPipelineInput = {
   action: string;
   actionParams: Record<string, any>;
   audit?: { attemptNumber: number; deliveryId: string };
+  channelId?: string;
+  guildId?: string;
   message: string;
+  replyMessageId?: string;
   strict: boolean;
   targetId: string;
   targetType: QqbotMessageType;
@@ -124,6 +128,7 @@ export class QqbotSendService {
     channelId?: string;
     guildId?: string;
     message: string;
+    replyMessageId?: string;
     selfId?: string;
     targetId: string;
     targetType: QqbotMessageType;
@@ -137,7 +142,10 @@ export class QqbotSendService {
     return this.sendWithAccount(account, {
       action,
       actionParams,
+      channelId: params.channelId,
+      guildId: params.guildId,
       message: params.message,
+      replyMessageId: params.replyMessageId,
       strict: false,
       targetId: params.targetId,
       targetType: params.targetType,
@@ -215,6 +223,16 @@ export class QqbotSendService {
   }
 
   /**
+   * 从 Nest 运行时读取 QQ 官方双 transport 服务，避免发送应用层静态依赖 ESM SDK。
+   * @returns 当前应用唯一的 QQ 官方服务实例。
+   */
+  private async getOfficialService() {
+    const { QqbotOfficialService } =
+      await import('../../infrastructure/integration/connection/qqbot-official.service');
+    return this.moduleRef.get(QqbotOfficialService, { strict: false });
+  }
+
+  /**
    * 按`account`、`input`投递携带账号；把变更持久化到当前存储（`sendLogRepository.save`）。
    * @param account - 用于携带账号的领域对象，包含 `selfId` 字段。
    * @param input - 用于携带账号的结构化输入，包含 `targetId`、`strict`、`message`、`actionParams` 字段。
@@ -246,11 +264,12 @@ export class QqbotSendService {
         return {};
       })(),
     };
+    const transportAction = this.transportAction(account, input);
     let log: QqbotSendLog;
     try {
       log = await this.sendLogRepository.save(
         this.sendLogRepository.create({
-          action: input.action,
+          action: transportAction,
           messageText: storedMessageText,
           params: storedActionParams,
           selfId: account.selfId,
@@ -267,18 +286,41 @@ export class QqbotSendService {
       await this.busService.publish(
         QQBOT_MQTT_TOPICS.commandSend(account.selfId),
         {
-          action: input.action,
+          action: transportAction,
           logId: log!.id,
           params: input.actionParams,
           selfId: account.selfId,
         },
       );
-      const reverseWsService = await this.getReverseWsService();
-      const response = await reverseWsService.sendAction(
-        account.selfId,
-        input.action,
-        input.actionParams,
-      );
+      let response: QqbotOneBotActionResponse & Record<string, any>;
+      if (!this.isOfficialConnectionMode(account.connectionMode)) {
+        const reverseWsService = await this.getReverseWsService();
+        response = await reverseWsService.sendAction(
+          account.selfId,
+          input.action,
+          input.actionParams,
+        );
+      } else {
+        const officialService = await this.getOfficialService();
+        const officialResponse = await officialService.sendText({
+          channelId: input.channelId,
+          guildId: input.guildId,
+          message: input.message,
+          replyMessageId: input.replyMessageId,
+          selfId: account.selfId,
+          targetId: input.targetId,
+          targetType: input.targetType,
+        });
+        response = {
+          data: { message_id: officialResponse.id },
+          official: {
+            extInfo: officialResponse.ext_info || null,
+            timestamp: officialResponse.timestamp,
+          },
+          retcode: 0,
+          status: 'ok',
+        };
+      }
       const success = (() => {
         if (input.strict) {
           return response.status === 'ok' && response.retcode === 0;
@@ -344,7 +386,7 @@ export class QqbotSendService {
       if (input.strict && err instanceof QqbotSendAttemptError) throw err;
       const message = this.toolsService.getErrorMessage(
         err,
-        'OneBot send failed',
+        'QQBot send failed',
       );
       if (input.strict) {
         const error = this.toStrictSendError(err, log!.id);
@@ -357,6 +399,36 @@ export class QqbotSendService {
       );
       throwVbenError(message);
     }
+  }
+
+  /**
+   * 按账号接入方式生成可审计发送动作；OneBot 保留原 action，官方模式使用稳定语义名。
+   * @param account - 决定发送 transport 的 QQBot 账号。
+   * @param input - 当前目标类型和 OneBot 兼容 action。
+   * @returns 写入发送日志与事件总线的稳定动作名。
+   */
+  private transportAction(
+    account: QqbotAccount,
+    input: Pick<SendPipelineInput, 'action' | 'targetType'>,
+  ) {
+    if (!this.isOfficialConnectionMode(account.connectionMode)) {
+      return input.action;
+    }
+    return `official_send_${input.targetType}`;
+  }
+
+  /**
+   * 判断账号是否显式选择 QQ 官方 WebSocket 或 Webhook；缺失和未知旧值保持 OneBot 路由。
+   * @param connectionMode - 账号持久化的接入方式。
+   * @returns 两种官方 transport 之一时返回 true。
+   */
+  private isOfficialConnectionMode(
+    connectionMode: QqbotAccount['connectionMode'],
+  ) {
+    return (
+      connectionMode === 'official-websocket' ||
+      connectionMode === 'official-webhook'
+    );
   }
 
   /**
@@ -399,9 +471,17 @@ export class QqbotSendService {
         sendLogId,
       });
     }
+    if (this.isOfficialActionError(err)) {
+      return new QqbotSendAttemptError({
+        code: err.code,
+        message: err.message,
+        retryable: err.retryable,
+        sendLogId,
+      });
+    }
     return new QqbotSendAttemptError({
       code: 'onebot_disconnected',
-      message: 'OneBot send failed',
+      message: 'QQBot send failed',
       retryable: true,
       sendLogId,
     });
@@ -423,6 +503,31 @@ export class QqbotSendService {
   }
 
   /**
+   * 判断异常是否由 QQ 官方发送服务产生，并读取其稳定代码与重试语义。
+   * @param err - 待识别的未知异常。
+   * @returns 是否为 QQ 官方结构化发送异常。
+   */
+  private isOfficialActionError(err: unknown): err is Error & {
+    code: 'official_disconnected' | 'official_rejected' | 'official_timeout';
+    retryable: boolean;
+  } {
+    if (!(err instanceof Error) || err.name !== 'QqbotOfficialActionError') {
+      return false;
+    }
+    const value = err as Error & {
+      code?: unknown;
+      retryable?: unknown;
+    };
+    return (
+      [
+        'official_disconnected',
+        'official_rejected',
+        'official_timeout',
+      ].includes(`${value.code || ''}`) && typeof value.retryable === 'boolean'
+    );
+  }
+
+  /**
    * 以统一异常拒绝发送失败。
    * @param strict - 决定是否启用“strict”分支的布尔选项。
    * @param err - 待转换为稳定业务错误或日志文本的未知异常。
@@ -435,10 +540,7 @@ export class QqbotSendService {
     sendLogId: null | string,
   ): never {
     if (strict) throw this.toStrictSendError(err, sendLogId);
-    const message = this.toolsService.getErrorMessage(
-      err,
-      'OneBot send failed',
-    );
+    const message = this.toolsService.getErrorMessage(err, 'QQBot send failed');
     throwVbenError(message);
     throw new Error(message);
   }

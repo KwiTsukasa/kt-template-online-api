@@ -113,13 +113,9 @@ export class RepeaterApplication {
     try {
       await this.host.sendText({
         channelId: message.channelId,
-        guildId: (() => {
-          if (message.rawEvent.guild_id) {
-            return `${message.rawEvent.guild_id}`;
-          }
-          return undefined;
-        })(),
+        guildId: message.guildId,
         message: text,
+        replyMessageId: message.replyMessageId,
         selfId: message.selfId,
         targetId: message.targetId,
         targetType: message.messageType,
@@ -127,14 +123,12 @@ export class RepeaterApplication {
       return true;
     } catch (error) {
       this.host.warn?.(
-        `QQBot 复读机发送失败: ${
-          (() => {
-            if (error instanceof Error) {
-              return error.message;
-            }
-            return `${error}`;
-          })()
-        }`,
+        `QQBot 复读机发送失败: ${(() => {
+          if (error instanceof Error) {
+            return error.message;
+          }
+          return `${error}`;
+        })()}`,
       );
       return false;
     }

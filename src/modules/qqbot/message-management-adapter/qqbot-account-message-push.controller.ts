@@ -58,6 +58,8 @@ const allowlistTargetOptions = (
   value: QqbotMessagePushTargetOptionsResponse,
 ): QqbotMessagePushTargetOptionsResponse => ({
   available: value.available,
+  connectionMode: value.connectionMode,
+  manualEntry: value.manualEntry,
   options: value.options.map((option) => ({
     label: option.label,
     targetId: option.targetId,

@@ -565,6 +565,7 @@ CREATE TABLE IF NOT EXISTS qqbot_account (
   id BIGINT NOT NULL PRIMARY KEY,
   self_id VARCHAR(64) NOT NULL,
   connection_mode VARCHAR(32) NOT NULL DEFAULT 'reverse-ws',
+  official_app_id VARCHAR(64) NULL,
   name VARCHAR(120) NOT NULL DEFAULT '',
   display_name VARCHAR(128) NULL,
   access_token VARCHAR(255) NULL,
@@ -579,11 +580,13 @@ CREATE TABLE IF NOT EXISTS qqbot_account (
   last_heartbeat_at DATETIME NULL,
   last_error TEXT NULL,
   napcat_login_password_secret VARCHAR(1024) NULL,
+  official_app_secret_ciphertext VARCHAR(1024) NULL,
   remark VARCHAR(255) NOT NULL DEFAULT '',
   is_deleted TINYINT NOT NULL DEFAULT 0,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_qqbot_account_self_id (self_id)
+  UNIQUE KEY uk_qqbot_account_self_id (self_id),
+  UNIQUE KEY uk_qqbot_account_official_app_id (official_app_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS qqbot_account_ability (

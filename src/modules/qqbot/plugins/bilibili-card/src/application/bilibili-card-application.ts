@@ -50,13 +50,9 @@ export class BilibiliCardApplication {
         const video = await this.videoClient.fetchVideo(reference, config);
         await this.host.sendText({
           channelId: message.channelId,
-          guildId: (() => {
-            if (message.rawEvent.guild_id) {
-              return `${message.rawEvent.guild_id}`;
-            }
-            return undefined;
-          })(),
+          guildId: message.guildId,
           message: formatBilibiliVideoReply(video, config),
+          replyMessageId: message.replyMessageId,
           selfId: message.selfId,
           targetId: message.targetId,
           targetType: message.messageType,

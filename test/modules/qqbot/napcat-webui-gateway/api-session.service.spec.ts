@@ -464,6 +464,43 @@ describe('QqbotNapcatWebuiGatewayService', () => {
     expect(auditRepository.save).not.toHaveBeenCalled();
   });
 
+  it('rejects QQ official accounts before looking up any NapCat container', async () => {
+    const accountService = {
+      findById: jest.fn(async () => ({
+        connectionMode: 'official-webhook',
+        id: '1001',
+        name: '官方机器人',
+        selfId: 'qq-official:1020000000',
+      })),
+    };
+    const containerService = {
+      findPrimaryContainerByAccountId: jest.fn(),
+    };
+    const client = { createSession: jest.fn() };
+    const auditRepository = createRepository<NapcatWebuiGatewayAudit>();
+    const service = new QqbotNapcatWebuiGatewayService(
+      accountService as never,
+      containerService as never,
+      client as unknown as QqbotNapcatWebuiGatewayClient,
+      new NapcatWebuiGatewayAuditService(auditRepository as never),
+    );
+    let thrown: unknown;
+
+    try {
+      await service.createSession({
+        accountId: '1001',
+        adminUserId: '3001',
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(getThrownMessage(thrown)).toBe('QQ 官方 Bot 不提供 NapCat WebUI');
+    expect(containerService.findPrimaryContainerByAccountId).not.toHaveBeenCalled();
+    expect(client.createSession).not.toHaveBeenCalled();
+    expect(auditRepository.save).not.toHaveBeenCalled();
+  });
+
   it('rejects malformed account and session ids before downstream calls', async () => {
     const accountService = {
       findById: jest.fn(),

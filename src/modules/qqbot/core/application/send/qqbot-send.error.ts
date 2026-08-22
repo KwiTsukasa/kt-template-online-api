@@ -3,6 +3,9 @@ import type { QqbotSendAttemptErrorOptions } from '../../contract/send/qqbot-sen
 const STRICT_SEND_ERROR_SUMMARIES: Readonly<Record<string, string>> = {
   account_unavailable: 'Configured QQBot account is unavailable',
   invalid_target_type: 'Strict QQBot delivery target type is invalid',
+  official_disconnected: 'QQ official Bot connection unavailable',
+  official_rejected: 'QQ official Bot rejected the send request',
+  official_timeout: 'QQ official Bot send timed out',
   onebot_disconnected: 'OneBot connection unavailable',
   onebot_rejected: 'OneBot rejected the send action',
   onebot_timeout: 'OneBot send timed out',

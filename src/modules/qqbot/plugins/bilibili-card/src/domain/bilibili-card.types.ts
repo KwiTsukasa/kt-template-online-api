@@ -34,10 +34,12 @@ export type BilibiliCardManifest = {
 
 export type BilibiliCardMessage = {
   channelId?: string;
+  guildId?: string;
   messageText: string;
   messageType: string;
   rawEvent: Record<string, any>;
   rawMessage?: string;
+  replyMessageId?: string;
   selfId: string;
   targetId: string;
   userId: string;
@@ -86,6 +88,7 @@ export type BilibiliCardPluginHost = {
     channelId?: string;
     guildId?: string;
     message: string;
+    replyMessageId?: string;
     selfId: string;
     targetId: string;
     targetType: string;

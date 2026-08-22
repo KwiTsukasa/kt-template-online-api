@@ -71,13 +71,9 @@ export class QqbotCommandEngineService {
         if (replyText) {
           await this.sendService.sendText({
             channelId: message.channelId,
-            guildId: (() => {
-              if (message.rawEvent.guild_id) {
-                return `${message.rawEvent.guild_id}`;
-              }
-              return undefined;
-            })(),
+            guildId: message.guildId,
             message: replyText,
+            replyMessageId: message.replyMessageId,
             selfId: message.selfId,
             targetId: message.targetId,
             targetType: message.messageType,
@@ -221,13 +217,9 @@ export class QqbotCommandEngineService {
     try {
       await this.sendService.sendText({
         channelId: message.channelId,
-        guildId: (() => {
-          if (message.rawEvent.guild_id) {
-            return `${message.rawEvent.guild_id}`;
-          }
-          return undefined;
-        })(),
+        guildId: message.guildId,
         message: reply,
+        replyMessageId: message.replyMessageId,
         selfId: message.selfId,
         targetId: message.targetId,
         targetType: message.messageType,

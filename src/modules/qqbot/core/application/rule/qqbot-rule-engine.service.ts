@@ -57,13 +57,9 @@ export class QqbotRuleEngineService {
       try {
         await this.sendService.sendText({
           channelId: message.channelId,
-          guildId: (() => {
-            if (message.rawEvent.guild_id) {
-              return `${message.rawEvent.guild_id}`;
-            }
-            return undefined;
-          })(),
+          guildId: message.guildId,
           message: rule.replyContent,
+          replyMessageId: message.replyMessageId,
           selfId: message.selfId,
           targetId: message.targetId,
           targetType: message.messageType,

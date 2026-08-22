@@ -8,7 +8,10 @@ import { QQBOT_MQTT_TOPICS } from '../../contract/qqbot.constants';
 import { QqbotDedupeService } from '../dedupe/qqbot-dedupe.service';
 import { QqbotMessageService } from '../message/qqbot-message.service';
 import { QqbotBusService } from '../../infrastructure/integration/bus/qqbot-bus.service';
-import type { QqbotOneBotEvent } from '../../contract/qqbot.types';
+import type {
+  QqbotNormalizedMessage,
+  QqbotOneBotEvent,
+} from '../../contract/qqbot.types';
 import {
   buildDedupeKey,
   getOneBotOfflineReason,
@@ -40,18 +43,30 @@ export class QqbotEventService {
    */
   async handleIncoming(payload: QqbotOneBotEvent) {
     const selfId = `${payload.self_id || ''}`;
-    if (selfId) {
-      await this.busService.publish(
-        QQBOT_MQTT_TOPICS.eventRaw(selfId),
-        payload,
-      );
-    }
+    if (selfId) await this.handleRawEvent(selfId, payload);
 
     if (!isOneBotMessageEvent(payload)) {
       await this.handleRuntimeNotice(selfId, payload);
       return;
     }
     const message = normalizeOneBotMessage(payload, this.toolsService);
+    await this.handleNormalizedMessage(message);
+  }
+
+  /**
+   * 发布任意 QQBot transport 的脱敏原始事件，保持 MQTT 与本地总线观察入口一致。
+   * @param selfId - 当前事件归属的稳定 QQBot 账号键。
+   * @param payload - OneBot 或 QQ 官方 SDK 的原始事件安全投影。
+   */
+  async handleRawEvent(selfId: string, payload: Record<string, unknown>) {
+    await this.busService.publish(QQBOT_MQTT_TOPICS.eventRaw(selfId), payload);
+  }
+
+  /**
+   * 将任意 transport 已归一化的消息送入统一去重、消息持久化、总线和规则/命令/插件链。
+   * @param message - 已完成账号、会话、发送者、正文和回复上下文映射的消息。
+   */
+  async handleNormalizedMessage(message: QqbotNormalizedMessage) {
     if (!message.selfId || !message.targetId || !message.userId) {
       this.logger.warn('QQBot 收到缺少关键字段的消息事件，已忽略');
       return;

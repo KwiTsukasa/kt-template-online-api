@@ -10,7 +10,7 @@
 - Swagger / Knife4j
 - nestjs-pino / pino-loki / Loki
 - MinIO
-- MQTT / OneBot v11 reverse WebSocket / NapCat
+- MQTT / OneBot v11 reverse WebSocket / NapCat / QQ 官方 WebSocket 与 Webhook
 - skia-canvas / Chart.js
 - pnpm 9
 
@@ -20,7 +20,7 @@
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `admin`                         | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志、环境总览、网络管理和媒体治理生产编排                                       |
 | `blog`                          | 本地博客文章、分类、标签和 Argon 主题配置                                                                                                           |
-| `qqbot`                         | QQBot 账号、NapCat 扫码登录、运行态 Profile、OneBot 反向 WS、在线命令、规则、权限、系统消息源/订阅/模板/账号绑定、耐久投递、发送/接收日志和插件平台 |
+| `qqbot`                         | QQBot 账号、QQ 官方 WebSocket/Webhook、NapCat 扫码登录、运行态 Profile、OneBot 反向 WS、在线命令、规则、权限、系统消息源/订阅/模板/账号绑定、耐久投递、发送/接收日志和插件平台 |
 | `modules/qqbot/plugin-platform` | QQBot 插件 manifest 校验、版本安装、运行事件、定时任务、受控 SDK 和 CLI 脚手架                                                                      |
 | `qqbot/plugins/bangdream`       | BanG Dream 查曲、查卡、查活动、试炼、玩家、卡池、抽卡模拟、档线、谱面出图                                                                           |
 | `qqbot/plugins/bilibili-card`   | 解析 QQ/NapCat Bilibili 卡片和短链，按账号事件绑定回复封面图和视频文字摘要                                                                          |
@@ -63,7 +63,7 @@ ci/            Jenkins Agent/Docker 辅助文件
 | Admin                 | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`ADMIN_NOTICE_SSE_REPLAY_LIMIT`、`ADMIN_NOTICE_SSE_HEARTBEAT_MS`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                              |
 | Public Security       | `PUBLIC_SECURITY_*`、`PUBLIC_RATE_LIMIT_REDIS_*`、`PUBLIC_RATE_LIMIT_*`                                                                                                                                                                                                                                                                                                                                                                                         |
 | Logging/Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*`                                                                                                                                                                                                                                                                                                                                                                                            |
-| QQBot/NapCat          | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_REVERSE_WS_*`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`、`NAPCAT_*`、`QQBOT_NAPCAT_*`、`MQTT_*`                                                                                                                                             |
+| QQBot/NapCat          | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_OFFICIAL_WEBHOOK_PUBLIC_BASE_URL`、`QQBOT_REVERSE_WS_*`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`、`NAPCAT_*`、`QQBOT_NAPCAT_*`、`MQTT_*`                                                                                                                                             |
 | Environment Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_JENKINS_*`、`ENV_DASHBOARD_K8S_*`、`ENV_DASHBOARD_TENCENT_*`、`ENV_DASHBOARD_CADDY_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                         |
 | Network Management    | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_TCP_NATMAP_RELEASE_MODE`、`NETWORK_TCP_NATMAP_CANARY_PORTS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_*`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
 | Media Governance      | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`；Codex 端点、模型与内部认证统一复用下方 LLM 配置                                                                                                                                                                                                                                                |
@@ -103,6 +103,14 @@ QQBot 插件 worker 使用 BullMQ 队列串行执行同一插件安装实例的�
 
 QQBot 插件定时任务由 manifest 的 `tasks` 声明，平台持久化到 `qqbot_plugin_task` / `qqbot_plugin_task_run`，通过 BullMQ Job Scheduler 调度并经插件 worker 的 `executeTask` 边界执行。`sql/qqbot-init.sql` 可为既有环境增量创建任务表和 Admin 菜单。Admin 页面路径为 `/qqbot/plugin-task`。定时任务队列可用 `QQBOT_PLUGIN_TASK_QUEUE_REDIS_*` 单独配置；留空时复用插件 worker 队列的 Redis 连接。BangDream Bestdori 主数据缓存使用 `BANGDREAM_TSUGU_CACHE_ROOT`，生产清单挂载到容器内 `/data/qqbot/plugins/bangdream/cache`，对应 k3d 节点可写 hostPath `/var/lib/rancher/k3s/kt-template-online-api/qqbot-plugins`。
 
+QQBot 账号支持 `reverse-ws`、`official-websocket`、`official-webhook` 三种接入方式。NapCat 账号继续以真实 QQ UIN 作为 `selfId`；QQ 官方账号保存公开 AppID，并生成 `qq-official:<AppID>` 内部稳定键，避免与 QQ UIN 冲突。AppSecret 只在受信 HTTPS save/update 请求中出现，后端使用 `QQBOT_ACCOUNT_SECRET_KEY` 包装为 `official_app_secret_ciphertext`，列表、日志和事件均不回显；官方 WebSocket 与 Webhook 可以原账号直接切换，官方账号与 NapCat 账号不能互转。
+
+官方 WebSocket 使用 `@tencent-connect/qqbot-nodejs` protocol `GatewayConnection`、完整 intents、心跳、自动重连和进程内 RESUME session，C2C、群、频道及频道私信统一投影为现有 `QqbotNormalizedMessage`。官方 Webhook 的公开入口为 `/qqbot/official/webhook/:appId/:webhookToken`：URL token 由 AppSecret 按固定用途 HMAC 派生，事件继续校验 QQ 的 `X-Signature-Timestamp` / `X-Signature-Ed25519`，`op=13` 返回 challenge 签名，合法事件立即返回 `op=12` ACK 后异步进入同一去重、权限、命令、规则、插件、会话和日志链。`QQBOT_OFFICIAL_WEBHOOK_PUBLIC_BASE_URL` 必须配置为当期 NAS 直连 HTTPS API 基址，不得配置腾讯云中转入口；动态公网端口不写入 Git，Admin 账号行通过后端生成并复制完整回调 URL。
+
+三种 transport 共用发送排队和发送日志。官方 C2C/群消息使用 OpenID，频道回复保留 `channelId/guildId/replyMessageId`；现有插件产生的 HTTPS 或 `base64://` CQ 图片会转换为官方媒体上传。消息推送目标在 NapCat 模式继续校验数字 QQ/群号，官方模式改为手工填写事件中获得的用户 OpenID/群 OpenID，不调用 OneBot 好友或群列表。NapCat 更新登录、运行态和 WebUI 接口对官方账号失败关闭，Admin 同样只展示当前 provider 适用的动作。
+
+既有数据库只执行幂等增量 `sql/qqbot-official-transport-v1.sql`，随后运行只读 `sql/qqbot-official-transport-v1-verify.sql` 核对两列、唯一索引、身份映射和重复 AppID；不要为本功能重放完整 `sql/qqbot-init.sql`。
+
 既有环境的 QQBot 发送日志菜单若仍使用旧路由 `/qqbot/sendLog` 或旧组件 `/qqbot/sendLog/list`，只执行幂等增量入口 `sql/qqbot-send-log-menu-route-v1.sql`，将两者统一迁移为 `/qqbot/send-log` 与 `/qqbot/send-log/list`，随后执行只读的 `sql/qqbot-send-log-menu-route-v1-verify.sql`。该迁移只匹配固定菜单 ID、名称和权限码；不要为这一个路径修复重跑完整 `sql/qqbot-init.sql`。
 
 Admin 环境总览面板使用 `ENV_DASHBOARD_*` 只读配置聚合 local-dev、NAS 线上、腾讯云和 r4se 状态。`ENV_DASHBOARD_ADMIN_LOCAL_URL` / `ENV_DASHBOARD_ADMIN_PUBLIC_URL` 只用于展示 Admin 本机与线上入口证据。HTTP 快照提供当前拓扑，后端 local/MQTT 事件总线通过 SSE 推送增量事件给 Admin；前端不直连 MQTT，也不轮询刷新。Jenkins、K8s、Tencent Cloud、Caddy、WireGuard、Mihomo/OpenClash 未配置时会显示 `unwired` 证据，不能渲染成健康假象；第一版不暴露重启、部署、迁移、容器重建、插件启停或代理切换等写操作。
@@ -119,7 +127,7 @@ v2 endpoint event 通常先于 matching reported 到达，因此 event-first 先
 
 系统消息现由独立 Message Management 管理，链路固定为“消息源 → 来源适配器 → 绑定来源的模板 → 绑定多个同来源模板及一个订阅者的订阅 → 统一消息协议 → 订阅者私有投递”。来源 adapter 只注册在 Message Management；QQBot 和站内信只作为统一协议订阅者，不直接依赖 STUN、TCP NATMap 等消息源。每个匹配订阅会把全部模板按绑定顺序渲染为一个 `templates[]`，只调用所选订阅者一次，由订阅者决定一条、多条、聚合或跳过投递。系统事件只通过内部 Outbox stager 暂存，不提供 publish/event/worker HTTP 路由；管理响应仅返回字段白名单，不暴露凭据、Provider/OneBot/MQTT 运行对象、原始事件载荷或内部持久化键。
 
-通用协议数据位于 `message_template`、`message_subscription`、`message_subscription_template` 和 `message_event`。QQBot 适配器只拥有账号订阅绑定、群聊/私聊目标和耐久投递，当前策略是对每个模板 × 每个启用目标各创建一条投递；站内信适配器只拥有订阅、标题与接收角色绑定，当前策略是每个模板物化一条 `admin_notice`。QQBot 账号接口严格使用路由 `selfId`，不会回退到其他机器人；Snowflake、QQ 账号和目标 ID 在 HTTP 与数据库边界始终保持字符串。
+通用协议数据位于 `message_template`、`message_subscription`、`message_subscription_template` 和 `message_event`。QQBot 适配器只拥有账号订阅绑定、群聊/私聊目标和耐久投递，当前策略是对每个模板 × 每个启用目标各创建一条投递；站内信适配器只拥有订阅、标题与接收角色绑定，当前策略是每个模板物化一条 `admin_notice`。QQBot 账号接口严格使用路由 `selfId`，不会回退到其他机器人；Snowflake、QQ UIN、内部官方账号键与 OpenID 在 HTTP 与数据库边界始终保持字符串。
 
 `message_event` 扇出状态为 `accepted`、`processing`、`deferred`、`retry`、`completed`、`failed`。DDNS 等来源前置条件未满足时由通用事件进入 `deferred` 并每 60 秒复检，不会预先生成订阅者私有投递；条件成功持久化后 `notifyDdnsSynced()` 可提前唤醒。QQBot 投递状态为 `pending`、`processing`、`retry`、`success`、`failed`、`superseded`、`cancelled`，唯一键为事件、目标和模板三元组。事件和投递每次最多领取 50 行，处理租约为 30 秒；临时错误从 10 秒开始指数退避，单次最长 15 分钟。OneBot 超时后的重试仍具至少一次语义，收件端可能收到重复消息。
 

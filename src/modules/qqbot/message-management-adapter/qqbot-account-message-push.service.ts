@@ -15,8 +15,10 @@ import { QqbotMessagePublishBinding } from './qqbot-message-publish-binding.enti
 import { QqbotMessagePublishTarget } from './qqbot-message-publish-target.entity';
 import { QqbotMessageDelivery } from './qqbot-message-delivery.entity';
 import { MessageBindingProtocolService } from '@/modules/message-management/application/message-binding-protocol.service';
+import type { QqbotConnectionMode } from '@/modules/qqbot/core/contract/qqbot.types';
 
-const TARGET_ID_PATTERN = /^[1-9]\d{4,19}$/;
+const NAPCAT_TARGET_ID_PATTERN = /^[1-9]\d{4,19}$/;
+const OFFICIAL_TARGET_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const QQBOT_SUBSCRIBER_KEY = 'qqbot';
 
 type NormalizedTarget = {
@@ -64,7 +66,10 @@ export class QqbotAccountMessagePushService {
     input: QqbotMessagePublishBindingInput,
   ): Promise<QqbotMessagePublishBindingView> {
     const account = await this.requireAccount(selfId);
-    const normalizedTargets = this.normalizeTargets(input.targets);
+    const normalizedTargets = this.normalizeTargets(
+      input.targets,
+      account.connectionMode,
+    );
     try {
       const binding = await this.bindingRepository.manager.transaction(
         async (manager) => {
@@ -153,7 +158,10 @@ export class QqbotAccountMessagePushService {
     input: QqbotMessagePublishBindingInput,
   ): Promise<QqbotMessagePublishBindingView> {
     const account = await this.requireAccount(selfId);
-    const normalizedTargets = this.normalizeTargets(input.targets);
+    const normalizedTargets = this.normalizeTargets(
+      input.targets,
+      account.connectionMode,
+    );
     try {
       const binding = await this.bindingRepository.manager.transaction(
         async (manager) => {
@@ -285,17 +293,25 @@ export class QqbotAccountMessagePushService {
   }
 
   /**
-   * 将`inputs`规范为目标，使等价输入得到一致表示。
+   * 按账号 transport 规范目标：NapCat 只接受数字 QQ/群号，官方模式接受 OpenID。
    * @param inputs - 决定目标内容、边界或目标的 `inputs` 值。
+   * @param connectionMode - 当前账号接入方式，决定目标 ID 合同。
    * @returns 按输入顺序得到的目标列表；没有匹配项时为空数组。
    */
   private normalizeTargets(
     inputs: QqbotMessagePublishTargetInput[],
+    connectionMode: QqbotConnectionMode = 'reverse-ws',
   ): NormalizedTarget[] {
     const targets = new Map<string, NormalizedTarget>();
     inputs.forEach((input) => {
       const targetId = String(input.targetId ?? '').trim();
-      if (!TARGET_ID_PATTERN.test(targetId)) {
+      const targetIdPattern = (() => {
+        if (connectionMode === 'reverse-ws') {
+          return NAPCAT_TARGET_ID_PATTERN;
+        }
+        return OFFICIAL_TARGET_ID_PATTERN;
+      })();
+      if (!targetIdPattern.test(targetId)) {
         throw new SystemMessageContractError('invalid_target_id');
       }
       if (input.targetType !== 'group' && input.targetType !== 'private') {

@@ -15,6 +15,12 @@ jest.mock(
   }),
 );
 jest.mock(
+  '@/modules/qqbot/core/infrastructure/integration/connection/qqbot-official.service',
+  () => ({
+    QqbotOfficialService: class {},
+  }),
+);
+jest.mock(
   '@/modules/qqbot/napcat/application/login/qqbot-napcat-login.service',
   () => ({
     QqbotNapcatLoginService: class {},
@@ -39,6 +45,7 @@ import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qq
 import { QqbotNapcatLoginService } from '@/modules/qqbot/napcat/application/login/qqbot-napcat-login.service';
 import { QqbotNapcatLoginController } from '@/modules/qqbot/napcat/contract/qqbot-napcat-login.controller';
 import { QqbotReverseWsService } from '@/modules/qqbot/core/infrastructure/integration/connection/qqbot-reverse-ws.service';
+import { QqbotOfficialService } from '@/modules/qqbot/core/infrastructure/integration/connection/qqbot-official.service';
 
 describe('QqbotAccountController', () => {
   let app: INestApplication;
@@ -46,6 +53,11 @@ describe('QqbotAccountController', () => {
   const repositoryWrite = jest.fn();
   const secretWrapper = jest.fn();
   const accountService = {
+    findById: jest.fn().mockResolvedValue({
+      connectionMode: 'reverse-ws',
+      id: 'account-1',
+      selfId: '1914728559',
+    }),
     save: jest.fn().mockImplementation(async () => {
       secretWrapper();
       repositoryWrite();
@@ -65,6 +77,9 @@ describe('QqbotAccountController', () => {
       status: 'success',
     }),
   };
+  const officialService = {
+    reconcileAccount: jest.fn().mockResolvedValue({ started: false }),
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -72,6 +87,7 @@ describe('QqbotAccountController', () => {
       providers: [
         { provide: QqbotAccountService, useValue: accountService },
         { provide: QqbotNapcatLoginService, useValue: napcatLoginService },
+        { provide: QqbotOfficialService, useValue: officialService },
         { provide: QqbotReverseWsService, useValue: {} },
         {
           provide: ConfigService,

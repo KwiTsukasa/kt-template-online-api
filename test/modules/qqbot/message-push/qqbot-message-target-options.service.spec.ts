@@ -32,6 +32,8 @@ describe('QqbotMessageTargetOptionsService', () => {
       service.listTargetOptions('10000000000000001'),
     ).resolves.toEqual({
       available: true,
+      connectionMode: 'reverse-ws',
+      manualEntry: false,
       options: [
         {
           label: 'KT 群 (20000000000000001)',
@@ -76,6 +78,8 @@ describe('QqbotMessageTargetOptionsService', () => {
     accountService.findBySelfId.mockResolvedValueOnce(null);
     await expect(service.listTargetOptions('10001')).resolves.toEqual({
       available: false,
+      connectionMode: null,
+      manualEntry: false,
       options: [],
       reasonCode: 'account_unavailable',
     });
@@ -85,6 +89,8 @@ describe('QqbotMessageTargetOptionsService', () => {
     reverseWsService.sendAction.mockRejectedValueOnce(new Error('offline'));
     await expect(service.listTargetOptions('10001')).resolves.toEqual({
       available: false,
+      connectionMode: 'reverse-ws',
+      manualEntry: false,
       options: [],
       reasonCode: 'onebot_unavailable',
     });
@@ -94,6 +100,8 @@ describe('QqbotMessageTargetOptionsService', () => {
       .mockResolvedValueOnce({ data: [], status: 'ok' });
     await expect(service.listTargetOptions('10001')).resolves.toEqual({
       available: false,
+      connectionMode: 'reverse-ws',
+      manualEntry: false,
       options: [],
       reasonCode: 'onebot_unavailable',
     });
@@ -138,6 +146,8 @@ describe('QqbotMessageTargetOptionsService', () => {
 
     expect(first).toEqual({
       available: true,
+      connectionMode: 'reverse-ws',
+      manualEntry: false,
       options: [
         {
           label: 'Alpha (20000000000000001)',
@@ -149,4 +159,34 @@ describe('QqbotMessageTargetOptionsService', () => {
     });
     expect(second).toEqual(first);
   });
+
+  it.each(['official-websocket', 'official-webhook'] as const)(
+    'uses manual OpenID entry for %s without calling OneBot discovery',
+    async (connectionMode) => {
+      const accountService = {
+        findBySelfId: jest.fn().mockResolvedValue({
+          connectionMode,
+          enabled: true,
+          id: 'official-1',
+          isDeleted: false,
+        }),
+      };
+      const reverseWsService = { sendAction: jest.fn() };
+      const service = new QqbotMessageTargetOptionsService(
+        accountService as never,
+        reverseWsService as never,
+      );
+
+      await expect(
+        service.listTargetOptions('qq-official:1020000000'),
+      ).resolves.toEqual({
+        available: true,
+        connectionMode,
+        manualEntry: true,
+        options: [],
+        reasonCode: null,
+      });
+      expect(reverseWsService.sendAction).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -140,6 +140,37 @@ describe('QqbotAccountService', () => {
           const draftAbilities = structuredClone(abilities);
           const draftDeliveries = structuredClone(deliveries);
           const accountStore = {
+            createQueryBuilder: jest.fn(() => {
+              const query: Record<string, unknown> = {};
+              const builder = {
+                addSelect: jest.fn(() => builder),
+                andWhere: jest.fn(
+                  (_sql: string, params: Record<string, unknown>) => {
+                    Object.assign(query, params);
+                    return builder;
+                  },
+                ),
+                getOne: jest.fn(async () => {
+                  const row = draftAccounts.find((candidate) =>
+                    Object.entries(query).every(
+                      ([key, value]) => candidate[key] === value,
+                    ),
+                  );
+                  return row ? structuredClone(row) : null;
+                }),
+                setLock: jest.fn(() => {
+                  operations.push('account:lock');
+                  return builder;
+                }),
+                where: jest.fn(
+                  (_sql: string, params: Record<string, unknown>) => {
+                    Object.assign(query, params);
+                    return builder;
+                  },
+                ),
+              };
+              return builder;
+            }),
             findOne: jest.fn(
               async ({
                 lock,
@@ -555,8 +586,18 @@ describe('QqbotAccountService', () => {
           work({
             getRepository: (entity: unknown) => {
               if (entity === QqbotAccount) {
+                const builder = {
+                  addSelect: jest.fn(() => builder),
+                  andWhere: jest.fn(() => builder),
+                  getOne: jest.fn().mockResolvedValue({
+                    ...account,
+                    connectionMode: 'reverse-ws',
+                  }),
+                  setLock: jest.fn(() => builder),
+                  where: jest.fn(() => builder),
+                };
                 return {
-                  findOne: jest.fn().mockResolvedValue({ ...account }),
+                  createQueryBuilder: jest.fn(() => builder),
                   update: accountUpdate,
                 };
               }
@@ -599,7 +640,7 @@ describe('QqbotAccountService', () => {
     await service.markOffline('1914728559');
 
     expect(accountRepository.update).toHaveBeenCalledWith(
-      { selfId: '1914728559' },
+      { connectionMode: 'reverse-ws', selfId: '1914728559' },
       expect.objectContaining({
         connectStatus: 'offline',
         oneBotStatus: 'offline',
@@ -635,7 +676,7 @@ describe('QqbotAccountService', () => {
     await service.markOnline('1914728559', 'Universal', null);
 
     expect(accountRepository.update).toHaveBeenCalledWith(
-      { selfId: '1914728559' },
+      { connectionMode: 'reverse-ws', selfId: '1914728559' },
       expect.objectContaining({
         clientRole: 'Universal',
         connectStatus: 'online',
@@ -654,7 +695,7 @@ describe('QqbotAccountService', () => {
     await service.markHeartbeat('1914728559');
 
     expect(accountRepository.update).toHaveBeenCalledWith(
-      { selfId: '1914728559' },
+      { connectionMode: 'reverse-ws', selfId: '1914728559' },
       expect.objectContaining({
         connectStatus: 'online',
         lastHeartbeatAt: expect.any(Date),
@@ -672,7 +713,7 @@ describe('QqbotAccountService', () => {
     await service.markOffline('1914728559', '错误'.repeat(300));
 
     expect(accountRepository.update).toHaveBeenCalledWith(
-      { selfId: '1914728559' },
+      { connectionMode: 'reverse-ws', selfId: '1914728559' },
       expect.objectContaining({
         connectStatus: 'offline',
         lastError: `${'错误'.repeat(248)}错...`,

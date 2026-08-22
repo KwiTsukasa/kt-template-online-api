@@ -13,11 +13,13 @@ import {
 } from 'class-validator';
 import { SNOWFLAKE_ID_PATTERN } from '@/modules/message-management/contract/message-management.dto';
 
-export const QQ_TARGET_ID_PATTERN = /^[1-9]\d{4,19}$/;
+export const QQ_ACCOUNT_SELF_ID_PATTERN =
+  /^(?:[1-9]\d{4,19}|qq-official:\d{5,20})$/;
+export const QQ_TARGET_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 export class AccountMessagePushParamDto {
   @IsString()
-  @Matches(QQ_TARGET_ID_PATTERN)
+  @Matches(QQ_ACCOUNT_SELF_ID_PATTERN)
   selfId: string;
 }
 

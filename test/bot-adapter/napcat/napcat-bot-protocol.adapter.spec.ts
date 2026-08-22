@@ -54,6 +54,41 @@ describe('NapCat Bot protocol adapter', () => {
     );
   });
 
+  it('preserves trusted OneBot CQ strings so images and mentions are not downgraded to plain text', async () => {
+    const reverseWsService = {
+      sendAction: jest.fn().mockResolvedValue({
+        data: { message_id: 'message-cq' },
+        retcode: 0,
+        status: 'ok',
+      }),
+    };
+    const adapter = new NapcatBotProtocolAdapter(
+      {} as any,
+      reverseWsService as any,
+      {} as any,
+    );
+
+    await adapter.deliver({
+      ...deliveryRequest,
+      adapterContext: {
+        actionParams: {
+          group_id: '20001',
+          message: '[CQ:at,qq=30001] hello',
+        },
+      },
+      intent: { content: '[CQ:at,qq=30001] hello', kind: 'text' },
+    });
+
+    expect(reverseWsService.sendAction).toHaveBeenCalledWith(
+      '10001',
+      'send_group_msg',
+      {
+        group_id: '20001',
+        message: '[CQ:at,qq=30001] hello',
+      },
+    );
+  });
+
   it.each([
     ['failed status despite zero retcode', { retcode: 0, status: 'failed' }],
     ['ok status with nonzero retcode', { retcode: 1404, status: 'ok' }],

@@ -475,7 +475,7 @@ export class TencentBotService
     this.assertProjectedPanelCapacity(panelRecords, panelPlans);
 
     let menuUpdated = 0;
-    if (!isDeepStrictEqual(currentMenuItems, nextMenuItems)) {
+    if (!this.menuItemsMatch(currentMenuItems, nextMenuItems)) {
       await bot.api.put<{ version: number }>('/v2/menu', {
         menu: { items: nextMenuItems },
       });
@@ -658,7 +658,7 @@ export class TencentBotService
       items: primary.panel.items || [],
       remark: primary.panel.remark || '',
     };
-    if (!isDeepStrictEqual(currentPanel, desiredPanel)) {
+    if (!this.panelsMatch(currentPanel, desiredPanel)) {
       await bot.api.put<{ version: number }>(
         `/v2/panels/${encodeURIComponent(primary.panel_id)}`,
         { panel: desiredPanel },
@@ -672,6 +672,95 @@ export class TencentBotService
       deleted += 1;
     }
     return { created, deleted, updated };
+  }
+
+  /**
+   * 只比较菜单可写字段，忽略 QQ GET 自动补入的默认图标，避免把服务端展示投影误判为业务漂移。
+   * @param currentItems - QQ GET 返回且可能含只读展示字段的菜单项。
+   * @param desiredItems - 当前插件绑定生成的完整可写菜单项。
+   * @returns 两组菜单的可写语义和顺序完全一致时返回 true。
+   */
+  private menuItemsMatch(
+    currentItems: TencentMenuItem[],
+    desiredItems: TencentMenuItem[],
+  ) {
+    return isDeepStrictEqual(
+      this.toComparableMenuItems(currentItems),
+      this.toComparableMenuItems(desiredItems),
+    );
+  }
+
+  /**
+   * 将菜单收敛为名称、类型、动作和子菜单等官方可写字段，使 GET 附加的 icon 不进入幂等比较。
+   * @param items - 待收敛的当前或期望菜单项。
+   * @returns 保持原顺序的可写菜单语义投影。
+   */
+  private toComparableMenuItems(items: TencentMenuItem[]) {
+    return items.map((item) => {
+      const comparable: Record<string, unknown> = {
+        name: item.name,
+        type: item.type,
+      };
+      if (item.link !== undefined) comparable.link = item.link;
+      if (item.send_message !== undefined) {
+        comparable.send_message = item.send_message;
+      }
+      if (item.switch !== undefined) comparable.switch = item.switch;
+      if (item.sub_menu_items !== undefined) {
+        comparable.sub_menu_items = item.sub_menu_items.map((subItem) => {
+          const subComparable: Record<string, unknown> = {
+            name: subItem.name,
+            type: subItem.type,
+          };
+          if (subItem.link !== undefined) subComparable.link = subItem.link;
+          if (subItem.send_message !== undefined) {
+            subComparable.send_message = subItem.send_message;
+          }
+          return subComparable;
+        });
+      }
+      return comparable;
+    });
+  }
+
+  /**
+   * 比较面板指令时把 QQ GET 省略的 `only_admin=false` 补回默认值，避免同一面板被每轮重复覆盖。
+   * @param currentPanel - QQ GET 返回的当前面板。
+   * @param desiredPanel - 当前插件绑定生成的期望面板。
+   * @returns 两个面板在指令、描述、权限和备注上等价时返回 true。
+   */
+  private panelsMatch(
+    currentPanel: { items: TencentPanelItem[]; remark: string },
+    desiredPanel: { items: TencentPanelItem[]; remark: string },
+  ) {
+    return isDeepStrictEqual(
+      this.toComparablePanel(currentPanel),
+      this.toComparablePanel(desiredPanel),
+    );
+  }
+
+  /**
+   * 将面板元素投影为官方持久化语义，并把缺失的管理员限定字段按 false 处理。
+   * @param panel - 当前或期望面板的元素与稳定备注。
+   * @returns 可用于幂等比较的面板语义投影。
+   */
+  private toComparablePanel(panel: {
+    items: TencentPanelItem[];
+    remark: string;
+  }) {
+    return {
+      items: panel.items.map((item) => {
+        const comparable: Record<string, unknown> = {
+          desc: item.desc,
+          name: item.name,
+          only_admin: item.only_admin === true,
+          type: item.type,
+        };
+        if (item.link !== undefined) comparable.link = item.link;
+        return comparable;
+      }),
+      remark: panel.remark,
+    };
   }
 
   /**

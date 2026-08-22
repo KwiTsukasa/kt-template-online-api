@@ -105,7 +105,7 @@ function buildOneBotAction(scope: BotDeliveryRequest['scope']) {
  * @returns OneBot 动作参数。
  */
 function buildOneBotParams(request: BotDeliveryRequest) {
-  const message = [{ data: { text: request.intent.content }, type: 'text' }];
+  const message = resolveOneBotMessage(request);
   if (request.scope === 'direct') {
     return { message, user_id: request.targetKey };
   }
@@ -120,6 +120,36 @@ function buildOneBotParams(request: BotDeliveryRequest) {
     guild_id: context?.guildId || '',
     message,
   };
+}
+
+/**
+ * 优先复用核心已构造的 OneBot 字符串或消息段，使 CQ 图片和 @ 提及保持协议语义；上下文缺失或非法时回退纯文本段。
+ * @param request - 标准投递请求及只供具体适配器解释的动作上下文。
+ * @returns 可直接传给 OneBot `message` 字段的字符串或受控消息段数组。
+ */
+function resolveOneBotMessage(request: BotDeliveryRequest) {
+  const context = request.adapterContext as
+    | { actionParams?: Record<string, unknown> }
+    | undefined;
+  const candidate = context?.actionParams?.message;
+  if (typeof candidate === 'string') return candidate;
+  if (Array.isArray(candidate) && candidate.every(isOneBotSegment)) {
+    return candidate;
+  }
+  return [{ data: { text: request.intent.content }, type: 'text' }];
+}
+
+/**
+ * 仅接受带字符串 `type` 和普通对象 `data` 的 OneBot 消息段，阻止任意适配器上下文原样进入协议发送。
+ * @param value - 待校验的消息段候选。
+ * @returns 候选符合最小 OneBot 消息段结构时返回 true。
+ */
+function isOneBotSegment(value: unknown) {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record.type !== 'string' || !record.type) return false;
+  if (!record.data || typeof record.data !== 'object') return false;
+  return !Array.isArray(record.data);
 }
 
 /**

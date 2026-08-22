@@ -108,9 +108,9 @@ Plugin Platform worker 使用 BullMQ 串行执行同一插件安装实例的请�
 
 Tencent 连接支持官方 WebSocket 与 Webhook。官方 WebSocket 继续使用腾讯 SDK 的 `QQBot.on('message')` / `QQBot.start()`，被动回复保留同一 `replyTarget/msgId`；Webhook 公开入口为 `/bot-adapter/tencent/webhook/:appId/:webhookToken`，使用账号 URL capability token、原始请求字节与官方 Ed25519 签名。`TENCENT_BOT_WEBHOOK_PUBLIC_BASE_URL` 只允许不经腾讯云中转的 NAS 直连 HTTPS，端口必须是 `80/443/8080/8443`。
 
-绑定或解绑 Tencent 插件后，adapter 按官方协议先读取 `GET /v2/menu`，保留非 `KT·` 项后以 `PUT /v2/menu` 全量覆盖；再分别读取 `c2c/group/channel/dm` 的 `GET /v2/panels`，只更新、创建或删除 remark 为 `kt-plugin-menu:v1:<scope>` 的面板。菜单顶层最多 10 项、子菜单最多 5 项、单面板最多 20 项，字符权重在任何写入前验证；重复同步无差异时不调用写接口。
+绑定或解绑 Tencent 插件后，adapter 按官方协议先读取 `GET /v2/menu`，保留非 `KT·` 项后以 `PUT /v2/menu` 全量覆盖；再分别读取 `c2c/group/channel/dm` 的 `GET /v2/panels`，只更新、创建或删除 remark 为 `kt-plugin-menu:v1:<scope>` 的面板。菜单顶层最多 10 项、子菜单最多 5 项、单面板最多 20 项，字符权重在任何写入前验证；幂等比较忽略 GET 自动补入的菜单图标、把省略的 `only_admin` 视为 `false`，面板指令使用官方不带 `/` 的名称，因此重复同步无差异时不调用写接口。
 
-三种 transport 共用发送排队和发送日志。官方 C2C/群消息使用 OpenID，频道回复保留 `channelId/guildId/replyMessageId`；现有插件产生的 HTTPS 或 `base64://` CQ 图片会转换为官方媒体上传。消息推送目标在 NapCat 模式继续校验数字 QQ/群号，官方模式改为手工填写事件中获得的用户 OpenID/群 OpenID，不调用 OneBot 好友或群列表。NapCat 更新登录、运行态和 WebUI 接口对官方账号失败关闭，Admin 同样只展示当前 provider 适用的动作。
+三种 transport 共用发送排队和发送日志。NapCat adapter 复用核心已构造的受控 OneBot 字符串或消息段，使 CQ 图片和 @ 提及不会降级为普通文本，严格纯文本投递仍保持文本段；官方 C2C/群消息使用 OpenID，频道回复保留 `channelId/guildId/replyMessageId`，现有插件产生的 HTTPS 或 `base64://` CQ 图片会转换为官方媒体上传。消息推送目标在 NapCat 模式继续校验数字 QQ/群号，官方模式改为手工填写事件中获得的用户 OpenID/群 OpenID，不调用 OneBot 好友或群列表。NapCat 更新登录、运行态和 WebUI 接口对官方账号失败关闭，Admin 同样只展示当前 provider 适用的动作。
 
 既有数据库由 K8s `bot-adapter-migration` initContainer 执行 `sql/bot-adapter-protocol-v1.sql` 与 `sql/bot-adapter-menu-v1.sql`，随后强校验 `bot-adapter-protocol-v1-verify.sql`。迁移通过数据库 advisory lock 运行：新旧表并存时逐字段对账，NapCat/Tencent 插件绑定分别归入 adapter，Message Management 私有旧表只在等价关系核验后删除，旧 `/qqbot` 菜单、权限和字典物理清理。验证要求新表 33/33，旧表、旧索引、旧菜单、旧字典和 `qqbot:` 订阅键全部为 0；任一冲突以 `SQLSTATE 45000` 失败关闭并阻止 API 容器启动。
 

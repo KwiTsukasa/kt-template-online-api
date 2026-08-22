@@ -73,7 +73,7 @@ describe('TencentBotMenuService', () => {
           c2c: [
             {
               desc: '查询状态',
-              name: '/状态',
+              name: '状态',
               only_admin: false,
               type: 'command',
             },
@@ -81,13 +81,13 @@ describe('TencentBotMenuService', () => {
           channel: [
             {
               desc: '查询状态',
-              name: '/状态',
+              name: '状态',
               only_admin: false,
               type: 'command',
             },
             {
               desc: '频道帮助',
-              name: '/频道',
+              name: '频道',
               only_admin: false,
               type: 'command',
             },
@@ -95,13 +95,13 @@ describe('TencentBotMenuService', () => {
           dm: [
             {
               desc: '查询状态',
-              name: '/状态',
+              name: '状态',
               only_admin: false,
               type: 'command',
             },
             {
               desc: '频道帮助',
-              name: '/频道',
+              name: '频道',
               only_admin: false,
               type: 'command',
             },
@@ -109,13 +109,13 @@ describe('TencentBotMenuService', () => {
           group: [
             {
               desc: '查询状态',
-              name: '/状态',
+              name: '状态',
               only_admin: false,
               type: 'command',
             },
             {
               desc: '群排行',
-              name: '/群排行',
+              name: '群排行',
               only_admin: false,
               type: 'command',
             },

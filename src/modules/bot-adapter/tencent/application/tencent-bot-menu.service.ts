@@ -198,7 +198,7 @@ export class TencentBotMenuService {
         .filter((command) => this.supportsScope(command.targetType, scope))
         .map((command) => ({
           desc: command.desc,
-          name: command.invocation,
+          name: command.label,
           only_admin: false,
           type: 'command' as const,
         })),

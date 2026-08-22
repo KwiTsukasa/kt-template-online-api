@@ -453,13 +453,34 @@ describe('TencentBotService', () => {
       ['dm', []],
     ]);
     bot.api.get.mockImplementation(async (path: string, query?: any) => {
-      if (path === '/v2/menu')
-        return { menu: { items: menuItems }, version: 1 };
+      if (path === '/v2/menu') {
+        return {
+          menu: {
+            items: menuItems.map((item) => ({
+              ...item,
+              icon: 'https://bot.example.com/default-menu-icon.png',
+            })),
+          },
+          version: 1,
+        };
+      }
       if (path === '/v2/panels') {
         return {
           is_end: true,
           next_cursor: '',
-          records: panels.get(query?.scope) || [],
+          records: (panels.get(query?.scope) || []).map((record) => ({
+            ...record,
+            panel: {
+              ...record.panel,
+              items: (record.panel.items || []).map((item: any) => {
+                const normalized = { ...item };
+                if (normalized.only_admin === false) {
+                  delete normalized.only_admin;
+                }
+                return normalized;
+              }),
+            },
+          })),
         };
       }
       throw new Error(`unexpected GET ${path}`);
@@ -513,7 +534,7 @@ describe('TencentBotService', () => {
     );
     const command = {
       desc: '查询状态',
-      name: '/status',
+      name: 'status',
       only_admin: false,
       type: 'command' as const,
     };
@@ -553,7 +574,12 @@ describe('TencentBotService', () => {
     });
     expect(menuItems).toEqual([
       projection.menuItems[0],
-      { name: '帮助', send_message: '/help', type: 'send_message' },
+      {
+        icon: 'https://bot.example.com/default-menu-icon.png',
+        name: '帮助',
+        send_message: '/help',
+        type: 'send_message',
+      },
     ]);
     expect(
       panels.get('c2c')?.some((item) => item.panel_id === 'foreign-panel'),

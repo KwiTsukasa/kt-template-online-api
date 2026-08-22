@@ -8,8 +8,10 @@ const PROTECTED_POST_CREDENTIAL_PATHS = new Set([
   '/auth/login',
   '/auth/logout',
   '/auth/refresh',
-  '/qqbot/account/save',
-  '/qqbot/account/update',
+  '/bot-adapter/napcat/account/save',
+  '/bot-adapter/napcat/account/update',
+  '/bot-adapter/tencent/save',
+  '/bot-adapter/tencent/update',
   '/llm/configs',
   '/system/user',
 ]);

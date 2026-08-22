@@ -2,14 +2,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const schemaFiles = [
-  'sql/qqbot-message-push-init.sql',
-  'sql/qqbot-init.sql',
+  'sql/bot-message-push-init.sql',
+  'sql/bot-init.sql',
   'sql/refactor-v3/00-full-schema.sql',
 ] as const;
 
 const menuSeedFiles = [
-  'sql/qqbot-message-push-init.sql',
-  'sql/qqbot-init.sql',
+  'sql/bot-message-push-init.sql',
+  'sql/bot-init.sql',
   'sql/vben-admin-init.sql',
   'sql/refactor-v3/01-seed-core.sql',
 ] as const;
@@ -56,11 +56,11 @@ describe('message management SQL contract', () => {
         sql,
         'message_subscription_template',
       );
-      const qqbotBinding = extractTableBlock(
+      const botBinding = extractTableBlock(
         sql,
-        'qqbot_message_publish_binding',
+        'bot_message_publish_binding',
       );
-      const delivery = extractTableBlock(sql, 'qqbot_message_delivery');
+      const delivery = extractTableBlock(sql, 'bot_message_delivery');
       const stationNotice = extractTableBlock(
         sql,
         'station_notice_message_binding',
@@ -78,22 +78,22 @@ describe('message management SQL contract', () => {
       expect(templateBinding).toContain(
         'unique key uk_message_subscription_template_order (subscription_id, sort_order)',
       );
-      expect(qqbotBinding).toContain('subscription_id bigint not null');
-      expect(qqbotBinding).not.toContain('template_id');
+      expect(botBinding).toContain('subscription_id bigint not null');
+      expect(botBinding).not.toContain('template_id');
       expect(delivery).toContain(
-        'unique key uk_qqbot_message_delivery_event_target_template (message_event_id, publish_target_id, template_id)',
+        'unique key uk_bot_message_delivery_event_target_template (message_event_id, publish_target_id, template_id)',
       );
       expect(stationNotice).toContain('subscription_id bigint not null');
       expect(stationNotice).toContain('notify_role_code varchar(64) not null');
     },
   );
 
-  it('migrates legacy QQBot protocol records before dropping private template ownership', () => {
-    const sql = readNormalizedSql('sql/qqbot-message-push-init.sql');
+  it('migrates legacy Bot protocol records before dropping private template ownership', () => {
+    const sql = readNormalizedSql('sql/bot-message-push-init.sql');
 
-    expect(sql).toContain('from qqbot_message_template');
-    expect(sql).toContain('from qqbot_message_event');
-    expect(sql).toContain('from qqbot_message_subscription legacy');
+    expect(sql).toContain('from bot_message_template');
+    expect(sql).toContain('from bot_message_event');
+    expect(sql).toContain('from bot_message_subscription legacy');
     expect(sql).toContain(
       'create temporary table legacy_message_subscription_template_map',
     );
@@ -110,16 +110,16 @@ describe('message management SQL contract', () => {
       'binding.subscription_id = mapping.mapped_subscription_id',
     );
     expect(sql).toContain(
-      'alter table qqbot_message_publish_binding drop column template_id',
+      'alter table bot_message_publish_binding drop column template_id',
     );
-    expect(sql).toContain('drop index uk_qqbot_message_delivery_event_target');
+    expect(sql).toContain('drop index uk_bot_message_delivery_event_target');
     expect(sql).toContain(
-      'add unique key uk_qqbot_message_delivery_event_target_template (message_event_id, publish_target_id, template_id)',
+      'add unique key uk_bot_message_delivery_event_target_template (message_event_id, publish_target_id, template_id)',
     );
   });
 
   it.each(menuSeedFiles)(
-    '%s seeds message management separately while retaining QQBot delivery permissions',
+    '%s seeds message management separately while retaining Bot delivery permissions',
     (relativePath) => {
       const sql = readNormalizedSql(relativePath);
 
@@ -139,7 +139,7 @@ describe('message management SQL contract', () => {
       expect(sql).toContain("'messagemanagement:template:list'");
       expect(sql).toContain("'messagemanagement:subscription:list'");
       expect(sql).toContain("'messagemanagement:push:list'");
-      expect(sql).toContain("'qqbot:account:messagepush:list'");
+      expect(sql).toContain("'bot:account:messagepush:list'");
       expect(sql).not.toContain("'qqbotmessagesubscription'");
       expect(sql).not.toContain("'qqbotmessagetemplate'");
       expect(sql).not.toContain("'/qqbot/message-subscription'");
@@ -149,7 +149,7 @@ describe('message management SQL contract', () => {
 
   it('verifies protocol columns, template associations, and per-template deliveries', () => {
     const incrementalVerify = readNormalizedSql(
-      'sql/qqbot-message-push-verify.sql',
+      'sql/bot-message-push-verify.sql',
     );
     const fullVerify = readNormalizedSql('sql/refactor-v3/99-verify.sql');
 
@@ -158,9 +158,9 @@ describe('message management SQL contract', () => {
       'message_template',
       'message_subscription_template',
       'message_event',
-      'qqbot_message_publish_binding',
-      'qqbot_message_publish_target',
-      'qqbot_message_delivery',
+      'bot_message_publish_binding',
+      'bot_message_publish_target',
+      'bot_message_delivery',
       'station_notice_message_binding',
     ]) {
       expect(incrementalVerify).toContain(`'${tableName}'`);
@@ -174,7 +174,7 @@ describe('message management SQL contract', () => {
       'group by message_event_id, publish_target_id, template_id',
     );
     expect(incrementalVerify).toContain(
-      "'qqbot_binding_forbidden_template_column'",
+      "'bot_binding_forbidden_template_column'",
     );
     expect(incrementalVerify).toContain(
       "'message_subscription_forbidden_source_column'",

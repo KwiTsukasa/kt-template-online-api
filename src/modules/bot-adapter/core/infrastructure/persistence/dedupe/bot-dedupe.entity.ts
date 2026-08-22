@@ -1,0 +1,35 @@
+import { BeforeInsert, Column, Entity, PrimaryColumn } from 'typeorm';
+import {
+  ensureSnowflakeId,
+  KtCreateDateColumn,
+  KtDateTime,
+  KtDateTimeColumn,
+  KtUpdateDateColumn,
+} from '@/common';
+@Entity('bot_dedupe')
+export class BotDedupe {
+  @PrimaryColumn({ type: 'bigint' })
+  id: string;
+
+  @Column({ length: 255, name: 'event_key', unique: true })
+  eventKey: string;
+
+  @KtDateTimeColumn({
+    default: null,
+    name: 'expire_at',
+    nullable: true,
+    type: 'datetime',
+  })
+  expireAt: KtDateTime | null;
+
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
+
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
+
+  @BeforeInsert()
+  createId() {
+    ensureSnowflakeId(this);
+  }
+}

@@ -33,7 +33,7 @@
     "blog-assets:migrate": "node dist/commands/migrate-blog-legacy-assets.js",
     "lint": "pnpm run check:jsdoc && eslint \"{src,apps,libs,test}/**/*.ts\"",
     "lint:fix": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "qqbot-plugin": "ts-node -r tsconfig-paths/register scripts/qqbot-plugin/cli.ts",
+    "plugin": "ts-node -r tsconfig-paths/register scripts/plugin/cli.ts",
     "verify:staged": "node scripts/husky-fast-check.mjs",
     "verify:local": "bash scripts/local-runtime.sh verify",
     "verify:commit": "pnpm run lint && pnpm run typecheck",

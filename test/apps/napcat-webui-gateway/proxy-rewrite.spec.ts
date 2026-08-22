@@ -36,7 +36,7 @@ function createGatewaySession(
     accountId: 'account-1',
     adminUserId: 'admin-1',
     containerId: 'container-1',
-    containerName: 'kt-qqbot-napcat-1914728559',
+    containerName: 'kt-napcat-1914728559',
     createdAt: 1000,
     expiresAt: 61_000,
     selfId: '1914728559',

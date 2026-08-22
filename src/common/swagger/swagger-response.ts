@@ -532,18 +532,17 @@ function schemaFromExample(
       }
       return undefined;
     })();
-    const itemSchema =
-      (() => {
-        if (example.length > 0) {
-          return schemaFromExample(
-            example[0],
-            getArrayItemName(propertyName),
-            components,
-            itemSchemaName,
-          );
-        }
-        return { type: 'object' };
-      })();
+    const itemSchema = (() => {
+      if (example.length > 0) {
+        return schemaFromExample(
+          example[0],
+          getArrayItemName(propertyName),
+          components,
+          itemSchemaName,
+        );
+      }
+      return { type: 'object' };
+    })();
 
     if (components && itemSchemaName && itemSchema.type === 'object') {
       components.schemas[itemSchemaName] = itemSchema;
@@ -553,15 +552,14 @@ function schemaFromExample(
       type: 'array',
       description: getPropertyDescription(propertyName),
       example,
-      items:
-        (() => {
-          if (components && itemSchemaName && itemSchema.type === 'object') {
-            return {
-              $ref: `#/components/schemas/${itemSchemaName}`,
-            };
-          }
-          return itemSchema;
-        })(),
+      items: (() => {
+        if (components && itemSchemaName && itemSchema.type === 'object') {
+          return {
+            $ref: `#/components/schemas/${itemSchemaName}`,
+          };
+        }
+        return itemSchema;
+      })(),
     };
   }
 
@@ -752,7 +750,7 @@ function getPropertyDescription(propertyName: string) {
 }
 
 /**
- * 按`path`、`method`、`operation`读取操作数据示例；当 `normalizedPath.includes('/auth/codes')` 成立时返回 `['QqBotAccountCreateButton', 'QqBotPermissi…`。
+ * 按路径、方法和 OpenAPI 操作读取示例；权限码接口返回当前 Bot 操作码。
  * @param path - 必须保持在受控根目录内的路径。
  * @param method - 决定操作数据示例内容、边界或目标的 `method` 值。
  * @param operation - 在当前锁、事务或错误边界内执行的受控回调。
@@ -769,9 +767,9 @@ function getOperationDataExample(
   if (normalizedPath.includes('/auth/login')) return adminLoginExample();
   if (normalizedPath.includes('/auth/refresh')) return '<access-token>';
   if (normalizedPath.includes('/auth/codes')) {
-    return ['QqBotAccountCreateButton', 'QqBotPermissionCreateButton'];
+    return ['BotAccountCreateButton', 'BotPermissionCreateButton'];
   }
-  if (normalizedPath.includes('/scan/')) return qqbotScanExample();
+  if (normalizedPath.includes('/scan/')) return botScanExample();
   if (normalizedPath.includes('/dashboard/summary')) return dashboardExample();
   if (isPageResponsePath(normalizedPath)) {
     return {
@@ -872,14 +870,14 @@ function isRuntimeHealthPath(path: string) {
  * @returns 包含 `id`、`name`、`status` 字段的条目示例路径。
  */
 function itemExampleByPath(path: string) {
-  if (path.includes('/qqbot/account')) return qqbotAccountExample();
-  if (path.includes('/qqbot/command')) return qqbotCommandExample();
-  if (path.includes('/qqbot/rule')) return qqbotRuleExample();
-  if (path.includes('/qqbot/message')) return qqbotMessageExample();
-  if (path.includes('/qqbot/conversation')) return qqbotConversationExample();
-  if (path.includes('/qqbot/permission')) return qqbotPermissionExample();
-  if (path.includes('/qqbot/plugin')) return qqbotPluginExample();
-  if (path.includes('/qqbot/send')) return qqbotSendLogExample();
+  if (path.includes('/bot-adapter/')) return botAccountExample();
+  if (path.includes('/bot/command')) return botCommandExample();
+  if (path.includes('/bot/rule')) return botRuleExample();
+  if (path.includes('/bot/message')) return botMessageExample();
+  if (path.includes('/bot/conversation')) return botConversationExample();
+  if (path.includes('/bot/permission')) return botPermissionExample();
+  if (path.includes('/bot/send')) return botSendLogExample();
+  if (path.includes('/plugin-platform')) return pluginPlatformExample();
   if (path.includes('/system/menu') || path.includes('/menu/'))
     return adminMenuExample();
   if (path.includes('/system/dept')) return adminDeptExample();
@@ -950,11 +948,11 @@ function adminUserExample() {
 function adminMenuExample() {
   return {
     id: '1000000000000000001',
-    name: 'QqBot',
-    path: '/qqbot',
+    name: 'Bot',
+    path: '/bot',
     component: 'LAYOUT',
     meta: {
-      title: 'QQBot',
+      title: 'Bot 管理',
       icon: 'lucide:bot',
     },
     children: [],
@@ -1001,10 +999,10 @@ function componentExample() {
 }
 
 /**
- * 根据当前运行态处理qqbot账号示例。
- * @returns 包含 `connectStatus`、`connectionMode`、`enabled`、`id`、`lastHeartbeatAt` 字段的qqbot账号示例。
+ * 根据当前运行态构造 Bot 连接账号示例。
+ * @returns 包含 `connectStatus`、`connectionMode`、`enabled`、`id`、`lastHeartbeatAt` 字段的 Bot 账号示例。
  */
-function qqbotAccountExample() {
+function botAccountExample() {
   return {
     connectStatus: 'online',
     connectionMode: 'reverse-ws',
@@ -1014,7 +1012,7 @@ function qqbotAccountExample() {
     name: '主账号',
     napcat: {
       bindStatus: 'bound',
-      containerName: 'kt-qqbot-napcat-1914728559',
+      containerName: 'kt-napcat-1914728559',
       containerOnline: true,
       containerStatus: 'running',
       lastLoginAt: '2026-06-02 19:55:00',
@@ -1029,10 +1027,10 @@ function qqbotAccountExample() {
 }
 
 /**
- * 根据当前运行态处理qqbot命令示例。
- * @returns 包含 `id`、`name`、`command`、`pluginKey`、`enabled` 字段的qqbot命令示例。
+ * 根据当前运行态构造 Bot 命令示例。
+ * @returns 包含 `id`、`name`、`command`、`pluginKey`、`enabled` 字段的 Bot 命令示例。
  */
-function qqbotCommandExample() {
+function botCommandExample() {
   return {
     id: '1000000000000000001',
     name: 'FFLogs 查询',
@@ -1043,10 +1041,10 @@ function qqbotCommandExample() {
 }
 
 /**
- * 根据当前运行态处理qqbot权限规则示例。
- * @returns 包含 `id`、`name`、`matchType`、`keyword`、`replyContent` 字段的qqbot权限规则示例。
+ * 根据当前运行态构造 Bot 自动回复规则示例。
+ * @returns 包含 `id`、`name`、`matchType`、`keyword`、`replyContent` 字段的 Bot 规则示例。
  */
-function qqbotRuleExample() {
+function botRuleExample() {
   return {
     id: '1000000000000000001',
     name: '关键词回复',
@@ -1058,10 +1056,10 @@ function qqbotRuleExample() {
 }
 
 /**
- * 根据当前运行态处理qqbot会话消息示例。
- * @returns 包含 `id`、`selfId`、`targetType`、`targetId`、`lastMessage` 字段的qqbot会话消息示例。
+ * 根据当前运行态构造 Bot 会话示例。
+ * @returns 包含 `id`、`selfId`、`targetType`、`targetId`、`lastMessage` 字段的 Bot 会话示例。
  */
-function qqbotConversationExample() {
+function botConversationExample() {
   return {
     id: '1000000000000000001',
     selfId: '1914728559',
@@ -1072,10 +1070,10 @@ function qqbotConversationExample() {
 }
 
 /**
- * 根据当前运行态处理qqbot消息示例。
- * @returns 包含 `id`、`selfId`、`messageType`、`direction`、`userId` 字段的qqbot消息示例。
+ * 根据当前运行态构造 Bot 消息示例。
+ * @returns 包含 `id`、`selfId`、`messageType`、`direction`、`userId` 字段的 Bot 消息示例。
  */
-function qqbotMessageExample() {
+function botMessageExample() {
   return {
     id: '1000000000000000001',
     selfId: '1914728559',
@@ -1087,10 +1085,10 @@ function qqbotMessageExample() {
 }
 
 /**
- * 根据当前运行态处理qqbot权限示例。
- * @returns 包含 `id`、`selfId`、`targetType`、`targetId`、`userId` 字段的qqbot权限示例。
+ * 根据当前运行态构造 Bot 权限名单示例。
+ * @returns 包含 `id`、`selfId`、`targetType`、`targetId`、`userId` 字段的 Bot 权限示例。
  */
-function qqbotPermissionExample() {
+function botPermissionExample() {
   return {
     id: '1000000000000000001',
     selfId: '1914728559',
@@ -1103,10 +1101,10 @@ function qqbotPermissionExample() {
 }
 
 /**
- * 根据当前运行态处理qqbot插件示例。
- * @returns 包含 `key`、`name`、`triggerMode`、`description` 字段的qqbot插件示例。
+ * 根据当前运行态构造平台无关插件示例。
+ * @returns 包含 `key`、`name`、`triggerMode`、`description` 字段的插件平台示例。
  */
-function qqbotPluginExample() {
+function pluginPlatformExample() {
   return {
     key: 'fflogs',
     name: 'FFLogs 查询',
@@ -1116,10 +1114,10 @@ function qqbotPluginExample() {
 }
 
 /**
- * 根据当前运行态处理qqbot日志示例。
- * @returns 包含 `id`、`selfId`、`targetType`、`targetId`、`message` 字段的qqbot日志示例。
+ * 根据当前运行态构造 Bot 发送日志示例。
+ * @returns 包含 `id`、`selfId`、`targetType`、`targetId`、`message` 字段的 Bot 日志示例。
  */
-function qqbotSendLogExample() {
+function botSendLogExample() {
   return {
     id: '1000000000000000001',
     selfId: '1914728559',
@@ -1131,10 +1129,10 @@ function qqbotSendLogExample() {
 }
 
 /**
- * 根据当前运行态处理qqbot扫码会话示例。
- * @returns 包含 `sessionId`、`qrcode`、`status`、`expireAt` 字段的qqbot扫码会话示例。
+ * 根据当前运行态构造 NapCat 扫码会话示例。
+ * @returns 包含 `sessionId`、`qrcode`、`status`、`expireAt` 字段的扫码会话示例。
  */
-function qqbotScanExample() {
+function botScanExample() {
   return {
     sessionId: 'KT_SCAN_20260602120000',
     qrcode: 'data:image/png;base64,MOCK_QRCODE',
@@ -1197,10 +1195,10 @@ function runtimeHealthExample() {
         message: 'NestJS process is responding',
       },
       {
-        name: 'config:QQBOT_NAPCAT_IMAGE',
+        name: 'config:NAPCAT_IMAGE',
         status: 'degraded',
         critical: false,
-        message: 'QQBOT_NAPCAT_IMAGE is not configured',
+        message: 'NAPCAT_IMAGE is not configured',
       },
     ],
   };

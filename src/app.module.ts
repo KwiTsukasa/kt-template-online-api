@@ -18,10 +18,12 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AssetModule } from './modules/asset/asset.module';
 import { BlogContentModule } from './modules/blog/blog-content.module';
 import { MessageManagementModule } from './modules/message-management/message-management.module';
-import { QqbotCoreModule } from './modules/qqbot/core/qqbot-core.module';
-import { QqbotMessageSubscriberModule } from './modules/qqbot/message-management-adapter/qqbot-message-subscriber.module';
-import { QqbotNapcatModule } from './modules/qqbot/napcat/qqbot-napcat.module';
-import { QqbotPluginPlatformModule } from './modules/qqbot/plugin-platform/plugin-platform.module';
+import { BotProtocolModule } from './modules/bot';
+import { BotAdapterCoreModule } from './modules/bot-adapter/core/bot-adapter-core.module';
+import { BotMessageSubscriberModule } from './modules/bot-adapter/message-management/bot-message-subscriber.module';
+import { NapcatModule } from './modules/bot-adapter/napcat/napcat.module';
+import { TencentBotAdapterModule } from './modules/bot-adapter/tencent/tencent-bot-adapter.module';
+import { PluginPlatformModule } from './modules/plugin-platform/plugin-platform.module';
 import { RuntimeModule } from './runtime';
 
 /**
@@ -86,10 +88,12 @@ export function buildTypeOrmOptions(configService: ConfigService) {
     BlogContentModule,
     AssetModule,
     MessageManagementModule,
-    QqbotCoreModule,
-    QqbotMessageSubscriberModule,
-    QqbotNapcatModule,
-    QqbotPluginPlatformModule,
+    BotProtocolModule,
+    BotAdapterCoreModule,
+    BotMessageSubscriberModule,
+    NapcatModule,
+    TencentBotAdapterModule,
+    PluginPlatformModule,
   ],
   providers: [
     AppService,

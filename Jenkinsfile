@@ -62,8 +62,8 @@ def requiredRuntimeEnvKeys() {
     'ADMIN_TOKEN_SECRET',
     'FFLOGS_CLIENT_ID',
     'FFLOGS_CLIENT_SECRET',
-    'QQBOT_PLUGIN_QUEUE_REDIS_HOST',
-    'QQBOT_PLUGIN_QUEUE_REDIS_PORT',
+    'PLUGIN_QUEUE_REDIS_HOST',
+    'PLUGIN_QUEUE_REDIS_PORT',
     'NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET',
     'NETWORK_AGENT_ID',
     'NETWORK_AGENT_TARGET_IPV4',
@@ -143,8 +143,8 @@ pipeline {
     string(name: 'K8S_CONTAINER', defaultValue: 'api', description: 'Deployment 内业务容器名称')
     string(name: 'K8S_ENV_SECRET', defaultValue: 'kt-template-online-api-env', description: '由 .env.production 生成的 K8s Secret 名称')
     string(name: 'K8S_ROLLOUT_TIMEOUT', defaultValue: '180s', description: 'kubectl rollout status 超时时间')
-    string(name: 'QQBOT_NAPCAT_IMAGE_OVERRIDE', defaultValue: '', description: 'Verified NapCat runtime image to inject into API deployment; empty keeps manifest/default env')
-    string(name: 'QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE', defaultValue: '', description: 'Verified NapCat runtime profile version to inject into API deployment; empty keeps manifest/default env')
+    string(name: 'NAPCAT_IMAGE_OVERRIDE', defaultValue: '', description: 'Verified NapCat runtime image to inject into API deployment; empty keeps manifest/default env')
+    string(name: 'NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE', defaultValue: '', description: 'Verified NapCat runtime profile version to inject into API deployment; empty keeps manifest/default env')
   }
 
   environment {
@@ -207,8 +207,8 @@ pipeline {
             error('TASK13_PREBUILD_ONLY cannot be combined with PREBUILT_RELEASE.')
           }
           def restrictedOverrideParameters = [
-              'QQBOT_NAPCAT_IMAGE_OVERRIDE',
-              'QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE',
+              'NAPCAT_IMAGE_OVERRIDE',
+              'NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE',
           ]
           restrictedOverrideParameters.each { parameterName ->
             if (
@@ -618,8 +618,8 @@ pipeline {
           def kubeConfigArg = "--kubeconfig ${shellQuote(kubeConfigFile)}"
           def namespaceArg = "-n ${shellQuote(namespace)}"
           def changeCause = "Jenkins ${env.JOB_NAME} #${env.BUILD_NUMBER} ${env.CHECKED_OUT_GIT_COMMIT}"
-          def napcatImageOverride = params.QQBOT_NAPCAT_IMAGE_OVERRIDE?.trim()
-          def napcatProfileOverride = params.QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE?.trim()
+          def napcatImageOverride = params.NAPCAT_IMAGE_OVERRIDE?.trim()
+          def napcatProfileOverride = params.NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE?.trim()
 
           if (env.IS_PREBUILT_RELEASE == 'true') {
             withEnv([
@@ -667,14 +667,15 @@ pipeline {
             set -e
             kubectl ${kubeConfigArg} apply -f ${shellQuote(manifestFile)}
             kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote("deployment/${deploymentName}")} ${shellQuote("${containerName}=${env.DOCKER_IMAGE}")}
+            kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote("deployment/${deploymentName}")} ${shellQuote("bot-adapter-migration=${env.DOCKER_IMAGE}")}
             kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote('deployment/kt-napcat-webui-gateway')} ${shellQuote("gateway=${env.GATEWAY_DOCKER_IMAGE}")}
           """.stripIndent())
 
           if (napcatImageOverride) {
-            runCmd("kubectl ${kubeConfigArg} ${namespaceArg} set env ${shellQuote("deployment/${deploymentName}")} ${shellQuote("QQBOT_NAPCAT_IMAGE=${napcatImageOverride}")}")
+            runCmd("kubectl ${kubeConfigArg} ${namespaceArg} set env ${shellQuote("deployment/${deploymentName}")} ${shellQuote("NAPCAT_IMAGE=${napcatImageOverride}")}")
           }
           if (napcatProfileOverride) {
-            runCmd("kubectl ${kubeConfigArg} ${namespaceArg} set env ${shellQuote("deployment/${deploymentName}")} ${shellQuote("QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION=${napcatProfileOverride}")}")
+            runCmd("kubectl ${kubeConfigArg} ${namespaceArg} set env ${shellQuote("deployment/${deploymentName}")} ${shellQuote("NAPCAT_DESKTOP_PROFILE_VERSION=${napcatProfileOverride}")}")
           }
 
           runCmd("""

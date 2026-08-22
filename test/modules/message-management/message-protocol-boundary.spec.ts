@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 const PROJECT_ROOT = resolve(__dirname, '../../..');
 const CHANNEL_ROOTS = [
-  'src/modules/qqbot/message-management-adapter',
+  'src/modules/bot-adapter/message-management',
   'src/modules/admin/platform-config/notice',
 ];
 
@@ -21,7 +21,7 @@ function typescriptFiles(relativeRoot: string): string[] {
 }
 
 describe('message protocol dependency boundary', () => {
-  it('keeps QQBot and station notice adapters behind the unified message protocol', () => {
+  it('keeps Bot and station notice adapters behind the unified message protocol', () => {
     const forbidden =
       /SystemMessageSource(?:Adapter|Registry)|resolveDelivery|validateEventPayload|inspectSubscription|waiting_ddns|network\.ddns/;
 
@@ -91,7 +91,7 @@ describe('message protocol dependency boundary', () => {
 
   it('keeps templates out of subscriber-private bindings', () => {
     const bindingFiles = [
-      'src/modules/qqbot/message-management-adapter/qqbot-message-publish-binding.entity.ts',
+      'src/modules/bot-adapter/message-management/bot-message-publish-binding.entity.ts',
       'src/modules/admin/platform-config/notice/station-notice-message-binding.entity.ts',
     ];
     for (const file of bindingFiles) {

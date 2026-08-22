@@ -1,0 +1,49 @@
+import { cardIllustrationOperation } from '@/modules/plugins/bangdream/src/operations/card-illustration';
+import { cardSearchOperation } from '@/modules/plugins/bangdream/src/operations/card-search';
+import { characterSearchOperation } from '@/modules/plugins/bangdream/src/operations/character-search';
+import { cutoffAllOperation } from '@/modules/plugins/bangdream/src/operations/cutoff-all';
+import { cutoffDetailOperation } from '@/modules/plugins/bangdream/src/operations/cutoff-detail';
+import { cutoffRecentOperation } from '@/modules/plugins/bangdream/src/operations/cutoff-recent';
+import { eventSearchOperation } from '@/modules/plugins/bangdream/src/operations/event-search';
+import { eventStageOperation } from '@/modules/plugins/bangdream/src/operations/event-stage';
+import { gachaSearchOperation } from '@/modules/plugins/bangdream/src/operations/gacha-search';
+import { gachaSimulateOperation } from '@/modules/plugins/bangdream/src/operations/gacha-simulate';
+import type { BangDreamOperationModule } from '@/modules/plugins/bangdream/src/operations/operation';
+import { playerSearchOperation } from '@/modules/plugins/bangdream/src/operations/player-search';
+import { songChartOperation } from '@/modules/plugins/bangdream/src/operations/song-chart';
+import { songMetaOperation } from '@/modules/plugins/bangdream/src/operations/song-meta';
+import { songRandomOperation } from '@/modules/plugins/bangdream/src/operations/song-random';
+import { songSearchOperation } from '@/modules/plugins/bangdream/src/operations/song-search';
+
+export const BANGDREAM_OPERATION_MODULES: BangDreamOperationModule[] = [
+  songSearchOperation,
+  songChartOperation,
+  songRandomOperation,
+  songMetaOperation,
+  cardSearchOperation,
+  cardIllustrationOperation,
+  characterSearchOperation,
+  eventSearchOperation,
+  eventStageOperation,
+  playerSearchOperation,
+  gachaSearchOperation,
+  gachaSimulateOperation,
+  cutoffDetailOperation,
+  cutoffAllOperation,
+  cutoffRecentOperation,
+];
+
+/**
+ * 按当前运行态读取BanG Dream操作集合Handler名称。
+ * @returns 按稳定键索引的BanGDream操作集合Handler名称映射；没有输入项时为空映射。
+ */
+export function getBangDreamOperationsByHandlerName() {
+  return new Map(
+    BANGDREAM_OPERATION_MODULES.map((operation) => [
+      operation.handlerName,
+      operation,
+    ]),
+  );
+}
+
+export type { BangDreamOperationModule } from './operation';

@@ -178,6 +178,25 @@ async function insertNoticeFixture(connection) {
 }
 
 /**
+ * 递归收集动态菜单名称，验证 Bot 与 Plugin Platform 新层级完整进入真实登录响应。
+ * @param {unknown} menus - `/menu/all` 返回的菜单树。
+ * @returns {Set<string>} 菜单树中全部字符串名称。
+ */
+function collectMenuNames(menus) {
+  const names = new Set();
+  const visit = (items) => {
+    if (!Array.isArray(items)) return;
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+      if (typeof item.name === 'string') names.add(item.name);
+      visit(item.children);
+    }
+  };
+  visit(menus);
+  return names;
+}
+
+/**
  * 运行真实登录、未读计数、别名路由、批量已读和 SSE 变更事件烟测，并清理唯一 fixture。
  * @returns {Promise<void>} 全部断言通过且 fixture 清理完成后结束。
  * @throws 当任一真实接口、事件或数据库断言不满足时抛出错误。
@@ -214,6 +233,49 @@ async function runLocalSmoke() {
       throw new Error('本地登录没有返回 accessToken');
     }
     const authorization = `Bearer ${accessToken}`;
+    const tencentConnections = await requestJson(
+      baseUrl,
+      '/bot-adapter/tencent/list?pageNo=1&pageSize=10',
+      { headers: { authorization } },
+    );
+    if (
+      !Array.isArray(tencentConnections?.list) ||
+      typeof tencentConnections?.total !== 'number'
+    ) {
+      throw new Error('Tencent 连接接口没有返回分页合同');
+    }
+    const protocolPlugins = await requestJson(
+      baseUrl,
+      '/plugin-platform/catalog/list',
+      { headers: { authorization } },
+    );
+    if (!Array.isArray(protocolPlugins)) {
+      throw new Error('插件平台目录接口没有返回数组合同');
+    }
+    const menus = await requestJson(baseUrl, '/menu/all', {
+      headers: { authorization },
+    });
+    const menuNames = collectMenuNames(menus);
+    for (const requiredMenu of [
+      'Bot',
+      'BotNapcatConnection',
+      'BotTencentConnection',
+      'PluginPlatform',
+      'PluginPlatformPlugins',
+      'PluginPlatformTasks',
+    ]) {
+      if (!menuNames.has(requiredMenu)) {
+        throw new Error(`动态菜单缺少 ${requiredMenu}`);
+      }
+    }
+    const retiredRouteResponse = await fetch(`${baseUrl}/qqbot/account/list`, {
+      headers: { authorization },
+    });
+    if (retiredRouteResponse.status !== 404) {
+      throw new Error(
+        `退役 QQBot 路由未返回 404：HTTP ${retiredRouteResponse.status}`,
+      );
+    }
     const baseline = await requestJson(baseUrl, '/system/notice/unread-count', {
       headers: { authorization },
     });
@@ -296,8 +358,11 @@ async function runLocalSmoke() {
         baselineUnreadCount: baseline.count,
         batchUpdated: batchResult.updated,
         healthService: health.service,
+        menuContract: 'bot+plugin-platform',
+        protocolPluginCount: protocolPlugins.length,
         realtimeEvent: changeEvent.type,
         snapshotEvent: snapshotEvent.type,
+        tencentConnectionCount: tencentConnections.total,
       })}\n`,
     );
   } finally {

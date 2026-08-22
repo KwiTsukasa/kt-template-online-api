@@ -76,7 +76,7 @@ describe('RuntimeConfigService', () => {
       WORDPRESS_ADMIN_USERNAME: 'wordpress-user',
       WORDPRESS_ADMIN_PASSWORD: 'wordpress-password',
       LOKI_PASSWORD: 'loki-password',
-      QQBOT_REVERSE_WS_TOKEN: 'qq-reverse-token',
+      BOT_REVERSE_WS_TOKEN: 'qq-reverse-token',
       NAPCAT_WEBUI_TOKEN: 'napcat-webui-token',
     });
 
@@ -106,8 +106,8 @@ describe('RuntimeConfigService', () => {
     expect(snapshot.minio.useSSL).toBe(false);
     expect(snapshot).not.toHaveProperty('wordpress');
     expect(snapshot.loki.passwordConfigured).toBe(true);
-    expect(snapshot.qqbot.reverseWsToken).toBe('qq***en');
-    expect(snapshot.qqbot.napcatWebuiToken).toBe('na***en');
+    expect(snapshot.bot.reverseWsToken).toBe('qq***en');
+    expect(snapshot.bot.napcatWebuiToken).toBe('na***en');
   });
 
   it('reads current Loki and NapCat runtime keys without leaking secrets', () => {
@@ -118,16 +118,16 @@ describe('RuntimeConfigService', () => {
       LOKI_HTTP_REQUEST_PUSH_ENABLED: 'false',
       LOKI_USERNAME: 'loki-user',
       LOKI_PASSWORD: 'loki-password',
-      QQBOT_NAPCAT_ROOT: '/vol1/docker/napcat',
-      QQBOT_NAPCAT_IMAGE: 'mlikiowa/napcat-docker:latest',
-      QQBOT_NAPCAT_CONTAINER_MODE: 'ssh',
-      QQBOT_NAPCAT_SSH_TARGET: 'nas',
-      QQBOT_NAPCAT_SSH_PORT: '2202',
-      QQBOT_NAPCAT_SSH_KEY_PATH: '/home/kt/.ssh/napcat',
+      NAPCAT_ROOT: '/vol1/docker/napcat',
+      NAPCAT_IMAGE: 'mlikiowa/napcat-docker:latest',
+      NAPCAT_CONTAINER_MODE: 'ssh',
+      NAPCAT_SSH_TARGET: 'nas',
+      NAPCAT_SSH_PORT: '2202',
+      NAPCAT_SSH_KEY_PATH: '/home/kt/.ssh/napcat',
       NAPCAT_LOGIN_HUMAN_VERIFY_EXPIRE_MS: '900000',
-      QQBOT_NAPCAT_REVERSE_WS_BASE: 'ws://api.example.test/onebot',
-      QQBOT_REVERSE_WS_PATH: '/qqbot/reverse',
-      QQBOT_REVERSE_WS_TOKEN: 'qq-reverse-token',
+      NAPCAT_REVERSE_WS_BASE: 'ws://api.example.test/onebot',
+      BOT_REVERSE_WS_PATH: '/bot-adapter/napcat/reverse',
+      BOT_REVERSE_WS_TOKEN: 'qq-reverse-token',
       NAPCAT_WEBUI_BASE_URL: 'http://127.0.0.1:6099',
       NAPCAT_WEBUI_TOKEN: 'napcat-webui-token',
     });
@@ -143,8 +143,8 @@ describe('RuntimeConfigService', () => {
       username: 'loki-user',
       passwordConfigured: true,
     });
-    expect(service.readQqbotProfile()).toEqual({
-      reverseWsPath: '/qqbot/reverse',
+    expect(service.readBotProfile()).toEqual({
+      reverseWsPath: '/bot-adapter/napcat/reverse',
       reverseWsToken: 'qq***en',
       napcatRoot: '/vol1/docker/napcat',
       napcatImage: 'mlikiowa/napcat-docker:latest',
@@ -167,14 +167,14 @@ describe('RuntimeConfigService', () => {
     );
     expect(checks).toContainEqual(
       expect.objectContaining({
-        key: 'QQBOT_NAPCAT_IMAGE',
+        key: 'NAPCAT_IMAGE',
         level: 'optional',
         present: true,
       }),
     );
     expect(checks).toContainEqual(
       expect.objectContaining({
-        key: 'QQBOT_NAPCAT_REVERSE_WS_URL|QQBOT_NAPCAT_REVERSE_WS_BASE',
+        key: 'NAPCAT_REVERSE_WS_URL|NAPCAT_REVERSE_WS_BASE',
         level: 'optional',
         present: true,
       }),
@@ -188,7 +188,7 @@ describe('RuntimeConfigService', () => {
     );
     expect(checks).toContainEqual(
       expect.objectContaining({
-        key: 'NAPCAT_WEBUI_BASE_URL|QQBOT_NAPCAT_WEBUI_URL',
+        key: 'NAPCAT_WEBUI_BASE_URL|NAPCAT_WEBUI_URL',
         level: 'optional',
         present: true,
       }),

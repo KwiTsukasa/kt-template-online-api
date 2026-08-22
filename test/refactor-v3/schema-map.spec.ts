@@ -56,11 +56,11 @@ describe('refactor v3 schema skeleton', () => {
     );
 
     expect(seed).toContain('INSERT INTO admin_user');
-    expect(seed).toContain('INSERT INTO qqbot_command');
-    expect(seed).toContain('INSERT INTO qqbot_plugin');
+    expect(seed).toContain('INSERT INTO bot_command');
+    expect(seed).toContain('INSERT INTO plugin');
     expect(verify).toContain('admin_user');
-    expect(verify).toContain('qqbot_command');
-    expect(verify).toContain('qqbot_plugin');
+    expect(verify).toContain('bot_command');
+    expect(verify).toContain('plugin');
     expect(verify).toContain('napcat_device_identity');
   });
 
@@ -145,13 +145,13 @@ describe('refactor v3 schema skeleton', () => {
     });
   });
 
-  it('seeds qqbot command rows with required command code and manifest-owned aliases', () => {
+  it('seeds Bot command rows with required command code and manifest-owned aliases', () => {
     const seed = readFileSync(
       join(root, 'sql/refactor-v3/01-seed-core.sql'),
       'utf8',
     );
     const commandColumns = seed.match(
-      /INSERT INTO qqbot_command \(([\s\S]*?)\) VALUES/,
+      /INSERT INTO bot_command \(([\s\S]*?)\) VALUES/,
     )?.[1];
 
     expect(commandColumns).toContain('code');
@@ -164,50 +164,79 @@ describe('refactor v3 schema skeleton', () => {
     );
   });
 
-  it('seeds qqbot admin menus and button permissions required by current pages', () => {
+  it('seeds Bot and Plugin Platform menus required by current pages', () => {
     const seed = readFileSync(
       join(root, 'sql/refactor-v3/01-seed-core.sql'),
       'utf8',
     );
     const requiredNames = [
-      'QqBotDashboard',
-      'QqBotAccount',
-      'QqBotAccountConfig',
-      'QqBotAccountConfigButton',
-      'QqBotAccountCreate',
-      'QqBotAccountDelete',
-      'QqBotAccountEdit',
-      'QqBotAccountKick',
-      'QqBotAccountRefreshLogin',
-      'QqBotRule',
-      'QqBotRuleCreate',
-      'QqBotRuleDelete',
-      'QqBotRuleEdit',
-      'QqBotRuleToggle',
-      'QqBotCommand',
-      'QqBotCommandCreate',
-      'QqBotCommandDelete',
-      'QqBotCommandEdit',
-      'QqBotCommandTest',
-      'QqBotCommandToggle',
-      'QqBotPlugin',
-      'QqBotConversation',
-      'QqBotMessage',
-      'QqBotSendLog',
-      'QqBotSendPrivate',
-      'QqBotSendGroup',
-      'QqBotPermission',
-      'QqBotPermissionCreate',
-      'QqBotPermissionDelete',
-      'QqBotPermissionEdit',
+      'Bot',
+      'BotDashboard',
+      'BotNapcatConnection',
+      'BotNapcatConfig',
+      'BotNapcatWebui',
+      'BotTencentConnection',
+      'BotTencentCreate',
+      'BotTencentDelete',
+      'BotTencentEdit',
+      'BotTencentMenuSync',
+      'BotTencentPlugin',
+      'BotTencentReconnect',
+      'BotTencentWebhookUrl',
+      'BotAccountConfigButton',
+      'BotAccountCreate',
+      'BotAccountDelete',
+      'BotAccountEdit',
+      'BotAccountKick',
+      'BotAccountRefreshLogin',
+      'BotRule',
+      'BotRuleCreate',
+      'BotRuleDelete',
+      'BotRuleEdit',
+      'BotRuleToggle',
+      'BotCommand',
+      'BotCommandCreate',
+      'BotCommandDelete',
+      'BotCommandEdit',
+      'BotCommandTest',
+      'BotCommandToggle',
+      'BotConversation',
+      'BotMessage',
+      'BotSendLog',
+      'BotSendPrivate',
+      'BotSendGroup',
+      'BotPermission',
+      'BotPermissionCreate',
+      'BotPermissionDelete',
+      'BotPermissionEdit',
+      'PluginPlatform',
+      'PluginPlatformPluginConfig',
+      'PluginPlatformPluginDisable',
+      'PluginPlatformPluginEnable',
+      'PluginPlatformPluginInstall',
+      'PluginPlatformPluginUninstall',
+      'PluginPlatformPluginUpgrade',
+      'PluginPlatformPlugins',
+      'PluginPlatformTasks',
+      'PluginPlatformTaskUpdateCron',
+      'PluginPlatformTaskEnable',
+      'PluginPlatformTaskDisable',
+      'PluginPlatformTaskRun',
+      'PluginPlatformTaskRunLog',
     ];
 
     for (const name of requiredNames) {
       expect(seed).toContain(`'${name}'`);
     }
 
-    expect(seed).toContain("'QqBot:Account:RefreshLogin'");
-    expect(seed).toContain("'QqBot:Command:Test'");
+    expect(seed).toContain("'Bot:Account:RefreshLogin'");
+    expect(seed).toContain("'Bot:Command:Test'");
+    expect(seed).toContain("'PluginPlatform:Plugin:List'");
+    expect(seed).toContain("'PluginPlatform:Task:Run'");
+    expect(seed).toContain("'/bot/napcat'");
+    expect(seed).toContain("'/bot/tencent'");
+    expect(seed).toContain("'/plugin-platform/plugins'");
+    expect(seed).toContain("'/plugin-platform/tasks'");
     expect(seed).toContain('INSERT IGNORE INTO admin_role_menu');
   });
 

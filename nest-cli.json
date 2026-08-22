@@ -5,19 +5,19 @@
   "compilerOptions": {
     "assets": [
       {
-        "include": "modules/qqbot/plugins/*/plugin.json",
+        "include": "modules/plugins/*/plugin.json",
         "outDir": "dist"
       },
       {
-        "include": "modules/qqbot/plugins/bangdream/TSUGU-LICENSE",
+        "include": "modules/plugins/bangdream/TSUGU-LICENSE",
         "outDir": "dist"
       },
       {
-        "include": "modules/qqbot/plugins/bangdream/src/assets/**/*",
+        "include": "modules/plugins/bangdream/src/assets/**/*",
         "outDir": "dist"
       },
       {
-        "include": "modules/qqbot/plugins/bangdream/src/config/static/**/*",
+        "include": "modules/plugins/bangdream/src/config/static/**/*",
         "outDir": "dist"
       }
     ],

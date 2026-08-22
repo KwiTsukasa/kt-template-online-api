@@ -1,0 +1,72 @@
+import type { BangDreamDataProvider } from '@/modules/plugins/bangdream/src/infrastructure/integration/bangdream-data-provider';
+import {
+  ItemResourceRepository,
+  type ItemResourceSource,
+} from '@/modules/plugins/bangdream/src/domain/catalog/item-resource.repository';
+import { Server } from '@/modules/plugins/bangdream/src/domain/catalog/server.model';
+
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @returns 创建后的 BangDream 插件对象或配置。
+ */
+function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
+  return {
+    getAsset: jest.fn(),
+    getJson: jest.fn(),
+    getTracker: jest.fn(),
+    name: 'MockBestdori',
+    resolveUrl: jest.fn((pathOrUrl) => `https://bestdori.example${pathOrUrl}`),
+  };
+}
+
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @param overrides - BangDream列表；生成 BangDream对象。
+ * @returns 创建后的 BangDream 插件对象或配置。
+ */
+function createItemSource(
+  overrides: Partial<ItemResourceSource> = {},
+): ItemResourceSource {
+  return {
+    resourceId: 7,
+    typeName: 'gacha_ticket_',
+    ...overrides,
+  };
+}
+
+describe('BangDream item resource repository', () => {
+  it('builds material, star, and common item image paths', () => {
+    const repository = new ItemResourceRepository(createProviderMock());
+
+    expect(
+      repository.getImagePath(
+        createItemSource({ resourceId: 3, typeName: 'material' }),
+        Server.cn,
+      ),
+    ).toBe('/assets/cn/thumb/material_rip/material003.png');
+    expect(
+      repository.getImagePath(
+        createItemSource({ typeName: 'star' }),
+        Server.jp,
+      ),
+    ).toBe('/assets/jp/thumb/common_rip/star.png');
+    expect(repository.getImagePath(createItemSource(), Server.cn)).toBe(
+      '/assets/cn/thumb/common_rip/gacha_ticket_7.png',
+    );
+  });
+
+  it('downloads item images through the provider', async () => {
+    const provider = createProviderMock();
+    const itemBuffer = Buffer.from('item');
+    provider.getAsset.mockResolvedValue(itemBuffer);
+    const repository = new ItemResourceRepository(provider);
+
+    await expect(
+      repository.getImageBuffer(createItemSource(), Server.cn),
+    ).resolves.toBe(itemBuffer);
+
+    expect(provider.getAsset).toHaveBeenCalledWith(
+      '/assets/cn/thumb/common_rip/gacha_ticket_7.png',
+    );
+  });
+});

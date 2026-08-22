@@ -98,7 +98,7 @@ describe('AdminNoticeService system event notices', () => {
   it('aggregates repeated events by dedupe key instead of creating noise', async () => {
     const existingNotice = {
       content: 'old',
-      dedupeKey: 'qqbot:offline:1914728559',
+      dedupeKey: 'bot:offline:1914728559',
       id: 'notice-1',
       isDeleted: false,
       occurrenceCount: 2,
@@ -124,15 +124,15 @@ describe('AdminNoticeService system event notices', () => {
 
     const id = await (service as any).publishSystemNotice({
       content: 'bot_offline/kick_offline：账号已在另一台终端登录',
-      dedupeKey: 'qqbot:offline:1914728559',
-      eventType: 'qqbot.account.offline',
+      dedupeKey: 'bot:offline:1914728559',
+      eventType: 'bot.account.offline',
       metadata: {
         selfId: '1914728559',
       },
       severity: 'error',
-      source: 'qqbot',
+      source: 'bot',
       summary: '账号已在另一台终端登录',
-      title: 'QQBot 账号已下线：1914728559',
+      title: 'Bot 账号已下线：1914728559',
     });
 
     expect(id).toBe('notice-1');
@@ -147,7 +147,7 @@ describe('AdminNoticeService system event notices', () => {
         severity: 'error',
         status: 1,
         summary: '账号已在另一台终端登录',
-        title: 'QQBot 账号已下线：1914728559',
+        title: 'Bot 账号已下线：1914728559',
       }),
     );
     expect(updateBuilder.where).toHaveBeenCalledWith('id = :id', {

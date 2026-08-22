@@ -42,7 +42,7 @@ export interface RuntimeMinioConfig {
   bucket: string;
 }
 
-export interface RuntimeQqbotConfig {
+export interface RuntimeBotConfig {
   reverseWsPath: string;
   reverseWsToken: string;
   napcatRoot: string;
@@ -87,7 +87,7 @@ export interface RuntimeSafeConfigSnapshot {
   database: RuntimeDatabaseConfig;
   loki: RuntimeLokiConfig;
   minio: RuntimeMinioConfig;
-  qqbot: RuntimeQqbotConfig;
+  bot: RuntimeBotConfig;
   security: RuntimeSecurityConfig;
   checks: RuntimeConfigCheck[];
 }

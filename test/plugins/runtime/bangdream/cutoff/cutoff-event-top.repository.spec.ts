@@ -1,0 +1,45 @@
+import type { BangDreamDataProvider } from '@/modules/plugins/bangdream/src/infrastructure/integration/bangdream-data-provider';
+import { CutoffEventTopRepository } from '@/modules/plugins/bangdream/src/domain/cutoff/cutoff-event-top.repository';
+import { Server } from '@/modules/plugins/bangdream/src/domain/catalog/server.model';
+
+/**
+ * 创建 BangDream 插件对象或配置。
+ * @returns 创建后的 BangDream 插件对象或配置。
+ */
+function createProviderMock(): jest.Mocked<BangDreamDataProvider> {
+  return {
+    getAsset: jest.fn(),
+    getJson: jest.fn(),
+    getTracker: jest.fn(),
+    name: 'MockBestdori',
+    resolveUrl: jest.fn((pathOrUrl) => `https://bestdori.example${pathOrUrl}`),
+  };
+}
+
+describe('BangDream cutoff event top repository', () => {
+  it('builds event top data paths', () => {
+    const repository = new CutoffEventTopRepository(createProviderMock());
+
+    expect(repository.getTopDataPath(50, Server.cn)).toBe(
+      '/api/eventtop/data?server=3&event=50&mid=0&interval=3600000',
+    );
+  });
+
+  it('routes event top data requests through the provider', async () => {
+    const provider = createProviderMock();
+    provider.getJson.mockResolvedValue({
+      points: [{ time: 1, uid: 2, value: 3 }],
+      users: [],
+    });
+    const repository = new CutoffEventTopRepository(provider);
+
+    await expect(repository.getTopData(50, Server.cn)).resolves.toEqual({
+      points: [{ time: 1, uid: 2, value: 3 }],
+      users: [],
+    });
+
+    expect(provider.getJson).toHaveBeenCalledWith(
+      '/api/eventtop/data?server=3&event=50&mid=0&interval=3600000',
+    );
+  });
+});

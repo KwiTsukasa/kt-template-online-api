@@ -43,20 +43,38 @@ class CredentialRouteTestController {
   }
 }
 
-@Controller('qqbot/account')
-class QqbotCredentialRouteTestController {
-  @Post('save')
+@Controller('bot-adapter')
+class BotCredentialRouteTestController {
+  @Post('napcat/account/save')
   save() {
     return { ok: true };
   }
 
-  @Post('update')
+  @Post('napcat/account/update')
   update() {
     return { ok: true };
   }
 
-  @Post('delete')
+  @Post('napcat/account/delete')
   delete() {
+    return { ok: true };
+  }
+
+  /**
+   * 模拟 Tencent 连接凭据创建接口，供全局传输保护测试命中真实新路由。
+   * @returns 固定成功载荷。
+   */
+  @Post('tencent/save')
+  saveTencent() {
+    return { ok: true };
+  }
+
+  /**
+   * 模拟 Tencent 连接凭据更新接口，供全局传输保护测试命中真实新路由。
+   * @returns 固定成功载荷。
+   */
+  @Post('tencent/update')
+  updateTencent() {
     return { ok: true };
   }
 }
@@ -106,7 +124,7 @@ const consume = jest.fn().mockResolvedValue({
 @Module({
   controllers: [
     CredentialRouteTestController,
-    QqbotCredentialRouteTestController,
+    BotCredentialRouteTestController,
     AdminUserCredentialRouteTestController,
     LlmCredentialRouteTestController,
   ],
@@ -161,8 +179,10 @@ describe('PublicRateLimitGuard credential transport boundary', () => {
     '/auth/login',
     '/auth/refresh/',
     '/auth/logout',
-    '/qqbot/account/save',
-    '/qqbot/account/update/',
+    '/bot-adapter/napcat/account/save',
+    '/bot-adapter/napcat/account/update/',
+    '/bot-adapter/tencent/save',
+    '/bot-adapter/tencent/update/',
     '/llm/configs',
     '/system/user',
   ])('rejects direct HTTP %s before rate-limit consumption', async (path) => {
@@ -184,7 +204,7 @@ describe('PublicRateLimitGuard credential transport boundary', () => {
     },
   );
 
-  it.each(['/auth/login', '/qqbot/account/save'])(
+  it.each(['/auth/login', '/bot-adapter/napcat/account/save'])(
     'keeps trusted proxy HTTPS %s on the existing rate-limit path',
     async (path) => {
       await request(app.getHttpServer())
@@ -199,7 +219,7 @@ describe('PublicRateLimitGuard credential transport boundary', () => {
   it.each([
     ['GET', '/auth/login'],
     ['POST', '/auth/profile'],
-    ['POST', '/qqbot/account/delete'],
+    ['POST', '/bot-adapter/napcat/account/delete'],
     ['GET', '/system/user/admin-1'],
   ] as const)(
     'keeps unrelated %s %s on the existing rate-limit path',

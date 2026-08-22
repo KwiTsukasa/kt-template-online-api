@@ -78,13 +78,13 @@ describe('AdminNoticeController', () => {
     noticeService.page.mockResolvedValueOnce({
       items: [
         {
-          eventType: 'qqbot.account.offline',
+          eventType: 'bot.account.offline',
           id: 'notice-1',
           occurrenceCount: 3,
           severity: 'error',
-          source: 'qqbot',
+          source: 'bot',
           status: 1,
-          title: 'QQBot 账号已下线：1914728559',
+          title: 'Bot 账号已下线：1914728559',
         },
       ],
       total: 1,
@@ -93,18 +93,18 @@ describe('AdminNoticeController', () => {
     const response = await request(app.getHttpServer())
       .get('/system/notice/list')
       .query({
-        eventType: 'qqbot.account.offline',
+        eventType: 'bot.account.offline',
         severity: 'error',
-        source: 'qqbot',
+        source: 'bot',
         status: 1,
       })
       .expect(200);
 
     expect(noticeService.page).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: 'qqbot.account.offline',
+        eventType: 'bot.account.offline',
         severity: 'error',
-        source: 'qqbot',
+        source: 'bot',
         status: '1',
       }),
     );
@@ -113,10 +113,10 @@ describe('AdminNoticeController', () => {
       data: {
         items: [
           expect.objectContaining({
-            eventType: 'qqbot.account.offline',
+            eventType: 'bot.account.offline',
             occurrenceCount: 3,
             severity: 'error',
-            source: 'qqbot',
+            source: 'bot',
           }),
         ],
         total: 1,

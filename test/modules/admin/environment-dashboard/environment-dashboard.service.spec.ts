@@ -29,7 +29,7 @@ describe('EnvironmentDashboardService', () => {
         'redis',
         'loki',
         'minio',
-        'qqbot-core',
+        'bot-core',
         'napcat-runtime',
         'plugin-platform',
         'plugin-tasks',

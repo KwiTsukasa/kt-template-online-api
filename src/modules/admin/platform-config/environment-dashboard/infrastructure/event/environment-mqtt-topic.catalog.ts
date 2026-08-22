@@ -2,8 +2,8 @@ export interface EnvironmentMqttTopics {
   signal(siteId: string, nodeId: string, serviceId: string): string;
   event(siteId: string, nodeId: string, serviceId: string): string;
   selfCheckResult(siteId: string): string;
-  qqbotRuntime(selfId: string): string;
-  qqbotNapcatLogin(selfId: string): string;
+  botRuntime(connectionKey: string): string;
+  botNapcatLogin(connectionKey: string): string;
   pluginTaskRun(pluginKey: string, taskKey: string): string;
 }
 
@@ -25,7 +25,7 @@ export function normalizeEnvironmentTopicSegment(value: string): string {
 /**
  * 根据`topicPrefix`构造环境MQTT主题。
  * @param topicPrefix - 决定环境MQTT主题内容、边界或目标的 `topicPrefix` 值；省略时默认采用 `process.env.ENV_DASHBOARD_MQTT_TOPIC_PREFIX || 'k…`。
- * @returns 包含 `event`、`pluginTaskRun`、`qqbotNapcatLogin`、`qqbotRuntime`、`selfCheckResult` 字段的环境MQTT主题。
+ * @returns 包含 `botNapcatLogin`、`botRuntime`、`event`、`pluginTaskRun`、`selfCheckResult` 字段的环境 MQTT 主题。
  */
 export function buildEnvironmentMqttTopics(
   topicPrefix = process.env.ENV_DASHBOARD_MQTT_TOPIC_PREFIX || 'kt/env',
@@ -44,26 +44,27 @@ export function buildEnvironmentMqttTopics(
     pluginTaskRun: (pluginKey: string, taskKey: string) =>
       [
         prefix,
-        'qqbot',
-        'plugin-task',
+        'plugin-platform',
+        'tasks',
         normalizeEnvironmentTopicSegment(pluginKey),
         normalizeEnvironmentTopicSegment(taskKey),
         'run',
       ].join('/'),
-    qqbotNapcatLogin: (selfId: string) =>
+    botNapcatLogin: (connectionKey: string) =>
       [
         prefix,
-        'qqbot',
+        'bot-adapter',
         'napcat',
-        normalizeEnvironmentTopicSegment(selfId),
+        normalizeEnvironmentTopicSegment(connectionKey),
         'login',
       ].join('/'),
-    qqbotRuntime: (selfId: string) =>
+    botRuntime: (connectionKey: string) =>
       [
         prefix,
-        'qqbot',
+        'bot-adapter',
+        'napcat',
         'runtime',
-        normalizeEnvironmentTopicSegment(selfId),
+        normalizeEnvironmentTopicSegment(connectionKey),
       ].join('/'),
     selfCheckResult: (siteId: string) =>
       [prefix, 'self-check', normalizeEnvironmentTopicSegment(siteId)].join(

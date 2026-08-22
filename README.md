@@ -1,6 +1,6 @@
 # KT Template Online API
 
-`kt-template-online-api` 是 KT 工作区的 NestJS 后端服务，承接 Admin 后台、博客内容、组件模板、MinIO 文件、系统日志、QQBot/NapCat 和游戏查询插件能力。
+`kt-template-online-api` 是 KT 工作区的 NestJS 后端服务，承接 Admin 后台、博客内容、组件模板、MinIO 文件、系统日志、Bot 协议、Bot Adapter、Plugin Platform 和游戏查询插件能力。
 
 ## 技术栈
 
@@ -20,12 +20,10 @@
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `admin`                         | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志、环境总览、网络管理和媒体治理生产编排                                       |
 | `blog`                          | 本地博客文章、分类、标签和 Argon 主题配置                                                                                                           |
-| `qqbot`                         | QQBot 账号、QQ 官方 WebSocket/Webhook、NapCat 扫码登录、运行态 Profile、OneBot 反向 WS、在线命令、规则、权限、系统消息源/订阅/模板/账号绑定、耐久投递、发送/接收日志和插件平台 |
-| `modules/qqbot/plugin-platform` | QQBot 插件 manifest 校验、版本安装、运行事件、定时任务、受控 SDK 和 CLI 脚手架                                                                      |
-| `qqbot/plugins/bangdream`       | BanG Dream 查曲、查卡、查活动、试炼、玩家、卡池、抽卡模拟、档线、谱面出图                                                                           |
-| `qqbot/plugins/bilibili-card`   | 解析 QQ/NapCat Bilibili 卡片和短链，按账号事件绑定回复封面图和视频文字摘要                                                                          |
-| `qqbot/plugins/ff14-market`     | XIVAPI + Universalis 物品解析和 FF14 市场查价                                                                                                       |
-| `qqbot/plugins/fflogs`          | FFLogs v2 GraphQL 角色排名和指定高难最近记录查询                                                                                                    |
+| `modules/bot`                   | 无状态 Bot 协议、标准入站/投递信封和 adapter registry；禁止账号、会话、连接与持久化依赖                                                            |
+| `modules/bot-adapter`           | 有状态 Bot Core，以及 NapCat/OneBot、Tencent WebSocket/Webhook 和消息投递适配器                                                                    |
+| `modules/plugin-platform`       | 无账号身份的插件 manifest、版本安装、运行事件、定时任务、受控 SDK 和 CLI                                                                            |
+| `modules/plugins/*`             | BangDream、Bilibili Card、FF14 Market、FFLogs、Repeater 等独立协议插件包                                                                             |
 | `minio`                         | Bucket 检查、上传、列表、临时 URL、代理下载、删除，以及 Blog Live2D 运行包受控读取入口                                                              |
 | `common`                        | 响应封装、异常过滤、请求日志、日期格式化、字典解码、Snowflake、工具服务                                                                             |
 
@@ -36,10 +34,14 @@ src/
   apps/        独立进程入口（CodexAgent Gateway、NapCat WebUI Gateway）
   commands/    有界命令行入口
   common/      跨业务装饰器、过滤器、拦截器、日志、安全和基础服务
-  modules/     admin、asset、blog、qqbot 等业务边界
+  modules/     admin、asset、blog、bot、bot-adapter、plugin-platform、plugins 等业务边界
     admin/identity/auth/                       application/contract/infrastructure/persistence/presentation 分层
     admin/media-governance/                    application/contract/domain/infrastructure/presentation 分层
     admin/platform-config/network-management/ application/contract/domain/infrastructure/presentation 分层
+    bot/                                       仅含无状态 contract、registry、module 和公共导出
+    bot-adapter/{core,napcat,tencent}/          账号、连接、传输与平台适配状态
+    plugin-platform/                           平台无关插件协议与运行时
+    plugins/                                   具体插件包
   runtime/     运行时客户端、配置、错误、证据和健康检查
   app.module.ts
   main.ts
@@ -63,7 +65,8 @@ ci/            Jenkins Agent/Docker 辅助文件
 | Admin                 | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`ADMIN_NOTICE_SSE_REPLAY_LIMIT`、`ADMIN_NOTICE_SSE_HEARTBEAT_MS`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                              |
 | Public Security       | `PUBLIC_SECURITY_*`、`PUBLIC_RATE_LIMIT_REDIS_*`、`PUBLIC_RATE_LIMIT_*`                                                                                                                                                                                                                                                                                                                                                                                         |
 | Logging/Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*`                                                                                                                                                                                                                                                                                                                                                                                            |
-| QQBot/NapCat          | `QQBOT_ENABLED`、`QQBOT_ACCOUNT_SECRET_KEY`、`QQBOT_OFFICIAL_WEBHOOK_PUBLIC_BASE_URL`、`QQBOT_REVERSE_WS_*`、`QQBOT_SEND_*`、`QQBOT_PLUGIN_QUEUE_REDIS_*`、`QQBOT_PLUGIN_TASK_QUEUE_REDIS_*`、`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`QQBOT_COMMAND_MIN_COOLDOWN_MS`、`QQBOT_RULE_MIN_COOLDOWN_MS`、`QQBOT_REPEATER_*`、`NAPCAT_*`、`QQBOT_NAPCAT_*`、`MQTT_*`                                                                                                                                             |
+| Bot/Bot Adapter       | `BOT_ENABLED`、`BOT_ACCOUNT_SECRET_KEY`、`TENCENT_BOT_WEBHOOK_PUBLIC_BASE_URL`、`BOT_REVERSE_WS_*`、`BOT_SEND_*`、`BOT_COMMAND_MIN_COOLDOWN_MS`、`BOT_RULE_MIN_COOLDOWN_MS`、`NAPCAT_*`、`MQTT_*`                                                                                                                                                                                                  |
+| Plugin Platform       | `PLUGIN_QUEUE_REDIS_*`、`PLUGIN_TASK_QUEUE_REDIS_*`、`PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`PLUGIN_REPEATER_*`                                                                                                                                                                                                                                                                                        |
 | Environment Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_JENKINS_*`、`ENV_DASHBOARD_K8S_*`、`ENV_DASHBOARD_TENCENT_*`、`ENV_DASHBOARD_CADDY_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                         |
 | Network Management    | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_TCP_NATMAP_RELEASE_MODE`、`NETWORK_TCP_NATMAP_CANARY_PORTS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_*`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
 | Media Governance      | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`；Codex 端点、模型与内部认证统一复用下方 LLM 配置                                                                                                                                                                                                                                                |
@@ -99,21 +102,17 @@ Blog Live2D 运行包存放在 MinIO，公开读取入口为 `/blog/live2d/:char
 迁移 URL 遗留数为 0，且只生成一个内容寻址对象。该本地证据不代替生产
 备份、维护授权、生产 dry-run 审查和迁移后 verify。
 
-QQBot 插件 worker 使用 BullMQ 队列串行执行同一插件安装实例的请求。K8s 生产清单包含内部服务 `kt-qqbot-plugin-redis`，生产 env 可将 `QQBOT_PLUGIN_QUEUE_REDIS_HOST` 配为该服务名。`QQBOT_PLUGIN_QUEUE_WAIT_TIMEOUT_MS` 控制排队等待窗口，插件 `operation.timeoutMs` 仍表示单次执行预算。
+Plugin Platform worker 使用 BullMQ 串行执行同一插件安装实例的请求；定时任务由 manifest `tasks` 声明并持久化到 `plugin_task` / `plugin_task_run`。平台不保存 `selfId`、AppID、OpenID 或账号绑定，插件回调只接收标准会话键、发送者键、消息和 reply intent。K8s 使用独立 `kt-plugin-redis`，插件数据挂载到 `/data/plugin-platform/plugins`，Admin 页面为独立顶级 `/plugin-platform/{plugins,tasks}`。
 
-QQBot 插件定时任务由 manifest 的 `tasks` 声明，平台持久化到 `qqbot_plugin_task` / `qqbot_plugin_task_run`，通过 BullMQ Job Scheduler 调度并经插件 worker 的 `executeTask` 边界执行。`sql/qqbot-init.sql` 可为既有环境增量创建任务表和 Admin 菜单。Admin 页面路径为 `/qqbot/plugin-task`。定时任务队列可用 `QQBOT_PLUGIN_TASK_QUEUE_REDIS_*` 单独配置；留空时复用插件 worker 队列的 Redis 连接。BangDream Bestdori 主数据缓存使用 `BANGDREAM_TSUGU_CACHE_ROOT`，生产清单挂载到容器内 `/data/qqbot/plugins/bangdream/cache`，对应 k3d 节点可写 hostPath `/var/lib/rancher/k3s/kt-template-online-api/qqbot-plugins`。
+`src/modules/bot` 只定义无状态 `BotAdapterProtocol` 和 adapter registry。账号、命令、规则、会话、发送日志与持久化位于 `bot-adapter/core`；NapCat 连接位于 `bot-adapter/napcat`；Tencent WebSocket/Webhook 位于 `bot-adapter/tencent`。NapCat 事件插件绑定保存在 `bot_account_ability(event_plugin)`，Tencent 插件绑定保存在 `tencent_bot_plugin_binding`；两种 adapter 都从 Plugin Platform 读取同一插件协议，但平台本身不感知任何 Bot 身份。
 
-QQBot 账号支持 `reverse-ws`、`official-websocket`、`official-webhook` 三种接入方式。NapCat 账号继续以真实 QQ UIN 作为 `selfId`；QQ 官方账号保存公开 AppID，并生成 `qq-official:<AppID>` 内部稳定键，避免与 QQ UIN 冲突。AppSecret 只在受信 HTTPS save/update 请求中出现，后端使用 `QQBOT_ACCOUNT_SECRET_KEY` 包装为 `official_app_secret_ciphertext`，列表、日志和事件均不回显；官方 WebSocket 与 Webhook 可以原账号直接切换，官方账号与 NapCat 账号不能互转。
+Tencent 连接支持官方 WebSocket 与 Webhook。官方 WebSocket 继续使用腾讯 SDK 的 `QQBot.on('message')` / `QQBot.start()`，被动回复保留同一 `replyTarget/msgId`；Webhook 公开入口为 `/bot-adapter/tencent/webhook/:appId/:webhookToken`，使用账号 URL capability token、原始请求字节与官方 Ed25519 签名。`TENCENT_BOT_WEBHOOK_PUBLIC_BASE_URL` 只允许不经腾讯云中转的 NAS 直连 HTTPS，端口必须是 `80/443/8080/8443`。
 
-官方 WebSocket 使用 `@tencent-connect/qqbot-nodejs` protocol `GatewayConnection`、完整 intents、心跳、自动重连和进程内 RESUME session，C2C、群、频道及频道私信统一投影为现有 `QqbotNormalizedMessage`。官方 Webhook 的公开入口为 `/qqbot/official/webhook/:appId/:webhookToken`：URL token 由 AppSecret 按固定用途 HMAC 派生，事件继续校验 QQ 的 `X-Signature-Timestamp` / `X-Signature-Ed25519`，`op=13` 返回 challenge 签名，合法事件立即返回 `op=12` ACK 后异步进入同一去重、权限、命令、规则、插件、会话和日志链。`QQBOT_OFFICIAL_WEBHOOK_PUBLIC_BASE_URL` 必须配置为当期 NAS 直连 HTTPS API 基址，不得配置腾讯云中转入口；动态公网端口不写入 Git，Admin 账号行通过后端生成并复制完整回调 URL。
-
-QQ 官方与 NapCat 账号共用 `qqbot_plugin_account_binding` 平台绑定权威：插件平台账号抽屉展示所有启用账号与未卸载插件的绑定矩阵，支持直接绑定和解绑；事件 dispatcher 只把消息交给当前账号已绑定的插件，真实在线命令也同时校验命令能力绑定和平台插件绑定。既有环境先执行幂等 `sql/qqbot-plugin-account-binding-v1.sql`，把当前 `command` / `event_plugin` 能力补入平台表，再用 `qqbot-plugin-account-binding-v1-verify.sql` 验证两类缺失与孤儿绑定均为 0；脚本只补缺失行，不会在重复执行时重新启用已手动停用的绑定。
+绑定或解绑 Tencent 插件后，adapter 按官方协议先读取 `GET /v2/menu`，保留非 `KT·` 项后以 `PUT /v2/menu` 全量覆盖；再分别读取 `c2c/group/channel/dm` 的 `GET /v2/panels`，只更新、创建或删除 remark 为 `kt-plugin-menu:v1:<scope>` 的面板。菜单顶层最多 10 项、子菜单最多 5 项、单面板最多 20 项，字符权重在任何写入前验证；重复同步无差异时不调用写接口。
 
 三种 transport 共用发送排队和发送日志。官方 C2C/群消息使用 OpenID，频道回复保留 `channelId/guildId/replyMessageId`；现有插件产生的 HTTPS 或 `base64://` CQ 图片会转换为官方媒体上传。消息推送目标在 NapCat 模式继续校验数字 QQ/群号，官方模式改为手工填写事件中获得的用户 OpenID/群 OpenID，不调用 OneBot 好友或群列表。NapCat 更新登录、运行态和 WebUI 接口对官方账号失败关闭，Admin 同样只展示当前 provider 适用的动作。
 
-既有数据库只执行幂等增量 `sql/qqbot-official-transport-v1.sql`，随后运行只读 `sql/qqbot-official-transport-v1-verify.sql` 核对两列、唯一索引、身份映射和重复 AppID；不要为本功能重放完整 `sql/qqbot-init.sql`。
-
-既有环境的 QQBot 发送日志菜单若仍使用旧路由 `/qqbot/sendLog` 或旧组件 `/qqbot/sendLog/list`，只执行幂等增量入口 `sql/qqbot-send-log-menu-route-v1.sql`，将两者统一迁移为 `/qqbot/send-log` 与 `/qqbot/send-log/list`，随后执行只读的 `sql/qqbot-send-log-menu-route-v1-verify.sql`。该迁移只匹配固定菜单 ID、名称和权限码；不要为这一个路径修复重跑完整 `sql/qqbot-init.sql`。
+既有数据库由 K8s `bot-adapter-migration` initContainer 执行 `sql/bot-adapter-protocol-v1.sql` 与 `sql/bot-adapter-menu-v1.sql`，随后强校验 `bot-adapter-protocol-v1-verify.sql`。迁移通过数据库 advisory lock 运行：新旧表并存时逐字段对账，NapCat/Tencent 插件绑定分别归入 adapter，Message Management 私有旧表只在等价关系核验后删除，旧 `/qqbot` 菜单、权限和字典物理清理。验证要求新表 33/33，旧表、旧索引、旧菜单、旧字典和 `qqbot:` 订阅键全部为 0；任一冲突以 `SQLSTATE 45000` 失败关闭并阻止 API 容器启动。
 
 Admin 环境总览面板使用 `ENV_DASHBOARD_*` 只读配置聚合 local-dev、NAS 线上、腾讯云和 r4se 状态。`ENV_DASHBOARD_ADMIN_LOCAL_URL` / `ENV_DASHBOARD_ADMIN_PUBLIC_URL` 只用于展示 Admin 本机与线上入口证据。HTTP 快照提供当前拓扑，后端 local/MQTT 事件总线通过 SSE 推送增量事件给 Admin；前端不直连 MQTT，也不轮询刷新。Jenkins、K8s、Tencent Cloud、Caddy、WireGuard、Mihomo/OpenClash 未配置时会显示 `unwired` 证据，不能渲染成健康假象；第一版不暴露重启、部署、迁移、容器重建、插件启停或代理切换等写操作。
 
@@ -129,13 +128,13 @@ v2 endpoint event 通常先于 matching reported 到达，因此 event-first 先
 
 系统消息现由独立 Message Management 管理，链路固定为“消息源 → 来源适配器 → 绑定来源的模板 → 绑定多个同来源模板及一个订阅者的订阅 → 统一消息协议 → 订阅者私有投递”。来源 adapter 只注册在 Message Management；QQBot 和站内信只作为统一协议订阅者，不直接依赖 STUN、TCP NATMap 等消息源。每个匹配订阅会把全部模板按绑定顺序渲染为一个 `templates[]`，只调用所选订阅者一次，由订阅者决定一条、多条、聚合或跳过投递。系统事件只通过内部 Outbox stager 暂存，不提供 publish/event/worker HTTP 路由；管理响应仅返回字段白名单，不暴露凭据、Provider/OneBot/MQTT 运行对象、原始事件载荷或内部持久化键。
 
-通用协议数据位于 `message_template`、`message_subscription`、`message_subscription_template` 和 `message_event`。QQBot 适配器只拥有账号订阅绑定、群聊/私聊目标和耐久投递，当前策略是对每个模板 × 每个启用目标各创建一条投递；站内信适配器只拥有订阅、标题与接收角色绑定，当前策略是每个模板物化一条 `admin_notice`。QQBot 账号接口严格使用路由 `selfId`，不会回退到其他机器人；Snowflake、QQ UIN、内部官方账号键与 OpenID 在 HTTP 与数据库边界始终保持字符串。
+通用协议数据位于 `message_template`、`message_subscription`、`message_subscription_template` 和 `message_event`。Bot 适配器只拥有账号订阅绑定、目标和耐久投递，当前策略是对每个模板 × 每个启用目标各创建一条投递；站内信适配器只拥有订阅、标题与接收角色绑定。
 
-`message_event` 扇出状态为 `accepted`、`processing`、`deferred`、`retry`、`completed`、`failed`。DDNS 等来源前置条件未满足时由通用事件进入 `deferred` 并每 60 秒复检，不会预先生成订阅者私有投递；条件成功持久化后 `notifyDdnsSynced()` 可提前唤醒。QQBot 投递状态为 `pending`、`processing`、`retry`、`success`、`failed`、`superseded`、`cancelled`，唯一键为事件、目标和模板三元组。事件和投递每次最多领取 50 行，处理租约为 30 秒；临时错误从 10 秒开始指数退避，单次最长 15 分钟。OneBot 超时后的重试仍具至少一次语义，收件端可能收到重复消息。
+`message_event` 扇出状态为 `accepted`、`processing`、`deferred`、`retry`、`completed`、`failed`。Bot 投递状态为 `pending`、`processing`、`retry`、`success`、`failed`、`superseded`、`cancelled`，唯一键为事件、目标和模板三元组。
 
-NapCat Runtime/Protocol Profile 已完成本地 API/Admin 实施，线上发布和账号闭环按 `docs/plans/2026-06-18-qqbot-napcat-runtime-protocol-profile-implementation-plan.md` 的 Task 10 执行。当前实现覆盖运行态/协议/会话行为/历史登录事件兼容表/风险模式表，真实物理设备风格 hostname/MAC，NapCat/OneBot 配置 hash，KT `zh_CN.UTF-8` 中国桌面派生镜像资产，只读 `/qqbot/napcat/runtime/detail` 证据接口，watchdog 离线巡检告警，以及 Admin 账号页“运行态”抽屉；不绕过 QQ/Tencent 验证码、不修改 QQ/NTQQ 签名协议、不启用 privileged/host network，也不做账号级每小时/每日累计发送预算。NapCat Chinese Desktop Runtime v20 使用 KT `NapCatQQ` fork 源码构建出的 `NapCat.Shell` artifact，并在 QQ `KickedOffLine` 后标记 native login service stale；API 在源 Docker 容器在线但 WebUI 明确 QQ 离线时会同容器调用 `RestartNapCat` 重启 NapCat worker，重建 QQCore login service 后再推进 quick/password/qrcode，不做 Docker 重建、补 env 或设备身份迁移，且同一个更新登录 session 只消费一次 worker restart 预算；v14 起还会对 QQ/NapCat/Xvfb 长期进程的 `/proc/<pid>/mountinfo` 做 PID 级遮蔽，防止 `overlay`、`/vol1/docker`、`docker-init`、`/docker/containers`、`napcat-instances` 等宿主路径泄露；v15 修复扫码成功时 `QQLoginInfo` 晚于登录态写入造成的 QQ 号回读空窗；v16 在 native reset 缺少 `offline()` 时改用 `destroy()` 硬重置半登录服务，并让镜像 verify 等待 mountinfo guard 收敛；v17/v18 增加 WebUI 鉴权的 `/api/Debug/RuntimeViewProbe` 同进程诊断并修正 native maps 截断导致的 hook 证据假阴性；v19 保留 WebUI `RestartNapCat` 重启 worker 时的 `-q <uin>` 快速登录参数，避免重启后退回无账号扫码；v20 保护 API 预写的 `/app/napcat/config`，避免上游首次解包 `NapCat.Shell/*` 覆盖 `bypass.*=true` 与 `o3HookMode=0`。镜像必须先用 `scripts/napcat-desktop-cn-stage-build.mjs` staged build context，生产 `QQBOT_NAPCAT_IMAGE` 应指向验证过的 `kt-napcat-desktop-cn:desktop-cn-v20` digest。`k8s/prod/api.yaml` 保留 `desktop-cn-v20` 稳定默认值；Jenkins `QQBOT_NAPCAT_IMAGE_OVERRIDE` 和 `QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE` 仅在填写时通过 `kubectl set env` 推广已验证运行时镜像/profile，空值会继续使用 manifest/default env。回滚时重新运行 Jenkins 并填入上一版 digest/profile，或清空两个 override 后重新部署 manifest 默认值。
+NapCat Runtime/Protocol Profile 已完成本地 API/Admin 实施，线上发布和账号闭环按 `docs/plans/2026-06-18-qqbot-napcat-runtime-protocol-profile-implementation-plan.md` 的 Task 10 执行。当前实现覆盖运行态/协议/会话行为/历史登录事件兼容表/风险模式表，真实物理设备风格 hostname/MAC，NapCat/OneBot 配置 hash，KT `zh_CN.UTF-8` 中国桌面派生镜像资产，只读 `/bot-adapter/napcat/runtime/detail` 证据接口，watchdog 离线巡检告警，以及 Admin 账号页“运行态”抽屉；不绕过 QQ/Tencent 验证码、不修改 QQ/NTQQ 签名协议、不启用 privileged/host network，也不做账号级每小时/每日累计发送预算。NapCat Chinese Desktop Runtime v20 使用 KT `NapCatQQ` fork 源码构建出的 `NapCat.Shell` artifact，并在 QQ `KickedOffLine` 后标记 native login service stale；API 在源 Docker 容器在线但 WebUI 明确 QQ 离线时会同容器调用 `RestartNapCat` 重启 NapCat worker，重建 QQCore login service 后再推进 quick/password/qrcode，不做 Docker 重建、补 env 或设备身份迁移，且同一个更新登录 session 只消费一次 worker restart 预算；v14 起还会对 QQ/NapCat/Xvfb 长期进程的 `/proc/<pid>/mountinfo` 做 PID 级遮蔽，防止 `overlay`、`/vol1/docker`、`docker-init`、`/docker/containers`、`napcat-instances` 等宿主路径泄露；v15 修复扫码成功时 `QQLoginInfo` 晚于登录态写入造成的 QQ 号回读空窗；v16 在 native reset 缺少 `offline()` 时改用 `destroy()` 硬重置半登录服务，并让镜像 verify 等待 mountinfo guard 收敛；v17/v18 增加 WebUI 鉴权的 `/api/Debug/RuntimeViewProbe` 同进程诊断并修正 native maps 截断导致的 hook 证据假阴性；v19 保留 WebUI `RestartNapCat` 重启 worker 时的 `-q <uin>` 快速登录参数，避免重启后退回无账号扫码；v20 保护 API 预写的 `/app/napcat/config`，避免上游首次解包 `NapCat.Shell/*` 覆盖 `bypass.*=true` 与 `o3HookMode=0`。镜像必须先用 `scripts/napcat-desktop-cn-stage-build.mjs` staged build context，生产 `NAPCAT_IMAGE` 应指向验证过的 `kt-napcat-desktop-cn:desktop-cn-v20` digest。`k8s/prod/api.yaml` 保留 `desktop-cn-v20` 稳定默认值；Jenkins `NAPCAT_IMAGE_OVERRIDE` 和 `NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE` 仅在填写时通过 `kubectl set env` 推广已验证运行时镜像/profile，空值会继续使用 manifest/default env。回滚时重新运行 Jenkins 并填入上一版 digest/profile，或清空两个 override 后重新部署 manifest 默认值。
 
-上段 v20 为历史演进说明；当前仓库发布基线已经升级到 `desktop-cn-v21`，新增插件框架级页面基址契约，并由 `k8s/prod/api.yaml` 显式声明 `QQBOT_NAPCAT_MUTATION_PROTOCOL=journal-flock-v1`。既有数据库在部署含 profile upsert 的 API 前必须先执行幂等入口 `sql/napcat-profile-container-unique.sql`；它拒绝非空 `container_id` 重复，只把 runtime/protocol profile 的旧普通索引替换为唯一索引，执行后不得留下临时 procedure。
+上段 v20 为历史演进说明；当前仓库发布基线已经升级到 `desktop-cn-v21`，新增插件框架级页面基址契约，并由 `k8s/prod/api.yaml` 显式声明 `NAPCAT_MUTATION_PROTOCOL=journal-flock-v1`。既有数据库在部署含 profile upsert 的 API 前必须先执行幂等入口 `sql/napcat-profile-container-unique.sql`；它拒绝非空 `container_id` 重复，只把 runtime/protocol profile 的旧普通索引替换为唯一索引，执行后不得留下临时 procedure。
 
 运行时发布时，API 仓库不提交 `NapCat.Shell.zip`；生产镜像必须从 staged context 构建，`fork-artifact.json` 必须带完整 marker metadata，包括 upstream release tag/commit、fork commit、base image digest、Jenkins URL 和 artifact hashes。release evidence 里的 NapCat base image 必须用 digest pin。API Jenkins 只消费人工确认后的运行时推广参数，不自动合并上游、不自动构建隐藏镜像，也不在 override 为空时覆盖 K8s manifest 中的默认 env。
 
@@ -148,7 +147,7 @@ node scripts/napcat-desktop-cn-stage-build.mjs \
   --jenkins-build-url https://jenkins.kwitsukasa.top/job/KT-NapCatQQ-Runtime-Release/1/
 ```
 
-NapCat WebUI Gateway 是独立运行的 NestJS 入口，生产镜像使用 `dockerfile.gateway` 打包 `dist/apps/napcat-webui-gateway/main.js` 并监听 `48086`。API 通过内部地址 `NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL=http://kt-napcat-webui-gateway:48086` 创建/续期/撤销 WebUI 会话，Admin 浏览器在统一网关只访问公开前缀 `NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL=/admin/napcat-webui`；Traefik 去掉 `/admin` 后，Admin Nginx 与 Gateway 应用内部仍使用 `/napcat-webui`。Gateway 必须按 NapCat 通用契约代理任意插件 ID：改写 `/plugin/:pluginId/page/*` 入口 HTML、`files`/`mem` 下的浏览器文本资源和 Web Manifest 内的根路径；`Service-Worker-Allowed` 只接受核心 `/webui` 或 `files`/`mem` worker 所属同一插件命名空间，跨插件、session 根和非法 scope 删除响应头，未声明时保留浏览器的脚本目录默认 scope。核心 `/api/*` 与 `/plugin/:pluginId/api/*` 继续直通流式响应，禁止把 API 当静态 worker 或为路径改写而缓冲。代理生命周期固定为服务级 streaming HTTP、文本 HTTP 与 WebSocket 三个实例，动态 target、Credential 和 session 响应改写只从当前请求的隔离上下文读取；HTTP 实例不得订阅 `upgrade`，WebSocket 只能由一个幂等 dispatcher 接管，禁止按请求创建 `ws:true` middleware；不匹配或畸形的 Upgrade 必须立即返回无认证挑战的 403 并销毁 socket，不能悬空等待。WebSocket 鉴权按 NapCat 路由语义处理：终端 `/api/ws/terminal` 的浏览器占位 token 必须替换为服务端 Credential，Debug `/api/Debug/ws` 的临时 adapter token 必须原样保留；两类请求都剥离浏览器 Authorization/Cookie。Gateway 运行时需要 `NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET`、`NAPCAT_WEBUI_GATEWAY_REDIS_HOST`、`NAPCAT_WEBUI_GATEWAY_REDIS_PORT`、`NAPCAT_WEBUI_GATEWAY_SESSION_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_TICKET_TTL_MS`、`NAPCAT_WEBUI_GATEWAY_UPSTREAM_TIMEOUT_MS`；生产 secret 由 Jenkins 从私有 `.env.production` 重建到 `kt-template-online-api-env`，不得写入 Git。验收命令：`pnpm exec jest --runTestsByPath test/modules/qqbot/napcat-webui-gateway/gateway-deployment.spec.ts --runInBand`、`pnpm run typecheck`、`pnpm run build`、`test -f dist/apps/napcat-webui-gateway/main.js`、`git diff --check`。安全边界：浏览器不得收到 WebUI token、Credential、上游 URL/端口、Docker 拓扑、Redis 地址或内部 secret。
+NapCat WebUI Gateway 是独立运行的 NestJS 入口，生产镜像使用 `dockerfile.gateway` 打包 `dist/apps/napcat-webui-gateway/main.js` 并监听 `48086`。API 通过内部地址创建/续期/撤销 WebUI 会话，Admin 浏览器只访问 `/admin/napcat-webui`。验收入口为 `test/modules/bot-adapter/napcat-webui-gateway/*`、API `typecheck/build` 和 Gateway 构建产物；浏览器不得收到 WebUI token、Credential、上游 URL/端口、Docker 拓扑、Redis 地址或内部 secret。
 
 统一网关的部署布局、Canary、DNS/Caddy、密码迁移和 WordPress 两阶段回滚
 见 KT 工作区根文档 `docs/unified-natmap-tls-gateway-operations.md`。统一网关、
@@ -196,10 +195,10 @@ pnpm run typecheck
 pnpm run lint
 pnpm test
 pnpm run build
-pnpm qqbot-plugin create <pluginKey>
-pnpm qqbot-plugin validate <pluginDir>
-pnpm qqbot-plugin pack <pluginDir>
-pnpm qqbot-plugin install-local <packageFile>
+pnpm plugin create <pluginKey>
+pnpm plugin validate <pluginDir>
+pnpm plugin pack <pluginDir>
+pnpm plugin install-local <packageFile>
 ```
 
 Jest 只扫描 `test/**/*.spec.ts`。如果在 Windows 下指定测试文件，使用：
@@ -212,7 +211,7 @@ pnpm exec jest --runInBand --runTestsByPath test/path/to/file.spec.ts
 
 - Swagger 全量：`http://localhost:48085/api`
 - OpenAPI JSON：`http://localhost:48085/api-json`
-- 分组文档：`/api/admin`、`/api/qqbot`、`/api/basic`
+- 分组文档：`/api/admin`、`/api/bot`、`/api/plugin-platform`、`/api/basic`
 - Knife4j：服务启动后同样使用上述 OpenAPI 服务列表
 - 手工接口索引：[API.md](./API.md)
 
@@ -388,24 +387,22 @@ Run，并由 Agent 的类型化身份修正收口。升级前已处于这一精�
 - 后端响应时间统一用 `KtDateTime extends Date` 承接序列化语义；Entity 使用 `@KtDateTimeColumn(format)`、`@KtCreateDateColumn(format)`、`@KtUpdateDateColumn(format)` 在 TypeORM hydrate 边界转换，DTO/外部数据源使用 `@KtDateTimeField(format)` + `transformKtDateTimeFields()` 转换，默认格式为 `YYYY-MM-DD HH:mm:ss`。Create/Update 列显式配置 `precision` 时，公共装饰器会在调用方未覆盖的前提下生成同精度 `CURRENT_TIMESTAMP(n)` 默认值与更新表达式，避免 MySQL 列精度不匹配；`vbenSuccess` / `ToolsService.res` 不做全量递归格式化。
 - 字典维护在 `admin_dict`，Admin 字典管理按 `dictCode` 分组展示；可运营映射优先走字典或静态配置，不硬编码到业务函数。
 - 全局 `SaveBodyInterceptor` 会删除 `POST */save` 请求体里的 `id`；需要保留时使用 `@SkipSaveBodyNormalize()`。
-- Admin、Component、Dict、MinIO、Blog 管理和 QQBot 管理接口默认走 `JwtAuthGuard`；公开接口用 `@Public()`。
+- Admin、Component、Dict、MinIO、Blog、Bot、Bot Adapter 和 Plugin Platform 管理接口默认走 `JwtAuthGuard`；公开接口用 `@Public()`。
 - 系统日志由 pino 输出，Loki 查询统一通过后端 `/system/logs/*` 代理，前端不直连 Loki。
-- 日志级站内信只承接运行期事件：接口 5xx、QQBot 下线 notice、NapCat 容器最新离线日志及 Message Management 的站内信订阅者会自动写入或聚合通知；服务端强制 `super` 访问，Admin 不暴露人工新增/编辑入口。消息变更只在数据库事务提交后通过带重放游标与心跳的 SSE 广播，Admin 右上角铃铛显示 `99+` 封顶的未读 Badge，消息中心支持所选未读项一次批量标记已读；长路径接口错误仍会压缩 `dedupeKey/title` 到表字段长度内。
-- QQBot 扫码登录通过 SSE `/qqbot/account/scan/events` 暴露进度，耗时链路不应阻塞普通 HTTP 响应；新增账号扫码会先返回 pending `sessionId`，后台再创建 NapCat 容器并生成二维码。`CheckLoginStatus.isLogin=true` 只代表 NapCat 登录阳性，创建账号必须继续等 `GetQQLoginInfo` 返回 `uin/selfId` 后才绑定真实 QQ 号；短暂缺号时会话保持 pending 并显示正在读取 QQ 号，不能重建容器或猜号。
-- QQBot 外发统一走发送排队：默认全局间隔 `2500ms`、同会话间隔 `8000ms`、排队抖动 `0-800ms`，超过 `QQBOT_SEND_MAX_QUEUE_WAIT_MS` 时拒绝本次发送，避免高频自动回复形成突发流量。
-- QQBot 在线命令和自动回复规则都有运行时保底冷却：默认命令 `5000ms`、规则 `30000ms`；即使数据库里旧数据冷却值更低，也按保底值判定，降低频繁触发风控的概率。
-- QQBot 复读机默认阈值为 4，同一会话默认 10 分钟只复读一次，默认只复读 120 字以内普通文本，避免群聊重复内容导致机器人过于频繁地模拟真人发言。
-- QQBot 插件平台统一使用 `plugin.json` manifest 描述插件 key、版本、操作、事件、权限、运行预算和包入口；CLI 负责 create/validate/pack/install-local，后端只暴露受控 SDK 能力并通过插件维度记录安装、配置、账号绑定和运行事件。
-- 插件账号绑定对 transport 无差别：NapCat UIN 与 `qq-official:<AppID>` 都进入同一平台矩阵；绑定是插件执行的账号级总门禁，在线命令仍保留命令级精确绑定，事件插件由平台绑定直接决定是否接收消息。
+- 日志级站内信只承接运行期事件：接口 5xx、Bot 下线 notice、NapCat 容器最新离线日志及 Message Management 的站内信订阅者会自动写入或聚合通知；服务端强制 `super` 访问，Admin 不暴露人工新增/编辑入口。
+- NapCat 扫码登录通过 SSE `/bot-adapter/napcat/account/scan/events` 暴露进度；新增账号必须在 `CheckLoginStatus.isLogin=true` 后继续等待 `GetQQLoginInfo.uin/selfId`，不能重建容器或猜号。
+- Bot 外发统一走 adapter registry 和发送排队；在线命令、自动回复和复读机继续使用现有冷却与风控边界，核心不直接 import OneBot 或 Tencent transport。
+- Plugin Platform 使用 `plugin.json` 描述 key、版本、操作、事件、权限、运行预算和包入口；CLI 负责 create/validate/pack/install-local。平台只保存插件生命周期与运行状态，不保存账号身份或 adapter 绑定。
+- NapCat 与 Tencent 各自保存插件绑定并自行把入站事件适配为无状态插件协议；在线命令仍保留 adapter core 的账号能力精确绑定。
 - Bilibili Card 是事件型内置插件：`bilibili-card.message` 只在账号绑定后监听 QQ/NapCat `share/json/xml/lightapp` 卡片或文本里的 Bilibili 链接，`b23.tv` 短链通过平台 `resolveRedirect` 受控 host 能力解析，视频信息从 Bilibili `x/web-interface/view` 获取后回复首行封面图和文本摘要。
-- QQBot 同一账号只允许一个有效 NapCat 主容器；绑定新容器时会释放旧绑定和不再共享的旧容器，机器人下线 notice、`isOnline:false` 和 NapCat 容器最新离线日志都会写入账号 `lastError`，普通群成员 kick 不属于账号离线信号；写入 `last_error` 前按 500 字符截断，后续无错误的普通断连不能清空该原因；账号列表拆开展示 OneBot、容器、WebUI 和 QQ 登录态，心跳只代表 OneBot/容器通信，不能推导 QQ 登录态；近期连接只用于避免重连瞬间被旧缓存误伤，后续仍必须以 NapCat WebUI/日志检查判断 QQ 登录态；`qqLoginMessage` 只展示 QQ 登录态消息，WebUI 配置或请求错误留在 `lastError`。
-- NapCat 托管容器必须显式配置 `QQBOT_NAPCAT_IMAGE`，不要依赖 `latest` 默认镜像；生产切换镜像前先 pin 明确版本或 digest 并单账号观察。`desktop-cn-v20` 镜像从 KT `NapCatQQ` fork 的 source-built `NapCat.Shell` 构建，不再在镜像内对上游 bundle 做字符串 patch，并修复非自动重试 QR failure 后下次 WebUI 登录动作不重置、QQCore 通过进程级 mountinfo 探针看到 Docker/宿主路径、扫码登录成功后 API 立即读不到 QQ 号、生产 native reset 缺少 `offline()` 时半登录态无法清理、runtime view native maps 取证假阴性、WebUI `RestartNapCat` 重启 worker 丢失快速登录账号参数，以及首次解包覆盖 API 预写 NapCat config 导致 bypass 开关回落默认关闭的问题。踢下线后的半登录态不能只靠旧 native reset 兜底；源 Docker 容器在线时 API 会先同容器 `RestartNapCat` 重建 NapCat worker，再继续登录流程，同一个更新登录 session 不能反复重启 worker。
-- NapCat 账号新增/编辑支持可选请求字段 `loginPassword`：只允许经 TLS 提交，后端在当前 save/update 请求内直接用显式配置的 `QQBOT_ACCOUNT_SECRET_KEY`（或非默认 `ADMIN_TOKEN_SECRET`）包装为 AES-GCM `ktv1` secret 并保存到 `qqbot_account.napcat_login_password_secret`；空白编辑不更新现有 secret，列表、详情、事件与日志均不回显该字段或明文。
-- NapCat 容器为已知 `selfId` 创建/重建时会一次性注入 `ACCOUNT` 等必要 env；容器重启（崩溃/重启策略/宿主重启）可复用持久化会话，但硬踢 `登录已失效` 仍需人工登录。Admin「更新登录」不通过 Docker 重建、重启或补 env 刷新登录态：只要源容器在线，就保持同一 Docker 容器；若 WebUI 明确返回 QQ 离线，会先调用同容器 `/api/QQLogin/RestartNapCat` 重启 NapCat worker，随后通过 NapCat WebUI `SetQuickLogin -> PasswordLogin -> RefreshQRcode/GetQQLoginQrcode` 推进原弹窗流程；同一个更新登录 session 只允许一次 worker restart，后续状态轮询只能继续 WebUI 登录/二维码刷新，不能反复重启 worker。只有 Docker 容器离线或缺失时，容器准备阶段才创建/重建并一次性注入 env。快速登录失败后，如果账号保存了登录密码，后端使用解密密码计算 MD5 调 `/api/QQLogin/PasswordLogin`，不会把密码写入运行态 env，也没有成功后的 env 清理步骤；密码登录按 `QQBOT_NAPCAT_PASSWORD_LOGIN_WAIT_MS` / `QQBOT_NAPCAT_LOGIN_POLL_INTERVAL_MS` 轮询结果。准备中的扫码会话会续期，重复调用更新登录会复用同一 pending `sessionId`，不会再次启动 quick/password/二维码准备；但如果该 pending 会话是在账号维护登录密码前创建、且尚未进入密码/验证码/新设备上下文，后续更新登录必须退役这条无密码会话并新建 refresh session，以重新读取账号表中的最新密码。取消扫码会话会在接口返回前把持久化 session 标成 `error/cancelled` 并写完成时间，避免已取消二维码从 DB 恢复为 active pending。若 API Pod 在准备阶段重启，持久化的 `preparingRelogin` 超过 `QQBOT_NAPCAT_RELOGIN_PREPARING_STALE_MS` 后会自动恢复为普通状态检测。pending refresh 会话没有二维码、验证码或新设备挑战时，状态轮询会按 `NAPCAT_LOGIN_QR_AUTO_REFRESH_COOLDOWN_MS` 冷却在同一容器自动重试二维码刷新，避免 SSE 长时间停在生成中。验证码和新设备验证保持同一会话 pending：腾讯验证码结果 `ticket`/`randstr`/`sid` 通过 `/qqbot/account/scan/captcha/submit` 回交到同一容器的 `/api/QQLogin/CaptchaLogin`；状态轮询遇到验证码文案但缺少 URL 时会先从当前容器日志恢复 `proofWaterUrl`，没有 URL 也保持验证码处理中而不切到二维码兜底。扫码或密码链路拿到 NapCat 登录阳性但 QQ 号暂不可读时，会按 `NAPCAT_LOGIN_SELF_ID_WAIT_MS` 保持 pending，超过窗口才失败。密码登录仍失败、验证码未完成、离线、账号不匹配或缺少 QQ 号时，直接通过 WebUI 二维码接口进入扫码兜底，不 reset 登录态。Admin SSE 步骤顺序按实际路径为 `quick-login-*` -> `password-login-*` / `password-login-captcha` / 新设备验证 -> `qrcode/waiting-scan` -> `login-success|login-failed`；SSE 事件缓存因 Pod 重启丢失时，新订阅会收到当前会话快照。
+- 同一账号只允许一个有效 NapCat 主容器；账号列表拆开展示 OneBot、容器、WebUI 和 QQ 登录态，心跳只代表 OneBot/容器通信，不能推导 QQ 登录态。
+- NapCat 托管容器必须显式配置 `NAPCAT_IMAGE`，不要依赖 `latest` 默认镜像；生产切换镜像前先 pin 明确版本或 digest 并单账号观察。`desktop-cn-v20` 镜像从 KT `NapCatQQ` fork 的 source-built `NapCat.Shell` 构建，不再在镜像内对上游 bundle 做字符串 patch，并修复非自动重试 QR failure 后下次 WebUI 登录动作不重置、QQCore 通过进程级 mountinfo 探针看到 Docker/宿主路径、扫码登录成功后 API 立即读不到 QQ 号、生产 native reset 缺少 `offline()` 时半登录态无法清理、runtime view native maps 取证假阴性、WebUI `RestartNapCat` 重启 worker 丢失快速登录账号参数，以及首次解包覆盖 API 预写 NapCat config 导致 bypass 开关回落默认关闭的问题。踢下线后的半登录态不能只靠旧 native reset 兜底；源 Docker 容器在线时 API 会先同容器 `RestartNapCat` 重建 NapCat worker，再继续登录流程，同一个更新登录 session 不能反复重启 worker。
+- NapCat 账号新增/编辑支持可选请求字段 `loginPassword`：只允许经 TLS 提交，后端使用 `BOT_ACCOUNT_SECRET_KEY`（或非默认 `ADMIN_TOKEN_SECRET`）包装为 AES-GCM `ktv1` secret 并保存到 `bot_account.napcat_login_password_secret`；空白编辑不更新，任何响应均不回显。
+- NapCat 容器为已知 `selfId` 创建/重建时会一次性注入 `ACCOUNT` 等必要 env；容器重启（崩溃/重启策略/宿主重启）可复用持久化会话，但硬踢 `登录已失效` 仍需人工登录。Admin「更新登录」不通过 Docker 重建、重启或补 env 刷新登录态：只要源容器在线，就保持同一 Docker 容器；若 WebUI 明确返回 QQ 离线，会先调用同容器 `/api/QQLogin/RestartNapCat` 重启 NapCat worker，随后通过 NapCat WebUI `SetQuickLogin -> PasswordLogin -> RefreshQRcode/GetQQLoginQrcode` 推进原弹窗流程；同一个更新登录 session 只允许一次 worker restart，后续状态轮询只能继续 WebUI 登录/二维码刷新，不能反复重启 worker。只有 Docker 容器离线或缺失时，容器准备阶段才创建/重建并一次性注入 env。快速登录失败后，如果账号保存了登录密码，后端使用解密密码计算 MD5 调 `/api/QQLogin/PasswordLogin`，不会把密码写入运行态 env，也没有成功后的 env 清理步骤；密码登录按 `NAPCAT_PASSWORD_LOGIN_WAIT_MS` / `NAPCAT_LOGIN_POLL_INTERVAL_MS` 轮询结果。准备中的扫码会话会续期，重复调用更新登录会复用同一 pending `sessionId`，不会再次启动 quick/password/二维码准备；但如果该 pending 会话是在账号维护登录密码前创建、且尚未进入密码/验证码/新设备上下文，后续更新登录必须退役这条无密码会话并新建 refresh session，以重新读取账号表中的最新密码。取消扫码会话会在接口返回前把持久化 session 标成 `error/cancelled` 并写完成时间，避免已取消二维码从 DB 恢复为 active pending。若 API Pod 在准备阶段重启，持久化的 `preparingRelogin` 超过 `NAPCAT_RELOGIN_PREPARING_STALE_MS` 后会自动恢复为普通状态检测。pending refresh 会话没有二维码、验证码或新设备挑战时，状态轮询会按 `NAPCAT_LOGIN_QR_AUTO_REFRESH_COOLDOWN_MS` 冷却在同一容器自动重试二维码刷新，避免 SSE 长时间停在生成中。验证码和新设备验证保持同一会话 pending：腾讯验证码结果 `ticket`/`randstr`/`sid` 通过 `/bot-adapter/napcat/account/scan/captcha/submit` 回交到同一容器的 `/api/QQLogin/CaptchaLogin`；状态轮询遇到验证码文案但缺少 URL 时会先从当前容器日志恢复 `proofWaterUrl`，没有 URL 也保持验证码处理中而不切到二维码兜底。扫码或密码链路拿到 NapCat 登录阳性但 QQ 号暂不可读时，会按 `NAPCAT_LOGIN_SELF_ID_WAIT_MS` 保持 pending，超过窗口才失败。密码登录仍失败、验证码未完成、离线、账号不匹配或缺少 QQ 号时，直接通过 WebUI 二维码接口进入扫码兜底，不 reset 登录态。Admin SSE 步骤顺序按实际路径为 `quick-login-*` -> `password-login-*` / `password-login-captcha` / 新设备验证 -> `qrcode/waiting-scan` -> `login-success|login-failed`；SSE 事件缓存因 Pod 重启丢失时，新订阅会收到当前会话快照。
 - NapCat 设备身份按账号持久化到 `napcat_device_identity`：同一账号重建容器会复用数据目录、`pc-<8hex>` hostname、machine-id 和实体 OUI 风格 MAC，明确排除 Docker `02:42`、QEMU/KVM `52:54:00`、VMware、Hyper-V 等虚拟化前缀；新增账号首次扫码会先用预留容器 id 创建临时设备身份并应用到第一次 Docker run，扫码成功后归属到真实账号并同步 runtime/protocol profile；Docker run 会注入 `--hostname`、`--mac-address`、只读 `/etc/machine-id`，并同步写入 QQNT Linux `machine-info`，使 `/etc/machine-id`、Docker MAC 和 QQNT 本地设备缓存保持一致。当前策略名为 `qqnt-visible-hostname-v1` / `physical-oui-mac-v1`。
 - NapCat 新设备验证走同一 scan session：`CaptchaLogin` 返回 `needNewDevice` 后，后端继续调用 `GetNewDeviceQRCode -> PollNewDeviceQR -> NewDeviceLogin`，Admin/SSE 分开展示 `captchaUrl`、`newDeviceQrcode`、已扫码、确认中、验证成功、登录成功/失败等中文进度，不把 `jumpUrl` 当作唯一完成入口。
-- NapCat 离线看门狗按 `QQBOT_NAPCAT_WATCHDOG_INTERVAL_MS`（默认 `120000`，最小 `30000`，`QQBOT_NAPCAT_WATCHDOG_ENABLED=false` 关闭）定时巡检在线账号，使掉线/被踢无需管理员打开列表页即可及时发现；检测到离线后只写入离线原因并复用 `super` 站内信告警，恢复登录必须由管理员在 Admin 手动触发「更新登录」。
-- BangDream 当前源码根目录是 `src/modules/qqbot/plugins/bangdream/src`；按第三期插件结构放置真实职责代码：业务在 `domain/*`，编排在 `application`，操作在 `operations`，外部 API 在 `infrastructure/integration`，缓存/静态修正在 `infrastructure/storage`，字典和静态配置在 `config`，视觉渲染公共件在 `theme`；不要恢复旧 `tsugu` 层级、旧大桶目录、纯 re-export 转接文件或空 `.gitkeep` 目录壳。
+- NapCat 离线看门狗按 `NAPCAT_WATCHDOG_INTERVAL_MS`（默认 `120000`，最小 `30000`，`NAPCAT_WATCHDOG_ENABLED=false` 关闭）定时巡检在线账号，使掉线/被踢无需管理员打开列表页即可及时发现；检测到离线后只写入离线原因并复用 `super` 站内信告警，恢复登录必须由管理员在 Admin 手动触发「更新登录」。
+- BangDream 当前源码根目录是 `src/modules/plugins/bangdream/src`；业务在 `domain/*`，编排在 `application`，操作在 `operations`，外部 API 在 `infrastructure/integration`，缓存/静态修正在 `infrastructure/storage`，字典和静态配置在 `config`，视觉渲染公共件在 `theme`。
 - BangDream 在线命令以 `plugins/bangdream/plugin.json` 为单一来源，新增命令必须同步 SQL/在线命令表并跑 manifest/command-SQL 测试。
 - BangDream event stage 大图必须保持分页拆图行为，线上 smoke 关注 `imageCount=5`，避免大 canvas OOM 回归。
 
@@ -487,11 +484,11 @@ manifest apply、本地回读、rollout 或最终回读失败时都会尝试恢�
 Message Management 与订阅者适配器按以下顺序发布和回滚：
 
 1. 备份现存的旧 `qqbot_message_subscription` / `qqbot_message_template` / `qqbot_message_event`、现行四张 `message_*` 协议表、QQBot 三张订阅者表、`station_notice_message_binding`，以及相关 `admin_menu` / `admin_role_menu` 行；不存在的表只记录为未创建。
-2. 既有环境只应用本功能的幂等增量入口 `sql/qqbot-message-push-init.sql`，随后执行只读的 `sql/qqbot-message-push-verify.sql`；不要把包含历史迁移的 `sql/qqbot-init.sql` 作为本功能生产迁移。仅一次性、可丢弃的全量初始化环境按顺序使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`。发布前还需通过网络菜单 SQL 应用独立 `System:Network:PortForward:Natmap` 权限并确认只授予活动 `super`。
+2. 既有环境只应用本功能的幂等增量入口 `sql/bot-message-push-init.sql`，随后执行只读的 `sql/bot-message-push-verify.sql`；不要把包含历史迁移的 `sql/bot-init.sql` 作为本功能生产迁移。仅一次性、可丢弃的全量初始化环境按顺序使用 `sql/refactor-v3/00-full-schema.sql`、`01-seed-core.sql`、`99-verify.sql`。发布前还需通过网络菜单 SQL 应用独立 `System:Network:PortForward:Natmap` 权限并确认只授予活动 `super`。
 3. 增量迁移会把旧协议表复制到通用表，并把不同账号所选的旧模板按“旧订阅 + 模板”拆成单模板订阅；验证 8 张现行表、精确索引、订阅非空模板集合、同来源约束、QQBot 私有绑定无 `template_id`、默认模板、菜单和活动角色授权。
 4. 先发布并验证 API 健康检查、Message Management CRUD、旧 QQBot 发送能力和两个订阅者接口，再发布并验证 Admin。
 5. 管理员先创建绑定来源的模板，再创建绑定一个或多个同来源模板及一个订阅者的订阅；随后仅在具体订阅者页面配置 QQ 账号/目标或站内信标题/接收角色，并分别完成授权的有界来源事件验收。
-6. 回滚时先停用 QQBot 与站内信订阅者绑定，再回滚 Admin 和 API；保留通用事件、QQBot 投递、站内信和 `qqbot_send_log` 历史供审计，不停止 Network Agent、端口转发、STUN Keeper 或 DDNS。
+6. 回滚时先停用 Bot 与站内信订阅者绑定，再回滚 Admin 和 API；保留通用事件、Bot 投递、站内信和 `bot_send_log` 历史供审计，不停止 Network Agent、端口转发、STUN Keeper 或 DDNS。
 7. Jenkins/K8s 成功只属于部署证据，不能代替真实 CRUD、页面、Outbox/DDNS 或 QQ 投递功能验收。
 
 每次发布记录必须分别写明代码部署、生产 SQL、真实 CRUD、Admin 页面、Outbox/DDNS 和授权 QQ 投递的证据；没有明确授权的 QQ 群或 QQ 号时不得任选目标，且必须把真实投递标记为未验证，不能用 Jenkins/K8s 成功替代。
@@ -500,4 +497,4 @@ Message Management 与订阅者适配器按以下顺序发布和回滚：
 
 | 一级来源                                                                 | 使用方式                                                                                               | License |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ------- |
-| [Tsugu BangDream Bot](https://github.com/Yamamoto-2/tsugu-bangdream-bot) | BangDream QQBot 后端能力已重构合入 `src/modules/qqbot/plugins/bangdream/src`，保留本地 `TSUGU-LICENSE` | MIT     |
+| [Tsugu BangDream Bot](https://github.com/Yamamoto-2/tsugu-bangdream-bot) | BangDream 插件能力已重构合入 `src/modules/plugins/bangdream/src`，保留本地 `TSUGU-LICENSE` | MIT     |

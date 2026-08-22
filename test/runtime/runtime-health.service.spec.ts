@@ -37,8 +37,8 @@ function createSnapshot(
       accessKey: 'mi***ey',
       bucket: 'kt-template-online',
     },
-    qqbot: {
-      reverseWsPath: '/qqbot/onebot/reverse',
+    bot: {
+      reverseWsPath: '/bot-adapter/napcat/onebot/reverse',
       reverseWsToken: 'qq***en',
       napcatRoot: '/vol1/docker/napcat',
       napcatImage: 'mlikiowa/napcat-docker:latest',

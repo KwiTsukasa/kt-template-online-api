@@ -42,9 +42,15 @@ const swaggerGroups: SwaggerDocumentGroup[] = [
     path: 'api/admin',
   },
   {
-    matcher: (path) => path.startsWith('/qqbot'),
-    name: 'QQBot 机器人',
-    path: 'api/qqbot',
+    matcher: (path) =>
+      path.startsWith('/bot/') || path.startsWith('/bot-adapter/'),
+    name: 'Bot 管理',
+    path: 'api/bot',
+  },
+  {
+    matcher: (path) => path.startsWith('/plugin-platform/'),
+    name: '插件平台',
+    path: 'api/plugin-platform',
   },
   {
     matcher: (path) =>

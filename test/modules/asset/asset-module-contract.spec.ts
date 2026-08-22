@@ -1,5 +1,5 @@
-jest.mock('../../../src/modules/qqbot/core/qqbot-core.module', () => ({
-  QqbotCoreModule: class QqbotCoreModule {},
+jest.mock('../../../src/modules/bot-adapter/core/bot-adapter-core.module', () => ({
+  BotAdapterCoreModule: class BotAdapterCoreModule {},
 }));
 
 import { MODULE_METADATA } from '@nestjs/common/constants';

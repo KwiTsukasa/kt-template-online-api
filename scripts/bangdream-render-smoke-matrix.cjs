@@ -3,7 +3,7 @@ const path = require('path');
 const { setTimeout: delay } = require('timers/promises');
 const XLSX = require('xlsx');
 const { loadImage } = require('skia-canvas');
-const { createPlugin } = require('../src/modules/qqbot/plugins/bangdream/src');
+const { createPlugin } = require('../src/modules/plugins/bangdream/src');
 
 const cases = [
   { name: 'song-search-detail', operationKey: 'bangdream.song.search', text: '136', expectedImageCount: 1 },
@@ -177,7 +177,7 @@ async function main() {
   const payload = readPayload();
   fs.mkdirSync(payload.outDir, { recursive: true });
   const manifest = readJsonFile(
-    path.join(process.cwd(), 'src/modules/qqbot/plugins/bangdream/plugin.json'),
+    path.join(process.cwd(), 'src/modules/plugins/bangdream/plugin.json'),
   );
   const operations = manifest.operations.map((operation) => ({
     handlerName: operation.handlerName,

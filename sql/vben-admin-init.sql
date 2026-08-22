@@ -446,11 +446,11 @@ VALUES
   (2041700000000120493, 2041700000000100423, 'MessageManagementPushUpdate', NULL, NULL, NULL, 'MessageManagement:Push:Update', 'button', '{"title":"common.edit"}', 1, 0),
   (2041700000000120494, 2041700000000100423, 'MessageManagementPushDelete', NULL, NULL, NULL, 'MessageManagement:Push:Delete', 'button', '{"title":"common.delete"}', 1, 0),
   (2041700000000120495, 2041700000000100423, 'MessageManagementPushToggle', NULL, NULL, NULL, 'MessageManagement:Push:Toggle', 'button', '{"title":"启停"}', 1, 0),
-  (2041700000000120481, 2041700000000100410, 'QqBotAccountMessagePushList', NULL, NULL, NULL, 'QqBot:Account:MessagePush:List', 'button', '{"title":"common.list"}', 1, 0),
-  (2041700000000120482, 2041700000000100410, 'QqBotAccountMessagePushCreate', NULL, NULL, NULL, 'QqBot:Account:MessagePush:Create', 'button', '{"title":"common.create"}', 1, 0),
-  (2041700000000120483, 2041700000000100410, 'QqBotAccountMessagePushUpdate', NULL, NULL, NULL, 'QqBot:Account:MessagePush:Update', 'button', '{"title":"common.edit"}', 1, 0),
-  (2041700000000120484, 2041700000000100410, 'QqBotAccountMessagePushDelete', NULL, NULL, NULL, 'QqBot:Account:MessagePush:Delete', 'button', '{"title":"common.delete"}', 1, 0),
-  (2041700000000120485, 2041700000000100410, 'QqBotAccountMessagePushToggle', NULL, NULL, NULL, 'QqBot:Account:MessagePush:Toggle', 'button', '{"title":"启停"}', 1, 0)
+  (2041700000000120481, 2041700000000100410, 'BotAccountMessagePushList', NULL, NULL, NULL, 'Bot:Account:MessagePush:List', 'button', '{"title":"common.list"}', 1, 0),
+  (2041700000000120482, 2041700000000100410, 'BotAccountMessagePushCreate', NULL, NULL, NULL, 'Bot:Account:MessagePush:Create', 'button', '{"title":"common.create"}', 1, 0),
+  (2041700000000120483, 2041700000000100410, 'BotAccountMessagePushUpdate', NULL, NULL,NULL, 'Bot:Account:MessagePush:Update', 'button', '{"title":"common.edit"}', 1, 0),
+  (2041700000000120484, 2041700000000100410, 'BotAccountMessagePushDelete', NULL, NULL, NULL, 'Bot:Account:MessagePush:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000120485, 2041700000000100410, 'BotAccountMessagePushToggle', NULL, NULL, NULL, 'Bot:Account:MessagePush:Toggle', 'button', '{"title":"启停"}', 1, 0)
 ON DUPLICATE KEY UPDATE
   `pid` = VALUES(`pid`), `name` = VALUES(`name`), `path` = VALUES(`path`), `component` = VALUES(`component`), `redirect` = VALUES(`redirect`), `auth_code` = VALUES(`auth_code`), `type` = VALUES(`type`), `meta` = VALUES(`meta`), `status` = VALUES(`status`), `sort` = VALUES(`sort`), `is_deleted` = 0;
 

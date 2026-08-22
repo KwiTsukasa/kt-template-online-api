@@ -154,50 +154,77 @@ INSERT INTO admin_menu (
   (
     2041700000000100400,
     0,
-    'QqBot',
-    '/qqbot',
+    'Bot',
+    '/bot',
     NULL,
-    '/qqbot/dashboard',
+    '/bot/dashboard',
     NULL,
     'catalog',
-    '{"icon":"lucide:bot","order":110,"title":"QQBot 管理"}',
+    '{"icon":"lucide:bot","order":110,"title":"Bot 管理"}',
     1,
     110
   ),
-  (2041700000000100401, 2041700000000100400, 'QqBotDashboard', '/qqbot/dashboard', '/qqbot/dashboard/list', NULL, 'QqBot:Dashboard:List', 'menu', '{"icon":"lucide:gauge","title":"工作台"}', 1, 0),
-  (2041700000000100402, 2041700000000100400, 'QqBotAccount', '/qqbot/account', '/qqbot/account/list', NULL, 'QqBot:Account:List', 'menu', '{"icon":"lucide:radio-receiver","title":"账号连接"}', 1, 1),
-  (2041700000000100410, 2041700000000100400, 'QqBotAccountConfig', '/qqbot/account/config', '/qqbot/account/config', NULL, 'QqBot:Account:Config', 'menu', '{"activePath":"/qqbot/account","hideInMenu":true,"title":"账号功能配置"}', 1, 0),
-  (2041700000000100412, 2041700000000100400, 'QqBotAccountNapcatWebui', '/qqbot/account/:accountId/napcat-webui', '/qqbot/account/napcat-webui/index', NULL, 'QqBot:Account:WebUI', 'menu', '{"activePath":"/qqbot/account","hideInMenu":true,"title":"NapCat WebUI"}', 1, 0),
-  (2041700000000120401, 2041700000000100402, 'QqBotAccountCreate', NULL, NULL, NULL, 'QqBot:Account:Create', 'button', '{"title":"common.create"}', 1, 0),
-  (2041700000000120402, 2041700000000100402, 'QqBotAccountEdit', NULL, NULL, NULL, 'QqBot:Account:Edit', 'button', '{"title":"common.edit"}', 1, 0),
-  (2041700000000120403, 2041700000000100402, 'QqBotAccountDelete', NULL, NULL, NULL, 'QqBot:Account:Delete', 'button', '{"title":"common.delete"}', 1, 0),
-  (2041700000000120404, 2041700000000100402, 'QqBotAccountKick', NULL, NULL, NULL, 'QqBot:Account:Kick', 'button', '{"title":"断开连接"}', 1, 0),
-  (2041700000000120405, 2041700000000100402, 'QqBotAccountRefreshLogin', NULL, NULL, NULL, 'QqBot:Account:RefreshLogin', 'button', '{"title":"更新登录"}', 1, 0),
-  (2041700000000120406, 2041700000000100402, 'QqBotAccountConfigButton', NULL, NULL, NULL, 'QqBot:Account:Config', 'button', '{"title":"配置"}', 1, 0),
-  (2041700000000120407, 2041700000000100402, 'QqBotAccountWebUI', NULL, NULL, NULL, 'QqBot:Account:WebUI', 'button', '{"title":"NapCat WebUI"}', 1, 0),
-  (2041700000000100403, 2041700000000100400, 'QqBotRule', '/qqbot/rule', '/qqbot/rule/list', NULL, 'QqBot:Rule:List', 'menu', '{"icon":"lucide:workflow","title":"自动回复规则"}', 1, 2),
-  (2041700000000120411, 2041700000000100403, 'QqBotRuleCreate', NULL, NULL, NULL, 'QqBot:Rule:Create', 'button', '{"title":"common.create"}', 1, 0),
-  (2041700000000120412, 2041700000000100403, 'QqBotRuleEdit', NULL, NULL, NULL, 'QqBot:Rule:Edit', 'button', '{"title":"common.edit"}', 1, 0),
-  (2041700000000120413, 2041700000000100403, 'QqBotRuleDelete', NULL, NULL, NULL, 'QqBot:Rule:Delete', 'button', '{"title":"common.delete"}', 1, 0),
-  (2041700000000120414, 2041700000000100403, 'QqBotRuleToggle', NULL, NULL, NULL, 'QqBot:Rule:Toggle', 'button', '{"title":"启停"}', 1, 0),
-  (2041700000000100408, 2041700000000100400, 'QqBotCommand', '/qqbot/command', '/qqbot/command/list', NULL, 'QqBot:Command:List', 'menu', '{"icon":"lucide:square-terminal","title":"在线命令"}', 1, 3),
-  (2041700000000120441, 2041700000000100408, 'QqBotCommandCreate', NULL, NULL, NULL, 'QqBot:Command:Create', 'button', '{"title":"common.create"}', 1, 0),
-  (2041700000000120442, 2041700000000100408, 'QqBotCommandEdit', NULL, NULL, NULL, 'QqBot:Command:Edit', 'button', '{"title":"common.edit"}', 1, 0),
-  (2041700000000120443, 2041700000000100408, 'QqBotCommandDelete', NULL, NULL, NULL, 'QqBot:Command:Delete', 'button', '{"title":"common.delete"}', 1, 0),
-  (2041700000000120444, 2041700000000100408, 'QqBotCommandToggle', NULL, NULL, NULL, 'QqBot:Command:Toggle', 'button', '{"title":"启停"}', 1, 0),
-  (2041700000000120445, 2041700000000100408, 'QqBotCommandTest', NULL, NULL, NULL, 'QqBot:Command:Test', 'button', '{"title":"测试命令"}', 1, 0),
-  (2041700000000100409, 2041700000000100400, 'QqBotPlugin', '/qqbot/plugin', '/qqbot/plugin/list', NULL, 'QqBot:Plugin:List', 'menu', '{"icon":"lucide:plug","title":"插件能力"}', 1, 4),
-  (2041700000000100404, 2041700000000100400, 'QqBotConversation', '/qqbot/conversation', '/qqbot/conversation/list', NULL, 'QqBot:Conversation:List', 'menu', '{"icon":"lucide:messages-square","title":"会话管理"}', 1, 5),
-  (2041700000000100405, 2041700000000100400, 'QqBotMessage', '/qqbot/message', '/qqbot/message/list', NULL, 'QqBot:Message:List', 'menu', '{"icon":"lucide:message-square-text","title":"消息日志"}', 1, 6),
-  (2041700000000100406, 2041700000000100400, 'QqBotSendLog', '/qqbot/send-log', '/qqbot/send-log/list', NULL, 'QqBot:SendLog:List', 'menu', '{"icon":"lucide:send","title":"发送日志"}', 1, 7),
-  (2041700000000120421, 2041700000000100406, 'QqBotSendPrivate', NULL, NULL, NULL, 'QqBot:Send:Private', 'button', '{"title":"发送私聊"}', 1, 0),
-  (2041700000000120422, 2041700000000100406, 'QqBotSendGroup', NULL, NULL, NULL, 'QqBot:Send:Group', 'button', '{"title":"发送群聊"}', 1, 0),
-  (2041700000000100407, 2041700000000100400, 'QqBotPermission', '/qqbot/permission', '/qqbot/permission/list', NULL, 'QqBot:Permission:List', 'menu', '{"icon":"lucide:shield-check","title":"权限名单"}', 1, 8),
-  (2041700000000120431, 2041700000000100407, 'QqBotPermissionCreate', NULL, NULL, NULL, 'QqBot:Permission:Create', 'button', '{"title":"common.create"}', 1, 0),
-  (2041700000000120432, 2041700000000100407, 'QqBotPermissionEdit', NULL, NULL, NULL, 'QqBot:Permission:Edit', 'button', '{"title":"common.edit"}', 1, 0),
-  (2041700000000120433, 2041700000000100407, 'QqBotPermissionDelete', NULL, NULL, NULL, 'QqBot:Permission:Delete', 'button', '{"title":"common.delete"}', 1, 0)
+  (2041700000000100401, 2041700000000100400, 'BotDashboard', '/bot/dashboard', '/bot/dashboard/list', NULL, 'Bot:Dashboard:List', 'menu', '{"icon":"lucide:gauge","title":"工作台"}', 1, 0),
+  (2041700000000100402, 2041700000000100400, 'BotNapcatConnection', '/bot/napcat', '/bot/account/list', NULL, 'Bot:Account:List', 'menu', '{"icon":"lucide:radio-receiver","title":"NapCat 连接"}', 1, 1),
+  (2041700000000100410, 2041700000000100400, 'BotNapcatConfig', '/bot/napcat/config', '/bot/account/config', NULL, 'Bot:Account:Config', 'menu', '{"activePath":"/bot/napcat","hideInMenu":true,"title":"NapCat 功能配置"}', 1, 0),
+  (2041700000000100412, 2041700000000100400, 'BotNapcatWebui', '/bot/napcat/:accountId/webui', '/bot/account/napcat-webui/index', NULL, 'Bot:Account:WebUI', 'menu', '{"activePath":"/bot/napcat","hideInMenu":true,"title":"NapCat WebUI"}', 1, 0),
+  (2041700000000100421, 2041700000000100400, 'BotTencentConnection', '/bot/tencent', '/bot/tencent/list', NULL, 'Bot:Tencent:List', 'menu', '{"icon":"lucide:cloud-cog","title":"Tencent 连接"}', 1, 2),
+  (2041700000000120531, 2041700000000100421, 'BotTencentCreate', NULL, NULL, NULL, 'Bot:Tencent:Create', 'button', '{"title":"common.create"}', 1, 0),
+  (2041700000000120532, 2041700000000100421, 'BotTencentEdit', NULL, NULL, NULL, 'Bot:Tencent:Edit', 'button', '{"title":"common.edit"}', 1, 0),
+  (2041700000000120533, 2041700000000100421, 'BotTencentDelete', NULL, NULL, NULL, 'Bot:Tencent:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000120534, 2041700000000100421, 'BotTencentReconnect', NULL, NULL, NULL, 'Bot:Tencent:Reconnect', 'button', '{"title":"重连"}', 1, 0),
+  (2041700000000120535, 2041700000000100421, 'BotTencentPlugin', NULL, NULL, NULL, 'Bot:Tencent:Plugin', 'button', '{"title":"插件能力"}', 1, 0),
+  (2041700000000120536, 2041700000000100421, 'BotTencentMenuSync', NULL, NULL, NULL, 'Bot:Tencent:MenuSync', 'button', '{"title":"同步官方菜单"}', 1, 0),
+  (2041700000000120537, 2041700000000100421, 'BotTencentWebhookUrl', NULL, NULL, NULL, 'Bot:Tencent:WebhookUrl', 'button', '{"title":"复制 Webhook 回调"}', 1, 0),
+  (2041700000000120401, 2041700000000100402, 'BotAccountCreate', NULL, NULL, NULL, 'Bot:Account:Create', 'button', '{"title":"common.create"}', 1, 0),
+  (2041700000000120402, 2041700000000100402, 'BotAccountEdit', NULL, NULL, NULL, 'Bot:Account:Edit', 'button', '{"title":"common.edit"}', 1, 0),
+  (2041700000000120403, 2041700000000100402, 'BotAccountDelete', NULL, NULL, NULL, 'Bot:Account:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000120404, 2041700000000100402, 'BotAccountKick', NULL, NULL, NULL, 'Bot:Account:Kick', 'button', '{"title":"断开连接"}', 1, 0),
+  (2041700000000120405, 2041700000000100402, 'BotAccountRefreshLogin', NULL, NULL, NULL, 'Bot:Account:RefreshLogin', 'button', '{"title":"更新登录"}', 1, 0),
+  (2041700000000120406, 2041700000000100402, 'BotAccountConfigButton', NULL, NULL, NULL, 'Bot:Account:Config', 'button', '{"title":"配置"}', 1, 0),
+  (2041700000000120407, 2041700000000100402, 'BotAccountWebUI', NULL, NULL, NULL, 'Bot:Account:WebUI', 'button', '{"title":"NapCat WebUI"}', 1, 0),
+  (2041700000000100403, 2041700000000100400, 'BotRule', '/bot/rule', '/bot/rule/list', NULL, 'Bot:Rule:List', 'menu', '{"icon":"lucide:workflow","title":"自动回复规则"}', 1, 3),
+  (2041700000000120411, 2041700000000100403, 'BotRuleCreate', NULL, NULL, NULL, 'Bot:Rule:Create', 'button', '{"title":"common.create"}', 1, 0),
+  (2041700000000120412, 2041700000000100403, 'BotRuleEdit', NULL, NULL, NULL, 'Bot:Rule:Edit', 'button', '{"title":"common.edit"}', 1, 0),
+  (2041700000000120413, 2041700000000100403, 'BotRuleDelete', NULL, NULL, NULL, 'Bot:Rule:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000120414, 2041700000000100403, 'BotRuleToggle', NULL, NULL, NULL, 'Bot:Rule:Toggle', 'button', '{"title":"启停"}', 1, 0),
+  (2041700000000100408, 2041700000000100400, 'BotCommand', '/bot/command', '/bot/command/list', NULL, 'Bot:Command:List', 'menu', '{"icon":"lucide:square-terminal","title":"在线命令"}', 1, 4),
+  (2041700000000120441, 2041700000000100408, 'BotCommandCreate', NULL, NULL, NULL, 'Bot:Command:Create', 'button', '{"title":"common.create"}', 1, 0),
+  (2041700000000120442, 2041700000000100408, 'BotCommandEdit', NULL, NULL, NULL, 'Bot:Command:Edit', 'button', '{"title":"common.edit"}', 1, 0),
+  (2041700000000120443, 2041700000000100408, 'BotCommandDelete', NULL, NULL, NULL, 'Bot:Command:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000120444, 2041700000000100408, 'BotCommandToggle', NULL, NULL, NULL, 'Bot:Command:Toggle', 'button', '{"title":"启停"}', 1, 0),
+  (2041700000000120445, 2041700000000100408, 'BotCommandTest', NULL, NULL, NULL, 'Bot:Command:Test', 'button', '{"title":"测试命令"}', 1, 0),
+  (2041700000000100404, 2041700000000100400, 'BotConversation', '/bot/conversation', '/bot/conversation/list', NULL, 'Bot:Conversation:List', 'menu', '{"icon":"lucide:messages-square","title":"会话管理"}', 1, 5),
+  (2041700000000100405, 2041700000000100400, 'BotMessage', '/bot/message', '/bot/message/list', NULL, 'Bot:Message:List', 'menu', '{"icon":"lucide:message-square-text","title":"消息日志"}', 1, 6),
+  (2041700000000100406, 2041700000000100400, 'BotSendLog', '/bot/send-log', '/bot/send-log/list', NULL, 'Bot:SendLog:List', 'menu', '{"icon":"lucide:send","title":"发送日志"}', 1, 7),
+  (2041700000000120421, 2041700000000100406, 'BotSendPrivate', NULL, NULL, NULL, 'Bot:Send:Private', 'button', '{"title":"发送私聊"}', 1, 0),
+  (2041700000000120422, 2041700000000100406, 'BotSendGroup', NULL, NULL, NULL, 'Bot:Send:Group', 'button', '{"title":"发送群聊"}', 1, 0),
+  (2041700000000100407, 2041700000000100400, 'BotPermission', '/bot/permission', '/bot/permission/list', NULL, 'Bot:Permission:List', 'menu', '{"icon":"lucide:shield-check","title":"权限名单"}', 1, 8),
+  (2041700000000120431, 2041700000000100407, 'BotPermissionCreate', NULL, NULL, NULL, 'Bot:Permission:Create', 'button', '{"title":"common.create"}', 1, 0),
+  (2041700000000120432, 2041700000000100407, 'BotPermissionEdit', NULL, NULL, NULL, 'Bot:Permission:Edit', 'button', '{"title":"common.edit"}', 1, 0),
+  (2041700000000120433, 2041700000000100407, 'BotPermissionDelete', NULL, NULL, NULL, 'Bot:Permission:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000100422, 0, 'PluginPlatform', '/plugin-platform', NULL, '/plugin-platform/plugins', NULL, 'catalog', '{"icon":"lucide:blocks","order":111,"title":"插件平台"}', 1, 111),
+  (2041700000000100409, 2041700000000100422, 'PluginPlatformPlugins', '/plugin-platform/plugins', '/plugin-platform/plugin/list', NULL, 'PluginPlatform:Plugin:List', 'menu', '{"icon":"lucide:plug","title":"插件管理"}', 1, 0),
+  (2041700000000120521, 2041700000000100409, 'PluginPlatformPluginInstall', NULL, NULL, NULL, 'PluginPlatform:Plugin:Install', 'button', '{"title":"安装"}', 1, 0),
+  (2041700000000120522, 2041700000000100409, 'PluginPlatformPluginEnable', NULL, NULL, NULL, 'PluginPlatform:Plugin:Enable', 'button', '{"title":"启用"}', 1, 0),
+  (2041700000000120523, 2041700000000100409, 'PluginPlatformPluginDisable', NULL, NULL, NULL, 'PluginPlatform:Plugin:Disable', 'button', '{"title":"停用"}', 1, 0),
+  (2041700000000120524, 2041700000000100409, 'PluginPlatformPluginUpgrade', NULL, NULL, NULL, 'PluginPlatform:Plugin:Upgrade', 'button', '{"title":"升级"}', 1, 0),
+  (2041700000000120525, 2041700000000100409, 'PluginPlatformPluginUninstall', NULL, NULL, NULL, 'PluginPlatform:Plugin:Uninstall', 'button', '{"title":"卸载"}', 1, 0),
+  (2041700000000120526, 2041700000000100409, 'PluginPlatformPluginConfig', NULL, NULL, NULL, 'PluginPlatform:Plugin:Config', 'button', '{"title":"配置"}', 1, 0),
+  (2041700000000100411, 2041700000000100422, 'PluginPlatformTasks', '/plugin-platform/tasks', '/plugin-platform/task/list', NULL, 'PluginPlatform:Task:List', 'menu', '{"icon":"lucide:calendar-clock","title":"定时任务"}', 1, 1),
+  (2041700000000120451, 2041700000000100411, 'PluginPlatformTaskUpdateCron', NULL, NULL, NULL, 'PluginPlatform:Task:UpdateCron', 'button', '{"title":"修改 Cron"}', 1, 0),
+  (2041700000000120452, 2041700000000100411, 'PluginPlatformTaskEnable', NULL, NULL, NULL, 'PluginPlatform:Task:Enable', 'button', '{"title":"启用"}', 1, 0),
+  (2041700000000120453, 2041700000000100411, 'PluginPlatformTaskDisable', NULL, NULL, NULL, 'PluginPlatform:Task:Disable', 'button', '{"title":"停用"}', 1, 0),
+  (2041700000000120454, 2041700000000100411, 'PluginPlatformTaskRun', NULL, NULL, NULL, 'PluginPlatform:Task:Run', 'button', '{"title":"手动运行"}', 1, 0),
+  (2041700000000120455, 2041700000000100411, 'PluginPlatformTaskRunLog', NULL, NULL, NULL, 'PluginPlatform:Task:RunLog', 'button', '{"title":"运行记录"}', 1, 0),
+  (2041700000000120481, 2041700000000100410, 'BotAccountMessagePushList', NULL, NULL, NULL, 'Bot:Account:MessagePush:List', 'button', '{"title":"common.list"}', 1, 0),
+  (2041700000000120482, 2041700000000100410, 'BotAccountMessagePushCreate', NULL, NULL, NULL, 'Bot:Account:MessagePush:Create', 'button', '{"title":"common.create"}', 1, 0),
+  (2041700000000120483, 2041700000000100410, 'BotAccountMessagePushUpdate', NULL, NULL, NULL, 'Bot:Account:MessagePush:Update', 'button', '{"title":"common.edit"}', 1, 0),
+  (2041700000000120484, 2041700000000100410, 'BotAccountMessagePushDelete', NULL, NULL, NULL, 'Bot:Account:MessagePush:Delete', 'button', '{"title":"common.delete"}', 1, 0),
+  (2041700000000120485, 2041700000000100410, 'BotAccountMessagePushToggle', NULL, NULL, NULL, 'Bot:Account:MessagePush:Toggle', 'button', '{"title":"启停"}', 1, 0)
 ON DUPLICATE KEY UPDATE
   pid = VALUES(pid),
+  name = VALUES(name),
   path = VALUES(path),
   component = VALUES(component),
   redirect = VALUES(redirect),
@@ -207,6 +234,28 @@ ON DUPLICATE KEY UPDATE
   status = VALUES(status),
   sort = VALUES(sort),
   is_deleted = 0;
+
+DELETE role_menu
+FROM admin_role_menu role_menu
+JOIN admin_menu menu ON menu.id = role_menu.menu_id
+WHERE menu.name LIKE 'QqBot%'
+   OR menu.path = '/qqbot'
+   OR menu.path LIKE '/qqbot/%'
+   OR menu.component LIKE '/qqbot/%'
+   OR menu.auth_code LIKE 'QqBot:%'
+   OR menu.auth_code LIKE 'Bot:PluginTask:%'
+   OR menu.path IN ('/bot/plugin', '/bot/plugin-task')
+   OR menu.path LIKE '/bot/plugin-platform/%';
+
+DELETE FROM admin_menu
+WHERE name LIKE 'QqBot%'
+   OR path = '/qqbot'
+   OR path LIKE '/qqbot/%'
+   OR component LIKE '/qqbot/%'
+   OR auth_code LIKE 'QqBot:%'
+   OR auth_code LIKE 'Bot:PluginTask:%'
+   OR path IN ('/bot/plugin', '/bot/plugin-task')
+   OR path LIKE '/bot/plugin-platform/%';
 
 DELETE role_menu
 FROM admin_role_menu role_menu
@@ -230,6 +279,37 @@ WHERE role.role_code <> 'super'
     'SystemNetworkDdnsDelete',
     'SystemNetworkDdnsRetry'
   );
+
+DELETE legacy
+FROM admin_dict legacy
+JOIN admin_dict canonical
+  ON canonical.dict_code = 'PLUGIN_TRIGGER_MODE'
+  AND canonical.value = legacy.value
+WHERE legacy.dict_code IN (
+  'QQBOT_PLUGIN_TRIGGER_MODE',
+  'BOT_PLUGIN_TRIGGER_MODE'
+);
+
+DELETE duplicate
+FROM admin_dict duplicate
+JOIN admin_dict retained
+  ON retained.value = duplicate.value
+  AND retained.dict_code IN (
+    'QQBOT_PLUGIN_TRIGGER_MODE',
+    'BOT_PLUGIN_TRIGGER_MODE'
+  )
+  AND retained.id < duplicate.id
+WHERE duplicate.dict_code IN (
+  'QQBOT_PLUGIN_TRIGGER_MODE',
+  'BOT_PLUGIN_TRIGGER_MODE'
+);
+
+UPDATE admin_dict
+SET dict_code = 'PLUGIN_TRIGGER_MODE'
+WHERE dict_code IN (
+  'QQBOT_PLUGIN_TRIGGER_MODE',
+  'BOT_PLUGIN_TRIGGER_MODE'
+);
 
 INSERT INTO admin_dict (
   id,
@@ -257,8 +337,27 @@ INSERT INTO admin_dict (
     NULL,
     0,
     1
+  ),
+  (
+    2041700000000300401,
+    'PLUGIN_TRIGGER_MODE',
+    '命令',
+    'command',
+    NULL,
+    1,
+    1
+  ),
+  (
+    2041700000000300402,
+    'PLUGIN_TRIGGER_MODE',
+    '事件',
+    'event',
+    NULL,
+    2,
+    1
   )
 ON DUPLICATE KEY UPDATE
+  dict_code = VALUES(dict_code),
   label = VALUES(label),
   children_code = VALUES(children_code),
   sort = VALUES(sort),
@@ -267,6 +366,19 @@ ON DUPLICATE KEY UPDATE
 
 INSERT IGNORE INTO admin_user_role (user_id, role_id)
 VALUES (2041700000000000002, 2041700000000010001);
+
+INSERT IGNORE INTO admin_role_menu (role_id, menu_id)
+SELECT DISTINCT role_menu.role_id, 2041700000000100422
+FROM admin_role_menu role_menu
+WHERE role_menu.menu_id IN (
+  2041700000000100409,
+  2041700000000100411,
+  2041700000000120451,
+  2041700000000120452,
+  2041700000000120453,
+  2041700000000120454,
+  2041700000000120455
+);
 
 INSERT IGNORE INTO admin_role_menu (role_id, menu_id)
 SELECT 2041700000000010001, id
@@ -287,7 +399,7 @@ INSERT INTO platform_setting (
   setting_value = VALUES(setting_value),
   value_type = VALUES(value_type);
 
-INSERT INTO qqbot_plugin (
+INSERT INTO plugin (
   id,
   plugin_key,
   plugin_name,
@@ -334,7 +446,7 @@ ON DUPLICATE KEY UPDATE
   description = VALUES(description),
   status = VALUES(status);
 
-INSERT INTO qqbot_plugin_version (
+INSERT INTO plugin_version (
   id,
   plugin_id,
   version,
@@ -354,8 +466,8 @@ INSERT INTO qqbot_plugin_version (
     'author', 'KT',
     'entry', 'src/index.ts',
     'permissions', JSON_ARRAY(
-      'qqbot.event.receive',
-      'qqbot.send',
+      'bot.event.receive',
+      'bot.reply',
       'runtime.http',
       'plugin.config.read'
     ),
@@ -365,31 +477,31 @@ INSERT INTO qqbot_plugin_version (
       'memoryMb', 128,
       'maxConcurrency', 1,
       'configKeys', JSON_ARRAY(
-        'QQBOT_BILIBILI_CARD_HTTP_TIMEOUT_MS',
-        'QQBOT_BILIBILI_CARD_MAX_REDIRECTS',
-        'QQBOT_BILIBILI_CARD_DEDUPE_TTL_MS',
-        'QQBOT_BILIBILI_CARD_DESC_MAX_LENGTH'
+        'PLUGIN_BILIBILI_CARD_HTTP_TIMEOUT_MS',
+        'PLUGIN_BILIBILI_CARD_MAX_REDIRECTS',
+        'PLUGIN_BILIBILI_CARD_DEDUPE_TTL_MS',
+        'PLUGIN_BILIBILI_CARD_DESC_MAX_LENGTH'
       )
     ),
     'configSchema', JSON_OBJECT(
       'type', 'object',
       'properties', JSON_OBJECT(
-        'QQBOT_BILIBILI_CARD_HTTP_TIMEOUT_MS', JSON_OBJECT(
+        'PLUGIN_BILIBILI_CARD_HTTP_TIMEOUT_MS', JSON_OBJECT(
           'type', 'number',
           'title', 'HTTP 超时毫秒',
           'default', 6000
         ),
-        'QQBOT_BILIBILI_CARD_MAX_REDIRECTS', JSON_OBJECT(
+        'PLUGIN_BILIBILI_CARD_MAX_REDIRECTS', JSON_OBJECT(
           'type', 'number',
           'title', '短链最大跳转次数',
           'default', 5
         ),
-        'QQBOT_BILIBILI_CARD_DEDUPE_TTL_MS', JSON_OBJECT(
+        'PLUGIN_BILIBILI_CARD_DEDUPE_TTL_MS', JSON_OBJECT(
           'type', 'number',
           'title', '同视频去重毫秒',
           'default', 600000
         ),
-        'QQBOT_BILIBILI_CARD_DESC_MAX_LENGTH', JSON_OBJECT(
+        'PLUGIN_BILIBILI_CARD_DESC_MAX_LENGTH', JSON_OBJECT(
           'type', 'number',
           'title', '简介最大长度',
           'default', 80
@@ -411,7 +523,7 @@ INSERT INTO qqbot_plugin_version (
   package_hash = VALUES(package_hash),
   manifest_json = VALUES(manifest_json);
 
-INSERT INTO qqbot_plugin_installation (
+INSERT INTO plugin_installation (
   id,
   plugin_id,
   version_id,
@@ -424,14 +536,14 @@ INSERT INTO qqbot_plugin_installation (
   1000000000000001105,
   'enabled',
   'stopped',
-  'src/modules/qqbot/plugins/bilibili-card'
+  'src/modules/plugins/bilibili-card'
 ) ON DUPLICATE KEY UPDATE
   version_id = VALUES(version_id),
   status = VALUES(status),
   runtime_status = VALUES(runtime_status),
   installed_path = VALUES(installed_path);
 
-INSERT INTO qqbot_plugin_event_handler (
+INSERT INTO plugin_event_handler (
   id,
   plugin_id,
   event_key,
@@ -447,7 +559,7 @@ INSERT INTO qqbot_plugin_event_handler (
   handler_name = VALUES(handler_name),
   enabled = VALUES(enabled);
 
-INSERT INTO qqbot_command (
+INSERT INTO bot_command (
   id,
   operation_key,
   command_key,
@@ -659,7 +771,7 @@ INSERT INTO admin_menu (id, pid, name, path, component, redirect, auth_code, typ
   (2041700000000120461,2041700000000100413,'MessageManagementSubscriptionList',NULL,NULL,NULL,'MessageManagement:Subscription:List','button','{"title":"common.list"}',1,0),(2041700000000120462,2041700000000100413,'MessageManagementSubscriptionCreate',NULL,NULL,NULL,'MessageManagement:Subscription:Create','button','{"title":"common.create"}',1,0),(2041700000000120463,2041700000000100413,'MessageManagementSubscriptionUpdate',NULL,NULL,NULL,'MessageManagement:Subscription:Update','button','{"title":"common.edit"}',1,0),(2041700000000120464,2041700000000100413,'MessageManagementSubscriptionDelete',NULL,NULL,NULL,'MessageManagement:Subscription:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120465,2041700000000100413,'MessageManagementSubscriptionToggle',NULL,NULL,NULL,'MessageManagement:Subscription:Toggle','button','{"title":"启停"}',1,0),
   (2041700000000120471,2041700000000100414,'MessageManagementTemplateList',NULL,NULL,NULL,'MessageManagement:Template:List','button','{"title":"common.list"}',1,0),(2041700000000120472,2041700000000100414,'MessageManagementTemplateCreate',NULL,NULL,NULL,'MessageManagement:Template:Create','button','{"title":"common.create"}',1,0),(2041700000000120473,2041700000000100414,'MessageManagementTemplateUpdate',NULL,NULL,NULL,'MessageManagement:Template:Update','button','{"title":"common.edit"}',1,0),(2041700000000120474,2041700000000100414,'MessageManagementTemplateDelete',NULL,NULL,NULL,'MessageManagement:Template:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120475,2041700000000100414,'MessageManagementTemplateToggle',NULL,NULL,NULL,'MessageManagement:Template:Toggle','button','{"title":"启停"}',1,0),(2041700000000120476,2041700000000100414,'MessageManagementTemplatePreview',NULL,NULL,NULL,'MessageManagement:Template:Preview','button','{"title":"预览"}',1,0),
   (2041700000000120491,2041700000000100423,'MessageManagementPushList',NULL,NULL,NULL,'MessageManagement:Push:List','button','{"title":"common.list"}',1,0),(2041700000000120492,2041700000000100423,'MessageManagementPushCreate',NULL,NULL,NULL,'MessageManagement:Push:Create','button','{"title":"common.create"}',1,0),(2041700000000120493,2041700000000100423,'MessageManagementPushUpdate',NULL,NULL,NULL,'MessageManagement:Push:Update','button','{"title":"common.edit"}',1,0),(2041700000000120494,2041700000000100423,'MessageManagementPushDelete',NULL,NULL,NULL,'MessageManagement:Push:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120495,2041700000000100423,'MessageManagementPushToggle',NULL,NULL,NULL,'MessageManagement:Push:Toggle','button','{"title":"启停"}',1,0),
-  (2041700000000120481,2041700000000100410,'QqBotAccountMessagePushList',NULL,NULL,NULL,'QqBot:Account:MessagePush:List','button','{"title":"common.list"}',1,0),(2041700000000120482,2041700000000100410,'QqBotAccountMessagePushCreate',NULL,NULL,NULL,'QqBot:Account:MessagePush:Create','button','{"title":"common.create"}',1,0),(2041700000000120483,2041700000000100410,'QqBotAccountMessagePushUpdate',NULL,NULL,NULL,'QqBot:Account:MessagePush:Update','button','{"title":"common.edit"}',1,0),(2041700000000120484,2041700000000100410,'QqBotAccountMessagePushDelete',NULL,NULL,NULL,'QqBot:Account:MessagePush:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120485,2041700000000100410,'QqBotAccountMessagePushToggle',NULL,NULL,NULL,'QqBot:Account:MessagePush:Toggle','button','{"title":"启停"}',1,0)
+  (2041700000000120481,2041700000000100410,'BotAccountMessagePushList',NULL,NULL,NULL,'Bot:Account:MessagePush:List','button','{"title":"common.list"}',1,0),(2041700000000120482,2041700000000100410,'BotAccountMessagePushCreate',NULL,NULL,NULL,'Bot:Account:MessagePush:Create','button','{"title":"common.create"}',1,0),(2041700000000120483,2041700000000100410,'BotAccountMessagePushUpdate',NULL,NULL,NULL,'Bot:Account:MessagePush:Update','button','{"title":"common.edit"}',1,0),(2041700000000120484,2041700000000100410,'BotAccountMessagePushDelete',NULL,NULL,NULL,'Bot:Account:MessagePush:Delete','button','{"title":"common.delete"}',1,0),(2041700000000120485,2041700000000100410,'BotAccountMessagePushToggle',NULL,NULL,NULL,'Bot:Account:MessagePush:Toggle','button','{"title":"启停"}',1,0)
 ON DUPLICATE KEY UPDATE pid = VALUES(pid), name = VALUES(name), path = VALUES(path), component = VALUES(component), redirect = VALUES(redirect), auth_code = VALUES(auth_code), type = VALUES(type), meta = VALUES(meta), status = VALUES(status), sort = VALUES(sort), is_deleted = 0;
 
 INSERT IGNORE INTO admin_role_menu (role_id, menu_id)

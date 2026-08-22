@@ -27,6 +27,6 @@ describe('environment mqtt topic catalog', () => {
         'bangdream',
         '/bestdori sync',
       ),
-    ).toBe('kt/env/qqbot/plugin-task/bangdream/bestdori-sync/run');
+    ).toBe('kt/env/plugin-platform/tasks/bangdream/bestdori-sync/run');
   });
 });

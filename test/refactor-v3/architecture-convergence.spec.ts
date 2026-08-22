@@ -6,9 +6,17 @@ const srcRoot = join(repoRoot, 'src');
 
 const legacyRootNames = ['admin', 'blog', 'minio', 'wordpress', 'qqbot'];
 const legacyRootPaths = legacyRootNames.map((root) => join(srcRoot, root));
-const moduleRoots = ['admin', 'asset', 'blog', 'qqbot'];
+const moduleRoots = [
+  'admin',
+  'asset',
+  'blog',
+  'bot',
+  'bot-adapter',
+  'message-management',
+  'plugin-platform',
+  'plugins',
+];
 const retiredModuleRoots = ['wordpress'];
-const qqbotRoots = ['core', 'napcat', 'plugin-platform', 'plugins'];
 
 /**
  * 判断 测试断言条件。
@@ -119,12 +127,20 @@ describe('architecture convergence', () => {
     expect(existing).toEqual([]);
   });
 
-  it('keeps QQBot subdomains under src/modules/qqbot', () => {
-    const missing = qqbotRoots.filter(
-      (root) => !isDirectory(join(srcRoot, 'modules', 'qqbot', root)),
+  it('keeps stateless Bot protocol, adapters, plugin platform, and plugins in separate module roots', () => {
+    expect(isDirectory(join(srcRoot, 'modules', 'bot', 'contract'))).toBe(true);
+    expect(isDirectory(join(srcRoot, 'modules', 'bot', 'registry'))).toBe(true);
+    expect(isDirectory(join(srcRoot, 'modules', 'bot-adapter', 'core'))).toBe(
+      true,
     );
-
-    expect(missing).toEqual([]);
+    expect(isDirectory(join(srcRoot, 'modules', 'bot-adapter', 'napcat'))).toBe(
+      true,
+    );
+    expect(
+      isDirectory(join(srcRoot, 'modules', 'bot-adapter', 'tencent')),
+    ).toBe(true);
+    expect(isDirectory(join(srcRoot, 'modules', 'plugin-platform'))).toBe(true);
+    expect(isDirectory(join(srcRoot, 'modules', 'plugins'))).toBe(true);
   });
 
   it('does not import old roots from src/modules', () => {

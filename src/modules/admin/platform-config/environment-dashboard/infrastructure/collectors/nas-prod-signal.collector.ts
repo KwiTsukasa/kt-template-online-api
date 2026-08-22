@@ -1,9 +1,13 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { RuntimeHealthService } from '@/runtime/health/runtime-health.service';
 import { MinioClientService } from '@/modules/asset/application/asset-minio.service';
-import { QqbotDashboardService } from '@/modules/qqbot/core/application/dashboard/qqbot-dashboard.service';
-import { QqbotPluginTaskService } from '@/modules/qqbot/plugin-platform/application/task';
-import { errorEvidence, liveEvidence, unwiredEvidence } from '../environment-dashboard-evidence.mapper';
+import { BotDashboardService } from '@/modules/bot-adapter/core/application/dashboard/bot-dashboard.service';
+import { PluginTaskService } from '@/modules/plugin-platform/application/task';
+import {
+  errorEvidence,
+  liveEvidence,
+  unwiredEvidence,
+} from '../environment-dashboard-evidence.mapper';
 import { EnvironmentDashboardConfigService } from '../environment-dashboard-config.service';
 import { JenkinsReadonlyAdapter } from '../adapters/jenkins-readonly.adapter';
 import { KubernetesReadonlyAdapter } from '../adapters/kubernetes-readonly.adapter';
@@ -24,7 +28,7 @@ export interface NasProdSignalCollectContext {
   observedAt?: string;
 }
 
-type QqbotSummaryProbe =
+type BotSummaryProbe =
   | { data: any; error?: never }
   | { data?: never; error: unknown };
 
@@ -34,9 +38,9 @@ export class NasProdSignalCollector {
     @Optional()
     private readonly runtimeHealthService?: RuntimeHealthService,
     @Optional()
-    private readonly qqbotDashboardService?: QqbotDashboardService,
+    private readonly botDashboardService?: BotDashboardService,
     @Optional()
-    private readonly pluginTaskService?: QqbotPluginTaskService,
+    private readonly pluginTaskService?: PluginTaskService,
     @Optional()
     private readonly minioClientService?: MinioClientService,
     @Optional()
@@ -48,13 +52,15 @@ export class NasProdSignalCollector {
   ) {}
 
   /**
-   * 根据`context`处理NAS生产环境信号采集器记录；从 `readQqbotSummary` 读取NAS生产环境信号采集器记录。
+   * 根据`context`处理NAS生产环境信号采集器记录；从 `readBotSummary` 读取NAS生产环境信号采集器记录。
    * @param context - 用于NAS生产环境信号采集器记录的领域对象，包含 `observedAt` 字段；省略时默认采用 `{}`。
    * @returns 包含 `id`、`label`、`nodes`、`status`、`summary` 字段的NAS生产环境信号采集器记录。
    */
-  async collect(context: NasProdSignalCollectContext = {}): Promise<EnvironmentSite> {
+  async collect(
+    context: NasProdSignalCollectContext = {},
+  ): Promise<EnvironmentSite> {
     const observedAt = context.observedAt || new Date().toISOString();
-    const qqbotSummary = await this.readQqbotSummary();
+    const botSummary = await this.readBotSummary();
     const services = [
       this.createNasApiService(observedAt),
       this.createNasAdminService(observedAt),
@@ -77,8 +83,8 @@ export class NasProdSignalCollector {
         observedAt,
       ),
       await this.createMinioService(observedAt),
-      this.createQqbotService(qqbotSummary, observedAt),
-      this.createNapcatService(qqbotSummary, observedAt),
+      this.createBotService(botSummary, observedAt),
+      this.createNapcatService(botSummary, observedAt),
       this.createPluginPlatformService(observedAt),
       await this.createPluginTaskService(observedAt),
       await this.createAdapterService(
@@ -102,7 +108,11 @@ export class NasProdSignalCollector {
         this.kubernetesAdapter,
       ),
     ];
-    const node = this.createNode('nas-prod-node', 'NAS Production Host', services);
+    const node = this.createNode(
+      'nas-prod-node',
+      'NAS Production Host',
+      services,
+    );
     return {
       id: 'nas-prod',
       label: 'NAS Production',
@@ -113,13 +123,14 @@ export class NasProdSignalCollector {
   }
 
   /**
-   * 读取QQBot摘要，并输出固定投影 `error` 字段。
-   * @returns 包含 `error` 字段的Qqbot摘要。
+   * 读取 Bot 核心摘要，并把未接入和调用失败统一投影为 `error` 字段。
+   * @returns 包含 `error` 字段的Bot摘要。
    */
-  private async readQqbotSummary(): Promise<QqbotSummaryProbe> {
-    if (!this.qqbotDashboardService) return { error: new Error('QQBot dashboard service is not wired') };
+  private async readBotSummary(): Promise<BotSummaryProbe> {
+    if (!this.botDashboardService)
+      return { error: new Error('Bot dashboard service is not wired') };
     try {
-      return { data: await this.qqbotDashboardService.summary() };
+      return { data: await this.botDashboardService.summary() };
     } catch (error) {
       return { error };
     }
@@ -206,18 +217,18 @@ export class NasProdSignalCollector {
         };
       }
       return {
-          evidence: [
-            unwiredEvidence('Admin public route', [
-              'ENV_DASHBOARD_ADMIN_PUBLIC_URL',
-              'ENV_DASHBOARD_CADDY_PUBLIC_URL',
-            ]),
-          ],
-          id: 'nas-admin-route',
-          label: 'Admin Public Route',
-          sourceKind: 'unwired',
-          status: 'unwired',
-          summary: 'Admin 公开入口未接入只读观测',
-        };
+        evidence: [
+          unwiredEvidence('Admin public route', [
+            'ENV_DASHBOARD_ADMIN_PUBLIC_URL',
+            'ENV_DASHBOARD_CADDY_PUBLIC_URL',
+          ]),
+        ],
+        id: 'nas-admin-route',
+        label: 'Admin Public Route',
+        sourceKind: 'unwired',
+        status: 'unwired',
+        summary: 'Admin 公开入口未接入只读观测',
+      };
     })();
     return this.createService('nas-admin', 'Admin Frontend', [signal]);
   }
@@ -261,9 +272,16 @@ export class NasProdSignalCollector {
    * @param observedAt - 用于过期、排序或租约判定的时间基准。
    * @returns MinIO服务。
    */
-  private async createMinioService(observedAt: string): Promise<EnvironmentService> {
+  private async createMinioService(
+    observedAt: string,
+  ): Promise<EnvironmentService> {
     if (!this.minioClientService) {
-      return this.createUnknownService('minio', 'MinIO', 'MinioClientService 未接入', observedAt);
+      return this.createUnknownService(
+        'minio',
+        'MinIO',
+        'MinioClientService 未接入',
+        observedAt,
+      );
     }
     try {
       const result = await this.minioClientService.checkConnection();
@@ -276,10 +294,15 @@ export class NasProdSignalCollector {
       return this.createService('minio', 'MinIO', [
         {
           evidence: [
-            liveEvidence('minio', `Bucket ${result?.bucketName || ''} exists=${!!result?.exists}`, observedAt, {
-              bucketName: result?.bucketName,
-              exists: !!result?.exists,
-            }),
+            liveEvidence(
+              'minio',
+              `Bucket ${result?.bucketName || ''} exists=${!!result?.exists}`,
+              observedAt,
+              {
+                bucketName: result?.bucketName,
+                exists: !!result?.exists,
+              },
+            ),
           ],
           id: 'minio-bucket',
           label: 'Default Bucket',
@@ -310,57 +333,61 @@ export class NasProdSignalCollector {
   }
 
   /**
-   * 根据`probe`、`observedAt`构造QQBot服务；当 `probe.error` 成立时返回 `this.createService('qqbot-core', 'QQBot Cor…`。
-   * @param probe - 用于QQBot服务的领域对象，包含 `error`、`data` 字段。
+   * 根据 Bot 摘要构造核心服务信号；摘要不可用时保留可观测错误证据。
+   * @param probe - 用于 Bot 核心服务的领域对象，包含 `error`、`data` 字段。
    * @param observedAt - 用于过期、排序或租约判定的时间基准。
-   * @returns QQBot服务。
+   * @returns Bot 核心服务。
    */
-  private createQqbotService(
-    probe: QqbotSummaryProbe,
+  private createBotService(
+    probe: BotSummaryProbe,
     observedAt: string,
   ): EnvironmentService {
     if (probe.error) {
-      return this.createService('qqbot-core', 'QQBot Core', [
+      return this.createService('bot-core', 'Bot Core', [
         {
-          evidence: [errorEvidence('qqbot-dashboard', probe.error, observedAt)],
-          id: 'qqbot-core-summary',
-          label: 'QQBot Summary',
+          evidence: [errorEvidence('bot-dashboard', probe.error, observedAt)],
+          id: 'bot-core-summary',
+          label: 'Bot Summary',
           observedAt,
           sourceKind: 'derived',
           status: (() => {
-            if (this.qqbotDashboardService) {
+            if (this.botDashboardService) {
               return 'down';
             }
             return 'unknown';
           })(),
-          summary: 'QQBot 摘要不可用',
+          summary: 'Bot 摘要不可用',
         },
       ]);
     }
     const accountTotal = Number(probe.data?.accountTotal || 0);
     const onlineTotal = Number(probe.data?.onlineTotal || 0);
-    const status: EnvironmentHealthStatus =
-      (() => {
-        if (accountTotal > 0 && onlineTotal <= 0) {
-          return 'degraded';
-        }
-        return 'ok';
-      })();
-    return this.createService('qqbot-core', 'QQBot Core', [
+    const status: EnvironmentHealthStatus = (() => {
+      if (accountTotal > 0 && onlineTotal <= 0) {
+        return 'degraded';
+      }
+      return 'ok';
+    })();
+    return this.createService('bot-core', 'Bot Core', [
       {
         evidence: [
-          liveEvidence('qqbot-dashboard', `QQBot online ${onlineTotal}/${accountTotal}`, observedAt, {
-            accountTotal,
-            bus: probe.data?.bus,
-            onlineTotal,
-          }),
+          liveEvidence(
+            'bot-dashboard',
+            `Bot online ${onlineTotal}/${accountTotal}`,
+            observedAt,
+            {
+              accountTotal,
+              bus: probe.data?.bus,
+              onlineTotal,
+            },
+          ),
         ],
-        id: 'qqbot-core-summary',
-        label: 'QQBot Summary',
+        id: 'bot-core-summary',
+        label: 'Bot Summary',
         observedAt,
         sourceKind: 'live',
         status,
-        summary: `QQBot 在线账号 ${onlineTotal}/${accountTotal}`,
+        summary: `Bot 在线连接 ${onlineTotal}/${accountTotal}`,
       },
     ]);
   }
@@ -372,11 +399,16 @@ export class NasProdSignalCollector {
    * @returns NapCat服务。
    */
   private createNapcatService(
-    probe: QqbotSummaryProbe,
+    probe: BotSummaryProbe,
     observedAt: string,
   ): EnvironmentService {
     if (probe.error) {
-      return this.createUnknownService('napcat-runtime', 'NapCat Runtime', '等待 QQBot 摘要提供 NapCat 会话证据', observedAt);
+      return this.createUnknownService(
+        'napcat-runtime',
+        'NapCat Runtime',
+        '等待 Bot 摘要提供 NapCat 会话证据',
+        observedAt,
+      );
     }
     const sessions = (() => {
       if (Array.isArray(probe.data?.runtime?.sessions)) {
@@ -397,10 +429,15 @@ export class NasProdSignalCollector {
     return this.createService('napcat-runtime', 'NapCat Runtime', [
       {
         evidence: [
-          liveEvidence('qqbot-reverse-ws', `NapCat reverse WS sessions: ${sessions.length}`, observedAt, {
-            enabled,
-            sessionCount: sessions.length,
-          }),
+          liveEvidence(
+            'bot-reverse-ws',
+            `NapCat reverse WS sessions: ${sessions.length}`,
+            observedAt,
+            {
+              enabled,
+              sessionCount: sessions.length,
+            },
+          ),
         ],
         id: 'napcat-reverse-ws',
         label: 'Reverse WS Sessions',
@@ -473,9 +510,16 @@ export class NasProdSignalCollector {
    * @param observedAt - 用于过期、排序或租约判定的时间基准。
    * @returns 插件任务服务。
    */
-  private async createPluginTaskService(observedAt: string): Promise<EnvironmentService> {
+  private async createPluginTaskService(
+    observedAt: string,
+  ): Promise<EnvironmentService> {
     if (!this.pluginTaskService) {
-      return this.createUnknownService('plugin-tasks', 'Plugin Tasks', 'QqbotPluginTaskService 未接入', observedAt);
+      return this.createUnknownService(
+        'plugin-tasks',
+        'Plugin Tasks',
+        'PluginTaskService 未接入',
+        observedAt,
+      );
     }
     try {
       const page = await this.pluginTaskService.pageTasks({
@@ -488,26 +532,34 @@ export class NasProdSignalCollector {
         }
         return [];
       })();
-      const disabledCount = list.filter((task) => task?.enabled === false).length;
-      const failedCount = list.filter((task) => /failed|error/i.test(`${task?.runtimeStatus || ''}`)).length;
-      const status: EnvironmentHealthStatus =
-        (() => {
-          if (failedCount > 0) {
-            return 'down';
-          }
-          if (disabledCount > 0) {
-            return 'degraded';
-          }
-          return 'ok';
-        })();
+      const disabledCount = list.filter(
+        (task) => task?.enabled === false,
+      ).length;
+      const failedCount = list.filter((task) =>
+        /failed|error/i.test(`${task?.runtimeStatus || ''}`),
+      ).length;
+      const status: EnvironmentHealthStatus = (() => {
+        if (failedCount > 0) {
+          return 'down';
+        }
+        if (disabledCount > 0) {
+          return 'degraded';
+        }
+        return 'ok';
+      })();
       return this.createService('plugin-tasks', 'Plugin Tasks', [
         {
           evidence: [
-            liveEvidence('plugin-tasks', `Plugin tasks total=${page?.total || list.length}, disabled=${disabledCount}`, observedAt, {
-              disabledCount,
-              failedCount,
-              total: page?.total || list.length,
-            }),
+            liveEvidence(
+              'plugin-tasks',
+              `Plugin tasks total=${page?.total || list.length}, disabled=${disabledCount}`,
+              observedAt,
+              {
+                disabledCount,
+                failedCount,
+                total: page?.total || list.length,
+              },
+            ),
           ],
           id: 'plugin-task-scheduler',
           label: 'Scheduled Tasks',
@@ -634,7 +686,9 @@ export class NasProdSignalCollector {
    * @param status - 决定运行态状态内容、边界或目标的 `status` 值；为空时采用 `status === 'ready'` 作为兜底。
    * @returns 当前状态对应的运行态状态，取值为 `'ok'`、`'blocked'`、`'degraded'`、`'unknown'`。
    */
-  private mapRuntimeStatus(status?: RuntimeHealthStatus): EnvironmentHealthStatus {
+  private mapRuntimeStatus(
+    status?: RuntimeHealthStatus,
+  ): EnvironmentHealthStatus {
     if (status === 'live' || status === 'ready') return 'ok';
     if (status === 'blocked') return 'blocked';
     if (status === 'degraded') return 'degraded';

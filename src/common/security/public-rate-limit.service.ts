@@ -42,12 +42,9 @@ const MANAGEMENT_EXACT_PATHS = new Set([
   '/doc.html',
   '/services.json',
 ]);
-const UPLOAD_PATHS = new Set([
-  '/minio/upload',
-  '/qqbot/plugin-platform/upload',
-]);
+const UPLOAD_PATHS = new Set(['/minio/upload', '/plugin-platform/upload']);
 const SSE_PATHS = new Set([
-  '/qqbot/account/scan/events',
+  '/bot-adapter/napcat/account/scan/events',
   '/system/environment/events/stream',
   '/system/network/events/stream',
 ]);
@@ -686,12 +683,12 @@ export class PublicRateLimitService {
    * @throws 当 `!path.startsWith('/') || /[?#\s]/.test(path)` 成立时拒绝当前输入并抛出 `Error`。
    */
   private readWebsocketPath(): string {
-    const value = `${this.configService.get('QQBOT_REVERSE_WS_PATH') || ''}`
+    const value = `${this.configService.get('BOT_REVERSE_WS_PATH') || ''}`
       .trim()
       .replace(/\/+$/, '');
-    const path = value || '/qqbot/onebot/reverse';
+    const path = value || '/bot-adapter/napcat/onebot/reverse';
     if (!path.startsWith('/') || /[?#\s]/.test(path)) {
-      throw new Error('QQBOT_REVERSE_WS_PATH 必须是根相对路径');
+      throw new Error('BOT_REVERSE_WS_PATH 必须是根相对路径');
     }
     return path;
   }

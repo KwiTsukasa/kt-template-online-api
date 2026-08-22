@@ -8,7 +8,7 @@ import {
   RuntimeDatabaseConfig,
   RuntimeLokiConfig,
   RuntimeMinioConfig,
-  RuntimeQqbotConfig,
+  RuntimeBotConfig,
   RuntimeSafeConfigSnapshot,
   RuntimeSecurityConfig,
 } from './runtime-config.types';
@@ -77,18 +77,18 @@ const OPTIONAL_CONFIG_CHECKS: ReadonlyArray<string | readonly string[]> = [
   'LOKI_QUERY_TIMEOUT_MS',
   'LOKI_BATCH_INTERVAL_SECONDS',
   'LOKI_BATCH_MAX_BUFFER_SIZE',
-  'QQBOT_REVERSE_WS_PATH',
-  'QQBOT_REVERSE_WS_TOKEN',
-  'QQBOT_NAPCAT_ROOT',
-  'QQBOT_NAPCAT_IMAGE',
-  'QQBOT_NAPCAT_CONTAINER_MODE',
-  'QQBOT_NAPCAT_SSH_TARGET',
-  'QQBOT_NAPCAT_SSH_PORT',
-  'QQBOT_NAPCAT_SSH_KEY_PATH',
+  'BOT_REVERSE_WS_PATH',
+  'BOT_REVERSE_WS_TOKEN',
+  'NAPCAT_ROOT',
+  'NAPCAT_IMAGE',
+  'NAPCAT_CONTAINER_MODE',
+  'NAPCAT_SSH_TARGET',
+  'NAPCAT_SSH_PORT',
+  'NAPCAT_SSH_KEY_PATH',
   'NAPCAT_LOGIN_HUMAN_VERIFY_EXPIRE_MS',
-  ['QQBOT_NAPCAT_REVERSE_WS_URL', 'QQBOT_NAPCAT_REVERSE_WS_BASE'],
-  ['NAPCAT_WEBUI_BASE_URL', 'QQBOT_NAPCAT_WEBUI_URL'],
-  ['NAPCAT_WEBUI_TOKEN', 'QQBOT_NAPCAT_WEBUI_TOKEN'],
+  ['NAPCAT_REVERSE_WS_URL', 'NAPCAT_REVERSE_WS_BASE'],
+  ['NAPCAT_WEBUI_BASE_URL', 'NAPCAT_WEBUI_URL'],
+  ['NAPCAT_WEBUI_TOKEN', 'NAPCAT_WEBUI_TOKEN'],
 ];
 
 @Injectable()
@@ -171,34 +171,34 @@ export class RuntimeConfigService {
    * 按当前运行态读取针对运行态健康检查；从 `getString` 读取针对运行态健康检查。
    * @returns 包含 `reverseWsPath`、`reverseWsToken`、`napcatRoot`、`napcatImage`、`napcatContainerMode` 字段的针对运行态健康检查。
    */
-  readQqbotProfile(): RuntimeQqbotConfig {
+  readBotProfile(): RuntimeBotConfig {
     return {
       reverseWsPath: this.getString(
-        'QQBOT_REVERSE_WS_PATH',
-        '/qqbot/onebot/reverse',
+        'BOT_REVERSE_WS_PATH',
+        '/bot-adapter/napcat/onebot/reverse',
       ),
       reverseWsToken: this.maskSecret(
-        this.configService.get('QQBOT_REVERSE_WS_TOKEN'),
+        this.configService.get('BOT_REVERSE_WS_TOKEN'),
       ),
       napcatRoot: this.getString(
-        'QQBOT_NAPCAT_ROOT',
-        '/vol1/docker/kt-qqbot/napcat-instances',
+        'NAPCAT_ROOT',
+        '/vol1/docker/kt-bot/napcat-instances',
       ),
-      napcatImage: this.getString('QQBOT_NAPCAT_IMAGE'),
-      napcatContainerMode: this.getString('QQBOT_NAPCAT_CONTAINER_MODE'),
-      napcatSshTarget: this.getString('QQBOT_NAPCAT_SSH_TARGET', 'nas'),
-      napcatSshPort: this.getPositiveNumber('QQBOT_NAPCAT_SSH_PORT', 22),
-      napcatSshKeyPath: this.getString('QQBOT_NAPCAT_SSH_KEY_PATH'),
+      napcatImage: this.getString('NAPCAT_IMAGE'),
+      napcatContainerMode: this.getString('NAPCAT_CONTAINER_MODE'),
+      napcatSshTarget: this.getString('NAPCAT_SSH_TARGET', 'nas'),
+      napcatSshPort: this.getPositiveNumber('NAPCAT_SSH_PORT', 22),
+      napcatSshKeyPath: this.getString('NAPCAT_SSH_KEY_PATH'),
       napcatReverseWsBase: this.getFirstString([
-        'QQBOT_NAPCAT_REVERSE_WS_URL',
-        'QQBOT_NAPCAT_REVERSE_WS_BASE',
+        'NAPCAT_REVERSE_WS_URL',
+        'NAPCAT_REVERSE_WS_BASE',
       ]),
       napcatWebuiBaseUrl: this.getFirstString([
         'NAPCAT_WEBUI_BASE_URL',
-        'QQBOT_NAPCAT_WEBUI_URL',
+        'NAPCAT_WEBUI_URL',
       ]),
       napcatWebuiToken: this.maskSecret(
-        this.getFirstString(['NAPCAT_WEBUI_TOKEN', 'QQBOT_NAPCAT_WEBUI_TOKEN']),
+        this.getFirstString(['NAPCAT_WEBUI_TOKEN', 'NAPCAT_WEBUI_TOKEN']),
       ),
     };
   }
@@ -292,7 +292,7 @@ export class RuntimeConfigService {
 
   /**
    * 按当前运行态读取针对运行态健康检查；从 `readAppProfile` 读取针对运行态健康检查。
-   * @returns 包含 `app`、`database`、`loki`、`minio`、`qqbot` 字段的针对运行态健康检查。
+   * @returns 包含 `app`、`bot`、`database`、`loki`、`minio` 字段的针对运行态健康检查。
    */
   getSafeSnapshot(): RuntimeSafeConfigSnapshot {
     return {
@@ -300,7 +300,7 @@ export class RuntimeConfigService {
       database: this.readDatabaseProfile(),
       loki: this.readLokiProfile(),
       minio: this.readMinioProfile(),
-      qqbot: this.readQqbotProfile(),
+      bot: this.readBotProfile(),
       security: this.readSecurityProfile(),
       checks: this.getConfigChecks(),
     };
@@ -313,14 +313,12 @@ export class RuntimeConfigService {
   getConfigChecks(): RuntimeConfigCheck[] {
     return [
       ...REQUIRED_CONFIG_KEYS.map((key) => this.createCheck(key, 'required')),
-      ...OPTIONAL_CONFIG_CHECKS.map((check) =>
-        {
-          if (typeof check === 'string') {
-            return this.createCheck(check, 'optional');
-          }
-          return this.createAnyCheck([...check], 'optional');
-        },
-      ),
+      ...OPTIONAL_CONFIG_CHECKS.map((check) => {
+        if (typeof check === 'string') {
+          return this.createCheck(check, 'optional');
+        }
+        return this.createAnyCheck([...check], 'optional');
+      }),
     ];
   }
 

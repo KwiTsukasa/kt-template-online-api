@@ -2,7 +2,7 @@ import { EnvironmentDashboardConfigService } from '../../../../src/modules/admin
 import { NasProdSignalCollector } from '../../../../src/modules/admin/platform-config/environment-dashboard/infrastructure/collectors/nas-prod-signal.collector';
 
 describe('NasProdSignalCollector', () => {
-  it('contains QQBot offline state without marking API down', async () => {
+  it('contains Bot offline state without marking API down', async () => {
     const jenkinsAdapter = {
       inspect: jest.fn(async () => ({
         id: 'jenkins-build',
@@ -75,12 +75,12 @@ describe('NasProdSignalCollector', () => {
     expect(services.find((service) => service.id === 'nas-api')?.status).toBe(
       'ok',
     );
-    expect(services.find((service) => service.id === 'qqbot-core')?.status).toBe(
+    expect(services.find((service) => service.id === 'bot-core')?.status).toBe(
       'degraded',
     );
-    expect(services.find((service) => service.id === 'plugin-tasks')?.status).toBe(
-      'degraded',
-    );
+    expect(
+      services.find((service) => service.id === 'plugin-tasks')?.status,
+    ).toBe('degraded');
     expect(services.find((service) => service.id === 'minio')?.status).toBe(
       'down',
     );

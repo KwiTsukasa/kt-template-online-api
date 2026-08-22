@@ -18,6 +18,23 @@ spec:
       labels:
         app: kt-template-online-api
     spec:
+      initContainers:
+        - name: bot-adapter-migration
+          image: k3d-kt-registry.localhost:5000/kt-template-online-api:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - node
+            - dist/commands/migrate-bot-adapter-protocol.js
+          envFrom:
+            - secretRef:
+                name: kt-template-online-api-env
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
       containers:
         - name: api
           image: k3d-kt-registry.localhost:5000/kt-template-online-api:latest
@@ -34,18 +51,18 @@ spec:
               value: Asia/Shanghai
             - name: DB_TIMEZONE
               value: "+08:00"
-            - name: QQBOT_NAPCAT_IMAGE
+            - name: NAPCAT_IMAGE
               value: kt-napcat-desktop-cn:desktop-cn-v21
-            - name: QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION
+            - name: NAPCAT_DESKTOP_PROFILE_VERSION
               value: desktop-cn-v21
-            - name: QQBOT_NAPCAT_MUTATION_PROTOCOL
+            - name: NAPCAT_MUTATION_PROTOCOL
               value: journal-flock-v1
-            - name: QQBOT_NAPCAT_SSH_KEY_PATH
+            - name: NAPCAT_SSH_KEY_PATH
               value: /app/secrets/napcat-ssh/id_rsa
-            - name: QQBOT_PLUGIN_TASK_QUEUE_REDIS_PREFIX
-              value: kt:qqbot:plugin-task
+            - name: PLUGIN_TASK_QUEUE_REDIS_PREFIX
+              value: kt:plugin:plugin-task
             - name: BANGDREAM_TSUGU_CACHE_ROOT
-              value: /data/qqbot/plugins/bangdream/cache
+              value: /data/plugin-platform/plugins/bangdream/cache
             - name: NAPCAT_WEBUI_GATEWAY_INTERNAL_BASE_URL
               value: http://kt-napcat-webui-gateway:48086
             - name: NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL
@@ -59,7 +76,7 @@ spec:
             - name: MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS
               value: "20000"
             - name: PUBLIC_RATE_LIMIT_REDIS_HOST
-              value: kt-qqbot-plugin-redis
+              value: kt-plugin-redis
             - name: PUBLIC_RATE_LIMIT_REDIS_PORT
               value: "6379"
             - name: PUBLIC_RATE_LIMIT_REDIS_DB
@@ -116,8 +133,8 @@ spec:
             - name: napcat-ssh-key
               mountPath: /app/secrets/napcat-ssh
               readOnly: true
-            - name: qqbot-plugin-data
-              mountPath: /data/qqbot/plugins
+            - name: plugin-data
+              mountPath: /data/plugin-platform/plugins
           readinessProbe:
             tcpSocket:
               port: 48085
@@ -142,12 +159,12 @@ spec:
       volumes:
         - name: napcat-ssh-key
           secret:
-            secretName: kt-qqbot-napcat-ssh-key
+            secretName: kt-bot-napcat-ssh-key
             optional: true
             defaultMode: 0400
-        - name: qqbot-plugin-data
+        - name: plugin-data
           hostPath:
-            path: /var/lib/rancher/k3s/kt-template-online-api/qqbot-plugins
+            path: /var/lib/rancher/k3s/kt-template-online-api/plugin-platform/plugins
             type: DirectoryOrCreate
 ---
 apiVersion: v1
@@ -170,20 +187,20 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kt-qqbot-plugin-redis
+  name: kt-plugin-redis
   namespace: kt-prod
   labels:
-    app: kt-qqbot-plugin-redis
+    app: kt-plugin-redis
 spec:
   replicas: 1
   revisionHistoryLimit: 2
   selector:
     matchLabels:
-      app: kt-qqbot-plugin-redis
+      app: kt-plugin-redis
   template:
     metadata:
       labels:
-        app: kt-qqbot-plugin-redis
+        app: kt-plugin-redis
     spec:
       containers:
         - name: redis
@@ -280,7 +297,7 @@ spec:
             - name: NAPCAT_WEBUI_GATEWAY_PUBLIC_BASE_URL
               value: /admin/napcat-webui
             - name: NAPCAT_WEBUI_GATEWAY_REDIS_HOST
-              value: kt-qqbot-plugin-redis
+              value: kt-plugin-redis
             - name: NAPCAT_WEBUI_GATEWAY_REDIS_PORT
               value: "6379"
             - name: NAPCAT_WEBUI_GATEWAY_INTERNAL_SECRET
@@ -313,14 +330,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: kt-qqbot-plugin-redis
+  name: kt-plugin-redis
   namespace: kt-prod
   labels:
-    app: kt-qqbot-plugin-redis
+    app: kt-plugin-redis
 spec:
   type: ClusterIP
   selector:
-    app: kt-qqbot-plugin-redis
+    app: kt-plugin-redis
   ports:
     - name: redis
       port: 6379

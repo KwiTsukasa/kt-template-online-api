@@ -334,14 +334,18 @@ describe('PublicRateLimitService', () => {
 
   it.each([
     ['GET', '/system/network/events/stream', { accept: 'text/event-stream' }],
-    ['GET', '/qqbot/account/scan/events', { accept: 'text/event-stream' }],
     [
       'GET',
-      '/qqbot/onebot/reverse',
+      '/bot-adapter/napcat/account/scan/events',
+      { accept: 'text/event-stream' },
+    ],
+    [
+      'GET',
+      '/bot-adapter/napcat/onebot/reverse',
       { connection: 'Upgrade', upgrade: 'websocket' },
     ],
     ['POST', '/minio/upload', {}],
-    ['POST', '/qqbot/plugin-platform/upload', {}],
+    ['POST', '/plugin-platform/upload', {}],
   ])(
     'does not count the explicit exception %s %s',
     async (method, path, headers) => {

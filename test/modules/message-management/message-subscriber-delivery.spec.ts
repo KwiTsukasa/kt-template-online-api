@@ -1,11 +1,11 @@
 import { StationNoticeMessageSubscriberAdapter } from '@/modules/admin/platform-config/notice/station-notice-message-subscriber.adapter';
 import { StationNoticeMessageBinding } from '@/modules/admin/platform-config/notice/station-notice-message-binding.entity';
 import type { MessageSubscriberInput } from '@/modules/message-management/application/subscriber/message-subscriber.adapter';
-import { QqbotAccount } from '@/modules/qqbot/core/infrastructure/persistence/account/qqbot-account.entity';
-import { QqbotMessageSubscriberAdapter } from '@/modules/qqbot/message-management-adapter/qqbot-message-subscriber.adapter';
-import { QqbotMessageDelivery } from '@/modules/qqbot/message-management-adapter/qqbot-message-delivery.entity';
-import { QqbotMessagePublishBinding } from '@/modules/qqbot/message-management-adapter/qqbot-message-publish-binding.entity';
-import { QqbotMessagePublishTarget } from '@/modules/qqbot/message-management-adapter/qqbot-message-publish-target.entity';
+import { BotAccount } from '@/modules/bot-adapter/core/infrastructure/persistence/account/bot-account.entity';
+import { BotMessageSubscriberAdapter } from '@/modules/bot-adapter/message-management/bot-message-subscriber.adapter';
+import { BotMessageDelivery } from '@/modules/bot-adapter/message-management/bot-message-delivery.entity';
+import { BotMessagePublishBinding } from '@/modules/bot-adapter/message-management/bot-message-publish-binding.entity';
+import { BotMessagePublishTarget } from '@/modules/bot-adapter/message-management/bot-message-publish-target.entity';
 
 const unifiedInput: Extract<MessageSubscriberInput, { lifecycle: 'deliver' }> =
   {
@@ -17,7 +17,7 @@ const unifiedInput: Extract<MessageSubscriberInput, { lifecycle: 'deliver' }> =
       occurredAt: new Date('2026-08-18T00:00:00.000Z'),
       resourceKey: 'resource-1',
       sourceKey: 'source-1',
-      subscriberKey: 'qqbot',
+      subscriberKey: 'bot',
       subscriptionId: '200',
       supersededMessageEventIds: [],
       templates: [
@@ -42,7 +42,7 @@ const unifiedInput: Extract<MessageSubscriberInput, { lifecycle: 'deliver' }> =
   };
 
 describe('message subscriber delivery', () => {
-  it('lets QQBot create one private delivery per rendered template and target', async () => {
+  it('lets Bot create one private delivery per rendered template and target', async () => {
     const saved: Array<Record<string, unknown>> = [];
     const deliveryRepository = {
       create: jest.fn((value) => value),
@@ -54,7 +54,7 @@ describe('message subscriber delivery', () => {
     };
     const manager = {
       getRepository: jest.fn((entity) => {
-        if (entity === QqbotMessagePublishBinding) {
+        if (entity === BotMessagePublishBinding) {
           return {
             find: jest.fn().mockResolvedValue([
               {
@@ -68,7 +68,7 @@ describe('message subscriber delivery', () => {
             ]),
           };
         }
-        if (entity === QqbotAccount) {
+        if (entity === BotAccount) {
           return {
             find: jest.fn().mockResolvedValue([
               {
@@ -80,7 +80,7 @@ describe('message subscriber delivery', () => {
             ]),
           };
         }
-        if (entity === QqbotMessagePublishTarget) {
+        if (entity === BotMessagePublishTarget) {
           return {
             find: jest.fn().mockResolvedValue([
               {
@@ -94,11 +94,11 @@ describe('message subscriber delivery', () => {
             ]),
           };
         }
-        if (entity === QqbotMessageDelivery) return deliveryRepository;
+        if (entity === BotMessageDelivery) return deliveryRepository;
         throw new Error('unexpected repository');
       }),
     };
-    const adapter = new QqbotMessageSubscriberAdapter(
+    const adapter = new BotMessageSubscriberAdapter(
       {} as never,
       {} as never,
       {} as never,

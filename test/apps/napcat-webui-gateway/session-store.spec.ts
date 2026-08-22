@@ -170,7 +170,7 @@ function createSessionInput(
     adminUserId: 'admin-1',
     clientIp: '127.0.0.1',
     containerId: 'container-1',
-    containerName: 'kt-qqbot-napcat-1914728559',
+    containerName: 'kt-napcat-1914728559',
     selfId: '1914728559',
     upstreamBaseUrl: 'http://127.0.0.1:6099',
     userAgent: 'jest-agent',
@@ -752,7 +752,7 @@ describe('InternalSessionController', () => {
         selfId: '1914728559',
       },
       container: {
-        containerName: 'kt-qqbot-napcat-1914728559',
+        containerName: 'kt-napcat-1914728559',
       },
       expiresAt: 61_000,
       iframeUrl: expect.stringMatching(

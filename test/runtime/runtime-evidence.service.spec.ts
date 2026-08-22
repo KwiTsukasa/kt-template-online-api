@@ -46,11 +46,11 @@ describe('RuntimeEvidenceService', () => {
     const service = new RuntimeEvidenceService();
 
     const record = service.createRecord({
-      title: 'qqbot captcha smoke',
+      title: 'bot captcha smoke',
       taskType: 'api',
       project: 'kt-template-online-api',
       environment: 'local',
-      operation: 'qqbot-login',
+      operation: 'bot-login',
       target: 'account:2637330537',
       status: 'blocked',
       details: {
@@ -136,7 +136,7 @@ describe('RuntimeEvidenceService', () => {
       taskType: 'api',
       project: 'kt-template-online-api',
       environment: 'local',
-      operation: 'qqbot-login',
+      operation: 'bot-login',
       target: 'account safe text Authorization=Bearer raw-token',
       status: 'failed' as const,
       error: {
@@ -189,7 +189,7 @@ describe('RuntimeEvidenceService', () => {
       taskType: 'api',
       project: 'kt-template-online-api',
       environment: 'local',
-      operation: 'qqbot-login',
+      operation: 'bot-login',
       status: 'blocked',
       details: {
         sid: 'raw-captcha-sid',
@@ -230,8 +230,7 @@ describe('RuntimeEvidenceService', () => {
       status: 'failed',
       details: {
         sessionId: 'KT_SCAN_SAFE',
-        text:
-          'accessToken=raw-access-token refreshToken=raw-refresh-token access_token=raw-snake-token client_secret=raw-client-secret sessionId=KT_SCAN_SAFE',
+        text: 'accessToken=raw-access-token refreshToken=raw-refresh-token access_token=raw-snake-token client_secret=raw-client-secret sessionId=KT_SCAN_SAFE',
         jsonText:
           '{"accessToken":"raw-json-access","refreshToken":"raw-json-refresh","access_token":"raw-json-snake","client_secret":"raw-json-client-secret","sessionId":"KT_SCAN_SAFE"}',
       },
@@ -291,8 +290,7 @@ describe('RuntimeEvidenceService', () => {
       operation: 'runtime-evidence',
       status: 'failed',
       details: {
-        text:
-          'accessKey=raw-access-key access_key=raw-snake-access-key apiKey=raw-api-key api_key=raw-snake-api-key private_key=-----BEGIN PRIVATE KEY----- raw unquoted pem token=Bearer raw-bearer-token safe=value',
+        text: 'accessKey=raw-access-key access_key=raw-snake-access-key apiKey=raw-api-key api_key=raw-snake-api-key private_key=-----BEGIN PRIVATE KEY----- raw unquoted pem token=Bearer raw-bearer-token safe=value',
         jsonText:
           '{"accessKey":"raw-json-access-key","api_key":"raw-json-api-key","safe":"kept"}',
       },

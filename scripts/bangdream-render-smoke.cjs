@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { setTimeout: delay } = require('timers/promises');
 const XLSX = require('xlsx');
-const { createPlugin } = require('../src/modules/qqbot/plugins/bangdream/src');
+const { createPlugin } = require('../src/modules/plugins/bangdream/src');
 
 function readPayload() {
   const expectedImageCount = Number.parseInt(
@@ -123,7 +123,7 @@ function normalizeError(error) {
 async function main() {
   const payload = readPayload();
   const manifest = readJsonFile(
-    path.join(process.cwd(), 'src/modules/qqbot/plugins/bangdream/plugin.json'),
+    path.join(process.cwd(), 'src/modules/plugins/bangdream/plugin.json'),
   );
   const operations = manifest.operations.map((operation) => ({
     handlerName: operation.handlerName,

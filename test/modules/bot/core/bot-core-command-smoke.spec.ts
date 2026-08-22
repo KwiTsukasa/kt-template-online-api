@@ -1,0 +1,229 @@
+jest.mock('@/modules/admin/identity/auth/presentation/jwt-auth.guard', () => ({
+  JwtAuthGuard: class {
+    /**
+     * 判断 QQBot 核心条件。
+     */
+    canActivate() {
+      return true;
+    }
+  },
+}));
+
+import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { Test } from '@nestjs/testing';
+import * as request from 'supertest';
+import { DictService } from '../../../../src/modules/admin/platform-config/dict/dict.service';
+import { ToolsService } from '../../../../src/common';
+import { BotAccountService } from '../../../../src/modules/bot-adapter/core/application/account/bot-account.service';
+import { BotCommandController } from '../../../../src/modules/bot-adapter/core/contract/command/bot-command.controller';
+import { BotCommand } from '../../../../src/modules/bot-adapter/core/infrastructure/persistence/command/bot-command.entity';
+import { BotCommandEngineService } from '../../../../src/modules/bot-adapter/core/application/command/bot-command-engine.service';
+import { BotCommandLog } from '../../../../src/modules/bot-adapter/core/infrastructure/persistence/command/bot-command-log.entity';
+import { BotCommandParserService } from '../../../../src/modules/bot-adapter/core/application/command/bot-command-parser.service';
+import { BotCommandService } from '../../../../src/modules/bot-adapter/core/application/command/bot-command.service';
+import { BotReplyTemplateService } from '../../../../src/modules/bot-adapter/core/application/command/bot-reply-template.service';
+import { PLUGIN_EXECUTION_PORT } from '../../../../src/modules/bot-adapter/core/domain/plugin-execution.port';
+import { BotSendService } from '../../../../src/modules/bot-adapter/core/application/send/bot-send.service';
+
+describe('QQBot core command local smoke', () => {
+  let app: INestApplication;
+
+  const command = {
+    aliases: '[]',
+    code: 'bd',
+    cooldownMs: 5000,
+    defaultParams: null,
+    enabled: true,
+    errorTemplate: null,
+    id: 'cmd-bangdream-song-search',
+    isDeleted: false,
+    lastHitAt: null,
+    name: '',
+    operationKey: 'bangdream.song.search',
+    parserKey: 'plain',
+    pluginKey: 'bangdream',
+    prefixes: '["/"]',
+    priority: 100,
+    replyTemplate: '找到歌曲：{{output.title}}',
+    targetType: 'all',
+  } as BotCommand;
+
+  const queryBuilder = {
+    addOrderBy: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    getManyAndCount: jest.fn().mockResolvedValue([[command], 1]),
+    orderBy: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
+    take: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+  };
+
+  const commandRepository = {
+    createQueryBuilder: jest.fn(() => queryBuilder),
+    findOne: jest.fn().mockResolvedValue(command),
+  };
+
+  const commandLogRepository = {
+    create: jest.fn((payload) => payload),
+    save: jest.fn(),
+  };
+
+  const pluginExecution = {
+    bindAccountPlugin: jest.fn().mockResolvedValue(true),
+    executeOperation: jest.fn().mockResolvedValue({
+      title: 'FIRE BIRD',
+      type: 'text',
+    }),
+    getOperationByCommand: jest.fn().mockResolvedValue({
+      aliases: ['查歌', 'bd', 'bangdream', 'bandori', '邦邦', '邦邦查歌'],
+      key: command.operationKey,
+      name: '查曲',
+      pluginKey: command.pluginKey,
+    }),
+    listBoundPluginKeys: jest.fn().mockResolvedValue(['bangdream']),
+  };
+
+  const accountService = {
+    bindCommand: jest.fn().mockResolvedValue(true),
+    getBoundCommandIds: jest.fn().mockResolvedValue([command.id]),
+  };
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [BotCommandController],
+      providers: [
+        ToolsService,
+        BotCommandEngineService,
+        BotCommandParserService,
+        BotCommandService,
+        BotReplyTemplateService,
+        {
+          provide: getRepositoryToken(BotCommand),
+          useValue: commandRepository,
+        },
+        {
+          provide: getRepositoryToken(BotCommandLog),
+          useValue: commandLogRepository,
+        },
+        {
+          provide: BotAccountService,
+          useValue: accountService,
+        },
+        {
+          provide: PLUGIN_EXECUTION_PORT,
+          useValue: pluginExecution,
+        },
+        {
+          provide: BotSendService,
+          useValue: {
+            sendText: jest.fn(),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue('5000'),
+          },
+        },
+        {
+          provide: DictService,
+          useValue: {
+            getDictItemsByKey: jest.fn().mockResolvedValue([]),
+            relationTree: jest.fn().mockResolvedValue([]),
+          },
+        },
+      ],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('queries enabled command by operationKey before previewing a full command text with commandId', async () => {
+    const listResponse = await request(app.getHttpServer())
+      .get('/bot/command/list')
+      .query({
+        enabled: true,
+        operationKey: command.operationKey,
+        pageNo: 1,
+        pageSize: 10,
+      })
+      .expect(200);
+
+    const commandId = listResponse.body.data.list[0].id;
+
+    const previewResponse = await request(app.getHttpServer())
+      .post('/bot/command/test')
+      .send({
+        commandId,
+        selfId: 'preview',
+        targetId: '10000',
+        targetType: 'group',
+        text: '/查歌 FIRE BIRD',
+        userId: '10000',
+      })
+      .expect(200);
+
+    const sanitizedPreview = { ...previewResponse.body.data };
+    delete sanitizedPreview.replyText;
+
+    expect(sanitizedPreview).toMatchObject({
+      command: {
+        id: command.id,
+        operationKey: command.operationKey,
+      },
+      input: {
+        text: 'FIRE BIRD',
+      },
+      matched: true,
+      status: 'success',
+    });
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+      'command.operationKey = :operationKey',
+      { operationKey: command.operationKey },
+    );
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+      'command.enabled = :enabled',
+      { enabled: true },
+    );
+    expect(commandRepository.findOne).toHaveBeenCalledWith({
+      where: { id: command.id, isDeleted: false },
+    });
+    expect(pluginExecution.executeOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.objectContaining({
+          arguments: expect.objectContaining({
+            text: 'FIRE BIRD',
+          }),
+        }),
+        input: expect.objectContaining({
+          text: 'FIRE BIRD',
+        }),
+        operationKey: command.operationKey,
+        pluginKey: command.pluginKey,
+      }),
+    );
+  });
+
+  it('persists command ability without writing adapter identity into the plugin protocol', async () => {
+    const service = app.get(BotCommandService);
+
+    await expect(
+      service.bindAccountCommand('10001', command.id),
+    ).resolves.toBe(true);
+    expect(accountService.bindCommand).toHaveBeenCalledWith(
+      '10001',
+      command.id,
+    );
+  });
+});

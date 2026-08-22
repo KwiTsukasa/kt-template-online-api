@@ -394,7 +394,7 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
     const prepare = extractStage('Prepare');
 
     expect(prepare).toContain(
-      "def restrictedOverrideParameters = [\n              'QQBOT_NAPCAT_IMAGE_OVERRIDE',\n              'QQBOT_NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE',",
+      "def restrictedOverrideParameters = [\n              'NAPCAT_IMAGE_OVERRIDE',\n              'NAPCAT_DESKTOP_PROFILE_VERSION_OVERRIDE',",
     );
     expect(prepare).toContain('params[parameterName]?.trim()');
     expect(prepare).toContain(

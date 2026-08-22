@@ -8,8 +8,8 @@ SELECT 'network_agent_state' AS table_name, COUNT(*) AS row_count FROM network_a
 SELECT 'network_endpoint_history' AS table_name, COUNT(*) AS row_count FROM network_endpoint_history;
 SELECT 'platform_setting' AS table_name, COUNT(*) AS row_count FROM platform_setting;
 SELECT 'admin_dict' AS table_name, COUNT(*) AS row_count FROM admin_dict;
-SELECT 'qqbot_command' AS table_name, COUNT(*) AS row_count FROM qqbot_command;
-SELECT 'qqbot_plugin' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin;
+SELECT 'bot_command' AS table_name, COUNT(*) AS row_count FROM bot_command;
+SELECT 'plugin' AS table_name, COUNT(*) AS row_count FROM plugin;
 SELECT 'napcat_container' AS table_name, COUNT(*) AS row_count FROM napcat_container;
 SELECT 'napcat_device_identity' AS table_name, COUNT(*) AS row_count FROM napcat_device_identity;
 SELECT 'napcat_account_binding' AS table_name, COUNT(*) AS row_count FROM napcat_account_binding;
@@ -21,15 +21,15 @@ SELECT 'napcat_protocol_profile' AS table_name, COUNT(*) AS row_count FROM napca
 SELECT 'napcat_session_behavior_profile' AS table_name, COUNT(*) AS row_count FROM napcat_session_behavior_profile;
 SELECT 'napcat_login_event' AS table_name, COUNT(*) AS row_count FROM napcat_login_event;
 SELECT 'napcat_risk_mode' AS table_name, COUNT(*) AS row_count FROM napcat_risk_mode;
-SELECT 'qqbot_plugin_task' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task;
-SELECT 'qqbot_plugin_task_run' AS table_name, COUNT(*) AS row_count FROM qqbot_plugin_task_run;
+SELECT 'plugin_task' AS table_name, COUNT(*) AS row_count FROM plugin_task;
+SELECT 'plugin_task_run' AS table_name, COUNT(*) AS row_count FROM plugin_task_run;
 SELECT 'message_subscription' AS table_name, COUNT(*) AS row_count FROM message_subscription;
 SELECT 'message_template' AS table_name, COUNT(*) AS row_count FROM message_template;
 SELECT 'message_subscription_template' AS table_name, COUNT(*) AS row_count FROM message_subscription_template;
-SELECT 'qqbot_message_publish_binding' AS table_name, COUNT(*) AS row_count FROM qqbot_message_publish_binding;
-SELECT 'qqbot_message_publish_target' AS table_name, COUNT(*) AS row_count FROM qqbot_message_publish_target;
+SELECT 'bot_message_publish_binding' AS table_name, COUNT(*) AS row_count FROM bot_message_publish_binding;
+SELECT 'bot_message_publish_target' AS table_name, COUNT(*) AS row_count FROM bot_message_publish_target;
 SELECT 'message_event' AS table_name, COUNT(*) AS row_count FROM message_event;
-SELECT 'qqbot_message_delivery' AS table_name, COUNT(*) AS row_count FROM qqbot_message_delivery;
+SELECT 'bot_message_delivery' AS table_name, COUNT(*) AS row_count FROM bot_message_delivery;
 SELECT 'station_notice_message_binding' AS table_name, COUNT(*) AS row_count FROM station_notice_message_binding;
 
 SELECT 'seed_message_template' AS check_name, COUNT(*) AS matched_rows
@@ -41,7 +41,7 @@ WHERE id = 2041700000000200601
   AND enabled = 1
   AND is_deleted = 0;
 
-SELECT 'seed_qqbot_tcp_natmap_message_template' AS check_name, COUNT(*) AS matched_rows
+SELECT 'seed_bot_tcp_natmap_message_template' AS check_name, COUNT(*) AS matched_rows
 FROM message_template
 WHERE id = 2041700000000200602
   AND BINARY name = BINARY 'TCP NATMap 端点变更默认模板'
@@ -71,11 +71,11 @@ WITH expected_menu AS (
   UNION ALL SELECT 2041700000000120493, 2041700000000100423, 'MessageManagementPushUpdate', 'MessageManagement:Push:Update'
   UNION ALL SELECT 2041700000000120494, 2041700000000100423, 'MessageManagementPushDelete', 'MessageManagement:Push:Delete'
   UNION ALL SELECT 2041700000000120495, 2041700000000100423, 'MessageManagementPushToggle', 'MessageManagement:Push:Toggle'
-  UNION ALL SELECT 2041700000000120481, 2041700000000100410, 'QqBotAccountMessagePushList', 'QqBot:Account:MessagePush:List'
-  UNION ALL SELECT 2041700000000120482, 2041700000000100410, 'QqBotAccountMessagePushCreate', 'QqBot:Account:MessagePush:Create'
-  UNION ALL SELECT 2041700000000120483, 2041700000000100410, 'QqBotAccountMessagePushUpdate', 'QqBot:Account:MessagePush:Update'
-  UNION ALL SELECT 2041700000000120484, 2041700000000100410, 'QqBotAccountMessagePushDelete', 'QqBot:Account:MessagePush:Delete'
-  UNION ALL SELECT 2041700000000120485, 2041700000000100410, 'QqBotAccountMessagePushToggle', 'QqBot:Account:MessagePush:Toggle'
+  UNION ALL SELECT 2041700000000120481, 2041700000000100410, 'BotAccountMessagePushList', 'Bot:Account:MessagePush:List'
+  UNION ALL SELECT 2041700000000120482, 2041700000000100410, 'BotAccountMessagePushCreate', 'Bot:Account:MessagePush:Create'
+  UNION ALL SELECT 2041700000000120483, 2041700000000100410, 'BotAccountMessagePushUpdate', 'Bot:Account:MessagePush:Update'
+  UNION ALL SELECT 2041700000000120484, 2041700000000100410, 'BotAccountMessagePushDelete', 'Bot:Account:MessagePush:Delete'
+  UNION ALL SELECT 2041700000000120485, 2041700000000100410, 'BotAccountMessagePushToggle', 'Bot:Account:MessagePush:Toggle'
 )
 SELECT 'seed_message_management_menu_mismatch' AS check_name,
        expected.id, expected.pid, expected.name, expected.auth_code,
@@ -130,10 +130,117 @@ WHERE role.role_code IN ('super', 'admin')
   AND role.is_deleted = 0
   AND role_menu.menu_id IS NULL;
 
-SELECT 'qqbot_napcat_webui_gateway_audit table exists' AS check_name, COUNT(*) AS matched_rows
+WITH expected_menu AS (
+  SELECT 2041700000000100400 AS id, 0 AS pid, 'Bot' AS name, '/bot' AS path, NULL AS component, '/bot/dashboard' AS redirect, NULL AS auth_code
+  UNION ALL SELECT 2041700000000100402, 2041700000000100400, 'BotNapcatConnection', '/bot/napcat', '/bot/account/list', NULL, 'Bot:Account:List'
+  UNION ALL SELECT 2041700000000100421, 2041700000000100400, 'BotTencentConnection', '/bot/tencent', '/bot/tencent/list', NULL, 'Bot:Tencent:List'
+  UNION ALL SELECT 2041700000000100422, 0, 'PluginPlatform', '/plugin-platform', NULL, '/plugin-platform/plugins', NULL
+  UNION ALL SELECT 2041700000000100409, 2041700000000100422, 'PluginPlatformPlugins', '/plugin-platform/plugins', '/plugin-platform/plugin/list', NULL, 'PluginPlatform:Plugin:List'
+  UNION ALL SELECT 2041700000000100411, 2041700000000100422, 'PluginPlatformTasks', '/plugin-platform/tasks', '/plugin-platform/task/list', NULL, 'PluginPlatform:Task:List'
+  UNION ALL SELECT 2041700000000120531, 2041700000000100421, 'BotTencentCreate', NULL, NULL, NULL, 'Bot:Tencent:Create'
+  UNION ALL SELECT 2041700000000120532, 2041700000000100421, 'BotTencentEdit', NULL, NULL, NULL, 'Bot:Tencent:Edit'
+  UNION ALL SELECT 2041700000000120533, 2041700000000100421, 'BotTencentDelete', NULL, NULL, NULL, 'Bot:Tencent:Delete'
+  UNION ALL SELECT 2041700000000120534, 2041700000000100421, 'BotTencentReconnect', NULL, NULL, NULL, 'Bot:Tencent:Reconnect'
+  UNION ALL SELECT 2041700000000120535, 2041700000000100421, 'BotTencentPlugin', NULL, NULL, NULL, 'Bot:Tencent:Plugin'
+  UNION ALL SELECT 2041700000000120536, 2041700000000100421, 'BotTencentMenuSync', NULL, NULL, NULL, 'Bot:Tencent:MenuSync'
+  UNION ALL SELECT 2041700000000120537, 2041700000000100421, 'BotTencentWebhookUrl', NULL, NULL, NULL, 'Bot:Tencent:WebhookUrl'
+  UNION ALL SELECT 2041700000000120521, 2041700000000100409, 'PluginPlatformPluginInstall', NULL, NULL, NULL, 'PluginPlatform:Plugin:Install'
+  UNION ALL SELECT 2041700000000120522, 2041700000000100409, 'PluginPlatformPluginEnable', NULL, NULL, NULL, 'PluginPlatform:Plugin:Enable'
+  UNION ALL SELECT 2041700000000120523, 2041700000000100409, 'PluginPlatformPluginDisable', NULL, NULL, NULL, 'PluginPlatform:Plugin:Disable'
+  UNION ALL SELECT 2041700000000120524, 2041700000000100409, 'PluginPlatformPluginUpgrade', NULL, NULL, NULL, 'PluginPlatform:Plugin:Upgrade'
+  UNION ALL SELECT 2041700000000120525, 2041700000000100409, 'PluginPlatformPluginUninstall', NULL, NULL, NULL, 'PluginPlatform:Plugin:Uninstall'
+  UNION ALL SELECT 2041700000000120526, 2041700000000100409, 'PluginPlatformPluginConfig', NULL, NULL, NULL, 'PluginPlatform:Plugin:Config'
+)
+SELECT 'seed_bot_plugin_menu_mismatch' AS check_name,
+       expected.id, expected.pid, expected.name, expected.path,
+       actual.id AS actual_id, actual.pid AS actual_pid,
+       actual.name AS actual_name, actual.path AS actual_path
+FROM expected_menu expected
+LEFT JOIN admin_menu actual ON actual.id = expected.id
+WHERE actual.id IS NULL
+   OR NOT (BINARY actual.name <=> BINARY expected.name)
+   OR NOT (BINARY actual.path <=> BINARY expected.path)
+   OR NOT (BINARY actual.component <=> BINARY expected.component)
+   OR NOT (BINARY actual.redirect <=> BINARY expected.redirect)
+   OR NOT (BINARY actual.auth_code <=> BINARY expected.auth_code)
+   OR actual.pid <> expected.pid
+   OR actual.status <> 1
+   OR actual.is_deleted <> 0;
+
+WITH expected_permission AS (
+  SELECT 2041700000000120531 AS id
+  UNION ALL SELECT 2041700000000120532
+  UNION ALL SELECT 2041700000000120533
+  UNION ALL SELECT 2041700000000120534
+  UNION ALL SELECT 2041700000000120535
+  UNION ALL SELECT 2041700000000120536
+  UNION ALL SELECT 2041700000000120537
+  UNION ALL SELECT 2041700000000120521
+  UNION ALL SELECT 2041700000000120522
+  UNION ALL SELECT 2041700000000120523
+  UNION ALL SELECT 2041700000000120524
+  UNION ALL SELECT 2041700000000120525
+  UNION ALL SELECT 2041700000000120526
+)
+SELECT 'seed_bot_plugin_menu_role_grant_missing' AS check_name,
+       role.role_code, expected.id AS menu_id
+FROM admin_role role CROSS JOIN expected_permission expected
+LEFT JOIN admin_role_menu role_menu
+  ON role_menu.role_id = role.id
+  AND role_menu.menu_id = expected.id
+WHERE role.role_code IN ('super', 'admin')
+  AND role.status = 1
+  AND role.is_deleted = 0
+  AND role_menu.menu_id IS NULL;
+
+SELECT 'legacy_bot_menu_contract_count' AS check_name, COUNT(*) AS matched_rows
+FROM admin_menu
+WHERE name LIKE 'QqBot%'
+   OR path = '/qqbot'
+   OR path LIKE '/qqbot/%'
+   OR component LIKE '/qqbot/%'
+   OR auth_code LIKE 'QqBot:%'
+   OR auth_code LIKE 'Bot:PluginTask:%'
+   OR path IN ('/bot/plugin', '/bot/plugin-task')
+   OR path LIKE '/bot/plugin-platform/%';
+
+SELECT 'seed_plugin_trigger_mode' AS check_name, COUNT(*) AS matched_rows
+FROM admin_dict
+WHERE dict_code = 'PLUGIN_TRIGGER_MODE'
+  AND value IN ('command', 'event')
+  AND status = 1
+  AND is_deleted = 0;
+
+SELECT 'legacy_plugin_trigger_mode_count' AS check_name, COUNT(*) AS matched_rows
+FROM admin_dict
+WHERE dict_code IN (
+  'QQBOT_PLUGIN_TRIGGER_MODE',
+  'BOT_PLUGIN_TRIGGER_MODE'
+);
+
+SELECT 'legacy_bot_subscription_key_count' AS check_name, COUNT(*) AS matched_rows
+FROM message_subscription
+WHERE subscriber_key = 'qqbot'
+   OR active_key LIKE 'qqbot:%';
+
+SELECT 'legacy_napcat_reverse_ws_path_count' AS check_name, COUNT(*) AS matched_rows
+FROM napcat_container
+WHERE reverse_ws_url LIKE '%/qqbot/onebot/reverse%';
+
+SELECT 'legacy_bot_table_count' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.tables
 WHERE table_schema = DATABASE()
-  AND table_name = 'qqbot_napcat_webui_gateway_audit';
+  AND table_name REGEXP '^qqbot_';
+
+SELECT 'legacy_bot_index_count' AS check_name, COUNT(DISTINCT index_name) AS matched_rows
+FROM information_schema.statistics
+WHERE table_schema = DATABASE()
+  AND index_name LIKE '%qqbot%';
+
+SELECT 'napcat_webui_gateway_audit table exists' AS check_name, COUNT(*) AS matched_rows
+FROM information_schema.tables
+WHERE table_schema = DATABASE()
+  AND table_name = 'napcat_webui_gateway_audit';
 
 SELECT 'seed_admin_user' AS check_name, COUNT(*) AS matched_rows
 FROM admin_user
@@ -217,19 +324,19 @@ WHERE table_schema = DATABASE()
   AND table_name = 'network_endpoint_history'
   AND index_name = 'uk_network_endpoint_history_event_id';
 
-SELECT 'seed_qqbot_plugin_bangdream' AS check_name, COUNT(*) AS matched_rows
-FROM qqbot_plugin
+SELECT 'seed_plugin_bangdream' AS check_name, COUNT(*) AS matched_rows
+FROM plugin
 WHERE plugin_key = 'bangdream'
   AND status = 'installed';
 
-SELECT 'seed_qqbot_plugin_bilibili_card' AS check_name, COUNT(*) AS matched_rows
-FROM qqbot_plugin
+SELECT 'seed_plugin_bilibili_card' AS check_name, COUNT(*) AS matched_rows
+FROM plugin
 WHERE plugin_key = 'bilibili-card'
   AND status = 'installed';
 
-SELECT 'seed_qqbot_plugin_version_bilibili_card' AS check_name, COUNT(*) AS matched_rows
-FROM qqbot_plugin_version v
-JOIN qqbot_plugin p ON p.id = v.plugin_id
+SELECT 'seed_plugin_version_bilibili_card' AS check_name, COUNT(*) AS matched_rows
+FROM plugin_version v
+JOIN plugin p ON p.id = v.plugin_id
 WHERE p.plugin_key = 'bilibili-card'
   AND v.version = '1.0.0'
   AND v.package_hash = 'bilibili-card:1.0.0'
@@ -237,41 +344,41 @@ WHERE p.plugin_key = 'bilibili-card'
   AND JSON_UNQUOTE(JSON_EXTRACT(v.manifest_json, '$.runtime.workerType')) = 'thread'
   AND JSON_UNQUOTE(JSON_EXTRACT(v.manifest_json, '$.events[0].key')) = 'bilibili-card.message';
 
-SELECT 'seed_qqbot_plugin_installation_bilibili_card' AS check_name, COUNT(*) AS matched_rows
-FROM qqbot_plugin_installation i
-JOIN qqbot_plugin p ON p.id = i.plugin_id
-JOIN qqbot_plugin_version v ON v.id = i.version_id
+SELECT 'seed_plugin_installation_bilibili_card' AS check_name, COUNT(*) AS matched_rows
+FROM plugin_installation i
+JOIN plugin p ON p.id = i.plugin_id
+JOIN plugin_version v ON v.id = i.version_id
 WHERE p.plugin_key = 'bilibili-card'
   AND v.version = '1.0.0'
   AND i.status = 'enabled'
   AND i.runtime_status = 'stopped'
-  AND i.installed_path = 'src/modules/qqbot/plugins/bilibili-card';
+  AND i.installed_path = 'src/modules/plugins/bilibili-card';
 
-SELECT 'seed_qqbot_plugin_event_bilibili_card' AS check_name, COUNT(*) AS matched_rows
-FROM qqbot_plugin_event_handler h
-JOIN qqbot_plugin p ON p.id = h.plugin_id
+SELECT 'seed_plugin_event_bilibili_card' AS check_name, COUNT(*) AS matched_rows
+FROM plugin_event_handler h
+JOIN plugin p ON p.id = h.plugin_id
 WHERE p.plugin_key = 'bilibili-card'
   AND h.event_key = 'bilibili-card.message'
   AND h.handler_name = 'handleMessage'
   AND h.enabled = 1;
 
-SELECT 'seed_qqbot_command_bangdream_song' AS check_name, COUNT(*) AS matched_rows
-FROM qqbot_command
+SELECT 'seed_bot_command_bangdream_song' AS check_name, COUNT(*) AS matched_rows
+FROM bot_command
 WHERE command_key = 'bangdream_song'
   AND operation_key = 'bangdream.song.search'
   AND plugin_key = 'bangdream'
   AND enabled = 1;
 
-SELECT 'seed_qqbot_command_bangdream_all' AS check_name, COUNT(*) AS matched_rows
-FROM qqbot_command
+SELECT 'seed_bot_command_bangdream_all' AS check_name, COUNT(*) AS matched_rows
+FROM bot_command
 WHERE plugin_key = 'bangdream'
   AND operation_key LIKE 'bangdream.%'
   AND enabled = 1
   AND is_deleted = 0;
 
-SELECT 'seed_qqbot_account_webui_permission' AS check_name, COUNT(*) AS matched_rows
+SELECT 'seed_bot_account_webui_permission' AS check_name, COUNT(*) AS matched_rows
 FROM admin_menu
-WHERE auth_code = 'QqBot:Account:WebUI';
+WHERE auth_code = 'Bot:Account:WebUI';
 
 SELECT 'seed_network_ddns_permissions' AS check_name, COUNT(*) AS matched_rows
 FROM admin_menu
@@ -419,11 +526,11 @@ WHERE table_schema = DATABASE()
   AND table_name = 'admin_dict'
   AND index_name = 'uk_admin_dict_code_value';
 
-SELECT 'index_qqbot_command_key' AS check_name, COUNT(*) AS matched_rows
+SELECT 'index_bot_command_key' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics
 WHERE table_schema = DATABASE()
-  AND table_name = 'qqbot_command'
-  AND index_name = 'uk_qqbot_command_key';
+  AND table_name = 'bot_command'
+  AND index_name = 'uk_bot_command_key';
 
 SELECT 'index_napcat_device_identity_account' AS check_name, COUNT(*) AS matched_rows
 FROM information_schema.statistics

@@ -50,9 +50,9 @@ describe('system notice SQL', () => {
     const noticeSql = readSql('sql/system-notice-menu.sql');
     const initSql = readSql('sql/vben-admin-init.sql');
     const fixMenuSql = readSql('sql/fix-admin-menu-meta.sql');
-    const messageManagementSql = readSql('sql/qqbot-message-push-init.sql');
+    const messageManagementSql = readSql('sql/bot-message-push-init.sql');
     const messageManagementVerifySql = readSql(
-      'sql/qqbot-message-push-verify.sql',
+      'sql/bot-message-push-verify.sql',
     );
 
     for (const sql of [

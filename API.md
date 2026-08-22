@@ -286,7 +286,7 @@ Search 的 `llm-codex` 权限档。
 | `POST`   | `/media-governance/tasks/:taskId/downloads/start`                  | 启动或接管失联的 NAS 隔离目录下载      |
 | `POST`   | `/media-governance/tasks/:taskId/downloads/pause`                  | 暂停同一下载 Run                       |
 | `POST`   | `/media-governance/tasks/:taskId/downloads/cancel`                 | 取消下载并保留载荷直到精确来源清理     |
-| `POST`   | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传同一下载 Run                       |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传活动 Run，或创建失联恢复 Run       |
 | `POST`   | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理       |
 | `POST`   | `/media-governance/tasks/:taskId/governance/identity-rebase`       | 按版本把已提交旧目录重排到当前规范身份 |
 | `POST`   | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验              |
@@ -347,7 +347,7 @@ NAS 执行器通过独立内部 secret 调用以下接口；浏览器和普通 A
 同一 Task 只能存在一个 `primary_media` 下载 owner。无字幕媒体按季绑定完整字幕
 来源，不同季可使用不同发布组，同一季只接受与该季范围、所选来源发布组一致的
 合同；主媒体与所有补充字幕来源均完成清单检查和运行时探针后才允许启动下载。
-下载 Run 已失联且活动 Run 已清空时，再次调用 `downloads/start` 会密封
+下载 Run 已失联且活动 Run 已清空时，调用 `downloads/resume` 或再次调用 `downloads/start` 会密封
 `source.resume` 接管 Run：任务、来源和 info-hash 身份保持不变，执行器复用原
 staging/qBittorrent 状态；尚未轮到的同任务补充来源才从零开始。存在 qBittorrent
 状态但任务 staging 已丢失时失败关闭，不能静默重新下载。
@@ -385,12 +385,14 @@ Task 的 Agent 绑定只保存 `llm_conversation_id`，消息和 Codex thread �
 `MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`
 和 `MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS` 调用 NAS 执行器；缺少数据库状态仓、私有
 地址或 secret 时失败关闭。执行器只兑换一次描述/计划授权，并按 Run 从序号 1 连续回调，
-重复序号幂等忽略，缺号和身份漂移拒绝。回调瞬时失败会按同一序号有界重试；NAS executor
-在发送终态前先把连续事件 journal 和最终报告原子密封到固定 Codex Run 证据根。API 还会
+重复序号幂等忽略，缺号和身份漂移拒绝。NAS executor 在调用 API 前先把每条事件写入连续
+journal；transport、408/425/429 与 5xx 按同一序号持续退避，因此 API `Recreate` 不会终止
+活动 qBittorrent。发送终态前还会把最终报告原子密封到固定 Codex Run 证据根。API 还会
 按 Run、Task 与密封输入摘要读取执行器的精确 systemd runner 状态；runner 已退出或失联时，
-状态响应必须同时提供匹配的 Run manifest SHA、精确成功/失败终态和下一连续序号，API 才在
-同一事务应用该终态。缺少密封证据、身份漂移或序号跳跃时保持活动 Run 等待下轮核对，绝不
-由 API 伪造失败事件。状态响应采用 8 MiB 有界读取，可恢复包含 732 项 `payloadFiles` 的
+状态请求携权威 `afterSequence`，executor 先按最多 256 条且不超过 4 MiB 分页补回连续
+非终态缺口；状态响应随后必须提供匹配的 Run manifest SHA、精确成功/失败终态和下一连续
+序号，API 才在同一事务应用该终态。缺少密封证据、身份漂移或序号跳跃时保持活动 Run 等待
+下轮核对，绝不由 API 伪造失败事件。状态响应采用 8 MiB 有界读取，可恢复包含 732 项 `payloadFiles` 的
 大批量终态，同时继续拒绝超限或未密封响应。
 高频执行器回调先校验 Run、manifest 与连续序号，再原子追加 Redis 热层并立即发布包含
 `runId`、`runSequence` 与紧凑 Task patch 的 `task-changed`。普通 tick 不等待 MySQL；

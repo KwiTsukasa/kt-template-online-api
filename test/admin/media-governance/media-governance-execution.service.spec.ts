@@ -525,8 +525,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     const source = await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
       expectedRevision: 1,
-      magnetUri:
-        'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
+      magnetUri: 'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
       sourceRole: 'primary_media',
     });
     source.manifest = [
@@ -973,8 +972,17 @@ describe('MediaGovernanceService production execution adapter', () => {
   });
 
   it('restores and reconciles a vanished sealed Run into one durable blocked terminal state', async () => {
+    const progressHotStore: MediaGovernanceProgressHotStore = {
+      append: jest.fn(async (event) => ({
+        applied: true,
+        authorityRequired: false,
+        previousSequence: event.sequence - 1,
+        sequenceGap: false,
+        snapshotRequired: false,
+      })),
+    };
     const { dispatch, gateway, service, setGatewayEnabled, stateStore } =
-      fixture({ durable: true });
+      fixture({ durable: true, progressHotStore });
     await service.onModuleInit();
     const task = await service.create({
       mediaType: 'movie',
@@ -1005,6 +1013,7 @@ describe('MediaGovernanceService production execution adapter', () => {
       undefined,
       stateStore,
       gateway,
+      progressHotStore,
     );
     await restoredService.onModuleInit();
     const restoredTask = restoredService.detail(task.id);
@@ -1019,6 +1028,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     dispatch.mockClear();
     (gateway.control as jest.Mock).mockClear();
     (stateStore.applyExecutorEvent as jest.Mock).mockClear();
+    (stateStore.saveExecutorProgressSnapshot as jest.Mock).mockClear();
     const reconcile = restoredService as unknown as {
       reconcileActiveExecutions(): Promise<void>;
     };
@@ -1052,12 +1062,33 @@ describe('MediaGovernanceService production execution adapter', () => {
       status: 'lost',
       subState: 'dead',
       taskId: task.id,
+      pendingEvents: [
+        {
+          action: envelope.action,
+          eventType: 'peer-progress',
+          observedAt: new Date().toISOString(),
+          progress: {
+            completedBytes: 5,
+            completedItems: 0,
+            etaLabel: '最多还需 115 秒',
+            speedBytesPerSecond: 0,
+            totalBytes: 120,
+            totalItems: 0,
+          },
+          runId: envelope.runId,
+          sequence: 2,
+          sourceId: source.id,
+          summary: '正在获取磁链文件清单',
+          taskId: task.id,
+          taskRevision: envelope.taskRevision,
+        },
+      ],
       terminalEvent: {
         action: envelope.action,
         eventType: 'run-failed',
         observedAt: new Date().toISOString(),
         runId: envelope.runId,
-        sequence: 2,
+        sequence: 3,
         summary: 'NAS 执行单元已退出或被回收，但未返回可验证终态',
         taskId: task.id,
         taskRevision: envelope.taskRevision,
@@ -1066,6 +1097,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     await reconcile.reconcileActiveExecutions();
 
     expect(gateway.status).toHaveBeenCalledWith({
+      afterSequence: 1,
       runId: envelope.runId,
       sealedInputSha256: envelope.sealedInputSha256,
       taskId: task.id,
@@ -1077,9 +1109,17 @@ describe('MediaGovernanceService production execution adapter', () => {
         action: envelope.action,
         eventType: 'run-failed',
         runId: envelope.runId,
-        sequence: 2,
+        sequence: 3,
         taskId: task.id,
         taskRevision: envelope.taskRevision,
+      }),
+    );
+    expect(stateStore.saveExecutorProgressSnapshot).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: 'peer-progress',
+        runId: envelope.runId,
+        sequence: 2,
       }),
     );
     expect(restoredTask).toMatchObject({
@@ -1137,7 +1177,7 @@ describe('MediaGovernanceService production execution adapter', () => {
     task.runState = 'blocked';
     task.stage = 'download';
 
-    await service.startDownload(task.id, { expectedRevision: 2 });
+    await service.resumeDownload(task.id, { expectedRevision: 2 });
 
     const envelope = dispatch.mock.calls[0]![0];
     expect(envelope).toMatchObject({

@@ -4,7 +4,10 @@ import {
   MEDIA_GOVERNANCE_EXECUTOR_ACTIONS,
   type buildMediaGovernanceExecutionEnvelope,
 } from '@/modules/admin/media-governance/contract/media-governance-executor.contract';
-import type { MediaGovernanceExecutorEventDto } from '@/modules/admin/media-governance/contract/media-governance.dto';
+import {
+  MEDIA_GOVERNANCE_EXECUTOR_EVENT_TYPES,
+  type MediaGovernanceExecutorEventDto,
+} from '@/modules/admin/media-governance/contract/media-governance.dto';
 
 export const MEDIA_GOVERNANCE_EXECUTION_GATEWAY = Symbol(
   'MEDIA_GOVERNANCE_EXECUTION_GATEWAY',
@@ -41,6 +44,7 @@ export type MediaGovernanceExecutionStatus = {
   subState: string;
   taskId: string;
   manifestSha256?: string;
+  pendingEvents?: MediaGovernanceExecutorEventDto[];
   terminalEvent?: MediaGovernanceExecutorEventDto;
 };
 
@@ -57,6 +61,7 @@ export interface MediaGovernanceExecutionGateway {
   ): Promise<MediaGovernanceExecutionDispatch>;
   enabled(): boolean;
   status(input: {
+    afterSequence: number;
     runId: string;
     sealedInputSha256: string;
     taskId: string;
@@ -86,6 +91,69 @@ const TERMINAL_EVENT_KEYS = new Set([
   'taskId',
   'taskRevision',
 ]);
+
+/**
+ * 校验 executor 从权威游标之后返回的连续非终态事件页，拒绝身份、字段或序号漂移。
+ * @param value - 状态响应中的候选待补投事件集合。
+ * @param input - 本次状态查询绑定的运行、任务与已确认序号。
+ * @returns 通过字段闭包、运行身份和连续序号检查的事件数组。
+ * @throws 当事件页超限、含终态、存在未知字段或身份与序号不连续时抛出。
+ */
+function parsePendingEvents(
+  value: unknown,
+  input: {
+    afterSequence: number;
+    runId: string;
+    taskId: string;
+  },
+): MediaGovernanceExecutorEventDto[] {
+  if (!Array.isArray(value) || value.length > 256) {
+    throw new Error('media-governance-executor-identity-mismatch');
+  }
+  const pendingEvents: MediaGovernanceExecutorEventDto[] = [];
+  value.forEach((candidate, index) => {
+    if (
+      !candidate ||
+      typeof candidate !== 'object' ||
+      Array.isArray(candidate)
+    ) {
+      throw new Error('media-governance-executor-identity-mismatch');
+    }
+    const event = candidate as Record<string, unknown>;
+    const keysInvalid = Object.keys(event).some(
+      (key) => !TERMINAL_EVENT_KEYS.has(key),
+    );
+    const eventType = String(event.eventType ?? '');
+    const typeInvalid =
+      !MEDIA_GOVERNANCE_EXECUTOR_EVENT_TYPES.includes(
+        eventType as (typeof MEDIA_GOVERNANCE_EXECUTOR_EVENT_TYPES)[number],
+      ) || ['run-failed', 'run-succeeded'].includes(eventType);
+    const identityInvalid =
+      !MEDIA_GOVERNANCE_EXECUTOR_ACTIONS.includes(
+        event.action as (typeof MEDIA_GOVERNANCE_EXECUTOR_ACTIONS)[number],
+      ) ||
+      event.runId !== input.runId ||
+      event.taskId !== input.taskId ||
+      !Number.isSafeInteger(event.taskRevision) ||
+      Number(event.taskRevision) < 1;
+    const sequenceInvalid = event.sequence !== input.afterSequence + index + 1;
+    const observationInvalid =
+      typeof event.observedAt !== 'string' ||
+      Number.isNaN(Date.parse(event.observedAt));
+    const summaryInvalid =
+      typeof event.summary !== 'string' ||
+      event.summary.length < 1 ||
+      event.summary.length > 400;
+    const contractInvalid = keysInvalid || typeInvalid || identityInvalid;
+    const contentInvalid =
+      sequenceInvalid || observationInvalid || summaryInvalid;
+    if (contractInvalid || contentInvalid) {
+      throw new Error('media-governance-executor-identity-mismatch');
+    }
+    pendingEvents.push(event as unknown as MediaGovernanceExecutorEventDto);
+  });
+  return pendingEvents;
+}
 
 @Injectable()
 export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExecutionGateway {
@@ -205,6 +273,7 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
    *   当 `result.manifestSha256 !== undefined || terminalEvent !== undefined` 成立时拒绝当前输入并抛出 `Error`。
    */
   async status(input: {
+    afterSequence: number;
     runId: string;
     sealedInputSha256: string;
     taskId: string;
@@ -245,6 +314,12 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
     }
     const terminal = terminalEvent as Record<string, unknown> | undefined;
     const terminalStatus = ['exited', 'lost'].includes(String(result.status));
+    let pendingEvents: MediaGovernanceExecutorEventDto[] = [];
+    if (terminalStatus) {
+      pendingEvents = parsePendingEvents(result.pendingEvents, input);
+    } else if (result.pendingEvents !== undefined) {
+      throw new Error('media-governance-executor-identity-mismatch');
+    }
     const terminalEventType = String(terminal?.eventType ?? '');
     let terminalShapeInvalid: boolean;
     if (terminalEventType === 'run-failed') {
@@ -327,7 +402,10 @@ export class MediaGovernanceExecutionGatewayClient implements MediaGovernanceExe
     ) {
       throw new Error('media-governance-executor-identity-mismatch');
     }
-    return result as MediaGovernanceExecutionStatus;
+    return {
+      ...result,
+      pendingEvents,
+    } as MediaGovernanceExecutionStatus;
   }
 
   /**

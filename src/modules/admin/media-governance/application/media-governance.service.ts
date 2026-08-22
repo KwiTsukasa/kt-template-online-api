@@ -2548,15 +2548,24 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
-   * 根据`taskId`、`input`处理从同一运行身份继续已暂停下载。
+   * 活动 runner 存在时只发送继续控制；closeout 已清空活动身份时创建新信封并复用原 profile。
    * @param taskId - 用于精确定位任务的标识。
    * @param input - 用于从同一运行身份继续已暂停下载的结构化输入，包含 `expectedRevision` 字段。
-   * @returns 从同一运行身份继续已暂停下载。
+   * @returns 已接受控制或已进入新恢复运行的下载任务。
    */
   async resumeDownload(
     taskId: string,
     input: MediaGovernanceRevisionCommandDto,
   ): Promise<MediaGovernanceTask> {
+    const task = this.detail(taskId);
+    this.assertRevision(task, input.expectedRevision);
+    if (
+      task.stage === 'download' &&
+      task.runState === 'blocked' &&
+      task.activeRunId === null
+    ) {
+      return this.startDownload(taskId, input);
+    }
     return this.controlDownload(taskId, input.expectedRevision, 'resume');
   }
 
@@ -5192,7 +5201,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
   }
 
-  /** 轮询活动运行并仅应用身份完整的可验证终态事件。 */
+  /**
+   * 轮询活动运行，先补齐 NAS journal 缺口并持久化热进度游标，再应用精确下一终态。
+   * @throws 当补投事件身份、顺序或热进度持久能力不符合密封运行合同时抛出。
+   */
   private async reconcileActiveExecutions() {
     if (
       !this.executionGateway?.enabled() ||
@@ -5217,11 +5229,43 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           ) {
             continue;
           }
+          const previousSequence = await this.stateStore.readRunSequence(runId);
           const observed = await this.executionGateway.status({
+            afterSequence: previousSequence,
             runId,
             sealedInputSha256: envelope.sealedInputSha256,
             taskId: task.id,
           });
+          const pendingEvents = observed.pendingEvents ?? [];
+          for (const [index, event] of pendingEvents.entries()) {
+            const identityInvalid =
+              event.action !== envelope.action ||
+              event.runId !== runId ||
+              event.taskId !== task.id ||
+              event.taskRevision !== envelope.taskRevision;
+            const sequenceInvalid =
+              event.sequence !== previousSequence + index + 1;
+            const terminalInvalid = ['run-failed', 'run-succeeded'].includes(
+              event.eventType,
+            );
+            if (identityInvalid || sequenceInvalid || terminalInvalid) {
+              throw new Error('media-governance-executor-replay-invalid');
+            }
+            await this.applyExecutorEvent(event);
+          }
+          if (pendingEvents.length > 0 && this.progressHotStore) {
+            if (!this.stateStore.saveExecutorProgressSnapshot) {
+              throw new Error(
+                'media-governance-executor-replay-snapshot-unavailable',
+              );
+            }
+            await this.progressSnapshotQueue.catch(() => undefined);
+            const lastPendingEvent = pendingEvents.at(-1)!;
+            await this.stateStore.saveExecutorProgressSnapshot(
+              structuredClone(task),
+              structuredClone(lastPendingEvent),
+            );
+          }
           if (observed.status === 'queued' || observed.status === 'running') {
             continue;
           }
@@ -5230,7 +5274,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
             summary = `NAS 执行器已退出（退出码 ${observed.exitCode}），但未返回可验证终态`;
           }
           const terminal = observed.terminalEvent;
-          const previousSequence = await this.stateStore.readRunSequence(runId);
+          const replayedSequence = previousSequence + pendingEvents.length;
           if (
             !observed.manifestSha256 ||
             !terminal ||
@@ -5243,7 +5287,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
             terminal.runId !== runId ||
             terminal.taskId !== task.id ||
             terminal.taskRevision !== envelope.taskRevision ||
-            terminal.sequence !== previousSequence + 1
+            terminal.sequence !== replayedSequence + 1
           ) {
             continue;
           }

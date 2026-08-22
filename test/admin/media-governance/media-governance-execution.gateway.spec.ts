@@ -101,6 +101,18 @@ describe('MediaGovernanceExecutionGatewayClient', () => {
           exitCode: 1,
           result: 'exit-code',
           manifestSha256: 'f'.repeat(64),
+          pendingEvents: [
+            {
+              action: envelope.action,
+              eventType: 'run-started',
+              observedAt: '2026-08-11T12:00:00.000Z',
+              runId: envelope.runId,
+              sequence: 1,
+              summary: 'API 发布期间已先写入 NAS journal',
+              taskId: envelope.taskId,
+              taskRevision: envelope.taskRevision,
+            },
+          ],
           runId: envelope.runId,
           runnerId:
             'kt-media-governance-0123456789abcdef0123456789abcdef.service',
@@ -130,18 +142,23 @@ describe('MediaGovernanceExecutionGatewayClient', () => {
 
     await expect(
       gateway.status({
+        afterSequence: 0,
         runId: envelope.runId,
         sealedInputSha256: envelope.sealedInputSha256,
         taskId: envelope.taskId,
       }),
     ).resolves.toMatchObject({
       manifestSha256: 'f'.repeat(64),
+      pendingEvents: [{ eventType: 'run-started', sequence: 1 }],
       status: 'exited',
       terminalEvent: { eventType: 'run-succeeded', sequence: 2 },
     });
     expect(request).toHaveBeenCalledWith(
       'http://172.21.0.1:48088/v1/status',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        body: expect.stringContaining('"afterSequence":0'),
+        method: 'POST',
+      }),
     );
   });
 
@@ -159,10 +176,10 @@ describe('MediaGovernanceExecutionGatewayClient', () => {
       activeState: 'inactive',
       exitCode: 0,
       manifestSha256: 'f'.repeat(64),
+      pendingEvents: [],
       result: 'success',
       runId: envelope.runId,
-      runnerId:
-        'kt-media-governance-0123456789abcdef0123456789abcdef.service',
+      runnerId: 'kt-media-governance-0123456789abcdef0123456789abcdef.service',
       sealedInputSha256: envelope.sealedInputSha256,
       status: 'exited',
       subState: 'dead',
@@ -193,6 +210,7 @@ describe('MediaGovernanceExecutionGatewayClient', () => {
     );
 
     const status = await gateway.status({
+      afterSequence: 0,
       runId: envelope.runId,
       sealedInputSha256: envelope.sealedInputSha256,
       taskId: envelope.taskId,
@@ -208,6 +226,7 @@ describe('MediaGovernanceExecutionGatewayClient', () => {
           activeState: 'inactive',
           exitCode: 1,
           result: 'exit-code',
+          pendingEvents: [],
           runId: envelope.runId,
           runnerId:
             'kt-media-governance-0123456789abcdef0123456789abcdef.service',
@@ -226,6 +245,7 @@ describe('MediaGovernanceExecutionGatewayClient', () => {
 
     await expect(
       gateway.status({
+        afterSequence: 0,
         runId: envelope.runId,
         sealedInputSha256: envelope.sealedInputSha256,
         taskId: envelope.taskId,

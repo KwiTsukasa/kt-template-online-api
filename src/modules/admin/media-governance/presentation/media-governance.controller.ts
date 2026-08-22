@@ -403,15 +403,15 @@ export class MediaGovernanceController {
   }
 
   /**
-   * 从同一运行身份恢复已暂停的下载。
+   * 将同一入口映射为存活 runner 的继续控制，或失联 closeout 后复用原载荷的新恢复信封。
    * @param taskId - 用于精确定位任务的标识。
-   * @param body - 用于从同一运行身份恢复已暂停的下载的结构化输入。
+   * @param body - 携带当前 Task revision 的下载继续或失联恢复命令。
    * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
-   * @returns 从同一运行身份恢复已暂停的下载。
+   * @returns 已接受同 Run 继续控制或已派发新恢复 Run 的任务状态。
    */
   @Post(':taskId/downloads/resume')
   @MediaGovernancePermission('Media:Governance:Download')
-  @ApiOperation({ summary: '从同一 NAS 下载 Run 续传' })
+  @ApiOperation({ summary: '继续 NAS 下载或从失联 Run 恢复' })
   async resumeDownload(
     @Param('taskId') taskId: string,
     @Body() body: MediaGovernanceRevisionCommandDto,

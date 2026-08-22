@@ -349,16 +349,18 @@ profile 的中文字幕覆盖、同季单一字幕发布组以及补充来源只
 revision/run/replay 幂等和五层 Agent 边界。数据库 Outbox 会把密封 Run 发送到仅监听
 私网的 NAS 执行器，执行器按任务隔离目录完成下载、治理、元数据核验和独立验收；缺少
 数据库状态仓、私网地址或内部 secret 时失败关闭。云端治理仍保持关闭。
-执行器回调会按同一事件序号有界重试；NAS executor 先把连续事件 journal 和最终报告
-原子密封到 `/vol1/docker/kt-codex/artifacts/automation/media/<runId>`，再向 API 发送终态。
+NAS executor 会在调用 API 前先把每条事件 fsync 到连续 journal；网络传输和服务端暂态
+状态按同一序号持续退避，API `Recreate` 发布期间 qBittorrent 与 runner 保持运行。最终报告
+原子密封到 `/vol1/docker/kt-codex/artifacts/automation/media/<runId>` 后再向 API 发送终态。
 下载 runner 每 1 秒采集 qBittorrent 字节、速度、ETA、peer 与逐文件进度；磁链清单检查
 仍按每 5 秒、最长 120 秒的独立合同执行。隔离 qBittorrent 使用零下载限速、全部 Tracker、
 DHT/PeX/LSD、全局 800/单种 400 连接和每秒 100 个新连接；不修改 NAS 温控或电源保护。
 API 每 5 秒以 Run、Task 和密封输入摘要查询
 对应 systemd runner；执行单元退出或失联时，
-只有状态响应同时携带匹配的 Run manifest SHA、精确成功/失败终态与下一连续序号，API
-才应用该终态并清除活动 Run。缺少密封证据、身份漂移或序号跳跃时保持 Run 活跃等待下轮
-核对，API 不自行伪造失败事件。此后再次开始下载会密封新的接管 Run，按
+状态查询会携 API 已确认的 `afterSequence`；失联 runner 先分页补回连续非终态事件，只有
+随后状态响应同时携带匹配的 Run manifest SHA、精确成功/失败终态与下一连续序号，API
+才应用终态并清除活动 Run。缺少密封证据、身份漂移或序号跳跃时保持 Run 活跃等待下轮
+核对，API 不自行伪造失败事件。此后调用继续或再次开始下载会密封新的接管 Run，按
 Task/Source/info-hash 复用原 staging 与 qBittorrent 状态；已完整载荷只重新校验，未完成
 载荷从原分片续传，存在 qBittorrent 状态却丢失 staging 时失败关闭。
 新任务不需要操作员填写内部 `workItemId`：首次本地治理前由数据库串行分配

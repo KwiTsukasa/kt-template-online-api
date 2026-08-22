@@ -27,6 +27,10 @@ import { QqbotPluginTaskManifestSynchronizer } from './task/qqbot-plugin-task-ma
 import { QqbotPluginTaskSchedulerService } from './task/qqbot-plugin-task-scheduler.service';
 import type { QqbotPluginTaskTriggerType } from './task/qqbot-plugin-task.types';
 import { QqbotPluginArgumentParserService } from './argument/qqbot-plugin-argument-parser.service';
+import {
+  type QqbotPluginAccountBindingIdentity,
+  QqbotPluginAccountBindingService,
+} from './account-binding/qqbot-plugin-account-binding.service';
 import { QqbotPluginPackageReaderService } from '../infrastructure/integration/package/plugin-package-reader.service';
 import { QqbotPluginPackageSourceService } from '../infrastructure/integration/package/plugin-package-source.service';
 import type { QqbotPluginPackageDescriptor } from '../infrastructure/integration/package/plugin-package.types';
@@ -35,7 +39,6 @@ import { resolveInactivePluginKeys } from './registry/plugin-installation-state'
 import { QqbotPluginRegistryService } from './registry/qqbot-plugin-registry.service';
 import {
   QqbotPlugin,
-  QqbotPluginAccountBinding,
   QqbotPluginAsset,
   QqbotPluginConfig,
   QqbotPluginEventHandler,
@@ -146,8 +149,7 @@ export class QqbotPluginPlatformService
     private readonly operationRepository: Repository<QqbotPluginOperation>,
     @InjectRepository(QqbotPluginEventHandler)
     private readonly eventHandlerRepository: Repository<QqbotPluginEventHandler>,
-    @InjectRepository(QqbotPluginAccountBinding)
-    private readonly accountBindingRepository: Repository<QqbotPluginAccountBinding>,
+    private readonly accountBindingService: QqbotPluginAccountBindingService,
     @InjectRepository(QqbotPluginConfig)
     private readonly configRepository: Repository<QqbotPluginConfig>,
     @InjectRepository(QqbotPluginAsset)
@@ -295,13 +297,12 @@ export class QqbotPluginPlatformService
       }
       return 1;
     })();
-    const safePageSize =
-      (() => {
-        if (Number.isFinite(pageSize) && pageSize > 0) {
-          return pageSize;
-        }
-        return 10;
-      })();
+    const safePageSize = (() => {
+      if (Number.isFinite(pageSize) && pageSize > 0) {
+        return pageSize;
+      }
+      return 10;
+    })();
     const operations = await this.listOperationSummaries(query);
     const skip = (safePageNo - 1) * safePageSize;
 
@@ -500,6 +501,7 @@ export class QqbotPluginPlatformService
    * @returns 操作。
    */
   async executeOperation(input: QqbotPluginExecutionInput) {
+    await this.assertOperationAccountBinding(input);
     const normalizedInput =
       (await this.argumentParser?.normalizeInput(input)) || input.input;
     const workerContext = this.requireActiveWorker(input.pluginKey);
@@ -528,13 +530,12 @@ export class QqbotPluginPlatformService
           pluginId,
           safeSummary: {
             operationKey: input.operationKey,
-            outputKeys:
-              (() => {
-                if (output && typeof output === 'object') {
-                  return Object.keys(output as Record<string, unknown>).sort();
-                }
-                return [];
-              })(),
+            outputKeys: (() => {
+              if (output && typeof output === 'object') {
+                return Object.keys(output as Record<string, unknown>).sort();
+              }
+              return [];
+            })(),
             pluginKey: input.pluginKey,
           },
         });
@@ -552,7 +553,13 @@ export class QqbotPluginPlatformService
    */
   async dispatchEvent(input: QqbotPluginEventDispatchInput) {
     let handled = false;
+    const boundPluginKeys = new Set(
+      await this.accountBindingService.listBoundPluginKeys(
+        input.message.selfId,
+      ),
+    );
     for (const workerContext of this.activeWorkerContexts.values()) {
+      if (!boundPluginKeys.has(workerContext.pluginKey)) continue;
       for (const event of workerContext.manifest.events) {
         if (
           event.eventName !== input.eventKey &&
@@ -666,45 +673,44 @@ export class QqbotPluginPlatformService
    * @returns 运行态事件流。
    */
   async listRuntimeEvents(query?: RuntimeEventQuery | string) {
-    const normalizedQuery =
-      (() => {
-        if (typeof query === 'string') {
-          return { pluginId: query };
-        }
-        return query || {};
-      })();
+    const normalizedQuery = (() => {
+      if (typeof query === 'string') {
+        return { pluginId: query };
+      }
+      return query || {};
+    })();
     const where = {
-      ...((() => {
+      ...(() => {
         if (normalizedQuery.eventType) {
           return { eventType: normalizedQuery.eventType };
         }
         return {};
-      })()),
-      ...((() => {
+      })(),
+      ...(() => {
         if (normalizedQuery.installationId) {
           return { installationId: normalizedQuery.installationId };
         }
         return {};
-      })()),
-      ...((() => {
+      })(),
+      ...(() => {
         if (normalizedQuery.level) {
           return { level: normalizedQuery.level };
         }
         return {};
-      })()),
-      ...((() => {
+      })(),
+      ...(() => {
         if (normalizedQuery.pluginId) {
           return { pluginId: normalizedQuery.pluginId };
         }
         return {};
-      })()),
+      })(),
       ...this.buildRuntimeEventTimeFilter(normalizedQuery),
     };
 
     return this.runtimeEventRepository.find({
       where: (() => {
         if (Object.keys(where).length) {
-          return (where as any);
+          return where as any;
         }
         return undefined;
       })(),
@@ -717,13 +723,59 @@ export class QqbotPluginPlatformService
    * @returns 账号绑定列表。
    */
   async listAccountBindings(pluginId?: string) {
-    return this.accountBindingRepository.find({
-      where: (() => {
-        if (pluginId) {
-          return { pluginId };
-        }
-        return undefined;
-      })(),
+    return this.accountBindingService.list(pluginId);
+  }
+
+  /**
+   * 将 NapCat 或 QQ 官方账号绑定到指定插件，作为命令与事件执行的统一平台门禁。
+   * @param input - 账号与插件的主键或稳定业务键。
+   * @returns 平台绑定完成时固定返回 true。
+   */
+  async bindAccountPlugin(
+    input: QqbotPluginAccountBindingIdentity,
+  ): Promise<boolean> {
+    await this.accountBindingService.bind(input);
+    return true;
+  }
+
+  /**
+   * 将指定账号与插件的持久化行标记为停用并保留原身份，使命令和事件同时失去执行资格且后续可幂等恢复。
+   * @param input - 账号与插件的主键或稳定业务键。
+   * @returns 平台解绑完成时返回 true。
+   */
+  async unbindAccountPlugin(
+    input: QqbotPluginAccountBindingIdentity,
+  ): Promise<boolean> {
+    return this.accountBindingService.unbind(input);
+  }
+
+  /**
+   * 将账号稳定键解析为平台绑定集合，并排除停用或已卸载插件后返回 Core 可执行键。
+   * @param selfId - NapCat QQ 号或 QQ 官方账号稳定键。
+   * @returns 已绑定且未卸载的插件键列表。
+   */
+  async listBoundPluginKeys(selfId: string): Promise<string[]> {
+    return this.accountBindingService.listBoundPluginKeys(selfId);
+  }
+
+  /**
+   * 对真实消息触发的插件操作执行账号绑定门禁，管理端预览保持独立能力验证语义。
+   * @param input - 插件操作、运行上下文与输入参数。
+   * @throws 真实消息缺少账号身份或账号未绑定插件时抛出业务错误。
+   */
+  private async assertOperationAccountBinding(
+    input: QqbotPluginExecutionInput,
+  ): Promise<void> {
+    if (input.context?.accountBindingRequired !== true) return;
+    const message = input.context.message;
+    if (!message || typeof message !== 'object') {
+      throwVbenError('QQBot 插件操作缺少账号消息上下文');
+    }
+    const selfId = `${(message as { selfId?: unknown }).selfId || ''}`.trim();
+    if (!selfId) throwVbenError('QQBot 插件操作缺少账号标识');
+    await this.accountBindingService.assertBound({
+      pluginKey: input.pluginKey,
+      selfId,
     });
   }
 
@@ -941,11 +993,7 @@ export class QqbotPluginPlatformService
       }
       return `${error}`;
     })();
-    await this.updateInstallationRuntime(
-      installation,
-      'enabled',
-      'unhealthy',
-    );
+    await this.updateInstallationRuntime(installation, 'enabled', 'unhealthy');
     await this.recordRuntimeEvent(
       installation,
       'builtin-start-failed',
@@ -980,12 +1028,12 @@ export class QqbotPluginPlatformService
         );
       }
       return await this.installationRepository.save({
-          installedPath: descriptor.packageRoot,
-          pluginId: plugin.id,
-          runtimeStatus: 'stopped',
-          status: 'enabled',
-          versionId: version.id,
-        });
+        installedPath: descriptor.packageRoot,
+        pluginId: plugin.id,
+        runtimeStatus: 'stopped',
+        status: 'enabled',
+        versionId: version.id,
+      });
     })();
 
     return { installation, version };
@@ -996,9 +1044,7 @@ export class QqbotPluginPlatformService
    * @param descriptor - 用于内置的插件的领域对象，包含 `pluginKey`、`manifest` 字段。
    * @returns 内置的插件；无法解析或未命中时为 `null`。
    */
-  private async ensureBuiltinPlugin(
-    descriptor: QqbotPluginPackageDescriptor,
-  ) {
+  private async ensureBuiltinPlugin(descriptor: QqbotPluginPackageDescriptor) {
     const existing = await this.pluginRepository.findOne({
       where: { pluginKey: descriptor.pluginKey },
     });
@@ -1022,8 +1068,10 @@ export class QqbotPluginPlatformService
     pluginId: string,
     descriptor: QqbotPluginPackageDescriptor,
   ) {
-    const manifestJson =
-      descriptor.manifest as unknown as Record<string, unknown>;
+    const manifestJson = descriptor.manifest as unknown as Record<
+      string,
+      unknown
+    >;
     const packageHash = `${descriptor.pluginKey}:${descriptor.manifest.version}`;
     const existing = await this.versionRepository.findOne({
       where: {
@@ -1190,34 +1238,31 @@ export class QqbotPluginPlatformService
     workerContext: ActiveWorkerContext,
     healthPayload: unknown,
   ): QqbotPluginHealth {
-    const health =
-      (() => {
-        if (healthPayload && typeof healthPayload === 'object') {
-          return (healthPayload as Record<string, unknown>);
-        }
-        return {};
-      })();
+    const health = (() => {
+      if (healthPayload && typeof healthPayload === 'object') {
+        return healthPayload as Record<string, unknown>;
+      }
+      return {};
+    })();
     return {
-      checkedAt:
-        (() => {
-          if (typeof health.checkedAt === 'string') {
-            return health.checkedAt;
-          }
-          return formatKtDateTime(new Date());
-        })(),
+      checkedAt: (() => {
+        if (typeof health.checkedAt === 'string') {
+          return health.checkedAt;
+        }
+        return formatKtDateTime(new Date());
+      })(),
       message: (() => {
         if (typeof health.message === 'string') {
           return health.message;
         }
         return undefined;
       })(),
-      name:
-        (() => {
-          if (typeof health.name === 'string') {
-            return health.name;
-          }
-          return workerContext.manifest.name;
-        })(),
+      name: (() => {
+        if (typeof health.name === 'string') {
+          return health.name;
+        }
+        return workerContext.manifest.name;
+      })(),
       pluginKey: workerContext.pluginKey,
       status: this.normalizePluginHealthStatus(health.status),
       triggerMode: 'command',

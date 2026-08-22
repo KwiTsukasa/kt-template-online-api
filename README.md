@@ -107,6 +107,8 @@ QQBot 账号支持 `reverse-ws`、`official-websocket`、`official-webhook` 三�
 
 官方 WebSocket 使用 `@tencent-connect/qqbot-nodejs` protocol `GatewayConnection`、完整 intents、心跳、自动重连和进程内 RESUME session，C2C、群、频道及频道私信统一投影为现有 `QqbotNormalizedMessage`。官方 Webhook 的公开入口为 `/qqbot/official/webhook/:appId/:webhookToken`：URL token 由 AppSecret 按固定用途 HMAC 派生，事件继续校验 QQ 的 `X-Signature-Timestamp` / `X-Signature-Ed25519`，`op=13` 返回 challenge 签名，合法事件立即返回 `op=12` ACK 后异步进入同一去重、权限、命令、规则、插件、会话和日志链。`QQBOT_OFFICIAL_WEBHOOK_PUBLIC_BASE_URL` 必须配置为当期 NAS 直连 HTTPS API 基址，不得配置腾讯云中转入口；动态公网端口不写入 Git，Admin 账号行通过后端生成并复制完整回调 URL。
 
+QQ 官方与 NapCat 账号共用 `qqbot_plugin_account_binding` 平台绑定权威：插件平台账号抽屉展示所有启用账号与未卸载插件的绑定矩阵，支持直接绑定和解绑；事件 dispatcher 只把消息交给当前账号已绑定的插件，真实在线命令也同时校验命令能力绑定和平台插件绑定。既有环境先执行幂等 `sql/qqbot-plugin-account-binding-v1.sql`，把当前 `command` / `event_plugin` 能力补入平台表，再用 `qqbot-plugin-account-binding-v1-verify.sql` 验证两类缺失与孤儿绑定均为 0；脚本只补缺失行，不会在重复执行时重新启用已手动停用的绑定。
+
 三种 transport 共用发送排队和发送日志。官方 C2C/群消息使用 OpenID，频道回复保留 `channelId/guildId/replyMessageId`；现有插件产生的 HTTPS 或 `base64://` CQ 图片会转换为官方媒体上传。消息推送目标在 NapCat 模式继续校验数字 QQ/群号，官方模式改为手工填写事件中获得的用户 OpenID/群 OpenID，不调用 OneBot 好友或群列表。NapCat 更新登录、运行态和 WebUI 接口对官方账号失败关闭，Admin 同样只展示当前 provider 适用的动作。
 
 既有数据库只执行幂等增量 `sql/qqbot-official-transport-v1.sql`，随后运行只读 `sql/qqbot-official-transport-v1-verify.sql` 核对两列、唯一索引、身份映射和重复 AppID；不要为本功能重放完整 `sql/qqbot-init.sql`。
@@ -394,6 +396,7 @@ Run，并由 Agent 的类型化身份修正收口。升级前已处于这一精�
 - QQBot 在线命令和自动回复规则都有运行时保底冷却：默认命令 `5000ms`、规则 `30000ms`；即使数据库里旧数据冷却值更低，也按保底值判定，降低频繁触发风控的概率。
 - QQBot 复读机默认阈值为 4，同一会话默认 10 分钟只复读一次，默认只复读 120 字以内普通文本，避免群聊重复内容导致机器人过于频繁地模拟真人发言。
 - QQBot 插件平台统一使用 `plugin.json` manifest 描述插件 key、版本、操作、事件、权限、运行预算和包入口；CLI 负责 create/validate/pack/install-local，后端只暴露受控 SDK 能力并通过插件维度记录安装、配置、账号绑定和运行事件。
+- 插件账号绑定对 transport 无差别：NapCat UIN 与 `qq-official:<AppID>` 都进入同一平台矩阵；绑定是插件执行的账号级总门禁，在线命令仍保留命令级精确绑定，事件插件由平台绑定直接决定是否接收消息。
 - Bilibili Card 是事件型内置插件：`bilibili-card.message` 只在账号绑定后监听 QQ/NapCat `share/json/xml/lightapp` 卡片或文本里的 Bilibili 链接，`b23.tv` 短链通过平台 `resolveRedirect` 受控 host 能力解析，视频信息从 Bilibili `x/web-interface/view` 获取后回复首行封面图和文本摘要。
 - QQBot 同一账号只允许一个有效 NapCat 主容器；绑定新容器时会释放旧绑定和不再共享的旧容器，机器人下线 notice、`isOnline:false` 和 NapCat 容器最新离线日志都会写入账号 `lastError`，普通群成员 kick 不属于账号离线信号；写入 `last_error` 前按 500 字符截断，后续无错误的普通断连不能清空该原因；账号列表拆开展示 OneBot、容器、WebUI 和 QQ 登录态，心跳只代表 OneBot/容器通信，不能推导 QQ 登录态；近期连接只用于避免重连瞬间被旧缓存误伤，后续仍必须以 NapCat WebUI/日志检查判断 QQ 登录态；`qqLoginMessage` 只展示 QQ 登录态消息，WebUI 配置或请求错误留在 `lastError`。
 - NapCat 托管容器必须显式配置 `QQBOT_NAPCAT_IMAGE`，不要依赖 `latest` 默认镜像；生产切换镜像前先 pin 明确版本或 digest 并单账号观察。`desktop-cn-v20` 镜像从 KT `NapCatQQ` fork 的 source-built `NapCat.Shell` 构建，不再在镜像内对上游 bundle 做字符串 patch，并修复非自动重试 QR failure 后下次 WebUI 登录动作不重置、QQCore 通过进程级 mountinfo 探针看到 Docker/宿主路径、扫码登录成功后 API 立即读不到 QQ 号、生产 native reset 缺少 `offline()` 时半登录态无法清理、runtime view native maps 取证假阴性、WebUI `RestartNapCat` 重启 worker 丢失快速登录账号参数，以及首次解包覆盖 API 预写 NapCat config 导致 bypass 开关回落默认关闭的问题。踢下线后的半登录态不能只靠旧 native reset 兜底；源 Docker 容器在线时 API 会先同容器 `RestartNapCat` 重建 NapCat worker，再继续登录流程，同一个更新登录 session 不能反复重启 worker。

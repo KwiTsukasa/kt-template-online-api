@@ -59,6 +59,7 @@ export class QqbotCommandEngineService {
       try {
         const output = await this.pluginExecution.executeOperation({
           context: {
+            accountBindingRequired: true,
             args: matched.input,
             command,
             message,

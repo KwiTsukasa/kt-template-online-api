@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../../../../src/modules/admin/identity/auth/presen
 import { QqbotPluginPlatformController } from '../../../../src/modules/qqbot/plugin-platform/contract/plugin-platform.controller';
 import { QqbotPluginPlatformModule } from '../../../../src/modules/qqbot/plugin-platform/plugin-platform.module';
 import { QqbotPluginPlatformService } from '../../../../src/modules/qqbot/plugin-platform/application/plugin-platform.service';
+import { QqbotPluginAccountBindingService } from '../../../../src/modules/qqbot/plugin-platform/application/account-binding/qqbot-plugin-account-binding.service';
 import { QqbotPluginPackageReaderService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/package/plugin-package-reader.service';
 import {
   QQBOT_PLUGIN_PLATFORM_ENTITIES,
@@ -115,13 +116,40 @@ const writePluginPackage = (manifest: ReturnType<typeof createManifest>) => {
 describe('QQBot plugin platform API contract', () => {
   let app: INestApplication;
   let repositoryMocks: Map<unknown, ReturnType<typeof createRepositoryMock>>;
+  let accountBindingService: {
+    bind: jest.Mock;
+    list: jest.Mock;
+    unbind: jest.Mock;
+  };
 
   beforeEach(async () => {
     repositoryMocks = new Map();
+    accountBindingService = {
+      bind: jest.fn(async () => true),
+      list: jest.fn(async () => [
+        {
+          accountId: '2090739000000000001',
+          accountName: 'Official Bot',
+          bound: false,
+          connectionMode: 'official-websocket',
+          enabled: false,
+          id: null,
+          pluginId: '2060000000000000002',
+          pluginKey: 'bangdream',
+          pluginName: 'BangDream',
+          selfId: 'qq-official:1020000000',
+        },
+      ]),
+      unbind: jest.fn(async () => true),
+    };
     const moduleRef = await Test.createTestingModule({
       controllers: [QqbotPluginPlatformController],
       providers: [
         QqbotPluginPlatformService,
+        {
+          provide: QqbotPluginAccountBindingService,
+          useValue: accountBindingService,
+        },
         QqbotPluginPackageReaderService,
         ...[
           QqbotPlugin,
@@ -194,12 +222,47 @@ describe('QQBot plugin platform API contract', () => {
         'POST /qqbot/plugin-platform/config',
         'GET /qqbot/plugin-platform/runtime-events',
         'GET /qqbot/plugin-platform/account-bindings',
+        'POST /qqbot/plugin-platform/account-bindings/bind',
+        'POST /qqbot/plugin-platform/account-bindings/unbind',
         'GET /qqbot/plugin-platform/capabilities',
         'GET /qqbot/plugin-platform/operations/list',
         'GET /qqbot/plugin-platform/operations/page',
         'GET /qqbot/plugin-platform/event-handlers',
       ]),
     );
+  });
+
+  it('lists and updates official account bindings through the platform contract', async () => {
+    const listResponse = await request(app.getHttpServer())
+      .get('/qqbot/plugin-platform/account-bindings')
+      .expect(200);
+
+    expect(listResponse.body).toMatchObject({
+      code: 200,
+      data: [
+        {
+          bound: false,
+          connectionMode: 'official-websocket',
+          pluginKey: 'bangdream',
+          selfId: 'qq-official:1020000000',
+        },
+      ],
+    });
+
+    const body = {
+      accountId: '2090739000000000001',
+      pluginId: '2060000000000000002',
+    };
+    await request(app.getHttpServer())
+      .post('/qqbot/plugin-platform/account-bindings/bind')
+      .send(body)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/qqbot/plugin-platform/account-bindings/unbind')
+      .send(body)
+      .expect(200);
+    expect(accountBindingService.bind).toHaveBeenCalledWith(body);
+    expect(accountBindingService.unbind).toHaveBeenCalledWith(body);
   });
 
   it('validates manifests through the real HTTP wrapper', async () => {

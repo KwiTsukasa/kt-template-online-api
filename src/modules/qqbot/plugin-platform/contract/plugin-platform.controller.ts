@@ -255,4 +255,28 @@ export class QqbotPluginPlatformController {
   async accountBindings(@Query('pluginId') pluginId?: string) {
     return vbenSuccess(await this.service.listAccountBindings(pluginId));
   }
+
+  /**
+   * 将指定 QQBot 账号绑定到插件平台记录，官方与 NapCat 账号使用相同请求合同。
+   * @param body - QQBot 账号主键与插件主键。
+   * @returns 平台账号绑定写入结果。
+   */
+  @Post('account-bindings/bind')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '绑定插件平台账号' })
+  async bindAccount(@Body() body: { accountId?: string; pluginId?: string }) {
+    return vbenSuccess(await this.service.bindAccountPlugin(body));
+  }
+
+  /**
+   * 停用指定 QQBot 账号与插件的绑定，保留绑定行供后续幂等恢复。
+   * @param body - QQBot 账号主键与插件主键。
+   * @returns 平台账号解绑结果。
+   */
+  @Post('account-bindings/unbind')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '解绑插件平台账号' })
+  async unbindAccount(@Body() body: { accountId?: string; pluginId?: string }) {
+    return vbenSuccess(await this.service.unbindAccountPlugin(body));
+  }
 }

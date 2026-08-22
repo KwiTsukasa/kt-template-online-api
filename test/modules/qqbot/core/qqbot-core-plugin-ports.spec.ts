@@ -17,10 +17,13 @@ describe('QQBot core plugin execution ports', () => {
     if (!existsSync(portPath)) return;
 
     const source = readFileSync(portPath, 'utf8');
+    expect(source).toEqual(expect.stringContaining('bindAccountPlugin'));
     expect(source).toEqual(expect.stringContaining('executeOperation'));
     expect(source).toEqual(expect.stringContaining('dispatchEvent'));
     expect(source).toEqual(expect.stringContaining('listActiveOperations'));
     expect(source).toEqual(expect.stringContaining('getOperationByCommand'));
+    expect(source).toEqual(expect.stringContaining('listBoundPluginKeys'));
+    expect(source).toEqual(expect.stringContaining('unbindAccountPlugin'));
   });
 
   it('keeps command parser generic and leaves plugin-specific parsing to plugins', () => {

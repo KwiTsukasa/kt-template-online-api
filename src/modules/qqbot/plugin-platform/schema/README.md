@@ -17,6 +17,13 @@ Seed linkage:
 - Built-in command capabilities are exposed through the platform registry.
 - Legacy `/qqbot/plugin/*` routes are contract compatibility endpoints owned by
   Plugin Platform.
+- `qqbot_plugin_account_binding` is the transport-neutral account gate for both
+  NapCat UIN and `qq-official:<AppID>` accounts. Command abilities remain
+  operation-specific, while event dispatch and real command execution both
+  require the plugin-level binding.
+- Existing command and event-plugin abilities are backfilled with
+  `sql/qqbot-plugin-account-binding-v1.sql`; the migration inserts only missing
+  rows so a rerun cannot re-enable an explicitly disabled platform binding.
 
 Verification SQL:
 

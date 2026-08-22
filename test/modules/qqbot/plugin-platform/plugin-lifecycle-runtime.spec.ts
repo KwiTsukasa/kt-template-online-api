@@ -82,9 +82,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
 
     expect(source).toContain('node:worker_threads');
     expect(source).toContain('descriptor');
-    expect(source).not.toContain(
-      `Qqbot${'Builtin'}PluginPackageLoaderService`,
-    );
+    expect(source).not.toContain(`Qqbot${'Builtin'}PluginPackageLoaderService`);
     expect(source).not.toMatch(
       new RegExp(
         [
@@ -496,7 +494,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       createRepository(installation),
       createRepository(),
       createRepository(),
-      createRepository(),
+      { listBoundPluginKeys: jest.fn(async () => ['demo-plugin']) },
       createRepository(),
       createRepository(),
       runtimeEventRepository,
@@ -644,13 +642,17 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       setPluginActive: jest.fn(),
       unregisterRuntimeEvents: jest.fn(),
     };
+    const listBoundPluginKeys = jest
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValue(['demo-plugin']);
     const service = new (QqbotPluginPlatformService as any)(
       createRepository({ id: installation.pluginId, pluginKey: 'demo-plugin' }),
       createRepository(version),
       createRepository(installation),
       createRepository(),
       createRepository(),
-      createRepository(),
+      { listBoundPluginKeys },
       createRepository(),
       createRepository(),
       runtimeEventRepository,
@@ -669,6 +671,23 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
         pluginKey: 'demoLegacy',
       }),
     ).resolves.toEqual({ replyText: 'worker-ok' });
+    await expect(
+      service.dispatchEvent({
+        eventKey: 'message',
+        message: {
+          eventTime: new Date(),
+          messageId: 'msg-unbound',
+          messageText: 'unbound',
+          messageType: 'group',
+          rawEvent: {},
+          rawMessage: 'unbound',
+          selfId: 'qq-official:1020000000',
+          targetId: 'group-openid',
+          userId: 'user-openid',
+        },
+      }),
+    ).resolves.toBe(false);
+    expect(worker.handleEvent).not.toHaveBeenCalled();
     await expect(
       service.dispatchEvent({
         eventKey: 'message',
@@ -789,7 +808,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       createRepository([disabledInstallation], disabledInstallation),
       createRepository(),
       createRepository(),
-      createRepository(),
+      { listBoundPluginKeys: jest.fn(async () => ['demo-plugin']) },
       createRepository(),
       createRepository(),
       createRepository(),
@@ -1172,7 +1191,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       createRepository([installation], installation),
       createRepository(),
       createRepository(),
-      createRepository(),
+      { listBoundPluginKeys: jest.fn(async () => ['demo-plugin']) },
       createRepository(),
       createRepository(),
       createRepository(),
@@ -1306,7 +1325,7 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       createRepository([], installation),
       createRepository(),
       createRepository(),
-      createRepository(),
+      { listBoundPluginKeys: jest.fn(async () => ['demo-plugin']) },
       createRepository(),
       createRepository(),
       createRepository(),
@@ -1625,13 +1644,16 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
 
     const accountService = {
       allEnabled: jest.fn(async () => []),
-      bindEventPlugin: jest.fn(async () => true),
       findBySelfId: jest.fn(),
-      getBoundEventPluginKeys: jest.fn(async () => []),
-      unbindEventPlugin: jest.fn(async () => true),
+    };
+    const accountBindingService = {
+      bind: jest.fn(async () => true),
+      listBoundPluginKeys: jest.fn(async () => []),
+      unbind: jest.fn(async () => true),
     };
     const eventRegistry = new QqbotEventPluginRegistryService(
       accountService as any,
+      accountBindingService as any,
     );
     eventRegistry.registerRuntimeEvents('repeater', [
       {
@@ -1647,10 +1669,10 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
       eventRegistry.dispatchMessage({ messageType: 'group' } as any),
     ).resolves.toBe(false);
     await expect(eventRegistry.bind('repeater', '10000')).resolves.toBe(true);
-    expect(accountService.bindEventPlugin).toHaveBeenCalledWith(
-      '10000',
-      'repeater',
-    );
+    expect(accountBindingService.bind).toHaveBeenCalledWith({
+      pluginKey: 'repeater',
+      selfId: '10000',
+    });
 
     eventRegistry.setPluginActive('repeater', false);
 
@@ -1715,6 +1737,11 @@ describe('QQBot plugin platform lifecycle runtime contract', () => {
         findBySelfId: jest.fn(),
         getBoundEventPluginKeys: jest.fn(async () => []),
         unbindEventPlugin: jest.fn(async () => true),
+      },
+      {
+        bind: jest.fn(async () => true),
+        listBoundPluginKeys: jest.fn(async () => []),
+        unbind: jest.fn(async () => true),
       },
       pluginRepository,
       installationRepository,

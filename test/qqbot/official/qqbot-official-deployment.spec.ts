@@ -22,12 +22,14 @@ describe('QQ official Bot deployment contract', () => {
     expect(migration).toContain('information_schema.statistics');
     expect(migration).not.toMatch(/\bDROP\b/iu);
     expect(migration).not.toMatch(/\bDELETE\b/iu);
-    expect(verification).toContain("column_name IN (");
+    expect(verification).toContain('column_name IN (');
     expect(verification).toContain(
       "index_name = 'uk_qqbot_account_official_app_id'",
     );
     expect(verification).toContain('HAVING COUNT(*) > 1');
-    expect(verification).not.toMatch(/\b(?:ALTER|DELETE|DROP|INSERT|UPDATE)\b/iu);
+    expect(verification).not.toMatch(
+      /\b(?:ALTER|DELETE|DROP|INSERT|UPDATE)\b/iu,
+    );
   });
 
   it('preserves raw Webhook bytes and keeps the direct NAS callback base runtime-configured', () => {
@@ -37,9 +39,7 @@ describe('QQ official Bot deployment contract', () => {
 
     expect(main).toContain('rawBody: true');
     expect(main).toContain("app.useBodyParser('json', { limit: '50mb' })");
-    expect(envExample).toContain(
-      'QQBOT_OFFICIAL_WEBHOOK_PUBLIC_BASE_URL=',
-    );
+    expect(envExample).toContain('QQBOT_OFFICIAL_WEBHOOK_PUBLIC_BASE_URL=');
     expect(envExample).toContain('不经中转的 NAS 公网 HTTPS API 基址');
     expect(envExample).not.toContain(
       'QQBOT_OFFICIAL_WEBHOOK_PUBLIC_BASE_URL=https://admin.kwitsukasa.top',
@@ -52,6 +52,27 @@ describe('QQ official Bot deployment contract', () => {
     const packageJson = JSON.parse(readSource('package.json'));
     expect(packageJson.dependencies['@tencent-connect/qqbot-nodejs']).toBe(
       '1.0.4',
+    );
+  });
+
+  it('backfills official and NapCat abilities into the transport-neutral plugin binding table', () => {
+    const migration = readSource('sql/qqbot-plugin-account-binding-v1.sql');
+    const verification = readSource(
+      'sql/qqbot-plugin-account-binding-v1-verify.sql',
+    );
+
+    expect(migration).toContain(
+      'INSERT IGNORE INTO `qqbot_plugin_account_binding`',
+    );
+    expect(migration).toContain("`ability`.`ability_type` = 'command'");
+    expect(migration).toContain("`ability`.`ability_type` = 'event_plugin'");
+    expect(migration).toContain('`plugin`.`plugin_key`');
+    expect(migration).not.toMatch(/\b(?:DELETE|DROP|TRUNCATE)\b/iu);
+    expect(verification).toContain('missing_command_plugin_binding_count');
+    expect(verification).toContain('missing_event_plugin_binding_count');
+    expect(verification).toContain('official_plugin_account_binding_count');
+    expect(verification).not.toMatch(
+      /\b(?:ALTER|DELETE|DROP|INSERT|TRUNCATE|UPDATE)\b/iu,
     );
   });
 });

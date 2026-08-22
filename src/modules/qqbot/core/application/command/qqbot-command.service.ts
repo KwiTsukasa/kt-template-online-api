@@ -111,21 +111,43 @@ export class QqbotCommandService {
    * @returns 启用状态消息。
    */
   async listEnabledForMessage(message: QqbotNormalizedMessage) {
-    const boundIds = await this.accountService.getBoundCommandIds(
-      message.selfId,
-    );
-    if (boundIds.length === 0) return [];
+    const [boundIds, boundPluginKeys] = await Promise.all([
+      this.accountService.getBoundCommandIds(message.selfId),
+      this.pluginExecution.listBoundPluginKeys(message.selfId),
+    ]);
+    if (boundIds.length === 0 || boundPluginKeys.length === 0) return [];
     return this.commandRepository
       .createQueryBuilder('command')
       .where('command.isDeleted = :isDeleted', { isDeleted: false })
       .andWhere('command.enabled = :enabled', { enabled: true })
       .andWhere('command.id IN (:...boundIds)', { boundIds })
+      .andWhere('command.pluginKey IN (:...boundPluginKeys)', {
+        boundPluginKeys,
+      })
       .andWhere('command.targetType IN (:...targetTypes)', {
         targetTypes: ['all', message.messageType],
       })
       .orderBy('command.priority', 'DESC')
       .addOrderBy('command.createTime', 'ASC')
       .getMany();
+  }
+
+  /**
+   * 绑定账号在线命令前先恢复对应插件的平台账号绑定，确保官方与 NapCat 使用同一执行门禁。
+   * @param selfId - NapCat QQ 号或 QQ 官方账号稳定键。
+   * @param commandId - 待绑定在线命令主键。
+   * @returns 命令能力与平台插件绑定均写入完成时返回 true。
+   */
+  async bindAccountCommand(
+    selfId: string,
+    commandId: string,
+  ): Promise<boolean> {
+    const command = await this.findById(commandId);
+    await this.pluginExecution.bindAccountPlugin({
+      pluginKey: command.pluginKey,
+      selfId,
+    });
+    return this.accountService.bindCommand(selfId, commandId);
   }
 
   /**
@@ -235,13 +257,12 @@ export class QqbotCommandService {
         errorMessage: params.errorMessage || null,
         input: JSON.stringify(params.input || {}),
         operationKey: params.command.operationKey,
-        output:
-          (() => {
-            if (params.output === undefined) {
-              return null;
-            }
-            return this.stringifyStoredOutput(params.output);
-          })(),
+        output: (() => {
+          if (params.output === undefined) {
+            return null;
+          }
+          return this.stringifyStoredOutput(params.output);
+        })(),
         pluginKey: params.command.pluginKey,
         rawMessage: params.message.messageText,
         selfId: params.message.selfId,
@@ -365,12 +386,14 @@ export class QqbotCommandService {
       .map((item) => `${item || ''}`.trim())
       .filter(Boolean);
     return JSON.stringify([
-      ...new Set((() => {
-        if (normalized.length > 0) {
-          return normalized;
-        }
-        return fallback;
-      })()),
+      ...new Set(
+        (() => {
+          if (normalized.length > 0) {
+            return normalized;
+          }
+          return fallback;
+        })(),
+      ),
     ]);
   }
 

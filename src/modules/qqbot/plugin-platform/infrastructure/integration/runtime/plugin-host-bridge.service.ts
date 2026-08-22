@@ -2,10 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { DictService } from '@/modules/admin/platform-config/dict/dict.service';
-import { QqbotAccountService } from '@/modules/qqbot/core/application/account/qqbot-account.service';
 import { QqbotConfigService } from '@/modules/qqbot/core/application/config/qqbot-config.service';
 import { QqbotSendService } from '@/modules/qqbot/core/application/send/qqbot-send.service';
 import type { QqbotPluginPackageDescriptor } from '@/modules/qqbot/plugin-platform/infrastructure/integration/package/plugin-package.types';
+import { QqbotPluginAccountBindingService } from '@/modules/qqbot/plugin-platform/application/account-binding/qqbot-plugin-account-binding.service';
 import {
   QqbotPluginHttpClientService,
   type QqbotPluginHttpClientRequest,
@@ -28,7 +28,7 @@ export class QqbotPluginHostBridgeService {
     private readonly configService: QqbotConfigService,
     private readonly dictService: DictService,
     private readonly httpClient: QqbotPluginHttpClientService,
-    private readonly accountService: QqbotAccountService,
+    private readonly accountBindingService: QqbotPluginAccountBindingService,
     private readonly sendService: QqbotSendService,
   ) {}
 
@@ -73,12 +73,12 @@ export class QqbotPluginHostBridgeService {
 
     switch (request.method) {
       case 'bindEventPlugin':
-        return this.accountService.bindEventPlugin(
-          getRequiredText(args, 'selfId'),
-          request.pluginKey,
-        );
+        return this.accountBindingService.bind({
+          pluginKey: request.pluginKey,
+          selfId: getRequiredText(args, 'selfId'),
+        });
       case 'getBoundEventPluginKeys':
-        return this.accountService.getBoundEventPluginKeys(
+        return this.accountBindingService.listBoundPluginKeys(
           getRequiredText(args, 'selfId'),
         );
       case 'getConfig':
@@ -116,10 +116,10 @@ export class QqbotPluginHostBridgeService {
       case 'sleep':
         return this.sleep(getRequiredNumber(args, 'ms'));
       case 'unbindEventPlugin':
-        return this.accountService.unbindEventPlugin(
-          getRequiredText(args, 'selfId'),
-          request.pluginKey,
-        );
+        return this.accountBindingService.unbind({
+          pluginKey: request.pluginKey,
+          selfId: getRequiredText(args, 'selfId'),
+        });
       case 'warn':
         this.logger.warn({
           message: getRequiredText(args, 'message'),

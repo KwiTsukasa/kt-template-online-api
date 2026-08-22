@@ -28,7 +28,13 @@ export type QqbotPluginOperationListContext = {
   selfId?: string;
 };
 
+export type QqbotPluginAccountBindingInput = {
+  pluginKey: string;
+  selfId: string;
+};
+
 export interface QqbotPluginExecutionPort {
+  bindAccountPlugin(input: QqbotPluginAccountBindingInput): Promise<boolean>;
   dispatchEvent(input: QqbotPluginEventDispatchInput): Promise<boolean>;
   executeOperation(input: QqbotPluginExecutionInput): Promise<any>;
   getOperationByCommand(
@@ -37,4 +43,6 @@ export interface QqbotPluginExecutionPort {
   listActiveOperations(
     context?: QqbotPluginOperationListContext,
   ): Promise<QqbotPluginOperationSummary[]>;
+  listBoundPluginKeys(selfId: string): Promise<string[]>;
+  unbindAccountPlugin(input: QqbotPluginAccountBindingInput): Promise<boolean>;
 }

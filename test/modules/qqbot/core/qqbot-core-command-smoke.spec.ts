@@ -71,6 +71,7 @@ describe('QQBot core command local smoke', () => {
   };
 
   const pluginExecution = {
+    bindAccountPlugin: jest.fn().mockResolvedValue(true),
     executeOperation: jest.fn().mockResolvedValue({
       title: 'FIRE BIRD',
       type: 'text',
@@ -81,6 +82,12 @@ describe('QQBot core command local smoke', () => {
       name: '查曲',
       pluginKey: command.pluginKey,
     }),
+    listBoundPluginKeys: jest.fn().mockResolvedValue(['bangdream']),
+  };
+
+  const accountService = {
+    bindCommand: jest.fn().mockResolvedValue(true),
+    getBoundCommandIds: jest.fn().mockResolvedValue([command.id]),
   };
 
   beforeAll(async () => {
@@ -102,9 +109,7 @@ describe('QQBot core command local smoke', () => {
         },
         {
           provide: QqbotAccountService,
-          useValue: {
-            getBoundCommandIds: jest.fn().mockResolvedValue([command.id]),
-          },
+          useValue: accountService,
         },
         {
           provide: QQBOT_PLUGIN_EXECUTION_PORT,
@@ -205,6 +210,22 @@ describe('QQBot core command local smoke', () => {
         operationKey: command.operationKey,
         pluginKey: command.pluginKey,
       }),
+    );
+  });
+
+  it('binds an official account to the command plugin before persisting the command ability', async () => {
+    const service = app.get(QqbotCommandService);
+
+    await expect(
+      service.bindAccountCommand('qq-official:1020000000', command.id),
+    ).resolves.toBe(true);
+    expect(pluginExecution.bindAccountPlugin).toHaveBeenCalledWith({
+      pluginKey: 'bangdream',
+      selfId: 'qq-official:1020000000',
+    });
+    expect(accountService.bindCommand).toHaveBeenCalledWith(
+      'qq-official:1020000000',
+      command.id,
     );
   });
 });

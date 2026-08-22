@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  QqbotPluginAccountBindingInput,
   QqbotPluginEventDispatchInput,
   QqbotPluginExecutionInput,
   QqbotPluginExecutionPort,
@@ -10,6 +11,15 @@ import { QqbotPluginPlatformService } from './plugin-platform.service';
 @Injectable()
 export class QqbotPluginExecutionAdapter implements QqbotPluginExecutionPort {
   constructor(private readonly platformService: QqbotPluginPlatformService) {}
+
+  /**
+   * 把账号与插件绑定请求交给平台权威绑定服务。
+   * @param input - 账号稳定键与插件稳定键。
+   * @returns 平台绑定完成时返回 true。
+   */
+  async bindAccountPlugin(input: QqbotPluginAccountBindingInput) {
+    return this.platformService.bindAccountPlugin(input);
+  }
 
   /**
    * 将插件能力执行请求交给平台服务，并采用其异步执行结果。
@@ -44,5 +54,23 @@ export class QqbotPluginExecutionAdapter implements QqbotPluginExecutionPort {
    */
   async getOperationByCommand(command: QqbotPluginOperationLookup) {
     return this.platformService.getOperationByCommand(command);
+  }
+
+  /**
+   * 把账号稳定键交给平台查询，并返回未卸载且绑定启用的插件键供 Core 执行前门禁。
+   * @param selfId - NapCat 或 QQ 官方账号稳定键。
+   * @returns 已绑定插件键列表。
+   */
+  async listBoundPluginKeys(selfId: string) {
+    return this.platformService.listBoundPluginKeys(selfId);
+  }
+
+  /**
+   * 把账号与插件解绑请求交给平台权威绑定服务。
+   * @param input - 账号稳定键与插件稳定键。
+   * @returns 平台解绑完成时返回 true。
+   */
+  async unbindAccountPlugin(input: QqbotPluginAccountBindingInput) {
+    return this.platformService.unbindAccountPlugin(input);
   }
 }

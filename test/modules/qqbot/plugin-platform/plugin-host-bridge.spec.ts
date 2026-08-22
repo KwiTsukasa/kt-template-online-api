@@ -1,13 +1,13 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { QqbotAccountService } from '../../../../src/modules/qqbot/core/application/account/qqbot-account.service';
 import { QqbotConfigService } from '../../../../src/modules/qqbot/core/application/config/qqbot-config.service';
 import { QqbotSendService } from '../../../../src/modules/qqbot/core/application/send/qqbot-send.service';
 import { DictService } from '../../../../src/modules/admin/platform-config/dict/dict.service';
 import { QqbotPluginHostBridgeService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/runtime/plugin-host-bridge.service';
 import { QqbotPluginHttpClientService } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/sdk/plugin-http-client.service';
 import type { QqbotPluginPackageDescriptor } from '../../../../src/modules/qqbot/plugin-platform/infrastructure/integration/package/plugin-package.types';
+import { QqbotPluginAccountBindingService } from '../../../../src/modules/qqbot/plugin-platform/application/account-binding/qqbot-plugin-account-binding.service';
 
 describe('QQBot plugin host bridge', () => {
   let tempRoot: string;
@@ -18,10 +18,10 @@ describe('QQBot plugin host bridge', () => {
     requestJson: jest.Mock;
     resolveRedirect: jest.Mock;
   };
-  let accountService: {
-    bindEventPlugin: jest.Mock;
-    getBoundEventPluginKeys: jest.Mock;
-    unbindEventPlugin: jest.Mock;
+  let accountBindingService: {
+    bind: jest.Mock;
+    listBoundPluginKeys: jest.Mock;
+    unbind: jest.Mock;
   };
   let sendService: { sendText: jest.Mock };
 
@@ -44,10 +44,10 @@ describe('QQBot plugin host bridge', () => {
       requestJson: jest.fn().mockResolvedValue({ ok: true }),
       resolveRedirect: jest.fn(),
     };
-    accountService = {
-      bindEventPlugin: jest.fn().mockResolvedValue(true),
-      getBoundEventPluginKeys: jest.fn(),
-      unbindEventPlugin: jest.fn(),
+    accountBindingService = {
+      bind: jest.fn().mockResolvedValue(true),
+      listBoundPluginKeys: jest.fn(),
+      unbind: jest.fn(),
     };
     sendService = {
       sendText: jest.fn().mockResolvedValue({ messageId: 'msg-1' }),
@@ -56,7 +56,7 @@ describe('QQBot plugin host bridge', () => {
       configService,
       dictService,
       httpClient as unknown as QqbotPluginHttpClientService,
-      accountService as unknown as QqbotAccountService,
+      accountBindingService as unknown as QqbotPluginAccountBindingService,
       sendService as unknown as QqbotSendService,
     );
   });
@@ -179,10 +179,10 @@ describe('QQBot plugin host bridge', () => {
       }),
     ).resolves.toEqual({ ok: true, value: { messageId: 'msg-1' } });
 
-    expect(accountService.bindEventPlugin).toHaveBeenCalledWith(
-      '10001',
-      'sample',
-    );
+    expect(accountBindingService.bind).toHaveBeenCalledWith({
+      pluginKey: 'sample',
+      selfId: '10001',
+    });
     expect(sendService.sendText).toHaveBeenCalledWith(sendInput);
   });
 
@@ -195,10 +195,10 @@ describe('QQBot plugin host bridge', () => {
       pluginKey: 'sample',
     });
 
-    expect(accountService.unbindEventPlugin).toHaveBeenCalledWith(
-      '10001',
-      'sample',
-    );
+    expect(accountBindingService.unbind).toHaveBeenCalledWith({
+      pluginKey: 'sample',
+      selfId: '10001',
+    });
   });
 
   it('reads JSON files from descriptor package roots', async () => {

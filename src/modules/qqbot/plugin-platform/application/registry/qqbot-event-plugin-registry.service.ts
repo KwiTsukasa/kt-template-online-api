@@ -14,6 +14,7 @@ import {
   QqbotPlugin,
   QqbotPluginInstallation,
 } from '@/modules/qqbot/plugin-platform/infrastructure/persistence';
+import { QqbotPluginAccountBindingService } from '../account-binding/qqbot-plugin-account-binding.service';
 import { resolveInactivePluginKeys } from './plugin-installation-state';
 
 @Injectable()
@@ -26,6 +27,7 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
 
   constructor(
     private readonly accountService: QqbotAccountService,
+    private readonly accountBindingService: QqbotPluginAccountBindingService,
     @Optional()
     @InjectRepository(QqbotPlugin)
     private readonly pluginRepository?: Repository<QqbotPlugin>,
@@ -102,7 +104,9 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
         .filter((account): account is NonNullable<typeof account> => !!account)
         .map(async (account) => {
           const boundKeys = new Set(
-            await this.accountService.getBoundEventPluginKeys(account.selfId),
+            await this.accountBindingService.listBoundPluginKeys(
+              account.selfId,
+            ),
           );
           return definitions.map((definition) => ({
             accountName: account.name,
@@ -179,7 +183,8 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
    */
   async bind(pluginKey: string, selfId: string) {
     this.requireDefinition(pluginKey);
-    return this.accountService.bindEventPlugin(selfId, pluginKey);
+    await this.accountBindingService.bind({ pluginKey, selfId });
+    return true;
   }
 
   /**
@@ -190,7 +195,7 @@ export class QqbotEventPluginRegistryService implements OnModuleInit {
    */
   async unbind(pluginKey: string, selfId: string) {
     this.requireDefinition(pluginKey);
-    return this.accountService.unbindEventPlugin(selfId, pluginKey);
+    return this.accountBindingService.unbind({ pluginKey, selfId });
   }
 
   /**

@@ -21,6 +21,7 @@ import {
 import { QqbotAccountService } from '../../application/account/qqbot-account.service';
 import { QqbotReverseWsService } from '../../infrastructure/integration/connection/qqbot-reverse-ws.service';
 import { QqbotOfficialService } from '../../infrastructure/integration/connection/qqbot-official.service';
+import { QqbotCommandService } from '../../application/command/qqbot-command.service';
 
 @ApiTags('QQBot - 账号连接')
 @Controller('qqbot/account')
@@ -31,6 +32,7 @@ export class QqbotAccountController {
     private readonly officialService: QqbotOfficialService,
     private readonly reverseWsService: QqbotReverseWsService,
     private readonly trustedCredentialTransportService: TrustedCredentialTransportService,
+    private readonly commandService: QqbotCommandService,
   ) {}
 
   /**
@@ -123,7 +125,7 @@ export class QqbotAccountController {
     @Query('commandId') commandId: string,
   ) {
     return vbenSuccess(
-      await this.accountService.bindCommand(selfId, commandId),
+      await this.commandService.bindAccountCommand(selfId, commandId),
     );
   }
 

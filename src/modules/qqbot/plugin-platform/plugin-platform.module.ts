@@ -7,6 +7,7 @@ import { DictModule } from '@/modules/admin/platform-config/dict/dict.module';
 import { QQBOT_PLUGIN_EXECUTION_PORT } from '@/modules/qqbot/core/domain/plugin-execution.port';
 import { QqbotCoreModule } from '@/modules/qqbot/core/qqbot-core.module';
 import { QqbotPluginArgumentParserService } from './application/argument/qqbot-plugin-argument-parser.service';
+import { QqbotPluginAccountBindingService } from './application/account-binding/qqbot-plugin-account-binding.service';
 import { QqbotEventPluginRegistryService } from './application/registry/qqbot-event-plugin-registry.service';
 import { QqbotPluginRegistryService } from './application/registry/qqbot-plugin-registry.service';
 import { QqbotPluginExecutionAdapter } from './application/plugin-execution.adapter';
@@ -41,6 +42,7 @@ import { QQBOT_PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.serv
   ],
   exports: [
     QQBOT_PLUGIN_EXECUTION_PORT,
+    QqbotPluginAccountBindingService,
     QqbotPluginHttpClientService,
     QqbotPluginPlatformService,
     QqbotPluginTaskService,
@@ -61,6 +63,7 @@ import { QQBOT_PLUGIN_RUNTIME_FACTORY } from './application/plugin-platform.serv
     TypeOrmModule.forFeature([...QQBOT_PLUGIN_PLATFORM_ENTITIES]),
   ],
   providers: [
+    QqbotPluginAccountBindingService,
     QqbotEventPluginRegistryService,
     QqbotPluginArgumentParserService,
     QqbotPluginExecutionAdapter,

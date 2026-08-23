@@ -48,6 +48,16 @@ type CanonicalIdentityRebaseInput = {
   summary: string;
 };
 
+type CatalogIdentityRestorationInput = {
+  previousPlanSha256: string;
+  summary: string;
+};
+
+type MediaGovernanceTitleIdentity = Pick<
+  MediaGovernanceTask,
+  'mediaType' | 'providerRef' | 'releaseYear' | 'titleHint'
+>;
+
 /**
  * 按声明的文件角色校验扩展名，并投影为治理计划文件类型。
  * @param value - 参与Mapped文件Kind比较、格式化或输出的候选值。
@@ -99,7 +109,7 @@ function safeTitle(value: string) {
  * @param task - 用于根据媒体类型、年份和资料源身份生成正式媒体根目录的领域对象，包含 `titleHint`、`releaseYear`、`providerRef`、`mediaType` 字段。
  * @returns 按参数编码并拼接完成的根据媒体类型、年份和资料源身份生成正式媒体根目录。
  */
-function titleRoot(task: MediaGovernanceTask) {
+export function mediaGovernanceTitleRoot(task: MediaGovernanceTitleIdentity) {
   const title = safeTitle(task.titleHint);
   let year = '';
   if (task.releaseYear) year = ` (${task.releaseYear})`;
@@ -277,6 +287,52 @@ export function isCanonicalIdentityRebasePlan(
 }
 
 /**
+ * 从密封计划读取固定二级元数据身份，并兼容旧版顶层 TMDB 路径身份。
+ * @param plan - 待读取二级元数据身份的 Schema 1.2.0 计划。
+ * @returns 计划显式绑定的二级元数据身份；未声明时返回 `null`。
+ */
+export function mediaGovernancePlanMetadataIdentity(
+  plan: null | Record<string, unknown>,
+) {
+  if (!plan) return null;
+  const rootIdentity = plan.metadataIdentity;
+  if (rootIdentity !== undefined) {
+    if (
+      rootIdentity &&
+      typeof rootIdentity === 'object' &&
+      !Array.isArray(rootIdentity)
+    ) {
+      return rootIdentity as Record<string, unknown>;
+    }
+    return null;
+  }
+  const identity = plan.identity;
+  if (!identity || typeof identity !== 'object' || Array.isArray(identity)) {
+    return null;
+  }
+  const identityValue = identity as Record<string, unknown>;
+  const nestedIdentity = identityValue.metadataIdentity;
+  if (
+    nestedIdentity &&
+    typeof nestedIdentity === 'object' &&
+    !Array.isArray(nestedIdentity)
+  ) {
+    return nestedIdentity as Record<string, unknown>;
+  }
+  const providerRef = identityValue.providerRef;
+  if (!providerRef || typeof providerRef !== 'object') return null;
+  if (Array.isArray(providerRef)) return null;
+  const providerValue = providerRef as Record<string, unknown>;
+  if (providerValue.provider !== 'tmdb') return null;
+  return {
+    provider: providerValue.provider,
+    providerId: providerValue.providerId,
+    providerTitle: identityValue.providerTitle,
+    releaseYear: identityValue.releaseYear,
+  };
+}
+
+/**
  * 把已提交文件的旧规范目标转换为新来源，并按修正后的身份重封可逆本地计划。
  * @param task - 已投影新资料源身份、但尚未改变文件位置的媒体任务。
  * @param currentPlan - 文件已按其正向清单提交的现有 Schema 1.2.0 计划。
@@ -305,7 +361,7 @@ export function buildCanonicalIdentityRebasePlan(
     task.mediaType,
     parsed.operations,
   );
-  const targetTitleRoot = titleRoot(task);
+  const targetTitleRoot = mediaGovernanceTitleRoot(task);
   if (previousTitleRoot === targetTitleRoot) {
     throw new Error('governance-identity-rebase-not-required');
   }
@@ -396,6 +452,117 @@ export function buildCanonicalIdentityRebasePlan(
 }
 
 /**
+ * 在不改动已提交媒体路径的前提下，把历史目录身份恢复为用户选择的主资料库身份。
+ * @param task - 已投影目标主资料库身份的媒体任务。
+ * @param currentPlan - 当前已提交且仍绑定播放元数据身份的密封计划。
+ * @param input - 绑定当前计划摘要与恢复原因的审计输入。
+ * @param now - 记录主资料库身份恢复时间的时间基准。
+ * @returns 保留原文件清单与播放元数据身份，并新增可审计主资料库身份的密封计划。
+ * @throws 当计划摘要、关闭状态、历史目录或目标资料库身份不一致时拒绝恢复。
+ */
+export function buildCatalogIdentityRestorationPlan(
+  task: MediaGovernanceTask,
+  currentPlan: Record<string, unknown>,
+  input: CatalogIdentityRestorationInput,
+  now = new Date(),
+): Record<string, unknown> {
+  if (
+    sha256Json(currentPlan) !== input.previousPlanSha256 ||
+    currentPlan.catalogIdentity !== undefined ||
+    !task.providerRef ||
+    !Number.isInteger(task.releaseYear) ||
+    !input.summary.trim()
+  ) {
+    throw new Error('governance-catalog-identity-restore-input-invalid');
+  }
+  const transition = currentPlan.transition;
+  if (!transition || typeof transition !== 'object') {
+    throw new Error('governance-catalog-identity-restore-history-missing');
+  }
+  if (Array.isArray(transition)) {
+    throw new Error('governance-catalog-identity-restore-history-missing');
+  }
+  const transitionValue = transition as Record<string, unknown>;
+  const restoredTitleRoot = mediaGovernanceTitleRoot(task);
+  const parsed = parseCommittedPlanForIdentityRebase(currentPlan);
+  const committedRoot = committedTitleRoot(task.mediaType, parsed.operations);
+  const allowlists = parsed.execution.allowlists as
+    | Record<string, unknown>
+    | undefined;
+  const transitionDigestInvalid =
+    typeof transitionValue.previousPlanSha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/u.test(transitionValue.previousPlanSha256) ||
+    typeof transitionValue.amendmentPlanSha256 !== 'string' ||
+    !/^[a-f0-9]{64}$/u.test(transitionValue.amendmentPlanSha256);
+  const transitionRootInvalid =
+    transitionValue.previousTitleRoot !== restoredTitleRoot ||
+    transitionValue.targetTitleRoot !== committedRoot ||
+    allowlists?.localSourceRoot !== restoredTitleRoot;
+  if (
+    transitionValue.kind !== 'canonical-identity-rebase-v1' ||
+    transitionDigestInvalid ||
+    transitionRootInvalid
+  ) {
+    throw new Error('governance-catalog-identity-restore-history-mismatch');
+  }
+  const canonicalIdentity = currentPlan.identity;
+  if (
+    !canonicalIdentity ||
+    typeof canonicalIdentity !== 'object' ||
+    Array.isArray(canonicalIdentity)
+  ) {
+    throw new Error('governance-catalog-identity-restore-history-mismatch');
+  }
+  const canonicalIdentityValue = canonicalIdentity as Record<string, unknown>;
+  const canonicalProviderRef = canonicalIdentityValue.providerRef;
+  if (
+    !canonicalProviderRef ||
+    typeof canonicalProviderRef !== 'object' ||
+    Array.isArray(canonicalProviderRef)
+  ) {
+    throw new Error('governance-catalog-identity-restore-history-mismatch');
+  }
+  const canonicalProvider = canonicalProviderRef as Record<string, unknown>;
+  const canonicalProviderInvalid =
+    canonicalProvider.provider !== 'tmdb' ||
+    typeof canonicalProvider.providerId !== 'string' ||
+    !canonicalProvider.providerId;
+  const canonicalMetadataInvalid =
+    typeof canonicalIdentityValue.providerTitle !== 'string' ||
+    !canonicalIdentityValue.providerTitle.trim() ||
+    !Number.isInteger(canonicalIdentityValue.releaseYear);
+  if (canonicalProviderInvalid || canonicalMetadataInvalid) {
+    throw new Error('governance-catalog-identity-restore-history-mismatch');
+  }
+  const metadataIdentity = {
+    provider: canonicalProvider.provider,
+    providerId: canonicalProvider.providerId,
+    providerTitle: canonicalIdentityValue.providerTitle,
+    releaseYear: canonicalIdentityValue.releaseYear,
+  };
+  return {
+    ...currentPlan,
+    catalogIdentity: {
+      mediaType: task.mediaType,
+      providerRef: task.providerRef,
+      releaseYear: task.releaseYear,
+      title: task.titleHint,
+    },
+    catalogIdentityRestoration: {
+      amendmentPlanSha256: transitionValue.amendmentPlanSha256,
+      canonicalTitleRoot: committedRoot,
+      previousPlanSha256: input.previousPlanSha256,
+      restoredAt: now.toISOString(),
+      restoredProviderRef: task.providerRef,
+      restoredReleaseYear: task.releaseYear,
+      restoredTitleRoot,
+      summary: input.summary.trim(),
+    },
+    metadataIdentity,
+  };
+}
+
+/**
  * 校验任务身份、计划摘要与全部正式目标都指向同一个当前规范作品根。
  * @param task - 准备进入元数据或独立验收阶段的任务。
  * @throws 当密封计划摘要、身份或目标根与任务当前身份不一致时抛出。
@@ -412,34 +579,102 @@ export function assertAdminMediaGovernancePlanCanonicalIdentity(
     throw new Error('governance-sealed-plan-digest-mismatch');
   }
   const identity = plan.identity as Record<string, unknown> | undefined;
-  const providerRef = identity?.providerRef as
-    | Record<string, unknown>
-    | undefined;
   const manifests = plan.manifests as Record<string, unknown> | undefined;
   const local = manifests?.local as Record<string, unknown> | undefined;
   const forward = local?.forward;
+  if (plan.schemaVersion !== '1.2.0' || plan.sealed !== true || !identity) {
+    throw new Error('governance-sealed-plan-identity-mismatch');
+  }
+  const catalogIdentityValue = plan.catalogIdentity;
+  let taskIdentity = identity;
+  if (catalogIdentityValue !== undefined) {
+    if (
+      !catalogIdentityValue ||
+      typeof catalogIdentityValue !== 'object' ||
+      Array.isArray(catalogIdentityValue)
+    ) {
+      throw new Error('governance-sealed-plan-catalog-identity-mismatch');
+    }
+    taskIdentity = catalogIdentityValue as Record<string, unknown>;
+  }
+  const taskProviderRef = taskIdentity.providerRef as
+    | Record<string, unknown>
+    | undefined;
   let providerMatches =
     task.providerRef === null &&
-    (identity?.providerRef === null || identity?.providerRef === undefined);
-  if (task.providerRef && providerRef) {
+    (taskIdentity.providerRef === null ||
+      taskIdentity.providerRef === undefined);
+  if (task.providerRef && taskProviderRef) {
     providerMatches =
-      providerRef.provider === task.providerRef.provider &&
-      providerRef.providerId === task.providerRef.providerId;
+      taskProviderRef.provider === task.providerRef.provider &&
+      taskProviderRef.providerId === task.providerRef.providerId;
   }
-  if (plan.schemaVersion !== '1.2.0' || plan.sealed !== true || !identity) {
+  if (
+    taskIdentity.mediaType !== task.mediaType ||
+    taskIdentity.title !== task.titleHint ||
+    taskIdentity.releaseYear !== task.releaseYear ||
+    !providerMatches
+  ) {
     throw new Error('governance-sealed-plan-identity-mismatch');
   }
   if (
     identity.mediaType !== task.mediaType ||
     identity.title !== task.titleHint ||
-    identity.releaseYear !== task.releaseYear
+    !Array.isArray(forward) ||
+    forward.length === 0
   ) {
     throw new Error('governance-sealed-plan-identity-mismatch');
   }
-  if (!providerMatches || !Array.isArray(forward) || forward.length === 0) {
-    throw new Error('governance-sealed-plan-identity-mismatch');
+  const canonicalProviderRef = identity.providerRef as
+    | MediaGovernanceTask['providerRef']
+    | undefined;
+  const canonicalTask: MediaGovernanceTitleIdentity = {
+    mediaType: task.mediaType,
+    providerRef: canonicalProviderRef ?? null,
+    releaseYear: identity.releaseYear as null | number,
+    titleHint: task.titleHint,
+  };
+  const root = mediaGovernanceTitleRoot(canonicalTask);
+  const rootMetadataIdentityDeclared = Object.prototype.hasOwnProperty.call(
+    plan,
+    'metadataIdentity',
+  );
+  let metadataIdentity: Record<string, unknown> | undefined;
+  if (rootMetadataIdentityDeclared) {
+    const value = plan.metadataIdentity;
+    if (value !== null) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('governance-sealed-plan-metadata-identity-mismatch');
+      }
+      metadataIdentity = value as Record<string, unknown>;
+    }
+  } else {
+    const nestedMetadataIdentity = identity.metadataIdentity;
+    if (
+      nestedMetadataIdentity &&
+      typeof nestedMetadataIdentity === 'object' &&
+      !Array.isArray(nestedMetadataIdentity)
+    ) {
+      metadataIdentity = nestedMetadataIdentity as Record<string, unknown>;
+    } else if (catalogIdentityValue !== undefined) {
+      metadataIdentity = identity;
+    }
   }
-  const root = titleRoot(task);
+  if (metadataIdentity) {
+    const expected = task.metadataIdentity;
+    if (!expected) {
+      throw new Error('governance-sealed-plan-metadata-identity-mismatch');
+    }
+    if (
+      metadataIdentity.provider !== expected.provider ||
+      metadataIdentity.providerId !== expected.providerId ||
+      metadataIdentity.releaseYear !== expected.releaseYear
+    ) {
+      throw new Error('governance-sealed-plan-metadata-identity-mismatch');
+    }
+  } else if (rootMetadataIdentityDeclared && task.metadataIdentity) {
+    throw new Error('governance-sealed-plan-metadata-identity-mismatch');
+  }
   for (const value of forward) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw new Error('governance-sealed-plan-target-root-mismatch');
@@ -606,7 +841,7 @@ export function buildAdminMediaGovernancePlan(
   }
   if (!task.governanceProfile) throw new Error('governance-profile-required');
   const stagingRoot = assertPayload(task, payload);
-  const root = titleRoot(task);
+  const root = mediaGovernanceTitleRoot(task);
   const title = safeTitle(task.titleHint);
   const identities = payload.files.map((file) => {
     const source = task.sources.find(
@@ -729,7 +964,17 @@ export function buildAdminMediaGovernancePlan(
     scope: 'local',
     size: file.sizeBytes,
   }));
+  let metadataIdentity: MediaGovernanceTask['metadataIdentity'] = null;
+  if (task.metadataIdentity) {
+    metadataIdentity = structuredClone(task.metadataIdentity);
+  }
   return {
+    catalogIdentity: {
+      mediaType: task.mediaType,
+      providerRef: task.providerRef,
+      releaseYear: task.releaseYear,
+      title: task.titleHint,
+    },
     execution: {
       allowlists: {
         localSourceRoot: `${LOCAL_MEDIA_ROOT}/incoming`,
@@ -757,6 +1002,7 @@ export function buildAdminMediaGovernancePlan(
       releaseYear: task.releaseYear,
       title: task.titleHint,
     },
+    metadataIdentity,
     manifests,
     schemaVersion: '1.2.0',
     sealed: true,

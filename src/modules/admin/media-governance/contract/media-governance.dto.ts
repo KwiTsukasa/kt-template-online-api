@@ -248,6 +248,26 @@ export class MediaGovernanceTaskIdentityUpdateDto extends MediaGovernanceRevisio
   titleHint?: string;
 }
 
+export class MediaGovernanceCatalogIdentityRestoreDto extends MediaGovernanceRevisionCommandDto {
+  @ApiProperty({
+    description: '从密封历史目录恢复的用户主资料库编号',
+    type: MediaGovernanceProviderRefDto,
+  })
+  @ValidateNested()
+  @Type(() => MediaGovernanceProviderRefDto)
+  providerRef: MediaGovernanceProviderRefDto;
+
+  @ApiProperty({
+    description: '从密封历史目录恢复的首播或上映年份',
+    maximum: MAX_RELEASE_YEAR,
+    minimum: 1888,
+  })
+  @IsInt()
+  @Min(1888)
+  @Max(MAX_RELEASE_YEAR)
+  releaseYear: number;
+}
+
 export class MediaGovernanceDescriptorRedeemDto {
   @IsString()
   @MaxLength(96)
@@ -443,6 +463,11 @@ export class MediaGovernanceExecutorMetadataIdentityDto {
   @IsString()
   @Matches(PROVIDER_ID_PATTERN)
   providerId: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  providerTitle?: string;
 
   @IsOptional()
   @Type(() => Number)

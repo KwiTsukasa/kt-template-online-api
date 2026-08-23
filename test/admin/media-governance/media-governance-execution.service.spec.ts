@@ -234,7 +234,8 @@ describe('MediaGovernanceService production execution adapter', () => {
     task.workItemId = 'media-073';
     const sourcePath =
       '/vol2/1000/.kt-media-governance-staging/media-task-jjk-zero/sources/media-source-jjk-zero/咒术回战0.mkv';
-    const oldTarget = '/vol2/1000/Media/movie/Movies/咒术回战0/咒术回战0.mkv';
+    const oldTarget =
+      '/vol2/1000/Media/movie/Movies/咒术回战0 (2022) [bangumiid-302286]/咒术回战0.mkv';
     const forward = [
       {
         evidenceId: 'admin-video-0001',
@@ -347,7 +348,8 @@ describe('MediaGovernanceService production execution adapter', () => {
     expect(task.sealedPlan).toMatchObject({
       execution: {
         allowlists: {
-          localSourceRoot: '/vol2/1000/Media/movie/Movies/咒术回战0',
+          localSourceRoot:
+            '/vol2/1000/Media/movie/Movies/咒术回战0 (2022) [bangumiid-302286]',
           localTargetRoot: '/vol2/1000/Media/movie',
         },
       },
@@ -359,6 +361,61 @@ describe('MediaGovernanceService production execution adapter', () => {
       },
     });
     expect(task.sealedPlanSha256).toBe(sha256Json(task.sealedPlan));
+
+    task.activeRunId = null;
+    task.closedAt = '2026-08-23T04:46:40.223Z';
+    task.closedMode = 'bounded_repair';
+    task.metadataStatus = 'verified';
+    task.runState = 'succeeded';
+    task.stage = 'closed';
+    task.metadataIdentity = {
+      provider: 'tmdb',
+      providerId: '810693',
+      releaseYear: 2022,
+    };
+    const restored = await service.restoreCatalogIdentity(task.id, {
+      expectedRevision: 2,
+      providerRef: { provider: 'bangumi', providerId: '302286' },
+      releaseYear: 2022,
+    });
+
+    expect(restored).toMatchObject({
+      activeRunId: null,
+      closedAt: null,
+      closedMode: null,
+      metadataIdentity: {
+        provider: 'tmdb',
+        providerId: '810693',
+        releaseYear: 2022,
+      },
+      metadataStatus: 'pending',
+      providerRef: { provider: 'bangumi', providerId: '302286' },
+      releaseYear: 2022,
+      revision: 3,
+      runState: 'succeeded',
+      stage: 'metadata',
+    });
+    expect(restored.identityPreview).toMatchObject({
+      providerLabel: 'Bangumi · 302286',
+      releaseYearLabel: '2022 年',
+      status: 'verified-provider-identity',
+    });
+    expect(restored.sealedPlan).toMatchObject({
+      catalogIdentity: {
+        providerRef: { provider: 'bangumi', providerId: '302286' },
+        releaseYear: 2022,
+      },
+      identity: {
+        providerRef: { provider: 'tmdb', providerId: '810693' },
+        releaseYear: 2022,
+      },
+      metadataIdentity: {
+        provider: 'tmdb',
+        providerId: '810693',
+        releaseYear: 2022,
+      },
+    });
+    expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
   it('projects ordered executor events into semantic source and task progress', async () => {
@@ -1983,6 +2040,102 @@ describe('MediaGovernanceService production execution adapter', () => {
         taskRevision: 2,
       }),
     );
+  });
+
+  it('rejects executor metadata identity drift before mutating the task projection', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      providerRef: { provider: 'bangumi', providerId: '302286' },
+      releaseYear: 2022,
+      seasonNumbers: ['S01'],
+      titleHint: '死神 千年血战篇',
+    });
+    task.governanceProfile = 'sidecar-bundled';
+    task.metadataIdentity = {
+      provider: 'tmdb',
+      providerId: '30984',
+      providerTitle: '死神',
+      releaseYear: 2004,
+    };
+    task.metadataStatus = 'pending';
+    task.runState = 'succeeded';
+    task.stage = 'metadata';
+    sealCanonicalPlan(task);
+    task.sealedPlan = {
+      ...task.sealedPlan!,
+      catalogIdentity: {
+        mediaType: 'tv',
+        providerRef: task.providerRef,
+        releaseYear: 2022,
+        title: task.titleHint,
+      },
+      metadataIdentity: { ...task.metadataIdentity },
+    };
+    task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+
+    await service.startMetadataVerification(task.id, { expectedRevision: 1 });
+    const envelope = dispatch.mock.calls.at(-1)?.[0];
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: envelope.runId,
+      sequence: 1,
+      summary: '元数据核验开始',
+      taskId: task.id,
+      taskRevision: 2,
+    });
+    const projectionBefore = structuredClone(task.units[0]!.metadataProjection);
+
+    await expect(
+      service.applyExecutorEvent({
+        action: 'metadata.verify',
+        evidenceSha256: 'd'.repeat(64),
+        eventType: 'run-succeeded',
+        metadata: {
+          canAccept: true,
+          identity: {
+            provider: 'tmdb',
+            providerId: '99999',
+            providerTitle: '错误作品',
+            releaseYear: 2004,
+          },
+          repairAttempts: 0,
+          schemaVersion: 'media-admin-metadata-verification-v1',
+          units: [
+            {
+              accepted: true,
+              missingA: [],
+              missingB: [],
+              missingC: [],
+              unitId: task.units[0]!.id,
+            },
+          ],
+          writeBoundaries: {
+            cloud: 0,
+            databaseDirect: 0,
+            mechanicalScan: 0,
+            ui: 0,
+          },
+        },
+        observedAt: new Date().toISOString(),
+        runId: envelope.runId,
+        sequence: 2,
+        summary: '错误元数据身份',
+        taskId: task.id,
+        taskRevision: 2,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(task.metadataIdentity).toMatchObject({
+      provider: 'tmdb',
+      providerId: '30984',
+      releaseYear: 2004,
+    });
+    expect(task.units[0]!.metadataProjection).toEqual(projectionBefore);
+    expect(task.units[0]!.evidenceSha256).toBeNull();
+    expect(task.activeRunId).toBe(envelope.runId);
   });
 
   it('rechecks deferred fnOS identity through the deterministic metadata path', async () => {

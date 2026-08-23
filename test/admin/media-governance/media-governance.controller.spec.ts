@@ -203,6 +203,42 @@ describe('MediaGovernanceController', () => {
     rebaseSpy.mockRestore();
   });
 
+  it('routes closed catalog identity restoration through the Run permission endpoint', async () => {
+    const taskId = 'media-task-http-catalog-restore';
+    const restoreSpy = jest
+      .spyOn(service, 'restoreCatalogIdentity')
+      .mockResolvedValueOnce({
+        id: taskId,
+        providerRef: { provider: 'bangumi', providerId: '302286' },
+        releaseYear: 2022,
+        revision: 41,
+        stage: 'metadata',
+      } as never);
+
+    const response = await request(apiUrl)
+      .post(`/media-governance/tasks/${taskId}/catalog-identity/restore`)
+      .send({
+        expectedRevision: 40,
+        providerRef: { provider: 'bangumi', providerId: '302286' },
+        releaseYear: 2022,
+      })
+      .expect(201)
+      .expect('Cache-Control', 'no-store');
+
+    expect(restoreSpy).toHaveBeenCalledWith(taskId, {
+      expectedRevision: 40,
+      providerRef: { provider: 'bangumi', providerId: '302286' },
+      releaseYear: 2022,
+    });
+    expect(response.body.data).toMatchObject({
+      providerRef: { provider: 'bangumi', providerId: '302286' },
+      releaseYear: 2022,
+      revision: 41,
+      stage: 'metadata',
+    });
+    restoreSpy.mockRestore();
+  });
+
   it('creates and lists a normalized draft over real HTTP', async () => {
     const created = await request(apiUrl)
       .post('/media-governance/tasks')

@@ -379,6 +379,7 @@ payload-ready 载荷重试，不会重新下载。
 Run，并由 Agent 的类型化身份修正收口。升级前已处于这一精确缺口
 且尚无计数字段的持久化任务按刷新已用完迁移，避免 API 重启重新打开循环。
 任务若已有每个 Unit 的成功核验证据、明确的元数据缺口阻塞、同一密封计划且无活动 Run，可用当前 revision 重新调用 `metadata/verify` 采集事实，以承接执行器版本修正或外部合法元数据收敛；该路径本地媒体/云端/数据库直写均为 0，不会重开已用完的延迟身份刷新次数。
+任务的用户主资料库 `catalogIdentity`、TMDB 二级元数据 `metadataIdentity` 与密封物理根 `identity` 分别校验。已选 Bangumi/TVDB/TMDB 主身份不会被 Agent 的 TMDB 候选静默覆盖；NFO 的 provider 季集可使用二级 TMDB，但 `title/showtitle/year` 仍使用 catalog 标题和年份。旧的 closed Task 只在主次身份精确折叠、密封历史根匹配且具备 Run 权限时，才可通过 `catalog-identity/restore` 一次性恢复并重开元数据核验，不移动已验收媒体。
 内嵌字幕任务在唯一 TMDB 身份已闭合且只缺 LocalNFO、作品/季海报时，第一次确定性生成
 属于自动元数据补齐，独立验收后记为 `automatic`；第二次尝试、其他 profile 或额外缺口
 继续进入 `bounded_repair`/Agent，不改变 A/B/C 硬门禁。

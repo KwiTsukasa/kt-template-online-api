@@ -289,6 +289,7 @@ Search 的 `llm-codex` 权限档。
 | `POST`   | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传活动 Run，或创建失联恢复 Run       |
 | `POST`   | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理       |
 | `POST`   | `/media-governance/tasks/:taskId/governance/identity-rebase`       | 按版本把已提交旧目录重排到当前规范身份 |
+| `POST`   | `/media-governance/tasks/:taskId/catalog-identity/restore`         | 恢复已关闭残留的用户主资料库身份   |
 | `POST`   | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验              |
 | `POST`   | `/media-governance/tasks/:taskId/metadata/repair`                  | 启动最多两次的确定性有界元数据修复     |
 | `POST`   | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理             |
@@ -372,6 +373,10 @@ revision 和 replay key。治理完成后 fnOS 尚未稳定回填身份时，若
 刷新与任意阶段 Agent 入口互不覆盖；普通元数据缺口或独立验收仍按原门禁处理。
 升级前已处于该精确缺口且缺少计数字段的任务按一次已消费迁移。
 普通元数据缺口投影若已为每个 Unit 绑定成功核验证据，且 Task 仍持有同一密封计划、无活动 Run、`gateReason` 为明确元数据缺口，则可用当前 revision 重新调用 `/metadata/verify`。该重采集只替换 A/B/C 事实投影，不执行媒体写入，也不绕过已用完的延迟身份刷新门禁。
+
+媒体任务身份固定拆分为三份密封投影：`catalogIdentity` 是用户创建任务时选择的主资料库、作品年份与标题；`metadataIdentity` 是 trim.media/NFO 所需的 TMDB 二级身份；`identity` 只表示当前密封文件清单所在的物理规范根。Agent 可以补齐 TMDB 元数据身份，但已有主资料库时不得改写 Task `providerRef/releaseYear`。管理端优先显示主资料库与主年份，只在两者未声明时回退到元数据身份。
+
+`catalog-identity/restore` 不是通用 closed Task 编辑器：它只对“当前主身份精确等于二级 TMDB 身份、计划尚无 `catalogIdentity`”的历史折叠残留开放，要求 `Media:Governance:Run`、当前 revision、`closed/succeeded/verified`、无活动 Run，且请求身份派生根必须精确等于密封 transition 的 `previousTitleRoot`。恢复只重开 metadata verify，不移动已验收媒体，不派发下载或目录事务。
 内嵌字幕 profile 已获得唯一 TMDB 身份、且缺口严格只有 LocalNFO 与作品/季海报时，
 第一次确定性元数据生成记为自动补齐；其独立验收通过后保持 `closedMode=automatic`。
 其他 profile、第二次尝试或更广的缺口仍按 `bounded_repair`/Agent 分支计数，不能借自动

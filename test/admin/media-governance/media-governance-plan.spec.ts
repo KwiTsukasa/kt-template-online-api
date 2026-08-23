@@ -1,6 +1,7 @@
 import { sha256Json } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
 import {
   buildAdminMediaGovernancePlan,
+  buildCatalogIdentityRestorationPlan,
   buildCanonicalIdentityRebasePlan,
 } from '../../../src/modules/admin/media-governance/application/media-governance-plan';
 import type {
@@ -336,6 +337,81 @@ describe('Admin media Schema 1.2.0 plan builder', () => {
     expect(rebased.execution.manifestSha256.localInverse).toBe(
       sha256Json(rebased.manifests.local.inverse),
     );
+  });
+
+  it('restores a legacy collapsed catalog identity without moving committed targets', () => {
+    const catalogTask = {
+      ...task,
+      providerRef: { provider: 'bangumi', providerId: '302286' },
+      releaseYear: 2022,
+      titleHint: '死神 千年血战篇',
+    } as MediaGovernanceTask;
+    const explicitPlan = buildAdminMediaGovernancePlan(catalogTask, payload);
+    const legacyPlan = structuredClone(
+      explicitPlan,
+    ) as unknown as Record<string, unknown>;
+    delete legacyPlan.catalogIdentity;
+    delete legacyPlan.metadataIdentity;
+    const wrongTask = {
+      ...catalogTask,
+      metadataIdentity: {
+        provider: 'tmdb',
+        providerId: '30984',
+        releaseYear: 2004,
+      },
+      providerRef: { provider: 'tmdb', providerId: '30984' },
+      releaseYear: 2004,
+    } as MediaGovernanceTask;
+    const legacyPlanSha256 = sha256Json(legacyPlan);
+    const collapsedPlan = buildCanonicalIdentityRebasePlan(
+      wrongTask,
+      legacyPlan,
+      {
+        amendmentPlanSha256: 'a'.repeat(64),
+        previousPlanSha256: legacyPlanSha256,
+        providerTitle: '死神',
+        summary: '错误把二级 TMDB 身份折叠为主资料库身份',
+      },
+      new Date('2026-08-23T03:18:55.643Z'),
+    );
+    const collapsedPlanSha256 = sha256Json(collapsedPlan);
+
+    const restored = buildCatalogIdentityRestorationPlan(
+      catalogTask,
+      collapsedPlan,
+      {
+        previousPlanSha256: collapsedPlanSha256,
+        summary: '恢复用户创建任务时选择的 Bangumi 身份',
+      },
+      new Date('2026-08-23T05:00:00.000Z'),
+    );
+
+    expect(restored).toMatchObject({
+      catalogIdentity: {
+        mediaType: 'tv',
+        providerRef: { provider: 'bangumi', providerId: '302286' },
+        releaseYear: 2022,
+        title: '死神 千年血战篇',
+      },
+      catalogIdentityRestoration: {
+        amendmentPlanSha256: 'a'.repeat(64),
+        previousPlanSha256: collapsedPlanSha256,
+        restoredTitleRoot:
+          '/vol2/1000/Media/movie/TV/死神 千年血战篇 (2022) [bangumiid-302286]',
+      },
+      identity: {
+        providerRef: { provider: 'tmdb', providerId: '30984' },
+        releaseYear: 2004,
+      },
+      metadataIdentity: {
+        provider: 'tmdb',
+        providerId: '30984',
+        providerTitle: '死神',
+        releaseYear: 2004,
+      },
+    });
+    expect(restored.manifests).toEqual(collapsedPlan.manifests);
+    expect(restored.sourceEvidence).toEqual(collapsedPlan.sourceEvidence);
   });
 
   it('fails closed on missing episode coverage and paths outside the task staging root', () => {

@@ -26,6 +26,7 @@ import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-aut
 import {
   MediaGovernanceMagnetSourceCreateDto,
   MediaGovernanceAgentSessionQueryDto,
+  MediaGovernanceCatalogIdentityRestoreDto,
   MediaGovernanceOperatorDecisionDto,
   MediaGovernanceRevisionCommandDto,
   MediaGovernanceSourceClassificationDto,
@@ -143,6 +144,25 @@ export class MediaGovernanceController {
   ) {
     this.noStore(response);
     return vbenSuccess(await this.service.updateIdentity(taskId, body));
+  }
+
+  /**
+   * 以当前 revision 恢复已关闭任务在密封历史中的用户主资料库身份。
+   * @param taskId - 需要恢复主资料库身份的媒体任务。
+   * @param body - 携带历史资料库编号、年份与当前 revision 的结构化输入。
+   * @param response - 禁止缓存本次身份恢复结果的 HTTP 响应。
+   * @returns 恢复主资料库身份并重开元数据核验的任务。
+   */
+  @Post(':taskId/catalog-identity/restore')
+  @MediaGovernancePermission('Media:Governance:Run')
+  @ApiOperation({ summary: '恢复密封历史中的用户主资料库身份' })
+  async restoreCatalogIdentity(
+    @Param('taskId') taskId: string,
+    @Body() body: MediaGovernanceCatalogIdentityRestoreDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.service.restoreCatalogIdentity(taskId, body));
   }
 
   /**

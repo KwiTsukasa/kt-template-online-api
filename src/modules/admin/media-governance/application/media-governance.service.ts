@@ -25,6 +25,7 @@ import {
 import type {
   MediaGovernanceAgentSessionQueryDto,
   MediaGovernanceAgentToolCallDto,
+  MediaGovernanceCatalogIdentityRestoreDto,
   MediaGovernanceDescriptorRedeemDto,
   MediaGovernanceExecutorEventDto,
   MediaGovernancePlanRedeemDto,
@@ -73,8 +74,11 @@ import {
 import {
   assertAdminMediaGovernancePlanCanonicalIdentity,
   buildAdminMediaGovernancePlan,
+  buildCatalogIdentityRestorationPlan,
   buildCanonicalIdentityRebasePlan,
   isCanonicalIdentityRebasePlan,
+  mediaGovernancePlanMetadataIdentity,
+  mediaGovernanceTitleRoot,
 } from './media-governance-plan';
 import {
   MEDIA_GOVERNANCE_PROGRESS_HOT_STORE,
@@ -244,6 +248,7 @@ export type MediaGovernanceTask = {
   metadataIdentity: null | {
     provider: MediaGovernanceProvider;
     providerId: string;
+    providerTitle?: string;
     releaseYear: null | number;
   };
   metadataStatus: 'pending' | 'requires-agent' | 'verified';
@@ -594,6 +599,159 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       .update(JSON.stringify(normalizedInput))
       .digest('hex');
     this.bumpRevision(task);
+    await this.commitTask(task, 'state-updated');
+    return task;
+  }
+
+  /**
+   * 按当前 revision 把已关闭任务恢复到密封历史中的用户主资料库身份。
+   * @param taskId - 需要恢复主资料库身份的已关闭媒体任务。
+   * @param input - 携带目标资料库编号、年份与当前 revision 的恢复命令。
+   * @returns 主资料库身份已恢复并重开元数据核验的同一任务。
+   */
+  async restoreCatalogIdentity(
+    taskId: string,
+    input: MediaGovernanceCatalogIdentityRestoreDto,
+  ) {
+    const task = this.detail(taskId);
+    this.assertRevision(task, input.expectedRevision);
+    return this.restoreClosedCatalogIdentity(task, input);
+  }
+
+  /**
+   * 从已关闭任务的密封身份重排历史恢复用户原选主资料库身份，并重开只读元数据核验。
+   * @param task - 已经独立验收关闭、但主资料库身份被元数据身份覆盖的任务。
+   * @param input - 只允许携带历史主资料库编号、年份与当前 revision 的恢复输入。
+   * @returns 主资料库身份已恢复且进入元数据待核验状态的同一任务。
+   * @throws 当任务未关闭、仍有活动 Run、输入扩大到结构修改，或目标身份不匹配密封历史目录时拒绝恢复。
+   */
+  private async restoreClosedCatalogIdentity(
+    task: MediaGovernanceTask,
+    input: MediaGovernanceCatalogIdentityRestoreDto,
+  ) {
+    const stateInvalid =
+      task.activeRunId !== null ||
+      task.runState !== 'succeeded' ||
+      task.metadataStatus !== 'verified' ||
+      task.closedAt === null ||
+      !task.closedMode;
+    const planInvalid =
+      !task.sealedPlan ||
+      !task.sealedPlanSha256 ||
+      !task.metadataIdentity;
+    if (stateInvalid || planInvalid) {
+      throwVbenError('已关闭任务不满足主资料库身份恢复条件', HttpStatus.CONFLICT);
+    }
+    const metadataIdentity = task.metadataIdentity!;
+    const primaryCollapsedIntoMetadata =
+      task.providerRef?.provider === metadataIdentity.provider &&
+      task.providerRef.providerId === metadataIdentity.providerId &&
+      task.releaseYear === metadataIdentity.releaseYear;
+    if (
+      !primaryCollapsedIntoMetadata ||
+      task.sealedPlan!.catalogIdentity !== undefined ||
+      input.providerRef.provider === metadataIdentity.provider
+    ) {
+      throwVbenError('当前任务不是主次资料库身份折叠残留', HttpStatus.CONFLICT);
+    }
+    if (!input.providerRef || !Number.isInteger(input.releaseYear)) {
+      throwVbenError('已关闭任务只允许恢复主资料库编号与年份', HttpStatus.BAD_REQUEST);
+    }
+    const providerRef: MediaGovernanceProviderRef = {
+      provider: input.providerRef.provider,
+      providerId: input.providerRef.providerId.trim(),
+    };
+    const releaseYear = Number(input.releaseYear);
+    if (
+      task.providerRef?.provider === providerRef.provider &&
+      task.providerRef.providerId === providerRef.providerId &&
+      task.releaseYear === releaseYear
+    ) {
+      throwVbenError('主资料库身份未发生变化', HttpStatus.BAD_REQUEST);
+    }
+    this.assertCanonicalSealedPlan(task);
+    const nextTask = {
+      ...task,
+      providerRef,
+      releaseYear,
+    };
+    let restoredPlan: Record<string, unknown>;
+    try {
+      restoredPlan = buildCatalogIdentityRestorationPlan(
+        nextTask,
+        task.sealedPlan,
+        {
+          previousPlanSha256: task.sealedPlanSha256,
+          summary: '恢复用户在创建任务时选择的主资料库身份',
+        },
+      );
+    } catch {
+      throwVbenError('目标主资料库身份与密封历史不一致', HttpStatus.CONFLICT);
+    }
+    task.providerRef = providerRef;
+    task.releaseYear = releaseYear;
+    task.sealedPlan = restoredPlan;
+    task.sealedPlanSha256 = sha256Json(restoredPlan);
+    const restoredMetadataIdentity = restoredPlan.metadataIdentity;
+    if (
+      restoredMetadataIdentity &&
+      typeof restoredMetadataIdentity === 'object' &&
+      !Array.isArray(restoredMetadataIdentity)
+    ) {
+      const restoredProviderTitle = (
+        restoredMetadataIdentity as Record<string, unknown>
+      ).providerTitle;
+      if (
+        typeof restoredProviderTitle === 'string' &&
+        restoredProviderTitle.trim()
+      ) {
+        task.metadataIdentity = {
+          ...task.metadataIdentity!,
+          providerTitle: restoredProviderTitle.trim(),
+        };
+      }
+    }
+    const seasonNumbers = task.units
+      .map((unit) => unit.seasonNumber)
+      .filter((season): season is string => Boolean(season));
+    const normalizedInput = {
+      mediaType: task.mediaType,
+      providerRef,
+      releaseYear,
+      seasonNumbers,
+      titleHint: task.titleHint,
+      workItemId: task.workItemId,
+    };
+    task.inputSnapshotSha256 = createHash('sha256')
+      .update(JSON.stringify(normalizedInput))
+      .digest('hex');
+    task.identityPreview = this.buildIdentityPreview({
+      ...normalizedInput,
+      metadataIdentity: task.metadataIdentity,
+    });
+    task.closedAt = null;
+    task.closedMode = null;
+    task.gateReason = null;
+    task.metadataStatus = 'pending';
+    task.runState = 'succeeded';
+    task.stage = 'metadata';
+    task.nextCommandLabel = '重新运行 A/B/C 分档元数据核验';
+    task.progress = {
+      ...task.progress,
+      etaLabel: '等待元数据核验',
+      heartbeatLabel: '刚刚',
+      observedAt: new Date().toISOString(),
+      percent: 100,
+      progressLabel: '主资料库身份已恢复，等待重新核验',
+    };
+    for (const unit of task.units) unit.localAcceptedAt = null;
+    if (task.agentSession) {
+      task.agentSession.currentActionLabel =
+        '主资料库身份已恢复，等待重新核验元数据';
+      task.agentSession.statusLabel = '等待重新核验';
+    }
+    this.bumpRevision(task);
+    this.refreshSemanticProjection(task);
     await this.commitTask(task, 'state-updated');
     return task;
   }
@@ -1206,6 +1364,52 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     ) {
       throwVbenError('元数据分档证据不完整', HttpStatus.BAD_REQUEST);
     }
+    const sealedMetadataIdentity = mediaGovernancePlanMetadataIdentity(
+      task.sealedPlan,
+    );
+    if (sealedMetadataIdentity) {
+      const observedIdentity = metadata.identity;
+      if (!observedIdentity) {
+        throwVbenError('元数据身份与密封计划不一致', HttpStatus.CONFLICT);
+      }
+      const providerChanged =
+        sealedMetadataIdentity.provider !== observedIdentity.provider ||
+        sealedMetadataIdentity.providerId !== observedIdentity.providerId;
+      const releaseYearChanged =
+        sealedMetadataIdentity.releaseYear !== observedIdentity.releaseYear;
+      const sealedProviderTitle = sealedMetadataIdentity.providerTitle;
+      const providerTitleChanged =
+        typeof sealedProviderTitle === 'string' &&
+        sealedProviderTitle.trim().length > 0 &&
+        sealedProviderTitle !== observedIdentity.providerTitle;
+      if (providerChanged || releaseYearChanged || providerTitleChanged) {
+        throwVbenError('元数据身份与密封计划不一致', HttpStatus.CONFLICT);
+      }
+    }
+    const planHasEmptyMetadataIdentity =
+      task.sealedPlan !== null &&
+      Object.prototype.hasOwnProperty.call(
+        task.sealedPlan,
+        'metadataIdentity',
+      ) &&
+      task.sealedPlan.metadataIdentity === null;
+    if (
+      !sealedMetadataIdentity &&
+      metadata.identity &&
+      planHasEmptyMetadataIdentity
+    ) {
+      const previousPlanSha256 = task.sealedPlanSha256;
+      task.sealedPlan = {
+        ...task.sealedPlan!,
+        metadataIdentity: { ...metadata.identity },
+        metadataIdentityBinding: {
+          boundAt: input.observedAt,
+          evidenceSha256: input.evidenceSha256,
+          previousPlanSha256,
+        },
+      };
+      task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+    }
     const identity = metadata.identity ?? task.providerRef;
     if (identity) {
       const observedReleaseYear = (identity as { releaseYear?: null | number })
@@ -1214,11 +1418,19 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       if (typeof observedReleaseYear === 'number') {
         releaseYear = observedReleaseYear;
       }
-      task.metadataIdentity = {
+      const metadataIdentity: NonNullable<
+        MediaGovernanceTask['metadataIdentity']
+      > = {
         provider: identity.provider,
         providerId: identity.providerId,
         releaseYear,
       };
+      const providerTitle = (identity as { providerTitle?: unknown })
+        .providerTitle;
+      if (typeof providerTitle === 'string' && providerTitle.trim()) {
+        metadataIdentity.providerTitle = providerTitle.trim();
+      }
+      task.metadataIdentity = metadataIdentity;
     } else if (metadata.canAccept) {
       throwVbenError('元数据身份硬门禁未闭合', HttpStatus.CONFLICT);
     }
@@ -4065,13 +4277,24 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (Array.isArray(currentPlan.agentAmendments)) {
       currentAmendments = currentPlan.agentAmendments.slice(-15);
     }
-    const nextProviderRef: MediaGovernanceProviderRef = {
+    const metadataProviderRef: MediaGovernanceProviderRef = {
       provider: 'tmdb',
       providerId: amendment.identity.providerId,
     };
+    let nextProviderRef = task.providerRef;
+    if (!nextProviderRef) nextProviderRef = metadataProviderRef;
+    let nextReleaseYear = task.releaseYear;
+    if (!task.providerRef) {
+      nextReleaseYear = amendment.identity.releaseYear;
+    }
     const nextTask = {
       ...task,
       providerRef: nextProviderRef,
+      releaseYear: nextReleaseYear,
+    };
+    const metadataIdentity = {
+      ...metadataProviderRef,
+      providerTitle: amendment.providerTitle,
       releaseYear: amendment.identity.releaseYear,
     };
     const amendedPlan = {
@@ -4089,32 +4312,55 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           summary: amendment.summary,
         },
       ],
+      catalogIdentity: {
+        mediaType: task.mediaType,
+        providerRef: nextProviderRef,
+        releaseYear: nextReleaseYear,
+        title: task.titleHint,
+      },
       identity: {
         ...currentIdentity,
         providerRef: nextProviderRef,
-        providerTitle: amendment.providerTitle,
-        releaseYear: amendment.identity.releaseYear,
+        releaseYear: nextReleaseYear,
       },
+      metadataIdentity,
     };
-    task.sealedPlan = buildCanonicalIdentityRebasePlan(nextTask, currentPlan, {
-      amendmentPlanSha256: planSha256,
-      previousPlanSha256: task.sealedPlanSha256!,
-      providerTitle: amendment.providerTitle,
-      summary: amendment.summary,
-    });
-    task.sealedPlan = {
-      ...task.sealedPlan,
-      agentAmendments: amendedPlan.agentAmendments,
-    };
+    const previousTitleRoot = mediaGovernanceTitleRoot(task);
+    const nextTitleRoot = mediaGovernanceTitleRoot(nextTask);
+    const requiresCanonicalRebase = previousTitleRoot !== nextTitleRoot;
+    if (requiresCanonicalRebase) {
+      const rebasePlan = buildCanonicalIdentityRebasePlan(
+        nextTask,
+        currentPlan,
+        {
+          amendmentPlanSha256: planSha256,
+          previousPlanSha256: task.sealedPlanSha256!,
+          providerTitle: amendment.providerTitle,
+          summary: amendment.summary,
+        },
+      );
+      const rebaseIdentity = rebasePlan.identity as Record<string, unknown>;
+      task.sealedPlan = {
+        ...rebasePlan,
+        agentAmendments: amendedPlan.agentAmendments,
+        catalogIdentity: amendedPlan.catalogIdentity,
+        identity: rebaseIdentity,
+        metadataIdentity,
+      };
+    } else {
+      task.sealedPlan = amendedPlan;
+    }
     task.providerRef = nextProviderRef;
     task.metadataIdentity = {
-      ...nextProviderRef,
+      ...metadataProviderRef,
+      providerTitle: amendment.providerTitle,
       releaseYear: amendment.identity.releaseYear,
     };
-    task.releaseYear = amendment.identity.releaseYear;
+    task.releaseYear = nextReleaseYear;
     task.sealedPlanSha256 = sha256Json(task.sealedPlan);
     task.identityPreview = this.buildIdentityPreview({
       mediaType: task.mediaType,
+      metadataIdentity: task.metadataIdentity,
       providerRef: task.providerRef,
       releaseYear: task.releaseYear,
       seasonNumbers: task.units
@@ -4122,16 +4368,43 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         .filter((season): season is string => Boolean(season)),
       titleHint: task.titleHint,
     });
+    const seasonNumbers = task.units
+      .map((unit) => unit.seasonNumber)
+      .filter((season): season is string => Boolean(season));
+    task.inputSnapshotSha256 = createHash('sha256')
+      .update(
+        JSON.stringify({
+          mediaType: task.mediaType,
+          providerRef: task.providerRef,
+          releaseYear: task.releaseYear,
+          seasonNumbers,
+          titleHint: task.titleHint,
+          workItemId: task.workItemId,
+        }),
+      )
+      .digest('hex');
     task.metadataStatus = 'pending';
-    task.runState = 'blocked';
-    task.stage = 'governance';
-    task.gateReason = '身份修正已生成规范目录重排计划';
-    task.nextCommandLabel = '执行规范身份目录重排';
-    task.progress = {
-      ...task.progress,
-      etaLabel: '等待本地事务',
-      progressLabel: 'TMDB 身份已密封，等待规范目录重排',
-    };
+    task.gateReason = null;
+    if (requiresCanonicalRebase) {
+      task.runState = 'blocked';
+      task.stage = 'governance';
+      task.gateReason = '身份修正已生成规范目录重排计划';
+      task.nextCommandLabel = '执行规范身份目录重排';
+      task.progress = {
+        ...task.progress,
+        etaLabel: '等待本地事务',
+        progressLabel: 'TMDB 元数据身份已密封，等待规范目录重排',
+      };
+    } else {
+      task.runState = 'succeeded';
+      task.stage = 'metadata';
+      task.nextCommandLabel = '重新运行 A/B/C 分档元数据核验';
+      task.progress = {
+        ...task.progress,
+        etaLabel: '等待元数据核验',
+        progressLabel: 'TMDB 元数据身份已密封，主资料库身份保持不变',
+      };
+    }
   }
 
   /**
@@ -4345,20 +4618,24 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       releaseYear: identity.releaseYear as null | number,
     });
     const normalizedReleaseYear = identity.releaseYear as null | number;
-    task.providerRef = {
+    const metadataProviderRef: MediaGovernanceProviderRef = {
       provider: 'tmdb',
       providerId,
     };
+    if (!task.providerRef) {
+      task.providerRef = metadataProviderRef;
+      task.releaseYear = normalizedReleaseYear;
+    }
     task.metadataIdentity = {
-      provider: 'tmdb',
-      providerId,
+      ...metadataProviderRef,
+      providerTitle: candidate.title,
       releaseYear: normalizedReleaseYear,
     };
-    task.releaseYear = normalizedReleaseYear;
     task.identityPreview = this.buildIdentityPreview({
       mediaType: task.mediaType,
+      metadataIdentity: task.metadataIdentity,
       providerRef: task.providerRef,
-      releaseYear: normalizedReleaseYear,
+      releaseYear: task.releaseYear,
       seasonNumbers: task.units
         .map((unit) => unit.seasonNumber)
         .filter((season): season is string => Boolean(season)),
@@ -4369,7 +4646,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         JSON.stringify({
           mediaType: task.mediaType,
           providerRef: task.providerRef,
-          releaseYear: normalizedReleaseYear,
+          releaseYear: task.releaseYear,
           seasonNumbers: task.units
             .map((unit) => unit.seasonNumber)
             .filter((season): season is string => Boolean(season)),
@@ -4378,7 +4655,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         }),
       )
       .digest('hex');
-    task.gateReason = 'TMDB 身份已确认，等待密封文件选择';
+    task.gateReason = 'TMDB 元数据身份已确认，等待密封文件选择';
     task.nextCommandLabel = '自动选择主媒体与中文字幕文件';
     this.bumpRevision(task);
     await this.commitTask(task, 'state-updated');
@@ -5917,9 +6194,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     seasonNumbers: string[];
     titleHint: string;
   }): MediaGovernanceTask['identityPreview'] {
-    const providerRef = input.metadataIdentity ?? input.providerRef;
+    const providerRef = input.providerRef ?? input.metadataIdentity;
     const releaseYear =
-      input.metadataIdentity?.releaseYear ?? input.releaseYear;
+      input.releaseYear ?? input.metadataIdentity?.releaseYear;
     const identityVerified =
       input.metadataIdentity !== null && input.metadataIdentity !== undefined;
     let providerLabel = '未填写（后续由资料源候选核验）';

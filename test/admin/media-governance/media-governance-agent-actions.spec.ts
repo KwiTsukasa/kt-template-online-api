@@ -89,6 +89,94 @@ describe('MediaGovernanceService Agent typed actions', () => {
     expect(available(task)).not.toContain('plan.submit.sealed');
   });
 
+  it('keeps a selected Bangumi catalog identity when sealing TMDB metadata identity', async () => {
+    const service = new MediaGovernanceService();
+    const task = await service.create({
+      mediaType: 'tv',
+      providerRef: { provider: 'bangumi', providerId: '302286' },
+      releaseYear: 2022,
+      seasonNumbers: ['S01'],
+      titleHint: '死神 千年血战篇',
+    });
+    const amendmentPlanSha256 = 'a'.repeat(64);
+    task.metadataStatus = 'requires-agent';
+    task.runState = 'blocked';
+    task.stage = 'metadata';
+    task.sealedPlan = {
+      agentPendingAmendment: {
+        identity: {
+          provider: 'tmdb',
+          providerId: '30984',
+          releaseYear: 2004,
+        },
+        planSha256: amendmentPlanSha256,
+        providerTitle: '死神',
+        replayKey: `${task.id}-operator-r${task.revision}`,
+        summary: '仅密封 TMDB 二级元数据身份',
+        taskRevision: task.revision,
+      },
+      catalogIdentity: {
+        mediaType: 'tv',
+        providerRef: { provider: 'bangumi', providerId: '302286' },
+        releaseYear: 2022,
+        title: '死神 千年血战篇',
+      },
+      identity: {
+        mediaType: 'tv',
+        providerRef: { provider: 'bangumi', providerId: '302286' },
+        releaseYear: 2022,
+        title: '死神 千年血战篇',
+      },
+      manifests: { local: { forward: [], inverse: [] } },
+      metadataIdentity: null,
+      schemaVersion: '1.2.0',
+      sealed: true,
+    };
+    task.sealedPlanSha256 = 'b'.repeat(64);
+    const finalize = Reflect.get(
+      service,
+      'finalizeAgentIdentityAmendment',
+    ).bind(service) as (currentTask: typeof task, planSha256: string) => void;
+
+    finalize(task, amendmentPlanSha256);
+
+    expect(task).toMatchObject({
+      metadataIdentity: {
+        provider: 'tmdb',
+        providerId: '30984',
+        providerTitle: '死神',
+        releaseYear: 2004,
+      },
+      metadataStatus: 'pending',
+      providerRef: { provider: 'bangumi', providerId: '302286' },
+      releaseYear: 2022,
+      runState: 'succeeded',
+      stage: 'metadata',
+    });
+    expect(task.identityPreview).toMatchObject({
+      providerLabel: 'Bangumi · 302286',
+      releaseYearLabel: '2022 年',
+      statusLabel: '元数据身份已验证',
+    });
+    expect(task.sealedPlan).toMatchObject({
+      catalogIdentity: {
+        providerRef: { provider: 'bangumi', providerId: '302286' },
+        releaseYear: 2022,
+      },
+      identity: {
+        providerRef: { provider: 'bangumi', providerId: '302286' },
+        releaseYear: 2022,
+      },
+      metadataIdentity: {
+        provider: 'tmdb',
+        providerId: '30984',
+        providerTitle: '死神',
+        releaseYear: 2004,
+      },
+    });
+    expect(task.sealedPlan).not.toHaveProperty('transition');
+  });
+
   it('auto-selects root episode numbers delimited by release punctuation', async () => {
     const service = new MediaGovernanceService();
     const task = await service.create({

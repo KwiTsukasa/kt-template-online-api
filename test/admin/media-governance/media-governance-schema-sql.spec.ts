@@ -19,11 +19,17 @@ describe('media governance production schema SQL', () => {
     'utf8',
   );
 
-  it('creates exactly the ten designed domain tables without menu writes', () => {
-    expect(initSql.match(/CREATE TABLE IF NOT EXISTS/gu)).toHaveLength(10);
+  it('creates exactly the seventeen task, catalog and RSS tables without menu writes', () => {
+    expect(initSql.match(/CREATE TABLE IF NOT EXISTS/gu)).toHaveLength(17);
     expect(initSql).toContain('`media_governance_task`');
     expect(initSql).toContain('`media_governance_agent_session`');
     expect(initSql).toContain('`media_governance_outbox`');
+    expect(initSql).toContain('`media_governance_series`');
+    expect(initSql).toContain('`media_governance_season`');
+    expect(initSql).toContain('`media_governance_episode`');
+    expect(initSql).toContain('`media_governance_task_episode_binding`');
+    expect(initSql).toContain('`media_governance_rss_subscription`');
+    expect(initSql).toContain('`media_governance_rss_item`');
     expect(initSql).not.toMatch(/admin_menu|admin_role_menu|INSERT\s+INTO/iu);
   });
 
@@ -49,6 +55,9 @@ describe('media governance production schema SQL', () => {
     expect(verifySql).toContain('COUNT(*) AS table_count');
     expect(verifySql).toContain('MAX(last_sequence)');
     expect(verifySql).toContain('llm_conversation_unique_index_count');
+    expect(verifySql).toContain('canonical_identity_count');
+    expect(verifySql).toContain('task_episode_identity_count');
+    expect(verifySql).toContain('enabled_rss_subscription_count');
     expect(verifySql).not.toMatch(/INSERT|UPDATE|DELETE|ALTER|DROP/iu);
   });
 

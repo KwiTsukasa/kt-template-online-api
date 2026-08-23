@@ -163,6 +163,13 @@ async function prepareLocalDatabase() {
       'message_subscription_template',
       'message_template',
       'media_governance_task',
+      'media_governance_series',
+      'media_governance_series_external_ref',
+      'media_governance_season',
+      'media_governance_episode',
+      'media_governance_task_episode_binding',
+      'media_governance_rss_subscription',
+      'media_governance_rss_item',
       'station_notice_message_binding',
     ];
     const [rows] = await databaseConnection.query(

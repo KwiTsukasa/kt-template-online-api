@@ -249,6 +249,12 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，提供作品身份、来源、
 逐季字幕合同、运行时探针、下载/治理进度、低效下载取消与精确换源、CodexAgent
 人工放行、聚合和可续接 SSE。
+作品目录与执行任务已分层：`Series → Season → Episode` 是唯一 canonical 事实，
+Task 只记录一次执行及其 Episode 绑定，Bangumi 等分篇编号作为外部资料证据保留，
+不能再覆盖 TMDB/fnOS 使用的季号。每个 Task 最多密封 16 个同治理类型的主媒体来源，
+因此逐集磁链可在一个 Task 内批量接入；同包外挂字幕会跨这些来源合并为同一发布组合同。
+RSS 订阅按 Series/Season 持久化地址、过滤和集号解析规则，每分钟扫描到期订阅，条目按
+GUID/BTIH 去重后按最多 16 集一组创建 Task；原始磁链仍只进入私有描述符存储，不写入 RSS 表。
 磁链清单检查每 5 秒发布语义进度并在 120 秒内终结；失败后清除 active Run 并保留精确
 来源身份，允许重新填写来源、修正任务身份、已有清单时重编文件映射，或在无载荷/计划/
 来源清理 Run 时删除任务。列表 CRUD 支持真实新建、详情查询和下载前身份编辑；删除只
@@ -266,7 +272,7 @@ Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，�
 元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据，先执行最多两次的确定性
 LocalNFO/海报有界修复，再将仍未闭合的真实歧义交给 CodexAgent；最终闭环模式只由
 独立验收判定。
-Task、Unit、来源、Run 和治理证据由 10 张 TypeORM 领域表持久化；其中旧 Agent session
+Task、Unit、来源、Run、canonical 目录和 RSS 由 17 张 TypeORM 领域表持久化；其中旧 Agent session
 表只作历史兼容。新任务只保存 `llmConversationId`，API 启动时从标准 LLM conversation
 恢复派生状态；状态变更和语义事件在数据库事务提交后才发布 SSE。
 执行器高频进度先校验 Run、manifest 与连续序号，再原子追加到 Redis 热层并立即发布
@@ -277,9 +283,9 @@ tick 原位合并补丁，不重载列表/详情，也不显示整页 Spin；SSE
 执行器序号与进度热层，不声明为跨进程 SSE 历史回放层。媒体 SSE 响应同时返回
 `Cache-Control: no-store` 和 `X-Accel-Buffering: no`，防止反向代理积攒进度事件。
 运维入口 `pnpm media-governance:backup-restore-drill -- ...` 默认只输出计划；执行模式
-只备份精确 10 张媒体治理表，并且只允许恢复到新建的
-`kt_media_governance_restore_*` 隔离库。入口会在 dump 前后比较源库 10 表行数及
-Task/Run/Event 身份快照、校验 SQL SHA-256、恢复后再次比较相同快照，最后只删除本次
+只备份精确 17 张媒体治理表，并且只允许恢复到新建的
+`kt_media_governance_restore_*` 隔离库。入口会在 dump 前后比较源库 17 表行数及
+Task/Run/Event/Series/Season/Episode/Binding/RSS 身份快照、校验 SQL SHA-256、恢复后再次比较相同快照，最后只删除本次
 创建的隔离库；快照比较复用同一 `sha256sum`，不额外依赖 `cmp`。源库变化、目标已
 存在、摘要漂移或能力缺失都会失败关闭。
 任务汇总接口从真实 Task/Unit/Run 投影阻塞任务、10 分钟无心跳的失联运行、已关闭但

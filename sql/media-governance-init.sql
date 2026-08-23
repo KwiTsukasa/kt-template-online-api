@@ -236,3 +236,122 @@ CREATE TABLE IF NOT EXISTS `media_governance_outbox` (
   UNIQUE KEY `uk_media_governance_outbox_idempotency` (`idempotency_key`),
   KEY `idx_media_governance_outbox_task` (`task_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `media_governance_series` (
+  `id` varchar(96) NOT NULL,
+  `canonical_provider` varchar(16) NOT NULL,
+  `canonical_provider_id` varchar(64) NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `original_title` varchar(200) DEFAULT NULL,
+  `release_year` int NOT NULL,
+  `media_type` varchar(24) NOT NULL,
+  `revision` int NOT NULL DEFAULT 1,
+  `status` varchar(24) NOT NULL DEFAULT 'active',
+  `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_media_governance_series_canonical` (`canonical_provider`, `canonical_provider_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `media_governance_series_external_ref` (
+  `id` varchar(96) NOT NULL,
+  `series_id` varchar(96) NOT NULL,
+  `provider` varchar(16) NOT NULL,
+  `provider_id` varchar(64) NOT NULL,
+  `reference_role` varchar(32) NOT NULL,
+  `title` varchar(200) DEFAULT NULL,
+  `release_year` int DEFAULT NULL,
+  `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_media_governance_series_external_ref` (`provider`, `provider_id`),
+  KEY `idx_media_governance_series_external_ref_series` (`series_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `media_governance_season` (
+  `id` varchar(96) NOT NULL,
+  `series_id` varchar(96) NOT NULL,
+  `season_number` int NOT NULL,
+  `episode_count` int NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `release_year` int DEFAULT NULL,
+  `status` varchar(24) NOT NULL DEFAULT 'known',
+  `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_media_governance_season_identity` (`series_id`, `season_number`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `media_governance_episode` (
+  `id` varchar(96) NOT NULL,
+  `series_id` varchar(96) NOT NULL,
+  `season_id` varchar(96) NOT NULL,
+  `season_number` int NOT NULL,
+  `episode_number` int NOT NULL,
+  `title` varchar(200) DEFAULT NULL,
+  `status` varchar(24) NOT NULL DEFAULT 'known',
+  `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_media_governance_episode_identity` (`season_id`, `episode_number`),
+  KEY `idx_media_governance_episode_series` (`series_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `media_governance_task_episode_binding` (
+  `id` varchar(96) NOT NULL,
+  `series_id` varchar(96) NOT NULL,
+  `season_id` varchar(96) NOT NULL,
+  `episode_id` varchar(96) NOT NULL,
+  `task_id` varchar(96) NOT NULL,
+  `source_id` varchar(96) DEFAULT NULL,
+  `binding_role` varchar(32) NOT NULL,
+  `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_media_governance_task_episode` (`task_id`, `episode_id`),
+  KEY `idx_media_governance_task_episode_series` (`series_id`),
+  KEY `idx_media_governance_task_episode_task` (`task_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `media_governance_rss_subscription` (
+  `id` varchar(96) NOT NULL,
+  `series_id` varchar(96) NOT NULL,
+  `season_id` varchar(96) NOT NULL,
+  `name` varchar(120) NOT NULL,
+  `feed_url` varchar(2048) NOT NULL,
+  `feed_url_sha256` varchar(64) NOT NULL,
+  `enabled` tinyint(1) NOT NULL DEFAULT 1,
+  `content_kind` varchar(32) NOT NULL,
+  `release_group` varchar(160) DEFAULT NULL,
+  `include_pattern` varchar(500) DEFAULT NULL,
+  `episode_pattern` varchar(500) DEFAULT NULL,
+  `poll_interval_minutes` int NOT NULL DEFAULT 15,
+  `revision` int NOT NULL DEFAULT 1,
+  `status` varchar(24) NOT NULL DEFAULT 'idle',
+  `last_error` varchar(500) DEFAULT NULL,
+  `last_polled_at` datetime(3) DEFAULT NULL,
+  `next_poll_at` datetime(3) DEFAULT NULL,
+  `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_media_governance_rss_subscription_feed` (`series_id`, `feed_url_sha256`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `media_governance_rss_item` (
+  `id` varchar(96) NOT NULL,
+  `subscription_id` varchar(96) NOT NULL,
+  `item_key_sha256` varchar(64) NOT NULL,
+  `guid` varchar(512) DEFAULT NULL,
+  `title` varchar(512) NOT NULL,
+  `info_hash` varchar(40) DEFAULT NULL,
+  `episode_number` int DEFAULT NULL,
+  `state` varchar(24) NOT NULL DEFAULT 'discovered',
+  `state_reason` varchar(500) DEFAULT NULL,
+  `task_id` varchar(96) DEFAULT NULL,
+  `source_id` varchar(96) DEFAULT NULL,
+  `published_at` datetime(3) DEFAULT NULL,
+  `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_media_governance_rss_item_key` (`subscription_id`, `item_key_sha256`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

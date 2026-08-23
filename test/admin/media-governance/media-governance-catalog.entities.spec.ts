@@ -1,0 +1,76 @@
+import { getMetadataArgsStorage } from 'typeorm';
+import {
+  MEDIA_GOVERNANCE_CATALOG_ENTITIES,
+  MediaGovernanceEpisodeEntity,
+  MediaGovernanceRssItemEntity,
+  MediaGovernanceRssSubscriptionEntity,
+  MediaGovernanceSeasonEntity,
+  MediaGovernanceSeriesEntity,
+  MediaGovernanceSeriesExternalRefEntity,
+  MediaGovernanceTaskEpisodeBindingEntity,
+} from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-catalog.entities';
+
+describe('media governance catalog entity schema', () => {
+  const entities = [
+    [MediaGovernanceSeriesEntity, 'media_governance_series'],
+    [
+      MediaGovernanceSeriesExternalRefEntity,
+      'media_governance_series_external_ref',
+    ],
+    [MediaGovernanceSeasonEntity, 'media_governance_season'],
+    [MediaGovernanceEpisodeEntity, 'media_governance_episode'],
+    [
+      MediaGovernanceTaskEpisodeBindingEntity,
+      'media_governance_task_episode_binding',
+    ],
+    [MediaGovernanceRssSubscriptionEntity, 'media_governance_rss_subscription'],
+    [MediaGovernanceRssItemEntity, 'media_governance_rss_item'],
+  ] as const;
+
+  it('registers the complete Series Season Episode RSS table set', () => {
+    expect(MEDIA_GOVERNANCE_CATALOG_ENTITIES).toEqual(
+      entities.map(([entity]) => entity),
+    );
+    expect(
+      entities.map(
+        ([entity]) =>
+          getMetadataArgsStorage().tables.find(
+            (table) => table.target === entity,
+          )?.name,
+      ),
+    ).toEqual(entities.map(([, tableName]) => tableName));
+  });
+
+  it('keeps canonical provider, season, episode, task and RSS identities unique', () => {
+    const indices = getMetadataArgsStorage().indices;
+    expect(
+      indices.find(
+        (index) => index.target === MediaGovernanceSeriesEntity && index.unique,
+      )?.columns,
+    ).toEqual(['canonicalProvider', 'canonicalProviderId']);
+    expect(
+      indices.find(
+        (index) => index.target === MediaGovernanceSeasonEntity && index.unique,
+      )?.columns,
+    ).toEqual(['seriesId', 'seasonNumber']);
+    expect(
+      indices.find(
+        (index) =>
+          index.target === MediaGovernanceEpisodeEntity && index.unique,
+      )?.columns,
+    ).toEqual(['seasonId', 'episodeNumber']);
+    expect(
+      indices.find(
+        (index) =>
+          index.target === MediaGovernanceTaskEpisodeBindingEntity &&
+          index.unique,
+      )?.columns,
+    ).toEqual(['taskId', 'episodeId']);
+    expect(
+      indices.find(
+        (index) =>
+          index.target === MediaGovernanceRssItemEntity && index.unique,
+      )?.columns,
+    ).toEqual(['subscriptionId', 'itemKeySha256']);
+  });
+});

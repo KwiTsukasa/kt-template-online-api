@@ -583,10 +583,10 @@ describe('MediaGovernanceService', () => {
     ).rejects.toThrow(HttpException);
   });
 
-  it('rejects a second primary download owner', async () => {
+  it('allows multiple primary episode sources but keeps one governance profile', async () => {
     const task = await service.create({
       mediaType: 'movie',
-      titleHint: '唯一下载 owner 测试',
+      titleHint: '多来源下载 owner 测试',
     });
     await service.addMagnetSource(task.id, {
       contentKind: 'embedded_subtitle_media',
@@ -598,16 +598,122 @@ describe('MediaGovernanceService', () => {
 
     await expect(
       service.addMagnetSource(task.id, {
-        contentKind: 'burned_in_subtitle_media',
+        contentKind: 'embedded_subtitle_media',
         expectedRevision: 2,
         magnetUri:
           'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
         seasonNumbers: [],
         sourceRole: 'primary_media',
       }),
+    ).resolves.toMatchObject({ sourceRole: 'primary_media' });
+    expect(service.detail(task.id).sources).toHaveLength(2);
+
+    await expect(
+      service.addMagnetSource(task.id, {
+        contentKind: 'bundled_sidecar_media',
+        expectedRevision: 3,
+        magnetUri:
+          'magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        seasonNumbers: [],
+        sourceRole: 'primary_media',
+      }),
     ).rejects.toMatchObject({
-      response: { msg: '同一任务只能有一个主媒体下载 owner' },
+      response: {
+        msg: '同一任务的主媒体来源必须使用一致治理类型',
+      },
       status: 409,
+    });
+  });
+
+  it('derives one bundled subtitle contract across multiple episode sources', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S02'],
+      titleHint: '多磁链逐集字幕合同测试',
+    });
+    const first = await service.addMagnetSource(task.id, {
+      contentKind: 'bundled_sidecar_media',
+      expectedRevision: 1,
+      magnetUri: 'magnet:?xt=urn:btih:1111111111111111111111111111111111111111',
+      releaseGroup: 'LoliHouse',
+      seasonNumbers: ['S02'],
+      sourceRole: 'primary_media',
+    });
+    const second = await service.addMagnetSource(task.id, {
+      contentKind: 'bundled_sidecar_media',
+      expectedRevision: 2,
+      magnetUri: 'magnet:?xt=urn:btih:2222222222222222222222222222222222222222',
+      releaseGroup: 'LoliHouse',
+      seasonNumbers: ['S02'],
+      sourceRole: 'primary_media',
+    });
+    for (const [source, episode] of [
+      [first, 27],
+      [second, 28],
+    ] as const) {
+      source.manifestState = 'inspected';
+      source.manifest = [
+        {
+          executable: false,
+          index: 0,
+          relativePath: `BLEACH - ${episode}.mkv`,
+          sizeBytes: 1_000,
+        },
+        {
+          executable: false,
+          index: 1,
+          relativePath: `BLEACH - ${episode}.SC.ass`,
+          sizeBytes: 100,
+        },
+      ];
+    }
+    await service.updateSourceSelection(task.id, first.id, {
+      expectedRevision: 3,
+      fileMappings: [
+        {
+          episodeNumber: 27,
+          fileRole: 'video',
+          index: 0,
+          unitId: task.units[0].id,
+        },
+        {
+          episodeNumber: 27,
+          fileRole: 'subtitle',
+          index: 1,
+          language: 'zh-CN',
+          unitId: task.units[0].id,
+        },
+      ],
+      selectedFileIndices: [0, 1],
+    });
+    await service.updateSourceSelection(task.id, second.id, {
+      expectedRevision: 4,
+      fileMappings: [
+        {
+          episodeNumber: 28,
+          fileRole: 'video',
+          index: 0,
+          unitId: task.units[0].id,
+        },
+        {
+          episodeNumber: 28,
+          fileRole: 'subtitle',
+          index: 1,
+          language: 'zh-CN',
+          unitId: task.units[0].id,
+        },
+      ],
+      selectedFileIndices: [0, 1],
+    });
+
+    expect(service.detail(task.id).units[0].subtitleContract).toMatchObject({
+      expectedEpisodeNumbers: [27, 28],
+      mappings: [
+        expect.objectContaining({ episodeNumber: 27, sourceId: first.id }),
+        expect.objectContaining({ episodeNumber: 28, sourceId: second.id }),
+      ],
+      releaseGroup: 'LoliHouse',
+      sourceIds: [first.id, second.id],
     });
   });
 

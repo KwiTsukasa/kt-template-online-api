@@ -53,16 +53,16 @@ if [[ -z $query ]]; then
   exit 0
 fi
 case "$query" in
-  *information_schema.tables*) printf '10\\n' ;;
+  *information_schema.tables*) printf '17\\n' ;;
   *information_schema.schemata*) printf '0\\n' ;;
   'CREATE DATABASE '*|'DROP DATABASE '*) ;;
   'SELECT COUNT(*) FROM \`'*)
     table=\${query#*\\\`}
     table=\${table%%\\\`*}
     case "$table" in
-      media_governance_task|media_governance_unit|media_governance_source|media_governance_descriptor_revision|media_governance_run|media_governance_outbox) printf '1\\n' ;;
+      media_governance_task|media_governance_unit|media_governance_source|media_governance_descriptor_revision|media_governance_run|media_governance_outbox|media_governance_series|media_governance_season|media_governance_episode|media_governance_task_episode_binding) printf '1\\n' ;;
       media_governance_event) printf '2\\n' ;;
-      media_governance_agent_session|media_governance_metadata_exception|media_governance_operator_decision) printf '0\\n' ;;
+      media_governance_agent_session|media_governance_metadata_exception|media_governance_operator_decision|media_governance_series_external_ref|media_governance_rss_subscription|media_governance_rss_item) printf '0\\n' ;;
       *) printf 'unexpected table: %s\\n' "$table" >&2; exit 9 ;;
     esac
     ;;
@@ -83,6 +83,20 @@ case "$query" in
       printf 'media-run-fixture:2\\tmedia-task-fixture\\tmedia-run-fixture\\t2\\trun-progress\\tgovernance\\trunning\\n'
     fi
     ;;
+  *'FROM media_governance_series ORDER BY id'*)
+    printf 'media-series-fixture\\ttmdb\\t30984\\t死神\\t2004\\t1\\tactive\\n'
+    ;;
+  *'FROM media_governance_season ORDER BY'*)
+    printf 'media-season-fixture\\tmedia-series-fixture\\t2\\t50\\t千年血战篇\\t2022\\tknown\\n'
+    ;;
+  *'FROM media_governance_episode ORDER BY'*)
+    printf 'media-episode-fixture\\tmedia-series-fixture\\tmedia-season-fixture\\t2\\t1\\tcompleted\\n'
+    ;;
+  *'FROM media_governance_task_episode_binding ORDER BY'*)
+    printf 'media-binding-fixture\\tmedia-series-fixture\\tmedia-season-fixture\\tmedia-episode-fixture\\tmedia-task-fixture\\t\\texecution-history\\n'
+    ;;
+  *'FROM media_governance_rss_subscription ORDER BY'*) ;;
+  *'FROM media_governance_rss_item ORDER BY'*) ;;
   *) printf 'unexpected query: %s\\n' "$query" >&2; exit 10 ;;
 esac
 `,
@@ -168,7 +182,7 @@ printf '%s\\n' '-- isolated media governance fixture' >"$result_file"
     expect(() => readdirSync(current.output)).toThrow();
   });
 
-  it('backs up the exact ten tables and verifies an isolated restore', () => {
+  it('backs up the exact seventeen task, catalog and RSS tables', () => {
     const current = fixture();
     const result = runDrill(current);
 
@@ -187,7 +201,7 @@ printf '%s\\n' '-- isolated media governance fixture' >"$result_file"
       restoreDatabaseDropped: true,
       restoreVerified: true,
       schemaVersion: '1.0.0',
-      tableCount: 10,
+      tableCount: 17,
       writeBoundaries: {
         cloud: 0,
         media: 0,
@@ -198,8 +212,14 @@ printf '%s\\n' '-- isolated media governance fixture' >"$result_file"
     });
     expect(evidence.dump.sha256).toMatch(/^[a-f0-9]{64}$/u);
     expect(evidence.snapshots).toEqual({
+      bindingSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      episodeSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
       eventSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      rssItemSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      rssSubscriptionSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
       runSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      seasonSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      seriesSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
       tableCountsSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
       taskSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
     });
@@ -218,6 +238,13 @@ printf '%s\\n' '-- isolated media governance fixture' >"$result_file"
       'media_governance_metadata_exception',
       'media_governance_operator_decision',
       'media_governance_outbox',
+      'media_governance_series',
+      'media_governance_series_external_ref',
+      'media_governance_season',
+      'media_governance_episode',
+      'media_governance_task_episode_binding',
+      'media_governance_rss_subscription',
+      'media_governance_rss_item',
     ]) {
       expect(dumpLine).toContain(`\t${table}`);
     }

@@ -23,13 +23,20 @@ tables=(
   media_governance_metadata_exception
   media_governance_operator_decision
   media_governance_outbox
+  media_governance_series
+  media_governance_series_external_ref
+  media_governance_season
+  media_governance_episode
+  media_governance_task_episode_binding
+  media_governance_rss_subscription
+  media_governance_rss_item
 )
 
 print_help() {
   cat <<'EOF'
 Usage: backup-restore-drill.sh --source-database NAME --restore-database NAME --output-directory PATH [options]
 
-Back up the ten media-governance tables, restore them into a new isolated
+Back up the seventeen media-governance tables, restore them into a new isolated
 database, compare row counts plus Task/Run/Event identity snapshots, and remove
 only the isolated database created by this run. The default mode is plan-only.
 
@@ -195,6 +202,12 @@ write_identity_snapshot() {
   run_mysql_query "$database" 'SELECT id, revision, stage, run_state, IFNULL(active_run_id, ""), input_snapshot_sha256, IFNULL(sealed_plan_sha256, ""), IFNULL(closed_mode, "") FROM media_governance_task ORDER BY id;' >"$prefix.task.tsv"
   run_mysql_query "$database" 'SELECT id, task_id, task_revision, action, status, replay_key, input_snapshot_sha256, IFNULL(plan_sha256, ""), IFNULL(evidence_sha256, "") FROM media_governance_run ORDER BY id;' >"$prefix.run.tsv"
   run_mysql_query "$database" 'SELECT event_id, task_id, IFNULL(run_id, ""), sequence, type, stage, run_state FROM media_governance_event ORDER BY task_id, IFNULL(run_id, ""), sequence, event_id;' >"$prefix.event.tsv"
+  run_mysql_query "$database" 'SELECT id, canonical_provider, canonical_provider_id, title, release_year, revision, status FROM media_governance_series ORDER BY id;' >"$prefix.series.tsv"
+  run_mysql_query "$database" 'SELECT id, series_id, season_number, episode_count, title, IFNULL(release_year, ""), status FROM media_governance_season ORDER BY series_id, season_number;' >"$prefix.season.tsv"
+  run_mysql_query "$database" 'SELECT id, series_id, season_id, season_number, episode_number, status FROM media_governance_episode ORDER BY series_id, season_number, episode_number;' >"$prefix.episode.tsv"
+  run_mysql_query "$database" 'SELECT id, series_id, season_id, episode_id, task_id, IFNULL(source_id, ""), binding_role FROM media_governance_task_episode_binding ORDER BY series_id, season_id, episode_id, task_id;' >"$prefix.binding.tsv"
+  run_mysql_query "$database" 'SELECT id, series_id, season_id, feed_url_sha256, enabled, revision, status, IFNULL(last_polled_at, ""), IFNULL(next_poll_at, "") FROM media_governance_rss_subscription ORDER BY id;' >"$prefix.rss-subscription.tsv"
+  run_mysql_query "$database" 'SELECT id, subscription_id, item_key_sha256, IFNULL(info_hash, ""), IFNULL(episode_number, ""), state, IFNULL(task_id, ""), IFNULL(source_id, "") FROM media_governance_rss_item ORDER BY subscription_id, item_key_sha256;' >"$prefix.rss-item.tsv"
 }
 
 source_before_prefix="$batch_directory/source-before"
@@ -217,7 +230,7 @@ timeout --foreground --kill-after=5s "${timeout_seconds}s" \
 
 [[ -s $dump_path ]] || fail 'media-governance dump is empty'
 write_identity_snapshot "$source_database" "$source_prefix"
-for snapshot in table-counts task run event; do
+for snapshot in table-counts task run event series season episode binding rss-subscription rss-item; do
   [[ $(file_sha256 "$source_before_prefix.$snapshot.tsv") == $(file_sha256 "$source_prefix.$snapshot.tsv") ]] ||
     fail "source $snapshot snapshot changed during backup window"
 done
@@ -231,7 +244,7 @@ timeout --foreground --kill-after=5s "${timeout_seconds}s" \
 
 write_identity_snapshot "$restore_database" "$restore_prefix"
 
-for snapshot in table-counts task run event; do
+for snapshot in table-counts task run event series season episode binding rss-subscription rss-item; do
   [[ $(file_sha256 "$source_prefix.$snapshot.tsv") == $(file_sha256 "$restore_prefix.$snapshot.tsv") ]] ||
     fail "restored $snapshot snapshot differs from source"
 done
@@ -240,6 +253,12 @@ table_counts_sha256=$(file_sha256 "$source_prefix.table-counts.tsv")
 task_snapshot_sha256=$(file_sha256 "$source_prefix.task.tsv")
 run_snapshot_sha256=$(file_sha256 "$source_prefix.run.tsv")
 event_snapshot_sha256=$(file_sha256 "$source_prefix.event.tsv")
+series_snapshot_sha256=$(file_sha256 "$source_prefix.series.tsv")
+season_snapshot_sha256=$(file_sha256 "$source_prefix.season.tsv")
+episode_snapshot_sha256=$(file_sha256 "$source_prefix.episode.tsv")
+binding_snapshot_sha256=$(file_sha256 "$source_prefix.binding.tsv")
+rss_subscription_snapshot_sha256=$(file_sha256 "$source_prefix.rss-subscription.tsv")
+rss_item_snapshot_sha256=$(file_sha256 "$source_prefix.rss-item.tsv")
 
 run_mysql_server "DROP DATABASE \`$restore_database\`;"
 restore_created=false
@@ -260,7 +279,13 @@ cat >"$manifest_path" <<EOF
     "tableCountsSha256": "$table_counts_sha256",
     "taskSha256": "$task_snapshot_sha256",
     "runSha256": "$run_snapshot_sha256",
-    "eventSha256": "$event_snapshot_sha256"
+    "eventSha256": "$event_snapshot_sha256",
+    "seriesSha256": "$series_snapshot_sha256",
+    "seasonSha256": "$season_snapshot_sha256",
+    "episodeSha256": "$episode_snapshot_sha256",
+    "bindingSha256": "$binding_snapshot_sha256",
+    "rssSubscriptionSha256": "$rss_subscription_snapshot_sha256",
+    "rssItemSha256": "$rss_item_snapshot_sha256"
   },
   "restoreVerified": true,
   "restoreDatabaseDropped": true,

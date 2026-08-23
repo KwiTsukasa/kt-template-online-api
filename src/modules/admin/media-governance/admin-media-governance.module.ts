@@ -8,6 +8,7 @@ import {
   MediaGovernanceEventsController,
 } from '@/modules/admin/media-governance/presentation/media-governance.controller';
 import { MEDIA_GOVERNANCE_ENTITIES } from '@/modules/admin/media-governance/infrastructure/persistence/media-governance.entities';
+import { MEDIA_GOVERNANCE_CATALOG_ENTITIES } from '@/modules/admin/media-governance/infrastructure/persistence/media-governance-catalog.entities';
 import { MediaDescriptorStore } from '@/modules/admin/media-governance/infrastructure/persistence/media-descriptor.store';
 import { MediaGovernanceEventStreamService } from '@/modules/admin/media-governance/application/media-governance-event-stream.service';
 import { MediaGovernancePermissionGuard } from '@/modules/admin/media-governance/presentation/media-governance-permission.guard';
@@ -28,11 +29,14 @@ import {
   MEDIA_GOVERNANCE_PROGRESS_HOT_STORE,
   MediaGovernanceRedisProgressHotStore,
 } from '@/modules/admin/media-governance/infrastructure/persistence/media-governance-progress-hot.store';
+import { MediaGovernanceCatalogController } from '@/modules/admin/media-governance/presentation/media-governance-catalog.controller';
+import { MediaGovernanceCatalogService } from '@/modules/admin/media-governance/application/media-governance-catalog.service';
 
 @Module({
   controllers: [
     MediaGovernanceAgentInternalController,
     MediaGovernanceExecutorInternalController,
+    MediaGovernanceCatalogController,
     MediaGovernanceController,
     MediaGovernanceEventsController,
   ],
@@ -40,7 +44,10 @@ import {
     AdminAuthGuardModule,
     AdminLlmModule,
     ConfigModule,
-    TypeOrmModule.forFeature(MEDIA_GOVERNANCE_ENTITIES),
+    TypeOrmModule.forFeature([
+      ...MEDIA_GOVERNANCE_ENTITIES,
+      ...MEDIA_GOVERNANCE_CATALOG_ENTITIES,
+    ]),
   ],
   providers: [
     MediaGovernanceAgentInternalGuard,
@@ -51,6 +58,7 @@ import {
       useExisting: MediaGovernanceExecutionGatewayClient,
     },
     MediaDescriptorStore,
+    MediaGovernanceCatalogService,
     MediaGovernanceEventStreamService,
     MediaGovernanceRedisProgressHotStore,
     {

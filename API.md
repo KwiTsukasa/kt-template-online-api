@@ -299,6 +299,21 @@ Search 的 `llm-codex` 权限档。
 | `GET`    | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
 | `GET`    | `/media-governance/events/stream`                                  | 订阅带 replay/snapshot-required 的 SSE |
 
+canonical 系列、逐集多磁链与 RSS 使用独立目录接口；这些接口不修改已闭环 Task 的原始输入快照，
+而是把 Task 绑定到唯一的 Series/Season/Episode 事实：
+
+| 方法   | 路径                                                                                   | 说明                                       |
+| ------ | -------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `GET`  | `/media-governance/series/page`                                                        | 分页查询系列卡片与季集/绑定/RSS 数量       |
+| `GET`  | `/media-governance/series/:seriesId`                                                   | 查询系列、资料引用、季和 Task 覆盖         |
+| `POST` | `/media-governance/series/reconcile`                                                   | 按唯一资料事实幂等纠正系列层级和 Task 范围 |
+| `GET`  | `/media-governance/series/:seriesId/seasons/:seasonNumber/episodes`                    | 分页查询 Episode 与 Task/来源绑定          |
+| `POST` | `/media-governance/series/:seriesId/seasons/:seasonNumber/magnet-batch`                | 在一个 Task 内创建 1–16 条按集磁链来源     |
+| `POST` | `/media-governance/series/:seriesId/seasons/:seasonNumber/rss-subscriptions`           | 创建按季 RSS 订阅                          |
+| `PUT`  | `/media-governance/series/rss-subscriptions/:subscriptionId/state`                     | 按 revision 启停 RSS                       |
+| `POST` | `/media-governance/series/rss-subscriptions/:subscriptionId/poll`                      | 立即轮询、去重并按集创建 Task              |
+| `GET`  | `/media-governance/series/rss-subscriptions/:subscriptionId/items`                     | 分页查询 RSS 条目处理历史                  |
+
 `GET /media-governance/tasks/summary` 额外返回 `blocked`、`stuckRunCount`、
 `evidenceDriftCount`、`mixedSubtitleSeasonCount`、去重后的 `attentionRequired` 和中文
 `healthLabel`。失联 Run 只统计数据库生产 Task 中 queued/running 状态与 `activeRunId`

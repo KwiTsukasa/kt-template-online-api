@@ -111,9 +111,14 @@ export type MediaGovernanceUnit = {
   seasonNumber: null | string;
   subtitleContract: null | {
     expectedEpisodeNumbers: number[];
-    mappings: Array<{ episodeNumber: number; relativePath: string }>;
+    mappings: Array<{
+      episodeNumber: number;
+      relativePath: string;
+      sourceId?: string;
+    }>;
     releaseGroup: string;
     sourceId: string;
+    sourceIds?: string[];
   };
   unitKind: 'movie' | 'season';
 };
@@ -639,11 +644,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       task.closedAt === null ||
       !task.closedMode;
     const planInvalid =
-      !task.sealedPlan ||
-      !task.sealedPlanSha256 ||
-      !task.metadataIdentity;
+      !task.sealedPlan || !task.sealedPlanSha256 || !task.metadataIdentity;
     if (stateInvalid || planInvalid) {
-      throwVbenError('已关闭任务不满足主资料库身份恢复条件', HttpStatus.CONFLICT);
+      throwVbenError(
+        '已关闭任务不满足主资料库身份恢复条件',
+        HttpStatus.CONFLICT,
+      );
     }
     const metadataIdentity = task.metadataIdentity!;
     const primaryCollapsedIntoMetadata =
@@ -658,7 +664,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       throwVbenError('当前任务不是主次资料库身份折叠残留', HttpStatus.CONFLICT);
     }
     if (!input.providerRef || !Number.isInteger(input.releaseYear)) {
-      throwVbenError('已关闭任务只允许恢复主资料库编号与年份', HttpStatus.BAD_REQUEST);
+      throwVbenError(
+        '已关闭任务只允许恢复主资料库编号与年份',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     const providerRef: MediaGovernanceProviderRef = {
       provider: input.providerRef.provider,
@@ -1765,6 +1774,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     const { displayName, infoHash, trackerCount } = this.parseMagnetUri(
       input.magnetUri,
     );
+    if (
+      task.sources.some(
+        (source) =>
+          source.descriptorTombstonedAt === null &&
+          source.infoHash === infoHash,
+      )
+    ) {
+      throwVbenError('同一任务不能重复添加相同 BTIH', HttpStatus.CONFLICT);
+    }
     const sourceId = `media-source-${randomUUID()}`;
     const descriptorSha256 = createHash('sha256')
       .update(input.magnetUri)
@@ -2204,7 +2222,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       preGovernanceUnitsUntouched;
     task.sources.splice(task.sources.indexOf(source), 1);
     for (const unit of task.units) {
-      if (unit.subtitleContract?.sourceId === source.id) {
+      const contract = unit.subtitleContract;
+      const sourceIds = contract?.sourceIds ?? [];
+      if (contract?.sourceId === source.id || sourceIds.includes(source.id)) {
         unit.subtitleContract = null;
       }
     }
@@ -2324,20 +2344,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       const sources = task.sources.filter(
         (source) =>
           source.sourceRole === 'primary_media' &&
-          source.contentKind === 'bundled_sidecar_media' &&
-          source.selectedFileMappings.some(
-            (mapping) =>
-              mapping.unitId === unit.id &&
-              mapping.fileRole === 'subtitle' &&
-              mapping.language === 'zh-CN',
-          ),
+          source.contentKind === 'bundled_sidecar_media',
       );
-      let source = null;
-      if (sources.length === 1) source = sources[0];
-      const releaseGroup = source?.releaseGroup?.trim();
-      let mappings: Array<{ episodeNumber: number; relativePath: string }> = [];
-      if (source) {
-        mappings = source.selectedFileMappings
+      const mappings = sources.flatMap((source) =>
+        source.selectedFileMappings
           .filter(
             (mapping) =>
               mapping.unitId === unit.id &&
@@ -2350,11 +2360,23 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
             relativePath:
               source.manifest.find((entry) => entry.index === mapping.index)
                 ?.relativePath ?? '',
-          }))
-          .sort((left, right) => left.episodeNumber - right.episodeNumber);
-      }
+            sourceId: source.id,
+          })),
+      );
+      mappings.sort((left, right) => left.episodeNumber - right.episodeNumber);
+      const releaseGroups = new Set(
+        sources
+          .map((source) => source.releaseGroup?.trim())
+          .filter((value): value is string => Boolean(value)),
+      );
+      const sourceIds = [
+        ...new Set(mappings.map((mapping) => mapping.sourceId)),
+      ];
+      let releaseGroup = null;
+      if (releaseGroups.size === 1) releaseGroup = [...releaseGroups][0];
       const complete =
-        Boolean(source && releaseGroup) &&
+        Boolean(releaseGroup) &&
+        sourceIds.length > 0 &&
         unit.expectedEpisodeNumbers.length > 0 &&
         mappings.length === unit.expectedEpisodeNumbers.length &&
         mappings.every(
@@ -2380,7 +2402,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
             releaseGroup: releaseGroup!,
           })),
           seasonNumber: unit.seasonNumber,
-          sourceId: source!.id,
+          sourceId: sourceIds[0],
         },
       ]);
       unit.subtitleContract = {
@@ -2388,6 +2410,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         mappings,
         releaseGroup: validated.releaseGroup,
         sourceId: validated.sourceId,
+        sourceIds,
       };
     }
   }
@@ -2436,6 +2459,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         executable: false,
         relativePath: mapping.relativePath,
       }),
+      sourceId: input.sourceId,
     }));
     const [validated] = validateSubtitleContracts([
       {
@@ -2454,6 +2478,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       mappings,
       releaseGroup: validated.releaseGroup,
       sourceId: validated.sourceId,
+      sourceIds: [validated.sourceId],
     };
     task.nextCommandLabel = '检查来源清单';
     this.bumpRevision(task);
@@ -5082,6 +5107,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           expectedEpisodeNumbers: unit.subtitleContract.expectedEpisodeNumbers,
           releaseGroup: unit.subtitleContract.releaseGroup,
           sourceId: unit.subtitleContract.sourceId,
+          sourceIds: unit.subtitleContract.sourceIds ?? [
+            unit.subtitleContract.sourceId,
+          ],
         };
       }
       return {
@@ -5329,6 +5357,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           releaseGroup: unit.subtitleContract.releaseGroup,
           seasonNumber: unit.seasonNumber,
           sourceId: unit.subtitleContract.sourceId,
+          sourceIds: unit.subtitleContract.sourceIds ?? [
+            unit.subtitleContract.sourceId,
+          ],
         };
       }
       return {
@@ -5374,8 +5405,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         stage: task.stage,
       };
     }
+    let governanceProfile;
     try {
-      return assertSourceClassification({
+      governanceProfile = assertSourceClassification({
         contentKind: input.contentKind,
         linkedTask,
         sourceRole: input.sourceRole,
@@ -5383,6 +5415,18 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     } catch {
       throwVbenError('来源角色与内容类型不匹配', HttpStatus.BAD_REQUEST);
     }
+    if (
+      input.sourceRole === 'primary_media' &&
+      primary &&
+      task.governanceProfile &&
+      task.governanceProfile !== governanceProfile
+    ) {
+      throwVbenError(
+        '同一任务的主媒体来源必须使用一致治理类型',
+        HttpStatus.CONFLICT,
+      );
+    }
+    return governanceProfile;
   }
 
   /**
@@ -5782,9 +5826,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
-   * 校验`task`、`sourceRole`是否满足单个任务最多存在一个主媒体下载所有者约束，并拒绝不合法输入。
-   * @param task - 用于单个任务最多存在一个主媒体下载所有者的领域对象，包含 `sources` 字段。
-   * @param sourceRole - 决定单个任务最多存在一个主媒体下载所有者内容、边界或目标的 `sourceRole` 值。
+   * 校验任务主媒体来源未超过执行器一次可密封的十六个来源上限。
+   * @param task - 包含当前来源集合的媒体任务。
+   * @param sourceRole - 本次准备新增或转换的来源角色。
    */
   private assertSourceOwnerAvailable(
     task: MediaGovernanceTask,
@@ -5792,9 +5836,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ) {
     if (
       sourceRole === 'primary_media' &&
-      task.sources.some((source) => source.sourceRole === 'primary_media')
+      task.sources.filter((source) => source.sourceRole === 'primary_media')
+        .length >= 16
     ) {
-      throwVbenError('同一任务只能有一个主媒体下载 owner', HttpStatus.CONFLICT);
+      throwVbenError('同一任务最多包含 16 个主媒体来源', HttpStatus.CONFLICT);
     }
   }
 

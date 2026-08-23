@@ -12,7 +12,14 @@ WHERE table_schema = DATABASE()
     'media_governance_agent_session',
     'media_governance_metadata_exception',
     'media_governance_operator_decision',
-    'media_governance_outbox'
+    'media_governance_outbox',
+    'media_governance_series',
+    'media_governance_series_external_ref',
+    'media_governance_season',
+    'media_governance_episode',
+    'media_governance_task_episode_binding',
+    'media_governance_rss_subscription',
+    'media_governance_rss_item'
   );
 
 SELECT
@@ -32,6 +39,21 @@ SELECT
   COUNT(*) AS agent_session_count,
   COALESCE(MAX(last_sequence), 0) AS max_agent_sequence
 FROM media_governance_agent_session;
+
+SELECT
+  COUNT(*) AS canonical_series_count,
+  COUNT(DISTINCT canonical_provider, canonical_provider_id) AS canonical_identity_count
+FROM media_governance_series;
+
+SELECT
+  COUNT(*) AS task_episode_binding_count,
+  COUNT(DISTINCT task_id, episode_id) AS task_episode_identity_count
+FROM media_governance_task_episode_binding;
+
+SELECT
+  COUNT(*) AS rss_subscription_count,
+  SUM(enabled = 1) AS enabled_rss_subscription_count
+FROM media_governance_rss_subscription;
 
 SELECT
   COUNT(*) AS llm_conversation_column_count

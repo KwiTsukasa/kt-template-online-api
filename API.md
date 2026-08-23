@@ -376,6 +376,8 @@ revision 和 replay key。治理完成后 fnOS 尚未稳定回填身份时，若
 
 媒体任务身份固定拆分为三份密封投影：`catalogIdentity` 是用户创建任务时选择的主资料库、作品年份与标题；`metadataIdentity` 是 trim.media/NFO 所需的 TMDB 二级身份；`identity` 只表示当前密封文件清单所在的物理规范根。Agent 可以补齐 TMDB 元数据身份，但已有主资料库时不得改写 Task `providerRef/releaseYear`。管理端优先显示主资料库与主年份，只在两者未声明时回退到元数据身份。
 
+已应用 Agent 身份修正的 Task 会进入服务端确定性自动续跑，而不是由 Admin 或 LLM 继续逐段调用阶段接口。自动续跑要求密封计划中的 `agentAmendments` 与当前 `metadataIdentity` 精确一致、没有活动 Run 且当前状态只有一个合法后继；可串联规范身份重排、元数据核验、次数受限修复、修复后复验和独立验收。每个成功终态先按原 Run 序号持久化，再预约带新 revision/replay key 的下一 Run；失败终态、身份漂移、非修复型 A/C 缺口、修复次数耗尽或人工候选状态固定停止。API 启动时会恢复这一类无活动 Run 的持久化阶段边界；`closed` Task 和已有活动 Run 不参与扫描，因此发布重启不会重复验收或并发创建 Run。
+
 `catalog-identity/restore` 不是通用 closed Task 编辑器：它只对“当前主身份精确等于二级 TMDB 身份、计划尚无 `catalogIdentity`”的历史折叠残留开放，要求 `Media:Governance:Run`、当前 revision、`closed/succeeded/verified`、无活动 Run，且请求身份派生根必须精确等于密封 transition 的 `previousTitleRoot`。恢复只重开 metadata verify，不移动已验收媒体，不派发下载或目录事务。
 内嵌字幕 profile 已获得唯一 TMDB 身份、且缺口严格只有 LocalNFO 与作品/季海报时，
 第一次确定性元数据生成记为自动补齐；其独立验收通过后保持 `closedMode=automatic`。

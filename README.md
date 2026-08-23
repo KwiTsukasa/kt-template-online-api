@@ -302,6 +302,8 @@ Web Search 的 `llm-codex` 权限档。媒体治理调用 `agent/start` 时只�
 
 媒体 CodexAgent 每轮从当前 Task 重新生成 `availableActions`，提示词与 API 共用同一阶段门；工具拒绝必须返回非空、脱敏稳定码，禁止把 409 吞成空结果后诱导模型原样重试。结构化结果以最长 8000 字的 `answer` 进入标准 LLM 消息，以短 `summary` 更新 Task 投影。策略 v3 的类型化工具覆盖 TMDB 身份确认、磁链添加/检查/移除、分页清单、保守自动文件映射、来源探针、下载、治理、元数据核验/修复与独立验收；自动映射除 `SxxExx` 和根目录纯数字方括号外，还接受根目录中唯一、由发布标点分隔的 1–3 位集号，多个候选继续失败关闭。电影来源存在宣传短片时，仅在最大视频至少 512 MiB、其余视频均不超过 64 MiB 且正片至少为第二大文件 8 倍时自动选择，否则仍要求人工复核。所有写动作仍由 Task revision、当前阶段、胶囊、provider thread CAS 和既有应用服务门保护，成功改变 revision 后当前回合必须停止，下一轮重新读取线上 Task。旧 App Server thread 在策略升级时通过显式 CAS 旋转一次，标准 conversationId 保持不变。
 
+Agent 身份修正一旦通过计划摘要、修正历史和当前二级 TMDB 身份三重绑定，后续不再要求操作员逐阶段点击。API 只在无活动 Run 的确定性边界自动预约唯一后继：需要规范根重排时先执行治理事务；否则按 `metadata.verify → 最多两次 metadata.repair → metadata.verify → acceptance.verify` 串联，任一执行失败、次数耗尽或仍需人工判断时立即停止。服务启动会恢复同一类已持久化阶段边界，包括旧版曾被错误覆盖成 `metadata/blocked + gateReason=null` 的已应用计划；已关闭任务、普通人工任务和未应用的候选计划不会被自动推进。LLM 对话恢复时，已落入计划修正历史的 `plan-submitted` 结果投影为 `succeeded` 且清空 `pendingPlanSha256`，不会重新显示成待人工处理。
+
 TMDB 搜索页读取固定使用 `connection: close` 与最多两次独立 10 秒请求，防止长驻 API 进程复用失效连接后持续 `fetch failed`；两次都不可用时 `provider.metadata.read` 返回 `lookupAvailable=false`，不再把整轮变成 503。Agent 可用 live Web Search 给出明确的 `themoviedb.org/movie|tv/<id>`，但 `media.identity.confirm` 仍必须由 API 独立读取该官方详情页并核对媒体类型和年份，验证失败保持零写。
 
 OpenAI、智谱、DeepSeek 与 Moonshot 通过各自 OpenAI-compatible `GET /models` 读取当前

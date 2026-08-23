@@ -51,6 +51,27 @@ SELECT
 FROM media_governance_task_episode_binding;
 
 SELECT
+  COUNT(*) AS season_episode_start_column_count
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = 'media_governance_season'
+  AND column_name = 'episode_start'
+  AND is_nullable = 'NO';
+
+SELECT
+  COUNT(*) AS invalid_season_episode_range_count
+FROM (
+  SELECT season.id
+  FROM media_governance_season AS season
+  LEFT JOIN media_governance_episode AS episode
+    ON episode.season_id = season.id
+  GROUP BY season.id, season.episode_start, season.episode_count
+  HAVING COUNT(episode.id) <> season.episode_count
+    OR COALESCE(MIN(episode.episode_number), 0) <> season.episode_start
+    OR COALESCE(MAX(episode.episode_number), 0) <> season.episode_start + season.episode_count - 1
+) AS invalid_season_range;
+
+SELECT
   COUNT(*) AS rss_subscription_count,
   SUM(enabled = 1) AS enabled_rss_subscription_count
 FROM media_governance_rss_subscription;

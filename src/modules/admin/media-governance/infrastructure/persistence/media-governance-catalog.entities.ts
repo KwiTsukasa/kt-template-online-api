@@ -92,6 +92,9 @@ export class MediaGovernanceSeasonEntity {
   @Column({ name: 'season_number', type: 'int' })
   seasonNumber: number;
 
+  @Column({ default: 1, name: 'episode_start', type: 'int' })
+  episodeStart: number;
+
   @Column({ name: 'episode_count', type: 'int' })
   episodeCount: number;
 

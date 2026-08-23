@@ -31,10 +31,84 @@ import {
   parseMediaGovernanceRss,
   type MediaGovernanceRssEntry,
 } from '@/modules/admin/media-governance/infrastructure/integration/media-governance-rss-parser';
-import { MediaGovernanceService } from './media-governance.service';
+import {
+  MediaGovernanceService,
+  type MediaGovernanceTask,
+} from './media-governance.service';
 
 const RSS_POLL_TICK_MS = 60_000;
 const RSS_MAX_BYTES = 2 * 1024 * 1024;
+
+type HistoricalClassificationStatus =
+  | 'classifiable'
+  | 'classified'
+  | 'not-applicable'
+  | 'pending';
+
+type HistoricalIdentity = {
+  provider: string;
+  providerId: string;
+};
+
+type HistoricalIdentityTarget = {
+  matchRole: 'canonical' | 'external-ref';
+  series: MediaGovernanceSeriesEntity;
+};
+
+type HistoricalSeasonEvidence = {
+  episodeNumbers: number[];
+  season: MediaGovernanceSeasonEntity;
+};
+
+type HistoricalEvidenceResult =
+  | {
+      ok: false;
+      reasonCode: string;
+      reasonLabel: string;
+    }
+  | {
+      ok: true;
+      seasons: HistoricalSeasonEvidence[];
+    };
+
+type HistoricalClassificationTarget = {
+  canonicalProvider: string;
+  canonicalProviderId: string;
+  matchRole: 'canonical' | 'catalog-binding' | 'external-ref';
+  releaseYear: number;
+  seasons: Array<{
+    canonicalEpisodeCount: number;
+    canonicalEpisodeStart: number;
+    episodeCount: number;
+    episodeRanges: Array<{ end: number; start: number }>;
+    existingBindingCount: number;
+    missingBindingCount: number;
+    seasonNumber: number;
+  }>;
+  seriesId: string;
+  title: string;
+};
+
+type HistoricalClassificationItem = {
+  existingBindingCount: number;
+  mediaType: string;
+  metadataIdentity: HistoricalIdentity | null;
+  reasonCode: string;
+  reasonLabel: string;
+  status: HistoricalClassificationStatus;
+  target: HistoricalClassificationTarget | null;
+  taskId: string;
+  title: string;
+};
+
+type HistoricalClassificationScope = {
+  bindingsByTask: Map<string, MediaGovernanceTaskEpisodeBindingEntity[]>;
+  canonicalEpisodes: Set<string>;
+  episodesById: Map<string, MediaGovernanceEpisodeEntity>;
+  identityTargets: Map<string, HistoricalIdentityTarget[]>;
+  seriesById: Map<string, MediaGovernanceSeriesEntity>;
+  seasonsByIdentity: Map<string, MediaGovernanceSeasonEntity>;
+};
 
 /**
  * 把离散集号压缩为连续起止范围，供系列详情展示任务覆盖而不返回数百条重复记录。
@@ -53,6 +127,30 @@ function compressEpisodeRanges(values: number[]) {
     ranges.push({ end: episode, start: episode });
   }
   return ranges;
+}
+
+/**
+ * 为历史任务归档生成只依据资料源与资料编号的匹配键，明确排除标题和年份参与自动合并。
+ * @param provider - canonical 或外部引用的资料源。
+ * @param providerId - 资料源内唯一编号。
+ * @returns 去除首尾空白后的精确身份键。
+ */
+function historicalIdentityKey(provider: string, providerId: string): string {
+  return `${provider.trim()}:${providerId.trim()}`;
+}
+
+/**
+ * 比较两个集号集合是否完全一致，避免把来源映射与单元声明冲突的任务自动归类。
+ * @param left - 第一组集号。
+ * @param right - 第二组集号。
+ * @returns 两组集号完全相同时返回 `true`。
+ */
+function sameEpisodeSet(left: Set<number>, right: Set<number>): boolean {
+  if (left.size !== right.size) return false;
+  for (const episodeNumber of left) {
+    if (!right.has(episodeNumber)) return false;
+  }
+  return true;
 }
 
 /**
@@ -129,6 +227,109 @@ export class MediaGovernanceCatalogService
       items.push(await this.projectSeriesCard(item));
     }
     return { items, total };
+  }
+
+  /**
+   * 只读核对全部历史任务的系列归类状态，并为可安全归类项返回现有 reconcile 所需的精确季集范围。
+   * @returns 覆盖全部历史任务的分类计数、确定性原因与可归类目标。
+   */
+  async historyClassification() {
+    const tasks = this.readHistoricalTasks();
+    const [series, references, seasons, episodes, bindings] = await Promise.all(
+      [
+        this.dataSource
+          .getRepository(MediaGovernanceSeriesEntity)
+          .find({ order: { id: 'ASC' } }),
+        this.dataSource
+          .getRepository(MediaGovernanceSeriesExternalRefEntity)
+          .find({ order: { id: 'ASC' } }),
+        this.dataSource
+          .getRepository(MediaGovernanceSeasonEntity)
+          .find({ order: { id: 'ASC' } }),
+        this.dataSource
+          .getRepository(MediaGovernanceEpisodeEntity)
+          .find({ order: { id: 'ASC' } }),
+        this.dataSource
+          .getRepository(MediaGovernanceTaskEpisodeBindingEntity)
+          .find({ order: { id: 'ASC' } }),
+      ],
+    );
+    const seriesById = new Map(series.map((item) => [item.id, item]));
+    const identityTargets = new Map<string, HistoricalIdentityTarget[]>();
+    for (const item of series) {
+      const key = historicalIdentityKey(
+        item.canonicalProvider,
+        item.canonicalProviderId,
+      );
+      const values = identityTargets.get(key) ?? [];
+      values.push({ matchRole: 'canonical', series: item });
+      identityTargets.set(key, values);
+    }
+    for (const reference of references) {
+      const targetSeries = seriesById.get(reference.seriesId);
+      if (!targetSeries) continue;
+      const key = historicalIdentityKey(
+        reference.provider,
+        reference.providerId,
+      );
+      const values = identityTargets.get(key) ?? [];
+      if (!values.some((value) => value.series.id === targetSeries.id)) {
+        values.push({ matchRole: 'external-ref', series: targetSeries });
+      }
+      identityTargets.set(key, values);
+    }
+    const bindingsByTask = new Map<
+      string,
+      MediaGovernanceTaskEpisodeBindingEntity[]
+    >();
+    for (const binding of bindings) {
+      const values = bindingsByTask.get(binding.taskId) ?? [];
+      values.push(binding);
+      bindingsByTask.set(binding.taskId, values);
+    }
+    const seasonsByIdentity = new Map<string, MediaGovernanceSeasonEntity>();
+    for (const season of seasons) {
+      seasonsByIdentity.set(
+        `${season.seriesId}:${season.seasonNumber}`,
+        season,
+      );
+    }
+    const episodesById = new Map(episodes.map((item) => [item.id, item]));
+    const canonicalEpisodes = new Set(
+      episodes.map(
+        (episode) =>
+          `${episode.seriesId}:${episode.seasonNumber}:${episode.episodeNumber}`,
+      ),
+    );
+    const scope: HistoricalClassificationScope = {
+      bindingsByTask,
+      canonicalEpisodes,
+      episodesById,
+      identityTargets,
+      seasonsByIdentity,
+      seriesById,
+    };
+    const items = tasks.map((task) => this.classifyHistoricalTask(task, scope));
+    let classifiable = 0;
+    let classified = 0;
+    let notApplicable = 0;
+    let pending = 0;
+    for (const item of items) {
+      if (item.status === 'classifiable') classifiable += 1;
+      if (item.status === 'classified') classified += 1;
+      if (item.status === 'not-applicable') notApplicable += 1;
+      if (item.status === 'pending') pending += 1;
+    }
+    return {
+      items,
+      summary: {
+        classifiable,
+        classified,
+        notApplicable,
+        pending,
+        total: items.length,
+      },
+    };
   }
 
   /**
@@ -286,6 +487,18 @@ export class MediaGovernanceCatalogService
    */
   async reconcile(input: MediaGovernanceSeriesReconcileDto) {
     this.assertReconcileInput(input);
+    const acceptedTaskIdentities = new Set([
+      historicalIdentityKey(
+        input.canonicalProviderRef.provider,
+        input.canonicalProviderRef.providerId,
+      ),
+      ...(input.externalRefs ?? []).map((reference) =>
+        historicalIdentityKey(
+          reference.providerRef.provider,
+          reference.providerRef.providerId,
+        ),
+      ),
+    ]);
     const taskIds = [
       ...new Set((input.taskBindings ?? []).map((item) => item.taskId)),
     ];
@@ -294,9 +507,14 @@ export class MediaGovernanceCatalogService
       const metadataIdentity = task.metadataIdentity;
       if (
         task.mediaType !== 'tv' ||
-        metadataIdentity?.provider !== input.canonicalProviderRef.provider ||
-        metadataIdentity.providerId !==
-          input.canonicalProviderRef.providerId.trim()
+        task.metadataStatus !== 'verified' ||
+        !metadataIdentity ||
+        !acceptedTaskIdentities.has(
+          historicalIdentityKey(
+            metadataIdentity.provider,
+            metadataIdentity.providerId,
+          ),
+        )
       ) {
         throwVbenError(
           `任务 ${taskId} 的元数据身份与 canonical Series 不一致`,
@@ -450,39 +668,559 @@ export class MediaGovernanceCatalogService
   }
 
   /**
-   * 并行聚合系列的季、集、Task 绑定和启用订阅数量，避免卡片把 Task 数误当作品层级。
+   * 通过任务服务的权威运行态投影分页读取全部任务，并克隆快照隔离后续分类计算。
+   * @returns 按任务标识稳定排序的完整运行态快照。
+   */
+  private readHistoricalTasks(): MediaGovernanceTask[] {
+    const tasks: MediaGovernanceTask[] = [];
+    const pageSize = 100;
+    let pageNo = 1;
+    let total = 0;
+    do {
+      const page = this.mediaTasks.page({ pageNo, pageSize });
+      total = page.total;
+      tasks.push(...page.items.map((task) => structuredClone(task)));
+      if (page.items.length === 0) break;
+      pageNo += 1;
+    } while (tasks.length < total);
+    return tasks.sort((left, right) => left.id.localeCompare(right.id));
+  }
+
+  /**
+   * 按已存在目录绑定或精确资料身份判断单个历史任务，任何季集歧义都失败关闭为待处理。
+   * @param task - 仅读取的历史任务持久化快照。
+   * @param scope - 当前目录、季集、来源映射与绑定索引。
+   * @returns 单个任务的稳定分类结果。
+   */
+  private classifyHistoricalTask(
+    task: MediaGovernanceTask,
+    scope: HistoricalClassificationScope,
+  ): HistoricalClassificationItem {
+    const identity = this.readHistoricalIdentity(task);
+    const bindings = scope.bindingsByTask.get(task.id) ?? [];
+    if (task.mediaType === 'movie' || task.mediaType === 'theatrical') {
+      return {
+        existingBindingCount: bindings.length,
+        mediaType: task.mediaType,
+        metadataIdentity: identity,
+        reasonCode: 'media-type-not-tv',
+        reasonLabel: '电影或院线任务不进入 TV 系列资料库',
+        status: 'not-applicable',
+        target: null,
+        taskId: task.id,
+        title: task.titleHint,
+      };
+    }
+    if (task.mediaType !== 'tv') {
+      return this.pendingHistoricalTask(
+        task,
+        identity,
+        bindings.length,
+        'media-type-unsupported',
+        '任务媒体类型不受系列资料库支持',
+      );
+    }
+    if (bindings.length > 0) {
+      return this.classifyBoundHistoricalTask(task, identity, bindings, scope);
+    }
+    if (!identity) {
+      return this.pendingHistoricalTask(
+        task,
+        null,
+        0,
+        'metadata-identity-missing',
+        '任务缺少已核实的资料身份',
+      );
+    }
+    if (task.metadataStatus !== 'verified') {
+      return this.pendingHistoricalTask(
+        task,
+        identity,
+        0,
+        'metadata-identity-unverified',
+        '任务资料身份尚未完成核实',
+      );
+    }
+    const identityTargets =
+      scope.identityTargets.get(
+        historicalIdentityKey(identity.provider, identity.providerId),
+      ) ?? [];
+    if (identityTargets.length === 0) {
+      return this.pendingHistoricalTask(
+        task,
+        identity,
+        0,
+        'canonical-series-not-found',
+        '精确资料身份尚未建立 canonical Series',
+      );
+    }
+    if (identityTargets.length !== 1) {
+      return this.pendingHistoricalTask(
+        task,
+        identity,
+        0,
+        'canonical-identity-conflict',
+        '精确资料身份同时指向多个 Series',
+      );
+    }
+    const identityTarget = identityTargets[0];
+    const evidence = this.buildHistoricalSeasonEvidence(
+      task,
+      identityTarget.series,
+      scope,
+    );
+    if (evidence.ok === false) {
+      return this.pendingHistoricalTask(
+        task,
+        identity,
+        0,
+        evidence.reasonCode,
+        evidence.reasonLabel,
+        this.projectHistoricalTarget(identityTarget, [], new Set<string>()),
+      );
+    }
+    return {
+      existingBindingCount: 0,
+      mediaType: task.mediaType,
+      metadataIdentity: identity,
+      reasonCode: 'catalog-binding-missing',
+      reasonLabel: '资料身份与季集证据完整，可通过现有 reconcile 显式归类',
+      status: 'classifiable',
+      target: this.projectHistoricalTarget(
+        identityTarget,
+        evidence.seasons,
+        new Set<string>(),
+      ),
+      taskId: task.id,
+      title: task.titleHint,
+    };
+  }
+
+  /**
+   * 验证既有目录绑定只指向一个 Series 且不违背任务资料身份，并把绑定本身作为已归类事实。
+   * @param task - 当前历史任务快照。
+   * @param identity - 任务可选精确资料身份。
+   * @param bindings - 当前任务已有 Episode 绑定。
+   * @param scope - 当前目录索引。
+   * @returns 已归类结果或确定性冲突结果。
+   */
+  private classifyBoundHistoricalTask(
+    task: MediaGovernanceTask,
+    identity: HistoricalIdentity | null,
+    bindings: MediaGovernanceTaskEpisodeBindingEntity[],
+    scope: HistoricalClassificationScope,
+  ): HistoricalClassificationItem {
+    const seriesIds = new Set(bindings.map((binding) => binding.seriesId));
+    if (seriesIds.size !== 1) {
+      return this.pendingHistoricalTask(
+        task,
+        identity,
+        bindings.length,
+        'existing-binding-series-conflict',
+        '既有目录绑定跨越多个 Series',
+      );
+    }
+    const seriesId = [...seriesIds][0];
+    const targetSeries = scope.seriesById.get(seriesId);
+    if (!targetSeries) {
+      return this.pendingHistoricalTask(
+        task,
+        identity,
+        bindings.length,
+        'existing-binding-series-missing',
+        '既有目录绑定指向不存在的 Series',
+      );
+    }
+    let matchRole: HistoricalClassificationTarget['matchRole'] =
+      'catalog-binding';
+    if (identity) {
+      const identityTargets =
+        scope.identityTargets.get(
+          historicalIdentityKey(identity.provider, identity.providerId),
+        ) ?? [];
+      if (
+        identityTargets.length !== 1 ||
+        identityTargets[0].series.id !== targetSeries.id
+      ) {
+        return this.pendingHistoricalTask(
+          task,
+          identity,
+          bindings.length,
+          'existing-binding-identity-conflict',
+          '既有目录绑定与任务精确资料身份不一致',
+        );
+      }
+      matchRole = identityTargets[0].matchRole;
+    }
+    const episodesBySeason = new Map<number, Set<number>>();
+    const existingEpisodeKeys = new Set<string>();
+    for (const binding of bindings) {
+      const episode = scope.episodesById.get(binding.episodeId);
+      if (
+        !episode ||
+        binding.seasonId !== episode.seasonId ||
+        binding.seriesId !== episode.seriesId ||
+        episode.seriesId !== targetSeries.id
+      ) {
+        return this.pendingHistoricalTask(
+          task,
+          identity,
+          bindings.length,
+          'existing-binding-episode-conflict',
+          '既有目录绑定与 canonical Episode 身份不一致',
+        );
+      }
+      const season = scope.seasonsByIdentity.get(
+        `${targetSeries.id}:${episode.seasonNumber}`,
+      );
+      if (!season || season.id !== episode.seasonId) {
+        return this.pendingHistoricalTask(
+          task,
+          identity,
+          bindings.length,
+          'existing-binding-season-conflict',
+          '既有目录绑定与 canonical Season 身份不一致',
+        );
+      }
+      const values = episodesBySeason.get(episode.seasonNumber) ?? new Set();
+      values.add(episode.episodeNumber);
+      episodesBySeason.set(episode.seasonNumber, values);
+      existingEpisodeKeys.add(
+        `${episode.seasonNumber}:${episode.episodeNumber}`,
+      );
+    }
+    const seasonEvidence = [...episodesBySeason.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([seasonNumber, episodeNumbers]) => ({
+        episodeNumbers: [...episodeNumbers].sort((left, right) => left - right),
+        season: scope.seasonsByIdentity.get(
+          `${targetSeries.id}:${seasonNumber}`,
+        )!,
+      }));
+    return {
+      existingBindingCount: bindings.length,
+      mediaType: task.mediaType,
+      metadataIdentity: identity,
+      reasonCode: 'catalog-binding-existing',
+      reasonLabel: '任务已经存在唯一且一致的 canonical Episode 绑定',
+      status: 'classified',
+      target: this.projectHistoricalTarget(
+        { matchRole, series: targetSeries },
+        seasonEvidence,
+        existingEpisodeKeys,
+      ),
+      taskId: task.id,
+      title: task.titleHint,
+    };
+  }
+
+  /**
+   * 从 Task Unit 声明与来源文件映射交叉提取唯一季集集合，并逐集核对 canonical 目录。
+   * @param task - 待核对的未归类 TV 任务。
+   * @param series - 精确身份命中的既有 Series。
+   * @param scope - 单元、来源、季和 Episode 索引。
+   * @returns 唯一季集证据，或第一条稳定失败原因。
+   */
+  private buildHistoricalSeasonEvidence(
+    task: MediaGovernanceTask,
+    series: MediaGovernanceSeriesEntity,
+    scope: HistoricalClassificationScope,
+  ): HistoricalEvidenceResult {
+    const units = task.units.filter((unit) => unit.unitKind === 'season');
+    if (units.length === 0) {
+      return {
+        ok: false,
+        reasonCode: 'season-evidence-missing',
+        reasonLabel: '任务缺少 TV Season 单元',
+      };
+    }
+    const sources = task.sources;
+    const episodesBySeason = new Map<number, Set<number>>();
+    for (const unit of units) {
+      const seasonMatch = /^S(\d{2})$/u.exec(unit.seasonNumber ?? '');
+      if (!seasonMatch) {
+        return {
+          ok: false,
+          reasonCode: 'season-evidence-invalid',
+          reasonLabel: '任务季号不是唯一的 S00–S99 canonical 令牌',
+        };
+      }
+      const seasonNumber = Number(seasonMatch[1]);
+      const declaredEpisodes = new Set<number>();
+      for (const rawEpisode of unit.expectedEpisodeNumbers ?? []) {
+        const episodeNumber = Number(rawEpisode);
+        if (
+          !Number.isInteger(episodeNumber) ||
+          episodeNumber < 1 ||
+          episodeNumber > 2000
+        ) {
+          return {
+            ok: false,
+            reasonCode: 'episode-evidence-invalid',
+            reasonLabel: '任务声明包含非法集号',
+          };
+        }
+        declaredEpisodes.add(episodeNumber);
+      }
+      const mappedEpisodes = new Set<number>();
+      for (const source of sources) {
+        for (const mapping of source.selectedFileMappings ?? []) {
+          if (mapping.unitId !== unit.id) continue;
+          if (mapping.fileRole !== 'video') continue;
+          if (
+            mapping.episodeNumber === null ||
+            mapping.episodeNumber === undefined
+          ) {
+            continue;
+          }
+          if (
+            typeof mapping.episodeNumber !== 'number' ||
+            !Number.isInteger(mapping.episodeNumber) ||
+            mapping.episodeNumber < 1 ||
+            mapping.episodeNumber > 2000
+          ) {
+            return {
+              ok: false,
+              reasonCode: 'episode-evidence-invalid',
+              reasonLabel: '来源文件映射包含非法集号',
+            };
+          }
+          mappedEpisodes.add(mapping.episodeNumber);
+        }
+      }
+      if (
+        declaredEpisodes.size > 0 &&
+        mappedEpisodes.size > 0 &&
+        !sameEpisodeSet(declaredEpisodes, mappedEpisodes)
+      ) {
+        return {
+          ok: false,
+          reasonCode: 'episode-evidence-conflict',
+          reasonLabel: 'Task Unit 声明与来源文件映射的集号不一致',
+        };
+      }
+      let unitEpisodes = declaredEpisodes;
+      if (unitEpisodes.size === 0) unitEpisodes = mappedEpisodes;
+      if (unitEpisodes.size === 0) {
+        return {
+          ok: false,
+          reasonCode: 'episode-evidence-missing',
+          reasonLabel: '任务缺少可证明的集号声明或来源文件映射',
+        };
+      }
+      const season = scope.seasonsByIdentity.get(
+        `${series.id}:${seasonNumber}`,
+      );
+      if (!season) {
+        return {
+          ok: false,
+          reasonCode: 'canonical-season-missing',
+          reasonLabel: '任务季号在目标 Series 中不存在',
+        };
+      }
+      const existingSeasonEpisodes =
+        episodesBySeason.get(seasonNumber) ?? new Set<number>();
+      for (const episodeNumber of unitEpisodes) {
+        const canonicalEpisodeStart = season.episodeStart ?? 1;
+        const canonicalEpisodeEnd =
+          canonicalEpisodeStart + season.episodeCount - 1;
+        if (
+          episodeNumber < canonicalEpisodeStart ||
+          episodeNumber > canonicalEpisodeEnd
+        ) {
+          return {
+            ok: false,
+            reasonCode: 'canonical-episode-out-of-range',
+            reasonLabel: '任务集号超出目标 canonical Season 范围',
+          };
+        }
+        if (
+          !scope.canonicalEpisodes.has(
+            `${series.id}:${seasonNumber}:${episodeNumber}`,
+          )
+        ) {
+          return {
+            ok: false,
+            reasonCode: 'canonical-episode-missing',
+            reasonLabel: '任务集号对应的 canonical Episode 不存在',
+          };
+        }
+        if (existingSeasonEpisodes.has(episodeNumber)) {
+          return {
+            ok: false,
+            reasonCode: 'episode-evidence-conflict',
+            reasonLabel: '同一任务的多个 Unit 重复声明了相同季集',
+          };
+        }
+        existingSeasonEpisodes.add(episodeNumber);
+      }
+      episodesBySeason.set(seasonNumber, existingSeasonEpisodes);
+    }
+    const seasonEvidence = [...episodesBySeason.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([seasonNumber, episodeNumbers]) => ({
+        episodeNumbers: [...episodeNumbers].sort((left, right) => left - right),
+        season: scope.seasonsByIdentity.get(`${series.id}:${seasonNumber}`)!,
+      }));
+    return { ok: true, seasons: seasonEvidence };
+  }
+
+  /**
+   * 把精确命中的 Series 和任务季集证据投影为可直接转换为 reconcile 范围的只读目标。
+   * @param identityTarget - 精确命中的 canonical 或外部资料身份。
+   * @param seasons - 已核对存在的任务季集证据。
+   * @param existingEpisodeKeys - 已经存在目录绑定的季集键。
+   * @returns 含连续集范围与覆盖计数的目标投影。
+   */
+  private projectHistoricalTarget(
+    identityTarget: {
+      matchRole: HistoricalClassificationTarget['matchRole'];
+      series: MediaGovernanceSeriesEntity;
+    },
+    seasons: HistoricalSeasonEvidence[],
+    existingEpisodeKeys: Set<string>,
+  ): HistoricalClassificationTarget {
+    const seasonTargets = seasons.map((item) => {
+      let existingBindingCount = 0;
+      for (const episodeNumber of item.episodeNumbers) {
+        if (
+          existingEpisodeKeys.has(
+            `${item.season.seasonNumber}:${episodeNumber}`,
+          )
+        ) {
+          existingBindingCount += 1;
+        }
+      }
+      return {
+        canonicalEpisodeCount: item.season.episodeCount,
+        canonicalEpisodeStart: item.season.episodeStart ?? 1,
+        episodeCount: item.episodeNumbers.length,
+        episodeRanges: compressEpisodeRanges(item.episodeNumbers),
+        existingBindingCount,
+        missingBindingCount: item.episodeNumbers.length - existingBindingCount,
+        seasonNumber: item.season.seasonNumber,
+      };
+    });
+    return {
+      canonicalProvider: identityTarget.series.canonicalProvider,
+      canonicalProviderId: identityTarget.series.canonicalProviderId,
+      matchRole: identityTarget.matchRole,
+      releaseYear: identityTarget.series.releaseYear,
+      seasons: seasonTargets,
+      seriesId: identityTarget.series.id,
+      title: identityTarget.series.title,
+    };
+  }
+
+  /**
+   * 读取任务内已经持久化的精确资料身份，缺字段或空编号时按无身份处理。
+   * @param task - 仅读取的历史任务实体。
+   * @returns 规范化资料身份或 `null`。
+   */
+  private readHistoricalIdentity(
+    task: MediaGovernanceTask,
+  ): HistoricalIdentity | null {
+    const identity = task.metadataIdentity;
+    if (!identity) return null;
+    if (
+      typeof identity.provider !== 'string' ||
+      typeof identity.providerId !== 'string'
+    ) {
+      return null;
+    }
+    const provider = identity.provider.trim();
+    const providerId = identity.providerId.trim();
+    if (!provider || !providerId) return null;
+    return { provider, providerId };
+  }
+
+  /**
+   * 创建不改变任务和目录的待处理投影，并保留已解析出的目标供管理员核对。
+   * @param task - 当前历史任务实体。
+   * @param identity - 已解析资料身份或 `null`。
+   * @param existingBindingCount - 当前目录绑定数量。
+   * @param reasonCode - 稳定机器原因码。
+   * @param reasonLabel - 管理端可读原因。
+   * @param target - 可选已解析 Series 目标。
+   * @returns 待处理分类项。
+   */
+  private pendingHistoricalTask(
+    task: MediaGovernanceTask,
+    identity: HistoricalIdentity | null,
+    existingBindingCount: number,
+    reasonCode: string,
+    reasonLabel: string,
+    target: HistoricalClassificationTarget | null = null,
+  ): HistoricalClassificationItem {
+    return {
+      existingBindingCount,
+      mediaType: task.mediaType,
+      metadataIdentity: identity,
+      reasonCode,
+      reasonLabel,
+      status: 'pending',
+      target,
+      taskId: task.id,
+      title: task.titleHint,
+    };
+  }
+
+  /**
+   * 并行聚合系列的按季覆盖、独立任务、已绑定集和 RSS 数量，供卡片直接呈现治理密度。
    * @param series - canonical 系列实体。
-   * @returns 系列卡片投影。
+   * @returns 含按季覆盖率与独立任务数的系列卡片投影。
    */
   private async projectSeriesCard(series: MediaGovernanceSeriesEntity) {
-    const [seasonCount, episodeCount, bindingCount, rssCount] =
+    const [seasons, episodeCount, bindings, rssCount, rssTotalCount] =
       await Promise.all([
-        this.dataSource
-          .getRepository(MediaGovernanceSeasonEntity)
-          .countBy({ seriesId: series.id }),
+        this.dataSource.getRepository(MediaGovernanceSeasonEntity).find({
+          order: { seasonNumber: 'ASC' },
+          where: { seriesId: series.id },
+        }),
         this.dataSource
           .getRepository(MediaGovernanceEpisodeEntity)
           .countBy({ seriesId: series.id }),
         this.dataSource
           .getRepository(MediaGovernanceTaskEpisodeBindingEntity)
-          .countBy({ seriesId: series.id }),
+          .findBy({ seriesId: series.id }),
         this.dataSource
           .getRepository(MediaGovernanceRssSubscriptionEntity)
           .countBy({ enabled: true, seriesId: series.id }),
+        this.dataSource
+          .getRepository(MediaGovernanceRssSubscriptionEntity)
+          .countBy({ seriesId: series.id }),
       ]);
+    const seasonSummaries = await Promise.all(
+      seasons.map((season) => this.projectSeasonCard(season)),
+    );
+    const boundEpisodeCount = new Set(
+      bindings.map((binding) => binding.episodeId),
+    ).size;
+    const taskCount = new Set(bindings.map((binding) => binding.taskId)).size;
+    let coveragePercent = 0;
+    if (episodeCount > 0) {
+      coveragePercent = Number(
+        ((boundEpisodeCount / episodeCount) * 100).toFixed(1),
+      );
+    }
     return {
       ...series,
-      bindingCount,
+      bindingCount: bindings.length,
+      boundEpisodeCount,
+      coveragePercent,
       episodeCount,
       rssCount,
-      seasonCount,
+      rssTotalCount,
+      seasonCount: seasons.length,
+      seasonSummaries,
+      taskCount,
     };
   }
 
   /**
-   * 按 Episode 状态分组并叠加 Task 绑定数，形成不依赖历史 Task 季号的季摘要。
+   * 按 Episode 状态分组并计算独立任务、唯一绑定集与覆盖率，形成不依赖历史 Task 季号的季摘要。
    * @param season - canonical 季实体。
-   * @returns 季卡片投影。
+   * @returns 含独立任务数、唯一绑定集与覆盖率的季卡片投影。
    */
   private async projectSeasonCard(season: MediaGovernanceSeasonEntity) {
     const episodeRepository = this.dataSource.getRepository(
@@ -493,10 +1231,27 @@ export class MediaGovernanceCatalogService
     for (const episode of episodes) {
       statusCounts[episode.status] = (statusCounts[episode.status] ?? 0) + 1;
     }
-    const bindingCount = await this.dataSource
+    const bindings = await this.dataSource
       .getRepository(MediaGovernanceTaskEpisodeBindingEntity)
-      .countBy({ seasonId: season.id });
-    return { ...season, bindingCount, statusCounts };
+      .findBy({ seasonId: season.id });
+    const boundEpisodeCount = new Set(
+      bindings.map((binding) => binding.episodeId),
+    ).size;
+    const taskCount = new Set(bindings.map((binding) => binding.taskId)).size;
+    let coveragePercent = 0;
+    if (season.episodeCount > 0) {
+      coveragePercent = Number(
+        ((boundEpisodeCount / season.episodeCount) * 100).toFixed(1),
+      );
+    }
+    return {
+      ...season,
+      bindingCount: bindings.length,
+      boundEpisodeCount,
+      coveragePercent,
+      statusCounts,
+      taskCount,
+    };
   }
 
   /**
@@ -510,6 +1265,16 @@ export class MediaGovernanceCatalogService
     if (seasons.size !== input.seasons.length) {
       throwVbenError('canonical 季号不能重复', HttpStatus.BAD_REQUEST);
     }
+    for (const season of input.seasons) {
+      const episodeStart = season.episodeStart ?? 1;
+      const episodeEnd = episodeStart + season.episodeCount - 1;
+      if (episodeEnd > 2000) {
+        throwVbenError(
+          'canonical 季集号范围不能超过 2000',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+    }
     const referenceKeys = new Set<string>();
     const canonicalKey = `${input.canonicalProviderRef.provider}:${input.canonicalProviderRef.providerId.trim()}`;
     for (const reference of input.externalRefs ?? []) {
@@ -522,10 +1287,17 @@ export class MediaGovernanceCatalogService
     const boundIdentities = new Set<string>();
     for (const binding of input.taskBindings ?? []) {
       const season = seasons.get(binding.seasonNumber);
+      let episodeStart = 1;
+      let episodeEnd = 0;
+      if (season) {
+        episodeStart = season.episodeStart ?? 1;
+        episodeEnd = episodeStart + season.episodeCount - 1;
+      }
       if (
         !season ||
         binding.episodeStart > binding.episodeEnd ||
-        binding.episodeEnd > season.episodeCount
+        binding.episodeStart < episodeStart ||
+        binding.episodeEnd > episodeEnd
       ) {
         throwVbenError('Task 集范围超出 canonical 季', HttpStatus.BAD_REQUEST);
       }
@@ -635,7 +1407,7 @@ export class MediaGovernanceCatalogService
   }
 
   /**
-   * 将每季收敛为 1..episodeCount；扩展时补集，缩减时只删除未绑定的越界集并保留稳定 ID。
+   * 将每季收敛为 episodeStart 起始的连续区间；变更时只删除未绑定的越界集并保留稳定 ID。
    * @param manager - 当前 TypeORM 事务管理器。
    * @param series - 已持久化的系列主实体。
    * @param input - 季事实集合。
@@ -658,6 +1430,8 @@ export class MediaGovernanceCatalogService
       }
     >();
     for (const inputSeason of input.seasons) {
+      const episodeStart = inputSeason.episodeStart ?? 1;
+      const episodeEnd = episodeStart + inputSeason.episodeCount - 1;
       let season = await seasonRepository.findOneBy({
         seasonNumber: inputSeason.seasonNumber,
         seriesId: series.id,
@@ -665,6 +1439,7 @@ export class MediaGovernanceCatalogService
       if (!season) {
         season = seasonRepository.create({
           episodeCount: inputSeason.episodeCount,
+          episodeStart,
           id: `media-season-${randomUUID()}`,
           releaseYear: inputSeason.releaseYear ?? null,
           seasonNumber: inputSeason.seasonNumber,
@@ -676,6 +1451,7 @@ export class MediaGovernanceCatalogService
         season.title = inputSeason.title.trim();
         season.releaseYear = inputSeason.releaseYear ?? null;
         season.episodeCount = inputSeason.episodeCount;
+        season.episodeStart = episodeStart;
       }
       season = await seasonRepository.save(season);
       const existing = await episodeRepository.findBy({ seasonId: season.id });
@@ -683,7 +1459,9 @@ export class MediaGovernanceCatalogService
         existing.map((episode) => [episode.episodeNumber, episode]),
       );
       const obsolete = existing.filter(
-        (episode) => episode.episodeNumber > inputSeason.episodeCount,
+        (episode) =>
+          episode.episodeNumber < episodeStart ||
+          episode.episodeNumber > episodeEnd,
       );
       if (obsolete.length > 0) {
         const obsoleteIds = obsolete.map((episode) => episode.id);
@@ -703,8 +1481,8 @@ export class MediaGovernanceCatalogService
       }
       const additions = [];
       for (
-        let episodeNumber = 1;
-        episodeNumber <= inputSeason.episodeCount;
+        let episodeNumber = episodeStart;
+        episodeNumber <= episodeEnd;
         episodeNumber += 1
       ) {
         if (episodes.has(episodeNumber)) continue;
@@ -821,10 +1599,13 @@ export class MediaGovernanceCatalogService
     if (new Set(episodeNumbers).size !== episodeNumbers.length) {
       throwVbenError('批量磁链集号不能重复', HttpStatus.BAD_REQUEST);
     }
+    const canonicalEpisodeStart = season.episodeStart ?? 1;
+    const canonicalEpisodeEnd = canonicalEpisodeStart + season.episodeCount - 1;
     if (
       episodeNumbers.some(
         (episodeNumber) =>
-          episodeNumber < 1 || episodeNumber > season.episodeCount,
+          episodeNumber < canonicalEpisodeStart ||
+          episodeNumber > canonicalEpisodeEnd,
       )
     ) {
       throwVbenError('批量磁链集号超出 canonical 季', HttpStatus.BAD_REQUEST);
@@ -1183,10 +1964,14 @@ export class MediaGovernanceCatalogService
         taskId: null,
         title: entry.title,
       });
+      const canonicalEpisodeStart = season.episodeStart ?? 1;
+      const canonicalEpisodeEnd =
+        canonicalEpisodeStart + season.episodeCount - 1;
       if (
         !entry.magnetUri ||
         !episodeNumber ||
-        episodeNumber > season.episodeCount
+        episodeNumber < canonicalEpisodeStart ||
+        episodeNumber > canonicalEpisodeEnd
       ) {
         entity.state = 'ignored';
         entity.stateReason = '条目未命中过滤、集号或磁链合同';

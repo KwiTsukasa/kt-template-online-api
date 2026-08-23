@@ -73,4 +73,18 @@ describe('media governance catalog entity schema', () => {
       )?.columns,
     ).toEqual(['subscriptionId', 'itemKeySha256']);
   });
+
+  it('persists a non-null episode start for seasons with continuous numbering', () => {
+    const episodeStart = getMetadataArgsStorage().columns.find(
+      (column) =>
+        column.target === MediaGovernanceSeasonEntity &&
+        column.propertyName === 'episodeStart',
+    );
+
+    expect(episodeStart?.options).toMatchObject({
+      default: 1,
+      name: 'episode_start',
+      type: 'int',
+    });
+  });
 });

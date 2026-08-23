@@ -72,6 +72,18 @@ export class MediaGovernanceCatalogController {
   }
 
   /**
+   * 返回全部历史任务的系列归类状态、确定性原因和可复用 reconcile 目标。
+   * @param response - 当前 HTTP 响应。
+   * @returns 历史任务分类报告。
+   */
+  @Get('history-classification')
+  @ApiOperation({ summary: '核对历史媒体任务的系列归类状态' })
+  async historyClassification(@Res({ passthrough: true }) response: Response) {
+    this.noStore(response);
+    return vbenSuccess(await this.catalog.historyClassification());
+  }
+
+  /**
    * 按唯一资料事实创建或纠正 Series/Season/Episode 与 Task 绑定。
    * @param body - canonical 系列事实和 Task 集范围。
    * @param response - 当前 HTTP 响应。

@@ -272,6 +272,7 @@ CREATE TABLE IF NOT EXISTS `media_governance_season` (
   `id` varchar(96) NOT NULL,
   `series_id` varchar(96) NOT NULL,
   `season_number` int NOT NULL,
+  `episode_start` int NOT NULL DEFAULT 1,
   `episode_count` int NOT NULL,
   `title` varchar(200) NOT NULL,
   `release_year` int DEFAULT NULL,

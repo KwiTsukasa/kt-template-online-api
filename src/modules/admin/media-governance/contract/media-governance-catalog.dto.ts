@@ -31,6 +31,14 @@ export class MediaGovernanceSeriesSeasonFactDto {
   @Max(99)
   seasonNumber: number;
 
+  @ApiPropertyOptional({ default: 1, maximum: 2000, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2000)
+  episodeStart?: number;
+
   @ApiProperty({ maxLength: 200 })
   @IsString()
   @MaxLength(200)

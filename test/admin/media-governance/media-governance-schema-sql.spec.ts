@@ -18,6 +18,13 @@ describe('media governance production schema SQL', () => {
     resolve(process.cwd(), 'sql/media-governance-source-mapping-v1.sql'),
     'utf8',
   );
+  const seasonEpisodeStartMigrationSql = readFileSync(
+    resolve(
+      process.cwd(),
+      'sql/media-governance-season-episode-start-v1.sql',
+    ),
+    'utf8',
+  );
 
   it('creates exactly the seventeen task, catalog and RSS tables without menu writes', () => {
     expect(initSql.match(/CREATE TABLE IF NOT EXISTS/gu)).toHaveLength(17);
@@ -30,6 +37,7 @@ describe('media governance production schema SQL', () => {
     expect(initSql).toContain('`media_governance_task_episode_binding`');
     expect(initSql).toContain('`media_governance_rss_subscription`');
     expect(initSql).toContain('`media_governance_rss_item`');
+    expect(initSql).toContain('`episode_start` int NOT NULL DEFAULT 1');
     expect(initSql).not.toMatch(/admin_menu|admin_role_menu|INSERT\s+INTO/iu);
   });
 
@@ -58,6 +66,8 @@ describe('media governance production schema SQL', () => {
     expect(verifySql).toContain('canonical_identity_count');
     expect(verifySql).toContain('task_episode_identity_count');
     expect(verifySql).toContain('enabled_rss_subscription_count');
+    expect(verifySql).toContain('season_episode_start_column_count');
+    expect(verifySql).toContain('invalid_season_episode_range_count');
     expect(verifySql).not.toMatch(/INSERT|UPDATE|DELETE|ALTER|DROP/iu);
   });
 
@@ -96,5 +106,17 @@ describe('media governance production schema SQL', () => {
     );
     expect(verifySql).toContain('COUNT(*) AS source_mapping_columns');
     expect(verifySql).toContain("column_name = 'selected_file_mappings'");
+  });
+
+  it('adds a non-null season episode start without rewriting existing task data', () => {
+    expect(seasonEpisodeStartMigrationSql).toContain(
+      "column_name = 'episode_start'",
+    );
+    expect(seasonEpisodeStartMigrationSql).toContain(
+      'ADD COLUMN `episode_start` int NOT NULL DEFAULT 1',
+    );
+    expect(seasonEpisodeStartMigrationSql).not.toMatch(
+      /DROP\s+(?:TABLE|DATABASE)|UPDATE\s+`media_governance_task`/iu,
+    );
   });
 });

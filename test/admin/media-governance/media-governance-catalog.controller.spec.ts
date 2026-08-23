@@ -18,6 +18,7 @@ describe('MediaGovernanceCatalogController', () => {
     createRssSubscription: jest.fn(),
     detail: jest.fn(),
     episodePage: jest.fn(),
+    historyClassification: jest.fn(),
     page: jest.fn(),
     pollRssSubscription: jest.fn(),
     reconcile: jest.fn(),
@@ -103,6 +104,73 @@ describe('MediaGovernanceCatalogController', () => {
     expect(catalog.reconcile).toHaveBeenCalledWith(
       expect.objectContaining({ title: '死神' }),
     );
+  });
+
+  it('accepts canonical seasons whose continuous episode range starts above one', async () => {
+    catalog.reconcile.mockResolvedValueOnce({
+      series: { canonicalProviderId: '95479', id: 'media-series-jjk' },
+    });
+
+    await request(apiUrl)
+      .post('/media-governance/series/reconcile')
+      .send({
+        canonicalProviderRef: { provider: 'tmdb', providerId: '95479' },
+        releaseYear: 2020,
+        seasons: [
+          {
+            episodeCount: 23,
+            episodeStart: 25,
+            seasonNumber: 2,
+            title: '怀玉·玉折 / 涩谷事变',
+          },
+        ],
+        taskBindings: [
+          {
+            episodeEnd: 47,
+            episodeStart: 25,
+            seasonNumber: 2,
+            taskId: 'media-task-jjk-season-two-1234567890',
+          },
+        ],
+        title: '咒术回战',
+      })
+      .expect(201)
+      .expect('Cache-Control', 'no-store');
+
+    expect(catalog.reconcile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        seasons: [expect.objectContaining({ episodeStart: 25 })],
+      }),
+    );
+  });
+
+  it('returns the no-store historical classification report', async () => {
+    catalog.historyClassification.mockResolvedValueOnce({
+      items: [
+        {
+          reasonCode: 'catalog-binding-missing',
+          status: 'classifiable',
+          taskId: 'media-task-history-12345678901234567890',
+        },
+      ],
+      summary: {
+        classifiable: 1,
+        classified: 0,
+        notApplicable: 0,
+        pending: 0,
+        total: 1,
+      },
+    });
+
+    const response = await request(apiUrl)
+      .get('/media-governance/series/history-classification')
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+
+    expect(response.body.data.summary).toEqual(
+      expect.objectContaining({ classifiable: 1, total: 1 }),
+    );
+    expect(catalog.historyClassification).toHaveBeenCalledTimes(1);
   });
 
   it('creates one task containing multiple episode magnets', async () => {

@@ -305,6 +305,7 @@ canonical 系列、逐集多磁链与 RSS 使用独立目录接口；这些接�
 | 方法   | 路径                                                                                   | 说明                                       |
 | ------ | -------------------------------------------------------------------------------------- | ------------------------------------------ |
 | `GET`  | `/media-governance/series/page`                                                        | 分页查询系列卡片与季集/绑定/RSS 数量       |
+| `GET`  | `/media-governance/series/history-classification`                                      | 只读核对全部历史 Task 的系列归类状态       |
 | `GET`  | `/media-governance/series/:seriesId`                                                   | 查询系列、资料引用、季和 Task 覆盖         |
 | `POST` | `/media-governance/series/reconcile`                                                   | 按唯一资料事实幂等纠正系列层级和 Task 范围 |
 | `GET`  | `/media-governance/series/:seriesId/seasons/:seasonNumber/episodes`                    | 分页查询 Episode 与 Task/来源绑定          |
@@ -313,6 +314,13 @@ canonical 系列、逐集多磁链与 RSS 使用独立目录接口；这些接�
 | `PUT`  | `/media-governance/series/rss-subscriptions/:subscriptionId/state`                     | 按 revision 启停 RSS                       |
 | `POST` | `/media-governance/series/rss-subscriptions/:subscriptionId/poll`                      | 立即轮询、去重并按集创建 Task              |
 | `GET`  | `/media-governance/series/rss-subscriptions/:subscriptionId/items`                     | 分页查询 RSS 条目处理历史                  |
+
+Season 事实使用 `episodeStart + episodeCount` 表示连续集号区间；`episodeStart`
+省略时为 `1`。这允许同一系列保留 S02 `E25–E47`、S03 `E48–E59` 等资料库原始连续编号，
+批量磁链、RSS、Episode 分页和历史 Task 归类均按该闭区间校验，不做隐式偏移换算。
+历史分类接口完全只读，只按精确 `provider + providerId`、Task Unit 和来源映射判断
+`classified / classifiable / not-applicable / pending`，并返回稳定原因；实际写入仍只走
+显式 `series/reconcile`，不会修改 Task revision、Run、来源、密封计划或下载状态。
 
 `GET /media-governance/tasks/summary` 额外返回 `blocked`、`stuckRunCount`、
 `evidenceDriftCount`、`mixedSubtitleSeasonCount`、去重后的 `attentionRequired` 和中文

@@ -251,7 +251,9 @@ Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，�
 人工放行、聚合和可续接 SSE。
 作品目录与执行任务已分层：`Series → Season → Episode` 是唯一 canonical 事实，
 Task 只记录一次执行及其 Episode 绑定，Bangumi 等分篇编号作为外部资料证据保留，
-不能再覆盖 TMDB/fnOS 使用的季号。每个 Task 最多密封 16 个同治理类型的主媒体来源，
+不能再覆盖 TMDB/fnOS 使用的季号。Season 通过 `episodeStart + episodeCount` 保留
+非 1 起始的连续集号；历史分类接口只按精确资料身份和季集证据给出只读分类，实际归类
+继续使用显式 `series/reconcile`，不触碰 Task/Run/来源/密封状态。每个 Task 最多密封 16 个同治理类型的主媒体来源，
 因此逐集磁链可在一个 Task 内批量接入；同包外挂字幕会跨这些来源合并为同一发布组合同。
 RSS 订阅按 Series/Season 持久化地址、过滤和集号解析规则，每分钟扫描到期订阅，条目按
 GUID/BTIH 去重后按最多 16 集一组创建 Task；原始磁链仍只进入私有描述符存储，不写入 RSS 表。

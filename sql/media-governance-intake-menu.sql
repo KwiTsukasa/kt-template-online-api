@@ -6,10 +6,12 @@ INSERT INTO `admin_menu` (
   `id`, `pid`, `name`, `path`, `component`, `redirect`, `auth_code`, `type`, `meta`, `status`, `sort`
 )
 VALUES
-  (2041700000000100600, 0, 'MediaGovernance', '/media/governance', NULL, '/media/governance/tasks', NULL, 'catalog', '{"icon":"lucide:folder-cog","order":120,"title":"媒体治理"}', 1, 120),
-  (2041700000000100601, 2041700000000100600, 'MediaGovernanceTasks', '/media/governance/tasks', '/media/governance/tasks/list', NULL, 'Media:Governance:List', 'menu', '{"icon":"lucide:clapperboard","title":"治理任务"}', 1, 0),
-  (2041700000000100602, 2041700000000100600, 'MediaGovernanceAgentQueue', '/media/governance/agent-queue', '/media/governance/agent-queue/list', NULL, 'Media:Governance:List', 'menu', '{"icon":"lucide:bot","title":"Agent 治理队列"}', 1, 1),
-  (2041700000000100603, 2041700000000100600, 'MediaGovernanceAgentSession', '/media/governance/tasks/:taskId/agent', '/media/governance/agent-session/index', NULL, 'Media:Governance:AgentOperate', 'menu', '{"activePath":"/media/governance/tasks","hideInMenu":true,"hideInTab":true,"title":"CodexAgent 治理会话"}', 1, 2),
+  (2041700000000100600, 0, 'MediaGovernance', '/media/governance', NULL, '/media/governance/series', NULL, 'catalog', '{"icon":"lucide:folder-cog","order":120,"title":"媒体治理"}', 1, 120),
+  (2041700000000100604, 2041700000000100600, 'MediaGovernanceSeries', '/media/governance/series', '/media/governance/series/list', NULL, 'Media:Governance:List', 'menu', '{"icon":"lucide:library-big","title":"系列资料库"}', 1, 0),
+  (2041700000000100605, 2041700000000100600, 'MediaGovernanceSeriesDetail', '/media/governance/series/:seriesId', '/media/governance/series/detail', NULL, 'Media:Governance:List', 'menu', '{"activePath":"/media/governance/series","hideInMenu":true,"title":"媒体系列详情"}', 1, 0),
+  (2041700000000100601, 2041700000000100600, 'MediaGovernanceTasks', '/media/governance/tasks', '/media/governance/tasks/list', NULL, 'Media:Governance:List', 'menu', '{"icon":"lucide:clapperboard","title":"执行任务"}', 1, 1),
+  (2041700000000100602, 2041700000000100600, 'MediaGovernanceAgentQueue', '/media/governance/agent-queue', '/media/governance/agent-queue/list', NULL, 'Media:Governance:List', 'menu', '{"icon":"lucide:bot","title":"Agent 治理队列"}', 1, 2),
+  (2041700000000100603, 2041700000000100600, 'MediaGovernanceAgentSession', '/media/governance/tasks/:taskId/agent', '/media/governance/agent-session/index', NULL, 'Media:Governance:AgentOperate', 'menu', '{"activePath":"/media/governance/tasks","hideInMenu":true,"hideInTab":true,"title":"CodexAgent 治理会话"}', 1, 3),
   (2041700000000120601, 2041700000000100601, 'MediaGovernanceTaskList', NULL, NULL, NULL, 'Media:Governance:List', 'button', '{"title":"common.list"}', 1, 0),
   (2041700000000120602, 2041700000000100601, 'MediaGovernanceTaskCreate', NULL, NULL, NULL, 'Media:Governance:Create', 'button', '{"title":"common.create"}', 1, 1),
   (2041700000000120603, 2041700000000100601, 'MediaGovernanceSourceUpload', NULL, NULL, NULL, 'Media:Governance:SourceUpload', 'button', '{"title":"来源上传"}', 1, 2),
@@ -39,6 +41,8 @@ JOIN `admin_menu` menu ON menu.`id` = role_menu.`menu_id`
 WHERE role.`role_code` <> 'super'
   AND menu.`name` IN (
     'MediaGovernance',
+    'MediaGovernanceSeries',
+    'MediaGovernanceSeriesDetail',
     'MediaGovernanceTasks',
     'MediaGovernanceAgentQueue',
     'MediaGovernanceAgentSession',
@@ -58,6 +62,8 @@ SELECT role.`id`, menu.`id`
 FROM `admin_role` role
 JOIN `admin_menu` menu ON menu.`name` IN (
   'MediaGovernance',
+  'MediaGovernanceSeries',
+  'MediaGovernanceSeriesDetail',
   'MediaGovernanceTasks',
   'MediaGovernanceAgentQueue',
   'MediaGovernanceAgentSession',

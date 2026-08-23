@@ -7,8 +7,13 @@ describe('media governance intake menu seed', () => {
     'utf8',
   );
 
-  it('registers the task/Agent routes and the complete permission set', () => {
+  it('registers the series/task/Agent routes and the complete permission set', () => {
     expect(sql).toContain("'MediaGovernance'");
+    expect(sql).toContain("'/media/governance/series'");
+    expect(sql).toContain("'/media/governance/series/list'");
+    expect(sql).toContain("'MediaGovernanceSeriesDetail'");
+    expect(sql).toContain("'/media/governance/series/:seriesId'");
+    expect(sql).toContain("'/media/governance/series/detail'");
     expect(sql).toContain("'/media/governance/tasks'");
     expect(sql).toContain("'/media/governance/tasks/list'");
     expect(sql).toContain("'Media:Governance:List'");

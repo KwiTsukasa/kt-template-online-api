@@ -359,6 +359,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       if (task.llmConversationId) await this.hydrateLlmAgentProjection(task);
     }
     if (this.executionGateway?.enabled()) {
+      for (const task of this.tasks) {
+        await this.continueAppliedAgentPipeline(task).catch(() => false);
+      }
       void this.retryPendingDispatches();
       void this.reconcileActiveExecutions();
       this.dispatchTimer = setInterval(() => {
@@ -1001,6 +1004,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       );
     }
     this.publishTaskPatch(task, 'state-updated', input.runId, input.sequence);
+    if (input.eventType === 'run-succeeded') {
+      await this.continueAppliedAgentPipeline(task).catch(() => false);
+    }
     return {
       applied: true,
       revision: task.revision,
@@ -3382,6 +3388,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
     this.llmAgentResults.set(task.id, result);
     const session = task.agentSession;
+    let appliedPlan = false;
     if (session) {
       session.currentActionLabel = result.summary;
       session.lastHeartbeatLabel = '刚刚';
@@ -3393,9 +3400,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       }
       if (result.status === 'plan-submitted') {
         session.statusLabel = '密封计划已提交，等待人工复核';
+        const alreadyApplied =
+          Boolean(result.planSha256) &&
+          this.hasAppliedAgentIdentityAmendment(
+            task,
+            result.planSha256 ?? undefined,
+          );
         if (
           !result.planSha256 ||
-          result.planSha256 !== session.pendingPlanSha256
+          (result.planSha256 !== session.pendingPlanSha256 && !alreadyApplied)
         ) {
           throwVbenError(
             'LLM 对话结果与已提交密封计划不一致',
@@ -3407,6 +3420,11 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           session.status = 'succeeded';
           session.statusLabel = 'TMDB 身份已密封应用';
           task.revision += 1;
+          appliedPlan = true;
+        } else if (alreadyApplied) {
+          session.status = 'succeeded';
+          session.statusLabel = 'TMDB 身份已密封应用';
+          appliedPlan = true;
         }
         session.pendingPlanSha256 = null;
       }
@@ -3414,12 +3432,15 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         session.statusLabel = '等待人工选择候选';
       }
     }
-    if (!task.activeRunId) {
+    if (!task.activeRunId && !appliedPlan) {
       task.runState = 'blocked';
       task.nextCommandLabel = session?.statusLabel ?? result.nextActionLabel;
     }
     this.refreshSemanticProjection(task);
     await this.commitTask(task, 'state-updated');
+    if (appliedPlan) {
+      await this.continueAppliedAgentPipeline(task).catch(() => false);
+    }
     return { applied: true, revision: task.revision };
   }
 
@@ -3512,9 +3533,20 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         restoredPolicyVersion = 'media-codex-agent-policy-v2';
       }
       const result = parseMediaCodexAgentResult(rawResult);
+      let pendingPlanSha256 = result?.planSha256 ?? null;
       if (result) {
         this.llmAgentResults.set(task.id, result);
         statusLabel = result.nextActionLabel;
+        if (
+          result.status === 'plan-submitted' &&
+          result.planSha256 &&
+          this.hasAppliedAgentIdentityAmendment(task, result.planSha256) &&
+          !detail.conversation.active
+        ) {
+          pendingPlanSha256 = null;
+          status = 'succeeded';
+          statusLabel = 'TMDB 身份已密封应用';
+        }
       }
       task.agentSession = {
         capsuleSha256: capsule.capsuleSha256,
@@ -3525,7 +3557,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         currentUnitId: request.currentUnitId,
         lastHeartbeatLabel: '已从 LLM 对话恢复',
         lastSequence: detail.messages.length,
-        pendingPlanSha256: result?.planSha256 ?? null,
+        pendingPlanSha256,
         policyBoundaryLabel: '媒体任务仅绑定 LLM conversationId',
         policySha256: policy.policySha256,
         policyVersion: restoredPolicyVersion,
@@ -3963,6 +3995,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       };
       this.bumpRevision(task);
       await this.commitTask(task, 'state-updated');
+      await this.continueAppliedAgentPipeline(task).catch(() => false);
       return task;
     }
     task.agentSession = {
@@ -4184,6 +4217,111 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       return null;
     }
     return amendment as unknown as MediaGovernanceAgentPendingAmendment;
+  }
+
+  /**
+   * 核对密封计划历史中是否存在与当前二级 TMDB 身份一致的已应用 Agent 修正。
+   * @param task - 需要判断是否已完成 Agent 身份修正的媒体任务。
+   * @param planSha256 - 可选的指定 Agent 计划摘要；传入时必须与历史记录精确一致。
+   * @returns 历史修正、当前二级身份与可选计划摘要全部一致时返回 `true`。
+   */
+  private hasAppliedAgentIdentityAmendment(
+    task: MediaGovernanceTask,
+    planSha256?: string,
+  ) {
+    const metadataIdentity = task.metadataIdentity;
+    const amendments = task.sealedPlan?.agentAmendments;
+    if (
+      !metadataIdentity ||
+      metadataIdentity.provider !== 'tmdb' ||
+      !Array.isArray(amendments)
+    ) {
+      return false;
+    }
+    return amendments.some((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return false;
+      }
+      const amendment = value as Record<string, unknown>;
+      const identityMismatch =
+        amendment.kind !== 'identity' ||
+        amendment.provider !== 'tmdb' ||
+        amendment.providerId !== metadataIdentity.providerId ||
+        amendment.releaseYear !== metadataIdentity.releaseYear;
+      const planDigestInvalid =
+        typeof amendment.planSha256 !== 'string' ||
+        !/^[a-f0-9]{64}$/u.test(amendment.planSha256);
+      if (identityMismatch || planDigestInvalid) return false;
+      if (planSha256 && amendment.planSha256 !== planSha256) return false;
+      return true;
+    });
+  }
+
+  /**
+   * 从已应用 Agent 身份修正后的权威任务状态推导唯一可安全自动续跑的执行器动作。
+   * @param task - 当前没有活动 Run、且可能位于确定性阶段边界的媒体任务。
+   * @returns 可自动预约的唯一执行器动作；存在人工决策、失败门或已闭环时返回 `null`。
+   */
+  private automaticAgentContinuationAction(
+    task: MediaGovernanceTask,
+  ): MediaGovernanceExecutorAction | null {
+    if (
+      task.activeRunId ||
+      !this.executionGateway?.enabled() ||
+      !this.hasAppliedAgentIdentityAmendment(task)
+    ) {
+      return null;
+    }
+    if (
+      task.stage === 'governance' &&
+      task.runState === 'blocked' &&
+      task.metadataStatus === 'pending' &&
+      isCanonicalIdentityRebasePlan(task.sealedPlan)
+    ) {
+      return 'governance.execute';
+    }
+    if (task.stage !== 'metadata') return null;
+    if (task.metadataStatus === 'pending') {
+      if (task.runState === 'succeeded') return 'metadata.verify';
+      if (task.runState === 'blocked' && task.gateReason === null) {
+        return 'metadata.verify';
+      }
+      return null;
+    }
+    if (
+      task.metadataStatus === 'requires-agent' &&
+      task.runState === 'blocked'
+    ) {
+      if (this.canRunBoundedMetadataRepair(task)) return 'metadata.repair';
+      if (this.canRefreshDeferredMetadataIdentity(task)) {
+        return 'metadata.verify';
+      }
+      if (this.canRefreshLegacyMetadata(task)) return 'metadata.verify';
+      return null;
+    }
+    if (task.metadataStatus === 'verified' && task.runState === 'succeeded') {
+      return 'acceptance.verify';
+    }
+    return null;
+  }
+
+  /**
+   * 对已应用 Agent 身份修正的任务只预约一个确定性后继 Run，并发布其持久化排队状态。
+   * @param task - 需要从当前阶段边界继续推进的媒体任务。
+   * @returns 成功预约后继 Run 时返回 `true`；当前状态需要人工处理或已闭环时返回 `false`。
+   * @throws 当密封计划身份漂移、运行持久化或执行器派发合同失败时抛出。
+   */
+  private async continueAppliedAgentPipeline(task: MediaGovernanceTask) {
+    const action = this.automaticAgentContinuationAction(task);
+    if (!action) return false;
+    this.assertCanonicalSealedPlan(task);
+    let sources: MediaGovernanceSource[] | undefined;
+    if (action === 'acceptance.verify' && task.sources.length > 0) {
+      sources = task.sources;
+    }
+    await this.reserveExecution(task, action, sources);
+    this.publishTaskPatch(task, 'state-updated');
+    return true;
   }
 
   /**

@@ -2601,6 +2601,412 @@ describe('MediaGovernanceService production execution adapter', () => {
     },
   );
 
+  it('keeps an applied LLM plan runnable instead of overwriting it back to blocked', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      providerRef: { provider: 'bangumi', providerId: '412916' },
+      releaseYear: 2023,
+      seasonNumbers: ['S02'],
+      titleHint: '死神 千年血战篇-诀别谭-',
+    });
+    await service.startAgent(task.id, { expectedRevision: 1 });
+    const planSha256 = '9'.repeat(64);
+    task.governanceProfile = 'sidecar-bundled';
+    task.metadataStatus = 'requires-agent';
+    task.runState = 'blocked';
+    task.stage = 'metadata';
+    sealCanonicalPlan(task);
+    task.sealedPlan = {
+      ...task.sealedPlan!,
+      agentPendingAmendment: {
+        identity: {
+          provider: 'tmdb',
+          providerId: '30984',
+          releaseYear: 2004,
+        },
+        planSha256,
+        providerTitle: '死神',
+        replayKey: `${task.id}-agent-r${task.revision}`,
+        summary: '密封 TMDB 二级元数据身份',
+        taskRevision: task.revision,
+      },
+    };
+    task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+    task.agentSession!.pendingPlanSha256 = planSha256;
+
+    await expect(
+      service.applyLlmConversationResult({
+        conversationId: task.llmConversationId!,
+        conversationTurnId: 'media-turn-agent-plan-fixture',
+        providerThreadId: '019fbc48-c50e-7453-89b1-9c1b40234b3a',
+        result: {
+          answer: 'TMDB 二级身份计划已提交。',
+          candidateSummaries: [],
+          nextActionLabel: '运行元数据核验',
+          planSha256,
+          status: 'plan-submitted',
+          summary: '已提交纯身份修正计划',
+        },
+        taskId: task.id,
+      }),
+    ).resolves.toMatchObject({ applied: true, revision: 4 });
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'metadata.verify',
+        taskId: task.id,
+        taskRevision: 4,
+      }),
+    );
+    expect(task).toMatchObject({
+      activeRunId: expect.stringMatching(/^media-run-/u),
+      agentSession: {
+        pendingPlanSha256: null,
+        status: 'succeeded',
+        statusLabel: 'TMDB 身份已密封应用',
+      },
+      gateReason: null,
+      metadataStatus: 'pending',
+      providerRef: { provider: 'bangumi', providerId: '412916' },
+      releaseYear: 2023,
+      revision: 4,
+      runState: 'queued',
+      stage: 'metadata',
+    });
+  });
+
+  it('continues an applied Agent plan through repair, reverify and acceptance without stage clicks', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      providerRef: { provider: 'bangumi', providerId: '412916' },
+      releaseYear: 2023,
+      seasonNumbers: ['S02'],
+      titleHint: '死神 千年血战篇-诀别谭-',
+    });
+    task.governanceProfile = 'sidecar-bundled';
+    task.metadataIdentity = {
+      provider: 'tmdb',
+      providerId: '30984',
+      providerTitle: '死神',
+      releaseYear: 2004,
+    };
+    task.metadataStatus = 'pending';
+    task.runState = 'blocked';
+    task.stage = 'metadata';
+    task.units[0]!.expectedEpisodeNumbers = [14];
+    sealCanonicalPlan(task);
+    task.sealedPlan = {
+      ...task.sealedPlan!,
+      agentAmendments: [
+        {
+          appliedAt: '2026-08-23T07:22:58.939Z',
+          kind: 'identity',
+          planSha256: 'a'.repeat(64),
+          provider: 'tmdb',
+          providerId: '30984',
+          providerTitle: '死神',
+          releaseYear: 2004,
+          summary: '密封 TMDB 二级元数据身份',
+        },
+      ],
+      catalogIdentity: {
+        mediaType: 'tv',
+        providerRef: { provider: 'bangumi', providerId: '412916' },
+        releaseYear: 2023,
+        title: '死神 千年血战篇-诀别谭-',
+      },
+      metadataIdentity: { ...task.metadataIdentity },
+    };
+    task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+    const continuePipeline = Reflect.get(
+      service,
+      'continueAppliedAgentPipeline',
+    ).bind(service) as (currentTask: MediaGovernanceTask) => Promise<boolean>;
+
+    await expect(continuePipeline(task)).resolves.toBe(true);
+    const firstVerification = dispatch.mock.calls.at(-1)![0];
+    expect(firstVerification).toMatchObject({
+      action: 'metadata.verify',
+      taskRevision: 2,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: firstVerification.runId,
+      sequence: 1,
+      summary: '元数据核验开始',
+      taskId: task.id,
+      taskRevision: firstVerification.taskRevision,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      evidenceSha256: 'b'.repeat(64),
+      eventType: 'run-succeeded',
+      metadata: {
+        canAccept: false,
+        identity: { ...task.metadataIdentity! },
+        repairAttempts: 0,
+        schemaVersion: 'media-admin-metadata-verification-v1',
+        units: [
+          {
+            accepted: false,
+            missingA: [],
+            missingB: ['metadata.local-nfo', 'artwork.poster'],
+            missingC: [],
+            unitId: task.units[0]!.id,
+          },
+        ],
+        writeBoundaries: {
+          cloud: 0,
+          databaseDirect: 0,
+          mechanicalScan: 0,
+          ui: 0,
+        },
+      },
+      observedAt: new Date().toISOString(),
+      runId: firstVerification.runId,
+      sequence: 2,
+      summary: '元数据核验发现可修复缺项',
+      taskId: task.id,
+      taskRevision: firstVerification.taskRevision,
+    });
+
+    const repair = dispatch.mock.calls.at(-1)![0];
+    expect(repair).toMatchObject({
+      action: 'metadata.repair',
+      metadataRepairAttempt: 1,
+      taskRevision: 4,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.repair',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: repair.runId,
+      sequence: 1,
+      summary: '有界元数据修复开始',
+      taskId: task.id,
+      taskRevision: repair.taskRevision,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.repair',
+      evidenceSha256: 'c'.repeat(64),
+      eventType: 'run-succeeded',
+      metadata: {
+        canAccept: true,
+        identity: { ...task.metadataIdentity! },
+        repairAttempts: 1,
+        schemaVersion: 'media-admin-metadata-verification-v1',
+        units: [
+          {
+            accepted: true,
+            missingA: [],
+            missingB: [],
+            missingC: [],
+            unitId: task.units[0]!.id,
+          },
+        ],
+        writeBoundaries: {
+          cloud: 0,
+          databaseDirect: 0,
+          mechanicalScan: 0,
+          ui: 0,
+        },
+      },
+      observedAt: new Date().toISOString(),
+      runId: repair.runId,
+      sequence: 2,
+      summary: '有界元数据修复完成',
+      taskId: task.id,
+      taskRevision: repair.taskRevision,
+    });
+
+    const secondVerification = dispatch.mock.calls.at(-1)![0];
+    expect(secondVerification).toMatchObject({
+      action: 'metadata.verify',
+      taskRevision: 6,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: secondVerification.runId,
+      sequence: 1,
+      summary: '元数据复验开始',
+      taskId: task.id,
+      taskRevision: secondVerification.taskRevision,
+    });
+    await service.applyExecutorEvent({
+      action: 'metadata.verify',
+      evidenceSha256: 'd'.repeat(64),
+      eventType: 'run-succeeded',
+      metadata: {
+        canAccept: true,
+        identity: { ...task.metadataIdentity! },
+        repairAttempts: 1,
+        schemaVersion: 'media-admin-metadata-verification-v1',
+        units: [
+          {
+            accepted: true,
+            missingA: [],
+            missingB: [],
+            missingC: [],
+            unitId: task.units[0]!.id,
+          },
+        ],
+        writeBoundaries: {
+          cloud: 0,
+          databaseDirect: 0,
+          mechanicalScan: 0,
+          ui: 0,
+        },
+      },
+      observedAt: new Date().toISOString(),
+      runId: secondVerification.runId,
+      sequence: 2,
+      summary: '元数据复验通过',
+      taskId: task.id,
+      taskRevision: secondVerification.taskRevision,
+    });
+
+    const acceptance = dispatch.mock.calls.at(-1)![0];
+    expect(acceptance).toMatchObject({
+      action: 'acceptance.verify',
+      taskRevision: 8,
+    });
+    await service.applyExecutorEvent({
+      action: 'acceptance.verify',
+      eventType: 'run-started',
+      observedAt: new Date().toISOString(),
+      runId: acceptance.runId,
+      sequence: 1,
+      summary: '独立验收开始',
+      taskId: task.id,
+      taskRevision: acceptance.taskRevision,
+    });
+    await service.applyExecutorEvent({
+      acceptance: {
+        acceptedFiles: 40,
+        acceptedUnits: 1,
+        activeDownloadOwners: 0,
+        canClose: true,
+        cloudWrites: 0,
+        databaseDirectWrites: 0,
+        mechanicalScans: 0,
+        schemaVersion: 'media-admin-local-acceptance-v1',
+        stagingResiduals: 0,
+        uiWrites: 0,
+      },
+      action: 'acceptance.verify',
+      evidenceSha256: 'e'.repeat(64),
+      eventType: 'run-succeeded',
+      observedAt: new Date().toISOString(),
+      runId: acceptance.runId,
+      sequence: 2,
+      summary: '独立验收通过',
+      taskId: task.id,
+      taskRevision: acceptance.taskRevision,
+    });
+
+    expect(dispatch.mock.calls.map(([envelope]) => envelope.action)).toEqual([
+      'metadata.verify',
+      'metadata.repair',
+      'metadata.verify',
+      'acceptance.verify',
+    ]);
+    expect(task).toMatchObject({
+      activeRunId: null,
+      closedMode: 'bounded_repair',
+      gateReason: null,
+      metadataStatus: 'verified',
+      revision: 9,
+      runState: 'succeeded',
+      stage: 'closed',
+    });
+  });
+
+  it('recovers a persisted post-Agent metadata boundary on service startup', async () => {
+    const { dispatch, gateway, service, stateStore } = fixture({
+      durable: true,
+    });
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      providerRef: { provider: 'bangumi', providerId: '412916' },
+      releaseYear: 2023,
+      seasonNumbers: ['S02'],
+      titleHint: '死神 千年血战篇-诀别谭-',
+    });
+    task.governanceProfile = 'sidecar-bundled';
+    task.metadataIdentity = {
+      provider: 'tmdb',
+      providerId: '30984',
+      providerTitle: '死神',
+      releaseYear: 2004,
+    };
+    task.metadataStatus = 'pending';
+    task.runState = 'blocked';
+    task.stage = 'metadata';
+    sealCanonicalPlan(task);
+    task.sealedPlan = {
+      ...task.sealedPlan!,
+      agentAmendments: [
+        {
+          appliedAt: '2026-08-23T07:22:58.939Z',
+          kind: 'identity',
+          planSha256: 'f'.repeat(64),
+          provider: 'tmdb',
+          providerId: '30984',
+          providerTitle: '死神',
+          releaseYear: 2004,
+          summary: '密封 TMDB 二级元数据身份',
+        },
+      ],
+      catalogIdentity: {
+        mediaType: 'tv',
+        providerRef: { provider: 'bangumi', providerId: '412916' },
+        releaseYear: 2023,
+        title: '死神 千年血战篇-诀别谭-',
+      },
+      metadataIdentity: { ...task.metadataIdentity },
+    };
+    task.sealedPlanSha256 = sha256Json(task.sealedPlan);
+    await stateStore.saveTask(task);
+    service.onModuleDestroy();
+
+    const recoveredService = new MediaGovernanceService(
+      undefined,
+      undefined,
+      stateStore,
+      gateway,
+    );
+    await recoveredService.onModuleInit();
+    const recovered = recoveredService.detail(task.id);
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'metadata.verify',
+        taskId: task.id,
+        taskRevision: 2,
+      }),
+    );
+    expect(recovered).toMatchObject({
+      activeRunId: expect.stringMatching(/^media-run-/u),
+      gateReason: null,
+      metadataStatus: 'pending',
+      revision: 2,
+      runState: 'queued',
+      stage: 'metadata',
+    });
+    recoveredService.onModuleDestroy();
+  });
+
   it('recollects legacy empty metadata facts through deterministic verification', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();

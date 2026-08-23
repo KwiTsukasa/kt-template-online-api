@@ -371,6 +371,7 @@ revision 和 replay key。治理完成后 fnOS 尚未稳定回填身份时，若
 时 `/metadata/verify` 拒绝第三次相同尝试，并由 Agent 的类型化身份修正收口。确定性
 刷新与任意阶段 Agent 入口互不覆盖；普通元数据缺口或独立验收仍按原门禁处理。
 升级前已处于该精确缺口且缺少计数字段的任务按一次已消费迁移。
+普通元数据缺口投影若已为每个 Unit 绑定成功核验证据，且 Task 仍持有同一密封计划、无活动 Run、`gateReason` 为明确元数据缺口，则可用当前 revision 重新调用 `/metadata/verify`。该重采集只替换 A/B/C 事实投影，不执行媒体写入，也不绕过已用完的延迟身份刷新门禁。
 内嵌字幕 profile 已获得唯一 TMDB 身份、且缺口严格只有 LocalNFO 与作品/季海报时，
 第一次确定性元数据生成记为自动补齐；其独立验收通过后保持 `closedMode=automatic`。
 其他 profile、第二次尝试或更广的缺口仍按 `bounded_repair`/Agent 分支计数，不能借自动

@@ -1949,6 +1949,42 @@ describe('MediaGovernanceService production execution adapter', () => {
     );
   });
 
+  it('recollects an evidence-bound blocked metadata projection', async () => {
+    const { dispatch, service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '已有证据的元数据重新核验测试',
+    });
+    task.gateReason = '元数据仍缺少 A 级 1 项、B 级 5 项';
+    task.governanceProfile = 'sidecar-bundled';
+    task.metadataStatus = 'requires-agent';
+    task.runState = 'blocked';
+    sealCanonicalPlan(task);
+    task.stage = 'metadata';
+    task.units[0]!.metadataProjection.missingA = ['subtitle.coverage'];
+    task.units[0]!.metadataProjection.missingB = [
+      'metadata.local-nfo',
+      'artwork.poster',
+    ];
+
+    await expect(
+      service.startMetadataVerification(task.id, { expectedRevision: 1 }),
+    ).rejects.toMatchObject({ status: 409 });
+
+    task.units[0]!.evidenceSha256 = 'a'.repeat(64);
+    await service.startMetadataVerification(task.id, { expectedRevision: 1 });
+
+    expect(dispatch).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'metadata.verify',
+        replayKey: `${task.id}:metadata.verify:r2`,
+        taskRevision: 2,
+      }),
+    );
+  });
+
   it('rechecks deferred fnOS identity through the deterministic metadata path', async () => {
     const { dispatch, service } = fixture();
     await service.onModuleInit();

@@ -587,6 +587,24 @@ describe('MediaGovernanceController', () => {
       .expect(409);
   });
 
+  it('forwards an evidence-bound metadata recheck over real HTTP', async () => {
+    const taskId = 'media-task-http-metadata-recheck-001';
+    const verification = jest
+      .spyOn(service, 'startMetadataVerification')
+      .mockResolvedValueOnce({ id: taskId, revision: 33 } as never);
+
+    const response = await request(apiUrl)
+      .post(`/media-governance/tasks/${taskId}/metadata/verify`)
+      .send({ expectedRevision: 32 })
+      .expect(201)
+      .expect('Cache-Control', 'no-store');
+
+    expect(verification).toHaveBeenCalledWith(taskId, {
+      expectedRevision: 32,
+    });
+    expect(response.body.data).toEqual({ id: taskId, revision: 33 });
+  });
+
   it('accepts one multipart TV season and safely parses a torrent fixture', async () => {
     const created = await request(apiUrl)
       .post('/media-governance/tasks')

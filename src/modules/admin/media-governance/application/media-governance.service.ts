@@ -1352,6 +1352,33 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
+   * 仅允许已有逐单元核验证据的元数据缺口投影在无活动 Run 时重新采集事实。
+   * @param task - 候选重新核验的媒体治理任务。
+   * @returns 任务绑定密封计划、旧核验证据和明确缺口阻塞时为 `true`。
+   */
+  private canReverifyBlockedMetadataProjection(task: MediaGovernanceTask) {
+    return (
+      task.stage === 'metadata' &&
+      task.runState === 'blocked' &&
+      task.activeRunId === null &&
+      task.metadataStatus === 'requires-agent' &&
+      Boolean(task.sealedPlan) &&
+      task.gateReason?.startsWith('元数据仍缺少') === true &&
+      !this.hasDeferredMetadataIdentityGap(task) &&
+      task.units.length > 0 &&
+      task.units.every((unit) => unit.evidenceSha256 !== null) &&
+      task.units.some((unit) => {
+        const projection = unit.metadataProjection;
+        return (
+          projection.missingA.length > 0 ||
+          projection.missingB.length > 0 ||
+          projection.missingC.length > 0
+        );
+      })
+    );
+  }
+
+  /**
    * 判断失败的元数据或验收运行是否可从同一阶段重试。
    * @param task - 用于失败的元数据或验收运行是否可从同一阶段重试的领域对象，包含 `stage`、`runState`、`activeRunId`、`metadataStatus` 字段。
    * @param stage - 决定失败的元数据或验收运行是否可从同一阶段重试内容、边界或目标的 `stage` 值。
@@ -2836,13 +2863,14 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     );
     const refreshingDeferredIdentity =
       this.canRefreshDeferredMetadataIdentity(task);
-    if (
-      (regularVerificationInvalid &&
-        !this.canRefreshLegacyMetadata(task) &&
-        !refreshingDeferredIdentity &&
-        !retryingFailedVerification) ||
-      !task.sealedPlan
-    ) {
+    const recheckingEvidenceBoundProjection =
+      this.canReverifyBlockedMetadataProjection(task);
+    let verificationAllowed = !regularVerificationInvalid;
+    if (this.canRefreshLegacyMetadata(task)) verificationAllowed = true;
+    if (refreshingDeferredIdentity) verificationAllowed = true;
+    if (retryingFailedVerification) verificationAllowed = true;
+    if (recheckingEvidenceBoundProjection) verificationAllowed = true;
+    if (!verificationAllowed || !task.sealedPlan) {
       throwVbenError('当前任务尚未进入元数据核验门', HttpStatus.CONFLICT);
     }
     this.assertCanonicalSealedPlan(task);

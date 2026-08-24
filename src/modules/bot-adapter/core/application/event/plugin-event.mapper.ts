@@ -6,6 +6,7 @@ import type {
 import type { BotNormalizedMessage } from '../../contract/bot.types';
 
 const EMBEDDED_JSON_MAX_BYTES = 64 * 1024;
+const LINK_SCAN_MAX_DEPTH = 10;
 
 /**
  * 将当前 Bot 适配器消息转换为不暴露平台账号标识的插件事件信封，并提前抽取通用链接。
@@ -73,7 +74,7 @@ function collectHttpLinks(sources: unknown[]) {
   const seenObjects = new Set<object>();
   let visited = 0;
   const visit = (value: unknown, depth: number) => {
-    if (visited >= 500 || depth > 6) return;
+    if (visited >= 500 || depth > LINK_SCAN_MAX_DEPTH) return;
     visited += 1;
     if (typeof value === 'string') {
       const matches = value.match(/https?:\/\/[^\s<>'"\]]+/giu) || [];

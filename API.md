@@ -1011,7 +1011,7 @@ Admin 入口为 `/plugin-platform/plugins` 与 `/plugin-platform/tasks`。BangDr
 | ----------------------- | -------- | --------------------------------------------------------------------- |
 | `bilibili-card.message` | message  | 从 QQ/NapCat `share/json/xml/lightapp` 卡片和文本中提取 Bilibili 链接 |
 
-插件会解析 `www.bilibili.com`、`m.bilibili.com` 和 `b23.tv`。适配器核心先以 64 KiB、六层和 500 节点上限展开 JSON/lightapp 段的字符串化普通对象，再把其中 `qqdocurl` 等 HTTP(S) 叶子投影到通用 `links[]`；不把 OneBot 原始卡片结构重新暴露给插件。短链通过插件平台受控 `resolveRedirect` host 能力限制跳转次数和超时；视频信息来自 Bilibili `x/web-interface/view`，回复首行使用视频封面 CQ image，随后输出标题、UP 主、时长、播放/弹幕/点赞等文本摘要和标准视频链接。同一账号、同一会话、同一视频在 `PLUGIN_BILIBILI_CARD_DEDUPE_TTL_MS` 内去重。
+插件会解析 `www.bilibili.com`、`m.bilibili.com` 和 `b23.tv`。适配器核心先以 64 KiB、十层和 500 节点上限展开 JSON/lightapp 段的字符串化普通对象，再把其中 `qqdocurl` 等 HTTP(S) 叶子投影到通用 `links[]`；不把 OneBot 原始卡片结构重新暴露给插件。短链通过插件平台受控 `resolveRedirect` host 能力限制跳转次数和超时；视频信息来自 Bilibili `x/web-interface/view`，回复首行使用视频封面 CQ image，随后输出标题、UP 主、时长、播放/弹幕/点赞等文本摘要和标准视频链接。同一账号、同一会话、同一视频在 `PLUGIN_BILIBILI_CARD_DEDUPE_TTL_MS` 内去重。
 
 可配置键：
 

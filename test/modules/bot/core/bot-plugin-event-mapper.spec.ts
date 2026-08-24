@@ -6,17 +6,19 @@ describe('Bot plugin event mapper', () => {
   it('extracts a Bilibili jump URL from a OneBot JSON mini-app segment', () => {
     const qqdocurl =
       'https://b23.tv/vyg1fa3?share_medium=android&share_source=qq';
-    const card = JSON.stringify({
-      app: 'com.tencent.miniapp_01',
-      meta: {
-        detail_1: {
-          preview: 'https://qq.ugcimg.cn/preview',
-          qqdocurl,
-          title: 'Bilibili 视频卡片',
+    const card = JSON.stringify(
+      {
+        app: 'com.tencent.miniapp_01',
+        meta: {
+          detail_1: {
+            preview: 'https://qq.ugcimg.cn/preview',
+            qqdocurl,
+            title: 'Bilibili 视频卡片',
+          },
         },
+        prompt: '[QQ小程序] Bilibili 视频卡片',
       },
-      prompt: '[QQ小程序] Bilibili 视频卡片',
-    });
+    ).replaceAll('/', '\\/');
     const message = {
       eventTime: new Date('2026-08-24T15:54:05.000Z'),
       groupId: '939053394',

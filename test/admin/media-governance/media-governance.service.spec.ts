@@ -116,7 +116,7 @@ describe('MediaGovernanceService', () => {
   it('automatically starts the first pending RSS source inspection', async () => {
     const task = await service.create({
       mediaType: 'tv',
-      operationKind: 'rss-intake',
+      operationKind: 'rss-intake-auto',
       seasonNumbers: ['S01'],
       titleHint: 'RSS 自动接收测试',
     });
@@ -146,7 +146,7 @@ describe('MediaGovernanceService', () => {
   it('maps an inspected RSS source before probing and downloading it', async () => {
     const task = await service.create({
       mediaType: 'tv',
-      operationKind: 'rss-intake',
+      operationKind: 'rss-intake-auto',
       seasonNumbers: ['S01'],
       titleHint: '死神 千年血战篇-相克谭-',
     });

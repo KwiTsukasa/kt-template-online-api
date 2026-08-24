@@ -2861,8 +2861,8 @@ export class MediaGovernanceCatalogService
     if (existingBindings.length > 0) {
       throwVbenError('所选集已有 Task 绑定，不能重复入队', HttpStatus.CONFLICT);
     }
-    let operationKind: 'magnet-batch' | 'rss-intake' = 'magnet-batch';
-    if (bindingRole === 'pending-rss') operationKind = 'rss-intake';
+    let operationKind: 'magnet-batch' | 'rss-intake-auto' = 'magnet-batch';
+    if (bindingRole === 'pending-rss') operationKind = 'rss-intake-auto';
     const task = await this.mediaTasks.create({
       mediaType: 'tv',
       operationKind,

@@ -263,6 +263,7 @@ export type MediaGovernanceTask = {
     | 'legacy-pipeline'
     | 'magnet-batch'
     | 'rss-intake'
+    | 'rss-intake-auto'
     | 'source-intake';
   persistenceMode: 'database' | 'process-simulator';
   payloadSeal: MediaGovernancePayloadSeal | null;
@@ -4424,7 +4425,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     task: MediaGovernanceTask,
   ): Promise<boolean> {
     if (
-      task.operationKind !== 'rss-intake' ||
+      task.operationKind !== 'rss-intake-auto' ||
       task.stage !== 'intake' ||
       task.activeRunId ||
       ['blocked', 'queued', 'running'].includes(task.runState) ||

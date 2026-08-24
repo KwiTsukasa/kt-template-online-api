@@ -853,6 +853,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         metadataIdentity: task.metadataIdentity,
         metadataStatus: task.metadataStatus,
         nextCommandLabel: task.nextCommandLabel,
+        operationKind: task.operationKind,
         progressProjection: task.progress,
         providerRef: task.providerRef,
         releaseYear: task.releaseYear,
@@ -860,9 +861,11 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         runState: task.runState,
         sealedPlanSha256: task.sealedPlanSha256,
         sealedPlan: task.sealedPlan,
+        seriesId: task.seriesId,
         payloadSeal: task.payloadSeal,
         stage: task.stage,
         titleHint: task.titleHint,
+        workId: task.workId,
         workItemId: task.workItemId,
       }),
     );
@@ -1018,6 +1021,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       metadataStatus:
         task.metadataStatus as MediaGovernanceTask['metadataStatus'],
       nextCommandLabel: task.nextCommandLabel,
+      operationKind: task.operationKind as MediaGovernanceTask['operationKind'],
       progress: {
         ...(task.progressProjection as MediaGovernanceTask['progress']),
         observedAt:
@@ -1032,6 +1036,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       runState: task.runState as MediaGovernanceTask['runState'],
       sealedPlanSha256: task.sealedPlanSha256,
       sealedPlan: task.sealedPlan,
+      seriesId: task.seriesId,
       payloadSeal: task.payloadSeal as MediaGovernanceTask['payloadSeal'],
       sources: sources.map((source) =>
         this.restoreSource(
@@ -1046,6 +1051,7 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
       stage: task.stage as MediaGovernanceTask['stage'],
       titleHint: task.titleHint,
       units: units.map((unit) => this.restoreUnit(unit)),
+      workId: task.workId,
       workItemId: task.workItemId,
     };
   }

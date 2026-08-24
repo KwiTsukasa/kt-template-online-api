@@ -10,6 +10,22 @@ export class MediaGovernanceTaskEntity {
   @Column({ length: 96, name: 'work_item_id', nullable: true, type: 'varchar' })
   workItemId: null | string;
 
+  @Index()
+  @Column({ length: 96, name: 'series_id', nullable: true, type: 'varchar' })
+  seriesId: null | string;
+
+  @Index()
+  @Column({ length: 96, name: 'work_id', nullable: true, type: 'varchar' })
+  workId: null | string;
+
+  @Column({
+    length: 32,
+    name: 'operation_kind',
+    nullable: true,
+    type: 'varchar',
+  })
+  operationKind: null | string;
+
   @Column({ length: 200, name: 'title_hint', type: 'varchar' })
   titleHint: string;
 

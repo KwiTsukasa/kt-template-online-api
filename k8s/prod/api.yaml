@@ -35,6 +35,22 @@ spec:
             limits:
               cpu: 250m
               memory: 512Mi
+        - name: media-governance-series-work-migration
+          image: k3d-kt-registry.localhost:5000/kt-template-online-api:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - node
+            - dist/commands/migrate-media-governance-series-work.js
+          envFrom:
+            - secretRef:
+                name: kt-template-online-api-env
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
       containers:
         - name: api
           image: k3d-kt-registry.localhost:5000/kt-template-online-api:latest

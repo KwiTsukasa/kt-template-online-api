@@ -346,7 +346,7 @@ awk \
     if (kind != "Deployment") return
     if (name == api_deployment) {
       api_documents += 1
-      if (replicas != "0" || api_images != 1 || gateway_images != 0) failed = 1
+      if (replicas != "0" || api_images != 3 || gateway_images != 0) failed = 1
     }
     if (name == gateway_deployment) {
       gateway_documents += 1

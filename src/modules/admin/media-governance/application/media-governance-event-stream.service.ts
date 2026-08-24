@@ -38,18 +38,57 @@ export interface MediaGovernanceTaskChangedData {
   updatedAt: string;
 }
 
+export interface MediaGovernanceCatalogChangedData {
+  changeType: 'created' | 'updated';
+  observedAt: string;
+  revision: number;
+  series: {
+    bindingCount: number;
+    boundEpisodeCount: number;
+    canonicalProvider: string;
+    canonicalProviderId: string;
+    coveragePercent: number;
+    createTime: unknown;
+    episodeCount: number;
+    id: string;
+    mediaType: string;
+    originalTitle: null | string;
+    releaseYear: number;
+    revision: number;
+    rssCount: number;
+    rssTotalCount: number;
+    seasonCount: number;
+    seasonSummaries: Array<Record<string, unknown>>;
+    status: string;
+    taskCount: number;
+    title: string;
+    updateTime: unknown;
+  };
+  seriesId: string;
+  taskId: null | string;
+  taskIds: string[];
+  updatedAt: string;
+}
+
+export type MediaGovernanceTaskChangedSubscriber = (
+  event: MediaGovernanceTaskChangedData,
+) => Promise<void> | void;
+
 export interface MediaGovernanceStreamEvent {
   data:
+    | MediaGovernanceCatalogChangedData
     | MediaGovernanceTaskChangedData
     | { message: string; observedAt: string };
   id: string;
-  type: 'heartbeat' | 'snapshot-required' | 'task-changed';
+  type: 'catalog-changed' | 'heartbeat' | 'snapshot-required' | 'task-changed';
 }
 
 @Injectable()
 export class MediaGovernanceEventStreamService {
   private readonly replay: MediaGovernanceStreamEvent[] = [];
   private readonly streamSubject = new Subject<MediaGovernanceStreamEvent>();
+  private readonly taskChangedSubscribers =
+    new Set<MediaGovernanceTaskChangedSubscriber>();
   private readonly heartbeatMs: number;
   private readonly replayLimit: number;
   private eventSequence = 0;
@@ -89,13 +128,49 @@ export class MediaGovernanceEventStreamService {
     if (input.runId && input.runSequence !== null) {
       eventId = `${input.runId}:${input.runSequence}`;
     }
+    const data: MediaGovernanceTaskChangedData = { ...input, observedAt };
     const event: MediaGovernanceStreamEvent = {
-      data: { ...input, observedAt },
+      data,
       id: eventId,
       type: 'task-changed',
     };
     this.append(event);
+    for (const subscriber of this.taskChangedSubscribers) {
+      void Promise.resolve(subscriber(data)).catch(() => undefined);
+    }
     return event;
+  }
+
+  /**
+   * 发布已提交的系列卡片变化，使 Admin 可按系列身份原位更新或补偿重载。
+   *
+   * @param input - 已提交的系列卡片、任务身份和创建/更新语义。
+   * @returns 写入重放窗并广播的系列目录事件。
+   */
+  publishCatalogChanged(
+    input: Omit<MediaGovernanceCatalogChangedData, 'observedAt'>,
+  ): MediaGovernanceStreamEvent {
+    const observedAt = new Date().toISOString();
+    const event: MediaGovernanceStreamEvent = {
+      data: { ...input, observedAt },
+      id: `catalog-${input.seriesId}-${input.revision}-${++this.eventSequence}`,
+      type: 'catalog-changed',
+    };
+    this.append(event);
+    return event;
+  }
+
+  /**
+   * 把已提交 Task 事件桥接到进程内目录同步器，并返回解除监听的幂等清理函数。
+   *
+   * @param subscriber - 只接收已持久化完整或进度任务事件的监听器。
+   * @returns 解除该监听器的幂等回调。
+   */
+  subscribeTaskChanged(subscriber: MediaGovernanceTaskChangedSubscriber) {
+    this.taskChangedSubscribers.add(subscriber);
+    return () => {
+      this.taskChangedSubscribers.delete(subscriber);
+    };
   }
 
   /**

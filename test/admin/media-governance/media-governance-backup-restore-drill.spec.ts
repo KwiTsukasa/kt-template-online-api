@@ -53,21 +53,21 @@ if [[ -z $query ]]; then
   exit 0
 fi
 case "$query" in
-  *information_schema.tables*) printf '17\\n' ;;
+  *information_schema.tables*) printf '%s\\n' "\${KT_FAKE_SCHEMA_TABLE_COUNT:-19}" ;;
   *information_schema.schemata*) printf '0\\n' ;;
   'CREATE DATABASE '*|'DROP DATABASE '*) ;;
   'SELECT COUNT(*) FROM \`'*)
     table=\${query#*\\\`}
     table=\${table%%\\\`*}
     case "$table" in
-      media_governance_task|media_governance_unit|media_governance_source|media_governance_descriptor_revision|media_governance_run|media_governance_outbox|media_governance_series|media_governance_season|media_governance_episode|media_governance_task_episode_binding) printf '1\\n' ;;
+      media_governance_task|media_governance_unit|media_governance_source|media_governance_descriptor_revision|media_governance_run|media_governance_outbox|media_governance_series|media_governance_work|media_governance_work_external_ref|media_governance_season|media_governance_episode|media_governance_task_episode_binding) printf '1\\n' ;;
       media_governance_event) printf '2\\n' ;;
       media_governance_agent_session|media_governance_metadata_exception|media_governance_operator_decision|media_governance_series_external_ref|media_governance_rss_subscription|media_governance_rss_item) printf '0\\n' ;;
       *) printf 'unexpected table: %s\\n' "$table" >&2; exit 9 ;;
     esac
     ;;
   *'FROM media_governance_task ORDER BY id'*)
-    printf 'media-task-fixture\\t7\\tgovernance\\trunning\\tmedia-run-fixture\\t%s\\t%s\\t\\n' "$(printf a%.0s {1..64})" "$(printf b%.0s {1..64})"
+    printf 'media-task-fixture\\tmedia-series-fixture\\tmedia-work-fixture\\tlegacy-pipeline\\t7\\tgovernance\\trunning\\tmedia-run-fixture\\t%s\\t%s\\t\\n' "$(printf a%.0s {1..64})" "$(printf b%.0s {1..64})"
     ;;
   *'FROM media_governance_run ORDER BY id'*)
     printf 'media-run-fixture\\tmedia-task-fixture\\t7\\tgovernance.execute\\trunning\\tmedia-task-fixture:governance.execute:r7\\t%s\\t%s\\t\\n' "$(printf a%.0s {1..64})" "$(printf b%.0s {1..64})"
@@ -84,10 +84,16 @@ case "$query" in
     fi
     ;;
   *'FROM media_governance_series ORDER BY id'*)
-    printf 'media-series-fixture\\ttmdb\\t30984\\t死神\\t2004\\t1\\tactive\\n'
+    printf 'media-series-fixture\\ttmdb\\ttv\\t30984\\t死神\\t2004\\ttv\\tmedia-work-fixture\\t1\\tactive\\n'
+    ;;
+  *'FROM media_governance_work ORDER BY'*)
+    printf 'media-work-fixture\\tmedia-series-fixture\\ttmdb\\ttv\\t30984\\t死神\\t2004\\ttv\\t1\\tactive\\n'
+    ;;
+  *'FROM media_governance_work_external_ref ORDER BY'*)
+    printf 'media-work-ref-fixture\\tmedia-work-fixture\\ttmdb\\ttv\\t30984\\tcanonical\\t死神\\t2004\\n'
     ;;
   *'FROM media_governance_season ORDER BY'*)
-    printf 'media-season-fixture\\tmedia-series-fixture\\t2\\t50\\t千年血战篇\\t2022\\tknown\\n'
+    printf 'media-season-fixture\\tmedia-series-fixture\\tmedia-work-fixture\\t2\\t1\\t50\\t千年血战篇\\t2022\\tknown\\n'
     ;;
   *'FROM media_governance_episode ORDER BY'*)
     printf 'media-episode-fixture\\tmedia-series-fixture\\tmedia-season-fixture\\t2\\t1\\tcompleted\\n'
@@ -182,7 +188,7 @@ printf '%s\\n' '-- isolated media governance fixture' >"$result_file"
     expect(() => readdirSync(current.output)).toThrow();
   });
 
-  it('backs up the exact seventeen task, catalog and RSS tables', () => {
+  it('backs up the exact nineteen task, catalog and RSS tables', () => {
     const current = fixture();
     const result = runDrill(current);
 
@@ -201,7 +207,7 @@ printf '%s\\n' '-- isolated media governance fixture' >"$result_file"
       restoreDatabaseDropped: true,
       restoreVerified: true,
       schemaVersion: '1.0.0',
-      tableCount: 17,
+      tableCount: 19,
       writeBoundaries: {
         cloud: 0,
         media: 0,
@@ -222,6 +228,8 @@ printf '%s\\n' '-- isolated media governance fixture' >"$result_file"
       seriesSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
       tableCountsSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
       taskSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      workReferenceSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      workSha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
     });
 
     const log = readFileSync(current.log, 'utf8');
@@ -239,6 +247,8 @@ printf '%s\\n' '-- isolated media governance fixture' >"$result_file"
       'media_governance_operator_decision',
       'media_governance_outbox',
       'media_governance_series',
+      'media_governance_work',
+      'media_governance_work_external_ref',
       'media_governance_series_external_ref',
       'media_governance_season',
       'media_governance_episode',
@@ -264,6 +274,24 @@ printf '%s\\n' '-- isolated media governance fixture' >"$result_file"
     expect(sourceQueries.every((line) => line.includes('query=SELECT '))).toBe(
       true,
     );
+  });
+
+  it('backs up the legacy seventeen tables before the Work migration', () => {
+    const current = fixture();
+    const result = runDrill(current, { KT_FAKE_SCHEMA_TABLE_COUNT: '17' });
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    const evidencePath = result.stdout
+      .split('\n')
+      .find((line) => line.startsWith('evidence='))
+      ?.slice('evidence='.length);
+    const evidence = JSON.parse(readFileSync(evidencePath!, 'utf8'));
+    expect(evidence.tableCount).toBe(17);
+    const log = readFileSync(current.log, 'utf8');
+    const dumpLine = log.split('\n').find((line) => line.startsWith('dump\t'));
+    expect(dumpLine).not.toContain('\tmedia_governance_work');
+    expect(result.stdout).toContain('restore=verified');
   });
 
   it('uses the existing SHA-256 verifier instead of requiring cmp', () => {

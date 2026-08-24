@@ -1,6 +1,7 @@
 import {
   mediaGovernanceMagnetInfoHash,
   mediaGovernanceRssTitleIncluded,
+  normalizeMediaGovernanceMagnetUri,
   parseMediaGovernanceEpisodeNumber,
   parseMediaGovernanceRss,
 } from '../../../src/modules/admin/media-governance/infrastructure/integration/media-governance-rss-parser';
@@ -36,6 +37,7 @@ describe('media governance RSS parser', () => {
     expect(entries[0].publishedAt?.toISOString()).toBe(
       '2024-10-15T15:32:00.000Z',
     );
+    expect(entries[0].torrentUrl).toBeNull();
   });
 
   it('supports named episode groups and optional title inclusion filters', () => {
@@ -54,5 +56,26 @@ describe('media governance RSS parser', () => {
         '<!DOCTYPE rss [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><rss/>',
       ),
     ).toThrow('media-rss-feed-boundary-invalid');
+  });
+
+  it('normalizes Base32 BTIH and exposes HTTPS torrent enclosures', () => {
+    const base32 = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    const normalized = normalizeMediaGovernanceMagnetUri(
+      `magnet:?xt=urn:btih:${base32}&tr=https%3A%2F%2Ftracker.example%2Fannounce`,
+    );
+    expect(normalized).toBe(
+      'magnet:?xt=urn:btih:0000000000000000000000000000000000000000&tr=https%3A%2F%2Ftracker.example%2Fannounce',
+    );
+    const entries = parseMediaGovernanceRss(`
+      <rss><channel><item>
+        <title>[LoliHouse] BLEACH - 27</title>
+        <guid>acg-27</guid>
+        <enclosure url="https://acg.rip/t/27.torrent" type="application/x-bittorrent" />
+      </item></channel></rss>
+    `);
+    expect(entries[0]).toMatchObject({
+      magnetUri: null,
+      torrentUrl: 'https://acg.rip/t/27.torrent',
+    });
   });
 });

@@ -299,6 +299,7 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
     expect(extractStage('K8s Deploy')).toContain(
       './ci/jenkins/task13-prebuilt-release.sh',
     );
+    expect(task13PrebuiltReleaseScript).toContain('api_images != 3');
 
     for (const [path, script] of [
       [TASK13_PREBUILD_PUSH_SCRIPT_PATH, task13PrebuildPushScript],
@@ -719,14 +720,18 @@ describe('Jenkins exact-digest prebuilt release contract', () => {
     },
   );
 
-  it('keeps the normal manifest and set-image deployment path', () => {
+  it('applies one exact API image across the container and both initContainers', () => {
     const deploy = extractStage('K8s Deploy');
 
     expect(deploy).toContain(
-      'kubectl ${kubeConfigArg} apply -f ${shellQuote(manifestFile)}',
+      's|k3d-kt-registry.localhost:5000/kt-template-online-api:latest|${env.DOCKER_IMAGE}|g',
+    );
+    expect(deploy).toContain('| kubectl ${kubeConfigArg} apply -f -');
+    expect(deploy).not.toContain(
+      'set image ${shellQuote("deployment/${deploymentName}")}',
     );
     expect(deploy).toContain(
-      'set image ${shellQuote("deployment/${deploymentName}")}',
+      "set image ${shellQuote('deployment/kt-napcat-webui-gateway')}",
     );
     expect(deploy).toContain(
       "params.BUILD_DOCKER_IMAGE || env.IS_PREBUILT_RELEASE == 'true'",

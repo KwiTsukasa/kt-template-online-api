@@ -42,7 +42,7 @@ RUN npm install -g pnpm@9.15.9 --registry=https://registry.npmmirror.com \
 
 # dist 由 Jenkins 的 Build stage 生成，这里只打包运行产物。
 COPY dist ./dist
-COPY sql/bot-adapter-protocol-v1.sql sql/bot-adapter-menu-v1.sql sql/bot-adapter-protocol-v1-verify.sql ./sql/
+COPY sql/bot-adapter-protocol-v1.sql sql/bot-adapter-menu-v1.sql sql/bot-adapter-protocol-v1-verify.sql sql/media-governance-series-work-v1.sql sql/media-governance-series-work-v1-verify.sql ./sql/
 
 EXPOSE 48085
 

@@ -452,8 +452,8 @@ function createService(values: Record<string, unknown>) {
 describe('RuntimeConfigService', () => {
   it('parses app and database profiles with stable defaults', () => {
     const service = createService({
-      DB_HOST: '127.0.0.1',
-      DB_PORT: '3307',
+      DB_HOST: '10.66.66.2',
+      DB_PORT: '3306',
       DB_DATABASE: 'kt',
       DB_USERNAME: 'admin',
       DB_SYNC: 'true',
@@ -466,8 +466,8 @@ describe('RuntimeConfigService', () => {
       port: 48085,
     });
     expect(service.readDatabaseProfile()).toEqual({
-      host: '127.0.0.1',
-      port: 3307,
+      host: '10.66.66.2',
+      port: 3306,
       database: 'kt',
       username: 'admin',
       synchronize: true,

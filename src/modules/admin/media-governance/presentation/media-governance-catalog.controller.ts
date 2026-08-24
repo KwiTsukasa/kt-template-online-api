@@ -20,11 +20,17 @@ import { vbenPage, vbenSuccess } from '@/common';
 import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-auth.guard';
 import {
   MediaGovernanceEpisodePageQueryDto,
+  MediaGovernanceCatalogIdentitySearchQueryDto,
   MediaGovernanceMagnetBatchCreateDto,
+  MediaGovernanceRssDiscoverySearchDto,
+  MediaGovernanceRssIdentitySearchQueryDto,
   MediaGovernanceRssSubscriptionCreateDto,
   MediaGovernanceRssSubscriptionStateDto,
   MediaGovernanceSeriesPageQueryDto,
-  MediaGovernanceSeriesReconcileDto,
+  MediaGovernanceSeriesCreateDto,
+  MediaGovernanceSeriesSeasonFactDto,
+  MediaGovernanceWorkCreateDto,
+  MediaGovernanceWorkTaskCreateDto,
 } from '@/modules/admin/media-governance/contract/media-governance-catalog.dto';
 import { MediaGovernanceCatalogService } from '@/modules/admin/media-governance/application/media-governance-catalog.service';
 import {
@@ -72,6 +78,107 @@ export class MediaGovernanceCatalogController {
   }
 
   /**
+   * 返回 Series/Work 创建使用的通用身份候选并禁止缓存。
+   *
+   * @param query - 作品关键词与目标 Work 类型。
+   * @param response - 当前 HTTP 响应。
+   * @returns Bangumi/TMDB 候选和来源状态。
+   */
+  @Get('identity-candidates')
+  @ApiOperation({ summary: '搜索 Series/Work 主身份候选' })
+  async identityCandidates(
+    @Query() query: MediaGovernanceCatalogIdentitySearchQueryDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.catalog.identityCandidates(query));
+  }
+
+  /**
+   * 把用户选中的官方身份交给服务层二次核验，并返回同一事务生成的 Series 与主 Work。
+   *
+   * @param body - 主 Work 类型与资料身份。
+   * @param response - 当前 HTTP 响应。
+   * @returns 新 Series 完整详情。
+   */
+  @Post()
+  @MediaGovernancePermission('Media:Governance:Create')
+  @ApiOperation({ summary: '创建 Series 与主 Work' })
+  async createSeries(
+    @Body() body: MediaGovernanceSeriesCreateDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.catalog.createSeries(body));
+  }
+
+  /**
+   * 在路径指定 Series 的所有权门内重新核验身份，并附加不会伪造 Season 的独立 Work。
+   *
+   * @param seriesId - 目标 Series 标识。
+   * @param body - Work 类型与资料身份。
+   * @param response - 当前 HTTP 响应。
+   * @returns 更新后的 Series 详情。
+   */
+  @Post(':seriesId/works')
+  @MediaGovernancePermission('Media:Governance:Create')
+  @ApiOperation({ summary: '向 Series 添加 Work' })
+  async createWork(
+    @Param('seriesId') seriesId: string,
+    @Body() body: MediaGovernanceWorkCreateDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.catalog.createWork(seriesId, body));
+  }
+
+  /**
+   * 校验路径中的 Series/Work 归属与 TV 类型后，创建一个连续且无重复季号的 Season/Episode 区间。
+   *
+   * @param seriesId - Work 所属 Series 标识。
+   * @param workId - 目标 Work 标识。
+   * @param body - 季号、标题和连续集范围。
+   * @param response - 当前 HTTP 响应。
+   * @returns 更新后的 Series 详情。
+   */
+  @Post(':seriesId/works/:workId/seasons')
+  @MediaGovernancePermission('Media:Governance:Create')
+  @ApiOperation({ summary: '为 TV Work 创建 Season' })
+  async createSeason(
+    @Param('seriesId') seriesId: string,
+    @Param('workId') workId: string,
+    @Body() body: MediaGovernanceSeriesSeasonFactDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(await this.catalog.createSeason(seriesId, workId, body));
+  }
+
+  /**
+   * 从既有 Work 派生身份快照并创建一次 source-intake 执行 Task。
+   *
+   * @param seriesId - Task 所属 Series 标识。
+   * @param workId - Task 所属 Work 标识。
+   * @param body - TV Work 的已有季号选择。
+   * @param response - 当前 HTTP 响应。
+   * @returns 新建执行 Task。
+   */
+  @Post(':seriesId/works/:workId/tasks')
+  @MediaGovernancePermission('Media:Governance:Create')
+  @ApiOperation({ summary: '从 Work 创建执行 Task' })
+  async createWorkTask(
+    @Param('seriesId') seriesId: string,
+    @Param('workId') workId: string,
+    @Body() body: MediaGovernanceWorkTaskCreateDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.catalog.createWorkTask(seriesId, workId, body),
+    );
+  }
+
+  /**
    * 返回全部历史任务的系列归类状态、确定性原因和可复用 reconcile 目标。
    * @param response - 当前 HTTP 响应。
    * @returns 历史任务分类报告。
@@ -84,20 +191,20 @@ export class MediaGovernanceCatalogController {
   }
 
   /**
-   * 按唯一资料事实创建或纠正 Series/Season/Episode 与 Task 绑定。
-   * @param body - canonical 系列事实和 Task 集范围。
+   * 按搜索框文本并行返回 Bangumi 与 TMDB 的 TV 身份候选。
+   *
+   * @param query - 用户输入的作品名称或别名。
    * @param response - 当前 HTTP 响应。
-   * @returns 纠正后的系列详情。
+   * @returns 身份候选及资料源独立状态。
    */
-  @Post('reconcile')
-  @MediaGovernancePermission('Media:Governance:Run')
-  @ApiOperation({ summary: '按唯一事实纠正媒体系列层级' })
-  async reconcile(
-    @Body() body: MediaGovernanceSeriesReconcileDto,
+  @Get('rss-discovery/identity-candidates')
+  @ApiOperation({ summary: '搜索 RSS 聚合所需资料身份候选' })
+  async rssIdentityCandidates(
+    @Query() query: MediaGovernanceRssIdentitySearchQueryDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     this.noStore(response);
-    return vbenSuccess(await this.catalog.reconcile(body));
+    return vbenSuccess(await this.catalog.rssIdentityCandidates(query));
   }
 
   /**
@@ -119,15 +226,17 @@ export class MediaGovernanceCatalogController {
   /**
    * 分页返回一季 Episode 与 Task/来源绑定。
    * @param seriesId - canonical Series 标识。
+   * @param workId - canonical Work 标识。
    * @param seasonNumber - canonical 季号。
    * @param query - 集分页参数。
    * @param response - 当前 HTTP 响应。
    * @returns 集分页。
    */
-  @Get(':seriesId/seasons/:seasonNumber/episodes')
+  @Get(':seriesId/works/:workId/seasons/:seasonNumber/episodes')
   @ApiOperation({ summary: '分页查询 canonical Episode' })
   async episodes(
     @Param('seriesId') seriesId: string,
+    @Param('workId') workId: string,
     @Param('seasonNumber', ParseIntPipe) seasonNumber: number,
     @Query() query: MediaGovernanceEpisodePageQueryDto,
     @Res({ passthrough: true }) response: Response,
@@ -135,6 +244,7 @@ export class MediaGovernanceCatalogController {
     this.noStore(response);
     const result = await this.catalog.episodePage(
       seriesId,
+      workId,
       seasonNumber,
       query,
     );
@@ -144,46 +254,90 @@ export class MediaGovernanceCatalogController {
   /**
    * 把路由季号与最多十六条逐集磁链交给目录服务原子建立 Task-Episode 绑定。
    * @param seriesId - canonical Series 标识。
+   * @param workId - canonical Work 标识。
    * @param seasonNumber - canonical 季号。
    * @param body - 统一分类和最多十六条按集磁链。
    * @param response - 当前 HTTP 响应。
    * @returns 新建 Task、来源和集绑定。
    */
-  @Post(':seriesId/seasons/:seasonNumber/magnet-batch')
+  @Post(':seriesId/works/:workId/seasons/:seasonNumber/magnet-batch')
   @MediaGovernancePermission('Media:Governance:SourceUpload')
   @ApiOperation({ summary: '按集批量创建多磁链媒体 Task' })
   async createMagnetBatch(
     @Param('seriesId') seriesId: string,
+    @Param('workId') workId: string,
     @Param('seasonNumber', ParseIntPipe) seasonNumber: number,
     @Body() body: MediaGovernanceMagnetBatchCreateDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     this.noStore(response);
     return vbenSuccess(
-      await this.catalog.createMagnetBatch(seriesId, seasonNumber, body),
+      await this.catalog.createMagnetBatch(
+        seriesId,
+        workId,
+        seasonNumber,
+        body,
+      ),
+    );
+  }
+
+  /**
+   * 在用户选择身份后查询固定活跃来源，并按 BTIH 和发布组聚合结果。
+   *
+   * @param seriesId - canonical Series 标识。
+   * @param workId - canonical Work 标识。
+   * @param seasonNumber - canonical Season 号。
+   * @param body - 用户选择的资料身份。
+   * @param response - 当前 HTTP 响应。
+   * @returns 逐源状态、发布组和可订阅 RSS 入口。
+   */
+  @Post(':seriesId/works/:workId/seasons/:seasonNumber/rss-discovery/search')
+  @ApiOperation({ summary: '按资料身份聚合 RSS 来源发布组' })
+  async discoverRssSources(
+    @Param('seriesId') seriesId: string,
+    @Param('workId') workId: string,
+    @Param('seasonNumber', ParseIntPipe) seasonNumber: number,
+    @Body() body: MediaGovernanceRssDiscoverySearchDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.catalog.discoverRssSources(
+        seriesId,
+        workId,
+        seasonNumber,
+        body,
+      ),
     );
   }
 
   /**
    * 为一季创建 RSS 订阅并安排首次轮询。
    * @param seriesId - canonical Series 标识。
+   * @param workId - canonical Work 标识。
    * @param seasonNumber - canonical 季号。
    * @param body - RSS 地址、过滤、集号正则和来源分类。
    * @param response - 当前 HTTP 响应。
    * @returns 新订阅。
    */
-  @Post(':seriesId/seasons/:seasonNumber/rss-subscriptions')
+  @Post(':seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions')
   @MediaGovernancePermission('Media:Governance:SourceUpload')
   @ApiOperation({ summary: '创建媒体季 RSS 订阅' })
   async createRssSubscription(
     @Param('seriesId') seriesId: string,
+    @Param('workId') workId: string,
     @Param('seasonNumber', ParseIntPipe) seasonNumber: number,
     @Body() body: MediaGovernanceRssSubscriptionCreateDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     this.noStore(response);
     return vbenSuccess(
-      await this.catalog.createRssSubscription(seriesId, seasonNumber, body),
+      await this.catalog.createRssSubscription(
+        seriesId,
+        workId,
+        seasonNumber,
+        body,
+      ),
     );
   }
 

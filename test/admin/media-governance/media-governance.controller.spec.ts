@@ -21,6 +21,7 @@ import { LlmConversationService } from '../../../src/modules/admin/llm/applicati
 describe('MediaGovernanceController', () => {
   let app: INestApplication;
   let apiUrl: string;
+  let eventStream: MediaGovernanceEventStreamService;
   let service: MediaGovernanceService;
   let conversationSequence = 0n;
   const authGuard: CanActivate = {
@@ -80,12 +81,19 @@ describe('MediaGovernanceController', () => {
     app = moduleRef.createNestApplication();
     await app.listen(0, '127.0.0.1');
     apiUrl = await app.getUrl();
+    eventStream = app.get(MediaGovernanceEventStreamService);
     service = app.get(MediaGovernanceService);
   });
 
   afterAll(async () => {
     await app?.close();
   });
+
+  async function createLegacyTask(
+    input: Parameters<MediaGovernanceService['create']>[0],
+  ) {
+    return { body: { data: await service.create(input) } };
+  }
 
   it('streams through real HTTP with intermediary buffering disabled', async () => {
     await new Promise<void>((resolve, reject) => {
@@ -120,10 +128,92 @@ describe('MediaGovernanceController', () => {
     });
   });
 
+  it('streams committed catalog-changed cards through real HTTP', async () => {
+    await new Promise<void>((resolve, reject) => {
+      let responseText = '';
+      let settled = false;
+      const requestHandle = httpGet(
+        `${apiUrl}/media-governance/events/stream`,
+        { headers: { Accept: 'text/event-stream' } },
+        (response) => {
+          response.setEncoding('utf8');
+          response.on('data', (chunk: string) => {
+            responseText += chunk;
+            if (!responseText.includes('event: catalog-changed')) return;
+            try {
+              expect(responseText).toContain('media-series-http-catalog-001');
+              expect(responseText).toContain('media-task-http-catalog-001');
+              settled = true;
+              response.destroy();
+              resolve();
+            } catch (error) {
+              settled = true;
+              response.destroy();
+              reject(error);
+            }
+          });
+          eventStream.publishCatalogChanged({
+            changeType: 'created',
+            revision: 1,
+            series: {
+              bindingCount: 2,
+              boundEpisodeCount: 2,
+              canonicalProvider: 'tmdb',
+              canonicalProviderId: '90001',
+              coveragePercent: 100,
+              createTime: '2026-08-24T00:00:00.000Z',
+              episodeCount: 2,
+              id: 'media-series-http-catalog-001',
+              mediaType: 'tv',
+              originalTitle: null,
+              releaseYear: 2026,
+              revision: 1,
+              rssCount: 0,
+              rssTotalCount: 0,
+              seasonCount: 1,
+              seasonSummaries: [],
+              status: 'active',
+              taskCount: 1,
+              title: 'HTTP 自动归类作品',
+              updateTime: '2026-08-24T00:00:00.000Z',
+            },
+            seriesId: 'media-series-http-catalog-001',
+            taskId: 'media-task-http-catalog-001',
+            taskIds: ['media-task-http-catalog-001'],
+            updatedAt: '2026-08-24T00:00:00.000Z',
+          });
+        },
+      );
+      requestHandle.setTimeout(3_000, () => {
+        requestHandle.destroy(new Error('系列目录 SSE 事件读取超时'));
+      });
+      requestHandle.once('error', (error) => {
+        if (!settled) reject(error);
+      });
+    });
+  });
+
   it('does not expose a second media-specific conversation message action', () => {
     expect(
       Reflect.get(MediaGovernanceController.prototype, 'agentMessage'),
     ).toBeUndefined();
+  });
+
+  it('does not expose root Task creation or Task identity mutation routes', async () => {
+    await request(apiUrl)
+      .post('/media-governance/tasks')
+      .send({ mediaType: 'movie', titleHint: '禁止单独创建' })
+      .expect(404);
+    await request(apiUrl)
+      .put('/media-governance/tasks/media-task-legacy/identity')
+      .send({ expectedRevision: 1, mediaType: 'movie', titleHint: '禁止修改' })
+      .expect(404);
+    await request(apiUrl)
+      .post(
+        '/media-governance/tasks/media-task-legacy/catalog-identity/restore',
+      )
+      .send({ expectedRevision: 1, providerId: '123' })
+      .expect(404);
   });
 
   it('keeps read-only Agent projection while retiring the duplicate message route', async () => {
@@ -203,66 +293,21 @@ describe('MediaGovernanceController', () => {
     rebaseSpy.mockRestore();
   });
 
-  it('routes closed catalog identity restoration through the Run permission endpoint', async () => {
-    const taskId = 'media-task-http-catalog-restore';
-    const restoreSpy = jest
-      .spyOn(service, 'restoreCatalogIdentity')
-      .mockResolvedValueOnce({
-        id: taskId,
-        providerRef: { provider: 'bangumi', providerId: '302286' },
-        releaseYear: 2022,
-        revision: 41,
-        stage: 'metadata',
-      } as never);
-
-    const response = await request(apiUrl)
-      .post(`/media-governance/tasks/${taskId}/catalog-identity/restore`)
-      .send({
-        expectedRevision: 40,
-        providerRef: { provider: 'bangumi', providerId: '302286' },
-        releaseYear: 2022,
-      })
-      .expect(201)
-      .expect('Cache-Control', 'no-store');
-
-    expect(restoreSpy).toHaveBeenCalledWith(taskId, {
-      expectedRevision: 40,
-      providerRef: { provider: 'bangumi', providerId: '302286' },
-      releaseYear: 2022,
-    });
-    expect(response.body.data).toMatchObject({
-      providerRef: { provider: 'bangumi', providerId: '302286' },
-      releaseYear: 2022,
-      revision: 41,
-      stage: 'metadata',
-    });
-    restoreSpy.mockRestore();
-  });
-
   it('creates and lists a normalized draft over real HTTP', async () => {
-    const created = await request(apiUrl)
-      .post('/media-governance/tasks')
-      .send({
-        mediaType: 'tv',
-        providerRef: { provider: 'bangumi', providerId: '425909' },
-        releaseYear: 2024,
-        seasonNumbers: ['S00', 'S02'],
-        titleHint: '媒体治理演示作品',
-      })
-      .expect(201)
-      .expect('Cache-Control', 'no-store');
-
-    expect(created.body).toMatchObject({
-      code: 200,
-      data: {
-        mediaType: 'tv',
-        revision: 1,
-        runState: 'draft',
-        stage: 'intake',
-      },
-      msg: '操作成功',
+    const created = await createLegacyTask({
+      mediaType: 'tv',
+      providerRef: { provider: 'bangumi', providerId: '425909' },
+      releaseYear: 2024,
+      seasonNumbers: ['S00', 'S02'],
+      titleHint: '媒体治理演示作品',
     });
-    expect(created.body).not.toHaveProperty('err');
+
+    expect(created.body.data).toMatchObject({
+      mediaType: 'tv',
+      revision: 1,
+      runState: 'draft',
+      stage: 'intake',
+    });
     expect(created.body.data.units).toHaveLength(2);
 
     const page = await request(apiUrl)
@@ -304,14 +349,11 @@ describe('MediaGovernanceController', () => {
   });
 
   it('creates and binds one local Codex LLM conversation over real HTTP', async () => {
-    const created = await request(apiUrl)
-      .post('/media-governance/tasks')
-      .send({
-        mediaType: 'tv',
-        seasonNumbers: ['S01'],
-        titleHint: '草稿 Agent 入口接口测试',
-      })
-      .expect(201);
+    const created = await createLegacyTask({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '草稿 Agent 入口接口测试',
+    });
 
     const agent = await request(apiUrl)
       .post(`/media-governance/tasks/${created.body.data.id}/agent/start`)
@@ -336,122 +378,15 @@ describe('MediaGovernanceController', () => {
     expect(agent.body).not.toHaveProperty('err');
   });
 
-  it.each([
-    [
-      'TV 缺少季号',
-      { mediaType: 'tv', titleHint: '无季号作品' },
-      'TV 正常剧集必须至少声明一个季号',
-    ],
-    [
-      '电影错误使用 S00',
-      {
-        mediaType: 'movie',
-        seasonNumbers: ['S00'],
-        titleHint: '错误电影',
-      },
-      '电影或剧场版不能填写季号，也不能使用 S00 代替作品类型',
-    ],
-    [
-      'providerRef 缺少 providerId',
-      {
-        mediaType: 'movie',
-        providerRef: { provider: 'tmdb' },
-        titleHint: '错误编号',
-      },
-      '请求参数不符合媒体治理合同',
-    ],
-    [
-      '额外字段',
-      {
-        arbitraryPath: '/vol2/1000/Media',
-        mediaType: 'movie',
-        titleHint: '越界字段',
-      },
-      '请求参数不符合媒体治理合同',
-    ],
-  ])(
-    'rejects %s with a bounded Vben error',
-    async (_name, body, expectedError) => {
-      const response = await request(apiUrl)
-        .post('/media-governance/tasks')
-        .send(body)
-        .expect(400);
-
-      expect(response.body.err).toBe(expectedError);
-      expect(typeof response.body.msg).toBe('string');
-      expect(JSON.stringify(response.body)).not.toContain('/vol2/1000/Media');
-    },
-  );
-
-  it('corrects a draft identity over real HTTP and rejects stale or invalid input', async () => {
-    const created = await request(apiUrl)
-      .post('/media-governance/tasks')
-      .send({
-        mediaType: 'tv',
-        releaseYear: 2015,
-        seasonNumbers: ['S01'],
-        titleHint: '下载前身份接口测试',
-      })
-      .expect(201);
-    const taskId = created.body.data.id as string;
-
-    const updated = await request(apiUrl)
-      .put(`/media-governance/tasks/${taskId}/identity`)
-      .send({
-        expectedRevision: 1,
-        mediaType: 'tv',
-        providerRef: { provider: 'tmdb', providerId: '63145' },
-        seasonNumbers: ['S00', 'S02'],
-        titleHint: '下载前身份接口已修正',
-      })
-      .expect(200)
-      .expect('Cache-Control', 'no-store');
-
-    expect(updated.body.data).toMatchObject({
-      providerRef: { provider: 'tmdb', providerId: '63145' },
-      releaseYear: 2015,
+  it('supports keyword search and revision-gated discard over real HTTP', async () => {
+    const created = await createLegacyTask({
       mediaType: 'tv',
-      revision: 2,
-      stage: 'intake',
-      titleHint: '下载前身份接口已修正',
+      providerRef: { provider: 'bangumi', providerId: 'crud-fixture' },
+      releaseYear: 2025,
+      seasonNumbers: ['S00'],
+      titleHint: 'CRUD 草稿唯一标题',
+      workItemId: 'media-963',
     });
-    expect(updated.body.data.units).toEqual([
-      expect.objectContaining({ seasonNumber: 'S00', unitKind: 'season' }),
-      expect.objectContaining({ seasonNumber: 'S02', unitKind: 'season' }),
-    ]);
-
-    await request(apiUrl)
-      .put(`/media-governance/tasks/${taskId}/identity`)
-      .send({
-        expectedRevision: 1,
-        providerRef: { provider: 'tmdb', providerId: '63145' },
-      })
-      .expect(409);
-    await request(apiUrl)
-      .put(`/media-governance/tasks/${taskId}/identity`)
-      .send({
-        expectedRevision: 2,
-        providerRef: { provider: 'unknown', providerId: '../wrong' },
-      })
-      .expect(400);
-    await request(apiUrl)
-      .put(`/media-governance/tasks/${taskId}/identity`)
-      .send({ expectedRevision: 2 })
-      .expect(400);
-  });
-
-  it('supports keyword search, editable draft identity and revision-gated discard over real HTTP', async () => {
-    const created = await request(apiUrl)
-      .post('/media-governance/tasks')
-      .send({
-        mediaType: 'tv',
-        providerRef: { provider: 'bangumi', providerId: 'crud-fixture' },
-        releaseYear: 2025,
-        seasonNumbers: ['S00'],
-        titleHint: 'CRUD 草稿唯一标题',
-        workItemId: 'media-963',
-      })
-      .expect(201);
     const taskId = created.body.data.id as string;
 
     const page = await request(apiUrl)
@@ -463,28 +398,11 @@ describe('MediaGovernanceController', () => {
       total: 1,
     });
 
-    const updated = await request(apiUrl)
-      .put(`/media-governance/tasks/${taskId}/identity`)
-      .send({
-        expectedRevision: 1,
-        providerRef: null,
-        releaseYear: null,
-        titleHint: 'CRUD 草稿已更名',
-      })
-      .expect(200)
-      .expect('Cache-Control', 'no-store');
-    expect(updated.body.data).toMatchObject({
-      providerRef: null,
-      releaseYear: null,
-      revision: 2,
-      titleHint: 'CRUD 草稿已更名',
-    });
-
     await request(apiUrl)
       .post(`/media-governance/tasks/${taskId}/sources/magnet`)
       .send({
         contentKind: 'embedded_subtitle_media',
-        expectedRevision: 2,
+        expectedRevision: 1,
         magnetUri:
           'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567',
         sourceRole: 'primary_media',
@@ -493,11 +411,11 @@ describe('MediaGovernanceController', () => {
 
     await request(apiUrl)
       .delete(`/media-governance/tasks/${taskId}`)
-      .query({ expectedRevision: 2 })
+      .query({ expectedRevision: 1 })
       .expect(409);
     const deleted = await request(apiUrl)
       .delete(`/media-governance/tasks/${taskId}`)
-      .query({ expectedRevision: 3 })
+      .query({ expectedRevision: 2 })
       .expect(200)
       .expect('Cache-Control', 'no-store');
     expect(deleted.body).toMatchObject({
@@ -510,15 +428,12 @@ describe('MediaGovernanceController', () => {
     await request(apiUrl).get(`/media-governance/tasks/${taskId}`).expect(404);
   });
 
-  it('replaces, edits, and deletes a failed intake source over real HTTP', async () => {
-    const created = await request(apiUrl)
-      .post('/media-governance/tasks')
-      .send({
-        mediaType: 'tv',
-        seasonNumbers: ['S01'],
-        titleHint: '来源失败恢复接口测试',
-      })
-      .expect(201);
+  it('replaces and deletes a failed intake source over real HTTP', async () => {
+    const created = await createLegacyTask({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '来源失败恢复接口测试',
+    });
     const taskId = created.body.data.id as string;
     await request(apiUrl)
       .post(`/media-governance/tasks/${taskId}/sources/magnet`)
@@ -537,24 +452,14 @@ describe('MediaGovernanceController', () => {
     failedTask.runState = 'blocked';
     failedTask.gateReason = 'NAS 执行失败：magnet_metadata_unavailable';
 
-    const edited = await request(apiUrl)
-      .put(`/media-governance/tasks/${taskId}/identity`)
-      .send({ expectedRevision: 2, titleHint: '来源失败后已编辑' })
-      .expect(200);
-    expect(edited.body.data).toMatchObject({
-      revision: 3,
-      runState: 'blocked',
-      titleHint: '来源失败后已编辑',
-    });
-
     const removed = await request(apiUrl)
       .post(
         `/media-governance/tasks/${taskId}/sources/${failedSourceId}/remove`,
       )
-      .send({ expectedRevision: 3 })
+      .send({ expectedRevision: 2 })
       .expect(201);
     expect(removed.body.data).toMatchObject({
-      revision: 4,
+      revision: 3,
       runState: 'draft',
       sources: [],
     });
@@ -563,7 +468,7 @@ describe('MediaGovernanceController', () => {
       .post(`/media-governance/tasks/${taskId}/sources/magnet`)
       .send({
         contentKind: 'embedded_subtitle_media',
-        expectedRevision: 4,
+        expectedRevision: 3,
         magnetUri:
           'magnet:?xt=urn:btih:fedcba9876543210fedcba9876543210fedcba98',
         sourceRole: 'primary_media',
@@ -571,19 +476,16 @@ describe('MediaGovernanceController', () => {
       .expect(201);
     await request(apiUrl)
       .delete(`/media-governance/tasks/${taskId}`)
-      .query({ expectedRevision: 5 })
+      .query({ expectedRevision: 4 })
       .expect(200);
     await request(apiUrl).get(`/media-governance/tasks/${taskId}`).expect(404);
   });
 
   it('accepts a magnet source and returns only a sanitized projection', async () => {
-    const created = await request(apiUrl)
-      .post('/media-governance/tasks')
-      .send({
-        mediaType: 'movie',
-        titleHint: '来源接口测试',
-      })
-      .expect(201);
+    const created = await createLegacyTask({
+      mediaType: 'movie',
+      titleHint: '来源接口测试',
+    });
 
     const source = await request(apiUrl)
       .post(`/media-governance/tasks/${created.body.data.id}/sources/magnet`)
@@ -607,10 +509,10 @@ describe('MediaGovernanceController', () => {
   });
 
   it('exposes metadata and acceptance gates over real HTTP and fails closed out of order', async () => {
-    const created = await request(apiUrl)
-      .post('/media-governance/tasks')
-      .send({ mediaType: 'movie', titleHint: '分档与验收接口测试' })
-      .expect(201);
+    const created = await createLegacyTask({
+      mediaType: 'movie',
+      titleHint: '分档与验收接口测试',
+    });
     const taskId = created.body.data.id as string;
 
     await request(apiUrl)
@@ -642,14 +544,11 @@ describe('MediaGovernanceController', () => {
   });
 
   it('accepts one multipart TV season and safely parses a torrent fixture', async () => {
-    const created = await request(apiUrl)
-      .post('/media-governance/tasks')
-      .send({
-        mediaType: 'tv',
-        seasonNumbers: ['S01'],
-        titleHint: '种子接口测试',
-      })
-      .expect(201);
+    const created = await createLegacyTask({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '种子接口测试',
+    });
     const torrent = Buffer.from('d4:infod6:lengthi4e4:name8:demo.mkvee');
     const source = await request(apiUrl)
       .post(`/media-governance/tasks/${created.body.data.id}/sources/torrent`)
@@ -697,14 +596,11 @@ describe('MediaGovernanceController', () => {
   });
 
   it('runs the HTTP Demo through download, governance and one LLM conversation binding', async () => {
-    const created = await request(apiUrl)
-      .post('/media-governance/tasks')
-      .send({
-        mediaType: 'tv',
-        seasonNumbers: ['S01'],
-        titleHint: '完整 HTTP Demo',
-      })
-      .expect(201);
+    const created = await createLegacyTask({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '完整 HTTP Demo',
+    });
     const taskId = created.body.data.id as string;
     const source = await request(apiUrl)
       .post(`/media-governance/tasks/${taskId}/sources/magnet`)

@@ -7,13 +7,23 @@ describe('Bot Adapter migration deployment contract', () => {
     const manifest = readFileSync(resolve('k8s/prod/api.yaml'), 'utf8');
     const jenkinsfile = readFileSync(resolve('Jenkinsfile'), 'utf8');
 
-    expect(dockerfile).toContain(
-      'COPY sql/bot-adapter-protocol-v1.sql sql/bot-adapter-menu-v1.sql sql/bot-adapter-protocol-v1-verify.sql ./sql/',
-    );
+    expect(dockerfile).toContain('sql/bot-adapter-protocol-v1.sql');
+    expect(dockerfile).toContain('sql/bot-adapter-menu-v1.sql');
+    expect(dockerfile).toContain('sql/bot-adapter-protocol-v1-verify.sql');
     expect(manifest).toContain('strategy:\n    type: Recreate');
     expect(manifest).toContain('name: bot-adapter-migration');
     expect(manifest).toContain('dist/commands/migrate-bot-adapter-protocol.js');
+    expect(manifest).toContain('name: media-governance-series-work-migration');
+    expect(manifest).toContain(
+      'dist/commands/migrate-media-governance-series-work.js',
+    );
     expect(manifest).toContain('name: kt-template-online-api-env');
-    expect(jenkinsfile).toContain('bot-adapter-migration=${env.DOCKER_IMAGE}');
+    expect(jenkinsfile).toContain(
+      's|k3d-kt-registry.localhost:5000/kt-template-online-api:latest|${env.DOCKER_IMAGE}|g',
+    );
+    expect(dockerfile).toContain('sql/media-governance-series-work-v1.sql');
+    expect(dockerfile).toContain(
+      'sql/media-governance-series-work-v1-verify.sql',
+    );
   });
 });

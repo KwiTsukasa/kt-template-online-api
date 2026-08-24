@@ -258,6 +258,12 @@ export type MediaGovernanceTask = {
   };
   metadataStatus: 'pending' | 'requires-agent' | 'verified';
   nextCommandLabel: string;
+  operationKind:
+    | null
+    | 'legacy-pipeline'
+    | 'magnet-batch'
+    | 'rss-intake'
+    | 'source-intake';
   persistenceMode: 'database' | 'process-simulator';
   payloadSeal: MediaGovernancePayloadSeal | null;
   progress: MediaGovernanceProgress;
@@ -277,6 +283,7 @@ export type MediaGovernanceTask = {
   };
   sealedPlanSha256: null | string;
   sealedPlan: null | Record<string, unknown>;
+  seriesId: null | string;
   sources: MediaGovernanceSource[];
   stage:
     | 'acceptance'
@@ -287,7 +294,14 @@ export type MediaGovernanceTask = {
     | 'metadata';
   titleHint: string;
   units: MediaGovernanceUnit[];
+  workId: null | string;
   workItemId: null | string;
+};
+
+type MediaGovernanceTaskCreateInput = MediaGovernanceTaskCreateDto & {
+  operationKind?: NonNullable<MediaGovernanceTask['operationKind']>;
+  seriesId?: string;
+  workId?: string;
 };
 
 const MEDIA_TYPE_LABELS: Record<MediaGovernanceMediaType, string> = {
@@ -388,7 +402,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
    * @returns 作品身份与季号后创建并持久化媒体治理任务草稿。
    */
   async create(
-    input: MediaGovernanceTaskCreateDto,
+    input: MediaGovernanceTaskCreateInput,
   ): Promise<MediaGovernanceTask> {
     const titleHint = input.titleHint.trim();
     const seasonNumbers = (input.seasonNumbers ?? []).map((season) =>
@@ -408,10 +422,13 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (this.databaseReady()) persistenceMode = 'database';
     const normalizedInput = {
       mediaType: input.mediaType,
+      operationKind: input.operationKind ?? null,
       providerRef,
       releaseYear: input.releaseYear ?? null,
       seasonNumbers,
+      seriesId: input.seriesId ?? null,
       titleHint,
+      workId: input.workId ?? null,
       workItemId: input.workItemId ?? null,
     };
     const task: MediaGovernanceTask = {
@@ -431,6 +448,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       metadataIdentity: null,
       metadataStatus: 'pending',
       nextCommandLabel: '补充并检查来源',
+      operationKind: input.operationKind ?? null,
       persistenceMode,
       payloadSeal: null,
       progress: {
@@ -461,15 +479,46 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       },
       sealedPlanSha256: null,
       sealedPlan: null,
+      seriesId: input.seriesId ?? null,
       sources: [],
       stage: 'intake',
       titleHint,
       units: this.createUnits(input.mediaType, seasonNumbers),
+      workId: input.workId ?? null,
       workItemId: input.workItemId ?? null,
     };
     await this.persistTask(task);
     this.tasks.unshift(task);
     this.publishTaskPatch(task, 'created');
+    return task;
+  }
+
+  /**
+   * 仅为精确身份已确认的遗留 Task 持久化 Series/Work 所有权，并保持 revision、密封与身份快照原值。
+   *
+   * @param taskId - 需要绑定到目录 Work 的既有 Task。
+   * @param input - 唯一 Series/Work 与遗留执行类型。
+   * @returns 已持久化目录上下文的同一 Task。
+   */
+  async bindWorkContext(
+    taskId: string,
+    input: {
+      operationKind: NonNullable<MediaGovernanceTask['operationKind']>;
+      seriesId: string;
+      workId: string;
+    },
+  ): Promise<MediaGovernanceTask> {
+    const task = this.detail(taskId);
+    if (
+      task.workId &&
+      (task.workId !== input.workId || task.seriesId !== input.seriesId)
+    ) {
+      throwVbenError('Task 已绑定其他 Series Work', HttpStatus.CONFLICT);
+    }
+    task.operationKind = input.operationKind;
+    task.seriesId = input.seriesId;
+    task.workId = input.workId;
+    await this.persistTask(task);
     return task;
   }
 
@@ -485,6 +534,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ): Promise<MediaGovernanceTask> {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
+    if (task.seriesId || task.workId) {
+      throwVbenError(
+        'Work 绑定任务的身份只能从 Series 详情管理',
+        HttpStatus.CONFLICT,
+      );
+    }
     if (
       task.stage !== 'intake' ||
       !['blocked', 'draft'].includes(task.runState) ||
@@ -623,6 +678,9 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   ) {
     const task = this.detail(taskId);
     this.assertRevision(task, input.expectedRevision);
+    if (task.seriesId || task.workId) {
+      throwVbenError('Work 绑定任务不能恢复独立资料身份', HttpStatus.CONFLICT);
+    }
     return this.restoreClosedCatalogIdentity(task, input);
   }
 

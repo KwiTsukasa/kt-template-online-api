@@ -7,13 +7,18 @@ import {
 } from '@/common';
 
 @Entity('media_governance_series')
-@Index(['canonicalProvider', 'canonicalProviderId'], { unique: true })
+@Index(['canonicalProvider', 'canonicalNamespace', 'canonicalProviderId'], {
+  unique: true,
+})
 export class MediaGovernanceSeriesEntity {
   @PrimaryColumn({ length: 96, type: 'varchar' })
   id: string;
 
   @Column({ length: 16, name: 'canonical_provider', type: 'varchar' })
   canonicalProvider: string;
+
+  @Column({ length: 16, name: 'canonical_namespace', type: 'varchar' })
+  canonicalNamespace: string;
 
   @Column({ length: 64, name: 'canonical_provider_id', type: 'varchar' })
   canonicalProviderId: string;
@@ -35,11 +40,105 @@ export class MediaGovernanceSeriesEntity {
   @Column({ length: 24, name: 'media_type', type: 'varchar' })
   mediaType: string;
 
+  @Index({ unique: true })
+  @Column({
+    length: 96,
+    name: 'primary_work_id',
+    type: 'varchar',
+  })
+  primaryWorkId: string;
+
   @Column({ default: 1, type: 'int' })
   revision: number;
 
   @Column({ default: 'active', length: 24, type: 'varchar' })
   status: string;
+
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
+
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
+}
+
+@Entity('media_governance_work')
+@Index(['canonicalProvider', 'canonicalNamespace', 'canonicalProviderId'], {
+  unique: true,
+})
+@Index(['seriesId', 'status'])
+export class MediaGovernanceWorkEntity {
+  @PrimaryColumn({ length: 96, type: 'varchar' })
+  id: string;
+
+  @Column({ length: 96, name: 'series_id', type: 'varchar' })
+  seriesId: string;
+
+  @Column({ length: 16, name: 'canonical_provider', type: 'varchar' })
+  canonicalProvider: string;
+
+  @Column({ length: 16, name: 'canonical_namespace', type: 'varchar' })
+  canonicalNamespace: string;
+
+  @Column({ length: 64, name: 'canonical_provider_id', type: 'varchar' })
+  canonicalProviderId: string;
+
+  @Column({ length: 200, type: 'varchar' })
+  title: string;
+
+  @Column({
+    length: 200,
+    name: 'original_title',
+    nullable: true,
+    type: 'varchar',
+  })
+  originalTitle: null | string;
+
+  @Column({ name: 'release_year', type: 'int' })
+  releaseYear: number;
+
+  @Column({ length: 24, name: 'work_type', type: 'varchar' })
+  workType: string;
+
+  @Column({ default: 1, type: 'int' })
+  revision: number;
+
+  @Column({ default: 'active', length: 24, type: 'varchar' })
+  status: string;
+
+  @KtCreateDateColumn({ name: 'create_time' })
+  createTime: KtDateTime;
+
+  @KtUpdateDateColumn({ name: 'update_time' })
+  updateTime: KtDateTime;
+}
+
+@Entity('media_governance_work_external_ref')
+@Index(['provider', 'providerNamespace', 'providerId'], { unique: true })
+export class MediaGovernanceWorkExternalRefEntity {
+  @PrimaryColumn({ length: 96, type: 'varchar' })
+  id: string;
+
+  @Index()
+  @Column({ length: 96, name: 'work_id', type: 'varchar' })
+  workId: string;
+
+  @Column({ length: 16, type: 'varchar' })
+  provider: string;
+
+  @Column({ length: 16, name: 'provider_namespace', type: 'varchar' })
+  providerNamespace: string;
+
+  @Column({ length: 64, name: 'provider_id', type: 'varchar' })
+  providerId: string;
+
+  @Column({ length: 32, name: 'reference_role', type: 'varchar' })
+  referenceRole: string;
+
+  @Column({ length: 200, nullable: true, type: 'varchar' })
+  title: null | string;
+
+  @Column({ name: 'release_year', nullable: true, type: 'int' })
+  releaseYear: null | number;
 
   @KtCreateDateColumn({ name: 'create_time' })
   createTime: KtDateTime;
@@ -81,13 +180,16 @@ export class MediaGovernanceSeriesExternalRefEntity {
 }
 
 @Entity('media_governance_season')
-@Index(['seriesId', 'seasonNumber'], { unique: true })
+@Index(['workId', 'seasonNumber'], { unique: true })
 export class MediaGovernanceSeasonEntity {
   @PrimaryColumn({ length: 96, type: 'varchar' })
   id: string;
 
   @Column({ length: 96, name: 'series_id', type: 'varchar' })
   seriesId: string;
+
+  @Column({ length: 96, name: 'work_id', type: 'varchar' })
+  workId: string;
 
   @Column({ name: 'season_number', type: 'int' })
   seasonNumber: number;
@@ -309,6 +411,8 @@ export class MediaGovernanceRssItemEntity {
 
 export const MEDIA_GOVERNANCE_CATALOG_ENTITIES = [
   MediaGovernanceSeriesEntity,
+  MediaGovernanceWorkEntity,
+  MediaGovernanceWorkExternalRefEntity,
   MediaGovernanceSeriesExternalRefEntity,
   MediaGovernanceSeasonEntity,
   MediaGovernanceEpisodeEntity,

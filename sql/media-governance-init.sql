@@ -4,6 +4,9 @@
 CREATE TABLE IF NOT EXISTS `media_governance_task` (
   `id` varchar(96) NOT NULL,
   `work_item_id` varchar(96) DEFAULT NULL,
+  `series_id` varchar(96) DEFAULT NULL,
+  `work_id` varchar(96) DEFAULT NULL,
+  `operation_kind` varchar(32) DEFAULT NULL,
   `title_hint` varchar(200) NOT NULL,
   `media_type` varchar(24) NOT NULL,
   `release_year` int DEFAULT NULL,
@@ -31,6 +34,8 @@ CREATE TABLE IF NOT EXISTS `media_governance_task` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_media_governance_task_work_item` (`work_item_id`),
   UNIQUE KEY `uk_media_governance_task_llm_conversation` (`llm_conversation_id`),
+  KEY `idx_media_governance_task_series` (`series_id`),
+  KEY `idx_media_governance_task_work` (`work_id`),
   KEY `idx_media_governance_task_stage_state` (`stage`, `run_state`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -240,17 +245,55 @@ CREATE TABLE IF NOT EXISTS `media_governance_outbox` (
 CREATE TABLE IF NOT EXISTS `media_governance_series` (
   `id` varchar(96) NOT NULL,
   `canonical_provider` varchar(16) NOT NULL,
+  `canonical_namespace` varchar(16) NOT NULL,
   `canonical_provider_id` varchar(64) NOT NULL,
   `title` varchar(200) NOT NULL,
   `original_title` varchar(200) DEFAULT NULL,
   `release_year` int NOT NULL,
   `media_type` varchar(24) NOT NULL,
+  `primary_work_id` varchar(96) NOT NULL,
   `revision` int NOT NULL DEFAULT 1,
   `status` varchar(24) NOT NULL DEFAULT 'active',
   `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_media_governance_series_canonical` (`canonical_provider`, `canonical_provider_id`)
+  UNIQUE KEY `uk_media_governance_series_canonical` (`canonical_provider`, `canonical_namespace`, `canonical_provider_id`),
+  UNIQUE KEY `uk_media_governance_series_primary_work` (`primary_work_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `media_governance_work` (
+  `id` varchar(96) NOT NULL,
+  `series_id` varchar(96) NOT NULL,
+  `canonical_provider` varchar(16) NOT NULL,
+  `canonical_namespace` varchar(16) NOT NULL,
+  `canonical_provider_id` varchar(64) NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `original_title` varchar(200) DEFAULT NULL,
+  `release_year` int NOT NULL,
+  `work_type` varchar(24) NOT NULL,
+  `revision` int NOT NULL DEFAULT 1,
+  `status` varchar(24) NOT NULL DEFAULT 'active',
+  `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_media_governance_work_canonical` (`canonical_provider`, `canonical_namespace`, `canonical_provider_id`),
+  KEY `idx_media_governance_work_series` (`series_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `media_governance_work_external_ref` (
+  `id` varchar(96) NOT NULL,
+  `work_id` varchar(96) NOT NULL,
+  `provider` varchar(16) NOT NULL,
+  `provider_namespace` varchar(16) NOT NULL,
+  `provider_id` varchar(64) NOT NULL,
+  `reference_role` varchar(32) NOT NULL,
+  `title` varchar(200) DEFAULT NULL,
+  `release_year` int DEFAULT NULL,
+  `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_media_governance_work_external_ref` (`provider`, `provider_namespace`, `provider_id`),
+  KEY `idx_media_governance_work_external_ref_work` (`work_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `media_governance_series_external_ref` (
@@ -271,6 +314,7 @@ CREATE TABLE IF NOT EXISTS `media_governance_series_external_ref` (
 CREATE TABLE IF NOT EXISTS `media_governance_season` (
   `id` varchar(96) NOT NULL,
   `series_id` varchar(96) NOT NULL,
+  `work_id` varchar(96) NOT NULL,
   `season_number` int NOT NULL,
   `episode_start` int NOT NULL DEFAULT 1,
   `episode_count` int NOT NULL,
@@ -280,7 +324,8 @@ CREATE TABLE IF NOT EXISTS `media_governance_season` (
   `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_media_governance_season_identity` (`series_id`, `season_number`)
+  UNIQUE KEY `uk_media_governance_season_identity` (`work_id`, `season_number`),
+  KEY `idx_media_governance_season_series_work` (`series_id`, `work_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `media_governance_episode` (

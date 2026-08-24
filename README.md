@@ -16,16 +16,16 @@
 
 ## 功能模块
 
-| 模块                            | 说明                                                                                                                                                |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `admin`                         | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志、环境总览、网络管理和媒体治理生产编排                                       |
-| `blog`                          | 本地博客文章、分类、标签和 Argon 主题配置                                                                                                           |
-| `modules/bot`                   | 无状态 Bot 协议、标准入站/投递信封和 adapter registry；禁止账号、会话、连接与持久化依赖                                                            |
-| `modules/bot-adapter`           | 有状态 Bot Core，以及 NapCat/OneBot、Tencent WebSocket/Webhook 和消息投递适配器                                                                    |
-| `modules/plugin-platform`       | 无账号身份的插件 manifest、版本安装、运行事件、定时任务、受控 SDK 和 CLI                                                                            |
-| `modules/plugins/*`             | BangDream、Bilibili Card、FF14 Market、FFLogs、Repeater 等独立协议插件包                                                                             |
-| `minio`                         | Bucket 检查、上传、列表、临时 URL、代理下载、删除，以及 Blog Live2D 运行包受控读取入口                                                              |
-| `common`                        | 响应封装、异常过滤、请求日志、日期格式化、字典解码、Snowflake、工具服务                                                                             |
+| 模块                      | 说明                                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `admin`                   | Vben Admin 认证、用户、菜单、角色、部门、时区、字典、组件模板、系统日志、环境总览、网络管理和媒体治理生产编排 |
+| `blog`                    | 本地博客文章、分类、标签和 Argon 主题配置                                                                     |
+| `modules/bot`             | 无状态 Bot 协议、标准入站/投递信封和 adapter registry；禁止账号、会话、连接与持久化依赖                       |
+| `modules/bot-adapter`     | 有状态 Bot Core，以及 NapCat/OneBot、Tencent WebSocket/Webhook 和消息投递适配器                               |
+| `modules/plugin-platform` | 无账号身份的插件 manifest、版本安装、运行事件、定时任务、受控 SDK 和 CLI                                      |
+| `modules/plugins/*`       | BangDream、Bilibili Card、FF14 Market、FFLogs、Repeater 等独立协议插件包                                      |
+| `minio`                   | Bucket 检查、上传、列表、临时 URL、代理下载、删除，以及 Blog Live2D 运行包受控读取入口                        |
+| `common`                  | 响应封装、异常过滤、请求日志、日期格式化、字典解码、Snowflake、工具服务                                       |
 
 ## 目录结构
 
@@ -65,8 +65,8 @@ ci/            Jenkins Agent/Docker 辅助文件
 | Admin                 | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`ADMIN_NOTICE_SSE_REPLAY_LIMIT`、`ADMIN_NOTICE_SSE_HEARTBEAT_MS`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                              |
 | Public Security       | `PUBLIC_SECURITY_*`、`PUBLIC_RATE_LIMIT_REDIS_*`、`PUBLIC_RATE_LIMIT_*`                                                                                                                                                                                                                                                                                                                                                                                         |
 | Logging/Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_*`                                                                                                                                                                                                                                                                                                                                                                                            |
-| Bot/Bot Adapter       | `BOT_ENABLED`、`BOT_ACCOUNT_SECRET_KEY`、`TENCENT_BOT_WEBHOOK_PUBLIC_BASE_URL`、`BOT_REVERSE_WS_*`、`BOT_SEND_*`、`BOT_COMMAND_MIN_COOLDOWN_MS`、`BOT_RULE_MIN_COOLDOWN_MS`、`NAPCAT_*`、`MQTT_*`                                                                                                                                                                                                  |
-| Plugin Platform       | `PLUGIN_QUEUE_REDIS_*`、`PLUGIN_TASK_QUEUE_REDIS_*`、`PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`PLUGIN_REPEATER_*`                                                                                                                                                                                                                                                                                        |
+| Bot/Bot Adapter       | `BOT_ENABLED`、`BOT_ACCOUNT_SECRET_KEY`、`TENCENT_BOT_WEBHOOK_PUBLIC_BASE_URL`、`BOT_REVERSE_WS_*`、`BOT_SEND_*`、`BOT_COMMAND_MIN_COOLDOWN_MS`、`BOT_RULE_MIN_COOLDOWN_MS`、`NAPCAT_*`、`MQTT_*`                                                                                                                                                                                                                                                               |
+| Plugin Platform       | `PLUGIN_QUEUE_REDIS_*`、`PLUGIN_TASK_QUEUE_REDIS_*`、`PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`PLUGIN_REPEATER_*`                                                                                                                                                                                                                                                                                                                                                        |
 | Environment Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_JENKINS_*`、`ENV_DASHBOARD_K8S_*`、`ENV_DASHBOARD_TENCENT_*`、`ENV_DASHBOARD_CADDY_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                         |
 | Network Management    | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_TCP_NATMAP_RELEASE_MODE`、`NETWORK_TCP_NATMAP_CANARY_PORTS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_*`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
 | Media Governance      | `MEDIA_GOVERNANCE_DESCRIPTOR_BUCKET`、`MEDIA_GOVERNANCE_EXECUTOR_BASE_URL`、`MEDIA_GOVERNANCE_EXECUTOR_INTERNAL_SECRET`、`MEDIA_GOVERNANCE_EXECUTOR_TIMEOUT_MS`；Codex 端点、模型与内部认证统一复用下方 LLM 配置                                                                                                                                                                                                                                                |
@@ -249,24 +249,38 @@ API 暴露 `GET /health/runtime` 作为本地 smoke、Jenkins/K8s 和 ktWorkflow
 Admin 媒体治理生产链路使用 `JwtAuthGuard` 与媒体专用权限门，提供作品身份、来源、
 逐季字幕合同、运行时探针、下载/治理进度、低效下载取消与精确换源、CodexAgent
 人工放行、聚合和可续接 SSE。
-作品目录与执行任务已分层：`Series → Season → Episode` 是唯一 canonical 事实，
-Task 只记录一次执行及其 Episode 绑定，Bangumi 等分篇编号作为外部资料证据保留，
-不能再覆盖 TMDB/fnOS 使用的季号。Season 通过 `episodeStart + episodeCount` 保留
-非 1 起始的连续集号；历史分类接口只按精确资料身份和季集证据给出只读分类，实际归类
-继续使用显式 `series/reconcile`，不触碰 Task/Run/来源/密封状态。每个 Task 最多密封 16 个同治理类型的主媒体来源，
+作品目录与执行任务采用 Series-first 层级：`Series → Work → Season/Episode → Task`。
+Series 必须先从 Bangumi/TMDB 官方候选中确认主身份，创建事务会同时建立唯一主 Work；
+后续 TV、电影和剧场版都作为同一 Series 下的独立 Work 管理。Work 身份使用
+`provider + namespace + providerId` 唯一键区分 TMDB TV/Movie；只有 TV Work 可以创建
+Season/Episode，电影与剧场版禁止伪造 S00。Season 通过 `episodeStart + episodeCount`
+保留非 1 起始的连续集号。
+Task 只表达一次执行，不能从根任务接口单独创建或修改作品身份；新 Task 只能从既有 Work、
+逐集磁链或 RSS 入队创建，`seriesId/workId/operationKind` 与标题、资料编号、年份均从 Work
+派生。TV Task 在 `metadataStatus=verified`、主媒体清单已检查且 Unit/视频映射完全一致后，
+只会绑定目标 Work 已存在的 Season/Episode；缺季、缺集、跨 Work 或 Episode 已被其他 Task
+占用时保持零目录写入。该同步不修改 Task revision、Run、来源或密封状态。每个 Task 最多密封 16 个同治理类型的主媒体来源，
 因此逐集磁链可在一个 Task 内批量接入；同包外挂字幕会跨这些来源合并为同一发布组合同。
-RSS 订阅按 Series/Season 持久化地址、过滤和集号解析规则，每分钟扫描到期订阅，条目按
+RSS 订阅按 Series/Work/Season 持久化地址、过滤和集号解析规则，每分钟扫描到期订阅，条目按
 GUID/BTIH 去重后按最多 16 集一组创建 Task；原始磁链仍只进入私有描述符存储，不写入 RSS 表。
+创建订阅前先从 Bangumi/TMDB 选择作品身份，再由服务端并行聚合九个固定社区来源并按发布组去重。
+Mikan 精确番组页发现的每个字幕组 RSS 都会被分批读取，卡片中的命中数、最近时间和样例来自
+该子组 Feed 的真实条目；单源失败独立展示，不生成意义不明的“未识别发布组”。
+旧来源若对完整长标题返回 500，发现链路只追加一次标题尾部短别名请求，并继续用完整身份别名
+过滤条目；因此来源可用性不会被站点查询词缺陷误判，也不会把宽泛搜索结果混入作品。
+订阅创建会再次核验所选 Bangumi/TMDB 身份，并与订阅在同一事务写入 Work 资料证据；同一
+Feed 重复提交只补齐旧身份，不重复建订阅。轮询会重试尚无 Task/Source 的历史 ignored/failed
+条目，固定白名单 HTTPS torrent enclosure 重算 BTIH 后按最多 16 集创建 Task 和 Episode
+Binding；成功后通过 `catalog-changed` 让系列详情、覆盖率和剧集表自动回读。
 磁链清单检查每 5 秒发布语义进度并在 120 秒内终结；失败后清除 active Run 并保留精确
-来源身份，允许重新填写来源、修正任务身份、已有清单时重编文件映射，或在无载荷/计划/
-来源清理 Run 时删除任务。列表 CRUD 支持真实新建、详情查询和下载前身份编辑；删除只
-接受当前 revision，且允许尚未进入执行阶段的 intake `draft/blocked` 任务连同来源配置
+来源身份，允许重新填写来源、已有清单时重编文件映射，或在无载荷/计划/
+来源清理 Run 时删除任务。执行任务列表只提供状态、进度和执行操作，不再提供作品新建或身份编辑；删除只
+接受当前 revision，且允许尚未进入执行阶段的 intake `draft/blocked` Task 连同来源配置
 和绑定的本地账本一起删除。API 在同一数据库
 事务中清理 Task、Unit、Source、Run、Event、Outbox、Agent 与关联决策/例外记录，并返回
 `clearedWorkItemId`；已有活动 Run、载荷/计划密封、元数据成果或验收证据的任务仍返回冲突。
-草稿在下载前可用当前 revision 修正作品名、媒体类型、季号以及可选的 `providerRef`/
-`releaseYear`；已有来源、来源健康与阻塞状态保持不变，不再属于修正后 Unit 的旧映射会
-同步清除。下载、治理或 Agent 已开始后固定拒绝修改。
+迁移前遗留 Task 只有在操作者为 Series 新增完全相同官方身份的 Work 后才会补充绑定；
+电影与剧场版不会按标题相似度自动合并，Series/Work 上下文缺失或歧义固定保持待确认。
 治理执行若只完成 5 阶段中的第 1 阶段 dry-run、随后阻塞，且尚无 Unit 验收或元数据成果，
 允许按当前 revision 精确移除错误来源。执行器先清除该来源独占 staging/profile；终态回调
 再清空旧载荷和计划密封、保留已分配的 `workItemId`，把同一 Task 退回 intake 以接入正确来源。
@@ -274,20 +288,28 @@ GUID/BTIH 去重后按最多 16 集一组创建 Task；原始磁链仍只进入�
 元数据链路会持久化作品身份、逐 Unit A/B/C 缺口与证据，先执行最多两次的确定性
 LocalNFO/海报有界修复，再将仍未闭合的真实歧义交给 CodexAgent；最终闭环模式只由
 独立验收判定。
-Task、Unit、来源、Run、canonical 目录和 RSS 由 17 张 TypeORM 领域表持久化；其中旧 Agent session
+Task、Unit、来源、Run、Series/Work 目录和 RSS 由 19 张 TypeORM 领域表持久化；其中旧 Agent session
 表只作历史兼容。新任务只保存 `llmConversationId`，API 启动时从标准 LLM conversation
 恢复派生状态；状态变更和语义事件在数据库事务提交后才发布 SSE。
+生产发布由同一 API digest 的 `media-governance-series-work-migration` initContainer 在
+数据库 advisory lock 内执行 `media-governance-series-work-v1.sql`，随后用独立只读 SQL
+核对表结构、唯一索引、Series/Work/Season 所有权、旧资料引用和 Task 上下文；任一计数
+漂移都会阻止 API 启动。结构迁移不按标题写入电影归属；操作者确认的历史电影或剧场版
+通过认证的 Work 创建接口加入既有 Series，API 只绑定资料身份完全一致的遗留 Task，且
+不创建伪 Season/Episode。
 执行器高频进度先校验 Run、manifest 与连续序号，再原子追加到 Redis 热层并立即发布
 携带紧凑 Task patch 的 `task-changed`；普通 tick 不等待 MySQL。MySQL 最多每 10 秒、
 出现语义变化或进入终态时保存权威快照，终态必须等本实例已排队快照落库。Admin 对正常
 tick 原位合并补丁，不重载列表/详情，也不显示整页 Spin；SSE 游标超出 API 有界内存
-回放窗时发送 `snapshot-required`，由 Admin 静默重取权威快照。Redis Stream 当前承担
+回放窗时发送 `snapshot-required`，由 Admin 静默重取权威快照。目录事务提交后在同一 SSE 发布
+携完整 SeriesCard 的 `catalog-changed`；当前页卡片原位替换，新 Series、筛选边界或游标失效静默重载系列分页。
+Redis Stream 当前承担
 执行器序号与进度热层，不声明为跨进程 SSE 历史回放层。媒体 SSE 响应同时返回
 `Cache-Control: no-store` 和 `X-Accel-Buffering: no`，防止反向代理积攒进度事件。
 运维入口 `pnpm media-governance:backup-restore-drill -- ...` 默认只输出计划；执行模式
-只备份精确 17 张媒体治理表，并且只允许恢复到新建的
-`kt_media_governance_restore_*` 隔离库。入口会在 dump 前后比较源库 17 表行数及
-Task/Run/Event/Series/Season/Episode/Binding/RSS 身份快照、校验 SQL SHA-256、恢复后再次比较相同快照，最后只删除本次
+自动识别迁移前 17 张或 Series-first 19 张媒体治理表，并且只允许恢复到新建的
+`kt_media_governance_restore_*` 隔离库。入口会在 dump 前后比较源库表行数及
+Task/Run/Event/Series/Work/Season/Episode/Binding/RSS 身份快照、校验 SQL SHA-256、恢复后再次比较相同快照，最后只删除本次
 创建的隔离库；快照比较复用同一 `sha256sum`，不额外依赖 `cmp`。源库变化、目标已
 存在、摘要漂移或能力缺失都会失败关闭。
 任务汇总接口从真实 Task/Unit/Run 投影阻塞任务、10 分钟无心跳的失联运行、已关闭但
@@ -389,7 +411,7 @@ payload-ready 载荷重试，不会重新下载。
 Run，并由 Agent 的类型化身份修正收口。升级前已处于这一精确缺口
 且尚无计数字段的持久化任务按刷新已用完迁移，避免 API 重启重新打开循环。
 任务若已有每个 Unit 的成功核验证据、明确的元数据缺口阻塞、同一密封计划且无活动 Run，可用当前 revision 重新调用 `metadata/verify` 采集事实，以承接执行器版本修正或外部合法元数据收敛；该路径本地媒体/云端/数据库直写均为 0，不会重开已用完的延迟身份刷新次数。
-任务的用户主资料库 `catalogIdentity`、TMDB 二级元数据 `metadataIdentity` 与密封物理根 `identity` 分别校验。已选 Bangumi/TVDB/TMDB 主身份不会被 Agent 的 TMDB 候选静默覆盖；NFO 的 provider 季集可使用二级 TMDB，但 `title/showtitle/year` 仍使用 catalog 标题和年份。旧的 closed Task 只在主次身份精确折叠、密封历史根匹配且具备 Run 权限时，才可通过 `catalog-identity/restore` 一次性恢复并重开元数据核验，不移动已验收媒体。
+任务的 Work 派生 `catalogIdentity`、TMDB 二级元数据 `metadataIdentity` 与密封物理根 `identity` 分别校验。已选 Bangumi/TVDB/TMDB Work 主身份不会被 Agent 的 TMDB 候选静默覆盖；NFO 的 provider 季集可使用二级 TMDB，但 `title/showtitle/year` 仍使用 Work catalog 标题和年份。公开 Task API 不提供身份恢复或编辑入口；历史身份折叠残留必须先在 Series 下建立并确认正确 Work，再通过受控迁移补充上下文。
 内嵌字幕任务在唯一 TMDB 身份已闭合且只缺 LocalNFO、作品/季海报时，第一次确定性生成
 属于自动元数据补齐，独立验收后记为 `automatic`；第二次尝试、其他 profile 或额外缺口
 继续进入 `bounded_repair`/Agent，不改变 A/B/C 硬门禁。
@@ -509,6 +531,6 @@ Message Management 与订阅者适配器按以下顺序发布和回滚：
 
 ## 来源与许可证
 
-| 一级来源                                                                 | 使用方式                                                                                               | License |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ------- |
+| 一级来源                                                                 | 使用方式                                                                                   | License |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ | ------- |
 | [Tsugu BangDream Bot](https://github.com/Yamamoto-2/tsugu-bangdream-bot) | BangDream 插件能力已重构合入 `src/modules/plugins/bangdream/src`，保留本地 `TSUGU-LICENSE` | MIT     |

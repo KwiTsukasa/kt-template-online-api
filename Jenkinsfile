@@ -665,9 +665,7 @@ pipeline {
 
           runCmd("""
             set -e
-            kubectl ${kubeConfigArg} apply -f ${shellQuote(manifestFile)}
-            kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote("deployment/${deploymentName}")} ${shellQuote("${containerName}=${env.DOCKER_IMAGE}")}
-            kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote("deployment/${deploymentName}")} ${shellQuote("bot-adapter-migration=${env.DOCKER_IMAGE}")}
+            sed ${shellQuote("s|k3d-kt-registry.localhost:5000/kt-template-online-api:latest|${env.DOCKER_IMAGE}|g")} ${shellQuote(manifestFile)} | kubectl ${kubeConfigArg} apply -f -
             kubectl ${kubeConfigArg} ${namespaceArg} set image ${shellQuote('deployment/kt-napcat-webui-gateway')} ${shellQuote("gateway=${env.GATEWAY_DOCKER_IMAGE}")}
           """.stripIndent())
 

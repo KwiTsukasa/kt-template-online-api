@@ -26,14 +26,11 @@ import { JwtAuthGuard } from '@/modules/admin/identity/auth/presentation/jwt-aut
 import {
   MediaGovernanceMagnetSourceCreateDto,
   MediaGovernanceAgentSessionQueryDto,
-  MediaGovernanceCatalogIdentityRestoreDto,
   MediaGovernanceOperatorDecisionDto,
   MediaGovernanceRevisionCommandDto,
   MediaGovernanceSourceClassificationDto,
   MediaGovernanceSourceSelectionDto,
   MediaGovernanceSubtitleContractDto,
-  MediaGovernanceTaskCreateDto,
-  MediaGovernanceTaskIdentityUpdateDto,
   MediaGovernanceTaskPageQueryDto,
 } from '@/modules/admin/media-governance/contract/media-governance.dto';
 import { MediaGovernanceService } from '@/modules/admin/media-governance/application/media-governance.service';
@@ -108,61 +105,6 @@ export class MediaGovernanceController {
   ) {
     this.noStore(response);
     return vbenSuccess(this.service.detail(taskId));
-  }
-
-  /**
-   * 根据`body`、`response`构造媒体治理任务草稿并返回统一成功响应。
-   * @param body - 用于媒体治理任务草稿并返回统一成功响应的结构化输入。
-   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
-   * @returns 媒体治理任务草稿并返回统一成功响应。
-   */
-  @Post()
-  @MediaGovernancePermission('Media:Governance:Create')
-  @ApiOperation({ summary: '创建媒体治理任务草稿' })
-  async create(
-    @Body() body: MediaGovernanceTaskCreateDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    this.noStore(response);
-    return vbenSuccess(await this.service.create(body));
-  }
-
-  /**
-   * 通过在执行前修正任务的媒体身份和资料源引用。
-   * @param taskId - 用于精确定位任务的标识。
-   * @param body - 用于通过在执行前修正任务的媒体身份和资料源引用的结构化输入。
-   * @param response - 接收本次接口响应体并结束请求的当前 HTTP 响应。
-   * @returns 通过在执行前修正任务的媒体身份和资料源引用。
-   */
-  @Put(':taskId/identity')
-  @MediaGovernancePermission('Media:Governance:Create')
-  @ApiOperation({ summary: '在下载前修正作品资料库身份' })
-  async updateIdentity(
-    @Param('taskId') taskId: string,
-    @Body() body: MediaGovernanceTaskIdentityUpdateDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    this.noStore(response);
-    return vbenSuccess(await this.service.updateIdentity(taskId, body));
-  }
-
-  /**
-   * 以当前 revision 恢复已关闭任务在密封历史中的用户主资料库身份。
-   * @param taskId - 需要恢复主资料库身份的媒体任务。
-   * @param body - 携带历史资料库编号、年份与当前 revision 的结构化输入。
-   * @param response - 禁止缓存本次身份恢复结果的 HTTP 响应。
-   * @returns 恢复主资料库身份并重开元数据核验的任务。
-   */
-  @Post(':taskId/catalog-identity/restore')
-  @MediaGovernancePermission('Media:Governance:Run')
-  @ApiOperation({ summary: '恢复密封历史中的用户主资料库身份' })
-  async restoreCatalogIdentity(
-    @Param('taskId') taskId: string,
-    @Body() body: MediaGovernanceCatalogIdentityRestoreDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    this.noStore(response);
-    return vbenSuccess(await this.service.restoreCatalogIdentity(taskId, body));
   }
 
   /**
@@ -642,7 +584,7 @@ export class MediaGovernanceEventsController {
    * @returns 合并历史重放、实时任务或 Agent 增量与定时心跳的事件流。
    */
   @Sse('stream')
-  @ApiOperation({ summary: '订阅媒体治理任务语义进度' })
+  @ApiOperation({ summary: '订阅媒体治理任务与系列目录语义事件' })
   stream(
     @Res({ passthrough: true }) response: Response,
     @Headers('last-event-id') lastEventIdHeader?: string,

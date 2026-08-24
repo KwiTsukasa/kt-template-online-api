@@ -50,6 +50,64 @@ describe('MediaGovernanceEventStreamService', () => {
     ).resolves.toEqual(second);
   });
 
+  it('notifies internal task subscribers and publishes replayable catalog cards', async () => {
+    const service = new MediaGovernanceEventStreamService({
+      heartbeatMs: 60_000,
+      replayLimit: 5,
+    });
+    const subscriber = jest.fn();
+    const unsubscribe = service.subscribeTaskChanged(subscriber);
+    const taskChanged = service.publishTaskChanged(taskEvent('created', 1));
+    await Promise.resolve();
+    expect(subscriber).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'media-task-01' }),
+    );
+    unsubscribe();
+
+    const catalog = service.publishCatalogChanged({
+      changeType: 'created',
+      revision: 1,
+      series: {
+        bindingCount: 2,
+        boundEpisodeCount: 2,
+        canonicalProvider: 'tmdb',
+        canonicalProviderId: '100',
+        coveragePercent: 100,
+        createTime: new Date('2026-08-24T00:00:00.000Z'),
+        episodeCount: 2,
+        id: 'media-series-auto-01',
+        mediaType: 'tv',
+        originalTitle: null,
+        releaseYear: 2026,
+        revision: 1,
+        rssCount: 0,
+        rssTotalCount: 0,
+        seasonCount: 1,
+        seasonSummaries: [],
+        status: 'active',
+        taskCount: 1,
+        title: '自动归类作品',
+        updateTime: new Date('2026-08-24T00:00:00.000Z'),
+      },
+      seriesId: 'media-series-auto-01',
+      taskId: 'media-task-01',
+      taskIds: ['media-task-01'],
+      updatedAt: '2026-08-24T00:00:00.000Z',
+    });
+
+    expect(catalog).toMatchObject({
+      data: {
+        changeType: 'created',
+        seriesId: 'media-series-auto-01',
+        taskId: 'media-task-01',
+      },
+      type: 'catalog-changed',
+    });
+    await expect(
+      firstValueFrom(service.stream(taskChanged.id).pipe(take(1))),
+    ).resolves.toEqual(catalog);
+  });
+
   it('requires an authoritative snapshot after an unknown cursor', async () => {
     const service = new MediaGovernanceEventStreamService({
       heartbeatMs: 60_000,

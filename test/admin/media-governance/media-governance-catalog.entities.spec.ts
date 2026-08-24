@@ -8,11 +8,18 @@ import {
   MediaGovernanceSeriesEntity,
   MediaGovernanceSeriesExternalRefEntity,
   MediaGovernanceTaskEpisodeBindingEntity,
+  MediaGovernanceWorkEntity,
+  MediaGovernanceWorkExternalRefEntity,
 } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-catalog.entities';
 
 describe('media governance catalog entity schema', () => {
   const entities = [
     [MediaGovernanceSeriesEntity, 'media_governance_series'],
+    [MediaGovernanceWorkEntity, 'media_governance_work'],
+    [
+      MediaGovernanceWorkExternalRefEntity,
+      'media_governance_work_external_ref',
+    ],
     [
       MediaGovernanceSeriesExternalRefEntity,
       'media_governance_series_external_ref',
@@ -27,7 +34,7 @@ describe('media governance catalog entity schema', () => {
     [MediaGovernanceRssItemEntity, 'media_governance_rss_item'],
   ] as const;
 
-  it('registers the complete Series Season Episode RSS table set', () => {
+  it('registers the complete Series Work Season Episode RSS table set', () => {
     expect(MEDIA_GOVERNANCE_CATALOG_ENTITIES).toEqual(
       entities.map(([entity]) => entity),
     );
@@ -45,14 +52,31 @@ describe('media governance catalog entity schema', () => {
     const indices = getMetadataArgsStorage().indices;
     expect(
       indices.find(
-        (index) => index.target === MediaGovernanceSeriesEntity && index.unique,
+        (index) =>
+          index.target === MediaGovernanceSeriesEntity &&
+          index.unique &&
+          Array.isArray(index.columns) &&
+          index.columns.includes('canonicalNamespace'),
       )?.columns,
-    ).toEqual(['canonicalProvider', 'canonicalProviderId']);
+    ).toEqual([
+      'canonicalProvider',
+      'canonicalNamespace',
+      'canonicalProviderId',
+    ]);
+    expect(
+      indices.find(
+        (index) => index.target === MediaGovernanceWorkEntity && index.unique,
+      )?.columns,
+    ).toEqual([
+      'canonicalProvider',
+      'canonicalNamespace',
+      'canonicalProviderId',
+    ]);
     expect(
       indices.find(
         (index) => index.target === MediaGovernanceSeasonEntity && index.unique,
       )?.columns,
-    ).toEqual(['seriesId', 'seasonNumber']);
+    ).toEqual(['workId', 'seasonNumber']);
     expect(
       indices.find(
         (index) =>

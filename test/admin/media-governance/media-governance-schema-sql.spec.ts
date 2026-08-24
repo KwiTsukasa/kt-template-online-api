@@ -19,20 +19,30 @@ describe('media governance production schema SQL', () => {
     'utf8',
   );
   const seasonEpisodeStartMigrationSql = readFileSync(
-    resolve(
-      process.cwd(),
-      'sql/media-governance-season-episode-start-v1.sql',
-    ),
+    resolve(process.cwd(), 'sql/media-governance-season-episode-start-v1.sql'),
+    'utf8',
+  );
+  const seriesWorkMigrationSql = readFileSync(
+    resolve(process.cwd(), 'sql/media-governance-series-work-v1.sql'),
+    'utf8',
+  );
+  const seriesWorkVerifySql = readFileSync(
+    resolve(process.cwd(), 'sql/media-governance-series-work-v1-verify.sql'),
     'utf8',
   );
 
-  it('creates exactly the seventeen task, catalog and RSS tables without menu writes', () => {
-    expect(initSql.match(/CREATE TABLE IF NOT EXISTS/gu)).toHaveLength(17);
+  it('creates exactly the nineteen task, Work catalog and RSS tables without menu writes', () => {
+    expect(initSql.match(/CREATE TABLE IF NOT EXISTS/gu)).toHaveLength(19);
     expect(initSql).toContain('`media_governance_task`');
     expect(initSql).toContain('`media_governance_agent_session`');
     expect(initSql).toContain('`media_governance_outbox`');
     expect(initSql).toContain('`media_governance_series`');
+    expect(initSql).toContain('`media_governance_work`');
+    expect(initSql).toContain('`media_governance_work_external_ref`');
     expect(initSql).toContain('`media_governance_season`');
+    expect(initSql).toContain('`primary_work_id` varchar(96) NOT NULL');
+    expect(initSql).toContain('`canonical_namespace` varchar(16) NOT NULL');
+    expect(initSql).toContain('`work_id` varchar(96) NOT NULL');
     expect(initSql).toContain('`media_governance_episode`');
     expect(initSql).toContain('`media_governance_task_episode_binding`');
     expect(initSql).toContain('`media_governance_rss_subscription`');
@@ -117,6 +127,52 @@ describe('media governance production schema SQL', () => {
     );
     expect(seasonEpisodeStartMigrationSql).not.toMatch(
       /DROP\s+(?:TABLE|DATABASE)|UPDATE\s+`media_governance_task`/iu,
+    );
+  });
+
+  it('expands Series-first Work ownership and keeps movie membership explicit', () => {
+    expect(seriesWorkMigrationSql).toContain(
+      'CREATE TABLE IF NOT EXISTS `media_governance_work`',
+    );
+    expect(seriesWorkMigrationSql).toContain(
+      'CREATE TABLE IF NOT EXISTS `media_governance_work_external_ref`',
+    );
+    expect(seriesWorkMigrationSql).toContain(
+      "task.`operation_kind` = COALESCE(task.`operation_kind`, 'legacy-pipeline')",
+    );
+    expect(seriesWorkMigrationSql).toContain(
+      "WHEN reference.`provider` = 'bangumi' THEN 'subject'",
+    );
+    expect(seriesWorkMigrationSql).toContain(
+      '@legacy_reference_without_work_ref = 0',
+    );
+    expect(seriesWorkMigrationSql).not.toContain(
+      'reference.`provider` = series.`canonical_provider`',
+    );
+    expect(seriesWorkMigrationSql).toContain(
+      'ADD UNIQUE KEY `uk_media_governance_series_canonical` (`canonical_provider`, `canonical_namespace`, `canonical_provider_id`)',
+    );
+    expect(seriesWorkMigrationSql).toContain(
+      "MESSAGE_TEXT = 'series-work backfill incomplete'",
+    );
+    expect(seriesWorkMigrationSql).not.toMatch(
+      /UPDATE\s+`media_governance_task`[^;]+title_hint/iu,
+    );
+    expect(seriesWorkMigrationSql).not.toMatch(/咒术|810693|标题相似/iu);
+    expect(verifySql).toContain('series_without_primary_work_count');
+    expect(verifySql).toContain('invalid_series_namespace_count');
+    expect(verifySql).toContain('season_work_mismatch_count');
+    expect(verifySql).toContain('non_tv_work_with_season_count');
+    expect(verifySql).toContain('task_work_series_mismatch_count');
+    expect(verifySql).toContain(
+      'legacy_series_reference_without_work_ref_count',
+    );
+    expect(seriesWorkVerifySql).toContain('schema_contract_mismatch_count');
+    expect(seriesWorkVerifySql).toContain(
+      'legacy_series_reference_without_work_ref_count',
+    );
+    expect(seriesWorkVerifySql).not.toMatch(
+      /INSERT|UPDATE|DELETE|ALTER|DROP/iu,
     );
   });
 });

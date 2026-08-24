@@ -164,6 +164,30 @@ describe('MediaGovernanceService production execution adapter', () => {
     task.sealedPlanSha256 = sha256Json(task.sealedPlan);
   };
 
+  it('keeps a Work-bound Task identity immutable outside Series detail', async () => {
+    const { service } = fixture();
+    await service.onModuleInit();
+    const task = await service.create({
+      mediaType: 'movie',
+      operationKind: 'source-intake',
+      providerRef: { provider: 'tmdb', providerId: '810693' },
+      releaseYear: 2022,
+      seriesId: 'media-series-jjk',
+      titleHint: '咒术回战 0',
+      workId: 'media-work-jjk-zero',
+    });
+
+    await expect(
+      service.updateIdentity(task.id, {
+        expectedRevision: task.revision,
+        titleHint: '禁止从 Task 改名',
+      }),
+    ).rejects.toMatchObject({
+      response: { msg: 'Work 绑定任务的身份只能从 Series 详情管理' },
+      status: 409,
+    });
+  });
+
   it('reserves one durable run before dispatching source inspection', async () => {
     const { acknowledged, dispatch, reserved, service } = fixture();
     await service.onModuleInit();

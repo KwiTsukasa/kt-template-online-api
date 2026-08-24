@@ -18,11 +18,14 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   MEDIA_GOVERNANCE_CONTENT_KINDS,
+  MEDIA_GOVERNANCE_MEDIA_TYPES,
   MediaGovernanceContentKind,
+  MediaGovernanceMediaType,
   MediaGovernanceProviderRefDto,
 } from './media-governance.dto';
 
 const MAX_RELEASE_YEAR = new Date().getFullYear() + 2;
+const MEDIA_GOVERNANCE_RSS_IDENTITY_PROVIDERS = ['bangumi', 'tmdb'] as const;
 
 export class MediaGovernanceSeriesSeasonFactDto {
   @ApiProperty({ maximum: 99, minimum: 0 })
@@ -233,6 +236,62 @@ export class MediaGovernanceMagnetBatchCreateDto {
   items: MediaGovernanceMagnetBatchItemDto[];
 }
 
+export class MediaGovernanceRssIdentitySelectionDto {
+  @ApiProperty({ enum: MEDIA_GOVERNANCE_RSS_IDENTITY_PROVIDERS })
+  @IsIn(MEDIA_GOVERNANCE_RSS_IDENTITY_PROVIDERS)
+  provider: 'bangumi' | 'tmdb';
+
+  @ApiProperty({ maxLength: 32 })
+  @IsString()
+  @MaxLength(32)
+  @Matches(/^[1-9]\d*$/)
+  providerId: string;
+
+  @ApiPropertyOptional({ maximum: MAX_RELEASE_YEAR, minimum: 1888 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1888)
+  @Max(MAX_RELEASE_YEAR)
+  releaseYear?: number;
+}
+
+export class MediaGovernanceCatalogIdentitySearchQueryDto {
+  @ApiProperty({ maxLength: 120 })
+  @IsString()
+  @MaxLength(120)
+  @Matches(/\S/)
+  keyword: string;
+
+  @ApiProperty({ enum: MEDIA_GOVERNANCE_MEDIA_TYPES })
+  @IsIn(MEDIA_GOVERNANCE_MEDIA_TYPES)
+  workType: MediaGovernanceMediaType;
+}
+
+export class MediaGovernanceSeriesCreateDto {
+  @ApiProperty({ type: MediaGovernanceRssIdentitySelectionDto })
+  @ValidateNested()
+  @Type(() => MediaGovernanceRssIdentitySelectionDto)
+  identity: MediaGovernanceRssIdentitySelectionDto;
+
+  @ApiProperty({ enum: MEDIA_GOVERNANCE_MEDIA_TYPES })
+  @IsIn(MEDIA_GOVERNANCE_MEDIA_TYPES)
+  workType: MediaGovernanceMediaType;
+}
+
+export class MediaGovernanceWorkCreateDto extends MediaGovernanceSeriesCreateDto {}
+
+export class MediaGovernanceWorkTaskCreateDto {
+  @ApiPropertyOptional({ maxItems: 100, type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(99, { each: true })
+  seasonNumbers?: number[];
+}
+
 export class MediaGovernanceRssSubscriptionCreateDto {
   @ApiProperty({ maxLength: 120 })
   @IsString()
@@ -248,6 +307,11 @@ export class MediaGovernanceRssSubscriptionCreateDto {
   @ApiProperty({ enum: MEDIA_GOVERNANCE_CONTENT_KINDS })
   @IsIn(MEDIA_GOVERNANCE_CONTENT_KINDS)
   contentKind: MediaGovernanceContentKind;
+
+  @ApiProperty({ type: MediaGovernanceRssIdentitySelectionDto })
+  @ValidateNested()
+  @Type(() => MediaGovernanceRssIdentitySelectionDto)
+  identity: MediaGovernanceRssIdentitySelectionDto;
 
   @ApiPropertyOptional({ maxLength: 160 })
   @IsOptional()
@@ -274,6 +338,16 @@ export class MediaGovernanceRssSubscriptionCreateDto {
   @Max(1440)
   pollIntervalMinutes?: number;
 }
+
+export class MediaGovernanceRssIdentitySearchQueryDto {
+  @ApiProperty({ maxLength: 120 })
+  @IsString()
+  @MaxLength(120)
+  @Matches(/\S/)
+  keyword: string;
+}
+
+export class MediaGovernanceRssDiscoverySearchDto extends MediaGovernanceRssIdentitySelectionDto {}
 
 export class MediaGovernanceRssSubscriptionStateDto {
   @ApiProperty({ minimum: 1 })

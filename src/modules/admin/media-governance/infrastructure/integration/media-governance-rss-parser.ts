@@ -5,10 +5,12 @@ export interface MediaGovernanceRssEntry {
   magnetUri: null | string;
   publishedAt: Date | null;
   title: string;
+  torrentUrl: null | string;
 }
 
-const MAX_FEED_BYTES = 2 * 1024 * 1024;
+const MAX_FEED_BYTES = 4 * 1024 * 1024;
 const MAX_FEED_ITEMS = 5_000;
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 /**
  * 把 RSS/Atom 解析器可能返回的单值或数组统一为数组。
@@ -73,6 +75,32 @@ function entryMagnet(item: Record<string, unknown>): null | string {
 }
 
 /**
+ * 从 RSS enclosure 或 link 中提取 HTTPS torrent 描述符地址，供固定来源延迟解析 BTIH。
+ *
+ * @param item - 单个 RSS 或 Atom 条目。
+ * @returns 长度受限的 HTTPS torrent 地址；未命中时返回 `null`。
+ */
+function entryTorrentUrl(item: Record<string, unknown>): null | string {
+  const candidates: unknown[] = [];
+  for (const enclosure of asArray(item.enclosure)) {
+    if (!enclosure || typeof enclosure !== 'object') continue;
+    candidates.push((enclosure as Record<string, unknown>)['@_url']);
+  }
+  for (const link of asArray(item.link)) {
+    candidates.push(link);
+    if (!link || typeof link !== 'object') continue;
+    candidates.push((link as Record<string, unknown>)['@_href']);
+  }
+  for (const candidate of candidates) {
+    const value = nodeText(candidate, 2_048);
+    if (/^https:\/\/[^\s]+\.torrent(?:\?[^\s]*)?$/iu.test(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+/**
  * 把 RSS/Atom 日期字段转换为可持久化时间，拒绝无效或缺失日期。
  * @param value - pubDate、published 或 updated 节点。
  * @returns 有效日期；无法解析时返回 `null`。
@@ -128,6 +156,7 @@ export function parseMediaGovernanceRss(
       magnetUri: entryMagnet(item),
       publishedAt: entryDate(item.pubDate ?? item.published ?? item.updated),
       title: nodeText(item.title, 512),
+      torrentUrl: entryTorrentUrl(item),
     }))
     .filter((item) => item.title.length > 0);
 }
@@ -185,7 +214,64 @@ export function mediaGovernanceMagnetInfoHash(magnetUri: string): string {
   const xt = parsed.searchParams
     .getAll('xt')
     .find((value) => /^urn:btih:/iu.test(value));
-  const match = xt?.match(/^urn:btih:([a-f0-9]{40})$/iu);
-  if (!match) throw new Error('media-rss-magnet-info-hash-invalid');
-  return match[1].toLowerCase();
+  const value = xt?.slice('urn:btih:'.length) ?? '';
+  if (/^[a-f0-9]{40}$/iu.test(value)) return value.toLowerCase();
+  if (/^[a-z2-7]{32}$/iu.test(value)) return decodeBase32InfoHash(value);
+  throw new Error('media-rss-magnet-info-hash-invalid');
+}
+
+/**
+ * 把 RSS 来源中的 Base32 BTIH 解码为服务端统一接受的四十位十六进制摘要。
+ *
+ * @param value - 三十二位 Base32 BitTorrent v1 info hash。
+ * @returns 四十位小写十六进制摘要。
+ * @throws 字符表或解码后的字节长度不符合 BTIH 合同时抛出。
+ */
+function decodeBase32InfoHash(value: string): string {
+  let accumulator = 0;
+  let bitCount = 0;
+  const bytes: number[] = [];
+  for (const character of value.toUpperCase()) {
+    const index = BASE32_ALPHABET.indexOf(character);
+    if (index < 0) throw new Error('media-rss-magnet-info-hash-invalid');
+    accumulator = (accumulator << 5) | index;
+    bitCount += 5;
+    if (bitCount < 8) continue;
+    bitCount -= 8;
+    bytes.push((accumulator >> bitCount) & 0xff);
+    accumulator &= (1 << bitCount) - 1;
+  }
+  if (bytes.length !== 20 || bitCount !== 0) {
+    throw new Error('media-rss-magnet-info-hash-invalid');
+  }
+  return Buffer.from(bytes).toString('hex');
+}
+
+/**
+ * 将 Base32 或大小写混合 BTIH 规范为十六进制磁链，同时保留原显示名和 Tracker 参数。
+ *
+ * @param magnetUri - 固定 RSS 来源返回的原始磁链。
+ * @returns 以四十位小写十六进制 BTIH 开头的规范磁链。
+ */
+export function normalizeMediaGovernanceMagnetUri(magnetUri: string): string {
+  const infoHash = mediaGovernanceMagnetInfoHash(magnetUri);
+  const queryIndex = magnetUri.indexOf('?');
+  if (queryIndex < 0) return `magnet:?xt=urn:btih:${infoHash}`;
+  const retained: string[] = [];
+  for (const segment of magnetUri.slice(queryIndex + 1).split('&')) {
+    const separator = segment.indexOf('=');
+    let rawName = segment;
+    if (separator >= 0) rawName = segment.slice(0, separator);
+    let name = rawName;
+    try {
+      name = decodeURIComponent(rawName);
+    } catch {
+      name = rawName;
+    }
+    if (name.toLowerCase() === 'xt') continue;
+    if (segment) retained.push(segment);
+  }
+  const suffix = retained.join('&');
+  if (!suffix) return `magnet:?xt=urn:btih:${infoHash}`;
+  return `magnet:?xt=urn:btih:${infoHash}&${suffix}`;
 }

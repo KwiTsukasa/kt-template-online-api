@@ -11,6 +11,7 @@ output_directory=''
 timeout_seconds=120
 execute=false
 restore_created=false
+series_first_schema=true
 
 tables=(
   media_governance_task
@@ -24,6 +25,8 @@ tables=(
   media_governance_operator_decision
   media_governance_outbox
   media_governance_series
+  media_governance_work
+  media_governance_work_external_ref
   media_governance_series_external_ref
   media_governance_season
   media_governance_episode
@@ -36,7 +39,7 @@ print_help() {
   cat <<'EOF'
 Usage: backup-restore-drill.sh --source-database NAME --restore-database NAME --output-directory PATH [options]
 
-Back up the seventeen media-governance tables, restore them into a new isolated
+Back up the legacy seventeen or Series-first nineteen media-governance tables, restore them into a new isolated
 database, compare row counts plus Task/Run/Event identity snapshots, and remove
 only the isolated database created by this run. The default mode is plan-only.
 
@@ -170,8 +173,21 @@ expected_table_count=${#tables[@]}
 table_literals=$(printf "'%s'," "${tables[@]}")
 table_literals=${table_literals%,}
 source_table_count=$(run_mysql_query "$source_database" "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ($table_literals);")
-[[ $source_table_count == "$expected_table_count" ]] ||
-  fail "source media-governance table count is $source_table_count, expected $expected_table_count"
+legacy_table_count=$((expected_table_count - 2))
+if [[ $source_table_count == "$legacy_table_count" ]]; then
+  series_first_schema=false
+  legacy_tables=()
+  for table in "${tables[@]}"; do
+    if [[ $table == media_governance_work || $table == media_governance_work_external_ref ]]; then
+      continue
+    fi
+    legacy_tables+=("$table")
+  done
+  tables=("${legacy_tables[@]}")
+elif [[ $source_table_count != "$expected_table_count" ]]; then
+  fail "source media-governance table count is $source_table_count, expected $legacy_table_count or $expected_table_count"
+fi
+expected_table_count=${#tables[@]}
 
 restore_exists=$(run_mysql_server "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = '$restore_database';")
 [[ $restore_exists == 0 ]] || fail 'restore database already exists'
@@ -199,11 +215,24 @@ write_identity_snapshot() {
     printf '%s\t%s\n' "$table" "$count" >>"$prefix.table-counts.tsv"
   done
 
-  run_mysql_query "$database" 'SELECT id, revision, stage, run_state, IFNULL(active_run_id, ""), input_snapshot_sha256, IFNULL(sealed_plan_sha256, ""), IFNULL(closed_mode, "") FROM media_governance_task ORDER BY id;' >"$prefix.task.tsv"
+  if [[ $series_first_schema == true ]]; then
+    run_mysql_query "$database" 'SELECT id, IFNULL(series_id, ""), IFNULL(work_id, ""), IFNULL(operation_kind, ""), revision, stage, run_state, IFNULL(active_run_id, ""), input_snapshot_sha256, IFNULL(sealed_plan_sha256, ""), IFNULL(closed_mode, "") FROM media_governance_task ORDER BY id;' >"$prefix.task.tsv"
+  else
+    run_mysql_query "$database" 'SELECT id, revision, stage, run_state, IFNULL(active_run_id, ""), input_snapshot_sha256, IFNULL(sealed_plan_sha256, ""), IFNULL(closed_mode, "") FROM media_governance_task ORDER BY id;' >"$prefix.task.tsv"
+  fi
   run_mysql_query "$database" 'SELECT id, task_id, task_revision, action, status, replay_key, input_snapshot_sha256, IFNULL(plan_sha256, ""), IFNULL(evidence_sha256, "") FROM media_governance_run ORDER BY id;' >"$prefix.run.tsv"
   run_mysql_query "$database" 'SELECT event_id, task_id, IFNULL(run_id, ""), sequence, type, stage, run_state FROM media_governance_event ORDER BY task_id, IFNULL(run_id, ""), sequence, event_id;' >"$prefix.event.tsv"
-  run_mysql_query "$database" 'SELECT id, canonical_provider, canonical_provider_id, title, release_year, revision, status FROM media_governance_series ORDER BY id;' >"$prefix.series.tsv"
-  run_mysql_query "$database" 'SELECT id, series_id, season_number, episode_start, episode_count, title, IFNULL(release_year, ""), status FROM media_governance_season ORDER BY series_id, season_number;' >"$prefix.season.tsv"
+  if [[ $series_first_schema == true ]]; then
+    run_mysql_query "$database" 'SELECT id, canonical_provider, canonical_namespace, canonical_provider_id, title, release_year, media_type, primary_work_id, revision, status FROM media_governance_series ORDER BY id;' >"$prefix.series.tsv"
+    run_mysql_query "$database" 'SELECT id, series_id, canonical_provider, canonical_namespace, canonical_provider_id, title, release_year, work_type, revision, status FROM media_governance_work ORDER BY series_id, id;' >"$prefix.work.tsv"
+    run_mysql_query "$database" 'SELECT id, work_id, provider, provider_namespace, provider_id, reference_role, IFNULL(title, ""), IFNULL(release_year, "") FROM media_governance_work_external_ref ORDER BY work_id, provider, provider_namespace, provider_id;' >"$prefix.work-reference.tsv"
+    run_mysql_query "$database" 'SELECT id, series_id, work_id, season_number, episode_start, episode_count, title, IFNULL(release_year, ""), status FROM media_governance_season ORDER BY work_id, season_number;' >"$prefix.season.tsv"
+  else
+    run_mysql_query "$database" 'SELECT id, canonical_provider, canonical_provider_id, title, release_year, revision, status FROM media_governance_series ORDER BY id;' >"$prefix.series.tsv"
+    : >"$prefix.work.tsv"
+    : >"$prefix.work-reference.tsv"
+    run_mysql_query "$database" 'SELECT id, series_id, season_number, episode_start, episode_count, title, IFNULL(release_year, ""), status FROM media_governance_season ORDER BY series_id, season_number;' >"$prefix.season.tsv"
+  fi
   run_mysql_query "$database" 'SELECT id, series_id, season_id, season_number, episode_number, status FROM media_governance_episode ORDER BY series_id, season_number, episode_number;' >"$prefix.episode.tsv"
   run_mysql_query "$database" 'SELECT id, series_id, season_id, episode_id, task_id, IFNULL(source_id, ""), binding_role FROM media_governance_task_episode_binding ORDER BY series_id, season_id, episode_id, task_id;' >"$prefix.binding.tsv"
   run_mysql_query "$database" 'SELECT id, series_id, season_id, feed_url_sha256, enabled, revision, status, IFNULL(last_polled_at, ""), IFNULL(next_poll_at, "") FROM media_governance_rss_subscription ORDER BY id;' >"$prefix.rss-subscription.tsv"
@@ -230,7 +259,7 @@ timeout --foreground --kill-after=5s "${timeout_seconds}s" \
 
 [[ -s $dump_path ]] || fail 'media-governance dump is empty'
 write_identity_snapshot "$source_database" "$source_prefix"
-for snapshot in table-counts task run event series season episode binding rss-subscription rss-item; do
+for snapshot in table-counts task run event series work work-reference season episode binding rss-subscription rss-item; do
   [[ $(file_sha256 "$source_before_prefix.$snapshot.tsv") == $(file_sha256 "$source_prefix.$snapshot.tsv") ]] ||
     fail "source $snapshot snapshot changed during backup window"
 done
@@ -244,7 +273,7 @@ timeout --foreground --kill-after=5s "${timeout_seconds}s" \
 
 write_identity_snapshot "$restore_database" "$restore_prefix"
 
-for snapshot in table-counts task run event series season episode binding rss-subscription rss-item; do
+for snapshot in table-counts task run event series work work-reference season episode binding rss-subscription rss-item; do
   [[ $(file_sha256 "$source_prefix.$snapshot.tsv") == $(file_sha256 "$restore_prefix.$snapshot.tsv") ]] ||
     fail "restored $snapshot snapshot differs from source"
 done
@@ -254,6 +283,8 @@ task_snapshot_sha256=$(file_sha256 "$source_prefix.task.tsv")
 run_snapshot_sha256=$(file_sha256 "$source_prefix.run.tsv")
 event_snapshot_sha256=$(file_sha256 "$source_prefix.event.tsv")
 series_snapshot_sha256=$(file_sha256 "$source_prefix.series.tsv")
+work_snapshot_sha256=$(file_sha256 "$source_prefix.work.tsv")
+work_reference_snapshot_sha256=$(file_sha256 "$source_prefix.work-reference.tsv")
 season_snapshot_sha256=$(file_sha256 "$source_prefix.season.tsv")
 episode_snapshot_sha256=$(file_sha256 "$source_prefix.episode.tsv")
 binding_snapshot_sha256=$(file_sha256 "$source_prefix.binding.tsv")
@@ -281,6 +312,8 @@ cat >"$manifest_path" <<EOF
     "runSha256": "$run_snapshot_sha256",
     "eventSha256": "$event_snapshot_sha256",
     "seriesSha256": "$series_snapshot_sha256",
+    "workSha256": "$work_snapshot_sha256",
+    "workReferenceSha256": "$work_reference_snapshot_sha256",
     "seasonSha256": "$season_snapshot_sha256",
     "episodeSha256": "$episode_snapshot_sha256",
     "bindingSha256": "$binding_snapshot_sha256",

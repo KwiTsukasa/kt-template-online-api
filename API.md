@@ -196,8 +196,8 @@ Agent 状态响应额外包含可选的 `currentPublicIpv6/currentIpv6ObservedAt
 | MinIO         | `MINIO_ENDPOINT`、`MINIO_PORT`、`MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`BLOG_LIVE2D_BUCKET`、`BLOG_LIVE2D_ROOT_PREFIX`、`BLOG_LIVE2D_PREFIX`、`BLOG_ASSET_MIGRATION_*`                                                                                                                                                                                                                                                                                                                                                  |
 | Admin         | `ADMIN_TOKEN_SECRET`、`ADMIN_COOKIE_SECURE`、`ADMIN_AUTH_ALLOW_INSECURE_LOCAL`、`ADMIN_NOTICE_SSE_REPLAY_LIMIT`、`ADMIN_NOTICE_SSE_HEARTBEAT_MS`、`SNOWFLAKE_WORKER_ID`、`SNOWFLAKE_DATACENTER_ID`                                                                                                                                                                                                                                                                                                                                       |
 | Loki          | `LOG_LEVEL`、`LOG_APP_NAME`、`LOKI_URL`、`LOKI_QUERY_HOST`、`LOKI_QUERY_SELECTOR`                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| QQBot         | `BOT_ENABLED`、`BOT_ACCOUNT_SECRET_KEY`、`TENCENT_BOT_WEBHOOK_PUBLIC_BASE_URL`、`BOT_REVERSE_WS_PATH`、`BOT_REVERSE_WS_TOKEN`、`BOT_EVENT_BUS`、`BOT_SEND_*`、`PLUGIN_QUEUE_REDIS_*`、`PLUGIN_TASK_QUEUE_REDIS_*`、`PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`BOT_COMMAND_MIN_COOLDOWN_MS`、`BOT_RULE_MIN_COOLDOWN_MS`、`PLUGIN_REPEATER_*`                                                                                                                                                                                                              |
-| NapCat        | `NAPCAT_WEBUI_BASE_URL`、`NAPCAT_WEBUI_TOKEN`、`NAPCAT_*`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| QQBot         | `BOT_ENABLED`、`BOT_ACCOUNT_SECRET_KEY`、`TENCENT_BOT_WEBHOOK_PUBLIC_BASE_URL`、`BOT_REVERSE_WS_PATH`、`BOT_REVERSE_WS_TOKEN`、`BOT_EVENT_BUS`、`BOT_SEND_*`、`PLUGIN_QUEUE_REDIS_*`、`PLUGIN_TASK_QUEUE_REDIS_*`、`PLUGIN_QUEUE_WAIT_TIMEOUT_MS`、`BOT_COMMAND_MIN_COOLDOWN_MS`、`BOT_RULE_MIN_COOLDOWN_MS`、`PLUGIN_REPEATER_*`                                                                                                                                                                                                        |
+| NapCat        | `NAPCAT_WEBUI_BASE_URL`、`NAPCAT_WEBUI_TOKEN`、`NAPCAT_*`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | MQTT          | `MQTT_URL`、`MQTT_USERNAME`、`MQTT_PASSWORD`、`MQTT_CLIENT_ID`                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Env Dashboard | `ENV_DASHBOARD_CACHE_TTL_MS`、`ENV_DASHBOARD_SIGNAL_TIMEOUT_MS`、`ENV_DASHBOARD_EVENT_BUS`、`ENV_DASHBOARD_MQTT_*`、`ENV_DASHBOARD_SSE_*`、`ENV_DASHBOARD_JENKINS_*`、`ENV_DASHBOARD_K8S_*`、`ENV_DASHBOARD_TENCENT_*`、`ENV_DASHBOARD_CADDY_*`、`ENV_DASHBOARD_R4SE_*`                                                                                                                                                                                                                                                                  |
 | Network       | `NETWORK_AGENT_ID`、`NETWORK_AGENT_TARGET_IPV4`、`NETWORK_AGENT_MQTT_URL`、`NETWORK_AGENT_MQTT_CLIENT_ID`、`NETWORK_AGENT_MQTT_USERNAME`、`NETWORK_AGENT_MQTT_PASSWORD`、`NETWORK_AGENT_MQTT_RETRY_MS`、`NETWORK_TCP_NATMAP_RELEASE_MODE`、`NETWORK_TCP_NATMAP_CANARY_PORTS`、`NETWORK_MANAGEMENT_SSE_HEARTBEAT_MS`、`NETWORK_MANAGEMENT_SSE_REPLAY_LIMIT`、`NETWORK_DDNS_DNSPOD_ENABLED`、`NETWORK_DDNS_DNSPOD_SECRET_ID`、`NETWORK_DDNS_DNSPOD_SECRET_KEY`、`NETWORK_DDNS_RECONCILE_INTERVAL_MS`、`NETWORK_DDNS_AGENT_IPV6_MAX_AGE_MS` |
@@ -268,59 +268,89 @@ Search 的 `llm-codex` 权限档。
 
 ### 媒体治理 API/Admin 生产链路
 
-| 方法     | 路径                                                               | 说明                                   |
-| -------- | ------------------------------------------------------------------ | -------------------------------------- |
-| `POST`   | `/media-governance/tasks`                                          | 创建作品身份草稿和 Task/Unit           |
-| `GET`    | `/media-governance/tasks/page`                                     | 分页和语义过滤任务                     |
-| `GET`    | `/media-governance/tasks/summary`                                  | 查询任务、下载、治理和 Agent 聚合      |
-| `GET`    | `/media-governance/tasks/:taskId`                                  | 查询权威任务详情投影                   |
-| `PUT`    | `/media-governance/tasks/:taskId/identity`                         | 下载前修正作品类型、季号与资料身份     |
-| `DELETE` | `/media-governance/tasks/:taskId?expectedRevision=:revision`       | 按版本删除未执行任务并清除绑定账本     |
-| `POST`   | `/media-governance/tasks/:taskId/sources/magnet`                   | 脱敏添加磁链来源                       |
-| `POST`   | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件         |
-| `PUT`    | `/media-governance/tasks/:taskId/sources/:sourceId/classification` | 修订来源角色和内容分类                 |
-| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/remove`         | 精确清理并移除已取消的待更换来源       |
-| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`        | 生成来源清单；磁链最长 120 秒          |
-| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime`  | 执行有界运行时来源探针                 |
-| `PUT`    | `/media-governance/tasks/:taskId/units/:unitId/subtitle-contract`  | 密封逐季单一发布组字幕合同             |
-| `POST`   | `/media-governance/tasks/:taskId/downloads/start`                  | 启动或接管失联的 NAS 隔离目录下载      |
-| `POST`   | `/media-governance/tasks/:taskId/downloads/pause`                  | 暂停同一下载 Run                       |
-| `POST`   | `/media-governance/tasks/:taskId/downloads/cancel`                 | 取消下载并保留载荷直到精确来源清理     |
-| `POST`   | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传活动 Run，或创建失联恢复 Run       |
-| `POST`   | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理       |
-| `POST`   | `/media-governance/tasks/:taskId/governance/identity-rebase`       | 按版本把已提交旧目录重排到当前规范身份 |
-| `POST`   | `/media-governance/tasks/:taskId/catalog-identity/restore`         | 恢复已关闭残留的用户主资料库身份   |
-| `POST`   | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验              |
-| `POST`   | `/media-governance/tasks/:taskId/metadata/repair`                  | 启动最多两次的确定性有界元数据修复     |
-| `POST`   | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理             |
-| `POST`   | `/media-governance/tasks/:taskId/agent/start`                      | 创建并绑定唯一的本地 Codex LLM 对话    |
-| `GET`    | `/media-governance/tasks/:taskId/agent/session?afterSequence=N`    | 查询由 LLM 对话派生的只读治理投影      |
-| `POST`   | `/media-governance/tasks/:taskId/agent/operator-decision`          | 提交人工候选选择并闭环                 |
-| `GET`    | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要           |
-| `GET`    | `/media-governance/events/stream`                                  | 订阅带 replay/snapshot-required 的 SSE |
+目录和执行严格按 `Series → Work → Season/Episode → Task` 分层。Task 根资源只提供查询与执行，
+不存在根级创建、身份编辑、身份恢复或 Task-to-Series reconcile 路由。所有新 Task 必须从既有
+Work 派生不可变的 `seriesId/workId/operationKind` 与 catalog 身份。
 
-canonical 系列、逐集多磁链与 RSS 使用独立目录接口；这些接口不修改已闭环 Task 的原始输入快照，
-而是把 Task 绑定到唯一的 Series/Season/Episode 事实：
+| 方法     | 路径                                                               | 说明                                                              |
+| -------- | ------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `GET`    | `/media-governance/tasks/page`                                     | 分页和语义过滤纯执行任务                                          |
+| `GET`    | `/media-governance/tasks/summary`                                  | 查询任务、下载、治理和 Agent 聚合                                 |
+| `GET`    | `/media-governance/tasks/:taskId`                                  | 查询权威任务详情投影                                              |
+| `DELETE` | `/media-governance/tasks/:taskId?expectedRevision=:revision`       | 按版本删除未执行任务并清除绑定账本                                |
+| `POST`   | `/media-governance/tasks/:taskId/sources/magnet`                   | 脱敏添加磁链来源                                                  |
+| `POST`   | `/media-governance/tasks/:taskId/sources/torrent`                  | 上传并安全解析私有种子描述文件                                    |
+| `PUT`    | `/media-governance/tasks/:taskId/sources/:sourceId/classification` | 修订来源角色和内容分类                                            |
+| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/remove`         | 精确清理并移除已取消的待更换来源                                  |
+| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/inspect`        | 生成来源清单；磁链最长 120 秒                                     |
+| `POST`   | `/media-governance/tasks/:taskId/sources/:sourceId/probe-runtime`  | 执行有界运行时来源探针                                            |
+| `PUT`    | `/media-governance/tasks/:taskId/units/:unitId/subtitle-contract`  | 密封逐季单一发布组字幕合同                                        |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/start`                  | 启动或接管失联的 NAS 隔离目录下载                                 |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/pause`                  | 暂停同一下载 Run                                                  |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/cancel`                 | 取消下载并保留载荷直到精确来源清理                                |
+| `POST`   | `/media-governance/tasks/:taskId/downloads/resume`                 | 续传活动 Run，或创建失联恢复 Run                                  |
+| `POST`   | `/media-governance/tasks/:taskId/governance/start`                 | 密封并启动 Schema 1.2.0 本地治理                                  |
+| `POST`   | `/media-governance/tasks/:taskId/governance/identity-rebase`       | 按版本把已提交旧目录重排到当前规范身份                            |
+| `POST`   | `/media-governance/tasks/:taskId/metadata/verify`                  | 启动 A/B/C 分档元数据核验                                         |
+| `POST`   | `/media-governance/tasks/:taskId/metadata/repair`                  | 启动最多两次的确定性有界元数据修复                                |
+| `POST`   | `/media-governance/tasks/:taskId/acceptance/verify`                | 启动独立本地验收与精确清理                                        |
+| `POST`   | `/media-governance/tasks/:taskId/agent/start`                      | 创建并绑定唯一的本地 Codex LLM 对话                               |
+| `GET`    | `/media-governance/tasks/:taskId/agent/session?afterSequence=N`    | 查询由 LLM 对话派生的只读治理投影                                 |
+| `POST`   | `/media-governance/tasks/:taskId/agent/operator-decision`          | 提交人工候选选择并闭环                                            |
+| `GET`    | `/media-governance/tasks/:taskId/evidence`                         | 查询脱敏证据和零写入边界摘要                                      |
+| `GET`    | `/media-governance/events/stream`                                  | 订阅 task-changed/catalog-changed 与 replay/snapshot-required SSE |
 
-| 方法   | 路径                                                                                   | 说明                                       |
-| ------ | -------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `GET`  | `/media-governance/series/page`                                                        | 分页查询系列卡片与季集/绑定/RSS 数量       |
-| `GET`  | `/media-governance/series/history-classification`                                      | 只读核对全部历史 Task 的系列归类状态       |
-| `GET`  | `/media-governance/series/:seriesId`                                                   | 查询系列、资料引用、季和 Task 覆盖         |
-| `POST` | `/media-governance/series/reconcile`                                                   | 按唯一资料事实幂等纠正系列层级和 Task 范围 |
-| `GET`  | `/media-governance/series/:seriesId/seasons/:seasonNumber/episodes`                    | 分页查询 Episode 与 Task/来源绑定          |
-| `POST` | `/media-governance/series/:seriesId/seasons/:seasonNumber/magnet-batch`                | 在一个 Task 内创建 1–16 条按集磁链来源     |
-| `POST` | `/media-governance/series/:seriesId/seasons/:seasonNumber/rss-subscriptions`           | 创建按季 RSS 订阅                          |
-| `PUT`  | `/media-governance/series/rss-subscriptions/:subscriptionId/state`                     | 按 revision 启停 RSS                       |
-| `POST` | `/media-governance/series/rss-subscriptions/:subscriptionId/poll`                      | 立即轮询、去重并按集创建 Task              |
-| `GET`  | `/media-governance/series/rss-subscriptions/:subscriptionId/items`                     | 分页查询 RSS 条目处理历史                  |
+Series-first 目录接口先创建系列及主 Work，再在同一 Series 下增加 TV、电影或剧场版 Work。
+Series 与 Work 的官方身份都由候选选择后重新核验；TMDB 唯一键包含 `tv/movie` namespace。
+电影与剧场版不能创建 Season，TV 的所有季级路径必须同时携带 Work ID：
+
+| 方法   | 路径                                                                                          | 说明                                        |
+| ------ | --------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `GET`  | `/media-governance/series/page`                                                               | 分页查询 Series/Work/季集/执行聚合          |
+| `GET`  | `/media-governance/series/identity-candidates`                                                | 按关键词和 Work 类型搜索官方身份候选        |
+| `POST` | `/media-governance/series`                                                                    | 原子创建 Series 与唯一主 Work               |
+| `POST` | `/media-governance/series/:seriesId/works`                                                    | 向既有 Series 添加已核验 Work               |
+| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons`                                    | 为 TV Work 创建连续 Season/Episode          |
+| `POST` | `/media-governance/series/:seriesId/works/:workId/tasks`                                      | 从 Work 派生一次 source-intake Task         |
+| `GET`  | `/media-governance/series/history-classification`                                             | 只读核对历史 Task 的 Work 归类状态          |
+| `GET`  | `/media-governance/series/rss-discovery/identity-candidates`                                  | 按关键词查询 RSS 使用的 TV 身份候选         |
+| `GET`  | `/media-governance/series/:seriesId`                                                          | 查询 Series、Works、季、Task 与 RSS         |
+| `GET`  | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/episodes`             | 分页查询 Work Episode 与 Task/来源绑定      |
+| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/magnet-batch`         | 在一个 Work Task 内创建 1–16 条按集磁链来源 |
+| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-discovery/search` | 按 Work/Season 聚合固定来源和发布组 RSS     |
+| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions`    | 创建 Work-scoped 按季 RSS 订阅              |
+| `PUT`  | `/media-governance/series/rss-subscriptions/:subscriptionId/state`                            | 按 revision 启停 RSS                        |
+| `POST` | `/media-governance/series/rss-subscriptions/:subscriptionId/poll`                             | 立即轮询、去重并按集创建 Work-bound Task    |
+| `GET`  | `/media-governance/series/rss-subscriptions/:subscriptionId/items`                            | 分页查询 RSS 条目处理历史                   |
+
+RSS 来源发现严格分为身份候选与来源聚合两个阶段：用户必须先从 Bangumi/TMDB 候选中选择身份，
+服务端再次核验该身份后才并行查询 Mikan、Bangumi.moe、Nyaa、ACG.RIP、动漫花园、AniBT、
+Shana Project、nekoBT 和 SubsPlease。单个来源失败只进入该来源状态，不丢弃其他来源结果；
+没有可证明发布组的条目不会伪造“未识别发布组”。Mikan 会从精确番组页发现全部字幕组 RSS，
+分批读取每个子组 Feed 的真实条目，再回填条目数、最近发布时间、样例和专属订阅地址，
+不能仅凭 RSS 地址存在就显示空统计。ACG.RIP、动漫花园等旧查询接口若拒绝完整长标题，
+服务端最多再尝试一次从已核验标题尾部提取的短别名；返回条目仍必须通过完整身份别名过滤，
+短词只解决上游查询兼容性，不能放宽身份边界。
+
+创建订阅必须携带第一阶段选中的资料来源、编号和可选年份；API 会再次读取 Bangumi/TMDB
+官方详情，并在保存订阅的同一事务中把身份幂等写为 Work `catalog-evidence`。同一 Series、
+Work、Season 和 Feed 的重复创建用于补齐旧订阅身份，不产生第二条订阅。轮询可重新处理没有
+`taskId/sourceId` 的 `discovered/ignored/failed` 历史 item；已入队条目仍保持幂等跳过。
+Mikan 等只提供 HTTPS torrent enclosure 的 Feed 由固定主机白名单有界读取描述符、重算
+BTIH 后再创建最多 16 集的 Task。成功创建 Binding 后发布 `catalog-changed`，Series 详情与
+当前 Episode 页通过 SSE 回读权威快照，不需要浏览器手工刷新。
 
 Season 事实使用 `episodeStart + episodeCount` 表示连续集号区间；`episodeStart`
 省略时为 `1`。这允许同一系列保留 S02 `E25–E47`、S03 `E48–E59` 等资料库原始连续编号，
 批量磁链、RSS、Episode 分页和历史 Task 归类均按该闭区间校验，不做隐式偏移换算。
-历史分类接口完全只读，只按精确 `provider + providerId`、Task Unit 和来源映射判断
-`classified / classifiable / not-applicable / pending`，并返回稳定原因；实际写入仍只走
-显式 `series/reconcile`，不会修改 Task revision、Run、来源、密封计划或下载状态。
+历史分类接口完全只读，只按精确 `provider + namespace + providerId`、既有 Work 上下文、
+Task Unit 和来源映射判断 `classified / classifiable / pending`，并返回稳定原因。普通 TV Task
+仅在 `metadataStatus=verified`、主媒体 `manifestState=inspected` 且 Unit/视频映射完全一致时
+进入目录同步；同步目标必须是 Task 已绑定 Work 中已经存在的 Season/Episode，不会从 Task
+自动创建或合并 Series/Work。精确身份跨 Work、Season 缺失、集号有洞或映射不完整时零写；
+服务启动会补偿扫描已验证任务并只恢复合法的既有 Work 绑定。事务不修改 Task revision、Run、
+来源、密封计划或下载状态；提交后在 `/media-governance/events/stream` 发布携完整 SeriesCard 的
+`catalog-changed`。
 
 `GET /media-governance/tasks/summary` 额外返回 `blocked`、`stuckRunCount`、
 `evidenceDriftCount`、`mixedSubtitleSeasonCount`、去重后的 `attentionRequired` 和中文
@@ -397,11 +427,11 @@ revision 和 replay key。治理完成后 fnOS 尚未稳定回填身份时，若
 升级前已处于该精确缺口且缺少计数字段的任务按一次已消费迁移。
 普通元数据缺口投影若已为每个 Unit 绑定成功核验证据，且 Task 仍持有同一密封计划、无活动 Run、`gateReason` 为明确元数据缺口，则可用当前 revision 重新调用 `/metadata/verify`。该重采集只替换 A/B/C 事实投影，不执行媒体写入，也不绕过已用完的延迟身份刷新门禁。
 
-媒体任务身份固定拆分为三份密封投影：`catalogIdentity` 是用户创建任务时选择的主资料库、作品年份与标题；`metadataIdentity` 是 trim.media/NFO 所需的 TMDB 二级身份；`identity` 只表示当前密封文件清单所在的物理规范根。Agent 可以补齐 TMDB 元数据身份，但已有主资料库时不得改写 Task `providerRef/releaseYear`。管理端优先显示主资料库与主年份，只在两者未声明时回退到元数据身份。
+媒体任务身份固定拆分为三份密封投影：`catalogIdentity` 从用户已确认的 Work 派生主资料库、作品年份与标题；`metadataIdentity` 是 trim.media/NFO 所需的 TMDB 二级身份；`identity` 只表示当前密封文件清单所在的物理规范根。Agent 可以补齐 TMDB 元数据身份，但不得改写 Task 的 Work 派生 `providerRef/releaseYear`。管理端从 Series 详情进入 Task，Task 列表只展示执行语义与状态。
 
 已应用 Agent 身份修正的 Task 会进入服务端确定性自动续跑，而不是由 Admin 或 LLM 继续逐段调用阶段接口。自动续跑要求密封计划中的 `agentAmendments` 与当前 `metadataIdentity` 精确一致、没有活动 Run 且当前状态只有一个合法后继；可串联规范身份重排、元数据核验、次数受限修复、修复后复验和独立验收。每个成功终态先按原 Run 序号持久化，再预约带新 revision/replay key 的下一 Run；失败终态、身份漂移、非修复型 A/C 缺口、修复次数耗尽或人工候选状态固定停止。API 启动时会恢复这一类无活动 Run 的持久化阶段边界；`closed` Task 和已有活动 Run 不参与扫描，因此发布重启不会重复验收或并发创建 Run。
 
-`catalog-identity/restore` 不是通用 closed Task 编辑器：它只对“当前主身份精确等于二级 TMDB 身份、计划尚无 `catalogIdentity`”的历史折叠残留开放，要求 `Media:Governance:Run`、当前 revision、`closed/succeeded/verified`、无活动 Run，且请求身份派生根必须精确等于密封 transition 的 `previousTitleRoot`。恢复只重开 metadata verify，不移动已验收媒体，不派发下载或目录事务。
+公开 Task API 不提供 `catalog-identity/restore` 或身份编辑器。历史身份折叠残留只有在 Series 下确认唯一 Work 后才能通过受控迁移补充 `seriesId/workId/operationKind`；电影与剧场版禁止标题近似自动归类。
 内嵌字幕 profile 已获得唯一 TMDB 身份、且缺口严格只有 LocalNFO 与作品/季海报时，
 第一次确定性元数据生成记为自动补齐；其独立验收通过后保持 `closedMode=automatic`。
 其他 profile、第二次尝试或更广的缺口仍按 `bounded_repair`/Agent 分支计数，不能借自动
@@ -687,40 +717,40 @@ dry-run 审查和迁移后 verify，不能用本地结果替代生产证据。
 
 ### Account / Scan Login
 
-| 方法   | 路径                                            | 说明                       |
-| ------ | ----------------------------------------------- | -------------------------- |
-| `GET`  | `/bot-adapter/napcat/account/list`                           | NapCat 账号分页             |
-| `GET`  | `/bot-adapter/napcat/account/enabled`                        | 启用账号列表               |
-| `POST` | `/bot-adapter/napcat/account/save`                           | 手动新增账号               |
-| `POST` | `/bot-adapter/napcat/account/update`                         | 更新账号                   |
-| `POST` | `/bot-adapter/napcat/account/scan/create`                    | 扫码新增账号，创建登录会话 |
-| `POST` | `/bot-adapter/napcat/account/scan/refresh?id=`               | 对已有账号刷新登录态       |
-| `GET`  | `/bot-adapter/napcat/account/scan/status?sessionId=`         | 查询扫码会话状态           |
-| `GET`  | `/bot-adapter/napcat/account/scan/events?sessionId=`         | SSE 订阅扫码进度           |
-| `POST` | `/bot-adapter/napcat/account/scan/qrcode/refresh?sessionId=` | 刷新当前会话二维码         |
-| `POST` | `/bot-adapter/napcat/account/scan/captcha/submit`            | 提交密码登录安全验证码结果 |
-| `POST` | `/bot-adapter/napcat/account/scan/cancel?sessionId=`         | 取消扫码会话               |
-| `POST` | `/bot-adapter/napcat/account/delete?id=`                     | 删除账号并断开 WS          |
-| `POST` | `/bot-adapter/napcat/account/kick?selfId=`                   | 断开反向 WS 会话           |
-| `POST` | `/bot-adapter/tencent/webhook/:appId/:webhookToken`  | QQ 官方公开 Webhook challenge/事件入口 |
-| `GET`  | `/bot-adapter/napcat/runtime/detail?accountId=`       | 读取账号 NapCat 运行态证据 |
-| `POST` | `/bot-adapter/napcat/account/bind/command`                   | 绑定账号和在线命令         |
-| `POST` | `/bot-adapter/napcat/account/unbind/command`                 | 解绑账号和在线命令         |
-| `POST` | `/bot-adapter/napcat/account/bind/rule`                      | 绑定账号和自动回复规则     |
-| `POST` | `/bot-adapter/napcat/account/unbind/rule`                    | 解绑账号和自动回复规则     |
-| `GET`  | `/bot-adapter/napcat/account/plugins?selfId=`                | 读取 NapCat adapter 插件绑定 |
-| `POST` | `/bot-adapter/napcat/account/plugins/{bind,unbind}`           | 修改 NapCat adapter 插件绑定 |
+| 方法   | 路径                                                         | 说明                                   |
+| ------ | ------------------------------------------------------------ | -------------------------------------- |
+| `GET`  | `/bot-adapter/napcat/account/list`                           | NapCat 账号分页                        |
+| `GET`  | `/bot-adapter/napcat/account/enabled`                        | 启用账号列表                           |
+| `POST` | `/bot-adapter/napcat/account/save`                           | 手动新增账号                           |
+| `POST` | `/bot-adapter/napcat/account/update`                         | 更新账号                               |
+| `POST` | `/bot-adapter/napcat/account/scan/create`                    | 扫码新增账号，创建登录会话             |
+| `POST` | `/bot-adapter/napcat/account/scan/refresh?id=`               | 对已有账号刷新登录态                   |
+| `GET`  | `/bot-adapter/napcat/account/scan/status?sessionId=`         | 查询扫码会话状态                       |
+| `GET`  | `/bot-adapter/napcat/account/scan/events?sessionId=`         | SSE 订阅扫码进度                       |
+| `POST` | `/bot-adapter/napcat/account/scan/qrcode/refresh?sessionId=` | 刷新当前会话二维码                     |
+| `POST` | `/bot-adapter/napcat/account/scan/captcha/submit`            | 提交密码登录安全验证码结果             |
+| `POST` | `/bot-adapter/napcat/account/scan/cancel?sessionId=`         | 取消扫码会话                           |
+| `POST` | `/bot-adapter/napcat/account/delete?id=`                     | 删除账号并断开 WS                      |
+| `POST` | `/bot-adapter/napcat/account/kick?selfId=`                   | 断开反向 WS 会话                       |
+| `POST` | `/bot-adapter/tencent/webhook/:appId/:webhookToken`          | QQ 官方公开 Webhook challenge/事件入口 |
+| `GET`  | `/bot-adapter/napcat/runtime/detail?accountId=`              | 读取账号 NapCat 运行态证据             |
+| `POST` | `/bot-adapter/napcat/account/bind/command`                   | 绑定账号和在线命令                     |
+| `POST` | `/bot-adapter/napcat/account/unbind/command`                 | 解绑账号和在线命令                     |
+| `POST` | `/bot-adapter/napcat/account/bind/rule`                      | 绑定账号和自动回复规则                 |
+| `POST` | `/bot-adapter/napcat/account/unbind/rule`                    | 解绑账号和自动回复规则                 |
+| `GET`  | `/bot-adapter/napcat/account/plugins?selfId=`                | 读取 NapCat adapter 插件绑定           |
+| `POST` | `/bot-adapter/napcat/account/plugins/{bind,unbind}`          | 修改 NapCat adapter 插件绑定           |
 
 Tencent 连接使用独立接口，不与 NapCat 表单或路由混用：
 
-| 方法   | 路径                                                   | 说明 |
-| ------ | ------------------------------------------------------ | ---- |
-| `GET`  | `/bot-adapter/tencent/list`                            | Tencent WebSocket/Webhook 连接分页 |
-| `POST` | `/bot-adapter/tencent/{save,update,delete,reconnect}`   | 创建、编辑、删除或重连 Tencent 连接 |
-| `GET`  | `/bot-adapter/tencent/webhook-url?id=`                 | 读取 NAS 直连 Webhook 回调 URL |
-| `GET`  | `/bot-adapter/tencent/plugins?accountId=`              | 读取 adapter 插件绑定 |
-| `POST` | `/bot-adapter/tencent/plugins/{bind,unbind}`            | 修改绑定并同步官方菜单 |
-| `POST` | `/bot-adapter/tencent/menu/sync?accountId=`             | 幂等同步 QQ 官方菜单与四场景面板 |
+| 方法   | 路径                                                  | 说明                                |
+| ------ | ----------------------------------------------------- | ----------------------------------- |
+| `GET`  | `/bot-adapter/tencent/list`                           | Tencent WebSocket/Webhook 连接分页  |
+| `POST` | `/bot-adapter/tencent/{save,update,delete,reconnect}` | 创建、编辑、删除或重连 Tencent 连接 |
+| `GET`  | `/bot-adapter/tencent/webhook-url?id=`                | 读取 NAS 直连 Webhook 回调 URL      |
+| `GET`  | `/bot-adapter/tencent/plugins?accountId=`             | 读取 adapter 插件绑定               |
+| `POST` | `/bot-adapter/tencent/plugins/{bind,unbind}`          | 修改绑定并同步官方菜单              |
+| `POST` | `/bot-adapter/tencent/menu/sync?accountId=`           | 幂等同步 QQ 官方菜单与四场景面板    |
 
 NapCat 请求只接受 `connectionMode=reverse-ws` 与 `selfId/accessToken/loginPassword`；Tencent 请求只接受 `official-websocket|official-webhook` 与 `appId/appSecret`。`loginPassword` 与 `appSecret` 只允许经 TLS 提交并加密持久化，列表、事件、日志和响应不回显，空白编辑保留旧密文。
 
@@ -753,8 +783,8 @@ Tencent 插件菜单同步遵循 QQ 官方 `/v2/menu` 和 `/v2/panels`：先 GET
 | `GET/POST/PUT/DELETE` | `/message-management/subscriptions`、`/message-management/subscriptions/:id`、`/message-management/subscriptions/:id/enabled`          | 管理多模板、单订阅者订阅                             |
 | `GET/POST/PUT/DELETE` | `/message-management/templates`、`/message-management/templates/:id`、`/message-management/templates/:id/enabled`                      | 管理绑定一个来源的模板                               |
 | `POST`                | `/message-management/templates/preview`                                                                                                | 按来源变量预览模板                                   |
-| `GET/POST/PUT/DELETE` | `/message-management/subscribers/bot/accounts/:selfId/bindings`                                                                      | 管理 Bot 订阅者的账号、订阅和目标绑定              |
-| `GET`                 | `/message-management/subscribers/bot/accounts/:selfId/targets`                                                                       | 读取该 Bot 账号可投递目标                             |
+| `GET/POST/PUT/DELETE` | `/message-management/subscribers/bot/accounts/:selfId/bindings`                                                                        | 管理 Bot 订阅者的账号、订阅和目标绑定                |
+| `GET`                 | `/message-management/subscribers/bot/accounts/:selfId/targets`                                                                         | 读取该 Bot 账号可投递目标                            |
 | `GET/POST/PUT/DELETE` | `/message-management/subscribers/station-notice/bindings`                                                                              | 管理站内信订阅者的订阅、标题与接收角色绑定           |
 | `GET/POST/DELETE`     | `/message-management/subscribers/station-notice/notices/*`                                                                             | 查询或维护已物化站内信；要求 `super`                 |
 
@@ -786,8 +816,8 @@ TCP NATMap 独立消息源为 `network.tcp.natmap-endpoint-changed`、版本 `1`
 
 ### NapCat Runtime Profile
 
-| 方法  | 路径                                      | 说明                                                                                        |
-| ----- | ----------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 方法  | 路径                                            | 说明                                                                                        |
+| ----- | ----------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `GET` | `/bot-adapter/napcat/runtime/detail?accountId=` | 读取账号 NapCat runtime/protocol/session behavior profile、风险降载和历史登录事件兼容表状态 |
 
 该接口只返回脱敏后的运行态证据，供 Admin 排查镜像、locale、shm、配置 hash、漂移状态、风险模式和 watchdog 巡检告警状态；不会返回 WebUI token、reverse WS token、QQ 登录密码、SSH 私钥或运行态密码环境。账号列表只挂载 `napcat.profileStatus`、`napcat.runtimeProfile` 等摘要字段，不触发登录、重建或修复动作。watchdog 不执行登录恢复：遇到 QQ 登录态离线只记录离线原因并通知 `super`，登录恢复统一由 Admin 手动「更新登录」触发；session behavior profile 只做冷启动、housekeeping、presence 和自动能力分阶段降载，不实现账号级每小时/每日累计发送预算。
@@ -834,8 +864,8 @@ session 的精确 `/admin/napcat-webui/session/:id/webui/webui/` scope；不能�
 
 ### Command / Rule / Permission
 
-| 方法   | 路径                                     | 说明                                                                |
-| ------ | ---------------------------------------- | ------------------------------------------------------------------- |
+| 方法   | 路径                                   | 说明                                                                |
+| ------ | -------------------------------------- | ------------------------------------------------------------------- |
 | `GET`  | `/bot/command/list`                    | 在线命令分页，支持 `pluginKey`、`operationKey`、`selfId`、`enabled` |
 | `POST` | `/bot/command/save`                    | 新增在线命令                                                        |
 | `POST` | `/bot/command/update`                  | 更新在线命令                                                        |
@@ -875,19 +905,19 @@ session 的精确 `/admin/napcat-webui/session/:id/webui/webui/` scope；不能�
 
 ### Plugin / Dashboard / Send / Message
 
-| 方法   | 路径                           | 说明                                       |
-| ------ | ------------------------------ | ------------------------------------------ |
+| 方法   | 路径                                      | 说明                                       |
+| ------ | ----------------------------------------- | ------------------------------------------ |
 | `GET`  | `/plugin-platform/catalog/list`           | 插件列表，支持 `triggerMode=command/event` |
 | `GET`  | `/plugin-platform/catalog/operation/list` | 插件能力列表                               |
 | `GET`  | `/plugin-platform/catalog/operation/page` | 插件能力分页                               |
 | `GET`  | `/plugin-platform/catalog/health`         | 插件健康检查                               |
 | `GET`  | `/plugin-platform/catalog/event/list`     | 无账号身份的事件插件定义                   |
-| `GET`  | `/bot/dashboard/summary`     | Bot 工作台汇总                           |
-| `GET`  | `/bot/send/log/list`         | 发送日志分页                               |
-| `POST` | `/bot/send/private`          | 发送私聊消息                               |
-| `POST` | `/bot/send/group`            | 发送群聊消息                               |
-| `GET`  | `/bot/conversation/list`     | 会话列表                                   |
-| `GET`  | `/bot/message/list`          | 消息列表                                   |
+| `GET`  | `/bot/dashboard/summary`                  | Bot 工作台汇总                             |
+| `GET`  | `/bot/send/log/list`                      | 发送日志分页                               |
+| `POST` | `/bot/send/private`                       | 发送私聊消息                               |
+| `POST` | `/bot/send/group`                         | 发送群聊消息                               |
+| `GET`  | `/bot/conversation/list`                  | 会话列表                                   |
+| `GET`  | `/bot/message/list`                       | 消息列表                                   |
 
 ### Plugin Platform
 
@@ -915,24 +945,24 @@ pnpm plugin install-local <packageFile>
 
 平台管理接口：
 
-| 方法   | 路径                                      | 说明                               |
-| ------ | ----------------------------------------- | ---------------------------------- |
-| `GET`  | `/plugin-platform/installations`    | 插件安装记录，支持 key/status 过滤 |
-| `POST` | `/plugin-platform/upload`           | 上传插件包并返回校验摘要           |
-| `POST` | `/plugin-platform/validate`         | 校验 manifest JSON                 |
-| `POST` | `/plugin-platform/install`          | 按上传包安装插件版本               |
-| `POST` | `/plugin-platform/install-local`    | 按本地包路径安装插件版本           |
-| `POST` | `/plugin-platform/enable`           | 启用插件安装                       |
-| `POST` | `/plugin-platform/disable`          | 禁用插件安装                       |
-| `POST` | `/plugin-platform/upgrade`          | 升级插件安装版本                   |
-| `POST` | `/plugin-platform/uninstall`        | 卸载插件安装                       |
-| `POST` | `/plugin-platform/config`           | 保存插件配置                       |
-| `GET`  | `/plugin-platform/runtime-events`   | 查询插件运行事件                   |
+| 方法   | 路径                              | 说明                               |
+| ------ | --------------------------------- | ---------------------------------- |
+| `GET`  | `/plugin-platform/installations`  | 插件安装记录，支持 key/status 过滤 |
+| `POST` | `/plugin-platform/upload`         | 上传插件包并返回校验摘要           |
+| `POST` | `/plugin-platform/validate`       | 校验 manifest JSON                 |
+| `POST` | `/plugin-platform/install`        | 按上传包安装插件版本               |
+| `POST` | `/plugin-platform/install-local`  | 按本地包路径安装插件版本           |
+| `POST` | `/plugin-platform/enable`         | 启用插件安装                       |
+| `POST` | `/plugin-platform/disable`        | 禁用插件安装                       |
+| `POST` | `/plugin-platform/upgrade`        | 升级插件安装版本                   |
+| `POST` | `/plugin-platform/uninstall`      | 卸载插件安装                       |
+| `POST` | `/plugin-platform/config`         | 保存插件配置                       |
+| `GET`  | `/plugin-platform/runtime-events` | 查询插件运行事件                   |
 
 定时任务管理接口：
 
-| 方法   | 路径                                       | 说明                                 |
-| ------ | ------------------------------------------ | ------------------------------------ |
+| 方法   | 路径                                 | 说明                                 |
+| ------ | ------------------------------------ | ------------------------------------ |
 | `GET`  | `/plugin-platform/tasks/page`        | 插件定时任务分页，支持插件、状态过滤 |
 | `GET`  | `/plugin-platform/tasks/:id`         | 任务详情                             |
 | `POST` | `/plugin-platform/tasks/:id/enable`  | 启用任务并注册 BullMQ Job Scheduler  |
@@ -963,8 +993,8 @@ Admin 入口为 `/plugin-platform/plugins` 与 `/plugin-platform/tasks`。BangDr
 
 可配置键：
 
-| 配置键                                | 默认值 | 说明                 |
-| ------------------------------------- | ------ | -------------------- |
+| 配置键                                 | 默认值 | 说明                 |
+| -------------------------------------- | ------ | -------------------- |
 | `PLUGIN_BILIBILI_CARD_HTTP_TIMEOUT_MS` | 6000   | HTTP 请求超时毫秒    |
 | `PLUGIN_BILIBILI_CARD_MAX_REDIRECTS`   | 5      | `b23.tv` 最大跳转数  |
 | `PLUGIN_BILIBILI_CARD_DEDUPE_TTL_MS`   | 600000 | 同视频去重毫秒       |
@@ -1024,10 +1054,10 @@ Admin 入口为 `/plugin-platform/plugins` 与 `/plugin-platform/tasks`。BangDr
 | `sql/vben-admin-init.sql`                      | 创建 Admin 基础表、用户、角色、菜单、部门、字典和空组件表  |
 | `sql/blog-init.sql`                            | 初始化本地 Blog 表                                         |
 | `sql/blog-menu.sql`                            | 初始化 Blog 管理菜单                                       |
-| `sql/bot-init.sql`                           | 初始化 Bot Adapter 表、插件命令和字典                      |
-| `sql/bot-adapter-protocol-v1.sql`            | 幂等迁移旧表、绑定与订阅键                                 |
-| `sql/bot-adapter-menu-v1.sql`                | 迁移 Bot/Plugin Platform 菜单、权限与字典                  |
-| `sql/bot-adapter-protocol-v1-verify.sql`     | 只读验证 33 张新表及旧契约清零                             |
+| `sql/bot-init.sql`                             | 初始化 Bot Adapter 表、插件命令和字典                      |
+| `sql/bot-adapter-protocol-v1.sql`              | 幂等迁移旧表、绑定与订阅键                                 |
+| `sql/bot-adapter-menu-v1.sql`                  | 迁移 Bot/Plugin Platform 菜单、权限与字典                  |
+| `sql/bot-adapter-protocol-v1-verify.sql`       | 只读验证 33 张新表及旧契约清零                             |
 | `sql/system-log-menu.sql`                      | 初始化系统日志菜单和权限                                   |
 | `sql/system-notice-menu.sql`                   | 初始化系统站内信表与菜单权限                               |
 | `sql/media-governance-intake-menu.sql`         | 增量注册仅 `super` 可见的媒体治理任务/Agent 菜单和九个权限 |

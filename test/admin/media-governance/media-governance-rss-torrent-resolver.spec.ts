@@ -19,6 +19,54 @@ const TORRENT_FIXTURE = Buffer.from(
 );
 
 describe('media governance rss torrent resolver', () => {
+  it('rejects an RSS identity that was never registered to the selected Work', async () => {
+    const findOneBy = jest.fn().mockResolvedValue(null);
+    const service = new MediaGovernanceCatalogService(
+      {
+        getRepository: jest.fn((entity) => {
+          if (entity === MediaGovernanceWorkExternalRefEntity) {
+            return { findOneBy };
+          }
+          throw new Error(`unexpected repository ${String(entity)}`);
+        }),
+      } as unknown as DataSource,
+      {} as MediaGovernanceService,
+    );
+    const internal = service as unknown as {
+      assertRssIdentityBelongsToWork: (
+        work: MediaGovernanceWorkEntity,
+        identity: {
+          provider: 'bangumi';
+          providerId: string;
+        },
+      ) => Promise<void>;
+    };
+    const work = {
+      canonicalProvider: 'tmdb',
+      canonicalProviderId: '30984',
+      id: 'media-work-bleach',
+      workType: 'tv',
+    } as MediaGovernanceWorkEntity;
+
+    await expect(
+      internal.assertRssIdentityBelongsToWork(work, {
+        provider: 'bangumi',
+        providerId: '457326',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        msg: '所选 RSS 身份不属于当前 Work，请先在 Series 下添加对应作品',
+      },
+      status: 409,
+    });
+    expect(findOneBy).toHaveBeenCalledWith({
+      provider: 'bangumi',
+      providerId: '457326',
+      providerNamespace: 'subject',
+      workId: work.id,
+    });
+  });
+
   it('recomputes an allowlisted torrent enclosure into a canonical magnet', async () => {
     const response = new Response(TORRENT_FIXTURE, {
       headers: { 'content-type': 'application/x-bittorrent' },
@@ -175,7 +223,7 @@ describe('media governance rss torrent resolver', () => {
     });
   });
 
-  it('idempotently binds a verified RSS identity when the feed already exists', async () => {
+  it('keeps a duplicate feed idempotent without attaching a new Work identity', async () => {
     const duplicate = {
       feedUrl:
         'https://mikanani.kas.pub/RSS/Bangumi?bangumiId=3457&subgroupid=370',
@@ -187,18 +235,10 @@ describe('media governance rss torrent resolver', () => {
       findOneBy: jest.fn().mockResolvedValue(duplicate),
       save: jest.fn(),
     };
-    const referenceRepository = {
-      create: jest.fn((value) => value),
-      findOneBy: jest.fn().mockResolvedValue(null),
-      save: jest.fn(async (value) => value),
-    };
     const manager = {
       getRepository: jest.fn((entity) => {
         if (entity === MediaGovernanceRssSubscriptionEntity) {
           return subscriptionRepository;
-        }
-        if (entity === MediaGovernanceWorkExternalRefEntity) {
-          return referenceRepository;
         }
         throw new Error(`unexpected transaction repository ${String(entity)}`);
       }),
@@ -228,14 +268,14 @@ describe('media governance rss torrent resolver', () => {
         workType: 'tv',
       } as MediaGovernanceWorkEntity),
       verifyRssSubscriptionIdentity: jest.fn().mockResolvedValue({
-        candidateId: 'bangumi:457326',
-        episodeCount: 14,
-        originalTitle: 'BLEACH 千年血戦篇-相剋譚-',
+        candidateId: 'tmdb:30984',
+        episodeCount: null,
+        originalTitle: 'BLEACH',
         posterUrl: null,
-        provider: 'bangumi',
-        providerId: '457326',
-        releaseYear: 2024,
-        title: '死神 千年血战篇-相克谭-',
+        provider: 'tmdb',
+        providerId: '30984',
+        releaseYear: 2004,
+        title: '死神',
       }),
     });
 
@@ -248,9 +288,9 @@ describe('media governance rss torrent resolver', () => {
           contentKind: 'bundled_sidecar_media',
           feedUrl: duplicate.feedUrl,
           identity: {
-            provider: 'bangumi',
-            providerId: '457326',
-            releaseYear: 2024,
+            provider: 'tmdb',
+            providerId: '30984',
+            releaseYear: 2004,
           },
           includePattern: 'LoliHouse',
           name: '死神 千年血战篇-相克谭- · LoliHouse · Mikan',
@@ -259,15 +299,90 @@ describe('media governance rss torrent resolver', () => {
         },
       ),
     ).resolves.toBe(duplicate);
-    expect(referenceRepository.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'bangumi',
-        providerNamespace: 'subject',
-        providerId: '457326',
-        referenceRole: 'catalog-evidence',
-        workId: 'media-work-bleach',
-      }),
-    );
     expect(subscriptionRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('rebinds a subscription only after its old Task no longer exists', async () => {
+    const subscription = {
+      enabled: true,
+      id: 'media-rss-subscription-xiangke',
+      revision: 21,
+      seasonId: 'media-season-bleach-02',
+      seriesId: 'media-series-bleach',
+      status: 'idle',
+    } as MediaGovernanceRssSubscriptionEntity;
+    const items = [
+      {
+        id: 'media-rss-item-xiangke-27',
+        sourceId: 'media-source-old-27',
+        state: 'queued',
+        stateReason: null,
+        subscriptionId: subscription.id,
+        taskId: 'media-task-old-xiangke',
+      },
+    ] as MediaGovernanceRssItemEntity[];
+    const subscriptionRepository = {
+      findOneBy: jest.fn().mockResolvedValue(subscription),
+      save: jest.fn(async (value) => value),
+    };
+    const itemRepository = {
+      find: jest.fn().mockResolvedValue(items),
+      save: jest.fn(async (value) => value),
+    };
+    const manager = {
+      getRepository: jest.fn((entity) => {
+        if (entity === MediaGovernanceRssSubscriptionEntity) {
+          return subscriptionRepository;
+        }
+        if (entity === MediaGovernanceRssItemEntity) return itemRepository;
+        throw new Error(`unexpected repository ${String(entity)}`);
+      }),
+    };
+    const dataSource = {
+      getRepository: jest.fn((entity) => {
+        if (entity === MediaGovernanceRssItemEntity) return itemRepository;
+        throw new Error(`unexpected root repository ${String(entity)}`);
+      }),
+      transaction: jest.fn(async (callback) => callback(manager)),
+    } as unknown as DataSource;
+    const service = new MediaGovernanceCatalogService(
+      dataSource,
+      {} as MediaGovernanceService,
+    );
+    Object.assign(service, {
+      publishCatalogChanged: jest.fn().mockResolvedValue(undefined),
+      readHistoricalTasks: jest.fn().mockReturnValue([]),
+      requireSeason: jest.fn().mockResolvedValue({
+        id: 'media-season-xiangke-01',
+        seasonNumber: 1,
+        seriesId: 'media-series-bleach',
+        workId: 'media-work-xiangke',
+      }),
+      requireSubscription: jest.fn().mockResolvedValue(subscription),
+      requireWork: jest.fn().mockResolvedValue({
+        id: 'media-work-xiangke',
+        seriesId: 'media-series-bleach',
+        workType: 'tv',
+      }),
+    });
+
+    await expect(
+      service.rebindRssSubscription(
+        'media-series-bleach',
+        'media-work-xiangke',
+        1,
+        subscription.id,
+        { expectedRevision: 21 },
+      ),
+    ).resolves.toMatchObject({
+      revision: 22,
+      seasonId: 'media-season-xiangke-01',
+      status: 'idle',
+    });
+    expect(items[0]).toMatchObject({
+      sourceId: null,
+      state: 'discovered',
+      taskId: null,
+    });
   });
 });

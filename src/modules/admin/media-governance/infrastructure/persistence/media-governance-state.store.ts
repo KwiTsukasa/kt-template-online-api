@@ -27,6 +27,7 @@ import type {
   MediaGovernanceTask,
   MediaGovernanceUnit,
 } from '@/modules/admin/media-governance/application/media-governance.service';
+import { MediaGovernanceTaskEpisodeBindingEntity } from './media-governance-catalog.entities';
 
 export const MEDIA_GOVERNANCE_STATE_STORE = Symbol(
   'MEDIA_GOVERNANCE_STATE_STORE',
@@ -221,6 +222,9 @@ export class MediaGovernanceTypeOrmStateStore implements MediaGovernanceStateSto
         .delete({ taskId: input.taskId });
       await manager
         .getRepository(MediaGovernanceRunEntity)
+        .delete({ taskId: input.taskId });
+      await manager
+        .getRepository(MediaGovernanceTaskEpisodeBindingEntity)
         .delete({ taskId: input.taskId });
       await sourceRepository.delete({ taskId: input.taskId });
       await unitRepository.delete({ taskId: input.taskId });

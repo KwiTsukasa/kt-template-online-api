@@ -268,10 +268,13 @@ Mikan 精确番组页发现的每个字幕组 RSS 都会被分批读取，卡片
 该子组 Feed 的真实条目；单源失败独立展示，不生成意义不明的“未识别发布组”。
 旧来源若对完整长标题返回 500，发现链路只追加一次标题尾部短别名请求，并继续用完整身份别名
 过滤条目；因此来源可用性不会被站点查询词缺陷误判，也不会把宽泛搜索结果混入作品。
-订阅创建会再次核验所选 Bangumi/TMDB 身份，并与订阅在同一事务写入 Work 资料证据；同一
-Feed 重复提交只补齐旧身份，不重复建订阅。轮询会重试尚无 Task/Source 的历史 ignored/failed
-条目，固定白名单 HTTPS torrent enclosure 重算 BTIH 后按最多 16 集创建 Task 和 Episode
-Binding；成功后通过 `catalog-changed` 让系列详情、覆盖率和剧集表自动回读。
+订阅创建会再次核验所选 Bangumi/TMDB 身份，并且只接受当前 Work canonical 或已显式登记的
+外部引用；另一部作品必须先在同一 Series 下创建独立 Work/Season，API 不再把选择结果顺手
+并入当前 Work。错误订阅上下文在旧 Task 安全清理后可按 revision 迁移，并把历史 item 重置为
+可重入队状态。轮询会重试尚无 Task/Source 的历史 ignored/failed 条目，固定白名单 HTTPS
+torrent enclosure 重算 BTIH 后按最多 16 集创建 Task 和 Episode Binding；RSS Task 随后自动
+串行完成清单检查、保守文件映射和探针，全部来源通过后自动进入隔离下载，失败则停在明确人工
+复核态。成功后通过 `catalog-changed` 让系列详情、覆盖率和剧集表自动回读。
 磁链清单检查每 5 秒发布语义进度并在 120 秒内终结；失败后清除 active Run 并保留精确
 来源身份，允许重新填写来源、已有清单时重编文件映射，或在无载荷/计划/
 来源清理 Run 时删除任务。执行任务列表只提供状态、进度和执行操作，不再提供作品新建或身份编辑；删除只

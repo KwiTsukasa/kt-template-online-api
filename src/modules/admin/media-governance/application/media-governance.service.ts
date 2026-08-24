@@ -340,6 +340,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   private dispatchTimer: null | NodeJS.Timeout = null;
   private dispatchRetryActive = false;
   private executionReconcileActive = false;
+  private readonly rssContinuationTasks = new Set<string>();
   private readonly llmAgentResults = new Map<
     string,
     NonNullable<ReturnType<typeof parseMediaCodexAgentResult>>
@@ -380,6 +381,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     if (this.executionGateway?.enabled()) {
       for (const task of this.tasks) {
         await this.continueAppliedAgentPipeline(task).catch(() => false);
+        await this.continueRssIntakePipeline(task).catch(() => false);
       }
       void this.retryPendingDispatches();
       void this.reconcileActiveExecutions();
@@ -1072,7 +1074,12 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     }
     this.publishTaskPatch(task, 'state-updated', input.runId, input.sequence);
     if (input.eventType === 'run-succeeded') {
-      await this.continueAppliedAgentPipeline(task).catch(() => false);
+      const rssContinued = await this.continueRssIntakePipeline(task).catch(
+        () => false,
+      );
+      if (!rssContinued) {
+        await this.continueAppliedAgentPipeline(task).catch(() => false);
+      }
     }
     return {
       applied: true,
@@ -4408,6 +4415,86 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
+   * 让 RSS 入队 Task 依次完成清单检查、保守自动映射、来源探针和下载派发，人工映射失败时停止在可见阻断态。
+   *
+   * @param task - 可能处于接收阶段任一持久化边界的 RSS Task。
+   * @returns 本轮成功预约后继 Run 或完成一个自动映射步骤时返回 `true`。
+   */
+  private async continueRssIntakePipeline(
+    task: MediaGovernanceTask,
+  ): Promise<boolean> {
+    if (
+      task.operationKind !== 'rss-intake' ||
+      task.stage !== 'intake' ||
+      task.activeRunId ||
+      ['blocked', 'queued', 'running'].includes(task.runState) ||
+      this.rssContinuationTasks.has(task.id)
+    ) {
+      return false;
+    }
+    this.rssContinuationTasks.add(task.id);
+    try {
+      const unmapped = task.sources.find(
+        (source) =>
+          source.descriptorTombstonedAt === null &&
+          source.manifestState === 'inspected' &&
+          (source.selectedFileCount === 0 ||
+            source.selectedFileMappings.length !== source.selectedFileCount),
+      );
+      if (unmapped) {
+        try {
+          await this.applyAgentAutomaticSelection(task, {
+            sourceId: unmapped.id,
+            subtitleLanguage: 'zh-CN',
+          });
+        } catch {
+          task.runState = 'blocked';
+          task.gateReason = 'RSS 来源无法安全自动映射文件';
+          task.nextCommandLabel = '手动配置当前来源的逐文件治理映射';
+          this.bumpRevision(task);
+          await this.commitTask(task, 'state-updated');
+          return false;
+        }
+      }
+      const pendingInspection = task.sources.find(
+        (source) =>
+          source.descriptorTombstonedAt === null &&
+          source.manifestState === 'pending-inspection',
+      );
+      if (pendingInspection) {
+        await this.inspectSource(task.id, pendingInspection.id, {
+          expectedRevision: task.revision,
+        });
+        return true;
+      }
+      const unchecked = task.sources.find(
+        (source) =>
+          source.descriptorTombstonedAt === null &&
+          source.manifestState === 'inspected' &&
+          source.selectedFileCount > 0 &&
+          source.selectedFileMappings.length === source.selectedFileCount &&
+          source.sourceHealth === 'unchecked',
+      );
+      if (unchecked) {
+        await this.probeRuntimeSource(task.id, unchecked.id, {
+          expectedRevision: task.revision,
+        });
+        return true;
+      }
+      if (
+        task.sources.length > 0 &&
+        task.sources.every((source) => this.isSourceDownloadable(source))
+      ) {
+        await this.startDownload(task.id, { expectedRevision: task.revision });
+        return true;
+      }
+      return Boolean(unmapped);
+    } finally {
+      this.rssContinuationTasks.delete(task.id);
+    }
+  }
+
+  /**
    * 读取与任务当前 TMDB 身份一致的最后一条已应用修正，作为恢复重排的可审计来源。
    * @param task - 已写入资料源身份且保留 Agent 修正历史的媒体任务。
    * @returns 与当前任务身份、年份一致的最新修正摘要和密封计划摘要。
@@ -5852,6 +5939,10 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         } catch {
           // 单个状态探针失败不得覆盖仍可能运行的任务，下一轮继续核对。
         }
+      }
+      for (const task of [...this.tasks]) {
+        if (task.activeRunId) continue;
+        await this.continueRssIntakePipeline(task).catch(() => false);
       }
     } finally {
       this.executionReconcileActive = false;

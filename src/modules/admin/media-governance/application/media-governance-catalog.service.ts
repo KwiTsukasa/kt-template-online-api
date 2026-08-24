@@ -16,6 +16,7 @@ import type {
   MediaGovernanceRssDiscoverySearchDto,
   MediaGovernanceRssIdentitySearchQueryDto,
   MediaGovernanceRssSubscriptionCreateDto,
+  MediaGovernanceRssSubscriptionRebindDto,
   MediaGovernanceRssSubscriptionStateDto,
   MediaGovernanceSeriesPageQueryDto,
   MediaGovernanceSeriesReconcileDto,
@@ -1150,11 +1151,7 @@ export class MediaGovernanceCatalogService
     this.assertRssUrl(input.feedUrl);
     this.assertPattern(input.includePattern);
     this.assertPattern(input.episodePattern);
-    const identity = await this.verifyRssSubscriptionIdentity(
-      work,
-      season,
-      input,
-    );
+    await this.verifyRssSubscriptionIdentity(work, season, input);
     const normalizedUrl = new URL(input.feedUrl).href;
     const feedUrlSha256 = createHash('sha256')
       .update(normalizedUrl)
@@ -1170,7 +1167,6 @@ export class MediaGovernanceCatalogService
       if (duplicate && duplicate.seasonId !== season.id) {
         throwVbenError('该 RSS 地址已绑定系列的其他季', HttpStatus.CONFLICT);
       }
-      await this.saveWorkReference(manager, work, identity, 'catalog-evidence');
       if (duplicate) return duplicate;
       const now = new Date();
       const subscription = repository.create({
@@ -1201,6 +1197,95 @@ export class MediaGovernanceCatalogService
   }
 
   /**
+   * 在旧错误 Task 已清理后，把订阅和可重试条目整体迁入一个已核验 Work/Season。
+   *
+   * @param seriesId - 目标 Work 所属 Series。
+   * @param workId - 目标 TV Work。
+   * @param seasonNumber - 目标连续 Episode 范围。
+   * @param subscriptionId - 需要纠正上下文的订阅。
+   * @param input - 客户端读取的当前订阅 revision。
+   * @returns 已更新上下文并安排重新轮询的订阅。
+   */
+  async rebindRssSubscription(
+    seriesId: string,
+    workId: string,
+    seasonNumber: number,
+    subscriptionId: string,
+    input: MediaGovernanceRssSubscriptionRebindDto,
+  ) {
+    await this.requireWork(seriesId, workId);
+    const season = await this.requireSeason(seriesId, workId, seasonNumber);
+    const subscription = await this.requireSubscription(subscriptionId);
+    if (subscription.seriesId !== seriesId) {
+      throwVbenError('RSS 订阅不属于目标 Series', HttpStatus.CONFLICT);
+    }
+    if (subscription.revision !== input.expectedRevision) {
+      throwVbenError(
+        `订阅版本已变化，当前版本为 ${subscription.revision}`,
+        HttpStatus.CONFLICT,
+      );
+    }
+    if (subscription.status === 'polling') {
+      throwVbenError('RSS 订阅正在轮询，不能迁移上下文', HttpStatus.CONFLICT);
+    }
+    const itemRepository = this.dataSource.getRepository(
+      MediaGovernanceRssItemEntity,
+    );
+    const items = await itemRepository.find({ where: { subscriptionId } });
+    const taskIds = new Set(
+      items
+        .map((item) => item.taskId)
+        .filter((taskId): taskId is string => Boolean(taskId)),
+    );
+    const existingTaskIds = new Set(
+      this.readHistoricalTasks().map((task) => task.id),
+    );
+    if ([...taskIds].some((taskId) => existingTaskIds.has(taskId))) {
+      throwVbenError(
+        'RSS 订阅仍有关联 Task，请先清理错误入队任务',
+        HttpStatus.CONFLICT,
+      );
+    }
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(
+        MediaGovernanceRssSubscriptionEntity,
+      );
+      const current = await repository.findOneBy({ id: subscriptionId });
+      if (!current || current.revision !== input.expectedRevision) {
+        throwVbenError('RSS 订阅版本已变化', HttpStatus.CONFLICT);
+      }
+      current.seasonId = season.id;
+      current.revision += 1;
+      current.lastError = null;
+      current.nextPollAt = null;
+      current.status = 'disabled';
+      if (current.enabled) {
+        current.nextPollAt = toKtDateTime(new Date());
+        current.status = 'idle';
+      }
+      const currentItems = await manager
+        .getRepository(MediaGovernanceRssItemEntity)
+        .find({ where: { subscriptionId } });
+      for (const item of currentItems) {
+        item.sourceId = null;
+        item.state = 'discovered';
+        item.stateReason = 'RSS 上下文已纠正，等待重新入队';
+        item.taskId = null;
+      }
+      if (currentItems.length > 0) {
+        await manager
+          .getRepository(MediaGovernanceRssItemEntity)
+          .save(currentItems);
+      }
+      return repository.save(current);
+    });
+    await this.publishCatalogChanged(seriesId, [], 'updated').catch(
+      () => undefined,
+    );
+    return saved;
+  }
+
+  /**
    * 根据当前 Work/Season 重新请求官方详情，防止客户端自由文本成为资料引用证据。
    *
    * @param work - 订阅所属 canonical Work。
@@ -1213,8 +1298,9 @@ export class MediaGovernanceCatalogService
     season: MediaGovernanceSeasonEntity,
     input: MediaGovernanceRssSubscriptionCreateDto,
   ): Promise<MediaGovernanceRssIdentityCandidate> {
+    let identity: MediaGovernanceRssIdentityCandidate;
     try {
-      return await verifyMediaGovernanceRssIdentity({
+      identity = await verifyMediaGovernanceRssIdentity({
         identity: {
           provider: input.identity.provider,
           providerId: input.identity.providerId,
@@ -1227,6 +1313,44 @@ export class MediaGovernanceCatalogService
       });
     } catch {
       throwVbenError('所选 RSS 资料身份无法重新核验', HttpStatus.CONFLICT);
+    }
+    await this.assertRssIdentityBelongsToWork(work, identity);
+    return identity;
+  }
+
+  /**
+   * 只接受 Work canonical 身份或已显式登记的外部引用，拒绝订阅创建顺手把另一部作品并入当前 Work。
+   *
+   * @param work - 订阅路径中已经选定的 Work。
+   * @param identity - 官方详情重新核验后的 RSS 作品身份。
+   */
+  private async assertRssIdentityBelongsToWork(
+    work: MediaGovernanceWorkEntity,
+    identity: MediaGovernanceRssIdentityCandidate,
+  ): Promise<void> {
+    if (
+      identity.provider === work.canonicalProvider &&
+      identity.providerId === work.canonicalProviderId
+    ) {
+      return;
+    }
+    const providerNamespace = workIdentityNamespace(
+      identity.provider,
+      work.workType as MediaGovernanceMediaType,
+    );
+    const reference = await this.dataSource
+      .getRepository(MediaGovernanceWorkExternalRefEntity)
+      .findOneBy({
+        provider: identity.provider,
+        providerId: identity.providerId,
+        providerNamespace,
+        workId: work.id,
+      });
+    if (!reference) {
+      throwVbenError(
+        '所选 RSS 身份不属于当前 Work，请先在 Series 下添加对应作品',
+        HttpStatus.CONFLICT,
+      );
     }
   }
 

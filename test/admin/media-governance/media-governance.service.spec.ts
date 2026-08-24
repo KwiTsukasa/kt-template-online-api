@@ -1,5 +1,8 @@
 import { HttpException } from '@nestjs/common';
-import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
+import {
+  MediaGovernanceService,
+  type MediaGovernanceTask,
+} from '../../../src/modules/admin/media-governance/application/media-governance.service';
 
 describe('MediaGovernanceService', () => {
   let service: MediaGovernanceService;
@@ -108,6 +111,114 @@ describe('MediaGovernanceService', () => {
       expect.objectContaining({ seasonNumber: null, unitKind: 'movie' }),
     ]);
     expect(task.identityPreview.seasonLabel).toBe('电影单元（不使用 S00）');
+  });
+
+  it('automatically starts the first pending RSS source inspection', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      operationKind: 'rss-intake',
+      seasonNumbers: ['S01'],
+      titleHint: 'RSS 自动接收测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'bundled_sidecar_media',
+      expectedRevision: task.revision,
+      magnetUri: 'magnet:?xt=urn:btih:7123456789abcdef0123456789abcdef01234567',
+      releaseGroup: 'LoliHouse',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    const inspectSource = jest
+      .spyOn(service, 'inspectSource')
+      .mockResolvedValue(source);
+    const internal = service as unknown as {
+      continueRssIntakePipeline: (
+        task: MediaGovernanceTask,
+      ) => Promise<boolean>;
+    };
+
+    await expect(internal.continueRssIntakePipeline(task)).resolves.toBe(true);
+    expect(inspectSource).toHaveBeenCalledWith(task.id, source.id, {
+      expectedRevision: task.revision,
+    });
+  });
+
+  it('maps an inspected RSS source before probing and downloading it', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      operationKind: 'rss-intake',
+      seasonNumbers: ['S01'],
+      titleHint: '死神 千年血战篇-相克谭-',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'bundled_sidecar_media',
+      expectedRevision: task.revision,
+      magnetUri: 'magnet:?xt=urn:btih:8123456789abcdef0123456789abcdef01234567',
+      releaseGroup: 'LoliHouse',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    source.manifestState = 'inspected';
+    source.manifest = [
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'BLEACH - 27.mkv',
+        sizeBytes: 500_000_000,
+      },
+      {
+        executable: false,
+        index: 1,
+        relativePath: 'BLEACH - 27.sc.ass',
+        sizeBytes: 500_000,
+      },
+      {
+        executable: false,
+        index: 2,
+        relativePath: 'BLEACH - 27.nfo',
+        sizeBytes: 2_000,
+      },
+    ];
+    source.selectedFileCount = 3;
+    source.selectedFileIndices = [0, 1, 2];
+    source.selectedBytes = 500_502_000;
+    source.sourceHealth = 'unchecked';
+    const probeRuntimeSource = jest
+      .spyOn(service, 'probeRuntimeSource')
+      .mockResolvedValue(source);
+    const internal = service as unknown as {
+      continueRssIntakePipeline: (
+        task: MediaGovernanceTask,
+      ) => Promise<boolean>;
+    };
+
+    await expect(internal.continueRssIntakePipeline(task)).resolves.toBe(true);
+    expect(source.selectedFileMappings).toEqual([
+      expect.objectContaining({
+        episodeNumber: 27,
+        fileRole: 'video',
+        index: 0,
+      }),
+      expect.objectContaining({
+        episodeNumber: 27,
+        fileRole: 'subtitle',
+        index: 1,
+        language: 'zh-CN',
+      }),
+    ]);
+    expect(probeRuntimeSource).toHaveBeenCalledWith(task.id, source.id, {
+      expectedRevision: task.revision,
+    });
+
+    probeRuntimeSource.mockRestore();
+    source.sourceHealth = 'viable';
+    const startDownload = jest
+      .spyOn(service, 'startDownload')
+      .mockResolvedValue(task);
+    await expect(internal.continueRssIntakePipeline(task)).resolves.toBe(true);
+    expect(startDownload).toHaveBeenCalledWith(task.id, {
+      expectedRevision: task.revision,
+    });
   });
 
   it('updates a draft identity without replacing its existing source state', async () => {

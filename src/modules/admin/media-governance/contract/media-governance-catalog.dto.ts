@@ -359,3 +359,10 @@ export class MediaGovernanceRssSubscriptionStateDto {
   @IsBoolean()
   enabled: boolean;
 }
+
+export class MediaGovernanceRssSubscriptionRebindDto {
+  @ApiProperty({ minimum: 1 })
+  @IsInt()
+  @Min(1)
+  expectedRevision: number;
+}

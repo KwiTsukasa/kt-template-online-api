@@ -25,6 +25,7 @@ import {
   MediaGovernanceRssDiscoverySearchDto,
   MediaGovernanceRssIdentitySearchQueryDto,
   MediaGovernanceRssSubscriptionCreateDto,
+  MediaGovernanceRssSubscriptionRebindDto,
   MediaGovernanceRssSubscriptionStateDto,
   MediaGovernanceSeriesPageQueryDto,
   MediaGovernanceSeriesCreateDto,
@@ -336,6 +337,42 @@ export class MediaGovernanceCatalogController {
         seriesId,
         workId,
         seasonNumber,
+        body,
+      ),
+    );
+  }
+
+  /**
+   * 在目标 Work/Season 已核验且旧入队 Task 已清理后，原子迁移订阅上下文并重置条目等待重入队。
+   *
+   * @param seriesId - 目标 Work 所属 Series。
+   * @param workId - 订阅应归属的精确 Work。
+   * @param seasonNumber - 订阅应归属的连续集范围。
+   * @param subscriptionId - 需要纠正上下文的订阅。
+   * @param body - 客户端读到的当前订阅 revision。
+   * @param response - 当前 HTTP 响应。
+   * @returns 已迁移到目标 Work/Season 的订阅。
+   */
+  @Put(
+    ':seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context',
+  )
+  @MediaGovernancePermission('Media:Governance:SourceUpload')
+  @ApiOperation({ summary: '纠正 RSS 订阅的 Work/Season 上下文' })
+  async rebindRssSubscription(
+    @Param('seriesId') seriesId: string,
+    @Param('workId') workId: string,
+    @Param('seasonNumber', ParseIntPipe) seasonNumber: number,
+    @Param('subscriptionId') subscriptionId: string,
+    @Body() body: MediaGovernanceRssSubscriptionRebindDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.catalog.rebindRssSubscription(
+        seriesId,
+        workId,
+        seasonNumber,
+        subscriptionId,
         body,
       ),
     );

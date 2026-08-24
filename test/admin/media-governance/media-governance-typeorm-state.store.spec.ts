@@ -12,6 +12,7 @@ import {
   MediaGovernanceUnitEntity,
 } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance.entities';
 import { MediaGovernanceService } from '../../../src/modules/admin/media-governance/application/media-governance.service';
+import { MediaGovernanceTaskEpisodeBindingEntity } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-catalog.entities';
 import { MediaGovernanceTypeOrmStateStore } from '../../../src/modules/admin/media-governance/infrastructure/persistence/media-governance-state.store';
 import { buildMediaGovernanceExecutionEnvelope } from '../../../src/modules/admin/media-governance/contract/media-governance-executor.contract';
 import { sha256Json } from '../../../src/apps/media-codex-agent-gateway/domain/media-codex-agent.contract';
@@ -83,6 +84,8 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       new MemoryRepository<MediaGovernanceMetadataExceptionEntity>();
     const operatorDecisions =
       new MemoryRepository<MediaGovernanceOperatorDecisionEntity>();
+    const taskEpisodeBindings =
+      new MemoryRepository<MediaGovernanceTaskEpisodeBindingEntity>();
     const repositories = new Map<unknown, MemoryRepository<{ id: string }>>([
       [MediaGovernanceTaskEntity, tasks],
       [MediaGovernanceUnitEntity, units],
@@ -94,6 +97,7 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       [MediaGovernanceDescriptorRevisionEntity, descriptors],
       [MediaGovernanceMetadataExceptionEntity, metadataExceptions],
       [MediaGovernanceOperatorDecisionEntity, operatorDecisions],
+      [MediaGovernanceTaskEpisodeBindingEntity, taskEpisodeBindings],
     ]);
     const dataSource = {
       transaction: async (work: (manager: unknown) => Promise<unknown>) =>
@@ -382,6 +386,10 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
       id: 'operator-decision-delete-fixture',
       taskId: task.id,
     } as MediaGovernanceOperatorDecisionEntity);
+    await taskEpisodeBindings.save({
+      id: 'media-task-binding-delete-fixture',
+      taskId: task.id,
+    } as MediaGovernanceTaskEpisodeBindingEntity);
     const persistedSourceIds = new Set(
       [...sources.rows.values()]
         .filter((row) => row.taskId === task.id)
@@ -430,6 +438,11 @@ describe('MediaGovernanceTypeOrmStateStore', () => {
     ).toBe(false);
     expect(metadataExceptions.rows.size).toBe(0);
     expect(operatorDecisions.rows.size).toBe(0);
+    expect(
+      [...taskEpisodeBindings.rows.values()].some(
+        (row) => row.taskId === task.id,
+      ),
+    ).toBe(false);
 
     const replacement = await service.create({
       mediaType: 'movie',

@@ -319,6 +319,7 @@ Series 与 Work 的官方身份都由候选选择后重新核验；TMDB 唯一�
 | `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/magnet-batch`         | 在一个 Work Task 内创建 1–16 条按集磁链来源 |
 | `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-discovery/search` | 按 Work/Season 聚合固定来源和发布组 RSS     |
 | `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions`    | 创建 Work-scoped 按季 RSS 订阅              |
+| `PUT`  | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context` | 清理错误 Task 后迁移订阅上下文并重置条目 |
 | `PUT`  | `/media-governance/series/rss-subscriptions/:subscriptionId/state`                            | 按 revision 启停 RSS                        |
 | `POST` | `/media-governance/series/rss-subscriptions/:subscriptionId/poll`                             | 立即轮询、去重并按集创建 Work-bound Task    |
 | `GET`  | `/media-governance/series/rss-subscriptions/:subscriptionId/items`                            | 分页查询 RSS 条目处理历史                   |
@@ -333,12 +334,18 @@ Shana Project、nekoBT 和 SubsPlease。单个来源失败只进入该来源状�
 短词只解决上游查询兼容性，不能放宽身份边界。
 
 创建订阅必须携带第一阶段选中的资料来源、编号和可选年份；API 会再次读取 Bangumi/TMDB
-官方详情，并在保存订阅的同一事务中把身份幂等写为 Work `catalog-evidence`。同一 Series、
-Work、Season 和 Feed 的重复创建用于补齐旧订阅身份，不产生第二条订阅。轮询可重新处理没有
-`taskId/sourceId` 的 `discovered/ignored/failed` 历史 item；已入队条目仍保持幂等跳过。
+官方详情，并且只接受当前 Work canonical 身份或已经显式登记到该 Work 的外部引用。选择
+另一部作品时返回 409，禁止借创建订阅把它静默写成当前 Work 的 `catalog-evidence`。同一
+Series/Feed 不重复建订阅；错误上下文只有在旧 Task 已安全清理后，才能用 revision 绑定的
+context 路由迁到已核验 Work/Season，该操作会清空旧 task/source 引用并把条目重置为
+`discovered`。轮询可重新处理没有 `taskId/sourceId` 的 `discovered/ignored/failed` item；
+已入队条目仍保持幂等跳过。
 Mikan 等只提供 HTTPS torrent enclosure 的 Feed 由固定主机白名单有界读取描述符、重算
-BTIH 后再创建最多 16 集的 Task。成功创建 Binding 后发布 `catalog-changed`，Series 详情与
-当前 Episode 页通过 SSE 回读权威快照，不需要浏览器手工刷新。
+BTIH 后再创建最多 16 集的 Task。`operationKind=rss-intake` 的 Task 会由 API 状态机逐来源
+自动完成清单检查、保守视频/简中字幕映射和运行时探针；全部来源可下载时自动派发隔离下载，
+无法安全映射或任一探针失败时停止在带明确原因的人工复核态，不再要求每个来源手点同一按钮。
+成功创建 Binding 后发布 `catalog-changed`，Series 详情与当前 Episode 页通过 SSE 回读权威
+快照，不需要浏览器手工刷新。
 
 Season 事实使用 `episodeStart + episodeCount` 表示连续集号区间；`episodeStart`
 省略时为 `1`。这允许同一系列保留 S02 `E25–E47`、S03 `E48–E59` 等资料库原始连续编号，

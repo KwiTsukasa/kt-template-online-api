@@ -221,6 +221,146 @@ describe('MediaGovernanceService', () => {
     });
   });
 
+  it('recovers an RSS task only after every source proves embedded subtitles', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      operationKind: 'rss-intake-auto',
+      seasonNumbers: ['S02'],
+      titleHint: '死神 千年血战篇-祸进谭-',
+    });
+    const first = await service.addMagnetSource(task.id, {
+      contentKind: 'bundled_sidecar_media',
+      expectedRevision: task.revision,
+      magnetUri: 'magnet:?xt=urn:btih:9123456789abcdef0123456789abcdef01234567',
+      releaseGroup: 'Nix-Raws',
+      seasonNumbers: ['S02'],
+      sourceRole: 'primary_media',
+    });
+    const second = await service.addMagnetSource(task.id, {
+      contentKind: 'bundled_sidecar_media',
+      expectedRevision: task.revision,
+      magnetUri: 'magnet:?xt=urn:btih:a123456789abcdef0123456789abcdef01234567',
+      releaseGroup: 'Nix-Raws',
+      seasonNumbers: ['S02'],
+      sourceRole: 'primary_media',
+    });
+    first.manifestState = 'inspected';
+    first.manifest = [
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'BLEACH.Kashin-tan.S01E45.[SC_TC].mkv',
+        sizeBytes: 799_470_859,
+      },
+    ];
+    first.selectedBytes = 799_470_859;
+    first.selectedFileCount = 1;
+    first.selectedFileIndices = [0];
+    first.selectedFileMappings = [
+      {
+        episodeNumber: 45,
+        fileRole: 'video',
+        index: 0,
+        language: null,
+        unitId: task.units[0].id,
+      },
+    ];
+    task.units[0].expectedEpisodeNumbers = [45];
+    task.runState = 'blocked';
+    task.gateReason = 'RSS 来源无法安全自动映射文件';
+    const inspectSource = jest
+      .spyOn(service, 'inspectSource')
+      .mockResolvedValue(second);
+    const internal = service as unknown as {
+      continueRssIntakePipeline: (
+        task: MediaGovernanceTask,
+      ) => Promise<boolean>;
+    };
+
+    await expect(internal.continueRssIntakePipeline(task)).resolves.toBe(true);
+    expect(inspectSource).toHaveBeenCalledWith(task.id, second.id, {
+      expectedRevision: task.revision,
+    });
+    expect(task).toMatchObject({ gateReason: null, runState: 'succeeded' });
+    expect(first.contentKind).toBe('bundled_sidecar_media');
+
+    inspectSource.mockRestore();
+    second.manifestState = 'inspected';
+    second.manifest = [
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'BLEACH.Kashin-tan.S01E44.[SC_TC].mkv',
+        sizeBytes: 726_872_896,
+      },
+    ];
+    const probeRuntimeSource = jest
+      .spyOn(service, 'probeRuntimeSource')
+      .mockResolvedValue(first);
+
+    await expect(internal.continueRssIntakePipeline(task)).resolves.toBe(true);
+    expect(task.governanceProfile).toBe('embedded');
+    expect(task.sources.map((source) => source.contentKind)).toEqual([
+      'embedded_subtitle_media',
+      'embedded_subtitle_media',
+    ]);
+    expect(first.selectedFileMappings).toEqual([
+      expect.objectContaining({ episodeNumber: 45, fileRole: 'video' }),
+    ]);
+    expect(second.selectedFileMappings).toEqual([]);
+    expect(task.units[0].expectedEpisodeNumbers).toEqual([45]);
+    expect(probeRuntimeSource).toHaveBeenCalledWith(task.id, first.id, {
+      expectedRevision: task.revision,
+    });
+  });
+
+  it('does not retain a partial selection when subtitle contract validation fails', async () => {
+    const task = await service.create({
+      mediaType: 'tv',
+      seasonNumbers: ['S01'],
+      titleHint: '来源映射原子性测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'bundled_sidecar_media',
+      expectedRevision: task.revision,
+      magnetUri: 'magnet:?xt=urn:btih:b123456789abcdef0123456789abcdef01234567',
+      releaseGroup: 'TestGroup',
+      seasonNumbers: ['S01'],
+      sourceRole: 'primary_media',
+    });
+    source.manifestState = 'inspected';
+    source.manifest = [
+      {
+        executable: false,
+        index: 0,
+        relativePath: 'Show.S01E01.mkv',
+        sizeBytes: 500_000_000,
+      },
+    ];
+
+    await expect(
+      service.updateSourceSelection(task.id, source.id, {
+        expectedRevision: task.revision,
+        fileMappings: [
+          {
+            episodeNumber: 1,
+            fileRole: 'video',
+            index: 0,
+            unitId: task.units[0].id,
+          },
+        ],
+        selectedFileIndices: [0],
+      }),
+    ).rejects.toThrow(HttpException);
+    expect(source).toMatchObject({
+      selectedBytes: 0,
+      selectedFileCount: 0,
+      selectedFileIndices: [],
+      selectedFileMappings: [],
+    });
+    expect(task.units[0].expectedEpisodeNumbers).toEqual([]);
+  });
+
   it('updates a draft identity without replacing its existing source state', async () => {
     const task = await service.create({
       mediaType: 'tv',

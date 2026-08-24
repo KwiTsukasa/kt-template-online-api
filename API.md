@@ -346,6 +346,9 @@ revision 和完整 Task revision 清单，并确认全部 active Run 为零；�
 已入队条目仍保持幂等跳过。
 默认集号解析支持发布名中的 ` - 41`、`E41` 和 `S01E41`；`SxxEyy` 只把 `yy` 作为当前
 canonical Season 的绝对 Episode 号，避免紧凑命名因为 `E` 前无单词边界而被误记为 ignored。
+同批 RSS Task 会先检查全部来源清单，再执行自动映射。仅当全部主来源都有视频、没有 sidecar
+字幕且视频名带明确内封标记时，服务端才把错误的 `bundled_sidecar_media` 原子纠偏为
+`embedded_subtitle_media`；合同校验失败时原来源选择保持不变，旧的精确映射阻塞可由状态机重试。
 Mikan 等只提供 HTTPS torrent enclosure 的 Feed 由固定主机白名单有界读取描述符、重算
 BTIH 后再创建最多 16 集的 Task。`operationKind=rss-intake-auto` 的 Task 会由 API 状态机逐来源
 自动完成清单检查、保守视频/简中字幕映射和运行时探针；全部来源可下载时自动派发隔离下载，

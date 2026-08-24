@@ -2057,6 +2057,7 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
    * @param sourceId - 用于精确定位来源的标识。
    * @param input - 用于按文件选择与治理身份的一一对应关系校验后密封来源映射的结构化输入，包含 `expectedRevision`、`selectedFileIndices`、`fileMappings` 字段。
    * @returns 按文件选择与治理身份的一一对应关系校验后密封来源映射。
+   * @throws {HttpException} 当修订、来源、文件索引、治理身份或字幕合同不满足约束时拒绝写入。
    */
   async updateSourceSelection(
     taskId: string,
@@ -2205,6 +2206,17 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     ) {
       throwVbenError('主媒体来源至少选择一个视频文件', HttpStatus.BAD_REQUEST);
     }
+    const previousSelection = {
+      selectedBytes: source.selectedBytes,
+      selectedFileCount: source.selectedFileCount,
+      selectedFileIndices: [...source.selectedFileIndices],
+      selectedFileMappings: structuredClone(source.selectedFileMappings),
+    };
+    const previousUnits = task.units.map((unit) => ({
+      expectedEpisodeNumbers: [...unit.expectedEpisodeNumbers],
+      id: unit.id,
+      subtitleContract: structuredClone(unit.subtitleContract),
+    }));
     source.selectedFileIndices = selectedFileIndices;
     source.selectedFileMappings = selectedFileMappings;
     source.selectedFileCount = selectedEntries.length;
@@ -2212,8 +2224,20 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
       (total, entry) => total + entry.sizeBytes,
       0,
     );
-    this.refreshExpectedEpisodeNumbers(task);
-    this.deriveBundledSubtitleContracts(task, true);
+    try {
+      this.refreshExpectedEpisodeNumbers(task);
+      this.deriveBundledSubtitleContracts(task, true);
+    } catch (error) {
+      Object.assign(source, previousSelection);
+      for (const unit of task.units) {
+        const previousUnit = previousUnits.find(
+          (candidate) => candidate.id === unit.id,
+        )!;
+        unit.expectedEpisodeNumbers = previousUnit.expectedEpisodeNumbers;
+        unit.subtitleContract = previousUnit.subtitleContract;
+      }
+      throw error;
+    }
     this.bumpRevision(task);
     await this.commitTask(task, 'source-updated');
     return source;
@@ -4472,17 +4496,37 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   private async continueRssIntakePipeline(
     task: MediaGovernanceTask,
   ): Promise<boolean> {
+    const retryableSelectionFailure =
+      task.runState === 'blocked' &&
+      task.gateReason === 'RSS 来源无法安全自动映射文件';
+    if (task.operationKind !== 'rss-intake-auto') return false;
+    if (task.stage !== 'intake' || task.activeRunId) return false;
     if (
-      task.operationKind !== 'rss-intake-auto' ||
-      task.stage !== 'intake' ||
-      task.activeRunId ||
-      ['blocked', 'queued', 'running'].includes(task.runState) ||
-      this.rssContinuationTasks.has(task.id)
+      ['blocked', 'queued', 'running'].includes(task.runState) &&
+      !retryableSelectionFailure
     ) {
       return false;
     }
+    if (this.rssContinuationTasks.has(task.id)) return false;
     this.rssContinuationTasks.add(task.id);
     try {
+      if (retryableSelectionFailure) {
+        task.runState = 'succeeded';
+        task.gateReason = null;
+        task.nextCommandLabel = '继续检查 RSS 来源清单';
+      }
+      const pendingInspection = task.sources.find(
+        (source) =>
+          source.descriptorTombstonedAt === null &&
+          source.manifestState === 'pending-inspection',
+      );
+      if (pendingInspection) {
+        await this.inspectSource(task.id, pendingInspection.id, {
+          expectedRevision: task.revision,
+        });
+        return true;
+      }
+      this.normalizeExplicitEmbeddedRssSources(task);
       const unmapped = task.sources.find(
         (source) =>
           source.descriptorTombstonedAt === null &&
@@ -4504,17 +4548,6 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
           await this.commitTask(task, 'state-updated');
           return false;
         }
-      }
-      const pendingInspection = task.sources.find(
-        (source) =>
-          source.descriptorTombstonedAt === null &&
-          source.manifestState === 'pending-inspection',
-      );
-      if (pendingInspection) {
-        await this.inspectSource(task.id, pendingInspection.id, {
-          expectedRevision: task.revision,
-        });
-        return true;
       }
       const unchecked = task.sources.find(
         (source) =>
@@ -4541,6 +4574,61 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
     } finally {
       this.rssContinuationTasks.delete(task.id);
     }
+  }
+
+  /**
+   * 将全部清单都明确标注内封字幕的 RSS 主来源从错误的外挂分类原子纠偏，并清除失败调用遗留的部分映射。
+   * @param task - 已完成全部来源清单检查的 RSS 接收任务。
+   */
+  private normalizeExplicitEmbeddedRssSources(task: MediaGovernanceTask) {
+    if (
+      task.operationKind !== 'rss-intake-auto' ||
+      task.governanceProfile !== 'sidecar-bundled'
+    ) {
+      return;
+    }
+    const primarySources = task.sources.filter(
+      (source) =>
+        source.descriptorTombstonedAt === null &&
+        source.sourceRole === 'primary_media',
+    );
+    if (
+      primarySources.length === 0 ||
+      primarySources.some(
+        (source) =>
+          source.manifestState !== 'inspected' ||
+          source.manifest.length === 0 ||
+          source.contentKind !== 'bundled_sidecar_media',
+      )
+    ) {
+      return;
+    }
+    const embeddedMarker =
+      /(?:^|[^a-z0-9])(?:sc[_+&-]?tc|chs[_+&-]?cht|简繁内封|简繁内嵌|内封|内嵌)(?:[^a-z0-9]|$)/iu;
+    const explicitlyEmbedded = primarySources.every((source) => {
+      const videos = source.manifest.filter(
+        (entry) => this.agentFileRole(entry.relativePath) === 'video',
+      );
+      const hasSidecarSubtitle = source.manifest.some(
+        (entry) => this.agentFileRole(entry.relativePath) === 'subtitle',
+      );
+      return (
+        videos.length > 0 &&
+        !hasSidecarSubtitle &&
+        videos.every((entry) => embeddedMarker.test(entry.relativePath))
+      );
+    });
+    if (!explicitlyEmbedded) return;
+    for (const source of primarySources) {
+      source.contentKind = 'embedded_subtitle_media';
+      source.selectedBytes = 0;
+      source.selectedFileCount = 0;
+      source.selectedFileIndices = [];
+      source.selectedFileMappings = [];
+    }
+    task.governanceProfile = 'embedded';
+    for (const unit of task.units) unit.subtitleContract = null;
+    this.refreshExpectedEpisodeNumbers(task);
   }
 
   /**

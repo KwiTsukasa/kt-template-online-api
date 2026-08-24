@@ -350,7 +350,10 @@ canonical Season 的绝对 Episode 号，避免紧凑命名因为 `E` 前无单�
 字幕且视频名带明确内封标记时，服务端才把错误的 `bundled_sidecar_media` 原子纠偏为
 `embedded_subtitle_media`；合同校验失败时原来源选择保持不变，旧的精确映射阻塞可由状态机重试。
 Mikan 等只提供 HTTPS torrent enclosure 的 Feed 由固定主机白名单有界读取描述符、重算
-BTIH 后再创建最多 16 集的 Task。`operationKind=rss-intake-auto` 的 Task 会由 API 状态机逐来源
+BTIH 并把原始 torrent 字节写入私有描述符存储后，再创建最多 16 集的 Task；探针和下载直接复用
+该描述符，不再从裸磁链重新等待 metadata。历史已入队 magnet 来源在同 Feed 轮询时按
+Task/Source/BTIH 一次提交原地升级，Task、Source、RSS item 与 Episode Binding ID 均保持不变。
+`operationKind=rss-intake-auto` 的 Task 会由 API 状态机逐来源
 自动完成清单检查、保守视频/简中字幕映射和运行时探针；全部来源可下载时自动派发隔离下载，
 无法安全映射或任一探针失败时停止在带明确原因的人工复核态，不再要求每个来源手点同一按钮。
 下载 Run 在启动阶段先单次兑换并校验全部来源描述符，再进入可能耗时的逐来源 qBittorrent 流程；

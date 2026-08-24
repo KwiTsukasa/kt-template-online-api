@@ -3,6 +3,11 @@ import {
   MediaGovernanceService,
   type MediaGovernanceTask,
 } from '../../../src/modules/admin/media-governance/application/media-governance.service';
+import { parseTorrentDescriptor } from '../../../src/modules/admin/media-governance/domain/media-torrent-descriptor';
+
+const RSS_TORRENT_FIXTURE = Buffer.from(
+  'd8:announce23:https://tracker.invalid4:infod6:lengthi4e4:name8:demo.mkvee',
+);
 
 describe('MediaGovernanceService', () => {
   let service: MediaGovernanceService;
@@ -359,6 +364,83 @@ describe('MediaGovernanceService', () => {
       selectedFileMappings: [],
     });
     expect(task.units[0].expectedEpisodeNumbers).toEqual([]);
+  });
+
+  it('upgrades an RSS magnet descriptor in place without changing source identity', async () => {
+    const parsed = parseTorrentDescriptor(RSS_TORRENT_FIXTURE);
+    const task = await service.create({
+      mediaType: 'tv',
+      operationKind: 'rss-intake-auto',
+      seasonNumbers: ['S02'],
+      titleHint: 'RSS torrent 描述符恢复测试',
+    });
+    const source = await service.addMagnetSource(task.id, {
+      contentKind: 'embedded_subtitle_media',
+      expectedRevision: task.revision,
+      magnetUri: `magnet:?xt=urn:btih:${parsed.infoHash}`,
+      releaseGroup: 'Nix-Raws',
+      seasonNumbers: ['S02'],
+      sourceRole: 'primary_media',
+    });
+    const sourceId = source.id;
+    source.manifest = parsed.manifest;
+    source.manifestSha256 = parsed.manifestSha256;
+    source.manifestState = 'inspected';
+    source.selectedBytes = parsed.manifest[0].sizeBytes;
+    source.selectedFileCount = 1;
+    source.selectedFileIndices = [0];
+    source.selectedFileMappings = [
+      {
+        episodeNumber: 43,
+        fileRole: 'video',
+        index: 0,
+        language: null,
+        unitId: task.units[0].id,
+      },
+    ];
+    source.sourceHealth = 'unavailable';
+    task.units[0].expectedEpisodeNumbers = [43];
+    task.gateReason = '磁链在限定时间内未取得文件清单';
+    task.runState = 'blocked';
+
+    expect(
+      service.requiresRssTorrentDescriptorUpgrade(
+        task.id,
+        source.id,
+        parsed.infoHash,
+      ),
+    ).toBe(true);
+    const [upgraded] = await service.upgradeRssTorrentDescriptors(
+      task.id,
+      [{ descriptor: RSS_TORRENT_FIXTURE, sourceId: source.id }],
+    );
+
+    expect(upgraded).toMatchObject({
+      descriptorRevision: 2,
+      descriptorSha256: parsed.descriptorSha256,
+      id: sourceId,
+      infoHash: parsed.infoHash,
+      manifestSha256: parsed.manifestSha256,
+      manifestState: 'inspected',
+      selectedBytes: 0,
+      selectedFileCount: 0,
+      selectedFileIndices: [],
+      selectedFileMappings: [],
+      sourceHealth: 'unchecked',
+      transportKind: 'torrent',
+    });
+    expect(task).toMatchObject({
+      gateReason: null,
+      runState: 'succeeded',
+    });
+    expect(task.units[0].expectedEpisodeNumbers).toEqual([]);
+    expect(
+      service.requiresRssTorrentDescriptorUpgrade(
+        task.id,
+        source.id,
+        parsed.infoHash,
+      ),
+    ).toBe(false);
   });
 
   it('updates a draft identity without replacing its existing source state', async () => {

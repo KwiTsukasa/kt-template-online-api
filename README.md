@@ -263,7 +263,7 @@ TV Task 在 `metadataStatus=verified`、主媒体清单已检查且 Unit/视频�
 占用时保持零目录写入。该同步不修改 Task revision、Run、来源或密封状态。每个 Task 最多密封 16 个同治理类型的主媒体来源，
 因此逐集磁链可在一个 Task 内批量接入；同包外挂字幕会跨这些来源合并为同一发布组合同。
 RSS 订阅按 Series/Work/Season 持久化所选资料身份、地址、过滤和集号解析规则，每分钟扫描到期订阅，条目按
-GUID/BTIH 去重后按最多 16 集一组创建 Task；原始磁链仍只进入私有描述符存储，不写入 RSS 表。
+GUID/BTIH 去重后按最多 16 集一组创建 Task；原始磁链或 torrent 字节只进入私有描述符存储，不写入 RSS 表。
 内置集号解析同时接受 ` - 41`、`E41` 与 `S01E41`，其中紧凑季集格式仍取绝对 Episode `41`，
 不会把年份、分辨率或前缀季号误当成目标集号。
 RSS 自动接收会先完成同批全部来源清单检查；只有每个主来源都含视频、没有 sidecar 字幕，且
@@ -280,7 +280,9 @@ Work/Series `catalog-evidence`；若该身份已属于另一 Work 则返回冲�
 重置历史 item；误建 Work 已产生未密封 RSS Task 时，专用 context-repair 只在活动 Run 归零且
 subscription/Task revision 精确匹配时迁移同一 Task、来源、Episode Binding 和 item 历史，再删除
 已空的源 Work。轮询会重试尚无 Task/Source 的历史 ignored/failed 条目，固定白名单 HTTPS
-torrent enclosure 重算 BTIH 后按最多 16 集创建 Task 和 Episode Binding；RSS Task 随后自动
+torrent enclosure 重算 BTIH 后仍原样保存私有 torrent 描述符，再按最多 16 集创建 Task 和 Episode Binding；
+历史上已入队但被降格为裸磁链的来源会在同 Feed 重轮询时按 Task/Source/BTIH 原地批量升级，来源 ID 与
+Episode Binding 不变。RSS Task 随后自动
 串行完成清单检查、保守文件映射和探针，全部来源通过后自动进入隔离下载，失败则停在明确人工
 复核态。成功后通过 `catalog-changed` 让系列详情、覆盖率和剧集表自动回读。
 多来源下载 Run 会在执行开始时一次性兑换并复核全部描述符授权，再按来源顺序处理载荷；因此长下载

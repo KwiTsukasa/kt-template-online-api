@@ -84,14 +84,55 @@ describe('media governance rss torrent resolver', () => {
       {} as MediaGovernanceService,
     );
     const resolver = service as unknown as {
-      resolveRssTorrentMagnet: (torrentUrl: string) => Promise<string>;
+      resolveRssTorrentSource: (torrentUrl: string) => Promise<{
+        descriptor: Buffer;
+        infoHash: string;
+        magnetUri: string;
+      }>;
     };
+    const parsed = parseTorrentDescriptor(TORRENT_FIXTURE);
 
     await expect(
-      resolver.resolveRssTorrentMagnet('https://acg.rip/t/27.torrent'),
-    ).resolves.toBe(
-      `magnet:?xt=urn:btih:${parseTorrentDescriptor(TORRENT_FIXTURE).infoHash}`,
+      resolver.resolveRssTorrentSource('https://acg.rip/t/27.torrent'),
+    ).resolves.toEqual({
+      descriptor: TORRENT_FIXTURE,
+      infoHash: parsed.infoHash,
+      magnetUri: `magnet:?xt=urn:btih:${parsed.infoHash}`,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockRestore();
+  });
+
+  it('preserves the allowlisted torrent bytes beside the recomputed BTIH', async () => {
+    const response = new Response(TORRENT_FIXTURE, { status: 200 });
+    Object.defineProperty(response, 'url', {
+      value: 'https://mikanani.kas.pub/Download/20260824/demo.torrent',
+    });
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(response);
+    const service = new MediaGovernanceCatalogService(
+      {} as DataSource,
+      {} as MediaGovernanceService,
     );
+    const resolver = service as unknown as {
+      resolveRssTorrentSource: (torrentUrl: string) => Promise<{
+        descriptor: Buffer;
+        infoHash: string;
+        magnetUri: string;
+      }>;
+    };
+    const parsed = parseTorrentDescriptor(TORRENT_FIXTURE);
+
+    await expect(
+      resolver.resolveRssTorrentSource(
+        'https://mikanani.kas.pub/Download/20260824/demo.torrent',
+      ),
+    ).resolves.toEqual({
+      descriptor: TORRENT_FIXTURE,
+      infoHash: parsed.infoHash,
+      magnetUri: `magnet:?xt=urn:btih:${parsed.infoHash}`,
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     fetchMock.mockRestore();
   });
@@ -103,11 +144,11 @@ describe('media governance rss torrent resolver', () => {
       {} as MediaGovernanceService,
     );
     const resolver = service as unknown as {
-      resolveRssTorrentMagnet: (torrentUrl: string) => Promise<string>;
+      resolveRssTorrentSource: (torrentUrl: string) => Promise<unknown>;
     };
 
     await expect(
-      resolver.resolveRssTorrentMagnet('https://example.com/27.torrent'),
+      resolver.resolveRssTorrentSource('https://example.com/27.torrent'),
     ).rejects.toThrow('media-rss-torrent-url-rejected');
     expect(fetchMock).not.toHaveBeenCalled();
     fetchMock.mockRestore();
@@ -176,13 +217,18 @@ describe('media governance rss torrent resolver', () => {
         ignored: number;
         queued: number;
       }>;
-      resolveRssTorrentMagnet: (torrentUrl: string) => Promise<string>;
+      resolveRssTorrentSource: (torrentUrl: string) => Promise<{
+        descriptor: Buffer;
+        infoHash: string;
+        magnetUri: string;
+      }>;
     };
-    internal.resolveRssTorrentMagnet = jest
-      .fn()
-      .mockResolvedValue(
+    internal.resolveRssTorrentSource = jest.fn().mockResolvedValue({
+      descriptor: TORRENT_FIXTURE,
+      infoHash: 'd9470856384840edd9b61478c8352095b2c3e885',
+      magnetUri:
         'magnet:?xt=urn:btih:d9470856384840edd9b61478c8352095b2c3e885',
-      );
+    });
     internal.createMagnetBatchWithRole = jest.fn().mockResolvedValue({
       sources: [{ id: 'media-source-xiangke-27' }],
       task: { id: 'media-task-xiangke' },
@@ -226,6 +272,127 @@ describe('media governance rss torrent resolver', () => {
       stateReason: null,
       taskId: 'media-task-xiangke',
     });
+    expect(internal.createMagnetBatchWithRole).toHaveBeenCalledWith(
+      'media-series-bleach',
+      'media-work-bleach',
+      2,
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            episodeNumber: 27,
+            magnetUri:
+              'magnet:?xt=urn:btih:d9470856384840edd9b61478c8352095b2c3e885',
+          }),
+        ],
+      }),
+      'pending-rss',
+      expect.objectContaining({
+        provider: 'bangumi',
+        providerId: '457326',
+      }),
+      [TORRENT_FIXTURE],
+    );
+  });
+
+  it('upgrades an already queued RSS magnet source from the same torrent enclosure', async () => {
+    const infoHash = parseTorrentDescriptor(TORRENT_FIXTURE).infoHash;
+    const existing = {
+      id: 'media-rss-item-koshin-43',
+      infoHash,
+      sourceId: 'media-source-koshin-43',
+      state: 'queued',
+      subscriptionId: 'media-rss-subscription-koshin',
+      taskId: 'media-task-koshin',
+    } as MediaGovernanceRssItemEntity;
+    const mediaTasks = {
+      requiresRssTorrentDescriptorUpgrade: jest.fn().mockReturnValue(true),
+      upgradeRssTorrentDescriptors: jest.fn().mockResolvedValue(undefined),
+    };
+    const dataSource = {
+      getRepository: jest.fn((entity) => {
+        if (entity === MediaGovernanceSeasonEntity) {
+          return {
+            findOneByOrFail: jest.fn().mockResolvedValue({
+              episodeCount: 50,
+              episodeStart: 1,
+              id: 'media-season-bleach-02',
+              seasonNumber: 2,
+              workId: 'media-work-bleach',
+            }),
+          };
+        }
+        if (entity === MediaGovernanceRssItemEntity) {
+          return { findOneBy: jest.fn().mockResolvedValue(existing) };
+        }
+        throw new Error(`unexpected repository ${String(entity)}`);
+      }),
+    } as unknown as DataSource;
+    const service = new MediaGovernanceCatalogService(
+      dataSource,
+      mediaTasks as unknown as MediaGovernanceService,
+    );
+    const internal = service as unknown as {
+      persistRssEntries: (
+        subscription: MediaGovernanceRssSubscriptionEntity,
+        entries: MediaGovernanceRssEntry[],
+      ) => Promise<{
+        createdTasks: number;
+        discovered: number;
+        ignored: number;
+        queued: number;
+      }>;
+      resolveRssTorrentSource: () => Promise<{
+        descriptor: Buffer;
+        infoHash: string;
+        magnetUri: string;
+      }>;
+    };
+    internal.resolveRssTorrentSource = jest.fn().mockResolvedValue({
+      descriptor: TORRENT_FIXTURE,
+      infoHash,
+      magnetUri: `magnet:?xt=urn:btih:${infoHash}`,
+    });
+
+    await expect(
+      internal.persistRssEntries(
+        {
+          contentKind: 'embedded_subtitle_media',
+          id: 'media-rss-subscription-koshin',
+          identityProvider: 'bangumi',
+          identityProviderId: '530725',
+          identityReleaseYear: 2026,
+          identityTitle: '死神 千年血战篇-祸进谭-',
+          includePattern: 'Nix-Raws',
+          releaseGroup: 'Nix-Raws',
+          seasonId: 'media-season-bleach-02',
+          seriesId: 'media-series-bleach',
+        } as MediaGovernanceRssSubscriptionEntity,
+        [
+          {
+            guid: 'koshin-43',
+            magnetUri: null,
+            publishedAt: new Date('2026-08-12T13:20:10.693Z'),
+            title: '[Nix-Raws] BLEACH Kashin-tan S01E43 [SC_TC]',
+            torrentUrl:
+              'https://mikanani.kas.pub/Download/20260812/episode-43.torrent',
+          },
+        ],
+      ),
+    ).resolves.toEqual({
+      createdTasks: 0,
+      discovered: 0,
+      ignored: 0,
+      queued: 0,
+    });
+    expect(mediaTasks.requiresRssTorrentDescriptorUpgrade).toHaveBeenCalledWith(
+      existing.taskId,
+      existing.sourceId,
+      infoHash,
+    );
+    expect(mediaTasks.upgradeRssTorrentDescriptors).toHaveBeenCalledWith(
+      existing.taskId,
+      [{ descriptor: TORRENT_FIXTURE, sourceId: existing.sourceId }],
+    );
   });
 
   it('keeps a duplicate feed idempotent without attaching a new Work identity', async () => {

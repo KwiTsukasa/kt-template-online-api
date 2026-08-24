@@ -2016,6 +2016,129 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
+   * 判断既有 RSS 来源是否仍把已验证的 torrent enclosure 降格为裸磁链，并且当前状态允许原地升级描述符。
+   * @param taskId - RSS 自动接收任务标识。
+   * @param sourceId - 与 RSS 条目绑定的来源标识。
+   * @param infoHash - 当前 Feed 重新解析得到的 BTIH。
+   * @returns 同一任务、来源与 BTIH 仍匹配且只缺 torrent 描述符时返回 `true`。
+   * @throws {HttpException} 当任务或来源标识不存在时拒绝判断。
+   */
+  requiresRssTorrentDescriptorUpgrade(
+    taskId: string,
+    sourceId: string,
+    infoHash: string,
+  ) {
+    const task = this.detail(taskId);
+    const source = this.findSource(task, sourceId);
+    return (
+      task.operationKind === 'rss-intake-auto' &&
+      task.stage === 'intake' &&
+      task.activeRunId === null &&
+      task.payloadSeal === null &&
+      task.sealedPlan === null &&
+      source.descriptorTombstonedAt === null &&
+      source.transportKind === 'magnet' &&
+      source.infoHash === infoHash
+    );
+  }
+
+  /**
+   * 用同一 Feed 重新取得的原始 torrent 字节批量原地升级 RSS 来源，一次提交前保持状态机不可见。
+   * @param taskId - RSS 自动接收任务标识。
+   * @param upgrades - 需要保留来源身份的描述符升级集合。
+   * @returns 升级后的同一来源集合。
+   * @throws {HttpException} 当任务阶段、来源集合或任一描述符 BTIH 不匹配时拒绝整批升级。
+   */
+  async upgradeRssTorrentDescriptors(
+    taskId: string,
+    upgrades: Array<{ descriptor: Buffer; sourceId: string }>,
+  ) {
+    const task = this.detail(taskId);
+    if (
+      upgrades.length === 0 ||
+      upgrades.length > 16 ||
+      new Set(upgrades.map((upgrade) => upgrade.sourceId)).size !==
+        upgrades.length
+    ) {
+      throwVbenError('RSS torrent 描述符升级集合无效', HttpStatus.BAD_REQUEST);
+    }
+    const candidates = upgrades.map((upgrade) => {
+      const source = this.findSource(task, upgrade.sourceId);
+      const parsed = parseTorrentDescriptor(upgrade.descriptor);
+      if (
+        !this.requiresRssTorrentDescriptorUpgrade(
+          taskId,
+          source.id,
+          parsed.infoHash,
+        )
+      ) {
+        throwVbenError(
+          'RSS torrent 描述符升级身份不匹配',
+          HttpStatus.CONFLICT,
+        );
+      }
+      return { ...upgrade, parsed, source };
+    });
+    const prepared: Array<{
+      descriptorBytes: number;
+      descriptorObjectId: string;
+      descriptorRevision: number;
+      descriptorSha256: string;
+      manifest: MediaGovernanceSource['manifest'];
+      manifestSha256: string;
+      source: MediaGovernanceSource;
+    }> = [];
+    for (const candidate of candidates) {
+      const descriptorRevision = candidate.source.descriptorRevision + 1;
+      const stored = await this.descriptorStore?.putTorrentDescriptor({
+        bytes: candidate.descriptor,
+        revision: descriptorRevision,
+        sourceId: candidate.source.id,
+        taskId,
+      });
+      const upgraded = stored ?? {
+        ...candidate.parsed,
+        bytes: candidate.descriptor.length,
+        objectId: `simulator-private/${candidate.source.id}/${candidate.parsed.descriptorSha256}`,
+      };
+      prepared.push({
+        descriptorBytes: upgraded.bytes,
+        descriptorObjectId: upgraded.objectId,
+        descriptorRevision,
+        descriptorSha256: upgraded.descriptorSha256,
+        manifest: upgraded.manifest,
+        manifestSha256: upgraded.manifestSha256,
+        source: candidate.source,
+      });
+    }
+    for (const upgraded of prepared) {
+      upgraded.source.descriptorBytes = upgraded.descriptorBytes;
+      upgraded.source.descriptorObjectId = upgraded.descriptorObjectId;
+      upgraded.source.descriptorRevision = upgraded.descriptorRevision;
+      upgraded.source.descriptorSha256 = upgraded.descriptorSha256;
+      upgraded.source.manifest = upgraded.manifest;
+      upgraded.source.manifestSha256 = upgraded.manifestSha256;
+      upgraded.source.manifestState = 'inspected';
+      upgraded.source.selectedBytes = 0;
+      upgraded.source.selectedFileCount = 0;
+      upgraded.source.selectedFileIndices = [];
+      upgraded.source.selectedFileMappings = [];
+      upgraded.source.sourceHealth = 'unchecked';
+      upgraded.source.sourceHealthLabel = '来源清单已检查';
+      upgraded.source.sourceHealthReasonLabel =
+        '原始 torrent 描述符已恢复，等待运行时探针';
+      upgraded.source.transportKind = 'torrent';
+    }
+    this.refreshExpectedEpisodeNumbers(task);
+    task.gateReason = null;
+    task.runState = 'succeeded';
+    task.nextCommandLabel = '继续运行 RSS 来源探针';
+    this.bumpRevision(task);
+    await this.commitTask(task, 'source-updated');
+    return prepared.map((upgrade) => upgrade.source);
+  }
+
+  /**
    * 修订来源角色、内容类型及适用季范围，并清除旧映射。
    * @param taskId - 用于精确定位任务的标识。
    * @param sourceId - 用于精确定位来源的标识。

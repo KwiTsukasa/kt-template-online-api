@@ -3255,6 +3255,7 @@ export class MediaGovernanceCatalogService
    * @param input - 批量磁链输入。
    * @param bindingRole - 手动或 RSS 创建的绑定角色。
    * @param taskIdentity - RSS 订阅持久化的精确资料身份；手动磁链不传。
+   * @param torrentDescriptors - 与 RSS 条目同序的原始 torrent 描述符；普通磁链批次不传。
    * @returns 新 Task、来源与集绑定。
    */
   private async createMagnetBatchWithRole(
@@ -3264,6 +3265,7 @@ export class MediaGovernanceCatalogService
     input: MediaGovernanceMagnetBatchCreateDto,
     bindingRole: 'pending-rss' | 'pending-source',
     taskIdentity?: RssTaskIdentity,
+    torrentDescriptors: Array<Buffer | null> = [],
   ) {
     const work = await this.requireWork(seriesId, workId);
     const season = await this.requireSeason(seriesId, workId, seasonNumber);
@@ -3334,15 +3336,32 @@ export class MediaGovernanceCatalogService
       workId,
     });
     const sources = [];
-    for (const item of input.items) {
-      const source = await this.mediaTasks.addMagnetSource(task.id, {
-        contentKind: input.contentKind,
-        expectedRevision: task.revision,
-        magnetUri: item.magnetUri,
-        releaseGroup: input.releaseGroup,
-        seasonNumbers: [seasonToken(seasonNumber)],
-        sourceRole: 'primary_media',
-      });
+    for (let index = 0; index < input.items.length; index += 1) {
+      const item = input.items[index];
+      const torrentDescriptor = torrentDescriptors[index];
+      let source;
+      if (torrentDescriptor) {
+        source = await this.mediaTasks.addTorrentSource(
+          task.id,
+          {
+            contentKind: input.contentKind,
+            expectedRevision: task.revision,
+            releaseGroup: input.releaseGroup,
+            seasonNumbers: [seasonToken(seasonNumber)],
+            sourceRole: 'primary_media',
+          },
+          { buffer: torrentDescriptor, size: torrentDescriptor.length },
+        );
+      } else {
+        source = await this.mediaTasks.addMagnetSource(task.id, {
+          contentKind: input.contentKind,
+          expectedRevision: task.revision,
+          magnetUri: item.magnetUri,
+          releaseGroup: input.releaseGroup,
+          seasonNumbers: [seasonToken(seasonNumber)],
+          sourceRole: 'primary_media',
+        });
+      }
       sources.push(source);
     }
     const episodeByNumber = new Map(
@@ -3803,12 +3822,19 @@ export class MediaGovernanceCatalogService
     const candidates: Array<{
       entity: MediaGovernanceRssItemEntity;
       magnetUri: string;
+      torrentDescriptor: Buffer | null;
+    }> = [];
+    const descriptorUpgrades: Array<{
+      descriptor: Buffer;
+      sourceId: string;
+      taskId: string;
     }> = [];
     let ignored = 0;
     let discovered = 0;
     for (const entry of entries) {
       let infoHash: null | string = null;
       let magnetUri: null | string = null;
+      let torrentDescriptor: Buffer | null = null;
       if (entry.magnetUri) {
         try {
           magnetUri = normalizeMediaGovernanceMagnetUri(entry.magnetUri);
@@ -3838,6 +3864,11 @@ export class MediaGovernanceCatalogService
           duplicate.sourceId ||
           !RSS_RETRYABLE_ITEM_STATES.has(duplicate.state))
       ) {
+        const upgrade = await this.resolveExistingRssTorrentUpgrade(
+          duplicate,
+          entry,
+        );
+        if (upgrade) descriptorUpgrades.push(upgrade);
         continue;
       }
       discovered += 1;
@@ -3920,7 +3951,9 @@ export class MediaGovernanceCatalogService
       }
       if (!magnetUri && entry.torrentUrl) {
         try {
-          magnetUri = await this.resolveRssTorrentMagnet(entry.torrentUrl);
+          const resolved = await this.resolveRssTorrentSource(entry.torrentUrl);
+          magnetUri = resolved.magnetUri;
+          torrentDescriptor = resolved.descriptor;
           infoHash = mediaGovernanceMagnetInfoHash(magnetUri);
           entity.infoHash = infoHash;
         } catch {
@@ -3935,7 +3968,22 @@ export class MediaGovernanceCatalogService
         continue;
       }
       await itemRepository.save(entity);
-      candidates.push({ entity, magnetUri });
+      candidates.push({ entity, magnetUri, torrentDescriptor });
+    }
+    const descriptorUpgradesByTask = new Map<
+      string,
+      Array<{ descriptor: Buffer; sourceId: string }>
+    >();
+    for (const upgrade of descriptorUpgrades) {
+      const taskUpgrades = descriptorUpgradesByTask.get(upgrade.taskId) ?? [];
+      taskUpgrades.push({
+        descriptor: upgrade.descriptor,
+        sourceId: upgrade.sourceId,
+      });
+      descriptorUpgradesByTask.set(upgrade.taskId, taskUpgrades);
+    }
+    for (const [taskId, taskUpgrades] of descriptorUpgradesByTask) {
+      await this.mediaTasks.upgradeRssTorrentDescriptors(taskId, taskUpgrades);
     }
     let createdTasks = 0;
     let queued = 0;
@@ -3957,6 +4005,7 @@ export class MediaGovernanceCatalogService
           },
           'pending-rss',
           taskIdentity,
+          chunk.map((candidate) => candidate.torrentDescriptor),
         );
         createdTasks += 1;
         for (let index = 0; index < chunk.length; index += 1) {
@@ -3980,13 +4029,46 @@ export class MediaGovernanceCatalogService
   }
 
   /**
-   * 从固定来源的 HTTPS torrent enclosure 读取描述符，重算 BTIH 后转换为规范磁链。
-   *
+   * 为已经入队但仍只保存裸磁链的 RSS 来源解析同一 Feed 描述符，留待按 Task 原子批量升级。
+   * @param item - 已绑定 Task 与来源的 RSS 条目。
+   * @param entry - 当前 Feed 中与条目键一致的权威条目。
+   * @returns 通过 Task、来源和 BTIH 核对的升级输入；无需升级时返回 `null`。
+   * @throws 当 Feed 的 torrent BTIH 与既有来源身份不一致时抛出。
+   */
+  private async resolveExistingRssTorrentUpgrade(
+    item: MediaGovernanceRssItemEntity,
+    entry: MediaGovernanceRssEntry,
+  ) {
+    if (!item.taskId || !item.sourceId || !entry.torrentUrl) return null;
+    const expectedInfoHash = item.infoHash;
+    if (!expectedInfoHash) return null;
+    if (
+      !this.mediaTasks.requiresRssTorrentDescriptorUpgrade(
+        item.taskId,
+        item.sourceId,
+        expectedInfoHash,
+      )
+    ) {
+      return null;
+    }
+    const resolved = await this.resolveRssTorrentSource(entry.torrentUrl);
+    if (resolved.infoHash !== expectedInfoHash) {
+      throw new Error('media-rss-torrent-infohash-mismatch');
+    }
+    return {
+      descriptor: resolved.descriptor,
+      sourceId: item.sourceId,
+      taskId: item.taskId,
+    };
+  }
+
+  /**
+   * 从固定来源的 HTTPS torrent enclosure 读取并校验原始描述符，同时给出由真实 `info` 重算的 BTIH。
    * @param torrentUrl - RSS 条目给出的 torrent 描述符地址。
-   * @returns 仅含已重算十六进制 BTIH 的规范磁链。
+   * @returns 原始描述符、重算的 BTIH 与规范磁链。
    * @throws 主机、重定向、响应大小或描述符身份不符合固定合同时抛出。
    */
-  private async resolveRssTorrentMagnet(torrentUrl: string): Promise<string> {
+  private async resolveRssTorrentSource(torrentUrl: string) {
     const requestedUrl = new URL(torrentUrl);
     if (
       requestedUrl.protocol !== 'https:' ||
@@ -4012,7 +4094,11 @@ export class MediaGovernanceCatalogService
     }
     const descriptor = await this.readBoundedRssTorrent(response);
     const parsed = parseTorrentDescriptor(descriptor);
-    return `magnet:?xt=urn:btih:${parsed.infoHash}`;
+    return {
+      descriptor,
+      infoHash: parsed.infoHash,
+      magnetUri: `magnet:?xt=urn:btih:${parsed.infoHash}`,
+    };
   }
 
   /**

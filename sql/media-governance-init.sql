@@ -363,6 +363,10 @@ CREATE TABLE IF NOT EXISTS `media_governance_rss_subscription` (
   `id` varchar(96) NOT NULL,
   `series_id` varchar(96) NOT NULL,
   `season_id` varchar(96) NOT NULL,
+  `identity_provider` varchar(16) NOT NULL,
+  `identity_provider_id` varchar(64) NOT NULL,
+  `identity_title` varchar(200) NOT NULL,
+  `identity_release_year` int DEFAULT NULL,
   `name` varchar(120) NOT NULL,
   `feed_url` varchar(2048) NOT NULL,
   `feed_url_sha256` varchar(64) NOT NULL,
@@ -380,7 +384,8 @@ CREATE TABLE IF NOT EXISTS `media_governance_rss_subscription` (
   `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_media_governance_rss_subscription_feed` (`series_id`, `feed_url_sha256`)
+  UNIQUE KEY `uk_media_governance_rss_subscription_feed` (`series_id`, `feed_url_sha256`),
+  KEY `idx_media_governance_rss_identity` (`identity_provider`, `identity_provider_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `media_governance_rss_item` (

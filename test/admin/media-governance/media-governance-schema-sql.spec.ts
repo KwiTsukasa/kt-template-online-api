@@ -30,8 +30,22 @@ describe('media governance production schema SQL', () => {
     resolve(process.cwd(), 'sql/media-governance-series-work-v1-verify.sql'),
     'utf8',
   );
+  const rssContextMigrationSql = readFileSync(
+    resolve(process.cwd(), 'sql/media-governance-rss-context-v2.sql'),
+    'utf8',
+  );
+  const rssContextVerifySql = readFileSync(
+    resolve(process.cwd(), 'sql/media-governance-rss-context-v2-verify.sql'),
+    'utf8',
+  );
 
   it('creates exactly the nineteen task, Work catalog and RSS tables without menu writes', () => {
+    const rssSubscriptionTable = initSql.match(
+      /CREATE TABLE IF NOT EXISTS `media_governance_rss_subscription`[\s\S]+?ENGINE=InnoDB/iu,
+    )?.[0];
+    const episodeTable = initSql.match(
+      /CREATE TABLE IF NOT EXISTS `media_governance_episode`[\s\S]+?ENGINE=InnoDB/iu,
+    )?.[0];
     expect(initSql.match(/CREATE TABLE IF NOT EXISTS/gu)).toHaveLength(19);
     expect(initSql).toContain('`media_governance_task`');
     expect(initSql).toContain('`media_governance_agent_session`');
@@ -46,6 +60,13 @@ describe('media governance production schema SQL', () => {
     expect(initSql).toContain('`media_governance_episode`');
     expect(initSql).toContain('`media_governance_task_episode_binding`');
     expect(initSql).toContain('`media_governance_rss_subscription`');
+    expect(rssSubscriptionTable).toContain(
+      '`identity_provider_id` varchar(64) NOT NULL',
+    );
+    expect(rssSubscriptionTable).toContain(
+      'KEY `idx_media_governance_rss_identity` (`identity_provider`, `identity_provider_id`)',
+    );
+    expect(episodeTable).not.toContain('identity_provider');
     expect(initSql).toContain('`media_governance_rss_item`');
     expect(initSql).toContain('`episode_start` int NOT NULL DEFAULT 1');
     expect(initSql).not.toMatch(/admin_menu|admin_role_menu|INSERT\s+INTO/iu);
@@ -172,6 +193,23 @@ describe('media governance production schema SQL', () => {
       'legacy_series_reference_without_work_ref_count',
     );
     expect(seriesWorkVerifySql).not.toMatch(
+      /INSERT|UPDATE|DELETE|ALTER|DROP/iu,
+    );
+  });
+
+  it('persists the verified RSS identity and verifies its Work ownership', () => {
+    expect(rssContextMigrationSql).toContain(
+      'ADD COLUMN `identity_provider_id` varchar(64) NULL',
+    );
+    expect(rssContextMigrationSql).toContain(
+      'subscription.`identity_provider_id` = work.`canonical_provider_id`',
+    );
+    expect(rssContextMigrationSql).not.toMatch(/DROP\s+(?:TABLE|DATABASE)/iu);
+    expect(rssContextVerifySql).toContain('rss_context_missing_identity_count');
+    expect(rssContextVerifySql).toContain(
+      'rss_context_work_ref_mismatch_count',
+    );
+    expect(rssContextVerifySql).not.toMatch(
       /INSERT|UPDATE|DELETE|ALTER|DROP/iu,
     );
   });

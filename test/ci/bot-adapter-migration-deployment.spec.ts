@@ -25,5 +25,9 @@ describe('Bot Adapter migration deployment contract', () => {
     expect(dockerfile).toContain(
       'sql/media-governance-series-work-v1-verify.sql',
     );
+    expect(dockerfile).toContain('sql/media-governance-rss-context-v2.sql');
+    expect(dockerfile).toContain(
+      'sql/media-governance-rss-context-v2-verify.sql',
+    );
   });
 });

@@ -8,6 +8,7 @@ import {
   MediaGovernanceRssItemEntity,
   MediaGovernanceRssSubscriptionEntity,
   MediaGovernanceSeasonEntity,
+  MediaGovernanceSeriesExternalRefEntity,
   MediaGovernanceTaskEpisodeBindingEntity,
   MediaGovernanceWorkEntity,
   MediaGovernanceWorkExternalRefEntity,
@@ -191,6 +192,10 @@ describe('media governance rss torrent resolver', () => {
       {
         contentKind: 'bundled_sidecar_media',
         id: 'media-rss-subscription-xiangke',
+        identityProvider: 'bangumi',
+        identityProviderId: '457326',
+        identityReleaseYear: 2024,
+        identityTitle: '死神 千年血战篇-相克谭-',
         includePattern: 'LoliHouse',
         releaseGroup: 'LoliHouse',
         seasonId: 'media-season-bleach-02',
@@ -228,6 +233,10 @@ describe('media governance rss torrent resolver', () => {
       feedUrl:
         'https://mikanani.kas.pub/RSS/Bangumi?bangumiId=3457&subgroupid=370',
       id: 'media-rss-subscription-xiangke',
+      identityProvider: 'tmdb',
+      identityProviderId: '30984',
+      identityReleaseYear: 2004,
+      identityTitle: '死神',
       seasonId: 'media-season-bleach-02',
       seriesId: 'media-series-bleach',
     } as MediaGovernanceRssSubscriptionEntity;
@@ -235,10 +244,37 @@ describe('media governance rss torrent resolver', () => {
       findOneBy: jest.fn().mockResolvedValue(duplicate),
       save: jest.fn(),
     };
+    const duplicateWorkReferenceRepository = {
+      create: jest.fn((value) => value),
+      findOneBy: jest.fn().mockResolvedValue({
+        provider: 'tmdb',
+        providerId: '30984',
+        providerNamespace: 'tv',
+        referenceRole: 'canonical',
+        workId: 'media-work-bleach',
+      }),
+      save: jest.fn(async (value) => value),
+    };
+    const duplicateSeriesReferenceRepository = {
+      create: jest.fn((value) => value),
+      findOneBy: jest.fn().mockResolvedValue({
+        provider: 'tmdb',
+        providerId: '30984',
+        referenceRole: 'canonical',
+        seriesId: 'media-series-bleach',
+      }),
+      save: jest.fn(async (value) => value),
+    };
     const manager = {
       getRepository: jest.fn((entity) => {
         if (entity === MediaGovernanceRssSubscriptionEntity) {
           return subscriptionRepository;
+        }
+        if (entity === MediaGovernanceWorkExternalRefEntity) {
+          return duplicateWorkReferenceRepository;
+        }
+        if (entity === MediaGovernanceSeriesExternalRefEntity) {
+          return duplicateSeriesReferenceRepository;
         }
         throw new Error(`unexpected transaction repository ${String(entity)}`);
       }),
@@ -329,10 +365,37 @@ describe('media governance rss torrent resolver', () => {
       find: jest.fn().mockResolvedValue(items),
       save: jest.fn(async (value) => value),
     };
+    const workReferenceRepository = {
+      create: jest.fn((value) => value),
+      findOneBy: jest.fn().mockResolvedValue({
+        provider: 'tmdb',
+        providerId: '30984',
+        providerNamespace: 'tv',
+        referenceRole: 'canonical',
+        workId: 'media-work-bleach',
+      }),
+      save: jest.fn(async (value) => value),
+    };
+    const seriesReferenceRepository = {
+      create: jest.fn((value) => value),
+      findOneBy: jest.fn().mockResolvedValue({
+        provider: 'tmdb',
+        providerId: '30984',
+        referenceRole: 'canonical',
+        seriesId: 'media-series-bleach',
+      }),
+      save: jest.fn(async (value) => value),
+    };
     const manager = {
       getRepository: jest.fn((entity) => {
         if (entity === MediaGovernanceRssSubscriptionEntity) {
           return subscriptionRepository;
+        }
+        if (entity === MediaGovernanceWorkExternalRefEntity) {
+          return workReferenceRepository;
+        }
+        if (entity === MediaGovernanceSeriesExternalRefEntity) {
+          return seriesReferenceRepository;
         }
         if (entity === MediaGovernanceRssItemEntity) return itemRepository;
         throw new Error(`unexpected repository ${String(entity)}`);

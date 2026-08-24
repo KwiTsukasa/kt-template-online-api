@@ -366,3 +366,44 @@ export class MediaGovernanceRssSubscriptionRebindDto {
   @Min(1)
   expectedRevision: number;
 }
+
+export class MediaGovernanceRssContextRepairTaskDto {
+  @ApiProperty({ maxLength: 96 })
+  @IsString()
+  @Matches(/^media-task-[A-Za-z0-9-]{20,80}$/)
+  taskId: string;
+
+  @ApiProperty({ minimum: 1 })
+  @IsInt()
+  @Min(1)
+  expectedRevision: number;
+}
+
+export class MediaGovernanceRssContextRepairDto {
+  @ApiProperty({ minimum: 1 })
+  @IsInt()
+  @Min(1)
+  expectedRevision: number;
+
+  @ApiProperty({ type: MediaGovernanceRssIdentitySelectionDto })
+  @ValidateNested()
+  @Type(() => MediaGovernanceRssIdentitySelectionDto)
+  identity: MediaGovernanceRssIdentitySelectionDto;
+
+  @ApiProperty({ maxLength: 96 })
+  @IsString()
+  @Matches(/^media-work-[A-Za-z0-9-]{20,80}$/)
+  sourceWorkId: string;
+
+  @ApiProperty({
+    maxItems: 16,
+    minItems: 1,
+    type: [MediaGovernanceRssContextRepairTaskDto],
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(16)
+  @ValidateNested({ each: true })
+  @Type(() => MediaGovernanceRssContextRepairTaskDto)
+  tasks: MediaGovernanceRssContextRepairTaskDto[];
+}

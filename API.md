@@ -304,25 +304,26 @@ Series-first 目录接口先创建系列及主 Work，再在同一 Series 下增
 Series 与 Work 的官方身份都由候选选择后重新核验；TMDB 唯一键包含 `tv/movie` namespace。
 电影与剧场版不能创建 Season，TV 的所有季级路径必须同时携带 Work ID：
 
-| 方法   | 路径                                                                                          | 说明                                        |
-| ------ | --------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `GET`  | `/media-governance/series/page`                                                               | 分页查询 Series/Work/季集/执行聚合          |
-| `GET`  | `/media-governance/series/identity-candidates`                                                | 按关键词和 Work 类型搜索官方身份候选        |
-| `POST` | `/media-governance/series`                                                                    | 原子创建 Series 与唯一主 Work               |
-| `POST` | `/media-governance/series/:seriesId/works`                                                    | 向既有 Series 添加已核验 Work               |
-| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons`                                    | 为 TV Work 创建连续 Season/Episode          |
-| `POST` | `/media-governance/series/:seriesId/works/:workId/tasks`                                      | 从 Work 派生一次 source-intake Task         |
-| `GET`  | `/media-governance/series/history-classification`                                             | 只读核对历史 Task 的 Work 归类状态          |
-| `GET`  | `/media-governance/series/rss-discovery/identity-candidates`                                  | 按关键词查询 RSS 使用的 TV 身份候选         |
-| `GET`  | `/media-governance/series/:seriesId`                                                          | 查询 Series、Works、季、Task 与 RSS         |
-| `GET`  | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/episodes`             | 分页查询 Work Episode 与 Task/来源绑定      |
-| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/magnet-batch`         | 在一个 Work Task 内创建 1–16 条按集磁链来源 |
-| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-discovery/search` | 按 Work/Season 聚合固定来源和发布组 RSS     |
-| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions`    | 创建 Work-scoped 按季 RSS 订阅              |
-| `PUT`  | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context` | 清理错误 Task 后迁移订阅上下文并重置条目 |
-| `PUT`  | `/media-governance/series/rss-subscriptions/:subscriptionId/state`                            | 按 revision 启停 RSS                        |
-| `POST` | `/media-governance/series/rss-subscriptions/:subscriptionId/poll`                             | 立即轮询、去重并按集创建 Work-bound Task    |
-| `GET`  | `/media-governance/series/rss-subscriptions/:subscriptionId/items`                            | 分页查询 RSS 条目处理历史                   |
+| 方法   | 路径                                                                                                                      | 说明                                         |
+| ------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `GET`  | `/media-governance/series/page`                                                                                           | 分页查询 Series/Work/季集/执行聚合           |
+| `GET`  | `/media-governance/series/identity-candidates`                                                                            | 按关键词和 Work 类型搜索官方身份候选         |
+| `POST` | `/media-governance/series`                                                                                                | 原子创建 Series 与唯一主 Work                |
+| `POST` | `/media-governance/series/:seriesId/works`                                                                                | 向既有 Series 添加已核验 Work                |
+| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons`                                                                | 为 TV Work 创建连续 Season/Episode           |
+| `POST` | `/media-governance/series/:seriesId/works/:workId/tasks`                                                                  | 从 Work 派生一次 source-intake Task          |
+| `GET`  | `/media-governance/series/history-classification`                                                                         | 只读核对历史 Task 的 Work 归类状态           |
+| `GET`  | `/media-governance/series/rss-discovery/identity-candidates`                                                              | 按关键词查询 RSS 使用的 TV 身份候选          |
+| `GET`  | `/media-governance/series/:seriesId`                                                                                      | 查询 Series、Works、季、Task 与 RSS          |
+| `GET`  | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/episodes`                                         | 分页查询 Work Episode 与 Task/来源绑定       |
+| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/magnet-batch`                                     | 在一个 Work Task 内创建 1–16 条按集磁链来源  |
+| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-discovery/search`                             | 按 Work/Season 聚合固定来源和发布组 RSS      |
+| `POST` | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions`                                | 创建 Work-scoped 按季 RSS 订阅               |
+| `PUT`  | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context`        | 清理错误 Task 后迁移订阅上下文并重置条目     |
+| `PUT`  | `/media-governance/series/:seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context-repair` | 保留未密封 RSS Task/来源/条目并合并误建 Work |
+| `PUT`  | `/media-governance/series/rss-subscriptions/:subscriptionId/state`                                                        | 按 revision 启停 RSS                         |
+| `POST` | `/media-governance/series/rss-subscriptions/:subscriptionId/poll`                                                         | 立即轮询、去重并按集创建 Work-bound Task     |
+| `GET`  | `/media-governance/series/rss-subscriptions/:subscriptionId/items`                                                        | 分页查询 RSS 条目处理历史                    |
 
 RSS 来源发现严格分为身份候选与来源聚合两个阶段：用户必须先从 Bangumi/TMDB 候选中选择身份，
 服务端再次核验该身份后才并行查询 Mikan、Bangumi.moe、Nyaa、ACG.RIP、动漫花园、AniBT、
@@ -334,14 +335,17 @@ Shana Project、nekoBT 和 SubsPlease。单个来源失败只进入该来源状�
 短词只解决上游查询兼容性，不能放宽身份边界。
 
 创建订阅必须携带第一阶段选中的资料来源、编号和可选年份；API 会再次读取 Bangumi/TMDB
-官方详情，并且只接受当前 Work canonical 身份或已经显式登记到该 Work 的外部引用。选择
-另一部作品时返回 409，禁止借创建订阅把它静默写成当前 Work 的 `catalog-evidence`。同一
-Series/Feed 不重复建订阅；错误上下文只有在旧 Task 已安全清理后，才能用 revision 绑定的
-context 路由迁到已核验 Work/Season，该操作会清空旧 task/source 引用并把条目重置为
-`discovered`。轮询可重新处理没有 `taskId/sourceId` 的 `discovered/ignored/failed` item；
+官方详情，并把用户在当前 Season 明确确认的身份写入订阅及 Work/Series `catalog-evidence`。
+若该 provider 身份已属于另一 Work 则返回 409；订阅会持久化 provider、编号、标题和年份，
+后续 `rss-intake-auto` Task 使用这组精确身份，而不是回退成 Work canonical。同一 Series/Feed
+不重复建订阅；普通错误上下文在旧 Task 清理后使用 revision 绑定的 context 路由并把条目重置为
+`discovered`。如果错误上下文已经产生未密封 Task，context-repair 还必须精确提交源 Work、订阅
+revision 和完整 Task revision 清单，并确认全部 active Run 为零；事务保持 Task/Source/RSS item ID，
+把 Unit、来源季号和 Episode Binding 迁到目标 Season，移动资料引用后仅删除已空源 Work。
+轮询可重新处理没有 `taskId/sourceId` 的 `discovered/ignored/failed` item；
 已入队条目仍保持幂等跳过。
 Mikan 等只提供 HTTPS torrent enclosure 的 Feed 由固定主机白名单有界读取描述符、重算
-BTIH 后再创建最多 16 集的 Task。`operationKind=rss-intake` 的 Task 会由 API 状态机逐来源
+BTIH 后再创建最多 16 集的 Task。`operationKind=rss-intake-auto` 的 Task 会由 API 状态机逐来源
 自动完成清单检查、保守视频/简中字幕映射和运行时探针；全部来源可下载时自动派发隔离下载，
 无法安全映射或任一探针失败时停止在带明确原因的人工复核态，不再要求每个来源手点同一按钮。
 成功创建 Binding 后发布 `catalog-changed`，Series 详情与当前 Episode 页通过 SSE 回读权威

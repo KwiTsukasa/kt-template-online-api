@@ -14,6 +14,8 @@ import type {
   MediaGovernanceMagnetBatchCreateDto,
   MediaGovernanceCatalogIdentitySearchQueryDto,
   MediaGovernanceRssDiscoverySearchDto,
+  MediaGovernanceRssContextRepairDto,
+  MediaGovernanceRssIdentitySelectionDto,
   MediaGovernanceRssIdentitySearchQueryDto,
   MediaGovernanceRssSubscriptionCreateDto,
   MediaGovernanceRssSubscriptionRebindDto,
@@ -40,6 +42,11 @@ import {
   MediaGovernanceWorkEntity,
   MediaGovernanceWorkExternalRefEntity,
 } from '@/modules/admin/media-governance/infrastructure/persistence/media-governance-catalog.entities';
+import {
+  MediaGovernanceSourceEntity,
+  MediaGovernanceTaskEntity,
+  MediaGovernanceUnitEntity,
+} from '@/modules/admin/media-governance/infrastructure/persistence/media-governance.entities';
 import {
   discoverMediaGovernanceRssSources,
   searchMediaGovernanceCatalogIdentityCandidates,
@@ -87,6 +94,13 @@ type HistoricalClassificationStatus =
 type HistoricalIdentity = {
   provider: string;
   providerId: string;
+};
+
+type RssTaskIdentity = {
+  provider: 'bangumi' | 'tmdb';
+  providerId: string;
+  releaseYear: null | number;
+  title: string;
 };
 
 type HistoricalIdentityTarget = {
@@ -393,6 +407,34 @@ function collectTaskSeasonEvidence(
  */
 function seasonToken(seasonNumber: number): string {
   return `S${String(seasonNumber).padStart(2, '0')}`;
+}
+
+/**
+ * 按目标 Work 与季令牌重算未密封 RSS Task 的输入摘要，确保后续恢复 Run 使用新的目录上下文。
+ * @param task - 已通过 revision、活动 Run 和密封状态门禁的任务实体。
+ * @param workId - 任务迁入的目标 Work。
+ * @param targetSeasonToken - 目标 Season 的两位季令牌。
+ * @returns 与任务创建入口字段顺序一致的 SHA-256 摘要。
+ */
+function rssContextTaskInputSnapshot(
+  task: MediaGovernanceTaskEntity,
+  workId: string,
+  targetSeasonToken: string,
+): string {
+  const normalizedInput = {
+    mediaType: task.mediaType,
+    operationKind: task.operationKind,
+    providerRef: task.providerRef,
+    releaseYear: task.releaseYear,
+    seasonNumbers: [targetSeasonToken],
+    seriesId: task.seriesId,
+    titleHint: task.titleHint,
+    workId,
+    workItemId: task.workItemId,
+  };
+  return createHash('sha256')
+    .update(JSON.stringify(normalizedInput))
+    .digest('hex');
 }
 
 /**
@@ -1151,12 +1193,30 @@ export class MediaGovernanceCatalogService
     this.assertRssUrl(input.feedUrl);
     this.assertPattern(input.includePattern);
     this.assertPattern(input.episodePattern);
-    await this.verifyRssSubscriptionIdentity(work, season, input);
+    const identity = await this.verifyRssSubscriptionIdentity(
+      work,
+      season,
+      input.identity,
+    );
     const normalizedUrl = new URL(input.feedUrl).href;
     const feedUrlSha256 = createHash('sha256')
       .update(normalizedUrl)
       .digest('hex');
     const saved = await this.dataSource.transaction(async (manager) => {
+      let referenceRole: 'canonical' | 'catalog-evidence' = 'catalog-evidence';
+      if (
+        identity.provider === work.canonicalProvider &&
+        identity.providerId === work.canonicalProviderId
+      ) {
+        referenceRole = 'canonical';
+      }
+      await this.saveWorkReference(manager, work, identity, referenceRole);
+      await this.saveSeriesReference(
+        manager,
+        seriesId,
+        identity,
+        referenceRole,
+      );
       const repository = manager.getRepository(
         MediaGovernanceRssSubscriptionEntity,
       );
@@ -1167,7 +1227,20 @@ export class MediaGovernanceCatalogService
       if (duplicate && duplicate.seasonId !== season.id) {
         throwVbenError('该 RSS 地址已绑定系列的其他季', HttpStatus.CONFLICT);
       }
-      if (duplicate) return duplicate;
+      if (duplicate) {
+        const identityChanged =
+          duplicate.identityProvider !== identity.provider ||
+          duplicate.identityProviderId !== identity.providerId ||
+          duplicate.identityTitle !== identity.title ||
+          duplicate.identityReleaseYear !== identity.releaseYear;
+        if (!identityChanged) return duplicate;
+        duplicate.identityProvider = identity.provider;
+        duplicate.identityProviderId = identity.providerId;
+        duplicate.identityTitle = identity.title;
+        duplicate.identityReleaseYear = identity.releaseYear;
+        duplicate.revision += 1;
+        return repository.save(duplicate);
+      }
       const now = new Date();
       const subscription = repository.create({
         contentKind: input.contentKind,
@@ -1176,6 +1249,10 @@ export class MediaGovernanceCatalogService
         feedUrl: normalizedUrl,
         feedUrlSha256,
         id: `media-rss-subscription-${randomUUID()}`,
+        identityProvider: identity.provider,
+        identityProviderId: identity.providerId,
+        identityReleaseYear: identity.releaseYear,
+        identityTitle: identity.title,
         includePattern: input.includePattern?.trim() || null,
         lastError: null,
         lastPolledAt: null,
@@ -1286,25 +1363,364 @@ export class MediaGovernanceCatalogService
   }
 
   /**
+   * 把误建 Work 下的 RSS 订阅、未密封 Task、来源季号和 Episode 绑定原子迁回既有 Season，并清理空 Work。
+   *
+   * @param seriesId - 源 Work 与目标 Work 共同所属的 Series。
+   * @param workId - 正确目标 Work。
+   * @param seasonNumber - 正确目标 Season 号。
+   * @param subscriptionId - 需要保留历史条目与来源的 RSS 订阅。
+   * @param input - 源 Work、订阅 revision、精确 Task revision 和已核验 RSS 身份。
+   * @returns 已迁移 Task、订阅、目标目录和被清理 Work 的精确标识。
+   */
+  async repairRssSubscriptionContext(
+    seriesId: string,
+    workId: string,
+    seasonNumber: number,
+    subscriptionId: string,
+    input: MediaGovernanceRssContextRepairDto,
+  ) {
+    const targetWork = await this.requireWork(seriesId, workId);
+    const targetSeason = await this.requireSeason(
+      seriesId,
+      workId,
+      seasonNumber,
+    );
+    const identity = await this.verifyRssSubscriptionIdentity(
+      targetWork,
+      targetSeason,
+      input.identity,
+    );
+    const expectedTaskRevisions = new Map(
+      input.tasks.map((task) => [task.taskId, task.expectedRevision]),
+    );
+    if (expectedTaskRevisions.size !== input.tasks.length) {
+      throwVbenError('RSS 上下文修复 Task 不能重复', HttpStatus.BAD_REQUEST);
+    }
+    const targetSeasonToken = seasonToken(seasonNumber);
+    const result = await this.dataSource.transaction(async (manager) => {
+      const subscriptionRepository = manager.getRepository(
+        MediaGovernanceRssSubscriptionEntity,
+      );
+      const seasonRepository = manager.getRepository(
+        MediaGovernanceSeasonEntity,
+      );
+      const workRepository = manager.getRepository(MediaGovernanceWorkEntity);
+      const taskRepository = manager.getRepository(MediaGovernanceTaskEntity);
+      const unitRepository = manager.getRepository(MediaGovernanceUnitEntity);
+      const sourceRepository = manager.getRepository(
+        MediaGovernanceSourceEntity,
+      );
+      const episodeRepository = manager.getRepository(
+        MediaGovernanceEpisodeEntity,
+      );
+      const bindingRepository = manager.getRepository(
+        MediaGovernanceTaskEpisodeBindingEntity,
+      );
+      const referenceRepository = manager.getRepository(
+        MediaGovernanceWorkExternalRefEntity,
+      );
+
+      const subscription = await subscriptionRepository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { id: subscriptionId },
+      });
+      if (!subscription || subscription.seriesId !== seriesId) {
+        throwVbenError('RSS 订阅不属于目标 Series', HttpStatus.CONFLICT);
+      }
+      if (subscription.revision !== input.expectedRevision) {
+        throwVbenError(
+          `订阅版本已变化，当前版本为 ${subscription.revision}`,
+          HttpStatus.CONFLICT,
+        );
+      }
+      if (subscription.status === 'polling') {
+        throwVbenError('RSS 订阅正在轮询，不能修复上下文', HttpStatus.CONFLICT);
+      }
+      const sourceSeason = await seasonRepository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { id: subscription.seasonId },
+      });
+      if (
+        !sourceSeason ||
+        sourceSeason.seriesId !== seriesId ||
+        sourceSeason.workId !== input.sourceWorkId ||
+        sourceSeason.id === targetSeason.id
+      ) {
+        throwVbenError('RSS 源 Work/Season 身份已变化', HttpStatus.CONFLICT);
+      }
+      const sourceWork = await workRepository.findOne({
+        lock: { mode: 'pessimistic_write' },
+        where: { id: input.sourceWorkId, seriesId },
+      });
+      const series = await manager
+        .getRepository(MediaGovernanceSeriesEntity)
+        .findOneBy({ id: seriesId });
+      if (
+        !sourceWork ||
+        !series ||
+        sourceWork.id === targetWork.id ||
+        series.primaryWorkId === sourceWork.id
+      ) {
+        throwVbenError('RSS 源 Work 不能合并', HttpStatus.CONFLICT);
+      }
+      const sourceSeasons = await seasonRepository.findBy({
+        workId: sourceWork.id,
+      });
+      if (
+        sourceSeasons.length !== 1 ||
+        sourceSeasons[0].id !== sourceSeason.id
+      ) {
+        throwVbenError('RSS 源 Work 仍包含其他 Season', HttpStatus.CONFLICT);
+      }
+
+      const items = await manager
+        .getRepository(MediaGovernanceRssItemEntity)
+        .find({ where: { subscriptionId } });
+      const linkedTaskIds = [
+        ...new Set(
+          items
+            .map((item) => item.taskId)
+            .filter((taskId): taskId is string => Boolean(taskId)),
+        ),
+      ].sort();
+      const expectedTaskIds = [...expectedTaskRevisions.keys()].sort();
+      if (
+        linkedTaskIds.length !== expectedTaskIds.length ||
+        linkedTaskIds.some((taskId, index) => taskId !== expectedTaskIds[index])
+      ) {
+        throwVbenError('RSS 关联 Task 清单已变化', HttpStatus.CONFLICT);
+      }
+      const sourceWorkTasks = await taskRepository.findBy({
+        workId: sourceWork.id,
+      });
+      if (
+        sourceWorkTasks.length !== linkedTaskIds.length ||
+        sourceWorkTasks.some((task) => !expectedTaskRevisions.has(task.id))
+      ) {
+        throwVbenError('RSS 源 Work 仍包含其他 Task', HttpStatus.CONFLICT);
+      }
+      const tasks: MediaGovernanceTaskEntity[] = [];
+      for (const taskId of linkedTaskIds) {
+        const task = await taskRepository.findOne({
+          lock: { mode: 'pessimistic_write' },
+          where: { id: taskId },
+        });
+        const expectedRevision = expectedTaskRevisions.get(taskId);
+        if (!task) {
+          throwVbenError(
+            `RSS Task ${taskId} 不满足无损上下文修复门禁`,
+            HttpStatus.CONFLICT,
+          );
+        }
+        const contextMismatch =
+          task.revision !== expectedRevision ||
+          task.seriesId !== seriesId ||
+          task.workId !== sourceWork.id ||
+          task.operationKind !== 'rss-intake-auto';
+        const executionUnsafe =
+          task.activeRunId !== null ||
+          !['blocked', 'draft'].includes(task.runState) ||
+          !['download', 'intake'].includes(task.stage) ||
+          task.closedAt !== null;
+        const artifactsSealed =
+          task.payloadSeal !== null ||
+          task.sealedPlan !== null ||
+          task.sealedPlanSha256 !== null ||
+          task.metadataIdentity !== null;
+        if (contextMismatch || executionUnsafe || artifactsSealed) {
+          throwVbenError(
+            `RSS Task ${taskId} 不满足无损上下文修复门禁`,
+            HttpStatus.CONFLICT,
+          );
+        }
+        tasks.push(task);
+      }
+
+      const sourceEpisodes = await episodeRepository.findBy({
+        seasonId: sourceSeason.id,
+      });
+      const sourceEpisodeById = new Map(
+        sourceEpisodes.map((episode) => [episode.id, episode]),
+      );
+      const episodeNumbers = sourceEpisodes.map(
+        (episode) => episode.episodeNumber,
+      );
+      const targetEpisodes = await episodeRepository.findBy({
+        episodeNumber: In(episodeNumbers),
+        seasonId: targetSeason.id,
+      });
+      const targetEpisodeByNumber = new Map(
+        targetEpisodes.map((episode) => [episode.episodeNumber, episode]),
+      );
+      if (
+        sourceEpisodes.length === 0 ||
+        targetEpisodes.length !== sourceEpisodes.length
+      ) {
+        throwVbenError('目标 Season Episode 范围不完整', HttpStatus.CONFLICT);
+      }
+      const bindings = await bindingRepository.findBy({
+        taskId: In(linkedTaskIds),
+      });
+      if (
+        bindings.length !== sourceEpisodes.length ||
+        bindings.some(
+          (binding) =>
+            binding.seasonId !== sourceSeason.id ||
+            !sourceEpisodeById.has(binding.episodeId),
+        )
+      ) {
+        throwVbenError('RSS Task Episode 绑定不完整', HttpStatus.CONFLICT);
+      }
+      const occupiedTargetBindings = await bindingRepository.findBy({
+        episodeId: In(targetEpisodes.map((episode) => episode.id)),
+      });
+      if (occupiedTargetBindings.length > 0) {
+        throwVbenError('目标 Episode 已有其他 Task 绑定', HttpStatus.CONFLICT);
+      }
+
+      for (const task of tasks) {
+        const units = await unitRepository.findBy({ taskId: task.id });
+        const sources = await sourceRepository.findBy({ taskId: task.id });
+        if (units.length !== 1 || sources.length === 0) {
+          throwVbenError(
+            'RSS Task Unit/Source 结构不完整',
+            HttpStatus.CONFLICT,
+          );
+        }
+        const unit = units[0];
+        const expectedEpisodes = unit.expectedEpisodeNumbers.map((value) =>
+          Number(value),
+        );
+        if (
+          !unit.seasonNumber ||
+          expectedEpisodes.some(
+            (episodeNumber) => !targetEpisodeByNumber.has(episodeNumber),
+          ) ||
+          sources.some(
+            (source) =>
+              source.seasonNumbers.length !== 1 ||
+              source.seasonNumbers[0] !== unit.seasonNumber,
+          )
+        ) {
+          throwVbenError('RSS Task 季集快照不匹配', HttpStatus.CONFLICT);
+        }
+        unit.seasonNumber = targetSeasonToken;
+        for (const source of sources) {
+          source.seasonNumbers = [targetSeasonToken];
+        }
+        task.workId = targetWork.id;
+        task.inputSnapshotSha256 = rssContextTaskInputSnapshot(
+          task,
+          targetWork.id,
+          targetSeasonToken,
+        );
+        task.revision += 1;
+        await taskRepository.save(task);
+        await unitRepository.save(unit);
+        await sourceRepository.save(sources);
+      }
+
+      for (const binding of bindings) {
+        const sourceEpisode = sourceEpisodeById.get(binding.episodeId)!;
+        const targetEpisode = targetEpisodeByNumber.get(
+          sourceEpisode.episodeNumber,
+        )!;
+        targetEpisode.status = sourceEpisode.status;
+        binding.episodeId = targetEpisode.id;
+        binding.seasonId = targetSeason.id;
+      }
+      await episodeRepository.save(targetEpisodes);
+      await bindingRepository.save(bindings);
+
+      subscription.seasonId = targetSeason.id;
+      subscription.identityProvider = identity.provider;
+      subscription.identityProviderId = identity.providerId;
+      subscription.identityReleaseYear = identity.releaseYear;
+      subscription.identityTitle = identity.title;
+      subscription.lastError = null;
+      subscription.revision += 1;
+      await subscriptionRepository.save(subscription);
+
+      const sourceReferences = await referenceRepository.findBy({
+        workId: sourceWork.id,
+      });
+      const selectedReference = sourceReferences.find(
+        (reference) =>
+          reference.provider === identity.provider &&
+          reference.providerId === identity.providerId,
+      );
+      if (!selectedReference) {
+        throwVbenError('RSS 源 Work 缺少所选身份引用', HttpStatus.CONFLICT);
+      }
+      for (const reference of sourceReferences) {
+        const targetReference = await referenceRepository.findOneBy({
+          provider: reference.provider,
+          providerId: reference.providerId,
+          providerNamespace: reference.providerNamespace,
+          workId: targetWork.id,
+        });
+        if (targetReference) {
+          await referenceRepository.delete({ id: reference.id });
+          continue;
+        }
+        reference.workId = targetWork.id;
+        reference.referenceRole = 'catalog-evidence';
+        await referenceRepository.save(reference);
+      }
+      await this.saveSeriesReference(
+        manager,
+        seriesId,
+        identity,
+        'catalog-evidence',
+      );
+
+      targetWork.revision += 1;
+      await workRepository.save(targetWork);
+      await episodeRepository.delete({ seasonId: sourceSeason.id });
+      await seasonRepository.delete({ id: sourceSeason.id });
+      await workRepository.delete({ id: sourceWork.id });
+
+      return {
+        migratedTaskIds: linkedTaskIds,
+        removedSeasonId: sourceSeason.id,
+        removedWorkId: sourceWork.id,
+        subscription,
+        targetSeasonId: targetSeason.id,
+        targetWorkId: targetWork.id,
+      };
+    });
+    await this.mediaTasks.reloadCatalogRepairedTasks(result.migratedTaskIds);
+    await this.publishCatalogChanged(
+      seriesId,
+      result.migratedTaskIds,
+      'updated',
+    ).catch(() => undefined);
+    return {
+      ...result,
+      detail: await this.detail(seriesId),
+    };
+  }
+
+  /**
    * 根据当前 Work/Season 重新请求官方详情，防止客户端自由文本成为资料引用证据。
    *
    * @param work - 订阅所属 canonical Work。
    * @param season - 订阅所属 canonical Season。
-   * @param input - 带已选资料来源和编号的订阅输入。
+   * @param input - 用户明确选择的资料来源、编号和可选年份。
    * @returns 经过 Bangumi 或 TMDB 官方详情核验的身份。
    */
   private async verifyRssSubscriptionIdentity(
     work: MediaGovernanceWorkEntity,
     season: MediaGovernanceSeasonEntity,
-    input: MediaGovernanceRssSubscriptionCreateDto,
+    input: MediaGovernanceRssIdentitySelectionDto,
   ): Promise<MediaGovernanceRssIdentityCandidate> {
     let identity: MediaGovernanceRssIdentityCandidate;
     try {
       identity = await verifyMediaGovernanceRssIdentity({
         identity: {
-          provider: input.identity.provider,
-          providerId: input.identity.providerId,
-          releaseYear: input.identity.releaseYear ?? null,
+          provider: input.provider,
+          providerId: input.providerId,
+          releaseYear: input.releaseYear ?? null,
         },
         originalTitle: work.originalTitle,
         releaseYear: work.releaseYear,
@@ -1314,7 +1730,6 @@ export class MediaGovernanceCatalogService
     } catch {
       throwVbenError('所选 RSS 资料身份无法重新核验', HttpStatus.CONFLICT);
     }
-    await this.assertRssIdentityBelongsToWork(work, identity);
     return identity;
   }
 
@@ -1326,7 +1741,10 @@ export class MediaGovernanceCatalogService
    */
   private async assertRssIdentityBelongsToWork(
     work: MediaGovernanceWorkEntity,
-    identity: MediaGovernanceRssIdentityCandidate,
+    identity: Pick<
+      MediaGovernanceRssIdentityCandidate,
+      'provider' | 'providerId'
+    >,
   ): Promise<void> {
     if (
       identity.provider === work.canonicalProvider &&
@@ -1352,6 +1770,29 @@ export class MediaGovernanceCatalogService
         HttpStatus.CONFLICT,
       );
     }
+  }
+
+  /**
+   * 从订阅持久化字段恢复后续 RSS Task 的精确资料身份，拒绝回退成 Work 主身份。
+   * @param subscription - 已通过 Series/Season 所有权校验的订阅。
+   * @returns 用于创建 Task 身份快照的 provider、标题和年份。
+   */
+  private rssTaskIdentity(
+    subscription: MediaGovernanceRssSubscriptionEntity,
+  ): RssTaskIdentity {
+    if (
+      !['bangumi', 'tmdb'].includes(subscription.identityProvider) ||
+      !subscription.identityProviderId?.trim() ||
+      !subscription.identityTitle?.trim()
+    ) {
+      throwVbenError('RSS 订阅缺少已核验资料身份', HttpStatus.CONFLICT);
+    }
+    return {
+      provider: subscription.identityProvider as 'bangumi' | 'tmdb',
+      providerId: subscription.identityProviderId,
+      releaseYear: subscription.identityReleaseYear,
+      title: subscription.identityTitle,
+    };
   }
 
   /**
@@ -2813,6 +3254,7 @@ export class MediaGovernanceCatalogService
    * @param seasonNumber - canonical 季号。
    * @param input - 批量磁链输入。
    * @param bindingRole - 手动或 RSS 创建的绑定角色。
+   * @param taskIdentity - RSS 订阅持久化的精确资料身份；手动磁链不传。
    * @returns 新 Task、来源与集绑定。
    */
   private async createMagnetBatchWithRole(
@@ -2821,6 +3263,7 @@ export class MediaGovernanceCatalogService
     seasonNumber: number,
     input: MediaGovernanceMagnetBatchCreateDto,
     bindingRole: 'pending-rss' | 'pending-source',
+    taskIdentity?: RssTaskIdentity,
   ) {
     const work = await this.requireWork(seriesId, workId);
     const season = await this.requireSeason(seriesId, workId, seasonNumber);
@@ -2863,17 +3306,31 @@ export class MediaGovernanceCatalogService
     }
     let operationKind: 'magnet-batch' | 'rss-intake-auto' = 'magnet-batch';
     if (bindingRole === 'pending-rss') operationKind = 'rss-intake-auto';
+    let taskProvider = work.canonicalProvider as MediaGovernanceProvider;
+    let taskProviderId = work.canonicalProviderId;
+    let taskReleaseYear: null | number = work.releaseYear;
+    let taskTitle = work.title;
+    if (bindingRole === 'pending-rss') {
+      if (!taskIdentity) {
+        throwVbenError('RSS Task 缺少订阅资料身份', HttpStatus.CONFLICT);
+      }
+      await this.assertRssIdentityBelongsToWork(work, taskIdentity);
+      taskProvider = taskIdentity.provider;
+      taskProviderId = taskIdentity.providerId;
+      taskReleaseYear = taskIdentity.releaseYear;
+      taskTitle = taskIdentity.title;
+    }
     const task = await this.mediaTasks.create({
       mediaType: 'tv',
       operationKind,
       providerRef: {
-        provider: work.canonicalProvider as 'bangumi' | 'tmdb' | 'tvdb',
-        providerId: work.canonicalProviderId,
+        provider: taskProvider,
+        providerId: taskProviderId,
       },
-      releaseYear: work.releaseYear,
+      releaseYear: taskReleaseYear,
       seasonNumbers: [seasonToken(seasonNumber)],
       seriesId,
-      titleHint: work.title,
+      titleHint: taskTitle,
       workId,
     });
     const sources = [];
@@ -3060,6 +3517,49 @@ export class MediaGovernanceCatalogService
       });
     } else {
       reference.referenceRole = referenceRole;
+      reference.releaseYear = identity.releaseYear;
+      reference.title = identity.title;
+    }
+    await repository.save(reference);
+  }
+
+  /**
+   * 把 RSS 明确选择且已重新核验的身份同步为 Series 资料证据，并保留既有 canonical 角色。
+   * @param manager - 创建订阅或修复上下文的同一事务管理器。
+   * @param seriesId - 资料引用所属 Series。
+   * @param identity - 已从资料源重新读取的精确身份。
+   * @param referenceRole - canonical 或 catalog-evidence 角色。
+   */
+  private async saveSeriesReference(
+    manager: EntityManager,
+    seriesId: string,
+    identity: MediaGovernanceRssIdentityCandidate,
+    referenceRole: 'canonical' | 'catalog-evidence',
+  ): Promise<void> {
+    const repository = manager.getRepository(
+      MediaGovernanceSeriesExternalRefEntity,
+    );
+    let reference = await repository.findOneBy({
+      provider: identity.provider,
+      providerId: identity.providerId,
+    });
+    if (reference && reference.seriesId !== seriesId) {
+      throwVbenError('资料身份已绑定其他 Series', HttpStatus.CONFLICT);
+    }
+    if (!reference) {
+      reference = repository.create({
+        id: `media-series-ref-${randomUUID()}`,
+        provider: identity.provider,
+        providerId: identity.providerId,
+        referenceRole,
+        releaseYear: identity.releaseYear,
+        seriesId,
+        title: identity.title,
+      });
+    } else {
+      if (reference.referenceRole !== 'canonical') {
+        reference.referenceRole = referenceRole;
+      }
       reference.releaseYear = identity.releaseYear;
       reference.title = identity.title;
     }
@@ -3296,6 +3796,7 @@ export class MediaGovernanceCatalogService
     const season = await this.dataSource
       .getRepository(MediaGovernanceSeasonEntity)
       .findOneByOrFail({ id: subscription.seasonId });
+    const taskIdentity = this.rssTaskIdentity(subscription);
     const itemRepository = this.dataSource.getRepository(
       MediaGovernanceRssItemEntity,
     );
@@ -3455,6 +3956,7 @@ export class MediaGovernanceCatalogService
             releaseGroup: subscription.releaseGroup ?? undefined,
           },
           'pending-rss',
+          taskIdentity,
         );
         createdTasks += 1;
         for (let index = 0; index < chunk.length; index += 1) {

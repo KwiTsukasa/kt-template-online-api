@@ -256,22 +256,25 @@ Series 必须先从 Bangumi/TMDB 官方候选中确认主身份，创建事务�
 Season/Episode，电影与剧场版禁止伪造 S00。Season 通过 `episodeStart + episodeCount`
 保留非 1 起始的连续集号。
 Task 只表达一次执行，不能从根任务接口单独创建或修改作品身份；新 Task 只能从既有 Work、
-逐集磁链或 RSS 入队创建，`seriesId/workId/operationKind` 与标题、资料编号、年份均从 Work
-派生。TV Task 在 `metadataStatus=verified`、主媒体清单已检查且 Unit/视频映射完全一致后，
+逐集磁链或 RSS 入队创建，`seriesId/workId/operationKind` 从 Work/Season 派生；RSS Task 的
+标题、资料编号和年份固定使用订阅时再次核验并持久化的所选身份，不回退成 Work 主身份。
+TV Task 在 `metadataStatus=verified`、主媒体清单已检查且 Unit/视频映射完全一致后，
 只会绑定目标 Work 已存在的 Season/Episode；缺季、缺集、跨 Work 或 Episode 已被其他 Task
 占用时保持零目录写入。该同步不修改 Task revision、Run、来源或密封状态。每个 Task 最多密封 16 个同治理类型的主媒体来源，
 因此逐集磁链可在一个 Task 内批量接入；同包外挂字幕会跨这些来源合并为同一发布组合同。
-RSS 订阅按 Series/Work/Season 持久化地址、过滤和集号解析规则，每分钟扫描到期订阅，条目按
+RSS 订阅按 Series/Work/Season 持久化所选资料身份、地址、过滤和集号解析规则，每分钟扫描到期订阅，条目按
 GUID/BTIH 去重后按最多 16 集一组创建 Task；原始磁链仍只进入私有描述符存储，不写入 RSS 表。
 创建订阅前先从 Bangumi/TMDB 选择作品身份，再由服务端并行聚合九个固定社区来源并按发布组去重。
 Mikan 精确番组页发现的每个字幕组 RSS 都会被分批读取，卡片中的命中数、最近时间和样例来自
 该子组 Feed 的真实条目；单源失败独立展示，不生成意义不明的“未识别发布组”。
 旧来源若对完整长标题返回 500，发现链路只追加一次标题尾部短别名请求，并继续用完整身份别名
 过滤条目；因此来源可用性不会被站点查询词缺陷误判，也不会把宽泛搜索结果混入作品。
-订阅创建会再次核验所选 Bangumi/TMDB 身份，并且只接受当前 Work canonical 或已显式登记的
-外部引用；另一部作品必须先在同一 Series 下创建独立 Work/Season，API 不再把选择结果顺手
-并入当前 Work。错误订阅上下文在旧 Task 安全清理后可按 revision 迁移，并把历史 item 重置为
-可重入队状态。轮询会重试尚无 Task/Source 的历史 ignored/failed 条目，固定白名单 HTTPS
+订阅创建会再次核验所选 Bangumi/TMDB 身份，并把用户在当前 Season 明确选中的身份原子登记为
+Work/Series `catalog-evidence`；若该身份已属于另一 Work 则返回冲突。所选 provider、编号、标题和
+年份随订阅持久化，轮询创建 Task 时原样使用。普通错误订阅可在旧 Task 清理后按 revision 迁移并
+重置历史 item；误建 Work 已产生未密封 RSS Task 时，专用 context-repair 只在活动 Run 归零且
+subscription/Task revision 精确匹配时迁移同一 Task、来源、Episode Binding 和 item 历史，再删除
+已空的源 Work。轮询会重试尚无 Task/Source 的历史 ignored/failed 条目，固定白名单 HTTPS
 torrent enclosure 重算 BTIH 后按最多 16 集创建 Task 和 Episode Binding；RSS Task 随后自动
 串行完成清单检查、保守文件映射和探针，全部来源通过后自动进入隔离下载，失败则停在明确人工
 复核态。成功后通过 `catalog-changed` 让系列详情、覆盖率和剧集表自动回读。
@@ -295,8 +298,9 @@ Task、Unit、来源、Run、Series/Work 目录和 RSS 由 19 张 TypeORM 领域
 表只作历史兼容。新任务只保存 `llmConversationId`，API 启动时从标准 LLM conversation
 恢复派生状态；状态变更和语义事件在数据库事务提交后才发布 SSE。
 生产发布由同一 API digest 的 `media-governance-series-work-migration` initContainer 在
-数据库 advisory lock 内执行 `media-governance-series-work-v1.sql`，随后用独立只读 SQL
-核对表结构、唯一索引、Series/Work/Season 所有权、旧资料引用和 Task 上下文；任一计数
+数据库 advisory lock 内依次执行 `media-governance-series-work-v1.sql` 与
+`media-governance-rss-context-v2.sql`，随后用独立只读 SQL 核对表结构、唯一索引、
+Series/Work/Season 所有权、RSS 所选身份、旧资料引用和 Task 上下文；任一计数
 漂移都会阻止 API 启动。结构迁移不按标题写入电影归属；操作者确认的历史电影或剧场版
 通过认证的 Work 创建接口加入既有 Series，API 只绑定资料身份完全一致的遗留 Task，且
 不创建伪 Season/Episode。

@@ -23,6 +23,7 @@ import {
   MediaGovernanceCatalogIdentitySearchQueryDto,
   MediaGovernanceMagnetBatchCreateDto,
   MediaGovernanceRssDiscoverySearchDto,
+  MediaGovernanceRssContextRepairDto,
   MediaGovernanceRssIdentitySearchQueryDto,
   MediaGovernanceRssSubscriptionCreateDto,
   MediaGovernanceRssSubscriptionRebindDto,
@@ -369,6 +370,42 @@ export class MediaGovernanceCatalogController {
     this.noStore(response);
     return vbenSuccess(
       await this.catalog.rebindRssSubscription(
+        seriesId,
+        workId,
+        seasonNumber,
+        subscriptionId,
+        body,
+      ),
+    );
+  }
+
+  /**
+   * 在关联 Run 已终止后，把误建 Work 的 RSS Task、来源和 Episode 绑定无损迁回目标 Season。
+   *
+   * @param seriesId - 源 Work 与目标 Work 共同所属 Series。
+   * @param workId - 正确目标 Work。
+   * @param seasonNumber - 正确目标 Season 号。
+   * @param subscriptionId - 需要保留条目历史的 RSS 订阅。
+   * @param body - 源 Work、订阅 revision、Task revision 和所选资料身份。
+   * @param response - 当前 HTTP 响应。
+   * @returns 已迁移目录、订阅和 Task 精确标识。
+   */
+  @Put(
+    ':seriesId/works/:workId/seasons/:seasonNumber/rss-subscriptions/:subscriptionId/context-repair',
+  )
+  @MediaGovernancePermission('Media:Governance:SourceUpload')
+  @ApiOperation({ summary: '无损修复 RSS Task 的 Work/Season 上下文' })
+  async repairRssSubscriptionContext(
+    @Param('seriesId') seriesId: string,
+    @Param('workId') workId: string,
+    @Param('seasonNumber', ParseIntPipe) seasonNumber: number,
+    @Param('subscriptionId') subscriptionId: string,
+    @Body() body: MediaGovernanceRssContextRepairDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    this.noStore(response);
+    return vbenSuccess(
+      await this.catalog.repairRssSubscriptionContext(
         seriesId,
         workId,
         seasonNumber,

@@ -294,6 +294,18 @@ export class MediaGovernanceRssSubscriptionEntity {
   @Column({ length: 96, name: 'season_id', type: 'varchar' })
   seasonId: string;
 
+  @Column({ length: 16, name: 'identity_provider', type: 'varchar' })
+  identityProvider: string;
+
+  @Column({ length: 64, name: 'identity_provider_id', type: 'varchar' })
+  identityProviderId: string;
+
+  @Column({ length: 200, name: 'identity_title', type: 'varchar' })
+  identityTitle: string;
+
+  @Column({ name: 'identity_release_year', nullable: true, type: 'int' })
+  identityReleaseYear: null | number;
+
   @Column({ length: 120, type: 'varchar' })
   name: string;
 

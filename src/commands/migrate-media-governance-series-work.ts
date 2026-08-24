@@ -9,8 +9,14 @@ import {
 import { parseMysqlScript } from './migrate-bot-adapter-protocol';
 
 const MIGRATION_LOCK = 'kt:media-governance-series-work-v1';
-const MIGRATION_FILE = 'media-governance-series-work-v1.sql';
-const VERIFICATION_FILE = 'media-governance-series-work-v1-verify.sql';
+const MIGRATION_FILES = [
+  'media-governance-series-work-v1.sql',
+  'media-governance-rss-context-v2.sql',
+];
+const VERIFICATION_FILES = [
+  'media-governance-series-work-v1-verify.sql',
+  'media-governance-rss-context-v2-verify.sql',
+];
 const VERIFICATION_EXPECTATIONS = new Map<string, number>([
   ['work_table_count', 2],
   ['schema_contract_mismatch_count', 0],
@@ -21,6 +27,10 @@ const VERIFICATION_EXPECTATIONS = new Map<string, number>([
   ['non_tv_work_with_season_count', 0],
   ['task_work_series_mismatch_count', 0],
   ['legacy_series_reference_without_work_ref_count', 0],
+  ['rss_context_column_count', 4],
+  ['rss_context_missing_identity_count', 0],
+  ['rss_context_work_ref_mismatch_count', 0],
+  ['rss_context_index_count', 2],
 ]);
 
 export type MediaGovernanceSeriesWorkMigrationVerification = Record<
@@ -156,13 +166,22 @@ export async function runMediaGovernanceSeriesWorkMigration(): Promise<{
     if (!lockAcquired) {
       throw new Error('无法取得媒体 Series-first 数据库迁移锁');
     }
-    await executeMysqlScript(connection, readMigrationFile(MIGRATION_FILE));
-    const verification = assertMediaGovernanceSeriesWorkMigrationVerification(
-      await readVerificationResults(
-        connection,
-        readMigrationFile(VERIFICATION_FILE),
-      ),
-    );
+    for (const migrationFile of MIGRATION_FILES) {
+      await executeMysqlScript(connection, readMigrationFile(migrationFile));
+    }
+    const verificationResults: MediaGovernanceSeriesWorkMigrationVerification =
+      {};
+    for (const verificationFile of VERIFICATION_FILES) {
+      Object.assign(
+        verificationResults,
+        await readVerificationResults(
+          connection,
+          readMigrationFile(verificationFile),
+        ),
+      );
+    }
+    const verification =
+      assertMediaGovernanceSeriesWorkMigrationVerification(verificationResults);
     return { migrated: true, verification };
   } finally {
     if (lockAcquired) {
@@ -181,6 +200,7 @@ async function main(): Promise<void> {
     `${JSON.stringify({
       migrated: result.migrated,
       status: 'ready',
+      rssContextColumnCount: result.verification.rss_context_column_count,
       workTableCount: result.verification.work_table_count,
     })}\n`,
   );

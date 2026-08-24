@@ -526,6 +526,38 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
   }
 
   /**
+   * 在目录事务直接修正持久化上下文后重新加载权威 Task，并向现有 SSE 订阅发布更新投影。
+   * @param taskIds - 本次目录事务实际修改且必须能从数据库重新读取的 Task 标识。
+   * @returns 重新加载后的精确 Task 快照。
+   */
+  async reloadCatalogRepairedTasks(
+    taskIds: string[],
+  ): Promise<MediaGovernanceTask[]> {
+    if (!this.stateStore || !this.databaseReady()) {
+      throwVbenError(
+        '媒体治理数据库持久化暂不可用',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    const storedTasks = await this.stateStore.loadTasks();
+    const restoredTasks = storedTasks.map((storedTask) =>
+      this.restoreStoredTask(storedTask),
+    );
+    const repairedTaskIds = new Set(taskIds);
+    const repairedTasks = restoredTasks.filter((task) =>
+      repairedTaskIds.has(task.id),
+    );
+    if (repairedTasks.length !== repairedTaskIds.size) {
+      throwVbenError('目录修复后的 Task 投影不完整', HttpStatus.CONFLICT);
+    }
+    this.tasks.splice(0, this.tasks.length, ...restoredTasks);
+    for (const task of repairedTasks) {
+      this.publishTaskPatch(task, 'state-updated');
+    }
+    return repairedTasks.map((task) => structuredClone(task));
+  }
+
+  /**
    * 在执行前校验任务状态，并修正作品身份及关联单元结构。
    * @param taskId - 用于精确定位任务的标识。
    * @param input - 用于身份的结构化输入，包含 `expectedRevision`、`mediaType`、`providerRef`、`releaseYear` 字段。

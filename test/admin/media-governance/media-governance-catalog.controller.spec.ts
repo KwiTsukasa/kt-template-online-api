@@ -27,6 +27,7 @@ describe('MediaGovernanceCatalogController', () => {
     identityCandidates: jest.fn(),
     page: jest.fn(),
     pollRssSubscription: jest.fn(),
+    repairRssSubscriptionContext: jest.fn(),
     reconcile: jest.fn(),
     rssIdentityCandidates: jest.fn(),
     rssItemPage: jest.fn(),
@@ -316,6 +317,47 @@ describe('MediaGovernanceCatalogController', () => {
       'media-work-bleach',
       2,
       { provider: 'bangumi', providerId: '302286', releaseYear: 2022 },
+    );
+  });
+
+  it('repairs an RSS Task into an existing Work Season with exact revisions', async () => {
+    catalog.repairRssSubscriptionContext.mockResolvedValueOnce({
+      migratedTaskIds: ['media-task-dc2af239-8af9-43f3-8f25-7a8abf3590c7'],
+      removedWorkId: 'media-work-48c812c9-67cc-4b64-b443-d8bc4460d819',
+      targetSeasonId: 'media-season-ffeedd93-14b7-4d12-9e64-ad75a7e8320f',
+    });
+
+    await request(apiUrl)
+      .put(
+        '/media-governance/series/media-series-bleach/works/media-work-bleach/seasons/2/rss-subscriptions/media-rss-subscription-xiangke/context-repair',
+      )
+      .send({
+        expectedRevision: 918,
+        identity: {
+          provider: 'bangumi',
+          providerId: '457326',
+          releaseYear: 2024,
+        },
+        sourceWorkId: 'media-work-48c812c9-67cc-4b64-b443-d8bc4460d819',
+        tasks: [
+          {
+            expectedRevision: 87,
+            taskId: 'media-task-dc2af239-8af9-43f3-8f25-7a8abf3590c7',
+          },
+        ],
+      })
+      .expect(200)
+      .expect('Cache-Control', 'no-store');
+
+    expect(catalog.repairRssSubscriptionContext).toHaveBeenCalledWith(
+      'media-series-bleach',
+      'media-work-bleach',
+      2,
+      'media-rss-subscription-xiangke',
+      expect.objectContaining({
+        expectedRevision: 918,
+        sourceWorkId: 'media-work-48c812c9-67cc-4b64-b443-d8bc4460d819',
+      }),
     );
   });
 });

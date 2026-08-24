@@ -5,6 +5,8 @@ import type {
 } from '@/modules/plugin-platform/contract/plugin-protocol';
 import type { BotNormalizedMessage } from '../../contract/bot.types';
 
+const EMBEDDED_JSON_MAX_BYTES = 64 * 1024;
+
 /**
  * 将当前 Bot 适配器消息转换为不暴露平台账号标识的插件事件信封，并提前抽取通用链接。
  * @param message - 已由 NapCat 或 Tencent 适配器归一化的消息。
@@ -78,6 +80,8 @@ function collectHttpLinks(sources: unknown[]) {
       matches.forEach((match) => {
         if (!links.includes(match)) links.push(match);
       });
+      const embedded = parseEmbeddedJson(value);
+      if (embedded) visit(embedded, depth + 1);
       return;
     }
     if (!value || typeof value !== 'object') return;
@@ -93,4 +97,24 @@ function collectHttpLinks(sources: unknown[]) {
   };
   sources.forEach((source) => visit(source, 0));
   return links;
+}
+
+/**
+ * 对协议段中的有界字符串化 JSON 做一次安全展开，使通用链接投影能够读取卡片内部 URL。
+ * @param value - 可能由 OneBot JSON 段或其他适配器携带的字符串。
+ * @returns 解析后的普通对象或数组；不是有界 JSON 时返回 `null`。
+ */
+function parseEmbeddedJson(value: string): null | object {
+  const source = value.trim();
+  if (!source || Buffer.byteLength(source, 'utf8') > EMBEDDED_JSON_MAX_BYTES) {
+    return null;
+  }
+  if (!source.startsWith('{') && !source.startsWith('[')) return null;
+  try {
+    const parsed = JSON.parse(source);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed as object;
+  } catch {
+    return null;
+  }
 }

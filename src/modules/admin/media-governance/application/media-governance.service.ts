@@ -928,7 +928,23 @@ export class MediaGovernanceService implements OnModuleDestroy, OnModuleInit {
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
-    const grant = await this.stateStore.consumeDescriptorGrant(input);
+    let grant: { descriptorObjectId: string };
+    try {
+      grant = await this.stateStore.consumeDescriptorGrant(input);
+    } catch (error) {
+      let message = '';
+      if (error instanceof Error) message = error.message;
+      if (
+        message.includes('media-governance-descriptor-grant') ||
+        message.includes('Duplicate entry')
+      ) {
+        throwVbenError('媒体描述文件授权已失效', HttpStatus.CONFLICT);
+      }
+      throwVbenError(
+        '媒体描述文件授权服务暂不可用',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
     return this.descriptorStore.readDescriptor({
       descriptorSha256: input.descriptorSha256,
       objectId: grant.descriptorObjectId,

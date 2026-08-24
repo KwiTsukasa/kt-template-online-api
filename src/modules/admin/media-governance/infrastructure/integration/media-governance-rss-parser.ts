@@ -175,6 +175,7 @@ export function parseMediaGovernanceEpisodeNumber(
   const patterns: RegExp[] = [];
   if (episodePattern) patterns.push(new RegExp(episodePattern, 'iu'));
   patterns.push(/\s-\s(\d{1,4})(?:\s|\[|\()/u);
+  patterns.push(/\bS\d{1,2}E(?:P)?\s*(\d{1,4})\b/iu);
   patterns.push(/\bE(?:P)?\s*(\d{1,4})\b/iu);
   for (const pattern of patterns) {
     const match = pattern.exec(title);

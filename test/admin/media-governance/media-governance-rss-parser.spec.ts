@@ -50,6 +50,17 @@ describe('media governance RSS parser', () => {
     expect(mediaGovernanceRssTitleIncluded(title, 'DBD-Raws')).toBe(false);
   });
 
+  it('parses absolute episodes from compact season-episode release names', () => {
+    const titles = [41, 42, 43, 44, 45].map(
+      (episode) =>
+        `[Nix-Raws] BLEACH Sennen Kessen-hen Kashin-tan S01E${episode} [WEB-DL 1080p]`,
+    );
+
+    expect(
+      titles.map((title) => parseMediaGovernanceEpisodeNumber(title, null)),
+    ).toEqual([41, 42, 43, 44, 45]);
+  });
+
   it('rejects XML entity declarations before parsing', () => {
     expect(() =>
       parseMediaGovernanceRss(

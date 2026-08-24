@@ -164,6 +164,48 @@ describe('MediaGovernanceService production execution adapter', () => {
     task.sealedPlanSha256 = sha256Json(task.sealedPlan);
   };
 
+  it.each([
+    [
+      'media-governance-descriptor-grant-invalid',
+      409,
+      '媒体描述文件授权已失效',
+    ],
+    ['database-connection-lost', 503, '媒体描述文件授权服务暂不可用'],
+  ])(
+    'maps descriptor grant failures at the service boundary: %s',
+    async (errorMessage, status, publicMessage) => {
+      const descriptorStore = { readDescriptor: jest.fn() };
+      const stateStore = {
+        consumeDescriptorGrant: jest.fn(async () => {
+          throw new Error(errorMessage);
+        }),
+        isReady: () => true,
+        loadTasks: jest.fn(async () => []),
+        saveTask: jest.fn(async () => undefined),
+      } as unknown as MediaGovernanceStateStore;
+      const service = new MediaGovernanceService(
+        undefined,
+        descriptorStore as never,
+        stateStore,
+      );
+      await service.onModuleInit();
+
+      await expect(
+        service.redeemDescriptor({
+          descriptorGrantId: 'media-grant-fixture-0001',
+          descriptorSha256: 'a'.repeat(64),
+          runId: 'media-run-fixture-0001',
+          sourceId: 'media-source-fixture-0001',
+          taskId: 'media-task-fixture-0001',
+        }),
+      ).rejects.toMatchObject({
+        response: { msg: publicMessage },
+        status,
+      });
+      expect(descriptorStore.readDescriptor).not.toHaveBeenCalled();
+    },
+  );
+
   it('keeps a Work-bound Task identity immutable outside Series detail', async () => {
     const { service } = fixture();
     await service.onModuleInit();

@@ -35,26 +35,34 @@ const DECIMAL_ID_PATTERN = /^\d{1,24}$/;
 @ValidatorConstraint({ async: false, name: 'networkDdnsPortForwardId' })
 class NetworkDdnsPortForwardIdConstraint implements ValidatorConstraintInterface {
   /**
-   * 校验`value`、`args`是否满足网络DDNS端口转发标识约束记录约束，并拒绝不合法输入；当 `input.recordType === 'A'` 成立时返回 `typeof value === 'string' && DECIMAL_ID_PAT…`。
+   * 校验 A/IPv4 与 AAAA/IP4P 来源必须携带十进制端口转发 ID，而 Agent IPv6 禁止携带该字段。
    * @param value - 参与网络DDNS端口转发标识约束记录比较、格式化或输出的候选值。
    * @param args - 用于网络DDNS端口转发标识约束记录的领域对象，包含 `object` 字段。
    * @returns 满足网络DDNS端口转发标识约束记录约束时为 `true`；不满足、未命中或显式失败分支为 `false`；没有可用结果或提前结束时为 `undefined`。
    */
   validate(value: unknown, args: ValidationArguments): boolean {
-    const input = args.object as { recordType?: unknown };
-    if (input.recordType === 'A') {
+    const input = args.object as {
+      recordType?: unknown;
+      sourceType?: unknown;
+    };
+    if (
+      (input.recordType === 'A' && input.sourceType === 'port_forward_ipv4') ||
+      (input.recordType === 'AAAA' && input.sourceType === 'port_forward_ip4p')
+    ) {
       return typeof value === 'string' && DECIMAL_ID_PATTERN.test(value);
     }
-    if (input.recordType === 'AAAA') return value === undefined;
+    if (input.recordType === 'AAAA' && input.sourceType === 'agent_ipv6') {
+      return value === undefined;
+    }
     return true;
   }
 
   /**
-   * 返回端口转发标识约束的固定校验消息，明确 A 记录必填而 AAAA 记录禁填。
-   * @returns 当前状态对应的端口转发标识约束的固定校验消息，明确 A 记录必填而 AAAA 记录禁填，取值为 `'portForwardId is required for A and forbidden for AAAA'`。
+   * 返回端口转发标识与来源类型不匹配时使用的固定校验消息。
+   * @returns 明确端口来源必填 ID、Agent IPv6 禁止 ID 的固定英文错误文本。
    */
   defaultMessage(): string {
-    return 'portForwardId is required for A and forbidden for AAAA';
+    return 'portForwardId is required for port-forward sources and forbidden for Agent IPv6';
   }
 }
 
@@ -191,11 +199,15 @@ export class NetworkDdnsRecordInputDto {
   @IsIn(['A', 'AAAA'])
   recordType: NetworkDdnsRecordType;
 
-  @ApiProperty({ enum: ['agent_ipv6', 'port_forward_ipv4'] })
-  @IsIn(['agent_ipv6', 'port_forward_ipv4'])
+  @ApiProperty({
+    enum: ['agent_ipv6', 'port_forward_ip4p', 'port_forward_ipv4'],
+  })
+  @IsIn(['agent_ipv6', 'port_forward_ip4p', 'port_forward_ipv4'])
   sourceType: NetworkDdnsSourceType;
 
-  @ApiPropertyOptional({ description: 'A 记录使用的端口转发 Snowflake ID' })
+  @ApiPropertyOptional({
+    description: 'A 或 IP4P AAAA 记录使用的端口转发 Snowflake ID',
+  })
   @Validate(NetworkDdnsPortForwardIdConstraint)
   portForwardId?: string;
 

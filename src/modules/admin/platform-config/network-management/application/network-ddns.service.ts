@@ -167,17 +167,14 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 根据`query`处理输入约束并返回来源选项；当 `query.recordType === 'AAAA'` 成立时返回 `[await this.agentIpv6SourceOption()]`。
+   * 按记录类型返回 Agent IPv6、端口转发 IPv4 或 TCP NATMap IP4P 来源，IP4P 仅从 TCP 通道派生。
    * @param query - 限定输入约束并返回来源选项筛选、排序与分页范围的查询条件，包含 `recordType` 字段。
    * @returns 按输入顺序得到的输入约束并返回来源选项列表；没有匹配项时为空数组。
    */
   async sourceOptions(query: {
     recordType: NetworkDdnsRecordType;
   }): Promise<NetworkDdnsSourceOption[]> {
-    if (query.recordType === 'AAAA') {
-      return [await this.agentIpv6SourceOption()];
-    }
-    if (query.recordType !== 'A') {
+    if (query.recordType !== 'A' && query.recordType !== 'AAAA') {
       throwVbenError('DDNS 记录类型无效', HttpStatus.BAD_REQUEST);
     }
     const [mappings, groups] = await Promise.all([
@@ -193,10 +190,26 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     const groupsById = new Map(
       groups.map((group) => [String(group.id), group]),
     );
+    if (query.recordType === 'AAAA') {
+      const agentIpv6 = await this.agentIpv6SourceOption();
+      return [
+        agentIpv6,
+        ...mappings
+          .filter((mapping) => mapping.protocol === 'tcp')
+          .map((mapping) =>
+            this.portForwardSourceOption(
+              mapping,
+              groupsById.get(String(mapping.groupId)),
+              'port_forward_ip4p',
+            ),
+          ),
+      ];
+    }
     return mappings.map((mapping) =>
       this.portForwardSourceOption(
         mapping,
         groupsById.get(String(mapping.groupId)),
+        'port_forward_ipv4',
       ),
     );
   }
@@ -776,8 +789,10 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       return this.agentIpv6SourceOption();
     }
     if (
-      record.recordType === 'A' &&
-      record.sourceType === 'port_forward_ipv4' &&
+      ((record.recordType === 'A' &&
+        record.sourceType === 'port_forward_ipv4') ||
+        (record.recordType === 'AAAA' &&
+          record.sourceType === 'port_forward_ip4p')) &&
       record.portForwardId
     ) {
       const mapping = await this.mappingRepository.findOne({
@@ -787,12 +802,25 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
         const group = await this.groupRepository.findOne({
           where: { id: mapping.groupId, isDeleted: false },
         });
-        return this.portForwardSourceOption(mapping, group || undefined);
+        return this.portForwardSourceOption(
+          mapping,
+          group || undefined,
+          record.sourceType,
+        );
       }
-      return this.missingPortForwardSourceOption(record.portForwardId);
+      return this.missingPortForwardSourceOption(
+        record.portForwardId,
+        record.sourceType,
+      );
     }
     return this.missingPortForwardSourceOption(
       record.portForwardId || 'invalid',
+      (() => {
+        if (record.sourceType === 'port_forward_ip4p') {
+          return 'port_forward_ip4p';
+        }
+        return 'port_forward_ipv4';
+      })(),
     );
   }
 
@@ -800,11 +828,13 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
    * 按边界约束计算端口转发来源选项。
    * @param mapping - 用于按边界约束计算端口转发来源选项的领域对象，包含 `protocol`、`currentPublicIpv4`、`currentPublicPort`、`currentValidUntil` 字段。
    * @param group - 用于按边界约束计算端口转发来源选项的领域对象，包含 `name` 字段；为空时采用 `mapping.name` 作为兜底。
+   * @param sourceType - 决定返回原始公网 IPv4 还是编码公网 IPv4 与端口的 IP4P AAAA。
    * @returns 包含 `currentAddress`、`disabledReasonCode`、`eligible`、`externalPort`、`groupId` 字段的按边界约束计算端口转发来源选项；无法解析或未命中时为 `null`。
    */
   private portForwardSourceOption(
     mapping: NetworkPortForward,
     group?: NetworkPortForwardGroup,
+    sourceType: 'port_forward_ip4p' | 'port_forward_ipv4' = 'port_forward_ipv4',
   ): NetworkDdnsSourceOption {
     const mechanism = (() => {
       if (mapping.protocol === 'tcp') {
@@ -819,6 +849,9 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       return classifyStunEndpointSource(mapping);
     })();
     const disabledReasonCode = (() => {
+      if (sourceType === 'port_forward_ip4p' && mapping.protocol !== 'tcp') {
+        return 'IP4P_REQUIRES_TCP_NATMAP';
+      }
       if (group) {
         return sourceEligibility.disabledReasonCode;
       }
@@ -831,9 +864,16 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       !!mapping.currentValidUntil &&
       new Date(mapping.currentValidUntil).getTime() > Date.now();
     const sourceUsable = eligible && leaseValid;
+    const ip4pAddress = encodeIp4pAddress(
+      mapping.currentPublicIpv4,
+      mapping.currentPublicPort,
+    );
     return {
       currentAddress: (() => {
         if (sourceUsable) {
+          if (sourceType === 'port_forward_ip4p') {
+            return ip4pAddress;
+          }
           return mapping.currentPublicIpv4 || null;
         }
         return null;
@@ -851,6 +891,9 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       id: String(mapping.id),
       mechanism,
       name: `${group?.name || mapping.name} / ${(() => {
+        if (sourceType === 'port_forward_ip4p') {
+          return 'TCP NATMap IP4P';
+        }
         if (mechanism === 'tcp_natmap') {
           return 'TCP NATMap';
         }
@@ -863,7 +906,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
         return null;
       })(),
       protocol: mapping.protocol,
-      sourceType: 'port_forward_ipv4',
+      sourceType,
       validUntil: (() => {
         if (sourceUsable) {
           return mapping.currentValidUntil || null;
@@ -876,9 +919,13 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
   /**
    * 根据`id`处理并返回缺失的配置键。
    * @param id - 决定并返回缺失的配置键内容、边界或目标的 `id` 值。
+   * @param sourceType - 保留已删除来源原本的 IPv4 或 IP4P 类型，避免管理端错误降级显示。
    * @returns 包含 `currentAddress`、`disabledReasonCode`、`eligible`、`id`、`name` 字段的并返回缺失的配置键；无法解析或未命中时为 `null`。
    */
-  private missingPortForwardSourceOption(id: string): NetworkDdnsSourceOption {
+  private missingPortForwardSourceOption(
+    id: string,
+    sourceType: 'port_forward_ip4p' | 'port_forward_ipv4',
+  ): NetworkDdnsSourceOption {
     return {
       currentAddress: null,
       disabledReasonCode: 'SOURCE_NOT_FOUND',
@@ -886,7 +933,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       id,
       name: '端口转发来源已删除',
       observedAt: null,
-      sourceType: 'port_forward_ipv4',
+      sourceType,
       validUntil: null,
     };
   }
@@ -965,19 +1012,20 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     input: NetworkDdnsRecordUpdateInput,
   ) {
     const recordType = input.recordType || record.recordType;
+    const sourceType = input.sourceType || record.sourceType;
     const normalized = this.normalizeInput({
       domain: input.domain ?? record.domain,
       enabled: input.enabled ?? record.enabled,
       name: input.name ?? record.name,
       portForwardId: (() => {
-        if (recordType === 'AAAA') {
-          return input.portForwardId;
+        if (sourceType === 'agent_ipv6') {
+          return undefined;
         }
         return input.portForwardId ?? record.portForwardId ?? undefined;
       })(),
       recordType,
       remark: input.remark ?? record.remark ?? undefined,
-      sourceType: input.sourceType || record.sourceType,
+      sourceType,
       subDomain: input.subDomain ?? record.subDomain,
     });
     const sourceIdentityChanged =
@@ -1011,6 +1059,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     }
     if (
       input.sourceType !== 'port_forward_ipv4' &&
+      input.sourceType !== 'port_forward_ip4p' &&
       input.sourceType !== 'agent_ipv6'
     ) {
       throwVbenError('DDNS 来源类型无效', HttpStatus.BAD_REQUEST);
@@ -1077,12 +1126,18 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
         HttpStatus.BAD_REQUEST,
       );
     }
-    if (
+    const agentIpv6Shape =
       recordType === 'AAAA' &&
-      (sourceType !== 'agent_ipv6' || portForwardId !== null)
-    ) {
+      sourceType === 'agent_ipv6' &&
+      portForwardId === null;
+    const ip4pShape =
+      recordType === 'AAAA' &&
+      sourceType === 'port_forward_ip4p' &&
+      !!portForwardId &&
+      /^\d{1,24}$/.test(portForwardId);
+    if (recordType === 'AAAA' && !agentIpv6Shape && !ip4pShape) {
       throwVbenError(
-        'AAAA 记录必须使用 Agent IPv6 且不能绑定端口',
+        'AAAA 记录必须使用 Agent IPv6，或选择有效的 TCP NATMap IP4P 来源',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -1100,7 +1155,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
     portForwardId: null | string,
   ): Promise<void> {
     this.assertBindingShape(recordType, sourceType, portForwardId);
-    if (recordType === 'AAAA') return;
+    if (sourceType === 'agent_ipv6') return;
     const mapping = await this.mappingRepository.findOne({
       where: { id: portForwardId as string, isDeleted: false },
     });
@@ -1113,6 +1168,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       return null;
     })();
     const sourceEligible = (() => {
+      if (sourceType === 'port_forward_ip4p') {
+        return (
+          mapping?.protocol === 'tcp' &&
+          classifyTcpNatmapEndpointSource(mapping).eligible
+        );
+      }
       if (mapping?.protocol === 'tcp') {
         return classifyTcpNatmapEndpointSource(mapping).eligible;
       }
@@ -1122,6 +1183,12 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       return false;
     })();
     if (!mapping || !group || !sourceEligible) {
+      if (sourceType === 'port_forward_ip4p') {
+        throwVbenError(
+          'IP4P AAAA 来源必须是已启用的 TCP NATMap 通道',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       throwVbenError(
         'A 记录来源必须是已启用的 UDP Keeper 或 TCP NATMap 通道',
         HttpStatus.BAD_REQUEST,
@@ -1239,7 +1306,7 @@ export class NetworkDdnsService implements OnModuleInit, OnModuleDestroy {
       name: record.name,
       nextRetryAt: record.nextRetryAt || null,
       ...(() => {
-        if (record.recordType === 'A') {
+        if (record.sourceType !== 'agent_ipv6') {
           return { portForwardId: record.portForwardId || null };
         }
         return {};
@@ -1561,6 +1628,36 @@ function isValidPort(value?: null | number): value is number {
     value >= 1 &&
     value <= 65_535
   );
+}
+
+/**
+ * 把 NATMap 当前公网 IPv4 与动态端口编码为官方 IP4P AAAA 文本，非法或不完整端点返回空值。
+ * @param publicIpv4 - NATMap 当前发布的规范公网 IPv4。
+ * @param publicPort - NATMap 当前发布的动态公网 TCP 端口。
+ * @returns `2001::端口:IPv4高两字节:IPv4低两字节` 的零填充文本；端点无效时为 `null`。
+ */
+function encodeIp4pAddress(
+  publicIpv4?: null | string,
+  publicPort?: null | number,
+): null | string {
+  if (!publicIpv4 || isIP(publicIpv4) !== 4 || !isValidPort(publicPort)) {
+    return null;
+  }
+  const octets = publicIpv4.split('.').map(Number);
+  if (
+    octets.length !== 4 ||
+    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
+  ) {
+    return null;
+  }
+  const portHex = publicPort.toString(16).padStart(4, '0');
+  const addressHigh = ((octets[0] << 8) | octets[1])
+    .toString(16)
+    .padStart(4, '0');
+  const addressLow = ((octets[2] << 8) | octets[3])
+    .toString(16)
+    .padStart(4, '0');
+  return `2001::${portHex}:${addressHigh}:${addressLow}`;
 }
 
 /**

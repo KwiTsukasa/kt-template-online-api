@@ -326,6 +326,26 @@ describe('NetworkManagementController', () => {
     );
 
     await request(apiUrl)
+      .post('/system/network/ddns')
+      .send({
+        domain: 'kwitsukasa.top',
+        enabled: true,
+        name: 'Gitea SSH IP4P',
+        portForwardId: '100',
+        recordType: 'AAAA',
+        sourceType: 'port_forward_ip4p',
+        subDomain: 'git.nas4',
+      })
+      .expect(201);
+    expect(ddnsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        portForwardId: '100',
+        recordType: 'AAAA',
+        sourceType: 'port_forward_ip4p',
+      }),
+    );
+
+    await request(apiUrl)
       .put('/system/network/ddns/200')
       .send({
         domain: 'kwitsukasa.top',
@@ -353,6 +373,26 @@ describe('NetworkManagementController', () => {
           recordType: 'AAAA',
           sourceType: 'agent_ipv6',
           subDomain: 'nas6',
+        })
+        .expect(400);
+
+      expect(ddnsService.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, 123, '', 'not-an-id'])(
+    'rejects an IP4P AAAA request with portForwardId=%p',
+    async (portForwardId) => {
+      await request(apiUrl)
+        .post('/system/network/ddns')
+        .send({
+          domain: 'kwitsukasa.top',
+          enabled: true,
+          name: 'Gitea SSH IP4P',
+          portForwardId,
+          recordType: 'AAAA',
+          sourceType: 'port_forward_ip4p',
+          subDomain: 'git.nas4',
         })
         .expect(400);
 

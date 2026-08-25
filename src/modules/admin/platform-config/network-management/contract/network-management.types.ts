@@ -44,7 +44,10 @@ export type NetworkStateChangeEvent = {
 };
 
 export type NetworkDdnsRecordType = 'A' | 'AAAA';
-export type NetworkDdnsSourceType = 'agent_ipv6' | 'port_forward_ipv4';
+export type NetworkDdnsSourceType =
+  | 'agent_ipv6'
+  | 'port_forward_ip4p'
+  | 'port_forward_ipv4';
 export type NetworkDdnsSyncStatus =
   | 'disabled'
   | 'failed'

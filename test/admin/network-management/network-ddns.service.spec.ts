@@ -299,6 +299,77 @@ describe('NetworkDdnsService', () => {
     });
   });
 
+  it('encodes a managed TCP NATMap endpoint as an IP4P AAAA source', async () => {
+    const harness = createHarness();
+    harness.group.protocolMode = 'tcp';
+    Object.assign(harness.group, {
+      externalPort: 8418,
+      internalPort: 2222,
+    });
+    Object.assign(harness.mapping, {
+      currentPublicIpv4: '112.32.126.33',
+      currentPublicPort: 51_522,
+      externalPort: 8418,
+      internalPort: 2222,
+      keeperDesiredEnabled: false,
+      natmapDesiredEnabled: true,
+      natmapStatus: 'active',
+      protocol: 'tcp',
+    });
+
+    await expect(
+      harness.service.sourceOptions({ recordType: 'AAAA' }),
+    ).resolves.toEqual([
+      expect.objectContaining({ sourceType: 'agent_ipv6' }),
+      expect.objectContaining({
+        currentAddress: '2001::c942:7020:7e21',
+        currentPort: 51_522,
+        eligible: true,
+        id: '100',
+        mechanism: 'tcp_natmap',
+        name: '公网服务 / TCP NATMap IP4P',
+        sourceType: 'port_forward_ip4p',
+      }),
+    ]);
+    await expect(
+      harness.service.create({
+        domain: 'kwitsukasa.top',
+        enabled: false,
+        name: 'Gitea SSH IP4P',
+        portForwardId: '100',
+        recordType: 'AAAA',
+        sourceType: 'port_forward_ip4p',
+        subDomain: 'git.nas4',
+      }),
+    ).resolves.toMatchObject({
+      portForwardId: '100',
+      sourceAddress: null,
+      sourceType: 'port_forward_ip4p',
+    });
+    harness.client.reconcile.mockResolvedValueOnce({
+      appliedAddress: '2001::c942:7020:7e21',
+      changed: true,
+      providerRecordId: '302',
+    });
+    harness.records[0].enabled = true;
+    harness.records[0].syncStatus = 'pending';
+
+    await harness.service.reconcileNow('200', true);
+
+    expect(harness.client.reconcile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordType: 'AAAA',
+        subDomain: 'git.nas4',
+        targetAddress: '2001::c942:7020:7e21',
+      }),
+    );
+    expect(harness.records[0]).toMatchObject({
+      appliedAddress: '2001::c942:7020:7e21',
+      sourceAddress: '2001::c942:7020:7e21',
+      syncStatus: 'synced',
+    });
+  });
+
   it('derives accessEndpoint from a synchronized A record without writing DNS for a port-only change', async () => {
     const harness = createHarness();
     harness.group.protocolMode = 'tcp';
